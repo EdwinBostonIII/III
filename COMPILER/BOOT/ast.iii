@@ -1888,6 +1888,37 @@ fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 @export {
     return iii_ast_list_at(ast, lp, idx)
 }
 
+/* ============================================================================
+ * ast_accessors port -- batch 3: cycle_decl + modifier + type_ref/type_decl.
+ * ast_kind_list_at(ast,node,want_kind,list_off,i) = kind-checked packed-list
+ * element read (the list companion to ast_kind_child; all reg params spill-guarded).
+ * ============================================================================ */
+
+fn ast_kind_list_at(ast: u64, node: u32, want_kind: u32, list_off: u64, i: u32) -> u32 {
+    let wk: u32 = want_kind
+    let lo: u64 = list_off
+    let idx: u32 = i
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != wk { return 0u32 }
+    let lp: u64 = iii_lex_read_u64_c(n, lo)
+    return iii_ast_list_at(ast, lp, idx)
+}
+
+fn iii_ast_cycle_modifier_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CYCLE_DECL, 32u64) }
+fn iii_ast_cycle_modifier_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_CYCLE_DECL, 28u64, i) }
+fn iii_ast_cycle_forward_block(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CYCLE_DECL, 36u64) }
+fn iii_ast_cycle_compromise_block(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CYCLE_DECL, 40u64) }
+fn iii_ast_modifier_name_offset(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_MODIFIER, 8u64) }
+fn iii_ast_modifier_name_length(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_MODIFIER, 12u64) }
+fn iii_ast_type_ref_modifier_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_REF, 28u64) }
+fn iii_ast_type_ref_modifier_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_TYPE_REF, 24u64, i) }
+fn iii_ast_type_decl_modifier_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_DECL, 32u64) }
+fn iii_ast_type_decl_modifier_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_TYPE_DECL, 28u64, i) }
+fn iii_ast_type_decl_rhs_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_DECL, 24u64) }
+
 /* Distinct node count (sum of pool counts minus the 4 NULL sentinels). */
 fn iii_ast_node_count(ast: u64) -> u64 @export {
     if ast == 0u64 { return 0u64 }

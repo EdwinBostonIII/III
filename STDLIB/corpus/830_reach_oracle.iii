@@ -1,0 +1,67 @@
+/* 830_reach_oracle.iii -- The Reach, Phase 4: the DETERMINISM FIREWALL.
+ * Proves: a content-addressed value (CANONICAL tier) is ADMITTED into a deterministic context (1);
+ * an oracle result is tagged PROVISIONAL + carries an oracle-pin (2-3); the FIREWALL is DEFAULT-DENY
+ * -- a PROVISIONAL value is REFUSED canonical admission (4, the teeth), and so is ANY unknown tier
+ * (5); the oracle-pin is REPRODUCIBLE + BINDING -- pin_matches confirms the exact dependence bytes
+ * (6) while a DIFFERENT dependence does NOT match (7, the teeth: the pin binds precisely what the
+ * result depended on).  So a non-reproducible API answer can never pass as "determined".
+ * Exit 99 = all hold.  CORPUS-ONLY (reach_oracle / cad complete). */
+module corpus_830
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_admit_canonical(tier: u32) -> i32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_is_provisional(tier: u32) -> u8 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 from "reach_oracle.iii"
+
+fn main() -> u64 {
+    /* (1) a CANONICAL (content-addressed) value is admitted into a deterministic context */
+    if reach_oracle_admit_canonical(0u32) != 0i32 { return 1u64 }
+
+    /* (2-3) an oracle result: pin its dependence -> PROVISIONAL tier + a 32-byte oracle-pin */
+    let pin_data : *u8 = malloc(16u64)
+    pin_data[0] = 71u8
+    pin_data[1] = 69u8
+    pin_data[2] = 84u8
+    pin_data[3] = 32u8
+    pin_data[4] = 97u8
+    pin_data[5] = 112u8
+    pin_data[6] = 105u8
+    pin_data[7] = 47u8
+    pin_data[8] = 117u8
+    pin_data[9] = 115u8
+    pin_data[10] = 101u8
+    pin_data[11] = 114u8
+    pin_data[12] = 115u8
+    pin_data[13] = 47u8
+    pin_data[14] = 52u8
+    pin_data[15] = 50u8
+    let pin : *u8 = malloc(32u64)
+    let tier : u32 = reach_oracle_pin(pin_data as u64, 16u64, pin as u64)
+    if tier != 1u32 { return 2u64 }
+    if reach_oracle_is_provisional(tier) != 1u8 { return 3u64 }
+
+    /* (4) FIREWALL teeth: a PROVISIONAL value is REFUSED canonical admission (default-deny) */
+    if reach_oracle_admit_canonical(tier) != 1i32 { return 4u64 }
+
+    /* (5) default-deny: an UNKNOWN tier is also REFUSED */
+    if reach_oracle_admit_canonical(99u32) != 1i32 { return 5u64 }
+
+    /* (6) the oracle-pin is reproducible + binding: it matches the exact dependence bytes */
+    if reach_oracle_pin_matches(pin_data as u64, 16u64, pin as u64) != 1u8 { return 6u64 }
+
+    /* (7) teeth: a DIFFERENT dependence does NOT match the pin (it binds EXACTLY one dependence) */
+    let other : *u8 = malloc(16u64)
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        other[i] = 90u8
+        i = i + 1u64
+    }
+    if reach_oracle_pin_matches(other as u64, 16u64, pin as u64) != 0u8 { return 7u64 }
+
+    free(pin_data)
+    free(pin)
+    free(other)
+    return 99u64
+}

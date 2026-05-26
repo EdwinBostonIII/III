@@ -1,0 +1,61 @@
+/* _reach_remote_e2e.iii -- The Reach, Phase 3 LIVE E2E client (NOT a corpus test; driven by
+ * scripts/verify_reach_remote.sh against a real HTTP blob server in a SEPARATE process, which is
+ * how the live fetch is verified without the single-process client/server recv deadlock).
+ *
+ * Computes addr = sha256("REACH-OVER-HTTP-OK"), points the remote tier at 127.0.0.1:18080, and
+ * reach(addr) -- nothing is stored locally, so L0+L1 miss and L4 must FETCH the blob over HTTP,
+ * content-verify it (the returned bytes must re-hash to addr), and return it.  Exit 99 = the wire
+ * fetch + content-verification succeeded; 1/2/3 = the failing check. */
+module reach_remote_e2e
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn backend_remote_set_endpoint(ip_packed: u32, port: u32) -> i32 from "backend_remote.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x002Eu64, 0u64)    /* READ|WRITE|CREATE|DIAL */
+
+    /* the blob the server serves: "REACH-OVER-HTTP-OK" (18 bytes) */
+    let blob : *u8 = malloc(18u64)
+    blob[0] = 82u8
+    blob[1] = 69u8
+    blob[2] = 65u8
+    blob[3] = 67u8
+    blob[4] = 72u8
+    blob[5] = 45u8
+    blob[6] = 79u8
+    blob[7] = 86u8
+    blob[8] = 69u8
+    blob[9] = 82u8
+    blob[10] = 45u8
+    blob[11] = 72u8
+    blob[12] = 84u8
+    blob[13] = 84u8
+    blob[14] = 80u8
+    blob[15] = 45u8
+    blob[16] = 79u8
+    blob[17] = 75u8
+    let addr : *u8 = malloc(32u64)
+    cad_oneshot(0u32, blob, 18u64, addr)
+
+    backend_remote_set_endpoint(0x7F000001u32, 18080u32)
+
+    let out : *u8 = malloc(64u64)
+    let olen_p : *u8 = malloc(8u64)
+    let olen : *u64 = olen_p as *u64
+    let gid : *u8 = malloc(8u64)
+    let tmp : *u8 = malloc(32u64)
+
+    /* nothing emitted locally -> L0/L1 miss -> L4 must fetch over HTTP + content-verify */
+    let rc : i32 = reach(addr as u64, cap, out as u64, 64u64, olen as u64, gid as u64)
+    if rc != 0i32 { return 1u64 }
+    if olen[0] != 18u64 { return 2u64 }
+    cad_oneshot(0u32, out, 18u64, tmp)
+    if cad_eq(tmp, addr) != 1u8 { return 3u64 }
+    return 99u64
+}

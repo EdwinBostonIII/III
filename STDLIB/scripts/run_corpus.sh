@@ -497,6 +497,8 @@ declare -A EXPECTED=(
     [826_xii_conf_cert]=99
     [827_reach_spine]=99
     [828_reach_memo]=99
+    [829_reach_remote]=99
+    [830_reach_oracle]=99
 )
 
 PASS=0

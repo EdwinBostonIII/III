@@ -1,9 +1,11 @@
 /* jit_emit.iii — III Stage-0 NIH x86-64 instruction emitter (.iii port)
  *
- * Mirrors jit_emit.c byte-for-byte using flat C accessors over
- * iii_jit_buf_t (in jit_emit_accessors.c) and iii_ast_store_u8
- * (in ast_accessors.c).  Encoding tables taken straight from
- * Intel SDM Vol. 2 / AMD APM Vol. 3, with per-encoder citations.
+ * Mirrors jit_emit.c byte-for-byte.  iii_jit_buf_t fields are accessed by
+ * NATIVE .iii pointer deref at byte offsets -- jit_emit_accessors.c is
+ * DELETED, its 18 wrappers are now the .iii fns below.  Byte access to the
+ * code buffer still uses iii_ast_store_u8 / iii_ast_load_u8 (ast_accessors.c,
+ * ported with the AST).  Encoding tables straight from Intel SDM Vol. 2 /
+ * AMD APM Vol. 3, with per-encoder citations.
  *
  * The byte-write primitive iii_jit_byte is defined here in .iii;
  * everything else in this file calls it.  When jit_emit is in
@@ -62,22 +64,81 @@ const III_JIT_RELOC_ABS64 : u32 = 3u32
 
 /* ─── Externs from C surface ─────────────────────────────────── */
 
-extern @abi(c-msvc-x64) fn iii_jit_buf_bytes(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_cap(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_used(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_overflow(b: u64) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_err(b: u64) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_last_insn_off(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_relocs(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_reloc_cap(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_reloc_used(b: u64) -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_set_used(b: u64, v: u64) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_set_err(b: u64, v: u32) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_set_overflow(b: u64, v: u32) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_set_last_insn_off(b: u64, v: u64) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_buf_set_reloc_used(b: u64, v: u64) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_sizeof_reloc() -> u64 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_sizeof_buf() -> u64 from "jit_emit_accessors.c"
+/* iii_jit_buf_t field access -- NATIVE .iii deref (jit_emit_accessors.c DELETED).
+ * x64 LLP64 layout: buf*@0 cap@8 used@16 overflow(i32)@24 err(i32)@28
+ *   last_insn_off@32 relocs*@40 reloc_cap@48 reloc_used@56  (sizeof 64).
+ * iii_jit_reloc_t: offset(u32)@0 symbol_id(u32)@4 kind(u16)@8 reserved(u16)@10 (sizeof 12).
+ * Proven fixpoint-safe: iiis-1 and iiis-2 emit byte-identical .o for native deref. */
+
+const JIT_OFF_BUF        : u64 = 0u64
+const JIT_OFF_CAP        : u64 = 8u64
+const JIT_OFF_USED       : u64 = 16u64
+const JIT_OFF_OVERFLOW   : u64 = 24u64
+const JIT_OFF_ERR        : u64 = 28u64
+const JIT_OFF_LAST_INSN  : u64 = 32u64
+const JIT_OFF_RELOCS     : u64 = 40u64
+const JIT_OFF_RELOC_CAP  : u64 = 48u64
+const JIT_OFF_RELOC_USED : u64 = 56u64
+
+fn jit_ld64(base: u64, off: u64) -> u64 {
+    let a : u64 = base + off
+    let p : *u64 = a as *u64
+    return p[0]
+}
+fn jit_st64(base: u64, off: u64, v: u64) -> u32 {
+    let a : u64 = base + off
+    let p : *u64 = a as *u64
+    p[0] = v
+    return 0u32
+}
+fn jit_ld32(base: u64, off: u64) -> u32 {
+    let a : u64 = base + off
+    let p : *u32 = a as *u32
+    return p[0]
+}
+fn jit_st32(base: u64, off: u64, v: u32) -> u32 {
+    let a : u64 = base + off
+    let p : *u32 = a as *u32
+    p[0] = v
+    return 0u32
+}
+
+fn iii_jit_buf_bytes(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_BUF) }
+fn iii_jit_buf_cap(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_CAP) }
+fn iii_jit_buf_used(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_USED) }
+fn iii_jit_buf_overflow(b: u64) -> u32 @export { return jit_ld32(b, JIT_OFF_OVERFLOW) }
+fn iii_jit_buf_err(b: u64) -> u32 @export { return jit_ld32(b, JIT_OFF_ERR) }
+fn iii_jit_buf_last_insn_off(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_LAST_INSN) }
+fn iii_jit_buf_relocs(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_RELOCS) }
+fn iii_jit_buf_reloc_cap(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_RELOC_CAP) }
+fn iii_jit_buf_reloc_used(b: u64) -> u64 @export { return jit_ld64(b, JIT_OFF_RELOC_USED) }
+fn iii_jit_buf_set_used(b: u64, v: u64) -> u32 @export { return jit_st64(b, JIT_OFF_USED, v) }
+fn iii_jit_buf_set_err(b: u64, v: u32) -> u32 @export { return jit_st32(b, JIT_OFF_ERR, v) }
+fn iii_jit_buf_set_overflow(b: u64, v: u32) -> u32 @export { return jit_st32(b, JIT_OFF_OVERFLOW, v) }
+fn iii_jit_buf_set_last_insn_off(b: u64, v: u64) -> u32 @export { return jit_st64(b, JIT_OFF_LAST_INSN, v) }
+fn iii_jit_buf_set_reloc_used(b: u64, v: u64) -> u32 @export { return jit_st64(b, JIT_OFF_RELOC_USED, v) }
+fn iii_jit_sizeof_reloc() -> u64 @export { return 12u64 }
+fn iii_jit_sizeof_buf() -> u64 @export { return 64u64 }
+
+fn iii_jit_init_c(b: u64, bytes: u64, cap: u64) -> u32 @export {
+    jit_st64(b, JIT_OFF_BUF, bytes)
+    jit_st64(b, JIT_OFF_CAP, cap)
+    jit_st64(b, JIT_OFF_USED, 0u64)
+    jit_st32(b, JIT_OFF_OVERFLOW, 0u32)
+    jit_st32(b, JIT_OFF_ERR, 0u32)
+    jit_st64(b, JIT_OFF_LAST_INSN, 0u64)
+    jit_st64(b, JIT_OFF_RELOCS, 0u64)
+    jit_st64(b, JIT_OFF_RELOC_CAP, 0u64)
+    jit_st64(b, JIT_OFF_RELOC_USED, 0u64)
+    return 0u32
+}
+
+fn iii_jit_attach_relocs_c(b: u64, r: u64, cap: u64) -> u32 @export {
+    jit_st64(b, JIT_OFF_RELOCS, r)
+    jit_st64(b, JIT_OFF_RELOC_CAP, cap)
+    jit_st64(b, JIT_OFF_RELOC_USED, 0u64)
+    return 0u32
+}
 
 extern @abi(c-msvc-x64) fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_load_u8(ptr: u64) -> u32 from "ast_accessors.c"
@@ -107,9 +168,6 @@ fn iii_jit_init(b: u64, bytes: u64, cap: u64) -> u32 @export {
     iii_jit_init_c(b, bytes, cap)
     return 0u32
 }
-
-extern @abi(c-msvc-x64) fn iii_jit_init_c(b: u64, bytes: u64, cap: u64) -> u32 from "jit_emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_jit_attach_relocs_c(b: u64, r: u64, cap: u64) -> u32 from "jit_emit_accessors.c"
 
 fn iii_jit_attach_relocs(b: u64, r: u64, cap: u64) -> u32 @export {
     iii_jit_attach_relocs_c(b, r, cap)

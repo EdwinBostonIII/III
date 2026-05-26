@@ -1,0 +1,189 @@
+/* STDLIB/iii/aether/backend_remote.iii -- The Reach, Phase 3: the L4 remote backend (the HTTP
+ * internet leg -- "the network buys you the internet", done the III way).
+ *
+ * Fetches a content-addressed blob from a configured remote endpoint over a capability-gated TCP
+ * connection (aether/net), as "GET /<hex-address> HTTP/1.0".  This is the LAST + OPTIONAL tier:
+ *   - no endpoint configured           -> REMOTE_OFFLINE
+ *   - connection refused / unreachable -> REMOTE_OFFLINE (net_tcp_connect returns 0; loopback
+ *                                          refusal is immediate, so reach never HANGS offline)
+ *   - capability lacks NET_RIGHT_DIAL  -> connect returns 0 -> REMOTE_OFFLINE (far-reach is its
+ *                                          OWN right: a cap without DIAL is unforgeably offline-only)
+ * reach_core maps every REMOTE_OFFLINE/NOTFOUND to a typed GAP, so III keeps FULL LOCAL capacity
+ * when offline -- the remote tier can only ADD to the reachable set, never subtract from it.
+ *
+ * Like every tier this is a DUMB byte fetch: reach_core re-hashes the body against the requested
+ * address, so a remote that serves the WRONG bytes is rejected (you cannot be lied to over the
+ * wire either).  A verified fetch is written back DOWN to L1/L0 by reach_core, so the internet is
+ * a CACHE-FILLING backend (content-verified + local forever after one fetch), not a dependency.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  NIH: aether/net + numera/hex only.  Determinism: integer-only;
+ * ==/!= and unsigned < ; the i32 recv/send returns are branched via SIGN-BIT MASK (never the signed
+ * ordering compare that SIGSEGVs); single-line fns; params->locals; module-scope scratch; byte copy. */
+module aether_backend_remote
+
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn hex_encode(src: u64, n: u64, out: u64) -> i32 from "hex.iii"
+
+const REMOTE_OK       : i32 = 0i32
+const REMOTE_OFFLINE  : i32 = 1i32     /* no endpoint, refused, or no DIAL right -> reach_core GAPs */
+const REMOTE_NOTFOUND : i32 = 2i32     /* endpoint reachable, but no 200 for this address */
+const REMOTE_E_TOOBIG : i32 = -1i32
+
+const REMOTE_ADDR_BYTES : u64 = 32u64
+const REMOTE_HEX_LEN    : u64 = 64u64
+const REMOTE_RESP_CAP   : u64 = 4096u64
+const REMOTE_SADDR_LEN  : u32 = 16u32
+const REMOTE_SIGN_BIT   : u32 = 0x80000000u32
+const REMOTE_NONE       : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var REMOTE_ON    : u8  = 0u8
+var REMOTE_IP    : u32 = 0u32
+var REMOTE_PORT  : u32 = 0u32
+var REMOTE_SADDR : [u8; 16]
+var REMOTE_HEX   : [u8; 64]
+var REMOTE_REQ   : [u8; 256]
+var REMOTE_RESP  : [u8; 4096]
+
+/* configure the remote source (ip_packed as net_pack_sockaddr_ipv4 expects, e.g. 0x7F000001). */
+fn backend_remote_set_endpoint(ip_packed: u32, port: u32) -> i32 @export {
+    REMOTE_IP = ip_packed
+    REMOTE_PORT = port
+    REMOTE_ON = 1u8
+    return REMOTE_OK
+}
+
+/* unset the remote source (the lattice then has no L4 tier -> offline). */
+fn backend_remote_clear() -> i32 @export {
+    REMOTE_ON = 0u8
+    return REMOTE_OK
+}
+
+fn backend_remote_is_on() -> u8 @export { return REMOTE_ON }
+
+/* build "GET /<64-hex-addr> HTTP/1.0\r\n\r\n" into REMOTE_REQ; return its length (82). */
+fn backend_remote_build_req(addr: u64) -> u64 @export {
+    let a : u64 = addr
+    hex_encode(a, REMOTE_ADDR_BYTES, &REMOTE_HEX as u64)
+    let p : *u8 = (&REMOTE_REQ as u64) as *u8
+    let hx : *u8 = (&REMOTE_HEX as u64) as *u8
+    p[0] = 71u8
+    p[1] = 69u8
+    p[2] = 84u8
+    p[3] = 32u8
+    p[4] = 47u8
+    let mut i : u64 = 0u64
+    while i < REMOTE_HEX_LEN {
+        p[5u64 + i] = hx[i]
+        i = i + 1u64
+    }
+    let n : u64 = 5u64 + REMOTE_HEX_LEN
+    p[n] = 32u8
+    p[n + 1u64] = 72u8
+    p[n + 2u64] = 84u8
+    p[n + 3u64] = 84u8
+    p[n + 4u64] = 80u8
+    p[n + 5u64] = 47u8
+    p[n + 6u64] = 49u8
+    p[n + 7u64] = 46u8
+    p[n + 8u64] = 48u8
+    p[n + 9u64] = 13u8
+    p[n + 10u64] = 10u8
+    p[n + 11u64] = 13u8
+    p[n + 12u64] = 10u8
+    return n + 13u64
+}
+
+/* recv until close/full; sign-bit mask classifies the i32 return (negative=error, 0=EOF, else data). */
+fn _remote_recv_all(h: u64) -> u64 {
+    let hh : u64 = h
+    let mut total : u64 = 0u64
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let space : u64 = REMOTE_RESP_CAP - total
+        if space == 0u64 { go = 0u8 }
+        if go == 1u8 {
+            let dst : u64 = (&REMOTE_RESP as u64) + total
+            let got : i32 = net_tcp_recv(hh, dst, space)
+            let gu : u32 = got as u32
+            if (gu & REMOTE_SIGN_BIT) != 0u32 { go = 0u8 }
+            if go == 1u8 {
+                if got == 0i32 { go = 0u8 }
+                if go == 1u8 { total = total + (got as u64) }
+            }
+        }
+    }
+    return total
+}
+
+/* locate the response body: require a "...2 0 0..." status (p[9..11]) and find the CRLFCRLF that
+ * ends the headers; return the body offset, or REMOTE_NONE. */
+fn _remote_find_body(total: u64) -> u64 {
+    let t : u64 = total
+    if t < 12u64 { return REMOTE_NONE }
+    let p : *u8 = (&REMOTE_RESP as u64) as *u8
+    if p[9] != 50u8 { return REMOTE_NONE }
+    if p[10] != 48u8 { return REMOTE_NONE }
+    if p[11] != 48u8 { return REMOTE_NONE }
+    let mut i : u64 = 0u64
+    let mut go : u8 = 1u8
+    let mut body : u64 = REMOTE_NONE
+    while go == 1u8 {
+        if i + 4u64 > t { go = 0u8 }
+        if go == 1u8 {
+            if p[i] == 13u8 {
+                if p[i + 1u64] == 10u8 {
+                    if p[i + 2u64] == 13u8 {
+                        if p[i + 3u64] == 10u8 {
+                            body = i + 4u64
+                            go = 0u8
+                        }
+                    }
+                }
+            }
+            i = i + 1u64
+        }
+    }
+    return body
+}
+
+/* get(addr): fetch the content-addressed blob from the configured remote into out (up to max),
+ * set *out_len, return REMOTE_OK.  REMOTE_OFFLINE (no endpoint / refused / no DIAL) or
+ * REMOTE_NOTFOUND otherwise.  Returns the RAW body; reach_core verifies it against the address. */
+fn backend_remote_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 @export {
+    let a : u64 = addr
+    let c : u64 = cap
+    let o : u64 = out
+    let mx : u64 = max
+    let ol : u64 = out_len
+    if REMOTE_ON == 0u8 { return REMOTE_OFFLINE }
+    let reqlen : u64 = backend_remote_build_req(a)
+    net_pack_sockaddr_ipv4(&REMOTE_SADDR as u64, REMOTE_IP, REMOTE_PORT)
+    let h : u64 = net_tcp_connect_ipv4(c, &REMOTE_SADDR as u64, REMOTE_SADDR_LEN)
+    if h == 0u64 { return REMOTE_OFFLINE }
+    let sent : i32 = net_tcp_send(h, &REMOTE_REQ as u64, reqlen)
+    let su : u32 = sent as u32
+    if (su & REMOTE_SIGN_BIT) != 0u32 {
+        net_close(h)
+        return REMOTE_OFFLINE
+    }
+    let total : u64 = _remote_recv_all(h)
+    net_close(h)
+    let body : u64 = _remote_find_body(total)
+    if body == REMOTE_NONE { return REMOTE_NOTFOUND }
+    let bodylen : u64 = total - body
+    if bodylen > mx { return REMOTE_E_TOOBIG }
+    let src : *u8 = ((&REMOTE_RESP as u64) + body) as *u8
+    let dst : *u8 = o as *u8
+    let mut i : u64 = 0u64
+    while i < bodylen {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    let olp : *u64 = ol as *u64
+    olp[0] = bodylen
+    return REMOTE_OK
+}

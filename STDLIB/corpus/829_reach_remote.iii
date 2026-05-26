@@ -1,0 +1,106 @@
+/* 829_reach_remote.iii -- The Reach, Phase 3: the L4 remote tier + the offline-as-GAP guarantee.
+ * Proves the "no wifi handicap" property structurally: with the remote tier CONFIGURED but the
+ * endpoint UNREACHABLE (connection refused), reach degrades to a typed GAP -- never an error,
+ * never a hang (1); a value present LOCALLY is served WITHOUT needing the remote even when one is
+ * configured -- local-first, so a configured remote never slows or breaks offline operation (2-3);
+ * the HTTP request builder produces a well-formed GET of the expected length (4); the remote config
+ * toggles on/off (5).  The LIVE fetch + cache-fill-from-remote is exercised out-of-corpus by
+ * scripts/verify_reach_remote.sh -- a single-process KAT cannot drive client AND server without a
+ * recv deadlock.  Exit 99 = all hold.  CORPUS-ONLY (backend_remote/reach_core/net/cad/fs complete). */
+module corpus_829
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn reach_emit(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn backend_remote_set_endpoint(ip_packed: u32, port: u32) -> i32 from "backend_remote.iii"
+extern @abi(c-msvc-x64) fn backend_remote_clear() -> i32 from "backend_remote.iii"
+extern @abi(c-msvc-x64) fn backend_remote_is_on() -> u8 from "backend_remote.iii"
+extern @abi(c-msvc-x64) fn backend_remote_build_req(addr: u64) -> u64 from "backend_remote.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x002Eu64, 0u64)    /* READ|WRITE|CREATE|DIAL */
+
+    /* clean the disk store ("iii_reach_store.bin") for a deterministic start */
+    let path : *u8 = malloc(24u64)
+    path[0] = 105u8
+    path[1] = 105u8
+    path[2] = 105u8
+    path[3] = 95u8
+    path[4] = 114u8
+    path[5] = 101u8
+    path[6] = 97u8
+    path[7] = 99u8
+    path[8] = 104u8
+    path[9] = 95u8
+    path[10] = 115u8
+    path[11] = 116u8
+    path[12] = 111u8
+    path[13] = 114u8
+    path[14] = 101u8
+    path[15] = 46u8
+    path[16] = 98u8
+    path[17] = 105u8
+    path[18] = 110u8
+    path[19] = 0u8
+    fs_delete(cap, path as u64)
+
+    let out : *u8 = malloc(1024u64)
+    let olen_p : *u8 = malloc(8u64)
+    let olen : *u64 = olen_p as *u64
+    let gid : *u8 = malloc(8u64)
+    let tmp : *u8 = malloc(32u64)
+
+    /* (1) OFFLINE-AS-GAP: remote CONFIGURED but the endpoint is unreachable (127.0.0.1:59437,
+     * nothing listening -> connection refused, fast on loopback).  reach of a never-stored address
+     * tries L0/L1 (miss) then L4 (refused) and degrades to a typed GAP -- not an error, not a hang. */
+    backend_remote_set_endpoint(0x7F000001u32, 59437u32)
+    let bog : *u8 = malloc(32u64)
+    let mut bi : u64 = 0u64
+    while bi < 32u64 {
+        bog[bi] = 0xCDu8
+        bi = bi + 1u64
+    }
+    let rc1 : i32 = reach(bog as u64, cap, out as u64, 1024u64, olen as u64, gid as u64)
+    if rc1 != 1i32 { return 1u64 }
+
+    /* (2-3) LOCAL-FIRST: a locally-emitted value is served from L0/L1 even with the (dead) remote
+     * configured -- the remote is never consulted when a nearer tier holds a valid copy. */
+    let val : *u8 = malloc(5u64)
+    val[0] = 90u8
+    val[1] = 89u8
+    val[2] = 88u8
+    val[3] = 87u8
+    val[4] = 86u8
+    let addr : *u8 = malloc(32u64)
+    if reach_emit(val as u64, 5u64, cap, addr as u64) != 0i32 { return 2u64 }
+    let rc2 : i32 = reach(addr as u64, cap, out as u64, 1024u64, olen as u64, gid as u64)
+    if rc2 != 0i32 { return 2u64 }
+    cad_oneshot(0u32, out, olen[0], tmp)
+    if cad_eq(tmp, addr) != 1u8 { return 3u64 }
+
+    /* (4) the HTTP request builder: GET /<64-hex> HTTP/1.0 CRLF CRLF = 5 + 64 + 13 = 82 bytes */
+    if backend_remote_build_req(addr as u64) != 82u64 { return 4u64 }
+
+    /* (5) the remote config toggles */
+    if backend_remote_is_on() != 1u8 { return 5u64 }
+    backend_remote_clear()
+    if backend_remote_is_on() != 0u8 { return 5u64 }
+
+    fs_delete(cap, path as u64)
+    free(path)
+    free(out)
+    free(olen_p)
+    free(gid)
+    free(tmp)
+    free(bog)
+    free(val)
+    free(addr)
+    return 99u64
+}

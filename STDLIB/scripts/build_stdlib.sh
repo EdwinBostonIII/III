@@ -696,7 +696,9 @@ MODULES=(
     # cannot perturb any pre-existing module's BSS layout (iiis-0 BSS sensitivity).
     "aether/backend_memo"
     "aether/reach_store"
+    "aether/backend_remote"
     "aether/reach_core"
+    "aether/reach_oracle"
 )
 
 PASS=0

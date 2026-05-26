@@ -1,28 +1,31 @@
 /* STDLIB/iii/aether/reach_core.iii -- The Reach: the resolver + emit.
  *
  * The network redefined as content-addressed transport: reach(address) -> value | typed-GAP,
- * emit(value) -> address.  THE ADDRESS IS THE INTEGRITY PROOF: every value returned by reach is
- * re-hashed (cad) and checked against the requested address -- at EVERY tier -- so a corrupt,
- * tampered, or stale-cached backend entry is NEVER handed back; it degrades to a typed GAP
- * (uncertainty), never an error.  This is the tamper-evidence only a content-addressed network
- * has: you cannot be lied to about content, and a poisoned cache cannot be blessed.
+ * emit(value) -> address.  THE ADDRESS IS THE INTEGRITY PROOF: every value any tier returns is
+ * re-hashed (cad) and checked against the requested address; a tier whose bytes mismatch is
+ * SKIPPED (its result discarded, the next tier tried), so a corrupt disk entry, a poisoned cache,
+ * or a lying remote can NEVER be blessed.  You cannot be lied to about content, at any tier.
  *
- * Backend lattice, nearest-first (Phase 2): L0 memo (RAM) -> L1 content-store (disk).  The first
- * tier holding a VALID copy wins; an L1 hit is written back DOWN into L0 (cache-fill) so the next
- * reach is RAM-fast; emit primes L0 too.  Later phases extend the lattice to L2 IPC / L3 loopback-
- * peer / L4 remote, with the remote tier LAST and OPTIONAL -- so offline shrinks the reachable set
- * to a typed GAP and never reduces local capacity (the "no wifi handicap" property, structural).
- * Cap-gated per the M31 IO-membrane (corpus 687): reach needs READ; emit needs READ|WRITE|CREATE.
+ * Backend lattice, nearest-first: L0 memo (RAM) -> L1 content-store (disk) -> L4 remote (HTTP).
+ * The first tier holding a VALID copy wins; a hit from a farther tier is written back DOWN into
+ * the nearer ones (cache-fill: an L4 fetch lands in L1+L0; an L1 hit lands in L0), so the internet
+ * is a cache-filling backend -- content-verified + local forever after one fetch -- never a runtime
+ * dependency.  The remote tier is LAST and OPTIONAL: no endpoint / refused / no DIAL right -> it
+ * reports offline and reach degrades to a typed GAP, so III keeps FULL LOCAL capacity offline (the
+ * "no wifi handicap" property, structural).  Cap-gated per the M31 IO-membrane (corpus 687): reach
+ * needs READ; emit needs READ|WRITE|CREATE; the L4 tier additionally needs NET_RIGHT_DIAL (far-reach
+ * is its own right -- a cap without it is unforgeably offline-only).
  *
- * Hexad: kind_passage.  Ring: R-1.  NIH: backend_memo + reach_store + cad + uncertainty +
- * capability only.  Determinism: the immutable-by-address path is reproducible (same address ->
- * same value or same GAP on any run); integer-only; ==/!= compares; single-line fns; params->locals. */
+ * Hexad: kind_passage.  Ring: R-1.  NIH: backend_memo + reach_store + backend_remote + cad +
+ * uncertainty + capability only.  Determinism: the immutable-by-address path is reproducible (same
+ * address -> same value or same GAP); integer-only; ==/!= compares; single-line fns; params->locals. */
 module aether_reach_core
 
 extern @abi(c-msvc-x64) fn backend_memo_get(addr: u64, out: u64, max: u64, out_len: u64) -> i32 from "backend_memo.iii"
 extern @abi(c-msvc-x64) fn backend_memo_put(addr: u64, buf: u64, len: u64) -> i32 from "backend_memo.iii"
 extern @abi(c-msvc-x64) fn reach_store_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 from "reach_store.iii"
 extern @abi(c-msvc-x64) fn reach_store_put(addr: u64, buf: u64, len: u64, cap: u64) -> i32 from "reach_store.iii"
+extern @abi(c-msvc-x64) fn backend_remote_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 from "backend_remote.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
@@ -33,19 +36,18 @@ const REACH_GAP    : i32 = 1i32
 const REACH_DENIED : i32 = 2i32
 
 const REACH_SUITE        : u32 = 0u32    /* CAD_SUITE_SHA256 -- the canonical content-address */
-const REACH_RIGHT_READ   : u64 = 0x0002u64    /* FS_RIGHT_READ */
+const REACH_RIGHT_READ   : u64 = 0x0002u64
 const REACH_EMIT_RIGHTS  : u64 = 0x000Eu64    /* READ|WRITE|CREATE */
 
-const REACH_UNC_HOLE         : u8  = 1u8       /* UNC_HOLE -- not-yet-reachable (a hole, not an error) */
-const REACH_REASON_NOTFOUND  : u32 = 0x52001u32
-const REACH_REASON_INTEGRITY : u32 = 0x52002u32
-const REACH_STORE_OK         : i32 = 0i32
-const REACH_MEMO_OK          : i32 = 0i32
+const REACH_UNC_HOLE        : u8  = 1u8        /* UNC_HOLE -- not-yet-reachable (a hole, not an error) */
+const REACH_REASON_NOTFOUND : u32 = 0x52001u32
+const REACH_STORE_OK        : i32 = 0i32
+const REACH_MEMO_OK         : i32 = 0i32
+const REACH_REMOTE_OK       : i32 = 0i32
 
 var REACH_VBUF : [u8; 32]    /* recompute-the-address scratch for the integrity check */
 
-/* write u32 v as 4 little-endian bytes into ptr (byte-by-byte; dodges the u32-pointer-store
- * width trap where a *u32 store of an 8-byte-slot value can emit a wide movq). */
+/* write u32 v as 4 little-endian bytes into ptr (byte-by-byte; dodges the u32-pointer-store trap). */
 fn _reach_put_u32le(v: u32, ptr: u64) -> u64 {
     let p : *u8 = ptr as *u8
     let vv : u32 = v
@@ -56,8 +58,8 @@ fn _reach_put_u32le(v: u32, ptr: u64) -> u64 {
     return 0u64
 }
 
-/* integrity gate: 1 iff the got_len bytes at out re-hash (cad) to the requested address.
- * Applied to WHATEVER any backend tier returns -- L0 cache included -- before it is blessed. */
+/* integrity gate: 1 iff the got_len bytes at out re-hash (cad) to the requested address.  Applied
+ * to WHATEVER any backend tier returns -- L0 cache, L1 disk, L4 wire -- before it is blessed. */
 fn _reach_verify(out: u64, got_len: u64, addr: u64) -> u8 {
     let o : u64 = out
     let gl : u64 = got_len
@@ -81,10 +83,10 @@ fn reach_emit(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 @export {
     return REACH_OK
 }
 
-/* reach(address) -> value | GAP: resolve `addr` nearest-first (L0 memo, then L1 store), VERIFY the
- * bytes re-hash to the address at each tier (tamper-evident), and return REACH_OK with the value in
- * out (*out_len set).  On an L1 hit, fill L0 (cache-fill-down).  Otherwise REACH_GAP (*out_gid set,
- * *out_len 0).  REACH_DENIED if the capability lacks READ.  NEVER returns bytes that mismatch addr. */
+/* reach(address) -> value | GAP: resolve `addr` nearest-first (L0 memo -> L1 store -> L4 remote),
+ * re-hashing each tier's bytes against the address; the first VALID copy wins and is cache-filled
+ * DOWN into the nearer tiers; otherwise REACH_GAP (*out_gid set, *out_len 0).  REACH_DENIED if the
+ * cap lacks READ.  A tier that returns mismatching bytes is skipped, never returned. */
 fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 @export {
     let a : u64 = addr
     let c : u64 = cap
@@ -97,23 +99,27 @@ fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) ->
     if cap_verify_rights(c, REACH_RIGHT_READ) == 0u8 { return REACH_DENIED }
     let m : i32 = backend_memo_get(a, o, mx, ol)
     if m == REACH_MEMO_OK {
-        let g0 : u64 = olp[0]
-        if _reach_verify(o, g0, a) == 1u8 { return REACH_OK }
+        if _reach_verify(o, olp[0], a) == 1u8 { return REACH_OK }
         olp[0] = 0u64
     }
     let rc : i32 = reach_store_get(a, c, o, mx, ol)
     if rc == REACH_STORE_OK {
-        let g1 : u64 = olp[0]
-        if _reach_verify(o, g1, a) == 1u8 {
-            backend_memo_put(a, o, g1)
+        if _reach_verify(o, olp[0], a) == 1u8 {
+            backend_memo_put(a, o, olp[0])
             return REACH_OK
         }
         olp[0] = 0u64
-        let gidi : u32 = unc_gap_root(REACH_UNC_HOLE, REACH_REASON_INTEGRITY)
-        _reach_put_u32le(gidi, og)
-        return REACH_GAP
     }
-    let gidn : u32 = unc_gap_root(REACH_UNC_HOLE, REACH_REASON_NOTFOUND)
-    _reach_put_u32le(gidn, og)
+    let r4 : i32 = backend_remote_get(a, c, o, mx, ol)
+    if r4 == REACH_REMOTE_OK {
+        if _reach_verify(o, olp[0], a) == 1u8 {
+            reach_store_put(a, o, olp[0], c)
+            backend_memo_put(a, o, olp[0])
+            return REACH_OK
+        }
+        olp[0] = 0u64
+    }
+    let gid : u32 = unc_gap_root(REACH_UNC_HOLE, REACH_REASON_NOTFOUND)
+    _reach_put_u32le(gid, og)
     return REACH_GAP
 }

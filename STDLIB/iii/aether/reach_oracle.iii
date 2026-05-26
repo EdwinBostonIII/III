@@ -1,0 +1,70 @@
+/* STDLIB/iii/aether/reach_oracle.iii -- The Reach, Phase 4: the live-API quarantine (the
+ * DETERMINISM FIREWALL).
+ *
+ * The Reach's content-addressed tiers (L0/L1/L4) are REPRODUCIBLE -- reach(addr) yields the same
+ * value or the same typed GAP on any run, on any machine -- so they feed III's deterministic core
+ * freely.  A live API / RPC is the opposite: its answer is NON-reproducible (it depends on a remote
+ * oracle and the moment of the call).  This module types that distinction so it can never be lost:
+ *
+ *   - CANONICAL (0): content-addressed + reproducible.  Admissible into a deterministic context.
+ *   - PROVISIONAL (1): oracle-dependent.  It carries an ORACLE-PIN -- a content-address of EXACTLY
+ *     what it depended on (endpoint || args || epoch) -- so the dependence is auditable and the
+ *     value is never mistaken for reproducible.
+ *
+ * THE FIREWALL (reach_oracle_admit_canonical) is DEFAULT-DENY: it admits ONLY the CANONICAL tier;
+ * a PROVISIONAL value -- or any unknown tier -- is REFUSED.  So a non-reproducible API answer can
+ * never silently become a value the system claims as "determined": the only place the network
+ * touches non-determinism is walled off and explicitly typed.  (The design folds PROVISIONAL into
+ * omnia/sovval's SV_STATUS as a coordinated next step; here it is a reach-level tier so the firewall
+ * lands without editing the M5 currency.  A caller fetches a live result via net/reach, pins it
+ * here, and presents the (tier, pin) pair; deterministic consumers gate on admit_canonical.)
+ *
+ * Hexad: kind_passage.  Ring: R-1.  NIH: numera/cad only.  Determinism: integer-only; ==/!=
+ * compares; single-line fns; params bound to locals; the pin is content-addressed (reproducible). */
+module aether_reach_oracle
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const ROR_TIER_CANONICAL   : u32 = 0u32
+const ROR_TIER_PROVISIONAL : u32 = 1u32
+const ROR_OK       : i32 = 0i32
+const ROR_REFUSED  : i32 = 1i32
+const ROR_SUITE    : u32 = 0u32      /* CAD_SUITE_SHA256 */
+
+/* pin an oracle result: out_pin := cad(pin_bytes) -- a content-address of exactly what the result
+ * depended on (endpoint || args || epoch) -- and return the PROVISIONAL tier.  The pin is itself
+ * reproducible (same dependence -> same pin), so the oracle-dependence is auditable forever. */
+fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 @export {
+    let pb : u64 = pin_bytes
+    let pl : u64 = pin_len
+    let op : u64 = out_pin
+    cad_oneshot(ROR_SUITE, pb as *u8, pl, op as *u8)
+    return ROR_TIER_PROVISIONAL
+}
+
+/* THE FIREWALL (default-deny): admit a value into a deterministic/canonical context iff its tier
+ * is exactly CANONICAL.  PROVISIONAL, or ANY unknown tier value, is REFUSED. */
+fn reach_oracle_admit_canonical(tier: u32) -> i32 @export {
+    if tier == ROR_TIER_CANONICAL { return ROR_OK }
+    return ROR_REFUSED
+}
+
+/* 1 iff the tier is the oracle-dependent PROVISIONAL tier. */
+fn reach_oracle_is_provisional(tier: u32) -> u8 @export {
+    let t : u32 = tier
+    if t == ROR_TIER_PROVISIONAL { return 1u8 }
+    return 0u8
+}
+
+/* audit a claimed oracle-pin: re-derive cad(pin_bytes) and compare to claimed_pin (32 bytes).
+ * 1 iff the claim binds EXACTLY these dependence bytes -- a forged or mismatched pin is rejected. */
+fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 @export {
+    let pb : u64 = pin_bytes
+    let pl : u64 = pin_len
+    let cp : u64 = claimed_pin
+    cad_oneshot(ROR_SUITE, pb as *u8, pl, (&ROR_VBUF as u64) as *u8)
+    return cad_eq((&ROR_VBUF as u64) as *u8, cp as *u8)
+}
+
+var ROR_VBUF : [u8; 32]

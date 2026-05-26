@@ -4,20 +4,22 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "backend_memo.iiibackend_memo.iiireach_store.iiireach_store.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
+    .ascii "backend_memo.iiibackend_memo.iiireach_store.iiireach_store.iiibackend_remote.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
 L_str_1:
-    .ascii "backend_memo.iiireach_store.iiireach_store.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
+    .ascii "backend_memo.iiireach_store.iiireach_store.iiibackend_remote.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
 L_str_2:
-    .ascii "reach_store.iiireach_store.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
+    .ascii "reach_store.iiireach_store.iiibackend_remote.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
 L_str_3:
-    .ascii "reach_store.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
+    .ascii "reach_store.iiibackend_remote.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
 L_str_4:
-    .ascii "cad.iiicad.iiicapability.iiiuncertainty.iii\0"
+    .ascii "backend_remote.iiicad.iiicad.iiicapability.iiiuncertainty.iii\0"
 L_str_5:
-    .ascii "cad.iiicapability.iiiuncertainty.iii\0"
+    .ascii "cad.iiicad.iiicapability.iiiuncertainty.iii\0"
 L_str_6:
-    .ascii "capability.iiiuncertainty.iii\0"
+    .ascii "cad.iiicapability.iiiuncertainty.iii\0"
 L_str_7:
+    .ascii "capability.iiiuncertainty.iii\0"
+L_str_8:
     .ascii "uncertainty.iii\0"
     .section .rodata
 L_REACH_OK:
@@ -36,11 +38,11 @@ L_REACH_UNC_HOLE:
     .quad 0x1
 L_REACH_REASON_NOTFOUND:
     .quad 0x52001
-L_REACH_REASON_INTEGRITY:
-    .quad 0x52002
 L_REACH_STORE_OK:
     .quad 0x0
 L_REACH_MEMO_OK:
+    .quad 0x0
+L_REACH_REMOTE_OK:
     .quad 0x0
     .section .bss
     .global L_REACH_VBUF
@@ -540,6 +542,8 @@ L_if_end_5:
     popq %rax
     testq %rax, %rax
     jz L_if_end_7
+    movq -56(%rbp), %rax
+    pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -547,12 +551,6 @@ L_if_end_5:
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -120(%rbp)
-    movq -56(%rbp), %rax
-    pushq %rax
-    movq -120(%rbp), %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
@@ -636,6 +634,8 @@ L_if_end_7:
     popq %rax
     testq %rax, %rax
     jz L_if_end_11
+    movq -56(%rbp), %rax
+    pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -643,12 +643,6 @@ L_if_end_7:
     popq %rcx
     popq %rax
     movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -128(%rbp)
-    movq -56(%rbp), %rax
-    pushq %rax
-    movq -128(%rbp), %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
@@ -671,7 +665,13 @@ L_if_end_7:
     popq %rax
     testq %rax, %rax
     jz L_if_end_13
-    movq -128(%rbp), %rax
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
     pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
@@ -706,7 +706,148 @@ L_if_end_13:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
-    movl L_REACH_REASON_INTEGRITY(%rip), %eax
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    subq $8, %rsp
+    movq -88(%rbp), %rax
+    pushq %rax
+    movq -80(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq backend_remote_get
+    addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -128(%rbp)
+    movslq -128(%rbp), %rax
+    pushq %rax
+    movslq L_REACH_REMOTE_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movq -56(%rbp), %rax
+    pushq %rax
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L__reach_verify
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq reach_store_put
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq backend_memo_put
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movslq L_REACH_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movl L_REACH_REASON_NOTFOUND(%rip), %eax
     pushq %rax
     movzbq L_REACH_UNC_HOLE(%rip), %rax
     pushq %rax
@@ -722,40 +863,6 @@ L_if_end_13:
     movq -96(%rbp), %rax
     pushq %rax
     movl -136(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L__reach_put_u32le
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movslq L_REACH_GAP(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_11:
-    movl L_REACH_REASON_NOTFOUND(%rip), %eax
-    pushq %rax
-    movzbq L_REACH_UNC_HOLE(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq unc_gap_root
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -128(%rbp)
-    movq -96(%rbp), %rax
-    pushq %rax
-    movl -128(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rdx

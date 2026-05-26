@@ -1,0 +1,185 @@
+/* cg_sha.iii -- shared ctx-based streaming SHA-256 (FIPS 180-4) with
+ * snapshot-final, for the Ring-0/-1/-3 codegen D9 witness.
+ *
+ * ONE implementation replaces the three separate file-static SHA-256 copies
+ * that lived in cg_r0_accessors.c / cg_rm1_accessors.c / cg_r3_accessors.c.
+ * Each ring owns a 112-byte context ARRAY and calls the @export entry points
+ * with `&RING_SHA as u64`:
+ *
+ *   ctx layout: state[8]@0 (u32x8) | bitlen@32 (u64) | buflen@40 (u32) |
+ *               buf[64]@44 (u8x64)   -- 108 bytes used, [u64;14]=112 alloc.
+ *
+ * Design notes (iiis traps respected):
+ *   - ctx is taken as `&WHOLE_ARRAY as u64` (works); never `&GLOBAL[0]` (W3).
+ *   - the message schedule W is a module GLOBAL: iiis cannot runtime-index a
+ *     LOCAL array (segfaults) -- numera/sha256.iii uses a global SHA_W for the
+ *     same reason.  compress is a synchronous leaf (never re-entered), so one
+ *     shared W / SNAP scratch is safe.
+ *   - snapshot copies ctx -> CGSHA_SNAP and finalizes the COPY, leaving the
+ *     live stream intact (the witness must keep streaming after a snapshot).
+ *
+ * NIH: zero externs, libc-free.  Mirrors the proven numera/sha256.iii body.
+ * Verified: FIPS "abc" KAT + non-destructive-snapshot KAT (cgsha_kat.iii).
+ */
+module cg_sha
+
+var CGSHA_K    : [u32; 64]
+var CGSHA_W    : [u32; 64]     /* message-schedule scratch (GLOBAL by necessity) */
+var CGSHA_SNAP : [u64; 14]     /* snapshot scratch ctx (112 bytes) */
+
+fn cgsha_rd8(p: u64, o: u64) -> u32 { let q: *u8 = (p + o) as *u8; return q[0] as u32 }
+fn cgsha_wr8(p: u64, o: u64, v: u32) { let q: *u8 = (p + o) as *u8; q[0] = (v & 0xffu32) as u8 }
+fn cgsha_rd32(p: u64, o: u64) -> u32 { let q: *u32 = (p + o) as *u32; return q[0] }
+fn cgsha_wr32(p: u64, o: u64, v: u32) { let q: *u32 = (p + o) as *u32; q[0] = v }
+fn cgsha_rd64(p: u64, o: u64) -> u64 { let q: *u64 = (p + o) as *u64; return q[0] }
+fn cgsha_wr64(p: u64, o: u64, v: u64) { let q: *u64 = (p + o) as *u64; q[0] = v }
+fn cgsha_rotr(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32u32 - n)) }
+
+fn cgsha_init_k() -> u32 {
+    CGSHA_K[0]=0x428a2f98u32  CGSHA_K[1]=0x71374491u32  CGSHA_K[2]=0xb5c0fbcfu32  CGSHA_K[3]=0xe9b5dba5u32
+    CGSHA_K[4]=0x3956c25bu32  CGSHA_K[5]=0x59f111f1u32  CGSHA_K[6]=0x923f82a4u32  CGSHA_K[7]=0xab1c5ed5u32
+    CGSHA_K[8]=0xd807aa98u32  CGSHA_K[9]=0x12835b01u32  CGSHA_K[10]=0x243185beu32 CGSHA_K[11]=0x550c7dc3u32
+    CGSHA_K[12]=0x72be5d74u32 CGSHA_K[13]=0x80deb1feu32 CGSHA_K[14]=0x9bdc06a7u32 CGSHA_K[15]=0xc19bf174u32
+    CGSHA_K[16]=0xe49b69c1u32 CGSHA_K[17]=0xefbe4786u32 CGSHA_K[18]=0x0fc19dc6u32 CGSHA_K[19]=0x240ca1ccu32
+    CGSHA_K[20]=0x2de92c6fu32 CGSHA_K[21]=0x4a7484aau32 CGSHA_K[22]=0x5cb0a9dcu32 CGSHA_K[23]=0x76f988dau32
+    CGSHA_K[24]=0x983e5152u32 CGSHA_K[25]=0xa831c66du32 CGSHA_K[26]=0xb00327c8u32 CGSHA_K[27]=0xbf597fc7u32
+    CGSHA_K[28]=0xc6e00bf3u32 CGSHA_K[29]=0xd5a79147u32 CGSHA_K[30]=0x06ca6351u32 CGSHA_K[31]=0x14292967u32
+    CGSHA_K[32]=0x27b70a85u32 CGSHA_K[33]=0x2e1b2138u32 CGSHA_K[34]=0x4d2c6dfcu32 CGSHA_K[35]=0x53380d13u32
+    CGSHA_K[36]=0x650a7354u32 CGSHA_K[37]=0x766a0abbu32 CGSHA_K[38]=0x81c2c92eu32 CGSHA_K[39]=0x92722c85u32
+    CGSHA_K[40]=0xa2bfe8a1u32 CGSHA_K[41]=0xa81a664bu32 CGSHA_K[42]=0xc24b8b70u32 CGSHA_K[43]=0xc76c51a3u32
+    CGSHA_K[44]=0xd192e819u32 CGSHA_K[45]=0xd6990624u32 CGSHA_K[46]=0xf40e3585u32 CGSHA_K[47]=0x106aa070u32
+    CGSHA_K[48]=0x19a4c116u32 CGSHA_K[49]=0x1e376c08u32 CGSHA_K[50]=0x2748774cu32 CGSHA_K[51]=0x34b0bcb5u32
+    CGSHA_K[52]=0x391c0cb3u32 CGSHA_K[53]=0x4ed8aa4au32 CGSHA_K[54]=0x5b9cca4fu32 CGSHA_K[55]=0x682e6ff3u32
+    CGSHA_K[56]=0x748f82eeu32 CGSHA_K[57]=0x78a5636fu32 CGSHA_K[58]=0x84c87814u32 CGSHA_K[59]=0x8cc70208u32
+    CGSHA_K[60]=0x90befffau32 CGSHA_K[61]=0xa4506cebu32 CGSHA_K[62]=0xbef9a3f7u32 CGSHA_K[63]=0xc67178f2u32
+    return 0u32
+}
+
+fn cgsha_compress(ctx: u64) -> u32 {
+    let mut i: u32 = 0u32
+    while i < 16u32 {
+        let base: u64 = 44u64 + (i as u64) * 4u64
+        let p0: u32 = cgsha_rd8(ctx, base + 0u64)
+        let p1: u32 = cgsha_rd8(ctx, base + 1u64)
+        let p2: u32 = cgsha_rd8(ctx, base + 2u64)
+        let p3: u32 = cgsha_rd8(ctx, base + 3u64)
+        CGSHA_W[i] = (p0 << 24u32) | (p1 << 16u32) | (p2 << 8u32) | p3
+        i = i + 1u32
+    }
+    while i < 64u32 {
+        let w15: u32 = CGSHA_W[i - 15u32]
+        let s0: u32 = cgsha_rotr(w15, 7u32) ^ cgsha_rotr(w15, 18u32) ^ (w15 >> 3u32)
+        let w2: u32 = CGSHA_W[i - 2u32]
+        let s1: u32 = cgsha_rotr(w2, 17u32) ^ cgsha_rotr(w2, 19u32) ^ (w2 >> 10u32)
+        CGSHA_W[i] = CGSHA_W[i - 16u32] + s0 + CGSHA_W[i - 7u32] + s1
+        i = i + 1u32
+    }
+    let mut a: u32 = cgsha_rd32(ctx, 0u64)
+    let mut b: u32 = cgsha_rd32(ctx, 4u64)
+    let mut c: u32 = cgsha_rd32(ctx, 8u64)
+    let mut d: u32 = cgsha_rd32(ctx, 12u64)
+    let mut e: u32 = cgsha_rd32(ctx, 16u64)
+    let mut f: u32 = cgsha_rd32(ctx, 20u64)
+    let mut g: u32 = cgsha_rd32(ctx, 24u64)
+    let mut h: u32 = cgsha_rd32(ctx, 28u64)
+    let mut k: u32 = 0u32
+    while k < 64u32 {
+        let big_s1: u32 = cgsha_rotr(e, 6u32) ^ cgsha_rotr(e, 11u32) ^ cgsha_rotr(e, 25u32)
+        let ch: u32 = (e & f) ^ ((~e) & g)
+        let t1: u32 = h + big_s1 + ch + CGSHA_K[k] + CGSHA_W[k]
+        let big_s0: u32 = cgsha_rotr(a, 2u32) ^ cgsha_rotr(a, 13u32) ^ cgsha_rotr(a, 22u32)
+        let mj: u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2: u32 = big_s0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+        k = k + 1u32
+    }
+    cgsha_wr32(ctx, 0u64,  cgsha_rd32(ctx, 0u64)  + a)
+    cgsha_wr32(ctx, 4u64,  cgsha_rd32(ctx, 4u64)  + b)
+    cgsha_wr32(ctx, 8u64,  cgsha_rd32(ctx, 8u64)  + c)
+    cgsha_wr32(ctx, 12u64, cgsha_rd32(ctx, 12u64) + d)
+    cgsha_wr32(ctx, 16u64, cgsha_rd32(ctx, 16u64) + e)
+    cgsha_wr32(ctx, 20u64, cgsha_rd32(ctx, 20u64) + f)
+    cgsha_wr32(ctx, 24u64, cgsha_rd32(ctx, 24u64) + g)
+    cgsha_wr32(ctx, 28u64, cgsha_rd32(ctx, 28u64) + h)
+    return 0u32
+}
+
+fn cgsha_init(ctx: u64) -> u32 @export {
+    cgsha_init_k()
+    cgsha_wr32(ctx, 0u64,  0x6a09e667u32)
+    cgsha_wr32(ctx, 4u64,  0xbb67ae85u32)
+    cgsha_wr32(ctx, 8u64,  0x3c6ef372u32)
+    cgsha_wr32(ctx, 12u64, 0xa54ff53au32)
+    cgsha_wr32(ctx, 16u64, 0x510e527fu32)
+    cgsha_wr32(ctx, 20u64, 0x9b05688cu32)
+    cgsha_wr32(ctx, 24u64, 0x1f83d9abu32)
+    cgsha_wr32(ctx, 28u64, 0x5be0cd19u32)
+    cgsha_wr64(ctx, 32u64, 0u64)
+    cgsha_wr32(ctx, 40u64, 0u32)
+    return 0u32
+}
+
+fn cgsha_update(ctx: u64, addr: u64, n: u64) -> u32 @export {
+    cgsha_wr64(ctx, 32u64, cgsha_rd64(ctx, 32u64) + n * 8u64)
+    let mut rem: u64 = n
+    let mut off: u64 = 0u64
+    while rem > 0u64 {
+        let bl: u32 = cgsha_rd32(ctx, 40u64)
+        let mut take: u64 = 64u64 - (bl as u64)
+        if take > rem { take = rem }
+        let mut k: u64 = 0u64
+        while k < take {
+            cgsha_wr8(ctx, 44u64 + (bl as u64) + k, cgsha_rd8(addr, off + k))
+            k = k + 1u64
+        }
+        cgsha_wr32(ctx, 40u64, bl + (take as u32))
+        off = off + take
+        rem = rem - take
+        if cgsha_rd32(ctx, 40u64) == 64u32 {
+            cgsha_compress(ctx)
+            cgsha_wr32(ctx, 40u64, 0u32)
+        }
+    }
+    return 0u32
+}
+
+fn cgsha_snapshot(ctx: u64, out: u64) -> u32 @export {
+    let snap: u64 = &CGSHA_SNAP as u64
+    let mut i: u64 = 0u64
+    while i < 112u64 { cgsha_wr8(snap, i, cgsha_rd8(ctx, i)); i = i + 1u64 }
+    let blen: u64 = cgsha_rd64(snap, 32u64)
+    let mut bl: u32 = cgsha_rd32(snap, 40u64)
+    cgsha_wr8(snap, 44u64 + (bl as u64), 0x80u32)
+    bl = bl + 1u32
+    if bl > 56u32 {
+        while bl < 64u32 { cgsha_wr8(snap, 44u64 + (bl as u64), 0u32); bl = bl + 1u32 }
+        cgsha_compress(snap)
+        bl = 0u32
+    }
+    while bl < 56u32 { cgsha_wr8(snap, 44u64 + (bl as u64), 0u32); bl = bl + 1u32 }
+    let mut j: u32 = 0u32
+    while j < 8u32 {
+        let shift: u32 = 56u32 - j * 8u32
+        cgsha_wr8(snap, 44u64 + 56u64 + (j as u64), ((blen >> (shift as u64)) & 0xffu64) as u32)
+        j = j + 1u32
+    }
+    cgsha_compress(snap)
+    let mut m: u32 = 0u32
+    while m < 8u32 {
+        let hv: u32 = cgsha_rd32(snap, (m as u64) * 4u64)
+        let ob: u64 = (m as u64) * 4u64
+        cgsha_wr8(out, ob + 0u64, (hv >> 24u32) & 0xffu32)
+        cgsha_wr8(out, ob + 1u64, (hv >> 16u32) & 0xffu32)
+        cgsha_wr8(out, ob + 2u64, (hv >> 8u32) & 0xffu32)
+        cgsha_wr8(out, ob + 3u64, hv & 0xffu32)
+        m = m + 1u32
+    }
+    return 0u32
+}

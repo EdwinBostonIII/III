@@ -182,9 +182,6 @@ extern @abi(c-msvc-x64) fn iii_cg_r0_fwrite_c(out_handle: u64, addr: u64, n: u64
 extern @abi(c-msvc-x64) fn iii_cg_r0_sha_init_c() from "cg_r0_accessors.c"
 extern @abi(c-msvc-x64) fn iii_cg_r0_sha_update_c(addr: u64, n: u64) from "cg_r0_accessors.c"
 extern @abi(c-msvc-x64) fn iii_cg_r0_sha_snapshot_c(out32: u64) from "cg_r0_accessors.c"
-extern @abi(c-msvc-x64) fn iii_cg_r0_irp_mj_lookup_c(addr: u64, len: u64) -> i32 from "cg_r0_accessors.c"
-extern @abi(c-msvc-x64) fn iii_cg_r0_api_min_irql_c(addr: u64, len: u64) -> i32 from "cg_r0_accessors.c"
-extern @abi(c-msvc-x64) fn iii_cg_r0_irql_sym_c(addr: u64, len: u64) -> i32 from "cg_r0_accessors.c"
 
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
@@ -622,6 +619,75 @@ fn r0_callee_is_kernel_import(callee: u32, name_off: u32) -> u32 {
     return 0u32
 }
 fn r0_name_eq_lit(off: u32, len: u32, lit_addr: u64, lit_len: u64) -> u32 { if (len as u64) != lit_len { return 0u32 }; let src: u64 = iii_ast_source_buf(R0_G_AST); if iii_emit_memcmp_c(src + (off as u64), lit_addr, lit_len) == 0i32 { return 1u32 }; return 0u32 }
+fn r0_addr_eq_lit(addr: u64, len: u64, lit_addr: u64, lit_len: u64) -> u32 { if len != lit_len { return 0u32 }; if iii_emit_memcmp_c(addr, lit_addr, lit_len) == 0i32 { return 1u32 }; return 0u32 }
+fn iii_cg_r0_irp_mj_lookup_c(addr: u64, len: u64) -> i32 {
+    if addr == 0u64 { return -1i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_CREATE" as *u8 as u64, 13u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_CREATE_NAMED_PIPE" as *u8 as u64, 24u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_CLOSE" as *u8 as u64, 12u64) == 1u32 { return 2i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_READ" as *u8 as u64, 11u64) == 1u32 { return 3i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_WRITE" as *u8 as u64, 12u64) == 1u32 { return 4i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_QUERY_INFORMATION" as *u8 as u64, 24u64) == 1u32 { return 5i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SET_INFORMATION" as *u8 as u64, 22u64) == 1u32 { return 6i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_QUERY_EA" as *u8 as u64, 15u64) == 1u32 { return 7i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SET_EA" as *u8 as u64, 13u64) == 1u32 { return 8i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_FLUSH_BUFFERS" as *u8 as u64, 20u64) == 1u32 { return 9i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_QUERY_VOLUME_INFORMATION" as *u8 as u64, 31u64) == 1u32 { return 10i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SET_VOLUME_INFORMATION" as *u8 as u64, 29u64) == 1u32 { return 11i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_DIRECTORY_CONTROL" as *u8 as u64, 24u64) == 1u32 { return 12i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_FILE_SYSTEM_CONTROL" as *u8 as u64, 26u64) == 1u32 { return 13i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_DEVICE_CONTROL" as *u8 as u64, 21u64) == 1u32 { return 14i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_INTERNAL_DEVICE_CONTROL" as *u8 as u64, 30u64) == 1u32 { return 15i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SHUTDOWN" as *u8 as u64, 15u64) == 1u32 { return 16i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_LOCK_CONTROL" as *u8 as u64, 19u64) == 1u32 { return 17i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_CLEANUP" as *u8 as u64, 14u64) == 1u32 { return 18i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_CREATE_MAILSLOT" as *u8 as u64, 22u64) == 1u32 { return 19i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_QUERY_SECURITY" as *u8 as u64, 21u64) == 1u32 { return 20i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SET_SECURITY" as *u8 as u64, 19u64) == 1u32 { return 21i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_POWER" as *u8 as u64, 12u64) == 1u32 { return 22i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SYSTEM_CONTROL" as *u8 as u64, 21u64) == 1u32 { return 23i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_DEVICE_CHANGE" as *u8 as u64, 20u64) == 1u32 { return 24i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_QUERY_QUOTA" as *u8 as u64, 18u64) == 1u32 { return 25i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_SET_QUOTA" as *u8 as u64, 16u64) == 1u32 { return 26i32 }
+    if r0_addr_eq_lit(addr, len, "IRP_MJ_PNP" as *u8 as u64, 10u64) == 1u32 { return 27i32 }
+    return -1i32
+}
+fn iii_cg_r0_api_min_irql_c(addr: u64, len: u64) -> i32 @export {
+    if addr == 0u64 { return -1i32 }
+    if r0_addr_eq_lit(addr, len, "ExAllocatePool2" as *u8 as u64, 15u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "ExFreePool" as *u8 as u64, 10u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "ExAcquireFastMutex" as *u8 as u64, 18u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "ExReleaseFastMutex" as *u8 as u64, 18u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "KeAcquireSpinLock" as *u8 as u64, 17u64) == 1u32 { return 2i32 }
+    if r0_addr_eq_lit(addr, len, "KeReleaseSpinLock" as *u8 as u64, 17u64) == 1u32 { return 2i32 }
+    if r0_addr_eq_lit(addr, len, "KeWaitForSingleObject" as *u8 as u64, 21u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "ZwClose" as *u8 as u64, 7u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "ZwOpenFile" as *u8 as u64, 10u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "ZwReadFile" as *u8 as u64, 10u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "ZwWriteFile" as *u8 as u64, 11u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "IoCreateDevice" as *u8 as u64, 14u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "IoDeleteDevice" as *u8 as u64, 14u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "IoCreateSymbolicLink" as *u8 as u64, 20u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "IoDeleteSymbolicLink" as *u8 as u64, 20u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "IoCompleteRequest" as *u8 as u64, 17u64) == 1u32 { return 2i32 }
+    if r0_addr_eq_lit(addr, len, "IoCallDriver" as *u8 as u64, 12u64) == 1u32 { return 2i32 }
+    if r0_addr_eq_lit(addr, len, "MmMapIoSpace" as *u8 as u64, 12u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "MmUnmapIoSpace" as *u8 as u64, 14u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "RtlCopyMemory" as *u8 as u64, 13u64) == 1u32 { return 31i32 }
+    if r0_addr_eq_lit(addr, len, "RtlZeroMemory" as *u8 as u64, 13u64) == 1u32 { return 31i32 }
+    if r0_addr_eq_lit(addr, len, "DbgPrint" as *u8 as u64, 8u64) == 1u32 { return 31i32 }
+    if r0_addr_eq_lit(addr, len, "KeBugCheckEx" as *u8 as u64, 12u64) == 1u32 { return 31i32 }
+    if r0_addr_eq_lit(addr, len, "KeQuerySystemTime" as *u8 as u64, 17u64) == 1u32 { return 31i32 }
+    return -1i32
+}
+fn iii_cg_r0_irql_sym_c(addr: u64, len: u64) -> i32 {
+    if addr == 0u64 { return -1i32 }
+    if r0_addr_eq_lit(addr, len, "PASSIVE_LEVEL" as *u8 as u64, 13u64) == 1u32 { return 0i32 }
+    if r0_addr_eq_lit(addr, len, "APC_LEVEL" as *u8 as u64, 9u64) == 1u32 { return 1i32 }
+    if r0_addr_eq_lit(addr, len, "DISPATCH_LEVEL" as *u8 as u64, 14u64) == 1u32 { return 2i32 }
+    if r0_addr_eq_lit(addr, len, "HIGH_LEVEL" as *u8 as u64, 10u64) == 1u32 { return 31i32 }
+    return -1i32
+}
 
 fn r0_local_lookup(off: u32, len: u32) -> i32 { let src: u64 = iii_ast_source_buf(R0_G_AST); let mut i: u32 = 0u32; while i < R0_G_LOCAL_COUNT { if R0_LOCAL_LEN[i] == len { if iii_emit_memcmp_c(src + (R0_LOCAL_OFF[i] as u64), src + (off as u64), len as u64) == 0i32 { return i as i32 } }; i = i + 1u32 }; return -1i32 }
 fn r0_local_add(off: u32, len: u32) -> i32 { if R0_G_LOCAL_COUNT >= R0_MAX_LOCALS { R0_G_LAST_ERROR = R0_E_INTERNAL; return -1i32 }; R0_LOCAL_OFF[R0_G_LOCAL_COUNT] = off; R0_LOCAL_LEN[R0_G_LOCAL_COUNT] = len; let s: i32 = R0_G_LOCAL_COUNT as i32; R0_G_LOCAL_COUNT = R0_G_LOCAL_COUNT + 1u32; return s }

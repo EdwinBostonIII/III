@@ -216,8 +216,6 @@ extern @abi(c-msvc-x64) fn iii_cg_r3_fwrite_c(out_handle: u64, addr: u64, n: u64
 extern @abi(c-msvc-x64) fn iii_cg_r3_sha_init_c() from "cg_r3_accessors.c"
 extern @abi(c-msvc-x64) fn iii_cg_r3_sha_update_c(addr: u64, n: u64) from "cg_r3_accessors.c"
 extern @abi(c-msvc-x64) fn iii_cg_r3_sha_snapshot_c(out32: u64) from "cg_r3_accessors.c"
-extern @abi(c-msvc-x64) fn iii_cg_r3_op_known_c(addr: u64, len: u64) -> i32 from "cg_r3_accessors.c"
-extern @abi(c-msvc-x64) fn iii_cg_r3_is_volatile_c(addr: u64, len: u64) -> i32 from "cg_r3_accessors.c"
 
 /* XII gate externs (Phase XII-eta).  Linked in iiis-2 only (the C-side
  * implementations are guarded by IIIS_XII_ENABLED; without that define
@@ -1727,6 +1725,94 @@ fn iii_cg_r3_last_error() -> u32 @export { return R3_G_LAST_ERROR }
 fn iii_cg_r3_error_count() -> u32 @export { return R3_G_ERROR_COUNT }
 fn iii_cg_r3_get_witness(out32: u64) -> u32 @export { iii_emit_memcpy_c(out32, &R3_MHASH_CACHE as u64, 32u64); return R3_OK }
 fn iii_cg_r3_set_expected_witness(in32: u64) -> u32 @export { iii_emit_memcpy_c(&R3_EXPECTED_WITNESS as u64, in32, 32u64); R3_G_HAS_EXPECTED_WITNESS = 1u32; return R3_OK }
+fn r3_addr_eq_lit(addr: u64, len: u64, lit_addr: u64, lit_len: u64) -> u32 { if len != lit_len { return 0u32 }; if iii_emit_memcmp_c(addr, lit_addr, lit_len) == 0i32 { return 1u32 }; return 0u32 }
+fn iii_cg_r3_op_known_c(addr: u64, len: u64) -> i32 @export {
+    if addr == 0u64 { return 0i32 }
+    if len == 0u64 { return 0i32 }
+    if len > 16u64 { return 0i32 }
+    if r3_addr_eq_lit(addr, len, "movq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "movabsq" as *u8 as u64, 7u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "movzbq" as *u8 as u64, 6u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "movzwq" as *u8 as u64, 6u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "movl" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "leaq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "pushq" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "popq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "addq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "subq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "imulq" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "idivq" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "andq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "orq" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xorq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "notq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "negq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "shlq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "shrq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "cqto" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "cmpq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "testq" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "sete" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setne" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setl" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setle" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setg" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setge" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "seta" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setb" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setae" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "setbe" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "jmp" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "je" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "jne" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "jz" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "jnz" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "jl" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "jge" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "callq" as *u8 as u64, 5u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "retq" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    return 0i32
+}
+fn iii_cg_r3_is_volatile_c(addr: u64, len: u64) -> i32 {
+    if addr == 0u64 { return 0i32 }
+    if len == 0u64 { return 0i32 }
+    if len > 8u64 { return 0i32 }
+    if r3_addr_eq_lit(addr, len, "rax" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "rcx" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "rdx" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r8" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r9" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r10" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r11" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "eax" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "ecx" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "edx" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r8d" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r9d" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r10d" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r11d" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "ax" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "cx" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "dx" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r8w" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r9w" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r10w" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r11w" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "al" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "cl" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "dl" as *u8 as u64, 2u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r8b" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r9b" as *u8 as u64, 3u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r10b" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "r11b" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xmm0" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xmm1" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xmm2" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xmm3" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xmm4" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    if r3_addr_eq_lit(addr, len, "xmm5" as *u8 as u64, 4u64) == 1u32 { return 1i32 }
+    return 0i32
+}
 fn iii_cg_r3_is_volatile(addr: u64, len: u64) -> u32 @export { let r: i32 = iii_cg_r3_is_volatile_c(addr, len); if r != 0i32 { return 1u32 }; return 0u32 }
 
 /* ─────────────── CP-026: type-shape externs ─────────────── */

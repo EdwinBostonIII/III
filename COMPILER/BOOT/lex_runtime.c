@@ -41,68 +41,6 @@ uint32_t iii_lex_free_c(uint64_t addr)
     return 0u;
 }
 
-/* ─── byte/word/qword read+write at addr+off ───────────────────────── */
-
-uint32_t iii_lex_read_u8_at_c(uint64_t addr, uint64_t off)
-{
-    return (uint32_t)((const unsigned char *)(uintptr_t)addr)[off];
-}
-
-uint32_t iii_lex_write_u8_at_c(uint64_t addr, uint64_t off, uint32_t v)
-{
-    ((unsigned char *)(uintptr_t)addr)[off] = (unsigned char)(v & 0xffu);
-    return 0u;
-}
-
-/* LE u32 read/write.  Matches the host's native byte order on x86-64,
- * but we write it byte-by-byte so the .iii sees deterministic
- * semantics regardless of which side compiles. */
-uint32_t iii_lex_read_u32_c(uint64_t addr, uint64_t off)
-{
-    const unsigned char *p = (const unsigned char *)(uintptr_t)addr + off;
-    return  ((uint32_t)p[0])
-         | (((uint32_t)p[1]) <<  8)
-         | (((uint32_t)p[2]) << 16)
-         | (((uint32_t)p[3]) << 24);
-}
-
-uint32_t iii_lex_write_u32_c(uint64_t addr, uint64_t off, uint32_t v)
-{
-    unsigned char *p = (unsigned char *)(uintptr_t)addr + off;
-    p[0] = (unsigned char)( v        & 0xffu);
-    p[1] = (unsigned char)((v >>  8) & 0xffu);
-    p[2] = (unsigned char)((v >> 16) & 0xffu);
-    p[3] = (unsigned char)((v >> 24) & 0xffu);
-    return 0u;
-}
-
-uint64_t iii_lex_read_u64_c(uint64_t addr, uint64_t off)
-{
-    const unsigned char *p = (const unsigned char *)(uintptr_t)addr + off;
-    return  ((uint64_t)p[0])
-         | (((uint64_t)p[1]) <<  8)
-         | (((uint64_t)p[2]) << 16)
-         | (((uint64_t)p[3]) << 24)
-         | (((uint64_t)p[4]) << 32)
-         | (((uint64_t)p[5]) << 40)
-         | (((uint64_t)p[6]) << 48)
-         | (((uint64_t)p[7]) << 56);
-}
-
-uint32_t iii_lex_write_u64_c(uint64_t addr, uint64_t off, uint64_t v)
-{
-    unsigned char *p = (unsigned char *)(uintptr_t)addr + off;
-    p[0] = (unsigned char)( v        & 0xffu);
-    p[1] = (unsigned char)((v >>  8) & 0xffu);
-    p[2] = (unsigned char)((v >> 16) & 0xffu);
-    p[3] = (unsigned char)((v >> 24) & 0xffu);
-    p[4] = (unsigned char)((v >> 32) & 0xffu);
-    p[5] = (unsigned char)((v >> 40) & 0xffu);
-    p[6] = (unsigned char)((v >> 48) & 0xffu);
-    p[7] = (unsigned char)((v >> 56) & 0xffu);
-    return 0u;
-}
-
 /* memcpy / memset / memcmp passthroughs (for use inside lex.iii where
  * we don't want to depend on the iii_emit_* aliases — keeps the lex
  * runtime self-contained). */

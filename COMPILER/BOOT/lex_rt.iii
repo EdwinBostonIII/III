@@ -1,0 +1,44 @@
+/* lex_rt.iii -- native runtime memory-deref primitives for the compiler.
+ *
+ * The pure-deref half of lex_runtime.c: byte/word/qword read+write at addr+off.
+ * Every ported TU (ast, cg_*, sema, lex, ...) externs these `from
+ * "lex_runtime.c"`; the link now resolves them by name to this native module.
+ * malloc/free, memcpy/memset/memcmp, the streaming SHA-256, and the file /
+ * env / time / signal / exit surface stay in lex_runtime.c (the libc membrane).
+ *
+ * NIH: zero externs, libc-free.  Operates on REAL runtime pointers (heap /
+ * caller buffers), so native pointer deref is W3-safe.  The u32/u64 forms use
+ * native loads/stores: on the x64 (little-endian) target these are byte
+ * identical to lex_runtime.c's explicit little-endian byte assembly.  Verified
+ * by lex_rt_kat (round-trips + LE byte order) and the non-vacuous differential
+ * gate (every corpus program reads its AST through these).
+ */
+module lex_rt
+
+fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 @export {
+    let p: *u8 = (addr + off) as *u8
+    return p[0] as u32
+}
+fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 @export {
+    let p: *u8 = (addr + off) as *u8
+    p[0] = (v & 0xffu32) as u8
+    return 0u32
+}
+fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 @export {
+    let p: *u32 = (addr + off) as *u32
+    return p[0]
+}
+fn iii_lex_write_u32_c(addr: u64, off: u64, v: u32) -> u32 @export {
+    let p: *u32 = (addr + off) as *u32
+    p[0] = v
+    return 0u32
+}
+fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 @export {
+    let p: *u64 = (addr + off) as *u64
+    return p[0]
+}
+fn iii_lex_write_u64_c(addr: u64, off: u64, v: u64) -> u32 @export {
+    let p: *u64 = (addr + off) as *u64
+    p[0] = v
+    return 0u32
+}

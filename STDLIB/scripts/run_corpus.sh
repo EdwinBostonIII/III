@@ -499,6 +499,8 @@ declare -A EXPECTED=(
     [828_reach_memo]=99
     [829_reach_remote]=99
     [830_reach_oracle]=99
+    [831_reach_ipc]=99
+    [832_reach_loopback]=99
 )
 
 PASS=0

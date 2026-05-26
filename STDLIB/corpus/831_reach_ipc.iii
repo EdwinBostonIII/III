@@ -1,0 +1,131 @@
+/* 831_reach_ipc.iii -- The Reach, Phase 5: the L2 shared-memory IPC tier.
+ * Proves: the shared-mem region maps + round-trips a value (1-2); reach() USES it -- a value placed
+ * only in L2 (absent from L0 memo and L1 store) is RESOLVED by reach, so the tier is wired (3);
+ * emit PUBLISHES to L2 so sibling processes can see it (4); the INTEGRITY teeth -- a poisoned L2
+ * entry is re-hashed by reach and REJECTED, never returned (5); the size bound (6).  Cross-PROCESS
+ * sharing (two III processes mapping the same named region) is the same mechanism, exercised by
+ * scripts/verify_reach_ipc.sh.  Exit 99 = all hold.  CORPUS-ONLY. */
+module corpus_831
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn reach_emit(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn backend_ipc_put(addr: u64, buf: u64, len: u64) -> i32 from "backend_ipc.iii"
+extern @abi(c-msvc-x64) fn backend_ipc_get(addr: u64, out: u64, max: u64, out_len: u64) -> i32 from "backend_ipc.iii"
+extern @abi(c-msvc-x64) fn backend_ipc_has(addr: u64) -> u8 from "backend_ipc.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+
+    /* clean the disk store so L1 cannot mask the L2 tests */
+    let path : *u8 = malloc(24u64)
+    path[0] = 105u8
+    path[1] = 105u8
+    path[2] = 105u8
+    path[3] = 95u8
+    path[4] = 114u8
+    path[5] = 101u8
+    path[6] = 97u8
+    path[7] = 99u8
+    path[8] = 104u8
+    path[9] = 95u8
+    path[10] = 115u8
+    path[11] = 116u8
+    path[12] = 111u8
+    path[13] = 114u8
+    path[14] = 101u8
+    path[15] = 46u8
+    path[16] = 98u8
+    path[17] = 105u8
+    path[18] = 110u8
+    path[19] = 0u8
+    fs_delete(cap, path as u64)
+
+    let out : *u8 = malloc(1024u64)
+    let olen_p : *u8 = malloc(8u64)
+    let olen : *u64 = olen_p as *u64
+    let gid : *u8 = malloc(8u64)
+    let tmp : *u8 = malloc(32u64)
+
+    /* (1-2) shared-mem round-trip via the tier directly */
+    let v1 : *u8 = malloc(5u64)
+    v1[0] = 1u8
+    v1[1] = 1u8
+    v1[2] = 1u8
+    v1[3] = 1u8
+    v1[4] = 1u8
+    let a1 : *u8 = malloc(32u64)
+    cad_oneshot(0u32, v1, 5u64, a1)
+    if backend_ipc_put(a1 as u64, v1 as u64, 5u64) != 0i32 { return 1u64 }
+    if backend_ipc_has(a1 as u64) != 1u8 { return 1u64 }
+    if backend_ipc_get(a1 as u64, out as u64, 1024u64, olen as u64) != 0i32 { return 2u64 }
+    if olen[0] != 5u64 { return 2u64 }
+
+    /* (3) reach USES L2: a1 is only in L2 (never emitted) -> reach resolves it from shared-mem */
+    let rc3 : i32 = reach(a1 as u64, cap, out as u64, 1024u64, olen as u64, gid as u64)
+    if rc3 != 0i32 { return 3u64 }
+    cad_oneshot(0u32, out, olen[0], tmp)
+    if cad_eq(tmp, a1) != 1u8 { return 3u64 }
+
+    /* (4) emit publishes to L2 (sibling-visible) */
+    let v2 : *u8 = malloc(5u64)
+    v2[0] = 2u8
+    v2[1] = 2u8
+    v2[2] = 2u8
+    v2[3] = 2u8
+    v2[4] = 2u8
+    let a2 : *u8 = malloc(32u64)
+    if reach_emit(v2 as u64, 5u64, cap, a2 as u64) != 0i32 { return 4u64 }
+    if backend_ipc_has(a2 as u64) != 1u8 { return 4u64 }
+
+    /* (5) INTEGRITY teeth: poison L2 with bytes that do not hash to their key -> reach rejects */
+    let vr : *u8 = malloc(3u64)
+    vr[0] = 3u8
+    vr[1] = 3u8
+    vr[2] = 3u8
+    let a3 : *u8 = malloc(32u64)
+    cad_oneshot(0u32, vr, 3u64, a3)
+    let vw : *u8 = malloc(3u64)
+    vw[0] = 4u8
+    vw[1] = 4u8
+    vw[2] = 4u8
+    backend_ipc_put(a3 as u64, vw as u64, 3u64)
+    let rc5 : i32 = reach(a3 as u64, cap, out as u64, 1024u64, olen as u64, gid as u64)
+    if rc5 == 0i32 { return 5u64 }
+    if olen[0] != 0u64 { return 5u64 }
+
+    /* (6) bound: a value larger than the L2 slot is not cached */
+    let big : *u8 = malloc(600u64)
+    let mut k : u64 = 0u64
+    while k < 600u64 {
+        big[k] = (k & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    let abig : *u8 = malloc(32u64)
+    cad_oneshot(0u32, big, 600u64, abig)
+    if backend_ipc_put(abig as u64, big as u64, 600u64) != 2i32 { return 6u64 }
+
+    fs_delete(cap, path as u64)
+    free(path)
+    free(out)
+    free(olen_p)
+    free(gid)
+    free(tmp)
+    free(v1)
+    free(a1)
+    free(v2)
+    free(a2)
+    free(vr)
+    free(a3)
+    free(vw)
+    free(big)
+    free(abig)
+    return 99u64
+}

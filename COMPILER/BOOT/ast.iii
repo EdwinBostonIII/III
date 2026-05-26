@@ -1709,6 +1709,137 @@ fn iii_ast_get_mut(ast: u64, node_index: u32) -> u64 @export {
     return ast_pool_node(ast, ast_node_pool(node_index), ast_node_slot(node_index))
 }
 
+/* ============================================================================
+ * ast_accessors port -- batch 1: node basics + decl-name + module/block lists.
+ * Moved here from ast_accessors.c (DELETED there).  Field reads use this file's
+ * own iii_lex_read_u32_c / iii_lex_read_u64_c at C-authoritative byte offsets
+ * (extracted via offsetof, gen_ast_offsets).  Node header: kind@0 flags@4,
+ * union@8 (sizeof 48).  iii_src_text_t{offset@0,length@4}=8B; iii_ast_list_t
+ * {offset@0,count@4}=8B read packed as a u64 for iii_ast_list_at.
+ * ============================================================================ */
+
+/* decl `name` field byte-offset by kind: 12 for extern_decl (4-byte abi prefix),
+ * 8 for the other seven decl kinds, 0 = not a named decl. */
+fn ast_decl_name_field_off(k: u32) -> u64 {
+    if k == III_AST_EXTERN_DECL { return 12u64 }
+    if k == III_AST_CYCLE_DECL { return 8u64 }
+    if k == III_AST_FN_DECL { return 8u64 }
+    if k == III_AST_TYPE_DECL { return 8u64 }
+    if k == III_AST_CONST_DECL { return 8u64 }
+    if k == III_AST_MOBIUS_CANDIDATE_DECL { return 8u64 }
+    if k == III_AST_SCHEMA_DECL { return 8u64 }
+    if k == III_AST_SEALED_CALL_METHOD_DECL { return 8u64 }
+    return 0u64
+}
+
+fn iii_ast_node_kind(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(n, 0u64)
+}
+
+fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    let k: u32 = iii_lex_read_u32_c(n, 0u64)
+    let foff: u64 = ast_decl_name_field_off(k)
+    if foff == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(n, foff)
+}
+
+fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    let k: u32 = iii_lex_read_u32_c(n, 0u64)
+    let foff: u64 = ast_decl_name_field_off(k)
+    if foff == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(n, foff + 4u64)
+}
+
+fn iii_ast_module_name_offset(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_MODULE { return 0u32 }
+    return iii_lex_read_u32_c(n, 8u64)
+}
+
+fn iii_ast_module_name_length(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_MODULE { return 0u32 }
+    return iii_lex_read_u32_c(n, 12u64)
+}
+
+fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_MODULE { return 0u32 }
+    return iii_lex_read_u32_c(n, 36u64)
+}
+
+fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_MODULE { return 0u32 }
+    let lp: u64 = iii_lex_read_u64_c(n, 32u64)
+    let idx: u32 = i
+    return iii_ast_list_at(ast, lp, idx)
+}
+
+fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_FORWARD_BLOCK { return 0u32 }
+    return iii_lex_read_u32_c(n, 12u64)
+}
+
+fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_FORWARD_BLOCK { return 0u32 }
+    let lp: u64 = iii_lex_read_u64_c(n, 8u64)
+    let idx: u32 = i
+    return iii_ast_list_at(ast, lp, idx)
+}
+
+fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_EXPR_BLOCK { return 0u32 }
+    return iii_lex_read_u32_c(n, 12u64)
+}
+
+fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_EXPR_BLOCK { return 0u32 }
+    let lp: u64 = iii_lex_read_u64_c(n, 8u64)
+    let idx: u32 = i
+    return iii_ast_list_at(ast, lp, idx)
+}
+
 /* Distinct node count (sum of pool counts minus the 4 NULL sentinels). */
 fn iii_ast_node_count(ast: u64) -> u64 @export {
     if ast == 0u64 { return 0u64 }

@@ -1,0 +1,157 @@
+/* 832_reach_loopback.iii -- The Reach, Phase 5: the L3 loopback content-server (III-to-III peering).
+ * Single-process, 387-style (the client connects + sends BEFORE serve_once accepts, so loopback
+ * buffering avoids the recv deadlock): a III process SERVES a content-addressed GET out of its OWN
+ * store -- emit a value, listen, a client requests GET /<hex(addr)>, serve_once replies 200 + the
+ * raw bytes, and the received body content-addresses back to the requested address (1-4); a GET for
+ * an absent address yields 404 / LB_404 (5).  So two III processes reach each other's content over
+ * loopback with no server outside III.  Exit 99 = all hold.  CORPUS-ONLY. */
+module corpus_832
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn reach_emit(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn backend_loopback_listen(net_cap: u64, port: u32) -> u64 from "backend_loopback.iii"
+extern @abi(c-msvc-x64) fn backend_loopback_serve_once(listen_handle: u64, store_cap: u64) -> i32 from "backend_loopback.iii"
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn hex_encode(src: u64, n: u64, out: u64) -> i32 from "hex.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+var REQ  : [u8; 256]
+var HEXB : [u8; 64]
+var SADDR : [u8; 16]
+var RESP : [u8; 1100]
+
+/* build "GET /<hex(addr)> HTTP/1.0\r\n\r\n" into REQ from a 32-byte address; return the length (82). */
+fn build_get(addr: u64) -> u64 {
+    let a : u64 = addr
+    hex_encode(a, 32u64, &HEXB as u64)
+    let p : *u8 = (&REQ as u64) as *u8
+    let hx : *u8 = (&HEXB as u64) as *u8
+    p[0] = 71u8
+    p[1] = 69u8
+    p[2] = 84u8
+    p[3] = 32u8
+    p[4] = 47u8
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        p[5u64 + i] = hx[i]
+        i = i + 1u64
+    }
+    let n : u64 = 69u64
+    p[n] = 32u8
+    p[n + 1u64] = 72u8
+    p[n + 2u64] = 84u8
+    p[n + 3u64] = 84u8
+    p[n + 4u64] = 80u8
+    p[n + 5u64] = 47u8
+    p[n + 6u64] = 49u8
+    p[n + 7u64] = 46u8
+    p[n + 8u64] = 48u8
+    p[n + 9u64] = 13u8
+    p[n + 10u64] = 10u8
+    p[n + 11u64] = 13u8
+    p[n + 12u64] = 10u8
+    return 82u64
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x006Eu64, 0u64)    /* READ|WRITE|CREATE|DIAL|LISTEN */
+
+    let path : *u8 = malloc(24u64)
+    path[0] = 105u8
+    path[1] = 105u8
+    path[2] = 105u8
+    path[3] = 95u8
+    path[4] = 114u8
+    path[5] = 101u8
+    path[6] = 97u8
+    path[7] = 99u8
+    path[8] = 104u8
+    path[9] = 95u8
+    path[10] = 115u8
+    path[11] = 116u8
+    path[12] = 111u8
+    path[13] = 114u8
+    path[14] = 101u8
+    path[15] = 46u8
+    path[16] = 98u8
+    path[17] = 105u8
+    path[18] = 110u8
+    path[19] = 0u8
+    fs_delete(cap, path as u64)
+
+    /* emit a value into the server's store: "LOOPBACK-PEER-OK" (16 bytes) */
+    let val : *u8 = malloc(16u64)
+    val[0] = 76u8
+    val[1] = 79u8
+    val[2] = 79u8
+    val[3] = 80u8
+    val[4] = 66u8
+    val[5] = 65u8
+    val[6] = 67u8
+    val[7] = 75u8
+    val[8] = 45u8
+    val[9] = 80u8
+    val[10] = 69u8
+    val[11] = 69u8
+    val[12] = 82u8
+    val[13] = 45u8
+    val[14] = 79u8
+    val[15] = 75u8
+    let addr : *u8 = malloc(32u64)
+    if reach_emit(val as u64, 16u64, cap, addr as u64) != 0i32 { return 1u64 }
+
+    /* server: listen on 127.0.0.1:18091 */
+    let lh : u64 = backend_loopback_listen(cap, 18091u32)
+    if lh == 0u64 { return 2u64 }
+
+    /* (1-4) client connect + send GET /<hex(addr)> (buffered), then serve_once, then recv + verify */
+    net_pack_sockaddr_ipv4(&SADDR as u64, 0x7F000001u32, 18091u32)
+    let ch : u64 = net_tcp_connect_ipv4(cap, &SADDR as u64, 16u32)
+    if ch == 0u64 { return 3u64 }
+    let reqlen : u64 = build_get(addr as u64)
+    net_tcp_send(ch, &REQ as u64, reqlen)
+    if backend_loopback_serve_once(lh, cap) != 0i32 { return 4u64 }
+    let got : i32 = net_tcp_recv(ch, &RESP as u64, 1100u64)
+    net_close(ch)
+    let gu : u32 = got as u32
+    if (gu & 0x80000000u32) != 0u32 { return 4u64 }
+    let gl : u64 = got as u64
+    if gl < 20u64 { return 4u64 }
+    let bodylen : u64 = gl - 19u64               /* "HTTP/1.0 200 OK\r\n\r\n" is 19 bytes */
+    let bodytmp : *u8 = malloc(32u64)
+    cad_oneshot(0u32, ((&RESP as u64) + 19u64) as *u8, bodylen, bodytmp)
+    if cad_eq(bodytmp, addr) != 1u8 { return 4u64 }
+
+    /* (5) 404: a GET for an address NOT in the store -> serve_once returns LB_404 */
+    let bog : *u8 = malloc(32u64)
+    let mut bi : u64 = 0u64
+    while bi < 32u64 {
+        bog[bi] = 0xABu8
+        bi = bi + 1u64
+    }
+    let ch2 : u64 = net_tcp_connect_ipv4(cap, &SADDR as u64, 16u32)
+    if ch2 == 0u64 { return 5u64 }
+    let reqlen2 : u64 = build_get(bog as u64)
+    net_tcp_send(ch2, &REQ as u64, reqlen2)
+    if backend_loopback_serve_once(lh, cap) != 1i32 { return 5u64 }
+    net_close(ch2)
+    net_close(lh)
+
+    fs_delete(cap, path as u64)
+    free(path)
+    free(val)
+    free(addr)
+    free(bodytmp)
+    free(bog)
+    return 99u64
+}

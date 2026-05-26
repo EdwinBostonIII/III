@@ -1,0 +1,178 @@
+/* STDLIB/iii/aether/backend_ipc.iii -- The Reach, Phase 5: the L2 shared-memory IPC tier
+ * (localhost content sharing between sibling III processes -- the "localhost / IPC" use, done the
+ * content-addressed way).
+ *
+ * A Win32 named file-mapping ("iii_reach_ipc", pagefile-backed shared memory) holds a fixed FIFO
+ * content cache (64 slots x [occupied][address][length][value<=512B]).  Sibling III processes that
+ * open the SAME named region share emitted content at RAM speed -- no disk, no sockets, no copy.
+ * It sits between L1 (own disk) and L4 (remote) in the lattice: a value a sibling emitted is reached
+ * here without a disk hit or a network round-trip.
+ *
+ * Like every tier it is a DUMB byte store: reach_core re-hashes whatever it returns against the
+ * requested address, so a torn or racy shared-memory entry (there is no cross-process lock) can
+ * never be blessed -- the lattice's integrity does NOT depend on IPC synchronisation, only on the
+ * content-address.  Values over IPC_MAXVAL are not cached here (resolve falls through to L1/L4).
+ *
+ * Hexad: kind_passage.  Ring: R-1.  NIH: kernel32 (CreateFileMappingA/MapViewOfFile) + numera/cad.
+ * Determinism: integer-only; ==/!= and unsigned < ; single-line fns; slot offsets via masked u64
+ * pointer math; module-scope scratch; byte-by-byte LE + copy. */
+module aether_backend_ipc
+
+extern @abi(c-msvc-x64) fn CreateFileMappingA(hFile: u64, lpAttr: u64, flProtect: u32, maxHigh: u32, maxLow: u32, lpName: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn MapViewOfFile(hMap: u64, access: u32, offHigh: u32, offLow: u32, nbytes: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const IPC_OK        : i32 = 0i32
+const IPC_NOTFOUND  : i32 = 1i32
+const IPC_SKIP      : i32 = 2i32
+const IPC_E_TOOBIG  : i32 = -1i32
+const IPC_E_NOMAP   : i32 = -2i32
+
+const IPC_REGION_SIZE : u64 = 65536u64
+const IPC_SLOTS       : u64 = 64u64
+const IPC_SLOTMASK    : u64 = 63u64
+const IPC_STRIDE      : u64 = 560u64    /* 1 occ + 32 addr + 8 len + 512 val (+7 pad) */
+const IPC_OFF_ADDR    : u64 = 1u64
+const IPC_OFF_LEN     : u64 = 33u64
+const IPC_OFF_VAL     : u64 = 41u64
+const IPC_MAXVAL      : u64 = 512u64
+const IPC_ADDR_BYTES  : u64 = 32u64
+const IPC_INVALID_HANDLE : u64 = 0xFFFFFFFFFFFFFFFFu64
+const IPC_PAGE_RW     : u32 = 0x00000004u32
+const IPC_MAP_ALL     : u32 = 0x000F001Fu32
+const IPC_NONE        : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var IPC_NAME : [u8; 16]
+var IPC_BASE : u64 = 0u64
+var IPC_NEXT : u64 = 0u64
+
+fn _ipc_name() -> u64 {
+    IPC_NAME[0] = 105u8
+    IPC_NAME[1] = 105u8
+    IPC_NAME[2] = 105u8
+    IPC_NAME[3] = 95u8
+    IPC_NAME[4] = 114u8
+    IPC_NAME[5] = 101u8
+    IPC_NAME[6] = 97u8
+    IPC_NAME[7] = 99u8
+    IPC_NAME[8] = 104u8
+    IPC_NAME[9] = 95u8
+    IPC_NAME[10] = 105u8
+    IPC_NAME[11] = 112u8
+    IPC_NAME[12] = 99u8
+    IPC_NAME[13] = 0u8
+    return &IPC_NAME as u64
+}
+
+/* map (creating on first use) the named shared region; cache + return its base, or 0 on failure. */
+fn _ipc_ensure() -> u64 {
+    if IPC_BASE != 0u64 { return IPC_BASE }
+    let nm : u64 = _ipc_name()
+    let h : u64 = CreateFileMappingA(IPC_INVALID_HANDLE, 0u64, IPC_PAGE_RW, 0u32, 65536u32, nm)
+    if h == 0u64 { return 0u64 }
+    let p : u64 = MapViewOfFile(h, IPC_MAP_ALL, 0u32, 0u32, IPC_REGION_SIZE)
+    IPC_BASE = p
+    return p
+}
+
+fn _ipc_slot(base: u64, slot: u64) -> u64 {
+    let s : u64 = slot & IPC_SLOTMASK
+    return base + (s * IPC_STRIDE)
+}
+
+fn _ipc_le8_read(p: u64) -> u64 {
+    let q : *u8 = p as *u8
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        acc = acc | ((q[i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return acc
+}
+
+fn _ipc_le8_write(p: u64, v: u64) -> u64 {
+    let q : *u8 = p as *u8
+    let vv : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        q[i] = ((vv >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn _ipc_find(base: u64, addr: u64) -> u64 {
+    let a : u64 = addr
+    let mut i : u64 = 0u64
+    while i < IPC_SLOTS {
+        let sb : u64 = _ipc_slot(base, i)
+        let occ : *u8 = sb as *u8
+        if occ[0] == 1u8 {
+            if cad_eq((sb + IPC_OFF_ADDR) as *u8, a as *u8) == 1u8 { return i }
+        }
+        i = i + 1u64
+    }
+    return IPC_NONE
+}
+
+fn backend_ipc_has(addr: u64) -> u8 @export {
+    let base : u64 = _ipc_ensure()
+    if base == 0u64 { return 0u8 }
+    if _ipc_find(base, addr) == IPC_NONE { return 0u8 }
+    return 1u8
+}
+
+fn backend_ipc_get(addr: u64, out: u64, max: u64, out_len: u64) -> i32 @export {
+    let o : u64 = out
+    let mx : u64 = max
+    let ol : u64 = out_len
+    let base : u64 = _ipc_ensure()
+    if base == 0u64 { return IPC_E_NOMAP }
+    let slot : u64 = _ipc_find(base, addr)
+    if slot == IPC_NONE { return IPC_NOTFOUND }
+    let sb : u64 = _ipc_slot(base, slot)
+    let vlen : u64 = _ipc_le8_read(sb + IPC_OFF_LEN)
+    if vlen > mx { return IPC_E_TOOBIG }
+    let src : *u8 = (sb + IPC_OFF_VAL) as *u8
+    let dst : *u8 = o as *u8
+    let mut i : u64 = 0u64
+    while i < vlen {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    let olp : *u64 = ol as *u64
+    olp[0] = vlen
+    return IPC_OK
+}
+
+fn backend_ipc_put(addr: u64, buf: u64, len: u64) -> i32 @export {
+    let a : u64 = addr
+    let b : u64 = buf
+    let n : u64 = len
+    if n > IPC_MAXVAL { return IPC_SKIP }
+    let base : u64 = _ipc_ensure()
+    if base == 0u64 { return IPC_E_NOMAP }
+    if _ipc_find(base, a) != IPC_NONE { return IPC_OK }
+    let slot : u64 = IPC_NEXT
+    IPC_NEXT = (IPC_NEXT + 1u64) & IPC_SLOTMASK
+    let sb : u64 = _ipc_slot(base, slot)
+    let da : *u8 = (sb + IPC_OFF_ADDR) as *u8
+    let sa : *u8 = a as *u8
+    let mut i : u64 = 0u64
+    while i < IPC_ADDR_BYTES {
+        da[i] = sa[i]
+        i = i + 1u64
+    }
+    let dv : *u8 = (sb + IPC_OFF_VAL) as *u8
+    let sv : *u8 = b as *u8
+    let mut j : u64 = 0u64
+    while j < n {
+        dv[j] = sv[j]
+        j = j + 1u64
+    }
+    _ipc_le8_write(sb + IPC_OFF_LEN, n)
+    let occ : *u8 = sb as *u8
+    occ[0] = 1u8
+    return IPC_OK
+}

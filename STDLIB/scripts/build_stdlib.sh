@@ -697,8 +697,10 @@ MODULES=(
     "aether/backend_memo"
     "aether/reach_store"
     "aether/backend_remote"
+    "aether/backend_ipc"
     "aether/reach_core"
     "aether/reach_oracle"
+    "aether/backend_loopback"
 )
 
 PASS=0

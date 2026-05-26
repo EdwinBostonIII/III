@@ -1,0 +1,161 @@
+/* STDLIB/iii/aether/backend_loopback.iii -- The Reach, Phase 5: the L3 loopback content-server
+ * (the SERVE side that makes a III process an intra-machine content peer).
+ *
+ * A III process calls backend_loopback_listen(port) then backend_loopback_serve_once(...) to answer
+ * ONE content-addressed GET from a sibling over loopback: it accepts the connection, parses
+ * "GET /<hex-address>", looks the address up in its OWN content-store (reach_store), and replies
+ * "HTTP/1.0 200" + the raw bytes (close-delimited) or "HTTP/1.0 404".  The FETCH side is just the
+ * existing L4 (backend_remote pointed at 127.0.0.1), so two III processes now reach each other's
+ * content WITHOUT any server outside III -- the localhost peer, content-addressed.  The server is a
+ * DUMB byte source: it sends raw store bytes; the FETCHER (reach_core) re-hashes them against the
+ * address, so even a buggy/hostile peer cannot poison a result.
+ *
+ * Single-shot by design (serve_once, not serve_forever): bounded, testable (the 387 single-process
+ * pattern -- a client connects+sends BEFORE serve_once accepts, so loopback buffering avoids the
+ * recv deadlock), and composable into a caller's own accept loop.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  NIH: aether/net + reach_store + numera/hex only.  Determinism:
+ * integer-only; ==/!= ; i32 recv/send via sign-bit mask; single-line fns; params->locals; scratch. */
+module aether_backend_loopback
+
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn reach_store_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 from "reach_store.iii"
+extern @abi(c-msvc-x64) fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 from "hex.iii"
+
+const LB_OK        : i32 = 0i32
+const LB_404       : i32 = 1i32
+const LB_E_ACCEPT  : i32 = -1i32
+const LB_E_REQ     : i32 = -2i32
+const LB_SADDR_LEN : u32 = 16u32
+const LB_SIGN_BIT  : u32 = 0x80000000u32
+const LB_HEX_LEN   : u64 = 64u64
+const LB_ADDR_BYTES : u64 = 32u64
+const LB_BODY_CAP  : u64 = 1024u64
+const LB_STORE_OK  : i32 = 0i32
+
+var LB_SADDR : [u8; 16]
+var LB_REQ   : [u8; 256]
+var LB_ADDR  : [u8; 32]
+var LB_BODY  : [u8; 1024]
+var LB_RESP  : [u8; 1100]
+var LB_LEN8  : [u8; 8]
+
+/* listen on 127.0.0.1:port for sibling content GETs; return the listen handle (0 on failure). */
+fn backend_loopback_listen(net_cap: u64, port: u32) -> u64 @export {
+    let nc : u64 = net_cap
+    let pt : u32 = port
+    net_pack_sockaddr_ipv4(&LB_SADDR as u64, 0x7F000001u32, pt)
+    return net_tcp_listen_ipv4(nc, &LB_SADDR as u64, LB_SADDR_LEN)
+}
+
+/* parse "GET /<64-hex>" at the start of LB_REQ (reqlen bytes) into LB_ADDR (32 bytes); 1 ok / 0 not. */
+fn _lb_parse_addr(reqlen: u64) -> u8 {
+    let rl : u64 = reqlen
+    if rl < 69u64 { return 0u8 }
+    let p : *u8 = (&LB_REQ as u64) as *u8
+    if p[0] != 71u8 { return 0u8 }
+    if p[1] != 69u8 { return 0u8 }
+    if p[2] != 84u8 { return 0u8 }
+    if p[3] != 32u8 { return 0u8 }
+    if p[4] != 47u8 { return 0u8 }
+    hex_decode((&LB_REQ as u64) + 5u64, LB_HEX_LEN, &LB_ADDR as u64, LB_ADDR_BYTES)
+    return 1u8
+}
+
+/* build "HTTP/1.0 200 OK\r\n\r\n" + body into LB_RESP; return the total length. */
+fn _lb_build_200(bodylen: u64) -> u64 {
+    let bl : u64 = bodylen
+    let p : *u8 = (&LB_RESP as u64) as *u8
+    p[0] = 72u8
+    p[1] = 84u8
+    p[2] = 84u8
+    p[3] = 80u8
+    p[4] = 47u8
+    p[5] = 49u8
+    p[6] = 46u8
+    p[7] = 48u8
+    p[8] = 32u8
+    p[9] = 50u8
+    p[10] = 48u8
+    p[11] = 48u8
+    p[12] = 32u8
+    p[13] = 79u8
+    p[14] = 75u8
+    p[15] = 13u8
+    p[16] = 10u8
+    p[17] = 13u8
+    p[18] = 10u8
+    let bsrc : *u8 = (&LB_BODY as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < bl {
+        p[19u64 + i] = bsrc[i]
+        i = i + 1u64
+    }
+    return 19u64 + bl
+}
+
+/* build "HTTP/1.0 404\r\n\r\n" into LB_RESP; return its length (16). */
+fn _lb_build_404() -> u64 {
+    let p : *u8 = (&LB_RESP as u64) as *u8
+    p[0] = 72u8
+    p[1] = 84u8
+    p[2] = 84u8
+    p[3] = 80u8
+    p[4] = 47u8
+    p[5] = 49u8
+    p[6] = 46u8
+    p[7] = 48u8
+    p[8] = 32u8
+    p[9] = 52u8
+    p[10] = 48u8
+    p[11] = 52u8
+    p[12] = 13u8
+    p[13] = 10u8
+    p[14] = 13u8
+    p[15] = 10u8
+    return 16u64
+}
+
+/* serve ONE content GET on listen_handle: accept, parse, look up the local store with store_cap,
+ * reply 200+bytes (close-delimited) or 404, close.  LB_OK if served, LB_404 if absent, else error. */
+fn backend_loopback_serve_once(listen_handle: u64, store_cap: u64) -> i32 @export {
+    let lh : u64 = listen_handle
+    let sc : u64 = store_cap
+    let ah : u64 = net_tcp_accept(lh, sc)
+    if ah == 0u64 { return LB_E_ACCEPT }
+    let got : i32 = net_tcp_recv(ah, &LB_REQ as u64, 256u64)
+    let gu : u32 = got as u32
+    if (gu & LB_SIGN_BIT) != 0u32 {
+        net_close(ah)
+        return LB_E_REQ
+    }
+    if got == 0i32 {
+        net_close(ah)
+        return LB_E_REQ
+    }
+    let reqlen : u64 = got as u64
+    if _lb_parse_addr(reqlen) == 0u8 {
+        let n404a : u64 = _lb_build_404()
+        net_tcp_send(ah, &LB_RESP as u64, n404a)
+        net_close(ah)
+        return LB_404
+    }
+    let rc : i32 = reach_store_get(&LB_ADDR as u64, sc, &LB_BODY as u64, LB_BODY_CAP, &LB_LEN8 as u64)
+    if rc != LB_STORE_OK {
+        let n404b : u64 = _lb_build_404()
+        net_tcp_send(ah, &LB_RESP as u64, n404b)
+        net_close(ah)
+        return LB_404
+    }
+    let lp : *u64 = (&LB_LEN8 as u64) as *u64
+    let bodylen : u64 = lp[0]
+    let resplen : u64 = _lb_build_200(bodylen)
+    net_tcp_send(ah, &LB_RESP as u64, resplen)
+    net_close(ah)
+    return LB_OK
+}

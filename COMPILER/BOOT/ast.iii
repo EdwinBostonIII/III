@@ -1987,6 +1987,115 @@ fn iii_ast_type_decl_for_name(ast: u64, name_offset: u32, name_length: u32) -> u
     return 0u32
 }
 
+/* ============================================================================
+ * ast_accessors port -- batch 5+6 (FINAL): the remaining 53 accessors, completing
+ * the ast_accessors.c -> ast.iii migration.  ast_kind_child_u64 = the u64-return
+ * variant; the rest are one-liners over ast_kind_child / ast_kind_list_at plus a
+ * few specials (root-module/source-buf passthroughs, hex lo/hi split, bool byte,
+ * mhash byte/addr).  Offsets from gen_ast_offsets (note: type_array.count@16,
+ * sizeof.resolved@16 are u64 fields past their inner u32).
+ * ============================================================================ */
+
+fn ast_kind_child_u64(ast: u64, node: u32, want_kind: u32, off: u64) -> u64 {
+    let wk: u32 = want_kind
+    let o: u64 = off
+    if ast == 0u64 { return 0u64 }
+    if node == 0u32 { return 0u64 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u64 }
+    if iii_lex_read_u32_c(n, 0u64) != wk { return 0u64 }
+    return iii_lex_read_u64_c(n, o)
+}
+
+fn iii_ast_expr_hex_u64(ast: u64, node: u32) -> u64 @export { return ast_kind_child_u64(ast, node, III_AST_EXPR_HEX, 8u64) }
+fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_IDENT, 8u64) }
+fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_IDENT, 12u64) }
+fn iii_ast_field_name_offset(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_FIELD, 12u64) }
+fn iii_ast_field_name_length(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_FIELD, 16u64) }
+fn iii_ast_for_iter(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_FOR, 16u64) }
+fn iii_ast_for_where(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_FOR, 20u64) }
+fn iii_ast_for_body(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_FOR, 24u64) }
+fn iii_ast_match_stmt_scrutinee(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_MATCH, 8u64) }
+fn iii_ast_match_stmt_arm_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_MATCH, 16u64) }
+fn iii_ast_match_stmt_arm_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_STMT_MATCH, 12u64, i) }
+fn iii_ast_match_expr_scrutinee(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_MATCH, 8u64) }
+fn iii_ast_match_expr_arm_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_MATCH, 16u64) }
+fn iii_ast_match_expr_arm_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_EXPR_MATCH, 12u64, i) }
+fn iii_ast_match_arm_guard(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_MATCH_ARM, 12u64) }
+fn iii_ast_match_arm_body(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_MATCH_ARM, 16u64) }
+fn iii_ast_wavefront_node_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_WAVEFRONT, 20u64) }
+fn iii_ast_wavefront_node_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_STMT_WAVEFRONT, 16u64, i) }
+fn iii_ast_wavefront_rollback(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_WAVEFRONT, 24u64) }
+fn iii_ast_sanctum_enter_body(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_SANCTUM_ENTER, 16u64) }
+fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_PARALLEL, 12u64) }
+fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_EXPR_PARALLEL, 8u64, i) }
+fn iii_ast_module_use_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_MODULE, 28u64) }
+fn iii_ast_module_use_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_MODULE, 24u64, i) }
+fn iii_ast_use_qname_offset(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_USE, 8u64) }
+fn iii_ast_use_qname_length(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_USE, 12u64) }
+fn iii_ast_use_closure_mhash_node(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_USE, 16u64) }
+fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_REF, 8u64) }
+fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_REF, 12u64) }
+fn iii_ast_type_array_inner(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_ARRAY, 8u64) }
+fn iii_ast_type_array_count(ast: u64, node: u32) -> u64 @export { return ast_kind_child_u64(ast, node, III_AST_TYPE_ARRAY, 16u64) }
+fn iii_ast_type_ptr_inner(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_PTR, 8u64) }
+fn iii_ast_const_decl_name_off(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CONST_DECL, 8u64) }
+fn iii_ast_const_decl_name_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CONST_DECL, 12u64) }
+fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CONST_DECL, 16u64) }
+fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_CONST_DECL, 20u64) }
+fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_VAR_DECL, 16u64) }
+fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_VAR_DECL, 20u64) }
+fn iii_ast_sizeof_target_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_SIZEOF, 8u64) }
+fn iii_ast_sizeof_resolved(ast: u64, node: u32) -> u64 @export { return ast_kind_child_u64(ast, node, III_AST_EXPR_SIZEOF, 16u64) }
+fn iii_ast_str_payload_idx(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_STR, 8u64) }
+fn iii_ast_str_string_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_STR, 12u64) }
+fn iii_ast_raw_asm_str_idx(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_RAW_ASM, 8u64) }
+fn iii_ast_raw_asm_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_RAW_ASM, 12u64) }
+fn iii_ast_sealed_call_name_off(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_SEALED_CALL_METHOD_DECL, 8u64) }
+fn iii_ast_sealed_call_name_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_SEALED_CALL_METHOD_DECL, 12u64) }
+
+/* specials */
+fn iii_ast_root_module_idx_c(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    return iii_ast_root_module(ast)
+}
+fn iii_ast_source_buf_addr_c(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return iii_ast_source_buf(ast)
+}
+fn iii_ast_expr_mhash_bytes_addr(ast: u64, node: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if node == 0u32 { return 0u64 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u64 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_EXPR_MHASH { return 0u64 }
+    return n + 8u64
+}
+fn iii_ast_hex_value_lo(ast: u64, node: u32) -> u32 @export {
+    let v: u64 = ast_kind_child_u64(ast, node, III_AST_EXPR_HEX, 8u64)
+    return (v & 4294967295u64) as u32
+}
+fn iii_ast_hex_value_hi(ast: u64, node: u32) -> u32 @export {
+    let v: u64 = ast_kind_child_u64(ast, node, III_AST_EXPR_HEX, 8u64)
+    return (v >> 32u64) as u32
+}
+fn iii_ast_bool_value(ast: u64, node: u32) -> u32 @export {
+    let r: u32 = ast_kind_child(ast, node, III_AST_EXPR_BOOL, 8u64)
+    if (r & 255u32) != 0u32 { return 1u32 }
+    return 0u32
+}
+fn iii_ast_mhash_byte_at(ast: u64, node: u32, i: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let ii: u32 = i
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_EXPR_MHASH { return 0u32 }
+    let a: u64 = n + 8u64 + (ii as u64)
+    let p: *u8 = a as *u8
+    return p[0] as u32
+}
+
 /* Distinct node count (sum of pool counts minus the 4 NULL sentinels). */
 fn iii_ast_node_count(ast: u64) -> u64 @export {
     if ast == 0u64 { return 0u64 }

@@ -141,8 +141,15 @@ extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "s
 extern @abi(c-msvc-x64) fn iii_ast_string_payload_addr_c(ast: u64, idx: u32) -> u64 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_string_payload_count_c(ast: u64) -> u32 from "sema_accessors.c"
 
-extern @abi(c-msvc-x64) fn iii_cg_rm2_fwrite_c(out_handle: u64, addr: u64, n: u64) -> i32 from "cg_rm2_accessors.c"
-extern @abi(c-msvc-x64) fn iii_cg_rm2_strlen_c(s: u64) -> u64 from "cg_rm2_accessors.c"
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+fn iii_cg_rm2_fwrite_c(out_handle: u64, addr: u64, n: u64) -> i32 {
+    if out_handle == 0u64 { return 1i32 }
+    if addr == 0u64 { return 1i32 }
+    if n == 0u64 { return 0i32 }
+    let w: u64 = fwrite(addr, 1u64, n, out_handle)
+    if w != n { return 1i32 }
+    return 0i32
+}
 
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"

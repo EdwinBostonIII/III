@@ -1840,6 +1840,54 @@ fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 @export {
     return iii_ast_list_at(ast, lp, idx)
 }
 
+/* ============================================================================
+ * ast_accessors port -- batch 2: call args/callee + single-child expr/stmt/arg.
+ * ast_kind_child(ast,node,want_kind,off) = the common shape: get node, verify
+ * kind, return the u32 field at byte offset.  want_kind/off copied to locals
+ * before the iii_ast_get call (param-spill guard, verified).  Offsets from
+ * gen_ast_offsets (note stmt_let bool-padding: let_.value_expr@24).
+ * ============================================================================ */
+
+fn ast_kind_child(ast: u64, node: u32, want_kind: u32, off: u64) -> u32 {
+    let wk: u32 = want_kind
+    let o: u64 = off
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != wk { return 0u32 }
+    return iii_lex_read_u32_c(n, o)
+}
+
+fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_CALL, 16u64) }
+fn iii_ast_call_callee(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_CALL, 8u64) }
+fn iii_ast_let_value(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_LET, 24u64) }
+fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_EXPR, 8u64) }
+fn iii_ast_return_value(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_RETURN, 8u64) }
+fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_ASSIGN, 8u64) }
+fn iii_ast_assign_value(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STMT_ASSIGN, 12u64) }
+fn iii_ast_field_object(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_FIELD, 8u64) }
+fn iii_ast_index_object(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_INDEX, 8u64) }
+fn iii_ast_index_index(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_INDEX, 12u64) }
+fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_BINARY, 12u64) }
+fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_BINARY, 16u64) }
+fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_UNARY, 12u64) }
+fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_EXPR_PAREN, 8u64) }
+fn iii_ast_arg_value(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_ARG, 16u64) }
+fn iii_ast_arg_name_off(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_ARG, 8u64) }
+fn iii_ast_arg_name_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_ARG, 12u64) }
+
+fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node == 0u32 { return 0u32 }
+    let n: u64 = iii_ast_get(ast, node)
+    if n == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(n, 0u64) != III_AST_EXPR_CALL { return 0u32 }
+    let lp: u64 = iii_lex_read_u64_c(n, 12u64)
+    let idx: u32 = i
+    return iii_ast_list_at(ast, lp, idx)
+}
+
 /* Distinct node count (sum of pool counts minus the 4 NULL sentinels). */
 fn iii_ast_node_count(ast: u64) -> u64 @export {
     if ast == 0u64 { return 0u64 }

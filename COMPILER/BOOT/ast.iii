@@ -1919,6 +1919,74 @@ fn iii_ast_type_decl_modifier_count(ast: u64, node: u32) -> u32 @export { return
 fn iii_ast_type_decl_modifier_at(ast: u64, node: u32, i: u32) -> u32 @export { return ast_kind_list_at(ast, node, III_AST_TYPE_DECL, 28u64, i) }
 fn iii_ast_type_decl_rhs_type(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_TYPE_DECL, 24u64) }
 
+/* ============================================================================
+ * ast_accessors port -- batch 4: raw-memory pokes (native deref) + source-buffer
+ * slice + type_decl_for_name (decl-loop + iii_lex_memcmp_c).  The non-kind_child
+ * shapes.  source_buf/source_len/root_module already @export above.
+ * ============================================================================ */
+
+fn iii_ast_load_u8(ptr: u64) -> u32 @export {
+    if ptr == 0u64 { return 0u32 }
+    let p: *u8 = ptr as *u8
+    return p[0] as u32
+}
+fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 @export {
+    if ptr == 0u64 { return 0u32 }
+    let p: *u8 = ptr as *u8
+    p[0] = (v & 0xFFu32) as u8
+    return 0u32
+}
+fn iii_ast_store_u32(ptr: u64, v: u32) -> u32 @export {
+    if ptr == 0u64 { return 0u32 }
+    let p: *u32 = ptr as *u32
+    p[0] = v
+    return 0u32
+}
+
+fn iii_ast_source_slice(ast: u64, offset: u32, length: u32) -> u64 @export {
+    let off: u32 = offset
+    let len: u32 = length
+    if ast == 0u64 { return 0u64 }
+    let src: u64 = iii_ast_source_buf(ast)
+    if src == 0u64 { return 0u64 }
+    let slen: u64 = iii_ast_source_len(ast)
+    if (off as u64) + (len as u64) > slen { return 0u64 }
+    return src + (off as u64)
+}
+
+fn iii_ast_type_decl_for_name(ast: u64, name_offset: u32, name_length: u32) -> u32 @export {
+    let no: u32 = name_offset
+    let nl: u32 = name_length
+    if ast == 0u64 { return 0u32 }
+    if nl == 0u32 { return 0u32 }
+    let src: u64 = iii_ast_source_buf(ast)
+    if src == 0u64 { return 0u32 }
+    let root: u32 = iii_ast_root_module(ast)
+    let modn: u64 = iii_ast_get(ast, root)
+    if modn == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(modn, 0u64) != III_AST_MODULE { return 0u32 }
+    let noff: u64 = src + (no as u64)
+    let dcount: u32 = iii_lex_read_u32_c(modn, 36u64)
+    let dlist: u64 = iii_lex_read_u64_c(modn, 32u64)
+    let mut i: u32 = 0u32
+    while i < dcount {
+        let did: u32 = iii_ast_list_at(ast, dlist, i)
+        let d: u64 = iii_ast_get(ast, did)
+        if d != 0u64 {
+            if iii_lex_read_u32_c(d, 0u64) == III_AST_TYPE_DECL {
+                if iii_lex_read_u32_c(d, 12u64) == nl {
+                    let doff: u64 = src + (iii_lex_read_u32_c(d, 8u64) as u64)
+                    if iii_lex_memcmp_c(doff, noff, nl as u64) == 0i32 {
+                        return did
+                    }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
 /* Distinct node count (sum of pool counts minus the 4 NULL sentinels). */
 fn iii_ast_node_count(ast: u64) -> u64 @export {
     if ast == 0u64 { return 0u64 }

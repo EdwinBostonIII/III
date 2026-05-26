@@ -30,69 +30,6 @@
 
 
 
-/* ??? Raw memory pokes (ASCII-clean read/write helpers) ??????????????? */
-
-uint32_t iii_ast_load_u8(uint64_t ptr)
-{
-    if (!ptr) return 0;
-    return (uint32_t)(*(const uint8_t *)(uintptr_t)ptr);
-}
-
-uint32_t iii_ast_store_u8(uint64_t ptr, uint32_t v)
-{
-    if (!ptr) return 0;
-    *(uint8_t *)(uintptr_t)ptr = (uint8_t)(v & 0xFFu);
-    return 0;
-}
-
-uint32_t iii_ast_store_u32(uint64_t ptr, uint32_t v)
-{
-    if (!ptr) return 0;
-    *(uint32_t *)(uintptr_t)ptr = v;
-    return 0;
-}
-
-/* ??? Source-buffer slice (returns pointer + length) ??????????????? */
-/* Convenience: caller provides u32 offset and length, function returns
- * a u8 pointer into the source buffer or NULL if out of range. */
-const uint8_t *iii_ast_source_slice(const iii_ast_t *ast,
-                                     uint32_t offset, uint32_t length)
-{
-    if (!ast) return (const uint8_t *)0;
-    const uint8_t *src = iii_ast_source_buf(ast);
-    size_t slen = iii_ast_source_len(ast);
-    if (!src) return (const uint8_t *)0;
-    if ((size_t)offset + (size_t)length > slen) return (const uint8_t *)0;
-    return src + offset;
-}
-
-
-/* iiis-2 — find a TYPE_DECL in the root module by name.  Returns the
- * TYPE_DECL's node id or 0 if no match.  Used by alias resolution at
- * codegen time.  O(N) over module decl count; v1.0 acceptable, future
- * stages may cache via a name-keyed table.  Source-buffer byte
- * compare uses memcmp directly. */
-uint32_t iii_ast_type_decl_for_name(const iii_ast_t *ast,
-                                    uint32_t name_offset, uint32_t name_length)
-{
-    if (!ast || name_length == 0) return 0;
-    const uint8_t *src = iii_ast_source_buf(ast);
-    if (!src) return 0;
-    const iii_ast_node_t *mod =
-        iii_ast_get(ast, iii_ast_root_module(ast));
-    if (!mod || mod->kind != III_AST_MODULE) return 0;
-    for (uint32_t i = 0; i < mod->u.module_.decls.count; i++) {
-        uint32_t did = iii_ast_list_at(ast, mod->u.module_.decls, i);
-        const iii_ast_node_t *d = iii_ast_get(ast, did);
-        if (!d || d->kind != III_AST_TYPE_DECL) continue;
-        if (d->u.type_decl.name.length != name_length) continue;
-        if (memcmp(src + d->u.type_decl.name.offset,
-                   src + name_offset, name_length) != 0)
-            continue;
-        return did;
-    }
-    return 0;
-}
 
 /* iiis-1 — EXPR_HEX u64 extraction.  Mirrors iii_ast_expr_int_u64
  * for hex literals (0xFFu64 etc.) so codegen's modifier-extract

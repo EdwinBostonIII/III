@@ -1,0 +1,84 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\uuid.iii
+ *
+ * III STDLIB - verba::uuid
+ *
+ * RFC 4122 UUID version 4 (random) generation.  Uses the
+ * xoshiro256** PRNG for randomness -- caller is responsible for
+ * seeding the PRNG with adequate entropy before calling.
+ *
+ * Public API:
+ *   uuid_v4_generate(out_16:*u8) -> i32
+ *      Writes 16 binary bytes (network byte order).
+ *   uuid_v4_format(uuid_16:*u8, out_36:*u8) -> i32
+ *      Formats the binary UUID as 36 ASCII chars (8-4-4-4-12 lowercase hex).
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module verba_uuid
+
+extern @abi(c-msvc-x64) fn xoshiro_next_u64() -> u64 from "xoshiro.iii"
+
+const UUID_OK : i32 = 0i32
+
+fn uuid_v4_generate(out_16: *u8) -> i32 @export {
+    let v0 : u64 = xoshiro_next_u64()
+    let v1 : u64 = xoshiro_next_u64()
+    /* Write 16 bytes BE from v0 (high 8) and v1 (low 8). */
+    out_16[0]  = ((v0 >> 56u64) & 0xFFu64) as u8
+    out_16[1]  = ((v0 >> 48u64) & 0xFFu64) as u8
+    out_16[2]  = ((v0 >> 40u64) & 0xFFu64) as u8
+    out_16[3]  = ((v0 >> 32u64) & 0xFFu64) as u8
+    out_16[4]  = ((v0 >> 24u64) & 0xFFu64) as u8
+    out_16[5]  = ((v0 >> 16u64) & 0xFFu64) as u8
+    out_16[6]  = ((v0 >> 8u64)  & 0xFFu64) as u8
+    out_16[7]  = (v0 & 0xFFu64) as u8
+    out_16[8]  = ((v1 >> 56u64) & 0xFFu64) as u8
+    out_16[9]  = ((v1 >> 48u64) & 0xFFu64) as u8
+    out_16[10] = ((v1 >> 40u64) & 0xFFu64) as u8
+    out_16[11] = ((v1 >> 32u64) & 0xFFu64) as u8
+    out_16[12] = ((v1 >> 24u64) & 0xFFu64) as u8
+    out_16[13] = ((v1 >> 16u64) & 0xFFu64) as u8
+    out_16[14] = ((v1 >> 8u64)  & 0xFFu64) as u8
+    out_16[15] = (v1 & 0xFFu64) as u8
+    /* Set version=4 (high nibble of byte 6 = 0x4). */
+    out_16[6] = ((out_16[6] as u32 & 0x0Fu32) | 0x40u32) as u8
+    /* Set variant=10 (top 2 bits of byte 8). */
+    out_16[8] = ((out_16[8] as u32 & 0x3Fu32) | 0x80u32) as u8
+    return UUID_OK
+}
+
+fn uuid_nibble_hex(n: u32) -> u32 {
+    let v : u32 = n & 0xFu32
+    if v < 10u32 { return v + 48u32 }       /* '0'..'9' */
+    return v + 87u32                         /* 'a'..'f' */
+}
+
+fn uuid_v4_format(uuid_16: *u8, out_36: *u8) -> i32 @export {
+    /* Format: 8-4-4-4-12 hex chars, lowercase, with hyphens. */
+    let mut bi : u32 = 0u32   /* byte index in uuid_16 */
+    let mut oi : u32 = 0u32   /* char index in out_36 */
+    let mut group : u32 = 0u32
+    while group < 5u32 {
+        let mut count : u32 = 0u32
+        let mut bytes_in_group : u32 = 4u32
+        if group == 1u32 { bytes_in_group = 2u32 }
+        if group == 2u32 { bytes_in_group = 2u32 }
+        if group == 3u32 { bytes_in_group = 2u32 }
+        if group == 4u32 { bytes_in_group = 6u32 }
+        while count < bytes_in_group {
+            let b : u32 = uuid_16[bi] as u32
+            out_36[oi]      = uuid_nibble_hex(b >> 4u32) as u8
+            out_36[oi + 1u32] = uuid_nibble_hex(b) as u8
+            oi = oi + 2u32
+            bi = bi + 1u32
+            count = count + 1u32
+        }
+        if group < 4u32 {
+            out_36[oi] = 45u8   /* '-' */
+            oi = oi + 1u32
+        }
+        group = group + 1u32
+    }
+    return UUID_OK
+}

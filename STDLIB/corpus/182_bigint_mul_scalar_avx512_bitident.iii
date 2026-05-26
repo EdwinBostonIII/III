@@ -1,0 +1,68 @@
+/* BigInt multiply-path bit-identity: scalar == AVX-512.
+ *
+ * RITCHIE §3.5 kernel 6/10.  Exercises the 8-wide partial-product
+ * primitive (vpmullq + 4x vpmuludq) shared by bigint_mul and
+ * bigint_mul_u64, on 11-limb operands (1 full 8-group + 3 remainder),
+ * and asserts:
+ *   (1) IDENTITY ANCHOR (correctness, not-both-wrong): a*1 == a and
+ *       bigint_mul_u64(a,1) == a, run on the AVX-512 path -- the group
+ *       path must produce the exact product.
+ *   (2) BIT-IDENTITY: force-scalar == force-avx512 for a*b and a*K.
+ *
+ * Exit = 88 on full success.
+ */
+module corpus_182
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena_id: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena_id: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena_id: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_force_path(p: u32) -> i32 from "bigint.iii"
+
+fn fill_pattern(id: u64, n: u64, seed: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        let v : u64 = 0x0123456789ABCDEFu64 + (i + seed) * 0x1000000000000001u64
+        bigint_set_limb(id, i, v)
+        i = i + 1u64
+    }
+    bigint_set_len(id, n)
+    return 0i32
+}
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(262144u64)
+    let a  : u64 = bigint_new(ar, 11u64)
+    let b  : u64 = bigint_new(ar, 11u64)
+    fill_pattern(a, 11u64, 1u64)
+    fill_pattern(b, 11u64, 7u64)
+    let one : u64 = bigint_from_u64(ar, 1u64)
+
+    /* (1) Identity anchor on the AVX-512 path (group + remainder). */
+    bigint_force_path(2u32)
+    let r_id  : u64 = bigint_mul(ar, a, one)
+    if bigint_eq(r_id, a) != 1u8 { return 11u64 }
+    let ru_id : u64 = bigint_mul_u64(ar, a, 1u64)
+    if bigint_eq(ru_id, a) != 1u8 { return 12u64 }
+
+    /* (2) bigint_mul bit-identity: scalar == avx512. */
+    bigint_force_path(1u32)
+    let rs : u64 = bigint_mul(ar, a, b)
+    bigint_force_path(2u32)
+    let ra : u64 = bigint_mul(ar, a, b)
+    if bigint_eq(rs, ra) != 1u8 { return 21u64 }
+
+    /* (3) bigint_mul_u64 bit-identity: scalar == avx512. */
+    bigint_force_path(1u32)
+    let rus : u64 = bigint_mul_u64(ar, a, 0xDEADBEEFCAFEBABEu64)
+    bigint_force_path(2u32)
+    let rua : u64 = bigint_mul_u64(ar, a, 0xDEADBEEFCAFEBABEu64)
+    if bigint_eq(rus, rua) != 1u8 { return 31u64 }
+
+    bigint_force_path(0u32)
+    return 88u64
+}

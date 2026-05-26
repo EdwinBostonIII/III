@@ -1,0 +1,81 @@
+/* 679_synthesis_bounds.iii -- M15 keystone: the synthesis spec language is BOUNDED + deterministic.
+ *
+ * synthesis_spec.iii is the canonical spec language: SYNSPEC_SLOTS=128 live specs,
+ * SYNSPEC_MAX_CONSTRAINTS=32 predicates/spec (W8), no statistical learning. 648_synthesis_spec
+ * tests canonical-encode <-> content-address. This KAT closes the W8 bounds gap (apotheosis
+ * falsifier: "a spec exceeding 128/32 that isn't refused -> red"): the 33rd constraint on a spec
+ * is REFUSED (E_TOO_MANY_CONSTRAINTS), the 129th spec is REFUSED (E_FULL) -- enforced, never
+ * truncated; plus determinism -- the same spec's content-address is stable across calls.
+ *
+ * NOTE: ss_init is idempotent-guarded (returns early if already inited), so this KAT uses a
+ * SINGLE ss_init and budgets the 128 slots (spec0 + 127 more = 128 live, 129th -> FULL); the
+ * determinism check runs on the empty spec0 before the slots fill.
+ *
+ * Main-corpus convention: rc 99 = pass; 1..8 = which check failed. */
+module corpus_679
+
+extern @abi(c-msvc-x64) fn ss_init() -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_alloc(out_spec_id: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_set_signature(spec_id: *u8, sig: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_add_constraint(spec_id: *u8, predicate: *u8, predicate_len: u32) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_content_address(spec_id: *u8, out: *u8) -> i32 from "synthesis_spec.iii"
+
+const SS_OK        : i32 =  0i32
+const SS_E_FULL    : i32 = -2i32
+const SS_E_TOOMANY : i32 = -7i32
+
+var SB_SPEC  : [u8; 32]
+var SB_SPEC2 : [u8; 32]
+var SB_SIG   : [u8; 72]
+var SB_PRED  : [u8; 8]
+var SB_CA1   : [u8; 32]
+var SB_CA2   : [u8; 32]
+
+/* a minimal valid signature: in_arity=1, out_arity=1, one in/out kind (mirrors ss_selftest). */
+fn sb_set_sig(addr: u64) -> i32 {
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < 72u64 { p[i] = 0u8  i = i + 1u64 }
+    p[0u64]  = 1u8
+    p[4u64]  = 1u8
+    p[8u64]  = 1u8
+    p[40u64] = 1u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let pr : *u8 = (&SB_PRED as u64) as *u8
+    pr[0u64] = 0xAAu8  pr[1u64] = 0xBBu8
+    ss_init()
+    let sp : *u8 = (&SB_SPEC as u64) as *u8
+    if ss_alloc(sp) != SS_OK { return 1u64 }
+    /* --- determinism: the (empty) spec's content-address is stable across calls. --- */
+    if ss_content_address(sp, (&SB_CA1 as u64) as *u8) != SS_OK { return 2u64 }
+    if ss_content_address(sp, (&SB_CA2 as u64) as *u8) != SS_OK { return 3u64 }
+    let mut acc : u32 = 0u32
+    let mut hi : u64 = 0u64
+    while hi < 32u64 { acc = acc | ((SB_CA1[hi] as u32) ^ (SB_CA2[hi] as u32))  hi = hi + 1u64 }
+    if acc != 0u32 { return 4u64 }
+    /* --- per-spec constraint bound (32 max): the 33rd is REFUSED. --- */
+    sb_set_sig(&SB_SIG as u64)
+    ss_set_signature(sp, (&SB_SIG as u64) as *u8)
+    let mut c : u64 = 0u64
+    let mut cbad : u8 = 0u8
+    while c < 32u64 {
+        if ss_add_constraint(sp, pr, 2u32) != SS_OK { cbad = 1u8 }
+        c = c + 1u64
+    }
+    if cbad == 1u8 { return 5u64 }
+    if ss_add_constraint(sp, pr, 2u32) != SS_E_TOOMANY { return 6u64 }
+    /* --- slot bound (128 max): spec0 + 127 more = 128 live; the 129th is REFUSED. --- */
+    let sp2 : *u8 = (&SB_SPEC2 as u64) as *u8
+    let mut s : u64 = 0u64
+    let mut sbad : u8 = 0u8
+    while s < 127u64 {
+        if ss_alloc(sp2) != SS_OK { sbad = 1u8 }
+        s = s + 1u64
+    }
+    if sbad == 1u8 { return 7u64 }
+    if ss_alloc(sp2) != SS_E_FULL { return 8u64 }
+    return 99u64
+}

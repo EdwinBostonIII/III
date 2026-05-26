@@ -1,0 +1,47 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\265_return_kind_static.iii
+ *
+ * III conformance corpus 265 -- @returns_hexad static return-kind
+ * propagation (iiis-1 fourth propagation rule).
+ *
+ * When a callee fn declares `@returns_hexad(K_r)` and a let-binding
+ * assigns the call result with declared type `@hexad_kind(K_l)`,
+ * codegen asserts `K_l == K_r`.  Mismatch → rc=14 with marker
+ * `# III_RETURN_KIND_VIOLATION:`.
+ *
+ * Separate modifier name (`@returns_hexad` vs `@hexad_kind`) preserves
+ * the existing fn-level @hexad_kind semantics (ctx.hexad_kind gate)
+ * and adds a NEW return-value type-tag without conflict.
+ *
+ * This file is the POSITIVE case: matching kinds; codegen accepts;
+ * the call returns and runtime succeeds.
+ *
+ * Mandate 7: pure integer equality on declared metadata.
+ */
+module corpus_265
+
+/* A fn whose return value carries hexad kind FORM (1). */
+fn _make_form() -> u64 @returns_hexad(1u64) {
+    return 0xFFFFu64
+}
+
+/* A fn whose return value carries hexad kind COMPOSE (6). */
+fn _make_compose() -> u64 @returns_hexad(6u64) {
+    return 0xCCCCu64
+}
+
+fn main() -> u64 {
+    /* Bind FORM result into a FORM-typed slot — kinds match,
+     * codegen accepts, runtime runs. */
+    let f_val : u64 @hexad_kind(1u64) = _make_form()
+    if f_val != 0xFFFFu64 { return 1u64 }
+
+    /* Bind COMPOSE result into a COMPOSE-typed slot — same. */
+    let c_val : u64 @hexad_kind(6u64) = _make_compose()
+    if c_val != 0xCCCCu64 { return 2u64 }
+
+    /* Untyped slot bypasses the static check (TIGHTENING is opt-in). */
+    let untyped : u64 = _make_form()
+    if untyped != 0xFFFFu64 { return 3u64 }
+
+    return 99u64
+}

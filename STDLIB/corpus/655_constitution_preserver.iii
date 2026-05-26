@@ -1,0 +1,4 @@
+/* 655 — constitution_preserver: LTL-checked invariant preservation over witnessed segments. */
+module corpus_655
+extern @abi(c-msvc-x64) fn cpres_selftest() -> u64 from "constitution_preserver.iii"
+fn main() -> u64 { return cpres_selftest() }

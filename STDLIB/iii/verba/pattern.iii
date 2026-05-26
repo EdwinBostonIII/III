@@ -1,0 +1,219 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\pattern.iii
+ *
+ * III STDLIB - verba::pattern
+ *
+ * pattern_t constructors and accessors (boot-time use).
+ * FROZEN SPEC §2.1.1, §Z.B.2.
+ *
+ * Hexad: kind_form. Ring: R0. K: 0.95.
+ *
+ * pattern_t layout (168 bytes per FROZEN SPEC §2.1.1):
+ *   off  field
+ *    0   pattern_id : u64
+ *    8   module_mhash : [u8; 32]
+ *   40   arity : u8
+ *   41   binding_kinds : [u8; 32]
+ *   73   _pad
+ *   80   predicate_fn : u64
+ *   88   unify_fn : u64
+ *   96   dispatch_fn : u64
+ *  104   activation_base : u64
+ *  112   guarantees_provided : u32
+ *  116   guarantees_required : u32
+ *  120   hexad_kind : u8
+ *  121   ring : u8
+ *  122   _pad
+ *  128   k_value_fixed : u64
+ *  136   effects_mask : u32
+ *  140   _pad
+ *  144   specialisation_of : u64
+ *  152   proof_id : u64
+ *  160   _pad to 168
+ */
+
+module verba_pattern
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const VP_PATTERN_BYTES : u32 = 168u32
+
+const VP_PATTERN_ID          : u32 = 0u32
+const VP_MODULE_MHASH        : u32 = 8u32
+const VP_ARITY               : u32 = 40u32
+const VP_BINDING_KINDS       : u32 = 41u32
+const VP_PREDICATE_FN        : u32 = 80u32
+const VP_UNIFY_FN            : u32 = 88u32
+const VP_DISPATCH_FN         : u32 = 96u32
+const VP_ACTIVATION_BASE     : u32 = 104u32
+const VP_GUARANTEES_PROVIDED : u32 = 112u32
+const VP_GUARANTEES_REQUIRED : u32 = 116u32
+const VP_HEXAD_KIND          : u32 = 120u32
+const VP_RING                : u32 = 121u32
+const VP_K_VALUE             : u32 = 128u32
+const VP_EFFECTS_MASK        : u32 = 136u32
+const VP_SPECIALISATION_OF   : u32 = 144u32
+const VP_PROOF_ID            : u32 = 152u32
+
+const BIND_KIND_FORM    : u8 = 1u8
+const BIND_KIND_INT64   : u8 = 2u8
+const BIND_KIND_PTR     : u8 = 3u8
+const BIND_KIND_CAP     : u8 = 4u8
+const BIND_KIND_VARIANT : u8 = 5u8
+
+const PATTERN_OK         : i32 =  0i32
+const PATTERN_E_RANGE    : i32 = -1i32
+
+/* Domain "III_PAT_ID" 16 bytes */
+var DOM_PAT_ID_BYTES : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 80u8, 65u8, 84u8, 95u8, 73u8, 68u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]
+
+fn vp_write_u32(p: u64, v: u32) -> i32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn vp_read_u32(p: u64) -> u32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn vp_write_u64(p: u64, v: u64) -> i32 {
+    vp_write_u32(p, (v & 0xFFFFFFFFu64) as u32)
+    vp_write_u32(p + 4u64, ((v >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+fn vp_read_u64(p: u64) -> u64 {
+    let lo : u64 = (vp_read_u32(p) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (vp_read_u32(p + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn pattern_template_zero(buf_168: u64) -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < VP_PATTERN_BYTES {
+        let bp : *u8 = (buf_168 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u32
+    }
+    return PATTERN_OK
+}
+
+var PATTERN_TEMPLATE_OUT32 : [u8; 32]
+
+fn pattern_template_set_id(buf_168: u64, module_mhash_32: u64, symbol_name: u64, name_len: u32) -> i32 @export {
+    /* Compute pattern_id = SHA256(domain || module_mhash || symbol_name) */
+    mhash_begin()
+    mhash_domain((&DOM_PAT_ID_BYTES) as u64, 10u64)
+    mhash_payload(module_mhash_32, 32u64)
+    mhash_payload(symbol_name, (name_len as u64) & 0xFFFFFFFFu64)
+    mhash_final((&PATTERN_TEMPLATE_OUT32) as u64)
+    let pid : u64 = vp_read_u64((&PATTERN_TEMPLATE_OUT32) as u64)
+    vp_write_u64(buf_168 + (VP_PATTERN_ID as u64), pid)
+    /* Copy module_mhash into VP_MODULE_MHASH */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let src : *u8 = (module_mhash_32 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        let dst : *u8 = (buf_168 + (VP_MODULE_MHASH as u64) + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        dst[0u64] = src[0u64]
+        i = i + 1u32
+    }
+    return PATTERN_OK
+}
+
+fn pattern_template_set_arity(buf_168: u64, arity: u8) -> i32 @export {
+    if arity > 32u8 { return PATTERN_E_RANGE }
+    let bp : *u8 = (buf_168 + (VP_ARITY as u64)) as *u8
+    bp[0u64] = arity
+    return PATTERN_OK
+}
+
+fn pattern_template_set_binding_kind(buf_168: u64, slot: u8, bind_kind: u8) -> i32 @export {
+    if slot >= 32u8 { return PATTERN_E_RANGE }
+    let bp : *u8 = (buf_168 + (VP_BINDING_KINDS as u64) + ((slot as u64) & 0xFFu64)) as *u8
+    bp[0u64] = bind_kind
+    return PATTERN_OK
+}
+
+fn pattern_template_set_predicate(buf_168: u64, fn_ptr: u64) -> i32 @export {
+    vp_write_u64(buf_168 + (VP_PREDICATE_FN as u64), fn_ptr)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_unify(buf_168: u64, fn_ptr: u64) -> i32 @export {
+    vp_write_u64(buf_168 + (VP_UNIFY_FN as u64), fn_ptr)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_dispatch(buf_168: u64, fn_ptr: u64) -> i32 @export {
+    vp_write_u64(buf_168 + (VP_DISPATCH_FN as u64), fn_ptr)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_activation_base(buf_168: u64, base: u64) -> i32 @export {
+    if base > 2000000000u64 { return PATTERN_E_RANGE }
+    vp_write_u64(buf_168 + (VP_ACTIVATION_BASE as u64), base)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_guarantees_provided(buf_168: u64, mask: u32) -> i32 @export {
+    vp_write_u32(buf_168 + (VP_GUARANTEES_PROVIDED as u64), mask)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_guarantees_required(buf_168: u64, mask: u32) -> i32 @export {
+    vp_write_u32(buf_168 + (VP_GUARANTEES_REQUIRED as u64), mask)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_hexad_kind(buf_168: u64, hk: u8) -> i32 @export {
+    if hk == 0u8 { return PATTERN_E_RANGE }
+    if hk > 7u8 { return PATTERN_E_RANGE }
+    let bp : *u8 = (buf_168 + (VP_HEXAD_KIND as u64)) as *u8
+    bp[0u64] = hk
+    return PATTERN_OK
+}
+
+fn pattern_template_set_ring(buf_168: u64, ring: u8) -> i32 @export {
+    if ring > 3u8 { return PATTERN_E_RANGE }
+    let bp : *u8 = (buf_168 + (VP_RING as u64)) as *u8
+    bp[0u64] = ring
+    return PATTERN_OK
+}
+
+fn pattern_template_set_k_value(buf_168: u64, k_fixed: u64) -> i32 @export {
+    if k_fixed > 1000000000u64 { return PATTERN_E_RANGE }
+    vp_write_u64(buf_168 + (VP_K_VALUE as u64), k_fixed)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_effects_mask(buf_168: u64, mask: u32) -> i32 @export {
+    vp_write_u32(buf_168 + (VP_EFFECTS_MASK as u64), mask)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_specialisation_of(buf_168: u64, parent_id: u64) -> i32 @export {
+    vp_write_u64(buf_168 + (VP_SPECIALISATION_OF as u64), parent_id)
+    return PATTERN_OK
+}
+
+fn pattern_template_set_proof_id(buf_168: u64, proof_crystal_id: u64) -> i32 @export {
+    vp_write_u64(buf_168 + (VP_PROOF_ID as u64), proof_crystal_id)
+    return PATTERN_OK
+}

@@ -1,0 +1,118 @@
+/* http_server: build "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n
+ *                    Content-Length: 5\r\n\r\nHello"
+ *
+ * Verify the byte stream matches expected.
+ */
+module corpus_65
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn http_send_status(builder_id: u64, status_code: u32, reason_base: u64, reason_len: u64) -> i32 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_send_header_name(builder_id: u64, name_base: u64, name_len: u64) -> i32 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_send_header_value(builder_id: u64, value_base: u64, value_len: u64) -> i32 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_send_end_headers(builder_id: u64) -> i32 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_send_body(builder_id: u64, body_base: u64, body_len: u64) -> i32 from "http_server.iii"
+
+fn check_byte(p: *u8, idx: u64, expected: u8) -> u64 {
+    if p[idx] != expected { return idx + 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let b : u64 = builder_new(a, 256u64)
+    if b == 0u64 { return 1u64 }
+    /* Reason phrase: "OK" */
+    let reason : *u8 = malloc(2u64)
+    reason[0] = 79u8   /* O */
+    reason[1] = 75u8   /* K */
+    http_send_status(b, 200u32, reason as u64, 2u64)
+    /* Content-Type: text/plain */
+    let ct_name : *u8 = malloc(12u64)
+    ct_name[0]  = 67u8   /* C */
+    ct_name[1]  = 111u8  /* o */
+    ct_name[2]  = 110u8  /* n */
+    ct_name[3]  = 116u8  /* t */
+    ct_name[4]  = 101u8  /* e */
+    ct_name[5]  = 110u8  /* n */
+    ct_name[6]  = 116u8  /* t */
+    ct_name[7]  = 45u8   /* - */
+    ct_name[8]  = 84u8   /* T */
+    ct_name[9]  = 121u8  /* y */
+    ct_name[10] = 112u8  /* p */
+    ct_name[11] = 101u8  /* e */
+    let ct_value : *u8 = malloc(10u64)
+    ct_value[0] = 116u8  /* t */
+    ct_value[1] = 101u8  /* e */
+    ct_value[2] = 120u8  /* x */
+    ct_value[3] = 116u8  /* t */
+    ct_value[4] = 47u8   /* / */
+    ct_value[5] = 112u8  /* p */
+    ct_value[6] = 108u8  /* l */
+    ct_value[7] = 97u8   /* a */
+    ct_value[8] = 105u8  /* i */
+    ct_value[9] = 110u8  /* n */
+    http_send_header_name(b, ct_name as u64, 12u64)
+    http_send_header_value(b, ct_value as u64, 10u64)
+    /* Content-Length: 5 */
+    let cl_name : *u8 = malloc(14u64)
+    cl_name[0]  = 67u8;  cl_name[1]  = 111u8; cl_name[2]  = 110u8; cl_name[3]  = 116u8
+    cl_name[4]  = 101u8; cl_name[5]  = 110u8; cl_name[6]  = 116u8; cl_name[7]  = 45u8
+    cl_name[8]  = 76u8;  cl_name[9]  = 101u8; cl_name[10] = 110u8; cl_name[11] = 103u8
+    cl_name[12] = 116u8; cl_name[13] = 104u8
+    let cl_value : *u8 = malloc(1u64)
+    cl_value[0] = 53u8   /* '5' */
+    http_send_header_name(b, cl_name as u64, 14u64)
+    http_send_header_value(b, cl_value as u64, 1u64)
+    /* End headers */
+    http_send_end_headers(b)
+    /* Body: "Hello" */
+    let body : *u8 = malloc(5u64)
+    body[0] = 72u8; body[1] = 101u8; body[2] = 108u8; body[3] = 108u8; body[4] = 111u8
+    http_send_body(b, body as u64, 5u64)
+    /* Verify the built response. */
+    let total_len : u64 = builder_len(b)
+    let expected_len : u64 = 69u64
+    if total_len != expected_len { return 200u64 + total_len }
+    let buf : *u8 = builder_seal(b) as *u8
+    /* Spot-check key bytes. */
+    /* "HTTP/1.1 200 OK\r\n" — total 17 bytes */
+    if check_byte(buf, 0u64, 72u8) != 0u64 { return 100u64 }   /* H */
+    if check_byte(buf, 9u64, 50u8) != 0u64 { return 101u64 }   /* '2' (status code) */
+    if check_byte(buf, 10u64, 48u8) != 0u64 { return 102u64 }  /* '0' */
+    if check_byte(buf, 11u64, 48u8) != 0u64 { return 103u64 }  /* '0' */
+    if check_byte(buf, 13u64, 79u8) != 0u64 { return 104u64 }  /* 'O' */
+    if check_byte(buf, 14u64, 75u8) != 0u64 { return 105u64 }  /* 'K' */
+    if check_byte(buf, 15u64, 13u8) != 0u64 { return 106u64 }  /* CR */
+    if check_byte(buf, 16u64, 10u8) != 0u64 { return 107u64 }  /* LF */
+    /* "Content-Type: text/plain\r\n" (26) — starts at offset 17 */
+    if check_byte(buf, 17u64, 67u8) != 0u64 { return 108u64 }  /* 'C' */
+    if check_byte(buf, 29u64, 58u8) != 0u64 { return 109u64 }  /* ':' */
+    if check_byte(buf, 30u64, 32u8) != 0u64 { return 110u64 }  /* SP */
+    if check_byte(buf, 31u64, 116u8) != 0u64 { return 111u64 } /* 't' */
+    if check_byte(buf, 35u64, 47u8) != 0u64 { return 112u64 }  /* '/' */
+    if check_byte(buf, 42u64, 10u8) != 0u64 { return 113u64 }  /* LF */
+    /* "Content-Length: 5\r\n" at offset 43..61 — 16 + 1 + 2 = 19 bytes */
+    if check_byte(buf, 43u64, 67u8) != 0u64 { return 114u64 }  /* 'C' */
+    if check_byte(buf, 59u64, 53u8) != 0u64 { return 115u64 }  /* '5' */
+    if check_byte(buf, 60u64, 13u8) != 0u64 { return 116u64 }  /* CR */
+    if check_byte(buf, 61u64, 10u8) != 0u64 { return 117u64 }  /* LF */
+    /* "\r\n" before body — at offset 62..63 */
+    if check_byte(buf, 62u64, 13u8) != 0u64 { return 118u64 }  /* CR */
+    if check_byte(buf, 63u64, 10u8) != 0u64 { return 119u64 }  /* LF */
+    /* Body: "Hello" at offset 64..68 */
+    if check_byte(buf, 64u64, 72u8) != 0u64 { return 120u64 }  /* H */
+    if check_byte(buf, 65u64, 101u8) != 0u64 { return 121u64 } /* e */
+    if check_byte(buf, 68u64, 111u8) != 0u64 { return 122u64 } /* o */
+    free(reason)
+    free(ct_name); free(ct_value)
+    free(cl_name); free(cl_value)
+    free(body)
+    arena_drop(a)
+    return 99u64
+}

@@ -1,0 +1,33 @@
+/* 704 -- mig3 (H1) foundation: the named SovVal boundary type.
+ *
+ * Proves the H1 boundary-type FORM the @sovereign checker will require already
+ * compiles + runs end-to-end: `type SovVal = *u8 @sovereign_value` (a transparent
+ * alias of the 112-byte cell ptr -- ABI-identical to *u8) declared per-module (the
+ * corpus-269 convention), a boundary fn whose param is `: SovVal`, and round-trip
+ * interop with the sv_* facet accessors.  This is the prerequisite the cg_r3
+ * @sovereign boundary checker resolves against (it reads SovVal's @sovereign_value
+ * marker via the alias chase).  rc 99 = pass; 1/2 = which assertion failed. */
+module corpus_704
+
+extern @abi(c-msvc-x64) fn sv_init() -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_set_hexad(sv: *u8, h: u64) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_hexad(sv: *u8) -> u64 from "sovval.iii"
+
+/* The H1 boundary type, declared per-module (alias chase resolves it in cg_r3). */
+type SovVal = *u8 @sovereign_value
+
+var C704_CELL : [u8; 112]
+
+/* A boundary fn declared via the SovVal named type -- the exact form a `@sovereign`
+ * fn will require.  SovVal == *u8, so the sv_* accessors apply directly. */
+fn c704_read_hexad(v: SovVal) -> u64 { return sv_hexad(v) }
+
+fn main() -> u64 {
+    sv_init()
+    let cell : *u8 = (&C704_CELL as u64) as *u8
+    sv_set_hexad(cell, 728u64)
+    if c704_read_hexad(cell) != 728u64 { return 1u64 }
+    sv_set_hexad(cell, 364u64)
+    if c704_read_hexad(cell) != 364u64 { return 2u64 }
+    return 99u64
+}

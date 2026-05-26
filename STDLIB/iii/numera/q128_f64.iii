@@ -1,0 +1,207 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\q128_f64.iii
+ *
+ * III STDLIB - numera::q128_f64
+ *
+ * Lattice plan Step 0030 -- convert a Q128 (128-bit unsigned) to its
+ * IEEE 754 double-precision bit pattern (returned as u64), with a
+ * companion crystal that records the rounding direction.
+ *
+ *   q128_to_f64_bits(id: u64) -> u64
+ *      Returns the 64 bits of the IEEE 754 binary64 representation
+ *      of the value (treating Q128 as a non-negative integer).  Uses
+ *      round-to-nearest, ties-to-even.  Returns 0 (positive zero
+ *      bit pattern) for a Q128 of zero.  Returns 0x7FF0_0000_0000_0000
+ *      (positive infinity) if the value is too large for f64
+ *      (impossible for Q128 since 2^128 < 2^1024).
+ *
+ *   q128_to_f64_round_dir(id: u64) -> i32
+ *      Returns the rounding direction the most recent
+ *      q128_to_f64_bits(id) call applied:
+ *         0 = exact (no rounding lost)
+ *        +1 = rounded up (added ulp)
+ *        -1 = rounded down (truncated low bits, no ulp added)
+ *      The state is per-Q128-id; concurrent callers should not race.
+ *
+ *   q128_to_f64_crystal(id, site_hash_ptr) -> u64
+ *      Mints a crystal whose error_code records the rounding
+ *      direction (0 / +1 / -1 -> 0u32 / 1u32 / 0xFFFFFFFFu32) and
+ *      whose site_hash is caller-supplied.  Returns the crystal_id.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (rounding may lose precision).
+ */
+
+module numera_q128_f64
+
+extern @abi(c-msvc-x64) fn q128_lo(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_hi(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+
+const F64_POS_ZERO_BITS : u64 = 0x0000000000000000u64
+const F64_POS_INF_BITS  : u64 = 0x7FF0000000000000u64
+
+const Q128_F64_MAX_INSTANCES : u32 = 64u32
+
+var Q128_F64_LAST_DIR : [i32; 64]    /* per-slot rounding direction record */
+
+/* Find the highest set bit of (hi, lo).  Returns 0..127, or 128
+ * (sentinel for "all zeroes"). */
+fn q128f_msb(hi: u64, lo: u64) -> u32 {
+    if hi != 0u64 {
+        let mut i : u32 = 64u32
+        let mut found : u32 = 128u32
+        let mut going : u8 = 1u8
+        while going == 1u8 {
+            if i == 0u32 { going = 0u8 }
+            if going == 1u8 {
+                let pos : u32 = i - 1u32
+                let bit : u64 = (hi >> (pos as u64)) & 1u64
+                if bit == 1u64 {
+                    found = pos + 64u32
+                    going = 0u8
+                }
+                if bit != 1u64 {
+                    i = i - 1u32
+                }
+            }
+        }
+        return found
+    }
+    if lo == 0u64 { return 128u32 }
+    let mut j : u32 = 64u32
+    let mut found2 : u32 = 128u32
+    let mut going2 : u8 = 1u8
+    while going2 == 1u8 {
+        if j == 0u32 { going2 = 0u8 }
+        if going2 == 1u8 {
+            let pos2 : u32 = j - 1u32
+            let bit2 : u64 = (lo >> (pos2 as u64)) & 1u64
+            if bit2 == 1u64 {
+                found2 = pos2
+                going2 = 0u8
+            }
+            if bit2 != 1u64 {
+                j = j - 1u32
+            }
+        }
+    }
+    return found2
+}
+
+/* Extract bits [lo_bit .. lo_bit+nbits-1] of the 128-bit (hi, lo)
+ * value as a u64.  Caller guarantees nbits ≤ 64. */
+fn q128f_extract(hi: u64, lo: u64, lo_bit: u32, nbits: u32) -> u64 {
+    let lo_bit_l : u64 = (lo_bit as u64) & 0xFFFFFFFFu64
+    let nbits_l  : u64 = (nbits as u64) & 0xFFFFFFFFu64
+    let mut result : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < nbits_l {
+        let abs_bit : u64 = lo_bit_l + k
+        let mut b : u64 = 0u64
+        if abs_bit < 64u64 {
+            b = (lo >> abs_bit) & 1u64
+        } else {
+            let hi_pos : u64 = abs_bit - 64u64
+            b = (hi >> hi_pos) & 1u64
+        }
+        result = result | (b << k)
+        k = k + 1u64
+    }
+    return result
+}
+
+fn q128_to_f64_bits(id: u64) -> u64 @export {
+    let id_l : u64 = id
+    if id_l == 0u64 { return F64_POS_ZERO_BITS }
+    let hi : u64 = q128_hi(id_l)
+    let lo : u64 = q128_lo(id_l)
+    if hi == 0u64 {
+        if lo == 0u64 {
+            /* exact zero */
+            let slot : u64 = (id_l - 1u64) & 0xFFu64
+            Q128_F64_LAST_DIR[slot] = 0i32
+            return F64_POS_ZERO_BITS
+        }
+    }
+    let msb : u32 = q128f_msb(hi, lo)
+    if msb == 128u32 { return F64_POS_ZERO_BITS }
+    /* exponent = msb + 1023 (bias).  Within range since msb ≤ 127 ≤ 1023. */
+    let exp : u64 = (msb as u64) + 1023u64
+    /* Mantissa: top 53 bits including the implicit leading 1.  We strip
+     * the leading 1 to get the stored 52-bit fraction. */
+    let mut mant_full : u64 = 0u64
+    let mut sticky : u64 = 0u64
+    let mut round_bit : u64 = 0u64
+    if msb < 53u32 {
+        /* Value fits in 53 bits -- exact representation, just shift up. */
+        let shift : u32 = 52u32 - msb
+        mant_full = lo << (shift as u64)
+        /* clear the implicit leading bit (top bit of mantissa). */
+        mant_full = mant_full & 0x000FFFFFFFFFFFFFu64
+    }
+    if msb >= 53u32 {
+        /* Take top 53 bits starting from msb, drop the leading 1 to
+         * get the stored 52-bit mantissa.  Round bit = bit at position
+         * (msb - 53).  Sticky = OR of bits below the round bit. */
+        let take_lo : u32 = msb - 52u32
+        let top_53  : u64 = q128f_extract(hi, lo, take_lo, 53u32)
+        mant_full = top_53 & 0x000FFFFFFFFFFFFFu64    /* drop leading 1 */
+        if take_lo > 0u32 {
+            round_bit = q128f_extract(hi, lo, take_lo - 1u32, 1u32)
+            if take_lo > 1u32 {
+                /* sticky = OR of bits 0..take_lo-2 */
+                let mut sb : u32 = 0u32
+                let mut acc : u64 = 0u64
+                while sb < (take_lo - 1u32) {
+                    let b : u64 = q128f_extract(hi, lo, sb, 1u32)
+                    acc = acc | b
+                    sb = sb + 1u32
+                }
+                sticky = acc
+            }
+        }
+    }
+    /* Round to nearest, ties to even. */
+    let mut bits : u64 = (exp << 52u64) | mant_full
+    let slot : u64 = (id_l - 1u64) & 0xFFu64
+    if round_bit == 1u64 {
+        let lsb_of_mant : u64 = mant_full & 1u64
+        if sticky != 0u64 {
+            bits = bits + 1u64
+            Q128_F64_LAST_DIR[slot] = 1i32
+        }
+        if sticky == 0u64 {
+            if lsb_of_mant == 1u64 {
+                bits = bits + 1u64
+                Q128_F64_LAST_DIR[slot] = 1i32
+            }
+            if lsb_of_mant == 0u64 {
+                Q128_F64_LAST_DIR[slot] = 0i32
+            }
+        }
+    }
+    if round_bit == 0u64 {
+        if sticky == 0u64 {
+            Q128_F64_LAST_DIR[slot] = 0i32
+        }
+        if sticky != 0u64 {
+            Q128_F64_LAST_DIR[slot] = -1i32
+        }
+    }
+    return bits
+}
+
+fn q128_to_f64_round_dir(id: u64) -> i32 @export {
+    if id == 0u64 { return 0i32 }
+    let slot : u64 = (id - 1u64) & 0xFFu64
+    return Q128_F64_LAST_DIR[slot]
+}
+
+fn q128_to_f64_crystal(id: u64, site_hash_ptr: u64) -> u64 @export {
+    if site_hash_ptr == 0u64 { return 0u64 }
+    let dir : i32 = q128_to_f64_round_dir(id)
+    let mut code : u32 = 0u32
+    if dir == 1i32 { code = 1u32 }
+    if dir == -1i32 { code = 0xFFFFFFFFu32 }
+    return crystal_mint(code, site_hash_ptr, 0u64, id)
+}

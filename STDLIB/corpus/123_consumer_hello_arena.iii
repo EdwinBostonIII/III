@@ -1,0 +1,16 @@
+/* Consumer baseline (Step 0021): a 5-line hello-world that constructs
+ * an arena, allocates a small buffer, records its size, and exits.
+ * Demonstrates the minimum surface a new III user touches. */
+module corpus_123
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    let p : u64 = arena_alloc8(a, 32u64)
+    if p == 0u64 { return 1u64 }
+    arena_drop(a)
+    return 99u64
+}

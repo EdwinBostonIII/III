@@ -1,0 +1,232 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bigint_div.iii
+ *
+ * III STDLIB - numera::bigint_div
+ *
+ * Division and modular arithmetic over bigint.  Phase D ships:
+ *   - bigint_div_qr (quotient + remainder via side-channel global)
+ *   - bigint_div_u64 (single-limb)
+ *   - bigint_mod (remainder only)
+ *   - bigint_modpow (repeated-square)
+ *
+ * Algorithm: bit-by-bit long division.  O(bits(a) * limbs(b)) per
+ * call.  Phase E with @specialize will switch to Knuth Algorithm D
+ * for n > 16 limbs.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+
+module numera_bigint_div
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_assign(dst: u64, src: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, n: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+
+const BIGINT_DIV_INVALID : u64 = 0u64
+
+var BIGINT_DIV_LAST_REM : u64 = 0u64
+var BIGINT_DIV_REM_U64  : u64 = 0u64
+
+fn bigint_remainder_take() -> u64 @export {
+    let r : u64 = BIGINT_DIV_LAST_REM
+    BIGINT_DIV_LAST_REM = 0u64
+    return r
+}
+
+fn bigint_remainder_get() -> u64 @export {
+    return BIGINT_DIV_LAST_REM
+}
+
+fn bigint_remainder_u64() -> u64 @export {
+    return BIGINT_DIV_REM_U64
+}
+
+fn bigint_msb_position(id: u64) -> u64 @export {
+    let n : u64 = bigint_len_limbs(id)
+    if n == 0u64 { return 0u64 }
+    let top : u64 = bigint_get_limb(id, n - 1u64)
+    let mut bit : u64 = 64u64
+    while bit > 0u64 {
+        bit = bit - 1u64
+        let mask : u64 = 1u64 << bit
+        let masked : u64 = top & mask
+        if masked != 0u64 {
+            let limb_bits : u64 = (n - 1u64) * 64u64
+            return limb_bits + bit + 1u64
+        }
+    }
+    return 0u64
+}
+
+fn bigint_div_u64(arena: u64, a: u64, scalar: u64) -> u64 @export {
+    if scalar == 0u64 { return BIGINT_DIV_INVALID }
+    let la : u64 = bigint_len_limbs(a)
+    if la == 0u64 {
+        BIGINT_DIV_REM_U64 = 0u64
+        return bigint_from_u64(arena, 0u64)
+    }
+    let q_id : u64 = bigint_new(arena, la)
+    if q_id == 0u64 { return BIGINT_DIV_INVALID }
+    let mut rem : u64 = 0u64
+    let mut i : u64 = la
+    while i > 0u64 {
+        i = i - 1u64
+        let limb : u64 = bigint_get_limb(a, i)
+        let mut bit : u64 = 64u64
+        let mut q_limb : u64 = 0u64
+        while bit > 0u64 {
+            bit = bit - 1u64
+            let rem_top : u64 = rem >> 63u64
+            let limb_shift : u64 = limb >> bit
+            let limb_bit : u64 = limb_shift & 1u64
+            let rem_shifted : u64 = rem << 1u64
+            rem = rem_shifted | limb_bit
+            let bit_mask : u64 = 1u64 << bit
+            if rem_top == 1u64 {
+                rem = rem - scalar
+                q_limb = q_limb | bit_mask
+            }
+            if rem_top == 0u64 {
+                if rem >= scalar {
+                    rem = rem - scalar
+                    q_limb = q_limb | bit_mask
+                }
+            }
+        }
+        bigint_set_limb(q_id, i, q_limb)
+    }
+    BIGINT_DIV_REM_U64 = rem
+    let mut nl : u64 = la
+    while nl > 0u64 {
+        let v : u64 = bigint_get_limb(q_id, nl - 1u64)
+        if v != 0u64 {
+            bigint_set_len(q_id, nl)
+            return q_id
+        }
+        nl = nl - 1u64
+    }
+    bigint_set_len(q_id, 0u64)
+    return q_id
+}
+
+fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 @export {
+    if bigint_is_zero(b) == 1u8 { return BIGINT_DIV_INVALID }
+    if bigint_is_zero(a) == 1u8 {
+        BIGINT_DIV_LAST_REM = bigint_from_u64(arena, 0u64)
+        return bigint_from_u64(arena, 0u64)
+    }
+    let cmp_ab : i32 = bigint_cmp(a, b)
+    if cmp_ab == -1i32 {
+        BIGINT_DIV_LAST_REM = bigint_copy(arena, a)
+        return bigint_from_u64(arena, 0u64)
+    }
+    if cmp_ab == 0i32 {
+        BIGINT_DIV_LAST_REM = bigint_from_u64(arena, 0u64)
+        return bigint_from_u64(arena, 1u64)
+    }
+    let msb_a : u64 = bigint_msb_position(a)
+    let mut q_id : u64 = bigint_from_u64(arena, 0u64)
+    if q_id == 0u64 { return BIGINT_DIV_INVALID }
+    let mut r_id : u64 = bigint_from_u64(arena, 0u64)
+    if r_id == 0u64 { return BIGINT_DIV_INVALID }
+    let mut bit : u64 = msb_a
+    while bit > 0u64 {
+        bit = bit - 1u64
+        let r_shifted : u64 = bigint_shl_bits(arena, r_id, 1u64)
+        bigint_drop(r_id)
+        r_id = r_shifted
+        let limb_idx : u64 = bit / 64u64
+        let bit_off  : u64 = bit % 64u64
+        let limb_val : u64 = bigint_get_limb(a, limb_idx)
+        let limb_shift : u64 = limb_val >> bit_off
+        let a_bit : u64 = limb_shift & 1u64
+        if a_bit == 1u64 {
+            let one_bigint : u64 = bigint_from_u64(arena, 1u64)
+            let r_or : u64 = bigint_add(arena, r_id, one_bigint)
+            bigint_drop(r_id)
+            bigint_drop(one_bigint)
+            r_id = r_or
+        }
+        let cmp_rb : i32 = bigint_cmp(r_id, b)
+        let mut do_sub : u8 = 0u8
+        if cmp_rb == 0i32 { do_sub = 1u8 }
+        if cmp_rb == 1i32 { do_sub = 1u8 }
+        if do_sub == 1u8 {
+            let r_sub : u64 = bigint_sub(arena, r_id, b)
+            bigint_drop(r_id)
+            r_id = r_sub
+            let one_b : u64 = bigint_from_u64(arena, 1u64)
+            let bit_set : u64 = bigint_shl_bits(arena, one_b, bit)
+            bigint_drop(one_b)
+            let q_new : u64 = bigint_add(arena, q_id, bit_set)
+            bigint_drop(bit_set)
+            bigint_drop(q_id)
+            q_id = q_new
+        }
+    }
+    /* Belt-and-suspenders: even though every shl/add/sub now
+     * normalises post-Phase-E-prep, force r_id and q_id canonical so
+     * downstream bigint_eq/bigint_cmp work without length-tolerant
+     * helpers. */
+    bigint_normalize(r_id)
+    bigint_normalize(q_id)
+    BIGINT_DIV_LAST_REM = r_id
+    return q_id
+}
+
+fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 @export {
+    let q : u64 = bigint_div_qr(arena, a, m)
+    if q == BIGINT_DIV_INVALID { return BIGINT_DIV_INVALID }
+    bigint_drop(q)
+    let r : u64 = BIGINT_DIV_LAST_REM
+    BIGINT_DIV_LAST_REM = 0u64
+    return r
+}
+
+fn bigint_modpow(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 @export {
+    if bigint_is_zero(modulus) == 1u8 { return BIGINT_DIV_INVALID }
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    if bigint_eq(modulus, one) == 1u8 {
+        bigint_drop(one)
+        return bigint_from_u64(arena, 0u64)
+    }
+    let mut result : u64 = one
+    let mut b_cur : u64 = bigint_mod(arena, base, modulus)
+    let exp_bits : u64 = bigint_msb_position(exp)
+    let mut bit : u64 = 0u64
+    while bit < exp_bits {
+        let limb_idx : u64 = bit / 64u64
+        let bit_off  : u64 = bit % 64u64
+        let limb_val : u64 = bigint_get_limb(exp, limb_idx)
+        let limb_shift : u64 = limb_val >> bit_off
+        let e_bit : u64 = limb_shift & 1u64
+        if e_bit == 1u64 {
+            let prod : u64 = bigint_mul(arena, result, b_cur)
+            let new_result : u64 = bigint_mod(arena, prod, modulus)
+            bigint_drop(prod)
+            bigint_drop(result)
+            result = new_result
+        }
+        let b_squared : u64 = bigint_mul(arena, b_cur, b_cur)
+        let b_next : u64 = bigint_mod(arena, b_squared, modulus)
+        bigint_drop(b_squared)
+        bigint_drop(b_cur)
+        b_cur = b_next
+        bit = bit + 1u64
+    }
+    bigint_drop(b_cur)
+    return result
+}

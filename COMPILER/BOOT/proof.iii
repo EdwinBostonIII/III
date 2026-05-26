@@ -1,0 +1,1049 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\proof.iii
+ *
+ * III Stage-0 Proof Certificate Emitter — .iii port of proof.c.
+ *
+ * Mirrors proof.h ABI exactly so this object file is link-compatible
+ * with the C iiis-0 build (replaces proof.o).  All eight public
+ * symbols are @export'd (unmangled).  SHA-256 is hand-rolled inline.
+ *
+ * Stage-0 simplifications versus proof.c:
+ *
+ *   - No iii_proof_state_t heap struct
+ state lives in module-scope
+ *     globals.  iii_proof_create returns a sentinel pointer (the
+ *     address of PF_SENTINEL[0]) and iii_proof_destroy is a no-op
+ *     reset.  Proof is single-instance — main.c calls create/destroy
+ *     once per build, never concurrently (consistent with the rest
+ *     of BOOT's single-process model).
+ *
+ *   - errors[] and certs[] are fixed-cap arrays (256 errors,
+ *     1024 certs) instead of growable.  Excess is silently dropped
+ *     after the cap (parity with C's behaviour after realloc OOM).
+ *
+ *   - Error messages are fixed strings (no arena printf).  The
+ *     "subtree of decl node N contains an error node" message loses
+ *     the N (logged as the generic message instead).  Stage-1's
+ *     iii dialect with format-string support will restore it.
+ *
+ *   - AST/sema field access uses the flat accessor surface in
+ *     ast_accessors.c rather than struct-field-through-pointer
+ *     (which the Stage-0 cg_r3 doesn't yet support).
+ *
+ * NIH: only ast.h / sema.h / hexad_check.h / ast_accessors.c.  No
+ * external CIC kernel.  Hand-rolled SHA-256 inside this TU.
+ */
+
+module proof
+
+/* ─── Public ABI: error codes (must match proof.h) ─────────────────── */
+
+/* Error codes (inlined as i32 literals in this file; mirrors proof.h):
+ *   III_PROOF_OK = 0, E_HEXAD_UNREP = 1, E_RING_MALFORMED = 2,
+ *   E_ERROR_NODE = 3, E_OOM = 99. */
+
+/* ─── AST kind constants (mirror ast.h, append-only enum) ──────────── */
+
+const PF_K_MODULE                  : u32 = 1u32
+const PF_K_CYCLE_DECL              : u32 = 3u32
+const PF_K_FN_DECL                 : u32 = 4u32
+const PF_K_TYPE_DECL               : u32 = 5u32
+const PF_K_CONST_DECL              : u32 = 6u32
+const PF_K_EXTERN_DECL             : u32 = 7u32
+const PF_K_MOBIUS_CANDIDATE_DECL   : u32 = 8u32
+const PF_K_SCHEMA_DECL             : u32 = 9u32
+const PF_K_SEALED_CALL_METHOD_DECL : u32 = 11u32
+const PF_K_STMT_LET                : u32 = 20u32
+const PF_K_STMT_RETURN             : u32 = 26u32
+const PF_K_STMT_ASSIGN             : u32 = 27u32
+const PF_K_STMT_EXPR               : u32 = 28u32
+const PF_K_FORWARD_BLOCK           : u32 = 29u32
+const PF_K_EXPR_CALL               : u32 = 46u32
+const PF_K_EXPR_FIELD              : u32 = 47u32
+const PF_K_EXPR_INDEX              : u32 = 48u32
+const PF_K_EXPR_BINARY             : u32 = 49u32
+const PF_K_EXPR_UNARY              : u32 = 50u32
+const PF_K_EXPR_BLOCK              : u32 = 51u32
+const PF_K_EXPR_PAREN              : u32 = 53u32
+const PF_K_ARG                     : u32 = 57u32
+const PF_K_ERROR_NODE              : u32 = 62u32
+
+/* Ring lattice mask (must match ast.h III_RING_ANY = 0x0F). */
+const PF_RING_ANY : u32 = 0x0Fu32
+
+/* ─── Externs from C side ─────────────────────────────────────────── */
+
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_slice(ast: u64, offset: u32, length: u32) -> u64 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_mhash(ast: u64, node: u32) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_annotate(ast: u64, phase: u64, node: u32, bytes: u64, len: u64) -> u8 from "ast.c"
+
+extern @abi(c-msvc-x64) fn iii_sema_cycle_hexad(sema: u64, node: u32) -> u32 from "sema.c"
+extern @abi(c-msvc-x64) fn iii_sema_cycle_ring_mask(sema: u64, node: u32) -> u32 from "sema.c"
+
+extern @abi(c-msvc-x64) fn iii_hexad_check_init() -> u32 from "hexad_check.c"
+extern @abi(c-msvc-x64) fn iii_hexad_packed_admitted(packed: u32) -> u8 from "hexad_check.c"
+
+/* ─── Module-global state (single proof instance) ─────────────────── */
+
+/* Sentinel "opaque pointer" — taking its address yields a non-NULL
+ * value for iii_proof_create's return. */
+var PF_SENTINEL : [u8; 1]
+
+var PF_AST          : u64 = 0u64
+var PF_SEMA         : u64 = 0u64
+var PF_RAN          : u8  = 0u8
+
+/* Error queue: fixed cap 256. */
+const PF_ERR_CAP : u32 = 256u32
+var PF_ERR_CODE  : [i32; 256]
+var PF_ERR_NODE  : [u32; 256]
+/* Message pointers (u64 each — addresses of static const message
+ * arrays).  Stored as a flat byte buffer indexed by 8 to avoid the
+ * non-u8 stride bug in Stage-0 EXPR_INDEX dispatch. */
+var PF_ERR_MSG_BYTES : [u8; 2048]
+var PF_ERR_COUNT : u32 = 0u32
+
+/* Cert table: fixed cap 1024. */
+const PF_CERT_CAP    : u32 = 1024u32
+var PF_CERT_NODE     : [u32; 1024]
+var PF_CERT_BYTES    : [u8; 32768]
+var PF_CERT_COUNT    : u32 = 0u32
+
+/* Annotation phase string ("proof/cert_mhash\0"). */
+var PF_ANNO_PHASE : [u8; 17]
+var PF_ANNO_INIT  : u8 = 0u8
+
+/* Domain-separation strings. */
+var PF_DOMAIN     : [u8; 13]   /* "III_PROOF_v1\0" — 13 bytes */
+var PF_DOMAIN_AGG : [u8; 23]   /* "III_PROOF_AGGREGATE_v1\0" — 23 bytes */
+var PF_DOMAIN_INIT : u8 = 0u8
+
+/* Scratch buffer for u32/u64 byte-encoding. */
+var PF_SCRATCH8 : [u8; 8]
+
+/* Error message tables.  Each is a `var` (so EXPR_IDENT yields leaq
+ * — the address — rather than load).  Null-terminated. */
+var PF_MSG_ERROR_NODE     : [u8; 48]
+var PF_MSG_HEXAD_UNREP    : [u8; 56]
+var PF_MSG_RING_MALFORMED : [u8; 64]
+var PF_MSG_OK             : [u8; 4]
+var PF_MSG_UNKNOWN        : [u8; 8]
+var PF_MSG_NAME_HEXAD     : [u8; 16]
+var PF_MSG_NAME_RING      : [u8; 16]
+var PF_MSG_NAME_ERROR     : [u8; 16]
+var PF_MSG_NAME_OOM       : [u8; 4]
+var PF_MSG_INIT           : u8 = 0u8
+
+/* ─── SHA-256 working state ──────────────────────────────────────── */
+
+var PF_K       : [u32; 64]
+var PF_K_INIT  : u8 = 0u8
+var PF_W       : [u32; 64]
+var PF_H       : [u32; 8]
+var PF_BUF     : [u8; 64]
+var PF_BUFLEN  : u32 = 0u32
+var PF_BITS    : u64 = 0u64
+
+/* ─── Helpers ────────────────────────────────────────────────────── */
+
+fn pf_rotr(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+fn pf_init_k_once() -> u32 {
+    if PF_K_INIT == 1u8 { return 0u32 }
+    PF_K[0]  = 0x428a2f98u32
+    PF_K[1]  = 0x71374491u32
+    PF_K[2]  = 0xb5c0fbcfu32
+    PF_K[3]  = 0xe9b5dba5u32
+    PF_K[4]  = 0x3956c25bu32
+    PF_K[5]  = 0x59f111f1u32
+    PF_K[6]  = 0x923f82a4u32
+    PF_K[7]  = 0xab1c5ed5u32
+    PF_K[8]  = 0xd807aa98u32
+    PF_K[9]  = 0x12835b01u32
+    PF_K[10] = 0x243185beu32
+    PF_K[11] = 0x550c7dc3u32
+    PF_K[12] = 0x72be5d74u32
+    PF_K[13] = 0x80deb1feu32
+    PF_K[14] = 0x9bdc06a7u32
+    PF_K[15] = 0xc19bf174u32
+    PF_K[16] = 0xe49b69c1u32
+    PF_K[17] = 0xefbe4786u32
+    PF_K[18] = 0x0fc19dc6u32
+    PF_K[19] = 0x240ca1ccu32
+    PF_K[20] = 0x2de92c6fu32
+    PF_K[21] = 0x4a7484aau32
+    PF_K[22] = 0x5cb0a9dcu32
+    PF_K[23] = 0x76f988dau32
+    PF_K[24] = 0x983e5152u32
+    PF_K[25] = 0xa831c66du32
+    PF_K[26] = 0xb00327c8u32
+    PF_K[27] = 0xbf597fc7u32
+    PF_K[28] = 0xc6e00bf3u32
+    PF_K[29] = 0xd5a79147u32
+    PF_K[30] = 0x06ca6351u32
+    PF_K[31] = 0x14292967u32
+    PF_K[32] = 0x27b70a85u32
+    PF_K[33] = 0x2e1b2138u32
+    PF_K[34] = 0x4d2c6dfcu32
+    PF_K[35] = 0x53380d13u32
+    PF_K[36] = 0x650a7354u32
+    PF_K[37] = 0x766a0abbu32
+    PF_K[38] = 0x81c2c92eu32
+    PF_K[39] = 0x92722c85u32
+    PF_K[40] = 0xa2bfe8a1u32
+    PF_K[41] = 0xa81a664bu32
+    PF_K[42] = 0xc24b8b70u32
+    PF_K[43] = 0xc76c51a3u32
+    PF_K[44] = 0xd192e819u32
+    PF_K[45] = 0xd6990624u32
+    PF_K[46] = 0xf40e3585u32
+    PF_K[47] = 0x106aa070u32
+    PF_K[48] = 0x19a4c116u32
+    PF_K[49] = 0x1e376c08u32
+    PF_K[50] = 0x2748774cu32
+    PF_K[51] = 0x34b0bcb5u32
+    PF_K[52] = 0x391c0cb3u32
+    PF_K[53] = 0x4ed8aa4au32
+    PF_K[54] = 0x5b9cca4fu32
+    PF_K[55] = 0x682e6ff3u32
+    PF_K[56] = 0x748f82eeu32
+    PF_K[57] = 0x78a5636fu32
+    PF_K[58] = 0x84c87814u32
+    PF_K[59] = 0x8cc70208u32
+    PF_K[60] = 0x90befffau32
+    PF_K[61] = 0xa4506cebu32
+    PF_K[62] = 0xbef9a3f7u32
+    PF_K[63] = 0xc67178f2u32
+    PF_K_INIT = 1u8
+    return 0u32
+}
+
+fn pf_sha_init() -> u32 {
+    pf_init_k_once()
+    PF_H[0] = 0x6a09e667u32
+    PF_H[1] = 0xbb67ae85u32
+    PF_H[2] = 0x3c6ef372u32
+    PF_H[3] = 0xa54ff53au32
+    PF_H[4] = 0x510e527fu32
+    PF_H[5] = 0x9b05688cu32
+    PF_H[6] = 0x1f83d9abu32
+    PF_H[7] = 0x5be0cd19u32
+    PF_BITS = 0u64
+    PF_BUFLEN = 0u32
+    return 0u32
+}
+
+fn pf_sha_block() -> u32 {
+    for i in 0..16 {
+        let i4: u32 = (i as u32) * 4u32
+        let b0: u32 = PF_BUF[i4 + 0u32] as u32
+        let b1: u32 = PF_BUF[i4 + 1u32] as u32
+        let b2: u32 = PF_BUF[i4 + 2u32] as u32
+        let b3: u32 = PF_BUF[i4 + 3u32] as u32
+        PF_W[i] = (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3
+    }
+    for j in 16..64 {
+        let w15: u32 = PF_W[j - 15]
+        let w2:  u32 = PF_W[j - 2]
+        let s0: u32 = pf_rotr(w15, 7u32) ^ pf_rotr(w15, 18u32) ^ (w15 >> 3u32)
+        let s1: u32 = pf_rotr(w2, 17u32) ^ pf_rotr(w2, 19u32) ^ (w2 >> 10u32)
+        PF_W[j] = PF_W[j - 16] + s0 + PF_W[j - 7] + s1
+    }
+    let mut a: u32 = PF_H[0]
+    let mut b: u32 = PF_H[1]
+    let mut c: u32 = PF_H[2]
+    let mut d: u32 = PF_H[3]
+    let mut e: u32 = PF_H[4]
+    let mut f: u32 = PF_H[5]
+    let mut g: u32 = PF_H[6]
+    let mut h: u32 = PF_H[7]
+    for i in 0..64 {
+        let S1: u32 = pf_rotr(e, 6u32) ^ pf_rotr(e, 11u32) ^ pf_rotr(e, 25u32)
+        let ch: u32 = (e & f) ^ ((~e) & g)
+        let t1: u32 = h + S1 + ch + PF_K[i] + PF_W[i]
+        let S0: u32 = pf_rotr(a, 2u32) ^ pf_rotr(a, 13u32) ^ pf_rotr(a, 22u32)
+        let mj: u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2: u32 = S0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+    }
+    PF_H[0] = PF_H[0] + a
+    PF_H[1] = PF_H[1] + b
+    PF_H[2] = PF_H[2] + c
+    PF_H[3] = PF_H[3] + d
+    PF_H[4] = PF_H[4] + e
+    PF_H[5] = PF_H[5] + f
+    PF_H[6] = PF_H[6] + g
+    PF_H[7] = PF_H[7] + h
+    return 0u32
+}
+
+fn pf_sha_update_byte(b: u8) -> u32 {
+    PF_BITS = PF_BITS + 8u64
+    PF_BUF[PF_BUFLEN] = b
+    PF_BUFLEN = PF_BUFLEN + 1u32
+    if PF_BUFLEN == 64u32 {
+        pf_sha_block()
+        PF_BUFLEN = 0u32
+    }
+    return 0u32
+}
+
+fn pf_sha_update(data: *u8, len: u64) -> u32 {
+    if len == 0u64 { return 0u32 }
+    let mut off: u64 = 0u64
+    while off < len {
+        pf_sha_update_byte(data[off])
+        off = off + 1u64
+    }
+    return 0u32
+}
+
+fn pf_sha_update_u32(v: u32) -> u32 {
+    PF_SCRATCH8[0] = ( v          & 0xffu32) as u8
+    PF_SCRATCH8[1] = ((v >> 8u32)  & 0xffu32) as u8
+    PF_SCRATCH8[2] = ((v >> 16u32) & 0xffu32) as u8
+    PF_SCRATCH8[3] = ((v >> 24u32) & 0xffu32) as u8
+    pf_sha_update_byte(PF_SCRATCH8[0])
+    pf_sha_update_byte(PF_SCRATCH8[1])
+    pf_sha_update_byte(PF_SCRATCH8[2])
+    pf_sha_update_byte(PF_SCRATCH8[3])
+    return 0u32
+}
+
+fn pf_sha_update_u64(v: u64) -> u32 {
+    PF_SCRATCH8[0] = ( v           & 0xffu64) as u8
+    PF_SCRATCH8[1] = ((v >>  8u64) & 0xffu64) as u8
+    PF_SCRATCH8[2] = ((v >> 16u64) & 0xffu64) as u8
+    PF_SCRATCH8[3] = ((v >> 24u64) & 0xffu64) as u8
+    PF_SCRATCH8[4] = ((v >> 32u64) & 0xffu64) as u8
+    PF_SCRATCH8[5] = ((v >> 40u64) & 0xffu64) as u8
+    PF_SCRATCH8[6] = ((v >> 48u64) & 0xffu64) as u8
+    PF_SCRATCH8[7] = ((v >> 56u64) & 0xffu64) as u8
+    pf_sha_update_byte(PF_SCRATCH8[0])
+    pf_sha_update_byte(PF_SCRATCH8[1])
+    pf_sha_update_byte(PF_SCRATCH8[2])
+    pf_sha_update_byte(PF_SCRATCH8[3])
+    pf_sha_update_byte(PF_SCRATCH8[4])
+    pf_sha_update_byte(PF_SCRATCH8[5])
+    pf_sha_update_byte(PF_SCRATCH8[6])
+    pf_sha_update_byte(PF_SCRATCH8[7])
+    return 0u32
+}
+
+fn pf_sha_final(out: *u8) -> u32 {
+    let final_bits: u64 = PF_BITS
+    pf_sha_update_byte(0x80u8)
+    while PF_BUFLEN != 56u32 {
+        pf_sha_update_byte(0u8)
+    }
+    pf_sha_update_byte(((final_bits >> 56u64) & 0xffu64) as u8)
+    pf_sha_update_byte(((final_bits >> 48u64) & 0xffu64) as u8)
+    pf_sha_update_byte(((final_bits >> 40u64) & 0xffu64) as u8)
+    pf_sha_update_byte(((final_bits >> 32u64) & 0xffu64) as u8)
+    pf_sha_update_byte(((final_bits >> 24u64) & 0xffu64) as u8)
+    pf_sha_update_byte(((final_bits >> 16u64) & 0xffu64) as u8)
+    pf_sha_update_byte(((final_bits >>  8u64) & 0xffu64) as u8)
+    pf_sha_update_byte(( final_bits          & 0xffu64) as u8)
+    for i in 0..8 {
+        let hi: u32 = PF_H[i]
+        let i4: u32 = (i as u32) * 4u32
+        out[i4 + 0u32] = ((hi >> 24u32) & 0xffu32) as u8
+        out[i4 + 1u32] = ((hi >> 16u32) & 0xffu32) as u8
+        out[i4 + 2u32] = ((hi >>  8u32) & 0xffu32) as u8
+        out[i4 + 3u32] = ( hi           & 0xffu32) as u8
+    }
+    return 0u32
+}
+
+/* ─── Static-string init ─────────────────────────────────────────── */
+
+fn pf_init_strings_once() -> u32 {
+    if PF_MSG_INIT == 1u8 { return 0u32 }
+    /* "decl is a parser-recovery error node" + NUL = 38 bytes (fits in 48) */
+    PF_MSG_ERROR_NODE[0]  = 100u8
+    PF_MSG_ERROR_NODE[1]  = 101u8
+    PF_MSG_ERROR_NODE[2]  = 99u8
+    PF_MSG_ERROR_NODE[3]  = 108u8
+    PF_MSG_ERROR_NODE[4]  = 32u8
+    PF_MSG_ERROR_NODE[5]  = 105u8
+    PF_MSG_ERROR_NODE[6]  = 115u8
+    PF_MSG_ERROR_NODE[7]  = 32u8
+    PF_MSG_ERROR_NODE[8]  = 97u8
+    PF_MSG_ERROR_NODE[9]  = 32u8
+    PF_MSG_ERROR_NODE[10] = 112u8
+    PF_MSG_ERROR_NODE[11] = 97u8
+    PF_MSG_ERROR_NODE[12] = 114u8
+    PF_MSG_ERROR_NODE[13] = 115u8
+    PF_MSG_ERROR_NODE[14] = 101u8
+    PF_MSG_ERROR_NODE[15] = 114u8
+    PF_MSG_ERROR_NODE[16] = 45u8
+    PF_MSG_ERROR_NODE[17] = 114u8
+    PF_MSG_ERROR_NODE[18] = 101u8
+    PF_MSG_ERROR_NODE[19] = 99u8
+    PF_MSG_ERROR_NODE[20] = 111u8
+    PF_MSG_ERROR_NODE[21] = 118u8
+    PF_MSG_ERROR_NODE[22] = 101u8
+    PF_MSG_ERROR_NODE[23] = 114u8
+    PF_MSG_ERROR_NODE[24] = 121u8
+    PF_MSG_ERROR_NODE[25] = 32u8
+    PF_MSG_ERROR_NODE[26] = 101u8
+    PF_MSG_ERROR_NODE[27] = 114u8
+    PF_MSG_ERROR_NODE[28] = 114u8
+    PF_MSG_ERROR_NODE[29] = 111u8
+    PF_MSG_ERROR_NODE[30] = 114u8
+    PF_MSG_ERROR_NODE[31] = 32u8
+    PF_MSG_ERROR_NODE[32] = 110u8
+    PF_MSG_ERROR_NODE[33] = 111u8
+    PF_MSG_ERROR_NODE[34] = 100u8
+    PF_MSG_ERROR_NODE[35] = 101u8
+    PF_MSG_ERROR_NODE[36] = 0u8
+
+    /* "cycle hexad fails defense-in-depth admission" + NUL = 46 bytes (fits in 56) */
+    PF_MSG_HEXAD_UNREP[0]  = 99u8
+    PF_MSG_HEXAD_UNREP[1]  = 121u8
+    PF_MSG_HEXAD_UNREP[2]  = 99u8
+    PF_MSG_HEXAD_UNREP[3]  = 108u8
+    PF_MSG_HEXAD_UNREP[4]  = 101u8
+    PF_MSG_HEXAD_UNREP[5]  = 32u8
+    PF_MSG_HEXAD_UNREP[6]  = 104u8
+    PF_MSG_HEXAD_UNREP[7]  = 101u8
+    PF_MSG_HEXAD_UNREP[8]  = 120u8
+    PF_MSG_HEXAD_UNREP[9]  = 97u8
+    PF_MSG_HEXAD_UNREP[10] = 100u8
+    PF_MSG_HEXAD_UNREP[11] = 32u8
+    PF_MSG_HEXAD_UNREP[12] = 102u8
+    PF_MSG_HEXAD_UNREP[13] = 97u8
+    PF_MSG_HEXAD_UNREP[14] = 105u8
+    PF_MSG_HEXAD_UNREP[15] = 108u8
+    PF_MSG_HEXAD_UNREP[16] = 115u8
+    PF_MSG_HEXAD_UNREP[17] = 32u8
+    PF_MSG_HEXAD_UNREP[18] = 100u8
+    PF_MSG_HEXAD_UNREP[19] = 101u8
+    PF_MSG_HEXAD_UNREP[20] = 102u8
+    PF_MSG_HEXAD_UNREP[21] = 101u8
+    PF_MSG_HEXAD_UNREP[22] = 110u8
+    PF_MSG_HEXAD_UNREP[23] = 115u8
+    PF_MSG_HEXAD_UNREP[24] = 101u8
+    PF_MSG_HEXAD_UNREP[25] = 45u8
+    PF_MSG_HEXAD_UNREP[26] = 105u8
+    PF_MSG_HEXAD_UNREP[27] = 110u8
+    PF_MSG_HEXAD_UNREP[28] = 45u8
+    PF_MSG_HEXAD_UNREP[29] = 100u8
+    PF_MSG_HEXAD_UNREP[30] = 101u8
+    PF_MSG_HEXAD_UNREP[31] = 112u8
+    PF_MSG_HEXAD_UNREP[32] = 116u8
+    PF_MSG_HEXAD_UNREP[33] = 104u8
+    PF_MSG_HEXAD_UNREP[34] = 32u8
+    PF_MSG_HEXAD_UNREP[35] = 97u8
+    PF_MSG_HEXAD_UNREP[36] = 100u8
+    PF_MSG_HEXAD_UNREP[37] = 109u8
+    PF_MSG_HEXAD_UNREP[38] = 105u8
+    PF_MSG_HEXAD_UNREP[39] = 115u8
+    PF_MSG_HEXAD_UNREP[40] = 115u8
+    PF_MSG_HEXAD_UNREP[41] = 105u8
+    PF_MSG_HEXAD_UNREP[42] = 111u8
+    PF_MSG_HEXAD_UNREP[43] = 110u8
+    PF_MSG_HEXAD_UNREP[44] = 0u8
+
+    /* "cycle ring set has bits outside the four-ring lattice" + NUL = 54 bytes (fits in 64) */
+    PF_MSG_RING_MALFORMED[0]  = 99u8
+    PF_MSG_RING_MALFORMED[1]  = 121u8
+    PF_MSG_RING_MALFORMED[2]  = 99u8
+    PF_MSG_RING_MALFORMED[3]  = 108u8
+    PF_MSG_RING_MALFORMED[4]  = 101u8
+    PF_MSG_RING_MALFORMED[5]  = 32u8
+    PF_MSG_RING_MALFORMED[6]  = 114u8
+    PF_MSG_RING_MALFORMED[7]  = 105u8
+    PF_MSG_RING_MALFORMED[8]  = 110u8
+    PF_MSG_RING_MALFORMED[9]  = 103u8
+    PF_MSG_RING_MALFORMED[10] = 32u8
+    PF_MSG_RING_MALFORMED[11] = 115u8
+    PF_MSG_RING_MALFORMED[12] = 101u8
+    PF_MSG_RING_MALFORMED[13] = 116u8
+    PF_MSG_RING_MALFORMED[14] = 32u8
+    PF_MSG_RING_MALFORMED[15] = 104u8
+    PF_MSG_RING_MALFORMED[16] = 97u8
+    PF_MSG_RING_MALFORMED[17] = 115u8
+    PF_MSG_RING_MALFORMED[18] = 32u8
+    PF_MSG_RING_MALFORMED[19] = 98u8
+    PF_MSG_RING_MALFORMED[20] = 105u8
+    PF_MSG_RING_MALFORMED[21] = 116u8
+    PF_MSG_RING_MALFORMED[22] = 115u8
+    PF_MSG_RING_MALFORMED[23] = 32u8
+    PF_MSG_RING_MALFORMED[24] = 111u8
+    PF_MSG_RING_MALFORMED[25] = 117u8
+    PF_MSG_RING_MALFORMED[26] = 116u8
+    PF_MSG_RING_MALFORMED[27] = 115u8
+    PF_MSG_RING_MALFORMED[28] = 105u8
+    PF_MSG_RING_MALFORMED[29] = 100u8
+    PF_MSG_RING_MALFORMED[30] = 101u8
+    PF_MSG_RING_MALFORMED[31] = 32u8
+    PF_MSG_RING_MALFORMED[32] = 116u8
+    PF_MSG_RING_MALFORMED[33] = 104u8
+    PF_MSG_RING_MALFORMED[34] = 101u8
+    PF_MSG_RING_MALFORMED[35] = 32u8
+    PF_MSG_RING_MALFORMED[36] = 102u8
+    PF_MSG_RING_MALFORMED[37] = 111u8
+    PF_MSG_RING_MALFORMED[38] = 117u8
+    PF_MSG_RING_MALFORMED[39] = 114u8
+    PF_MSG_RING_MALFORMED[40] = 45u8
+    PF_MSG_RING_MALFORMED[41] = 114u8
+    PF_MSG_RING_MALFORMED[42] = 105u8
+    PF_MSG_RING_MALFORMED[43] = 110u8
+    PF_MSG_RING_MALFORMED[44] = 103u8
+    PF_MSG_RING_MALFORMED[45] = 32u8
+    PF_MSG_RING_MALFORMED[46] = 108u8
+    PF_MSG_RING_MALFORMED[47] = 97u8
+    PF_MSG_RING_MALFORMED[48] = 116u8
+    PF_MSG_RING_MALFORMED[49] = 116u8
+    PF_MSG_RING_MALFORMED[50] = 105u8
+    PF_MSG_RING_MALFORMED[51] = 99u8
+    PF_MSG_RING_MALFORMED[52] = 101u8
+    PF_MSG_RING_MALFORMED[53] = 0u8
+
+    /* Code-name strings: "OK", "PROOF-HEXAD-001", "PROOF-RING-001", "PROOF-ERROR-001", "OOM", "UNKNOWN". */
+    PF_MSG_OK[0] = 79u8
+    PF_MSG_OK[1] = 75u8
+    PF_MSG_OK[2] = 0u8
+
+    PF_MSG_NAME_HEXAD[0]  = 80u8
+    PF_MSG_NAME_HEXAD[1]  = 82u8
+    PF_MSG_NAME_HEXAD[2]  = 79u8
+    PF_MSG_NAME_HEXAD[3]  = 79u8
+    PF_MSG_NAME_HEXAD[4]  = 70u8
+    PF_MSG_NAME_HEXAD[5]  = 45u8
+    PF_MSG_NAME_HEXAD[6]  = 72u8
+    PF_MSG_NAME_HEXAD[7]  = 69u8
+    PF_MSG_NAME_HEXAD[8]  = 88u8
+    PF_MSG_NAME_HEXAD[9]  = 65u8
+    PF_MSG_NAME_HEXAD[10] = 68u8
+    PF_MSG_NAME_HEXAD[11] = 45u8
+    PF_MSG_NAME_HEXAD[12] = 48u8
+    PF_MSG_NAME_HEXAD[13] = 48u8
+    PF_MSG_NAME_HEXAD[14] = 49u8
+    PF_MSG_NAME_HEXAD[15] = 0u8
+
+    PF_MSG_NAME_RING[0]  = 80u8
+    PF_MSG_NAME_RING[1]  = 82u8
+    PF_MSG_NAME_RING[2]  = 79u8
+    PF_MSG_NAME_RING[3]  = 79u8
+    PF_MSG_NAME_RING[4]  = 70u8
+    PF_MSG_NAME_RING[5]  = 45u8
+    PF_MSG_NAME_RING[6]  = 82u8
+    PF_MSG_NAME_RING[7]  = 73u8
+    PF_MSG_NAME_RING[8]  = 78u8
+    PF_MSG_NAME_RING[9]  = 71u8
+    PF_MSG_NAME_RING[10] = 45u8
+    PF_MSG_NAME_RING[11] = 48u8
+    PF_MSG_NAME_RING[12] = 48u8
+    PF_MSG_NAME_RING[13] = 49u8
+    PF_MSG_NAME_RING[14] = 0u8
+
+    PF_MSG_NAME_ERROR[0]  = 80u8
+    PF_MSG_NAME_ERROR[1]  = 82u8
+    PF_MSG_NAME_ERROR[2]  = 79u8
+    PF_MSG_NAME_ERROR[3]  = 79u8
+    PF_MSG_NAME_ERROR[4]  = 70u8
+    PF_MSG_NAME_ERROR[5]  = 45u8
+    PF_MSG_NAME_ERROR[6]  = 69u8
+    PF_MSG_NAME_ERROR[7]  = 82u8
+    PF_MSG_NAME_ERROR[8]  = 82u8
+    PF_MSG_NAME_ERROR[9]  = 79u8
+    PF_MSG_NAME_ERROR[10] = 82u8
+    PF_MSG_NAME_ERROR[11] = 45u8
+    PF_MSG_NAME_ERROR[12] = 48u8
+    PF_MSG_NAME_ERROR[13] = 48u8
+    PF_MSG_NAME_ERROR[14] = 49u8
+    PF_MSG_NAME_ERROR[15] = 0u8
+
+    PF_MSG_NAME_OOM[0] = 79u8
+    PF_MSG_NAME_OOM[1] = 79u8
+    PF_MSG_NAME_OOM[2] = 77u8
+    PF_MSG_NAME_OOM[3] = 0u8
+
+    PF_MSG_UNKNOWN[0] = 85u8
+    PF_MSG_UNKNOWN[1] = 78u8
+    PF_MSG_UNKNOWN[2] = 75u8
+    PF_MSG_UNKNOWN[3] = 78u8
+    PF_MSG_UNKNOWN[4] = 79u8
+    PF_MSG_UNKNOWN[5] = 87u8
+    PF_MSG_UNKNOWN[6] = 78u8
+    PF_MSG_UNKNOWN[7] = 0u8
+
+    PF_MSG_INIT = 1u8
+    return 0u32
+}
+
+fn pf_init_anno_phase_once() -> u32 {
+    if PF_ANNO_INIT == 1u8 { return 0u32 }
+    PF_ANNO_PHASE[0]  = 112u8
+    PF_ANNO_PHASE[1]  = 114u8
+    PF_ANNO_PHASE[2]  = 111u8
+    PF_ANNO_PHASE[3]  = 111u8
+    PF_ANNO_PHASE[4]  = 102u8
+    PF_ANNO_PHASE[5]  = 47u8
+    PF_ANNO_PHASE[6]  = 99u8
+    PF_ANNO_PHASE[7]  = 101u8
+    PF_ANNO_PHASE[8]  = 114u8
+    PF_ANNO_PHASE[9]  = 116u8
+    PF_ANNO_PHASE[10] = 95u8
+    PF_ANNO_PHASE[11] = 109u8
+    PF_ANNO_PHASE[12] = 104u8
+    PF_ANNO_PHASE[13] = 97u8
+    PF_ANNO_PHASE[14] = 115u8
+    PF_ANNO_PHASE[15] = 104u8
+    PF_ANNO_PHASE[16] = 0u8
+    PF_ANNO_INIT = 1u8
+    return 0u32
+}
+
+fn pf_init_domains_once() -> u32 {
+    if PF_DOMAIN_INIT == 1u8 { return 0u32 }
+    /* "III_PROOF_v1\0" — 13 bytes. */
+    PF_DOMAIN[0]  = 73u8
+    PF_DOMAIN[1]  = 73u8
+    PF_DOMAIN[2]  = 73u8
+    PF_DOMAIN[3]  = 95u8
+    PF_DOMAIN[4]  = 80u8
+    PF_DOMAIN[5]  = 82u8
+    PF_DOMAIN[6]  = 79u8
+    PF_DOMAIN[7]  = 79u8
+    PF_DOMAIN[8]  = 70u8
+    PF_DOMAIN[9]  = 95u8
+    PF_DOMAIN[10] = 118u8
+    PF_DOMAIN[11] = 49u8
+    PF_DOMAIN[12] = 0u8
+
+    /* "III_PROOF_AGGREGATE_v1\0" — 23 bytes. */
+    PF_DOMAIN_AGG[0]  = 73u8
+    PF_DOMAIN_AGG[1]  = 73u8
+    PF_DOMAIN_AGG[2]  = 73u8
+    PF_DOMAIN_AGG[3]  = 95u8
+    PF_DOMAIN_AGG[4]  = 80u8
+    PF_DOMAIN_AGG[5]  = 82u8
+    PF_DOMAIN_AGG[6]  = 79u8
+    PF_DOMAIN_AGG[7]  = 79u8
+    PF_DOMAIN_AGG[8]  = 70u8
+    PF_DOMAIN_AGG[9]  = 95u8
+    PF_DOMAIN_AGG[10] = 65u8
+    PF_DOMAIN_AGG[11] = 71u8
+    PF_DOMAIN_AGG[12] = 71u8
+    PF_DOMAIN_AGG[13] = 82u8
+    PF_DOMAIN_AGG[14] = 69u8
+    PF_DOMAIN_AGG[15] = 71u8
+    PF_DOMAIN_AGG[16] = 65u8
+    PF_DOMAIN_AGG[17] = 84u8
+    PF_DOMAIN_AGG[18] = 69u8
+    PF_DOMAIN_AGG[19] = 95u8
+    PF_DOMAIN_AGG[20] = 118u8
+    PF_DOMAIN_AGG[21] = 49u8
+    PF_DOMAIN_AGG[22] = 0u8
+
+    PF_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+/* ─── Error/cert table helpers ───────────────────────────────────── */
+
+/* Store a u64 message pointer at slot `i` in PF_ERR_MSG_BYTES. */
+fn pf_msg_set(i: u32, ptr: u64) -> u32 {
+    let base: u32 = i * 8u32
+    PF_ERR_MSG_BYTES[base + 0u32] = ( ptr           & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 1u32] = ((ptr >>  8u64) & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 2u32] = ((ptr >> 16u64) & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 3u32] = ((ptr >> 24u64) & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 4u32] = ((ptr >> 32u64) & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 5u32] = ((ptr >> 40u64) & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 6u32] = ((ptr >> 48u64) & 0xffu64) as u8
+    PF_ERR_MSG_BYTES[base + 7u32] = ((ptr >> 56u64) & 0xffu64) as u8
+    return 0u32
+}
+
+fn pf_msg_get(i: u32) -> u64 {
+    let base: u32 = i * 8u32
+    let b0: u64 = PF_ERR_MSG_BYTES[base + 0u32] as u64
+    let b1: u64 = PF_ERR_MSG_BYTES[base + 1u32] as u64
+    let b2: u64 = PF_ERR_MSG_BYTES[base + 2u32] as u64
+    let b3: u64 = PF_ERR_MSG_BYTES[base + 3u32] as u64
+    let b4: u64 = PF_ERR_MSG_BYTES[base + 4u32] as u64
+    let b5: u64 = PF_ERR_MSG_BYTES[base + 5u32] as u64
+    let b6: u64 = PF_ERR_MSG_BYTES[base + 6u32] as u64
+    let b7: u64 = PF_ERR_MSG_BYTES[base + 7u32] as u64
+    let lo: u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi: u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn pf_emit_error(code: i32, decl_node: u32, msg: u64) -> u32 {
+    if PF_ERR_COUNT == PF_ERR_CAP { return 0u32 }
+    PF_ERR_CODE[PF_ERR_COUNT] = code
+    PF_ERR_NODE[PF_ERR_COUNT] = decl_node
+    pf_msg_set(PF_ERR_COUNT, msg)
+    PF_ERR_COUNT = PF_ERR_COUNT + 1u32
+    return 0u32
+}
+
+fn pf_record_cert(decl_node: u32, cert: *u8) -> u32 {
+    if PF_CERT_COUNT == PF_CERT_CAP { return 0u32 }
+    PF_CERT_NODE[PF_CERT_COUNT] = decl_node
+    let base: u32 = PF_CERT_COUNT * 32u32
+    for k in 0..32 {
+        PF_CERT_BYTES[base + (k as u32)] = cert[k as u64]
+    }
+    PF_CERT_COUNT = PF_CERT_COUNT + 1u32
+    return 0u32
+}
+
+/* ─── Recursive ERROR_NODE walker ────────────────────────────────── */
+
+fn pf_subtree_has_error_node(node: u32) -> u8 {
+    if node == 0u32 { return 0u8 }
+    let k: u32 = iii_ast_node_kind(PF_AST, node)
+    if k == 0u32 { return 0u8 }
+    if k == PF_K_ERROR_NODE { return 1u8 }
+
+    if k == PF_K_FORWARD_BLOCK {
+        let n: u32 = iii_ast_forward_block_stmt_count(PF_AST, node)
+        let mut i: u32 = 0u32
+        while i < n {
+            let c: u32 = iii_ast_forward_block_stmt_at(PF_AST, node, i)
+            if pf_subtree_has_error_node(c) == 1u8 { return 1u8 }
+            i = i + 1u32
+        }
+        return 0u8
+    }
+    if k == PF_K_EXPR_BLOCK {
+        let n: u32 = iii_ast_block_stmt_count(PF_AST, node)
+        let mut i: u32 = 0u32
+        while i < n {
+            let c: u32 = iii_ast_block_stmt_at(PF_AST, node, i)
+            if pf_subtree_has_error_node(c) == 1u8 { return 1u8 }
+            i = i + 1u32
+        }
+        return 0u8
+    }
+    if k == PF_K_STMT_LET {
+        return pf_subtree_has_error_node(iii_ast_let_value(PF_AST, node))
+    }
+    if k == PF_K_STMT_EXPR {
+        return pf_subtree_has_error_node(iii_ast_expr_stmt_expr(PF_AST, node))
+    }
+    if k == PF_K_STMT_RETURN {
+        return pf_subtree_has_error_node(iii_ast_return_value(PF_AST, node))
+    }
+    if k == PF_K_STMT_ASSIGN {
+        let lv: u32 = iii_ast_assign_lvalue(PF_AST, node)
+        if pf_subtree_has_error_node(lv) == 1u8 { return 1u8 }
+        return pf_subtree_has_error_node(iii_ast_assign_value(PF_AST, node))
+    }
+    if k == PF_K_EXPR_CALL {
+        let cl: u32 = iii_ast_call_callee(PF_AST, node)
+        if pf_subtree_has_error_node(cl) == 1u8 { return 1u8 }
+        let n: u32 = iii_ast_call_arg_count(PF_AST, node)
+        let mut i: u32 = 0u32
+        while i < n {
+            let a: u32 = iii_ast_call_arg_at(PF_AST, node, i)
+            if pf_subtree_has_error_node(a) == 1u8 { return 1u8 }
+            i = i + 1u32
+        }
+        return 0u8
+    }
+    if k == PF_K_EXPR_FIELD {
+        return pf_subtree_has_error_node(iii_ast_field_object(PF_AST, node))
+    }
+    if k == PF_K_EXPR_INDEX {
+        let o: u32 = iii_ast_index_object(PF_AST, node)
+        if pf_subtree_has_error_node(o) == 1u8 { return 1u8 }
+        return pf_subtree_has_error_node(iii_ast_index_index(PF_AST, node))
+    }
+    if k == PF_K_EXPR_BINARY {
+        let lh: u32 = iii_ast_binary_lhs(PF_AST, node)
+        if pf_subtree_has_error_node(lh) == 1u8 { return 1u8 }
+        return pf_subtree_has_error_node(iii_ast_binary_rhs(PF_AST, node))
+    }
+    if k == PF_K_EXPR_UNARY {
+        return pf_subtree_has_error_node(iii_ast_unary_operand(PF_AST, node))
+    }
+    if k == PF_K_EXPR_PAREN {
+        return pf_subtree_has_error_node(iii_ast_paren_inner(PF_AST, node))
+    }
+    if k == PF_K_ARG {
+        return pf_subtree_has_error_node(iii_ast_arg_value(PF_AST, node))
+    }
+    return 0u8
+}
+
+/* ─── Certificate emission (per decl) ────────────────────────────── */
+
+/* Compute a 32-byte SHA-256 over the canonical bytes of the decl,
+ * matching proof.c::pf_compute_cert exactly. */
+fn pf_compute_cert(decl_node: u32, kind: u32, out: *u8) -> u32 {
+    pf_init_domains_once()
+    pf_sha_init()
+    pf_sha_update(&PF_DOMAIN[0], 13u64)            /* "III_PROOF_v1\0" */
+    pf_sha_update_u32(kind)
+
+    let name_off: u32 = iii_ast_decl_name_offset(PF_AST, decl_node)
+    let name_len: u32 = iii_ast_decl_name_length(PF_AST, decl_node)
+    pf_sha_update_u32(name_len)
+    if name_len > 0u32 {
+        let src: u64 = iii_ast_source_slice(PF_AST, name_off, name_len)
+        if src != 0u64 {
+            pf_sha_update(src as *u8, name_len as u64)
+        }
+    }
+
+    /* Resolved sema annotations (cycle decls only). */
+    let mut hexad: u32 = 0xFFFFu32
+    let mut ring:  u32 = 0u32
+    if PF_SEMA != 0u64 {
+        if kind == PF_K_CYCLE_DECL {
+            hexad = iii_sema_cycle_hexad(PF_SEMA, decl_node)
+            ring  = iii_sema_cycle_ring_mask(PF_SEMA, decl_node)
+        }
+    }
+    if hexad == 0xFFFFu32 {
+        pf_sha_update_u32(0xFFFFFFFFu32)
+    } else {
+        pf_sha_update_u32(hexad)
+    }
+    pf_sha_update_u32(ring)
+    pf_sha_update_u32(0xFFFFFFFFu32)            /* tier sentinel */
+    pf_sha_update_u64(0u64)                     /* epoch */
+
+    /* Subtree mhash. */
+    let mh: u64 = iii_ast_node_mhash(PF_AST, decl_node)
+    if mh != 0u64 {
+        pf_sha_update(mh as *u8, 32u64)
+    } else {
+        for i in 0..32 {
+            pf_sha_update_byte(0u8)
+        }
+    }
+
+    pf_sha_final(out)
+    return 0u32
+}
+
+/* ─── Per-decl processing ────────────────────────────────────────── */
+
+var PF_TMP_CERT : [u8; 32]
+
+fn pf_process_decl(decl_node: u32, kind: u32) -> u32 {
+    if kind == PF_K_ERROR_NODE {
+        pf_emit_error(3i32, decl_node, &PF_MSG_ERROR_NODE[0] as u64)
+        return 0u32
+    }
+
+    if pf_subtree_has_error_node(decl_node) == 1u8 {
+        pf_emit_error(3i32, decl_node, &PF_MSG_ERROR_NODE[0] as u64)
+        return 0u32
+    }
+
+    if kind == PF_K_CYCLE_DECL {
+        if PF_SEMA != 0u64 {
+            let h: u32 = iii_sema_cycle_hexad(PF_SEMA, decl_node)
+            if h != 0xFFFFu32 {
+                if iii_hexad_packed_admitted(h) == 0u8 {
+                    pf_emit_error(1i32, decl_node, &PF_MSG_HEXAD_UNREP[0] as u64)
+                }
+            }
+            let ring: u32 = iii_sema_cycle_ring_mask(PF_SEMA, decl_node)
+            if ring != 0u32 {
+                if (ring & (~PF_RING_ANY)) != 0u32 {
+                    pf_emit_error(2i32, decl_node, &PF_MSG_RING_MALFORMED[0] as u64)
+                }
+            }
+        }
+    }
+
+    pf_compute_cert(decl_node, kind, &PF_TMP_CERT[0])
+    pf_record_cert(decl_node, &PF_TMP_CERT[0])
+    pf_init_anno_phase_once()
+    iii_ast_annotate(PF_AST, &PF_ANNO_PHASE[0] as u64, decl_node, &PF_TMP_CERT[0] as u64, 32u64)
+    return 0u32
+}
+
+/* ─── Public API ─────────────────────────────────────────────────── */
+
+fn iii_proof_create(ast: u64, sema: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    PF_AST = ast
+    PF_SEMA = sema
+    PF_RAN = 0u8
+    PF_ERR_COUNT = 0u32
+    PF_CERT_COUNT = 0u32
+    pf_init_strings_once()
+    pf_init_anno_phase_once()
+    pf_init_domains_once()
+    return &PF_SENTINEL[0] as u64
+}
+
+fn iii_proof_destroy(p: u64) -> u32 @export {
+    if p == 0u64 { return 0u32 }
+    PF_AST = 0u64
+    PF_SEMA = 0u64
+    PF_RAN = 0u8
+    PF_ERR_COUNT = 0u32
+    PF_CERT_COUNT = 0u32
+    return 0u32
+}
+
+fn iii_proof_run(p: u64) -> i32 @export {
+    if p == 0u64 { return 0 }
+    if PF_AST == 0u64 { return 0 }
+    if PF_RAN == 1u8 {
+        if PF_ERR_COUNT == 0u32 { return 1 }
+        return 0
+    }
+    PF_RAN = 1u8
+
+    iii_hexad_check_init()
+
+    let mod_node: u32 = iii_ast_root_module(PF_AST)
+    if mod_node == 0u32 { return 0 }
+    let mk: u32 = iii_ast_node_kind(PF_AST, mod_node)
+    if mk != PF_K_MODULE { return 0 }
+
+    let n: u32 = iii_ast_module_decl_count(PF_AST, mod_node)
+    let mut i: u32 = 0u32
+    while i < n {
+        let didx: u32 = iii_ast_module_decl_at(PF_AST, mod_node, i)
+        if didx != 0u32 {
+            let dk: u32 = iii_ast_node_kind(PF_AST, didx)
+            if dk != 0u32 {
+                pf_process_decl(didx, dk)
+            }
+        }
+        i = i + 1u32
+    }
+
+    if PF_ERR_COUNT == 0u32 { return 1 }
+    return 0
+}
+
+fn iii_proof_error_count(p: u64) -> u32 @export {
+    if p == 0u64 { return 0u32 }
+    return PF_ERR_COUNT
+}
+
+fn iii_proof_error_at(p: u64, i: u32, out: *u8) -> u32 @export {
+        /* Zero out the 16-byte struct first (sizeof iii_proof_error_t). */
+    for k in 0..16 {
+        out[k as u64] = 0u8
+    }
+    if p == 0u64 { return 0u32 }
+    if i >= PF_ERR_COUNT { return 0u32 }
+    let code: i32 = PF_ERR_CODE[i]
+    let node: u32 = PF_ERR_NODE[i]
+    let msg:  u64 = pf_msg_get(i)
+    /* Field layout (matches struct iii_proof_error_t):
+     *   off 0,4: int code
+     *   off 4,4: uint32_t decl_node
+     *   off 8,8: const char *message  (after natural padding)
+     */
+    let cu: u32 = code as u32
+    out[0u64] = ( cu           & 0xffu32) as u8
+    out[1u64] = ((cu >>  8u32) & 0xffu32) as u8
+    out[2u64] = ((cu >> 16u32) & 0xffu32) as u8
+    out[3u64] = ((cu >> 24u32) & 0xffu32) as u8
+    out[4u64] = ( node          & 0xffu32) as u8
+    out[5u64] = ((node >>  8u32) & 0xffu32) as u8
+    out[6u64] = ((node >> 16u32) & 0xffu32) as u8
+    out[7u64] = ((node >> 24u32) & 0xffu32) as u8
+    out[8u64]  = ( msg           & 0xffu64) as u8
+    out[9u64]  = ((msg >>  8u64) & 0xffu64) as u8
+    out[10u64] = ((msg >> 16u64) & 0xffu64) as u8
+    out[11u64] = ((msg >> 24u64) & 0xffu64) as u8
+    out[12u64] = ((msg >> 32u64) & 0xffu64) as u8
+    out[13u64] = ((msg >> 40u64) & 0xffu64) as u8
+    out[14u64] = ((msg >> 48u64) & 0xffu64) as u8
+    out[15u64] = ((msg >> 56u64) & 0xffu64) as u8
+    return 0u32
+}
+
+fn iii_proof_error_name(code: i32) -> u64 @export {
+    pf_init_strings_once()
+    if code == 0i32  { return &PF_MSG_OK[0]         as u64 }
+    if code == 1i32  { return &PF_MSG_NAME_HEXAD[0] as u64 }
+    if code == 2i32  { return &PF_MSG_NAME_RING[0]  as u64 }
+    if code == 3i32  { return &PF_MSG_NAME_ERROR[0] as u64 }
+    if code == 99i32 { return &PF_MSG_NAME_OOM[0]   as u64 }
+    return &PF_MSG_UNKNOWN[0] as u64
+}
+
+fn iii_proof_cert_for_decl(p: u64, decl_node: u32, out: *u8) -> u8 @export {
+    if p == 0u64 { return 0u8 }
+        let mut i: u32 = 0u32
+    while i < PF_CERT_COUNT {
+        if PF_CERT_NODE[i] == decl_node {
+            let base: u32 = i * 32u32
+            for k in 0..32 {
+                out[k as u64] = PF_CERT_BYTES[base + (k as u32)]
+            }
+            return 1u8
+        }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+fn iii_proof_aggregate_root(p: u64, out: *u8) -> u32 @export {
+        if p == 0u64 {
+        for k in 0..32 { out[k as u64] = 0u8 }
+        return 0u32
+    }
+    if PF_CERT_COUNT == 0u32 {
+        for k in 0..32 { out[k as u64] = 0u8 }
+        return 0u32
+    }
+    pf_init_domains_once()
+    pf_sha_init()
+    pf_sha_update(&PF_DOMAIN_AGG[0], 23u64)         /* "III_PROOF_AGGREGATE_v1\0" */
+    let mut i: u32 = 0u32
+    while i < PF_CERT_COUNT {
+        pf_sha_update_u32(PF_CERT_NODE[i])
+        let base: u32 = i * 32u32
+        for k in 0..32 {
+            pf_sha_update_byte(PF_CERT_BYTES[base + (k as u32)])
+        }
+        i = i + 1u32
+    }
+    pf_sha_final(out)
+    return 0u32
+}

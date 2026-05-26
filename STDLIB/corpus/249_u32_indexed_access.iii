@@ -1,0 +1,58 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\249_u32_indexed_access.iii
+ *
+ * III conformance corpus 249 -- *u32 pointer indexed read/write width.
+ *
+ * Regression test for the Phase-3-Step-1 iiis-0.1 codegen fix that
+ * introduces width-aware indexed access via pointer_element_width.
+ * Before the fix, *u32 indexed write emitted `movq %rdx, (%rax,%rcx,8)`
+ * with scale=8 — wrong stride AND wrong width, clobbering adjacent
+ * 4-byte slots and skipping every other element.
+ *
+ * Exit 99 = pass; non-99 = a specific access mode regressed.
+ */
+module corpus_249
+
+var BUF : [u32; 4]
+
+fn _read_u32_via_ptr(p: *u32, idx: u64) -> u32 {
+    return p[idx]
+}
+
+fn _write_u32_via_ptr(p: *u32, idx: u64, v: u32) -> i32 {
+    p[idx] = v
+    return 0i32
+}
+
+fn main() -> u64 {
+    let p : *u32 = (&BUF) as *u32
+
+    /* Seed all 4 slots with sentinels. */
+    p[0u64] = 0x11111111u32
+    p[1u64] = 0x22222222u32
+    p[2u64] = 0x33333333u32
+    p[3u64] = 0x44444444u32
+
+    /* Sanity: direct array writes via *u32 indexing. */
+    if _read_u32_via_ptr(p, 0u64) != 0x11111111u32 { return 1u64 }
+    if _read_u32_via_ptr(p, 1u64) != 0x22222222u32 { return 2u64 }
+    if _read_u32_via_ptr(p, 2u64) != 0x33333333u32 { return 3u64 }
+    if _read_u32_via_ptr(p, 3u64) != 0x44444444u32 { return 4u64 }
+
+    /* Now write a u32 via helper.  If the codegen emits movq, the adjacent
+     * slot gets clobbered with the high 4 bytes of v_u32 in its 8-byte
+     * stack slot — typically 0. */
+    let v : u32 = 0xDEADBEEFu32
+    _write_u32_via_ptr(p, 0u64, v)
+    if _read_u32_via_ptr(p, 0u64) != 0xDEADBEEFu32 { return 10u64 }
+    /* CRITICAL: slot 1 must STILL be 0x22222222 -- if 8-byte movq fired,
+     * it's now 0 (or some other corruption). */
+    if _read_u32_via_ptr(p, 1u64) != 0x22222222u32 { return 11u64 }
+
+    /* Repeat with different index to exercise non-zero offset path. */
+    _write_u32_via_ptr(p, 2u64, 0xCAFEBABEu32)
+    if _read_u32_via_ptr(p, 2u64) != 0xCAFEBABEu32 { return 20u64 }
+    if _read_u32_via_ptr(p, 3u64) != 0x44444444u32 { return 21u64 }
+    if _read_u32_via_ptr(p, 1u64) != 0x22222222u32 { return 22u64 }
+
+    return 99u64
+}

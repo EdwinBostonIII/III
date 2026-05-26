@@ -1,0 +1,11 @@
+/* Lattice plan Step 0003: @dynamic(ripple=auto) parser-recognized,
+ * sema silently accepts, codegen no-op. */
+module corpus_106
+
+fn step() -> u64 @dynamic(ripple=auto) {
+    return 1u64
+}
+
+fn main() -> u64 {
+    return step()
+}

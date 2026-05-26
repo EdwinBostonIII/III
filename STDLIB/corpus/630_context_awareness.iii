@@ -1,0 +1,4 @@
+/* 630 — context_awareness: exact integer OLS regression/trend (analytic, not learned, M3). */
+module corpus_630
+extern @abi(c-msvc-x64) fn ctxa_selftest() -> u64 from "context_awareness.iii"
+fn main() -> u64 { return ctxa_selftest() }

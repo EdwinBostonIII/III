@@ -1,0 +1,78 @@
+/* 687_membrane_cap_gate.iii -- M31 keystone (clause 2 / the Key Move): the IO membrane
+ * REFUSES a crossing whose capability lacks the required right (apotheosis M31 falsifier "an
+ * fs/net op that skips cap_verify_rights -> red"; Key Move illegal = "an input enters
+ * un-quarantined").  37/38 exercise handle_verify + fs ops only with a SUFFICIENT cap (positive)
+ * + a closed-handle negative -- never an op whose cap LACKS the requested right.  This KAT closes
+ * that: a READ-ONLY cap (0x02) verifies the read right but is DENIED the write right
+ * (handle_verify(0x04)=0), and an fs_open(WRITE) on an EXISTING file with that read-only cap is
+ * REFUSED (handle 0) while fs_open(READ) is admitted -- proving you cannot cross the membrane
+ * without the capability that grants the specific right.  Exit 99 = all hold; 1..N = the failing
+ * check.  CORPUS-ONLY (fs/handle/capability are complete). */
+module corpus_687
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_verify(id: u64, req: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_drop(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let rw : u64 = cap_attenuate(env, 0x0Eu64, 0u64)    /* read|write|create */
+    let ro : u64 = cap_attenuate(env, 0x02u64, 0u64)    /* read ONLY */
+
+    /* === handle_verify cap-gate: the read-only cap grants read, DENIES write === */
+    let h : u64 = handle_alloc(1u8, 0x1234u64, ro)
+    if h == 0u64 { return 1u64 }
+    if handle_verify(h, 0x02u64) != 1u8 { return 2u64 }    /* ro HAS read 0x02 -> verify 1 */
+    if handle_verify(h, 0x04u64) != 0u8 { return 3u64 }    /* ro LACKS write 0x04 -> verify 0 (cap-gate negative) */
+    handle_drop(h)
+
+    /* path "./iii_mcg.tmp" */
+    let path : *u8 = malloc(16u64)
+    path[0] = 46u8
+    path[1] = 47u8
+    path[2] = 105u8
+    path[3] = 105u8
+    path[4] = 105u8
+    path[5] = 95u8
+    path[6] = 109u8
+    path[7] = 99u8
+    path[8] = 103u8
+    path[9] = 46u8
+    path[10] = 116u8
+    path[11] = 109u8
+    path[12] = 112u8
+    path[13] = 0u8
+
+    /* === fs membrane: create the file with the full cap === */
+    let hw : u64 = fs_open(rw, path as u64, 2u32)          /* WRITE */
+    if hw == 0u64 { return 4u64 }
+    let payload : *u8 = malloc(2u64)
+    payload[0] = 72u8
+    payload[1] = 105u8
+    if fs_write(hw, payload as u64, 2u64) != 2u64 { return 5u64 }
+    fs_close(hw)
+
+    /* the read-only cap is DENIED a WRITE open of the EXISTING file (lacks 0x04) */
+    let h_denied : u64 = fs_open(ro, path as u64, 2u32)    /* WRITE with ro cap */
+    if h_denied != 0u64 { return 6u64 }                    /* REFUSED -- the cap-gate negative */
+
+    /* but the read-only cap IS admitted a READ open (has 0x02) */
+    let h_ok : u64 = fs_open(ro, path as u64, 1u32)        /* READ with ro cap */
+    if h_ok == 0u64 { return 7u64 }
+    fs_close(h_ok)
+
+    /* cleanup */
+    if fs_delete(rw, path as u64) != 0i32 { return 8u64 }
+
+    free(path)
+    free(payload)
+    return 99u64
+}

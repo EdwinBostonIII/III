@@ -1,0 +1,329 @@
+module stage1_sha256
+
+/* III Stage-1 SHA-256 implementation — FIPS 180-4 §6.2.
+ *
+ * Mirrors the per-TU SHA-256 implementations in
+ * COMPILER/BOOT/{ast,emit,hexad_check,ceiling,proof}.c so that
+ * Stage-1 ports (ceiling.iii, hexad_check.iii, acc.iii,
+ * witness_alloc.iii, proof.iii) can compute byte-identical mhashes
+ * without each maintaining a private copy.
+ *
+ * Stage-1 storage: a struct holds the streaming context.  This is
+ * the first iii module to rely heavily on F8.5 struct field access.
+ *
+ * Public API (mirrors main.c::iii_sha256_*):
+ *   ssh_init(ctx)
+ *   ssh_update(ctx, data: *u8, len: u64)
+ *   ssh_final(ctx, out: *u8)        — out must point at 32 writable bytes
+ *   ssh_hash(data: *u8, len: u64, out: *u8)  — one-shot convenience
+ *
+ * No heap allocation.  The context lives on the caller's stack.
+ * The 64-entry K table is a global rodata array.
+ */
+
+extern @abi(c-msvc-x64) fn malloc(n: u64)            -> *u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u64)             -> u64  from "msvcrt"
+
+/* SHA-256 K constants (FIPS 180-4 Table 2). */
+var SSH_K: [u64; 64] = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+]
+
+/* Streaming context.  All hash state lives in this struct. */
+struct SshCtx {
+    h0: u64,
+    h1: u64,
+    h2: u64,
+    h3: u64,
+    h4: u64,
+    h5: u64,
+    h6: u64,
+    h7: u64,
+    bits_lo: u64,
+    bits_hi: u64,
+    /* Buffer of 64 bytes (one 512-bit block) — Stage-1 holds it as
+     * 64 u64 slots (1 byte per slot) to fit the field-uniform layout. */
+    buflen: u64,
+    /* Spread the 64 buffer bytes across 64 slots so each is
+     * field-addressable.  Stage-2+ packs 8 bytes per slot.  All 64
+     * comma-separated to match the struct grammar. */
+    b00: u64, b01: u64, b02: u64, b03: u64, b04: u64, b05: u64, b06: u64, b07: u64,
+    b08: u64, b09: u64, b10: u64, b11: u64, b12: u64, b13: u64, b14: u64, b15: u64,
+    b16: u64, b17: u64, b18: u64, b19: u64, b20: u64, b21: u64, b22: u64, b23: u64,
+    b24: u64, b25: u64, b26: u64, b27: u64, b28: u64, b29: u64, b30: u64, b31: u64,
+    b32: u64, b33: u64, b34: u64, b35: u64, b36: u64, b37: u64, b38: u64, b39: u64,
+    b40: u64, b41: u64, b42: u64, b43: u64, b44: u64, b45: u64, b46: u64, b47: u64,
+    b48: u64, b49: u64, b50: u64, b51: u64, b52: u64, b53: u64, b54: u64, b55: u64,
+    b56: u64, b57: u64, b58: u64, b59: u64, b60: u64, b61: u64, b62: u64, b63: u64
+}
+
+/* 32-bit rotate right.  v is treated as u32 (low 32 bits); high
+ * bits are masked off before rotating. */
+fn ssh_rotr32(v: u64, n: u64) -> u64 {
+    let v32: u64 = v & 0xFFFFFFFF
+    let lo:  u64 = v32 >> n
+    let hi:  u64 = (v32 << (32 - n)) & 0xFFFFFFFF
+    return (lo | hi) & 0xFFFFFFFF
+}
+
+/* Single 64-byte block compression — heap-allocate the W message
+ * schedule array (64 × u64 stored as u32-effective values) so we
+ * don't need huge stack reservation for 64 distinct locals. */
+fn ssh_compress(ctx: *u64, blk: *u8) -> u64 {
+    /* ctx is laid out as struct SshCtx — read state via byte
+     * arithmetic.  Stage-1 uses *u64 indexing for the h* fields
+     * and the bits_* fields; the byte buffer is at slot offset 11+. */
+    let w: *u64 = malloc(64 * 8)
+    let mut i: u64 = 0
+    /* Initial 16 words: big-endian u32s from blk[0..63]. */
+    while i < 16 {
+        let off: u64 = i * 4
+        let b0: u64 = blk[off + 0]
+        let b1: u64 = blk[off + 1]
+        let b2: u64 = blk[off + 2]
+        let b3: u64 = blk[off + 3]
+        w[i] = ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) & 0xFFFFFFFF
+        i = i + 1
+    }
+    /* Schedule extension: w[i] = w[i-16] + s0(w[i-15]) + w[i-7] + s1(w[i-2]). */
+    while i < 64 {
+        let w15: u64 = w[i - 15]
+        let w2:  u64 = w[i - 2]
+        let s0:  u64 = ssh_rotr32(w15, 7) ^ ssh_rotr32(w15, 18) ^ ((w15 & 0xFFFFFFFF) >> 3)
+        let s1:  u64 = ssh_rotr32(w2, 17) ^ ssh_rotr32(w2, 19)  ^ ((w2  & 0xFFFFFFFF) >> 10)
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF
+        i = i + 1
+    }
+    /* Working variables a..h initialised from ctx->h0..h7.  ctx is
+     * a *u64 view of the SshCtx struct; field offsets are slot indices. */
+    let mut a: u64 = ctx[0]
+    let mut b: u64 = ctx[1]
+    let mut c: u64 = ctx[2]
+    let mut d: u64 = ctx[3]
+    let mut e: u64 = ctx[4]
+    let mut f: u64 = ctx[5]
+    let mut g: u64 = ctx[6]
+    let mut h: u64 = ctx[7]
+    let mut t1: u64 = 0
+    let mut t2: u64 = 0
+    let mut bigS1: u64 = 0
+    let mut bigS0: u64 = 0
+    let mut ch: u64 = 0
+    let mut mj: u64 = 0
+    i = 0
+    while i < 64 {
+        bigS1 = ssh_rotr32(e, 6) ^ ssh_rotr32(e, 11) ^ ssh_rotr32(e, 25)
+        ch    = (e & f) ^ ((~e) & g) & 0xFFFFFFFF
+        t1    = (h + bigS1 + ch + SSH_K[i] + w[i]) & 0xFFFFFFFF
+        bigS0 = ssh_rotr32(a, 2) ^ ssh_rotr32(a, 13) ^ ssh_rotr32(a, 22)
+        mj    = (a & b) ^ (a & c) ^ (b & c)
+        t2    = (bigS0 + mj) & 0xFFFFFFFF
+        h = g
+        g = f
+        f = e
+        e = (d + t1) & 0xFFFFFFFF
+        d = c
+        c = b
+        b = a
+        a = (t1 + t2) & 0xFFFFFFFF
+        i = i + 1
+    }
+    ctx[0] = (ctx[0] + a) & 0xFFFFFFFF
+    ctx[1] = (ctx[1] + b) & 0xFFFFFFFF
+    ctx[2] = (ctx[2] + c) & 0xFFFFFFFF
+    ctx[3] = (ctx[3] + d) & 0xFFFFFFFF
+    ctx[4] = (ctx[4] + e) & 0xFFFFFFFF
+    ctx[5] = (ctx[5] + f) & 0xFFFFFFFF
+    ctx[6] = (ctx[6] + g) & 0xFFFFFFFF
+    ctx[7] = (ctx[7] + h) & 0xFFFFFFFF
+    free(w)
+    return 0
+}
+
+/* The streaming API hides the struct layout — callers receive an
+ * opaque *u64 pointer to a stack-allocated context.  Stage-1 uses
+ * a flat-buffer trick: malloc(SshCtx-size) returns *u64; field
+ * indexing matches the struct layout above. */
+
+const SSH_CTX_SLOTS: u64 = 11 + 64       /* h0..h7 + bits_lo + bits_hi + buflen + 64 buffer slots */
+
+fn ssh_init(ctx: *u64) -> u64 {
+    ctx[0] = 0x6a09e667
+    ctx[1] = 0xbb67ae85
+    ctx[2] = 0x3c6ef372
+    ctx[3] = 0xa54ff53a
+    ctx[4] = 0x510e527f
+    ctx[5] = 0x9b05688c
+    ctx[6] = 0x1f83d9ab
+    ctx[7] = 0x5be0cd19
+    ctx[8] = 0          /* bits_lo */
+    ctx[9] = 0          /* bits_hi */
+    ctx[10] = 0         /* buflen */
+    return 0
+}
+
+/* The buffer lives at ctx[11..74].  We treat it as 64 u64 slots
+ * each holding ONE byte (in low 8 bits).  This wastes memory but
+ * matches Stage-1's field-uniform discipline; the eventual
+ * Stage-2 port packs 8 bytes per slot for true 64-byte buffers. */
+
+fn ssh_update(ctx: *u64, data: *u8, len: u64) -> u64 {
+    /* Update bits counter. */
+    let bits_added: u64 = len * 8
+    ctx[8] = (ctx[8] + bits_added) & 0xFFFFFFFFFFFFFFFF
+    /* Stage-1: ignore overflow into bits_hi for simplicity; messages
+     * up to 2^64 bits work. */
+    let mut buflen: u64 = ctx[10]
+    let mut p: u64 = 0
+    let mut take: u64 = 0
+    /* Convert ctx[11..] into a virtual byte buffer view: we need
+     * to store one byte per slot. */
+    while p < len {
+        take = 64 - buflen
+        if take > (len - p) {
+            take = len - p
+        }
+        let mut k: u64 = 0
+        while k < take {
+            ctx[11 + buflen + k] = data[p + k]
+            k = k + 1
+        }
+        buflen = buflen + take
+        p = p + take
+        if buflen == 64 {
+            /* Compress: build a 64-byte buffer from ctx[11..74] (each
+             * slot's low byte) and run the compression. */
+            let blk: *u8 = malloc(64)
+            let mut j: u64 = 0
+            while j < 64 {
+                blk[j] = ctx[11 + j]
+                j = j + 1
+            }
+            ssh_compress(ctx, blk)
+            free(blk)
+            buflen = 0
+        }
+    }
+    ctx[10] = buflen
+    return 0
+}
+
+fn ssh_final(ctx: *u64, out: *u8) -> u64 {
+    /* Save bits before pad-mutates state. */
+    let bits: u64 = ctx[8]
+    /* Append 0x80 byte. */
+    let mut buflen: u64 = ctx[10]
+    ctx[11 + buflen] = 0x80
+    buflen = buflen + 1
+    /* If buflen > 56, fill rest with zero, compress, then continue. */
+    if buflen > 56 {
+        while buflen < 64 {
+            ctx[11 + buflen] = 0
+            buflen = buflen + 1
+        }
+        let blk2: *u8 = malloc(64)
+        let mut j2: u64 = 0
+        while j2 < 64 {
+            blk2[j2] = ctx[11 + j2]
+            j2 = j2 + 1
+        }
+        ssh_compress(ctx, blk2)
+        free(blk2)
+        buflen = 0
+    }
+    /* Pad with zero up to byte 56. */
+    while buflen < 56 {
+        ctx[11 + buflen] = 0
+        buflen = buflen + 1
+    }
+    /* Append 64-bit big-endian bit-length. */
+    ctx[11 + 56] = (bits >> 56) & 0xFF
+    ctx[11 + 57] = (bits >> 48) & 0xFF
+    ctx[11 + 58] = (bits >> 40) & 0xFF
+    ctx[11 + 59] = (bits >> 32) & 0xFF
+    ctx[11 + 60] = (bits >> 24) & 0xFF
+    ctx[11 + 61] = (bits >> 16) & 0xFF
+    ctx[11 + 62] = (bits >> 8)  & 0xFF
+    ctx[11 + 63] = bits & 0xFF
+    let blk3: *u8 = malloc(64)
+    let mut j3: u64 = 0
+    while j3 < 64 {
+        blk3[j3] = ctx[11 + j3]
+        j3 = j3 + 1
+    }
+    ssh_compress(ctx, blk3)
+    free(blk3)
+    /* Emit big-endian 32-byte digest. */
+    let mut i: u64 = 0
+    while i < 8 {
+        let v: u64 = ctx[i]
+        out[i * 4 + 0] = (v >> 24) & 0xFF
+        out[i * 4 + 1] = (v >> 16) & 0xFF
+        out[i * 4 + 2] = (v >> 8)  & 0xFF
+        out[i * 4 + 3] = v & 0xFF
+        i = i + 1
+    }
+    return 0
+}
+
+fn ssh_hash(data: *u8, len: u64, out: *u8) -> u64 {
+    let ctx: *u64 = malloc(SSH_CTX_SLOTS * 8)
+    ssh_init(ctx)
+    ssh_update(ctx, data, len)
+    ssh_final(ctx, out)
+    free(ctx)
+    return 0
+}
+
+/* Test driver: hash the empty string and compare against the known
+ * SHA-256 digest:
+ *   sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ *
+ * We verify the FIRST byte (0xE3) and the LAST byte (0x55) of the
+ * digest as a smoke check.  Full byte-by-byte parity with the C
+ * implementation is the next step (and is the gate for revisiting
+ * ceiling/hexad_check/acc to wire in their bitmap_mhash).
+ *
+ * Exit-code bits:
+ *   bit 0: digest[0]  == 0xE3
+ *   bit 1: digest[31] == 0x55
+ *   bit 2: digest[1]  == 0xB0
+ *   bit 3: digest[2]  == 0xC4
+ * Pass = 15.
+ */
+fn main() -> u64 {
+    let buf: *u8 = malloc(32)
+    let empty: *u8 = malloc(1)
+    ssh_hash(empty, 0, buf)
+    let mut score: u64 = 0
+    if buf[0] == 0xE3 {
+        score = score | 1
+    }
+    if buf[31] == 0x55 {
+        score = score | 2
+    }
+    if buf[1] == 0xB0 {
+        score = score | 4
+    }
+    if buf[2] == 0xC4 {
+        score = score | 8
+    }
+    free(buf)
+    free(empty)
+    return score
+}

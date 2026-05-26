@@ -1,0 +1,12 @@
+/* 689_h3_charter.iii -- H3 ("one serialization") as a self-falsifying constitutional clause.
+ *
+ * Drives numera_h3_charter's KAT: every SovVal serializes to the ONE self-verifying 192-byte
+ * Glyph (M25) that re-checks in isolation (verify), a tampered glyph is REJECTED with no
+ * external trust (falsify), and run_charter goes RED on a canary that pretends a tampered
+ * glyph validates (prove-the-negative).  Main-corpus convention: rc 99 = pass; 1..8 = which
+ * check (see h3_selftest). */
+module corpus_689
+
+extern @abi(c-msvc-x64) fn h3_selftest() -> u64 from "h3_charter.iii"
+
+fn main() -> u64 { return h3_selftest() }

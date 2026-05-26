@@ -1,0 +1,659 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\http_server.iii
+ *
+ * III STDLIB - aether::http_server
+ *
+ * RFC 7230 / 9112 HTTP/1.1 server-side: incoming-request parser and
+ * outgoing-response builder.  Symmetric to aether/http_client.iii: where
+ * that module parses RESPONSES and builds REQUESTS, this module parses
+ * REQUESTS and builds RESPONSES.
+ *
+ * Listen/accept loops live in aether/net.iii (deferred to Phase E with
+ * full IPv6 + listen/accept ABIs).  This module is pure-functional and
+ * unit-testable against synthetic byte buffers.
+ *
+ * REQUEST PARSING (returns a 1-indexed slot id, 0 on failure):
+ *   http_parse_request           arena, raw_base, raw_len    -> id
+ *   http_request_method_base     id                          -> u64
+ *   http_request_method_len      id                          -> u64
+ *   http_request_target_base     id                          -> u64
+ *   http_request_target_len      id                          -> u64
+ *   http_request_header_count    id                          -> u64
+ *   http_request_header_name_base   id, hdr_idx              -> u64
+ *   http_request_header_name_len    id, hdr_idx              -> u64
+ *   http_request_header_value_base  id, hdr_idx              -> u64
+ *   http_request_header_value_len   id, hdr_idx              -> u64
+ *   http_request_header_find_ci  id, name_base, name_len     -> i64
+ *   http_request_body_base       id                          -> u64
+ *   http_request_body_len        id                          -> u64
+ *   http_request_drop            id                          -> i32
+ *
+ * RESPONSE BUILDING (pushes into a builder you supply):
+ *   http_send_status        builder_id, status_code, reason_base, reason_len
+ *                                                       "HTTP/1.1 N reason\r\n"
+ *   http_send_header_name   builder_id, name_base, name_len     "name: "
+ *   http_send_header_value  builder_id, value_base, value_len   "value\r\n"
+ *   http_send_end_headers   builder_id                          "\r\n"
+ *   http_send_body          builder_id, body_base, body_len     (raw bytes)
+ *
+ * Body framing: same dispatch as http_client (Transfer-Encoding chunked,
+ * Content-Length, or rest-of-buffer).
+ *
+ * NIH: zero externs; depends only on memoria/arena, verba/builder,
+ * verba/normalise_ascii.  W1-W14 honoured throughout.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
+ */
+
+module aether_http_server
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn str_ascii_eq_ci(a: u64, alen: u64, b: u64, blen: u64) -> u8 from "normalise_ascii.iii"
+
+/* ----------- Public constants ----------- */
+
+const HTTPS_OK         : i32 =  0i32
+const HTTPS_E_PARSE    : i32 = -1i32
+const HTTPS_E_BADID    : i32 = -2i32
+const HTTPS_E_OOM      : i32 = -3i32
+const HTTPS_E_TOOMANY  : i32 = -4i32
+
+const HTTPS_REQ_MAX    : u32 = 64u32
+const HTTPS_HDR_MAX    : u64 = 64u64
+
+/* ----------- Request slot table ----------- */
+
+var HTTPS_REQ_METHOD_BASE   : [u64; 64]
+var HTTPS_REQ_METHOD_LEN    : [u64; 64]
+var HTTPS_REQ_TARGET_BASE   : [u64; 64]
+var HTTPS_REQ_TARGET_LEN    : [u64; 64]
+var HTTPS_REQ_HEADERS_COUNT : [u64; 64]
+var HTTPS_REQ_BODY_BASE     : [u64; 64]
+var HTTPS_REQ_BODY_LEN      : [u64; 64]
+var HTTPS_REQ_LIVE          : [u8;  64]
+
+/* Per-header parallel arrays. */
+var HTTPS_HDR_NAME_BASE  : [u64; 4096]
+var HTTPS_HDR_NAME_LEN   : [u64; 4096]
+var HTTPS_HDR_VALUE_BASE : [u64; 4096]
+var HTTPS_HDR_VALUE_LEN  : [u64; 4096]
+
+/* ----------- Parser cursor (module-scope, dodges W2 4-arg cap) ----------- */
+
+var HTTPS_PARSE_RAW_BASE : u64 = 0u64
+var HTTPS_PARSE_RAW_LEN  : u64 = 0u64
+var HTTPS_PARSE_CURSOR   : u64 = 0u64
+
+/* ----------- Slot allocator ----------- */
+
+fn https_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < HTTPS_REQ_MAX {
+        if HTTPS_REQ_LIVE[i] == 0u8 {
+            HTTPS_REQ_LIVE[i] = 1u8
+            HTTPS_REQ_METHOD_BASE[i] = 0u64
+            HTTPS_REQ_METHOD_LEN[i] = 0u64
+            HTTPS_REQ_TARGET_BASE[i] = 0u64
+            HTTPS_REQ_TARGET_LEN[i] = 0u64
+            HTTPS_REQ_HEADERS_COUNT[i] = 0u64
+            HTTPS_REQ_BODY_BASE[i] = 0u64
+            HTTPS_REQ_BODY_LEN[i] = 0u64
+            return i
+        }
+        i = i + 1u32
+    }
+    return HTTPS_REQ_MAX
+}
+
+fn https_resolve_id(id: u64) -> u32 {
+    if id == 0u64 { return HTTPS_REQ_MAX }
+    let idx_u64 : u64 = id - 1u64
+    if idx_u64 >= (HTTPS_REQ_MAX as u64) { return HTTPS_REQ_MAX }
+    let idx : u32 = idx_u64 as u32
+    if HTTPS_REQ_LIVE[idx] == 0u8 { return HTTPS_REQ_MAX }
+    return idx
+}
+
+/* ----------- Response building helpers ----------- */
+
+fn https_push_crlf(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 13u32)
+    builder_push_byte(builder_id, 10u32)
+    return HTTPS_OK
+}
+
+fn https_push_colon_space(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 58u32)
+    builder_push_byte(builder_id, 32u32)
+    return HTTPS_OK
+}
+
+fn https_push_status_code(builder_id: u64, code: u32) -> i32 {
+    let d2 : u32 = (code / 100u32) % 10u32
+    let d1 : u32 = (code / 10u32) % 10u32
+    let d0 : u32 = code % 10u32
+    builder_push_byte(builder_id, 48u32 + d2)
+    builder_push_byte(builder_id, 48u32 + d1)
+    builder_push_byte(builder_id, 48u32 + d0)
+    return HTTPS_OK
+}
+
+fn https_push_http11_prefix(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 72u32)   /* H */
+    builder_push_byte(builder_id, 84u32)   /* T */
+    builder_push_byte(builder_id, 84u32)   /* T */
+    builder_push_byte(builder_id, 80u32)   /* P */
+    builder_push_byte(builder_id, 47u32)   /* / */
+    builder_push_byte(builder_id, 49u32)   /* 1 */
+    builder_push_byte(builder_id, 46u32)   /* . */
+    builder_push_byte(builder_id, 49u32)   /* 1 */
+    builder_push_byte(builder_id, 32u32)   /* SP */
+    return HTTPS_OK
+}
+
+fn http_send_status(builder_id: u64, status_code: u32, reason_base: u64, reason_len: u64) -> i32 @export {
+    https_push_http11_prefix(builder_id)
+    https_push_status_code(builder_id, status_code)
+    builder_push_byte(builder_id, 32u32)  /* SP */
+    builder_push_bytes(builder_id, reason_base, reason_len)
+    return https_push_crlf(builder_id)
+}
+
+fn http_send_header_name(builder_id: u64, name_base: u64, name_len: u64) -> i32 @export {
+    builder_push_bytes(builder_id, name_base, name_len)
+    return https_push_colon_space(builder_id)
+}
+
+fn http_send_header_value(builder_id: u64, value_base: u64, value_len: u64) -> i32 @export {
+    builder_push_bytes(builder_id, value_base, value_len)
+    return https_push_crlf(builder_id)
+}
+
+fn http_send_end_headers(builder_id: u64) -> i32 @export {
+    return https_push_crlf(builder_id)
+}
+
+fn http_send_body(builder_id: u64, body_base: u64, body_len: u64) -> i32 @export {
+    return builder_push_bytes(builder_id, body_base, body_len)
+}
+
+/* ----------- Parser primitives ----------- */
+
+fn https_byte_at(off: u64) -> u32 {
+    if off >= HTTPS_PARSE_RAW_LEN { return 0x100u32 }
+    let p : *u8 = (HTTPS_PARSE_RAW_BASE + off) as *u8
+    return p[0u64] as u32
+}
+
+fn https_at_crlf() -> u8 {
+    let b0 : u32 = https_byte_at(HTTPS_PARSE_CURSOR)
+    let b1 : u32 = https_byte_at(HTTPS_PARSE_CURSOR + 1u64)
+    if b0 == 13u32 {
+        if b1 == 10u32 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn https_skip_ows() -> i32 {
+    while HTTPS_PARSE_CURSOR < HTTPS_PARSE_RAW_LEN {
+        let b : u32 = https_byte_at(HTTPS_PARSE_CURSOR)
+        if b == 32u32 {
+            HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+        } else {
+            if b == 9u32 {
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            } else {
+                return HTTPS_OK
+            }
+        }
+    }
+    return HTTPS_OK
+}
+
+/* Parse "METHOD SP TARGET SP HTTP/1.1 CRLF" into slot.  Method ends at
+ * first SP; target at second SP; rest of line discarded (must match HTTP/1.1). */
+fn https_parse_request_line(slot_idx: u32) -> i32 {
+    /* Method */
+    let method_off : u64 = HTTPS_PARSE_CURSOR
+    let mut going_m : u8 = 1u8
+    while going_m == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_m = 0u8 }
+        if going_m == 1u8 {
+            let b : u32 = https_byte_at(HTTPS_PARSE_CURSOR)
+            if b == 32u32 {
+                going_m = 0u8
+            } else {
+                if b == 13u32 { return HTTPS_E_PARSE }
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+    let method_len : u64 = HTTPS_PARSE_CURSOR - method_off
+    if method_len == 0u64 { return HTTPS_E_PARSE }
+    HTTPS_REQ_METHOD_BASE[slot_idx] = HTTPS_PARSE_RAW_BASE + method_off
+    HTTPS_REQ_METHOD_LEN[slot_idx]  = method_len
+    HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64   /* past SP */
+    /* Target */
+    let target_off : u64 = HTTPS_PARSE_CURSOR
+    let mut going_t : u8 = 1u8
+    while going_t == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_t = 0u8 }
+        if going_t == 1u8 {
+            let b : u32 = https_byte_at(HTTPS_PARSE_CURSOR)
+            if b == 32u32 {
+                going_t = 0u8
+            } else {
+                if b == 13u32 { return HTTPS_E_PARSE }
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+    let target_len : u64 = HTTPS_PARSE_CURSOR - target_off
+    if target_len == 0u64 { return HTTPS_E_PARSE }
+    HTTPS_REQ_TARGET_BASE[slot_idx] = HTTPS_PARSE_RAW_BASE + target_off
+    HTTPS_REQ_TARGET_LEN[slot_idx]  = target_len
+    HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64   /* past SP */
+    /* Skip HTTP-version up to CRLF.  We accept anything as long as the
+     * line ends with CRLF; strict version checking can be added later. */
+    let mut going_v : u8 = 1u8
+    while going_v == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_v = 0u8 }
+        if going_v == 1u8 {
+            if https_at_crlf() == 1u8 {
+                going_v = 0u8
+            } else {
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+    HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 2u64   /* past CRLF */
+    return HTTPS_OK
+}
+
+/* Parse one header.  Returns 0 on success, 1 on end-of-headers, error otherwise. */
+fn https_parse_one_header(slot_idx: u32) -> i32 {
+    if https_at_crlf() == 1u8 {
+        HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 2u64
+        return 1i32
+    }
+    let name_off : u64 = HTTPS_PARSE_CURSOR
+    let mut going_n : u8 = 1u8
+    while going_n == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_n = 0u8 }
+        if going_n == 1u8 {
+            let b : u32 = https_byte_at(HTTPS_PARSE_CURSOR)
+            if b == 58u32 {
+                going_n = 0u8
+            } else {
+                if b == 13u32 { return HTTPS_E_PARSE }
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+    let name_len : u64 = HTTPS_PARSE_CURSOR - name_off
+    if name_len == 0u64 { return HTTPS_E_PARSE }
+    HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64   /* past ':' */
+    https_skip_ows()
+    let value_off : u64 = HTTPS_PARSE_CURSOR
+    let mut going_v : u8 = 1u8
+    while going_v == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_v = 0u8 }
+        if going_v == 1u8 {
+            if https_at_crlf() == 1u8 {
+                going_v = 0u8
+            } else {
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+    let value_len_raw : u64 = HTTPS_PARSE_CURSOR - value_off
+    HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 2u64
+    /* Trim trailing OWS in value. */
+    let mut v_end : u64 = value_len_raw
+    let mut trimming : u8 = 1u8
+    while trimming == 1u8 {
+        if v_end == 0u64 { trimming = 0u8 }
+        if trimming == 1u8 {
+            let last_off : u64 = value_off + v_end - 1u64
+            let lb : u32 = https_byte_at(last_off)
+            if lb == 32u32 {
+                v_end = v_end - 1u64
+            } else {
+                if lb == 9u32 {
+                    v_end = v_end - 1u64
+                } else {
+                    trimming = 0u8
+                }
+            }
+        }
+    }
+    let hcount : u64 = HTTPS_REQ_HEADERS_COUNT[slot_idx]
+    if hcount >= HTTPS_HDR_MAX { return HTTPS_E_TOOMANY }
+    let hidx_u64 : u64 = (slot_idx as u64) * 64u64 + hcount
+    let hidx : u32 = hidx_u64 as u32
+    HTTPS_HDR_NAME_BASE[hidx]  = HTTPS_PARSE_RAW_BASE + name_off
+    HTTPS_HDR_NAME_LEN[hidx]   = name_len
+    HTTPS_HDR_VALUE_BASE[hidx] = HTTPS_PARSE_RAW_BASE + value_off
+    HTTPS_HDR_VALUE_LEN[hidx]  = v_end
+    HTTPS_REQ_HEADERS_COUNT[slot_idx] = hcount + 1u64
+    return HTTPS_OK
+}
+
+fn https_parse_headers(slot_idx: u32) -> i32 {
+    while HTTPS_PARSE_CURSOR < HTTPS_PARSE_RAW_LEN {
+        let r : i32 = https_parse_one_header(slot_idx)
+        if r == 1i32 { return HTTPS_OK }
+        if r == HTTPS_E_PARSE { return HTTPS_E_PARSE }
+        if r == HTTPS_E_TOOMANY { return HTTPS_E_TOOMANY }
+    }
+    return HTTPS_E_PARSE
+}
+
+/* ----------- Header lookup helpers ----------- */
+
+fn http_request_header_name_base(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    if hdr_idx >= HTTPS_REQ_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTPS_HDR_NAME_BASE[hi]
+}
+
+fn http_request_header_name_len(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    if hdr_idx >= HTTPS_REQ_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTPS_HDR_NAME_LEN[hi]
+}
+
+fn http_request_header_value_base(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    if hdr_idx >= HTTPS_REQ_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTPS_HDR_VALUE_BASE[hi]
+}
+
+fn http_request_header_value_len(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    if hdr_idx >= HTTPS_REQ_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTPS_HDR_VALUE_LEN[hi]
+}
+
+fn http_request_header_find_ci(id: u64, name_base: u64, name_len: u64) -> i64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return -1i64 }
+    let hcount : u64 = HTTPS_REQ_HEADERS_COUNT[idx]
+    let mut j : u64 = 0u64
+    while j < hcount {
+        let hi : u32 = ((idx as u64) * 64u64 + j) as u32
+        let nb : u64 = HTTPS_HDR_NAME_BASE[hi]
+        let nl : u64 = HTTPS_HDR_NAME_LEN[hi]
+        if str_ascii_eq_ci(nb, nl, name_base, name_len) == 1u8 {
+            return j as i64
+        }
+        j = j + 1u64
+    }
+    return -1i64
+}
+
+/* ----------- Decimal parsing for Content-Length ----------- */
+
+fn https_parse_decimal_u64(base: u64, len: u64) -> u64 {
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    let p : *u8 = base as *u8
+    while i < len {
+        let b : u32 = p[i] as u32
+        if b < 48u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+        if b > 57u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+        let d : u64 = (b - 48u32) as u64
+        acc = acc * 10u64 + d
+        i = i + 1u64
+    }
+    return acc
+}
+
+/* Chunked decode (same algorithm as http_client). */
+
+fn https_read_chunk_size() -> u64 {
+    let mut acc : u64 = 0u64
+    let mut got : u8 = 0u8
+    let mut going_hex : u8 = 1u8
+    while going_hex == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_hex = 0u8 }
+        if going_hex == 1u8 {
+            let b : u32 = https_byte_at(HTTPS_PARSE_CURSOR)
+            let mut d : u32 = 0xFFu32
+            if b >= 48u32 {
+                if b <= 57u32 { d = b - 48u32 }
+            }
+            if b >= 65u32 {
+                if b <= 70u32 { d = b - 55u32 }
+            }
+            if b >= 97u32 {
+                if b <= 102u32 { d = b - 87u32 }
+            }
+            if d == 0xFFu32 {
+                going_hex = 0u8
+            } else {
+                acc = acc * 16u64 + (d as u64)
+                got = 1u8
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if got == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let mut going_ext : u8 = 1u8
+    while going_ext == 1u8 {
+        if HTTPS_PARSE_CURSOR >= HTTPS_PARSE_RAW_LEN { going_ext = 0u8 }
+        if going_ext == 1u8 {
+            if https_at_crlf() == 1u8 {
+                going_ext = 0u8
+            } else {
+                HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if https_at_crlf() == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 2u64
+    return acc
+}
+
+fn https_chunked_decode(arena: u64, slot_idx: u32) -> i32 {
+    let remaining : u64 = HTTPS_PARSE_RAW_LEN - HTTPS_PARSE_CURSOR
+    let accum : u64 = arena_alloc1(arena, remaining)
+    if accum == 0u64 { return HTTPS_E_OOM }
+    let dst : *u8 = accum as *u8
+    let mut written : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let sz : u64 = https_read_chunk_size()
+        if sz == 0xFFFFFFFFFFFFFFFFu64 { return HTTPS_E_PARSE }
+        if sz == 0u64 { done = 1u8 }
+        if done == 0u8 {
+            if HTTPS_PARSE_CURSOR + sz > HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+            let src : *u8 = (HTTPS_PARSE_RAW_BASE + HTTPS_PARSE_CURSOR) as *u8
+            let mut k : u64 = 0u64
+            while k < sz {
+                dst[written + k] = src[k]
+                k = k + 1u64
+            }
+            written = written + sz
+            HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + sz
+            if https_at_crlf() == 0u8 { return HTTPS_E_PARSE }
+            HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 2u64
+        }
+    }
+    HTTPS_REQ_BODY_BASE[slot_idx] = accum
+    HTTPS_REQ_BODY_LEN[slot_idx]  = written
+    return HTTPS_OK
+}
+
+/* ----------- Body framing dispatch ----------- */
+
+fn https_parse_body(arena: u64, slot_idx: u32) -> i32 {
+    let id : u64 = (slot_idx as u64) + 1u64
+    /* Look up Transfer-Encoding header. */
+    let te_lit : u64 = arena_alloc1(arena, 17u64)
+    if te_lit == 0u64 { return HTTPS_E_OOM }
+    let tep : *u8 = te_lit as *u8
+    tep[0]  = 84u8   /* T */
+    tep[1]  = 114u8  /* r */
+    tep[2]  = 97u8   /* a */
+    tep[3]  = 110u8  /* n */
+    tep[4]  = 115u8  /* s */
+    tep[5]  = 102u8  /* f */
+    tep[6]  = 101u8  /* e */
+    tep[7]  = 114u8  /* r */
+    tep[8]  = 45u8   /* - */
+    tep[9]  = 69u8   /* E */
+    tep[10] = 110u8  /* n */
+    tep[11] = 99u8   /* c */
+    tep[12] = 111u8  /* o */
+    tep[13] = 100u8  /* d */
+    tep[14] = 105u8  /* i */
+    tep[15] = 110u8  /* n */
+    tep[16] = 103u8  /* g */
+    let te_idx : i64 = http_request_header_find_ci(id, te_lit, 17u64)
+    /* W11 discipline: avoid signed i64 ordering compares -- iiis-0
+     * codegen bug produces SIGSEGV on `>=`/`<`/`<=`/`>` for i64.  Use
+     * `==`/`!=` against the sentinel -1 returned by the helper. */
+    if te_idx != -1i64 {
+        let vh : u32 = ((slot_idx as u64) * 64u64 + (te_idx as u64)) as u32
+        let vb : u64 = HTTPS_HDR_VALUE_BASE[vh]
+        let vl : u64 = HTTPS_HDR_VALUE_LEN[vh]
+        let chunked_lit : u64 = arena_alloc1(arena, 7u64)
+        if chunked_lit == 0u64 { return HTTPS_E_OOM }
+        let cp : *u8 = chunked_lit as *u8
+        cp[0] = 99u8   /* c */
+        cp[1] = 104u8  /* h */
+        cp[2] = 117u8  /* u */
+        cp[3] = 110u8  /* n */
+        cp[4] = 107u8  /* k */
+        cp[5] = 101u8  /* e */
+        cp[6] = 100u8  /* d */
+        if str_ascii_eq_ci(vb, vl, chunked_lit, 7u64) == 1u8 {
+            return https_chunked_decode(arena, slot_idx)
+        }
+    }
+    /* Look up Content-Length. */
+    let cl_lit : u64 = arena_alloc1(arena, 14u64)
+    if cl_lit == 0u64 { return HTTPS_E_OOM }
+    let clp : *u8 = cl_lit as *u8
+    clp[0]  = 67u8   /* C */
+    clp[1]  = 111u8  /* o */
+    clp[2]  = 110u8  /* n */
+    clp[3]  = 116u8  /* t */
+    clp[4]  = 101u8  /* e */
+    clp[5]  = 110u8  /* n */
+    clp[6]  = 116u8  /* t */
+    clp[7]  = 45u8   /* - */
+    clp[8]  = 76u8   /* L */
+    clp[9]  = 101u8  /* e */
+    clp[10] = 110u8  /* n */
+    clp[11] = 103u8  /* g */
+    clp[12] = 116u8  /* t */
+    clp[13] = 104u8  /* h */
+    let cl_idx : i64 = http_request_header_find_ci(id, cl_lit, 14u64)
+    /* W11 discipline: see comment on te_idx above. */
+    if cl_idx != -1i64 {
+        let vh : u32 = ((slot_idx as u64) * 64u64 + (cl_idx as u64)) as u32
+        let vb : u64 = HTTPS_HDR_VALUE_BASE[vh]
+        let vl : u64 = HTTPS_HDR_VALUE_LEN[vh]
+        let n : u64 = https_parse_decimal_u64(vb, vl)
+        if n == 0xFFFFFFFFFFFFFFFFu64 { return HTTPS_E_PARSE }
+        if HTTPS_PARSE_CURSOR + n > HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+        HTTPS_REQ_BODY_BASE[slot_idx] = HTTPS_PARSE_RAW_BASE + HTTPS_PARSE_CURSOR
+        HTTPS_REQ_BODY_LEN[slot_idx]  = n
+        HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + n
+        return HTTPS_OK
+    }
+    /* Fallback: no body. */
+    HTTPS_REQ_BODY_BASE[slot_idx] = 0u64
+    HTTPS_REQ_BODY_LEN[slot_idx]  = 0u64
+    return HTTPS_OK
+}
+
+/* ----------- Public parse entry ----------- */
+
+fn http_parse_request(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
+    HTTPS_PARSE_RAW_BASE = raw_base
+    HTTPS_PARSE_RAW_LEN  = raw_len
+    HTTPS_PARSE_CURSOR   = 0u64
+    let slot : u32 = https_alloc_slot()
+    if slot >= HTTPS_REQ_MAX { return 0u64 }
+    if https_parse_request_line(slot) != HTTPS_OK {
+        HTTPS_REQ_LIVE[slot] = 0u8
+        return 0u64
+    }
+    if https_parse_headers(slot) != HTTPS_OK {
+        HTTPS_REQ_LIVE[slot] = 0u8
+        return 0u64
+    }
+    if https_parse_body(arena, slot) != HTTPS_OK {
+        HTTPS_REQ_LIVE[slot] = 0u8
+        return 0u64
+    }
+    return (slot as u64) + 1u64
+}
+
+/* ----------- Public request accessors ----------- */
+
+fn http_request_method_base(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_METHOD_BASE[idx]
+}
+
+fn http_request_method_len(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_METHOD_LEN[idx]
+}
+
+fn http_request_target_base(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_TARGET_BASE[idx]
+}
+
+fn http_request_target_len(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_TARGET_LEN[idx]
+}
+
+fn http_request_header_count(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_HEADERS_COUNT[idx]
+}
+
+fn http_request_body_base(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_BODY_BASE[idx]
+}
+
+fn http_request_body_len(id: u64) -> u64 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return 0u64 }
+    return HTTPS_REQ_BODY_LEN[idx]
+}
+
+fn http_request_drop(id: u64) -> i32 @export {
+    let idx : u32 = https_resolve_id(id)
+    if idx == HTTPS_REQ_MAX { return HTTPS_E_BADID }
+    HTTPS_REQ_LIVE[idx] = 0u8
+    return HTTPS_OK
+}

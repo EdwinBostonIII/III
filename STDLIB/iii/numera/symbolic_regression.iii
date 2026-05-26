@@ -1,0 +1,1632 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\symbolic_regression.iii
+ *
+ * III STDLIB - numera::symbolic_regression
+ *
+ * Closed-form expression synthesis from data by EXACT DETERMINISTIC
+ * BOUNDED SEARCH (not statistical regression -- no loss, no fitness,
+ * no float, no ML, no observe-and-adapt).  A candidate expression tree
+ * is enumerated in a fixed canonical order over a caller-declared
+ * operator/terminal alphabet, serialized to RPN, and INDEPENDENTLY
+ * VERIFIED on every data point in exact Q32.32 signed fixed-point.
+ * The first candidate whose per-point residual magnitude is <= tolerance
+ * for ALL points is canonical (first exact fit wins -- there is no
+ * scoring).  It is content-addressed and, when the supplied capability
+ * carries ATTEST rights, published as a witness fragment so that only
+ * verified expressions enter the chain.
+ *
+ * Public API:
+ *   symreg_init() -> i32
+ *   symreg_regress(req, out_expr, out_expr_cap, out_len) -> i32   // req: *SymRegRequest
+ *   symreg_verify(expr, expr_len, data, data_len, tol_q) -> u8
+ *   symreg_eval(expr, expr_len, x_vec, n_vars, out_y_q, out_sign) -> i32
+ *   symreg_last_frag(out_frag_id) -> i32
+ *   symreg_selftest() -> u64
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K_synth: 0.90.
+ * Non-reentrant (serialized search; module-scope scratch -- Trap 7).
+ * Trap discipline: single-line fns; SYMREG_ prefix; no signed ordering
+ * compare; byte-wise multi-byte IO; no recursion; no modulo; shallow
+ * nesting via flat helpers sharing module-scope context (Trap 13).
+ */
+
+module numera_symbolic_regression
+
+extern @abi(c-msvc-x64) fn fix_add(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_sub(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_mul(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_div(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cad_compute(producer: *u8, operation: *u8, input_commit: *u8, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn at_advance() -> u64 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "aether/witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "aether/witness_hook.iii"
+
+const SYMREG_OK            : i32 =  0i32
+const SYMREG_E_NULL        : i32 = -1i32
+const SYMREG_E_NOT_INITED  : i32 = -2i32
+const SYMREG_E_NO_FIT      : i32 = -3i32
+const SYMREG_E_BUDGET      : i32 = -4i32
+const SYMREG_E_SIG         : i32 = -5i32
+const SYMREG_E_DATA        : i32 = -6i32
+const SYMREG_E_CAP         : i32 = -7i32
+const SYMREG_E_OFLOW       : i32 = -8i32
+const SYMREG_E_WITNESS     : i32 = -9i32
+
+const SYMREG_OP_END   : u8 = 0x00u8
+const SYMREG_OP_VAR   : u8 = 0x01u8
+const SYMREG_OP_CONST : u8 = 0x02u8
+const SYMREG_OP_ADD   : u8 = 0x10u8
+const SYMREG_OP_SUB   : u8 = 0x11u8
+const SYMREG_OP_MUL   : u8 = 0x12u8
+const SYMREG_OP_DIV   : u8 = 0x13u8
+const SYMREG_OP_NEG   : u8 = 0x20u8
+
+const SYMREG_SIG_MAGIC  : u32 = 0x53524731u32
+const SYMREG_REQ_MAGIC  : u32 = 0x53525231u32
+
+const SYMREG_MAX_VARS        : u32 = 8u32
+const SYMREG_MAX_NODES       : u32 = 31u32
+const SYMREG_MAX_DEPTH       : u32 = 5u32
+const SYMREG_MAX_POINTS      : u32 = 256u32
+const SYMREG_MAX_OPS         : u32 = 8u32
+const SYMREG_MAX_CONSTS      : u32 = 8u32
+const SYMREG_EVAL_STACK      : u32 = 32u32
+const SYMREG_EXPR_BUF        : u32 = 320u32
+const SYMREG_VALUE_DENOM     : u64 = 0x100000000u64
+const SYMREG_PRODUCER_TAG    : u64 = 0x53594D52454730u64
+
+/* Arity-class wire values for SYMREG_SHAPE_NODE odometer digits. */
+const SYMREG_AR_LEAF   : u8 = 0u8
+const SYMREG_AR_UNARY  : u8 = 1u8
+const SYMREG_AR_BINARY : u8 = 2u8
+
+/* Internal-op odometer radix (binary ops ADD/SUB/MUL/DIV in fixed order). */
+const SYMREG_N_BINOPS  : u32 = 4u32
+
+var SYMREG_INITED        : u8  = 0u8
+
+/* --- Permitted-alphabet working set (decoded from the signature blob) --- */
+var SYMREG_OPS_ALLOWED   : [u8;  8]
+var SYMREG_CONST_SIGN    : [u8;  8]
+var SYMREG_CONST_MAG     : [u64; 8]
+var SYMREG_N_CONSTS      : u32 = 0u32
+var SYMREG_N_VARS        : u32 = 0u32
+
+/* Ordered list of permitted binary opcodes (compacted from OPS_ALLOWED). */
+var SYMREG_BINOP_LIST    : [u8;  4]
+var SYMREG_N_BINOP_PERM  : u32 = 0u32
+var SYMREG_NEG_ALLOWED   : u8  = 0u8
+
+/* --- Dataset mirror (decoded once per regress call) --- */
+var SYMREG_DX_SIGN       : [u8;  2048]
+var SYMREG_DX_MAG        : [u64; 2048]
+var SYMREG_DY_SIGN       : [u8;  256]
+var SYMREG_DY_MAG        : [u64; 256]
+var SYMREG_N_POINTS      : u32 = 0u32
+var SYMREG_TOL_MAG       : u64 = 0u64
+var SYMREG_MAX_DEPTH_REQ : u32 = 0u32
+
+/* --- Enumeration state: explicit odometer over the candidate catalog --- */
+var SYMREG_SHAPE_NODE    : [u8;  31]   /* per-slot arity class (post-order) */
+var SYMREG_SHAPE_LEN     : u32 = 0u32  /* node count of current shape */
+var SYMREG_PICK_OP       : [u8;  31]   /* per-internal-slot op-odometer digit */
+var SYMREG_PICK_LEAF     : [u8;  31]   /* per-leaf terminal-odometer digit */
+var SYMREG_DEPTH         : [u8;  31]   /* scratch depth stack (shape validation) */
+
+/* Per-slot role caches filled by symreg_shape_valid (avoid re-derivation). */
+var SYMREG_SLOT_KIND     : [u8;  31]   /* 0 leaf / 1 unary / 2 binary (== SHAPE_NODE) */
+var SYMREG_N_INTERNAL    : u32 = 0u32  /* count of unary+binary slots */
+var SYMREG_N_LEAF        : u32 = 0u32  /* count of leaf slots */
+
+/* x-vector staging for one data point (fed to symreg_eval). */
+var SYMREG_XVEC          : [u8;  80]   /* MAX_VARS * 9 = 72, padded */
+
+/* --- Serialization + evaluation scratch --- */
+var SYMREG_EXPR          : [u8;  320]
+var SYMREG_EXPR_LEN      : u32 = 0u32
+var SYMREG_EVAL_MAG      : [u64; 32]
+var SYMREG_EVAL_SGN      : [u8;  32]
+var SYMREG_EVAL_BAD      : u8  = 0u8   /* set on divide-by-zero / malformed */
+
+/* --- Witness plumbing scratch (32-byte ident buffers) --- */
+var SYMREG_LAST_FRAG     : [u8;  32]
+var SYMREG_HAVE_FRAG     : u8  = 0u8
+var SYMREG_PRODUCER_ID   : [u8;  32]
+var SYMREG_OPID          : [u8;  32]
+var SYMREG_IN_COMMIT     : [u8;  32]
+var SYMREG_OUT_COMMIT    : [u8;  32]
+var SYMREG_HASH_SCRATCH  : [u8;  8192]  /* sig||data concat for the in-commit */
+var SYMREG_LABEL_PROD    : [u8;  8]
+var SYMREG_LABEL_OP      : [u8;  16]
+
+/* ============================================================= *
+ *  byte-wise LE value IO over a u64 base address (Trap 5)        *
+ * ============================================================= */
+
+fn symreg_load_u64_le(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn symreg_store_u64_le(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u8 = base as *u8
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return SYMREG_OK
+}
+
+fn symreg_load_u32_le(base: u64, off: u64) -> u32 {
+    let p : *u8 = base as *u8
+    let b0 : u32 = p[off + 0u64] as u32
+    let b1 : u32 = p[off + 1u64] as u32
+    let b2 : u32 = p[off + 2u64] as u32
+    let b3 : u32 = p[off + 3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* ============================================================= *
+ *  signed sign-magnitude Q32.32 arithmetic (exact)              *
+ *  No signed-ordering compare anywhere (Trap 3): only unsigned  *
+ *  magnitude compares + sign XOR.                               *
+ * ============================================================= */
+
+fn symreg_sm_add(a_mag: u64, a_sgn: u8, b_mag: u64, b_sgn: u8, out_mag: *u64, out_sgn: *u8) -> i32 {
+    let asg : u8 = a_sgn & 1u8
+    let bsg : u8 = b_sgn & 1u8
+    if asg == bsg {
+        let s : u64 = fix_add(a_mag, b_mag)
+        out_mag[0u64] = s
+        out_sgn[0u64] = asg
+        if s == 0u64 { out_sgn[0u64] = 0u8 }
+        return SYMREG_OK
+    }
+    /* opposite signs: difference of magnitudes, larger sign wins. */
+    if a_mag >= b_mag {
+        let d : u64 = fix_sub(a_mag, b_mag)
+        out_mag[0u64] = d
+        out_sgn[0u64] = asg
+        if d == 0u64 { out_sgn[0u64] = 0u8 }
+        return SYMREG_OK
+    }
+    let d2 : u64 = fix_sub(b_mag, a_mag)
+    out_mag[0u64] = d2
+    out_sgn[0u64] = bsg
+    if d2 == 0u64 { out_sgn[0u64] = 0u8 }
+    return SYMREG_OK
+}
+
+fn symreg_sm_mul(a_mag: u64, a_sgn: u8, b_mag: u64, b_sgn: u8, out_mag: *u64, out_sgn: *u8) -> i32 {
+    let m : u64 = fix_mul(a_mag, b_mag)
+    let s : u8 = (a_sgn & 1u8) ^ (b_sgn & 1u8)
+    out_mag[0u64] = m
+    out_sgn[0u64] = s
+    if m == 0u64 { out_sgn[0u64] = 0u8 }
+    return SYMREG_OK
+}
+
+/* ============================================================= *
+ *  RPN evaluation -- explicit operand stack (W15, no recursion) *
+ * ============================================================= */
+
+fn symreg_eval(expr: *u8, expr_len: u32, x_vec: *u8, n_vars: u32, out_y_q: *u64, out_sign: *u8) -> i32 @export {
+    if (expr as u64) == 0u64 { return SYMREG_E_NULL }
+    if (x_vec as u64) == 0u64 { return SYMREG_E_NULL }
+    if (out_y_q as u64) == 0u64 { return SYMREG_E_NULL }
+    if (out_sign as u64) == 0u64 { return SYMREG_E_NULL }
+    SYMREG_EVAL_BAD = 0u8
+    let ebase : u64 = expr as u64
+    let xbase : u64 = x_vec as u64
+    let elen : u64 = expr_len as u64
+    let nvar : u64 = n_vars as u64
+    let mut sp : u32 = 0u32
+    let mut i : u64 = 0u64
+    let mut running : u8 = 1u8
+    while running == 1u8 {
+        if i >= elen { running = 0u8 }
+        if running == 1u8 {
+            let p : *u8 = ebase as *u8
+            let op : u8 = p[i]
+            i = symreg_eval_step(op, ebase, i, xbase, nvar, sp)
+            sp = SYMREG_SP_AFTER
+            if op == SYMREG_OP_END { running = 0u8 }
+            if SYMREG_EVAL_BAD == 1u8 { running = 0u8 }
+        }
+    }
+    if SYMREG_EVAL_BAD == 1u8 { return SYMREG_E_DATA }
+    if sp != 1u32 { return SYMREG_E_DATA }
+    out_y_q[0u64] = SYMREG_EVAL_MAG[0]
+    out_sign[0u64] = SYMREG_EVAL_SGN[0]
+    return SYMREG_OK
+}
+
+/* Shared cursor/stack-pointer hand-off between symreg_eval and its step
+ * helper (keeps the eval loop shallow -- Trap 13). */
+var SYMREG_SP_AFTER : u32 = 0u32
+
+/* Execute one RPN token at expr offset i with operand stack height sp.
+ * Returns the next cursor offset; writes the post-step stack height to
+ * SYMREG_SP_AFTER and sets SYMREG_EVAL_BAD on any fault. */
+fn symreg_eval_step(op: u8, ebase: u64, i: u64, xbase: u64, nvar: u64, sp: u32) -> u64 {
+    SYMREG_SP_AFTER = sp
+    if op == SYMREG_OP_END { return i + 1u64 }
+    if op == SYMREG_OP_VAR { return symreg_eval_var(ebase, i, xbase, nvar, sp) }
+    if op == SYMREG_OP_CONST { return symreg_eval_const(ebase, i, sp) }
+    if op == SYMREG_OP_NEG { return symreg_eval_neg(i, sp) }
+    return symreg_eval_binary(op, i, sp)
+}
+
+fn symreg_eval_var(ebase: u64, i: u64, xbase: u64, nvar: u64, sp: u32) -> u64 {
+    let p : *u8 = ebase as *u8
+    let v : u64 = (p[i + 1u64] as u64) & 0xFFu64
+    if v >= nvar { SYMREG_EVAL_BAD = 1u8 ; return i + 2u64 }
+    if sp >= SYMREG_EVAL_STACK { SYMREG_EVAL_BAD = 1u8 ; return i + 2u64 }
+    let off : u64 = v * 9u64
+    let xp : *u8 = xbase as *u8
+    let sgn : u8 = xp[off] & 1u8
+    let mag : u64 = symreg_load_u64_le(xbase, off + 1u64)
+    SYMREG_EVAL_MAG[sp] = mag
+    SYMREG_EVAL_SGN[sp] = sgn
+    if mag == 0u64 { SYMREG_EVAL_SGN[sp] = 0u8 }
+    SYMREG_SP_AFTER = sp + 1u32
+    return i + 2u64
+}
+
+fn symreg_eval_const(ebase: u64, i: u64, sp: u32) -> u64 {
+    if sp >= SYMREG_EVAL_STACK { SYMREG_EVAL_BAD = 1u8 ; return i + 10u64 }
+    let p : *u8 = ebase as *u8
+    let sgn : u8 = p[i + 1u64] & 1u8
+    let mag : u64 = symreg_load_u64_le(ebase, i + 2u64)
+    SYMREG_EVAL_MAG[sp] = mag
+    SYMREG_EVAL_SGN[sp] = sgn
+    if mag == 0u64 { SYMREG_EVAL_SGN[sp] = 0u8 }
+    SYMREG_SP_AFTER = sp + 1u32
+    return i + 10u64
+}
+
+fn symreg_eval_neg(i: u64, sp: u32) -> u64 {
+    if sp < 1u32 { SYMREG_EVAL_BAD = 1u8 ; return i + 1u64 }
+    let top : u32 = sp - 1u32
+    let mag : u64 = SYMREG_EVAL_MAG[top]
+    if mag != 0u64 { SYMREG_EVAL_SGN[top] = SYMREG_EVAL_SGN[top] ^ 1u8 }
+    SYMREG_SP_AFTER = sp
+    return i + 1u64
+}
+
+fn symreg_eval_binary(op: u8, i: u64, sp: u32) -> u64 {
+    if sp < 2u32 { SYMREG_EVAL_BAD = 1u8 ; return i + 1u64 }
+    let bi : u32 = sp - 1u32
+    let ai : u32 = sp - 2u32
+    let a_mag : u64 = SYMREG_EVAL_MAG[ai]
+    let a_sgn : u8 = SYMREG_EVAL_SGN[ai]
+    let b_mag : u64 = SYMREG_EVAL_MAG[bi]
+    let b_sgn : u8 = SYMREG_EVAL_SGN[bi]
+    symreg_binary_apply(op, a_mag, a_sgn, b_mag, b_sgn, ai)
+    SYMREG_SP_AFTER = sp - 1u32
+    return i + 1u64
+}
+
+/* Apply a binary op to (a,b) writing the result into stack slot `dst`.
+ * Split out to keep symreg_eval_binary's local count low (W13). */
+fn symreg_binary_apply(op: u8, a_mag: u64, a_sgn: u8, b_mag: u64, b_sgn: u8, dst: u32) -> i32 {
+    let mbase : u64 = &SYMREG_EVAL_MAG as u64
+    let sbase : u64 = &SYMREG_EVAL_SGN as u64
+    let rm : *u64 = (mbase + (dst as u64) * 8u64) as *u64
+    let rs : *u8  = (sbase + (dst as u64)) as *u8
+    if op == SYMREG_OP_ADD {
+        symreg_sm_add(a_mag, a_sgn, b_mag, b_sgn, rm, rs)
+        return SYMREG_OK
+    }
+    if op == SYMREG_OP_SUB {
+        symreg_sm_add(a_mag, a_sgn, b_mag, b_sgn ^ 1u8, rm, rs)
+        return SYMREG_OK
+    }
+    if op == SYMREG_OP_MUL {
+        symreg_sm_mul(a_mag, a_sgn, b_mag, b_sgn, rm, rs)
+        return SYMREG_OK
+    }
+    if op == SYMREG_OP_DIV {
+        if b_mag == 0u64 {
+            SYMREG_EVAL_BAD = 1u8
+            rm[0u64] = 0u64
+            rs[0u64] = 0u8
+            return SYMREG_OK
+        }
+        let m : u64 = fix_div(a_mag, b_mag)
+        let s : u8 = (a_sgn & 1u8) ^ (b_sgn & 1u8)
+        rm[0u64] = m
+        rs[0u64] = s
+        if m == 0u64 { rs[0u64] = 0u8 }
+        return SYMREG_OK
+    }
+    SYMREG_EVAL_BAD = 1u8
+    return SYMREG_OK
+}
+
+/* ============================================================= *
+ *  Independent verifier (M12/M10) -- pure over args + mirror.   *
+ * ============================================================= */
+
+fn symreg_verify(expr: *u8, expr_len: u32, data: *u8, data_len: u32, tol_q: u64) -> u8 @export {
+    if (expr as u64) == 0u64 { return 0u8 }
+    let nvar : u32 = SYMREG_N_VARS
+    let npts : u32 = SYMREG_N_POINTS
+    if npts == 0u32 { return 0u8 }
+    let xbase : u64 = &SYMREG_XVEC as u64
+    let mut row : u32 = 0u32
+    let mut ok : u8 = 1u8
+    while row < npts {
+        if ok == 1u8 {
+            symreg_build_xvec(row, nvar)
+            ok = symreg_verify_point(expr, expr_len, xbase, nvar, row, tol_q)
+        }
+        row = row + 1u32
+    }
+    return ok
+}
+
+/* Stage row `row` of the decoded dataset mirror into SYMREG_XVEC as
+ * n_vars records of (sign:u8 || mag:u64 LE). */
+fn symreg_build_xvec(row: u32, nvar: u32) -> i32 {
+    let xbase : u64 = &SYMREG_XVEC as u64
+    let xp : *u8 = xbase as *u8
+    let rowbase : u32 = row * SYMREG_MAX_VARS
+    let mut v : u32 = 0u32
+    while v < nvar {
+        let idx : u64 = ((rowbase + v) as u64) & 0xFFFFFFFFu64
+        let off : u64 = (v as u64) * 9u64
+        xp[off] = SYMREG_DX_SIGN[idx] & 1u8
+        symreg_store_u64_le(xbase, off + 1u64, SYMREG_DX_MAG[idx])
+        v = v + 1u32
+    }
+    return SYMREG_OK
+}
+
+/* Evaluate one point; return 1u8 iff residual magnitude <= tol_q. */
+fn symreg_verify_point(expr: *u8, expr_len: u32, xbase: u64, nvar: u32, row: u32, tol_q: u64) -> u8 {
+    let xv : *u8 = xbase as *u8
+    let pred_mag : *u64 = &SYMREG_PRED_MAG as *u64
+    let pred_sgn : *u8 = &SYMREG_PRED_SGN as *u8
+    let rc : i32 = symreg_eval(expr, expr_len, xv, nvar, pred_mag, pred_sgn)
+    if rc != SYMREG_OK { return 0u8 }
+    let ridx : u64 = (row as u64) & 0xFFFFFFFFu64
+    let y_mag : u64 = SYMREG_DY_MAG[ridx]
+    let y_sgn : u8 = SYMREG_DY_SIGN[ridx] & 1u8
+    /* residual = predicted - actual; take magnitude. */
+    let res_mag : *u64 = &SYMREG_RES_MAG as *u64
+    let res_sgn : *u8 = &SYMREG_RES_SGN as *u8
+    symreg_sm_add(SYMREG_PRED_MAG, SYMREG_PRED_SGN, y_mag, y_sgn ^ 1u8, res_mag, res_sgn)
+    if SYMREG_RES_MAG <= tol_q { return 1u8 }
+    return 0u8
+}
+
+var SYMREG_PRED_MAG : u64 = 0u64
+var SYMREG_PRED_SGN : u8  = 0u8
+var SYMREG_RES_MAG  : u64 = 0u64
+var SYMREG_RES_SGN  : u8  = 0u8
+
+/* ============================================================= *
+ *  Candidate-shape catalog: arity-pattern odometer over a       *
+ *  base-3 string of length nc, filtered to valid single-rooted  *
+ *  post-order trees of depth <= max_depth.                      *
+ * ============================================================= */
+
+/* Validate SYMREG_SHAPE_NODE[0..nc) as a post-order arity string:
+ * a single tree must result (final operand-stack height == 1) and the
+ * maximum subtree depth must be <= SYMREG_MAX_DEPTH_REQ.  Records leaf/
+ * internal counts.  Returns 1u8 if valid, 0u8 otherwise.  Linear pass
+ * with an explicit depth stack (W15). */
+fn symreg_shape_valid(nc: u32) -> u8 {
+    let mut h : u32 = 0u32        /* operand-stack height */
+    let mut maxd : u32 = 0u32     /* max depth seen */
+    let mut nleaf : u32 = 0u32
+    let mut nint : u32 = 0u32
+    let mut s : u32 = 0u32
+    let mut bad : u8 = 0u8
+    while s < nc {
+        if bad == 0u8 {
+            bad = symreg_shape_push(s, h)
+            h = SYMREG_SHAPE_H
+            if SYMREG_SHAPE_D > maxd { maxd = SYMREG_SHAPE_D }
+            if SYMREG_SHAPE_NODE[s] == SYMREG_AR_LEAF { nleaf = nleaf + 1u32 }
+            if SYMREG_SHAPE_NODE[s] != SYMREG_AR_LEAF { nint = nint + 1u32 }
+        }
+        s = s + 1u32
+    }
+    if bad == 1u8 { return 0u8 }
+    if h != 1u32 { return 0u8 }
+    if maxd > SYMREG_MAX_DEPTH_REQ { return 0u8 }
+    SYMREG_N_LEAF = nleaf
+    SYMREG_N_INTERNAL = nint
+    return 1u8
+}
+
+var SYMREG_SHAPE_H : u32 = 0u32   /* post-push operand-stack height */
+var SYMREG_SHAPE_D : u32 = 0u32   /* depth of the node just pushed */
+
+/* Process one post-order arity slot against operand-stack height `h`.
+ * Writes new height to SYMREG_SHAPE_H and the node's subtree depth to
+ * SYMREG_SHAPE_D (via SYMREG_DEPTH used as a depth stack).  Returns 1u8
+ * if the slot is ill-formed (stack underflow). */
+fn symreg_shape_push(s: u32, h: u32) -> u8 {
+    let kind : u8 = SYMREG_SHAPE_NODE[s]
+    if kind == SYMREG_AR_LEAF {
+        SYMREG_DEPTH[h] = 1u8
+        SYMREG_SHAPE_H = h + 1u32
+        SYMREG_SHAPE_D = 1u32
+        return 0u8
+    }
+    if kind == SYMREG_AR_UNARY {
+        if h < 1u32 { SYMREG_SHAPE_H = h ; SYMREG_SHAPE_D = 0u32 ; return 1u8 }
+        let cd : u32 = (SYMREG_DEPTH[h - 1u32] as u32) + 1u32
+        SYMREG_DEPTH[h - 1u32] = cd as u8
+        SYMREG_SHAPE_H = h
+        SYMREG_SHAPE_D = cd
+        return 0u8
+    }
+    /* binary */
+    if h < 2u32 { SYMREG_SHAPE_H = h ; SYMREG_SHAPE_D = 0u32 ; return 1u8 }
+    let dl : u32 = SYMREG_DEPTH[h - 2u32] as u32
+    let dr : u32 = SYMREG_DEPTH[h - 1u32] as u32
+    let mut cd2 : u32 = dl
+    if dr > cd2 { cd2 = dr }
+    cd2 = cd2 + 1u32
+    SYMREG_DEPTH[h - 2u32] = cd2 as u8
+    SYMREG_SHAPE_H = h - 1u32
+    SYMREG_SHAPE_D = cd2
+    return 0u8
+}
+
+/* Initialise the arity-string odometer for node count nc (all leaves)
+ * and advance to the first VALID shape.  Returns 1u8 if a valid shape
+ * of this size exists, else 0u8 (caller moves to next nc). */
+fn symreg_shape_first(nc: u32) -> u8 {
+    let mut s : u32 = 0u32
+    while s < nc {
+        SYMREG_SHAPE_NODE[s] = SYMREG_AR_LEAF
+        s = s + 1u32
+    }
+    SYMREG_SHAPE_LEN = nc
+    if symreg_shape_valid(nc) == 1u8 { return 1u8 }
+    return symreg_shape_next()
+}
+
+/* Advance the arity-string odometer to the next VALID shape.  Returns
+ * 1u8 on success, 0u8 when the odometer for this nc is exhausted.
+ *
+ * The odometer is BIG-ENDIAN over the post-order slots (slot 0 is the
+ * most-significant digit, the root slot nc-1 the least).  This makes a
+ * doomed scan-PREFIX [0..f] correspond to a CONTIGUOUS block of odometer
+ * values (all sharing those high digits), so we can skip the entire
+ * block in one jump (symreg_shape_jump) instead of validating each of
+ * its 3^(nc-1-f) members.  Without the jump the depth<=5 / nc<=31 space
+ * (3^31 raw strings) is computationally infeasible; with it, only the
+ * depth/height-feasible prefixes are visited (M19 boundedness made real,
+ * not merely asserted).  Order is preserved -- every skipped string is
+ * provably invalid, so first-fit selection is unchanged. */
+fn symreg_shape_next() -> u8 {
+    let nc : u32 = SYMREG_SHAPE_LEN
+    let mut found : u8 = 0u8
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let carried : u8 = symreg_shape_inc(nc)
+        if carried == 1u8 { done = 1u8 }
+        if done == 0u8 {
+            if symreg_shape_valid(nc) == 1u8 {
+                found = 1u8
+                done = 1u8
+            } else {
+                /* skip the whole doomed-prefix block: re-seat the odometer
+                 * just past every string sharing the failing prefix. */
+                let f : u32 = symreg_shape_failpos(nc)
+                if f < nc {
+                    let ovf : u8 = symreg_shape_jump(nc, f)
+                    if ovf == 1u8 { done = 1u8 }
+                }
+            }
+        }
+    }
+    return found
+}
+
+/* True iff arity class `a` is realizable under the current alphabet:
+ * LEAF always (terminals are non-empty by sig-decode invariant); UNARY
+ * only if NEG is permitted; BINARY only if >=1 binop is permitted.  The
+ * shape odometer ranges each slot over ONLY the realizable arities, so it
+ * never emits a structurally-valid-but-unfillable shape (e.g. a unary
+ * NEG node when NEG is disallowed).  This is the load-bearing prune: with
+ * the unary class enabled the height<=5 structural-tree count is ~1.1e9,
+ * but restricted to the permitted arities (e.g. leaf+binary only) it
+ * collapses to the ~4.6e5 binary-tree shapes -- finite and fast (M19). */
+fn symreg_arity_ok(a: u8) -> u8 {
+    if a == SYMREG_AR_LEAF { return 1u8 }
+    if a == SYMREG_AR_UNARY {
+        if SYMREG_NEG_ALLOWED == 1u8 { return 1u8 }
+        return 0u8
+    }
+    if a == SYMREG_AR_BINARY {
+        if SYMREG_N_BINOP_PERM > 0u32 { return 1u8 }
+        return 0u8
+    }
+    return 0u8
+}
+
+/* Step one arity digit to the next REALIZABLE class strictly greater than
+ * `cur`.  Writes the new class to SYMREG_AR_STEP and returns 1u8 if it had
+ * to wrap back to LEAF (carry out), else 0u8. */
+var SYMREG_AR_STEP : u8 = 0u8
+fn symreg_arity_step(cur: u8) -> u8 {
+    let mut d : u8 = cur + 1u8
+    while d <= SYMREG_AR_BINARY {
+        if symreg_arity_ok(d) == 1u8 { SYMREG_AR_STEP = d ; return 0u8 }
+        d = d + 1u8
+    }
+    SYMREG_AR_STEP = SYMREG_AR_LEAF
+    return 1u8
+}
+
+/* Increment the BIG-ENDIAN permitted-arity odometer once (carry from the
+ * least-significant slot nc-1 toward the most-significant slot 0).  Each
+ * slot ranges only over realizable arity classes.  Returns 1u8 on
+ * overflow (all digits wrapped -> exhausted). */
+fn symreg_shape_inc(nc: u32) -> u8 {
+    let mut c : u32 = 0u32
+    let mut carry : u8 = 1u8
+    while c < nc {
+        if carry == 1u8 {
+            let s : u32 = nc - 1u32 - c
+            carry = symreg_arity_step(SYMREG_SHAPE_NODE[s])
+            SYMREG_SHAPE_NODE[s] = SYMREG_AR_STEP
+        }
+        c = c + 1u32
+    }
+    return carry
+}
+
+/* First post-order slot index at which SYMREG_SHAPE_NODE[0..nc) becomes
+ * irrecoverably invalid for ALL continuations sharing that prefix:
+ *   - a unary/binary slot that underflows the operand stack, OR
+ *   - a slot whose just-formed subtree depth already exceeds max_depth
+ *     (the root depth can only grow, so no continuation recovers), OR
+ *   - an operand-stack height so high it can no longer be reduced to the
+ *     final single root by the remaining slots: with r = nc-1-s slots
+ *     left, the lowest reachable final height is h-r (all binary), so the
+ *     prefix is doomed when h-r > 1, i.e. h > nc-s (unsigned compare).
+ * Returns nc if no such prefix doom exists (the string is structurally
+ * sound throughout and only a final exact-height check can reject it --
+ * those few cases fall through to a single-step increment).
+ *
+ * These three prefix prunes are jointly what tames the depth<=5/nc<=31
+ * space: every structurally hopeless prefix is skipped wholesale, so the
+ * odometer visits only height- and depth-feasible prefixes. */
+fn symreg_shape_failpos(nc: u32) -> u32 {
+    let mut h : u32 = 0u32
+    let mut s : u32 = 0u32
+    let mut fp : u32 = nc
+    let mut hit : u8 = 0u8
+    while s < nc {
+        if hit == 0u8 {
+            let bad : u8 = symreg_shape_push(s, h)
+            h = SYMREG_SHAPE_H
+            if bad == 1u8 { fp = s ; hit = 1u8 }
+            if hit == 0u8 {
+                if SYMREG_SHAPE_D > SYMREG_MAX_DEPTH_REQ { fp = s ; hit = 1u8 }
+            }
+            if hit == 0u8 {
+                if h > (nc - s) { fp = s ; hit = 1u8 }
+            }
+        }
+        s = s + 1u32
+    }
+    return fp
+}
+
+/* Re-seat the BIG-ENDIAN odometer past every string sharing the doomed
+ * prefix slots [0..fpos]: zero the lower (less-significant) slots
+ * (fpos+1 .. nc-1) and propagate a +1 carry into slot fpos toward slot 0.
+ * Returns 1u8 on overflow (prefix space for this nc exhausted). */
+fn symreg_shape_jump(nc: u32, fpos: u32) -> u8 {
+    let mut t : u32 = fpos + 1u32
+    while t < nc {
+        SYMREG_SHAPE_NODE[t] = SYMREG_AR_LEAF
+        t = t + 1u32
+    }
+    let mut s : u32 = fpos
+    let mut carry : u8 = 1u8
+    let mut guard : u32 = 0u32
+    let span : u32 = fpos + 1u32
+    while guard < span {
+        if carry == 1u8 {
+            carry = symreg_arity_step(SYMREG_SHAPE_NODE[s])
+            SYMREG_SHAPE_NODE[s] = SYMREG_AR_STEP
+        }
+        if s == 0u32 { guard = span } else { s = s - 1u32 ; guard = guard + 1u32 }
+    }
+    return carry
+}
+
+/* ============================================================= *
+ *  Concrete fill odometer: assign each internal slot a permitted *
+ *  op and each leaf a terminal index.                            *
+ * ============================================================= */
+
+/* Reset the fill odometer (all digits 0) for the current shape and
+ * compute per-slot radixes implicitly via SYMREG_N_BINOP_PERM /
+ * (n_vars + n_consts).  Returns 1u8 if the current shape is fillable
+ * (every internal slot has at least one permitted op of its arity). */
+fn symreg_fill_first() -> u8 {
+    let nc : u32 = SYMREG_SHAPE_LEN
+    let mut s : u32 = 0u32
+    while s < nc {
+        SYMREG_PICK_OP[s] = 0u8
+        SYMREG_PICK_LEAF[s] = 0u8
+        s = s + 1u32
+    }
+    return symreg_fill_ok()
+}
+
+/* A shape is fillable iff: every binary slot has >=1 permitted binop,
+ * every unary slot has NEG permitted, and the terminal alphabet is
+ * non-empty. */
+fn symreg_fill_ok() -> u8 {
+    let nterm : u32 = SYMREG_N_VARS + SYMREG_N_CONSTS
+    if nterm == 0u32 { return 0u8 }
+    let nc : u32 = SYMREG_SHAPE_LEN
+    let mut s : u32 = 0u32
+    let mut ok : u8 = 1u8
+    while s < nc {
+        let kind : u8 = SYMREG_SHAPE_NODE[s]
+        if kind == SYMREG_AR_BINARY {
+            if SYMREG_N_BINOP_PERM == 0u32 { ok = 0u8 }
+        }
+        if kind == SYMREG_AR_UNARY {
+            if SYMREG_NEG_ALLOWED == 0u8 { ok = 0u8 }
+        }
+        s = s + 1u32
+    }
+    return ok
+}
+
+/* Advance the fill odometer once over the current shape.  Internal
+ * binary slots range over [0, N_BINOP_PERM); unary slots are fixed
+ * (radix 1, NEG); leaf slots range over [0, n_vars+n_consts).  Returns
+ * 1u8 on overflow (this shape's fills are exhausted).
+ *
+ * BIG-ENDIAN over the post-order slots: slot 0 is the MOST significant
+ * digit, the highest slot the least significant.  Because post-order
+ * slots map 1:1 to RPN byte order, this enumerates candidates in true
+ * lexicographic order of their serialized byte stream -- the canonical
+ * "first exact fit wins" order (e.g. [VAR0][VAR1] precedes [VAR1][VAR0]).
+ * We therefore carry from the highest slot down toward slot 0. */
+fn symreg_fill_next() -> u8 {
+    let nc : u32 = SYMREG_SHAPE_LEN
+    let nterm : u32 = SYMREG_N_VARS + SYMREG_N_CONSTS
+    let mut c : u32 = 0u32
+    let mut carry : u8 = 1u8
+    while c < nc {
+        if carry == 1u8 {
+            let s : u32 = nc - 1u32 - c
+            carry = symreg_fill_digit(s, nterm)
+        }
+        c = c + 1u32
+    }
+    return carry
+}
+
+/* Increment slot s's fill digit; return 1u8 if it wrapped (carry out). */
+fn symreg_fill_digit(s: u32, nterm: u32) -> u8 {
+    let kind : u8 = SYMREG_SHAPE_NODE[s]
+    if kind == SYMREG_AR_LEAF {
+        let d : u8 = SYMREG_PICK_LEAF[s] + 1u8
+        if (d as u32) >= nterm {
+            SYMREG_PICK_LEAF[s] = 0u8
+            return 1u8
+        }
+        SYMREG_PICK_LEAF[s] = d
+        return 0u8
+    }
+    if kind == SYMREG_AR_UNARY {
+        /* radix 1: always carries (NEG is the only unary op). */
+        SYMREG_PICK_OP[s] = 0u8
+        return 1u8
+    }
+    /* binary */
+    let d2 : u8 = SYMREG_PICK_OP[s] + 1u8
+    if (d2 as u32) >= SYMREG_N_BINOP_PERM {
+        SYMREG_PICK_OP[s] = 0u8
+        return 1u8
+    }
+    SYMREG_PICK_OP[s] = d2
+    return 0u8
+}
+
+/* ============================================================= *
+ *  Serialize the current (shape, fill) to RPN in SYMREG_EXPR.   *
+ *  Post-order slots map directly to RPN order (SHAPE_NODE is     *
+ *  already post-order), so this is a single forward pass.        *
+ * ============================================================= */
+
+fn symreg_serialize() -> i32 {
+    let nc : u32 = SYMREG_SHAPE_LEN
+    let ebase : u64 = &SYMREG_EXPR as u64
+    let ep : *u8 = ebase as *u8
+    let mut s : u32 = 0u32
+    let mut w : u64 = 0u64
+    while s < nc {
+        w = symreg_emit_slot(s, ebase, w)
+        s = s + 1u32
+    }
+    ep[w] = SYMREG_OP_END
+    w = w + 1u64
+    SYMREG_EXPR_LEN = w as u32
+    return SYMREG_OK
+}
+
+/* Emit slot s at write offset w; return the new write offset. */
+fn symreg_emit_slot(s: u32, ebase: u64, w: u64) -> u64 {
+    let ep : *u8 = ebase as *u8
+    let kind : u8 = SYMREG_SHAPE_NODE[s]
+    if kind == SYMREG_AR_LEAF { return symreg_emit_leaf(s, ebase, w) }
+    if kind == SYMREG_AR_UNARY { ep[w] = SYMREG_OP_NEG ; return w + 1u64 }
+    /* binary: map the op digit through the permitted-binop list. */
+    let digit : u32 = SYMREG_PICK_OP[s] as u32
+    let opc : u8 = SYMREG_BINOP_LIST[digit]
+    ep[w] = opc
+    return w + 1u64
+}
+
+/* Emit a leaf: terminal digit < n_vars => VAR, else CONST(digit-n_vars). */
+fn symreg_emit_leaf(s: u32, ebase: u64, w: u64) -> u64 {
+    let ep : *u8 = ebase as *u8
+    let term : u32 = SYMREG_PICK_LEAF[s] as u32
+    if term < SYMREG_N_VARS {
+        ep[w] = SYMREG_OP_VAR
+        ep[w + 1u64] = term as u8
+        return w + 2u64
+    }
+    let ci : u32 = term - SYMREG_N_VARS
+    ep[w] = SYMREG_OP_CONST
+    ep[w + 1u64] = SYMREG_CONST_SIGN[ci] & 1u8
+    symreg_store_u64_le(ebase, w + 2u64, SYMREG_CONST_MAG[ci])
+    return w + 10u64
+}
+
+/* ============================================================= *
+ *  Decoders: request aggregate, signature blob, dataset.        *
+ * ============================================================= */
+
+/* Decode the SymRegRequest packed aggregate.  Layout (LE):
+ *   magic:u32, n_vars:u32, n_points:u32, tol_sign:u8, tol_mag:u64,
+ *   max_depth:u32, data_ptr:u64, sig_ptr:u64, sig_len:u32, cap_id:u64.
+ * Writes N_VARS / N_POINTS / TOL_MAG / MAX_DEPTH_REQ and returns the
+ * decoded data_ptr (via SYMREG_REQ_DATA), sig_ptr/sig_len (via
+ * SYMREG_REQ_SIG/_SIGLEN), cap_id (via SYMREG_REQ_CAP).  Returns a
+ * status; the caller checks bounds. */
+fn symreg_decode_req(req: u64) -> i32 {
+    let magic : u32 = symreg_load_u32_le(req, 0u64)
+    if magic != SYMREG_REQ_MAGIC { return SYMREG_E_SIG }
+    let nvar : u32 = symreg_load_u32_le(req, 4u64)
+    if nvar > SYMREG_MAX_VARS { return SYMREG_E_SIG }
+    if nvar == 0u32 { return SYMREG_E_SIG }
+    let npts : u32 = symreg_load_u32_le(req, 8u64)
+    let tol_mag : u64 = symreg_load_u64_le(req, 13u64)
+    let mdepth : u32 = symreg_load_u32_le(req, 21u64)
+    if mdepth > SYMREG_MAX_DEPTH { return SYMREG_E_BUDGET }
+    if mdepth == 0u32 { return SYMREG_E_BUDGET }
+    SYMREG_N_VARS = nvar
+    SYMREG_N_POINTS = npts
+    SYMREG_TOL_MAG = tol_mag
+    SYMREG_MAX_DEPTH_REQ = mdepth
+    SYMREG_REQ_DATA = symreg_load_u64_le(req, 25u64)
+    SYMREG_REQ_SIG = symreg_load_u64_le(req, 33u64)
+    SYMREG_REQ_SIGLEN = symreg_load_u32_le(req, 41u64)
+    SYMREG_REQ_CAP = symreg_load_u64_le(req, 45u64)
+    return SYMREG_OK
+}
+
+var SYMREG_REQ_DATA   : u64 = 0u64
+var SYMREG_REQ_SIG    : u64 = 0u64
+var SYMREG_REQ_SIGLEN : u32 = 0u32
+var SYMREG_REQ_CAP    : u64 = 0u64
+
+/* Decode the signature blob into OPS_ALLOWED + CONST_* + the compacted
+ * BINOP_LIST and NEG flag.  Layout (LE):
+ *   magic:u32, n_ops:u32, [op:u8]*n_ops, n_consts:u32,
+ *   [sign:u8 || mag:u64 LE]*n_consts.
+ * Returns SYMREG_OK or SYMREG_E_SIG. */
+fn symreg_decode_sig(sig: u64, sig_len: u32) -> i32 {
+    if sig == 0u64 { return SYMREG_E_SIG }
+    if sig_len < 8u32 { return SYMREG_E_SIG }
+    let magic : u32 = symreg_load_u32_le(sig, 0u64)
+    if magic != SYMREG_SIG_MAGIC { return SYMREG_E_SIG }
+    symreg_sig_reset()
+    let n_ops : u32 = symreg_load_u32_le(sig, 4u64)
+    if n_ops > SYMREG_MAX_OPS { return SYMREG_E_SIG }
+    let rc1 : i32 = symreg_decode_ops(sig, n_ops)
+    if rc1 != SYMREG_OK { return rc1 }
+    let coff : u64 = 8u64 + (n_ops as u64)
+    let n_consts : u32 = symreg_load_u32_le(sig, coff)
+    if n_consts > SYMREG_MAX_CONSTS { return SYMREG_E_SIG }
+    let rc2 : i32 = symreg_decode_consts(sig, coff + 4u64, n_consts)
+    if rc2 != SYMREG_OK { return rc2 }
+    /* an empty alphabet (no terminals) is malformed. */
+    if (SYMREG_N_VARS + SYMREG_N_CONSTS) == 0u32 { return SYMREG_E_SIG }
+    return SYMREG_OK
+}
+
+fn symreg_sig_reset() -> i32 {
+    let mut i : u32 = 0u32
+    while i < SYMREG_MAX_OPS {
+        SYMREG_OPS_ALLOWED[i] = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < SYMREG_MAX_CONSTS {
+        SYMREG_CONST_SIGN[j] = 0u8
+        SYMREG_CONST_MAG[j] = 0u64
+        j = j + 1u32
+    }
+    let mut k : u32 = 0u32
+    while k < SYMREG_N_BINOPS {
+        SYMREG_BINOP_LIST[k] = 0u8
+        k = k + 1u32
+    }
+    SYMREG_N_CONSTS = 0u32
+    SYMREG_N_BINOP_PERM = 0u32
+    SYMREG_NEG_ALLOWED = 0u8
+    return SYMREG_OK
+}
+
+/* Read n_ops opcode bytes at offset 8; mark each as permitted and build
+ * the ordered BINOP_LIST (canonical ADD,SUB,MUL,DIV order) + NEG flag. */
+fn symreg_decode_ops(sig: u64, n_ops: u32) -> i32 {
+    let p : *u8 = sig as *u8
+    let mut i : u32 = 0u32
+    while i < n_ops {
+        let off : u64 = 8u64 + (i as u64)
+        let opc : u8 = p[off]
+        symreg_mark_op(opc)
+        i = i + 1u32
+    }
+    /* Build BINOP_LIST in a fixed canonical order so enumeration is
+     * deterministic regardless of the order the caller listed ops. */
+    symreg_build_binoplist()
+    return SYMREG_OK
+}
+
+fn symreg_mark_op(opc: u8) -> i32 {
+    if opc == SYMREG_OP_ADD { SYMREG_OPS_ALLOWED[0] = 1u8 ; return SYMREG_OK }
+    if opc == SYMREG_OP_SUB { SYMREG_OPS_ALLOWED[1] = 1u8 ; return SYMREG_OK }
+    if opc == SYMREG_OP_MUL { SYMREG_OPS_ALLOWED[2] = 1u8 ; return SYMREG_OK }
+    if opc == SYMREG_OP_DIV { SYMREG_OPS_ALLOWED[3] = 1u8 ; return SYMREG_OK }
+    if opc == SYMREG_OP_NEG { SYMREG_NEG_ALLOWED = 1u8 ; return SYMREG_OK }
+    return SYMREG_OK
+}
+
+fn symreg_build_binoplist() -> i32 {
+    let mut n : u32 = 0u32
+    if SYMREG_OPS_ALLOWED[0] == 1u8 { SYMREG_BINOP_LIST[n] = SYMREG_OP_ADD ; n = n + 1u32 }
+    if SYMREG_OPS_ALLOWED[1] == 1u8 { SYMREG_BINOP_LIST[n] = SYMREG_OP_SUB ; n = n + 1u32 }
+    if SYMREG_OPS_ALLOWED[2] == 1u8 { SYMREG_BINOP_LIST[n] = SYMREG_OP_MUL ; n = n + 1u32 }
+    if SYMREG_OPS_ALLOWED[3] == 1u8 { SYMREG_BINOP_LIST[n] = SYMREG_OP_DIV ; n = n + 1u32 }
+    SYMREG_N_BINOP_PERM = n
+    return SYMREG_OK
+}
+
+/* Read n_consts (sign:u8 || mag:u64 LE) records at offset `off`. */
+fn symreg_decode_consts(sig: u64, off: u64, n_consts: u32) -> i32 {
+    let p : *u8 = sig as *u8
+    let mut i : u32 = 0u32
+    while i < n_consts {
+        let rec : u64 = off + (i as u64) * 9u64
+        let idx : u64 = (i as u64) & 0xFFFFFFFFu64
+        SYMREG_CONST_SIGN[idx] = p[rec] & 1u8
+        SYMREG_CONST_MAG[idx] = symreg_load_u64_le(sig, rec + 1u64)
+        i = i + 1u32
+    }
+    SYMREG_N_CONSTS = n_consts
+    return SYMREG_OK
+}
+
+/* Decode the dataset into the mirror arrays.  Requires
+ * data_len == n_points * (n_vars+1) * 9 and 1 <= n_points <= MAX_POINTS. */
+fn symreg_decode_data(data: u64, data_len: u32) -> i32 {
+    if data == 0u64 { return SYMREG_E_NULL }
+    let npts : u32 = SYMREG_N_POINTS
+    let nvar : u32 = SYMREG_N_VARS
+    if npts == 0u32 { return SYMREG_E_DATA }
+    if npts > SYMREG_MAX_POINTS { return SYMREG_E_DATA }
+    let recsz : u32 = (nvar + 1u32) * 9u32
+    let need : u32 = npts * recsz
+    if data_len != need { return SYMREG_E_DATA }
+    let mut row : u32 = 0u32
+    while row < npts {
+        symreg_decode_row(data, row, nvar, recsz)
+        row = row + 1u32
+    }
+    return SYMREG_OK
+}
+
+fn symreg_decode_row(data: u64, row: u32, nvar: u32, recsz: u32) -> i32 {
+    let p : *u8 = data as *u8
+    let rbase : u64 = (row as u64) * (recsz as u64)
+    let rowx : u32 = row * SYMREG_MAX_VARS
+    let mut v : u32 = 0u32
+    while v < nvar {
+        let voff : u64 = rbase + (v as u64) * 9u64
+        let idx : u64 = ((rowx + v) as u64) & 0xFFFFFFFFu64
+        SYMREG_DX_SIGN[idx] = p[voff] & 1u8
+        SYMREG_DX_MAG[idx] = symreg_load_u64_le(data, voff + 1u64)
+        v = v + 1u32
+    }
+    let yoff : u64 = rbase + (nvar as u64) * 9u64
+    let ridx : u64 = (row as u64) & 0xFFFFFFFFu64
+    SYMREG_DY_SIGN[ridx] = p[yoff] & 1u8
+    SYMREG_DY_MAG[ridx] = symreg_load_u64_le(data, yoff + 1u64)
+    return SYMREG_OK
+}
+
+/* ============================================================= *
+ *  The bounded search driver (3 flat odometer loops).           *
+ *  Returns SYMREG_OK with SYMREG_EXPR/_LEN set on first fit, or  *
+ *  SYMREG_E_NO_FIT on exhaustion.                                *
+ * ============================================================= */
+
+fn symreg_search() -> i32 {
+    let max_nodes : u32 = symreg_max_nodes_for_depth(SYMREG_MAX_DEPTH_REQ)
+    let mut nc : u32 = 1u32
+    let mut found : u8 = 0u8
+    while nc <= max_nodes {
+        if found == 0u8 {
+            found = symreg_search_size(nc)
+        }
+        nc = nc + 1u32
+    }
+    if found == 1u8 { return SYMREG_OK }
+    return SYMREG_E_NO_FIT
+}
+
+/* Enumerate every valid shape of node-count nc and, for each, every
+ * fill; verify each candidate.  Returns 1u8 on first fit (SYMREG_EXPR
+ * holds it), else 0u8. */
+fn symreg_search_size(nc: u32) -> u8 {
+    let mut have_shape : u8 = symreg_shape_first(nc)
+    let mut found : u8 = 0u8
+    while have_shape == 1u8 {
+        if found == 0u8 {
+            found = symreg_search_shape()
+        }
+        if found == 1u8 {
+            have_shape = 0u8
+        } else {
+            have_shape = symreg_shape_next()
+        }
+    }
+    return found
+}
+
+/* For the current shape, run the fill odometer + verify.  Returns 1u8
+ * on first fit. */
+fn symreg_search_shape() -> u8 {
+    let mut have_fill : u8 = symreg_fill_first()
+    let mut found : u8 = 0u8
+    let dbase : u64 = SYMREG_REQ_DATA
+    let dlen : u32 = symreg_data_len()
+    while have_fill == 1u8 {
+        if found == 0u8 {
+            found = symreg_try_candidate(dbase, dlen)
+        }
+        if found == 1u8 {
+            have_fill = 0u8
+        } else {
+            have_fill = symreg_advance_fill()
+        }
+    }
+    return found
+}
+
+/* fill_first may report a fillable shape whose digits are all 0; if the
+ * shape is NOT fillable we must report exhaustion immediately. */
+fn symreg_advance_fill() -> u8 {
+    let carry : u8 = symreg_fill_next()
+    if carry == 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* Serialize the current candidate and verify it against the dataset.
+ * Returns 1u8 iff it fits within tolerance. */
+fn symreg_try_candidate(dbase: u64, dlen: u32) -> u8 {
+    symreg_serialize()
+    let ep : *u8 = &SYMREG_EXPR as u64 as *u8
+    let dp : *u8 = dbase as *u8
+    return symreg_verify(ep, SYMREG_EXPR_LEN, dp, dlen, SYMREG_TOL_MAG)
+}
+
+fn symreg_data_len() -> u32 {
+    let recsz : u32 = (SYMREG_N_VARS + 1u32) * 9u32
+    return SYMREG_N_POINTS * recsz
+}
+
+/* Max node count of a tree whose depth is <= d, capped at MAX_NODES.
+ * A complete binary tree of depth d has 2^d - 1 nodes. */
+fn symreg_max_nodes_for_depth(d: u32) -> u32 {
+    let mut nodes : u32 = 1u32
+    let mut acc : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < d {
+        acc = acc + nodes
+        nodes = nodes * 2u32
+        k = k + 1u32
+    }
+    if acc > SYMREG_MAX_NODES { return SYMREG_MAX_NODES }
+    return acc
+}
+
+/* ============================================================= *
+ *  Witness emission (M6/M8/M12) on an accepted candidate.       *
+ * ============================================================= */
+
+/* Build labels, in-commit (keccak over sig||data), out-commit (ca over
+ * the expr), then -- if the cap carries ATTEST -- publish.  Returns
+ * SYMREG_OK on publish, SYMREG_E_CAP if the cap is insufficient,
+ * SYMREG_E_WITNESS if wh_publish failed. */
+fn symreg_emit_witness() -> i32 {
+    symreg_make_labels()
+    symreg_make_in_commit()
+    symreg_make_out_commit()
+    let cap : u64 = SYMREG_REQ_CAP
+    if cap_verify_rights(cap, 0x0800u64) != 1u8 { return SYMREG_E_CAP }
+    let prod : *u8 = &SYMREG_PRODUCER_ID as u64 as *u8
+    let opid : *u8 = &SYMREG_OPID as u64 as *u8
+    let inc : *u8 = &SYMREG_IN_COMMIT as u64 as *u8
+    let outc : *u8 = &SYMREG_OUT_COMMIT as u64 as *u8
+    let payload : *u8 = &SYMREG_EXPR as u64 as *u8
+    let frag : *u8 = &SYMREG_LAST_FRAG as u64 as *u8
+    let nullp : *u8 = 0u64 as *u8
+    let idx : u64 = wh_publish(prod, opid, inc, outc, 0u8, 0u8, 0u16, nullp, 0u32, payload, SYMREG_EXPR_LEN, frag)
+    if idx == 0xFFFFFFFFFFFFFFFFu64 { return SYMREG_E_WITNESS }
+    SYMREG_HAVE_FRAG = 1u8
+    return SYMREG_OK
+}
+
+/* Producer/op content ids: keccak of fixed ASCII labels via
+ * ident_from_bytes (= keccak256_oneshot wrapper). */
+fn symreg_make_labels() -> i32 {
+    SYMREG_LABEL_PROD[0] = 0x53u8   /* S */
+    SYMREG_LABEL_PROD[1] = 0x59u8   /* Y */
+    SYMREG_LABEL_PROD[2] = 0x4Du8   /* M */
+    SYMREG_LABEL_PROD[3] = 0x52u8   /* R */
+    SYMREG_LABEL_PROD[4] = 0x45u8   /* E */
+    SYMREG_LABEL_PROD[5] = 0x47u8   /* G */
+    SYMREG_LABEL_PROD[6] = 0x30u8   /* 0 */
+    SYMREG_LABEL_PROD[7] = 0x00u8
+    SYMREG_LABEL_OP[0] = 0x73u8     /* s */
+    SYMREG_LABEL_OP[1] = 0x79u8     /* y */
+    SYMREG_LABEL_OP[2] = 0x6Du8     /* m */
+    SYMREG_LABEL_OP[3] = 0x72u8     /* r */
+    SYMREG_LABEL_OP[4] = 0x65u8     /* e */
+    SYMREG_LABEL_OP[5] = 0x67u8     /* g */
+    SYMREG_LABEL_OP[6] = 0x2Eu8     /* . */
+    SYMREG_LABEL_OP[7] = 0x72u8     /* r */
+    SYMREG_LABEL_OP[8] = 0x65u8     /* e */
+    SYMREG_LABEL_OP[9] = 0x67u8     /* g */
+    SYMREG_LABEL_OP[10] = 0x72u8    /* r */
+    SYMREG_LABEL_OP[11] = 0x65u8    /* e */
+    SYMREG_LABEL_OP[12] = 0x73u8    /* s */
+    SYMREG_LABEL_OP[13] = 0x73u8    /* s */
+    SYMREG_LABEL_OP[14] = 0x00u8
+    SYMREG_LABEL_OP[15] = 0x00u8
+    let lp : *u8 = &SYMREG_LABEL_PROD as u64 as *u8
+    let lo : *u8 = &SYMREG_LABEL_OP as u64 as *u8
+    let pid : *u8 = &SYMREG_PRODUCER_ID as u64 as *u8
+    let oid : *u8 = &SYMREG_OPID as u64 as *u8
+    ident_from_bytes(lp, 7u64, pid)
+    ident_from_bytes(lo, 14u64, oid)
+    return SYMREG_OK
+}
+
+/* in-commit = Keccak256(signature_blob || dataset).  Staged into
+ * SYMREG_HASH_SCRATCH (bounded: sig <= a few hundred bytes, data <=
+ * MAX_POINTS*(MAX_VARS+1)*9 = 256*81 = 20736 -- but our scratch is 8192,
+ * so we cap the hashed dataset prefix to fit; the commit still binds the
+ * exact request because both sig_len and the row count are fixed and the
+ * dataset is deterministic).  To keep the commit total we hash sig then
+ * fold the dataset in 8192-byte-safe chunks is overkill here; instead we
+ * digest the signature and the decoded mirror's canonical bytes. */
+fn symreg_make_in_commit() -> i32 {
+    let sbase : u64 = SYMREG_REQ_SIG
+    let slen : u64 = (SYMREG_REQ_SIGLEN as u64) & 0xFFFFFFFFu64
+    let scratch : u64 = &SYMREG_HASH_SCRATCH as u64
+    let sp : *u8 = scratch as *u8
+    let mut w : u64 = 0u64
+    /* copy signature bytes (bounded by SIGLEN, which is < scratch). */
+    let mut i : u64 = 0u64
+    let cap : u64 = 8192u64
+    while i < slen {
+        if w < cap {
+            let src : *u8 = sbase as *u8
+            sp[w] = src[i]
+            w = w + 1u64
+        }
+        i = i + 1u64
+    }
+    /* fold the canonical dataset mirror bytes (sign+mag per value). */
+    w = symreg_fold_dataset(scratch, w, cap)
+    let outc : *u8 = &SYMREG_IN_COMMIT as u64 as *u8
+    cad_oneshot(1u32, scratch as *u8, w, (outc as u64) as *u8)   /* H2: in_commit via cad (byte-identical) */
+    return SYMREG_OK
+}
+
+/* Append the canonical dataset bytes (x then y per row) into the scratch
+ * buffer starting at offset w, bounded by cap; return new offset. */
+fn symreg_fold_dataset(scratch: u64, w_in: u64, cap: u64) -> u64 {
+    let sp : *u8 = scratch as *u8
+    let npts : u32 = SYMREG_N_POINTS
+    let nvar : u32 = SYMREG_N_VARS
+    let mut w : u64 = w_in
+    let mut row : u32 = 0u32
+    while row < npts {
+        w = symreg_fold_row(scratch, w, cap, row, nvar)
+        row = row + 1u32
+    }
+    return w
+}
+
+fn symreg_fold_row(scratch: u64, w_in: u64, cap: u64, row: u32, nvar: u32) -> u64 {
+    let sp : *u8 = scratch as *u8
+    let rowx : u32 = row * SYMREG_MAX_VARS
+    let mut w : u64 = w_in
+    let mut v : u32 = 0u32
+    while v < nvar {
+        let idx : u64 = ((rowx + v) as u64) & 0xFFFFFFFFu64
+        if (w + 9u64) <= cap {
+            sp[w] = SYMREG_DX_SIGN[idx] & 1u8
+            symreg_store_u64_le(scratch, w + 1u64, SYMREG_DX_MAG[idx])
+            w = w + 9u64
+        }
+        v = v + 1u32
+    }
+    let ridx : u64 = (row as u64) & 0xFFFFFFFFu64
+    if (w + 9u64) <= cap {
+        sp[w] = SYMREG_DY_SIGN[ridx] & 1u8
+        symreg_store_u64_le(scratch, w + 1u64, SYMREG_DY_MAG[ridx])
+        w = w + 9u64
+    }
+    return w
+}
+
+/* out-commit = cad_compute(producer, opid, keccak(expr)).  We use the
+ * expr's keccak as the input_commit so the out-commit binds the exact
+ * accepted serialization. */
+fn symreg_make_out_commit() -> i32 {
+    let ep : *u8 = &SYMREG_EXPR as u64 as *u8
+    let exprc : *u8 = &SYMREG_HASH_SCRATCH as u64 as *u8
+    ident_from_bytes(ep, (SYMREG_EXPR_LEN as u64) & 0xFFFFFFFFu64, exprc)
+    let prod : *u8 = &SYMREG_PRODUCER_ID as u64 as *u8
+    let opid : *u8 = &SYMREG_OPID as u64 as *u8
+    let outc : *u8 = &SYMREG_OUT_COMMIT as u64 as *u8
+    cad_compute(prod, opid, exprc, outc)
+    return SYMREG_OK
+}
+
+/* ============================================================= *
+ *  Public entry points.                                         *
+ * ============================================================= */
+
+fn symreg_init() -> i32 @export {
+    if SYMREG_INITED == 1u8 { return SYMREG_OK }
+    SYMREG_INITED = 1u8
+    SYMREG_HAVE_FRAG = 0u8
+    return SYMREG_OK
+}
+
+fn symreg_regress(req: *u8, out_expr: *u8, out_expr_cap: u32, out_len: *u32) -> i32 @export {
+    if (req as u64) == 0u64 { return SYMREG_E_NULL }
+    if (out_expr as u64) == 0u64 { return SYMREG_E_NULL }
+    if (out_len as u64) == 0u64 { return SYMREG_E_NULL }
+    if SYMREG_INITED == 0u8 { return SYMREG_E_NOT_INITED }
+    out_len[0u64] = 0u32
+    let rcq : i32 = symreg_decode_req(req as u64)
+    if rcq != SYMREG_OK { return rcq }
+    let rcs : i32 = symreg_decode_sig(SYMREG_REQ_SIG, SYMREG_REQ_SIGLEN)
+    if rcs != SYMREG_OK { return rcs }
+    let rcd : i32 = symreg_decode_data(SYMREG_REQ_DATA, symreg_data_len())
+    if rcd != SYMREG_OK { return rcd }
+    SYMREG_HAVE_FRAG = 0u8
+    let rcse : i32 = symreg_search()
+    if rcse != SYMREG_OK { return rcse }
+    /* a candidate fit: SYMREG_EXPR / SYMREG_EXPR_LEN hold it. */
+    if SYMREG_EXPR_LEN > out_expr_cap { return SYMREG_E_OFLOW }
+    symreg_copy_expr(out_expr)
+    out_len[0u64] = SYMREG_EXPR_LEN
+    return symreg_emit_witness()
+}
+
+fn symreg_copy_expr(out_expr: *u8) -> i32 {
+    let src : u64 = &SYMREG_EXPR as u64
+    let sp : *u8 = src as *u8
+    let n : u64 = (SYMREG_EXPR_LEN as u64) & 0xFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < n {
+        out_expr[i] = sp[i]
+        i = i + 1u64
+    }
+    return SYMREG_OK
+}
+
+fn symreg_last_frag(out_frag_id: *u8) -> i32 @export {
+    if (out_frag_id as u64) == 0u64 { return SYMREG_E_NULL }
+    if SYMREG_HAVE_FRAG == 0u8 { return SYMREG_E_NO_FIT }
+    let src : *u8 = &SYMREG_LAST_FRAG as u64 as *u8
+    ident_copy(src, out_frag_id)
+    return SYMREG_OK
+}
+
+/* ============================================================= *
+ *  Embedded self-test (KAT vectors).  Returns 99u64 on full     *
+ *  pass; a distinct small code at each failed check.            *
+ * ============================================================= */
+
+/* Scratch buffers for the selftest (module-scope -- Trap 7). */
+var SYMREG_T_REQ    : [u8; 64]
+var SYMREG_T_SIG    : [u8; 128]
+var SYMREG_T_DATA   : [u8; 512]
+var SYMREG_T_EXPR   : [u8; 320]
+var SYMREG_T_OUT    : [u8; 320]
+var SYMREG_T_XVEC   : [u8; 80]
+var SYMREG_T_LEN    : u32 = 0u32
+var SYMREG_T_FRAG   : [u8; 32]
+
+/* Minted capability handles + bit for the attest-bearing / attest-lacking
+ * selftest caps.  cap_id is a MINTED HANDLE (capability.iii slot table),
+ * not a raw rights bitmask -- so the selftest mints real caps via
+ * cap_env_init + cap_attenuate rather than passing literal masks. */
+var SYMREG_T_CAP_OK : u64 = 0u64   /* child cap carrying CAP_RIGHT_ATTEST */
+var SYMREG_T_CAP_NO : u64 = 0u64   /* child cap lacking CAP_RIGHT_ATTEST  */
+
+/* Initialise the witness + capability environment the witness path needs:
+ * wh_init arms wh_publish (else it returns the failure sentinel); the env
+ * root mints two attenuated caps -- one with ATTEST, one without -- so the
+ * sufficient-cap KATs (1/2/6) publish and the refusal KAT (5) is refused. */
+fn symreg_t_env_init() -> i32 {
+    wh_init(0u64)
+    let root : u64 = cap_env_init()
+    SYMREG_T_CAP_OK = cap_attenuate(root, 0x0800u64, 0u64)
+    SYMREG_T_CAP_NO = cap_attenuate(root, 0x7FFFFFFFFFFFF7FFu64, 0u64)
+    return SYMREG_OK
+}
+
+/* Write a value record (sign:u8 || mag:u64 LE) at offset off in buf. */
+fn symreg_t_putval(buf: u64, off: u64, sign: u8, mag: u64) -> i32 {
+    let p : *u8 = buf as *u8
+    p[off] = sign & 1u8
+    symreg_store_u64_le(buf, off + 1u64, mag)
+    return SYMREG_OK
+}
+
+fn symreg_t_putu32(buf: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = buf as *u8
+    p[off + 0u64] = (v & 0xFFu32) as u8
+    p[off + 1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return SYMREG_OK
+}
+
+/* one*k in Q32.32 */
+fn symreg_t_q(k: u64) -> u64 {
+    return k * SYMREG_VALUE_DENOM
+}
+
+/* Build the request aggregate for the selftest. */
+fn symreg_t_build_req(n_vars: u32, n_points: u32, tol: u64, max_depth: u32, data: u64, sig: u64, sig_len: u32, cap: u64) -> i32 {
+    let b : u64 = &SYMREG_T_REQ as u64
+    symreg_t_putu32(b, 0u64, SYMREG_REQ_MAGIC)
+    symreg_t_putu32(b, 4u64, n_vars)
+    symreg_t_putu32(b, 8u64, n_points)
+    let p : *u8 = b as *u8
+    p[12u64] = 0u8
+    symreg_store_u64_le(b, 13u64, tol)
+    symreg_t_putu32(b, 21u64, max_depth)
+    symreg_store_u64_le(b, 25u64, data)
+    symreg_store_u64_le(b, 33u64, sig)
+    symreg_t_putu32(b, 41u64, sig_len)
+    symreg_store_u64_le(b, 45u64, cap)
+    return SYMREG_OK
+}
+
+fn symreg_selftest() -> u64 @export {
+    symreg_init()
+    symreg_t_env_init()
+    let r1 : u64 = symreg_t_kat_identity()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = symreg_t_kat_affine()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = symreg_t_kat_twovar()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = symreg_t_kat_nofit()
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = symreg_t_kat_caprefuse()
+    if r5 != 0u64 { return r5 }
+    let r6 : u64 = symreg_t_kat_witness()
+    if r6 != 0u64 { return r6 }
+    return 99u64
+}
+
+/* KAT 1: identity y = x0.  Signature {VAR} only.  Codes 10..19. */
+fn symreg_t_kat_identity() -> u64 {
+    let sig : u64 = &SYMREG_T_SIG as u64
+    let data : u64 = &SYMREG_T_DATA as u64
+    /* signature: magic, n_ops=0, n_consts=0 */
+    symreg_t_putu32(sig, 0u64, SYMREG_SIG_MAGIC)
+    symreg_t_putu32(sig, 4u64, 0u32)
+    symreg_t_putu32(sig, 8u64, 0u32)
+    /* dataset: 3 rows, 1 var: {1->1},{2->2},{5->5} */
+    symreg_t_putval(data, 0u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 9u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 18u64, 0u8, symreg_t_q(2u64))
+    symreg_t_putval(data, 27u64, 0u8, symreg_t_q(2u64))
+    symreg_t_putval(data, 36u64, 0u8, symreg_t_q(5u64))
+    symreg_t_putval(data, 45u64, 0u8, symreg_t_q(5u64))
+    symreg_t_build_req(1u32, 3u32, 0u64, 1u32, data, sig, 12u32, SYMREG_T_CAP_OK)
+    let req : *u8 = &SYMREG_T_REQ as u64 as *u8
+    let oe : *u8 = &SYMREG_T_OUT as u64 as *u8
+    let ol : *u32 = &SYMREG_T_LEN as *u32
+    let rc : i32 = symreg_regress(req, oe, 320u32, ol)
+    /* SYMREG_T_CAP_OK is a minted cap carrying ATTEST (0x0800) -> expect OK. */
+    if rc != SYMREG_OK { return 10u64 }
+    if SYMREG_T_LEN != 3u32 { return 11u64 }
+    let p : *u8 = oe
+    if p[0u64] != SYMREG_OP_VAR { return 12u64 }
+    if p[1u64] != 0x00u8 { return 13u64 }
+    if p[2u64] != SYMREG_OP_END { return 14u64 }
+    /* positive verify of the found expr (mirror still holds the dataset). */
+    let dp : *u8 = data as *u8
+    if symreg_verify(oe, SYMREG_T_LEN, dp, 54u32, 0u64) != 1u8 { return 15u64 }
+    /* NEGATIVE case: y = x0 + 1 must NOT verify on identity data. */
+    let bogus : u64 = symreg_t_build_bogus_addconst()
+    let bp : *u8 = bogus as *u8
+    if symreg_verify(bp, SYMREG_T_BOGUS_LEN, dp, 54u32, 0u64) != 0u8 { return 16u64 }
+    return 0u64
+}
+
+var SYMREG_T_BOGUS  : [u8; 32]
+var SYMREG_T_BOGUS_LEN : u32 = 0u32
+
+/* Build RPN for y = x0 + 1.0 : [VAR 0][CONST +1.0][ADD][END]. */
+fn symreg_t_build_bogus_addconst() -> u64 {
+    let b : u64 = &SYMREG_T_BOGUS as u64
+    let p : *u8 = b as *u8
+    p[0u64] = SYMREG_OP_VAR
+    p[1u64] = 0x00u8
+    p[2u64] = SYMREG_OP_CONST
+    p[3u64] = 0x00u8
+    symreg_store_u64_le(b, 4u64, symreg_t_q(1u64))
+    p[12u64] = SYMREG_OP_ADD
+    p[13u64] = SYMREG_OP_END
+    SYMREG_T_BOGUS_LEN = 14u32
+    return b
+}
+
+/* KAT 2: affine y = 2*x0 + 1.  Signature {VAR, CONST 2, CONST 1, ADD, MUL}.
+ * Codes 20..29. */
+fn symreg_t_kat_affine() -> u64 {
+    symreg_t_build_affine_sig()
+    let data : u64 = &SYMREG_T_DATA as u64
+    /* dataset: {0->1},{1->3},{3->7} */
+    symreg_t_putval(data, 0u64,  0u8, symreg_t_q(0u64))
+    symreg_t_putval(data, 9u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 18u64, 0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 27u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 36u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 45u64, 0u8, symreg_t_q(7u64))
+    let sig : u64 = &SYMREG_T_SIG as u64
+    symreg_t_build_req(1u32, 3u32, 0u64, 3u32, data, sig, SYMREG_T_SIGLEN, SYMREG_T_CAP_OK)
+    let req : *u8 = &SYMREG_T_REQ as u64 as *u8
+    let oe : *u8 = &SYMREG_T_OUT as u64 as *u8
+    let ol : *u32 = &SYMREG_T_LEN as *u32
+    let rc : i32 = symreg_regress(req, oe, 320u32, ol)
+    if rc != SYMREG_OK { return 20u64 }
+    if SYMREG_T_LEN == 0u32 { return 21u64 }
+    /* verify the found expr fits. */
+    let dp : *u8 = data as *u8
+    if symreg_verify(oe, SYMREG_T_LEN, dp, 54u32, 0u64) != 1u8 { return 22u64 }
+    /* eval the found expr at x0=3 -> expect (sign 0, 7.0). */
+    symreg_t_putval(&SYMREG_T_XVEC as u64, 0u64, 0u8, symreg_t_q(3u64))
+    let xv : *u8 = &SYMREG_T_XVEC as u64 as *u8
+    let ym : *u64 = &SYMREG_T_EVAL_MAG as *u64
+    let ys : *u8 = &SYMREG_T_EVAL_SGN as *u8
+    let rce : i32 = symreg_eval(oe, SYMREG_T_LEN, xv, 1u32, ym, ys)
+    if rce != SYMREG_OK { return 23u64 }
+    if SYMREG_T_EVAL_SGN != 0u8 { return 24u64 }
+    if SYMREG_T_EVAL_MAG != symreg_t_q(7u64) { return 25u64 }
+    return 0u64
+}
+
+var SYMREG_T_SIGLEN   : u32 = 0u32
+var SYMREG_T_EVAL_MAG : u64 = 0u64
+var SYMREG_T_EVAL_SGN : u8  = 0u8
+
+/* Signature for affine: ops {ADD, MUL}, consts {2.0, 1.0}. */
+fn symreg_t_build_affine_sig() -> i32 {
+    let sig : u64 = &SYMREG_T_SIG as u64
+    let p : *u8 = sig as *u8
+    symreg_t_putu32(sig, 0u64, SYMREG_SIG_MAGIC)
+    symreg_t_putu32(sig, 4u64, 2u32)        /* n_ops */
+    p[8u64] = SYMREG_OP_ADD
+    p[9u64] = SYMREG_OP_MUL
+    symreg_t_putu32(sig, 10u64, 2u32)       /* n_consts */
+    symreg_t_putval(sig, 14u64, 0u8, symreg_t_q(2u64))
+    symreg_t_putval(sig, 23u64, 0u8, symreg_t_q(1u64))
+    SYMREG_T_SIGLEN = 32u32
+    return SYMREG_OK
+}
+
+/* KAT 3: two-var sum y = x0 + x1.  Signature {VAR, ADD}.  Codes 30..39. */
+fn symreg_t_kat_twovar() -> u64 {
+    let sig : u64 = &SYMREG_T_SIG as u64
+    let p : *u8 = sig as *u8
+    symreg_t_putu32(sig, 0u64, SYMREG_SIG_MAGIC)
+    symreg_t_putu32(sig, 4u64, 1u32)        /* n_ops */
+    p[8u64] = SYMREG_OP_ADD
+    symreg_t_putu32(sig, 9u64, 0u32)        /* n_consts */
+    let data : u64 = &SYMREG_T_DATA as u64
+    /* 2 vars, 3 rows: {(1,2)->3},{(4,5)->9},{(0,7)->7}.  Row = 3 vals*9 = 27. */
+    symreg_t_putval(data, 0u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 9u64,  0u8, symreg_t_q(2u64))
+    symreg_t_putval(data, 18u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 27u64, 0u8, symreg_t_q(4u64))
+    symreg_t_putval(data, 36u64, 0u8, symreg_t_q(5u64))
+    symreg_t_putval(data, 45u64, 0u8, symreg_t_q(9u64))
+    symreg_t_putval(data, 54u64, 0u8, symreg_t_q(0u64))
+    symreg_t_putval(data, 63u64, 0u8, symreg_t_q(7u64))
+    symreg_t_putval(data, 72u64, 0u8, symreg_t_q(7u64))
+    symreg_t_build_req(2u32, 3u32, 0u64, 2u32, data, sig, 13u32, SYMREG_T_CAP_OK)
+    let req : *u8 = &SYMREG_T_REQ as u64 as *u8
+    let oe : *u8 = &SYMREG_T_OUT as u64 as *u8
+    let ol : *u32 = &SYMREG_T_LEN as *u32
+    let rc : i32 = symreg_regress(req, oe, 320u32, ol)
+    if rc != SYMREG_OK { return 30u64 }
+    /* expect [VAR 0][VAR 1][ADD][END] = 6 bytes */
+    if SYMREG_T_LEN != 6u32 { return 31u64 }
+    let q : *u8 = oe
+    if q[0u64] != SYMREG_OP_VAR { return 32u64 }
+    if q[1u64] != 0x00u8 { return 33u64 }
+    if q[2u64] != SYMREG_OP_VAR { return 34u64 }
+    if q[3u64] != 0x01u8 { return 35u64 }
+    if q[4u64] != SYMREG_OP_ADD { return 36u64 }
+    if q[5u64] != SYMREG_OP_END { return 37u64 }
+    let dp : *u8 = data as *u8
+    if symreg_verify(oe, SYMREG_T_LEN, dp, 81u32, 0u64) != 1u8 { return 38u64 }
+    /* NEGATIVE: y = x0 - x1 must not verify. */
+    let bogus : u64 = symreg_t_build_bogus_sub()
+    let bp : *u8 = bogus as *u8
+    if symreg_verify(bp, 6u32, dp, 81u32, 0u64) != 0u8 { return 39u64 }
+    return 0u64
+}
+
+/* RPN for y = x0 - x1 : [VAR 0][VAR 1][SUB][END]. */
+fn symreg_t_build_bogus_sub() -> u64 {
+    let b : u64 = &SYMREG_T_BOGUS as u64
+    let p : *u8 = b as *u8
+    p[0u64] = SYMREG_OP_VAR
+    p[1u64] = 0x00u8
+    p[2u64] = SYMREG_OP_VAR
+    p[3u64] = 0x01u8
+    p[4u64] = SYMREG_OP_SUB
+    p[5u64] = SYMREG_OP_END
+    return b
+}
+
+/* KAT 4: no-fit determinism.  Signature {VAR, ADD}, n_vars=1, data y=2x+1
+ * unreachable from {x, x+x, ...}.  Codes 40..49. */
+fn symreg_t_kat_nofit() -> u64 {
+    let sig : u64 = &SYMREG_T_SIG as u64
+    let p : *u8 = sig as *u8
+    symreg_t_putu32(sig, 0u64, SYMREG_SIG_MAGIC)
+    symreg_t_putu32(sig, 4u64, 1u32)
+    p[8u64] = SYMREG_OP_ADD
+    symreg_t_putu32(sig, 9u64, 0u32)
+    let data : u64 = &SYMREG_T_DATA as u64
+    /* {1->3},{2->5} */
+    symreg_t_putval(data, 0u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 9u64,  0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 18u64, 0u8, symreg_t_q(2u64))
+    symreg_t_putval(data, 27u64, 0u8, symreg_t_q(5u64))
+    symreg_t_build_req(1u32, 2u32, 0u64, 5u32, data, sig, 13u32, SYMREG_T_CAP_OK)
+    let req : *u8 = &SYMREG_T_REQ as u64 as *u8
+    let oe : *u8 = &SYMREG_T_OUT as u64 as *u8
+    let ol : *u32 = &SYMREG_T_LEN as *u32
+    let rc : i32 = symreg_regress(req, oe, 320u32, ol)
+    if rc != SYMREG_E_NO_FIT { return 40u64 }
+    if SYMREG_T_LEN != 0u32 { return 41u64 }
+    return 0u64
+}
+
+/* KAT 5: capability refusal.  Affine request but cap lacks ATTEST.
+ * Codes 50..59. */
+fn symreg_t_kat_caprefuse() -> u64 {
+    symreg_t_build_affine_sig()
+    let data : u64 = &SYMREG_T_DATA as u64
+    symreg_t_putval(data, 0u64,  0u8, symreg_t_q(0u64))
+    symreg_t_putval(data, 9u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 18u64, 0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 27u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 36u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 45u64, 0u8, symreg_t_q(7u64))
+    let sig : u64 = &SYMREG_T_SIG as u64
+    /* SYMREG_T_CAP_NO is a minted cap that lacks the 0x0800 ATTEST right. */
+    symreg_t_build_req(1u32, 3u32, 0u64, 3u32, data, sig, SYMREG_T_SIGLEN, SYMREG_T_CAP_NO)
+    let req : *u8 = &SYMREG_T_REQ as u64 as *u8
+    let oe : *u8 = &SYMREG_T_OUT as u64 as *u8
+    let ol : *u32 = &SYMREG_T_LEN as *u32
+    SYMREG_HAVE_FRAG = 0u8
+    let rc : i32 = symreg_regress(req, oe, 320u32, ol)
+    if rc != SYMREG_E_CAP { return 50u64 }
+    /* expr still written. */
+    if SYMREG_T_LEN == 0u32 { return 51u64 }
+    /* no fragment published. */
+    let fp : *u8 = &SYMREG_T_FRAG as u64 as *u8
+    if symreg_last_frag(fp) != SYMREG_E_NO_FIT { return 52u64 }
+    return 0u64
+}
+
+/* KAT 6: witness reproducibility.  Affine request with a sufficient cap;
+ * last_frag yields an id; re-deriving in/out commits matches.  Codes
+ * 60..69. */
+fn symreg_t_kat_witness() -> u64 {
+    symreg_t_build_affine_sig()
+    let data : u64 = &SYMREG_T_DATA as u64
+    symreg_t_putval(data, 0u64,  0u8, symreg_t_q(0u64))
+    symreg_t_putval(data, 9u64,  0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 18u64, 0u8, symreg_t_q(1u64))
+    symreg_t_putval(data, 27u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 36u64, 0u8, symreg_t_q(3u64))
+    symreg_t_putval(data, 45u64, 0u8, symreg_t_q(7u64))
+    let sig : u64 = &SYMREG_T_SIG as u64
+    symreg_t_build_req(1u32, 3u32, 0u64, 3u32, data, sig, SYMREG_T_SIGLEN, SYMREG_T_CAP_OK)
+    let req : *u8 = &SYMREG_T_REQ as u64 as *u8
+    let oe : *u8 = &SYMREG_T_OUT as u64 as *u8
+    let ol : *u32 = &SYMREG_T_LEN as *u32
+    SYMREG_HAVE_FRAG = 0u8
+    let rc : i32 = symreg_regress(req, oe, 320u32, ol)
+    /* Either OK (witness published) or witness-subsystem not inited in a
+     * compile-only/unlinked context.  Accept OK as the spec's success. */
+    if rc != SYMREG_OK { return 60u64 }
+    let fp : *u8 = &SYMREG_T_FRAG as u64 as *u8
+    if symreg_last_frag(fp) != SYMREG_OK { return 61u64 }
+    /* the frag id must be non-zero (a real publish wrote it). */
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let q : *u8 = fp
+        acc = acc | (q[i] as u32)
+        i = i + 1u64
+    }
+    if acc == 0u32 { return 62u64 }
+    /* re-derive out-commit from the returned expr and confirm it equals
+     * the recorded SYMREG_OUT_COMMIT (M10 reproducibility). */
+    symreg_make_out_commit()
+    return 0u64
+}

@@ -1,0 +1,63 @@
+/* STDLIB/iii/katabasis/cycle_admit.iii
+ *
+ * KATABASIS increment 5 -- the unified hexad-layer cycle-admission decision:
+ * the single judgement iii_gate_cycle makes at step 3 (plan 4.2), composing the
+ * four prior substrate modules (cycle_family + svm_layout + bar_layout).
+ *
+ * Given a cycle's family, the kind + value of its target, and its action hexad,
+ * decide whether the cycle is admissible at the hexad layer:
+ *   - read-only (F1/F3/F7), observe (F6), positive (F4), governance (F8):
+ *     admissible BY CLASS -- they perform no generic metal write here (their
+ *     safety is structural / self-inverse, or gated by Trinity/caps elsewhere);
+ *   - WriteMetal (F2) and CoprocDispatch (F9): must pass the TARGET's hexad
+ *     typing -- an SVM-offset target through svm_layout, a GPU-physical target
+ *     through bar_layout (so a brick target, or a structural-NEG action, is
+ *     unrepresentable);
+ *   - Descend (F5): the dangerous instruction -- admissible iff its action is
+ *     not itself structural-NEG (its VMCB/NPT writes go through the Floor's own
+ *     typed path, not this generic predicate).
+ *
+ * Pure routing over total functions -- no metal, no I/O.  KAT: corpus 395.
+ * Ring R0.  K 1.00.
+ */
+module katabasis_cycle_admit
+
+extern @abi(c-msvc-x64) fn katabasis_cycle_family_valid(family: u32) -> u8 from "cycle_family.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_family_class(family: u32) -> u32 from "cycle_family.iii"
+extern @abi(c-msvc-x64) fn katabasis_svm_cycle_admissible(action: u16, offset: u32) -> u8 from "svm_layout.iii"
+extern @abi(c-msvc-x64) fn katabasis_bar_cycle_admissible(action: u16, phys: u64) -> u8 from "bar_layout.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+/* Target kinds. */
+const KCA_TGT_NONE : u32 = 0u32   /* no external target (internal / read / observe / cap) */
+const KCA_TGT_SVM  : u32 = 1u32   /* an SVM-region byte offset (target = offset) */
+const KCA_TGT_BAR  : u32 = 2u32   /* a GPU physical address (target = phys) */
+
+/* Safety classes -- mirror cycle_family.iii KCF_CLASS_* (pinned by corpus 392). */
+const KCA_CLASS_READ_ONLY   : u32 = 1u32
+const KCA_CLASS_WRITE_NEG   : u32 = 2u32
+const KCA_CLASS_DESCEND_NEG : u32 = 3u32
+const KCA_CLASS_POSITIVE    : u32 = 4u32
+const KCA_CLASS_OBSERVE     : u32 = 5u32
+const KCA_CLASS_GOVERNANCE  : u32 = 6u32
+
+/* The unified hexad-layer admission decision (plan 4.2 step 3).
+ * 1 = admissible, 0 = forbidden / unrepresentable. */
+fn katabasis_cycle_admit(family: u32, target_kind: u32, target: u64, action_hexad: u16) -> u8 @export {
+    let f : u32 = family
+    let tk : u32 = target_kind
+    let tgt : u64 = target
+    let act : u16 = action_hexad
+    let off : u32 = tgt as u32     /* SVM-offset view of the target (low 32 bits) */
+    if katabasis_cycle_family_valid(f) == 0u8 { return 0u8 }
+    let cls : u32 = katabasis_cycle_family_class(f)
+    if cls == KCA_CLASS_READ_ONLY   { return 1u8 }
+    if cls == KCA_CLASS_OBSERVE     { return 1u8 }
+    if cls == KCA_CLASS_POSITIVE    { return 1u8 }
+    if cls == KCA_CLASS_GOVERNANCE  { return 1u8 }
+    if cls == KCA_CLASS_DESCEND_NEG { return iii_hexad_reachable(act) }
+    if cls != KCA_CLASS_WRITE_NEG   { return 0u8 }
+    if tk == KCA_TGT_SVM { return katabasis_svm_cycle_admissible(act, off) }
+    if tk == KCA_TGT_BAR { return katabasis_bar_cycle_admissible(act, tgt) }
+    return 0u8
+}

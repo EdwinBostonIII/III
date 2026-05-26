@@ -1,0 +1,55 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\269_iiis2_type_alias.iii
+ *
+ * III conformance corpus 269 -- iiis-2 feature 4: type-alias
+ * resolution for static type-system checks.
+ *
+ * When a TYPE_REF has no inline modifiers, the codegen now resolves
+ * the type's name to a TYPE_DECL in the module and checks the
+ * TYPE_DECL's modifiers (and its rhs_type's modifiers, single-level)
+ * for @hexad_kind / @cap_required / @k_max.  This closes the
+ * "first-class intent type" idiom from the iiis-1 architecture doc:
+ *
+ *     type IntentForm    = u64 @hexad_kind(1u64)
+ *     type IntentCompose = u64 @hexad_kind(6u64)
+ *     fn consume(x: IntentForm) -> u64 { ... }
+ *     let y : IntentForm = ...
+ *     consume(y)                  -- static check passes via alias
+ *
+ * Without alias resolution (iiis-1 behavior), the static check
+ * silently skipped this case because IntentForm's TYPE_REF had no
+ * INLINE modifiers.  With iiis-2's chase, the modifier flows from
+ * the TYPE_DECL → TYPE_REF → static check.
+ *
+ * Mandate 7 clean: structural name-lookup, no observation.
+ */
+module corpus_269
+
+/* Type aliases carrying hexad kind annotations. */
+type IntentForm = u64 @hexad_kind(1u64)
+type IntentCompose = u64 @hexad_kind(6u64)
+
+/* Param declared via alias instead of inline. */
+fn _consume_form(x: IntentForm) -> u64 {
+    return x + 0x1000u64
+}
+
+fn _consume_compose(x: IntentCompose) -> u64 {
+    return x + 0x6000u64
+}
+
+fn main() -> u64 {
+    /* Binding via alias.  Without alias chase: silently bypasses
+     * static check (no inline modifier).  With alias chase: alias
+     * resolves to TYPE_DECL with @hexad_kind(1u64).  Static check
+     * at the call site sees pkind=1 (from _consume_form's param
+     * alias) and akind=1 (from form's let alias) -> match. */
+    let form : IntentForm = 0x100u64
+    let r1 : u64 = _consume_form(form)
+    if r1 != 0x1100u64 { return 1u64 }
+
+    let comp : IntentCompose = 0x600u64
+    let r2 : u64 = _consume_compose(comp)
+    if r2 != 0x6600u64 { return 2u64 }
+
+    return 99u64
+}

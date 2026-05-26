@@ -1,0 +1,210 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fed_eclipse.iii
+ *
+ * III STDLIB - aether::fed_eclipse -- eclipse-attack detection via
+ * incremental set-hash divergence over the admitted peer set.
+ *
+ * Lattice plan Phase 14k Step 0190.
+ *
+ * Each node computes its own "peer-set fingerprint" as the XOR of
+ * SHA-256(peer_id) for every admitted peer.  This is order-independent
+ * (SHA-256 ⊕ is commutative & associative): two nodes with the same
+ * admitted set produce identical fingerprints regardless of admission
+ * order.  Two nodes with diverging sets produce fingerprints whose
+ * byte-wise difference grows roughly linearly with the number of
+ * differing peers (each differing peer flips ~16 of 32 bytes uniformly).
+ *
+ * Eclipse detection: a node periodically exchanges fingerprints with
+ * peers it trusts (e.g., over a sovereign-tier channel).  If the local
+ * fingerprint diverges significantly from the consensus expected
+ * fingerprint, the node may be eclipsed.
+ *
+ * Public surface:
+ *   fed_eclipse_compute_my_fingerprint(out_32)            -> i32
+ *   fed_eclipse_set_reference_fingerprint(in_32)          -> i32
+ *   fed_eclipse_byte_divergence()                         -> u32
+ *   fed_eclipse_default_threshold()                       -> u32
+ *   fed_eclipse_set_threshold(t)                          -> i32
+ *   fed_eclipse_threshold()                               -> u32
+ *   fed_eclipse_alarm()                                   -> u8
+ *   fed_eclipse_clear()                                   -> i32
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module aether_fed_eclipse
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_slot_live(slot: u32) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_peer_id_copy(slot: u32, out_32: u64) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_slots_max() -> u32 from "fed_sybil.iii"
+
+const FECL_OK             : i32 =  0i32
+const FECL_E_NULL         : i32 = -1i32
+const FECL_E_BADARG       : i32 = -2i32
+
+const FECL_DEFAULT_THRESH : u32 = 4u32
+
+var FECL_REFERENCE       : [u8; 32]
+var FECL_REFERENCE_SET   : u8 = 0u8
+var FECL_THRESHOLD       : u32 = 4u32
+
+/* Scratch buffers (not reentrant -- caller serializes). */
+var FECL_PEER_BUF  : [u8; 32]
+var FECL_HASH_BUF  : [u8; 32]
+var FECL_FINGER    : [u8; 32]
+
+/* XOR scratch for fed_eclipse_anomaly_check (Hamming-distance probe).
+ * Module-private; caller must serialize. */
+var ECLIPSE_XOR_SCRATCH : [u8; 32]
+
+fn fed_eclipse_default_threshold() -> u32 @export {
+    return FECL_DEFAULT_THRESH
+}
+
+fn fed_eclipse_threshold() -> u32 @export {
+    return FECL_THRESHOLD
+}
+
+fn fed_eclipse_set_threshold(t: u32) -> i32 @export {
+    let t_l : u32 = t
+    if t_l > 32u32 { return FECL_E_BADARG }
+    FECL_THRESHOLD = t_l
+    return FECL_OK
+}
+
+/* Compute fingerprint = XOR over all admitted peers of SHA-256(peer_id).
+ * Writes 32 bytes to out_32. */
+fn fed_eclipse_compute_my_fingerprint(out_32: u64) -> i32 @export {
+    let o_l : u64 = out_32
+    if o_l == 0u64 { return FECL_E_NULL }
+
+    /* Reset finger accumulator. */
+    let mut z : u32 = 0u32
+    while z < 32u32 {
+        FECL_FINGER[z] = 0u8
+        z = z + 1u32
+    }
+
+    let cap : u32 = fed_sybil_slots_max()
+    let mut s : u32 = 0u32
+    while s < cap {
+        if fed_sybil_slot_live(s) == 1u8 {
+            fed_sybil_peer_id_copy(s, &FECL_PEER_BUF as u64)
+            sha256_oneshot(&FECL_PEER_BUF as *u8, 32u64, &FECL_HASH_BUF as *u8)
+            let mut i : u32 = 0u32
+            while i < 32u32 {
+                FECL_FINGER[i] = FECL_FINGER[i] ^ FECL_HASH_BUF[i]
+                i = i + 1u32
+            }
+        }
+        s = s + 1u32
+    }
+
+    let dp : *u8 = o_l as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        dp[k] = FECL_FINGER[k]
+        k = k + 1u64
+    }
+    return FECL_OK
+}
+
+fn fed_eclipse_set_reference_fingerprint(in_32: u64) -> i32 @export {
+    let i_l : u64 = in_32
+    if i_l == 0u64 { return FECL_E_NULL }
+    let sp : *u8 = i_l as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        FECL_REFERENCE[k] = sp[k]
+        k = k + 1u64
+    }
+    FECL_REFERENCE_SET = 1u8
+    return FECL_OK
+}
+
+/* Returns count of differing bytes between FECL_FINGER (last computed
+ * local fingerprint) and FECL_REFERENCE.  Returns 0xFFFFFFFFu32 if no
+ * reference has been set. */
+fn fed_eclipse_byte_divergence() -> u32 @export {
+    if FECL_REFERENCE_SET == 0u8 { return 0xFFFFFFFFu32 }
+    let mut diff : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if FECL_FINGER[i] != FECL_REFERENCE[i] { diff = diff + 1u32 }
+        i = i + 1u32
+    }
+    return diff
+}
+
+/* Returns 1 iff local fingerprint diverges from reference by more
+ * than the configured threshold.  0 if no reference is set or
+ * divergence is within tolerance. */
+fn fed_eclipse_alarm() -> u8 @export {
+    if FECL_REFERENCE_SET == 0u8 { return 0u8 }
+    let d : u32 = fed_eclipse_byte_divergence()
+    if d > FECL_THRESHOLD { return 1u8 }
+    return 0u8
+}
+
+fn fed_eclipse_clear() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        FECL_REFERENCE[i] = 0u8
+        FECL_FINGER[i]    = 0u8
+        i = i + 1u32
+    }
+    FECL_REFERENCE_SET = 0u8
+    FECL_THRESHOLD     = FECL_DEFAULT_THRESH
+    return FECL_OK
+}
+
+/* Brian Kernighan popcount over a single byte.  Module-private.
+ * Each iteration clears the lowest set bit (x = x & (x - 1)) and
+ * increments the count.  Loop terminates when x reaches zero, so the
+ * total iterations equals the number of set bits.  Pure structural
+ * arithmetic -- no table, no statistics. */
+fn _eclipse_popcount8(x: u8) -> u32 {
+    let mut v : u8  = x
+    let mut c : u32 = 0u32
+    while v != 0u8 {
+        v = v & (v - 1u8)
+        c = c + 1u32
+    }
+    return c
+}
+
+/* Deterministic eclipse-attack probe.  Computes the Hamming distance
+ * (in bits) between two 32-byte peer-set fingerprints by XOR-ing them
+ * into ECLIPSE_XOR_SCRATCH and popcounting every byte.  Returns 1 iff
+ * the distance exceeds expected_overlap_bits (caller-supplied threshold
+ * derived at compile time from network-topology constants), 0 otherwise.
+ *
+ * Mandate 7: PURE STRUCTURAL comparison.  No statistical adaptation, no
+ * learning, no thresholds derived from observed traffic.  The threshold
+ * is a fixed compile-time constant chosen by the caller. */
+fn fed_eclipse_anomaly_check(local_fingerprint_ptr: u64, peer_fingerprint_ptr: u64, expected_overlap_bits: u32) -> u8 @export {
+    let l_l : u64 = local_fingerprint_ptr
+    let p_l : u64 = peer_fingerprint_ptr
+    let t_l : u32 = expected_overlap_bits
+    if l_l == 0u64 { return 0u8 }
+    if p_l == 0u64 { return 0u8 }
+
+    let lp : *u8 = l_l as *u8
+    let pp : *u8 = p_l as *u8
+
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        ECLIPSE_XOR_SCRATCH[i] = lp[i] ^ pp[i]
+        i = i + 1u64
+    }
+
+    let mut bits : u32 = 0u32
+    let mut j    : u64 = 0u64
+    while j < 32u64 {
+        bits = bits + _eclipse_popcount8(ECLIPSE_XOR_SCRATCH[j])
+        j = j + 1u64
+    }
+
+    if bits > t_l { return 1u8 }
+    return 0u8
+}

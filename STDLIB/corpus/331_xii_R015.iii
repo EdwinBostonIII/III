@@ -1,0 +1,24 @@
+/* corpus/331_xii_R015.iii  -- R015 [C3] Loop over Compose distribution */
+
+module corpus_331_xii_R015
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* a and b have disjoint cap-sets: K01_FORM (cap NONE) and K01_FORM (cap NONE). */
+    let a : u32 = xii_term_make_basis(0u8, 0x100u32)
+    let b : u32 = xii_term_make_basis(0u8, 0x200u32)
+    let body : u32 = xii_term_make_fusion2(18u8, a, b)
+    let t : u32 = xii_term_make_loop(body, 4u64)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 15u32 { return 1u64 }
+    if xii_term_get_kind(r) != 18u8 { return 2u64 }
+    return 0u64
+}

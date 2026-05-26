@@ -1,0 +1,505 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\blake2s.iii
+ *
+ * III STDLIB - numera::blake2s
+ *
+ * RFC 7693 BLAKE2s -- modern fast hash, 32-byte output, 64-byte block,
+ * operates on u32 words.  10 rounds of compression.
+ *
+ * Public API (singleton state):
+ *   blake2s_init(out_len:u64) -> u32           -- out_len 1..32
+ *   blake2s_update(input:*u8, len:u64) -> u32
+ *   blake2s_final(out:*u8) -> u32              -- writes out_len bytes
+ *   blake2s_oneshot(input:*u8, len:u64, out:*u8, out_len:u64) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_blake2s
+
+const B2S_BLOCK_BYTES : u32 = 64u32
+
+/* Initialization vector (IV) -- same as SHA-256's, RFC 7693 §2.6 */
+var B2S_IV : [u32; 8]
+var B2S_IV_INIT : u8 = 0u8
+
+/* SIGMA: 10 permutations of {0..15} for round message scheduling */
+var B2S_SIGMA : [u32; 160]   /* 10 rounds * 16 entries */
+
+/* State */
+var B2S_H        : [u32; 8]
+var B2S_T        : [u32; 2]      /* low/high 64-bit message-length counter */
+var B2S_BUF      : [u8;  64]
+var B2S_BUFLEN   : u32 = 0u32
+var B2S_OUT_LEN  : u32 = 32u32
+var B2S_M        : [u32; 16]     /* message words for compression */
+var B2S_V        : [u32; 16]     /* working vector */
+var B2S_MROWS    : [u32; 160]    /* §3.5 SIMD pre-gathered message schedule:
+                                  * 10 rounds × {col_x,col_y,diag_x,diag_y} × 4 lanes */
+var B2S_FORCE    : u32           /* §3.5 dispatch override: 0=auto, 1=scalar, 2=avx512, 3=avx2 */
+
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+
+fn b2s_init_iv() -> i32 {
+    if B2S_IV_INIT == 1u8 { return 0i32 }
+    B2S_IV[0] = 0x6A09E667u32
+    B2S_IV[1] = 0xBB67AE85u32
+    B2S_IV[2] = 0x3C6EF372u32
+    B2S_IV[3] = 0xA54FF53Au32
+    B2S_IV[4] = 0x510E527Fu32
+    B2S_IV[5] = 0x9B05688Cu32
+    B2S_IV[6] = 0x1F83D9ABu32
+    B2S_IV[7] = 0x5BE0CD19u32
+    /* SIGMA: standard 10 rounds.  Layout: round r, position p -> SIGMA[r*16 + p] */
+    let mut sig : u32 = 0u32
+    /* round 0 */
+    B2S_SIGMA[sig +  0u32] =  0u32; B2S_SIGMA[sig +  1u32] =  1u32
+    B2S_SIGMA[sig +  2u32] =  2u32; B2S_SIGMA[sig +  3u32] =  3u32
+    B2S_SIGMA[sig +  4u32] =  4u32; B2S_SIGMA[sig +  5u32] =  5u32
+    B2S_SIGMA[sig +  6u32] =  6u32; B2S_SIGMA[sig +  7u32] =  7u32
+    B2S_SIGMA[sig +  8u32] =  8u32; B2S_SIGMA[sig +  9u32] =  9u32
+    B2S_SIGMA[sig + 10u32] = 10u32; B2S_SIGMA[sig + 11u32] = 11u32
+    B2S_SIGMA[sig + 12u32] = 12u32; B2S_SIGMA[sig + 13u32] = 13u32
+    B2S_SIGMA[sig + 14u32] = 14u32; B2S_SIGMA[sig + 15u32] = 15u32
+    sig = sig + 16u32
+    /* round 1 */
+    B2S_SIGMA[sig +  0u32] = 14u32; B2S_SIGMA[sig +  1u32] = 10u32
+    B2S_SIGMA[sig +  2u32] =  4u32; B2S_SIGMA[sig +  3u32] =  8u32
+    B2S_SIGMA[sig +  4u32] =  9u32; B2S_SIGMA[sig +  5u32] = 15u32
+    B2S_SIGMA[sig +  6u32] = 13u32; B2S_SIGMA[sig +  7u32] =  6u32
+    B2S_SIGMA[sig +  8u32] =  1u32; B2S_SIGMA[sig +  9u32] = 12u32
+    B2S_SIGMA[sig + 10u32] =  0u32; B2S_SIGMA[sig + 11u32] =  2u32
+    B2S_SIGMA[sig + 12u32] = 11u32; B2S_SIGMA[sig + 13u32] =  7u32
+    B2S_SIGMA[sig + 14u32] =  5u32; B2S_SIGMA[sig + 15u32] =  3u32
+    sig = sig + 16u32
+    /* round 2 */
+    B2S_SIGMA[sig +  0u32] = 11u32; B2S_SIGMA[sig +  1u32] =  8u32
+    B2S_SIGMA[sig +  2u32] = 12u32; B2S_SIGMA[sig +  3u32] =  0u32
+    B2S_SIGMA[sig +  4u32] =  5u32; B2S_SIGMA[sig +  5u32] =  2u32
+    B2S_SIGMA[sig +  6u32] = 15u32; B2S_SIGMA[sig +  7u32] = 13u32
+    B2S_SIGMA[sig +  8u32] = 10u32; B2S_SIGMA[sig +  9u32] = 14u32
+    B2S_SIGMA[sig + 10u32] =  3u32; B2S_SIGMA[sig + 11u32] =  6u32
+    B2S_SIGMA[sig + 12u32] =  7u32; B2S_SIGMA[sig + 13u32] =  1u32
+    B2S_SIGMA[sig + 14u32] =  9u32; B2S_SIGMA[sig + 15u32] =  4u32
+    sig = sig + 16u32
+    /* round 3 */
+    B2S_SIGMA[sig +  0u32] =  7u32; B2S_SIGMA[sig +  1u32] =  9u32
+    B2S_SIGMA[sig +  2u32] =  3u32; B2S_SIGMA[sig +  3u32] =  1u32
+    B2S_SIGMA[sig +  4u32] = 13u32; B2S_SIGMA[sig +  5u32] = 12u32
+    B2S_SIGMA[sig +  6u32] = 11u32; B2S_SIGMA[sig +  7u32] = 14u32
+    B2S_SIGMA[sig +  8u32] =  2u32; B2S_SIGMA[sig +  9u32] =  6u32
+    B2S_SIGMA[sig + 10u32] =  5u32; B2S_SIGMA[sig + 11u32] = 10u32
+    B2S_SIGMA[sig + 12u32] =  4u32; B2S_SIGMA[sig + 13u32] =  0u32
+    B2S_SIGMA[sig + 14u32] = 15u32; B2S_SIGMA[sig + 15u32] =  8u32
+    sig = sig + 16u32
+    /* round 4 */
+    B2S_SIGMA[sig +  0u32] =  9u32; B2S_SIGMA[sig +  1u32] =  0u32
+    B2S_SIGMA[sig +  2u32] =  5u32; B2S_SIGMA[sig +  3u32] =  7u32
+    B2S_SIGMA[sig +  4u32] =  2u32; B2S_SIGMA[sig +  5u32] =  4u32
+    B2S_SIGMA[sig +  6u32] = 10u32; B2S_SIGMA[sig +  7u32] = 15u32
+    B2S_SIGMA[sig +  8u32] = 14u32; B2S_SIGMA[sig +  9u32] =  1u32
+    B2S_SIGMA[sig + 10u32] = 11u32; B2S_SIGMA[sig + 11u32] = 12u32
+    B2S_SIGMA[sig + 12u32] =  6u32; B2S_SIGMA[sig + 13u32] =  8u32
+    B2S_SIGMA[sig + 14u32] =  3u32; B2S_SIGMA[sig + 15u32] = 13u32
+    sig = sig + 16u32
+    /* round 5 */
+    B2S_SIGMA[sig +  0u32] =  2u32; B2S_SIGMA[sig +  1u32] = 12u32
+    B2S_SIGMA[sig +  2u32] =  6u32; B2S_SIGMA[sig +  3u32] = 10u32
+    B2S_SIGMA[sig +  4u32] =  0u32; B2S_SIGMA[sig +  5u32] = 11u32
+    B2S_SIGMA[sig +  6u32] =  8u32; B2S_SIGMA[sig +  7u32] =  3u32
+    B2S_SIGMA[sig +  8u32] =  4u32; B2S_SIGMA[sig +  9u32] = 13u32
+    B2S_SIGMA[sig + 10u32] =  7u32; B2S_SIGMA[sig + 11u32] =  5u32
+    B2S_SIGMA[sig + 12u32] = 15u32; B2S_SIGMA[sig + 13u32] = 14u32
+    B2S_SIGMA[sig + 14u32] =  1u32; B2S_SIGMA[sig + 15u32] =  9u32
+    sig = sig + 16u32
+    /* round 6 */
+    B2S_SIGMA[sig +  0u32] = 12u32; B2S_SIGMA[sig +  1u32] =  5u32
+    B2S_SIGMA[sig +  2u32] =  1u32; B2S_SIGMA[sig +  3u32] = 15u32
+    B2S_SIGMA[sig +  4u32] = 14u32; B2S_SIGMA[sig +  5u32] = 13u32
+    B2S_SIGMA[sig +  6u32] =  4u32; B2S_SIGMA[sig +  7u32] = 10u32
+    B2S_SIGMA[sig +  8u32] =  0u32; B2S_SIGMA[sig +  9u32] =  7u32
+    B2S_SIGMA[sig + 10u32] =  6u32; B2S_SIGMA[sig + 11u32] =  3u32
+    B2S_SIGMA[sig + 12u32] =  9u32; B2S_SIGMA[sig + 13u32] =  2u32
+    B2S_SIGMA[sig + 14u32] =  8u32; B2S_SIGMA[sig + 15u32] = 11u32
+    sig = sig + 16u32
+    /* round 7 */
+    B2S_SIGMA[sig +  0u32] = 13u32; B2S_SIGMA[sig +  1u32] = 11u32
+    B2S_SIGMA[sig +  2u32] =  7u32; B2S_SIGMA[sig +  3u32] = 14u32
+    B2S_SIGMA[sig +  4u32] = 12u32; B2S_SIGMA[sig +  5u32] =  1u32
+    B2S_SIGMA[sig +  6u32] =  3u32; B2S_SIGMA[sig +  7u32] =  9u32
+    B2S_SIGMA[sig +  8u32] =  5u32; B2S_SIGMA[sig +  9u32] =  0u32
+    B2S_SIGMA[sig + 10u32] = 15u32; B2S_SIGMA[sig + 11u32] =  4u32
+    B2S_SIGMA[sig + 12u32] =  8u32; B2S_SIGMA[sig + 13u32] =  6u32
+    B2S_SIGMA[sig + 14u32] =  2u32; B2S_SIGMA[sig + 15u32] = 10u32
+    sig = sig + 16u32
+    /* round 8 */
+    B2S_SIGMA[sig +  0u32] =  6u32; B2S_SIGMA[sig +  1u32] = 15u32
+    B2S_SIGMA[sig +  2u32] = 14u32; B2S_SIGMA[sig +  3u32] =  9u32
+    B2S_SIGMA[sig +  4u32] = 11u32; B2S_SIGMA[sig +  5u32] =  3u32
+    B2S_SIGMA[sig +  6u32] =  0u32; B2S_SIGMA[sig +  7u32] =  8u32
+    B2S_SIGMA[sig +  8u32] = 12u32; B2S_SIGMA[sig +  9u32] =  2u32
+    B2S_SIGMA[sig + 10u32] = 13u32; B2S_SIGMA[sig + 11u32] =  7u32
+    B2S_SIGMA[sig + 12u32] =  1u32; B2S_SIGMA[sig + 13u32] =  4u32
+    B2S_SIGMA[sig + 14u32] = 10u32; B2S_SIGMA[sig + 15u32] =  5u32
+    sig = sig + 16u32
+    /* round 9 */
+    B2S_SIGMA[sig +  0u32] = 10u32; B2S_SIGMA[sig +  1u32] =  2u32
+    B2S_SIGMA[sig +  2u32] =  8u32; B2S_SIGMA[sig +  3u32] =  4u32
+    B2S_SIGMA[sig +  4u32] =  7u32; B2S_SIGMA[sig +  5u32] =  6u32
+    B2S_SIGMA[sig +  6u32] =  1u32; B2S_SIGMA[sig +  7u32] =  5u32
+    B2S_SIGMA[sig +  8u32] = 15u32; B2S_SIGMA[sig +  9u32] = 11u32
+    B2S_SIGMA[sig + 10u32] =  9u32; B2S_SIGMA[sig + 11u32] = 14u32
+    B2S_SIGMA[sig + 12u32] =  3u32; B2S_SIGMA[sig + 13u32] = 12u32
+    B2S_SIGMA[sig + 14u32] = 13u32; B2S_SIGMA[sig + 15u32] =  0u32
+    B2S_IV_INIT = 1u8
+    return 0i32
+}
+
+fn b2s_rotr32(x: u32, n: u32) -> u32 {
+    return ((x >> n) | (x << (32u32 - n)))
+}
+
+/* G mixing function (RFC 7693 §3.1) operates on B2S_V */
+fn b2s_mix(a: u32, b: u32, c: u32, d: u32) -> i32 {
+    let mut va : u32 = B2S_V[a]
+    let mut vb : u32 = B2S_V[b]
+    let mut vc : u32 = B2S_V[c]
+    let mut vd : u32 = B2S_V[d]
+    /* x and y are stored in B2S_M_X / B2S_M_Y module-scope (set by caller) */
+    let x : u32 = B2S_MIX_X
+    let y : u32 = B2S_MIX_Y
+    va = (va + vb + x)
+    vd = b2s_rotr32(vd ^ va, 16u32)
+    vc = (vc + vd)
+    vb = b2s_rotr32(vb ^ vc, 12u32)
+    va = (va + vb + y)
+    vd = b2s_rotr32(vd ^ va, 8u32)
+    vc = (vc + vd)
+    vb = b2s_rotr32(vb ^ vc, 7u32)
+    B2S_V[a] = va
+    B2S_V[b] = vb
+    B2S_V[c] = vc
+    B2S_V[d] = vd
+    return 0i32
+}
+
+var B2S_MIX_X : u32 = 0u32
+var B2S_MIX_Y : u32 = 0u32
+
+/* ---- §3.5 SIMD round engine ---- */
+
+/* Scalar 10-round loop (RFC 7693), operating on B2S_V via b2s_mix. */
+fn b2s_rounds_scalar() -> i32 {
+    let mut r : u32 = 0u32
+    while r < 10u32 {
+        let s : u32 = r * 16u32
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 0u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 1u32]]
+        b2s_mix(0u32, 4u32, 8u32, 12u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 2u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 3u32]]
+        b2s_mix(1u32, 5u32, 9u32, 13u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 4u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 5u32]]
+        b2s_mix(2u32, 6u32, 10u32, 14u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 6u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 7u32]]
+        b2s_mix(3u32, 7u32, 11u32, 15u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 8u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 9u32]]
+        b2s_mix(0u32, 5u32, 10u32, 15u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 10u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 11u32]]
+        b2s_mix(1u32, 6u32, 11u32, 12u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 12u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 13u32]]
+        b2s_mix(2u32, 7u32, 8u32, 13u32)
+        B2S_MIX_X = B2S_M[B2S_SIGMA[s + 14u32]]; B2S_MIX_Y = B2S_M[B2S_SIGMA[s + 15u32]]
+        b2s_mix(3u32, 4u32, 9u32, 14u32)
+        r = r + 1u32
+    }
+    return 0i32
+}
+
+/* Pre-gather the per-round message rows into B2S_MROWS so the SIMD
+ * kernels avoid a runtime gather.  Per round r (s=r*16, o=r*16):
+ *   col_x = M[sig s+0,+2,+4,+6]   col_y = M[sig s+1,+3,+5,+7]
+ *   diag_x= M[sig s+8,+10,+12,+14] diag_y= M[sig s+9,+11,+13,+15]
+ * matching the column/diagonal mix message-word usage exactly. */
+fn b2s_gather_msched() -> i32 {
+    let mut r : u32 = 0u32
+    while r < 10u32 {
+        let s : u32 = r * 16u32
+        let o : u32 = r * 16u32
+        B2S_MROWS[o +  0u32] = B2S_M[B2S_SIGMA[s +  0u32]]
+        B2S_MROWS[o +  1u32] = B2S_M[B2S_SIGMA[s +  2u32]]
+        B2S_MROWS[o +  2u32] = B2S_M[B2S_SIGMA[s +  4u32]]
+        B2S_MROWS[o +  3u32] = B2S_M[B2S_SIGMA[s +  6u32]]
+        B2S_MROWS[o +  4u32] = B2S_M[B2S_SIGMA[s +  1u32]]
+        B2S_MROWS[o +  5u32] = B2S_M[B2S_SIGMA[s +  3u32]]
+        B2S_MROWS[o +  6u32] = B2S_M[B2S_SIGMA[s +  5u32]]
+        B2S_MROWS[o +  7u32] = B2S_M[B2S_SIGMA[s +  7u32]]
+        B2S_MROWS[o +  8u32] = B2S_M[B2S_SIGMA[s +  8u32]]
+        B2S_MROWS[o +  9u32] = B2S_M[B2S_SIGMA[s + 10u32]]
+        B2S_MROWS[o + 10u32] = B2S_M[B2S_SIGMA[s + 12u32]]
+        B2S_MROWS[o + 11u32] = B2S_M[B2S_SIGMA[s + 14u32]]
+        B2S_MROWS[o + 12u32] = B2S_M[B2S_SIGMA[s +  9u32]]
+        B2S_MROWS[o + 13u32] = B2S_M[B2S_SIGMA[s + 11u32]]
+        B2S_MROWS[o + 14u32] = B2S_M[B2S_SIGMA[s + 13u32]]
+        B2S_MROWS[o + 15u32] = B2S_M[B2S_SIGMA[s + 15u32]]
+        r = r + 1u32
+    }
+    return 0i32
+}
+
+/* AVX-512 (EVEX.128) 4-row SIMD: ChaCha20 structure with vprord (ROTR)
+ * and two message-row vpaddd per G.  rax=V, rdx=MROWS, rcx=round ctr,
+ * xmm0..3 = rows — all Win64 caller-saved. */
+fn b2s_rounds_avx512() -> i32 {
+    b2s_gather_msched()
+    metal {
+    leaq L_B2S_V(%rip), %rax
+    vmovdqu (%rax), %xmm0
+    vmovdqu 16(%rax), %xmm1
+    vmovdqu 32(%rax), %xmm2
+    vmovdqu 48(%rax), %xmm3
+    leaq L_B2S_MROWS(%rip), %rdx
+    movl $10, %ecx
+.Lb2s_avx_rnd:
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd (%rdx), %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprord $16, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprord $12, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd 16(%rdx), %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprord $8, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprord $7, %xmm1, %xmm1
+    vpshufd $0x39, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x93, %xmm3, %xmm3
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd 32(%rdx), %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprord $16, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprord $12, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd 48(%rdx), %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprord $8, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprord $7, %xmm1, %xmm1
+    vpshufd $0x93, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x39, %xmm3, %xmm3
+    addq $64, %rdx
+    decl %ecx
+    jnz .Lb2s_avx_rnd
+    vmovdqu %xmm0, (%rax)
+    vmovdqu %xmm1, 16(%rax)
+    vmovdqu %xmm2, 32(%rax)
+    vmovdqu %xmm3, 48(%rax)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* AVX2 (VEX.128): same, but ROTR via vpsrld+vpslld+vpor (xmm4 temp),
+ * vpxor not vpxord. */
+fn b2s_rounds_avx2() -> i32 {
+    b2s_gather_msched()
+    metal {
+    leaq L_B2S_V(%rip), %rax
+    vmovdqu (%rax), %xmm0
+    vmovdqu 16(%rax), %xmm1
+    vmovdqu 32(%rax), %xmm2
+    vmovdqu 48(%rax), %xmm3
+    leaq L_B2S_MROWS(%rip), %rdx
+    movl $10, %ecx
+.Lb2s_avx2_rnd:
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd (%rdx), %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpsrld $16, %xmm3, %xmm4
+    vpslld $16, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpsrld $12, %xmm1, %xmm4
+    vpslld $20, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd 16(%rdx), %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpsrld $8, %xmm3, %xmm4
+    vpslld $24, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpsrld $7, %xmm1, %xmm4
+    vpslld $25, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpshufd $0x39, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x93, %xmm3, %xmm3
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd 32(%rdx), %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpsrld $16, %xmm3, %xmm4
+    vpslld $16, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpsrld $12, %xmm1, %xmm4
+    vpslld $20, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpaddd 48(%rdx), %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpsrld $8, %xmm3, %xmm4
+    vpslld $24, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpsrld $7, %xmm1, %xmm4
+    vpslld $25, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpshufd $0x93, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x39, %xmm3, %xmm3
+    addq $64, %rdx
+    decl %ecx
+    jnz .Lb2s_avx2_rnd
+    vmovdqu %xmm0, (%rax)
+    vmovdqu %xmm1, 16(%rax)
+    vmovdqu %xmm2, 32(%rax)
+    vmovdqu %xmm3, 48(%rax)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* iiis-2 cpufeat dispatch: AVX-512 > AVX2 > scalar; B2S_FORCE overrides
+ * for KAT bit-identity testing.  Mandate 7: structural CPUID dispatch. */
+fn b2s_rounds() -> i32 {
+    if B2S_FORCE == 1u32 { return b2s_rounds_scalar() }
+    if B2S_FORCE == 2u32 { return b2s_rounds_avx512() }
+    if B2S_FORCE == 3u32 { return b2s_rounds_avx2() }
+    if cpufeat_has_avx512f() == 1u8 { return b2s_rounds_avx512() }
+    if cpufeat_has_avx2() == 1u8 { return b2s_rounds_avx2() }
+    return b2s_rounds_scalar()
+}
+
+fn b2s_force_path(p: u32) -> i32 @export { B2S_FORCE = p ; return 0i32 }
+
+fn b2s_compress(last: u8) -> i32 {
+    /* Load message words from BUF (LE u32). */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let off : u32 = i * 4u32
+        let b0 : u32 = B2S_BUF[off + 0u32] as u32
+        let b1 : u32 = B2S_BUF[off + 1u32] as u32
+        let b2 : u32 = B2S_BUF[off + 2u32] as u32
+        let b3 : u32 = B2S_BUF[off + 3u32] as u32
+        B2S_M[i] = b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+        i = i + 1u32
+    }
+    /* Initialize V. */
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        B2S_V[k] = B2S_H[k]
+        k = k + 1u32
+    }
+    B2S_V[8]  = B2S_IV[0]
+    B2S_V[9]  = B2S_IV[1]
+    B2S_V[10] = B2S_IV[2]
+    B2S_V[11] = B2S_IV[3]
+    B2S_V[12] = B2S_IV[4] ^ B2S_T[0]
+    B2S_V[13] = B2S_IV[5] ^ B2S_T[1]
+    B2S_V[14] = B2S_IV[6]
+    if last == 1u8 { B2S_V[14] = B2S_V[14] ^ 0xFFFFFFFFu32 }
+    B2S_V[15] = B2S_IV[7]
+    /* 10 rounds — §3.5 dispatched (scalar / AVX-512 / AVX2), bit-identical. */
+    b2s_rounds()
+    /* Mix V into H. */
+    let mut q : u32 = 0u32
+    while q < 8u32 {
+        B2S_H[q] = (B2S_H[q] ^ B2S_V[q] ^ B2S_V[q + 8u32])
+        q = q + 1u32
+    }
+    return 0i32
+}
+
+fn blake2s_init(out_len: u64) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    b2s_init_iv()
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        B2S_H[i] = B2S_IV[i]
+        i = i + 1u32
+    }
+    /* Mix in parameter block: depth=1, fanout=1, key_length=0, digest_length */
+    let param0 : u32 = 0x01010000u32 | (out_len as u32)
+    B2S_H[0] = B2S_H[0] ^ param0
+    B2S_T[0]    = 0u32
+    B2S_T[1]    = 0u32
+    B2S_BUFLEN  = 0u32
+    B2S_OUT_LEN = out_len as u32
+    return 0u32
+}
+
+fn blake2s_update(input: *u8, len: u64) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    let mut rem : u64 = len
+    let mut off : u64 = 0u64
+    while rem > 0u64 {
+        if B2S_BUFLEN == 64u32 {
+            /* Counter += 64 */
+            let new_t0 : u32 = (B2S_T[0] + 64u32)
+            if new_t0 < B2S_T[0] { B2S_T[1] = (B2S_T[1] + 1u32) }
+            B2S_T[0] = new_t0
+            b2s_compress(0u8)
+            B2S_BUFLEN = 0u32
+        }
+        let mut take : u64 = (64u32 - B2S_BUFLEN) as u64
+        if take > rem { take = rem }
+        let mut k : u64 = 0u64
+        while k < take {
+            B2S_BUF[(B2S_BUFLEN as u64) + k] = input[off + k]
+            k = k + 1u64
+        }
+        B2S_BUFLEN = B2S_BUFLEN + (take as u32)
+        off = off + take
+        rem = rem - take
+    }
+    return 0u32
+}
+
+fn blake2s_final(out: *u8) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    /* Counter += BUFLEN */
+    let new_t0 : u32 = (B2S_T[0] + B2S_BUFLEN)
+    if new_t0 < B2S_T[0] { B2S_T[1] = (B2S_T[1] + 1u32) }
+    B2S_T[0] = new_t0
+    /* Pad remaining buffer with zeros */
+    while B2S_BUFLEN < 64u32 {
+        B2S_BUF[B2S_BUFLEN] = 0u8
+        B2S_BUFLEN = B2S_BUFLEN + 1u32
+    }
+    b2s_compress(1u8)
+    /* Emit OUT_LEN bytes from H, LE */
+    let mut i : u32 = 0u32
+    while i < B2S_OUT_LEN {
+        let word_idx : u32 = i >> 2u32
+        let byte_in_word : u32 = i & 3u32
+        let h_val : u32 = B2S_H[word_idx]
+        let shift : u32 = byte_in_word * 8u32
+        out[i] = ((h_val >> shift) & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn blake2s_oneshot(input: *u8, len: u64, out: *u8, out_len: u64) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    blake2s_init(out_len)
+    blake2s_update(input, len)
+    return blake2s_final(out)
+}

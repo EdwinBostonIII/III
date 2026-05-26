@@ -1,0 +1,244 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\hw_offload.iii
+ *
+ * III STDLIB - omnia::hw_offload
+ *
+ * Hardware lowering registry (Phase C.2 of the Intent Calculus v1.0
+ * performance stack).
+ *
+ * For each (primitive_id, cpu_feature_mask) pair, an entry maps to a
+ * hardware-accelerated assembly template (raw bytes) that the cg_r3
+ * partial evaluator can copy inline at the call site -- erasing not
+ * only the resolver dispatch but the dispatched function body, when
+ * the host CPU advertises the required features.
+ *
+ *   primitive_id      u8     PRIMITIVE_* id (verba/intent.iii)
+ *   feature_mask      u32    bitwise CPUFEAT_* (numera/cpufeat.iii)
+ *   asm_blob_offset   u32    byte offset into HW_ASM_TEMPLATE_BLOB
+ *   asm_blob_len      u16    length of the asm template (<= BLOB_MAX)
+ *   fallback_pid      u32    pattern_id used when feature absent
+ *
+ * Registry is populated at boot via hw_offload_init_all (called from
+ * resolution_init.iii). Lookup is linear; first match by primitive_id
+ * with feature_mask satisfied wins. Entries should be registered in
+ * preference order (most-specific first).
+ *
+ * Capacity: 512 entries; 16 KiB asm template blob storage.
+ *
+ * Hexad: kind_substance (machine-level lowering). Ring: R0. K: 1.00.
+ */
+
+module omnia_hw_offload
+
+extern @abi(c-msvc-x64) fn cpufeat_summary() -> u32 from "cpufeat.iii"
+
+const HW_LOWERING_CAP    : u32 = 512u32
+const HW_BLOB_TOTAL_BYTES : u32 = 16384u32
+const HW_BLOB_MAX_PER_ENTRY : u16 = 256u16
+
+const HW_OFFLOAD_OK            : i32 =  0i32
+const HW_OFFLOAD_E_FULL        : i32 = -1i32
+const HW_OFFLOAD_E_BLOB_TOO_BIG: i32 = -2i32
+const HW_OFFLOAD_E_BLOB_FULL   : i32 = -3i32
+const HW_OFFLOAD_E_NULL        : i32 = -4i32
+
+/* Per-entry metadata. */
+var HW_LOWERING_PRIMITIVE_ID : [u8;  512]
+var HW_LOWERING_FEATURE_MASK : [u32; 512]
+var HW_LOWERING_BLOB_OFFSET  : [u32; 512]
+var HW_LOWERING_BLOB_LEN     : [u16; 512]
+var HW_LOWERING_FALLBACK_PID : [u32; 512]
+var HW_LOWERING_LIVE         : [u8;  512]
+
+/* Asm template blob. Caller-supplied bytes copied into here at register
+ * time. cg_r3 emits these inline at static-intent call sites. */
+var HW_ASM_TEMPLATE_BLOB : [u8; 16384]
+
+var HW_LOWERING_USED  : u32 = 0u32
+var HW_BLOB_USED      : u32 = 0u32
+
+fn _hw_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < HW_LOWERING_CAP {
+        if HW_LOWERING_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* Allocate `len` bytes from the blob arena. Returns offset, or
+ * 0xFFFFFFFFu32 if insufficient space remains. */
+fn _hw_alloc_blob(len: u16) -> u32 {
+    let l_len : u32 = (len as u32) & 0xFFFFu32
+    if (HW_BLOB_USED + l_len) > HW_BLOB_TOTAL_BYTES { return 0xFFFFFFFFu32 }
+    let off : u32 = HW_BLOB_USED
+    HW_BLOB_USED = HW_BLOB_USED + l_len
+    return off
+}
+
+/* ---------------- public surface ---------------- */
+
+/* Register a hardware lowering. 4-u64-arg signature = composition-dispatch
+ * ABI: hw_offload_register is registered in iii_compositions.def and invoked
+ * via the prespec fn(a,b,c,d:u64) trampoline, so it must take <=4 u64 args
+ * -- do NOT widen.  (The iiis-0 5+-arg trap this also dodged is fixed --
+ * Stage 3.9, corpus 277 -- but the packing remains the composition ABI.)
+ * The metadata fields are packed:
+ *
+ *   packed_meta layout:
+ *     bits 0..7   = primitive_id
+ *     bits 8..39  = feature_mask (32 bits)
+ *     bits 40..55 = blob_len (16 bits)
+ *     bits 56..63 = reserved (must be zero)
+ *
+ * The asm template bytes pointed to by asm_blob_ptr are copied into
+ * HW_ASM_TEMPLATE_BLOB; subsequent lookups retrieve a stable arena
+ * address.
+ *
+ * Returns:
+ *   HW_OFFLOAD_OK on success
+ *   HW_OFFLOAD_E_FULL  if 512 entries exhausted
+ *   HW_OFFLOAD_E_BLOB_TOO_BIG  if blob_len > HW_BLOB_MAX_PER_ENTRY
+ *   HW_OFFLOAD_E_BLOB_FULL  if 16 KiB blob arena exhausted
+ *   HW_OFFLOAD_E_NULL  if asm_blob_ptr == 0 */
+fn hw_offload_register(packed_meta: u64,
+                       asm_blob_ptr: u64,
+                       fallback_pid: u32) -> i32 @export {
+    let l_pm   : u64 = packed_meta
+    let l_pp   : u64 = asm_blob_ptr
+    let l_fb   : u32 = fallback_pid
+
+    let l_pid  : u8  = (l_pm & 0xFFu64) as u8
+    let l_feat : u32 = ((l_pm >> 8u64) & 0xFFFFFFFFu64) as u32
+    let l_len  : u16 = ((l_pm >> 40u64) & 0xFFFFu64) as u16
+
+    if l_pp == 0u64 { return HW_OFFLOAD_E_NULL }
+    if l_len > HW_BLOB_MAX_PER_ENTRY { return HW_OFFLOAD_E_BLOB_TOO_BIG }
+
+    let slot : u32 = _hw_alloc_slot()
+    if slot == 0xFFFFFFFFu32 { return HW_OFFLOAD_E_FULL }
+
+    let blob_off : u32 = _hw_alloc_blob(l_len)
+    if blob_off == 0xFFFFFFFFu32 { return HW_OFFLOAD_E_BLOB_FULL }
+
+    /* Byte-by-byte copy of asm template into the blob arena. */
+    let len_u32 : u32 = (l_len as u32) & 0xFFFFu32
+    let mut k : u32 = 0u32
+    while k < len_u32 {
+        let src : *u8 = (l_pp + ((k as u64) & 0xFFFFFFFFu64)) as *u8
+        HW_ASM_TEMPLATE_BLOB[(blob_off + k)] = src[0u64]
+        k = k + 1u32
+    }
+
+    HW_LOWERING_PRIMITIVE_ID[slot] = l_pid
+    HW_LOWERING_FEATURE_MASK[slot] = l_feat
+    HW_LOWERING_BLOB_OFFSET[slot]  = blob_off
+    HW_LOWERING_BLOB_LEN[slot]     = l_len
+    HW_LOWERING_FALLBACK_PID[slot] = l_fb
+    HW_LOWERING_LIVE[slot]         = 1u8
+    if HW_LOWERING_USED < HW_LOWERING_CAP {
+        HW_LOWERING_USED = HW_LOWERING_USED + 1u32
+    }
+    return HW_OFFLOAD_OK
+}
+
+/* Convenience packer for callers building packed_meta inline. */
+fn hw_offload_pack_meta(primitive_id: u8, feature_mask: u32, blob_len: u16) -> u64 @export {
+    let l_pid  : u64 = (primitive_id as u64) & 0xFFu64
+    let l_feat : u64 = ((feature_mask as u64) & 0xFFFFFFFFu64) << 8u64
+    let l_len  : u64 = ((blob_len as u64) & 0xFFFFu64) << 40u64
+    return l_pid | l_feat | l_len
+}
+
+/* Look up a hardware lowering for `primitive_id` whose `feature_mask`
+ * is fully satisfied by the host's available features (from cpufeat).
+ * Returns the absolute address of the asm template within
+ * HW_ASM_TEMPLATE_BLOB on success, or 0 if no match. */
+fn hw_offload_lookup(primitive_id: u8) -> u64 @export {
+    let l_pid : u8 = primitive_id
+    let avail : u32 = cpufeat_summary()
+    let mut i : u32 = 0u32
+    while i < HW_LOWERING_CAP {
+        if HW_LOWERING_LIVE[i] == 1u8 {
+            if HW_LOWERING_PRIMITIVE_ID[i] == l_pid {
+                let req : u32 = HW_LOWERING_FEATURE_MASK[i]
+                /* feature_mask req is satisfied iff (avail & req) == req. */
+                if (avail & req) == req {
+                    let off : u32 = HW_LOWERING_BLOB_OFFSET[i]
+                    return ((&HW_ASM_TEMPLATE_BLOB) as u64) + (off as u64)
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+/* Retrieve the lookup-matching slot's blob length (so cg_r3 can know
+ * how many bytes to copy inline). */
+fn hw_offload_blob_len(primitive_id: u8) -> u16 @export {
+    let l_pid : u8 = primitive_id
+    let avail : u32 = cpufeat_summary()
+    let mut i : u32 = 0u32
+    while i < HW_LOWERING_CAP {
+        if HW_LOWERING_LIVE[i] == 1u8 {
+            if HW_LOWERING_PRIMITIVE_ID[i] == l_pid {
+                let req : u32 = HW_LOWERING_FEATURE_MASK[i]
+                if (avail & req) == req {
+                    return HW_LOWERING_BLOB_LEN[i]
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u16
+}
+
+/* Retrieve the fallback pattern_id for a lowering that doesn't apply
+ * (e.g., target hardware lacks feature). cg_r3 falls back to the
+ * fallback pattern's dispatch. */
+fn hw_offload_fallback_pid(primitive_id: u8) -> u32 @export {
+    let l_pid : u8 = primitive_id
+    let mut i : u32 = 0u32
+    while i < HW_LOWERING_CAP {
+        if HW_LOWERING_LIVE[i] == 1u8 {
+            if HW_LOWERING_PRIMITIVE_ID[i] == l_pid {
+                return HW_LOWERING_FALLBACK_PID[i]
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn hw_offload_used() -> u32 @export {
+    return HW_LOWERING_USED
+}
+
+fn hw_offload_capacity() -> u32 @export {
+    return HW_LOWERING_CAP
+}
+
+fn hw_offload_blob_used() -> u32 @export {
+    return HW_BLOB_USED
+}
+
+fn hw_offload_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < HW_LOWERING_CAP {
+        HW_LOWERING_LIVE[i]         = 0u8
+        HW_LOWERING_PRIMITIVE_ID[i] = 0u8
+        HW_LOWERING_FEATURE_MASK[i] = 0u32
+        HW_LOWERING_BLOB_OFFSET[i]  = 0u32
+        HW_LOWERING_BLOB_LEN[i]     = 0u16
+        HW_LOWERING_FALLBACK_PID[i] = 0u32
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < HW_BLOB_TOTAL_BYTES {
+        HW_ASM_TEMPLATE_BLOB[j] = 0u8
+        j = j + 1u32
+    }
+    HW_LOWERING_USED = 0u32
+    HW_BLOB_USED     = 0u32
+    return HW_OFFLOAD_OK
+}

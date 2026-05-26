@@ -1,0 +1,136 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\normalise_ascii.iii
+ *
+ * III STDLIB - verba::normalise_ascii
+ *
+ * ASCII case-folding and equivalence.  Phase D ships only ASCII
+ * normalisation: full Unicode NFC/NFD/NFKC/NFKD await UCD ingestion
+ * (which needs ~3 MB of compressed tables and is its own session).
+ *
+ * Operations:
+ *   - str_ascii_lower(src, src_len, dst, dst_cap) -> u64 (bytes written)
+ *   - str_ascii_upper(src, src_len, dst, dst_cap) -> u64
+ *   - str_ascii_eq_ci(a, a_len, b, b_len) -> u8  (case-insensitive)
+ *   - str_ascii_starts_with_ci(a, a_len, p, p_len) -> u8
+ *   - str_is_ascii(base, len) -> u8
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module verba_normalise_ascii
+
+const NRM_OK         : i32 =  0i32
+const NRM_E_BUF      : i32 = -1i32
+
+fn ascii_to_lower(c: u32) -> u32 {
+    if c >= 0x41u32 {
+        if c <= 0x5Au32 { return c + 32u32 }
+    }
+    return c
+}
+
+fn ascii_to_upper(c: u32) -> u32 {
+    if c >= 0x61u32 {
+        if c <= 0x7Au32 { return c - 32u32 }
+    }
+    return c
+}
+
+/* Fold src into dst as lower-case.  Returns bytes written or u64-max
+ * on dst overflow. */
+fn str_ascii_lower(src: u64, src_len: u64, dst: u64, dst_cap: u64) -> u64 @export {
+    if src == 0u64 {
+        if src_len == 0u64 { return 0u64 }
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    if dst == 0u64 {
+        if src_len == 0u64 { return 0u64 }
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    if src_len > dst_cap { return 0xFFFFFFFFFFFFFFFFu64 }
+    let sp : *u8 = src as *u8
+    let dp : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let c : u32 = sp[i] as u32
+        let folded : u32 = ascii_to_lower(c)
+        dp[i] = (folded & 0xFFu32) as u8
+        i = i + 1u64
+    }
+    return src_len
+}
+
+fn str_ascii_upper(src: u64, src_len: u64, dst: u64, dst_cap: u64) -> u64 @export {
+    if src == 0u64 {
+        if src_len == 0u64 { return 0u64 }
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    if dst == 0u64 {
+        if src_len == 0u64 { return 0u64 }
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    if src_len > dst_cap { return 0xFFFFFFFFFFFFFFFFu64 }
+    let sp : *u8 = src as *u8
+    let dp : *u8 = dst as *u8
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let c : u32 = sp[i] as u32
+        let folded : u32 = ascii_to_upper(c)
+        dp[i] = (folded & 0xFFu32) as u8
+        i = i + 1u64
+    }
+    return src_len
+}
+
+/* Case-insensitive byte equality (ASCII).  Bytes outside ASCII
+ * letters compare strictly. */
+fn str_ascii_eq_ci(a: u64, a_len: u64, b: u64, b_len: u64) -> u8 @export {
+    if a_len != b_len { return 0u8 }
+    if a_len == 0u64 { return 1u8 }
+    if a == 0u64 { return 0u8 }
+    if b == 0u64 { return 0u8 }
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < a_len {
+        let av : u32 = ap[i] as u32
+        let bv : u32 = bp[i] as u32
+        let af : u32 = ascii_to_lower(av)
+        let bf : u32 = ascii_to_lower(bv)
+        if af != bf { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn str_ascii_starts_with_ci(a: u64, a_len: u64, prefix: u64, p_len: u64) -> u8 @export {
+    if p_len > a_len { return 0u8 }
+    if p_len == 0u64 { return 1u8 }
+    let ap : *u8 = a as *u8
+    let pp : *u8 = prefix as *u8
+    let mut i : u64 = 0u64
+    while i < p_len {
+        let av : u32 = ap[i] as u32
+        let pv : u32 = pp[i] as u32
+        let af : u32 = ascii_to_lower(av)
+        let pf : u32 = ascii_to_lower(pv)
+        if af != pf { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Returns 1 if every byte in (base, len) is < 0x80. */
+fn str_is_ascii(base: u64, len: u64) -> u8 @export {
+    if base == 0u64 {
+        if len == 0u64 { return 1u8 }
+        return 0u8
+    }
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : u32 = p[i] as u32
+        if c >= 0x80u32 { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}

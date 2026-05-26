@@ -1,0 +1,29 @@
+/* corpus/306_xii_R003.iii  -- R003 [A3] With right-assoc */
+
+module corpus_306_xii_R003
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let a : u32 = xii_term_make_basis(0u8, 0x100u32)
+    let b : u32 = xii_term_make_basis(0u8, 0x200u32)
+    let c : u32 = xii_term_make_basis(0u8, 0x300u32)
+    /* route-S: associativity is STRUCTURAL. make_fusion2 re-associates with(with(a,b),c) into the
+     * right-nested canonical form with(a, with(b,c)) AT CONSTRUCTION (R003 retired). */
+    let inner : u32 = xii_term_make_fusion2(20u8, a, b)
+    let t : u32 = xii_term_make_fusion2(20u8, inner, c)
+    if xii_term_get_kind(t) != 20u8 { return 2u64 }
+    if xii_term_get_child_a(t) != a { return 3u64 }
+    /* and R003 is RETIRED: it cannot fire on the (already-canonical) term. */
+    xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() == 3u32 { return 1u64 }
+    return 0u64
+}

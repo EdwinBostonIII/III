@@ -1,0 +1,67 @@
+/* STDLIB/iii/omnia/hexad.iii
+ *
+ * III HEXAD umbrella -- the native .iii hexad stdlib (V1 Stage 7).
+ *
+ * The hexad subsystem is the six pillar modules:
+ *   omnia/hexad_algebra.iii   -- asymmetric ternary trit algebra + base-3 packing
+ *   omnia/hexad_pfs.iii       -- the six platform-firmware-security bricking hexads
+ *   omnia/hexad_reach.iii     -- the 729-bit reachability bitmap (admitted = 144)
+ *   omnia/hexad_epistemic.iii -- confidence/open-questions/domain hexads
+ *   omnia/hexad_mobius.iii    -- bidirectional inverse pairs (active-negation)
+ *   omnia/hexad_dynamic.iii   -- Catalyst-gated runtime promotion
+ *
+ * iii has no same-name re-export, so consumers extern the pillar modules
+ * directly; this umbrella provides a single integration self-test that
+ * exercises every pillar end-to-end (returns 99 on full agreement).
+ *
+ * Hexad kind_essence.  Ring R0.  K floor 0.99.
+ */
+module omnia_hexad
+
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_pfs(op: u32) -> u16 from "hexad_pfs.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable_count() -> u64 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_epistemic_make(buf: u64, h: u16, conf_ppm: u32, qd: u64) -> i32 from "hexad_epistemic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_epistemic_combine(a: u64, b: u64, o: u64) -> i32 from "hexad_epistemic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_epistemic_confidence(buf: u64) -> u32 from "hexad_epistemic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_mobius_make(buf: u64, fwd: u16, fl: u32) -> i32 from "hexad_mobius.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_mobius_valid(buf: u64) -> u8 from "hexad_mobius.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_mobius_roundtrip(buf: u64) -> u8 from "hexad_mobius.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_create(buf: u64, h: u16, coh: u32) -> i32 from "hexad_dynamic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_set_gates(buf: u64, t: u8, c: u8, g: u8) -> i32 from "hexad_dynamic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_promote(buf: u64) -> i32 from "hexad_dynamic.iii"
+
+var HX_E1 : [u32; 4]
+var HX_E2 : [u32; 4]
+var HX_EO : [u32; 4]
+var HX_M  : [u32; 3]
+var HX_C  : [u32; 3]
+
+/* End-to-end self-test across all six pillars; 99 = full agreement. */
+fn iii_hexad_selftest() -> u64 @export {
+    /* algebra: position-aware compose (AND on 1..4, OR on 5..6). */
+    if iii_hexad_compose6(728u16, 0u16) != 648u16 { return 1u64 }
+    /* pfs: capsule_update packs to 324, smram_write to 243. */
+    if iii_hexad_pfs(1u32) != 324u16 { return 2u64 }
+    if iii_hexad_pfs(6u32) != 243u16 { return 3u64 }
+    /* reach: 144 admitted; all-POS reachable, the PFS capsule hexad not. */
+    if iii_hexad_reachable_count() != 144u64 { return 4u64 }
+    if iii_hexad_reachable(728u16) != 1u8 { return 5u64 }
+    if iii_hexad_reachable(324u16) != 0u8 { return 6u64 }
+    /* epistemic: 0.9 * 0.8 = 0.72 confidence. */
+    let hi : u64 = 0u64
+    iii_hexad_epistemic_make(&HX_E1 as u64, 100u16, 900000u32, hi)
+    iii_hexad_epistemic_make(&HX_E2 as u64, 200u16, 800000u32, hi)
+    iii_hexad_epistemic_combine(&HX_E1 as u64, &HX_E2 as u64, &HX_EO as u64)
+    if iii_hexad_epistemic_confidence(&HX_EO as u64) != 720000u32 { return 7u64 }
+    /* mobius: a valid involutive pair round-trips. */
+    iii_hexad_mobius_make(&HX_M as u64, 500u16, 0u32)
+    if iii_hexad_mobius_valid(&HX_M as u64) != 1u8 { return 8u64 }
+    if iii_hexad_mobius_roundtrip(&HX_M as u64) != 1u8 { return 9u64 }
+    /* dynamic: an already-admitted structural hexad is refused (-4). */
+    iii_hexad_dynamic_create(&HX_C as u64, 728u16, 950000u32)
+    iii_hexad_dynamic_set_gates(&HX_C as u64, 1u8, 1u8, 1u8)
+    if iii_hexad_dynamic_promote(&HX_C as u64) != -4i32 { return 10u64 }
+    return 99u64
+}

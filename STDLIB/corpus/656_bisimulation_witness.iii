@@ -1,0 +1,6 @@
+/* 656 — bisimulation_witness: substrate-level W41 bisimulation witness producer
+ * (cap-gated; cross-branch/epoch resolution; composite 0x10 witness with
+ * deterministic content-address id; refuses non-bisimilar + uncapped). */
+module corpus_656
+extern @abi(c-msvc-x64) fn bw_selftest() -> u64 from "bisimulation_witness.iii"
+fn main() -> u64 { return bw_selftest() }

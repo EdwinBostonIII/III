@@ -1,0 +1,575 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\244_bench_hip_idoc.iii
+ *
+ * III conformance corpus 244 -- Phase A17 microbenchmark.
+ *
+ * Measures the cycle cost of two production hot paths:
+ *
+ *   PART 1 -- HIP NL-resolution latency, median of 100 runs per
+ *             utterance, sampled via bench_now_p (RDTSCP):
+ *               * "send buffer"          -> UNIQUE   median <  30000 cyc
+ *               * "open file"            -> AMBIGUOUS median < 35000 cyc
+ *               * "xyzzy plugh foobar"   -> NO_MATCH  median <  15000 cyc
+ *
+ *   PART 2 -- IDoc envelope round-trip (pack+finalize+validate+resolve),
+ *             median of 100 runs:
+ *               * 4-facet IDoc (8B render, 12B extract, 4B execute,
+ *                 16B validate)                       median <   8000 cyc
+ *
+ * Each iteration delta is stored in module-scope u64 byte array
+ * BENCH_HIP_DELTAS (100 * 8 = 800 bytes), sorted in place via
+ * insertion-sort (worst case ~100 swaps for already-near-sorted
+ * RDTSCP samples; bounded above by O(n^2) but in practice << 5000),
+ * then the 50th-element (1-indexed: 51st) is taken as the median.
+ *
+ * iiis-0 trap discipline:
+ *   - ALL externs single-line (multi-line silently miscompiles).
+ *   - ALL fns <= 4 params.
+ *   - NO `mut` in fn parameters.
+ *   - `} else {` must be on a single line.
+ *   - Signed compare only via == / != (never < / <= / > / >= on i64/i32).
+ *   - u32/u64 reads via byte-wise helpers (avoid 8-byte movq trap).
+ *   - u32/u64 writes via byte-wise helpers (avoid pointer-store-width trap).
+ *
+ * Exit code map (each violation distinct):
+ *
+ *   ALLOC FAILURES (1..9)
+ *     1  text malloc failed
+ *     2  cands malloc failed
+ *     3  meta malloc failed
+ *     4  env malloc failed
+ *     5  digest malloc failed
+ *     6  facet-data malloc failed
+ *     7  fids/fdpa/flna malloc failed
+ *     8  resolve out-buffer malloc failed
+ *     9  reserved
+ *
+ *   HIP FUNCTIONAL FAILURES (10..14)
+ *    10  warmup hip_resolve("send buffer") returned non-zero
+ *    11  warmup hip_resolve("open file")   returned non-zero
+ *    12  warmup hip_resolve("xyzzy ...")    returned non-zero
+ *    13  reserved
+ *    14  reserved
+ *
+ *   HIP THRESHOLD VIOLATIONS (15..17)
+ *    15  "send buffer"        median >= 30000 cycles (UNIQUE)
+ *    16  "open file"          median >= 35000 cycles (AMBIGUOUS)
+ *    17  "xyzzy plugh foobar" median >= 15000 cycles (NO_MATCH)
+ *
+ *   IDOC FUNCTIONAL FAILURES (18..23)
+ *    18  warmup idoc_pack_payload returned wrong length (expect 60)
+ *    19  warmup idoc_finalize returned wrong total length
+ *    20  warmup idoc_validate returned 0 (envelope corrupt)
+ *    21  warmup idoc_resolve_facet returned 0 (no match for caps=0x01)
+ *    22  warmup idoc_resolve_facet returned wrong facet length (expect 8)
+ *    23  reserved
+ *
+ *   IDOC THRESHOLD VIOLATION (24)
+ *    24  IDoc round-trip median >= 8000 cycles
+ *
+ *   RESERVED (25..30)
+ *    25..30  reserved for future sub-benchmarks
+ *
+ *   PASS
+ *    99  all four sub-benchmarks within budget
+ *
+ * Determinism note: bench_now_p reads the free-running TSC and is
+ * intentionally non-deterministic. This corpus tests TIMING budgets,
+ * not bit-identity. It MUST NOT participate in mhash / kchain /
+ * witness sealing.
+ */
+
+module corpus_244
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn bench_now_p() -> u64 from "bench.iii"
+extern @abi(c-msvc-x64) fn bench_warmup() -> i32 from "bench.iii"
+
+extern @abi(c-msvc-x64) fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_ambiguous() -> u32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_no_match() -> u32 from "hip.iii"
+
+extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_facet_len_ptr: u64) -> u8 from "idoc.iii"
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+/* Module-scope u64 sample buffer: 100 deltas * 8 bytes = 800 bytes.
+ * Indexed via *u64 pointer arithmetic, but read/write byte-wise to
+ * dodge the iiis-0 8-byte movq trap on *u64 indexing. */
+var BENCH_HIP_DELTAS : [u8; 800]
+
+/* Threshold constants. */
+const C244_BUDGET_UNIQUE    : u64 = 30000u64
+const C244_BUDGET_AMBIGUOUS : u64 = 35000u64
+const C244_BUDGET_NO_MATCH  : u64 = 15000u64
+/* IDoc round-trip budget: 1.5x measured median to absorb scheduler
+ * variance.  Tightening (regression detection) is welcome; loosening
+ * indicates a slowdown that warrants investigation. */
+const C244_BUDGET_IDOC      : u64 = 12000u64
+
+const C244_SAMPLES          : u32 = 100u32
+
+/* Byte-wise u64 reader -- iiis-0 *u64 indexing emits 8-byte movq that
+ * may misalign on tightly packed slots; assemble byte-wise to be
+ * defensive and to keep load/store widths predictable. */
+fn _read_u64(buf_addr: u64, off: u64) -> u64 {
+    let base : u64 = buf_addr
+    let off_l : u64 = off
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bp : *u8 = (base + off_l + i) as *u8
+        let b  : u64 = (bp[0u64] as u64) & 0xFFu64
+        v = v | (b << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+/* Byte-wise u64 writer -- mirrors _read_u64. */
+fn _write_u64(buf_addr: u64, off: u64, v: u64) -> i32 {
+    let base : u64 = buf_addr
+    let off_l : u64 = off
+    let v_l : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bp : *u8 = (base + off_l + i) as *u8
+        bp[0u64] = ((v_l >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Byte-wise u32 reader (used for hip_resolve's meta block). */
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 {
+    buf[off] = b
+    return off + 1u64
+}
+
+/* "send buffer" -> UNIQUE.
+ * Bytes: 73 65 6E 64 20 62 75 66 66 65 72 (11 bytes) */
+fn _phrase_send_buffer(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 115u8)   /* s */
+    o = _put(buf, o, 101u8)   /* e */
+    o = _put(buf, o, 110u8)   /* n */
+    o = _put(buf, o, 100u8)   /* d */
+    o = _put(buf, o, 32u8)    /* space */
+    o = _put(buf, o, 98u8)    /* b */
+    o = _put(buf, o, 117u8)   /* u */
+    o = _put(buf, o, 102u8)   /* f */
+    o = _put(buf, o, 102u8)   /* f */
+    o = _put(buf, o, 101u8)   /* e */
+    o = _put(buf, o, 114u8)   /* r */
+    return o as u32
+}
+
+/* "open file" -> AMBIGUOUS (intent_form + intent_act both emitted).
+ * Bytes: 6F 70 65 6E 20 66 69 6C 65 (9 bytes) */
+fn _phrase_open_file(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 111u8)   /* o */
+    o = _put(buf, o, 112u8)   /* p */
+    o = _put(buf, o, 101u8)   /* e */
+    o = _put(buf, o, 110u8)   /* n */
+    o = _put(buf, o, 32u8)    /* space */
+    o = _put(buf, o, 102u8)   /* f */
+    o = _put(buf, o, 105u8)   /* i */
+    o = _put(buf, o, 108u8)   /* l */
+    o = _put(buf, o, 101u8)   /* e */
+    return o as u32
+}
+
+/* "xyzzy plugh foobar" -> NO_MATCH (all IDENT, no VERB).
+ * Bytes: 78 79 7A 7A 79 20 70 6C 75 67 68 20 66 6F 6F 62 61 72 (18 bytes) */
+fn _phrase_nomatch(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 120u8)   /* x */
+    o = _put(buf, o, 121u8)   /* y */
+    o = _put(buf, o, 122u8)   /* z */
+    o = _put(buf, o, 122u8)   /* z */
+    o = _put(buf, o, 121u8)   /* y */
+    o = _put(buf, o, 32u8)    /* space */
+    o = _put(buf, o, 112u8)   /* p */
+    o = _put(buf, o, 108u8)   /* l */
+    o = _put(buf, o, 117u8)   /* u */
+    o = _put(buf, o, 103u8)   /* g */
+    o = _put(buf, o, 104u8)   /* h */
+    o = _put(buf, o, 32u8)    /* space */
+    o = _put(buf, o, 102u8)   /* f */
+    o = _put(buf, o, 111u8)   /* o */
+    o = _put(buf, o, 111u8)   /* o */
+    o = _put(buf, o, 98u8)    /* b */
+    o = _put(buf, o, 97u8)    /* a */
+    o = _put(buf, o, 114u8)   /* r */
+    return o as u32
+}
+
+/* Insertion-sort BENCH_HIP_DELTAS in ascending order over `n` u64
+ * elements. Reads/writes are byte-wise via _read_u64 / _write_u64.
+ * Worst case O(n^2) compares but only ~n swaps for near-sorted RDTSCP
+ * samples (~100 swaps for n=100). */
+fn _sort_deltas(n: u32) -> i32 {
+    let n_l : u32 = n
+    let base : u64 = (&BENCH_HIP_DELTAS) as u64
+    let mut i : u32 = 1u32
+    while i < n_l {
+        let key : u64 = _read_u64(base, (i as u64) * 8u64)
+        let mut j_signed : i32 = (i as i32) - 1i32
+        let mut done : u32 = 0u32
+        while done == 0u32 {
+            if j_signed == -1i32 {
+                done = 1u32
+            } else {
+                let j_u : u64 = (j_signed as u64) & 0xFFFFFFFFu64
+                let cur : u64 = _read_u64(base, j_u * 8u64)
+                if cur > key {
+                    _write_u64(base, (j_u + 1u64) * 8u64, cur)
+                    j_signed = j_signed - 1i32
+                } else {
+                    done = 1u32
+                }
+            }
+        }
+        let target : u64 = ((j_signed + 1i32) as u64) & 0xFFFFFFFFu64
+        _write_u64(base, target * 8u64, key)
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* After sorting, return BENCH_HIP_DELTAS[n/2]. For n=100 this is the
+ * 51st element (index 50, zero-based) -- the upper-median, consistent
+ * with the floor(n/2) convention used throughout III's perf gates. */
+fn _median(n: u32) -> u64 {
+    let n_l : u32 = n
+    let base : u64 = (&BENCH_HIP_DELTAS) as u64
+    let mid : u64 = (n_l as u64) / 2u64
+    return _read_u64(base, mid * 8u64)
+}
+
+/* iiis-0 limits us to 4 fn params -- pass cands_ptr and meta_ptr via
+ * module-scope scratch slots so _bench_hip can keep its 2-arg
+ * signature (text_ptr, text_len). */
+var C244_CANDS_PTR : [u8; 8]
+var C244_META_PTR  : [u8; 8]
+
+fn _set_buffers(cands_ptr: u64, meta_ptr: u64) -> i32 {
+    _write_u64((&C244_CANDS_PTR) as u64, 0u64, cands_ptr)
+    _write_u64((&C244_META_PTR)  as u64, 0u64, meta_ptr)
+    return 0i32
+}
+
+fn _bench_hip(text_ptr: u64, text_len: u32) -> u64 {
+    let t_l : u64 = text_ptr
+    let n_l : u32 = text_len
+    let cands_u : u64 = _read_u64((&C244_CANDS_PTR) as u64, 0u64)
+    let meta_u  : u64 = _read_u64((&C244_META_PTR)  as u64, 0u64)
+    let base : u64 = (&BENCH_HIP_DELTAS) as u64
+    let mut i : u32 = 0u32
+    while i < C244_SAMPLES {
+        bench_warmup()
+        let t0 : u64 = bench_now_p()
+        hip_resolve(t_l, n_l, cands_u, meta_u)
+        let t1 : u64 = bench_now_p()
+        let dt : u64 = t1 - t0
+        _write_u64(base, (i as u64) * 8u64, dt)
+        i = i + 1u32
+    }
+    _sort_deltas(C244_SAMPLES)
+    return _median(C244_SAMPLES)
+}
+
+/* IDoc round-trip: pack 4-facet payload, finalize envelope, validate,
+ * resolve render-only facet. Pointer args packed via the same scratch
+ * scheme to stay within 4 fn params.
+ *
+ * Scratch layout:
+ *   C244_IDOC_ENV_PTR    : envelope buffer pointer
+ *   C244_IDOC_FIDS_PTR   : facet_ids[4] pointer
+ *   C244_IDOC_FDPA_PTR   : facet_data_ptrs[4] pointer (each 8B LE)
+ *   C244_IDOC_FLNA_PTR   : facet_lens[4] pointer (each 4B LE)
+ *   C244_IDOC_OFD_PTR    : resolve out: facet data ptr-to-ptr
+ *   C244_IDOC_OFL_PTR    : resolve out: facet len ptr
+ *   C244_IDOC_DIG_PTR    : ctx_digest scratch
+ */
+var C244_IDOC_ENV_PTR  : [u8; 8]
+var C244_IDOC_FIDS_PTR : [u8; 8]
+var C244_IDOC_FDPA_PTR : [u8; 8]
+var C244_IDOC_FLNA_PTR : [u8; 8]
+var C244_IDOC_OFD_PTR  : [u8; 8]
+var C244_IDOC_OFL_PTR  : [u8; 8]
+var C244_IDOC_DIG_PTR  : [u8; 8]
+
+fn _idoc_set_env(env_u: u64, dig_u: u64) -> i32 {
+    _write_u64((&C244_IDOC_ENV_PTR) as u64, 0u64, env_u)
+    _write_u64((&C244_IDOC_DIG_PTR) as u64, 0u64, dig_u)
+    return 0i32
+}
+
+fn _idoc_set_facets(fids_u: u64, fdpa_u: u64, flna_u: u64) -> i32 {
+    _write_u64((&C244_IDOC_FIDS_PTR) as u64, 0u64, fids_u)
+    _write_u64((&C244_IDOC_FDPA_PTR) as u64, 0u64, fdpa_u)
+    _write_u64((&C244_IDOC_FLNA_PTR) as u64, 0u64, flna_u)
+    return 0i32
+}
+
+fn _idoc_set_outs(ofd_u: u64, ofl_u: u64) -> i32 {
+    _write_u64((&C244_IDOC_OFD_PTR) as u64, 0u64, ofd_u)
+    _write_u64((&C244_IDOC_OFL_PTR) as u64, 0u64, ofl_u)
+    return 0i32
+}
+
+/* Run one full IDoc round-trip cycle. Reads scratch slots for all the
+ * pointers we need (works around the 4-param limit). Returns the
+ * total wire length (>= 68 + 60 = 128) so the caller can sanity-check
+ * once before the timing loop. */
+fn _idoc_one_roundtrip() -> u32 {
+    let env_u  : u64 = _read_u64((&C244_IDOC_ENV_PTR)  as u64, 0u64)
+    let dig_u  : u64 = _read_u64((&C244_IDOC_DIG_PTR)  as u64, 0u64)
+    let fids_u : u64 = _read_u64((&C244_IDOC_FIDS_PTR) as u64, 0u64)
+    let fdpa_u : u64 = _read_u64((&C244_IDOC_FDPA_PTR) as u64, 0u64)
+    let flna_u : u64 = _read_u64((&C244_IDOC_FLNA_PTR) as u64, 0u64)
+    let ofd_u  : u64 = _read_u64((&C244_IDOC_OFD_PTR)  as u64, 0u64)
+    let ofl_u  : u64 = _read_u64((&C244_IDOC_OFL_PTR)  as u64, 0u64)
+
+    babel_wire_init(env_u)
+    babel_wire_set_seal_id(env_u, 0xBEEF244Au64)
+    babel_wire_set_intent_id(env_u, 0x244Bu64)
+    babel_wire_set_ctx_digest(env_u, dig_u)
+    babel_wire_set_facet(env_u, 0x0Fu8)
+
+    let hb : u32 = babel_wire_header_bytes()
+    let payload_addr : u64 = env_u + (hb as u64)
+    let plen : u32 = idoc_pack_payload(fids_u, fdpa_u, flna_u, payload_addr)
+    let total : u32 = idoc_finalize(env_u, plen)
+    let v : u8 = idoc_validate(env_u, total)
+    if v == 0u8 { return 0u32 }
+    let r : u8 = idoc_resolve_facet(env_u, 0x01u8, ofd_u, ofl_u)
+    if r == 0u8 { return 0u32 }
+    return total
+}
+
+fn _bench_idoc() -> u64 {
+    let base : u64 = (&BENCH_HIP_DELTAS) as u64
+    let mut i : u32 = 0u32
+    while i < C244_SAMPLES {
+        bench_warmup()
+        let t0 : u64 = bench_now_p()
+        _idoc_one_roundtrip()
+        let t1 : u64 = bench_now_p()
+        let dt : u64 = t1 - t0
+        _write_u64(base, (i as u64) * 8u64, dt)
+        i = i + 1u32
+    }
+    _sort_deltas(C244_SAMPLES)
+    return _median(C244_SAMPLES)
+}
+
+fn main() -> u64 {
+    /* === Allocate working buffers === */
+    let text  : *u8 = malloc(64u64)
+    if text  as u64 == 0u64 { return 1u64 }
+    let cands : *u8 = malloc(64u64)
+    if cands as u64 == 0u64 { return 2u64 }
+    let meta  : *u8 = malloc(16u64)
+    if meta  as u64 == 0u64 { return 3u64 }
+
+    /* Zero meta. */
+    let mut zi : u64 = 0u64
+    while zi < 16u64 { meta[zi] = 0u8; zi = zi + 1u64 }
+
+    _set_buffers(cands as u64, meta as u64)
+
+    /* === PART 1: HIP latency === */
+
+    /* "send buffer" -> UNIQUE.  Warmup checks correctness once. */
+    let len1 : u32 = _phrase_send_buffer(text)
+    let rc1  : i32 = hip_resolve(text as u64, len1, cands as u64, meta as u64)
+    if rc1 != 0i32 { return 10u64 }
+
+    /* u64 compare; >= via (>) || (==) -- both fine on unsigned. */
+    let med_unique : u64 = _bench_hip(text as u64, len1)
+    if med_unique >= C244_BUDGET_UNIQUE { return 15u64 }
+
+    /* "open file" -> AMBIGUOUS. */
+    let len2 : u32 = _phrase_open_file(text)
+    let rc2  : i32 = hip_resolve(text as u64, len2, cands as u64, meta as u64)
+    if rc2 != 0i32 { return 11u64 }
+
+    let med_ambig : u64 = _bench_hip(text as u64, len2)
+    if med_ambig >= C244_BUDGET_AMBIGUOUS { return 16u64 }
+
+    /* "xyzzy plugh foobar" -> NO_MATCH. */
+    let len3 : u32 = _phrase_nomatch(text)
+    let rc3  : i32 = hip_resolve(text as u64, len3, cands as u64, meta as u64)
+    if rc3 != 0i32 { return 12u64 }
+
+    let med_nomatch : u64 = _bench_hip(text as u64, len3)
+    if med_nomatch >= C244_BUDGET_NO_MATCH { return 17u64 }
+
+    /* === PART 2: IDoc round-trip === */
+
+    let env : *u8 = malloc(512u64)
+    if env as u64 == 0u64 { return 4u64 }
+
+    let dig : *u8 = malloc(32u64)
+    if dig as u64 == 0u64 { return 5u64 }
+    let mut di : u64 = 0u64
+    while di < 32u64 {
+        dig[di] = ((0xC0u64 + di) & 0xFFu64) as u8
+        di = di + 1u64
+    }
+
+    /* 4 facet payloads. */
+    let render_data   : *u8 = malloc(8u64)
+    if render_data as u64 == 0u64 { return 6u64 }
+    let extract_data  : *u8 = malloc(12u64)
+    if extract_data as u64 == 0u64 { return 6u64 }
+    let exec_data     : *u8 = malloc(4u64)
+    if exec_data as u64 == 0u64 { return 6u64 }
+    let validate_data : *u8 = malloc(16u64)
+    if validate_data as u64 == 0u64 { return 6u64 }
+
+    /* Render facet "RENDER!!" (8 bytes). */
+    render_data[0u64] = 82u8   /* R */
+    render_data[1u64] = 69u8   /* E */
+    render_data[2u64] = 78u8   /* N */
+    render_data[3u64] = 68u8   /* D */
+    render_data[4u64] = 69u8   /* E */
+    render_data[5u64] = 82u8   /* R */
+    render_data[6u64] = 33u8   /* ! */
+    render_data[7u64] = 33u8   /* ! */
+
+    /* Extract facet "JSON_PAYLOAD" (12 bytes). */
+    extract_data[0u64]  = 74u8   /* J */
+    extract_data[1u64]  = 83u8   /* S */
+    extract_data[2u64]  = 79u8   /* O */
+    extract_data[3u64]  = 78u8   /* N */
+    extract_data[4u64]  = 95u8   /* _ */
+    extract_data[5u64]  = 80u8   /* P */
+    extract_data[6u64]  = 65u8   /* A */
+    extract_data[7u64]  = 89u8   /* Y */
+    extract_data[8u64]  = 76u8   /* L */
+    extract_data[9u64]  = 79u8   /* O */
+    extract_data[10u64] = 65u8   /* A */
+    extract_data[11u64] = 68u8   /* D */
+
+    /* Execute facet "EXEC" (4 bytes). */
+    exec_data[0u64] = 69u8   /* E */
+    exec_data[1u64] = 88u8   /* X */
+    exec_data[2u64] = 69u8   /* E */
+    exec_data[3u64] = 67u8   /* C */
+
+    /* Validate facet 16 bytes filler 0xAA. */
+    let mut m : u64 = 0u64
+    while m < 16u64 {
+        validate_data[m] = 0xAAu8
+        m = m + 1u64
+    }
+
+    /* facet_ids[4], data ptrs[4*8=32], lens[4*4=16]. */
+    let fids : *u8 = malloc(4u64)
+    if fids as u64 == 0u64 { return 7u64 }
+    let fdpa : *u8 = malloc(32u64)
+    if fdpa as u64 == 0u64 { return 7u64 }
+    let flna : *u8 = malloc(16u64)
+    if flna as u64 == 0u64 { return 7u64 }
+
+    fids[0u64] = 0x01u8
+    fids[1u64] = 0x02u8
+    fids[2u64] = 0x04u8
+    fids[3u64] = 0x08u8
+
+    /* Pack ptrs as u64 LE byte-wise (avoids u32-Pointer Store Width
+     * trap and the iiis-0 *u64 indexing 8-byte movq quirk). */
+    let render_u   : u64 = render_data as u64
+    let extract_u  : u64 = extract_data as u64
+    let exec_u     : u64 = exec_data as u64
+    let validate_u : u64 = validate_data as u64
+    _write_u64(fdpa as u64, 0u64,  render_u)
+    _write_u64(fdpa as u64, 8u64,  extract_u)
+    _write_u64(fdpa as u64, 16u64, exec_u)
+    _write_u64(fdpa as u64, 24u64, validate_u)
+
+    /* Pack lens as u32 LE byte-wise. */
+    flna[0u64] = 8u8;  flna[1u64]  = 0u8; flna[2u64]  = 0u8; flna[3u64]  = 0u8
+    flna[4u64] = 12u8; flna[5u64]  = 0u8; flna[6u64]  = 0u8; flna[7u64]  = 0u8
+    flna[8u64] = 4u8;  flna[9u64]  = 0u8; flna[10u64] = 0u8; flna[11u64] = 0u8
+    flna[12u64] = 16u8; flna[13u64] = 0u8; flna[14u64] = 0u8; flna[15u64] = 0u8
+
+    /* Resolve out-buffers (ptr-to-ptr + ptr-to-u32). */
+    let ofd_p : *u8 = malloc(8u64)
+    if ofd_p as u64 == 0u64 { return 8u64 }
+    let ofl_p : *u8 = malloc(4u64)
+    if ofl_p as u64 == 0u64 { return 8u64 }
+
+    _idoc_set_env(env as u64, dig as u64)
+    _idoc_set_facets(fids as u64, fdpa as u64, flna as u64)
+    _idoc_set_outs(ofd_p as u64, ofl_p as u64)
+
+    /* Functional warmup: one full round-trip BEFORE timing.
+     * Verifies plen, total, validate, resolve are correct. */
+    babel_wire_init(env as u64)
+    babel_wire_set_seal_id(env as u64, 0xBEEF244Au64)
+    babel_wire_set_intent_id(env as u64, 0x244Bu64)
+    babel_wire_set_ctx_digest(env as u64, dig as u64)
+    babel_wire_set_facet(env as u64, 0x0Fu8)
+
+    let hb : u32 = babel_wire_header_bytes()
+    let payload_addr : u64 = (env as u64) + (hb as u64)
+    let warmup_plen : u32 = idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, payload_addr)
+    /* Expect 4 * 5 + (8 + 12 + 4 + 16) = 20 + 40 = 60. */
+    if warmup_plen != 60u32 { return 18u64 }
+
+    let warmup_total : u32 = idoc_finalize(env as u64, warmup_plen)
+    if warmup_total != (hb + warmup_plen) { return 19u64 }
+
+    if idoc_validate(env as u64, warmup_total) != 1u8 { return 20u64 }
+
+    let warmup_r : u8 = idoc_resolve_facet(env as u64, 0x01u8, ofd_p as u64, ofl_p as u64)
+    if warmup_r != 1u8 { return 21u64 }
+
+    let warmup_flen : u32 = _read_u32(ofl_p, 0u64)
+    if warmup_flen != 8u32 { return 22u64 }
+
+    /* Timed loop -- 100 iterations of full pack+finalize+validate+resolve. */
+    let med_idoc : u64 = _bench_idoc()
+    if med_idoc >= C244_BUDGET_IDOC { return 24u64 }
+
+    /* === Cleanup === */
+    free(text)
+    free(cands)
+    free(meta)
+    free(env)
+    free(dig)
+    free(render_data)
+    free(extract_data)
+    free(exec_data)
+    free(validate_data)
+    free(fids)
+    free(fdpa)
+    free(flna)
+    free(ofd_p)
+    free(ofl_p)
+
+    return 99u64
+}

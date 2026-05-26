@@ -1,0 +1,17 @@
+module corpus_31
+
+extern @abi(c-msvc-x64) fn sat_add_u64(a: u64, b: u64) -> u64 from "sat_arith.iii"
+extern @abi(c-msvc-x64) fn sat_sub_u64(a: u64, b: u64) -> u64 from "sat_arith.iii"
+extern @abi(c-msvc-x64) fn sat_mul_u64(a: u64, b: u64) -> u64 from "sat_arith.iii"
+
+fn main() -> u64 {
+    let r1 : u64 = sat_add_u64(0xFFFFFFFFFFFFFFFFu64, 1u64)
+    if r1 != 0xFFFFFFFFFFFFFFFFu64 { return 10u64 }
+    let r2 : u64 = sat_sub_u64(0u64, 1u64)
+    if r2 != 0u64 { return 20u64 }
+    let r3 : u64 = sat_mul_u64(7u64, 9u64)
+    if r3 != 63u64 { return 30u64 }
+    let r4 : u64 = sat_add_u64(100u64, 200u64)
+    if r4 != 300u64 { return 40u64 }
+    return 1u64
+}

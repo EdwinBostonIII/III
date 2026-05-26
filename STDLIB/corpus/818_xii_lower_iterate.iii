@@ -1,0 +1,17 @@
+/* 818 -- mig4 Step 8b: lower the ITERATION domain through XII.  Drives xli_selftest: the iteration-
+ * algebra LAWS hold by canonicalisation -- loop-once R013 (1), multiplicative fold of nested loops
+ * R014 (2), distribute over independent composition R015 (3), null-body wipe R041 (4); the prove-
+ * the-negative TEETH that a genuine iteration is preserved (5) and the count is observable so
+ * distinct counts stay distinct (6); determinism (7); the rules realising it are ADMITTED by Step 6
+ * (8).  Exit 99 = all hold -- ITERATION is now XII canonicalisation, completing the structured-
+ * programming trinity (sequence/816, selection/817, iteration/818) all routed through the one
+ * engine.  Gated by run_corpus.sh. */
+module corpus_818
+
+extern @abi(c-msvc-x64) fn xli_selftest() -> u64 from "xii_lower_iterate.iii"
+
+fn main() -> u64 {
+    let r : u64 = xli_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

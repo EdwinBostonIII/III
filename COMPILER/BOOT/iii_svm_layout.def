@@ -1,0 +1,24 @@
+# iii_svm_layout.def
+#
+# SINGLE SOURCE OF TRUTH for the AMD-SVM region hexad typing
+# (KATABASIS plan 4.7 keystone / 0.4 layout / 0.6 BSOD post-mortem).
+# Regenerate svm_layout.iii's generated section via:
+#   bash COMPILER/BOOT/gen_svm_layout.sh
+# The build's drift gate (gen_svm_layout.sh --check) fails if svm_layout.iii's
+# generated section diverges from this file -- so the safety typing and the
+# verified SVM layout can NEVER drift apart (plan 6.9).
+#
+# Fields (whitespace-delimited):  region_id  name  lo_offset  hi_offset  hexad
+#   hexad 728 = all-POS (reachable -> writable);  324 = structural-NEG (brick).
+# Rows MUST be in ascending lo order: the region classifier is an ascending
+# `offset < hi` cascade.  Bounds verified off live AD103 silicon 2026-04-11.
+#
+# id  name       lo        hi          hexad
+1     VMCB       0x00000   0x01000     324
+2     HSAVE      0x01000   0x02000     324
+3     NPT        0x02000   0x0A000     324
+4     GUEST      0x0A000   0x10000     324
+5     ML_STATE   0x10000   0x20000     728
+6     SHARED     0x20000   0x3E000     728
+7     HV_STATE   0x3E000   0x3F000     324
+8     DIAG       0x3F000   0x40000     324

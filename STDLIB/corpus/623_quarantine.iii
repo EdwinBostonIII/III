@@ -1,0 +1,4 @@
+/* 623 — quarantine: physical capability-gated boundaries with reversible undo journal. */
+module corpus_623
+extern @abi(c-msvc-x64) fn q_selftest() -> u64 from "quarantine.iii"
+fn main() -> u64 { return q_selftest() }

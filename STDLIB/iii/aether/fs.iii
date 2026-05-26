@@ -1,0 +1,158 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fs.iii
+ *
+ * III STDLIB - aether::fs
+ *
+ * File-system IO surface, capability-gated.  Underlying ABI is the
+ * MSVCRT POSIX-like layer (_open / _read / _write / _close / _lseeki64)
+ * which uses integer flag arguments and a u32 file descriptor -
+ * avoiding the W3 address-of-static-string problem that fopen's mode
+ * argument would create.
+ *
+ * Phase C scope: open / close / read / write / seek / tell / size.
+ * Phase D adds directory ops, stat, atomic-rename.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
+ */
+
+module aether_fs
+
+extern @abi(c-msvc-x64) fn _open(path: *u8, flags: i32, mode: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _close(fd: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _read(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _write(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn _lseeki64(fd: i32, off: u64, whence: i32) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _unlink(path: *u8) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_close(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_drop(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_fd(id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_verify(id: u64, required: u64) -> u8 from "handle.iii"
+
+const FS_OK         : i32 = 0i32
+const FS_E_BADID    : i32 = -1i32
+const FS_E_DENIED   : i32 = -2i32
+const FS_E_OPEN     : i32 = -3i32
+const FS_E_IO       : i32 = -4i32
+
+const FS_MODE_READ   : u32 = 1u32
+const FS_MODE_WRITE  : u32 = 2u32
+const FS_MODE_APPEND : u32 = 3u32
+
+const FS_O_RDONLY : i32 = 0i32
+const FS_O_WRONLY : i32 = 1i32
+const FS_O_RDWR   : i32 = 2i32
+const FS_O_APPEND : i32 = 0x0008i32
+const FS_O_CREAT  : i32 = 0x0100i32
+const FS_O_TRUNC  : i32 = 0x0200i32
+const FS_O_BINARY : i32 = 0x8000i32
+
+const FS_S_IREAD_WRITE : i32 = 0x180i32
+
+const FS_SEEK_SET : i32 = 0i32
+const FS_SEEK_CUR : i32 = 1i32
+const FS_SEEK_END : i32 = 2i32
+
+const FS_RIGHT_READ   : u64 = 0x0002u64
+const FS_RIGHT_WRITE  : u64 = 0x0004u64
+const FS_RIGHT_CREATE : u64 = 0x0008u64
+
+fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 @export {
+    let mut required : u64 = 0u64
+    let mut flags : i32 = FS_O_BINARY
+    if mode == FS_MODE_READ {
+        required = FS_RIGHT_READ
+        flags = flags | FS_O_RDONLY
+    }
+    if mode == FS_MODE_WRITE {
+        required = FS_RIGHT_WRITE | FS_RIGHT_CREATE
+        flags = flags | FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC
+    }
+    if mode == FS_MODE_APPEND {
+        required = FS_RIGHT_WRITE
+        flags = flags | FS_O_WRONLY | FS_O_APPEND
+    }
+    if required == 0u64 { return 0u64 }
+    if cap_verify_rights(cap_id, required) == 0u8 { return 0u64 }
+    let p_path : *u8 = path as *u8
+    let fd : i32 = _open(p_path, flags, FS_S_IREAD_WRITE)
+    if fd == -1i32 { return 0u64 }
+    return handle_alloc(1u8, fd as u64, cap_id)
+}
+
+/* Delete a file by path. Deletion is a write-class mutation, so it requires
+ * the WRITE right on the capability (same right that creates/truncates in
+ * fs_open WRITE mode). Path-based (like fs_open), not handle-based — there is
+ * no open descriptor to delete. Returns FS_OK on success, FS_E_DENIED if the
+ * capability lacks WRITE, FS_E_IO if the underlying unlink fails (e.g. the
+ * file does not exist or is locked). RITCHIE Stage 1.X (Phase D ops, brought
+ * forward to support deterministic corpus cleanup). */
+fn fs_delete(cap_id: u64, path: u64) -> i32 @export {
+    if cap_verify_rights(cap_id, FS_RIGHT_WRITE) == 0u8 { return FS_E_DENIED }
+    let p_path : *u8 = path as *u8
+    let rc : i32 = _unlink(p_path)
+    if rc != 0i32 { return FS_E_IO }
+    return FS_OK
+}
+
+fn fs_close(handle_id: u64) -> i32 @export {
+    let fd64 : u64 = handle_fd(handle_id)
+    let fd : i32 = fd64 as i32
+    let rc : i32 = _close(fd)
+    handle_close(handle_id)
+    if rc != 0i32 { return FS_E_IO }
+    return FS_OK
+}
+
+/* mig3 boundary SOURCE: read fills `buf` with untrusted file bytes -- buf is
+ * @sovereign_value @sovereign_out (the same recv/read out-buffer taint law). */
+fn fs_read(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 @export {
+    if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0u64 }
+    let fd64 : u64 = handle_fd(handle_id)
+    let fd : i32 = fd64 as i32
+    let bp : *u8 = buf as *u8
+    let n32 : u32 = (n & 0xFFFFFFFFu64) as u32
+    let read_n : i32 = _read(fd, bp, n32)
+    if read_n == -1i32 { return 0u64 }
+    return read_n as u64
+}
+
+/* mig3 boundary SINK: write emits `buf` OUTWARD to the file, so it may carry
+ * sovereign data -- buf is @sovereign_value (read-only sink, not @sovereign_out). */
+fn fs_write(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> u64 @export {
+    if handle_verify(handle_id, FS_RIGHT_WRITE) == 0u8 { return 0u64 }
+    let fd64 : u64 = handle_fd(handle_id)
+    let fd : i32 = fd64 as i32
+    let bp : *u8 = buf as *u8
+    let n32 : u32 = (n & 0xFFFFFFFFu64) as u32
+    let written : i32 = _write(fd, bp, n32)
+    if written == -1i32 { return 0u64 }
+    return written as u64
+}
+
+fn fs_seek(handle_id: u64, off: u64, whence: u32) -> i32 @export {
+    if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return FS_E_DENIED }
+    let fd64 : u64 = handle_fd(handle_id)
+    let fd : i32 = fd64 as i32
+    let w : i32 = whence as i32
+    _lseeki64(fd, off, w)
+    return FS_OK
+}
+
+fn fs_tell(handle_id: u64) -> u64 @export {
+    if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let fd64 : u64 = handle_fd(handle_id)
+    let fd : i32 = fd64 as i32
+    return _lseeki64(fd, 0u64, FS_SEEK_CUR)
+}
+
+fn fs_size(handle_id: u64) -> u64 @export {
+    if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let fd64 : u64 = handle_fd(handle_id)
+    let fd : i32 = fd64 as i32
+    let saved : u64 = _lseeki64(fd, 0u64, FS_SEEK_CUR)
+    let sz : u64 = _lseeki64(fd, 0u64, FS_SEEK_END)
+    _lseeki64(fd, saved, FS_SEEK_SET)
+    return sz
+}

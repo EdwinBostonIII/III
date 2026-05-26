@@ -1,0 +1,105 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\codegen_patterns.iii
+ *
+ * III STDLIB - omnia::codegen_patterns
+ *
+ * Register the 27 codegen patterns at boot.
+ * FROZEN SPEC §7.2, §7.3, §Z.C.9; ADR-RES-005.
+ *
+ *   Slots 42..48: 7 codegen-call patterns
+ *   Slots 49..68: 20 codegen-AST-kind patterns
+ *
+ * Parent meta-pattern: slot 5 (PRIMITIVE_COMPOSE) per
+ * R2-GENESIS/CORE-CALCULUS-V1.0.iii. The legacy MP-14/MP-15 distinction
+ * (mp_codegen_lower_node vs mp_codegen_emit_call) collapses into a single
+ * compose root with codegen specialisations.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ */
+
+module omnia_codegen_patterns
+
+extern @abi(c-msvc-x64) fn pattern_template_zero(buf: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_id(buf: u64, mod_mh: u64, name: u64, name_len: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_predicate(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_unify(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_dispatch(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_activation_base(buf: u64, b: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_hexad_kind(buf: u64, h: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_ring(buf: u64, r: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_k_value(buf: u64, k: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_specialisation_of(buf: u64, parent: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_binding_kind(buf: u64, slot: u8, k: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+
+const HEXAD_COMPOSE : u8 = 6u8
+const RING_R0       : u8 = 2u8
+
+var CG_MODULE_MHASH : [u8; 32]
+var CG_TEMPLATE_BUF : [u8; 168]
+var CG_NAME_BUF : [u8; 32]
+
+/* Default codegen dispatch is defined in codegen_dispatch.iii (separate
+ * file) so the fn-address operator produces a proper extern symbol. */
+extern @abi(c-msvc-x64) fn cg_dispatch_default(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
+
+fn _cg_register(slot: u32, parent: u64, ast_kind_low: u8, name_b0: u8, name_b1: u8, name_b2: u8, name_b3: u8) -> i32 {
+    pattern_template_zero((&CG_TEMPLATE_BUF) as u64)
+    CG_NAME_BUF[0] = name_b0
+    CG_NAME_BUF[1] = name_b1
+    CG_NAME_BUF[2] = name_b2
+    CG_NAME_BUF[3] = name_b3
+    CG_NAME_BUF[4] = 0u8
+    pattern_template_set_id((&CG_TEMPLATE_BUF) as u64, (&CG_MODULE_MHASH) as u64, (&CG_NAME_BUF) as u64, 4u32)
+    pattern_template_set_activation_base((&CG_TEMPLATE_BUF) as u64, 1000000000u64)
+    pattern_template_set_hexad_kind((&CG_TEMPLATE_BUF) as u64, HEXAD_COMPOSE)
+    pattern_template_set_ring((&CG_TEMPLATE_BUF) as u64, RING_R0)
+    pattern_template_set_k_value((&CG_TEMPLATE_BUF) as u64, 950000000u64)
+    pattern_template_set_specialisation_of((&CG_TEMPLATE_BUF) as u64, parent)
+    /* Wire in the real default dispatch via fn-pointer */
+    let fp : u64 = cg_dispatch_default
+    pattern_template_set_dispatch((&CG_TEMPLATE_BUF) as u64, fp)
+    /* Encode AST kind tag in binding_kinds[1] for lookup */
+    pattern_template_set_binding_kind((&CG_TEMPLATE_BUF) as u64, 1u8, ast_kind_low)
+    pattern_register(slot, (&CG_TEMPLATE_BUF) as u64)
+    return 0i32
+}
+
+fn codegen_register_all() -> i32 @export {
+    /* PRIMITIVE_COMPOSE meta-pattern at slot 5 is the unified parent for
+     * every codegen pattern. The legacy MP-14/MP-15 split is gone with the
+     * 18-primitive collapse (see R2-GENESIS/CORE-CALCULUS-V1.0.iii sec A.2). */
+    let mp_compose : u64 = 5u64
+
+    /* 7 call-family patterns at slots 42..48 */
+    _cg_register(42u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 48u8)   /* cg_call_direct_extern */
+    _cg_register(43u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 49u8)   /* cg_call_direct_local */
+    _cg_register(44u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 50u8)
+    _cg_register(45u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 51u8)
+    _cg_register(46u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 52u8)   /* cg_resolver_self */
+    _cg_register(47u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 53u8)
+    _cg_register(48u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 54u8)
+
+    /* 20 AST-kind patterns at slots 49..68 */
+    _cg_register(49u32, mp_compose, 1u8,  99u8, 97u8, 48u8, 49u8)  /* cg_lower_binary, AST kind 1 */
+    _cg_register(50u32, mp_compose, 2u8,  99u8, 97u8, 48u8, 50u8)
+    _cg_register(51u32, mp_compose, 3u8,  99u8, 97u8, 48u8, 51u8)
+    _cg_register(52u32, mp_compose, 4u8,  99u8, 97u8, 48u8, 52u8)
+    _cg_register(53u32, mp_compose, 5u8,  99u8, 97u8, 48u8, 53u8)
+    _cg_register(54u32, mp_compose, 6u8,  99u8, 97u8, 48u8, 54u8)
+    _cg_register(55u32, mp_compose, 7u8,  99u8, 97u8, 48u8, 55u8)
+    _cg_register(56u32, mp_compose, 8u8,  99u8, 97u8, 48u8, 56u8)
+    _cg_register(57u32, mp_compose, 9u8,  99u8, 97u8, 48u8, 57u8)
+    _cg_register(58u32, mp_compose, 10u8, 99u8, 97u8, 49u8, 48u8)
+    _cg_register(59u32, mp_compose, 11u8, 99u8, 97u8, 49u8, 49u8)
+    _cg_register(60u32, mp_compose, 12u8, 99u8, 97u8, 49u8, 50u8)
+    _cg_register(61u32, mp_compose, 13u8, 99u8, 97u8, 49u8, 51u8)
+    _cg_register(62u32, mp_compose, 14u8, 99u8, 97u8, 49u8, 52u8)
+    _cg_register(63u32, mp_compose, 15u8, 99u8, 97u8, 49u8, 53u8)
+    _cg_register(64u32, mp_compose, 16u8, 99u8, 97u8, 49u8, 54u8)
+    _cg_register(65u32, mp_compose, 17u8, 99u8, 97u8, 49u8, 55u8)
+    _cg_register(66u32, mp_compose, 18u8, 99u8, 97u8, 49u8, 56u8)
+    _cg_register(67u32, mp_compose, 19u8, 99u8, 97u8, 49u8, 57u8)
+    _cg_register(68u32, mp_compose, 20u8, 99u8, 97u8, 50u8, 48u8)
+
+    return 0i32
+}

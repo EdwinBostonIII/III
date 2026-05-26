@@ -1,0 +1,50 @@
+/* corpus/364_xii_horizon_metadata.iii — Horizon metadata consistency */
+
+module corpus_364_xii_horizon_metadata
+
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_hexad(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_k_cost(id: u32) -> u32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_ct_kind(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_count() -> u32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_productive_count() -> u32 from "xii_horizon.iii"
+
+fn main() -> u64 {
+    xii_horizon_init()
+
+    /* Total pattern count is 144. */
+    if xii_horizon_count() != 144u32 { return 1u64 }
+
+    /* Productive count is 126. */
+    if xii_horizon_productive_count() != 126u32 { return 2u64 }
+
+    /* H001 ed25519_sign metadata. */
+    if xii_horizon_hexad(0u32) != 7u8 { return 3u64 }   /* ORIGIN */
+    if xii_horizon_is_productive(0u32) != 1u8 { return 4u64 }
+    if xii_horizon_ct_kind(0u32) != 1u8 { return 5u64 } /* CT class DATA_INDEP_BRANCH */
+
+    /* H012 sha256_oneshot at index 11 (per DOCS/III-XII.md §26.8.1).
+     * H011 at index 10 is x25519_kex (ESSENCE, hexad 4). */
+    if xii_horizon_hexad(11u32) != 5u8 { return 6u64 }  /* MOTION */
+    if xii_horizon_is_productive(11u32) != 1u8 { return 7u64 }
+
+    /* H127 first guard cell: not productive. */
+    if xii_horizon_is_productive(126u32) != 0u8 { return 8u64 }
+
+    /* H143 last reserved cell: not productive. */
+    if xii_horizon_is_productive(143u32) != 0u8 { return 9u64 }
+
+    /* All productive patterns must have ct_kind <= 8 (per S26.6). */
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        if xii_horizon_is_productive(i) == 1u8 {
+            let ct : u8 = xii_horizon_ct_kind(i)
+            if ct > 8u8 { return 100u64 + (i as u64) }
+        }
+        i = i + 1u32
+    }
+
+    return 0u64
+}

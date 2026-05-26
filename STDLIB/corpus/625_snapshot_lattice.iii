@@ -1,0 +1,4 @@
+/* 625 — snapshot_lattice: snapshot forest-meet consulted before destructive ops (W26/M9). */
+module corpus_625
+extern @abi(c-msvc-x64) fn sl_selftest() -> u64 from "snapshot_lattice.iii"
+fn main() -> u64 { return sl_selftest() }

@@ -1,0 +1,10 @@
+module corpus_45
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn resolver_replay_check_chain() -> u8 from "resolver_replay.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    let r : u8 = resolver_replay_check_chain()
+    return r as u64
+}

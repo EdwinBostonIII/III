@@ -1,0 +1,4 @@
+/* 617 — quine_verifier: bootstrap self-verification (recompute master hash, equality compare). */
+module corpus_617
+extern @abi(c-msvc-x64) fn qv_selftest() -> u64 from "quine_verifier.iii"
+fn main() -> u64 { return qv_selftest() }

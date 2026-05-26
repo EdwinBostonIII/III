@@ -1,0 +1,17 @@
+/* 700 -- charter_terminal: the Constitution's TERMINAL GATE (capability 1).
+ *
+ * The global run_charter folds all thirteen Harmony-Invariant clauses (H1..H13,
+ * h{1..13}_charter.iii / corpus 674,688..699) into one green/red light: GREEN iff every
+ * invariant's full self-test passes (verify held, falsifier caught, canary drove RED, sealed
+ * verdict reproduced), else the 1-based index of the first failing clause -- which, for the
+ * thirteen registered in order, IS the failing invariant's number.  ct_selftest also proves
+ * the terminal fold is a REAL falsifier: an injected canary that claims H1 is broken drives
+ * the gate RED at index 14.  On GREEN the gate cad-seals its own verdict (the stable seal of
+ * capability 1; the single light a stranger runs of capability 12).
+ * Main-corpus convention: rc 99 = pass; 1..13 = which Harmony Invariant failed;
+ * 14..21 = which terminal-gate assertion failed. */
+module corpus_700
+
+extern @abi(c-msvc-x64) fn ct_selftest() -> u64 from "charter_terminal.iii"
+
+fn main() -> u64 { return ct_selftest() }

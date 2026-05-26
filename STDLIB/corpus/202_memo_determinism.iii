@@ -1,0 +1,128 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\202_memo_determinism.iii
+ *
+ * III conformance corpus 202 -- Phase C.3: deterministic memoization.
+ *
+ * Asserts:
+ *   1. memo_reset clears all entries (memo_used == 0).
+ *   2. memo_key is deterministic: same inputs yield same key.
+ *   3. memo_lookup on miss returns MEMO_NOT_FOUND (0xFFFFFFFF).
+ *   4. memo_insert + memo_lookup roundtrip.
+ *   5. Inserting a duplicate key updates in place (memo_used unchanged).
+ *   6. Inserting N distinct keys yields memo_used == N.
+ *   7. FIFO eviction: when cap is exceeded, oldest entry is evicted.
+ *
+ * Exit code: 99 on full pass; 1..N for specific failures.
+ */
+
+module corpus_202
+
+extern @abi(c-msvc-x64) fn memo_reset() -> i32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_key(set: u64, intent: u64, ctx_digest_ptr: u64) -> u64 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_lookup(key: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_pattern_id(slot: u32) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_dispatch_fp(slot: u32) -> u64 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_used() -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_capacity() -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_seq(slot: u32) -> u64 from "resolver_memo.iii"
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+fn main() -> u64 {
+    /* ---- 1. memo_reset clears all entries. ---- */
+    memo_reset()
+    if memo_used() != 0u32 { return 1u64 }
+
+    /* Allocate two 32-byte ctx_digest buffers with distinct content. */
+    let dig_a : *u8 = malloc(32u64)
+    let dig_b : *u8 = malloc(32u64)
+    if dig_a as u64 == 0u64 { return 2u64 }
+    if dig_b as u64 == 0u64 { return 3u64 }
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dig_a[i] = (i & 0xFFu64) as u8
+        dig_b[i] = ((i + 100u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+
+    /* ---- 2. memo_key determinism. ---- */
+    let k_aa : u64 = memo_key(0x1000u64, 0x2000u64, dig_a as u64)
+    let k_ab : u64 = memo_key(0x1000u64, 0x2000u64, dig_a as u64)
+    if k_aa != k_ab { return 4u64 }
+    if k_aa == 0u64 { return 5u64 }
+
+    /* Different ctx_digest -> different key. */
+    let k_b  : u64 = memo_key(0x1000u64, 0x2000u64, dig_b as u64)
+    if k_aa == k_b { return 6u64 }
+
+    /* Different intent -> different key. */
+    let k_intent_diff : u64 = memo_key(0x1000u64, 0x2001u64, dig_a as u64)
+    if k_aa == k_intent_diff { return 7u64 }
+
+    /* Different set -> different key. */
+    let k_set_diff : u64 = memo_key(0x1001u64, 0x2000u64, dig_a as u64)
+    if k_aa == k_set_diff { return 8u64 }
+
+    /* ---- 3. lookup on miss. ---- */
+    if memo_lookup(k_aa) != 0xFFFFFFFFu32 { return 10u64 }
+
+    /* ---- 4. insert + lookup roundtrip. ---- */
+    let slot_a : u32 = memo_insert(k_aa, 42u32, 0xDEADBEEFu64)
+    if slot_a >= memo_capacity() { return 11u64 }
+    if memo_used() != 1u32 { return 12u64 }
+
+    let found : u32 = memo_lookup(k_aa)
+    if found != slot_a { return 13u64 }
+    if memo_pattern_id(found) != 42u32 { return 14u64 }
+    if memo_dispatch_fp(found) != 0xDEADBEEFu64 { return 15u64 }
+
+    /* ---- 5. duplicate key updates in place. ---- */
+    let slot_a2 : u32 = memo_insert(k_aa, 99u32, 0xCAFEBABEu64)
+    if slot_a2 != slot_a { return 16u64 }
+    if memo_used() != 1u32 { return 17u64 }
+    if memo_pattern_id(slot_a) != 99u32 { return 18u64 }
+    if memo_dispatch_fp(slot_a) != 0xCAFEBABEu64 { return 19u64 }
+
+    /* ---- 6. N distinct keys -> N entries. Verify each lookup
+     *      returns the right slot, with the right pattern_id/fp. ---- */
+    memo_reset()
+    if memo_used() != 0u32 { return 20u64 }
+
+    let mut n : u32 = 0u32
+    while n < 256u32 {
+        let k : u64 = memo_key((n as u64) & 0xFFFFFFFFu64, 0xAAAAu64, dig_a as u64)
+        memo_insert(k, n, ((n as u64) & 0xFFFFFFFFu64) | 0x100000000u64)
+        n = n + 1u32
+    }
+    if memo_used() != 256u32 { return 21u64 }
+
+    /* Verify all 256 are findable. */
+    let mut m : u32 = 0u32
+    while m < 256u32 {
+        let k : u64 = memo_key((m as u64) & 0xFFFFFFFFu64, 0xAAAAu64, dig_a as u64)
+        let s : u32 = memo_lookup(k)
+        if s == 0xFFFFFFFFu32 { return 30u64 }
+        if memo_pattern_id(s) != m { return 31u64 }
+        let expected_fp : u64 = ((m as u64) & 0xFFFFFFFFu64) | 0x100000000u64
+        if memo_dispatch_fp(s) != expected_fp { return 32u64 }
+        m = m + 1u32
+    }
+
+    /* ---- 7. Strict-monotonic seq for the 256 inserts (FIFO order). ---- */
+    /* The 256 entries should have monotonically increasing seq values
+     * matching insertion order; specifically slot[k] for the k'th key
+     * should have seq = k+1 (memo_reset zeroed seq and current_seq is
+     * bumped before each insert; first insert -> seq=1). */
+    let mut q : u32 = 0u32
+    while q < 256u32 {
+        let k_q : u64 = memo_key((q as u64) & 0xFFFFFFFFu64, 0xAAAAu64, dig_a as u64)
+        let s_q : u32 = memo_lookup(k_q)
+        if memo_seq(s_q) != ((q as u64) + 1u64) { return 40u64 }
+        q = q + 1u32
+    }
+
+    free(dig_a)
+    free(dig_b)
+    return 99u64
+}

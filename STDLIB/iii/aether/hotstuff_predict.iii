@@ -1,0 +1,99 @@
+/* aether/hotstuff_predict.iii — V1 Stage 5 (gospel L24436): predictive quorum.
+ *
+ * Pre-forms a redundant quorum of size 2f+1+k so a single node failure does not
+ * collapse the quorum at the protocol's critical path.  Exposes
+ * hsp_predict_quorum(view, out_quorum, out_size).
+ *
+ * ANTI-OBSERVATIONAL-LEARNING RECONCILIATION (binding standard, overrides the
+ * gospel's mechanism): the gospel ranks peers by "past reliability over the
+ * prior N views" — that is count-and-promote / observe-and-adapt, which the
+ * substrate forbids absolutely (no ML in disguise; W-law / deterministic
+ * mandate).  The FUNCTION (a deterministic, verifiable, redundant quorum) is
+ * preserved WITHOUT history: the predicted quorum for a view is the contiguous
+ * peer set of size 2f+1+k anchored at leader = view mod n.  This is a closed
+ * form of (view, n, f) only — re-derivable, no learned state, no adaptation.
+ *
+ * Hexad: kind_motion + kind_federation.  Ring: R0.  K: 1.00 (fully deterministic).
+ */
+module aether_hotstuff_predict
+
+const HSP_OK         : i32 =  0i32
+const HSP_E_NULL     : i32 = -1i32
+const HSP_E_NOT_INIT : i32 = -2i32
+const HSP_MAX_PEERS  : u32 = 64u32
+const HSP_K          : u32 = 1u32        /* failure-absorption redundancy (gospel: "one or two") */
+
+var HSP_PEER_KEYS : [u8; 2048]           /* 64 * 32 */
+var HSP_N         : u32 = 0u32
+var HSP_F         : u32 = 0u32
+var HSP_INITED    : u8  = 0u8
+
+fn hsp_init(peers: *u8, n_peers: u32) -> i32 @export {
+    if (peers as u64) == 0u64 { return HSP_E_NULL }
+    if n_peers > HSP_MAX_PEERS { return HSP_E_NULL }
+    HSP_N = n_peers
+    HSP_F = (n_peers - 1u32) / 3u32
+    let mut i : u64 = 0u64
+    while i < (n_peers as u64) * 32u64 { HSP_PEER_KEYS[i] = peers[i] ; i = i + 1u64 }
+    HSP_INITED = 1u8
+    return HSP_OK
+}
+
+/* Deterministic redundant quorum for `view`: the contiguous peer set of size
+ * min(2f+1+k, n) starting at leader = view mod n.  out_quorum receives the
+ * selected peer pubkeys (32 bytes each); out_size receives the count. */
+fn hsp_predict_quorum(view: u64, out_quorum: *u8, out_size: *u32) -> i32 @export {
+    if HSP_INITED == 0u8 { return HSP_E_NOT_INIT }
+    if (out_quorum as u64) == 0u64 { return HSP_E_NULL }
+    if (out_size as u64) == 0u64 { return HSP_E_NULL }
+    let n : u32 = HSP_N
+    let mut qsize : u32 = 2u32 * HSP_F + 1u32 + HSP_K
+    if qsize > n { qsize = n }
+    let leader : u32 = (view as u32) % n
+    let mut i : u32 = 0u32
+    while i < qsize {
+        let peer_idx : u32 = (leader + i) % n
+        let mut j : u64 = 0u64
+        while j < 32u64 {
+            out_quorum[(i as u64) * 32u64 + j] = HSP_PEER_KEYS[(peer_idx as u64) * 32u64 + j]
+            j = j + 1u64
+        }
+        i = i + 1u32
+    }
+    out_size[0u64] = qsize
+    return HSP_OK
+}
+
+/* Self-test (99 = pass): n=7 (f=2, quorum 5) -> predicted size 2f+1+k = 6
+ * (one redundant member, < n), leader-anchored + contiguous, deterministic,
+ * rotates with the view.  No history consulted. */
+var HSP_KAT_PEERS : [u8; 224]   /* 7 * 32 */
+var HSP_KAT_OUT   : [u8; 256]
+var HSP_KAT_OUT2  : [u8; 256]
+var HSP_KAT_SIZE  : [u32; 1]
+var HSP_KAT_SIZE2 : [u32; 1]
+
+fn hsp_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 7u64 {
+        let mut j : u64 = 0u64
+        while j < 32u64 { HSP_KAT_PEERS[i * 32u64 + j] = (i + 1u64) as u8  j = j + 1u64 }
+        i = i + 1u64
+    }
+    hsp_init((&HSP_KAT_PEERS as u64) as *u8, 7u32)
+    /* view 3: leader 3, qsize 6, peers 3,4,5,6,0,1 (keys 4,5,6,7,1,2) */
+    hsp_predict_quorum(3u64, (&HSP_KAT_OUT as u64) as *u8, (&HSP_KAT_SIZE as u64) as *u32)
+    if HSP_KAT_SIZE[0] != 6u32 { return 1u64 }
+    if HSP_KAT_OUT[0u64] != 4u8 { return 2u64 }            /* peer 3 -> key 4 */
+    if HSP_KAT_OUT[32u64] != 5u8 { return 3u64 }           /* peer 4 -> key 5 */
+    if HSP_KAT_OUT[5u64 * 32u64] != 2u8 { return 4u64 }    /* peer (3+5)%7=1 -> key 2 */
+    /* determinism: re-run identical */
+    hsp_predict_quorum(3u64, (&HSP_KAT_OUT2 as u64) as *u8, (&HSP_KAT_SIZE2 as u64) as *u32)
+    if HSP_KAT_SIZE2[0] != 6u32 { return 5u64 }
+    let mut k : u64 = 0u64
+    while k < 6u64 * 32u64 { if HSP_KAT_OUT[k] != HSP_KAT_OUT2[k] { return 6u64 }  k = k + 1u64 }
+    /* view 4: leader 4 -> first peer key 5 (rotated) */
+    hsp_predict_quorum(4u64, (&HSP_KAT_OUT2 as u64) as *u8, (&HSP_KAT_SIZE2 as u64) as *u32)
+    if HSP_KAT_OUT2[0u64] != 5u8 { return 7u64 }
+    return 99u64
+}

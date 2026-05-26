@@ -1,0 +1,65 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\set.iii
+ *
+ * III STDLIB - omnia::set
+ *
+ * Set of u32 elements built atop omnia::map.  Membership is encoded
+ * as a put with value=1; queries become contains.  Phase B: set_u32
+ * only.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 0.99.
+ */
+
+module omnia_set
+
+extern @abi(c-msvc-x64) fn map_u32u32_new(arena: u64, hard: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_put(id: u64, k: u32, v: u32) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_contains(id: u64, k: u32) -> u8 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_remove(id: u64, k: u32) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_len(id: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_capacity(id: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_drop(id: u64) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_integrity_compute(id: u64, out: u64) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_integrity_byte(id: u64, i: u32) -> u32 from "map.iii"
+
+const SET_OK      : i32 = 0i32
+const SET_E_BADID : i32 = -3i32
+
+/* The set id IS the underlying map id - same opaque u64. */
+
+fn set_u32_new(arena_id: u64, hard_max: u64) -> u64 @export {
+    return map_u32u32_new(arena_id, hard_max)
+}
+
+fn set_u32_insert(id: u64, key: u32) -> i32 @export {
+    return map_u32u32_put(id, key, 1u32)
+}
+
+fn set_u32_contains(id: u64, key: u32) -> u8 @export {
+    return map_u32u32_contains(id, key)
+}
+
+fn set_u32_remove(id: u64, key: u32) -> u8 @export {
+    let r : u64 = map_u32u32_remove(id, key)
+    if (r & 1u64) == 1u64 { return 1u8 }
+    return 0u8
+}
+
+fn set_u32_len(id: u64) -> u64 @export {
+    return map_u32u32_len(id)
+}
+
+fn set_u32_capacity(id: u64) -> u64 @export {
+    return map_u32u32_capacity(id)
+}
+
+fn set_u32_drop(id: u64) -> i32 @export {
+    return map_u32u32_drop(id)
+}
+
+fn set_u32_integrity_compute(id: u64, out_32: u64) -> i32 @export {
+    return map_integrity_compute(id, out_32)
+}
+
+fn set_u32_integrity_byte(id: u64, i: u32) -> u32 @export {
+    return map_integrity_byte(id, i)
+}

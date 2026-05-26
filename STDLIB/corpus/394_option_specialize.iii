@@ -1,0 +1,29 @@
+/* 394 — V1 Stage 7.2: option @specialize alphabet extension.
+ * Exercises the newly-generated option_<type>_<op> symbols beyond the original
+ * u8/u32/u64: u16 (lossless), i32 (sign round-trip through the inline
+ * encoding), and bool.  Proves the generic option__<op><T> monomorphised
+ * correctly per type.  Exit 99 = pass. */
+module corpus_394_option_specialize
+
+extern @abi(c-msvc-x64) fn option_u16_some(v: u16) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u16_unwrap_or(o: u64, default: u16) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_i32_some(v: i32) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_i32_unwrap_or(o: u64, default: i32) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_bool_some(v: bool) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_bool_is_some(o: u64) -> u8 from "option.iii"
+extern @abi(c-msvc-x64) fn option_bool_is_none(o: u64) -> u8 from "option.iii"
+
+fn main() -> u64 {
+    /* u16: lossless inline round-trip. */
+    let a : u64 = option_u16_some(40000u16)
+    if (option_u16_unwrap_or(a, 0u16)) != 40000u64 { return 1u64 }
+    /* i32: -5 loads sign-extended (movslq); the low 32 bits round-trip. */
+    let b : u64 = option_i32_some(-5i32)
+    let r : i32 = (option_i32_unwrap_or(b, 0i32)) as i32
+    if r != -5i32 { return 2u64 }
+    /* bool: some(true) is_some; none is_none. */
+    let c : u64 = option_bool_some(true)
+    if option_bool_is_some(c) != 1u8 { return 3u64 }
+    if option_bool_is_none(c) != 0u8 { return 4u64 }
+    return 99u64
+}

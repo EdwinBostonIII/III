@@ -1,0 +1,12 @@
+/* Diag: local [T; N] usage. */
+module corpus_256
+
+fn main() -> u64 {
+    let buf : [u8; 16]
+    /* Try to write/read. */
+    buf[0u64] = 0xAAu8
+    buf[1u64] = 0xBBu8
+    if buf[0u64] != 0xAAu8 { return 1u64 }
+    if buf[1u64] != 0xBBu8 { return 2u64 }
+    return 99u64
+}

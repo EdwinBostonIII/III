@@ -1,0 +1,9 @@
+/* Minimal cpufeat test — just call has_sse2 (always true on x86-64). */
+module corpus_150
+
+extern @abi(c-msvc-x64) fn cpufeat_has_sse2() -> u8 from "cpufeat.iii"
+
+fn main() -> u64 {
+    if cpufeat_has_sse2() != 1u8 { return 1u64 }
+    return 99u64
+}

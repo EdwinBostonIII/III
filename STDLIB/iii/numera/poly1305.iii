@@ -1,0 +1,466 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\poly1305.iii
+ *
+ * III STDLIB - numera::poly1305
+ *
+ * RFC 8439 Poly1305 one-time MAC.  Operates in GF(2^130 - 5).
+ *
+ * Public API (singleton):
+ *   poly1305_set_key  (key:*u8) -> i32       (32-byte key)
+ *   poly1305_update   (data:*u8, len:u64) -> i32
+ *   poly1305_finalize (tag_out:*u8) -> i32   (16-byte tag)
+ *
+ * Native u64 implementation, radix-2^26 (5 limbs, each fits in 32 bits
+ * with 26 useful bits).  No bigint dependency.  Constant-time except for
+ * branch on partial-block length.  Replaces the prior bigint-based
+ * implementation which leaked bigint slots into the global 64-slot table
+ * and was 100x slower than necessary.
+ *
+ * Algorithm (per RFC 8439 sec 2.5):
+ *   r = key[0..16] LE int, with the 22 clamp bits cleared.
+ *   s = key[16..32] LE int (used only at finalize as pad).
+ *   acc = 0
+ *   For each 16-byte block:
+ *     n = LE-int(block) | (1 << 8*len(block))
+ *     acc = (acc + n) * r mod (2^130 - 5)
+ *   tag = (acc + s) mod 2^128
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_poly1305
+
+const POLY_OK : i32 =  0i32
+const POLY_E_INIT : i32 = -1i32
+
+const POLY_MASK_26 : u64 = 0x3FFFFFFu64
+
+/* Accumulator h: 5 limbs of 26 bits (radix 2^26).  Stored u64 each for
+ * arithmetic headroom during multiplication. */
+var POLY_H0 : u64 = 0u64
+var POLY_H1 : u64 = 0u64
+var POLY_H2 : u64 = 0u64
+var POLY_H3 : u64 = 0u64
+var POLY_H4 : u64 = 0u64
+
+/* Clamped key r: 5 limbs of 26 bits. */
+var POLY_R0 : u64 = 0u64
+var POLY_R1 : u64 = 0u64
+var POLY_R2 : u64 = 0u64
+var POLY_R3 : u64 = 0u64
+var POLY_R4 : u64 = 0u64
+
+/* Pre-computed s_i = 5*r_i for the reduction step. */
+var POLY_S1 : u64 = 0u64
+var POLY_S2 : u64 = 0u64
+var POLY_S3 : u64 = 0u64
+var POLY_S4 : u64 = 0u64
+
+/* Pad s: 128 bits, added at finalize.  Stored as 4 u64 lanes (26-bit
+ * limbs are not appropriate here; finalize uses a different layout). */
+var POLY_PAD_0 : u64 = 0u64
+var POLY_PAD_1 : u64 = 0u64
+var POLY_PAD_2 : u64 = 0u64
+var POLY_PAD_3 : u64 = 0u64
+
+var POLY_INITED : u8  = 0u8
+
+/* ---- §3.5 AVX-512 vectorized field multiply (d = sum_j h_j * col_j) ---- */
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+var POLY_FORCE : u32 = 0u32     /* 0=auto, 1=scalar, 2=avx512 (KAT bit-identity override) */
+var POLY_COLS  : [u64; 40]      /* 5 column vectors x 8 lanes; per-key; lanes 5-7 stay 0 (.bss) */
+var POLY_HBUF  : [u64; 8]       /* post-(h+=n) limbs h0..h4 = multiply input */
+var POLY_DBUF  : [u64; 8]       /* multiply output d0..d4 (lanes 5-7 = 0) */
+
+/* Load 4 LE bytes from *u8 ptr at offset off as a u32 value (zero-extended
+ * to u64).  Uses byte reads to sidestep any iiis-0 u32-pointer store
+ * width quirks. */
+fn _poly_u32_le(p: *u8, off: u32) -> u64 {
+    let b0 : u64 = p[off + 0u32] as u64
+    let b1 : u64 = p[off + 1u32] as u64
+    let b2 : u64 = p[off + 2u32] as u64
+    let b3 : u64 = p[off + 3u32] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+}
+
+/* Clamp + load 32-byte key into (r0..r4, pad0..pad3) state. */
+fn poly1305_set_key(key: *u8) -> i32 @side_channel_resistant @constant_time @export {
+    let l_key : *u8 = key
+    /* Load r as four 32-bit LE words. */
+    let t0 : u64 = _poly_u32_le(l_key, 0u32)
+    let t1 : u64 = _poly_u32_le(l_key, 4u32)
+    let t2 : u64 = _poly_u32_le(l_key, 8u32)
+    let t3 : u64 = _poly_u32_le(l_key, 12u32)
+
+    /* Apply RFC 8439 clamp + repack into 5 26-bit limbs.
+     * Clamp mask in 128-bit LE: 0x0ffffffc0ffffffc0ffffffc0fffffff. */
+    let c0 : u64 = t0 & 0x0fffffffu64
+    let c1 : u64 = t1 & 0x0ffffffcu64
+    let c2 : u64 = t2 & 0x0ffffffcu64
+    let c3 : u64 = t3 & 0x0ffffffcu64
+
+    /* Concatenate (c0, c1, c2, c3) as a 128-bit LE integer and split into
+     * 5 26-bit limbs.  Equivalent to:
+     *   r0 = c0 & 0x3FFFFFF
+     *   r1 = ((c0 >> 26) | (c1 << 6)) & 0x3FFFFFF
+     *   r2 = ((c1 >> 20) | (c2 << 12)) & 0x3FFFFFF
+     *   r3 = ((c2 >> 14) | (c3 << 18)) & 0x3FFFFFF
+     *   r4 = (c3 >> 8) & 0x3FFFFFF        (top 24 bits + a couple zero pad) */
+    let r0 : u64 = c0 & POLY_MASK_26
+    let r1 : u64 = ((c0 >> 26u64) | (c1 << 6u64)) & POLY_MASK_26
+    let r2 : u64 = ((c1 >> 20u64) | (c2 << 12u64)) & POLY_MASK_26
+    let r3 : u64 = ((c2 >> 14u64) | (c3 << 18u64)) & POLY_MASK_26
+    let r4 : u64 = (c3 >> 8u64) & POLY_MASK_26
+
+    POLY_R0 = r0
+    POLY_R1 = r1
+    POLY_R2 = r2
+    POLY_R3 = r3
+    POLY_R4 = r4
+    POLY_S1 = r1 * 5u64
+    POLY_S2 = r2 * 5u64
+    POLY_S3 = r3 * 5u64
+    POLY_S4 = r4 * 5u64
+
+    /* §3.5: precompute the 5 column vectors for the AVX-512 multiply.
+     * col_j[i] is the matrix entry that multiplies h_j into output d_i:
+     *   d0 = h0*R0 + h1*S4 + h2*S3 + h3*S2 + h4*S1
+     *   d1 = h0*R1 + h1*R0 + h2*S4 + h3*S3 + h4*S2  ... etc.
+     * Lanes 5-7 of each column stay 0 (.bss) so d lanes 5-7 stay 0. */
+    POLY_COLS[0u32]  = r0
+    POLY_COLS[1u32]  = r1
+    POLY_COLS[2u32]  = r2
+    POLY_COLS[3u32]  = r3
+    POLY_COLS[4u32]  = r4
+    POLY_COLS[8u32]  = POLY_S4
+    POLY_COLS[9u32]  = r0
+    POLY_COLS[10u32] = r1
+    POLY_COLS[11u32] = r2
+    POLY_COLS[12u32] = r3
+    POLY_COLS[16u32] = POLY_S3
+    POLY_COLS[17u32] = POLY_S4
+    POLY_COLS[18u32] = r0
+    POLY_COLS[19u32] = r1
+    POLY_COLS[20u32] = r2
+    POLY_COLS[24u32] = POLY_S2
+    POLY_COLS[25u32] = POLY_S3
+    POLY_COLS[26u32] = POLY_S4
+    POLY_COLS[27u32] = r0
+    POLY_COLS[28u32] = r1
+    POLY_COLS[32u32] = POLY_S1
+    POLY_COLS[33u32] = POLY_S2
+    POLY_COLS[34u32] = POLY_S3
+    POLY_COLS[35u32] = POLY_S4
+    POLY_COLS[36u32] = r0
+
+    /* Pad s = key[16..32] as 4 LE u32 words. */
+    POLY_PAD_0 = _poly_u32_le(l_key, 16u32)
+    POLY_PAD_1 = _poly_u32_le(l_key, 20u32)
+    POLY_PAD_2 = _poly_u32_le(l_key, 24u32)
+    POLY_PAD_3 = _poly_u32_le(l_key, 28u32)
+
+    /* Reset accumulator. */
+    POLY_H0 = 0u64
+    POLY_H1 = 0u64
+    POLY_H2 = 0u64
+    POLY_H3 = 0u64
+    POLY_H4 = 0u64
+
+    POLY_INITED = 1u8
+    return POLY_OK
+}
+
+/* ---- §3.5 field multiply: d[i] = sum_j h_j * M[i][j], radix 2^26 ---- */
+
+/* Scalar reference (bit-identity baseline): the exact d_i expressions,
+ * reading post-(h+=n) limbs from POLY_HBUF, writing d0..d4 to POLY_DBUF. */
+fn _poly_mul_scalar() -> i32 {
+    let h0 : u64 = POLY_HBUF[0u32]
+    let h1 : u64 = POLY_HBUF[1u32]
+    let h2 : u64 = POLY_HBUF[2u32]
+    let h3 : u64 = POLY_HBUF[3u32]
+    let h4 : u64 = POLY_HBUF[4u32]
+    POLY_DBUF[0u32] = h0 * POLY_R0 + h1 * POLY_S4 + h2 * POLY_S3 + h3 * POLY_S2 + h4 * POLY_S1
+    POLY_DBUF[1u32] = h0 * POLY_R1 + h1 * POLY_R0 + h2 * POLY_S4 + h3 * POLY_S3 + h4 * POLY_S2
+    POLY_DBUF[2u32] = h0 * POLY_R2 + h1 * POLY_R1 + h2 * POLY_R0 + h3 * POLY_S4 + h4 * POLY_S3
+    POLY_DBUF[3u32] = h0 * POLY_R3 + h1 * POLY_R2 + h2 * POLY_R1 + h3 * POLY_R0 + h4 * POLY_S4
+    POLY_DBUF[4u32] = h0 * POLY_R4 + h1 * POLY_R3 + h2 * POLY_R2 + h3 * POLY_R1 + h4 * POLY_R0
+    return 0i32
+}
+
+/* AVX-512: d_vec = sum_{j=0}^{4} broadcast(h_j) * COLS[j], via vpmuludq
+ * (low32 x low32 -> 64 per lane) + vpaddq accumulate.  COLS[j] lanes 0..4
+ * hold column j of the multiply matrix, lanes 5..7 = 0 so d lanes 5..7
+ * stay 0.  26-bit limbs and h_j (< 2^27) fit 32 bits; 5-term sums < 2^59
+ * fit a 64-bit lane -> bit-identical to _poly_mul_scalar.  zmm0/1/2 +
+ * rax/rcx/rdx all Win64 caller-saved; vzeroupper clears AVX state. */
+fn _poly_mul_avx512() -> i32 {
+    metal {
+    leaq L_POLY_HBUF(%rip), %rax
+    leaq L_POLY_COLS(%rip), %rcx
+    leaq L_POLY_DBUF(%rip), %rdx
+    vpbroadcastq 0(%rax), %zmm1
+    vmovdqu64 0(%rcx), %zmm0
+    vpmuludq %zmm1, %zmm0, %zmm0
+    vpbroadcastq 8(%rax), %zmm1
+    vmovdqu64 64(%rcx), %zmm2
+    vpmuludq %zmm1, %zmm2, %zmm2
+    vpaddq %zmm2, %zmm0, %zmm0
+    vpbroadcastq 16(%rax), %zmm1
+    vmovdqu64 128(%rcx), %zmm2
+    vpmuludq %zmm1, %zmm2, %zmm2
+    vpaddq %zmm2, %zmm0, %zmm0
+    vpbroadcastq 24(%rax), %zmm1
+    vmovdqu64 192(%rcx), %zmm2
+    vpmuludq %zmm1, %zmm2, %zmm2
+    vpaddq %zmm2, %zmm0, %zmm0
+    vpbroadcastq 32(%rax), %zmm1
+    vmovdqu64 256(%rcx), %zmm2
+    vpmuludq %zmm1, %zmm2, %zmm2
+    vpaddq %zmm2, %zmm0, %zmm0
+    vmovdqu64 %zmm0, 0(%rdx)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* Dispatch: AVX-512 on capable hosts, else scalar; POLY_FORCE overrides
+ * for KAT bit-identity testing.  Mandate 7: structural CPUID dispatch.
+ * 2-path (scalar/AVX-512): the radix-2^26 5-limb multiply maps to zmm's
+ * 8 lanes (5 used) but not ymm's 4 -> an AVX2 path would be a non-natural
+ * multi-register split for marginal gain (anti-bloat; cf. GHASH 2-path). */
+fn _poly_mul() -> i32 {
+    if POLY_FORCE == 1u32 { return _poly_mul_scalar() }
+    if POLY_FORCE == 2u32 { return _poly_mul_avx512() }
+    if cpufeat_has_avx512f() == 1u8 { return _poly_mul_avx512() }
+    return _poly_mul_scalar()
+}
+
+fn poly1305_force_path(p: u32) -> i32 @export { POLY_FORCE = p ; return 0i32 }
+
+/* Process one 16-byte block (or shorter partial block via len).  The block
+ * pointer points to `len` bytes; bytes beyond `len` are treated as zero,
+ * and the high "1" bit goes at position 8*len. */
+fn _poly_block(block_ptr: u64, block_len: u64) -> i32 {
+    let p : *u8 = block_ptr as *u8
+    let l_len : u64 = block_len
+
+    /* Load 4 bytes at a time; pad with zeros beyond len; append the 0x01
+     * marker bit at position 8*len. */
+    let mut t0 : u64 = 0u64
+    let mut t1 : u64 = 0u64
+    let mut t2 : u64 = 0u64
+    let mut t3 : u64 = 0u64
+    let mut hi : u64 = 0u64    /* the bit-1 marker, will go into limb 4 */
+
+    let mut i : u64 = 0u64
+    while i < l_len {
+        let b : u64 = p[i] as u64
+        if i < 4u64 {
+            t0 = t0 | (b << (i * 8u64))
+        }
+        if i >= 4u64 {
+            if i < 8u64 {
+                t1 = t1 | (b << ((i - 4u64) * 8u64))
+            }
+        }
+        if i >= 8u64 {
+            if i < 12u64 {
+                t2 = t2 | (b << ((i - 8u64) * 8u64))
+            }
+        }
+        if i >= 12u64 {
+            if i < 16u64 {
+                t3 = t3 | (b << ((i - 12u64) * 8u64))
+            }
+        }
+        i = i + 1u64
+    }
+
+    /* Position the 0x01 marker bit at offset 8*l_len.  For a full 16-byte
+     * block l_len = 16 -> marker at bit 128 -> goes into limb 4 at bit 24
+     * (after the limb-extraction shift).  For partial l_len < 16, the
+     * marker bit goes into one of t0..t3 at bit (8*l_len). */
+    if l_len < 16u64 {
+        let bit_off : u64 = 8u64 * l_len
+        let word_idx : u64 = bit_off / 32u64
+        let bit_in_word : u64 = bit_off & 31u64
+        let one : u64 = 1u64 << bit_in_word
+        if word_idx == 0u64 { t0 = t0 | one }
+        if word_idx == 1u64 { t1 = t1 | one }
+        if word_idx == 2u64 { t2 = t2 | one }
+        if word_idx == 3u64 { t3 = t3 | one }
+    }
+    if l_len == 16u64 {
+        hi = 1u64 << 24u64  /* marker at bit 128 -> top of limb 4 */
+    }
+
+    /* Repack 128 bits (t0..t3) + hi into 5 26-bit limbs. */
+    let n0 : u64 = t0 & POLY_MASK_26
+    let n1 : u64 = ((t0 >> 26u64) | (t1 << 6u64)) & POLY_MASK_26
+    let n2 : u64 = ((t1 >> 20u64) | (t2 << 12u64)) & POLY_MASK_26
+    let n3 : u64 = ((t2 >> 14u64) | (t3 << 18u64)) & POLY_MASK_26
+    let n4 : u64 = (t3 >> 8u64) | hi
+
+    /* h += n */
+    let mut h0 : u64 = POLY_H0 + n0
+    let mut h1 : u64 = POLY_H1 + n1
+    let mut h2 : u64 = POLY_H2 + n2
+    let mut h3 : u64 = POLY_H3 + n3
+    let mut h4 : u64 = POLY_H4 + n4
+
+    /* d = h * r mod (2^130 - 5).  Dispatched scalar / AVX-512 (§3.5):
+     * stash the post-add limbs, multiply, read back d0..d4. */
+    POLY_HBUF[0u32] = h0
+    POLY_HBUF[1u32] = h1
+    POLY_HBUF[2u32] = h2
+    POLY_HBUF[3u32] = h3
+    POLY_HBUF[4u32] = h4
+    _poly_mul()
+    let d0 : u64 = POLY_DBUF[0u32]
+    let d1 : u64 = POLY_DBUF[1u32]
+    let d2 : u64 = POLY_DBUF[2u32]
+    let d3 : u64 = POLY_DBUF[3u32]
+    let d4 : u64 = POLY_DBUF[4u32]
+
+    /* Carry propagation: reduce each d_i to a 26-bit limb. */
+    let c0 : u64 = d0 >> 26u64
+    h0 = d0 & POLY_MASK_26
+    let d1c : u64 = d1 + c0
+    let c1 : u64 = d1c >> 26u64
+    h1 = d1c & POLY_MASK_26
+    let d2c : u64 = d2 + c1
+    let c2 : u64 = d2c >> 26u64
+    h2 = d2c & POLY_MASK_26
+    let d3c : u64 = d3 + c2
+    let c3 : u64 = d3c >> 26u64
+    h3 = d3c & POLY_MASK_26
+    let d4c : u64 = d4 + c3
+    let c4 : u64 = d4c >> 26u64
+    h4 = d4c & POLY_MASK_26
+    /* Carry out of limb 4 wraps to limb 0 multiplied by 5 (the (2^130 - 5)
+     * reduction).  At most one extra carry into limb 1. */
+    h0 = h0 + (c4 * 5u64)
+    let c5 : u64 = h0 >> 26u64
+    h0 = h0 & POLY_MASK_26
+    h1 = h1 + c5
+
+    POLY_H0 = h0
+    POLY_H1 = h1
+    POLY_H2 = h2
+    POLY_H3 = h3
+    POLY_H4 = h4
+    return 0i32
+}
+
+fn poly1305_update(data: *u8, data_len: u64) -> i32 @side_channel_resistant @constant_time @export {
+    if POLY_INITED == 0u8 { return POLY_E_INIT }
+    let mut pos : u64 = 0u64
+    while pos < data_len {
+        let mut chunk : u64 = 16u64
+        if pos + chunk > data_len { chunk = data_len - pos }
+        _poly_block((data as u64) + pos, chunk)
+        pos = pos + chunk
+    }
+    return POLY_OK
+}
+
+fn poly1305_finalize(tag_out: *u8) -> i32 @side_channel_resistant @constant_time @export {
+    if POLY_INITED == 0u8 { return POLY_E_INIT }
+
+    /* Final carry pass + conditional subtraction of p = 2^130 - 5.
+     *
+     * The algorithm: form g = h - p.  If g borrows out of limb 4 (top bit
+     * set), h was already < p, so use h.  Else use g.  Constant-time by
+     * mask-select. */
+    let mut h0 : u64 = POLY_H0
+    let mut h1 : u64 = POLY_H1
+    let mut h2 : u64 = POLY_H2
+    let mut h3 : u64 = POLY_H3
+    let mut h4 : u64 = POLY_H4
+
+    /* Full carry pass. */
+    let c0 : u64 = h1 >> 26u64; h1 = h1 & POLY_MASK_26
+    h2 = h2 + c0
+    let c1 : u64 = h2 >> 26u64; h2 = h2 & POLY_MASK_26
+    h3 = h3 + c1
+    let c2 : u64 = h3 >> 26u64; h3 = h3 & POLY_MASK_26
+    h4 = h4 + c2
+    let c3 : u64 = h4 >> 26u64; h4 = h4 & POLY_MASK_26
+    h0 = h0 + (c3 * 5u64)
+    let c4 : u64 = h0 >> 26u64; h0 = h0 & POLY_MASK_26
+    h1 = h1 + c4
+
+    /* Compute g = h + 5 - 2^130 = h - (2^130 - 5).  If positive (no
+     * underflow), g is the reduced value.  Else h itself was reduced. */
+    let g0_raw : u64 = h0 + 5u64
+    let g0 : u64 = g0_raw & POLY_MASK_26
+    let g0c : u64 = g0_raw >> 26u64
+    let g1_raw : u64 = h1 + g0c
+    let g1 : u64 = g1_raw & POLY_MASK_26
+    let g1c : u64 = g1_raw >> 26u64
+    let g2_raw : u64 = h2 + g1c
+    let g2 : u64 = g2_raw & POLY_MASK_26
+    let g2c : u64 = g2_raw >> 26u64
+    let g3_raw : u64 = h3 + g2c
+    let g3 : u64 = g3_raw & POLY_MASK_26
+    let g3c : u64 = g3_raw >> 26u64
+    let g4_full : u64 = h4 + g3c
+    /* Subtract 2^130 from g4 (i.e. drop the bit at position 26 in limb 4). */
+    let g4 : u64 = g4_full & POLY_MASK_26
+    let carry_out : u64 = g4_full >> 26u64
+
+    /* mask = 0xFFFF...FF if (g >= 2^130) i.e. carry_out == 1; else 0.
+     * Equivalent: mask = -carry_out as u64.  iiis-0 lacks unary negate on
+     * u64 — fabricate via two's-complement: mask = (0u64 - carry_out). */
+    let mask : u64 = 0u64 - (carry_out & 1u64)
+
+    /* mask_inv keeps h's bits, mask keeps g's bits. */
+    let mask_inv : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    let f0 : u64 = (h0 & mask_inv) | (g0 & mask)
+    let f1 : u64 = (h1 & mask_inv) | (g1 & mask)
+    let f2 : u64 = (h2 & mask_inv) | (g2 & mask)
+    let f3 : u64 = (h3 & mask_inv) | (g3 & mask)
+    let f4 : u64 = (h4 & mask_inv) | (g4 & mask)
+
+    /* Repack f as 4 32-bit lanes.  f is 130 bits across 5 26-bit limbs;
+     * we want the low 128 bits as a 128-bit LE integer. */
+    let w0 : u64 = (f0 | (f1 << 26u64)) & 0xFFFFFFFFu64
+    let w1 : u64 = ((f1 >> 6u64) | (f2 << 20u64)) & 0xFFFFFFFFu64
+    let w2 : u64 = ((f2 >> 12u64) | (f3 << 14u64)) & 0xFFFFFFFFu64
+    let w3 : u64 = ((f3 >> 18u64) | (f4 << 8u64)) & 0xFFFFFFFFu64
+
+    /* Add pad s mod 2^128. */
+    let mut acc_lo : u64 = w0 + POLY_PAD_0
+    let carry01 : u64 = acc_lo >> 32u64
+    acc_lo = acc_lo & 0xFFFFFFFFu64
+    let mut acc_w1 : u64 = w1 + POLY_PAD_1 + carry01
+    let carry12 : u64 = acc_w1 >> 32u64
+    acc_w1 = acc_w1 & 0xFFFFFFFFu64
+    let mut acc_w2 : u64 = w2 + POLY_PAD_2 + carry12
+    let carry23 : u64 = acc_w2 >> 32u64
+    acc_w2 = acc_w2 & 0xFFFFFFFFu64
+    let acc_w3_raw : u64 = w3 + POLY_PAD_3 + carry23
+    let acc_w3 : u64 = acc_w3_raw & 0xFFFFFFFFu64
+
+    /* Write 16 LE bytes to tag_out. */
+    let t : *u8 = tag_out
+    t[0u64]  = (acc_lo & 0xFFu64) as u8
+    t[1u64]  = ((acc_lo >> 8u64)  & 0xFFu64) as u8
+    t[2u64]  = ((acc_lo >> 16u64) & 0xFFu64) as u8
+    t[3u64]  = ((acc_lo >> 24u64) & 0xFFu64) as u8
+    t[4u64]  = (acc_w1 & 0xFFu64) as u8
+    t[5u64]  = ((acc_w1 >> 8u64)  & 0xFFu64) as u8
+    t[6u64]  = ((acc_w1 >> 16u64) & 0xFFu64) as u8
+    t[7u64]  = ((acc_w1 >> 24u64) & 0xFFu64) as u8
+    t[8u64]  = (acc_w2 & 0xFFu64) as u8
+    t[9u64]  = ((acc_w2 >> 8u64)  & 0xFFu64) as u8
+    t[10u64] = ((acc_w2 >> 16u64) & 0xFFu64) as u8
+    t[11u64] = ((acc_w2 >> 24u64) & 0xFFu64) as u8
+    t[12u64] = (acc_w3 & 0xFFu64) as u8
+    t[13u64] = ((acc_w3 >> 8u64)  & 0xFFu64) as u8
+    t[14u64] = ((acc_w3 >> 16u64) & 0xFFu64) as u8
+    t[15u64] = ((acc_w3 >> 24u64) & 0xFFu64) as u8
+
+    POLY_INITED = 0u8
+    return POLY_OK
+}

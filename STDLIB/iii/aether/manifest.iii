@@ -1,0 +1,395 @@
+/* III/STDLIB/iii/aether/manifest.iii
+ *
+ * III STDLIB - aether::manifest
+ *
+ * Provenance manifests. Every artifact the substrate produces carries a
+ * manifest fragment id. A manifest IS a witness fragment (published through
+ * wh_publish with opid = MANIFEST_OPID), so provenance inherits the witness
+ * chain's hash-continuity, revocation, and algebraic-time ordering for free.
+ *
+ * The fixed 144-byte little-endian payload self-describes the artifact so a
+ * consumer holding the in-band fragment id can recompute every commitment
+ * byte-for-byte from the payload alone (M10 reproducibility):
+ *   [  0 ..   8)  artifact payload_len            (u64 LE)
+ *   [  8 ..  16)  attach algebraic-time placeholder (u64 LE, constant 0 here)
+ *   [ 16 ..  48)  prior witness chain head        (32 bytes)
+ *   [ 48 ..  80)  in_commit  = K256(producer || op || chain_head)  (32 bytes)
+ *   [ 80 .. 112)  op id (operation type)          (32 bytes)
+ *   [112 .. 144)  out_commit = K256(artifact bytes)               (32 bytes)
+ *
+ * A module-scope reverse index maps a manifest fragment id back to its
+ * witness-hook index for id-keyed verify (exact key map, never observed).
+ *
+ * Public API:
+ *   mf_init() -> i32
+ *   mf_attach(req: *u8) -> u64           -- req = MfAttachReq aggregate (W2)
+ *   mf_verify_by_idx(idx: u64, artifact_payload: *u8, payload_len: u64) -> u8
+ *   mf_verify(manifest_id: *u8, artifact_payload: *u8, payload_len: u64) -> u8
+ *   mf_producer(idx: u64, out: *u8) -> i32
+ *   mf_op(idx: u64, out: *u8) -> i32
+ *   mf_chain_head_at(idx: u64, out: *u8) -> i32
+ *   mf_selftest() -> u64
+ *
+ * MfAttachReq aggregate (caller-owned, little-endian, byte offsets):
+ *   [ 0.. 8) artifact_payload pointer (u64)
+ *   [ 8..16) payload_len (u64)
+ *   [16..24) producer pointer (u64)
+ *   [24..32) op pointer (u64)
+ *   [32..40) out_manifest_id pointer (u64)
+ *
+ * Hexad: kind_witness.  Ring: R0.  K: 1.00.
+ * Discipline: W2 (aggregate req), W8 (bounded reverse index), W12, W14.
+ */
+module aether_manifest
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_producer(idx: u64, out: *u8) -> i32 from "witness_hook.iii"
+
+const MANIFEST_OK          : i32 =  0i32
+const MANIFEST_E_NULL      : i32 = -1i32
+const MANIFEST_E_BAD_IDX   : i32 = -2i32
+const MANIFEST_E_NOT_FOUND : i32 = -3i32
+const MANIFEST_E_FULL      : i32 = -4i32
+
+const MANIFEST_PAYLOAD_LEN : u64 = 144u64
+const MANIFEST_PILLAR      : u16 = 5u16
+const MANIFEST_OPID_STRLEN : u64 = 24u64
+const MANIFEST_MAX_INDEX   : u64 = 1048576u64
+const MANIFEST_SENT        : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* MANIFEST_OPID = Keccak256("aether::manifest::attach"); cached at boot. */
+var MANIFEST_OPID    : [u8; 32]
+var MANIFEST_INITED  : u8 = 0u8
+
+/* serialized manifest payload built in mf_attach (single-threaded use) */
+var MANIFEST_PAYLOAD_SCRATCH : [u8; 144]
+
+/* reverse index: fragment-id -> witness-hook index.  Bound = WH_MAX_FRAGMENTS.
+ * Byte buffers declared [u64; bytes/8] per the witness-hook slot convention
+ * (iiis allocates 8 bytes per element); access is via byte-pointer math. */
+var MANIFEST_IDX_KEYS  : [u64; 4194304]   /* 1048576 * 32 bytes */
+var MANIFEST_IDX_VALS  : [u64; 1048576]
+var MANIFEST_IDX_LIVE  : [u8;  1048576]
+var MANIFEST_IDX_COUNT : u64 = 0u64
+
+/* verify / accessor scratch */
+var MANIFEST_RDBUF   : [u8; 144]
+var MANIFEST_CMP_OC  : [u8; 32]
+var MANIFEST_ZERO_ID : [u8; 32]
+
+/* attach scratch -- avoids local var arrays (Trap 7) and keeps locals low */
+var MANIFEST_RDLEN   : [u64; 1]
+
+/* ---- self-test scratch ---- */
+var MANIFEST_T_PROD : [u8; 32]
+var MANIFEST_T_OP   : [u8; 32]
+var MANIFEST_T_PAY  : [u8; 64]
+var MANIFEST_T_MID  : [u8; 32]
+var MANIFEST_T_REQ  : [u8; 40]
+var MANIFEST_T_OC   : [u8; 32]
+var MANIFEST_T_LEN  : [u64; 1]
+
+/* mf_init -- idempotent boot.  Computes MANIFEST_OPID = Keccak256 of the fixed
+ * 24-byte literal "aether::manifest::attach" (NIH: ident_from_bytes is the
+ * keccak256_oneshot wrapper), zeroes the reverse-index count, sets inited.
+ * Early-return gate on MANIFEST_INITED (Trap 10 -- no mutated checkpoint flag). */
+fn mf_init() -> i32 @export {
+    if MANIFEST_INITED == 1u8 { return MANIFEST_OK }
+    let s : *u8 = "aether::manifest::attach" as *u8
+    let op : *u8 = (&MANIFEST_OPID as u64) as *u8
+    ident_from_bytes(s, MANIFEST_OPID_STRLEN, op)
+    ident_zero((&MANIFEST_ZERO_ID as u64) as *u8)
+    MANIFEST_IDX_COUNT = 0u64
+    MANIFEST_INITED = 1u8
+    return MANIFEST_OK
+}
+
+/* Write v little-endian into MANIFEST_PAYLOAD_SCRATCH[off..off+8) byte-by-byte
+ * through *u8 (Trap 5 -- never a u32/u64-width pointer store).  off is a small
+ * constant from the caller. */
+fn _mf_put_u64_le(off: u64, v: u64) -> i32 {
+    let base : *u8 = (&MANIFEST_PAYLOAD_SCRATCH as u64) as *u8
+    let val : u64 = v
+    let o : u64 = off
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        base[o + i] = ((val >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return MANIFEST_OK
+}
+
+/* Decode a little-endian u64 from buf[off..off+8) by OR-accumulating u64 byte
+ * loads (Trap 4 -- the value is assembled purely from u64 loads, never a u32
+ * slot reinterpreted).  Used to read the stored payload_len in verify. */
+fn _mf_get_u64_le(buf: *u8, off: u64) -> u64 {
+    let p : *u8 = buf
+    let o : u64 = off
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        acc = acc | ((p[o + i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return acc
+}
+
+/* Copy 32 bytes from src into MANIFEST_PAYLOAD_SCRATCH[off..off+32). */
+fn _mf_copy32_into_scratch(off: u64, src: *u8) -> i32 {
+    let base : *u8 = (&MANIFEST_PAYLOAD_SCRATCH as u64) as *u8
+    let s : *u8 = src
+    let o : u64 = off
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        base[o + i] = s[i]
+        i = i + 1u64
+    }
+    return MANIFEST_OK
+}
+
+/* in_commit = Keccak256(producer[0..32] || op[0..32] || chain_head[0..32]),
+ * written into MANIFEST_PAYLOAD_SCRATCH[48..80].  chain_head is read from the
+ * scratch slot [16..48] (already populated by the caller via wh_chain_root).
+ * Three contiguous 32-byte streaming updates; no modulo, no param spill. */
+fn _mf_compute_in_commit(producer: *u8, op: *u8) -> i32 {
+    let prod : *u8 = producer
+    let opp  : *u8 = op
+    let head : *u8 = ((&MANIFEST_PAYLOAD_SCRATCH as u64) + 16u64) as *u8
+    let dst  : *u8 = ((&MANIFEST_PAYLOAD_SCRATCH as u64) + 48u64) as *u8
+    cad_begin(1u32)
+    cad_payload(prod as u64, 32u64)
+    cad_payload(opp as u64, 32u64)
+    cad_payload(head as u64, 32u64)
+    cad_final(dst as u64)
+    return MANIFEST_OK
+}
+
+/* mf_attach -- W2 aggregate form.  req points at MfAttachReq (5 pointer/len
+ * fields at fixed offsets).  Builds the self-describing 144-byte payload,
+ * publishes a witness fragment with opid = MANIFEST_OPID, writes the 32-byte
+ * fragment id into the caller's out_manifest_id slot, registers the reverse
+ * index, and returns the fragment index (MANIFEST_SENT on failure -- W12). */
+fn mf_attach(req: *u8) -> u64 @export {
+    if MANIFEST_INITED == 0u8 { mf_init() }
+    let r : *u8 = req
+    if (r as u64) == 0u64 { return MANIFEST_SENT }
+    let art_a  : u64 = _mf_get_u64_le(r, 0u64)
+    let plen   : u64 = _mf_get_u64_le(r, 8u64)
+    let prod_a : u64 = _mf_get_u64_le(r, 16u64)
+    let op_a   : u64 = _mf_get_u64_le(r, 24u64)
+    let out_a  : u64 = _mf_get_u64_le(r, 32u64)
+    let artifact : *u8 = art_a as *u8
+    let producer : *u8 = prod_a as *u8
+    let op       : *u8 = op_a as *u8
+    let out_id   : *u8 = out_a as *u8
+    if (artifact as u64) == 0u64 { return MANIFEST_SENT }
+    if (producer as u64) == 0u64 { return MANIFEST_SENT }
+    if (op as u64) == 0u64 { return MANIFEST_SENT }
+    if (out_id as u64) == 0u64 { return MANIFEST_SENT }
+    /* chain_head -> scratch[16..48] */
+    wh_chain_root(((&MANIFEST_PAYLOAD_SCRATCH as u64) + 16u64) as *u8)
+    /* in_commit -> scratch[48..80] */
+    _mf_compute_in_commit(producer, op)
+    /* out_commit = K256(artifact[0..plen]) -> scratch[112..144] */
+    ident_from_bytes(artifact, plen, ((&MANIFEST_PAYLOAD_SCRATCH as u64) + 112u64) as *u8)
+    /* serialize: payload_len LE [0..8); time placeholder 0 LE [8..16); op [80..112) */
+    _mf_put_u64_le(0u64, plen)
+    _mf_put_u64_le(8u64, 0u64)
+    _mf_copy32_into_scratch(80u64, op)
+    /* publish: in_commit/out_commit slices come from the scratch payload */
+    let in_p  : *u8 = ((&MANIFEST_PAYLOAD_SCRATCH as u64) + 48u64) as *u8
+    let out_p : *u8 = ((&MANIFEST_PAYLOAD_SCRATCH as u64) + 112u64) as *u8
+    let opid_p : *u8 = (&MANIFEST_OPID as u64) as *u8
+    let ante_p : *u8 = (&MANIFEST_ZERO_ID as u64) as *u8
+    let pay_p  : *u8 = (&MANIFEST_PAYLOAD_SCRATCH as u64) as *u8
+    let idx : u64 = wh_publish(producer, opid_p, in_p, out_p, 0u8, 0u8, MANIFEST_PILLAR, ante_p, 0u32, pay_p, MANIFEST_PAYLOAD_LEN as u32, out_id)
+    if idx == MANIFEST_SENT { return MANIFEST_SENT }
+    _mf_register_index(idx, out_id)
+    return idx
+}
+
+/* Append a reverse-index slot: copy the 32-byte fragment id into the key table
+ * and record idx in the value table.  O(1) append; bounded by MANIFEST_MAX_INDEX
+ * (W8 -- a manifest fragment's index cannot exceed the hook's own ceiling). */
+fn _mf_register_index(idx: u64, id: *u8) -> i32 {
+    let slot : u64 = MANIFEST_IDX_COUNT
+    if slot >= MANIFEST_MAX_INDEX { return MANIFEST_E_FULL }
+    let kdst : *u8 = ((&MANIFEST_IDX_KEYS as u64) + slot * 32u64) as *u8
+    ident_copy(id, kdst)
+    MANIFEST_IDX_VALS[slot] = idx
+    MANIFEST_IDX_LIVE[slot] = 1u8
+    MANIFEST_IDX_COUNT = slot + 1u64
+    return MANIFEST_OK
+}
+
+/* mf_verify_by_idx -- primitive verify against a known fragment index.
+ * Re-derives out_commit from the supplied artifact bytes and compares it
+ * against the payload-resident out_commit (offset 112), and checks the stored
+ * length matches.  Reproducible from artifact + stored payload alone (M10).
+ * Uses the payload-resident commitment (not wh_get_out_commit) to keep verify
+ * off the optional-accessor path. */
+fn mf_verify_by_idx(idx: u64, artifact_payload: *u8, payload_len: u64) -> u8 @export {
+    let art : *u8 = artifact_payload
+    let plen : u64 = payload_len
+    if (art as u64) == 0u64 { return 0u8 }
+    let rc : i32 = wh_get_payload(idx, (&MANIFEST_RDBUF as u64) as *u8, MANIFEST_PAYLOAD_LEN, (&MANIFEST_RDLEN as u64) as *u8)
+    if rc != 0i32 { return 0u8 }
+    if MANIFEST_RDLEN[0] != MANIFEST_PAYLOAD_LEN { return 0u8 }
+    let stored_len : u64 = _mf_get_u64_le((&MANIFEST_RDBUF as u64) as *u8, 0u64)
+    if stored_len != plen { return 0u8 }
+    ident_from_bytes(art, plen, (&MANIFEST_CMP_OC as u64) as *u8)
+    let stored_oc : *u8 = ((&MANIFEST_RDBUF as u64) + 112u64) as *u8
+    return ident_eq((&MANIFEST_CMP_OC as u64) as *u8, stored_oc)
+}
+
+/* mf_verify -- identifier-keyed verify.  Resolves manifest_id -> fragment index
+ * via the local reverse index (exact id equality, no heuristic -- M3/M4), then
+ * delegates to mf_verify_by_idx.  Linear scan is counter-driven with a found
+ * guard (W14 -- no break); once found, the inner ident_eq is skipped. */
+fn mf_verify(manifest_id: *u8, artifact_payload: *u8, payload_len: u64) -> u8 @export {
+    let mid : *u8 = manifest_id
+    if (mid as u64) == 0u64 { return 0u8 }
+    let found : u64 = _mf_lookup_idx(mid)
+    if found == MANIFEST_SENT { return 0u8 }
+    return mf_verify_by_idx(found, artifact_payload, payload_len)
+}
+
+/* Reverse-index lookup: scan live slots for a key equal to id; return the
+ * matching value (fragment index) or MANIFEST_SENT.  Counter-driven, found-guard
+ * idiom (W14). */
+fn _mf_lookup_idx(id: *u8) -> u64 {
+    let key : *u8 = id
+    let n : u64 = MANIFEST_IDX_COUNT
+    let mut found : u64 = MANIFEST_SENT
+    let mut i : u64 = 0u64
+    while i < n {
+        if found == MANIFEST_SENT {
+            if MANIFEST_IDX_LIVE[i] == 1u8 {
+                let kp : *u8 = ((&MANIFEST_IDX_KEYS as u64) + i * 32u64) as *u8
+                if ident_eq(kp, key) == 1u8 { found = MANIFEST_IDX_VALS[i] }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* mf_producer -- copy the manifest fragment's producer id (32 bytes) to out.
+ * The producer is a first-class fragment field (not in the payload), so this
+ * uses wh_get_producer.  Returns MANIFEST_OK / MANIFEST_E_BAD_IDX (W9/W12). */
+fn mf_producer(idx: u64, out: *u8) -> i32 @export {
+    let o : *u8 = out
+    if (o as u64) == 0u64 { return MANIFEST_E_NULL }
+    let rc : i32 = wh_get_producer(idx, o)
+    if rc != 0i32 { return MANIFEST_E_BAD_IDX }
+    return MANIFEST_OK
+}
+
+/* mf_op -- copy the recorded operation type id (32 bytes) from the manifest
+ * payload (offset 80) to out.  Built-only path via wh_get_payload. */
+fn mf_op(idx: u64, out: *u8) -> i32 @export {
+    let o : *u8 = out
+    if (o as u64) == 0u64 { return MANIFEST_E_NULL }
+    let rc : i32 = wh_get_payload(idx, (&MANIFEST_RDBUF as u64) as *u8, MANIFEST_PAYLOAD_LEN, (&MANIFEST_RDLEN as u64) as *u8)
+    if rc != 0i32 { return MANIFEST_E_BAD_IDX }
+    if MANIFEST_RDLEN[0] != MANIFEST_PAYLOAD_LEN { return MANIFEST_E_BAD_IDX }
+    let src : *u8 = ((&MANIFEST_RDBUF as u64) + 80u64) as *u8
+    ident_copy(src, o)
+    return MANIFEST_OK
+}
+
+/* mf_chain_head_at -- copy the prior chain head recorded at attach time
+ * (32 bytes, payload offset 16) to out.  Built-only path. Lets a consumer
+ * anchor the artifact to a point in the witness chain (M6/M16). */
+fn mf_chain_head_at(idx: u64, out: *u8) -> i32 @export {
+    let o : *u8 = out
+    if (o as u64) == 0u64 { return MANIFEST_E_NULL }
+    let rc : i32 = wh_get_payload(idx, (&MANIFEST_RDBUF as u64) as *u8, MANIFEST_PAYLOAD_LEN, (&MANIFEST_RDLEN as u64) as *u8)
+    if rc != 0i32 { return MANIFEST_E_BAD_IDX }
+    if MANIFEST_RDLEN[0] != MANIFEST_PAYLOAD_LEN { return MANIFEST_E_BAD_IDX }
+    let src : *u8 = ((&MANIFEST_RDBUF as u64) + 16u64) as *u8
+    ident_copy(src, o)
+    return MANIFEST_OK
+}
+
+/* Build the MfAttachReq aggregate in MANIFEST_T_REQ from the self-test buffers. */
+fn _mf_build_test_req() -> i32 {
+    _mf_put_test_ptr(0u64, (&MANIFEST_T_PAY as u64))
+    _mf_put_test_ptr(8u64, 64u64)
+    _mf_put_test_ptr(16u64, (&MANIFEST_T_PROD as u64))
+    _mf_put_test_ptr(24u64, (&MANIFEST_T_OP as u64))
+    _mf_put_test_ptr(32u64, (&MANIFEST_T_MID as u64))
+    return MANIFEST_OK
+}
+
+/* Write v little-endian into MANIFEST_T_REQ[off..off+8) byte-by-byte. */
+fn _mf_put_test_ptr(off: u64, v: u64) -> i32 {
+    let base : *u8 = (&MANIFEST_T_REQ as u64) as *u8
+    let val : u64 = v
+    let o : u64 = off
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        base[o + i] = ((val >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return MANIFEST_OK
+}
+
+/* mf_selftest -- KAT vectors 1-4 (house convention: 99 = full pass). */
+fn mf_selftest() -> u64 @export {
+    wh_init(0u64)
+    MANIFEST_INITED = 0u8
+    mf_init()
+    /* KAT4a: a second (idempotent) init leaves MANIFEST_OPID populated. */
+    let mut opacc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 { opacc = opacc | (MANIFEST_OPID[i] as u32)  i = i + 1u64 }
+    if opacc == 0u32 { return 1u64 }
+    /* fill test inputs */
+    i = 0u64
+    while i < 32u64 { MANIFEST_T_PROD[i] = (i + 1u64) as u8  MANIFEST_T_OP[i] = (i + 50u64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 64u64 { MANIFEST_T_PAY[i] = (i * 3u64 + 1u64) as u8  i = i + 1u64 }
+    _mf_build_test_req()
+    /* KAT1: attach returns index 0, id non-zero, reverse index count == 1 */
+    let idx : u64 = mf_attach((&MANIFEST_T_REQ as u64) as *u8)
+    if idx != 0u64 { return 2u64 }
+    let mut idacc : u32 = 0u32
+    i = 0u64
+    while i < 32u64 { idacc = idacc | (MANIFEST_T_MID[i] as u32)  i = i + 1u64 }
+    if idacc == 0u32 { return 3u64 }
+    if MANIFEST_IDX_COUNT != 1u64 { return 4u64 }
+    /* KAT2: verify-by-idx passes on the exact artifact */
+    if mf_verify_by_idx(0u64, (&MANIFEST_T_PAY as u64) as *u8, 64u64) != 1u8 { return 5u64 }
+    /* KAT2: wrong length fails */
+    if mf_verify_by_idx(0u64, (&MANIFEST_T_PAY as u64) as *u8, 63u64) != 0u8 { return 6u64 }
+    /* KAT3: verify-by-id round-trips through the reverse index */
+    if mf_verify((&MANIFEST_T_MID as u64) as *u8, (&MANIFEST_T_PAY as u64) as *u8, 64u64) != 1u8 { return 7u64 }
+    /* KAT3: unknown (all-zero) id -> not found -> 0 */
+    if mf_verify((&MANIFEST_ZERO_ID as u64) as *u8, (&MANIFEST_T_PAY as u64) as *u8, 64u64) != 0u8 { return 8u64 }
+    /* KAT4b: out_commit re-derivation matches the payload-resident commitment */
+    let rc : i32 = wh_get_payload(0u64, (&MANIFEST_RDBUF as u64) as *u8, MANIFEST_PAYLOAD_LEN, (&MANIFEST_T_LEN as u64) as *u8)
+    if rc != 0i32 { return 9u64 }
+    if MANIFEST_T_LEN[0] != MANIFEST_PAYLOAD_LEN { return 10u64 }
+    ident_from_bytes((&MANIFEST_T_PAY as u64) as *u8, 64u64, (&MANIFEST_T_OC as u64) as *u8)
+    if ident_eq((&MANIFEST_T_OC as u64) as *u8, ((&MANIFEST_RDBUF as u64) + 112u64) as *u8) != 1u8 { return 11u64 }
+    /* accessor sanity: op id and chain head copy out from the payload */
+    if mf_op(0u64, (&MANIFEST_T_OC as u64) as *u8) != 0i32 { return 12u64 }
+    i = 0u64
+    while i < 32u64 { if MANIFEST_T_OC[i] != MANIFEST_T_OP[i] { return 13u64 }  i = i + 1u64 }
+    /* KAT2 negative: one-byte mutation of the artifact fails verify */
+    MANIFEST_T_PAY[0] = MANIFEST_T_PAY[0] ^ 0xFFu8
+    if mf_verify_by_idx(0u64, (&MANIFEST_T_PAY as u64) as *u8, 64u64) != 0u8 { return 14u64 }
+    return 99u64
+}

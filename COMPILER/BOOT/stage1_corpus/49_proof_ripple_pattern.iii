@@ -1,0 +1,14 @@
+module corpus_49
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_equivalence_pattern(parent: u64, child: u64, witness: u64) -> u64 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_verify_pattern(cert: u64, parent: u64, child: u64, witness: u64) -> u8 from "proof_ripple_resolution.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    /* Mint a cert and immediately verify. */
+    let cid : u64 = proof_ripple_equivalence_pattern(0xAAu64, 0xBBu64, 0xCCu64)
+    if cid == 0u64 { return 0u64 }
+    let r : u8 = proof_ripple_verify_pattern(cid, 0xAAu64, 0xBBu64, 0xCCu64)
+    return r as u64
+}

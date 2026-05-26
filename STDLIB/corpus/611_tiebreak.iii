@@ -1,0 +1,4 @@
+/* 611 — tiebreak: deterministic canonical ordering (min/max ident, compare, select). */
+module corpus_611
+extern @abi(c-msvc-x64) fn tb_selftest() -> u64 from "tiebreak.iii"
+fn main() -> u64 { return tb_selftest() }

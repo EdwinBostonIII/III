@@ -1,0 +1,38 @@
+/* Priority queue: push (5, 50), (1, 10), (3, 30), (2, 20), (4, 40);
+ * pop_min must return payloads 10, 20, 30, 40, 50 in order. */
+module corpus_b24
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_new(arena: u64, hard: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_push(id: u64, prio: u64, payload: u32) -> i32 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_pop_min_payload(id: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_len(id: u64) -> u64 from "pq.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_drop(id: u64) -> i32 from "pq.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    let p : u64 = pq_u64u32_new(a, 16u64)
+    if p == 0u64 { return 1u64 }
+    pq_u64u32_push(p, 5u64, 50u32)
+    pq_u64u32_push(p, 1u64, 10u32)
+    pq_u64u32_push(p, 3u64, 30u32)
+    pq_u64u32_push(p, 2u64, 20u32)
+    pq_u64u32_push(p, 4u64, 40u32)
+    if pq_u64u32_len(p) != 5u64 { return 2u64 }
+    /* Pop 10, 20, 30, 40, 50 */
+    let mut want : u32 = 10u32
+    let mut step : u32 = 0u32
+    while step < 5u32 {
+        let r : u64 = pq_u64u32_pop_min_payload(p)
+        if (r & 1u64) != 1u64 { return 3u64 }
+        let v : u32 = ((r >> 1u64) & 0xFFFFFFFFu64) as u32
+        if v != want { return 4u64 }
+        want = want + 10u32
+        step = step + 1u32
+    }
+    if pq_u64u32_len(p) != 0u64 { return 5u64 }
+    pq_u64u32_drop(p)
+    arena_drop(a)
+    return 99u64
+}

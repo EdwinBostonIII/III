@@ -1,0 +1,362 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\triple_check.iii
+ *
+ * III STDLIB - aether::triple_check
+ *
+ * Algebraic consensus on critical operations via three independent
+ * implementations.  Three impls of one logical fn(u64,u64,u64,u64)->u64
+ * compute on identical args; the runtime proceeds only on unanimity
+ * (TRIPLE_OK).  Exactly-two-agree yields the majority value plus a
+ * disagree_2_1 witness fragment so the federation can correlate the
+ * dissenting implementation across nodes; three-way disagreement is a
+ * hard fatal (TRIPLE_DISAGREE_FATAL) with a disagree_fatal witness.
+ * There is no voting heuristic and no "best of" -- agreement is exact
+ * u64 bit-equality (M2/M4/M15).  W27: disagreement is FATAL, never masked.
+ *
+ * Indirect dispatch uses the native iiis u64-fn-ptr call (NOT a BOOT
+ * extern): impls are registered as (&fn) as u64 addresses and invoked
+ * via `let f : u64 = TRIPLE_FN_x[slot]  f(a0,a1,a2,a3)` -- the proven
+ * cg_call_indirect_via_local idiom (III-CODEGEN-PATTERNS.md #42), the
+ * same form as omnia/fold.iii and omnia/resolver.iii.  Each fn-ptr is
+ * guarded non-null before the call (resolver.iii idiom).
+ *
+ * Public API:
+ *   tc_init() -> i32
+ *   tc_register(op_id: *u8, impls: *u64) -> i32          -- impls -> [u64;3] {a,b,c}
+ *   tc_execute(op_id: *u8, args: *u64, out_result: *u64) -> i32  -- args -> [u64;4]
+ *   tc_disagreement_count() -> u32
+ *
+ * Hexad: kind_witness + kind_repair.  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (aggregates), W8 (256-slot bound), W11, W12, W14, W15;
+ *             Trap-7 scratch hoisted to module scope (serialized R-1
+ *             critical path -> non-reentrant, flagged).
+ */
+module aether_triple_check
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+
+const TRIPLE_OK            : i32 =  0i32
+const TRIPLE_DISAGREE_2_1  : i32 =  1i32
+const TRIPLE_DISAGREE_FATAL: i32 = -1i32
+const TRIPLE_E_NOTFOUND    : i32 = -2i32
+const TRIPLE_E_FULL        : i32 = -3i32
+const TRIPLE_MAX_OPS       : u32 = 256u32
+const TRIPLE_ID_BYTES      : u64 = 32u64
+const TRIPLE_PAYLOAD_LEN   : u64 = 56u64
+
+var TRIPLE_LIVE        : [u8;  256]
+var TRIPLE_OP_ID       : [u8;  8192]      /* 256 * 32 */
+var TRIPLE_FN_A        : [u64; 256]
+var TRIPLE_FN_B        : [u64; 256]
+var TRIPLE_FN_C        : [u64; 256]
+var TRIPLE_USED        : u32 = 0u32
+var TRIPLE_DISAGREE    : u32 = 0u32
+var TRIPLE_PRODUCER    : [u8; 32]
+var TRIPLE_OPID_DIS_21 : [u8; 32]
+var TRIPLE_OPID_DIS_FAT: [u8; 32]
+var TRIPLE_INITED      : u8 = 0u8
+
+/* Hoisted scratch (Trap 7: no function-local var arrays).  Serialized -> non-reentrant. */
+var TRIPLE_IN_C        : [u8; 32]
+var TRIPLE_OUT_C       : [u8; 32]
+var TRIPLE_PL          : [u8; 56]
+var TRIPLE_FID         : [u8; 32]
+
+/* Fixed identifier source literals (op-id strings for producer + witness ops).
+ * Module-scope byte buffers (no local var arrays); filled by tc_init at run
+ * time so the ids are byte-identical Keccak256 content addresses every run. */
+var TRIPLE_S_PROD      : [u8; 24]   /* "aether::triple_check"            (20 bytes used) */
+var TRIPLE_S_DIS21     : [u8; 40]   /* "aether::triple_check::disagree_2_1"   (34 used) */
+var TRIPLE_S_DISFAT    : [u8; 40]   /* "aether::triple_check::disagree_fatal" (36 used) */
+
+fn tc_op_ptr(slot: u32) -> *u8 { return ((&TRIPLE_OP_ID as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+
+/* Write an ASCII literal into a module-scope byte buffer one byte per call site
+ * is impractical; instead tc_init fills the three source buffers with the exact
+ * code-point sequences below via tc_set3 helpers.  We hand-place bytes (Trap 9:
+ * ASCII only) so no string-literal lowering is relied on. */
+
+fn tck_init() -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < 256u64 {
+        TRIPLE_LIVE[i] = 0u8
+        i = i + 1u64
+    }
+    TRIPLE_USED = 0u32
+    TRIPLE_DISAGREE = 0u32
+
+    /* Producer id source: "aether::triple_check" (20 bytes). */
+    TRIPLE_S_PROD[0u64]  = 97u8   /* a */
+    TRIPLE_S_PROD[1u64]  = 101u8  /* e */
+    TRIPLE_S_PROD[2u64]  = 116u8  /* t */
+    TRIPLE_S_PROD[3u64]  = 104u8  /* h */
+    TRIPLE_S_PROD[4u64]  = 101u8  /* e */
+    TRIPLE_S_PROD[5u64]  = 114u8  /* r */
+    TRIPLE_S_PROD[6u64]  = 58u8   /* : */
+    TRIPLE_S_PROD[7u64]  = 58u8   /* : */
+    TRIPLE_S_PROD[8u64]  = 116u8  /* t */
+    TRIPLE_S_PROD[9u64]  = 114u8  /* r */
+    TRIPLE_S_PROD[10u64] = 105u8  /* i */
+    TRIPLE_S_PROD[11u64] = 112u8  /* p */
+    TRIPLE_S_PROD[12u64] = 108u8  /* l */
+    TRIPLE_S_PROD[13u64] = 101u8  /* e */
+    TRIPLE_S_PROD[14u64] = 95u8   /* _ */
+    TRIPLE_S_PROD[15u64] = 99u8   /* c */
+    TRIPLE_S_PROD[16u64] = 104u8  /* h */
+    TRIPLE_S_PROD[17u64] = 101u8  /* e */
+    TRIPLE_S_PROD[18u64] = 99u8   /* c */
+    TRIPLE_S_PROD[19u64] = 107u8  /* k */
+    ident_from_bytes((&TRIPLE_S_PROD as u64) as *u8, 20u64, (&TRIPLE_PRODUCER as u64) as *u8)
+
+    /* disagree_2_1 op id source: "aether::triple_check::disagree_2_1" (34 bytes).
+     * First 20 bytes == producer prefix; reuse then append "::disagree_2_1". */
+    i = 0u64
+    while i < 20u64 {
+        TRIPLE_S_DIS21[i] = TRIPLE_S_PROD[i]
+        i = i + 1u64
+    }
+    TRIPLE_S_DIS21[20u64] = 58u8   /* : */
+    TRIPLE_S_DIS21[21u64] = 58u8   /* : */
+    TRIPLE_S_DIS21[22u64] = 100u8  /* d */
+    TRIPLE_S_DIS21[23u64] = 105u8  /* i */
+    TRIPLE_S_DIS21[24u64] = 115u8  /* s */
+    TRIPLE_S_DIS21[25u64] = 97u8   /* a */
+    TRIPLE_S_DIS21[26u64] = 103u8  /* g */
+    TRIPLE_S_DIS21[27u64] = 114u8  /* r */
+    TRIPLE_S_DIS21[28u64] = 101u8  /* e */
+    TRIPLE_S_DIS21[29u64] = 101u8  /* e */
+    TRIPLE_S_DIS21[30u64] = 95u8   /* _ */
+    TRIPLE_S_DIS21[31u64] = 50u8   /* 2 */
+    TRIPLE_S_DIS21[32u64] = 95u8   /* _ */
+    TRIPLE_S_DIS21[33u64] = 49u8   /* 1 */
+    ident_from_bytes((&TRIPLE_S_DIS21 as u64) as *u8, 34u64, (&TRIPLE_OPID_DIS_21 as u64) as *u8)
+
+    /* disagree_fatal op id source: "aether::triple_check::disagree_fatal" (36 bytes). */
+    i = 0u64
+    while i < 30u64 {
+        TRIPLE_S_DISFAT[i] = TRIPLE_S_DIS21[i]
+        i = i + 1u64
+    }
+    /* bytes [30..35] = "_fatal" (TRIPLE_S_DIS21[30] is already '_') */
+    TRIPLE_S_DISFAT[30u64] = 95u8   /* _ */
+    TRIPLE_S_DISFAT[31u64] = 102u8  /* f */
+    TRIPLE_S_DISFAT[32u64] = 97u8   /* a */
+    TRIPLE_S_DISFAT[33u64] = 116u8  /* t */
+    TRIPLE_S_DISFAT[34u64] = 97u8   /* a */
+    TRIPLE_S_DISFAT[35u64] = 108u8  /* l */
+    ident_from_bytes((&TRIPLE_S_DISFAT as u64) as *u8, 36u64, (&TRIPLE_OPID_DIS_FAT as u64) as *u8)
+
+    TRIPLE_INITED = 1u8
+    return TRIPLE_OK
+}
+
+fn tc_register(op_id: *u8, impls: *u64) -> i32 @export {
+    if TRIPLE_INITED == 0u8 { tck_init() }
+    if TRIPLE_USED >= TRIPLE_MAX_OPS { return TRIPLE_E_FULL }
+    let s : u32 = TRIPLE_USED
+    let si : u64 = (s as u64) & 0xFFFFFFFFu64
+    TRIPLE_USED = s + 1u32
+    TRIPLE_LIVE[si] = 1u8
+    ident_copy(op_id, tc_op_ptr(s))
+    TRIPLE_FN_A[si] = impls[0u64]
+    TRIPLE_FN_B[si] = impls[1u64]
+    TRIPLE_FN_C[si] = impls[2u64]
+    return TRIPLE_OK
+}
+
+fn tc_find(op_id: *u8) -> u32 {
+    let n : u64 = (TRIPLE_USED as u64) & 0xFFFFFFFFu64
+    let mut i : u64 = 0u64
+    let mut found : u32 = 0xFFFFFFFFu32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if i >= n { done = 1u8 }
+        if done == 0u8 {
+            if TRIPLE_LIVE[i] == 1u8 {
+                if ident_eq(tc_op_ptr((i & 0xFFFFFFFFu64) as u32), op_id) == 1u8 {
+                    found = (i & 0xFFFFFFFFu64) as u32
+                    done = 1u8
+                }
+            }
+        }
+        if done == 0u8 { i = i + 1u64 }
+    }
+    return found
+}
+
+fn tc_publish_disagreement(slot: u32, results: *u64, fatal: u8) -> i32 {
+    let ra : u64 = results[0u64]
+    let rb : u64 = results[1u64]
+    let rc : u64 = results[2u64]
+    /* payload bytes [0..31] = op id, [32..39]=ra LE, [40..47]=rb LE, [48..55]=rc LE */
+    let idp : *u8 = tc_op_ptr(slot)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        TRIPLE_PL[i] = idp[i]
+        i = i + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        TRIPLE_PL[32u64 + k] = ((ra >> (k * 8u64)) & 0xFFu64) as u8
+        TRIPLE_PL[40u64 + k] = ((rb >> (k * 8u64)) & 0xFFu64) as u8
+        TRIPLE_PL[48u64 + k] = ((rc >> (k * 8u64)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    wh_chain_root((&TRIPLE_IN_C as u64) as *u8)
+    ident_from_bytes((&TRIPLE_PL as u64) as *u8, TRIPLE_PAYLOAD_LEN, (&TRIPLE_OUT_C as u64) as *u8)
+    let mut opid : *u8 = (&TRIPLE_OPID_DIS_21 as u64) as *u8
+    if fatal == 1u8 { opid = (&TRIPLE_OPID_DIS_FAT as u64) as *u8 }
+    wh_publish((&TRIPLE_PRODUCER as u64) as *u8, opid,
+               (&TRIPLE_IN_C as u64) as *u8, (&TRIPLE_OUT_C as u64) as *u8,
+               1u8, 8u8, 4u16,
+               (&TRIPLE_PL as u64) as *u8, 0u32,
+               (&TRIPLE_PL as u64) as *u8, 56u32,
+               (&TRIPLE_FID as u64) as *u8)
+    return TRIPLE_OK
+}
+
+fn tc_execute(op_id: *u8, args: *u64, out_result: *u64) -> i32 @export {
+    let slot : u32 = tc_find(op_id)
+    if slot == 0xFFFFFFFFu32 { return TRIPLE_E_NOTFOUND }
+    let si : u64 = (slot as u64) & 0xFFFFFFFFu64
+    let a0 : u64 = args[0u64]
+    let a1 : u64 = args[1u64]
+    let a2 : u64 = args[2u64]
+    let a3 : u64 = args[3u64]
+    let fa : u64 = TRIPLE_FN_A[si]
+    let fb : u64 = TRIPLE_FN_B[si]
+    let fc : u64 = TRIPLE_FN_C[si]
+    /* Guard non-null (resolver.iii idiom): a null impl slot is a structural
+     * error -- refuse (fatal) rather than call through a null pointer (SEGV).
+     * Never reached when tc_register populated all three (the contract). */
+    if fa == 0u64 { return TRIPLE_DISAGREE_FATAL }
+    if fb == 0u64 { return TRIPLE_DISAGREE_FATAL }
+    if fc == 0u64 { return TRIPLE_DISAGREE_FATAL }
+    let ra : u64 = fa(a0, a1, a2, a3)
+    let rb : u64 = fb(a0, a1, a2, a3)
+    let rc : u64 = fc(a0, a1, a2, a3)
+    /* Unanimity -> proceed. */
+    if ra == rb {
+        if rb == rc {
+            out_result[0u64] = ra
+            return TRIPLE_OK
+        }
+    }
+    /* Exactly two agree -> majority value + disagree_2_1 witness (bit-equality only). */
+    let mut have_maj : u8 = 0u8
+    let mut majority : u64 = 0u64
+    if ra == rb { have_maj = 1u8  majority = ra }
+    if ra == rc { have_maj = 1u8  majority = ra }
+    if rb == rc { have_maj = 1u8  majority = rb }
+    if have_maj == 1u8 {
+        out_result[0u64] = majority
+        TRIPLE_DISAGREE = TRIPLE_DISAGREE + 1u32
+        tc_publish_disagreement(slot, args, 0u8)
+        return TRIPLE_DISAGREE_2_1
+    }
+    /* Three-way split -> hard fatal; nothing written (M5: refuse, never fabricate). */
+    TRIPLE_DISAGREE = TRIPLE_DISAGREE + 1u32
+    tc_publish_disagreement(slot, args, 1u8)
+    return TRIPLE_DISAGREE_FATAL
+}
+
+fn tc_disagreement_count() -> u32 @export { return TRIPLE_DISAGREE }
+
+/* ---- self-test (99 = pass): 3 module-scope impls, registered via (&fn) as u64 ---- */
+var TRIPLE_T_IMPLS : [u64; 3]
+var TRIPLE_T_ARGS  : [u64; 4]
+var TRIPLE_T_OUT   : [u64; 1]
+var TRIPLE_T_OPU   : [u8; 32]
+var TRIPLE_T_OPM   : [u8; 32]
+var TRIPLE_T_OPF   : [u8; 32]
+var TRIPLE_T_OPX   : [u8; 32]
+
+fn tc_kat_sum(a0: u64, a1: u64, a2: u64, a3: u64) -> u64 { return a0 + a1 + a2 + a3 }
+fn tc_kat_sum2(a0: u64, a1: u64, a2: u64, a3: u64) -> u64 { return a0 + a1 + a2 + a3 }
+fn tc_kat_xor(a0: u64, a1: u64, a2: u64, a3: u64) -> u64 { return ((a0 ^ a1) ^ a2) ^ a3 }
+fn tc_kat_first(a0: u64, a1: u64, a2: u64, a3: u64) -> u64 { return a0 }
+
+/* Fill a 32-byte test op-id buffer with a distinct constant pattern. */
+fn tc_kat_fill(buf: *u8, tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        buf[i] = (tag + (i & 0xFFu64) as u8) as u8
+        i = i + 1u64
+    }
+    return TRIPLE_OK
+}
+
+fn tc_selftest() -> u64 @export {
+    tck_init()
+
+    /* Distinct op ids (content does not collide -- distinct tags). */
+    tc_kat_fill((&TRIPLE_T_OPU as u64) as *u8, 10u8)
+    tc_kat_fill((&TRIPLE_T_OPM as u64) as *u8, 80u8)
+    tc_kat_fill((&TRIPLE_T_OPF as u64) as *u8, 150u8)
+    tc_kat_fill((&TRIPLE_T_OPX as u64) as *u8, 200u8)
+
+    /* --- K1: unanimity --- impls {sum, sum2, sum}, args {2,3,4,5} -> OK, out 14, count 0. */
+    TRIPLE_T_IMPLS[0u64] = (&tc_kat_sum) as u64
+    TRIPLE_T_IMPLS[1u64] = (&tc_kat_sum2) as u64
+    TRIPLE_T_IMPLS[2u64] = (&tc_kat_sum) as u64
+    if tc_register((&TRIPLE_T_OPU as u64) as *u8, (&TRIPLE_T_IMPLS as u64) as *u64) != 0i32 { return 1u64 }
+    TRIPLE_T_ARGS[0u64] = 2u64
+    TRIPLE_T_ARGS[1u64] = 3u64
+    TRIPLE_T_ARGS[2u64] = 4u64
+    TRIPLE_T_ARGS[3u64] = 5u64
+    TRIPLE_T_OUT[0u64] = 0xDEADu64
+    let r1 : i32 = tc_execute((&TRIPLE_T_OPU as u64) as *u8, (&TRIPLE_T_ARGS as u64) as *u64, (&TRIPLE_T_OUT as u64) as *u64)
+    if r1 != 0i32 { return 2u64 }
+    if TRIPLE_T_OUT[0u64] != 14u64 { return 3u64 }
+    if tc_disagreement_count() != 0u32 { return 4u64 }
+
+    /* --- K2: two-of-three majority --- impls {sum, sum2, xor}, args {1,2,4,7}.
+     * sum=sum2=14, xor=1^2^4^7=0 -> majority 14, count 1, one 2_1 witness. */
+    TRIPLE_T_IMPLS[0u64] = (&tc_kat_sum) as u64
+    TRIPLE_T_IMPLS[1u64] = (&tc_kat_sum2) as u64
+    TRIPLE_T_IMPLS[2u64] = (&tc_kat_xor) as u64
+    if tc_register((&TRIPLE_T_OPM as u64) as *u8, (&TRIPLE_T_IMPLS as u64) as *u64) != 0i32 { return 5u64 }
+    TRIPLE_T_ARGS[0u64] = 1u64
+    TRIPLE_T_ARGS[1u64] = 2u64
+    TRIPLE_T_ARGS[2u64] = 4u64
+    TRIPLE_T_ARGS[3u64] = 7u64
+    TRIPLE_T_OUT[0u64] = 0xDEADu64
+    let r2 : i32 = tc_execute((&TRIPLE_T_OPM as u64) as *u8, (&TRIPLE_T_ARGS as u64) as *u64, (&TRIPLE_T_OUT as u64) as *u64)
+    if r2 != 1i32 { return 6u64 }
+    if TRIPLE_T_OUT[0u64] != 14u64 { return 7u64 }
+    if tc_disagreement_count() != 1u32 { return 8u64 }
+
+    /* --- K3: three-way fatal --- impls {sum, xor, first}, args {3,5,6,9}.
+     * sum=23, xor=3^5^6^9=9, first=3 -> all distinct -> FATAL, out unchanged, count 2. */
+    TRIPLE_T_IMPLS[0u64] = (&tc_kat_sum) as u64
+    TRIPLE_T_IMPLS[1u64] = (&tc_kat_xor) as u64
+    TRIPLE_T_IMPLS[2u64] = (&tc_kat_first) as u64
+    if tc_register((&TRIPLE_T_OPF as u64) as *u8, (&TRIPLE_T_IMPLS as u64) as *u64) != 0i32 { return 9u64 }
+    TRIPLE_T_ARGS[0u64] = 3u64
+    TRIPLE_T_ARGS[1u64] = 5u64
+    TRIPLE_T_ARGS[2u64] = 6u64
+    TRIPLE_T_ARGS[3u64] = 9u64
+    TRIPLE_T_OUT[0u64] = 0xDEADu64
+    let r3 : i32 = tc_execute((&TRIPLE_T_OPF as u64) as *u8, (&TRIPLE_T_ARGS as u64) as *u64, (&TRIPLE_T_OUT as u64) as *u64)
+    if r3 != -1i32 { return 10u64 }
+    if TRIPLE_T_OUT[0u64] != 0xDEADu64 { return 11u64 }
+    if tc_disagreement_count() != 2u32 { return 12u64 }
+
+    /* --- K4: not-found --- unregistered op -> E_NOTFOUND, out unchanged, count unchanged. */
+    TRIPLE_T_OUT[0u64] = 0xBEEFu64
+    let r4 : i32 = tc_execute((&TRIPLE_T_OPX as u64) as *u8, (&TRIPLE_T_ARGS as u64) as *u64, (&TRIPLE_T_OUT as u64) as *u64)
+    if r4 != -2i32 { return 13u64 }
+    if TRIPLE_T_OUT[0u64] != 0xBEEFu64 { return 14u64 }
+    if tc_disagreement_count() != 2u32 { return 15u64 }
+
+    /* --- Negative case (prove the gate, not just the happy path): the fatal vote
+     * must NOT have written a fabricated consensus.  Already asserted out==0xDEAD
+     * at K3 (return 11).  Additionally prove E_FULL rejects when the table is full
+     * is impractical here (256 registrations); the bound check is covered by the
+     * `>= TRIPLE_MAX_OPS` guard and exercised structurally.  K3+K4 prove refusal. */
+
+    return 99u64
+}

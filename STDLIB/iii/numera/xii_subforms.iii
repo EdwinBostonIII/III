@@ -1,0 +1,297 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\xii_subforms.iii
+ *
+ * III STDLIB - numera::xii_subforms
+ *
+ * Sealed enumeration of basis-kernel subforms. Per DOCS/III-XII.md S26.18.
+ *
+ * Each named subform maps to a deterministic bit-pattern computed as
+ *   bit_pattern := low_N_bits(SHA-256("KERNEL:" ‖ name))
+ * where N is the kernel's subform field width:
+ *   K01 FORM:    18 bits (form_id)
+ *   K04 MEAN:     9 bits (equiv_kind)
+ *   K05 ACT:     17 bits (transition_id)
+ *   K07 SEAL:    24 bits (snapshot_id)
+ *   K08 PROVE:   24 bits (cert_id)
+ *   K09 QUERY:   24 bits (pattern_id)
+ *   K10 GRANT:    9 bits (attenuation_kind)
+ *   K11 GOVERN:  24 bits (proposal_id)
+ *   K17 LIFT:    20 bits (from+to+cap_ref)
+ *   K18 REFLECT:  8 bits (scope)
+ *
+ * Hexad: kind_essence. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only.
+ */
+
+module numera_xii_subforms
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* Kernel prefix ids; map to the prefix string for SHA-256 derivation. */
+const XSF_PREFIX_FORM    : u8 = 1u8
+const XSF_PREFIX_MEAN    : u8 = 2u8
+const XSF_PREFIX_ACT     : u8 = 3u8
+const XSF_PREFIX_SEAL    : u8 = 4u8
+const XSF_PREFIX_PROVE   : u8 = 5u8
+const XSF_PREFIX_QUERY   : u8 = 6u8
+const XSF_PREFIX_GRANT   : u8 = 7u8
+const XSF_PREFIX_GOVERN  : u8 = 8u8
+const XSF_PREFIX_LIFT    : u8 = 9u8
+const XSF_PREFIX_REFLECT : u8 = 10u8
+
+/* Subform field widths (in bits, per S26.18). */
+const XSF_BITS_FORM    : u32 = 18u32
+const XSF_BITS_MEAN    : u32 =  9u32
+const XSF_BITS_ACT     : u32 = 17u32
+const XSF_BITS_SEAL    : u32 = 24u32
+const XSF_BITS_PROVE   : u32 = 24u32
+const XSF_BITS_QUERY   : u32 = 24u32
+const XSF_BITS_GRANT   : u32 =  9u32
+const XSF_BITS_GOVERN  : u32 = 24u32
+const XSF_BITS_LIFT    : u32 = 20u32
+const XSF_BITS_REFLECT : u32 =  8u32
+
+/* Module-scope scratch buffer for SHA-256 derivation. Max prefix "REFLECT:" (8) +
+ * max name length (32) = 40 bytes; round up to 64. */
+var XSF_SCRATCH : [u8; 64]
+var XSF_HASH_OUT : [u8; 32]
+
+/* Prefix lookup: returns prefix bytes + length. */
+fn _prefix_bytes(prefix_id: u8, out: *u8) -> u32 {
+    if prefix_id == XSF_PREFIX_FORM {
+        out[0u64] = 0x46u8 /* 'F' */
+        out[1u64] = 0x4Fu8 /* 'O' */
+        out[2u64] = 0x52u8 /* 'R' */
+        out[3u64] = 0x4Du8 /* 'M' */
+        out[4u64] = 0x3Au8 /* ':' */
+        return 5u32
+    }
+    if prefix_id == XSF_PREFIX_MEAN {
+        out[0u64] = 0x4Du8 /* 'M' */
+        out[1u64] = 0x45u8 /* 'E' */
+        out[2u64] = 0x41u8 /* 'A' */
+        out[3u64] = 0x4Eu8 /* 'N' */
+        out[4u64] = 0x3Au8
+        return 5u32
+    }
+    if prefix_id == XSF_PREFIX_ACT {
+        out[0u64] = 0x41u8 /* 'A' */
+        out[1u64] = 0x43u8 /* 'C' */
+        out[2u64] = 0x54u8 /* 'T' */
+        out[3u64] = 0x3Au8
+        return 4u32
+    }
+    if prefix_id == XSF_PREFIX_SEAL {
+        out[0u64] = 0x53u8 /* 'S' */
+        out[1u64] = 0x45u8 /* 'E' */
+        out[2u64] = 0x41u8 /* 'A' */
+        out[3u64] = 0x4Cu8 /* 'L' */
+        out[4u64] = 0x3Au8
+        return 5u32
+    }
+    if prefix_id == XSF_PREFIX_PROVE {
+        out[0u64] = 0x50u8 /* 'P' */
+        out[1u64] = 0x52u8 /* 'R' */
+        out[2u64] = 0x4Fu8 /* 'O' */
+        out[3u64] = 0x56u8 /* 'V' */
+        out[4u64] = 0x45u8 /* 'E' */
+        out[5u64] = 0x3Au8
+        return 6u32
+    }
+    if prefix_id == XSF_PREFIX_QUERY {
+        out[0u64] = 0x51u8 /* 'Q' */
+        out[1u64] = 0x55u8 /* 'U' */
+        out[2u64] = 0x45u8 /* 'E' */
+        out[3u64] = 0x52u8 /* 'R' */
+        out[4u64] = 0x59u8 /* 'Y' */
+        out[5u64] = 0x3Au8
+        return 6u32
+    }
+    if prefix_id == XSF_PREFIX_GRANT {
+        out[0u64] = 0x47u8 /* 'G' */
+        out[1u64] = 0x52u8 /* 'R' */
+        out[2u64] = 0x41u8 /* 'A' */
+        out[3u64] = 0x4Eu8 /* 'N' */
+        out[4u64] = 0x54u8 /* 'T' */
+        out[5u64] = 0x3Au8
+        return 6u32
+    }
+    if prefix_id == XSF_PREFIX_GOVERN {
+        out[0u64] = 0x47u8 /* 'G' */
+        out[1u64] = 0x4Fu8 /* 'O' */
+        out[2u64] = 0x56u8 /* 'V' */
+        out[3u64] = 0x45u8 /* 'E' */
+        out[4u64] = 0x52u8 /* 'R' */
+        out[5u64] = 0x4Eu8 /* 'N' */
+        out[6u64] = 0x3Au8
+        return 7u32
+    }
+    if prefix_id == XSF_PREFIX_LIFT {
+        out[0u64] = 0x4Cu8 /* 'L' */
+        out[1u64] = 0x49u8 /* 'I' */
+        out[2u64] = 0x46u8 /* 'F' */
+        out[3u64] = 0x54u8 /* 'T' */
+        out[4u64] = 0x3Au8
+        return 5u32
+    }
+    if prefix_id == XSF_PREFIX_REFLECT {
+        out[0u64] = 0x52u8 /* 'R' */
+        out[1u64] = 0x45u8 /* 'E' */
+        out[2u64] = 0x46u8 /* 'F' */
+        out[3u64] = 0x4Cu8 /* 'L' */
+        out[4u64] = 0x45u8 /* 'E' */
+        out[5u64] = 0x43u8 /* 'C' */
+        out[6u64] = 0x54u8 /* 'T' */
+        out[7u64] = 0x3Au8
+        return 8u32
+    }
+    return 0u32
+}
+
+/* Compute subform value: SHA-256("PREFIX:NAME")[0..bits/8] as u32. */
+fn xii_subforms_compute(prefix_id: u8, name_ptr: *u8, name_len: u32, bits: u32) -> u32 @export {
+    let scratch_ptr : *u8 = &XSF_SCRATCH as *u8
+    let p_len : u32 = _prefix_bytes(prefix_id, scratch_ptr)
+    /* Append name bytes after prefix. */
+    let mut i : u32 = 0u32
+    while i < name_len {
+        if (p_len + i) >= 64u32 { return 0u32 }
+        XSF_SCRATCH[p_len + i] = name_ptr[i as u64]
+        i = i + 1u32
+    }
+    let total_len : u32 = p_len + name_len
+    sha256_oneshot(scratch_ptr, total_len as u64, &XSF_HASH_OUT as *u8)
+    /* Extract low `bits` from XSF_HASH_OUT (first 4 bytes, little-endian). */
+    let b0 : u32 = XSF_HASH_OUT[0u32] as u32
+    let b1 : u32 = XSF_HASH_OUT[1u32] as u32
+    let b2 : u32 = XSF_HASH_OUT[2u32] as u32
+    let b3 : u32 = XSF_HASH_OUT[3u32] as u32
+    let raw : u32 = b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+    /* Mask to `bits` width. */
+    let mask : u32 = if_mask(bits)
+    return raw & mask
+}
+
+fn if_mask(bits: u32) -> u32 {
+    if bits >= 32u32 { return 0xFFFFFFFFu32 }
+    /* iiis-1 parser bug: a leading `(` after `return` triggers hexad
+     * parse path.  Bind to a local first. */
+    let shifted : u32 = 1u32 << bits
+    return shifted - 1u32
+}
+
+/* Convenience helpers for common Horizon-pattern subforms. */
+
+fn _name_buf_set(name: *u8, b0: u8, b1: u8, b2: u8, b3: u8, b4: u8, b5: u8, b6: u8, b7: u8) -> i32 {
+    name[0u64] = b0
+    name[1u64] = b1
+    name[2u64] = b2
+    name[3u64] = b3
+    name[4u64] = b4
+    name[5u64] = b5
+    name[6u64] = b6
+    name[7u64] = b7
+    return 0i32
+}
+
+/* ACT transition_id for "POLY_MULT" — Poly1305 multiply-step. */
+var XSF_NAME_POLY_MULT : [u8; 16]
+var XSF_POLY_MULT_DONE : u8 = 0u8
+var XSF_POLY_MULT_VAL : u32 = 0u32
+
+fn xii_subforms_act_poly_mult() -> u32 @export {
+    if XSF_POLY_MULT_DONE != 0u8 { return XSF_POLY_MULT_VAL }
+    XSF_NAME_POLY_MULT[0u32] = 0x50u8 /* P */
+    XSF_NAME_POLY_MULT[1u32] = 0x4Fu8 /* O */
+    XSF_NAME_POLY_MULT[2u32] = 0x4Cu8 /* L */
+    XSF_NAME_POLY_MULT[3u32] = 0x59u8 /* Y */
+    XSF_NAME_POLY_MULT[4u32] = 0x5Fu8 /* _ */
+    XSF_NAME_POLY_MULT[5u32] = 0x4Du8 /* M */
+    XSF_NAME_POLY_MULT[6u32] = 0x55u8 /* U */
+    XSF_NAME_POLY_MULT[7u32] = 0x4Cu8 /* L */
+    XSF_NAME_POLY_MULT[8u32] = 0x54u8 /* T */
+    XSF_POLY_MULT_VAL = xii_subforms_compute(XSF_PREFIX_ACT, &XSF_NAME_POLY_MULT as *u8, 9u32, XSF_BITS_ACT)
+    XSF_POLY_MULT_DONE = 1u8
+    return XSF_POLY_MULT_VAL
+}
+
+/* SEAL snapshot_id for "WITNESS_FORM" — append-only witness record. */
+var XSF_NAME_WITNESS_FORM : [u8; 16]
+var XSF_WITNESS_FORM_DONE : u8 = 0u8
+var XSF_WITNESS_FORM_VAL : u32 = 0u32
+
+fn xii_subforms_seal_witness_form() -> u32 @export {
+    if XSF_WITNESS_FORM_DONE != 0u8 { return XSF_WITNESS_FORM_VAL }
+    XSF_NAME_WITNESS_FORM[0u32]  = 0x57u8 /* W */
+    XSF_NAME_WITNESS_FORM[1u32]  = 0x49u8 /* I */
+    XSF_NAME_WITNESS_FORM[2u32]  = 0x54u8 /* T */
+    XSF_NAME_WITNESS_FORM[3u32]  = 0x4Eu8 /* N */
+    XSF_NAME_WITNESS_FORM[4u32]  = 0x45u8 /* E */
+    XSF_NAME_WITNESS_FORM[5u32]  = 0x53u8 /* S */
+    XSF_NAME_WITNESS_FORM[6u32]  = 0x53u8 /* S */
+    XSF_NAME_WITNESS_FORM[7u32]  = 0x5Fu8 /* _ */
+    XSF_NAME_WITNESS_FORM[8u32]  = 0x46u8 /* F */
+    XSF_NAME_WITNESS_FORM[9u32]  = 0x4Fu8 /* O */
+    XSF_NAME_WITNESS_FORM[10u32] = 0x52u8 /* R */
+    XSF_NAME_WITNESS_FORM[11u32] = 0x4Du8 /* M */
+    XSF_WITNESS_FORM_VAL = xii_subforms_compute(XSF_PREFIX_SEAL, &XSF_NAME_WITNESS_FORM as *u8, 12u32, XSF_BITS_SEAL)
+    XSF_WITNESS_FORM_DONE = 1u8
+    return XSF_WITNESS_FORM_VAL
+}
+
+/* REFLECT scope ids (sealed constants per S26.18). */
+const XSF_SCOPE_K_NOW              : u8 = 0u8
+const XSF_SCOPE_RECURSION_DEPTH    : u8 = 1u8
+const XSF_SCOPE_LAST_PATTERN       : u8 = 2u8
+const XSF_SCOPE_PATTERN_CHAIN      : u8 = 3u8
+const XSF_SCOPE_LAST_SCORE         : u8 = 4u8
+const XSF_SCOPE_TX_VERSION         : u8 = 5u8
+const XSF_SCOPE_PIPELINE_CONGESTION: u8 = 6u8
+const XSF_SCOPE_HARDWARE_FEATURES  : u8 = 7u8
+const XSF_SCOPE_PREFETCH_HINT      : u8 = 8u8
+
+fn xii_subforms_reflect_scope(scope: u8) -> u32 @export {
+    return scope as u32
+}
+
+/* GRANT attenuation_kind (sealed constants). */
+const XSF_GRANT_NO_ATTEN      : u32 = 0u32
+const XSF_GRANT_READ_ONLY     : u32 = 1u32
+const XSF_GRANT_WRITE_ONLY    : u32 = 2u32
+const XSF_GRANT_READ_WRITE    : u32 = 3u32
+const XSF_GRANT_EXECUTE_ONLY  : u32 = 4u32
+const XSF_GRANT_READ_EXECUTE  : u32 = 5u32
+const XSF_GRANT_REVOKE        : u32 = 6u32
+const XSF_GRANT_STRICT        : u32 = 7u32
+const XSF_GRANT_EXACT_CAP     : u32 = 8u32
+
+fn xii_subforms_grant_atten(kind: u32) -> u32 @export {
+    return kind
+}
+
+/* LIFT ring encoding: low 4 = from_ring, next 4 = to_ring. */
+fn xii_subforms_lift_encode(from_ring: u8, to_ring: u8, cap_ref: u32) -> u32 @export {
+    return (from_ring as u32) | ((to_ring as u32) << 4u32) | (cap_ref << 8u32)
+}
+
+/* MEAN equiv_kind sealed constants. */
+const XSF_MEAN_BYTE_EQ      : u32 = 0u32
+const XSF_MEAN_MAC_EQ       : u32 = 1u32
+const XSF_MEAN_MHASH_EQ     : u32 = 2u32
+const XSF_MEAN_CT_EQ        : u32 = 3u32
+const XSF_MEAN_STRUCT_EQ    : u32 = 4u32
+const XSF_MEAN_ENCODING_EQ  : u32 = 5u32
+const XSF_MEAN_SEMANTIC_EQ  : u32 = 6u32
+
+fn xii_subforms_mean_kind(kind: u32) -> u32 @export {
+    return kind
+}
+
+/* Verify collision-free: compute a sample of subform values and ensure
+ * they differ. Returns 0 if collision detected, 1 otherwise. */
+fn xii_subforms_sample_collision_free() -> u8 @export {
+    let v1 : u32 = xii_subforms_act_poly_mult()
+    let v2 : u32 = xii_subforms_seal_witness_form()
+    if v1 == v2 { return 0u8 }
+    return 1u8
+}

@@ -1,0 +1,55 @@
+/* STDLIB/iii/katabasis/caps.iii
+ *
+ * KATABASIS increment 14 -- descent capability verification (plan 4.2 step 2 /
+ * invariant #3: no ambient authority).  Every descent cycle names a capability
+ * (the GRANT child of its term); the Gate must verify that capability grants
+ * the right required for the cycle's FAMILY.  This composes the real III object-
+ * capability algebra (aether/capability): attenuating tokens, a 64-bit rights
+ * mask, parent-chain revocation, expiry.
+ *
+ * Each family requires a distinct descent right bit, allocated at 0x00100000+
+ * (free in the rights mask: aether rights occupy <= 0x40000 plus the ENV top
+ * bit).  A cap is sufficient iff it carries the family's required right; the
+ * real cap_verify_rights enforces (actual & required) == required and that no
+ * ancestor in the cap's chain is revoked.  This makes the gate's cap_ok
+ * self-computable.  KAT: corpus 608.  Ring R0.  K 1.00.
+ */
+module katabasis_caps
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+/* Descent right bits (distinct, in the free 0x00100000+ region of the mask). */
+const KCAP_R_READMETAL  : u64 = 0x00100000u64   /* F1 ReadMetal / F3 Census / F7 SelfVerify */
+const KCAP_R_WRITEMETAL : u64 = 0x00200000u64   /* F2 WriteMetal */
+const KCAP_R_SNAPSHOT   : u64 = 0x00400000u64   /* F4 Snapshot/Reverse */
+const KCAP_R_DESCEND    : u64 = 0x00800000u64   /* F5 Descend (VMRUN) */
+const KCAP_R_OBSERVE    : u64 = 0x01000000u64   /* F6 Observe */
+const KCAP_R_CAPOP      : u64 = 0x02000000u64   /* F8 CapOp */
+const KCAP_R_COPROC     : u64 = 0x04000000u64   /* F9 CoprocDispatch */
+
+/* The capability right a cycle of `family` requires (the nine families, §3.0).
+ * Read-class families (F1/F3/F7) share the read-metal right; 0 = invalid. */
+fn katabasis_family_required_right(family: u32) -> u64 @export {
+    let f : u32 = family
+    if f == 1u32 { return KCAP_R_READMETAL }
+    if f == 2u32 { return KCAP_R_WRITEMETAL }
+    if f == 3u32 { return KCAP_R_READMETAL }
+    if f == 4u32 { return KCAP_R_SNAPSHOT }
+    if f == 5u32 { return KCAP_R_DESCEND }
+    if f == 6u32 { return KCAP_R_OBSERVE }
+    if f == 7u32 { return KCAP_R_READMETAL }
+    if f == 8u32 { return KCAP_R_CAPOP }
+    if f == 9u32 { return KCAP_R_COPROC }
+    return 0u64
+}
+
+/* Does capability `cap_id` authorize a cycle of `family`?  1 = authorized
+ * (the gate's cap_ok); 0 = denied (invalid family, or the cap lacks the right,
+ * or an ancestor is revoked -- enforced by the real cap_verify_rights). */
+fn katabasis_cap_check(family: u32, cap_id: u64) -> u8 @export {
+    let f   : u32 = family
+    let cid : u64 = cap_id
+    let req : u64 = katabasis_family_required_right(f)
+    if req == 0u64 { return 0u8 }
+    return cap_verify_rights(cid, req)
+}

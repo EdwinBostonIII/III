@@ -1,0 +1,16 @@
+module corpus_37
+
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+
+var TMPL : [u8; 168]
+
+fn main() -> u64 {
+    /* Force seal */
+    pattern_registry_seal_global()
+    if pattern_registry_is_sealed() != 1u8 { return 1u64 }
+    let r : u8 = pattern_register(2000u32, (&TMPL) as u64)
+    /* Expect 0: refused. */
+    return r as u64
+}

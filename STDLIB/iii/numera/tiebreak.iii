@@ -1,0 +1,189 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\tiebreak.iii
+ *
+ * III STDLIB - numera::tiebreak
+ *
+ * Deterministic tie-breaking primitives. Used wherever an algorithm must
+ * select one canonical candidate from a set of equivalent candidates.
+ *
+ * Canonical rule (public, never hidden):
+ *   1. primary u64 key, ascending (smallest wins for *_min / *_select)
+ *   2. then lexicographic 256-bit identifier (via ident_cmp)
+ *   3. then lowest first-issued arena address -- realized structurally by
+ *      scanning ascending indices over a contiguous block and updating
+ *      best ONLY on a STRICT improvement, so on a tie the lower index
+ *      (= lower address) stays canonical.  No hidden tie breaking.
+ *
+ * Public API:
+ *   tb_min_ident(items, count, out_index) -> i32
+ *   tb_max_ident(items, count, out_index) -> i32
+ *   tb_compare_pair(a_val, a_ident, b_val, b_ident) -> i32   // {-1,0,1}; idents MUST be non-null
+ *   tb_select_by_u64_then_ident(values, idents, count, out_index) -> i32
+ *   tb_selftest() -> u64                                     // 99 = pass
+ *
+ * tb_compare_pair is a LEAF comparator: a_ident / b_ident MUST be non-null.
+ * It carries no null guard (that would change its {-1,0,1} return type).
+ * The guarded public entry points are tb_min_ident / tb_max_ident /
+ * tb_select_by_u64_then_ident; callers needing guards use those.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ * NIH: depends only on identifier.iii (-> keccak256.iii).
+ * Discipline: W2 (<=4 params), W13 (<=20 locals), W14 (sentinel loops),
+ *   W9 (negative-i32 errors), W11 (i32 compared by == / != only),
+ *   W15 (no recursion).  Trap 1 (single-line fn sigs), Trap 2 (TB_ prefix),
+ *   Trap 3 (only unsigned u64 ordering compares; i32 via == / != only).
+ */
+
+module numera_tiebreak
+
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+
+const TB_OK          : i32 =  0i32
+const TB_E_EMPTY     : i32 = -1i32
+const TB_E_NULL      : i32 = -2i32
+const TB_IDENT_BYTES : u64 = 32u64
+
+var TB_KAT_IDENTS : [u8; 96]    /* 3 x 32-byte identifiers for the self-test */
+var TB_KAT_VALUES : [u64; 3]    /* 3 primary u64 keys paired with TB_KAT_IDENTS */
+var TB_KAT_OUT    : [u64; 1]    /* out_index receiver for the self-test calls  */
+
+/* Linear minimum scan under lexicographic 256-bit identifier order.
+ * Guards in this order so a null out_index is reported before any deref. */
+fn tb_min_ident(items: *u8, count: u64, out_index: *u64) -> i32 @export {
+    if (out_index as u64) == 0u64 { return TB_E_NULL }
+    if count == 0u64 { return TB_E_EMPTY }
+    if (items as u64) == 0u64 { return TB_E_NULL }
+    let base : u64 = items as u64
+    let mut best : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < count {
+        let p_best : *u8 = (base + best * TB_IDENT_BYTES) as *u8
+        let p_i : *u8 = (base + i * TB_IDENT_BYTES) as *u8
+        let c : i32 = ident_cmp(p_i, p_best)
+        /* STRICT less-than only: on a tie (c == 0) best is NOT moved, so the
+         * lower index -- hence the lower memory address -- stays canonical. */
+        if c == -1i32 { best = i }
+        i = i + 1u64
+    }
+    out_index[0u64] = best
+    return TB_OK
+}
+
+/* Linear maximum scan; comparator inverted vs tb_min_ident. */
+fn tb_max_ident(items: *u8, count: u64, out_index: *u64) -> i32 @export {
+    if (out_index as u64) == 0u64 { return TB_E_NULL }
+    if count == 0u64 { return TB_E_EMPTY }
+    if (items as u64) == 0u64 { return TB_E_NULL }
+    let base : u64 = items as u64
+    let mut best : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < count {
+        let p_best : *u8 = (base + best * TB_IDENT_BYTES) as *u8
+        let p_i : *u8 = (base + i * TB_IDENT_BYTES) as *u8
+        let c : i32 = ident_cmp(p_i, p_best)
+        /* STRICT greater-than only: deliberate asymmetry (max value, min
+         * address) -- on a tie the lower index/address again stays canonical. */
+        if c == 1i32 { best = i }
+        i = i + 1u64
+    }
+    out_index[0u64] = best
+    return TB_OK
+}
+
+/* Lexicographic pair comparator: primary u64 key, then identifier.
+ * a_val/b_val use UNSIGNED u64 ordering (Trap 3 covers signed i32/i64 only;
+ * the exemplar identifier.iii uses the same unsigned compares safely). */
+fn tb_compare_pair(a_val: u64, a_ident: *u8, b_val: u64, b_ident: *u8) -> i32 @export {
+    if a_val < b_val { return -1i32 }
+    if a_val > b_val { return 1i32 }
+    let pa : *u8 = a_ident
+    let pb : *u8 = b_ident
+    return ident_cmp(pa, pb)
+}
+
+/* Linear minimum scan under the composite (value, ident) order. */
+fn tb_select_by_u64_then_ident(values: *u64, idents: *u8, count: u64, out_index: *u64) -> i32 @export {
+    if (out_index as u64) == 0u64 { return TB_E_NULL }
+    if count == 0u64 { return TB_E_EMPTY }
+    if (values as u64) == 0u64 { return TB_E_NULL }
+    if (idents as u64) == 0u64 { return TB_E_NULL }
+    let base : u64 = idents as u64
+    let mut best : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < count {
+        /* All four comparator args pre-bound to locals (param-spill discipline:
+         * never inline a single-use arg into the call expression). */
+        let p_best : *u8 = (base + best * TB_IDENT_BYTES) as *u8
+        let p_i : *u8 = (base + i * TB_IDENT_BYTES) as *u8
+        let v_best : u64 = values[best]
+        let v_i : u64 = values[i]
+        let c : i32 = tb_compare_pair(v_i, p_i, v_best, p_best)
+        /* STRICT less-than only: ties keep the lower index/address canonical. */
+        if c == -1i32 { best = i }
+        i = i + 1u64
+    }
+    out_index[0u64] = best
+    return TB_OK
+}
+
+/* Self-test.  99 = pass; 1..8 = first failed KAT (K1..K8). */
+fn tb_selftest() -> u64 @export {
+    /* Zero the ident vectors, then set the discriminating byte-0 of each.
+     * id0 = {0x03,..} val0 = 10 ; id1 = {0x01,..} val1 = 10 ; id2 = {0x02,..} val2 = 5. */
+    let mut z : u64 = 0u64
+    while z < 96u64 { TB_KAT_IDENTS[z] = 0u8 ; z = z + 1u64 }
+    TB_KAT_IDENTS[0u64]  = 0x03u8
+    TB_KAT_IDENTS[32u64] = 0x01u8
+    TB_KAT_IDENTS[64u64] = 0x02u8
+    TB_KAT_VALUES[0u64] = 10u64
+    TB_KAT_VALUES[1u64] = 10u64
+    TB_KAT_VALUES[2u64] = 5u64
+
+    let ids : *u8 = (&TB_KAT_IDENTS as u64) as *u8
+    let id0 : *u8 = (&TB_KAT_IDENTS as u64) as *u8
+    let id1 : *u8 = ((&TB_KAT_IDENTS as u64) + 32u64) as *u8
+    let id2 : *u8 = ((&TB_KAT_IDENTS as u64) + 64u64) as *u8
+    let vals : *u64 = (&TB_KAT_VALUES as u64) as *u64
+    let outp : *u64 = (&TB_KAT_OUT as u64) as *u64
+
+    /* K1: min ident -> index 1 (id1=0x01 lexicographically smallest). */
+    TB_KAT_OUT[0u64] = 7u64
+    if tb_min_ident(ids, 3u64, outp) != TB_OK { return 1u64 }
+    if TB_KAT_OUT[0u64] != 1u64 { return 1u64 }
+
+    /* K2: max ident -> index 0 (id0=0x03 largest). */
+    TB_KAT_OUT[0u64] = 7u64
+    if tb_max_ident(ids, 3u64, outp) != TB_OK { return 2u64 }
+    if TB_KAT_OUT[0u64] != 0u64 { return 2u64 }
+
+    /* K3: compare_pair(10,id0, 10,id1) -> 1 (values tie -> 0x03 > 0x01). */
+    if tb_compare_pair(10u64, id0, 10u64, id1) != 1i32 { return 3u64 }
+
+    /* K4: compare_pair(5,id2, 10,id0) -> -1 (decided on primary key 5 < 10). */
+    if tb_compare_pair(5u64, id2, 10u64, id0) != -1i32 { return 4u64 }
+
+    /* K5: select by (value,ident) -> index 2 (value2=5 unique minimum). */
+    TB_KAT_OUT[0u64] = 7u64
+    if tb_select_by_u64_then_ident(vals, ids, 3u64, outp) != TB_OK { return 5u64 }
+    if TB_KAT_OUT[0u64] != 2u64 { return 5u64 }
+
+    /* K6: tie-break in select -- set value2 = 10 so all three values tie at
+     * 10; smallest ident id1=0x01 (index 1) wins. */
+    TB_KAT_VALUES[2u64] = 10u64
+    TB_KAT_OUT[0u64] = 7u64
+    if tb_select_by_u64_then_ident(vals, ids, 3u64, outp) != TB_OK { return 6u64 }
+    if TB_KAT_OUT[0u64] != 1u64 { return 6u64 }
+
+    /* K7 (negative case): null out_index -> TB_E_NULL; out untouched.
+     * Proves the null guard FIRES, not merely that the happy path passes. */
+    TB_KAT_OUT[0u64] = 42u64
+    if tb_min_ident(ids, 3u64, 0u64 as *u64) != TB_E_NULL { return 7u64 }
+    if TB_KAT_OUT[0u64] != 42u64 { return 7u64 }
+
+    /* K8 (negative case): count == 0 -> TB_E_EMPTY; out untouched.
+     * Proves the empty guard FIRES. */
+    TB_KAT_OUT[0u64] = 42u64
+    if tb_min_ident(ids, 0u64, outp) != TB_E_EMPTY { return 8u64 }
+    if TB_KAT_OUT[0u64] != 42u64 { return 8u64 }
+
+    return 99u64
+}

@@ -1,0 +1,924 @@
+/* jit_emit.iii — III Stage-0 NIH x86-64 instruction emitter (.iii port)
+ *
+ * Mirrors jit_emit.c byte-for-byte using flat C accessors over
+ * iii_jit_buf_t (in jit_emit_accessors.c) and iii_ast_store_u8
+ * (in ast_accessors.c).  Encoding tables taken straight from
+ * Intel SDM Vol. 2 / AMD APM Vol. 3, with per-encoder citations.
+ *
+ * The byte-write primitive iii_jit_byte is defined here in .iii;
+ * everything else in this file calls it.  When jit_emit is in
+ * PORTED_TUS, jit_emit.c is NOT linked — only this file plus the
+ * accessor surface.
+ *
+ * Strict NIH per ADR-021.
+ */
+
+module jit_emit
+
+/* ─── Error codes (D8) ────────────────────────────────────────── */
+const III_JIT_E_OK              : u32 = 0u32
+const III_JIT_E_BUF_OVERFLOW    : u32 = 1u32
+const III_JIT_E_DISP_OVERFLOW   : u32 = 2u32
+const III_JIT_E_BAD_OPERAND     : u32 = 3u32
+const III_JIT_E_BAD_PATCH_SITE  : u32 = 4u32
+const III_JIT_E_NOT_IMPLEMENTED : u32 = 5u32
+const III_JIT_E_RELOC_FULL      : u32 = 6u32
+
+/* Register identifiers (matching AMD64 encoding). */
+const III_REG_RAX : u32 = 0u32
+const III_REG_RCX : u32 = 1u32
+const III_REG_RDX : u32 = 2u32
+const III_REG_RBX : u32 = 3u32
+const III_REG_RSP : u32 = 4u32
+const III_REG_RBP : u32 = 5u32
+const III_REG_RSI : u32 = 6u32
+const III_REG_RDI : u32 = 7u32
+const III_REG_R8  : u32 = 8u32
+const III_REG_R9  : u32 = 9u32
+const III_REG_R10 : u32 = 10u32
+const III_REG_R11 : u32 = 11u32
+const III_REG_R12 : u32 = 12u32
+const III_REG_R13 : u32 = 13u32
+const III_REG_R14 : u32 = 14u32
+const III_REG_R15 : u32 = 15u32
+
+/* Named-constant ModR/M.mod values (D3) */
+const III_MOD_INDIRECT        : u32 = 0u32
+const III_MOD_INDIRECT_DISP8  : u32 = 1u32
+const III_MOD_INDIRECT_DISP32 : u32 = 2u32
+const III_MOD_REGISTER        : u32 = 3u32
+
+const III_RM_SIB_ESCAPE       : u32 = 4u32
+const III_SIB_NO_INDEX        : u32 = 4u32
+
+/* Reloc kinds */
+const III_JIT_RELOC_NONE  : u32 = 0u32
+const III_JIT_RELOC_REL32 : u32 = 1u32
+const III_JIT_RELOC_REL8  : u32 = 2u32
+const III_JIT_RELOC_ABS64 : u32 = 3u32
+
+/* iii_jit_reloc_t layout: offset(u32), symbol_id(u32), kind(u16),
+ * reserved(u16) — 12 bytes packed; aligned to 4 (no padding). */
+
+/* ─── Externs from C surface ─────────────────────────────────── */
+
+extern @abi(c-msvc-x64) fn iii_jit_buf_bytes(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_cap(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_used(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_overflow(b: u64) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_err(b: u64) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_last_insn_off(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_relocs(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_reloc_cap(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_reloc_used(b: u64) -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_set_used(b: u64, v: u64) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_set_err(b: u64, v: u32) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_set_overflow(b: u64, v: u32) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_set_last_insn_off(b: u64, v: u64) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_buf_set_reloc_used(b: u64, v: u64) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_sizeof_reloc() -> u64 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_sizeof_buf() -> u64 from "jit_emit_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_load_u8(ptr: u64) -> u32 from "ast_accessors.c"
+
+/* ─── Internal helpers ────────────────────────────────────────── */
+
+fn jit_poison(b: u64, e: u32) -> u32 {
+    if iii_jit_buf_err(b) == III_JIT_E_OK {
+        iii_jit_buf_set_err(b, e)
+    }
+    return 0u32
+}
+
+fn jit_mark_insn(b: u64) -> u32 {
+    iii_jit_buf_set_last_insn_off(b, iii_jit_buf_used(b))
+    return 0u32
+}
+
+/* ─── Init / state ───────────────────────────────────────────── */
+
+fn iii_jit_init(b: u64, bytes: u64, cap: u64) -> u32 @export {
+    /* Lay out the iii_jit_buf_t fields directly via the accessors.
+     * Field ordering is established by jit_emit.h §"Encoder context".
+     * The accessor surface offers setters for every mutable field
+     * we need; for the pointer fields (buf, relocs) and cap we can
+     * use a tiny one-shot init done in C (iii_jit_init_c). */
+    iii_jit_init_c(b, bytes, cap)
+    return 0u32
+}
+
+extern @abi(c-msvc-x64) fn iii_jit_init_c(b: u64, bytes: u64, cap: u64) -> u32 from "jit_emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_jit_attach_relocs_c(b: u64, r: u64, cap: u64) -> u32 from "jit_emit_accessors.c"
+
+fn iii_jit_attach_relocs(b: u64, r: u64, cap: u64) -> u32 @export {
+    iii_jit_attach_relocs_c(b, r, cap)
+    return 0u32
+}
+
+fn iii_jit_error(b: u64) -> u32 @export {
+    return iii_jit_buf_err(b)
+}
+
+fn iii_jit_clear_error(b: u64) -> u32 @export {
+    iii_jit_buf_set_err(b, III_JIT_E_OK)
+    iii_jit_buf_set_overflow(b, 0u32)
+    return 0u32
+}
+
+/* ─── Raw emitters ───────────────────────────────────────────── */
+
+fn iii_jit_byte(b: u64, v: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK {
+        return 0u32
+    }
+    let used : u64 = iii_jit_buf_used(b)
+    let cap  : u64 = iii_jit_buf_cap(b)
+    if used >= cap {
+        iii_jit_buf_set_overflow(b, 1u32)
+        jit_poison(b, III_JIT_E_BUF_OVERFLOW)
+        return 0u32
+    }
+    let bytes : u64 = iii_jit_buf_bytes(b)
+    iii_ast_store_u8(bytes + used, v & 0xFFu32)
+    iii_jit_buf_set_used(b, used + 1u64)
+    return 0u32
+}
+
+fn iii_jit_word(b: u64, v: u32) -> u32 @export {
+    iii_jit_byte(b, v & 0xFFu32)
+    iii_jit_byte(b, (v >> 8u32) & 0xFFu32)
+    return 0u32
+}
+
+fn iii_jit_dword(b: u64, v: u32) -> u32 @export {
+    iii_jit_byte(b, v & 0xFFu32)
+    iii_jit_byte(b, (v >> 8u32)  & 0xFFu32)
+    iii_jit_byte(b, (v >> 16u32) & 0xFFu32)
+    iii_jit_byte(b, (v >> 24u32) & 0xFFu32)
+    return 0u32
+}
+
+fn iii_jit_qword(b: u64, v: u64) -> u32 @export {
+    iii_jit_dword(b, (v & 0xFFFFFFFFu64) as u32)
+    iii_jit_dword(b, ((v >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0u32
+}
+
+fn iii_jit_offset(b: u64) -> u64 @export {
+    return iii_jit_buf_used(b)
+}
+
+/* ─── D4 displacement patchers ──────────────────────────────── */
+
+fn iii_jit_patch_rel32(b: u64, offset: u64, target: u64) -> u32 @export {
+    let cap : u64 = iii_jit_buf_cap(b)
+    if offset + 4u64 > cap {
+        jit_poison(b, III_JIT_E_BAD_PATCH_SITE)
+        return III_JIT_E_BAD_PATCH_SITE
+    }
+    /* rel = target - (offset + 4); range check in signed-32 space.
+     * Since target & offset are u64, do unsigned arith and check
+     * separately for negative-overflow. */
+    let after : u64 = offset + 4u64
+    let bytes : u64 = iii_jit_buf_bytes(b)
+    let rel32 : u32 = ((target as u64) - (after as u64)) as u32
+    /* Range check via sign extension round-trip:
+     * if target >= after, rel = target-after, must fit in i32 max = 0x7FFFFFFF.
+     * if target  < after, the wrap is the negative offset; the test is
+     *   (after - target) <= 0x80000000.  */
+    if target >= after {
+        let pos : u64 = target - after
+        if pos > 0x7FFFFFFFu64 {
+            jit_poison(b, III_JIT_E_DISP_OVERFLOW)
+            return III_JIT_E_DISP_OVERFLOW
+        }
+    } else {
+        let neg : u64 = after - target
+        if neg > 0x80000000u64 {
+            jit_poison(b, III_JIT_E_DISP_OVERFLOW)
+            return III_JIT_E_DISP_OVERFLOW
+        }
+    }
+    iii_ast_store_u8(bytes + offset + 0u64,  rel32        & 0xFFu32)
+    iii_ast_store_u8(bytes + offset + 1u64, (rel32 >> 8u32)  & 0xFFu32)
+    iii_ast_store_u8(bytes + offset + 2u64, (rel32 >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(bytes + offset + 3u64, (rel32 >> 24u32) & 0xFFu32)
+    return III_JIT_E_OK
+}
+
+fn iii_jit_patch_rel8(b: u64, offset: u64, target: u64) -> u32 @export {
+    let cap : u64 = iii_jit_buf_cap(b)
+    if offset + 1u64 > cap {
+        jit_poison(b, III_JIT_E_BAD_PATCH_SITE)
+        return III_JIT_E_BAD_PATCH_SITE
+    }
+    let after : u64 = offset + 1u64
+    let bytes : u64 = iii_jit_buf_bytes(b)
+    if target >= after {
+        let pos : u64 = target - after
+        if pos > 127u64 {
+            jit_poison(b, III_JIT_E_DISP_OVERFLOW)
+            return III_JIT_E_DISP_OVERFLOW
+        }
+    } else {
+        let neg : u64 = after - target
+        if neg > 128u64 {
+            jit_poison(b, III_JIT_E_DISP_OVERFLOW)
+            return III_JIT_E_DISP_OVERFLOW
+        }
+    }
+    let rel : u32 = ((target as u64) - (after as u64)) as u32
+    iii_ast_store_u8(bytes + offset, rel & 0xFFu32)
+    return III_JIT_E_OK
+}
+
+/* ─── D2 / D3 pure encoding-field builders ──────────────────── */
+
+fn iii_jit_compute_rex(W: u32, R: u32, X: u32, B: u32) -> u32 @export {
+    /* Intel SDM Vol. 2 §2.2.1 Fig. 2-3.  Each input non-zero → bit set. */
+    let mut wb : u32 = 0u32
+    let mut rb : u32 = 0u32
+    let mut xb : u32 = 0u32
+    let mut bb : u32 = 0u32
+    if W != 0u32 { wb = 1u32 }
+    if R != 0u32 { rb = 1u32 }
+    if X != 0u32 { xb = 1u32 }
+    if B != 0u32 { bb = 1u32 }
+    return 0x40u32 | (wb << 3u32) | (rb << 2u32) | (xb << 1u32) | bb
+}
+
+fn iii_jit_compute_modrm(modv: u32, reg: u32, rm: u32) -> u32 @export {
+    return ((modv & 3u32) << 6u32) | ((reg & 7u32) << 3u32) | (rm & 7u32)
+}
+
+fn iii_jit_compute_sib(scale: u32, index: u32, base: u32) -> u32 @export {
+    return ((scale & 3u32) << 6u32) | ((index & 7u32) << 3u32) | (base & 7u32)
+}
+
+/* Internal: REX.W + R/B from operand pair. */
+fn jit_rex_w_rb(reg: u32, rm: u32) -> u32 {
+    let mut r : u32 = 0u32
+    let mut bb : u32 = 0u32
+    if reg >= III_REG_R8 { r = 1u32 }
+    if rm  >= III_REG_R8 { bb = 1u32 }
+    return iii_jit_compute_rex(1u32, r, 0u32, bb)
+}
+
+fn jit_rex_w_b(rm: u32) -> u32 {
+    let mut bb : u32 = 0u32
+    if rm >= III_REG_R8 { bb = 1u32 }
+    return iii_jit_compute_rex(1u32, 0u32, 0u32, bb)
+}
+
+fn jit_emit_modrm_reg_reg(b: u64, reg: u32, rm: u32) -> u32 {
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, reg & 7u32, rm & 7u32))
+    return 0u32
+}
+
+fn jit_emit_modrm_mem(b: u64, reg: u32, base: u32, disp: u32) -> u32 {
+    if (base & 7u32) == (III_REG_RSP & 7u32) {
+        iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_INDIRECT_DISP32, reg & 7u32, III_RM_SIB_ESCAPE))
+        iii_jit_byte(b, iii_jit_compute_sib(0u32, III_SIB_NO_INDEX, base & 7u32))
+    } else {
+        iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_INDIRECT_DISP32, reg & 7u32, base & 7u32))
+    }
+    iii_jit_dword(b, disp)
+    return 0u32
+}
+
+/* ─── mov ────────────────────────────────────────────────────── */
+
+fn iii_jit_mov_r64_imm64(b: u64, dst: u32, imm: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    let mut bb : u32 = 0u32
+    if dst >= III_REG_R8 { bb = 1u32 }
+    iii_jit_byte(b, iii_jit_compute_rex(1u32, 0u32, 0u32, bb))
+    iii_jit_byte(b, 0xB8u32 + (dst & 7u32))
+    iii_jit_qword(b, imm)
+    return 0u32
+}
+
+fn iii_jit_mov_r64_r64(b: u64, dst: u32, src: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_rb(src, dst))
+    iii_jit_byte(b, 0x89u32)
+    jit_emit_modrm_reg_reg(b, src, dst)
+    return 0u32
+}
+
+fn iii_jit_mov_r64_mem(b: u64, dst: u32, base: u32, disp: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    let mut r : u32 = 0u32
+    if dst >= III_REG_R8 { r = 1u32 }
+    let mut bb : u32 = 0u32
+    if base >= III_REG_R8 { bb = 1u32 }
+    iii_jit_byte(b, iii_jit_compute_rex(1u32, r, 0u32, bb))
+    iii_jit_byte(b, 0x8Bu32)
+    jit_emit_modrm_mem(b, dst, base, disp)
+    return 0u32
+}
+
+fn iii_jit_mov_mem_r64(b: u64, base: u32, disp: u32, src: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    let mut r : u32 = 0u32
+    if src >= III_REG_R8 { r = 1u32 }
+    let mut bb : u32 = 0u32
+    if base >= III_REG_R8 { bb = 1u32 }
+    iii_jit_byte(b, iii_jit_compute_rex(1u32, r, 0u32, bb))
+    iii_jit_byte(b, 0x89u32)
+    jit_emit_modrm_mem(b, src, base, disp)
+    return 0u32
+}
+
+fn iii_jit_lea_r64_mem(b: u64, dst: u32, base: u32, disp: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    let mut r : u32 = 0u32
+    if dst >= III_REG_R8 { r = 1u32 }
+    let mut bb : u32 = 0u32
+    if base >= III_REG_R8 { bb = 1u32 }
+    iii_jit_byte(b, iii_jit_compute_rex(1u32, r, 0u32, bb))
+    iii_jit_byte(b, 0x8Du32)
+    jit_emit_modrm_mem(b, dst, base, disp)
+    return 0u32
+}
+
+/* ─── Arithmetic: dst <op>= src ──────────────────────────────── */
+
+fn jit_emit_arith_rr(b: u64, op: u32, dst: u32, src: u32) -> u32 {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_rb(src, dst))
+    iii_jit_byte(b, op)
+    jit_emit_modrm_reg_reg(b, src, dst)
+    return 0u32
+}
+
+fn iii_jit_add_r64_r64 (b: u64, dst: u32, src: u32) -> u32 @export { jit_emit_arith_rr(b, 0x01u32, dst, src) return 0u32 }
+fn iii_jit_sub_r64_r64 (b: u64, dst: u32, src: u32) -> u32 @export { jit_emit_arith_rr(b, 0x29u32, dst, src) return 0u32 }
+fn iii_jit_xor_r64_r64 (b: u64, dst: u32, src: u32) -> u32 @export { jit_emit_arith_rr(b, 0x31u32, dst, src) return 0u32 }
+fn iii_jit_and_r64_r64 (b: u64, dst: u32, src: u32) -> u32 @export { jit_emit_arith_rr(b, 0x21u32, dst, src) return 0u32 }
+fn iii_jit_or_r64_r64  (b: u64, dst: u32, src: u32) -> u32 @export { jit_emit_arith_rr(b, 0x09u32, dst, src) return 0u32 }
+fn iii_jit_cmp_r64_r64 (b: u64, l: u32, r: u32)     -> u32 @export { jit_emit_arith_rr(b, 0x39u32, l, r)     return 0u32 }
+fn iii_jit_test_r64_r64(b: u64, l: u32, r: u32)     -> u32 @export { jit_emit_arith_rr(b, 0x85u32, l, r)     return 0u32 }
+
+/* ─── Shifts (CL-implicit) ───────────────────────────────────── */
+
+fn jit_emit_shift_cl(b: u64, op_ext: u32, dst: u32) -> u32 {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_b(dst))
+    iii_jit_byte(b, 0xD3u32)
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, op_ext, dst & 7u32))
+    return 0u32
+}
+
+fn iii_jit_shl_r64_cl(b: u64, dst: u32) -> u32 @export { jit_emit_shift_cl(b, 4u32, dst) return 0u32 }
+fn iii_jit_shr_r64_cl(b: u64, dst: u32) -> u32 @export { jit_emit_shift_cl(b, 5u32, dst) return 0u32 }
+fn iii_jit_sar_r64_cl(b: u64, dst: u32) -> u32 @export { jit_emit_shift_cl(b, 7u32, dst) return 0u32 }
+
+/* ─── Multiply / divide ──────────────────────────────────────── */
+
+fn iii_jit_imul_r64_r64(b: u64, dst: u32, src: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_rb(dst, src))
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0xAFu32)
+    jit_emit_modrm_reg_reg(b, dst, src)
+    return 0u32
+}
+
+fn iii_jit_cqto(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x48u32)
+    iii_jit_byte(b, 0x99u32)
+    return 0u32
+}
+
+fn iii_jit_idiv_r64(b: u64, divisor: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_b(divisor))
+    iii_jit_byte(b, 0xF7u32)
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, 7u32, divisor & 7u32))
+    return 0u32
+}
+
+/* ─── Push / Pop ─────────────────────────────────────────────── */
+
+fn iii_jit_push_r64(b: u64, r: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    if r >= III_REG_R8 {
+        iii_jit_byte(b, iii_jit_compute_rex(0u32, 0u32, 0u32, 1u32))
+    }
+    iii_jit_byte(b, 0x50u32 + (r & 7u32))
+    return 0u32
+}
+
+fn iii_jit_pop_r64(b: u64, r: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    if r >= III_REG_R8 {
+        iii_jit_byte(b, iii_jit_compute_rex(0u32, 0u32, 0u32, 1u32))
+    }
+    iii_jit_byte(b, 0x58u32 + (r & 7u32))
+    return 0u32
+}
+
+/* ─── ADD/SUB r64, imm32 ─────────────────────────────────────── */
+
+fn iii_jit_add_r64_imm32(b: u64, dst: u32, imm: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_b(dst))
+    iii_jit_byte(b, 0x81u32)
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, 0u32, dst & 7u32))
+    iii_jit_dword(b, imm)
+    return 0u32
+}
+
+fn iii_jit_sub_r64_imm32(b: u64, dst: u32, imm: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, jit_rex_w_b(dst))
+    iii_jit_byte(b, 0x81u32)
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, 5u32, dst & 7u32))
+    iii_jit_dword(b, imm)
+    return 0u32
+}
+
+/* ─── SETcc + MOVZX ──────────────────────────────────────────── */
+
+fn iii_jit_setcc_r8(b: u64, cc: u32, dst: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    let mut bb : u32 = 0u32
+    if dst >= III_REG_R8 { bb = 1u32 }
+    if bb != 0u32 {
+        iii_jit_byte(b, iii_jit_compute_rex(0u32, 0u32, 0u32, bb))
+    } else {
+        if dst >= III_REG_RSP {
+            iii_jit_byte(b, iii_jit_compute_rex(0u32, 0u32, 0u32, 0u32))
+        }
+    }
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x90u32 + (cc & 0xFu32))
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, 0u32, dst & 7u32))
+    return 0u32
+}
+
+fn iii_jit_movzbq_r64_r8(b: u64, dst: u32, src8: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    let mut r : u32 = 0u32
+    if dst >= III_REG_R8 { r = 1u32 }
+    let mut bb : u32 = 0u32
+    if src8 >= III_REG_R8 { bb = 1u32 }
+    iii_jit_byte(b, iii_jit_compute_rex(1u32, r, 0u32, bb))
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0xB6u32)
+    jit_emit_modrm_reg_reg(b, dst, src8)
+    return 0u32
+}
+
+/* ─── Branches ───────────────────────────────────────────────── */
+
+fn iii_jit_jmp_rel32(b: u64) -> u64 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u64 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0xE9u32)
+    let off : u64 = iii_jit_buf_used(b)
+    iii_jit_dword(b, 0u32)
+    return off
+}
+
+fn iii_jit_jcc_rel32(b: u64, cc: u32) -> u64 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u64 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x80u32 + (cc & 0xFu32))
+    let off : u64 = iii_jit_buf_used(b)
+    iii_jit_dword(b, 0u32)
+    return off
+}
+
+fn iii_jit_jmp_rel8(b: u64) -> u64 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u64 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0xEBu32)
+    let off : u64 = iii_jit_buf_used(b)
+    iii_jit_byte(b, 0u32)
+    return off
+}
+
+fn iii_jit_jcc_rel8(b: u64, cc: u32) -> u64 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u64 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x70u32 + (cc & 0xFu32))
+    let off : u64 = iii_jit_buf_used(b)
+    iii_jit_byte(b, 0u32)
+    return off
+}
+
+fn iii_jit_call_rel32(b: u64, rel32: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0xE8u32)
+    iii_jit_dword(b, rel32)
+    return 0u32
+}
+
+fn iii_jit_call_r64(b: u64, target: u32) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    if target >= III_REG_R8 {
+        iii_jit_byte(b, iii_jit_compute_rex(0u32, 0u32, 0u32, 1u32))
+    }
+    iii_jit_byte(b, 0xFFu32)
+    iii_jit_byte(b, iii_jit_compute_modrm(III_MOD_REGISTER, 2u32, target & 7u32))
+    return 0u32
+}
+
+fn iii_jit_ret(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0xC3u32)
+    return 0u32
+}
+
+/* ─── D12 relocation recording ───────────────────────────────── *
+ *
+ * iii_jit_reloc_t layout (12 bytes packed):
+ *   +0  u32 offset
+ *   +4  u32 symbol_id
+ *   +8  u16 kind
+ *   +10 u16 reserved
+ */
+
+fn iii_jit_record_reloc(b: u64, offset: u32, kind: u32, symbol_id: u32) -> u32 @export {
+    let relocs : u64 = iii_jit_buf_relocs(b)
+    let cap    : u64 = iii_jit_buf_reloc_cap(b)
+    let used   : u64 = iii_jit_buf_reloc_used(b)
+    if relocs == 0u64 {
+        jit_poison(b, III_JIT_E_RELOC_FULL)
+        return III_JIT_E_RELOC_FULL
+    }
+    if used >= cap {
+        jit_poison(b, III_JIT_E_RELOC_FULL)
+        return III_JIT_E_RELOC_FULL
+    }
+    let rec_size : u64 = iii_jit_sizeof_reloc()
+    let rec : u64 = relocs + used * rec_size
+    /* offset (u32 LE) */
+    iii_ast_store_u8(rec + 0u64,  offset        & 0xFFu32)
+    iii_ast_store_u8(rec + 1u64, (offset >> 8u32)  & 0xFFu32)
+    iii_ast_store_u8(rec + 2u64, (offset >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(rec + 3u64, (offset >> 24u32) & 0xFFu32)
+    /* symbol_id (u32 LE) */
+    iii_ast_store_u8(rec + 4u64,  symbol_id        & 0xFFu32)
+    iii_ast_store_u8(rec + 5u64, (symbol_id >> 8u32)  & 0xFFu32)
+    iii_ast_store_u8(rec + 6u64, (symbol_id >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(rec + 7u64, (symbol_id >> 24u32) & 0xFFu32)
+    /* kind (u16 LE) */
+    iii_ast_store_u8(rec + 8u64,  kind        & 0xFFu32)
+    iii_ast_store_u8(rec + 9u64, (kind >> 8u32) & 0xFFu32)
+    /* reserved (u16) = 0 */
+    iii_ast_store_u8(rec + 10u64, 0u32)
+    iii_ast_store_u8(rec + 11u64, 0u32)
+    iii_jit_buf_set_reloc_used(b, used + 1u64)
+    return III_JIT_E_OK
+}
+
+/* ─── Privileged opcode bytes ────────────────────────────────── */
+
+fn iii_jit_rdmsr(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x32u32)
+    return 0u32
+}
+
+fn iii_jit_wrmsr(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x30u32)
+    return 0u32
+}
+
+fn iii_jit_clgi(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x01u32)
+    iii_jit_byte(b, 0xDDu32)
+    return 0u32
+}
+
+fn iii_jit_stgi(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x01u32)
+    iii_jit_byte(b, 0xDCu32)
+    return 0u32
+}
+
+fn iii_jit_vmsave(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x01u32)
+    iii_jit_byte(b, 0xDBu32)
+    return 0u32
+}
+
+fn iii_jit_vmload(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x01u32)
+    iii_jit_byte(b, 0xDAu32)
+    return 0u32
+}
+
+fn iii_jit_vmrun(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0x01u32)
+    iii_jit_byte(b, 0xD8u32)
+    return 0u32
+}
+
+/* ─── D14 SVM safety bracket (AMD APM Vol. 3 §15.5) ──────────── */
+
+fn iii_jit_emit_vm_session(b: u64) -> u32 @export {
+    let curr : u32 = iii_jit_buf_err(b)
+    if curr != III_JIT_E_OK {
+        return curr
+    }
+    let snap : u64 = iii_jit_buf_used(b)
+    iii_jit_vmsave(b)
+    iii_jit_vmrun(b)
+    iii_jit_vmload(b)
+    let after_err : u32 = iii_jit_buf_err(b)
+    if after_err != III_JIT_E_OK {
+        iii_jit_buf_set_used(b, snap)
+        return after_err
+    }
+    let after_used : u64 = iii_jit_buf_used(b)
+    if (after_used - snap) != 9u64 {
+        iii_jit_buf_set_used(b, snap)
+        jit_poison(b, III_JIT_E_BAD_OPERAND)
+        return III_JIT_E_BAD_OPERAND
+    }
+    return III_JIT_E_OK
+}
+
+/* ─── Fences + PAUSE ─────────────────────────────────────────── */
+
+fn iii_jit_mfence(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0xAEu32)
+    iii_jit_byte(b, 0xF0u32)
+    return 0u32
+}
+
+fn iii_jit_lfence(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0xAEu32)
+    iii_jit_byte(b, 0xE8u32)
+    return 0u32
+}
+
+fn iii_jit_sfence(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0x0Fu32)
+    iii_jit_byte(b, 0xAEu32)
+    iii_jit_byte(b, 0xF8u32)
+    return 0u32
+}
+
+fn iii_jit_pause(b: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    jit_mark_insn(b)
+    iii_jit_byte(b, 0xF3u32)
+    iii_jit_byte(b, 0x90u32)
+    return 0u32
+}
+
+/* ─── D11 canonical NOP padding ──────────────────────────────── *
+ *
+ * Intel SDM Vol. 2B "NOP — No Operation" recommended sequences. */
+
+var K_NOP1 : [u8; 1] = [0x90u8]
+var K_NOP2 : [u8; 2] = [0x66u8, 0x90u8]
+var K_NOP3 : [u8; 3] = [0x0Fu8, 0x1Fu8, 0x00u8]
+var K_NOP4 : [u8; 4] = [0x0Fu8, 0x1Fu8, 0x40u8, 0x00u8]
+var K_NOP5 : [u8; 5] = [0x0Fu8, 0x1Fu8, 0x44u8, 0x00u8, 0x00u8]
+var K_NOP6 : [u8; 6] = [0x66u8, 0x0Fu8, 0x1Fu8, 0x44u8, 0x00u8, 0x00u8]
+var K_NOP7 : [u8; 7] = [0x0Fu8, 0x1Fu8, 0x80u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8]
+var K_NOP8 : [u8; 8] = [0x0Fu8, 0x1Fu8, 0x84u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8]
+var K_NOP9 : [u8; 9] = [0x66u8, 0x0Fu8, 0x1Fu8, 0x84u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8]
+
+fn jit_nop_emit_run(b: u64, n: u32) -> u32 {
+    if n == 0u32 { return 0u32 }
+    let mut base : u64 = 0u64
+    if n == 1u32 { base = &K_NOP1 as u64 }
+    if n == 2u32 { base = &K_NOP2 as u64 }
+    if n == 3u32 { base = &K_NOP3 as u64 }
+    if n == 4u32 { base = &K_NOP4 as u64 }
+    if n == 5u32 { base = &K_NOP5 as u64 }
+    if n == 6u32 { base = &K_NOP6 as u64 }
+    if n == 7u32 { base = &K_NOP7 as u64 }
+    if n == 8u32 { base = &K_NOP8 as u64 }
+    if n == 9u32 { base = &K_NOP9 as u64 }
+    if base == 0u64 { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < n {
+        iii_jit_byte(b, iii_ast_load_u8(base + (i as u64)))
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn iii_jit_emit_nop(b: u64, n: u64) -> u32 @export {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 0u32 }
+    if n == 0u64 { return 0u32 }
+    jit_mark_insn(b)
+    let mut rem : u64 = n
+    while rem >= 9u64 {
+        jit_nop_emit_run(b, 9u32)
+        rem = rem - 9u64
+    }
+    if rem != 0u64 {
+        jit_nop_emit_run(b, rem as u32)
+    }
+    return 0u32
+}
+
+/* ─── D9 AVX-512 stubs ───────────────────────────────────────── */
+
+fn iii_jit_avx512_vmovdqa64_stub(b: u64) -> u32 @export {
+    jit_poison(b, III_JIT_E_NOT_IMPLEMENTED)
+    return III_JIT_E_NOT_IMPLEMENTED
+}
+
+fn iii_jit_avx512_vpaddq_stub(b: u64) -> u32 @export {
+    jit_poison(b, III_JIT_E_NOT_IMPLEMENTED)
+    return III_JIT_E_NOT_IMPLEMENTED
+}
+
+/* ─── D5 self-test ───────────────────────────────────────────── *
+ *
+ * Re-encodes a static array of (instruction, expected_byte_seq)
+ * vectors derived from Intel SDM examples.  Returns 0 on success
+ * or 1-based vector index of the first failure. */
+
+/* Golden expected-byte arrays. */
+var E_MOV_RAX_IMM   : [u8; 10] = [0x48u8, 0xB8u8, 0x88u8, 0x77u8, 0x66u8, 0x55u8, 0x44u8, 0x33u8, 0x22u8, 0x11u8]
+var E_MOV_RAX_RAX   : [u8; 3]  = [0x48u8, 0x89u8, 0xC0u8]
+var E_ADD_RAX_RAX   : [u8; 3]  = [0x48u8, 0x01u8, 0xC0u8]
+var E_XOR_R8_R8     : [u8; 3]  = [0x4Du8, 0x31u8, 0xC0u8]
+var E_PUSH_RBX      : [u8; 1]  = [0x53u8]
+var E_PUSH_R15      : [u8; 2]  = [0x41u8, 0x57u8]
+var E_POP_RBX       : [u8; 1]  = [0x5Bu8]
+var E_RET           : [u8; 1]  = [0xC3u8]
+var E_MFENCE        : [u8; 3]  = [0x0Fu8, 0xAEu8, 0xF0u8]
+var E_PAUSE         : [u8; 2]  = [0xF3u8, 0x90u8]
+var E_VMRUN         : [u8; 3]  = [0x0Fu8, 0x01u8, 0xD8u8]
+var E_VMSAVE        : [u8; 3]  = [0x0Fu8, 0x01u8, 0xDBu8]
+var E_NOP9          : [u8; 9]  = [0x66u8, 0x0Fu8, 0x1Fu8, 0x84u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8]
+var E_NOP1          : [u8; 1]  = [0x90u8]
+var E_LEA_RAX_RSP_8 : [u8; 8]  = [0x48u8, 0x8Du8, 0x84u8, 0x24u8, 0x08u8, 0x00u8, 0x00u8, 0x00u8]
+
+/* Uninitialized scratch — placed AFTER all initialized vars because
+ * iiis-0 cg emits .section .bss for uninit vars and never returns to
+ * .data; any initialized var that follows would be mis-emitted as bss. */
+var SCRATCH_BUF : [u8; 64]
+var BSTORE      : [u8; 128]
+
+fn jit_st_init(b: u64) -> u32 {
+    iii_jit_init(b, &SCRATCH_BUF as u64, 64u64)
+    /* Fill scratch with 0xCC poison so leftover bytes are detectable. */
+    let base : u64 = &SCRATCH_BUF as u64
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        iii_ast_store_u8(base + i, 0xCCu32)
+        i = i + 1u64
+    }
+    iii_jit_buf_set_used(b, 0u64)
+    iii_jit_buf_set_err(b, 0u32)
+    iii_jit_buf_set_overflow(b, 0u32)
+    return 0u32
+}
+
+fn jit_st_check(b: u64, exp: u64, exp_len: u64) -> u32 {
+    if iii_jit_buf_err(b) != III_JIT_E_OK { return 1u32 }
+    if iii_jit_buf_used(b) != exp_len { return 1u32 }
+    let base : u64 = iii_jit_buf_bytes(b)
+    let mut i : u64 = 0u64
+    while i < exp_len {
+        if iii_ast_load_u8(base + i) != iii_ast_load_u8(exp + i) {
+            return 1u32
+        }
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn iii_jit_self_test() -> u32 @export {
+    let b : u64 = &BSTORE as u64
+
+    /* Vector 1: mov rax, imm64 0x1122334455667788. */
+    jit_st_init(b)
+    iii_jit_mov_r64_imm64(b, III_REG_RAX, 0x1122334455667788u64)
+    if jit_st_check(b, &E_MOV_RAX_IMM as u64, 10u64) != 0u32 { return 1u32 }
+
+    /* Vector 2: mov rax, rax. */
+    jit_st_init(b)
+    iii_jit_mov_r64_r64(b, III_REG_RAX, III_REG_RAX)
+    if jit_st_check(b, &E_MOV_RAX_RAX as u64, 3u64) != 0u32 { return 2u32 }
+
+    /* Vector 3: add rax, rax. */
+    jit_st_init(b)
+    iii_jit_add_r64_r64(b, III_REG_RAX, III_REG_RAX)
+    if jit_st_check(b, &E_ADD_RAX_RAX as u64, 3u64) != 0u32 { return 3u32 }
+
+    /* Vector 4: xor r8, r8. */
+    jit_st_init(b)
+    iii_jit_xor_r64_r64(b, III_REG_R8, III_REG_R8)
+    if jit_st_check(b, &E_XOR_R8_R8 as u64, 3u64) != 0u32 { return 4u32 }
+
+    /* Vector 5: push rbx. */
+    jit_st_init(b)
+    iii_jit_push_r64(b, III_REG_RBX)
+    if jit_st_check(b, &E_PUSH_RBX as u64, 1u64) != 0u32 { return 5u32 }
+
+    /* Vector 6: push r15. */
+    jit_st_init(b)
+    iii_jit_push_r64(b, III_REG_R15)
+    if jit_st_check(b, &E_PUSH_R15 as u64, 2u64) != 0u32 { return 6u32 }
+
+    /* Vector 7: pop rbx. */
+    jit_st_init(b)
+    iii_jit_pop_r64(b, III_REG_RBX)
+    if jit_st_check(b, &E_POP_RBX as u64, 1u64) != 0u32 { return 7u32 }
+
+    /* Vector 8: ret. */
+    jit_st_init(b)
+    iii_jit_ret(b)
+    if jit_st_check(b, &E_RET as u64, 1u64) != 0u32 { return 8u32 }
+
+    /* Vector 9: mfence. */
+    jit_st_init(b)
+    iii_jit_mfence(b)
+    if jit_st_check(b, &E_MFENCE as u64, 3u64) != 0u32 { return 9u32 }
+
+    /* Vector 10: pause. */
+    jit_st_init(b)
+    iii_jit_pause(b)
+    if jit_st_check(b, &E_PAUSE as u64, 2u64) != 0u32 { return 10u32 }
+
+    /* Vector 11: vmrun. */
+    jit_st_init(b)
+    iii_jit_vmrun(b)
+    if jit_st_check(b, &E_VMRUN as u64, 3u64) != 0u32 { return 11u32 }
+
+    /* Vector 12: vmsave. */
+    jit_st_init(b)
+    iii_jit_vmsave(b)
+    if jit_st_check(b, &E_VMSAVE as u64, 3u64) != 0u32 { return 12u32 }
+
+    /* Vector 13: nop(9). */
+    jit_st_init(b)
+    iii_jit_emit_nop(b, 9u64)
+    if jit_st_check(b, &E_NOP9 as u64, 9u64) != 0u32 { return 13u32 }
+
+    /* Vector 14: nop(1). */
+    jit_st_init(b)
+    iii_jit_emit_nop(b, 1u64)
+    if jit_st_check(b, &E_NOP1 as u64, 1u64) != 0u32 { return 14u32 }
+
+    /* Vector 15: lea rax, [rsp+8]. */
+    jit_st_init(b)
+    iii_jit_lea_r64_mem(b, III_REG_RAX, III_REG_RSP, 8u32)
+    if jit_st_check(b, &E_LEA_RAX_RSP_8 as u64, 8u64) != 0u32 { return 15u32 }
+
+    return 0u32
+}

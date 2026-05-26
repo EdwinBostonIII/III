@@ -1,0 +1,21 @@
+/* string byte_eq("abc", "abc") = 1; ("abc", "abd") = 0 */
+module corpus_a07
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn str_byte_eq(a: u64, a_len: u64, b: u64, b_len: u64) -> u8 from "string.iii"
+
+fn main() -> u64 {
+    let p1 : *u8 = malloc(3u64)
+    p1[0] = 97u8; p1[1] = 98u8; p1[2] = 99u8
+    let p2 : *u8 = malloc(3u64)
+    p2[0] = 97u8; p2[1] = 98u8; p2[2] = 99u8
+    let p3 : *u8 = malloc(3u64)
+    p3[0] = 97u8; p3[1] = 98u8; p3[2] = 100u8
+    let eq : u8 = str_byte_eq(p1 as u64, 3u64, p2 as u64, 3u64)
+    if eq != 1u8 { return 1u64 }
+    let neq : u8 = str_byte_eq(p1 as u64, 3u64, p3 as u64, 3u64)
+    if neq != 0u8 { return 2u64 }
+    free(p1); free(p2); free(p3)
+    return 99u64
+}

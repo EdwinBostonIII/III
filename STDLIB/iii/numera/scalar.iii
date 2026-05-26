@@ -1,0 +1,328 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\scalar.iii
+ *
+ * III STDLIB - numera::scalar
+ *
+ * Wrapping, saturating, and overflow-detecting arithmetic over the
+ * canonical unsigned scalar types u32 and u64.  Pure functions, no
+ * external state, no allocation.  Every op is total: it terminates
+ * deterministically for every input pair.
+ *
+ * Phase A scope:
+ *   - u32 / u64 wrapping add, sub, mul
+ *   - u32 / u64 saturating add, sub, mul
+ *   - u32 / u64 did-overflow detection (parallel predicates)
+ *   - u32 / u64 min, max
+ *   - u32 / u64 popcount, leading_zeros, trailing_zeros
+ *   - u32 / u64 byteswap
+ *
+ * Deferred to Phase B (when @specialize lands so signed cases share code):
+ *   - i32 / i64 saturating ops (need INT_MIN constants which require
+ *     reliable bit-pattern reinterpretation through u32 -> i32 cast)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (total, deterministic).
+ *
+ * NIH: zero externs.  All operations are machine-code primitives.
+ */
+
+module numera_scalar
+
+/* --- Constants: limits --- */
+
+const SCALAR_U32_MAX : u32 = 0xFFFFFFFFu32
+const SCALAR_U64_MAX : u64 = 0xFFFFFFFFFFFFFFFFu64
+const SCALAR_U32_BITS : u32 = 32u32
+const SCALAR_U64_BITS : u32 = 64u32
+
+/* --- u32 wrapping --- */
+
+fn scalar_u32_add_wrap(a: u32, b: u32) -> u32 @export {
+    return a + b
+}
+
+fn scalar_u32_sub_wrap(a: u32, b: u32) -> u32 @export {
+    return a - b
+}
+
+fn scalar_u32_mul_wrap(a: u32, b: u32) -> u32 @export {
+    return a * b
+}
+
+/* --- u32 overflow detection --- */
+
+fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 @export {
+    let am : u32 = a & 0xFFFFFFFFu32
+    let bm : u32 = b & 0xFFFFFFFFu32
+    let r : u32 = (am + bm) & 0xFFFFFFFFu32
+    if r < am { return 1u8 }
+    return 0u8
+}
+
+fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 @export {
+    let am : u32 = a & 0xFFFFFFFFu32
+    let bm : u32 = b & 0xFFFFFFFFu32
+    if bm > am { return 1u8 }
+    return 0u8
+}
+
+fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 @export {
+    let am : u32 = a & 0xFFFFFFFFu32
+    let bm : u32 = b & 0xFFFFFFFFu32
+    if bm == 0u32 { return 0u8 }
+    let r : u32 = (am * bm) & 0xFFFFFFFFu32
+    let q : u32 = r / bm
+    if q != am { return 1u8 }
+    return 0u8
+}
+
+/* --- u32 saturating --- */
+
+fn scalar_u32_add_sat(a: u32, b: u32) -> u32 @export {
+    let am : u32 = a & 0xFFFFFFFFu32
+    let bm : u32 = b & 0xFFFFFFFFu32
+    let r : u32 = (am + bm) & 0xFFFFFFFFu32
+    if r < am { return SCALAR_U32_MAX }
+    return r
+}
+
+fn scalar_u32_sub_sat(a: u32, b: u32) -> u32 @export {
+    let am : u32 = a & 0xFFFFFFFFu32
+    let bm : u32 = b & 0xFFFFFFFFu32
+    if bm > am { return 0u32 }
+    return (am - bm) & 0xFFFFFFFFu32
+}
+
+fn scalar_u32_mul_sat(a: u32, b: u32) -> u32 @export {
+    let am : u32 = a & 0xFFFFFFFFu32
+    let bm : u32 = b & 0xFFFFFFFFu32
+    if bm == 0u32 { return 0u32 }
+    if am == 0u32 { return 0u32 }
+    let r : u32 = (am * bm) & 0xFFFFFFFFu32
+    let q : u32 = r / bm
+    if q != am { return SCALAR_U32_MAX }
+    return r
+}
+
+/* --- u32 ordering --- */
+
+fn scalar_u32_min(a: u32, b: u32) -> u32 @export {
+    if a < b { return a }
+    return b
+}
+
+fn scalar_u32_max(a: u32, b: u32) -> u32 @export {
+    if a > b { return a }
+    return b
+}
+
+fn scalar_u32_clamp(x: u32, lo: u32, hi: u32) -> u32 @export {
+    if x < lo { return lo }
+    if x > hi { return hi }
+    return x
+}
+
+/* --- u32 bitwise primitives --- */
+
+fn scalar_u32_popcount(x: u32) -> u32 @export {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 {
+        c = c + (v & 1u32)
+        v = v >> 1u32
+    }
+    return c
+}
+
+fn scalar_u32_leading_zeros(x: u32) -> u32 @export {
+    if x == 0u32 { return 32u32 }
+    let mut v : u32 = x
+    let mut n : u32 = 0u32
+    while (v & 0x80000000u32) == 0u32 {
+        v = v << 1u32
+        n = n + 1u32
+    }
+    return n
+}
+
+fn scalar_u32_trailing_zeros(x: u32) -> u32 @export {
+    if x == 0u32 { return 32u32 }
+    let mut v : u32 = x
+    let mut n : u32 = 0u32
+    while (v & 1u32) == 0u32 {
+        v = v >> 1u32
+        n = n + 1u32
+    }
+    return n
+}
+
+fn scalar_u32_byteswap(x: u32) -> u32 @export {
+    let b0 : u32 =  x & 0xFFu32
+    let b1 : u32 = (x >> 8u32)  & 0xFFu32
+    let b2 : u32 = (x >> 16u32) & 0xFFu32
+    let b3 : u32 = (x >> 24u32) & 0xFFu32
+    return (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3
+}
+
+fn scalar_u32_rotr(x: u32, n: u32) -> u32 @export {
+    let m : u32 = n & 31u32
+    if m == 0u32 { return x }
+    return (x >> m) | (x << (32u32 - m))
+}
+
+fn scalar_u32_rotl(x: u32, n: u32) -> u32 @export {
+    let m : u32 = n & 31u32
+    if m == 0u32 { return x }
+    return (x << m) | (x >> (32u32 - m))
+}
+
+/* --- u64 wrapping --- */
+
+fn scalar_u64_add_wrap(a: u64, b: u64) -> u64 @export {
+    return a + b
+}
+
+fn scalar_u64_sub_wrap(a: u64, b: u64) -> u64 @export {
+    return a - b
+}
+
+fn scalar_u64_mul_wrap(a: u64, b: u64) -> u64 @export {
+    return a * b
+}
+
+/* --- u64 overflow detection --- */
+
+fn scalar_u64_add_did_overflow(a: u64, b: u64) -> u8 @export {
+    let r : u64 = a + b
+    if r < a { return 1u8 }
+    return 0u8
+}
+
+fn scalar_u64_sub_did_underflow(a: u64, b: u64) -> u8 @export {
+    if b > a { return 1u8 }
+    return 0u8
+}
+
+fn scalar_u64_mul_did_overflow(a: u64, b: u64) -> u8 @export {
+    if b == 0u64 { return 0u8 }
+    let r : u64 = a * b
+    let q : u64 = r / b
+    if q != a { return 1u8 }
+    return 0u8
+}
+
+/* --- u64 saturating --- */
+
+fn scalar_u64_add_sat(a: u64, b: u64) -> u64 @export {
+    let r : u64 = a + b
+    if r < a { return SCALAR_U64_MAX }
+    return r
+}
+
+fn scalar_u64_sub_sat(a: u64, b: u64) -> u64 @export {
+    if b > a { return 0u64 }
+    return a - b
+}
+
+fn scalar_u64_mul_sat(a: u64, b: u64) -> u64 @export {
+    if b == 0u64 { return 0u64 }
+    if a == 0u64 { return 0u64 }
+    let r : u64 = a * b
+    let q : u64 = r / b
+    if q != a { return SCALAR_U64_MAX }
+    return r
+}
+
+/* --- u64 ordering --- */
+
+fn scalar_u64_min(a: u64, b: u64) -> u64 @export {
+    if a < b { return a }
+    return b
+}
+
+fn scalar_u64_max(a: u64, b: u64) -> u64 @export {
+    if a > b { return a }
+    return b
+}
+
+fn scalar_u64_clamp(x: u64, lo: u64, hi: u64) -> u64 @export {
+    if x < lo { return lo }
+    if x > hi { return hi }
+    return x
+}
+
+/* --- u64 bitwise primitives --- */
+
+fn scalar_u64_popcount(x: u64) -> u32 @export {
+    let mut v : u64 = x
+    let mut c : u32 = 0u32
+    while v != 0u64 {
+        c = c + ((v & 1u64) as u32)
+        v = v >> 1u64
+    }
+    return c
+}
+
+fn scalar_u64_leading_zeros(x: u64) -> u32 @export {
+    if x == 0u64 { return 64u32 }
+    let mut v : u64 = x
+    let mut n : u32 = 0u32
+    while (v & 0x8000000000000000u64) == 0u64 {
+        v = v << 1u64
+        n = n + 1u32
+    }
+    return n
+}
+
+fn scalar_u64_trailing_zeros(x: u64) -> u32 @export {
+    if x == 0u64 { return 64u32 }
+    let mut v : u64 = x
+    let mut n : u32 = 0u32
+    while (v & 1u64) == 0u64 {
+        v = v >> 1u64
+        n = n + 1u32
+    }
+    return n
+}
+
+fn scalar_u64_byteswap(x: u64) -> u64 @export {
+    let b0 : u64 =  x         & 0xFFu64
+    let b1 : u64 = (x >> 8u64)  & 0xFFu64
+    let b2 : u64 = (x >> 16u64) & 0xFFu64
+    let b3 : u64 = (x >> 24u64) & 0xFFu64
+    let b4 : u64 = (x >> 32u64) & 0xFFu64
+    let b5 : u64 = (x >> 40u64) & 0xFFu64
+    let b6 : u64 = (x >> 48u64) & 0xFFu64
+    let b7 : u64 = (x >> 56u64) & 0xFFu64
+    let hi : u64 = (b0 << 56u64) | (b1 << 48u64) | (b2 << 40u64) | (b3 << 32u64)
+    let lo : u64 = (b4 << 24u64) | (b5 << 16u64) | (b6 << 8u64) | b7
+    return hi | lo
+}
+
+fn scalar_u64_rotr(x: u64, n: u32) -> u64 @export {
+    let m : u32 = n & 63u32
+    if m == 0u32 { return x }
+    return (x >> (m as u64)) | (x << ((64u32 - m) as u64))
+}
+
+fn scalar_u64_rotl(x: u64, n: u32) -> u64 @export {
+    let m : u32 = n & 63u32
+    if m == 0u32 { return x }
+    return (x << (m as u64)) | (x >> ((64u32 - m) as u64))
+}
+
+/* --- Width conversion --- */
+
+fn scalar_u32_to_u64(x: u32) -> u64 @export {
+    return x as u64
+}
+
+fn scalar_u64_to_u32_lo(x: u64) -> u32 @export {
+    return (x & 0xFFFFFFFFu64) as u32
+}
+
+fn scalar_u64_to_u32_hi(x: u64) -> u32 @export {
+    return ((x >> 32u64) & 0xFFFFFFFFu64) as u32
+}
+
+fn scalar_u64_combine(hi: u32, lo: u32) -> u64 @export {
+    return ((hi as u64) << 32u64) | (lo as u64)
+}

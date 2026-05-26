@@ -1,0 +1,4 @@
+/* 640 — cost_calculus: exact op-cost (cycles/throughput/regpressure/icache) via the microarch simulator. */
+module corpus_640
+extern @abi(c-msvc-x64) fn cc_selftest() -> u64 from "cost_calculus.iii"
+fn main() -> u64 { return cc_selftest() }

@@ -1,0 +1,10 @@
+/* Lattice plan Step 0007: @variant modifier (post-specialize tag). */
+module corpus_110
+
+fn shape() -> u64 @variant {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return shape()
+}

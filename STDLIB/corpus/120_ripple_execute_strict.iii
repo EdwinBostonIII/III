@@ -1,0 +1,91 @@
+/* omnia::ripple — execute(strict) emits a result crystal and grows
+ * the witness chain by one record per affected dependent. */
+module corpus_120
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn witness_init() -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+
+extern @abi(c-msvc-x64) fn ripple_change_new(arena_id: u64, kind: u32, target: u64,
+                                              old_mhash: u64, new_mhash: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute(arena_id: u64, plan_id: u64, mode: u32) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_verify(result_id: u64) -> u8 from "ripple.iii"
+
+fn fill(p: *u8, v: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = v
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    witness_init()
+    let prior_w : u32 = witness_count()
+
+    let site : *u8 = malloc(32u64)
+    let old_h : *u8 = malloc(32u64)
+    let new_h : *u8 = malloc(32u64)
+    fill(site, 0u8)
+    fill(old_h, 0xAAu8)
+    fill(new_h, 0xBBu8)
+
+    let ar : u64 = arena_new(1u64 << 20u64)
+    if ar == 0u64 { return 1u64 }
+
+    /* Diamond: A → B, A → C, both → D. */
+    let a : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let b : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let c : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let d : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    crystal_edges_init(a, ar)
+    crystal_edges_init(b, ar)
+    crystal_edges_init(c, ar)
+    crystal_edges_init(d, ar)
+    crystal_edges_add(a, b)
+    crystal_edges_add(a, c)
+    crystal_edges_add(b, d)
+    crystal_edges_add(c, d)
+
+    /* Ripple a change against A. */
+    let change : u64 = ripple_change_new(ar, 1u32, a,
+                                          old_h as u64, new_h as u64)
+    if change == 0u64 { return 2u64 }
+    let plan : u64 = ripple_analyze(ar, change)
+    if plan == 0u64 { return 3u64 }
+    let plan_n : u32 = crystal_edges_count(plan)
+
+    let result : u64 = ripple_execute(ar, plan, 1u32)        /* RIPPLE_MODE_STRICT */
+    if result == 0u64 { return 4u64 }
+
+    /* Strict mode appends one witness record per plan edge. */
+    let new_w : u32 = witness_count()
+    if new_w < prior_w + plan_n { return 5u64 }
+
+    /* Verify must pass. */
+    if ripple_verify(result) != 1u8 { return 6u64 }
+
+    /* Fast mode: no witness append; results still verify. */
+    let result_fast : u64 = ripple_execute(ar, plan, 2u32)   /* RIPPLE_MODE_FAST */
+    if result_fast == 0u64 { return 7u64 }
+    let after_fast : u32 = witness_count()
+    if after_fast != new_w { return 8u64 }
+    if ripple_verify(result_fast) != 1u8 { return 9u64 }
+
+    arena_drop(ar)
+    free(site); free(old_h); free(new_h)
+    return 99u64
+}

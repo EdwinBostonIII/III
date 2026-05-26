@@ -1,0 +1,74 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_x86_disasm.iii
+ *
+ * Transform pattern: FORM_X86_BYTES → FORM_X86_ASM
+ * FROZEN SPEC §7B.6 slot 28; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Baseline disassembler: emits `db 0xNN, 0xNN, ...` lines (8 bytes per line).
+ * A full x86-64 instruction-decoder is multi-thousand LOC; this baseline
+ * emits valid GAS-compatible byte-directive output that round-trips
+ * through tp_x86_assemble.
+ */
+
+module omnia_tp_x86_disasm
+
+var TP_DISASM_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+/* "    .byte 0x" 13 bytes */
+var TP_DISASM_PREFIX : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 121u8, 116u8, 101u8, 32u8, 48u8, 120u8, 0u8]
+/* ", 0x" 4 bytes */
+var TP_DISASM_SEP : [u8; 4] = [44u8, 32u8, 48u8, 120u8]
+
+fn tp_disasm_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_disasm_emit_byte_hex(dst: u64, off: u64, b: u8) -> u32 {
+    let hi : u8 = (b >> 4u8) & 0xFu8
+    let lo : u8 = b & 0xFu8
+    tp_disasm_emit(dst, off, TP_DISASM_HEX[hi as u32])
+    tp_disasm_emit(dst, off + 1u64, TP_DISASM_HEX[lo as u32])
+    return 2u32
+}
+
+fn tp_x86_disasm(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut src_off : u64 = 0u64
+    let mut dst_off : u64 = 0u64
+    while src_off < src_len {
+        if dst_off + 96u64 > dst_cap { return 0u64 }
+        /* Emit prefix "    .byte 0x" */
+        let mut p : u32 = 0u32
+        while p < 12u32 {
+            tp_disasm_emit(dst_buf, dst_off, TP_DISASM_PREFIX[p])
+            dst_off = dst_off + 1u64
+            p = p + 1u32
+        }
+        /* First byte */
+        let bp : *u8 = (src + src_off) as *u8
+        dst_off = dst_off + (tp_disasm_emit_byte_hex(dst_buf, dst_off, bp[0u64]) as u64)
+        src_off = src_off + 1u64
+        /* Up to 7 more bytes per line */
+        let mut col : u32 = 1u32
+        while col < 8u32 {
+            if src_off >= src_len { col = 8u32 }
+            if col < 8u32 {
+                /* Separator ", 0x" */
+                let mut s : u32 = 0u32
+                while s < 4u32 {
+                    tp_disasm_emit(dst_buf, dst_off, TP_DISASM_SEP[s])
+                    dst_off = dst_off + 1u64
+                    s = s + 1u32
+                }
+                let bp2 : *u8 = (src + src_off) as *u8
+                dst_off = dst_off + (tp_disasm_emit_byte_hex(dst_buf, dst_off, bp2[0u64]) as u64)
+                src_off = src_off + 1u64
+                col = col + 1u32
+            }
+        }
+        tp_disasm_emit(dst_buf, dst_off, 10u8)
+        dst_off = dst_off + 1u64
+    }
+    return dst_off
+}

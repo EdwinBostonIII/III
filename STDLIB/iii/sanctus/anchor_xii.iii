@@ -1,0 +1,147 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\anchor_xii.iii
+ *
+ * III STDLIB - sanctus::anchor_xii
+ *
+ * PFK-ANCHOR-INVARIANT predicate for XII curation. Per DOCS/III-XII.md
+ * S17.4 + S26.16.
+ *
+ * Seven sub-checks. Each returns 0 on PASS or the sub-check id on FAIL.
+ * Aggregate check returns 0 (ACCEPT) or the first failing sub-check id.
+ *
+ *   1. No XII operator violates the bricking class
+ *   2. K11 GOVERN patterns have Trinity admit
+ *   3. 24 crypto hot-path patterns present
+ *   4. MPHF collision-free
+ *   5. R1 root matches current
+ *   6. 8 CT obligation classes intact
+ *   7. ΔK_compose savings positive
+ *
+ * Hexad: kind_origin. Ring: R-3 (Founders-Anchor). K: 200.
+ *
+ * NIH: libc only.
+ */
+
+module sanctus_anchor_xii
+
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_cap_class(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_hexad(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_productive_count() -> u32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_chd_verify_collision_free() -> u32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_savings_init() -> i32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_savings_positive_check() -> u32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_ct_kind(id: u32) -> u8 from "xii_horizon.iii"
+
+const XA_ACCEPT : u8 = 0u8
+
+/* Sub-check 1: no productive pattern has a bricking-class hexad
+ * (bricking hexads have specific PFS NEG combinations; for the XII
+ * algebra, all 6 productive hexads + COMPOSE are admissible by
+ * construction, but we validate each productive pattern's hexad
+ * is in the admissible set 1..7). */
+fn anchor_check_no_bricking() -> u8 @export {
+    xii_horizon_init()
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        if xii_horizon_is_productive(i) == 1u8 {
+            let h : u8 = xii_horizon_hexad(i)
+            if h == 0u8 { return 1u8 }
+            if h > 7u8 { return 1u8 }
+        }
+        i = i + 1u32
+    }
+    return XA_ACCEPT
+}
+
+/* Sub-check 2: K11 GOVERN patterns (cap_class 14) require Trinity admit.
+ * For curation correctness, we verify each governance pattern has its
+ * trinity_admit field populated in the curation manifest. Here we just
+ * check that no productive K11-bearing pattern lacks the GOVERN cap. */
+fn anchor_check_govern_admit() -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        if xii_horizon_is_productive(i) == 1u8 {
+            let op : u8 = xii_horizon_primary_op(i)
+            let cap : u8 = xii_horizon_cap_class(i)
+            if op == 10u8 {   /* K11 GOVERN */
+                if cap != 14u8 {   /* CAP_GOVERN */
+                    return 2u8
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return XA_ACCEPT
+}
+
+/* Sub-check 3: H001..H024 (24 crypto hot-path patterns) are all productive. */
+fn anchor_check_24_crypto() -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < 24u32 {
+        if xii_horizon_is_productive(i) != 1u8 { return 3u8 }
+        i = i + 1u32
+    }
+    return XA_ACCEPT
+}
+
+/* Sub-check 4: MPHF collision-free. */
+fn anchor_check_mphf_clean() -> u8 @export {
+    let fails : u32 = xii_chd_verify_collision_free()
+    if fails != 0u32 { return 4u8 }
+    return XA_ACCEPT
+}
+
+/* Sub-check 5: R1 root matches current. The current R1 mhash is embedded
+ * at sealed location; this check would compare the manifest's r1_root
+ * field against it. Here we accept (true verification needs r1_root). */
+fn anchor_check_r1_root(manifest_r1: *u8, current_r1: *u8) -> u8 @export {
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if manifest_r1[k as u64] != current_r1[k as u64] { return 5u8 }
+        k = k + 1u32
+    }
+    return XA_ACCEPT
+}
+
+/* Sub-check 6: 8 CT classes (0..8) intact. Verified by checking that
+ * every productive pattern's ct_kind is in {0..8}. */
+fn anchor_check_8_ct_classes() -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        if xii_horizon_is_productive(i) == 1u8 {
+            let ct : u8 = xii_horizon_ct_kind(i)
+            if ct > 8u8 { return 6u8 }
+        }
+        i = i + 1u32
+    }
+    return XA_ACCEPT
+}
+
+/* Sub-check 7: ΔK_compose savings positive. */
+fn anchor_check_dk_positive() -> u8 @export {
+    xii_savings_init()
+    let fails : u32 = xii_savings_positive_check()
+    if fails > 0u32 { return 7u8 }
+    return XA_ACCEPT
+}
+
+/* Aggregate: returns 0 ACCEPT or first failing sub-check id (1..7). */
+fn pfk_anchor_invariant_xii(manifest_r1: *u8, current_r1: *u8) -> u8 @export {
+    let r1 : u8 = anchor_check_no_bricking()
+    if r1 != XA_ACCEPT { return r1 }
+    let r2 : u8 = anchor_check_govern_admit()
+    if r2 != XA_ACCEPT { return r2 }
+    let r3 : u8 = anchor_check_24_crypto()
+    if r3 != XA_ACCEPT { return r3 }
+    let r4 : u8 = anchor_check_mphf_clean()
+    if r4 != XA_ACCEPT { return r4 }
+    let r5 : u8 = anchor_check_r1_root(manifest_r1, current_r1)
+    if r5 != XA_ACCEPT { return r5 }
+    let r6 : u8 = anchor_check_8_ct_classes()
+    if r6 != XA_ACCEPT { return r6 }
+    let r7 : u8 = anchor_check_dk_positive()
+    if r7 != XA_ACCEPT { return r7 }
+    return XA_ACCEPT
+}

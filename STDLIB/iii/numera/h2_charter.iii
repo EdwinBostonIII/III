@@ -1,0 +1,215 @@
+/* STDLIB/iii/numera/h2_charter.iii — mig6: the H2 falsifier as a run_charter constitutional clause.
+ *
+ * H2 ("one name"): every content-address in the substrate is computed by the ONE
+ * primitive, cad (M1).  This module makes H2 a *constitutional clause* with a
+ * paired verify-AND-falsify predicate (the mig6 falsifier-per-clause discipline)
+ * folded by a terminal-gate run_charter: the charter is GREEN iff every clause
+ * both HOLDS on its good witness AND CATCHES its bad witness.  This mirrors the
+ * GENERIC mechanism in constitution.iii -- cons_clause_holds / cons_holds_selftest
+ * (673_constitution_holds), HOLDS = verify(good) AND falsify(bad) over the COP
+ * witness-VM -- but H2 is a hash-byte-identity property that VM cannot express, so
+ * h2_holds is the H2 module's OWN falsifier, ready to be unioned into the
+ * constitution's run_charter (the union-of-all-module-falsifiers, mig6 gap b).
+ *
+ * The H2 clause's two runtime-checkable, byte-exact facets:
+ *   verify  -- cad is FAITHFUL to its registered backends.  For a test vector v:
+ *              cad_oneshot(KECCAK256, v) == keccak256(v)  AND
+ *              cad_oneshot(SHA256,    v) == sha256(v),  byte-for-byte.  So routing
+ *              every content-address through cad loses NOTHING -- the one name IS
+ *              the legacy address, exactly.  This is *why* the ~16 keccak->cad
+ *              triage repoints are behavior-preserving; the clause proves the premise.
+ *   falsify -- cad HONORS its suite tag (no conflation -- no "second path" by
+ *              another name): cad_oneshot(SHA256, v) != keccak256(v)  AND
+ *              cad_oneshot(KECCAK256, v) != sha256(v).  If cad ignored the suite,
+ *              these would be equal; the clause CATCHES that.  HOLDS = verify & falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing-clause index)
+ * unless all hold.  The negative arm in h2_selftest registers a deliberately-false
+ * canary clause (cad(KECCAK,v) == sha256(v), which is FALSE since keccak != sha) and
+ * proves the gate goes RED -- the gate is a real falsifier, not vacuously green.  On
+ * GREEN the charter content-addresses its OWN verdict via cad (the seal dogfoods H2).
+ *
+ * The STRUCTURAL half of H2 ("no content-address computed outside cad") is the source
+ * invariant scripts/verify_h2_one_address.sh -- a property a runtime clause cannot
+ * see.  Together (runtime faithfulness clause + structural build-gate) they are the
+ * complete H2 falsifier.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: cad.iii + keccak256.iii + sha256.iii only.  No ML, no float, no u64 division.
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores; masked idx.
+ */
+module numera_h2_charter
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const H2_OK              : i32 =  0i32
+const H2_SUITE_SHA256    : u32 = 0u32
+const H2_SUITE_KECCAK256 : u32 = 1u32
+const H2_MAX_CLAUSES     : u32 = 64u32
+const H2_KIND_FAITHFUL   : u8  = 0u8    /* the H2 clause: cad == backends AND suite-distinct */
+const H2_KIND_CANARY     : u8  = 1u8    /* a deliberately-false clause (negative arm only) */
+const H2_VERDICT_GREEN   : u64 = 99u64  /* > H2_MAX_CLAUSES, so never a RED index */
+const H2_U32MASK         : u64 = 0xFFFFFFFFu64
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var H2_CLAUSE_KIND  : [u8;  64]
+var H2_CLAUSE_ID    : [u8;  2048]   /* 64 * 32-byte clause content-addresses */
+var H2_CLAUSE_COUNT : u32 = 0u32
+
+/* --- test vector + scratch (module-scope, Trap 7; serialized R-1 use) --- */
+var H2_VEC      : [u8; 8]      /* canonical vector "abc"; len chosen per check */
+var H2_KINDBUF  : [u8; 1]      /* 1-byte clause-text (the kind) for clause_id */
+var H2_CAD      : [u8; 32]     /* cad result */
+var H2_REF      : [u8; 32]     /* backend reference result */
+var H2_SAVED    : [u8; 32]     /* selftest: saved green verdict for the re-run compare */
+var H2_VERDICT  : [u8; 32]     /* the sealed charter verdict */
+var H2_SEAL_BUF : [u8; 2080]   /* count(4) || clause ids, for the verdict seal */
+
+/* Reset the registry + load the canonical test vector "abc" (0x61,0x62,0x63). */
+fn h2_init() -> i32 @export {
+    H2_CLAUSE_COUNT = 0u32
+    H2_VEC[0u64] = 0x61u8
+    H2_VEC[1u64] = 0x62u8
+    H2_VEC[2u64] = 0x63u8
+    return H2_OK
+}
+
+/* cad FAITHFUL on (msg,len): cad(KECCAK) == keccak256 AND cad(SHA) == sha256. 1 = faithful. */
+fn h2_faithful_on(msg: *u8, len: u64) -> u8 {
+    cad_oneshot(H2_SUITE_KECCAK256, msg, len, (&H2_CAD as u64) as *u8)
+    keccak256_oneshot(msg as u64, len, (&H2_REF as u64))
+    if cad_eq((&H2_CAD as u64) as *u8, (&H2_REF as u64) as *u8) != 1u8 { return 0u8 }
+    cad_oneshot(H2_SUITE_SHA256, msg, len, (&H2_CAD as u64) as *u8)
+    sha256_oneshot(msg, len, (&H2_REF as u64) as *u8)
+    if cad_eq((&H2_CAD as u64) as *u8, (&H2_REF as u64) as *u8) != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* The H2 clause VERIFY arm: cad faithful on the empty string AND on "abc". */
+fn h2_verify() -> u8 @export {
+    let v : *u8 = (&H2_VEC as u64) as *u8
+    if h2_faithful_on(v, 0u64) != 1u8 { return 0u8 }
+    if h2_faithful_on(v, 3u64) != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* cad SUITE-DISTINCT on (msg,len): cad(SHA) != keccak256 AND cad(KECCAK) != sha256. 1 = distinct. */
+fn h2_suite_distinct_on(msg: *u8, len: u64) -> u8 {
+    cad_oneshot(H2_SUITE_SHA256, msg, len, (&H2_CAD as u64) as *u8)
+    keccak256_oneshot(msg as u64, len, (&H2_REF as u64))
+    if cad_eq((&H2_CAD as u64) as *u8, (&H2_REF as u64) as *u8) != 0u8 { return 0u8 }
+    cad_oneshot(H2_SUITE_KECCAK256, msg, len, (&H2_CAD as u64) as *u8)
+    sha256_oneshot(msg, len, (&H2_REF as u64) as *u8)
+    if cad_eq((&H2_CAD as u64) as *u8, (&H2_REF as u64) as *u8) != 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* The H2 clause FALSIFY arm: cad catches the suite-conflation bad case on "abc". */
+fn h2_falsify() -> u8 @export {
+    let v : *u8 = (&H2_VEC as u64) as *u8
+    return h2_suite_distinct_on(v, 3u64)
+}
+
+/* The canary's holds: cad(KECCAK,"abc") == sha256("abc") -- FALSE (keccak != sha).
+ * A genuinely-false clause used ONLY to prove run_charter goes RED on a failure. */
+fn h2_canary_holds() -> u8 {
+    let v : *u8 = (&H2_VEC as u64) as *u8
+    cad_oneshot(H2_SUITE_KECCAK256, v, 3u64, (&H2_CAD as u64) as *u8)
+    sha256_oneshot(v, 3u64, (&H2_REF as u64) as *u8)
+    return cad_eq((&H2_CAD as u64) as *u8, (&H2_REF as u64) as *u8)
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn h2_clause_eval(idx: u32) -> u8 {
+    let k : u8 = H2_CLAUSE_KIND[(idx as u64) & H2_U32MASK]
+    if k == H2_KIND_FAITHFUL {
+        if h2_verify() != 1u8 { return 0u8 }
+        if h2_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == H2_KIND_CANARY { return h2_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k; clause_id = cad(KECCAK256, kind-byte) (content-addressed,
+ * dogfooding cad).  Returns the 0-based slot, or -1 if the registry is full. */
+fn h2_register(k: u8) -> i32 {
+    let n : u32 = H2_CLAUSE_COUNT
+    if n >= H2_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & H2_U32MASK
+    H2_CLAUSE_KIND[slot] = k
+    H2_KINDBUF[0u64] = k
+    cad_oneshot(H2_SUITE_KECCAK256, (&H2_KINDBUF as u64) as *u8, 1u64, ((&H2_CLAUSE_ID as u64) + slot * 32u64) as *u8)
+    H2_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* Seal the GREEN verdict: H2_VERDICT = cad(KECCAK256, count(LE4) || clause_ids[0..n*32]). */
+fn h2_seal_verdict(n: u32) -> i32 {
+    let n64 : u64 = (n as u64) & H2_U32MASK
+    H2_SEAL_BUF[0u64] = (n & 0xFFu32) as u8
+    H2_SEAL_BUF[1u64] = ((n >> 8u32)  & 0xFFu32) as u8
+    H2_SEAL_BUF[2u64] = ((n >> 16u32) & 0xFFu32) as u8
+    H2_SEAL_BUF[3u64] = ((n >> 24u32) & 0xFFu32) as u8
+    let total : u64 = n64 * 32u64
+    let mut b : u64 = 0u64
+    while b < total {
+        H2_SEAL_BUF[4u64 + b] = H2_CLAUSE_ID[b]
+        b = b + 1u64
+    }
+    cad_oneshot(H2_SUITE_KECCAK256, (&H2_SEAL_BUF as u64) as *u8, 4u64 + total, (&H2_VERDICT as u64) as *u8)
+    return H2_OK
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED).  GREEN seals the verdict (M6/H2 dogfood). */
+fn h2_run_charter() -> u64 @export {
+    let n : u32 = H2_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if h2_clause_eval(i) != 1u8 { return ((i as u64) & H2_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    h2_seal_verdict(n)
+    return H2_VERDICT_GREEN
+}
+
+/* Copy the last sealed verdict into out[0..32). -1 on null. */
+fn h2_verdict(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    let mut z : u64 = 0u64
+    while z < 32u64 { out[z] = H2_VERDICT[z]  z = z + 1u64 }
+    return H2_OK
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves: cad faithful to both backends (1); cad honors its suite (2); the canary is
+ * genuinely false (3); run_charter GREEN with the H2 clause (4,5); the verdict is
+ * non-zero (6) and reproducible (7,8); and -- the prove-the-negative arm -- run_charter
+ * goes RED, returning the failing canary's 1-based index (=2), proving the gate is a
+ * real falsifier, not vacuously green (9,10). */
+fn h2_selftest() -> u64 @export {
+    h2_init()
+    if h2_verify() != 1u8 { return 1u64 }
+    if h2_falsify() != 1u8 { return 2u64 }
+    if h2_canary_holds() != 0u8 { return 3u64 }
+    if h2_register(H2_KIND_FAITHFUL) != 0i32 { return 4u64 }
+    if h2_run_charter() != H2_VERDICT_GREEN { return 5u64 }
+    if cad_is_zero((&H2_VERDICT as u64) as *u8) != 0u8 { return 6u64 }
+    let mut s : u64 = 0u64
+    while s < 32u64 { H2_SAVED[s] = H2_VERDICT[s]  s = s + 1u64 }
+    if h2_run_charter() != H2_VERDICT_GREEN { return 7u64 }
+    if cad_eq((&H2_VERDICT as u64) as *u8, (&H2_SAVED as u64) as *u8) != 1u8 { return 8u64 }
+    if h2_register(H2_KIND_CANARY) != 1i32 { return 9u64 }
+    if h2_run_charter() != 2u64 { return 10u64 }
+    return 99u64
+}
+
+/* h2_charter EMBODIES the H2 invariant as a self-falsifying constitutional clause:
+ * the one content-address (cad) is faithful to its backends and honors its suite, and
+ * the terminal gate proves itself RED on a failing clause.  The structural companion
+ * scripts/verify_h2_one_address.sh forbids any content-address outside cad. */

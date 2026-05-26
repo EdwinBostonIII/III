@@ -1,0 +1,944 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\json.iii
+ *
+ * III STDLIB - verba::json
+ *
+ * RFC 8259 JSON parser + emitter, written entirely in stdlib III.
+ * No external libraries beyond MSVCRT malloc/free for the input
+ * buffer surface.  This is the canonical stdlib stress test for
+ * Phase F: a working program in pure III using arena, vec, map-like
+ * structures, builder, parse cursors, and recursive descent.
+ *
+ * Phase F scope (RFC 8259 subset):
+ *   value   = null | true | false | number | string | array | object
+ *   number  = '-'? digit+         (integer-only; fractional/exp deferred)
+ *   string  = '"' chars '"'       (with \\, \", \n, \t, \r, \b, \f, \/)
+ *                                 (\uXXXX deferred to Phase G - needs
+ *                                  UTF-8 encoder beyond current rune.iii)
+ *   array   = '[' (value (',' value)*)? ']'
+ *   object  = '{' (string ':' value (',' string ':' value)*)? '}'
+ *
+ * Storage discipline:
+ *   - Each value occupies a slot in a 2048-entry table
+ *   - Strings: payload_a = base ptr in arena, payload_b = byte length
+ *   - Numbers: payload_a = i64 value (signed, stored in u64)
+ *   - Arrays:  payload_a = base of child u64[] in arena, payload_b = count
+ *   - Objects: payload_a = base of (key_id, value_id) pairs (16 bytes each),
+ *              payload_b = pair count
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 0.95 (parse may fail).
+ *
+ * Discipline against iiis-2 codegen bugs:
+ *   - All u32 expressions masked with `& 0xFFFFFFFFu32`     (W1)
+ *   - All fn signatures ≤ 4 parameters                      (W2)
+ *   - No `&GLOBAL[0]` patterns                              (W3)
+ *   - No reserved-word identifiers                          (W4, W9)
+ *   - No underscore in hex literals                         (W5)
+ *   - No empty `if {}` blocks                               (W6)
+ *   - Chained parenthesised sums split into lets            (W7)
+ *   - i32 ordering uses `==` exclusively                    (W12)
+ */
+
+module verba_json
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+
+/* --- Value kinds --- */
+const JSON_KIND_NULL  : u8 = 1u8
+const JSON_KIND_FALSE : u8 = 2u8
+const JSON_KIND_TRUE  : u8 = 3u8
+const JSON_KIND_NUM   : u8 = 4u8
+const JSON_KIND_STR   : u8 = 5u8
+const JSON_KIND_ARR   : u8 = 6u8
+const JSON_KIND_OBJ   : u8 = 7u8
+
+const JSON_INVALID : u64 = 0u64
+
+const JSON_OK             : i32 =  0i32
+const JSON_E_BADID        : i32 = -1i32
+const JSON_E_FULL         : i32 = -2i32
+const JSON_E_PARSE        : i32 = -3i32
+const JSON_E_DEPTH        : i32 = -4i32
+const JSON_E_OOM          : i32 = -5i32
+const JSON_E_TYPE         : i32 = -6i32
+const JSON_E_BUF          : i32 = -7i32
+
+const JSON_MAX_NODES : u32 = 2048u32
+const JSON_MAX_DEPTH : u32 = 64u32
+
+/* Slot table */
+var JSON_KIND  : [u8;  2048]
+var JSON_PAY_A : [u64; 2048]
+var JSON_PAY_B : [u64; 2048]
+var JSON_LIVE  : [u8;  2048]
+var JSON_COUNT : u32 = 0u32
+
+/* Parse state */
+var JSON_INPUT_BASE : u64 = 0u64
+var JSON_INPUT_LEN  : u64 = 0u64
+var JSON_INPUT_POS  : u64 = 0u64
+var JSON_ARENA      : u64 = 0u64
+var JSON_DEPTH      : u32 = 0u32
+var JSON_ERROR      : i32 = 0i32
+var JSON_ERROR_POS  : u64 = 0u64
+
+/* --- Slot management --- */
+
+fn json_alloc_slot() -> u64 {
+    if JSON_COUNT >= JSON_MAX_NODES { return JSON_INVALID }
+    let s : u32 = JSON_COUNT
+    JSON_KIND[s]  = 0u8
+    JSON_PAY_A[s] = 0u64
+    JSON_PAY_B[s] = 0u64
+    JSON_LIVE[s]  = 1u8
+    JSON_COUNT = JSON_COUNT + 1u32
+    return (s as u64) + 1u64
+}
+
+fn json_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (JSON_MAX_NODES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if JSON_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* --- Lifecycle --- */
+
+fn json_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < JSON_MAX_NODES {
+        JSON_LIVE[i]  = 0u8
+        JSON_KIND[i]  = 0u8
+        JSON_PAY_A[i] = 0u64
+        JSON_PAY_B[i] = 0u64
+        i = i + 1u32
+    }
+    JSON_COUNT = 0u32
+    JSON_INPUT_BASE = 0u64
+    JSON_INPUT_LEN  = 0u64
+    JSON_INPUT_POS  = 0u64
+    JSON_ARENA      = 0u64
+    JSON_DEPTH      = 0u32
+    JSON_ERROR      = 0i32
+    JSON_ERROR_POS  = 0u64
+    return JSON_OK
+}
+
+/* --- Cursor helpers --- */
+
+fn json_peek() -> u32 {
+    if JSON_INPUT_POS >= JSON_INPUT_LEN { return 0x100u32 }
+    let p : *u8 = JSON_INPUT_BASE as *u8
+    return p[JSON_INPUT_POS] as u32
+}
+
+fn json_advance() -> u32 {
+    JSON_INPUT_POS = JSON_INPUT_POS + 1u64
+    return 0u32
+}
+
+fn json_skip_ws() -> u32 {
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let c : u32 = json_peek()
+        if c == 0x100u32 { done = 1u8 }
+        if done == 0u8 {
+            let mut is_ws : u8 = 0u8
+            if c == 0x20u32 { is_ws = 1u8 }
+            if c == 0x09u32 { is_ws = 1u8 }
+            if c == 0x0Au32 { is_ws = 1u8 }
+            if c == 0x0Du32 { is_ws = 1u8 }
+            if is_ws == 0u8 { done = 1u8 }
+            if is_ws == 1u8 { json_advance() }
+        }
+    }
+    return 0u32
+}
+
+fn json_set_error(code: i32) -> i32 {
+    JSON_ERROR = code
+    JSON_ERROR_POS = JSON_INPUT_POS
+    return code
+}
+
+/* --- Match a literal ASCII keyword (e.g. "true", "false", "null") --- */
+
+fn json_match_keyword_3(b0: u32, b1: u32, b2: u32) -> u8 {
+    let p : *u8 = JSON_INPUT_BASE as *u8
+    if JSON_INPUT_POS + 3u64 > JSON_INPUT_LEN { return 0u8 }
+    if (p[JSON_INPUT_POS] as u32) != b0 { return 0u8 }
+    if (p[JSON_INPUT_POS + 1u64] as u32) != b1 { return 0u8 }
+    if (p[JSON_INPUT_POS + 2u64] as u32) != b2 { return 0u8 }
+    JSON_INPUT_POS = JSON_INPUT_POS + 3u64
+    return 1u8
+}
+
+fn json_match_keyword_4(b0: u32, b1: u32, b2: u32, b3: u32) -> u8 {
+    let p : *u8 = JSON_INPUT_BASE as *u8
+    if JSON_INPUT_POS + 4u64 > JSON_INPUT_LEN { return 0u8 }
+    if (p[JSON_INPUT_POS] as u32) != b0 { return 0u8 }
+    if (p[JSON_INPUT_POS + 1u64] as u32) != b1 { return 0u8 }
+    if (p[JSON_INPUT_POS + 2u64] as u32) != b2 { return 0u8 }
+    if (p[JSON_INPUT_POS + 3u64] as u32) != b3 { return 0u8 }
+    JSON_INPUT_POS = JSON_INPUT_POS + 4u64
+    return 1u8
+}
+
+/* --- Parse leaf values --- */
+
+fn json_parse_null() -> u64 {
+    /* expects "null" */
+    if json_match_keyword_4(110u32, 117u32, 108u32, 108u32) != 1u8 {
+        return JSON_INVALID
+    }
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 { return JSON_INVALID }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s] = JSON_KIND_NULL
+    return id
+}
+
+fn json_parse_true() -> u64 {
+    if json_match_keyword_4(116u32, 114u32, 117u32, 101u32) != 1u8 {
+        return JSON_INVALID
+    }
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 { return JSON_INVALID }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s] = JSON_KIND_TRUE
+    return id
+}
+
+fn json_parse_false() -> u64 {
+    /* "false" - 5 bytes, two-step match */
+    let p : *u8 = JSON_INPUT_BASE as *u8
+    if JSON_INPUT_POS + 5u64 > JSON_INPUT_LEN { return JSON_INVALID }
+    if (p[JSON_INPUT_POS] as u32) != 102u32 { return JSON_INVALID }
+    if (p[JSON_INPUT_POS + 1u64] as u32) != 97u32  { return JSON_INVALID }
+    if (p[JSON_INPUT_POS + 2u64] as u32) != 108u32 { return JSON_INVALID }
+    if (p[JSON_INPUT_POS + 3u64] as u32) != 115u32 { return JSON_INVALID }
+    if (p[JSON_INPUT_POS + 4u64] as u32) != 101u32 { return JSON_INVALID }
+    JSON_INPUT_POS = JSON_INPUT_POS + 5u64
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 { return JSON_INVALID }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s] = JSON_KIND_FALSE
+    return id
+}
+
+/* Parse signed integer.  Returns slot id or JSON_INVALID. */
+fn json_parse_number() -> u64 {
+    let mut neg : u8 = 0u8
+    let p : *u8 = JSON_INPUT_BASE as *u8
+    if json_peek() == 0x2Du32 {       /* '-' */
+        neg = 1u8
+        json_advance()
+    }
+    let start : u64 = JSON_INPUT_POS
+    let mut digits : u64 = 0u64
+    let mut value : i64 = 0i64
+    let mut overflowed : u8 = 0u8
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let c : u32 = json_peek()
+        if c == 0x100u32 { done = 1u8 }
+        if done == 0u8 {
+            if c < 0x30u32 { done = 1u8 }
+            if c > 0x39u32 { done = 1u8 }
+            if done == 0u8 {
+                let d : i64 = (c - 0x30u32) as i64
+                /* Overflow check: ±2^63 / 10 = ±922337203685477580
+                 * Guard with magnitude check. */
+                let lim : i64 = 922337203685477580i64
+                let v_abs : i64 = value
+                if v_abs > lim { overflowed = 1u8 }
+                if overflowed == 0u8 {
+                    value = (value * 10i64) + d
+                }
+                json_advance()
+                digits = digits + 1u64
+            }
+        }
+    }
+    if digits == 0u64 { return JSON_INVALID }
+    if overflowed == 1u8 { return JSON_INVALID }
+    if neg == 1u8 { value = 0i64 - value }
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 { return JSON_INVALID }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s]  = JSON_KIND_NUM
+    JSON_PAY_A[s] = value as u64
+    return id
+}
+
+/* Parse a JSON string starting at the current "; copy escaped bytes
+ * into a fresh arena buffer.  Returns the slot id or JSON_INVALID. */
+
+fn json_unescape_byte(c: u32) -> u32 {
+    if c == 34u32  { return 34u32 }     /* \" -> " */
+    if c == 92u32  { return 92u32 }     /* \\ -> \ */
+    if c == 47u32  { return 47u32 }     /* \/ -> / */
+    if c == 98u32  { return 8u32 }      /* \b -> 0x08 */
+    if c == 102u32 { return 12u32 }     /* \f -> 0x0C */
+    if c == 110u32 { return 10u32 }     /* \n -> 0x0A */
+    if c == 114u32 { return 13u32 }     /* \r -> 0x0D */
+    if c == 116u32 { return 9u32 }      /* \t -> 0x09 */
+    return 0x100u32                      /* invalid */
+}
+
+fn json_parse_string() -> u64 {
+    if json_peek() != 0x22u32 { return JSON_INVALID }   /* '"' */
+    json_advance()
+    let p : *u8 = JSON_INPUT_BASE as *u8
+    /* Two-pass: first measure the unescaped length, then allocate
+     * and copy.  Simpler than dynamic growth and avoids depending on
+     * builder's resize logic from inside the lexer. */
+    let scan_start : u64 = JSON_INPUT_POS
+    let mut scan_pos : u64 = scan_start
+    let mut out_len : u64 = 0u64
+    let mut closed : u8 = 0u8
+    let mut bad : u8 = 0u8
+    while closed == 0u8 {
+        if scan_pos >= JSON_INPUT_LEN { bad = 1u8; closed = 1u8 }
+        if closed == 0u8 {
+            let c : u32 = p[scan_pos] as u32
+            if c == 0x22u32 { closed = 1u8 }       /* '"' end */
+            if closed == 0u8 {
+                if c == 92u32 {                    /* '\' escape */
+                    if scan_pos + 1u64 >= JSON_INPUT_LEN { bad = 1u8; closed = 1u8 }
+                    if closed == 0u8 {
+                        let n : u32 = p[scan_pos + 1u64] as u32
+                        if n == 117u32 {           /* \uXXXX deferred */
+                            bad = 1u8
+                            closed = 1u8
+                        }
+                        if closed == 0u8 {
+                            let r : u32 = json_unescape_byte(n)
+                            if r == 0x100u32 { bad = 1u8; closed = 1u8 }
+                            if closed == 0u8 {
+                                scan_pos = scan_pos + 2u64
+                                out_len = out_len + 1u64
+                            }
+                        }
+                    }
+                }
+                if closed == 0u8 {
+                    if c != 92u32 {
+                        scan_pos = scan_pos + 1u64
+                        out_len = out_len + 1u64
+                    }
+                }
+            }
+        }
+    }
+    if bad == 1u8 { return JSON_INVALID }
+    /* Allocate and copy. */
+    let buf : u64 = arena_alloc1(JSON_ARENA, out_len + 1u64)
+    if buf == 0u64 { return JSON_INVALID }
+    let dp : *u8 = buf as *u8
+    let mut src : u64 = scan_start
+    let mut di : u64 = 0u64
+    while src < scan_pos {
+        let c : u32 = p[src] as u32
+        if c == 92u32 {
+            let n : u32 = p[src + 1u64] as u32
+            let r : u32 = json_unescape_byte(n)
+            dp[di] = (r & 0xFFu32) as u8
+            src = src + 2u64
+            di = di + 1u64
+        }
+        if c != 92u32 {
+            dp[di] = (c & 0xFFu32) as u8
+            src = src + 1u64
+            di = di + 1u64
+        }
+    }
+    /* skip past closing quote */
+    JSON_INPUT_POS = scan_pos + 1u64
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 { return JSON_INVALID }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s]  = JSON_KIND_STR
+    JSON_PAY_A[s] = buf
+    JSON_PAY_B[s] = out_len
+    return id
+}
+
+/* Forward declaration - parser is recursive. */
+fn json_parse_value() -> u64 {
+    if JSON_DEPTH >= JSON_MAX_DEPTH {
+        json_set_error(JSON_E_DEPTH)
+        return JSON_INVALID
+    }
+    json_skip_ws()
+    let c : u32 = json_peek()
+    if c == 0x100u32 {
+        json_set_error(JSON_E_PARSE)
+        return JSON_INVALID
+    }
+    if c == 0x6Eu32 { return json_parse_null() }     /* 'n' */
+    if c == 0x74u32 { return json_parse_true() }     /* 't' */
+    if c == 0x66u32 { return json_parse_false() }    /* 'f' */
+    if c == 0x22u32 { return json_parse_string() }   /* '"' */
+    if c == 0x2Du32 { return json_parse_number() }   /* '-' */
+    if c >= 0x30u32 {
+        if c <= 0x39u32 { return json_parse_number() }   /* '0'..'9' */
+    }
+    if c == 0x5Bu32 { return json_parse_array() }    /* '[' */
+    if c == 0x7Bu32 { return json_parse_object() }   /* '{' */
+    json_set_error(JSON_E_PARSE)
+    return JSON_INVALID
+}
+
+/* Parse an array.  Children stored as u64[] in arena. */
+
+fn json_parse_array() -> u64 {
+    if json_peek() != 0x5Bu32 { return JSON_INVALID }
+    json_advance()
+    JSON_DEPTH = JSON_DEPTH + 1u32
+    json_skip_ws()
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 {
+        JSON_DEPTH = JSON_DEPTH - 1u32
+        return JSON_INVALID
+    }
+    /* Empty array */
+    if json_peek() == 0x5Du32 {     /* ']' */
+        json_advance()
+        let s : u32 = json_slot_of(id)
+        JSON_KIND[s]  = JSON_KIND_ARR
+        JSON_PAY_A[s] = 0u64
+        JSON_PAY_B[s] = 0u64
+        JSON_DEPTH = JSON_DEPTH - 1u32
+        return id
+    }
+    /* Two-pass: first collect children into a temporary u64[] buffer,
+     * then allocate the final-sized buffer in arena.  We use a
+     * module-scope scratch array for the temporaries (cap 256 items
+     * per array - JSON arrays beyond 256 elements need Phase G's
+     * dynamic growth via vec_u64). */
+    let mut count : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if count >= 256u64 {
+            json_set_error(JSON_E_FULL)
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        let child : u64 = json_parse_value()
+        if child == JSON_INVALID {
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        JSON_ARRAY_SCRATCH[count as u32] = child
+        count = count + 1u64
+        json_skip_ws()
+        let nx : u32 = json_peek()
+        if nx == 0x2Cu32 {                          /* ',' */
+            json_advance()
+            json_skip_ws()
+        }
+        if nx == 0x5Du32 {                          /* ']' */
+            json_advance()
+            done = 1u8
+        }
+        if nx == 0x100u32 {
+            json_set_error(JSON_E_PARSE)
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        if nx != 0x2Cu32 {
+            if nx != 0x5Du32 {
+                if nx != 0x100u32 {
+                    json_set_error(JSON_E_PARSE)
+                    JSON_DEPTH = JSON_DEPTH - 1u32
+                    return JSON_INVALID
+                }
+            }
+        }
+    }
+    let buf : u64 = arena_alloc1(JSON_ARENA, count * 8u64)
+    if buf == 0u64 {
+        JSON_DEPTH = JSON_DEPTH - 1u32
+        return JSON_INVALID
+    }
+    let bp : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < count {
+        let v : u64 = JSON_ARRAY_SCRATCH[i as u32]
+        let off : u64 = i * 8u64
+        bp[off + 0u64] = (v & 0xFFu64) as u8
+        bp[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+        bp[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+        bp[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+        bp[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+        bp[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+        bp[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+        bp[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s]  = JSON_KIND_ARR
+    JSON_PAY_A[s] = buf
+    JSON_PAY_B[s] = count
+    JSON_DEPTH = JSON_DEPTH - 1u32
+    return id
+}
+
+var JSON_ARRAY_SCRATCH : [u64; 256]
+var JSON_OBJECT_SCRATCH : [u64; 512]   /* 256 (key, value) pairs */
+
+fn json_parse_object() -> u64 {
+    if json_peek() != 0x7Bu32 { return JSON_INVALID }   /* '{' */
+    json_advance()
+    JSON_DEPTH = JSON_DEPTH + 1u32
+    json_skip_ws()
+    let id : u64 = json_alloc_slot()
+    if id == 0u64 {
+        JSON_DEPTH = JSON_DEPTH - 1u32
+        return JSON_INVALID
+    }
+    /* Empty object */
+    if json_peek() == 0x7Du32 {     /* '}' */
+        json_advance()
+        let s : u32 = json_slot_of(id)
+        JSON_KIND[s]  = JSON_KIND_OBJ
+        JSON_PAY_A[s] = 0u64
+        JSON_PAY_B[s] = 0u64
+        JSON_DEPTH = JSON_DEPTH - 1u32
+        return id
+    }
+    let mut count : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if count >= 256u64 {
+            json_set_error(JSON_E_FULL)
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        json_skip_ws()
+        let key_id : u64 = json_parse_string()
+        if key_id == JSON_INVALID {
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        json_skip_ws()
+        if json_peek() != 0x3Au32 {                  /* ':' */
+            json_set_error(JSON_E_PARSE)
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        json_advance()
+        let value_id : u64 = json_parse_value()
+        if value_id == JSON_INVALID {
+            JSON_DEPTH = JSON_DEPTH - 1u32
+            return JSON_INVALID
+        }
+        let pair_idx : u32 = (count as u32) * 2u32
+        JSON_OBJECT_SCRATCH[pair_idx] = key_id
+        JSON_OBJECT_SCRATCH[pair_idx + 1u32] = value_id
+        count = count + 1u64
+        json_skip_ws()
+        let nx : u32 = json_peek()
+        if nx == 0x2Cu32 {                          /* ',' */
+            json_advance()
+        }
+        if nx == 0x7Du32 {                          /* '}' */
+            json_advance()
+            done = 1u8
+        }
+        if nx != 0x2Cu32 {
+            if nx != 0x7Du32 {
+                json_set_error(JSON_E_PARSE)
+                JSON_DEPTH = JSON_DEPTH - 1u32
+                return JSON_INVALID
+            }
+        }
+    }
+    /* Allocate (key_id, value_id) pairs as 16 bytes each */
+    let buf : u64 = arena_alloc1(JSON_ARENA, count * 16u64)
+    if buf == 0u64 {
+        JSON_DEPTH = JSON_DEPTH - 1u32
+        return JSON_INVALID
+    }
+    let bp : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < count {
+        let pair_idx : u32 = (i as u32) * 2u32
+        let kid : u64 = JSON_OBJECT_SCRATCH[pair_idx]
+        let vid : u64 = JSON_OBJECT_SCRATCH[pair_idx + 1u32]
+        let off : u64 = i * 16u64
+        let mut j : u32 = 0u32
+        while j < 8u32 {
+            let shift : u64 = (j as u64) * 8u64
+            bp[off + (j as u64)] = ((kid >> shift) & 0xFFu64) as u8
+            bp[off + 8u64 + (j as u64)] = ((vid >> shift) & 0xFFu64) as u8
+            j = j + 1u32
+        }
+        i = i + 1u64
+    }
+    let s : u32 = json_slot_of(id)
+    JSON_KIND[s]  = JSON_KIND_OBJ
+    JSON_PAY_A[s] = buf
+    JSON_PAY_B[s] = count
+    JSON_DEPTH = JSON_DEPTH - 1u32
+    return id
+}
+
+/* --- Top-level parse entry --- */
+
+fn json_parse(arena: u64, input_base: u64, input_len: u64) -> u64 @export {
+    json_reset()
+    JSON_ARENA = arena
+    JSON_INPUT_BASE = input_base
+    JSON_INPUT_LEN  = input_len
+    JSON_INPUT_POS  = 0u64
+    json_skip_ws()
+    let root : u64 = json_parse_value()
+    if root == JSON_INVALID { return JSON_INVALID }
+    json_skip_ws()
+    /* Trailing garbage is an error per RFC 8259. */
+    if JSON_INPUT_POS != JSON_INPUT_LEN {
+        json_set_error(JSON_E_PARSE)
+        return JSON_INVALID
+    }
+    return root
+}
+
+fn json_last_error() -> i32 @export {
+    return JSON_ERROR
+}
+
+fn json_last_error_pos() -> u64 @export {
+    return JSON_ERROR_POS
+}
+
+/* --- Query API --- */
+
+fn json_kind(id: u64) -> u8 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return JSON_KIND[s]
+}
+
+fn json_int(id: u64) -> i64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0i64 }
+    if JSON_KIND[s] != JSON_KIND_NUM { return 0i64 }
+    return JSON_PAY_A[s] as i64
+}
+
+fn json_string_base(id: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_STR { return 0u64 }
+    return JSON_PAY_A[s]
+}
+
+fn json_string_len(id: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_STR { return 0u64 }
+    return JSON_PAY_B[s]
+}
+
+fn json_array_len(id: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_ARR { return 0u64 }
+    return JSON_PAY_B[s]
+}
+
+fn json_array_at(id: u64, i: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_ARR { return 0u64 }
+    if i >= JSON_PAY_B[s] { return 0u64 }
+    let base : u64 = JSON_PAY_A[s]
+    let bp : *u8 = base as *u8
+    let off : u64 = i * 8u64
+    let b0 : u64 = bp[off + 0u64] as u64
+    let b1 : u64 = bp[off + 1u64] as u64
+    let b2 : u64 = bp[off + 2u64] as u64
+    let b3 : u64 = bp[off + 3u64] as u64
+    let b4 : u64 = bp[off + 4u64] as u64
+    let b5 : u64 = bp[off + 5u64] as u64
+    let b6 : u64 = bp[off + 6u64] as u64
+    let b7 : u64 = bp[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn json_object_len(id: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_OBJ { return 0u64 }
+    return JSON_PAY_B[s]
+}
+
+fn json_object_pair_load(base: u64, off: u64) -> u64 {
+    let bp : *u8 = base as *u8
+    let b0 : u64 = bp[off + 0u64] as u64
+    let b1 : u64 = bp[off + 1u64] as u64
+    let b2 : u64 = bp[off + 2u64] as u64
+    let b3 : u64 = bp[off + 3u64] as u64
+    let b4 : u64 = bp[off + 4u64] as u64
+    let b5 : u64 = bp[off + 5u64] as u64
+    let b6 : u64 = bp[off + 6u64] as u64
+    let b7 : u64 = bp[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn json_object_key_at(id: u64, i: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_OBJ { return 0u64 }
+    if i >= JSON_PAY_B[s] { return 0u64 }
+    let base : u64 = JSON_PAY_A[s]
+    return json_object_pair_load(base, i * 16u64)
+}
+
+fn json_object_value_at(id: u64, i: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_OBJ { return 0u64 }
+    if i >= JSON_PAY_B[s] { return 0u64 }
+    let base : u64 = JSON_PAY_A[s]
+    return json_object_pair_load(base, i * 16u64 + 8u64)
+}
+
+/* Look up object key by byte-equal match.  Returns value slot id or 0. */
+fn json_object_get(id: u64, key_base: u64, key_len: u64) -> u64 @export {
+    let s : u32 = json_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if JSON_KIND[s] != JSON_KIND_OBJ { return 0u64 }
+    let n : u64 = JSON_PAY_B[s]
+    let mut i : u64 = 0u64
+    while i < n {
+        let key_id : u64 = json_object_key_at(id, i)
+        let kbase : u64 = json_string_base(key_id)
+        let klen  : u64 = json_string_len(key_id)
+        if klen == key_len {
+            let kp : *u8 = kbase as *u8
+            let qp : *u8 = key_base as *u8
+            let mut j : u64 = 0u64
+            let mut diff : u8 = 0u8
+            while j < klen {
+                if kp[j] != qp[j] { diff = 1u8 }
+                j = j + 1u64
+            }
+            if diff == 0u8 {
+                return json_object_value_at(id, i)
+            }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* --- Emitter: serialize a value tree back to a builder --- */
+
+/* Forward declaration: emit is recursive. */
+fn json_emit(builder_id: u64, value_id: u64) -> i32 @export {
+    let s : u32 = json_slot_of(value_id)
+    if s == 0xFFFFFFFFu32 { return JSON_E_BADID }
+    let k : u8 = JSON_KIND[s]
+    if k == JSON_KIND_NULL  { return json_emit_null(builder_id) }
+    if k == JSON_KIND_FALSE { return json_emit_false(builder_id) }
+    if k == JSON_KIND_TRUE  { return json_emit_true(builder_id) }
+    if k == JSON_KIND_NUM   { return json_emit_number(builder_id, value_id) }
+    if k == JSON_KIND_STR   { return json_emit_string(builder_id, value_id) }
+    if k == JSON_KIND_ARR   { return json_emit_array(builder_id, value_id) }
+    if k == JSON_KIND_OBJ   { return json_emit_object(builder_id, value_id) }
+    return JSON_E_TYPE
+}
+
+fn json_emit_null(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 110u32)   /* n */
+    builder_push_byte(builder_id, 117u32)   /* u */
+    builder_push_byte(builder_id, 108u32)   /* l */
+    builder_push_byte(builder_id, 108u32)   /* l */
+    return JSON_OK
+}
+
+fn json_emit_true(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 116u32)   /* t */
+    builder_push_byte(builder_id, 114u32)   /* r */
+    builder_push_byte(builder_id, 117u32)   /* u */
+    builder_push_byte(builder_id, 101u32)   /* e */
+    return JSON_OK
+}
+
+fn json_emit_false(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 102u32)   /* f */
+    builder_push_byte(builder_id, 97u32)    /* a */
+    builder_push_byte(builder_id, 108u32)   /* l */
+    builder_push_byte(builder_id, 115u32)   /* s */
+    builder_push_byte(builder_id, 101u32)   /* e */
+    return JSON_OK
+}
+
+var JSON_NUM_BUF : [u8; 24]
+
+fn json_emit_number(builder_id: u64, value_id: u64) -> i32 {
+    let v_signed : i64 = json_int(value_id)
+    /* Use the bit pattern to detect sign without i64 ordering (W12). */
+    let v_bits : u64 = v_signed as u64
+    if v_bits == 0u64 {
+        builder_push_byte(builder_id, 48u32)
+        return JSON_OK
+    }
+    /* i64::MIN = 0x8000000000000000 - special case (no positive equivalent). */
+    if v_bits == 0x8000000000000000u64 {
+        builder_push_byte(builder_id, 45u32)
+        return json_emit_min_i64(builder_id)
+    }
+    let mut neg : u8 = 0u8
+    let mut v : u64 = v_bits
+    let high_bit : u64 = v_bits >> 63u64
+    if high_bit == 1u64 {
+        neg = 1u8
+        let neg_bits : u64 = 0u64 - v_bits
+        v = neg_bits
+    }
+    let mut n : u32 = 0u32
+    while v > 0u64 {
+        let d : u32 = (v % 10u64) as u32
+        JSON_NUM_BUF[n] = (48u32 + d) as u8
+        v = v / 10u64
+        n = n + 1u32
+    }
+    if neg == 1u8 { builder_push_byte(builder_id, 45u32) }
+    let mut i : u32 = n
+    while i > 0u32 {
+        i = i - 1u32
+        let c : u32 = JSON_NUM_BUF[i] as u32
+        builder_push_byte(builder_id, c)
+    }
+    return JSON_OK
+}
+
+fn json_emit_min_i64(builder_id: u64) -> i32 {
+    /* "9223372036854775808" - 19 chars - matches abs of i64::MIN */
+    builder_push_byte(builder_id, 57u32)   /* 9 */
+    builder_push_byte(builder_id, 50u32)   /* 2 */
+    builder_push_byte(builder_id, 50u32)
+    builder_push_byte(builder_id, 51u32)
+    builder_push_byte(builder_id, 51u32)
+    builder_push_byte(builder_id, 55u32)
+    builder_push_byte(builder_id, 50u32)
+    builder_push_byte(builder_id, 48u32)
+    builder_push_byte(builder_id, 51u32)
+    builder_push_byte(builder_id, 54u32)
+    builder_push_byte(builder_id, 56u32)
+    builder_push_byte(builder_id, 53u32)
+    builder_push_byte(builder_id, 52u32)
+    builder_push_byte(builder_id, 55u32)
+    builder_push_byte(builder_id, 55u32)
+    builder_push_byte(builder_id, 53u32)
+    builder_push_byte(builder_id, 56u32)
+    builder_push_byte(builder_id, 48u32)
+    builder_push_byte(builder_id, 56u32)
+    return JSON_OK
+}
+
+fn json_emit_string(builder_id: u64, value_id: u64) -> i32 {
+    let base : u64 = json_string_base(value_id)
+    let len  : u64 = json_string_len(value_id)
+    builder_push_byte(builder_id, 34u32)            /* '"' */
+    if base != 0u64 {
+        let p : *u8 = base as *u8
+        let mut i : u64 = 0u64
+        while i < len {
+            let c : u32 = p[i] as u32
+            /* Escape \, ", and control characters */
+            if c == 34u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 34u32)
+            }
+            if c == 92u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 92u32)
+            }
+            if c == 8u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 98u32)
+            }
+            if c == 9u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 116u32)
+            }
+            if c == 10u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 110u32)
+            }
+            if c == 12u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 102u32)
+            }
+            if c == 13u32 {
+                builder_push_byte(builder_id, 92u32)
+                builder_push_byte(builder_id, 114u32)
+            }
+            /* Pass through other bytes */
+            let mut needs_escape : u8 = 0u8
+            if c == 34u32 { needs_escape = 1u8 }
+            if c == 92u32 { needs_escape = 1u8 }
+            if c == 8u32  { needs_escape = 1u8 }
+            if c == 9u32  { needs_escape = 1u8 }
+            if c == 10u32 { needs_escape = 1u8 }
+            if c == 12u32 { needs_escape = 1u8 }
+            if c == 13u32 { needs_escape = 1u8 }
+            if needs_escape == 0u8 {
+                builder_push_byte(builder_id, c)
+            }
+            i = i + 1u64
+        }
+    }
+    builder_push_byte(builder_id, 34u32)            /* '"' */
+    return JSON_OK
+}
+
+fn json_emit_array(builder_id: u64, value_id: u64) -> i32 {
+    builder_push_byte(builder_id, 91u32)            /* '[' */
+    let n : u64 = json_array_len(value_id)
+    let mut i : u64 = 0u64
+    while i < n {
+        if i > 0u64 { builder_push_byte(builder_id, 44u32) }    /* ',' */
+        let child : u64 = json_array_at(value_id, i)
+        let rc : i32 = json_emit(builder_id, child)
+        if rc != JSON_OK { return rc }
+        i = i + 1u64
+    }
+    builder_push_byte(builder_id, 93u32)            /* ']' */
+    return JSON_OK
+}
+
+fn json_emit_object(builder_id: u64, value_id: u64) -> i32 {
+    builder_push_byte(builder_id, 123u32)           /* '{' */
+    let n : u64 = json_object_len(value_id)
+    let mut i : u64 = 0u64
+    while i < n {
+        if i > 0u64 { builder_push_byte(builder_id, 44u32) }
+        let k : u64 = json_object_key_at(value_id, i)
+        let v : u64 = json_object_value_at(value_id, i)
+        let rk : i32 = json_emit_string(builder_id, k)
+        if rk != JSON_OK { return rk }
+        builder_push_byte(builder_id, 58u32)        /* ':' */
+        let rv : i32 = json_emit(builder_id, v)
+        if rv != JSON_OK { return rv }
+        i = i + 1u64
+    }
+    builder_push_byte(builder_id, 125u32)           /* '}' */
+    return JSON_OK
+}
+
+fn json_node_count() -> u32 @export {
+    return JSON_COUNT
+}

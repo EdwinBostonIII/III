@@ -1,0 +1,114 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\215_sealed_channel_session_id.iii
+ *
+ * III conformance corpus 215 -- sealed_channel session-id determinism.
+ *
+ * Asserts:
+ *   1. Two parties (Alice, Bob) using identical input keypairs derive
+ *      byte-identical 8-byte session_ids (the value used as AAD on
+ *      every send/recv).
+ *   2. Distinct keypairs produce distinct session_ids (sanity).
+ *   3. The session_id is non-zero (entropy from the SHA-256 of the
+ *      derived key has at least one set bit in the first 8 bytes).
+ *   4. After sc_close, sc_session_id_byte returns 0x100 (sentinel).
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_215
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_close(channel_id: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_session_id_byte(channel_id: u64, i: u32) -> u32 from "sealed_channel.iii"
+
+fn main() -> u64 {
+    sc_reset_all()
+
+    /* Set up basepoint + two keypairs. */
+    let bp : *u8 = malloc(32u64)
+    if bp as u64 == 0u64 { return 1u64 }
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+
+    let alice_sk : *u8 = malloc(32u64)
+    let bob_sk   : *u8 = malloc(32u64)
+    let mut a : u64 = 0u64
+    while a < 32u64 {
+        alice_sk[a] = ((a + 1u64) & 0xFFu64) as u8
+        a = a + 1u64
+    }
+    let mut b : u64 = 0u64
+    while b < 32u64 {
+        bob_sk[b] = ((0x40u64 + b) & 0xFFu64) as u8
+        b = b + 1u64
+    }
+
+    let alice_pk : *u8 = malloc(32u64)
+    let bob_pk   : *u8 = malloc(32u64)
+    if x25519(alice_pk, alice_sk, bp) != 0i32 { return 2u64 }
+    if x25519(bob_pk,   bob_sk,    bp) != 0i32 { return 3u64 }
+
+    let alice_ch : u64 = sc_handshake_init(bob_pk as u64, alice_sk as u64)
+    let bob_ch   : u64 = sc_handshake_init(alice_pk as u64, bob_sk as u64)
+    if alice_ch == 0u64 { return 4u64 }
+    if bob_ch == 0u64 { return 5u64 }
+
+    /* Verify byte-identical session_ids. */
+    let mut sum : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let av : u32 = sc_session_id_byte(alice_ch, k)
+        let bv : u32 = sc_session_id_byte(bob_ch, k)
+        if av != bv { return 6u64 }
+        if av == 0x100u32 { return 7u64 }
+        sum = sum + (av & 0xFFu32)
+        k = k + 1u32
+    }
+    /* At least one byte non-zero (entropy). */
+    if sum == 0u32 { return 8u64 }
+
+    /* Open a third channel with a distinct keypair; session_id should
+     * differ from alice's. */
+    let charlie_sk : *u8 = malloc(32u64)
+    let mut c : u64 = 0u64
+    while c < 32u64 {
+        charlie_sk[c] = ((0x80u64 + c) & 0xFFu64) as u8
+        c = c + 1u64
+    }
+    let charlie_pk : *u8 = malloc(32u64)
+    if x25519(charlie_pk, charlie_sk, bp) != 0i32 { return 9u64 }
+
+    let alice2_ch : u64 = sc_handshake_init(charlie_pk as u64, alice_sk as u64)
+    if alice2_ch == 0u64 { return 10u64 }
+
+    /* alice2's session_id (with charlie) should differ from alice's
+     * (with bob). Compare byte-by-byte; expect at least one diff. */
+    let mut differs : u32 = 0u32
+    let mut q : u32 = 0u32
+    while q < 8u32 {
+        let v1 : u32 = sc_session_id_byte(alice_ch, q)
+        let v2 : u32 = sc_session_id_byte(alice2_ch, q)
+        if v1 != v2 { differs = differs + 1u32 }
+        q = q + 1u32
+    }
+    if differs == 0u32 { return 11u64 }
+
+    /* sc_close zeros the session_id; subsequent reads return sentinel. */
+    sc_close(alice_ch)
+    if sc_session_id_byte(alice_ch, 0u32) != 0x100u32 { return 12u64 }
+
+    free(bp)
+    free(alice_sk)
+    free(bob_sk)
+    free(charlie_sk)
+    free(alice_pk)
+    free(bob_pk)
+    free(charlie_pk)
+    return 99u64
+}

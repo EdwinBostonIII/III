@@ -1,0 +1,361 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\regex.iii
+ *
+ * III STDLIB - verba::regex
+ *
+ * Brzozowski-derivative regex over byte sequences.  A pattern is
+ * compiled to a small AST; matching steps a derivative for each input
+ * byte and accepts iff the final derivative is nullable.  Provably
+ * linear in input length for a given pattern: there is no
+ * backtracking and no catastrophic blow-up, because the standard
+ * algebraic identities are applied during AST construction
+ * (reduction to a small canonical form per derivative step).
+ *
+ * Phase B grammar (kept intentionally small to keep the AST and the
+ * derivative engine tractable in a single file):
+ *
+ *   atom    = byte | '.'         ('.' = any byte)
+ *   factor  = atom ('*')?
+ *   term    = factor*
+ *   regex   = term ('|' term)*
+ *
+ * Special bytes in the pattern:
+ *   '*' postfix Kleene star
+ *   '|' alternation
+ *   '.' any-byte wildcard
+ * All other bytes are literals.  Phase C will add escape syntax,
+ * grouping with '(...)', character classes, and the '+'/'?' quantifiers.
+ *
+ * AST node layout (16 bytes, packed into REGEX_NODES global byte array):
+ *   off  type  field
+ *    0   u32   kind (low byte significant)
+ *    4   u32   val   (LITERAL: byte; ANY: 0; others: 0)
+ *    8   u32   left  (child index for CONCAT/ALT/STAR)
+ *   12   u32   right (child index for CONCAT/ALT)
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 0.99.
+ *
+ * Discipline: ≤4 fn params; address-of-global confined to this file;
+ * masking on u32 ops; let-binding rather than nested parens.
+ */
+
+module verba_regex
+
+const RX_NULL_SET : u32 = 0u32       /* matches nothing                       */
+const RX_EPSILON  : u32 = 1u32       /* matches empty string                  */
+const RX_LITERAL  : u32 = 2u32       /* matches a single specific byte        */
+const RX_ANY      : u32 = 3u32       /* matches any single byte               */
+const RX_CONCAT   : u32 = 4u32       /* L · R                                 */
+const RX_ALT      : u32 = 5u32       /* L | R                                 */
+const RX_STAR     : u32 = 6u32       /* L*                                    */
+
+const RX_NODE_BYTES : u32 = 16u32
+const RX_MAX_NODES  : u32 = 4096u32
+const RX_NODES_TOTAL_BYTES : u32 = 65536u32  /* 4096 * 16 */
+
+const RX_INVALID_IDX : u32 = 0xFFFFFFFFu32
+
+/* The first two slots are reserved for the canonical singletons. */
+const RX_NULL_IDX : u32 = 0u32
+const RX_EPS_IDX  : u32 = 1u32
+
+const RX_OK : i32 = 0i32
+const RX_E_BAD : i32 = -1i32
+const RX_E_FULL : i32 = -2i32
+
+var REGEX_NODES : [u8; 65536]
+var REGEX_NODE_COUNT : u32 = 0u32
+var REGEX_INIT : u8 = 0u8
+
+/* Pattern parsing scratch. */
+var REGEX_PATTERN : u64 = 0u64
+var REGEX_PATTERN_LEN : u64 = 0u64
+var REGEX_PATTERN_POS : u64 = 0u64
+
+/* --- Byte-level node accessors --- */
+
+fn rx_load_u32_le(off: u32) -> u32 {
+    let b0 : u32 = REGEX_NODES[off + 0u32] as u32
+    let b1 : u32 = REGEX_NODES[off + 1u32] as u32
+    let b2 : u32 = REGEX_NODES[off + 2u32] as u32
+    let b3 : u32 = REGEX_NODES[off + 3u32] as u32
+    return (b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)) & 0xFFFFFFFFu32
+}
+
+fn rx_store_u32_le(off: u32, v: u32) -> u32 {
+    REGEX_NODES[off + 0u32] = (v & 0xFFu32) as u8
+    REGEX_NODES[off + 1u32] = ((v >> 8u32) & 0xFFu32) as u8
+    REGEX_NODES[off + 2u32] = ((v >> 16u32) & 0xFFu32) as u8
+    REGEX_NODES[off + 3u32] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn rx_node_kind(idx: u32) -> u32 {
+    let off : u32 = idx * RX_NODE_BYTES + 0u32
+    return rx_load_u32_le(off)
+}
+
+fn rx_node_val(idx: u32) -> u32 {
+    let off : u32 = idx * RX_NODE_BYTES + 4u32
+    return rx_load_u32_le(off)
+}
+
+fn rx_node_left(idx: u32) -> u32 {
+    let off : u32 = idx * RX_NODE_BYTES + 8u32
+    return rx_load_u32_le(off)
+}
+
+fn rx_node_right(idx: u32) -> u32 {
+    let off : u32 = idx * RX_NODE_BYTES + 12u32
+    return rx_load_u32_le(off)
+}
+
+fn rx_alloc_node_raw(kind: u32, val: u32, left: u32, right: u32) -> u32 {
+    if REGEX_NODE_COUNT >= RX_MAX_NODES { return RX_INVALID_IDX }
+    let idx : u32 = REGEX_NODE_COUNT
+    let base : u32 = idx * RX_NODE_BYTES
+    rx_store_u32_le(base + 0u32, kind)
+    rx_store_u32_le(base + 4u32, val)
+    rx_store_u32_le(base + 8u32, left)
+    rx_store_u32_le(base + 12u32, right)
+    REGEX_NODE_COUNT = REGEX_NODE_COUNT + 1u32
+    return idx
+}
+
+/* --- Module init: bind canonical NULL and EPSILON --- */
+
+fn rx_init() -> u32 {
+    if REGEX_INIT == 1u8 { return 0u32 }
+    REGEX_NODE_COUNT = 0u32
+    let n0 : u32 = rx_alloc_node_raw(RX_NULL_SET, 0u32, 0u32, 0u32)
+    let n1 : u32 = rx_alloc_node_raw(RX_EPSILON, 0u32, 0u32, 0u32)
+    REGEX_INIT = 1u8
+    return 0u32
+}
+
+/* --- Smart constructors with algebraic simplification --- */
+
+fn rx_make_literal(b: u32) -> u32 {
+    return rx_alloc_node_raw(RX_LITERAL, b & 0xFFu32, 0u32, 0u32)
+}
+
+fn rx_make_any() -> u32 {
+    return rx_alloc_node_raw(RX_ANY, 0u32, 0u32, 0u32)
+}
+
+fn rx_make_concat(l: u32, r: u32) -> u32 {
+    if l == RX_INVALID_IDX { return RX_INVALID_IDX }
+    if r == RX_INVALID_IDX { return RX_INVALID_IDX }
+    let lk : u32 = rx_node_kind(l)
+    let rk : u32 = rx_node_kind(r)
+    /* ∅ · X = ∅ ; X · ∅ = ∅ */
+    if lk == RX_NULL_SET { return RX_NULL_IDX }
+    if rk == RX_NULL_SET { return RX_NULL_IDX }
+    /* ε · X = X ; X · ε = X */
+    if lk == RX_EPSILON { return r }
+    if rk == RX_EPSILON { return l }
+    return rx_alloc_node_raw(RX_CONCAT, 0u32, l, r)
+}
+
+fn rx_make_alt(l: u32, r: u32) -> u32 {
+    if l == RX_INVALID_IDX { return RX_INVALID_IDX }
+    if r == RX_INVALID_IDX { return RX_INVALID_IDX }
+    let lk : u32 = rx_node_kind(l)
+    let rk : u32 = rx_node_kind(r)
+    /* ∅ | X = X ; X | ∅ = X */
+    if lk == RX_NULL_SET { return r }
+    if rk == RX_NULL_SET { return l }
+    /* X | X = X (only if same node index) */
+    if l == r { return l }
+    return rx_alloc_node_raw(RX_ALT, 0u32, l, r)
+}
+
+fn rx_make_star(l: u32) -> u32 {
+    if l == RX_INVALID_IDX { return RX_INVALID_IDX }
+    let lk : u32 = rx_node_kind(l)
+    /* ∅* = ε ; ε* = ε */
+    if lk == RX_NULL_SET { return RX_EPS_IDX }
+    if lk == RX_EPSILON  { return RX_EPS_IDX }
+    /* (R*)* = R* */
+    if lk == RX_STAR { return l }
+    return rx_alloc_node_raw(RX_STAR, 0u32, l, 0u32)
+}
+
+/* --- Nullability: does the regex match ε ? --- */
+
+fn rx_nullable(idx: u32) -> u8 {
+    let k : u32 = rx_node_kind(idx)
+    if k == RX_NULL_SET { return 0u8 }
+    if k == RX_EPSILON  { return 1u8 }
+    if k == RX_LITERAL  { return 0u8 }
+    if k == RX_ANY      { return 0u8 }
+    if k == RX_STAR     { return 1u8 }
+    if k == RX_CONCAT {
+        let nl : u8 = rx_nullable(rx_node_left(idx))
+        if nl == 0u8 { return 0u8 }
+        return rx_nullable(rx_node_right(idx))
+    }
+    if k == RX_ALT {
+        let nl : u8 = rx_nullable(rx_node_left(idx))
+        if nl == 1u8 { return 1u8 }
+        return rx_nullable(rx_node_right(idx))
+    }
+    return 0u8
+}
+
+/* --- Derivative: D_c(R) --- */
+
+fn rx_derivative(idx: u32, c: u32) -> u32 {
+    let k : u32 = rx_node_kind(idx)
+    if k == RX_NULL_SET { return RX_NULL_IDX }
+    if k == RX_EPSILON  { return RX_NULL_IDX }
+    if k == RX_LITERAL {
+        if rx_node_val(idx) == (c & 0xFFu32) { return RX_EPS_IDX }
+        return RX_NULL_IDX
+    }
+    if k == RX_ANY      { return RX_EPS_IDX }
+    if k == RX_STAR {
+        let inner : u32 = rx_node_left(idx)
+        let dleft : u32 = rx_derivative(inner, c)
+        return rx_make_concat(dleft, idx)
+    }
+    if k == RX_CONCAT {
+        let l : u32 = rx_node_left(idx)
+        let r : u32 = rx_node_right(idx)
+        let dl : u32 = rx_derivative(l, c)
+        let left_branch : u32 = rx_make_concat(dl, r)
+        if rx_nullable(l) == 1u8 {
+            let dr : u32 = rx_derivative(r, c)
+            return rx_make_alt(left_branch, dr)
+        }
+        return left_branch
+    }
+    if k == RX_ALT {
+        let l : u32 = rx_node_left(idx)
+        let r : u32 = rx_node_right(idx)
+        let dl : u32 = rx_derivative(l, c)
+        let dr : u32 = rx_derivative(r, c)
+        return rx_make_alt(dl, dr)
+    }
+    return RX_NULL_IDX
+}
+
+/* --- Pattern parser: recursive descent --- */
+
+fn rx_peek_byte() -> u32 {
+    let pos : u64 = REGEX_PATTERN_POS
+    if pos >= REGEX_PATTERN_LEN { return 0x100u32 }
+    let p : *u8 = REGEX_PATTERN as *u8
+    return p[pos] as u32
+}
+
+fn rx_advance() -> u32 {
+    REGEX_PATTERN_POS = REGEX_PATTERN_POS + 1u64
+    return 0u32
+}
+
+/* parse_atom: '.' | byte */
+fn rx_parse_atom() -> u32 {
+    let c : u32 = rx_peek_byte()
+    if c == 0x100u32 { return RX_INVALID_IDX }
+    if c == 0x2Au32 { return RX_INVALID_IDX }   /* '*' is postfix only      */
+    if c == 0x7Cu32 { return RX_INVALID_IDX }   /* '|' is separator         */
+    if c == 0x29u32 { return RX_INVALID_IDX }   /* ')' reserved             */
+    if c == 0x2Eu32 {
+        rx_advance()
+        return rx_make_any()
+    }
+    rx_advance()
+    return rx_make_literal(c)
+}
+
+/* parse_factor: atom ('*')? */
+fn rx_parse_factor() -> u32 {
+    let a : u32 = rx_parse_atom()
+    if a == RX_INVALID_IDX { return RX_INVALID_IDX }
+    let c : u32 = rx_peek_byte()
+    if c == 0x2Au32 {
+        rx_advance()
+        return rx_make_star(a)
+    }
+    return a
+}
+
+/* parse_term: factor* (concatenation; halts on '|', ')', or EOF) */
+fn rx_parse_term() -> u32 {
+    let mut acc : u32 = RX_EPS_IDX
+    let mut started : u8 = 0u8
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let c : u32 = rx_peek_byte()
+        if c == 0x100u32 { done = 1u8 }
+        if done == 0u8 {
+            if c == 0x7Cu32 { done = 1u8 }
+            if c == 0x29u32 { done = 1u8 }
+        }
+        if done == 0u8 {
+            let f : u32 = rx_parse_factor()
+            if f == RX_INVALID_IDX { return RX_INVALID_IDX }
+            if started == 0u8 {
+                acc = f
+                started = 1u8
+            }
+            if started == 1u8 {
+                if acc != f {
+                    acc = rx_make_concat(acc, f)
+                }
+            }
+        }
+    }
+    return acc
+}
+
+/* parse_regex: term ('|' term)* */
+fn rx_parse_regex() -> u32 {
+    let mut acc : u32 = rx_parse_term()
+    if acc == RX_INVALID_IDX { return RX_INVALID_IDX }
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let c : u32 = rx_peek_byte()
+        if c != 0x7Cu32 { done = 1u8 }
+        if done == 0u8 {
+            rx_advance()
+            let t : u32 = rx_parse_term()
+            if t == RX_INVALID_IDX { return RX_INVALID_IDX }
+            acc = rx_make_alt(acc, t)
+        }
+    }
+    return acc
+}
+
+/* --- Public API: compile + match --- */
+
+fn regex_compile(pattern: u64, len: u64) -> u32 @export {
+    rx_init()
+    REGEX_NODE_COUNT = 2u32   /* keep canonical NULL/EPS, drop everything else */
+    REGEX_PATTERN = pattern
+    REGEX_PATTERN_LEN = len
+    REGEX_PATTERN_POS = 0u64
+    let root : u32 = rx_parse_regex()
+    if root == RX_INVALID_IDX { return RX_INVALID_IDX }
+    if REGEX_PATTERN_POS != REGEX_PATTERN_LEN { return RX_INVALID_IDX }
+    return root
+}
+
+fn regex_match(root: u32, input: u64, len: u64) -> u8 @export {
+    if root == RX_INVALID_IDX { return 0u8 }
+    let mut node_idx : u32 = root
+    let p : *u8 = input as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : u32 = p[i] as u32
+        node_idx = rx_derivative(node_idx, c)
+        let k : u32 = rx_node_kind(node_idx)
+        if k == RX_NULL_SET { return 0u8 }
+        i = i + 1u64
+    }
+    return rx_nullable(node_idx)
+}
+
+fn regex_node_count() -> u32 @export {
+    return REGEX_NODE_COUNT
+}

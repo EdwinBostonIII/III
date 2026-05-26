@@ -1,0 +1,28 @@
+/* corpus/351_xii_term_term_mixed.iii  -- Termination: mixed associativity + null folds */
+
+module corpus_351_xii_term_term_mixed
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_is_canonical(t: u32) -> u8 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise_last_steps() -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* Build F.WITH(NULL, F.COMPOSE(F.COMPOSE(NULL, K02), NULL))
+     * Multiple rules fire (R016, R001, R037, R017). Terminates to K02. */
+    let null_a : u32 = xii_term_make_basis(5u8, xii_rewrite_null_form())
+    let null_b : u32 = xii_term_make_basis(5u8, xii_rewrite_null_form())
+    let null_c : u32 = xii_term_make_basis(5u8, xii_rewrite_null_form())
+    let k02 : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let inner : u32 = xii_term_make_fusion2(18u8, null_b, k02)
+    let mid : u32 = xii_term_make_fusion2(18u8, inner, null_c)
+    let t : u32 = xii_term_make_fusion2(20u8, null_a, mid)
+    let canon : u32 = xii_canonicalise(t)
+    if xii_is_canonical(canon) != 1u8 { return 1u64 }
+    if xii_canonicalise_last_steps() > 4096u32 { return 2u64 }
+    return 0u64
+}

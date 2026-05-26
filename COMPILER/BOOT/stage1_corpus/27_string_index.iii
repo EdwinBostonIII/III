@@ -1,0 +1,5 @@
+module corpus_27
+
+fn main() -> u64 {
+    return "ABCDE"[2]
+}

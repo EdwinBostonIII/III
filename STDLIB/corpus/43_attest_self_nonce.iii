@@ -1,0 +1,74 @@
+/* attest: same inputs + same nonce -> same digest;
+ *         same inputs + different nonce -> different digest */
+module corpus_c43
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn witness_init() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_append(mh: u64, cap: u64, epoch: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn attest_self(cap: u64, closure: u64, nonce: u64) -> i32 from "attest.iii"
+extern @abi(c-msvc-x64) fn attest_byte(i: u32) -> u32 from "attest.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let attest_cap : u64 = cap_attenuate(env, 0x800u64, 0u64)
+    /* Append a witness entry so the attestation has something to bind. */
+    witness_init()
+    let mh : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        mh[i] = 0xAAu8
+        i = i + 1u64
+    }
+    witness_append(mh as u64, 1u64, 1u64)
+    /* Closure: 32 bytes of 0x55 */
+    let cl : *u8 = malloc(32u64)
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        cl[j] = 0x55u8
+        j = j + 1u64
+    }
+    /* Run 1: nonce = 1 */
+    if attest_self(attest_cap, cl as u64, 1u64) != 0i32 { return 1u64 }
+    /* Save first byte for comparison */
+    let r1_b0 : u32 = attest_byte(0u32)
+    let r1_b1 : u32 = attest_byte(1u32)
+    let r1_b15 : u32 = attest_byte(15u32)
+    /* Snapshot the FULL 32-byte Run-1 digest.  attest_byte() reads the
+     * CURRENT digest, which Run 2/3 overwrite, so it must be captured
+     * now.  Used by the real "different nonce -> different digest"
+     * assertion below (the previous attest_byte(k) != attest_byte(k)
+     * loop was a tautological no-op placeholder: always false, and
+     * `differ` was never read). */
+    let r1 : *u8 = malloc(32u64)
+    let mut si : u64 = 0u64
+    while si < 32u64 {
+        r1[si] = attest_byte(si as u32) as u8
+        si = si + 1u64
+    }
+    /* Run 2: same inputs, same nonce -> identical digest */
+    if attest_self(attest_cap, cl as u64, 1u64) != 0i32 { return 2u64 }
+    if attest_byte(0u32) != r1_b0 { return 3u64 }
+    if attest_byte(1u32) != r1_b1 { return 4u64 }
+    if attest_byte(15u32) != r1_b15 { return 5u64 }
+    /* Run 3: same inputs, DIFFERENT nonce -> digest MUST differ.
+     * Real assertion (no tautology): compare the full 32-byte Run-3
+     * digest against the saved Run-1 snapshot and require at least one
+     * byte to differ.  A nonce that leaves the attestation digest
+     * unchanged is a definitive cryptographic-binding failure. */
+    if attest_self(attest_cap, cl as u64, 2u64) != 0i32 { return 6u64 }
+    let mut diff_count : u32 = 0u32
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if attest_byte(k as u32) != (r1[k] as u32) { diff_count = diff_count + 1u32 }
+        k = k + 1u64
+    }
+    free(r1)
+    free(mh)
+    free(cl)
+    /* A changed nonce must perturb at least one digest byte. */
+    if diff_count == 0u32 { return 7u64 }
+    return 99u64
+}

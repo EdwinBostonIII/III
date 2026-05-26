@@ -1,0 +1,63 @@
+/* STDLIB/iii/katabasis/ring_lattice.iii
+ *
+ * KATABASIS increment 7 -- the legal ring-transition lattice (plan 4.6).
+ * Descending beneath the OS crosses CPU privilege rings, and III permits a
+ * crossing ONLY through one of the lawful constructors (no ring may be skipped,
+ * none may be ascended without the proper door).  This module is the faithful
+ * relation: for an ordered (src, dst) ring pair it returns the single legal
+ * constructor, or NONE.  Mirrors the live PHASES/ring_lattice.c (R1 reference).
+ *
+ *   R3 -> R0   : IOCTL (iii_gate_cycle) -- the ONLY R3->R0 door
+ *   R0 -> R-1  : magic-MSR (the hoist, gated by hoist_arm)
+ *   R-1 -> R-1 : VMRUN / VMEXIT (the descent cycle)
+ *   R0 -> R-2  : SKINIT (the optional sealed re-root; highest gate)
+ *   R-1 -> R-2 : SMI intercept (observe-only)
+ *
+ * NOTE: `from` is a reserved iii keyword (the extern-from clause), so the ring
+ * parameters are named src/dst.  Pure total functions over small ids -- no
+ * metal.  KAT: corpus 601.  Ring R0.  K 1.00.
+ */
+module katabasis_ring_lattice
+
+/* Ring codes (privilege ladder; higher code = deeper / more privileged). */
+const KRL_R3  : u32 = 0u32   /* user */
+const KRL_R0  : u32 = 1u32   /* kernel (the Gate) */
+const KRL_RM1 : u32 = 2u32   /* hypervisor (the Floor) */
+const KRL_RM2 : u32 = 3u32   /* SMM (observe / optional sealed re-root) */
+const KRL_RM4 : u32 = 4u32   /* microcode / PSP (observe-only; never entered) */
+
+/* Legal ring-transition constructors (plan 4.6). */
+const KRL_C_NONE      : u32 = 0u32
+const KRL_C_IOCTL     : u32 = 1u32   /* R3->R0 */
+const KRL_C_MAGIC_MSR : u32 = 2u32   /* R0->R-1 */
+const KRL_C_VMRUN     : u32 = 3u32   /* R-1->R-1 */
+const KRL_C_SKINIT    : u32 = 4u32   /* R0->R-2 */
+const KRL_C_SMI       : u32 = 5u32   /* R-1->R-2 (observe) */
+const KRL_C_VMMCALL   : u32 = 6u32   /* guest->host within R-1 (a VMEXIT cause; see vmexit.iii) */
+
+/* === BEGIN AUTO-GENERATED FROM iii_ring_lattice.def === */
+/* GENERATED FROM iii_ring_lattice.def by gen_ring_lattice.sh -- DO NOT EDIT BY HAND. */
+/* The single legal constructor for a src->dst crossing, or NONE.  The pair is
+ * encoded as key = src*5 + dst (rings 0..4), so a flat key cascade is exact.
+ * Only the five lawful descents map to a constructor; all else is NONE -- a ring
+ * cannot be skipped (R3 reaches only R0) nor ascended through this relation. */
+fn katabasis_ring_constructor(src: u32, dst: u32) -> u32 @export {
+    let a : u32 = src
+    let b : u32 = dst
+    let key : u32 = (a * 5u32) + b
+    if key == 1u32  { return KRL_C_IOCTL }   /* R3(0) -> R0(1) */
+    if key == 7u32  { return KRL_C_MAGIC_MSR }   /* R0(1) -> RM1(2) */
+    if key == 12u32 { return KRL_C_VMRUN }   /* RM1(2) -> RM1(2) */
+    if key == 8u32  { return KRL_C_SKINIT }   /* R0(1) -> RM2(3) */
+    if key == 13u32 { return KRL_C_SMI }   /* RM1(2) -> RM2(3) */
+    return KRL_C_NONE
+}
+/* === END AUTO-GENERATED FROM iii_ring_lattice.def === */
+
+/* Is the src->dst crossing lawful (has a legal constructor)? */
+fn katabasis_ring_legal(src: u32, dst: u32) -> u8 @export {
+    let a : u32 = src
+    let b : u32 = dst
+    if katabasis_ring_constructor(a, b) == KRL_C_NONE { return 0u8 }
+    return 1u8
+}

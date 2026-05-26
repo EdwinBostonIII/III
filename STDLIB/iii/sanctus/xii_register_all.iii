@@ -1,0 +1,56 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\xii_register_all.iii
+ *
+ * III STDLIB - sanctus::xii_register_all
+ *
+ * Single entry point that orchestrates day-zero curation registration.
+ * Called once at module init (after iiis-1 boots, before any XII
+ * compilation). Registers:
+ *   - Horizon pattern metadata + templates (xii_horizon_init)
+ *   - DeltaK_compose table (xii_savings_init)
+ *   - Anti-drift table reset (xii_rewrite_tables_reset)
+ *   - Curated machine-code overrides (xii_curated_payloads_register_all,
+ *                                      xii_curated_crypto_register_all)
+ *
+ * Per DOCS/III-XII.md S17.
+ *
+ * Hexad: kind_origin. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only.
+ */
+
+module sanctus_xii_register_all
+
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_savings_init() -> i32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_tables_reset() -> i32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_curated_payloads_register_all() -> i32 from "xii_curated_payloads.iii"
+extern @abi(c-msvc-x64) fn xii_curated_crypto_register_all() -> i32 from "xii_curated_crypto.iii"
+extern @abi(c-msvc-x64) fn xii_curated_riscv_register_all() -> i32 from "xii_curated_riscv.iii"
+extern @abi(c-msvc-x64) fn xii_curated_embedded_register_all() -> i32 from "xii_curated_embedded.iii"
+extern @abi(c-msvc-x64) fn xii_curated_extended_register_all() -> i32 from "xii_curated_extended.iii"
+extern @abi(c-msvc-x64) fn xii_curated_crypto_extended_register_all() -> i32 from "xii_curated_crypto_extended.iii"
+extern @abi(c-msvc-x64) fn xii_curated_crypto_final_register_all() -> i32 from "xii_curated_crypto_final.iii"
+extern @abi(c-msvc-x64) fn xii_curated_arm64_crypto_register_all() -> i32 from "xii_curated_arm64_crypto.iii"
+
+var XII_REGISTER_DONE : u8 = 0u8
+
+fn xii_register_all() -> i32 @export {
+    if XII_REGISTER_DONE != 0u8 { return 0i32 }
+    xii_horizon_init()
+    xii_savings_init()
+    xii_rewrite_tables_reset()
+    xii_curated_payloads_register_all()
+    xii_curated_crypto_register_all()
+    xii_curated_riscv_register_all()
+    xii_curated_embedded_register_all()
+    xii_curated_extended_register_all()
+    xii_curated_crypto_extended_register_all()
+    xii_curated_crypto_final_register_all()
+    xii_curated_arm64_crypto_register_all()
+    XII_REGISTER_DONE = 1u8
+    return 0i32
+}
+
+fn xii_register_done() -> u8 @export {
+    return XII_REGISTER_DONE
+}

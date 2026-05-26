@@ -1,0 +1,7 @@
+module corpus_28
+
+extern @abi(c-msvc-x64) fn another(c: u64) -> u64 from "fake"
+
+fn main() -> u64 {
+    return 0
+}

@@ -1,0 +1,17 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\267_neg_call_arg.iii
+ *
+ * NEGATIVE-COMPILE test for cross-rule call-arg propagation.
+ *
+ * Violation: inner CALL returns kind=6 (COMPOSE); outer param expects
+ * kind=1 (FORM).  Cross-check fires; rc=14 with
+ * III_INTENT_KIND_VIOLATION marker.
+ */
+module corpus_267_neg
+
+fn _make_compose() -> u64 @returns_hexad(6u64) { return 0u64 }
+fn _wants_form(x: u64 @hexad_kind(1u64)) -> u64 { return x }
+
+fn main() -> u64 {
+    let r : u64 = _wants_form(_make_compose())
+    return r
+}

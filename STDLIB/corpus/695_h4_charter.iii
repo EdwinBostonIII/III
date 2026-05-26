@@ -1,0 +1,16 @@
+/* 695_h4_charter.iii -- H4 ("one engine") as a self-falsifying constitutional clause.
+ *
+ * Every computation is evaluated by XII (M7); confluence makes rewrite order irrelevant, so
+ * a term has exactly ONE normal form.  The one engine (the XII canonicaliser over the sealed,
+ * confluence-certified rule set) genuinely reduces, has a unique normal form, and DISTINGUISHES
+ * non-equivalent terms -- it is a real evaluator, not a collapse-everything map.  The paired
+ * verify-AND-falsify clause is folded by a terminal-gate run_charter that is GREEN iff the
+ * clause both holds on its good witness and catches its bad witness; the negative arm proves
+ * the gate goes RED on a deliberately-false canary (one term, two normal forms).
+ *
+ * Main-corpus convention: rc 99 on pass; 1..8 = which check failed. */
+module corpus_695
+
+extern @abi(c-msvc-x64) fn h4_selftest() -> u64 from "h4_charter.iii"
+
+fn main() -> u64 { return h4_selftest() }

@@ -1,0 +1,15 @@
+/* 805 -- nous Phase 4: confluence-completion acceleration.  Drives nous_completion_selftest:
+ * the completion trichotomy over synthetic critical pairs -- all pairs join + full budget
+ * => SATURATED (+ cad convergence cert); budget < pairs => GAP (promotion refused, engine
+ * unchanged); a non-joinable overlap => REFUTED.  The negative arm: a partial pair-check
+ * is NEVER SATURATED (a partial completion cannot masquerade as proven-confluent), and a
+ * non-saturating completion ships no certificate.  Exit 99 = all hold; 1..10 = failing check. */
+module corpus_805
+
+extern @abi(c-msvc-x64) fn nous_completion_selftest() -> u64 from "nous_completion.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_completion_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,4 @@
+/* 612 — galois: GF(2^8), GF(2^128), GF(p) arithmetic + Berlekamp-Massey + Lagrange. */
+module corpus_612
+extern @abi(c-msvc-x64) fn galois_selftest() -> u64 from "galois.iii"
+fn main() -> u64 { return galois_selftest() }

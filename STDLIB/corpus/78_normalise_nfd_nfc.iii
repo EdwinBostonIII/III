@@ -1,0 +1,71 @@
+/* Unicode normalize round-trip:
+ *   NFD: "café" (c, a, f, é=U+00E9) -> "café" (c, a, f, e, U+0301)
+ *   NFC: "e" + combining acute -> "é" (U+00E9)
+ */
+module corpus_78
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn normalise_nfd(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "normalise.iii"
+extern @abi(c-msvc-x64) fn normalise_nfc(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "normalise.iii"
+
+fn fill_cafe_precomposed(p: *u8) -> i32 {
+    /* "café" with composed é (U+00E9 = 0xC3 0xA9 in UTF-8) — 5 bytes */
+    p[0] = 99u8    /* c */
+    p[1] = 97u8    /* a */
+    p[2] = 102u8   /* f */
+    p[3] = 0xC3u8  /* é low byte */
+    p[4] = 0xA9u8  /* é high byte */
+    return 0i32
+}
+
+fn fill_cafe_decomposed(p: *u8) -> i32 {
+    /* "cafe" + combining acute (U+0301 = 0xCC 0x81 in UTF-8) — 6 bytes */
+    p[0] = 99u8    /* c */
+    p[1] = 97u8    /* a */
+    p[2] = 102u8   /* f */
+    p[3] = 101u8   /* e */
+    p[4] = 0xCCu8  /* combining acute low */
+    p[5] = 0x81u8  /* combining acute high */
+    return 0i32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* NFD: precomposed -> decomposed */
+    let src1 : *u8 = malloc(5u64)
+    fill_cafe_precomposed(src1)
+    let nfd_b : u64 = builder_new(a, 32u64)
+    if nfd_b == 0u64 { return 1u64 }
+    normalise_nfd(nfd_b, src1 as u64, 5u64)
+    if builder_len(nfd_b) != 6u64 { return 100u64 + builder_len(nfd_b) }
+    let nfd_out : *u8 = builder_seal(nfd_b) as *u8
+    if nfd_out[0] != 99u8  { return 2u64 }   /* c */
+    if nfd_out[1] != 97u8  { return 3u64 }   /* a */
+    if nfd_out[2] != 102u8 { return 4u64 }   /* f */
+    if nfd_out[3] != 101u8 { return 5u64 }   /* e */
+    if nfd_out[4] != 0xCCu8 { return 6u64 }  /* combining acute */
+    if nfd_out[5] != 0x81u8 { return 7u64 }
+    /* NFC: decomposed -> precomposed */
+    let src2 : *u8 = malloc(6u64)
+    fill_cafe_decomposed(src2)
+    let nfc_b : u64 = builder_new(a, 32u64)
+    if nfc_b == 0u64 { return 8u64 }
+    normalise_nfc(nfc_b, src2 as u64, 6u64)
+    if builder_len(nfc_b) != 5u64 { return 200u64 + builder_len(nfc_b) }
+    let nfc_out : *u8 = builder_seal(nfc_b) as *u8
+    if nfc_out[0] != 99u8   { return 9u64 }
+    if nfc_out[1] != 97u8   { return 10u64 }
+    if nfc_out[2] != 102u8  { return 11u64 }
+    if nfc_out[3] != 0xC3u8 { return 12u64 }
+    if nfc_out[4] != 0xA9u8 { return 13u64 }
+    free(src1)
+    free(src2)
+    arena_drop(a)
+    return 99u64
+}

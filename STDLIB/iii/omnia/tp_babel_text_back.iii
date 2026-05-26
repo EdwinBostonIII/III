@@ -1,0 +1,54 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_babel_text_back.iii
+ *
+ * Transform pattern: FORM_BABEL_TEXT → FORM_BABEL_JSON
+ * FROZEN SPEC §7B.6 slot 32; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Inverse of tp_babel_text. Replaces top-level newlines with commas and
+ * wraps the result in '{' '}' to reconstruct JSON. Round-trip is
+ * byte-equal for envelope-text produced by tp_babel_text.
+ */
+
+module omnia_tp_babel_text_back
+
+fn tp_btb_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_babel_text_back(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut in_off : u64 = 0u64
+    let mut out_off : u64 = 0u64
+    if dst_cap < src_len + 4u64 { return 0u64 }
+    /* Open brace */
+    tp_btb_emit(dst_buf, out_off, 123u8)
+    out_off = out_off + 1u64
+    let mut depth : u32 = 0u32
+    while in_off < src_len {
+        let bp : *u8 = (src + in_off) as *u8
+        let c : u8 = bp[0u64]
+        if c == 123u8 { depth = depth + 1u32 }
+        if c == 125u8 { depth = depth - 1u32 }
+        if c == 10u8 {
+            if depth == 0u32 {
+                tp_btb_emit(dst_buf, out_off, 44u8)
+                out_off = out_off + 1u64
+            }
+            if depth != 0u32 {
+                tp_btb_emit(dst_buf, out_off, c)
+                out_off = out_off + 1u64
+            }
+        }
+        if c != 10u8 {
+            tp_btb_emit(dst_buf, out_off, c)
+            out_off = out_off + 1u64
+        }
+        in_off = in_off + 1u64
+    }
+    /* Close brace */
+    tp_btb_emit(dst_buf, out_off, 125u8)
+    out_off = out_off + 1u64
+    return out_off
+}

@@ -1,0 +1,27 @@
+/* Region: create -> alloc 100 + 50 -> verify used=150, remaining=106 -> release */
+module corpus_a03
+
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_alloc(id: u64, n: u64, align: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_used(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_remaining(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_count_live() -> u32 from "region.iii"
+
+fn main() -> u64 {
+    let id : u64 = region_create(256u64)
+    if id == 0u64 { return 1u64 }
+    let p1 : u64 = region_alloc(id, 100u64, 8u64)
+    if p1 == 0u64 { return 2u64 }
+    let p2 : u64 = region_alloc(id, 50u64, 1u64)
+    if p2 == 0u64 { return 3u64 }
+    let u : u64 = region_used(id)
+    if u < 150u64 { return 4u64 }
+    let r : u64 = region_remaining(id)
+    if r > 110u64 { return 5u64 }
+    let rc : i32 = region_release(id)
+    if rc != 0i32 { return 6u64 }
+    let live : u32 = region_count_live()
+    if live != 0u32 { return 7u64 }
+    return 99u64
+}

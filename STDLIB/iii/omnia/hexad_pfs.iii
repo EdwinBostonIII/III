@@ -1,0 +1,68 @@
+/* STDLIB/iii/omnia/hexad_pfs.iii
+ *
+ * III HEXAD — §4 Representability Theorem: the six PFS bricking ops.
+ * Native .iii port of HEXAD/src/hexad_pfs.c (V1 Stage 7 hexad stdlib).
+ *
+ * Each of the six platform-firmware-security bricking operations maps to a
+ * hexad that is structurally UNrepresentable (NEG in some pillar 1..4), so the
+ * §3.3 reachability rule already excludes them.  Listed verbatim from §4.2.
+ *
+ * PFS op enum (matches HEXAD/include/iii/hexad.h):
+ *   0 none, 1 capsule_update, 2 microcode_load, 3 bootorder_set,
+ *   4 real_nvram_write, 5 me_psp_mailbox, 6 smram_write ; count = 7.
+ *
+ * Hexad: kind_federation.  Ring: R0.  K: 1.00.
+ */
+module omnia_hexad_pfs
+
+extern @abi(c-msvc-x64) fn iii_hexad_pack6(pillars_addr: u64) -> u16 from "hexad_algebra.iii"
+
+const HXP_PFS_COUNT : u32 = 7u32
+
+var HXP_PILLARS : [i32; 6]
+
+/* Fill HXP_PILLARS for PFS op (1..6); returns 1 if op is a valid PFS op.
+ * Trits not set to NEG default to ZERO (the §4.2 patterns are all NEG/ZERO). */
+fn _hxp_fill(op: u32) -> u8 {
+    HXP_PILLARS[0u64] = 0i32  HXP_PILLARS[1u64] = 0i32  HXP_PILLARS[2u64] = 0i32
+    HXP_PILLARS[3u64] = 0i32  HXP_PILLARS[4u64] = 0i32  HXP_PILLARS[5u64] = 0i32
+    if op == 1u32 { HXP_PILLARS[0u64] = -1i32  HXP_PILLARS[1u64] = -1i32  HXP_PILLARS[2u64] = -1i32  HXP_PILLARS[3u64] = -1i32  return 1u8 }
+    if op == 2u32 { HXP_PILLARS[0u64] = -1i32  HXP_PILLARS[1u64] = -1i32  HXP_PILLARS[2u64] = -1i32  return 1u8 }
+    if op == 3u32 { HXP_PILLARS[0u64] = -1i32  HXP_PILLARS[1u64] = -1i32  HXP_PILLARS[3u64] = -1i32  return 1u8 }
+    if op == 4u32 { HXP_PILLARS[0u64] = -1i32  HXP_PILLARS[2u64] = -1i32  HXP_PILLARS[3u64] = -1i32  return 1u8 }
+    if op == 5u32 { HXP_PILLARS[1u64] = -1i32  HXP_PILLARS[2u64] = -1i32  HXP_PILLARS[3u64] = -1i32  return 1u8 }
+    if op == 6u32 { HXP_PILLARS[0u64] = -1i32  HXP_PILLARS[1u64] = -1i32  HXP_PILLARS[2u64] = -1i32  HXP_PILLARS[3u64] = -1i32  HXP_PILLARS[4u64] = -1i32  return 1u8 }
+    return 0u8
+}
+
+/* The packed hexad for a PFS op (0 for none/invalid). */
+fn iii_hexad_pfs(op: u32) -> u16 @export {
+    if _hxp_fill(op) == 0u8 { return 0u16 }
+    return iii_hexad_pack6(&HXP_PILLARS as u64)
+}
+
+fn iii_hexad_pfs_count() -> u32 @export { return HXP_PFS_COUNT }
+
+/* Reverse lookup: which PFS op (1..6) packs to hexad h, or 0 (none). */
+fn iii_hexad_pfs_kind(h: u16) -> u32 @export {
+    let mut op : u32 = 1u32
+    while op < HXP_PFS_COUNT {
+        if _hxp_fill(op) == 1u8 {
+            if iii_hexad_pack6(&HXP_PILLARS as u64) == h { return op }
+        }
+        op = op + 1u32
+    }
+    return 0u32
+}
+
+/* Human-readable diagnostic name for a PFS op. */
+fn iii_hexad_pfs_name(op: u32) -> *u8 @export {
+    if op == 0u32 { return "none" as *u8 }
+    if op == 1u32 { return "capsule_update" as *u8 }
+    if op == 2u32 { return "microcode_load" as *u8 }
+    if op == 3u32 { return "bootorder_set" as *u8 }
+    if op == 4u32 { return "real_nvram_write" as *u8 }
+    if op == 5u32 { return "me_psp_mailbox" as *u8 }
+    if op == 6u32 { return "smram_write" as *u8 }
+    return "unknown" as *u8
+}

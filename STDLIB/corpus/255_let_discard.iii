@@ -1,0 +1,25 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\255_let_discard.iii
+ *
+ * III conformance corpus 255 -- `let _` discard binding.
+ *
+ * Regression test for the Phase-3-Step-1 iiis-0.1 parser fix that
+ * accepts `_` (III_TOK_UNDERSCORE) as a let-binding name.  Common
+ * pattern for evaluating an expression purely for its side effects
+ * without naming the bound slot.
+ */
+module corpus_255
+
+var SIDE_EFFECT_COUNTER : u64 = 0u64
+
+fn _side_effect() -> u64 {
+    SIDE_EFFECT_COUNTER = SIDE_EFFECT_COUNTER + 1u64
+    return 42u64
+}
+
+fn main() -> u64 {
+    let _ : u64 = _side_effect()
+    if SIDE_EFFECT_COUNTER != 1u64 { return 1u64 }
+    let _ : u64 = _side_effect()
+    if SIDE_EFFECT_COUNTER != 2u64 { return 2u64 }
+    return 99u64
+}

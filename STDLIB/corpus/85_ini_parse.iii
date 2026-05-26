@@ -1,0 +1,76 @@
+/* INI parser test:
+ *   [server]
+ *   host=example.com
+ *   port=8080
+ *   [client]
+ *   timeout=30
+ *
+ * Expected: 3 entries, server.host=example.com, server.port=8080, client.timeout=30.
+ */
+module corpus_85
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn ini_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_count(id: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_section_base(id: u64, i: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_section_len(id: u64, i: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_key_base(id: u64, i: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_key_len(id: u64, i: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_value_base(id: u64, i: u64) -> u64 from "ini.iii"
+extern @abi(c-msvc-x64) fn ini_value_len(id: u64, i: u64) -> u64 from "ini.iii"
+
+fn fill(buf: *u8) -> i32 {
+    /* "[server]\nhost=example.com\nport=8080\n[client]\ntimeout=30\n"
+     * = 9 + 17 + 10 + 9 + 11 = 56 bytes */
+    /* "[server]\n" 9 bytes */
+    buf[0] = 91u8;  buf[1] = 115u8; buf[2] = 101u8; buf[3] = 114u8
+    buf[4] = 118u8; buf[5] = 101u8; buf[6] = 114u8; buf[7] = 93u8; buf[8] = 10u8
+    /* "host=example.com\n" 17 bytes (offset 9..25) */
+    buf[9]  = 104u8; buf[10] = 111u8; buf[11] = 115u8; buf[12] = 116u8
+    buf[13] = 61u8;  buf[14] = 101u8; buf[15] = 120u8; buf[16] = 97u8
+    buf[17] = 109u8; buf[18] = 112u8; buf[19] = 108u8; buf[20] = 101u8
+    buf[21] = 46u8;  buf[22] = 99u8;  buf[23] = 111u8; buf[24] = 109u8
+    buf[25] = 10u8
+    /* "port=8080\n" 10 bytes (26..35) */
+    buf[26] = 112u8; buf[27] = 111u8; buf[28] = 114u8; buf[29] = 116u8
+    buf[30] = 61u8;  buf[31] = 56u8;  buf[32] = 48u8;  buf[33] = 56u8
+    buf[34] = 48u8;  buf[35] = 10u8
+    /* "[client]\n" 9 bytes (36..44) */
+    buf[36] = 91u8;  buf[37] = 99u8;  buf[38] = 108u8; buf[39] = 105u8
+    buf[40] = 101u8; buf[41] = 110u8; buf[42] = 116u8; buf[43] = 93u8
+    buf[44] = 10u8
+    /* "timeout=30\n" 11 bytes (45..55) */
+    buf[45] = 116u8; buf[46] = 105u8; buf[47] = 109u8; buf[48] = 101u8
+    buf[49] = 111u8; buf[50] = 117u8; buf[51] = 116u8; buf[52] = 61u8
+    buf[53] = 51u8;  buf[54] = 48u8;  buf[55] = 10u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(56u64)
+    fill(buf)
+    let id : u64 = ini_parse(a, buf as u64, 56u64)
+    if id == 0u64 { return 1u64 }
+    if ini_count(id) != 3u64 { return 100u64 + ini_count(id) }
+    /* Entry 0: section=server (6 chars), key=host (4), value=example.com (11) */
+    if ini_section_len(id, 0u64) != 6u64 { return 2u64 }
+    let s0 : *u8 = ini_section_base(id, 0u64) as *u8
+    if s0[0] != 115u8 { return 3u64 }   /* 's' */
+    if ini_key_len(id, 0u64) != 4u64 { return 4u64 }
+    if ini_value_len(id, 0u64) != 11u64 { return 5u64 }
+    let v0 : *u8 = ini_value_base(id, 0u64) as *u8
+    if v0[0] != 101u8 { return 6u64 }   /* 'e' */
+    /* Entry 2: section=client (6), key=timeout (7), value=30 (2) */
+    if ini_section_len(id, 2u64) != 6u64 { return 7u64 }
+    let s2 : *u8 = ini_section_base(id, 2u64) as *u8
+    if s2[0] != 99u8 { return 8u64 }    /* 'c' */
+    if ini_key_len(id, 2u64) != 7u64 { return 9u64 }
+    if ini_value_len(id, 2u64) != 2u64 { return 10u64 }
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

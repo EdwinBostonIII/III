@@ -1,0 +1,46 @@
+/* Isolate http_response_header_find_ci's behavior. */
+module corpus_142
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_find_ci(id: u64, name_base: u64, name_len: u64) -> i64 from "http_client.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+
+    let buf : *u8 = malloc(43u64)
+    buf[0]=72u8; buf[1]=84u8; buf[2]=84u8; buf[3]=80u8; buf[4]=47u8
+    buf[5]=49u8; buf[6]=46u8; buf[7]=49u8; buf[8]=32u8; buf[9]=50u8
+    buf[10]=48u8; buf[11]=48u8; buf[12]=32u8; buf[13]=79u8; buf[14]=75u8
+    buf[15]=13u8; buf[16]=10u8
+    buf[17]=67u8; buf[18]=111u8; buf[19]=110u8; buf[20]=116u8; buf[21]=101u8
+    buf[22]=110u8; buf[23]=116u8; buf[24]=45u8; buf[25]=76u8; buf[26]=101u8
+    buf[27]=110u8; buf[28]=103u8; buf[29]=116u8; buf[30]=104u8; buf[31]=58u8
+    buf[32]=32u8; buf[33]=53u8; buf[34]=13u8; buf[35]=10u8
+    buf[36]=13u8; buf[37]=10u8
+    buf[38]=72u8; buf[39]=101u8; buf[40]=108u8; buf[41]=108u8; buf[42]=111u8
+
+    /* Build a lookup string "Content-Length" without parsing the response. */
+    let lookup : *u8 = malloc(14u64)
+    lookup[0]=67u8;  lookup[1]=111u8; lookup[2]=110u8; lookup[3]=116u8
+    lookup[4]=101u8; lookup[5]=110u8; lookup[6]=116u8; lookup[7]=45u8
+    lookup[8]=76u8;  lookup[9]=101u8; lookup[10]=110u8; lookup[11]=103u8
+    lookup[12]=116u8; lookup[13]=104u8
+
+    /* First parse a response so HTTP_HDR_* tables are populated. */
+    let resp : u64 = http_parse_response(a, buf as u64, 43u64)
+    /* If parse_response itself segfaulted, we never get here. */
+    if resp == 0u64 { return 1u64 }
+
+    /* Now call header_find_ci directly. */
+    let idx : i64 = http_response_header_find_ci(resp, lookup as u64, 14u64)
+    /* Expect 0 (Content-Length is the only header at index 0). */
+    if idx != 0i64 { return 2u64 + (idx as u64) }
+
+    free(buf); free(lookup)
+    arena_drop(a)
+    return 99u64
+}

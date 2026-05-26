@@ -1,0 +1,53 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\either.iii
+ *
+ * III STDLIB - omnia::either
+ *
+ * Discriminated sum type Either(L, R).  Phase B: either_u32_u32 only
+ * - both halves carry u32 payloads.  Encoded as a u64 where bit 0
+ * is the tag (0 = left, 1 = right) and bits 1..32 are the payload
+ * left-shifted by one.  Lossless because u32 fits in u31 of the high
+ * portion of u64.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module omnia_either
+
+const EITHER_TAG_LEFT  : u64 = 0u64
+const EITHER_TAG_RIGHT : u64 = 1u64
+
+fn either_u32_left(v: u32) -> u64 @export {
+    return ((v as u64) << 1u64) | EITHER_TAG_LEFT
+}
+
+fn either_u32_right(v: u32) -> u64 @export {
+    return ((v as u64) << 1u64) | EITHER_TAG_RIGHT
+}
+
+fn either_u32_is_left(e: u64) -> u8 @export {
+    if (e & 1u64) == EITHER_TAG_LEFT { return 1u8 }
+    return 0u8
+}
+
+fn either_u32_is_right(e: u64) -> u8 @export {
+    if (e & 1u64) == EITHER_TAG_RIGHT { return 1u8 }
+    return 0u8
+}
+
+fn either_u32_unwrap_left_or(e: u64, default: u32) -> u32 @export {
+    if (e & 1u64) != EITHER_TAG_LEFT { return default }
+    return ((e >> 1u64) & 0xFFFFFFFFu64) as u32
+}
+
+fn either_u32_unwrap_right_or(e: u64, default: u32) -> u32 @export {
+    if (e & 1u64) != EITHER_TAG_RIGHT { return default }
+    return ((e >> 1u64) & 0xFFFFFFFFu64) as u32
+}
+
+/* Swap left/right: a quick functor-of-sorts on Either. */
+fn either_u32_swap(e: u64) -> u64 @export {
+    let tag : u64 = e & 1u64
+    let payload : u64 = (e >> 1u64) & 0xFFFFFFFFu64
+    let new_tag : u64 = tag ^ 1u64
+    return (payload << 1u64) | new_tag
+}

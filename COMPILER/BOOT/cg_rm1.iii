@@ -1,0 +1,781 @@
+/* III Stage-0 Ring -1 codegen — cg_rm1.c port to .iii.
+ * ABI-compatible with cg_rm1.h.  State is a Stage-1 singleton like the
+ * other opaque-state .iii ports in BOOT; all AST/FILE/memory access goes
+ * through the accessor surfaces.
+ */
+
+module cgrm1
+
+const RM1_OK: u32 = 0u32
+const RM1_E_NULL_ARG: u32 = 1u32
+const RM1_E_IO: u32 = 2u32
+const RM1_E_UNSUPPORTED: u32 = 3u32
+const RM1_E_NON_PIC_RELOC: u32 = 4u32
+const RM1_E_FORBIDDEN_TARGET: u32 = 5u32
+const RM1_E_BAD_ENTRY_SIG: u32 = 6u32
+const RM1_E_ONEWAY_READ: u32 = 7u32
+const RM1_E_NO_CAP_REVOKE: u32 = 8u32
+const RM1_E_SEALED: u32 = 9u32
+const RM1_E_INTERNAL: u32 = 99u32
+
+const RM1_FMT_ELF: u32 = 0u32
+const RM1_FMT_PE: u32 = 1u32
+const RM1_FRAME_RESERVE: u32 = 1024u32
+const RM1_MAX_LOCALS: u32 = 64u32
+
+const RM1_K_MODULE: u32 = 1u32
+const RM1_K_CYCLE_DECL: u32 = 3u32
+const RM1_K_FN_DECL: u32 = 4u32
+const RM1_K_SEALED: u32 = 11u32
+const RM1_K_PARAM: u32 = 12u32
+const RM1_K_STMT_LET: u32 = 20u32
+const RM1_K_STMT_WAVEFRONT: u32 = 21u32
+const RM1_K_STMT_SANCTUM_ENTER: u32 = 22u32
+const RM1_K_STMT_METAL: u32 = 23u32
+const RM1_K_STMT_FOR: u32 = 24u32
+const RM1_K_STMT_MATCH: u32 = 25u32
+const RM1_K_STMT_RETURN: u32 = 26u32
+const RM1_K_STMT_ASSIGN: u32 = 27u32
+const RM1_K_STMT_EXPR: u32 = 28u32
+const RM1_K_FORWARD_BLOCK: u32 = 29u32
+const RM1_K_MATCH_ARM: u32 = 31u32
+const RM1_K_PAT_LITERAL: u32 = 32u32
+const RM1_K_PAT_IDENT: u32 = 33u32
+const RM1_K_PAT_HEXAD: u32 = 34u32
+const RM1_K_PAT_WILDCARD: u32 = 35u32
+const RM1_K_EXPR_INT: u32 = 37u32
+const RM1_K_EXPR_HEX: u32 = 38u32
+const RM1_K_EXPR_MHASH: u32 = 39u32
+const RM1_K_EXPR_STR: u32 = 40u32
+const RM1_K_EXPR_BOOL: u32 = 41u32
+const RM1_K_EXPR_TRIT: u32 = 42u32
+const RM1_K_EXPR_HEXAD: u32 = 43u32
+const RM1_K_EXPR_UNIT: u32 = 44u32
+const RM1_K_EXPR_IDENT: u32 = 45u32
+const RM1_K_EXPR_CALL: u32 = 46u32
+const RM1_K_EXPR_FIELD: u32 = 47u32
+const RM1_K_EXPR_INDEX: u32 = 48u32
+const RM1_K_EXPR_BINARY: u32 = 49u32
+const RM1_K_EXPR_UNARY: u32 = 50u32
+const RM1_K_EXPR_BLOCK: u32 = 51u32
+const RM1_K_EXPR_MATCH: u32 = 52u32
+const RM1_K_EXPR_PAREN: u32 = 53u32
+const RM1_K_EXPR_RAW_ASM: u32 = 54u32
+const RM1_K_ARG: u32 = 57u32
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_len(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_where(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_guard(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_hex_value_lo(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_hex_value_hi(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_bool_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_str_payload_idx(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_raw_asm_str_idx(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_raw_asm_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_mhash_byte_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_call_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_call_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_sealed_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_forward_block(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_metal_asm_str_idx(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_metal_asm_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_frame_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_frame_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_pattern(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_ident_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_ident_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_literal_node(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_hexad_trit_at(ast: u64, node: u32, pillar: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_trit_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_hexad_trit_at(ast: u64, node: u32, pillar: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_string_payload_addr_c(ast: u64, idx: u32) -> u64 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_string_payload_count_c(ast: u64) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_cg_rm1_fwrite_c(out_handle: u64, addr: u64, n: u64) -> i32 from "cg_rm1_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_strlen_c(s: u64) -> u64 from "cg_rm1_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_sha_init_c() from "cg_rm1_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_sha_update_c(addr: u64, n: u64) from "cg_rm1_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_sha_snapshot_c(out32: u64) from "cg_rm1_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_write_u8_c(addr: u64, val: u32) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_write_u32_be_c(addr: u64, val: u32) -> u32 from "emit_accessors.c"
+
+var RM1_SENTINEL: [u8; 1]
+var RM1_G_AST: u64 = 0u64
+var RM1_G_SEMA: u64 = 0u64
+var RM1_G_SID: u64 = 0u64
+var RM1_G_WALLOC: u64 = 0u64
+var RM1_G_OUT: u64 = 0u64
+var RM1_G_FMT: u32 = 0u32
+var RM1_G_CONST_TIME: u32 = 0u32
+var RM1_G_SEALED: u32 = 0u32
+var RM1_G_CAP_REVOKE: u32 = 0u32
+var RM1_G_IN_ENTRY: u32 = 0u32
+var RM1_G_LOCAL_COUNT: u32 = 0u32
+var RM1_G_STACK_DEPTH: u32 = 0u32
+var RM1_G_LABEL_COUNTER: u32 = 0u32
+var RM1_G_LAST_ERROR: u32 = 0u32
+var RM1_LOCAL_OFF: [u32; 64]
+var RM1_LOCAL_LEN: [u32; 64]
+
+var RM1_MHASH_CACHE : [u8; 32]
+var RM1_ASM_DIGEST : [u8; 32]
+var RM1_TRAILER_HEX : [u8; 2] = [48u8, 48u8]
+var RM1_TRAILER_PFX : [u8; 25] = [35u8, 32u8, 73u8, 73u8, 73u8, 95u8, 67u8, 71u8, 95u8, 82u8, 77u8, 49u8, 95u8, 65u8, 83u8, 77u8, 95u8, 83u8, 72u8, 65u8, 50u8, 53u8, 54u8, 58u8, 32u8]
+const RM1_TRAILER_PFX_LEN : u64 = 25u64
+var RM1_TRAILER_NL : [u8; 1] = [10u8]
+
+var RM1_NUMBUF: [u8; 32]
+var RM1_TMPNAME: [u8; 256]
+var RM1_CREV: [u8; 14] = [105u8,105u8,105u8,95u8,99u8,97u8,112u8,95u8,114u8,101u8,118u8,111u8,107u8,101u8]
+
+
+/* inlined _strs.iiifrag */
+var RM1_SEC_TEXT_PE : [u8; 37] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 120u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 46u8, 116u8, 101u8, 120u8, 116u8, 44u8, 32u8, 34u8, 120u8, 114u8, 34u8, 10u8]
+const RM1_SEC_TEXT_PE_LEN : u64 = 37u64
+var RM1_SEC_TEXT_ELF : [u8; 48] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 120u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 46u8, 116u8, 101u8, 120u8, 116u8, 44u8, 32u8, 34u8, 97u8, 120u8, 34u8, 44u8, 32u8, 64u8, 112u8, 114u8, 111u8, 103u8, 98u8, 105u8, 116u8, 115u8, 10u8]
+const RM1_SEC_TEXT_ELF_LEN : u64 = 48u64
+var RM1_SEC_RODATA_PE : [u8; 38] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 120u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 46u8, 114u8, 111u8, 100u8, 97u8, 116u8, 97u8, 44u8, 32u8, 34u8, 114u8, 34u8, 10u8]
+const RM1_SEC_RODATA_PE_LEN : u64 = 38u64
+var RM1_SEC_RODATA_ELF : [u8; 49] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 120u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 46u8, 114u8, 111u8, 100u8, 97u8, 116u8, 97u8, 44u8, 32u8, 34u8, 97u8, 34u8, 44u8, 32u8, 64u8, 112u8, 114u8, 111u8, 103u8, 98u8, 105u8, 116u8, 115u8, 10u8]
+const RM1_SEC_RODATA_ELF_LEN : u64 = 49u64
+var RM1_PFX_LSANCTUM : [u8; 10] = [76u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 95u8]
+const RM1_PFX_LSANCTUM_LEN : u64 = 10u64
+var RM1_PFX_IIISANCTUM : [u8; 12] = [105u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 95u8]
+const RM1_PFX_IIISANCTUM_LEN : u64 = 12u64
+var RM1_PFX_XIISANCTUM : [u8; 12] = [120u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 95u8]
+const RM1_PFX_XIISANCTUM_LEN : u64 = 12u64
+var RM1_PFX_IIICAP : [u8; 8] = [105u8, 105u8, 105u8, 95u8, 99u8, 97u8, 112u8, 95u8]
+const RM1_PFX_IIICAP_LEN : u64 = 8u64
+var RM1_SYM_ONEWAY : [u8; 23] = [105u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 95u8, 111u8, 110u8, 101u8, 119u8, 97u8, 121u8, 95u8, 112u8, 111u8, 114u8, 116u8]
+const RM1_SYM_ONEWAY_LEN : u64 = 23u64
+var RM1_SYM_CAPREVOKE : [u8; 14] = [105u8, 105u8, 105u8, 95u8, 99u8, 97u8, 112u8, 95u8, 114u8, 101u8, 118u8, 111u8, 107u8, 101u8]
+const RM1_SYM_CAPREVOKE_LEN : u64 = 14u64
+var RM1_STR_LEAQ : [u8; 9] = [32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8]
+const RM1_STR_LEAQ_LEN : u64 = 9u64
+var RM1_STR_RIPCM_PCT : [u8; 9] = [40u8, 37u8, 114u8, 105u8, 112u8, 41u8, 44u8, 32u8, 37u8]
+const RM1_STR_RIPCM_PCT_LEN : u64 = 9u64
+var RM1_STR_MOVQ_LD : [u8; 9] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8]
+const RM1_STR_MOVQ_LD_LEN : u64 = 9u64
+var RM1_STR_MOVQ_PRAX_C : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8]
+const RM1_STR_MOVQ_PRAX_C_LEN : u64 = 15u64
+var RM1_STR_MOVQ_PCT : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8]
+const RM1_STR_MOVQ_PCT_LEN : u64 = 10u64
+var RM1_STR_COMMA_SP : [u8; 2] = [44u8, 32u8]
+const RM1_STR_COMMA_SP_LEN : u64 = 2u64
+var RM1_STR_RIP_PAREN : [u8; 7] = [40u8, 37u8, 114u8, 105u8, 112u8, 41u8, 10u8]
+const RM1_STR_RIP_PAREN_LEN : u64 = 7u64
+var RM1_STR_PFX_STR : [u8; 9] = [76u8, 95u8, 104u8, 118u8, 95u8, 115u8, 116u8, 114u8, 95u8]
+const RM1_STR_PFX_STR_LEN : u64 = 9u64
+var RM1_STR_PFX_MHASH : [u8; 11] = [76u8, 95u8, 104u8, 118u8, 95u8, 109u8, 104u8, 97u8, 115u8, 104u8, 95u8]
+const RM1_STR_PFX_MHASH_LEN : u64 = 11u64
+var RM1_STR_PFX_FORTOP : [u8; 13] = [76u8, 95u8, 104u8, 118u8, 95u8, 102u8, 111u8, 114u8, 95u8, 116u8, 111u8, 112u8, 95u8]
+const RM1_STR_PFX_FORTOP_LEN : u64 = 13u64
+var RM1_STR_PFX_FOREND : [u8; 13] = [76u8, 95u8, 104u8, 118u8, 95u8, 102u8, 111u8, 114u8, 95u8, 101u8, 110u8, 100u8, 95u8]
+const RM1_STR_PFX_FOREND_LEN : u64 = 13u64
+var RM1_STR_PFX_FORCONT : [u8; 18] = [76u8, 95u8, 104u8, 118u8, 95u8, 102u8, 111u8, 114u8, 95u8, 99u8, 111u8, 110u8, 116u8, 105u8, 110u8, 117u8, 101u8, 95u8]
+const RM1_STR_PFX_FORCONT_LEN : u64 = 18u64
+var RM1_STR_PFX_MATCHEND : [u8; 15] = [76u8, 95u8, 104u8, 118u8, 95u8, 109u8, 97u8, 116u8, 99u8, 104u8, 95u8, 101u8, 110u8, 100u8, 95u8]
+const RM1_STR_PFX_MATCHEND_LEN : u64 = 15u64
+var RM1_STR_PFX_SKIP : [u8; 10] = [76u8, 95u8, 104u8, 118u8, 95u8, 115u8, 107u8, 105u8, 112u8, 95u8]
+const RM1_STR_PFX_SKIP_LEN : u64 = 10u64
+var RM1_STR_CMP_RAX_RAX : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 99u8, 109u8, 112u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_CMP_RAX_RAX_LEN : u64 = 20u64
+var RM1_STR_ASCII_OPEN : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 115u8, 99u8, 105u8, 105u8, 32u8, 34u8]
+const RM1_STR_ASCII_OPEN_LEN : u64 = 12u64
+var RM1_STR_ASCII_CLOSE : [u8; 4] = [92u8, 48u8, 34u8, 10u8]
+const RM1_STR_ASCII_CLOSE_LEN : u64 = 4u64
+var RM1_WIT_CMT : [u8; 17] = [32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 68u8, 56u8, 32u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 32u8]
+var RM1_WIT_ENTRY : [u8; 5] = [101u8, 110u8, 116u8, 114u8, 121u8]
+var RM1_WIT_EXIT : [u8; 4] = [101u8, 120u8, 105u8, 116u8]
+var RM1_WIT_WIDEQ : [u8; 7] = [32u8, 119u8, 105u8, 100u8, 61u8, 48u8, 120u8]
+var RM1_WIT_PUSH : [u8; 30] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8]
+var RM1_WIT_SUBQ8 : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8, 56u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+var RM1_WIT_MOVRDI : [u8; 37] = [44u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8, 105u8, 105u8, 105u8, 95u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 95u8, 101u8, 109u8, 105u8, 116u8, 95u8, 104u8, 118u8, 10u8]
+var RM1_WIT_ADDQ8 : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 36u8, 56u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+var RM1_WIT_POP : [u8; 28] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+var RM1_STR_HDR1 : [u8; 54] = [35u8, 32u8, 73u8, 73u8, 73u8, 32u8, 83u8, 116u8, 97u8, 103u8, 101u8, 45u8, 48u8, 32u8, 82u8, 105u8, 110u8, 103u8, 32u8, 45u8, 50u8, 32u8, 99u8, 111u8, 100u8, 101u8, 103u8, 101u8, 110u8, 32u8, 111u8, 117u8, 116u8, 112u8, 117u8, 116u8, 32u8, 40u8, 83u8, 65u8, 78u8, 67u8, 84u8, 85u8, 77u8, 45u8, 115u8, 101u8, 97u8, 108u8, 101u8, 100u8, 41u8, 10u8]
+const RM1_STR_HDR1_LEN : u64 = 54u64
+var RM1_STR_HDR2 : [u8; 61] = [35u8, 32u8, 83u8, 112u8, 101u8, 99u8, 58u8, 32u8, 83u8, 80u8, 69u8, 67u8, 46u8, 88u8, 73u8, 73u8, 32u8, 83u8, 49u8, 52u8, 32u8, 43u8, 32u8, 68u8, 82u8, 84u8, 77u8, 32u8, 40u8, 73u8, 110u8, 116u8, 101u8, 108u8, 32u8, 84u8, 88u8, 84u8, 32u8, 77u8, 76u8, 69u8, 32u8, 47u8, 32u8, 84u8, 67u8, 71u8, 32u8, 68u8, 45u8, 82u8, 84u8, 77u8, 32u8, 49u8, 46u8, 48u8, 41u8, 46u8, 10u8]
+const RM1_STR_HDR2_LEN : u64 = 61u64
+var RM1_STR_ATTSYNTAX : [u8; 16] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 116u8, 116u8, 95u8, 115u8, 121u8, 110u8, 116u8, 97u8, 120u8, 10u8]
+const RM1_STR_ATTSYNTAX_LEN : u64 = 16u64
+var RM1_STR_BAL32 : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 51u8, 50u8, 10u8]
+const RM1_STR_BAL32_LEN : u64 = 15u64
+var RM1_STR_BAL16 : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 49u8, 54u8, 10u8]
+const RM1_STR_BAL16_LEN : u64 = 15u64
+var RM1_STR_BAL8 : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 56u8, 10u8]
+const RM1_STR_BAL8_LEN : u64 = 14u64
+var RM1_STR_GLOBAL : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8]
+const RM1_STR_GLOBAL_LEN : u64 = 12u64
+var RM1_STR_TYPE : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 121u8, 112u8, 101u8, 32u8]
+const RM1_STR_TYPE_LEN : u64 = 10u64
+var RM1_STR_TYPEFUNC : [u8; 12] = [44u8, 32u8, 64u8, 102u8, 117u8, 110u8, 99u8, 116u8, 105u8, 111u8, 110u8, 10u8]
+const RM1_STR_TYPEFUNC_LEN : u64 = 12u64
+var RM1_STR_SIZE : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 105u8, 122u8, 101u8, 32u8]
+const RM1_STR_SIZE_LEN : u64 = 10u64
+var RM1_STR_DOTMINUS : [u8; 4] = [44u8, 32u8, 46u8, 45u8]
+const RM1_STR_DOTMINUS_LEN : u64 = 4u64
+var RM1_STR_NL : [u8; 1] = [10u8]
+const RM1_STR_NL_LEN : u64 = 1u64
+var RM1_STR_COLONNL : [u8; 2] = [58u8, 10u8]
+const RM1_STR_COLONNL_LEN : u64 = 2u64
+var RM1_STR_GLOBAL_MHPL : [u8; 42] = [32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 95u8, 109u8, 104u8, 97u8, 115u8, 104u8, 95u8, 112u8, 108u8, 97u8, 99u8, 101u8, 104u8, 111u8, 108u8, 100u8, 101u8, 114u8, 10u8]
+const RM1_STR_GLOBAL_MHPL_LEN : u64 = 42u64
+var RM1_STR_MHPL_LBL : [u8; 31] = [105u8, 105u8, 105u8, 95u8, 115u8, 97u8, 110u8, 99u8, 116u8, 117u8, 109u8, 95u8, 109u8, 104u8, 97u8, 115u8, 104u8, 95u8, 112u8, 108u8, 97u8, 99u8, 101u8, 104u8, 111u8, 108u8, 100u8, 101u8, 114u8, 58u8, 10u8]
+const RM1_STR_MHPL_LBL_LEN : u64 = 31u64
+var RM1_STR_MHPL_CMT : [u8; 68] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 51u8, 58u8, 32u8, 51u8, 50u8, 45u8, 98u8, 121u8, 116u8, 101u8, 32u8, 122u8, 101u8, 114u8, 111u8, 32u8, 98u8, 108u8, 111u8, 98u8, 59u8, 32u8, 108u8, 105u8, 110u8, 107u8, 101u8, 114u8, 32u8, 112u8, 97u8, 116u8, 99u8, 104u8, 101u8, 115u8, 32u8, 119u8, 105u8, 116u8, 104u8, 32u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 109u8, 104u8, 97u8, 115u8, 104u8, 46u8, 32u8, 42u8, 47u8, 10u8]
+const RM1_STR_MHPL_CMT_LEN : u64 = 68u64
+var RM1_STR_MHPL_ZERO : [u8; 81] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 121u8, 116u8, 101u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 32u8, 48u8, 44u8, 48u8, 44u8, 48u8, 44u8, 48u8, 10u8]
+const RM1_STR_MHPL_ZERO_LEN : u64 = 81u64
+var RM1_STR_BYTE : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 98u8, 121u8, 116u8, 101u8, 32u8]
+const RM1_STR_BYTE_LEN : u64 = 10u64
+var RM1_STR_PROLOG : [u8; 90] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 49u8, 53u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 49u8, 52u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 49u8, 51u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 49u8, 50u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 98u8, 120u8, 10u8]
+const RM1_STR_PROLOG_LEN : u64 = 90u64
+var RM1_STR_MOVRSPRBP : [u8; 41] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 115u8, 112u8, 44u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8, 49u8, 48u8, 50u8, 52u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const RM1_STR_MOVRSPRBP_LEN : u64 = 41u64
+var RM1_STR_FRAMEZ : [u8; 119] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 50u8, 58u8, 32u8, 122u8, 101u8, 114u8, 111u8, 32u8, 108u8, 111u8, 99u8, 97u8, 108u8, 32u8, 102u8, 114u8, 97u8, 109u8, 101u8, 32u8, 40u8, 49u8, 48u8, 50u8, 52u8, 32u8, 98u8, 121u8, 116u8, 101u8, 115u8, 41u8, 32u8, 42u8, 47u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 115u8, 112u8, 44u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 49u8, 50u8, 56u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 112u8, 32u8, 115u8, 116u8, 111u8, 115u8, 113u8, 10u8]
+const RM1_STR_FRAMEZ_LEN : u64 = 119u64
+var RM1_STR_CAPV : [u8; 82] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 48u8, 58u8, 32u8, 99u8, 97u8, 112u8, 45u8, 104u8, 97u8, 110u8, 100u8, 108u8, 101u8, 32u8, 118u8, 101u8, 114u8, 105u8, 102u8, 121u8, 32u8, 42u8, 47u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 45u8, 56u8, 40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8, 105u8, 105u8, 105u8, 95u8, 99u8, 97u8, 112u8, 95u8, 118u8, 101u8, 114u8, 105u8, 102u8, 121u8, 10u8]
+const RM1_STR_CAPV_LEN : u64 = 82u64
+var RM1_STR_EPILOGUE : [u8; 113] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 98u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 49u8, 50u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 49u8, 51u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 49u8, 52u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 49u8, 53u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 116u8, 113u8, 10u8]
+const RM1_STR_EPILOGUE_LEN : u64 = 113u64
+var RM1_STR_VOLCLEAR : [u8; 158] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 100u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 115u8, 105u8, 44u8, 32u8, 37u8, 114u8, 115u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 100u8, 105u8, 44u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 56u8, 44u8, 32u8, 32u8, 37u8, 114u8, 56u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 57u8, 44u8, 32u8, 32u8, 37u8, 114u8, 57u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 49u8, 48u8, 44u8, 32u8, 37u8, 114u8, 49u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 49u8, 49u8, 44u8, 32u8, 37u8, 114u8, 49u8, 49u8, 10u8]
+const RM1_STR_VOLCLEAR_LEN : u64 = 158u64
+var RM1_STR_PXOR : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 112u8, 120u8, 111u8, 114u8, 32u8, 37u8, 120u8, 109u8, 109u8]
+const RM1_STR_PXOR_LEN : u64 = 13u64
+var RM1_STR_PXOR_COMMA : [u8; 6] = [44u8, 32u8, 37u8, 120u8, 109u8, 109u8]
+const RM1_STR_PXOR_COMMA_LEN : u64 = 6u64
+var RM1_STR_XORRAX : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_XORRAX_LEN : u64 = 20u64
+var RM1_STR_PUSHRAX : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_PUSHRAX_LEN : u64 = 15u64
+var RM1_STR_POPRAX : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_POPRAX_LEN : u64 = 14u64
+var RM1_STR_POPRCX : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const RM1_STR_POPRCX_LEN : u64 = 14u64
+var RM1_STR_POPRDX : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 10u8]
+const RM1_STR_POPRDX_LEN : u64 = 14u64
+var RM1_STR_POPRDI : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 100u8, 105u8, 10u8]
+const RM1_STR_POPRDI_LEN : u64 = 14u64
+var RM1_STR_POPRSI : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 115u8, 105u8, 10u8]
+const RM1_STR_POPRSI_LEN : u64 = 14u64
+var RM1_STR_POPR8 : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 56u8, 10u8]
+const RM1_STR_POPR8_LEN : u64 = 13u64
+var RM1_STR_POPR9 : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 57u8, 10u8]
+const RM1_STR_POPR9_LEN : u64 = 13u64
+var RM1_REG_RDI : [u8; 3] = [114u8, 100u8, 105u8]
+const RM1_REG_RDI_LEN : u64 = 3u64
+var RM1_REG_RSI : [u8; 3] = [114u8, 115u8, 105u8]
+const RM1_REG_RSI_LEN : u64 = 3u64
+var RM1_REG_RDX : [u8; 3] = [114u8, 100u8, 120u8]
+const RM1_REG_RDX_LEN : u64 = 3u64
+var RM1_REG_RCX : [u8; 3] = [114u8, 99u8, 120u8]
+const RM1_REG_RCX_LEN : u64 = 3u64
+var RM1_REG_R8 : [u8; 2] = [114u8, 56u8]
+const RM1_REG_R8_LEN : u64 = 2u64
+var RM1_REG_R9 : [u8; 2] = [114u8, 57u8]
+const RM1_REG_R9_LEN : u64 = 2u64
+var RM1_REG_RAX : [u8; 3] = [114u8, 97u8, 120u8]
+const RM1_REG_RAX_LEN : u64 = 3u64
+var RM1_STR_MOVABSQ_OPEN : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 97u8, 98u8, 115u8, 113u8, 32u8, 36u8, 48u8, 120u8]
+const RM1_STR_MOVABSQ_OPEN_LEN : u64 = 15u64
+var RM1_STR_COMMA_RAX_NL : [u8; 7] = [44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_COMMA_RAX_NL_LEN : u64 = 7u64
+var RM1_STR_COMMA_RCX_NL : [u8; 7] = [44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const RM1_STR_COMMA_RCX_NL_LEN : u64 = 7u64
+var RM1_STR_DOL_DASH : [u8; 3] = [44u8, 32u8, 45u8]
+const RM1_STR_DOL_DASH_LEN : u64 = 3u64
+var RM1_STR_PCT_RBP_NL : [u8; 7] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 10u8]
+const RM1_STR_PCT_RBP_NL_LEN : u64 = 7u64
+var RM1_STR_DASH_OPEN : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 45u8]
+const RM1_STR_DASH_OPEN_LEN : u64 = 10u64
+var RM1_STR_BPCMA_RAX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_BPCMA_RAX_LEN : u64 = 13u64
+var RM1_STR_BPCMA_RCX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const RM1_STR_BPCMA_RCX_LEN : u64 = 13u64
+var RM1_STR_ADDQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_ADDQ_LEN : u64 = 20u64
+var RM1_STR_SUBQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SUBQ_LEN : u64 = 20u64
+var RM1_STR_IMULQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 105u8, 109u8, 117u8, 108u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_IMULQ_LEN : u64 = 21u64
+var RM1_STR_IDIV : [u8; 24] = [32u8, 32u8, 32u8, 32u8, 99u8, 113u8, 116u8, 111u8, 10u8, 32u8, 32u8, 32u8, 32u8, 105u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const RM1_STR_IDIV_LEN : u64 = 24u64
+var RM1_STR_IDIVMOD : [u8; 44] = [32u8, 32u8, 32u8, 32u8, 99u8, 113u8, 116u8, 111u8, 10u8, 32u8, 32u8, 32u8, 32u8, 105u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_IDIVMOD_LEN : u64 = 44u64
+var RM1_STR_ANDQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 110u8, 100u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_ANDQ_LEN : u64 = 20u64
+var RM1_STR_ORQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_ORQ_LEN : u64 = 19u64
+var RM1_STR_XORQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_XORQ_LEN : u64 = 20u64
+var RM1_STR_SHLQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 115u8, 104u8, 108u8, 113u8, 32u8, 37u8, 99u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SHLQ_LEN : u64 = 19u64
+var RM1_STR_SHRQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 115u8, 104u8, 114u8, 113u8, 32u8, 37u8, 99u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SHRQ_LEN : u64 = 19u64
+var RM1_STR_NEGQ : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 110u8, 101u8, 103u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_NEGQ_LEN : u64 = 14u64
+var RM1_STR_NOTQ : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 110u8, 111u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_NOTQ_LEN : u64 = 14u64
+var RM1_STR_DEREF_RAX : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_DEREF_RAX_LEN : u64 = 22u64
+var RM1_STR_TESTRSTNE : [u8; 56] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_TESTRSTNE_LEN : u64 = 56u64
+var RM1_STR_TESTRSTE : [u8; 55] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_TESTRSTE_LEN : u64 = 55u64
+var RM1_STR_LAND_P1 : [u8; 56] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 100u8, 120u8, 10u8]
+const RM1_STR_LAND_P1_LEN : u64 = 56u64
+var RM1_STR_LAND_P2 : [u8; 56] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_LAND_P2_LEN : u64 = 56u64
+var RM1_STR_LAND_AND : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 110u8, 100u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_LAND_AND_LEN : u64 = 20u64
+var RM1_STR_LOR_LINE : [u8; 75] = [32u8, 32u8, 32u8, 32u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_LOR_LINE_LEN : u64 = 75u64
+var RM1_STR_CMP_RCX_RAX : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 99u8, 109u8, 112u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_CMP_RCX_RAX_LEN : u64 = 20u64
+var RM1_STR_SETE : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SETE_LEN : u64 = 34u64
+var RM1_STR_SETNE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SETNE_LEN : u64 = 35u64
+var RM1_STR_SETL : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 108u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SETL_LEN : u64 = 34u64
+var RM1_STR_SETLE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 108u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SETLE_LEN : u64 = 35u64
+var RM1_STR_SETG : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 103u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SETG_LEN : u64 = 34u64
+var RM1_STR_SETGE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 103u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_SETGE_LEN : u64 = 35u64
+var RM1_STR_INDEX_LD : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_INDEX_LD_LEN : u64 = 29u64
+var RM1_STR_INDEX_ST : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 10u8]
+const RM1_STR_INDEX_ST_LEN : u64 = 29u64
+var RM1_STR_CALLQ : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8]
+const RM1_STR_CALLQ_LEN : u64 = 10u64
+var RM1_STR_CALL_INDIR : [u8; 16] = [32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8, 42u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_CALL_INDIR_LEN : u64 = 16u64
+var RM1_STR_SUB8RSP : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8, 56u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const RM1_STR_SUB8RSP_LEN : u64 = 18u64
+var RM1_STR_ADD8RSP : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 36u8, 56u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const RM1_STR_ADD8RSP_LEN : u64 = 18u64
+var RM1_STR_MOVQRAX_DASH : [u8; 16] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 45u8]
+const RM1_STR_MOVQRAX_DASH_LEN : u64 = 16u64
+var RM1_STR_JMP_SP : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8]
+const RM1_STR_JMP_SP_LEN : u64 = 8u64
+var RM1_STR_JNE_SP : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 106u8, 110u8, 101u8, 32u8]
+const RM1_STR_JNE_SP_LEN : u64 = 8u64
+var RM1_STR_JZ_SP : [u8; 7] = [32u8, 32u8, 32u8, 32u8, 106u8, 122u8, 32u8]
+const RM1_STR_JZ_SP_LEN : u64 = 7u64
+var RM1_STR_JGE_SP : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 106u8, 103u8, 101u8, 32u8]
+const RM1_STR_JGE_SP_LEN : u64 = 8u64
+var RM1_STR_MOVQ0RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 48u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_MOVQ0RAX_LEN : u64 = 18u64
+var RM1_STR_MOVQ1RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 49u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_MOVQ1RAX_LEN : u64 = 18u64
+var RM1_STR_DOL_0_DASH : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 48u8, 44u8, 32u8, 45u8]
+const RM1_STR_DOL_0_DASH_LEN : u64 = 14u64
+var RM1_STR_ADD1RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 36u8, 49u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const RM1_STR_ADD1RAX_LEN : u64 = 18u64
+var RM1_ENAME_OK : [u8; 2] = [79u8, 75u8]
+const RM1_ENAME_OK_LEN : u64 = 2u64
+var RM1_ENAME_NULL_ARG : [u8; 8] = [78u8, 85u8, 76u8, 76u8, 95u8, 65u8, 82u8, 71u8]
+const RM1_ENAME_NULL_ARG_LEN : u64 = 8u64
+var RM1_ENAME_IO : [u8; 2] = [73u8, 79u8]
+const RM1_ENAME_IO_LEN : u64 = 2u64
+var RM1_ENAME_UNSUPPORTED : [u8; 11] = [85u8, 78u8, 83u8, 85u8, 80u8, 80u8, 79u8, 82u8, 84u8, 69u8, 68u8]
+const RM1_ENAME_UNSUPPORTED_LEN : u64 = 11u64
+var RM1_ENAME_NON_PIC_RELOC : [u8; 13] = [78u8, 79u8, 78u8, 95u8, 80u8, 73u8, 67u8, 95u8, 82u8, 69u8, 76u8, 79u8, 67u8]
+const RM1_ENAME_NON_PIC_RELOC_LEN : u64 = 13u64
+var RM1_ENAME_FORBIDDEN_TARGET : [u8; 16] = [70u8, 79u8, 82u8, 66u8, 73u8, 68u8, 68u8, 69u8, 78u8, 95u8, 84u8, 65u8, 82u8, 71u8, 69u8, 84u8]
+const RM1_ENAME_FORBIDDEN_TARGET_LEN : u64 = 16u64
+var RM1_ENAME_BAD_ENTRY_SIG : [u8; 13] = [66u8, 65u8, 68u8, 95u8, 69u8, 78u8, 84u8, 82u8, 89u8, 95u8, 83u8, 73u8, 71u8]
+const RM1_ENAME_BAD_ENTRY_SIG_LEN : u64 = 13u64
+var RM1_ENAME_ONEWAY_READ : [u8; 11] = [79u8, 78u8, 69u8, 87u8, 65u8, 89u8, 95u8, 82u8, 69u8, 65u8, 68u8]
+const RM1_ENAME_ONEWAY_READ_LEN : u64 = 11u64
+var RM1_ENAME_NO_CAP_REVOKE : [u8; 13] = [78u8, 79u8, 95u8, 67u8, 65u8, 80u8, 95u8, 82u8, 69u8, 86u8, 79u8, 75u8, 69u8]
+const RM1_ENAME_NO_CAP_REVOKE_LEN : u64 = 13u64
+var RM1_ENAME_SEALED : [u8; 6] = [83u8, 69u8, 65u8, 76u8, 69u8, 68u8]
+const RM1_ENAME_SEALED_LEN : u64 = 6u64
+var RM1_ENAME_INTERNAL : [u8; 8] = [73u8, 78u8, 84u8, 69u8, 82u8, 78u8, 65u8, 76u8]
+const RM1_ENAME_INTERNAL_LEN : u64 = 8u64
+var RM1_ENAME_UNKNOWN : [u8; 9] = [60u8, 117u8, 110u8, 107u8, 110u8, 111u8, 119u8, 110u8, 62u8]
+const RM1_ENAME_UNKNOWN_LEN : u64 = 9u64
+
+fn rm1_cg_emit_bytes(addr: u64, n: u64) -> u32 { if RM1_G_SEALED != 0u32 { RM1_G_LAST_ERROR = RM1_E_SEALED; return RM1_E_SEALED }; if n == 0u64 { return RM1_OK }; if RM1_G_OUT != 0u64 { if iii_cg_rm1_fwrite_c(RM1_G_OUT, addr, n) != 0i32 { RM1_G_LAST_ERROR = RM1_E_IO; return RM1_E_IO } }; iii_cg_rm1_sha_update_c(addr,n); return RM1_OK }
+fn rm1_cg_emit_arr(addr: u64, n: u64) -> u32 { return rm1_cg_emit_bytes(addr,n) }
+fn rm1_cg_emit_ch(ch: u32) -> u32 { RM1_NUMBUF[0] = (ch & 0xffu32) as u8; return rm1_cg_emit_bytes(&RM1_NUMBUF as u64,1u64) }
+fn rm1_cg_emit_dec(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { RM1_NUMBUF[0]=48u8; return rm1_cg_emit_bytes(&RM1_NUMBUF as u64,1u64) }; while v > 0u64 { RM1_NUMBUF[n] = (48u64 + (v % 10u64)) as u8; n = n + 1u32; v = v / 10u64 }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = RM1_NUMBUF[a]; RM1_NUMBUF[a] = RM1_NUMBUF[b]; RM1_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return rm1_cg_emit_bytes(&RM1_NUMBUF as u64, n as u64) }
+fn rm1_cg_emit_hex(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { RM1_NUMBUF[0]=48u8; return rm1_cg_emit_bytes(&RM1_NUMBUF as u64,1u64) }; while v != 0u64 { let d: u64 = v & 15u64; if d < 10u64 { RM1_NUMBUF[n] = (48u64+d) as u8 } else { RM1_NUMBUF[n] = (87u64+d) as u8 }; n = n + 1u32; v = v >> 4u64 }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = RM1_NUMBUF[a]; RM1_NUMBUF[a] = RM1_NUMBUF[b]; RM1_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return rm1_cg_emit_bytes(&RM1_NUMBUF as u64, n as u64) }
+/* NOTE: nibbles extracted via mask(&15)+shift(>>4), NOT %16/÷16: iiis-0 compiles
+ * u64 %/÷ as SIGNED idiv, so 0xFFFF..FF%16 = -1 -> (87-1)=0x56='V'.  [u64-div-signed trap; Stage 3 compiler fix pending] */
+fn rm1_emit_section_text() -> u32 { if RM1_G_FMT == RM1_FMT_PE { return rm1_cg_emit_arr(&RM1_SEC_TEXT_PE as u64, RM1_SEC_TEXT_PE_LEN) }; return rm1_cg_emit_arr(&RM1_SEC_TEXT_ELF as u64, RM1_SEC_TEXT_ELF_LEN) }
+fn rm1_emit_section_rodata() -> u32 { if RM1_G_FMT == RM1_FMT_PE { return rm1_cg_emit_arr(&RM1_SEC_RODATA_PE as u64, RM1_SEC_RODATA_PE_LEN) }; return rm1_cg_emit_arr(&RM1_SEC_RODATA_ELF as u64, RM1_SEC_RODATA_ELF_LEN) }
+fn rm1_is_sym_char(b: u32) -> u32 { if b >= 65u32 { if b <= 90u32 { return 1u32 } }; if b >= 97u32 { if b <= 122u32 { return 1u32 } }; if b >= 48u32 { if b <= 57u32 { return 1u32 } }; if b == 95u32 { return 1u32 }; return 0u32 }
+fn rm1_emit_mangled(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(RM1_G_AST); rm1_cg_emit_arr(&RM1_HV_LHV as u64,RM1_HV_LHV_LEN); let mut i: u32 = 0u32; while i < len { let b: u32 = iii_emit_buf_read_u8_c(src, (off+i) as u64); if rm1_is_sym_char(b) == 1u32 { rm1_cg_emit_ch(b) } else { rm1_cg_emit_ch(95u32) }; i = i + 1u32 }; return RM1_OK }
+fn rm1_build_mangled(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(RM1_G_AST); iii_emit_memcpy_c(&RM1_TMPNAME as u64, &RM1_HV_LHV as u64, RM1_HV_LHV_LEN); let mut k: u32 = RM1_HV_LHV_LEN as u32; let mut i: u32 = 0u32; while i < len { let b: u32 = iii_emit_buf_read_u8_c(src,(off+i) as u64); if rm1_is_sym_char(b) == 1u32 { RM1_TMPNAME[k] = b as u8 } else { RM1_TMPNAME[k] = 95u8 }; k = k + 1u32; i = i + 1u32; if k >= 255u32 { RM1_TMPNAME[k]=0u8; return k } }; RM1_TMPNAME[k]=0u8; return k }
+fn rm1_sym_is_permitted(addr: u64, n: u32) -> u32 { if n >= (RM1_HV_LHV_LEN as u32) { if iii_emit_memcmp_c(addr,&RM1_HV_LHV as u64,RM1_HV_LHV_LEN) == 0i32 { return 1u32 } }; if n >= (RM1_PFX_LSANCTUM_LEN as u32) { if iii_emit_memcmp_c(addr,&RM1_PFX_LSANCTUM as u64,RM1_PFX_LSANCTUM_LEN) == 0i32 { return 1u32 } }; if n >= (RM1_PFX_IIISANCTUM_LEN as u32) { if iii_emit_memcmp_c(addr,&RM1_PFX_IIISANCTUM as u64,RM1_PFX_IIISANCTUM_LEN) == 0i32 { return 1u32 } }; if n >= (RM1_PFX_XIISANCTUM_LEN as u32) { if iii_emit_memcmp_c(addr,&RM1_PFX_XIISANCTUM as u64,RM1_PFX_XIISANCTUM_LEN) == 0i32 { return 1u32 } }; if n >= (RM1_PFX_IIICAP_LEN as u32) { if iii_emit_memcmp_c(addr,&RM1_PFX_IIICAP as u64,RM1_PFX_IIICAP_LEN) == 0i32 { return 1u32 } }; return 0u32 }
+fn rm1_guard_symbol_load(addr: u64, n: u32) -> u32 { if rm1_sym_is_permitted(addr,n) == 0u32 { RM1_G_LAST_ERROR=RM1_E_FORBIDDEN_TARGET; return RM1_E_FORBIDDEN_TARGET }; if n == (RM1_SYM_ONEWAY_LEN as u32) { if iii_emit_memcmp_c(addr,&RM1_SYM_ONEWAY as u64,RM1_SYM_ONEWAY_LEN)==0i32 { RM1_G_LAST_ERROR=RM1_E_ONEWAY_READ; return RM1_E_ONEWAY_READ } }; return RM1_OK }
+fn rm1_emit_sym_address(addr: u64, n: u32, reg: u64, regn: u64) -> u32 { let e: u32 = rm1_guard_symbol_load(addr,n); if e != RM1_OK { return e }; rm1_cg_emit_arr(&RM1_STR_LEAQ as u64,RM1_STR_LEAQ_LEN); rm1_cg_emit_bytes(addr,n as u64); rm1_cg_emit_arr(&RM1_STR_RIPCM_PCT as u64,RM1_STR_RIPCM_PCT_LEN); rm1_cg_emit_bytes(reg,regn); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); return RM1_OK }
+fn rm1_local_slot(off: u32, len: u32) -> i32 { let src: u64 = iii_ast_source_buf(RM1_G_AST); let mut i: u32 = 0u32; while i < RM1_G_LOCAL_COUNT { if RM1_LOCAL_LEN[i] == len { if iii_emit_memcmp_c(src+(RM1_LOCAL_OFF[i] as u64), src+(off as u64), len as u64) == 0i32 { return i as i32 } }; i = i + 1u32 }; return -1i32 }
+fn rm1_local_add(off: u32, len: u32) -> u32 { if RM1_G_LOCAL_COUNT >= RM1_MAX_LOCALS { RM1_G_LAST_ERROR=RM1_E_INTERNAL; return RM1_E_INTERNAL }; RM1_LOCAL_OFF[RM1_G_LOCAL_COUNT]=off; RM1_LOCAL_LEN[RM1_G_LOCAL_COUNT]=len; RM1_G_LOCAL_COUNT = RM1_G_LOCAL_COUNT + 1u32; return RM1_OK }
+fn rm1_push_rax() -> u32 { rm1_cg_emit_arr(&RM1_STR_PUSHRAX as u64,RM1_STR_PUSHRAX_LEN); RM1_G_STACK_DEPTH=RM1_G_STACK_DEPTH+1u32; return RM1_OK }
+fn rm1_pop_reg(reg: u64, n: u64) -> u32 { rm1_cg_emit_arr(&RM1_STR_POPRAX as u64,0u64); rm1_cg_emit_arr(&RM1_STR_MOVQ_LD as u64,0u64); rm1_cg_emit_arr(&RM1_STR_POPRAX as u64,10u64); rm1_cg_emit_bytes(reg,n); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); if RM1_G_STACK_DEPTH > 0u32 { RM1_G_STACK_DEPTH=RM1_G_STACK_DEPTH-1u32 }; return RM1_OK }
+
+fn rm1_emit_movabs_rax(v: u64) -> u32 { rm1_cg_emit_arr(&RM1_STR_MOVABSQ_OPEN as u64,RM1_STR_MOVABSQ_OPEN_LEN); rm1_cg_emit_hex(v); rm1_cg_emit_arr(&RM1_STR_COMMA_RAX_NL as u64,RM1_STR_COMMA_RAX_NL_LEN); return RM1_OK }
+fn rm1_emit_movabs_rcx(v: u64) -> u32 { rm1_cg_emit_arr(&RM1_STR_MOVABSQ_OPEN as u64,RM1_STR_MOVABSQ_OPEN_LEN); rm1_cg_emit_hex(v); rm1_cg_emit_arr(&RM1_STR_COMMA_RCX_NL as u64,RM1_STR_COMMA_RCX_NL_LEN); return RM1_OK }
+fn rm1_emit_load_slot(slot: u32, reg: u64, regn: u64) -> u32 { rm1_cg_emit_arr(&RM1_STR_DASH_OPEN as u64,RM1_STR_DASH_OPEN_LEN); rm1_cg_emit_dec(((slot+1u32)*8u32) as u64); rm1_cg_emit_arr(&RM1_STR_PCT_RBP_NL as u64,6u64); rm1_cg_emit_arr(&RM1_STR_COMMA_SP as u64,RM1_STR_COMMA_SP_LEN); rm1_cg_emit_ch(37u32); rm1_cg_emit_bytes(reg,regn); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); return RM1_OK }
+fn rm1_emit_store_rax_slot(slot: u32) -> u32 { rm1_cg_emit_arr(&RM1_STR_MOVQRAX_DASH as u64,RM1_STR_MOVQRAX_DASH_LEN); rm1_cg_emit_dec(((slot+1u32)*8u32) as u64); rm1_cg_emit_arr(&RM1_STR_PCT_RBP_NL as u64,6u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); return RM1_OK }
+fn rm1_emit_store_rcx_slot(slot: u32) -> u32 { rm1_cg_emit_arr(&RM1_STR_MOVQ_PCT as u64,RM1_STR_MOVQ_PCT_LEN); rm1_cg_emit_arr(&RM1_REG_RCX as u64,RM1_REG_RCX_LEN); rm1_cg_emit_arr(&RM1_STR_COMMA_SP as u64,RM1_STR_COMMA_SP_LEN); rm1_cg_emit_ch(45u32); rm1_cg_emit_dec(((slot+1u32)*8u32) as u64); rm1_cg_emit_arr(&RM1_STR_BPCMA_RCX as u64,7u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); return RM1_OK }
+fn rm1_emit_bool_setcc(op: u32) -> u32 { rm1_cg_emit_arr(&RM1_STR_CMP_RCX_RAX as u64,RM1_STR_CMP_RCX_RAX_LEN); if op == 11u32 { rm1_cg_emit_arr(&RM1_STR_SETE as u64,RM1_STR_SETE_LEN) }; if op == 12u32 { rm1_cg_emit_arr(&RM1_STR_SETNE as u64,RM1_STR_SETNE_LEN) }; if op == 13u32 { rm1_cg_emit_arr(&RM1_STR_SETL as u64,RM1_STR_SETL_LEN) }; if op == 14u32 { rm1_cg_emit_arr(&RM1_STR_SETLE as u64,RM1_STR_SETLE_LEN) }; if op == 15u32 { rm1_cg_emit_arr(&RM1_STR_SETG as u64,RM1_STR_SETG_LEN) }; if op == 16u32 { rm1_cg_emit_arr(&RM1_STR_SETGE as u64,RM1_STR_SETGE_LEN) }; return RM1_OK }
+fn rm1_pack_hexad_expr(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_expr_hexad_trit_at(RM1_G_AST,node,i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
+fn rm1_pack_hexad_pat(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_pat_hexad_trit_at(RM1_G_AST,node,i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
+
+fn rm1_emit_expr(node: u32) -> u32 {
+    if node == 0u32 { return RM1_OK }
+    let k: u32 = iii_ast_node_kind(RM1_G_AST,node)
+    if k == RM1_K_EXPR_INT { rm1_emit_movabs_rax(iii_ast_expr_int_u64(RM1_G_AST,node)); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_HEX { let lo: u64 = iii_ast_hex_value_lo(RM1_G_AST,node) as u64; let hi: u64 = iii_ast_hex_value_hi(RM1_G_AST,node) as u64; rm1_emit_movabs_rax(lo | (hi << 32u64)); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_BOOL { if iii_ast_bool_value(RM1_G_AST,node) != 0u32 { rm1_cg_emit_arr(&RM1_STR_MOVQ1RAX as u64,RM1_STR_MOVQ1RAX_LEN) } else { rm1_cg_emit_arr(&RM1_STR_MOVQ0RAX as u64,RM1_STR_MOVQ0RAX_LEN) }; rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_TRIT { rm1_emit_movabs_rax(iii_ast_expr_trit_value(RM1_G_AST,node) as u64); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_UNIT { rm1_cg_emit_arr(&RM1_STR_XORRAX as u64,RM1_STR_XORRAX_LEN); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_HEXAD { rm1_emit_movabs_rax(rm1_pack_hexad_expr(node)); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_STR { rm1_cg_emit_arr(&RM1_STR_PFX_STR as u64,0u64); let idx: u32 = iii_ast_str_payload_idx(RM1_G_AST,node); iii_emit_memcpy_c(&RM1_TMPNAME as u64,&RM1_STR_PFX_STR as u64,RM1_STR_PFX_STR_LEN); let mut off: u32 = RM1_STR_PFX_STR_LEN as u32; let mut v: u32 = idx; let mut n: u32 = 0u32; if v == 0u32 { RM1_TMPNAME[off]=48u8; off=off+1u32 } else { while v > 0u32 { RM1_NUMBUF[n]=(48u32+(v%10u32)) as u8; n=n+1u32; v=v/10u32 }; while n>0u32 { n=n-1u32; RM1_TMPNAME[off]=RM1_NUMBUF[n]; off=off+1u32 } }; rm1_emit_sym_address(&RM1_TMPNAME as u64,off,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_push_rax(); return RM1_G_LAST_ERROR }
+    if k == RM1_K_EXPR_IDENT { let no: u32 = iii_ast_ident_name_offset(RM1_G_AST,node); let nl: u32 = iii_ast_ident_name_length(RM1_G_AST,node); let s: i32 = rm1_local_slot(no,nl); if s >= 0i32 { rm1_emit_load_slot(s as u32,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_push_rax(); return RM1_OK }; let l: u32 = rm1_build_mangled(no,nl); let e: u32 = rm1_emit_sym_address(&RM1_TMPNAME as u64,l,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); if e != RM1_OK { return e }; rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_PAREN { return rm1_emit_expr(iii_ast_paren_inner(RM1_G_AST,node)) }
+    if k == RM1_K_EXPR_UNARY { let e0: u32 = rm1_emit_expr(iii_ast_unary_operand(RM1_G_AST,node)); if e0 != RM1_OK { return e0 }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let op: u32 = iii_ast_unary_op(RM1_G_AST,node); if op == 1u32 { rm1_cg_emit_arr(&RM1_STR_NEGQ as u64,RM1_STR_NEGQ_LEN) }; if op == 2u32 { rm1_cg_emit_arr(&RM1_STR_TESTRSTE as u64,RM1_STR_TESTRSTE_LEN) }; if op == 3u32 { rm1_cg_emit_arr(&RM1_STR_NOTQ as u64,RM1_STR_NOTQ_LEN) }; if op == 4u32 { rm1_cg_emit_arr(&RM1_STR_DEREF_RAX as u64,RM1_STR_DEREF_RAX_LEN) }; rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_BINARY { let e1: u32 = rm1_emit_expr(iii_ast_binary_lhs(RM1_G_AST,node)); if e1 != RM1_OK { return e1 }; let e2: u32 = rm1_emit_expr(iii_ast_binary_rhs(RM1_G_AST,node)); if e2 != RM1_OK { return e2 }; rm1_pop_reg(&RM1_REG_RCX as u64,RM1_REG_RCX_LEN); rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let op: u32 = iii_ast_binary_op(RM1_G_AST,node); if op == 1u32 { rm1_cg_emit_arr(&RM1_STR_ADDQ as u64,RM1_STR_ADDQ_LEN) }; if op == 2u32 { rm1_cg_emit_arr(&RM1_STR_SUBQ as u64,RM1_STR_SUBQ_LEN) }; if op == 3u32 { rm1_cg_emit_arr(&RM1_STR_IMULQ as u64,RM1_STR_IMULQ_LEN) }; if op == 4u32 { rm1_cg_emit_arr(&RM1_STR_IDIV as u64,RM1_STR_IDIV_LEN) }; if op == 5u32 { rm1_cg_emit_arr(&RM1_STR_IDIVMOD as u64,RM1_STR_IDIVMOD_LEN) }; if op == 6u32 { rm1_cg_emit_arr(&RM1_STR_ANDQ as u64,RM1_STR_ANDQ_LEN) }; if op == 7u32 { rm1_cg_emit_arr(&RM1_STR_ORQ as u64,RM1_STR_ORQ_LEN) }; if op == 8u32 { rm1_cg_emit_arr(&RM1_STR_XORQ as u64,RM1_STR_XORQ_LEN) }; if op == 9u32 { rm1_cg_emit_arr(&RM1_STR_SHLQ as u64,RM1_STR_SHLQ_LEN) }; if op == 10u32 { rm1_cg_emit_arr(&RM1_STR_SHRQ as u64,RM1_STR_SHRQ_LEN) }; if op >= 11u32 { if op <= 16u32 { rm1_emit_bool_setcc(op) } }; if op == 17u32 { rm1_cg_emit_arr(&RM1_STR_LAND_P1 as u64,RM1_STR_LAND_P1_LEN); rm1_cg_emit_arr(&RM1_STR_LAND_P2 as u64,RM1_STR_LAND_P2_LEN); rm1_cg_emit_arr(&RM1_STR_LAND_AND as u64,RM1_STR_LAND_AND_LEN) }; if op == 18u32 { rm1_cg_emit_arr(&RM1_STR_LOR_LINE as u64,RM1_STR_LOR_LINE_LEN) }; rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_CALL { return rm1_emit_call(node) }
+    if k == RM1_K_EXPR_BLOCK { return rm1_emit_block(node) }
+    if k == RM1_K_EXPR_FIELD { let obj: u32 = iii_ast_field_object(RM1_G_AST,node); if iii_ast_node_kind(RM1_G_AST,obj) != RM1_K_EXPR_IDENT { RM1_G_LAST_ERROR=RM1_E_UNSUPPORTED; return RM1_E_UNSUPPORTED }; rm1_cg_emit_arr(&RM1_STR_LEAQ as u64,RM1_STR_LEAQ_LEN); rm1_emit_field_label(obj,iii_ast_field_name_offset(RM1_G_AST,node),iii_ast_field_name_length(RM1_G_AST,node)); rm1_cg_emit_arr(&RM1_STR_RIPCM_PCT as u64,RM1_STR_RIPCM_PCT_LEN); rm1_cg_emit_arr(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_INDEX { let e3: u32 = rm1_emit_expr(iii_ast_index_object(RM1_G_AST,node)); if e3 != RM1_OK { return e3 }; let e4: u32 = rm1_emit_expr(iii_ast_index_index(RM1_G_AST,node)); if e4 != RM1_OK { return e4 }; rm1_pop_reg(&RM1_REG_RCX as u64,RM1_REG_RCX_LEN); rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_INDEX_LD as u64,RM1_STR_INDEX_LD_LEN); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_MHASH { rm1_emit_section_rodata(); rm1_emit_mhash_data_label(node); rm1_emit_section_text(); iii_emit_memcpy_c(&RM1_TMPNAME as u64,&RM1_STR_PFX_MHASH as u64,RM1_STR_PFX_MHASH_LEN); let mut o: u32 = RM1_STR_PFX_MHASH_LEN as u32; let mut v2: u32 = node; let mut n2: u32 = 0u32; if v2==0u32 { RM1_TMPNAME[o]=48u8; o=o+1u32 } else { while v2>0u32 { RM1_NUMBUF[n2]=(48u32+(v2%10u32)) as u8; n2=n2+1u32; v2=v2/10u32 }; while n2>0u32 { n2=n2-1u32; RM1_TMPNAME[o]=RM1_NUMBUF[n2]; o=o+1u32 } }; rm1_emit_sym_address(&RM1_TMPNAME as u64,o,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_push_rax(); return RM1_G_LAST_ERROR }
+    if k == RM1_K_EXPR_RAW_ASM { let p: u64 = iii_ast_source_buf(RM1_G_AST) + (iii_ast_raw_asm_str_idx(RM1_G_AST,node) as u64); rm1_cg_emit_bytes(p,iii_ast_raw_asm_len(RM1_G_AST,node) as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_cg_emit_arr(&RM1_STR_MOVQ0RAX as u64,RM1_STR_MOVQ0RAX_LEN); rm1_push_rax(); return RM1_OK }
+    if k == RM1_K_EXPR_MATCH { return rm1_emit_match_expr(node) }
+    RM1_G_LAST_ERROR = RM1_E_UNSUPPORTED; return RM1_E_UNSUPPORTED
+}
+
+fn rm1_emit_field_label(obj: u32, foff: u32, flen: u32) -> u32 { let oo: u32 = iii_ast_ident_name_offset(RM1_G_AST,obj); let ol: u32 = iii_ast_ident_name_length(RM1_G_AST,obj); rm1_emit_mangled(oo,ol); rm1_cg_emit_ch(95u32); rm1_cg_emit_ch(95u32); let src: u64 = iii_ast_source_buf(RM1_G_AST); let mut i: u32 = 0u32; while i < flen { let b: u32 = iii_emit_buf_read_u8_c(src,(foff+i) as u64); if rm1_is_sym_char(b)==1u32 { rm1_cg_emit_ch(b) } else { rm1_cg_emit_ch(95u32) }; i=i+1u32 }; return RM1_OK }
+fn rm1_emit_mhash_data_label(node: u32) -> u32 { rm1_cg_emit_arr(&RM1_STR_BAL32 as u64,RM1_STR_BAL32_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_MHASH as u64,RM1_STR_PFX_MHASH_LEN); rm1_cg_emit_dec(node as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); rm1_cg_emit_arr(&RM1_STR_BYTE as u64,RM1_STR_BYTE_LEN); let mut i: u32 = 0u32; while i < 32u32 { if i != 0u32 { rm1_cg_emit_arr(&RM1_STR_COMMA_SP as u64,RM1_STR_COMMA_SP_LEN) }; rm1_cg_emit_dec(iii_ast_mhash_byte_at(RM1_G_AST,node,i) as u64); i=i+1u32 }; rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); return RM1_OK }
+fn rm1_emit_pattern_compare(pat: u32) -> u32 { let k: u32 = iii_ast_node_kind(RM1_G_AST,pat); if k == RM1_K_PAT_WILDCARD { rm1_cg_emit_arr(&RM1_STR_CMP_RAX_RAX as u64,RM1_STR_CMP_RAX_RAX_LEN); return RM1_OK }; if k == RM1_K_PAT_IDENT { rm1_cg_emit_arr(&RM1_STR_CMP_RAX_RAX as u64,RM1_STR_CMP_RAX_RAX_LEN); return RM1_OK }; if k == RM1_K_PAT_LITERAL { let lit: u32 = iii_ast_pat_literal_node(RM1_G_AST,pat); let lk: u32 = iii_ast_node_kind(RM1_G_AST,lit); let mut v: u64 = 0u64; if lk == RM1_K_EXPR_INT { v=iii_ast_expr_int_u64(RM1_G_AST,lit) }; if lk == RM1_K_EXPR_HEX { v=(iii_ast_hex_value_lo(RM1_G_AST,lit) as u64) | ((iii_ast_hex_value_hi(RM1_G_AST,lit) as u64)<<32u64) }; if lk == RM1_K_EXPR_BOOL { v=iii_ast_bool_value(RM1_G_AST,lit) as u64 }; if lk == RM1_K_EXPR_TRIT { v=iii_ast_expr_trit_value(RM1_G_AST,lit) as u64 }; rm1_emit_movabs_rcx(v); rm1_cg_emit_arr(&RM1_STR_CMP_RCX_RAX as u64,RM1_STR_CMP_RCX_RAX_LEN); return RM1_OK }; if k == RM1_K_PAT_HEXAD { rm1_emit_movabs_rcx(rm1_pack_hexad_pat(pat)); rm1_cg_emit_arr(&RM1_STR_CMP_RCX_RAX as u64,RM1_STR_CMP_RCX_RAX_LEN); return RM1_OK }; RM1_G_LAST_ERROR=RM1_E_UNSUPPORTED; return RM1_E_UNSUPPORTED }
+fn rm1_emit_pattern_bind(pat: u32) -> u32 { if iii_ast_node_kind(RM1_G_AST,pat) == RM1_K_PAT_IDENT { rm1_local_add(iii_ast_pat_ident_name_off(RM1_G_AST,pat),iii_ast_pat_ident_name_len(RM1_G_AST,pat)); rm1_emit_store_rax_slot(RM1_G_LOCAL_COUNT-1u32) }; return RM1_OK }
+
+fn rm1_emit_call(node: u32) -> u32 { let ac: u32 = iii_ast_call_arg_count(RM1_G_AST,node); let mut i: u32 = 0u32; while i < ac { let a: u32 = iii_ast_call_arg_at(RM1_G_AST,node,i); if iii_ast_node_kind(RM1_G_AST,a)==RM1_K_ARG { let e: u32 = rm1_emit_expr(iii_ast_arg_value(RM1_G_AST,a)); if e != RM1_OK { return e } }; i=i+1u32 }; let mut r: u32 = ac; if r > 6u32 { r=6u32 }; i=0u32; while i < r { let idx: u32 = r - 1u32 - i; if idx==0u32 { rm1_pop_reg(&RM1_REG_RDI as u64,RM1_REG_RDI_LEN) }; if idx==1u32 { rm1_pop_reg(&RM1_REG_RSI as u64,RM1_REG_RSI_LEN) }; if idx==2u32 { rm1_pop_reg(&RM1_REG_RDX as u64,RM1_REG_RDX_LEN) }; if idx==3u32 { rm1_pop_reg(&RM1_REG_RCX as u64,RM1_REG_RCX_LEN) }; if idx==4u32 { rm1_pop_reg(&RM1_REG_R8 as u64,RM1_REG_R8_LEN) }; if idx==5u32 { rm1_pop_reg(&RM1_REG_R9 as u64,RM1_REG_R9_LEN) }; i=i+1u32 }; let mut pad: u32 = 0u32; if (RM1_G_STACK_DEPTH & 1u32) != 0u32 { pad=1u32; rm1_cg_emit_arr(&RM1_STR_SUB8RSP as u64,RM1_STR_SUB8RSP_LEN); RM1_G_STACK_DEPTH=RM1_G_STACK_DEPTH+1u32 }; let cal: u32 = iii_ast_call_callee(RM1_G_AST,node); if iii_ast_node_kind(RM1_G_AST,cal)==RM1_K_EXPR_IDENT { let no: u32 = iii_ast_ident_name_offset(RM1_G_AST,cal); let nl: u32 = iii_ast_ident_name_length(RM1_G_AST,cal); let l: u32 = rm1_build_mangled(no,nl); if rm1_sym_is_permitted(&RM1_TMPNAME as u64,l)==0u32 { RM1_G_LAST_ERROR=RM1_E_FORBIDDEN_TARGET; return RM1_E_FORBIDDEN_TARGET }; let src: u64 = iii_ast_source_buf(RM1_G_AST); if nl == (RM1_SYM_CAPREVOKE_LEN as u32) { if iii_emit_memcmp_c(src+(no as u64),&RM1_CREV as u64,RM1_SYM_CAPREVOKE_LEN)==0i32 { RM1_G_CAP_REVOKE=1u32 } }; rm1_cg_emit_arr(&RM1_STR_CALLQ as u64,RM1_STR_CALLQ_LEN); rm1_cg_emit_bytes(&RM1_TMPNAME as u64,l as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN) } else { let e: u32 = rm1_emit_expr(cal); if e != RM1_OK { return e }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_CALL_INDIR as u64,RM1_STR_CALL_INDIR_LEN) }; if pad != 0u32 { rm1_cg_emit_arr(&RM1_STR_ADD8RSP as u64,RM1_STR_ADD8RSP_LEN); RM1_G_STACK_DEPTH=RM1_G_STACK_DEPTH-1u32 }; rm1_push_rax(); return RM1_OK }
+
+fn rm1_emit_match_expr(node: u32) -> u32 { let end: u32 = RM1_G_LABEL_COUNTER; RM1_G_LABEL_COUNTER=RM1_G_LABEL_COUNTER+1u32; let e: u32 = rm1_emit_expr(iii_ast_match_expr_scrutinee(RM1_G_AST,node)); if e != RM1_OK { return e }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let scrut: u32 = RM1_G_LOCAL_COUNT; RM1_G_LOCAL_COUNT=RM1_G_LOCAL_COUNT+1u32; rm1_emit_store_rax_slot(scrut); let cnt: u32 = iii_ast_match_expr_arm_count(RM1_G_AST,node); let mut i: u32 = 0u32; while i < cnt { let arm: u32 = iii_ast_match_expr_arm_at(RM1_G_AST,node,i); let skip: u32 = RM1_G_LABEL_COUNTER; RM1_G_LABEL_COUNTER=RM1_G_LABEL_COUNTER+1u32; rm1_emit_load_slot(scrut,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let ep: u32 = rm1_emit_pattern_compare(iii_ast_match_arm_pattern(RM1_G_AST,arm)); if ep != RM1_OK { return ep }; rm1_cg_emit_arr(&RM1_STR_JNE_SP as u64,RM1_STR_JNE_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_SKIP as u64,RM1_STR_PFX_SKIP_LEN); rm1_cg_emit_dec(skip as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_emit_pattern_bind(iii_ast_match_arm_pattern(RM1_G_AST,arm)); let guard: u32 = iii_ast_match_arm_guard(RM1_G_AST,arm); if guard != 0u32 { let eg: u32 = rm1_emit_expr(guard); if eg != RM1_OK { return eg }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_TESTRSTNE as u64,20u64); rm1_cg_emit_arr(&RM1_STR_JZ_SP as u64,RM1_STR_JZ_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_SKIP as u64,RM1_STR_PFX_SKIP_LEN); rm1_cg_emit_dec(skip as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN) }; let eb: u32 = rm1_emit_expr(iii_ast_match_arm_body(RM1_G_AST,arm)); if eb != RM1_OK { return eb }; rm1_cg_emit_arr(&RM1_STR_JMP_SP as u64,RM1_STR_JMP_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_MATCHEND as u64,RM1_STR_PFX_MATCHEND_LEN); rm1_cg_emit_dec(end as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_SKIP as u64,RM1_STR_PFX_SKIP_LEN); rm1_cg_emit_dec(skip as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); i=i+1u32 }; rm1_cg_emit_arr(&RM1_STR_MOVQ0RAX as u64,RM1_STR_MOVQ0RAX_LEN); rm1_push_rax(); rm1_cg_emit_arr(&RM1_STR_PFX_MATCHEND as u64,RM1_STR_PFX_MATCHEND_LEN); rm1_cg_emit_dec(end as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); return RM1_OK }
+
+fn rm1_emit_stmt(node: u32) -> u32 {
+    if node == 0u32 { return RM1_OK }
+    let k: u32 = iii_ast_node_kind(RM1_G_AST,node)
+    if k == RM1_K_STMT_LET { let e: u32 = rm1_emit_expr(iii_ast_let_value(RM1_G_AST,node)); if e != RM1_OK { return e }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_local_add(iii_ast_let_name_off(RM1_G_AST,node),iii_ast_let_name_len(RM1_G_AST,node)); rm1_emit_store_rax_slot(RM1_G_LOCAL_COUNT-1u32); return RM1_OK }
+    if k == RM1_K_STMT_EXPR { let e2: u32 = rm1_emit_expr(iii_ast_expr_stmt_expr(RM1_G_AST,node)); if e2 != RM1_OK { return e2 }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); return RM1_OK }
+    if k == RM1_K_STMT_RETURN { let rv: u32 = iii_ast_return_value(RM1_G_AST,node); if rv != 0u32 { let er: u32 = rm1_emit_expr(rv); if er != RM1_OK { return er }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN) } else { rm1_cg_emit_arr(&RM1_STR_XORRAX as u64,RM1_STR_XORRAX_LEN) }; rm1_cg_emit_arr((&RM1_HV_EPILOG_FULL as u64) + 20u64, 43u64); return RM1_OK }
+    if k == RM1_K_STMT_ASSIGN { return rm1_emit_assign(node) }
+    if k == RM1_K_STMT_FOR { return rm1_emit_for(node) }
+    if k == RM1_K_STMT_WAVEFRONT { let c: u32 = iii_ast_wavefront_node_count(RM1_G_AST,node); let mut i: u32 = 0u32; while i < c { let ew: u32 = rm1_emit_stmt(iii_ast_wavefront_node_at(RM1_G_AST,node,i)); if ew != RM1_OK { return ew }; i=i+1u32 }; return RM1_OK }
+    if k == RM1_K_STMT_SANCTUM_ENTER { rm1_local_add(iii_ast_sanctum_enter_frame_off(RM1_G_AST,node),iii_ast_sanctum_enter_frame_len(RM1_G_AST,node)); rm1_cg_emit_arr(&RM1_STR_DOL_0_DASH as u64,RM1_STR_DOL_0_DASH_LEN); rm1_cg_emit_dec((RM1_G_LOCAL_COUNT*8u32) as u64); rm1_cg_emit_arr(&RM1_STR_PCT_RBP_NL as u64,RM1_STR_PCT_RBP_NL_LEN); let es: u32 = rm1_emit_block(iii_ast_sanctum_enter_body(RM1_G_AST,node)); if es != RM1_OK { return es }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); return RM1_OK }
+    if k == RM1_K_STMT_METAL { let p: u64 = iii_ast_source_buf(RM1_G_AST)+(iii_ast_metal_asm_str_idx(RM1_G_AST,node) as u64); rm1_cg_emit_bytes(p,iii_ast_metal_asm_len(RM1_G_AST,node) as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); return RM1_OK }
+    if k == RM1_K_STMT_MATCH { return rm1_emit_match_stmt(node) }
+    RM1_G_LAST_ERROR=RM1_E_UNSUPPORTED; return RM1_E_UNSUPPORTED
+}
+fn rm1_emit_assign(node: u32) -> u32 { let lv: u32 = iii_ast_assign_lvalue(RM1_G_AST,node); let lk: u32 = iii_ast_node_kind(RM1_G_AST,lv); if lk == RM1_K_EXPR_IDENT { let no: u32 = iii_ast_ident_name_offset(RM1_G_AST,lv); let nl: u32 = iii_ast_ident_name_length(RM1_G_AST,lv); let mut s: i32 = rm1_local_slot(no,nl); if s < 0i32 { rm1_local_add(no,nl); s=(RM1_G_LOCAL_COUNT-1u32) as i32 }; let e: u32 = rm1_emit_expr(iii_ast_assign_value(RM1_G_AST,node)); if e != RM1_OK { return e }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_emit_store_rax_slot(s as u32); return RM1_OK }; if lk == RM1_K_EXPR_INDEX { let e1: u32 = rm1_emit_expr(iii_ast_index_object(RM1_G_AST,lv)); if e1 != RM1_OK { return e1 }; let e2: u32 = rm1_emit_expr(iii_ast_index_index(RM1_G_AST,lv)); if e2 != RM1_OK { return e2 }; let e3: u32 = rm1_emit_expr(iii_ast_assign_value(RM1_G_AST,node)); if e3 != RM1_OK { return e3 }; rm1_pop_reg(&RM1_REG_RDX as u64,RM1_REG_RDX_LEN); rm1_pop_reg(&RM1_REG_RCX as u64,RM1_REG_RCX_LEN); rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_INDEX_ST as u64,RM1_STR_INDEX_ST_LEN); return RM1_OK }; if lk == RM1_K_EXPR_FIELD { let obj: u32 = iii_ast_field_object(RM1_G_AST,lv); if iii_ast_node_kind(RM1_G_AST,obj) != RM1_K_EXPR_IDENT { RM1_G_LAST_ERROR=RM1_E_UNSUPPORTED; return RM1_E_UNSUPPORTED }; let e4: u32 = rm1_emit_expr(iii_ast_assign_value(RM1_G_AST,node)); if e4 != RM1_OK { return e4 }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_MOVQ_PRAX_C as u64,RM1_STR_MOVQ_PRAX_C_LEN); rm1_emit_field_label(obj,iii_ast_field_name_offset(RM1_G_AST,lv),iii_ast_field_name_length(RM1_G_AST,lv)); rm1_cg_emit_arr(&RM1_STR_RIP_PAREN as u64,RM1_STR_RIP_PAREN_LEN); return RM1_OK }; RM1_G_LAST_ERROR=RM1_E_UNSUPPORTED; return RM1_E_UNSUPPORTED }
+fn rm1_emit_for(node: u32) -> u32 { let top: u32 = RM1_G_LABEL_COUNTER; RM1_G_LABEL_COUNTER=RM1_G_LABEL_COUNTER+1u32; let done: u32 = RM1_G_LABEL_COUNTER; RM1_G_LABEL_COUNTER=RM1_G_LABEL_COUNTER+1u32; let e: u32 = rm1_emit_expr(iii_ast_for_iter(RM1_G_AST,node)); if e != RM1_OK { return e }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let count_slot: u32 = RM1_G_LOCAL_COUNT; RM1_G_LOCAL_COUNT=RM1_G_LOCAL_COUNT+1u32; rm1_emit_store_rax_slot(count_slot); rm1_local_add(iii_ast_for_var_off(RM1_G_AST,node),iii_ast_for_var_len(RM1_G_AST,node)); let var_slot: u32 = RM1_G_LOCAL_COUNT-1u32; rm1_cg_emit_arr(&RM1_STR_DOL_0_DASH as u64,RM1_STR_DOL_0_DASH_LEN); rm1_cg_emit_dec(((var_slot+1u32)*8u32) as u64); rm1_cg_emit_arr(&RM1_STR_PCT_RBP_NL as u64,RM1_STR_PCT_RBP_NL_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_FORTOP as u64,RM1_STR_PFX_FORTOP_LEN); rm1_cg_emit_dec(top as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); rm1_emit_load_slot(var_slot,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_emit_load_slot(count_slot,&RM1_REG_RCX as u64,RM1_REG_RCX_LEN); rm1_cg_emit_arr(&RM1_STR_CMP_RCX_RAX as u64,RM1_STR_CMP_RCX_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_JGE_SP as u64,RM1_STR_JGE_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_FOREND as u64,RM1_STR_PFX_FOREND_LEN); rm1_cg_emit_dec(done as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); let where_n: u32 = iii_ast_for_where(RM1_G_AST,node); if where_n != 0u32 { let ew: u32 = rm1_emit_expr(where_n); if ew != RM1_OK { return ew }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_TESTRSTNE as u64,20u64); rm1_cg_emit_arr(&RM1_STR_JZ_SP as u64,RM1_STR_JZ_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_FORCONT as u64,RM1_STR_PFX_FORCONT_LEN); rm1_cg_emit_dec(top as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN) }; let eb: u32 = rm1_emit_block(iii_ast_for_body(RM1_G_AST,node)); if eb != RM1_OK { return eb }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); if where_n != 0u32 { rm1_cg_emit_arr(&RM1_STR_PFX_FORCONT as u64,RM1_STR_PFX_FORCONT_LEN); rm1_cg_emit_dec(top as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN) }; rm1_emit_load_slot(var_slot,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_ADD1RAX as u64,RM1_STR_ADD1RAX_LEN); rm1_emit_store_rax_slot(var_slot); rm1_cg_emit_arr(&RM1_STR_JMP_SP as u64,RM1_STR_JMP_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_FORTOP as u64,RM1_STR_PFX_FORTOP_LEN); rm1_cg_emit_dec(top as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_FOREND as u64,RM1_STR_PFX_FOREND_LEN); rm1_cg_emit_dec(done as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); return RM1_OK }
+fn rm1_emit_match_stmt(node: u32) -> u32 { let end_lbl: u32 = RM1_G_LABEL_COUNTER; RM1_G_LABEL_COUNTER=RM1_G_LABEL_COUNTER+1u32; let e: u32 = rm1_emit_expr(iii_ast_match_stmt_scrutinee(RM1_G_AST,node)); if e != RM1_OK { return e }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let scrut: u32 = RM1_G_LOCAL_COUNT; RM1_G_LOCAL_COUNT=RM1_G_LOCAL_COUNT+1u32; rm1_emit_store_rax_slot(scrut); let cnt: u32 = iii_ast_match_stmt_arm_count(RM1_G_AST,node); let mut i: u32 = 0u32; while i < cnt { let arm: u32 = iii_ast_match_stmt_arm_at(RM1_G_AST,node,i); let skip: u32 = RM1_G_LABEL_COUNTER; RM1_G_LABEL_COUNTER=RM1_G_LABEL_COUNTER+1u32; rm1_emit_load_slot(scrut,&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); let ep: u32 = rm1_emit_pattern_compare(iii_ast_match_arm_pattern(RM1_G_AST,arm)); if ep != RM1_OK { return ep }; rm1_cg_emit_arr(&RM1_STR_JNE_SP as u64,RM1_STR_JNE_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_SKIP as u64,RM1_STR_PFX_SKIP_LEN); rm1_cg_emit_dec(skip as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_emit_pattern_bind(iii_ast_match_arm_pattern(RM1_G_AST,arm)); let guard: u32 = iii_ast_match_arm_guard(RM1_G_AST,arm); if guard != 0u32 { let eg: u32 = rm1_emit_expr(guard); if eg != RM1_OK { return eg }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_TESTRSTNE as u64,20u64); rm1_cg_emit_arr(&RM1_STR_JZ_SP as u64,RM1_STR_JZ_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_SKIP as u64,RM1_STR_PFX_SKIP_LEN); rm1_cg_emit_dec(skip as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN) }; let eb: u32 = rm1_emit_expr(iii_ast_match_arm_body(RM1_G_AST,arm)); if eb != RM1_OK { return eb }; rm1_pop_reg(&RM1_REG_RAX as u64,RM1_REG_RAX_LEN); rm1_cg_emit_arr(&RM1_STR_JMP_SP as u64,RM1_STR_JMP_SP_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_MATCHEND as u64,RM1_STR_PFX_MATCHEND_LEN); rm1_cg_emit_dec(end_lbl as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); rm1_cg_emit_arr(&RM1_STR_PFX_SKIP as u64,RM1_STR_PFX_SKIP_LEN); rm1_cg_emit_dec(skip as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); i=i+1u32 }; rm1_cg_emit_arr(&RM1_STR_PFX_MATCHEND as u64,RM1_STR_PFX_MATCHEND_LEN); rm1_cg_emit_dec(end_lbl as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); return RM1_OK }
+fn rm1_emit_block(node: u32) -> u32 { let k: u32 = iii_ast_node_kind(RM1_G_AST,node); let saved: u32 = RM1_G_LOCAL_COUNT; let mut c: u32 = 0u32; if k == RM1_K_EXPR_BLOCK { c=iii_ast_block_stmt_count(RM1_G_AST,node) } else { c=iii_ast_forward_block_stmt_count(RM1_G_AST,node) }; let mut i: u32 = 0u32; while i < c { let mut st: u32 = 0u32; if k == RM1_K_EXPR_BLOCK { st=iii_ast_block_stmt_at(RM1_G_AST,node,i) } else { st=iii_ast_forward_block_stmt_at(RM1_G_AST,node,i) }; let e: u32 = rm1_emit_stmt(st); if e != RM1_OK { return e }; i=i+1u32 }; RM1_G_LOCAL_COUNT=saved; rm1_cg_emit_arr(&RM1_STR_XORRAX as u64,RM1_STR_XORRAX_LEN); rm1_push_rax(); return RM1_OK }
+fn rm1_emit_volatile_clear() -> u32 { rm1_cg_emit_arr(&RM1_STR_VOLCLEAR as u64,RM1_STR_VOLCLEAR_LEN); let mut i: u32 = 0u32; while i < 16u32 { rm1_cg_emit_arr(&RM1_STR_PXOR as u64,RM1_STR_PXOR_LEN); rm1_cg_emit_dec(i as u64); rm1_cg_emit_arr(&RM1_STR_PXOR_COMMA as u64,RM1_STR_PXOR_COMMA_LEN); rm1_cg_emit_dec(i as u64); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); i=i+1u32 }; return RM1_OK }
+fn rm1_emit_sanctum_epilogue() -> u32 { rm1_emit_volatile_clear(); rm1_cg_emit_arr(&RM1_STR_EPILOGUE as u64,RM1_STR_EPILOGUE_LEN); return RM1_OK }
+fn rm1_emit_section_mhash_placeholder() -> u32 { rm1_emit_section_text(); rm1_cg_emit_arr(&RM1_STR_BAL32 as u64,RM1_STR_BAL32_LEN); rm1_cg_emit_arr(&RM1_STR_GLOBAL_MHPL as u64,RM1_STR_GLOBAL_MHPL_LEN); rm1_cg_emit_arr(&RM1_STR_MHPL_LBL as u64,RM1_STR_MHPL_LBL_LEN); rm1_cg_emit_arr(&RM1_STR_MHPL_CMT as u64,RM1_STR_MHPL_CMT_LEN); rm1_cg_emit_arr(&RM1_STR_MHPL_ZERO as u64,RM1_STR_MHPL_ZERO_LEN); return RM1_OK }
+
+fn rm1_emit_function(decl: u32) -> u32 { let pc: u32 = iii_ast_sealed_param_count(RM1_G_AST,decl); if pc < 1u32 { RM1_G_LAST_ERROR=RM1_E_BAD_ENTRY_SIG; return RM1_E_BAD_ENTRY_SIG }; let p0: u32 = iii_ast_sealed_param_at(RM1_G_AST,decl,0u32); if iii_ast_node_kind(RM1_G_AST,p0) != RM1_K_PARAM { RM1_G_LAST_ERROR=RM1_E_BAD_ENTRY_SIG; return RM1_E_BAD_ENTRY_SIG }; RM1_G_LOCAL_COUNT=0u32; RM1_G_STACK_DEPTH=0u32; RM1_G_LABEL_COUNTER=0u32; RM1_G_CAP_REVOKE=0u32; RM1_G_IN_ENTRY=1u32; let no: u32 = iii_ast_sealed_call_name_off(RM1_G_AST,decl); let nl: u32 = iii_ast_sealed_call_name_len(RM1_G_AST,decl); rm1_emit_section_text(); rm1_cg_emit_arr(&RM1_STR_BAL16 as u64,RM1_STR_BAL16_LEN); rm1_cg_emit_arr(&RM1_STR_GLOBAL as u64,RM1_STR_GLOBAL_LEN); rm1_emit_mangled(no,nl); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN); if RM1_G_FMT == RM1_FMT_ELF { rm1_cg_emit_arr(&RM1_STR_TYPE as u64,RM1_STR_TYPE_LEN); rm1_emit_mangled(no,nl); rm1_cg_emit_arr(&RM1_STR_TYPEFUNC as u64,RM1_STR_TYPEFUNC_LEN) }; rm1_emit_mangled(no,nl); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); rm1_cg_emit_arr(&RM1_STR_PROLOG as u64,RM1_STR_PROLOG_LEN); rm1_cg_emit_arr(&RM1_STR_MOVRSPRBP as u64,RM1_STR_MOVRSPRBP_LEN); rm1_cg_emit_arr(&RM1_STR_FRAMEZ as u64,RM1_STR_FRAMEZ_LEN); let mut i: u32 = 0u32; while i < pc { if i < 6u32 { let p: u32 = iii_ast_sealed_param_at(RM1_G_AST,decl,i); if iii_ast_node_kind(RM1_G_AST,p) == RM1_K_PARAM { rm1_local_add(iii_ast_param_name_off(RM1_G_AST,p),iii_ast_param_name_len(RM1_G_AST,p)); rm1_cg_emit_arr(&RM1_STR_MOVQ_PCT as u64,RM1_STR_MOVQ_PCT_LEN); if i==0u32 { rm1_cg_emit_arr(&RM1_REG_RDI as u64,RM1_REG_RDI_LEN) }; if i==1u32 { rm1_cg_emit_arr(&RM1_REG_RSI as u64,RM1_REG_RSI_LEN) }; if i==2u32 { rm1_cg_emit_arr(&RM1_REG_RDX as u64,RM1_REG_RDX_LEN) }; if i==3u32 { rm1_cg_emit_arr(&RM1_REG_RCX as u64,RM1_REG_RCX_LEN) }; if i==4u32 { rm1_cg_emit_arr(&RM1_REG_R8 as u64,RM1_REG_R8_LEN) }; if i==5u32 { rm1_cg_emit_arr(&RM1_REG_R9 as u64,RM1_REG_R9_LEN) }; rm1_cg_emit_arr(&RM1_STR_DOL_DASH as u64,RM1_STR_DOL_DASH_LEN); rm1_cg_emit_dec((RM1_G_LOCAL_COUNT*8u32) as u64); rm1_cg_emit_arr(&RM1_STR_PCT_RBP_NL as u64,RM1_STR_PCT_RBP_NL_LEN) } }; i=i+1u32 }; rm1_cg_emit_arr(&RM1_STR_CAPV as u64,RM1_STR_CAPV_LEN); let body: u32 = iii_ast_sealed_body(RM1_G_AST,decl); if body != 0u32 { let eb: u32 = rm1_emit_block(body); if eb != RM1_OK { RM1_G_IN_ENTRY=0u32; return eb } }; if RM1_G_CAP_REVOKE == 0u32 { RM1_G_LAST_ERROR=RM1_E_NO_CAP_REVOKE; RM1_G_IN_ENTRY=0u32; return RM1_E_NO_CAP_REVOKE }; rm1_cg_emit_arr(&RM1_STR_XORRAX as u64,RM1_STR_XORRAX_LEN); rm1_emit_sanctum_epilogue(); if RM1_G_FMT == RM1_FMT_ELF { rm1_cg_emit_arr(&RM1_STR_SIZE as u64,RM1_STR_SIZE_LEN); rm1_emit_mangled(no,nl); rm1_cg_emit_arr(&RM1_STR_DOTMINUS as u64,RM1_STR_DOTMINUS_LEN); rm1_emit_mangled(no,nl); rm1_cg_emit_arr(&RM1_STR_NL as u64,RM1_STR_NL_LEN) }; RM1_G_IN_ENTRY=0u32; return RM1_OK }
+fn rm1_emit_string_pool() -> u32 { let cnt: u32 = iii_ast_string_payload_count_c(RM1_G_AST); let mut i: u32 = 0u32; while i < cnt { rm1_cg_emit_arr(&RM1_STR_PFX_STR as u64,RM1_STR_PFX_STR_LEN); rm1_cg_emit_dec(i as u64); rm1_cg_emit_arr(&RM1_STR_COLONNL as u64,RM1_STR_COLONNL_LEN); rm1_cg_emit_arr(&RM1_STR_ASCII_OPEN as u64,RM1_STR_ASCII_OPEN_LEN); let p: u64 = iii_ast_string_payload_addr_c(RM1_G_AST,i); if p != 0u64 { let mut j: u64 = 0u64; while iii_emit_buf_read_u8_c(p,j) != 0u32 { let b: u32 = iii_emit_buf_read_u8_c(p,j); let mut done: u32 = 0u32; if b == 34u32 { rm1_cg_emit_ch(92u32); rm1_cg_emit_ch(b); done=1u32 }; if b == 92u32 { rm1_cg_emit_ch(92u32); rm1_cg_emit_ch(b); done=1u32 }; if done == 0u32 { if b == 10u32 { rm1_cg_emit_ch(92u32); rm1_cg_emit_ch(110u32); done=1u32 } }; if done == 0u32 { if b >= 32u32 { if b < 127u32 { rm1_cg_emit_ch(b); done=1u32 } } }; if done == 0u32 { rm1_cg_emit_ch(92u32); rm1_cg_emit_ch(48u32+((b>>6u32)&7u32)); rm1_cg_emit_ch(48u32+((b>>3u32)&7u32)); rm1_cg_emit_ch(48u32+(b&7u32)) }; j=j+1u64 } }; rm1_cg_emit_arr(&RM1_STR_ASCII_CLOSE as u64,RM1_STR_ASCII_CLOSE_LEN); i=i+1u32 }; return RM1_OK }
+
+/* AUTOGENERATED by _gen_rm1_hv.py — do not edit by hand.
+ * HV-static byte constants for cg_rm1.iii Ring-1 codegen.
+ */
+
+var RM1_HV_BARE_METAL_ENTRY : [u8; 213] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 101u8, 110u8, 116u8, 114u8, 121u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 101u8, 110u8, 116u8, 114u8, 121u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 68u8, 50u8, 32u8, 115u8, 116u8, 97u8, 99u8, 107u8, 45u8, 112u8, 111u8, 105u8, 110u8, 116u8, 101u8, 114u8, 32u8, 115u8, 101u8, 116u8, 117u8, 112u8, 59u8, 32u8, 68u8, 49u8, 48u8, 32u8, 100u8, 101u8, 116u8, 101u8, 114u8, 109u8, 105u8, 110u8, 105u8, 115u8, 116u8, 105u8, 99u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 49u8, 54u8, 44u8, 32u8, 48u8, 120u8, 57u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 116u8, 97u8, 99u8, 107u8, 95u8, 116u8, 111u8, 112u8, 40u8, 37u8, 114u8, 105u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 44u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 108u8, 100u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 109u8, 97u8, 105u8, 110u8, 10u8]
+const RM1_HV_BARE_METAL_ENTRY_LEN: u64 = 213u64
+var RM1_HV_VMX_SVM_DISPATCH : [u8; 494] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 115u8, 118u8, 109u8, 95u8, 100u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 115u8, 118u8, 109u8, 95u8, 100u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 68u8, 51u8, 32u8, 67u8, 80u8, 85u8, 73u8, 68u8, 40u8, 49u8, 41u8, 46u8, 69u8, 67u8, 88u8, 91u8, 53u8, 93u8, 32u8, 61u8, 32u8, 86u8, 77u8, 88u8, 32u8, 40u8, 73u8, 110u8, 116u8, 101u8, 108u8, 32u8, 83u8, 68u8, 77u8, 32u8, 86u8, 111u8, 108u8, 46u8, 50u8, 65u8, 32u8, 67u8, 80u8, 85u8, 73u8, 68u8, 41u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 108u8, 32u8, 36u8, 49u8, 44u8, 32u8, 37u8, 101u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 108u8, 32u8, 37u8, 101u8, 99u8, 120u8, 44u8, 32u8, 37u8, 101u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 112u8, 117u8, 105u8, 100u8, 10u8, 32u8, 32u8, 32u8, 32u8, 98u8, 116u8, 108u8, 32u8, 32u8, 36u8, 53u8, 44u8, 32u8, 37u8, 101u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 99u8, 32u8, 32u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 112u8, 97u8, 116u8, 104u8, 95u8, 118u8, 109u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 68u8, 51u8, 32u8, 67u8, 80u8, 85u8, 73u8, 68u8, 40u8, 48u8, 120u8, 56u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 49u8, 41u8, 46u8, 69u8, 67u8, 88u8, 91u8, 50u8, 93u8, 32u8, 61u8, 32u8, 83u8, 86u8, 77u8, 32u8, 40u8, 65u8, 77u8, 68u8, 32u8, 65u8, 80u8, 77u8, 32u8, 86u8, 111u8, 108u8, 46u8, 51u8, 32u8, 194u8, 167u8, 51u8, 46u8, 51u8, 41u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 108u8, 32u8, 36u8, 48u8, 120u8, 56u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 49u8, 44u8, 32u8, 37u8, 101u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 108u8, 32u8, 37u8, 101u8, 99u8, 120u8, 44u8, 32u8, 37u8, 101u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 112u8, 117u8, 105u8, 100u8, 10u8, 32u8, 32u8, 32u8, 32u8, 98u8, 116u8, 108u8, 32u8, 32u8, 36u8, 50u8, 44u8, 32u8, 37u8, 101u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 99u8, 32u8, 32u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 112u8, 97u8, 116u8, 104u8, 95u8, 115u8, 118u8, 109u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 78u8, 101u8, 105u8, 116u8, 104u8, 101u8, 114u8, 32u8, 86u8, 77u8, 88u8, 32u8, 110u8, 111u8, 114u8, 32u8, 83u8, 86u8, 77u8, 32u8, 97u8, 118u8, 97u8, 105u8, 108u8, 97u8, 98u8, 108u8, 101u8, 32u8, 226u8, 128u8, 148u8, 32u8, 104u8, 97u8, 108u8, 116u8, 46u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 108u8, 105u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 100u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 95u8, 104u8, 97u8, 108u8, 116u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 104u8, 108u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 100u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 95u8, 104u8, 97u8, 108u8, 116u8, 10u8]
+const RM1_HV_VMX_SVM_DISPATCH_LEN: u64 = 494u64
+var RM1_HV_SVM_VMRUN_BRACKET : [u8; 478] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 118u8, 109u8, 95u8, 118u8, 109u8, 114u8, 117u8, 110u8, 95u8, 98u8, 114u8, 97u8, 99u8, 107u8, 101u8, 116u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 118u8, 109u8, 95u8, 118u8, 109u8, 114u8, 117u8, 110u8, 95u8, 98u8, 114u8, 97u8, 99u8, 107u8, 101u8, 116u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 68u8, 49u8, 50u8, 32u8, 65u8, 77u8, 68u8, 32u8, 65u8, 80u8, 77u8, 32u8, 86u8, 111u8, 108u8, 46u8, 51u8, 32u8, 194u8, 167u8, 49u8, 53u8, 46u8, 53u8, 32u8, 226u8, 128u8, 148u8, 32u8, 99u8, 108u8, 103u8, 105u8, 59u8, 118u8, 109u8, 108u8, 111u8, 97u8, 100u8, 59u8, 118u8, 109u8, 114u8, 117u8, 110u8, 59u8, 118u8, 109u8, 115u8, 97u8, 118u8, 101u8, 59u8, 115u8, 116u8, 103u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 114u8, 100u8, 105u8, 32u8, 61u8, 32u8, 112u8, 104u8, 121u8, 115u8, 32u8, 97u8, 100u8, 100u8, 114u8, 32u8, 111u8, 102u8, 32u8, 104u8, 111u8, 115u8, 116u8, 32u8, 86u8, 77u8, 67u8, 66u8, 32u8, 115u8, 97u8, 118u8, 101u8, 44u8, 32u8, 114u8, 115u8, 105u8, 32u8, 61u8, 32u8, 112u8, 104u8, 121u8, 115u8, 32u8, 97u8, 100u8, 100u8, 114u8, 32u8, 111u8, 102u8, 32u8, 103u8, 117u8, 101u8, 115u8, 116u8, 32u8, 86u8, 77u8, 67u8, 66u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 98u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 32u8, 37u8, 114u8, 100u8, 105u8, 44u8, 32u8, 37u8, 114u8, 98u8, 120u8, 32u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 104u8, 111u8, 115u8, 116u8, 32u8, 32u8, 86u8, 77u8, 67u8, 66u8, 32u8, 112u8, 104u8, 121u8, 115u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 32u8, 37u8, 114u8, 115u8, 105u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 32u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 103u8, 117u8, 101u8, 115u8, 116u8, 32u8, 86u8, 77u8, 67u8, 66u8, 32u8, 112u8, 104u8, 121u8, 115u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 108u8, 103u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 118u8, 109u8, 108u8, 111u8, 97u8, 100u8, 32u8, 37u8, 114u8, 98u8, 120u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 104u8, 111u8, 115u8, 116u8, 32u8, 115u8, 97u8, 118u8, 101u8, 32u8, 97u8, 114u8, 101u8, 97u8, 10u8, 32u8, 32u8, 32u8, 32u8, 118u8, 109u8, 114u8, 117u8, 110u8, 32u8, 32u8, 37u8, 114u8, 97u8, 120u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 101u8, 110u8, 116u8, 101u8, 114u8, 32u8, 103u8, 117u8, 101u8, 115u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 118u8, 109u8, 115u8, 97u8, 118u8, 101u8, 32u8, 37u8, 114u8, 98u8, 120u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 104u8, 111u8, 115u8, 116u8, 32u8, 115u8, 97u8, 118u8, 101u8, 32u8, 97u8, 114u8, 101u8, 97u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 116u8, 103u8, 105u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 32u8, 37u8, 114u8, 98u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 116u8, 113u8, 10u8]
+const RM1_HV_SVM_VMRUN_BRACKET_LEN: u64 = 478u64
+var RM1_HV_VMX_VMRUN_BRACKET : [u8; 491] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 118u8, 109u8, 114u8, 117u8, 110u8, 95u8, 98u8, 114u8, 97u8, 99u8, 107u8, 101u8, 116u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 118u8, 109u8, 114u8, 117u8, 110u8, 95u8, 98u8, 114u8, 97u8, 99u8, 107u8, 101u8, 116u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 68u8, 49u8, 51u8, 32u8, 73u8, 110u8, 116u8, 101u8, 108u8, 32u8, 83u8, 68u8, 77u8, 32u8, 86u8, 111u8, 108u8, 46u8, 51u8, 32u8, 194u8, 167u8, 50u8, 54u8, 46u8, 49u8, 32u8, 226u8, 128u8, 148u8, 32u8, 86u8, 77u8, 76u8, 65u8, 85u8, 78u8, 67u8, 72u8, 32u8, 111u8, 110u8, 32u8, 102u8, 105u8, 114u8, 115u8, 116u8, 32u8, 101u8, 110u8, 116u8, 114u8, 121u8, 44u8, 32u8, 86u8, 77u8, 82u8, 69u8, 83u8, 85u8, 77u8, 69u8, 32u8, 97u8, 102u8, 116u8, 101u8, 114u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 80u8, 101u8, 114u8, 45u8, 86u8, 67u8, 80u8, 85u8, 32u8, 108u8, 97u8, 117u8, 110u8, 99u8, 104u8, 101u8, 100u8, 32u8, 102u8, 108u8, 97u8, 103u8, 32u8, 97u8, 116u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 99u8, 112u8, 117u8, 95u8, 108u8, 97u8, 117u8, 110u8, 99u8, 104u8, 101u8, 100u8, 32u8, 40u8, 49u8, 32u8, 98u8, 121u8, 116u8, 101u8, 47u8, 86u8, 67u8, 80u8, 85u8, 41u8, 46u8, 10u8, 32u8, 32u8, 32u8, 32u8, 35u8, 32u8, 114u8, 100u8, 105u8, 32u8, 61u8, 32u8, 86u8, 67u8, 80u8, 85u8, 32u8, 105u8, 110u8, 100u8, 101u8, 120u8, 46u8, 10u8, 32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 99u8, 112u8, 117u8, 95u8, 108u8, 97u8, 117u8, 110u8, 99u8, 104u8, 101u8, 100u8, 40u8, 37u8, 114u8, 105u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 98u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 100u8, 105u8, 44u8, 49u8, 41u8, 44u8, 32u8, 37u8, 99u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 98u8, 32u8, 37u8, 99u8, 108u8, 44u8, 32u8, 37u8, 99u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 110u8, 101u8, 32u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 100u8, 111u8, 95u8, 114u8, 101u8, 115u8, 117u8, 109u8, 101u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 98u8, 32u8, 36u8, 49u8, 44u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 100u8, 105u8, 44u8, 49u8, 41u8, 10u8, 32u8, 32u8, 32u8, 32u8, 118u8, 109u8, 108u8, 97u8, 117u8, 110u8, 99u8, 104u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 112u8, 111u8, 115u8, 116u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 100u8, 111u8, 95u8, 114u8, 101u8, 115u8, 117u8, 109u8, 101u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 118u8, 109u8, 114u8, 101u8, 115u8, 117u8, 109u8, 101u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 120u8, 95u8, 112u8, 111u8, 115u8, 116u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 116u8, 113u8, 10u8]
+const RM1_HV_VMX_VMRUN_BRACKET_LEN: u64 = 491u64
+var RM1_HV_SLAT_HDR : [u8; 327] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 111u8, 100u8, 97u8, 116u8, 97u8, 46u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 44u8, 34u8, 97u8, 34u8, 44u8, 64u8, 112u8, 114u8, 111u8, 103u8, 98u8, 105u8, 116u8, 115u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 52u8, 48u8, 57u8, 54u8, 44u8, 32u8, 48u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 109u8, 108u8, 52u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 112u8, 116u8, 32u8, 43u8, 32u8, 48u8, 120u8, 48u8, 55u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 102u8, 105u8, 108u8, 108u8, 32u8, 53u8, 49u8, 49u8, 44u8, 32u8, 56u8, 44u8, 32u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 52u8, 48u8, 57u8, 54u8, 44u8, 32u8, 48u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 112u8, 116u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 48u8, 32u8, 43u8, 32u8, 48u8, 120u8, 48u8, 55u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 49u8, 32u8, 43u8, 32u8, 48u8, 120u8, 48u8, 55u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 50u8, 32u8, 43u8, 32u8, 48u8, 120u8, 48u8, 55u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 51u8, 32u8, 43u8, 32u8, 48u8, 120u8, 48u8, 55u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 102u8, 105u8, 108u8, 108u8, 32u8, 53u8, 48u8, 56u8, 44u8, 32u8, 56u8, 44u8, 32u8, 48u8, 10u8]
+const RM1_HV_SLAT_HDR_LEN: u64 = 327u64
+var RM1_HV_VMEXIT_TBL_HDR : [u8; 125] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 111u8, 100u8, 97u8, 116u8, 97u8, 46u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 101u8, 120u8, 105u8, 116u8, 95u8, 116u8, 97u8, 98u8, 108u8, 101u8, 44u8, 34u8, 97u8, 34u8, 44u8, 64u8, 112u8, 114u8, 111u8, 103u8, 98u8, 105u8, 116u8, 115u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 49u8, 54u8, 44u8, 32u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 101u8, 120u8, 105u8, 116u8, 95u8, 116u8, 97u8, 98u8, 108u8, 101u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 101u8, 120u8, 105u8, 116u8, 95u8, 116u8, 97u8, 98u8, 108u8, 101u8, 58u8, 10u8]
+const RM1_HV_VMEXIT_TBL_HDR_LEN: u64 = 125u64
+var RM1_HV_VMEXIT_DEFAULT_LINE : [u8; 32] = [32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 101u8, 120u8, 105u8, 116u8, 95u8, 100u8, 101u8, 102u8, 97u8, 117u8, 108u8, 116u8, 10u8]
+const RM1_HV_VMEXIT_DEFAULT_LINE_LEN: u64 = 32u64
+var RM1_HV_BSS_HEAD : [u8; 743] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 98u8, 115u8, 115u8, 46u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 44u8, 34u8, 97u8, 119u8, 34u8, 44u8, 64u8, 110u8, 111u8, 98u8, 105u8, 116u8, 115u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 52u8, 48u8, 57u8, 54u8, 44u8, 32u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 116u8, 97u8, 99u8, 107u8, 95u8, 98u8, 111u8, 116u8, 116u8, 111u8, 109u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 116u8, 97u8, 99u8, 107u8, 95u8, 98u8, 111u8, 116u8, 116u8, 111u8, 109u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 107u8, 105u8, 112u8, 32u8, 49u8, 54u8, 51u8, 56u8, 52u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 116u8, 97u8, 99u8, 107u8, 95u8, 116u8, 111u8, 112u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 116u8, 97u8, 99u8, 107u8, 95u8, 116u8, 111u8, 112u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 54u8, 52u8, 44u8, 32u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 95u8, 114u8, 105u8, 110u8, 103u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 95u8, 114u8, 105u8, 110u8, 103u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 107u8, 105u8, 112u8, 32u8, 51u8, 50u8, 55u8, 54u8, 56u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 95u8, 114u8, 105u8, 110u8, 103u8, 95u8, 101u8, 110u8, 100u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 95u8, 114u8, 105u8, 110u8, 103u8, 95u8, 101u8, 110u8, 100u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 54u8, 52u8, 44u8, 32u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 99u8, 112u8, 117u8, 95u8, 108u8, 97u8, 117u8, 110u8, 99u8, 104u8, 101u8, 100u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 99u8, 112u8, 117u8, 95u8, 108u8, 97u8, 117u8, 110u8, 99u8, 104u8, 101u8, 100u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 107u8, 105u8, 112u8, 32u8, 50u8, 53u8, 54u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 100u8, 97u8, 116u8, 97u8, 46u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 44u8, 34u8, 97u8, 119u8, 34u8, 44u8, 64u8, 112u8, 114u8, 111u8, 103u8, 98u8, 105u8, 116u8, 115u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 56u8, 44u8, 32u8, 48u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 99u8, 97u8, 110u8, 97u8, 114u8, 121u8, 95u8, 115u8, 101u8, 101u8, 100u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 99u8, 97u8, 110u8, 97u8, 114u8, 121u8, 95u8, 115u8, 101u8, 101u8, 100u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 48u8, 120u8, 51u8, 49u8, 52u8, 49u8, 53u8, 57u8, 50u8, 54u8, 53u8, 51u8, 53u8, 56u8, 57u8, 55u8, 57u8, 51u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 99u8, 97u8, 110u8, 97u8, 114u8, 121u8, 95u8, 102u8, 97u8, 105u8, 108u8, 10u8, 95u8, 95u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 99u8, 97u8, 110u8, 97u8, 114u8, 121u8, 95u8, 102u8, 97u8, 105u8, 108u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 108u8, 105u8, 10u8, 49u8, 58u8, 32u8, 32u8, 104u8, 108u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8, 49u8, 98u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 101u8, 120u8, 105u8, 116u8, 95u8, 100u8, 101u8, 102u8, 97u8, 117u8, 108u8, 116u8, 10u8, 105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 118u8, 109u8, 101u8, 120u8, 105u8, 116u8, 95u8, 100u8, 101u8, 102u8, 97u8, 117u8, 108u8, 116u8, 58u8, 10u8, 32u8, 32u8, 32u8, 32u8, 99u8, 108u8, 105u8, 10u8, 49u8, 58u8, 32u8, 32u8, 104u8, 108u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8, 49u8, 98u8, 10u8]
+const RM1_HV_BSS_HEAD_LEN: u64 = 743u64
+var RM1_HV_PD_ALIGN : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 52u8, 48u8, 57u8, 54u8, 44u8, 32u8, 48u8, 10u8]
+const RM1_HV_PD_ALIGN_LEN: u64 = 19u64
+var RM1_HV_PD0_LBL : [u8; 17] = [105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 48u8, 58u8, 10u8]
+const RM1_HV_PD0_LBL_LEN: u64 = 17u64
+var RM1_HV_PD1_LBL : [u8; 17] = [105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 49u8, 58u8, 10u8]
+const RM1_HV_PD1_LBL_LEN: u64 = 17u64
+var RM1_HV_PD2_LBL : [u8; 17] = [105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 50u8, 58u8, 10u8]
+const RM1_HV_PD2_LBL_LEN: u64 = 17u64
+var RM1_HV_PD3_LBL : [u8; 17] = [105u8, 105u8, 105u8, 95u8, 104u8, 118u8, 95u8, 115u8, 108u8, 97u8, 116u8, 95u8, 112u8, 100u8, 51u8, 58u8, 10u8]
+const RM1_HV_PD3_LBL_LEN: u64 = 17u64
+var RM1_HV_QUAD_OPEN : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 48u8, 120u8]
+const RM1_HV_QUAD_OPEN_LEN: u64 = 12u64
+var RM1_HV_NL : [u8; 1] = [10u8]
+const RM1_HV_NL_LEN: u64 = 1u64
+var RM1_HV_HDR1 : [u8; 62] = [35u8, 32u8, 73u8, 73u8, 73u8, 32u8, 83u8, 116u8, 97u8, 103u8, 101u8, 45u8, 48u8, 32u8, 82u8, 105u8, 110u8, 103u8, 32u8, 45u8, 49u8, 32u8, 99u8, 111u8, 100u8, 101u8, 103u8, 101u8, 110u8, 32u8, 111u8, 117u8, 116u8, 112u8, 117u8, 116u8, 32u8, 40u8, 105u8, 105u8, 105u8, 115u8, 45u8, 48u8, 32u8, 102u8, 114u8, 101u8, 101u8, 115u8, 116u8, 97u8, 110u8, 100u8, 105u8, 110u8, 103u8, 32u8, 72u8, 86u8, 41u8, 10u8]
+const RM1_HV_HDR1_LEN: u64 = 62u64
+var RM1_HV_HDR2 : [u8; 43] = [35u8, 32u8, 83u8, 121u8, 115u8, 86u8, 32u8, 65u8, 77u8, 68u8, 54u8, 52u8, 32u8, 65u8, 66u8, 73u8, 59u8, 32u8, 98u8, 97u8, 114u8, 101u8, 45u8, 109u8, 101u8, 116u8, 97u8, 108u8, 59u8, 32u8, 110u8, 111u8, 32u8, 104u8, 111u8, 115u8, 116u8, 32u8, 67u8, 82u8, 84u8, 46u8, 10u8]
+const RM1_HV_HDR2_LEN: u64 = 43u64
+var RM1_HV_ATTSYNTAX : [u8; 16] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 116u8, 116u8, 95u8, 115u8, 121u8, 110u8, 116u8, 97u8, 120u8, 10u8]
+const RM1_HV_ATTSYNTAX_LEN: u64 = 16u64
+var RM1_HV_RODATA : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 111u8, 100u8, 97u8, 116u8, 97u8, 10u8]
+const RM1_HV_RODATA_LEN: u64 = 21u64
+var RM1_HV_TRAILER_PFX : [u8; 25] = [35u8, 32u8, 73u8, 73u8, 73u8, 95u8, 67u8, 71u8, 95u8, 82u8, 77u8, 49u8, 95u8, 65u8, 83u8, 77u8, 95u8, 83u8, 72u8, 65u8, 50u8, 53u8, 54u8, 58u8, 32u8]
+const RM1_HV_TRAILER_PFX_LEN: u64 = 25u64
+var RM1_HV_TEXTNL : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8]
+const RM1_HV_TEXTNL_LEN : u64 = 10u64
+var RM1_HV_GLOBAL_LHV : [u8; 17] = [32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8, 76u8, 95u8, 104u8, 118u8, 95u8]
+const RM1_HV_GLOBAL_LHV_LEN : u64 = 17u64
+var RM1_HV_LHV : [u8; 5] = [76u8, 95u8, 104u8, 118u8, 95u8]
+const RM1_HV_LHV_LEN : u64 = 5u64
+var RM1_HV_ALIGN16NOP : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 108u8, 105u8, 103u8, 110u8, 32u8, 49u8, 54u8, 44u8, 32u8, 48u8, 120u8, 57u8, 48u8, 10u8]
+const RM1_HV_ALIGN16NOP_LEN : u64 = 20u64
+var RM1_HV_PROLOG_FULL : [u8; 56] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 115u8, 112u8, 44u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8, 49u8, 48u8, 50u8, 52u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const RM1_HV_PROLOG_FULL_LEN : u64 = 56u64
+var RM1_HV_EPILOG_FULL : [u8; 63] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 116u8, 113u8, 10u8]
+const RM1_HV_EPILOG_FULL_LEN : u64 = 63u64
+var RM1_HV_MOVQ_PCT : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8]
+const RM1_HV_MOVQ_PCT_LEN : u64 = 10u64
+var RM1_HV_DASHRBP : [u8; 7] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 10u8]
+const RM1_HV_DASHRBP_LEN : u64 = 7u64
+var RM1_HV_COMMA_DASH : [u8; 3] = [44u8, 32u8, 45u8]
+const RM1_HV_COMMA_DASH_LEN : u64 = 3u64
+
+fn rm1_hv_emit_bare_metal_entry() -> u32 { return rm1_cg_emit_arr(&RM1_HV_BARE_METAL_ENTRY as u64, RM1_HV_BARE_METAL_ENTRY_LEN) }
+fn rm1_hv_emit_vmx_svm_dispatch() -> u32 { return rm1_cg_emit_arr(&RM1_HV_VMX_SVM_DISPATCH as u64, RM1_HV_VMX_SVM_DISPATCH_LEN) }
+fn rm1_hv_emit_svm_vmrun_bracket() -> u32 { return rm1_cg_emit_arr(&RM1_HV_SVM_VMRUN_BRACKET as u64, RM1_HV_SVM_VMRUN_BRACKET_LEN) }
+fn rm1_hv_emit_vmx_vmrun_bracket() -> u32 { return rm1_cg_emit_arr(&RM1_HV_VMX_VMRUN_BRACKET as u64, RM1_HV_VMX_VMRUN_BRACKET_LEN) }
+fn rm1_hv_emit_one_pd(g: u32) -> u32 {
+    rm1_cg_emit_arr(&RM1_HV_PD_ALIGN as u64, RM1_HV_PD_ALIGN_LEN);
+    if g == 0u32 { rm1_cg_emit_arr(&RM1_HV_PD0_LBL as u64, RM1_HV_PD0_LBL_LEN) };
+    if g == 1u32 { rm1_cg_emit_arr(&RM1_HV_PD1_LBL as u64, RM1_HV_PD1_LBL_LEN) };
+    if g == 2u32 { rm1_cg_emit_arr(&RM1_HV_PD2_LBL as u64, RM1_HV_PD2_LBL_LEN) };
+    if g == 3u32 { rm1_cg_emit_arr(&RM1_HV_PD3_LBL as u64, RM1_HV_PD3_LBL_LEN) };
+    let g64: u64 = g as u64
+    let mut e: u32 = 0u32
+    while e < 512u32 {
+        let phys: u64 = (g64 << 30u64) | ((e as u64) << 21u64)
+        let val: u64 = phys | 0xB7u64
+        rm1_cg_emit_arr(&RM1_HV_QUAD_OPEN as u64, RM1_HV_QUAD_OPEN_LEN)
+        rm1_cg_emit_hex(val)
+        rm1_cg_emit_arr(&RM1_HV_NL as u64, RM1_HV_NL_LEN)
+        e = e + 1u32
+    }
+    return RM1_OK
+}
+fn rm1_hv_emit_slat_tables() -> u32 {
+    rm1_cg_emit_arr(&RM1_HV_SLAT_HDR as u64, RM1_HV_SLAT_HDR_LEN)
+    let mut g: u32 = 0u32
+    while g < 4u32 { rm1_hv_emit_one_pd(g); g = g + 1u32 }
+    return RM1_OK
+}
+fn rm1_hv_emit_vmexit_table() -> u32 {
+    rm1_cg_emit_arr(&RM1_HV_VMEXIT_TBL_HDR as u64, RM1_HV_VMEXIT_TBL_HDR_LEN)
+    let mut i: u32 = 0u32
+    while i < 256u32 {
+        rm1_cg_emit_arr(&RM1_HV_VMEXIT_DEFAULT_LINE as u64, RM1_HV_VMEXIT_DEFAULT_LINE_LEN)
+        i = i + 1u32
+    }
+    return RM1_OK
+}
+fn rm1_hv_emit_bss_and_data() -> u32 {
+    return rm1_cg_emit_arr(&RM1_HV_BSS_HEAD as u64, RM1_HV_BSS_HEAD_LEN)
+}
+
+fn rm1_emit_name_raw(off: u32, len: u32) -> u32 {
+    let src: u64 = iii_ast_source_buf(RM1_G_AST)
+    let mut i: u32 = 0u32
+    while i < len {
+        let bch: u32 = iii_emit_buf_read_u8_c(src, (off + i) as u64)
+        rm1_cg_emit_ch(bch)
+        i = i + 1u32
+    }
+    return RM1_OK
+}
+
+/* D8 witness entry/exit (cg_rm1.c::emit_witness_call): subq/addq are
+ * stack-depth-parity-conditional, so RM1_G_STACK_DEPTH is tracked identically. */
+fn rm1_hv_emit_witness(wid: u32, is_exit: u32) -> u32 {
+    rm1_cg_emit_arr(&RM1_WIT_CMT as u64, 17u64)
+    if is_exit == 1u32 { rm1_cg_emit_arr(&RM1_WIT_EXIT as u64, 4u64) }
+    if is_exit != 1u32 { rm1_cg_emit_arr(&RM1_WIT_ENTRY as u64, 5u64) }
+    rm1_cg_emit_arr(&RM1_WIT_WIDEQ as u64, 7u64)
+    rm1_cg_emit_hex(wid as u64)
+    rm1_cg_emit_arr(&RM1_STR_NL as u64, RM1_STR_NL_LEN)
+    rm1_cg_emit_arr(&RM1_WIT_PUSH as u64, 30u64)
+    RM1_G_STACK_DEPTH = RM1_G_STACK_DEPTH + 2u32
+    if (RM1_G_STACK_DEPTH & 1u32) != 0u32 { rm1_cg_emit_arr(&RM1_WIT_SUBQ8 as u64, 18u64); RM1_G_STACK_DEPTH = RM1_G_STACK_DEPTH + 1u32 }
+    rm1_cg_emit_arr(&RM1_STR_MOVABSQ_OPEN as u64, RM1_STR_MOVABSQ_OPEN_LEN)
+    rm1_cg_emit_hex(wid as u64)
+    rm1_cg_emit_arr(&RM1_WIT_MOVRDI as u64, 37u64)
+    if ((RM1_G_STACK_DEPTH - 2u32) & 1u32) != 0u32 { rm1_cg_emit_arr(&RM1_WIT_ADDQ8 as u64, 18u64); RM1_G_STACK_DEPTH = RM1_G_STACK_DEPTH - 1u32 }
+    rm1_cg_emit_arr(&RM1_WIT_POP as u64, 28u64)
+    RM1_G_STACK_DEPTH = RM1_G_STACK_DEPTH - 2u32
+    return RM1_OK
+}
+fn rm1_hv_emit_function(decl: u32, kind: u32, witness_id: u32) -> u32 {
+    RM1_G_LOCAL_COUNT = 0u32
+    RM1_G_STACK_DEPTH = 0u32
+    RM1_G_LABEL_COUNTER = 0u32
+    let mut no: u32 = 0u32
+    let mut nl: u32 = 0u32
+    let mut pc: u32 = 0u32
+    let mut body: u32 = 0u32
+    if kind == RM1_K_FN_DECL {
+        no = iii_ast_fn_name_off(RM1_G_AST, decl)
+        nl = iii_ast_fn_name_len(RM1_G_AST, decl)
+        pc = iii_ast_fn_param_count(RM1_G_AST, decl)
+        body = iii_ast_fn_body(RM1_G_AST, decl)
+    }
+    if kind == RM1_K_CYCLE_DECL {
+        no = iii_ast_cycle_name_off(RM1_G_AST, decl)
+        nl = iii_ast_cycle_name_len(RM1_G_AST, decl)
+        pc = iii_ast_cycle_param_count(RM1_G_AST, decl)
+        body = iii_ast_cycle_forward_block(RM1_G_AST, decl)
+    }
+    rm1_cg_emit_arr(&RM1_HV_TEXTNL as u64, RM1_HV_TEXTNL_LEN)
+    rm1_cg_emit_arr(&RM1_HV_GLOBAL_LHV as u64, RM1_HV_GLOBAL_LHV_LEN)
+    rm1_emit_name_raw(no, nl)
+    rm1_cg_emit_arr(&RM1_STR_NL as u64, RM1_STR_NL_LEN)
+    rm1_cg_emit_arr(&RM1_HV_LHV as u64, RM1_HV_LHV_LEN)
+    rm1_emit_name_raw(no, nl)
+    rm1_cg_emit_arr(&RM1_STR_COLONNL as u64, RM1_STR_COLONNL_LEN)
+    rm1_cg_emit_arr(&RM1_HV_ALIGN16NOP as u64, RM1_HV_ALIGN16NOP_LEN)
+    rm1_cg_emit_arr(&RM1_HV_PROLOG_FULL as u64, RM1_HV_PROLOG_FULL_LEN)
+    let mut i: u32 = 0u32
+    while i < pc {
+        if i < 6u32 {
+            let mut p: u32 = 0u32
+            if kind == RM1_K_FN_DECL { p = iii_ast_fn_param_at(RM1_G_AST, decl, i) }
+            if kind == RM1_K_CYCLE_DECL { p = iii_ast_cycle_param_at(RM1_G_AST, decl, i) }
+            if iii_ast_node_kind(RM1_G_AST, p) == RM1_K_PARAM {
+                rm1_local_add(iii_ast_param_name_off(RM1_G_AST, p), iii_ast_param_name_len(RM1_G_AST, p))
+                rm1_cg_emit_arr(&RM1_HV_MOVQ_PCT as u64, RM1_HV_MOVQ_PCT_LEN)
+                if i == 0u32 { rm1_cg_emit_arr(&RM1_REG_RDI as u64, RM1_REG_RDI_LEN) }
+                if i == 1u32 { rm1_cg_emit_arr(&RM1_REG_RSI as u64, RM1_REG_RSI_LEN) }
+                if i == 2u32 { rm1_cg_emit_arr(&RM1_REG_RDX as u64, RM1_REG_RDX_LEN) }
+                if i == 3u32 { rm1_cg_emit_arr(&RM1_REG_RCX as u64, RM1_REG_RCX_LEN) }
+                if i == 4u32 { rm1_cg_emit_arr(&RM1_REG_R8 as u64, RM1_REG_R8_LEN) }
+                if i == 5u32 { rm1_cg_emit_arr(&RM1_REG_R9 as u64, RM1_REG_R9_LEN) }
+                rm1_cg_emit_arr(&RM1_HV_COMMA_DASH as u64, RM1_HV_COMMA_DASH_LEN)
+                rm1_cg_emit_dec((RM1_G_LOCAL_COUNT * 8u32) as u64)
+                rm1_cg_emit_arr(&RM1_HV_DASHRBP as u64, RM1_HV_DASHRBP_LEN)
+            }
+        }
+        i = i + 1u32
+    }
+    if witness_id != 0u32 { rm1_hv_emit_witness(witness_id, 0u32) }
+    if body != 0u32 {
+        let eb: u32 = rm1_emit_block(body)
+        if eb != RM1_OK { return eb }
+    }
+    if witness_id != 0u32 { rm1_hv_emit_witness(witness_id, 1u32) }
+    rm1_cg_emit_arr(&RM1_HV_EPILOG_FULL as u64, RM1_HV_EPILOG_FULL_LEN)
+    return RM1_OK
+}
+
+fn iii_cg_rm1_create(ast: u64, sema: u64, sid: u64, walloc: u64) -> u64 @export { if ast == 0u64 { return 0u64 }; RM1_G_AST=ast; RM1_G_SEMA=sema; RM1_G_SID=sid; RM1_G_WALLOC=walloc; RM1_G_OUT=0u64; RM1_G_FMT=RM1_FMT_ELF; RM1_G_CONST_TIME=0u32; RM1_G_SEALED=0u32; RM1_G_LAST_ERROR=RM1_OK; RM1_G_LOCAL_COUNT=0u32; RM1_G_STACK_DEPTH=0u32; RM1_G_LABEL_COUNTER=0u32; iii_cg_rm1_sha_init_c(); return &RM1_SENTINEL as u64 }
+fn iii_cg_rm1_destroy(cg: u64) @export { RM1_G_AST=0u64; RM1_G_SEMA=0u64; RM1_G_SID=0u64; RM1_G_WALLOC=0u64; RM1_G_OUT=0u64; RM1_G_SEALED=0u32; return }
+fn iii_cg_rm1_set_format(cg: u64, fmt: u32) @export { if cg != 0u64 { if RM1_G_SEALED == 0u32 { RM1_G_FMT=fmt } }; return }
+fn iii_cg_rm1_set_const_time(cg: u64, on: u32) @export { if cg != 0u64 { if RM1_G_SEALED == 0u32 { RM1_G_CONST_TIME=on } }; return }
+fn rm1_emit_sha_trailer() -> u32 {
+    /* Snapshot streaming digest into RM1_ASM_DIGEST. C side preserves live state. */
+    iii_cg_rm1_sha_snapshot_c(&RM1_ASM_DIGEST as u64)
+    if RM1_G_OUT != 0u64 { iii_cg_rm1_fwrite_c(RM1_G_OUT, &RM1_TRAILER_PFX as u64, RM1_TRAILER_PFX_LEN) }
+    let mut i: u32 = 0u32
+    while i < 32u32 {
+        let b: u32 = iii_emit_buf_read_u8_c(&RM1_ASM_DIGEST as u64, i as u64)
+        let hi: u32 = (b >> 4u32) & 0x0fu32
+        let lo: u32 = b & 0x0fu32
+        let mut hi_c: u32 = 0u32
+        if hi < 10u32 { hi_c = 48u32 + hi } else { hi_c = 87u32 + hi }
+        let mut lo_c: u32 = 0u32
+        if lo < 10u32 { lo_c = 48u32 + lo } else { lo_c = 87u32 + lo }
+        iii_emit_write_u8_c(&RM1_TRAILER_HEX as u64, hi_c)
+        iii_emit_write_u8_c((&RM1_TRAILER_HEX as u64) + 1u64, lo_c)
+        if RM1_G_OUT != 0u64 { iii_cg_rm1_fwrite_c(RM1_G_OUT, &RM1_TRAILER_HEX as u64, 2u64) }
+        i = i + 1u32
+    }
+    if RM1_G_OUT != 0u64 { iii_cg_rm1_fwrite_c(RM1_G_OUT, &RM1_TRAILER_NL as u64, 1u64) }
+    return RM1_OK
+}
+fn iii_cg_rm1_emit_module(cg: u64, out: u64) -> u32 @export { if cg == 0u64 { return RM1_E_NULL_ARG }; if out == 0u64 { RM1_G_LAST_ERROR=RM1_E_NULL_ARG; return RM1_E_NULL_ARG }; if RM1_G_SEALED != 0u32 { RM1_G_LAST_ERROR=RM1_E_SEALED; return RM1_E_SEALED }; RM1_G_OUT=out; rm1_cg_emit_arr(&RM1_HV_HDR1 as u64,RM1_HV_HDR1_LEN); rm1_cg_emit_arr(&RM1_HV_HDR2 as u64,RM1_HV_HDR2_LEN); rm1_cg_emit_arr(&RM1_HV_ATTSYNTAX as u64,RM1_HV_ATTSYNTAX_LEN); rm1_cg_emit_arr(&RM1_HV_RODATA as u64,RM1_HV_RODATA_LEN); rm1_emit_string_pool(); rm1_hv_emit_bare_metal_entry(); rm1_hv_emit_vmx_svm_dispatch(); rm1_hv_emit_svm_vmrun_bracket(); rm1_hv_emit_vmx_vmrun_bracket(); let root: u32 = iii_ast_root_module(RM1_G_AST); if root == 0u32 { RM1_G_LAST_ERROR=RM1_E_INTERNAL; return RM1_E_INTERNAL }; let dc: u32 = iii_ast_module_decl_count(RM1_G_AST,root); let mut i: u32 = 0u32; while i < dc { let d: u32 = iii_ast_module_decl_at(RM1_G_AST,root,i); let dk: u32 = iii_ast_node_kind(RM1_G_AST,d); if dk == RM1_K_FN_DECL { let e: u32 = rm1_hv_emit_function(d, RM1_K_FN_DECL, 0u32); if e != RM1_OK { return e } }; if dk == RM1_K_CYCLE_DECL { let wid: u32 = (3250585600u32) | (i + 1u32); let e2: u32 = rm1_hv_emit_function(d, RM1_K_CYCLE_DECL, wid); if e2 != RM1_OK { return e2 } }; i=i+1u32 }; rm1_hv_emit_vmexit_table(); rm1_hv_emit_slat_tables(); rm1_hv_emit_bss_and_data(); rm1_emit_sha_trailer(); RM1_G_CONST_TIME=0u32; return RM1_OK }
+fn iii_cg_rm1_module_finish(cg: u64) -> u32 @export { if cg == 0u64 { return RM1_E_NULL_ARG }; RM1_G_SEALED=1u32; return RM1_OK }
+fn iii_cg_rm1_section_mhash(cg: u64, out_mhash: u64) -> u32 @export { if cg == 0u64 { return RM1_E_NULL_ARG }; if out_mhash == 0u64 { return RM1_E_NULL_ARG }; iii_cg_rm1_sha_snapshot_c(out_mhash); return RM1_OK }
+fn iii_cg_rm1_last_error(cg: u64) -> u32 @export { if cg == 0u64 { return RM1_E_NULL_ARG }; return RM1_G_LAST_ERROR }
+fn iii_cg_rm1_error_name(code: u32) -> u64 @export { if code==RM1_OK { return &RM1_ENAME_OK as u64 }; if code==RM1_E_NULL_ARG { return &RM1_ENAME_NULL_ARG as u64 }; if code==RM1_E_IO { return &RM1_ENAME_IO as u64 }; if code==RM1_E_UNSUPPORTED { return &RM1_ENAME_UNSUPPORTED as u64 }; if code==RM1_E_NON_PIC_RELOC { return &RM1_ENAME_NON_PIC_RELOC as u64 }; if code==RM1_E_FORBIDDEN_TARGET { return &RM1_ENAME_FORBIDDEN_TARGET as u64 }; if code==RM1_E_BAD_ENTRY_SIG { return &RM1_ENAME_BAD_ENTRY_SIG as u64 }; if code==RM1_E_ONEWAY_READ { return &RM1_ENAME_ONEWAY_READ as u64 }; if code==RM1_E_NO_CAP_REVOKE { return &RM1_ENAME_NO_CAP_REVOKE as u64 }; if code==RM1_E_SEALED { return &RM1_ENAME_SEALED as u64 }; if code==RM1_E_INTERNAL { return &RM1_ENAME_INTERNAL as u64 }; return &RM1_ENAME_UNKNOWN as u64 }

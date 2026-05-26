@@ -1,0 +1,15 @@
+/* 823 -- mig4 Step 8e: lower the SCOPING domain (FUNDER) through XII.  Drives xlu_selftest: the
+ * left-assoc/right-zero laws hold by canonicalisation -- LEFT-associativity (1), NF is the LEFT-nested
+ * word (2), the constructor left-nests STRUCTURALLY at zero rewrite cost (3, route-S), RIGHT zero a/e->e (4);
+ * the keystone ASYMMETRY teeth -- e/a does NOT reduce, FUNDER has a right zero but no left identity
+ * (5); determinism (6); ADMITTED by Step 6 (7).  Exit 99 = all hold -- the fourth and last distinct
+ * composition algebra, completing the lowering of every binary fusion operator.  Gated by run_corpus.sh. */
+module corpus_823
+
+extern @abi(c-msvc-x64) fn xlu_selftest() -> u64 from "xii_lower_under.iii"
+
+fn main() -> u64 {
+    let r : u64 = xlu_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

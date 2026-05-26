@@ -1,0 +1,1014 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\emit.iii
+ *
+ * III Stage-0 binary emitter ? Stage-1 .iii port of emit.c.
+ *
+ * Mirrors emit.c determinism contract D1..D18 (see emit.h).  All
+ * libc / subprocess primitives are reached via emit_accessors.c so
+ * the .iii body itself remains pure compiler-language.
+ *
+ * NIH per ADR-021: gcc/ld/objcopy/objdump on the host side; libc only
+ * on our side.  No third-party deps.
+ */
+
+module emit
+
+/* ??? Error codes (must mirror emit.h, ABI-stable) ??????????????????? */
+const III_EMIT_OK                       : u32 = 0u32
+const III_EMIT_E_NULL_ARG               : u32 = 1u32
+const III_EMIT_E_BAD_FORMAT             : u32 = 2u32
+const III_EMIT_E_CMD_OVERFLOW           : u32 = 3u32
+const III_EMIT_E_GCC_FAIL               : u32 = 4u32
+const III_EMIT_E_LD_FAIL                : u32 = 5u32
+const III_EMIT_E_OBJCOPY_FAIL           : u32 = 6u32
+const III_EMIT_E_IO                     : u32 = 7u32
+const III_EMIT_E_OOM                    : u32 = 8u32
+const III_EMIT_E_MHASH_MISMATCH         : u32 = 9u32
+const III_EMIT_E_NO_SANCTUM_SECTION     : u32 = 10u32
+const III_EMIT_E_LDSCRIPT_WRITE         : u32 = 11u32
+const III_EMIT_E_WITNESS_WRITE          : u32 = 12u32
+const III_EMIT_E_VERSION_PROBE          : u32 = 13u32
+const III_EMIT_E_SEALED                 : u32 = 14u32
+const III_EMIT_E_ENV                    : u32 = 15u32
+const III_EMIT_E_INTERNAL               : u32 = 99u32
+
+/* ??? Format enum (ABI-stable) ??????????????????????????????????????? */
+const III_EMIT_FORMAT_PE_EXE         : u32 = 0u32
+const III_EMIT_FORMAT_PE_DLL         : u32 = 1u32
+const III_EMIT_FORMAT_PE_SYS         : u32 = 2u32
+const III_EMIT_FORMAT_ELF_EXE        : u32 = 3u32
+const III_EMIT_FORMAT_RAW_BIN        : u32 = 4u32
+const III_EMIT_FORMAT_SANCTUM_OBJECT : u32 = 5u32
+
+/* ??? Phase codes for audit sink ????????????????????????????????????? */
+const III_EMIT_PHASE_ASSEMBLE : u32 = 1u32
+const III_EMIT_PHASE_LINK     : u32 = 2u32
+const III_EMIT_PHASE_OBJCOPY  : u32 = 3u32
+const III_EMIT_PHASE_VERSION  : u32 = 4u32
+const III_EMIT_PHASE_WITNESS  : u32 = 5u32
+
+/* ??? C accessors (libc / subprocess / I/O surface) ?????????????????? */
+extern @abi(c-msvc-x64) fn iii_emit_putenv_c(kv: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_system_c(cmd: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_popen_first_line_c(cmd: u64, out: u64, cap: u64) -> i64 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_popen_grep_c(cmd: u64, needle: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_write_file_c(path: u64, data: u64, len: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_read_file_c(path: u64, out_buf_addr: u64, out_len: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_free_c(addr: u64) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_appstr_c(dst: u64, off: u64, cap: u64, src: u64) -> i64 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_appch_c(dst: u64, off: u64, cap: u64, ch: u32) -> i64 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_apphex_c(dst: u64, off: u64, cap: u64, v: u64) -> i64 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_strlen_c(s: u64) -> u64 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_strcmp_c(a: u64, b: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_write_u8_c(addr: u64, val: u32) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_write_u32_be_c(addr: u64, val: u32) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_pack8_c(b0: u32, b1: u32, b2: u32, b3: u32, b4: u32, b5: u32, b6: u32, b7: u32) -> u64 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_hexchar_c(nibble: u32) -> u32 from "emit_accessors.c"
+
+/* ??? D1/D5/D6 forced env strings (writable; putenv binds storage) ??
+ *
+ * Each var is a NUL-terminated "K=V\n"-less form.  iii_emit_force_env
+ * walks the FORCED_ENV pointer table and putenv()s each one.  Order
+ * matches sema-sorted form for env_mhash determinism. */
+var ENV_CCACHE  : [u8; 17] = [67u8,67u8,65u8,67u8,72u8,69u8,95u8,68u8,73u8,83u8,65u8,66u8,76u8,69u8,61u8,49u8,0u8]            /* "CCACHE_DISABLE=1\0" */
+var ENV_LANG    : [u8; 8]  = [76u8,65u8,78u8,71u8,61u8,67u8,0u8,0u8]                                                          /* "LANG=C\0" + pad */
+var ENV_LCALL   : [u8; 9]  = [76u8,67u8,95u8,65u8,76u8,76u8,61u8,67u8,0u8]                                                    /* "LC_ALL=C\0" */
+var ENV_SDE     : [u8; 20] = [83u8,79u8,85u8,82u8,67u8,69u8,95u8,68u8,65u8,84u8,69u8,95u8,69u8,80u8,79u8,67u8,72u8,61u8,48u8,0u8] /* "SOURCE_DATE_EPOCH=0\0" */
+var ENV_TZ      : [u8; 8]  = [84u8,90u8,61u8,85u8,84u8,67u8,48u8,0u8]                                                         /* "TZ=UTC0\0" */
+
+/* Format-name strings (returned by iii_emit_format_name). */
+var FN_PE_EXE    : [u8; 7]  = [112u8,101u8,45u8,101u8,120u8,101u8,0u8]                                                                                    /* "pe-exe\0" */
+var FN_PE_DLL    : [u8; 7]  = [112u8,101u8,45u8,100u8,108u8,108u8,0u8]                                                                                    /* "pe-dll\0" */
+var FN_PE_SYS    : [u8; 7]  = [112u8,101u8,45u8,115u8,121u8,115u8,0u8]                                                                                    /* "pe-sys\0" */
+var FN_ELF_EXE   : [u8; 8]  = [101u8,108u8,102u8,45u8,101u8,120u8,101u8,0u8]                                                                              /* "elf-exe\0" */
+var FN_RAW_BIN   : [u8; 8]  = [114u8,97u8,119u8,45u8,98u8,105u8,110u8,0u8]                                                                                /* "raw-bin\0" */
+var FN_SANCTUM   : [u8; 15] = [115u8,97u8,110u8,99u8,116u8,117u8,109u8,45u8,111u8,98u8,106u8,101u8,99u8,116u8,0u8]                                        /* "sanctum-object\0" */
+var FN_UNKNOWN   : [u8; 10] = [60u8,117u8,110u8,107u8,110u8,111u8,119u8,110u8,62u8,0u8]                                                                   /* "<unknown>\0" */
+
+/* Tool name strings. */
+var TOOL_GCC     : [u8; 4] = [103u8,99u8,99u8,0u8]                                                                                                        /* "gcc\0" */
+var TOOL_LD      : [u8; 3] = [108u8,100u8,0u8]                                                                                                            /* "ld\0" */
+var TOOL_OBJDUMP : [u8; 8] = [111u8,98u8,106u8,100u8,117u8,109u8,112u8,0u8]                                                                                /* "objdump\0" */
+var SANCTUM_SECT : [u8; 18] = [46u8,120u8,105u8,105u8,95u8,115u8,97u8,110u8,99u8,116u8,117u8,109u8,46u8,116u8,101u8,120u8,116u8,0u8]                      /* ".xii_sanctum.text\0" */
+var UNAVAILABLE  : [u8; 13] = [85u8,78u8,65u8,86u8,65u8,73u8,76u8,65u8,66u8,76u8,69u8,10u8,0u8]                                                            /* "UNAVAILABLE\n\0" */
+
+/* ??? Format spec table: parallel arrays in declaration order ???????? *
+ *
+ * driver: 0 = "gcc", 1 = "ld"
+ * abi_flags / link_flags: pointer to NUL-terminated string ("" if empty)
+ * emit_objcopy_bin / is_sanctum: 0/1 booleans
+ *
+ * Indexed by format enum.
+ */
+var FMT_DRIVER          : [u32; 6] = [0u32,0u32,0u32,0u32,1u32,1u32]
+var FMT_EMIT_OBJCOPY    : [u32; 6] = [0u32,0u32,0u32,0u32,1u32,0u32]
+var FMT_IS_SANCTUM      : [u32; 6] = [0u32,0u32,0u32,0u32,0u32,1u32]
+
+/* ABI / link flags as concrete strings (parallel to format enum). */
+var ABI_PE_EXE   : [u8; 9]  = [45u8,109u8,97u8,98u8,105u8,61u8,109u8,115u8,0u8]                                                                       /* "-mabi=ms\0" */
+var ABI_PE_DLL   : [u8; 9]  = [45u8,109u8,97u8,98u8,105u8,61u8,109u8,115u8,0u8]                                                                       /* "-mabi=ms\0" */
+var ABI_PE_SYS   : [u8; 24] = [45u8,109u8,97u8,98u8,105u8,61u8,109u8,115u8,32u8,45u8,102u8,102u8,114u8,101u8,101u8,115u8,116u8,97u8,110u8,100u8,105u8,110u8,103u8,0u8] /* "-mabi=ms -ffreestanding\0" */
+var ABI_EMPTY    : [u8; 1]  = [0u8]
+var LF_EMPTY     : [u8; 1]  = [0u8]
+var LF_PE_DLL    : [u8; 8]  = [45u8,115u8,104u8,97u8,114u8,101u8,100u8,0u8]                                                                            /* "-shared\0" */
+var LF_PE_SYS    : [u8; 41] = [45u8,115u8,104u8,97u8,114u8,101u8,100u8,32u8,45u8,110u8,111u8,115u8,116u8,100u8,108u8,105u8,98u8,32u8,45u8,87u8,108u8,44u8,45u8,45u8,115u8,117u8,98u8,115u8,121u8,115u8,116u8,101u8,109u8,44u8,110u8,97u8,116u8,105u8,118u8,101u8,0u8] /* "-shared -nostdlib -Wl,--subsystem,native\0" */
+var LF_RAW_BIN   : [u8; 18] = [45u8,110u8,111u8,115u8,116u8,100u8,108u8,105u8,98u8,32u8,45u8,115u8,116u8,97u8,116u8,105u8,99u8,0u8]                    /* "-nostdlib -static\0" */
+var LF_SANCTUM   : [u8; 21] = [45u8,110u8,111u8,115u8,116u8,100u8,108u8,105u8,98u8,32u8,45u8,115u8,116u8,97u8,116u8,105u8,99u8,32u8,45u8,114u8,0u8]    /* "-nostdlib -static -r\0" */
+
+/* Boilerplate strings for command-line construction. */
+var STR_GCC_C_X_ASM   : [u8; 22] = [103u8,99u8,99u8,32u8,45u8,99u8,32u8,45u8,120u8,32u8,97u8,115u8,115u8,101u8,109u8,98u8,108u8,101u8,114u8,32u8,0u8,0u8] /* "gcc -c -x assembler \0" + pad */
+var STR_FILEPREFIX    : [u8; 22] = [45u8,102u8,102u8,105u8,108u8,101u8,45u8,112u8,114u8,101u8,102u8,105u8,120u8,45u8,109u8,97u8,112u8,61u8,36u8,80u8,87u8,68u8] /* "-ffile-prefix-map=$PWD" no NUL ? see helpers */
+var STR_PREFIX_EQ_DOT : [u8; 5]  = [61u8,46u8,32u8,0u8,0u8]                                                                                              /* "=. \0" */
+var STR_FRAND         : [u8; 15] = [45u8,102u8,114u8,97u8,110u8,100u8,111u8,109u8,45u8,115u8,101u8,101u8,100u8,61u8,0u8]                                  /* "-frandom-seed=\0" */
+var STR_SP            : [u8; 2]  = [32u8,0u8]                                                                                                             /* " \0" */
+var STR_BIDNONE_GCC   : [u8; 22] = [45u8,87u8,108u8,44u8,45u8,45u8,98u8,117u8,105u8,108u8,100u8,45u8,105u8,100u8,61u8,110u8,111u8,110u8,101u8,32u8,0u8,0u8] /* "-Wl,--build-id=none \0" + pad */
+var STR_BIDNONE_LD    : [u8; 16] = [45u8,45u8,98u8,117u8,105u8,108u8,100u8,45u8,105u8,100u8,61u8,110u8,111u8,110u8,101u8,0u8]                              /* "--build-id=none\0" */
+var STR_DASH_O_QQ     : [u8; 6]  = [32u8,45u8,111u8,32u8,34u8,0u8]                                                                                        /* " -o \"\0" */
+var STR_QQ            : [u8; 2]  = [34u8,0u8]                                                                                                              /* "\"\0" */
+var STR_SP_QQ         : [u8; 3]  = [32u8,34u8,0u8]                                                                                                         /* " \"\0" */
+var STR_DASH_T_QQ     : [u8; 5]  = [32u8,45u8,84u8,32u8,0u8]                                                                                              /* " -T \0" */
+var STR_QQ_SP_QQ      : [u8; 4]  = [34u8,32u8,34u8,0u8]                                                                                                    /* "\" \"\0" */
+var STR_VER           : [u8; 11] = [32u8,45u8,45u8,118u8,101u8,114u8,115u8,105u8,111u8,110u8,0u8]                                                          /* " --version\0" */
+var STR_OBJDUMP_H     : [u8; 12] = [111u8,98u8,106u8,100u8,117u8,109u8,112u8,32u8,45u8,104u8,32u8,0u8]                                                     /* "objdump -h \0" */
+var STR_OBJCOPY_OB    : [u8; 17] = [111u8,98u8,106u8,99u8,111u8,112u8,121u8,32u8,45u8,79u8,32u8,98u8,105u8,110u8,97u8,114u8,121u8]                         /* "objcopy -O binary" no NUL */
+var STR_OBJCOPY_TAIL  : [u8; 7]  = [32u8,34u8,37u8,115u8,46u8,98u8,105u8]                                                                                  /* unused, see assemble */
+var STR_DOT_BIN       : [u8; 5]  = [46u8,98u8,105u8,110u8,0u8]                                                                                             /* ".bin\0" */
+var STR_NL            : [u8; 2]  = [10u8,0u8]                                                                                                              /* "\n\0" */
+var STR_DOT_WITNESS   : [u8; 14] = [46u8,119u8,105u8,116u8,110u8,101u8,115u8,115u8,46u8,106u8,115u8,111u8,110u8,0u8]                                       /* ".witness.json\0" */
+var STR_DOT_SANCTLD   : [u8; 11] = [46u8,115u8,97u8,110u8,99u8,116u8,117u8,109u8,46u8,108u8,100u8]                                                         /* ".sanctum.ld" no NUL */
+var STR_DOT_SANCTLD_Z : [u8; 12] = [46u8,115u8,97u8,110u8,99u8,116u8,117u8,109u8,46u8,108u8,100u8,0u8]                                                     /* ".sanctum.ld\0" */
+var STR_LDSCRIPT_HDR  : [u8; 64] = [47u8,42u8,32u8,73u8,73u8,73u8,32u8,115u8,97u8,110u8,99u8,116u8,117u8,109u8,45u8,111u8,98u8,106u8,101u8,99u8,116u8,32u8,108u8,105u8,110u8,107u8,101u8,114u8,32u8,115u8,99u8,114u8,105u8,112u8,116u8,32u8,45u8,32u8,103u8,101u8,110u8,101u8,114u8,97u8,116u8,101u8,100u8,44u8,32u8,100u8,101u8,116u8,101u8,114u8,109u8,105u8,110u8,105u8,115u8,116u8,105u8,99u8,46u8,32u8,42u8,47u8] /* III sanctum-object linker script header text, no NUL terminator */
+var STR_LDSCRIPT_S1   : [u8; 16] = [10u8,83u8,69u8,67u8,84u8,73u8,79u8,78u8,83u8,32u8,123u8,10u8,32u8,32u8,32u8,32u8]                                      /* "\nSECTIONS {\n    " */
+var STR_LDSCRIPT_S2   : [u8; 8]  = [46u8,32u8,61u8,32u8,48u8,120u8,0u8,0u8]                                                                                /* ". = 0x\0" + pad */
+var STR_LDSCRIPT_S3   : [u8; 32] = [59u8,10u8,32u8,32u8,32u8,32u8,46u8,120u8,105u8,105u8,95u8,115u8,97u8,110u8,99u8,116u8,117u8,109u8,46u8,116u8,101u8,120u8,116u8,32u8,58u8,32u8,123u8,32u8,75u8,69u8,69u8,80u8] /* ";\n    .xii_sanctum.text : { KEEP" */
+var STR_LDSCRIPT_S4   : [u8; 4]  = [40u8,42u8,40u8,0u8]                                                                                                    /* "(*(\0" */
+var STR_LDSCRIPT_S5   : [u8; 6]  = [41u8,41u8,32u8,125u8,10u8,125u8]                                                                                       /* "))) }\n}" */
+var STR_LDSCRIPT_S6   : [u8; 2]  = [10u8,0u8]                                                                                                              /* "\n\0" */
+var STR_WIT_K1        : [u8; 24] = [123u8,34u8,99u8,111u8,109u8,109u8,97u8,110u8,100u8,95u8,108u8,105u8,110u8,101u8,95u8,109u8,104u8,97u8,115u8,104u8,34u8,58u8,34u8,0u8]                                            /* "{\"command_line_mhash\":\"\0" */
+var STR_WIT_K2        : [u8; 16] = [34u8,44u8,34u8,101u8,110u8,118u8,95u8,109u8,104u8,97u8,115u8,104u8,34u8,58u8,34u8,0u8]                                                                                            /* "\",\"env_mhash\":\"\0" */
+var STR_WIT_K3        : [u8; 13] = [34u8,44u8,34u8,102u8,111u8,114u8,109u8,97u8,116u8,34u8,58u8,34u8,0u8]                                                                                                              /* "\",\"format\":\"\0" */
+var STR_WIT_K4        : [u8; 24] = [34u8,44u8,34u8,103u8,99u8,99u8,95u8,118u8,101u8,114u8,115u8,105u8,111u8,110u8,95u8,109u8,104u8,97u8,115u8,104u8,34u8,58u8,34u8,0u8]                                                /* "\",\"gcc_version_mhash\":\"\0" */
+var STR_WIT_K5        : [u8; 23] = [34u8,44u8,34u8,108u8,100u8,95u8,118u8,101u8,114u8,115u8,105u8,111u8,110u8,95u8,109u8,104u8,97u8,115u8,104u8,34u8,58u8,34u8,0u8]                                                    /* "\",\"ld_version_mhash\":\"\0" */
+var STR_WIT_K6        : [u8; 19] = [34u8,44u8,34u8,111u8,117u8,116u8,112u8,117u8,116u8,95u8,109u8,104u8,97u8,115u8,104u8,34u8,58u8,34u8,0u8]                                                                            /* "\",\"output_mhash\":\"\0" */
+var STR_WIT_K7        : [u8; 24] = [34u8,44u8,34u8,115u8,111u8,117u8,114u8,99u8,101u8,95u8,100u8,97u8,116u8,101u8,95u8,101u8,112u8,111u8,99u8,104u8,34u8,58u8,34u8,0u8]                                                /* "\",\"source_date_epoch\":\"\0" */
+var STR_WIT_TAIL      : [u8; 4]  = [34u8,125u8,0u8,0u8]                                                                                                                                                                  /* "\"}\0" + pad */
+var STR_SDE_VAL       : [u8; 2]  = [48u8,0u8]                                                                                                                                                                            /* "0\0" */
+
+/* Sanctum VMA literal. */
+const III_EMIT_SANCTUM_VMA : u64 = 0xFFFF800000200000u64
+
+/* ??? Process-global emitter state ??????????????????????????????????? *
+ *
+ * Mirrors C iii_emit_state_t.  All fields module-scope `var`.
+ */
+var G_SEALED                : u32 = 0u32
+var G_HAVE_EXPECTED         : u32 = 0u32
+var G_HAVE_LAST             : u32 = 0u32
+var G_AUDIT_FN              : u64 = 0u64
+var G_AUDIT_USER            : u64 = 0u64
+var G_BUFADDR               : u64 = 0u64
+var G_BUFLEN                : u64 = 0u64
+
+/* ??? SHA-256 state (NIH FIPS-180-4) ????????????????????????????????? */
+var EMIT_SHA_S0 : u32 = 0u32
+var EMIT_SHA_S1 : u32 = 0u32
+var EMIT_SHA_S2 : u32 = 0u32
+var EMIT_SHA_S3 : u32 = 0u32
+var EMIT_SHA_S4 : u32 = 0u32
+var EMIT_SHA_S5 : u32 = 0u32
+var EMIT_SHA_S6 : u32 = 0u32
+var EMIT_SHA_S7 : u32 = 0u32
+var EMIT_SHA_BITS_HI : u32 = 0u32
+var EMIT_SHA_BITS_LO : u32 = 0u32
+var EMIT_SHA_LEN : u32 = 0u32
+
+/* Uninitialized arrays (must follow ALL initialized vars per cg .bss layout). */
+var G_EXPECTED_MHASH        : [u8; 32]
+var G_LAST_OUTPUT_MHASH     : [u8; 32]
+var G_LAST_ARGV_MHASH       : [u8; 32]
+var G_LAST_ENV_MHASH        : [u8; 32]
+var G_LAST_GCC_VER_MHASH    : [u8; 32]
+var G_LAST_LD_VER_MHASH     : [u8; 32]
+var G_WITNESS_JSON          : [u8; 2048]
+
+/* Scratch buffers used by various entry points (uninitialized). */
+var EMIT_CMD                : [u8; 16384]
+var EMIT_CMD2               : [u8; 2048]
+var EMIT_VERSION_LINE       : [u8; 512]
+var EMIT_SANCTUM_SCRIPT_PATH: [u8; 1024]
+var EMIT_OUTPUT_FOR_HASH    : [u8; 1024]
+var EMIT_WITNESS_PATH       : [u8; 1024]
+var EMIT_LDSCRIPT_BUF       : [u8; 256]
+var EMIT_HEX_ARGV           : [u8; 65]
+var EMIT_HEX_ENV            : [u8; 65]
+var EMIT_HEX_GCC            : [u8; 65]
+var EMIT_HEX_LD             : [u8; 65]
+var EMIT_HEX_OUT            : [u8; 65]
+var EMIT_HEX_TMP            : [u8; 17]
+
+var EMIT_SHA_BUF : [u8; 64]
+var EMIT_SHA_W   : [u32; 64]
+
+/* ??? Helpers ???????????????????????????????????????????????????????? */
+
+fn emit_rotr32(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+fn emit_k256_at(i: u32) -> u32 {
+    /* FIPS 180-4 ?4.2.2 ? SHA-256 round constants. */
+    if i == 0u32  { return 0x428a2f98u32 }
+    if i == 1u32  { return 0x71374491u32 }
+    if i == 2u32  { return 0xb5c0fbcfu32 }
+    if i == 3u32  { return 0xe9b5dba5u32 }
+    if i == 4u32  { return 0x3956c25bu32 }
+    if i == 5u32  { return 0x59f111f1u32 }
+    if i == 6u32  { return 0x923f82a4u32 }
+    if i == 7u32  { return 0xab1c5ed5u32 }
+    if i == 8u32  { return 0xd807aa98u32 }
+    if i == 9u32  { return 0x12835b01u32 }
+    if i == 10u32 { return 0x243185beu32 }
+    if i == 11u32 { return 0x550c7dc3u32 }
+    if i == 12u32 { return 0x72be5d74u32 }
+    if i == 13u32 { return 0x80deb1feu32 }
+    if i == 14u32 { return 0x9bdc06a7u32 }
+    if i == 15u32 { return 0xc19bf174u32 }
+    if i == 16u32 { return 0xe49b69c1u32 }
+    if i == 17u32 { return 0xefbe4786u32 }
+    if i == 18u32 { return 0x0fc19dc6u32 }
+    if i == 19u32 { return 0x240ca1ccu32 }
+    if i == 20u32 { return 0x2de92c6fu32 }
+    if i == 21u32 { return 0x4a7484aau32 }
+    if i == 22u32 { return 0x5cb0a9dcu32 }
+    if i == 23u32 { return 0x76f988dau32 }
+    if i == 24u32 { return 0x983e5152u32 }
+    if i == 25u32 { return 0xa831c66du32 }
+    if i == 26u32 { return 0xb00327c8u32 }
+    if i == 27u32 { return 0xbf597fc7u32 }
+    if i == 28u32 { return 0xc6e00bf3u32 }
+    if i == 29u32 { return 0xd5a79147u32 }
+    if i == 30u32 { return 0x06ca6351u32 }
+    if i == 31u32 { return 0x14292967u32 }
+    if i == 32u32 { return 0x27b70a85u32 }
+    if i == 33u32 { return 0x2e1b2138u32 }
+    if i == 34u32 { return 0x4d2c6dfcu32 }
+    if i == 35u32 { return 0x53380d13u32 }
+    if i == 36u32 { return 0x650a7354u32 }
+    if i == 37u32 { return 0x766a0abbu32 }
+    if i == 38u32 { return 0x81c2c92eu32 }
+    if i == 39u32 { return 0x92722c85u32 }
+    if i == 40u32 { return 0xa2bfe8a1u32 }
+    if i == 41u32 { return 0xa81a664bu32 }
+    if i == 42u32 { return 0xc24b8b70u32 }
+    if i == 43u32 { return 0xc76c51a3u32 }
+    if i == 44u32 { return 0xd192e819u32 }
+    if i == 45u32 { return 0xd6990624u32 }
+    if i == 46u32 { return 0xf40e3585u32 }
+    if i == 47u32 { return 0x106aa070u32 }
+    if i == 48u32 { return 0x19a4c116u32 }
+    if i == 49u32 { return 0x1e376c08u32 }
+    if i == 50u32 { return 0x2748774cu32 }
+    if i == 51u32 { return 0x34b0bcb5u32 }
+    if i == 52u32 { return 0x391c0cb3u32 }
+    if i == 53u32 { return 0x4ed8aa4au32 }
+    if i == 54u32 { return 0x5b9cca4fu32 }
+    if i == 55u32 { return 0x682e6ff3u32 }
+    if i == 56u32 { return 0x748f82eeu32 }
+    if i == 57u32 { return 0x78a5636fu32 }
+    if i == 58u32 { return 0x84c87814u32 }
+    if i == 59u32 { return 0x8cc70208u32 }
+    if i == 60u32 { return 0x90befffau32 }
+    if i == 61u32 { return 0xa4506cebu32 }
+    if i == 62u32 { return 0xbef9a3f7u32 }
+    return 0xc67178f2u32
+}
+
+fn emit_sha_w_set(i: u32, v: u32) -> u32 {
+    /* `var EMIT_SHA_W : [u32;64]` lives in .data; address is &EMIT_SHA_W. */
+    let base : u64 = &EMIT_SHA_W as u64
+    let p    : u64 = base + (i as u64) * 4u64
+    /* Manual little-endian u32 store via single-byte writes. */
+    iii_emit_write_u8_c(p,        (v >>  0u32) & 0xffu32)
+    iii_emit_write_u8_c(p + 1u64, (v >>  8u32) & 0xffu32)
+    iii_emit_write_u8_c(p + 2u64, (v >> 16u32) & 0xffu32)
+    iii_emit_write_u8_c(p + 3u64, (v >> 24u32) & 0xffu32)
+    return 0u32
+}
+
+fn sha_w_get(i: u32) -> u32 {
+    let base : u64 = &EMIT_SHA_W as u64
+    let p    : u64 = base + (i as u64) * 4u64
+    let b0 : u32 = iii_emit_buf_read_u8_c(p, 0u64)
+    let b1 : u32 = iii_emit_buf_read_u8_c(p, 1u64)
+    let b2 : u32 = iii_emit_buf_read_u8_c(p, 2u64)
+    let b3 : u32 = iii_emit_buf_read_u8_c(p, 3u64)
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn emit_sha_compress() -> u32 {
+    /* Load 16 big-endian u32s from EMIT_SHA_BUF into W[0..16]. */
+    let bbase : u64 = &EMIT_SHA_BUF as u64
+    let mut i : u32 = 0u32
+    if i < 16u32 {
+        /* Use a manual loop via recursion-equivalent: simple while */
+    }
+    /* No while: use unrolled / manual loop with mut counter */
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        let off : u64 = (k as u64) * 4u64
+        let b0 : u32 = iii_emit_buf_read_u8_c(bbase, off + 0u64)
+        let b1 : u32 = iii_emit_buf_read_u8_c(bbase, off + 1u64)
+        let b2 : u32 = iii_emit_buf_read_u8_c(bbase, off + 2u64)
+        let b3 : u32 = iii_emit_buf_read_u8_c(bbase, off + 3u64)
+        emit_sha_w_set(k, (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3)
+        k = k + 1u32
+    }
+    /* Expand W[16..64]. */
+    k = 16u32
+    while k < 64u32 {
+        let w15 : u32 = sha_w_get(k - 15u32)
+        let w2  : u32 = sha_w_get(k - 2u32)
+        let s0  : u32 = emit_rotr32(w15, 7u32) ^ emit_rotr32(w15, 18u32) ^ (w15 >> 3u32)
+        let s1  : u32 = emit_rotr32(w2, 17u32) ^ emit_rotr32(w2, 19u32) ^ (w2 >> 10u32)
+        let w16 : u32 = sha_w_get(k - 16u32)
+        let w7  : u32 = sha_w_get(k - 7u32)
+        emit_sha_w_set(k, w16 + s0 + w7 + s1)
+        k = k + 1u32
+    }
+    let mut a : u32 = EMIT_SHA_S0
+    let mut b : u32 = EMIT_SHA_S1
+    let mut c : u32 = EMIT_SHA_S2
+    let mut d : u32 = EMIT_SHA_S3
+    let mut e : u32 = EMIT_SHA_S4
+    let mut f : u32 = EMIT_SHA_S5
+    let mut g : u32 = EMIT_SHA_S6
+    let mut h : u32 = EMIT_SHA_S7
+    k = 0u32
+    while k < 64u32 {
+        let S1 : u32 = emit_rotr32(e, 6u32) ^ emit_rotr32(e, 11u32) ^ emit_rotr32(e, 25u32)
+        let ch : u32 = (e & f) ^ ((!e) & g)
+        let t1 : u32 = h + S1 + ch + emit_k256_at(k) + sha_w_get(k)
+        let S0 : u32 = emit_rotr32(a, 2u32) ^ emit_rotr32(a, 13u32) ^ emit_rotr32(a, 22u32)
+        let mj : u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2 : u32 = S0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+        k = k + 1u32
+    }
+    EMIT_SHA_S0 = EMIT_SHA_S0 + a
+    EMIT_SHA_S1 = EMIT_SHA_S1 + b
+    EMIT_SHA_S2 = EMIT_SHA_S2 + c
+    EMIT_SHA_S3 = EMIT_SHA_S3 + d
+    EMIT_SHA_S4 = EMIT_SHA_S4 + e
+    EMIT_SHA_S5 = EMIT_SHA_S5 + f
+    EMIT_SHA_S6 = EMIT_SHA_S6 + g
+    EMIT_SHA_S7 = EMIT_SHA_S7 + h
+    return 0u32
+}
+
+fn emit_sha_init() -> u32 {
+    EMIT_SHA_S0 = 0x6a09e667u32
+    EMIT_SHA_S1 = 0xbb67ae85u32
+    EMIT_SHA_S2 = 0x3c6ef372u32
+    EMIT_SHA_S3 = 0xa54ff53au32
+    EMIT_SHA_S4 = 0x510e527fu32
+    EMIT_SHA_S5 = 0x9b05688cu32
+    EMIT_SHA_S6 = 0x1f83d9abu32
+    EMIT_SHA_S7 = 0x5be0cd19u32
+    EMIT_SHA_BITS_HI = 0u32
+    EMIT_SHA_BITS_LO = 0u32
+    EMIT_SHA_LEN = 0u32
+    return 0u32
+}
+
+fn emit_sha_buf_set(off: u32, v: u8) -> u32 {
+    let p : u64 = (&EMIT_SHA_BUF as u64) + (off as u64)
+    iii_emit_write_u8_c(p, v as u32)
+    return 0u32
+}
+
+fn emit_sha_update(data: u64, n: u64) -> u32 {
+    /* Update bit counter (n*8) into 64-bit (HI:LO). */
+    let bits_add_lo : u32 = ((n & 0xffffffffu64) as u32) << 3u32
+    let bits_add_hi : u32 = ((n >> 29u64) as u32)
+    let new_lo : u32 = EMIT_SHA_BITS_LO + bits_add_lo
+    let mut carry : u32 = 0u32
+    if new_lo < EMIT_SHA_BITS_LO { carry = 1u32 }
+    EMIT_SHA_BITS_LO = new_lo
+    EMIT_SHA_BITS_HI = EMIT_SHA_BITS_HI + bits_add_hi + carry
+
+    let mut left : u64 = n
+    let mut p    : u64 = data
+    while left > 0u64 {
+        let mut take : u64 = 64u64 - (EMIT_SHA_LEN as u64)
+        if take > left { take = left }
+        iii_emit_memcpy_c((&EMIT_SHA_BUF as u64) + (EMIT_SHA_LEN as u64), p, take)
+        EMIT_SHA_LEN = EMIT_SHA_LEN + (take as u32)
+        p = p + take
+        left = left - take
+        if EMIT_SHA_LEN == 64u32 {
+            emit_sha_compress()
+            EMIT_SHA_LEN = 0u32
+        }
+    }
+    return 0u32
+}
+
+fn emit_sha_final(out: u64) -> u32 {
+    emit_sha_buf_set(EMIT_SHA_LEN, 0x80u8)
+    EMIT_SHA_LEN = EMIT_SHA_LEN + 1u32
+    if EMIT_SHA_LEN > 56u32 {
+        while EMIT_SHA_LEN < 64u32 { emit_sha_buf_set(EMIT_SHA_LEN, 0u8); EMIT_SHA_LEN = EMIT_SHA_LEN + 1u32 }
+        emit_sha_compress()
+        EMIT_SHA_LEN = 0u32
+    }
+    while EMIT_SHA_LEN < 56u32 { emit_sha_buf_set(EMIT_SHA_LEN, 0u8); EMIT_SHA_LEN = EMIT_SHA_LEN + 1u32 }
+    /* Big-endian length. */
+    emit_sha_buf_set(56u32, ((EMIT_SHA_BITS_HI >> 24u32) & 0xffu32) as u8)
+    emit_sha_buf_set(57u32, ((EMIT_SHA_BITS_HI >> 16u32) & 0xffu32) as u8)
+    emit_sha_buf_set(58u32, ((EMIT_SHA_BITS_HI >>  8u32) & 0xffu32) as u8)
+    emit_sha_buf_set(59u32, ( EMIT_SHA_BITS_HI         & 0xffu32) as u8)
+    emit_sha_buf_set(60u32, ((EMIT_SHA_BITS_LO >> 24u32) & 0xffu32) as u8)
+    emit_sha_buf_set(61u32, ((EMIT_SHA_BITS_LO >> 16u32) & 0xffu32) as u8)
+    emit_sha_buf_set(62u32, ((EMIT_SHA_BITS_LO >>  8u32) & 0xffu32) as u8)
+    emit_sha_buf_set(63u32, ( EMIT_SHA_BITS_LO         & 0xffu32) as u8)
+    emit_sha_compress()
+    /* Write 8 big-endian u32s via the C accessor (no inline arrays in let). */
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let mut s : u32 = 0u32
+        if i == 0u32 { s = EMIT_SHA_S0 }
+        if i == 1u32 { s = EMIT_SHA_S1 }
+        if i == 2u32 { s = EMIT_SHA_S2 }
+        if i == 3u32 { s = EMIT_SHA_S3 }
+        if i == 4u32 { s = EMIT_SHA_S4 }
+        if i == 5u32 { s = EMIT_SHA_S5 }
+        if i == 6u32 { s = EMIT_SHA_S6 }
+        if i == 7u32 { s = EMIT_SHA_S7 }
+        iii_emit_write_u32_be_c(out + (i as u64) * 4u64, s)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn emit_sha_oneshot(data: u64, n: u64, out: u64) -> u32 {
+    emit_sha_init()
+    emit_sha_update(data, n)
+    emit_sha_final(out)
+    return 0u32
+}
+
+/* ??? Public hex helper ?????????????????????????????????????????????? */
+fn iii_emit_hex32(input_p: u64, out_p: u64) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let v   : u32 = iii_emit_buf_read_u8_c(input_p, i as u64)
+        let hi  : u32 = (v >> 4u32) & 0xfu32
+        let lo  : u32 = v & 0xfu32
+        let chi : u32 = iii_emit_hexchar_c(hi)
+        let clo : u32 = iii_emit_hexchar_c(lo)
+        iii_emit_write_u8_c(out_p + (i as u64) * 2u64,        chi)
+        iii_emit_write_u8_c(out_p + (i as u64) * 2u64 + 1u64, clo)
+        i = i + 1u32
+    }
+    iii_emit_write_u8_c(out_p + 64u64, 0u32)
+    return 0u32
+}
+
+/* ??? Forced env ????????????????????????????????????????????????????? */
+fn iii_emit_force_env() -> u32 {
+    iii_emit_putenv_c(&ENV_CCACHE as u64)
+    iii_emit_putenv_c(&ENV_LANG   as u64)
+    iii_emit_putenv_c(&ENV_LCALL  as u64)
+    iii_emit_putenv_c(&ENV_SDE    as u64)
+    iii_emit_putenv_c(&ENV_TZ     as u64)
+    return 0u32
+}
+
+fn iii_emit_compute_env_mhash(out: u64) -> u32 {
+    emit_sha_init()
+    emit_sha_update(&ENV_CCACHE as u64, iii_emit_strlen_c(&ENV_CCACHE as u64))
+    emit_sha_update(&STR_NL     as u64, 1u64)
+    emit_sha_update(&ENV_LANG   as u64, iii_emit_strlen_c(&ENV_LANG   as u64))
+    emit_sha_update(&STR_NL     as u64, 1u64)
+    emit_sha_update(&ENV_LCALL  as u64, iii_emit_strlen_c(&ENV_LCALL  as u64))
+    emit_sha_update(&STR_NL     as u64, 1u64)
+    emit_sha_update(&ENV_SDE    as u64, iii_emit_strlen_c(&ENV_SDE    as u64))
+    emit_sha_update(&STR_NL     as u64, 1u64)
+    emit_sha_update(&ENV_TZ     as u64, iii_emit_strlen_c(&ENV_TZ     as u64))
+    emit_sha_update(&STR_NL     as u64, 1u64)
+    emit_sha_final(out)
+    return 0u32
+}
+
+/* ??? Format-name resolver ??????????????????????????????????????????? */
+fn iii_emit_format_name(fmt: u32) -> u64 @export {
+    if fmt == 0u32 { return &FN_PE_EXE  as u64 }
+    if fmt == 1u32 { return &FN_PE_DLL  as u64 }
+    if fmt == 2u32 { return &FN_PE_SYS  as u64 }
+    if fmt == 3u32 { return &FN_ELF_EXE as u64 }
+    if fmt == 4u32 { return &FN_RAW_BIN as u64 }
+    if fmt == 5u32 { return &FN_SANCTUM as u64 }
+    return &FN_UNKNOWN as u64
+}
+
+/* basename ? last segment after / or \ */
+fn emit_basename(path: u64) -> u64 {
+    let n : u64 = iii_emit_strlen_c(path)
+    let mut last : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let c : u32 = iii_emit_buf_read_u8_c(path, i)
+        if c == 47u32 { last = i + 1u64 }
+        if c == 92u32 { last = i + 1u64 }
+        i = i + 1u64
+    }
+    return path + last
+}
+
+/* ??? Format-table accessors ????????????????????????????????????????? */
+fn fmt_driver(fmt: u32) -> u32 {
+    let p : u64 = (&FMT_DRIVER as u64) + (fmt as u64) * 4u64
+    let b0 : u32 = iii_emit_buf_read_u8_c(p, 0u64)
+    let b1 : u32 = iii_emit_buf_read_u8_c(p, 1u64)
+    let b2 : u32 = iii_emit_buf_read_u8_c(p, 2u64)
+    let b3 : u32 = iii_emit_buf_read_u8_c(p, 3u64)
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn fmt_emit_objcopy(fmt: u32) -> u32 {
+    let p : u64 = (&FMT_EMIT_OBJCOPY as u64) + (fmt as u64) * 4u64
+    let b0 : u32 = iii_emit_buf_read_u8_c(p, 0u64)
+    return b0
+}
+
+fn fmt_is_sanctum(fmt: u32) -> u32 {
+    let p : u64 = (&FMT_IS_SANCTUM as u64) + (fmt as u64) * 4u64
+    let b0 : u32 = iii_emit_buf_read_u8_c(p, 0u64)
+    return b0
+}
+
+fn fmt_abi_flags(fmt: u32) -> u64 {
+    if fmt == 0u32 { return &ABI_PE_EXE as u64 }
+    if fmt == 1u32 { return &ABI_PE_DLL as u64 }
+    if fmt == 2u32 { return &ABI_PE_SYS as u64 }
+    return &ABI_EMPTY as u64
+}
+
+fn fmt_link_flags(fmt: u32) -> u64 {
+    if fmt == 1u32 { return &LF_PE_DLL  as u64 }
+    if fmt == 2u32 { return &LF_PE_SYS  as u64 }
+    if fmt == 4u32 { return &LF_RAW_BIN as u64 }
+    if fmt == 5u32 { return &LF_SANCTUM as u64 }
+    return &LF_EMPTY as u64
+}
+
+fn fmt_driver_name(fmt: u32) -> u64 {
+    let d : u32 = fmt_driver(fmt)
+    if d == 0u32 { return &TOOL_GCC as u64 }
+    return &TOOL_LD as u64
+}
+
+/* ??? Capture tool version (popen first line, sha) ??????????????????? */
+fn emit_capture_version(tool: u64, out: u64) -> u32 {
+    /* Build "<tool> --version\0" into EMIT_CMD2. */
+    let cap : u64 = 2048u64
+    let dst : u64 = &EMIT_CMD2 as u64
+    let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, tool)
+    if off < 0i64 {
+        emit_sha_oneshot(&UNAVAILABLE as u64, 12u64, out)
+        return 0u32
+    }
+    let off2 : i64 = iii_emit_appstr_c(dst, off as u64, cap, &STR_VER as u64)
+    if off2 < 0i64 {
+        emit_sha_oneshot(&UNAVAILABLE as u64, 12u64, out)
+        return 0u32
+    }
+    let n : i64 = iii_emit_popen_first_line_c(dst, &EMIT_VERSION_LINE as u64, 512u64)
+    if n <= 0i64 {
+        emit_sha_oneshot(&UNAVAILABLE as u64, 12u64, out)
+        return 0u32
+    }
+    emit_sha_oneshot(&EMIT_VERSION_LINE as u64, iii_emit_strlen_c(&EMIT_VERSION_LINE as u64), out)
+    return 0u32
+}
+
+/* ??? Sanctum linker script ?????????????????????????????????????????? */
+fn emit_write_sanctum_script(script_path: u64) -> u32 {
+    let cap : u64 = 256u64
+    let dst : u64 = &EMIT_LDSCRIPT_BUF as u64
+    /* Build header + body deterministically. */
+    let mut off : i64 = 0i64
+    /* Use memcpy for the no-NUL header to avoid strlen. */
+    iii_emit_memcpy_c(dst, &STR_LDSCRIPT_HDR as u64, 64u64)
+    off = 64i64
+    iii_emit_memcpy_c(dst + (off as u64), &STR_LDSCRIPT_S1 as u64, 16u64)
+    off = off + 16i64
+    iii_emit_memcpy_c(dst + (off as u64), &STR_LDSCRIPT_S2 as u64, 6u64)
+    off = off + 6i64
+    let off1 : i64 = iii_emit_apphex_c(dst, off as u64, cap, III_EMIT_SANCTUM_VMA)
+    if off1 < 0i64 { return III_EMIT_E_LDSCRIPT_WRITE }
+    off = off1
+    iii_emit_memcpy_c(dst + (off as u64), &STR_LDSCRIPT_S3 as u64, 32u64)
+    off = off + 32i64
+    iii_emit_memcpy_c(dst + (off as u64), &STR_LDSCRIPT_S4 as u64, 3u64)
+    off = off + 3i64
+    let off2 : i64 = iii_emit_appstr_c(dst, off as u64, cap, &SANCTUM_SECT as u64)
+    if off2 < 0i64 { return III_EMIT_E_LDSCRIPT_WRITE }
+    off = off2
+    iii_emit_memcpy_c(dst + (off as u64), &STR_LDSCRIPT_S5 as u64, 6u64)
+    off = off + 6i64
+    iii_emit_memcpy_c(dst + (off as u64), &STR_LDSCRIPT_S6 as u64, 1u64)
+    off = off + 1i64
+    let rc : i32 = iii_emit_write_file_c(script_path, dst, off as u64)
+    if rc != 0i32 { return III_EMIT_E_LDSCRIPT_WRITE }
+    return III_EMIT_OK
+}
+
+fn emit_object_has_sanctum(obj_path: u64) -> u32 {
+    let cap : u64 = 1024u64
+    let dst : u64 = &EMIT_CMD as u64
+    let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, &STR_OBJDUMP_H as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appch_c(dst, off as u64, cap, 34u32)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, obj_path)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appch_c(dst, off as u64, cap, 34u32)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    let r : i32 = iii_emit_popen_grep_c(dst, &SANCTUM_SECT as u64)
+    if r < 0i32 { return III_EMIT_E_NO_SANCTUM_SECTION }
+    if r == 0i32 { return III_EMIT_E_NO_SANCTUM_SECTION }
+    return III_EMIT_OK
+}
+
+/* ??? Witness JSON renderer ?????????????????????????????????????????? */
+fn emit_render_witness(fmt: u32) -> u32 {
+    let dst : u64 = &G_WITNESS_JSON as u64
+    let cap : u64 = 2048u64
+    iii_emit_hex32(&G_LAST_ARGV_MHASH    as u64, &EMIT_HEX_ARGV as u64)
+    iii_emit_hex32(&G_LAST_ENV_MHASH     as u64, &EMIT_HEX_ENV  as u64)
+    iii_emit_hex32(&G_LAST_GCC_VER_MHASH as u64, &EMIT_HEX_GCC  as u64)
+    iii_emit_hex32(&G_LAST_LD_VER_MHASH  as u64, &EMIT_HEX_LD   as u64)
+    iii_emit_hex32(&G_LAST_OUTPUT_MHASH  as u64, &EMIT_HEX_OUT  as u64)
+
+    let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, &STR_WIT_K1 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &EMIT_HEX_ARGV as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_K2 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &EMIT_HEX_ENV as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_K3 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, iii_emit_format_name(fmt))
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_K4 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &EMIT_HEX_GCC as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_K5 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &EMIT_HEX_LD as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_K6 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &EMIT_HEX_OUT as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_K7 as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SDE_VAL as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_WIT_TAIL as u64)
+    if off < 0i64 { return III_EMIT_E_INTERNAL }
+    return III_EMIT_OK
+}
+
+fn emit_write_witness(out_path: u64) -> u32 {
+    let cap : u64 = 1024u64
+    let dst : u64 = &EMIT_WITNESS_PATH as u64
+    let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, out_path)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_DOT_WITNESS as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    let wlen : u64 = iii_emit_strlen_c(&G_WITNESS_JSON as u64)
+    let rc : i32 = iii_emit_write_file_c(dst, &G_WITNESS_JSON as u64, wlen)
+    if rc != 0i32 { return III_EMIT_E_WITNESS_WRITE }
+    return III_EMIT_OK
+}
+
+/* ??? Public lifecycle ??????????????????????????????????????????????? */
+fn iii_emit_reset() -> u32 @export {
+    if G_SEALED != 0u32 { return III_EMIT_OK }
+    G_HAVE_EXPECTED = 0u32
+    G_AUDIT_FN      = 0u64
+    G_AUDIT_USER    = 0u64
+    return III_EMIT_OK
+}
+
+fn iii_emit_seal() -> u32 @export {
+    G_SEALED = 1u32
+    return III_EMIT_OK
+}
+
+fn iii_emit_is_sealed() -> u32 @export {
+    return G_SEALED
+}
+
+fn iii_emit_set_audit_sink(fn_p: u64, user_p: u64) -> u32 @export {
+    if G_SEALED != 0u32 { return III_EMIT_E_SEALED }
+    G_AUDIT_FN   = fn_p
+    G_AUDIT_USER = user_p
+    return III_EMIT_OK
+}
+
+fn iii_emit_set_expected_mhash(expected_or_null: u64) -> u32 @export {
+    if G_SEALED != 0u32 { return III_EMIT_E_SEALED }
+    if expected_or_null == 0u64 {
+        G_HAVE_EXPECTED = 0u32
+        return III_EMIT_OK
+    }
+    iii_emit_memcpy_c(&G_EXPECTED_MHASH as u64, expected_or_null, 32u64)
+    G_HAVE_EXPECTED = 1u32
+    return III_EMIT_OK
+}
+
+fn iii_emit_get_output_mhash(out: u64) -> u32 @export {
+    if out == 0u64 { return III_EMIT_E_NULL_ARG }
+    if G_HAVE_LAST == 0u32 { return III_EMIT_E_INTERNAL }
+    iii_emit_memcpy_c(out, &G_LAST_OUTPUT_MHASH as u64, 32u64)
+    return III_EMIT_OK
+}
+
+fn iii_emit_get_argv_mhash(out: u64) -> u32 @export {
+    if out == 0u64 { return III_EMIT_E_NULL_ARG }
+    iii_emit_memcpy_c(out, &G_LAST_ARGV_MHASH as u64, 32u64)
+    return III_EMIT_OK
+}
+
+fn iii_emit_get_env_mhash(out: u64) -> u32 @export {
+    if out == 0u64 { return III_EMIT_E_NULL_ARG }
+    iii_emit_memcpy_c(out, &G_LAST_ENV_MHASH as u64, 32u64)
+    return III_EMIT_OK
+}
+
+fn iii_emit_get_gcc_version_mhash(out: u64) -> u32 @export {
+    if out == 0u64 { return III_EMIT_E_NULL_ARG }
+    iii_emit_memcpy_c(out, &G_LAST_GCC_VER_MHASH as u64, 32u64)
+    return III_EMIT_OK
+}
+
+fn iii_emit_get_ld_version_mhash(out: u64) -> u32 @export {
+    if out == 0u64 { return III_EMIT_E_NULL_ARG }
+    iii_emit_memcpy_c(out, &G_LAST_LD_VER_MHASH as u64, 32u64)
+    return III_EMIT_OK
+}
+
+fn iii_emit_get_witness_json() -> u64 @export {
+    if G_HAVE_LAST == 0u32 { return 0u64 }
+    return &G_WITNESS_JSON as u64
+}
+
+/* ??? iii_emit_assemble ?????????????????????????????????????????????? */
+fn iii_emit_assemble(asm_path: u64, out_obj_path: u64) -> u32 @export {
+    if asm_path == 0u64 { return III_EMIT_E_NULL_ARG }
+    if out_obj_path == 0u64 { return III_EMIT_E_NULL_ARG }
+    iii_emit_force_env()
+    let cap : u64 = 16384u64
+    let dst : u64 = &EMIT_CMD as u64
+    let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, &STR_GCC_C_X_ASM as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    /* "-ffile-prefix-map=$PWD=. " */
+    iii_emit_memcpy_c(dst + (off as u64), &STR_FILEPREFIX as u64, 22u64)
+    off = off + 22i64
+    iii_emit_memcpy_c(dst + (off as u64), &STR_PREFIX_EQ_DOT as u64, 3u64)
+    off = off + 3i64
+    /* "-frandom-seed=<basename> " */
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_FRAND as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, emit_basename(asm_path))
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SP as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_BIDNONE_GCC as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    /* "-o \"<out>\" \"<asm>\"" */
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_DASH_O_QQ as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, out_obj_path)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_QQ_SP_QQ as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, asm_path)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_QQ as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+
+    let rc : i32 = iii_emit_system_c(dst)
+    if rc != 0i32 { return III_EMIT_E_GCC_FAIL }
+    return III_EMIT_OK
+}
+
+/* ??? iii_emit_link ?????????????????????????????????????????????????? */
+fn iii_emit_link(fmt: u32, obj_paths: u64, obj_count: u64, out_path: u64, linker_script_or_null: u64) -> u32 @export {
+    if obj_paths == 0u64 { return III_EMIT_E_NULL_ARG }
+    if obj_count == 0u64 { return III_EMIT_E_NULL_ARG }
+    if out_path == 0u64  { return III_EMIT_E_NULL_ARG }
+    if fmt > 5u32        { return III_EMIT_E_BAD_FORMAT }
+
+    let is_sanctum : u32 = fmt_is_sanctum(fmt)
+
+    /* Sanctum pre-flight: every input must contain the section. */
+    if is_sanctum != 0u32 {
+        let mut i : u64 = 0u64
+        while i < obj_count {
+            let p_addr : u64 = obj_paths + i * 8u64
+            let p0 : u32 = iii_emit_buf_read_u8_c(p_addr, 0u64)
+            let p1 : u32 = iii_emit_buf_read_u8_c(p_addr, 1u64)
+            let p2 : u32 = iii_emit_buf_read_u8_c(p_addr, 2u64)
+            let p3 : u32 = iii_emit_buf_read_u8_c(p_addr, 3u64)
+            let p4 : u32 = iii_emit_buf_read_u8_c(p_addr, 4u64)
+            let p5 : u32 = iii_emit_buf_read_u8_c(p_addr, 5u64)
+            let p6 : u32 = iii_emit_buf_read_u8_c(p_addr, 6u64)
+            let p7 : u32 = iii_emit_buf_read_u8_c(p_addr, 7u64)
+            let pp : u64 = iii_emit_pack8_c(p0, p1, p2, p3, p4, p5, p6, p7)
+            let r : u32 = emit_object_has_sanctum(pp)
+            if r != III_EMIT_OK { return r }
+            i = i + 1u64
+        }
+        let cap : u64 = 1024u64
+        let dst : u64 = &EMIT_SANCTUM_SCRIPT_PATH as u64
+        let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, out_path)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_DOT_SANCTLD_Z as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        let wr : u32 = emit_write_sanctum_script(dst)
+        if wr != III_EMIT_OK { return wr }
+    }
+
+    iii_emit_force_env()
+
+    let cap : u64 = 16384u64
+    let dst : u64 = &EMIT_CMD as u64
+    let mut off : i64 = iii_emit_appstr_c(dst, 0u64, cap, fmt_driver_name(fmt))
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+
+    let abi_p : u64 = fmt_abi_flags(fmt)
+    if iii_emit_buf_read_u8_c(abi_p, 0u64) != 0u32 {
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SP as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, abi_p)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    }
+
+    let lf_p : u64 = fmt_link_flags(fmt)
+    if iii_emit_buf_read_u8_c(lf_p, 0u64) != 0u32 {
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SP as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, lf_p)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    }
+
+    /* Driver-specific build-id flag. */
+    if fmt_driver(fmt) == 0u32 {
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SP as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        iii_emit_memcpy_c(dst + (off as u64), &STR_FILEPREFIX as u64, 22u64)
+        off = off + 22i64
+        iii_emit_memcpy_c(dst + (off as u64), &STR_PREFIX_EQ_DOT as u64, 3u64)
+        off = off + 3i64
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_BIDNONE_GCC as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    } else {
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SP as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_BIDNONE_LD as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    }
+
+    /* "-o \"<out>\"" */
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_DASH_O_QQ as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, out_path)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    off = iii_emit_appstr_c(dst, off as u64, cap, &STR_QQ as u64)
+    if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+
+    /* Sanctum + extra script. */
+    if is_sanctum != 0u32 {
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_DASH_T_QQ as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appch_c(dst, off as u64, cap, 34u32)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, &EMIT_SANCTUM_SCRIPT_PATH as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appch_c(dst, off as u64, cap, 34u32)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    }
+    if linker_script_or_null != 0u64 {
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_DASH_T_QQ as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appch_c(dst, off as u64, cap, 34u32)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, linker_script_or_null)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appch_c(dst, off as u64, cap, 34u32)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    }
+
+    /* Append all object paths. */
+    let mut i : u64 = 0u64
+    while i < obj_count {
+        let p_addr : u64 = obj_paths + i * 8u64
+        let p0 : u32 = iii_emit_buf_read_u8_c(p_addr, 0u64)
+        let p1 : u32 = iii_emit_buf_read_u8_c(p_addr, 1u64)
+        let p2 : u32 = iii_emit_buf_read_u8_c(p_addr, 2u64)
+        let p3 : u32 = iii_emit_buf_read_u8_c(p_addr, 3u64)
+        let p4 : u32 = iii_emit_buf_read_u8_c(p_addr, 4u64)
+        let p5 : u32 = iii_emit_buf_read_u8_c(p_addr, 5u64)
+        let p6 : u32 = iii_emit_buf_read_u8_c(p_addr, 6u64)
+        let p7 : u32 = iii_emit_buf_read_u8_c(p_addr, 7u64)
+        let pp : u64 = iii_emit_pack8_c(p0, p1, p2, p3, p4, p5, p6, p7)
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_SP_QQ as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, pp)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off = iii_emit_appstr_c(dst, off as u64, cap, &STR_QQ as u64)
+        if off < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        i = i + 1u64
+    }
+
+    /* Argv / env / version mhashes. */
+    emit_sha_oneshot(dst, iii_emit_strlen_c(dst), &G_LAST_ARGV_MHASH as u64)
+    iii_emit_compute_env_mhash(&G_LAST_ENV_MHASH as u64)
+    emit_capture_version(&TOOL_GCC as u64, &G_LAST_GCC_VER_MHASH as u64)
+    emit_capture_version(&TOOL_LD  as u64, &G_LAST_LD_VER_MHASH  as u64)
+
+    let rc : i32 = iii_emit_system_c(dst)
+    if rc != 0i32 {
+        if fmt_driver(fmt) == 1u32 { return III_EMIT_E_LD_FAIL }
+        return III_EMIT_E_GCC_FAIL
+    }
+
+    /* Determine the output path used for the post-emission hash. */
+    let cap2 : u64 = 1024u64
+    let dst2 : u64 = &EMIT_OUTPUT_FOR_HASH as u64
+    let mut off2 : i64 = iii_emit_appstr_c(dst2, 0u64, cap2, out_path)
+    if off2 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+
+    if fmt_emit_objcopy(fmt) != 0u32 {
+        let cap3 : u64 = 2048u64
+        let dst3 : u64 = &EMIT_CMD2 as u64
+        let mut off3 : i64 = iii_emit_appstr_c(dst3, 0u64, cap3, &STR_OBJCOPY_OB as u64)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off3 = iii_emit_appstr_c(dst3, off3 as u64, cap3, &STR_SP_QQ as u64)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off3 = iii_emit_appstr_c(dst3, off3 as u64, cap3, out_path)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off3 = iii_emit_appstr_c(dst3, off3 as u64, cap3, &STR_QQ_SP_QQ as u64)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off3 = iii_emit_appstr_c(dst3, off3 as u64, cap3, out_path)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off3 = iii_emit_appstr_c(dst3, off3 as u64, cap3, &STR_DOT_BIN as u64)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        off3 = iii_emit_appstr_c(dst3, off3 as u64, cap3, &STR_QQ as u64)
+        if off3 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+        let rc2 : i32 = iii_emit_system_c(dst3)
+        if rc2 != 0i32 { return III_EMIT_E_OBJCOPY_FAIL }
+        off2 = iii_emit_appstr_c(dst2, off2 as u64, cap2, &STR_DOT_BIN as u64)
+        if off2 < 0i64 { return III_EMIT_E_CMD_OVERFLOW }
+    }
+
+    /* Read output bytes, hash them. */
+    G_BUFADDR = 0u64
+    G_BUFLEN  = 0u64
+    let rc3 : i32 = iii_emit_read_file_c(dst2, &G_BUFADDR as u64, &G_BUFLEN as u64)
+    if rc3 != 0i32 { return III_EMIT_E_IO }
+    emit_sha_oneshot(G_BUFADDR, G_BUFLEN, &G_LAST_OUTPUT_MHASH as u64)
+    iii_emit_free_c(G_BUFADDR)
+    G_HAVE_LAST = 1u32
+
+    /* Render + write witness. */
+    let rcw : u32 = emit_render_witness(fmt)
+    if rcw != III_EMIT_OK { return rcw }
+    let rcw2 : u32 = emit_write_witness(out_path)
+    if rcw2 != III_EMIT_OK { return rcw2 }
+
+    /* Golden-bytes gate. */
+    if G_HAVE_EXPECTED != 0u32 {
+        if iii_emit_memcmp_c(&G_EXPECTED_MHASH as u64, &G_LAST_OUTPUT_MHASH as u64, 32u64) != 0i32 {
+            return III_EMIT_E_MHASH_MISMATCH
+        }
+    }
+
+    return III_EMIT_OK
+}

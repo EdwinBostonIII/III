@@ -1,0 +1,125 @@
+/* STDLIB/iii/omnia/xii_lower_iterate.iii -- mig4 Step 8b: lower the ITERATION domain through XII.
+ * The third structured-programming primitive (after COMPOSITION/Step 7 and SELECTION/Step 8a):
+ * bounded repetition, lowered onto FLOOP.  Additive (a consumer of canonicalise; the cascade is
+ * untouched) and the engine's OWN loop rules ARE the iteration algebra's laws (read from
+ * xii_rewrite.iii):
+ *   - iterate         loop(b, n)   = FLOOP(b, n)        (n is the FLOOP aux count)
+ *   - body atoms      = inert K12 leaves (CAP_NONE -> cap-disjoint, so the distribute law may fire)
+ *   - null body       = K06 null-form leaf
+ * The laws:
+ *   - LOOP-ONCE       R013  FLOOP(b, 1)                 -> b                  (apply_R013 = child_a)
+ *   - MULT. FOLD      R014  FLOOP(FLOOP(b, n), m)        -> FLOOP(b, n*m)     (nested loops multiply)
+ *   - DISTRIBUTE      R015  FLOOP(FCOMPOSE(a,b), n)      -> FCOMPOSE(FLOOP(a,n), FLOOP(b,n))
+ *                           (guard cap_disjoint(a,b): independent steps loop independently)
+ *   - NULL-BODY       R041  FLOOP(K06_NULL, n)          -> K06_NULL          (iterating nothing is nothing)
+ * So xii_canonicalise of an encoded iteration IS the iteration normal form -- a single body when the
+ * count is one, a folded count for nested loops, distributed loops over independent composition, and
+ * the empty body wiped.  Gated by xad_admit.  struct_eq compares the FLOOP aux, so loop(b,2) and
+ * loop(b,3) are genuinely distinct iterations (the count is observable).
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_admission only.  Determinism: integer-only; ==/!= compares; single-line fns; no arrays /
+ * pointer math / u64 div-mod; eval results bound to locals before struct_eq (param-spill-safe).
+ */
+module omnia_xii_lower_iterate
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLI_FCOMPOSE : u8 = 18u8    /* for the distribute law (R015) */
+const XLI_K06      : u8 = 5u8     /* the null kind = the empty body */
+const XLI_ATOM     : u8 = 11u8    /* K12: CAP_NONE + inert under FCOMPOSE -> cap-disjoint free bodies */
+const XLI_NULL_REF : u32 = 0xFFFFFFFFu32
+
+/* a free body atom indexed by subform sf. */
+fn xli_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLI_ATOM, sf) }
+
+/* the empty body = the K06 null-form leaf. */
+fn xli_null() -> u32 @export { return xii_term_make_basis(XLI_K06, xii_rewrite_null_form()) }
+
+/* iterate body n times  = FLOOP(body, n). */
+fn xli_loop(body: u32, n: u64) -> u32 @export { return xii_term_make_loop(body, n) }
+
+/* compose two independent steps (for the distribute law)  a . b = FCOMPOSE(a, b). */
+fn xli_compose(a: u32, b: u32) -> u32 @export { return xii_term_make_fusion2(XLI_FCOMPOSE, a, b) }
+
+/* evaluate (reduce) an iteration term: this IS the engine's canonicalisation. */
+fn xli_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.
+ * Proves the iteration-algebra LAWS hold by canonicalisation -- loop-once (1), multiplicative fold
+ * of nested loops (2), distribute over independent composition (3), null-body wipe (4); the prove-
+ * the-negative TEETH that a GENUINE iteration is preserved (5) and that the count is observable so
+ * distinct counts stay distinct (6); determinism (7); and the rules realising it are ADMITTED by
+ * Step 6 (8). */
+fn xli_selftest() -> u64 @export {
+    /* (1) LOOP-ONCE (R013): loop(b, 1) -> b. */
+    xii_term_arena_reset()
+    let l1 : u32 = xli_loop(xli_atom(1u32), 1u64)
+    let b1 : u32 = xli_atom(1u32)
+    let nf1 : u32 = xli_eval(l1)
+    if xii_rewrite_struct_eq(nf1, b1) != 1u8 { return 1u64 }
+
+    /* (2) MULTIPLICATIVE FOLD (R014): loop(loop(b, 2), 3) -> loop(b, 6). */
+    xii_term_arena_reset()
+    let l2 : u32 = xli_loop(xli_loop(xli_atom(1u32), 2u64), 3u64)
+    let e2 : u32 = xli_loop(xli_atom(1u32), 6u64)
+    let nf2 : u32 = xli_eval(l2)
+    if xii_rewrite_struct_eq(nf2, e2) != 1u8 { return 2u64 }
+
+    /* (3) DISTRIBUTE (R015): loop(a.b, 2) -> loop(a,2).loop(b,2)  (a,b cap-disjoint). */
+    xii_term_arena_reset()
+    let l3 : u32 = xli_loop(xli_compose(xli_atom(1u32), xli_atom(2u32)), 2u64)
+    let e3 : u32 = xli_compose(xli_loop(xli_atom(1u32), 2u64), xli_loop(xli_atom(2u32), 2u64))
+    let nf3 : u32 = xli_eval(l3)
+    if xii_rewrite_struct_eq(nf3, e3) != 1u8 { return 3u64 }
+
+    /* (4) NULL-BODY (R041): loop(null, 5) -> null. */
+    xii_term_arena_reset()
+    let l4 : u32 = xli_loop(xli_null(), 5u64)
+    let e4 : u32 = xli_null()
+    let nf4 : u32 = xli_eval(l4)
+    if xii_rewrite_struct_eq(nf4, e4) != 1u8 { return 4u64 }
+
+    /* (5) GENUINE ITERATION preserved (teeth): loop(b, 3) with a single-atom body does NOT reduce. */
+    xii_term_arena_reset()
+    let l5 : u32 = xli_loop(xli_atom(1u32), 3u64)
+    let s5 : u32 = xli_loop(xli_atom(1u32), 3u64)
+    let nf5 : u32 = xli_eval(l5)
+    if xii_rewrite_struct_eq(nf5, s5) != 1u8 { return 5u64 }
+
+    /* (6) COUNT OBSERVABLE (teeth): loop(b, 2) != loop(b, 3) -- the iteration count is structural. */
+    xii_term_arena_reset()
+    let c2 : u32 = xli_loop(xli_atom(1u32), 2u64)
+    let c3 : u32 = xli_loop(xli_atom(1u32), 3u64)
+    let nc2 : u32 = xli_eval(c2)
+    let nc3 : u32 = xli_eval(c3)
+    if xii_rewrite_struct_eq(nc2, nc3) != 0u8 { return 6u64 }
+
+    /* (7) DETERMINISM. */
+    xii_term_arena_reset()
+    let z1 : u32 = xli_loop(xli_loop(xli_atom(1u32), 2u64), 3u64)
+    let z2 : u32 = xli_loop(xli_loop(xli_atom(1u32), 2u64), 3u64)
+    let nz1 : u32 = xli_eval(z1)
+    let nz2 : u32 = xli_eval(z2)
+    if xii_rewrite_struct_eq(nz1, nz2) != 1u8 { return 7u64 }
+
+    /* (8) the rules realising the iteration domain are ADMITTED (Step 6). */
+    if xad_admit() != 1u32 { return 8u64 }
+
+    return 99u64
+}
+
+/* xii_lower_iterate EMBODIES ITERATION lowered onto XII: bounded repetition is FLOOP, the count is
+ * its aux, body atoms are inert K12 leaves, the empty body is the K06 null, and the engine's own
+ * R013 (loop-once) / R014 (multiplicative fold) / R015 (distribute) / R041 (null-body wipe) rules ARE
+ * the iteration algebra -- so canonicalising a loop folds nested counts, distributes over independent
+ * composition, and wipes the empty body.  The third of the structured-programming trinity
+ * (sequence/Step 7, selection/Step 8a, iteration/here), additive and Step-6-admitted -- so all of
+ * structured computation now reduces through the one engine. */

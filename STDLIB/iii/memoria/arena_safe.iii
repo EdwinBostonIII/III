@@ -1,0 +1,51 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\arena_safe.iii
+ *
+ * III STDLIB - memoria::arena_safe
+ *
+ * Lattice plan Step 0017 (separated from arena.iii to keep arena.iii's
+ * BSS layout undisturbed; some downstream tests are sensitive to BSS
+ * arrangement).  Provides arena_reset_safe with caller-asserted
+ * clear_done flag.  Without function pointers in iii, the registered
+ * clear_fn is advisory; caller invokes it manually and signals
+ * `clear_done=1`.
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 0.99.
+ */
+
+module memoria_arena_safe
+
+extern @abi(c-msvc-x64) fn arena_reset(arena_id: u64) -> i32 from "arena.iii"
+
+const ARENA_OK             : i32 =  0i32
+const ARENA_E_UNCLEARED    : i32 = -1i32
+const ARENA_E_BADID        : i32 = -2i32
+
+const ARENA_REG_MAX : u32 = 64u32
+
+var ARENA_CLEAR_FN : [u64; 64]
+
+fn arena_register_clear_fn(arena_id: u64, clear_fn_addr: u64) -> i32 @export {
+    if arena_id == 0u64 { return ARENA_E_BADID }
+    let idx : u64 = arena_id - 1u64
+    if idx >= (ARENA_REG_MAX as u64) { return ARENA_E_BADID }
+    ARENA_CLEAR_FN[idx] = clear_fn_addr
+    return ARENA_OK
+}
+
+fn arena_clear_fn_addr(arena_id: u64) -> u64 @export {
+    if arena_id == 0u64 { return 0u64 }
+    let idx : u64 = arena_id - 1u64
+    if idx >= (ARENA_REG_MAX as u64) { return 0u64 }
+    return ARENA_CLEAR_FN[idx]
+}
+
+fn arena_reset_safe(arena_id: u64, clear_done: u8) -> i32 @export {
+    if arena_id == 0u64 { return ARENA_E_BADID }
+    let idx : u64 = arena_id - 1u64
+    if idx >= (ARENA_REG_MAX as u64) { return ARENA_E_BADID }
+    let fa : u64 = ARENA_CLEAR_FN[idx]
+    if fa != 0u64 {
+        if clear_done != 1u8 { return ARENA_E_UNCLEARED }
+    }
+    return arena_reset(arena_id)
+}

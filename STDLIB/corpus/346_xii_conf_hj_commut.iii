@@ -1,0 +1,14 @@
+/* corpus/346_xii_conf_hj_commut.iii  -- Confluence dep: HJ commutativity 49/49 */
+
+module corpus_346_xii_conf_hj_commut
+
+extern @abi(c-msvc-x64) fn xii_hj_commut_full_check() -> u32 from "xii_hj.iii"
+extern @abi(c-msvc-x64) fn xii_hj_origin_dominates_check() -> u32 from "xii_hj.iii"
+extern @abi(c-msvc-x64) fn xii_hj_compose_identity_check() -> u32 from "xii_hj.iii"
+
+fn main() -> u64 {
+    let f1 : u32 = xii_hj_commut_full_check()
+    let f2 : u32 = xii_hj_origin_dominates_check()
+    let f3 : u32 = xii_hj_compose_identity_check()
+    return (f1 + f2 + f3) as u64
+}

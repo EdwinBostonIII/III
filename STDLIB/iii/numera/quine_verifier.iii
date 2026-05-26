@@ -1,0 +1,325 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\quine_verifier.iii
+ *
+ * III STDLIB -- numera::quine_verifier -- Layer 5, Module 20 (gospel).
+ *
+ * Bootstrap self-verification (W25, Discipline Four).  Reconstruct the seed
+ * identity from running state -- fold every boot-registered module's
+ * (module_id || source_hash), in canonical ascending module_id order, into a
+ * master Keccak-256 -- and compare by bit-identical EQUALITY against the seed
+ * identifier recorded in Ring -2.  On success, publish a Quine Verification
+ * Witness fragment so the self-proof is itself chained.  It IS the fixed-point
+ * check that the running system is the system the seed names: it holds no
+ * opinion and makes no estimate (M3/M4) -- it recomputes and compares.
+ *
+ * Hexad: kind_witness.  Ring: R-2.  K: 1.00.
+ * NIH: depends only on identifier.iii, keccak256.iii, witness_hook.iii.
+ *
+ * Reconciliations vs gospel candidate (all mechanical, no algorithm redesign):
+ *   - streaming keccak externed from keccak256.iii (NOT keccak.iii, which has
+ *     no keccak256_init/update/final -- only the low-level sponge primitives);
+ *   - five function-local var arrays promoted to module scope (Trap 7);
+ *   - &ARR[expr] element-address replaced by ((&ARR as u64)+off) as *u8;
+ *   - insertion-sort active-flag fix (the flag drives the while condition
+ *     itself; q decrements only on a real swap -- iiis-1 clobber trap);
+ *   - single ident_cmp per inner iteration into a local (param-spill family);
+ *   - masked u32->u64 before every pointer-math multiply (Trap 4);
+ *   - wh_publish argument fix (antecedents=ZERO_ID/n_ante=0, payload=WIT_OUT/
+ *     payload_len=32) and single-line extern + call (Trap 1);
+ *   - null guards + distinct QV_E_NO_TARGET / QV_E_NULL (W9).
+ *
+ * State is module-singleton (like sha256.iii / keccak256.iii / witness_hook.iii).
+ * III has no threads in the bit-identical path, so serialized use is safe.
+ */
+
+module numera_quine_verifier
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn keccak256_init() -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_update(input: *u8, len: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_final(out: *u8) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+
+const QV_OK          : i32 =  0i32
+const QV_E_FULL      : i32 = -1i32
+const QV_E_NO_TARGET : i32 = -2i32
+const QV_E_NULL      : i32 = -3i32
+const QV_MAX_MODULES : u32 = 512u32
+const QV_ID_BYTES    : u64 = 32u64
+const QV_FAIL_SENT   : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var QV_MOD_LIVE    : [u8;  512]
+var QV_MOD_ID      : [u8;  16384]
+var QV_MOD_SRC     : [u8;  16384]
+var QV_MOD_COUNT   : u32 = 0u32
+
+var QV_SEED_TARGET : [u8; 32]
+var QV_TARGET_SET  : u8  = 0u8
+
+var QV_PRODUCER    : [u8; 32]
+var QV_OPID        : [u8; 32]
+var QV_INITED      : u8  = 0u8
+
+var QV_ORDER       : [u32; 512]     /* sort permutation (Trap 7: was function-local) */
+var QV_RECON_OUT   : [u8; 32]       /* reconstructed master digest sink */
+var QV_WIT_IN      : [u8; 32]       /* witness in-commit (chain root) */
+var QV_WIT_OUT     : [u8; 32]       /* witness out-commit (= seed target) */
+var QV_WIT_FID     : [u8; 32]       /* published fragment-id sink */
+var QV_ZERO_ID     : [u8; 32]       /* canonical zero id (antecedents, n_ante=0) */
+
+var QV_PROD_NAME   : [u8; 32]       /* "numera::quine_verifier" literal bytes */
+var QV_OPID_NAME   : [u8; 32]       /* "numera::quine_verifier::verify" literal bytes */
+
+var QV_T_A   : [u8; 32]
+var QV_T_B   : [u8; 32]
+var QV_T_C   : [u8; 32]
+var QV_T_HA  : [u8; 32]
+var QV_T_HB  : [u8; 32]
+var QV_T_HC  : [u8; 32]
+var QV_T_TARGET : [u8; 32]
+var QV_T_GOT    : [u8; 32]
+
+/* qv_init: zero liveness + count + flags, zero the canonical zero-id, derive the
+ * producer and op identifiers from their ASCII names (literal byte lengths --
+ * no libc strlen in the bit-identical path), mark inited. */
+fn qv_init() -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < 512u64 { QV_MOD_LIVE[i] = 0u8 ; i = i + 1u64 }
+    QV_MOD_COUNT = 0u32
+    QV_TARGET_SET = 0u8
+    i = 0u64
+    while i < 32u64 { QV_ZERO_ID[i] = 0u8 ; i = i + 1u64 }
+    /* "numera::quine_verifier" = 22 bytes */
+    QV_PROD_NAME[0u64]  = 0x6eu8
+    QV_PROD_NAME[1u64]  = 0x75u8
+    QV_PROD_NAME[2u64]  = 0x6du8
+    QV_PROD_NAME[3u64]  = 0x65u8
+    QV_PROD_NAME[4u64]  = 0x72u8
+    QV_PROD_NAME[5u64]  = 0x61u8
+    QV_PROD_NAME[6u64]  = 0x3au8
+    QV_PROD_NAME[7u64]  = 0x3au8
+    QV_PROD_NAME[8u64]  = 0x71u8
+    QV_PROD_NAME[9u64]  = 0x75u8
+    QV_PROD_NAME[10u64] = 0x69u8
+    QV_PROD_NAME[11u64] = 0x6eu8
+    QV_PROD_NAME[12u64] = 0x65u8
+    QV_PROD_NAME[13u64] = 0x5fu8
+    QV_PROD_NAME[14u64] = 0x76u8
+    QV_PROD_NAME[15u64] = 0x65u8
+    QV_PROD_NAME[16u64] = 0x72u8
+    QV_PROD_NAME[17u64] = 0x69u8
+    QV_PROD_NAME[18u64] = 0x66u8
+    QV_PROD_NAME[19u64] = 0x69u8
+    QV_PROD_NAME[20u64] = 0x65u8
+    QV_PROD_NAME[21u64] = 0x72u8
+    ident_from_bytes((&QV_PROD_NAME as u64) as *u8, 22u64, (&QV_PRODUCER as u64) as *u8)
+    /* "numera::quine_verifier::verify" = 30 bytes (append "::verify" to the above) */
+    i = 0u64
+    while i < 22u64 { QV_OPID_NAME[i] = QV_PROD_NAME[i] ; i = i + 1u64 }
+    QV_OPID_NAME[22u64] = 0x3au8
+    QV_OPID_NAME[23u64] = 0x3au8
+    QV_OPID_NAME[24u64] = 0x76u8
+    QV_OPID_NAME[25u64] = 0x65u8
+    QV_OPID_NAME[26u64] = 0x72u8
+    QV_OPID_NAME[27u64] = 0x69u8
+    QV_OPID_NAME[28u64] = 0x66u8
+    QV_OPID_NAME[29u64] = 0x79u8
+    ident_from_bytes((&QV_OPID_NAME as u64) as *u8, 30u64, (&QV_OPID as u64) as *u8)
+    QV_INITED = 1u8
+    return QV_OK
+}
+
+/* qv_register_module: null + capacity guards; byte-copy 32 of id and 32 of src
+ * into the slot at masked offset; mark live; bump count. */
+fn qv_register_module(module_id: *u8, source_hash: *u8) -> i32 @export {
+    if (module_id as u64) == 0u64 { return QV_E_NULL }
+    if (source_hash as u64) == 0u64 { return QV_E_NULL }
+    if QV_MOD_COUNT >= QV_MAX_MODULES { return QV_E_FULL }
+    let idx : u32 = QV_MOD_COUNT
+    let off : u64 = ((idx as u64) & 0xFFFFFFFFu64) * QV_ID_BYTES
+    let idp : *u8 = ((&QV_MOD_ID as u64) + off) as *u8
+    let srp : *u8 = ((&QV_MOD_SRC as u64) + off) as *u8
+    let mut k : u64 = 0u64
+    while k < QV_ID_BYTES {
+        idp[k] = module_id[k]
+        srp[k] = source_hash[k]
+        k = k + 1u64
+    }
+    QV_MOD_LIVE[idx] = 1u8
+    QV_MOD_COUNT = idx + 1u32
+    return QV_OK
+}
+
+/* qv_set_target: null guard; copy the recorded seed identifier; flag set. */
+fn qv_set_target(target: *u8) -> i32 @export {
+    if (target as u64) == 0u64 { return QV_E_NULL }
+    ident_copy(target, (&QV_SEED_TARGET as u64) as *u8)
+    QV_TARGET_SET = 1u8
+    return QV_OK
+}
+
+/* qv_seed_target: null guard; distinct no-target code; copy the recorded seed. */
+fn qv_seed_target(out_id: *u8) -> i32 @export {
+    if (out_id as u64) == 0u64 { return QV_E_NULL }
+    if QV_TARGET_SET == 0u8 { return QV_E_NO_TARGET }
+    ident_copy((&QV_SEED_TARGET as u64) as *u8, out_id)
+    return QV_OK
+}
+
+/* qv_reconstruct (private): insertion-sort the index permutation by module_id
+ * ascending, then streaming-fold (id||src) per slot into a master Keccak-256.
+ * Iterative (W15 -- no recursion); the active flag drives the inner while
+ * condition itself; ident_cmp called once per iteration into a local. */
+fn qv_reconstruct(out: *u8) -> i32 {
+    let mut i : u32 = 0u32
+    while i < QV_MOD_COUNT { QV_ORDER[i] = i ; i = i + 1u32 }
+    let mut p : u32 = 1u32
+    while p < QV_MOD_COUNT {
+        let mut q : u32 = p
+        let mut active : u8 = 1u8
+        while active == 1u8 {
+            if q == 0u32 { active = 0u8 } else {
+                let lhs_idx : u32 = QV_ORDER[q - 1u32]
+                let rhs_idx : u32 = QV_ORDER[q]
+                let loff : u64 = ((lhs_idx as u64) & 0xFFFFFFFFu64) * QV_ID_BYTES
+                let roff : u64 = ((rhs_idx as u64) & 0xFFFFFFFFu64) * QV_ID_BYTES
+                let lp : *u8 = ((&QV_MOD_ID as u64) + loff) as *u8
+                let rp : *u8 = ((&QV_MOD_ID as u64) + roff) as *u8
+                let c : i32 = ident_cmp(lp, rp)
+                if c == 1i32 {
+                    let tmp : u32 = QV_ORDER[q - 1u32]
+                    QV_ORDER[q - 1u32] = QV_ORDER[q]
+                    QV_ORDER[q] = tmp
+                    q = q - 1u32
+                } else { active = 0u8 }
+            }
+        }
+        p = p + 1u32
+    }
+    cad_begin(1u32)
+    let mut kk : u32 = 0u32
+    while kk < QV_MOD_COUNT {
+        let sidx : u32 = QV_ORDER[kk]
+        let soff : u64 = ((sidx as u64) & 0xFFFFFFFFu64) * QV_ID_BYTES
+        let mp : *u8 = ((&QV_MOD_ID as u64) + soff) as *u8
+        cad_payload(mp as u64, QV_ID_BYTES)
+        let hp : *u8 = ((&QV_MOD_SRC as u64) + soff) as *u8
+        cad_payload(hp as u64, QV_ID_BYTES)
+        kk = kk + 1u32
+    }
+    cad_final(out as u64)
+    return QV_OK
+}
+
+/* qv_verify: no target -> 0; reconstruct the master digest; byte-equality vs
+ * the recorded seed (M3/M4 -- pure equality, no tolerance). */
+fn qv_verify() -> u8 @export {
+    if QV_TARGET_SET == 0u8 { return 0u8 }
+    qv_reconstruct((&QV_RECON_OUT as u64) as *u8)
+    return ident_eq((&QV_RECON_OUT as u64) as *u8, (&QV_SEED_TARGET as u64) as *u8)
+}
+
+/* qv_verify_publish: sentinel on verify-failure; else publish a Quine
+ * Verification Witness whose payload is the verified seed identity. */
+fn qv_verify_publish() -> u64 @export {
+    if qv_verify() == 0u8 { return QV_FAIL_SENT }
+    wh_chain_root((&QV_WIT_IN as u64) as *u8)
+    ident_copy((&QV_SEED_TARGET as u64) as *u8, (&QV_WIT_OUT as u64) as *u8)
+    return wh_publish((&QV_PRODUCER as u64) as *u8, (&QV_OPID as u64) as *u8, (&QV_WIT_IN as u64) as *u8, (&QV_WIT_OUT as u64) as *u8, 0u8, 0u8, 5u16, (&QV_ZERO_ID as u64) as *u8, 0u32, (&QV_WIT_OUT as u64) as *u8, 32u32, (&QV_WIT_FID as u64) as *u8)
+}
+
+/* ---- self-test (99 = pass; small positive = first failing step) ----
+ * KAT 1: empty system -> fold == Keccak256("") (anchored to the published
+ *        c5d246..70 vector) + mismatch detection.
+ * KAT 2: 3 modules registered out of order (C,A,B) -> ascending fold matches an
+ *        independently-built target (the load-bearing sort fix).
+ * KAT 3: same modules, descending target -> mismatch (order-fixing, not -agnostic).
+ * KAT 4: verify_publish returns a real fragment index on success + seed_target
+ *        round-trip; sentinel on a corrupted target. */
+fn qv_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+
+    /* ---- KAT 1: empty-system fold == Keccak256("") ---- */
+    qv_init()
+    /* independent empty target: a fresh sponge with zero updates */
+    keccak256_init()
+    keccak256_final((&QV_T_TARGET as u64) as *u8)
+    /* anchor to the published Keccak256("") vector (keccak256.iii::keccak256_kat) */
+    if QV_T_TARGET[0u64] != 0xc5u8 { return 1u64 }
+    if QV_T_TARGET[1u64] != 0xd2u8 { return 2u64 }
+    if QV_T_TARGET[2u64] != 0x46u8 { return 3u64 }
+    if QV_T_TARGET[31u64] != 0x70u8 { return 4u64 }
+    qv_set_target((&QV_T_TARGET as u64) as *u8)
+    if qv_verify() != 1u8 { return 5u64 }
+    /* mismatch detection: corrupt byte 0 of the recorded target */
+    QV_SEED_TARGET[0u64] = QV_SEED_TARGET[0u64] ^ 0x01u8
+    if qv_verify() != 0u8 { return 6u64 }
+
+    /* ---- KAT 2: scrambled registration, ascending fold matches ---- */
+    qv_init()
+    /* A < B < C by first byte (0x00 < 0x11 < 0x22), tails zero */
+    i = 0u64
+    while i < 32u64 {
+        QV_T_A[i] = 0u8
+        QV_T_B[i] = 0u8
+        QV_T_C[i] = 0u8
+        QV_T_HA[i] = 0xAAu8
+        QV_T_HB[i] = 0xBBu8
+        QV_T_HC[i] = 0xCCu8
+        i = i + 1u64
+    }
+    QV_T_B[0u64] = 0x11u8
+    QV_T_C[0u64] = 0x22u8
+    /* register in scrambled order C, A, B */
+    if qv_register_module((&QV_T_C as u64) as *u8, (&QV_T_HC as u64) as *u8) != 0i32 { return 7u64 }
+    if qv_register_module((&QV_T_A as u64) as *u8, (&QV_T_HA as u64) as *u8) != 0i32 { return 8u64 }
+    if qv_register_module((&QV_T_B as u64) as *u8, (&QV_T_HB as u64) as *u8) != 0i32 { return 9u64 }
+    /* independent ascending target: Keccak256(A||HA || B||HB || C||HC) */
+    keccak256_init()
+    keccak256_update((&QV_T_A as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_HA as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_B as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_HB as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_C as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_HC as u64) as *u8, 32u64)
+    keccak256_final((&QV_T_TARGET as u64) as *u8)
+    qv_set_target((&QV_T_TARGET as u64) as *u8)
+    if qv_verify() != 1u8 { return 10u64 }
+
+    /* ---- KAT 3: descending target must NOT match (order-sensitivity) ---- */
+    keccak256_init()
+    keccak256_update((&QV_T_C as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_HC as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_B as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_HB as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_A as u64) as *u8, 32u64)
+    keccak256_update((&QV_T_HA as u64) as *u8, 32u64)
+    keccak256_final((&QV_T_GOT as u64) as *u8)
+    /* if the two folds happen to differ (they must), this is a real negative */
+    qv_set_target((&QV_T_GOT as u64) as *u8)
+    if qv_verify() != 0u8 { return 11u64 }
+
+    /* ---- KAT 4: verify_publish round-trip (success) + sentinel (failure) ---- */
+    /* witness chain has module-singleton state; init it (mirrors wh_selftest) */
+    wh_init(0u64)
+    qv_set_target((&QV_T_TARGET as u64) as *u8)             /* restore the ascending (matching) target */
+    if qv_verify() != 1u8 { return 12u64 }
+    let fidx : u64 = qv_verify_publish()
+    if fidx == QV_FAIL_SENT { return 13u64 }
+    /* seed_target round-trips to the verified target byte-for-byte */
+    qv_seed_target((&QV_T_GOT as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if QV_T_GOT[i] != QV_T_TARGET[i] { return 14u64 }  i = i + 1u64 }
+    /* corrupted target -> verify_publish returns the failure sentinel */
+    QV_SEED_TARGET[0u64] = QV_SEED_TARGET[0u64] ^ 0x01u8
+    if qv_verify_publish() != QV_FAIL_SENT { return 15u64 }
+
+    return 99u64
+}

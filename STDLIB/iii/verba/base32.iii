@@ -1,0 +1,155 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\base32.iii
+ *
+ * III STDLIB - verba::base32
+ *
+ * RFC 4648 Base32 encoder/decoder.  Standard alphabet (A-Z 2-7).
+ * Used by TOTP secrets, BitTorrent magnet links, etc.
+ *
+ * Public API:
+ *   base32_encode(builder_id, src_base, src_len) -> i32
+ *   base32_decode(builder_id, src_base, src_len) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_base32
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+
+const B32_OK : i32 = 0i32
+const B32_E_BADCHAR : i32 = -1i32
+
+fn b32_encode_5bit(v: u32) -> u32 {
+    let m : u32 = v & 0x1Fu32
+    if m < 26u32 { return 65u32 + m }       /* A-Z */
+    return 50u32 + (m - 26u32)              /* 2-7 */
+}
+
+fn b32_decode_5bit(c: u32) -> u32 {
+    if c >= 65u32 {
+        if c <= 90u32 { return c - 65u32 }
+    }
+    if c >= 97u32 {
+        if c <= 122u32 { return c - 97u32 }   /* lowercase tolerant */
+    }
+    if c >= 50u32 {
+        if c <= 55u32 { return 26u32 + (c - 50u32) }
+    }
+    return 0xFFu32
+}
+
+fn base32_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i + 5u64 <= src_len {
+        let b0 : u64 = p[i + 0u64] as u64
+        let b1 : u64 = p[i + 1u64] as u64
+        let b2 : u64 = p[i + 2u64] as u64
+        let b3 : u64 = p[i + 3u64] as u64
+        let b4 : u64 = p[i + 4u64] as u64
+        let v : u64 = (b0 << 32u64) | (b1 << 24u64) | (b2 << 16u64) | (b3 << 8u64) | b4
+        let g0 : u64 = (v >> 35u64) & 0x1Fu64
+        let g1 : u64 = (v >> 30u64) & 0x1Fu64
+        let g2 : u64 = (v >> 25u64) & 0x1Fu64
+        let g3 : u64 = (v >> 20u64) & 0x1Fu64
+        let g4 : u64 = (v >> 15u64) & 0x1Fu64
+        let g5 : u64 = (v >> 10u64) & 0x1Fu64
+        let g6 : u64 = (v >> 5u64)  & 0x1Fu64
+        let g7 : u64 = v & 0x1Fu64
+        builder_push_byte(builder_id, b32_encode_5bit(g0 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g1 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g2 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g3 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g4 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g5 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g6 as u32))
+        builder_push_byte(builder_id, b32_encode_5bit(g7 as u32))
+        i = i + 5u64
+    }
+    let rem : u64 = src_len - i
+    if rem > 0u64 {
+        let mut b0 : u64 = 0u64
+        let mut b1 : u64 = 0u64
+        let mut b2 : u64 = 0u64
+        let mut b3 : u64 = 0u64
+        let b4 : u64 = 0u64
+        if rem >= 1u64 { b0 = p[i + 0u64] as u64 }
+        if rem >= 2u64 { b1 = p[i + 1u64] as u64 }
+        if rem >= 3u64 { b2 = p[i + 2u64] as u64 }
+        if rem >= 4u64 { b3 = p[i + 3u64] as u64 }
+        let v : u64 = (b0 << 32u64) | (b1 << 24u64) | (b2 << 16u64) | (b3 << 8u64) | b4
+        let g0 : u64 = (v >> 35u64) & 0x1Fu64
+        let g1 : u64 = (v >> 30u64) & 0x1Fu64
+        let g2 : u64 = (v >> 25u64) & 0x1Fu64
+        let g3 : u64 = (v >> 20u64) & 0x1Fu64
+        let g4 : u64 = (v >> 15u64) & 0x1Fu64
+        let g5 : u64 = (v >> 10u64) & 0x1Fu64
+        let g6 : u64 = (v >> 5u64)  & 0x1Fu64
+        /* RFC 4648 §6: data chars based on rem, then padding to 8 total.
+         * rem=1: 2 data + 6 pad
+         * rem=2: 4 data + 4 pad
+         * rem=3: 5 data + 3 pad
+         * rem=4: 7 data + 1 pad */
+        let mut data_chars : u32 = 0u32
+        if rem == 1u64 { data_chars = 2u32 }
+        if rem == 2u64 { data_chars = 4u32 }
+        if rem == 3u64 { data_chars = 5u32 }
+        if rem == 4u64 { data_chars = 7u32 }
+        if data_chars >= 1u32 { builder_push_byte(builder_id, b32_encode_5bit(g0 as u32)) }
+        if data_chars >= 2u32 { builder_push_byte(builder_id, b32_encode_5bit(g1 as u32)) }
+        if data_chars >= 3u32 { builder_push_byte(builder_id, b32_encode_5bit(g2 as u32)) }
+        if data_chars >= 4u32 { builder_push_byte(builder_id, b32_encode_5bit(g3 as u32)) }
+        if data_chars >= 5u32 { builder_push_byte(builder_id, b32_encode_5bit(g4 as u32)) }
+        if data_chars >= 6u32 { builder_push_byte(builder_id, b32_encode_5bit(g5 as u32)) }
+        if data_chars >= 7u32 { builder_push_byte(builder_id, b32_encode_5bit(g6 as u32)) }
+        let mut pad_count : u32 = 8u32 - data_chars
+        while pad_count > 0u32 {
+            builder_push_byte(builder_id, 61u32)
+            pad_count = pad_count - 1u32
+        }
+    }
+    return B32_OK
+}
+
+fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i + 8u64 <= src_len {
+        let mut nvalid : u32 = 8u32
+        let mut bytes_out : u32 = 5u32
+        let mut v : u64 = 0u64
+        let mut k : u64 = 0u64
+        while k < 8u64 {
+            let c : u32 = p[i + k] as u32
+            if c == 61u32 {
+                nvalid = k as u32
+                let m : u64 = 7u64 - k
+                k = 8u64
+                /* Determine bytes_out from number of pad chars (8-nvalid) */
+                let pad : u32 = 8u32 - nvalid
+                if pad == 1u32 { bytes_out = 4u32 }
+                if pad == 3u32 { bytes_out = 3u32 }
+                if pad == 4u32 { bytes_out = 2u32 }
+                if pad == 6u32 { bytes_out = 1u32 }
+            } else {
+                let d : u32 = b32_decode_5bit(c)
+                if d == 0xFFu32 { return B32_E_BADCHAR }
+                let shift : u64 = (7u64 - k) * 5u64
+                v = v | ((d as u64) << shift)
+                k = k + 1u64
+            }
+        }
+        let o0 : u64 = (v >> 32u64) & 0xFFu64
+        let o1 : u64 = (v >> 24u64) & 0xFFu64
+        let o2 : u64 = (v >> 16u64) & 0xFFu64
+        let o3 : u64 = (v >> 8u64)  & 0xFFu64
+        let o4 : u64 = v & 0xFFu64
+        if bytes_out >= 1u32 { builder_push_byte(builder_id, o0 as u32) }
+        if bytes_out >= 2u32 { builder_push_byte(builder_id, o1 as u32) }
+        if bytes_out >= 3u32 { builder_push_byte(builder_id, o2 as u32) }
+        if bytes_out >= 4u32 { builder_push_byte(builder_id, o3 as u32) }
+        if bytes_out >= 5u32 { builder_push_byte(builder_id, o4 as u32) }
+        i = i + 8u64
+    }
+    return B32_OK
+}

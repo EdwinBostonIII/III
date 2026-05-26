@@ -1,0 +1,91 @@
+/* Phase 14d Step 0148 verification: numera/merkle binary-tree integrity.
+ * Builds a 4-leaf tree, computes root, computes inclusion proof for
+ * each leaf, verifies all proofs reconstruct the root, and verifies
+ * a tampered proof rejects.
+ */
+module corpus_167
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_proof_len_for(leaf_count: u32, leaf_index: u32) -> u32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+
+fn fill_leaf(p: *u8, base: u8, n: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = base + (i as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let leaves : *u8 = malloc(64u64)   /* 4 leaves * 16 bytes */
+    fill_leaf(leaves,            0x10u8, 16u64)
+    fill_leaf((leaves as u64 + 16u64) as *u8, 0x20u8, 16u64)
+    fill_leaf((leaves as u64 + 32u64) as *u8, 0x30u8, 16u64)
+    fill_leaf((leaves as u64 + 48u64) as *u8, 0x40u8, 16u64)
+
+    /* Compute root. */
+    let root : *u8 = malloc(32u64)
+    if merkle_compute_root(leaves as u64, 4u32, 16u64, root as u64) != 0i32 { return 1u64 }
+
+    /* proof_len for 4 leaves should be 2 (log2(4)). */
+    if merkle_proof_len_for(4u32, 0u32) != 2u32 { return 2u64 }
+    if merkle_proof_len_for(4u32, 3u32) != 2u32 { return 3u64 }
+    /* Out-of-range index → 0. */
+    if merkle_proof_len_for(4u32, 4u32) != 0u32 { return 4u64 }
+
+    /* Verify each leaf produces a valid proof. */
+    let proof : *u8 = malloc(256u64)   /* 2 steps * 33 bytes */
+    let mut idx : u32 = 0u32
+    while idx < 4u32 {
+        let pci : u64 = merkle_pack_count_index(4u32, idx)
+        if merkle_compute_proof(leaves as u64, 16u64, pci, proof as u64) != 0i32 { return 5u64 }
+        let leaf_off : u64 = (idx as u64) * 16u64
+        let leaf_p : *u8 = (leaves as u64 + leaf_off) as *u8
+        let vm : u64 = merkle_pack_verify_meta(16u32, idx, 2u32)
+        if merkle_verify_proof(leaf_p as u64, vm, proof as u64, root as u64) != 1u8 {
+            return 6u64
+        }
+        idx = idx + 1u32
+    }
+
+    /* Tamper the first byte of the proof for leaf 0 -- verification must reject. */
+    let pci0 : u64 = merkle_pack_count_index(4u32, 0u32)
+    merkle_compute_proof(leaves as u64, 16u64, pci0, proof as u64)
+    proof[1] = proof[1] ^ 0xFFu8   /* flip first byte of sibling-hash */
+    let vm0 : u64 = merkle_pack_verify_meta(16u32, 0u32, 2u32)
+    if merkle_verify_proof(leaves, vm0, proof as u64, root as u64) != 0u8 { return 7u64 }
+    proof[1] = proof[1] ^ 0xFFu8   /* restore */
+
+    /* Tamper the leaf -- verification must reject. */
+    leaves[0] = leaves[0] ^ 0xFFu8
+    if merkle_verify_proof(leaves, vm0, proof as u64, root as u64) != 0u8 { return 8u64 }
+    leaves[0] = leaves[0] ^ 0xFFu8
+
+    /* Single-leaf tree: root == leaf_hash, proof_len = 0. */
+    if merkle_proof_len_for(1u32, 0u32) != 0u32 { return 9u64 }
+    let single_root : *u8 = malloc(32u64)
+    if merkle_compute_root(leaves as u64, 1u32, 16u64, single_root as u64) != 0i32 { return 10u64 }
+    /* Verify with 0-step proof. */
+    let vm_single : u64 = merkle_pack_verify_meta(16u32, 0u32, 0u32)
+    if merkle_verify_proof(leaves as u64, vm_single, proof as u64, single_root as u64) != 1u8 { return 11u64 }
+
+    /* Out-of-range refusals. */
+    if merkle_compute_root(0u64, 4u32, 16u64, root as u64) != -1i32 { return 12u64 }
+    if merkle_compute_root(leaves as u64, 0u32, 16u64, root as u64) != -2i32 { return 13u64 }
+    if merkle_compute_root(leaves as u64, 2000u32, 16u64, root as u64) != -2i32 { return 14u64 }
+    let pci_oor : u64 = merkle_pack_count_index(4u32, 99u32)
+    if merkle_compute_proof(leaves as u64, 16u64, pci_oor, proof as u64) != -3i32 { return 15u64 }
+
+    free(leaves)
+    free(root)
+    free(proof)
+    free(single_root)
+    return 99u64
+}

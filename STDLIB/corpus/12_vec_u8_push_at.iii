@@ -1,0 +1,26 @@
+/* vec_u8: push 10, 20, 30; verify len=3 and at(1)=20 */
+module corpus_a12
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn vec_u8_new(arena: u64, max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u8_push(id: u64, b: u32) -> i32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u8_at(id: u64, i: u64) -> u32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u8_len(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u8_drop(id: u64) -> i32 from "vec.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    let v : u64 = vec_u8_new(a, 64u64)
+    if v == 0u64 { return 1u64 }
+    if vec_u8_push(v, 10u32) != 0i32 { return 2u64 }
+    if vec_u8_push(v, 20u32) != 0i32 { return 3u64 }
+    if vec_u8_push(v, 30u32) != 0i32 { return 4u64 }
+    if vec_u8_len(v) != 3u64 { return 5u64 }
+    if vec_u8_at(v, 0u64) != 10u32 { return 6u64 }
+    if vec_u8_at(v, 1u64) != 20u32 { return 7u64 }
+    if vec_u8_at(v, 2u64) != 30u32 { return 8u64 }
+    vec_u8_drop(v)
+    arena_drop(a)
+    return 99u64
+}

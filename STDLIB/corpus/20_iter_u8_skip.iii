@@ -1,0 +1,21 @@
+/* iter_u8: skip 2, then next returns 3rd byte = 30 */
+module corpus_a20
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iter_u8_new(base: u64, len: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_next(id: u64) -> u32 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_skip(id: u64, n: u64) -> u64 from "iter.iii"
+
+fn main() -> u64 {
+    let p : *u8 = malloc(5u64)
+    p[0] = 10u8; p[1] = 20u8; p[2] = 30u8; p[3] = 40u8; p[4] = 50u8
+    let it : u64 = iter_u8_new(p as u64, 5u64)
+    if it == 0u64 { return 1u64 }
+    let skipped : u64 = iter_u8_skip(it, 2u64)
+    if skipped != 2u64 { return 2u64 }
+    let v : u32 = iter_u8_next(it)
+    free(p)
+    if v != 30u32 { return 3u64 }
+    return 99u64
+}

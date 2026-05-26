@@ -1,0 +1,240 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_circ.iii
+ *
+ * III STDLIB - omnia::xii_circ
+ *
+ * 24-bit circumstance encoding + 13 feasibility predicates.
+ * Per DOCS/III-XII.md S11 + S26.9.
+ *
+ * Six coordinates (24 bits total, packed low-to-high):
+ *   D1 deployment_target  [2:0]  : 7 targets (silicon retired per H-11)
+ *     0=x86_avx512, 1=x86_avx2, 2=x86_scalar_ct, 3=arm64_neon,
+ *     4=arm64_sve2, 5=riscv64_v, 6=embedded_safe
+ *   D2 hardware_feature_mask [6:3] : 16 curated combinations
+ *   D3 k_budget_bucket     [9:7]  : 8 buckets [0,1] [2,3] [4,7] [8,15]
+ *                                   [16,31] [32,63] [64,127] [128,255]
+ *   D4 cap_mask_class     [13:10] : 16 cap-set equivalence classes
+ *   D5 hexad_kind         [16:14] : 7 productive hexads + reserved
+ *   D6 fusion_budget      [19:17] : 8 budgets: 0,1,2,3,4,6,8,16
+ *   reserved              [23:20] : zero
+ *
+ * Hexad: kind_essence. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_circ
+
+/* Target ids (the 7 commodity-CPU targets; silicon retired). */
+const XCR_TGT_X86_AVX512    : u32 = 0u32
+const XCR_TGT_X86_AVX2      : u32 = 1u32
+const XCR_TGT_X86_SCALAR_CT : u32 = 2u32
+const XCR_TGT_ARM64_NEON    : u32 = 3u32
+const XCR_TGT_ARM64_SVE2    : u32 = 4u32
+const XCR_TGT_RISCV64_V     : u32 = 5u32
+const XCR_TGT_EMBEDDED_SAFE : u32 = 6u32
+
+/* Feature mask bits (low 4 within the 4-bit D2 field). */
+const XCR_FEAT_AVX512 : u32 = 0x1u32
+const XCR_FEAT_NEON   : u32 = 0x2u32
+const XCR_FEAT_SVE2   : u32 = 0x4u32
+const XCR_FEAT_RV_V   : u32 = 0x8u32
+
+/* K-budget bucket boundaries (per S26.9 P03). */
+const XCR_KB_BUCKET_MAX : u32 = 7u32
+
+/* Hexad values (mirror omnia/xii_term.iii). */
+const XCR_HEXAD_ORIGIN : u32 = 7u32
+
+/* Fusion op kinds (mirror omnia/xii_term.iii). */
+const XCR_FCOMPOSE : u32 = 18u32
+const XCR_FLOOP    : u32 = 23u32
+
+/* ------------------------------------------------------------------ */
+/* Encoding helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+fn xii_circ_encode(target: u32, hw_mask: u32, k_bucket: u32, cap_class: u32, hexad: u32, fusion_budget: u32) -> u32 @export {
+    /* iiis-1 parser requires single-line expressions; bind per-field. */
+    let t   : u32 = target & 0x7u32
+    let h   : u32 = (hw_mask & 0xFu32) << 3u32
+    let kb  : u32 = (k_bucket & 0x7u32) << 7u32
+    let cc  : u32 = (cap_class & 0xFu32) << 10u32
+    let hx  : u32 = (hexad & 0x7u32) << 14u32
+    let fb  : u32 = (fusion_budget & 0x7u32) << 17u32
+    return t | h | kb | cc | hx | fb
+}
+
+fn xii_circ_target(circ: u32) -> u32 @export {
+    return circ & 0x7u32
+}
+
+fn xii_circ_hw_mask(circ: u32) -> u32 @export {
+    return (circ >> 3u32) & 0xFu32
+}
+
+fn xii_circ_k_bucket(circ: u32) -> u32 @export {
+    return (circ >> 7u32) & 0x7u32
+}
+
+fn xii_circ_cap_class(circ: u32) -> u32 @export {
+    return (circ >> 10u32) & 0xFu32
+}
+
+fn xii_circ_hexad(circ: u32) -> u32 @export {
+    return (circ >> 14u32) & 0x7u32
+}
+
+fn xii_circ_fusion_budget(circ: u32) -> u32 @export {
+    return (circ >> 17u32) & 0x7u32
+}
+
+/* ------------------------------------------------------------------ */
+/* 13 feasibility predicates (P01..P13)                                */
+/* Each returns 1 iff the circumstance satisfies the predicate.        */
+/* ------------------------------------------------------------------ */
+
+/* P01: target requires matching hardware feature. */
+fn xii_circ_p01_target_hw_match(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let mask : u32 = xii_circ_hw_mask(circ)
+    if target == XCR_TGT_X86_AVX512    { if (mask & XCR_FEAT_AVX512) == 0u32 { return 0u8 } }
+    if target == XCR_TGT_ARM64_NEON    { if (mask & XCR_FEAT_NEON) == 0u32 { return 0u8 } }
+    if target == XCR_TGT_ARM64_SVE2    { if (mask & XCR_FEAT_SVE2) == 0u32 { return 0u8 } }
+    if target == XCR_TGT_RISCV64_V     { if (mask & XCR_FEAT_RV_V) == 0u32 { return 0u8 } }
+    return 1u8
+}
+
+/* P02: minimum-baseline feature requirements per target. */
+fn xii_circ_p02_target_hw_baseline(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let mask : u32 = xii_circ_hw_mask(circ)
+    if target == XCR_TGT_X86_AVX512 {
+        if (mask & XCR_FEAT_AVX512) == 0u32 { return 0u8 }
+    }
+    if target == XCR_TGT_X86_AVX2 {
+        if (mask & XCR_FEAT_AVX512) != 0u32 { return 0u8 } /* downgrade path */
+    }
+    return 1u8
+}
+
+/* P03: K-budget bucket within target's supported range. */
+fn xii_circ_p03_k_budget_target_compat(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let bucket : u32 = xii_circ_k_bucket(circ)
+    if target == XCR_TGT_X86_SCALAR_CT { if bucket > 5u32 { return 0u8 } }
+    if target == XCR_TGT_EMBEDDED_SAFE { if bucket > 3u32 { return 0u8 } }
+    return 1u8
+}
+
+/* P04: cap class compatible with target. */
+fn xii_circ_p04_cap_target_compat(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let cap : u32 = xii_circ_cap_class(circ)
+    if target == XCR_TGT_EMBEDDED_SAFE { if cap > 8u32 { return 0u8 } }
+    return 1u8
+}
+
+/* P05: hexad x op combinations against guard cells (delegated). */
+fn xii_circ_p05_hexad_op_compat(circ: u32) -> u8 @export {
+    /* Guard cells are non-productive; admission is checked at Horizon lookup. */
+    return 1u8
+}
+
+/* P06: fusion_budget <= k_max_for_bucket. */
+fn xii_circ_p06_fusion_budget_k_max(circ: u32) -> u8 @export {
+    let fb : u32 = xii_circ_fusion_budget(circ)
+    let kb : u32 = xii_circ_k_bucket(circ)
+    let kb_max : u32 = 8u32 + (kb << 1u32) /* coarse heuristic; tight on bucket 0 */
+    if fb > kb_max { return 0u8 }
+    return 1u8
+}
+
+/* P07: AVX512 target forbids mask without AVX512_BIT. */
+fn xii_circ_p07_avx512_baseline(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let mask : u32 = xii_circ_hw_mask(circ)
+    if target == XCR_TGT_X86_AVX512 {
+        if (mask & XCR_FEAT_AVX512) == 0u32 { return 0u8 }
+    }
+    return 1u8
+}
+
+/* P08: ARM NEON target requires NEON_BIT. */
+fn xii_circ_p08_arm_neon_baseline(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let mask : u32 = xii_circ_hw_mask(circ)
+    if target == XCR_TGT_ARM64_NEON {
+        if (mask & XCR_FEAT_NEON) == 0u32 { return 0u8 }
+    }
+    return 1u8
+}
+
+/* P09: RISC-V V target requires RV_V_BIT. */
+fn xii_circ_p09_riscv_v_baseline(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let mask : u32 = xii_circ_hw_mask(circ)
+    if target == XCR_TGT_RISCV64_V {
+        if (mask & XCR_FEAT_RV_V) == 0u32 { return 0u8 }
+    }
+    return 1u8
+}
+
+/* P10: embedded target forbids any SIMD bit. */
+fn xii_circ_p10_embedded_no_simd(circ: u32) -> u8 @export {
+    let target : u32 = xii_circ_target(circ)
+    let mask : u32 = xii_circ_hw_mask(circ)
+    if target == XCR_TGT_EMBEDDED_SAFE {
+        if (mask & 0xFu32) != 0u32 { return 0u8 }
+    }
+    return 1u8
+}
+
+/* P11: CT-tagged patterns require CT-capable target. */
+fn xii_circ_p11_ct_target_compat(circ: u32) -> u8 @export {
+    /* All 7 commodity targets support CT lowering via §26.7 templates. */
+    return 1u8
+}
+
+/* P12: ORIGIN+fusion combinations require Trinity admit (checked at runtime). */
+fn xii_circ_p12_forbidden_origins(circ: u32) -> u8 @export {
+    /* This predicate is a structural pre-check; the actual admission is
+     * verified at xii_horizon_construct via guard cells H127..H132. */
+    return 1u8
+}
+
+/* P13: Horizon cell size bound (curated <= 512 bytes per target). */
+fn xii_circ_p13_ldil_size_bound(circ: u32) -> u8 @export {
+    /* Cell size is enforced at LDIL inlining time. */
+    return 1u8
+}
+
+/* Aggregate feasibility check. */
+fn xii_circ_feasible(circ: u32) -> u8 @export {
+    if xii_circ_p01_target_hw_match(circ) == 0u8 { return 0u8 }
+    if xii_circ_p02_target_hw_baseline(circ) == 0u8 { return 0u8 }
+    if xii_circ_p03_k_budget_target_compat(circ) == 0u8 { return 0u8 }
+    if xii_circ_p04_cap_target_compat(circ) == 0u8 { return 0u8 }
+    if xii_circ_p05_hexad_op_compat(circ) == 0u8 { return 0u8 }
+    if xii_circ_p06_fusion_budget_k_max(circ) == 0u8 { return 0u8 }
+    if xii_circ_p07_avx512_baseline(circ) == 0u8 { return 0u8 }
+    if xii_circ_p08_arm_neon_baseline(circ) == 0u8 { return 0u8 }
+    if xii_circ_p09_riscv_v_baseline(circ) == 0u8 { return 0u8 }
+    if xii_circ_p10_embedded_no_simd(circ) == 0u8 { return 0u8 }
+    if xii_circ_p11_ct_target_compat(circ) == 0u8 { return 0u8 }
+    if xii_circ_p12_forbidden_origins(circ) == 0u8 { return 0u8 }
+    if xii_circ_p13_ldil_size_bound(circ) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* Total feasible-circumstance count enumerator (per S26.9 sealed 16,128). */
+fn xii_circ_count_feasible() -> u32 @export {
+    let mut count : u32 = 0u32
+    let mut c : u32 = 0u32
+    /* iiis-1: bind paren-shift to local to avoid hexad-parse misread. */
+    let limit : u32 = 1u32 << 20u32
+    while c < limit {
+        if xii_circ_feasible(c) == 1u8 { count = count + 1u32 }
+        c = c + 1u32
+    }
+    return count
+}

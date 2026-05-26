@@ -1,0 +1,47 @@
+/* mandate: audit returns full mask when k-chain is healthy and mhash matched */
+module corpus_d45
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn mandate_audit(kchain_id: u64, mhash_matched: u8) -> u32 from "mandate.iii"
+extern @abi(c-msvc-x64) fn mandate_all_mask() -> u32 from "mandate.iii"
+extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_compute() -> i32 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn closure_set(root_ptr: u64) -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_compute_with_resolver() -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+
+fn main() -> u64 {
+    /* M22 setup: lint passed, registry sealed, resolver computed, closure absorbs resolver. */
+    quality_set_resolver_lint_passed()
+    pattern_registry_seal_global()
+    seal_resolver_compute()
+    let cr : *u8 = malloc(32u64)
+    let mut ci : u64 = 0u64
+    while ci < 32u64 { cr[ci] = 0u8; ci = ci + 1u64 }
+    closure_set(cr as u64)
+    closure_compute_with_resolver()
+
+    let k : u64 = kchain_new(0u64)
+    /* compose a single 0.95 step - still above 0.85 floor */
+    kchain_compose(k, 950000000u64)
+    let bits : u32 = mandate_audit(k, 1u8)
+    let all : u32 = mandate_all_mask()
+    if bits != all { return 1u64 }
+    /* now compose another 0.95 -> 0.9025 still above floor */
+    kchain_compose(k, 950000000u64)
+    let bits2 : u32 = mandate_audit(k, 1u8)
+    if bits2 != all { return 2u64 }
+    /* compose 0.9 -> 0.81 below floor; M1 and M15 should drop */
+    kchain_compose(k, 900000000u64)
+    let bits3 : u32 = mandate_audit(k, 1u8)
+    if bits3 == all { return 3u64 }
+    /* M1 bit (bit 0) and M15 bit (bit 14) should be clear */
+    if (bits3 & 0x00000001u32) != 0u32 { return 4u64 }
+    if (bits3 & 0x00004000u32) != 0u32 { return 5u64 }
+    /* mhash mismatch -> M14 also drops */
+    let bits4 : u32 = mandate_audit(k, 0u8)
+    if (bits4 & 0x00002000u32) != 0u32 { return 6u64 }
+    return 99u64
+}

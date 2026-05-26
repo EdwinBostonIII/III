@@ -1,0 +1,135 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_enum.iii
+ *
+ * III STDLIB - verba::glyph_enum -- Glyph V3 form for tagged-union enum.
+ *
+ * Lattice plan Phase 14h Step 0175.
+ *
+ * Payload layout (form_id = 0x33):
+ *   payload[0..3]     variant_tag      (u32 LE)
+ *   payload[4..7]     variant_form_id  (u32 LE) - form of the variant value
+ *   payload[8..11]    variant_len      (u32 LE) - bytes of variant payload
+ *   payload[12..151]  variant payload  (≤ 140 bytes)
+ *
+ * payload_len = 12 + variant_len.
+ *
+ * Public surface:
+ *   glyph_enum_form_id()                                            -> u32 (0x33)
+ *   glyph_enum_pack(tag, variant_form_id, variant_len, src, out)    -> i32
+ *   glyph_enum_unpack_tag(in_192)                                   -> u32
+ *   glyph_enum_unpack_variant_form(in_192)                          -> u32
+ *   glyph_enum_unpack_variant_len(in_192)                           -> u32
+ *   glyph_enum_unpack_variant_bytes(in_192, dst, dst_cap)           -> i32
+ *   glyph_enum_validate(in_192)                                     -> u8
+ *
+ * Hexad: kind_compose.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_enum
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u32_le(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_ENUM : u32 = 0x33u32
+
+fn glyph_enum_form_id() -> u32 @export { return GV3_FORM_ENUM }
+
+fn glyph_enum_pack_meta(tag: u32, variant_form_id: u32, variant_len: u32) -> u64 @export {
+    let l_t : u64 = (tag as u64) & 0xFFFFFFFFu64
+    let l_f : u64 = ((variant_form_id as u64) & 0xFFFFu64) << 32u64
+    let l_l : u64 = ((variant_len as u64) & 0xFFFFu64) << 48u64
+    return l_t | l_f | l_l
+}
+
+/* 3-u64-arg signature = glyph-form ABI: matches the composition-dispatch
+ * shape of the registered glyph forms (set/map/crystal/proof/recursive/
+ * witness, all <=4 u64 args via the prespec fn(a,b,c,d:u64) trampoline), so
+ * glyph_enum stays consistent + composition-registration-ready -- do NOT
+ * widen.  (The iiis-0 5+-arg trap this also dodged is fixed -- Stage 3.9,
+ * corpus 277.) */
+fn glyph_enum_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 @export {
+    let pm   : u64 = packed_meta
+    let t_l  : u32 = (pm & 0xFFFFFFFFu64) as u32
+    let vf_l : u32 = ((pm >> 32u64) & 0xFFFFu64) as u32
+    let vl_l : u32 = ((pm >> 48u64) & 0xFFFFu64) as u32
+    let s_l  : u64 = src_ptr
+    let o_l  : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    if vl_l > 140u32 { return -2i32 }
+    if s_l == 0u64 {
+        if vl_l != 0u32 { return -1i32 }
+    }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64,  GV3_FORM_ENUM)
+    gv3_write_u32_le(o_l + 4u64,  12u32 + vl_l)
+    gv3_write_u32_le(o_l + 8u64,  t_l)
+    gv3_write_u32_le(o_l + 12u64, vf_l)
+    gv3_write_u32_le(o_l + 16u64, vl_l)
+    if s_l != 0u64 {
+        let sp : *u8 = s_l as *u8
+        let dp : *u8 = (o_l + 20u64) as *u8
+        let mut i : u64 = 0u64
+        let n : u64 = (vl_l as u64) & 0xFFFFFFFFu64
+        while i < n {
+            dp[i] = sp[i]
+            i = i + 1u64
+        }
+    }
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_enum_unpack_tag(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_ENUM { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 8u64)
+}
+
+fn glyph_enum_unpack_variant_form(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_ENUM { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 12u64)
+}
+
+fn glyph_enum_unpack_variant_len(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_ENUM { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 16u64)
+}
+
+fn glyph_enum_unpack_variant_bytes(in_192: u64, dst_ptr: u64, dst_cap: u32) -> i32 @export {
+    let i_l : u64 = in_192
+    let d_l : u64 = dst_ptr
+    let c_l : u32 = dst_cap
+    if i_l == 0u64 { return -1i32 }
+    if d_l == 0u64 { return -1i32 }
+    if gv3_form_id(i_l) != GV3_FORM_ENUM { return -2i32 }
+    if gv3_validate(i_l) != 1u8 { return -3i32 }
+    let vl : u32 = gv3_read_u32_le(i_l + 16u64)
+    if vl > c_l { return -5i32 }
+    let sp : *u8 = (i_l + 20u64) as *u8
+    let dp : *u8 = d_l as *u8
+    let mut k : u64 = 0u64
+    let n : u64 = (vl as u64) & 0xFFFFFFFFu64
+    while k < n {
+        dp[k] = sp[k]
+        k = k + 1u64
+    }
+    return vl as i32
+}
+
+fn glyph_enum_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_ENUM { return 0u8 }
+    return gv3_validate(i_l)
+}

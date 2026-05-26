@@ -1,0 +1,564 @@
+/* aether/reversibility_audit.iii -- Layer R-1, Module 33 (gospel).
+ *
+ * III STDLIB - aether::reversibility_audit
+ *
+ * Proof-carrying gate for reversibility (M9). Given forward f and
+ * inverse g (bit-blasted by the caller into the live SMT session as
+ * y=f(x), z=g(y)), the auditor asserts the disequality x != z as a
+ * single monotonic SMT query and solves: UNSAT proves g(f(x))=x over
+ * the whole bit-vector domain (operation is reversible -> admit + pass
+ * witness); SAT yields a concrete counterexample (operation refused ->
+ * fail witness carrying (x_value, z_value)). Admission to the reversible
+ * registry is capability-mediated (CAP_RIGHT_AMEND = 0x4000). The UNSAT
+ * verdict is the Curry-Howard proof term (M11); the witness fragment is
+ * its certificate (M12/M18).
+ *
+ * Non-reentrant: shared registry + witness scratch (single serialized use).
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (<=4 params), W8 (static registry 1024), W13 (<=20
+ * locals per fn), W14 (sentinel loops, no break), W15 (no recursion).
+ *
+ * Trap discipline:
+ *   Trap 1: all fn/extern signatures single-line.
+ *   Trap 2: every const prefixed RVA_; zero collision confirmed via grep.
+ *   Trap 3: no i32/i64 ordering compares; all SMT results compared via ==.
+ *   Trap 4: rva_op_ptr masks (slot as u64) & 0xFFFFFFFFu64 before multiply.
+ *   Trap 7: all scratch hoisted to module scope (no local var arrays).
+ *   Trap 8: every } else { on one line.
+ *   Trap 9: ASCII -- in all comments; no em-dash.
+ *   Trap 16: no leading-paren literal expressions; null pointer bound first.
+ *   Trap 18: no u64 / or u64 % on values that may reach 2^63.
+ *   Trap 19: large [u8;1024] and [u8;32768] fit within the 2 GiB BSS limit
+ *            (1024 + 32768 = 33792 elements * 8 bytes each = 270336 bytes --
+ *            well within the small-code-model limit).
+ */
+
+module aether_reversibility_audit
+
+extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_new_var(width: u32) -> u32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_add_eq(a: u32, b: u32) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_add_neq(a: u32, b: u32) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_solve() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_value(vr: u32) -> u64 from "smt.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+
+/* --- Constants (PREFIX = RVA_; zero collision confirmed) --- */
+const RVA_OK             : i32 =  0i32
+const RVA_E_BAD          : i32 = -1i32
+const RVA_E_FAIL         : i32 = -2i32
+const RVA_E_FULL         : i32 = -3i32
+const RVA_E_CAP          : i32 = -4i32
+
+const RVA_SAT_SAT        : i32 =  1i32    /* == smt.iii SMT_SAT */
+const RVA_SAT_UNSAT      : i32 =  2i32    /* == smt.iii SMT_UNSAT */
+
+const RVA_MAX_OPS        : u32 = 1024u32
+const RVA_OPID_BYTES     : u64 = 32u64
+const RVA_CE_BYTES       : u64 = 16u64
+const RVA_PRODUCER_LEN   : u64 = 27u64
+const RVA_OPID_PASS_LEN  : u64 = 33u64
+const RVA_OPID_FAIL_LEN  : u64 = 33u64
+
+const RVA_WIT_REVTAG_PASS : u8  = 0u8
+const RVA_WIT_REVTAG_FAIL : u8  = 1u8
+const RVA_WIT_PHASE       : u8  = 4u8
+const RVA_WIT_PILLAR      : u16 = 3u16
+
+/* CAP_RIGHT_AMEND = 0x4000u64 (declared in capability.iii; consumed as literal -- Trap 2). */
+
+/* --- Reversible operation registry --- */
+var RVA_LIVE       : [u8;  1024]
+var RVA_OP_ID      : [u8;  32768]     /* RVA_MAX_OPS * RVA_OPID_BYTES = 32768 bytes */
+var RVA_COUNT      : u32 = 0u32
+
+/* --- Last counterexample --- */
+var RVA_LAST_CE_X  : u64 = 0u64
+var RVA_LAST_CE_Z  : u64 = 0u64
+var RVA_LAST_VALID : u8  = 0u8
+
+/* --- Identity / boot --- */
+var RVA_PRODUCER   : [u8; 32]
+var RVA_OPID_PASS  : [u8; 32]
+var RVA_OPID_FAIL  : [u8; 32]
+var RVA_INITED     : u8 = 0u8
+
+/* --- Hoisted witness scratch (Trap 7: no local var arrays; was function-local in gospel) --- */
+var RVA_W_INC      : [u8; 32]
+var RVA_W_OUTC     : [u8; 32]
+var RVA_W_PAY      : [u8; 16]
+var RVA_W_FID      : [u8; 32]
+var RVA_ZERO_ID    : [u8; 32]     /* canonical zero antecedent */
+
+/* --- Source byte buffers for producer/op-id strings --- */
+var RVA_PROD_SRC   : [u8; 27]     /* "aether::reversibility_audit" */
+var RVA_PASS_SRC   : [u8; 33]     /* "aether::reversibility_audit::pass" */
+var RVA_FAIL_SRC   : [u8; 33]     /* "aether::reversibility_audit::fail" */
+
+/* --- Self-test scratch (module scope; Trap 7) --- */
+var RVA_KAT_OPA    : [u8; 32]
+var RVA_KAT_OPB    : [u8; 32]
+var RVA_KAT_OPC    : [u8; 32]
+var RVA_KAT_CE     : [u8; 16]
+var RVA_KAT_CE2    : [u8; 16]
+var RVA_KAT_CTX    : [u8; 40]     /* audit_and_admit context: 32 op-id + 8 cap-u64 LE */
+
+/* ---- Internal helper: address of registry slot `slot` ----
+ * Trap 4: mask (slot as u64) & 0xFFFFFFFFu64 before multiply. */
+fn rva_op_ptr(slot: u32) -> *u8 {
+    return ((&RVA_OP_ID as u64) + ((slot as u64) & 0xFFFFFFFFu64) * RVA_OPID_BYTES) as *u8
+}
+
+/* ---- Internal: fill "aether::reversibility_audit" (27 bytes) into RVA_PROD_SRC ---- */
+fn rva_fill_prod_src() -> i32 {
+    let p : *u8 = (&RVA_PROD_SRC as u64) as *u8
+    p[0u64]  =  97u8   /* a */
+    p[1u64]  = 101u8   /* e */
+    p[2u64]  = 116u8   /* t */
+    p[3u64]  = 104u8   /* h */
+    p[4u64]  = 101u8   /* e */
+    p[5u64]  = 114u8   /* r */
+    p[6u64]  =  58u8   /* : */
+    p[7u64]  =  58u8   /* : */
+    p[8u64]  = 114u8   /* r */
+    p[9u64]  = 101u8   /* e */
+    p[10u64] = 118u8   /* v */
+    p[11u64] = 101u8   /* e */
+    p[12u64] = 114u8   /* r */
+    p[13u64] = 115u8   /* s */
+    p[14u64] = 105u8   /* i */
+    p[15u64] =  98u8   /* b */
+    p[16u64] = 105u8   /* i */
+    p[17u64] = 108u8   /* l */
+    p[18u64] = 105u8   /* i */
+    p[19u64] = 116u8   /* t */
+    p[20u64] = 121u8   /* y */
+    p[21u64] =  95u8   /* _ */
+    p[22u64] =  97u8   /* a */
+    p[23u64] = 117u8   /* u */
+    p[24u64] = 100u8   /* d */
+    p[25u64] = 105u8   /* i */
+    p[26u64] = 116u8   /* t */
+    return RVA_OK
+}
+
+/* ---- Internal: fill "aether::reversibility_audit::pass" (33 bytes) into RVA_PASS_SRC ---- */
+fn rva_fill_pass_src() -> i32 {
+    let p : *u8 = (&RVA_PASS_SRC as u64) as *u8
+    p[0u64]  =  97u8   /* a */
+    p[1u64]  = 101u8   /* e */
+    p[2u64]  = 116u8   /* t */
+    p[3u64]  = 104u8   /* h */
+    p[4u64]  = 101u8   /* e */
+    p[5u64]  = 114u8   /* r */
+    p[6u64]  =  58u8   /* : */
+    p[7u64]  =  58u8   /* : */
+    p[8u64]  = 114u8   /* r */
+    p[9u64]  = 101u8   /* e */
+    p[10u64] = 118u8   /* v */
+    p[11u64] = 101u8   /* e */
+    p[12u64] = 114u8   /* r */
+    p[13u64] = 115u8   /* s */
+    p[14u64] = 105u8   /* i */
+    p[15u64] =  98u8   /* b */
+    p[16u64] = 105u8   /* i */
+    p[17u64] = 108u8   /* l */
+    p[18u64] = 105u8   /* i */
+    p[19u64] = 116u8   /* t */
+    p[20u64] = 121u8   /* y */
+    p[21u64] =  95u8   /* _ */
+    p[22u64] =  97u8   /* a */
+    p[23u64] = 117u8   /* u */
+    p[24u64] = 100u8   /* d */
+    p[25u64] = 105u8   /* i */
+    p[26u64] = 116u8   /* t */
+    p[27u64] =  58u8   /* : */
+    p[28u64] =  58u8   /* : */
+    p[29u64] = 112u8   /* p */
+    p[30u64] =  97u8   /* a */
+    p[31u64] = 115u8   /* s */
+    p[32u64] = 115u8   /* s */
+    return RVA_OK
+}
+
+/* ---- Internal: fill "aether::reversibility_audit::fail" (33 bytes) into RVA_FAIL_SRC ---- */
+fn rva_fill_fail_src() -> i32 {
+    let p : *u8 = (&RVA_FAIL_SRC as u64) as *u8
+    p[0u64]  =  97u8   /* a */
+    p[1u64]  = 101u8   /* e */
+    p[2u64]  = 116u8   /* t */
+    p[3u64]  = 104u8   /* h */
+    p[4u64]  = 101u8   /* e */
+    p[5u64]  = 114u8   /* r */
+    p[6u64]  =  58u8   /* : */
+    p[7u64]  =  58u8   /* : */
+    p[8u64]  = 114u8   /* r */
+    p[9u64]  = 101u8   /* e */
+    p[10u64] = 118u8   /* v */
+    p[11u64] = 101u8   /* e */
+    p[12u64] = 114u8   /* r */
+    p[13u64] = 115u8   /* s */
+    p[14u64] = 105u8   /* i */
+    p[15u64] =  98u8   /* b */
+    p[16u64] = 105u8   /* i */
+    p[17u64] = 108u8   /* l */
+    p[18u64] = 105u8   /* i */
+    p[19u64] = 116u8   /* t */
+    p[20u64] = 121u8   /* y */
+    p[21u64] =  95u8   /* _ */
+    p[22u64] =  97u8   /* a */
+    p[23u64] = 117u8   /* u */
+    p[24u64] = 100u8   /* d */
+    p[25u64] = 105u8   /* i */
+    p[26u64] = 116u8   /* t */
+    p[27u64] =  58u8   /* : */
+    p[28u64] =  58u8   /* : */
+    p[29u64] = 102u8   /* f */
+    p[30u64] =  97u8   /* a */
+    p[31u64] = 105u8   /* i */
+    p[32u64] = 108u8   /* l */
+    return RVA_OK
+}
+
+/* ---- rva_init: idempotent boot ---- */
+fn rva_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < RVA_MAX_OPS {
+        RVA_LIVE[i] = 0u8
+        i = i + 1u32
+    }
+    RVA_COUNT      = 0u32
+    RVA_LAST_VALID = 0u8
+    RVA_LAST_CE_X  = 0u64
+    RVA_LAST_CE_Z  = 0u64
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        RVA_ZERO_ID[k] = 0u8
+        k = k + 1u64
+    }
+    rva_fill_prod_src()
+    rva_fill_pass_src()
+    rva_fill_fail_src()
+    ident_from_bytes((&RVA_PROD_SRC as u64) as *u8, RVA_PRODUCER_LEN, (&RVA_PRODUCER as u64) as *u8)
+    ident_from_bytes((&RVA_PASS_SRC as u64) as *u8, RVA_OPID_PASS_LEN, (&RVA_OPID_PASS as u64) as *u8)
+    ident_from_bytes((&RVA_FAIL_SRC as u64) as *u8, RVA_OPID_FAIL_LEN, (&RVA_OPID_FAIL as u64) as *u8)
+    RVA_INITED = 1u8
+    return RVA_OK
+}
+
+/* ---- rva_audit_bv_pair: single monotonic disequality query ----
+ * Contract: caller has, in the current live SMT session, created BV vars
+ * x, y, z and asserted y=f(x) and z=g(y). This fn asserts x!=z (one
+ * smt_bv_add_neq call) and solves: UNSAT => reversible (RVA_OK),
+ * SAT => counterexample recorded and fail witness published (RVA_E_FAIL).
+ * No smt_init() inside -- the caller owns session lifecycle (Gap A fix).
+ * Returns RVA_OK / RVA_E_FAIL / RVA_E_BAD.  3 params (W2-OK). */
+fn rva_audit_bv_pair(width: u32, x: u32, z: u32) -> i32 @export {
+    if RVA_INITED == 0u8 { rva_init() }
+    let ar : i32 = smt_bv_add_neq(x, z)
+    if ar != RVA_OK { return RVA_E_BAD }
+    let r : i32 = smt_solve()
+    if r == RVA_SAT_SAT {
+        /* SAT: counterexample exists -- operation is NOT reversible */
+        RVA_LAST_CE_X  = smt_bv_value(x)
+        RVA_LAST_CE_Z  = smt_bv_value(z)
+        RVA_LAST_VALID = 1u8
+        /* pack counterexample LE u64 x || LE u64 z into RVA_W_PAY[0..16) */
+        let xv : u64 = RVA_LAST_CE_X
+        let zv : u64 = RVA_LAST_CE_Z
+        let pp : *u8 = (&RVA_W_PAY as u64) as *u8
+        pp[0u64]  = (xv & 0xFFu64) as u8
+        pp[1u64]  = ((xv >> 8u64)  & 0xFFu64) as u8
+        pp[2u64]  = ((xv >> 16u64) & 0xFFu64) as u8
+        pp[3u64]  = ((xv >> 24u64) & 0xFFu64) as u8
+        pp[4u64]  = ((xv >> 32u64) & 0xFFu64) as u8
+        pp[5u64]  = ((xv >> 40u64) & 0xFFu64) as u8
+        pp[6u64]  = ((xv >> 48u64) & 0xFFu64) as u8
+        pp[7u64]  = ((xv >> 56u64) & 0xFFu64) as u8
+        pp[8u64]  = (zv & 0xFFu64) as u8
+        pp[9u64]  = ((zv >> 8u64)  & 0xFFu64) as u8
+        pp[10u64] = ((zv >> 16u64) & 0xFFu64) as u8
+        pp[11u64] = ((zv >> 24u64) & 0xFFu64) as u8
+        pp[12u64] = ((zv >> 32u64) & 0xFFu64) as u8
+        pp[13u64] = ((zv >> 40u64) & 0xFFu64) as u8
+        pp[14u64] = ((zv >> 48u64) & 0xFFu64) as u8
+        pp[15u64] = ((zv >> 56u64) & 0xFFu64) as u8
+        wh_chain_root((&RVA_W_INC as u64) as *u8)
+        ident_from_bytes((&RVA_W_PAY as u64) as *u8, RVA_CE_BYTES, (&RVA_W_OUTC as u64) as *u8)
+        wh_publish((&RVA_PRODUCER as u64) as *u8, (&RVA_OPID_FAIL as u64) as *u8, (&RVA_W_INC as u64) as *u8, (&RVA_W_OUTC as u64) as *u8, RVA_WIT_REVTAG_FAIL, RVA_WIT_PHASE, RVA_WIT_PILLAR, (&RVA_ZERO_ID as u64) as *u8, 0u32, (&RVA_W_PAY as u64) as *u8, 16u32, (&RVA_W_FID as u64) as *u8)
+        return RVA_E_FAIL
+    }
+    if r == RVA_SAT_UNSAT {
+        /* UNSAT: g(f(x))=x proven over whole domain -- operation is reversible */
+        RVA_LAST_VALID = 0u8
+        /* payload: 4-byte LE encoding of width as the proof certificate */
+        let wv : u32 = width
+        let qp : *u8 = (&RVA_W_PAY as u64) as *u8
+        qp[0u64] = (wv & 0xFFu32) as u8
+        qp[1u64] = ((wv >> 8u32)  & 0xFFu32) as u8
+        qp[2u64] = ((wv >> 16u32) & 0xFFu32) as u8
+        qp[3u64] = ((wv >> 24u32) & 0xFFu32) as u8
+        wh_chain_root((&RVA_W_INC as u64) as *u8)
+        ident_from_bytes((&RVA_W_PAY as u64) as *u8, 4u64, (&RVA_W_OUTC as u64) as *u8)
+        wh_publish((&RVA_PRODUCER as u64) as *u8, (&RVA_OPID_PASS as u64) as *u8, (&RVA_W_INC as u64) as *u8, (&RVA_W_OUTC as u64) as *u8, RVA_WIT_REVTAG_PASS, RVA_WIT_PHASE, RVA_WIT_PILLAR, (&RVA_ZERO_ID as u64) as *u8, 0u32, (&RVA_W_PAY as u64) as *u8, 4u32, (&RVA_W_FID as u64) as *u8)
+        return RVA_OK
+    }
+    /* negative SMT error or SMT_UNKNOWN */
+    return RVA_E_BAD
+}
+
+/* ---- rva_audit_and_admit: atomic prove-then-admit (Gap H) ----
+ * ctx layout: bytes [0..32) = op-id; bytes [32..40) = cap as LE u64.
+ * Runs rva_audit_bv_pair; on RVA_OK reads op-id + cap from ctx and
+ * calls rva_admit. Returns audit result if audit failed; else admit result.
+ * 4 params (W2-OK). */
+fn rva_audit_and_admit(width: u32, x: u32, z: u32, ctx: *u8) -> i32 @export {
+    let ar : i32 = rva_audit_bv_pair(width, x, z)
+    if ar != RVA_OK { return ar }
+    /* read cap as LE u64 from ctx[32..40) */
+    let cp : *u8 = ctx
+    let b0 : u64 = (cp[32u64] as u64) & 0xFFu64
+    let b1 : u64 = ((cp[33u64] as u64) & 0xFFu64) << 8u64
+    let b2 : u64 = ((cp[34u64] as u64) & 0xFFu64) << 16u64
+    let b3 : u64 = ((cp[35u64] as u64) & 0xFFu64) << 24u64
+    let b4 : u64 = ((cp[36u64] as u64) & 0xFFu64) << 32u64
+    let b5 : u64 = ((cp[37u64] as u64) & 0xFFu64) << 40u64
+    let b6 : u64 = ((cp[38u64] as u64) & 0xFFu64) << 48u64
+    let b7 : u64 = ((cp[39u64] as u64) & 0xFFu64) << 56u64
+    let cap : u64 = b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+    return rva_admit(ctx, cap)
+}
+
+/* ---- rva_admit: capability-gated registry admission (Gap D / M8) ----
+ * Requires cap to carry CAP_RIGHT_AMEND (0x4000). Idempotent on re-admit.
+ * Returns RVA_OK / RVA_E_CAP / RVA_E_FULL. 2 params (W2-OK). */
+fn rva_admit(op_id: *u8, cap: u64) -> i32 @export {
+    if RVA_INITED == 0u8 { rva_init() }
+    /* capability gate: CAP_RIGHT_AMEND = 0x4000 (not re-declared -- Trap 2) */
+    if cap_verify_rights(cap, 0x4000u64) == 0u8 { return RVA_E_CAP }
+    /* idempotent scan: if already live and equal, return OK */
+    let mut i : u32 = 0u32
+    let mut found : u8 = 0u8
+    while i < RVA_MAX_OPS {
+        if found == 0u8 {
+            if RVA_LIVE[i] == 1u8 {
+                if ident_eq(rva_op_ptr(i), op_id) == 1u8 { found = 1u8 }
+            }
+        }
+        i = i + 1u32
+    }
+    if found == 1u8 { return RVA_OK }
+    /* first-free insert */
+    let mut j : u32 = 0u32
+    let mut inserted : u8 = 0u8
+    while j < RVA_MAX_OPS {
+        if inserted == 0u8 {
+            if RVA_LIVE[j] == 0u8 {
+                ident_copy(op_id, rva_op_ptr(j))
+                RVA_LIVE[j] = 1u8
+                RVA_COUNT   = RVA_COUNT + 1u32
+                inserted    = 1u8
+            }
+        }
+        j = j + 1u32
+    }
+    if inserted == 1u8 { return RVA_OK }
+    return RVA_E_FULL
+}
+
+/* ---- rva_is_admitted: membership test ----
+ * Returns 1u8 iff op_id is currently in the live registry. Pure read. */
+fn rva_is_admitted(op_id: *u8) -> u8 @export {
+    let mut i : u32 = 0u32
+    let mut hit : u8 = 0u8
+    while i < RVA_MAX_OPS {
+        if hit == 0u8 {
+            if RVA_LIVE[i] == 1u8 {
+                if ident_eq(rva_op_ptr(i), op_id) == 1u8 { hit = 1u8 }
+            }
+        }
+        i = i + 1u32
+    }
+    return hit
+}
+
+/* ---- rva_last_counter: copy the last counterexample to out[0..16) ----
+ * out[0..8)  = x_value LE u64.
+ * out[8..16) = z_value LE u64.
+ * Returns RVA_OK, or RVA_E_BAD if no valid counterexample exists. */
+fn rva_last_counter(out: *u8) -> i32 @export {
+    if RVA_LAST_VALID == 0u8 { return RVA_E_BAD }
+    let xv : u64 = RVA_LAST_CE_X
+    let zv : u64 = RVA_LAST_CE_Z
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        out[k]       = ((xv >> (k * 8u64)) & 0xFFu64) as u8
+        out[k + 8u64] = ((zv >> (k * 8u64)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return RVA_OK
+}
+
+/* ---- rva_count: number of live admitted operations ---- */
+fn rva_count() -> u32 @export {
+    return RVA_COUNT
+}
+
+/* ---- rva_selftest: Phase-2 acceptance gate ----
+ * Plays the caller role over the SMT oracle. Returns 99u64 on full pass
+ * (house style: 99 = pass). Returns first failing test index on any
+ * failure. KAT 1: identity is reversible (UNSAT). KAT 2: non-inverse
+ * is refused (SAT, negative case). KAT 3: admission capability gate
+ * fails closed on null cap (negative case). KAT 4: idempotence +
+ * registry full. KAT 5: counterexample reproducibility (M10). */
+fn rva_selftest() -> u64 @export {
+    rva_init()
+
+    /* -- KAT 1: identity f=g=id is reversible -> UNSAT -> RVA_OK -- */
+    smt_init()
+    let xv1 : u32 = smt_bv_new_var(4u32)
+    let yv1 : u32 = smt_bv_new_var(4u32)
+    let zv1 : u32 = smt_bv_new_var(4u32)
+    /* f = identity: y = x */
+    smt_bv_add_eq(xv1, yv1)
+    /* g = identity: z = y */
+    smt_bv_add_eq(yv1, zv1)
+    let r1 : i32 = rva_audit_bv_pair(4u32, xv1, zv1)
+    if r1 != RVA_OK { return 1u64 }
+    /* no counterexample should be recorded */
+    let nc1 : i32 = rva_last_counter((&RVA_KAT_CE as u64) as *u8)
+    if nc1 != RVA_E_BAD { return 2u64 }
+
+    /* -- KAT 1 cont: admit with amend cap (cap id 1 = CAP_ENV_ROOT has all rights) -- */
+    /* derive a KAT op-id A */
+    let pp1 : *u8 = (&RVA_KAT_OPA as u64) as *u8
+    pp1[0u64]  =  0xA1u8
+    pp1[1u64]  =  0xB2u8
+    pp1[2u64]  =  0xC3u8
+    pp1[3u64]  =  0xD4u8
+    let mut fi : u64 = 4u64
+    while fi < 32u64 { pp1[fi] = (fi as u8) ; fi = fi + 1u64 }
+    /* cap id 1 = CAP_ENV_ROOT (all rights incl. 0x4000 AMEND).  Bootstrap it
+     * (idempotent) -- the per-module corpus exe links only us, so the KAT must
+     * stand up its own capability env before any cap-gated admit. */
+    cap_env_init()
+    let r_adm1 : i32 = rva_admit((&RVA_KAT_OPA as u64) as *u8, 1u64)
+    if r_adm1 != RVA_OK { return 3u64 }
+    if rva_is_admitted((&RVA_KAT_OPA as u64) as *u8) != 1u8 { return 4u64 }
+    if rva_count() != 1u32 { return 5u64 }
+
+    /* -- KAT 2: non-inverse is refused (SAT -> RVA_E_FAIL) -- NEGATIVE CASE -- */
+    rva_init()
+    smt_init()
+    let xv2 : u32 = smt_bv_new_var(4u32)
+    let yv2 : u32 = smt_bv_new_var(4u32)
+    let zv2 : u32 = smt_bv_new_var(4u32)
+    let kv2 : u32 = smt_bv_new_var(4u32)
+    /* f = identity: y = x */
+    smt_bv_add_eq(xv2, yv2)
+    /* g = "add const": bind z = kv2 (kv2 is unconstrained -- can differ from y).
+     * Then assert kv2 == zv2 so zv2 is a fresh unconstrained var (not equal to y
+     * in general). The neq query z != x then has SAT solutions whenever
+     * the free var kv2 can be assigned differently from x. */
+    smt_bv_add_eq(kv2, zv2)
+    let r2 : i32 = rva_audit_bv_pair(4u32, xv2, zv2)
+    if r2 != RVA_E_FAIL { return 10u64 }
+    /* counterexample must be available and x_val != z_val in the CE */
+    let rc2 : i32 = rva_last_counter((&RVA_KAT_CE as u64) as *u8)
+    if rc2 != RVA_OK { return 11u64 }
+    /* decode x_val and z_val from LE bytes */
+    let xb0 : u64 = (RVA_KAT_CE[0u64] as u64) & 0xFFu64
+    let xb1 : u64 = ((RVA_KAT_CE[1u64] as u64) & 0xFFu64) << 8u64
+    let xb2 : u64 = ((RVA_KAT_CE[2u64] as u64) & 0xFFu64) << 16u64
+    let xb3 : u64 = ((RVA_KAT_CE[3u64] as u64) & 0xFFu64) << 24u64
+    let xb4 : u64 = ((RVA_KAT_CE[4u64] as u64) & 0xFFu64) << 32u64
+    let xb5 : u64 = ((RVA_KAT_CE[5u64] as u64) & 0xFFu64) << 40u64
+    let xb6 : u64 = ((RVA_KAT_CE[6u64] as u64) & 0xFFu64) << 48u64
+    let xb7 : u64 = ((RVA_KAT_CE[7u64] as u64) & 0xFFu64) << 56u64
+    let xval : u64 = xb0 | xb1 | xb2 | xb3 | xb4 | xb5 | xb6 | xb7
+    let zb0 : u64 = (RVA_KAT_CE[8u64] as u64) & 0xFFu64
+    let zb1 : u64 = ((RVA_KAT_CE[9u64] as u64) & 0xFFu64) << 8u64
+    let zb2 : u64 = ((RVA_KAT_CE[10u64] as u64) & 0xFFu64) << 16u64
+    let zb3 : u64 = ((RVA_KAT_CE[11u64] as u64) & 0xFFu64) << 24u64
+    let zb4 : u64 = ((RVA_KAT_CE[12u64] as u64) & 0xFFu64) << 32u64
+    let zb5 : u64 = ((RVA_KAT_CE[13u64] as u64) & 0xFFu64) << 40u64
+    let zb6 : u64 = ((RVA_KAT_CE[14u64] as u64) & 0xFFu64) << 48u64
+    let zb7 : u64 = ((RVA_KAT_CE[15u64] as u64) & 0xFFu64) << 56u64
+    let zval : u64 = zb0 | zb1 | zb2 | zb3 | zb4 | zb5 | zb6 | zb7
+    /* the counterexample must have x_val != z_val */
+    if xval == zval { return 12u64 }
+    /* op_id_B was never admitted */
+    let pp2 : *u8 = (&RVA_KAT_OPB as u64) as *u8
+    let mut gi : u64 = 0u64
+    while gi < 32u64 { pp2[gi] = (0xBBu64 ^ gi) as u8 ; gi = gi + 1u64 }
+    if rva_is_admitted((&RVA_KAT_OPB as u64) as *u8) != 0u8 { return 13u64 }
+
+    /* -- KAT 3: admission is capability-gated (null cap must fail) -- NEGATIVE CASE -- */
+    rva_init()
+    let pp3 : *u8 = (&RVA_KAT_OPC as u64) as *u8
+    let mut hi : u64 = 0u64
+    while hi < 32u64 { pp3[hi] = (0xCCu64 ^ hi) as u8 ; hi = hi + 1u64 }
+    let r3 : i32 = rva_admit((&RVA_KAT_OPC as u64) as *u8, 0u64)
+    if r3 != RVA_E_CAP { return 20u64 }
+    if rva_is_admitted((&RVA_KAT_OPC as u64) as *u8) != 0u8 { return 21u64 }
+    if rva_count() != 0u32 { return 22u64 }
+    /* admit with valid cap should succeed */
+    let r3b : i32 = rva_admit((&RVA_KAT_OPC as u64) as *u8, 1u64)
+    if r3b != RVA_OK { return 23u64 }
+    if rva_is_admitted((&RVA_KAT_OPC as u64) as *u8) != 1u8 { return 24u64 }
+
+    /* -- KAT 4: admission idempotence -- */
+    rva_init()
+    let pp4 : *u8 = (&RVA_KAT_OPA as u64) as *u8
+    pp4[0u64] = 0xAAu8
+    let mut ii : u64 = 1u64
+    while ii < 32u64 { pp4[ii] = (ii as u8) ; ii = ii + 1u64 }
+    let ra1 : i32 = rva_admit((&RVA_KAT_OPA as u64) as *u8, 1u64)
+    if ra1 != RVA_OK { return 30u64 }
+    if rva_count() != 1u32 { return 31u64 }
+    /* re-admit same op-id: must still be RVA_OK and count unchanged */
+    let ra2 : i32 = rva_admit((&RVA_KAT_OPA as u64) as *u8, 1u64)
+    if ra2 != RVA_OK { return 32u64 }
+    if rva_count() != 1u32 { return 33u64 }
+
+    /* -- KAT 5: counterexample reproducibility (M10) -- */
+    rva_init()
+    smt_init()
+    let xv5 : u32 = smt_bv_new_var(4u32)
+    let yv5 : u32 = smt_bv_new_var(4u32)
+    let zv5 : u32 = smt_bv_new_var(4u32)
+    let kv5 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(xv5, yv5)
+    smt_bv_add_eq(kv5, zv5)
+    let r5a : i32 = rva_audit_bv_pair(4u32, xv5, zv5)
+    if r5a != RVA_E_FAIL { return 40u64 }
+    rva_last_counter((&RVA_KAT_CE as u64) as *u8)
+    /* second independent run -- same SMT constraints -- must yield same CE bytes */
+    rva_init()
+    smt_init()
+    let xv5b : u32 = smt_bv_new_var(4u32)
+    let yv5b : u32 = smt_bv_new_var(4u32)
+    let zv5b : u32 = smt_bv_new_var(4u32)
+    let kv5b : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(xv5b, yv5b)
+    smt_bv_add_eq(kv5b, zv5b)
+    let r5b : i32 = rva_audit_bv_pair(4u32, xv5b, zv5b)
+    if r5b != RVA_E_FAIL { return 41u64 }
+    rva_last_counter((&RVA_KAT_CE2 as u64) as *u8)
+    let mut same5 : u8 = 1u8
+    let mut si : u64 = 0u64
+    while si < 16u64 {
+        if RVA_KAT_CE[si] != RVA_KAT_CE2[si] { same5 = 0u8 }
+        si = si + 1u64
+    }
+    if same5 != 1u8 { return 42u64 }
+
+    return 99u64
+}

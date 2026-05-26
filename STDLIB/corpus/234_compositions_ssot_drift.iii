@@ -1,0 +1,196 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\234_compositions_ssot_drift.iii
+ *
+ * III conformance corpus 234 -- Composition table SSOT drift detector.
+ *
+ * Single source of truth: COMPILER/BOOT/iii_compositions.def. Two
+ * downstream artifacts are derived from the .def via gen_compositions.sh:
+ *   1. COMPILER/BOOT/iii_compositions.h        (cg_r3 PE narrow table)
+ *   2. STDLIB/iii/omnia/prespec.iii            (runtime registry block
+ *                                               between the AUTO-
+ *                                               GENERATED sentinels)
+ *
+ * This corpus enumerates a representative sample of the runtime registry
+ * produced by prespec_register_compositions() and verifies, entry-by-entry,
+ * that each canonical SSOT entry is:
+ *   (a) reachable via prespec_lookup(synth_hash) where synth_hash is
+ *       computed from the .def-known SEQ_IDX, PRIMITIVE_ID, HEXAD_BAG
+ *       triple via the canonical encoding:
+ *         (0x494E5450u64 << 32u64)
+ *         | ((HEXAD     & 0xFF) << 24)
+ *         | ((PRIMITIVE & 0xFF) << 16)
+ *         | (SEQ_IDX    & 0xFFFF)
+ *   (b) bound to the REAL exported function: prespec_dispatch_fp(slot)
+ *       must equal (&FN_NAME) as u64 for the matching FN_NAME from the
+ *       .def's final column. fp = 0u64 placeholders are rejected.
+ *
+ * Drift in either direction (.def changes without regenerating, or the
+ * generated prespec.iii block diverging from the .def) is structurally
+ * caught: the synth_hash in this corpus is computed from .def values
+ * directly and the lookup MUST hit AND the bound fp MUST match the real
+ * symbol address.
+ *
+ * The 10 sampled entries below are STABLE anchor compositions across
+ * NUMERA (hash/KDF/AEAD/cipher), MEMORIA (arena), and SANCTUS (ed25519)
+ * categories. Their SEQ_IDX/PRIMITIVE/HEXAD triples reflect the
+ * canonical block layout in iii_compositions.def. If any of these
+ * sampled triples shifts in the .def, this test fails — that's the
+ * intended drift signal.
+ *
+ * Exit code: 99 on full pass; 1..30 on specific failure (each entry
+ * has two failure codes: lookup-miss vs fp-mismatch; preamble checks
+ * use 1).
+ */
+
+module corpus_234
+
+/* Registry control. */
+extern @abi(c-msvc-x64) fn prespec_reset() -> i32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_register_compositions() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_used() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_lookup(composition_hash: u64) -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_dispatch_fp(slot: u32) -> u64 from "prespec.iii"
+
+/* Real exported functions referenced by the .def -- signatures match
+ * exactly what prespec.iii's externs use (u64-as-pointer under the
+ * c-msvc-x64 ABI, since iiis-0 passes pointers in the same registers
+ * as u64). */
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: u64, len: u64, out_32: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha512_oneshot(input: u64, len: u64, out_64: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn blake2s_oneshot(input: u64, len: u64, out: u64, out_len: u64) -> u32 from "blake2s.iii"
+extern @abi(c-msvc-x64) fn x25519(out: u64, scalar: u64, u_in: u64) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn chacha20_keystream(out: u64) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: u64, out_block: u64) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_decrypt_block(in_block: u64, out_block: u64) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn arena_alloc(arena_id: u64, n: u64, align: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(arena_id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: u64, msg: u64, msg_len: u64, sig: u64) -> u8 from "crypt_ed25519.iii"
+
+/* Mirror the synthetic-hash encoding from prespec.iii::_prespec_synth_hash
+ * and iii_compositions.h::iii_composition_synth_hash. Recomputed here
+ * from the .def's SEQ_IDX/PRIMITIVE/HEXAD triple so any structural drift
+ * between this encoding and the registered hashes is caught. */
+fn _synth(seq_idx: u32, primitive_id: u8, hexad_bag: u8) -> u64 {
+    let s_l : u64 = (seq_idx as u64) & 0xFFFFu64
+    let p_l : u64 = ((primitive_id as u64) & 0xFFu64) << 16u64
+    let b_l : u64 = ((hexad_bag as u64) & 0xFFu64) << 24u64
+    let m_l : u64 = 0x494E5450u64 << 32u64    /* "INTP" marker */
+    return s_l | p_l | b_l | m_l
+}
+
+/* Verify a single SSOT entry: lookup by synth_hash, then compare the
+ * bound dispatch_fp against the expected function address. Returns
+ * 0u64 on pass, or one of two distinct non-zero codes:
+ *   1u32 = lookup returned NOT_FOUND
+ *   2u32 = lookup hit but dispatch_fp != expected_fp
+ * The caller chooses the per-entry codes so failures are per-entry
+ * unique. */
+fn _check(seq_idx: u32, primitive_id: u8, hexad_bag: u8,
+          expected_fp: u64) -> u32 {
+    let h    : u64 = _synth(seq_idx, primitive_id, hexad_bag)
+    let slot : u32 = prespec_lookup(h)
+    if slot == 0xFFFFFFFFu32 { return 1u32 }
+    let bound : u64 = prespec_dispatch_fp(slot)
+    if bound != expected_fp { return 2u32 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* Preamble: clean registry, populate via the auto-generated block. */
+    prespec_reset()
+    if prespec_used() != 0u32 { return 1u64 }
+
+    let n : u32 = prespec_register_compositions()
+    /* The current .def has 256 entries (249 baseline + IDSG primitive
+     * intent_abstract + ed25519_sign_c4 §4.1 + 5 PQ pq_*_c4 §4.4.5). This
+     * count is the structural SSOT cardinality and must equal prespec_used()
+     * after the bulk register call. If they diverge, the generator's emitted
+     * block is out of sync with the .def — drift. If the .def grows or shrinks
+     * intentionally, this constant updates in lock-step (one definition:
+     * iii_compositions.def). */
+    if n != 256u32 { return 1u64 }
+    if prespec_used() != 256u32 { return 1u64 }
+
+    /* Capture real function addresses for comparison. These must match
+     * exactly what prespec.iii's auto-generated block bound via
+     * (&FN_NAME) as u64 -- a mismatch proves drift between the
+     * generator's emitted code and the actual symbol resolution. */
+    let fp_sha256   : u64 = (&sha256_oneshot) as u64
+    let fp_sha512   : u64 = (&sha512_oneshot) as u64
+    let fp_blake2s  : u64 = (&blake2s_oneshot) as u64
+    let fp_x25519   : u64 = (&x25519) as u64
+    let fp_chacha   : u64 = (&chacha20_keystream) as u64
+    let fp_aes_enc  : u64 = (&aes_encrypt_block) as u64
+    let fp_aes_dec  : u64 = (&aes_decrypt_block) as u64
+    let fp_arena_a  : u64 = (&arena_alloc) as u64
+    let fp_arena_r  : u64 = (&arena_reset) as u64
+    let fp_ed25519  : u64 = (&ed25519_verify) as u64
+
+    /* No fp may legitimately be 0 -- a 0-fp would mean the symbol
+     * resolved to nothing, breaking the SSOT contract that every .def
+     * entry must point at a real exported function. */
+    if fp_sha256  == 0u64 { return 1u64 }
+    if fp_sha512  == 0u64 { return 1u64 }
+    if fp_blake2s == 0u64 { return 1u64 }
+    if fp_x25519  == 0u64 { return 1u64 }
+    if fp_chacha  == 0u64 { return 1u64 }
+    if fp_aes_enc == 0u64 { return 1u64 }
+    if fp_aes_dec == 0u64 { return 1u64 }
+    if fp_arena_a == 0u64 { return 1u64 }
+    if fp_arena_r == 0u64 { return 1u64 }
+    if fp_ed25519 == 0u64 { return 1u64 }
+
+    /* Entry 0: sha256_oneshot       SEQ=100  PRIM=1 HEX=0x01 (NUMERA hashes) */
+    let r0 : u32 = _check(100u32, 1u8, 0x01u8, fp_sha256)
+    if r0 == 1u32 { return 2u64 }
+    if r0 == 2u32 { return 3u64 }
+
+    /* Entry 1: sha512_oneshot       SEQ=101  PRIM=1 HEX=0x01 */
+    let r1 : u32 = _check(101u32, 1u8, 0x01u8, fp_sha512)
+    if r1 == 1u32 { return 4u64 }
+    if r1 == 2u32 { return 5u64 }
+
+    /* Entry 2: blake2s_oneshot      SEQ=102  PRIM=1 HEX=0x01 */
+    let r2 : u32 = _check(102u32, 1u8, 0x01u8, fp_blake2s)
+    if r2 == 1u32 { return 6u64 }
+    if r2 == 2u32 { return 7u64 }
+
+    /* Entry 3: x25519               SEQ=120  PRIM=3 HEX=0x04 (NUMERA cipher/KEX) */
+    let r3 : u32 = _check(120u32, 3u8, 0x04u8, fp_x25519)
+    if r3 == 1u32 { return 8u64 }
+    if r3 == 2u32 { return 9u64 }
+
+    /* Entry 4: chacha20_keystream   SEQ=122  PRIM=3 HEX=0x04 */
+    let r4 : u32 = _check(122u32, 3u8, 0x04u8, fp_chacha)
+    if r4 == 1u32 { return 10u64 }
+    if r4 == 2u32 { return 11u64 }
+
+    /* Entry 5: aes_encrypt_block    SEQ=131  PRIM=3 HEX=0x04 */
+    let r5 : u32 = _check(131u32, 3u8, 0x04u8, fp_aes_enc)
+    if r5 == 1u32 { return 12u64 }
+    if r5 == 2u32 { return 13u64 }
+
+    /* Entry 6: aes_decrypt_block    SEQ=132  PRIM=3 HEX=0x04 */
+    let r6 : u32 = _check(132u32, 3u8, 0x04u8, fp_aes_dec)
+    if r6 == 1u32 { return 14u64 }
+    if r6 == 2u32 { return 15u64 }
+
+    /* Entry 7: arena_alloc          SEQ=203  PRIM=1 HEX=0x02 (MEMORIA) */
+    let r7 : u32 = _check(203u32, 1u8, 0x02u8, fp_arena_a)
+    if r7 == 1u32 { return 16u64 }
+    if r7 == 2u32 { return 17u64 }
+
+    /* Entry 8: arena_reset          SEQ=202  PRIM=5 HEX=0x10 (MEMORIA / ACT) */
+    let r8 : u32 = _check(202u32, 5u8, 0x10u8, fp_arena_r)
+    if r8 == 1u32 { return 18u64 }
+    if r8 == 2u32 { return 19u64 }
+
+    /* Entry 9: ed25519_verify       SEQ=140  PRIM=8 HEX=0x08 (SANCTUS / PROVE) */
+    let r9 : u32 = _check(140u32, 8u8, 0x08u8, fp_ed25519)
+    if r9 == 1u32 { return 20u64 }
+    if r9 == 2u32 { return 21u64 }
+
+    /* All 10 sampled .def entries verified: hash reachable + fp bound
+     * to real exported symbol. The runtime registry agrees with the
+     * .def structurally; no drift detected. */
+    return 99u64
+}

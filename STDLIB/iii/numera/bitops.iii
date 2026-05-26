@@ -1,0 +1,130 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bitops.iii
+ *
+ * III STDLIB - numera::bitops
+ *
+ * Bit manipulation primitives:
+ *   bitops_popcount32(v) -> u32   -- count set bits (Hamming weight)
+ *   bitops_popcount64(v) -> u32
+ *   bitops_clz32(v)      -> u32   -- count leading zeros (32 if v=0)
+ *   bitops_clz64(v)      -> u32
+ *   bitops_ctz32(v)      -> u32   -- count trailing zeros (32 if v=0)
+ *   bitops_ctz64(v)      -> u32
+ *   bitops_rotl32(v, n)  -> u32   -- rotate left
+ *   bitops_rotr32(v, n)  -> u32   -- rotate right
+ *   bitops_rotl64(v, n)  -> u64
+ *   bitops_rotr64(v, n)  -> u64
+ *   bitops_log2_floor64(v) -> u32 -- floor(log2(v)); 0 for v=0
+ *   bitops_next_pow2_64(v) -> u64 -- smallest pow2 ≥ v; 0 for v=0; 1 for v=1
+ *   bitops_reverse32(v)  -> u32   -- bit reversal
+ *
+ * All implementations are pure, branchless where practical, and
+ * verified against the standard recurrence definitions.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_bitops
+
+const BITOPS_OK : i32 = 0i32
+
+/* Popcount32 -- Hacker's Delight 5-1 */
+fn bitops_popcount32(v: u32) -> u32 @export {
+    let mut x : u32 = v
+    x = (x & 0x55555555u32) + ((x >> 1u32) & 0x55555555u32)
+    x = (x & 0x33333333u32) + ((x >> 2u32) & 0x33333333u32)
+    x = (x & 0x0F0F0F0Fu32) + ((x >> 4u32) & 0x0F0F0F0Fu32)
+    x = x * 0x01010101u32
+    return (x >> 24u32) & 0xFFu32
+}
+
+fn bitops_popcount64(v: u64) -> u32 @export {
+    let lo : u32 = (v & 0xFFFFFFFFu64) as u32
+    let hi : u32 = ((v >> 32u64) & 0xFFFFFFFFu64) as u32
+    return bitops_popcount32(lo) + bitops_popcount32(hi)
+}
+
+fn bitops_clz32(v: u32) -> u32 @export {
+    if v == 0u32 { return 32u32 }
+    let mut n : u32 = 0u32
+    let mut x : u32 = v
+    if (x & 0xFFFF0000u32) == 0u32 { n = n + 16u32; x = x << 16u32 }
+    if (x & 0xFF000000u32) == 0u32 { n = n +  8u32; x = x <<  8u32 }
+    if (x & 0xF0000000u32) == 0u32 { n = n +  4u32; x = x <<  4u32 }
+    if (x & 0xC0000000u32) == 0u32 { n = n +  2u32; x = x <<  2u32 }
+    if (x & 0x80000000u32) == 0u32 { n = n +  1u32 }
+    return n
+}
+
+fn bitops_clz64(v: u64) -> u32 @export {
+    if v == 0u64 { return 64u64 as u32 }
+    let hi : u32 = ((v >> 32u64) & 0xFFFFFFFFu64) as u32
+    if hi != 0u32 { return bitops_clz32(hi) }
+    let lo : u32 = (v & 0xFFFFFFFFu64) as u32
+    return 32u32 + bitops_clz32(lo)
+}
+
+fn bitops_ctz32(v: u32) -> u32 @export {
+    if v == 0u32 { return 32u32 }
+    let mut n : u32 = 0u32
+    let mut x : u32 = v
+    if (x & 0x0000FFFFu32) == 0u32 { n = n + 16u32; x = x >> 16u32 }
+    if (x & 0x000000FFu32) == 0u32 { n = n +  8u32; x = x >>  8u32 }
+    if (x & 0x0000000Fu32) == 0u32 { n = n +  4u32; x = x >>  4u32 }
+    if (x & 0x00000003u32) == 0u32 { n = n +  2u32; x = x >>  2u32 }
+    if (x & 0x00000001u32) == 0u32 { n = n +  1u32 }
+    return n
+}
+
+fn bitops_ctz64(v: u64) -> u32 @export {
+    if v == 0u64 { return 64u64 as u32 }
+    let lo : u32 = (v & 0xFFFFFFFFu64) as u32
+    if lo != 0u32 { return bitops_ctz32(lo) }
+    let hi : u32 = ((v >> 32u64) & 0xFFFFFFFFu64) as u32
+    return 32u32 + bitops_ctz32(hi)
+}
+
+fn bitops_rotl32(v: u32, n: u32) -> u32 @export {
+    let s : u32 = n & 31u32
+    if s == 0u32 { return v }
+    return (v << s) | (v >> (32u32 - s))
+}
+
+fn bitops_rotr32(v: u32, n: u32) -> u32 @export {
+    let s : u32 = n & 31u32
+    if s == 0u32 { return v }
+    return (v >> s) | (v << (32u32 - s))
+}
+
+fn bitops_rotl64(v: u64, n: u32) -> u64 @export {
+    let s : u32 = n & 63u32
+    if s == 0u32 { return v }
+    return (v << (s as u64)) | (v >> ((64u32 - s) as u64))
+}
+
+fn bitops_rotr64(v: u64, n: u32) -> u64 @export {
+    let s : u32 = n & 63u32
+    if s == 0u32 { return v }
+    return (v >> (s as u64)) | (v << ((64u32 - s) as u64))
+}
+
+fn bitops_log2_floor64(v: u64) -> u32 @export {
+    if v == 0u64 { return 0u32 }
+    return 63u32 - bitops_clz64(v)
+}
+
+fn bitops_next_pow2_64(v: u64) -> u64 @export {
+    if v == 0u64 { return 0u64 }
+    if v == 1u64 { return 1u64 }
+    let lg : u32 = bitops_log2_floor64(v - 1u64)
+    return 1u64 << ((lg + 1u32) as u64)
+}
+
+fn bitops_reverse32(v: u32) -> u32 @export {
+    let mut x : u32 = v
+    x = ((x >> 1u32) & 0x55555555u32) | ((x & 0x55555555u32) << 1u32)
+    x = ((x >> 2u32) & 0x33333333u32) | ((x & 0x33333333u32) << 2u32)
+    x = ((x >> 4u32) & 0x0F0F0F0Fu32) | ((x & 0x0F0F0F0Fu32) << 4u32)
+    x = ((x >> 8u32) & 0x00FF00FFu32) | ((x & 0x00FF00FFu32) << 8u32)
+    x = (x >> 16u32) | (x << 16u32)
+    return x
+}

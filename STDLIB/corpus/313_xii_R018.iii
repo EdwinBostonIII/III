@@ -1,0 +1,22 @@
+/* corpus/313_xii_R018.iii  -- R018 [D3] IF const-true */
+
+module corpus_313_xii_R018
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_pe_const_true_form() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let p : u32 = xii_term_make_basis(0u8, xii_rewrite_pe_const_true_form())
+    let then_b : u32 = xii_term_make_basis(1u8, 0x200u32)
+    let else_b : u32 = xii_term_make_basis(1u8, 0x300u32)
+    let t : u32 = xii_term_make_if(p, then_b, else_b)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 18u32 { return 1u64 }
+    if r != then_b { return 2u64 }
+    return 0u64
+}

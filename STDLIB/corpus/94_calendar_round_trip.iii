@@ -1,0 +1,40 @@
+/* Calendar round-trip: civil-to-unix → unix-to-civil should recover.
+ * Test 2026-05-08 00:00:00 UTC = 1778198400 unix sec.
+ */
+module corpus_94
+
+extern @abi(c-msvc-x64) fn cal_civil_to_unix(year: u32, month: u32, day: u32) -> u64 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_unix_to_civil(unix_seconds: u64) -> i32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_year() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_month() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_day() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_hour() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_min() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_sec() -> u32 from "calendar.iii"
+
+fn main() -> u64 {
+    /* 2026-05-08 → unix */
+    let ts : u64 = cal_civil_to_unix(2026u32, 5u32, 8u32)
+    if ts != 1778198400u64 { return 1u64 }
+    /* Round-trip: ts → civil */
+    cal_unix_to_civil(ts)
+    if cal_last_year() != 2026u32 { return 2u64 }
+    if cal_last_month() != 5u32 { return 3u64 }
+    if cal_last_day() != 8u32 { return 4u64 }
+    if cal_last_hour() != 0u32 { return 5u64 }
+    if cal_last_min() != 0u32 { return 6u64 }
+    if cal_last_sec() != 0u32 { return 7u64 }
+    /* 1970-01-01 00:00:00 = 0 */
+    if cal_civil_to_unix(1970u32, 1u32, 1u32) != 0u64 { return 8u64 }
+    /* 2000-02-29 (leap day) → 951782400 */
+    if cal_civil_to_unix(2000u32, 2u32, 29u32) != 951782400u64 { return 9u64 }
+    /* Mid-day timestamp: 1778198400 + 12*3600 + 34*60 + 56 = 1778243696 */
+    cal_unix_to_civil(1778243696u64)
+    if cal_last_year() != 2026u32 { return 10u64 }
+    if cal_last_month() != 5u32 { return 11u64 }
+    if cal_last_day() != 8u32 { return 12u64 }
+    if cal_last_hour() != 12u32 { return 13u64 }
+    if cal_last_min() != 34u32 { return 14u64 }
+    if cal_last_sec() != 56u32 { return 15u64 }
+    return 99u64
+}

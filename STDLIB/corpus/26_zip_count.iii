@@ -1,0 +1,45 @@
+/* zip(iter_a[5], iter_b[3]) -> 3 pairs */
+module corpus_b26
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iter_u8_new(base: u64, len: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_drop(id: u64) -> u8 from "iter.iii"
+extern @abi(c-msvc-x64) fn zip_u8_u8_count(a: u64, b: u64) -> u64 from "zip.iii"
+extern @abi(c-msvc-x64) fn zip_u8_u8_next(a: u64, b: u64) -> u64 from "zip.iii"
+extern @abi(c-msvc-x64) fn zip_u8_u8_a(packed: u64) -> u32 from "zip.iii"
+extern @abi(c-msvc-x64) fn zip_u8_u8_b(packed: u64) -> u32 from "zip.iii"
+
+fn main() -> u64 {
+    let pa : *u8 = malloc(5u64)
+    let pb : *u8 = malloc(3u64)
+    pa[0] = 10u8
+    pa[1] = 11u8
+    pa[2] = 12u8
+    pa[3] = 13u8
+    pa[4] = 14u8
+    pb[0] = 20u8
+    pb[1] = 21u8
+    pb[2] = 22u8
+    /* count test */
+    let ia : u64 = iter_u8_new(pa as u64, 5u64)
+    let ib : u64 = iter_u8_new(pb as u64, 3u64)
+    let n : u64 = zip_u8_u8_count(ia, ib)
+    iter_u8_drop(ia)
+    iter_u8_drop(ib)
+    if n != 3u64 { return 1u64 }
+    /* explicit pair test */
+    let ja : u64 = iter_u8_new(pa as u64, 5u64)
+    let jb : u64 = iter_u8_new(pb as u64, 3u64)
+    let r0 : u64 = zip_u8_u8_next(ja, jb)
+    if zip_u8_u8_a(r0) != 10u32 { return 2u64 }
+    if zip_u8_u8_b(r0) != 20u32 { return 3u64 }
+    let r1 : u64 = zip_u8_u8_next(ja, jb)
+    if zip_u8_u8_a(r1) != 11u32 { return 4u64 }
+    if zip_u8_u8_b(r1) != 21u32 { return 5u64 }
+    iter_u8_drop(ja)
+    iter_u8_drop(jb)
+    free(pa)
+    free(pb)
+    return 99u64
+}

@@ -1,0 +1,4 @@
+/* 610 — rev_invoke: native u64 fn-ptr indirect-call trampoline (arg passing + return). */
+module corpus_610
+extern @abi(c-msvc-x64) fn revinv_selftest() -> u64 from "rev_invoke.iii"
+fn main() -> u64 { return revinv_selftest() }

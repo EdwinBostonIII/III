@@ -1,0 +1,173 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\transform.iii
+ *
+ * III STDLIB - omnia::transform
+ *
+ * X → Y rapid conversion entry point.
+ * FROZEN SPEC §7B.2, §Z.C.6; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.90.
+ *
+ * Every transform routes through resolve() against G_TRANSFORM_PATTERN_SET.
+ * 24 transform patterns (slots 16..39) per §7B.6.
+ */
+
+module omnia_transform
+
+const FORM_III          : u32 = 1u32
+const FORM_BABEL_JSON   : u32 = 2u32
+const FORM_X86_ASM      : u32 = 3u32
+const FORM_C99          : u32 = 4u32
+const FORM_PE_EXE       : u32 = 5u32
+const FORM_ELF_EXE      : u32 = 6u32
+const FORM_AST_BINARY   : u32 = 7u32
+const FORM_BABEL_CBOR   : u32 = 8u32
+const FORM_BABEL_TEXT   : u32 = 9u32
+const FORM_LATEX        : u32 = 10u32
+const FORM_MARKDOWN     : u32 = 11u32
+const FORM_HEX_DUMP     : u32 = 12u32
+const FORM_DOT_GRAPH    : u32 = 13u32
+const FORM_RIPPLE_PROOF : u32 = 14u32
+const FORM_X86_BYTES    : u32 = 15u32
+const FORM_C99_HEADER   : u32 = 16u32
+const FORM_RAW_BIN      : u32 = 17u32
+const FORM_PIPELINE     : u32 = 18u32
+
+const G_TRANSFORM_SLOT_FIRST : u32 = 18u32
+const G_TRANSFORM_SLOT_LAST  : u32 = 41u32
+const G_TRANSFORM_COUNT      : u32 = 24u32
+
+extern @abi(c-msvc-x64) fn intent_new_transform(src_form: u32, dst_form: u32, src_handle: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn call_context_cap_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_arena_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn pattern_set_new(arena: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_set_add(set: u64, slot: u32) -> i32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(code: u32, site_hash: u64, cap: u64, cause: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal_edges.iii"
+extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u32, align: u8) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+var g_transform_pattern_set : u64 = 0u64
+
+/* Domain "III_TXF_SITE" 16 bytes */
+var XFM_DOM_SITE : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 84u8, 88u8, 70u8, 95u8, 83u8, 73u8, 84u8, 69u8, 0u8, 0u8, 0u8, 0u8]
+
+var TX_TMP4 : [u8; 4]
+var TX_TMP8 : [u8; 8]
+var TX_OUT  : [u8; 32]
+
+fn transform_pattern_set_init(arena: u64) -> u64 @export {
+    let set : u64 = pattern_set_new(arena)
+    if set == 0u64 { return 0u64 }
+    let mut i : u32 = G_TRANSFORM_SLOT_FIRST
+    while i <= G_TRANSFORM_SLOT_LAST {
+        pattern_set_add(set, i)
+        i = i + 1u32
+    }
+    g_transform_pattern_set = set
+    return set
+}
+
+fn transform_pattern_set_get() -> u64 @export {
+    return g_transform_pattern_set
+}
+
+fn transform_site_hash(src_form: u32, dst_form: u32, src_handle: u64, out_32: u64) -> i32 @export {
+    mhash_begin()
+    mhash_domain((&XFM_DOM_SITE) as u64, 12u64)
+    TX_TMP4[0] = (src_form & 0xFFu32) as u8
+    TX_TMP4[1] = ((src_form >> 8u32) & 0xFFu32) as u8
+    TX_TMP4[2] = ((src_form >> 16u32) & 0xFFu32) as u8
+    TX_TMP4[3] = ((src_form >> 24u32) & 0xFFu32) as u8
+    mhash_payload((&TX_TMP4) as u64, 4u64)
+    TX_TMP4[0] = (dst_form & 0xFFu32) as u8
+    TX_TMP4[1] = ((dst_form >> 8u32) & 0xFFu32) as u8
+    TX_TMP4[2] = ((dst_form >> 16u32) & 0xFFu32) as u8
+    TX_TMP4[3] = ((dst_form >> 24u32) & 0xFFu32) as u8
+    mhash_payload((&TX_TMP4) as u64, 4u64)
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        TX_TMP8[k] = ((src_handle >> ((k & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        k = k + 1u32
+    }
+    mhash_payload((&TX_TMP8) as u64, 8u64)
+    mhash_final(out_32)
+    return 0i32
+}
+
+fn transform_pack(dst_handle: u64, prov_id: u64) -> u64 @export {
+    return (dst_handle & 0x0000FFFFFFFFFFFFu64) | ((prov_id & 0xFFFFu64) << 48u64)
+}
+
+fn transform_unpack_dst(packed: u64) -> u64 @export {
+    return packed & 0x0000FFFFFFFFFFFFu64
+}
+
+/* result_u64 helpers (mirrors omnia/result.iii layout) */
+fn result_ok(v: u64) -> u64 {
+    return (v & 0x7FFFFFFFFFFFFFFFu64) << 1u64
+}
+
+fn result_err(code: u32) -> u64 {
+    return (((code as u64) & 0xFFFFFFFFu64) << 1u64) | 1u64
+}
+
+fn result_is_ok(r: u64) -> u8 {
+    if (r & 1u64) == 0u64 { return 1u8 }
+    return 0u8
+}
+
+fn result_unwrap(r: u64) -> u64 {
+    return (r >> 1u64) & 0x7FFFFFFFFFFFFFFFu64
+}
+
+fn transform(src_form: u32, dst_form: u32, src_handle: u64, ctx: u64) -> u64 @export {
+    /* Identity transform: zero-cost, no resolve needed */
+    if src_form == dst_form {
+        return result_ok(src_handle)
+    }
+    let intent_id : u64 = intent_new_transform(src_form, dst_form, src_handle)
+    if intent_id == 0u64 { return result_err(0xE10Du32) }
+    let result : u64 = resolve(g_transform_pattern_set, intent_id, ctx)
+    if result_is_ok(result) == 0u8 { return result }
+    let dst_handle : u64 = result_unwrap(result)
+    transform_site_hash(src_form, dst_form, src_handle, (&TX_OUT) as u64)
+    let prov : u64 = crystal_mint(0u32, (&TX_OUT) as u64, call_context_cap_id(ctx), intent_id)
+    /* Only chain edges for non-zero handles (resolver returns 0 in baseline). */
+    if intent_id != 0u64 {
+        if prov != 0u64 {
+            crystal_edges_add(intent_id, prov)
+        }
+    }
+    if prov != 0u64 {
+        if dst_handle != 0u64 {
+            crystal_edges_add(prov, dst_handle)
+        }
+    }
+    return result_ok(transform_pack(dst_handle, prov))
+}
+
+fn transform_buffer(src_bytes: u64, src_len: u64, src_form: u32, dst_form: u32, ctx: u64) -> u64 @export {
+    let arena : u64 = call_context_arena_id(ctx)
+    let wrapper : u64 = arena_alloc(arena, 16u32, 8u8)
+    if wrapper == 0u64 { return result_err(0xE111u32) }
+    let p0 : *u8 = (wrapper) as *u8
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let b : u8 = ((src_bytes >> ((i & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        let pi : *u8 = (wrapper + ((i as u64) & 0xFFu64)) as *u8
+        pi[0u64] = b
+        i = i + 1u32
+    }
+    i = 0u32
+    while i < 8u32 {
+        let b : u8 = ((src_len >> ((i & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        let pi : *u8 = (wrapper + 8u64 + ((i as u64) & 0xFFu64)) as *u8
+        pi[0u64] = b
+        i = i + 1u32
+    }
+    return transform(src_form, dst_form, wrapper, ctx)
+}

@@ -1,0 +1,21 @@
+/* 694_h11_charter.iii -- mig6 / H11: the H11 falsifier as a run_charter constitutional clause.
+ *
+ * Companion to 673_constitution_holds (the GENERIC verify-AND-falsify mechanism over the COP
+ * witness-VM): the H11 invariant ("one category: every transform is a morphism (M12); composition
+ * is ASSOCIATIVE; coequalizer = egraph equality, pullback = consensus") is an algebraic law the COP
+ * VM cannot express, so it is its own module falsifier here.  Drives h11_selftest (numera/
+ * h11_charter.iii): over the free category numera/category.iii (the M12 keystone proven by
+ * 676_cat_laws) it asserts composition is ASSOCIATIVE -- every bracketing of the 4-chain f.g.h.k is
+ * one morphism -- and that a non-composable pair has NO lawful composite (compose refuses, returning
+ * the sentinel).  run_charter is a REAL terminal gate: GREEN on the H11 clause, RED (the failing
+ * clause index) on an injected deliberately-false canary that pretends a non-composable pair composes
+ * (prove-the-negative: not vacuously green).  h11_selftest is the H11 module's contribution to the
+ * constitution's union-of-all-module-falsifiers.
+ * Main-corpus convention: rc 99 = pass; 1..9 = which h11_selftest assertion failed. */
+module corpus_694
+
+extern @abi(c-msvc-x64) fn h11_selftest() -> u64 from "h11_charter.iii"
+
+fn main() -> u64 {
+    return h11_selftest()
+}

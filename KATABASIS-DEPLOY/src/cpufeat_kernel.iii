@@ -1,0 +1,34 @@
+module numera_cpufeat_kernel
+
+/* KATABASIS Tier-2 -- kernel-safe CPU-feature probe (Ring 0).
+ *
+ * The user-mode numera::cpufeat (STDLIB/iii/numera/cpufeat.iii) detects
+ * vector features via the kernel32 API IsProcessorFeaturePresent. That
+ * import is UNAVAILABLE in Ring 0 and would also break the gate driver's
+ * zero-imports invariant. More fundamentally, a Windows kernel driver may
+ * NOT execute AVX2 / AVX-512 (EVEX) instructions without first calling
+ * KeSaveExtendedProcessorState to preserve the interrupted thread's
+ * extended (YMM / ZMM / opmask) state; doing so silently corrupts user FP
+ * state and bugchecks.
+ *
+ * Therefore, in Ring 0 the correct AND complete answer is: NO vector fast
+ * path is available. This probe returns 0u8, which makes sha256's
+ * _sha_sched4 (numera/sha256.iii:184) and keccak's _kk_chi
+ * (numera/keccak.iii:264) dispatch to their pure scalar (general-purpose
+ * register only) paths -- bit-identical hash output, kernel-safe. The
+ * driver also pins SHA_FORCE=1 / KK_CHI_FORCE=1 via sha256_sched_force /
+ * keccak_chi_force_path as a second, independent guarantee that the EVEX
+ * metal{} blocks (_sha_sched4_avx512, _kk_chi_avx512) are never reached.
+ *
+ * This is NOT a placeholder: "feature unusable in this execution context"
+ * is the truthful, complete contract for kernel mode. The emitted symbol
+ * L_p_cpufeat_has_avx512f matches the extern in numera/sha256.iii:51 and
+ * numera/keccak.iii:45, so it satisfies the closure's only cpufeat link
+ * reference with zero imports.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (constant, total, no syscall).
+ */
+
+fn cpufeat_has_avx512f() -> u8 @export {
+    return 0u8
+}

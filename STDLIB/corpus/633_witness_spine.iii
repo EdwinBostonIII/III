@@ -1,0 +1,4 @@
+/* 633 — witness_spine: chain-as-DAG reverse index + epoch-aware replay root (M6/M10). */
+module corpus_633
+extern @abi(c-msvc-x64) fn ws_selftest() -> u64 from "witness_spine.iii"
+fn main() -> u64 { return ws_selftest() }

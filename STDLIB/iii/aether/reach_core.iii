@@ -1,0 +1,119 @@
+/* STDLIB/iii/aether/reach_core.iii -- The Reach: the resolver + emit.
+ *
+ * The network redefined as content-addressed transport: reach(address) -> value | typed-GAP,
+ * emit(value) -> address.  THE ADDRESS IS THE INTEGRITY PROOF: every value returned by reach is
+ * re-hashed (cad) and checked against the requested address -- at EVERY tier -- so a corrupt,
+ * tampered, or stale-cached backend entry is NEVER handed back; it degrades to a typed GAP
+ * (uncertainty), never an error.  This is the tamper-evidence only a content-addressed network
+ * has: you cannot be lied to about content, and a poisoned cache cannot be blessed.
+ *
+ * Backend lattice, nearest-first (Phase 2): L0 memo (RAM) -> L1 content-store (disk).  The first
+ * tier holding a VALID copy wins; an L1 hit is written back DOWN into L0 (cache-fill) so the next
+ * reach is RAM-fast; emit primes L0 too.  Later phases extend the lattice to L2 IPC / L3 loopback-
+ * peer / L4 remote, with the remote tier LAST and OPTIONAL -- so offline shrinks the reachable set
+ * to a typed GAP and never reduces local capacity (the "no wifi handicap" property, structural).
+ * Cap-gated per the M31 IO-membrane (corpus 687): reach needs READ; emit needs READ|WRITE|CREATE.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  NIH: backend_memo + reach_store + cad + uncertainty +
+ * capability only.  Determinism: the immutable-by-address path is reproducible (same address ->
+ * same value or same GAP on any run); integer-only; ==/!= compares; single-line fns; params->locals. */
+module aether_reach_core
+
+extern @abi(c-msvc-x64) fn backend_memo_get(addr: u64, out: u64, max: u64, out_len: u64) -> i32 from "backend_memo.iii"
+extern @abi(c-msvc-x64) fn backend_memo_put(addr: u64, buf: u64, len: u64) -> i32 from "backend_memo.iii"
+extern @abi(c-msvc-x64) fn reach_store_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 from "reach_store.iii"
+extern @abi(c-msvc-x64) fn reach_store_put(addr: u64, buf: u64, len: u64, cap: u64) -> i32 from "reach_store.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn unc_gap_root(kind: u8, reason: u32) -> u32 from "uncertainty.iii"
+
+const REACH_OK     : i32 = 0i32
+const REACH_GAP    : i32 = 1i32
+const REACH_DENIED : i32 = 2i32
+
+const REACH_SUITE        : u32 = 0u32    /* CAD_SUITE_SHA256 -- the canonical content-address */
+const REACH_RIGHT_READ   : u64 = 0x0002u64    /* FS_RIGHT_READ */
+const REACH_EMIT_RIGHTS  : u64 = 0x000Eu64    /* READ|WRITE|CREATE */
+
+const REACH_UNC_HOLE         : u8  = 1u8       /* UNC_HOLE -- not-yet-reachable (a hole, not an error) */
+const REACH_REASON_NOTFOUND  : u32 = 0x52001u32
+const REACH_REASON_INTEGRITY : u32 = 0x52002u32
+const REACH_STORE_OK         : i32 = 0i32
+const REACH_MEMO_OK          : i32 = 0i32
+
+var REACH_VBUF : [u8; 32]    /* recompute-the-address scratch for the integrity check */
+
+/* write u32 v as 4 little-endian bytes into ptr (byte-by-byte; dodges the u32-pointer-store
+ * width trap where a *u32 store of an 8-byte-slot value can emit a wide movq). */
+fn _reach_put_u32le(v: u32, ptr: u64) -> u64 {
+    let p : *u8 = ptr as *u8
+    let vv : u32 = v
+    p[0] = (vv & 0xFFu32) as u8
+    p[1] = ((vv >> 8u32) & 0xFFu32) as u8
+    p[2] = ((vv >> 16u32) & 0xFFu32) as u8
+    p[3] = ((vv >> 24u32) & 0xFFu32) as u8
+    return 0u64
+}
+
+/* integrity gate: 1 iff the got_len bytes at out re-hash (cad) to the requested address.
+ * Applied to WHATEVER any backend tier returns -- L0 cache included -- before it is blessed. */
+fn _reach_verify(out: u64, got_len: u64, addr: u64) -> u8 {
+    let o : u64 = out
+    let gl : u64 = got_len
+    let a : u64 = addr
+    cad_oneshot(REACH_SUITE, o as *u8, gl, (&REACH_VBUF as u64) as *u8)
+    return cad_eq((&REACH_VBUF as u64) as *u8, a as *u8)
+}
+
+/* emit(value) -> address: content-address the value (cad) into out_addr (32 bytes), store it in
+ * L1, and prime L0.  Idempotent.  REACH_DENIED if the capability lacks the emit rights. */
+fn reach_emit(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 @export {
+    let b : u64 = buf
+    let n : u64 = len
+    let c : u64 = cap
+    let oa : u64 = out_addr
+    if cap_verify_rights(c, REACH_EMIT_RIGHTS) == 0u8 { return REACH_DENIED }
+    cad_oneshot(REACH_SUITE, b as *u8, n, oa as *u8)
+    let rc : i32 = reach_store_put(oa, b, n, c)
+    if rc != REACH_STORE_OK { return REACH_GAP }
+    backend_memo_put(oa, b, n)
+    return REACH_OK
+}
+
+/* reach(address) -> value | GAP: resolve `addr` nearest-first (L0 memo, then L1 store), VERIFY the
+ * bytes re-hash to the address at each tier (tamper-evident), and return REACH_OK with the value in
+ * out (*out_len set).  On an L1 hit, fill L0 (cache-fill-down).  Otherwise REACH_GAP (*out_gid set,
+ * *out_len 0).  REACH_DENIED if the capability lacks READ.  NEVER returns bytes that mismatch addr. */
+fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 @export {
+    let a : u64 = addr
+    let c : u64 = cap
+    let o : u64 = out
+    let mx : u64 = max
+    let ol : u64 = out_len
+    let og : u64 = out_gid
+    let olp : *u64 = ol as *u64
+    olp[0] = 0u64
+    if cap_verify_rights(c, REACH_RIGHT_READ) == 0u8 { return REACH_DENIED }
+    let m : i32 = backend_memo_get(a, o, mx, ol)
+    if m == REACH_MEMO_OK {
+        let g0 : u64 = olp[0]
+        if _reach_verify(o, g0, a) == 1u8 { return REACH_OK }
+        olp[0] = 0u64
+    }
+    let rc : i32 = reach_store_get(a, c, o, mx, ol)
+    if rc == REACH_STORE_OK {
+        let g1 : u64 = olp[0]
+        if _reach_verify(o, g1, a) == 1u8 {
+            backend_memo_put(a, o, g1)
+            return REACH_OK
+        }
+        olp[0] = 0u64
+        let gidi : u32 = unc_gap_root(REACH_UNC_HOLE, REACH_REASON_INTEGRITY)
+        _reach_put_u32le(gidi, og)
+        return REACH_GAP
+    }
+    let gidn : u32 = unc_gap_root(REACH_UNC_HOLE, REACH_REASON_NOTFOUND)
+    _reach_put_u32le(gidn, og)
+    return REACH_GAP
+}

@@ -1,0 +1,31 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\262_neg_cap_flow.iii
+ *
+ * NEGATIVE-COMPILE test for the @cap_required static cap-flow check.
+ *
+ * THIS FILE MUST FAIL TO COMPILE.  It is consumed by
+ * scripts/test_cap_flow_static_negative.sh, which invokes iiis on
+ * this source and asserts non-zero exit + the
+ * `III_CAP_FLOW_VIOLATION` marker in the produced asm comment trail.
+ *
+ * Cap-flow violation: caller declares @cap_required(0x100u64) but
+ * calls a callee declared @cap_required(0x200u64).  The required
+ * containment (0x100 & 0x200) == 0x200 is FALSE.  Static check
+ * fires; codegen rejects.
+ */
+module corpus_262_neg
+
+fn _leaf_high(ctx: u64) -> u64 @cap_required(0x200u64) {
+    let _unused : u64 = ctx
+    return 0xBBBBu64
+}
+
+/* Caller has 0x100; callee requires 0x200; violation. */
+fn _caller_low(ctx: u64) -> u64 @cap_required(0x100u64) {
+    let _unused : u64 = ctx
+    let r : u64 = _leaf_high(ctx)
+    return r
+}
+
+fn main() -> u64 {
+    return 0u64
+}

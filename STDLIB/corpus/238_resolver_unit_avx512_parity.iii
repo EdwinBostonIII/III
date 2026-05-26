@@ -1,0 +1,177 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\238_resolver_unit_avx512_parity.iii
+ *
+ * III conformance corpus 238 -- Phase C.4: AVX-512 path BIT-IDENTITY
+ * cross-path parity.
+ *
+ * Phase C.4 INSEL exposes THREE Software Resolution Unit entry points
+ * that MUST produce bit-identical packed (best_id << 32) | best_score
+ * for the SAME (set, intent, ctx) triple:
+ *
+ *   1. iii_resolver_unit_resolve         -- front-end dispatcher
+ *                                           (selects scalar or AVX-2 or
+ *                                           AVX-512 per cpufeat probe)
+ *   2. iii_resolver_unit_resolve_avx2    -- dedicated AVX-2 entry
+ *                                           (resolver_unit.s)
+ *   3. iii_resolver_unit_resolve_avx512  -- dedicated AVX-512 entry
+ *                                           (resolver_unit_avx512.s)
+ *
+ * Corpus 235 already pins AVX-2 against a pure-iii scalar reference.
+ * This test pins the AVX-512 path AGAINST the AVX-2 path AND the
+ * dispatcher's choice -- catching any drift where AVX-512 lane
+ * reduction (vpconflictq, vpermd lane-shuffle, k-mask compose) returns
+ * a different (best_id, best_score) than the AVX-2 path's vptest +
+ * pointer-gather.
+ *
+ * Conditional skip strategy
+ * -------------------------
+ *   cpufeat_has_avx2()    == 0 -> EARLY return 99 (skip whole test;
+ *                                  AVX-2 path is the parity baseline,
+ *                                  there's nothing to compare against
+ *                                  on a non-AVX-2 host).
+ *   cpufeat_has_avx512f() == 0 -> per-triple, set the AVX-512 result
+ *                                  EQUAL to the AVX-2 result, so the
+ *                                  three-way equality assertion
+ *                                  collapses to (avx2 == dispatcher),
+ *                                  which is still a meaningful check
+ *                                  (the dispatcher MUST pick AVX-2 on
+ *                                  this host since AVX-512 is absent).
+ *
+ * THREE distinct (intent, ctx) triples broaden coverage across the
+ * primitive INTENT taxonomy:
+ *
+ *   - intent_form(0x100)              -- primitive FORM
+ *   - intent_act(0x200, 0x300)        -- primitive ACT
+ *   - intent_convey(0x400, 0x500, 0x600) -- primitive CONVEY
+ *
+ * Sample expected packed u64 (empty pattern set; best_id=0, best_score=0):
+ *
+ *   FORM     : 0x0000000000000000u64
+ *   ACT      : 0x0000000000000000u64
+ *   CONVEY   : 0x0000000000000000u64
+ *
+ * (On the populated sealed table built by resolution_init the actual
+ * packed values depend on resolver_score outcomes; what this corpus
+ * pins is BIT-IDENTITY across the three paths, not the absolute value.)
+ *
+ * EXIT MAP
+ * --------
+ *   1   pattern_set_global() returned 0 (resolution_init failed)
+ *   2   call_context_new() returned 0
+ *   3   intent_form(0x100) returned 0
+ *   4   intent_act(0x200, 0x300) returned 0
+ *   5   intent_convey(0x400, 0x500, 0x600) returned 0
+ *   11  FORM   : avx2 result was 0 (asm bug)
+ *   12  FORM   : avx512 result was 0 (asm bug)
+ *   13  FORM   : dispatcher result was 0
+ *   14  FORM   : avx512 != avx2 (parity break)
+ *   15  FORM   : dispatcher != avx2 (parity break)
+ *   16  ACT    : avx2 result was 0
+ *   17  ACT    : avx512 result was 0
+ *   18  ACT    : dispatcher result was 0
+ *   19  ACT    : avx512 != avx2
+ *   20  ACT    : dispatcher != avx2
+ *   21  CONVEY : avx2 result was 0
+ *   22  CONVEY : avx512 result was 0
+ *   23  CONVEY : dispatcher result was 0
+ *   24  CONVEY : avx512 != avx2
+ *   25  CONVEY : dispatcher != avx2
+ *   99  PASS (or skipped because cpufeat_has_avx2 == 0)
+ */
+
+module corpus_238
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn calculus_init() -> i32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_convey(src_handle: u64, dst_cap: u64, byte_count: u64) -> u64 from "intent.iii"
+
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+
+/* Three resolver entry points. The two SIMD entries aren't declared in
+ * any normal .iii module; the linker resolves them out of
+ * resolver_unit.o / resolver_unit_avx512.o regardless of the `from`
+ * sentinel string we pin here. */
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve_avx2(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve_avx512(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "_unused.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    calculus_init()
+
+    /* Conditional skip: AVX-2 is the parity baseline. Without it the
+     * three-way comparison degenerates to dispatcher-vs-dispatcher,
+     * which is meaningless. Skip cleanly with PASS exit 99. */
+    if cpufeat_has_avx2() == 0u8 { return 99u64 }
+
+    let has_avx512 : u8 = cpufeat_has_avx512f()
+
+    let set : u64 = pattern_set_global()
+    if set == 0u64 { return 1u64 }
+
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 2u64 }
+
+    /* ── Triple 1: primitive FORM ── */
+    let i_form : u64 = intent_form(0x100u64)
+    if i_form == 0u64 { return 3u64 }
+
+    let f_avx2 : u64 = iii_resolver_unit_resolve_avx2(set, i_form, ctx)
+    if f_avx2 == 0u64 { return 11u64 }
+
+    let mut f_avx512 : u64 = f_avx2
+    if has_avx512 == 1u8 {
+        f_avx512 = iii_resolver_unit_resolve_avx512(set, i_form, ctx)
+        if f_avx512 == 0u64 { return 12u64 }
+        if f_avx512 != f_avx2 { return 14u64 }
+    }
+
+    let f_disp : u64 = iii_resolver_unit_resolve(set, i_form, ctx)
+    if f_disp == 0u64 { return 13u64 }
+    if f_disp != f_avx2 { return 15u64 }
+
+    /* ── Triple 2: primitive ACT ── */
+    let i_act : u64 = intent_act(0x200u64, 0x300u64)
+    if i_act == 0u64 { return 4u64 }
+
+    let a_avx2 : u64 = iii_resolver_unit_resolve_avx2(set, i_act, ctx)
+    if a_avx2 == 0u64 { return 16u64 }
+
+    let mut a_avx512 : u64 = a_avx2
+    if has_avx512 == 1u8 {
+        a_avx512 = iii_resolver_unit_resolve_avx512(set, i_act, ctx)
+        if a_avx512 == 0u64 { return 17u64 }
+        if a_avx512 != a_avx2 { return 19u64 }
+    }
+
+    let a_disp : u64 = iii_resolver_unit_resolve(set, i_act, ctx)
+    if a_disp == 0u64 { return 18u64 }
+    if a_disp != a_avx2 { return 20u64 }
+
+    /* ── Triple 3: primitive CONVEY ── */
+    let i_convey : u64 = intent_convey(0x400u64, 0x500u64, 0x600u64)
+    if i_convey == 0u64 { return 5u64 }
+
+    let c_avx2 : u64 = iii_resolver_unit_resolve_avx2(set, i_convey, ctx)
+    if c_avx2 == 0u64 { return 21u64 }
+
+    let mut c_avx512 : u64 = c_avx2
+    if has_avx512 == 1u8 {
+        c_avx512 = iii_resolver_unit_resolve_avx512(set, i_convey, ctx)
+        if c_avx512 == 0u64 { return 22u64 }
+        if c_avx512 != c_avx2 { return 24u64 }
+    }
+
+    let c_disp : u64 = iii_resolver_unit_resolve(set, i_convey, ctx)
+    if c_disp == 0u64 { return 23u64 }
+    if c_disp != c_avx2 { return 25u64 }
+
+    /* All three primitives produced bit-identical packed u64 across
+     * dispatcher / AVX-2 entry / AVX-512 entry. */
+    return 99u64
+}

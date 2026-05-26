@@ -1,0 +1,61 @@
+/* Diag: verify x25519(a_sk, c_pk) != x25519(b_sk, c_pk).  If they collide,
+ * the x25519 implementation is broken.  If they differ, corpus 239's exit 15
+ * is caused elsewhere (slot allocator, session_id derivation, sid_eq). */
+module diag_x25519_independence
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+var BP_BYTES : [u8; 32]
+var A_SK     : [u8; 32]
+var B_SK     : [u8; 32]
+var C_SK_TMP : [u8; 32]
+var C_PK     : [u8; 32]
+var OUT_AC   : [u8; 32]
+var OUT_BC   : [u8; 32]
+
+fn _fill(p: *u8, base: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = ((base + i) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let bp   : *u8 = (&BP_BYTES) as *u8
+    let asks : *u8 = (&A_SK) as *u8
+    let bsks : *u8 = (&B_SK) as *u8
+    let cpks : *u8 = (&C_PK) as *u8
+    let oac  : *u8 = (&OUT_AC) as *u8
+    let obc  : *u8 = (&OUT_BC) as *u8
+
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+
+    _fill(asks, 0x11u64)
+    _fill(bsks, 0x40u64)
+
+    /* First derive C_PK = x25519(c_sk, basepoint).  c_sk seeded 0x80. */
+    let csks : *u8 = (&C_SK_TMP) as *u8
+    _fill(csks, 0x80u64)
+    if x25519(cpks, csks, bp) != 0i32 { return 1u64 }
+
+    /* Compute shared secret AC = x25519(a_sk, c_pk). */
+    if x25519(oac, asks, cpks) != 0i32 { return 2u64 }
+
+    /* Compute shared secret BC = x25519(b_sk, c_pk). */
+    if x25519(obc, bsks, cpks) != 0i32 { return 3u64 }
+
+    /* If a_sk != b_sk AND x25519 is correct, oac MUST differ from obc. */
+    let mut k : u64 = 0u64
+    let mut diff : u32 = 0u32
+    while k < 32u64 {
+        if oac[k] != obc[k] { diff = diff + 1u32 }
+        k = k + 1u64
+    }
+    /* Exit code = number of differing bytes.  0 = identical (BUG). */
+    if diff == 0u32 { return 50u64 }
+    return 99u64
+}

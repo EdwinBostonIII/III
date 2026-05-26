@@ -1,0 +1,60 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\273_cross_fn_dynamic_intent.iii
+ *
+ * III conformance corpus 273 — iiis-2 cross-function PE non-narrowing
+ * (dynamic-intent) case.  Companion to 272_cross_fn_pe.iii.
+ *
+ * 272 proves the cross-fn Partial Evaluator NARROWS when the intent
+ * traces (through a let-binding) to a user fn whose body provably
+ * returns a literal-derived intent_form.  273 proves it correctly does
+ * NOT narrow when the user fn's return is NON-STATIC.  (This is a
+ * VALID program that compiles and runs to exit 88 — NOT a
+ * negative-compile test; the "negative" is purely that the PE
+ * narrowing must not fire.  The non-narrowing is asserted out-of-band
+ * by scripts/test_cross_fn_pe_negative.sh, which checks the emitted
+ * asm has NO `# III_PE_DIRECT_LOAD` marker.  The file is deliberately
+ * NOT named `*_pe_*` so run_corpus.sh's narrowing-required pe-marker
+ * assertion does not apply to it.)
+ *
+ * `build_dynamic_intent` returns its PARAMETER `x` — not a constructor
+ * literal.  iiis-2 cross-fn PE (iii_cg_pe_iiis1.c::classify_intent_
+ * bounded Case B -> fn_returns_static_intent) recurses into the return
+ * statement, finds `return x` where `x` binds to a PARAM (not a
+ * STMT_LET with a constructor initializer), classifies it NON_STATIC,
+ * and returns NULL.  Consequently resolve() is NOT narrowed: the
+ * runtime resolver dispatch is emitted (verified: leaq_sha256=0 /
+ * PE_DIRECT_LOAD=0, vs 272's 1/1).  Functional test: the runtime
+ * resolve() still resolves intent_form(100) -> sha256_oneshot (the
+ * param value flows through at runtime), so fp is non-zero -> exit 88.
+ *
+ * Mandate 7: pure structural analysis of the return statement's binder
+ * kind; no observation, no learning, no runtime state.
+ */
+module corpus_273
+
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+
+/* NON-STATIC return: yields the parameter, not a constructor literal.
+ * Cross-fn PE must classify this as NON_STATIC and refuse to narrow. */
+fn build_dynamic_intent(x: u64) -> u64 {
+    return x
+}
+
+fn use_cross_fn_dynamic() -> u64 {
+    let set : u64 = pattern_set_global()
+    let ctx : u64 = call_context_new()
+    /* The intent traces to build_dynamic_intent, whose body returns a
+     * PARAM — NON_STATIC.  resolve() stays a runtime dispatch. */
+    let intent : u64 = build_dynamic_intent(intent_form(100u64))
+    let fp : u64 = resolve(set, intent, ctx)
+    if fp == 0u64 { return 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r : u64 = use_cross_fn_dynamic()
+    if r != 0u64 { return r }
+    return 88u64
+}

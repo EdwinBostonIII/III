@@ -1,0 +1,4 @@
+/* Keccak-256 wrapper KAT driver. exit 99 = pass. */
+module kk256_probe
+extern @abi(c-msvc-x64) fn keccak256_kat() -> u64 from "keccak256.iii"
+fn main() -> u64 { return keccak256_kat() }

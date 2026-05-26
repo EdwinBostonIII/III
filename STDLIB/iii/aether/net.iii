@@ -1,0 +1,219 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\net.iii
+ *
+ * III STDLIB - aether::net
+ *
+ * Win32 TCP-IPv4 client surface, capability-gated.  Underlying ABI is
+ * Winsock2 (WSAStartup, socket, connect, send, recv, closesocket).
+ * IPv6 and listen/accept variants arrive in Phase E.
+ *
+ * Phase D: synchronous TCP client only.
+ *   - net_init                      one-shot WSAStartup
+ *   - net_tcp_connect_ipv4          attenuates fs handle, connects
+ *   - net_tcp_send / net_tcp_recv   capability-gated IO
+ *   - net_close
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.85 (network may fail).
+ */
+
+module aether_net
+
+extern @abi(c-msvc-x64) fn WSAStartup(version: u32, data: u64) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn socket(family: i32, type_: i32, proto: i32) -> u64 from "ws2_32"
+extern @abi(c-msvc-x64) fn closesocket(sock: u64) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn connect(sock: u64, addr: u64, addr_len: i32) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn send(sock: u64, buf: *u8, len: i32, flags: i32) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn recv(sock: u64, buf: *u8, len: i32, flags: i32) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn htons(host: u32) -> u32 from "ws2_32"
+extern @abi(c-msvc-x64) fn bind(sock: u64, addr: u64, addr_len: i32) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn listen(sock: u64, backlog: i32) -> i32 from "ws2_32"
+extern @abi(c-msvc-x64) fn accept(sock: u64, addr: u64, addr_len_ptr: u64) -> u64 from "ws2_32"
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_close(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_drop(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_fd(id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_verify(id: u64, required: u64) -> u8 from "handle.iii"
+
+const NET_OK         : i32 =  0i32
+const NET_E_BADID    : i32 = -1i32
+const NET_E_DENIED   : i32 = -2i32
+const NET_E_INIT     : i32 = -3i32
+const NET_E_SOCKET   : i32 = -4i32
+const NET_E_CONNECT  : i32 = -5i32
+const NET_E_IO       : i32 = -6i32
+
+/* Cap rights from capability.iii: bit 5 = net_dial, bit 6 = net_listen */
+const NET_RIGHT_DIAL   : u64 = 0x0020u64
+const NET_RIGHT_LISTEN : u64 = 0x0040u64
+
+/* Winsock constants */
+const NET_AF_INET    : i32 = 2i32
+const NET_SOCK_STREAM: i32 = 1i32
+const NET_IPPROTO_TCP: i32 = 6i32
+const NET_INVALID_SOCKET : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* WSADATA (~400 bytes) - we allocate in module scope. */
+var NET_WSADATA   : [u8; 408]
+var NET_INITED    : u8 = 0u8
+
+/* sockaddr_in is 16 bytes:
+ *   0: sin_family u16 LE
+ *   2: sin_port   u16 BE
+ *   4: sin_addr   u32 BE
+ *   8: sin_zero   8 bytes
+ *
+ * We construct it in a module-scope buffer at connect-time. */
+var NET_SOCKADDR : [u8; 16]
+
+fn net_init() -> i32 @export {
+    if NET_INITED == 1u8 { return NET_OK }
+    /* Winsock REQUIRES WSAStartup before any socket call (the prior
+     * "lazy auto-init" assumption was false — all socket/bind/connect
+     * fail with WSANOTINITIALISED without it; the client path was never
+     * corpus-tested so this was latent).  Request Winsock 2.2 (0x0202)
+     * and fill the module-resident WSADATA. */
+    let rc : i32 = WSAStartup(0x00000202u32, &NET_WSADATA as u64)
+    if rc != 0i32 { return NET_E_INIT }
+    NET_INITED = 1u8
+    return NET_OK
+}
+
+/* Build the IPv4 sockaddr in NET_SOCKADDR for (a.b.c.d : port). */
+fn net_build_sockaddr_ipv4(a: u32, b: u32, c: u32, port: u32) -> u32 {
+    /* family AF_INET = 2 (LE) */
+    NET_SOCKADDR[0] = 2u8
+    NET_SOCKADDR[1] = 0u8
+    /* port (BE) */
+    NET_SOCKADDR[2] = ((port >> 8u32) & 0xFFu32) as u8
+    NET_SOCKADDR[3] = (port & 0xFFu32) as u8
+    /* addr (BE bytes a,b,c,d) -- caller passes a, b, c via 3 args; the
+     * fourth byte d is stored separately to keep this fn ≤4 args. */
+    NET_SOCKADDR[4] = (a & 0xFFu32) as u8
+    NET_SOCKADDR[5] = (b & 0xFFu32) as u8
+    NET_SOCKADDR[6] = (c & 0xFFu32) as u8
+    /* d set by caller via net_set_addr_d */
+    /* zero pad */
+    let mut i : u32 = 8u32
+    while i < 16u32 {
+        NET_SOCKADDR[i] = 0u8
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn net_set_addr_d(d: u32) -> u32 @export {
+    NET_SOCKADDR[7] = (d & 0xFFu32) as u8
+    return 0u32
+}
+
+/* Connect.  Caller has already filled the sockaddr via prior helper.
+ * Returns a handle id (or 0 on failure).
+ *
+ * Because connect() takes a pointer-to-sockaddr and we cannot legally
+ * take the address of NET_SOCKADDR via &GLOBAL[0] (W3), the caller
+ * supplies a buffer they constructed themselves.  net_tcp_connect
+ * therefore takes a pointer to a 16-byte sockaddr buffer the caller
+ * built (e.g., via the helpers below or by-hand). */
+fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 @export {
+    if cap_verify_rights(net_cap, NET_RIGHT_DIAL) == 0u8 { return 0u64 }
+    if NET_INITED == 0u8 { net_init() }
+    let sock : u64 = socket(NET_AF_INET, NET_SOCK_STREAM, NET_IPPROTO_TCP)
+    if sock == NET_INVALID_SOCKET { return 0u64 }
+    if sock == 0u64 { return 0u64 }
+    let len_i : i32 = sockaddr_len as i32
+    let rc : i32 = connect(sock, sockaddr_ptr, len_i)
+    if rc != 0i32 {
+        closesocket(sock)
+        return 0u64
+    }
+    return handle_alloc(2u8, sock, net_cap)
+}
+
+/* Phase E: bind+listen on (sockaddr_ptr) and return a listening handle.
+ * Requires NET_RIGHT_LISTEN on net_cap. */
+fn net_tcp_listen_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 @export {
+    if cap_verify_rights(net_cap, NET_RIGHT_LISTEN) == 0u8 { return 0u64 }
+    if NET_INITED == 0u8 { net_init() }
+    let sock : u64 = socket(NET_AF_INET, NET_SOCK_STREAM, NET_IPPROTO_TCP)
+    if sock == NET_INVALID_SOCKET { return 0u64 }
+    if sock == 0u64 { return 0u64 }
+    let len_i : i32 = sockaddr_len as i32
+    if bind(sock, sockaddr_ptr, len_i) != 0i32 { closesocket(sock)  return 0u64 }
+    if listen(sock, 16i32) != 0i32 { closesocket(sock)  return 0u64 }
+    return handle_alloc(2u8, sock, net_cap)
+}
+
+/* Accept one inbound connection on a listening handle.  The accepted
+ * connection's handle is bound to dial_cap (which must carry NET_RIGHT_DIAL
+ * so net_tcp_send/recv succeed on it).  Returns the connection handle or 0. */
+fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 @export {
+    if handle_verify(listen_handle, NET_RIGHT_LISTEN) == 0u8 { return 0u64 }
+    let lsock : u64 = handle_fd(listen_handle)
+    if lsock == 0u64 { return 0u64 }
+    let csock : u64 = accept(lsock, 0u64, 0u64)
+    if csock == NET_INVALID_SOCKET { return 0u64 }
+    if csock == 0u64 { return 0u64 }
+    return handle_alloc(2u8, csock, dial_cap)
+}
+
+/* mig3 boundary SINK: send transmits `buf` OUTWARD to the OS socket, so it may
+ * legitimately carry sovereign data (echo/proxy) -- buf is @sovereign_value (NOT
+ * @sovereign_out: send READS the buffer, it does not fill it).  This lets a SovVal
+ * recv-buffer flow here without a false III_SOVEREIGN_FLOW_VIOLATION, completing
+ * the boundary contract's sink dual. */
+fn net_tcp_send(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> i32 @export {
+    if handle_verify(handle_id, NET_RIGHT_DIAL) == 0u8 { return NET_E_DENIED }
+    let sock : u64 = handle_fd(handle_id)
+    if sock == 0u64 { return NET_E_BADID }
+    let bp : *u8 = buf as *u8
+    let n32 : i32 = (n & 0xFFFFFFFFu64) as i32
+    let sent : i32 = send(sock, bp, n32, 0i32)
+    if sent == -1i32 { return NET_E_IO }
+    return sent
+}
+
+/* mig3 boundary SOURCE: recv fills `buf` with untrusted external bytes, so buf
+ * is @sovereign_value @sovereign_out -- callers must hold it as a SovVal buffer
+ * (the @sovereign_out law) and Part 2's flow check then contains it downstream. */
+fn net_tcp_recv(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 @export {
+    if handle_verify(handle_id, NET_RIGHT_DIAL) == 0u8 { return NET_E_DENIED }
+    let sock : u64 = handle_fd(handle_id)
+    if sock == 0u64 { return NET_E_BADID }
+    let bp : *u8 = buf as *u8
+    let n32 : i32 = (n & 0xFFFFFFFFu64) as i32
+    let got : i32 = recv(sock, bp, n32, 0i32)
+    if got == -1i32 { return NET_E_IO }
+    return got
+}
+
+fn net_close(handle_id: u64) -> i32 @export {
+    let sock : u64 = handle_fd(handle_id)
+    if sock != 0u64 {
+        closesocket(sock)
+    }
+    handle_close(handle_id)
+    return NET_OK
+}
+
+/* Helper: write a sockaddr_in into a caller-provided 16-byte buffer.
+ * Caller passes (buf_addr, ip_packed = a<<24|b<<16|c<<8|d, port).  We
+ * write the 16 bytes in network order. */
+fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 @export {
+    if buf_addr == 0u64 { return 1u32 }
+    let p : *u8 = buf_addr as *u8
+    p[0] = 2u8                                  /* AF_INET LE */
+    p[1] = 0u8
+    p[2] = ((port >> 8u32) & 0xFFu32) as u8     /* port BE high */
+    p[3] = (port & 0xFFu32) as u8               /* port BE low */
+    p[4] = ((ip_packed >> 24u32) & 0xFFu32) as u8
+    p[5] = ((ip_packed >> 16u32) & 0xFFu32) as u8
+    p[6] = ((ip_packed >> 8u32)  & 0xFFu32) as u8
+    p[7] = (ip_packed & 0xFFu32) as u8
+    let mut i : u64 = 8u64
+    while i < 16u64 {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    return 0u32
+}

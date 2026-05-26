@@ -1,0 +1,851 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sat_at_scale.iii
+ *
+ * III STDLIB - numera::sat_at_scale
+ *
+ * Verified SAT at scale. The CDCL search (Module 15 numera::sat) is
+ * UNTRUSTED/oracular; an independent verifier re-parses the formula
+ * bytes and re-checks the result before sats_solve returns. On SAT the
+ * certificate is the satisfying assignment (every clause re-evaluated);
+ * on UNSAT it is a resolution refutation (every step re-derived). Only
+ * the verifier verdict enters the witness chain (M6/M10/M12).
+ *
+ * Public API:
+ *   sats_init() -> i32
+ *   sats_solve(req: *u8) -> i32           (req = SatsReq aggregate; W2 fold)
+ *   sats_verify(formula: *u8, formula_len: u32, result: u8, cert: *u8) -> i32
+ *   sats_verify_len() -> u32
+ *
+ * Wire format: [magic u32 "SAT1"][n_vars u32][n_clauses u32]
+ *              then per clause [k u32][k literals u32], lit=(v<<1)|sign.
+ * SatsReq (56B LE): formula*8 | formula_len u32 | _pad | budget_conflicts u64
+ *              | cap u64 | out_result*8 | out_cert*8 | out_cert_len*8.
+ *
+ * Model certificate:    [n_vars u32][n_vars assignment bytes, 0/1].
+ * Refutation certificate (this module defines it): [n_steps u32] then
+ *   n_steps records of 12 bytes each: [ante_a u32][ante_b u32][pivot_var u32].
+ *   An id < n_clauses is an ORIGINAL clause; id >= n_clauses indexes a
+ *   previously-derived resolvent (id - n_clauses). The checker re-derives
+ *   each resolvent (A on pivot positive, B on pivot negative -> union minus
+ *   pivot/neg-pivot) and requires the final resolvent to be the empty clause.
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K_synth: 0.99 (verifier is trust root).
+ * Discipline: W1, W2, W8, W9, W10, W11, W12, W14, W15 (no recursion).
+ *
+ * NOT-YET-BUILT deps: numera/sat.iii (Module 15). See spec Gap/Fix #1,#6.
+ * The oracle is never trusted: sats_solve re-checks every clause locally
+ * before writing a SAT result, and certifies an UNSAT verdict by an
+ * independently re-derived resolution refutation (fail-closed otherwise).
+ */
+
+module numera_sat_at_scale
+
+/* --- BUILT dependencies (signatures verified against provider files) --- */
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+
+/* --- NOT-YET-BUILT dependency: Module 15 numera::sat (real incremental API) --- */
+extern @abi(c-msvc-x64) fn sat_init(n_vars: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_add_clause(lits: *u32, n_lits: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_solve() -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_value(vr: u32) -> u8 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_n_conflicts() -> u64 from "sat.iii"
+
+/* --- Outcomes / errors (W9 negative) --- */
+const SATS_OK            : i32 =  0i32
+const SATS_SAT           : i32 =  1i32
+const SATS_UNSAT         : i32 =  2i32
+const SATS_E_NULL        : i32 = -1i32
+const SATS_E_TIMEOUT     : i32 = -2i32
+const SATS_E_NOT_INITED  : i32 = -3i32
+const SATS_E_BADFMT      : i32 = -4i32
+const SATS_E_TOO_BIG     : i32 = -5i32
+const SATS_E_DENIED      : i32 = -6i32
+const SATS_E_UNVERIFIED  : i32 = -7i32
+const SATS_E_CORE        : i32 = -8i32
+
+/* --- Core return-code mirrors (Trap 2: value-duplicated, not imported by name).
+ * Must equal numera::sat's SAT_OK/SAT_SAT/SAT_UNSAT/SAT_E_TRIV_UNSAT. --- */
+const SATS_CORE_OK         : i32 =  0i32
+const SATS_CORE_SAT        : i32 =  1i32
+const SATS_CORE_UNSAT      : i32 =  2i32
+const SATS_CORE_TRIV_UNSAT : i32 = -1i32
+
+/* --- Bounds / format constants (W8) --- */
+const SATS_MAGIC         : u32 = 0x53415431u32
+const SATS_MAX_VARS      : u32 = 65536u32
+const SATS_MAX_CLAUSES   : u32 = 262144u32
+const SATS_MAX_FORMULA   : u32 = 16777216u32
+const SATS_MAX_CERT      : u32 = 4194304u32
+const SATS_ASSIGN_BYTES  : u32 = 65537u32
+const SATS_HDR_BYTES     : u32 = 12u32
+const SATS_RIGHT_SOLVE   : u64 = 0x00010000u64
+const SATS_DEFAULT_BUDGET : u64 = 4294967296u64
+
+/* --- Refutation-checker bounds (sound + fail-closed; oversized -> E_UNVERIFIED) --- */
+const SATS_MAX_STEPS     : u32 = 16384u32
+const SATS_MAX_RESLITS   : u32 = 262144u32
+const SATS_MAX_CL_LITS   : u32 = 4096u32
+const SATS_NULL_U32      : u32 = 0xFFFFFFFFu32
+
+/* --- Model / assignment scratch (hoisted from local var; Trap 7 fix) --- */
+var SATS_ASSIGN    : [u8; 65537]
+
+/* --- Certificate staging (model or serialized refutation) --- */
+var SATS_CERT      : [u8; 4194304]
+var SATS_CERT_LEN  : u32 = 0u32
+
+/* --- Literal staging for the core loader (Trap 4 fallback: copy, do not alias) --- */
+var SATS_LITSTAGE  : [u32; 65537]
+
+/* --- Resolution-refutation work arenas (no recursion; explicit tables, W15) --- */
+var SATS_RES_OFF   : [u32; 16384]      /* offset of derived clause i into SATS_RES_LITS */
+var SATS_RES_SIZE  : [u32; 16384]      /* literal count of derived clause i */
+var SATS_RES_LITS  : [u32; 262144]     /* packed sorted-unique literals of derived clauses */
+var SATS_RES_USED  : u32 = 0u32
+var SATS_FETCH_A   : [u32; 4096]       /* antecedent A literals (scratch) */
+var SATS_FETCH_B   : [u32; 4096]       /* antecedent B literals (scratch) */
+var SATS_RESOLV    : [u32; 4096]       /* recomputed resolvent (scratch) */
+
+/* --- Commit + witness tags --- */
+var SATS_FORM_COMMIT : [u8; 32]
+var SATS_CERT_COMMIT : [u8; 32]
+var SATS_PRODUCER    : [u8; 32]
+var SATS_OPID        : [u8; 32]
+var SATS_LAST_FRAG   : [u8; 32]
+var SATS_PAYLOAD     : [u8; 16]        /* [result u8][n_vars u32][n_clauses u32] = 9B used */
+
+/* --- Parsed-header cache (non-reentrant; single-threaded) --- */
+var SATS_HDR_NVARS   : u32 = 0u32
+var SATS_HDR_NCLS    : u32 = 0u32
+var SATS_INITED      : u8  = 0u8
+
+/* --- Selftest scratch (module-scope; Trap 7) --- */
+var SATS_T_FORM    : [u8; 256]
+var SATS_T_CERT    : [u8; 256]
+var SATS_T_RES     : [u8; 64]
+var SATS_T_LEN     : [u8; 16]          /* certificate length sink (out_cert_len target) */
+var SATS_T_REQ     : [u8; 64]          /* SatsReq aggregate */
+var SATS_T_REF     : [u8; 32]          /* independent keccak recompute */
+
+/* --- Module-scope sinks for helper out-params (single-threaded; W8/Trap 7) --- */
+var SATS_FETCH_CNT    : u32 = 0u32     /* literal count written by sats_fetch_clause */
+var SATS_RESOLV_N     : u32 = 0u32     /* literal count of the recomputed resolvent */
+var SATS_RES_LIT_USED : u32 = 0u32     /* bump cursor into SATS_RES_LITS */
+var SATS_SOLVE_RES    : u8  = 0u8      /* oracle verdict: 1=SAT, 0=UNSAT */
+
+/* --- Stashed request output pointers (W2 fold: keeps sats_finish at 2 params).
+ * Set by sats_solve from the SatsReq aggregate; read by sats_finish. --- */
+var SATS_OUT_RESULT   : u64 = 0u64
+var SATS_OUT_CERT     : u64 = 0u64
+var SATS_OUT_CERTLEN  : u64 = 0u64
+var SATS_REQ_PTR      : u64 = 0u64
+
+/* --- Lifecycle --- */
+fn sats_init() -> i32 @export {
+    if SATS_INITED == 1u8 { return SATS_OK }
+    ident_zero((&SATS_PRODUCER as u64) as *u8)
+    let op : *u8 = (&SATS_OPID as u64) as *u8
+    let mut i : u32 = 0u32
+    while i < 32u32 { op[i] = 0u8 ; i = i + 1u32 }
+    /* ASCII tag "sats.solve" (10 bytes), byte-wise through *u8 (Trap 5). */
+    op[0]  = 0x73u8   /* s */
+    op[1]  = 0x61u8   /* a */
+    op[2]  = 0x74u8   /* t */
+    op[3]  = 0x73u8   /* s */
+    op[4]  = 0x2Eu8   /* . */
+    op[5]  = 0x73u8   /* s */
+    op[6]  = 0x6Fu8   /* o */
+    op[7]  = 0x6Cu8   /* l */
+    op[8]  = 0x76u8   /* v */
+    op[9]  = 0x65u8   /* e */
+    SATS_CERT_LEN = 0u32
+    SATS_HDR_NVARS = 0u32
+    SATS_HDR_NCLS  = 0u32
+    SATS_RES_USED  = 0u32
+    SATS_INITED = 1u8
+    return SATS_OK
+}
+
+/* --- Wire-format readers (Trap 4: mask offsets before *u8 pointer math) --- */
+fn sats_rd_u32(base: *u8, off: u32) -> u32 {
+    let m : u64 = (off as u64) & 0xFFFFFFFFu64
+    let p : *u8 = ((base as u64) + m) as *u8
+    let b0 : u32 = p[0u64] as u32
+    let b1 : u32 = p[1u64] as u32
+    let b2 : u32 = p[2u64] as u32
+    let b3 : u32 = p[3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn sats_rd_clause_count(formula: *u8, formula_len: u32) -> u32 {
+    if formula_len < SATS_HDR_BYTES { return 0u32 }
+    return sats_rd_u32(formula, 8u32)
+}
+
+/* Structural pass over clause headers: returns total formula length consumed
+ * (== formula_len exactly when well-formed) or SATS_NULL_U32 on a truncated
+ * clause / overflow. Flat, counter-driven (W14), shallow nesting. */
+fn sats_walk_clauses(formula: *u8, formula_len: u32, n_cls: u32) -> u32 {
+    let mut off : u32 = SATS_HDR_BYTES
+    let mut ci  : u32 = 0u32
+    let mut bad : u8  = 0u8
+    while ci < n_cls {
+        if bad == 0u8 {
+            if (off + 4u32) > formula_len { bad = 1u8 }
+        }
+        if bad == 0u8 {
+            let k : u32 = sats_rd_u32(formula, off)
+            if k > SATS_MAX_CL_LITS { bad = 1u8 }
+            if bad == 0u8 {
+                let span : u32 = 4u32 + (k << 2u32)
+                if (off + span) > formula_len { bad = 1u8 }
+                if bad == 0u8 { off = off + span }
+            }
+        }
+        ci = ci + 1u32
+    }
+    if bad == 1u8 { return SATS_NULL_U32 }
+    return off
+}
+
+fn sats_parse_header(formula: *u8, formula_len: u32) -> i32 {
+    if formula_len < SATS_HDR_BYTES { return SATS_E_BADFMT }
+    let magic : u32 = sats_rd_u32(formula, 0u32)
+    if magic != SATS_MAGIC { return SATS_E_BADFMT }
+    let nv : u32 = sats_rd_u32(formula, 4u32)
+    let nc : u32 = sats_rd_u32(formula, 8u32)
+    if nv > SATS_MAX_VARS { return SATS_E_TOO_BIG }
+    if nc > SATS_MAX_CLAUSES { return SATS_E_TOO_BIG }
+    let consumed : u32 = sats_walk_clauses(formula, formula_len, nc)
+    if consumed == SATS_NULL_U32 { return SATS_E_BADFMT }
+    SATS_HDR_NVARS = nv
+    SATS_HDR_NCLS  = nc
+    return SATS_OK
+}
+
+/* Byte offset of clause ci's header within the wire image (counter-driven walk;
+ * W14). Returns SATS_NULL_U32 if ci is out of range. Shallow nesting. */
+fn sats_clause_off(formula: *u8, ci: u32) -> u32 {
+    let mut off : u32 = SATS_HDR_BYTES
+    let mut j   : u32 = 0u32
+    while j < ci {
+        let k : u32 = sats_rd_u32(formula, off)
+        off = off + 4u32 + (k << 2u32)
+        j = j + 1u32
+    }
+    return off
+}
+
+/* --- Core loading (real Module-15 incremental API) ---
+ * Copies each clause's k literals into SATS_LITSTAGE (Trap 4 fallback: never
+ * alias &formula[off] as *u32) and feeds sat_add_clause. Returns SATS_OK,
+ * SATS_CORE_TRIV_UNSAT (add-time level-0 contradiction -> UNSAT), or
+ * SATS_E_CORE on an unexpected core status. Counter-driven (W14, no break). */
+fn sats_load_into_core(formula: *u8, formula_len: u32) -> i32 {
+    let ri : i32 = sat_init(SATS_HDR_NVARS)
+    if ri != SATS_CORE_OK { return SATS_E_CORE }
+    let stage : *u32 = (&SATS_LITSTAGE as u64) as *u32
+    let mut off : u32 = SATS_HDR_BYTES
+    let mut ci  : u32 = 0u32
+    let mut verdict : i32 = SATS_OK
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if ci >= SATS_HDR_NCLS { going = 0u8 }
+        if going == 1u8 {
+            let k : u32 = sats_rd_u32(formula, off)
+            let mut t : u32 = 0u32
+            while t < k {
+                SATS_LITSTAGE[t] = sats_rd_u32(formula, off + 4u32 + (t << 2u32))
+                t = t + 1u32
+            }
+            let rc : i32 = sat_add_clause(stage, k)
+            if rc == SATS_CORE_TRIV_UNSAT { verdict = SATS_CORE_TRIV_UNSAT  going = 0u8 }
+            if going == 1u8 {
+                if rc != SATS_CORE_OK { verdict = SATS_E_CORE  going = 0u8 }
+            }
+            if going == 1u8 {
+                off = off + 4u32 + (k << 2u32)
+                ci = ci + 1u32
+            }
+        }
+    }
+    return verdict
+}
+
+/* --- Independent verifier: the trust root (M12) --- */
+fn sats_lit_sat(lit: u32, assign: *u8, n_vars: u32) -> u8 {
+    let v : u32 = lit >> 1u32
+    if v == 0u32 { return 0u8 }
+    if v > n_vars { return 0u8 }
+    let want : u32 = lit & 1u32
+    /* assign[] is 0-based over variables 1..n_vars: variable v at index v-1
+     * (cert layout: [n_vars u32][assign byte for var 1][...][var n_vars]). */
+    let m : u64 = ((v - 1u32) as u64) & 0xFFFFFFFFu64
+    let p : *u8 = ((assign as u64) + m) as *u8
+    let a : u8 = p[0u64]
+    if want == 0u32 { if a == 1u8 { return 1u8 } }
+    if want == 1u32 { if a == 0u8 { return 1u8 } }
+    return 0u8
+}
+
+/* Clause ci satisfied under assign? OR-reduce sats_lit_sat over its k literals.
+ * Sentinel-loop, no break: a satisfied literal sets j = k to terminate (W14). */
+fn sats_clause_sat(formula: *u8, ci: u32, assign: *u8) -> u8 {
+    let off : u32 = sats_clause_off(formula, ci)
+    let k : u32 = sats_rd_u32(formula, off)
+    let mut j : u32 = 0u32
+    let mut hit : u8 = 0u8
+    while j < k {
+        let lit : u32 = sats_rd_u32(formula, off + 4u32 + (j << 2u32))
+        let s : u8 = sats_lit_sat(lit, assign, SATS_HDR_NVARS)
+        if s == 1u8 { hit = 1u8  j = k }
+        if hit == 0u8 { j = j + 1u32 }
+    }
+    return hit
+}
+
+/* THE TRUST ROOT (M12). Re-parse the header from formula (independent of any
+ * solver state), then assert EVERY clause has a satisfied literal under the
+ * assignment carried by cert = [n_vars u32][n_vars bytes]. No recursion (W15).
+ * Returns SATS_OK iff the model satisfies the formula, else SATS_E_UNVERIFIED. */
+fn sats_check_model_cert(formula: *u8, formula_len: u32, cert: *u8) -> i32 {
+    let ph : i32 = sats_parse_header(formula, formula_len)
+    if ph != SATS_OK { return ph }
+    let cnv : u32 = sats_rd_u32(cert, 0u32)
+    if cnv != SATS_HDR_NVARS { return SATS_E_UNVERIFIED }
+    let assign : *u8 = ((cert as u64) + 4u64) as *u8
+    let mut ci : u32 = 0u32
+    let mut bad : u8 = 0u8
+    while ci < SATS_HDR_NCLS {
+        if bad == 0u8 {
+            let cs : u8 = sats_clause_sat(formula, ci, assign)
+            if cs == 0u8 { bad = 1u8 }
+        }
+        ci = ci + 1u32
+    }
+    if bad == 1u8 { return SATS_E_UNVERIFIED }
+    return SATS_OK
+}
+
+/* Fetch clause `id` literals into a destination scratch (*u32). id < n_cls is an
+ * ORIGINAL formula clause; id >= n_cls indexes derived resolvent (id - n_cls).
+ * Writes the literal count into the module sink SATS_FETCH_CNT. Returns 1u8 ok,
+ * 0u8 on range error / oversize. Flat, shallow nesting (W13/depth-7). */
+fn sats_fetch_clause(formula: *u8, id: u32, dst: *u32) -> u8 {
+    if id < SATS_HDR_NCLS {
+        let off : u32 = sats_clause_off(formula, id)
+        let k : u32 = sats_rd_u32(formula, off)
+        if k > SATS_MAX_CL_LITS { return 0u8 }
+        let mut t : u32 = 0u32
+        while t < k {
+            let mt : u64 = (t as u64) & 0xFFFFFFFFu64
+            let dp : *u32 = ((dst as u64) + mt * 4u64) as *u32
+            dp[0u64] = sats_rd_u32(formula, off + 4u32 + (t << 2u32))
+            t = t + 1u32
+        }
+        SATS_FETCH_CNT = k
+        return 1u8
+    }
+    let di : u32 = id - SATS_HDR_NCLS
+    if di >= SATS_RES_USED { return 0u8 }
+    let base : u32 = SATS_RES_OFF[di]
+    let sz : u32 = SATS_RES_SIZE[di]
+    if sz > SATS_MAX_CL_LITS { return 0u8 }
+    let mut u : u32 = 0u32
+    while u < sz {
+        let mu : u64 = (u as u64) & 0xFFFFFFFFu64
+        let dp2 : *u32 = ((dst as u64) + mu * 4u64) as *u32
+        dp2[0u64] = SATS_RES_LITS[base + u]
+        u = u + 1u32
+    }
+    SATS_FETCH_CNT = sz
+    return 1u8
+}
+
+/* Does literal list src[0..n) contain lit? (linear, bounded). */
+fn sats_list_has(src: *u32, n: u32, lit: u32) -> u8 {
+    let mut i : u32 = 0u32
+    let mut found : u8 = 0u8
+    while i < n {
+        let mi : u64 = (i as u64) & 0xFFFFFFFFu64
+        let sp : *u32 = ((src as u64) + mi * 4u64) as *u32
+        if sp[0u64] == lit { found = 1u8  i = n }
+        if found == 0u8 { i = i + 1u32 }
+    }
+    return found
+}
+
+/* Append lit to SATS_RESOLV[0..*resolv_len) if not already present and not the
+ * excluded literal; updates SATS_RESOLV_N. Bounded by SATS_MAX_CL_LITS. */
+fn sats_resolv_push(lit: u32, excl: u32) -> u8 {
+    if lit == excl { return 1u8 }
+    let rp : *u32 = (&SATS_RESOLV as u64) as *u32
+    let already : u8 = sats_list_has(rp, SATS_RESOLV_N, lit)
+    if already == 1u8 { return 1u8 }
+    if SATS_RESOLV_N >= SATS_MAX_CL_LITS { return 0u8 }
+    SATS_RESOLV[SATS_RESOLV_N] = lit
+    SATS_RESOLV_N = SATS_RESOLV_N + 1u32
+    return 1u8
+}
+
+/* Build resolvent of A=SATS_FETCH_A[0..na) and B=SATS_FETCH_B[0..nb) on pivot
+ * var p: A must hold pos=(p<<1), B must hold neg=(p<<1)|1; resolvent = (A minus
+ * pos) union (B minus neg). Result -> SATS_RESOLV[0..SATS_RESOLV_N). Returns
+ * 1u8 ok, 0u8 if pivots absent or overflow. Flat (W13). */
+fn sats_resolve(na: u32, nb: u32, p: u32) -> u8 {
+    let pos : u32 = p << 1u32
+    let neg : u32 = (p << 1u32) | 1u32
+    let ap : *u32 = (&SATS_FETCH_A as u64) as *u32
+    let bp : *u32 = (&SATS_FETCH_B as u64) as *u32
+    let hasA : u8 = sats_list_has(ap, na, pos)
+    let hasB : u8 = sats_list_has(bp, nb, neg)
+    if hasA == 0u8 { return 0u8 }
+    if hasB == 0u8 { return 0u8 }
+    SATS_RESOLV_N = 0u32
+    let mut i : u32 = 0u32
+    let mut ok : u8 = 1u8
+    while i < na {
+        if ok == 1u8 {
+            let pr : u8 = sats_resolv_push(SATS_FETCH_A[i], pos)
+            if pr == 0u8 { ok = 0u8 }
+        }
+        i = i + 1u32
+    }
+    let mut q : u32 = 0u32
+    while q < nb {
+        if ok == 1u8 {
+            let pr2 : u8 = sats_resolv_push(SATS_FETCH_B[q], neg)
+            if pr2 == 0u8 { ok = 0u8 }
+        }
+        q = q + 1u32
+    }
+    return ok
+}
+
+/* UNSAT certificate checker. cert = [n_steps u32] then n_steps x 12B records
+ * [ante_a u32][ante_b u32][pivot u32]. Re-derive each resolvent into the
+ * SATS_RES_* table; require the LAST resolvent to be empty. No recursion (W15);
+ * counter-driven (W14). Sound + fail-closed: any inconsistency -> E_UNVERIFIED. */
+fn sats_check_refutation(formula: *u8, formula_len: u32, cert: *u8) -> i32 {
+    let ph : i32 = sats_parse_header(formula, formula_len)
+    if ph != SATS_OK { return ph }
+    let n_steps : u32 = sats_rd_u32(cert, 0u32)
+    if n_steps == 0u32 { return SATS_E_UNVERIFIED }
+    if n_steps > SATS_MAX_STEPS { return SATS_E_UNVERIFIED }
+    SATS_RES_USED = 0u32
+    SATS_RES_LIT_USED = 0u32
+    let ap : *u32 = (&SATS_FETCH_A as u64) as *u32
+    let bp : *u32 = (&SATS_FETCH_B as u64) as *u32
+    let mut si : u32 = 0u32
+    let mut bad : u8 = 0u8
+    let mut last_empty : u8 = 0u8
+    while si < n_steps {
+        if bad == 0u8 {
+            let roff : u32 = 4u32 + si * 12u32
+            let aid : u32 = sats_rd_u32(cert, roff)
+            let bid : u32 = sats_rd_u32(cert, roff + 4u32)
+            let piv : u32 = sats_rd_u32(cert, roff + 8u32)
+            let fa : u8 = sats_fetch_clause(formula, aid, ap)
+            let na : u32 = SATS_FETCH_CNT
+            let fb : u8 = sats_fetch_clause(formula, bid, bp)
+            let nb : u32 = SATS_FETCH_CNT
+            if fa == 0u8 { bad = 1u8 }
+            if fb == 0u8 { bad = 1u8 }
+            if bad == 0u8 {
+                let rr : u8 = sats_resolve(na, nb, piv)
+                if rr == 0u8 { bad = 1u8 }
+            }
+            if bad == 0u8 {
+                let st : u8 = sats_store_resolvent()
+                if st == 0u8 { bad = 1u8 }
+            }
+            if bad == 0u8 {
+                last_empty = 0u8
+                if SATS_RESOLV_N == 0u32 { last_empty = 1u8 }
+            }
+        }
+        si = si + 1u32
+    }
+    if bad == 1u8 { return SATS_E_UNVERIFIED }
+    if last_empty == 0u8 { return SATS_E_UNVERIFIED }
+    return SATS_OK
+}
+
+/* Store SATS_RESOLV[0..SATS_RESOLV_N) as the next derived clause in the
+ * SATS_RES_* table. Returns 1u8 ok, 0u8 on arena overflow. */
+fn sats_store_resolvent() -> u8 {
+    if SATS_RES_USED >= SATS_MAX_STEPS { return 0u8 }
+    let need : u32 = SATS_RES_LIT_USED + SATS_RESOLV_N
+    if need > SATS_MAX_RESLITS { return 0u8 }
+    let di : u32 = SATS_RES_USED
+    SATS_RES_OFF[di]  = SATS_RES_LIT_USED
+    SATS_RES_SIZE[di] = SATS_RESOLV_N
+    let mut i : u32 = 0u32
+    while i < SATS_RESOLV_N {
+        SATS_RES_LITS[SATS_RES_LIT_USED + i] = SATS_RESOLV[i]
+        i = i + 1u32
+    }
+    SATS_RES_LIT_USED = SATS_RES_LIT_USED + SATS_RESOLV_N
+    SATS_RES_USED = di + 1u32
+    return 1u8
+}
+
+/* --- Certificate construction --- */
+/* Model cert: [n_vars u32 LE][SATS_ASSIGN[1..n_vars] bytes]. Byte-wise *u8
+ * stores (Trap 5: no *u32 store-width clobber). Returns total length. */
+fn sats_build_model_cert(out_cert: *u8) -> u32 {
+    let nv : u32 = SATS_HDR_NVARS
+    out_cert[0u64] = (nv & 0xFFu32) as u8
+    out_cert[1u64] = ((nv >> 8u32) & 0xFFu32) as u8
+    out_cert[2u64] = ((nv >> 16u32) & 0xFFu32) as u8
+    out_cert[3u64] = ((nv >> 24u32) & 0xFFu32) as u8
+    let mut v : u32 = 1u32
+    while v <= nv {
+        let mv : u64 = ((v - 1u32) as u64) & 0xFFFFFFFFu64
+        let dp : *u8 = ((out_cert as u64) + 4u64 + mv) as *u8
+        dp[0u64] = SATS_ASSIGN[v]
+        v = v + 1u32
+    }
+    return 4u32 + nv
+}
+
+/* Refutation cert builder for the directly-resolvable contradiction class:
+ * scan original clauses for a complementary pair of UNIT clauses (l) and (l^1).
+ * Emits the single resolution step that derives the empty clause and writes the
+ * cert into out_cert. Returns the cert length, or 0u32 if no such pair exists
+ * (general CDCL UNSAT needs the not-yet-built Module-15 proof trace; the trust
+ * root then REFUSES rather than emit an uncheckable claim -- fail-closed). */
+fn sats_build_refutation(formula: *u8, out_cert: *u8) -> u32 {
+    let mut ai : u32 = 0u32
+    let mut found : u8 = 0u8
+    let mut id_pos : u32 = 0u32
+    let mut id_neg : u32 = 0u32
+    let mut piv : u32 = 0u32
+    while ai < SATS_HDR_NCLS {
+        if found == 0u8 {
+            let oa : u32 = sats_clause_off(formula, ai)
+            let ka : u32 = sats_rd_u32(formula, oa)
+            if ka == 1u32 {
+                let la : u32 = sats_rd_u32(formula, oa + 4u32)
+                let target : u32 = la ^ 1u32
+                let mate : u32 = sats_find_unit(formula, target, ai)
+                if mate != SATS_NULL_U32 {
+                    found = 1u8
+                    piv = la >> 1u32
+                    if (la & 1u32) == 0u32 { id_pos = ai  id_neg = mate }
+                    if (la & 1u32) == 1u32 { id_pos = mate  id_neg = ai }
+                }
+            }
+        }
+        ai = ai + 1u32
+    }
+    if found == 0u8 { return 0u32 }
+    /* n_steps = 1; record [id_pos][id_neg][piv]. Byte-wise *u8 (Trap 5). */
+    sats_wr_u32(out_cert, 0u32, 1u32)
+    sats_wr_u32(out_cert, 4u32, id_pos)
+    sats_wr_u32(out_cert, 8u32, id_neg)
+    sats_wr_u32(out_cert, 12u32, piv)
+    return 16u32
+}
+
+/* Scan original clauses for a UNIT clause holding `lit`, excluding clause `skip`.
+ * Returns its clause id or SATS_NULL_U32. Counter-driven (W14). */
+fn sats_find_unit(formula: *u8, lit: u32, skip: u32) -> u32 {
+    let mut ci : u32 = 0u32
+    let mut res : u32 = SATS_NULL_U32
+    while ci < SATS_HDR_NCLS {
+        if res == SATS_NULL_U32 {
+            if ci != skip {
+                let o : u32 = sats_clause_off(formula, ci)
+                let k : u32 = sats_rd_u32(formula, o)
+                if k == 1u32 {
+                    let l : u32 = sats_rd_u32(formula, o + 4u32)
+                    if l == lit { res = ci }
+                }
+            }
+        }
+        ci = ci + 1u32
+    }
+    return res
+}
+
+/* Write u32 v little-endian at out[off..off+4) byte-wise through *u8 (Trap 5). */
+fn sats_wr_u32(out: *u8, off: u32, v: u32) -> i32 {
+    let m : u64 = (off as u64) & 0xFFFFFFFFu64
+    let p : *u8 = ((out as u64) + m) as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return SATS_OK
+}
+
+/* --- Content-address commit + witness (only the verdict is witnessed) --- */
+fn sats_commit(buf: *u8, len: u32, out32: *u8) -> i32 {
+    return cad_oneshot(1u32, buf as *u8, (len as u64) & 0xFFFFFFFFu64, out32 as *u8)   /* H2: sat commit via cad (byte-identical) */
+}
+
+/* Fold the 12-arg wh_publish call (W2: this wrapper takes 2 params). Commits
+ * formula + cert, publishes ONLY the verifier verdict, copies the frag id into
+ * the request's out_frag_id. A 0xFFFF..FF return (witness store full / uninited)
+ * is non-fatal to the already-established verdict (spec policy). */
+fn sats_emit_witness(req: *u8, result: u8) -> i32 {
+    let f_lo : u32 = sats_rd_u32(req, 0u32)
+    let f_hi : u32 = sats_rd_u32(req, 4u32)
+    let formula : *u8 = ((f_lo as u64) | ((f_hi as u64) << 32u64)) as *u8
+    let flen : u32 = sats_rd_u32(req, 8u32)
+    let cert : *u8 = (&SATS_CERT as u64) as *u8
+    sats_commit(formula, flen, (&SATS_FORM_COMMIT as u64) as *u8)
+    sats_commit(cert, SATS_CERT_LEN, (&SATS_CERT_COMMIT as u64) as *u8)
+    /* payload = [result u8][n_vars u32][n_clauses u32] (9 bytes). */
+    SATS_PAYLOAD[0] = result
+    sats_wr_u32((&SATS_PAYLOAD as u64) as *u8, 1u32, SATS_HDR_NVARS)
+    sats_wr_u32((&SATS_PAYLOAD as u64) as *u8, 5u32, SATS_HDR_NCLS)
+    let fid : u64 = wh_publish((&SATS_PRODUCER as u64) as *u8, (&SATS_OPID as u64) as *u8, (&SATS_FORM_COMMIT as u64) as *u8, (&SATS_CERT_COMMIT as u64) as *u8, 0u8, 0u8, 5u16, (&SATS_PRODUCER as u64) as *u8, 0u32, (&SATS_PAYLOAD as u64) as *u8, 9u32, (&SATS_LAST_FRAG as u64) as *u8)
+    /* Copy frag id (32B) into req.out_frag_id IF the request supplies one. The
+     * 56B SatsReq has no out_frag_id slot; the canonical sink is SATS_LAST_FRAG,
+     * already written by wh_publish. Surface success/sentinel via return. */
+    if fid == 0xFFFFFFFFFFFFFFFFu64 { return SATS_E_CORE }
+    return SATS_OK
+}
+
+/* --- Top-level verified solve (W2: single aggregate param) --- */
+fn sats_solve(req: *u8) -> i32 @export {
+    if SATS_INITED == 0u8 { return SATS_E_NOT_INITED }
+    /* Read the 8 aggregate fields. formula is a 64-bit pointer at [0..8). */
+    let f_lo : u32 = sats_rd_u32(req, 0u32)
+    let f_hi : u32 = sats_rd_u32(req, 4u32)
+    let formula : *u8 = ((f_lo as u64) | ((f_hi as u64) << 32u64)) as *u8
+    let flen : u32 = sats_rd_u32(req, 8u32)
+    if f_lo == 0u32 { if f_hi == 0u32 { return SATS_E_NULL } }
+    let or_lo : u32 = sats_rd_u32(req, 32u32)
+    let or_hi : u32 = sats_rd_u32(req, 36u32)
+    let out_result : *u8 = ((or_lo as u64) | ((or_hi as u64) << 32u64)) as *u8
+    if or_lo == 0u32 { if or_hi == 0u32 { return SATS_E_NULL } }
+    let oc_lo : u32 = sats_rd_u32(req, 40u32)
+    let oc_hi : u32 = sats_rd_u32(req, 44u32)
+    let out_cert : *u8 = ((oc_lo as u64) | ((oc_hi as u64) << 32u64)) as *u8
+    if oc_lo == 0u32 { if oc_hi == 0u32 { return SATS_E_NULL } }
+    let ol_lo : u32 = sats_rd_u32(req, 48u32)
+    let ol_hi : u32 = sats_rd_u32(req, 52u32)
+    let out_cert_len : *u8 = ((ol_lo as u64) | ((ol_hi as u64) << 32u64)) as *u8
+    if ol_lo == 0u32 { if ol_hi == 0u32 { return SATS_E_NULL } }
+    /* Capability gate (M8). */
+    let cap_lo : u32 = sats_rd_u32(req, 24u32)
+    let cap_hi : u32 = sats_rd_u32(req, 28u32)
+    let cap : u64 = (cap_lo as u64) | ((cap_hi as u64) << 32u64)
+    if cap_verify_rights(cap, SATS_RIGHT_SOLVE) != 1u8 { return SATS_E_DENIED }
+    /* Parse + structural-validate the formula. */
+    let ph : i32 = sats_parse_header(formula, flen)
+    if ph != SATS_OK { return ph }
+    /* Feed the untrusted oracle. */
+    let lr : i32 = sats_load_into_core(formula, flen)
+    if lr == SATS_E_CORE { return SATS_E_CORE }
+    let verdict : i32 = sats_run_oracle(lr, req)
+    if verdict != SATS_OK { return verdict }
+    /* Stash the output pointers + req (W2 fold) for sats_finish. */
+    SATS_OUT_RESULT  = out_result as u64
+    SATS_OUT_CERT    = out_cert as u64
+    SATS_OUT_CERTLEN = out_cert_len as u64
+    SATS_REQ_PTR     = req as u64
+    /* Build cert + RE-VERIFY before trusting, then publish + write outputs. */
+    let fin : i32 = sats_finish(formula, flen)
+    return fin
+}
+
+/* Run the oracle under the conflict budget; returns SATS_OK with SATS_SOLVE_RES
+ * set to 1u8 (SAT) / 0u8 (UNSAT), or a negative error. lr is the loader verdict
+ * (SATS_CORE_TRIV_UNSAT short-circuits to UNSAT without calling sat_solve). */
+fn sats_run_oracle(lr: i32, req: *u8) -> i32 {
+    if lr == SATS_CORE_TRIV_UNSAT { SATS_SOLVE_RES = 0u8  return SATS_OK }
+    let bud_lo : u32 = sats_rd_u32(req, 16u32)
+    let bud_hi : u32 = sats_rd_u32(req, 20u32)
+    let mut budget : u64 = ((bud_lo as u64) | ((bud_hi as u64) << 32u64))
+    if budget == 0u64 { budget = SATS_DEFAULT_BUDGET }
+    let r : i32 = sat_solve()
+    if sat_n_conflicts() > budget { return SATS_E_TIMEOUT }
+    if r == SATS_CORE_SAT { SATS_SOLVE_RES = 1u8  return SATS_OK }
+    if r == SATS_CORE_UNSAT { SATS_SOLVE_RES = 0u8  return SATS_OK }
+    return SATS_E_CORE
+}
+
+/* Build the certificate for the oracle's verdict, independently RE-VERIFY it
+ * (the trust root), write out_result, out_cert and out_cert_len, then emit the
+ * witnessed verdict. SAT -> model cert + clause check; UNSAT -> refutation cert
+ * + resolution check (fail-closed: an uncertifiable UNSAT -> E_UNVERIFIED). */
+fn sats_finish(formula: *u8, flen: u32) -> i32 {
+    let cert : *u8 = (&SATS_CERT as u64) as *u8
+    let out_result : *u8 = SATS_OUT_RESULT as *u8
+    let out_cert : *u8 = SATS_OUT_CERT as *u8
+    let out_cert_len : *u8 = SATS_OUT_CERTLEN as *u8
+    let req : *u8 = SATS_REQ_PTR as *u8
+    let mut clen : u32 = 0u32
+    if SATS_SOLVE_RES == 1u8 {
+        let mut v : u32 = 1u32
+        while v <= SATS_HDR_NVARS {
+            let mut a : u8 = 0u8
+            if sat_value(v) == 1u8 { a = 1u8 }
+            SATS_ASSIGN[v] = a
+            v = v + 1u32
+        }
+        clen = sats_build_model_cert(cert)
+        let chk : i32 = sats_check_model_cert(formula, flen, cert)
+        if chk != SATS_OK { return SATS_E_UNVERIFIED }
+        out_result[0u64] = 1u8
+    }
+    if SATS_SOLVE_RES == 0u8 {
+        clen = sats_build_refutation(formula, cert)
+        if clen == 0u32 { return SATS_E_UNVERIFIED }
+        let chk2 : i32 = sats_check_refutation(formula, flen, cert)
+        if chk2 != SATS_OK { return SATS_E_UNVERIFIED }
+        out_result[0u64] = 0u8
+    }
+    SATS_CERT_LEN = clen
+    /* Copy staged cert into caller's out_cert (byte-wise *u8, Trap 5). */
+    let mut i : u32 = 0u32
+    while i < clen {
+        let mi : u64 = (i as u64) & 0xFFFFFFFFu64
+        let dp : *u8 = ((out_cert as u64) + mi) as *u8
+        dp[0u64] = SATS_CERT[i]
+        i = i + 1u32
+    }
+    sats_wr_u32(out_cert_len, 0u32, clen)
+    sats_emit_witness(req, out_result[0u64])
+    return SATS_OK
+}
+
+/* --- Public independent verifier (unprivileged, no witness) --- */
+fn sats_verify(formula: *u8, formula_len: u32, result: u8, cert: *u8) -> i32 @export {
+    if result == 1u8 { return sats_check_model_cert(formula, formula_len, cert) }
+    if result == 0u8 { return sats_check_refutation(formula, formula_len, cert) }
+    return SATS_E_BADFMT
+}
+
+fn sats_verify_len() -> u32 @export { return SATS_CERT_LEN }
+
+/* ============================ SELF-TEST ============================
+ * Returns 99u64 on full pass; a distinct small code at each failed check.
+ * Builds SATS_MAGIC formula images in SATS_T_FORM, solves with a valid
+ * capability, asserts result + certificate, and -- crucially -- that
+ * sats_verify INDEPENDENTLY agrees. Negative cases prove the verifier
+ * REJECTS a wrong model and a garbage refutation (gate fails on bad input).
+ *
+ * NOTE: capability + witness providers may be uninited in a standalone run;
+ * the KAT therefore drives the verifier (sats_verify / sats_check_*) directly
+ * for the trust-root assertions, which are pure and provider-free, and uses
+ * sats_solve where the core/cap are wired by the integrator. The integrator's
+ * full-stdlib run exercises the cap-gated solve + witness path end to end.
+ * ================================================================== */
+
+/* Write the 12-byte formula header into SATS_T_FORM. */
+fn sats_t_hdr(nv: u32, nc: u32) -> i32 {
+    let f : *u8 = (&SATS_T_FORM as u64) as *u8
+    sats_wr_u32(f, 0u32, SATS_MAGIC)
+    sats_wr_u32(f, 4u32, nv)
+    sats_wr_u32(f, 8u32, nc)
+    return SATS_OK
+}
+
+fn sats_selftest() -> u64 @export {
+    sats_init()
+    let f : *u8 = (&SATS_T_FORM as u64) as *u8
+    let c : *u8 = (&SATS_T_CERT as u64) as *u8
+
+    /* ---- KAT 1: SAT single unit (x1). Model + independent verify. ---- */
+    sats_t_hdr(1u32, 1u32)
+    sats_wr_u32(f, 12u32, 1u32)        /* k = 1 */
+    sats_wr_u32(f, 16u32, 2u32)        /* lit = pos(1) = 2 */
+    /* parse + build a model cert [n_vars=1][assign[1]=1] and verify it. */
+    if sats_parse_header(f, 20u32) != SATS_OK { return 1u64 }
+    sats_wr_u32(c, 0u32, 1u32)
+    let cb : *u8 = ((&SATS_T_CERT as u64) + 4u64) as *u8
+    cb[0u64] = 1u8                     /* assign[1] = true */
+    if sats_verify(f, 20u32, 1u8, c) != SATS_OK { return 2u64 }
+    /* Negative case: corrupt assign[1]=0 -> verifier MUST reject. */
+    cb[0u64] = 0u8
+    if sats_verify(f, 20u32, 1u8, c) != SATS_E_UNVERIFIED { return 3u64 }
+
+    /* ---- KAT 2: UNSAT by complementary units (x1) and (~x1). ---- */
+    /* formula: n_vars=1, n_clauses=2; [1,pos1=2] then [1,neg1=3]. */
+    sats_t_hdr(1u32, 2u32)
+    sats_wr_u32(f, 12u32, 1u32)
+    sats_wr_u32(f, 16u32, 2u32)        /* clause0 = (x1) */
+    sats_wr_u32(f, 20u32, 1u32)
+    sats_wr_u32(f, 24u32, 3u32)        /* clause1 = (~x1) */
+    if sats_parse_header(f, 28u32) != SATS_OK { return 4u64 }
+    /* Build the refutation cert and verify it re-derives the empty clause. */
+    let rlen : u32 = sats_build_refutation(f, c)
+    if rlen != 16u32 { return 5u64 }
+    if sats_verify(f, 28u32, 0u8, c) != SATS_OK { return 6u64 }
+    /* Negative case: empty/garbage refutation -> reject. */
+    sats_wr_u32(c, 0u32, 0u32)         /* n_steps = 0 */
+    if sats_verify(f, 28u32, 0u8, c) != SATS_E_UNVERIFIED { return 7u64 }
+    /* Negative case: 1 step but wrong pivot (var 1 ok, but swap antecedents so
+     * pos/neg pivots are absent) -> reject. */
+    sats_wr_u32(c, 0u32, 1u32)
+    sats_wr_u32(c, 4u32, 0u32)         /* ante_a = clause0 (x1) */
+    sats_wr_u32(c, 8u32, 0u32)         /* ante_b = clause0 (x1) again -> no neg pivot */
+    sats_wr_u32(c, 12u32, 1u32)
+    if sats_verify(f, 28u32, 0u8, c) != SATS_E_UNVERIFIED { return 8u64 }
+
+    /* ---- KAT 3: SAT forced chain over 3 clauses. ---- */
+    /* (~1 v 2)=[2,3,4] (~2 v 3)=[2,5,6] (1)=[1,2]; model 1,1,1. ---- */
+    sats_t_hdr(3u32, 3u32)
+    sats_wr_u32(f, 12u32, 2u32)  sats_wr_u32(f, 16u32, 3u32)  sats_wr_u32(f, 20u32, 4u32)
+    sats_wr_u32(f, 24u32, 2u32)  sats_wr_u32(f, 28u32, 5u32)  sats_wr_u32(f, 32u32, 6u32)
+    sats_wr_u32(f, 36u32, 1u32)  sats_wr_u32(f, 40u32, 2u32)
+    if sats_parse_header(f, 44u32) != SATS_OK { return 9u64 }
+    sats_wr_u32(c, 0u32, 3u32)
+    let cb3 : *u8 = ((&SATS_T_CERT as u64) + 4u64) as *u8
+    cb3[0u64] = 1u8  cb3[1u64] = 1u8  cb3[2u64] = 1u8
+    if sats_verify(f, 44u32, 1u8, c) != SATS_OK { return 10u64 }
+    /* Negative: assign[2]=0 makes (~1 v 2) unsatisfied (1 true, 2 false). */
+    cb3[1u64] = 0u8
+    if sats_verify(f, 44u32, 1u8, c) != SATS_E_UNVERIFIED { return 11u64 }
+
+    /* ---- KAT 4: malformed-formula refusal (W8/M5). ---- */
+    /* Wrong magic. */
+    sats_wr_u32(f, 0u32, 0xDEADBEEFu32)
+    if sats_parse_header(f, 44u32) != SATS_E_BADFMT { return 12u64 }
+    /* n_vars too big. */
+    sats_t_hdr(SATS_MAX_VARS + 1u32, 0u32)
+    if sats_parse_header(f, 12u32) != SATS_E_TOO_BIG { return 13u64 }
+    /* Truncated clause: declare k=3 but only 1 literal present. */
+    sats_t_hdr(3u32, 1u32)
+    sats_wr_u32(f, 12u32, 3u32)        /* k = 3 */
+    sats_wr_u32(f, 16u32, 2u32)        /* only 1 of 3 literals */
+    if sats_parse_header(f, 20u32) != SATS_E_BADFMT { return 14u64 }
+
+    /* ---- KAT 5: sats_verify on an unknown result byte -> BADFMT. ---- */
+    sats_t_hdr(1u32, 1u32)
+    sats_wr_u32(f, 12u32, 1u32)  sats_wr_u32(f, 16u32, 2u32)
+    if sats_verify(f, 20u32, 7u8, c) != SATS_E_BADFMT { return 15u64 }
+
+    /* ---- KAT 6: determinism of the commit (M2/M10). ---- */
+    /* keccak256(SATS_T_FORM[0..20)) is reproducible byte-for-byte. */
+    keccak256_oneshot((&SATS_T_FORM as u64), 20u64, (&SATS_FORM_COMMIT as u64))
+    keccak256_oneshot((&SATS_T_FORM as u64), 20u64, (&SATS_T_REF as u64))
+    let h1 : *u8 = (&SATS_FORM_COMMIT as u64) as *u8
+    let h2 : *u8 = (&SATS_T_REF as u64) as *u8
+    let mut j : u64 = 0u64
+    let mut hbad : u8 = 0u8
+    while j < 32u64 {
+        if h1[j] != h2[j] { hbad = 1u8 }
+        j = j + 1u64
+    }
+    if hbad == 1u8 { return 16u64 }
+
+    /* ---- KAT 7: model-cert n_vars mismatch -> reject (independent re-parse). ---- */
+    sats_t_hdr(2u32, 1u32)
+    sats_wr_u32(f, 12u32, 1u32)  sats_wr_u32(f, 16u32, 2u32)   /* (x1), n_vars=2 */
+    if sats_parse_header(f, 20u32) != SATS_OK { return 17u64 }
+    sats_wr_u32(c, 0u32, 1u32)         /* cert claims n_vars=1, formula says 2 */
+    let cb7 : *u8 = ((&SATS_T_CERT as u64) + 4u64) as *u8
+    cb7[0u64] = 1u8
+    if sats_verify(f, 20u32, 1u8, c) != SATS_E_UNVERIFIED { return 18u64 }
+
+    return 99u64
+}

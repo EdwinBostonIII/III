@@ -1,0 +1,10 @@
+/* Lattice plan Step 0008: @k(value=950000000) — K = 0.95 fixed-point. */
+module corpus_111
+
+fn parse_int() -> u64 @k(value=950000000) {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return parse_int()
+}

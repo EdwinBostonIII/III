@@ -1,0 +1,136 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_witness.iii
+ *
+ * III STDLIB - verba::glyph_witness -- Glyph V3 form for witness chain entry.
+ *
+ * Lattice plan Phase 14h Step 0178.  Encodes a single witness record:
+ *   payload[ 0.. 7]  witness_idx  (u64 LE)
+ *   payload[ 8..39]  mhash_32     (32 bytes - the witness payload hash)
+ *   payload[40..47]  cap_id       (u64 LE)
+ *   payload[48..55]  k_fixed      (u64 LE - K-value at witness time)
+ *   payload[56..151] reserved (96 bytes, zero-padded)
+ *
+ * payload_len = 56.
+ *
+ * Public surface:
+ *   glyph_witness_form_id()                                              -> u32 (0x41)
+ *   glyph_witness_pack(witness_idx, mhash_32_ptr, cap_id, k_fixed, out)  -> i32
+ *   glyph_witness_unpack_idx(in_192)                                     -> u64
+ *   glyph_witness_unpack_mhash_byte(in_192, i)                           -> u32
+ *   glyph_witness_unpack_cap_id(in_192)                                  -> u64
+ *   glyph_witness_unpack_k_fixed(in_192)                                 -> u64
+ *   glyph_witness_validate(in_192)                                       -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_witness
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u64_le(p: u64, v: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u64_le(p: u64) -> u64 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_WITNESS : u32 = 0x41u32
+
+fn glyph_witness_form_id() -> u32 @export { return GV3_FORM_WITNESS }
+
+/* Helper: write the 3 u64 metadata fields into a 24-byte args buffer. */
+fn glyph_witness_set_args(args_ptr: u64, witness_idx: u64, cap_id: u64, k_fixed: u64) -> i32 @export {
+    let ap_l : u64 = args_ptr
+    let w_l  : u64 = witness_idx
+    let c_l  : u64 = cap_id
+    let k_l  : u64 = k_fixed
+    if ap_l == 0u64 { return -1i32 }
+    let ap : *u64 = ap_l as *u64
+    ap[0u64] = w_l
+    ap[1u64] = c_l
+    ap[2u64] = k_l
+    return 0i32
+}
+
+/* 3-arg signature = composition-dispatch ABI: glyph_witness_pack is
+ * registered in iii_compositions.def and invoked via the prespec
+ * fn(a,b,c,d:u64) trampoline, so it must take <=4 u64 args -- do NOT widen.
+ * The 3 u64 metadata values that don't compress (witness_idx, cap_id,
+ * k_fixed) live in a 24-byte caller-allocated args buffer at args_ptr
+ * (LE u64 each):
+ *   args_ptr[ 0.. 7] = witness_idx
+ *   args_ptr[ 8..15] = cap_id
+ *   args_ptr[16..23] = k_fixed
+ * Use glyph_witness_set_args or write the bytes manually.  (The iiis-0
+ * 5+-arg trap this also dodged is fixed -- Stage 3.9, corpus 277 -- but
+ * the packing remains the composition ABI.) */
+fn glyph_witness_pack(args_ptr: u64, mhash_32_ptr: u64, out_192: u64) -> i32 @export {
+    let ap_l : u64 = args_ptr
+    let m_l  : u64 = mhash_32_ptr
+    let o_l  : u64 = out_192
+    if ap_l == 0u64 { return -1i32 }
+    /* Read the three u64 metadata fields. */
+    let ap : *u64 = ap_l as *u64
+    let w_l : u64 = ap[0u64]
+    let c_l : u64 = ap[1u64]
+    let k_l : u64 = ap[2u64]
+    if o_l == 0u64 { return -1i32 }
+    if m_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_WITNESS)
+    gv3_write_u32_le(o_l + 4u64, 56u32)
+    gv3_write_u64_le(o_l + 8u64, w_l)
+    /* Copy mhash_32 into payload[8..40]. */
+    let sp : *u8 = m_l as *u8
+    let dp : *u8 = (o_l + 16u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    gv3_write_u64_le(o_l + 48u64, c_l)
+    gv3_write_u64_le(o_l + 56u64, k_l)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_witness_unpack_idx(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_WITNESS { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 8u64)
+}
+
+fn glyph_witness_unpack_mhash_byte(in_192: u64, i: u32) -> u32 @export {
+    let i_l : u64 = in_192
+    let idx : u32 = i
+    if i_l == 0u64 { return 0x100u32 }
+    if idx >= 32u32 { return 0x100u32 }
+    if gv3_form_id(i_l) != GV3_FORM_WITNESS { return 0x100u32 }
+    if gv3_validate(i_l) != 1u8 { return 0x100u32 }
+    let bp : *u8 = (i_l + 16u64 + (idx as u64)) as *u8
+    return bp[0u64] as u32
+}
+
+fn glyph_witness_unpack_cap_id(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_WITNESS { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 48u64)
+}
+
+fn glyph_witness_unpack_k_fixed(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_WITNESS { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 56u64)
+}
+
+fn glyph_witness_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_WITNESS { return 0u8 }
+    return gv3_validate(i_l)
+}

@@ -1,0 +1,13 @@
+/* 716 -- mig3 (H1) Part 3: @sovereign_out OUT-parameter taint, POSITIVE arm.
+ * `recv_into`'s buf is @sovereign_value @sovereign_out; `main` passes a SovVal
+ * buffer (SovBuf = u64 @sovereign_value), so the taint IS captured and BOTH the
+ * Part 3 out-param check (arg is sovereign) and the Part 2 flow check (sovereign
+ * arg into a @sovereign_value param) are satisfied -> ACCEPTED.
+ * recv_into(tainted) = 99 = GREEN. */
+module corpus_716
+type SovBuf = u64 @sovereign_value
+fn recv_into(buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 { return 99u64 }
+fn main() -> u64 {
+    let tainted : SovBuf = 0u64
+    return recv_into(tainted, 8u64)
+}

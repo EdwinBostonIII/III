@@ -1,0 +1,37 @@
+# COMPILER/BOOT/iii_ring_lattice.def
+#
+# SINGLE SOURCE OF TRUTH for the KATABASIS legal ring-transition lattice
+# (DOCS/III-KATABASIS.md plan 4.6).  Descending beneath the OS crosses CPU
+# privilege rings; III permits a crossing ONLY through one of the lawful
+# constructors (no ring skipped, none ascended without the proper door).  This
+# table is the relation: ordered (src, dst) ring pair -> the single legal
+# constructor.
+#
+# Regenerate the AUTO-GENERATED constructor cascade in
+# STDLIB/iii/katabasis/ring_lattice.iii via:
+#     bash COMPILER/BOOT/gen_ring_lattice.sh
+# The build's drift gate (gen_ring_lattice.sh --check) fails on divergence
+# (plan 6.9 / FR-9).
+#
+# The classifier encodes the pair as key = src_code*5 + dst_code over the ring
+# codes R3=0 R0=1 RM1=2 RM2=3 RM4=4 (a flat key cascade is exact).  Each row maps
+# to the hand-written enum constants in ring_lattice.iii:
+#   ring code const = KRL_<ring>          (e.g. KRL_R3, KRL_RM1)
+#   constructor const = KRL_C_<ctor>      (e.g. KRL_C_IOCTL)
+# gen_ring_lattice.sh asserts those constants exist; any (src,dst) NOT listed
+# here maps to KRL_C_NONE (the catch-all -- no ring may be skipped or ascended).
+#
+# Rows are emitted in this order (matches the existing cascade).
+#
+# Fields (whitespace-delimited):  src  dst  constructor
+#   src   str -- source ring (R3|R0|RM1|RM2|RM4); forms KRL_<src>.
+#   dst   str -- destination ring; forms KRL_<dst>.
+#   ctor  str -- the legal constructor; forms KRL_C_<ctor>.
+# Lines starting with '#' are comments. Blank lines ignored.
+# ---------------------------------------------------------------------------
+# src  dst   constructor
+R3     R0    IOCTL
+R0     RM1   MAGIC_MSR
+RM1    RM1   VMRUN
+R0     RM2   SKINIT
+RM1    RM2   SMI

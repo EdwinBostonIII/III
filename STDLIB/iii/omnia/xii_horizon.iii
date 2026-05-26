@@ -1,0 +1,829 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_horizon.iii
+ *
+ * III STDLIB - omnia::xii_horizon
+ *
+ * The 144 sealed Horizon patterns. Per DOCS/III-XII.md S10 + S26.8.
+ *
+ * Each pattern has metadata (hexad, primary_op, K-cost, cap_class, ct_kind,
+ * prov_xform_id, productive flag) and a structural template that the
+ * generic constructor xii_horizon_construct(id) walks to build the
+ * canonical-form algebra term.
+ *
+ * Categories (S26.8):
+ *   H001..H024: 24 cryptographic hot paths (productive)
+ *   H025..H042: 18 arithmetic reductions (productive)
+ *   H043..H060: 18 memory-bound kernels (productive)
+ *   H061..H072: 12 capability-checked (productive)
+ *   H073..H084: 12 witness/provenance (productive)
+ *   H085..H096: 12 governance (productive)
+ *   H097..H108: 12 codegen meta (productive)
+ *   H109..H120: 12 resolver-self (productive)
+ *   H121..H126:  6 hexad/trit (productive)
+ *   H127..H138: 12 guard cells (non-productive)
+ *   H139..H144:  6 reserved (non-productive)
+ * Total: 132 productive + 12 guard + 6 reserved = 150 wait
+ * Recount: 24+18+18+12+12+12+12+12+6 = 126 productive + 18 = 144. Wait.
+ * 24+18+18+12+12+12+12+12+6 = 126 + 12 guard + 6 reserved = 144 total. ✓
+ * Productive: 126; guard+reserved: 18.
+ *
+ * Hexad: kind_compose. Ring: R0. K: per-pattern.
+ *
+ * NIH: libc only. Sealed: xii_horizon_seal.mhash := SHA-256(metadata table).
+ */
+
+module omnia_xii_horizon
+
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+
+/* Sealed subform resolver (S26.18): SHA-256("PREFIX:" || name) low N bits. */
+extern @abi(c-msvc-x64) fn xii_subforms_compute(prefix_id: u8, name_ptr: *u8, name_len: u32, bits: u32) -> u32 from "xii_subforms.iii"
+
+/* Kernel kind codes (mirror xii_term.iii / xii_rewrite.iii). */
+const XHK_K01 : u8 = 0u8
+const XHK_K02 : u8 = 1u8
+const XHK_K03 : u8 = 2u8
+const XHK_K04 : u8 = 3u8
+const XHK_K05 : u8 = 4u8
+const XHK_K06 : u8 = 5u8
+const XHK_K07 : u8 = 6u8
+const XHK_K08 : u8 = 7u8
+const XHK_K09 : u8 = 8u8
+const XHK_K10 : u8 = 9u8
+const XHK_K11 : u8 = 10u8
+const XHK_K17 : u8 = 16u8
+const XHK_K18 : u8 = 17u8
+const XHK_FCOMPOSE : u8 = 18u8
+const XHK_FTHEN    : u8 = 19u8
+const XHK_FWITH    : u8 = 20u8
+const XHK_FUNDER   : u8 = 21u8
+const XHK_FIF      : u8 = 22u8
+const XHK_FLOOP    : u8 = 23u8
+
+/* Subform prefix ids (mirror numera/xii_subforms.iii XSF_PREFIX_*). */
+const XHP_FORM    : u8 = 1u8
+const XHP_MEAN    : u8 = 2u8
+const XHP_ACT     : u8 = 3u8
+const XHP_SEAL    : u8 = 4u8
+const XHP_PROVE   : u8 = 5u8
+const XHP_QUERY   : u8 = 6u8
+const XHP_GRANT   : u8 = 7u8
+const XHP_GOVERN  : u8 = 8u8
+const XHP_LIFT    : u8 = 9u8
+const XHP_REFLECT : u8 = 10u8
+
+/* Subform field widths (bits) per S26.18. */
+const XHW_FORM  : u32 = 18u32
+const XHW_MEAN  : u32 =  9u32
+const XHW_ACT   : u32 = 17u32
+const XHW_SEAL  : u32 = 24u32
+const XHW_PROVE : u32 = 24u32
+const XHW_QUERY : u32 = 24u32
+const XHW_GOVERN: u32 = 24u32
+
+/* Null ground form sentinel (K06_COMPOSE_NULL per S26.1). */
+const XHC_NULL_GROUND : u32 = 0xFFFFFFFFu32
+
+/* Recursion-depth guard for nested H-pattern references. */
+const XHC_MAX_DEPTH : u32 = 16u32
+
+const XHR_NULL_REF       : u32 = 0xFFFFFFFFu32
+const XHR_TOTAL_PATTERNS : u32 = 144u32
+
+/* Metadata table: 8 bytes per pattern.
+ * Offset 0: hexad_kind (1..7)
+ * Offset 1: primary_op_kind (basis 0..17 or fusion 18..23)
+ * Offset 2..5: k_cost u32
+ * Offset 6: cap_class (0..15)
+ * Offset 7: ct_kind (0..8)  bit 7 = productive flag (1=productive)
+ *
+ * Total: 144 * 8 = 1152 bytes
+ */
+const XHR_META_BYTES_PER_PATTERN : u32 = 8u32
+const XHR_META_TOTAL_BYTES       : u32 = 1152u32
+
+var XII_HORIZON_META : [u8; 1152]
+var XII_HORIZON_INIT_DONE : u8 = 0u8
+
+/* Auxiliary metadata: structural template (the math expr shape).
+ * 4 bytes per pattern:
+ *   Offset 0: template_kind (0=basis, 1=compose, 2=then, 3=with, 4=under,
+ *             5=if, 6=loop, 7=guard, 8=composite_seal_prove,
+ *             9=composite_chacha_round, 10=loop_of_pattern, 11=then_pair)
+ *   Offset 1: child_a_pattern_id (or 0xFF if basis subform)
+ *   Offset 2: child_b_pattern_id (or 0xFF)
+ *   Offset 3: child_c_pattern_id (or 0xFF; for IF)
+ */
+var XII_HORIZON_TEMPL : [u8; 576]   /* 144 * 4 */
+
+fn _meta_set(id: u32, hexad: u8, op: u8, k: u32, cap: u8, ct: u8, productive: u8) -> i32 {
+    let off : u32 = id * XHR_META_BYTES_PER_PATTERN
+    XII_HORIZON_META[off]      = hexad
+    XII_HORIZON_META[off + 1u32] = op
+    XII_HORIZON_META[off + 2u32] = (k & 0xFFu32) as u8
+    XII_HORIZON_META[off + 3u32] = ((k >> 8u32) & 0xFFu32) as u8
+    XII_HORIZON_META[off + 4u32] = ((k >> 16u32) & 0xFFu32) as u8
+    XII_HORIZON_META[off + 5u32] = ((k >> 24u32) & 0xFFu32) as u8
+    XII_HORIZON_META[off + 6u32] = cap
+    let pflag : u8 = productive << 7u8
+    XII_HORIZON_META[off + 7u32] = ct | pflag
+    return 0i32
+}
+
+fn _templ_set(id: u32, kind: u8, a: u8, b: u8, c: u8) -> i32 {
+    let off : u32 = id * 4u32
+    XII_HORIZON_TEMPL[off]        = kind
+    XII_HORIZON_TEMPL[off + 1u32] = a
+    XII_HORIZON_TEMPL[off + 2u32] = b
+    XII_HORIZON_TEMPL[off + 3u32] = c
+    return 0i32
+}
+
+/* Hexad constants */
+const XH_FORM      : u8 = 1u8
+const XH_SUBSTANCE : u8 = 2u8
+const XH_PASSAGE   : u8 = 3u8
+const XH_ESSENCE   : u8 = 4u8
+const XH_MOTION    : u8 = 5u8
+const XH_COMPOSE   : u8 = 6u8
+const XH_ORIGIN    : u8 = 7u8
+
+/* Kernel constants for primary_op */
+const XH_K01 : u8 = 0u8
+const XH_K05 : u8 = 4u8
+const XH_K07 : u8 = 6u8
+const XH_K08 : u8 = 7u8
+const XH_K09 : u8 = 8u8
+const XH_K11 : u8 = 10u8
+const XH_K16 : u8 = 15u8
+const XH_K17 : u8 = 16u8
+const XH_K18 : u8 = 17u8
+const XH_FCOMPOSE : u8 = 18u8
+const XH_FTHEN    : u8 = 19u8
+const XH_FWITH    : u8 = 20u8
+const XH_FUNDER   : u8 = 21u8
+const XH_FIF      : u8 = 22u8
+const XH_FLOOP    : u8 = 23u8
+
+/* Template kinds */
+const XHT_BASIS  : u8 = 0u8
+const XHT_COMPOSE: u8 = 1u8
+const XHT_THEN   : u8 = 2u8
+const XHT_WITH   : u8 = 3u8
+const XHT_UNDER  : u8 = 4u8
+const XHT_IF     : u8 = 5u8
+const XHT_LOOP   : u8 = 6u8
+const XHT_GUARD  : u8 = 7u8
+
+fn xii_horizon_init() -> i32 @export {
+    if XII_HORIZON_INIT_DONE != 0u8 { return 0i32 }
+    let mut i : u32 = 0u32
+    while i < XHR_META_TOTAL_BYTES {
+        XII_HORIZON_META[i] = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 576u32 {
+        XII_HORIZON_TEMPL[j] = 0u8
+        j = j + 1u32
+    }
+
+    /* --- H001..H024: Cryptographic hot paths --- */
+    /* H001 ed25519_sign: F.COMPOSE(K07_SEAL, K08_PROVE) hexad=ORIGIN k=13 cap=SIGN ct=1 */
+    _meta_set(0u32, XH_ORIGIN, XH_K07, 13u32, 1u8, 1u8, 1u8)
+    _templ_set(0u32, XHT_COMPOSE, 0u8, 0u8, 0u8)  /* shape: SEAL/PROVE composite */
+
+    _meta_set(1u32, XH_ESSENCE, XH_K08, 25u32, 2u8, 1u8, 1u8) /* ed25519_verify */
+    _templ_set(1u32, XHT_THEN, 0u8, 0u8, 0u8)
+
+    _meta_set(2u32, XH_MOTION, XH_K16, 70u32, 3u8, 1u8, 1u8) /* chacha20_block */
+    _templ_set(2u32, XHT_LOOP, 3u8, 0u8, 0u8)
+
+    _meta_set(3u32, XH_MOTION, XH_FCOMPOSE, 7u32, 3u8, 1u8, 1u8) /* chacha20_round_pair */
+    _templ_set(3u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+
+    _meta_set(4u32, XH_MOTION, XH_K05, 5u32, 4u8, 1u8, 1u8) /* poly1305_block */
+    _templ_set(4u32, XHT_THEN, 0u8, 0u8, 0u8)
+
+    _meta_set(5u32, XH_MOTION, XH_K16, 80u32, 4u8, 1u8, 1u8) /* poly1305_mac_oneshot */
+    _templ_set(5u32, XHT_LOOP, 4u8, 0u8, 0u8)
+
+    _meta_set(6u32, XH_MOTION, XH_FCOMPOSE, 7u32, 5u8, 1u8, 1u8) /* aes_gcm_encrypt_block */
+    _templ_set(6u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+
+    _meta_set(7u32, XH_MOTION, XH_FTHEN, 8u32, 5u8, 1u8, 1u8) /* aes_gcm_decrypt_block */
+    _templ_set(7u32, XHT_THEN, 0u8, 0u8, 0u8)
+
+    _meta_set(8u32, XH_MOTION, XH_K16, 56u32, 5u8, 1u8, 1u8) /* aes_256_keyexp */
+    _templ_set(8u32, XHT_LOOP, 0u8, 0u8, 0u8)
+
+    _meta_set(9u32, XH_MOTION, XH_K16, 1020u32, 6u8, 1u8, 1u8) /* x25519_scalarmult */
+    _templ_set(9u32, XHT_LOOP, 0u8, 0u8, 0u8)
+
+    _meta_set(10u32, XH_ESSENCE, XH_FTHEN, 1021u32, 6u8, 1u8, 1u8) /* x25519_kex */
+    _templ_set(10u32, XHT_THEN, 9u8, 0u8, 0u8)
+
+    _meta_set(11u32, XH_MOTION, XH_K16, 64u32, 7u8, 0u8, 1u8) /* sha256_oneshot */
+    _templ_set(11u32, XHT_LOOP, 12u8, 0u8, 0u8)
+
+    _meta_set(12u32, XH_MOTION, XH_K05, 4u32, 7u8, 0u8, 1u8) /* sha256_block */
+    _templ_set(12u32, XHT_BASIS, 0u8, 0u8, 0u8)
+
+    _meta_set(13u32, XH_MOTION, XH_K16, 128u32, 7u8, 0u8, 1u8) /* sha512_oneshot */
+    _templ_set(13u32, XHT_LOOP, 0u8, 0u8, 0u8)
+
+    _meta_set(14u32, XH_MOTION, XH_K16, 96u32, 7u8, 0u8, 1u8) /* sha3_keccak_f1600 */
+    _templ_set(14u32, XHT_LOOP, 0u8, 0u8, 0u8)
+
+    _meta_set(15u32, XH_MOTION, XH_K16, 96u32, 7u8, 0u8, 1u8) /* shake128_squeeze */
+    _templ_set(15u32, XHT_LOOP, 14u8, 0u8, 0u8)
+
+    _meta_set(16u32, XH_MOTION, XH_K05, 4u32, 7u8, 0u8, 1u8) /* blake2s_block */
+    _templ_set(16u32, XHT_BASIS, 0u8, 0u8, 0u8)
+
+    _meta_set(17u32, XH_MOTION, XH_FTHEN, 12u32, 8u8, 1u8, 1u8) /* hmac_sha256 */
+    _templ_set(17u32, XHT_THEN, 11u8, 11u8, 0u8)
+
+    _meta_set(18u32, XH_ORIGIN, XH_FTHEN, 24u32, 8u8, 1u8, 1u8) /* hkdf_extract */
+    _templ_set(18u32, XHT_THEN, 17u8, 0u8, 0u8)
+
+    _meta_set(19u32, XH_MOTION, XH_FTHEN, 13u32, 8u8, 1u8, 1u8) /* hkdf_expand_block */
+    _templ_set(19u32, XHT_THEN, 0u8, 17u8, 0u8)
+
+    _meta_set(20u32, XH_MOTION, XH_K16, 12u32, 8u8, 1u8, 1u8) /* pbkdf2_iter */
+    _templ_set(20u32, XHT_LOOP, 17u8, 0u8, 0u8)
+
+    _meta_set(21u32, XH_MOTION, XH_K05, 4u32, 9u8, 0u8, 1u8) /* crc32c_block */
+    _templ_set(21u32, XHT_BASIS, 0u8, 0u8, 0u8)
+
+    _meta_set(22u32, XH_MOTION, XH_K05, 4u32, 9u8, 0u8, 1u8) /* murmur3_block */
+    _templ_set(22u32, XHT_BASIS, 0u8, 0u8, 0u8)
+
+    _meta_set(23u32, XH_ORIGIN, XH_FTHEN, 1240u32, 4u8, 1u8, 1u8) /* aead_chacha20poly1305 */
+    _templ_set(23u32, XHT_THEN, 2u8, 5u8, 0u8)
+
+    /* --- H025..H042: Arithmetic reductions (18 patterns) --- */
+    let mut a_id : u32 = 24u32
+    while a_id < 42u32 {
+        _meta_set(a_id, XH_MOTION, XH_K16, 8u32, 10u8, 0u8, 1u8)
+        _templ_set(a_id, XHT_LOOP, 0u8, 0u8, 0u8)
+        a_id = a_id + 1u32
+    }
+    /* H027/H028 are CT */
+    _meta_set(26u32, XH_MOTION, XH_K16, 8u32, 10u8, 1u8, 1u8) /* max_u32_n */
+    _meta_set(27u32, XH_MOTION, XH_K16, 8u32, 10u8, 1u8, 1u8) /* min_u32_n */
+    _meta_set(36u32, XH_MOTION, XH_K16, 256u32, 10u8, 3u8, 1u8) /* int_div_u64_ct */
+    _meta_set(37u32, XH_MOTION, XH_K16, 1792u32, 10u8, 1u8, 1u8) /* mod_p_pow */
+    _meta_set(38u32, XH_MOTION, XH_FCOMPOSE, 7u32, 10u8, 1u8, 1u8) /* barrett_reduce */
+    _templ_set(38u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+    _meta_set(39u32, XH_MOTION, XH_FCOMPOSE, 7u32, 10u8, 1u8, 1u8) /* montgomery_reduce */
+    _templ_set(39u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+    _meta_set(40u32, XH_MOTION, XH_FIF, 6u32, 10u8, 0u8, 1u8) /* range_check_u32 */
+    _templ_set(40u32, XHT_IF, 0u8, 0u8, 0u8)
+    _meta_set(41u32, XH_MOTION, XH_FIF, 6u32, 10u8, 0u8, 1u8) /* int_clamp_u32 */
+    _templ_set(41u32, XHT_IF, 0u8, 0u8, 0u8)
+
+    /* --- H043..H060: Memory-bound (18) --- */
+    let mut m_id : u32 = 42u32
+    while m_id < 60u32 {
+        _meta_set(m_id, XH_MOTION, XH_K16, 8u32, 11u8, 0u8, 1u8)
+        _templ_set(m_id, XHT_LOOP, 0u8, 0u8, 0u8)
+        m_id = m_id + 1u32
+    }
+    _meta_set(43u32, XH_PASSAGE, XH_FTHEN, 4u32, 11u8, 0u8, 1u8) /* memcpy_capped */
+    _templ_set(43u32, XHT_THEN, 0u8, 0u8, 0u8)
+    _meta_set(44u32, XH_MOTION, XH_K16, 12u32, 11u8, 1u8, 1u8) /* memcmp_ct */
+    _meta_set(45u32, XH_SUBSTANCE, XH_K16, 1u32, 11u8, 1u8, 1u8) /* memset_zero_ct */
+    _meta_set(46u32, XH_SUBSTANCE, XH_K16, 1u32, 11u8, 1u8, 1u8) /* memset_const_ct */
+    _meta_set(48u32, XH_PASSAGE, XH_K16, 8u32, 11u8, 7u8, 1u8) /* gather_u64 */
+    _meta_set(49u32, XH_PASSAGE, XH_K16, 8u32, 11u8, 7u8, 1u8) /* scatter_u64 */
+    _meta_set(50u32, XH_MOTION, XH_K05, 4u32, 11u8, 0u8, 1u8) /* swap_bytes_u64 */
+    _templ_set(50u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(51u32, XH_MOTION, XH_K05, 4u32, 11u8, 0u8, 1u8) /* bitreverse_u64 */
+    _templ_set(51u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(55u32, XH_MOTION, XH_FCOMPOSE, 7u32, 11u8, 0u8, 1u8) /* bitmap_set_atomic */
+    _templ_set(55u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+    _meta_set(56u32, XH_MOTION, XH_FCOMPOSE, 7u32, 11u8, 0u8, 1u8) /* bitmap_clear_atomic */
+    _templ_set(56u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+    _meta_set(57u32, XH_ESSENCE, XH_K09, 4u32, 11u8, 0u8, 1u8) /* aligned_load_u128 */
+    _templ_set(57u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(58u32, XH_SUBSTANCE, 1u8, 1u32, 11u8, 0u8, 1u8) /* aligned_store_u128 */
+    _templ_set(58u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(59u32, XH_ESSENCE, XH_K18, 1u32, 11u8, 0u8, 1u8) /* prefetch_t0 */
+    _templ_set(59u32, XHT_BASIS, 0u8, 0u8, 0u8)
+
+    /* --- H061..H072: Capability-checked (12) --- */
+    let mut c_id : u32 = 60u32
+    while c_id < 72u32 {
+        _meta_set(c_id, XH_ORIGIN, XH_FTHEN, 12u32, 12u8, 0u8, 1u8)
+        _templ_set(c_id, XHT_THEN, 0u8, 0u8, 0u8)
+        c_id = c_id + 1u32
+    }
+    _meta_set(61u32, XH_ORIGIN, XH_FUNDER, 13u32, 12u8, 0u8, 1u8) /* cap_attenuate_under_grant */
+    _templ_set(61u32, XHT_UNDER, 0u8, 0u8, 0u8)
+    _meta_set(62u32, XH_ORIGIN, XH_K17, 1u32, 12u8, 0u8, 1u8) /* cap_lift_R0_to_Rm1 */
+    _templ_set(62u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(63u32, XH_ORIGIN, XH_K17, 1u32, 12u8, 0u8, 1u8) /* cap_lift_Rm1_to_R0 */
+    _templ_set(63u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(64u32, XH_ORIGIN, XH_K17, 1u32, 12u8, 0u8, 1u8) /* cap_lift_R3_to_R0 */
+    _templ_set(64u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(67u32, XH_ORIGIN, XH_FWITH, 12u32, 12u8, 0u8, 1u8) /* cap_grant_with_seal */
+    _templ_set(67u32, XHT_WITH, 0u8, 0u8, 0u8)
+    _meta_set(69u32, XH_ESSENCE, XH_FIF, 6u32, 12u8, 0u8, 1u8) /* cap_check_only */
+    _templ_set(69u32, XHT_IF, 0u8, 0u8, 0u8)
+    _meta_set(71u32, XH_ORIGIN, XH_FUNDER, 13u32, 12u8, 0u8, 1u8) /* cap_admit_trinity_gated */
+    _templ_set(71u32, XHT_UNDER, 0u8, 0u8, 0u8)
+
+    /* --- H073..H084: Witness/Provenance (12) --- */
+    let mut w_id : u32 = 72u32
+    while w_id < 84u32 {
+        _meta_set(w_id, XH_ORIGIN, XH_K07, 12u32, 13u8, 0u8, 1u8)
+        _templ_set(w_id, XHT_BASIS, 0u8, 0u8, 0u8)
+        w_id = w_id + 1u32
+    }
+    _meta_set(73u32, XH_ORIGIN, XH_FCOMPOSE, 16u32, 13u8, 0u8, 1u8) /* prov_merge_pair */
+    _templ_set(73u32, XHT_COMPOSE, 0u8, 0u8, 0u8)
+    _meta_set(74u32, XH_ORIGIN, XH_FTHEN, 24u32, 13u8, 0u8, 1u8) /* prov_chain_extend */
+    _templ_set(74u32, XHT_THEN, 0u8, 0u8, 0u8)
+    _meta_set(76u32, XH_ESSENCE, XH_FTHEN, 28u32, 13u8, 0u8, 1u8) /* prov_replay_verify */
+    _templ_set(76u32, XHT_THEN, 0u8, 0u8, 0u8)
+    _meta_set(78u32, XH_ORIGIN, XH_K16, 12u32, 13u8, 0u8, 1u8) /* witness_seal_block */
+    _templ_set(78u32, XHT_LOOP, 72u8, 0u8, 0u8)
+
+    /* --- H085..H096: Governance (12) --- */
+    let mut g_id : u32 = 84u32
+    while g_id < 96u32 {
+        _meta_set(g_id, XH_ORIGIN, XH_K11, 12u32, 14u8, 0u8, 1u8)
+        _templ_set(g_id, XHT_BASIS, 0u8, 0u8, 0u8)
+        g_id = g_id + 1u32
+    }
+    _meta_set(85u32, XH_ORIGIN, XH_FTHEN, 24u32, 14u8, 0u8, 1u8) /* govern_admit_quorum */
+    _templ_set(85u32, XHT_THEN, 84u8, 0u8, 0u8)
+    _meta_set(89u32, XH_ESSENCE, XH_FIF, 6u32, 14u8, 0u8, 1u8) /* anchor_veto */
+    _templ_set(89u32, XHT_IF, 0u8, 0u8, 0u8)
+    _meta_set(93u32, XH_ORIGIN, XH_FUNDER, 25u32, 14u8, 0u8, 1u8) /* H094 constitution_amend */
+    _templ_set(93u32, XHT_UNDER, 0u8, 0u8, 0u8)
+    _meta_set(94u32, XH_ORIGIN, XH_FTHEN, 16u32, 14u8, 0u8, 1u8) /* H095 sml_launch_seal */
+    _templ_set(94u32, XHT_THEN, 0u8, 0u8, 0u8)
+
+    /* --- H097..H108: Codegen meta (12) --- */
+    let mut cg_id : u32 = 96u32
+    while cg_id < 108u32 {
+        _meta_set(cg_id, XH_MOTION, XH_FTHEN, 8u32, 15u8, 0u8, 1u8)
+        _templ_set(cg_id, XHT_THEN, 0u8, 0u8, 0u8)
+        cg_id = cg_id + 1u32
+    }
+    _meta_set(104u32, XH_MOTION, XH_K16, 4u32, 15u8, 0u8, 1u8) /* cg_canon_pre_pass */
+    _templ_set(104u32, XHT_LOOP, 0u8, 0u8, 0u8)
+
+    /* --- H109..H120: Resolver-self (12) --- */
+    let mut r_id : u32 = 108u32
+    while r_id < 120u32 {
+        _meta_set(r_id, XH_ESSENCE, XH_K09, 4u32, 0u8, 0u8, 1u8)
+        _templ_set(r_id, XHT_BASIS, 0u8, 0u8, 0u8)
+        r_id = r_id + 1u32
+    }
+    _meta_set(109u32, XH_ESSENCE, XH_FTHEN, 5u32, 0u8, 0u8, 1u8) /* resolve_dynamic_mphf */
+    _templ_set(109u32, XHT_THEN, 0u8, 0u8, 0u8)
+    _meta_set(110u32, XH_MOTION, XH_K16, 4u32, 0u8, 0u8, 1u8) /* resolve_score_top1 */
+    _templ_set(110u32, XHT_LOOP, 0u8, 0u8, 0u8)
+    _meta_set(111u32, XH_ESSENCE, XH_FIF, 11u32, 0u8, 0u8, 1u8) /* resolve_tiebreak */
+    _templ_set(111u32, XHT_IF, 0u8, 0u8, 0u8)
+    _meta_set(115u32, XH_ESSENCE, XH_FIF, 6u32, 0u8, 0u8, 1u8) /* k_compose_check */
+    _templ_set(115u32, XHT_IF, 0u8, 0u8, 0u8)
+    _meta_set(116u32, XH_ORIGIN, XH_FTHEN, 16u32, 13u8, 0u8, 1u8) /* witness_write_resolve_ok */
+    _templ_set(116u32, XHT_THEN, 0u8, 0u8, 0u8)
+    _meta_set(117u32, XH_ORIGIN, XH_FTHEN, 16u32, 13u8, 0u8, 1u8) /* witness_write_resolve_fail */
+    _templ_set(117u32, XHT_THEN, 0u8, 0u8, 0u8)
+    _meta_set(118u32, XH_MOTION, XH_K16, 4u32, 0u8, 0u8, 1u8) /* ctx_serialise */
+    _templ_set(118u32, XHT_LOOP, 0u8, 0u8, 0u8)
+    _meta_set(119u32, XH_MOTION, XH_FTHEN, 0u32, 0u8, 0u8, 1u8) /* ctx_digest_compute */
+    _templ_set(119u32, XHT_THEN, 118u8, 11u8, 0u8)
+
+    /* --- H121..H126: Hexad/Trit (6) --- */
+    _meta_set(120u32, XH_ESSENCE, XH_FIF, 6u32, 6u8, 0u8, 1u8) /* hexad_admit */
+    _templ_set(120u32, XHT_IF, 0u8, 0u8, 0u8)
+    _meta_set(121u32, XH_MOTION, XH_K05, 4u32, 6u8, 0u8, 1u8) /* hexad_compose_asym */
+    _templ_set(121u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(122u32, XH_MOTION, XH_K05, 4u32, 6u8, 0u8, 1u8) /* trit_not */
+    _templ_set(122u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(123u32, XH_MOTION, XH_K05, 4u32, 6u8, 0u8, 1u8) /* trit_and */
+    _templ_set(123u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(124u32, XH_MOTION, XH_K05, 4u32, 6u8, 0u8, 1u8) /* trit_or */
+    _templ_set(124u32, XHT_BASIS, 0u8, 0u8, 0u8)
+    _meta_set(125u32, XH_MOTION, XH_K05, 4u32, 6u8, 0u8, 1u8) /* trit_mul */
+    _templ_set(125u32, XHT_BASIS, 0u8, 0u8, 0u8)
+
+    /* --- H127..H138: Guard cells (12) — non-productive --- */
+    let mut gd_id : u32 = 126u32
+    while gd_id < 138u32 {
+        _meta_set(gd_id, XH_ORIGIN, XH_FCOMPOSE, 0u32, 0u8, 0u8, 0u8)
+        _templ_set(gd_id, XHT_GUARD, 0u8, 0u8, 0u8)
+        gd_id = gd_id + 1u32
+    }
+
+    /* --- H139..H144: Reserved (6) — non-productive --- */
+    let mut rs_id : u32 = 138u32
+    while rs_id < 144u32 {
+        _meta_set(rs_id, XH_FORM, XH_K01, 0u32, 0u8, 0u8, 0u8)
+        _templ_set(rs_id, XHT_GUARD, 0u8, 0u8, 0u8)
+        rs_id = rs_id + 1u32
+    }
+
+    XII_HORIZON_INIT_DONE = 1u8
+    return 0i32
+}
+
+/* Metadata accessors */
+
+fn xii_horizon_hexad(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0u8 }
+    return XII_HORIZON_META[id * XHR_META_BYTES_PER_PATTERN]
+}
+
+fn xii_horizon_primary_op(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0u8 }
+    return XII_HORIZON_META[(id * XHR_META_BYTES_PER_PATTERN) + 1u32]
+}
+
+fn xii_horizon_k_cost(id: u32) -> u32 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0u32 }
+    let off : u32 = (id * XHR_META_BYTES_PER_PATTERN) + 2u32
+    let b0 : u32 = XII_HORIZON_META[off] as u32
+    let b1 : u32 = XII_HORIZON_META[off + 1u32] as u32
+    let b2 : u32 = XII_HORIZON_META[off + 2u32] as u32
+    let b3 : u32 = XII_HORIZON_META[off + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn xii_horizon_cap_class(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0u8 }
+    return XII_HORIZON_META[(id * XHR_META_BYTES_PER_PATTERN) + 6u32]
+}
+
+fn xii_horizon_ct_kind(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0u8 }
+    return XII_HORIZON_META[(id * XHR_META_BYTES_PER_PATTERN) + 7u32] & 0x7Fu8
+}
+
+fn xii_horizon_is_productive(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0u8 }
+    let b : u8 = XII_HORIZON_META[(id * XHR_META_BYTES_PER_PATTERN) + 7u32]
+    if (b & 0x80u8) != 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn xii_horizon_template_kind(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 7u8 }
+    return XII_HORIZON_TEMPL[id * 4u32]
+}
+
+fn xii_horizon_template_child_a(id: u32) -> u8 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return 0xFFu8 }
+    return XII_HORIZON_TEMPL[(id * 4u32) + 1u32]
+}
+
+fn xii_horizon_count() -> u32 @export {
+    return XHR_TOTAL_PATTERNS
+}
+
+fn xii_horizon_productive_count() -> u32 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    let mut count : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < XHR_TOTAL_PATTERNS {
+        if xii_horizon_is_productive(i) == 1u8 { count = count + 1u32 }
+        i = i + 1u32
+    }
+    return count
+}
+
+/* ================================================================== */
+/* Phase XII-iota: real per-pattern term construction (S26.8 + S26.18) */
+/*                                                                    */
+/* xii_horizon_construct(id) returns the canonical TEMPLATE term for   */
+/* H(id+1): the exact S26.8 math_expr with every named subform         */
+/* resolved via the sealed S26.18 SHA-256 derivation, $variable        */
+/* operands left free (subform 0 -- the documented emit_gen seam),     */
+/* nested H-refs built recursively, literal loop counts exact and      */
+/* symbolic counts 0 (variable). Guard/reserved cells -> XHR_NULL_REF. */
+/* See DOCS/XII-HORIZON-CONSTRUCT.md (Phase 2 ADR).                     */
+/* ================================================================== */
+
+/* Name scratch + memo cache (anti-bloat: names ARE the sealed spec;   */
+/* each resolved once, deterministically).                             */
+var XHC_NM : [u8; 32]
+
+fn _xhc_r(pfx: u8, len: u32, bits: u32) -> u32 {
+    let np : *u8 = &XHC_NM as *u8
+    let v : u32 = xii_subforms_compute(pfx, np, len, bits)
+    return v
+}
+
+/* ---- ACT transition_id resolvers (17-bit) ---- */
+fn _a_col() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Cu8 let v:u32=_xhc_r(XHP_ACT,3u32,XHW_ACT) return v }
+fn _a_diag() -> u32 { XHC_NM[0u32]=0x44u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x47u8 let v:u32=_xhc_r(XHP_ACT,4u32,XHW_ACT) return v }
+fn _a_poly_mult() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x59u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x4Du8 XHC_NM[6u32]=0x55u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_aes_enc() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x53u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x4Eu8 XHC_NM[6u32]=0x43u8 let v:u32=_xhc_r(XHP_ACT,7u32,XHW_ACT) return v }
+fn _a_aes_dec() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x53u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x44u8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x43u8 let v:u32=_xhc_r(XHP_ACT,7u32,XHW_ACT) return v }
+fn _a_gf_mult() -> u32 { XHC_NM[0u32]=0x47u8 XHC_NM[1u32]=0x46u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x4Du8 XHC_NM[4u32]=0x55u8 XHC_NM[5u32]=0x4Cu8 XHC_NM[6u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,7u32,XHW_ACT) return v }
+fn _a_expand() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x58u8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x4Eu8 XHC_NM[5u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_ladder() -> u32 { XHC_NM[0u32]=0x4Cu8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x53u8 XHC_NM[8u32]=0x54u8 XHC_NM[9u32]=0x45u8 XHC_NM[10u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_sha256_rnd() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x48u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x32u8 XHC_NM[4u32]=0x35u8 XHC_NM[5u32]=0x36u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x4Eu8 XHC_NM[9u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_sha256_block() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x48u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x32u8 XHC_NM[4u32]=0x35u8 XHC_NM[5u32]=0x36u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x42u8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x4Bu8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_sha256_64() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x48u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x32u8 XHC_NM[4u32]=0x35u8 XHC_NM[5u32]=0x36u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x36u8 XHC_NM[8u32]=0x34u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x4Eu8 XHC_NM[12u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,13u32,XHW_ACT) return v }
+fn _a_sha512_rnd() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x48u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x35u8 XHC_NM[4u32]=0x31u8 XHC_NM[5u32]=0x32u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x4Eu8 XHC_NM[9u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_keccak_rnd() -> u32 { XHC_NM[0u32]=0x4Bu8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x43u8 XHC_NM[3u32]=0x43u8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x4Bu8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x4Eu8 XHC_NM[9u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_blake2s() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x4Cu8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x4Bu8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x32u8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x4Du8 XHC_NM[9u32]=0x49u8 XHC_NM[10u32]=0x58u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_ipad() -> u32 { XHC_NM[0u32]=0x49u8 XHC_NM[1u32]=0x50u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,4u32,XHW_ACT) return v }
+fn _a_crc32c() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x43u8 XHC_NM[3u32]=0x33u8 XHC_NM[4u32]=0x32u8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x36u8 XHC_NM[8u32]=0x34u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_murmur3() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x52u8 XHC_NM[3u32]=0x4Du8 XHC_NM[4u32]=0x55u8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x33u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x4Du8 XHC_NM[9u32]=0x49u8 XHC_NM[10u32]=0x58u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_add() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x44u8 XHC_NM[2u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,3u32,XHW_ACT) return v }
+fn _a_xor() -> u32 { XHC_NM[0u32]=0x58u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x52u8 let v:u32=_xhc_r(XHP_ACT,3u32,XHW_ACT) return v }
+fn _a_max_ct() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x58u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_min_ct() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x4Eu8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_popcnt() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x43u8 XHC_NM[4u32]=0x4Eu8 XHC_NM[5u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_popcnt_add() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x43u8 XHC_NM[4u32]=0x4Eu8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x41u8 XHC_NM[8u32]=0x44u8 XHC_NM[9u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_mul() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 let v:u32=_xhc_r(XHP_ACT,3u32,XHW_ACT) return v }
+fn _a_mul_recip() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x43u8 XHC_NM[8u32]=0x49u8 XHC_NM[9u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_shift_down() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x48u8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x44u8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x57u8 XHC_NM[9u32]=0x4Eu8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_shift_sub() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x48u8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x55u8 XHC_NM[8u32]=0x42u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_mul_mod_p() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x4Du8 XHC_NM[5u32]=0x4Fu8 XHC_NM[6u32]=0x44u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_sq_mod_p() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x51u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x4Du8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x44u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,8u32,XHW_ACT) return v }
+fn _a_mult_barrett() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x42u8 XHC_NM[6u32]=0x41u8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x52u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_mult_mont() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x4Du8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x4Eu8 XHC_NM[8u32]=0x54u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x52u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_sub_mod() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x42u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x52u8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x54u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x4Du8 XHC_NM[10u32]=0x4Fu8 XHC_NM[11u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,12u32,XHW_ACT) return v }
+fn _a_raise() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x53u8 XHC_NM[4u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,5u32,XHW_ACT) return v }
+fn _a_or_set() -> u32 { XHC_NM[0u32]=0x4Fu8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x53u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_and_clear() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x4Eu8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x4Cu8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x41u8 XHC_NM[8u32]=0x52u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_add_pair() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x44u8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x50u8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x49u8 XHC_NM[7u32]=0x52u8 let v:u32=_xhc_r(XHP_ACT,8u32,XHW_ACT) return v }
+fn _a_mul_twiddle() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x57u8 XHC_NM[6u32]=0x49u8 XHC_NM[7u32]=0x44u8 XHC_NM[8u32]=0x44u8 XHC_NM[9u32]=0x4Cu8 XHC_NM[10u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_xor_or() -> u32 { XHC_NM[0u32]=0x58u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x52u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_canon_xf() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x4Eu8 XHC_NM[3u32]=0x4Fu8 XHC_NM[4u32]=0x4Eu8 XHC_NM[5u32]=0x49u8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x41u8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x54u8 XHC_NM[11u32]=0x52u8 XHC_NM[12u32]=0x41u8 XHC_NM[13u32]=0x4Eu8 XHC_NM[14u32]=0x53u8 XHC_NM[15u32]=0x46u8 XHC_NM[16u32]=0x4Fu8 XHC_NM[17u32]=0x52u8 XHC_NM[18u32]=0x4Du8 let v:u32=_xhc_r(XHP_ACT,19u32,XHW_ACT) return v }
+fn _a_finalise() -> u32 { XHC_NM[0u32]=0x46u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x4Eu8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x4Cu8 XHC_NM[5u32]=0x49u8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x45u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x46u8 XHC_NM[10u32]=0x49u8 XHC_NM[11u32]=0x4Cu8 XHC_NM[12u32]=0x4Cu8 let v:u32=_xhc_r(XHP_ACT,13u32,XHW_ACT) return v }
+fn _a_tally() -> u32 { XHC_NM[0u32]=0x54u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x4Cu8 XHC_NM[4u32]=0x59u8 let v:u32=_xhc_r(XHP_ACT,5u32,XHW_ACT) return v }
+fn _a_reject() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x4Au8 XHC_NM[3u32]=0x45u8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_veto() -> u32 { XHC_NM[0u32]=0x56u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x4Fu8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x41u8 XHC_NM[7u32]=0x49u8 XHC_NM[8u32]=0x53u8 XHC_NM[9u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_emit_bin() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x42u8 XHC_NM[6u32]=0x49u8 XHC_NM[7u32]=0x4Eu8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_emit_un() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x55u8 XHC_NM[6u32]=0x4Eu8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x4Fu8 XHC_NM[9u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_emit_call32() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x41u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x45u8 XHC_NM[12u32]=0x4Cu8 XHC_NM[13u32]=0x33u8 XHC_NM[14u32]=0x32u8 let v:u32=_xhc_r(XHP_ACT,15u32,XHW_ACT) return v }
+fn _a_emit_callind() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x41u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x49u8 XHC_NM[11u32]=0x4Eu8 XHC_NM[12u32]=0x44u8 XHC_NM[13u32]=0x49u8 XHC_NM[14u32]=0x52u8 XHC_NM[15u32]=0x45u8 XHC_NM[16u32]=0x43u8 XHC_NM[17u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,18u32,XHW_ACT) return v }
+fn _a_emit_bypass() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x44u8 XHC_NM[6u32]=0x49u8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x43u8 XHC_NM[10u32]=0x54u8 XHC_NM[11u32]=0x5Fu8 XHC_NM[12u32]=0x42u8 XHC_NM[13u32]=0x59u8 XHC_NM[14u32]=0x50u8 XHC_NM[15u32]=0x41u8 XHC_NM[16u32]=0x53u8 XHC_NM[17u32]=0x53u8 let v:u32=_xhc_r(XHP_ACT,18u32,XHW_ACT) return v }
+fn _a_emit_thunk() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x48u8 XHC_NM[7u32]=0x55u8 XHC_NM[8u32]=0x4Eu8 XHC_NM[9u32]=0x4Bu8 XHC_NM[10u32]=0x5Fu8 XHC_NM[11u32]=0x42u8 XHC_NM[12u32]=0x59u8 XHC_NM[13u32]=0x54u8 XHC_NM[14u32]=0x45u8 XHC_NM[15u32]=0x53u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+fn _a_emit_callq() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x41u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x51u8 XHC_NM[10u32]=0x5Fu8 XHC_NM[11u32]=0x52u8 XHC_NM[12u32]=0x45u8 XHC_NM[13u32]=0x4Cu8 XHC_NM[14u32]=0x33u8 XHC_NM[15u32]=0x32u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+fn _a_emit_externtag() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x4Du8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x58u8 XHC_NM[7u32]=0x54u8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x52u8 XHC_NM[10u32]=0x4Eu8 XHC_NM[11u32]=0x5Fu8 XHC_NM[12u32]=0x54u8 XHC_NM[13u32]=0x41u8 XHC_NM[14u32]=0x47u8 let v:u32=_xhc_r(XHP_ACT,15u32,XHW_ACT) return v }
+fn _a_apply_rule() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x50u8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x4Cu8 XHC_NM[4u32]=0x59u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x4Eu8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x55u8 XHC_NM[12u32]=0x4Cu8 XHC_NM[13u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,14u32,XHW_ACT) return v }
+fn _a_copy_cell() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x59u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x42u8 XHC_NM[11u32]=0x59u8 XHC_NM[12u32]=0x54u8 XHC_NM[13u32]=0x45u8 XHC_NM[14u32]=0x53u8 let v:u32=_xhc_r(XHP_ACT,15u32,XHW_ACT) return v }
+fn _a_write_ctw() -> u32 { XHC_NM[0u32]=0x57u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x54u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x57u8 XHC_NM[10u32]=0x49u8 XHC_NM[11u32]=0x54u8 XHC_NM[12u32]=0x4Eu8 XHC_NM[13u32]=0x45u8 XHC_NM[14u32]=0x53u8 XHC_NM[15u32]=0x53u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+fn _a_cmp_score() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Du8 XHC_NM[3u32]=0x50u8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x53u8 XHC_NM[9u32]=0x43u8 XHC_NM[10u32]=0x4Fu8 XHC_NM[11u32]=0x52u8 XHC_NM[12u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,13u32,XHW_ACT) return v }
+fn _a_bind_slot() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x4Eu8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x53u8 XHC_NM[6u32]=0x4Cu8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_call_ind() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x4Cu8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x49u8 XHC_NM[6u32]=0x4Eu8 XHC_NM[7u32]=0x44u8 XHC_NM[8u32]=0x49u8 XHC_NM[9u32]=0x52u8 XHC_NM[10u32]=0x45u8 XHC_NM[11u32]=0x43u8 XHC_NM[12u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,13u32,XHW_ACT) return v }
+fn _a_k_underflow() -> u32 { XHC_NM[0u32]=0x4Bu8 XHC_NM[1u32]=0x5Fu8 XHC_NM[2u32]=0x55u8 XHC_NM[3u32]=0x4Eu8 XHC_NM[4u32]=0x44u8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x46u8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x57u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_return() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x55u8 XHC_NM[4u32]=0x52u8 XHC_NM[5u32]=0x4Eu8 let v:u32=_xhc_r(XHP_ACT,6u32,XHW_ACT) return v }
+fn _a_advance64() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x44u8 XHC_NM[2u32]=0x56u8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x4Eu8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x36u8 XHC_NM[9u32]=0x34u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_dispatch_fp() -> u32 { XHC_NM[0u32]=0x44u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x53u8 XHC_NM[3u32]=0x50u8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x48u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x46u8 XHC_NM[10u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_bswap64() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x53u8 XHC_NM[2u32]=0x57u8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x50u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x36u8 XHC_NM[7u32]=0x34u8 let v:u32=_xhc_r(XHP_ACT,8u32,XHW_ACT) return v }
+fn _a_brev64() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x45u8 XHC_NM[3u32]=0x56u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x36u8 XHC_NM[6u32]=0x34u8 let v:u32=_xhc_r(XHP_ACT,7u32,XHW_ACT) return v }
+fn _a_serialise_le() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x52u8 XHC_NM[3u32]=0x49u8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x4Cu8 XHC_NM[6u32]=0x49u8 XHC_NM[7u32]=0x53u8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x4Cu8 XHC_NM[11u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,12u32,XHW_ACT) return v }
+fn _a_index_write() -> u32 { XHC_NM[0u32]=0x49u8 XHC_NM[1u32]=0x4Eu8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x45u8 XHC_NM[4u32]=0x58u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x57u8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x49u8 XHC_NM[9u32]=0x54u8 XHC_NM[10u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_zero_write() -> u32 { XHC_NM[0u32]=0x5Au8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x52u8 XHC_NM[3u32]=0x4Fu8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x57u8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x49u8 XHC_NM[8u32]=0x54u8 XHC_NM[9u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_value_write() -> u32 { XHC_NM[0u32]=0x56u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x55u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x57u8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x49u8 XHC_NM[9u32]=0x54u8 XHC_NM[10u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,11u32,XHW_ACT) return v }
+fn _a_write() -> u32 { XHC_NM[0u32]=0x57u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,5u32,XHW_ACT) return v }
+fn _a_read() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,4u32,XHW_ACT) return v }
+fn _a_bit_check() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x48u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x43u8 XHC_NM[8u32]=0x4Bu8 let v:u32=_xhc_r(XHP_ACT,9u32,XHW_ACT) return v }
+fn _a_compute() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Du8 XHC_NM[3u32]=0x50u8 XHC_NM[4u32]=0x55u8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,7u32,XHW_ACT) return v }
+fn _a_asym_compose() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x53u8 XHC_NM[2u32]=0x59u8 XHC_NM[3u32]=0x4Du8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x4Du8 XHC_NM[8u32]=0x50u8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x53u8 XHC_NM[11u32]=0x45u8 XHC_NM[12u32]=0x5Fu8 XHC_NM[13u32]=0x54u8 XHC_NM[14u32]=0x41u8 XHC_NM[15u32]=0x42u8 XHC_NM[16u32]=0x4Cu8 XHC_NM[17u32]=0x45u8 XHC_NM[18u32]=0x5Fu8 XHC_NM[19u32]=0x4Cu8 XHC_NM[20u32]=0x4Fu8 XHC_NM[21u32]=0x4Fu8 XHC_NM[22u32]=0x4Bu8 XHC_NM[23u32]=0x55u8 XHC_NM[24u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,25u32,XHW_ACT) return v }
+fn _a_not_tbl() -> u32 { XHC_NM[0u32]=0x4Eu8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x42u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x4Cu8 XHC_NM[11u32]=0x4Fu8 XHC_NM[12u32]=0x4Fu8 XHC_NM[13u32]=0x4Bu8 XHC_NM[14u32]=0x55u8 XHC_NM[15u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+fn _a_and_tbl() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x4Eu8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x42u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x4Cu8 XHC_NM[11u32]=0x4Fu8 XHC_NM[12u32]=0x4Fu8 XHC_NM[13u32]=0x4Bu8 XHC_NM[14u32]=0x55u8 XHC_NM[15u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+fn _a_or_tbl() -> u32 { XHC_NM[0u32]=0x4Fu8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x42u8 XHC_NM[6u32]=0x4Cu8 XHC_NM[7u32]=0x45u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x4Cu8 XHC_NM[10u32]=0x4Fu8 XHC_NM[11u32]=0x4Fu8 XHC_NM[12u32]=0x4Bu8 XHC_NM[13u32]=0x55u8 XHC_NM[14u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,15u32,XHW_ACT) return v }
+fn _a_mul_tbl() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x55u8 XHC_NM[2u32]=0x4Cu8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x42u8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x4Cu8 XHC_NM[11u32]=0x4Fu8 XHC_NM[12u32]=0x4Fu8 XHC_NM[13u32]=0x4Bu8 XHC_NM[14u32]=0x55u8 XHC_NM[15u32]=0x50u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+
+fn _a_raise_cap_fault() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x53u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x41u8 XHC_NM[8u32]=0x50u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x46u8 XHC_NM[11u32]=0x41u8 XHC_NM[12u32]=0x55u8 XHC_NM[13u32]=0x4Cu8 XHC_NM[14u32]=0x54u8 let v:u32=_xhc_r(XHP_ACT,15u32,XHW_ACT) return v }
+fn _a_verify_launch() -> u32 { XHC_NM[0u32]=0x56u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x52u8 XHC_NM[3u32]=0x49u8 XHC_NM[4u32]=0x46u8 XHC_NM[5u32]=0x59u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x4Cu8 XHC_NM[8u32]=0x41u8 XHC_NM[9u32]=0x55u8 XHC_NM[10u32]=0x4Eu8 XHC_NM[11u32]=0x43u8 XHC_NM[12u32]=0x48u8 let v:u32=_xhc_r(XHP_ACT,13u32,XHW_ACT) return v }
+fn _a_reach_violation() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x43u8 XHC_NM[4u32]=0x48u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x56u8 XHC_NM[7u32]=0x49u8 XHC_NM[8u32]=0x4Fu8 XHC_NM[9u32]=0x4Cu8 XHC_NM[10u32]=0x41u8 XHC_NM[11u32]=0x54u8 XHC_NM[12u32]=0x49u8 XHC_NM[13u32]=0x4Fu8 XHC_NM[14u32]=0x4Eu8 let v:u32=_xhc_r(XHP_ACT,15u32,XHW_ACT) return v }
+fn _a_new_record() -> u32 { XHC_NM[0u32]=0x4Eu8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x57u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x52u8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x52u8 XHC_NM[9u32]=0x44u8 let v:u32=_xhc_r(XHP_ACT,10u32,XHW_ACT) return v }
+fn _a_aligned16w() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x4Cu8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x47u8 XHC_NM[4u32]=0x4Eu8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x44u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x31u8 XHC_NM[9u32]=0x36u8 XHC_NM[10u32]=0x5Fu8 XHC_NM[11u32]=0x57u8 XHC_NM[12u32]=0x52u8 XHC_NM[13u32]=0x49u8 XHC_NM[14u32]=0x54u8 XHC_NM[15u32]=0x45u8 let v:u32=_xhc_r(XHP_ACT,16u32,XHW_ACT) return v }
+fn _q_bit_check() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x48u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x43u8 XHC_NM[8u32]=0x4Bu8 let v:u32=_xhc_r(XHP_QUERY,9u32,XHW_QUERY) return v }
+fn _f_broadcast() -> u32 { XHC_NM[0u32]=0x42u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x4Fu8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x44u8 XHC_NM[5u32]=0x43u8 XHC_NM[6u32]=0x41u8 XHC_NM[7u32]=0x53u8 XHC_NM[8u32]=0x54u8 XHC_NM[9u32]=0x5Fu8 XHC_NM[10u32]=0x46u8 XHC_NM[11u32]=0x4Fu8 XHC_NM[12u32]=0x52u8 XHC_NM[13u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,14u32,XHW_FORM) return v }
+fn _s_dom_resolve_ok() -> u32 { XHC_NM[0u32]=0x44u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Du8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x52u8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x56u8 XHC_NM[10u32]=0x45u8 XHC_NM[11u32]=0x5Fu8 XHC_NM[12u32]=0x4Fu8 XHC_NM[13u32]=0x4Bu8 let v:u32=_xhc_r(XHP_SEAL,14u32,XHW_SEAL) return v }
+fn _s_dom_resolve_fail() -> u32 { XHC_NM[0u32]=0x44u8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Du8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x52u8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x4Cu8 XHC_NM[9u32]=0x56u8 XHC_NM[10u32]=0x45u8 XHC_NM[11u32]=0x5Fu8 XHC_NM[12u32]=0x46u8 XHC_NM[13u32]=0x41u8 XHC_NM[14u32]=0x49u8 XHC_NM[15u32]=0x4Cu8 let v:u32=_xhc_r(XHP_SEAL,16u32,XHW_SEAL) return v }
+
+/* ---- QUERY pattern_id resolvers (24-bit) ---- */
+fn _q_read_u64() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x55u8 XHC_NM[6u32]=0x36u8 XHC_NM[7u32]=0x34u8 let v:u32=_xhc_r(XHP_QUERY,8u32,XHW_QUERY) return v }
+fn _q_read_u32() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x55u8 XHC_NM[6u32]=0x33u8 XHC_NM[7u32]=0x32u8 let v:u32=_xhc_r(XHP_QUERY,8u32,XHW_QUERY) return v }
+fn _q_read() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 let v:u32=_xhc_r(XHP_QUERY,4u32,XHW_QUERY) return v }
+fn _q_read_direct() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x44u8 XHC_NM[6u32]=0x49u8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x45u8 XHC_NM[9u32]=0x43u8 XHC_NM[10u32]=0x54u8 let v:u32=_xhc_r(XHP_QUERY,11u32,XHW_QUERY) return v }
+fn _q_read_aligned() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x4Cu8 XHC_NM[7u32]=0x4Eu8 XHC_NM[8u32]=0x31u8 XHC_NM[9u32]=0x36u8 let v:u32=_xhc_r(XHP_QUERY,10u32,XHW_QUERY) return v }
+fn _q_read_record() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x43u8 let v:u32=_xhc_r(XHP_QUERY,8u32,XHW_QUERY) return v }
+fn _q_read_vote() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x56u8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x54u8 let v:u32=_xhc_r(XHP_QUERY,8u32,XHW_QUERY) return v }
+fn _q_mphf() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x50u8 XHC_NM[2u32]=0x48u8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x4Cu8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x4Bu8 XHC_NM[9u32]=0x55u8 XHC_NM[10u32]=0x50u8 let v:u32=_xhc_r(XHP_QUERY,11u32,XHW_QUERY) return v }
+fn _q_index() -> u32 { XHC_NM[0u32]=0x49u8 XHC_NM[1u32]=0x4Eu8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x45u8 XHC_NM[4u32]=0x58u8 let v:u32=_xhc_r(XHP_QUERY,5u32,XHW_QUERY) return v }
+fn _q_dispatch() -> u32 { XHC_NM[0u32]=0x44u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x53u8 XHC_NM[3u32]=0x50u8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x43u8 XHC_NM[7u32]=0x48u8 let v:u32=_xhc_r(XHP_QUERY,8u32,XHW_QUERY) return v }
+fn _q_prov_read() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x4Fu8 XHC_NM[3u32]=0x56u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x41u8 XHC_NM[8u32]=0x44u8 let v:u32=_xhc_r(XHP_QUERY,9u32,XHW_QUERY) return v }
+
+/* ---- SEAL snapshot_id resolvers (24-bit) ---- */
+fn _s_witness() -> u32 { XHC_NM[0u32]=0x57u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x4Eu8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x53u8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x46u8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,12u32,XHW_SEAL) return v }
+fn _s_cap() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x46u8 XHC_NM[5u32]=0x4Fu8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,8u32,XHW_SEAL) return v }
+fn _s_scoped() -> u32 { XHC_NM[0u32]=0x53u8 XHC_NM[1u32]=0x43u8 XHC_NM[2u32]=0x4Fu8 XHC_NM[3u32]=0x50u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x44u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x46u8 XHC_NM[8u32]=0x4Fu8 XHC_NM[9u32]=0x52u8 XHC_NM[10u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,11u32,XHW_SEAL) return v }
+fn _s_revoked() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x56u8 XHC_NM[3u32]=0x4Fu8 XHC_NM[4u32]=0x4Bu8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x44u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x46u8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,12u32,XHW_SEAL) return v }
+fn _s_aead() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x44u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x46u8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,9u32,XHW_SEAL) return v }
+fn _s_hkdf_prk() -> u32 { XHC_NM[0u32]=0x48u8 XHC_NM[1u32]=0x4Bu8 XHC_NM[2u32]=0x44u8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x50u8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x4Bu8 let v:u32=_xhc_r(XHP_SEAL,8u32,XHW_SEAL) return v }
+fn _s_prov() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x4Fu8 XHC_NM[3u32]=0x56u8 XHC_NM[4u32]=0x5Fu8 XHC_NM[5u32]=0x46u8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,9u32,XHW_SEAL) return v }
+fn _s_xform_rec() -> u32 { XHC_NM[0u32]=0x58u8 XHC_NM[1u32]=0x46u8 XHC_NM[2u32]=0x4Fu8 XHC_NM[3u32]=0x52u8 XHC_NM[4u32]=0x4Du8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x45u8 XHC_NM[8u32]=0x43u8 let v:u32=_xhc_r(XHP_SEAL,9u32,XHW_SEAL) return v }
+fn _s_iat() -> u32 { XHC_NM[0u32]=0x49u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x46u8 XHC_NM[5u32]=0x4Fu8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,8u32,XHW_SEAL) return v }
+fn _s_ct_witness() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x54u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x57u8 XHC_NM[4u32]=0x49u8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x4Eu8 XHC_NM[7u32]=0x45u8 XHC_NM[8u32]=0x53u8 XHC_NM[9u32]=0x53u8 let v:u32=_xhc_r(XHP_SEAL,10u32,XHW_SEAL) return v }
+fn _s_admit() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x44u8 XHC_NM[2u32]=0x4Du8 XHC_NM[3u32]=0x49u8 XHC_NM[4u32]=0x54u8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x46u8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x52u8 XHC_NM[9u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,10u32,XHW_SEAL) return v }
+fn _s_catalyst() -> u32 { XHC_NM[0u32]=0x43u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x4Cu8 XHC_NM[5u32]=0x59u8 XHC_NM[6u32]=0x53u8 XHC_NM[7u32]=0x54u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x46u8 XHC_NM[10u32]=0x4Fu8 XHC_NM[11u32]=0x52u8 XHC_NM[12u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,13u32,XHW_SEAL) return v }
+fn _s_r1() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x31u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,7u32,XHW_SEAL) return v }
+fn _s_initial() -> u32 { XHC_NM[0u32]=0x49u8 XHC_NM[1u32]=0x4Eu8 XHC_NM[2u32]=0x49u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x49u8 XHC_NM[5u32]=0x41u8 XHC_NM[6u32]=0x4Cu8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x46u8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,12u32,XHW_SEAL) return v }
+fn _s_final() -> u32 { XHC_NM[0u32]=0x46u8 XHC_NM[1u32]=0x49u8 XHC_NM[2u32]=0x4Eu8 XHC_NM[3u32]=0x41u8 XHC_NM[4u32]=0x4Cu8 XHC_NM[5u32]=0x5Fu8 XHC_NM[6u32]=0x46u8 XHC_NM[7u32]=0x4Fu8 XHC_NM[8u32]=0x52u8 XHC_NM[9u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,10u32,XHW_SEAL) return v }
+fn _s_m_audit() -> u32 { XHC_NM[0u32]=0x4Du8 XHC_NM[1u32]=0x5Fu8 XHC_NM[2u32]=0x41u8 XHC_NM[3u32]=0x55u8 XHC_NM[4u32]=0x44u8 XHC_NM[5u32]=0x49u8 XHC_NM[6u32]=0x54u8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x46u8 XHC_NM[9u32]=0x4Fu8 XHC_NM[10u32]=0x52u8 XHC_NM[11u32]=0x4Du8 let v:u32=_xhc_r(XHP_SEAL,12u32,XHW_SEAL) return v }
+fn _s_pre_relaunch() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x52u8 XHC_NM[2u32]=0x45u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x52u8 XHC_NM[5u32]=0x45u8 XHC_NM[6u32]=0x4Cu8 XHC_NM[7u32]=0x41u8 XHC_NM[8u32]=0x55u8 XHC_NM[9u32]=0x4Eu8 XHC_NM[10u32]=0x43u8 XHC_NM[11u32]=0x48u8 let v:u32=_xhc_r(XHP_SEAL,12u32,XHW_SEAL) return v }
+
+/* ---- FORM form_id resolvers (18-bit) ---- */
+fn _f_le() -> u32 { XHC_NM[0u32]=0x4Cu8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,7u32,XHW_FORM) return v }
+fn _f_ge() -> u32 { XHC_NM[0u32]=0x47u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,7u32,XHW_FORM) return v }
+fn _f_eq() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x51u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,7u32,XHW_FORM) return v }
+fn _f_lt() -> u32 { XHC_NM[0u32]=0x4Cu8 XHC_NM[1u32]=0x54u8 XHC_NM[2u32]=0x5Fu8 XHC_NM[3u32]=0x46u8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,7u32,XHW_FORM) return v }
+fn _f_nonzero() -> u32 { XHC_NM[0u32]=0x4Eu8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x4Eu8 XHC_NM[3u32]=0x5Au8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Fu8 let v:u32=_xhc_r(XHP_FORM,7u32,XHW_FORM) return v }
+fn _f_overflow() -> u32 { XHC_NM[0u32]=0x4Fu8 XHC_NM[1u32]=0x56u8 XHC_NM[2u32]=0x45u8 XHC_NM[3u32]=0x52u8 XHC_NM[4u32]=0x46u8 XHC_NM[5u32]=0x4Cu8 XHC_NM[6u32]=0x4Fu8 XHC_NM[7u32]=0x57u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x46u8 XHC_NM[10u32]=0x4Fu8 XHC_NM[11u32]=0x52u8 XHC_NM[12u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,13u32,XHW_FORM) return v }
+fn _f_not_all_ones() -> u32 { XHC_NM[0u32]=0x4Eu8 XHC_NM[1u32]=0x4Fu8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x41u8 XHC_NM[5u32]=0x4Cu8 XHC_NM[6u32]=0x4Cu8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x4Fu8 XHC_NM[9u32]=0x4Eu8 XHC_NM[10u32]=0x45u8 XHC_NM[11u32]=0x53u8 let v:u32=_xhc_r(XHP_FORM,12u32,XHW_FORM) return v }
+fn _f_kdf() -> u32 { XHC_NM[0u32]=0x4Bu8 XHC_NM[1u32]=0x44u8 XHC_NM[2u32]=0x46u8 XHC_NM[3u32]=0x5Fu8 XHC_NM[4u32]=0x46u8 XHC_NM[5u32]=0x4Fu8 XHC_NM[6u32]=0x52u8 XHC_NM[7u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,8u32,XHW_FORM) return v }
+fn _f_anchor_inv() -> u32 { XHC_NM[0u32]=0x41u8 XHC_NM[1u32]=0x4Eu8 XHC_NM[2u32]=0x43u8 XHC_NM[3u32]=0x48u8 XHC_NM[4u32]=0x4Fu8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x5Fu8 XHC_NM[7u32]=0x49u8 XHC_NM[8u32]=0x4Eu8 XHC_NM[9u32]=0x56u8 let v:u32=_xhc_r(XHP_FORM,10u32,XHW_FORM) return v }
+fn _f_expected_cap() -> u32 { XHC_NM[0u32]=0x45u8 XHC_NM[1u32]=0x58u8 XHC_NM[2u32]=0x50u8 XHC_NM[3u32]=0x45u8 XHC_NM[4u32]=0x43u8 XHC_NM[5u32]=0x54u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x44u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x43u8 XHC_NM[10u32]=0x41u8 XHC_NM[11u32]=0x50u8 let v:u32=_xhc_r(XHP_FORM,12u32,XHW_FORM) return v }
+fn _f_pat_pred() -> u32 { XHC_NM[0u32]=0x50u8 XHC_NM[1u32]=0x41u8 XHC_NM[2u32]=0x54u8 XHC_NM[3u32]=0x54u8 XHC_NM[4u32]=0x45u8 XHC_NM[5u32]=0x52u8 XHC_NM[6u32]=0x4Eu8 XHC_NM[7u32]=0x5Fu8 XHC_NM[8u32]=0x50u8 XHC_NM[9u32]=0x52u8 XHC_NM[10u32]=0x45u8 XHC_NM[11u32]=0x44u8 XHC_NM[12u32]=0x49u8 XHC_NM[13u32]=0x43u8 XHC_NM[14u32]=0x41u8 XHC_NM[15u32]=0x54u8 XHC_NM[16u32]=0x45u8 XHC_NM[17u32]=0x5Fu8 XHC_NM[18u32]=0x46u8 XHC_NM[19u32]=0x4Fu8 XHC_NM[20u32]=0x52u8 XHC_NM[21u32]=0x4Du8 let v:u32=_xhc_r(XHP_FORM,22u32,XHW_FORM) return v }
+fn _f_resolver_ident() -> u32 { XHC_NM[0u32]=0x52u8 XHC_NM[1u32]=0x45u8 XHC_NM[2u32]=0x53u8 XHC_NM[3u32]=0x4Fu8 XHC_NM[4u32]=0x4Cu8 XHC_NM[5u32]=0x56u8 XHC_NM[6u32]=0x45u8 XHC_NM[7u32]=0x52u8 XHC_NM[8u32]=0x5Fu8 XHC_NM[9u32]=0x49u8 XHC_NM[10u32]=0x44u8 XHC_NM[11u32]=0x45u8 XHC_NM[12u32]=0x4Eu8 XHC_NM[13u32]=0x54u8 let v:u32=_xhc_r(XHP_FORM,14u32,XHW_FORM) return v }
+
+/* ---- helpers: kinds, null, lift ---- */
+fn _hb(k: u8, s: u32) -> u32 { let t:u32=xii_term_make_basis(k,s) return t }
+fn _hf(k: u8, a: u32, b: u32) -> u32 { let t:u32=xii_term_make_fusion2(k,a,b) return t }
+fn _hnull() -> u32 { let t:u32=xii_term_make_basis(XHK_K06,XHC_NULL_GROUND) return t }
+fn _hlift(fr: u32, to: u32) -> u32 { let s:u32=fr|(to<<4u32) let t:u32=xii_term_make_basis(XHK_K17,s) return t }
+fn _hfree(k: u8) -> u32 { let t:u32=xii_term_make_basis(k,0u32) return t }
+
+/* Per-pattern builders. id is 0-based (id 0 == H001). Nested H-refs use
+ * recursion via _hc(ref0) where ref0 is the 0-based id. depth guards
+ * runaway (spec is a DAG; refs point to lower ids). */
+fn _hc(id: u32, depth: u32) -> u32 {
+    if depth > XHC_MAX_DEPTH { return XHR_NULL_REF }
+    let d1 : u32 = depth + 1u32
+    /* H001 ed25519_sign: THEN(K04_MEAN, COMPOSE(K07_SEAL, K08_PROVE)) */
+    if id == 0u32 { let m:u32=_hfree(XHK_K04) let sl:u32=_hfree(XHK_K07) let pr:u32=_hfree(XHK_K08) let c:u32=_hf(XHK_FCOMPOSE,sl,pr) let r:u32=_hf(XHK_FTHEN,m,c) return r }
+    if id == 1u32 { let m:u32=_hfree(XHK_K04) let pr:u32=_hfree(XHK_K08) let r:u32=_hf(XHK_FTHEN,m,pr) return r }
+    if id == 2u32 { let cl:u32=_hb(XHK_K05,_a_col()) let dg:u32=_hb(XHK_K05,_a_diag()) let bd:u32=_hf(XHK_FCOMPOSE,cl,dg) let r:u32=xii_term_make_loop(bd,10u64) return r }
+    if id == 3u32 { let cl:u32=_hb(XHK_K05,_a_col()) let dg:u32=_hb(XHK_K05,_a_diag()) let r:u32=_hf(XHK_FCOMPOSE,cl,dg) return r }
+    if id == 4u32 { let m:u32=_hfree(XHK_K04) let ac:u32=_hb(XHK_K05,_a_poly_mult()) let r:u32=_hf(XHK_FTHEN,m,ac) return r }
+    if id == 5u32 { let bd:u32=_hc(4u32,d1) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 6u32 { let en:u32=_hb(XHK_K05,_a_aes_enc()) let gf:u32=_hb(XHK_K05,_a_gf_mult()) let r:u32=_hf(XHK_FCOMPOSE,en,gf) return r }
+    if id == 7u32 { let gf:u32=_hb(XHK_K05,_a_gf_mult()) let de:u32=_hb(XHK_K05,_a_aes_dec()) let r:u32=_hf(XHK_FTHEN,gf,de) return r }
+    if id == 8u32 { let ex:u32=_hb(XHK_K05,_a_expand()) let r:u32=xii_term_make_loop(ex,14u64) return r }
+    if id == 9u32 { let ld:u32=_hb(XHK_K05,_a_ladder()) let r:u32=xii_term_make_loop(ld,255u64) return r }
+    if id == 10u32 { let h10:u32=_hc(9u32,d1) let m:u32=_hb(XHK_K04,_f_kdf()) let r:u32=_hf(XHK_FTHEN,h10,m) return r }
+    if id == 11u32 { let rn:u32=_hb(XHK_K05,_a_sha256_rnd()) let r:u32=xii_term_make_loop(rn,0u64) return r }
+    if id == 12u32 { let r:u32=_hb(XHK_K05,_a_sha256_64()) return r }
+    if id == 13u32 { let rn:u32=_hb(XHK_K05,_a_sha512_rnd()) let r:u32=xii_term_make_loop(rn,0u64) return r }
+    if id == 14u32 { let rn:u32=_hb(XHK_K05,_a_keccak_rnd()) let r:u32=xii_term_make_loop(rn,24u64) return r }
+    if id == 15u32 { let h15:u32=_hc(14u32,d1) let r:u32=xii_term_make_loop(h15,0u64) return r }
+    if id == 16u32 { let r:u32=_hb(XHK_K05,_a_blake2s()) return r }
+    if id == 17u32 { let h12a:u32=_hc(11u32,d1) let ip:u32=_hb(XHK_K05,_a_ipad()) let inr:u32=_hf(XHK_FTHEN,h12a,ip) let h12b:u32=_hc(11u32,d1) let r:u32=_hf(XHK_FTHEN,inr,h12b) return r }
+    if id == 18u32 { let h18:u32=_hc(17u32,d1) let sl:u32=_hb(XHK_K07,_s_hkdf_prk()) let r:u32=_hf(XHK_FTHEN,h18,sl) return r }
+    if id == 19u32 { let m:u32=_hfree(XHK_K04) let h18:u32=_hc(17u32,d1) let r:u32=_hf(XHK_FTHEN,m,h18) return r }
+    if id == 20u32 { let h18:u32=_hc(17u32,d1) let r:u32=xii_term_make_loop(h18,0u64) return r }
+    if id == 21u32 { let r:u32=_hb(XHK_K05,_a_crc32c()) return r }
+    if id == 22u32 { let r:u32=_hb(XHK_K05,_a_murmur3()) return r }
+    if id == 23u32 { let h3:u32=_hc(2u32,d1) let h6:u32=_hc(5u32,d1) let sl:u32=_hb(XHK_K07,_s_aead()) let inr:u32=_hf(XHK_FTHEN,h6,sl) let r:u32=_hf(XHK_FTHEN,h3,inr) return r }
+    /* H025..H029: LOOP(COMPOSE(K09_QUERY(READ_*), K05_ACT(op)), $n) */
+    if id == 24u32 { let q:u32=_hb(XHK_K09,_q_read_u64()) let ac:u32=_hb(XHK_K05,_a_add()) let bd:u32=_hf(XHK_FCOMPOSE,q,ac) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 25u32 { let q:u32=_hb(XHK_K09,_q_read_u64()) let ac:u32=_hb(XHK_K05,_a_xor()) let bd:u32=_hf(XHK_FCOMPOSE,q,ac) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 26u32 { let q:u32=_hb(XHK_K09,_q_read_u32()) let ac:u32=_hb(XHK_K05,_a_max_ct()) let bd:u32=_hf(XHK_FCOMPOSE,q,ac) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 27u32 { let q:u32=_hb(XHK_K09,_q_read_u32()) let ac:u32=_hb(XHK_K05,_a_min_ct()) let bd:u32=_hf(XHK_FCOMPOSE,q,ac) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 28u32 { let q:u32=_hb(XHK_K09,_q_read_u64()) let ac:u32=_hb(XHK_K05,_a_popcnt()) let bd:u32=_hf(XHK_FCOMPOSE,q,ac) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 29u32 { let qa:u32=_hfree(XHK_K09) let qb:u32=_hfree(XHK_K09) let qc:u32=_hf(XHK_FCOMPOSE,qa,qb) let mu:u32=_hb(XHK_K05,_a_mul()) let ad:u32=_hb(XHK_K05,_a_add()) let mc:u32=_hf(XHK_FCOMPOSE,mu,ad) let bd:u32=_hf(XHK_FCOMPOSE,qc,mc) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 30u32 { let h30:u32=_hc(29u32,d1) let in1:u32=xii_term_make_loop(h30,0u64) let r:u32=xii_term_make_loop(in1,0u64) return r }
+    if id == 31u32 { let h30:u32=_hc(29u32,d1) let r:u32=xii_term_make_loop(h30,0u64) return r }
+    if id == 32u32 { let ap:u32=_hb(XHK_K05,_a_add_pair()) let tw:u32=_hb(XHK_K05,_a_mul_twiddle()) let r:u32=_hf(XHK_FCOMPOSE,ap,tw) return r }
+    if id == 33u32 { let h33:u32=_hc(32u32,d1) let r:u32=xii_term_make_loop(h33,0u64) return r }
+    if id == 34u32 { let mr:u32=_hb(XHK_K05,_a_mul_recip()) let sd:u32=_hb(XHK_K05,_a_shift_down()) let r:u32=_hf(XHK_FCOMPOSE,mr,sd) return r }
+    if id == 35u32 { let ss:u32=_hb(XHK_K05,_a_shift_sub()) let r:u32=xii_term_make_loop(ss,64u64) return r }
+    if id == 36u32 { let mm:u32=_hb(XHK_K05,_a_mul_mod_p()) let sq:u32=_hb(XHK_K05,_a_sq_mod_p()) let bd:u32=_hf(XHK_FCOMPOSE,mm,sq) let r:u32=xii_term_make_loop(bd,256u64) return r }
+    if id == 37u32 { let mb:u32=_hb(XHK_K05,_a_mult_barrett()) let sm:u32=_hb(XHK_K05,_a_sub_mod()) let r:u32=_hf(XHK_FCOMPOSE,mb,sm) return r }
+    if id == 38u32 { let mn:u32=_hb(XHK_K05,_a_mult_mont()) let sm:u32=_hb(XHK_K05,_a_sub_mod()) let r:u32=_hf(XHK_FCOMPOSE,mn,sm) return r }
+    if id == 39u32 { let m:u32=_hb(XHK_K04,_f_le()) let nl:u32=_hnull() let er:u32=_hb(XHK_K05,_a_raise()) let r:u32=xii_term_make_if(m,nl,er) return r }
+    if id == 40u32 { let m:u32=_hb(XHK_K04,_f_ge()) let bd:u32=_hfree(XHK_K02) let nl:u32=_hnull() let r:u32=xii_term_make_if(m,bd,nl) return r }
+    if id == 41u32 { let ac:u32=_hb(XHK_K05,_a_add()) let mo:u32=_hb(XHK_K04,_f_overflow()) let bd:u32=_hfree(XHK_K02) let nl:u32=_hnull() let iff:u32=xii_term_make_if(mo,bd,nl) let r:u32=_hf(XHK_FTHEN,ac,iff) return r }
+    /* H043..H060 memory-bound */
+    if id == 42u32 { let q:u32=_hb(XHK_K09,_q_read()) let bn:u32=_hb(XHK_K02,_a_write()) let bd:u32=_hf(XHK_FCOMPOSE,q,bn) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 43u32 { let cv:u32=_hfree(XHK_K03) let nl:u32=_hnull() let r:u32=_hf(XHK_FTHEN,cv,nl) return r }
+    if id == 44u32 { let qa:u32=_hb(XHK_K09,_q_read()) let qb:u32=_hb(XHK_K09,_q_read()) let xo:u32=_hb(XHK_K05,_a_xor_or()) let inr:u32=_hf(XHK_FCOMPOSE,qb,xo) let bd:u32=_hf(XHK_FCOMPOSE,qa,inr) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 45u32 { let bn:u32=_hb(XHK_K02,_a_zero_write()) let r:u32=xii_term_make_loop(bn,0u64) return r }
+    if id == 46u32 { let bn:u32=_hb(XHK_K02,_a_value_write()) let r:u32=xii_term_make_loop(bn,0u64) return r }
+    if id == 47u32 { let mn:u32=_hb(XHK_K04,_f_nonzero()) let ir:u32=_hb(XHK_K05,_a_return()) let nl:u32=_hnull() let iff:u32=xii_term_make_if(mn,ir,nl) let r:u32=xii_term_make_loop(iff,0u64) return r }
+    if id == 48u32 { let q:u32=_hb(XHK_K09,_q_index()) let bn:u32=_hb(XHK_K02,_a_write()) let bd:u32=_hf(XHK_FCOMPOSE,q,bn) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 49u32 { let q:u32=_hfree(XHK_K09) let bn:u32=_hb(XHK_K02,_a_index_write()) let bd:u32=_hf(XHK_FCOMPOSE,q,bn) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 50u32 { let r:u32=_hb(XHK_K05,_a_bswap64()) return r }
+    if id == 51u32 { let r:u32=_hb(XHK_K05,_a_brev64()) return r }
+    if id == 52u32 { let h51:u32=_hc(50u32,d1) let r:u32=xii_term_make_loop(h51,0u64) return r }
+    if id == 53u32 { let q:u32=_hb(XHK_K09,_q_read()) let pa:u32=_hb(XHK_K05,_a_popcnt_add()) let bd:u32=_hf(XHK_FCOMPOSE,q,pa) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 54u32 { let mn:u32=_hb(XHK_K04,_f_not_all_ones()) let cm:u32=_hb(XHK_K05,_a_compute()) let nl:u32=_hnull() let iff:u32=xii_term_make_if(mn,cm,nl) let r:u32=xii_term_make_loop(iff,0u64) return r }
+    if id == 55u32 { let q:u32=_hb(XHK_K09,_q_read()) let os:u32=_hb(XHK_K05,_a_or_set()) let r:u32=_hf(XHK_FCOMPOSE,q,os) return r }
+    if id == 56u32 { let q:u32=_hb(XHK_K09,_q_read()) let ac:u32=_hb(XHK_K05,_a_and_clear()) let r:u32=_hf(XHK_FCOMPOSE,q,ac) return r }
+    if id == 57u32 { let r:u32=_hb(XHK_K09,_q_read_aligned()) return r }
+    if id == 58u32 { let r:u32=_hb(XHK_K02,_a_aligned16w()) return r }
+    if id == 59u32 { let r:u32=_hb(XHK_K18,8u32) return r }
+    /* H061..H072 capability-checked */
+    if id == 60u32 { let g:u32=_hfree(XHK_K10) let sl:u32=_hb(XHK_K07,_s_cap()) let r:u32=_hf(XHK_FTHEN,g,sl) return r }
+    if id == 61u32 { let g:u32=_hfree(XHK_K10) let sl:u32=_hb(XHK_K07,_s_scoped()) let r:u32=_hf(XHK_FUNDER,g,sl) return r }
+    if id == 62u32 { let r:u32=_hlift(0u32,7u32) return r }
+    if id == 63u32 { let r:u32=_hlift(7u32,0u32) return r }
+    if id == 64u32 { let r:u32=_hlift(3u32,0u32) return r }
+    if id == 65u32 { let r:u32=_hb(XHK_K04,_f_expected_cap()) return r }
+    if id == 66u32 { let ga:u32=_hfree(XHK_K10) let gb:u32=_hfree(XHK_K10) let r:u32=_hf(XHK_FCOMPOSE,ga,gb) return r }
+    if id == 67u32 { let g:u32=_hfree(XHK_K10) let sl:u32=_hb(XHK_K07,_s_scoped()) let r:u32=_hf(XHK_FWITH,g,sl) return r }
+    if id == 68u32 { let la:u32=_hfree(XHK_K17) let lb:u32=_hfree(XHK_K17) let r:u32=_hf(XHK_FTHEN,la,lb) return r }
+    if id == 69u32 { let h66:u32=_hc(65u32,d1) let nl:u32=_hnull() let er:u32=_hb(XHK_K05,_a_raise_cap_fault()) let r:u32=xii_term_make_if(h66,nl,er) return r }
+    if id == 70u32 { let g:u32=_hb(XHK_K10,6u32) let sl:u32=_hb(XHK_K07,_s_revoked()) let r:u32=_hf(XHK_FTHEN,g,sl) return r }
+    if id == 71u32 { let gv:u32=_hfree(XHK_K11) let g:u32=_hfree(XHK_K10) let r:u32=_hf(XHK_FUNDER,gv,g) return r }
+    /* H073..H084 witness/provenance */
+    if id == 72u32 { let r:u32=_hb(XHK_K07,_s_witness()) return r }
+    if id == 73u32 { let sa:u32=_hb(XHK_K07,_s_prov()) let sb:u32=_hb(XHK_K07,_s_prov()) let r:u32=_hf(XHK_FCOMPOSE,sa,sb) return r }
+    if id == 74u32 { let sa:u32=_hb(XHK_K07,_s_prov()) let sb:u32=_hb(XHK_K07,_s_prov()) let r:u32=_hf(XHK_FTHEN,sa,sb) return r }
+    if id == 75u32 { let r:u32=_hb(XHK_K07,_s_xform_rec()) return r }
+    if id == 76u32 { let q:u32=_hb(XHK_K09,_q_prov_read()) let pr:u32=_hfree(XHK_K08) let r:u32=_hf(XHK_FTHEN,q,pr) return r }
+    if id == 77u32 { let r:u32=_hb(XHK_K05,_a_canon_xf()) return r }
+    if id == 78u32 { let h73:u32=_hc(72u32,d1) let r:u32=xii_term_make_loop(h73,0u64) return r }
+    if id == 79u32 { let q:u32=_hb(XHK_K09,_q_read_record()) let r:u32=xii_term_make_loop(q,0u64) return r }
+    if id == 80u32 { let ac:u32=_hb(XHK_K05,_a_sha256_block()) let r:u32=xii_term_make_loop(ac,0u64) return r }
+    if id == 81u32 { let r:u32=_hc(44u32,d1) return r }
+    if id == 82u32 { let bn:u32=_hb(XHK_K02,_a_new_record()) let sl:u32=_hb(XHK_K07,_s_initial()) let r:u32=_hf(XHK_FTHEN,bn,sl) return r }
+    if id == 83u32 { let ac:u32=_hb(XHK_K05,_a_finalise()) let sl:u32=_hb(XHK_K07,_s_final()) let r:u32=_hf(XHK_FTHEN,ac,sl) return r }
+    /* H085..H096 governance */
+    if id == 84u32 { let r:u32=_hfree(XHK_K11) return r }
+    if id == 85u32 { let h85:u32=_hc(84u32,d1) let sl:u32=_hb(XHK_K07,_s_admit()) let r:u32=_hf(XHK_FTHEN,h85,sl) return r }
+    if id == 86u32 { let h85:u32=_hc(84u32,d1) let rj:u32=_hb(XHK_K05,_a_reject()) let r:u32=_hf(XHK_FTHEN,h85,rj) return r }
+    if id == 87u32 { let gv:u32=_hfree(XHK_K11) let sl:u32=_hb(XHK_K07,_s_m_audit()) let r:u32=_hf(XHK_FCOMPOSE,gv,sl) return r }
+    if id == 88u32 { let gv:u32=_hfree(XHK_K11) let h85:u32=_hc(84u32,d1) let sl:u32=_hb(XHK_K07,_s_catalyst()) let inr:u32=_hf(XHK_FTHEN,h85,sl) let r:u32=_hf(XHK_FUNDER,gv,inr) return r }
+    if id == 89u32 { let m:u32=_hb(XHK_K04,_f_anchor_inv()) let nl:u32=_hnull() let vr:u32=_hb(XHK_K05,_a_veto()) let r:u32=xii_term_make_if(m,nl,vr) return r }
+    if id == 90u32 { let ma:u32=_hfree(XHK_K04) let mb:u32=_hfree(XHK_K04) let l:u32=_hf(XHK_FTHEN,ma,mb) let mc:u32=_hfree(XHK_K04) let md:u32=_hfree(XHK_K04) let rr:u32=_hf(XHK_FTHEN,mc,md) let r:u32=_hf(XHK_FTHEN,l,rr) return r }
+    if id == 91u32 { let cv:u32=_hfree(XHK_K03) let sl:u32=_hb(XHK_K07,_f_broadcast()) let r:u32=_hf(XHK_FCOMPOSE,cv,sl) return r }
+    if id == 92u32 { let q:u32=_hb(XHK_K09,_q_read_vote()) let ta:u32=_hb(XHK_K05,_a_tally()) let bd:u32=_hf(XHK_FTHEN,q,ta) let r:u32=xii_term_make_loop(bd,0u64) return r }
+    if id == 93u32 { let gv:u32=_hfree(XHK_K11) let sl:u32=_hb(XHK_K07,_s_r1()) let r:u32=_hf(XHK_FUNDER,gv,sl) return r }
+    if id == 94u32 { let sl:u32=_hb(XHK_K07,_s_pre_relaunch()) let ac:u32=_hb(XHK_K05,_a_verify_launch()) let r:u32=_hf(XHK_FTHEN,sl,ac) return r }
+    if id == 95u32 { let ga:u32=_hfree(XHK_K11) let gb:u32=_hfree(XHK_K11) let r:u32=_hf(XHK_FTHEN,ga,gb) return r }
+    /* H097..H108 codegen meta */
+    if id == 96u32 { let q:u32=_hb(XHK_K09,_q_read()) let em:u32=_hb(XHK_K05,_a_emit_bin()) let r:u32=_hf(XHK_FTHEN,q,em) return r }
+    if id == 97u32 { let q:u32=_hb(XHK_K09,_q_read()) let em:u32=_hb(XHK_K05,_a_emit_un()) let r:u32=_hf(XHK_FTHEN,q,em) return r }
+    if id == 98u32 { let h97:u32=_hc(96u32,d1) let em:u32=_hb(XHK_K05,_a_emit_call32()) let r:u32=_hf(XHK_FTHEN,h97,em) return r }
+    if id == 99u32 { let q:u32=_hb(XHK_K09,_q_read()) let em:u32=_hb(XHK_K05,_a_emit_callind()) let r:u32=_hf(XHK_FTHEN,q,em) return r }
+    if id == 100u32 { let m:u32=_hb(XHK_K04,_f_resolver_ident()) let em:u32=_hb(XHK_K05,_a_emit_bypass()) let r:u32=_hf(XHK_FTHEN,m,em) return r }
+    if id == 101u32 { let ba:u32=_hfree(XHK_K02) let bb:u32=_hfree(XHK_K02) let l:u32=_hf(XHK_FTHEN,ba,bb) let q:u32=_hb(XHK_K09,_q_dispatch()) let r:u32=_hf(XHK_FTHEN,l,q) return r }
+    if id == 102u32 { let em:u32=_hb(XHK_K05,_a_emit_thunk()) let sl:u32=_hb(XHK_K07,_s_iat()) let r:u32=_hf(XHK_FTHEN,em,sl) return r }
+    if id == 103u32 { let ea:u32=_hb(XHK_K05,_a_emit_callq()) let eb:u32=_hb(XHK_K05,_a_emit_externtag()) let r:u32=_hf(XHK_FTHEN,ea,eb) return r }
+    if id == 104u32 { let ar:u32=_hb(XHK_K05,_a_apply_rule()) let r:u32=xii_term_make_loop(ar,0u64) return r }
+    if id == 105u32 { let q:u32=_hb(XHK_K09,_q_mphf()) let cc:u32=_hb(XHK_K05,_a_copy_cell()) let r:u32=_hf(XHK_FTHEN,q,cc) return r }
+    if id == 106u32 { let h106:u32=_hc(105u32,d1) let r:u32=xii_term_make_loop(h106,0u64) return r }
+    if id == 107u32 { let ew:u32=_hb(XHK_K05,_a_write_ctw()) let sl:u32=_hb(XHK_K07,_s_ct_witness()) let r:u32=_hf(XHK_FTHEN,ew,sl) return r }
+    /* H109..H120 resolver-self */
+    if id == 108u32 { let r:u32=_hb(XHK_K09,_q_read_direct()) return r }
+    if id == 109u32 { let q:u32=_hb(XHK_K09,_q_mphf()) let df:u32=_hb(XHK_K05,_a_dispatch_fp()) let r:u32=_hf(XHK_FTHEN,q,df) return r }
+    if id == 110u32 { let cs:u32=_hb(XHK_K05,_a_cmp_score()) let r:u32=xii_term_make_loop(cs,0u64) return r }
+    if id == 111u32 { let me:u32=_hb(XHK_K04,_f_eq()) let ml:u32=_hb(XHK_K04,_f_lt()) let ba:u32=_hfree(XHK_K02) let bb:u32=_hfree(XHK_K02) let inr:u32=xii_term_make_if(ml,ba,bb) let nl:u32=_hnull() let r:u32=xii_term_make_if(me,inr,nl) return r }
+    if id == 112u32 { let ac:u32=_hb(XHK_K05,_a_bind_slot()) let r:u32=xii_term_make_loop(ac,0u64) return r }
+    if id == 113u32 { let r:u32=_hb(XHK_K04,_f_pat_pred()) return r }
+    if id == 114u32 { let r:u32=_hb(XHK_K05,_a_call_ind()) return r }
+    if id == 115u32 { let m:u32=_hb(XHK_K04,_f_le()) let nl:u32=_hnull() let ku:u32=_hb(XHK_K05,_a_k_underflow()) let r:u32=xii_term_make_if(m,nl,ku) return r }
+    if id == 116u32 { let sl:u32=_hb(XHK_K07,_s_dom_resolve_ok()) let ad:u32=_hb(XHK_K05,_a_advance64()) let r:u32=_hf(XHK_FTHEN,sl,ad) return r }
+    if id == 117u32 { let sl:u32=_hb(XHK_K07,_s_dom_resolve_fail()) let ad:u32=_hb(XHK_K05,_a_advance64()) let r:u32=_hf(XHK_FTHEN,sl,ad) return r }
+    if id == 118u32 { let sa:u32=_hb(XHK_K05,_a_serialise_le()) let r:u32=xii_term_make_loop(sa,0u64) return r }
+    if id == 119u32 { let h119:u32=_hc(118u32,d1) let h81:u32=_hc(80u32,d1) let r:u32=_hf(XHK_FTHEN,h119,h81) return r }
+    /* H121..H126 hexad/trit */
+    if id == 120u32 { let q:u32=_hb(XHK_K09,_q_bit_check()) let nl:u32=_hnull() let er:u32=_hb(XHK_K05,_a_reach_violation()) let r:u32=xii_term_make_if(q,nl,er) return r }
+    if id == 121u32 { let r:u32=_hb(XHK_K05,_a_asym_compose()) return r }
+    if id == 122u32 { let r:u32=_hb(XHK_K05,_a_not_tbl()) return r }
+    if id == 123u32 { let r:u32=_hb(XHK_K05,_a_and_tbl()) return r }
+    if id == 124u32 { let r:u32=_hb(XHK_K05,_a_or_tbl()) return r }
+    if id == 125u32 { let r:u32=_hb(XHK_K05,_a_mul_tbl()) return r }
+    /* H127..H144 guard + reserved: no productive term */
+    return XHR_NULL_REF
+}
+
+/* Construct the canonical TEMPLATE algebra term for productive pattern
+ * H(id+1) per S26.8, with S26.18 SHA-resolved named subforms and free
+ * $variable operands. Guard/reserved cells return XHR_NULL_REF.
+ * See DOCS/XII-HORIZON-CONSTRUCT.md. */
+fn xii_horizon_construct(id: u32) -> u32 @export {
+    if XII_HORIZON_INIT_DONE == 0u8 { xii_horizon_init() }
+    if id >= XHR_TOTAL_PATTERNS { return XHR_NULL_REF }
+    if xii_horizon_is_productive(id) != 1u8 { return XHR_NULL_REF }
+    let t : u32 = _hc(id, 0u32)
+    return t
+}

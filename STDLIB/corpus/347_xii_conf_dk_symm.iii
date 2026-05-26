@@ -1,0 +1,14 @@
+/* corpus/347_xii_conf_dk_symm.iii  -- Confluence dep: ΔK_compose symmetry */
+
+module corpus_347_xii_conf_dk_symm
+
+extern @abi(c-msvc-x64) fn xii_savings_init() -> i32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_savings_symmetry_check() -> u32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_savings_positive_check() -> u32 from "xii_savings.iii"
+
+fn main() -> u64 {
+    xii_savings_init()
+    let f1 : u32 = xii_savings_symmetry_check()
+    let f2 : u32 = xii_savings_positive_check()
+    return (f1 + f2) as u64
+}

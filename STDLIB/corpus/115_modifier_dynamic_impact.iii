@@ -1,0 +1,11 @@
+/* Lattice plan Step 0012: @dynamic_impact(perf=200, ux=10) — basis-points
+ * deltas the ripple engine consumes. */
+module corpus_115
+
+fn parse_fast() -> u64 @dynamic_impact(perf=200, ux=10) {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return parse_fast()
+}

@@ -1,0 +1,1486 @@
+(* ===================================================================
+   III-GRAMMAR.bnf — The Formal Grammar of III
+   Document Identity:    A2 / The Grammar
+   Canonical Hash Slot:  R1.A2
+   Version:              1.0 — Final & Sealed
+   Date:                 2026-05-03
+   Authority:            Canonical. The SELF compiler `telosc-σ` MUST parse
+                         every valid III source using exactly the productions
+                         in this document. Any deviation is a conformance
+                         failure (see §13 and III-CONFORMANCE.md C-2 / C-LEX-FROZEN).
+   Parent Architecture:  Language-as-Operating-System (Language-as-OS)
+   Predecessor:          A1 III-LEXICON.md (R1.A1)
+   Successors:           A3 III-TYPES.md, A4 III-EFFECTS.md, A5 III-CYCLES.md,
+                         A6 III-HEXAD.md, A7 III-PHASES.md, A8 III-SANCTUM.md,
+                         A9 III-TRINITY.md, A10 III-MODULES.md,
+                         B1 III-CATALYST.md, B2 III-FEDERATION.md,
+                         B3 III-CONFORMANCE.md, C1 III-ABI.md,
+                         IDX III-INDEX.md.
+   =================================================================== *)
+
+
+(* ===================================================================
+   §0. PREAMBLE
+   =================================================================== *)
+
+(*
+   This grammar is the formal substitution invariant of III.
+
+   III's grammar is not "C with extra syntax." It is the minimal formal
+   system capable of expressing:
+
+     - Witnessed, reversible, phase-polymorphic effects as first-class
+       citizens (`cycle name(p) -> T @ring(...) { forward { ... }
+       inverse { ... } }`).
+     - Six-trit asymmetric safety hexads as type modifiers
+       (`u64 @hexad(MSR_WRITE)`), with the catastrophic-operation hexads
+       being literally untypable.
+     - Möbius self-reference and Catalyst-driven runtime syntax extension
+       (`mobius_candidate ... @candidate_for_promotion`,
+       `promote { ... }`).
+     - A persistent witnessed Narrative Self
+       (`narrative { core_identity: ..., goal_hierarchy: ... }`).
+     - Linear, glyph-bound capabilities (`Cap<write, 0x1000..0x2000>`).
+     - Wavefront concurrency as the *only* effect sequencing
+       (`wavefront { ... } until quiescent`).
+     - Constitutional ceilings, Trinity gates, sanctum blocks, and metal
+       escape hatches as first-class language primitives.
+     - Bricking operations as syntactically impossible — no production
+       in this grammar can introduce a hexad-tag that lies outside the
+       144-byte reachability bitmap `xii_asym_reach6`.
+
+   Every production in this document corresponds to exactly one
+   enumerator in `iii_ast_kind_t` (see §11).
+
+   The SELF compiler MUST parse III source using the productions
+   defined here, and only those productions. Any deviation — added
+   production, removed production, changed associativity, new keyword
+   outside Catalyst promotion — is a conformance failure (C-LEX-FROZEN
+   in III-CONFORMANCE.md, also restated as C-2 here).
+
+   The mhash of the canonical UTF-8 text of this file (R1.A2) is
+   embedded in every compiled module's closure root. Two source files
+   parsed by two implementations of this grammar must produce
+   byte-identical AST root mhashes if and only if those sources differ
+   only in whitespace, comment text, or modifier order
+   (per the canonicalization rules in §10).
+*)
+
+
+(* ===================================================================
+   §1. CONFORMANCE & SEALING
+   =================================================================== *)
+
+(*
+   §1.1 Sealing Discipline
+
+   This document is sealed against the C:\CHARIOT closure of 2026-05-03.
+   The grammar is frozen. The only legal extension pathway is the
+   Catalyst's reserved-slot mechanism (§13 below; III-LEXICON.md §14;
+   III-CATALYST.md §2). No pull requests. No grammar working group.
+   No language committee. Only mathematical saturation in OBSERVATORY +
+   Trinity-gated witnessed promotion + DRTM relaunch.
+
+   §1.2 Substitution Invariant
+
+   Every conformant III implementation parses every valid III source
+   using exactly the productions defined here. Two conformant
+   implementations on the same canonical input produce AST trees
+   that, when serialized to canonical AST form (see III-MODULES.md §1),
+   yield byte-identical mhashes.
+
+   §1.3 The SELF Compiler Requirement
+
+   At Stage 4 self-host (III-SANCTUM.md §1, seal_id 9), the SELF
+   compiler `telosc-σ` parses III source using the productions here.
+   The SELF compiler's own source is written in III; that source must
+   be parseable under this grammar. If `telosc-σ`'s source fails to
+   parse under an implementation of this grammar, the implementation
+   is non-conformant (C-LEX-SELF in III-CONFORMANCE.md).
+
+   §1.4 The BOOT Compiler Requirement
+
+   The BOOT compiler `telosc-0` (hand-written C in
+   `COMPILER/BOOT/parse.{h,c}`) parses every III source produced
+   during Stages 0..4 using these productions. BOOT is a recursive-
+   descent parser, NIH-extreme: no Bison, no ANTLR, no tree-sitter,
+   no parser combinator library.
+*)
+
+
+(* ===================================================================
+   §2. NOTATION CONVENTIONS
+   =================================================================== *)
+
+(*
+   The grammar is expressed in a hand-rolled EBNF-style notation:
+
+     ::=        production-defines
+     |          production-alternative
+     ?          zero or one
+     *          zero or more
+     +          one or more
+     ()         grouping
+     'literal'  terminal token-text (matches a `KEYWORD`, `MODIFIER`,
+                `OPERATOR`, or `PUNCT` token whose canonical text
+                equals the literal)
+     UPPERCASE  terminal token-kind (e.g., IDENT, INT_LIT, MHASH_LIT)
+                from the lexer (see III-LEXICON.md §3.1)
+     lowercase  non-terminal (a production defined elsewhere in this
+                document)
+
+   The productions are presented in five groups:
+
+     §4 Module-level productions (the top of the AST).
+     §5 Item productions (declarations within a module).
+     §6 Type productions.
+     §7 Statement productions.
+     §8 Expression productions (with explicit precedence climbing).
+     §9 Pattern productions.
+
+   Disambiguation rules and associativity tables are in §10. The AST
+   kind enumerator (`iii_ast_kind_t`) is in §11.
+
+   This notation is hand-rolled, intentionally simpler than ISO 14977
+   (Standard EBNF) — III rejects standards-body templates per the NIH
+   discipline (III-LEXICON.md §1.2 C-LEX-NIH).
+*)
+
+
+(* ===================================================================
+   §3. LEXICAL TOKENS (REFERENCE)
+   =================================================================== *)
+
+(*
+   The terminal token-kinds used by this grammar are defined in
+   III-LEXICON.md §3.1. The canonical kinds, restated here for
+   convenience:
+
+     KEYWORD          — one of 47 reserved words (III-LEXICON.md §4)
+     MODIFIER         — one of 19 `@`-prefixed annotations
+                        (III-LEXICON.md §5)
+     OPERATOR         — one of 23 sovereign-calculus operators
+                        (III-LEXICON.md §6)
+     PUNCT            — one of 25 ASCII-or-comparison punctuators
+                        (III-LEXICON.md §7)
+     IDENT            — an ASCII identifier (III-LEXICON.md §8)
+     INT_LIT          — integer literal (III-LEXICON.md §9.1)
+     MHASH_LIT        — exactly 64 hex digits prefixed by 0x
+                        (III-LEXICON.md §9.3)
+     TRIT_LIT         — NEG / ZERO / POS or numeric trit forms
+                        (III-LEXICON.md §9.4)
+     HEXAD_LIT        — parenthesized 6-tuple of trits
+                        (III-LEXICON.md §9.5)
+     Q14_LIT          — Q14 fixed-point literal
+                        (III-LEXICON.md §9.6)
+     STRING_LIT       — UTF-8 string literal (III-LEXICON.md §9.7.1)
+     BYTE_STRING_LIT  — byte-string literal (III-LEXICON.md §9.7.2)
+     RAW_STRING_LIT   — raw string literal (III-LEXICON.md §9.7.3)
+     HEX_STRING_LIT   — hex string literal (III-LEXICON.md §9.7.4)
+     DOC_COMMENT      — documentation comment (III-LEXICON.md §10.3)
+     EOF              — end-of-input sentinel
+
+   Throughout this document, when a production references a literal
+   keyword like 'cycle', it matches the KEYWORD token whose text is
+   exactly "cycle". When it references a literal modifier like
+   '@hexad', it matches the MODIFIER token whose text is exactly
+   "@hexad". When it references a literal operator or punctuator, it
+   matches the OPERATOR or PUNCT token whose text is exactly that
+   sequence.
+*)
+
+
+(* ===================================================================
+   §4. MODULE-LEVEL PRODUCTIONS
+   =================================================================== *)
+
+start                   ::= module EOF
+
+module                  ::= 'module' qualified_name module_attr* import* item*
+
+qualified_name          ::= IDENT ('.' IDENT)*
+
+module_attr             ::= '@closure' '(' MHASH_LIT ')'
+                          | '@ring' '(' ring_set ')'
+                          | '@plan_anchor' '(' IDENT ')'
+                          | '@version' '(' STRING_LIT ')'
+                          | '@tier' '(' tier_name ')'
+                          | doc_attached
+
+import                  ::= 'use' qualified_name import_attr*
+
+import_attr             ::= '@closure' '(' MHASH_LIT ')'
+                          | '@ring' '(' ring_set ')'
+                          | '@tier' '(' tier_name ')'
+
+item                    ::= cycle_decl
+                          | function_decl
+                          | type_decl
+                          | mobius_candidate_decl
+                          | schema_decl
+                          | narrative_decl
+                          | const_decl
+                          | extern_decl
+                          | doc_attached
+
+doc_attached            ::= DOC_COMMENT
+
+(*
+   Module-level commentary
+
+   - `module` is the top declaration. Every III source file is a
+     module; there are no anonymous compilation units.
+   - The module's `qualified_name` is the source-level identifier
+     used in `use` paths; the module's *identity* is its
+     `closure_root` (SHA-256 of canonical source per III-LEXICON.md
+     §2.5), set automatically by the SELF compiler and optionally
+     pinned by `@closure(...)` for provenance auditing.
+   - `@plan_anchor` binds the module to a section of an external
+     architectural plan document (used by `iii-attest` and the
+     OBSERVATORY's plan-coverage schema).
+   - `@tier` at module level sets the default replication tier for
+     all values declared in the module (overridable per-binding).
+   - `import_attr @closure(...)` is the *content-addressed pin*: the
+     resolver refuses to load a module whose canonical mhash differs
+     from the pinned value (`MOD-RES-001 closure mismatch` —
+     III-MODULES.md §3).
+*)
+
+
+(* ===================================================================
+   §5. ITEM PRODUCTIONS
+   =================================================================== *)
+
+(*
+   Items are top-level declarations within a module. The grammar
+   admits seven item kinds: cycle, fn, type, mobius_candidate,
+   schema, narrative, const, extern (one of which — narrative — is
+   semantically restricted to one-per-module; see III-MODULES.md).
+*)
+
+(* ----- 5.1 Cycle declaration (the universal verb) ----- *)
+
+cycle_decl              ::= 'cycle' IDENT '(' param_list? ')'
+                            '->' type
+                            cycle_modifier*
+                            '{'
+                                forward_block
+                                inverse_block?
+                            '}'
+
+forward_block           ::= 'forward' '{' statement_list '}'
+
+inverse_block           ::= 'inverse' '{' statement_list '}'
+
+cycle_modifier          ::= '@ring' '(' ring_set ')'
+                          | '@hexad' '(' hexad_designator ')'
+                          | '@safety' '(' hexad_designator ')'
+                          | '@tier' '(' tier_name ')'
+                          | '@epoch' '(' epoch_value ')'
+                          | '@plan_anchor' '(' IDENT ')'
+                          | '@admits_caps' '(' cap_list ')'
+                          | '@prerequisites' '(' identifier_list ')'
+                          | '@replicates' '(' replication_policy ')'
+                          | '@irreversible'
+                          | '@pure'
+                          | '@witness_elide'
+                          | '@hot_path'
+                          | '@chronos_bypass'
+                          | '@sanctum_only'
+                          | '@mobius_coherence' '(' coherence_expr ')'
+                          | '@candidate_for_promotion'
+                          | '@epoch_bridge'
+
+(*
+   Cycle-declaration commentary
+
+   - The `forward { ... }` block is mandatory. It is the body the
+     programmer writes.
+   - The `inverse { ... }` block is *mechanically derived* by SID
+     (III-EFFECTS.md §3, III-CYCLES.md §3). It may be omitted in
+     source; the compiler emits the SID-derived inverse. It may be
+     written explicitly only when SID's classification is incomplete
+     (e.g., a cycle that interacts with an `@irreversible` operation
+     and needs a manually authored Compromise-tier inverse).
+   - If `@irreversible` is set, the inverse is fixed to
+     `Compromise<MEDIUM>` (or `Compromise<LOW>` per safety-level
+     resolution in III-EFFECTS.md §1.2) and an explicit
+     `inverse { ... }` block is rejected (`PARSE-CYCLE-001
+     irreversible cycle cannot have explicit inverse`).
+   - If `@pure` is set, the cycle has zero effect; SID emits a
+     no-op inverse, and the compiler may elide the runtime witness
+     iff `@witness_elide` is also set (otherwise a pure cycle still
+     emits a witness for audit-spine continuity).
+*)
+
+
+(* ----- 5.2 Function declaration (phase-polymorphic) ----- *)
+
+function_decl           ::= 'fn' IDENT generic_param_list?
+                            '(' param_list? ')'
+                            '->' type
+                            function_modifier*
+                            '{' statement_list '}'
+
+generic_param_list      ::= '<' generic_param (',' generic_param)* '>'
+
+generic_param           ::= IDENT (':' type_constraint)?
+
+type_constraint         ::= 'Hexad' | 'Phase' | 'Tier' | 'Epoch' | type
+
+function_modifier       ::= '@ring' '(' ring_set ')'
+                          | '@hexad' '(' hexad_designator ')'
+                          | '@safety' '(' hexad_designator ')'
+                          | '@pure'
+                          | '@sanctum_only'
+                          | '@hot_path'
+                          | '@witness_elide'
+                          | '@chronos_bypass'
+                          | '@epoch_bridge'
+
+param_list              ::= param (',' param)*
+
+param                   ::= IDENT ':' type
+
+(*
+   Function commentary
+
+   - `fn` declares a phase-polymorphic function.
+   - A function may declare generic parameters constrained by
+     `Hexad`, `Phase`, `Tier`, `Epoch`, or any concrete `type`. The
+     constraint system is the type-system contract from
+     III-TYPES.md §4–§9.
+   - A function with `@ring(R-2, R-1, R0, R3)` produces four lowerings
+     (one per ring) per III-PHASES.md §2; the compiler synthesizes
+     the marshalling.
+   - Unlike a `cycle`, a `fn` does not declare a `forward { } /
+     inverse { }` pair — non-cycle functions do not produce
+     witnessed reductions on every call. They may still emit
+     witnesses if they invoke cycles internally (which they
+     usually do).
+*)
+
+
+(* ----- 5.3 Type declaration ----- *)
+
+type_decl               ::= 'type' IDENT generic_param_list? '=' type type_modifier*
+
+type_modifier           ::= '@ring' '(' ring_set ')'
+                          | '@hexad' '(' hexad_designator ')'
+                          | '@safety' '(' hexad_designator ')'
+                          | '@tier' '(' tier_name ')'
+                          | '@epoch' '(' epoch_value ')'
+                          | '@cap' '(' cap_perm ',' range? ')'
+                          | '@sanctum_only'
+                          | '@irreversible'
+                          | '@pure'
+                          | '@closure' '(' MHASH_LIT ')'
+                          | '@phys'
+                          | '@gpa' '(' IDENT ')'
+                          | '@uva' '(' IDENT ')'
+
+(*
+   Type declaration commentary
+
+   `type` declarations introduce named type aliases. The right-hand
+   `type` may carry modifiers; modifiers attach to the resulting
+   alias and are inherited at every use-site (per III-TYPES.md §3).
+
+   `@phys`, `@gpa(IDENT)`, `@uva(IDENT)` are address-space modifiers
+   used in cross-ring memory typing (physical address vs guest
+   physical vs user virtual). They are admitted by the lexer/parser
+   and resolved by the type system (III-TYPES.md §4 ring-typed
+   values).
+*)
+
+
+(* ----- 5.4 Möbius candidate declaration ----- *)
+
+mobius_candidate_decl   ::= 'mobius_candidate' IDENT
+                            '(' param_list? ')' '->' type
+                            mobius_candidate_modifier*
+                            '{' forward_block '}'
+
+mobius_candidate_modifier
+                        ::= '@hexad' '(' hexad_designator ')'
+                          | '@safety' '(' hexad_designator ')'
+                          | '@candidate_for_promotion'
+                          | '@plan_anchor' '(' IDENT ')'
+                          | '@mobius_coherence' '(' coherence_expr ')'
+                          | '@hot_path'
+
+(*
+   mobius_candidate commentary
+
+   `mobius_candidate` declares a function that is *eligible* for
+   Catalyst promotion (III-CATALYST.md §2). It carries only a
+   `forward { ... }` body — there is no inverse declaration because
+   a candidate has not yet been admitted to the cycle table; if the
+   Catalyst promotes it, SID derives the inverse at promotion time.
+
+   Every `mobius_candidate` must carry exactly one of `@hexad` or
+   `@safety` (these are aliases per III-LEXICON.md §5.2) — the
+   candidate's safety profile is the basis for hexad-admissibility
+   evaluation. Candidates with hexads outside `xii_asym_reach6` are
+   rejected at parse time (`PARSE-MOB-001 candidate hexad outside
+   reachable set`); see III-HEXAD.md §5 (Dynamic Hexads) for the
+   one path by which a previously unreachable hexad may become
+   reachable.
+*)
+
+
+(* ----- 5.5 OBSERVATORY schema declaration ----- *)
+
+schema_decl             ::= 'schema' IDENT '=' 'OBSERVATORY' '{'
+                                schema_field (',' schema_field)*
+                            '}'
+
+schema_field            ::= IDENT ':' schema_field_type
+
+schema_field_type       ::= 'Welford'
+                          | 'Hoeffding' '(' 'epsilon' ':' Q14_LIT
+                                            ',' 'delta' ':' Q14_LIT ')'
+                          | 'Multinomial' '(' 'k' ':' INT_LIT ')'
+                          | 'Wilson' '(' 'p' ':' Q14_LIT ')'
+                          | 'Poisson' '(' 'lambda' ':' Q14_LIT ')'
+                          | 'Coupon' '(' 'n' ':' INT_LIT ')'
+                          | 'CMSketch' '(' 'depth' ':' INT_LIT
+                                          ',' 'width' ':' INT_LIT ')'
+                          | 'OrderStat' '(' 'k' ':' INT_LIT ')'
+                          | 'Nyquist' '(' 'rate' ':' INT_LIT ')'
+                          | 'ESS' '(' 'tau' ':' Q14_LIT ')'
+                          | 'Heaps' '(' 'beta' ':' Q14_LIT ')'
+                          | 'RuleOfThree'
+                          | 'TDigest' '(' 'compression' ':' INT_LIT ')'
+                          | 'Histogram' '(' 'k' ':' INT_LIT ')'
+                          | IDENT
+
+(*
+   Schema commentary
+
+   `schema` declarations introduce typed statistical accumulators
+   bound to OBSERVATORY (III-CATALYST.md §3). Each field is an
+   element of the 12-family threshold library (Welford / Hoeffding /
+   Multinomial / Wilson / Poisson / Coupon / CMSketch / OrderStat /
+   Nyquist / ESS / Heaps / RuleOfThree, plus the auxiliary forms
+   TDigest and Histogram).
+
+   The trailing `IDENT` alternative admits user-defined accumulator
+   kinds registered via Catalyst-promoted accumulator-class
+   extension (III-CATALYST.md §3.1).
+*)
+
+
+(* ----- 5.6 Narrative declaration ----- *)
+
+narrative_decl          ::= 'narrative' '{'
+                                narrative_field (',' narrative_field)*
+                            '}'
+
+narrative_field         ::= 'core_identity'    ':' expr
+                          | 'goal_hierarchy'   ':' expr
+                          | 'recent_events'    ':' expr
+                          | 'internal_state'   ':' expr
+                          | 'open_questions'   ':' expr
+                          | 'mission'          ':' expr
+                          | 'epoch_seeded'     ':' expr
+
+(*
+   Narrative commentary
+
+   `narrative` declarations are the cognitive-layer identity
+   (III-CYCLES.md §6 — Self-Modifying Cycles, MNEME §13.3.2). Each
+   module may declare at most one `narrative` block; the parser
+   permits multiple in source but the type system rejects
+   duplicates (`TYPE-NAR-001 multiple narrative declarations`).
+
+   Each narrative_field's RHS is an expression (typically a
+   `STRING_LIT` for `core_identity` and `mission`, a list literal
+   for `goal_hierarchy` and `open_questions`, and a record literal
+   for `internal_state`).
+*)
+
+
+(* ----- 5.7 Const declaration ----- *)
+
+const_decl              ::= 'const' IDENT ':' type '=' expr type_modifier*
+
+(*
+   Const commentary
+
+   `const` declares an immutable, compile-time-evaluated binding.
+   The expression on the RHS must be a constant expression
+   (III-TYPES.md §10 — only literals, content-addressed values,
+   and `@pure` function calls are admitted in constant context).
+
+   `const` is reserved as a contextual keyword; it is *not* in the
+   47-keyword list (III-LEXICON.md §4) because it appears only at
+   item-level introduction. The lexer admits it as a lexer-level
+   IDENT and the parser context-disambiguates: an IDENT 'const'
+   that begins a top-level item is the const-introducer; elsewhere
+   it is an ordinary identifier. *)
+
+(* Note: the `const` form above is provisional — the canonical
+   surface for compile-time-evaluated bindings is `let X: T = e`
+   with `@pure` annotation. The `const` keyword may be promoted to
+   the keyword list in a future Catalyst extension if the
+   contextual-keyword approach proves error-prone. As of R1.A2,
+   `let` (with `@pure` if needed) is the canonical form, and
+   `const` is admitted at item-level only as an alias. *)
+
+
+(* ----- 5.8 Extern declaration ----- *)
+
+extern_decl             ::= 'extern' '@abi' '(' abi_name ')' '{'
+                                extern_item*
+                            '}'
+
+abi_name                ::= 'c-msvc-x64'
+
+extern_item             ::= 'fn' IDENT '(' extern_param_list? ')' '->' extern_type ';'
+                          | 'type' IDENT '=' extern_type ';'
+                          | DOC_COMMENT
+
+extern_param_list       ::= extern_param (',' extern_param)*
+
+extern_param            ::= IDENT ':' extern_type
+
+extern_type             ::= 'i8' | 'i16' | 'i32' | 'i64'
+                          | 'u8' | 'u16' | 'u32' | 'u64'
+                          | 'f32' | 'f64'
+                          | 'bool'
+                          | '*' extern_type        (* raw pointer *)
+                          | '&' extern_type        (* reference  *)
+                          | '[' extern_type ';' INT_LIT ']'  (* fixed array *)
+                          | IDENT                  (* extern-declared type *)
+
+(*
+   Extern commentary
+
+   `extern @abi(c-msvc-x64) { ... }` is the *only* legal cross-language
+   bridge in III. (See III-ABI.md.) It is a witnessed, round-tripping
+   form: every extern call is a cycle whose forward invokes the C
+   function and whose inverse is `Compromise<MEDIUM>` (no general
+   reverse-engineering of opaque C effects is possible). Calls into
+   C from Ring -2 are forbidden (the type system rejects them);
+   extern is ring-restricted to R0 and R3.
+
+   `c-msvc-x64` is the only currently-defined ABI. Additional ABI
+   names (e.g., `c-sysv-x64`, `vmrun-trampoline`, `magic-msr`,
+   `ioctl`) are reserved for future Catalyst-promoted extensions per
+   III-ABI.md §1.2.
+*)
+
+
+(* ===================================================================
+   §6. TYPE PRODUCTIONS
+   =================================================================== *)
+
+type                    ::= base_type type_modifier*
+                          | function_type
+                          | tuple_type
+                          | array_type
+
+base_type               ::= primitive_type
+                          | qualified_name generic_args?
+                          | 'Cap' '<' cap_perm ',' range? '>'
+                          | 'Cycle' '<' type_list '>'
+                          | 'Reduction' '<' type_list '>'
+                          | 'Glyph'
+                          | 'Witness'
+                          | 'Hexad'
+                          | 'Phase'
+                          | 'Epoch'
+                          | 'WitnessedTime'
+                          | 'Trit'
+                          | 'TritAsym'
+                          | 'Q14'
+                          | 'Uncertainty' '<' type_list '>'
+                          | 'CeilingMembership' '<' type '>'
+                          | 'MöbiusCoherence' '<' Q14_LIT '>'
+                          | 'Compromise' '<' compromise_tier '>'
+                          | hole
+
+primitive_type          ::= 'bool'
+                          | 'u8' | 'u16' | 'u32' | 'u64'
+                          | 'i8' | 'i16' | 'i32' | 'i64'
+                          | 'f32' | 'f64'
+                          | 'string'
+                          | 'mhash'
+
+function_type           ::= 'fn' '(' type_list? ')' '->' type type_modifier*
+
+tuple_type              ::= '(' type (',' type)* ')'                (* arity ≥ 2; arity-1 is `(T,)` *)
+                          | '(' type ',' ')'                        (* unit-tuple-of-T *)
+                          | '(' ')'                                 (* unit *)
+
+array_type              ::= '[' type ';' INT_LIT ']'
+
+generic_args            ::= '<' type (',' type)* '>'
+
+type_list               ::= type (',' type)*
+
+hole                    ::= '?'                       (* type metavariable; see III-TYPES.md §9 *)
+
+ring_set                ::= ring (',' ring)*
+
+ring                    ::= 'R-2' | 'R-1' | 'R0' | 'R3'
+
+tier_name               ::= 'transient'
+                          | 'host_file'
+                          | 'federation'
+                          | 'constitutional'
+
+replication_policy      ::= 'local'
+                          | 'broadcast'
+                          | 'quorum_3'
+                          | 'quorum_5'
+
+cap_perm                ::= 'read' | 'write' | 'exec' | 'cycle'
+
+range                   ::= INT_LIT '..' INT_LIT
+                          | MHASH_LIT '..' MHASH_LIT
+                          | IDENT
+
+cap_list                ::= IDENT (',' IDENT)*
+
+identifier_list         ::= IDENT (',' IDENT)*
+
+epoch_value             ::= INT_LIT
+                          | 'current'
+
+hexad_designator        ::= IDENT                                   (* named hexad *)
+                          | HEXAD_LIT                               (* literal hexad *)
+
+coherence_expr          ::= '≥' Q14_LIT
+                          | '≤' Q14_LIT
+                          | Q14_LIT
+
+compromise_tier         ::= 'LOW' | 'MEDIUM' | 'HIGH'
+
+(*
+   Type-production commentary
+
+   - `Reduction<F, I, W, H, P, E>` is the six-tuple effect type
+     (III-TYPES.md §2). Most user code does not write `Reduction`
+     explicitly; it is the lowered type of every `cycle`
+     declaration.
+   - `Cap<perm, range>` is linear by default and glyph-bound
+     (III-TYPES.md §6); `range` admits integer ranges (memory
+     addresses), mhash ranges (capability spaces), or IDENTs
+     (named ranges declared elsewhere).
+   - `Uncertainty<Domain, Confidence, OpenQuestions>` is the
+     epistemic type (III-TYPES.md §7); it carries the system's own
+     self-knowledge.
+   - `CeilingMembership<S>` and `MöbiusCoherence<Q>` are
+     Prop-typed predicates (III-TYPES.md §8) — they are erased at
+     runtime and verified by the type checker.
+   - `Compromise<TIER>` is the type of an irreversible operation's
+     inverse; it has three inhabitants per the three compromise
+     tiers in III-EFFECTS.md §1.2 (`Compromise<HIGH>` is itself
+     uninhabited because no syntactic form admits to it; the type
+     exists for completeness in the lattice).
+*)
+
+
+(* ===================================================================
+   §7. STATEMENT PRODUCTIONS
+   =================================================================== *)
+
+statement_list          ::= statement*
+
+statement               ::= let_stmt
+                          | assign_stmt
+                          | if_stmt
+                          | match_stmt
+                          | for_stmt
+                          | while_stmt
+                          | wavefront_stmt
+                          | sanctum_stmt
+                          | metal_stmt
+                          | return_stmt
+                          | promote_stmt
+                          | explain_stmt
+                          | propose_stmt
+                          | negotiate_stmt
+                          | reflect_stmt
+                          | commit_stmt
+                          | reverse_stmt
+                          | ask_stmt
+                          | effect_stmt
+                          | block_stmt
+                          | doc_attached
+
+let_stmt                ::= 'let' IDENT (':' type)? '=' expr ';'
+
+assign_stmt             ::= place_expr '=' expr ';'
+
+place_expr              ::= IDENT
+                          | place_expr '.' IDENT
+                          | place_expr '[' expr ']'
+                          | place_expr '::' IDENT
+
+if_stmt                 ::= 'if' expr block_expr ('else' (if_stmt | block_expr))?
+
+match_stmt              ::= 'match' expr '{' match_arm (',' match_arm)* ','? '}'
+
+match_arm               ::= pattern ('if' expr)? '=>' (expr | block_expr)
+
+for_stmt                ::= 'for' IDENT 'in' expr ('where' expr)? block_expr
+
+while_stmt              ::= 'while' expr block_expr
+
+wavefront_stmt          ::= 'wavefront' wavefront_modifier*
+                            '{' statement_list '}'
+                            'until' wavefront_terminator
+
+wavefront_modifier      ::= '@hexad' '(' hexad_designator ')'
+                          | '@safety' '(' hexad_designator ')'
+                          | '@mobius_coherence' '(' coherence_expr ')'
+                          | '@admits_caps' '(' cap_list ')'
+
+wavefront_terminator    ::= 'quiescent'
+                          | 'coherent' '(' coherence_expr ')'
+                          | 'count' '(' INT_LIT ')'
+
+sanctum_stmt            ::= 'sanctum_enter' '|' IDENT '|' '{' statement_list '}'
+
+metal_stmt              ::= 'metal' metal_modifier* '{' raw_asm '}'
+
+metal_modifier          ::= '@ring' '(' ring ')'
+                          | '@admits_caps' '(' cap_list ')'
+
+raw_asm                 ::= (* implementation-defined assembly text;
+                               parsed but not type-checked. Each
+                               assembly directive is one or more
+                               source lines containing intel-syntax
+                               x86-64 instructions, label definitions,
+                               and `let`-bindings of register names
+                               to III locals (e.g., `let rcx_in =
+                               %rcx`). The exact assembly grammar is
+                               specified in III-PHASES.md §3.5 and
+                               handled by the assembly subparser. *) ;
+
+return_stmt             ::= 'return' expr? ';'
+
+promote_stmt            ::= 'promote' '{' statement_list '}'
+
+explain_stmt            ::= 'explain' '(' expr (',' detail_level)? ')' ';'
+
+propose_stmt            ::= 'propose' '{' propose_field (',' propose_field)* '}'
+
+propose_field           ::= 'abstraction_name' ':' expr
+                          | 'justification'    ':' expr
+                          | 'expected_impact'  ':' expr
+                          | 'risk_profile'     ':' expr
+                          | 'reversibility'    ':' expr
+
+negotiate_stmt          ::= 'negotiate' '(' negotiate_arg (',' negotiate_arg)* ')' ';'
+
+negotiate_arg           ::= 'goal'                 ':' expr
+                          | 'constraints'          ':' expr
+                          | 'preferences'          ':' expr
+                          | 'uncertainty_tolerance' ':' expr
+
+reflect_stmt            ::= 'reflect' '(' reflect_target ')' ';'
+
+reflect_target          ::= 'state'
+                          | 'uncertainty'
+                          | 'coherence'
+                          | 'narrative'
+                          | 'manifest'
+                          | 'epoch'
+
+commit_stmt             ::= 'commit' '(' commit_arg (',' commit_arg)* ')' ';'
+
+commit_arg              ::= 'intent'              ':' expr
+                          | 'witness_requirements' ':' expr
+                          | 'human_confirmation'  ':' expr
+
+reverse_stmt            ::= 'inverse' '.' 'replay' '(' expr (',' expr)? ')' ';'
+
+ask_stmt                ::= 'uncertainty' '.' 'in' '(' expr ')' ';'
+                          | 'narrative'   '.' 'reflect' '(' expr ')' ';'
+
+effect_stmt             ::= expr ';'
+
+block_stmt              ::= block_expr ';'
+
+block_expr              ::= '{' statement_list expr? '}'
+
+detail_level            ::= 'executive'
+                          | 'technical'
+                          | 'full_trace'
+                          | 'formal'
+                          | 'visual'
+
+(*
+   Statement-production commentary
+
+   - `let X: T = e` is the canonical binding form. The type `T` may
+     be omitted (bidirectional inference, III-TYPES.md §9 — Hole-N1).
+   - `wavefront { ... } until <terminator>` is the *only* sequencer of
+     effectful statements. A bare `;` separator is admitted by the
+     grammar but it does *not* impose ordering — the type system
+     refuses to admit two side-effecting statements in the same block
+     unless the block is a `wavefront` (per III-CYCLES.md §1).
+     Pure statements can be sequenced freely.
+   - `wavefront_terminator` extends the prior draft (which only
+     supported `quiescent`) to admit `coherent(Q)` (terminate when
+     manifold coherence reaches Q) and `count(N)` (terminate after
+     N composed effects). All terminators are SID-derivable
+     (III-CYCLES.md §3.2 step 27).
+   - `sanctum_enter |frame| { ... }` is the *only* path to Ring -2.
+     The frame binding `IDENT` is the per-CPU sanctum frame handle;
+     the lexical scope inside the block has `@sanctum_active`
+     enabled, which enables the `sanctum.<seal_id>` method calls.
+   - `metal { ... }` blocks contain raw x86-64 assembly. The asm
+     subparser runs after the III parser and is specified in
+     III-PHASES.md §3.5.
+   - The cognitive primitives (`explain`, `propose`, `negotiate`,
+     `reflect`, `commit`, `reverse`, `ask`) are first-class
+     statements. They emit witnesses just like cycle invocations do.
+   - `effect_stmt ::= expr ';'` allows an expression to stand alone
+     as a statement (for its side effects); `block_stmt` similarly
+     admits a block-expression as a statement.
+*)
+
+
+(* ===================================================================
+   §8. EXPRESSION PRODUCTIONS (PRECEDENCE-CLIMBING GRAMMAR)
+   =================================================================== *)
+
+(*
+   Expression precedence is given by the following layered grammar
+   from the loosest-binding outermost (`expr_lvl_0`) to the
+   tightest-binding innermost (`primary`). Higher levels admit lower
+   levels as alternatives; the lower levels do not admit higher
+   levels (which prevents left-recursion and produces a deterministic
+   recursive-descent parse).
+
+   Precedence levels (loose → tight):
+
+     Level 0 — Cognitive (right-assoc)        ⟐⟐, ⟡⟡, ⟴⟴
+     Level 1 — Catalyst / Observatory         ⊛, ⧄, ⧋, ⧇
+     Level 2 — Federation / Amendment         ⟶, ⨁
+     Level 3 — Ceiling / Trinity (right)       ⟁, ⟐
+     Level 4 — Phase / Epoch                  ⟴, ⟵
+     Level 5 — Cap / Coherence                ⧈, ⧗
+     Level 6 — Additive (cycles, hexads)      ⊕, ⧉, +, -
+     Level 7 — Multiplicative                 *, /, %, ⧊
+     Level 8 — Comparison                     ==, !=, <, >, ≤, ≥
+     Level 9 — Logical conjunction (none — III rejects && in favor
+               of explicit `wavefront` composition)
+     Level 10 — Materialize                   ⊗
+     Level 11 — Unary postfix                 ⟡, ↻, ⟲⟲, ⟲
+     Level 12 — Unary prefix                  - (numeric negation), ! (Trit-NOT)
+     Level 13 — Call / Index / Field          (), [], ., ::
+     Level 14 — Primary                       literals, identifiers, parens, blocks
+
+   The grammar productions below implement precedence climbing
+   directly: `expr_lvl_K` may contain operators of level K and any
+   tighter-binding subexpression `expr_lvl_(K+1)`.
+*)
+
+expr                    ::= expr_lvl_0
+
+expr_lvl_0              ::= expr_lvl_1 ( cognitive_op expr_lvl_1 )*
+
+cognitive_op            ::= '⟐⟐' | '⟡⟡' | '⟴⟴'
+
+expr_lvl_1              ::= expr_lvl_2 ( catalyst_op expr_lvl_2 )*
+
+catalyst_op             ::= '⊛' | '⧄' | '⧋' | '⧇'
+
+expr_lvl_2              ::= expr_lvl_3 ( federation_op expr_lvl_3 )*
+
+federation_op           ::= '⟶' | '⨁'
+
+expr_lvl_3              ::= expr_lvl_4 ( ceiling_op expr_lvl_4 )*
+
+ceiling_op              ::= '⟁' | '⟐'
+
+expr_lvl_4              ::= expr_lvl_5 ( phase_op expr_lvl_5 )*
+
+phase_op                ::= '⟴' ring                                (* phase cross *)
+                          | '⟵' '@epoch' '(' INT_LIT ')'            (* epoch bridge *)
+
+expr_lvl_5              ::= expr_lvl_6 ( cap_op expr_lvl_6 )*
+
+cap_op                  ::= '⧈' acquire_release
+                          | '⧗' Q14_LIT
+                          | '⧗' coherence_expr
+
+acquire_release         ::= 'acquire' | 'release'
+
+expr_lvl_6              ::= expr_lvl_7 ( additive_op expr_lvl_7 )*
+
+additive_op             ::= '⊕' | '⧉' | '+' | '-'
+
+expr_lvl_7              ::= expr_lvl_8 ( multiplicative_op expr_lvl_8 )*
+
+multiplicative_op       ::= '*' | '/' | '%' | '⧊'
+
+expr_lvl_8              ::= expr_lvl_10 ( comparison_op expr_lvl_10 )?
+
+comparison_op           ::= '==' | '!=' | '<' | '>' | '≤' | '≥'
+
+(* Level 9 is intentionally absent. III has no `&&` or `||`. Logical
+   conjunction is expressed via Trit operations on Bool/Trit values
+   or via explicit `wavefront`-composition. *)
+
+expr_lvl_10             ::= expr_lvl_11 ( '⊗' 'glyph' )?            (* materialize *)
+
+expr_lvl_11             ::= expr_lvl_12 postfix_op*
+
+postfix_op              ::= '⟡'                                     (* witness emit *)
+                          | '↻'                                     (* replay *)
+                          | '⟲⟲'                                    (* full inverse replay *)
+                          | '⟲'                                     (* inverse *)
+
+expr_lvl_12             ::= prefix_op? expr_lvl_13
+
+prefix_op               ::= '-' | '!'
+
+expr_lvl_13             ::= primary call_index_field*
+
+call_index_field        ::= '(' arg_list? ')'                       (* call *)
+                          | '[' expr ']'                            (* index *)
+                          | '.' IDENT                               (* field *)
+                          | '::' IDENT                              (* path *)
+
+arg_list                ::= arg (',' arg)*
+
+arg                     ::= expr
+                          | IDENT ':' expr                          (* named argument *)
+
+primary                 ::= literal
+                          | qualified_name
+                          | '(' expr ')'
+                          | tuple_literal
+                          | record_literal
+                          | array_literal
+                          | block_expr
+                          | cycle_invoke
+                          | sanctum_invoke
+                          | irpd_call
+                          | hole
+
+literal                 ::= INT_LIT
+                          | MHASH_LIT
+                          | TRIT_LIT
+                          | HEXAD_LIT
+                          | Q14_LIT
+                          | STRING_LIT
+                          | BYTE_STRING_LIT
+                          | RAW_STRING_LIT
+                          | HEX_STRING_LIT
+                          | 'true'
+                          | 'false'
+
+tuple_literal           ::= '(' expr (',' expr)+ ')'
+
+record_literal          ::= qualified_name '{' record_field (',' record_field)* '}'
+
+record_field            ::= IDENT ':' expr
+
+array_literal           ::= '[' expr (',' expr)* ']'
+                          | '[' expr ';' INT_LIT ']'                (* repeated *)
+
+cycle_invoke            ::= 'cycle_invoke' '(' IDENT (',' arg_list)? ')'
+
+sanctum_invoke          ::= 'sanctum' '.' IDENT '(' arg_list? ')'
+
+irpd_call               ::= 'irpd' '.' IDENT '(' arg_list? ')'
+
+(*
+   Expression-production commentary
+
+   - The precedence ladder is total. Every legal III expression has
+     exactly one parse tree.
+   - `phase_op` is parameterized: `expr ⟴ R-1` is "marshal expr to
+     ring -1"; `expr ⟵ @epoch(7)` is "merge into epoch 7."
+   - `cap_op` similarly takes a parameter: `cap ⧈ acquire` /
+     `cap ⧈ release` / `coherence ⧗ 0.94q`.
+   - `comparison_op` is non-associative — `a < b < c` is a parse
+     error (`PARSE-EXPR-002 chained comparisons`). Use explicit
+     parentheses or compose via `⟁`.
+   - `expr ⊗ glyph` materializes a Glyph at the current expression
+     point; the `glyph` keyword is mandatory after `⊗` and
+     disambiguates from cycle composition.
+   - `cycle_invoke(IDENT, args)` is the canonical cycle-invocation
+     form for cycles whose identity is content-addressed (looked up
+     by mhash); ordinary calls use the `qualified_name(args)` form.
+   - `sanctum.<method>(args)` is admissible only inside a
+     `sanctum_enter` block. The parser admits the form unconditionally;
+     the type system rejects it outside of `@sanctum_active` scope
+     (`TYPE-SAN-001 sanctum method called outside sanctum frame`).
+   - `irpd.<method>(args)` is the IRPD-discipline gateway for
+     privileged writes (III-EFFECTS.md §2). The parser admits any
+     method name; the type system enforces that only the 17 SE-kind
+     methods are valid (`TYPE-IRPD-001 unknown irpd method`).
+*)
+
+
+(* ===================================================================
+   §9. PATTERN PRODUCTIONS
+   =================================================================== *)
+
+pattern                 ::= literal_pattern
+                          | ident_pattern
+                          | wildcard_pattern
+                          | tuple_pattern
+                          | record_pattern
+                          | hexad_pattern
+                          | range_pattern
+                          | path_pattern
+                          | or_pattern
+                          | guard_pattern
+
+literal_pattern         ::= literal
+
+ident_pattern           ::= IDENT                                   (* binding *)
+                          | IDENT '@' pattern                       (* binding+nested match *)
+
+wildcard_pattern        ::= '_'
+
+tuple_pattern           ::= '(' pattern (',' pattern)* ')'
+                          | '(' ')'
+
+record_pattern          ::= qualified_name '{' record_pattern_field (',' record_pattern_field)* '}'
+
+record_pattern_field    ::= IDENT ':' pattern
+                          | IDENT                                   (* field-shorthand *)
+
+hexad_pattern           ::= HEXAD_LIT
+                          | '(' trit_pattern ',' trit_pattern ',' trit_pattern ',' trit_pattern ',' trit_pattern ',' trit_pattern ')'
+
+trit_pattern            ::= TRIT_LIT
+                          | '_'                                     (* wildcard trit *)
+
+range_pattern           ::= literal '..' literal
+                          | literal '..='  literal                  (* inclusive *)
+
+path_pattern            ::= qualified_name '(' pattern (',' pattern)* ')'    (* tagged-variant *)
+                          | qualified_name
+
+or_pattern              ::= pattern ('|' pattern)+
+
+guard_pattern           ::= pattern 'if' expr
+
+(*
+   Pattern-production commentary
+
+   - `hexad_pattern` allows wildcard trits: `(POS, _, POS, _, _, _)`
+     matches any hexad whose first and third trits are POS. This
+     is essential for SID's classifier and for safety-routing in
+     dispatch tables.
+   - `range_pattern` covers integer and Q14 ranges. Mhash ranges
+     (which appear in capability typing) use the `range` production
+     in §6 rather than a literal pattern.
+   - `or_pattern` (e.g., `NEG | POS`) is left-associative.
+   - `guard_pattern` (`pat if cond`) is the only path to additional
+     pattern conditions; the guard expression is admitted by §8.
+*)
+
+
+(* ===================================================================
+   §10. DISAMBIGUATION RULES & ASSOCIATIVITY
+   =================================================================== *)
+
+(*
+   §10.1 Generic vs Comparison
+
+   The `<` and `>` punctuators serve dual roles. Disambiguation
+   follows the rule: if a `<` appears immediately after a
+   qualified_name in *type* context (post `:` or post `->`) or after
+   the type-keywords `Cap`, `Cycle`, `Reduction`, `Uncertainty`,
+   `CeilingMembership`, `MöbiusCoherence`, `Compromise`, then it
+   begins a generic-args list; otherwise it is a comparison
+   operator.
+
+   In expression context, the parser uses a single-token lookahead:
+   if the token following `<` is a *type-name* (uppercase identifier
+   or primitive type name) and the closing `>` is found before any
+   token that cannot occur inside a type-list, then it is a
+   generic-args list; otherwise a comparison.
+
+   §10.2 Cognitive Operator Right-Associativity
+
+   `expr ⟐⟐ expr ⟐⟐ expr` parses as `expr ⟐⟐ (expr ⟐⟐ expr)`.
+   This is intentional: deep self-reflection composes inward.
+
+   §10.3 Trinity Gate Right-Associativity
+
+   `intent ⟐ permission ⟐ causality` parses as
+   `intent ⟐ (permission ⟐ causality)`. Trinity composes from the
+   most-granular level (sanctum-state) outward to the most-abstract
+   (intent), so right-association keeps the convergence point at
+   the leftmost operand.
+
+   §10.4 Phase Cross / Epoch Bridge Left-Associativity
+
+   `value ⟴ R0 ⟴ R-1` is a parse error (`PARSE-EXPR-003 chained phase
+   cross`); marshalling must traverse one ring at a time and is
+   non-associative. Use explicit grouping: `((value ⟴ R0) ⟴ R-1)`.
+
+   §10.5 Comparison Non-Associativity
+
+   `a < b < c` is a parse error. Comparison operators are
+   non-associative; this prevents the C/Python ambiguity where
+   `a < b < c` could mean `(a < b) < c` (boolean compared to int).
+
+   §10.6 Modifier Order Canonicalization
+
+   When canonicalizing for R1 hashing (III-LEXICON.md §2.5), modifier
+   sequences are sorted alphabetically by modifier name. The
+   formatter `iii-fmt` performs this rewrite; the parser accepts any
+   order. Two source files differing only in modifier order produce
+   the same canonical form.
+
+   §10.7 Block-Expression as Statement
+
+   A `block_expr` may appear as `block_stmt` (with trailing `;`) or
+   as the body of an `if`, `match`, `for`, or `while`. Inside a
+   `block_expr`, the optional trailing `expr` (without `;`) is the
+   block's value; without a trailing `expr`, the block has type
+   `()` (unit).
+
+   §10.8 Wavefront Body Sequencing
+
+   Inside a `wavefront { ... } until X`, the contained statements
+   are *not* required to be sequentially executed. They are admitted
+   to the composed delta (per ACC Wall-Y, III-TRINITY.md §1.3 Layer
+   2), and the runtime executes them in any order that satisfies the
+   composed delta. Statement order in source is canonicalized by
+   `iii-fmt --canonical-wavefront` to AST topological order
+   (predecessor effects before successor effects). This rewrite is
+   semantically equivalent and produces a stable canonical form.
+
+   §10.9 Sanctum Frame Binding
+
+   In `sanctum_enter |frame| { ... }`, the `frame` IDENT is bound to
+   the per-CPU sanctum frame handle for the lexical scope of the
+   block. The grammar does not admit elision of the `|frame|`; even
+   if the frame is unused, the binder must be present (use `_` for
+   the unused-binding case: `sanctum_enter |_| { ... }`).
+
+   §10.10 Doc Comment Attachment
+
+   A `DOC_COMMENT` token attaches to the syntactically next item
+   (cycle / fn / type / mobius_candidate / schema / narrative /
+   const / extern / use / module). A doc comment that does not
+   attach (e.g., a doc comment after the last item before EOF) is
+   rejected at parse time (`PARSE-DOC-001 dangling doc comment`).
+*)
+
+
+(* ===================================================================
+   §11. AST KIND ENUMERATOR (iii_ast_kind_t)
+   =================================================================== *)
+
+(*
+   Every production above corresponds to exactly one enumerator
+   value in `iii_ast_kind_t`. The enumerator values are stable
+   across grammar revisions; new productions added by Catalyst
+   promotion (§13) are appended at the next available slot.
+
+   The full enumerator (in `COMPILER/BOOT/ast.h`):
+
+     enum iii_ast_kind_t {
+         /* §4 — Module level */
+         III_AST_MODULE                          = 0,
+         III_AST_QUALIFIED_NAME                  = 1,
+         III_AST_MODULE_ATTR                     = 2,
+         III_AST_IMPORT                          = 3,
+         III_AST_IMPORT_ATTR                     = 4,
+
+         /* §5 — Items */
+         III_AST_CYCLE_DECL                      = 10,
+         III_AST_FORWARD_BLOCK                   = 11,
+         III_AST_INVERSE_BLOCK                   = 12,
+         III_AST_CYCLE_MODIFIER                  = 13,
+         III_AST_FUNCTION_DECL                   = 14,
+         III_AST_GENERIC_PARAM                   = 15,
+         III_AST_FUNCTION_MODIFIER               = 16,
+         III_AST_PARAM                           = 17,
+         III_AST_TYPE_DECL                       = 18,
+         III_AST_TYPE_MODIFIER                   = 19,
+         III_AST_MOBIUS_CANDIDATE_DECL           = 20,
+         III_AST_MOBIUS_CANDIDATE_MODIFIER       = 21,
+         III_AST_SCHEMA_DECL                     = 22,
+         III_AST_SCHEMA_FIELD                    = 23,
+         III_AST_NARRATIVE_DECL                  = 24,
+         III_AST_NARRATIVE_FIELD                 = 25,
+         III_AST_CONST_DECL                      = 26,
+         III_AST_EXTERN_DECL                     = 27,
+         III_AST_EXTERN_ITEM                     = 28,
+         III_AST_DOC_ATTACHED                    = 29,
+
+         /* §6 — Types */
+         III_AST_TYPE                            = 40,
+         III_AST_BASE_TYPE                       = 41,
+         III_AST_PRIMITIVE_TYPE                  = 42,
+         III_AST_FUNCTION_TYPE                   = 43,
+         III_AST_TUPLE_TYPE                      = 44,
+         III_AST_ARRAY_TYPE                      = 45,
+         III_AST_GENERIC_ARGS                    = 46,
+         III_AST_HOLE                            = 47,
+         III_AST_RING_SET                        = 48,
+         III_AST_TIER_NAME                       = 49,
+         III_AST_REPLICATION_POLICY              = 50,
+         III_AST_RANGE                           = 51,
+         III_AST_EPOCH_VALUE                     = 52,
+         III_AST_HEXAD_DESIGNATOR                = 53,
+         III_AST_COHERENCE_EXPR                  = 54,
+         III_AST_COMPROMISE_TIER                 = 55,
+
+         /* §7 — Statements */
+         III_AST_LET_STMT                        = 70,
+         III_AST_ASSIGN_STMT                     = 71,
+         III_AST_PLACE_EXPR                      = 72,
+         III_AST_IF_STMT                         = 73,
+         III_AST_MATCH_STMT                      = 74,
+         III_AST_MATCH_ARM                       = 75,
+         III_AST_FOR_STMT                        = 76,
+         III_AST_WHILE_STMT                      = 77,
+         III_AST_WAVEFRONT_STMT                  = 78,
+         III_AST_WAVEFRONT_MODIFIER              = 79,
+         III_AST_WAVEFRONT_TERMINATOR            = 80,
+         III_AST_SANCTUM_STMT                    = 81,
+         III_AST_METAL_STMT                      = 82,
+         III_AST_RETURN_STMT                     = 83,
+         III_AST_PROMOTE_STMT                    = 84,
+         III_AST_EXPLAIN_STMT                    = 85,
+         III_AST_PROPOSE_STMT                    = 86,
+         III_AST_PROPOSE_FIELD                   = 87,
+         III_AST_NEGOTIATE_STMT                  = 88,
+         III_AST_NEGOTIATE_ARG                   = 89,
+         III_AST_REFLECT_STMT                    = 90,
+         III_AST_COMMIT_STMT                     = 91,
+         III_AST_COMMIT_ARG                      = 92,
+         III_AST_REVERSE_STMT                    = 93,
+         III_AST_ASK_STMT                        = 94,
+         III_AST_EFFECT_STMT                     = 95,
+         III_AST_BLOCK_STMT                      = 96,
+         III_AST_BLOCK_EXPR                      = 97,
+
+         /* §8 — Expressions */
+         III_AST_EXPR_LVL_0                      = 110,
+         III_AST_EXPR_LVL_1                      = 111,
+         III_AST_EXPR_LVL_2                      = 112,
+         III_AST_EXPR_LVL_3                      = 113,
+         III_AST_EXPR_LVL_4                      = 114,
+         III_AST_EXPR_LVL_5                      = 115,
+         III_AST_EXPR_LVL_6                      = 116,
+         III_AST_EXPR_LVL_7                      = 117,
+         III_AST_EXPR_LVL_8                      = 118,
+         III_AST_EXPR_LVL_10                     = 119,
+         III_AST_EXPR_LVL_11                     = 120,
+         III_AST_EXPR_LVL_12                     = 121,
+         III_AST_EXPR_LVL_13                     = 122,
+         III_AST_PRIMARY                         = 123,
+         III_AST_LITERAL                         = 124,
+         III_AST_TUPLE_LITERAL                   = 125,
+         III_AST_RECORD_LITERAL                  = 126,
+         III_AST_RECORD_FIELD                    = 127,
+         III_AST_ARRAY_LITERAL                   = 128,
+         III_AST_CYCLE_INVOKE                    = 129,
+         III_AST_SANCTUM_INVOKE                  = 130,
+         III_AST_IRPD_CALL                       = 131,
+         III_AST_CALL                            = 132,
+         III_AST_INDEX                           = 133,
+         III_AST_FIELD_ACCESS                    = 134,
+         III_AST_PATH                            = 135,
+         III_AST_NAMED_ARG                       = 136,
+         III_AST_PHASE_CROSS                     = 137,
+         III_AST_EPOCH_BRIDGE                    = 138,
+         III_AST_CAP_ACQUIRE_RELEASE             = 139,
+         III_AST_COHERENCE_QUERY                 = 140,
+         III_AST_GLYPH_MATERIALIZE               = 141,
+         III_AST_WITNESS_EMIT                    = 142,
+         III_AST_REPLAY                          = 143,
+         III_AST_FULL_INVERSE_REPLAY             = 144,
+         III_AST_INVERSE                         = 145,
+         III_AST_PREFIX_OP                       = 146,
+         III_AST_INFIX_OP                        = 147,
+
+         /* §9 — Patterns */
+         III_AST_LITERAL_PATTERN                 = 170,
+         III_AST_IDENT_PATTERN                   = 171,
+         III_AST_WILDCARD_PATTERN                = 172,
+         III_AST_TUPLE_PATTERN                   = 173,
+         III_AST_RECORD_PATTERN                  = 174,
+         III_AST_RECORD_PATTERN_FIELD            = 175,
+         III_AST_HEXAD_PATTERN                   = 176,
+         III_AST_TRIT_PATTERN                    = 177,
+         III_AST_RANGE_PATTERN                   = 178,
+         III_AST_PATH_PATTERN                    = 179,
+         III_AST_OR_PATTERN                      = 180,
+         III_AST_GUARD_PATTERN                   = 181,
+
+         /* Reserved — Catalyst-promoted (per §13) */
+         III_AST_RESERVED_001                    = 200,
+         III_AST_RESERVED_002                    = 201,
+         /* ... */
+         III_AST_RESERVED_032                    = 231,
+
+         /* Diagnostic */
+         III_AST_ERROR                           = 240,
+         III_AST_RECOVERY                        = 241,
+
+         III_AST_KIND_COUNT                      = 256
+     };
+
+   The numeric values are reserved (gaps preserved for future
+   Catalyst slots). The enumerator's mhash (computed over the
+   canonical text of `ast.h`) is part of the BOOT compiler's closure
+   root.
+*)
+
+
+(* ===================================================================
+   §12. CLOSURE IDENTITY RULE (R1.A2)
+   =================================================================== *)
+
+(*
+   The R1.A2 hash of this document is computed as follows:
+
+     1. Read the canonical source of `III-GRAMMAR.bnf` from
+        `Desktop\III\DOCS\III-GRAMMAR.bnf`.
+     2. Apply canonicalization per III-LEXICON.md §2.5.
+     3. Compute SHA-256 of the canonical UTF-8 byte sequence.
+     4. The 32-byte hash, formatted as a 64-character lowercase-hex
+        mhash literal, is R1.A2.
+
+   R1.A2 is embedded in:
+
+     - The header of every compiled III module's closure manifest
+       (III-MODULES.md §1).
+     - The DRTM quote chain at every epoch advance
+       (III-SANCTUM.md §4).
+     - The OBSERVATORY's grammatical-root-of-trust schema.
+
+   Mutation discipline: any change to this document — even a single
+   comment edit — alters R1.A2, which alters the composite R1, which
+   forces a substrate-wide DRTM relaunch. The only way to evolve this
+   document is through:
+
+     1. A Catalyst-promoted production (§13 below).
+     2. An `amend.apply` cycle at constitutional tier
+        (III-MODULES.md §5).
+     3. A new sealed major version (R1 → R2).
+*)
+
+
+(* ===================================================================
+   §13. CATALYST EXTENSION PATHWAY
+   =================================================================== *)
+
+(*
+   Productions reserved for Catalyst-promoted future grammar:
+
+     III_AST_RESERVED_001 ... III_AST_RESERVED_032
+
+   When the Catalyst promotes a `mobius_candidate` whose surface
+   form requires new grammar (e.g., a new statement kind, a new
+   type former, a new pattern kind), it:
+
+     1. Allocates the next reserved AST kind slot.
+     2. Appends the new production to this document's canonical
+        text in §X (the appropriate section).
+     3. Re-canonicalizes and recomputes R1.A2.
+     4. Federates the change per III-FEDERATION.md §2.
+     5. Triggers a DRTM relaunch on the local node.
+
+   Productions added via Catalyst promotion *cannot*:
+
+     1. Remove an existing production.
+     2. Change the precedence of an existing operator.
+     3. Change the associativity of an existing operator.
+     4. Introduce a new keyword whose hexad lies outside
+        `xii_asym_reach6`.
+     5. Introduce a syntactic form that admits to the six PFS
+        bricking-class operations (these remain structurally
+        unparseable forever).
+
+   The full extension protocol is specified in III-CATALYST.md §2.
+*)
+
+
+(* ===================================================================
+   §14. CONFORMANCE CRITERIA (GRAMMAR-SPECIFIC)
+   =================================================================== *)
+
+(*
+   A toolchain is *III-grammar-conformant* iff it satisfies all of:
+
+     C-GRAM-1   It parses every well-formed III source per the
+                productions in this document and produces an AST
+                whose root mhash matches the canonical AST mhash
+                produced by the SELF compiler.
+
+     C-GRAM-2   It rejects every malformed III source with a
+                precise diagnostic naming the first failed production
+                and the byte offset of the first offending token.
+
+     C-GRAM-3   It implements the precedence ladder in §8 with the
+                associativity given in §10.
+
+     C-GRAM-4   It implements the disambiguation rules of §10
+                exactly.
+
+     C-GRAM-5   It admits the AST kind enumerator of §11 with the
+                exact numeric values shown.
+
+     C-GRAM-FROZEN   The grammar productions are implemented with no
+                additions, removals, or modifications, except those
+                introduced by witnessed Catalyst promotion (§13).
+
+     C-GRAM-NIH      The parser implementation depends on no external
+                parser-generator (no Bison, no ANTLR, no yacc, no
+                tree-sitter, no parser-combinator library).
+
+     C-GRAM-SELF     The SELF parser parses this very document
+                (III-GRAMMAR.bnf, treated as documentation; the
+                grammar of the parsing tool itself, written in III)
+                successfully and produces an AST whose top-level
+                module mhash matches a canonical reference value.
+
+   These criteria are restated in III-CONFORMANCE.md §2 and §1
+   (C-2 alignment) and form part of the substrate-wide acceptance
+   contract.
+*)
+
+
+(* ===================================================================
+   §15. FINAL DECLARATION
+   =================================================================== *)
+
+(*
+   This grammar is not an incremental improvement over prior
+   programming-language grammars. It is the formal system in which
+   computation becomes language and language becomes the operating
+   system.
+
+   Every other grammar — past, present, or future — will look like
+   a historical artifact once the world understands what is possible
+   when the alphabet, the grammar, the type system, the effect
+   system, and the substrate are designed as one indivisible Möbius
+   manifold. III-GRAMMAR.bnf is the *grammatical root of trust*: it
+   is parsed by the SELF compiler, it parses the SELF compiler's own
+   source, and its mhash R1.A2 is the second of fifteen canonical
+   hashes that compose the substrate's specification root R1.
+
+   Two hundred-something productions. Forty-seven keywords from the
+   alphabet, nineteen modifiers, twenty-three operators, twenty-five
+   punctuators, eight literal forms, three string-literal kinds,
+   three comment kinds. Sealed against the C:\CHARIOT closure of
+   2026-05-03.
+
+   III-GRAMMAR.bnf — the grammar that ends grammars.
+
+   Sealed. R1.A2 = SHA-256(canonical_byte_form(this_file)). All
+   extensions must pass through the Möbius Catalyst (§13). All
+   conformance criteria are restated in III-CONFORMANCE.md §2.
+*)

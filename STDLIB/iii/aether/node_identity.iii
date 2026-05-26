@@ -1,0 +1,414 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\node_identity.iii
+ *
+ * III STDLIB - aether::node_identity
+ *
+ * Per-host cryptographic selfhood.  At boot it deterministically derives, from
+ * a hardware-bound seed combined with the constitutional bootstrap secret,
+ * three Ed25519 keypairs -- an identity key (signs attestations of who this
+ * node is), a communication key (signs federation messages), and a witness key
+ * (signs witness fragments this node emits) -- plus a 32-byte canonical node id
+ * = Keccak256(identity_pub).  Two physically distinct hosts can never collide
+ * because the hardware-bound seed is a per-machine runtime input.
+ *
+ * Derivation: node_seed = Keccak256(hw_seed || bootstrap_secret) is the HKDF
+ * PRK; each role's sub-seed = HKDF-Expand(PRK, info_role) realized as a single
+ * Keccak-256 block T(1) = Keccak256(PRK || info || 0x01); the role keypair is
+ * ed25519_keypair_from_seed(sub_seed).  RFC 8032 is fully deterministic, so
+ * identical inputs yield identical keys, node id, and signatures cross-run and
+ * cross-CPU (M2/W5).
+ *
+ * Reconciliations vs the gospel candidate body (see node_identity.spec.md):
+ *   - keccak256_oneshot from keccak256.iii (gospel said keccak.iii streaming;
+ *     wrong file + the documented param-spill trap).  All hashing is oneshot
+ *     over a single contiguous buffer (the realized identifier.iii strategy).
+ *   - ed25519_keypair_from_seed -> u32 (0=ok, 1=fail), gated != 0u32.
+ *   - ed25519_sign_c4(keys, msg, len, sig) -> u8 with keys = seed(32)||pub(32);
+ *     gated != 1u8.  The gospel's ed25519_sign signature was wrong in param
+ *     order, arity, and return type, and passed a 64-byte key where the real
+ *     signer demands a 32-byte SEED -- it would silently produce wrong sigs.
+ *   - function-local var arrays hoisted to module scope (Trap 7).  init is
+ *     boot-serialized and runs once; the scratch buffers are NOT reentrant,
+ *     which is acceptable for a once-per-boot identity ceremony.  Signing
+ *     reuses no scratch and is reentrant.
+ *   - M6 witnessed birth (ni_init_witnessed publishes a NODE_BIRTH fragment)
+ *     and M8 capability gate added (maximal intent).  Plain ni_init is the
+ *     pre-cap very-early-boot path.
+ *
+ * Hexad: kind_essence + kind_witness.  Ring: R-2.  K: 1.00.
+ */
+module aether_node_identity
+
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ed25519_keypair_from_seed(seed_32: *u8, pubkey_32: *u8, privkey_64: *u8) -> u32 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_c4(keys: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+
+const NODEID_OK         : i32 =  0i32
+const NODEID_E_BAD      : i32 = -1i32
+const NODEID_E_DENIED   : i32 = -2i32
+const NODEID_E_SIGN     : i32 = -3i32
+const NODEID_E_DERIVE   : i32 = -4i32
+
+const NODEID_KEY_BYTES   : u64 = 32u64
+const NODEID_SIG_BYTES   : u64 = 64u64
+const NODEID_KEYS_BYTES  : u64 = 64u64
+const NODEID_MAX_INPUT   : u64 = 8191u64
+
+const NODEID_RIGHT_ATTEST : u64 = 0x0800u64
+const NODEID_RIGHT_SIGN   : u64 = 0x1000u64
+
+const NODEID_INFO_ID_LEN   : u64 = 19u64
+const NODEID_INFO_COMM_LEN : u64 = 24u64
+const NODEID_INFO_WIT_LEN  : u64 = 18u64
+const NODEID_PRODUCER_LEN  : u64 = 21u64
+const NODEID_OPID_LEN      : u64 = 28u64
+
+/* identity / communication / witness role key stores: seed(32) || pub(32). */
+var NODEID_ID_KEYS    : [u8; 64]
+var NODEID_COMM_KEYS  : [u8; 64]
+var NODEID_WIT_KEYS   : [u8; 64]
+/* canonical node id = Keccak256(identity_pub). */
+var NODEID_NODE_ID    : [u8; 32]
+/* HKDF PRK = Keccak256(hw_seed || bootstrap_secret). */
+var NODEID_NODE_SEED  : [u8; 32]
+/* per-role HKDF-Expand T(1) output (the 32-byte sub-key seed). */
+var NODEID_HKDF_SEED  : [u8; 32]
+/* discarded 64-byte expanded private key from keypair generation. */
+var NODEID_PRIV_SCRAP : [u8; 64]
+/* oneshot concat scratch: PRK(32) || info || 0x01, and hw || bootstrap. */
+var NODEID_CONCAT     : [u8; 8224]
+/* producer id = ident_from_bytes("aether::node_identity"). */
+var NODEID_PRODUCER   : [u8; 32]
+/* op id = ident_from_bytes("aether::node_identity::birth"). */
+var NODEID_OPID_BIRTH : [u8; 32]
+/* per-role HKDF info strings (ASCII), populated once by ni_build_info. */
+var NODEID_INFO_ID    : [u8; 24]
+var NODEID_INFO_COMM  : [u8; 24]
+var NODEID_INFO_WIT   : [u8; 24]
+/* producer / opid source strings, populated once by ni_build_info. */
+var NODEID_PROD_STR   : [u8; 32]
+var NODEID_OPID_STR   : [u8; 32]
+/* witness in_commit scratch (chain root at birth). */
+var NODEID_IN_COMMIT  : [u8; 32]
+/* 0 until ni_init* completes; gates every accessor.  set once at boot. */
+var NODEID_INITED     : u8 = 0u8
+/* 0 until ni_build_info has populated the constant strings; idempotency flag. */
+var NODEID_INFO_READY : u8 = 0u8
+
+/* selftest scratch (module scope; Trap 7). */
+var NODEID_ST_ARGS    : [u8; 32]
+var NODEID_ST_HW      : [u8; 8]
+var NODEID_ST_BS      : [u8; 8]
+var NODEID_ST_SEEDREF : [u8; 32]
+var NODEID_ST_PUB     : [u8; 32]
+var NODEID_ST_PUB2    : [u8; 32]
+var NODEID_ST_PUB3    : [u8; 32]
+var NODEID_ST_IDREF   : [u8; 32]
+var NODEID_ST_IDOUT   : [u8; 32]
+var NODEID_ST_MSG     : [u8; 4]
+var NODEID_ST_SIG     : [u8; 64]
+var NODEID_ST_SIG2    : [u8; 64]
+var NODEID_ST_CONCAT  : [u8; 16]
+
+/* Populate the fixed ASCII info / producer / opid strings exactly once. */
+fn ni_build_info() -> i32 {
+    if NODEID_INFO_READY == 1u8 { return NODEID_OK }
+    /* "iii::node::identity" (19) */
+    NODEID_INFO_ID[0u64]  = 0x69u8  NODEID_INFO_ID[1u64]  = 0x69u8  NODEID_INFO_ID[2u64]  = 0x69u8
+    NODEID_INFO_ID[3u64]  = 0x3au8  NODEID_INFO_ID[4u64]  = 0x3au8
+    NODEID_INFO_ID[5u64]  = 0x6eu8  NODEID_INFO_ID[6u64]  = 0x6fu8  NODEID_INFO_ID[7u64]  = 0x64u8  NODEID_INFO_ID[8u64]  = 0x65u8
+    NODEID_INFO_ID[9u64]  = 0x3au8  NODEID_INFO_ID[10u64] = 0x3au8
+    NODEID_INFO_ID[11u64] = 0x69u8  NODEID_INFO_ID[12u64] = 0x64u8  NODEID_INFO_ID[13u64] = 0x65u8  NODEID_INFO_ID[14u64] = 0x6eu8
+    NODEID_INFO_ID[15u64] = 0x74u8  NODEID_INFO_ID[16u64] = 0x69u8  NODEID_INFO_ID[17u64] = 0x74u8  NODEID_INFO_ID[18u64] = 0x79u8
+    /* "iii::node::communication" (24) */
+    NODEID_INFO_COMM[0u64]  = 0x69u8  NODEID_INFO_COMM[1u64]  = 0x69u8  NODEID_INFO_COMM[2u64]  = 0x69u8
+    NODEID_INFO_COMM[3u64]  = 0x3au8  NODEID_INFO_COMM[4u64]  = 0x3au8
+    NODEID_INFO_COMM[5u64]  = 0x6eu8  NODEID_INFO_COMM[6u64]  = 0x6fu8  NODEID_INFO_COMM[7u64]  = 0x64u8  NODEID_INFO_COMM[8u64]  = 0x65u8
+    NODEID_INFO_COMM[9u64]  = 0x3au8  NODEID_INFO_COMM[10u64] = 0x3au8
+    NODEID_INFO_COMM[11u64] = 0x63u8  NODEID_INFO_COMM[12u64] = 0x6fu8  NODEID_INFO_COMM[13u64] = 0x6du8  NODEID_INFO_COMM[14u64] = 0x6du8
+    NODEID_INFO_COMM[15u64] = 0x75u8  NODEID_INFO_COMM[16u64] = 0x6eu8  NODEID_INFO_COMM[17u64] = 0x69u8  NODEID_INFO_COMM[18u64] = 0x63u8
+    NODEID_INFO_COMM[19u64] = 0x61u8  NODEID_INFO_COMM[20u64] = 0x74u8  NODEID_INFO_COMM[21u64] = 0x69u8  NODEID_INFO_COMM[22u64] = 0x6fu8
+    NODEID_INFO_COMM[23u64] = 0x6eu8
+    /* "iii::node::witness" (18) */
+    NODEID_INFO_WIT[0u64]  = 0x69u8  NODEID_INFO_WIT[1u64]  = 0x69u8  NODEID_INFO_WIT[2u64]  = 0x69u8
+    NODEID_INFO_WIT[3u64]  = 0x3au8  NODEID_INFO_WIT[4u64]  = 0x3au8
+    NODEID_INFO_WIT[5u64]  = 0x6eu8  NODEID_INFO_WIT[6u64]  = 0x6fu8  NODEID_INFO_WIT[7u64]  = 0x64u8  NODEID_INFO_WIT[8u64]  = 0x65u8
+    NODEID_INFO_WIT[9u64]  = 0x3au8  NODEID_INFO_WIT[10u64] = 0x3au8
+    NODEID_INFO_WIT[11u64] = 0x77u8  NODEID_INFO_WIT[12u64] = 0x69u8  NODEID_INFO_WIT[13u64] = 0x74u8  NODEID_INFO_WIT[14u64] = 0x6eu8
+    NODEID_INFO_WIT[15u64] = 0x65u8  NODEID_INFO_WIT[16u64] = 0x73u8  NODEID_INFO_WIT[17u64] = 0x73u8
+    /* "aether::node_identity" (21) */
+    NODEID_PROD_STR[0u64]  = 0x61u8  NODEID_PROD_STR[1u64]  = 0x65u8  NODEID_PROD_STR[2u64]  = 0x74u8  NODEID_PROD_STR[3u64]  = 0x68u8
+    NODEID_PROD_STR[4u64]  = 0x65u8  NODEID_PROD_STR[5u64]  = 0x72u8
+    NODEID_PROD_STR[6u64]  = 0x3au8  NODEID_PROD_STR[7u64]  = 0x3au8
+    NODEID_PROD_STR[8u64]  = 0x6eu8  NODEID_PROD_STR[9u64]  = 0x6fu8  NODEID_PROD_STR[10u64] = 0x64u8  NODEID_PROD_STR[11u64] = 0x65u8
+    NODEID_PROD_STR[12u64] = 0x5fu8
+    NODEID_PROD_STR[13u64] = 0x69u8  NODEID_PROD_STR[14u64] = 0x64u8  NODEID_PROD_STR[15u64] = 0x65u8  NODEID_PROD_STR[16u64] = 0x6eu8
+    NODEID_PROD_STR[17u64] = 0x74u8  NODEID_PROD_STR[18u64] = 0x69u8  NODEID_PROD_STR[19u64] = 0x74u8  NODEID_PROD_STR[20u64] = 0x79u8
+    /* "aether::node_identity::birth" (28) = prod(21) || "::birth" */
+    let mut i : u64 = 0u64
+    while i < NODEID_PRODUCER_LEN { NODEID_OPID_STR[i] = NODEID_PROD_STR[i]  i = i + 1u64 }
+    NODEID_OPID_STR[21u64] = 0x3au8  NODEID_OPID_STR[22u64] = 0x3au8
+    NODEID_OPID_STR[23u64] = 0x62u8  NODEID_OPID_STR[24u64] = 0x69u8  NODEID_OPID_STR[25u64] = 0x72u8  NODEID_OPID_STR[26u64] = 0x74u8
+    NODEID_OPID_STR[27u64] = 0x68u8
+    ident_from_bytes((&NODEID_PROD_STR as u64) as *u8, NODEID_PRODUCER_LEN, (&NODEID_PRODUCER as u64) as *u8)
+    ident_from_bytes((&NODEID_OPID_STR as u64) as *u8, NODEID_OPID_LEN, (&NODEID_OPID_BIRTH as u64) as *u8)
+    NODEID_INFO_READY = 1u8
+    return NODEID_OK
+}
+
+/* HKDF-Expand single block: out = Keccak256(NODEID_NODE_SEED(32) || info || 0x01). */
+fn ni_hkdf_expand(info: *u8, info_len: u64, out: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < NODEID_KEY_BYTES { NODEID_CONCAT[i] = NODEID_NODE_SEED[i]  i = i + 1u64 }
+    let mut j : u64 = 0u64
+    while j < info_len { NODEID_CONCAT[NODEID_KEY_BYTES + j] = info[j]  j = j + 1u64 }
+    let total : u64 = NODEID_KEY_BYTES + info_len
+    NODEID_CONCAT[total] = 0x01u8
+    keccak256_oneshot(&NODEID_CONCAT as u64, total + 1u64, out as u64)
+    return NODEID_OK
+}
+
+/* Read a little-endian u64 field from the NodeIdInitArgs aggregate at byte off. */
+fn ni_args_u64(args: *u8, off: u64) -> u64 {
+    let b0 : u64 = args[off + 0u64] as u64
+    let b1 : u64 = args[off + 1u64] as u64
+    let b2 : u64 = args[off + 2u64] as u64
+    let b3 : u64 = args[off + 3u64] as u64
+    let b4 : u64 = args[off + 4u64] as u64
+    let b5 : u64 = args[off + 5u64] as u64
+    let b6 : u64 = args[off + 6u64] as u64
+    let b7 : u64 = args[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+/* Derive one role keypair into keys_base (= seed(32)||pub(32)).  Returns
+ * NODEID_OK or NODEID_E_DERIVE. */
+fn ni_derive_role(keys_base: u64, info: *u8, info_len: u64) -> i32 {
+    ni_hkdf_expand(info, info_len, (&NODEID_HKDF_SEED as u64) as *u8)
+    let kp : *u8 = keys_base as *u8
+    let mut i : u64 = 0u64
+    while i < NODEID_KEY_BYTES { kp[i] = NODEID_HKDF_SEED[i]  i = i + 1u64 }
+    let pub_ptr : *u8 = (keys_base + NODEID_KEY_BYTES) as *u8
+    let rc : u32 = ed25519_keypair_from_seed((&NODEID_HKDF_SEED as u64) as *u8, pub_ptr, (&NODEID_PRIV_SCRAP as u64) as *u8)
+    if rc != 0u32 { return NODEID_E_DERIVE }
+    return NODEID_OK
+}
+
+/* node_seed = Keccak256(hw_seed || bootstrap_secret) into NODEID_NODE_SEED.
+ * args fields are read LE; returns NODEID_OK or NODEID_E_BAD on bound overflow. */
+fn ni_make_node_seed(args: *u8) -> i32 {
+    let hw_ptr : u64 = ni_args_u64(args, 0u64)
+    let hw_len : u64 = ni_args_u64(args, 8u64)
+    let bs_ptr : u64 = ni_args_u64(args, 16u64)
+    let bs_len : u64 = ni_args_u64(args, 24u64)
+    let total : u64 = hw_len + bs_len
+    if total > NODEID_MAX_INPUT { return NODEID_E_BAD }
+    let hw : *u8 = hw_ptr as *u8
+    let bs : *u8 = bs_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < hw_len { NODEID_CONCAT[i] = hw[i]  i = i + 1u64 }
+    let mut j : u64 = 0u64
+    while j < bs_len { NODEID_CONCAT[hw_len + j] = bs[j]  j = j + 1u64 }
+    keccak256_oneshot(&NODEID_CONCAT as u64, total, &NODEID_NODE_SEED as u64)
+    return NODEID_OK
+}
+
+/* Publish the M6 NODE_BIRTH witness fragment (out_commit = node_id, payload =
+ * identity pub).  Best-effort: returns wh_publish's verdict folded to status. */
+fn ni_witness_birth() -> i32 {
+    wh_chain_root((&NODEID_IN_COMMIT as u64) as *u8)
+    let nullante : *u8 = 0u64 as *u8
+    let nullfid : *u8 = 0u64 as *u8
+    let idpub : *u8 = ((&NODEID_ID_KEYS as u64) + NODEID_KEY_BYTES) as *u8
+    let fid : u64 = wh_publish((&NODEID_PRODUCER as u64) as *u8, (&NODEID_OPID_BIRTH as u64) as *u8, (&NODEID_IN_COMMIT as u64) as *u8, (&NODEID_NODE_ID as u64) as *u8, 0u8, 0u8, 0u16, nullante, 0u32, idpub, 32u32, nullfid)
+    if fid == 0xFFFFFFFFFFFFFFFFu64 { return NODEID_E_BAD }
+    return NODEID_OK
+}
+
+/* Core derivation shared by both init entries.  cap_id == 0 (CAP_INVALID)
+ * skips the M8 gate (pre-cap very-early boot); do_witness == 1 publishes the
+ * M6 birth fragment. */
+fn ni_derive(args: *u8, cap_id: u64, do_witness: u8) -> i32 {
+    ni_build_info()
+    if cap_id != 0u64 {
+        let need : u64 = NODEID_RIGHT_ATTEST | NODEID_RIGHT_SIGN
+        if cap_verify_rights(cap_id, need) != 1u8 { return NODEID_E_DENIED }
+    }
+    let seed_rc : i32 = ni_make_node_seed(args)
+    if seed_rc != NODEID_OK { return seed_rc }
+    let r_id : i32 = ni_derive_role(&NODEID_ID_KEYS as u64, (&NODEID_INFO_ID as u64) as *u8, NODEID_INFO_ID_LEN)
+    if r_id != NODEID_OK { return NODEID_E_DERIVE }
+    let r_comm : i32 = ni_derive_role(&NODEID_COMM_KEYS as u64, (&NODEID_INFO_COMM as u64) as *u8, NODEID_INFO_COMM_LEN)
+    if r_comm != NODEID_OK { return NODEID_E_DERIVE }
+    let r_wit : i32 = ni_derive_role(&NODEID_WIT_KEYS as u64, (&NODEID_INFO_WIT as u64) as *u8, NODEID_INFO_WIT_LEN)
+    if r_wit != NODEID_OK { return NODEID_E_DERIVE }
+    let idpub : *u8 = ((&NODEID_ID_KEYS as u64) + NODEID_KEY_BYTES) as *u8
+    ident_from_bytes(idpub, NODEID_KEY_BYTES, (&NODEID_NODE_ID as u64) as *u8)
+    NODEID_INITED = 1u8
+    if do_witness == 1u8 { ni_witness_birth() }
+    return NODEID_OK
+}
+
+fn ni_init(args: *u8) -> i32 @export {
+    if (args as u64) == 0u64 { return NODEID_E_BAD }
+    return ni_derive(args, 0u64, 0u8)
+}
+
+fn ni_init_witnessed(args: *u8, cap_id: u64) -> i32 @export {
+    if (args as u64) == 0u64 { return NODEID_E_BAD }
+    return ni_derive(args, cap_id, 1u8)
+}
+
+/* Copy 32-byte pubkey half of a role key store into out_pub. */
+fn ni_copy_pub(keys_base: u64, out_pub: *u8) -> i32 {
+    if NODEID_INITED == 0u8 { return NODEID_E_BAD }
+    if (out_pub as u64) == 0u64 { return NODEID_E_BAD }
+    let src : *u8 = (keys_base + NODEID_KEY_BYTES) as *u8
+    let mut i : u64 = 0u64
+    while i < NODEID_KEY_BYTES { out_pub[i] = src[i]  i = i + 1u64 }
+    return NODEID_OK
+}
+
+fn ni_identity_pub(out_pub: *u8) -> i32 @export {
+    return ni_copy_pub(&NODEID_ID_KEYS as u64, out_pub)
+}
+
+fn ni_communication_pub(out_pub: *u8) -> i32 @export {
+    return ni_copy_pub(&NODEID_COMM_KEYS as u64, out_pub)
+}
+
+fn ni_witness_pub(out_pub: *u8) -> i32 @export {
+    return ni_copy_pub(&NODEID_WIT_KEYS as u64, out_pub)
+}
+
+/* Sign msg with a role keypair (keys = seed||pub).  RFC 8032 detached 64-byte
+ * signature, deterministic (r is hash-derived, no nonce RNG). */
+fn ni_sign_role(keys_base: u64, msg: *u8, msg_len: u64, out_sig: *u8) -> i32 {
+    if NODEID_INITED == 0u8 { return NODEID_E_BAD }
+    if (out_sig as u64) == 0u64 { return NODEID_E_BAD }
+    let keys : *u8 = keys_base as *u8
+    if ed25519_sign_c4(keys, msg, msg_len, out_sig) != 1u8 { return NODEID_E_SIGN }
+    return NODEID_OK
+}
+
+fn ni_identity_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 @export {
+    return ni_sign_role(&NODEID_ID_KEYS as u64, msg, msg_len, out_sig)
+}
+
+fn ni_communication_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 @export {
+    return ni_sign_role(&NODEID_COMM_KEYS as u64, msg, msg_len, out_sig)
+}
+
+fn ni_witness_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 @export {
+    return ni_sign_role(&NODEID_WIT_KEYS as u64, msg, msg_len, out_sig)
+}
+
+fn ni_node_id(out_id: *u8) -> i32 @export {
+    if NODEID_INITED == 0u8 { return NODEID_E_BAD }
+    if (out_id as u64) == 0u64 { return NODEID_E_BAD }
+    ident_copy((&NODEID_NODE_ID as u64) as *u8, out_id)
+    return NODEID_OK
+}
+
+fn ni_is_inited() -> u8 @export {
+    return NODEID_INITED
+}
+
+/* Build the fixed selftest NodeIdInitArgs aggregate: hw_seed="HW0", bs="BS0". */
+fn ni_st_build_args() -> i32 {
+    NODEID_ST_HW[0u64] = 0x48u8  NODEID_ST_HW[1u64] = 0x57u8  NODEID_ST_HW[2u64] = 0x30u8
+    NODEID_ST_BS[0u64] = 0x42u8  NODEID_ST_BS[1u64] = 0x53u8  NODEID_ST_BS[2u64] = 0x30u8
+    let hwp : u64 = &NODEID_ST_HW as u64
+    let bsp : u64 = &NODEID_ST_BS as u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { NODEID_ST_ARGS[i] = ((hwp >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    NODEID_ST_ARGS[8u64]  = 0x03u8  NODEID_ST_ARGS[9u64]  = 0x00u8  NODEID_ST_ARGS[10u64] = 0x00u8  NODEID_ST_ARGS[11u64] = 0x00u8
+    NODEID_ST_ARGS[12u64] = 0x00u8  NODEID_ST_ARGS[13u64] = 0x00u8  NODEID_ST_ARGS[14u64] = 0x00u8  NODEID_ST_ARGS[15u64] = 0x00u8
+    let mut j : u64 = 0u64
+    while j < 8u64 { NODEID_ST_ARGS[16u64 + j] = ((bsp >> (j * 8u64)) & 0xFFu64) as u8  j = j + 1u64 }
+    NODEID_ST_ARGS[24u64] = 0x03u8  NODEID_ST_ARGS[25u64] = 0x00u8  NODEID_ST_ARGS[26u64] = 0x00u8  NODEID_ST_ARGS[27u64] = 0x00u8
+    NODEID_ST_ARGS[28u64] = 0x00u8  NODEID_ST_ARGS[29u64] = 0x00u8  NODEID_ST_ARGS[30u64] = 0x00u8  NODEID_ST_ARGS[31u64] = 0x00u8
+    return NODEID_OK
+}
+
+/* 1 iff the two 32-byte buffers differ in at least one byte (distinctness). */
+fn ni_st_differs(a: *u8, b: *u8) -> u8 {
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < NODEID_KEY_BYTES { acc = acc | ((a[i] as u32) ^ (b[i] as u32))  i = i + 1u64 }
+    if acc == 0u32 { return 0u8 }
+    return 1u8
+}
+
+/* 1 iff the two 32-byte buffers are byte-identical. */
+fn ni_st_eq32(a: *u8, b: *u8) -> u8 {
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < NODEID_KEY_BYTES { acc = acc | ((a[i] as u32) ^ (b[i] as u32))  i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* 1 iff the two 64-byte buffers are byte-identical. */
+fn ni_st_eq64(a: *u8, b: *u8) -> u8 {
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < NODEID_SIG_BYTES { acc = acc | ((a[i] as u32) ^ (b[i] as u32))  i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* Self-test.  Returns 99u64 on full pass; otherwise the failing checkpoint
+ * number.  KAT vectors per node_identity.spec.md.  Negative-case (uninit
+ * guard) is asserted FIRST, because NODEID_INITED is a once-set boot flag. */
+fn ni_selftest() -> u64 @export {
+    let nullp : *u8 = 0u64 as *u8
+    /* Checkpoint 1/2: uninitialized guards FAIL closed (negative case). */
+    if ni_is_inited() != 0u8 { return 1u64 }
+    if ni_identity_pub((&NODEID_ST_PUB as u64) as *u8) != NODEID_E_BAD { return 2u64 }
+
+    /* Init via the un-gated convenience path with fixed args. */
+    ni_st_build_args()
+    if ni_init((&NODEID_ST_ARGS as u64) as *u8) != NODEID_OK { return 3u64 }
+    if ni_is_inited() != 1u8 { return 4u64 }
+
+    /* Checkpoint 5: node_seed == Keccak256("HW0BS0"). */
+    NODEID_ST_CONCAT[0u64] = 0x48u8  NODEID_ST_CONCAT[1u64] = 0x57u8  NODEID_ST_CONCAT[2u64] = 0x30u8
+    NODEID_ST_CONCAT[3u64] = 0x42u8  NODEID_ST_CONCAT[4u64] = 0x53u8  NODEID_ST_CONCAT[5u64] = 0x30u8
+    keccak256_oneshot(&NODEID_ST_CONCAT as u64, 6u64, &NODEID_ST_SEEDREF as u64)
+    if ni_st_eq32((&NODEID_ST_SEEDREF as u64) as *u8, (&NODEID_NODE_SEED as u64) as *u8) != 1u8 { return 5u64 }
+
+    /* Checkpoint 6: node_id == Keccak256(identity_pub). */
+    if ni_identity_pub((&NODEID_ST_PUB as u64) as *u8) != NODEID_OK { return 6u64 }
+    if ni_node_id((&NODEID_ST_IDOUT as u64) as *u8) != NODEID_OK { return 6u64 }
+    keccak256_oneshot(&NODEID_ST_PUB as u64, 32u64, &NODEID_ST_IDREF as u64)
+    if ni_st_eq32((&NODEID_ST_IDOUT as u64) as *u8, (&NODEID_ST_IDREF as u64) as *u8) != 1u8 { return 7u64 }
+
+    /* Checkpoint 8: sign -> verify round-trip on the identity key. */
+    NODEID_ST_MSG[0u64] = 0x61u8  NODEID_ST_MSG[1u64] = 0x62u8  NODEID_ST_MSG[2u64] = 0x63u8
+    if ni_identity_sign((&NODEID_ST_MSG as u64) as *u8, 3u64, (&NODEID_ST_SIG as u64) as *u8) != NODEID_OK { return 8u64 }
+    if ed25519_verify((&NODEID_ST_PUB as u64) as *u8, (&NODEID_ST_MSG as u64) as *u8, 3u64, (&NODEID_ST_SIG as u64) as *u8) != 1u8 { return 9u64 }
+
+    /* Checkpoint 10/11/12: three role pubkeys pairwise distinct (HKDF info
+     * separation diverged the keys). */
+    if ni_communication_pub((&NODEID_ST_PUB2 as u64) as *u8) != NODEID_OK { return 10u64 }
+    if ni_witness_pub((&NODEID_ST_PUB3 as u64) as *u8) != NODEID_OK { return 10u64 }
+    if ni_st_differs((&NODEID_ST_PUB as u64) as *u8, (&NODEID_ST_PUB2 as u64) as *u8) != 1u8 { return 10u64 }
+    if ni_st_differs((&NODEID_ST_PUB2 as u64) as *u8, (&NODEID_ST_PUB3 as u64) as *u8) != 1u8 { return 11u64 }
+    if ni_st_differs((&NODEID_ST_PUB as u64) as *u8, (&NODEID_ST_PUB3 as u64) as *u8) != 1u8 { return 12u64 }
+
+    /* Checkpoint 13: signing determinism -- same msg+key yields same sig. */
+    if ni_identity_sign((&NODEID_ST_MSG as u64) as *u8, 3u64, (&NODEID_ST_SIG2 as u64) as *u8) != NODEID_OK { return 13u64 }
+    if ni_st_eq64((&NODEID_ST_SIG as u64) as *u8, (&NODEID_ST_SIG2 as u64) as *u8) != 1u8 { return 13u64 }
+
+    /* Checkpoint 14: bad-signature verify FAILS closed (negative case). */
+    NODEID_ST_SIG2[0u64] = NODEID_ST_SIG2[0u64] ^ 0x01u8
+    if ed25519_verify((&NODEID_ST_PUB as u64) as *u8, (&NODEID_ST_MSG as u64) as *u8, 3u64, (&NODEID_ST_SIG2 as u64) as *u8) == 1u8 { return 14u64 }
+
+    return 99u64
+}

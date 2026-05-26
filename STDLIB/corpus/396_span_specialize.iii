@@ -1,0 +1,43 @@
+/* 396 — V1 Stage 7.2: span @specialize (class-B, memory-element).
+ * Stores then loads elements of several widths through *T indexing, proving
+ * the cg sizeof(T)/stride + indexed load/store width binding is correct
+ * (distinct byte regions per width).  Exit 99 = pass. */
+module corpus_396_span_specialize
+
+extern @abi(c-msvc-x64) fn span_u32_store(base: u64, len: u64, idx: u64, value: u32) -> i32 from "span.iii"
+extern @abi(c-msvc-x64) fn span_u32_load(base: u64, len: u64, idx: u64) -> u64 from "span.iii"
+extern @abi(c-msvc-x64) fn span_u16_store(base: u64, len: u64, idx: u64, value: u16) -> i32 from "span.iii"
+extern @abi(c-msvc-x64) fn span_u16_load(base: u64, len: u64, idx: u64) -> u64 from "span.iii"
+extern @abi(c-msvc-x64) fn span_i16_store(base: u64, len: u64, idx: u64, value: i16) -> i32 from "span.iii"
+extern @abi(c-msvc-x64) fn span_i16_load(base: u64, len: u64, idx: u64) -> u64 from "span.iii"
+
+var SPAN_SCRATCH : [u8; 64]
+
+fn main() -> u64 {
+    let base : u64 = &SPAN_SCRATCH as u64
+    /* u32 element round-trip at idx 3 (byte offset 12). */
+    if span_u32_store(base, 16u64, 3u64, 0xDEADBEEFu32) != 0i32 { return 1u64 }
+    if span_u32_load(base, 16u64, 3u64) != 0xDEADBEEFu64 { return 2u64 }
+    /* u16 element round-trip at idx 5 (byte offset 10). */
+    if span_u16_store(base, 32u64, 5u64, 0xBEEFu16) != 0i32 { return 3u64 }
+    if span_u16_load(base, 32u64, 5u64) != 0xBEEFu64 { return 4u64 }
+    /* i16 sign round-trip at idx 2 (byte offset 4). */
+    if span_i16_store(base, 32u64, 2u64, -1000i16) != 0i32 { return 5u64 }
+    let r : i16 = (span_i16_load(base, 32u64, 2u64)) as i16
+    if r != -1000i16 { return 6u64 }
+    /* STRIDE GUARD (regression: *T must use sizeof(T) stride/width, not the
+     * 8-byte quad default).  Store u32 at idx 0 and 1; assert idx1 lands at
+     * byte 4 (stride-4), with byte 8 untouched.  Under the stride-8 bug byte 4
+     * stays 0 and the consistent store+load round-trip would still "pass" --
+     * which is why a single-index round-trip is an insufficient guard. */
+    let p : *u8 = base as *u8
+    let mut z : u64 = 0u64
+    while z < 16u64 { p[z] = 0u8; z = z + 1u64 }
+    if span_u32_store(base, 16u64, 0u64, 0x11223344u32) != 0i32 { return 7u64 }
+    if span_u32_store(base, 16u64, 1u64, 0x55667788u32) != 0i32 { return 8u64 }
+    if (p[0] as u64) != 0x44u64 { return 9u64 }
+    if (p[4] as u64) != 0x88u64 { return 10u64 }
+    if (p[8] as u64) != 0x00u64 { return 11u64 }
+    if span_u32_load(base, 16u64, 1u64) != 0x55667788u64 { return 12u64 }
+    return 99u64
+}

@@ -1,0 +1,23 @@
+/* corpus/321_xii_R030.iii  -- R030 [L1] IF equal-branches collapse */
+
+module corpus_321_xii_R030
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* p: pure K01_FORM (cap-set 0), both branches identical K02_BIND */
+    let p : u32 = xii_term_make_basis(0u8, 0x10u32)
+    let then_b : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let else_b : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let t : u32 = xii_term_make_if(p, then_b, else_b)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 30u32 { return 1u64 }
+    if xii_term_get_kind(r) != 1u8 { return 2u64 }
+    return 0u64
+}

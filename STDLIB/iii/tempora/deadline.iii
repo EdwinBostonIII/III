@@ -1,0 +1,122 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\tempora\deadline.iii
+ *
+ * III STDLIB - tempora::deadline
+ *
+ * First-class deadline.  A deadline pairs an instant_id with an
+ * on-late action enum (RETURN_ERR / TRAP / ABORT).  deadline_check
+ * compares a fresh instant against the deadline and routes via the
+ * on-late action.
+ *
+ * Hexad: kind_motion.  Ring: R0.  K: 1.00.
+ */
+
+module tempora_deadline
+
+extern @abi(c-msvc-x64) fn instant_tick(id: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_now_sealed(time_cap: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+
+const DEADLINE_INVALID : u64 = 0u64
+
+const DEADLINE_LATE_RETURN_ERR : u8 = 0u8
+const DEADLINE_LATE_TRAP       : u8 = 1u8
+const DEADLINE_LATE_ABORT      : u8 = 2u8
+
+const DEADLINE_OK         : i32 = 0i32
+const DEADLINE_E_BADID    : i32 = -1i32
+const DEADLINE_E_LATE     : i32 = -2i32
+
+const DEADLINE_MAX_INSTANCES : u32 = 64u32
+
+var DEADLINE_TICK    : [u64; 64]   /* expiry tick                          */
+var DEADLINE_ACTION  : [u8;  64]
+var DEADLINE_LIVE    : [u8;  64]
+
+fn deadline_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < DEADLINE_MAX_INSTANCES {
+        if DEADLINE_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn deadline_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (DEADLINE_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if DEADLINE_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Create a deadline from an instant id (taken at the deadline tick) +
+ * an on-late action.  The instant is consumed (dropped) after capture. */
+fn deadline_at(instant_id: u64, on_late: u8) -> u64 @export {
+    let tick : u64 = instant_tick(instant_id)
+    if tick == 0u64 { return DEADLINE_INVALID }
+    let s : u32 = deadline_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return DEADLINE_INVALID }
+    DEADLINE_TICK[s]   = tick
+    DEADLINE_ACTION[s] = on_late
+    DEADLINE_LIVE[s]   = 1u8
+    instant_drop(instant_id)
+    return (s as u64) + 1u64
+}
+
+/* Create a deadline `delta_nanos` from now.  Caller must hold a
+ * time_cap that's also good enough to read the current instant. */
+fn deadline_in(time_cap: u64, delta_nanos: u64, on_late: u8) -> u64 @export {
+    let now_id : u64 = instant_now_sealed(time_cap)
+    if now_id == 0u64 { return DEADLINE_INVALID }
+    let now_tick : u64 = instant_tick(now_id)
+    instant_drop(now_id)
+    /* GetTickCount64 returns milliseconds.  Convert delta_nanos to ms. */
+    let delta_ms : u64 = delta_nanos / 1000000u64
+    let target : u64 = now_tick + delta_ms
+    let s : u32 = deadline_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return DEADLINE_INVALID }
+    DEADLINE_TICK[s]   = target
+    DEADLINE_ACTION[s] = on_late
+    DEADLINE_LIVE[s]   = 1u8
+    return (s as u64) + 1u64
+}
+
+fn deadline_tick(id: u64) -> u64 @export {
+    let s : u32 = deadline_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return DEADLINE_TICK[s]
+}
+
+fn deadline_action(id: u64) -> u8 @export {
+    let s : u32 = deadline_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return DEADLINE_ACTION[s]
+}
+
+/* Check the deadline against a known current tick (caller passes it
+ * to keep deadline_check pure-data and ≤4-arg).  Returns DEADLINE_OK
+ * if before deadline, DEADLINE_E_LATE otherwise. */
+fn deadline_check(id: u64, now_tick: u64) -> i32 @export {
+    let s : u32 = deadline_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return DEADLINE_E_BADID }
+    if now_tick < DEADLINE_TICK[s] { return DEADLINE_OK }
+    return DEADLINE_E_LATE
+}
+
+fn deadline_remaining(id: u64, now_tick: u64) -> u64 @export {
+    let s : u32 = deadline_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let target : u64 = DEADLINE_TICK[s]
+    if now_tick >= target { return 0u64 }
+    return target - now_tick
+}
+
+fn deadline_drop(id: u64) -> i32 @export {
+    let s : u32 = deadline_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return DEADLINE_E_BADID }
+    DEADLINE_LIVE[s]   = 0u8
+    DEADLINE_TICK[s]   = 0u64
+    DEADLINE_ACTION[s] = 0u8
+    return DEADLINE_OK
+}

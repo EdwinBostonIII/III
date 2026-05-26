@@ -1,0 +1,146 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ecdsa_p384.iii
+ *
+ * III STDLIB - numera::ecdsa_p384 -- ECDSA over NIST P-384 (RITCHIE §4.11).
+ * Composes the verified constant-time layers fp384/ec384/fn384.  Mirrors
+ * ecdsa_p256 (proven) with 48-byte field coords and 96-byte signatures.
+ *
+ *   keygen(d): Q = d.G                                  (pub = Qx||Qy, 96 B)
+ *   sign(d, z, k): r = (k.G).x mod n; s = k^-1(z+r.d) mod n  (sig = r||s, 96 B)
+ *   verify(Q, z, sig): u1 = z.s^-1, u2 = r.s^-1 mod n;
+ *                      R = u1.G + u2.Q; accept iff R.x mod n == r
+ *
+ * ec384 point storage uses fp384 slots 23/26/29/32 (NOT 30/33/36/39 as ec256
+ * did) because ec384's curve constants live at 40-43 in the smaller 48-slot
+ * fp384 pool; 32..34 stay clear of them.
+ *
+ * Hexad: kind_prove.  Ring: R3.  K: 1.00.
+ */
+
+module numera_ecdsa_p384
+
+extern @abi(c-msvc-x64) fn ec384_scalar_mul_base(out: u64, k_bytes: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_scalar_mul_pt(out: u64, k_bytes: u64, bp: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_add_x(out: u64, a: u64, bp: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_affine_x(out_x: u64, p: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn ec384_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 from "ec384.iii"
+extern @abi(c-msvc-x64) fn fn384_boot() -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_set_bytes_x(slot: u64, src: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_get_bytes_x(dst: u64, slot: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_reduce_x(slot: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_to_mont_x(r: u64, a: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_from_mont_x(r: u64, a: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_mul_x(r: u64, a: u64, b: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_add_x(r: u64, a: u64, b: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_inv_x(r: u64, a: u64) -> i32 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_is_zero_x(slot: u64) -> u8 from "fn384.iii"
+extern @abi(c-msvc-x64) fn gn_eq_x(a: u64, b: u64) -> u8 from "fn384.iii"
+
+var EC384_RX : [u8; 48]
+var EC384_U1 : [u8; 48]
+var EC384_U2 : [u8; 48]
+
+fn iii_ecdsa_p384_keygen(d_bytes: u64, pub_out: u64) -> i32 @export {
+    ec384_scalar_mul_base(23u64, d_bytes)
+    ec384_affine_xy(pub_out, pub_out + 48u64, 23u64)
+    return 0i32
+}
+
+fn iii_ecdsa_p384_sign(d_bytes: u64, z_bytes: u64, k_bytes: u64, sig_out: u64) -> i32 @export {
+    fn384_boot()
+    ec384_scalar_mul_base(23u64, k_bytes)
+    ec384_affine_x(&EC384_RX as u64, 23u64)
+    gn_set_bytes_x(0u64, &EC384_RX as u64)
+    gn_reduce_x(0u64)                     /* r */
+    gn_get_bytes_x(sig_out, 0u64)
+    gn_set_bytes_x(1u64, z_bytes) gn_reduce_x(1u64)
+    gn_set_bytes_x(2u64, d_bytes)
+    gn_set_bytes_x(3u64, k_bytes)
+    gn_to_mont_x(4u64, 0u64)              /* r_m */
+    gn_to_mont_x(5u64, 1u64)              /* z_m */
+    gn_to_mont_x(6u64, 2u64)              /* d_m */
+    gn_to_mont_x(7u64, 3u64)              /* k_m */
+    gn_mul_x(8u64, 4u64, 6u64)            /* r*d */
+    gn_add_x(9u64, 5u64, 8u64)            /* z + r*d */
+    gn_inv_x(10u64, 7u64)                 /* k^-1 */
+    gn_mul_x(11u64, 10u64, 9u64)          /* s_m */
+    gn_from_mont_x(12u64, 11u64)
+    gn_get_bytes_x(sig_out + 48u64, 12u64)
+    return 0i32
+}
+
+fn iii_ecdsa_p384_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: u64) -> u8 {
+    fn384_boot()
+    gn_set_bytes_x(0u64, sig_bytes)               /* r */
+    gn_set_bytes_x(1u64, sig_bytes + 48u64)       /* s */
+    if gn_is_zero_x(0u64) == 1u8 { return 0u8 }
+    if gn_is_zero_x(1u64) == 1u8 { return 0u8 }
+    gn_set_bytes_x(2u64, z_bytes) gn_reduce_x(2u64)
+    gn_to_mont_x(3u64, 1u64)              /* s_m */
+    gn_inv_x(4u64, 3u64)                  /* w = s^-1 */
+    gn_to_mont_x(5u64, 2u64)              /* z_m */
+    gn_to_mont_x(6u64, 0u64)              /* r_m */
+    gn_mul_x(7u64, 5u64, 4u64)            /* u1_m */
+    gn_from_mont_x(8u64, 7u64)
+    gn_get_bytes_x(&EC384_U1 as u64, 8u64)
+    gn_mul_x(7u64, 6u64, 4u64)            /* u2_m */
+    gn_from_mont_x(9u64, 7u64)
+    gn_get_bytes_x(&EC384_U2 as u64, 9u64)
+    ec384_scalar_mul_base(23u64, &EC384_U1 as u64)
+    ec384_set_affine(26u64, qx_bytes, qy_bytes)
+    ec384_scalar_mul_pt(29u64, &EC384_U2 as u64, 26u64)
+    ec384_add_x(32u64, 23u64, 29u64)
+    ec384_affine_x(&EC384_RX as u64, 32u64)
+    gn_set_bytes_x(10u64, &EC384_RX as u64) gn_reduce_x(10u64)
+    if gn_eq_x(10u64, 0u64) == 1u8 { return 1u8 }
+    return 0u8
+}
+fn iii_ecdsa_p384_verify_x(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: u64) -> u8 @export {
+    return iii_ecdsa_p384_verify(qx_bytes, qy_bytes, z_bytes, sig_bytes)
+}
+
+/* ---- Crypto-agility entry points (seed-keygen + deterministic sign) ---- */
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+
+var EC384_D    : [u8; 48]
+var EC384_KBUF : [u8; 48]
+
+/* keygen from a 48-byte seed: d = (seed mod n) forced into [1,n-1];
+ * pub = d.G (Qx||Qy, 96 B); d written to d_out (48 B) as the caller's sk. */
+fn iii_ecdsa_p384_keygen_seed(seed: u64, d_out: u64, pub_out: u64) -> i32 @export {
+    fn384_boot()
+    gn_set_bytes_x(0u64, seed)
+    gn_reduce_x(0u64)
+    let db : *u8 = &EC384_D as *u8
+    if gn_is_zero_x(0u64) == 1u8 {
+        let mut i : u64 = 0u64
+        while i < 48u64 { db[i] = 0u8 ; i = i + 1u64 }
+        db[47] = 1u8
+    } else {
+        gn_get_bytes_x(&EC384_D as u64, 0u64)
+    }
+    let dd : *u8 = d_out as *u8
+    let mut j : u64 = 0u64
+    while j < 48u64 { dd[j] = db[j] ; j = j + 1u64 }
+    return iii_ecdsa_p384_keygen(&EC384_D as u64, pub_out)
+}
+
+/* deterministic sign: nonce k via SP 800-90A HMAC-DRBG seeded from (d,z),
+ * reduced into [1,n-1].  sig_out = r||s (96 B). */
+fn iii_ecdsa_p384_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @export {
+    fn384_boot()
+    iii_drbg_instantiate(d_bytes, 48u64, z_bytes, 48u64, 0u64, 0u64)
+    let mut done : u8 = 0u8
+    let mut guard : u64 = 0u64
+    while done == 0u8 {
+        iii_drbg_generate(&EC384_KBUF as u64, 48u64, 0u64, 0u64)
+        gn_set_bytes_x(0u64, &EC384_KBUF as u64)
+        gn_reduce_x(0u64)
+        if gn_is_zero_x(0u64) == 0u8 { done = 1u8 }
+        guard = guard + 1u64
+        if guard > 64u64 { done = 1u8 }
+    }
+    gn_get_bytes_x(&EC384_KBUF as u64, 0u64)
+    return iii_ecdsa_p384_sign(d_bytes, z_bytes, &EC384_KBUF as u64, sig_out)
+}

@@ -1,0 +1,101 @@
+/* 676_cat_laws.iii -- M12 keystone: the category's algebraic laws (additive over 620_category).
+ *
+ * category.iii is a FREE category over op-words: morphism id = Keccak256(src||dst||op),
+ * composition = op-word CONCATENATION (associative by construction; the nested-hash composite
+ * that re-encodes bracketing is the fixed bug). NOTE: identity is a generator with a non-empty
+ * op-word (cad(obj||"id")), so id.f != f -- this is NOT a unital category, so the identity law is
+ * deliberately NOT asserted. This KAT closes the gaps 620_category leaves: associativity over a
+ * 4-chain for ALL bracketings (a non-associative / bracket-encoding composite breaks it), the
+ * NON-commutativity of composition (op-word order is significant -- associativity is non-trivial),
+ * composite content-address determinism, and the non-composable boundary (prove the negative).
+ *
+ * Main-corpus convention: rc 99 = pass; 1..14 = which check failed. */
+module corpus_676
+
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morph_eq(f_slot: u32, g_slot: u32) -> u8 from "category.iii"
+
+const CAT_SENT : u32 = 0xFFFFFFFFu32
+
+var COBJA : [u8; 32]
+var COBJB : [u8; 32]
+var COBJC : [u8; 32]
+var COBJD : [u8; 32]
+var COBJE : [u8; 32]
+var COPF  : [u8; 32]
+var COPG  : [u8; 32]
+var COPH  : [u8; 32]
+var COPK  : [u8; 32]
+var COPP  : [u8; 32]
+var COPQ  : [u8; 32]
+var CSINK : [u8; 32]
+
+fn cat_fill32(addr: u64, b: u8) -> i32 {
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = b  i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    cat_init()
+    cat_fill32(&COBJA as u64, 0x41u8)  cat_fill32(&COBJB as u64, 0x42u8)
+    cat_fill32(&COBJC as u64, 0x43u8)  cat_fill32(&COBJD as u64, 0x44u8)
+    cat_fill32(&COBJE as u64, 0x45u8)
+    cat_fill32(&COPF as u64, 0x66u8)  cat_fill32(&COPG as u64, 0x67u8)
+    cat_fill32(&COPH as u64, 0x68u8)  cat_fill32(&COPK as u64, 0x6Bu8)
+    cat_fill32(&COPP as u64, 0x70u8)  cat_fill32(&COPQ as u64, 0x71u8)
+    let sk : *u8 = (&CSINK as u64) as *u8
+    let sa : u32 = cat_add_object((&COBJA as u64) as *u8)
+    let sb : u32 = cat_add_object((&COBJB as u64) as *u8)
+    let sc : u32 = cat_add_object((&COBJC as u64) as *u8)
+    let sd : u32 = cat_add_object((&COBJD as u64) as *u8)
+    let se : u32 = cat_add_object((&COBJE as u64) as *u8)
+    if sa == CAT_SENT { return 1u64 }
+    if sb == CAT_SENT { return 1u64 }
+    if sc == CAT_SENT { return 1u64 }
+    if sd == CAT_SENT { return 1u64 }
+    if se == CAT_SENT { return 1u64 }
+    /* the composable chain f:A->B, g:B->C, h:C->D, k:D->E. */
+    let f : u32 = cat_add_morphism(sa, sb, (&COPF as u64) as *u8, sk)
+    let g : u32 = cat_add_morphism(sb, sc, (&COPG as u64) as *u8, sk)
+    let h : u32 = cat_add_morphism(sc, sd, (&COPH as u64) as *u8, sk)
+    let k : u32 = cat_add_morphism(sd, se, (&COPK as u64) as *u8, sk)
+    if f == CAT_SENT { return 2u64 }
+    if g == CAT_SENT { return 2u64 }
+    if h == CAT_SENT { return 2u64 }
+    if k == CAT_SENT { return 2u64 }
+    /* 4-chain associativity: every bracketing of f.g.h.k is the same morphism. */
+    let fg : u32 = cat_compose(f, g, sk)
+    let fgh : u32 = cat_compose(fg, h, sk)
+    let b1 : u32 = cat_compose(fgh, k, sk)                 /* ((f.g).h).k */
+    if b1 == CAT_SENT { return 3u64 }
+    let hk : u32 = cat_compose(h, k, sk)
+    let ghk : u32 = cat_compose(g, hk, sk)
+    let b2 : u32 = cat_compose(f, ghk, sk)                 /* f.(g.(h.k)) */
+    if b2 == CAT_SENT { return 4u64 }
+    let b3 : u32 = cat_compose(fg, hk, sk)                 /* (f.g).(h.k) */
+    if b3 == CAT_SENT { return 5u64 }
+    if cat_morph_eq(b1, b2) != 1u8 { return 6u64 }
+    if cat_morph_eq(b1, b3) != 1u8 { return 7u64 }
+    /* composite content-address determinism: recompose f.g -> the same slot. */
+    let fg2 : u32 = cat_compose(f, g, sk)
+    if fg2 != fg { return 8u64 }
+    /* non-commutativity: endomorphisms p,q : A->A; p.q != q.p (op-word order is significant,
+     * so associativity is a non-trivial law, not because composition collapses order). */
+    let p : u32 = cat_add_morphism(sa, sa, (&COPP as u64) as *u8, sk)
+    let q : u32 = cat_add_morphism(sa, sa, (&COPQ as u64) as *u8, sk)
+    if p == CAT_SENT { return 9u64 }
+    if q == CAT_SENT { return 10u64 }
+    let pq : u32 = cat_compose(p, q, sk)
+    let qp : u32 = cat_compose(q, p, sk)
+    if pq == CAT_SENT { return 11u64 }
+    if qp == CAT_SENT { return 12u64 }
+    if cat_morph_eq(pq, qp) != 0u8 { return 13u64 }
+    /* prove the negative: a non-composable pair (dst(f)=B != src(h)=C) is refused. */
+    if cat_compose(f, h, sk) != CAT_SENT { return 14u64 }
+    return 99u64
+}

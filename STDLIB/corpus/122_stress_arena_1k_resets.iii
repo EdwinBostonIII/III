@@ -1,0 +1,24 @@
+/* Stress baseline (Step 0021): 1024 alloc + reset cycles must
+ * leave arena_used at 0 with no fragmentation. */
+module corpus_122
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_used(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset_safe(id: u64, clear_done: u8) -> i32 from "arena.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+    let mut k : u32 = 0u32
+    while k < 1024u32 {
+        let p : u64 = arena_alloc8(a, 64u64)
+        if p == 0u64 { return 2u64 }
+        if arena_reset_safe(a, 0u8) != 0i32 { return 3u64 }
+        if arena_used(a) != 0u64 { return 4u64 }
+        k = k + 1u32
+    }
+    arena_drop(a)
+    return 99u64
+}

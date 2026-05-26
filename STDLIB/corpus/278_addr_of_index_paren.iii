@@ -1,0 +1,42 @@
+/* III conformance corpus 278 -- Stage 3.11: address-of-index codegen pin.
+ *
+ * The W3 trap "&GLOBAL[0] as u64 does not yield a real address" was
+ * root-caused (Stage 3.11) as a PARSER PRECEDENCE bug, NOT a codegen bug:
+ * the bare `&G[i] as u64` parses as `&(G[i] as u64)` (the `as` cast binds
+ * tighter than unary `&`), so `&` applies to a cast-rvalue and degenerates
+ * to a value load -> wild address -> segfault.  The PARENTHESISED form
+ * `(&G[i]) as u64` reaches the (correct) address-of-index codegen, which
+ * emits `leaq (base, idx, stride)` and yields the real address.
+ *
+ * This pins that correct codegen path (paren'd form).  Once the parser
+ * precedence is fixed (`&X as T` == `(&X) as T`), the bare form will be
+ * pinned too and the W3 byte-at-a-time workarounds can be retired.
+ *
+ * Exit = 99 on success.
+ */
+module corpus_278
+
+var G_BUF : [u8; 32]
+
+fn read_via_ptr(p: u64, idx: u64) -> u32 {
+    let pp : *u8 = p as *u8
+    return pp[idx] as u32
+}
+
+fn main() -> u64 {
+    let mut i : u32 = 0u32
+    while i < 32u32 { G_BUF[i] = (i + 100u32) as u8; i = i + 1u32 }
+    /* paren'd address-of-index, local read */
+    let base : u64 = (&G_BUF[0u32]) as u64
+    let pp : *u8 = base as *u8
+    if (pp[0u64] as u32) != 100u32 { return 1u64 }
+    if (pp[5u64] as u32) != 105u32 { return 2u64 }
+    /* paren'd address-of-index at a non-zero offset */
+    let mid : u64 = (&G_BUF[8u32]) as u64
+    let mp : *u8 = mid as *u8
+    if (mp[0u64] as u32) != 108u32 { return 3u64 }
+    /* cross-fn: pass the computed address to another fn */
+    if read_via_ptr((&G_BUF[16u32]) as u64, 0u64) != 116u32 { return 4u64 }
+    if read_via_ptr((&G_BUF[3u32]) as u64, 0u64) != 103u32 { return 5u64 }
+    return 99u64
+}

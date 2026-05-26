@@ -1,0 +1,106 @@
+/* Poly1305 multiply-path bit-identity: scalar == AVX-512.
+ *
+ * RITCHIE §3.5 kernel 4/10.  MACs the RFC 8439 §2.5.2 vector twice --
+ * once forcing the scalar radix-2^26 multiply (poly1305_force_path(1))
+ * and once forcing the AVX-512 vectorized multiply (force_path(2)) --
+ * and asserts:
+ *   (1) the two tags are byte-for-byte identical (the field-multiply
+ *       bit-identity proof: d = sum_j h_j*col_j in zmm lanes equals the
+ *       scalar d_i expressions exactly),
+ *   (2) the tag equals the published RFC 8439 value, so an
+ *       identical-but-wrong result cannot pass.
+ *
+ * Exit = 88 on full success.
+ */
+module corpus_180
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn poly1305_set_key(key: *u8) -> i32 from "poly1305.iii"
+extern @abi(c-msvc-x64) fn poly1305_update(data: *u8, data_len: u64) -> i32 from "poly1305.iii"
+extern @abi(c-msvc-x64) fn poly1305_finalize(tag_out: *u8) -> i32 from "poly1305.iii"
+extern @abi(c-msvc-x64) fn poly1305_force_path(p: u32) -> i32 from "poly1305.iii"
+
+fn fill_key(k: *u8) -> i32 {
+    k[0]  = 0x85u8; k[1]  = 0xD6u8; k[2]  = 0xBEu8; k[3]  = 0x78u8
+    k[4]  = 0x57u8; k[5]  = 0x55u8; k[6]  = 0x6Du8; k[7]  = 0x33u8
+    k[8]  = 0x7Fu8; k[9]  = 0x44u8; k[10] = 0x52u8; k[11] = 0xFEu8
+    k[12] = 0x42u8; k[13] = 0xD5u8; k[14] = 0x06u8; k[15] = 0xA8u8
+    k[16] = 0x01u8; k[17] = 0x03u8; k[18] = 0x80u8; k[19] = 0x8Au8
+    k[20] = 0xFBu8; k[21] = 0x0Du8; k[22] = 0xB2u8; k[23] = 0xFDu8
+    k[24] = 0x4Au8; k[25] = 0xBFu8; k[26] = 0xF6u8; k[27] = 0xAFu8
+    k[28] = 0x41u8; k[29] = 0x49u8; k[30] = 0xF5u8; k[31] = 0x1Bu8
+    return 0i32
+}
+
+fn fill_msg(m: *u8) -> i32 {
+    /* "Cryptographic Forum Research Group" -- 34 bytes */
+    m[0]  = 67u8;  m[1]  = 114u8; m[2]  = 121u8; m[3]  = 112u8
+    m[4]  = 116u8; m[5]  = 111u8; m[6]  = 103u8; m[7]  = 114u8
+    m[8]  = 97u8;  m[9]  = 112u8; m[10] = 104u8; m[11] = 105u8
+    m[12] = 99u8;  m[13] = 32u8;  m[14] = 70u8;  m[15] = 111u8
+    m[16] = 114u8; m[17] = 117u8; m[18] = 109u8; m[19] = 32u8
+    m[20] = 82u8;  m[21] = 101u8; m[22] = 115u8; m[23] = 101u8
+    m[24] = 97u8;  m[25] = 114u8; m[26] = 99u8;  m[27] = 104u8
+    m[28] = 32u8;  m[29] = 71u8;  m[30] = 114u8; m[31] = 111u8
+    m[32] = 117u8; m[33] = 112u8
+    return 0i32
+}
+
+fn mac_with_path(path: u32, key: *u8, msg: *u8, tag: *u8) -> i32 {
+    poly1305_force_path(path)
+    poly1305_set_key(key)
+    poly1305_update(msg, 34u64)
+    poly1305_finalize(tag)
+    return 0i32
+}
+
+fn check_tag_rfc(tag: *u8) -> u64 {
+    /* Expected: a8 06 1d c1 30 51 36 c6 c2 2b 8b af 0c 01 27 a9 */
+    if tag[0]  != 0xA8u8 { return 1u64 }
+    if tag[1]  != 0x06u8 { return 2u64 }
+    if tag[2]  != 0x1Du8 { return 3u64 }
+    if tag[3]  != 0xC1u8 { return 4u64 }
+    if tag[4]  != 0x30u8 { return 5u64 }
+    if tag[5]  != 0x51u8 { return 6u64 }
+    if tag[6]  != 0x36u8 { return 7u64 }
+    if tag[7]  != 0xC6u8 { return 8u64 }
+    if tag[8]  != 0xC2u8 { return 9u64 }
+    if tag[9]  != 0x2Bu8 { return 10u64 }
+    if tag[10] != 0x8Bu8 { return 11u64 }
+    if tag[11] != 0xAFu8 { return 12u64 }
+    if tag[12] != 0x0Cu8 { return 13u64 }
+    if tag[13] != 0x01u8 { return 14u64 }
+    if tag[14] != 0x27u8 { return 15u64 }
+    if tag[15] != 0xA9u8 { return 16u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let key   : *u8 = malloc(32u64)
+    let msg   : *u8 = malloc(34u64)
+    let tag_a : *u8 = malloc(16u64)
+    let tag_b : *u8 = malloc(16u64)
+    fill_key(key)
+    fill_msg(msg)
+
+    mac_with_path(1u32, key, msg, tag_a)   /* scalar  */
+    mac_with_path(2u32, key, msg, tag_b)   /* avx512  */
+    poly1305_force_path(0u32)
+
+    /* (1) field-multiply bit-identity: scalar tag == avx512 tag. */
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        if tag_a[i] != tag_b[i] { return 1u64 + i }
+        i = i + 1u64
+    }
+    /* (2) anchor to RFC 8439: identical-but-wrong cannot pass. */
+    let rfc_err : u64 = check_tag_rfc(tag_a)
+    if rfc_err != 0u64 { return 40u64 + rfc_err }
+
+    free(key)
+    free(msg)
+    free(tag_a)
+    free(tag_b)
+    return 88u64
+}

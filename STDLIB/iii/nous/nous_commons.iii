@@ -1,0 +1,227 @@
+/* STDLIB/iii/nous/nous_commons.iii -- the cumulative certified commons (nous Phase 5).
+ *
+ * Every search result is deposited, keyed by its reproducibility key (nous_search), so
+ * work is never repeated and progress accumulates:
+ *   CERTIFIED / REFUTED -- IDEMPOTENT, content-addressed deposit: the same content under
+ *                          the same canonical key deposits once; a second deposit is a
+ *                          no-op (B-5: the canonical key omits nous weights, so the
+ *                          commons survives a retrain).  A lookup is a free cache hit,
+ *                          RE-VERIFIED by its certificate (never trusted blindly).
+ *   GAP                 -- the frontier is stored APPEND-ONLY (C-13: versioned gap-ids,
+ *                          so parallel resume never makes commons state run-dependent),
+ *                          and nous_gap_resume continues from it with more budget --
+ *                          reaching CERTIFIED without restarting from scratch.
+ *
+ * THE SAFETY PROPERTY (the negative arm): every entry carries a cad certificate over its
+ * content; a lookup RE-COMPUTES it and refuses (cache miss) on any mismatch.  A tampered
+ * or corrupt entry can never be served as a certified result.
+ *
+ * Hexad: kind_essence (the commons IS the accumulated knowledge).  Ring: R0.  K: 1.00.
+ * NIH: cad.iii + nous_completion.iii.  Determinism: integer-only; byte-wise LE; ==/!=;
+ * single-line fns.  Outcome bytes (0/1/2) are written as literals (the named tags are
+ * link-global in nous_search/nous_completion -- trap #2).
+ */
+module nous_commons
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn nous_complete(n_pairs: u32, budget: u32, force_nonjoin: u8) -> u8 from "nous_completion.iii"
+
+const NOUS_CMN_MAX        : u32 = 256u32
+const NOUS_CMN_SENT       : u32 = 0xFFFFFFFFu32
+const NOUS_CMN_OK         : i32 = 0i32
+const NOUS_CMN_EREFUSE    : i32 = -1i32
+const NOUS_CMN_CERTIFIED  : u8  = 0u8    /* = SATURATED */
+const NOUS_CMN_GAP        : u8  = 1u8
+const NOUS_CMN_REFUTED    : u8  = 2u8
+const NOUS_CMN_CAD_KECCAK : u32 = 1u32
+const NOUS_CMN_U32MASK    : u64 = 0xFFFFFFFFu64
+
+var NOUS_CMN_KEY     : [u8;  8192]   /* 256 * 32-byte keys */
+var NOUS_CMN_OUTCOME : [u8;  256]
+var NOUS_CMN_RES_N   : [u32; 256]    /* gap frontier: n_pairs */
+var NOUS_CMN_RES_B   : [u32; 256]    /* gap frontier: budget spent (resumable) */
+var NOUS_CMN_CERT    : [u8;  8192]   /* 256 * 32-byte content certificates */
+var NOUS_CMN_COUNT   : u32 = 0u32
+var NOUS_CMN_PRE     : [u8;  16]     /* cert preimage scratch */
+var NOUS_CMN_VBUF    : [u8;  32]     /* re-verify digest scratch (NOT a key buffer) */
+/* selftest scratch */
+var NOUS_CMN_K1      : [u8;  32]
+var NOUS_CMN_K2      : [u8;  32]
+var NOUS_CMN_OO      : [u8;  4]
+var NOUS_CMN_ON      : [u32; 2]
+var NOUS_CMN_OB      : [u32; 2]
+
+fn nous_commons_init() -> i32 @export {
+    NOUS_CMN_COUNT = 0u32
+    return NOUS_CMN_OK
+}
+
+fn _cmn_key_eq(slot: u32, key32: *u8) -> u8 {
+    let base : u64 = ((slot as u64) & NOUS_CMN_U32MASK) * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if NOUS_CMN_KEY[base + i] != key32[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn _cmn_find(key32: *u8) -> u32 {
+    let mut i : u32 = 0u32
+    while i < NOUS_CMN_COUNT {
+        if _cmn_key_eq(i, key32) == 1u8 { return i }
+        i = i + 1u32
+    }
+    return NOUS_CMN_SENT
+}
+
+/* The content certificate of slot: cad(n_pairs LE4 || budget LE4 || outcome). */
+fn _cmn_seal(slot: u32) -> i32 {
+    let sb : u64 = (slot as u64) & NOUS_CMN_U32MASK
+    let n : u32 = NOUS_CMN_RES_N[sb]
+    let b : u32 = NOUS_CMN_RES_B[sb]
+    NOUS_CMN_PRE[0u64] = (n & 0xFFu32) as u8
+    NOUS_CMN_PRE[1u64] = ((n >> 8u32)  & 0xFFu32) as u8
+    NOUS_CMN_PRE[2u64] = ((n >> 16u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[3u64] = ((n >> 24u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[4u64] = (b & 0xFFu32) as u8
+    NOUS_CMN_PRE[5u64] = ((b >> 8u32)  & 0xFFu32) as u8
+    NOUS_CMN_PRE[6u64] = ((b >> 16u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[7u64] = ((b >> 24u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[8u64] = NOUS_CMN_OUTCOME[sb]
+    cad_oneshot(NOUS_CMN_CAD_KECCAK, (&NOUS_CMN_PRE as u64) as *u8, 9u64, ((&NOUS_CMN_CERT as u64) + sb * 32u64) as *u8)
+    return NOUS_CMN_OK
+}
+
+/* Recompute slot's certificate and compare to the stored one.  1 = intact. */
+fn _cmn_verify(slot: u32) -> u8 {
+    let sb : u64 = (slot as u64) & NOUS_CMN_U32MASK
+    /* recompute into PRE-derived digest, compare against stored CERT */
+    let n : u32 = NOUS_CMN_RES_N[sb]
+    let b : u32 = NOUS_CMN_RES_B[sb]
+    NOUS_CMN_PRE[0u64] = (n & 0xFFu32) as u8
+    NOUS_CMN_PRE[1u64] = ((n >> 8u32)  & 0xFFu32) as u8
+    NOUS_CMN_PRE[2u64] = ((n >> 16u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[3u64] = ((n >> 24u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[4u64] = (b & 0xFFu32) as u8
+    NOUS_CMN_PRE[5u64] = ((b >> 8u32)  & 0xFFu32) as u8
+    NOUS_CMN_PRE[6u64] = ((b >> 16u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[7u64] = ((b >> 24u32) & 0xFFu32) as u8
+    NOUS_CMN_PRE[8u64] = NOUS_CMN_OUTCOME[sb]
+    cad_oneshot(NOUS_CMN_CAD_KECCAK, (&NOUS_CMN_PRE as u64) as *u8, 9u64, (&NOUS_CMN_VBUF as u64) as *u8)
+    return cad_eq((&NOUS_CMN_VBUF as u64) as *u8, ((&NOUS_CMN_CERT as u64) + sb * 32u64) as *u8)
+}
+
+fn _cmn_store(slot: u32, key32: *u8, outcome: u8, n_pairs: u32, budget: u32) -> i32 {
+    let sb : u64 = (slot as u64) & NOUS_CMN_U32MASK
+    let base : u64 = sb * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 { NOUS_CMN_KEY[base + i] = key32[i]  i = i + 1u64 }
+    NOUS_CMN_OUTCOME[sb] = outcome
+    NOUS_CMN_RES_N[sb] = n_pairs
+    NOUS_CMN_RES_B[sb] = budget
+    _cmn_seal(slot)
+    return NOUS_CMN_OK
+}
+
+/* Deposit a result.  CERTIFIED/REFUTED: idempotent by key (a second identical deposit is
+ * a no-op; a same-key DIFFERENT-content deposit is refused as a content-address conflict).
+ * GAP: append-only (versioned).  Returns the slot, or -1 on refuse / full. */
+fn nous_deposit(key32: *u8, outcome: u8, n_pairs: u32, budget: u32) -> i32 @export {
+    if (key32 as u64) == 0u64 { return NOUS_CMN_EREFUSE }
+    if outcome != NOUS_CMN_GAP {
+        let found : u32 = _cmn_find(key32)
+        if found != NOUS_CMN_SENT {
+            let fb : u64 = (found as u64) & NOUS_CMN_U32MASK
+            /* idempotent only if the content matches AND the stored entry verifies */
+            if NOUS_CMN_OUTCOME[fb] != outcome { return NOUS_CMN_EREFUSE }
+            if NOUS_CMN_RES_N[fb] != n_pairs { return NOUS_CMN_EREFUSE }
+            if NOUS_CMN_RES_B[fb] != budget { return NOUS_CMN_EREFUSE }
+            if _cmn_verify(found) != 1u8 { return NOUS_CMN_EREFUSE }
+            return found as i32
+        }
+    }
+    if NOUS_CMN_COUNT >= NOUS_CMN_MAX { return NOUS_CMN_EREFUSE }
+    let slot : u32 = NOUS_CMN_COUNT
+    _cmn_store(slot, key32, outcome, n_pairs, budget)
+    NOUS_CMN_COUNT = NOUS_CMN_COUNT + 1u32
+    return slot as i32
+}
+
+/* Look up by key.  Returns 1 (hit) + outcome/frontier iff the entry's certificate
+ * re-verifies; 0 (miss) on absent OR corrupt (re-verification failure). */
+fn nous_lookup(key32: *u8, out_outcome: *u8, out_n: *u32, out_b: *u32) -> u8 @export {
+    let found : u32 = _cmn_find(key32)
+    if found == NOUS_CMN_SENT { return 0u8 }
+    if _cmn_verify(found) != 1u8 { return 0u8 }
+    let fb : u64 = (found as u64) & NOUS_CMN_U32MASK
+    if (out_outcome as u64) != 0u64 { out_outcome[0u64] = NOUS_CMN_OUTCOME[fb] }
+    if (out_n as u64) != 0u64 { out_n[0u64] = NOUS_CMN_RES_N[fb] }
+    if (out_b as u64) != 0u64 { out_b[0u64] = NOUS_CMN_RES_B[fb] }
+    return 1u8
+}
+
+/* Resume a stored GAP with more budget: re-run the completion from the frontier.  On
+ * reaching CERTIFIED, the entry is promoted (outcome + cert updated) in place.  Returns
+ * the new outcome.  A non-GAP slot is returned unchanged. */
+fn nous_gap_resume(slot: u32, more_budget: u32) -> u8 @export {
+    if slot >= NOUS_CMN_COUNT { return NOUS_CMN_REFUTED }
+    let sb : u64 = (slot as u64) & NOUS_CMN_U32MASK
+    if NOUS_CMN_OUTCOME[sb] != NOUS_CMN_GAP { return NOUS_CMN_OUTCOME[sb] }
+    let n : u32 = NOUS_CMN_RES_N[sb]
+    let newb : u32 = NOUS_CMN_RES_B[sb] + more_budget
+    let oc : u8 = nous_complete(n, newb, 0u8)
+    NOUS_CMN_OUTCOME[sb] = oc
+    NOUS_CMN_RES_B[sb] = newb
+    _cmn_seal(slot)
+    return oc
+}
+
+fn nous_commons_selftest() -> u64 @export {
+    nous_commons_init()
+    /* two distinct keys */
+    let mut z : u64 = 0u64
+    while z < 32u64 { NOUS_CMN_K1[z] = 0u8  NOUS_CMN_K2[z] = 0u8  z = z + 1u64 }
+    NOUS_CMN_K1[0u64] = 0x11u8
+    let k1 : *u8 = (&NOUS_CMN_K1 as u64) as *u8
+
+    /* deposit a CERTIFIED result */
+    let s0 : i32 = nous_deposit(k1, NOUS_CMN_CERTIFIED, 3u32, 5u32)
+    if s0 != 0i32 { return 1u64 }
+    if NOUS_CMN_COUNT != 1u32 { return 2u64 }
+    /* idempotent: same content + key -> same slot, no growth */
+    if nous_deposit(k1, NOUS_CMN_CERTIFIED, 3u32, 5u32) != 0i32 { return 3u64 }
+    if NOUS_CMN_COUNT != 1u32 { return 4u64 }
+    /* same key, DIFFERENT content -> refused (content-address conflict) */
+    if nous_deposit(k1, NOUS_CMN_CERTIFIED, 3u32, 9u32) != NOUS_CMN_EREFUSE { return 5u64 }
+
+    /* lookup hit + re-verified */
+    let oo : *u8 = (&NOUS_CMN_OO as u64) as *u8
+    let on : *u32 = (&NOUS_CMN_ON as u64) as *u32
+    let ob : *u32 = (&NOUS_CMN_OB as u64) as *u32
+    if nous_lookup(k1, oo, on, ob) != 1u8 { return 6u64 }
+    if NOUS_CMN_OO[0u64] != NOUS_CMN_CERTIFIED { return 7u64 }
+    if NOUS_CMN_ON[0u64] != 3u32 { return 8u64 }
+
+    /* the negative arm: tamper the stored frontier -> lookup re-verify fails -> miss */
+    NOUS_CMN_RES_B[0u64] = 99u32
+    if nous_lookup(k1, oo, on, ob) != 0u8 { return 9u64 }
+    NOUS_CMN_RES_B[0u64] = 5u32        /* restore -> verifies again */
+    if nous_lookup(k1, oo, on, ob) != 1u8 { return 10u64 }
+
+    /* GAP deposit + resume to CERTIFIED (from the frontier, not from scratch) */
+    NOUS_CMN_K2[0u64] = 0x22u8
+    let k2 : *u8 = (&NOUS_CMN_K2 as u64) as *u8
+    let g0 : i32 = nous_deposit(k2, NOUS_CMN_GAP, 3u32, 2u32)   /* n=3, budget spent=2 -> GAP */
+    if g0 != 1i32 { return 11u64 }
+    /* GAP is append-only: a second GAP deposit (same key) appends, never dedups */
+    if nous_deposit(k2, NOUS_CMN_GAP, 3u32, 2u32) != 2i32 { return 12u64 }
+    if NOUS_CMN_COUNT != 3u32 { return 13u64 }
+    /* resume slot 1 with +3 budget (2+3=5 >= 3 pairs) -> CERTIFIED */
+    if nous_gap_resume(1u32, 3u32) != NOUS_CMN_CERTIFIED { return 14u64 }
+    if nous_lookup(k2, oo, on, ob) != 1u8 { return 15u64 }    /* slot 1 found first; now CERTIFIED + re-verifies */
+    if NOUS_CMN_OO[0u64] != NOUS_CMN_CERTIFIED { return 16u64 }
+
+    return 99u64
+}

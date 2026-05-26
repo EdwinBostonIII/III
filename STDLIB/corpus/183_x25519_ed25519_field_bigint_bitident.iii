@@ -1,0 +1,117 @@
+/* Ed25519/X25519 field-multiply bit-identity: scalar bigint == AVX-512 bigint.
+ *
+ * RITCHIE §3.5 kernels 7+8.  Ed25519 (field mul) and X25519 (Montgomery
+ * ladder) in this NIH substrate are both built on field.iii::fp_mul =
+ * bigint_mul + bigint_mod -- there is NO dedicated 5x51-bit field.  So
+ * their field multiply IS bigint_mul, which the §3.5 kernel-6 work
+ * vectorized (AVX-512 vpmullq + vpmuludq).  Adding a separate 51-bit
+ * field would duplicate field arithmetic (anti-bloat, Mandate 9) and
+ * force a rewrite of working point code -- so kernels 7+8 are delivered
+ * via the shared bigint_mul.
+ *
+ * This test runs the full X25519 Montgomery ladder (255 rounds, each a
+ * chain of fp_mul=bigint_mul) twice -- once forcing the scalar bigint
+ * multiply (bigint_force_path(1)) and once forcing the AVX-512 multiply
+ * (force_path(2)) -- and asserts:
+ *   (1) the two 32-byte outputs are byte-identical (the field-mul
+ *       bit-identity proof at the curve level), and
+ *   (2) the output equals the RFC 7748 5.2 Test 1 vector (correctness
+ *       anchor on the AVX-512 path, not-both-wrong).
+ *
+ * Exit = 88 on full success.
+ */
+module corpus_183
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn bigint_force_path(p: u32) -> i32 from "bigint.iii"
+
+fn fill_scalar(s: *u8) -> i32 {
+    s[0]  = 0xA5u8; s[1]  = 0x46u8; s[2]  = 0xE3u8; s[3]  = 0x6Bu8
+    s[4]  = 0xF0u8; s[5]  = 0x52u8; s[6]  = 0x7Cu8; s[7]  = 0x9Du8
+    s[8]  = 0x3Bu8; s[9]  = 0x16u8; s[10] = 0x15u8; s[11] = 0x4Bu8
+    s[12] = 0x82u8; s[13] = 0x46u8; s[14] = 0x5Eu8; s[15] = 0xDDu8
+    s[16] = 0x62u8; s[17] = 0x14u8; s[18] = 0x4Cu8; s[19] = 0x0Au8
+    s[20] = 0xC1u8; s[21] = 0xFCu8; s[22] = 0x5Au8; s[23] = 0x18u8
+    s[24] = 0x50u8; s[25] = 0x6Au8; s[26] = 0x22u8; s[27] = 0x44u8
+    s[28] = 0xBAu8; s[29] = 0x44u8; s[30] = 0x9Au8; s[31] = 0xC4u8
+    return 0i32
+}
+
+fn fill_u(u: *u8) -> i32 {
+    u[0]  = 0xE6u8; u[1]  = 0xDBu8; u[2]  = 0x68u8; u[3]  = 0x67u8
+    u[4]  = 0x58u8; u[5]  = 0x30u8; u[6]  = 0x30u8; u[7]  = 0xDBu8
+    u[8]  = 0x35u8; u[9]  = 0x94u8; u[10] = 0xC1u8; u[11] = 0xA4u8
+    u[12] = 0x24u8; u[13] = 0xB1u8; u[14] = 0x5Fu8; u[15] = 0x7Cu8
+    u[16] = 0x72u8; u[17] = 0x66u8; u[18] = 0x24u8; u[19] = 0xECu8
+    u[20] = 0x26u8; u[21] = 0xB3u8; u[22] = 0x35u8; u[23] = 0x3Bu8
+    u[24] = 0x10u8; u[25] = 0xA9u8; u[26] = 0x03u8; u[27] = 0xA6u8
+    u[28] = 0xD0u8; u[29] = 0xABu8; u[30] = 0x1Cu8; u[31] = 0x4Cu8
+    return 0i32
+}
+
+fn check_rfc(r: *u8) -> u64 {
+    /* RFC 7748 5.2 Test 1 output, all 32 bytes. */
+    if r[0]  != 0xC3u8 { return 1u64 }
+    if r[1]  != 0xDAu8 { return 2u64 }
+    if r[2]  != 0x55u8 { return 3u64 }
+    if r[3]  != 0x37u8 { return 4u64 }
+    if r[4]  != 0x9Du8 { return 5u64 }
+    if r[5]  != 0xE9u8 { return 6u64 }
+    if r[6]  != 0xC6u8 { return 7u64 }
+    if r[7]  != 0x90u8 { return 8u64 }
+    if r[8]  != 0x8Eu8 { return 9u64 }
+    if r[9]  != 0x94u8 { return 10u64 }
+    if r[10] != 0xEAu8 { return 11u64 }
+    if r[11] != 0x4Du8 { return 12u64 }
+    if r[12] != 0xF2u8 { return 13u64 }
+    if r[13] != 0x8Du8 { return 14u64 }
+    if r[14] != 0x08u8 { return 15u64 }
+    if r[15] != 0x4Fu8 { return 16u64 }
+    if r[16] != 0x32u8 { return 17u64 }
+    if r[17] != 0xECu8 { return 18u64 }
+    if r[18] != 0xCFu8 { return 19u64 }
+    if r[19] != 0x03u8 { return 20u64 }
+    if r[20] != 0x49u8 { return 21u64 }
+    if r[21] != 0x1Cu8 { return 22u64 }
+    if r[22] != 0x71u8 { return 23u64 }
+    if r[23] != 0xF7u8 { return 24u64 }
+    if r[24] != 0x54u8 { return 25u64 }
+    if r[25] != 0xB4u8 { return 26u64 }
+    if r[26] != 0x07u8 { return 27u64 }
+    if r[27] != 0x55u8 { return 28u64 }
+    if r[28] != 0x77u8 { return 29u64 }
+    if r[29] != 0xA2u8 { return 30u64 }
+    if r[30] != 0x85u8 { return 31u64 }
+    if r[31] != 0x52u8 { return 32u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let scalar : *u8 = malloc(32u64)
+    let u_in   : *u8 = malloc(32u64)
+    let out_s  : *u8 = malloc(32u64)
+    let out_a  : *u8 = malloc(32u64)
+    fill_scalar(scalar)
+    fill_u(u_in)
+
+    bigint_force_path(1u32)        /* scalar bigint multiply */
+    x25519(out_s, scalar, u_in)
+    bigint_force_path(2u32)        /* AVX-512 bigint multiply */
+    x25519(out_a, scalar, u_in)
+    bigint_force_path(0u32)
+
+    /* (1) field-mul bit-identity at the curve level. */
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if out_s[i] != out_a[i] { return 1u64 + i }
+        i = i + 1u64
+    }
+    /* (2) RFC 7748 correctness anchor. */
+    let rfc_err : u64 = check_rfc(out_s)
+    if rfc_err != 0u64 { return 40u64 + rfc_err }
+
+    free(scalar); free(u_in); free(out_s); free(out_a)
+    return 88u64
+}

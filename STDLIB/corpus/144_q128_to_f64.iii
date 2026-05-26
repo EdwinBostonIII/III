@@ -1,0 +1,43 @@
+/* q128_to_f64_bits — IEEE 754 conversions for known integer values. */
+module corpus_144
+
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_drop(id: u64) -> u8 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_bits(id: u64) -> u64 from "q128_f64.iii"
+extern @abi(c-msvc-x64) fn q128_to_f64_round_dir(id: u64) -> i32 from "q128_f64.iii"
+
+fn main() -> u64 {
+    /* Zero -> +0.0 = 0x0000_0000_0000_0000 */
+    let z : u64 = q128_from_u64(0u64)
+    if q128_to_f64_bits(z) != 0u64 { return 1u64 }
+    if q128_to_f64_round_dir(z) != 0i32 { return 2u64 }
+    q128_drop(z)
+
+    /* 1 -> 1.0 = 0x3FF0_0000_0000_0000 (exp 0+1023=1023, mantissa 0) */
+    let one : u64 = q128_from_u64(1u64)
+    if q128_to_f64_bits(one) != 0x3FF0000000000000u64 { return 3u64 }
+    if q128_to_f64_round_dir(one) != 0i32 { return 4u64 }
+    q128_drop(one)
+
+    /* 2 -> 2.0 = 0x4000_0000_0000_0000 (exp 1+1023=1024, mantissa 0) */
+    let two : u64 = q128_from_u64(2u64)
+    if q128_to_f64_bits(two) != 0x4000000000000000u64 { return 5u64 }
+    q128_drop(two)
+
+    /* 3 -> 1.5 * 2^1 = 0x4008_0000_0000_0000
+     * (exp 1+1023=1024 = 0x400, mantissa 0.5 stored as 0x800...0000) */
+    let three : u64 = q128_from_u64(3u64)
+    if q128_to_f64_bits(three) != 0x4008000000000000u64 { return 6u64 }
+    q128_drop(three)
+
+    /* 2^53 - 1 (= 9007199254740991) — exact representation. */
+    let big_exact : u64 = q128_from_u64(9007199254740991u64)
+    /* Expected: exp = 52+1023 = 1075 = 0x433, mantissa is all 52 ones
+     * (since 2^53-1 = 1.111...1 * 2^52, dropping leading 1 -> 52 ones).
+     * bits = 0x433FFFFFFFFFFFFF */
+    if q128_to_f64_bits(big_exact) != 0x433FFFFFFFFFFFFFu64 { return 7u64 }
+    if q128_to_f64_round_dir(big_exact) != 0i32 { return 8u64 }
+    q128_drop(big_exact)
+
+    return 99u64
+}

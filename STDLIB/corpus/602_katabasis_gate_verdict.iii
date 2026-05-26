@@ -1,0 +1,47 @@
+/* 602 -- KATABASIS increment 8: the gate-verdict pipeline (plan 6.2 / 4.2).
+ * Asserts the six-step order, the verdict each rejecting step yields, and the
+ * short-circuit decide() over the five gating-check bits (first failure wins;
+ * OK only if all pass).
+ * Exit 99 = all hold; 1..N = the index of the failing assertion. */
+module corpus_602_katabasis_gate_verdict
+
+extern @abi(c-msvc-x64) fn katabasis_gate_step_verdict(step: u32) -> u32 from "gate_verdict.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_next_step(step: u32) -> u32 from "gate_verdict.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_decide(checks: u32) -> u32 from "gate_verdict.iii"
+extern @abi(c-msvc-x64) fn katabasis_verdict_is_ok(verdict: u32) -> u8 from "gate_verdict.iii"
+
+fn main() -> u64 {
+    /* step -> reject verdict (SEAL=1 CAP=2 HEXAD=3 SID=4 PERFORM=5 WITNESS=6;
+     * verdicts OK=0 SEAL=1 CAP=2 HEXAD=3 IRREVERSIBLE=4 FAIL_CLOSED=5) */
+    if katabasis_gate_step_verdict(1u32) != 1u32 { return 1u64 }   /* SEAL -> REJECT_SEAL */
+    if katabasis_gate_step_verdict(2u32) != 2u32 { return 2u64 }   /* CAP -> REJECT_CAP */
+    if katabasis_gate_step_verdict(3u32) != 3u32 { return 3u64 }   /* HEXAD -> REJECT_HEXAD */
+    if katabasis_gate_step_verdict(4u32) != 4u32 { return 4u64 }   /* SID -> REJECT_IRREVERSIBLE */
+    if katabasis_gate_step_verdict(5u32) != 5u32 { return 5u64 }   /* PERFORM -> FAIL_CLOSED */
+    if katabasis_gate_step_verdict(6u32) != 0u32 { return 6u64 }   /* WITNESS -> OK */
+
+    /* pipeline order: next step after a passing step */
+    if katabasis_gate_next_step(1u32) != 2u32 { return 7u64 }   /* SEAL -> CAP */
+    if katabasis_gate_next_step(2u32) != 3u32 { return 8u64 }   /* CAP -> HEXAD */
+    if katabasis_gate_next_step(3u32) != 4u32 { return 9u64 }   /* HEXAD -> SID */
+    if katabasis_gate_next_step(4u32) != 5u32 { return 10u64 }  /* SID -> PERFORM */
+    if katabasis_gate_next_step(5u32) != 6u32 { return 11u64 }  /* PERFORM -> WITNESS */
+    if katabasis_gate_next_step(6u32) != 0u32 { return 12u64 }  /* WITNESS -> NONE */
+
+    /* short-circuit decide over the 5 check bits (bit0 seal..bit4 perform) */
+    if katabasis_gate_decide(31u32) != 0u32 { return 13u64 }  /* 11111 all pass -> OK */
+    if katabasis_gate_decide(30u32) != 1u32 { return 14u64 }  /* 11110 seal fail -> REJECT_SEAL */
+    if katabasis_gate_decide(29u32) != 2u32 { return 15u64 }  /* 11101 cap fail -> REJECT_CAP */
+    if katabasis_gate_decide(27u32) != 3u32 { return 16u64 }  /* 11011 hexad fail -> REJECT_HEXAD */
+    if katabasis_gate_decide(23u32) != 4u32 { return 17u64 }  /* 10111 sid fail -> REJECT_IRREVERSIBLE */
+    if katabasis_gate_decide(15u32) != 5u32 { return 18u64 }  /* 01111 perform fail -> FAIL_CLOSED */
+    if katabasis_gate_decide(28u32) != 1u32 { return 19u64 }  /* 11100 seal+cap fail -> first (SEAL) */
+    if katabasis_gate_decide(0u32)  != 1u32 { return 20u64 }  /* 00000 all fail -> first (SEAL) */
+
+    /* verdict is_ok */
+    if katabasis_verdict_is_ok(0u32) != 1u8 { return 21u64 }   /* OK */
+    if katabasis_verdict_is_ok(3u32) != 0u8 { return 22u64 }   /* REJECT_HEXAD not ok */
+    if katabasis_verdict_is_ok(5u32) != 0u8 { return 23u64 }   /* FAIL_CLOSED not ok */
+
+    return 99u64
+}

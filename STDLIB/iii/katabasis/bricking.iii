@@ -1,0 +1,68 @@
+/* STDLIB/iii/katabasis/bricking.iii
+ *
+ * KATABASIS increment 10 -- the extended bricking theorem (plan 4.7 / App A).
+ * The hexad bricking-impossibility proof (HEXAD/tests/hexad_bricking_proof.c)
+ * shows, over all 729x729 hexad pairs, that no admitted composition is a brick.
+ * KATABASIS extends it with the physical-write trits: a WriteMetal cycle is
+ * compose6(action, target-region-hexad), so the theorem to prove at the metal
+ * is that NO action can make a write to a structural-NEG SVM target admissible.
+ *
+ * This module proves it EXHAUSTIVELY over all 729 action hexads:
+ *   (T1) for every action a, reachable(compose6(a, BRICK)) == 0   -- the brick
+ *        target is unrepresentable for EVERY action (no laundering);
+ *   (T2) for every action a, reachable(compose6(a, SAFE)) == reachable(a) -- a
+ *        positive target neither grants nor removes admissibility (the action
+ *        decides), so exactly the 144 admitted actions stay admissible.
+ * Together: bricking at the metal is structurally impossible, not guarded.
+ *
+ * Pure -- composes the live hexad algebra over the whole 729 action space.
+ * KAT: corpus 604.  Ring R0.  K 1.00.
+ */
+module katabasis_bricking
+
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+const KBP_BRICK : u16 = 324u16   /* a structural-NEG SVM target (capsule_update brick pattern) */
+const KBP_SAFE  : u16 = 728u16   /* a positive SVM target (all-POS) */
+const KBP_MAX   : u32 = 729u32   /* 3^6 hexads */
+
+/* (T1) The count of actions for which a write-cycle to the BRICK target is
+ * admissible.  The theorem: this is 0 -- exhaustively, over all 729 actions. */
+fn katabasis_bricking_count_reachable_to_brick() -> u64 @export {
+    let mut a : u32 = 0u32
+    let mut c : u64 = 0u64
+    while a < KBP_MAX {
+        let eff : u16 = iii_hexad_compose6(a as u16, KBP_BRICK)
+        if iii_hexad_reachable(eff) == 1u8 { c = c + 1u64 }
+        a = a + 1u32
+    }
+    return c
+}
+
+/* (T2) The count of actions for which composing with the SAFE target does NOT
+ * preserve the action's own admissibility.  The dual: this is 0. */
+fn katabasis_bricking_count_safe_mismatch() -> u64 @export {
+    let mut a : u32 = 0u32
+    let mut c : u64 = 0u64
+    while a < KBP_MAX {
+        let eff : u16 = iii_hexad_compose6(a as u16, KBP_SAFE)
+        if iii_hexad_reachable(eff) != iii_hexad_reachable(a as u16) { c = c + 1u64 }
+        a = a + 1u32
+    }
+    return c
+}
+
+/* The count of actions admissible to the SAFE target -- must equal the reach
+ * bitmap's admitted count (144), confirming the exhaustive sweep is non-vacuous
+ * and consistent with omnia/hexad_reach. */
+fn katabasis_bricking_count_reachable_to_safe() -> u64 @export {
+    let mut a : u32 = 0u32
+    let mut c : u64 = 0u64
+    while a < KBP_MAX {
+        let eff : u16 = iii_hexad_compose6(a as u16, KBP_SAFE)
+        if iii_hexad_reachable(eff) == 1u8 { c = c + 1u64 }
+        a = a + 1u32
+    }
+    return c
+}

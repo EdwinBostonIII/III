@@ -1,0 +1,18 @@
+/* Diag: full iiis-1 type-system annotation parse. */
+module corpus_257
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+
+fn f1(a: u64) -> u64 @hexad_kind(COMPOSE) @k_max(500u64) @cap_required(0x1000u64) {
+    return a + 1u64
+}
+
+fn f2(b: u64) -> u64 @hexad_kind(FORM) {
+    return b * 2u64
+}
+
+fn main() -> u64 {
+    if f1(1u64) != 2u64 { return 1u64 }
+    if f2(5u64) != 10u64 { return 2u64 }
+    return 99u64
+}

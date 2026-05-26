@@ -1,0 +1,152 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\endian.iii
+ *
+ * III STDLIB - numera::endian
+ *
+ * Endianness load/store helpers.  The III stdlib runs on little-endian
+ * hosts (x86-64) but many wire formats use big-endian (network byte
+ * order).  These helpers make the conversions explicit.
+ *
+ * Public API:
+ *   endian_load_u16_le(p:*u8, off:u64) -> u32
+ *   endian_load_u32_le(p:*u8, off:u64) -> u32
+ *   endian_load_u64_le(p:*u8, off:u64) -> u64
+ *   endian_load_u16_be(p:*u8, off:u64) -> u32
+ *   endian_load_u32_be(p:*u8, off:u64) -> u32
+ *   endian_load_u64_be(p:*u8, off:u64) -> u64
+ *   endian_store_u16_le(p:*u8, off:u64, v:u32) -> i32
+ *   endian_store_u32_le(p:*u8, off:u64, v:u32) -> i32
+ *   endian_store_u64_le(p:*u8, off:u64, v:u64) -> i32
+ *   endian_store_u16_be(p:*u8, off:u64, v:u32) -> i32
+ *   endian_store_u32_be(p:*u8, off:u64, v:u32) -> i32
+ *   endian_store_u64_be(p:*u8, off:u64, v:u64) -> i32
+ *   endian_bswap32(v:u32) -> u32
+ *   endian_bswap64(v:u64) -> u64
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_endian
+
+fn endian_load_u16_le(p: *u8, off: u64) -> u32 @export {
+    let b0 : u32 = p[off + 0u64] as u32
+    let b1 : u32 = p[off + 1u64] as u32
+    return b0 | (b1 << 8u32)
+}
+
+fn endian_load_u32_le(p: *u8, off: u64) -> u32 @export {
+    let b0 : u32 = p[off + 0u64] as u32
+    let b1 : u32 = p[off + 1u64] as u32
+    let b2 : u32 = p[off + 2u64] as u32
+    let b3 : u32 = p[off + 3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn endian_load_u64_le(p: *u8, off: u64) -> u64 @export {
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+fn endian_load_u16_be(p: *u8, off: u64) -> u32 @export {
+    let b0 : u32 = p[off + 0u64] as u32
+    let b1 : u32 = p[off + 1u64] as u32
+    return (b0 << 8u32) | b1
+}
+
+fn endian_load_u32_be(p: *u8, off: u64) -> u32 @export {
+    let b0 : u32 = p[off + 0u64] as u32
+    let b1 : u32 = p[off + 1u64] as u32
+    let b2 : u32 = p[off + 2u64] as u32
+    let b3 : u32 = p[off + 3u64] as u32
+    return (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3
+}
+
+fn endian_load_u64_be(p: *u8, off: u64) -> u64 @export {
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return (b0 << 56u64) | (b1 << 48u64) | (b2 << 40u64) | (b3 << 32u64) | (b4 << 24u64) | (b5 << 16u64) | (b6 << 8u64) | b7
+}
+
+fn endian_store_u16_le(p: *u8, off: u64, v: u32) -> i32 @export {
+    p[off + 0u64] = (v & 0xFFu32) as u8
+    p[off + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn endian_store_u32_le(p: *u8, off: u64, v: u32) -> i32 @export {
+    p[off + 0u64] = (v & 0xFFu32) as u8
+    p[off + 1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn endian_store_u64_le(p: *u8, off: u64, v: u64) -> i32 @export {
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+fn endian_store_u16_be(p: *u8, off: u64, v: u32) -> i32 @export {
+    p[off + 0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[off + 1u64] = (v & 0xFFu32) as u8
+    return 0i32
+}
+
+fn endian_store_u32_be(p: *u8, off: u64, v: u32) -> i32 @export {
+    p[off + 0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    p[off + 1u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[off + 2u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p[off + 3u64] = (v & 0xFFu32) as u8
+    return 0i32
+}
+
+fn endian_store_u64_be(p: *u8, off: u64, v: u64) -> i32 @export {
+    p[off + 0u64] = ((v >> 56u64) & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 7u64] = (v & 0xFFu64) as u8
+    return 0i32
+}
+
+fn endian_bswap32(v: u32) -> u32 @export {
+    let b0 : u32 = (v >> 24u32) & 0xFFu32
+    let b1 : u32 = (v >> 16u32) & 0xFFu32
+    let b2 : u32 = (v >> 8u32)  & 0xFFu32
+    let b3 : u32 = v & 0xFFu32
+    return (b3 << 24u32) | (b2 << 16u32) | (b1 << 8u32) | b0
+}
+
+fn endian_bswap64(v: u64) -> u64 @export {
+    let b0 : u64 = (v >> 56u64) & 0xFFu64
+    let b1 : u64 = (v >> 48u64) & 0xFFu64
+    let b2 : u64 = (v >> 40u64) & 0xFFu64
+    let b3 : u64 = (v >> 32u64) & 0xFFu64
+    let b4 : u64 = (v >> 24u64) & 0xFFu64
+    let b5 : u64 = (v >> 16u64) & 0xFFu64
+    let b6 : u64 = (v >> 8u64)  & 0xFFu64
+    let b7 : u64 = v & 0xFFu64
+    return (b7 << 56u64) | (b6 << 48u64) | (b5 << 40u64) | (b4 << 32u64) | (b3 << 24u64) | (b2 << 16u64) | (b1 << 8u64) | b0
+}

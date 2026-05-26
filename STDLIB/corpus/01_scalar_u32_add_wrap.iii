@@ -1,0 +1,8 @@
+module corpus_a01
+
+extern @abi(c-msvc-x64) fn scalar_u32_add_wrap(a: u32, b: u32) -> u32 from "scalar.iii"
+
+fn main() -> u64 {
+    let r : u32 = scalar_u32_add_wrap(40u32, 2u32)
+    return r as u64
+}

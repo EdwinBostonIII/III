@@ -1,0 +1,19 @@
+/* 717 -- mig3 (H1) Part 3 x Part 2 COMPOSITION: systematic application, NEG arm.
+ * THIS FILE MUST FAIL TO COMPILE.
+ * `recv_into` is the ONLY annotated fn (its OUT buffer is @sovereign_value
+ * @sovereign_out).  Its @sovereign_out forces `main` to declare its receive
+ * buffer as SovVal (else 715's rule rejects the recv_into call itself).  But
+ * then that SovVal buffer is leaked into `trusted`'s PLAIN param -- and Part 2's
+ * flow check (r3_chk_param_sovereign) catches it as III_SOVEREIGN_FLOW_VIOLATION,
+ * with ZERO annotation on `trusted`.  This is the whole thesis: mark one real
+ * source, and III enforces containment across the entire call graph itself.
+ * Validated by the run_corpus *_neg contract (non-zero compile rc = PASS). */
+module corpus_717
+type SovBuf = u64 @sovereign_value
+fn recv_into(buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 { return n }
+fn trusted(p: u64) -> u64 { return p }
+fn main() -> u64 {
+    let buf : SovBuf = 0u64
+    let got : u64 = recv_into(buf, 8u64)
+    return trusted(buf)
+}

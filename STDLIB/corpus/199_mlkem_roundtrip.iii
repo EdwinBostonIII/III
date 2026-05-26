@@ -1,0 +1,51 @@
+/* III conformance corpus 199 -- Stage 4.4.2: native .iii ML-KEM (FIPS 203)
+ * round-trip.  ML-KEM-512 (k=2): keygen(seed) -> encaps(coins) -> decaps must
+ * recover the SAME shared secret (encaps/decaps agreement); a 1-bit ciphertext
+ * tamper must DIVERGE the secret (Fujisaki-Okamoto implicit reject).
+ * The substrate's second native .iii post-quantum primitive.  Exit 99.
+ */
+module corpus_199
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_encaps(k: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+
+fn main() -> u64 {
+    let seed  : *u8 = malloc(64u64)
+    let pk    : *u8 = malloc(2048u64)
+    let sk    : *u8 = malloc(4096u64)
+    let ct    : *u8 = malloc(2048u64)
+    let coins : *u8 = malloc(32u64)
+    let s1    : *u8 = malloc(32u64)
+    let s2    : *u8 = malloc(32u64)
+    let s3    : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 64u64 { seed[i] = ((0x33u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { coins[i] = ((i * 11u64 + 5u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    iii_mlkem_keygen(2u64, seed as u64, pk as u64, sk as u64)
+    iii_mlkem_encaps(2u64, pk as u64, coins as u64, ct as u64, s1 as u64)
+    iii_mlkem_decaps(2u64, sk as u64, ct as u64, s2 as u64)
+    i = 0u64
+    while i < 32u64 {
+        if s1[i] != s2[i] { free(seed) ; free(pk) ; free(sk) ; free(ct) ; free(coins) ; free(s1) ; free(s2) ; free(s3) ; return 1u64 }
+        i = i + 1u64
+    }
+    ct[0] = ct[0] ^ 0x01u8
+    iii_mlkem_decaps(2u64, sk as u64, ct as u64, s3 as u64)
+    let mut diff : u64 = 0u64
+    i = 0u64
+    while i < 32u64 { if s1[i] != s3[i] { diff = 1u64 } i = i + 1u64 }
+    free(seed)
+    free(pk)
+    free(sk)
+    free(ct)
+    free(coins)
+    free(s1)
+    free(s2)
+    free(s3)
+    if diff == 0u64 { return 2u64 }
+    return 99u64
+}

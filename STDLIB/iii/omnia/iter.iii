@@ -1,0 +1,172 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\iter.iii
+ *
+ * III STDLIB - omnia::iter
+ *
+ * Total bounded iterators over u8 byte spans.  Every iterator carries
+ * an explicit upper bound (the span length); next() returns the next
+ * byte or signals exhaustion.  No infinite iterators in stdlib.
+ *
+ * Phase A: u8 iterators only.  Generic iterators await @specialize.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.
+ */
+
+module omnia_iter
+
+const ITER_INVALID : u64 = 0u64
+const ITER_END     : u32 = 0x100u32   /* exhaustion sentinel for u8 next */
+const ITER_MAX     : u32 = 64u32
+
+var ITER_BASE : [u64; 64]
+var ITER_LEN  : [u64; 64]
+var ITER_POS  : [u64; 64]
+var ITER_LIVE : [u8;  64]
+
+fn iter_u8_new(base: u64, len: u64) -> u64 @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < ITER_MAX {
+        if ITER_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return ITER_INVALID }
+    ITER_BASE[slot] = base
+    ITER_LEN[slot]  = len
+    ITER_POS[slot]  = 0u64
+    ITER_LIVE[slot] = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn iter_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (ITER_MAX as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if ITER_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Returns next byte (0..255) or ITER_END (0x100) on exhaustion. */
+fn iter_u8_next(id: u64) -> u32 @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return ITER_END }
+    let pos : u64 = ITER_POS[s]
+    let len : u64 = ITER_LEN[s]
+    if pos >= len { return ITER_END }
+    let base : u64 = ITER_BASE[s]
+    if base == 0u64 { return ITER_END }
+    let p : *u8 = base as *u8
+    let v : u8 = p[pos]
+    ITER_POS[s] = pos + 1u64
+    return v as u32
+}
+
+fn iter_u8_pos(id: u64) -> u64 @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return ITER_POS[s]
+}
+
+fn iter_u8_remaining(id: u64) -> u64 @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let pos : u64 = ITER_POS[s]
+    let len : u64 = ITER_LEN[s]
+    if pos >= len { return 0u64 }
+    return len - pos
+}
+
+fn iter_u8_skip(id: u64, n: u64) -> u64 @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let pos : u64 = ITER_POS[s]
+    let len : u64 = ITER_LEN[s]
+    let mut new_pos : u64 = pos + n
+    if new_pos > len { new_pos = len }
+    ITER_POS[s] = new_pos
+    return new_pos - pos
+}
+
+fn iter_u8_drop(id: u64) -> u8 @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    ITER_LIVE[s] = 0u8
+    ITER_BASE[s] = 0u64
+    ITER_LEN[s]  = 0u64
+    ITER_POS[s]  = 0u64
+    return 1u8
+}
+
+/* ─── generic element iterators (V1 Stage 7.2) ──────────────────────────
+ * @specialize over the non-u8 widths.  Shared slot table; len = ELEMENT
+ * count; next reads *T at base+pos*sizeof(T) (the cg T-in-memory hook).  next
+ * returns the element as u64 and advances; at end it returns 0 without
+ * advancing -- detect exhaustion via remaining()==0.  u8 keeps its
+ * 0x100-sentinel API above (corpus 11/20). */
+
+fn iter__new<T>(base: u64, len: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < ITER_MAX {
+        if ITER_LIVE[i] == 0u8 { if slot == 0xFFFFFFFFu32 { slot = i } }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return ITER_INVALID }
+    ITER_BASE[slot] = base
+    ITER_LEN[slot]  = len
+    ITER_POS[slot]  = 0u64
+    ITER_LIVE[slot] = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn iter__next<T>(id: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let pos : u64 = ITER_POS[s]
+    let len : u64 = ITER_LEN[s]
+    if pos >= len { return 0u64 }
+    let base : u64 = ITER_BASE[s]
+    if base == 0u64 { return 0u64 }
+    let p : *T = base as *T
+    let v : T = p[pos]
+    ITER_POS[s] = pos + 1u64
+    return v as u64
+}
+
+fn iter__pos<T>(id: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return ITER_POS[s]
+}
+
+fn iter__remaining<T>(id: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let pos : u64 = ITER_POS[s]
+    let len : u64 = ITER_LEN[s]
+    if pos >= len { return 0u64 }
+    return len - pos
+}
+
+fn iter__skip<T>(id: u64, n: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let pos : u64 = ITER_POS[s]
+    let len : u64 = ITER_LEN[s]
+    let mut new_pos : u64 = pos + n
+    if new_pos > len { new_pos = len }
+    ITER_POS[s] = new_pos
+    return new_pos - pos
+}
+
+fn iter__drop<T>(id: u64) -> u8 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    let s : u32 = iter_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    ITER_LIVE[s] = 0u8
+    ITER_BASE[s] = 0u64
+    ITER_LEN[s]  = 0u64
+    ITER_POS[s]  = 0u64
+    return 1u8
+}

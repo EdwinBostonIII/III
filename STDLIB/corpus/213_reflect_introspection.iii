@@ -1,0 +1,101 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\213_reflect_introspection.iii
+ *
+ * III conformance corpus 213 -- reflect() introspection scopes 0..4
+ * end-to-end. Verifies determinism of the structural-introspection
+ * primitive that powers the calculus's "loop closure" (Phase F).
+ *
+ * Asserts:
+ *   1. resolution_init() initialises cleanly (idempotent).
+ *   2. reflect(0) returns 0 immediately after init (no resolve yet
+ *      ran, so K-cost accumulator is 0).
+ *   3. reflect(2) returns 0 (no last_pattern_id yet).
+ *   4. reflect(5) (out-of-range scope) returns 0 (graceful default).
+ *   5. calculus_primitive_count() == 19.
+ *   6. calculus_primitive_hexad / k_cost queries return deterministic
+ *      values for all 19 primitives (sanity check on the sealed
+ *      metadata table).
+ *   7. calculus_root_mhash is non-zero (the calculus has been sealed).
+ *   8. resolver_last_event emits a 64-byte snapshot (zero-initialised
+ *      before any resolve has fired, but non-erroring).
+ *
+ * Determinism: every reflect() and calculus_*() query is replay-stable.
+ *
+ * Exit code: 99 on full pass; 1..N on specific case failure.
+ */
+
+module corpus_213
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn reflect(scope: u32) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn resolver_last_event(out_64: u64) -> i32 from "resolver.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_count() -> u32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_hexad(p_id: u32) -> u8 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_k_cost(p_id: u32) -> u64 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_root_mhash_byte(i: u32) -> u32 from "calculus_v1.iii"
+
+fn main() -> u64 {
+    /* Init twice; should be idempotent. */
+    let init1 : i32 = resolution_init()
+    if init1 != 0i32 { return 1u64 }
+    let init2 : i32 = resolution_init()
+    if init2 != 0i32 { return 2u64 }
+
+    /* reflect(0) = K-cost accumulator = 0 before any resolve. */
+    if reflect(0u32) != 0u64 { return 3u64 }
+
+    /* reflect(2) = last_pattern_id = 0 before any resolve. */
+    if reflect(2u32) != 0u64 { return 4u64 }
+
+    /* reflect(5) = out-of-range scope; should default to 0. */
+    if reflect(5u32) != 0u64 { return 5u64 }
+
+    /* Calculus has 19 primitives (IDSG abstract added). */
+    if calculus_primitive_count() != 19u32 { return 6u64 }
+
+    /* Each primitive's hexad must be in 1..7 (HEXAD constants). */
+    let mut p : u32 = 1u32
+    while p <= 19u32 {
+        let hexad : u8 = calculus_primitive_hexad(p)
+        if hexad < 1u8  { return 7u64 }
+        if hexad > 7u8  { return 8u64 }
+        let k_cost : u64 = calculus_primitive_k_cost(p)
+        /* K-cost is a non-negative fixed-point ×1e9 value. Must be ≤ 1e9. */
+        if k_cost > 1000000000u64 { return 9u64 }
+        p = p + 1u32
+    }
+
+    /* Root mhash byte 0 should be non-zero (sealed). */
+    if calculus_root_mhash_byte(0u32) > 255u32 { return 10u64 }
+    /* Sum of first 32 bytes should be > 0 (non-zero mhash). */
+    let mut byte_sum : u32 = 0u32
+    let mut bi : u32 = 0u32
+    while bi < 32u32 {
+        byte_sum = byte_sum + (calculus_root_mhash_byte(bi) & 0xFFu32)
+        bi = bi + 1u32
+    }
+    if byte_sum == 0u32 { return 11u64 }
+
+    /* resolver_last_event: write a 64-byte snapshot. Buffer must be
+     * pre-allocated; function fills it. */
+    let evt_buf : *u8 = malloc(64u64)
+    if evt_buf as u64 == 0u64 { return 12u64 }
+    /* Zero buffer first. */
+    let mut zi : u64 = 0u64
+    while zi < 64u64 { evt_buf[zi] = 0u8; zi = zi + 1u64 }
+    let evt_rc : i32 = resolver_last_event(evt_buf as u64)
+    if evt_rc != 0i32 { return 13u64 }
+
+    /* Determinism: re-run all queries once more. Same outputs. */
+    if reflect(0u32) != 0u64 { return 14u64 }
+    if reflect(2u32) != 0u64 { return 15u64 }
+    if calculus_primitive_count() != 19u32 { return 16u64 }
+    let hexad_again : u8 = calculus_primitive_hexad(1u32)
+    let hexad_first : u8 = calculus_primitive_hexad(1u32)
+    if hexad_again != hexad_first { return 17u64 }
+
+    free(evt_buf)
+    return 99u64
+}

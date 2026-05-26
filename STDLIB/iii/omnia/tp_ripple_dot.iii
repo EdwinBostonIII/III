@@ -1,0 +1,89 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_ripple_dot.iii
+ *
+ * Transform pattern: FORM_RIPPLE_PROOF → FORM_DOT_GRAPH
+ * FROZEN SPEC §7B.6 slot 24; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Renders a ripple proof crystal as a Graphviz dot graph. The proof's
+ * crystal_edges form a DAG; we emit each edge as a "from -> to" line.
+ *
+ * Input: a u64 crystal_id (passed as 8-byte little-endian src bytes).
+ * Output: dot-graph text.
+ */
+
+module omnia_tp_ripple_dot
+
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal_edges.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_at(id: u64, idx: u32) -> u64 from "crystal_edges.iii"
+
+var TP_RD_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+/* "digraph G {\n" 12 bytes */
+var TP_RD_HEAD : [u8; 12] = [100u8, 105u8, 103u8, 114u8, 97u8, 112u8, 104u8, 32u8, 71u8, 32u8, 123u8, 10u8]
+/* "}\n" 2 bytes */
+var TP_RD_TAIL : [u8; 2] = [125u8, 10u8]
+
+fn tp_rd_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_rd_emit_hex16(dst: u64, off: u64, v: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let nib : u32 = ((v >> ((15u64 - ((i as u64) & 0xFu64)) * 4u64)) & 0xFu64) as u32
+        tp_rd_emit(dst, off + ((i as u64) & 0xFu64), TP_RD_HEX[nib])
+        i = i + 1u32
+    }
+    return 16u32
+}
+
+fn tp_ripple_dot(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if src_len < 8u64 { return 0u64 }
+    /* Read crystal_id from first 8 bytes LE */
+    let mut crystal_id : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let bp : *u8 = (src + ((k as u64) & 0x7u64)) as *u8
+        crystal_id = crystal_id | (((bp[0u64] as u64) & 0xFFu64) << (((k as u64) & 0x7u64) * 8u64))
+        k = k + 1u32
+    }
+    let mut off : u64 = 0u64
+    /* Emit "digraph G {\n" */
+    let mut h : u32 = 0u32
+    while h < 12u32 {
+        if off >= dst_cap { return 0u64 }
+        tp_rd_emit(dst_buf, off, TP_RD_HEAD[h])
+        off = off + 1u64
+        h = h + 1u32
+    }
+    /* For each edge, emit "  c<from> -> c<to>;\n" */
+    let n : u32 = crystal_edges_count(crystal_id)
+    let mut e : u32 = 0u32
+    while e < n {
+        let to : u64 = crystal_edges_at(crystal_id, e)
+        if off + 50u64 > dst_cap { return 0u64 }
+        tp_rd_emit(dst_buf, off, 32u8)
+        tp_rd_emit(dst_buf, off + 1u64, 32u8)
+        tp_rd_emit(dst_buf, off + 2u64, 99u8)   /* 'c' */
+        off = off + 3u64
+        off = off + (tp_rd_emit_hex16(dst_buf, off, crystal_id) as u64)
+        tp_rd_emit(dst_buf, off, 32u8)
+        tp_rd_emit(dst_buf, off + 1u64, 45u8)   /* '-' */
+        tp_rd_emit(dst_buf, off + 2u64, 62u8)   /* '>' */
+        tp_rd_emit(dst_buf, off + 3u64, 32u8)
+        tp_rd_emit(dst_buf, off + 4u64, 99u8)   /* 'c' */
+        off = off + 5u64
+        off = off + (tp_rd_emit_hex16(dst_buf, off, to) as u64)
+        tp_rd_emit(dst_buf, off, 59u8)          /* ';' */
+        tp_rd_emit(dst_buf, off + 1u64, 10u8)   /* '\n' */
+        off = off + 2u64
+        e = e + 1u32
+    }
+    /* Tail "}\n" */
+    if off + 2u64 > dst_cap { return 0u64 }
+    tp_rd_emit(dst_buf, off, TP_RD_TAIL[0])
+    tp_rd_emit(dst_buf, off + 1u64, TP_RD_TAIL[1])
+    return off + 2u64
+}

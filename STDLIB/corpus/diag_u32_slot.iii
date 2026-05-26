@@ -1,0 +1,45 @@
+/* Diag: u32-in-u64-Slot Garbage trap.
+ *
+ * If iiis-0 stores u32 locals in 8-byte stack slots without
+ * zero-extending the high 4 bytes, then reading via `as u64`
+ * picks up uninitialized garbage in bits 32..63. */
+module diag_u32_slot
+
+fn _grab_high() -> u64 {
+    /* Set up junk in a u64 local; this allocates a stack slot. */
+    let mut j : u64 = 0xDEADBEEF00000000u64
+    j = j + 0u64
+    return j
+}
+
+fn _u32_to_u64(v: u32) -> u64 {
+    /* The trap: if v is stored in 8-byte slot without zero-ext,
+     * then v as u64 reads the high garbage too. */
+    let local : u32 = v
+    return local as u64
+}
+
+fn main() -> u64 {
+    /* Step 1: dirty up the stack by calling a function that leaves
+     * high bits non-zero in some slot. */
+    let _g : u64 = _grab_high()
+
+    /* Step 2: now call _u32_to_u64.  If the bug exists, the high
+     * 4 bytes of `local`'s slot may still be 0xDEADBEEF. */
+    let r : u64 = _u32_to_u64(0x1234u32)
+    if r != 0x1234u64 { return 1u64 }
+
+    /* Step 3: pointer arithmetic via u32-derived u64.  If the high
+     * bits leak, this would compute a wild address.  We check the
+     * scalar value rather than dereferencing (segfault avoidance). */
+    let idx : u32 = 0x5678u32
+    let widened : u64 = (idx as u64)
+    if widened != 0x5678u64 { return 2u64 }
+
+    /* Step 4: arithmetic that masks high bits — should be no-op if
+     * already clean, or restore correctness if dirty. */
+    let masked : u64 = widened & 0xFFFFFFFFu64
+    if masked != 0x5678u64 { return 3u64 }
+
+    return 99u64
+}

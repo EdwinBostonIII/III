@@ -1,0 +1,20 @@
+/* SHA-256 known-answer test: SHA-256("abc") byte 0 = 0xBA = 186 */
+module corpus_a02
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+fn main() -> u64 {
+    let input : *u8 = malloc(3u64)
+    input[0] = 97u8
+    input[1] = 98u8
+    input[2] = 99u8
+    let out : *u8 = malloc(32u64)
+    sha256_oneshot(input, 3u64, out)
+    let first : u8 = out[0]
+    let val : u64 = first as u64
+    free(input)
+    free(out)
+    return val
+}

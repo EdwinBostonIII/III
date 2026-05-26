@@ -1,0 +1,532 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\intent.iii
+ *
+ * III STDLIB - verba::intent
+ *
+ * First-class intent type for the III Intent Calculus.
+ * Sealed against R2-GENESIS/CORE-CALCULUS-V1.0.iii (which supersedes
+ * FROZEN SPEC III-RES-FROZEN-001 §2.1.2).
+ *
+ * Hexad: kind_form. Ring: R0. K: 0.95.
+ * No FP. No telemetry. No mutation post-construction.
+ *
+ * intent_t layout (192 bytes; unchanged across the calculus rev):
+ *   off  field
+ *    0   intent_id : u64
+ *    8   goal_kind : u8     -- now holds a PRIMITIVE_* id (1..18)
+ *    9   _pad
+ *   16   partial_args : [u64; 16]
+ *  144   partial_args_mask : u32
+ *  148   required_guarantees : u32
+ *  152   arena_id : u64
+ *  160   cap_id : u64
+ *  168   expected_hexad_kind : u8
+ *  169   _pad
+ *  176   recursion_depth : u16
+ *  178   _pad
+ *  184   parent_intent_id : u64
+ *  192   end
+ *
+ * The 18 primitives (R2-GENESIS/CORE-CALCULUS-V1.0.iii):
+ *   Hexad        (1-7): form, bind, convey, mean, act, compose, seal
+ *   Meta         (8-11): prove, query, grant, govern
+ *   Composition (12-15): then, with, under, if
+ *   Special    (16-18): loop, lift, reflect
+ */
+
+module verba_intent
+
+/* The 18 primitives of the Intent Calculus. */
+const PRIMITIVE_FORM          : u8 = 1u8
+const PRIMITIVE_BIND          : u8 = 2u8
+const PRIMITIVE_CONVEY        : u8 = 3u8
+const PRIMITIVE_MEAN          : u8 = 4u8
+const PRIMITIVE_ACT           : u8 = 5u8
+const PRIMITIVE_COMPOSE       : u8 = 6u8
+const PRIMITIVE_SEAL          : u8 = 7u8
+const PRIMITIVE_PROVE         : u8 = 8u8
+const PRIMITIVE_QUERY         : u8 = 9u8
+const PRIMITIVE_GRANT         : u8 = 10u8
+const PRIMITIVE_GOVERN        : u8 = 11u8
+const PRIMITIVE_THEN          : u8 = 12u8
+const PRIMITIVE_WITH          : u8 = 13u8
+const PRIMITIVE_UNDER         : u8 = 14u8
+const PRIMITIVE_IF            : u8 = 15u8
+const PRIMITIVE_LOOP          : u8 = 16u8
+const PRIMITIVE_LIFT          : u8 = 17u8
+const PRIMITIVE_REFLECT       : u8 = 18u8
+const PRIMITIVE_ABSTRACT      : u8 = 19u8   /* IDSG generalisation primitive */
+
+/* Hexad kinds (unchanged from FROZEN SPEC §2.1.3). Used as
+ * intent_set_expected_hexad arg. */
+const INTENT_HEXAD_FORM       : u8 = 1u8
+const INTENT_HEXAD_SUBSTANCE  : u8 = 2u8
+const INTENT_HEXAD_PASSAGE    : u8 = 3u8
+const INTENT_HEXAD_ESSENCE    : u8 = 4u8
+const INTENT_HEXAD_MOTION     : u8 = 5u8
+const INTENT_HEXAD_COMPOSE    : u8 = 6u8
+const INTENT_HEXAD_ORIGIN     : u8 = 7u8
+
+const INTENT_TABLE_CAP : u32 = 1024u32
+const INTENT_BYTES     : u32 = 192u32
+
+const INTENT_OK         : i32 =  0i32
+const INTENT_E_RANGE    : i32 = -1i32
+const INTENT_E_FULL     : i32 = -2i32
+const INTENT_E_NULL     : i32 = -3i32
+
+var g_intent_table : [u8; 196608]   /* 1024 × 192 */
+var g_intent_used  : u32 = 0u32
+
+fn intent_slot_ptr(idx: u32) -> u64 {
+    let base : u64 = (&g_intent_table) as u64
+    let off  : u64 = ((idx as u64) & 0xFFFFFFFFu64) * (INTENT_BYTES as u64)
+    return base + off
+}
+
+fn intent_zero(p: u64) -> i32 {
+    let mut i : u32 = 0u32
+    while i < INTENT_BYTES {
+        let bp : *u8 = (p + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u32
+    }
+    return INTENT_OK
+}
+
+fn write_u32_le_at(p: u64, v: u32) -> i32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn read_u32_le_at(p: u64) -> u32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn write_u64_le_at(p: u64, v: u64) -> i32 {
+    let lo : u32 = (v & 0xFFFFFFFFu64) as u32
+    let hi : u32 = ((v >> 32u64) & 0xFFFFFFFFu64) as u32
+    write_u32_le_at(p, lo)
+    write_u32_le_at(p + 4u64, hi)
+    return 0i32
+}
+
+fn read_u64_le_at(p: u64) -> u64 {
+    let lo : u64 = (read_u32_le_at(p) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (read_u32_le_at(p + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn intent_new(goal_kind: u8) -> u64 @export {
+    if g_intent_used >= INTENT_TABLE_CAP { return 0u64 }
+    let idx : u32 = g_intent_used
+    g_intent_used = g_intent_used + 1u32
+    let p   : u64 = intent_slot_ptr(idx)
+    intent_zero(p)
+    /* goal_kind at offset 8 */
+    let pk : *u8 = (p + 8u64) as *u8
+    pk[0u64] = goal_kind
+    /* intent_id derived from index + magic for uniqueness */
+    let magic : u64 = 0xAAAA555500000000u64
+    let id : u64 = magic | ((idx as u64) & 0xFFFFFFFFu64)
+    write_u64_le_at(p, id)
+    return p
+}
+
+fn intent_set_partial_arg(intent_ptr: u64, slot: u32, value: u64) -> i32 @export {
+    if slot >= 16u32 { return INTENT_E_RANGE }
+    let off : u64 = 16u64 + ((slot as u64) & 0xFFFFFFFFu64) * 8u64
+    write_u64_le_at(intent_ptr + off, value)
+    let mask_off : u64 = 144u64
+    let cur : u32 = read_u32_le_at(intent_ptr + mask_off)
+    let bit : u32 = 1u32 << (slot & 0x1Fu32)
+    write_u32_le_at(intent_ptr + mask_off, cur | bit)
+    return INTENT_OK
+}
+
+fn intent_set_required_guarantees(intent_ptr: u64, g: u32) -> i32 @export {
+    write_u32_le_at(intent_ptr + 148u64, g)
+    return INTENT_OK
+}
+
+fn intent_set_arena(intent_ptr: u64, arena_id: u64) -> i32 @export {
+    write_u64_le_at(intent_ptr + 152u64, arena_id)
+    return INTENT_OK
+}
+
+fn intent_set_cap(intent_ptr: u64, cap_id: u64) -> i32 @export {
+    write_u64_le_at(intent_ptr + 160u64, cap_id)
+    return INTENT_OK
+}
+
+fn intent_set_expected_hexad(intent_ptr: u64, hexad: u8) -> i32 @export {
+    let p : *u8 = (intent_ptr + 168u64) as *u8
+    p[0u64] = hexad
+    return INTENT_OK
+}
+
+fn intent_set_recursion_depth(intent_ptr: u64, depth: u16) -> i32 @export {
+    let plo : *u8 = (intent_ptr + 176u64) as *u8
+    let phi : *u8 = (intent_ptr + 177u64) as *u8
+    plo[0u64] = (depth & 0xFFu16) as u8
+    phi[0u64] = ((depth >> 8u16) & 0xFFu16) as u8
+    return INTENT_OK
+}
+
+fn intent_set_parent_intent(intent_ptr: u64, parent: u64) -> i32 @export {
+    write_u64_le_at(intent_ptr + 184u64, parent)
+    return INTENT_OK
+}
+
+/* Accessors */
+fn intent_id(intent_ptr: u64) -> u64 @export {
+    return read_u64_le_at(intent_ptr)
+}
+
+fn intent_goal_kind(intent_ptr: u64) -> u8 @export {
+    let p : *u8 = (intent_ptr + 8u64) as *u8
+    return p[0u64]
+}
+
+fn intent_partial_arg(intent_ptr: u64, slot: u32) -> u64 @export {
+    if slot >= 16u32 { return 0u64 }
+    let off : u64 = 16u64 + ((slot as u64) & 0xFFFFFFFFu64) * 8u64
+    return read_u64_le_at(intent_ptr + off)
+}
+
+fn intent_partial_args_mask(intent_ptr: u64) -> u32 @export {
+    return read_u32_le_at(intent_ptr + 144u64)
+}
+
+fn intent_required_guarantees(intent_ptr: u64) -> u32 @export {
+    return read_u32_le_at(intent_ptr + 148u64)
+}
+
+fn intent_arena_id(intent_ptr: u64) -> u64 @export {
+    return read_u64_le_at(intent_ptr + 152u64)
+}
+
+fn intent_cap_id(intent_ptr: u64) -> u64 @export {
+    return read_u64_le_at(intent_ptr + 160u64)
+}
+
+fn intent_expected_hexad_kind(intent_ptr: u64) -> u8 @export {
+    let p : *u8 = (intent_ptr + 168u64) as *u8
+    return p[0u64]
+}
+
+fn intent_recursion_depth(intent_ptr: u64) -> u16 @export {
+    let plo : *u8 = (intent_ptr + 176u64) as *u8
+    let phi : *u8 = (intent_ptr + 177u64) as *u8
+    let blo : u16 = (plo[0u64] as u16) & 0xFFu16
+    let bhi : u16 = (phi[0u64] as u16) & 0xFFu16
+    return blo | (bhi << 8u16)
+}
+
+fn intent_parent_intent_id(intent_ptr: u64) -> u64 @export {
+    return read_u64_le_at(intent_ptr + 184u64)
+}
+
+fn intent_verify(intent_ptr: u64) -> u8 @export {
+    let base : u64 = (&g_intent_table) as u64
+    if intent_ptr < base { return 0u8 }
+    let span : u64 = (INTENT_TABLE_CAP as u64) * (INTENT_BYTES as u64)
+    if intent_ptr >= base + span { return 0u8 }
+    let off : u64 = intent_ptr - base
+    if (off % (INTENT_BYTES as u64)) != 0u64 { return 0u8 }
+    return 1u8
+}
+
+/* Legacy compose-class convenience constructors.
+ * Each routes through PRIMITIVE_COMPOSE per the calculus's collapse:
+ * lower_call / lower_ast_node / transform are all compose-class operations
+ * under the 18-primitive set. The function names are preserved so existing
+ * callsites (omnia/transform.iii) link without source change. */
+
+fn intent_new_lower_call(ast: u64, node: u64, stack_depth: u32) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_COMPOSE)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, ast)
+    intent_set_partial_arg(p, 1u32, node)
+    intent_set_partial_arg(p, 2u32, (stack_depth as u64) & 0xFFFFFFFFu64)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+fn intent_new_lower_ast_node(ast: u64, node: u64, kind: u32) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_COMPOSE)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, ast)
+    intent_set_partial_arg(p, 1u32, node)
+    intent_set_partial_arg(p, 2u32, (kind as u64) & 0xFFFFFFFFu64)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+fn intent_new_transform(src_form: u32, dst_form: u32, src_handle: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_COMPOSE)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, (src_form as u64) & 0xFFFFFFFFu64)
+    intent_set_partial_arg(p, 1u32, (dst_form as u64) & 0xFFFFFFFFu64)
+    intent_set_partial_arg(p, 2u32, src_handle)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* ------------------------------------------------------------------
+ * 18 typed primitive constructors -- the canonical Intent Calculus API
+ *
+ * Each constructor sets goal_kind to its primitive id and populates
+ * partial_args per the parameter schema declared in
+ * R2-GENESIS/CORE-CALCULUS-V1.0.iii sec A.4. expected_hexad_kind is set
+ * so resolver.iii's score function can match patterns by hexad
+ * alignment without consulting the calculus spec at runtime.
+ * ------------------------------------------------------------------ */
+
+/* form(form_id) -- declare a value's type/identity. */
+fn intent_form(form_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_FORM)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, form_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_FORM)
+    return p
+}
+
+/* bind(arena_id, size_bytes) -- create a linear (use-once) ownership. */
+fn intent_bind(arena_id: u64, size_bytes: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_BIND)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, arena_id)
+    intent_set_partial_arg(p, 1u32, size_bytes)
+    intent_set_expected_hexad(p, INTENT_HEXAD_SUBSTANCE)
+    return p
+}
+
+/* convey(src_handle, dst_capability, byte_count) -- move bytes across
+ * a boundary (network egress, IOMMU transport, persistent storage). */
+fn intent_convey(src_handle: u64, dst_cap: u64, byte_count: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_CONVEY)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, src_handle)
+    intent_set_partial_arg(p, 1u32, dst_cap)
+    intent_set_partial_arg(p, 2u32, byte_count)
+    intent_set_expected_hexad(p, INTENT_HEXAD_PASSAGE)
+    return p
+}
+
+/* mean(form_id, semantic_assertion_id) -- declare semantics / refinement
+ * type / proof obligation between a form and an assertion. */
+fn intent_mean(form_id: u64, assertion_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_MEAN)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, form_id)
+    intent_set_partial_arg(p, 1u32, assertion_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ESSENCE)
+    return p
+}
+
+/* act(state_id, transition_id) -- side-effecting state transition. */
+fn intent_act(state_id: u64, transition_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_ACT)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, state_id)
+    intent_set_partial_arg(p, 1u32, transition_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_MOTION)
+    return p
+}
+
+/* compose(left_intent, right_intent) -- chain or fork two resolutions. */
+fn intent_compose(left_intent: u64, right_intent: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_COMPOSE)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, left_intent)
+    intent_set_partial_arg(p, 1u32, right_intent)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* seal(value_handle, seal_id) -- commit + cryptographic closure. */
+fn intent_seal(value_handle: u64, seal_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_SEAL)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, value_handle)
+    intent_set_partial_arg(p, 1u32, seal_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ORIGIN)
+    return p
+}
+
+/* prove(left_resolution, right_resolution) -- assert equivalence;
+ * emits a verifiable witness. */
+fn intent_prove(left_id: u64, right_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_PROVE)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, left_id)
+    intent_set_partial_arg(p, 1u32, right_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ESSENCE)
+    return p
+}
+
+/* query(target_kind, target_id) -- introspect a pattern set, intent,
+ * context, or available facets. */
+fn intent_query(target_kind: u64, target_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_QUERY)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, target_kind)
+    intent_set_partial_arg(p, 1u32, target_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ESSENCE)
+    return p
+}
+
+/* grant(parent_cap, child_attenuation_mask) -- capability transfer. */
+fn intent_grant(parent_cap: u64, attenuation_mask: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_GRANT)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, parent_cap)
+    intent_set_partial_arg(p, 1u32, attenuation_mask)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ORIGIN)
+    return p
+}
+
+/* govern(proposer_cap, change_intent_id) -- propose a sealed surface
+ * change; routed through the governance pipeline. */
+fn intent_govern(proposer_cap: u64, change_intent_id: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_GOVERN)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, proposer_cap)
+    intent_set_partial_arg(p, 1u32, change_intent_id)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ORIGIN)
+    return p
+}
+
+/* then(left_intent, right_intent) -- sequential composition;
+ * left's result feeds right's context. */
+fn intent_then(left_intent: u64, right_intent: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_THEN)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, left_intent)
+    intent_set_partial_arg(p, 1u32, right_intent)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* with(left_intent, right_intent) -- parallel/conjunction;
+ * both must resolve under the same context. */
+fn intent_with(left_intent: u64, right_intent: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_WITH)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, left_intent)
+    intent_set_partial_arg(p, 1u32, right_intent)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* under(context_intent, body_intent) -- contextual composition;
+ * body resolves under modified context derived from context_intent. */
+fn intent_under(context_intent: u64, body_intent: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_UNDER)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, context_intent)
+    intent_set_partial_arg(p, 1u32, body_intent)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* if(guard_intent, body_intent) -- guarded composition;
+ * body resolves only if guard's witness satisfies a predicate. */
+fn intent_if(guard_intent: u64, body_intent: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_IF)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, guard_intent)
+    intent_set_partial_arg(p, 1u32, body_intent)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* loop(body_intent, max_iterations, k_decrement_per_iter) -- bounded
+ * iteration; K decrements each turn so K-floor halts run-away loops. */
+fn intent_loop(body_intent: u64, max_iter: u64, k_decrement: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_LOOP)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, body_intent)
+    intent_set_partial_arg(p, 1u32, max_iter)
+    intent_set_partial_arg(p, 2u32, k_decrement)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+/* lift(value_handle, target_ring) -- capability-checked ring crossing.
+ * target_ring in {RV_RING_RM2..RV_RING_R3}. */
+fn intent_lift(value_handle: u64, target_ring: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_LIFT)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, value_handle)
+    intent_set_partial_arg(p, 1u32, target_ring)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ORIGIN)
+    return p
+}
+
+/* reflect(scope) -- self-observation primitive. scope in {0..4}:
+ *   0 = current K-cost
+ *   1 = current recursion depth
+ *   2 = last winning pattern_id
+ *   3 = caller pattern-id chain (bit-packed, depth <= 8)
+ *   4 = last winning score
+ */
+fn intent_reflect(scope: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_REFLECT)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, scope)
+    intent_set_expected_hexad(p, INTENT_HEXAD_ESSENCE)
+    return p
+}
+
+/* intent_abstract -- IDSG 19th primitive (HEXAD_COMPOSE).
+ *
+ * Generalises a sealed concrete intent into an abstract pattern that
+ * future intents may resolve against.  This is the first-class
+ * compile-time generalisation operation that closes the Self-Reformatter
+ * loop: governance promote -> intent_abstract -> sealed pattern.
+ *
+ * Mandate 7: pure structural generalisation, no observation.
+ *   concrete_intent  : the intent_id of an existing concrete intent
+ *                      (an output of any intent_X constructor)
+ *   abstraction_seed : a 64-bit identity for the abstract slot the
+ *                      pattern will inhabit; deterministic per-call. */
+fn intent_abstract(concrete_intent: u64, abstraction_seed: u64) -> u64 @export {
+    let p : u64 = intent_new(PRIMITIVE_ABSTRACT)
+    if p == 0u64 { return 0u64 }
+    intent_set_partial_arg(p, 0u32, concrete_intent)
+    intent_set_partial_arg(p, 1u32, abstraction_seed)
+    intent_set_expected_hexad(p, INTENT_HEXAD_COMPOSE)
+    return p
+}
+
+fn intent_table_reset() -> i32 @export {
+    g_intent_used = 0u32
+    let mut i : u32 = 0u32
+    let total : u32 = INTENT_TABLE_CAP * INTENT_BYTES
+    while i < total {
+        let bp : *u8 = ((&g_intent_table) as u64 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u32
+    }
+    return INTENT_OK
+}
+
+fn intent_table_used() -> u32 @export {
+    return g_intent_used
+}

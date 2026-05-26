@@ -1,0 +1,8 @@
+/* 690 -- H8 ("one record") constitutional charter clause: every operation emits a
+ * witness fragment (M6); the chain is append-only AND provably forgettable (M20);
+ * algebraic_time (M21) is its clock.  Drives h8_selftest (99 = pass): the op is
+ * witnessed, redaction is a verifiable hole that preserves the frag_id, and the
+ * terminal gate goes RED on a false canary. */
+module corpus_690
+extern @abi(c-msvc-x64) fn h8_selftest() -> u64 from "h8_charter.iii"
+fn main() -> u64 { return h8_selftest() }

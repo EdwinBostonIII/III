@@ -1,0 +1,134 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\xii_sml.iii
+ *
+ * III STDLIB - sanctus::xii_sml
+ *
+ * Software Measured Launch — sealed loader prologue inserted into every
+ * XII binary. Per DOCS/III-XII.md S16.3 + S26.16.
+ *
+ * Six steps at every program startup:
+ *   1. Open self binary via fopen(argv[0]) or mmap_self equivalent
+ *   2. Locate .iii_manifest section
+ *   3. Recompute Manifest mhash and compare to embedded golden
+ *   4. Verify Founders-Anchor Ed25519 signature
+ *   5. Walk inlined Lattice cells against per-cell SHA-256
+ *   6. Hand off to program _start
+ *
+ * Cost: ~10 us at startup. Cycles: ~30,000.
+ *
+ * Hexad: kind_origin. Ring: R0. K: 16.
+ *
+ * NIH: libc only (sha256 + ed25519 from numera/).
+ */
+
+module sanctus_xii_sml
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* Error codes (mirror DOCS/III-ERRORS.md §N.6). */
+const XSL_OK                      : u32 = 0u32
+const XSL_E_SELF_MMAP             : u32 = 1u32
+const XSL_E_NO_MANIFEST           : u32 = 2u32
+const XSL_E_MANIFEST_TAMPER       : u32 = 3u32
+const XSL_E_ANCHOR_SIG            : u32 = 4u32
+const XSL_E_LDIL_AUDIT_TAMPER     : u32 = 5u32
+const XSL_E_CELL_TAMPER           : u32 = 6u32
+
+const XSL_MANIFEST_BYTES : u32 = 1040u32
+
+var XSL_COMPUTED_MHASH : [u8; 32]
+var XSL_LAST_ERROR : u32 = 0u32
+
+fn xii_sml_last_error() -> u32 @export {
+    return XSL_LAST_ERROR
+}
+
+/* Step 3: verify Manifest mhash against embedded golden. */
+fn xii_sml_verify_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 @export {
+    if manifest_size != XSL_MANIFEST_BYTES {
+        XSL_LAST_ERROR = XSL_E_NO_MANIFEST
+        return XSL_E_NO_MANIFEST
+    }
+    sha256_oneshot(manifest_ptr, manifest_size as u64, &XSL_COMPUTED_MHASH as *u8)
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if XSL_COMPUTED_MHASH[i] != golden_mhash[i as u64] {
+            XSL_LAST_ERROR = XSL_E_MANIFEST_TAMPER
+            return XSL_E_MANIFEST_TAMPER
+        }
+        i = i + 1u32
+    }
+    XSL_LAST_ERROR = XSL_OK
+    return XSL_OK
+}
+
+/* Step 4: verify Founders-Anchor Ed25519 signature.
+ * Signature covers manifest bytes [0..0x32F]; signature stored at [0x330..0x36F]. */
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, signature: *u8) -> u32 from "crypt_ed25519.iii"
+
+fn xii_sml_verify_anchor_signature(manifest_ptr: *u8) -> u32 @export {
+    let pubkey : *u8 = (manifest_ptr as u64 + 0x310u64) as *u8
+    let signature : *u8 = (manifest_ptr as u64 + 0x330u64) as *u8
+    let signed_len : u64 = 0x330u64
+    let rc : u32 = ed25519_verify(pubkey, manifest_ptr, signed_len, signature)
+    if rc != 0u32 {
+        XSL_LAST_ERROR = XSL_E_ANCHOR_SIG
+        return XSL_E_ANCHOR_SIG
+    }
+    XSL_LAST_ERROR = XSL_OK
+    return XSL_OK
+}
+
+/* Step 5: verify each inlined Lattice cell's bytes match its expected mhash.
+ * audit_records is a pointer to .iii_xii_ldil_audit section; record_count is
+ * the number of 64-byte records. text_section is the binary's .text. */
+fn xii_sml_verify_cells(text_section: *u8, audit_records: *u8, record_count: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < record_count {
+        let rec_off : u32 = i * 64u32
+        /* Read text_offset (u64 LE at offset 0). */
+        let b0 : u64 = audit_records[(rec_off + 0u32) as u64] as u64
+        let b1 : u64 = audit_records[(rec_off + 1u32) as u64] as u64
+        let b2 : u64 = audit_records[(rec_off + 2u32) as u64] as u64
+        let b3 : u64 = audit_records[(rec_off + 3u32) as u64] as u64
+        let b4 : u64 = audit_records[(rec_off + 4u32) as u64] as u64
+        let b5 : u64 = audit_records[(rec_off + 5u32) as u64] as u64
+        let b6 : u64 = audit_records[(rec_off + 6u32) as u64] as u64
+        let b7 : u64 = audit_records[(rec_off + 7u32) as u64] as u64
+        let text_offset_lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+        let text_offset_hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+        let text_offset : u64 = text_offset_lo | text_offset_hi
+        /* Read payload_size (u32 LE at offset 16). */
+        let p0 : u32 = audit_records[(rec_off + 16u32) as u64] as u32
+        let p1 : u32 = audit_records[(rec_off + 17u32) as u64] as u32
+        let p2 : u32 = audit_records[(rec_off + 18u32) as u64] as u32
+        let p3 : u32 = audit_records[(rec_off + 19u32) as u64] as u32
+        let payload_size : u32 = p0 | (p1 << 8u32) | (p2 << 16u32) | (p3 << 24u32)
+        /* Compute mhash over text_section[text_offset..text_offset + payload_size]. */
+        let cell_ptr : *u8 = (text_section as u64 + text_offset) as *u8
+        sha256_oneshot(cell_ptr, payload_size as u64, &XSL_COMPUTED_MHASH as *u8)
+        /* Compare against expected_cell_mhash at audit record offset 24..56. */
+        let mut k : u32 = 0u32
+        while k < 32u32 {
+            if XSL_COMPUTED_MHASH[k] != audit_records[(rec_off + 24u32 + k) as u64] {
+                XSL_LAST_ERROR = XSL_E_CELL_TAMPER
+                return XSL_E_CELL_TAMPER
+            }
+            k = k + 1u32
+        }
+        i = i + 1u32
+    }
+    XSL_LAST_ERROR = XSL_OK
+    return XSL_OK
+}
+
+/* Full SML launch sequence: verifies manifest, signature, and all cells.
+ * Returns XSL_OK on success, error code on failure. */
+fn xii_sml_launch(manifest_ptr: *u8, golden_mhash: *u8, text_section: *u8, audit_records: *u8, record_count: u32) -> u32 @export {
+    let rc1 : u32 = xii_sml_verify_manifest(manifest_ptr, XSL_MANIFEST_BYTES, golden_mhash)
+    if rc1 != XSL_OK { return rc1 }
+    let rc2 : u32 = xii_sml_verify_anchor_signature(manifest_ptr)
+    if rc2 != XSL_OK { return rc2 }
+    let rc3 : u32 = xii_sml_verify_cells(text_section, audit_records, record_count)
+    if rc3 != XSL_OK { return rc3 }
+    return XSL_OK
+}

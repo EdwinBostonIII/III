@@ -1,0 +1,51 @@
+/* normalise_ascii: lower-fold "Hello" -> "hello"; ci-eq matches case-insens */
+module corpus_d50
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn str_ascii_lower(src: u64, src_len: u64, dst: u64, dst_cap: u64) -> u64 from "normalise_ascii.iii"
+extern @abi(c-msvc-x64) fn str_ascii_upper(src: u64, src_len: u64, dst: u64, dst_cap: u64) -> u64 from "normalise_ascii.iii"
+extern @abi(c-msvc-x64) fn str_ascii_eq_ci(a: u64, a_len: u64, b: u64, b_len: u64) -> u8 from "normalise_ascii.iii"
+extern @abi(c-msvc-x64) fn str_ascii_starts_with_ci(a: u64, al: u64, p: u64, pl: u64) -> u8 from "normalise_ascii.iii"
+extern @abi(c-msvc-x64) fn str_is_ascii(base: u64, len: u64) -> u8 from "normalise_ascii.iii"
+
+fn main() -> u64 {
+    let s : *u8 = malloc(5u64)
+    s[0] = 72u8     /* 'H' */
+    s[1] = 101u8    /* 'e' */
+    s[2] = 76u8     /* 'L' */
+    s[3] = 108u8    /* 'l' */
+    s[4] = 79u8     /* 'O' */
+    let lo : *u8 = malloc(5u64)
+    let n : u64 = str_ascii_lower(s as u64, 5u64, lo as u64, 5u64)
+    if n != 5u64 { return 1u64 }
+    if lo[0] != 104u8 { return 2u64 }   /* 'h' */
+    if lo[1] != 101u8 { return 3u64 }
+    if lo[2] != 108u8 { return 4u64 }   /* 'l' */
+    if lo[3] != 108u8 { return 5u64 }
+    if lo[4] != 111u8 { return 6u64 }   /* 'o' */
+    /* upper "hello" -> "HELLO" */
+    let lo2 : *u8 = malloc(5u64)
+    lo2[0] = 104u8; lo2[1] = 101u8; lo2[2] = 108u8; lo2[3] = 108u8; lo2[4] = 111u8
+    let up : *u8 = malloc(5u64)
+    str_ascii_upper(lo2 as u64, 5u64, up as u64, 5u64)
+    if up[0] != 72u8 { return 7u64 }    /* 'H' */
+    if up[2] != 76u8 { return 8u64 }    /* 'L' */
+    /* ci-eq */
+    if str_ascii_eq_ci(s as u64, 5u64, lo2 as u64, 5u64) != 1u8 { return 9u64 }
+    /* starts_with_ci("Hello-World", "HELLO") */
+    let big : *u8 = malloc(11u64)
+    big[0]=72u8;  big[1]=101u8; big[2]=108u8; big[3]=108u8; big[4]=111u8
+    big[5]=45u8;  big[6]=87u8;  big[7]=111u8; big[8]=114u8; big[9]=108u8; big[10]=100u8
+    let prefix : *u8 = malloc(5u64)
+    prefix[0]=72u8; prefix[1]=69u8; prefix[2]=76u8; prefix[3]=76u8; prefix[4]=79u8   /* "HELLO" */
+    if str_ascii_starts_with_ci(big as u64, 11u64, prefix as u64, 5u64) != 1u8 { return 10u64 }
+    /* is_ascii */
+    if str_is_ascii(s as u64, 5u64) != 1u8 { return 11u64 }
+    let nonasc : *u8 = malloc(2u64)
+    nonasc[0] = 0xC3u8
+    nonasc[1] = 0xA9u8                  /* é in UTF-8 */
+    if str_is_ascii(nonasc as u64, 2u64) != 0u8 { return 12u64 }
+    free(s); free(lo); free(lo2); free(up); free(big); free(prefix); free(nonasc)
+    return 99u64
+}

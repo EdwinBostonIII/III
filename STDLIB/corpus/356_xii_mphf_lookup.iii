@@ -1,0 +1,28 @@
+/* corpus/356_xii_mphf_lookup.iii — MPHF lookup returns correct id for each input */
+
+module corpus_356_xii_mphf_lookup
+
+extern @abi(c-msvc-x64) fn xii_chd_set_hash(idx: u32, hash_lo: u32, hash_hi: u32) -> i32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_construct() -> u8 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_lookup_split(hash_lo: u32, hash_hi: u32) -> u8 from "xii_chd.iii"
+
+fn main() -> u64 {
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        let lo : u32 = (i * 2654435761u32) ^ 0xDEADBEEFu32
+        let hi : u32 = (i * 40503u32) ^ 0xCAFEBABEu32
+        xii_chd_set_hash(i, lo, hi)
+        i = i + 1u32
+    }
+    xii_chd_construct()
+    /* Verify each input hash maps back to its index. */
+    let mut j : u32 = 0u32
+    while j < 144u32 {
+        let lo : u32 = (j * 2654435761u32) ^ 0xDEADBEEFu32
+        let hi : u32 = (j * 40503u32) ^ 0xCAFEBABEu32
+        let r : u8 = xii_chd_lookup_split(lo, hi)
+        if (r as u32) != j { return (j + 1u32) as u64 }
+        j = j + 1u32
+    }
+    return 0u64
+}

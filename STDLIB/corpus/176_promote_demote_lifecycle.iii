@@ -1,0 +1,94 @@
+/* Phase 14n Steps 0198 + 0199 verification: vocabulary promotion +
+ * demotion lifecycle.  Drives a hypothesis through catalyst → promote
+ * → demote, verifying each gate. */
+module corpus_176
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn catalyst_clear_all() -> i32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_register(hyp_id: u64) -> i32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_set_gate(hyp_id: u64, gate_bit: u32, fired: u8) -> i32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_promotable(hyp_id: u64) -> u8 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn promote_clear_all() -> i32 from "promote.iii"
+extern @abi(c-msvc-x64) fn promote_register(hyp_id: u64, name_hash_32_ptr: u64) -> u64 from "promote.iii"
+extern @abi(c-msvc-x64) fn promote_vocabulary_count() -> u32 from "promote.iii"
+extern @abi(c-msvc-x64) fn promote_vocabulary_active_count() -> u32 from "promote.iii"
+extern @abi(c-msvc-x64) fn promote_is_active(vocab_id: u64) -> u8 from "promote.iii"
+extern @abi(c-msvc-x64) fn promote_hyp_id(vocab_id: u64) -> u64 from "promote.iii"
+extern @abi(c-msvc-x64) fn promote_name_byte(vocab_id: u64, i: u32) -> u32 from "promote.iii"
+extern @abi(c-msvc-x64) fn demote_clear() -> i32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_record(vocab_id: u64, reason_hash_32_ptr: u64) -> i32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_count() -> u32 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_was_demoted(vocab_id: u64) -> u8 from "demote.iii"
+extern @abi(c-msvc-x64) fn demote_at_vocab_id(seq: u32) -> u64 from "demote.iii"
+
+fn main() -> u64 {
+    catalyst_clear_all()
+    promote_clear_all()
+    demote_clear()
+
+    let nh : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 { nh[i] = (0x60u64 + i) as u8; i = i + 1u64 }
+
+    /* Register hyp 42 but don't fire all gates → promotion refused. */
+    catalyst_register(42u64)
+    catalyst_set_gate(42u64, 0x01u32, 1u8)
+    catalyst_set_gate(42u64, 0x02u32, 1u8)
+    if catalyst_promotable(42u64) != 0u8 { return 1u64 }
+    if promote_register(42u64, nh as u64) != 0u64 { return 2u64 }
+
+    /* Fire all 8 gates. */
+    catalyst_set_gate(42u64, 0x04u32, 1u8)
+    catalyst_set_gate(42u64, 0x08u32, 1u8)
+    catalyst_set_gate(42u64, 0x10u32, 1u8)
+    catalyst_set_gate(42u64, 0x20u32, 1u8)
+    catalyst_set_gate(42u64, 0x40u32, 1u8)
+    catalyst_set_gate(42u64, 0x80u32, 1u8)
+    if catalyst_promotable(42u64) != 1u8 { return 3u64 }
+
+    /* Promote: returns vocab_id 1. */
+    let v1 : u64 = promote_register(42u64, nh as u64)
+    if v1 != 1u64 { return 4u64 }
+    if promote_vocabulary_count() != 1u32 { return 5u64 }
+    if promote_vocabulary_active_count() != 1u32 { return 6u64 }
+    if promote_is_active(v1) != 1u8 { return 7u64 }
+    if promote_hyp_id(v1) != 42u64 { return 8u64 }
+    if promote_name_byte(v1, 0u32) != 0x60u32 { return 9u64 }
+    if promote_name_byte(v1, 31u32) != 0x7fu32 { return 10u64 }
+
+    /* Promote a second vocab via hyp 99. */
+    catalyst_register(99u64)
+    let mut g : u32 = 0u32
+    while g < 8u32 {
+        let bit : u32 = 1u32 << g
+        catalyst_set_gate(99u64, bit, 1u8)
+        g = g + 1u32
+    }
+    let v2 : u64 = promote_register(99u64, nh as u64)
+    if v2 != 2u64 { return 11u64 }
+    if promote_vocabulary_active_count() != 2u32 { return 12u64 }
+
+    /* Demote v1 with a reason. */
+    let rh : *u8 = malloc(32u64)
+    let mut r : u64 = 0u64
+    while r < 32u64 { rh[r] = 0x88u8; r = r + 1u64 }
+    if demote_record(v1, rh as u64) != 0i32 { return 13u64 }
+    if demote_count() != 1u32 { return 14u64 }
+    if demote_was_demoted(v1) != 1u8 { return 15u64 }
+    if demote_was_demoted(v2) != 0u8 { return 16u64 }
+    if demote_at_vocab_id(0u32) != v1 { return 17u64 }
+    /* demote toggled promote's active flag for v1. */
+    if promote_is_active(v1) != 0u8 { return 18u64 }
+    if promote_is_active(v2) != 1u8 { return 19u64 }
+    if promote_vocabulary_active_count() != 1u32 { return 20u64 }
+    /* But promote_vocabulary_count (lifetime) stays 2. */
+    if promote_vocabulary_count() != 2u32 { return 21u64 }
+
+    /* demote_record refuses null reason. */
+    if demote_record(v2, 0u64) != -1i32 { return 22u64 }
+
+    free(nh)
+    free(rh)
+    return 99u64
+}

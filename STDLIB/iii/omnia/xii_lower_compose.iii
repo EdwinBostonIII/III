@@ -1,0 +1,162 @@
+/* STDLIB/iii/omnia/xii_lower_compose.iii -- mig4 Step 7: lower the FIRST domain (the composition
+ * monoid) through XII.  The mig4 thesis is "route ALL computation through XII"; Steps 1-6 built and
+ * gated the engine as a terminating, root-confluent, ADMITTED deterministic normaliser.  Step 7 is
+ * the first PAYLOAD: take a real algebraic domain and make its computation BE canonicalisation.
+ *
+ * THE DOMAIN: the free composition monoid (M, ., e) -- the algebra of composing operations in
+ * sequence.  It lowers EXACTLY onto XII's FCOMPOSE fusion + the engine's own rules, ADDITIVELY (no
+ * new engine rule; the cascade is untouched -- this module is a consumer of canonicalise):
+ *   - product  a . b   = FCOMPOSE(a, b)
+ *   - identity e       = the K06 null-form leaf (the subform the engine's null rules recognise)
+ *   - atoms            = inert K02 leaves (distinct subforms = distinct atoms).  K02 is referenced
+ *                        by NO FCOMPOSE rule (the FCOMPOSE merge/sort/idempotent rules key on
+ *                        K01/K05/K06/K07/K08/K09/K10/K18, never K02), so atoms NEVER merge, sort,
+ *                        or collapse -- a FREE monoid (a.a != a, a.b != b.a).
+ * The engine rules then ARE the monoid axioms, verified by reading their RHS (xii_rewrite.iii):
+ *   - associativity    R001  FCOMPOSE(FCOMPOSE(a,b),c) -> FCOMPOSE(a,FCOMPOSE(b,c))  [right-nested NF]
+ *   - left identity    R037  FCOMPOSE(K06null, x)      -> x   (apply_R037 returns child_b)
+ *   - right identity   R017  FCOMPOSE(x, K06null)      -> x   (apply_R017 returns child_a)
+ *   - e . e            R038  FCOMPOSE(K06null,K06null) -> K06null   (apply_R038 returns child_a)
+ * So xii_canonicalise of an encoded product IS the monoid normal form: the identity-free word,
+ * right-nested.  Computing in this domain == reducing in XII -- the Step-7 demonstration that a
+ * domain's computation is canonicalisation.
+ *
+ * Gated by xad_admit (Step 6): the rules realising the monoid belong to the ADMITTED (root-
+ * confluent + terminating) set, so the lowered computation inherits the engine's determinism.
+ * This is the lowering PATTERN Steps 8-10 generalise (more domains -> caller migration -> retire
+ * the syntactic path).
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_admission only.  Determinism: integer-only; ==/!= compares; single-line fns; no arrays /
+ * pointer math / u64 div-mod; eval results bound to locals before struct_eq (param-spill-safe);
+ * the only reduction is the engine's own canonicalise.
+ */
+module omnia_xii_lower_compose
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLC_FCOMPOSE : u8  = 18u8    /* the monoid product operator */
+const XLC_K06      : u8  = 5u8     /* the null kind = the monoid identity e */
+const XLC_ATOM     : u8  = 1u8     /* K02: inert under every FCOMPOSE rule -> free atoms */
+const XLC_NULL_REF : u32 = 0xFFFFFFFFu32
+
+/* the monoid identity e = the K06 null-form leaf (the subform the engine's null rules recognise). */
+fn xlc_id() -> u32 @export { return xii_term_make_basis(XLC_K06, xii_rewrite_null_form()) }
+
+/* a free atom of the monoid, indexed by subform sf (distinct sf = distinct atom). */
+fn xlc_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLC_ATOM, sf) }
+
+/* the monoid product a . b = FCOMPOSE(a, b). */
+fn xlc_compose(a: u32, b: u32) -> u32 @export { return xii_term_make_fusion2(XLC_FCOMPOSE, a, b) }
+
+/* evaluate (reduce) a monoid term: this IS the engine's canonicalisation -- the Step-7 point. */
+fn xlc_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.
+ * Proves the monoid AXIOMS hold by canonicalisation -- associativity (1), the normal form is the
+ * right-nested free-monoid word so XII-result == the direct word (2), left/right/interior identity
+ * (3-5), the full word with identities stripped (6); the prove-the-negative TEETH -- the monoid is
+ * non-commutative (7), distinct words stay distinct (8), and is FREE / non-idempotent (9); e.e->e
+ * (10); determinism (11); and the rules realising it are ADMITTED by Step 6 (12). */
+fn xlc_selftest() -> u64 @export {
+    /* (1) ASSOCIATIVITY: (a.b).c and a.(b.c) canonicalise to the SAME normal form. */
+    xii_term_arena_reset()
+    let l : u32 = xlc_compose(xlc_compose(xlc_atom(1u32), xlc_atom(2u32)), xlc_atom(3u32))
+    let r : u32 = xlc_compose(xlc_atom(1u32), xlc_compose(xlc_atom(2u32), xlc_atom(3u32)))
+    let nfl : u32 = xlc_eval(l)
+    let nfr : u32 = xlc_eval(r)
+    if xii_rewrite_struct_eq(nfl, nfr) != 1u8 { return 1u64 }
+
+    /* (2) the NF is exactly the right-nested word [a,b,c]: XII result == the direct free-monoid word
+     * (the word is already right-nested + atom-headed, so it is its own NF). */
+    xii_term_arena_reset()
+    let prod : u32 = xlc_compose(xlc_compose(xlc_atom(1u32), xlc_atom(2u32)), xlc_atom(3u32))
+    let word : u32 = xlc_compose(xlc_atom(1u32), xlc_compose(xlc_atom(2u32), xlc_atom(3u32)))
+    let nfp : u32 = xlc_eval(prod)
+    if xii_rewrite_struct_eq(nfp, word) != 1u8 { return 2u64 }
+
+    /* (3) LEFT IDENTITY: e.a -> a. */
+    xii_term_arena_reset()
+    let la : u32 = xlc_compose(xlc_id(), xlc_atom(1u32))
+    let ea : u32 = xlc_atom(1u32)
+    let nfla : u32 = xlc_eval(la)
+    if xii_rewrite_struct_eq(nfla, ea) != 1u8 { return 3u64 }
+
+    /* (4) RIGHT IDENTITY: a.e -> a. */
+    xii_term_arena_reset()
+    let ar : u32 = xlc_compose(xlc_atom(1u32), xlc_id())
+    let ae : u32 = xlc_atom(1u32)
+    let nfar : u32 = xlc_eval(ar)
+    if xii_rewrite_struct_eq(nfar, ae) != 1u8 { return 4u64 }
+
+    /* (5) INTERIOR IDENTITY stripped: a.(e.b) -> a.b. */
+    xii_term_arena_reset()
+    let mid : u32 = xlc_compose(xlc_atom(1u32), xlc_compose(xlc_id(), xlc_atom(2u32)))
+    let ab : u32 = xlc_compose(xlc_atom(1u32), xlc_atom(2u32))
+    let nfmid : u32 = xlc_eval(mid)
+    if xii_rewrite_struct_eq(nfmid, ab) != 1u8 { return 5u64 }
+
+    /* (6) FULL WORD with identities: ((e.a).b).c -> a.(b.c). */
+    xii_term_arena_reset()
+    let full : u32 = xlc_compose(xlc_compose(xlc_compose(xlc_id(), xlc_atom(1u32)), xlc_atom(2u32)), xlc_atom(3u32))
+    let w3 : u32 = xlc_compose(xlc_atom(1u32), xlc_compose(xlc_atom(2u32), xlc_atom(3u32)))
+    let nffull : u32 = xlc_eval(full)
+    if xii_rewrite_struct_eq(nffull, w3) != 1u8 { return 6u64 }
+
+    /* (7) NON-COMMUTATIVE (teeth): a.b and b.a have DIFFERENT NFs -- order is preserved. */
+    xii_term_arena_reset()
+    let abx : u32 = xlc_compose(xlc_atom(1u32), xlc_atom(2u32))
+    let bax : u32 = xlc_compose(xlc_atom(2u32), xlc_atom(1u32))
+    let nfab : u32 = xlc_eval(abx)
+    let nfba : u32 = xlc_eval(bax)
+    if xii_rewrite_struct_eq(nfab, nfba) != 0u8 { return 7u64 }
+
+    /* (8) DISTINCT WORDS distinct (teeth): a.b != a.c -- the monoid does not collapse. */
+    xii_term_arena_reset()
+    let ab2 : u32 = xlc_compose(xlc_atom(1u32), xlc_atom(2u32))
+    let ac2 : u32 = xlc_compose(xlc_atom(1u32), xlc_atom(3u32))
+    let nfab2 : u32 = xlc_eval(ab2)
+    let nfac2 : u32 = xlc_eval(ac2)
+    if xii_rewrite_struct_eq(nfab2, nfac2) != 0u8 { return 8u64 }
+
+    /* (9) NON-IDEMPOTENT (teeth): a.a != a -- a FREE monoid (no merging). */
+    xii_term_arena_reset()
+    let aa : u32 = xlc_compose(xlc_atom(1u32), xlc_atom(1u32))
+    let a0 : u32 = xlc_atom(1u32)
+    let nfaa : u32 = xlc_eval(aa)
+    if xii_rewrite_struct_eq(nfaa, a0) != 0u8 { return 9u64 }
+
+    /* (10) e.e -> e (the identity composes with itself to itself, R038). */
+    xii_term_arena_reset()
+    let ee : u32 = xlc_compose(xlc_id(), xlc_id())
+    let e0 : u32 = xlc_id()
+    let nfee : u32 = xlc_eval(ee)
+    if xii_rewrite_struct_eq(nfee, e0) != 1u8 { return 10u64 }
+
+    /* (11) DETERMINISM: the same product reduces to the same NF (built twice, one arena). */
+    xii_term_arena_reset()
+    let d1 : u32 = xlc_compose(xlc_compose(xlc_atom(1u32), xlc_atom(2u32)), xlc_atom(3u32))
+    let d2 : u32 = xlc_compose(xlc_compose(xlc_atom(1u32), xlc_atom(2u32)), xlc_atom(3u32))
+    let nfd1 : u32 = xlc_eval(d1)
+    let nfd2 : u32 = xlc_eval(d2)
+    if xii_rewrite_struct_eq(nfd1, nfd2) != 1u8 { return 11u64 }
+
+    /* (12) the rules realising this monoid are ADMITTED (Step 6): the lowered domain inherits the
+     * engine's determinism (root-confluent + terminating). */
+    if xad_admit() != 1u32 { return 12u64 }
+
+    return 99u64
+}
+
+/* xii_lower_compose EMBODIES the mig4 Step-7 payload: the free composition monoid is LOWERED onto
+ * XII so that computing a product IS canonicalising a term.  Atoms are inert K02 leaves, the
+ * identity is the K06 null-form, the product is FCOMPOSE, and the engine's own rules (R001
+ * associativity + R017/R037/R038 identity) supply the monoid axioms -- additively, with the cascade
+ * untouched and the rule set ADMITTED by Step 6.  This is the lowering pattern Steps 8-10 carry to
+ * the remaining domains, then to callers, then to retiring the syntactic path. */

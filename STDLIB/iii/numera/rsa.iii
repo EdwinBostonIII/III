@@ -1,0 +1,886 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\rsa.iii
+ *
+ * III STDLIB - numera::rsa -- RSA-3072 / RSA-4096 signatures (RSASSA-PSS,
+ * RFC 8017 / FIPS 186).  RITCHIE Stage 4.11.  EMSA-PSS encode/verify over
+ * SHA-256 with MGF1-SHA-256; RSA primitive via rsa_modexp (constant-time
+ * u32-limb Montgomery CIOS; s=m^d mod n, m=s^e mod n).  Keygen primality
+ * (Miller-Rabin) uses bigint_modpow.  Keys are arena-bigints (n, e, d).
+ * Size-generic over modBits.
+ *
+ * Public surface (key as bigint IDs + modBits; arena owned by caller):
+ *   rsa_pss_sign(arena, n, d, modBits, mHash32, salt, sLen, sig_out) -> i32
+ *   rsa_pss_verify(arena, n, e, modBits, mHash32, sig, sigLen, sLen) -> u8 (1=ok)
+ *   rsa_os2ip / rsa_i2osp -- octet-string <-> bigint bridge (BE).
+ *
+ * Hexad: kind_prove.  Ring: R3.  K: 1.00.
+ */
+
+module numera_rsa
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_to_u64_lo(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, s: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shr_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_div_u64(arena: u64, a: u64, d: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update(input: u64, len: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: u64) -> u32 from "sha256.iii"
+
+var RSA_MP    : [u8; 96]      /* M' = 8 zeros || mHash || salt */
+var RSA_H     : [u8; 32]      /* H = Hash(M') */
+var RSA_HH    : [u8; 32]      /* H' (verify) */
+var RSA_DB    : [u8; 512]     /* DB / maskedDB */
+var RSA_MASK  : [u8; 512]     /* dbMask */
+var RSA_EM    : [u8; 512]     /* encoded message */
+var RSA_MGFIN : [u8; 36]      /* MGF seed(32) || counter(4) */
+var RSA_T     : [u8; 32]      /* MGF block */
+
+/* octet string (BE, len bytes at src) -> new bigint in arena. */
+fn rsa_os2ip(arena: u64, src: u64, len: u64) -> u64 {
+    let s : *u8 = src as *u8
+    let nlimbs : u64 = (len + 7u64) / 8u64
+    let bi : u64 = bigint_new(arena, nlimbs + 1u64)
+    let mut j : u64 = 0u64
+    while j < nlimbs {
+        let mut v : u64 = 0u64
+        let mut p : u64 = 0u64
+        while p < 8u64 {
+            let k : u64 = 8u64 * j + p          /* value-byte index (LSB=0) */
+            if k < len { v = v | ((s[len - 1u64 - k] as u64) << (8u64 * p)) }
+            p = p + 1u64
+        }
+        bigint_set_limb(bi, j, v)
+        j = j + 1u64
+    }
+    bigint_set_len(bi, nlimbs)
+    bigint_normalize(bi)
+    return bi
+}
+
+/* bigint -> octet string (BE, len bytes at dst), zero-padded on the left. */
+fn rsa_i2osp(bi: u64, dst: u64, len: u64) -> i32 {
+    let d : *u8 = dst as *u8
+    let nl : u64 = bigint_len_limbs(bi)
+    let mut k : u64 = 0u64
+    while k < len {
+        let limbidx : u64 = k / 8u64
+        let byteoff : u64 = k % 8u64
+        let mut bval : u64 = 0u64
+        if limbidx < nl { bval = (bigint_get_limb(bi, limbidx) >> (8u64 * byteoff)) & 0xFFu64 }
+        d[len - 1u64 - k] = bval as u8
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+/* MGF1-SHA-256(seed[32], maskLen) -> out (maskLen bytes). */
+fn rsa_mgf1(seed: u64, out: u64, mask_len: u64) -> i32 {
+    let sp : *u8 = seed as *u8
+    let op : *u8 = out as *u8
+    let gi : *u8 = &RSA_MGFIN as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { gi[i] = sp[i] ; i = i + 1u64 }
+    let mut counter : u64 = 0u64
+    let mut produced : u64 = 0u64
+    while produced < mask_len {
+        gi[32] = ((counter >> 24u64) & 0xFFu64) as u8
+        gi[33] = ((counter >> 16u64) & 0xFFu64) as u8
+        gi[34] = ((counter >> 8u64) & 0xFFu64) as u8
+        gi[35] = (counter & 0xFFu64) as u8
+        sha256_init()
+        sha256_update(&RSA_MGFIN as u64, 36u64)
+        sha256_final(&RSA_T as u64)
+        let tp : *u8 = &RSA_T as *u8
+        let mut take : u64 = 32u64
+        if (mask_len - produced) < 32u64 { take = mask_len - produced }
+        let mut b : u64 = 0u64
+        while b < take { op[produced + b] = tp[b] ; b = b + 1u64 }
+        produced = produced + take
+        counter = counter + 1u64
+    }
+    return 0i32
+}
+
+/* EMSA-PSS-ENCODE(mHash[32], emBits, salt[sLen]) -> RSA_EM (emLen bytes).
+ * Returns emLen on success, 0 on error. */
+fn rsa_pss_encode(mHash: u64, emBits: u64, salt: u64, sLen: u64) -> u64 {
+    let emLen : u64 = (emBits + 7u64) / 8u64
+    if emLen < 34u64 + sLen { return 0u64 }       /* hLen+sLen+2, hLen=32 */
+    let mh : *u8 = mHash as *u8
+    let sl : *u8 = salt as *u8
+    let mp : *u8 = &RSA_MP as *u8
+    /* M' = 8 zeros || mHash || salt */
+    let mut i : u64 = 0u64
+    while i < 8u64 { mp[i] = 0u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { mp[8u64 + i] = mh[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < sLen { mp[40u64 + i] = sl[i] ; i = i + 1u64 }
+    sha256_init()
+    sha256_update(&RSA_MP as u64, 40u64 + sLen)
+    sha256_final(&RSA_H as u64)
+    /* DB = PS(zeros) || 0x01 || salt ; dbLen = emLen - hLen - 1 */
+    let dbLen : u64 = emLen - 33u64
+    let db : *u8 = &RSA_DB as *u8
+    let psLen : u64 = dbLen - sLen - 1u64
+    i = 0u64
+    while i < psLen { db[i] = 0u8 ; i = i + 1u64 }
+    db[psLen] = 0x01u8
+    i = 0u64
+    while i < sLen { db[psLen + 1u64 + i] = sl[i] ; i = i + 1u64 }
+    /* maskedDB = DB XOR MGF1(H, dbLen) */
+    rsa_mgf1(&RSA_H as u64, &RSA_MASK as u64, dbLen)
+    let mk : *u8 = &RSA_MASK as *u8
+    i = 0u64
+    while i < dbLen { db[i] = ((db[i] as u64) ^ (mk[i] as u64)) as u8 ; i = i + 1u64 }
+    /* clear leftmost (8*emLen - emBits) bits of maskedDB[0] */
+    let clr : u64 = 8u64 * emLen - emBits
+    db[0] = ((db[0] as u64) & (0xFFu64 >> clr)) as u8
+    /* EM = maskedDB || H || 0xbc */
+    let em : *u8 = &RSA_EM as *u8
+    i = 0u64
+    while i < dbLen { em[i] = db[i] ; i = i + 1u64 }
+    let hp : *u8 = &RSA_H as *u8
+    i = 0u64
+    while i < 32u64 { em[dbLen + i] = hp[i] ; i = i + 1u64 }
+    em[emLen - 1u64] = 0xbcu8
+    return emLen
+}
+
+/* EMSA-PSS-VERIFY(mHash[32], EM at RSA_EM, emBits, sLen) -> 1 consistent / 0 not. */
+fn rsa_pss_verify_em(mHash: u64, emBits: u64, sLen: u64) -> u8 {
+    let emLen : u64 = (emBits + 7u64) / 8u64
+    if emLen < 34u64 + sLen { return 0u8 }
+    let em : *u8 = &RSA_EM as *u8
+    if em[emLen - 1u64] != 0xbcu8 { RSA_DBG[7] = 11u64 return 0u8 }
+    let dbLen : u64 = emLen - 33u64
+    /* H = EM[dbLen .. dbLen+32] */
+    let hp : *u8 = &RSA_H as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { hp[i] = em[dbLen + i] ; i = i + 1u64 }
+    /* the top (8*emLen - emBits) bits of maskedDB[0] must be zero */
+    let clr : u64 = 8u64 * emLen - emBits
+    let topmask : u64 = (0xFFu64 << (8u64 - clr)) & 0xFFu64
+    if ((em[0] as u64) & topmask) != 0u64 { RSA_DBG[7] = 12u64 return 0u8 }
+    /* DB = maskedDB XOR MGF1(H, dbLen) */
+    rsa_mgf1(&RSA_H as u64, &RSA_MASK as u64, dbLen)
+    let db : *u8 = &RSA_DB as *u8
+    let mk : *u8 = &RSA_MASK as *u8
+    i = 0u64
+    while i < dbLen { db[i] = ((em[i] as u64) ^ (mk[i] as u64)) as u8 ; i = i + 1u64 }
+    db[0] = ((db[0] as u64) & (0xFFu64 >> clr)) as u8
+    /* DB must be PS(zeros) || 0x01 || salt */
+    let psLen : u64 = dbLen - sLen - 1u64
+    i = 0u64
+    while i < psLen { if db[i] != 0u8 { RSA_DBG[7] = 13u64 return 0u8 } i = i + 1u64 }
+    if db[psLen] != 0x01u8 { RSA_DBG[7] = 14u64 return 0u8 }
+    /* M' = 8 zeros || mHash || salt(=db[psLen+1..]) ; H' = Hash(M') */
+    let mh : *u8 = mHash as *u8
+    let mp : *u8 = &RSA_MP as *u8
+    i = 0u64
+    while i < 8u64 { mp[i] = 0u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { mp[8u64 + i] = mh[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < sLen { mp[40u64 + i] = db[psLen + 1u64 + i] ; i = i + 1u64 }
+    sha256_init()
+    sha256_update(&RSA_MP as u64, 40u64 + sLen)
+    sha256_final(&RSA_HH as u64)
+    let hh : *u8 = &RSA_HH as *u8
+    let mut diff : u32 = 0u32
+    i = 0u64
+    while i < 32u64 { diff = diff | ((hp[i] as u32) ^ (hh[i] as u32)) ; i = i + 1u64 }
+    if diff == 0u32 { RSA_DBG[7] = 99u64 return 1u8 }
+    RSA_DBG[7] = 15u64
+    return 0u8
+}
+
+var RSA_MH   : [u8; 32]
+var RSA_SALT : [u8; 32]
+var RSA_SAVE : [u8; 512]
+var RSA_EM2  : [u8; 512]
+var RSA_DBG  : [u64; 8]
+var RSA_SIG  : [u8; 512]
+fn rsa_dbg(i: u64) -> u64 @export { return RSA_DBG[i] }
+
+/* test m mod n == m for the EM-value (modpow exp=1).  99=yes (m<n, mod ok);
+ * 100+i = first differing byte; tells us if m>=n or the mod is buggy. */
+fn rsa_debug_mod1(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    let em : *u8 = &RSA_EM as *u8
+    let sv : *u8 = &RSA_SAVE as *u8
+    let mut i : u64 = 0u64
+    while i < emLen { sv[i] = em[i] ; i = i + 1u64 }
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let r : u64 = bigint_modpow(arena, m, one, n)
+    rsa_i2osp(r, &RSA_EM as u64, emLen)
+    i = 0u64
+    while i < emLen { if em[i] != sv[i] { return 100u64 + i } i = i + 1u64 }
+    return 99u64
+}
+
+/* signature serialization round-trip: s -> i2osp -> os2ip -> s2 ; cmp(s2,s).
+ * 1=equal (serialization OK), 0/2 = i2osp/os2ip bug for the signature value. */
+fn rsa_debug_sigser(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    rsa_pss_encode(mHash, emBits, salt, sLen)
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emBits / 8u64 + 1u64)
+    let s : u64 = bigint_modpow(arena, m, d, n)
+    let k : u64 = modBits / 8u64
+    rsa_i2osp(s, &RSA_SIG as u64, k)
+    let s2 : u64 = rsa_os2ip(arena, &RSA_SIG as u64, k)
+    let cmpv : i32 = bigint_cmp(s2, s)
+    RSA_DBG[0] = bigint_len_limbs(s)
+    RSA_DBG[1] = bigint_len_limbs(s2)
+    return (cmpv + 1i32) as u64
+}
+
+/* all-bigint round-trip: (m^d)^e vs a fresh os2ip(EM).  cmp+1: 1=equal (modexp
+ * round-trip OK -> bug is serialization), 0/2 = modexp/d wrong for EM-value. */
+fn rsa_debug_bigint_rt(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    let mfresh : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)   /* keep m intact for compare */
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let r1 : u64 = rsa_modexp(arena, m, d, n)
+    let m2 : u64 = rsa_modexp(arena, r1, e, n)
+    /* also test identity modexp(m,1,n)==m */
+    let m3 : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let r_id : u64 = rsa_modexp(arena, m3, one, n)
+    RSA_DBG[3] = (bigint_cmp(r_id, mfresh) + 1i32) as u64
+    let cmpv : i32 = bigint_cmp(m2, mfresh)
+    return (cmpv + 1i32) as u64
+}
+
+/* real-path debug: real sign then real verify; returns verify_em's stage
+ * (99=verified, 11=bc, 12=topmask, 13=PS, 14=0x01, 15=H mismatch). */
+fn rsa_debug_real(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    RSA_DBG[7] = 0u64
+    rsa_pss_sign(arena, n, d, modBits, mHash, salt, sLen, &RSA_SIG as u64)
+    let k : u64 = modBits / 8u64
+    rsa_pss_verify(arena, n, e, modBits, mHash, &RSA_SIG as u64, k, sLen)
+    let emLen : u64 = (modBits - 1u64 + 7u64) / 8u64
+    let em : *u8 = &RSA_EM as *u8
+    RSA_DBG[3] = em[emLen - 1u64] as u64       /* recovered last byte (expect 0xbc=188) */
+    RSA_DBG[4] = em[0] as u64
+    RSA_DBG[5] = em[emLen - 2u64] as u64
+    return RSA_DBG[7]
+}
+
+/* instrumented full-path debug: returns a stage code (99=ok). */
+fn rsa_debug_path(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    if emLen == 0u64 { return 1u64 }
+    let em : *u8 = &RSA_EM as *u8
+    let sv : *u8 = &RSA_SAVE as *u8
+    let e2 : *u8 = &RSA_EM2 as *u8
+    let mut i : u64 = 0u64
+    while i < emLen { sv[i] = em[i] ; i = i + 1u64 }
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    rsa_i2osp(m, &RSA_EM2 as u64, emLen)
+    i = 0u64
+    while i < emLen { if e2[i] != sv[i] { return 2u64 } i = i + 1u64 }
+    let s : u64 = bigint_modpow(arena, m, d, n)
+    let m2 : u64 = bigint_modpow(arena, s, e, n)
+    RSA_DBG[0] = bigint_len_limbs(m)
+    RSA_DBG[1] = bigint_len_limbs(m2)
+    let cmpv : i32 = bigint_cmp(m2, m)
+    RSA_DBG[2] = (cmpv + 1i32) as u64
+    RSA_DBG[3] = bigint_get_limb(m, 15u64)
+    RSA_DBG[4] = bigint_get_limb(m2, 15u64)
+    RSA_DBG[5] = bigint_get_limb(m, 0u64)
+    RSA_DBG[6] = bigint_get_limb(m2, 0u64)
+    if cmpv != 0i32 { return 3u64 }
+    rsa_i2osp(m2, &RSA_EM as u64, emLen)
+    i = 0u64
+    while i < emLen {
+        if em[i] != sv[i] { return 100u64 + i }
+        i = i + 1u64
+    }
+    let v : u8 = rsa_pss_verify_em(mHash, emBits, sLen)
+    if v != 1u8 { return 5u64 }
+    return 99u64
+}
+
+/* PSS-layer self-test (no RSA key): encode -> verify_em (expect 1); tamper the
+ * maskedDB and the 0xbc trailer -> verify_em (expect 0).  emBits=3071 (3072-bit
+ * modulus, emLen 384), sLen=32, salt=zeros.  Returns 99 on full success. */
+fn rsa_pss_selftest() -> u64 @export {
+    let mh : *u8 = &RSA_MH as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { mh[i] = (i & 0xFFu64) as u8 ; i = i + 1u64 }
+    let sp : *u8 = &RSA_SALT as *u8
+    i = 0u64
+    while i < 32u64 { sp[i] = 0u8 ; i = i + 1u64 }
+    let emLen : u64 = rsa_pss_encode(&RSA_MH as u64, 3071u64, &RSA_SALT as u64, 32u64)
+    if emLen != 384u64 { return 1u64 }
+    if rsa_pss_verify_em(&RSA_MH as u64, 3071u64, 32u64) != 1u8 { return 2u64 }
+    let em : *u8 = &RSA_EM as *u8
+    em[0] = ((em[0] as u64) ^ 0x40u64) as u8        /* flip a low bit (not the top, which is masked off) */
+    if rsa_pss_verify_em(&RSA_MH as u64, 3071u64, 32u64) != 0u8 { return 3u64 }
+    em[0] = ((em[0] as u64) ^ 0x40u64) as u8        /* restore */
+    if rsa_pss_verify_em(&RSA_MH as u64, 3071u64, 32u64) != 1u8 { return 4u64 }
+    em[383] = 0x00u8                                 /* break the 0xbc trailer */
+    if rsa_pss_verify_em(&RSA_MH as u64, 3071u64, 32u64) != 0u8 { return 5u64 }
+    return 99u64
+}
+
+/* ---- Key generation (Miller-Rabin + small-e modular inverse) ---- */
+
+var RSA_GEN_N : [u64; 1]
+var RSA_GEN_E : [u64; 1]
+var RSA_GEN_D : [u64; 1]
+var RSA_CAND  : [u8; 512]
+
+const RSA_E_PUB : u64 = 65537u64
+
+/* small u64 modexp (modulus < 2^32 so products fit u64) for the e-inverse. */
+fn rsa_u64_modexp(base: u64, exp: u64, m: u64) -> u64 {
+    let mut r : u64 = 1u64
+    let mut b : u64 = base % m
+    let mut e : u64 = exp
+    while e > 0u64 {
+        if (e & 1u64) == 1u64 { r = (r * b) % m }
+        b = (b * b) % m
+        e = e >> 1u64
+    }
+    return r
+}
+
+fn rsa_setbit(id: u64, bit: u64) -> i32 {
+    let limb : u64 = bit / 64u64
+    let off : u64 = bit % 64u64
+    let v : u64 = bigint_get_limb(id, limb)
+    let bitval : u64 = 1u64 << off       /* bare top-level shift: avoids the (1u64<<var) partial-hexad misparse trap */
+    let nv : u64 = v | bitval
+    bigint_set_limb(id, limb, nv)
+    return 0i32
+}
+
+/* one Miller-Rabin round for `base`: 1 = probably-prime, 0 = composite.
+ * n odd; nm1=n-1; d_mr*2^s = nm1.  Drops all its own bigints (64-slot limit). */
+fn rsa_mr_base(arena: u64, n: u64, nm1: u64, d_mr: u64, s: u64, base: u64) -> u8 {
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    let a : u64 = bigint_from_u64(arena, base)
+    let mut x : u64 = rsa_modexp(arena, a, d_mr, n)   /* Montgomery (rm_*): MR candidates are top-bit-set odd, so rsa_modexp's precondition holds; far faster than bit-serial bigint_modpow, making RSA-3072/4096 keygen practical.  Proven == bigint_modpow (DOCS/CRASH-AUDIT.md sec.6 / corpus 373). */
+    let mut res : u8 = 0u8
+    if bigint_cmp(x, one) == 0i32 { res = 1u8 }
+    if bigint_cmp(x, nm1) == 0i32 { res = 1u8 }
+    let mut j : u64 = 1u64
+    while j < s {
+        if res == 1u8 { j = s } else {
+            let xsq : u64 = rsa_modexp(arena, x, two, n)
+            bigint_drop(x)
+            x = xsq
+            if bigint_cmp(x, nm1) == 0i32 { res = 1u8 }
+            j = j + 1u64
+        }
+    }
+    bigint_drop(one)
+    bigint_drop(two)
+    bigint_drop(a)
+    bigint_drop(x)
+    return res
+}
+
+/* probabilistic primality: 12 fixed bases (deterministic).  All bigints in
+ * `arena` are dropped before return so the caller can arena_drop cleanly. */
+fn rsa_is_prime(arena: u64, n: u64) -> u8 {
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let nm1 : u64 = bigint_sub(arena, n, one)
+    let mut s : u64 = 0u64
+    while ((bigint_get_limb(nm1, s / 64u64) >> (s % 64u64)) & 1u64) == 0u64 { s = s + 1u64 }
+    let d_mr : u64 = bigint_shr_bits(arena, nm1, s)
+    let mut ok : u8 = 1u8
+    if rsa_mr_base(arena, n, nm1, d_mr, s, 2u64) == 0u8 { ok = 0u8 }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 3u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 5u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 7u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 11u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 13u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 17u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 19u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 23u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 29u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 31u64) == 0u8 { ok = 0u8 } }
+    if ok == 1u8 { if rsa_mr_base(arena, n, nm1, d_mr, s, 37u64) == 0u8 { ok = 0u8 } }
+    bigint_drop(one)
+    bigint_drop(nm1)
+    bigint_drop(d_mr)
+    return ok
+}
+
+/* random pbits-bit odd candidate in `arena` (top two bits + bit0 set). */
+fn rsa_rand_candidate(arena: u64, pbits: u64) -> u64 {
+    let pbytes : u64 = pbits / 8u64
+    iii_drbg_generate(&RSA_CAND as u64, pbytes, 0u64, 0u64)
+    let nlimbs : u64 = (pbytes + 7u64) / 8u64
+    let cand : u64 = rsa_os2ip(arena, &RSA_CAND as u64, pbytes)
+    bigint_set_len(cand, nlimbs)
+    rsa_setbit(cand, pbits - 1u64)
+    rsa_setbit(cand, pbits - 2u64)
+    rsa_setbit(cand, 0u64)
+    return cand
+}
+
+/* generate a pbits-bit prime in `persist`; each candidate's Miller-Rabin runs
+ * in a per-candidate scratch arena (modexp memory reclaimed via arena_drop;
+ * the 64 global bigint slots are freed by is_prime's own drops). */
+fn rsa_gen_prime(persist: u64, pbits: u64) -> u64 {
+    let two : u64 = bigint_from_u64(persist, 2u64)
+    let mut cand : u64 = rsa_rand_candidate(persist, pbits)
+    let mut found : u64 = 0u64
+    while found == 0u64 {
+        let tmp : u64 = arena_new(67108864u64)        /* 1<<26 = 64 MiB scratch (precomputed; avoids literal-shift misparse) */
+        let pr : u8 = rsa_is_prime(tmp, cand)
+        arena_drop(tmp)
+        if pr == 1u8 { found = 1u64 } else {
+            let next : u64 = bigint_add(persist, cand, two)
+            bigint_drop(cand)
+            cand = next
+        }
+    }
+    bigint_drop(two)
+    return cand
+}
+
+/* generate an RSA key of modBits bits; stores n,e,d bigint IDs in module slots.
+ * DRBG seeded from (seed, slen) -> deterministic + reproducible. */
+fn rsa_keygen(arena: u64, modBits: u64, seed: u64, slen: u64) -> i32 @export {
+    iii_drbg_instantiate(seed, slen, seed, slen, 0u64, 0u64)
+    let pbits : u64 = modBits / 2u64
+    let p : u64 = rsa_gen_prime(arena, pbits)
+    let q : u64 = rsa_gen_prime(arena, pbits)
+    let n : u64 = bigint_mul(arena, p, q)
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let pm1 : u64 = bigint_sub(arena, p, one)
+    let qm1 : u64 = bigint_sub(arena, q, one)
+    let phi : u64 = bigint_mul(arena, pm1, qm1)
+    let e_big : u64 = bigint_from_u64(arena, RSA_E_PUB)
+    /* d = e^-1 mod phi via small-e trick: pe = phi mod e; k = (e - pe^-1) mod e;
+     * d = (1 + k*phi) / e (exact). */
+    let pe_big : u64 = bigint_mod(arena, phi, e_big)
+    let pe : u64 = bigint_to_u64_lo(pe_big)
+    let inv_pe : u64 = rsa_u64_modexp(pe, RSA_E_PUB - 2u64, RSA_E_PUB)
+    let k : u64 = (RSA_E_PUB - inv_pe) % RSA_E_PUB
+    let kphi : u64 = bigint_mul_u64(arena, phi, k)
+    let kphi1 : u64 = bigint_add(arena, kphi, one)
+    let d : u64 = bigint_div_u64(arena, kphi1, RSA_E_PUB)
+    RSA_GEN_N[0] = n
+    RSA_GEN_E[0] = e_big
+    RSA_GEN_D[0] = d
+    return 0i32
+}
+fn rsa_gen_n() -> u64 @export { return RSA_GEN_N[0] }
+fn rsa_gen_e() -> u64 @export { return RSA_GEN_E[0] }
+fn rsa_gen_d() -> u64 @export { return RSA_GEN_D[0] }
+
+/* ---- Self-contained Montgomery modexp (u32-limb CIOS) ----
+ * RSA sign/verify use this constant-time Montgomery exponentiation over u32
+ * half-limbs (the proven fp256/fp384 CIOS pattern, generalized to RSA-sized
+ * moduli) for PERFORMANCE: O(limbs^2) per multiply with no inner-loop
+ * division, vs bigint_modpow's O(bits^2 * limbs) bit-serial division.
+ * (bigint_mul/div/modpow are themselves correct and KAT-verified; the earlier
+ * "bigint collapses to len-0" note was resolved -- see DOCS/CRASH-AUDIT.md
+ * sec.6 and the rsa corpus tests.  No bigint mul/div in the inner loop.)
+ * Buffers sized for RSA-4096 (128 u32 limbs). */
+var RM_N   : [u32; 130]
+var RM_R2  : [u32; 130]
+var RM_A   : [u32; 130]
+var RM_RES : [u32; 130]
+var RM_ONE : [u32; 130]
+var RM_TMP : [u32; 130]
+var RM_T   : [u64; 132]
+var RM_NP  : [u32; 1]
+var RM_NW  : [u64; 1]
+
+fn rm_copy(dst: u64, src: u64, nw: u64) -> i32 {
+    let d : *u32 = dst as *u32
+    let s : *u32 = src as *u32
+    let mut i : u64 = 0u64
+    while i < nw { d[i] = s[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* extract bigint -> u32 LE limbs at RM dst (nw limbs); returns significant nw. */
+fn rm_extract(bi: u64, dst: u64, maxw: u64) -> u64 {
+    let d : *u32 = dst as *u32
+    let nu64 : u64 = bigint_len_limbs(bi)
+    let mut i : u64 = 0u64
+    while i < maxw { d[i] = 0u32 ; i = i + 1u64 }
+    i = 0u64
+    while i < nu64 {
+        let v : u64 = bigint_get_limb(bi, i)
+        d[2u64 * i] = (v & 0xFFFFFFFFu64) as u32
+        d[2u64 * i + 1u64] = ((v >> 32u64) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    let mut nw : u64 = nu64 * 2u64
+    let mut trimming : u64 = 1u64
+    while trimming == 1u64 {
+        if nw <= 1u64 { trimming = 0u64 } else {
+            if d[nw - 1u64] == 0u32 { nw = nw - 1u64 } else { trimming = 0u64 }
+        }
+    }
+    return nw
+}
+
+/* conditional subtract RM_N (nw limbs) from buf if (extra_high!=0 || buf>=N). */
+fn rm_csub(buf: u64, nw: u64, extra: u64) -> i32 {
+    let a : *u32 = buf as *u32
+    let pp : *u32 = &RM_N as *u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < nw {
+        let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
+        RM_T[i] = v & 0xFFFFFFFFu64
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mut ge : u64 = 0u64
+    if extra != 0u64 { ge = 1u64 }
+    if borrow == 0u64 { ge = 1u64 }
+    let mask : u64 = 0u64 - ge
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    i = 0u64
+    while i < nw {
+        a[i] = (((RM_T[i] & mask) | ((a[i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* buf = 2*buf mod N (nw limbs). */
+fn rm_dbl(buf: u64, nw: u64) -> i32 {
+    let a : *u32 = buf as *u32
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < nw {
+        let v : u64 = ((a[i] as u64) << 1u64) | carry
+        a[i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    rm_csub(buf, nw, carry)
+    return 0i32
+}
+
+/* out = a*b*R^-1 mod N (CIOS), nw u32 limbs.  out/a/b are u32 buffers. */
+fn rm_mont_mul(out: u64, a: u64, b: u64, nw: u64) -> i32 {
+    let ap : *u32 = a as *u32
+    let bp : *u32 = b as *u32
+    let pp : *u32 = &RM_N as *u32
+    let np : u64 = RM_NP[0] as u64
+    let mut k : u64 = 0u64
+    while k < nw + 2u64 { RM_T[k] = 0u64 ; k = k + 1u64 }
+    let mut i : u64 = 0u64
+    while i < nw {
+        let bi : u64 = bp[i] as u64
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < nw {
+            let uv : u64 = RM_T[j] + (ap[j] as u64) * bi + c
+            RM_T[j] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvn : u64 = RM_T[nw] + c
+        RM_T[nw] = uvn & 0xFFFFFFFFu64
+        RM_T[nw + 1u64] = uvn >> 32u64
+        let m : u64 = (RM_T[0] * np) & 0xFFFFFFFFu64
+        let uv0 : u64 = RM_T[0] + m * (pp[0] as u64)
+        c = uv0 >> 32u64
+        j = 1u64
+        while j < nw {
+            let uv : u64 = RM_T[j] + m * (pp[j] as u64) + c
+            RM_T[j - 1u64] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvs : u64 = RM_T[nw] + c
+        RM_T[nw - 1u64] = uvs & 0xFFFFFFFFu64
+        RM_T[nw] = RM_T[nw + 1u64] + (uvs >> 32u64)
+        i = i + 1u64
+    }
+    let o : *u32 = out as *u32
+    let mut q : u64 = 0u64
+    while q < nw { o[q] = RM_T[q] as u32 ; q = q + 1u64 }
+    rm_csub(out, nw, RM_T[nw])
+    return 0i32
+}
+
+/* RSA modular exponentiation base^exp mod n via Montgomery (u32 CIOS). */
+fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
+    let nw : u64 = rm_extract(n, &RM_N as u64, 130u64)
+    /* n'[0] = -N[0]^-1 mod 2^32 via Newton */
+    let n0 : u64 = RM_N[0] as u64
+    let mut x : u64 = n0
+    let mut it : u64 = 0u64
+    while it < 6u64 {
+        let prod : u64 = (n0 * x) & 0xFFFFFFFFu64
+        let tm : u64 = (2u64 + 0x100000000u64 - prod) & 0xFFFFFFFFu64
+        x = (x * tm) & 0xFFFFFFFFu64
+        it = it + 1u64
+    }
+    RM_NP[0] = ((0x100000000u64 - x) & 0xFFFFFFFFu64) as u32
+    /* R2 = 2^(64*nw) mod N : start at R mod N = 2^(32*nw) mod N = 2^(32*nw)-N,
+     * then double 32*nw more times.  Build R mod N = (2^(32*nw) - N). */
+    let r2 : *u32 = &RM_R2 as *u32
+    let pp : *u32 = &RM_N as *u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < nw {
+        let v : u64 = 0x100000000u64 - (pp[i] as u64) - borrow
+        r2[i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mut d : u64 = 0u64
+    let dn : u64 = 32u64 * nw
+    while d < dn { rm_dbl(&RM_R2 as u64, nw) ; d = d + 1u64 }
+    /* aMont = base * R2 * R^-1 = base*R ; load base into RM_A */
+    rm_extract(base, &RM_A as u64, 130u64)
+    rm_csub(&RM_A as u64, nw, 0u64)              /* base < n already; normalize */
+    rm_mont_mul(&RM_TMP as u64, &RM_A as u64, &RM_R2 as u64, nw) /* aMont (de-aliased) */
+    rm_copy(&RM_A as u64, &RM_TMP as u64, nw)
+    /* resMont = mont(1) = 1 * R2 * R^-1 = R mod N */
+    let one : *u32 = &RM_ONE as *u32
+    i = 0u64
+    while i < nw { one[i] = 0u32 ; i = i + 1u64 }
+    one[0] = 1u32
+    rm_mont_mul(&RM_RES as u64, &RM_ONE as u64, &RM_R2 as u64, nw)  /* RM_RES = mont(1) */
+    /* square-and-multiply, MSB->LSB */
+    let ebits : u64 = bigint_msb_position(exp)
+    let mut bit : u64 = ebits
+    while bit > 0u64 {
+        bit = bit - 1u64
+        rm_mont_mul(&RM_TMP as u64, &RM_RES as u64, &RM_RES as u64, nw)   /* square (de-aliased) */
+        rm_copy(&RM_RES as u64, &RM_TMP as u64, nw)
+        let limb : u64 = bigint_get_limb(exp, bit / 64u64)
+        let ebit : u64 = (limb >> (bit % 64u64)) & 1u64
+        if ebit == 1u64 {
+            rm_mont_mul(&RM_TMP as u64, &RM_RES as u64, &RM_A as u64, nw)
+            rm_copy(&RM_RES as u64, &RM_TMP as u64, nw)
+        }
+    }
+    /* convert out of Montgomery: result = resMont * 1 * R^-1 */
+    i = 0u64
+    while i < nw { one[i] = 0u32 ; i = i + 1u64 }
+    one[0] = 1u32
+    rm_mont_mul(&RM_TMP as u64, &RM_RES as u64, &RM_ONE as u64, nw)   /* from-mont (de-aliased) */
+    rm_copy(&RM_RES as u64, &RM_TMP as u64, nw)
+    /* pack RM_RES (nw u32) -> bigint */
+    let nu64 : u64 = (nw + 1u64) / 2u64
+    let result : u64 = bigint_new(arena, nu64 + 1u64)
+    let rp : *u32 = &RM_RES as *u32
+    i = 0u64
+    while i < nu64 {
+        let lo : u64 = rp[2u64 * i] as u64
+        let mut hi : u64 = 0u64
+        if (2u64 * i + 1u64) < nw { hi = rp[2u64 * i + 1u64] as u64 }
+        bigint_set_limb(result, i, lo | (hi << 32u64))
+        i = i + 1u64
+    }
+    bigint_set_len(result, nu64)
+    bigint_normalize(result)
+    return result
+}
+
+fn rsa_test_sq(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let sq : u64 = bigint_mul(arena, m, m)
+    let sq_ref : u64 = bigint_mod(arena, sq, n)            /* m^2 mod n (proven single ops) */
+    let m2 : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    let sq_mont : u64 = rsa_modexp(arena, m2, two, n)       /* m^2 mod n (Montgomery) */
+    let three : u64 = bigint_from_u64(arena, 3u64)
+    let m3 : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let cube_mont : u64 = rsa_modexp(arena, m3, three, n)
+    let cube_ref : u64 = bigint_mod(arena, bigint_mul(arena, sq_ref, m), n)
+    RSA_DBG[0] = (bigint_cmp(sq_mont, sq_ref) + 1i32) as u64    /* 1 = squaring OK */
+    RSA_DBG[1] = (bigint_cmp(cube_mont, cube_ref) + 1i32) as u64 /* 1 = cube OK */
+    return RSA_DBG[0] + RSA_DBG[1] * 8u64
+}
+
+fn rsa_test_smallbase(arena: u64, n: u64, d: u64, e: u64) -> u64 @export {
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    let r1 : u64 = rsa_modexp(arena, two, d, n)        /* 2^d mod n */
+    let r2 : u64 = rsa_modexp(arena, r1, e, n)         /* (2^d)^e mod n -> should be 2 */
+    let two2 : u64 = bigint_from_u64(arena, 2u64)
+    RSA_DBG[0] = bigint_len_limbs(r1)
+    RSA_DBG[1] = bigint_msb_position(d)
+    return (bigint_cmp(r2, two2) + 1i32) as u64
+}
+
+fn rsa_test_fermat(arena: u64, seed: u64, slen: u64) -> u64 @export {
+    iii_drbg_instantiate(seed, slen, seed, slen, 0u64, 0u64)
+    let p : u64 = rsa_gen_prime(arena, 512u64)         /* 512-bit prime, top-bit-set */
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let pm1 : u64 = bigint_sub(arena, p, one)           /* p-1 (~512-bit exponent) */
+    let base : u64 = bigint_from_u64(arena, 2u64)
+    let r : u64 = rsa_modexp(arena, base, pm1, p)       /* 2^(p-1) mod p == 1 (Fermat) */
+    RSA_DBG[0] = bigint_len_limbs(r)
+    RSA_DBG[1] = bigint_to_u64_lo(r)
+    RSA_DBG[2] = bigint_msb_position(pm1)
+    let oneref : u64 = bigint_from_u64(arena, 1u64)
+    return (bigint_cmp(r, oneref) + 1i32) as u64        /* 1 if r==1 (Montgomery correct) */
+}
+
+/* rm_* Montgomery (rsa_modexp) vs trusted bigint_modpow, long exponent.
+ * n = top-bit-set odd 512-bit modulus; g < n multi-limb base; e ~448-bit
+ * exponent (drives ~448 square-and-multiply iterations through rm_*).
+ * bigint_modpow is the proven-correct oracle (probe2 / M521 KAT).
+ * Returns bigint_cmp(rm,lib)+1: 1 == rm_ matches the oracle (correct). */
+fn rsa_test_rm_vs_lib(arena: u64) -> u64 @export {
+    let n : u64 = bigint_new(arena, 8u64)
+    let mut i : u64 = 0u64
+    while i < 8u64 { bigint_set_limb(n, i, 0xFEDCBA9876543211u64 + i * 0x1111111111111111u64) ; i = i + 1u64 }
+    bigint_set_limb(n, 7u64, 0x8000000000000001u64)
+    let g : u64 = bigint_new(arena, 8u64)
+    i = 0u64
+    while i < 8u64 { bigint_set_limb(g, i, 0x0123456789ABCDEFu64 + i * 0x1000000000000001u64) ; i = i + 1u64 }
+    let e : u64 = bigint_new(arena, 7u64)
+    i = 0u64
+    while i < 7u64 { bigint_set_limb(e, i, 0xCAFEBABEDEADBEEFu64 + i * 0x0F0F0F0F0F0F0F0Fu64) ; i = i + 1u64 }
+    let r_mont : u64 = rsa_modexp(arena, g, e, n)
+    let r_lib : u64 = bigint_modpow(arena, g, e, n)
+    RSA_DBG[0] = bigint_len_limbs(r_mont)
+    RSA_DBG[1] = bigint_len_limbs(r_lib)
+    RSA_DBG[2] = bigint_to_u64_lo(r_mont)
+    RSA_DBG[3] = bigint_to_u64_lo(r_lib)
+    return (bigint_cmp(r_mont, r_lib) + 1i32) as u64
+}
+
+fn rsa_test_mont_small(arena: u64) -> u64 @export {
+    let n : u64 = bigint_from_u64(arena, 1001u64)        /* odd */
+    let base : u64 = bigint_from_u64(arena, 2u64)
+    let exp : u64 = bigint_from_u64(arena, 10u64)
+    let r : u64 = rsa_modexp(arena, base, exp, n)         /* 2^10 mod 1001 = 23 */
+    RSA_DBG[0] = bigint_len_limbs(r)
+    return bigint_to_u64_lo(r)
+}
+
+fn rsa_test_mulmod(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let sq : u64 = bigint_mul(arena, m, m)
+    let r : u64 = bigint_mod(arena, sq, n)
+    RSA_DBG[0] = bigint_len_limbs(m)
+    RSA_DBG[1] = bigint_len_limbs(sq)
+    RSA_DBG[2] = bigint_len_limbs(r)
+    RSA_DBG[3] = bigint_len_limbs(n)
+    return RSA_DBG[0] * 1000000u64 + RSA_DBG[1] * 10000u64 + RSA_DBG[2] * 100u64 + RSA_DBG[3]
+}
+
+fn rsa_test_modexp_len(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let s_mine : u64 = rsa_modexp(arena, m, d, n)
+    let m2 : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let s_lib : u64 = bigint_modpow(arena, m2, d, n)
+    RSA_DBG[0] = bigint_len_limbs(s_mine)
+    RSA_DBG[1] = bigint_len_limbs(s_lib)
+    return RSA_DBG[0] * 100u64 + RSA_DBG[1]
+}
+
+/* RSASSA-PSS sign: sig_out (modBits/8 bytes) = (EMSA-PSS-ENCODE(mHash))^d mod n. */
+fn rsa_pss_sign(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64, sig_out: u64) -> i32 @export {
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
+    if emLen == 0u64 { return 0i32 - 1i32 }
+    let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    let s : u64 = rsa_modexp(arena, m, d, n)
+    let k : u64 = modBits / 8u64
+    rsa_i2osp(s, sig_out, k)
+    return 0i32
+}
+
+/* RSASSA-PSS verify: 1 if sig valid. */
+fn rsa_pss_verify(arena: u64, n: u64, e: u64, modBits: u64, mHash: u64, sig: u64, sigLen: u64, sLen: u64) -> u8 @export {
+    let k : u64 = modBits / 8u64
+    if sigLen != k { return 0u8 }
+    let emBits : u64 = modBits - 1u64
+    let emLen : u64 = (emBits + 7u64) / 8u64
+    let s : u64 = rsa_os2ip(arena, sig, sigLen)
+    let m : u64 = rsa_modexp(arena, s, e, n)
+    rsa_i2osp(m, &RSA_EM as u64, emLen)
+    return rsa_pss_verify_em(mHash, emBits, sLen)
+}
+
+/* ---- Crypto-agility byte-ABI bridge (arena + bigint-key serialization) ---- */
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+
+var RSA_SALTZ : [u8; 32]
+
+/* keygen: pk_out = n (k=modBits/8 bytes, BE); sk_out = n||d (2k).  e is the
+ * fixed RSA_E_PUB (65537), reconstructed at verify.  Arena owned internally. */
+fn iii_rsa_keygen_seed(modBits: u64, seed: u64, slen: u64, pk_out: u64, sk_out: u64) -> i32 @export {
+    let k : u64 = modBits / 8u64
+    let arena : u64 = arena_new(67108864u64)
+    if arena == 0u64 { return 0i32 - 1i32 }
+    rsa_keygen(arena, modBits, seed, slen)
+    let n : u64 = rsa_gen_n()
+    let d : u64 = rsa_gen_d()
+    rsa_i2osp(n, pk_out, k)
+    rsa_i2osp(n, sk_out, k)
+    rsa_i2osp(d, sk_out + k, k)
+    bigint_drop_arena(arena)
+    arena_drop(arena)
+    return 0i32
+}
+
+/* PSS sign: sk = n||d (2k); mHash = 32-byte SHA-256(msg); salt=zeros, sLen=32. */
+fn iii_rsa_pss_sign_det(modBits: u64, sk: u64, mHash: u64, sig_out: u64) -> i32 @export {
+    let k : u64 = modBits / 8u64
+    let arena : u64 = arena_new(33554432u64)
+    if arena == 0u64 { return 0i32 - 1i32 }
+    let n : u64 = rsa_os2ip(arena, sk, k)
+    let d : u64 = rsa_os2ip(arena, sk + k, k)
+    let sz : *u8 = &RSA_SALTZ as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { sz[i] = 0u8 ; i = i + 1u64 }
+    rsa_pss_sign(arena, n, d, modBits, mHash, &RSA_SALTZ as u64, 32u64, sig_out)
+    bigint_drop_arena(arena)
+    arena_drop(arena)
+    return 0i32
+}
+
+/* PSS verify: pk = n (k); e fixed 65537; mHash = SHA-256(msg); sLen=32. */
+fn iii_rsa_pss_verify_x(modBits: u64, pk: u64, mHash: u64, sig: u64, sigLen: u64) -> u8 @export {
+    let k : u64 = modBits / 8u64
+    let arena : u64 = arena_new(33554432u64)
+    if arena == 0u64 { return 0u8 }
+    let n : u64 = rsa_os2ip(arena, pk, k)
+    let e : u64 = bigint_from_u64(arena, RSA_E_PUB)
+    let v : u8 = rsa_pss_verify(arena, n, e, modBits, mHash, sig, sigLen, 32u64)
+    bigint_drop_arena(arena)
+    arena_drop(arena)
+    return v
+}

@@ -1,0 +1,9 @@
+/* rune_to_ascii_lower('H' = 0x48) -> 'h' = 0x68 = 104 */
+module corpus_a06
+
+extern @abi(c-msvc-x64) fn rune_to_ascii_lower(cp: u32) -> u32 from "rune.iii"
+
+fn main() -> u64 {
+    let v : u32 = rune_to_ascii_lower(72u32)
+    return v as u64
+}

@@ -1,0 +1,70 @@
+module katabasis_svm_const
+
+/* KATABASIS Ring -1 -- the proven AMD-SVM constants, single-source.
+ * Harvested from CHARIOT-HYPERVISOR-WORKING (proven on Ryzen 9 7945HX) + cross-checked vs the
+ * AMD64 APM vol 2 ch.15. See DOCS/SVM-CONSTANTS-HARVEST.md for every source line + APM cross-ref.
+ * Every name is SVM_-prefixed (module-level const = global linker symbol; avoid collisions).
+ * No magic number enters the Ring -1 loader un-sourced; this module is that source. */
+
+/* --- region layout (256KB, physically contiguous) --- */
+const SVM_REGION_SIZE     : u64 = 0x40000u64
+const SVM_OFF_VMCB        : u64 = 0x0u64
+const SVM_OFF_HOSTSAVE    : u64 = 0x1000u64
+const SVM_OFF_NPT_PML4    : u64 = 0x2000u64
+const SVM_OFF_NPT_PDPT    : u64 = 0x3000u64
+const SVM_OFF_NPT_PD0     : u64 = 0x4000u64
+const SVM_OFF_GUEST_CODE  : u64 = 0xA000u64
+const SVM_OFF_GUEST_STACK : u64 = 0xAFE0u64
+const SVM_OFF_MSRPM       : u64 = 0xB000u64
+const SVM_OFF_IOPM        : u64 = 0xC000u64
+const SVM_OFF_DIAG        : u64 = 0x3F000u64
+
+/* --- VMCB control area offsets --- */
+const SVM_VMCB_INTERCEPT_EXC   : u64 = 0x008u64
+const SVM_VMCB_INTERCEPT_MISC1 : u64 = 0x00Cu64
+const SVM_VMCB_INTERCEPT_MISC2 : u64 = 0x010u64
+const SVM_VMCB_ASID            : u64 = 0x058u64
+const SVM_VMCB_EXITCODE        : u64 = 0x070u64
+const SVM_VMCB_EXITINFO1       : u64 = 0x078u64
+const SVM_VMCB_NP_ENABLE       : u64 = 0x090u64
+const SVM_VMCB_N_CR3           : u64 = 0x0B0u64
+const SVM_VMCB_CLEAN           : u64 = 0x0C0u64
+
+/* --- VMCB state-save area offsets (base 0x400) --- */
+const SVM_VMCB_SS_ES   : u64 = 0x400u64
+const SVM_VMCB_EFER    : u64 = 0x4D0u64
+const SVM_VMCB_CR4     : u64 = 0x548u64
+const SVM_VMCB_CR3     : u64 = 0x550u64
+const SVM_VMCB_CR0     : u64 = 0x558u64
+const SVM_VMCB_DR7     : u64 = 0x560u64
+const SVM_VMCB_DR6     : u64 = 0x568u64
+const SVM_VMCB_RFLAGS  : u64 = 0x570u64
+const SVM_VMCB_RIP     : u64 = 0x578u64
+const SVM_VMCB_RSP     : u64 = 0x5D8u64
+const SVM_VMCB_RAX     : u64 = 0x5F8u64
+
+/* --- VMCB field values (INIT_SVM proven) --- */
+const SVM_INTERCEPT_EXC_ALL    : u64 = 0xFFFFFFFFu64
+const SVM_INTERCEPT_MISC1_VAL  : u64 = 0x9906000Fu64
+const SVM_INTERCEPT_MISC2_ALL6 : u64 = 0x3Fu64          /* VMRUN|VMMCALL|VMLOAD|VMSAVE|STGI|CLGI */
+const SVM_ASID_VAL             : u64 = 0x1u64           /* MUST be != 0 */
+const SVM_NP_ENABLE_VAL        : u64 = 0x1u64
+const SVM_VMCB_EFER_SVME       : u64 = 0x1000u64        /* guest EFER.SVME required or VMEXIT_INVALID */
+const SVM_NPT_PDE_2MB_FLAGS    : u64 = 0xB7u64          /* present|rw|user|accessed|dirty|PS (2MB) */
+const SVM_NPT_PTR_FLAGS        : u64 = 0x67u64          /* present|rw|user|accessed|dirty (to next level) */
+
+/* --- MSRs + bits (host SVM enable) --- */
+const SVM_MSR_EFER         : u64 = 0xC0000080u64
+const SVM_EFER_SVME_BIT    : u64 = 0x1000u64            /* bit 12 */
+const SVM_MSR_VM_HSAVE_PA  : u64 = 0xC0010117u64
+const SVM_MSR_VM_CR        : u64 = 0xC0010114u64
+const SVM_VMCR_SVMLOCK_BIT : u64 = 0x8u64               /* VM_CR bit 3 */
+const SVM_VMCR_SVMDIS_BIT  : u64 = 0x10u64              /* VM_CR bit 4 */
+
+/* --- CPUID SVM detect --- */
+const SVM_CPUID_EXT_FEAT   : u64 = 0x80000001u64        /* ECX bit 2 (=0x4) => SVM available */
+const SVM_CPUID_SVM_ECX    : u64 = 0x4u64
+
+/* --- VMEXIT codes --- */
+const SVM_EXIT_VMMCALL : u64 = 0x81u64                  /* the throwaway-guest success signal */
+const SVM_EXIT_NPF     : u64 = 0x400u64                 /* nested page fault */

@@ -1,0 +1,25 @@
+/* either_u32: left(7).is_left=1; left(7).unwrap_left=7; swap turns it into right(7) */
+module corpus_b27
+
+extern @abi(c-msvc-x64) fn either_u32_left(v: u32) -> u64 from "either.iii"
+extern @abi(c-msvc-x64) fn either_u32_right(v: u32) -> u64 from "either.iii"
+extern @abi(c-msvc-x64) fn either_u32_is_left(e: u64) -> u8 from "either.iii"
+extern @abi(c-msvc-x64) fn either_u32_is_right(e: u64) -> u8 from "either.iii"
+extern @abi(c-msvc-x64) fn either_u32_unwrap_left_or(e: u64, default: u32) -> u32 from "either.iii"
+extern @abi(c-msvc-x64) fn either_u32_unwrap_right_or(e: u64, default: u32) -> u32 from "either.iii"
+extern @abi(c-msvc-x64) fn either_u32_swap(e: u64) -> u64 from "either.iii"
+
+fn main() -> u64 {
+    let l : u64 = either_u32_left(7u32)
+    if either_u32_is_left(l) != 1u8 { return 1u64 }
+    if either_u32_is_right(l) != 0u8 { return 2u64 }
+    if either_u32_unwrap_left_or(l, 99u32) != 7u32 { return 3u64 }
+    if either_u32_unwrap_right_or(l, 99u32) != 99u32 { return 4u64 }
+    let r : u64 = either_u32_right(13u32)
+    if either_u32_is_right(r) != 1u8 { return 5u64 }
+    if either_u32_unwrap_right_or(r, 99u32) != 13u32 { return 6u64 }
+    let s : u64 = either_u32_swap(l)
+    if either_u32_is_right(s) != 1u8 { return 7u64 }
+    if either_u32_unwrap_right_or(s, 99u32) != 7u32 { return 8u64 }
+    return 99u64
+}

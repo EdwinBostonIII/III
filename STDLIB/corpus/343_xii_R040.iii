@@ -1,0 +1,24 @@
+/* corpus/343_xii_R040.iii  -- R040 [M5] IF null-branches */
+
+module corpus_343_xii_R040
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* Pure predicate (K01_FORM, cap=NONE). */
+    let p : u32 = xii_term_make_basis(0u8, 0x10u32)
+    let n1 : u32 = xii_term_make_basis(5u8, xii_rewrite_null_form())
+    let n2 : u32 = xii_term_make_basis(5u8, xii_rewrite_null_form())
+    let t : u32 = xii_term_make_if(p, n1, n2)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 40u32 { return 1u64 }
+    if xii_term_get_kind(r) != 5u8 { return 2u64 }
+    return 0u64
+}

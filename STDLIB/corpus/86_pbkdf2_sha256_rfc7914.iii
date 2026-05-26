@@ -1,0 +1,37 @@
+/* PBKDF2-HMAC-SHA256 KAT: RFC 7914 §11.
+ *   P = "passwd"
+ *   S = "salt"
+ *   c = 1
+ *   dkLen = 64
+ *   expected = 55 ac 04 6e 56 e3 08 9f ec 16 91 c2 25 44 b6 05 ...
+ *
+ * Exit = first byte = 0x55 = 85.
+ */
+module corpus_86
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_salt(salt: *u8, salt_len: u64) -> i32 from "pbkdf2.iii"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_set_iter(iterations: u32) -> i32 from "pbkdf2.iii"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) -> i32 from "pbkdf2.iii"
+
+fn main() -> u64 {
+    let pw   : *u8 = malloc(6u64)
+    let salt : *u8 = malloc(4u64)
+    let dk   : *u8 = malloc(64u64)
+    pw[0] = 112u8; pw[1] = 97u8; pw[2] = 115u8; pw[3] = 115u8; pw[4] = 119u8; pw[5] = 100u8
+    salt[0] = 115u8; salt[1] = 97u8; salt[2] = 108u8; salt[3] = 116u8
+    pbkdf2_sha256_set_salt(salt, 4u64)
+    pbkdf2_sha256_set_iter(1u32)
+    pbkdf2_sha256_derive(pw, 6u64, dk, 64u64)
+    if dk[0]  != 0x55u8 { return 1u64 }
+    if dk[1]  != 0xACu8 { return 2u64 }
+    if dk[2]  != 0x04u8 { return 3u64 }
+    if dk[3]  != 0x6Eu8 { return 4u64 }
+    if dk[15] != 0x05u8 { return 5u64 }
+    if dk[31] != 0xBCu8 { return 6u64 }
+    if dk[63] != 0x83u8 { return 7u64 }
+    let result : u64 = dk[0] as u64
+    free(pw); free(salt); free(dk)
+    return result
+}

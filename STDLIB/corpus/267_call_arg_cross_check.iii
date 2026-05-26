@@ -1,0 +1,41 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\267_call_arg_cross_check.iii
+ *
+ * III conformance corpus 267 -- cross-rule integration: when an arg
+ * is a direct CALL (not a binding), the callee's @returns_hexad
+ * propagates as the arg's effective kind for the param-hexad check.
+ *
+ * This closes the gap between two equivalent expressions:
+ *
+ *   POSITIVE (works in this file):
+ *     let x : u64 @hexad_kind(K) = make()    -- return-kind check
+ *     consume(x)                              -- param-kind check
+ *
+ *   ALSO POSITIVE (new in this corpus):
+ *     consume(make())                         -- both checks via cross-rule
+ *
+ * The compiler now propagates `make`'s @returns_hexad(K_r) through
+ * the CALL-arg position so that `consume`'s @hexad_kind(K_p) param
+ * sees the right kind for comparison.  Match → codegen accepts;
+ * mismatch → III_INTENT_KIND_VIOLATION (handled in the 267_neg case).
+ *
+ * Mandate 7: pure structural integer-equality.  No observation, no
+ * runtime state involvement.
+ */
+module corpus_267
+
+fn _make_compose() -> u64 @returns_hexad(6u64) {
+    return 0xC0DEu64
+}
+
+fn _consume_compose(x: u64 @hexad_kind(6u64)) -> u64 {
+    return x + 0x100u64
+}
+
+fn main() -> u64 {
+    /* Direct call-as-arg: _make_compose returns kind=6, _consume_compose
+     * expects param kind=6.  Static check matches.  Codegen accepts. */
+    let r : u64 = _consume_compose(_make_compose())
+    if r != 0xC1DEu64 { return 1u64 }
+
+    return 99u64
+}

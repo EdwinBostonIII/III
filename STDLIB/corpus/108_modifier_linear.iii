@@ -1,0 +1,10 @@
+/* Lattice plan Step 0005: @linear modifier (no args). */
+module corpus_108
+
+fn handoff() -> u64 @linear {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return handoff()
+}

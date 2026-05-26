@@ -1,0 +1,1590 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\zk_field.iii
+ *
+ * III STDLIB - numera::zk_field -- BLS12-381 finite-field tower (gospel
+ * V1 Stage 4 ZK scale-up, forward-ref #4).  Replaces the toy ~30-bit
+ * supersingular field with the real 381-bit pairing-friendly field.
+ *
+ * This module begins with the base field Fp (this commit); the Fp2/Fp6/Fp12
+ * tower, plus G1/G2 (zk_curve) and the optimal-Ate pairing, build atop it.
+ *
+ * Fp:  GF(p), p = the BLS12-381 base-field prime
+ *      = 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
+ *   12 x u32 little-endian limbs in a static slot pool; MONTGOMERY domain
+ *   (R = 2^384).  CIOS multiply with general n'[0] (Newton-computed, != 1,
+ *   since p[0] != 2^32-1, unlike P-256/P-384).  R^2 derived at init by
+ *   doublings.  Constant-time conditional subtract (masked).
+ *
+ *   The prime p was derived + cross-validated to the limb against the
+ *   canonical BLS12-381 value (seed x = -0xd201000000010000,
+ *   p = (x-1)^2/3 * (x^4-x^2+1) + x); see ZK-PRUNING/build/_bls_const_probe.
+ *   The full Fp/Fp2/Fp6/Fp12 arithmetic was structurally validated in the
+ *   C oracle ZK-PRUNING/build/_bls.c (Fermat + GF(p^k): x^(p^k)=x).
+ *
+ * Slot pool convention: a field element is slot s at ZKF[s*12 + 0..11].
+ *   Scratch slots 44..47 are reserved (to/from-mont + inversion ladder).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ * Discipline: distinct ZKF_/zkf_ names (no collision with fp384's FQ_/fq_).
+ *   No signed compares; u32-in-u64 masked; single-line fn decls; ASCII only.
+ */
+
+module numera_zk_field
+
+var ZKF_P    : [u32; 12]
+var ZKF_R2   : [u32; 12]
+var ZKF_ONE  : [u32; 12]       /* R mod p (Montgomery 1) */
+var ZKF      : [u32; 49152]    /* 4096 Fp slots * 12 limbs (room for the Fp6/Fp12 tower + G1/G2 + pairing) */
+var ZKF_T    : [u64; 14]
+var ZKF_INIT : [u32; 1]
+var ZKF_PM2  : [u32; 12]
+var ZKF_NP   : [u64; 1]        /* -p[0]^-1 mod 2^32 (general n'[0]) */
+var ZK_R     : [u32; 8]        /* BLS12-381 group order r (256-bit, scalar field) */
+var ZK_H1    : [u32; 4]        /* G1 cofactor h1 = (x-1)^2/3 (128-bit) */
+var ZK_SQRTE : [u32; 12]       /* (p+1)/4, the sqrt exponent (p == 3 mod 4) */
+var ZKG1_INF : [u32; 64]       /* G1 affine point infinity flags, indexed by g1 slot */
+var ZK_H2    : [u32; 16]       /* G2 cofactor h2 (512-bit), derived in _bls_const_probe */
+var ZK_PM1H  : [u32; 12]       /* (p-1)/2, the Fp QR (Euler) exponent */
+var ZKG2_INF : [u32; 32]       /* G2 affine point infinity flags, indexed by g2 slot */
+var ZK_FEXP  : [u32; 136]      /* final-exp exponent E = (p^12-1)/r (derived in _bls_const_probe) */
+var ZKEC_INF : [u32; 16]       /* Fp12 elliptic-point infinity flags (Miller loop) */
+var ZK_PINIT : [u32; 1]        /* pairing-init guard (w^-2, w^-3 computed once) */
+/* ---- Fr: the BLS12-381 scalar field GF(r), 8 x u32 Montgomery (R = 2^256). ---- */
+var ZKFR_P    : [u32; 8]
+var ZKFR_R2   : [u32; 8]
+var ZKFR_ONE  : [u32; 8]       /* R mod r */
+var ZKFR      : [u32; 4096]    /* 512 Fr slots * 8 limbs (0-9 selftest, 180-255 engine/frq scratch, 256+ Groth16) */
+var ZKFR_T    : [u64; 10]
+var ZKFR_INIT : [u32; 1]
+var ZKFR_NP   : [u64; 1]
+var ZKFR_PM2  : [u32; 8]
+
+fn zkf_init() -> i32 {
+    if ZKF_INIT[0] == 1u32 { return 0i32 }
+    /* BLS12-381 p, little-endian u32 limbs (each u64 limb split lo|hi). */
+    ZKF_P[0]=0xffffaaabu32  ZKF_P[1]=0xb9feffffu32
+    ZKF_P[2]=0xb153ffffu32  ZKF_P[3]=0x1eabfffeu32
+    ZKF_P[4]=0xf6b0f624u32  ZKF_P[5]=0x6730d2a0u32
+    ZKF_P[6]=0xf38512bfu32  ZKF_P[7]=0x64774b84u32
+    ZKF_P[8]=0x434bacd7u32  ZKF_P[9]=0x4b1ba7b6u32
+    ZKF_P[10]=0x397fe69au32 ZKF_P[11]=0x1a0111eau32
+    /* n'[0] = -p[0]^-1 mod 2^32 via Newton (p[0] odd). */
+    let p0 : u64 = ZKF_P[0] as u64
+    let mut inv : u64 = p0
+    let mut k : u64 = 0u64
+    while k < 5u64 {
+        let prod : u64 = (p0 * inv) & 0xFFFFFFFFu64
+        let tm : u64 = (2u64 + 0x100000000u64 - prod) & 0xFFFFFFFFu64
+        inv = (inv * tm) & 0xFFFFFFFFu64
+        k = k + 1u64
+    }
+    ZKF_NP[0] = (0x100000000u64 - inv) & 0xFFFFFFFFu64
+    /* R mod p = 2^384 mod p : start at 1, double 384 times mod p.
+     * (Cannot use 2^384 - p: BLS12-381 p < 2^381, so 2^384 > 2p and a single
+     * subtraction would not reduce -- unlike P-384 where p > 2^383.) */
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF_ONE[i] = 0u32 ; i = i + 1u64 }
+    ZKF_ONE[0] = 1u32
+    let mut d : u64 = 0u64
+    while d < 384u64 { zkf_dbl_raw(&ZKF_ONE as u64) ; d = d + 1u64 }
+    /* R^2 = 2^768 mod p : start at R mod p, double 384 more times. */
+    i = 0u64
+    while i < 12u64 { ZKF_R2[i] = ZKF_ONE[i] ; i = i + 1u64 }
+    d = 0u64
+    while d < 384u64 { zkf_dbl_raw(&ZKF_R2 as u64) ; d = d + 1u64 }
+    /* BLS12-381 group order r (= x^4 - x^2 + 1), little-endian u32. */
+    ZK_R[0]=0x00000001u32 ZK_R[1]=0xffffffffu32 ZK_R[2]=0xfffe5bfeu32 ZK_R[3]=0x53bda402u32
+    ZK_R[4]=0x09a1d805u32 ZK_R[5]=0x3339d808u32 ZK_R[6]=0x299d7d48u32 ZK_R[7]=0x73eda753u32
+    /* G1 cofactor h1 = (x-1)^2/3, little-endian u32. */
+    ZK_H1[0]=0x0000aaabu32 ZK_H1[1]=0x8c00aaabu32 ZK_H1[2]=0x5555e156u32 ZK_H1[3]=0x396c8c00u32
+    /* sqrt exponent (p+1)/4 (p == 3 mod 4): start at p+1 (p[0] odd, no carry), >> 2. */
+    let mut si : u64 = 0u64
+    while si < 12u64 { ZK_SQRTE[si] = ZKF_P[si] ; si = si + 1u64 }
+    ZK_SQRTE[0] = (((ZKF_P[0] as u64) + 1u64) & 0xFFFFFFFFu64) as u32
+    si = 0u64
+    while si < 11u64 {
+        let lo : u64 = (ZK_SQRTE[si] as u64) >> 2u64
+        let hi : u64 = ((ZK_SQRTE[si + 1u64] as u64) << 30u64) & 0xFFFFFFFFu64
+        ZK_SQRTE[si] = (lo | hi) as u32
+        si = si + 1u64
+    }
+    ZK_SQRTE[11] = ((ZK_SQRTE[11] as u64) >> 2u64) as u32
+    /* G2 cofactor h2 (derived + printed by _bls_const_probe), little-endian u32. */
+    ZK_H2[0]=0x1c7238e5u32 ZK_H2[1]=0xcf1c38e3u32 ZK_H2[2]=0x786f0c70u32 ZK_H2[3]=0x1616ec6eu32
+    ZK_H2[4]=0x3a6691aeu32 ZK_H2[5]=0x21537e29u32 ZK_H2[6]=0x4d9e82efu32 ZK_H2[7]=0xa628f1cbu32
+    ZK_H2[8]=0x2e5a7ddfu32 ZK_H2[9]=0xa68a205bu32 ZK_H2[10]=0x47085abau32 ZK_H2[11]=0xcd91de45u32
+    ZK_H2[12]=0x2876a202u32 ZK_H2[13]=0x091d5079u32 ZK_H2[14]=0x5414e7f1u32 ZK_H2[15]=0x05d543a9u32
+    /* (p-1)/2: the Fp QR (Euler) exponent.  p[0]=...aaab odd, p-1 even. */
+    si = 0u64
+    while si < 12u64 { ZK_PM1H[si] = ZKF_P[si] ; si = si + 1u64 }
+    ZK_PM1H[0] = (((ZKF_P[0] as u64) - 1u64) & 0xFFFFFFFFu64) as u32
+    si = 0u64
+    while si < 11u64 {
+        let lo : u64 = (ZK_PM1H[si] as u64) >> 1u64
+        let hi : u64 = ((ZK_PM1H[si + 1u64] as u64) << 31u64) & 0xFFFFFFFFu64
+        ZK_PM1H[si] = (lo | hi) as u32
+        si = si + 1u64
+    }
+    ZK_PM1H[11] = ((ZK_PM1H[11] as u64) >> 1u64) as u32
+    /* inv2 = mont(1/2) = mont((p+1)/2) into reserved Fp slot 1395 (no inversion). */
+    si = 0u64
+    while si < 12u64 { ZKF[1394u64*12u64 + si] = ZKF_P[si] ; si = si + 1u64 }
+    ZKF[1394u64*12u64] = (((ZKF_P[0] as u64) + 1u64) & 0xFFFFFFFFu64) as u32
+    si = 0u64
+    while si < 11u64 {
+        let lo : u64 = (ZKF[1394u64*12u64 + si] as u64) >> 1u64
+        let hi : u64 = ((ZKF[1394u64*12u64 + si + 1u64] as u64) << 31u64) & 0xFFFFFFFFu64
+        ZKF[1394u64*12u64 + si] = (lo | hi) as u32
+        si = si + 1u64
+    }
+    ZKF[1394u64*12u64 + 11u64] = ((ZKF[1394u64*12u64 + 11u64] as u64) >> 1u64) as u32
+    zkf_to_mont(1395u64, 1394u64)
+    /* final-exp exponent E = (p^12-1)/r (derived + verified E*r==p^12-1 in _bls_const_probe). */
+    ZK_FEXP[0]=0x5df57510u32 ZK_FEXP[1]=0xc0bcb9b5u32 ZK_FEXP[2]=0xe68bfb24u32 ZK_FEXP[3]=0x25f98630u32
+    ZK_FEXP[4]=0xfbd5f489u32 ZK_FEXP[5]=0x4406fbc8u32 ZK_FEXP[6]=0xd12191a0u32 ZK_FEXP[7]=0x8e2f8491u32
+    ZK_FEXP[8]=0x0a6f8069u32 ZK_FEXP[9]=0x3e9d7165u32 ZK_FEXP[10]=0x1d4cab80u32 ZK_FEXP[11]=0x226c2f01u32
+    ZK_FEXP[12]=0x17489119u32 ZK_FEXP[13]=0x67f67c47u32 ZK_FEXP[14]=0xd88592d7u32 ZK_FEXP[15]=0xaf3f881bu32
+    ZK_FEXP[16]=0xeed2161du32 ZK_FEXP[17]=0x1a67e49eu32 ZK_FEXP[18]=0x69aeb218u32 ZK_FEXP[19]=0xe5b78c78u32
+    ZK_FEXP[20]=0x043f7bbcu32 ZK_FEXP[21]=0xf6539314u32 ZK_FEXP[22]=0xf2701aaeu32 ZK_FEXP[23]=0x73f62537u32
+    ZK_FEXP[24]=0xe9622d2au32 ZK_FEXP[25]=0xaff1c910u32 ZK_FEXP[26]=0x92caa9d4u32 ZK_FEXP[27]=0x62833134u32
+    ZK_FEXP[28]=0xbea83d19u32 ZK_FEXP[29]=0x2e2f3ec2u32 ZK_FEXP[30]=0xb02faa73u32 ZK_FEXP[31]=0xa4c7e79fu32
+    ZK_FEXP[32]=0xd7961be1u32 ZK_FEXP[33]=0x6c49637fu32 ZK_FEXP[34]=0xe8817745u32 ZK_FEXP[35]=0x08e88adcu32
+    ZK_FEXP[36]=0x36399917u32 ZK_FEXP[37]=0x35de3f7au32 ZK_FEXP[38]=0x31759c36u32 ZK_FEXP[39]=0x9c1d9f7cu32
+    ZK_FEXP[40]=0x4ea820b0u32 ZK_FEXP[41]=0xfa9e13c2u32 ZK_FEXP[42]=0xa403577du32 ZK_FEXP[43]=0x3fc56947u32
+    ZK_FEXP[44]=0xfc5cceb7u32 ZK_FEXP[45]=0xa4c1b6dcu32 ZK_FEXP[46]=0x7066bca6u32 ZK_FEXP[47]=0x1bbd8136u32
+    ZK_FEXP[48]=0x0bc62775u32 ZK_FEXP[49]=0x0418a3efu32 ZK_FEXP[50]=0xa9f9e010u32 ZK_FEXP[51]=0x49bf9b71u32
+    ZK_FEXP[52]=0x7db60b17u32 ZK_FEXP[53]=0x51129109u32 ZK_FEXP[54]=0xe5308f1cu32 ZK_FEXP[55]=0x498345c6u32
+    ZK_FEXP[56]=0x9dadd7c2u32 ZK_FEXP[57]=0x6d8823b1u32 ZK_FEXP[58]=0xd556952cu32 ZK_FEXP[59]=0x92004cedu32
+    ZK_FEXP[60]=0xc03ef195u32 ZK_FEXP[61]=0x4c6bec3eu32 ZK_FEXP[62]=0x044ce6adu32 ZK_FEXP[63]=0x0a1fad20u32
+    ZK_FEXP[64]=0xcd15948du32 ZK_FEXP[65]=0xc55d3109u32 ZK_FEXP[66]=0x2c3f0bd0u32 ZK_FEXP[67]=0x334f46c0u32
+    ZK_FEXP[68]=0x34c05739u32 ZK_FEXP[69]=0x3b5a62ebu32 ZK_FEXP[70]=0x1d1676a5u32 ZK_FEXP[71]=0x72453841u32
+    ZK_FEXP[72]=0xd0463434u32 ZK_FEXP[73]=0x127a1b5au32 ZK_FEXP[74]=0xc85b0129u32 ZK_FEXP[75]=0x61a474c5u32
+    ZK_FEXP[76]=0x86ef965eu32 ZK_FEXP[77]=0x8dfc8e28u32 ZK_FEXP[78]=0x459f1243u32 ZK_FEXP[79]=0x96532fefu32
+    ZK_FEXP[80]=0xcdc10412u32 ZK_FEXP[81]=0x40ee7169u32 ZK_FEXP[82]=0xb74bb22au32 ZK_FEXP[83]=0x9c40a68eu32
+    ZK_FEXP[84]=0xf4684d0bu32 ZK_FEXP[85]=0x25118790u32 ZK_FEXP[86]=0xc8d4c01fu32 ZK_FEXP[87]=0x596bc293u32
+    ZK_FEXP[88]=0x27611212u32 ZK_FEXP[89]=0x1064837fu32 ZK_FEXP[90]=0xbf24dde4u32 ZK_FEXP[91]=0x077ffb10u32
+    ZK_FEXP[92]=0xcd2b01f3u32 ZK_FEXP[93]=0xc49f570bu32 ZK_FEXP[94]=0x4c374693u32 ZK_FEXP[95]=0x1a0c5bf2u32
+    ZK_FEXP[96]=0x9bc73ab6u32 ZK_FEXP[97]=0x350da535u32 ZK_FEXP[98]=0xe4d7acddu32 ZK_FEXP[99]=0xd2670d93u32
+    ZK_FEXP[100]=0x6e1ab656u32 ZK_FEXP[101]=0xd39099b8u32 ZK_FEXP[102]=0x978e2b0du32 ZK_FEXP[103]=0x19328148u32
+    ZK_FEXP[104]=0x386b0e88u32 ZK_FEXP[105]=0xb113f414u32 ZK_FEXP[106]=0x630d9aa4u32 ZK_FEXP[107]=0x07a0dce2u32
+    ZK_FEXP[108]=0x93753318u32 ZK_FEXP[109]=0xa927e7bbu32 ZK_FEXP[110]=0xad49466fu32 ZK_FEXP[111]=0xe347aa68u32
+    ZK_FEXP[112]=0x106feaf4u32 ZK_FEXP[113]=0x1c0ad0d6u32 ZK_FEXP[114]=0xff3a0f0fu32 ZK_FEXP[115]=0xc872ee83u32
+    ZK_FEXP[116]=0xa660835cu32 ZK_FEXP[117]=0x074e43b9u32 ZK_FEXP[118]=0xe9cfee9au32 ZK_FEXP[119]=0xc0aadff5u32
+    ZK_FEXP[120]=0xc7deada9u32 ZK_FEXP[121]=0x30698e8cu32 ZK_FEXP[122]=0xab353f2cu32 ZK_FEXP[123]=0xd1073776u32
+    ZK_FEXP[124]=0xbadc3a43u32 ZK_FEXP[125]=0x17848517u32 ZK_FEXP[126]=0x3f8d14a9u32 ZK_FEXP[127]=0x7363baa1u32
+    ZK_FEXP[128]=0x7d4507d0u32 ZK_FEXP[129]=0xd4977b3fu32 ZK_FEXP[130]=0x89ee0193u32 ZK_FEXP[131]=0x496a1c0au32
+    ZK_FEXP[132]=0xe1bda9c0u32 ZK_FEXP[133]=0xdcc825b7u32 ZK_FEXP[134]=0x02ee1db5u32 ZK_FEXP[135]=0x00000000u32
+    ZKF_INIT[0] = 1u32
+    return 0i32
+}
+
+fn zkf_dbl_raw(addr: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = ((a[i] as u64) << 1u64) | carry
+        a[i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    zkf_csub_p(addr, carry)
+    return 0i32
+}
+
+/* constant-time: if (extra_high != 0 || a >= p) then a -= p. */
+fn zkf_csub_p(addr: u64, extra_high: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let pp : *u32 = &ZKF_P as *u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
+        ZKF_T[i] = v & 0xFFFFFFFFu64
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mut ge : u64 = 0u64
+    if extra_high != 0u64 { ge = 1u64 }
+    if borrow == 0u64 { ge = 1u64 }
+    let mask : u64 = 0u64 - ge
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    i = 0u64
+    while i < 12u64 {
+        a[i] = (((ZKF_T[i] & mask) | ((a[i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn zkf_copy(dst: u64, src: u64) -> i32 {
+    let db : u64 = dst * 12u64
+    let sb : u64 = src * 12u64
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF[db + i] = ZKF[sb + i] ; i = i + 1u64 }
+    return 0i32
+}
+
+fn zkf_add(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 12u64
+    let ab : u64 = a * 12u64
+    let bb : u64 = b * 12u64
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = (ZKF[ab + i] as u64) + (ZKF[bb + i] as u64) + carry
+        ZKF[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    zkf_csub_p((&ZKF as u64) + rb * 4u64, carry)
+    return 0i32
+}
+
+fn zkf_sub(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 12u64
+    let ab : u64 = a * 12u64
+    let bb : u64 = b * 12u64
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = 0x100000000u64 + (ZKF[ab + i] as u64) - (ZKF[bb + i] as u64) - borrow
+        ZKF[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mask : u64 = 0u64 - borrow
+    let pp : *u32 = &ZKF_P as *u32
+    let mut c2 : u64 = 0u64
+    i = 0u64
+    while i < 12u64 {
+        let v : u64 = (ZKF[rb + i] as u64) + ((pp[i] as u64) & mask) + c2
+        ZKF[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        c2 = v >> 32u64
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* CIOS Montgomery multiply, general n'[0] = ZKF_NP. */
+fn zkf_mul(r: u64, a: u64, b: u64) -> i32 {
+    let ab : u64 = a * 12u64
+    let bb : u64 = b * 12u64
+    let pp : *u32 = &ZKF_P as *u32
+    let np : u64 = ZKF_NP[0]
+    let mut k : u64 = 0u64
+    while k < 14u64 { ZKF_T[k] = 0u64 ; k = k + 1u64 }
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let bi : u64 = ZKF[bb + i] as u64
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 12u64 {
+            let uv : u64 = ZKF_T[j] + (ZKF[ab + j] as u64) * bi + c
+            ZKF_T[j] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uv12 : u64 = ZKF_T[12] + c
+        ZKF_T[12] = uv12 & 0xFFFFFFFFu64
+        ZKF_T[13] = uv12 >> 32u64
+        let m : u64 = (ZKF_T[0] * np) & 0xFFFFFFFFu64
+        let uv0 : u64 = ZKF_T[0] + m * (pp[0] as u64)
+        c = uv0 >> 32u64
+        j = 1u64
+        while j < 12u64 {
+            let uv : u64 = ZKF_T[j] + m * (pp[j] as u64) + c
+            ZKF_T[j - 1u64] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvs : u64 = ZKF_T[12] + c
+        ZKF_T[11] = uvs & 0xFFFFFFFFu64
+        ZKF_T[12] = ZKF_T[13] + (uvs >> 32u64)
+        i = i + 1u64
+    }
+    let rb : u64 = r * 12u64
+    let mut q : u64 = 0u64
+    while q < 12u64 { ZKF[rb + q] = ZKF_T[q] as u32 ; q = q + 1u64 }
+    zkf_csub_p((&ZKF as u64) + rb * 4u64, ZKF_T[12])
+    return 0i32
+}
+
+fn zkf_sqr(r: u64, a: u64) -> i32 { return zkf_mul(r, a, a) }
+
+fn zkf_to_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF[47u64*12u64 + i] = ZKF_R2[i] ; i = i + 1u64 }
+    return zkf_mul(r, a, 47u64)
+}
+fn zkf_from_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF[47u64*12u64 + i] = 0u32 ; i = i + 1u64 }
+    ZKF[47u64*12u64] = 1u32
+    return zkf_mul(r, a, 47u64)
+}
+
+/* r = a^-1 (Montgomery domain) via Fermat a^(p-2). */
+fn zkf_inv(r: u64, a: u64) -> i32 {
+    zkf_init()
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF_PM2[i] = ZKF_P[i] ; i = i + 1u64 }
+    ZKF_PM2[0] = ((ZKF_P[0] as u64) - 2u64) as u32     /* p[0] = 0x...aaab odd, no borrow */
+    zkf_copy(45u64, a)
+    i = 0u64
+    while i < 12u64 { ZKF[46u64*12u64 + i] = ZKF_ONE[i] ; i = i + 1u64 }
+    let mut idx : u64 = 384u64
+    while idx > 0u64 {
+        idx = idx - 1u64
+        zkf_sqr(46u64, 46u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((ZKF_PM2[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkf_mul(46u64, 46u64, 45u64) }
+    }
+    zkf_copy(r, 46u64)
+    return 0i32
+}
+
+/* ================= Fp2 = Fp[u]/(u^2+1) over the Fp slot pool =================
+ * Fp2 index f maps to Fp slots (2f, 2f+1) = (real, imag).  Fp2-internal Fp
+ * scratch uses Fp slots 48..53 (clear of Fp scratch 44..47 and of the Fp2
+ * element region indices 0..21 -> Fp 0..43).  All values Montgomery. */
+fn zkf_eq(s1: u64, s2: u64) -> u64 {
+    let b1 : u64 = s1 * 12u64
+    let b2 : u64 = s2 * 12u64
+    let mut i : u64 = 0u64
+    let mut diff : u64 = 0u64
+    while i < 12u64 { if ZKF[b1 + i] != ZKF[b2 + i] { diff = 1u64 } i = i + 1u64 }
+    if diff == 0u64 { return 1u64 }
+    return 0u64
+}
+fn zkf2_copy(rf: u64, af: u64) -> i32 {
+    zkf_copy(2u64*rf, 2u64*af) ; zkf_copy(2u64*rf+1u64, 2u64*af+1u64) ; return 0i32
+}
+fn zkf2_add(rf: u64, af: u64, bf: u64) -> i32 {
+    zkf_add(2u64*rf, 2u64*af, 2u64*bf) ; zkf_add(2u64*rf+1u64, 2u64*af+1u64, 2u64*bf+1u64) ; return 0i32
+}
+fn zkf2_sub(rf: u64, af: u64, bf: u64) -> i32 {
+    zkf_sub(2u64*rf, 2u64*af, 2u64*bf) ; zkf_sub(2u64*rf+1u64, 2u64*af+1u64, 2u64*bf+1u64) ; return 0i32
+}
+fn zkf2_mul(rf: u64, af: u64, bf: u64) -> i32 {
+    let a0 : u64 = 2u64*af  let a1 : u64 = a0+1u64  let b0 : u64 = 2u64*bf  let b1 : u64 = b0+1u64
+    zkf_mul(48u64, a0, b0)            /* ac */
+    zkf_mul(49u64, a1, b1)            /* bd */
+    zkf_mul(50u64, a0, b1)            /* ad */
+    zkf_mul(51u64, a1, b0)            /* bc */
+    zkf_sub(2u64*rf, 48u64, 49u64)            /* ac - bd  (products done -> alias-safe) */
+    zkf_add(2u64*rf+1u64, 50u64, 51u64)       /* ad + bc */
+    return 0i32
+}
+fn zkf2_sqr(rf: u64, af: u64) -> i32 { return zkf2_mul(rf, af, af) }
+fn zkf2_conj(rf: u64, af: u64) -> i32 {
+    zkf_copy(2u64*rf, 2u64*af)
+    zkf_set_u32(52u64, 0u32)
+    zkf_sub(2u64*rf+1u64, 52u64, 2u64*af+1u64)     /* r1 = -a1 */
+    return 0i32
+}
+fn zkf2_mul_xi(rf: u64, af: u64) -> i32 {
+    /* (a0 + a1 u)(1 + u) = (a0 - a1) + (a0 + a1) u */
+    let a0 : u64 = 2u64*af  let a1 : u64 = a0+1u64
+    zkf_sub(48u64, a0, a1)
+    zkf_add(49u64, a0, a1)
+    zkf_copy(2u64*rf, 48u64) ; zkf_copy(2u64*rf+1u64, 49u64)
+    return 0i32
+}
+fn zkf2_inv(rf: u64, af: u64) -> i32 {
+    let a0 : u64 = 2u64*af  let a1 : u64 = a0+1u64
+    zkf_sqr(48u64, a0)                /* a0^2 */
+    zkf_sqr(49u64, a1)                /* a1^2 */
+    zkf_add(50u64, 48u64, 49u64)      /* norm = a0^2 + a1^2 */
+    zkf_inv(51u64, 50u64)             /* ninv = norm^-1 */
+    zkf_mul(2u64*rf, a0, 51u64)       /* r0 = a0 * ninv */
+    zkf_set_u32(52u64, 0u32)
+    zkf_sub(53u64, 52u64, a1)         /* -a1 */
+    zkf_mul(2u64*rf+1u64, 53u64, 51u64)   /* r1 = -a1 * ninv */
+    return 0i32
+}
+
+/* Fp2 structural self-test (mirrors _bls.c).  99 = pass. */
+fn zkf_fp2_selftest() -> u64 @export {
+    zkf_init()
+    /* sample a, b (plain, < p) in Fp slots 30, 31 -> to_mont -> 32, 33 */
+    zkf_set_u32(30u64, 0u32)
+    ZKF[30u64*12u64]=0x12345678u32 ZKF[30u64*12u64+1u64]=0x9abcdef0u32 ZKF[30u64*12u64+2u64]=0x0fedcba9u32
+    zkf_set_u32(31u64, 0u32)
+    ZKF[31u64*12u64]=0xdeadbeefu32 ZKF[31u64*12u64+1u64]=0x01020304u32 ZKF[31u64*12u64+5u64]=0xabacadabu32
+    zkf_to_mont(32u64, 30u64)         /* am */
+    zkf_to_mont(33u64, 31u64)         /* cm */
+    /* X = idx0 = (am, cm); Y = idx1 = (cm, am); one2 = idx2 = (R mod p, 0) */
+    zkf_copy(0u64, 32u64) ; zkf_copy(1u64, 33u64)
+    zkf_copy(2u64, 33u64) ; zkf_copy(3u64, 32u64)
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF[4u64*12u64 + i] = ZKF_ONE[i] ; i = i + 1u64 }
+    zkf_set_u32(5u64, 0u32)
+    /* (1) X * one2 == X */
+    zkf2_mul(3u64, 0u64, 2u64)        /* idx3 -> Fp slots 6,7 */
+    if zkf_eq(6u64, 0u64) == 0u64 { return 1u64 }
+    if zkf_eq(7u64, 1u64) == 0u64 { return 1u64 }
+    /* (2) X*Y == Y*X */
+    zkf2_mul(4u64, 0u64, 1u64)        /* idx4 -> 8,9 */
+    zkf2_mul(5u64, 1u64, 0u64)        /* idx5 -> 10,11 */
+    if zkf_eq(8u64, 10u64) == 0u64 { return 2u64 }
+    if zkf_eq(9u64, 11u64) == 0u64 { return 2u64 }
+    /* (3) X * inv(X) == one2 */
+    zkf2_inv(6u64, 0u64)              /* idx6 -> 12,13 */
+    zkf2_mul(7u64, 0u64, 6u64)        /* idx7 -> 14,15 */
+    if zkf_eq(14u64, 4u64) == 0u64 { return 3u64 }
+    if zkf_eq(15u64, 5u64) == 0u64 { return 3u64 }
+    return 99u64
+}
+
+/* ================= Fp6 = Fp2[v]/(v^3 - xi), xi = 1+u =================
+ * Fp6 object addressed by an Fp2-BASE index B; components = Fp2 indices
+ * (B, B+1, B+2).  Fp6-internal Fp2 scratch: Fp2 indices 480..491 (Fp slots
+ * 960..983), disjoint from Fp/Fp2 scratch (44..53) and the work region.
+ * pow helper uses Fp2 work 30/33/36 (res/b/tmp). */
+fn zkf6_copy(rB: u64, aB: u64) -> i32 {
+    zkf2_copy(rB, aB) ; zkf2_copy(rB+1u64, aB+1u64) ; zkf2_copy(rB+2u64, aB+2u64) ; return 0i32
+}
+fn zkf6_add(rB: u64, aB: u64, bB: u64) -> i32 {
+    zkf2_add(rB, aB, bB) ; zkf2_add(rB+1u64, aB+1u64, bB+1u64) ; zkf2_add(rB+2u64, aB+2u64, bB+2u64) ; return 0i32
+}
+fn zkf6_sub(rB: u64, aB: u64, bB: u64) -> i32 {
+    zkf2_sub(rB, aB, bB) ; zkf2_sub(rB+1u64, aB+1u64, bB+1u64) ; zkf2_sub(rB+2u64, aB+2u64, bB+2u64) ; return 0i32
+}
+fn zkf6_set_one(bB: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF[(2u64*bB)*12u64 + i] = ZKF_ONE[i] ; i = i + 1u64 }
+    zkf_set_u32(2u64*bB+1u64, 0u32) zkf_set_u32(2u64*bB+2u64, 0u32) zkf_set_u32(2u64*bB+3u64, 0u32)
+    zkf_set_u32(2u64*bB+4u64, 0u32) zkf_set_u32(2u64*bB+5u64, 0u32)
+    return 0i32
+}
+fn zkf6_eq(bB: u64, cB: u64) -> u64 {
+    if zkf_eq(2u64*bB, 2u64*cB) == 0u64 { return 0u64 }
+    if zkf_eq(2u64*bB+1u64, 2u64*cB+1u64) == 0u64 { return 0u64 }
+    if zkf_eq(2u64*bB+2u64, 2u64*cB+2u64) == 0u64 { return 0u64 }
+    if zkf_eq(2u64*bB+3u64, 2u64*cB+3u64) == 0u64 { return 0u64 }
+    if zkf_eq(2u64*bB+4u64, 2u64*cB+4u64) == 0u64 { return 0u64 }
+    if zkf_eq(2u64*bB+5u64, 2u64*cB+5u64) == 0u64 { return 0u64 }
+    return 1u64
+}
+/* c0=a0b0+xi(a1b2+a2b1); c1=a0b1+a1b0+xi(a2b2); c2=a0b2+a1b1+a2b0.  v^3=xi. */
+fn zkf6_mul(rB: u64, aB: u64, bB: u64) -> i32 {
+    zkf2_mul(480u64, aB+1u64, bB+2u64)      /* a1 b2 */
+    zkf2_mul(481u64, aB+2u64, bB+1u64)      /* a2 b1 */
+    zkf2_add(480u64, 480u64, 481u64)
+    zkf2_mul_xi(480u64, 480u64)
+    zkf2_mul(481u64, aB, bB)                /* a0 b0 */
+    zkf2_add(483u64, 481u64, 480u64)        /* c0 -> 483 */
+    zkf2_mul(480u64, aB, bB+1u64)           /* a0 b1 */
+    zkf2_mul(481u64, aB+1u64, bB)           /* a1 b0 */
+    zkf2_add(480u64, 480u64, 481u64)
+    zkf2_mul(481u64, aB+2u64, bB+2u64)      /* a2 b2 */
+    zkf2_mul_xi(481u64, 481u64)
+    zkf2_add(484u64, 480u64, 481u64)        /* c1 -> 484 */
+    zkf2_mul(480u64, aB, bB+2u64)           /* a0 b2 */
+    zkf2_mul(481u64, aB+1u64, bB+1u64)      /* a1 b1 */
+    zkf2_add(480u64, 480u64, 481u64)
+    zkf2_mul(481u64, aB+2u64, bB)           /* a2 b0 */
+    zkf2_add(485u64, 480u64, 481u64)        /* c2 -> 485 */
+    zkf2_copy(rB, 483u64) ; zkf2_copy(rB+1u64, 484u64) ; zkf2_copy(rB+2u64, 485u64)
+    return 0i32
+}
+fn zkf6_sqr(rB: u64, aB: u64) -> i32 { return zkf6_mul(rB, aB, aB) }
+fn zkf6_inv(rB: u64, aB: u64) -> i32 {
+    /* A=a0^2-xi a1 a2 (486); B=xi a2^2-a0 a1 (488); C=a1^2-a0 a2 (489)
+     * F=a0 A+xi a2 B+xi a1 C (490); finv (491); r=(A,B,C)*finv */
+    zkf2_sqr(486u64, aB)                    /* a0^2 */
+    zkf2_mul(487u64, aB+1u64, aB+2u64)      /* a1 a2 */
+    zkf2_mul_xi(487u64, 487u64)
+    zkf2_sub(486u64, 486u64, 487u64)        /* A */
+    zkf2_sqr(488u64, aB+2u64)               /* a2^2 */
+    zkf2_mul_xi(488u64, 488u64)
+    zkf2_mul(487u64, aB, aB+1u64)           /* a0 a1 */
+    zkf2_sub(488u64, 488u64, 487u64)        /* B */
+    zkf2_sqr(489u64, aB+1u64)               /* a1^2 */
+    zkf2_mul(487u64, aB, aB+2u64)           /* a0 a2 */
+    zkf2_sub(489u64, 489u64, 487u64)        /* C */
+    zkf2_mul(490u64, aB, 486u64)            /* a0 A */
+    zkf2_mul(487u64, aB+2u64, 488u64)       /* a2 B */
+    zkf2_mul_xi(487u64, 487u64)
+    zkf2_add(490u64, 490u64, 487u64)
+    zkf2_mul(487u64, aB+1u64, 489u64)       /* a1 C */
+    zkf2_mul_xi(487u64, 487u64)
+    zkf2_add(490u64, 490u64, 487u64)        /* F */
+    zkf2_inv(491u64, 490u64)                /* finv */
+    zkf2_mul(rB, 486u64, 491u64)
+    zkf2_mul(rB+1u64, 488u64, 491u64)
+    zkf2_mul(rB+2u64, 489u64, 491u64)
+    return 0i32
+}
+/* out = base^p (exp = the modulus p), LSB-first square-and-multiply.
+ * Work: res=Fp2-base 30, b=33, tmp=36 (disjoint from callers' Fp6 objects). */
+fn zkf6_pow_p(outB: u64, baseB: u64) -> i32 {
+    zkf6_set_one(30u64)
+    zkf6_copy(33u64, baseB)
+    let mut idx : u64 = 0u64
+    while idx < 384u64 {
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((ZKF_P[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkf6_mul(36u64, 30u64, 33u64) ; zkf6_copy(30u64, 36u64) }
+        zkf6_sqr(36u64, 33u64) ; zkf6_copy(33u64, 36u64)
+        idx = idx + 1u64
+    }
+    zkf6_copy(outB, 30u64)
+    return 0i32
+}
+
+/* Fp6 structural self-test (mirrors _bls.c).  99 = pass. */
+fn zkf_fp6_selftest() -> u64 @export {
+    zkf_init()
+    /* A at Fp2-base 60: c0=(mont 2, mont 3), c1=(mont 5, mont 7), c2=(mont 11, mont 13). */
+    zkf_set_u32(70u64, 2u32)  zkf_to_mont(120u64, 70u64)
+    zkf_set_u32(70u64, 3u32)  zkf_to_mont(121u64, 70u64)
+    zkf_set_u32(70u64, 5u32)  zkf_to_mont(122u64, 70u64)
+    zkf_set_u32(70u64, 7u32)  zkf_to_mont(123u64, 70u64)
+    zkf_set_u32(70u64, 11u32) zkf_to_mont(124u64, 70u64)
+    zkf_set_u32(70u64, 13u32) zkf_to_mont(125u64, 70u64)
+    zkf6_set_one(63u64)
+    zkf6_mul(66u64, 60u64, 63u64)               /* A * one6 */
+    if zkf6_eq(66u64, 60u64) == 0u64 { return 1u64 }
+    zkf6_inv(69u64, 60u64)
+    zkf6_mul(72u64, 60u64, 69u64)               /* A * A^-1 */
+    if zkf6_eq(72u64, 63u64) == 0u64 { return 2u64 }
+    zkf6_copy(75u64, 60u64)
+    let mut k : u64 = 0u64
+    while k < 6u64 { zkf6_pow_p(78u64, 75u64) ; zkf6_copy(75u64, 78u64) ; k = k + 1u64 }
+    if zkf6_eq(75u64, 60u64) == 0u64 { return 3u64 }       /* A^(p^6) == A */
+    return 99u64
+}
+
+/* ================= Fp12 = Fp6[w]/(w^2 - v) =================
+ * Fp12 object at Fp2-base B: c0 = Fp6 at B (Fp2 idx B..B+2), c1 = Fp6 at B+3.
+ * Fp12-internal Fp6 scratch: Fp2-bases 1500..1517 (Fp slots 3000..3035).
+ * pow work: Fp12 at Fp2-bases 1530/1545/1560 (disjoint from scratch + work). */
+fn zkf6_set_zero(bB: u64) -> i32 {
+    zkf_set_u32(2u64*bB, 0u32) zkf_set_u32(2u64*bB+1u64, 0u32) zkf_set_u32(2u64*bB+2u64, 0u32)
+    zkf_set_u32(2u64*bB+3u64, 0u32) zkf_set_u32(2u64*bB+4u64, 0u32) zkf_set_u32(2u64*bB+5u64, 0u32)
+    return 0i32
+}
+fn zkf6_mul_by_v(rB: u64, aB: u64) -> i32 {
+    /* (c0 + c1 v + c2 v^2) * v = xi*c2 + c0 v + c1 v^2 */
+    zkf2_mul_xi(492u64, aB+2u64)
+    zkf2_copy(493u64, aB)
+    zkf2_copy(494u64, aB+1u64)
+    zkf2_copy(rB, 492u64) ; zkf2_copy(rB+1u64, 493u64) ; zkf2_copy(rB+2u64, 494u64)
+    return 0i32
+}
+fn zkf12_copy(rB: u64, aB: u64) -> i32 { zkf6_copy(rB, aB) ; zkf6_copy(rB+3u64, aB+3u64) ; return 0i32 }
+fn zkf12_set_one(bB: u64) -> i32 { zkf6_set_one(bB) ; zkf6_set_zero(bB+3u64) ; return 0i32 }
+fn zkf12_eq(bB: u64, cB: u64) -> u64 {
+    if zkf6_eq(bB, cB) == 0u64 { return 0u64 }
+    if zkf6_eq(bB+3u64, cB+3u64) == 0u64 { return 0u64 }
+    return 1u64
+}
+fn zkf12_mul(rB: u64, aB: u64, bB: u64) -> i32 {
+    /* (a0+a1 w)(b0+b1 w) = (a0b0 + v a1b1) + (a0b1 + a1b0) w ; c0->1509, c1->1512 */
+    zkf6_mul(1500u64, aB, bB)              /* a0 b0 */
+    zkf6_mul(1503u64, aB+3u64, bB+3u64)    /* a1 b1 */
+    zkf6_mul_by_v(1506u64, 1503u64)        /* v a1b1 */
+    zkf6_add(1509u64, 1500u64, 1506u64)    /* c0 */
+    zkf6_mul(1500u64, aB, bB+3u64)         /* a0 b1 */
+    zkf6_mul(1503u64, aB+3u64, bB)         /* a1 b0 */
+    zkf6_add(1512u64, 1500u64, 1503u64)    /* c1 (= Fp6 at 1509+3) */
+    zkf12_copy(rB, 1509u64)
+    return 0i32
+}
+fn zkf12_sqr(rB: u64, aB: u64) -> i32 { return zkf12_mul(rB, aB, aB) }
+fn zkf12_inv(rB: u64, aB: u64) -> i32 {
+    /* 1/(c0 + c1 w) = (c0 - c1 w)/(c0^2 - v c1^2) */
+    zkf6_sqr(1500u64, aB)                  /* c0^2 */
+    zkf6_sqr(1503u64, aB+3u64)             /* c1^2 */
+    zkf6_mul_by_v(1506u64, 1503u64)        /* v c1^2 */
+    zkf6_sub(1509u64, 1500u64, 1506u64)    /* norm */
+    zkf6_inv(1512u64, 1509u64)             /* ninv */
+    zkf6_mul(rB, aB, 1512u64)              /* r0 = c0 * ninv */
+    zkf6_set_zero(1515u64)
+    zkf6_sub(1515u64, 1515u64, aB+3u64)    /* -c1 */
+    zkf6_mul(rB+3u64, 1515u64, 1512u64)    /* r1 = -c1 * ninv */
+    return 0i32
+}
+fn zkf12_pow_p(outB: u64, baseB: u64) -> i32 {
+    zkf12_set_one(1530u64)                 /* res */
+    zkf12_copy(1545u64, baseB)             /* b */
+    let mut idx : u64 = 0u64
+    while idx < 384u64 {
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((ZKF_P[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkf12_mul(1560u64, 1530u64, 1545u64) ; zkf12_copy(1530u64, 1560u64) }
+        zkf12_sqr(1560u64, 1545u64) ; zkf12_copy(1545u64, 1560u64)
+        idx = idx + 1u64
+    }
+    zkf12_copy(outB, 1530u64)
+    return 0i32
+}
+
+/* Fp12 structural self-test (mirrors _bls.c).  99 = pass. */
+fn zkf_fp12_selftest() -> u64 @export {
+    zkf_init()
+    /* A = Fp12 at Fp2-base 90: c0 components mont(2,3,5,7,11,13), c1 mont(17,19,23,29,31,37). */
+    zkf_set_u32(70u64, 2u32)  zkf_to_mont(180u64, 70u64)
+    zkf_set_u32(70u64, 3u32)  zkf_to_mont(181u64, 70u64)
+    zkf_set_u32(70u64, 5u32)  zkf_to_mont(182u64, 70u64)
+    zkf_set_u32(70u64, 7u32)  zkf_to_mont(183u64, 70u64)
+    zkf_set_u32(70u64, 11u32) zkf_to_mont(184u64, 70u64)
+    zkf_set_u32(70u64, 13u32) zkf_to_mont(185u64, 70u64)
+    zkf_set_u32(70u64, 17u32) zkf_to_mont(186u64, 70u64)
+    zkf_set_u32(70u64, 19u32) zkf_to_mont(187u64, 70u64)
+    zkf_set_u32(70u64, 23u32) zkf_to_mont(188u64, 70u64)
+    zkf_set_u32(70u64, 29u32) zkf_to_mont(189u64, 70u64)
+    zkf_set_u32(70u64, 31u32) zkf_to_mont(190u64, 70u64)
+    zkf_set_u32(70u64, 37u32) zkf_to_mont(191u64, 70u64)
+    /* A is Fp12 at base 90 (Fp slots 180..191). one12 at base 96 (Fp slots 192..203). */
+    zkf12_set_one(96u64)
+    zkf12_mul(102u64, 90u64, 96u64)             /* A * one12 */
+    if zkf12_eq(102u64, 90u64) == 0u64 { return 1u64 }
+    zkf12_inv(108u64, 90u64)
+    zkf12_mul(114u64, 90u64, 108u64)            /* A * A^-1 */
+    if zkf12_eq(114u64, 96u64) == 0u64 { return 2u64 }
+    zkf12_copy(120u64, 90u64)
+    let mut k : u64 = 0u64
+    while k < 12u64 { zkf12_pow_p(126u64, 120u64) ; zkf12_copy(120u64, 126u64) ; k = k + 1u64 }
+    if zkf12_eq(120u64, 90u64) == 0u64 { return 3u64 }      /* A^(p^12) == A */
+    return 99u64
+}
+
+/* ================= G1: E(Fp): y^2 = x^3 + 4 =================
+ * G1 point g (g1 slot) -> x at Fp slot (300+2g), y at (300+2g+1), inf flag
+ * ZKG1_INF[g].  Reserved: g1 slot 60 = zkg1_mul accumulator.  Fp scratch:
+ * 500..511 (add/dbl), 520..521 (pow), 530..534 (generator).  Affine; the
+ * per-op inversion is acceptable for a reference (clarity over speed). */
+
+/* generic Montgomery exponentiation: rs = aslot^exp, exp = expPtr[0..nbits). */
+fn zkf_pow_exp(rs: u64, aslot: u64, expPtr: u64, nbits: u64) -> i32 {
+    let e : *u32 = expPtr as *u32
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF[520u64*12u64 + i] = ZKF_ONE[i] ; i = i + 1u64 }
+    zkf_copy(521u64, aslot)
+    let mut idx : u64 = nbits
+    while idx > 0u64 {
+        idx = idx - 1u64
+        zkf_sqr(520u64, 520u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((e[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkf_mul(520u64, 520u64, 521u64) }
+    }
+    zkf_copy(rs, 520u64)
+    return 0i32
+}
+/* rs = sqrt(aslot) = aslot^((p+1)/4)  (p == 3 mod 4). */
+fn zkf_sqrt(rs: u64, aslot: u64) -> i32 { return zkf_pow_exp(rs, aslot, &ZK_SQRTE as u64, 381u64) }
+
+fn zkg1_is_inf(g: u64) -> u64 { return ZKG1_INF[g] as u64 }
+fn zkg1_set_inf(g: u64) -> i32 { ZKG1_INF[g] = 1u32 ; return 0i32 }
+fn zkg1_copy(rg: u64, ag: u64) -> i32 {
+    zkf_copy(300u64+2u64*rg, 300u64+2u64*ag)
+    zkf_copy(300u64+2u64*rg+1u64, 300u64+2u64*ag+1u64)
+    ZKG1_INF[rg] = ZKG1_INF[ag]
+    return 0i32
+}
+fn zkg1_on_curve(g: u64) -> u64 {
+    if ZKG1_INF[g] == 1u32 { return 1u64 }
+    let xa : u64 = 300u64+2u64*g  let ya : u64 = xa+1u64
+    zkf_sqr(500u64, ya)                          /* y^2 */
+    zkf_sqr(501u64, xa) zkf_mul(501u64, 501u64, xa)   /* x^3 */
+    zkf_set_u32(503u64, 4u32) zkf_to_mont(502u64, 503u64)   /* mont(4) */
+    zkf_add(501u64, 501u64, 502u64)              /* x^3 + 4 */
+    return zkf_eq(500u64, 501u64)
+}
+fn zkg1_dbl(rg: u64, ag: u64) -> i32 {
+    if ZKG1_INF[ag] == 1u32 { zkg1_set_inf(rg) ; return 0i32 }
+    let xa : u64 = 300u64+2u64*ag  let ya : u64 = xa+1u64
+    /* lambda = 3x^2 / 2y ; x3 = lambda^2 - 2x ; y3 = lambda(x - x3) - y */
+    zkf_sqr(500u64, xa)                          /* x^2 */
+    zkf_add(501u64, 500u64, 500u64)
+    zkf_add(500u64, 501u64, 500u64)              /* 3x^2 */
+    zkf_add(501u64, ya, ya)                      /* 2y */
+    zkf_inv(502u64, 501u64)
+    zkf_mul(503u64, 500u64, 502u64)              /* lambda */
+    zkf_sqr(504u64, 503u64)
+    zkf_add(505u64, xa, xa)
+    zkf_sub(504u64, 504u64, 505u64)              /* x3 */
+    zkf_sub(505u64, xa, 504u64)
+    zkf_mul(505u64, 503u64, 505u64)
+    zkf_sub(505u64, 505u64, ya)                  /* y3 */
+    zkf_copy(300u64+2u64*rg, 504u64)
+    zkf_copy(300u64+2u64*rg+1u64, 505u64)
+    ZKG1_INF[rg] = 0u32
+    return 0i32
+}
+fn zkg1_add(rg: u64, ag: u64, bg: u64) -> i32 {
+    if ZKG1_INF[ag] == 1u32 { zkg1_copy(rg, bg) ; return 0i32 }
+    if ZKG1_INF[bg] == 1u32 { zkg1_copy(rg, ag) ; return 0i32 }
+    let xa : u64 = 300u64+2u64*ag  let ya : u64 = xa+1u64
+    let xb : u64 = 300u64+2u64*bg  let yb : u64 = xb+1u64
+    if zkf_eq(xa, xb) == 1u64 {
+        if zkf_eq(ya, yb) == 1u64 { return zkg1_dbl(rg, ag) }
+        zkg1_set_inf(rg) ; return 0i32
+    }
+    zkf_sub(500u64, yb, ya)
+    zkf_sub(501u64, xb, xa)
+    zkf_inv(502u64, 501u64)
+    zkf_mul(503u64, 500u64, 502u64)              /* lambda */
+    zkf_sqr(504u64, 503u64)
+    zkf_sub(504u64, 504u64, xa)
+    zkf_sub(504u64, 504u64, xb)                  /* x3 */
+    zkf_sub(505u64, xa, 504u64)
+    zkf_mul(505u64, 503u64, 505u64)
+    zkf_sub(505u64, 505u64, ya)                  /* y3 */
+    zkf_copy(300u64+2u64*rg, 504u64)
+    zkf_copy(300u64+2u64*rg+1u64, 505u64)
+    ZKG1_INF[rg] = 0u32
+    return 0i32
+}
+fn zkg1_mul(rg: u64, ag: u64, expPtr: u64, nbits: u64) -> i32 {
+    let e : *u32 = expPtr as *u32
+    zkg1_set_inf(60u64)                          /* acc = O */
+    let mut idx : u64 = nbits
+    while idx > 0u64 {
+        idx = idx - 1u64
+        zkg1_dbl(60u64, 60u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((e[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkg1_add(60u64, 60u64, ag) }
+    }
+    zkg1_copy(rg, 60u64)
+    return 0i32
+}
+fn zkg1_eq(ag: u64, bg: u64) -> u64 {
+    let ai : u32 = ZKG1_INF[ag]  let bi : u32 = ZKG1_INF[bg]
+    if ai == 1u32 { if bi == 1u32 { return 1u64 } return 0u64 }
+    if bi == 1u32 { return 0u64 }
+    if zkf_eq(300u64+2u64*ag, 300u64+2u64*bg) == 0u64 { return 0u64 }
+    if zkf_eq(300u64+2u64*ag+1u64, 300u64+2u64*bg+1u64) == 0u64 { return 0u64 }
+    return 1u64
+}
+/* Derive an order-r generator: smallest x with x^3+4 a QR, then clear cofactor. */
+fn zkg1_generator(g: u64) -> i32 {
+    let mut xi : u32 = 1u32
+    let mut found : u64 = 0u64
+    while found == 0u64 {
+        zkf_set_u32(531u64, xi) zkf_to_mont(530u64, 531u64)        /* mont(x) */
+        zkf_sqr(532u64, 530u64) zkf_mul(532u64, 532u64, 530u64)    /* x^3 */
+        zkf_set_u32(534u64, 4u32) zkf_to_mont(533u64, 534u64)      /* mont(4) */
+        zkf_add(532u64, 532u64, 533u64)                            /* x^3+4 */
+        zkf_sqrt(533u64, 532u64)                                   /* y candidate */
+        zkf_sqr(534u64, 533u64)                                    /* y^2 */
+        if zkf_eq(534u64, 532u64) == 1u64 {
+            zkf_copy(300u64+2u64*55u64, 530u64)
+            zkf_copy(300u64+2u64*55u64+1u64, 533u64)
+            ZKG1_INF[55] = 0u32
+            zkg1_mul(g, 55u64, &ZK_H1 as u64, 128u64)              /* G = h1 * P */
+            if zkg1_is_inf(g) == 0u64 { found = 1u64 }
+        }
+        if found == 0u64 { xi = xi + 1u32 }
+    }
+    return 0i32
+}
+
+/* G1 structural self-test.  99 = pass. */
+fn zkf_g1_selftest() -> u64 @export {
+    zkf_init()
+    zkg1_generator(0u64)                         /* G at slot 0 */
+    if zkg1_on_curve(0u64) == 0u64 { return 1u64 }
+    if zkg1_is_inf(0u64) == 1u64 { return 2u64 }
+    zkg1_mul(1u64, 0u64, &ZK_R as u64, 255u64)   /* r * G */
+    if zkg1_is_inf(1u64) == 0u64 { return 3u64 }  /* must be O (G has order r) */
+    /* associativity: (P+Q)+R == P+(Q+R) with P=G, Q=2G, R=3G */
+    zkg1_dbl(2u64, 0u64)                          /* 2G */
+    zkg1_add(3u64, 2u64, 0u64)                    /* 3G */
+    zkg1_add(6u64, 0u64, 2u64)                    /* P+Q = 3G */
+    zkg1_add(6u64, 6u64, 3u64)                    /* (P+Q)+R = 6G */
+    zkg1_add(7u64, 2u64, 3u64)                    /* Q+R = 5G */
+    zkg1_add(7u64, 0u64, 7u64)                    /* P+(Q+R) = 6G */
+    if zkg1_eq(6u64, 7u64) == 0u64 { return 4u64 }
+    if zkg1_on_curve(6u64) == 0u64 { return 5u64 }
+    return 99u64
+}
+
+/* ================= G2: E'(Fp2): y^2 = x^3 + 4(1+u) (sextic twist) =================
+ * G2 point g (g2 slot) -> x at Fp2 idx (600+2g), y at (601+2g), inf ZKG2_INF[g].
+ * Reserved: g2 slot 28 = generator's twist point P2, slot 30 = zkg2_mul acc.
+ * Fp2 scratch: 670..675 (add/dbl), 680..684 (generator).  Fp scratch:
+ * 1382..1389 (Fp2 sqrt), 1395 = inv2 (mont 1/2).  is_qr uses Fp 520..522. */
+
+fn zkf_is_zero_slot(s: u64) -> u64 {
+    let b : u64 = s * 12u64
+    let mut i : u64 = 0u64
+    let mut nz : u64 = 0u64
+    while i < 12u64 { if ZKF[b + i] != 0u32 { nz = 1u64 } i = i + 1u64 }
+    if nz == 0u64 { return 1u64 }
+    return 0u64
+}
+/* Euler QR test in Fp: a^((p-1)/2) == 1 (Montgomery one). */
+fn zkf_is_qr(s: u64) -> u64 {
+    zkf_pow_exp(522u64, s, &ZK_PM1H as u64, 381u64)
+    let mut i : u64 = 0u64
+    let mut diff : u64 = 0u64
+    while i < 12u64 { if ZKF[522u64*12u64 + i] != ZKF_ONE[i] { diff = 1u64 } i = i + 1u64 }
+    if diff == 0u64 { return 1u64 }
+    return 0u64
+}
+fn zkf2_eq(bB: u64, cB: u64) -> u64 {
+    if zkf_eq(2u64*bB, 2u64*cB) == 0u64 { return 0u64 }
+    if zkf_eq(2u64*bB+1u64, 2u64*cB+1u64) == 0u64 { return 0u64 }
+    return 1u64
+}
+/* Fp2 square root (complex method, p == 3 mod 4).  Returns 1 + writes rB if a
+ * is a square in Fp2, else 0.  Fp temps 1382..1389; inv2 = Fp slot 1395. */
+fn zkf2_sqrt(rB: u64, aB: u64) -> u64 {
+    let a0 : u64 = 2u64*aB  let a1 : u64 = 2u64*aB+1u64
+    if zkf_is_zero_slot(a1) == 1u64 {
+        if zkf_is_qr(a0) == 1u64 {
+            zkf_sqrt(2u64*rB, a0) zkf_set_u32(2u64*rB+1u64, 0u32) return 1u64
+        }
+        zkf_set_u32(1382u64, 0u32) zkf_sub(1382u64, 1382u64, a0)        /* -a0 */
+        if zkf_is_qr(1382u64) == 1u64 {
+            zkf_sqrt(2u64*rB+1u64, 1382u64) zkf_set_u32(2u64*rB, 0u32) return 1u64
+        }
+        return 0u64
+    }
+    zkf_sqr(1382u64, a0) zkf_sqr(1383u64, a1) zkf_add(1384u64, 1382u64, 1383u64)   /* norm = a0^2+a1^2 */
+    if zkf_is_qr(1384u64) == 0u64 { return 0u64 }
+    zkf_sqrt(1385u64, 1384u64)                                          /* alpha = sqrt(norm) */
+    zkf_add(1386u64, a0, 1385u64) zkf_mul(1386u64, 1386u64, 1395u64)    /* delta = (a0+alpha)/2 */
+    if zkf_is_qr(1386u64) == 0u64 {
+        zkf_sub(1386u64, a0, 1385u64) zkf_mul(1386u64, 1386u64, 1395u64) /* (a0-alpha)/2 */
+    }
+    zkf_sqrt(1387u64, 1386u64)                                          /* x = sqrt(delta) */
+    zkf_inv(1388u64, 1387u64) zkf_mul(1388u64, 1388u64, 1395u64)        /* 1/(2x) */
+    zkf_mul(1389u64, a1, 1388u64)                                       /* y = a1/(2x) */
+    zkf_copy(2u64*rB, 1387u64) zkf_copy(2u64*rB+1u64, 1389u64)
+    return 1u64
+}
+
+fn zkg2_is_inf(g: u64) -> u64 { return ZKG2_INF[g] as u64 }
+fn zkg2_set_inf(g: u64) -> i32 { ZKG2_INF[g] = 1u32 ; return 0i32 }
+fn zkg2_copy(rg: u64, ag: u64) -> i32 {
+    zkf2_copy(600u64+2u64*rg, 600u64+2u64*ag)
+    zkf2_copy(601u64+2u64*rg, 601u64+2u64*ag)
+    ZKG2_INF[rg] = ZKG2_INF[ag]
+    return 0i32
+}
+fn zkg2_oncurve(g: u64) -> u64 {
+    if ZKG2_INF[g] == 1u32 { return 1u64 }
+    let xB : u64 = 600u64+2u64*g  let yB : u64 = 601u64+2u64*g
+    zkf2_sqr(670u64, yB)                                       /* y^2 */
+    zkf2_sqr(671u64, xB) zkf2_mul(671u64, 671u64, xB)          /* x^3 */
+    zkf_set_u32(1382u64, 4u32) zkf_to_mont(1383u64, 1382u64)   /* mont(4) */
+    zkf_copy(2u64*672u64, 1383u64) zkf_copy(2u64*672u64+1u64, 1383u64)   /* b' = 4 + 4u at Fp2 672 */
+    zkf2_add(671u64, 671u64, 672u64)                           /* x^3 + b' */
+    return zkf2_eq(670u64, 671u64)
+}
+fn zkg2_dbl(rg: u64, ag: u64) -> i32 {
+    if ZKG2_INF[ag] == 1u32 { zkg2_set_inf(rg) ; return 0i32 }
+    let xB : u64 = 600u64+2u64*ag  let yB : u64 = 601u64+2u64*ag
+    zkf2_sqr(670u64, xB)
+    zkf2_add(671u64, 670u64, 670u64) zkf2_add(670u64, 671u64, 670u64)   /* 3x^2 */
+    zkf2_add(671u64, yB, yB)                                            /* 2y */
+    zkf2_inv(672u64, 671u64)
+    zkf2_mul(673u64, 670u64, 672u64)                                    /* lambda */
+    zkf2_sqr(674u64, 673u64)
+    zkf2_add(675u64, xB, xB)
+    zkf2_sub(674u64, 674u64, 675u64)                                    /* x3 */
+    zkf2_sub(675u64, xB, 674u64)
+    zkf2_mul(675u64, 673u64, 675u64)
+    zkf2_sub(675u64, 675u64, yB)                                        /* y3 */
+    zkf2_copy(600u64+2u64*rg, 674u64) zkf2_copy(601u64+2u64*rg, 675u64)
+    ZKG2_INF[rg] = 0u32
+    return 0i32
+}
+fn zkg2_add(rg: u64, ag: u64, bg: u64) -> i32 {
+    if ZKG2_INF[ag] == 1u32 { zkg2_copy(rg, bg) ; return 0i32 }
+    if ZKG2_INF[bg] == 1u32 { zkg2_copy(rg, ag) ; return 0i32 }
+    let xA : u64 = 600u64+2u64*ag  let yA : u64 = 601u64+2u64*ag
+    let xC : u64 = 600u64+2u64*bg  let yC : u64 = 601u64+2u64*bg
+    if zkf2_eq(xA, xC) == 1u64 {
+        if zkf2_eq(yA, yC) == 1u64 { return zkg2_dbl(rg, ag) }
+        zkg2_set_inf(rg) ; return 0i32
+    }
+    zkf2_sub(670u64, yC, yA)
+    zkf2_sub(671u64, xC, xA)
+    zkf2_inv(672u64, 671u64)
+    zkf2_mul(673u64, 670u64, 672u64)                                    /* lambda */
+    zkf2_sqr(674u64, 673u64)
+    zkf2_sub(674u64, 674u64, xA)
+    zkf2_sub(674u64, 674u64, xC)                                        /* x3 */
+    zkf2_sub(675u64, xA, 674u64)
+    zkf2_mul(675u64, 673u64, 675u64)
+    zkf2_sub(675u64, 675u64, yA)                                        /* y3 */
+    zkf2_copy(600u64+2u64*rg, 674u64) zkf2_copy(601u64+2u64*rg, 675u64)
+    ZKG2_INF[rg] = 0u32
+    return 0i32
+}
+fn zkg2_mul(rg: u64, ag: u64, expPtr: u64, nbits: u64) -> i32 {
+    let e : *u32 = expPtr as *u32
+    zkg2_set_inf(30u64)
+    let mut idx : u64 = nbits
+    while idx > 0u64 {
+        idx = idx - 1u64
+        zkg2_dbl(30u64, 30u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((e[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkg2_add(30u64, 30u64, ag) }
+    }
+    zkg2_copy(rg, 30u64)
+    return 0i32
+}
+fn zkg2_eq(ag: u64, bg: u64) -> u64 {
+    let ai : u32 = ZKG2_INF[ag]  let bi : u32 = ZKG2_INF[bg]
+    if ai == 1u32 { if bi == 1u32 { return 1u64 } return 0u64 }
+    if bi == 1u32 { return 0u64 }
+    if zkf2_eq(600u64+2u64*ag, 600u64+2u64*bg) == 0u64 { return 0u64 }
+    if zkf2_eq(601u64+2u64*ag, 601u64+2u64*bg) == 0u64 { return 0u64 }
+    return 1u64
+}
+/* Order-r G2 generator: find a twist point (iterate x2=(xi,1) until x2^3+b' is
+ * a square in Fp2), then clear the h2 cofactor. */
+fn zkg2_generator(g: u64) -> i32 {
+    let mut xi : u32 = 1u32
+    let mut found : u64 = 0u64
+    while found == 0u64 {
+        zkf_set_u32(1382u64, xi) zkf_to_mont(2u64*680u64, 1382u64)            /* x2.re = mont(xi) */
+        zkf_set_u32(1382u64, 1u32) zkf_to_mont(2u64*680u64+1u64, 1382u64)     /* x2.im = mont(1) */
+        zkf2_sqr(681u64, 680u64) zkf2_mul(681u64, 681u64, 680u64)             /* x2^3 */
+        zkf_set_u32(1382u64, 4u32) zkf_to_mont(1383u64, 1382u64)
+        zkf_copy(2u64*682u64, 1383u64) zkf_copy(2u64*682u64+1u64, 1383u64)    /* b' */
+        zkf2_add(681u64, 681u64, 682u64)                                      /* rhs = x2^3+b' */
+        if zkf2_sqrt(683u64, 681u64) == 1u64 {
+            zkf2_sqr(684u64, 683u64)
+            if zkf2_eq(684u64, 681u64) == 1u64 {
+                zkf2_copy(600u64+2u64*28u64, 680u64) zkf2_copy(601u64+2u64*28u64, 683u64)
+                ZKG2_INF[28] = 0u32
+                zkg2_mul(g, 28u64, &ZK_H2 as u64, 512u64)                     /* G2 = h2 * P2 */
+                if zkg2_is_inf(g) == 0u64 { found = 1u64 }
+            }
+        }
+        if found == 0u64 { xi = xi + 1u32 }
+    }
+    return 0i32
+}
+
+/* G2 structural self-test.  99 = pass. */
+fn zkf_g2_selftest() -> u64 @export {
+    zkf_init()
+    zkg2_generator(0u64)
+    if zkg2_oncurve(0u64) == 0u64 { return 1u64 }
+    if zkg2_is_inf(0u64) == 1u64 { return 2u64 }
+    zkg2_mul(1u64, 0u64, &ZK_R as u64, 255u64)        /* r * G2 must be O */
+    if zkg2_is_inf(1u64) == 0u64 { return 3u64 }
+    zkg2_dbl(2u64, 0u64)                              /* 2G2 */
+    zkg2_add(3u64, 2u64, 0u64)                        /* 3G2 */
+    zkg2_add(4u64, 0u64, 2u64)                        /* P+Q = 3G2 */
+    zkg2_add(4u64, 4u64, 3u64)                        /* (P+Q)+R = 6G2 */
+    zkg2_add(5u64, 2u64, 3u64)                        /* Q+R = 5G2 */
+    zkg2_add(5u64, 0u64, 5u64)                        /* P+(Q+R) = 6G2 */
+    if zkg2_eq(4u64, 5u64) == 0u64 { return 4u64 }
+    if zkg2_oncurve(4u64) == 0u64 { return 5u64 }
+    return 99u64
+}
+
+/* ================= Fp12 add/sub/zero/embed + pairing init ================= */
+fn zkf12_add(rB: u64, aB: u64, bB: u64) -> i32 { zkf6_add(rB, aB, bB) ; zkf6_add(rB+3u64, aB+3u64, bB+3u64) ; return 0i32 }
+fn zkf12_sub(rB: u64, aB: u64, bB: u64) -> i32 { zkf6_sub(rB, aB, bB) ; zkf6_sub(rB+3u64, aB+3u64, bB+3u64) ; return 0i32 }
+fn zkf12_zero(bB: u64) -> i32 { zkf6_set_zero(bB) ; zkf6_set_zero(bB+3u64) ; return 0i32 }
+/* embed an Fp2 element (at Fp2 idx src) into Fp12 c0.c0 (rest zero) at base B. */
+fn zkf12_embed_fp2(bB: u64, src: u64) -> i32 { zkf12_zero(bB) ; zkf2_copy(bB, src) ; return 0i32 }
+/* compute w^-2 (@868), w^-3 (@874), b4emb = mont(4) embedded (@912), once. */
+fn zkf_pairing_init() -> i32 {
+    zkf_init()
+    if ZK_PINIT[0] == 1u32 { return 0i32 }
+    zkf6_set_zero(900u64) zkf6_set_one(903u64)        /* w = 0 + 1*w (Fp12 @900) */
+    zkf12_inv(906u64, 900u64)                          /* w^-1 */
+    zkf12_sqr(868u64, 906u64)                          /* w^-2 */
+    zkf12_mul(874u64, 868u64, 906u64)                  /* w^-3 */
+    zkf_set_u32(1840u64, 4u32) zkf_to_mont(1838u64, 1840u64) zkf_set_u32(1839u64, 0u32)   /* Fp2 idx 919 = (mont4,0) */
+    zkf12_embed_fp2(912u64, 919u64)                    /* b4emb = mont(4) embedded in Fp12 */
+    ZK_PINIT[0] = 1u32
+    return 0i32
+}
+
+/* ================= G_T-side: E(Fp12) elliptic points for the Miller loop =================
+ * ec slot e -> X = Fp12 at base (700+12e), Y = Fp12 at base (706+12e), inf ZKEC_INF[e].
+ * Reserved: ec slot 10 = mul accumulator.  Fp12 scratch 832..867; pairing
+ * constants w^-2 @868, w^-3 @874, b4emb @912; embed temp @924. */
+fn zkf12ec_is_inf(e: u64) -> u64 { return ZKEC_INF[e] as u64 }
+fn zkf12ec_set_inf(e: u64) -> i32 { ZKEC_INF[e] = 1u32 ; return 0i32 }
+fn zkf12ec_copy(re: u64, ae: u64) -> i32 {
+    zkf12_copy(700u64+12u64*re, 700u64+12u64*ae)
+    zkf12_copy(706u64+12u64*re, 706u64+12u64*ae)
+    ZKEC_INF[re] = ZKEC_INF[ae]
+    return 0i32
+}
+fn zkf12ec_eq(ae: u64, be: u64) -> u64 {
+    let ai : u32 = ZKEC_INF[ae]  let bi : u32 = ZKEC_INF[be]
+    if ai == 1u32 { if bi == 1u32 { return 1u64 } return 0u64 }
+    if bi == 1u32 { return 0u64 }
+    if zkf12_eq(700u64+12u64*ae, 700u64+12u64*be) == 0u64 { return 0u64 }
+    if zkf12_eq(706u64+12u64*ae, 706u64+12u64*be) == 0u64 { return 0u64 }
+    return 1u64
+}
+fn zkf12ec_oncurve(e: u64) -> u64 {
+    if ZKEC_INF[e] == 1u32 { return 1u64 }
+    zkf12_sqr(832u64, 706u64+12u64*e)                                   /* Y^2 */
+    zkf12_sqr(838u64, 700u64+12u64*e) zkf12_mul(838u64, 838u64, 700u64+12u64*e)   /* X^3 */
+    zkf12_add(838u64, 838u64, 912u64)                                   /* X^3 + 4 (b4emb) */
+    return zkf12_eq(832u64, 838u64)
+}
+fn zkf12ec_dbl(re: u64, ae: u64) -> i32 {
+    if ZKEC_INF[ae] == 1u32 { zkf12ec_set_inf(re) ; return 0i32 }
+    let xB : u64 = 700u64+12u64*ae  let yB : u64 = 706u64+12u64*ae
+    zkf12_sqr(832u64, xB)
+    zkf12_add(838u64, 832u64, 832u64) zkf12_add(832u64, 838u64, 832u64)   /* 3X^2 */
+    zkf12_add(838u64, yB, yB)                                            /* 2Y */
+    zkf12_inv(844u64, 838u64)
+    zkf12_mul(850u64, 832u64, 844u64)                                    /* lambda */
+    zkf12_sqr(856u64, 850u64)
+    zkf12_add(862u64, xB, xB)
+    zkf12_sub(856u64, 856u64, 862u64)                                    /* x3 */
+    zkf12_sub(862u64, xB, 856u64)
+    zkf12_mul(862u64, 850u64, 862u64)
+    zkf12_sub(862u64, 862u64, yB)                                        /* y3 */
+    zkf12_copy(700u64+12u64*re, 856u64) zkf12_copy(706u64+12u64*re, 862u64)
+    ZKEC_INF[re] = 0u32
+    return 0i32
+}
+fn zkf12ec_add(re: u64, ae: u64, be: u64) -> i32 {
+    if ZKEC_INF[ae] == 1u32 { zkf12ec_copy(re, be) ; return 0i32 }
+    if ZKEC_INF[be] == 1u32 { zkf12ec_copy(re, ae) ; return 0i32 }
+    let xA : u64 = 700u64+12u64*ae  let yA : u64 = 706u64+12u64*ae
+    let xC : u64 = 700u64+12u64*be  let yC : u64 = 706u64+12u64*be
+    if zkf12_eq(xA, xC) == 1u64 {
+        if zkf12_eq(yA, yC) == 1u64 { return zkf12ec_dbl(re, ae) }
+        zkf12ec_set_inf(re) ; return 0i32
+    }
+    zkf12_sub(832u64, yC, yA)
+    zkf12_sub(838u64, xC, xA)
+    zkf12_inv(844u64, 838u64)
+    zkf12_mul(850u64, 832u64, 844u64)                                    /* lambda */
+    zkf12_sqr(856u64, 850u64)
+    zkf12_sub(856u64, 856u64, xA)
+    zkf12_sub(856u64, 856u64, xC)                                        /* x3 */
+    zkf12_sub(862u64, xA, 856u64)
+    zkf12_mul(862u64, 850u64, 862u64)
+    zkf12_sub(862u64, 862u64, yA)                                        /* y3 */
+    zkf12_copy(700u64+12u64*re, 856u64) zkf12_copy(706u64+12u64*re, 862u64)
+    ZKEC_INF[re] = 0u32
+    return 0i32
+}
+fn zkf12ec_mul(re: u64, ae: u64, expPtr: u64, nbits: u64) -> i32 {
+    let ep : *u32 = expPtr as *u32
+    zkf12ec_set_inf(10u64)
+    let mut idx : u64 = nbits
+    while idx > 0u64 {
+        idx = idx - 1u64
+        zkf12ec_dbl(10u64, 10u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((ep[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkf12ec_add(10u64, 10u64, ae) }
+    }
+    zkf12ec_copy(re, 10u64)
+    return 0i32
+}
+/* psi(Q) : G2 point (g2 slot) -> E(Fp12) point (ec slot).  X=Q.x*w^-2, Y=Q.y*w^-3. */
+fn zkf_embed_g2(re: u64, g2slot: u64) -> i32 {
+    zkf_pairing_init()
+    zkf12_embed_fp2(924u64, 600u64+2u64*g2slot)
+    zkf12_mul(700u64+12u64*re, 924u64, 868u64)
+    zkf12_embed_fp2(924u64, 601u64+2u64*g2slot)
+    zkf12_mul(706u64+12u64*re, 924u64, 874u64)
+    ZKEC_INF[re] = 0u32
+    return 0i32
+}
+/* Fp12-EC + embedding self-test: psi(G2) on E(Fp12), r*psi(G2)==O.  99 = pass. */
+fn zkf_ec_selftest() -> u64 @export {
+    zkf_pairing_init()
+    zkg2_generator(0u64)
+    zkf_embed_g2(0u64, 0u64)                          /* psi(G2) at ec slot 0 */
+    if zkf12ec_oncurve(0u64) == 0u64 { return 1u64 }
+    if zkf12ec_is_inf(0u64) == 1u64 { return 2u64 }
+    zkf12ec_mul(1u64, 0u64, &ZK_R as u64, 255u64)     /* r * psi(G2) must be O */
+    if zkf12ec_is_inf(1u64) == 0u64 { return 3u64 }
+    return 99u64
+}
+
+/* ================= Optimal-Ate pairing (Miller loop + final exp) =================
+ * P (G1, Fp) embedded into E(Fp12); Q (G2 twist) via psi into E(Fp12).  Miller
+ * loop over the seed |x| with full Fp12 line functions (l/v, denominators kept
+ * -- clarity over speed, as the toy does).  e(P,Q) = conj(f^E) (neg seed).
+ * Slots: ec 0=P,1=psi(Q),2=T,4=T_out; f@972, f-tmp@978, lineval@984;
+ * line scratch 936..966; pairing-result/selftest Fp12 @990..1025. */
+fn zkf_embed_g1(re: u64, g1slot: u64) -> i32 {
+    zkf12_zero(700u64+12u64*re)
+    zkf_copy(2u64*(700u64+12u64*re), 300u64+2u64*g1slot)      /* X.c0.c0.re = P.x */
+    zkf12_zero(706u64+12u64*re)
+    zkf_copy(2u64*(706u64+12u64*re), 301u64+2u64*g1slot)      /* Y.c0.c0.re = P.y */
+    ZKEC_INF[re] = 0u32
+    return 0i32
+}
+/* line value of the line through T1,T2 evaluated at P (Fp12), and T_out = T1+T2.
+ * Writes line value to Fp12 @984 and the resulting point to ec slot Toute. */
+fn zkf12_line(T1e: u64, T2e: u64, Pe: u64, Toute: u64) -> i32 {
+    let xT1 : u64 = 700u64+12u64*T1e  let yT1 : u64 = 706u64+12u64*T1e
+    let xT2 : u64 = 700u64+12u64*T2e  let yT2 : u64 = 706u64+12u64*T2e
+    let xP  : u64 = 700u64+12u64*Pe   let yP  : u64 = 706u64+12u64*Pe
+    if zkf12_eq(xT1, xT2) == 1u64 {
+        if zkf12_eq(yT1, yT2) == 0u64 {
+            zkf12ec_set_inf(Toute)                 /* T1+T2 = O : vertical */
+            zkf12_sub(984u64, xP, xT1)
+            return 0i32
+        }
+        zkf12_sqr(936u64, xT1)
+        zkf12_add(942u64, 936u64, 936u64) zkf12_add(936u64, 942u64, 936u64)   /* 3 xT1^2 */
+        zkf12_add(942u64, yT1, yT1)
+        zkf12_inv(948u64, 942u64)
+        zkf12_mul(936u64, 936u64, 948u64)          /* lambda (doubling) */
+    } else {
+        zkf12_sub(936u64, yT2, yT1)
+        zkf12_sub(942u64, xT2, xT1)
+        zkf12_inv(948u64, 942u64)
+        zkf12_mul(936u64, 936u64, 948u64)          /* lambda (chord) */
+    }
+    zkf12_sqr(942u64, 936u64)
+    zkf12_sub(942u64, 942u64, xT1)
+    zkf12_sub(942u64, 942u64, xT2)                 /* x3 @942 */
+    zkf12_sub(948u64, xT1, 942u64)
+    zkf12_mul(948u64, 936u64, 948u64)
+    zkf12_sub(948u64, 948u64, yT1)                 /* y3 @948 */
+    zkf12_sub(954u64, xP, xT1)
+    zkf12_mul(954u64, 936u64, 954u64)
+    zkf12_sub(960u64, yP, yT1)
+    zkf12_sub(954u64, 960u64, 954u64)              /* l = (yP-yT1) - lambda(xP-xT1) */
+    zkf12_sub(960u64, xP, 942u64)                  /* v = xP - x3 */
+    zkf12_inv(966u64, 960u64)
+    zkf12_mul(984u64, 954u64, 966u64)              /* line value = l / v */
+    zkf12_copy(700u64+12u64*Toute, 942u64) zkf12_copy(706u64+12u64*Toute, 948u64)
+    ZKEC_INF[Toute] = 0u32
+    return 0i32
+}
+/* Miller loop f_{|x|, psi(Q)}(P) -> Fp12 @972.  Pe, Qe are E(Fp12) ec slots. */
+fn zkf12_miller(Pe: u64, Qe: u64) -> i32 {
+    zkf12_set_one(972u64)
+    zkf12ec_copy(2u64, Qe)                         /* T = psi(Q) */
+    let xseed : u64 = 0xd201000000010000u64        /* |x|, top bit 63 */
+    let mut i : u64 = 63u64
+    while i > 0u64 {
+        i = i - 1u64
+        zkf12_sqr(978u64, 972u64) zkf12_copy(972u64, 978u64)            /* f = f^2 */
+        zkf12_line(2u64, 2u64, Pe, 4u64)                                /* doubling line */
+        zkf12_mul(978u64, 972u64, 984u64) zkf12_copy(972u64, 978u64)    /* f *= l */
+        zkf12ec_copy(2u64, 4u64)                                        /* T = 2T */
+        if ((xseed >> i) & 1u64) == 1u64 {
+            zkf12_line(2u64, Qe, Pe, 4u64)                              /* addition line */
+            zkf12_mul(978u64, 972u64, 984u64) zkf12_copy(972u64, 978u64)
+            zkf12ec_copy(2u64, 4u64)                                    /* T = T + Q */
+        }
+    }
+    return 0i32
+}
+/* e(g1slot, g2slot) -> Fp12 @ outB. */
+fn zkf_pairing(g1slot: u64, g2slot: u64, outB: u64) -> i32 {
+    zkf_pairing_init()
+    zkf_embed_g1(0u64, g1slot)                     /* P -> ec 0 */
+    zkf_embed_g2(1u64, g2slot)                     /* psi(Q) -> ec 1 */
+    zkf12_miller(0u64, 1u64)                        /* f @972 */
+    zkf12_final_exp(outB, 972u64)                   /* f^E */
+    zkf12_conj(outB, outB)                          /* conjugate (negative seed) */
+    return 0i32
+}
+/* Pairing self-test: non-degeneracy, e^r==1, bilinearity e(2G,3H)=e(G,H)^6.  99=pass. */
+fn zkf_pairing_selftest() -> u64 @export {
+    zkf_pairing_init()
+    zkg1_generator(0u64)
+    zkg2_generator(0u64)
+    zkf_pairing(0u64, 0u64, 990u64)                 /* e0 = e(G1,G2) @990 */
+    zkf12_set_one(996u64)
+    if zkf12_eq(990u64, 996u64) == 1u64 { return 1u64 }       /* non-degenerate */
+    zkf12_pow_arr(996u64, 990u64, &ZK_R as u64, 8u64)         /* e0^r */
+    zkf12_set_one(1002u64)
+    if zkf12_eq(996u64, 1002u64) == 0u64 { return 2u64 }      /* e0^r == 1 */
+    zkg1_dbl(2u64, 0u64)                            /* 2G1 @ g1 slot 2 */
+    zkg2_dbl(2u64, 0u64) zkg2_add(3u64, 2u64, 0u64)            /* 3G2 @ g2 slot 3 */
+    zkf_pairing(2u64, 3u64, 1008u64)               /* e1 = e(2G1,3G2) @1008 */
+    zkf12_sqr(1014u64, 990u64)                      /* e0^2 */
+    zkf12_mul(1020u64, 1014u64, 990u64)             /* e0^3 */
+    zkf12_sqr(1014u64, 1020u64)                     /* e0^6 */
+    if zkf12_eq(1008u64, 1014u64) == 0u64 { return 3u64 }     /* e(2G1,3G2) == e0^6 */
+    return 99u64
+}
+
+/* ================= Fp12 final-exponentiation helpers ================= */
+/* generic Fp12 exponentiation: outB = baseB ^ exp, exp = expPtr[0..nu32) u32, LSB-first. */
+fn zkf12_pow_arr(outB: u64, baseB: u64, expPtr: u64, nu32: u64) -> i32 {
+    let e : *u32 = expPtr as *u32
+    zkf12_set_one(1530u64)
+    zkf12_copy(1545u64, baseB)
+    let mut limb : u64 = 0u64
+    while limb < nu32 {
+        let w : u64 = e[limb] as u64
+        let mut bit : u64 = 0u64
+        while bit < 32u64 {
+            if ((w >> bit) & 1u64) == 1u64 { zkf12_mul(1560u64, 1530u64, 1545u64) ; zkf12_copy(1530u64, 1560u64) }
+            zkf12_sqr(1560u64, 1545u64) ; zkf12_copy(1545u64, 1560u64)
+            bit = bit + 1u64
+        }
+        limb = limb + 1u64
+    }
+    zkf12_copy(outB, 1530u64)
+    return 0i32
+}
+/* Fp12 conjugate (the p^6-Frobenius): f = c0 + c1 w  ->  c0 - c1 w. */
+fn zkf12_conj(rB: u64, aB: u64) -> i32 {
+    zkf6_copy(rB, aB)
+    zkf6_set_zero(1518u64)
+    zkf6_sub(rB+3u64, 1518u64, aB+3u64)
+    return 0i32
+}
+/* final exponentiation (direct): outB = baseB ^ ((p^12-1)/r). */
+fn zkf12_final_exp(outB: u64, baseB: u64) -> i32 { return zkf12_pow_arr(outB, baseB, &ZK_FEXP as u64, 136u64) }
+
+/* Final-exp self-test: build f, check (f^E)^r == 1 and conj involution.  99 = pass. */
+fn zkf_fexp_selftest() -> u64 @export {
+    zkf_init()
+    /* f = Fp12 at base 90 (same construction as the Fp12 self-test). */
+    zkf_set_u32(70u64, 2u32)  zkf_to_mont(180u64, 70u64)
+    zkf_set_u32(70u64, 3u32)  zkf_to_mont(181u64, 70u64)
+    zkf_set_u32(70u64, 5u32)  zkf_to_mont(182u64, 70u64)
+    zkf_set_u32(70u64, 7u32)  zkf_to_mont(183u64, 70u64)
+    zkf_set_u32(70u64, 11u32) zkf_to_mont(184u64, 70u64)
+    zkf_set_u32(70u64, 13u32) zkf_to_mont(185u64, 70u64)
+    zkf_set_u32(70u64, 17u32) zkf_to_mont(186u64, 70u64)
+    zkf_set_u32(70u64, 19u32) zkf_to_mont(187u64, 70u64)
+    zkf_set_u32(70u64, 23u32) zkf_to_mont(188u64, 70u64)
+    zkf_set_u32(70u64, 29u32) zkf_to_mont(189u64, 70u64)
+    zkf_set_u32(70u64, 31u32) zkf_to_mont(190u64, 70u64)
+    zkf_set_u32(70u64, 37u32) zkf_to_mont(191u64, 70u64)
+    /* conj involution: conj(conj(f)) == f */
+    zkf12_conj(96u64, 90u64) zkf12_conj(102u64, 96u64)
+    if zkf12_eq(102u64, 90u64) == 0u64 { return 1u64 }
+    /* g = f^E ; g^r == 1 (g lies in the order-r subgroup) */
+    zkf12_final_exp(108u64, 90u64)
+    zkf12_pow_arr(114u64, 108u64, &ZK_R as u64, 8u64)
+    zkf12_set_one(120u64)
+    if zkf12_eq(114u64, 120u64) == 0u64 { return 2u64 }
+    if zkf12_eq(108u64, 120u64) == 1u64 { return 3u64 }    /* g != 1 (non-degenerate) */
+    return 99u64
+}
+
+/* ================= Fr = GF(r) scalar field (8 x u32 Montgomery) ================= */
+fn frq_csub_p(addr: u64, extra_high: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let pp : *u32 = &ZKFR_P as *u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
+        ZKFR_T[i] = v & 0xFFFFFFFFu64
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mut ge : u64 = 0u64
+    if extra_high != 0u64 { ge = 1u64 }
+    if borrow == 0u64 { ge = 1u64 }
+    let mask : u64 = 0u64 - ge
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    i = 0u64
+    while i < 8u64 {
+        a[i] = (((ZKFR_T[i] & mask) | ((a[i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn frq_dbl_raw(addr: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = ((a[i] as u64) << 1u64) | carry
+        a[i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    frq_csub_p(addr, carry)
+    return 0i32
+}
+fn frq_init() -> i32 {
+    if ZKFR_INIT[0] == 1u32 { return 0i32 }
+    ZKFR_P[0]=0x00000001u32 ZKFR_P[1]=0xffffffffu32 ZKFR_P[2]=0xfffe5bfeu32 ZKFR_P[3]=0x53bda402u32
+    ZKFR_P[4]=0x09a1d805u32 ZKFR_P[5]=0x3339d808u32 ZKFR_P[6]=0x299d7d48u32 ZKFR_P[7]=0x73eda753u32
+    let p0 : u64 = ZKFR_P[0] as u64
+    let mut inv : u64 = p0
+    let mut k : u64 = 0u64
+    while k < 5u64 {
+        let prod : u64 = (p0 * inv) & 0xFFFFFFFFu64
+        let tm : u64 = (2u64 + 0x100000000u64 - prod) & 0xFFFFFFFFu64
+        inv = (inv * tm) & 0xFFFFFFFFu64
+        k = k + 1u64
+    }
+    ZKFR_NP[0] = (0x100000000u64 - inv) & 0xFFFFFFFFu64
+    /* R mod r = 2^256 mod r : 1 doubled 256 times (r < 2^255, so 2^256 > 2r). */
+    let mut i : u64 = 0u64
+    while i < 8u64 { ZKFR_ONE[i] = 0u32 ; i = i + 1u64 }
+    ZKFR_ONE[0] = 1u32
+    let mut d : u64 = 0u64
+    while d < 256u64 { frq_dbl_raw(&ZKFR_ONE as u64) ; d = d + 1u64 }
+    i = 0u64
+    while i < 8u64 { ZKFR_R2[i] = ZKFR_ONE[i] ; i = i + 1u64 }
+    d = 0u64
+    while d < 256u64 { frq_dbl_raw(&ZKFR_R2 as u64) ; d = d + 1u64 }
+    ZKFR_INIT[0] = 1u32
+    return 0i32
+}
+fn frq_copy(dst: u64, src: u64) -> i32 {
+    let db : u64 = dst*8u64  let sb : u64 = src*8u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { ZKFR[db + i] = ZKFR[sb + i] ; i = i + 1u64 }
+    return 0i32
+}
+fn frq_add(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r*8u64  let ab : u64 = a*8u64  let bb : u64 = b*8u64
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = (ZKFR[ab + i] as u64) + (ZKFR[bb + i] as u64) + carry
+        ZKFR[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    frq_csub_p((&ZKFR as u64) + rb * 4u64, carry)
+    return 0i32
+}
+fn frq_sub(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r*8u64  let ab : u64 = a*8u64  let bb : u64 = b*8u64
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 + (ZKFR[ab + i] as u64) - (ZKFR[bb + i] as u64) - borrow
+        ZKFR[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mask : u64 = 0u64 - borrow
+    let pp : *u32 = &ZKFR_P as *u32
+    let mut c2 : u64 = 0u64
+    i = 0u64
+    while i < 8u64 {
+        let v : u64 = (ZKFR[rb + i] as u64) + ((pp[i] as u64) & mask) + c2
+        ZKFR[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        c2 = v >> 32u64
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn frq_mul(r: u64, a: u64, b: u64) -> i32 {
+    let ab : u64 = a*8u64  let bb : u64 = b*8u64
+    let pp : *u32 = &ZKFR_P as *u32
+    let np : u64 = ZKFR_NP[0]
+    let mut k : u64 = 0u64
+    while k < 10u64 { ZKFR_T[k] = 0u64 ; k = k + 1u64 }
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bi : u64 = ZKFR[bb + i] as u64
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let uv : u64 = ZKFR_T[j] + (ZKFR[ab + j] as u64) * bi + c
+            ZKFR_T[j] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uv8 : u64 = ZKFR_T[8] + c
+        ZKFR_T[8] = uv8 & 0xFFFFFFFFu64
+        ZKFR_T[9] = uv8 >> 32u64
+        let m : u64 = (ZKFR_T[0] * np) & 0xFFFFFFFFu64
+        let uv0 : u64 = ZKFR_T[0] + m * (pp[0] as u64)
+        c = uv0 >> 32u64
+        j = 1u64
+        while j < 8u64 {
+            let uv : u64 = ZKFR_T[j] + m * (pp[j] as u64) + c
+            ZKFR_T[j - 1u64] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvs : u64 = ZKFR_T[8] + c
+        ZKFR_T[7] = uvs & 0xFFFFFFFFu64
+        ZKFR_T[8] = ZKFR_T[9] + (uvs >> 32u64)
+        i = i + 1u64
+    }
+    let rb : u64 = r*8u64
+    let mut q : u64 = 0u64
+    while q < 8u64 { ZKFR[rb + q] = ZKFR_T[q] as u32 ; q = q + 1u64 }
+    frq_csub_p((&ZKFR as u64) + rb * 4u64, ZKFR_T[8])
+    return 0i32
+}
+fn frq_sqr(r: u64, a: u64) -> i32 { return frq_mul(r, a, a) }
+fn frq_to_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { ZKFR[255u64*8u64 + i] = ZKFR_R2[i] ; i = i + 1u64 }
+    return frq_mul(r, a, 255u64)
+}
+fn frq_from_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { ZKFR[255u64*8u64 + i] = 0u32 ; i = i + 1u64 }
+    ZKFR[255u64*8u64] = 1u32
+    return frq_mul(r, a, 255u64)
+}
+fn frq_inv(r: u64, a: u64) -> i32 {
+    frq_init()
+    let mut i : u64 = 0u64
+    while i < 8u64 { ZKFR_PM2[i] = ZKFR_P[i] ; i = i + 1u64 }   /* r - 2 (with borrow; r[0]=1) */
+    let mut borrow : u64 = 2u64
+    i = 0u64
+    while i < 8u64 {
+        let v : u64 = (ZKFR_PM2[i] as u64) + 0x100000000u64 - borrow
+        ZKFR_PM2[i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    frq_copy(253u64, a)
+    i = 0u64
+    while i < 8u64 { ZKFR[254u64*8u64 + i] = ZKFR_ONE[i] ; i = i + 1u64 }
+    let mut idx : u64 = 256u64
+    while idx > 0u64 {
+        idx = idx - 1u64
+        frq_sqr(254u64, 254u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((ZKFR_PM2[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { frq_mul(254u64, 254u64, 253u64) }
+    }
+    frq_copy(r, 254u64)
+    return 0i32
+}
+fn frq_boot() -> i32 @export { return frq_init() }
+fn frq_set_u32(slot: u64, v: u32) -> i32 @export {
+    let b : u64 = slot*8u64
+    ZKFR[b] = v
+    let mut i : u64 = 1u64
+    while i < 8u64 { ZKFR[b + i] = 0u32 ; i = i + 1u64 }
+    return 0i32
+}
+fn frq_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { ZKFR[slot*8u64 + idx] = v ; return 0i32 }
+fn frq_get_limb(slot: u64, idx: u64) -> u32 @export { return ZKFR[slot*8u64 + idx] }
+fn frq_add_x(r: u64, a: u64, b: u64) -> i32 @export { return frq_add(r, a, b) }
+fn frq_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return frq_sub(r, a, b) }
+fn frq_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return frq_mul(r, a, b) }
+fn frq_inv_x(r: u64, a: u64) -> i32 @export { return frq_inv(r, a) }
+fn frq_to_mont_x(r: u64, a: u64) -> i32 @export { return frq_to_mont(r, a) }
+fn frq_from_mont_x(r: u64, a: u64) -> i32 @export { return frq_from_mont(r, a) }
+fn frq_copy_x(dst: u64, src: u64) -> i32 @export { return frq_copy(dst, src) }
+fn zkf_fr_selftest() -> u64 @export {
+    frq_init()
+    if (((ZKFR_P[0] as u64) * ZKFR_NP[0] + 1u64) & 0xFFFFFFFFu64) != 0u64 { return 1u64 }
+    frq_set_u32(0u64, 0u32)
+    ZKFR[0]=0x12345678u32 ZKFR[1]=0x9abcdef0u32 ZKFR[2]=0x0fedcba9u32 ZKFR[3]=0x11112222u32   /* a < r (top limbs 0) */
+    frq_to_mont(1u64, 0u64)                      /* am */
+    frq_from_mont(2u64, 1u64)                    /* R^2 roundtrip */
+    let mut i : u64 = 0u64
+    while i < 8u64 { if ZKFR[2u64*8u64 + i] != ZKFR[0u64*8u64 + i] { return 2u64 } i = i + 1u64 }
+    frq_inv(3u64, 1u64)                          /* am^-1 (Fermat r-2) */
+    frq_mul(4u64, 1u64, 3u64)                    /* am * am^-1 == mont 1 */
+    i = 0u64
+    while i < 8u64 { if ZKFR[4u64*8u64 + i] != ZKFR_ONE[i] { return 3u64 } i = i + 1u64 }
+    return 99u64
+}
+
+/* ---------------- @export surface ---------------- */
+/* ---- G1/G2/GT/pairing bridges for zk_snark.iii (Groth16) ---- */
+fn zkg1_gen_x(g: u64) -> i32 @export { return zkg1_generator(g) }
+fn zkg1_add_x(rg: u64, ag: u64, bg: u64) -> i32 @export { return zkg1_add(rg, ag, bg) }
+fn zkg1_dbl_x(rg: u64, ag: u64) -> i32 @export { return zkg1_dbl(rg, ag) }
+fn zkg1_copy_x(rg: u64, ag: u64) -> i32 @export { return zkg1_copy(rg, ag) }
+fn zkg1_eq_x(ag: u64, bg: u64) -> u64 @export { return zkg1_eq(ag, bg) }
+fn zkg1_isinf_x(g: u64) -> u64 @export { return zkg1_is_inf(g) }
+fn zkg1_setinf_x(g: u64) -> i32 @export { return zkg1_set_inf(g) }
+fn zkg1_mul_fr(rg: u64, ag: u64, fr_slot: u64) -> i32 @export {
+    frq_from_mont(252u64, fr_slot)                                /* plain scalar -> ZKFR[252] */
+    zkg1_mul(rg, ag, (&ZKFR as u64) + 252u64*32u64, 255u64)
+    return 0i32
+}
+fn zkg2_gen_x(g: u64) -> i32 @export { return zkg2_generator(g) }
+fn zkg2_add_x(rg: u64, ag: u64, bg: u64) -> i32 @export { return zkg2_add(rg, ag, bg) }
+fn zkg2_dbl_x(rg: u64, ag: u64) -> i32 @export { return zkg2_dbl(rg, ag) }
+fn zkg2_copy_x(rg: u64, ag: u64) -> i32 @export { return zkg2_copy(rg, ag) }
+fn zkg2_isinf_x(g: u64) -> u64 @export { return zkg2_is_inf(g) }
+fn zkg2_setinf_x(g: u64) -> i32 @export { return zkg2_set_inf(g) }
+fn zkg2_mul_fr(rg: u64, ag: u64, fr_slot: u64) -> i32 @export {
+    frq_from_mont(252u64, fr_slot)
+    zkg2_mul(rg, ag, (&ZKFR as u64) + 252u64*32u64, 255u64)
+    return 0i32
+}
+fn zkf_pairing_x(g1slot: u64, g2slot: u64, outB: u64) -> i32 @export { return zkf_pairing(g1slot, g2slot, outB) }
+fn zkf12_mul_x(rB: u64, aB: u64, bB: u64) -> i32 @export { return zkf12_mul(rB, aB, bB) }
+fn zkf12_eq_x(aB: u64, bB: u64) -> u64 @export { return zkf12_eq(aB, bB) }
+fn zkf12_copy_x(rB: u64, aB: u64) -> i32 @export { return zkf12_copy(rB, aB) }
+fn zkf12_setone_x(bB: u64) -> i32 @export { zkf12_set_one(bB) ; return 0i32 }
+fn zkf_boot() -> i32 @export { return zkf_init() }
+fn zkf_set_u32(slot: u64, v: u32) -> i32 @export {
+    let b : u64 = slot * 12u64
+    ZKF[b] = v
+    let mut i : u64 = 1u64
+    while i < 12u64 { ZKF[b + i] = 0u32 ; i = i + 1u64 }
+    return 0i32
+}
+fn zkf_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { ZKF[slot * 12u64 + idx] = v ; return 0i32 }
+fn zkf_get_limb(slot: u64, idx: u64) -> u32 @export { return ZKF[slot * 12u64 + idx] }
+fn zkf_add_x(r: u64, a: u64, b: u64) -> i32 @export { return zkf_add(r, a, b) }
+fn zkf_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return zkf_sub(r, a, b) }
+fn zkf_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return zkf_mul(r, a, b) }
+fn zkf_sqr_x(r: u64, a: u64) -> i32 @export { return zkf_sqr(r, a) }
+fn zkf_copy_x(dst: u64, src: u64) -> i32 @export { return zkf_copy(dst, src) }
+fn zkf_inv_x(r: u64, a: u64) -> i32 @export { return zkf_inv(r, a) }
+fn zkf_to_mont_x(r: u64, a: u64) -> i32 @export { return zkf_to_mont(r, a) }
+fn zkf_from_mont_x(r: u64, a: u64) -> i32 @export { return zkf_from_mont(r, a) }
+fn zkf_np() -> u64 @export { return ZKF_NP[0] }
+
+/* Structural self-test (mirrors _bls.c Fp checks).  99 = all pass. */
+fn zkf_fp_selftest() -> u64 @export {
+    zkf_init()
+    /* n'[0] correctness: (p[0]*np + 1) mod 2^32 == 0. */
+    let chk : u64 = ((ZKF_P[0] as u64) * ZKF_NP[0] + 1u64) & 0xFFFFFFFFu64
+    if chk != 0u64 { return 1u64 }
+    /* sample a in [0,p): low limbs set, top limb small (< p top). */
+    zkf_set_u32(0u64, 0u32)
+    ZKF[0]=0x89abcdefu32 ZKF[1]=0x01234567u32 ZKF[2]=0x76543210u32 ZKF[3]=0xfedcba98u32
+    ZKF[4]=0x33334444u32 ZKF[5]=0x11112222u32 ZKF[6]=0x77778888u32 ZKF[7]=0x55556666u32
+    ZKF[8]=0xbbbbccccu32 ZKF[9]=0x9999aaaau32 ZKF[10]=0x397fe600u32 ZKF[11]=0x0a0111eau32
+    /* am = to_mont(a) in slot 1 */
+    zkf_to_mont(1u64, 0u64)
+    /* Fermat: am^(p-1) == 1 (Montgomery one).  Use ladder over p-1. */
+    let mut i : u64 = 0u64
+    while i < 12u64 { ZKF_PM2[i] = ZKF_P[i] ; i = i + 1u64 }
+    ZKF_PM2[0] = ((ZKF_P[0] as u64) - 1u64) as u32                  /* p-1 */
+    zkf_copy(45u64, 1u64)                                            /* base am */
+    i = 0u64
+    while i < 12u64 { ZKF[46u64*12u64 + i] = ZKF_ONE[i] ; i = i + 1u64 }
+    let mut idx : u64 = 384u64
+    while idx > 0u64 {
+        idx = idx - 1u64
+        zkf_sqr(46u64, 46u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((ZKF_PM2[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { zkf_mul(46u64, 46u64, 45u64) }
+    }
+    /* result slot 46 must equal Montgomery one (ZKF_ONE) */
+    i = 0u64
+    while i < 12u64 { if ZKF[46u64*12u64 + i] != ZKF_ONE[i] { return 2u64 } i = i + 1u64 }
+    /* inverse roundtrip: am * inv(am) == 1 (mont one) */
+    zkf_inv(2u64, 1u64)            /* slot2 = am^-1 */
+    zkf_mul(3u64, 1u64, 2u64)      /* slot3 = am * am^-1 */
+    i = 0u64
+    while i < 12u64 { if ZKF[3u64*12u64 + i] != ZKF_ONE[i] { return 3u64 } i = i + 1u64 }
+    return 99u64
+}

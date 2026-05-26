@@ -1,0 +1,17 @@
+/* 803 -- nous Phase 2: the constitutional amendment as a self-falsifying clause.
+ * Drives nous_charter_selftest: the propose-vs-decide amendment HOLDS (verify: only
+ * earned verdicts certified; falsify: a budget-hit is never certified + wall-clock
+ * refused), the terminal-gate run_charter is GREEN with the amendment + cad-seals a
+ * reproducible verdict, and -- the prove-the-negative arm -- a deliberately-false
+ * canary drives the gate RED.  The build-time keystone proof is
+ * scripts/verify_nous_differential.sh; the syntactic companion is
+ * scripts/verify_nous_propose_only.sh.  Exit 99 = all hold; 1..10 = the failing check. */
+module corpus_803
+
+extern @abi(c-msvc-x64) fn nous_charter_selftest() -> u64 from "nous_charter.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_charter_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

@@ -1,0 +1,466 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\math_library_curation.iii
+ *
+ * III STDLIB -- numera::math_library_curation
+ *
+ * The curation discipline: the operator-mediated admission ceremony for the
+ * mathematical library.  Operators open a pending ticket binding a carrier to
+ * their capability and a timestamp; curate_finalize is the ONLY path that
+ * invokes lib_admit, and only when all preconditions hold.  Every other path
+ * into the library is refused.
+ *
+ * Public API:
+ *   curate_init() -> i32                                   -- idempotent init
+ *   curate_propose(carrier_id, operator_capability, out_ticket) -> i32
+ *   curate_finalize(ticket) -> i32                         -- invoke lib_admit
+ *   curate_cancel(ticket) -> i32                           -- cancel pending
+ *   curate_query_ticket(ticket, out_state) -> i32          -- 0/1/2/3 state
+ *
+ * Hexad: kind_essence + kind_witness.  Ring: R0.  K: 1.00.
+ *
+ * NIH: depends on identifier.iii, algebraic_time.iii, math_library.iii (66).
+ *
+ * Reconciliations vs. gospel:
+ *   - at_now(out) DOES NOT EXIST -> at_current() -> u64, serialized via
+ *     ident_encode_u64 (the real algebraic_time.iii API).
+ *   - function-local var arrays (now_buf/seed/frag_id) -> module-scope scratch
+ *     (iiis local arrays are module-scope only; curation is serialized).
+ *   - &ARR[expr] element-address -> ((&ARR as u64)+off) as *u8  (W3/iiis-2).
+ *   - const prefix CR_ -> MLCUR_ (dispatch ledger row 67; collision-proof).
+ *   - dead ident_zero import dropped.
+ * Discipline: every admission is an operator ceremony; finalize is one-shot;
+ * a cancelled/rejected/finalized ticket cannot be re-finalized.  Capability
+ * verification (W39) is delegated to lib_admit's cp_library_admit clause until
+ * the 32-byte-vs-u64 capability representation is reconciled at R0 (see spec
+ * Gap #6 -- maximal-intent gap, flagged for the wave owner).
+ *
+ * Non-reentrant: curate_propose/curate_finalize use module-scope MLCUR_SEED,
+ * MLCUR_TIMEBUF, MLCUR_FRAGID scratch (single-ceremony, serialized admission).
+ */
+
+module numera_math_library_curation
+
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_encode_u64(v: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn lib_admit(carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 from "math_library.iii"
+/* Integration-tier KAT vertical: verifiable proof term -> leaf carrier ->
+ * tc_verify -> ratify cp_library_admit -> lib_init, then curate_propose/finalize. */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn lib_init() -> i32 from "math_library.iii"
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn tc_init() -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_pack_alloc_req(req_out: *u8, statement: *u8, statement_len: u32, ptids_and_deps: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_verify(carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+
+/* -- Error codes (W9: negative i32) -- */
+const MLCUR_OK           : i32 =  0i32
+const MLCUR_E_NULL       : i32 = -1i32
+const MLCUR_E_FULL       : i32 = -2i32
+const MLCUR_E_ABSENT     : i32 = -3i32
+const MLCUR_E_BAD_STATE  : i32 = -4i32
+const MLCUR_E_NOT_INITED : i32 = -5i32
+
+/* -- Dimensions -- */
+const MLCUR_SLOTS         : u64 = 1024u64
+const MLCUR_IDENT_BYTES   : u64 = 32u64
+
+/* -- Slot states -- */
+const MLCUR_STATE_PENDING   : u8 = 0u8
+const MLCUR_STATE_FINALIZED : u8 = 1u8
+const MLCUR_STATE_CANCELLED : u8 = 2u8
+const MLCUR_STATE_REJECTED  : u8 = 3u8
+
+/* -- Module state -- */
+var MLCUR_INITED : u8 = 0u8
+
+/* -- Slot tables (1024 slots * 32 bytes each = 32768 bytes; W8) -- */
+var MLCUR_TICKETS       : [u8; 32768]
+var MLCUR_CARRIER_IDS   : [u8; 32768]
+var MLCUR_OPERATOR_CAPS : [u8; 32768]
+var MLCUR_STATES        : [u8; 1024]
+var MLCUR_LIVE          : [u8; 1024]
+var MLCUR_COUNT         : u64 = 0u64
+
+/* -- Module-scope scratch (Trap 7 fix -- hoisted from gospel's local arrays) -- */
+var MLCUR_SEED    : [u8; 96]
+var MLCUR_TIMEBUF : [u8; 32]
+var MLCUR_FRAGID  : [u8; 32]
+
+/* -- Self-test fixture buffers -- */
+var MLCUR_T_CARRIER  : [u8; 32]
+var MLCUR_T_CAP      : [u8; 32]
+var MLCUR_T_TICKET   : [u8; 32]
+var MLCUR_T_TICKET2  : [u8; 32]
+var MLCUR_T_STATE    : [u8; 1]
+var MLCUR_T_UNKNOWN  : [u8; 32]
+/* Integration-tier KAT scratch (the curate_finalize POSITIVE vertical). */
+var MLCUR_KAT_TID    : [u8; 32]          /* proof-term id */
+var MLCUR_KAT_ARGS   : [u64; 8]          /* pt_add_inference args (64 bytes) */
+var MLCUR_KAT_STMT   : [u8; 8]           /* tiny theorem statement */
+var MLCUR_KAT_PAB    : [u64; 3]          /* tc ptids_and_deps (ptid, dep, dep_count=0) */
+var MLCUR_KAT_TCREQ  : [u64; 8]          /* tc_pack_alloc_req output */
+var MLCUR_KAT_LABEL  : [u8; 16]          /* "cp_library_admit" (curation's own copy) */
+var MLCUR_KAT_CREQ   : [u64; 16]         /* cons_ratify request (out_cid sink at byte 64) */
+var MLCUR_KAT_OUT    : [u8; 32]          /* spare out_frag sink */
+
+/* --------------------------------------------------------------------------
+ * curate_init -- idempotent; zero LIVE array; reset COUNT.
+ * W14: sentinel loop over MLCUR_SLOTS (no break).
+ * -------------------------------------------------------------------------- */
+fn curate_init() -> i32 @export {
+    if MLCUR_INITED == 1u8 { return MLCUR_OK }
+    let mut i : u64 = 0u64
+    while i < MLCUR_SLOTS {
+        MLCUR_LIVE[i] = 0u8
+        i = i + 1u64
+    }
+    MLCUR_COUNT = 0u64
+    MLCUR_INITED = 1u8
+    return MLCUR_OK
+}
+
+/* --------------------------------------------------------------------------
+ * curate_find -- linear scan; return slot index as i64 or -1i64 (absent).
+ * Trap 3: result compared via == / != -1i64 only (never <, <=, >, >=).
+ * W14: sentinel flag suppresses body after match; no break.
+ * -------------------------------------------------------------------------- */
+fn curate_find(ticket: *u8) -> i64 {
+    let mut i : u64 = 0u64
+    let mut found : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    while i < MLCUR_SLOTS {
+        if sentinel == 0u8 {
+            if MLCUR_LIVE[i] == 1u8 {
+                let slot_ptr : *u8 = ((&MLCUR_TICKETS as u64) + i * 32u64) as *u8
+                if ident_eq(slot_ptr, ticket) == 1u8 {
+                    found = i as i64
+                    sentinel = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* --------------------------------------------------------------------------
+ * curate_propose -- open a pending ticket.
+ * 1. Guards: not-inited, null pointers.
+ * 2. Find first free slot (W14 sentinel scan) -> MLCUR_E_FULL if none.
+ * 3. Build deterministic seed: carrier_id (32B) || operator_capability (32B)
+ *    || ident_encode_u64(at_current()) (32B) -> MLCUR_SEED[0..95].
+ * 4. Derive ticket id: ident_from_bytes(seed, 96, slot) -> Keccak256 of seed.
+ * 5. Copy ticket out; record carrier + cap provenance; set PENDING/LIVE/COUNT.
+ * M2/M10: ticket = Keccak256(carrier||cap||LE64(at_current())) -- pure.
+ * -------------------------------------------------------------------------- */
+fn curate_propose(carrier_id: *u8, operator_capability: *u8, out_ticket: *u8) -> i32 @export {
+    if MLCUR_INITED == 0u8 { return MLCUR_E_NOT_INITED }
+    if (carrier_id as u64) == 0u64 { return MLCUR_E_NULL }
+    if (operator_capability as u64) == 0u64 { return MLCUR_E_NULL }
+    if (out_ticket as u64) == 0u64 { return MLCUR_E_NULL }
+    /* Find first free slot (W14 sentinel). */
+    let mut si : u64 = 0u64
+    let mut slot : i64 = -1i64
+    let mut sflag : u8 = 0u8
+    while si < MLCUR_SLOTS {
+        if sflag == 0u8 {
+            if MLCUR_LIVE[si] == 0u8 {
+                slot = si as i64
+                sflag = 1u8
+            }
+        }
+        si = si + 1u64
+    }
+    if slot == -1i64 { return MLCUR_E_FULL }
+    let s : u64 = slot as u64
+    /* Build seed into MLCUR_SEED[0..95]: carrier || cap || time. */
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        MLCUR_SEED[k] = carrier_id[k]
+        k = k + 1u64
+    }
+    let mut k2 : u64 = 0u64
+    while k2 < 32u64 {
+        MLCUR_SEED[32u64 + k2] = operator_capability[k2]
+        k2 = k2 + 1u64
+    }
+    /* Time slice: at_current() -> u64; serialize 8 LE bytes + 24 zero bytes. */
+    let t : u64 = at_current()
+    let tbuf_ptr : *u8 = ((&MLCUR_TIMEBUF as u64)) as *u8
+    ident_encode_u64(t, tbuf_ptr)
+    let mut k3 : u64 = 0u64
+    while k3 < 32u64 {
+        MLCUR_SEED[64u64 + k3] = MLCUR_TIMEBUF[k3]
+        k3 = k3 + 1u64
+    }
+    /* Derive ticket id into slot. */
+    let seed_ptr : *u8 = ((&MLCUR_SEED as u64)) as *u8
+    let slot_tk_ptr : *u8 = ((&MLCUR_TICKETS as u64) + s * 32u64) as *u8
+    ident_from_bytes(seed_ptr, 96u64, slot_tk_ptr)
+    /* Copy ticket id out to caller. */
+    ident_copy(slot_tk_ptr, out_ticket)
+    /* Record carrier id provenance. */
+    let slot_ci_ptr : *u8 = ((&MLCUR_CARRIER_IDS as u64) + s * 32u64) as *u8
+    ident_copy(carrier_id, slot_ci_ptr)
+    /* Record operator capability provenance. */
+    let slot_cap_ptr : *u8 = ((&MLCUR_OPERATOR_CAPS as u64) + s * 32u64) as *u8
+    ident_copy(operator_capability, slot_cap_ptr)
+    /* Mark slot live and pending. */
+    MLCUR_STATES[s] = MLCUR_STATE_PENDING
+    MLCUR_LIVE[s] = 1u8
+    MLCUR_COUNT = MLCUR_COUNT + 1u64
+    return MLCUR_OK
+}
+
+/* --------------------------------------------------------------------------
+ * curate_finalize -- the one-shot admission path.
+ * 1. Guards: not-inited, null, absent, not-pending.
+ * 2. Invoke lib_admit with recorded carrier/cap; M5: a rejected ticket leaves
+ *    the library untouched; REJECTED state is set on lib_admit failure.
+ * Trap 3: admit result compared via != 0i32 only (W11).
+ * -------------------------------------------------------------------------- */
+fn curate_finalize(ticket: *u8) -> i32 @export {
+    if MLCUR_INITED == 0u8 { return MLCUR_E_NOT_INITED }
+    if (ticket as u64) == 0u64 { return MLCUR_E_NULL }
+    let found : i64 = curate_find(ticket)
+    if found == -1i64 { return MLCUR_E_ABSENT }
+    let s : u64 = found as u64
+    if MLCUR_STATES[s] != MLCUR_STATE_PENDING { return MLCUR_E_BAD_STATE }
+    let ci_ptr  : *u8 = ((&MLCUR_CARRIER_IDS   as u64) + s * 32u64) as *u8
+    let cap_ptr : *u8 = ((&MLCUR_OPERATOR_CAPS  as u64) + s * 32u64) as *u8
+    let frag_ptr : *u8 = ((&MLCUR_FRAGID as u64)) as *u8
+    let admit : i32 = lib_admit(ci_ptr, cap_ptr, frag_ptr)
+    if admit != 0i32 {
+        MLCUR_STATES[s] = MLCUR_STATE_REJECTED
+        return admit
+    }
+    MLCUR_STATES[s] = MLCUR_STATE_FINALIZED
+    return MLCUR_OK
+}
+
+/* --------------------------------------------------------------------------
+ * curate_cancel -- cancel a pending ticket (M5: reversible path).
+ * A cancelled ticket cannot be re-finalized (guard: STATE != PENDING).
+ * -------------------------------------------------------------------------- */
+fn curate_cancel(ticket: *u8) -> i32 @export {
+    if MLCUR_INITED == 0u8 { return MLCUR_E_NOT_INITED }
+    if (ticket as u64) == 0u64 { return MLCUR_E_NULL }
+    let found : i64 = curate_find(ticket)
+    if found == -1i64 { return MLCUR_E_ABSENT }
+    let s : u64 = found as u64
+    if MLCUR_STATES[s] != MLCUR_STATE_PENDING { return MLCUR_E_BAD_STATE }
+    MLCUR_STATES[s] = MLCUR_STATE_CANCELLED
+    return MLCUR_OK
+}
+
+/* --------------------------------------------------------------------------
+ * curate_query_ticket -- read the 1-byte ceremony state for a live ticket.
+ * Writes through *out_state (single u8 -- no Trap 5 hazard).
+ * -------------------------------------------------------------------------- */
+fn curate_query_ticket(ticket: *u8, out_state: *u8) -> i32 @export {
+    if MLCUR_INITED == 0u8 { return MLCUR_E_NOT_INITED }
+    if (ticket as u64) == 0u64 { return MLCUR_E_NULL }
+    if (out_state as u64) == 0u64 { return MLCUR_E_NULL }
+    let found : i64 = curate_find(ticket)
+    if found == -1i64 { return MLCUR_E_ABSENT }
+    let s : u64 = found as u64
+    out_state[0u64] = MLCUR_STATES[s]
+    return MLCUR_OK
+}
+
+/* --------------------------------------------------------------------------
+ * mlcur_selftest -- 99 = full pass; distinct small code at each failure.
+ *
+ * KAT 1: Init idempotence + absent-query negative gate.
+ * KAT 2: Propose -> PENDING state.
+ * KAT 3: Cancel blocks finalize (state machine); double-cancel refused.
+ * KAT 4: Absent/null negative discipline.
+ * KAT 5: Full-table refusal (W8/M5 no-brick).
+ *
+ * KAT 6 (finalize happy path) requires Module 66 (math_library.iii) to be
+ * linked; the selftest skips it (lib_admit returns non-zero when unlinked or
+ * uninitialized -- the REJECTED path is exercised in the negative arm).
+ * -------------------------------------------------------------------------- */
+/* Integration-tier KAT 6 (the curate_finalize POSITIVE path — the base KAT
+ * defers it as "requires math_library linked").  Stands up the full vertical
+ * (verifiable axiom proof term -> leaf carrier -> tc_verify -> ratify
+ * cp_library_admit, curation builds its OWN label since math_library's is
+ * module-private) then runs the ceremony: curate_propose -> curate_finalize
+ * (the only lib_admit caller) -> MLCUR_OK, and the re-finalize one-shot
+ * negative.  Returns 0 on full pass, or a distinct 60..70 code. */
+fn mlcur_kat_finalize() -> u64 {
+    pt_init()
+    tc_init()
+    wh_init(0u64)
+    lib_init()
+    /* Force a fresh curation table -- KAT 5 filled all 1024 slots and left
+     * MLCUR_INITED=1, so curate_init() alone is idempotent and would NOT clear
+     * it (curate_propose would then return MLCUR_E_FULL). */
+    MLCUR_INITED = 0u8
+    curate_init()
+    /* --- Verifiable single-axiom proof term. --- */
+    if pt_alloc((&MLCUR_KAT_TID as u64) as *u8) != 0i32 { return 60u64 }
+    let abase : u64 = &MLCUR_KAT_ARGS as u64
+    let ap : *u8 = abase as *u8
+    let mut zi : u64 = 0u64
+    while zi < 64u64 { ap[zi] = 0u8  zi = zi + 1u64 }
+    let tp : *u8 = (&MLCUR_KAT_TID as u64) as *u8
+    let mut ti : u64 = 0u64
+    while ti < 32u64 { ap[ti] = tp[ti]  ti = ti + 1u64 }
+    ap[32u64] = 0x01u8
+    ap[40u64] = 1u8
+    ap[44u64] = 0x41u8
+    if pt_add_inference(ap) != 0i32 { return 61u64 }
+    if pt_finalize((&MLCUR_KAT_TID as u64) as *u8) != 0i32 { return 62u64 }
+    if pt_verify((&MLCUR_KAT_TID as u64) as *u8) != 0i32 { return 63u64 }
+    /* --- Leaf carrier (dep_count=0) -> MLCUR_T_CARRIER. --- */
+    let pabbase : u64 = &MLCUR_KAT_PAB as u64
+    let pabp : *u64 = pabbase as *u64
+    pabp[0u64] = &MLCUR_KAT_TID as u64
+    pabp[1u64] = &MLCUR_KAT_TID as u64
+    pabp[2u64] = 0u64
+    MLCUR_KAT_STMT[0u64] = 0x41u8
+    if tc_pack_alloc_req((&MLCUR_KAT_TCREQ as u64) as *u8, (&MLCUR_KAT_STMT as u64) as *u8, 1u32, pabbase as *u8) != 0i32 { return 64u64 }
+    if tc_alloc((&MLCUR_KAT_TCREQ as u64) as *u8, (&MLCUR_T_CARRIER as u64) as *u8) != 0i32 { return 65u64 }
+    if tc_verify((&MLCUR_T_CARRIER as u64) as *u8) != 0i32 { return 66u64 }
+    /* --- Build "cp_library_admit" (16 ASCII bytes) + ratify it. --- */
+    MLCUR_KAT_LABEL[0u64]  = 99u8
+    MLCUR_KAT_LABEL[1u64]  = 112u8
+    MLCUR_KAT_LABEL[2u64]  = 95u8
+    MLCUR_KAT_LABEL[3u64]  = 108u8
+    MLCUR_KAT_LABEL[4u64]  = 105u8
+    MLCUR_KAT_LABEL[5u64]  = 98u8
+    MLCUR_KAT_LABEL[6u64]  = 114u8
+    MLCUR_KAT_LABEL[7u64]  = 97u8
+    MLCUR_KAT_LABEL[8u64]  = 114u8
+    MLCUR_KAT_LABEL[9u64]  = 121u8
+    MLCUR_KAT_LABEL[10u64] = 95u8
+    MLCUR_KAT_LABEL[11u64] = 97u8
+    MLCUR_KAT_LABEL[12u64] = 100u8
+    MLCUR_KAT_LABEL[13u64] = 109u8
+    MLCUR_KAT_LABEL[14u64] = 105u8
+    MLCUR_KAT_LABEL[15u64] = 116u8
+    let creqbase : u64 = &MLCUR_KAT_CREQ as u64
+    let lab : u64 = &MLCUR_KAT_LABEL as u64
+    let crp : *u64 = creqbase as *u64
+    crp[0u64] = creqbase + 64u64
+    crp[1u64] = lab
+    crp[2u64] = 16u64
+    crp[3u64] = lab
+    crp[4u64] = 0u64
+    crp[5u64] = lab
+    crp[6u64] = 0u64
+    if cons_ratify(creqbase as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 67u64 }
+    /* --- Curation ceremony: propose -> finalize (the only lib_admit path). --- */
+    let car_ptr : *u8 = (&MLCUR_T_CARRIER as u64) as *u8
+    let cap_ptr : *u8 = (&MLCUR_T_CAP as u64) as *u8
+    let tk_ptr  : *u8 = (&MLCUR_T_TICKET as u64) as *u8
+    if curate_propose(car_ptr, cap_ptr, tk_ptr) != MLCUR_OK { return 68u64 }
+    if curate_finalize(tk_ptr) != MLCUR_OK { return 69u64 }
+    /* Negative: re-finalize a finalized ticket -> BAD_STATE (one-shot ceremony). */
+    if curate_finalize(tk_ptr) != MLCUR_E_BAD_STATE { return 70u64 }
+    return 0u64
+}
+
+fn mlcur_selftest() -> u64 @export {
+    /* -- KAT 1: init idempotence + query on absent ticket returns E_ABSENT -- */
+    let r0 : i32 = curate_init()
+    if r0 != MLCUR_OK { return 1u64 }
+    let r1 : i32 = curate_init()
+    if r1 != MLCUR_OK { return 2u64 }
+    /* Zero MLCUR_T_UNKNOWN -- it was never proposed so curate_find will miss it. */
+    let mut zi : u64 = 0u64
+    while zi < 32u64 { MLCUR_T_UNKNOWN[zi] = 0xFFu8 ; zi = zi + 1u64 }
+    let st_ptr : *u8 = ((&MLCUR_T_STATE as u64)) as *u8
+    let unk_ptr : *u8 = ((&MLCUR_T_UNKNOWN as u64)) as *u8
+    let q_abs : i32 = curate_query_ticket(unk_ptr, st_ptr)
+    if q_abs != MLCUR_E_ABSENT { return 3u64 }
+
+    /* -- KAT 2: propose -> PENDING state -- */
+    /* Fill carrier = 0x11 * 32, cap = 0x22 * 32. */
+    let mut fi : u64 = 0u64
+    while fi < 32u64 { MLCUR_T_CARRIER[fi] = 0x11u8 ; fi = fi + 1u64 }
+    let mut gi : u64 = 0u64
+    while gi < 32u64 { MLCUR_T_CAP[gi] = 0x22u8 ; gi = gi + 1u64 }
+    let car_ptr : *u8 = ((&MLCUR_T_CARRIER as u64)) as *u8
+    let cap_ptr : *u8 = ((&MLCUR_T_CAP as u64)) as *u8
+    let tk_ptr  : *u8 = ((&MLCUR_T_TICKET as u64)) as *u8
+    let prop1 : i32 = curate_propose(car_ptr, cap_ptr, tk_ptr)
+    if prop1 != MLCUR_OK { return 10u64 }
+    let q2 : i32 = curate_query_ticket(tk_ptr, st_ptr)
+    if q2 != MLCUR_OK { return 11u64 }
+    if MLCUR_T_STATE[0u64] != MLCUR_STATE_PENDING { return 12u64 }
+    /* Verify COUNT == 1 */
+    if MLCUR_COUNT != 1u64 { return 13u64 }
+
+    /* -- KAT 3: cancel blocks finalize; double-cancel refused -- */
+    let can1 : i32 = curate_cancel(tk_ptr)
+    if can1 != MLCUR_OK { return 20u64 }
+    let q3 : i32 = curate_query_ticket(tk_ptr, st_ptr)
+    if q3 != MLCUR_OK { return 21u64 }
+    if MLCUR_T_STATE[0u64] != MLCUR_STATE_CANCELLED { return 22u64 }
+    /* finalize on CANCELLED ticket must return E_BAD_STATE */
+    let fin_bad : i32 = curate_finalize(tk_ptr)
+    if fin_bad != MLCUR_E_BAD_STATE { return 23u64 }
+    /* second cancel must also return E_BAD_STATE */
+    let can2 : i32 = curate_cancel(tk_ptr)
+    if can2 != MLCUR_E_BAD_STATE { return 24u64 }
+
+    /* -- KAT 4: absent / null discipline -- */
+    /* finalize on never-proposed id -> E_ABSENT */
+    let fin_abs : i32 = curate_finalize(unk_ptr)
+    if fin_abs != MLCUR_E_ABSENT { return 30u64 }
+    /* propose with null carrier -> E_NULL */
+    let nullp : *u8 = 0u64 as *u8
+    let tk2_ptr : *u8 = ((&MLCUR_T_TICKET2 as u64)) as *u8
+    let prop_null : i32 = curate_propose(nullp, cap_ptr, tk2_ptr)
+    if prop_null != MLCUR_E_NULL { return 31u64 }
+    /* calling any public fn before curate_init (MLCUR_INITED == 0) -> E_NOT_INITED */
+    MLCUR_INITED = 0u8
+    let pre_init : i32 = curate_finalize(tk_ptr)
+    if pre_init != MLCUR_E_NOT_INITED { return 32u64 }
+    let pre_init2 : i32 = curate_cancel(tk_ptr)
+    if pre_init2 != MLCUR_E_NOT_INITED { return 33u64 }
+    let pre_init3 : i32 = curate_query_ticket(tk_ptr, st_ptr)
+    if pre_init3 != MLCUR_E_NOT_INITED { return 34u64 }
+    /* Restore for subsequent tests. */
+    MLCUR_INITED = 1u8
+
+    /* -- KAT 5: full-table refusal (W8/M5 no-brick) -- */
+    /* Re-init to clear the cancelled slot and get a clean table. */
+    MLCUR_INITED = 0u8
+    curate_init()
+    /* Fill all 1024 slots -- vary carrier[0] per slot to get distinct tickets. */
+    let mut pi : u64 = 0u64
+    let mut fill_ok : u8 = 1u8
+    while pi < MLCUR_SLOTS {
+        if fill_ok == 1u8 {
+            MLCUR_T_CARRIER[0u64] = (pi & 0xFFu64) as u8
+            let pr : i32 = curate_propose(car_ptr, cap_ptr, tk2_ptr)
+            if pr != MLCUR_OK { fill_ok = 0u8 }
+        }
+        pi = pi + 1u64
+    }
+    if fill_ok == 0u8 { return 40u64 }
+    if MLCUR_COUNT != MLCUR_SLOTS { return 41u64 }
+    /* 1025th propose must return E_FULL (not corrupt). */
+    MLCUR_T_CARRIER[0u64] = 0xDEu8
+    let over : i32 = curate_propose(car_ptr, cap_ptr, tk2_ptr)
+    if over != MLCUR_E_FULL { return 42u64 }
+    /* COUNT must still be MLCUR_SLOTS (no phantom increment on refusal). */
+    if MLCUR_COUNT != MLCUR_SLOTS { return 43u64 }
+
+    /* KAT 6 (integration tier): the curate_finalize POSITIVE vertical. */
+    let kf : u64 = mlcur_kat_finalize()
+    if kf != 0u64 { return kf }
+
+    return 99u64
+}

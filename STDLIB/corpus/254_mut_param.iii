@@ -1,0 +1,12 @@
+/* Diag: mut in fn params. */
+module corpus_254
+
+fn f(mut a: u64, b: u64) -> u64 {
+    a = a + b
+    return a
+}
+
+fn main() -> u64 {
+    if f(3u64, 4u64) != 7u64 { return 1u64 }
+    return 99u64
+}

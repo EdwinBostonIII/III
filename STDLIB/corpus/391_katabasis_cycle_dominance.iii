@@ -1,0 +1,46 @@
+/* 391 -- KATABASIS increment 2: WriteMetal cycle-term target-dominance (plan 4.7).
+ * Proves the ROBUST keystone: a structural-NEG TARGET (a hypervisor-critical
+ * SVM offset) makes the WriteMetal cycle UNREPRESENTABLE for ANY write action --
+ * no action hexad can launder a brick target (compose6 ANDs pillars 1..4, NEG
+ * absorbs).  Dually, a structural-NEG ACTION is rejected even on a safe target
+ * (a write that asserts a brick-class operation cannot proceed).
+ * Exit 99 = all hold; 1..16 = the index of the failing assertion. */
+module corpus_391_katabasis_cycle_dominance
+
+extern @abi(c-msvc-x64) fn iii_hexad_pfs(op: u32) -> u16 from "hexad_pfs.iii"
+extern @abi(c-msvc-x64) fn katabasis_svm_cycle_admissible(action: u16, offset: u32) -> u8 from "svm_layout.iii"
+extern @abi(c-msvc-x64) fn katabasis_svm_cycle_hexad(action: u16, offset: u32) -> u16 from "svm_layout.iii"
+
+fn main() -> u64 {
+    let brick6 : u16 = iii_hexad_pfs(6u32)   /* smram_write: NEG in pillars 1..5 */
+    let brick1 : u16 = iii_hexad_pfs(1u32)   /* capsule_update: NEG in pillars 1..4 */
+
+    /* TARGET-DOMINANCE: HOST_SAVE @ 0x1000 (a brick target) is unrepresentable
+     * for every action class -- all-POS, all-ZERO, all-NEG, and PFS bricks. */
+    if katabasis_svm_cycle_admissible(728u16, 0x1000u32) != 0u8 { return 1u64 }
+    if katabasis_svm_cycle_admissible(364u16, 0x1000u32) != 0u8 { return 2u64 }
+    if katabasis_svm_cycle_admissible(0u16,   0x1000u32) != 0u8 { return 3u64 }
+    if katabasis_svm_cycle_admissible(brick6, 0x1000u32) != 0u8 { return 4u64 }
+    if katabasis_svm_cycle_admissible(brick1, 0x1000u32) != 0u8 { return 5u64 }
+
+    /* dominance across every hypervisor-critical region (positive action) */
+    if katabasis_svm_cycle_admissible(728u16, 0x0u32)     != 0u8 { return 6u64 }
+    if katabasis_svm_cycle_admissible(728u16, 0x2000u32)  != 0u8 { return 7u64 }
+    if katabasis_svm_cycle_admissible(728u16, 0xA000u32)  != 0u8 { return 8u64 }
+    if katabasis_svm_cycle_admissible(728u16, 0x3E000u32) != 0u8 { return 9u64 }
+    if katabasis_svm_cycle_admissible(728u16, 0x3F000u32) != 0u8 { return 10u64 }
+
+    /* ACTION-HONESTY: a positive/neutral action on a SAFE target is admitted;
+     * a structural-NEG action is rejected even on a safe target. */
+    if katabasis_svm_cycle_admissible(728u16, 0x20000u32) != 1u8 { return 11u64 }
+    if katabasis_svm_cycle_admissible(364u16, 0x20000u32) != 1u8 { return 12u64 }
+    if katabasis_svm_cycle_admissible(728u16, 0x10000u32) != 1u8 { return 13u64 }
+    if katabasis_svm_cycle_admissible(0u16,   0x20000u32) != 0u8 { return 14u64 }
+    if katabasis_svm_cycle_admissible(brick6, 0x20000u32) != 0u8 { return 15u64 }
+
+    /* the composition is real: (all-POS action, brick target) is dragged off
+     * all-POS (728), proving the target actually entered the result. */
+    if katabasis_svm_cycle_hexad(728u16, 0x1000u32) == 728u16 { return 16u64 }
+
+    return 99u64
+}

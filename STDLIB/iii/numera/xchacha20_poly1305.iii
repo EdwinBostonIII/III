@@ -1,0 +1,52 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\xchacha20_poly1305.iii
+ *
+ * III STDLIB - numera::xchacha20_poly1305 -- XChaCha20-Poly1305 AEAD with a
+ * 192-bit (24-byte) nonce (draft-irtf-cfrg-xchacha).  RITCHIE Stage 4.9.
+ *   subkey      = HChaCha20(key, nonce[0:16])           (numera/chacha20.iii)
+ *   cc_nonce    = 0x00000000 || nonce[16:24]            (12 bytes)
+ *   seal/open   = ChaCha20-Poly1305(subkey, cc_nonce)   (numera/chacha20_poly1305.iii)
+ *
+ * Public surface:
+ *   xchacha20_poly1305_seal(key, nonce24, aad, aad_len, pt, pt_len, ct_out, tag_out) -> i32
+ *   xchacha20_poly1305_open(key, nonce24, aad, aad_len, ct, ct_len, pt_out, tag_in)  -> u8 (1=ok,0=reject)
+ *
+ * Hexad: kind_convey.  Ring: R3.  K: 1.00.
+ */
+
+module numera_xchacha20_poly1305
+
+extern @abi(c-msvc-x64) fn hchacha20(key: u64, nonce16: u64, subkey_out: u64) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_init(key: u64, nonce: u64) -> i32 from "chacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_aad(aad: u64, aad_len: u64) -> i32 from "chacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_seal(pt: u64, pt_len: u64, ct_out: u64, tag_out: u64) -> i32 from "chacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_open(ct: u64, ct_len: u64, pt_out: u64, tag_in: u64) -> u8 from "chacha20_poly1305.iii"
+
+var XC_SUBKEY : [u8; 32]
+var XC_NONCE  : [u8; 12]
+
+fn xc_setup(key: u64, nonce24: u64) -> i32 {
+    hchacha20(key, nonce24, &XC_SUBKEY as u64)
+    let np : *u8 = nonce24 as *u8
+    let xn : *u8 = &XC_NONCE as *u8
+    xn[0] = 0u8
+    xn[1] = 0u8
+    xn[2] = 0u8
+    xn[3] = 0u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { xn[4u64 + i] = np[16u64 + i] ; i = i + 1u64 }
+    aead_chacha20_poly1305_init(&XC_SUBKEY as u64, &XC_NONCE as u64)
+    return 0i32
+}
+
+fn xchacha20_poly1305_seal(key: u64, nonce24: u64, aad: u64, aad_len: u64, pt: u64, pt_len: u64, ct_out: u64, tag_out: u64) -> i32 @export {
+    xc_setup(key, nonce24)
+    if aad_len > 0u64 { aead_chacha20_poly1305_aad(aad, aad_len) }
+    aead_chacha20_poly1305_seal(pt, pt_len, ct_out, tag_out)
+    return 0i32
+}
+
+fn xchacha20_poly1305_open(key: u64, nonce24: u64, aad: u64, aad_len: u64, ct: u64, ct_len: u64, pt_out: u64, tag_in: u64) -> u8 @export {
+    xc_setup(key, nonce24)
+    if aad_len > 0u64 { aead_chacha20_poly1305_aad(aad, aad_len) }
+    return aead_chacha20_poly1305_open(ct, ct_len, pt_out, tag_in)
+}

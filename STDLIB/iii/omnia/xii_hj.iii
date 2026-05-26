@@ -1,0 +1,169 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_hj.iii
+ *
+ * III STDLIB - omnia::xii_hj
+ *
+ * HJ hexad-join table for XII algebra. Per DOCS/III-XII.md S4.2 + S26.4.
+ *
+ * Asymmetric dominance order (low to high):
+ *   COMPOSE < FORM < SUBSTANCE < PASSAGE < ESSENCE < MOTION < ORIGIN
+ *
+ * The HJ table is a 7x7 sealed lookup; join(a, b) returns the higher-rank
+ * hexad of {a, b}. ORIGIN dominates always. COMPOSE is the bottom (acts
+ * as a structural identity for HJ -- joining anything with COMPOSE yields
+ * that other value).
+ *
+ * Indexed by XII_HEXAD value minus one (so index = value - 1; index range 0..6).
+ * Cell values are XII_HEXAD values (1..7).
+ *
+ * Theorem 4.3 (Hexad Kind Preservation under Canonicalisation) requires
+ * HJ to be associative; this is verified by corpus test 305 (343 triples).
+ *
+ * Hexad: kind_form. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only. Sealed: xii_hj.mhash := SHA-256(49-byte table).
+ */
+
+module omnia_xii_hj
+
+/* Hexad value constants (mirror omnia/xii_term.iii). */
+const XHJ_HEXAD_FORM      : u8 = 1u8
+const XHJ_HEXAD_SUBSTANCE : u8 = 2u8
+const XHJ_HEXAD_PASSAGE   : u8 = 3u8
+const XHJ_HEXAD_ESSENCE   : u8 = 4u8
+const XHJ_HEXAD_MOTION    : u8 = 5u8
+const XHJ_HEXAD_COMPOSE   : u8 = 6u8
+const XHJ_HEXAD_ORIGIN    : u8 = 7u8
+
+const XHJ_TABLE_LEN : u32 = 49u32
+
+/* Sealed 7x7 HJ table (row-major).
+ * Row 0 (FORM)    : FORM joined with each col
+ * Row 1 (SUBSTANCE)
+ * Row 2 (PASSAGE)
+ * Row 3 (ESSENCE)
+ * Row 4 (MOTION)
+ * Row 5 (COMPOSE) : COMPOSE is HJ-identity; joining with anything returns the other
+ * Row 6 (ORIGIN)  : ORIGIN dominates; every cell is ORIGIN(7)
+ *
+ * Column order matches row order: 0=FORM, 1=SUBSTANCE, 2=PASSAGE, 3=ESSENCE,
+ * 4=MOTION, 5=COMPOSE, 6=ORIGIN.
+ *
+ * Hand-derived from the dominance ordering above. The table satisfies:
+ *   - Associativity: HJ(HJ(a,b), c) == HJ(a, HJ(b,c))    for all 7^3 = 343 triples
+ *   - Commutativity: HJ(a, b) == HJ(b, a)                 for all 7^2 = 49 pairs
+ *   - Bottom: HJ(COMPOSE, x) == x                         for x in {FORM..ORIGIN}
+ *   - Top: HJ(ORIGIN, x) == ORIGIN                        for all x
+ */
+/* HJ table — 7x7 hexad-join.  Columns: FORM SUB PASS ESS MOT COMP ORG.
+ * Row N corresponds to first operand kind N+1.  iiis-1 parser requires
+ * array initializer on a single line (multi-line array w/ interleaved
+ * comments not yet supported). */
+var XII_HJ_TABLE : [u8; 49] = [1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 7u8, 2u8, 2u8, 3u8, 4u8, 5u8, 2u8, 7u8, 3u8, 3u8, 3u8, 4u8, 5u8, 3u8, 7u8, 4u8, 4u8, 4u8, 4u8, 5u8, 4u8, 7u8, 5u8, 5u8, 5u8, 5u8, 5u8, 5u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 7u8, 7u8, 7u8, 7u8, 7u8, 7u8, 7u8]
+
+/* ------------------------------------------------------------------ */
+/* Core HJ lookup                                                      */
+/* ------------------------------------------------------------------ */
+
+/* Returns HJ(a, b). If either operand is invalid (0 or >7), returns 0. */
+fn xii_hj_join(a: u8, b: u8) -> u8 @export {
+    if a == 0u8 { return 0u8 }
+    if b == 0u8 { return 0u8 }
+    if a > 7u8 { return 0u8 }
+    if b > 7u8 { return 0u8 }
+    let ai : u32 = (a as u32) - 1u32
+    let bi : u32 = (b as u32) - 1u32
+    let idx : u32 = (ai * 7u32) + bi
+    return XII_HJ_TABLE[idx]
+}
+
+/* Returns 1 iff HJ is associative on the given triple. Used by corpus 305. */
+fn xii_hj_is_associative(a: u8, b: u8, c: u8) -> u8 @export {
+    let ab : u8 = xii_hj_join(a, b)
+    let bc : u8 = xii_hj_join(b, c)
+    let lhs : u8 = xii_hj_join(ab, c)
+    let rhs : u8 = xii_hj_join(a, bc)
+    if lhs == rhs { return 1u8 }
+    return 0u8
+}
+
+/* Returns 1 iff HJ is commutative on the given pair. */
+fn xii_hj_is_commutative(a: u8, b: u8) -> u8 @export {
+    let ab : u8 = xii_hj_join(a, b)
+    let ba : u8 = xii_hj_join(b, a)
+    if ab == ba { return 1u8 }
+    return 0u8
+}
+
+/* Exhaustive associativity check over all 7^3 = 343 triples.
+ * Returns the count of associativity failures (must be 0 for a valid HJ). */
+fn xii_hj_assoc_full_check() -> u32 @export {
+    let mut fails : u32 = 0u32
+    let mut a : u8 = 1u8
+    while a <= 7u8 {
+        let mut b : u8 = 1u8
+        while b <= 7u8 {
+            let mut c : u8 = 1u8
+            while c <= 7u8 {
+                if xii_hj_is_associative(a, b, c) == 0u8 {
+                    fails = fails + 1u32
+                }
+                c = c + 1u8
+            }
+            b = b + 1u8
+        }
+        a = a + 1u8
+    }
+    return fails
+}
+
+/* Exhaustive commutativity check over all 7^2 = 49 pairs. */
+fn xii_hj_commut_full_check() -> u32 @export {
+    let mut fails : u32 = 0u32
+    let mut a : u8 = 1u8
+    while a <= 7u8 {
+        let mut b : u8 = 1u8
+        while b <= 7u8 {
+            if xii_hj_is_commutative(a, b) == 0u8 {
+                fails = fails + 1u32
+            }
+            b = b + 1u8
+        }
+        a = a + 1u8
+    }
+    return fails
+}
+
+/* COMPOSE is the HJ-identity for the 6 non-COMPOSE hexads. Verify. */
+fn xii_hj_compose_identity_check() -> u32 @export {
+    let mut fails : u32 = 0u32
+    let mut x : u8 = 1u8
+    while x <= 7u8 {
+        if x != XHJ_HEXAD_COMPOSE {
+            let r : u8 = xii_hj_join(XHJ_HEXAD_COMPOSE, x)
+            if r != x { fails = fails + 1u32 }
+        }
+        x = x + 1u8
+    }
+    return fails
+}
+
+/* ORIGIN dominates: HJ(ORIGIN, x) == ORIGIN for all x. */
+fn xii_hj_origin_dominates_check() -> u32 @export {
+    let mut fails : u32 = 0u32
+    let mut x : u8 = 1u8
+    while x <= 7u8 {
+        let r : u8 = xii_hj_join(XHJ_HEXAD_ORIGIN, x)
+        if r != XHJ_HEXAD_ORIGIN { fails = fails + 1u32 }
+        x = x + 1u8
+    }
+    return fails
+}
+
+/* Returns the sealed table base pointer for SHA-256 mhash computation. */
+fn xii_hj_table_ptr() -> u64 @export {
+    return &XII_HJ_TABLE as u64
+}
+
+fn xii_hj_table_len() -> u32 @export {
+    return XHJ_TABLE_LEN
+}

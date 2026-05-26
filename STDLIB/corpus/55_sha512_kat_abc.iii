@@ -1,0 +1,20 @@
+/* sha512 KAT: SHA-512("abc") = ddaf35a1936...  exit=first byte=0xDD=221 */
+module corpus_55
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha512_oneshot(input: *u8, len: u64, out: *u8) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_digest_byte(i: u32) -> u32 from "sha512.iii"
+
+fn main() -> u64 {
+    let inp : *u8 = malloc(3u64)
+    inp[0] = 97u8
+    inp[1] = 98u8
+    inp[2] = 99u8
+    let out : *u8 = malloc(64u64)
+    sha512_oneshot(inp, 3u64, out)
+    let b0 : u32 = sha512_digest_byte(0u32)
+    free(inp)
+    free(out)
+    return b0 as u64
+}

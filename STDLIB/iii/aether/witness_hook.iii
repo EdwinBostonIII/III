@@ -1,0 +1,489 @@
+/* aether/witness_hook.iii — Layer 2, Module 07 (gospel): universal witness
+ * fragment publication.  Every operation that produces provenance flows through
+ * wh_publish; the hook validates, computes the fragment id (Keccak256 over all
+ * fields), advances algebraic time, appends to the in-epoch log, and returns the
+ * fragment index.  wh_revoke marks a fragment revoked (the chain is append-only).
+ *
+ * Hexad: kind_witness + kind_essence.  Ring: R-1.  K: 0.99.
+ * Discipline: W2 (the gospel's wh_publish is the documented multi-field hook),
+ *             W6, W8 (bounded log), W14.
+ *
+ * Reconciliations (NOT scaling — full gospel capacity retained verbatim):
+ *   - keccak256 streaming externed from keccak256.iii (the canonical wrapper).
+ *   - gospel's function-local `var tmp_buf`/`len_buf` -> module-scope scratch
+ *     (iiis local var arrays are module-scope only).
+ *   - `&ARR[expr]` element-address -> `((&ARR as u64)+off) as *u8`.
+ *   - witness_append_resolution(cycle_kind,payload,len) wrapper added for the
+ *     hotstuff/aether consumers that publish a resolution fragment.
+ */
+module aether_witness_hook
+
+extern @abi(c-msvc-x64) fn at_advance() -> u64 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn keccak256_init() -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_update(input: *u8, len: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_final(out: *u8) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+/* M6: the provenance spine is content-addressed by the ONE primitive (cad/M1).
+ * cad_begin(KECCAK)/cad_payload/cad_final are byte-identical to keccak256 init/update/final
+ * (cad_payload adds NO separator -- only cad_domain does), so every frag_id is unchanged. */
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+const WH_SUITE_KECCAK : u32 = 1u32   /* cad CAD_SUITE_KECCAK256 */
+
+const WH_OK              : i32 =  0i32
+const WH_E_FULL          : i32 = -1i32
+const WH_E_NULL          : i32 = -2i32
+const WH_E_BAD_IDX       : i32 = -3i32
+const WH_E_BAD_PAYLOAD   : i32 = -4i32
+const WH_E_TOO_MANY_ANTE : i32 = -5i32
+
+const WH_MAX_FRAGMENTS   : u64 = 1048576u64
+const WH_PAYLOAD_AREA    : u64 = 67108864u64    /* 64 MiB rolling payload buffer */
+const WH_MAX_ANTECEDENTS : u32 = 32u32
+
+/* Per-fragment fixed fields (FULL gospel capacity: 1M fragments).  The large
+ * byte-addressed buffers are declared [u64; bytes/8] rather than [u8; bytes]:
+ * iiis allocates 8 bytes per array element (the u64-slot model), so [u8; B]
+ * would reserve 8*B; [u64; B/8] reserves EXACTLY B bytes — same capacity,
+ * fits the small code model's 2 GiB RIP-relative reach.  All access is via
+ * byte-pointer arithmetic ((&ARR as u64)+offset) so the backing type is
+ * transparent.  Capacity is identical to the gospel (no down-scaling). */
+var WH_FRAG_ID         : [u64; 4194304]    /* 1M*32 = 33554432 bytes */
+var WH_PROD_ID         : [u64; 4194304]
+var WH_OP_ID           : [u64; 4194304]
+var WH_IN_COMMIT       : [u64; 4194304]
+var WH_OUT_COMMIT      : [u64; 4194304]
+var WH_AT_TIME         : [u64; 1048576]
+var WH_REV_TAG         : [u8;  1048576]
+var WH_PHASE_ID        : [u8;  1048576]
+var WH_PILLAR_ID       : [u16; 1048576]
+var WH_REVOKED         : [u8;  1048576]
+var WH_ANTE_COUNT      : [u32; 1048576]
+var WH_ANTE            : [u64; 134217728]   /* 1M*32*32 = 1073741824 bytes (1 GiB) */
+var WH_PAYLOAD_OFFSET  : [u64; 1048576]
+var WH_PAYLOAD_LEN     : [u32; 1048576]
+var WH_PAYLOAD_BUF     : [u64; 8388608]     /* 67108864 bytes (64 MiB) */
+var WH_PAYLOAD_USED    : u64 = 0u64
+/* M6 provable forgetting: redaction flag + the commitment of the forgotten payload.
+ * [u64; 4194304] = 1M*32 = 33554432 bytes (32 MiB) -- well within the 2 GiB reach. */
+var WH_REDACTED        : [u8;  1048576]
+var WH_REDACT_COMMIT   : [u64; 4194304]
+
+var WH_NEXT_IDX        : u64 = 0u64
+var WH_EPOCH_START_IDX : u64 = 0u64
+var WH_EPOCH_INDEX     : u64 = 0u64
+var WH_CHAIN_ROOT      : [u8; 32]
+var WH_INITED          : u8 = 0u8
+
+var WH_TMP16           : [u8; 16]   /* frag-id field scratch (was function-local) */
+var WH_LENBUF          : [u8; 4]
+var WH_ZERO_ID         : [u8; 32]   /* canonical zero id (system producer) */
+var WH_OUT_TMP         : [u8; 32]   /* payload commitment for witness_append_resolution */
+var WH_RES_ID          : [u8; 32]   /* resolution fragment id sink */
+
+fn wh_init(initial_time: u64) -> i32 @export {
+    WH_NEXT_IDX = 0u64
+    WH_EPOCH_START_IDX = 0u64
+    WH_EPOCH_INDEX = 0u64
+    WH_PAYLOAD_USED = 0u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        WH_CHAIN_ROOT[i] = 0u8
+        WH_ZERO_ID[i] = 0u8
+        i = i + 1u64
+    }
+    WH_INITED = 1u8
+    return WH_OK
+}
+
+/* Frag id = Keccak256( producer || opid || in_commit || out_commit || at_time ||
+ *   rev_tag || phase || pillar || ante_count || antecedents || payload_len || payload ) */
+fn wh_compute_frag_id(idx: u64, out_id: *u8) -> i32 {
+    cad_begin(WH_SUITE_KECCAK)
+    let prod_p : *u8 = ((&WH_PROD_ID as u64) + idx * 32u64) as *u8
+    cad_payload(prod_p as u64, 32u64)
+    let op_p   : *u8 = ((&WH_OP_ID as u64) + idx * 32u64) as *u8
+    cad_payload(op_p as u64, 32u64)
+    let in_p   : *u8 = ((&WH_IN_COMMIT as u64) + idx * 32u64) as *u8
+    cad_payload(in_p as u64, 32u64)
+    let out_p  : *u8 = ((&WH_OUT_COMMIT as u64) + idx * 32u64) as *u8
+    cad_payload(out_p as u64, 32u64)
+    let tmp : *u8 = (&WH_TMP16 as u64) as *u8
+    let t : u64 = WH_AT_TIME[idx]
+    tmp[0u64] = (t & 0xFFu64) as u8
+    tmp[1u64] = ((t >> 8u64) & 0xFFu64) as u8
+    tmp[2u64] = ((t >> 16u64) & 0xFFu64) as u8
+    tmp[3u64] = ((t >> 24u64) & 0xFFu64) as u8
+    tmp[4u64] = ((t >> 32u64) & 0xFFu64) as u8
+    tmp[5u64] = ((t >> 40u64) & 0xFFu64) as u8
+    tmp[6u64] = ((t >> 48u64) & 0xFFu64) as u8
+    tmp[7u64] = ((t >> 56u64) & 0xFFu64) as u8
+    tmp[8u64] = WH_REV_TAG[idx]
+    tmp[9u64] = WH_PHASE_ID[idx]
+    let pl : u32 = WH_PILLAR_ID[idx] as u32
+    tmp[10u64] = (pl & 0xFFu32) as u8
+    tmp[11u64] = ((pl >> 8u32) & 0xFFu32) as u8
+    let ac : u32 = WH_ANTE_COUNT[idx]
+    tmp[12u64] = (ac & 0xFFu32) as u8
+    tmp[13u64] = ((ac >> 8u32)  & 0xFFu32) as u8
+    tmp[14u64] = ((ac >> 16u32) & 0xFFu32) as u8
+    tmp[15u64] = ((ac >> 24u32) & 0xFFu32) as u8
+    cad_payload(tmp as u64, 16u64)
+    if ac > 0u32 {
+        let ap : *u8 = ((&WH_ANTE as u64) + idx * 32u64 * 32u64) as *u8
+        cad_payload(ap as u64, (ac as u64) * 32u64)
+    }
+    let lp : *u8 = (&WH_LENBUF as u64) as *u8
+    let pl_len : u32 = WH_PAYLOAD_LEN[idx]
+    lp[0u64] = (pl_len & 0xFFu32) as u8
+    lp[1u64] = ((pl_len >> 8u32) & 0xFFu32) as u8
+    lp[2u64] = ((pl_len >> 16u32) & 0xFFu32) as u8
+    lp[3u64] = ((pl_len >> 24u32) & 0xFFu32) as u8
+    cad_payload(lp as u64, 4u64)
+    if pl_len > 0u32 {
+        let pp : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_OFFSET[idx]) as *u8
+        cad_payload(pp as u64, pl_len as u64)
+    }
+    cad_final(out_id as u64)
+    return WH_OK
+}
+
+fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8,
+              out_commit: *u8, revtag: u8, phase: u8, pillar: u16,
+              antecedents: *u8, n_ante: u32,
+              payload: *u8, payload_len: u32,
+              out_frag_id: *u8) -> u64 @export {
+    if WH_INITED == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if WH_NEXT_IDX >= WH_MAX_FRAGMENTS { return 0xFFFFFFFFFFFFFFFFu64 }
+    if n_ante > WH_MAX_ANTECEDENTS { return 0xFFFFFFFFFFFFFFFFu64 }
+    let pl : u64 = payload_len as u64
+    if (WH_PAYLOAD_USED + pl) > WH_PAYLOAD_AREA { return 0xFFFFFFFFFFFFFFFFu64 }
+    let idx : u64 = WH_NEXT_IDX
+    ident_copy(producer,   ((&WH_PROD_ID as u64) + idx * 32u64) as *u8)
+    ident_copy(opid,       ((&WH_OP_ID as u64) + idx * 32u64) as *u8)
+    ident_copy(in_commit,  ((&WH_IN_COMMIT as u64) + idx * 32u64) as *u8)
+    ident_copy(out_commit, ((&WH_OUT_COMMIT as u64) + idx * 32u64) as *u8)
+    let new_time : u64 = at_advance()
+    WH_AT_TIME[idx]   = new_time
+    WH_REV_TAG[idx]   = revtag
+    WH_PHASE_ID[idx]  = phase
+    WH_PILLAR_ID[idx] = pillar
+    WH_REVOKED[idx]   = 0u8
+    WH_REDACTED[idx]  = 0u8
+    WH_ANTE_COUNT[idx] = n_ante
+    if n_ante > 0u32 {
+        let dst : *u8 = ((&WH_ANTE as u64) + idx * 32u64 * 32u64) as *u8
+        let mut i : u64 = 0u64
+        while i < (n_ante as u64) * 32u64 {
+            dst[i] = antecedents[i]
+            i = i + 1u64
+        }
+    }
+    WH_PAYLOAD_OFFSET[idx] = WH_PAYLOAD_USED
+    WH_PAYLOAD_LEN[idx]    = payload_len
+    if payload_len > 0u32 {
+        let dst2 : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_USED) as *u8
+        let mut j : u64 = 0u64
+        while j < pl {
+            dst2[j] = payload[j]
+            j = j + 1u64
+        }
+        WH_PAYLOAD_USED = WH_PAYLOAD_USED + pl
+    }
+    wh_compute_frag_id(idx, ((&WH_FRAG_ID as u64) + idx * 32u64) as *u8)
+    if (out_frag_id as u64) != 0u64 {
+        ident_copy(((&WH_FRAG_ID as u64) + idx * 32u64) as *u8, out_frag_id)
+    }
+    WH_NEXT_IDX = idx + 1u64
+    return idx
+}
+
+fn wh_revoke(idx: u64) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    WH_REVOKED[idx] = 1u8
+    return WH_OK
+}
+
+/* M6 provable forgetting: commit to the payload (keccak256), then zero it. The stored
+ * frag_id is LEFT INTACT (computed at publish), so the chain root + prev-links are
+ * unchanged -- a verifiable hole, not a silent gap. The content is gone; the commitment
+ * proves what was there without revealing it. (Redaction POLICY/authority is M20.) */
+fn wh_redact(idx: u64) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    let pl : u64 = WH_PAYLOAD_LEN[idx] as u64
+    let src : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_OFFSET[idx]) as *u8
+    let com : *u8 = ((&WH_REDACT_COMMIT as u64) + idx * 32u64) as *u8
+    cad_oneshot(WH_SUITE_KECCAK, src as *u8, pl, com as *u8)   /* H2: redaction commitment via cad (byte-identical) */
+    let mut i : u64 = 0u64
+    while i < pl { src[i] = 0u8  i = i + 1u64 }
+    WH_REDACTED[idx] = 1u8
+    return WH_OK
+}
+fn wh_is_redacted(idx: u64) -> u8 @export {
+    if idx >= WH_NEXT_IDX { return 0u8 }
+    return WH_REDACTED[idx]
+}
+fn wh_redaction_commit(idx: u64, out: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    ident_copy(((&WH_REDACT_COMMIT as u64) + idx * 32u64) as *u8, out)
+    return WH_OK
+}
+fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    ident_copy(((&WH_FRAG_ID as u64) + idx * 32u64) as *u8, out_id)
+    return WH_OK
+}
+fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    let pl : u64 = WH_PAYLOAD_LEN[idx] as u64
+    if pl > max_len { return WH_E_BAD_PAYLOAD }
+    let src : *u8 = ((&WH_PAYLOAD_BUF as u64) + WH_PAYLOAD_OFFSET[idx]) as *u8
+    let mut i : u64 = 0u64
+    while i < pl {
+        out_buf[i] = src[i]
+        i = i + 1u64
+    }
+    out_len[0u64] = pl
+    return WH_OK
+}
+/* ---- field accessors (Phase-2 P1: consumers read published fields by idx) ----
+ * The 32-byte id getters mirror wh_get_frag_id (i32 status + out-param); the
+ * scalar getters return the value directly (bad idx -> 0), mirroring wh_next_idx. */
+fn wh_get_producer(idx: u64, out_id: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    ident_copy(((&WH_PROD_ID as u64) + idx * 32u64) as *u8, out_id)
+    return WH_OK
+}
+fn wh_get_op_id(idx: u64, out_id: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    ident_copy(((&WH_OP_ID as u64) + idx * 32u64) as *u8, out_id)
+    return WH_OK
+}
+fn wh_get_out_commit(idx: u64, out_id: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    ident_copy(((&WH_OUT_COMMIT as u64) + idx * 32u64) as *u8, out_id)
+    return WH_OK
+}
+fn wh_get_in_commit(idx: u64, out_id: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    ident_copy(((&WH_IN_COMMIT as u64) + idx * 32u64) as *u8, out_id)
+    return WH_OK
+}
+fn wh_get_pillar(idx: u64) -> u16 @export {
+    if idx >= WH_NEXT_IDX { return 0u16 }
+    return WH_PILLAR_ID[idx]
+}
+fn wh_get_phase(idx: u64) -> u8 @export {
+    if idx >= WH_NEXT_IDX { return 0u8 }
+    return WH_PHASE_ID[idx]
+}
+fn wh_get_time(idx: u64) -> u64 @export {
+    if idx >= WH_NEXT_IDX { return 0u64 }
+    return WH_AT_TIME[idx]
+}
+fn wh_is_revoked(idx: u64) -> u8 @export {
+    if idx >= WH_NEXT_IDX { return 0u8 }
+    return WH_REVOKED[idx]
+}
+fn wh_get_ante_count(idx: u64) -> u32 @export {
+    if idx >= WH_NEXT_IDX { return 0u32 }
+    return WH_ANTE_COUNT[idx]
+}
+fn wh_get_ante(idx: u64, ante_idx: u32, out_id: *u8) -> i32 @export {
+    if idx >= WH_NEXT_IDX { return WH_E_BAD_IDX }
+    let ac : u32 = WH_ANTE_COUNT[idx]
+    if ante_idx >= ac { return WH_E_BAD_IDX }
+    let off : u64 = idx * 32u64 * 32u64 + (ante_idx as u64) * 32u64
+    ident_copy(((&WH_ANTE as u64) + off) as *u8, out_id)
+    return WH_OK
+}
+
+fn wh_chain_root(out_id: *u8) -> i32 @export {
+    ident_copy((&WH_CHAIN_ROOT as u64) as *u8, out_id)
+    return WH_OK
+}
+
+/* Close epoch: hash every non-revoked fragment id in [start, next) into the
+ * chain root; return the closed epoch index. */
+fn wh_epoch_close() -> u64 @export {
+    cad_begin(WH_SUITE_KECCAK)
+    cad_payload((&WH_CHAIN_ROOT as u64), 32u64)
+    let mut i : u64 = WH_EPOCH_START_IDX
+    while i < WH_NEXT_IDX {
+        if WH_REVOKED[i] == 0u8 {
+            cad_payload((&WH_FRAG_ID as u64) + i * 32u64, 32u64)
+        }
+        i = i + 1u64
+    }
+    cad_final((&WH_CHAIN_ROOT as u64))
+    let e : u64 = WH_EPOCH_INDEX
+    WH_EPOCH_INDEX = e + 1u64
+    WH_EPOCH_START_IDX = WH_NEXT_IDX
+    return e
+}
+
+fn wh_next_idx() -> u64 @export { return WH_NEXT_IDX }
+fn wh_epoch_index() -> u64 @export { return WH_EPOCH_INDEX }
+
+/* Publish a resolution fragment (cycle_kind in the pillar slot, out_commit =
+ * Keccak256(payload)).  Convenience hook for the consensus/aether consumers.
+ * Named wh_append_resolution (not witness_append_resolution) — the latter is
+ * already the distinct K-chain export of sanctus/witness.iii; the C-ABI symbol
+ * must be unique across the aggregated lib. */
+fn wh_append_resolution(cycle_kind: u32, payload: *u8, payload_len: u32) -> i32 @export {
+    let ck : u32 = cycle_kind
+    let plen : u32 = payload_len
+    cad_oneshot(WH_SUITE_KECCAK, payload, plen as u64, (&WH_OUT_TMP as u64) as *u8)
+    let r : u64 = wh_publish((&WH_ZERO_ID as u64) as *u8, (&WH_ZERO_ID as u64) as *u8,
+                             (&WH_ZERO_ID as u64) as *u8, (&WH_OUT_TMP as u64) as *u8,
+                             0u8, 0u8, (ck & 0xFFFFu32) as u16,
+                             (&WH_ZERO_ID as u64) as *u8, 0u32,
+                             payload, plen, (&WH_RES_ID as u64) as *u8)
+    if r == 0xFFFFFFFFFFFFFFFFu64 { return WH_E_FULL }
+    return WH_OK
+}
+
+/* ---- self-test (99 = pass) ---- */
+var WH_T_PROD : [u8; 32]
+var WH_T_OP   : [u8; 32]
+var WH_T_PAY  : [u8; 64]
+var WH_T_GET  : [u8; 64]
+var WH_T_ID   : [u8; 32]
+var WH_T_ID2  : [u8; 32]
+var WH_T_GETID : [u8; 32]
+var WH_T_LEN  : [u64; 1]
+var WH_T_PRE  : [u8; 256]   /* flat frag-id preimage for the independent-recompute falsifier */
+
+fn wh_selftest() -> u64 @export {
+    wh_init(0u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 { WH_T_PROD[i] = (i + 1u64) as u8  WH_T_OP[i] = (i + 50u64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 64u64 { WH_T_PAY[i] = (i * 3u64 + 1u64) as u8  i = i + 1u64 }
+    /* publish fragment 0 */
+    let idx0 : u64 = wh_publish((&WH_T_PROD as u64) as *u8, (&WH_T_OP as u64) as *u8,
+                                (&WH_ZERO_ID as u64) as *u8, (&WH_ZERO_ID as u64) as *u8,
+                                0u8, 0u8, 7u16, (&WH_ZERO_ID as u64) as *u8, 0u32,
+                                (&WH_T_PAY as u64) as *u8, 64u32, (&WH_T_ID as u64) as *u8)
+    if idx0 != 0u64 { return 1u64 }
+    if wh_next_idx() != 1u64 { return 2u64 }
+    if at_current() != 1u64 { return 3u64 }              /* time advanced once */
+    /* payload round-trips */
+    wh_get_payload(0u64, (&WH_T_GET as u64) as *u8, 64u64, (&WH_T_LEN as u64) as *u8)
+    if WH_T_LEN[0] != 64u64 { return 4u64 }
+    i = 0u64
+    while i < 64u64 { if WH_T_GET[i] != WH_T_PAY[i] { return 5u64 }  i = i + 1u64 }
+    /* frag id is non-zero and matches wh_get_frag_id */
+    wh_get_frag_id(0u64, (&WH_T_ID2 as u64) as *u8)
+    let mut acc : u32 = 0u32
+    i = 0u64
+    while i < 32u64 { acc = acc | (WH_T_ID[i] as u32)  if WH_T_ID[i] != WH_T_ID2[i] { return 6u64 }  i = i + 1u64 }
+    if acc == 0u32 { return 7u64 }                       /* id not all-zero */
+    /* accessor getters reflect fragment 0's published fields (read-only) */
+    if wh_get_pillar(0u64) != 7u16 { return 70u64 }
+    if wh_get_time(0u64) != 1u64 { return 71u64 }
+    if wh_is_revoked(0u64) != 0u8 { return 72u64 }
+    if wh_get_ante_count(0u64) != 0u32 { return 73u64 }
+    wh_get_producer(0u64, (&WH_T_GETID as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if WH_T_GETID[i] != WH_T_PROD[i] { return 74u64 }  i = i + 1u64 }
+    wh_get_op_id(0u64, (&WH_T_GETID as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if WH_T_GETID[i] != WH_T_OP[i] { return 75u64 }  i = i + 1u64 }
+    /* publish fragment 1: distinct payload -> distinct frag id */
+    WH_T_PAY[0] = WH_T_PAY[0] ^ 0xFFu8
+    let idx1 : u64 = wh_publish((&WH_T_PROD as u64) as *u8, (&WH_T_OP as u64) as *u8,
+                                (&WH_ZERO_ID as u64) as *u8, (&WH_ZERO_ID as u64) as *u8,
+                                0u8, 0u8, 7u16, (&WH_ZERO_ID as u64) as *u8, 0u32,
+                                (&WH_T_PAY as u64) as *u8, 64u32, (&WH_T_ID2 as u64) as *u8)
+    if idx1 != 1u64 { return 8u64 }
+    let mut same : u32 = 1u32
+    i = 0u64
+    while i < 32u64 { if WH_T_ID[i] != WH_T_ID2[i] { same = 0u32 }  i = i + 1u64 }
+    if same == 1u32 { return 9u64 }                      /* distinct */
+    /* revoke + epoch close */
+    if wh_revoke(0u64) != 0i32 { return 10u64 }
+    if WH_REVOKED[0] != 1u8 { return 11u64 }
+    let e : u64 = wh_epoch_close()
+    if e != 0u64 { return 12u64 }
+    if wh_epoch_index() != 1u64 { return 13u64 }
+    /* wh_append_resolution publishes fragment 2 */
+    if wh_append_resolution(0x18u32, (&WH_T_PAY as u64) as *u8, 64u32) != 0i32 { return 14u64 }
+    if wh_next_idx() != 3u64 { return 15u64 }
+    /* ---- M6 provable forgetting ---- */
+    i = 0u64
+    while i < 32u64 { WH_T_PAY[i] = (i + 7u64) as u8  i = i + 1u64 }
+    let idx3 : u64 = wh_publish((&WH_T_PROD as u64) as *u8, (&WH_T_OP as u64) as *u8,
+                                (&WH_ZERO_ID as u64) as *u8, (&WH_ZERO_ID as u64) as *u8,
+                                0u8, 0u8, 9u16, (&WH_ZERO_ID as u64) as *u8, 0u32,
+                                (&WH_T_PAY as u64) as *u8, 32u32, (&WH_T_ID as u64) as *u8)
+    if idx3 != 3u64 { return 16u64 }
+    /* expected commitment = keccak256(original payload), computed BEFORE redaction */
+    keccak256_oneshot((&WH_T_PAY as u64), 32u64, (&WH_T_ID2 as u64))
+    /* save the stored frag id (must survive redaction) */
+    wh_get_frag_id(idx3, (&WH_T_GETID as u64) as *u8)
+    if wh_redact(idx3) != 0i32 { return 17u64 }
+    if wh_is_redacted(idx3) != 1u8 { return 18u64 }
+    /* the payload content is forgotten (zeroed hole) */
+    wh_get_payload(idx3, (&WH_T_GET as u64) as *u8, 64u64, (&WH_T_LEN as u64) as *u8)
+    let mut nz : u32 = 0u32
+    i = 0u64
+    while i < WH_T_LEN[0] { nz = nz | (WH_T_GET[i] as u32)  i = i + 1u64 }
+    if nz != 0u32 { return 19u64 }
+    /* stored frag id UNCHANGED -> chain integrity preserved (no broken link) */
+    wh_get_frag_id(idx3, (&WH_T_ID as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if WH_T_ID[i] != WH_T_GETID[i] { return 20u64 }  i = i + 1u64 }
+    /* the redaction commitment == keccak256(original payload) -> the verifiable hole */
+    wh_redaction_commit(idx3, (&WH_T_GETID as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if WH_T_GETID[i] != WH_T_ID2[i] { return 21u64 }  i = i + 1u64 }
+    /* a non-redacted sibling stays intact (no over-redaction) */
+    if wh_is_redacted(1u64) != 0u8 { return 22u64 }
+    /* ---- frag_id falsifier: independent flat-preimage recompute vs the streaming path ----
+     * Assemble fragment 0's canonical preimage and keccak256_oneshot it (the RAW backend, not
+     * cad); it must equal wh_get_frag_id(0) (the streaming wh_compute_frag_id path, now routed
+     * through cad/M1). Equality proves both the canonical encoding AND that the cad-routing is
+     * byte-identical -- the runtime baseline the frag_id lacked. */
+    let pre : *u8 = (&WH_T_PRE as u64) as *u8
+    wh_get_producer(0u64, pre)
+    wh_get_op_id(0u64, ((&WH_T_PRE as u64) + 32u64) as *u8)
+    wh_get_in_commit(0u64, ((&WH_T_PRE as u64) + 64u64) as *u8)
+    wh_get_out_commit(0u64, ((&WH_T_PRE as u64) + 96u64) as *u8)
+    let t0 : u64 = wh_get_time(0u64)
+    pre[128u64] = (t0 & 0xFFu64) as u8
+    pre[129u64] = ((t0 >> 8u64) & 0xFFu64) as u8
+    pre[130u64] = ((t0 >> 16u64) & 0xFFu64) as u8
+    pre[131u64] = ((t0 >> 24u64) & 0xFFu64) as u8
+    pre[132u64] = ((t0 >> 32u64) & 0xFFu64) as u8
+    pre[133u64] = ((t0 >> 40u64) & 0xFFu64) as u8
+    pre[134u64] = ((t0 >> 48u64) & 0xFFu64) as u8
+    pre[135u64] = ((t0 >> 56u64) & 0xFFu64) as u8
+    pre[136u64] = 0u8                            /* fragment 0 rev_tag = 0 */
+    pre[137u64] = wh_get_phase(0u64)
+    let p0 : u32 = wh_get_pillar(0u64) as u32
+    pre[138u64] = (p0 & 0xFFu32) as u8
+    pre[139u64] = ((p0 >> 8u32) & 0xFFu32) as u8
+    let a0 : u32 = wh_get_ante_count(0u64)
+    pre[140u64] = (a0 & 0xFFu32) as u8
+    pre[141u64] = ((a0 >> 8u32) & 0xFFu32) as u8
+    pre[142u64] = ((a0 >> 16u32) & 0xFFu32) as u8
+    pre[143u64] = ((a0 >> 24u32) & 0xFFu32) as u8
+    wh_get_payload(0u64, ((&WH_T_PRE as u64) + 148u64) as *u8, 64u64, (&WH_T_LEN as u64) as *u8)
+    let pl0 : u32 = WH_T_LEN[0] as u32
+    pre[144u64] = (pl0 & 0xFFu32) as u8
+    pre[145u64] = ((pl0 >> 8u32) & 0xFFu32) as u8
+    pre[146u64] = ((pl0 >> 16u32) & 0xFFu32) as u8
+    pre[147u64] = ((pl0 >> 24u32) & 0xFFu32) as u8
+    let total : u64 = 148u64 + (pl0 as u64)
+    keccak256_oneshot((&WH_T_PRE as u64), total, (&WH_T_ID2 as u64))
+    wh_get_frag_id(0u64, (&WH_T_ID as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if WH_T_ID[i] != WH_T_ID2[i] { return 23u64 }  i = i + 1u64 }
+    return 99u64
+}

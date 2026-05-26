@@ -1,0 +1,4 @@
+/* 653 — math_library_curation: ticketed propose/finalize curation over math_library. */
+module corpus_653
+extern @abi(c-msvc-x64) fn mlcur_selftest() -> u64 from "math_library_curation.iii"
+fn main() -> u64 { return mlcur_selftest() }

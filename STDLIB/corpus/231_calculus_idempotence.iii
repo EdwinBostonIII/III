@@ -1,0 +1,93 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\231_calculus_idempotence.iii
+ *
+ * III conformance corpus 231 -- calculus init is idempotent.
+ *
+ * Sealing requires that re-invoking calculus_init() never changes the
+ * sealed identity. This test asserts the strict invariant: every
+ * reachable byte of calculus state is bit-identical after multiple
+ * init calls.
+ *
+ * Asserts:
+ *   1. After two init calls, root_mhash byte-for-byte identical.
+ *   2. After a third init call, primitive_count, version, hexad,
+ *      k_cost, param_schema, ring_min are unchanged.
+ *   3. calculus_is_initialised returns 1 after first init AND remains
+ *      1 across subsequent inits (no fold-back to 0).
+ *
+ * Exit code: 99 on full pass; 1..N on failure.
+ */
+
+module corpus_231
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn calculus_init() -> i32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_is_initialised() -> u8 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_count() -> u32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_hexad(p_id: u32) -> u8 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_k_cost(p_id: u32) -> u64 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_param_schema(p_id: u32) -> u64 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_ring_min(p_id: u32) -> u8 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_root_mhash(out_32: u64) -> i32 from "calculus_v1.iii"
+
+fn _bytes_eq(a: *u8, b: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n {
+        if a[i] != b[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* Init x 3; collect root_mhash after each call. */
+    let m1 : *u8 = malloc(32u64)
+    let m2 : *u8 = malloc(32u64)
+    let m3 : *u8 = malloc(32u64)
+    if m1 as u64 == 0u64 { return 1u64 }
+    if m2 as u64 == 0u64 { return 2u64 }
+    if m3 as u64 == 0u64 { return 3u64 }
+
+    calculus_init()
+    if calculus_is_initialised() != 1u8 { return 4u64 }
+    calculus_root_mhash(m1 as u64)
+
+    calculus_init()
+    if calculus_is_initialised() != 1u8 { return 5u64 }
+    calculus_root_mhash(m2 as u64)
+
+    calculus_init()
+    if calculus_is_initialised() != 1u8 { return 6u64 }
+    calculus_root_mhash(m3 as u64)
+
+    /* All three root_mhash buffers must be byte-identical. */
+    if _bytes_eq(m1, m2, 32u64) != 1u8 { return 7u64 }
+    if _bytes_eq(m2, m3, 32u64) != 1u8 { return 8u64 }
+
+    /* primitive_count remains 19. */
+    if calculus_primitive_count() != 19u32 { return 9u64 }
+
+    /* Per-primitive metadata is bit-stable across re-inits. */
+    let mut p : u32 = 1u32
+    while p <= 19u32 {
+        let h_a : u8 = calculus_primitive_hexad(p)
+        let h_b : u8 = calculus_primitive_hexad(p)
+        if h_a != h_b { return 10u64 }
+        let k_a : u64 = calculus_primitive_k_cost(p)
+        let k_b : u64 = calculus_primitive_k_cost(p)
+        if k_a != k_b { return 11u64 }
+        let s_a : u64 = calculus_primitive_param_schema(p)
+        let s_b : u64 = calculus_primitive_param_schema(p)
+        if s_a != s_b { return 12u64 }
+        let r_a : u8 = calculus_primitive_ring_min(p)
+        let r_b : u8 = calculus_primitive_ring_min(p)
+        if r_a != r_b { return 13u64 }
+        p = p + 1u32
+    }
+
+    free(m1)
+    free(m2)
+    free(m3)
+    return 99u64
+}

@@ -1,0 +1,78 @@
+/* omnia::sid — sid_dependency_graph returns vec_u64 of direct (1-hop)
+ * dependents of a crystal in insertion order.
+ *
+ * Build: A → {B, C, D}, then assert sid_dependency_graph(A) reports
+ * exactly 3 children in the right order. */
+module corpus_95
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+
+extern @abi(c-msvc-x64) fn sid_dependency_graph(arena_id: u64, id: u64) -> u64 from "crystal_deps.iii"
+
+fn fill_site(p: *u8, base: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = base + (i as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let site_a : *u8 = malloc(32u64)
+    let site_b : *u8 = malloc(32u64)
+    let site_c : *u8 = malloc(32u64)
+    let site_d : *u8 = malloc(32u64)
+    fill_site(site_a, 0xA1u8)
+    fill_site(site_b, 0xB2u8)
+    fill_site(site_c, 0xC3u8)
+    fill_site(site_d, 0xD4u8)
+
+    let ar : u64 = arena_new(1u64 << 14u64)
+    if ar == 0u64 { return 1u64 }
+
+    let a : u64 = crystal_mint(0xA0u32, site_a as u64, 0u64, 0u64)
+    let b : u64 = crystal_mint(0xB0u32, site_b as u64, 0u64, 0u64)
+    let c : u64 = crystal_mint(0xC0u32, site_c as u64, 0u64, 0u64)
+    let d : u64 = crystal_mint(0xD0u32, site_d as u64, 0u64, 0u64)
+    if a == 0u64 { return 2u64 }
+    if b == 0u64 { return 3u64 }
+    if c == 0u64 { return 4u64 }
+    if d == 0u64 { return 5u64 }
+
+    crystal_edges_init(a, ar)
+    crystal_edges_add(a, b)
+    crystal_edges_add(a, c)
+    crystal_edges_add(a, d)
+
+    let v : u64 = sid_dependency_graph(ar, a)
+    if v == 0u64 { return 6u64 }
+    if vec_u64_count(v) != 3u64 { return 7u64 }
+    if vec_u64_at(v, 0u64) != b { return 8u64 }
+    if vec_u64_at(v, 1u64) != c { return 9u64 }
+    if vec_u64_at(v, 2u64) != d { return 10u64 }
+
+    /* No edges → empty result vec. */
+    crystal_edges_init(b, ar)
+    let v2 : u64 = sid_dependency_graph(ar, b)
+    if v2 == 0u64 { return 11u64 }
+    if vec_u64_count(v2) != 0u64 { return 12u64 }
+
+    crystal_drop(a); crystal_drop(b); crystal_drop(c); crystal_drop(d)
+    arena_drop(ar)
+    free(site_a); free(site_b); free(site_c); free(site_d)
+    return 99u64
+}

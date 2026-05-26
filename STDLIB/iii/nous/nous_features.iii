@@ -1,0 +1,106 @@
+/* STDLIB/iii/nous/nous_features.iii -- integer features of a term (nous Phase 3).
+ *
+ * The proposer ranks rules by an integer-quantized score over features of the context
+ * term and the goal kind.  This module extracts those features -- ALL integer, no
+ * float, deterministic -- so the policy (nous_policy.iii) is a pure integer function:
+ *   kind  -- the term's XII kind (the dominant feature: trit kinds 24-29 favour the
+ *            trit rules, fusion kinds 18-23 favour the structural rules).
+ *   size  -- the term-tree node count (a structural proxy for reduction work).
+ *   depth -- the term-tree depth.
+ *
+ * DELIBERATELY xii_term-ONLY (no xii_canonicalise dependency): the engine chain is
+ * xii_canonicalise -> xii_rewrite -> nous_socket -> nous_policy -> nous_features, so a
+ * back-edge from features to xii_canonicalise (e.g. xii_canon_weight) would close a
+ * dependency cycle.  A structural node-count gives an equivalent integer feature with
+ * NO such edge -- the proposer chain stays acyclic, bottoming out at the xii_term leaf.
+ *
+ * Hexad: kind_sensitivity (it senses the term's shape).  Ring: R0.  K: 1.00.
+ * NIH: xii_term only.  Determinism: integer-only; ==/!= compares; bounded recursion;
+ * single-line fns.
+ */
+module nous_features
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+
+const NOUS_FEAT_NULL     : u32 = 0xFFFFFFFFu32
+const NOUS_FEAT_K18      : u8  = 17u8   /* <=17 = basis kernel (a leaf) */
+const NOUS_FEAT_FIF      : u8  = 22u8   /* the only ternary fusion (has child c) */
+const NOUS_FEAT_MAXDEPTH : u32 = 64u32  /* recursion bound (tamper guard) */
+
+fn nous_feat_kind(t: u32) -> u32 @export {
+    if t == NOUS_FEAT_NULL { return 0u32 }
+    return xii_term_get_kind(t) as u32
+}
+
+/* Bounded term-tree depth: basis kernels are depth 1; a fusion is 1 + max child depth. */
+fn nous_feat_depth_b(t: u32, budget: u32) -> u32 {
+    if t == NOUS_FEAT_NULL { return 0u32 }
+    if budget == 0u32 { return 0u32 }
+    let k : u8 = xii_term_get_kind(t)
+    if k <= NOUS_FEAT_K18 { return 1u32 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let mut m : u32 = nous_feat_depth_b(a, budget - 1u32)
+    let db : u32 = nous_feat_depth_b(b, budget - 1u32)
+    if db > m { m = db }
+    if k == NOUS_FEAT_FIF {
+        let c : u32 = xii_term_get_child_c(t)
+        let dc : u32 = nous_feat_depth_b(c, budget - 1u32)
+        if dc > m { m = dc }
+    }
+    return m + 1u32
+}
+
+fn nous_feat_depth(t: u32) -> u32 @export {
+    return nous_feat_depth_b(t, NOUS_FEAT_MAXDEPTH)
+}
+
+/* Bounded term-tree node count (structural; xii_term-only). */
+fn nous_feat_size_b(t: u32, budget: u32) -> u32 {
+    if t == NOUS_FEAT_NULL { return 0u32 }
+    if budget == 0u32 { return 0u32 }
+    let k : u8 = xii_term_get_kind(t)
+    if k <= NOUS_FEAT_K18 { return 1u32 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let mut s : u32 = 1u32 + nous_feat_size_b(a, budget - 1u32) + nous_feat_size_b(b, budget - 1u32)
+    if k == NOUS_FEAT_FIF {
+        let c : u32 = xii_term_get_child_c(t)
+        s = s + nous_feat_size_b(c, budget - 1u32)
+    }
+    return s
+}
+
+fn nous_feat_size(t: u32) -> u32 @export {
+    return nous_feat_size_b(t, NOUS_FEAT_MAXDEPTH)
+}
+
+fn nous_features_selftest() -> u64 @export {
+    if nous_feat_kind(NOUS_FEAT_NULL) != 0u32 { return 1u64 }
+    if nous_feat_depth(NOUS_FEAT_NULL) != 0u32 { return 2u64 }
+    if nous_feat_size(NOUS_FEAT_NULL) != 0u32 { return 3u64 }
+
+    xii_term_arena_reset()
+    let v : u32 = xii_term_make_basis(24u8, 1u32)      /* TRIT_VAL leaf */
+    if nous_feat_kind(v) != 24u32 { return 4u64 }
+    if nous_feat_depth(v) != 1u32 { return 5u64 }
+    if nous_feat_size(v) != 1u32 { return 6u64 }
+
+    let v2 : u32 = xii_term_make_basis(24u8, 2u32)
+    let t : u32 = xii_term_make_fusion2(26u8, v, v2)   /* AND(VAL,VAL) */
+    if nous_feat_kind(t) != 26u32 { return 7u64 }
+    if nous_feat_depth(t) != 2u32 { return 8u64 }
+    if nous_feat_size(t) != 3u32 { return 9u64 }       /* AND + 2 leaves */
+
+    /* determinism */
+    if nous_feat_depth(t) != nous_feat_depth(t) { return 10u64 }
+    if nous_feat_size(t) != nous_feat_size(t) { return 11u64 }
+
+    return 99u64
+}

@@ -1,0 +1,199 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\list.iii
+ *
+ * III STDLIB - omnia::list
+ *
+ * Singly-linked list of u64 values.  Stored in a slot table -- indices
+ * are passed across the FFI as u64.  Each list owns its arena-backed
+ * node pool.  Nodes are 16 bytes (value:u64, next_idx:u64).
+ *
+ *   list_new(arena_id:u64, hard_max:u64) -> u64       -- list_id (slot+1)
+ *   list_push_front(list_id:u64, value:u64) -> i32
+ *   list_push_back(list_id:u64, value:u64) -> i32
+ *   list_pop_front(list_id:u64) -> u64                -- value or LIST_INVALID
+ *   list_front(list_id:u64) -> u64                    -- peek without remove
+ *   list_count(list_id:u64) -> u64
+ *   list_at(list_id:u64, i:u64) -> u64                -- O(i)
+ *   list_drop(list_id:u64) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.97.
+ */
+
+module omnia_list
+
+extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+const LIST_MAX_INSTANCES : u32 = 32u32
+const LIST_INVALID : u64 = 0xFFFFFFFFFFFFFFFFu64
+const LIST_OK : i32 = 0i32
+const LIST_E_FULL : i32 = -1i32
+const LIST_E_OOM  : i32 = -2i32
+const LIST_E_BADID: i32 = -3i32
+const LIST_E_EMPTY: i32 = -4i32
+
+const LIST_NIL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var LIST_LIVE      : [u8;  32]
+var LIST_ARENA     : [u64; 32]
+var LIST_NODE_BASE : [u64; 32]    /* base address of node pool */
+var LIST_NODE_CAP  : [u64; 32]    /* total nodes available */
+var LIST_NODE_USED : [u64; 32]    /* next free index */
+var LIST_HEAD      : [u64; 32]    /* head node index, LIST_NIL if empty */
+var LIST_TAIL      : [u64; 32]
+var LIST_LEN       : [u64; 32]
+
+fn list_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (LIST_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if LIST_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+fn list_new(arena_id: u64, hard_max: u64) -> u64 @export {
+    if hard_max == 0u64 { return 0u64 }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < LIST_MAX_INSTANCES {
+        if LIST_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return 0u64 }
+    let bytes : u64 = hard_max * 16u64
+    let base : u64 = arena_alloc8(arena_id, bytes)
+    if base == 0u64 { return 0u64 }
+    LIST_ARENA[slot]     = arena_id
+    LIST_NODE_BASE[slot] = base
+    LIST_NODE_CAP[slot]  = hard_max
+    LIST_NODE_USED[slot] = 0u64
+    LIST_HEAD[slot]      = LIST_NIL
+    LIST_TAIL[slot]      = LIST_NIL
+    LIST_LEN[slot]       = 0u64
+    LIST_LIVE[slot]      = 1u8
+    return (slot as u64) + 1u64
+}
+
+/* Internal: store / load node fields by index. */
+fn list_node_set(base: u64, idx: u64, value: u64, next: u64) -> i32 {
+    let p : u64 = base + idx * 16u64
+    let pv : *u64 = p as *u64
+    pv[0] = value
+    pv[1] = next
+    return LIST_OK
+}
+
+fn list_node_value(base: u64, idx: u64) -> u64 {
+    let pv : *u64 = (base + idx * 16u64) as *u64
+    return pv[0]
+}
+
+fn list_node_next(base: u64, idx: u64) -> u64 {
+    let pv : *u64 = (base + idx * 16u64) as *u64
+    return pv[1]
+}
+
+fn list_node_set_next(base: u64, idx: u64, next: u64) -> i32 {
+    let pv : *u64 = (base + idx * 16u64) as *u64
+    pv[1] = next
+    return LIST_OK
+}
+
+/* Allocate a fresh node index from the pool. */
+fn list_alloc_node(slot: u32) -> u64 {
+    let used : u64 = LIST_NODE_USED[slot]
+    if used >= LIST_NODE_CAP[slot] { return LIST_NIL }
+    LIST_NODE_USED[slot] = used + 1u64
+    return used
+}
+
+fn list_push_front(id: u64, value: u64) -> i32 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LIST_E_BADID }
+    let idx : u64 = list_alloc_node(s)
+    if idx == LIST_NIL { return LIST_E_FULL }
+    let base : u64 = LIST_NODE_BASE[s]
+    let old_head : u64 = LIST_HEAD[s]
+    list_node_set(base, idx, value, old_head)
+    LIST_HEAD[s] = idx
+    if LIST_TAIL[s] == LIST_NIL {
+        LIST_TAIL[s] = idx
+    }
+    LIST_LEN[s] = LIST_LEN[s] + 1u64
+    return LIST_OK
+}
+
+fn list_push_back(id: u64, value: u64) -> i32 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LIST_E_BADID }
+    let idx : u64 = list_alloc_node(s)
+    if idx == LIST_NIL { return LIST_E_FULL }
+    let base : u64 = LIST_NODE_BASE[s]
+    list_node_set(base, idx, value, LIST_NIL)
+    let old_tail : u64 = LIST_TAIL[s]
+    if old_tail == LIST_NIL {
+        LIST_HEAD[s] = idx
+    } else {
+        list_node_set_next(base, old_tail, idx)
+    }
+    LIST_TAIL[s] = idx
+    LIST_LEN[s] = LIST_LEN[s] + 1u64
+    return LIST_OK
+}
+
+fn list_pop_front(id: u64) -> u64 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LIST_INVALID }
+    let head : u64 = LIST_HEAD[s]
+    if head == LIST_NIL { return LIST_INVALID }
+    let base : u64 = LIST_NODE_BASE[s]
+    let v : u64 = list_node_value(base, head)
+    let next : u64 = list_node_next(base, head)
+    LIST_HEAD[s] = next
+    if next == LIST_NIL { LIST_TAIL[s] = LIST_NIL }
+    LIST_LEN[s] = LIST_LEN[s] - 1u64
+    return v
+}
+
+fn list_front(id: u64) -> u64 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LIST_INVALID }
+    let head : u64 = LIST_HEAD[s]
+    if head == LIST_NIL { return LIST_INVALID }
+    return list_node_value(LIST_NODE_BASE[s], head)
+}
+
+fn list_count(id: u64) -> u64 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return LIST_LEN[s]
+}
+
+fn list_at(id: u64, i: u64) -> u64 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LIST_INVALID }
+    if i >= LIST_LEN[s] { return LIST_INVALID }
+    let base : u64 = LIST_NODE_BASE[s]
+    let mut cur : u64 = LIST_HEAD[s]
+    let mut k : u64 = 0u64
+    while k < i {
+        cur = list_node_next(base, cur)
+        k = k + 1u64
+    }
+    return list_node_value(base, cur)
+}
+
+fn list_drop(id: u64) -> i32 @export {
+    let s : u32 = list_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LIST_E_BADID }
+    LIST_LIVE[s]      = 0u8
+    LIST_ARENA[s]     = 0u64
+    LIST_NODE_BASE[s] = 0u64
+    LIST_NODE_CAP[s]  = 0u64
+    LIST_NODE_USED[s] = 0u64
+    LIST_HEAD[s]      = LIST_NIL
+    LIST_TAIL[s]      = LIST_NIL
+    LIST_LEN[s]       = 0u64
+    return LIST_OK
+}

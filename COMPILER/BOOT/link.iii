@@ -1,0 +1,1552 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\link.iii
+ *
+ * III Stage-0 Linker — .iii port of link.c.
+ *
+ * Mirrors link.h ABI exactly (link-compatible with C iiis-0).  The
+ * opaque iii_link_state_t is collapsed to a module-singleton —
+ * iii_link_create returns a sentinel pointer, every other entry
+ * point ignores its `l` argument once create has been called.
+ *
+ * Stage-0 caps (less than link.c's; ample for the boot corpus):
+ *   modules    32     deps/module     16
+ *   exports    32     errors          32
+ *   name_cap   128    sym_cap         128
+ *
+ * NIH per ADR-021: no third-party crypto.  SHA-256 implemented
+ * inline (FIPS-180-4); copied from witness_alloc.iii with `l_`
+ * prefix to keep state private to this TU.
+ *
+ * Per-module byte layout (PER_MOD_BYTES = 6808):
+ *      0..127  name[128]            (NUL-padded)
+ *    128..159  local_mhash[32]
+ *    160..191  closure_mhash[32]
+ *    192..192  flags (u8: bit0=closure_done, bit1=closure_in_progress)
+ *    193..195  pad
+ *    196..199  dep_count (u32 LE)
+ *    200..2247 dep_names[16][128]
+ *   2248..2311 dep_idx[16] (i32 LE; -1 = unresolved)
+ *   2312..2315 export_count (u32 LE)
+ *   2316..6411 export_syms[32][128]
+ *   6412..6539 export_vis[32] (u32 LE)
+ *   6540..6795 export_addr[32] (u64 LE)
+ *   6796..6799 scc_index (i32 LE; -1 = unvisited)
+ *   6800..6803 scc_lowlink (i32 LE)
+ *   6804..6807 pad
+ *
+ * Per-error layout (ERR_BYTES = 48):
+ *    0..3   code (i32 LE)
+ *    4..7   msg_id (u32 LE; index into a static msg table)
+ *    8..11  use_node (u32 LE)
+ *   12..15  witness_count (u32 LE)
+ *   16..47  witness_mhash[32]
+ */
+
+module link
+
+/* ─── Caps and ABI constants (mirror link.h) ────────────────────────── */
+
+const LINK_MAX_MODULES   : u32 = 32u32
+const LINK_MAX_DEPS      : u32 = 16u32
+const LINK_MAX_EXPORTS   : u32 = 32u32
+const LINK_MAX_ERRORS    : u32 = 32u32
+const LINK_NAME_CAP      : u32 = 128u32
+const LINK_SYM_CAP       : u32 = 128u32
+
+const PER_MOD_BYTES      : u32 = 6808u32
+const ERR_BYTES          : u32 = 48u32
+
+/* Manifest constants (D6) */
+const MANIFEST_V1        : u32 = 0x494C4D31u32   /* 'ILM1' little-endian */
+const MANIFEST_VER       : u32 = 1u32
+const HEADER_BYTES       : u32 = 16u32
+const FOOTER_BYTES       : u32 = 32u32
+const MAX_SYM_LEN        : u32 = 255u32
+const MANIFEST_CAP       : u32 = 32768u32
+
+/* Visibility lattice (D8) */
+const VIS_PRIVATE        : u32 = 0u32
+const VIS_MODULE         : u32 = 1u32
+const VIS_PUBLIC         : u32 = 2u32
+const VIS_FEDERATED      : u32 = 3u32
+
+/* Stable error codes (mirror link.h, D13).  Note all stored as i32
+ * via the `as i32` casts since iii_link_error_t.code is signed. */
+const E_OK                : i32 = 0i32
+const E_NULL_ARG          : i32 = 1i32
+const E_CLOSURE_MISMATCH  : i32 = 2i32
+const E_UNKNOWN_MODULE    : i32 = 3i32
+const E_OOM               : i32 = 4i32
+const E_CYCLE             : i32 = 5i32
+const E_COLLISION         : i32 = 6i32
+const E_VISIBILITY        : i32 = 7i32
+const E_PIN_MISMATCH      : i32 = 8i32
+const E_UNRESOLVED        : i32 = 9i32
+const E_SEALED            : i32 = 10i32
+const E_PHASE             : i32 = 11i32
+const E_BAD_MANIFEST      : i32 = 12i32
+const E_TOO_MANY          : i32 = 13i32
+const E_INTERNAL          : i32 = 99i32
+
+/* ast.h kind constants used by verify_imports */
+const K_AST_MODULE  : u32 = 1u32
+const K_AST_USE     : u32 = 2u32        /* III_AST_USE — verified at runtime via accessor that returns 0 if mismatch */
+const K_AST_MHASH   : u32 = 0u32        /* sentinel; the EXPR_MHASH accessor returns 0 if the node is not mhash */
+
+/* ─── Externs: AST surface (link-port) ─────────────────────────────── */
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module_idx_c(ast: u64) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf_addr_c(ast: u64) -> u64 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_use_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_use_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_use_qname_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_use_qname_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_use_closure_mhash_node(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_mhash_bytes_addr(ast: u64, node: u32) -> u64 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_load_u8(ptr: u64) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
+
+/* ─── Module-singleton state (BSS) ─────────────────────────────────── */
+
+var LINK_SENTINEL    : [u8; 1]
+var LINK_MODULES     : [u8; 217856]    /* 32 * 6808 */
+var LINK_ERRORS      : [u8; 1536]      /* 32 * 48 */
+var LINK_MOD_COUNT   : u32 = 0u32
+var LINK_ERR_COUNT   : u32 = 0u32
+var LINK_PHASE_B     : u8  = 0u8
+var LINK_FINALIZED   : u8  = 0u8
+var LINK_SEALED      : u8  = 0u8
+var LINK_INIT        : u8  = 0u8
+
+var LINK_MANIFEST    : [u8; 32768]
+var LINK_MANIFEST_LEN: u32 = 0u32
+var LINK_MANIFEST_HAS: u8  = 0u8
+
+/* Tarjan scratch */
+var L_TJ_STACK       : [u8; 128]   /* 32 entries × i32 */
+var L_TJ_STACK_TOP   : u32 = 0u32
+var L_TJ_CALL_V      : [u8; 128]
+var L_TJ_CALL_NEXT   : [u8; 128]
+var L_TJ_CALL_TOP    : u32 = 0u32
+var L_TJ_INDEX       : i32 = 0i32
+var L_TJ_MEMBERS     : [u8; 128]
+
+/* Closure scratch (single-entry; we compute iteratively, not recursive) */
+var L_CLOS_SORTED    : [u8; 512]   /* 16 * 32 */
+var L_CLOS_SCOUNT    : u32 = 0u32
+
+/* Manifest entry list: parallel arrays of (mod_idx, exp_idx) */
+var L_ME_MOD         : [u8; 4096]  /* 1024 entries × i32 */
+var L_ME_EXP         : [u8; 4096]
+var L_ME_COUNT       : u32 = 0u32
+
+/* Domain tag bytes — built once at first use */
+var L_DOMAIN         : [u8; 11]    /* "III_LINK_v1" */
+var L_FOOTER_TAG     : [u8; 18]    /* "III_LINK_v1\0footer" */
+var L_TAGS_INIT      : u8  = 0u8
+
+/* SHA-256 working state (private prefix `l_`) */
+var L_K              : [u32; 64]
+var L_K_INIT         : u8  = 0u8
+var L_W              : [u32; 64]
+var L_H              : [u32; 8]
+var L_BUF            : [u8; 64]
+var L_BUFLEN         : u32 = 0u32
+var L_BITS           : u64 = 0u64
+
+/* ─── String/tag init ──────────────────────────────────────────────── */
+
+fn l_init_tags() -> u32 {
+    if L_TAGS_INIT == 1u8 { return 0u32 }
+    /* "III_LINK_v1" */
+    L_DOMAIN[0]  = 73u8   /* I */
+    L_DOMAIN[1]  = 73u8
+    L_DOMAIN[2]  = 73u8
+    L_DOMAIN[3]  = 95u8   /* _ */
+    L_DOMAIN[4]  = 76u8   /* L */
+    L_DOMAIN[5]  = 73u8   /* I */
+    L_DOMAIN[6]  = 78u8   /* N */
+    L_DOMAIN[7]  = 75u8   /* K */
+    L_DOMAIN[8]  = 95u8   /* _ */
+    L_DOMAIN[9]  = 118u8  /* v */
+    L_DOMAIN[10] = 49u8   /* 1 */
+
+    /* "III_LINK_v1\0footer" — 18 bytes */
+    L_FOOTER_TAG[0]  = 73u8
+    L_FOOTER_TAG[1]  = 73u8
+    L_FOOTER_TAG[2]  = 73u8
+    L_FOOTER_TAG[3]  = 95u8
+    L_FOOTER_TAG[4]  = 76u8
+    L_FOOTER_TAG[5]  = 73u8
+    L_FOOTER_TAG[6]  = 78u8
+    L_FOOTER_TAG[7]  = 75u8
+    L_FOOTER_TAG[8]  = 95u8
+    L_FOOTER_TAG[9]  = 118u8
+    L_FOOTER_TAG[10] = 49u8
+    L_FOOTER_TAG[11] = 0u8       /* embedded NUL */
+    L_FOOTER_TAG[12] = 102u8     /* f */
+    L_FOOTER_TAG[13] = 111u8     /* o */
+    L_FOOTER_TAG[14] = 111u8     /* o */
+    L_FOOTER_TAG[15] = 116u8     /* t */
+    L_FOOTER_TAG[16] = 101u8     /* e */
+    L_FOOTER_TAG[17] = 114u8     /* r */
+    L_TAGS_INIT = 1u8
+    return 0u32
+}
+
+/* ─── BSS pointer/byte primitives ──────────────────────────────────── */
+
+fn l_load_u8_at(addr: u64) -> u8 {
+    return (iii_ast_load_u8(addr) & 0xFFu32) as u8
+}
+
+fn l_store_u8_at(addr: u64, v: u8) -> u32 {
+    iii_ast_store_u8(addr, v as u32)
+    return 0u32
+}
+
+fn l_mod_base(idx: u32) -> u64 {
+    return (&LINK_MODULES as u64) + ((idx * PER_MOD_BYTES) as u64)
+}
+
+fn l_err_base(idx: u32) -> u64 {
+    return (&LINK_ERRORS as u64) + ((idx * ERR_BYTES) as u64)
+}
+
+fn l_load_u32_le(p: u64) -> u32 {
+    let b0 : u32 = iii_ast_load_u8(p)        & 0xFFu32
+    let b1 : u32 = iii_ast_load_u8(p + 1u64) & 0xFFu32
+    let b2 : u32 = iii_ast_load_u8(p + 2u64) & 0xFFu32
+    let b3 : u32 = iii_ast_load_u8(p + 3u64) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn l_store_u32_le(p: u64, v: u32) -> u32 {
+    iii_ast_store_u8(p,        v & 0xFFu32)
+    iii_ast_store_u8(p + 1u64, (v >> 8u32)  & 0xFFu32)
+    iii_ast_store_u8(p + 2u64, (v >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(p + 3u64, (v >> 24u32) & 0xFFu32)
+    return 0u32
+}
+
+fn l_load_i32_le(p: u64) -> i32 {
+    return l_load_u32_le(p) as i32
+}
+
+fn l_store_i32_le(p: u64, v: i32) -> u32 {
+    l_store_u32_le(p, v as u32)
+    return 0u32
+}
+
+fn l_load_u64_le(p: u64) -> u64 {
+    let lo : u64 = (l_load_u32_le(p) as u64)        & 0xFFFFFFFFu64
+    let hi : u64 = (l_load_u32_le(p + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn l_store_u64_le(p: u64, v: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        iii_ast_store_u8(p + (i as u64), ((v >> ((i * 8u32) as u64)) & 0xFFu64) as u32)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* memcpy/memset from one BSS region (or AST source) to another. */
+fn l_memcpy(dst: u64, src: u64, n: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        iii_ast_store_u8(dst + i, iii_ast_load_u8(src + i))
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn l_memset(dst: u64, v: u32, n: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        iii_ast_store_u8(dst + i, v & 0xFFu32)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn l_memcmp(a: u64, b: u64, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        let av : u32 = iii_ast_load_u8(a + i) & 0xFFu32
+        let bv : u32 = iii_ast_load_u8(b + i) & 0xFFu32
+        if av < bv { return 0i32 - 1i32 }
+        if av > bv { return 1i32 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* NUL-terminated string length, scanning at most cap bytes. */
+fn l_strlen_cap(p: u64, cap: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < cap {
+        if (iii_ast_load_u8(p + (i as u64)) & 0xFFu32) == 0u32 { return i }
+        i = i + 1u32
+    }
+    return cap
+}
+
+/* Compare two NUL-terminated strings (both bounded by NAME_CAP). */
+fn l_strcmp_cap(a: u64, b: u64, cap: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < cap {
+        let av : u32 = iii_ast_load_u8(a + (i as u64)) & 0xFFu32
+        let bv : u32 = iii_ast_load_u8(b + (i as u64)) & 0xFFu32
+        if av != bv {
+            if av < bv { return 0i32 - 1i32 }
+            return 1i32
+        }
+        if av == 0u32 { return 0i32 }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* Copy a string from src (up to len bytes) into dst (cap bytes),
+ * NUL-terminating.  Truncates to cap-1 if needed. */
+fn l_str_set(dst: u64, cap: u32, src: u64, slen: u32) -> u32 {
+    let mut n : u32 = slen
+    if n >= cap { n = cap - 1u32 }
+    let mut i : u32 = 0u32
+    while i < n {
+        iii_ast_store_u8(dst + (i as u64), iii_ast_load_u8(src + (i as u64)) & 0xFFu32)
+        i = i + 1u32
+    }
+    /* NUL terminate, then zero rest of slot */
+    while i < cap {
+        iii_ast_store_u8(dst + (i as u64), 0u32)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* ─── Per-module field accessors ───────────────────────────────────── */
+
+fn l_mod_name_addr(idx: u32) -> u64        { return l_mod_base(idx) +    0u64 }
+fn l_mod_local_mhash_addr(idx: u32) -> u64 { return l_mod_base(idx) +  128u64 }
+fn l_mod_closure_mhash_addr(idx: u32) -> u64 { return l_mod_base(idx) + 160u64 }
+
+fn l_mod_get_flags(idx: u32) -> u32 {
+    return iii_ast_load_u8(l_mod_base(idx) + 192u64) & 0xFFu32
+}
+fn l_mod_set_flags(idx: u32, v: u32) -> u32 {
+    iii_ast_store_u8(l_mod_base(idx) + 192u64, v & 0xFFu32)
+    return 0u32
+}
+fn l_mod_get_closure_done(idx: u32) -> u32 {
+    if (l_mod_get_flags(idx) & 1u32) != 0u32 { return 1u32 }
+    return 0u32
+}
+fn l_mod_set_closure_done(idx: u32, v: u32) -> u32 {
+    let mut f : u32 = l_mod_get_flags(idx) & (~1u32)
+    if v != 0u32 { f = f | 1u32 }
+    l_mod_set_flags(idx, f)
+    return 0u32
+}
+fn l_mod_get_closure_in_progress(idx: u32) -> u32 {
+    if (l_mod_get_flags(idx) & 2u32) != 0u32 { return 1u32 }
+    return 0u32
+}
+fn l_mod_set_closure_in_progress(idx: u32, v: u32) -> u32 {
+    let mut f : u32 = l_mod_get_flags(idx) & (~2u32)
+    if v != 0u32 { f = f | 2u32 }
+    l_mod_set_flags(idx, f)
+    return 0u32
+}
+fn l_mod_get_scc_onstack(idx: u32) -> u32 {
+    if (l_mod_get_flags(idx) & 4u32) != 0u32 { return 1u32 }
+    return 0u32
+}
+fn l_mod_set_scc_onstack(idx: u32, v: u32) -> u32 {
+    let mut f : u32 = l_mod_get_flags(idx) & (~4u32)
+    if v != 0u32 { f = f | 4u32 }
+    l_mod_set_flags(idx, f)
+    return 0u32
+}
+
+fn l_mod_get_dep_count(idx: u32) -> u32 {
+    return l_load_u32_le(l_mod_base(idx) + 196u64)
+}
+fn l_mod_set_dep_count(idx: u32, v: u32) -> u32 {
+    l_store_u32_le(l_mod_base(idx) + 196u64, v)
+    return 0u32
+}
+
+fn l_mod_dep_name_addr(idx: u32, k: u32) -> u64 {
+    return l_mod_base(idx) + 200u64 + ((k * LINK_NAME_CAP) as u64)
+}
+
+fn l_mod_get_dep_idx(idx: u32, k: u32) -> i32 {
+    return l_load_i32_le(l_mod_base(idx) + 2248u64 + ((k * 4u32) as u64))
+}
+fn l_mod_set_dep_idx(idx: u32, k: u32, v: i32) -> u32 {
+    l_store_i32_le(l_mod_base(idx) + 2248u64 + ((k * 4u32) as u64), v)
+    return 0u32
+}
+
+fn l_mod_get_export_count(idx: u32) -> u32 {
+    return l_load_u32_le(l_mod_base(idx) + 2312u64)
+}
+fn l_mod_set_export_count(idx: u32, v: u32) -> u32 {
+    l_store_u32_le(l_mod_base(idx) + 2312u64, v)
+    return 0u32
+}
+
+fn l_mod_export_sym_addr(idx: u32, k: u32) -> u64 {
+    return l_mod_base(idx) + 2316u64 + ((k * LINK_SYM_CAP) as u64)
+}
+fn l_mod_get_export_vis(idx: u32, k: u32) -> u32 {
+    return l_load_u32_le(l_mod_base(idx) + 6412u64 + ((k * 4u32) as u64))
+}
+fn l_mod_set_export_vis(idx: u32, k: u32, v: u32) -> u32 {
+    l_store_u32_le(l_mod_base(idx) + 6412u64 + ((k * 4u32) as u64), v)
+    return 0u32
+}
+fn l_mod_get_export_addr(idx: u32, k: u32) -> u64 {
+    return l_load_u64_le(l_mod_base(idx) + 6540u64 + ((k * 8u32) as u64))
+}
+fn l_mod_set_export_addr(idx: u32, k: u32, v: u64) -> u32 {
+    l_store_u64_le(l_mod_base(idx) + 6540u64 + ((k * 8u32) as u64), v)
+    return 0u32
+}
+
+fn l_mod_get_scc_index(idx: u32) -> i32 {
+    return l_load_i32_le(l_mod_base(idx) + 6796u64)
+}
+fn l_mod_set_scc_index(idx: u32, v: i32) -> u32 {
+    l_store_i32_le(l_mod_base(idx) + 6796u64, v)
+    return 0u32
+}
+fn l_mod_get_scc_lowlink(idx: u32) -> i32 {
+    return l_load_i32_le(l_mod_base(idx) + 6800u64)
+}
+fn l_mod_set_scc_lowlink(idx: u32, v: i32) -> u32 {
+    l_store_i32_le(l_mod_base(idx) + 6800u64, v)
+    return 0u32
+}
+
+/* Zero an entire module slot. */
+fn l_mod_clear(idx: u32) -> u32 {
+    l_memset(l_mod_base(idx), 0u32, PER_MOD_BYTES as u64)
+    /* Reset dep_idx slots to -1 and SCC index/lowlink to -1 */
+    let mut k : u32 = 0u32
+    while k < LINK_MAX_DEPS {
+        l_mod_set_dep_idx(idx, k, 0i32 - 1i32)
+        k = k + 1u32
+    }
+    l_mod_set_scc_index(idx, 0i32 - 1i32)
+    l_mod_set_scc_lowlink(idx, 0i32 - 1i32)
+    return 0u32
+}
+
+/* Find module by qualified name (NUL-terminated, name field).
+ * `name_ptr` points at a NUL-terminated string; returns -1 if not found. */
+fn l_find_module(name_ptr: u64) -> i32 {
+    let mut i : u32 = 0u32
+    while i < LINK_MOD_COUNT {
+        if l_strcmp_cap(name_ptr, l_mod_name_addr(i), LINK_NAME_CAP) == 0i32 {
+            return i as i32
+        }
+        i = i + 1u32
+    }
+    return 0i32 - 1i32
+}
+
+/* Same, but the caller's name is a (ptr,len) pair (e.g. AST source slice). */
+fn l_find_module_slice(src_ptr: u64, slen: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < LINK_MOD_COUNT {
+        let mname : u64 = l_mod_name_addr(i)
+        let mlen : u32 = l_strlen_cap(mname, LINK_NAME_CAP)
+        if mlen == slen {
+            if l_memcmp(src_ptr, mname, slen as u64) == 0i32 {
+                return i as i32
+            }
+        }
+        i = i + 1u32
+    }
+    return 0i32 - 1i32
+}
+
+/* ─── Error recording ──────────────────────────────────────────────── */
+
+fn l_record_err(code: i32, msg_id: u32, use_node: u32,
+                witness_count: u32, witness_mhash_ptr: u64) -> u32 {
+    if LINK_ERR_COUNT >= LINK_MAX_ERRORS { return 0u32 }
+    let base : u64 = l_err_base(LINK_ERR_COUNT)
+    l_store_i32_le(base + 0u64,  code)
+    l_store_u32_le(base + 4u64,  msg_id)
+    l_store_u32_le(base + 8u64,  use_node)
+    l_store_u32_le(base + 12u64, witness_count)
+    if witness_mhash_ptr != 0u64 {
+        l_memcpy(base + 16u64, witness_mhash_ptr, 32u64)
+    } else {
+        l_memset(base + 16u64, 0u32, 32u64)
+    }
+    LINK_ERR_COUNT = LINK_ERR_COUNT + 1u32
+    return 0u32
+}
+
+/* ─── SHA-256 (FIPS 180-4) — copied from witness_alloc.iii ──────────── */
+
+fn l_rotr(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+fn l_init_k_once() -> u32 {
+    if L_K_INIT == 1u8 { return 0u32 }
+    L_K[0]  = 0x428a2f98u32
+    L_K[1]  = 0x71374491u32
+    L_K[2]  = 0xb5c0fbcfu32
+    L_K[3]  = 0xe9b5dba5u32
+    L_K[4]  = 0x3956c25bu32
+    L_K[5]  = 0x59f111f1u32
+    L_K[6]  = 0x923f82a4u32
+    L_K[7]  = 0xab1c5ed5u32
+    L_K[8]  = 0xd807aa98u32
+    L_K[9]  = 0x12835b01u32
+    L_K[10] = 0x243185beu32
+    L_K[11] = 0x550c7dc3u32
+    L_K[12] = 0x72be5d74u32
+    L_K[13] = 0x80deb1feu32
+    L_K[14] = 0x9bdc06a7u32
+    L_K[15] = 0xc19bf174u32
+    L_K[16] = 0xe49b69c1u32
+    L_K[17] = 0xefbe4786u32
+    L_K[18] = 0x0fc19dc6u32
+    L_K[19] = 0x240ca1ccu32
+    L_K[20] = 0x2de92c6fu32
+    L_K[21] = 0x4a7484aau32
+    L_K[22] = 0x5cb0a9dcu32
+    L_K[23] = 0x76f988dau32
+    L_K[24] = 0x983e5152u32
+    L_K[25] = 0xa831c66du32
+    L_K[26] = 0xb00327c8u32
+    L_K[27] = 0xbf597fc7u32
+    L_K[28] = 0xc6e00bf3u32
+    L_K[29] = 0xd5a79147u32
+    L_K[30] = 0x06ca6351u32
+    L_K[31] = 0x14292967u32
+    L_K[32] = 0x27b70a85u32
+    L_K[33] = 0x2e1b2138u32
+    L_K[34] = 0x4d2c6dfcu32
+    L_K[35] = 0x53380d13u32
+    L_K[36] = 0x650a7354u32
+    L_K[37] = 0x766a0abbu32
+    L_K[38] = 0x81c2c92eu32
+    L_K[39] = 0x92722c85u32
+    L_K[40] = 0xa2bfe8a1u32
+    L_K[41] = 0xa81a664bu32
+    L_K[42] = 0xc24b8b70u32
+    L_K[43] = 0xc76c51a3u32
+    L_K[44] = 0xd192e819u32
+    L_K[45] = 0xd6990624u32
+    L_K[46] = 0xf40e3585u32
+    L_K[47] = 0x106aa070u32
+    L_K[48] = 0x19a4c116u32
+    L_K[49] = 0x1e376c08u32
+    L_K[50] = 0x2748774cu32
+    L_K[51] = 0x34b0bcb5u32
+    L_K[52] = 0x391c0cb3u32
+    L_K[53] = 0x4ed8aa4au32
+    L_K[54] = 0x5b9cca4fu32
+    L_K[55] = 0x682e6ff3u32
+    L_K[56] = 0x748f82eeu32
+    L_K[57] = 0x78a5636fu32
+    L_K[58] = 0x84c87814u32
+    L_K[59] = 0x8cc70208u32
+    L_K[60] = 0x90befffau32
+    L_K[61] = 0xa4506cebu32
+    L_K[62] = 0xbef9a3f7u32
+    L_K[63] = 0xc67178f2u32
+    L_K_INIT = 1u8
+    return 0u32
+}
+
+fn l_sha_init() -> u32 {
+    l_init_k_once()
+    L_H[0] = 0x6a09e667u32
+    L_H[1] = 0xbb67ae85u32
+    L_H[2] = 0x3c6ef372u32
+    L_H[3] = 0xa54ff53au32
+    L_H[4] = 0x510e527fu32
+    L_H[5] = 0x9b05688cu32
+    L_H[6] = 0x1f83d9abu32
+    L_H[7] = 0x5be0cd19u32
+    L_BITS   = 0u64
+    L_BUFLEN = 0u32
+    return 0u32
+}
+
+fn l_sha_block() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let p0 : u32 = L_BUF[i*4u32 + 0u32] as u32
+        let p1 : u32 = L_BUF[i*4u32 + 1u32] as u32
+        let p2 : u32 = L_BUF[i*4u32 + 2u32] as u32
+        let p3 : u32 = L_BUF[i*4u32 + 3u32] as u32
+        L_W[i] = (p0 << 24u32) | (p1 << 16u32) | (p2 << 8u32) | p3
+        i = i + 1u32
+    }
+    let mut ii : u32 = 16u32
+    while ii < 64u32 {
+        let w15 : u32 = L_W[ii - 15u32]
+        let w2  : u32 = L_W[ii - 2u32]
+        let s0  : u32 = l_rotr(w15, 7u32) ^ l_rotr(w15, 18u32) ^ (w15 >> 3u32)
+        let s1  : u32 = l_rotr(w2, 17u32) ^ l_rotr(w2, 19u32) ^ (w2 >> 10u32)
+        L_W[ii] = L_W[ii - 16u32] + s0 + L_W[ii - 7u32] + s1
+        ii = ii + 1u32
+    }
+    let mut a : u32 = L_H[0]
+    let mut b : u32 = L_H[1]
+    let mut c : u32 = L_H[2]
+    let mut d : u32 = L_H[3]
+    let mut e : u32 = L_H[4]
+    let mut f : u32 = L_H[5]
+    let mut g : u32 = L_H[6]
+    let mut h : u32 = L_H[7]
+    let mut k : u32 = 0u32
+    while k < 64u32 {
+        let S1 : u32 = l_rotr(e, 6u32) ^ l_rotr(e, 11u32) ^ l_rotr(e, 25u32)
+        let ch : u32 = (e & f) ^ ((~e) & g)
+        let t1 : u32 = h + S1 + ch + L_K[k] + L_W[k]
+        let S0 : u32 = l_rotr(a, 2u32) ^ l_rotr(a, 13u32) ^ l_rotr(a, 22u32)
+        let mj : u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2 : u32 = S0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+        k = k + 1u32
+    }
+    L_H[0] = L_H[0] + a
+    L_H[1] = L_H[1] + b
+    L_H[2] = L_H[2] + c
+    L_H[3] = L_H[3] + d
+    L_H[4] = L_H[4] + e
+    L_H[5] = L_H[5] + f
+    L_H[6] = L_H[6] + g
+    L_H[7] = L_H[7] + h
+    return 0u32
+}
+
+fn l_sha_update_byte(b: u8) -> u32 {
+    L_BITS = L_BITS + 8u64
+    L_BUF[L_BUFLEN] = b
+    L_BUFLEN = L_BUFLEN + 1u32
+    if L_BUFLEN == 64u32 {
+        l_sha_block()
+        L_BUFLEN = 0u32
+    }
+    return 0u32
+}
+
+fn l_sha_update_ptr(p: u64, len: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < len {
+        l_sha_update_byte((iii_ast_load_u8(p + i) & 0xFFu32) as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn l_sha_final(out: u64) -> u32 {
+    let bits : u64 = L_BITS
+    l_sha_update_byte(0x80u8)
+    while L_BUFLEN != 56u32 {
+        l_sha_update_byte(0u8)
+    }
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u32 = 56u32 - i*8u32
+        L_BUF[L_BUFLEN] = ((bits >> (shift as u64)) & 0xFFu64) as u8
+        L_BUFLEN = L_BUFLEN + 1u32
+        i = i + 1u32
+    }
+    l_sha_block()
+    L_BUFLEN = 0u32
+
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let h : u32 = L_H[j]
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 0u64, (h >> 24u32) & 0xFFu32)
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 1u64, (h >> 16u32) & 0xFFu32)
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 2u64, (h >> 8u32)  & 0xFFu32)
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 3u64, h & 0xFFu32)
+        j = j + 1u32
+    }
+    return 0u32
+}
+
+/* ─── Sorted-insert mhash into L_CLOS_SORTED ───────────────────────── */
+
+fn l_clos_sorted_insert(v_ptr: u64) -> u32 {
+    let mut pos : u32 = L_CLOS_SCOUNT
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0u32
+    while i < L_CLOS_SCOUNT {
+        if found == 0u32 {
+            let slot : u64 = (&L_CLOS_SORTED as u64) + ((i * 32u32) as u64)
+            let c : i32 = l_memcmp(v_ptr, slot, 32u64)
+            if c == 0i32 { return 0u32 }
+            if c < 0i32 { pos = i; found = 1u32 }
+        }
+        i = i + 1u32
+    }
+    if L_CLOS_SCOUNT >= LINK_MAX_DEPS { return 0u32 }
+    let mut j : u32 = L_CLOS_SCOUNT
+    while j > pos {
+        let dst : u64 = (&L_CLOS_SORTED as u64) + ((j * 32u32) as u64)
+        let src : u64 = (&L_CLOS_SORTED as u64) + (((j - 1u32) * 32u32) as u64)
+        l_memcpy(dst, src, 32u64)
+        j = j - 1u32
+    }
+    let into : u64 = (&L_CLOS_SORTED as u64) + ((pos * 32u32) as u64)
+    l_memcpy(into, v_ptr, 32u64)
+    L_CLOS_SCOUNT = L_CLOS_SCOUNT + 1u32
+    return 1u32
+}
+
+/* ─── Tarjan SCC (D2) — iterative, frame-stack based ──────────────── */
+
+fn l_tj_push_stack(v: i32) -> u32 {
+    l_store_i32_le((&L_TJ_STACK as u64) + ((L_TJ_STACK_TOP * 4u32) as u64), v)
+    L_TJ_STACK_TOP = L_TJ_STACK_TOP + 1u32
+    return 0u32
+}
+fn l_tj_pop_stack() -> i32 {
+    L_TJ_STACK_TOP = L_TJ_STACK_TOP - 1u32
+    return l_load_i32_le((&L_TJ_STACK as u64) + ((L_TJ_STACK_TOP * 4u32) as u64))
+}
+fn l_tj_call_push(v: i32, ns: u32) -> u32 {
+    l_store_i32_le((&L_TJ_CALL_V    as u64) + ((L_TJ_CALL_TOP * 4u32) as u64), v)
+    l_store_u32_le((&L_TJ_CALL_NEXT as u64) + ((L_TJ_CALL_TOP * 4u32) as u64), ns)
+    L_TJ_CALL_TOP = L_TJ_CALL_TOP + 1u32
+    return 0u32
+}
+fn l_tj_call_top_v() -> i32 {
+    return l_load_i32_le((&L_TJ_CALL_V as u64) + (((L_TJ_CALL_TOP - 1u32) * 4u32) as u64))
+}
+fn l_tj_call_top_next() -> u32 {
+    return l_load_u32_le((&L_TJ_CALL_NEXT as u64) + (((L_TJ_CALL_TOP - 1u32) * 4u32) as u64))
+}
+fn l_tj_call_top_set_next(ns: u32) -> u32 {
+    l_store_u32_le((&L_TJ_CALL_NEXT as u64) + (((L_TJ_CALL_TOP - 1u32) * 4u32) as u64), ns)
+    return 0u32
+}
+
+fn l_tj_handle_back_edge(v_u: u32, w_u: u32) -> u32 {
+    if l_mod_get_scc_onstack(w_u) == 1u32 {
+        let wi : i32 = l_mod_get_scc_index(w_u)
+        let vlow : i32 = l_mod_get_scc_lowlink(v_u)
+        if wi < vlow {
+            l_mod_set_scc_lowlink(v_u, wi)
+        }
+    }
+    return 0u32
+}
+
+fn l_tj_visit_new(w: i32, w_u: u32) -> i32 {
+    l_mod_set_scc_index(w_u, L_TJ_INDEX)
+    l_mod_set_scc_lowlink(w_u, L_TJ_INDEX)
+    L_TJ_INDEX = L_TJ_INDEX + 1i32
+    l_tj_push_stack(w)
+    l_mod_set_scc_onstack(w_u, 1u32)
+    if L_TJ_CALL_TOP >= LINK_MAX_MODULES {
+        l_record_err(E_TOO_MANY, 1u32, 0u32, 0u32, 0u64)
+        return E_TOO_MANY
+    }
+    l_tj_call_push(w, 0u32)
+    return E_OK
+}
+
+fn l_tj_advance(v_u: u32, ns: u32) -> i32 {
+    l_tj_call_top_set_next(ns + 1u32)
+    let w : i32 = l_mod_get_dep_idx(v_u, ns)
+    if w < 0i32 { return E_OK }
+    let w_u : u32 = w as u32
+    let widx : i32 = l_mod_get_scc_index(w_u)
+    if widx < 0i32 { return l_tj_visit_new(w, w_u) }
+    l_tj_handle_back_edge(v_u, w_u)
+    return E_OK
+}
+
+fn l_tj_pop_scc_check(v: i32, v_u: u32) -> i32 {
+    let mut scc_size : u32 = 0u32
+    let mut self_loop : u32 = 0u32
+    let mut first_member : i32 = 0i32 - 1i32
+    let mut popped : i32 = 0i32 - 1i32
+    let mut done : u32 = 0u32
+    while done == 0u32 {
+        popped = l_tj_pop_stack()
+        l_mod_set_scc_onstack(popped as u32, 0u32)
+        l_store_i32_le((&L_TJ_MEMBERS as u64) + ((scc_size * 4u32) as u64), popped)
+        scc_size = scc_size + 1u32
+        if first_member < 0i32 { first_member = popped }
+        if popped == v { done = 1u32 }
+    }
+    if scc_size == 1u32 {
+        let m0 : u32 = first_member as u32
+        let dc2 : u32 = l_mod_get_dep_count(m0)
+        let mut k : u32 = 0u32
+        let mut sl_done : u32 = 0u32
+        while k < dc2 {
+            if sl_done == 0u32 {
+                if l_mod_get_dep_idx(m0, k) == first_member {
+                    self_loop = 1u32
+                    sl_done = 1u32
+                }
+            }
+            k = k + 1u32
+        }
+    }
+    if scc_size > 1u32 { self_loop = 1u32 }
+    if self_loop == 1u32 {
+        l_record_err(E_CYCLE, 2u32, 0u32, scc_size,
+                     l_mod_local_mhash_addr(first_member as u32))
+        return E_CYCLE
+    }
+    return E_OK
+}
+
+fn l_tj_finish(v: i32, v_u: u32) -> i32 {
+    let vlow : i32 = l_mod_get_scc_lowlink(v_u)
+    let vidx : i32 = l_mod_get_scc_index(v_u)
+    if vlow == vidx {
+        let rc : i32 = l_tj_pop_scc_check(v, v_u)
+        if rc != E_OK { return rc }
+    }
+    L_TJ_CALL_TOP = L_TJ_CALL_TOP - 1u32
+    if L_TJ_CALL_TOP > 0u32 {
+        let pv : i32 = l_tj_call_top_v()
+        let plow : i32 = l_mod_get_scc_lowlink(pv as u32)
+        let vlow2 : i32 = l_mod_get_scc_lowlink(v_u)
+        if vlow2 < plow {
+            l_mod_set_scc_lowlink(pv as u32, vlow2)
+        }
+    }
+    return E_OK
+}
+
+fn l_run_tarjan() -> i32 {
+    L_TJ_INDEX = 0i32
+    L_TJ_STACK_TOP = 0u32
+    L_TJ_CALL_TOP  = 0u32
+
+    let mut start : u32 = 0u32
+    while start < LINK_MOD_COUNT {
+        if l_mod_get_scc_index(start) >= 0i32 {
+            start = start + 1u32
+        } else {
+            l_tj_call_push(start as i32, 0u32)
+            l_mod_set_scc_index(start, L_TJ_INDEX)
+            l_mod_set_scc_lowlink(start, L_TJ_INDEX)
+            L_TJ_INDEX = L_TJ_INDEX + 1i32
+            l_tj_push_stack(start as i32)
+            l_mod_set_scc_onstack(start, 1u32)
+
+            while L_TJ_CALL_TOP > 0u32 {
+                let v : i32 = l_tj_call_top_v()
+                let v_u : u32 = v as u32
+                let ns : u32 = l_tj_call_top_next()
+                let dc : u32 = l_mod_get_dep_count(v_u)
+                if ns < dc {
+                    let rc : i32 = l_tj_advance(v_u, ns)
+                    if rc != E_OK { return rc }
+                } else {
+                    let rc2 : i32 = l_tj_finish(v, v_u)
+                    if rc2 != E_OK { return rc2 }
+                }
+            }
+            start = start + 1u32
+        }
+    }
+    return E_OK
+}
+
+/* ─── Closure mhash (D1) — iterative bottom-up since DAG ──────────── */
+
+fn l_compute_closures() -> i32 {
+    /* Iteratively process: a module is "ready" when all its deps have
+     * closure_done.  Repeat until either all done or no progress. */
+    let mut progress : u32 = 1u32
+    while progress == 1u32 {
+        progress = 0u32
+        let mut i : u32 = 0u32
+        while i < LINK_MOD_COUNT {
+            if l_mod_get_closure_done(i) == 0u32 {
+                let dc : u32 = l_mod_get_dep_count(i)
+                let mut all_ready : u32 = 1u32
+                let mut k : u32 = 0u32
+                let mut not_ready : u32 = 0u32
+                while k < dc {
+                    if not_ready == 0u32 {
+                        let w : i32 = l_mod_get_dep_idx(i, k)
+                        if w < 0i32 {
+                            l_record_err(E_UNKNOWN_MODULE, 3u32, 0u32, 0u32, 0u64)
+                            return E_UNKNOWN_MODULE
+                        }
+                        if l_mod_get_closure_done(w as u32) == 0u32 {
+                            all_ready = 0u32
+                            not_ready = 1u32
+                        }
+                    }
+                    k = k + 1u32
+                }
+                if all_ready == 1u32 {
+                    /* Build sorted dep closure list */
+                    L_CLOS_SCOUNT = 0u32
+                    let mut k2 : u32 = 0u32
+                    while k2 < dc {
+                        let w2 : i32 = l_mod_get_dep_idx(i, k2)
+                        l_clos_sorted_insert(l_mod_closure_mhash_addr(w2 as u32))
+                        k2 = k2 + 1u32
+                    }
+                    /* Hash: domain || local_mhash || sorted closures */
+                    l_init_tags()
+                    l_sha_init()
+                    l_sha_update_ptr(&L_DOMAIN as u64, 11u64)
+                    l_sha_update_ptr(l_mod_local_mhash_addr(i), 32u64)
+                    let mut s : u32 = 0u32
+                    while s < L_CLOS_SCOUNT {
+                        l_sha_update_ptr((&L_CLOS_SORTED as u64) + ((s * 32u32) as u64), 32u64)
+                        s = s + 1u32
+                    }
+                    l_sha_final(l_mod_closure_mhash_addr(i))
+                    l_mod_set_closure_done(i, 1u32)
+                    progress = 1u32
+                }
+            }
+            i = i + 1u32
+        }
+    }
+    /* Verify all done — any leftover means an unresolved dep we missed. */
+    let mut chk : u32 = 0u32
+    while chk < LINK_MOD_COUNT {
+        if l_mod_get_closure_done(chk) == 0u32 {
+            l_record_err(E_UNRESOLVED, 4u32, 0u32, 0u32, 0u64)
+            return E_UNRESOLVED
+        }
+        chk = chk + 1u32
+    }
+    return E_OK
+}
+
+/* ─── Symbol-collision detection (D7) ──────────────────────────────── */
+
+fn l_check_collisions() -> i32 {
+    let mut i : u32 = 0u32
+    while i < LINK_MOD_COUNT {
+        let eci : u32 = l_mod_get_export_count(i)
+        let mut a : u32 = 0u32
+        while a < eci {
+            let sym_a : u64 = l_mod_export_sym_addr(i, a)
+            let mut j : u32 = i + 1u32
+            while j < LINK_MOD_COUNT {
+                let ecj : u32 = l_mod_get_export_count(j)
+                let mut b : u32 = 0u32
+                while b < ecj {
+                    let sym_b : u64 = l_mod_export_sym_addr(j, b)
+                    if l_strcmp_cap(sym_a, sym_b, LINK_SYM_CAP) == 0i32 {
+                        l_record_err(E_COLLISION, 5u32, 0u32, 2u32,
+                                     l_mod_local_mhash_addr(i))
+                        return E_COLLISION
+                    }
+                    b = b + 1u32
+                }
+                j = j + 1u32
+            }
+            a = a + 1u32
+        }
+        i = i + 1u32
+    }
+    return E_OK
+}
+
+/* ─── Manifest emission (D4/D5/D6) ─────────────────────────────────── */
+
+fn l_me_get_mod(i: u32) -> i32 {
+    return l_load_i32_le((&L_ME_MOD as u64) + ((i * 4u32) as u64))
+}
+fn l_me_get_exp(i: u32) -> u32 {
+    return l_load_u32_le((&L_ME_EXP as u64) + ((i * 4u32) as u64))
+}
+fn l_me_set(i: u32, mod_idx: i32, exp_idx: u32) -> u32 {
+    l_store_i32_le((&L_ME_MOD as u64) + ((i * 4u32) as u64), mod_idx)
+    l_store_u32_le((&L_ME_EXP as u64) + ((i * 4u32) as u64), exp_idx)
+    return 0u32
+}
+
+/* Compare two manifest entries by (module_mhash lex, sym lex). */
+fn l_me_cmp(i: u32, j: u32) -> i32 {
+    let ai : i32 = l_me_get_mod(i)
+    let aj : i32 = l_me_get_mod(j)
+    let c : i32 = l_memcmp(l_mod_local_mhash_addr(ai as u32),
+                            l_mod_local_mhash_addr(aj as u32), 32u64)
+    if c != 0i32 { return c }
+    return l_strcmp_cap(l_mod_export_sym_addr(ai as u32, l_me_get_exp(i)),
+                        l_mod_export_sym_addr(aj as u32, l_me_get_exp(j)),
+                        LINK_SYM_CAP)
+}
+
+/* Insertion sort over L_ME_* in [0, n) */
+fn l_me_sort(n: u32) -> u32 {
+    let mut i : u32 = 1u32
+    while i < n {
+        let mut j : u32 = i
+        let mut stop : u32 = 0u32
+        while j > 0u32 {
+            if stop == 0u32 {
+                if l_me_cmp(j - 1u32, j) > 0i32 {
+                    let tm : i32 = l_me_get_mod(j - 1u32)
+                    let te : u32 = l_me_get_exp(j - 1u32)
+                    l_me_set(j - 1u32, l_me_get_mod(j), l_me_get_exp(j))
+                    l_me_set(j, tm, te)
+                    j = j - 1u32
+                } else {
+                    stop = 1u32
+                }
+            } else {
+                j = 0u32
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn l_build_manifest() -> i32 {
+    /* Collect entries */
+    L_ME_COUNT = 0u32
+    let mut i : u32 = 0u32
+    while i < LINK_MOD_COUNT {
+        let ec : u32 = l_mod_get_export_count(i)
+        let mut k : u32 = 0u32
+        while k < ec {
+            if L_ME_COUNT >= 1024u32 { return E_TOO_MANY }
+            l_me_set(L_ME_COUNT, i as i32, k)
+            L_ME_COUNT = L_ME_COUNT + 1u32
+            k = k + 1u32
+        }
+        i = i + 1u32
+    }
+    l_me_sort(L_ME_COUNT)
+
+    /* Compute total bytes */
+    let mut entries_bytes : u64 = 0u64
+    let mut e : u32 = 0u32
+    while e < L_ME_COUNT {
+        let mi : i32 = l_me_get_mod(e)
+        let ek : u32 = l_me_get_exp(e)
+        let sl : u32 = l_strlen_cap(l_mod_export_sym_addr(mi as u32, ek), LINK_SYM_CAP)
+        if sl > MAX_SYM_LEN { return E_INTERNAL }
+        entries_bytes = entries_bytes + 32u64 + 4u64 + (sl as u64) + 8u64
+        e = e + 1u32
+    }
+    let total_bytes : u64 = (HEADER_BYTES as u64) + entries_bytes + (FOOTER_BYTES as u64)
+    if total_bytes > (MANIFEST_CAP as u64) { return E_OOM }
+
+    /* Zero scratch up to total_bytes (LINK_MANIFEST is the buffer) */
+    l_memset(&LINK_MANIFEST as u64, 0u32, total_bytes)
+
+    /* Header */
+    let buf : u64 = &LINK_MANIFEST as u64
+    l_store_u32_le(buf + 0u64,  MANIFEST_V1)
+    l_store_u32_le(buf + 4u64,  MANIFEST_VER)
+    l_store_u32_le(buf + 8u64,  L_ME_COUNT)
+    l_store_u32_le(buf + 12u64, 0u32)
+
+    /* Entries */
+    let mut off : u64 = HEADER_BYTES as u64
+    let mut ee : u32 = 0u32
+    while ee < L_ME_COUNT {
+        let mi2 : i32 = l_me_get_mod(ee)
+        let ek2 : u32 = l_me_get_exp(ee)
+        let sym_p : u64 = l_mod_export_sym_addr(mi2 as u32, ek2)
+        let sl2 : u32 = l_strlen_cap(sym_p, LINK_SYM_CAP)
+        l_memcpy(buf + off, l_mod_local_mhash_addr(mi2 as u32), 32u64)
+        off = off + 32u64
+        l_store_u32_le(buf + off, sl2)
+        off = off + 4u64
+        l_memcpy(buf + off, sym_p, sl2 as u64)
+        off = off + (sl2 as u64)
+        l_store_u64_le(buf + off, l_mod_get_export_addr(mi2 as u32, ek2))
+        off = off + 8u64
+        ee = ee + 1u32
+    }
+
+    /* Footer = SHA-256( "III_LINK_v1\0footer" || header || entries ) */
+    l_init_tags()
+    l_sha_init()
+    l_sha_update_ptr(&L_FOOTER_TAG as u64, 18u64)
+    l_sha_update_ptr(buf, off)
+    l_sha_final(buf + off)
+
+    LINK_MANIFEST_LEN = total_bytes as u32
+    LINK_MANIFEST_HAS = 1u8
+    return E_OK
+}
+
+/* ─── Lifecycle ────────────────────────────────────────────────────── */
+
+fn l_reset_all() -> u32 {
+    LINK_MOD_COUNT = 0u32
+    LINK_ERR_COUNT = 0u32
+    LINK_PHASE_B   = 0u8
+    LINK_FINALIZED = 0u8
+    LINK_SEALED    = 0u8
+    LINK_MANIFEST_LEN = 0u32
+    LINK_MANIFEST_HAS = 0u8
+    /* Zero whole module table (so flags/scc fields are clean) */
+    l_memset(&LINK_MODULES as u64, 0u32, (LINK_MAX_MODULES * PER_MOD_BYTES) as u64)
+    l_memset(&LINK_ERRORS  as u64, 0u32, (LINK_MAX_ERRORS  * ERR_BYTES) as u64)
+    LINK_INIT = 1u8
+    return 0u32
+}
+
+fn iii_link_create() -> u64 @export {
+    l_reset_all()
+    return &LINK_SENTINEL as u64
+}
+
+fn iii_link_destroy(l: u64) @export {
+    if l == 0u64 { return }
+    /* Singleton — nothing to free; just reset for next create. */
+    l_reset_all()
+    return
+}
+
+/* ─── Registration (Phase A — D3) ──────────────────────────────────── */
+
+fn iii_link_register_module(l: u64, qualified_name: u64,
+                            closure_root: u64) -> i32 @export {
+    if l == 0u64                    { return E_NULL_ARG }
+    if qualified_name == 0u64       { return E_NULL_ARG }
+    if closure_root == 0u64         { return E_NULL_ARG }
+    if LINK_SEALED == 1u8           { return E_SEALED }
+    if LINK_PHASE_B == 1u8          { return E_PHASE }
+
+    let mut idx : i32 = l_find_module(qualified_name)
+    if idx < 0i32 {
+        if LINK_MOD_COUNT >= LINK_MAX_MODULES { return E_TOO_MANY }
+        idx = LINK_MOD_COUNT as i32
+        LINK_MOD_COUNT = LINK_MOD_COUNT + 1u32
+        l_mod_clear(idx as u32)
+        let nlen : u32 = l_strlen_cap(qualified_name, LINK_NAME_CAP)
+        l_str_set(l_mod_name_addr(idx as u32), LINK_NAME_CAP, qualified_name, nlen)
+    }
+    /* Legacy path: supplied root IS the closure (no dep info). */
+    l_memcpy(l_mod_local_mhash_addr(idx as u32),   closure_root, 32u64)
+    l_memcpy(l_mod_closure_mhash_addr(idx as u32), closure_root, 32u64)
+    l_mod_set_closure_done(idx as u32, 1u32)
+    l_mod_set_dep_count(idx as u32, 0u32)
+    return E_OK
+}
+
+fn iii_link_register_module_ex(l: u64, qualified_name: u64,
+                               local_mhash: u64,
+                               dep_count: u32, dep_qualified_names: u64,
+                               export_count: u32, export_symbols: u64,
+                               export_visibility: u64, export_addr_tokens: u64) -> i32 @export {
+    if l == 0u64                    { return E_NULL_ARG }
+    if qualified_name == 0u64       { return E_NULL_ARG }
+    if local_mhash == 0u64          { return E_NULL_ARG }
+    if LINK_SEALED == 1u8           { return E_SEALED }
+    if LINK_PHASE_B == 1u8          { return E_PHASE }
+    if dep_count > LINK_MAX_DEPS    { return E_TOO_MANY }
+    if export_count > LINK_MAX_EXPORTS { return E_TOO_MANY }
+    if dep_count != 0u32 {
+        if dep_qualified_names == 0u64 { return E_NULL_ARG }
+    }
+    if export_count != 0u32 {
+        if export_symbols == 0u64     { return E_NULL_ARG }
+        if export_visibility == 0u64  { return E_NULL_ARG }
+        if export_addr_tokens == 0u64 { return E_NULL_ARG }
+    }
+
+    let mut idx : i32 = l_find_module(qualified_name)
+    if idx < 0i32 {
+        if LINK_MOD_COUNT >= LINK_MAX_MODULES { return E_TOO_MANY }
+        idx = LINK_MOD_COUNT as i32
+        LINK_MOD_COUNT = LINK_MOD_COUNT + 1u32
+        l_mod_clear(idx as u32)
+        let nlen : u32 = l_strlen_cap(qualified_name, LINK_NAME_CAP)
+        l_str_set(l_mod_name_addr(idx as u32), LINK_NAME_CAP, qualified_name, nlen)
+    }
+    l_memcpy(l_mod_local_mhash_addr(idx as u32), local_mhash, 32u64)
+    /* Reset closure flags + scc state */
+    l_mod_set_closure_done(idx as u32, 0u32)
+    l_mod_set_closure_in_progress(idx as u32, 0u32)
+    l_mod_set_scc_onstack(idx as u32, 0u32)
+    l_mod_set_scc_index(idx as u32, 0i32 - 1i32)
+    l_mod_set_scc_lowlink(idx as u32, 0i32 - 1i32)
+
+    l_mod_set_dep_count(idx as u32, dep_count)
+    let mut i : u32 = 0u32
+    while i < dep_count {
+        /* dep_qualified_names is a `const char *const []` — array of u64 ptrs. */
+        let p : u64 = l_load_u64_le(dep_qualified_names + ((i * 8u32) as u64))
+        let nlen : u32 = l_strlen_cap(p, LINK_NAME_CAP)
+        l_str_set(l_mod_dep_name_addr(idx as u32, i), LINK_NAME_CAP, p, nlen)
+        l_mod_set_dep_idx(idx as u32, i, 0i32 - 1i32)
+        i = i + 1u32
+    }
+    let mut j : u32 = dep_count
+    while j < LINK_MAX_DEPS {
+        l_mod_set_dep_idx(idx as u32, j, 0i32 - 1i32)
+        j = j + 1u32
+    }
+
+    l_mod_set_export_count(idx as u32, export_count)
+    let mut k : u32 = 0u32
+    while k < export_count {
+        let sp : u64 = l_load_u64_le(export_symbols + ((k * 8u32) as u64))
+        let slen : u32 = l_strlen_cap(sp, LINK_SYM_CAP)
+        l_str_set(l_mod_export_sym_addr(idx as u32, k), LINK_SYM_CAP, sp, slen)
+        let vis : u32 = l_load_u32_le(export_visibility + ((k * 4u32) as u64))
+        l_mod_set_export_vis(idx as u32, k, vis)
+        let tok : u64 = l_load_u64_le(export_addr_tokens + ((k * 8u32) as u64))
+        l_mod_set_export_addr(idx as u32, k, tok)
+        k = k + 1u32
+    }
+    return E_OK
+}
+
+/* ─── Finalize (Phase B — D3) ──────────────────────────────────────── */
+
+fn iii_link_finalize(l: u64) -> i32 @export {
+    if l == 0u64           { return E_NULL_ARG }
+    if LINK_SEALED == 1u8  { return E_SEALED }
+    LINK_PHASE_B = 1u8
+
+    /* Resolve dep names → indices */
+    let mut i : u32 = 0u32
+    while i < LINK_MOD_COUNT {
+        let dc : u32 = l_mod_get_dep_count(i)
+        let mut k : u32 = 0u32
+        while k < dc {
+            let w : i32 = l_find_module(l_mod_dep_name_addr(i, k))
+            if w < 0i32 {
+                l_record_err(E_UNKNOWN_MODULE, 6u32, 0u32, 0u32, 0u64)
+                return E_UNKNOWN_MODULE
+            }
+            l_mod_set_dep_idx(i, k, w)
+            k = k + 1u32
+        }
+        i = i + 1u32
+    }
+
+    /* Tarjan SCC (D2) — refuse cycles before closure mhashing */
+    let rc : i32 = l_run_tarjan()
+    if rc != E_OK { return rc }
+
+    /* Compute closure mhashes (D1) */
+    let rc2 : i32 = l_compute_closures()
+    if rc2 != E_OK {
+        l_record_err(rc2, 7u32, 0u32, 0u32, 0u64)
+        return rc2
+    }
+
+    /* Symbol collisions (D7) */
+    let rc3 : i32 = l_check_collisions()
+    if rc3 != E_OK { return rc3 }
+
+    /* Manifest (D4/D5/D6) — transactional */
+    let rc4 : i32 = l_build_manifest()
+    if rc4 != E_OK {
+        LINK_MANIFEST_LEN = 0u32
+        LINK_MANIFEST_HAS = 0u8
+        l_record_err(rc4, 8u32, 0u32, 0u32, 0u64)
+        return rc4
+    }
+
+    LINK_FINALIZED = 1u8
+    return E_OK
+}
+
+/* ─── Verify @closure(...) pins on AST use-decls ──────────────────── */
+
+/* Same-package test: equal up to the last '.' segment. */
+fn l_same_package(a: u64, alen: u32, b: u64, blen: u32) -> u32 {
+    let mut ad : u32 = 0u32
+    let mut had_a : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < alen {
+        if (iii_ast_load_u8(a + (i as u64)) & 0xFFu32) == 46u32 { ad = i; had_a = 1u32 }
+        i = i + 1u32
+    }
+    if had_a == 0u32 { ad = 0u32 }
+    let mut bd : u32 = 0u32
+    let mut had_b : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < blen {
+        if (iii_ast_load_u8(b + (j as u64)) & 0xFFu32) == 46u32 { bd = j; had_b = 1u32 }
+        j = j + 1u32
+    }
+    if had_b == 0u32 { bd = 0u32 }
+    if ad != bd { return 0u32 }
+    if ad == 0u32 { return 1u32 }
+    if l_memcmp(a, b, ad as u64) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+fn iii_link_verify_imports(l: u64, ast: u64) -> i32 @export {
+    if l == 0u64          { return E_NULL_ARG }
+    if ast == 0u64        { return E_NULL_ARG }
+    if LINK_SEALED == 1u8 { return E_SEALED }
+
+    let root_idx : u32 = iii_ast_root_module_idx_c(ast)
+    if root_idx == 0u32 { return E_INTERNAL }
+    if iii_ast_node_kind(ast, root_idx) != K_AST_MODULE { return E_INTERNAL }
+
+    let src : u64 = iii_ast_source_buf_addr_c(ast)
+    let imp_off : u32 = iii_ast_module_name_offset(ast, root_idx)
+    let imp_len : u32 = iii_ast_module_name_length(ast, root_idx)
+    let imp_ptr : u64 = src + (imp_off as u64)
+
+    let nuses : u32 = iii_ast_module_use_count(ast, root_idx)
+    let mut u : u32 = 0u32
+    while u < nuses {
+        let uid : u32 = iii_ast_module_use_at(ast, root_idx, u)
+        let qoff : u32 = iii_ast_use_qname_offset(ast, uid)
+        let qlen : u32 = iii_ast_use_qname_length(ast, uid)
+        let qptr : u64 = src + (qoff as u64)
+
+        /* D9: closure pin */
+        let mh_node : u32 = iii_ast_use_closure_mhash_node(ast, uid)
+        if mh_node != 0u32 {
+            let mh_addr : u64 = iii_ast_expr_mhash_bytes_addr(ast, mh_node)
+            if mh_addr != 0u64 {
+                let midx : i32 = l_find_module_slice(qptr, qlen)
+                if midx < 0i32 {
+                    l_record_err(E_UNKNOWN_MODULE, 9u32, uid, 0u32, 0u64)
+                } else {
+                    let mut root : u64 = l_mod_local_mhash_addr(midx as u32)
+                    if l_mod_get_closure_done(midx as u32) == 1u32 {
+                        root = l_mod_closure_mhash_addr(midx as u32)
+                    }
+                    if l_memcmp(root, mh_addr, 32u64) != 0i32 {
+                        l_record_err(E_CLOSURE_MISMATCH, 10u32, uid, 0u32, mh_addr)
+                    }
+                }
+            }
+        }
+
+        /* D8: visibility check */
+        let midx2 : i32 = l_find_module_slice(qptr, qlen)
+        if midx2 >= 0i32 {
+            let ec : u32 = l_mod_get_export_count(midx2 as u32)
+            let mut e : u32 = 0u32
+            let mut vstop : u32 = 0u32
+            while e < ec {
+                if vstop == 0u32 {
+                let v : u32 = l_mod_get_export_vis(midx2 as u32, e)
+                let mut same_mod : u32 = 0u32
+                if imp_len == qlen {
+                    if l_memcmp(imp_ptr, qptr, qlen as u64) == 0i32 { same_mod = 1u32 }
+                }
+                let same_pkg : u32 = l_same_package(imp_ptr, imp_len, qptr, qlen)
+                let mut ok : u32 = 0u32
+                if v == VIS_PRIVATE   { if same_mod == 1u32 { ok = 1u32 } }
+                if v == VIS_MODULE    { if same_pkg == 1u32 { ok = 1u32 } }
+                if v == VIS_PUBLIC    { ok = 1u32 }
+                if v == VIS_FEDERATED { ok = 1u32 }
+                if ok == 0u32 {
+                    l_record_err(E_VISIBILITY, 11u32, uid, v,
+                                 l_mod_local_mhash_addr(midx2 as u32))
+                    vstop = 1u32
+                }
+                }
+                e = e + 1u32
+            }
+        }
+        u = u + 1u32
+    }
+    if LINK_ERR_COUNT == 0u32 { return E_OK }
+    return E_CLOSURE_MISMATCH
+}
+
+/* ─── Pin-check (D9) ──────────────────────────────────────────────── */
+
+fn iii_link_pin_check(l: u64, qualified_name: u64,
+                      prior_local: u64, prior_closure: u64) -> i32 @export {
+    if l == 0u64               { return E_NULL_ARG }
+    if qualified_name == 0u64  { return E_NULL_ARG }
+    if prior_local == 0u64     { return E_NULL_ARG }
+    if prior_closure == 0u64   { return E_NULL_ARG }
+    let idx : i32 = l_find_module(qualified_name)
+    if idx < 0i32 { return E_UNKNOWN_MODULE }
+    if l_memcmp(l_mod_local_mhash_addr(idx as u32), prior_local, 32u64) != 0i32 {
+        return E_OK
+    }
+    if l_mod_get_closure_done(idx as u32) == 0u32 { return E_PHASE }
+    if l_memcmp(l_mod_closure_mhash_addr(idx as u32), prior_closure, 32u64) != 0i32 {
+        return E_PIN_MISMATCH
+    }
+    return E_OK
+}
+
+/* ─── Manifest accessors ──────────────────────────────────────────── */
+
+fn iii_link_get_manifest(l: u64, out_buf: u64, out_len: u64) -> i32 @export {
+    if l == 0u64         { return E_NULL_ARG }
+    if out_buf == 0u64   { return E_NULL_ARG }
+    if out_len == 0u64   { return E_NULL_ARG }
+    if LINK_MANIFEST_HAS == 1u8 {
+        l_store_u64_le(out_buf, &LINK_MANIFEST as u64)
+        l_store_u64_le(out_len, LINK_MANIFEST_LEN as u64)
+        return E_OK
+    }
+    l_store_u64_le(out_buf, 0u64)
+    l_store_u64_le(out_len, 0u64)
+    return E_BAD_MANIFEST
+}
+
+/* Pure self-check.  Walks the byte stream verifying framing + sort
+ * order + footer mhash. */
+fn iii_link_verify_manifest(buf: u64, len: u64) -> i32 @export {
+    if buf == 0u64 { return E_NULL_ARG }
+    let min_len : u64 = (HEADER_BYTES as u64) + (FOOTER_BYTES as u64)
+    if len < min_len { return E_BAD_MANIFEST }
+    let magic : u32 = l_load_u32_le(buf + 0u64)
+    let ver   : u32 = l_load_u32_le(buf + 4u64)
+    let cnt   : u32 = l_load_u32_le(buf + 8u64)
+    if magic != MANIFEST_V1  { return E_BAD_MANIFEST }
+    if ver   != MANIFEST_VER { return E_BAD_MANIFEST }
+
+    let body_end : u64 = len - (FOOTER_BYTES as u64)
+    let mut off : u64 = HEADER_BYTES as u64
+    let mut prev_mhash_off : u64 = 0u64
+    let mut prev_sym_off   : u64 = 0u64
+    let mut prev_sym_len   : u32 = 0u32
+    let mut have_prev      : u32 = 0u32
+
+    let mut i : u32 = 0u32
+    while i < cnt {
+        if off + 32u64 + 4u64 > body_end { return E_BAD_MANIFEST }
+        let mh_off : u64 = off
+        off = off + 32u64
+        let sl : u32 = l_load_u32_le(buf + off)
+        off = off + 4u64
+        if sl > MAX_SYM_LEN { return E_BAD_MANIFEST }
+        if off + (sl as u64) + 8u64 > body_end { return E_BAD_MANIFEST }
+        let sym_off : u64 = off
+        off = off + (sl as u64) + 8u64
+
+        if have_prev == 1u32 {
+            let c : i32 = l_memcmp(buf + mh_off, buf + prev_mhash_off, 32u64)
+            if c < 0i32 { return E_BAD_MANIFEST }
+            if c == 0i32 {
+                let mut cmp_n : u32 = sl
+                if prev_sym_len < sl { cmp_n = prev_sym_len }
+                let sc : i32 = l_memcmp(buf + prev_sym_off, buf + sym_off, cmp_n as u64)
+                if sc > 0i32 { return E_BAD_MANIFEST }
+                if sc == 0i32 {
+                    if sl <= prev_sym_len { return E_BAD_MANIFEST }
+                }
+            }
+        }
+        prev_mhash_off = mh_off
+        prev_sym_off   = sym_off
+        prev_sym_len   = sl
+        have_prev = 1u32
+        i = i + 1u32
+    }
+    if off != body_end { return E_BAD_MANIFEST }
+
+    /* Footer */
+    l_init_tags()
+    l_sha_init()
+    l_sha_update_ptr(&L_FOOTER_TAG as u64, 18u64)
+    l_sha_update_ptr(buf, off)
+    /* Compare to footer in buf — write expected footer to a temp slot
+     * inside L_BUF[0..32] is unsafe (used by sha state).  Use the
+     * tail of LINK_MODULES as scratch. */
+    let scratch : u64 = (&LINK_MODULES as u64) + (((LINK_MAX_MODULES - 1u32) * PER_MOD_BYTES) as u64) + ((PER_MOD_BYTES - 32u32) as u64)
+    /* Actually just reuse a fixed scratch — easier: store into L_CLOS_SORTED[480..512]. */
+    let scratch2 : u64 = (&L_CLOS_SORTED as u64) + 480u64
+    l_sha_final(scratch2)
+    if l_memcmp(scratch2, buf + off, 32u64) != 0i32 { return E_BAD_MANIFEST }
+    return E_OK
+}
+
+/* ─── Audit / seal / errors / closure query ───────────────────────── */
+
+fn iii_link_set_audit_sink(l: u64, fn_ptr: u64, user_data: u64) @export {
+    /* Stage-0: no fn-ptr storage; silently dropped (mirrors witness_alloc). */
+    if l == 0u64 { return }
+    let _a : u64 = fn_ptr
+    let _b : u64 = user_data
+    return
+}
+
+fn iii_link_seal(l: u64) -> i32 @export {
+    if l == 0u64 { return E_NULL_ARG }
+    LINK_SEALED = 1u8
+    return E_OK
+}
+
+fn iii_link_is_sealed(l: u64) -> u32 @export {
+    if l == 0u64 { return 0u32 }
+    if LINK_SEALED == 1u8 { return 1u32 }
+    return 0u32
+}
+
+fn iii_link_error_count(l: u64) -> u32 @export {
+    if l == 0u64 { return 0u32 }
+    return LINK_ERR_COUNT
+}
+
+fn iii_link_error_at(l: u64, i: u32, out: u64) @export {
+    if l == 0u64    { return }
+    if out == 0u64  { return }
+    if i >= LINK_ERR_COUNT {
+        /* Caller's iii_link_error_t is sizeof = 8 + ptr + 4 + 4 + 32 + alignment.
+         * Layout (link.h): { int code; const char *message; uint32_t use_node;
+         *                    uint32_t witness_count; uint8_t witness_mhash[32]; }
+         * On x86-64: code(4) + pad(4) + msg(8) + use(4) + wcount(4) + mhash(32) = 56 bytes.
+         * Zero-fill that entire struct on out-of-range. */
+        l_memset(out, 0u32, 56u64)
+        return
+    }
+    let base : u64 = l_err_base(i)
+    let code : i32 = l_load_i32_le(base + 0u64)
+    let unode : u32 = l_load_u32_le(base + 8u64)
+    let wcnt : u32 = l_load_u32_le(base + 12u64)
+    /* Write the C struct: code @ 0, message ptr @ 8 (NULL — no fn/string
+     * storage in Stage-0), use_node @ 16, witness_count @ 20,
+     * witness_mhash @ 24. */
+    l_store_i32_le(out + 0u64,  code)
+    l_store_u32_le(out + 4u64,  0u32)        /* pad */
+    l_store_u64_le(out + 8u64,  0u64)        /* message = NULL */
+    l_store_u32_le(out + 16u64, unode)
+    l_store_u32_le(out + 20u64, wcnt)
+    l_memcpy(out + 24u64, base + 16u64, 32u64)
+    return
+}
+
+fn iii_link_get_closure_mhash(l: u64, qualified_name: u64, out: u64) -> i32 @export {
+    if l == 0u64              { return E_NULL_ARG }
+    if qualified_name == 0u64 { return E_NULL_ARG }
+    if out == 0u64            { return E_NULL_ARG }
+    let idx : i32 = l_find_module(qualified_name)
+    if idx < 0i32 { return E_UNKNOWN_MODULE }
+    if l_mod_get_closure_done(idx as u32) == 0u32 { return E_PHASE }
+    l_memcpy(out, l_mod_closure_mhash_addr(idx as u32), 32u64)
+    return E_OK
+}

@@ -1,0 +1,1225 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\sid.iii
+ *
+ * III Stage-0 Side-effect Inverse Derivation (SID) — .iii port of sid.c.
+ *
+ * Mirrors sid.h ABI: every public entry point is @export and link-
+ * compatible with the C iiis-0 build.  The opaque iii_sid_state_t is
+ * collapsed into module-singleton state — iii_sid_create returns a
+ * sentinel pointer, every other entry point ignores its `s` argument.
+ *
+ * Stage-0 simplifications versus sid.c:
+ *   - Records and errors live in fixed-cap flat byte arrays.
+ *     SID_REC_CAP = 256 cycles; SID_ERR_CAP = 256 errors.  The boot
+ *     tree never approaches even 64 cycles in practice.
+ *   - Error messages are static per-code strings (no printf-style
+ *     interpolation).  The C version interpolates the offending IRPD
+ *     method name into one of the messages; this drops that detail,
+ *     which is acceptable per main.c::iii_diag_sid (message may be
+ *     NULL, code-name carries the diagnostic).
+ *   - Records are exposed via a flat 56-byte stride (decl_node u32 @0,
+ *     composed_hexad u32 @4 (0xFFFF sentinel), replay_bitmap u32 @8,
+ *     call_count u32 @12, irreversible u32 @16, calls u8[32] @20,
+ *     pad u32 @52).  No external consumer reads this layout in
+ *     Stage 0; cg consumes only the AST annotation blob, which keeps
+ *     the documented sid.c::sid_process_cycle wire format byte-for-byte.
+ *
+ * Annotation blob layout (must match sid.c lines 459-475):
+ *   off  type   field
+ *    0   u16    composed_hexad (LE)
+ *    2   u16    pad (zero)
+ *    4   u32    replay_bitmap (LE)
+ *    8   u8     call_count
+ *    9   u8     irreversible
+ *   10   u8[N]  calls (one byte per call_count, each an SE kind 1..17)
+ */
+
+module sid
+
+/* ─── ABI / SE kinds (mirror sid.h) ────────────────────────────────── */
+
+const SID_SE_NONE              : u32 = 0u32
+const SID_SE_MSR_WRITE         : u32 = 1u32
+const SID_SE_CR_WRITE          : u32 = 2u32
+const SID_SE_NPT_ENTRY_WRITE   : u32 = 3u32
+const SID_SE_VMCB_FIELD_WRITE  : u32 = 4u32
+const SID_SE_IOMMU_DTE_WORD    : u32 = 5u32
+const SID_SE_AVIC_TBL_WRITE    : u32 = 6u32
+const SID_SE_MSRPM_BIT_SET     : u32 = 7u32
+const SID_SE_IOPM_BIT_SET      : u32 = 8u32
+const SID_SE_PKRU_WRITE        : u32 = 9u32
+const SID_SE_XCR0_WRITE        : u32 = 10u32
+const SID_SE_CAP_ACQUIRE       : u32 = 11u32
+const SID_SE_CAP_RELEASE       : u32 = 12u32
+const SID_SE_PAGE_ALLOC        : u32 = 13u32
+const SID_SE_PAGE_FREE         : u32 = 14u32
+const SID_SE_DPC_ARM           : u32 = 15u32
+const SID_SE_DPC_CANCEL        : u32 = 16u32
+const SID_SE_NMI_INSTALL       : u32 = 17u32
+
+/* Error codes (mirror sid.h). */
+const SID_E_PARSE_IRPD             : i32 = 1i32
+const SID_E_UNKNOWN_METHOD         : i32 = 2i32
+const SID_E_HEXAD_COMPOSE_FAIL     : i32 = 3i32
+const SID_E_CEILING_REJECT         : i32 = 4i32
+const SID_E_TOO_MANY_CALLS         : i32 = 5i32
+const SID_E_REPLAY_BITMAP_OVERFLOW : i32 = 6i32
+const SID_E_OOM                    : i32 = 99i32
+
+/* Per-cycle hexad default (mirror sid.c::SID_IRPD_DEFAULT_HEXAD = 377). */
+const SID_IRPD_DEFAULT_HEXAD : u32 = 377u32
+const SID_HEXAD_UNSET        : u32 = 0xFFFFu32
+const SID_MAX_CALLS          : u32 = 32u32
+
+/* AST kind constants (mirror ast.h enum order). */
+const SID_K_MODULE             : u32 = 1u32
+const SID_K_CYCLE_DECL         : u32 = 3u32
+const SID_K_MODIFIER           : u32 = 14u32
+const SID_K_STMT_LET           : u32 = 20u32
+const SID_K_STMT_WAVEFRONT     : u32 = 21u32
+const SID_K_STMT_SANCTUM_ENTER : u32 = 22u32
+const SID_K_STMT_FOR           : u32 = 24u32
+const SID_K_STMT_MATCH         : u32 = 25u32
+const SID_K_STMT_RETURN        : u32 = 26u32
+const SID_K_STMT_ASSIGN        : u32 = 27u32
+const SID_K_STMT_EXPR          : u32 = 28u32
+const SID_K_FORWARD_BLOCK      : u32 = 29u32
+const SID_K_COMPROMISE_BLOCK   : u32 = 30u32
+const SID_K_MATCH_ARM          : u32 = 31u32
+const SID_K_EXPR_IDENT         : u32 = 45u32
+const SID_K_EXPR_CALL          : u32 = 46u32
+const SID_K_EXPR_FIELD         : u32 = 47u32
+const SID_K_EXPR_INDEX         : u32 = 48u32
+const SID_K_EXPR_BINARY        : u32 = 49u32
+const SID_K_EXPR_UNARY         : u32 = 50u32
+const SID_K_EXPR_BLOCK         : u32 = 51u32
+const SID_K_EXPR_MATCH         : u32 = 52u32
+const SID_K_EXPR_PAREN         : u32 = 53u32
+const SID_K_ARG                : u32 = 57u32
+const SID_K_EXPR_PARALLEL      : u32 = 61u32
+
+/* Caps. */
+const SID_REC_CAP   : u32 = 256u32
+const SID_REC_BYTES : u32 = 56u32
+const SID_ERR_CAP   : u32 = 256u32
+const SID_ERR_BYTES : u32 = 16u32   /* i32 code @0, u32 decl @4, u64 msg @8 */
+
+/* ─── Externs from C side (AST + sema + hexad_check) ──────────────── */
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_len(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_annotate(ast: u64, phase: u64, node: u32, bytes: u64, len: u64) -> u8 from "ast.c"
+
+extern @abi(c-msvc-x64) fn iii_sema_cycle_hexad(sema: u64, node: u32) -> u32 from "sema.c"
+
+extern @abi(c-msvc-x64) fn iii_hexad_check_init() -> u32 from "hexad_check.c"
+extern @abi(c-msvc-x64) fn iii_hexad_compose_packed(a: u32, b: u32) -> u32 from "hexad_check.c"
+extern @abi(c-msvc-x64) fn iii_hexad_packed_admitted(packed: u32) -> u8 from "hexad_check.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_load_u8(ptr: u64) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_forward_block(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_compromise_block(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_where(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_guard(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_rollback(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+/* ─── Module-global state (single SID instance) ───────────────────── */
+
+var SID_SENTINEL : [u8; 1]
+var SID_AST      : u64 = 0u64
+var SID_SEMA     : u64 = 0u64
+var SID_RAN      : u8  = 0u8
+var SID_INIT     : u8  = 0u8
+
+var SID_RECORDS    : [u8; 14336]   /* 256 records × 56 bytes */
+var SID_REC_COUNT  : u32 = 0u32
+
+var SID_ERRORS     : [u8; 4096]    /* 256 errors × 16 bytes */
+var SID_ERR_COUNT  : u32 = 0u32
+
+/* Annotation phase string ("sid/inverse_plan\0" = 17 bytes). */
+var SID_ANNO_PHASE : [u8; 17]
+var SID_ANNO_INIT  : u8 = 0u8
+
+/* Method-name table backing buffer.  17 NUL-separated lowercase
+ * canonical IRPD method names, one per SE kind (1..17). */
+var SID_METHOD_BUF     : [u8; 192]
+var SID_METHOD_OFF     : [u32; 18]
+var SID_METHOD_LEN     : [u32; 18]
+var SID_METHOD_INIT    : u8 = 0u8
+
+/* Error-name strings (8 entries: codes 0..6 + 99 mapped to slot 7). */
+var SID_ENAME_BUF      : [u8; 128]
+var SID_ENAME_OFF      : [u32; 9]
+var SID_ENAME_LEN      : [u32; 9]
+var SID_ENAME_INIT     : u8 = 0u8
+
+/* Static error message strings (one per code, codes 1..6 + slot 7=OOM,
+ * slot 8 = generic unknown).  Pointers stashed in SID_EMSG_PTR. */
+var SID_EMSG_BUF       : [u8; 512]
+var SID_EMSG_PTR       : [u64; 9]
+var SID_EMSG_INIT      : u8 = 0u8
+
+/* Annotation scratch buffer (composed_hexad+padding+replay+counts+calls).
+ * Fixed cap matches III_SID_MAX_CALLS_PER_CYCLE = 32 plus 10-byte header. */
+var SID_BLOB           : [u8; 64]
+
+/* ─── Helpers: byte read/write ────────────────────────────────────── */
+
+fn sid_load_u8(ptr: u64) -> u8 {
+    return (iii_ast_load_u8(ptr) & 0xFFu32) as u8
+}
+
+fn sid_to_lower(c: u32) -> u32 {
+    if c >= 65u32 {
+        if c <= 90u32 { return c + 32u32 }
+    }
+    return c
+}
+
+/* Compare a source-text slice (offset/length within ast source buffer)
+ * against a NUL-terminated cstring at cstr_ptr, both lower-cased.
+ * Returns 1u8 on match. */
+fn sid_slice_eq_cstr_lower(off: u32, len: u32, cstr_ptr: u64) -> u8 {
+    let buf : u64 = iii_ast_source_buf(SID_AST)
+    let slen : u64 = iii_ast_source_len(SID_AST)
+    if buf == 0u64 { return 0u8 }
+    /* Bound check: off + len must fit within slen. */
+    let end : u64 = (off as u64) + (len as u64)
+    if end > slen { return 0u8 }
+    /* Compute cstring length. */
+    let mut clen : u32 = 0u32
+    while sid_load_u8(cstr_ptr + (clen as u64)) != 0u8 {
+        clen = clen + 1u32
+        if clen > 64u32 { return 0u8 }
+    }
+    if clen != len { return 0u8 }
+    let mut i : u32 = 0u32
+    while i < len {
+        let a : u32 = sid_to_lower(iii_ast_load_u8(buf + (off as u64) + (i as u64)))
+        let b : u32 = sid_to_lower(iii_ast_load_u8(cstr_ptr + (i as u64)))
+        if a != b { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* ─── Init: method table, error names, error messages, anno phase ─── */
+
+fn sid_buf_set(buf_ptr: u64, idx: u32, b: u8) -> u32 {
+    /* Write byte b into byte buffer at offset idx. */
+    /* Realised by a helper to avoid &ARR[i] precedence trap.  We emit
+     * the store via iii_ast_store_u8 which takes a raw u64 address. */
+    let p : u64 = buf_ptr + (idx as u64)
+    return iii_ast_store_u8(p, b as u32)
+}
+
+extern @abi(c-msvc-x64) fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
+
+/* Helper to push one method name into SID_METHOD_BUF and record off/len.
+ * Bytes are copied byte-by-byte from src_ptr (a NUL-terminated cstring). */
+fn sid_push_method(slot: u32, src_ptr: u64) -> u32 {
+    /* Find next free byte in SID_METHOD_BUF: prior offsets+lengths
+     * are already populated for slots 0..slot-1.  We just track
+     * cumulative length explicitly via SID_METHOD_OFF[slot]. */
+    let off : u32 = SID_METHOD_OFF[slot]
+    let mut i : u32 = 0u32
+    while sid_load_u8(src_ptr + (i as u64)) != 0u8 {
+        sid_buf_set(&SID_METHOD_BUF as u64, off + i, sid_load_u8(src_ptr + (i as u64)))
+        i = i + 1u32
+        if i > 32u32 { return 0u32 }
+    }
+    SID_METHOD_LEN[slot] = i
+    if (slot + 1u32) < 18u32 {
+        SID_METHOD_OFF[slot + 1u32] = off + i
+    }
+    return 0u32
+}
+
+fn sid_init_method_table() -> u32 {
+    if SID_METHOD_INIT == 1u8 { return 0u32 }
+    SID_METHOD_OFF[0] = 0u32
+
+    /* Build all 17 names directly from inline byte literals.
+     * Slot 1 = MSR_WRITE = "msr_write" (slot 0 unused for SE_NONE). */
+    sid_set_name(1u32,  77u8, 115u8, 114u8, 95u8, 119u8, 114u8, 105u8, 116u8, 101u8, 0u8, 0u8, 0u8) /* msr_write */
+    sid_set_name(2u32,  99u8, 114u8, 95u8, 119u8, 114u8, 105u8, 116u8, 101u8, 0u8, 0u8, 0u8, 0u8)   /* cr_write */
+    sid_set_name(3u32,  110u8, 112u8, 116u8, 95u8, 119u8, 114u8, 105u8, 116u8, 101u8, 0u8, 0u8, 0u8) /* npt_write */
+    sid_set_name(4u32,  118u8, 109u8, 99u8, 98u8, 95u8, 102u8, 105u8, 101u8, 108u8, 100u8, 0u8, 0u8) /* vmcb_field */
+    sid_set_name(5u32,  105u8, 111u8, 109u8, 109u8, 117u8, 95u8, 100u8, 116u8, 101u8, 0u8, 0u8, 0u8) /* iommu_dte */
+    sid_set_name(6u32,  97u8, 118u8, 105u8, 99u8, 95u8, 116u8, 98u8, 108u8, 0u8, 0u8, 0u8, 0u8)      /* avic_tbl */
+    sid_set_name(7u32,  109u8, 115u8, 114u8, 112u8, 109u8, 95u8, 98u8, 105u8, 116u8, 0u8, 0u8, 0u8)  /* msrpm_bit */
+    sid_set_name(8u32,  105u8, 111u8, 112u8, 109u8, 95u8, 98u8, 105u8, 116u8, 0u8, 0u8, 0u8, 0u8)    /* iopm_bit */
+    sid_set_name(9u32,  112u8, 107u8, 114u8, 117u8, 95u8, 119u8, 114u8, 105u8, 116u8, 101u8, 0u8, 0u8) /* pkru_write */
+    sid_set_name(10u32, 120u8, 99u8, 114u8, 48u8, 95u8, 119u8, 114u8, 105u8, 116u8, 101u8, 0u8, 0u8) /* xcr0_write */
+    sid_set_name(11u32, 99u8, 97u8, 112u8, 95u8, 97u8, 99u8, 113u8, 117u8, 105u8, 114u8, 101u8, 0u8) /* cap_acquire */
+    sid_set_name(12u32, 99u8, 97u8, 112u8, 95u8, 114u8, 101u8, 108u8, 101u8, 97u8, 115u8, 101u8, 0u8) /* cap_release */
+    sid_set_name(13u32, 112u8, 97u8, 103u8, 101u8, 95u8, 97u8, 108u8, 108u8, 111u8, 99u8, 0u8, 0u8) /* page_alloc */
+    sid_set_name(14u32, 112u8, 97u8, 103u8, 101u8, 95u8, 102u8, 114u8, 101u8, 101u8, 0u8, 0u8, 0u8) /* page_free */
+    sid_set_name(15u32, 100u8, 112u8, 99u8, 95u8, 97u8, 114u8, 109u8, 0u8, 0u8, 0u8, 0u8, 0u8)       /* dpc_arm */
+    sid_set_name(16u32, 100u8, 112u8, 99u8, 95u8, 99u8, 97u8, 110u8, 99u8, 101u8, 108u8, 0u8, 0u8) /* dpc_cancel */
+    sid_set_name(17u32, 110u8, 109u8, 105u8, 95u8, 105u8, 110u8, 115u8, 116u8, 97u8, 108u8, 108u8, 0u8) /* nmi_install */
+
+    SID_METHOD_INIT = 1u8
+    return 0u32
+}
+
+/* Stash one method name into SID_METHOD_BUF.  Names are at most 12
+ * bytes (longest is "cap_acquire"=11 + NUL).  Bytes are written
+ * inline; trailing NULs in the argument list mark end-of-string. */
+fn sid_set_name(slot: u32,
+                  b0: u8, b1: u8, b2: u8, b3: u8, b4: u8, b5: u8,
+                  b6: u8, b7: u8, b8: u8, b9: u8, b10: u8, b11: u8) -> u32 {
+    let off : u32 = SID_METHOD_OFF[slot]
+    let mut len : u32 = 0u32
+
+    /* Unrolled: append each non-NUL byte; stop at first NUL. */
+    sid_method_append(off, len, b0)
+    if b0 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b1)
+    if b1 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b2)
+    if b2 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b3)
+    if b3 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b4)
+    if b4 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b5)
+    if b5 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b6)
+    if b6 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b7)
+    if b7 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b8)
+    if b8 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b9)
+    if b9 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b10)
+    if b10 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    sid_method_append(off, len, b11)
+    if b11 != 0u8 { len = len + 1u32 } else { return sid_method_finish(slot, off, len) }
+    return sid_method_finish(slot, off, len)
+}
+
+fn sid_method_append(off: u32, idx: u32, b: u8) -> u32 {
+    let p : u64 = (&SID_METHOD_BUF as u64) + ((off + idx) as u64)
+    return iii_ast_store_u8(p, b as u32)
+}
+
+fn sid_method_finish(slot: u32, off: u32, len: u32) -> u32 {
+    SID_METHOD_LEN[slot] = len
+    /* NUL-terminate. */
+    let p : u64 = (&SID_METHOD_BUF as u64) + ((off + len) as u64)
+    iii_ast_store_u8(p, 0u32)
+    if (slot + 1u32) < 18u32 {
+        SID_METHOD_OFF[slot + 1u32] = off + len + 1u32
+    }
+    return 0u32
+}
+
+/* Write the annotation phase string "sid/inverse_plan\0". */
+fn sid_init_anno_phase() -> u32 {
+    if SID_ANNO_INIT == 1u8 { return 0u32 }
+    SID_ANNO_PHASE[0]  = 115u8 /* s */
+    SID_ANNO_PHASE[1]  = 105u8 /* i */
+    SID_ANNO_PHASE[2]  = 100u8 /* d */
+    SID_ANNO_PHASE[3]  = 47u8  /* / */
+    SID_ANNO_PHASE[4]  = 105u8 /* i */
+    SID_ANNO_PHASE[5]  = 110u8 /* n */
+    SID_ANNO_PHASE[6]  = 118u8 /* v */
+    SID_ANNO_PHASE[7]  = 101u8 /* e */
+    SID_ANNO_PHASE[8]  = 114u8 /* r */
+    SID_ANNO_PHASE[9]  = 115u8 /* s */
+    SID_ANNO_PHASE[10] = 101u8 /* e */
+    SID_ANNO_PHASE[11] = 95u8  /* _ */
+    SID_ANNO_PHASE[12] = 112u8 /* p */
+    SID_ANNO_PHASE[13] = 108u8 /* l */
+    SID_ANNO_PHASE[14] = 97u8  /* a */
+    SID_ANNO_PHASE[15] = 110u8 /* n */
+    SID_ANNO_PHASE[16] = 0u8
+    SID_ANNO_INIT = 1u8
+    return 0u32
+}
+
+/* Static error names: returned by iii_sid_error_name.  Slot mapping:
+ *   0 -> "OK"                slot 0
+ *   1 -> "PARSE-IRPD-001"    slot 1
+ *   2 -> "TYPE-SID-001"      slot 2
+ *   3 -> "TYPE-HEXAD-002"    slot 3
+ *   4 -> "TYPE-CEIL-001"     slot 4
+ *   5 -> "TYPE-CYCLE-001"    slot 5
+ *   6 -> "TYPE-INV-001"      slot 6
+ *  99 -> "OOM"               slot 7
+ *  ?? -> "UNKNOWN"           slot 8
+ */
+fn sid_init_ename_table() -> u32 {
+    if SID_ENAME_INIT == 1u8 { return 0u32 }
+    SID_ENAME_OFF[0] = 0u32
+    sid_ename_write(0u32, 79u8, 75u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8) /* OK */
+    sid_ename_write(1u32, 80u8, 65u8, 82u8, 83u8, 69u8, 45u8, 73u8, 82u8, 80u8, 68u8, 45u8, 48u8, 48u8, 49u8, 0u8, 0u8) /* PARSE-IRPD-001 */
+    sid_ename_write(2u32, 84u8, 89u8, 80u8, 69u8, 45u8, 83u8, 73u8, 68u8, 45u8, 48u8, 48u8, 49u8, 0u8, 0u8, 0u8, 0u8) /* TYPE-SID-001 */
+    sid_ename_write(3u32, 84u8, 89u8, 80u8, 69u8, 45u8, 72u8, 69u8, 88u8, 65u8, 68u8, 45u8, 48u8, 48u8, 50u8, 0u8, 0u8) /* TYPE-HEXAD-002 */
+    sid_ename_write(4u32, 84u8, 89u8, 80u8, 69u8, 45u8, 67u8, 69u8, 73u8, 76u8, 45u8, 48u8, 48u8, 49u8, 0u8, 0u8, 0u8) /* TYPE-CEIL-001 */
+    sid_ename_write(5u32, 84u8, 89u8, 80u8, 69u8, 45u8, 67u8, 89u8, 67u8, 76u8, 69u8, 45u8, 48u8, 48u8, 49u8, 0u8, 0u8) /* TYPE-CYCLE-001 */
+    sid_ename_write(6u32, 84u8, 89u8, 80u8, 69u8, 45u8, 73u8, 78u8, 86u8, 45u8, 48u8, 48u8, 49u8, 0u8, 0u8, 0u8, 0u8) /* TYPE-INV-001 */
+    sid_ename_write(7u32, 79u8, 79u8, 77u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8) /* OOM */
+    sid_ename_write(8u32, 85u8, 78u8, 75u8, 78u8, 79u8, 87u8, 78u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8) /* UNKNOWN */
+    SID_ENAME_INIT = 1u8
+    return 0u32
+}
+
+fn sid_ename_write(slot: u32,
+                     b0: u8, b1: u8, b2: u8, b3: u8,
+                     b4: u8, b5: u8, b6: u8, b7: u8,
+                     b8: u8, b9: u8, b10: u8, b11: u8,
+                     b12: u8, b13: u8, b14: u8, b15: u8) -> u32 {
+    let off : u32 = SID_ENAME_OFF[slot]
+    let mut len : u32 = 0u32
+    sid_ename_step(off, &len, b0)
+    sid_ename_step(off, &len, b1)
+    sid_ename_step(off, &len, b2)
+    sid_ename_step(off, &len, b3)
+    sid_ename_step(off, &len, b4)
+    sid_ename_step(off, &len, b5)
+    sid_ename_step(off, &len, b6)
+    sid_ename_step(off, &len, b7)
+    sid_ename_step(off, &len, b8)
+    sid_ename_step(off, &len, b9)
+    sid_ename_step(off, &len, b10)
+    sid_ename_step(off, &len, b11)
+    sid_ename_step(off, &len, b12)
+    sid_ename_step(off, &len, b13)
+    sid_ename_step(off, &len, b14)
+    sid_ename_step(off, &len, b15)
+    SID_ENAME_LEN[slot] = len
+    /* NUL-terminate. */
+    let p : u64 = (&SID_ENAME_BUF as u64) + ((off + len) as u64)
+    iii_ast_store_u8(p, 0u32)
+    if (slot + 1u32) < 9u32 {
+        SID_ENAME_OFF[slot + 1u32] = off + len + 1u32
+    }
+    return 0u32
+}
+
+/* If b is non-NUL, write it at off+*len_ptr and bump *len_ptr.  If
+ * b is NUL, do nothing (ignore trailing padding bytes from the
+ * caller). */
+fn sid_ename_step(off: u32, len_ptr: u64, b: u8) -> u32 {
+    if b == 0u8 { return 0u32 }
+    let cur : u32 = sid_load_u32_le(len_ptr)
+    let p : u64 = (&SID_ENAME_BUF as u64) + ((off + cur) as u64)
+    iii_ast_store_u8(p, b as u32)
+    sid_store_u32_le(len_ptr, cur + 1u32)
+    return 0u32
+}
+
+fn sid_load_u32_le(ptr: u64) -> u32 {
+    let b0 : u32 = iii_ast_load_u8(ptr + 0u64)
+    let b1 : u32 = iii_ast_load_u8(ptr + 1u64)
+    let b2 : u32 = iii_ast_load_u8(ptr + 2u64)
+    let b3 : u32 = iii_ast_load_u8(ptr + 3u64)
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn sid_store_u32_le(ptr: u64, v: u32) -> u32 {
+    iii_ast_store_u8(ptr + 0u64, v & 0xFFu32)
+    iii_ast_store_u8(ptr + 1u64, (v >> 8u32) & 0xFFu32)
+    iii_ast_store_u8(ptr + 2u64, (v >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(ptr + 3u64, (v >> 24u32) & 0xFFu32)
+    return 0u32
+}
+
+/* Static error message strings.  Use the same off/len/buf pattern. */
+fn sid_init_emsg_table() -> u32 {
+    if SID_EMSG_INIT == 1u8 { return 0u32 }
+    let mut off : u32 = 0u32
+    /* Slot 0 (OK): empty. */
+    SID_EMSG_PTR[0] = (&SID_EMSG_BUF as u64) + (off as u64)
+    iii_ast_store_u8(SID_EMSG_PTR[0], 0u32)
+    off = off + 1u32
+
+    /* Slot 1 PARSE-IRPD: "irpd parse error". */
+    SID_EMSG_PTR[1] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 105u8, 114u8, 112u8, 100u8, 32u8, 112u8, 97u8, 114u8, 115u8, 101u8, 32u8, 101u8, 114u8, 114u8, 111u8, 114u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 2 TYPE-SID: "unknown irpd method". */
+    SID_EMSG_PTR[2] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 117u8, 110u8, 107u8, 110u8, 111u8, 119u8, 110u8, 32u8, 105u8, 114u8, 112u8, 100u8, 32u8, 109u8, 101u8, 116u8)
+    off = sid_emit_msg2(off, 104u8, 111u8, 100u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 3 TYPE-HEXAD: "hexad compose unreachable". */
+    SID_EMSG_PTR[3] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 104u8, 101u8, 120u8, 97u8, 100u8, 32u8, 99u8, 111u8, 109u8, 112u8, 111u8, 115u8, 101u8, 32u8, 117u8, 110u8)
+    off = sid_emit_msg2(off, 114u8, 101u8, 97u8, 99u8)
+    off = sid_emit_msg2(off, 104u8, 97u8, 98u8, 108u8)
+    off = sid_emit_msg2(off, 101u8, 0u8, 0u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 4 TYPE-CEIL: "ceiling rejects cycle kind". */
+    SID_EMSG_PTR[4] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 99u8, 101u8, 105u8, 108u8, 105u8, 110u8, 103u8, 32u8, 114u8, 101u8, 106u8, 101u8, 99u8, 116u8, 115u8, 32u8)
+    off = sid_emit_msg2(off, 99u8, 121u8, 99u8, 108u8)
+    off = sid_emit_msg2(off, 101u8, 32u8, 107u8, 105u8)
+    off = sid_emit_msg2(off, 110u8, 100u8, 0u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 5 TYPE-CYCLE: "cycle exceeds per-cycle irpd-call cap". */
+    SID_EMSG_PTR[5] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 99u8, 121u8, 99u8, 108u8, 101u8, 32u8, 101u8, 120u8, 99u8, 101u8, 101u8, 100u8, 115u8, 32u8, 105u8, 114u8)
+    off = sid_emit_msg2(off, 112u8, 100u8, 32u8, 99u8)
+    off = sid_emit_msg2(off, 97u8, 108u8, 108u8, 32u8)
+    off = sid_emit_msg2(off, 99u8, 97u8, 112u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 6 TYPE-INV: "replay bitmap overflow". */
+    SID_EMSG_PTR[6] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 114u8, 101u8, 112u8, 108u8, 97u8, 121u8, 32u8, 98u8, 105u8, 116u8, 109u8, 97u8, 112u8, 32u8, 111u8, 118u8)
+    off = sid_emit_msg2(off, 101u8, 114u8, 102u8, 108u8)
+    off = sid_emit_msg2(off, 111u8, 119u8, 0u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 7 OOM: "sid out of memory". */
+    SID_EMSG_PTR[7] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 115u8, 105u8, 100u8, 32u8, 111u8, 117u8, 116u8, 32u8, 111u8, 102u8, 32u8, 109u8, 101u8, 109u8, 111u8, 114u8)
+    off = sid_emit_msg2(off, 121u8, 0u8, 0u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    /* Slot 8 UNKNOWN. */
+    SID_EMSG_PTR[8] = (&SID_EMSG_BUF as u64) + (off as u64)
+    off = sid_emit_msg(off, 117u8, 110u8, 107u8, 110u8, 111u8, 119u8, 110u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8)
+    iii_ast_store_u8((&SID_EMSG_BUF as u64) + (off as u64), 0u32)
+    off = off + 1u32
+
+    SID_EMSG_INIT = 1u8
+    return 0u32
+}
+
+fn sid_emit_msg(off: u32,
+                  b0: u8, b1: u8, b2: u8, b3: u8,
+                  b4: u8, b5: u8, b6: u8, b7: u8,
+                  b8: u8, b9: u8, b10: u8, b11: u8,
+                  b12: u8, b13: u8, b14: u8, b15: u8) -> u32 {
+    let mut o : u32 = off
+    if b0  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b0  as u32)  o = o + 1u32 } else { return o }
+    if b1  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b1  as u32)  o = o + 1u32 } else { return o }
+    if b2  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b2  as u32)  o = o + 1u32 } else { return o }
+    if b3  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b3  as u32)  o = o + 1u32 } else { return o }
+    if b4  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b4  as u32)  o = o + 1u32 } else { return o }
+    if b5  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b5  as u32)  o = o + 1u32 } else { return o }
+    if b6  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b6  as u32)  o = o + 1u32 } else { return o }
+    if b7  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b7  as u32)  o = o + 1u32 } else { return o }
+    if b8  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b8  as u32)  o = o + 1u32 } else { return o }
+    if b9  != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b9  as u32)  o = o + 1u32 } else { return o }
+    if b10 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b10 as u32)  o = o + 1u32 } else { return o }
+    if b11 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b11 as u32)  o = o + 1u32 } else { return o }
+    if b12 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b12 as u32)  o = o + 1u32 } else { return o }
+    if b13 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b13 as u32)  o = o + 1u32 } else { return o }
+    if b14 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b14 as u32)  o = o + 1u32 } else { return o }
+    if b15 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b15 as u32)  o = o + 1u32 } else { return o }
+    return o
+}
+
+fn sid_emit_msg2(off: u32, b0: u8, b1: u8, b2: u8, b3: u8) -> u32 {
+    let mut o : u32 = off
+    if b0 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b0 as u32)  o = o + 1u32 } else { return o }
+    if b1 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b1 as u32)  o = o + 1u32 } else { return o }
+    if b2 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b2 as u32)  o = o + 1u32 } else { return o }
+    if b3 != 0u8 { iii_ast_store_u8((&SID_EMSG_BUF as u64) + (o as u64), b3 as u32)  o = o + 1u32 } else { return o }
+    return o
+}
+
+fn sid_init_all() -> u32 {
+    sid_init_method_table()
+    sid_init_anno_phase()
+    sid_init_ename_table()
+    sid_init_emsg_table()
+    return 0u32
+}
+
+/* ─── Method lookup: source slice -> SE kind (linear scan) ────────── */
+
+fn sid_method_lookup(off: u32, len: u32) -> u32 {
+    let mut k : u32 = 1u32
+    while k <= 17u32 {
+        let mlen : u32 = SID_METHOD_LEN[k]
+        if mlen == len {
+            let mptr : u64 = (&SID_METHOD_BUF as u64) + (SID_METHOD_OFF[k] as u64)
+            if sid_slice_eq_cstr_lower(off, len, mptr) == 1u8 {
+                return k
+            }
+        }
+        k = k + 1u32
+    }
+    return SID_SE_NONE
+}
+
+/* ─── Error queue ─────────────────────────────────────────────────── */
+
+fn sid_emsg_for_code(code: i32) -> u64 {
+    if code == SID_E_PARSE_IRPD             { return SID_EMSG_PTR[1] }
+    if code == SID_E_UNKNOWN_METHOD         { return SID_EMSG_PTR[2] }
+    if code == SID_E_HEXAD_COMPOSE_FAIL     { return SID_EMSG_PTR[3] }
+    if code == SID_E_CEILING_REJECT         { return SID_EMSG_PTR[4] }
+    if code == SID_E_TOO_MANY_CALLS         { return SID_EMSG_PTR[5] }
+    if code == SID_E_REPLAY_BITMAP_OVERFLOW { return SID_EMSG_PTR[6] }
+    if code == SID_E_OOM                    { return SID_EMSG_PTR[7] }
+    return SID_EMSG_PTR[8]
+}
+
+fn sid_emit_error(code: i32, decl_node: u32) -> u32 {
+    if SID_ERR_COUNT >= SID_ERR_CAP { return 0u32 }
+    let base : u64 = (&SID_ERRORS as u64) + ((SID_ERR_COUNT * SID_ERR_BYTES) as u64)
+    sid_store_u32_le(base + 0u64, code as u32)
+    sid_store_u32_le(base + 4u64, decl_node)
+    let msg : u64 = sid_emsg_for_code(code)
+    iii_ast_store_u8(base + 8u64,  (msg & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 9u64,  ((msg >> 8u64)  & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 10u64, ((msg >> 16u64) & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 11u64, ((msg >> 24u64) & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 12u64, ((msg >> 32u64) & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 13u64, ((msg >> 40u64) & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 14u64, ((msg >> 48u64) & 0xFFu64) as u32)
+    iii_ast_store_u8(base + 15u64, ((msg >> 56u64) & 0xFFu64) as u32)
+    SID_ERR_COUNT = SID_ERR_COUNT + 1u32
+    return 0u32
+}
+
+/* ─── Per-cycle record table (flat 56-byte stride) ────────────────── */
+
+fn sid_rec_base(idx: u32) -> u64 {
+    return (&SID_RECORDS as u64) + ((idx * SID_REC_BYTES) as u64)
+}
+
+fn sid_rec_alloc(decl_node: u32) -> u32 {
+    if SID_REC_COUNT >= SID_REC_CAP { return 0xFFFFFFFFu32 }
+    let idx : u32 = SID_REC_COUNT
+    SID_REC_COUNT = SID_REC_COUNT + 1u32
+    let base : u64 = sid_rec_base(idx)
+    /* Zero the record. */
+    let mut i : u32 = 0u32
+    while i < SID_REC_BYTES {
+        iii_ast_store_u8(base + (i as u64), 0u32)
+        i = i + 1u32
+    }
+    /* Set decl_node @0, composed_hexad sentinel @4, calls cleared. */
+    sid_store_u32_le(base + 0u64,  decl_node)
+    sid_store_u32_le(base + 4u64,  SID_HEXAD_UNSET)
+    return idx
+}
+
+fn sid_rec_decl_node(idx: u32) -> u32 {
+    return sid_load_u32_le(sid_rec_base(idx) + 0u64)
+}
+fn sid_rec_composed(idx: u32) -> u32 {
+    return sid_load_u32_le(sid_rec_base(idx) + 4u64)
+}
+fn sid_rec_set_composed(idx: u32, v: u32) -> u32 {
+    return sid_store_u32_le(sid_rec_base(idx) + 4u64, v & 0xFFFFu32)
+}
+fn sid_rec_replay(idx: u32) -> u32 {
+    return sid_load_u32_le(sid_rec_base(idx) + 8u64)
+}
+fn sid_rec_set_replay(idx: u32, v: u32) -> u32 {
+    return sid_store_u32_le(sid_rec_base(idx) + 8u64, v)
+}
+fn sid_rec_call_count(idx: u32) -> u32 {
+    return sid_load_u32_le(sid_rec_base(idx) + 12u64)
+}
+fn sid_rec_set_call_count(idx: u32, v: u32) -> u32 {
+    return sid_store_u32_le(sid_rec_base(idx) + 12u64, v)
+}
+fn sid_rec_irreversible(idx: u32) -> u32 {
+    return sid_load_u32_le(sid_rec_base(idx) + 16u64)
+}
+fn sid_rec_set_irreversible(idx: u32, v: u32) -> u32 {
+    return sid_store_u32_le(sid_rec_base(idx) + 16u64, v)
+}
+fn sid_rec_set_call(idx: u32, slot: u32, kind: u32) -> u32 {
+    let base : u64 = sid_rec_base(idx)
+    let p : u64 = base + 20u64 + (slot as u64)
+    return iii_ast_store_u8(p, kind & 0xFFu32)
+}
+fn sid_rec_get_call(idx: u32, slot: u32) -> u32 {
+    let base : u64 = sid_rec_base(idx)
+    return iii_ast_load_u8(base + 20u64 + (slot as u64))
+}
+
+/* ─── IRPD detection on a single CALL node ────────────────────────── */
+
+/* If `node` is a call of shape `irpd.<method>(...)`, return the SE kind
+ * (1..17), 99 if the method is unrecognised, 0 otherwise. */
+fn sid_call_irpd_kind(node: u32) -> u32 {
+    let k : u32 = iii_ast_node_kind(SID_AST, node)
+    if k != SID_K_EXPR_CALL { return 0u32 }
+    let callee : u32 = iii_ast_call_callee(SID_AST, node)
+    if callee == 0u32 { return 0u32 }
+    let ck : u32 = iii_ast_node_kind(SID_AST, callee)
+    if ck != SID_K_EXPR_FIELD { return 0u32 }
+    let obj : u32 = iii_ast_field_object(SID_AST, callee)
+    if obj == 0u32 { return 0u32 }
+    let ok : u32 = iii_ast_node_kind(SID_AST, obj)
+    if ok != SID_K_EXPR_IDENT { return 0u32 }
+    /* Object must be the identifier "irpd" (case-insensitive). */
+    let ioff : u32 = iii_ast_ident_name_offset(SID_AST, obj)
+    let ilen : u32 = iii_ast_ident_name_length(SID_AST, obj)
+    if sid_id_eq_irpd(ioff, ilen) == 0u8 { return 0u32 }
+    /* Lookup method. */
+    let foff : u32 = iii_ast_field_name_offset(SID_AST, callee)
+    let flen : u32 = iii_ast_field_name_length(SID_AST, callee)
+    let kind : u32 = sid_method_lookup(foff, flen)
+    if kind == SID_SE_NONE { return 99u32 }
+    return kind
+}
+
+/* "irpd" cstring (NUL-terminated) used by sid_id_eq_irpd. */
+var SID_IRPD_NAME : [u8; 5]
+var SID_IRPD_INIT : u8 = 0u8
+
+fn sid_id_eq_irpd(off: u32, len: u32) -> u8 {
+    if SID_IRPD_INIT == 0u8 {
+        SID_IRPD_NAME[0] = 105u8 /* i */
+        SID_IRPD_NAME[1] = 114u8 /* r */
+        SID_IRPD_NAME[2] = 112u8 /* p */
+        SID_IRPD_NAME[3] = 100u8 /* d */
+        SID_IRPD_NAME[4] = 0u8
+        SID_IRPD_INIT = 1u8
+    }
+    return sid_slice_eq_cstr_lower(off, len, &SID_IRPD_NAME as u64)
+}
+
+/* ─── Walk: accumulate IRPD calls into record idx ─────────────────── */
+
+fn sid_record_call(rec_idx: u32, kind: u32) -> u32 {
+    let cc : u32 = sid_rec_call_count(rec_idx)
+    if cc >= SID_MAX_CALLS {
+        sid_emit_error(SID_E_TOO_MANY_CALLS, sid_rec_decl_node(rec_idx))
+        return 0u32
+    }
+    sid_rec_set_call(rec_idx, cc, kind)
+    sid_rec_set_call_count(rec_idx, cc + 1u32)
+    /* Compose hexad. */
+    let per : u32 = SID_IRPD_DEFAULT_HEXAD
+    let prev : u32 = sid_rec_composed(rec_idx)
+    if prev == SID_HEXAD_UNSET {
+        sid_rec_set_composed(rec_idx, per)
+    } else {
+        let composed : u32 = iii_hexad_compose_packed(prev, per) & 0xFFFFu32
+        if composed == SID_HEXAD_UNSET {
+            sid_emit_error(SID_E_HEXAD_COMPOSE_FAIL, sid_rec_decl_node(rec_idx))
+        } else {
+            if iii_hexad_packed_admitted(composed) == 0u8 {
+                sid_emit_error(SID_E_HEXAD_COMPOSE_FAIL, sid_rec_decl_node(rec_idx))
+            }
+            sid_rec_set_composed(rec_idx, composed)
+        }
+    }
+    /* Replay bitmap bit cc (0-indexed). */
+    let bm : u32 = sid_rec_replay(rec_idx)
+    let bit : u32 = 1u32 << cc
+    sid_rec_set_replay(rec_idx, bm | bit)
+    return 0u32
+}
+
+fn sid_walk(node: u32, rec_idx: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let k : u32 = iii_ast_node_kind(SID_AST, node)
+    if k == 0u32 { return 0u32 }
+
+    /* Detect IRPD call at this node. */
+    if k == SID_K_EXPR_CALL {
+        let ik : u32 = sid_call_irpd_kind(node)
+        if ik == 99u32 {
+            sid_emit_error(SID_E_UNKNOWN_METHOD, sid_rec_decl_node(rec_idx))
+        } else {
+            if ik != 0u32 {
+                sid_record_call(rec_idx, ik)
+            }
+        }
+        /* Continue descending into args (nested IRPD calls allowed). */
+    }
+
+    if k == SID_K_FORWARD_BLOCK {
+        let n : u32 = iii_ast_forward_block_stmt_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_forward_block_stmt_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return 0u32
+    }
+    if k == SID_K_EXPR_BLOCK {
+        let n : u32 = iii_ast_block_stmt_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_block_stmt_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return 0u32
+    }
+    if k == SID_K_STMT_LET     { return sid_walk(iii_ast_let_value(SID_AST, node), rec_idx) }
+    if k == SID_K_STMT_EXPR    { return sid_walk(iii_ast_expr_stmt_expr(SID_AST, node), rec_idx) }
+    if k == SID_K_STMT_RETURN  { return sid_walk(iii_ast_return_value(SID_AST, node), rec_idx) }
+    if k == SID_K_STMT_ASSIGN {
+        sid_walk(iii_ast_assign_lvalue(SID_AST, node), rec_idx)
+        return sid_walk(iii_ast_assign_value(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_STMT_FOR {
+        sid_walk(iii_ast_for_iter(SID_AST, node), rec_idx)
+        sid_walk(iii_ast_for_where(SID_AST, node), rec_idx)
+        return sid_walk(iii_ast_for_body(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_STMT_MATCH {
+        sid_walk(iii_ast_match_stmt_scrutinee(SID_AST, node), rec_idx)
+        let n : u32 = iii_ast_match_stmt_arm_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_match_stmt_arm_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return 0u32
+    }
+    if k == SID_K_STMT_WAVEFRONT {
+        let n : u32 = iii_ast_wavefront_node_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_wavefront_node_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return sid_walk(iii_ast_wavefront_rollback(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_STMT_SANCTUM_ENTER {
+        return sid_walk(iii_ast_sanctum_enter_body(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_EXPR_CALL {
+        sid_walk(iii_ast_call_callee(SID_AST, node), rec_idx)
+        let n : u32 = iii_ast_call_arg_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_call_arg_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return 0u32
+    }
+    if k == SID_K_EXPR_FIELD   { return sid_walk(iii_ast_field_object(SID_AST, node), rec_idx) }
+    if k == SID_K_EXPR_INDEX {
+        sid_walk(iii_ast_index_object(SID_AST, node), rec_idx)
+        return sid_walk(iii_ast_index_index(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_EXPR_BINARY {
+        sid_walk(iii_ast_binary_lhs(SID_AST, node), rec_idx)
+        return sid_walk(iii_ast_binary_rhs(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_EXPR_UNARY   { return sid_walk(iii_ast_unary_operand(SID_AST, node), rec_idx) }
+    if k == SID_K_EXPR_PAREN   { return sid_walk(iii_ast_paren_inner(SID_AST, node), rec_idx) }
+    if k == SID_K_EXPR_PARALLEL {
+        let n : u32 = iii_ast_parallel_branch_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_parallel_branch_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return 0u32
+    }
+    if k == SID_K_EXPR_MATCH {
+        sid_walk(iii_ast_match_expr_scrutinee(SID_AST, node), rec_idx)
+        let n : u32 = iii_ast_match_expr_arm_count(SID_AST, node)
+        let mut i : u32 = 0u32
+        while i < n {
+            sid_walk(iii_ast_match_expr_arm_at(SID_AST, node, i), rec_idx)
+            i = i + 1u32
+        }
+        return 0u32
+    }
+    if k == SID_K_MATCH_ARM {
+        sid_walk(iii_ast_match_arm_guard(SID_AST, node), rec_idx)
+        return sid_walk(iii_ast_match_arm_body(SID_AST, node), rec_idx)
+    }
+    if k == SID_K_ARG          { return sid_walk(iii_ast_arg_value(SID_AST, node), rec_idx) }
+    if k == SID_K_COMPROMISE_BLOCK {
+        sid_rec_set_irreversible(rec_idx, 1u32)
+        return 0u32
+    }
+    return 0u32
+}
+
+/* ─── "irreversible" modifier check on a cycle decl ───────────────── */
+
+var SID_IRREV_NAME : [u8; 13]
+var SID_IRREV_INIT : u8 = 0u8
+
+fn sid_init_irrev_name() -> u32 {
+    if SID_IRREV_INIT == 1u8 { return 0u32 }
+    SID_IRREV_NAME[0]  = 105u8 /* i */
+    SID_IRREV_NAME[1]  = 114u8 /* r */
+    SID_IRREV_NAME[2]  = 114u8 /* r */
+    SID_IRREV_NAME[3]  = 101u8 /* e */
+    SID_IRREV_NAME[4]  = 118u8 /* v */
+    SID_IRREV_NAME[5]  = 101u8 /* e */
+    SID_IRREV_NAME[6]  = 114u8 /* r */
+    SID_IRREV_NAME[7]  = 115u8 /* s */
+    SID_IRREV_NAME[8]  = 105u8 /* i */
+    SID_IRREV_NAME[9]  = 98u8  /* b */
+    SID_IRREV_NAME[10] = 108u8 /* l */
+    SID_IRREV_NAME[11] = 101u8 /* e */
+    SID_IRREV_NAME[12] = 0u8
+    SID_IRREV_INIT = 1u8
+    return 0u32
+}
+
+fn sid_cycle_has_irreversible_modifier(decl_node: u32) -> u8 {
+    sid_init_irrev_name()
+    let n : u32 = iii_ast_cycle_modifier_count(SID_AST, decl_node)
+    let mut j : u32 = 0u32
+    while j < n {
+        let mn : u32 = iii_ast_cycle_modifier_at(SID_AST, decl_node, j)
+        if mn != 0u32 {
+            let mk : u32 = iii_ast_node_kind(SID_AST, mn)
+            if mk == SID_K_MODIFIER {
+                let off : u32 = iii_ast_modifier_name_offset(SID_AST, mn)
+                let len : u32 = iii_ast_modifier_name_length(SID_AST, mn)
+                if sid_slice_eq_cstr_lower(off, len, &SID_IRREV_NAME as u64) == 1u8 {
+                    return 1u8
+                }
+            }
+        }
+        j = j + 1u32
+    }
+    return 0u8
+}
+
+/* ─── Per-cycle processing ────────────────────────────────────────── */
+
+fn sid_emit_annotation(rec_idx: u32) -> u32 {
+    let decl : u32 = sid_rec_decl_node(rec_idx)
+    let composed : u32 = sid_rec_composed(rec_idx)
+    let replay : u32   = sid_rec_replay(rec_idx)
+    let cc : u32       = sid_rec_call_count(rec_idx)
+    let irr : u32      = sid_rec_irreversible(rec_idx)
+
+    /* Layout (mirror sid.c lines 459-475): u16 composed_hexad LE, u16 pad,
+     * u32 replay_bitmap LE, u8 call_count, u8 irreversible, u8[cc] calls. */
+    let base : u64 = &SID_BLOB as u64
+    iii_ast_store_u8(base + 0u64, composed & 0xFFu32)
+    iii_ast_store_u8(base + 1u64, (composed >> 8u32) & 0xFFu32)
+    iii_ast_store_u8(base + 2u64, 0u32)
+    iii_ast_store_u8(base + 3u64, 0u32)
+    iii_ast_store_u8(base + 4u64, replay & 0xFFu32)
+    iii_ast_store_u8(base + 5u64, (replay >> 8u32) & 0xFFu32)
+    iii_ast_store_u8(base + 6u64, (replay >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(base + 7u64, (replay >> 24u32) & 0xFFu32)
+    iii_ast_store_u8(base + 8u64, cc & 0xFFu32)
+    iii_ast_store_u8(base + 9u64, irr & 0xFFu32)
+    let mut i : u32 = 0u32
+    while i < cc {
+        let kk : u32 = sid_rec_get_call(rec_idx, i)
+        iii_ast_store_u8(base + 10u64 + (i as u64), kk & 0xFFu32)
+        i = i + 1u32
+    }
+    let blen : u64 = (10u32 + cc) as u64
+    let phase_ptr : u64 = &SID_ANNO_PHASE as u64
+    iii_ast_annotate(SID_AST, phase_ptr, decl, base, blen)
+    return 0u32
+}
+
+fn sid_process_cycle(decl_node: u32) -> u32 {
+    let rec : u32 = sid_rec_alloc(decl_node)
+    if rec == 0xFFFFFFFFu32 {
+        sid_emit_error(SID_E_OOM, decl_node)
+        return 0u32
+    }
+
+    /* @irreversible modifier check. */
+    if sid_cycle_has_irreversible_modifier(decl_node) == 1u8 {
+        sid_rec_set_irreversible(rec, 1u32)
+    }
+
+    /* Walk forward block. */
+    let fwd : u32 = iii_ast_cycle_forward_block(SID_AST, decl_node)
+    if fwd != 0u32 { sid_walk(fwd, rec) }
+
+    /* Walk compromise block (presence implies irreversible). */
+    let comp : u32 = iii_ast_cycle_compromise_block(SID_AST, decl_node)
+    if comp != 0u32 {
+        let ck : u32 = iii_ast_node_kind(SID_AST, comp)
+        if ck == SID_K_COMPROMISE_BLOCK {
+            sid_rec_set_irreversible(rec, 1u32)
+        }
+    }
+
+    /* Compose with sema-declared hexad. */
+    if SID_SEMA != 0u64 {
+        let declared : u32 = iii_sema_cycle_hexad(SID_SEMA, decl_node) & 0xFFFFu32
+        let composed : u32 = sid_rec_composed(rec)
+        if declared != SID_HEXAD_UNSET {
+            if composed != SID_HEXAD_UNSET {
+                let total : u32 = iii_hexad_compose_packed(declared, composed) & 0xFFFFu32
+                if total == SID_HEXAD_UNSET {
+                    sid_emit_error(SID_E_HEXAD_COMPOSE_FAIL, decl_node)
+                } else {
+                    if iii_hexad_packed_admitted(total) == 0u8 {
+                        sid_emit_error(SID_E_HEXAD_COMPOSE_FAIL, decl_node)
+                    }
+                    sid_rec_set_composed(rec, total)
+                }
+            } else {
+                sid_rec_set_composed(rec, declared)
+            }
+        }
+    }
+
+    /* Defense-in-depth: irreversible cycles emit no replay-plan bits. */
+    if sid_rec_irreversible(rec) == 1u32 {
+        sid_rec_set_replay(rec, 0u32)
+    }
+
+    sid_emit_annotation(rec)
+    return 0u32
+}
+
+/* ─── Public API ──────────────────────────────────────────────────── */
+
+fn iii_sid_create(ast: u64, sema: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    sid_init_all()
+    SID_AST   = ast
+    SID_SEMA  = sema
+    SID_RAN   = 0u8
+    SID_REC_COUNT = 0u32
+    SID_ERR_COUNT = 0u32
+    SID_INIT  = 1u8
+    return &SID_SENTINEL as u64
+}
+
+fn iii_sid_destroy(s: u64) @export {
+    SID_AST   = 0u64
+    SID_SEMA  = 0u64
+    SID_RAN   = 0u8
+    SID_REC_COUNT = 0u32
+    SID_ERR_COUNT = 0u32
+    SID_INIT  = 0u8
+    return
+}
+
+fn iii_sid_run(s: u64) -> i32 @export {
+    if SID_INIT == 0u8 { return 0i32 }
+    if SID_AST  == 0u64 { return 0i32 }
+    if SID_RAN  == 1u8 {
+        if SID_ERR_COUNT == 0u32 { return 1i32 }
+        return 0i32
+    }
+    SID_RAN = 1u8
+
+    iii_hexad_check_init()
+
+    let root : u32 = iii_ast_root_module(SID_AST)
+    if root == 0u32 { return 0i32 }
+    let mk : u32 = iii_ast_node_kind(SID_AST, root)
+    if mk != SID_K_MODULE { return 0i32 }
+
+    let n : u32 = iii_ast_module_decl_count(SID_AST, root)
+    let mut i : u32 = 0u32
+    while i < n {
+        let did  : u32 = iii_ast_module_decl_at(SID_AST, root, i)
+        let kind : u32 = iii_ast_node_kind(SID_AST, did)
+        if kind == SID_K_CYCLE_DECL {
+            sid_process_cycle(did)
+        }
+        i = i + 1u32
+    }
+
+    if SID_ERR_COUNT == 0u32 { return 1i32 }
+    return 0i32
+}
+
+fn iii_sid_error_count(s: u64) -> u32 @export {
+    return SID_ERR_COUNT
+}
+
+/* main.c reads three fields: code (i32@0), cycle_decl_node (u32@4),
+ * message (u64@8) — write them into *out. */
+fn iii_sid_error_at(s: u64, idx: u32, out: u64) @export {
+    if out == 0u64 { return }
+    /* Zero out 16 bytes first. */
+    let mut z : u32 = 0u32
+    while z < 16u32 {
+        iii_ast_store_u8(out + (z as u64), 0u32)
+        z = z + 1u32
+    }
+    if idx >= SID_ERR_COUNT { return }
+    let base : u64 = (&SID_ERRORS as u64) + ((idx * SID_ERR_BYTES) as u64)
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let b : u32 = iii_ast_load_u8(base + (i as u64))
+        iii_ast_store_u8(out + (i as u64), b)
+        i = i + 1u32
+    }
+    return
+}
+
+fn iii_sid_error_name(code: i32) -> u64 @export {
+    if code == 0i32                            { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[0] as u64) }
+    if code == SID_E_PARSE_IRPD                { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[1] as u64) }
+    if code == SID_E_UNKNOWN_METHOD            { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[2] as u64) }
+    if code == SID_E_HEXAD_COMPOSE_FAIL        { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[3] as u64) }
+    if code == SID_E_CEILING_REJECT            { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[4] as u64) }
+    if code == SID_E_TOO_MANY_CALLS            { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[5] as u64) }
+    if code == SID_E_REPLAY_BITMAP_OVERFLOW    { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[6] as u64) }
+    if code == SID_E_OOM                       { return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[7] as u64) }
+    return (&SID_ENAME_BUF as u64) + (SID_ENAME_OFF[8] as u64)
+}
+
+fn iii_sid_record_count(s: u64) -> u32 @export {
+    return SID_REC_COUNT
+}
+
+fn iii_sid_record_at(s: u64, idx: u32) -> u64 @export {
+    if idx >= SID_REC_COUNT { return 0u64 }
+    return sid_rec_base(idx)
+}
+
+fn iii_sid_record_for_decl(s: u64, decl_node: u32) -> u64 @export {
+    let mut i : u32 = 0u32
+    while i < SID_REC_COUNT {
+        if sid_rec_decl_node(i) == decl_node { return sid_rec_base(i) }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+fn iii_sid_se_kind_name(k: u32) -> u64 @export {
+    if k == 0u32 {
+        /* Return pointer to a static "none\0" embedded in SID_METHOD_BUF
+         * slot 0 (which we overload to hold "none"). */
+        return &SID_NONE_NAME as u64
+    }
+    if k >= 1u32 {
+        if k <= 17u32 {
+            return (&SID_METHOD_BUF as u64) + (SID_METHOD_OFF[k] as u64)
+        }
+    }
+    return &SID_UNKNOWN_NAME as u64
+}
+
+var SID_NONE_NAME    : [u8; 5]
+var SID_UNKNOWN_NAME : [u8; 8]
+var SID_KIND_NAMES_INIT : u8 = 0u8
+
+fn sid_init_kind_name_singletons() -> u32 {
+    if SID_KIND_NAMES_INIT == 1u8 { return 0u32 }
+    SID_NONE_NAME[0] = 110u8 /* n */
+    SID_NONE_NAME[1] = 111u8 /* o */
+    SID_NONE_NAME[2] = 110u8 /* n */
+    SID_NONE_NAME[3] = 101u8 /* e */
+    SID_NONE_NAME[4] = 0u8
+
+    SID_UNKNOWN_NAME[0] = 117u8 /* u */
+    SID_UNKNOWN_NAME[1] = 110u8 /* n */
+    SID_UNKNOWN_NAME[2] = 107u8 /* k */
+    SID_UNKNOWN_NAME[3] = 110u8 /* n */
+    SID_UNKNOWN_NAME[4] = 111u8 /* o */
+    SID_UNKNOWN_NAME[5] = 119u8 /* w */
+    SID_UNKNOWN_NAME[6] = 110u8 /* n */
+    SID_UNKNOWN_NAME[7] = 0u8
+    SID_KIND_NAMES_INIT = 1u8
+    return 0u32
+}
+
+fn iii_sid_se_kind_from_method(name_ptr: u64) -> u32 @export {
+    if name_ptr == 0u64 { return SID_SE_NONE }
+    sid_init_method_table()
+    /* Compute string length of cstring. */
+    let mut len : u32 = 0u32
+    while iii_ast_load_u8(name_ptr + (len as u64)) != 0u8 {
+        len = len + 1u32
+        if len > 32u32 { return SID_SE_NONE }
+    }
+    /* Linear scan of method table; case-insensitive cstring compare. */
+    let mut k : u32 = 1u32
+    while k <= 17u32 {
+        if SID_METHOD_LEN[k] == len {
+            let mptr : u64 = (&SID_METHOD_BUF as u64) + (SID_METHOD_OFF[k] as u64)
+            if sid_cstr_eq_lower(name_ptr, mptr, len) == 1u8 {
+                return k
+            }
+        }
+        k = k + 1u32
+    }
+    return SID_SE_NONE
+}
+
+fn sid_cstr_eq_lower(a: u64, b: u64, len: u32) -> u8 {
+    let mut i : u32 = 0u32
+    while i < len {
+        let av : u32 = sid_to_lower(iii_ast_load_u8(a + (i as u64)))
+        let bv : u32 = sid_to_lower(iii_ast_load_u8(b + (i as u64)))
+        if av != bv { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}

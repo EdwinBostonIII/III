@@ -1,0 +1,49 @@
+/* 388 — numera/fe25519 Ed25519 point layer via the module's public API.
+ * RFC8032 test1: pubkey(seed 9d61..7f60) == d75a98..511a (SHA-512+clamp+
+ * ed_scalar_mul_base+ed_compress), then decompress(pk)->recompress round-trip.
+ * exit 99 = both pass. Proves fe25519 (fixed-size, ~1000x faster field). */
+module corpus_388
+
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_scalar_mul_base(scalar: u64, out: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_compress(p: u64, out: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_decompress(comp: u64, pout: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_final(out: *u8) -> u32 from "sha512.iii"
+
+var SEED   : [u8; 32]
+var HASH   : [u8; 64]
+var SCALAR : [u8; 32]
+var PTR    : [u64; 32]
+var PKOUT  : [u8; 32]
+var PKE    : [u8; 32]
+
+fn main() -> u64 {
+    fe25519_init()
+    SEED[0u64]=0x9du8 SEED[1u64]=0x61u8 SEED[2u64]=0xb1u8 SEED[3u64]=0x9du8 SEED[4u64]=0xefu8 SEED[5u64]=0xfdu8 SEED[6u64]=0x5au8 SEED[7u64]=0x60u8
+    SEED[8u64]=0xbau8 SEED[9u64]=0x84u8 SEED[10u64]=0x4au8 SEED[11u64]=0xf4u8 SEED[12u64]=0x92u8 SEED[13u64]=0xecu8 SEED[14u64]=0x2cu8 SEED[15u64]=0xc4u8
+    SEED[16u64]=0x44u8 SEED[17u64]=0x49u8 SEED[18u64]=0xc5u8 SEED[19u64]=0x69u8 SEED[20u64]=0x7bu8 SEED[21u64]=0x32u8 SEED[22u64]=0x69u8 SEED[23u64]=0x19u8
+    SEED[24u64]=0x70u8 SEED[25u64]=0x3bu8 SEED[26u64]=0xacu8 SEED[27u64]=0x03u8 SEED[28u64]=0x1cu8 SEED[29u64]=0xaeu8 SEED[30u64]=0x7fu8 SEED[31u64]=0x60u8
+    PKE[0u64]=0xd7u8 PKE[1u64]=0x5au8 PKE[2u64]=0x98u8 PKE[3u64]=0x01u8 PKE[4u64]=0x82u8 PKE[5u64]=0xb1u8 PKE[6u64]=0x0au8 PKE[7u64]=0xb7u8
+    PKE[8u64]=0xd5u8 PKE[9u64]=0x4bu8 PKE[10u64]=0xfeu8 PKE[11u64]=0xd3u8 PKE[12u64]=0xc9u8 PKE[13u64]=0x64u8 PKE[14u64]=0x07u8 PKE[15u64]=0x3au8
+    PKE[16u64]=0x0eu8 PKE[17u64]=0xe1u8 PKE[18u64]=0x72u8 PKE[19u64]=0xf3u8 PKE[20u64]=0xdau8 PKE[21u64]=0xa6u8 PKE[22u64]=0x23u8 PKE[23u64]=0x25u8
+    PKE[24u64]=0xafu8 PKE[25u64]=0x02u8 PKE[26u64]=0x1au8 PKE[27u64]=0x68u8 PKE[28u64]=0xf7u8 PKE[29u64]=0x07u8 PKE[30u64]=0x51u8 PKE[31u64]=0x1au8
+    sha512_init()
+    sha512_update(&SEED as u64 as *u8, 32u64)
+    sha512_final(&HASH as u64 as *u8)
+    let mut k : u64 = 0u64
+    while k < 32u64 { SCALAR[k] = HASH[k]  k = k + 1u64 }
+    SCALAR[0u64] = SCALAR[0u64] & 0xF8u8
+    SCALAR[31u64] = SCALAR[31u64] & 0x7Fu8
+    SCALAR[31u64] = SCALAR[31u64] | 0x40u8
+    ed_scalar_mul_base(&SCALAR as u64, &PTR as u64)
+    ed_compress(&PTR as u64, &PKOUT as u64)
+    k = 0u64
+    while k < 32u64 { if PKOUT[k] != PKE[k] { return (k + 1u64) } k = k + 1u64 }
+    ed_decompress(&PKE as u64, &PTR as u64)
+    ed_compress(&PTR as u64, &PKOUT as u64)
+    k = 0u64
+    while k < 32u64 { if PKOUT[k] != PKE[k] { return (100u64 + k) } k = k + 1u64 }
+    return 99u64
+}

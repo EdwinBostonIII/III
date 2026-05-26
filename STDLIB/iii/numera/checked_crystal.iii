@@ -1,0 +1,172 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\checked_crystal.iii
+ *
+ * III STDLIB - numera::checked_crystal
+ *
+ * Lattice plan Step 0031 -- crystal-on-error wrappers around the
+ * existing checked_u32_* / checked_u64_* arithmetic.  When an op
+ * overflows / underflows / div-by-zero, the wrapper mints a crystal
+ * whose site_hash binds (op_kind, a, b) and whose error_code records
+ * the failure mode.  Caller can attach edges or carry it through
+ * the ripple engine for full provenance.
+ *
+ * Public surface:
+ *   checked_u32_add_with_crystal(a, b) -> u64       (option-encoded result; 0 = err crystal minted)
+ *   checked_u32_sub_with_crystal(a, b) -> u64
+ *   checked_u32_mul_with_crystal(a, b) -> u64
+ *   checked_u32_div_with_crystal(a, b) -> u64
+ *   checked_u64_add_with_crystal(a, b) -> u64       (returns option_u64 handle on success; 0 on err)
+ *   checked_u64_sub_with_crystal(a, b) -> u64
+ *   checked_u64_mul_with_crystal(a, b) -> u64
+ *   checked_u64_div_with_crystal(a, b) -> u64
+ *
+ *   checked_crystal_last_error() -> u64   -- crystal_id of most recent err, or 0
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+
+module numera_checked_crystal
+
+extern @abi(c-msvc-x64) fn checked_u32_add(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u32_sub(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u32_mul(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u32_div(a: u32, b: u32) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_add(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_sub(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_mul(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_div(a: u64, b: u64) -> u64 from "checked.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const CC_OP_ADD : u32 = 1u32
+const CC_OP_SUB : u32 = 2u32
+const CC_OP_MUL : u32 = 3u32
+const CC_OP_DIV : u32 = 4u32
+
+const CC_ERR_OVERFLOW   : u32 = 0xC101u32
+const CC_ERR_UNDERFLOW  : u32 = 0xC102u32
+const CC_ERR_DIV_BY_ZERO: u32 = 0xC103u32
+
+var CC_DOMAIN     : [u8; 12]    /* "checked_op\0\0" */
+var CC_DOMAIN_INIT : u8 = 0u8
+var CC_OP_BUF     : [u8; 4]
+var CC_A_BUF      : [u8; 8]
+var CC_B_BUF      : [u8; 8]
+var CC_SITE       : [u8; 32]
+var CC_LAST_ERR   : u64 = 0u64
+
+fn cc_init_domain() -> u32 {
+    if CC_DOMAIN_INIT == 1u8 { return 0u32 }
+    CC_DOMAIN[0u64]  =  99u8     /* c */
+    CC_DOMAIN[1u64]  = 104u8     /* h */
+    CC_DOMAIN[2u64]  = 101u8     /* e */
+    CC_DOMAIN[3u64]  =  99u8     /* c */
+    CC_DOMAIN[4u64]  = 107u8     /* k */
+    CC_DOMAIN[5u64]  = 101u8     /* e */
+    CC_DOMAIN[6u64]  = 100u8     /* d */
+    CC_DOMAIN[7u64]  =  95u8     /* _ */
+    CC_DOMAIN[8u64]  = 111u8     /* o */
+    CC_DOMAIN[9u64]  = 112u8     /* p */
+    CC_DOMAIN[10u64] = 0u8
+    CC_DOMAIN[11u64] = 0u8
+    CC_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+fn cc_pack_u32(buf_addr: u64, v: u32) -> u32 {
+    let p : *u8 = buf_addr as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn cc_pack_u64(buf_addr: u64, v: u64) -> u32 {
+    let p : *u8 = buf_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn cc_mint_err(op_kind: u32, err_code: u32, a64: u64, b64: u64) -> u64 {
+    cc_init_domain()
+    cc_pack_u32(&CC_OP_BUF as u64, op_kind)
+    cc_pack_u64(&CC_A_BUF as u64, a64)
+    cc_pack_u64(&CC_B_BUF as u64, b64)
+    mhash_begin()
+    mhash_domain(&CC_DOMAIN as u64, 10u64)
+    mhash_payload(&CC_OP_BUF as u64, 4u64)
+    mhash_payload(&CC_A_BUF as u64, 8u64)
+    mhash_payload(&CC_B_BUF as u64, 8u64)
+    mhash_final(&CC_SITE as u64)
+    let cid : u64 = crystal_mint(err_code, &CC_SITE as u64, 0u64, b64)
+    CC_LAST_ERR = cid
+    return 0u64
+}
+
+fn checked_crystal_last_error() -> u64 @export {
+    return CC_LAST_ERR
+}
+
+/* --- u32 wrappers --- */
+
+fn checked_u32_add_with_crystal(a: u32, b: u32) -> u64 @export {
+    let r : u64 = checked_u32_add(a, b)
+    if r != 0u64 { return r }
+    return cc_mint_err(CC_OP_ADD, CC_ERR_OVERFLOW, a as u64, b as u64)
+}
+
+fn checked_u32_sub_with_crystal(a: u32, b: u32) -> u64 @export {
+    let r : u64 = checked_u32_sub(a, b)
+    if r != 0u64 { return r }
+    return cc_mint_err(CC_OP_SUB, CC_ERR_UNDERFLOW, a as u64, b as u64)
+}
+
+fn checked_u32_mul_with_crystal(a: u32, b: u32) -> u64 @export {
+    let r : u64 = checked_u32_mul(a, b)
+    if r != 0u64 { return r }
+    return cc_mint_err(CC_OP_MUL, CC_ERR_OVERFLOW, a as u64, b as u64)
+}
+
+fn checked_u32_div_with_crystal(a: u32, b: u32) -> u64 @export {
+    if b == 0u32 {
+        return cc_mint_err(CC_OP_DIV, CC_ERR_DIV_BY_ZERO, a as u64, 0u64)
+    }
+    return checked_u32_div(a, b)
+}
+
+/* --- u64 wrappers (return option_u64 handle on success, 0 on err) --- */
+
+fn checked_u64_add_with_crystal(a: u64, b: u64) -> u64 @export {
+    let r : u64 = checked_u64_add(a, b)
+    if r != 0u64 { return r }
+    return cc_mint_err(CC_OP_ADD, CC_ERR_OVERFLOW, a, b)
+}
+
+fn checked_u64_sub_with_crystal(a: u64, b: u64) -> u64 @export {
+    let r : u64 = checked_u64_sub(a, b)
+    if r != 0u64 { return r }
+    return cc_mint_err(CC_OP_SUB, CC_ERR_UNDERFLOW, a, b)
+}
+
+fn checked_u64_mul_with_crystal(a: u64, b: u64) -> u64 @export {
+    let r : u64 = checked_u64_mul(a, b)
+    if r != 0u64 { return r }
+    return cc_mint_err(CC_OP_MUL, CC_ERR_OVERFLOW, a, b)
+}
+
+fn checked_u64_div_with_crystal(a: u64, b: u64) -> u64 @export {
+    if b == 0u64 {
+        return cc_mint_err(CC_OP_DIV, CC_ERR_DIV_BY_ZERO, a, 0u64)
+    }
+    return checked_u64_div(a, b)
+}

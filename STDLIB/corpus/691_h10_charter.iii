@@ -1,0 +1,19 @@
+/* 691_h10_charter.iii -- mig6 / H10: the H10 falsifier as a run_charter constitutional clause.
+ *
+ * Companion to 673_constitution_holds (the GENERIC verify-AND-falsify mechanism over the COP
+ * witness-VM): the H10 invariant ("nothing trusted: every result is a re-checkable certificate
+ * (M16); the producer is never trusted") is a trust property the COP VM cannot express, so it is
+ * its own module falsifier here.  Drives h10_selftest (numera/h10_charter.iii): the consumer RE-
+ * CHECKS an Ed25519 certificate (RFC 8032 7.1 Test 1) -- accepting the honest signature, rejecting
+ * an R-tamper and an S-tamper (S < L) -- and run_charter is a REAL terminal gate: GREEN on the H10
+ * clause, RED (the failing clause index) on an injected deliberately-false canary that pretends a
+ * tampered certificate still verifies (prove-the-negative: not vacuously green).  h10_selftest is
+ * the H10 module's contribution to the constitution's union-of-all-module-falsifiers.
+ * Main-corpus convention: rc 99 = pass; 1..9 = which h10_selftest assertion failed. */
+module corpus_691
+
+extern @abi(c-msvc-x64) fn h10_selftest() -> u64 from "h10_charter.iii"
+
+fn main() -> u64 {
+    return h10_selftest()
+}

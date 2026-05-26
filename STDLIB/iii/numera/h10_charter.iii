@@ -1,0 +1,300 @@
+/* STDLIB/iii/numera/h10_charter.iii -- the H10 falsifier as a run_charter constitutional clause.
+ *
+ * H10 ("nothing trusted"): every result -- solve, crypto, federation, memo, regeneration --
+ * is a re-checkable certificate (M16); the PRODUCER is never trusted.  The consumer protects
+ * itself by RE-RUNNING the check, never by re-signing and never by taking the producer's word.
+ * The falsifier is a result consumed without re-checking its certificate.  This module makes
+ * H10 a *constitutional clause* with a paired verify-AND-falsify predicate (the mig6 falsifier-
+ * per-clause discipline) folded by a terminal-gate run_charter: the charter is GREEN iff every
+ * clause both HOLDS on its good witness AND CATCHES its bad witness.  It mirrors the GENERIC
+ * mechanism in constitution.iii (cons_clause_holds / cons_holds_selftest, 673_constitution_holds)
+ * and the sibling h2/h3 charters, but H10 is a trust property (a certificate the consumer re-
+ * checks, never trusts) the COP witness-VM cannot express, so h10_canary_holds is the H10
+ * module's OWN falsifier, ready to be unioned into the constitution's run_charter (the union-of-
+ * all-module-falsifiers, mig6 gap b).
+ *
+ * The cleanest concrete witness is an Ed25519 signature: a certificate the consumer re-runs
+ * ed25519_verify on -- it never re-signs, never trusts the signer's assertion.  The vectors are
+ * RFC 8032 7.1 Test 1 (the same valid pk + signature as corpus 194, empty message).
+ *
+ * The H10 clause's two runtime-checkable, byte-exact facets:
+ *   verify  -- the certificate RE-CHECKS and is ACCEPTED: ed25519_verify(valid_pk, msg, 0, valid_sig)
+ *              == 1.  The consumer re-runs the check rather than trusting the producer, and the
+ *              honest certificate passes.  So a result carrying its certificate loses NOTHING --
+ *              the consumer verifies it itself.
+ *   falsify -- a TAMPERED certificate is REJECTED by the re-check: flip one byte of R (sig[0]) ->
+ *              verify == 0; restore; flip one byte of S that keeps S < L (sig[32] low bit) ->
+ *              verify == 0; restore.  A consumer that TRUSTED the producer (skipped the re-check)
+ *              would accept these forgeries; the re-check CATCHES them.  The arm is 1 iff the valid
+ *              sig verifies AND both tampers are rejected.  HOLDS = verify & falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing-clause index) unless all
+ * hold.  The negative arm in h10_selftest registers a deliberately-false canary clause (it CLAIMS a
+ * tampered signature still verifies -- it does not) and proves the gate goes RED: the gate is a
+ * real falsifier, not vacuously green.
+ *
+ * The STRUCTURAL half of H10 ("no result consumed without re-checking its certificate") is a
+ * source/build invariant a runtime clause cannot see.  Together (the runtime re-check clause +
+ * the structural build-gate) they are the complete H10 falsifier.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: crypt_ed25519.iii only (+ msvcrt malloc/free for the certificate buffers).  No ML, no
+ * float, no u64 division.
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores; masked idx.
+ */
+module numera_h10_charter
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+
+const H10_OK             : i32 =  0i32
+const H10_OFF_R          : u64 = 0u64     /* sig[0]: first byte of the R point (encoded) */
+const H10_OFF_S          : u64 = 32u64    /* sig[32]: first (low) byte of the S scalar (LE) */
+const H10_FLIP           : u8  = 0x01u8   /* flip the low bit; for S, 0x5F->0x5E keeps S < L */
+const H10_MAX_CLAUSES    : u32 = 64u32
+const H10_KIND_RECHECK   : u8  = 0u8    /* the H10 clause: certificate re-checks AND tamper-rejects */
+const H10_KIND_CANARY    : u8  = 1u8    /* a deliberately-false clause (negative arm only) */
+const H10_VERDICT_GREEN  : u64 = 99u64  /* > H10_MAX_CLAUSES, so never a RED index */
+const H10_U32MASK        : u64 = 0xFFFFFFFFu64
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var H10_CLAUSE_KIND  : [u8;  64]
+var H10_CLAUSE_COUNT : u32 = 0u32
+
+/* --- the certificate buffers (malloc'd in h10_init; NO local var arrays, Trap) --- */
+var H10_PUBKEY : u64 = 0u64   /* 32-byte Ed25519 public key */
+var H10_SIG    : u64 = 0u64   /* 64-byte signature (R || S) -- the certificate */
+var H10_MSG    : u64 = 0u64   /* the (empty) signed message */
+
+/* Fill the 32-byte RFC 8032 7.1 Test 1 public key (same vector as corpus 194). */
+fn h10_fill_pubkey(p: *u8) -> i32 {
+    p[0u64]  = 0xD7u8
+    p[1u64]  = 0x5Au8
+    p[2u64]  = 0x98u8
+    p[3u64]  = 0x01u8
+    p[4u64]  = 0x82u8
+    p[5u64]  = 0xB1u8
+    p[6u64]  = 0x0Au8
+    p[7u64]  = 0xB7u8
+    p[8u64]  = 0xD5u8
+    p[9u64]  = 0x4Bu8
+    p[10u64] = 0xFEu8
+    p[11u64] = 0xD3u8
+    p[12u64] = 0xC9u8
+    p[13u64] = 0x64u8
+    p[14u64] = 0x07u8
+    p[15u64] = 0x3Au8
+    p[16u64] = 0x0Eu8
+    p[17u64] = 0xE1u8
+    p[18u64] = 0x72u8
+    p[19u64] = 0xF3u8
+    p[20u64] = 0xDAu8
+    p[21u64] = 0xA6u8
+    p[22u64] = 0x23u8
+    p[23u64] = 0x25u8
+    p[24u64] = 0xAFu8
+    p[25u64] = 0x02u8
+    p[26u64] = 0x1Au8
+    p[27u64] = 0x68u8
+    p[28u64] = 0xF7u8
+    p[29u64] = 0x07u8
+    p[30u64] = 0x51u8
+    p[31u64] = 0x1Au8
+    return H10_OK
+}
+
+/* Fill the 64-byte RFC 8032 7.1 Test 1 signature R||S (same vector as corpus 194). */
+fn h10_fill_sig(s: *u8) -> i32 {
+    s[0u64]  = 0xE5u8
+    s[1u64]  = 0x56u8
+    s[2u64]  = 0x43u8
+    s[3u64]  = 0x00u8
+    s[4u64]  = 0xC3u8
+    s[5u64]  = 0x60u8
+    s[6u64]  = 0xACu8
+    s[7u64]  = 0x72u8
+    s[8u64]  = 0x90u8
+    s[9u64]  = 0x86u8
+    s[10u64] = 0xE2u8
+    s[11u64] = 0xCCu8
+    s[12u64] = 0x80u8
+    s[13u64] = 0x6Eu8
+    s[14u64] = 0x82u8
+    s[15u64] = 0x8Au8
+    s[16u64] = 0x84u8
+    s[17u64] = 0x87u8
+    s[18u64] = 0x7Fu8
+    s[19u64] = 0x1Eu8
+    s[20u64] = 0xB8u8
+    s[21u64] = 0xE5u8
+    s[22u64] = 0xD9u8
+    s[23u64] = 0x74u8
+    s[24u64] = 0xD8u8
+    s[25u64] = 0x73u8
+    s[26u64] = 0xE0u8
+    s[27u64] = 0x65u8
+    s[28u64] = 0x22u8
+    s[29u64] = 0x49u8
+    s[30u64] = 0x01u8
+    s[31u64] = 0x55u8
+    s[32u64] = 0x5Fu8
+    s[33u64] = 0xB8u8
+    s[34u64] = 0x82u8
+    s[35u64] = 0x15u8
+    s[36u64] = 0x90u8
+    s[37u64] = 0xA3u8
+    s[38u64] = 0x3Bu8
+    s[39u64] = 0xACu8
+    s[40u64] = 0xC6u8
+    s[41u64] = 0x1Eu8
+    s[42u64] = 0x39u8
+    s[43u64] = 0x70u8
+    s[44u64] = 0x1Cu8
+    s[45u64] = 0xF9u8
+    s[46u64] = 0xB4u8
+    s[47u64] = 0x6Bu8
+    s[48u64] = 0xD2u8
+    s[49u64] = 0x5Bu8
+    s[50u64] = 0xF5u8
+    s[51u64] = 0xF0u8
+    s[52u64] = 0x59u8
+    s[53u64] = 0x5Bu8
+    s[54u64] = 0xBEu8
+    s[55u64] = 0x24u8
+    s[56u64] = 0x65u8
+    s[57u64] = 0x51u8
+    s[58u64] = 0x41u8
+    s[59u64] = 0x43u8
+    s[60u64] = 0x8Eu8
+    s[61u64] = 0x7Au8
+    s[62u64] = 0x10u8
+    s[63u64] = 0x0Bu8
+    return H10_OK
+}
+
+/* Reset the registry + (idempotently) allocate and fill the certificate buffers.  The buffers
+ * are the producer's result; the consumer re-checks them, never trusts them.  -1 on OOM. */
+fn h10_init() -> i32 @export {
+    H10_CLAUSE_COUNT = 0u32
+    if H10_PUBKEY == 0u64 {
+        let pk : *u8 = malloc(32u64)
+        if (pk as u64) == 0u64 { return -1i32 }
+        H10_PUBKEY = pk as u64
+    }
+    if H10_SIG == 0u64 {
+        let sg : *u8 = malloc(64u64)
+        if (sg as u64) == 0u64 { return -1i32 }
+        H10_SIG = sg as u64
+    }
+    if H10_MSG == 0u64 {
+        let mg : *u8 = malloc(1u64)
+        if (mg as u64) == 0u64 { return -1i32 }
+        H10_MSG = mg as u64
+    }
+    h10_fill_pubkey(H10_PUBKEY as *u8)
+    h10_fill_sig(H10_SIG as *u8)
+    return H10_OK
+}
+
+/* The H10 clause VERIFY arm: the consumer RE-CHECKS the honest certificate and ACCEPTS it.
+ * ed25519_verify(valid_pk, msg, 0, valid_sig) == 1.  1 = the re-check passes. */
+fn h10_verify() -> u8 @export {
+    h10_fill_sig(H10_SIG as *u8)
+    return ed25519_verify(H10_PUBKEY as *u8, H10_MSG as *u8, 0u64, H10_SIG as *u8)
+}
+
+/* The H10 clause FALSIFY arm: a TAMPERED certificate is REJECTED by the re-check.  Re-fill the
+ * honest sig (re-check accepts); flip one byte of R (sig[0]) -> verify == 0; restore -> accepts;
+ * flip one byte of S that keeps S < L (sig[32] low bit) -> verify == 0; restore.  1 iff the
+ * honest sig verifies AND both tampers are rejected. */
+fn h10_falsify() -> u8 @export {
+    h10_fill_sig(H10_SIG as *u8)
+    let pk : *u8 = H10_PUBKEY as *u8
+    let mg : *u8 = H10_MSG as *u8
+    let sg : *u8 = H10_SIG as *u8
+    if ed25519_verify(pk, mg, 0u64, sg) != 1u8 { return 0u8 }
+    /* R-tamper (sig[0]): the re-check must REJECT */
+    sg[H10_OFF_R] = sg[H10_OFF_R] ^ H10_FLIP
+    if ed25519_verify(pk, mg, 0u64, sg) != 0u8 { return 0u8 }
+    sg[H10_OFF_R] = sg[H10_OFF_R] ^ H10_FLIP
+    if ed25519_verify(pk, mg, 0u64, sg) != 1u8 { return 0u8 }
+    /* S-tamper (sig[32] low bit, stays < L): the re-check must REJECT */
+    sg[H10_OFF_S] = sg[H10_OFF_S] ^ H10_FLIP
+    if ed25519_verify(pk, mg, 0u64, sg) != 0u8 { return 0u8 }
+    sg[H10_OFF_S] = sg[H10_OFF_S] ^ H10_FLIP
+    return 1u8
+}
+
+/* The canary's holds: it CLAIMS a tampered certificate still verifies -- FALSE (the re-check
+ * rejects an R-flipped sig, so verify == 0).  A genuinely-false clause used ONLY to prove
+ * run_charter goes RED on a failure.  Returns the (tampered) verify result, i.e. 0. */
+fn h10_canary_holds() -> u8 {
+    h10_fill_sig(H10_SIG as *u8)
+    let sg : *u8 = H10_SIG as *u8
+    sg[H10_OFF_R] = sg[H10_OFF_R] ^ H10_FLIP
+    let v : u8 = ed25519_verify(H10_PUBKEY as *u8, H10_MSG as *u8, 0u64, sg)
+    sg[H10_OFF_R] = sg[H10_OFF_R] ^ H10_FLIP
+    return v
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn h10_clause_eval(idx: u32) -> u8 {
+    let k : u8 = H10_CLAUSE_KIND[(idx as u64) & H10_U32MASK]
+    if k == H10_KIND_RECHECK {
+        if h10_verify() != 1u8 { return 0u8 }
+        if h10_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == H10_KIND_CANARY { return h10_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k.  Returns the 0-based slot, or -1 if the registry is full. */
+fn h10_register(k: u8) -> i32 {
+    let n : u32 = H10_CLAUSE_COUNT
+    if n >= H10_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & H10_U32MASK
+    H10_CLAUSE_KIND[slot] = k
+    H10_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED). */
+fn h10_run_charter() -> u64 @export {
+    let n : u32 = H10_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if h10_clause_eval(i) != 1u8 { return ((i as u64) & H10_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return H10_VERDICT_GREEN
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves: the consumer re-checks the honest certificate and accepts it (1); the re-check rejects
+ * both an R-tamper and an S-tamper (2); the canary is genuinely false -- a tampered certificate
+ * does NOT verify (3); run_charter GREEN with the H10 clause registered (4,5); GREEN is
+ * reproducible across a re-run (6); and -- the prove-the-negative arm -- registering the false
+ * canary drives run_charter RED, returning the canary's 1-based index (=2), proving the gate is a
+ * real falsifier, not vacuously green (7,8). */
+fn h10_selftest() -> u64 @export {
+    if h10_init() != H10_OK { return 1u64 }
+    if h10_verify() != 1u8 { return 2u64 }
+    if h10_falsify() != 1u8 { return 3u64 }
+    if h10_canary_holds() != 0u8 { return 4u64 }
+    if h10_register(H10_KIND_RECHECK) != 0i32 { return 5u64 }
+    if h10_run_charter() != H10_VERDICT_GREEN { return 6u64 }
+    if h10_run_charter() != H10_VERDICT_GREEN { return 7u64 }
+    if h10_register(H10_KIND_CANARY) != 1i32 { return 8u64 }
+    if h10_run_charter() != 2u64 { return 9u64 }
+    return 99u64
+}
+
+/* h10_charter EMBODIES the H10 invariant as a self-falsifying constitutional clause: every result
+ * is a re-checkable certificate and the PRODUCER is never trusted -- the consumer re-runs the
+ * Ed25519 verify (accepting the honest certificate, rejecting every R/S tamper), and the terminal
+ * gate proves itself RED on a clause that pretends a tampered certificate still verifies.  The
+ * structural companion (no result consumed without re-checking its certificate) completes the H10
+ * falsifier. */

@@ -1,0 +1,11 @@
+/* SHA3-256("") = a7ffc6f8bf1ed766...   first byte = 0xa7 = 167 */
+module corpus_169
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+
+fn main() -> u64 {
+    let out : *u8 = malloc(32u64)
+    sha3_256_oneshot(0u64, 0u64, out as u64)
+    return out[0] as u64
+}

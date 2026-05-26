@@ -1,0 +1,115 @@
+/* STDLIB/iii/aether/backend_memo.iii -- The Reach, Phase 2: the L0 in-RAM hot cache (the nearest
+ * backend tier).  A fixed FIFO ring of 32 slots, each holding [occupied][address][length][value]
+ * up to MEMO_MAXVAL bytes.  reach_core consults L0 before L1 (disk): an L0 hit avoids the disk
+ * scan, and an L1 hit is written back DOWN into L0 (cache-fill) so the next reach is RAM-fast.
+ *
+ * Bounded + deterministic: a value larger than MEMO_MAXVAL is simply NOT cached (resolve falls
+ * through to L1), so L0 never grows unbounded and never changes a RESULT -- only its speed.  Like
+ * the store this is a DUMB byte tier: integrity (does the value re-hash to its address?) is the
+ * caller's (reach_core) job, never trusted here, so a stale/poisoned cache entry can never be
+ * blessed -- reach_core re-hashes whatever L0 returns and rejects a mismatch.
+ *
+ * Hexad: kind_passage.  Ring: R0.  NIH: numera/cad only.  Determinism: integer-only; ==/!= and
+ * UNSIGNED < (u64) compares; single-line fns; slot indices are u64 masked before pointer math;
+ * module-scope scratch (no local arrays); byte-by-byte copy (no wide store). */
+module aether_backend_memo
+
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const MEMO_OK         : i32 = 0i32
+const MEMO_NOTFOUND   : i32 = 1i32
+const MEMO_SKIP       : i32 = 2i32     /* value too large to cache -- resolve falls through to L1 */
+const MEMO_E_TOOBIG   : i32 = -1i32    /* caller out-buffer smaller than the cached value */
+const MEMO_SLOTS      : u64 = 32u64
+const MEMO_SLOTMASK   : u64 = 31u64
+const MEMO_ADDR_BYTES : u64 = 32u64
+const MEMO_MAXVAL     : u64 = 512u64
+const MEMO_NONE       : u64 = 0xFFFFFFFFFFFFFFFFu64
+const MEMO_U32MASK    : u64 = 0xFFFFFFFFu64
+
+var MEMO_OCC  : [u8; 32]
+var MEMO_ADDR : [u8; 1024]    /* 32 slots * 32 bytes */
+var MEMO_LEN  : [u64; 32]
+var MEMO_VAL  : [u8; 16384]   /* 32 slots * 512 bytes */
+var MEMO_NEXT : u64 = 0u64
+
+/* address of slot's 32-byte address field. */
+fn _memo_addr_ptr(slot: u64) -> u64 {
+    let s : u64 = slot & MEMO_U32MASK
+    return (&MEMO_ADDR as u64) + (s * MEMO_ADDR_BYTES)
+}
+
+/* address of slot's value field. */
+fn _memo_val_ptr(slot: u64) -> u64 {
+    let s : u64 = slot & MEMO_U32MASK
+    return (&MEMO_VAL as u64) + (s * MEMO_MAXVAL)
+}
+
+/* find the occupied slot holding `addr`, or MEMO_NONE. */
+fn _memo_find(addr: u64) -> u64 {
+    let a : u64 = addr
+    let mut i : u64 = 0u64
+    while i < MEMO_SLOTS {
+        if MEMO_OCC[i] == 1u8 {
+            if cad_eq(_memo_addr_ptr(i) as *u8, a as *u8) == 1u8 { return i }
+        }
+        i = i + 1u64
+    }
+    return MEMO_NONE
+}
+
+/* has(addr): 1 if cached, else 0. */
+fn backend_memo_has(addr: u64) -> u8 @export {
+    if _memo_find(addr) == MEMO_NONE { return 0u8 }
+    return 1u8
+}
+
+/* get(addr): copy the cached value into out (up to max), set *out_len, return MEMO_OK. */
+fn backend_memo_get(addr: u64, out: u64, max: u64, out_len: u64) -> i32 @export {
+    let o : u64 = out
+    let mx : u64 = max
+    let ol : u64 = out_len
+    let slot : u64 = _memo_find(addr)
+    if slot == MEMO_NONE { return MEMO_NOTFOUND }
+    let vlen : u64 = MEMO_LEN[slot]
+    if vlen > mx { return MEMO_E_TOOBIG }
+    let src : *u8 = _memo_val_ptr(slot) as *u8
+    let dst : *u8 = o as *u8
+    let mut i : u64 = 0u64
+    while i < vlen {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    let olp : *u64 = ol as *u64
+    olp[0] = vlen
+    return MEMO_OK
+}
+
+/* put(addr, buf, len): cache the value (FIFO eviction).  Idempotent; values over MEMO_MAXVAL are
+ * skipped (MEMO_SKIP -- not an error, the resolver just uses L1).  Stores raw bytes; never hashes. */
+fn backend_memo_put(addr: u64, buf: u64, len: u64) -> i32 @export {
+    let a : u64 = addr
+    let b : u64 = buf
+    let n : u64 = len
+    if n > MEMO_MAXVAL { return MEMO_SKIP }
+    if _memo_find(a) != MEMO_NONE { return MEMO_OK }
+    let slot : u64 = MEMO_NEXT
+    MEMO_NEXT = (MEMO_NEXT + 1u64) & MEMO_SLOTMASK
+    let da : *u8 = _memo_addr_ptr(slot) as *u8
+    let sa : *u8 = a as *u8
+    let mut i : u64 = 0u64
+    while i < MEMO_ADDR_BYTES {
+        da[i] = sa[i]
+        i = i + 1u64
+    }
+    let dv : *u8 = _memo_val_ptr(slot) as *u8
+    let sv : *u8 = b as *u8
+    let mut j : u64 = 0u64
+    while j < n {
+        dv[j] = sv[j]
+        j = j + 1u64
+    }
+    MEMO_LEN[slot] = n
+    MEMO_OCC[slot] = 1u8
+    return MEMO_OK
+}

@@ -1,0 +1,44 @@
+/* HKDF-SHA256 KAT: RFC 5869 Test Case 1.
+ *   IKM  = 0x0b * 22
+ *   salt = 00 01 02 03 04 05 06 07 08 09 0a 0b 0c
+ *   info = f0 f1 f2 f3 f4 f5 f6 f7 f8 f9
+ *   L    = 42
+ *   OKM  = 3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf
+ *          34007208d5b887185865
+ *
+ * Exit = first byte of OKM = 0x3C = 60.
+ */
+module corpus_81
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn hkdf_sha256_extract(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64) -> i32 from "hkdf.iii"
+extern @abi(c-msvc-x64) fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 from "hkdf.iii"
+
+fn main() -> u64 {
+    let ikm  : *u8 = malloc(22u64)
+    let salt : *u8 = malloc(13u64)
+    let info : *u8 = malloc(10u64)
+    let okm  : *u8 = malloc(42u64)
+    let mut i : u64 = 0u64
+    while i < 22u64 { ikm[i] = 0x0Bu8; i = i + 1u64 }
+    let mut j : u64 = 0u64
+    while j < 13u64 { salt[j] = j as u8; j = j + 1u64 }
+    let mut k : u64 = 0u64
+    while k < 10u64 { info[k] = (0xF0u64 + k) as u8; k = k + 1u64 }
+    hkdf_sha256_extract(salt, 13u64, ikm, 22u64)
+    hkdf_sha256_expand(info, 10u64, okm, 42u64)
+    /* Verify expected OKM */
+    if okm[0]  != 0x3Cu8 { return 1u64 }
+    if okm[1]  != 0xB2u8 { return 2u64 }
+    if okm[2]  != 0x5Fu8 { return 3u64 }
+    if okm[3]  != 0x25u8 { return 4u64 }
+    if okm[4]  != 0xFAu8 { return 5u64 }
+    if okm[16] != 0x2Du8 { return 6u64 }
+    if okm[31] != 0xBFu8 { return 7u64 }
+    if okm[32] != 0x34u8 { return 8u64 }
+    if okm[41] != 0x65u8 { return 9u64 }
+    let result : u64 = okm[0] as u64
+    free(ikm); free(salt); free(info); free(okm)
+    return result
+}

@@ -1,0 +1,61 @@
+/* format: build "v=42 h=000000ab" via builder + format helpers */
+module corpus_b34
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(b: u64, v: u32) -> i32 from "format.iii"
+extern @abi(c-msvc-x64) fn format_hex_u32(b: u64, v: u32) -> i32 from "format.iii"
+extern @abi(c-msvc-x64) fn format_literal(b: u64, base: u64, len: u64) -> i32 from "format.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    let b : u64 = builder_new(a, 64u64)
+    if b == 0u64 { return 1u64 }
+    /* Push "v=" */
+    let lit_ve : *u8 = malloc(2u64)
+    lit_ve[0] = 118u8     /* 'v' */
+    lit_ve[1] = 61u8      /* '=' */
+    format_literal(b, lit_ve as u64, 2u64)
+    /* Push 42 in decimal */
+    format_decimal_u32(b, 42u32)
+    /* Push " h=" */
+    let lit_he : *u8 = malloc(3u64)
+    lit_he[0] = 32u8      /* ' ' */
+    lit_he[1] = 104u8     /* 'h' */
+    lit_he[2] = 61u8      /* '=' */
+    format_literal(b, lit_he as u64, 3u64)
+    /* Push 0xAB in hex (8 chars zero-padded: 000000ab) */
+    format_hex_u32(b, 0xABu32)
+    /* Seal and verify */
+    let base : u64 = builder_seal(b)
+    let len : u64 = builder_len(b)
+    /* expect: "v=42 h=000000ab" -> 15 bytes */
+    if len != 15u64 { return 2u64 }
+    let p : *u8 = base as *u8
+    if p[0] != 118u8 { return 3u64 }    /* 'v' */
+    if p[1] != 61u8 { return 4u64 }     /* '=' */
+    if p[2] != 52u8 { return 5u64 }     /* '4' */
+    if p[3] != 50u8 { return 6u64 }     /* '2' */
+    if p[4] != 32u8 { return 7u64 }     /* ' ' */
+    if p[5] != 104u8 { return 8u64 }    /* 'h' */
+    if p[6] != 61u8 { return 9u64 }     /* '=' */
+    /* "000000ab" */
+    let mut i : u64 = 7u64
+    while i < 13u64 {
+        if p[i] != 48u8 { return 10u64 }   /* '0' */
+        i = i + 1u64
+    }
+    if p[13] != 97u8 { return 11u64 }    /* 'a' */
+    if p[14] != 98u8 { return 12u64 }    /* 'b' */
+    free(lit_ve)
+    free(lit_he)
+    builder_drop(b)
+    arena_drop(a)
+    return 99u64
+}

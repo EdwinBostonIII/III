@@ -1,0 +1,661 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sat.iii
+ *
+ * III STDLIB - numera::sat
+ *
+ * Deterministic CDCL SAT solver. Conflict-driven, clause learning,
+ * non-chronological backjumping, two-watched literals, 1UIP conflict
+ * analysis. No restarts; no randomness; no clause deletion; no
+ * learned-from-data heuristic. Decision rule is a FIXED static order
+ * (smallest unassigned variable, positive phase) -- M2/M3/M4 compliant.
+ *
+ * Public API:
+ *   sat_init(n_vars: u32) -> i32
+ *   sat_add_clause(lits: *u32, n_lits: u32) -> i32
+ *   sat_solve() -> i32                 (SAT_SAT / SAT_UNSAT / negative)
+ *   sat_value(vr: u32) -> u8           (0 false, 1 true, 0xFF unknown)
+ *     -- spec names the param `var`; `var` is a reserved keyword in iii, so
+ *        the parameter is `vr`. Param names are not part of the link/ABI
+ *        contract (only fn name + types + @abi); the hard contract holds.
+ *   sat_n_learned() -> u32
+ *   sat_n_decisions() -> u64
+ *   sat_n_conflicts() -> u64
+ *
+ * Literal encoding: v in 1..NVAR; pos = (v<<1); neg = (v<<1)|1.
+ * Value encoding:   0 = unassigned, 1 = false, 2 = true.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W1, W2, W8, W13, W14, W15 (no recursion).
+ *
+ * Self-test: sat_selftest() -> u64 returns 99 on full KAT pass.
+ */
+
+module numera_sat
+
+const SAT_OK              : i32 =  0i32
+const SAT_SAT             : i32 =  1i32
+const SAT_UNSAT           : i32 =  2i32
+const SAT_E_TRIV_UNSAT    : i32 = -1i32
+const SAT_E_TOO_BIG       : i32 = -2i32
+const SAT_E_NOT_INIT      : i32 = -3i32
+
+const SAT_MAX_VARS        : u32 = 65536u32
+const SAT_MAX_CLAUSES     : u32 = 262144u32
+const SAT_MAX_LITS_BLOCK  : u32 = 2097152u32
+const SAT_MAX_WATCH       : u32 = 16777216u32
+const SAT_MAX_CLAUSE_LEN  : u32 = 65537u32
+const SAT_NULL_CL         : u32 = 0xFFFFFFFFu32
+
+/* Per-variable state (index 0 unused; 1..NVAR live). */
+var SAT_VAR_VAL    : [u8;  65537]
+var SAT_VAR_LEVEL  : [u32; 65537]
+var SAT_VAR_REASON : [u32; 65537]
+var SAT_VAR_POS    : [u32; 65537]
+
+/* Assignment trail + propagation cursor. */
+var SAT_TRAIL      : [u32; 65537]
+var SAT_TRAIL_LEN  : u32 = 0u32
+var SAT_QHEAD      : u32 = 0u32
+
+/* Decision-level boundaries. */
+var SAT_LEVEL_BASE : [u32; 65537]
+var SAT_LEVEL      : u32 = 0u32
+
+/* Clause database: headers + packed literal block. */
+var SAT_CL_LIVE    : [u8;  262144]
+var SAT_CL_SIZE    : [u32; 262144]
+var SAT_CL_OFF     : [u32; 262144]
+var SAT_CL_LEARNED : [u8;  262144]
+var SAT_CL_USED    : u32 = 0u32
+var SAT_LIT_BUF    : [u32; 2097152]
+var SAT_LIT_USED   : u32 = 0u32
+
+/* Watch lists: one growable chunk per literal in a bump arena. */
+var SAT_WATCH_HEAD : [u32; 131074]
+var SAT_WATCH_LEN  : [u32; 131074]
+var SAT_WATCH_CAP  : [u32; 131074]
+var SAT_WATCH_BUF  : [u32; 16777216]
+var SAT_WATCH_USED : u32 = 0u32
+
+/* Conflict-analysis scratch (learned clause built here). */
+var SAT_SEEN       : [u8;  65537]
+var SAT_OUT_LEARN  : [u32; 65537]
+var SAT_OUT_LEN    : u32 = 0u32
+var SAT_OUT_BJ     : u32 = 0u32
+
+/* Clause-canonicalisation scratch (hoisted from local var; non-reentrant). */
+var SAT_SCRATCH    : [u32; 65537]
+var SAT_PACKED     : [u32; 65537]
+
+/* Counters / status. */
+var SAT_NVAR       : u32 = 0u32
+var SAT_DECISIONS  : u64 = 0u64
+var SAT_CONFLICTS  : u64 = 0u64
+var SAT_INITED     : u8  = 0u8
+var SAT_ALLOC_FAIL : u8  = 0u8
+
+/* Self-test literal-array scratch (build clauses to pass as *u32). */
+var SAT_T_BUF      : [u32; 8]
+
+/* --- Literal helpers --- */
+fn sat_lit_var(lit: u32) -> u32 { return lit >> 1u32 }
+fn sat_lit_sign(lit: u32) -> u32 { return lit & 1u32 }
+fn sat_lit_neg(lit: u32) -> u32 { return lit ^ 1u32 }
+fn sat_mk_lit(v: u32, sign: u32) -> u32 { return (v << 1u32) | (sign & 1u32) }
+
+/* Literal truth under current assignment: 0 = unknown, 1 = false, 2 = true. */
+fn sat_lit_value(lit: u32) -> u8 {
+    let v : u8 = SAT_VAR_VAL[lit >> 1u32]
+    if v == 0u8 { return 0u8 }
+    if (lit & 1u32) == 0u32 { return v }
+    if v == 2u8 { return 1u8 }
+    return 2u8
+}
+
+/* --- Lifecycle --- */
+fn sat_init(n_vars: u32) -> i32 @export {
+    if n_vars > SAT_MAX_VARS { return SAT_E_TOO_BIG }
+    SAT_NVAR = n_vars
+    let mut i : u32 = 0u32
+    while i <= n_vars {
+        SAT_VAR_VAL[i]    = 0u8
+        SAT_VAR_LEVEL[i]  = 0u32
+        SAT_VAR_REASON[i] = SAT_NULL_CL
+        SAT_VAR_POS[i]    = 0u32
+        i = i + 1u32
+    }
+    let nlit : u32 = 2u32 * (n_vars + 1u32)
+    let mut j : u32 = 0u32
+    while j < nlit {
+        SAT_WATCH_HEAD[j] = 0u32
+        SAT_WATCH_LEN[j]  = 0u32
+        SAT_WATCH_CAP[j]  = 0u32
+        j = j + 1u32
+    }
+    SAT_TRAIL_LEN   = 0u32
+    SAT_QHEAD       = 0u32
+    SAT_LEVEL       = 0u32
+    SAT_LEVEL_BASE[0] = 0u32
+    SAT_CL_USED     = 0u32
+    SAT_LIT_USED    = 0u32
+    SAT_WATCH_USED  = 0u32
+    SAT_DECISIONS   = 0u64
+    SAT_CONFLICTS   = 0u64
+    SAT_OUT_LEN     = 0u32
+    SAT_OUT_BJ      = 0u32
+    SAT_ALLOC_FAIL  = 0u8
+    SAT_INITED      = 1u8
+    return SAT_OK
+}
+
+/* --- Watch-list management (sets SAT_ALLOC_FAIL on exhaustion; Gap/Fix #4) --- */
+fn sat_watch_add(lit: u32, cl: u32) -> i32 {
+    let len : u32 = SAT_WATCH_LEN[lit]
+    let cap : u32 = SAT_WATCH_CAP[lit]
+    if len < cap {
+        SAT_WATCH_BUF[SAT_WATCH_HEAD[lit] + len] = cl
+        SAT_WATCH_LEN[lit] = len + 1u32
+        return SAT_OK
+    }
+    let mut newcap : u32 = cap * 2u32
+    if newcap < 4u32 { newcap = 4u32 }
+    if SAT_WATCH_USED + newcap > SAT_MAX_WATCH {
+        SAT_ALLOC_FAIL = 1u8
+        return SAT_E_TOO_BIG
+    }
+    let newhead : u32 = SAT_WATCH_USED
+    SAT_WATCH_USED = SAT_WATCH_USED + newcap
+    let oldhead : u32 = SAT_WATCH_HEAD[lit]
+    let mut i : u32 = 0u32
+    while i < len {
+        SAT_WATCH_BUF[newhead + i] = SAT_WATCH_BUF[oldhead + i]
+        i = i + 1u32
+    }
+    SAT_WATCH_HEAD[lit] = newhead
+    SAT_WATCH_CAP[lit]  = newcap
+    SAT_WATCH_BUF[newhead + len] = cl
+    SAT_WATCH_LEN[lit]  = len + 1u32
+    return SAT_OK
+}
+
+fn sat_watch_remove(lit: u32, cl: u32) -> i32 {
+    let len : u32 = SAT_WATCH_LEN[lit]
+    let head : u32 = SAT_WATCH_HEAD[lit]
+    let mut i : u32 = 0u32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if i >= len { done = 1u8 }
+        if done == 0u8 {
+            if SAT_WATCH_BUF[head + i] == cl {
+                SAT_WATCH_BUF[head + i] = SAT_WATCH_BUF[head + len - 1u32]
+                SAT_WATCH_LEN[lit] = len - 1u32
+                done = 1u8
+            }
+            if done == 0u8 { i = i + 1u32 }
+        }
+    }
+    return SAT_OK
+}
+
+/* --- Enqueue: assign the variable so `lit` is true; push the trail. --- */
+fn sat_enqueue(lit: u32, reason: u32) -> i32 {
+    let v : u32 = lit >> 1u32
+    let mut want : u8 = 2u8
+    if (lit & 1u32) == 1u32 { want = 1u8 }
+    SAT_VAR_VAL[v]    = want
+    SAT_VAR_LEVEL[v]  = SAT_LEVEL
+    SAT_VAR_REASON[v] = reason
+    SAT_VAR_POS[v]    = SAT_TRAIL_LEN
+    SAT_TRAIL[SAT_TRAIL_LEN] = lit
+    SAT_TRAIL_LEN = SAT_TRAIL_LEN + 1u32
+    return SAT_OK
+}
+
+/* --- Clause addition (Trap-7 scratch hoisted; #2 trap-safe sort; #3 bound) --- */
+fn sat_add_clause(lits: *u32, n_lits: u32) -> i32 @export {
+    if SAT_INITED == 0u8 { return SAT_E_NOT_INIT }
+    if n_lits == 0u32 { return SAT_E_TRIV_UNSAT }
+    if n_lits > SAT_MAX_CLAUSE_LEN { return SAT_E_TOO_BIG }
+    let mut i : u32 = 0u32
+    while i < n_lits {
+        SAT_SCRATCH[i] = lits[i as u64]
+        i = i + 1u32
+    }
+    /* Trap-safe insertion sort (ascending): the q>0 test gates every
+     * SAT_SCRATCH[q-1] access (Gap/Fix #2; W14 flag-driven descent). */
+    let mut a : u32 = 1u32
+    while a < n_lits {
+        let mut q : u32 = a
+        let mut moving : u8 = 1u8
+        while moving == 1u8 {
+            if q == 0u32 { moving = 0u8 }
+            if moving == 1u8 {
+                if SAT_SCRATCH[q - 1u32] <= SAT_SCRATCH[q] { moving = 0u8 }
+            }
+            if moving == 1u8 {
+                let tmp : u32 = SAT_SCRATCH[q - 1u32]
+                SAT_SCRATCH[q - 1u32] = SAT_SCRATCH[q]
+                SAT_SCRATCH[q] = tmp
+                q = q - 1u32
+            }
+        }
+        a = a + 1u32
+    }
+    /* Dedup + tautology detection into SAT_PACKED (sorted run: lit and its
+     * negation lit^1 are adjacent integers, so a tautology shows as the
+     * immediately-preceding packed literal). */
+    let mut count : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < n_lits {
+        let cur : u32 = SAT_SCRATCH[k]
+        let mut keep : u8 = 1u8
+        if count > 0u32 {
+            let prev : u32 = SAT_PACKED[count - 1u32]
+            if cur == prev { keep = 0u8 }
+            if (cur ^ 1u32) == prev { return SAT_OK }
+        }
+        if keep == 1u8 {
+            SAT_PACKED[count] = cur
+            count = count + 1u32
+        }
+        k = k + 1u32
+    }
+    if count == 0u32 { return SAT_E_TRIV_UNSAT }
+    if SAT_CL_USED >= SAT_MAX_CLAUSES { return SAT_E_TOO_BIG }
+    if SAT_LIT_USED + count > SAT_MAX_LITS_BLOCK { return SAT_E_TOO_BIG }
+    let cl : u32 = SAT_CL_USED
+    let off : u32 = SAT_LIT_USED
+    SAT_CL_OFF[cl]     = off
+    SAT_CL_SIZE[cl]    = count
+    SAT_CL_LIVE[cl]    = 1u8
+    SAT_CL_LEARNED[cl] = 0u8
+    let mut w : u32 = 0u32
+    while w < count {
+        SAT_LIT_BUF[off + w] = SAT_PACKED[w]
+        w = w + 1u32
+    }
+    SAT_LIT_USED = off + count
+    SAT_CL_USED  = cl + 1u32
+    if count == 1u32 {
+        let lit0 : u32 = SAT_PACKED[0]
+        let vv : u32 = lit0 >> 1u32
+        let val : u8 = SAT_VAR_VAL[vv]
+        let mut want : u8 = 2u8
+        if (lit0 & 1u32) == 1u32 { want = 1u8 }
+        if val == 0u8 {
+            sat_enqueue(lit0, SAT_NULL_CL)
+            return SAT_OK
+        }
+        if val != want { return SAT_E_TRIV_UNSAT }
+        return SAT_OK
+    }
+    sat_watch_add(SAT_PACKED[0], cl)
+    if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
+    sat_watch_add(SAT_PACKED[1], cl)
+    if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
+    return SAT_OK
+}
+
+/* --- Propagate: two-watch BFS of the implication queue (no recursion). --- */
+fn sat_propagate() -> u32 {
+    let mut confl : u32 = SAT_NULL_CL
+    while SAT_QHEAD < SAT_TRAIL_LEN {
+        if confl != SAT_NULL_CL { return confl }
+        let just_lit : u32 = SAT_TRAIL[SAT_QHEAD]
+        SAT_QHEAD = SAT_QHEAD + 1u32
+        let nlit : u32 = just_lit ^ 1u32
+        let base : u32 = SAT_WATCH_HEAD[nlit]
+        let mut wlen : u32 = SAT_WATCH_LEN[nlit]
+        let mut i : u32 = 0u32
+        while i < wlen {
+            let cl : u32 = SAT_WATCH_BUF[base + i]
+            if SAT_CL_LIVE[cl] == 0u8 {
+                wlen = wlen - 1u32
+                SAT_WATCH_BUF[base + i] = SAT_WATCH_BUF[base + wlen]
+            }
+            if SAT_CL_LIVE[cl] == 1u8 {
+                let off : u32 = SAT_CL_OFF[cl]
+                let sz : u32 = SAT_CL_SIZE[cl]
+                if SAT_LIT_BUF[off + 0u32] == nlit {
+                    SAT_LIT_BUF[off + 0u32] = SAT_LIT_BUF[off + 1u32]
+                    SAT_LIT_BUF[off + 1u32] = nlit
+                }
+                let other : u32 = SAT_LIT_BUF[off + 0u32]
+                let oval : u8 = sat_lit_value(other)
+                if oval == 2u8 {
+                    i = i + 1u32
+                }
+                if oval != 2u8 {
+                    let mut repl : u32 = 0u32
+                    let mut found : u8 = 0u8
+                    let mut k : u32 = 2u32
+                    while k < sz {
+                        let cand : u32 = SAT_LIT_BUF[off + k]
+                        if found == 0u8 {
+                            if sat_lit_value(cand) != 1u8 {
+                                repl = k
+                                found = 1u8
+                            }
+                        }
+                        if found == 1u8 { k = sz }
+                        if found == 0u8 { k = k + 1u32 }
+                    }
+                    if found == 1u8 {
+                        let newlit : u32 = SAT_LIT_BUF[off + repl]
+                        SAT_LIT_BUF[off + repl] = nlit
+                        SAT_LIT_BUF[off + 1u32] = newlit
+                        sat_watch_add(newlit, cl)
+                        wlen = wlen - 1u32
+                        SAT_WATCH_BUF[base + i] = SAT_WATCH_BUF[base + wlen]
+                    }
+                    if found == 0u8 {
+                        if oval == 0u8 {
+                            sat_enqueue(other, cl)
+                            i = i + 1u32
+                        }
+                        if oval == 1u8 {
+                            confl = cl
+                            i = wlen
+                        }
+                    }
+                }
+            }
+        }
+        SAT_WATCH_LEN[nlit] = wlen
+    }
+    return confl
+}
+
+/* --- Conflict-analysis helpers (keep sat_analyze within W13). --- */
+fn sat_clear_seen() -> i32 {
+    let mut i : u32 = 0u32
+    while i <= SAT_NVAR {
+        SAT_SEEN[i] = 0u8
+        i = i + 1u32
+    }
+    return SAT_OK
+}
+
+fn sat_compute_bj() -> i32 {
+    let mut mx : u32 = 0u32
+    let mut i : u32 = 1u32
+    while i < SAT_OUT_LEN {
+        let lv : u32 = SAT_VAR_LEVEL[SAT_OUT_LEARN[i] >> 1u32]
+        if lv > mx { mx = lv }
+        i = i + 1u32
+    }
+    SAT_OUT_BJ = mx
+    return SAT_OK
+}
+
+/* --- Conflict analysis (1UIP; activity accumulation REMOVED, Gap/Fix #1) --- */
+fn sat_analyze(conflict_cl: u32) -> i32 {
+    sat_clear_seen()
+    SAT_OUT_LEN = 1u32
+    let mut counter : u32 = 0u32
+    let mut pivot : u32 = 0u32
+    let mut cur_cl : u32 = conflict_cl
+    let mut idx : u32 = SAT_TRAIL_LEN
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let off : u32 = SAT_CL_OFF[cur_cl]
+        let sz : u32 = SAT_CL_SIZE[cur_cl]
+        let mut k : u32 = 0u32
+        while k < sz {
+            let q : u32 = SAT_LIT_BUF[off + k]
+            if q != pivot {
+                let qv : u32 = q >> 1u32
+                if SAT_SEEN[qv] == 0u8 {
+                    if SAT_VAR_LEVEL[qv] > 0u32 {
+                        SAT_SEEN[qv] = 1u8
+                        if SAT_VAR_LEVEL[qv] >= SAT_LEVEL {
+                            counter = counter + 1u32
+                        }
+                        if SAT_VAR_LEVEL[qv] < SAT_LEVEL {
+                            SAT_OUT_LEARN[SAT_OUT_LEN] = q
+                            SAT_OUT_LEN = SAT_OUT_LEN + 1u32
+                        }
+                    }
+                }
+            }
+            k = k + 1u32
+        }
+        let mut inner : u8 = 1u8
+        while inner == 1u8 {
+            idx = idx - 1u32
+            if SAT_SEEN[SAT_TRAIL[idx] >> 1u32] == 1u8 { inner = 0u8 }
+        }
+        pivot = SAT_TRAIL[idx]
+        SAT_SEEN[pivot >> 1u32] = 0u8
+        counter = counter - 1u32
+        cur_cl = SAT_VAR_REASON[pivot >> 1u32]
+        if counter == 0u32 {
+            SAT_OUT_LEARN[0] = pivot ^ 1u32
+            going = 0u8
+        }
+    }
+    sat_compute_bj()
+    return SAT_OK
+}
+
+fn sat_undo_until(level: u32) -> i32 {
+    if level >= SAT_LEVEL { return SAT_OK }
+    let target : u32 = SAT_LEVEL_BASE[level + 1u32]
+    let mut i : u32 = SAT_TRAIL_LEN
+    while i > target {
+        i = i - 1u32
+        let v : u32 = SAT_TRAIL[i] >> 1u32
+        SAT_VAR_VAL[v]    = 0u8
+        SAT_VAR_LEVEL[v]  = 0u32
+        SAT_VAR_REASON[v] = SAT_NULL_CL
+    }
+    SAT_TRAIL_LEN = target
+    SAT_QHEAD     = target
+    SAT_LEVEL     = level
+    return SAT_OK
+}
+
+/* --- Record learned clause; watch UIP (slot 0) + a backjump-level lit
+ *     (slot 1). Sets SAT_ALLOC_FAIL / returns SAT_NULL_CL on overflow. --- */
+fn sat_record_learned() -> u32 {
+    let n : u32 = SAT_OUT_LEN
+    if SAT_CL_USED >= SAT_MAX_CLAUSES {
+        SAT_ALLOC_FAIL = 1u8
+        return SAT_NULL_CL
+    }
+    if SAT_LIT_USED + n > SAT_MAX_LITS_BLOCK {
+        SAT_ALLOC_FAIL = 1u8
+        return SAT_NULL_CL
+    }
+    if n >= 2u32 {
+        let mut j : u32 = 1u32
+        let mut found : u8 = 0u8
+        let mut going : u8 = 1u8
+        while going == 1u8 {
+            if j >= n { going = 0u8 }
+            if going == 1u8 {
+                if SAT_VAR_LEVEL[SAT_OUT_LEARN[j] >> 1u32] == SAT_OUT_BJ {
+                    found = 1u8
+                    going = 0u8
+                }
+                if found == 0u8 { j = j + 1u32 }
+            }
+        }
+        if found == 1u8 {
+            let tmp : u32 = SAT_OUT_LEARN[1]
+            SAT_OUT_LEARN[1] = SAT_OUT_LEARN[j]
+            SAT_OUT_LEARN[j] = tmp
+        }
+    }
+    let cl : u32 = SAT_CL_USED
+    let off : u32 = SAT_LIT_USED
+    SAT_CL_OFF[cl]     = off
+    SAT_CL_SIZE[cl]    = n
+    SAT_CL_LIVE[cl]    = 1u8
+    SAT_CL_LEARNED[cl] = 1u8
+    let mut i : u32 = 0u32
+    while i < n {
+        SAT_LIT_BUF[off + i] = SAT_OUT_LEARN[i]
+        i = i + 1u32
+    }
+    SAT_LIT_USED = off + n
+    SAT_CL_USED  = cl + 1u32
+    sat_watch_add(SAT_LIT_BUF[off + 0u32], cl)
+    if n >= 2u32 {
+        sat_watch_add(SAT_LIT_BUF[off + 1u32], cl)
+    }
+    return cl
+}
+
+/* --- FIXED structural decision rule: smallest unassigned variable (#1) --- */
+fn sat_pick_branching_variable() -> u32 {
+    let mut i : u32 = 1u32
+    while i <= SAT_NVAR {
+        if SAT_VAR_VAL[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* --- Top-level solve --- */
+fn sat_solve() -> i32 @export {
+    if SAT_INITED == 0u8 { return SAT_E_NOT_INIT }
+    let c0 : u32 = sat_propagate()
+    if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
+    if c0 != SAT_NULL_CL { return SAT_UNSAT }
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let confl : u32 = sat_propagate()
+        if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
+        if confl != SAT_NULL_CL {
+            SAT_CONFLICTS = SAT_CONFLICTS + 1u64
+            if SAT_LEVEL == 0u32 { return SAT_UNSAT }
+            sat_analyze(confl)
+            sat_undo_until(SAT_OUT_BJ)
+            let new_cl : u32 = sat_record_learned()
+            if SAT_ALLOC_FAIL == 1u8 { return SAT_E_TOO_BIG }
+            if new_cl == SAT_NULL_CL { return SAT_E_TOO_BIG }
+            sat_enqueue(SAT_OUT_LEARN[0], new_cl)
+        }
+        if confl == SAT_NULL_CL {
+            let v : u32 = sat_pick_branching_variable()
+            if v == 0u32 { return SAT_SAT }
+            SAT_LEVEL = SAT_LEVEL + 1u32
+            SAT_LEVEL_BASE[SAT_LEVEL] = SAT_TRAIL_LEN
+            sat_enqueue(sat_mk_lit(v, 0u32), SAT_NULL_CL)
+            SAT_DECISIONS = SAT_DECISIONS + 1u64
+        }
+    }
+    return SAT_UNSAT
+}
+
+/* --- Readers --- */
+fn sat_value(vr: u32) -> u8 @export {
+    if vr == 0u32 { return 0xFFu8 }
+    if vr > SAT_NVAR { return 0xFFu8 }
+    let v : u8 = SAT_VAR_VAL[vr]
+    if v == 2u8 { return 1u8 }
+    if v == 1u8 { return 0u8 }
+    return 0xFFu8
+}
+
+fn sat_n_learned() -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < SAT_CL_USED {
+        if SAT_CL_LEARNED[i] == 1u8 {
+            if SAT_CL_LIVE[i] == 1u8 { n = n + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return n
+}
+
+fn sat_n_decisions() -> u64 @export { return SAT_DECISIONS }
+fn sat_n_conflicts() -> u64 @export { return SAT_CONFLICTS }
+
+/* --- Self-test helpers: build a clause in SAT_T_BUF and add it. --- */
+fn sat_t_add1(l0: u32) -> i32 {
+    SAT_T_BUF[0] = l0
+    let p : *u32 = &SAT_T_BUF as *u32
+    return sat_add_clause(p, 1u32)
+}
+
+fn sat_t_add2(l0: u32, l1: u32) -> i32 {
+    SAT_T_BUF[0] = l0
+    SAT_T_BUF[1] = l1
+    let p : *u32 = &SAT_T_BUF as *u32
+    return sat_add_clause(p, 2u32)
+}
+
+/* Build vector #4 (UNSAT-by-conflict over 2 vars) and solve it.
+ * Returns the verdict (SAT_UNSAT expected). Used by the determinism KAT. */
+fn sat_t_build_v4() -> i32 {
+    sat_init(2u32)
+    sat_t_add2(2u32, 4u32)
+    sat_t_add2(2u32, 5u32)
+    sat_t_add2(3u32, 4u32)
+    sat_t_add2(3u32, 5u32)
+    return sat_solve()
+}
+
+/* --- Embedded KAT self-test: 99 on full pass; small code at each failure. --- */
+fn sat_selftest() -> u64 @export {
+    /* Vector 1: trivial SAT (single positive unit). */
+    sat_init(1u32)
+    sat_t_add1(2u32)
+    if sat_solve() != SAT_SAT { return 1u64 }
+    if sat_value(1u32) != 1u8 { return 2u64 }
+    if sat_n_decisions() != 0u64 { return 3u64 }
+    if sat_n_conflicts() != 0u64 { return 4u64 }
+
+    /* Vector 2: trivial UNSAT via contradictory units (add-time). */
+    sat_init(1u32)
+    if sat_t_add1(2u32) != SAT_OK { return 10u64 }
+    if sat_t_add1(3u32) != SAT_E_TRIV_UNSAT { return 11u64 }
+
+    /* Vector 3: forced chain SAT (unit propagation, no decision). */
+    sat_init(3u32)
+    sat_t_add2(3u32, 4u32)
+    sat_t_add2(5u32, 6u32)
+    sat_t_add1(2u32)
+    if sat_solve() != SAT_SAT { return 20u64 }
+    if sat_value(1u32) != 1u8 { return 21u64 }
+    if sat_value(2u32) != 1u8 { return 22u64 }
+    if sat_value(3u32) != 1u8 { return 23u64 }
+    if sat_n_decisions() != 0u64 { return 24u64 }
+
+    /* Vector 4: UNSAT requiring conflict analysis + backjump. */
+    if sat_t_build_v4() != SAT_UNSAT { return 30u64 }
+    if sat_n_conflicts() < 1u64 { return 31u64 }
+    if sat_n_learned() < 1u32 { return 32u64 }
+
+    /* Vector 5: PHP(2,1) level-0 conflict UNSAT. */
+    sat_init(2u32)
+    if sat_t_add1(2u32) != SAT_OK { return 40u64 }
+    if sat_t_add1(4u32) != SAT_OK { return 41u64 }
+    if sat_t_add2(3u32, 5u32) != SAT_OK { return 42u64 }
+    if sat_solve() != SAT_UNSAT { return 43u64 }
+
+    /* Vector 6: determinism / reset reproducibility (run #4 twice). */
+    if sat_t_build_v4() != SAT_UNSAT { return 50u64 }
+    let v_conf1 : u64 = sat_n_conflicts()
+    let v_lrn1 : u32 = sat_n_learned()
+    let v_dec1 : u64 = sat_n_decisions()
+    if sat_t_build_v4() != SAT_UNSAT { return 51u64 }
+    if sat_n_conflicts() != v_conf1 { return 52u64 }
+    if sat_n_learned() != v_lrn1 { return 53u64 }
+    if sat_n_decisions() != v_dec1 { return 54u64 }
+
+    /* Negative-case guard: a clause longer than the bound is rejected
+     * (prove the gate FAILS on bad input, not just passes). */
+    sat_init(2u32)
+    let pbad : *u32 = &SAT_T_BUF as *u32
+    if sat_add_clause(pbad, SAT_MAX_CLAUSE_LEN + 1u32) != SAT_E_TOO_BIG { return 60u64 }
+
+    /* Negative-case guard: operations before init are refused. */
+    SAT_INITED = 0u8
+    if sat_add_clause(pbad, 1u32) != SAT_E_NOT_INIT { return 61u64 }
+    if sat_solve() != SAT_E_NOT_INIT { return 62u64 }
+
+    return 99u64
+}

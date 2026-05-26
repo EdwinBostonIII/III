@@ -1,0 +1,6 @@
+/* 385 — V1 Stage 5 partition-heal driver: record partition divergence for
+ * operator review, round-trip, resolve (accept/reject), pending count
+ * (V1 closure: no auto-merge; bisimulation-backed merge is V3 Phase Eighteen). */
+module corpus_385
+extern @abi(c-msvc-x64) fn hh_selftest() -> u64 from "hotstuff_heal.iii"
+fn main() -> u64 { return hh_selftest() }

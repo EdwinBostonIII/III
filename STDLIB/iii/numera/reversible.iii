@@ -1,0 +1,752 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\reversible.iii
+ *
+ * III STDLIB - numera::reversible
+ *
+ * Transactional envelopes with explicit backward continuations,
+ * organised as a strict LIFO stack of capability-scoped envelopes.
+ * On commit the forward effects persist and the undo log truncates;
+ * on rollback every recorded undo is replayed in reverse order and
+ * the rollback is witnessed.
+ *
+ * Each undo record is: u32 tag + four u64 args (a,b,c,d).
+ * The tag table is set up at boot (rev_init). Tag 0 is reserved.
+ * Undo bodies are leaf ops; they MUST NOT re-enter the reversible API
+ * (the record log is shared module state -- re-entry corrupts it).
+ * Module state is non-reentrant (single-threaded substrate use), the
+ * same posture as bigint.iii's slot table.
+ *
+ * The envelope stack is the REV_SLOT_* arrays, not the call stack
+ * (W15 -- no recursion). Records only ever land on the top (most-
+ * recently-opened) envelope, so each slot's [start,end) span stays
+ * contiguous and non-overlapping; commit/rollback act only on the top,
+ * so log truncation is always exact (no permanent record-log leak).
+ *
+ * Privileged undos (memory restore, slot release) are refused unless
+ * the envelope was opened with a non-zero capability token (M8). The
+ * reverse-replay trampoline skips any record whose fn address is zero
+ * (M5 -- never an indirect call through null).
+ *
+ * Hexad: kind_essence.  Ring: R-1.  K: 0.99 (slot/log exhaustion).
+ * Discipline: W2 (<=4 params), W8 (static tables), W13 (<=20 locals),
+ * W14 (sentinel loops, no break), W17 (monotone envelope order).
+ */
+
+module numera_reversible
+
+extern @abi(c-msvc-x64) fn rev_invoke_undo(undo_fn: u64, a: u64, b: u64, c: u64, d: u64) -> i32 from "rev_invoke.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn wh_revoke(idx: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+
+const REV_OK             : i32 =  0i32
+const REV_E_OOM_SLOT     : i32 = -1i32
+const REV_E_OOM_LOG      : i32 = -2i32
+const REV_E_BAD_SLOT     : i32 = -3i32
+const REV_E_BAD_TAG      : i32 = -4i32
+const REV_E_BAD_CKPT     : i32 = -5i32
+const REV_E_NOT_TOP      : i32 = -6i32
+const REV_E_CAP          : i32 = -7i32
+const REV_E_INVARIANT    : i32 = -8i32
+
+const REV_SLOT_NONE      : u32 = 0xFFFFFFFFu32
+const REV_MAX_SLOTS      : u32 = 64u32
+const REV_MAX_RECORDS    : u32 = 8192u32
+const REV_MAX_TAGS       : u32 = 256u32
+
+const REV_TAG_MEM_RESTORE_U8  : u32 = 1u32
+const REV_TAG_MEM_RESTORE_U64 : u32 = 2u32
+const REV_TAG_DROP_BIGINT     : u32 = 3u32
+const REV_TAG_RELEASE_SLOT    : u32 = 4u32
+const REV_TAG_WITNESS_REVOKE  : u32 = 5u32
+const REV_WIT_OPID_LEN        : u64 = 26u64
+
+/* Witness framing constants (commit/rollback fragments). */
+const REV_WIT_PROD_LEN   : u64 = 18u64
+const REV_WIT_PHASE      : u8  = 9u8
+const REV_WIT_PILLAR     : u16 = 1u16
+const REV_WIT_TAG_COMMIT : u8  = 0u8
+const REV_WIT_TAG_ROLLBK : u8  = 1u8
+
+/* Envelope stack (slot tables). */
+var REV_SLOT_LIVE   : [u8;  64]
+var REV_SLOT_START  : [u32; 64]
+var REV_SLOT_END    : [u32; 64]
+var REV_SLOT_CAP    : [u64; 64]
+var REV_SLOT_ORDER  : [u32; 64]
+
+/* Undo record log. */
+var REV_REC_TAG     : [u32; 8192]
+var REV_REC_A       : [u64; 8192]
+var REV_REC_B       : [u64; 8192]
+var REV_REC_C       : [u64; 8192]
+var REV_REC_D       : [u64; 8192]
+var REV_REC_USED    : u32 = 0u32
+var REV_TOP_ORDER   : u32 = 0u32
+
+/* Tag dispatch: undo_fn = address of fn(a,b,c,d:u64)->i32. */
+var REV_UNDO_FN     : [u64; 256]
+var REV_TAG_LIVE    : [u8;  256]
+
+/* Scratch (module-scope; Trap 7) + KAT targets. */
+var REV_QUAD_SCRATCH : [u64; 4]
+var REV_KAT_BUF      : [u8;  8]
+var REV_KAT_Q        : [u64; 4]
+
+/* Witness scratch: source strings, derived 32-byte ids, payload + out ids. */
+var REV_STR_PROD    : [u8; 18]
+var REV_STR_COMMIT  : [u8; 26]
+var REV_STR_ROLLBK  : [u8; 26]
+var REV_ID_PROD     : [u8; 32]
+var REV_ID_COMMIT   : [u8; 26]
+var REV_ID_ROLLBK   : [u8; 26]
+var REV_WIT_INC     : [u8; 32]
+var REV_WIT_OUTC    : [u8; 32]
+var REV_WIT_FID     : [u8; 32]
+var REV_WIT_PAYLOAD : [u8; 16]
+var REV_WIT_INITED  : u8 = 0u8
+
+/* ============ Internal helpers ============ */
+
+/* First free envelope slot, or REV_SLOT_NONE on exhaustion (W14). */
+fn rev_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < REV_MAX_SLOTS {
+        if REV_SLOT_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return REV_SLOT_NONE
+}
+
+/* 1u8 iff `slot` is live and holds the maximum push order among live
+ * slots (the top of the LIFO stack). One sentinel scan; pure read. */
+fn _rev_is_top(slot: u32) -> u8 {
+    if slot >= REV_MAX_SLOTS { return 0u8 }
+    if REV_SLOT_LIVE[slot] == 0u8 { return 0u8 }
+    let want : u32 = REV_SLOT_ORDER[slot]
+    let mut i : u32 = 0u32
+    while i < REV_MAX_SLOTS {
+        if REV_SLOT_LIVE[i] == 1u8 {
+            if REV_SLOT_ORDER[i] > want { return 0u8 }
+        }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* Fill the three witness source strings with their ASCII bytes. */
+fn rev_fill_strings() -> i32 {
+    /* "numera::reversible" (18) */
+    REV_STR_PROD[0] = 110u8  REV_STR_PROD[1] = 117u8  REV_STR_PROD[2] = 109u8  REV_STR_PROD[3] = 101u8
+    REV_STR_PROD[4] = 114u8  REV_STR_PROD[5] = 97u8   REV_STR_PROD[6] = 58u8   REV_STR_PROD[7] = 58u8
+    REV_STR_PROD[8] = 114u8  REV_STR_PROD[9] = 101u8  REV_STR_PROD[10] = 118u8 REV_STR_PROD[11] = 101u8
+    REV_STR_PROD[12] = 114u8 REV_STR_PROD[13] = 115u8 REV_STR_PROD[14] = 105u8 REV_STR_PROD[15] = 98u8
+    REV_STR_PROD[16] = 108u8 REV_STR_PROD[17] = 101u8
+    /* "numera::reversible::commit" (26) */
+    REV_STR_COMMIT[0] = 110u8  REV_STR_COMMIT[1] = 117u8  REV_STR_COMMIT[2] = 109u8  REV_STR_COMMIT[3] = 101u8
+    REV_STR_COMMIT[4] = 114u8  REV_STR_COMMIT[5] = 97u8   REV_STR_COMMIT[6] = 58u8   REV_STR_COMMIT[7] = 58u8
+    REV_STR_COMMIT[8] = 114u8  REV_STR_COMMIT[9] = 101u8  REV_STR_COMMIT[10] = 118u8 REV_STR_COMMIT[11] = 101u8
+    REV_STR_COMMIT[12] = 114u8 REV_STR_COMMIT[13] = 115u8 REV_STR_COMMIT[14] = 105u8 REV_STR_COMMIT[15] = 98u8
+    REV_STR_COMMIT[16] = 108u8 REV_STR_COMMIT[17] = 101u8 REV_STR_COMMIT[18] = 58u8  REV_STR_COMMIT[19] = 58u8
+    REV_STR_COMMIT[20] = 99u8  REV_STR_COMMIT[21] = 111u8 REV_STR_COMMIT[22] = 109u8 REV_STR_COMMIT[23] = 109u8
+    REV_STR_COMMIT[24] = 105u8 REV_STR_COMMIT[25] = 116u8
+    /* "numera::reversible::revert" (26) -- the rollback op id */
+    REV_STR_ROLLBK[0] = 110u8  REV_STR_ROLLBK[1] = 117u8  REV_STR_ROLLBK[2] = 109u8  REV_STR_ROLLBK[3] = 101u8
+    REV_STR_ROLLBK[4] = 114u8  REV_STR_ROLLBK[5] = 97u8   REV_STR_ROLLBK[6] = 58u8   REV_STR_ROLLBK[7] = 58u8
+    REV_STR_ROLLBK[8] = 114u8  REV_STR_ROLLBK[9] = 101u8  REV_STR_ROLLBK[10] = 118u8 REV_STR_ROLLBK[11] = 101u8
+    REV_STR_ROLLBK[12] = 114u8 REV_STR_ROLLBK[13] = 115u8 REV_STR_ROLLBK[14] = 105u8 REV_STR_ROLLBK[15] = 98u8
+    REV_STR_ROLLBK[16] = 108u8 REV_STR_ROLLBK[17] = 101u8 REV_STR_ROLLBK[18] = 58u8  REV_STR_ROLLBK[19] = 58u8
+    REV_STR_ROLLBK[20] = 114u8 REV_STR_ROLLBK[21] = 101u8 REV_STR_ROLLBK[22] = 118u8 REV_STR_ROLLBK[23] = 101u8
+    REV_STR_ROLLBK[24] = 114u8 REV_STR_ROLLBK[25] = 116u8
+    return REV_OK
+}
+
+/* Derive the producer + op-id identifiers (content addressed). Idempotent. */
+fn rev_wit_init() -> i32 {
+    rev_fill_strings()
+    let pp : *u8 = &REV_STR_PROD as *u8
+    let cp : *u8 = &REV_STR_COMMIT as *u8
+    let rp : *u8 = &REV_STR_ROLLBK as *u8
+    ident_from_bytes(pp, REV_WIT_PROD_LEN, &REV_ID_PROD as *u8)
+    ident_from_bytes(cp, REV_WIT_OPID_LEN, &REV_ID_COMMIT as *u8)
+    ident_from_bytes(rp, REV_WIT_OPID_LEN, &REV_ID_ROLLBK as *u8)
+    REV_WIT_INITED = 1u8
+    return REV_OK
+}
+
+/* Serialize (order, count) little-endian into the 16-byte witness payload. */
+fn rev_wit_pack(order: u32, count: u32) -> i32 {
+    let o : u64 = (order as u64) & 0xFFFFFFFFu64
+    let c : u64 = (count as u64) & 0xFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        REV_WIT_PAYLOAD[i] = ((o >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < 8u64 {
+        REV_WIT_PAYLOAD[8u64 + j] = ((c >> (j * 8u64)) & 0xFFu64) as u8
+        j = j + 1u64
+    }
+    return REV_OK
+}
+
+/* Publish a commit/rollback witness fragment. revtag selects which op id.
+ * wh_publish self-degrades to a no-op (sentinel return) before witness
+ * boot, so the transaction never fails on witness -- K stays 0.99. */
+fn rev_wit_emit(revtag: u8, order: u32, count: u32) -> i32 {
+    if REV_WIT_INITED == 0u8 { rev_wit_init() }
+    rev_wit_pack(order, count)
+    wh_chain_root(&REV_WIT_INC as *u8)
+    let pl : *u8 = &REV_WIT_PAYLOAD as *u8
+    ident_from_bytes(pl, 16u64, &REV_WIT_OUTC as *u8)
+    let mut opp : *u8 = &REV_ID_COMMIT as *u8
+    if revtag == REV_WIT_TAG_ROLLBK { opp = &REV_ID_ROLLBK as *u8 }
+    let ap : *u8 = &REV_WIT_INC as *u8
+    wh_publish(&REV_ID_PROD as *u8, opp, &REV_WIT_INC as *u8, &REV_WIT_OUTC as *u8, revtag, REV_WIT_PHASE, REV_WIT_PILLAR, ap, 0u32, pl, 16u32, &REV_WIT_FID as *u8)
+    return REV_OK
+}
+
+/* Replay undo records of `slot` in reverse from end down to `floor`,
+ * skipping any record whose fn address is zero (M5). Flat helper to keep
+ * caller nesting shallow (Trap 13). */
+fn rev_replay(slot: u32, floor: u32) -> i32 {
+    let lo : u32 = floor
+    let mut i : u32 = REV_SLOT_END[slot]
+    while i > lo {
+        i = i - 1u32
+        let tag : u32 = REV_REC_TAG[i]
+        let fn_addr : u64 = REV_UNDO_FN[tag]
+        if fn_addr != 0u64 {
+            rev_invoke_undo(fn_addr, REV_REC_A[i], REV_REC_B[i], REV_REC_C[i], REV_REC_D[i])
+        }
+    }
+    return REV_OK
+}
+
+/* ============ Public API ============ */
+
+fn rev_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < REV_MAX_SLOTS {
+        REV_SLOT_LIVE[i]  = 0u8
+        REV_SLOT_START[i] = 0u32
+        REV_SLOT_END[i]   = 0u32
+        REV_SLOT_CAP[i]   = 0u64
+        REV_SLOT_ORDER[i] = 0u32
+        i = i + 1u32
+    }
+    let mut t : u32 = 0u32
+    while t < REV_MAX_TAGS {
+        REV_TAG_LIVE[t] = 0u8
+        REV_UNDO_FN[t]  = 0u64
+        t = t + 1u32
+    }
+    REV_REC_USED  = 0u32
+    REV_TOP_ORDER = 0u32
+    rev_register_undo(REV_TAG_MEM_RESTORE_U8,  rev_undo_mem_u8 as u64)
+    rev_register_undo(REV_TAG_MEM_RESTORE_U64, rev_undo_mem_u64 as u64)
+    rev_register_undo(REV_TAG_DROP_BIGINT,     rev_undo_drop_bigint as u64)
+    rev_register_undo(REV_TAG_RELEASE_SLOT,    rev_undo_release_slot as u64)
+    rev_register_undo(REV_TAG_WITNESS_REVOKE,  rev_undo_witness_revoke as u64)
+    rev_wit_init()
+    return REV_OK
+}
+
+fn rev_register_undo(tag: u32, undo_fn: u64) -> i32 @export {
+    if tag >= REV_MAX_TAGS { return REV_E_BAD_TAG }
+    if tag == 0u32 { return REV_E_BAD_TAG }
+    REV_UNDO_FN[tag]  = undo_fn
+    REV_TAG_LIVE[tag] = 1u8
+    return REV_OK
+}
+
+fn rev_begin(cap: u64) -> u32 @export {
+    let s : u32 = rev_alloc_slot()
+    if s == REV_SLOT_NONE { return REV_SLOT_NONE }
+    REV_SLOT_LIVE[s]  = 1u8
+    REV_SLOT_START[s] = REV_REC_USED
+    REV_SLOT_END[s]   = REV_REC_USED
+    REV_SLOT_CAP[s]   = cap
+    REV_TOP_ORDER     = REV_TOP_ORDER + 1u32
+    REV_SLOT_ORDER[s] = REV_TOP_ORDER
+    return s
+}
+
+fn rev_record(slot: u32, tag: u32, a: u64, b: u64) -> i32 @export {
+    REV_QUAD_SCRATCH[0] = a
+    REV_QUAD_SCRATCH[1] = b
+    REV_QUAD_SCRATCH[2] = 0u64
+    REV_QUAD_SCRATCH[3] = 0u64
+    let qp : *u64 = &REV_QUAD_SCRATCH as *u64
+    return rev_record_quad(slot, tag, qp)
+}
+
+fn rev_record_quad(slot: u32, tag: u32, quad: *u64) -> i32 @export {
+    if slot >= REV_MAX_SLOTS { return REV_E_BAD_SLOT }
+    if REV_SLOT_LIVE[slot] == 0u8 { return REV_E_BAD_SLOT }
+    if _rev_is_top(slot) == 0u8 { return REV_E_NOT_TOP }
+    if tag >= REV_MAX_TAGS { return REV_E_BAD_TAG }
+    if REV_TAG_LIVE[tag] == 0u8 { return REV_E_BAD_TAG }
+    if REV_SLOT_CAP[slot] == 0u64 {
+        if tag == REV_TAG_MEM_RESTORE_U8 { return REV_E_CAP }
+        if tag == REV_TAG_MEM_RESTORE_U64 { return REV_E_CAP }
+        if tag == REV_TAG_RELEASE_SLOT { return REV_E_CAP }
+    }
+    if REV_REC_USED >= REV_MAX_RECORDS { return REV_E_OOM_LOG }
+    let idx : u32 = REV_REC_USED
+    REV_REC_TAG[idx] = tag
+    REV_REC_A[idx] = quad[0u64]
+    REV_REC_B[idx] = quad[1u64]
+    REV_REC_C[idx] = quad[2u64]
+    REV_REC_D[idx] = quad[3u64]
+    REV_REC_USED = idx + 1u32
+    REV_SLOT_END[slot] = REV_REC_USED
+    return REV_OK
+}
+
+fn rev_commit(slot: u32) -> i32 @export {
+    if slot >= REV_MAX_SLOTS { return REV_E_BAD_SLOT }
+    if REV_SLOT_LIVE[slot] == 0u8 { return REV_E_BAD_SLOT }
+    if _rev_is_top(slot) == 0u8 { return REV_E_NOT_TOP }
+    let start : u32 = REV_SLOT_START[slot]
+    let count : u32 = REV_SLOT_END[slot] - start
+    rev_wit_emit(REV_WIT_TAG_COMMIT, REV_SLOT_ORDER[slot], count)
+    REV_SLOT_LIVE[slot] = 0u8
+    REV_REC_USED = start
+    return REV_OK
+}
+
+fn rev_rollback(slot: u32) -> i32 @export {
+    if slot >= REV_MAX_SLOTS { return REV_E_BAD_SLOT }
+    if REV_SLOT_LIVE[slot] == 0u8 { return REV_E_BAD_SLOT }
+    if _rev_is_top(slot) == 0u8 { return REV_E_NOT_TOP }
+    let start : u32 = REV_SLOT_START[slot]
+    let count : u32 = REV_SLOT_END[slot] - start
+    rev_replay(slot, start)
+    rev_wit_emit(REV_WIT_TAG_ROLLBK, REV_SLOT_ORDER[slot], count)
+    REV_SLOT_LIVE[slot] = 0u8
+    REV_REC_USED = start
+    return REV_OK
+}
+
+fn rev_nest_begin(slot: u32) -> u32 @export {
+    if slot >= REV_MAX_SLOTS { return REV_SLOT_NONE }
+    if REV_SLOT_LIVE[slot] == 0u8 { return REV_SLOT_NONE }
+    return REV_SLOT_END[slot]
+}
+
+fn rev_nest_rollback(slot: u32, checkpoint: u32) -> i32 @export {
+    if slot >= REV_MAX_SLOTS { return REV_E_BAD_SLOT }
+    if REV_SLOT_LIVE[slot] == 0u8 { return REV_E_BAD_SLOT }
+    if _rev_is_top(slot) == 0u8 { return REV_E_NOT_TOP }
+    if checkpoint > REV_SLOT_END[slot] { return REV_E_BAD_CKPT }
+    if checkpoint < REV_SLOT_START[slot] { return REV_E_BAD_CKPT }
+    rev_replay(slot, checkpoint)
+    REV_SLOT_END[slot] = checkpoint
+    REV_REC_USED = checkpoint
+    return REV_OK
+}
+
+fn rev_compact() -> i32 @export {
+    let mut i : u32 = 0u32
+    let mut have : u8 = 0u8
+    let mut best : u32 = 0u32
+    let mut best_slot : u32 = 0u32
+    while i < REV_MAX_SLOTS {
+        if REV_SLOT_LIVE[i] == 1u8 {
+            if have == 0u8 {
+                have = 1u8
+                best = REV_SLOT_ORDER[i]
+                best_slot = i
+            }
+            if REV_SLOT_ORDER[i] > best {
+                best = REV_SLOT_ORDER[i]
+                best_slot = i
+            }
+        }
+        i = i + 1u32
+    }
+    if have == 0u8 {
+        if REV_REC_USED != 0u32 { REV_REC_USED = 0u32 }
+        return REV_OK
+    }
+    if REV_REC_USED != REV_SLOT_END[best_slot] { return REV_E_INVARIANT }
+    return REV_OK
+}
+
+fn rev_depth() -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < REV_MAX_SLOTS {
+        if REV_SLOT_LIVE[i] == 1u8 { n = n + 1u32 }
+        i = i + 1u32
+    }
+    return n
+}
+
+fn rev_records_used() -> u32 @export {
+    return REV_REC_USED
+}
+
+/* ============ Built-in undo bodies (callee ABI fn(a,b,c,d)->i32) ============ */
+
+fn rev_undo_mem_u8(a: u64, b: u64, c: u64, d: u64) -> i32 {
+    let p : *u8 = a as *u8
+    p[0u64] = (b & 0xFFu64) as u8
+    return REV_OK
+}
+
+fn rev_undo_mem_u64(a: u64, b: u64, c: u64, d: u64) -> i32 {
+    let p : *u64 = a as *u64
+    p[0u64] = b
+    return REV_OK
+}
+
+fn rev_undo_drop_bigint(a: u64, b: u64, c: u64, d: u64) -> i32 {
+    return bigint_drop(a)
+}
+
+fn rev_undo_release_slot(a: u64, b: u64, c: u64, d: u64) -> i32 {
+    let p : *u8 = a as *u8
+    p[b] = 0u8
+    return REV_OK
+}
+
+fn rev_undo_witness_revoke(a: u64, b: u64, c: u64, d: u64) -> i32 {
+    return wh_revoke(a)
+}
+
+/* ============ Embedded self-test (KAT vectors) ============
+ * Returns 99u64 on full pass; a distinct small code at each failed check.
+ * KATs 5-7 prove the gates REJECT bad input (negative-case proof). */
+
+fn rev_selftest() -> u64 @export {
+    /* KAT 1: commit discards, no undo runs. */
+    rev_init()
+    REV_KAT_BUF[0] = 0xAAu8
+    let s1 : u32 = rev_begin(1u64)
+    if s1 == REV_SLOT_NONE { return 1u64 }
+    let r1 : i32 = rev_record(s1, REV_TAG_MEM_RESTORE_U8, &REV_KAT_BUF as u64, 0x11u64)
+    if r1 != REV_OK { return 2u64 }
+    REV_KAT_BUF[0] = 0xFFu8
+    if rev_commit(s1) != REV_OK { return 3u64 }
+    if REV_KAT_BUF[0] != 0xFFu8 { return 4u64 }
+    if rev_records_used() != 0u32 { return 5u64 }
+    if rev_depth() != 0u32 { return 6u64 }
+
+    /* KAT 2: rollback restores in reverse (LIFO) order. */
+    rev_init()
+    REV_KAT_BUF[0] = 0x00u8
+    let s2 : u32 = rev_begin(1u64)
+    if s2 == REV_SLOT_NONE { return 7u64 }
+    if rev_record(s2, REV_TAG_MEM_RESTORE_U8, &REV_KAT_BUF as u64, 0x01u64) != REV_OK { return 8u64 }
+    REV_KAT_BUF[0] = 0x10u8
+    if rev_record(s2, REV_TAG_MEM_RESTORE_U8, &REV_KAT_BUF as u64, 0x10u64) != REV_OK { return 9u64 }
+    REV_KAT_BUF[0] = 0x20u8
+    if rev_rollback(s2) != REV_OK { return 10u64 }
+    if REV_KAT_BUF[0] != 0x01u8 { return 11u64 }
+    if rev_records_used() != 0u32 { return 12u64 }
+    if rev_depth() != 0u32 { return 13u64 }
+
+    /* KAT 3: full-width u64 memory restore (guards Trap 5 store width). */
+    rev_init()
+    REV_KAT_Q[0] = 0u64
+    let s3 : u32 = rev_begin(1u64)
+    if s3 == REV_SLOT_NONE { return 14u64 }
+    if rev_record(s3, REV_TAG_MEM_RESTORE_U64, &REV_KAT_Q as u64, 0xDEADBEEFCAFEBABEu64) != REV_OK { return 15u64 }
+    REV_KAT_Q[0] = 0x1122334455667788u64
+    if rev_rollback(s3) != REV_OK { return 16u64 }
+    if REV_KAT_Q[0] != 0xDEADBEEFCAFEBABEu64 { return 17u64 }
+
+    /* KAT 4: nested checkpoint rollback leaves outer record intact. */
+    rev_init()
+    REV_KAT_BUF[0] = 0x00u8
+    let s4 : u32 = rev_begin(1u64)
+    if s4 == REV_SLOT_NONE { return 18u64 }
+    if rev_record(s4, REV_TAG_MEM_RESTORE_U8, &REV_KAT_BUF as u64, 0x01u64) != REV_OK { return 19u64 }
+    REV_KAT_BUF[0] = 0x01u8
+    let cp : u32 = rev_nest_begin(s4)
+    if cp == REV_SLOT_NONE { return 20u64 }
+    /* Undo record saves the checkpoint snapshot (0x01) so nested rollback
+     * restores it; the live byte is then mutated to 0x02 (undone below). */
+    if rev_record(s4, REV_TAG_MEM_RESTORE_U8, &REV_KAT_BUF as u64, 0x01u64) != REV_OK { return 21u64 }
+    REV_KAT_BUF[0] = 0x02u8
+    if rev_nest_rollback(s4, cp) != REV_OK { return 22u64 }
+    if REV_KAT_BUF[0] != 0x01u8 { return 23u64 }
+    if rev_records_used() != cp { return 24u64 }
+    if rev_depth() != 1u32 { return 25u64 }
+    if rev_commit(s4) != REV_OK { return 26u64 }
+    if rev_records_used() != 0u32 { return 27u64 }
+    if rev_depth() != 0u32 { return 28u64 }
+
+    /* KAT 5 (negative): capability gate refuses unprivileged memory restore. */
+    rev_init()
+    let s5 : u32 = rev_begin(0u64)
+    if s5 == REV_SLOT_NONE { return 29u64 }
+    let r5 : i32 = rev_record(s5, REV_TAG_MEM_RESTORE_U8, &REV_KAT_BUF as u64, 0x55u64)
+    if r5 != REV_E_CAP { return 30u64 }
+    if rev_records_used() != 0u32 { return 31u64 }
+    /* An unprivileged tag (witness revoke) is still allowed under cap 0. */
+    if rev_record(s5, REV_TAG_WITNESS_REVOKE, 0u64, 0u64) != REV_OK { return 32u64 }
+    rev_rollback(s5)
+
+    /* KAT 6 (negative): non-top record/commit refused (LIFO guard). */
+    rev_init()
+    let a6 : u32 = rev_begin(1u64)
+    if a6 == REV_SLOT_NONE { return 33u64 }
+    let b6 : u32 = rev_begin(1u64)
+    if b6 == REV_SLOT_NONE { return 34u64 }
+    if rev_record(a6, REV_TAG_WITNESS_REVOKE, 0u64, 0u64) != REV_E_NOT_TOP { return 35u64 }
+    if rev_commit(a6) != REV_E_NOT_TOP { return 36u64 }
+    if rev_commit(b6) != REV_OK { return 37u64 }
+    if rev_commit(a6) != REV_OK { return 38u64 }
+    if rev_depth() != 0u32 { return 39u64 }
+
+    /* KAT 7 (negative): bad tag + slot exhaustion. */
+    rev_init()
+    let s7 : u32 = rev_begin(1u64)
+    if s7 == REV_SLOT_NONE { return 40u64 }
+    if rev_record(s7, 0u32, 0u64, 0u64) != REV_E_BAD_TAG { return 41u64 }
+    if rev_record(s7, 250u32, 0u64, 0u64) != REV_E_BAD_TAG { return 42u64 }
+    if rev_commit(s7) != REV_OK { return 43u64 }
+    /* Exhaust the envelope stack: REV_MAX_SLOTS opens succeed, next fails. */
+    let mut k : u32 = 0u32
+    while k < REV_MAX_SLOTS {
+        let sk : u32 = rev_begin(1u64)
+        if sk == REV_SLOT_NONE { return 44u64 }
+        k = k + 1u32
+    }
+    let over : u32 = rev_begin(1u64)
+    if over != REV_SLOT_NONE { return 45u64 }
+    /* rev_compact must see the top live slot's END == REV_REC_USED. */
+    if rev_compact() != REV_OK { return 46u64 }
+    rev_init()
+    /* After a fresh init the log is empty and compact asserts USED==0. */
+    if rev_compact() != REV_OK { return 47u64 }
+
+    return 99u64
+}
+
+/* ============ Migration 5 -- H9 "one reversibility": the 3-way classification ============
+ *
+ * H9: every effect is EXACTLY ONE of -- REVERSIBLE (a derived/recorded inverse round-trips via
+ * rev_invoke_undo), TYPED-IRREVERSIBLE (Compromise<LOW|MED> -- the irreversibility is NAMED and
+ * witnessed, never silent), or UNREPRESENTABLE (Compromise<HIGH> = bricking; M3 reach forbids
+ * construction).  This block is the RUNTIME CORE of that classification, living beside the undo
+ * machinery whose round-trip it certifies.  It is ADDITIVE -- it touches no existing fn or var.
+ *
+ * The reversible leg is the five REV_TAG_* undo tags (1..5): each has a registered rev_invoke_undo
+ * body that recovers the prior state, so each classifies REVERSIBLE.  The irreversible legs are a
+ * representative subset of BOOT-sid's privileged side-effect kinds (the `irreversible` flag seed,
+ * MIGRATIONS-ARCH §B): PAGE_FREE -> Compromise<LOW>, CAP_RELEASE -> Compromise<MED>, NMI_INSTALL ->
+ * UNREPRESENTABLE (Compromise<HIGH>, bricking).  These effect kinds are placed at distinct high
+ * constants so they never collide with the 0..5 undo-tag space; rev_classify partitions the whole
+ * u32 input space.  TOTALITY: any tag not explicitly named falls through to UNREPRESENTABLE -- an
+ * effect we can neither derive an inverse for NOR type as a known Compromise tier is conservatively
+ * unrepresentable, so NOTHING unknown is ever mis-classified REVERSIBLE.  rev_classify is therefore
+ * total with range a subset of {0,1,2,3}.  The COP_REVTAG_EQ opcode (M10) reads exactly this tier
+ * off the witness fragment's revtag byte. */
+
+const REV_TIER_REVERSIBLE      : u8 = 0u8   /* a derived/recorded inverse round-trips (REV_TAG_*) */
+const REV_TIER_COMPROMISE_LOW  : u8 = 1u8   /* typed-irreversible, low debt   (Compromise<LOW>)  */
+const REV_TIER_COMPROMISE_MED  : u8 = 2u8   /* typed-irreversible, medium debt (Compromise<MED>) */
+const REV_TIER_UNREPRESENTABLE : u8 = 3u8   /* bricking / unrepresentable      (Compromise<HIGH>) */
+
+/* Representative irreversible/bricking effect kinds (BOOT-sid privileged side-effect kinds, §B),
+ * placed above the 0..5 undo-tag space so rev_classify partitions the input without collision. */
+const REVC_EFFECT_PAGE_FREE    : u32 = 0x101u32   /* freed page: typed-irreversible -> LOW       */
+const REVC_EFFECT_CAP_RELEASE  : u32 = 0x102u32   /* released capability: typed-irreversible -> MED */
+const REVC_EFFECT_NMI_INSTALL  : u32 = 0x103u32   /* NMI handler install: bricking -> UNREPRESENTABLE */
+const REVC_EFFECT_UNKNOWN      : u32 = 0xDEAD0u32 /* an unclassified effect kind (totality probe)  */
+
+/* H9 charter (mirrors the h{N}_charter template: registry + verify-AND-falsify fold + canary). */
+const REVC_OK                  : i32 = 0i32
+const REVC_REV_SLOT_NONE       : u32 = 0xFFFFFFFFu32
+const REVC_CAP_AMEND           : u64 = 1u64        /* non-zero cap authorizes the MEM_RESTORE undo  */
+const REVC_ORIG                : u8  = 0x5Au8      /* the cell's original value (recovered)         */
+const REVC_MUT                 : u8  = 0xA5u8      /* the forward-mutated value (must not survive)  */
+const REVC_WRONG               : u8  = 0x3Cu8      /* a BAD inverse target (!= ORIG) -- falsify arm  */
+const REVC_MAX_CLAUSES         : u32 = 64u32
+const REVC_KIND_TRICHOTOMY     : u8  = 0u8         /* the H9 runtime clause                         */
+const REVC_KIND_CANARY         : u8  = 1u8         /* a deliberately-false clause (negative arm)    */
+const REVC_VERDICT_GREEN       : u64 = 99u64       /* > REVC_MAX_CLAUSES, so never a RED index      */
+const REVC_U32MASK             : u64 = 0xFFFFFFFFu64
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var REVC_CLAUSE_KIND  : [u8; 64]
+var REVC_CLAUSE_COUNT : u32 = 0u32
+
+/* --- test cell (module-scope, Trap 7: no local var arrays; serialized R-1 use) --- */
+var REVC_CELL : [u8; 8]
+
+/* Classify an effect kind into exactly one H9 tier.  Monomorphic if-cascade (never a fn ptr).
+ * Reversible undo tags (REV_TAG_* == 1..5) -> REVERSIBLE; named irreversible effects -> a
+ * Compromise tier; the bricking effect -> UNREPRESENTABLE; every other tag falls through to
+ * UNREPRESENTABLE (conservative totality -- an unknown effect is never called reversible). */
+fn rev_classify(effect_tag: u32) -> u8 @export {
+    if effect_tag == REV_TAG_MEM_RESTORE_U8  { return REV_TIER_REVERSIBLE }
+    if effect_tag == REV_TAG_MEM_RESTORE_U64 { return REV_TIER_REVERSIBLE }
+    if effect_tag == REV_TAG_DROP_BIGINT     { return REV_TIER_REVERSIBLE }
+    if effect_tag == REV_TAG_RELEASE_SLOT    { return REV_TIER_REVERSIBLE }
+    if effect_tag == REV_TAG_WITNESS_REVOKE  { return REV_TIER_REVERSIBLE }
+    if effect_tag == REVC_EFFECT_PAGE_FREE   { return REV_TIER_COMPROMISE_LOW }
+    if effect_tag == REVC_EFFECT_CAP_RELEASE { return REV_TIER_COMPROMISE_MED }
+    if effect_tag == REVC_EFFECT_NMI_INSTALL { return REV_TIER_UNREPRESENTABLE }
+    return REV_TIER_UNREPRESENTABLE
+}
+
+/* The REVERSIBLE leg, literal recorded-inverse round-trip (numera::reversible, M8).
+ * Open a privileged envelope; set the cell to its original value and record the derived inverse
+ * (restore-to-original); mutate the cell forward; rev_rollback replays the inverse.  1 iff the cell
+ * == its original value byte-for-byte (the inverse recovered it) AND the mutation did not survive. */
+fn rev_roundtrip_holds() -> u8 {
+    rev_init()
+    let s : u32 = rev_begin(REVC_CAP_AMEND)
+    if s == REVC_REV_SLOT_NONE { return 0u8 }
+    REVC_CELL[0u64] = REVC_ORIG
+    if rev_record(s, REV_TAG_MEM_RESTORE_U8, (&REVC_CELL as u64), REVC_ORIG as u64) != REVC_OK { return 0u8 }
+    REVC_CELL[0u64] = REVC_MUT
+    if rev_rollback(s) != REVC_OK { return 0u8 }
+    if REVC_CELL[0u64] != REVC_ORIG { return 0u8 }
+    return 1u8
+}
+
+/* A tier byte is VALID iff it is one of the four trichotomy tiers.  Checked by EQUALITY
+ * only (the strict ==/!= discipline) -- never an ordering compare, even on unsigned u8. */
+fn rev_tier_valid(t: u8) -> u8 {
+    if t == REV_TIER_REVERSIBLE      { return 1u8 }
+    if t == REV_TIER_COMPROMISE_LOW  { return 1u8 }
+    if t == REV_TIER_COMPROMISE_MED  { return 1u8 }
+    if t == REV_TIER_UNREPRESENTABLE { return 1u8 }
+    return 0u8
+}
+
+/* rev_classify is TOTAL: every probed effect tag (the five reversible undo tags, the three named
+ * irreversible/bricking effects, and an unknown tag) classifies to a VALID tier in {REVERSIBLE,
+ * COMPROMISE_LOW, COMPROMISE_MED, UNREPRESENTABLE}; none escapes the trichotomy.  Membership is
+ * tested by equality (rev_tier_valid), not an ordering compare.  1 iff every probe is valid. */
+fn rev_classify_total() -> u8 {
+    if rev_tier_valid(rev_classify(REV_TAG_MEM_RESTORE_U8))  != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REV_TAG_MEM_RESTORE_U64)) != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REV_TAG_DROP_BIGINT))     != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REV_TAG_RELEASE_SLOT))    != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REV_TAG_WITNESS_REVOKE))  != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REVC_EFFECT_PAGE_FREE))   != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REVC_EFFECT_CAP_RELEASE)) != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REVC_EFFECT_NMI_INSTALL)) != 1u8 { return 0u8 }
+    if rev_tier_valid(rev_classify(REVC_EFFECT_UNKNOWN))     != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* The H9 clause VERIFY arm: a reversible effect ROUND-TRIPS (the recorded inverse recovers the
+ * original) AND rev_classify maps each reversible undo tag to REVERSIBLE and each irreversible
+ * effect to a Compromise/Unrepresentable tier (total classification).  1 iff all hold. */
+fn rev_compromise_verify() -> u8 @export {
+    if rev_roundtrip_holds() != 1u8 { return 0u8 }
+    if rev_classify(REV_TAG_MEM_RESTORE_U8)  != REV_TIER_REVERSIBLE { return 0u8 }
+    if rev_classify(REV_TAG_MEM_RESTORE_U64) != REV_TIER_REVERSIBLE { return 0u8 }
+    if rev_classify(REV_TAG_DROP_BIGINT)     != REV_TIER_REVERSIBLE { return 0u8 }
+    if rev_classify(REV_TAG_RELEASE_SLOT)    != REV_TIER_REVERSIBLE { return 0u8 }
+    if rev_classify(REV_TAG_WITNESS_REVOKE)  != REV_TIER_REVERSIBLE { return 0u8 }
+    if rev_classify(REVC_EFFECT_PAGE_FREE)   != REV_TIER_COMPROMISE_LOW { return 0u8 }
+    if rev_classify(REVC_EFFECT_CAP_RELEASE) != REV_TIER_COMPROMISE_MED { return 0u8 }
+    if rev_classify(REVC_EFFECT_NMI_INSTALL) != REV_TIER_UNREPRESENTABLE { return 0u8 }
+    if rev_classify_total() != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* The H9 clause FALSIFY arm (prove-the-negative -- must genuinely FIRE on the bad case):
+ *  (a) an effect that CLAIMS reversibility but whose recorded inverse does NOT round-trip is
+ *      CAUGHT.  Record a BAD inverse (restore-to-WRONG, WRONG != ORIG), mutate forward, rollback;
+ *      the cell ends at WRONG, so restored != original -- the broken inverse is detected.
+ *  (b) an UNREPRESENTABLE (Compromise<HIGH>) effect must NOT be classifiable as reversible:
+ *      rev_classify(NMI_INSTALL) != REV_TIER_REVERSIBLE.
+ *  (c) totality: every effect tag classifies to exactly one in-range tier (no tag returns an
+ *      out-of-range tier) -- rev_classify_total holds, AND the unknown tag is UNREPRESENTABLE,
+ *      never REVERSIBLE.
+ * 1 iff every negative is genuinely caught. */
+fn rev_compromise_falsify() -> u8 @export {
+    rev_init()
+    let s : u32 = rev_begin(REVC_CAP_AMEND)
+    if s == REVC_REV_SLOT_NONE { return 0u8 }
+    REVC_CELL[0u64] = REVC_ORIG
+    /* a BAD inverse: it restores WRONG (!= ORIG), so the "claimed reversible" op does NOT round-trip */
+    if rev_record(s, REV_TAG_MEM_RESTORE_U8, (&REVC_CELL as u64), REVC_WRONG as u64) != REVC_OK { return 0u8 }
+    REVC_CELL[0u64] = REVC_MUT
+    if rev_rollback(s) != REVC_OK { return 0u8 }
+    /* the broken inverse is CAUGHT: restored != original (it landed on WRONG, not ORIG) */
+    if REVC_CELL[0u64] == REVC_ORIG { return 0u8 }
+    if REVC_CELL[0u64] != REVC_WRONG { return 0u8 }
+    /* an UNREPRESENTABLE effect is NOT mis-classified reversible */
+    if rev_classify(REVC_EFFECT_NMI_INSTALL) == REV_TIER_REVERSIBLE { return 0u8 }
+    /* totality: no tag escapes the trichotomy, and the unknown tag is conservatively unrepresentable */
+    if rev_classify_total() != 1u8 { return 0u8 }
+    if rev_classify(REVC_EFFECT_UNKNOWN) == REV_TIER_REVERSIBLE { return 0u8 }
+    return 1u8
+}
+
+/* The canary's holds: it CLAIMS a bricking/unrepresentable effect (NMI_INSTALL) is REVERSIBLE --
+ * i.e. that rev_classify(NMI_INSTALL) == REV_TIER_REVERSIBLE.  It is FALSE (the effect is
+ * UNREPRESENTABLE).  A genuinely-false clause used ONLY to prove the fold goes RED on a failure.
+ * Returns 1u8 iff the (false) claim "an unrepresentable effect is reversible" held. */
+fn rev_compromise_canary_holds() -> u8 {
+    if rev_classify(REVC_EFFECT_NMI_INSTALL) == REV_TIER_REVERSIBLE { return 1u8 }
+    return 0u8
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn rev_compromise_clause_eval(idx: u32) -> u8 {
+    let k : u8 = REVC_CLAUSE_KIND[(idx as u64) & REVC_U32MASK]
+    if k == REVC_KIND_TRICHOTOMY {
+        if rev_compromise_verify() != 1u8 { return 0u8 }
+        if rev_compromise_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == REVC_KIND_CANARY { return rev_compromise_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k.  Returns the 0-based slot, or -1 if the registry is full. */
+fn rev_compromise_register(k: u8) -> i32 {
+    let n : u32 = REVC_CLAUSE_COUNT
+    if n >= REVC_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & REVC_U32MASK
+    REVC_CLAUSE_KIND[slot] = k
+    REVC_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the 1-based
+ * index of the first failing clause (RED). */
+fn rev_compromise_run_charter() -> u64 @export {
+    let n : u32 = REVC_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if rev_compromise_clause_eval(i) != 1u8 { return ((i as u64) & REVC_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return REVC_VERDICT_GREEN
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves H9's runtime core, in order: a reversible effect round-trips AND rev_classify totally maps
+ * each reversible tag REVERSIBLE / each irreversible effect to a Compromise/Unrepresentable tier
+ * (1); the FALSIFY arm genuinely fires -- a broken inverse is caught (restored != original), an
+ * unrepresentable effect is NOT reversible, and classification is total (2); the canary is genuinely
+ * false -- a bricking effect is NOT reversible (3); run_charter GREEN with the H9 clause registered
+ * (4,5); GREEN is reproducible across a re-run (6); and -- the prove-the-negative arm -- registering
+ * the false canary drives run_charter RED, returning the canary's 1-based index (=2) (7,8). */
+fn rev_compromise_charter_selftest() -> u64 @export {
+    REVC_CLAUSE_COUNT = 0u32
+    if rev_compromise_verify() != 1u8 { return 1u64 }
+    if rev_compromise_falsify() != 1u8 { return 2u64 }
+    if rev_compromise_canary_holds() != 0u8 { return 3u64 }
+    if rev_compromise_register(REVC_KIND_TRICHOTOMY) != 0i32 { return 4u64 }
+    if rev_compromise_run_charter() != REVC_VERDICT_GREEN { return 5u64 }
+    if rev_compromise_run_charter() != REVC_VERDICT_GREEN { return 6u64 }
+    if rev_compromise_register(REVC_KIND_CANARY) != 1i32 { return 7u64 }
+    if rev_compromise_run_charter() != 2u64 { return 8u64 }
+    return 99u64
+}

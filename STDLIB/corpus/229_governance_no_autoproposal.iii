@@ -1,0 +1,59 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\229_governance_no_autoproposal.iii
+ *
+ * III conformance corpus 229 -- governance observation is record-only,
+ * NEVER auto-proposes (Mandate 7: no-observational-learning).
+ *
+ * Asserts:
+ *   1. governance_observe_and_propose(N) returns 0 for any N (no auto-
+ *      proposal under any conditions).
+ *   2. Even after N samples (with reflect returning a non-zero pid),
+ *      no proposals are auto-generated.
+ *   3. Manually-driven governance_propose IS the only way to generate
+ *      proposals -- explicit, deterministic, never threshold-triggered.
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_229
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn governance_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_proposal_count() -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_observe_and_propose(replay_count: u32) -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_observe_history_len() -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_observe_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    governance_reset()
+    governance_observe_reset()
+
+    /* Even with high replay counts, no auto-proposals. */
+    if governance_observe_and_propose(0u32)   != 0u32 { return 1u64 }
+    if governance_observe_and_propose(1u32)   != 0u32 { return 2u64 }
+    if governance_observe_and_propose(10u32)  != 0u32 { return 3u64 }
+    if governance_observe_and_propose(100u32) != 0u32 { return 4u64 }
+
+    /* Proposal count remains 0 (never auto-incremented). */
+    if governance_proposal_count() != 0u32 { return 5u64 }
+
+    /* Manually proposing IS allowed and increments the count. */
+    let pid_a : u64 = governance_propose(0u64, 0xAA00u64, 0u64, 0u32)
+    if pid_a == 0u64 { return 6u64 }
+    if governance_proposal_count() != 1u32 { return 7u64 }
+
+    let pid_b : u64 = governance_propose(0u64, 0xBB00u64, 0u64, 0u32)
+    if pid_b == 0u64 { return 8u64 }
+    if pid_b == pid_a { return 9u64 }
+    if governance_proposal_count() != 2u32 { return 10u64 }
+
+    /* observe_and_propose still doesn't auto-add even after manual proposals. */
+    if governance_observe_and_propose(50u32) != 0u32 { return 11u64 }
+    if governance_proposal_count() != 2u32 { return 12u64 }
+
+    return 99u64
+}

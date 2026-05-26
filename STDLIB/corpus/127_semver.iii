@@ -1,0 +1,74 @@
+/* verba::semver — parse + compare semver 2.0.0 strings. */
+module corpus_123
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn semver_parse(src: *u8, src_len: u64) -> i32 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_major() -> u64 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_minor() -> u64 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_patch() -> u64 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_last_pre_len() -> u64 from "semver.iii"
+extern @abi(c-msvc-x64) fn semver_compare(a: *u8, a_len: u64, b: *u8, b_len: u64) -> i32 from "semver.iii"
+
+fn make_str(buf: *u8, s: *u8, len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < len {
+        buf[i] = s[i]
+        i = i + 1u64
+    }
+    return len
+}
+
+fn main() -> u64 {
+    let a : *u8 = malloc(64u64)
+    let b : *u8 = malloc(64u64)
+
+    /* Parse 1.2.3 */
+    let n1 : u64 = make_str(a, "1.2.3", 5u64)
+    if semver_parse(a, n1) != 0i32 { return 1u64 }
+    if semver_last_major() != 1u64 { return 2u64 }
+    if semver_last_minor() != 2u64 { return 3u64 }
+    if semver_last_patch() != 3u64 { return 4u64 }
+    if semver_last_pre_len() != 0u64 { return 5u64 }
+
+    /* Parse 1.2.3-alpha.1 */
+    let n2 : u64 = make_str(a, "1.2.3-alpha.1", 13u64)
+    if semver_parse(a, n2) != 0i32 { return 6u64 }
+    if semver_last_pre_len() != 7u64 { return 7u64 }
+
+    /* Parse 0.0.0 */
+    let n3 : u64 = make_str(a, "0.0.0", 5u64)
+    if semver_parse(a, n3) != 0i32 { return 8u64 }
+    if semver_last_major() != 0u64 { return 9u64 }
+
+    /* Reject leading zeros */
+    let n4 : u64 = make_str(a, "01.0.0", 6u64)
+    if semver_parse(a, n4) == 0i32 { return 10u64 }
+
+    /* Reject missing patch */
+    let n5 : u64 = make_str(a, "1.2", 3u64)
+    if semver_parse(a, n5) == 0i32 { return 11u64 }
+
+    /* Reject empty pre */
+    let n6 : u64 = make_str(a, "1.0.0-", 6u64)
+    if semver_parse(a, n6) == 0i32 { return 12u64 }
+
+    /* compare 1.0.0 < 2.0.0 */
+    let an1 : u64 = make_str(a, "1.0.0", 5u64)
+    let bn1 : u64 = make_str(b, "2.0.0", 5u64)
+    if semver_compare(a, an1, b, bn1) != -1i32 { return 13u64 }
+
+    /* compare 1.2.3 == 1.2.3 */
+    let an2 : u64 = make_str(a, "1.2.3", 5u64)
+    let bn2 : u64 = make_str(b, "1.2.3", 5u64)
+    if semver_compare(a, an2, b, bn2) != 0i32 { return 14u64 }
+
+    /* compare 1.0.0-alpha < 1.0.0 (pre-release < release per §11.3) */
+    let an3 : u64 = make_str(a, "1.0.0-alpha", 11u64)
+    let bn3 : u64 = make_str(b, "1.0.0", 5u64)
+    if semver_compare(a, an3, b, bn3) != -1i32 { return 15u64 }
+
+    free(b)
+    free(a)
+    return 99u64
+}

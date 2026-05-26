@@ -1,0 +1,192 @@
+[build_crypto_test] built /c/Users/Edwin Boston/OneDrive/Desktop/III/CRYPTO-AGILITY/build/iii_crypto_test.exe
+
+[suite names]
+  PASS strcmp(iii_crypto_suite_name(III_SUITE_AES_256_GCM), "aes-256-gcm") == 0
+  PASS strcmp(iii_crypto_suite_name(III_SUITE_ED25519), "ed25519") == 0
+  PASS strcmp(iii_crypto_suite_name(III_SUITE_ML_KEM_768), "ml-kem-768") == 0
+  PASS strcmp(iii_crypto_suite_name(III_SUITE_ML_DSA_65), "ml-dsa-65") == 0
+  PASS strcmp(iii_crypto_suite_name(III_SUITE_SLH_DSA_128S),"slh-dsa-128s")== 0
+
+[size queries]
+  PASS iii_crypto_sizes(III_SUITE_ED25519, &pk, &sk, &sig, &ss) == III_CRYPTO_OK
+  PASS pk == 32 && sk == 64 && sig == 64
+  PASS iii_crypto_sizes(III_SUITE_ML_KEM_768, &pk, &sk, &sig, &ss) == III_CRYPTO_OK
+  PASS pk == 1184 && sk == 2400 && sig == 1088 && ss == 32
+  PASS iii_crypto_sizes(III_SUITE_ML_DSA_44, &pk, &sk, &sig, &ss) == III_CRYPTO_OK
+  PASS pk == 1312 && sk == 2560
+  PASS iii_crypto_sizes(0xDEAD, &pk, &sk, &sig, &ss) == III_CRYPTO_E_BAD_SUITE
+
+[AEAD dispatch]
+  PASS rc == 0
+  PASS rc == 0
+  PASS memcmp(pt, pt2, sizeof(pt) - 1) == 0
+  PASS rc == 0
+  PASS rc == 0
+  PASS rc == III_CRYPTO_E_BAD_SUITE
+
+[Ed25519 dispatch]
+  PASS iii_crypto_keygen(III_SUITE_ED25519, seed, sizeof(seed), pk, sk) == III_CRYPTO_OK
+  PASS iii_crypto_sign(III_SUITE_ED25519, sk, msg, sizeof(msg) - 1, sig, &siglen) == III_CRYPTO_OK
+  PASS siglen == 64
+  PASS iii_crypto_verify(III_SUITE_ED25519, pk, bad, sizeof(bad) - 1, sig, siglen) == III_CRYPTO_E_VERIFY_FAIL
+
+[X25519 dispatch]
+  PASS memcmp(shared_a, shared_b, 32) == 0
+
+[ECDSA-P256 dispatch (full round-trip)]
+  PASS iii_crypto_sizes(III_SUITE_ECDSA_P256, &pk_b, &sk_b, &sig_b, &ss_b) == III_CRYPTO_OK
+  PASS pk_b == 64 && sk_b == 32 && sig_b == 64
+  PASS iii_crypto_keygen(III_SUITE_ECDSA_P256, seed, 32, pk, sk) == III_CRYPTO_OK
+  PASS iii_crypto_sign(III_SUITE_ECDSA_P256, sk, msg, sizeof(msg) - 1, sig, &siglen) == III_CRYPTO_OK
+  PASS siglen == 64
+  PASS iii_crypto_verify(III_SUITE_ECDSA_P256, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_OK
+  PASS sl2 == 64 && memcmp(sig, sig2, 64) == 0
+  PASS iii_crypto_verify(III_SUITE_ECDSA_P256, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_E_VERIFY_FAIL
+
+[ECDSA-P384 dispatch (full round-trip)]
+  PASS iii_crypto_sizes(III_SUITE_ECDSA_P384, &pk_b, &sk_b, &sig_b, &ss_b) == III_CRYPTO_OK
+  PASS pk_b == 96 && sk_b == 48 && sig_b == 96
+  PASS iii_crypto_keygen(III_SUITE_ECDSA_P384, seed, 48, pk, sk) == III_CRYPTO_OK
+  PASS iii_crypto_sign(III_SUITE_ECDSA_P384, sk, msg, sizeof(msg) - 1, sig, &siglen) == III_CRYPTO_OK
+  PASS siglen == 96
+  PASS iii_crypto_verify(III_SUITE_ECDSA_P384, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_OK
+  PASS sl2 == 96 && memcmp(sig, sig2, 96) == 0
+  PASS iii_crypto_verify(III_SUITE_ECDSA_P384, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_E_VERIFY_FAIL
+
+[RSA-3072 PSS round-trip]
+  PASS iii_crypto_sizes(suite, &pk_b, &sk_b, &sig_b, &ss_b) == III_CRYPTO_OK
+  PASS pk_b == k && sk_b == 2 * k && sig_b == k
+  PASS iii_crypto_keygen(suite, seed, 48, pk, sk) == III_CRYPTO_OK
+  PASS iii_crypto_sign(suite, sk, msg, sizeof(msg) - 1, sig, &siglen) == III_CRYPTO_OK
+  PASS siglen == k
+  PASS iii_crypto_verify(suite, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_OK
+  PASS iii_crypto_verify(suite, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_E_VERIFY_FAIL
+
+[RSA-4096 PSS round-trip]
+  PASS iii_crypto_sizes(suite, &pk_b, &sk_b, &sig_b, &ss_b) == III_CRYPTO_OK
+  PASS pk_b == k && sk_b == 2 * k && sig_b == k
+  PASS iii_crypto_keygen(suite, seed, 48, pk, sk) == III_CRYPTO_OK
+  PASS iii_crypto_sign(suite, sk, msg, sizeof(msg) - 1, sig, &siglen) == III_CRYPTO_OK
+  PASS siglen == k
+  PASS iii_crypto_verify(suite, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_OK
+  PASS iii_crypto_verify(suite, pk, msg, sizeof(msg) - 1, sig, siglen) == III_CRYPTO_E_VERIFY_FAIL
+
+[§5 swap ledger]
+  PASS L.active == III_SUITE_AES_256_GCM
+  PASS L.count == 0
+  PASS rc == III_CRYPTO_OK
+  PASS L.active == III_SUITE_CHACHA20_POLY1305
+  PASS L.count == 1
+  PASS rc == III_CRYPTO_E_SWAP_DENIED
+  PASS rc == III_CRYPTO_E_SWAP_DENIED
+  PASS rc == III_CRYPTO_E_SWAP_DENIED
+  PASS rc == III_CRYPTO_OK
+  PASS L.active == III_SUITE_AES_256_GCM
+  PASS L.count == 2
+  PASS rc == III_CRYPTO_OK
+  PASS L.active == III_SUITE_CHACHA20_POLY1305
+
+[ML-DSA-44 round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && sig_b > 0
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(pk, pk2, pk_b) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS siglen > 0 && siglen <= sig_b
+  PASS rc == III_CRYPTO_OK
+  PASS rc != III_CRYPTO_OK
+
+[ML-DSA-65 round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && sig_b > 0
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(pk, pk2, pk_b) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS siglen > 0 && siglen <= sig_b
+  PASS rc == III_CRYPTO_OK
+  PASS rc != III_CRYPTO_OK
+
+[ML-DSA-87 round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && sig_b > 0
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(pk, pk2, pk_b) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS siglen > 0 && siglen <= sig_b
+  PASS rc == III_CRYPTO_OK
+  PASS rc != III_CRYPTO_OK
+
+[ML-KEM-512 round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && ct_b > 0 && ss_b == 32
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(ss1, ss2, 32) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(ss1, ss3, 32) != 0
+
+[ML-KEM-768 round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && ct_b > 0 && ss_b == 32
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(ss1, ss2, 32) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(ss1, ss3, 32) != 0
+
+[ML-KEM-1024 round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && ct_b > 0 && ss_b == 32
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(ss1, ss2, 32) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(ss1, ss3, 32) != 0
+
+[SLH-DSA-128S round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && sig_b > 0
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(pk, pk2, pk_b) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS siglen > 0 && siglen <= sig_b
+  PASS rc == III_CRYPTO_OK
+  PASS rc != III_CRYPTO_OK
+
+[SLH-DSA-192S round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && sig_b > 0
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(pk, pk2, pk_b) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS siglen > 0 && siglen <= sig_b
+  PASS rc == III_CRYPTO_OK
+  PASS rc != III_CRYPTO_OK
+
+[SLH-DSA-256S round-trip]
+  PASS rc == III_CRYPTO_OK
+  PASS pk_b > 0 && sk_b > 0 && sig_b > 0
+  PASS rc == III_CRYPTO_OK
+  PASS rc == III_CRYPTO_OK
+  PASS memcmp(pk, pk2, pk_b) == 0
+  PASS rc == III_CRYPTO_OK
+  PASS siglen > 0 && siglen <= sig_b
+  PASS rc == III_CRYPTO_OK
+  PASS rc != III_CRYPTO_OK
+
+[SHA-512]
+  PASS memcmp(h, expected, 64) == 0
+
+[SHA-3-256 + SHAKE]
+  PASS memcmp(h, expected, 32) == 0
+  PASS memcmp(out1, out2, 32) == 0
+
+=== 147 passed, 0 failed ===

@@ -1,0 +1,7 @@
+module corpus_11
+
+fn main() -> u64 {
+    let mut x: u64 = 10
+    x = x + 32
+    return x
+}

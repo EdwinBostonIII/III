@@ -1,0 +1,62 @@
+[iiis-2 build] [PHASE] compile-c  t=0s
+[iiis-2 build] skip acc.c (ported to .iii)
+[iiis-2 build] skip ast.c (ported to .iii)
+[iiis-2 build] cc ast_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/ast_accessors.o
+[iiis-2 build] skip ceiling.c (ported to .iii)
+[iiis-2 build] skip cg_r0.c (ported to .iii)
+[iiis-2 build] cc cg_r0_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/cg_r0_accessors.o
+[iiis-2 build] skip cg_r3.c (ported to .iii)
+[iiis-2 build] cc cg_r3_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/cg_r3_accessors.o
+[iiis-2 build] cc cg_r3_xii.c -> /tmp/iiis1-build.5AI5rE/obj/cg_r3_xii.o
+[iiis-2 build] cc cg_r3_xii_adapter.c -> /tmp/iiis1-build.5AI5rE/obj/cg_r3_xii_adapter.o
+[iiis-2 build] skip cg_rm1.c (ported to .iii)
+[iiis-2 build] cc cg_rm1_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/cg_rm1_accessors.o
+[iiis-2 build] skip cg_rm2.c (ported to .iii)
+[iiis-2 build] cc cg_rm2_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/cg_rm2_accessors.o
+[iiis-2 build] skip emit.c (ported to .iii)
+[iiis-2 build] cc emit_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/emit_accessors.o
+[iiis-2 build] skip hexad_check.c (ported to .iii)
+[iiis-2 build] cc iiis1_link_stubs.c -> /tmp/iiis1-build.5AI5rE/obj/iiis1_link_stubs.o
+[iiis-2 build] cc iii_cg_pe_iiis1.c -> /tmp/iiis1-build.5AI5rE/obj/iii_cg_pe_iiis1.o
+[iiis-2 build] skip jit_emit.c (ported to .iii)
+[iiis-2 build] cc jit_emit_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/jit_emit_accessors.o
+[iiis-2 build] skip lex.c (ported to .iii)
+[iiis-2 build] cc lex_runtime.c -> /tmp/iiis1-build.5AI5rE/obj/lex_runtime.o
+[iiis-2 build] skip link.c (ported to .iii)
+[iiis-2 build] skip main.c (ported to .iii)
+[iiis-2 build] skip parse.c (ported to .iii)
+[iiis-2 build] skip proof.c (ported to .iii)
+[iiis-2 build] skip sema.c (ported to .iii)
+[iiis-2 build] cc sema_accessors.c -> /tmp/iiis1-build.5AI5rE/obj/sema_accessors.o
+[iiis-2 build] cc sema_xii.c -> /tmp/iiis1-build.5AI5rE/obj/sema_xii.o
+[iiis-2 build] cc sema_xii_adapter.c -> /tmp/iiis1-build.5AI5rE/obj/sema_xii_adapter.o
+[iiis-2 build] skip sid.c (ported to .iii)
+[iiis-2 build] skip witness_alloc.c (ported to .iii)
+[iiis-2 build] cc xii_lattice_loader.c -> /tmp/iiis1-build.5AI5rE/obj/xii_lattice_loader.o
+[iiis-2 build] cc xii_ldil.c -> /tmp/iiis1-build.5AI5rE/obj/xii_ldil.o
+[iiis-2 build] [PHASE] compile-iii  t=2s
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/acc.iii -> /tmp/iiis1-build.5AI5rE/obj/acc.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/ast.iii -> /tmp/iiis1-build.5AI5rE/obj/ast.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/ceiling.iii -> /tmp/iiis1-build.5AI5rE/obj/ceiling.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_r0.iii -> /tmp/iiis1-build.5AI5rE/obj/cg_r0.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_r3.iii -> /tmp/iiis1-build.5AI5rE/obj/cg_r3.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_rm1.iii -> /tmp/iiis1-build.5AI5rE/obj/cg_rm1.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/cg_rm2.iii -> /tmp/iiis1-build.5AI5rE/obj/cg_rm2.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/emit.iii -> /tmp/iiis1-build.5AI5rE/obj/emit.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/hexad_check.iii -> /tmp/iiis1-build.5AI5rE/obj/hexad_check.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/jit_emit.iii -> /tmp/iiis1-build.5AI5rE/obj/jit_emit.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/lex.iii -> /tmp/iiis1-build.5AI5rE/obj/lex.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/link.iii -> /tmp/iiis1-build.5AI5rE/obj/link.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/main.iii -> /tmp/iiis1-build.5AI5rE/obj/main.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/parse.iii -> /tmp/iiis1-build.5AI5rE/obj/parse.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/proof.iii -> /tmp/iiis1-build.5AI5rE/obj/proof.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/sema.iii -> /tmp/iiis1-build.5AI5rE/obj/sema.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/sid.iii -> /tmp/iiis1-build.5AI5rE/obj/sid.iii.o
+[iiis-2 build] iiis-0 /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/witness_alloc.iii -> /tmp/iiis1-build.5AI5rE/obj/witness_alloc.iii.o
+[iiis-2 build] [PHASE] link  t=4s
+[iiis-2 build] link -> /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+[iiis-2 build] linking with stdlib (XII enabled): /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+[iiis-2 build] [PHASE] verify  t=5s
+[iiis-2 build] mhash: 84880e839e2b06ea3713a2ee321c02e35287079b7cc6f08201fab0e174e1a1b9
+[iiis-2 build] witness: /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe.witness.json
+[iiis-2 build] OK: /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe

@@ -1,0 +1,199 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\237_insel_cycle_bench.iii
+ *
+ * III conformance corpus 237 -- Phase C.4: Insel cycle bench.
+ *
+ * Times the three Software Resolution Unit entry points on a single
+ * fixed (set, intent, ctx) triple via the serialised RDTSC helper
+ * (COMPILER/BOOT/bench_helpers.s::bench_rdtsc):
+ *
+ *   1. iii_resolver_unit_resolve         -- front-end dispatcher
+ *                                           (selects scalar or AVX-2
+ *                                           per cpufeat_has_avx2)
+ *   2. iii_resolver_unit_resolve_avx2    -- dedicated AVX-2 entry
+ *   3. iii_resolver_unit_resolve_avx512  -- dedicated AVX-512 entry
+ *
+ * For each path we:
+ *
+ *   - WARM the I-cache + D-cache + branch predictors with a discarded
+ *     pre-call (cold-call cycle counts can be 5x-30x worse than warm
+ *     and would blow any reasonable upper bound).
+ *
+ *   - Sample TSC immediately before and after the WARMED call; the
+ *     delta is the cycle count we assert against an upper bound.
+ *
+ *   - Verify bit-identity: every path must return the SAME packed
+ *     (best_id << 32) | best_score the front-end returned. Bit-
+ *     identity is the contract of corpus 235; we re-assert it at
+ *     bench-time so a regression where the AVX-512 path drifts is
+ *     caught here too.
+ *
+ * AVX-2 / AVX-512 probes gate on numera/cpufeat:
+ *
+ *   cpufeat_has_avx2()   == 0u8 -> EARLY return 99u64 (skip benches).
+ *   cpufeat_has_avx512f() == 0u8 -> skip ONLY the AVX-512 bench;
+ *                                   continue to scalar/AVX-2 bounds.
+ *
+ * Cycle bounds (warmed call, single resolve over a 4096-pattern set
+ * with ~67 occupied slots populated by resolution_init).
+ *
+ * ASPIRATIONAL TARGETS (Phase D resolver_score vectorisation):
+ *   scalar  < 100000 cycles
+ *   AVX-2   <  50000 cycles
+ *   AVX-512 <  30000 cycles
+ *
+ * CURRENT BOUNDS (Phase C.4 -- resolver_score is scalar-callee with
+ * full vzeroupper barriers per occupied slot, dominating runtime):
+ *
+ *   scalar  < 500000 cycles
+ *   AVX-2   < 500000 cycles  (tested only if AVX-2 available)
+ *   AVX-512 < 500000 cycles  (tested only if AVX-512 available)
+ *
+ * These bounds are upper limits, not equalities -- any speedup over
+ * scalar is a free win. The bounds account for:
+ *   - resolver_score callee work (which dominates per-occupied-slot
+ *     and is itself scalar at Phase C.4 -- vectorisation is a Phase D
+ *     line item; this bench is the artefact that will demonstrate
+ *     the speedup once that lands)
+ *   - AVX-2 vptest skip of empty 256-bit chunks (~93% of address space)
+ *   - AVX-512 wider vptestmd + vpconflictq lane reduction
+ *   - jitter from CI runners (TurboBoost transitions, SMT contention,
+ *     virtualised TSC on cloud builders, OneDrive AV scanning the .exe)
+ *
+ * Exit code: 99 on full pass; 1..30 on specific failure (see EXIT
+ * MAP at the end of this header).
+ *
+ * EXIT MAP
+ * --------
+ *   1   pattern_set_global() returned 0 (resolution_init failed)
+ *   2   call_context_new() returned 0
+ *   3   intent_form(0) returned 0
+ *   10  scalar resolve returned 0 (no patterns matched -- corpus bug)
+ *   11  scalar cycle delta exceeded 500000 (current bound)
+ *   20  AVX-2 result not bit-identical to scalar
+ *   21  AVX-2 returned 0
+ *   22  AVX-2 cycle delta exceeded 500000 (current bound)
+ *   30  AVX-512 result not bit-identical to scalar
+ *   31  AVX-512 returned 0
+ *   32  AVX-512 cycle delta exceeded 500000 (current bound)
+ *   99  PASS (full bench, or skipped AVX paths per cpufeat)
+ */
+
+module corpus_237
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "resolver_unit"
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve_avx2(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "resolver_unit"
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve_avx512(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "resolver_unit_avx512"
+
+extern @abi(c-msvc-x64) fn bench_rdtsc() -> u64 from "bench_helpers"
+
+/* ─── Wrappers that bracket each callee with a serialised RDTSC pair
+ *      and return the absolute cycle delta. The result of the resolve
+ *      call is captured into a module-level scratch slot so the caller
+ *      can read it back for parity verification.
+ *
+ *      We use a module-level mutable scratch rather than returning a
+ *      pair (no tuple types in iiis-0). Single-threaded, no concurrent
+ *      bench callers, so the global is safe. */
+
+var BENCH_LAST_PACKED : u64 = 0u64
+
+fn _bench_scalar(set: u64, intent: u64, ctx: u64) -> u64 {
+    let t0 : u64 = bench_rdtsc()
+    let r  : u64 = iii_resolver_unit_resolve(set, intent, ctx)
+    let t1 : u64 = bench_rdtsc()
+    BENCH_LAST_PACKED = r
+    return t1 - t0
+}
+
+fn _bench_avx2(set: u64, intent: u64, ctx: u64) -> u64 {
+    let t0 : u64 = bench_rdtsc()
+    let r  : u64 = iii_resolver_unit_resolve_avx2(set, intent, ctx)
+    let t1 : u64 = bench_rdtsc()
+    BENCH_LAST_PACKED = r
+    return t1 - t0
+}
+
+fn _bench_avx512(set: u64, intent: u64, ctx: u64) -> u64 {
+    let t0 : u64 = bench_rdtsc()
+    let r  : u64 = iii_resolver_unit_resolve_avx512(set, intent, ctx)
+    let t1 : u64 = bench_rdtsc()
+    BENCH_LAST_PACKED = r
+    return t1 - t0
+}
+
+fn main() -> u64 {
+    resolution_init()
+
+    /* ─── Build the (set, intent, ctx) triple. Reuse the form intent
+     *      (INTENT_HEXAD_FORM, form_id=0) that corpus 233 / 235 already
+     *      exercise -- known to score against multiple patterns in the
+     *      sealed table. */
+    let set : u64 = pattern_set_global()
+    if set == 0u64 { return 1u64 }
+
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 2u64 }
+
+    let intent : u64 = intent_form(0u64)
+    if intent == 0u64 { return 3u64 }
+
+    /* ─── WARMUP: discard three pre-calls per path to load I-cache /
+     *      D-cache / branch predictors / TLB entries. Three iterations
+     *      reliably saturates the front-end's BTB and the resolver_score
+     *      callee's L1 footprint; one iteration occasionally underwarms
+     *      on cold-launched processes (observed on Win11/Defender hosts
+     *      where the first .exe page-in stalls a few hundred K cycles).
+     *      The deltas captured from the FOURTH call are what we assert. */
+    let _w0a : u64 = iii_resolver_unit_resolve(set, intent, ctx)
+    let _w0b : u64 = iii_resolver_unit_resolve(set, intent, ctx)
+    let _w0c : u64 = iii_resolver_unit_resolve(set, intent, ctx)
+
+    /* Bench scalar. */
+    let cyc_scalar : u64 = _bench_scalar(set, intent, ctx)
+    let scalar_pkd : u64 = BENCH_LAST_PACKED
+    if scalar_pkd == 0u64 { return 10u64 }
+    if cyc_scalar > 500000u64 { return 11u64 }
+
+    /* AVX-2 gate: if not present, EARLY RETURN 99 (skip remaining
+     *  bench paths). cpufeat_has_avx2 reads the kernel's
+     *  IsProcessorFeaturePresent flag for AVX-2. */
+    if cpufeat_has_avx2() == 0u8 { return 99u64 }
+
+    /* Warm AVX-2 path (three pre-calls; see WARMUP comment above). */
+    let _w1a : u64 = iii_resolver_unit_resolve_avx2(set, intent, ctx)
+    let _w1b : u64 = iii_resolver_unit_resolve_avx2(set, intent, ctx)
+    let _w1c : u64 = iii_resolver_unit_resolve_avx2(set, intent, ctx)
+
+    let cyc_avx2 : u64 = _bench_avx2(set, intent, ctx)
+    let avx2_pkd : u64 = BENCH_LAST_PACKED
+    if avx2_pkd == 0u64 { return 21u64 }
+    if avx2_pkd != scalar_pkd { return 20u64 }
+    if cyc_avx2 > 500000u64 { return 22u64 }
+
+    /* AVX-512 gate: if not present, RETURN 99 (success -- AVX-2 path
+     *  passed; AVX-512 is optional). */
+    if cpufeat_has_avx512f() == 0u8 { return 99u64 }
+
+    /* Warm AVX-512 path (three pre-calls; see WARMUP comment above). */
+    let _w2a : u64 = iii_resolver_unit_resolve_avx512(set, intent, ctx)
+    let _w2b : u64 = iii_resolver_unit_resolve_avx512(set, intent, ctx)
+    let _w2c : u64 = iii_resolver_unit_resolve_avx512(set, intent, ctx)
+
+    let cyc_avx512 : u64 = _bench_avx512(set, intent, ctx)
+    let avx512_pkd : u64 = BENCH_LAST_PACKED
+    if avx512_pkd == 0u64 { return 31u64 }
+    if avx512_pkd != scalar_pkd { return 30u64 }
+    if cyc_avx512 > 500000u64 { return 32u64 }
+
+    /* All three paths produced bit-identical packed u64 within the
+     * cycle envelope. */
+    return 99u64
+}

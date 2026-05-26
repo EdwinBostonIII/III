@@ -1,0 +1,72 @@
+/* Diag: call x25519 the way sealed_channel.iii does — 6 times in a row,
+ * writing into different offsets of a single backing buffer.  Report each
+ * return value via packed exit code. */
+module diag_x25519_in_sc
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn arena_remaining(arena_id: u64) -> u64 from "arena.iii"
+
+var BACKING : [u8; 2048]
+var BP      : [u8; 32]
+var A_SK    : [u8; 32]
+var B_SK    : [u8; 32]
+var C_SK    : [u8; 32]
+var A_PK    : [u8; 32]
+var B_PK    : [u8; 32]
+var C_PK    : [u8; 32]
+
+fn _fill(p: *u8, base: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = ((base + i) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn _slot_ptr(s: u32) -> u64 {
+    let off : u64 = (s as u64) * 32u64
+    return (&BACKING) as u64 + off
+}
+
+fn main() -> u64 {
+    let bp : *u8 = (&BP) as *u8
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+
+    _fill((&A_SK) as *u8, 0x11u64)
+    _fill((&B_SK) as *u8, 0x40u64)
+    _fill((&C_SK) as *u8, 0x80u64)
+
+    /* Derive PKs. */
+    if x25519((&A_PK) as *u8, (&A_SK) as *u8, bp) != 0i32 { return 1u64 }
+    if x25519((&B_PK) as *u8, (&B_SK) as *u8, bp) != 0i32 { return 2u64 }
+    if x25519((&C_PK) as *u8, (&C_SK) as *u8, bp) != 0i32 { return 3u64 }
+
+    /* Run 6 handshake-style x25519 calls into BACKING slots 0..5. */
+    let r0 : i32 = x25519(_slot_ptr(0u32) as *u8, (&A_SK) as *u8, (&B_PK) as *u8)
+    if r0 != 0i32 { return 10u64 }
+    let r1 : i32 = x25519(_slot_ptr(1u32) as *u8, (&B_SK) as *u8, (&A_PK) as *u8)
+    if r1 != 0i32 { return 11u64 }
+    let r2 : i32 = x25519(_slot_ptr(2u32) as *u8, (&B_SK) as *u8, (&C_PK) as *u8)
+    if r2 != 0i32 { return 12u64 }
+    let r3 : i32 = x25519(_slot_ptr(3u32) as *u8, (&C_SK) as *u8, (&B_PK) as *u8)
+    if r3 != 0i32 { return 13u64 }
+    let r4 : i32 = x25519(_slot_ptr(4u32) as *u8, (&A_SK) as *u8, (&C_PK) as *u8)
+    if r4 != 0i32 { return 14u64 }
+    let r5 : i32 = x25519(_slot_ptr(5u32) as *u8, (&C_SK) as *u8, (&A_PK) as *u8)
+    if r5 != 0i32 { return 15u64 }
+
+    /* Compare slot 2 (b_sk * c_pk) with slot 4 (a_sk * c_pk). */
+    let p2 : *u8 = _slot_ptr(2u32) as *u8
+    let p4 : *u8 = _slot_ptr(4u32) as *u8
+    let mut k : u64 = 0u64
+    let mut diff : u32 = 0u32
+    while k < 32u64 {
+        if p2[k] != p4[k] { diff = diff + 1u32 }
+        k = k + 1u64
+    }
+    if diff == 0u32 { return 50u64 }
+    return 99u64
+}

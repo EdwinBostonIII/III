@@ -1,0 +1,7 @@
+/* 668 — uncertainty: the one typed gap. total + sound + maximally precise
+ * (0*unknown==Known(0)) + div0==essential gap + derived gaps carry non-empty
+ * provenance + root_causes walks the DAG + well_formed negatives + cad-addr
+ * determinism/distinctness. M4 typed-gap gate (the one net-new organ). */
+module corpus_668
+extern @abi(c-msvc-x64) fn unc_selftest() -> u64 from "uncertainty.iii"
+fn main() -> u64 { return unc_selftest() }

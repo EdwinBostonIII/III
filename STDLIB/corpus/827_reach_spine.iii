@@ -1,0 +1,136 @@
+/* 827_reach_spine.iii -- The Reach, Phase 1: the content-addressed local transport spine.
+ * Proves: emit(value)->address then reach(address) returns the SAME value, OK + length (1-2);
+ * the returned value content-addresses back to the requested address (3, round-trip integrity);
+ * DETERMINISM -- emitting the same value twice yields the same address (4); a never-emitted
+ * address is a typed GAP, not an error (5); the INTEGRITY TEETH -- bytes stored under an address
+ * they do NOT hash to are NEVER returned (reach degrades to GAP + leaks no length), the tamper-
+ * evidence only a content-addressed network has (6); the CAP-GATE TEETH (M31 membrane) -- reach
+ * with a cap lacking READ is DENIED, emit with a cap lacking WRITE is DENIED (7-8).  The store is
+ * local disk -- no network is touched, so this is full capacity offline.  Exit 99 = all hold.
+ * CORPUS-ONLY (reach_store / reach_core / fs / cad / capability / uncertainty are complete). */
+module corpus_827
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn reach_emit(buf: u64, len: u64, cap: u64, out_addr: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn reach(addr: u64, cap: u64, out: u64, max: u64, out_len: u64, out_gid: u64) -> i32 from "reach_core.iii"
+extern @abi(c-msvc-x64) fn reach_store_put(addr: u64, buf: u64, len: u64, cap: u64) -> i32 from "reach_store.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let cap : u64 = cap_attenuate(env, 0x0Eu64, 0u64)     /* read|write|create */
+    let rocap : u64 = cap_attenuate(env, 0x02u64, 0u64)   /* read only (no write) */
+    let wocap : u64 = cap_attenuate(env, 0x0Cu64, 0u64)   /* write|create, no read */
+
+    /* store filename "iii_reach_store.bin\0" -- clean any stale file for a deterministic start */
+    let path : *u8 = malloc(24u64)
+    path[0] = 105u8
+    path[1] = 105u8
+    path[2] = 105u8
+    path[3] = 95u8
+    path[4] = 114u8
+    path[5] = 101u8
+    path[6] = 97u8
+    path[7] = 99u8
+    path[8] = 104u8
+    path[9] = 95u8
+    path[10] = 115u8
+    path[11] = 116u8
+    path[12] = 111u8
+    path[13] = 114u8
+    path[14] = 101u8
+    path[15] = 46u8
+    path[16] = 98u8
+    path[17] = 105u8
+    path[18] = 110u8
+    path[19] = 0u8
+    fs_delete(cap, path as u64)
+
+    let val : *u8 = malloc(8u64)
+    val[0] = 72u8
+    val[1] = 73u8
+    val[2] = 74u8
+    val[3] = 75u8
+    val[4] = 76u8
+    let addr : *u8 = malloc(32u64)
+    let addr2 : *u8 = malloc(32u64)
+    let out : *u8 = malloc(64u64)
+    let olen_p : *u8 = malloc(8u64)
+    let olen : *u64 = olen_p as *u64
+    let gid : *u8 = malloc(8u64)
+    let tmp : *u8 = malloc(32u64)
+
+    /* (1) emit(value) -> address */
+    if reach_emit(val as u64, 5u64, cap, addr as u64) != 0i32 { return 1u64 }
+
+    /* (2) reach(address) -> value, OK + length 5 */
+    let rc2 : i32 = reach(addr as u64, cap, out as u64, 64u64, olen as u64, gid as u64)
+    if rc2 != 0i32 { return 2u64 }
+    if olen[0] != 5u64 { return 2u64 }
+
+    /* (3) round-trip integrity: the returned value content-addresses to the requested address */
+    cad_oneshot(0u32, out, 5u64, tmp)
+    if cad_eq(tmp, addr) != 1u8 { return 3u64 }
+
+    /* (4) determinism: emitting the same value again yields the same address */
+    if reach_emit(val as u64, 5u64, cap, addr2 as u64) != 0i32 { return 4u64 }
+    if cad_eq(addr, addr2) != 1u8 { return 4u64 }
+
+    /* (5) a never-emitted address is a typed GAP (reason HOLE), not an error */
+    let bog : *u8 = malloc(32u64)
+    let mut bi : u64 = 0u64
+    while bi < 32u64 {
+        bog[bi] = 0xABu8
+        bi = bi + 1u64
+    }
+    let rc5 : i32 = reach(bog as u64, cap, out as u64, 64u64, olen as u64, gid as u64)
+    if rc5 != 1i32 { return 5u64 }
+
+    /* (6) INTEGRITY TEETH: A = cad(val2); store val3 (!= val2) under A; reach(A) must degrade to
+     * GAP and NEVER hand back val3 (the bytes do not hash to A), nor leak its length. */
+    let val2 : *u8 = malloc(4u64)
+    val2[0] = 1u8
+    val2[1] = 2u8
+    val2[2] = 3u8
+    val2[3] = 4u8
+    let valA : *u8 = malloc(32u64)
+    cad_oneshot(0u32, val2, 4u64, valA)
+    let val3 : *u8 = malloc(4u64)
+    val3[0] = 9u8
+    val3[1] = 9u8
+    val3[2] = 9u8
+    val3[3] = 9u8
+    if reach_store_put(valA as u64, val3 as u64, 4u64, cap) != 0i32 { return 6u64 }
+    let rc6 : i32 = reach(valA as u64, cap, out as u64, 64u64, olen as u64, gid as u64)
+    if rc6 != 1i32 { return 6u64 }
+    if olen[0] != 0u64 { return 6u64 }
+
+    /* (7) CAP-GATE: reach with a cap lacking READ is DENIED */
+    let rc7 : i32 = reach(addr as u64, wocap, out as u64, 64u64, olen as u64, gid as u64)
+    if rc7 != 2i32 { return 7u64 }
+
+    /* (8) CAP-GATE: emit with a cap lacking WRITE is DENIED */
+    let rc8 : i32 = reach_emit(val as u64, 5u64, rocap, addr as u64)
+    if rc8 != 2i32 { return 8u64 }
+
+    /* cleanup so the next run starts clean */
+    fs_delete(cap, path as u64)
+    free(path)
+    free(val)
+    free(addr)
+    free(addr2)
+    free(out)
+    free(olen_p)
+    free(gid)
+    free(tmp)
+    free(bog)
+    free(val2)
+    free(valA)
+    free(val3)
+    return 99u64
+}

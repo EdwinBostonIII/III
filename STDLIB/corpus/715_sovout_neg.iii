@@ -1,0 +1,15 @@
+/* 715 -- mig3 (H1) Part 3: @sovereign_out OUT-parameter taint, NEGATIVE arm.
+ * THIS FILE MUST FAIL TO COMPILE.
+ * `recv_into` FILLS its buf with untrusted external bytes, so buf is marked
+ * @sovereign_value @sovereign_out: the caller MUST hand it a SovVal buffer so
+ * the taint is captured by the type system.  `main` passes a PLAIN u64 buffer
+ * -- losing the taint -- so cg_r3's r3_chk_param_sovereign_out MUST emit
+ * III_SOVEREIGN_OUT_VIOLATION and reject it.  This is the real recv/read source
+ * shape, whose taint lives on the OUT buffer, not the return value.
+ * Validated by the run_corpus *_neg contract (non-zero compile rc = PASS). */
+module corpus_715
+fn recv_into(buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 { return n }
+fn main() -> u64 {
+    let plain : u64 = 0u64
+    return recv_into(plain, 8u64)
+}

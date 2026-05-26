@@ -1,0 +1,8 @@
+{
+  "tool": "build_iiis1.sh",
+  "ported_tus": "acc,ast,ceiling,cg_r0,cg_r3,cg_rm1,cg_rm2,emit,hexad_check,jit_emit,lex,link,main,parse,proof,sema,sid,witness_alloc",
+  "mode": "release",
+  "iiis0_used": "iiis-0.exe",
+  "output": "iiis-1.exe",
+  "output_mhash": "a82dc08ef4689c7ea36329d1a20a4ee3786d9b843b7d230e28ed83845862ac0c"
+}

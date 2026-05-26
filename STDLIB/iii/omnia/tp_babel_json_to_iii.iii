@@ -1,0 +1,111 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_babel_json_to_iii.iii
+ *
+ * Transform pattern: FORM_BABEL_JSON → FORM_III
+ * FROZEN SPEC §7B.6 slot 18; ADR-RES-006, ADR-RES-007.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Decodes a Babel JSON envelope and extracts the payload_bytes (base64).
+ * Inverse of tp_iii_to_babel_json. Round-trip is byte-equal.
+ *
+ * Search the input for the literal `"payload_bytes":"`, then base64-decode
+ * until `"`. Skips header parsing -- we trust the well-formed envelope.
+ */
+
+module omnia_tp_babel_json_to_iii
+
+/* "payload_bytes" 13 bytes for substring search */
+var TP_BJI_KEY : [u8; 13] = [112u8, 97u8, 121u8, 108u8, 111u8, 97u8, 100u8, 95u8, 98u8, 121u8, 116u8, 101u8, 115u8]
+
+fn tp_bji_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_bji_b64_decode_char(c: u8) -> u32 {
+    if c >= 65u8 {
+        if c <= 90u8 { return (c - 65u8) as u32 }
+    }
+    if c >= 97u8 {
+        if c <= 122u8 { return (c - 97u8 + 26u8) as u32 }
+    }
+    if c >= 48u8 {
+        if c <= 57u8 { return (c - 48u8 + 52u8) as u32 }
+    }
+    if c == 43u8 { return 62u32 }
+    if c == 47u8 { return 63u32 }
+    if c == 61u8 { return 64u32 }
+    return 0xFFFFFFFFu32
+}
+
+/* Search src for "payload_bytes" then advance to the opening quote of the
+ * value. Returns offset of first b64 char, or 0 if not found. */
+fn tp_bji_find_payload(src: u64, src_len: u64) -> u64 {
+    if src_len < 16u64 { return 0u64 }
+    let mut i : u64 = 0u64
+    while i + 13u64 <= src_len {
+        let mut match_count : u32 = 0u32
+        let mut k : u32 = 0u32
+        while k < 13u32 {
+            let bp : *u8 = (src + i + ((k as u64) & 0xFFu64)) as *u8
+            if bp[0u64] == TP_BJI_KEY[k] { match_count = match_count + 1u32 }
+            k = k + 1u32
+        }
+        if match_count == 13u32 {
+            /* Skip past " characters and colon */
+            let mut j : u64 = i + 13u64
+            while j < src_len {
+                let bp : *u8 = (src + j) as *u8
+                if bp[0u64] == 34u8 {
+                    return j + 1u64   /* one past opening quote of value */
+                }
+                j = j + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn tp_babel_json_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let payload_off : u64 = tp_bji_find_payload(src, src_len)
+    if payload_off == 0u64 { return 0u64 }
+    let mut in_off : u64 = payload_off
+    let mut out_off : u64 = 0u64
+    /* Decode 4 b64 chars at a time */
+    while in_off + 4u64 <= src_len {
+        let bp0 : *u8 = (src + in_off) as *u8
+        if bp0[0u64] == 34u8 {
+            /* End-of-payload quote */
+            return out_off
+        }
+        let bp1 : *u8 = (src + in_off + 1u64) as *u8
+        let bp2 : *u8 = (src + in_off + 2u64) as *u8
+        let bp3 : *u8 = (src + in_off + 3u64) as *u8
+        let v0 : u32 = tp_bji_b64_decode_char(bp0[0u64])
+        let v1 : u32 = tp_bji_b64_decode_char(bp1[0u64])
+        let v2 : u32 = tp_bji_b64_decode_char(bp2[0u64])
+        let v3 : u32 = tp_bji_b64_decode_char(bp3[0u64])
+        if v0 == 0xFFFFFFFFu32 { return out_off }
+        if v1 == 0xFFFFFFFFu32 { return out_off }
+        let combined : u32 = (v0 << 18u32) | (v1 << 12u32) | ((v2 & 0x3Fu32) << 6u32) | (v3 & 0x3Fu32)
+        if out_off >= dst_cap { return 0u64 }
+        tp_bji_emit(dst_buf, out_off, ((combined >> 16u32) & 0xFFu32) as u8)
+        out_off = out_off + 1u64
+        if v2 != 64u32 {
+            if out_off >= dst_cap { return 0u64 }
+            tp_bji_emit(dst_buf, out_off, ((combined >> 8u32) & 0xFFu32) as u8)
+            out_off = out_off + 1u64
+        }
+        if v3 != 64u32 {
+            if v2 != 64u32 {
+                if out_off >= dst_cap { return 0u64 }
+                tp_bji_emit(dst_buf, out_off, (combined & 0xFFu32) as u8)
+                out_off = out_off + 1u64
+            }
+        }
+        in_off = in_off + 4u64
+    }
+    return out_off
+}

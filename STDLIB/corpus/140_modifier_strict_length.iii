@@ -1,0 +1,12 @@
+/* Lattice plan Step 0028: @strict_length modifier (token 124).
+ * Marks a function whose return value should NOT be auto-normalized
+ * (preserves trailing zero limbs in bigints, exact bytes for crypto). */
+module corpus_140
+
+fn raw_bytes() -> u64 @strict_length {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return raw_bytes()
+}

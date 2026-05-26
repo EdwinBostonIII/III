@@ -1,0 +1,46 @@
+module corpus_57
+
+extern @abi(c-msvc-x64) fn pattern_form_parse(spec: u64, spec_len: u64, template_buf: u64) -> i32 from "pattern_form.iii"
+
+/* "activation=900000000, hexad=6, ring=2, k=950000000, parent=12" */
+var SPEC : [u8; 60] = [
+    97u8, 99u8, 116u8, 105u8, 118u8, 97u8, 116u8, 105u8, 111u8, 110u8, 61u8,
+    57u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8,
+    44u8, 32u8,
+    104u8, 101u8, 120u8, 97u8, 100u8, 61u8, 54u8,
+    44u8, 32u8,
+    114u8, 105u8, 110u8, 103u8, 61u8, 50u8,
+    44u8, 32u8,
+    107u8, 61u8,
+    57u8, 53u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8,
+    44u8, 32u8,
+    112u8, 97u8, 114u8, 101u8, 110u8, 116u8, 61u8, 49u8, 50u8
+]
+
+var TPL : [u8; 168]
+
+fn read_u64_le(p: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bp : *u8 = (p + i) as *u8
+        let b : u64 = (bp[0u64] as u64) & 0xFFu64
+        v = v | (b << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+fn main() -> u64 {
+    let r : i32 = pattern_form_parse((&SPEC) as u64, 60u64, (&TPL) as u64)
+    if r != 0i32 { return 10u64 }
+    let base : u64 = read_u64_le((&TPL) as u64 + 104u64)
+    if base != 900000000u64 { return 20u64 }
+    let hp : *u8 = ((&TPL) as u64 + 120u64) as *u8
+    if hp[0u64] != 6u8 { return 30u64 }
+    let rp : *u8 = ((&TPL) as u64 + 121u64) as *u8
+    if rp[0u64] != 2u8 { return 40u64 }
+    let k : u64 = read_u64_le((&TPL) as u64 + 128u64)
+    if k != 950000000u64 { return 50u64 }
+    return 1u64
+}

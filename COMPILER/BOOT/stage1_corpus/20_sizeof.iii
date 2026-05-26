@@ -1,0 +1,6 @@
+module corpus_20
+
+fn main() -> u64 {
+    let s: u64 = sizeof u32
+    return s
+}

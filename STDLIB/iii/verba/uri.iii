@@ -1,0 +1,400 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\uri.iii
+ *
+ * III STDLIB - verba::uri
+ *
+ * RFC 3986 URI parser and percent-encoder/decoder.  Pure-functional;
+ * no IO, no externs beyond stdlib.
+ *
+ * URI grammar (RFC 3986 §3):
+ *   URI         = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+ *   hier-part   = "//" authority path-abempty | path-absolute | path-rootless | path-empty
+ *   scheme      = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+ *   authority   = [ userinfo "@" ] host [ ":" port ]
+ *
+ * For brevity and the most common case, our parser treats authority,
+ * path, query, fragment as opaque byte spans terminated by their next
+ * delimiter.  Sub-structure (host/port within authority, segments in
+ * path, k=v pairs in query) can be parsed by callers.
+ *
+ * Public API:
+ *   uri_parse              arena, raw_base, raw_len     -> id (1-indexed)
+ *   uri_scheme_base        id                           -> u64
+ *   uri_scheme_len         id                           -> u64
+ *   uri_authority_base     id                           -> u64
+ *   uri_authority_len      id                           -> u64
+ *   uri_path_base          id                           -> u64
+ *   uri_path_len           id                           -> u64
+ *   uri_query_base         id                           -> u64
+ *   uri_query_len          id                           -> u64
+ *   uri_fragment_base      id                           -> u64
+ *   uri_fragment_len       id                           -> u64
+ *   uri_drop               id                           -> i32
+ *   uri_pct_encode         builder_id, src_base, src_len -> i32
+ *   uri_pct_decode         builder_id, src_base, src_len -> i32
+ *
+ * Components that are absent get base=0, len=0.  Components that exist
+ * but are empty (e.g., the path "/" has length 1) get base=valid, len=1.
+ *
+ * NIH: zero externs except memoria/arena and verba/builder.
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_uri
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+
+/* ----------- Public constants ----------- */
+
+const URI_OK         : i32 =  0i32
+const URI_E_PARSE    : i32 = -1i32
+const URI_E_BADID    : i32 = -2i32
+const URI_E_BADHEX   : i32 = -3i32
+
+const URI_MAX : u32 = 32u32
+
+/* ----------- Slot table ----------- */
+
+var URI_SCHEME_BASE    : [u64; 32]
+var URI_SCHEME_LEN     : [u64; 32]
+var URI_AUTH_BASE      : [u64; 32]
+var URI_AUTH_LEN       : [u64; 32]
+var URI_PATH_BASE      : [u64; 32]
+var URI_PATH_LEN       : [u64; 32]
+var URI_QUERY_BASE     : [u64; 32]
+var URI_QUERY_LEN      : [u64; 32]
+var URI_FRAGMENT_BASE  : [u64; 32]
+var URI_FRAGMENT_LEN   : [u64; 32]
+var URI_LIVE           : [u8;  32]
+
+/* ----------- Slot allocator ----------- */
+
+fn uri_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < URI_MAX {
+        if URI_LIVE[i] == 0u8 {
+            URI_LIVE[i] = 1u8
+            URI_SCHEME_BASE[i]   = 0u64
+            URI_SCHEME_LEN[i]    = 0u64
+            URI_AUTH_BASE[i]     = 0u64
+            URI_AUTH_LEN[i]      = 0u64
+            URI_PATH_BASE[i]     = 0u64
+            URI_PATH_LEN[i]      = 0u64
+            URI_QUERY_BASE[i]    = 0u64
+            URI_QUERY_LEN[i]     = 0u64
+            URI_FRAGMENT_BASE[i] = 0u64
+            URI_FRAGMENT_LEN[i]  = 0u64
+            return i
+        }
+        i = i + 1u32
+    }
+    return URI_MAX
+}
+
+fn uri_resolve_id(id: u64) -> u32 {
+    if id == 0u64 { return URI_MAX }
+    let idx_u64 : u64 = id - 1u64
+    if idx_u64 >= (URI_MAX as u64) { return URI_MAX }
+    let idx : u32 = idx_u64 as u32
+    if URI_LIVE[idx] == 0u8 { return URI_MAX }
+    return idx
+}
+
+/* ----------- Character classification ----------- */
+
+fn uri_is_alpha(b: u32) -> u8 {
+    if b >= 65u32 {
+        if b <= 90u32 { return 1u8 }
+    }
+    if b >= 97u32 {
+        if b <= 122u32 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn uri_is_digit(b: u32) -> u8 {
+    if b >= 48u32 {
+        if b <= 57u32 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn uri_is_scheme_byte(b: u32) -> u8 {
+    /* scheme tail: ALPHA / DIGIT / "+" / "-" / "." */
+    if uri_is_alpha(b) == 1u8 { return 1u8 }
+    if uri_is_digit(b) == 1u8 { return 1u8 }
+    if b == 43u32 { return 1u8 }   /* + */
+    if b == 45u32 { return 1u8 }   /* - */
+    if b == 46u32 { return 1u8 }   /* . */
+    return 0u8
+}
+
+fn uri_is_unreserved(b: u32) -> u8 {
+    /* RFC 3986 §2.3:  ALPHA / DIGIT / "-" / "." / "_" / "~" */
+    if uri_is_alpha(b) == 1u8 { return 1u8 }
+    if uri_is_digit(b) == 1u8 { return 1u8 }
+    if b == 45u32 { return 1u8 }   /* - */
+    if b == 46u32 { return 1u8 }   /* . */
+    if b == 95u32 { return 1u8 }   /* _ */
+    if b == 126u32 { return 1u8 }  /* ~ */
+    return 0u8
+}
+
+/* Convert ASCII hex digit to 0..15.  Returns 0xFF on invalid. */
+fn uri_hex_nibble(b: u32) -> u32 {
+    if b >= 48u32 {
+        if b <= 57u32 { return b - 48u32 }
+    }
+    if b >= 65u32 {
+        if b <= 70u32 { return b - 55u32 }
+    }
+    if b >= 97u32 {
+        if b <= 102u32 { return b - 87u32 }
+    }
+    return 0xFFu32
+}
+
+fn uri_nibble_to_hex_upper(n: u32) -> u32 {
+    let v : u32 = n & 0xFu32
+    if v < 10u32 { return v + 48u32 }
+    return v - 10u32 + 65u32
+}
+
+/* ----------- Parser ----------- */
+
+/* Try to detect scheme at start of buffer.  Returns position of ':'
+ * if a valid scheme was found at offset 0 (length = position), or
+ * 0xFFFF_FFFF_FFFF_FFFF if no scheme (the whole thing is a relative ref). */
+fn uri_detect_scheme(base: u64, len: u64) -> u64 {
+    if len == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let p : *u8 = base as *u8
+    /* First byte must be ALPHA. */
+    if uri_is_alpha(p[0u64] as u32) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    /* Scan until non-scheme-byte or ':'. */
+    let mut i : u64 = 1u64
+    let mut found_colon : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= len { going = 0u8 }
+        if going == 1u8 {
+            let b : u32 = p[i] as u32
+            if b == 58u32 {
+                found_colon = 1u8
+                going = 0u8
+            } else {
+                if uri_is_scheme_byte(b) == 0u8 {
+                    going = 0u8
+                } else {
+                    i = i + 1u64
+                }
+            }
+        }
+    }
+    if found_colon == 1u8 { return i }
+    return 0xFFFFFFFFFFFFFFFFu64
+}
+
+fn uri_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
+    let slot : u32 = uri_alloc_slot()
+    if slot >= URI_MAX { return 0u64 }
+    let mut cursor : u64 = 0u64
+    /* Try to detect scheme. */
+    let scheme_end : u64 = uri_detect_scheme(raw_base, raw_len)
+    if scheme_end != 0xFFFFFFFFFFFFFFFFu64 {
+        URI_SCHEME_BASE[slot] = raw_base
+        URI_SCHEME_LEN[slot]  = scheme_end
+        cursor = scheme_end + 1u64   /* past ':' */
+    }
+    let p : *u8 = raw_base as *u8
+    /* Authority: only if next two bytes are "//". */
+    if cursor + 2u64 <= raw_len {
+        if p[cursor] == 47u8 {
+            if p[cursor + 1u64] == 47u8 {
+                cursor = cursor + 2u64
+                let auth_off : u64 = cursor
+                /* Authority ends at '/', '?', '#', or end-of-string. */
+                let mut going : u8 = 1u8
+                while going == 1u8 {
+                    if cursor >= raw_len { going = 0u8 }
+                    if going == 1u8 {
+                        let b : u32 = p[cursor] as u32
+                        if b == 47u32 { going = 0u8 }
+                        if going == 1u8 {
+                            if b == 63u32 { going = 0u8 }
+                        }
+                        if going == 1u8 {
+                            if b == 35u32 { going = 0u8 }
+                        }
+                        if going == 1u8 { cursor = cursor + 1u64 }
+                    }
+                }
+                URI_AUTH_BASE[slot] = raw_base + auth_off
+                URI_AUTH_LEN[slot]  = cursor - auth_off
+            }
+        }
+    }
+    /* Path: from cursor until '?', '#', or end. */
+    let path_off : u64 = cursor
+    let mut going_p : u8 = 1u8
+    while going_p == 1u8 {
+        if cursor >= raw_len { going_p = 0u8 }
+        if going_p == 1u8 {
+            let b : u32 = p[cursor] as u32
+            if b == 63u32 { going_p = 0u8 }
+            if going_p == 1u8 {
+                if b == 35u32 { going_p = 0u8 }
+            }
+            if going_p == 1u8 { cursor = cursor + 1u64 }
+        }
+    }
+    if cursor > path_off {
+        URI_PATH_BASE[slot] = raw_base + path_off
+        URI_PATH_LEN[slot]  = cursor - path_off
+    }
+    /* Query: if next byte is '?'. */
+    if cursor < raw_len {
+        if p[cursor] == 63u8 {
+            cursor = cursor + 1u64
+            let q_off : u64 = cursor
+            let mut going_q : u8 = 1u8
+            while going_q == 1u8 {
+                if cursor >= raw_len { going_q = 0u8 }
+                if going_q == 1u8 {
+                    let b : u32 = p[cursor] as u32
+                    if b == 35u32 { going_q = 0u8 }
+                    if going_q == 1u8 { cursor = cursor + 1u64 }
+                }
+            }
+            URI_QUERY_BASE[slot] = raw_base + q_off
+            URI_QUERY_LEN[slot]  = cursor - q_off
+        }
+    }
+    /* Fragment: if next byte is '#'. */
+    if cursor < raw_len {
+        if p[cursor] == 35u8 {
+            cursor = cursor + 1u64
+            URI_FRAGMENT_BASE[slot] = raw_base + cursor
+            URI_FRAGMENT_LEN[slot]  = raw_len - cursor
+        }
+    }
+    return (slot as u64) + 1u64
+}
+
+/* ----------- Public accessors ----------- */
+
+fn uri_scheme_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_SCHEME_BASE[idx]
+}
+
+fn uri_scheme_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_SCHEME_LEN[idx]
+}
+
+fn uri_authority_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_AUTH_BASE[idx]
+}
+
+fn uri_authority_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_AUTH_LEN[idx]
+}
+
+fn uri_path_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_PATH_BASE[idx]
+}
+
+fn uri_path_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_PATH_LEN[idx]
+}
+
+fn uri_query_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_QUERY_BASE[idx]
+}
+
+fn uri_query_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_QUERY_LEN[idx]
+}
+
+fn uri_fragment_base(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_FRAGMENT_BASE[idx]
+}
+
+fn uri_fragment_len(id: u64) -> u64 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return 0u64 }
+    return URI_FRAGMENT_LEN[idx]
+}
+
+fn uri_drop(id: u64) -> i32 @export {
+    let idx : u32 = uri_resolve_id(id)
+    if idx == URI_MAX { return URI_E_BADID }
+    URI_LIVE[idx] = 0u8
+    return URI_OK
+}
+
+/* ----------- Percent-encode ----------- */
+
+fn uri_pct_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let b : u32 = p[i] as u32
+        if uri_is_unreserved(b) == 1u8 {
+            builder_push_byte(builder_id, b)
+        } else {
+            builder_push_byte(builder_id, 37u32)   /* % */
+            let hi : u32 = (b >> 4u32) & 0xFu32
+            let lo : u32 = b & 0xFu32
+            builder_push_byte(builder_id, uri_nibble_to_hex_upper(hi))
+            builder_push_byte(builder_id, uri_nibble_to_hex_upper(lo))
+        }
+        i = i + 1u64
+    }
+    return URI_OK
+}
+
+/* ----------- Percent-decode ----------- */
+
+fn uri_pct_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let b : u32 = p[i] as u32
+        if b == 37u32 {
+            /* %XX expected */
+            if i + 2u64 >= src_len { return URI_E_BADHEX }
+            let hi_b : u32 = p[i + 1u64] as u32
+            let lo_b : u32 = p[i + 2u64] as u32
+            let hi : u32 = uri_hex_nibble(hi_b)
+            let lo : u32 = uri_hex_nibble(lo_b)
+            if hi == 0xFFu32 { return URI_E_BADHEX }
+            if lo == 0xFFu32 { return URI_E_BADHEX }
+            let decoded : u32 = (hi << 4u32) | lo
+            builder_push_byte(builder_id, decoded)
+            i = i + 3u64
+        } else {
+            builder_push_byte(builder_id, b)
+            i = i + 1u64
+        }
+    }
+    return URI_OK
+}

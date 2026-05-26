@@ -1,0 +1,4 @@
+/* 638 — groebner: Buchberger Groebner-basis over GF(p); normalize/combine/monic/reduce/spoly. */
+module corpus_638
+extern @abi(c-msvc-x64) fn gb_selftest() -> u64 from "groebner.iii"
+fn main() -> u64 { return gb_selftest() }

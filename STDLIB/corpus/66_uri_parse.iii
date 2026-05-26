@@ -1,0 +1,97 @@
+/* uri: parse "https://example.com:8080/path/to/resource?key=value&other=val#section"
+ *
+ * Verify each component:
+ *   scheme    = "https"     (5 bytes)
+ *   authority = "example.com:8080"  (16 bytes)
+ *   path      = "/path/to/resource" (17 bytes)
+ *   query     = "key=value&other=val" (19 bytes)
+ *   fragment  = "section"   (7 bytes)
+ */
+module corpus_66
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn uri_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_scheme_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_scheme_len(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_authority_len(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_path_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_path_len(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_query_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_query_len(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_fragment_base(id: u64) -> u64 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_fragment_len(id: u64) -> u64 from "uri.iii"
+
+fn fill_uri(buf: *u8) -> i32 {
+    /* "https://example.com:8080/path/to/resource?key=value&other=val#section" — 68 bytes */
+    /* "https" */
+    buf[0] = 104u8; buf[1] = 116u8; buf[2] = 116u8; buf[3] = 112u8; buf[4] = 115u8
+    /* "://" */
+    buf[5] = 58u8; buf[6] = 47u8; buf[7] = 47u8
+    /* "example.com:8080" — 16 bytes */
+    buf[8]  = 101u8; buf[9]  = 120u8; buf[10] = 97u8;  buf[11] = 109u8
+    buf[12] = 112u8; buf[13] = 108u8; buf[14] = 101u8; buf[15] = 46u8
+    buf[16] = 99u8;  buf[17] = 111u8; buf[18] = 109u8; buf[19] = 58u8
+    buf[20] = 56u8;  buf[21] = 48u8;  buf[22] = 56u8;  buf[23] = 48u8
+    /* "/path/to/resource" — 17 bytes */
+    buf[24] = 47u8;  buf[25] = 112u8; buf[26] = 97u8;  buf[27] = 116u8
+    buf[28] = 104u8; buf[29] = 47u8;  buf[30] = 116u8; buf[31] = 111u8
+    buf[32] = 47u8;  buf[33] = 114u8; buf[34] = 101u8; buf[35] = 115u8
+    buf[36] = 111u8; buf[37] = 117u8; buf[38] = 114u8; buf[39] = 99u8
+    buf[40] = 101u8
+    /* "?key=value&other=val" — 20 bytes (1 for ? + 19 for query) */
+    buf[41] = 63u8;  buf[42] = 107u8; buf[43] = 101u8; buf[44] = 121u8
+    buf[45] = 61u8;  buf[46] = 118u8; buf[47] = 97u8;  buf[48] = 108u8
+    buf[49] = 117u8; buf[50] = 101u8; buf[51] = 38u8;  buf[52] = 111u8
+    buf[53] = 116u8; buf[54] = 104u8; buf[55] = 101u8; buf[56] = 114u8
+    buf[57] = 61u8;  buf[58] = 118u8; buf[59] = 97u8;  buf[60] = 108u8
+    /* "#section" — 8 bytes (1 for # + 7 for fragment) */
+    buf[61] = 35u8;  buf[62] = 115u8; buf[63] = 101u8; buf[64] = 99u8
+    buf[65] = 116u8; buf[66] = 105u8; buf[67] = 111u8
+    /* hmm 8 bytes for "#section" = #, s, e, c, t, i, o, n — that's 8 bytes total */
+    /* index 61..68 means buf[68] = 'n'.  Let me recount. */
+    /* Total: 5 + 3 + 16 + 17 + 1 + 19 + 1 + 7 = 69 bytes.  Index 0..68 inclusive. */
+    buf[68] = 110u8   /* 'n' */
+    return 0i32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(69u64)
+    fill_uri(buf)
+    let u : u64 = uri_parse(a, buf as u64, 69u64)
+    if u == 0u64 { return 1u64 }
+    /* Scheme = "https" */
+    if uri_scheme_len(u) != 5u64 { return 2u64 }
+    let sp : *u8 = uri_scheme_base(u) as *u8
+    if sp[0] != 104u8 { return 3u64 }   /* h */
+    if sp[4] != 115u8 { return 4u64 }   /* s */
+    /* Authority = "example.com:8080" — 16 bytes */
+    if uri_authority_len(u) != 16u64 { return 5u64 }
+    let ap : *u8 = uri_authority_base(u) as *u8
+    if ap[0]  != 101u8 { return 6u64 }   /* e */
+    if ap[11] != 58u8  { return 7u64 }   /* : */
+    if ap[15] != 48u8  { return 8u64 }   /* 0 (last digit of 8080) */
+    /* Path = "/path/to/resource" — 17 bytes */
+    if uri_path_len(u) != 17u64 { return 9u64 }
+    let pp : *u8 = uri_path_base(u) as *u8
+    if pp[0]  != 47u8  { return 10u64 }  /* / */
+    if pp[16] != 101u8 { return 11u64 }  /* e (last char of resource) */
+    /* Query = "key=value&other=val" — 19 bytes */
+    if uri_query_len(u) != 19u64 { return 12u64 }
+    let qp : *u8 = uri_query_base(u) as *u8
+    if qp[0]  != 107u8 { return 13u64 }  /* k */
+    if qp[3]  != 61u8  { return 14u64 }  /* = */
+    if qp[18] != 108u8 { return 15u64 }  /* l (last char) */
+    /* Fragment = "section" — 7 bytes */
+    if uri_fragment_len(u) != 7u64 { return 16u64 }
+    let fp : *u8 = uri_fragment_base(u) as *u8
+    if fp[0] != 115u8 { return 17u64 }   /* s */
+    if fp[6] != 110u8 { return 18u64 }   /* n */
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

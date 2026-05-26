@@ -1,0 +1,24 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\253_hex_underscores.iii
+ *
+ * III conformance corpus 253 -- `_` as visual separator in hex literals.
+ *
+ * Regression test for the Phase-3-Step-1 iiis-0.1 lexer fix that permits
+ * `_` between hex digits.  Style: 0xFFFF_FFFFu64 (group by 4) or
+ * 0xFFFF_FFFF_FFFF_FFFFu64 (group by 4).  Underscores are not counted
+ * toward digit-length checks or value computation.
+ */
+module corpus_253
+
+fn main() -> u64 {
+    let a : u64 = 0xFFFF_FFFFu64
+    if a != 0xFFFFFFFFu64 { return 1u64 }
+    let b : u64 = 0xDEAD_BEEFu64
+    if b != 0xDEADBEEFu64 { return 2u64 }
+    let c : u64 = 0xFFFF_FFFF_FFFF_FFFFu64
+    if c != 0xFFFFFFFFFFFFFFFFu64 { return 3u64 }
+    let d : u32 = 0xCAFE_BABEu32
+    if d != 0xCAFEBABEu32 { return 4u64 }
+    let e : u32 = 0x1_2_3_4u32
+    if e != 0x1234u32 { return 5u64 }
+    return 99u64
+}

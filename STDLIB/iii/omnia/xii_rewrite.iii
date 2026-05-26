@@ -1,0 +1,1290 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_rewrite.iii
+ *
+ * III STDLIB - omnia::xii_rewrite
+ *
+ * The 40 sealed reduction rules for XII canonicalisation.
+ * Per DOCS/III-XII.md S9.1 + S26.1.
+ *
+ * Rule families:
+ *   A1-A4: Associativity (4 rules)
+ *   B1-B8: IF Common-Subterm Lifting (8 rules)
+ *   C1-C3: LOOP Reductions (3 rules)
+ *   D1-D5: Identity / PE-Const (5 rules)
+ *   E1-E2: Then null-position folds (2 rules)
+ *   F1-F3: Cap-flow folds (3 rules)
+ *   G1-G2: Witness/Provenance folds (2 rules)
+ *   H1-H2: State-transition folds (2 rules)
+ *   L1-L6: Direct pattern folds (6 rules)
+ *   M1-M5: Edge-case null folds (5 rules)
+ *
+ * Each rule has a match_RNNN(t) -> u8 (returns 1 iff LHS matches at t)
+ * and an apply_RNNN(t) -> u32 (returns the rewritten term ref).
+ *
+ * Termination: every rule strictly decreases MPO weight (S9.3).
+ * Confluence: the 117 critical pairs converge (S9.2, S26.15).
+ * Order of rule firing in xii_rewrite_apply_one: numeric R001..R040.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only. Sealed: xii_rewrite.mhash := SHA-256(rule bodies).
+ */
+
+module omnia_xii_rewrite
+
+/* ------------------------------------------------------------------ */
+/* Externs from xii_term                                               */
+/* ------------------------------------------------------------------ */
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_kind(idx: u32, kind: u8) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_subform(idx: u32, sub: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_aux(idx: u32, aux: u64) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(p: u32, t: u32, e: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+
+extern @abi(c-msvc-x64) fn xii_basis_cap_class(kind: u8) -> u32 from "xii_basis.iii"
+
+/* M7 keystone: the M2 ternary algebra evaluated AS XII rewrite rules (R041-R045).
+ * Each rule reduces a TRIT_op(TRIT_VAL[,TRIT_VAL]) term to its TRIT_VAL normal form via
+ * the proven M2 op. Trit kinds are disjoint from K01-K18 -> zero new critical pairs. */
+extern @abi(c-msvc-x64) fn iii_trit_not(a: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_or(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_sum(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_mul(a: i32, b: i32) -> i32 from "trit.iii"
+const XRW_TRIT_VAL : u8 = 24u8
+const XRW_TRIT_NOT : u8 = 25u8
+const XRW_TRIT_AND : u8 = 26u8
+const XRW_TRIT_OR  : u8 = 27u8
+const XRW_TRIT_SUM : u8 = 28u8
+const XRW_TRIT_MUL : u8 = 29u8
+
+/* nous proposer socket (Phase 0).  The engine consults nous_rank for the ORDER in
+ * which to try rules, then fires the first that matches via apply_specific.  Inert
+ * by default (nous_active()=0 -> the fixed cascade runs, byte-identical -- the kill
+ * switch).  The reorderable set R001-R044 + trit 101-105 is confluence-certified
+ * (xii_critpairs_verify_all()==0, 122 pairs incl. the XII-theta KB completion of
+ * R041-R044; trit kinds disjoint -> zero pairs), so any order reaches the same
+ * normal form (only the step count may differ). */
+extern @abi(c-msvc-x64) fn nous_active() -> u8 from "nous_socket.iii"
+extern @abi(c-msvc-x64) fn nous_should_engage(kind: u32) -> u8 from "nous_socket.iii"
+extern @abi(c-msvc-x64) fn nous_rank(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 from "nous_socket.iii"
+var XRW_NRANK_BUF : [u64; 64]
+const XRW_NRANK_CAP : u32 = 64u32
+
+/* ------------------------------------------------------------------ */
+/* Kind constants (mirror omnia/xii_term.iii)                          */
+/* ------------------------------------------------------------------ */
+
+const XRW_K01_FORM     : u8 = 0u8
+const XRW_K02_BIND     : u8 = 1u8
+const XRW_K03_CONVEY   : u8 = 2u8
+const XRW_K04_MEAN     : u8 = 3u8
+const XRW_K05_ACT      : u8 = 4u8
+const XRW_K06_COMPOSE  : u8 = 5u8
+const XRW_K07_SEAL     : u8 = 6u8
+const XRW_K08_PROVE    : u8 = 7u8
+const XRW_K09_QUERY    : u8 = 8u8
+const XRW_K10_GRANT    : u8 = 9u8
+const XRW_K11_GOVERN   : u8 = 10u8
+const XRW_K12_THEN     : u8 = 11u8
+const XRW_K13_WITH     : u8 = 12u8
+const XRW_K14_UNDER    : u8 = 13u8
+const XRW_K15_IF       : u8 = 14u8
+const XRW_K16_LOOP     : u8 = 15u8
+const XRW_K17_LIFT     : u8 = 16u8
+const XRW_K18_REFLECT  : u8 = 17u8
+const XRW_FCOMPOSE     : u8 = 18u8
+const XRW_FTHEN        : u8 = 19u8
+const XRW_FWITH        : u8 = 20u8
+const XRW_FUNDER       : u8 = 21u8
+const XRW_FIF          : u8 = 22u8
+const XRW_FLOOP        : u8 = 23u8
+
+const XRW_NULL_REF     : u32 = 0xFFFFFFFFu32
+
+/* Ground-form sentinel: the subform value that marks a kernel as its
+ * "null" curated ground form per S26.1.
+ *   K06 COMPOSE with subform == NULL_GROUND_FORM => K06_COMPOSE_NULL
+ *   K12 THEN with subform == NULL_GROUND_FORM    => K12_THEN_NULL
+ *   K10 GRANT with subform == NOOP_GRANT_FORM    => K10_GRANT_NOOP
+ *   K17 LIFT with subform == TRIVIAL_LIFT_FORM   => K17_LIFT_TRIVIAL */
+const XRW_NULL_GROUND_FORM    : u32 = 0xFFFFFFFFu32
+const XRW_NOOP_GRANT_FORM     : u32 = 0xFFFFFFFEu32
+const XRW_TRIVIAL_LIFT_FORM   : u32 = 0xFFFFFFFDu32
+const XRW_PE_CONST_TRUE_FORM  : u32 = 0xFFFFFFFCu32
+const XRW_PE_CONST_FALSE_FORM : u32 = 0xFFFFFFFBu32
+
+/* ------------------------------------------------------------------ */
+/* Curated commutativity / composition tables for K05_ACT (R028/R029) */
+/* 256x256 = 65536 bits each, stored as 8192-byte arrays.              */
+/* Initially all zero (no commutability registered); the curator       */
+/* populates legal pairs via xii_rewrite_commute_set().                */
+/* ------------------------------------------------------------------ */
+
+var XRW_COMMUTE_TABLE : [u8; 8192]
+var XRW_COMPOSE_TABLE : [u8; 65536]
+var XRW_TABLES_INIT_DONE : u8 = 0u8
+
+fn xii_rewrite_tables_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 8192u32 {
+        XRW_COMMUTE_TABLE[i] = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 65536u32 {
+        XRW_COMPOSE_TABLE[j] = 0xFFu8
+        j = j + 1u32
+    }
+    XRW_TABLES_INIT_DONE = 1u8
+    return 0i32
+}
+
+fn xii_rewrite_commute_set(t1: u8, t2: u8) -> i32 @export {
+    if XRW_TABLES_INIT_DONE == 0u8 { xii_rewrite_tables_reset() }
+    let bit_idx : u32 = ((t1 as u32) * 256u32) + (t2 as u32)
+    let byte_idx : u32 = bit_idx >> 3u32
+    let bit_in_byte : u8 = ((bit_idx & 7u32) as u8)
+    /* iiis-1 parser bug: a `(` after `|` is read as start-of-hexad.  Bind
+     * the shift result to a local first. */
+    let mask : u8 = 1u8 << bit_in_byte
+    XRW_COMMUTE_TABLE[byte_idx] = XRW_COMMUTE_TABLE[byte_idx] | mask
+    let bit_idx2 : u32 = ((t2 as u32) * 256u32) + (t1 as u32)
+    let byte_idx2 : u32 = bit_idx2 >> 3u32
+    let bit_in_byte2 : u8 = ((bit_idx2 & 7u32) as u8)
+    let mask2 : u8 = 1u8 << bit_in_byte2
+    XRW_COMMUTE_TABLE[byte_idx2] = XRW_COMMUTE_TABLE[byte_idx2] | mask2
+    return 0i32
+}
+
+fn xii_rewrite_commute_get(t1: u8, t2: u8) -> u8 @export {
+    if XRW_TABLES_INIT_DONE == 0u8 { xii_rewrite_tables_reset() }
+    let bit_idx : u32 = ((t1 as u32) * 256u32) + (t2 as u32)
+    let byte_idx : u32 = bit_idx >> 3u32
+    let bit_in_byte : u8 = ((bit_idx & 7u32) as u8)
+    let mask : u8 = 1u8 << bit_in_byte
+    let v : u8 = XRW_COMMUTE_TABLE[byte_idx] & mask
+    if v != 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn xii_rewrite_compose_set(t1: u8, t2: u8, result: u8) -> i32 @export {
+    if XRW_TABLES_INIT_DONE == 0u8 { xii_rewrite_tables_reset() }
+    let idx : u32 = ((t1 as u32) * 256u32) + (t2 as u32)
+    XRW_COMPOSE_TABLE[idx] = result
+    return 0i32
+}
+
+fn xii_rewrite_compose_get(t1: u8, t2: u8) -> u8 @export {
+    if XRW_TABLES_INIT_DONE == 0u8 { xii_rewrite_tables_reset() }
+    let idx : u32 = ((t1 as u32) * 256u32) + (t2 as u32)
+    return XRW_COMPOSE_TABLE[idx]
+}
+
+/* ------------------------------------------------------------------ */
+/* Ground-form predicates                                              */
+/* ------------------------------------------------------------------ */
+
+fn _is_compose_null(t: u32) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) != XRW_K06_COMPOSE { return 0u8 }
+    if xii_term_get_subform(t) != XRW_NULL_GROUND_FORM { return 0u8 }
+    return 1u8
+}
+
+fn _is_then_null(t: u32) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) != XRW_K12_THEN { return 0u8 }
+    if xii_term_get_subform(t) != XRW_NULL_GROUND_FORM { return 0u8 }
+    return 1u8
+}
+
+fn _is_grant_noop(t: u32) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) != XRW_K10_GRANT { return 0u8 }
+    if xii_term_get_subform(t) != XRW_NOOP_GRANT_FORM { return 0u8 }
+    return 1u8
+}
+
+fn _is_pe_const_true(t: u32) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) != XRW_K01_FORM { return 0u8 }
+    if xii_term_get_subform(t) != XRW_PE_CONST_TRUE_FORM { return 0u8 }
+    return 1u8
+}
+
+fn _is_pe_const_false(t: u32) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) != XRW_K01_FORM { return 0u8 }
+    if xii_term_get_subform(t) != XRW_PE_CONST_FALSE_FORM { return 0u8 }
+    return 1u8
+}
+
+fn _has_kind(t: u32, k: u8) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) == k { return 1u8 }
+    return 0u8
+}
+
+/* ------------------------------------------------------------------ */
+/* Cap-set computation (for side-condition checks).                    */
+/* Returns the union of all cap classes used in the subtree, as a      */
+/* u32 bitset (bit i = cap class i used).                              */
+/* ------------------------------------------------------------------ */
+
+fn xii_rewrite_cap_set(t: u32) -> u32 @export {
+    if t == XRW_NULL_REF { return 0u32 }
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= XRW_K18_REFLECT {
+        /* iiis-1 trap: flat-scope shadowing — two `let c :` bindings
+         * (basis branch + FIF branch below) confuse iiis-1 codegen,
+         * eliding the c == 0 early-return.  Rename per-branch. */
+        let cap_basis : u32 = xii_basis_cap_class(kind)
+        /* CAP_NONE (class 0) means the kernel contributes no cap to the
+         * side-condition bitset. */
+        if cap_basis == 0u32 { return 0u32 }
+        let shifted : u32 = 1u32 << cap_basis
+        return shifted
+    }
+    /* Fusion: union children */
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let mut s : u32 = 0u32
+    if a != XRW_NULL_REF { s = s | xii_rewrite_cap_set(a) }
+    if b != XRW_NULL_REF { s = s | xii_rewrite_cap_set(b) }
+    if kind == XRW_FIF {
+        let child_c_ref : u32 = xii_term_get_child_c(t)
+        if child_c_ref != XRW_NULL_REF { s = s | xii_rewrite_cap_set(child_c_ref) }
+    }
+    return s
+}
+
+fn xii_rewrite_cap_disjoint(t1: u32, t2: u32) -> u8 @export {
+    let s1 : u32 = xii_rewrite_cap_set(t1)
+    let s2 : u32 = xii_rewrite_cap_set(t2)
+    if (s1 & s2) == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* ------------------------------------------------------------------ */
+/* Structural equality (deep).                                         */
+/* Two terms are equal iff their kinds, subforms, and all children     */
+/* are pairwise equal. Used by R030 (equal-branches collapse).         */
+/* ------------------------------------------------------------------ */
+
+fn xii_rewrite_struct_eq(t1: u32, t2: u32) -> u8 @export {
+    if t1 == t2 { return 1u8 }
+    if t1 == XRW_NULL_REF { return 0u8 }
+    if t2 == XRW_NULL_REF { return 0u8 }
+    let k1 : u8 = xii_term_get_kind(t1)
+    let k2 : u8 = xii_term_get_kind(t2)
+    if k1 != k2 { return 0u8 }
+    if xii_term_get_subform(t1) != xii_term_get_subform(t2) { return 0u8 }
+    if xii_term_get_aux(t1) != xii_term_get_aux(t2) { return 0u8 }
+    let a1 : u32 = xii_term_get_child_a(t1)
+    let a2 : u32 = xii_term_get_child_a(t2)
+    if xii_rewrite_struct_eq(a1, a2) == 0u8 { return 0u8 }
+    let b1 : u32 = xii_term_get_child_b(t1)
+    let b2 : u32 = xii_term_get_child_b(t2)
+    if xii_rewrite_struct_eq(b1, b2) == 0u8 { return 0u8 }
+    if k1 == XRW_FIF {
+        let c1 : u32 = xii_term_get_child_c(t1)
+        let c2 : u32 = xii_term_get_child_c(t2)
+        if xii_rewrite_struct_eq(c1, c2) == 0u8 { return 0u8 }
+    }
+    return 1u8
+}
+
+/* ------------------------------------------------------------------ */
+/* R001 [A1] Compose right-association                                 */
+/*   LHS: F.COMPOSE(F.COMPOSE(a, b), c)                                */
+/*   RHS: F.COMPOSE(a, F.COMPOSE(b, c))                                */
+/* ------------------------------------------------------------------ */
+
+fn match_R001(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    if _has_kind(a, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R001(t: u32) -> u32 @export {
+    let inner : u32 = xii_term_get_child_a(t)
+    let c : u32 = xii_term_get_child_b(t)
+    let a : u32 = xii_term_get_child_a(inner)
+    let b : u32 = xii_term_get_child_b(inner)
+    let new_inner : u32 = xii_term_make_fusion2(XRW_FCOMPOSE, b, c)
+    xii_term_set_child_a(t, a)
+    xii_term_set_child_b(t, new_inner)
+    return t
+}
+
+/* ------------------------------------------------------------------ */
+/* R002 [A2] Then right-association                                    */
+/* ------------------------------------------------------------------ */
+
+fn match_R002(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    if _has_kind(a, XRW_FTHEN) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R002(t: u32) -> u32 @export {
+    let inner : u32 = xii_term_get_child_a(t)
+    let c : u32 = xii_term_get_child_b(t)
+    let a : u32 = xii_term_get_child_a(inner)
+    let b : u32 = xii_term_get_child_b(inner)
+    let new_inner : u32 = xii_term_make_fusion2(XRW_FTHEN, b, c)
+    xii_term_set_child_a(t, a)
+    xii_term_set_child_b(t, new_inner)
+    return t
+}
+
+/* ------------------------------------------------------------------ */
+/* R003 [A3] With right-association                                    */
+/* ------------------------------------------------------------------ */
+
+fn match_R003(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FWITH) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    if _has_kind(a, XRW_FWITH) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R003(t: u32) -> u32 @export {
+    let inner : u32 = xii_term_get_child_a(t)
+    let c : u32 = xii_term_get_child_b(t)
+    let a : u32 = xii_term_get_child_a(inner)
+    let b : u32 = xii_term_get_child_b(inner)
+    let new_inner : u32 = xii_term_make_fusion2(XRW_FWITH, b, c)
+    xii_term_set_child_a(t, a)
+    xii_term_set_child_b(t, new_inner)
+    return t
+}
+
+/* ------------------------------------------------------------------ */
+/* R004 [A4] Under left-association                                    */
+/*   LHS: F.UNDER(a, F.UNDER(b, c))                                    */
+/*   RHS: F.UNDER(F.UNDER(a, b), c)                                    */
+/* ------------------------------------------------------------------ */
+
+fn match_R004(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FUNDER) == 0u8 { return 0u8 }
+    let b_child : u32 = xii_term_get_child_b(t)
+    if _has_kind(b_child, XRW_FUNDER) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R004(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let inner : u32 = xii_term_get_child_b(t)
+    let b : u32 = xii_term_get_child_a(inner)
+    let c : u32 = xii_term_get_child_b(inner)
+    let new_outer : u32 = xii_term_make_fusion2(XRW_FUNDER, a, b)
+    xii_term_set_child_a(t, new_outer)
+    xii_term_set_child_b(t, c)
+    return t
+}
+
+/* ------------------------------------------------------------------ */
+/* B-family: IF Common-Subterm Lifting                                 */
+/*   General match: F.IF(p, X(?, ?), X(?, ?)) with X being same kind   */
+/*   Prefix: F.IF(p, X(a, t), X(a, e)) -> X(a, F.IF(p, t, e))          */
+/*   Suffix: F.IF(p, X(t, a), X(e, a)) -> X(F.IF(p, t, e), a)          */
+/* Side cond (prefix): cap(a) disjoint from cap(p)                     */
+/* Side cond (suffix): hk(t) == hk(e) (verified via xii_basis or hj)   */
+/* For simplicity here we require structural equality of the lifted    */
+/* subterm and cap-disjointness for prefix family.                     */
+/* ------------------------------------------------------------------ */
+
+fn _match_b_prefix(t: u32, inner_kind: u8) -> u8 {
+    if _has_kind(t, XRW_FIF) == 0u8 { return 0u8 }
+    let p : u32 = xii_term_get_child_a(t)
+    let then_b : u32 = xii_term_get_child_b(t)
+    let else_b : u32 = xii_term_get_child_c(t)
+    if _has_kind(then_b, inner_kind) == 0u8 { return 0u8 }
+    if _has_kind(else_b, inner_kind) == 0u8 { return 0u8 }
+    let a_then : u32 = xii_term_get_child_a(then_b)
+    let a_else : u32 = xii_term_get_child_a(else_b)
+    if xii_rewrite_struct_eq(a_then, a_else) == 0u8 { return 0u8 }
+    if xii_rewrite_cap_disjoint(a_then, p) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn _apply_b_prefix(t: u32, inner_kind: u8) -> u32 {
+    let p : u32 = xii_term_get_child_a(t)
+    let then_b : u32 = xii_term_get_child_b(t)
+    let else_b : u32 = xii_term_get_child_c(t)
+    let a_shared : u32 = xii_term_get_child_a(then_b)
+    let t_inner : u32 = xii_term_get_child_b(then_b)
+    let e_inner : u32 = xii_term_get_child_b(else_b)
+    let new_if : u32 = xii_term_make_if(p, t_inner, e_inner)
+    let new_outer : u32 = xii_term_make_fusion2(inner_kind, a_shared, new_if)
+    return new_outer
+}
+
+fn _match_b_suffix(t: u32, inner_kind: u8) -> u8 {
+    if _has_kind(t, XRW_FIF) == 0u8 { return 0u8 }
+    let then_b : u32 = xii_term_get_child_b(t)
+    let else_b : u32 = xii_term_get_child_c(t)
+    if _has_kind(then_b, inner_kind) == 0u8 { return 0u8 }
+    if _has_kind(else_b, inner_kind) == 0u8 { return 0u8 }
+    let a_then : u32 = xii_term_get_child_b(then_b)
+    let a_else : u32 = xii_term_get_child_b(else_b)
+    if xii_rewrite_struct_eq(a_then, a_else) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn _apply_b_suffix(t: u32, inner_kind: u8) -> u32 {
+    let p : u32 = xii_term_get_child_a(t)
+    let then_b : u32 = xii_term_get_child_b(t)
+    let else_b : u32 = xii_term_get_child_c(t)
+    let a_shared : u32 = xii_term_get_child_b(then_b)
+    let t_inner : u32 = xii_term_get_child_a(then_b)
+    let e_inner : u32 = xii_term_get_child_a(else_b)
+    let new_if : u32 = xii_term_make_if(p, t_inner, e_inner)
+    let new_outer : u32 = xii_term_make_fusion2(inner_kind, new_if, a_shared)
+    return new_outer
+}
+
+fn match_R005(t: u32) -> u8 @export { return _match_b_prefix(t, XRW_FTHEN) }
+fn apply_R005(t: u32) -> u32 @export { return _apply_b_prefix(t, XRW_FTHEN) }
+fn match_R006(t: u32) -> u8 @export { return _match_b_suffix(t, XRW_FTHEN) }
+fn apply_R006(t: u32) -> u32 @export { return _apply_b_suffix(t, XRW_FTHEN) }
+fn match_R007(t: u32) -> u8 @export { return _match_b_prefix(t, XRW_FCOMPOSE) }
+fn apply_R007(t: u32) -> u32 @export { return _apply_b_prefix(t, XRW_FCOMPOSE) }
+fn match_R008(t: u32) -> u8 @export { return _match_b_suffix(t, XRW_FCOMPOSE) }
+fn apply_R008(t: u32) -> u32 @export { return _apply_b_suffix(t, XRW_FCOMPOSE) }
+fn match_R009(t: u32) -> u8 @export { return _match_b_prefix(t, XRW_FWITH) }
+fn apply_R009(t: u32) -> u32 @export { return _apply_b_prefix(t, XRW_FWITH) }
+fn match_R010(t: u32) -> u8 @export { return _match_b_suffix(t, XRW_FWITH) }
+fn apply_R010(t: u32) -> u32 @export { return _apply_b_suffix(t, XRW_FWITH) }
+fn match_R011(t: u32) -> u8 @export { return _match_b_prefix(t, XRW_FUNDER) }
+fn apply_R011(t: u32) -> u32 @export { return _apply_b_prefix(t, XRW_FUNDER) }
+fn match_R012(t: u32) -> u8 @export { return _match_b_suffix(t, XRW_FUNDER) }
+fn apply_R012(t: u32) -> u32 @export { return _apply_b_suffix(t, XRW_FUNDER) }
+
+/* ------------------------------------------------------------------ */
+/* R013 [C1] Loop unit collapse: F.LOOP(b, 1) -> b                     */
+/* ------------------------------------------------------------------ */
+
+fn match_R013(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FLOOP) == 0u8 { return 0u8 }
+    if xii_term_get_aux(t) != 1u64 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R013(t: u32) -> u32 @export {
+    return xii_term_get_child_a(t)
+}
+
+/* ------------------------------------------------------------------ */
+/* R014 [C2] Loop multiplicative fold: F.LOOP(F.LOOP(b, n), m)         */
+/*                                    -> F.LOOP(b, n*m)                */
+/* ------------------------------------------------------------------ */
+
+fn match_R014(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FLOOP) == 0u8 { return 0u8 }
+    let body : u32 = xii_term_get_child_a(t)
+    if _has_kind(body, XRW_FLOOP) == 0u8 { return 0u8 }
+    let n : u64 = xii_term_get_aux(body)
+    let m : u64 = xii_term_get_aux(t)
+    /* Overflow guard: n * m must fit in u32. */
+    if n > 0xFFFFFFFFu64 { return 0u8 }
+    if m > 0xFFFFFFFFu64 { return 0u8 }
+    if n == 0u64 { return 0u8 }
+    if m == 0u64 { return 0u8 }
+    let prod : u64 = n * m
+    if prod > 0xFFFFFFFFu64 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R014(t: u32) -> u32 @export {
+    let body : u32 = xii_term_get_child_a(t)
+    let n : u64 = xii_term_get_aux(body)
+    let m : u64 = xii_term_get_aux(t)
+    let inner_body : u32 = xii_term_get_child_a(body)
+    xii_term_set_child_a(t, inner_body)
+    xii_term_set_aux(t, n * m)
+    return t
+}
+
+/* ------------------------------------------------------------------ */
+/* R015 [C3] Loop over Compose distribute:                             */
+/*   F.LOOP(F.COMPOSE(a, b), n) -> F.COMPOSE(F.LOOP(a, n), F.LOOP(b, n))*/
+/*   Side cond: cap(a) intersect cap(b) == 0                           */
+/*              AND DK_compose(prim(a), prim(b)) == 0                  */
+/* ------------------------------------------------------------------ */
+
+fn match_R015(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FLOOP) == 0u8 { return 0u8 }
+    let body : u32 = xii_term_get_child_a(t)
+    if _has_kind(body, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(body)
+    let b : u32 = xii_term_get_child_b(body)
+    if xii_rewrite_cap_disjoint(a, b) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R015(t: u32) -> u32 @export {
+    let body : u32 = xii_term_get_child_a(t)
+    let count : u64 = xii_term_get_aux(t)
+    let a : u32 = xii_term_get_child_a(body)
+    let b : u32 = xii_term_get_child_b(body)
+    let loop_a : u32 = xii_term_make_loop(a, count)
+    let loop_b : u32 = xii_term_make_loop(b, count)
+    return xii_term_make_fusion2(XRW_FCOMPOSE, loop_a, loop_b)
+}
+
+/* ------------------------------------------------------------------ */
+/* R041 [M6] Loop null-body wipe: F.LOOP(K06_NULL, n) -> K06_NULL      */
+/*   Iterating the null/identity body any number of times is null.     */
+/*   Knuth-Bendix completion: closes the R013/R014/R015 gap for a      */
+/*   null body with count != 1 (no prior rule applied).                */
+/* ------------------------------------------------------------------ */
+
+fn match_R041(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FLOOP) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R041(t: u32) -> u32 @export {
+    return xii_term_get_child_a(t)
+}
+
+/* ------------------------------------------------------------------ */
+/* D-family: Identity / PE-Const folds                                 */
+/* ------------------------------------------------------------------ */
+
+/* R016 [D1] F.WITH(K06_NULL, a) -> a */
+fn match_R016(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FWITH) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R016(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R017 [D2] F.COMPOSE(a, K06_NULL) -> a */
+fn match_R017(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R017(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* R018 [D3] F.IF(p, t, e) with pe_const(p) == TRUE -> t */
+fn match_R018(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FIF) == 0u8 { return 0u8 }
+    if _is_pe_const_true(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R018(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R019 [D4] F.IF(p, t, e) with pe_const(p) == FALSE -> e */
+fn match_R019(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FIF) == 0u8 { return 0u8 }
+    if _is_pe_const_false(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R019(t: u32) -> u32 @export { return xii_term_get_child_c(t) }
+
+/* R020 [D5] F.UNDER(K10_GRANT_NOOP, a) -> a */
+fn match_R020(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FUNDER) == 0u8 { return 0u8 }
+    if _is_grant_noop(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R020(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* ------------------------------------------------------------------ */
+/* E-family: Then null-position folds                                  */
+/* ------------------------------------------------------------------ */
+
+/* R021 [E1] F.THEN(K12_NULL, a) -> a */
+fn match_R021(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    if _is_then_null(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R021(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R022 [E2] F.THEN(a, K12_NULL) -> a */
+fn match_R022(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    if _is_then_null(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R022(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* ------------------------------------------------------------------ */
+/* F-family: Cap-flow folds                                            */
+/* ------------------------------------------------------------------ */
+
+/* R023 [F1] F.COMPOSE(K10_GRANT(p, c1, att), K10_GRANT(p, c2, att))
+ *          -> K10_GRANT(p, c1 | c2, att)
+ * Approximate match: both children are K10_GRANT with equal subform.aux.
+ * The full disjointness of c1 and c2 is encoded in their subform (parent_id
+ * upper bits, child_set bits, attenuation_kind low bits). We require equal
+ * subform.high-16 (parent + attenuation) and union the child_set bits. */
+fn match_R023(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K10_GRANT) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K10_GRANT) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    /* High 16 bits must match (parent + attenuation). */
+    if (sa >> 16u32) != (sb >> 16u32) { return 0u8 }
+    /* Low 16 bits (child_set) must be disjoint. */
+    if (sa & 0xFFFFu32) & (sb & 0xFFFFu32) != 0u32 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R023(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    let combined : u32 = (sa & 0xFFFF0000u32) | ((sa | sb) & 0xFFFFu32)
+    return xii_term_make_basis(XRW_K10_GRANT, combined)
+}
+
+/* R024 [F2] F.THEN(K17_LIFT(r1, r2), K17_LIFT(r2, r3)) -> K17_LIFT(r1, r3) */
+fn match_R024(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K17_LIFT) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K17_LIFT) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    /* TRIVIAL lift is the identity morphism, not a concrete ring        */
+    /* transport; ring-chain transitivity must not consume it (identity  */
+    /* composition is exclusively R043/R044's job).                      */
+    if sa == XRW_TRIVIAL_LIFT_FORM { return 0u8 }
+    if sb == XRW_TRIVIAL_LIFT_FORM { return 0u8 }
+    /* LIFT subform encoding: low 4 bits = from_ring, next 4 bits = to_ring. */
+    let to_a : u32 = (sa >> 4u32) & 0xFu32
+    let from_b : u32 = sb & 0xFu32
+    if to_a != from_b { return 0u8 }
+    return 1u8
+}
+
+fn apply_R024(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    let from_r : u32 = sa & 0xFu32
+    let to_r : u32 = (sb >> 4u32) & 0xFu32
+    let high : u32 = sb & 0xFFFFFF00u32
+    let combined : u32 = high | (to_r << 4u32) | from_r
+    return xii_term_make_basis(XRW_K17_LIFT, combined)
+}
+
+/* R025 [F3] K17_LIFT(r, r) -> K17_LIFT_TRIVIAL (curated null-ring form) */
+fn match_R025(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_K17_LIFT) == 0u8 { return 0u8 }
+    let s : u32 = xii_term_get_subform(t)
+    let from_r : u32 = s & 0xFu32
+    let to_r : u32 = (s >> 4u32) & 0xFu32
+    if from_r != to_r { return 0u8 }
+    if s == XRW_TRIVIAL_LIFT_FORM { return 0u8 }
+    return 1u8
+}
+
+fn apply_R025(t: u32) -> u32 @export {
+    xii_term_set_subform(t, XRW_TRIVIAL_LIFT_FORM)
+    return t
+}
+
+/* K17_LIFT_TRIVIAL predicate: kind K17_LIFT with the trivial-lift       */
+/* curated ground form.  The trivial lift is the identity morphism of    */
+/* the lift category.                                                    */
+fn _is_trivial_lift(t: u32) -> u8 {
+    if t == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(t) != XRW_K17_LIFT { return 0u8 }
+    if xii_term_get_subform(t) != XRW_TRIVIAL_LIFT_FORM { return 0u8 }
+    return 1u8
+}
+
+/* R043 [F4] THEN trivial-lift LEFT identity: F.THEN(LIFT_TRIVIAL, b) -> b */
+/*   Categorical identity law (id . f = f).  Side-guard: child_b not      */
+/*   K12_NULL, so R022 keeps precedence on F.THEN(LIFT_TRIVIAL, K12_NULL)  */
+/*   and the otherwise non-joinable R043/R022 pair is eliminated.         */
+fn match_R043(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    if _is_trivial_lift(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    if _is_then_null(xii_term_get_child_b(t)) != 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R043(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R044 [F5] THEN trivial-lift RIGHT identity: F.THEN(a, LIFT_TRIVIAL) -> a */
+/*   Categorical identity law (f . id = f).  Side-guard: child_a not       */
+/*   K12_NULL, so R021 keeps precedence on F.THEN(K12_NULL, LIFT_TRIVIAL).  */
+fn match_R044(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    if _is_trivial_lift(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    if _is_then_null(xii_term_get_child_a(t)) != 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R044(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* ------------------------------------------------------------------ */
+/* G-family: Witness / Provenance folds                                */
+/* ------------------------------------------------------------------ */
+
+/* R026 [G1] F.THEN(K06_NULL, K07_SEAL(a)) -> K07_SEAL(a)
+ * (Corrected from original spec per CRY-XII-KIND-001 violation.) */
+fn match_R026(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    if _has_kind(xii_term_get_child_b(t), XRW_K07_SEAL) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R026(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R027 [G2] F.COMPOSE(K07_SEAL(a), K08_PROVE(a)) -> K07_SEAL(a)
+ * (Corrected from original spec; cap-flow preserved by curated transform.)
+ * Side cond: K07's snapshot_id == K08's cert_id (same subform). */
+fn match_R027(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K07_SEAL) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K08_PROVE) == 0u8 { return 0u8 }
+    if xii_term_get_subform(a) != xii_term_get_subform(b) { return 0u8 }
+    return 1u8
+}
+fn apply_R027(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* ------------------------------------------------------------------ */
+/* H-family: State-transition folds (K05 ACT)                          */
+/* ------------------------------------------------------------------ */
+
+/* R028 [H1] F.COMPOSE(K05_ACT(s, t1), K05_ACT(s, t2))
+ *          -> K05_ACT(s, commute_compose(t1, t2))
+ * Side cond: same state, and (t1, t2) is registered as commutable. */
+fn match_R028(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K05_ACT) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K05_ACT) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    /* ACT subform: low 9 bits = state_reg, high 17 bits = transition_id. */
+    if (sa & 0x1FFu32) != (sb & 0x1FFu32) { return 0u8 }
+    let ta : u8 = ((sa >> 9u32) & 0xFFu32) as u8
+    let tb : u8 = ((sb >> 9u32) & 0xFFu32) as u8
+    if xii_rewrite_commute_get(ta, tb) == 0u8 { return 0u8 }
+    /* Must have a valid compose result. */
+    if xii_rewrite_compose_get(ta, tb) == 0xFFu8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R028(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    let state : u32 = sa & 0x1FFu32
+    let ta : u8 = ((sa >> 9u32) & 0xFFu32) as u8
+    let tb : u8 = ((sb >> 9u32) & 0xFFu32) as u8
+    let tc : u8 = xii_rewrite_compose_get(ta, tb)
+    let combined : u32 = state | ((tc as u32) << 9u32)
+    return xii_term_make_basis(XRW_K05_ACT, combined)
+}
+
+/* R029 [H2] F.THEN(K05_ACT(s, t1), K05_ACT(s, t2))
+ *          -> K05_ACT(s, compose_table(t1, t2)) */
+fn match_R029(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K05_ACT) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K05_ACT) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    if (sa & 0x1FFu32) != (sb & 0x1FFu32) { return 0u8 }
+    let ta : u8 = ((sa >> 9u32) & 0xFFu32) as u8
+    let tb : u8 = ((sb >> 9u32) & 0xFFu32) as u8
+    if xii_rewrite_compose_get(ta, tb) == 0xFFu8 { return 0u8 }
+    return 1u8
+}
+
+fn apply_R029(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    let state : u32 = sa & 0x1FFu32
+    let ta : u8 = ((sa >> 9u32) & 0xFFu32) as u8
+    let tb : u8 = ((sb >> 9u32) & 0xFFu32) as u8
+    let tc : u8 = xii_rewrite_compose_get(ta, tb)
+    let combined : u32 = state | ((tc as u32) << 9u32)
+    return xii_term_make_basis(XRW_K05_ACT, combined)
+}
+
+/* ------------------------------------------------------------------ */
+/* L-family: Direct pattern folds                                      */
+/* ------------------------------------------------------------------ */
+
+/* R030 [L1] F.IF(p, t, t) where struct_eq(t, t) -> t
+ * Side cond: cap(p) == 0 (pure predicate) */
+fn match_R030(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FIF) == 0u8 { return 0u8 }
+    let then_b : u32 = xii_term_get_child_b(t)
+    let else_b : u32 = xii_term_get_child_c(t)
+    if xii_rewrite_struct_eq(then_b, else_b) == 0u8 { return 0u8 }
+    let p : u32 = xii_term_get_child_a(t)
+    if xii_rewrite_cap_set(p) != 0u32 { return 0u8 }
+    return 1u8
+}
+fn apply_R030(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R031 [L2] F.THEN(K04_MEAN(a, b), K04_MEAN(b, c)) -> K04_MEAN(a, c)
+ * Approximate: same equiv_kind in both MEAN subforms, and the b values
+ * are encoded in K04 subform's mid bits (lhs in low 9, rhs in high 9). */
+fn match_R031(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K04_MEAN) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K04_MEAN) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    /* equiv_kind = high 9 bits (positions 18..26) */
+    if (sa >> 18u32) != (sb >> 18u32) { return 0u8 }
+    /* rhs of a (bits 9..17) == lhs of b (bits 0..8) */
+    let rhs_a : u32 = (sa >> 9u32) & 0x1FFu32
+    let lhs_b : u32 = sb & 0x1FFu32
+    if rhs_a != lhs_b { return 0u8 }
+    return 1u8
+}
+
+fn apply_R031(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    let lhs : u32 = sa & 0x1FFu32
+    let rhs : u32 = (sb >> 9u32) & 0x1FFu32
+    let kind_eq : u32 = sa & 0xFFFC0000u32
+    let combined : u32 = kind_eq | (rhs << 9u32) | lhs
+    return xii_term_make_basis(XRW_K04_MEAN, combined)
+}
+
+/* R032 [L3] F.COMPOSE(K01_FORM(f1), K01_FORM(f2)) where f1 > f2 ->
+ *          F.COMPOSE(K01_FORM(f2), K01_FORM(f1))  (sort ascending) */
+fn match_R032(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K01_FORM) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K01_FORM) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    if sa > sb { return 1u8 }
+    return 0u8
+}
+
+fn apply_R032(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    xii_term_set_child_a(t, b)
+    xii_term_set_child_b(t, a)
+    return t
+}
+
+/* R042 [L7] Associative-spine FORM transposition:                     */
+/*   F.COMPOSE(K01_FORM f1, F.COMPOSE(K01_FORM f2, z)), f1 > f2         */
+/*     -> F.COMPOSE(K01_FORM f2, F.COMPOSE(K01_FORM f1, z))             */
+/*   With the constructor's structural right-association (route S,      */
+/*   formerly R001) and R032 (base-case adjacent transposition) this    */
+/*   is the confluent "sort modulo associativity" completion -- the     */
+/*   ascending right-nested spine is the unique normal form.            */
+fn match_R042(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    if _has_kind(a, XRW_K01_FORM) == 0u8 { return 0u8 }
+    let inner : u32 = xii_term_get_child_b(t)
+    if _has_kind(inner, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let b : u32 = xii_term_get_child_a(inner)
+    if _has_kind(b, XRW_K01_FORM) == 0u8 { return 0u8 }
+    let sa : u32 = xii_term_get_subform(a)
+    let sb : u32 = xii_term_get_subform(b)
+    if sa > sb { return 1u8 }
+    return 0u8
+}
+
+fn apply_R042(t: u32) -> u32 @export {
+    let a : u32 = xii_term_get_child_a(t)
+    let inner : u32 = xii_term_get_child_b(t)
+    let b : u32 = xii_term_get_child_a(inner)
+    xii_term_set_child_a(t, b)
+    xii_term_set_child_a(inner, a)
+    return t
+}
+
+/* R033 [L4] F.COMPOSE(K09_QUERY(t), K09_QUERY(t)) -> K09_QUERY(t) */
+fn match_R033(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K09_QUERY) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K09_QUERY) == 0u8 { return 0u8 }
+    if xii_term_get_subform(a) != xii_term_get_subform(b) { return 0u8 }
+    return 1u8
+}
+fn apply_R033(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* R034 [L5] F.COMPOSE(K18_REFLECT(s), K18_REFLECT(s)) -> K18_REFLECT(s) */
+fn match_R034(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K18_REFLECT) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K18_REFLECT) == 0u8 { return 0u8 }
+    if xii_term_get_subform(a) != xii_term_get_subform(b) { return 0u8 }
+    return 1u8
+}
+fn apply_R034(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* R035 [L6] F.THEN(K11_GOVERN(p1), K11_GOVERN(p1)) -> K11_GOVERN(p1) */
+fn match_R035(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FTHEN) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    if _has_kind(a, XRW_K11_GOVERN) == 0u8 { return 0u8 }
+    if _has_kind(b, XRW_K11_GOVERN) == 0u8 { return 0u8 }
+    if xii_term_get_subform(a) != xii_term_get_subform(b) { return 0u8 }
+    return 1u8
+}
+fn apply_R035(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* ------------------------------------------------------------------ */
+/* M-family: Edge-case null folds                                      */
+/* ------------------------------------------------------------------ */
+
+/* R036 [M1] F.WITH(a, K06_NULL) -> K06_NULL */
+fn match_R036(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FWITH) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R036(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R037 [M2] F.COMPOSE(K06_NULL, a) -> a */
+fn match_R037(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R037(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R038 [M3] F.COMPOSE(K06_NULL, K06_NULL) -> K06_NULL
+ * (Special case, fires before R017/R037 on the exact pair.) */
+fn match_R038(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FCOMPOSE) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R038(t: u32) -> u32 @export { return xii_term_get_child_a(t) }
+
+/* R039 [M4] F.UNDER(a, K06_NULL) -> K06_NULL */
+fn match_R039(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FUNDER) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    return 1u8
+}
+fn apply_R039(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* R040 [M5] F.IF(p, K06_NULL, K06_NULL) -> K06_NULL
+ * Side cond: cap(p) == 0 */
+fn match_R040(t: u32) -> u8 @export {
+    if _has_kind(t, XRW_FIF) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_b(t)) == 0u8 { return 0u8 }
+    if _is_compose_null(xii_term_get_child_c(t)) == 0u8 { return 0u8 }
+    let p : u32 = xii_term_get_child_a(t)
+    if xii_rewrite_cap_set(p) != 0u32 { return 0u8 }
+    return 1u8
+}
+fn apply_R040(t: u32) -> u32 @export { return xii_term_get_child_b(t) }
+
+/* ------------------------------------------------------------------ */
+/* Master dispatcher: apply the first matching rule in numeric order.  */
+/* Returns the new term ref (or unchanged t if no rule fired).         */
+/* The companion fn xii_rewrite_did_fire returns 1 iff a rule fired.   */
+/* ------------------------------------------------------------------ */
+
+var XRW_LAST_RULE_FIRED : u32 = 0u32
+
+fn xii_rewrite_last_rule_fired() -> u32 @export {
+    return XRW_LAST_RULE_FIRED
+}
+
+/* ---- M7 keystone: the five M2 trit ops as XII rewrite rules (R041-R045) ----
+ * TRIT_VAL leaf carries the trit in subform (NEG=0, ZERO=1, POS=2). Each rule reduces a
+ * TRIT_op term whose operand(s) are already TRIT_VAL normal forms to the TRIT_VAL of the
+ * proven M2 result -> XII evaluates the algebra; disjoint kinds -> 0 new critical pairs;
+ * terminating (op(val,val) outweighs val by xii_canon_weight's depth-+1 tiebreaker). */
+fn _xrw_trit_val_make(v: i32) -> u32 {
+    return xii_term_make_basis(XRW_TRIT_VAL, (v + 1i32) as u32)
+}
+fn _xrw_trit_val_get(idx: u32) -> i32 {
+    return (xii_term_get_subform(idx) as i32) - 1i32
+}
+fn _xrw_is_trit_val(idx: u32) -> u8 {
+    if idx == XRW_NULL_REF { return 0u8 }
+    if xii_term_get_kind(idx) == XRW_TRIT_VAL { return 1u8 }
+    return 0u8
+}
+fn match_TRIT_NOT(t: u32) -> u8 @export {
+    if xii_term_get_kind(t) != XRW_TRIT_NOT { return 0u8 }
+    return _xrw_is_trit_val(xii_term_get_child_a(t))
+}
+fn apply_TRIT_NOT(t: u32) -> u32 @export {
+    let a : i32 = _xrw_trit_val_get(xii_term_get_child_a(t))
+    return _xrw_trit_val_make(iii_trit_not(a))
+}
+fn match_TRIT_AND(t: u32) -> u8 @export {
+    if xii_term_get_kind(t) != XRW_TRIT_AND { return 0u8 }
+    if _xrw_is_trit_val(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return _xrw_is_trit_val(xii_term_get_child_b(t))
+}
+fn apply_TRIT_AND(t: u32) -> u32 @export {
+    let a : i32 = _xrw_trit_val_get(xii_term_get_child_a(t))
+    let b : i32 = _xrw_trit_val_get(xii_term_get_child_b(t))
+    return _xrw_trit_val_make(iii_trit_and(a, b))
+}
+fn match_TRIT_OR(t: u32) -> u8 @export {
+    if xii_term_get_kind(t) != XRW_TRIT_OR { return 0u8 }
+    if _xrw_is_trit_val(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return _xrw_is_trit_val(xii_term_get_child_b(t))
+}
+fn apply_TRIT_OR(t: u32) -> u32 @export {
+    let a : i32 = _xrw_trit_val_get(xii_term_get_child_a(t))
+    let b : i32 = _xrw_trit_val_get(xii_term_get_child_b(t))
+    return _xrw_trit_val_make(iii_trit_or(a, b))
+}
+fn match_TRIT_SUM(t: u32) -> u8 @export {
+    if xii_term_get_kind(t) != XRW_TRIT_SUM { return 0u8 }
+    if _xrw_is_trit_val(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return _xrw_is_trit_val(xii_term_get_child_b(t))
+}
+fn apply_TRIT_SUM(t: u32) -> u32 @export {
+    let a : i32 = _xrw_trit_val_get(xii_term_get_child_a(t))
+    let b : i32 = _xrw_trit_val_get(xii_term_get_child_b(t))
+    return _xrw_trit_val_make(iii_trit_sum(a, b))
+}
+fn match_TRIT_MUL(t: u32) -> u8 @export {
+    if xii_term_get_kind(t) != XRW_TRIT_MUL { return 0u8 }
+    if _xrw_is_trit_val(xii_term_get_child_a(t)) == 0u8 { return 0u8 }
+    return _xrw_is_trit_val(xii_term_get_child_b(t))
+}
+fn apply_TRIT_MUL(t: u32) -> u32 @export {
+    let a : i32 = _xrw_trit_val_get(xii_term_get_child_a(t))
+    let b : i32 = _xrw_trit_val_get(xii_term_get_child_b(t))
+    return _xrw_trit_val_make(iii_trit_mul(a, b))
+}
+
+/* nous socket driver: try the certified-reorderable rules in nous_rank order via
+ * apply_specific; fire the first that matches (XRW_LAST_RULE_FIRED != 0).  Returns
+ * the rewritten ref, or t (LAST_RULE_FIRED=0) if none of the ranked rules match.
+ * Per-step rule identity may differ from the fixed cascade, but the canonicalise
+ * fixpoint reaches the SAME normal form (confluence over the certified set). */
+fn xrw_apply_ranked(t: u32) -> u32 {
+    let k : u32 = xii_term_get_kind(t) as u32
+    let n : u32 = nous_rank(t, k, (&XRW_NRANK_BUF as u64) as *u64, XRW_NRANK_CAP)
+    let mut i : u32 = 0u32
+    while i < n {
+        let rid : u32 = XRW_NRANK_BUF[(i as u64) & 0xFFFFFFFFu64] as u32
+        let r : u32 = xii_rewrite_apply_specific(rid, t)
+        if XRW_LAST_RULE_FIRED != 0u32 { return r }
+        i = i + 1u32
+    }
+    XRW_LAST_RULE_FIRED = 0u32
+    return t
+}
+
+fn xii_rewrite_apply_one(t: u32) -> u32 @export {
+    if t == XRW_NULL_REF { XRW_LAST_RULE_FIRED = 0u32; return t }
+    if nous_active() == 1u8 { if nous_should_engage(xii_term_get_kind(t) as u32) == 1u8 { return xrw_apply_ranked(t) } }
+
+    /* Family M before D/E/L for nested null cases:
+     *   - R038 before R037/R017 (null cascade)
+     *   - R040 (M5 null-both-branches collapse) before R030 (L1 equal-branches
+     *     collapse), because R040 is a strict specialization of R030 with a
+     *     tighter side condition; the spec marks R040 as "fires when this
+     *     specific null pattern is present" rather than via the generic
+     *     equal-branches rule. */
+    if match_R038(t) != 0u8 { XRW_LAST_RULE_FIRED = 38u32; return apply_R038(t) }
+    if match_R040(t) != 0u8 { XRW_LAST_RULE_FIRED = 40u32; return apply_R040(t) }
+
+    /* route-S: R001-R004 (associativity) RETIRED from the cascade. Associativity is now structural
+     * at xii_term.make_fusion2 (left/right-nesting unrepresentable), so these rules have no redex.
+     * Their match_/apply_ fns remain defined (dead) for ABI stability. See IMPL-PLAN Step B.2. */
+    if match_R005(t) != 0u8 { XRW_LAST_RULE_FIRED = 5u32;  return apply_R005(t) }
+    if match_R006(t) != 0u8 { XRW_LAST_RULE_FIRED = 6u32;  return apply_R006(t) }
+    if match_R007(t) != 0u8 { XRW_LAST_RULE_FIRED = 7u32;  return apply_R007(t) }
+    if match_R008(t) != 0u8 { XRW_LAST_RULE_FIRED = 8u32;  return apply_R008(t) }
+    if match_R009(t) != 0u8 { XRW_LAST_RULE_FIRED = 9u32;  return apply_R009(t) }
+    if match_R010(t) != 0u8 { XRW_LAST_RULE_FIRED = 10u32; return apply_R010(t) }
+    if match_R011(t) != 0u8 { XRW_LAST_RULE_FIRED = 11u32; return apply_R011(t) }
+    if match_R012(t) != 0u8 { XRW_LAST_RULE_FIRED = 12u32; return apply_R012(t) }
+    if match_R041(t) != 0u8 { XRW_LAST_RULE_FIRED = 41u32; return apply_R041(t) }
+    if match_R013(t) != 0u8 { XRW_LAST_RULE_FIRED = 13u32; return apply_R013(t) }
+    if match_R014(t) != 0u8 { XRW_LAST_RULE_FIRED = 14u32; return apply_R014(t) }
+    if match_R015(t) != 0u8 { XRW_LAST_RULE_FIRED = 15u32; return apply_R015(t) }
+    if match_R016(t) != 0u8 { XRW_LAST_RULE_FIRED = 16u32; return apply_R016(t) }
+    if match_R017(t) != 0u8 { XRW_LAST_RULE_FIRED = 17u32; return apply_R017(t) }
+    if match_R018(t) != 0u8 { XRW_LAST_RULE_FIRED = 18u32; return apply_R018(t) }
+    if match_R019(t) != 0u8 { XRW_LAST_RULE_FIRED = 19u32; return apply_R019(t) }
+    if match_R020(t) != 0u8 { XRW_LAST_RULE_FIRED = 20u32; return apply_R020(t) }
+    if match_R021(t) != 0u8 { XRW_LAST_RULE_FIRED = 21u32; return apply_R021(t) }
+    if match_R022(t) != 0u8 { XRW_LAST_RULE_FIRED = 22u32; return apply_R022(t) }
+    if match_R023(t) != 0u8 { XRW_LAST_RULE_FIRED = 23u32; return apply_R023(t) }
+    if match_R043(t) != 0u8 { XRW_LAST_RULE_FIRED = 43u32; return apply_R043(t) }
+    if match_R044(t) != 0u8 { XRW_LAST_RULE_FIRED = 44u32; return apply_R044(t) }
+    if match_R024(t) != 0u8 { XRW_LAST_RULE_FIRED = 24u32; return apply_R024(t) }
+    if match_R025(t) != 0u8 { XRW_LAST_RULE_FIRED = 25u32; return apply_R025(t) }
+    if match_R026(t) != 0u8 { XRW_LAST_RULE_FIRED = 26u32; return apply_R026(t) }
+    if match_R027(t) != 0u8 { XRW_LAST_RULE_FIRED = 27u32; return apply_R027(t) }
+    if match_R028(t) != 0u8 { XRW_LAST_RULE_FIRED = 28u32; return apply_R028(t) }
+    if match_R029(t) != 0u8 { XRW_LAST_RULE_FIRED = 29u32; return apply_R029(t) }
+    if match_R030(t) != 0u8 { XRW_LAST_RULE_FIRED = 30u32; return apply_R030(t) }
+    if match_R031(t) != 0u8 { XRW_LAST_RULE_FIRED = 31u32; return apply_R031(t) }
+    if match_R032(t) != 0u8 { XRW_LAST_RULE_FIRED = 32u32; return apply_R032(t) }
+    if match_R042(t) != 0u8 { XRW_LAST_RULE_FIRED = 42u32; return apply_R042(t) }
+    if match_R033(t) != 0u8 { XRW_LAST_RULE_FIRED = 33u32; return apply_R033(t) }
+    if match_R034(t) != 0u8 { XRW_LAST_RULE_FIRED = 34u32; return apply_R034(t) }
+    if match_R035(t) != 0u8 { XRW_LAST_RULE_FIRED = 35u32; return apply_R035(t) }
+    if match_R036(t) != 0u8 { XRW_LAST_RULE_FIRED = 36u32; return apply_R036(t) }
+    if match_R037(t) != 0u8 { XRW_LAST_RULE_FIRED = 37u32; return apply_R037(t) }
+    if match_R039(t) != 0u8 { XRW_LAST_RULE_FIRED = 39u32; return apply_R039(t) }
+    if match_R040(t) != 0u8 { XRW_LAST_RULE_FIRED = 40u32; return apply_R040(t) }
+
+    /* M7 keystone: the trit-op rules (disjoint kinds from R001-R040, so order-free here).
+     * Rule IDs 101-105, distinct from the existing R041-R044. */
+    if match_TRIT_NOT(t) != 0u8 { XRW_LAST_RULE_FIRED = 101u32; return apply_TRIT_NOT(t) }
+    if match_TRIT_AND(t) != 0u8 { XRW_LAST_RULE_FIRED = 102u32; return apply_TRIT_AND(t) }
+    if match_TRIT_OR(t)  != 0u8 { XRW_LAST_RULE_FIRED = 103u32; return apply_TRIT_OR(t) }
+    if match_TRIT_SUM(t) != 0u8 { XRW_LAST_RULE_FIRED = 104u32; return apply_TRIT_SUM(t) }
+    if match_TRIT_MUL(t) != 0u8 { XRW_LAST_RULE_FIRED = 105u32; return apply_TRIT_MUL(t) }
+
+    XRW_LAST_RULE_FIRED = 0u32
+    return t
+}
+
+/* Number of rules in the rule set. */
+fn xii_rewrite_rule_count() -> u32 @export {
+    return 44u32
+}
+
+/* Apply a specific rule by id (1..40) if it matches at t. Returns the
+ * rewritten term ref if rule fired, or XRW_NULL_REF if the rule does not
+ * match (so the caller knows the path-A reduction was unavailable).
+ *
+ * Sets XRW_LAST_RULE_FIRED to rule_id on success, 0 on no-match, so
+ * callers can use xii_rewrite_last_rule_fired() to introspect what fired
+ * (matching the protocol established by apply_one).  Note: rules that
+ * mutate in place return the SAME ref as the input -- callers MUST use
+ * xii_rewrite_last_rule_fired() (or the XRW_NULL_REF return-value
+ * sentinel) to detect firing, NOT pointer equality.
+ *
+ * Used by critical-pair convergence tests in xii_critpairs.iii to drive
+ * two specific reduction orderings from the same overlap term. */
+fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 @export {
+    /* route-S: R001-R004 retired (structural at the constructor). apply_specific(1..4) falls through
+     * to a no-op (no rule fires), consistent with their removal from the rule table. */
+    if rule_id == 5u32  { if match_R005(t) != 0u8 { XRW_LAST_RULE_FIRED = 5u32;  return apply_R005(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 6u32  { if match_R006(t) != 0u8 { XRW_LAST_RULE_FIRED = 6u32;  return apply_R006(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 7u32  { if match_R007(t) != 0u8 { XRW_LAST_RULE_FIRED = 7u32;  return apply_R007(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 8u32  { if match_R008(t) != 0u8 { XRW_LAST_RULE_FIRED = 8u32;  return apply_R008(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 9u32  { if match_R009(t) != 0u8 { XRW_LAST_RULE_FIRED = 9u32;  return apply_R009(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 10u32 { if match_R010(t) != 0u8 { XRW_LAST_RULE_FIRED = 10u32; return apply_R010(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 11u32 { if match_R011(t) != 0u8 { XRW_LAST_RULE_FIRED = 11u32; return apply_R011(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 12u32 { if match_R012(t) != 0u8 { XRW_LAST_RULE_FIRED = 12u32; return apply_R012(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 13u32 { if match_R013(t) != 0u8 { XRW_LAST_RULE_FIRED = 13u32; return apply_R013(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 14u32 { if match_R014(t) != 0u8 { XRW_LAST_RULE_FIRED = 14u32; return apply_R014(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 15u32 { if match_R015(t) != 0u8 { XRW_LAST_RULE_FIRED = 15u32; return apply_R015(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 16u32 { if match_R016(t) != 0u8 { XRW_LAST_RULE_FIRED = 16u32; return apply_R016(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 17u32 { if match_R017(t) != 0u8 { XRW_LAST_RULE_FIRED = 17u32; return apply_R017(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 18u32 { if match_R018(t) != 0u8 { XRW_LAST_RULE_FIRED = 18u32; return apply_R018(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 19u32 { if match_R019(t) != 0u8 { XRW_LAST_RULE_FIRED = 19u32; return apply_R019(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 20u32 { if match_R020(t) != 0u8 { XRW_LAST_RULE_FIRED = 20u32; return apply_R020(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 21u32 { if match_R021(t) != 0u8 { XRW_LAST_RULE_FIRED = 21u32; return apply_R021(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 22u32 { if match_R022(t) != 0u8 { XRW_LAST_RULE_FIRED = 22u32; return apply_R022(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 23u32 { if match_R023(t) != 0u8 { XRW_LAST_RULE_FIRED = 23u32; return apply_R023(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 24u32 { if match_R024(t) != 0u8 { XRW_LAST_RULE_FIRED = 24u32; return apply_R024(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 25u32 { if match_R025(t) != 0u8 { XRW_LAST_RULE_FIRED = 25u32; return apply_R025(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 26u32 { if match_R026(t) != 0u8 { XRW_LAST_RULE_FIRED = 26u32; return apply_R026(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 27u32 { if match_R027(t) != 0u8 { XRW_LAST_RULE_FIRED = 27u32; return apply_R027(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 28u32 { if match_R028(t) != 0u8 { XRW_LAST_RULE_FIRED = 28u32; return apply_R028(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 29u32 { if match_R029(t) != 0u8 { XRW_LAST_RULE_FIRED = 29u32; return apply_R029(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 30u32 { if match_R030(t) != 0u8 { XRW_LAST_RULE_FIRED = 30u32; return apply_R030(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 31u32 { if match_R031(t) != 0u8 { XRW_LAST_RULE_FIRED = 31u32; return apply_R031(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 32u32 { if match_R032(t) != 0u8 { XRW_LAST_RULE_FIRED = 32u32; return apply_R032(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 33u32 { if match_R033(t) != 0u8 { XRW_LAST_RULE_FIRED = 33u32; return apply_R033(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 34u32 { if match_R034(t) != 0u8 { XRW_LAST_RULE_FIRED = 34u32; return apply_R034(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 35u32 { if match_R035(t) != 0u8 { XRW_LAST_RULE_FIRED = 35u32; return apply_R035(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 36u32 { if match_R036(t) != 0u8 { XRW_LAST_RULE_FIRED = 36u32; return apply_R036(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 37u32 { if match_R037(t) != 0u8 { XRW_LAST_RULE_FIRED = 37u32; return apply_R037(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 38u32 { if match_R038(t) != 0u8 { XRW_LAST_RULE_FIRED = 38u32; return apply_R038(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 39u32 { if match_R039(t) != 0u8 { XRW_LAST_RULE_FIRED = 39u32; return apply_R039(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 40u32 { if match_R040(t) != 0u8 { XRW_LAST_RULE_FIRED = 40u32; return apply_R040(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 41u32 { if match_R041(t) != 0u8 { XRW_LAST_RULE_FIRED = 41u32; return apply_R041(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 42u32 { if match_R042(t) != 0u8 { XRW_LAST_RULE_FIRED = 42u32; return apply_R042(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 43u32 { if match_R043(t) != 0u8 { XRW_LAST_RULE_FIRED = 43u32; return apply_R043(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 44u32 { if match_R044(t) != 0u8 { XRW_LAST_RULE_FIRED = 44u32; return apply_R044(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    /* Trit rules 101-105: complete the single-rule dispatcher so the nous ranked
+     * path (xrw_apply_ranked) can fire EVERY rule the apply_one cascade can.  Mirrors
+     * the cascade's trit block exactly; purely additive -- existing callers
+     * (xii_critpairs, xii_antidrift) only ever pass rule_ids 1-40, so their dispatch
+     * is unchanged (they return at their branch before reaching here). */
+    if rule_id == 101u32 { if match_TRIT_NOT(t) != 0u8 { XRW_LAST_RULE_FIRED = 101u32; return apply_TRIT_NOT(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 102u32 { if match_TRIT_AND(t) != 0u8 { XRW_LAST_RULE_FIRED = 102u32; return apply_TRIT_AND(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 103u32 { if match_TRIT_OR(t)  != 0u8 { XRW_LAST_RULE_FIRED = 103u32; return apply_TRIT_OR(t)  } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 104u32 { if match_TRIT_SUM(t) != 0u8 { XRW_LAST_RULE_FIRED = 104u32; return apply_TRIT_SUM(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    if rule_id == 105u32 { if match_TRIT_MUL(t) != 0u8 { XRW_LAST_RULE_FIRED = 105u32; return apply_TRIT_MUL(t) } XRW_LAST_RULE_FIRED = 0u32; return XRW_NULL_REF }
+    XRW_LAST_RULE_FIRED = 0u32
+    return XRW_NULL_REF
+}
+
+/* Expose the null ground-form constants for canonicaliser / external callers. */
+fn xii_rewrite_null_form() -> u32 @export {
+    return XRW_NULL_GROUND_FORM
+}
+
+fn xii_rewrite_noop_grant_form() -> u32 @export {
+    return XRW_NOOP_GRANT_FORM
+}
+
+fn xii_rewrite_trivial_lift_form() -> u32 @export {
+    return XRW_TRIVIAL_LIFT_FORM
+}
+
+fn xii_rewrite_pe_const_true_form() -> u32 @export {
+    return XRW_PE_CONST_TRUE_FORM
+}
+
+fn xii_rewrite_pe_const_false_form() -> u32 @export {
+    return XRW_PE_CONST_FALSE_FORM
+}

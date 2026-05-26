@@ -1,0 +1,22 @@
+/* corpus/320_xii_R027.iii  -- R027 [G2] Compose SEAL with matching PROVE */
+
+module corpus_320_xii_R027
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let seal_t : u32 = xii_term_make_basis(6u8, 0xABCu32)
+    let prove_t : u32 = xii_term_make_basis(7u8, 0xABCu32)
+    let t : u32 = xii_term_make_fusion2(18u8, seal_t, prove_t)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 27u32 { return 1u64 }
+    if r != seal_t { return 2u64 }
+    if xii_term_get_kind(r) != 6u8 { return 3u64 }
+    return 0u64
+}

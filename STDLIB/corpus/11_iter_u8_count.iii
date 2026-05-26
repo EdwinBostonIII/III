@@ -1,0 +1,31 @@
+/* Iterate over 5 bytes, count non-END returns */
+module corpus_a11
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iter_u8_new(base: u64, len: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_next(id: u64) -> u32 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_drop(id: u64) -> u8 from "iter.iii"
+
+fn main() -> u64 {
+    let p : *u8 = malloc(5u64)
+    p[0] = 1u8; p[1] = 2u8; p[2] = 3u8; p[3] = 4u8; p[4] = 5u8
+    let it : u64 = iter_u8_new(p as u64, 5u64)
+    if it == 0u64 { return 1u64 }
+    let mut n : u32 = 0u32
+    let mut sum : u32 = 0u32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(it)
+        if v == 0x100u32 { done = 1u8 }
+        if done == 0u8 {
+            n = n + 1u32
+            sum = sum + v
+        }
+    }
+    iter_u8_drop(it)
+    free(p)
+    if n != 5u32 { return 2u64 }
+    if sum != 15u32 { return 3u64 }
+    return 99u64
+}

@@ -1,0 +1,20 @@
+module show_aes
+extern @abi(c-msvc-x64) fn aes256_set_key(key: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn _write(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
+var KEY : [u8; 32]
+var PT : [u8; 16]
+var CT : [u8; 16]
+var HEX : [u8; 40]
+fn _nib(v: u8) -> u8 { if v < 10u8 { return (48u8 + v) }  return (87u8 + v) }
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { KEY[i] = (i & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 16u64 { PT[i] = ((i * 17u64) & 0xFFu64) as u8  i = i + 1u64 }
+    aes256_set_key((&KEY as u64) as *u8)
+    aes_encrypt_block((&PT as u64) as *u8, (&CT as u64) as *u8)
+    i = 0u64
+    while i < 16u64 { HEX[i*2u64]=_nib((CT[i] >> 4u8) & 0x0Fu8)  HEX[(i*2u64)+1u64]=_nib(CT[i] & 0x0Fu8)  i = i + 1u64 }
+    HEX[32u64]=10u8  _write(1i32, (&HEX as u64) as *u8, 33u32)  return 0u64
+}

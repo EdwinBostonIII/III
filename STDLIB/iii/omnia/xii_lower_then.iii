@@ -1,0 +1,121 @@
+/* STDLIB/iii/omnia/xii_lower_then.iii -- mig4 Step 8c: lower the SEQUENCING domain (FTHEN) through XII.
+ * The "then" composition -- do a, then b -- is a free MONOID, exactly like FCOMPOSE (Step 7) but
+ * over the FTHEN operator with the K12 (THEN-null) identity.  Additive (a consumer of canonicalise;
+ * engine untouched); the engine's own rules ARE the monoid axioms (read from xii_rewrite.iii):
+ *   - product  a ; b = FTHEN(a, b)
+ *   - identity e     = the K12 THEN-null leaf  (make_basis(K12, null_form))
+ *   - atoms          = inert K13 leaves (CAP_NONE; referenced by NO FTHEN rule -> free, non-commutative)
+ * The laws:
+ *   - associativity  R002  FTHEN(FTHEN(a,b),c) -> FTHEN(a,FTHEN(b,c))  [right-nested NF]
+ *   - left identity  R021  FTHEN(K12null, x)   -> x   (apply_R021 = child_b)
+ *   - right identity R022  FTHEN(x, K12null)   -> x   (apply_R022 = child_a)
+ * So xii_canonicalise of an encoded sequence IS the sequencing-monoid normal form (identity-free,
+ * right-nested).  Gated by xad_admit.  The fourth structured-computation operator after Step 7's
+ * FCOMPOSE; together FCOMPOSE+FTHEN are the two composition monoids.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_admission only.  Determinism: integer-only; ==/!= compares; single-line fns; eval results
+ * bound to locals before struct_eq (param-spill-safe).
+ */
+module omnia_xii_lower_then
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLT_FTHEN    : u8  = 19u8    /* the sequencing operator */
+const XLT_K12      : u8  = 11u8    /* K12 THEN-null = the sequencing identity e */
+const XLT_ATOM     : u8  = 12u8    /* K13: CAP_NONE + inert under every FTHEN rule -> free atoms */
+const XLT_NULL_REF : u32 = 0xFFFFFFFFu32
+
+fn xlt_id() -> u32 @export { return xii_term_make_basis(XLT_K12, xii_rewrite_null_form()) }
+fn xlt_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLT_ATOM, sf) }
+fn xlt_then(a: u32, b: u32) -> u32 @export { return xii_term_make_fusion2(XLT_FTHEN, a, b) }
+fn xlt_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.  Proves the sequencing-monoid axioms by
+ * canonicalisation -- associativity (1), NF is the right-nested word (2), left/right identity
+ * (3-4), interior identity stripped (5); prove-the-negative TEETH -- non-commutative (6), distinct
+ * sequences distinct (7), free/non-idempotent (8); determinism (9); ADMITTED (10). */
+fn xlt_selftest() -> u64 @export {
+    /* (1) ASSOCIATIVITY. */
+    xii_term_arena_reset()
+    let l : u32 = xlt_then(xlt_then(xlt_atom(1u32), xlt_atom(2u32)), xlt_atom(3u32))
+    let r : u32 = xlt_then(xlt_atom(1u32), xlt_then(xlt_atom(2u32), xlt_atom(3u32)))
+    let nfl : u32 = xlt_eval(l)
+    let nfr : u32 = xlt_eval(r)
+    if xii_rewrite_struct_eq(nfl, nfr) != 1u8 { return 1u64 }
+
+    /* (2) NF is the right-nested word [a,b,c]. */
+    xii_term_arena_reset()
+    let prod : u32 = xlt_then(xlt_then(xlt_atom(1u32), xlt_atom(2u32)), xlt_atom(3u32))
+    let word : u32 = xlt_then(xlt_atom(1u32), xlt_then(xlt_atom(2u32), xlt_atom(3u32)))
+    let nfp : u32 = xlt_eval(prod)
+    if xii_rewrite_struct_eq(nfp, word) != 1u8 { return 2u64 }
+
+    /* (3) LEFT IDENTITY: e;a -> a. */
+    xii_term_arena_reset()
+    let la : u32 = xlt_then(xlt_id(), xlt_atom(1u32))
+    let ea : u32 = xlt_atom(1u32)
+    let nfla : u32 = xlt_eval(la)
+    if xii_rewrite_struct_eq(nfla, ea) != 1u8 { return 3u64 }
+
+    /* (4) RIGHT IDENTITY: a;e -> a. */
+    xii_term_arena_reset()
+    let ar : u32 = xlt_then(xlt_atom(1u32), xlt_id())
+    let ae : u32 = xlt_atom(1u32)
+    let nfar : u32 = xlt_eval(ar)
+    if xii_rewrite_struct_eq(nfar, ae) != 1u8 { return 4u64 }
+
+    /* (5) INTERIOR IDENTITY stripped: a;(e;b) -> a;b. */
+    xii_term_arena_reset()
+    let mid : u32 = xlt_then(xlt_atom(1u32), xlt_then(xlt_id(), xlt_atom(2u32)))
+    let ab : u32 = xlt_then(xlt_atom(1u32), xlt_atom(2u32))
+    let nfmid : u32 = xlt_eval(mid)
+    if xii_rewrite_struct_eq(nfmid, ab) != 1u8 { return 5u64 }
+
+    /* (6) NON-COMMUTATIVE (teeth): a;b != b;a. */
+    xii_term_arena_reset()
+    let abx : u32 = xlt_then(xlt_atom(1u32), xlt_atom(2u32))
+    let bax : u32 = xlt_then(xlt_atom(2u32), xlt_atom(1u32))
+    let nab : u32 = xlt_eval(abx)
+    let nba : u32 = xlt_eval(bax)
+    if xii_rewrite_struct_eq(nab, nba) != 0u8 { return 6u64 }
+
+    /* (7) DISTINCT sequences distinct (teeth): a;b != a;c. */
+    xii_term_arena_reset()
+    let ab2 : u32 = xlt_then(xlt_atom(1u32), xlt_atom(2u32))
+    let ac2 : u32 = xlt_then(xlt_atom(1u32), xlt_atom(3u32))
+    let nab2 : u32 = xlt_eval(ab2)
+    let nac2 : u32 = xlt_eval(ac2)
+    if xii_rewrite_struct_eq(nab2, nac2) != 0u8 { return 7u64 }
+
+    /* (8) FREE / NON-IDEMPOTENT (teeth): a;a != a. */
+    xii_term_arena_reset()
+    let aa : u32 = xlt_then(xlt_atom(1u32), xlt_atom(1u32))
+    let a0 : u32 = xlt_atom(1u32)
+    let naa : u32 = xlt_eval(aa)
+    if xii_rewrite_struct_eq(naa, a0) != 0u8 { return 8u64 }
+
+    /* (9) DETERMINISM. */
+    xii_term_arena_reset()
+    let d1 : u32 = xlt_then(xlt_then(xlt_atom(1u32), xlt_atom(2u32)), xlt_atom(3u32))
+    let d2 : u32 = xlt_then(xlt_then(xlt_atom(1u32), xlt_atom(2u32)), xlt_atom(3u32))
+    let nd1 : u32 = xlt_eval(d1)
+    let nd2 : u32 = xlt_eval(d2)
+    if xii_rewrite_struct_eq(nd1, nd2) != 1u8 { return 9u64 }
+
+    /* (10) ADMITTED (Step 6). */
+    if xad_admit() != 1u32 { return 10u64 }
+
+    return 99u64
+}
+
+/* xii_lower_then EMBODIES SEQUENCING lowered onto XII: "do a then b" is FTHEN, the identity is the
+ * K12 THEN-null, atoms are inert K13 leaves, and the engine's own R002 (assoc) + R021/R022 (identity)
+ * rules ARE the sequencing monoid -- so canonicalising a sequence right-nests it and strips no-ops.
+ * The second composition monoid (FCOMPOSE Step 7, FTHEN here); additive + Step-6-admitted. */

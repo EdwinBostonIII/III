@@ -1,0 +1,13 @@
+module corpus_52
+
+/* Canonical "function call" test. Post-C0010, this compiles with
+ * resolver-driven lowering and produces exit code 42. Pre-C0010, it
+ * uses the legacy direct-call path; result must equal 42 either way. */
+
+fn helper() -> u64 {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return helper()
+}

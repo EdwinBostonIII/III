@@ -1,0 +1,83 @@
+/* 684_crystal_seal.iii -- M27 keystone (clause 1, the Key Move): a crystal is a sealed,
+ * forge-resistant, provenance-bearing error value -- its 16-byte MAC binds EVERY provenance
+ * field (code, site_hash, cap_id, cause), so you cannot alter a field and keep a valid MAC
+ * (a tampered crystal's recomputed MAC diverges -> crystal_verify rejects).  44_crystal_mint_verify
+ * only tested positive verifies (its "tampering detected" comment was never exercised); this
+ * KAT proves the binding the corpus CAN reach (the API gives no raw-slot inject, so the
+ * forge-negative is the MAC-binding proxy): same fields -> IDENTICAL MAC (determinism, also
+ * re-proving the M21 deterministic-key fix), each single-field change -> DIFFERENT MAC, all
+ * mints verify.  Exit 99 = all hold; 1..N = the failing check.  CORPUS-ONLY. */
+module corpus_684
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn crystal_mint(code: u32, site: u64, cap: u64, cause: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_mac_byte(id: u64, i: u32) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+
+/* 1 iff the two crystals' 16-byte MACs are byte-identical. */
+fn mac_eq(a: u64, b: u64) -> u8 {
+    let mut i : u32 = 0u32
+    let mut diff : u32 = 0u32
+    while i < 16u32 {
+        let ba : u32 = crystal_mac_byte(a, i)
+        let bb : u32 = crystal_mac_byte(b, i)
+        if ba != bb { diff = 1u32 }
+        i = i + 1u32
+    }
+    if diff == 0u32 { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    let site  : *u8 = malloc(32u64)
+    let site2 : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        site[i]  = (i + 1u64) as u8
+        site2[i] = (i + 0x80u64) as u8     /* a different site hash */
+        i = i + 1u64
+    }
+
+    /* baseline: code=42, site, cap=100, cause=0 */
+    let c0 : u64 = crystal_mint(42u32, site as u64, 100u64, 0u64)
+    if c0 == 0u64 { return 1u64 }
+    if crystal_verify(c0) != 1u8 { return 2u64 }
+
+    /* determinism (M21 fix): identical fields -> identical MAC */
+    let c0b : u64 = crystal_mint(42u32, site as u64, 100u64, 0u64)
+    if c0b == 0u64 { return 3u64 }
+    if crystal_verify(c0b) != 1u8 { return 4u64 }
+    if mac_eq(c0, c0b) != 1u8 { return 5u64 }
+
+    /* binding: change code -> MAC differs */
+    let cc : u64 = crystal_mint(43u32, site as u64, 100u64, 0u64)
+    if crystal_verify(cc) != 1u8 { return 6u64 }
+    if mac_eq(c0, cc) != 0u8 { return 7u64 }
+
+    /* binding: change cap -> MAC differs */
+    let cp : u64 = crystal_mint(42u32, site as u64, 101u64, 0u64)
+    if crystal_verify(cp) != 1u8 { return 8u64 }
+    if mac_eq(c0, cp) != 0u8 { return 9u64 }
+
+    /* binding: change cause -> MAC differs */
+    let cz : u64 = crystal_mint(42u32, site as u64, 100u64, 1u64)
+    if crystal_verify(cz) != 1u8 { return 10u64 }
+    if mac_eq(c0, cz) != 0u8 { return 11u64 }
+
+    /* binding: change site_hash -> MAC differs */
+    let cs : u64 = crystal_mint(42u32, site2 as u64, 100u64, 0u64)
+    if crystal_verify(cs) != 1u8 { return 12u64 }
+    if mac_eq(c0, cs) != 0u8 { return 13u64 }
+
+    crystal_drop(c0)
+    crystal_drop(c0b)
+    crystal_drop(cc)
+    crystal_drop(cp)
+    crystal_drop(cz)
+    crystal_drop(cs)
+    free(site)
+    free(site2)
+    return 99u64
+}

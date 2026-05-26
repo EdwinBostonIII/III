@@ -1,0 +1,4 @@
+/* 654 — memo_query: verified memoized-result query door over memo_lattice + witness_spine. */
+module corpus_654
+extern @abi(c-msvc-x64) fn mq_selftest() -> u64 from "memo_query.iii"
+fn main() -> u64 { return mq_selftest() }

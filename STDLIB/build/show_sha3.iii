@@ -1,0 +1,14 @@
+module show_sha3
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+extern @abi(c-msvc-x64) fn _write(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
+var MSG : [u8; 16]
+var DIG : [u8; 32]
+var HEX : [u8; 70]
+fn _nib(v: u8) -> u8 { if v < 10u8 { return (48u8 + v) }  return (87u8 + v) }
+fn main() -> u64 {
+    MSG[0u64]=104u8 MSG[1u64]=101u8 MSG[2u64]=108u8 MSG[3u64]=108u8 MSG[4u64]=111u8 MSG[5u64]=32u8 MSG[6u64]=119u8 MSG[7u64]=111u8 MSG[8u64]=114u8 MSG[9u64]=108u8 MSG[10u64]=100u8
+    sha3_256_oneshot((&MSG as u64), 11u64, (&DIG as u64))
+    let mut i : u64 = 0u64
+    while i < 32u64 { HEX[i*2u64]=_nib((DIG[i] >> 4u8) & 0x0Fu8)  HEX[(i*2u64)+1u64]=_nib(DIG[i] & 0x0Fu8)  i = i + 1u64 }
+    HEX[64u64]=10u8  _write(1i32, (&HEX as u64) as *u8, 65u32)  return 0u64
+}

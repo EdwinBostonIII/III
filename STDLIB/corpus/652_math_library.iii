@@ -1,0 +1,4 @@
+/* 652 — math_library: theorem-carrier-admitted mathematical fact library over the algebra modules. */
+module corpus_652
+extern @abi(c-msvc-x64) fn mathlib_selftest() -> u64 from "math_library.iii"
+fn main() -> u64 { return mathlib_selftest() }

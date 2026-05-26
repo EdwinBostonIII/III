@@ -1,0 +1,182 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\drbg.iii
+ *
+ * III STDLIB - numera::drbg -- NIST SP 800-90A HMAC-DRBG with SHA-512.
+ * RITCHIE Stage 4.6.  Deterministic CSPRNG over the KAT-verified HMAC-SHA-512
+ * (numera/hmac.iii, §4.8).  Singleton state (K, V, reseed_counter).
+ *
+ *   Update(data):  K=HMAC(K, V||0x00||data); V=HMAC(K,V);
+ *                  if data: K=HMAC(K, V||0x01||data); V=HMAC(K,V)
+ *   Instantiate:   K=0x00*64; V=0x01*64; Update(entropy||nonce||perso); rc=1
+ *   Reseed:        Update(entropy||addl); rc=1
+ *   Generate:      [addl: Update(addl)]; emit HMAC(K,V) blocks; Update(addl); rc++
+ *
+ * Public surface:
+ *   iii_drbg_instantiate(entropy, elen, nonce, nlen, perso, plen) -> i32
+ *   iii_drbg_reseed(entropy, elen, addl, alen) -> i32
+ *   iii_drbg_generate(out, n_bytes, addl, alen) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module numera_drbg
+
+extern @abi(c-msvc-x64) fn hmac_sha512(key: u64, key_len: u64, msg: u64, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512_tag(out_64: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_rdrand() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_rdseed() -> u8 from "cpufeat.iii"
+
+/* Hardware entropy (§4.7): RDRAND/RDSEED via metal.  RDR_OK=1 if CF set
+ * (success), RDR_OUT = the 64-bit value.  Per-call (retry loop is in .iii);
+ * the block uses only Win64-volatile regs (rax/rcx/rdx) so nothing to spill. */
+var RDR_OUT : [u64; 1]
+var RDR_OK  : [u64; 1]
+
+fn drbg_rdrand_once() -> i32 {
+    metal {
+    rdrand %rax
+    setc %dl
+    leaq L_RDR_OUT(%rip), %rcx
+    movq %rax, (%rcx)
+    movzbq %dl, %rdx
+    leaq L_RDR_OK(%rip), %rcx
+    movq %rdx, (%rcx)
+    }
+    return 0i32
+}
+fn drbg_rdseed_once() -> i32 {
+    metal {
+    rdseed %rax
+    setc %dl
+    leaq L_RDR_OUT(%rip), %rcx
+    movq %rax, (%rcx)
+    movzbq %dl, %rdx
+    leaq L_RDR_OK(%rip), %rcx
+    movq %rdx, (%rcx)
+    }
+    return 0i32
+}
+
+/* Fill out[0..n] with hardware entropy: RDSEED preferred (true entropy),
+ * else RDRAND; each draw retried up to 16x on CF=0.  Returns 0 on success,
+ * -1 if neither instruction is available or a draw never succeeded. */
+fn iii_drbg_hw_entropy(out: u64, n: u64) -> i32 @export {
+    let use_seed : u8 = cpufeat_has_rdseed()
+    let use_rand : u8 = cpufeat_has_rdrand()
+    if use_seed != 1u8 {
+        if use_rand != 1u8 { return 0i32 - 1i32 }
+    }
+    let op : *u8 = out as *u8
+    let mut produced : u64 = 0u64
+    while produced < n {
+        let mut tries : u64 = 0u64
+        let mut got : u64 = 0u64
+        while tries < 16u64 {
+            if got == 0u64 {
+                if use_seed == 1u8 { drbg_rdseed_once() } else { drbg_rdrand_once() }
+                if RDR_OK[0] == 1u64 { got = 1u64 }
+                tries = tries + 1u64
+            } else {
+                tries = 16u64
+            }
+        }
+        if got == 0u64 { return 0i32 - 1i32 }
+        let r : u64 = RDR_OUT[0]
+        let mut take : u64 = 8u64
+        if (n - produced) < 8u64 { take = n - produced }
+        let mut j : u64 = 0u64
+        while j < take { op[produced + j] = ((r >> (8u64 * j)) & 0xFFu64) as u8 ; j = j + 1u64 }
+        produced = produced + take
+    }
+    return 0i32
+}
+
+var DRBG_K    : [u8; 64]
+var DRBG_V    : [u8; 64]
+var DRBG_RC   : [u64; 1]
+var DRBG_IN   : [u8; 1024]   /* HMAC input scratch: V || byte || data */
+var DRBG_SEED : [u8; 768]    /* seed material concat */
+
+/* out[0..64] = HMAC-SHA512(K, msg[msg_len]).  Safe when out aliases V/K:
+ * hmac_sha512 consumes key+msg before hmac_sha512_tag writes out. */
+fn drbg_hmac_into(out: u64, msg: u64, msg_len: u64) -> i32 {
+    hmac_sha512(&DRBG_K as u64, 64u64, msg, msg_len)
+    hmac_sha512_tag(out)
+    return 0i32
+}
+
+fn drbg_update(data: u64, data_len: u64) -> i32 {
+    let ip : *u8 = &DRBG_IN as *u8
+    let vp : *u8 = &DRBG_V as *u8
+    let dp : *u8 = data as *u8
+    /* IN = V || 0x00 || data ; K = HMAC(K, IN) ; V = HMAC(K, V) */
+    let mut i : u64 = 0u64
+    while i < 64u64 { ip[i] = vp[i] ; i = i + 1u64 }
+    ip[64] = 0x00u8
+    i = 0u64
+    while i < data_len { ip[65u64 + i] = dp[i] ; i = i + 1u64 }
+    drbg_hmac_into(&DRBG_K as u64, &DRBG_IN as u64, 65u64 + data_len)
+    drbg_hmac_into(&DRBG_V as u64, &DRBG_V as u64, 64u64)
+    if data_len > 0u64 {
+        /* IN = V || 0x01 || data ; K = HMAC(K, IN) ; V = HMAC(K, V) */
+        i = 0u64
+        while i < 64u64 { ip[i] = vp[i] ; i = i + 1u64 }
+        ip[64] = 0x01u8
+        i = 0u64
+        while i < data_len { ip[65u64 + i] = dp[i] ; i = i + 1u64 }
+        drbg_hmac_into(&DRBG_K as u64, &DRBG_IN as u64, 65u64 + data_len)
+        drbg_hmac_into(&DRBG_V as u64, &DRBG_V as u64, 64u64)
+    }
+    return 0i32
+}
+
+fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 @export {
+    let kp : *u8 = &DRBG_K as *u8
+    let vp : *u8 = &DRBG_V as *u8
+    let mut i : u64 = 0u64
+    while i < 64u64 { kp[i] = 0x00u8 ; vp[i] = 0x01u8 ; i = i + 1u64 }
+    /* seed = entropy || nonce || perso */
+    let sp : *u8 = &DRBG_SEED as *u8
+    let ep : *u8 = entropy as *u8
+    let np : *u8 = nonce as *u8
+    let pp : *u8 = perso as *u8
+    i = 0u64
+    while i < elen { sp[i] = ep[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < nlen { sp[elen + i] = np[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < plen { sp[elen + nlen + i] = pp[i] ; i = i + 1u64 }
+    drbg_update(&DRBG_SEED as u64, elen + nlen + plen)
+    DRBG_RC[0] = 1u64
+    return 0i32
+}
+
+fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 @export {
+    let sp : *u8 = &DRBG_SEED as *u8
+    let ep : *u8 = entropy as *u8
+    let ap : *u8 = addl as *u8
+    let mut i : u64 = 0u64
+    while i < elen { sp[i] = ep[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < alen { sp[elen + i] = ap[i] ; i = i + 1u64 }
+    drbg_update(&DRBG_SEED as u64, elen + alen)
+    DRBG_RC[0] = 1u64
+    return 0i32
+}
+
+fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 @export {
+    if alen > 0u64 { drbg_update(addl, alen) }
+    let op : *u8 = out as *u8
+    let vp : *u8 = &DRBG_V as *u8
+    let mut produced : u64 = 0u64
+    while produced < n_bytes {
+        drbg_hmac_into(&DRBG_V as u64, &DRBG_V as u64, 64u64)
+        let mut take : u64 = 64u64
+        if (n_bytes - produced) < 64u64 { take = n_bytes - produced }
+        let mut j : u64 = 0u64
+        while j < take { op[produced + j] = vp[j] ; j = j + 1u64 }
+        produced = produced + take
+    }
+    drbg_update(addl, alen)
+    DRBG_RC[0] = DRBG_RC[0] + 1u64
+    return 0i32
+}

@@ -1,0 +1,4 @@
+/* 615 — cost_lattice: partial-order cost lattice compare/join/meet over u64 cost words. */
+module corpus_615
+extern @abi(c-msvc-x64) fn cl_selftest() -> u64 from "cost_lattice.iii"
+fn main() -> u64 { return cl_selftest() }

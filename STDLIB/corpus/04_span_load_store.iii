@@ -1,0 +1,20 @@
+/* Span: alloc 16 bytes, fill with 0x42, load index 5, return as u8. */
+module corpus_a04
+
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_alloc(id: u64, n: u64, align: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn span_u8_fill(base: u64, len: u64, v: u32) -> i32 from "span.iii"
+extern @abi(c-msvc-x64) fn span_u8_load(base: u64, len: u64, idx: u64) -> u32 from "span.iii"
+
+fn main() -> u64 {
+    let r : u64 = region_create(64u64)
+    if r == 0u64 { return 1u64 }
+    let p : u64 = region_alloc(r, 16u64, 1u64)
+    if p == 0u64 { return 2u64 }
+    let rc : i32 = span_u8_fill(p, 16u64, 0x42u32)
+    if rc != 0i32 { return 3u64 }
+    let v : u32 = span_u8_load(p, 16u64, 5u64)
+    region_release(r)
+    return v as u64
+}

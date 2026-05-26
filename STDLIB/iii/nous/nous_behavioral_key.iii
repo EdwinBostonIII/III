@@ -1,0 +1,169 @@
+/* STDLIB/iii/nous/nous_behavioral_key.iii -- the behavioral key for dedup-by-behavior.
+ *
+ * Closes the realizable slice of the audit's "category.iii dedups on a SYNTACTIC key"
+ * finding.  A category morphism's op is an opaque label, so a TRUE behavioral key needs
+ * the morphism to carry an XII-term body (the deferred mig4).  But wherever the op IS an
+ * XII term, the behavioral key is genuinely computable here:
+ *
+ *   nous_skey(t)  = cad(KECCAK256, serialize(t))                  -- SYNTACTIC: keys on the
+ *                   raw term structure.  Two terms that compute the same function but
+ *                   differ in surface form (e.g. AND(a,b) vs AND(b,a)) get DIFFERENT skeys
+ *                   -- so a syntactic-keyed registry ADMITS the duplicate (the bug).
+ *   nous_bkey(t)  = cad(KECCAK256, serialize(xii_canonicalise(t)))-- BEHAVIORAL: keys on the
+ *                   XII NORMAL FORM.  Confluence makes the normal form unique, so the two
+ *                   forms above collapse to the SAME bkey -- the registry CATCHES the
+ *                   duplicate; behaviorally-distinct terms keep distinct bkeys.
+ *
+ * The serializer is an EXPLICIT-STACK preorder walk (no recursion; honors the XII/category
+ * W15 discipline): per node it emits a presence byte, kind, subform, aux, and pushes all
+ * three child slots (NULL slots emit a null marker) -- a canonical, unambiguous encoding
+ * of the (unique) normal-form tree.  Bounded; over-budget returns an error, never a
+ * partial/garbage key.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_canonicalise + cad.
+ * Determinism: integer-only; byte-wise LE; masked u32 indices; single-line fns.  Acyclic:
+ * nous_behavioral_key -> xii_canonicalise/xii_term/cad (no edge back).
+ */
+module nous_behavioral_key
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+/* selftest only */
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const NBK_NULL_REF   : u32 = 0xFFFFFFFFu32
+const NBK_CAD_KECCAK : u32 = 1u32
+const NBK_MAX_NODES  : u32 = 512u32
+const NBK_SER_CAP    : u64 = 8192u64
+const NBK_STK_CAP    : u32 = 2048u32
+const NBK_OK         : i32 = 0i32
+const NBK_E_OVER     : i32 = -1i32
+const NBK_E_NULL     : i32 = -2i32
+const NBK_VAL        : u8  = 24u8
+const NBK_AND        : u8  = 26u8
+const NBK_OR         : u8  = 27u8
+
+var NBK_SER  : [u8;  8192]
+var NBK_STK  : [u32; 2048]
+var NBK_SLEN : u64 = 0u64
+var NBK_K1   : [u8; 32]
+var NBK_K2   : [u8; 32]
+var NBK_K3   : [u8; 32]
+
+fn _nbk_emit(b: u8) -> u8 {
+    if NBK_SLEN >= NBK_SER_CAP { return 0u8 }
+    NBK_SER[NBK_SLEN] = b
+    NBK_SLEN = NBK_SLEN + 1u64
+    return 1u8
+}
+fn _nbk_emit_u32(v: u32) -> u8 {
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        if _nbk_emit(((v >> (i * 8u32)) & 0xFFu32) as u8) == 0u8 { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+fn _nbk_emit_u64(v: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        if _nbk_emit(((v >> (i * 8u64)) & 0xFFu64) as u8) == 0u8 { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Explicit-stack preorder serialization of term t into NBK_SER; sets NBK_SLEN.
+ * Canonical for a normal form.  NBK_OK / NBK_E_OVER (node, stack, or buffer cap). */
+fn _nbk_serialize(t: u32) -> i32 {
+    NBK_SLEN = 0u64
+    NBK_STK[0u64] = t
+    let mut sp : u32 = 1u32
+    let mut nodes : u32 = 0u32
+    while sp > 0u32 {
+        sp = sp - 1u32
+        let idx : u32 = NBK_STK[(sp as u64) & 0xFFFFFFFFu64]
+        if idx == NBK_NULL_REF {
+            if _nbk_emit(0x00u8) == 0u8 { return NBK_E_OVER }
+        } else {
+            nodes = nodes + 1u32
+            if nodes > NBK_MAX_NODES { return NBK_E_OVER }
+            if _nbk_emit(0x01u8) == 0u8 { return NBK_E_OVER }
+            if _nbk_emit(xii_term_get_kind(idx)) == 0u8 { return NBK_E_OVER }
+            if _nbk_emit_u32(xii_term_get_subform(idx)) == 0u8 { return NBK_E_OVER }
+            if _nbk_emit_u64(xii_term_get_aux(idx)) == 0u8 { return NBK_E_OVER }
+            if (sp + 3u32) > NBK_STK_CAP { return NBK_E_OVER }
+            NBK_STK[(sp as u64) & 0xFFFFFFFFu64] = xii_term_get_child_c(idx)
+            sp = sp + 1u32
+            NBK_STK[(sp as u64) & 0xFFFFFFFFu64] = xii_term_get_child_b(idx)
+            sp = sp + 1u32
+            NBK_STK[(sp as u64) & 0xFFFFFFFFu64] = xii_term_get_child_a(idx)
+            sp = sp + 1u32
+        }
+    }
+    return NBK_OK
+}
+
+/* SYNTACTIC key: content-address of the raw term structure (no canonicalisation). */
+fn nous_skey(t: u32, out32: *u8) -> i32 @export {
+    if (out32 as u64) == 0u64 { return NBK_E_NULL }
+    let r : i32 = _nbk_serialize(t)
+    if r != NBK_OK { return r }
+    cad_oneshot(NBK_CAD_KECCAK, (&NBK_SER as u64) as *u8, NBK_SLEN, out32)
+    return NBK_OK
+}
+
+/* BEHAVIORAL key: content-address of the XII NORMAL FORM (canonicalise, then serialize).
+ * NOTE: mutates t in place (canonicalisation rewrites the arena node). */
+fn nous_bkey(t: u32, out32: *u8) -> i32 @export {
+    if (out32 as u64) == 0u64 { return NBK_E_NULL }
+    let nf : u32 = xii_canonicalise(t)
+    let r : i32 = _nbk_serialize(nf)
+    if r != NBK_OK { return r }
+    cad_oneshot(NBK_CAD_KECCAK, (&NBK_SER as u64) as *u8, NBK_SLEN, out32)
+    return NBK_OK
+}
+
+fn nous_bkey_selftest() -> u64 @export {
+    let k1 : *u8 = (&NBK_K1 as u64) as *u8
+    let k2 : *u8 = (&NBK_K2 as u64) as *u8
+    let k3 : *u8 = (&NBK_K3 as u64) as *u8
+
+    /* t1 = AND(POS,NEG), t2 = AND(NEG,POS): syntactically different (operand order),
+     * behaviorally equal (trit-AND = min, commutative -> both normalise to VAL(NEG)). */
+    xii_term_arena_reset()
+    let t1 : u32 = xii_term_make_fusion2(NBK_AND, xii_term_make_basis(NBK_VAL, 2u32), xii_term_make_basis(NBK_VAL, 0u32))
+    let t2 : u32 = xii_term_make_fusion2(NBK_AND, xii_term_make_basis(NBK_VAL, 0u32), xii_term_make_basis(NBK_VAL, 2u32))
+
+    /* SYNTACTIC keys MUST differ (this is why a syntactic-keyed registry admits the dup) */
+    if nous_skey(t1, k1) != NBK_OK { return 1u64 }
+    if nous_skey(t2, k2) != NBK_OK { return 2u64 }
+    if cad_eq(k1, k2) != 0u8 { return 3u64 }
+
+    /* BEHAVIORAL keys MUST match (the fix: same normal form -> same key) */
+    if nous_bkey(t1, k1) != NBK_OK { return 4u64 }
+    if nous_bkey(t2, k2) != NBK_OK { return 5u64 }
+    if cad_eq(k1, k2) != 1u8 { return 6u64 }
+
+    /* a behaviorally-DIFFERENT term (OR = max -> VAL(POS)) gets a distinct behavioral key */
+    xii_term_arena_reset()
+    let t3 : u32 = xii_term_make_fusion2(NBK_OR, xii_term_make_basis(NBK_VAL, 2u32), xii_term_make_basis(NBK_VAL, 0u32))
+    if nous_bkey(t3, k3) != NBK_OK { return 7u64 }
+    if cad_eq(k1, k3) != 0u8 { return 8u64 }   /* VAL(NEG) vs VAL(POS): must differ */
+
+    /* null-out refused */
+    let znull : u64 = 0u64
+    let nullp : *u8 = znull as *u8
+    if nous_bkey(t3, nullp) != NBK_E_NULL { return 9u64 }
+
+    return 99u64
+}

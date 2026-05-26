@@ -1,0 +1,34 @@
+# III Stage-0 Ring-3 codegen output
+# Microsoft x64 ABI; gas syntax (AT&T); PE/COFF target
+    .att_syntax
+    .file 1 "<iii-source>"
+    .section .rodata
+    .section .rodata
+L_ANSWER:
+    .quad 0x2a
+    .section .iii.ring3,"n"
+    .asciz "main"
+    .text
+    .global main
+    .seh_proc main
+main:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq L_ANSWER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc

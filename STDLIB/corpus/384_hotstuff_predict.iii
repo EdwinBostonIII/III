@@ -1,0 +1,6 @@
+/* 384 — V1 Stage 5 predictive quorum: deterministic redundant quorum of size
+ * 2f+1+k anchored at leader=view mod n (NO observational learning — closed form
+ * of (view,n,f), re-derivable, leader-anchored, rotates with view). */
+module corpus_384
+extern @abi(c-msvc-x64) fn hsp_selftest() -> u64 from "hotstuff_predict.iii"
+fn main() -> u64 { return hsp_selftest() }

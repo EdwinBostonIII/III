@@ -1,0 +1,10 @@
+module corpus_23
+
+struct Point {
+    x: u64,
+    y: u64,
+}
+
+fn main() -> u64 {
+    return 0
+}

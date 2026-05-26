@@ -1,0 +1,691 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\http_client.iii
+ *
+ * III STDLIB - aether::http_client
+ *
+ * RFC 7230 / 9112 HTTP/1.1 client surface, split into pure-functional
+ * request building (atop verba/builder) and response parsing
+ * (independent of net.iii so it can be unit-tested deterministically).
+ *
+ * REQUEST BUILDING (pushes into a builder you supply):
+ *   http_method          builder_id, method_base, method_len   "METHOD "
+ *   http_path            builder_id, path_base, path_len       "PATH HTTP/1.1\r\n"
+ *   http_header_name     builder_id, name_base, name_len       "name: "
+ *   http_header_value    builder_id, value_base, value_len     "value\r\n"
+ *   http_end_headers     builder_id                            "\r\n"
+ *   http_body            builder_id, body_base, body_len       (raw bytes)
+ *
+ * RESPONSE PARSING (returns a 1-indexed slot id, 0 on failure):
+ *   http_parse_response  arena, raw_base, raw_len      -> id
+ *   http_response_status                  id           -> u32   (e.g. 200)
+ *   http_response_status_text_base        id           -> u64
+ *   http_response_status_text_len         id           -> u64
+ *   http_response_header_count            id           -> u64
+ *   http_response_header_name_base        id, hdr_idx  -> u64
+ *   http_response_header_name_len         id, hdr_idx  -> u64
+ *   http_response_header_value_base       id, hdr_idx  -> u64
+ *   http_response_header_value_len        id, hdr_idx  -> u64
+ *   http_response_header_find_ci          id, name_base, name_len -> i64 (-1 if absent)
+ *   http_response_body_base               id           -> u64
+ *   http_response_body_len                id           -> u64
+ *   http_response_drop                    id           -> i32
+ *
+ * Body decoding modes (per RFC 7230 §3.3.3):
+ *   1. Transfer-Encoding: chunked        -> chunked decode into arena buffer
+ *   2. Content-Length: N                  -> N bytes after \r\n\r\n
+ *   3. Neither                            -> rest of buffer (until close/EOF)
+ *
+ * W1-W13 discipline:
+ *   - W2  4-arg fn cap respected throughout.  Parser uses module-scope cursor
+ *         (HTTP_PARSE_*) so helpers stay at <=4 params.
+ *   - W3  No &GLOBAL[0]; literals pushed byte-by-byte via helpers.
+ *   - W7  No (paren-cast).  Cast operands kept in named lets.
+ *   - W9  No local fixed arrays; all pools are module-scope.
+ *   - W11 No i32 negative `<`/`>=`; comparisons use `==`.
+ *   - W13 <=20 named locals per function.
+ *
+ * Hexad: kind_passage.  Ring: R-1 (network-protocol).  K: 0.95.
+ */
+
+module aether_http_client
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn str_ascii_eq_ci(a: u64, alen: u64, b: u64, blen: u64) -> u8 from "normalise_ascii.iii"
+
+/* ----------- Public constants ----------- */
+
+const HTTP_OK         : i32 =  0i32
+const HTTP_E_PARSE    : i32 = -1i32
+const HTTP_E_BADID    : i32 = -2i32
+const HTTP_E_OOM      : i32 = -3i32
+const HTTP_E_TOOMANY  : i32 = -4i32
+
+const HTTP_RESP_MAX   : u32 = 64u32
+const HTTP_HDR_MAX    : u64 = 64u64       /* per response */
+const HTTP_HDR_TOTAL  : u64 = 4096u64     /* 64 * 64 */
+
+/* ----------- Response slot table ----------- */
+
+var HTTP_RESP_STATUS         : [u64; 64]
+var HTTP_RESP_TEXT_BASE      : [u64; 64]
+var HTTP_RESP_TEXT_LEN       : [u64; 64]
+var HTTP_RESP_HEADERS_COUNT  : [u64; 64]
+var HTTP_RESP_BODY_BASE      : [u64; 64]
+var HTTP_RESP_BODY_LEN       : [u64; 64]
+var HTTP_RESP_LIVE           : [u8;  64]
+
+/* Per-header parallel arrays.  Header j of response i lives at index
+ * (i * 64 + j). */
+var HTTP_HDR_NAME_BASE  : [u64; 4096]
+var HTTP_HDR_NAME_LEN   : [u64; 4096]
+var HTTP_HDR_VALUE_BASE : [u64; 4096]
+var HTTP_HDR_VALUE_LEN  : [u64; 4096]
+
+/* ----------- Parser cursor (module-scope) ----------- */
+
+var HTTP_PARSE_RAW_BASE : u64 = 0u64
+var HTTP_PARSE_RAW_LEN  : u64 = 0u64
+var HTTP_PARSE_CURSOR   : u64 = 0u64
+
+/* ----------- Slot allocator ----------- */
+
+fn http_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < HTTP_RESP_MAX {
+        if HTTP_RESP_LIVE[i] == 0u8 {
+            HTTP_RESP_LIVE[i] = 1u8
+            HTTP_RESP_STATUS[i] = 0u64
+            HTTP_RESP_TEXT_BASE[i] = 0u64
+            HTTP_RESP_TEXT_LEN[i] = 0u64
+            HTTP_RESP_HEADERS_COUNT[i] = 0u64
+            HTTP_RESP_BODY_BASE[i] = 0u64
+            HTTP_RESP_BODY_LEN[i] = 0u64
+            return i
+        }
+        i = i + 1u32
+    }
+    return HTTP_RESP_MAX
+}
+
+/* Validate a 1-indexed handle and return the 0-based slot index, or
+ * HTTP_RESP_MAX on failure. */
+fn http_resolve_id(id: u64) -> u32 {
+    if id == 0u64 { return HTTP_RESP_MAX }
+    let idx_u64 : u64 = id - 1u64
+    if idx_u64 >= (HTTP_RESP_MAX as u64) { return HTTP_RESP_MAX }
+    let idx : u32 = idx_u64 as u32
+    if HTTP_RESP_LIVE[idx] == 0u8 { return HTTP_RESP_MAX }
+    return idx
+}
+
+/* ----------- Request building helpers ----------- */
+
+fn http_push_crlf(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 13u32)
+    builder_push_byte(builder_id, 10u32)
+    return HTTP_OK
+}
+
+fn http_push_space(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 32u32)
+    return HTTP_OK
+}
+
+fn http_push_colon_space(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 58u32)
+    builder_push_byte(builder_id, 32u32)
+    return HTTP_OK
+}
+
+fn http_push_http11_crlf(builder_id: u64) -> i32 {
+    builder_push_byte(builder_id, 32u32)   /* space */
+    builder_push_byte(builder_id, 72u32)   /* H */
+    builder_push_byte(builder_id, 84u32)   /* T */
+    builder_push_byte(builder_id, 84u32)   /* T */
+    builder_push_byte(builder_id, 80u32)   /* P */
+    builder_push_byte(builder_id, 47u32)   /* / */
+    builder_push_byte(builder_id, 49u32)   /* 1 */
+    builder_push_byte(builder_id, 46u32)   /* . */
+    builder_push_byte(builder_id, 49u32)   /* 1 */
+    builder_push_byte(builder_id, 13u32)   /* \r */
+    builder_push_byte(builder_id, 10u32)   /* \n */
+    return HTTP_OK
+}
+
+fn http_method(builder_id: u64, method_base: u64, method_len: u64) -> i32 @export {
+    builder_push_bytes(builder_id, method_base, method_len)
+    return http_push_space(builder_id)
+}
+
+fn http_path(builder_id: u64, path_base: u64, path_len: u64) -> i32 @export {
+    builder_push_bytes(builder_id, path_base, path_len)
+    return http_push_http11_crlf(builder_id)
+}
+
+fn http_header_name(builder_id: u64, name_base: u64, name_len: u64) -> i32 @export {
+    builder_push_bytes(builder_id, name_base, name_len)
+    return http_push_colon_space(builder_id)
+}
+
+fn http_header_value(builder_id: u64, value_base: u64, value_len: u64) -> i32 @export {
+    builder_push_bytes(builder_id, value_base, value_len)
+    return http_push_crlf(builder_id)
+}
+
+fn http_end_headers(builder_id: u64) -> i32 @export {
+    return http_push_crlf(builder_id)
+}
+
+fn http_body(builder_id: u64, body_base: u64, body_len: u64) -> i32 @export {
+    return builder_push_bytes(builder_id, body_base, body_len)
+}
+
+/* ----------- Parser primitives over module cursor ----------- */
+
+/* Read byte at HTTP_PARSE_RAW_BASE + off; returns 0x100 if out-of-bounds. */
+fn http_byte_at(off: u64) -> u32 {
+    if off >= HTTP_PARSE_RAW_LEN { return 0x100u32 }
+    let p : *u8 = (HTTP_PARSE_RAW_BASE + off) as *u8
+    return p[0u64] as u32
+}
+
+/* Match \r\n at cursor.  Returns 1 if matched, 0 otherwise. */
+fn http_at_crlf() -> u8 {
+    let b0 : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+    let b1 : u32 = http_byte_at(HTTP_PARSE_CURSOR + 1u64)
+    if b0 == 13u32 {
+        if b1 == 10u32 { return 1u8 }
+    }
+    return 0u8
+}
+
+/* Skip ASCII OWS (SP, HT) at cursor. */
+fn http_skip_ows() -> i32 {
+    while HTTP_PARSE_CURSOR < HTTP_PARSE_RAW_LEN {
+        let b : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+        if b == 32u32 {
+            HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+        } else {
+            if b == 9u32 {
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            } else {
+                return HTTP_OK
+            }
+        }
+    }
+    return HTTP_OK
+}
+
+/* Parse status line: "HTTP/<major>.<minor> <code3> <text>\r\n".
+ * Stores status_code, text_base, text_len in slot. */
+fn http_parse_status_line(slot_idx: u32) -> i32 {
+    let slot_idx : u32 = (((slot_idx as u64) & 0xFFFFFFFFu64) as u32)
+    /* Match "HTTP/" prefix */
+    if HTTP_PARSE_RAW_LEN < 9u64 { return HTTP_E_PARSE }
+    let p0 : u32 = http_byte_at(0u64)
+    let p1 : u32 = http_byte_at(1u64)
+    let p2 : u32 = http_byte_at(2u64)
+    let p3 : u32 = http_byte_at(3u64)
+    let p4 : u32 = http_byte_at(4u64)
+    if p0 != 72u32 { return HTTP_E_PARSE }   /* H */
+    if p1 != 84u32 { return HTTP_E_PARSE }   /* T */
+    if p2 != 84u32 { return HTTP_E_PARSE }   /* T */
+    if p3 != 80u32 { return HTTP_E_PARSE }   /* P */
+    if p4 != 47u32 { return HTTP_E_PARSE }   /* / */
+    HTTP_PARSE_CURSOR = 5u64
+    /* Skip version digits/dot until first space. */
+    let mut going_ver : u8 = 1u8
+    while going_ver == 1u8 {
+        if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { going_ver = 0u8 }
+        if going_ver == 1u8 {
+            let b : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+            if b == 32u32 {
+                going_ver = 0u8
+            } else {
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+    HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64   /* past space */
+    /* Read 3-digit status code. */
+    if HTTP_PARSE_CURSOR + 3u64 > HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+    let d0 : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+    let d1 : u32 = http_byte_at(HTTP_PARSE_CURSOR + 1u64)
+    let d2 : u32 = http_byte_at(HTTP_PARSE_CURSOR + 2u64)
+    if d0 < 48u32 { return HTTP_E_PARSE }
+    if d0 > 57u32 { return HTTP_E_PARSE }
+    if d1 < 48u32 { return HTTP_E_PARSE }
+    if d1 > 57u32 { return HTTP_E_PARSE }
+    if d2 < 48u32 { return HTTP_E_PARSE }
+    if d2 > 57u32 { return HTTP_E_PARSE }
+    let s0 : u32 = d0 - 48u32
+    let s1 : u32 = d1 - 48u32
+    let s2 : u32 = d2 - 48u32
+    let status : u32 = s0 * 100u32 + s1 * 10u32 + s2
+    HTTP_RESP_STATUS[slot_idx] = status as u64
+    HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 3u64
+    /* Optional space + reason phrase. */
+    let after_code : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+    if after_code == 32u32 { HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64 }
+    let text_off : u64 = HTTP_PARSE_CURSOR
+    let mut going_text : u8 = 1u8
+    while going_text == 1u8 {
+        if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { going_text = 0u8 }
+        if going_text == 1u8 {
+            if http_at_crlf() == 1u8 {
+                going_text = 0u8
+            } else {
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+    HTTP_RESP_TEXT_BASE[slot_idx] = HTTP_PARSE_RAW_BASE + text_off
+    HTTP_RESP_TEXT_LEN[slot_idx]  = HTTP_PARSE_CURSOR - text_off
+    HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 2u64   /* past \r\n */
+    return HTTP_OK
+}
+
+/* Parse one header line.  Returns 0 on success, 1 on end-of-headers
+ * (empty CRLF), HTTP_E_PARSE on parse failure. */
+fn http_parse_one_header(slot_idx: u32) -> i32 {
+    /* Empty line check. */
+    if http_at_crlf() == 1u8 {
+        HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 2u64
+        return 1i32
+    }
+    /* Read name until ':'. */
+    let name_off : u64 = HTTP_PARSE_CURSOR
+    let mut going_name : u8 = 1u8
+    while going_name == 1u8 {
+        if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { going_name = 0u8 }
+        if going_name == 1u8 {
+            let b : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+            if b == 58u32 {
+                going_name = 0u8
+            } else {
+                if b == 13u32 { return HTTP_E_PARSE }
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+    let name_len : u64 = HTTP_PARSE_CURSOR - name_off
+    if name_len == 0u64 { return HTTP_E_PARSE }
+    HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64   /* past ':' */
+    http_skip_ows()
+    /* Read value until \r\n. */
+    let value_off : u64 = HTTP_PARSE_CURSOR
+    let mut going_val : u8 = 1u8
+    while going_val == 1u8 {
+        if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { going_val = 0u8 }
+        if going_val == 1u8 {
+            if http_at_crlf() == 1u8 {
+                going_val = 0u8
+            } else {
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+    let value_len_raw : u64 = HTTP_PARSE_CURSOR - value_off
+    HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 2u64   /* past \r\n */
+    /* Trim trailing OWS. */
+    let mut v_end : u64 = value_len_raw
+    let mut trimming : u8 = 1u8
+    while trimming == 1u8 {
+        if v_end == 0u64 { trimming = 0u8 }
+        if trimming == 1u8 {
+            let last_off : u64 = value_off + v_end - 1u64
+            let lb : u32 = http_byte_at(last_off)
+            if lb == 32u32 {
+                v_end = v_end - 1u64
+            } else {
+                if lb == 9u32 {
+                    v_end = v_end - 1u64
+                } else {
+                    trimming = 0u8
+                }
+            }
+        }
+    }
+    /* Store in per-response header table. */
+    let hcount : u64 = HTTP_RESP_HEADERS_COUNT[slot_idx]
+    if hcount >= HTTP_HDR_MAX { return HTTP_E_TOOMANY }
+    let hidx_u64 : u64 = (slot_idx as u64) * 64u64 + hcount
+    let hidx : u32 = hidx_u64 as u32
+    HTTP_HDR_NAME_BASE[hidx]  = HTTP_PARSE_RAW_BASE + name_off
+    HTTP_HDR_NAME_LEN[hidx]   = name_len
+    HTTP_HDR_VALUE_BASE[hidx] = HTTP_PARSE_RAW_BASE + value_off
+    HTTP_HDR_VALUE_LEN[hidx]  = v_end
+    HTTP_RESP_HEADERS_COUNT[slot_idx] = hcount + 1u64
+    return HTTP_OK
+}
+
+fn http_parse_headers(slot_idx: u32) -> i32 {
+    while HTTP_PARSE_CURSOR < HTTP_PARSE_RAW_LEN {
+        let r : i32 = http_parse_one_header(slot_idx)
+        if r == 1i32 { return HTTP_OK }   /* end-of-headers */
+        if r == HTTP_E_PARSE { return HTTP_E_PARSE }
+        if r == HTTP_E_TOOMANY { return HTTP_E_TOOMANY }
+    }
+    return HTTP_E_PARSE
+}
+
+/* ----------- Header lookup helpers ----------- */
+
+fn http_response_header_name_base(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    if hdr_idx >= HTTP_RESP_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTP_HDR_NAME_BASE[hi]
+}
+
+fn http_response_header_name_len(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    if hdr_idx >= HTTP_RESP_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTP_HDR_NAME_LEN[hi]
+}
+
+fn http_response_header_value_base(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    if hdr_idx >= HTTP_RESP_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTP_HDR_VALUE_BASE[hi]
+}
+
+fn http_response_header_value_len(id: u64, hdr_idx: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    if hdr_idx >= HTTP_RESP_HEADERS_COUNT[idx] { return 0u64 }
+    let hi : u32 = ((idx as u64) * 64u64 + hdr_idx) as u32
+    return HTTP_HDR_VALUE_LEN[hi]
+}
+
+fn http_response_header_find_ci(id: u64, name_base: u64, name_len: u64) -> i64 @export {
+    let id_l        : u64 = id
+    let name_base_l : u64 = name_base
+    let name_len_l  : u64 = name_len
+    let idx_raw : u32 = http_resolve_id(id_l)
+    /* iiis-0 mitigation: explicit u64 mask of u32 idx to clear garbage
+     * high bits before any subsequent multiplication / array index. */
+    let idx_u64 : u64 = (idx_raw as u64) & 0xFFFFFFFFu64
+    let max_u64 : u64 = (HTTP_RESP_MAX as u64) & 0xFFFFFFFFu64
+    if idx_u64 == max_u64 { return -1i64 }
+    let idx : u32 = idx_u64 as u32
+    let hcount : u64 = HTTP_RESP_HEADERS_COUNT[idx]
+    let mut j : u64 = 0u64
+    while j < hcount {
+        let hi_u64 : u64 = idx_u64 * 64u64 + j
+        let hi : u32 = (hi_u64 & 0xFFFFFFFFu64) as u32
+        let nb : u64 = HTTP_HDR_NAME_BASE[hi]
+        let nl : u64 = HTTP_HDR_NAME_LEN[hi]
+        if str_ascii_eq_ci(nb, nl, name_base_l, name_len_l) == 1u8 {
+            return j as i64
+        }
+        j = j + 1u64
+    }
+    return -1i64
+}
+
+/* ----------- Content-Length parsing ----------- */
+
+fn http_parse_decimal_u64(base: u64, len: u64) -> u64 {
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    let p : *u8 = base as *u8
+    while i < len {
+        let b : u32 = p[i] as u32
+        if b < 48u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+        if b > 57u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+        let d : u64 = (b - 48u32) as u64
+        acc = acc * 10u64 + d
+        i = i + 1u64
+    }
+    return acc
+}
+
+/* Parse hex digits at cursor up to first non-hex.  Advances cursor.
+ * Returns the parsed value, or 0xFFFF_FFFF_FFFF_FFFF on no-digits. */
+fn http_read_chunk_size() -> u64 {
+    let mut acc : u64 = 0u64
+    let mut got : u8 = 0u8
+    let mut going_hex : u8 = 1u8
+    while going_hex == 1u8 {
+        if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { going_hex = 0u8 }
+        if going_hex == 1u8 {
+            let b : u32 = http_byte_at(HTTP_PARSE_CURSOR)
+            let mut d : u32 = 0xFFu32
+            if b >= 48u32 {
+                if b <= 57u32 { d = b - 48u32 }
+            }
+            if b >= 65u32 {
+                if b <= 70u32 { d = b - 55u32 }
+            }
+            if b >= 97u32 {
+                if b <= 102u32 { d = b - 87u32 }
+            }
+            if d == 0xFFu32 {
+                going_hex = 0u8
+            } else {
+                acc = acc * 16u64 + (d as u64)
+                got = 1u8
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if got == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    /* Skip optional chunk extensions (anything before \r\n). */
+    let mut going_ext : u8 = 1u8
+    while going_ext == 1u8 {
+        if HTTP_PARSE_CURSOR >= HTTP_PARSE_RAW_LEN { going_ext = 0u8 }
+        if going_ext == 1u8 {
+            if http_at_crlf() == 1u8 {
+                going_ext = 0u8
+            } else {
+                HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 1u64
+            }
+        }
+    }
+    if http_at_crlf() == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 2u64
+    return acc
+}
+
+fn http_chunked_decode(arena: u64, slot_idx: u32) -> i32 {
+    /* Upper bound: remaining buffer is at least decoded body's size. */
+    let remaining : u64 = HTTP_PARSE_RAW_LEN - HTTP_PARSE_CURSOR
+    let accum : u64 = arena_alloc1(arena, remaining)
+    if accum == 0u64 { return HTTP_E_OOM }
+    let dst : *u8 = accum as *u8
+    let mut written : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let sz : u64 = http_read_chunk_size()
+        if sz == 0xFFFFFFFFFFFFFFFFu64 { return HTTP_E_PARSE }
+        if sz == 0u64 { done = 1u8 }
+        if done == 0u8 {
+            if HTTP_PARSE_CURSOR + sz > HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+            let src : *u8 = (HTTP_PARSE_RAW_BASE + HTTP_PARSE_CURSOR) as *u8
+            let mut k : u64 = 0u64
+            while k < sz {
+                dst[written + k] = src[k]
+                k = k + 1u64
+            }
+            written = written + sz
+            HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + sz
+            if http_at_crlf() == 0u8 { return HTTP_E_PARSE }
+            HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + 2u64
+        }
+    }
+    HTTP_RESP_BODY_BASE[slot_idx] = accum
+    HTTP_RESP_BODY_LEN[slot_idx]  = written
+    return HTTP_OK
+}
+
+/* ----------- Body framing dispatch ----------- */
+
+fn http_parse_body(arena: u64, slot_idx: u32) -> i32 {
+    let slot_idx : u32 = (((slot_idx as u64) & 0xFFFFFFFFu64) as u32)
+    /* Look up Transfer-Encoding header. */
+    let id : u64 = ((slot_idx as u64) & 0xFFFFFFFFu64) + 1u64
+    /* "Transfer-Encoding" = 17 chars at fixed-string buffer; build inline. */
+    let te_lit : u64 = arena_alloc1(arena, 17u64)
+    if te_lit == 0u64 { return HTTP_E_OOM }
+    let tep : *u8 = te_lit as *u8
+    tep[0]  = 84u8   /* T */
+    tep[1]  = 114u8  /* r */
+    tep[2]  = 97u8   /* a */
+    tep[3]  = 110u8  /* n */
+    tep[4]  = 115u8  /* s */
+    tep[5]  = 102u8  /* f */
+    tep[6]  = 101u8  /* e */
+    tep[7]  = 114u8  /* r */
+    tep[8]  = 45u8   /* - */
+    tep[9]  = 69u8   /* E */
+    tep[10] = 110u8  /* n */
+    tep[11] = 99u8   /* c */
+    tep[12] = 111u8  /* o */
+    tep[13] = 100u8  /* d */
+    tep[14] = 105u8  /* i */
+    tep[15] = 110u8  /* n */
+    tep[16] = 103u8  /* g */
+    let te_idx : i64 = http_response_header_find_ci(id, te_lit, 17u64)
+    /* W11 discipline: signed i64 ordering compares (>=, <, <=, >) trip
+     * an iiis-0 codegen bug that produces SIGSEGV.  Use `==`/`!=` only.
+     * `http_response_header_find_ci` returns -1 on not-found, otherwise
+     * a valid >= 0 index, so the != -1 form is semantically identical. */
+    if te_idx != -1i64 {
+        /* Check value contains "chunked" (case-insensitive equality of full value). */
+        let vh : u32 = ((slot_idx as u64) * 64u64 + (te_idx as u64)) as u32
+        let vb : u64 = HTTP_HDR_VALUE_BASE[vh]
+        let vl : u64 = HTTP_HDR_VALUE_LEN[vh]
+        let chunked_lit : u64 = arena_alloc1(arena, 7u64)
+        if chunked_lit == 0u64 { return HTTP_E_OOM }
+        let cp : *u8 = chunked_lit as *u8
+        cp[0] = 99u8   /* c */
+        cp[1] = 104u8  /* h */
+        cp[2] = 117u8  /* u */
+        cp[3] = 110u8  /* n */
+        cp[4] = 107u8  /* k */
+        cp[5] = 101u8  /* e */
+        cp[6] = 100u8  /* d */
+        if str_ascii_eq_ci(vb, vl, chunked_lit, 7u64) == 1u8 {
+            return http_chunked_decode(arena, slot_idx)
+        }
+    }
+    /* Look up Content-Length. */
+    let cl_lit : u64 = arena_alloc1(arena, 14u64)
+    if cl_lit == 0u64 { return HTTP_E_OOM }
+    let clp : *u8 = cl_lit as *u8
+    clp[0]  = 67u8   /* C */
+    clp[1]  = 111u8  /* o */
+    clp[2]  = 110u8  /* n */
+    clp[3]  = 116u8  /* t */
+    clp[4]  = 101u8  /* e */
+    clp[5]  = 110u8  /* n */
+    clp[6]  = 116u8  /* t */
+    clp[7]  = 45u8   /* - */
+    clp[8]  = 76u8   /* L */
+    clp[9]  = 101u8  /* e */
+    clp[10] = 110u8  /* n */
+    clp[11] = 103u8  /* g */
+    clp[12] = 116u8  /* t */
+    clp[13] = 104u8  /* h */
+    let cl_idx : i64 = http_response_header_find_ci(id, cl_lit, 14u64)
+    /* W11 discipline: see comment on te_idx above. */
+    if cl_idx != -1i64 {
+        let cl_idx_u64 : u64 = (cl_idx as u64) & 0xFFFFFFFFu64
+        let slot_u64 : u64 = (slot_idx as u64) & 0xFFFFFFFFu64
+        let vh_u64 : u64 = slot_u64 * 64u64 + cl_idx_u64
+        let vh : u32 = (vh_u64 & 0xFFFFFFFFu64) as u32
+        let vb : u64 = HTTP_HDR_VALUE_BASE[vh]
+        let vl : u64 = HTTP_HDR_VALUE_LEN[vh]
+        let n : u64 = http_parse_decimal_u64(vb, vl)
+        if n == 0xFFFFFFFFFFFFFFFFu64 { return HTTP_E_PARSE }
+        if HTTP_PARSE_CURSOR + n > HTTP_PARSE_RAW_LEN { return HTTP_E_PARSE }
+        HTTP_RESP_BODY_BASE[slot_idx] = HTTP_PARSE_RAW_BASE + HTTP_PARSE_CURSOR
+        HTTP_RESP_BODY_LEN[slot_idx]  = n
+        HTTP_PARSE_CURSOR = HTTP_PARSE_CURSOR + n
+        return HTTP_OK
+    }
+    /* Fallback: rest of buffer. */
+    HTTP_RESP_BODY_BASE[slot_idx] = HTTP_PARSE_RAW_BASE + HTTP_PARSE_CURSOR
+    HTTP_RESP_BODY_LEN[slot_idx]  = HTTP_PARSE_RAW_LEN - HTTP_PARSE_CURSOR
+    HTTP_PARSE_CURSOR = HTTP_PARSE_RAW_LEN
+    return HTTP_OK
+}
+
+/* ----------- Public parse entry ----------- */
+
+fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
+    HTTP_PARSE_RAW_BASE = raw_base
+    HTTP_PARSE_RAW_LEN  = raw_len
+    HTTP_PARSE_CURSOR   = 0u64
+    let slot : u32 = http_alloc_slot()
+    if slot >= HTTP_RESP_MAX { return 0u64 }
+    if http_parse_status_line(slot) != HTTP_OK {
+        HTTP_RESP_LIVE[slot] = 0u8
+        return 0u64
+    }
+    if http_parse_headers(slot) != HTTP_OK {
+        HTTP_RESP_LIVE[slot] = 0u8
+        return 0u64
+    }
+    if http_parse_body(arena, slot) != HTTP_OK {
+        HTTP_RESP_LIVE[slot] = 0u8
+        return 0u64
+    }
+    return (slot as u64) + 1u64
+}
+
+/* ----------- Public response accessors ----------- */
+
+fn http_response_status(id: u64) -> u32 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u32 }
+    return HTTP_RESP_STATUS[idx] as u32
+}
+
+fn http_response_status_text_base(id: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    return HTTP_RESP_TEXT_BASE[idx]
+}
+
+fn http_response_status_text_len(id: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    return HTTP_RESP_TEXT_LEN[idx]
+}
+
+fn http_response_header_count(id: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    return HTTP_RESP_HEADERS_COUNT[idx]
+}
+
+fn http_response_body_base(id: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    return HTTP_RESP_BODY_BASE[idx]
+}
+
+fn http_response_body_len(id: u64) -> u64 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return 0u64 }
+    return HTTP_RESP_BODY_LEN[idx]
+}
+
+fn http_response_drop(id: u64) -> i32 @export {
+    let idx : u32 = http_resolve_id(id)
+    if idx == HTTP_RESP_MAX { return HTTP_E_BADID }
+    HTTP_RESP_LIVE[idx] = 0u8
+    return HTTP_OK
+}

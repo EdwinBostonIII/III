@@ -1,0 +1,33 @@
+/* net: pack sockaddr_in for 127.0.0.1:8080 and verify byte layout */
+module corpus_d51
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf: u64, ip: u32, port: u32) -> u32 from "net.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(16u64)
+    /* 127.0.0.1 packed = 0x7F000001 */
+    let ip : u32 = 0x7F000001u32
+    let port : u32 = 8080u32   /* 0x1F90 */
+    net_pack_sockaddr_ipv4(buf as u64, ip, port)
+    /* AF_INET = 2 (LE) */
+    if buf[0] != 2u8 { return 1u64 }
+    if buf[1] != 0u8 { return 2u64 }
+    /* port BE: 0x1F, 0x90 */
+    if buf[2] != 0x1Fu8 { return 3u64 }
+    if buf[3] != 0x90u8 { return 4u64 }
+    /* IP BE: 127, 0, 0, 1 */
+    if buf[4] != 127u8 { return 5u64 }
+    if buf[5] != 0u8 { return 6u64 }
+    if buf[6] != 0u8 { return 7u64 }
+    if buf[7] != 1u8 { return 8u64 }
+    /* zero pad */
+    let mut i : u64 = 8u64
+    while i < 16u64 {
+        if buf[i] != 0u8 { return 9u64 }
+        i = i + 1u64
+    }
+    free(buf)
+    return 99u64
+}

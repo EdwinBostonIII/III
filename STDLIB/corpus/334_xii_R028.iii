@@ -1,0 +1,30 @@
+/* corpus/334_xii_R028.iii  -- R028 [H1] Parallel Acts same state */
+
+module corpus_334_xii_R028
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_tables_reset() -> i32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_commute_set(t1: u8, t2: u8) -> i32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_compose_set(t1: u8, t2: u8, result: u8) -> i32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    xii_rewrite_tables_reset()
+    /* Register transitions 0x10 and 0x20 as commutable; compose to 0x30. */
+    xii_rewrite_commute_set(0x10u8, 0x20u8)
+    xii_rewrite_compose_set(0x10u8, 0x20u8, 0x30u8)
+    /* K05_ACT subform: low 9 = state_reg, high = transition_id.
+     * state_reg = 5, transition_a = 0x10, transition_b = 0x20 */
+    let a : u32 = xii_term_make_basis(4u8, (0x10u32 << 9u32) | 5u32)
+    let b : u32 = xii_term_make_basis(4u8, (0x20u32 << 9u32) | 5u32)
+    let t : u32 = xii_term_make_fusion2(18u8, a, b)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 28u32 { return 1u64 }
+    if xii_term_get_kind(r) != 4u8 { return 2u64 }
+    return 0u64
+}

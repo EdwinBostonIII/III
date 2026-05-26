@@ -1,0 +1,61 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\264_k_floor_static.iii
+ *
+ * III conformance corpus 264 -- @k_max static K-floor propagation.
+ *
+ * Phase 3 Step 3 iiis-1 STATIC type-system check.
+ *
+ * When a caller fn declares `@k_max(N_A)` and calls a callee fn
+ * declared `@k_max(N_B)`, the codegen asserts `N_A >= N_B` at codegen
+ * time.  If `N_A < N_B`, the caller can enter at K = N_A < N_B and
+ * the callee MUST deny -- a structurally-unreachable success path,
+ * dead-on-arrival.  Codegen rejects.
+ *
+ * This file is the POSITIVE case: caller declares a HIGHER (more
+ * permissive) floor than the callee.  Codegen accepts; runtime gates
+ * fire correctly against an in-budget ctx.
+ *
+ * Mandate 7: pure integer comparison over declared metadata.
+ */
+module corpus_264
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+
+const C264_K_HIGH : u64 = 800000000u64
+const C264_K_LOW  : u64 = 400000000u64
+
+/* Low-floor leaf: callable when K >= 0.4. */
+fn _leaf_low_k(ctx: u64) -> u64 @k_max(400000000u64) {
+    let _unused : u64 = ctx
+    return 0xCCCCu64
+}
+
+/* High-floor caller: declares K >= 0.8 (more permissive caller).
+ * Calls _leaf_low_k which requires only K >= 0.4.
+ * Static check: 0.8 >= 0.4  -> compiles.
+ * Runtime: with ctx K=1.0, both prologue checks pass. */
+fn _outer_high_k(ctx: u64) -> u64 @k_max(800000000u64) {
+    let _unused : u64 = ctx
+    let r : u64 = _leaf_low_k(ctx)
+    return r
+}
+
+fn main() -> u64 {
+    /* Default kchain has K=1.0 -- above both floors. */
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    call_context_init_set(0u64, kch as u8, 2u8, 0u8)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 2u64 }
+
+    /* Both calls pass the static check at codegen time and the
+     * runtime prologue check at execution time. */
+    let r1 : u64 = _leaf_low_k(ctx)
+    if r1 != 0xCCCCu64 { return 3u64 }
+
+    let r2 : u64 = _outer_high_k(ctx)
+    if r2 != 0xCCCCu64 { return 4u64 }
+
+    return 99u64
+}

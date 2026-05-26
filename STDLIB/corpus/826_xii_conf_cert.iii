@@ -1,0 +1,10 @@
+/* 826 -- xii_conf_cert: the sealed Confluence-Core Certificate.  Drives xcc_selftest: the cert
+ * VERIFIES against the live rule semantics (1); the rule mhash is deterministic + non-trivial (2-3);
+ * the deep re-prover AGREES with the seal -- 20 non-joins, all route-R, 0 boundary, root-confluent,
+ * terminating, admitted (4); and the falsifiers fire -- a flipped-byte mhash does NOT verify (5), a
+ * non-joining (collapse x lift) pair is non-reorderable in both directions (6-7), and the LHS-disjoint
+ * trit block is freely reorderable (8).  Exit 99 = the confluence proof is sealed, content-addressed,
+ * and re-checkable.  Gated by run_corpus.sh. */
+module corpus_826
+extern @abi(c-msvc-x64) fn xcc_selftest() -> u64 from "xii_conf_cert.iii"
+fn main() -> u64 { return xcc_selftest() }

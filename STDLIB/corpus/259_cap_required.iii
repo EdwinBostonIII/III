@@ -1,0 +1,98 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\259_cap_required.iii
+ *
+ * III conformance corpus 259 -- @cap_required iiis-1 annotation
+ * with runtime prologue enforcement.
+ *
+ * Phase 3 Step 3: a fn annotated @cap_required(MASK) and accepting a
+ * `ctx` parameter now emits a prologue that calls cap_verify_rights.
+ * On denial, the fn returns the privacy-preserving sentinel value
+ * 0xFFFFFFFFFFFFFFFF — externally indistinguishable from "fn not found"
+ * (preserves the AI-safety property that callers cannot probe which
+ * capabilities they lack).
+ *
+ * Asserts:
+ *   1. A @cap_required fn called with a cap holding the required mask
+ *      returns its normal result.
+ *   2. The same fn called with a cap LACKING the required mask returns
+ *      0xFFFFFFFFFFFFFFFF (the cap-denied sentinel).
+ *   3. A @cap_required fn called with cap_id=0 (no capability) is treated
+ *      as denied: cap_verify_rights(0, MASK) returns 0.
+ */
+module corpus_259
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+
+const C259_RIGHT_CRYPTO_SIGN : u64 = 0x1000u64
+const C259_RIGHT_NET_DIAL    : u64 = 0x0020u64
+
+const C259_FAIL_SENTINEL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Fn that requires CRYPTO_SIGN.  Returns 0x42 on success. */
+fn _signing_op(ctx: u64) -> u64 @cap_required(0x1000u64) {
+    let _unused : u64 = ctx
+    return 0x42u64
+}
+
+/* Fn with no @cap_required — should always succeed. */
+fn _plain_op(ctx: u64) -> u64 {
+    let _unused : u64 = ctx
+    return 0x99u64
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    if env == 0u64 { return 1u64 }
+
+    /* Cap A: holds CRYPTO_SIGN (granted). */
+    let cap_signing : u64 = cap_attenuate(env, C259_RIGHT_CRYPTO_SIGN, 0u64)
+    if cap_signing == 0u64 { return 2u64 }
+
+    /* Cap B: holds only NET_DIAL (lacks CRYPTO_SIGN). */
+    let cap_netonly : u64 = cap_attenuate(env, C259_RIGHT_NET_DIAL, 0u64)
+    if cap_netonly == 0u64 { return 3u64 }
+
+    /* Build ctx for the signing-capable caller. */
+    let kch_a : u64 = kchain_new(0u64)
+    if kch_a == 0xFFFFFFFFFFFFFFFFu64 { return 4u64 }
+    call_context_init_set(cap_signing, kch_a as u8, 2u8, 1u8)
+    let ctx_a : u64 = call_context_new()
+    if ctx_a == 0u64 { return 5u64 }
+
+    /* Build ctx for the net-only caller. */
+    let kch_b : u64 = kchain_new(0u64)
+    if kch_b == 0xFFFFFFFFFFFFFFFFu64 { return 6u64 }
+    call_context_init_set(cap_netonly, kch_b as u8, 2u8, 1u8)
+    let ctx_b : u64 = call_context_new()
+    if ctx_b == 0u64 { return 7u64 }
+
+    /* Build ctx with cap_id=0 (no capability). */
+    let kch_c : u64 = kchain_new(0u64)
+    if kch_c == 0xFFFFFFFFFFFFFFFFu64 { return 8u64 }
+    call_context_init_set(0u64, kch_c as u8, 2u8, 1u8)
+    let ctx_c : u64 = call_context_new()
+    if ctx_c == 0u64 { return 9u64 }
+
+    /* Assertion 1: signing-capable caller -> normal result. */
+    let r_ok : u64 = _signing_op(ctx_a)
+    if r_ok != 0x42u64 { return 10u64 }
+
+    /* Assertion 2: net-only caller -> cap-denied sentinel. */
+    let r_denied : u64 = _signing_op(ctx_b)
+    if r_denied != C259_FAIL_SENTINEL { return 11u64 }
+
+    /* Assertion 3: no-cap caller -> cap-denied sentinel. */
+    let r_nocap : u64 = _signing_op(ctx_c)
+    if r_nocap != C259_FAIL_SENTINEL { return 12u64 }
+
+    /* Sanity: non-@cap_required fn ignores the cap. */
+    let r_plain_a : u64 = _plain_op(ctx_a)
+    if r_plain_a != 0x99u64 { return 13u64 }
+    let r_plain_b : u64 = _plain_op(ctx_b)
+    if r_plain_b != 0x99u64 { return 14u64 }
+
+    return 99u64
+}

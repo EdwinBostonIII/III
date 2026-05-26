@@ -1,0 +1,15 @@
+/* 697 -- h7_charter: the H7 ("one conscience") falsifier as a run_charter constitutional clause.
+ *
+ * H7: every guarantee is a constitutional clause (M10) carrying a PAIRED falsifier (verify AND
+ * falsify); the charter seal is the build's terminal gate.  Unlike the property-specific sibling
+ * H-charters, H7's invariant IS the constitution's paired-falsifier mechanism, so it is checked
+ * DIRECTLY over real ratified clauses folded through cons_clause_holds (the generic verify(good)
+ * AND falsify(bad) gate of 673_constitution_holds): a guarantee WITH a paired falsifier HOLDS, a
+ * clause WITHOUT a working falsifier is CAUGHT, and run_charter is a REAL terminal gate -- GREEN on
+ * the H7 conscience clause, RED on an injected canary that pretends an unfalsifiable claim holds.
+ * Main-corpus convention: rc 99 = pass; 1..8 = which h7_selftest assertion failed. */
+module corpus_697
+
+extern @abi(c-msvc-x64) fn h7_selftest() -> u64 from "h7_charter.iii"
+
+fn main() -> u64 { return h7_selftest() }

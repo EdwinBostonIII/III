@@ -1,0 +1,16 @@
+/* III conformance corpus 190 -- Stage 3.16: nested block comments.
+ * The iiis-0 lexer once ended a block comment at the first close marker
+ * regardless of nesting depth.  Fixed via depth-counted lexing: an inner
+ * open-marker raises the depth, so the comment ends only when the depth
+ * returns to zero.  The lines below nest one block comment inside another;
+ * if nesting were unsupported the trailing text would lex as code and the
+ * file would fail to compile.  (This header prose deliberately avoids any
+ * literal comment markers so it ends cleanly.)  Exit = 99. */
+module corpus_190
+
+/* outer /* inner */ still outer */
+
+fn main() -> u64 {
+    /* body /* nested */ comment */
+    return 99u64
+}

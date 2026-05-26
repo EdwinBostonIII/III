@@ -1,0 +1,715 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\mlkem.iii
+ *
+ * III STDLIB - numera::mlkem -- ML-KEM (FIPS 203 / Kyber) KEM.
+ * RITCHIE Stage 4.4.2: native .iii port of the now-correct (post-4.3, plain-
+ * zeta-fixed) CRYPTO-AGILITY/src/mlkem.c.  q = 3329, n = 256.
+ *
+ * Unsigned mod-q throughout (coeffs in [0,q)); dodges the iiis signed-ordering
+ * traps.  Storage: flat 64-slot pool; a "poly" is a slot index; NTT runs on a
+ * dedicated WORK slot (the §4.4.2-proven probe code) with copy-in/out;
+ * per-coeff + basemul ops are slot-indexed directly.
+ *
+ * Public surface (byte-compatible with the C ref for cross-KAT):
+ *   iii_mlkem_keygen(k, seed64, pk, sk) -> i32
+ *   iii_mlkem_encaps(k, pk, coins32, ct, ss32) -> i32
+ *   iii_mlkem_decaps(k, sk, ct, ss32) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module numera_mlkem
+
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) -> u64 from "keccak.iii"
+extern @abi(c-msvc-x64) fn shake256_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 from "shake256.iii"
+extern @abi(c-msvc-x64) fn sha3_512_oneshot(input_ptr: u64, input_len: u64, out_64: u64) -> u32 from "sha3_512.iii"
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+
+const KQ : u64 = 3329u64
+
+var KZ    : [u64; 128]    /* plain zetas */
+var KZINIT : [u64; 1]
+var KPOOL : [u32; 16384]  /* 64 slots * 256 */
+var KWORK : [u32; 256]
+
+/* per-k params */
+fn kem_eta1(k: u64) -> u64 { if k == 2u64 { return 3u64 } return 2u64 }
+fn kem_eta2(k: u64) -> u64 { return 2u64 }
+fn kem_du(k: u64) -> u64 { if k == 4u64 { return 11u64 } return 10u64 }
+fn kem_dv(k: u64) -> u64 { if k == 4u64 { return 5u64 } return 4u64 }
+
+fn kem_init_zetas() -> i32 {
+    if KZINIT[0] == 1u32 { return 0i32 }
+    KZ[0]=1u64 KZ[1]=1729u64 KZ[2]=2580u64 KZ[3]=3289u64 KZ[4]=2642u64 KZ[5]=630u64 KZ[6]=1897u64 KZ[7]=848u64
+    KZ[8]=1062u64 KZ[9]=1919u64 KZ[10]=193u64 KZ[11]=797u64 KZ[12]=2786u64 KZ[13]=3260u64 KZ[14]=569u64 KZ[15]=1746u64
+    KZ[16]=296u64 KZ[17]=2447u64 KZ[18]=1339u64 KZ[19]=1476u64 KZ[20]=3046u64 KZ[21]=56u64 KZ[22]=2240u64 KZ[23]=1333u64
+    KZ[24]=1426u64 KZ[25]=2094u64 KZ[26]=535u64 KZ[27]=2882u64 KZ[28]=2393u64 KZ[29]=2879u64 KZ[30]=1974u64 KZ[31]=821u64
+    KZ[32]=289u64 KZ[33]=331u64 KZ[34]=3253u64 KZ[35]=1756u64 KZ[36]=1197u64 KZ[37]=2304u64 KZ[38]=2277u64 KZ[39]=2055u64
+    KZ[40]=650u64 KZ[41]=1977u64 KZ[42]=2513u64 KZ[43]=632u64 KZ[44]=2865u64 KZ[45]=33u64 KZ[46]=1320u64 KZ[47]=1915u64
+    KZ[48]=2319u64 KZ[49]=1435u64 KZ[50]=807u64 KZ[51]=452u64 KZ[52]=1438u64 KZ[53]=2868u64 KZ[54]=1534u64 KZ[55]=2402u64
+    KZ[56]=2647u64 KZ[57]=2617u64 KZ[58]=1481u64 KZ[59]=648u64 KZ[60]=2474u64 KZ[61]=3110u64 KZ[62]=1227u64 KZ[63]=910u64
+    KZ[64]=17u64 KZ[65]=2761u64 KZ[66]=583u64 KZ[67]=2649u64 KZ[68]=1637u64 KZ[69]=723u64 KZ[70]=2288u64 KZ[71]=1100u64
+    KZ[72]=1409u64 KZ[73]=2662u64 KZ[74]=3281u64 KZ[75]=233u64 KZ[76]=756u64 KZ[77]=2156u64 KZ[78]=3015u64 KZ[79]=3050u64
+    KZ[80]=1703u64 KZ[81]=1651u64 KZ[82]=2789u64 KZ[83]=1789u64 KZ[84]=1847u64 KZ[85]=952u64 KZ[86]=1461u64 KZ[87]=2687u64
+    KZ[88]=939u64 KZ[89]=2308u64 KZ[90]=2437u64 KZ[91]=2388u64 KZ[92]=733u64 KZ[93]=2337u64 KZ[94]=268u64 KZ[95]=641u64
+    KZ[96]=1584u64 KZ[97]=2298u64 KZ[98]=2037u64 KZ[99]=3220u64 KZ[100]=375u64 KZ[101]=2549u64 KZ[102]=2090u64 KZ[103]=1645u64
+    KZ[104]=1063u64 KZ[105]=319u64 KZ[106]=2773u64 KZ[107]=757u64 KZ[108]=2099u64 KZ[109]=561u64 KZ[110]=2466u64 KZ[111]=2594u64
+    KZ[112]=2804u64 KZ[113]=1092u64 KZ[114]=403u64 KZ[115]=1026u64 KZ[116]=1143u64 KZ[117]=2150u64 KZ[118]=2775u64 KZ[119]=886u64
+    KZ[120]=1722u64 KZ[121]=1212u64 KZ[122]=1874u64 KZ[123]=1029u64 KZ[124]=2110u64 KZ[125]=2935u64 KZ[126]=885u64 KZ[127]=2154u64
+    KZINIT[0] = 1u32
+    return 0i32
+}
+
+fn kem_work_in(s: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let mut j : u64 = 0u64
+    while j < 256u64 { KWORK[j] = KPOOL[base + j] ; j = j + 1u64 }
+    return 0i32
+}
+fn kem_work_out(s: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let mut j : u64 = 0u64
+    while j < 256u64 { KPOOL[base + j] = KWORK[j] ; j = j + 1u64 }
+    return 0i32
+}
+
+/* incomplete 7-layer NTT on KWORK (proven §4.4.2) */
+fn kem_ntt_work() -> i32 {
+    let mut k : u64 = 1u64
+    let mut len : u64 = 128u64
+    while len >= 2u64 {
+        let mut start : u64 = 0u64
+        while start < 256u64 {
+            let z : u64 = KZ[k]
+            k = k + 1u64
+            let mut j : u64 = start
+            while j < start + len {
+                let t : u64 = (z * KWORK[j + len]) % KQ
+                let a : u64 = KWORK[j]
+                KWORK[j + len] = (a + KQ - t) % KQ
+                KWORK[j]       = (a + t) % KQ
+                j = j + 1u64
+            }
+            start = j + len
+        }
+        len = len >> 1u64
+    }
+    return 0i32
+}
+fn kem_invntt_work() -> i32 {
+    let mut k : u64 = 127u64
+    let mut len : u64 = 2u64
+    while len <= 128u64 {
+        let mut start : u64 = 0u64
+        while start < 256u64 {
+            let z : u64 = KZ[k]
+            k = k - 1u64
+            let mut j : u64 = start
+            while j < start + len {
+                let t : u64 = KWORK[j]
+                KWORK[j] = (t + KWORK[j + len]) % KQ
+                KWORK[j + len] = (z * ((KWORK[j + len] + KQ - t) % KQ)) % KQ
+                j = j + 1u64
+            }
+            start = j + len
+        }
+        len = len << 1u64
+    }
+    let mut j2 : u64 = 0u64
+    while j2 < 256u64 { KWORK[j2] = (KWORK[j2] * 3303u64) % KQ ; j2 = j2 + 1u64 }
+    return 0i32
+}
+fn kem_ntt(s: u64) -> i32 { kem_init_zetas() kem_work_in(s) kem_ntt_work() kem_work_out(s) return 0i32 }
+fn kem_invntt(s: u64) -> i32 { kem_init_zetas() kem_work_in(s) kem_invntt_work() kem_work_out(s) return 0i32 }
+
+/* basemul pair (degree-2 mod x^2 - zeta): r[i0..i0+1] = a (.) b */
+fn kem_basemul_pair(rs: u64, as_: u64, bs: u64, i0: u64, zeta: u64) -> i32 {
+    let ab : u64 = as_ * 256u64 + i0
+    let bb : u64 = bs * 256u64 + i0
+    let rb : u64 = rs * 256u64 + i0
+    let a0 : u64 = KPOOL[ab] as u64
+    let a1 : u64 = KPOOL[ab + 1u64] as u64
+    let b0 : u64 = KPOOL[bb] as u64
+    let b1 : u64 = KPOOL[bb + 1u64] as u64
+    let f11 : u64 = (a1 * b1) % KQ
+    KPOOL[rb]        = (((f11 * zeta) % KQ + (a0 * b0) % KQ) % KQ) as u32
+    KPOOL[rb + 1u64] = (((a0 * b1) % KQ + (a1 * b0) % KQ) % KQ) as u32
+    return 0i32
+}
+/* r = a (.) b in NTT domain (full poly, the basemul_acc pairing) */
+fn kem_basemul(rs: u64, as_: u64, bs: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 64u64 {
+        let z : u64 = KZ[64u64 + i]
+        kem_basemul_pair(rs, as_, bs, 4u64*i, z)
+        kem_basemul_pair(rs, as_, bs, 4u64*i + 2u64, (KQ - z) % KQ)
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* r = r + a (mod q), slot-indexed */
+fn kem_add(rs: u64, as_: u64) -> i32 {
+    let rb : u64 = rs * 256u64
+    let ab : u64 = as_ * 256u64
+    let mut j : u64 = 0u64
+    while j < 256u64 {
+        KPOOL[rb + j] = (((KPOOL[rb + j] as u64) + (KPOOL[ab + j] as u64)) % KQ) as u32
+        j = j + 1u64
+    }
+    return 0i32
+}
+
+/* ---- CBD noise (centered binomial), unsigned (a-b -> (a+q-b)%q) ---- */
+fn kem_cbd(s: u64, buf: u64, off: u64, eta: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let m : *u8 = buf as *u8
+    if eta == 2u64 {
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            let t : u64 = (m[off + 4u64*i] as u64) | ((m[off + 4u64*i + 1u64] as u64) << 8u64) | ((m[off + 4u64*i + 2u64] as u64) << 16u64) | ((m[off + 4u64*i + 3u64] as u64) << 24u64)
+            let d : u64 = (t & 0x55555555u64) + ((t >> 1u64) & 0x55555555u64)
+            let mut j : u64 = 0u64
+            while j < 8u64 {
+                let a : u64 = (d >> (4u64*j)) & 3u64
+                let b : u64 = (d >> (4u64*j + 2u64)) & 3u64
+                KPOOL[base + 8u64*i + j] = ((a + KQ - b) % KQ) as u32
+                j = j + 1u64
+            }
+            i = i + 1u64
+        }
+    } else {
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            let t : u64 = (m[off + 3u64*i] as u64) | ((m[off + 3u64*i + 1u64] as u64) << 8u64) | ((m[off + 3u64*i + 2u64] as u64) << 16u64)
+            let d : u64 = (t & 0x249249u64) + ((t >> 1u64) & 0x249249u64) + ((t >> 2u64) & 0x249249u64)
+            let mut j : u64 = 0u64
+            while j < 4u64 {
+                let a : u64 = (d >> (6u64*j)) & 7u64
+                let b : u64 = (d >> (6u64*j + 3u64)) & 7u64
+                KPOOL[base + 4u64*i + j] = ((a + KQ - b) % KQ) as u32
+                j = j + 1u64
+            }
+            i = i + 1u64
+        }
+    }
+    return 0i32
+}
+
+/* ---- poly_tobytes / frombytes (12-bit, 384 bytes/poly) ---- */
+fn kem_tobytes(s: u64, buf: u64, off: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let o : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 {
+        let t0 : u64 = (KPOOL[base + 2u64*i] as u64) % KQ
+        let t1 : u64 = (KPOOL[base + 2u64*i + 1u64] as u64) % KQ
+        o[off + 3u64*i]        = (t0 & 0xFFu64) as u8
+        o[off + 3u64*i + 1u64] = (((t0 >> 8u64) | (t1 << 4u64)) & 0xFFu64) as u8
+        o[off + 3u64*i + 2u64] = ((t1 >> 4u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn kem_frombytes(s: u64, buf: u64, off: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let o : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < 128u64 {
+        let b0 : u64 = o[off + 3u64*i] as u64
+        let b1 : u64 = o[off + 3u64*i + 1u64] as u64
+        let b2 : u64 = o[off + 3u64*i + 2u64] as u64
+        KPOOL[base + 2u64*i]        = ((b0 | (b1 << 8u64)) & 0xFFFu64) as u32
+        KPOOL[base + 2u64*i + 1u64] = (((b1 >> 4u64) | (b2 << 4u64)) & 0xFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ---- frommsg / tomsg ---- */
+fn kem_frommsg(s: u64, msg: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let m : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let mb : u64 = m[i] as u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let bit : u64 = (mb >> j) & 1u64
+            if bit == 1u64 { KPOOL[base + 8u64*i + j] = 1665u32 } else { KPOOL[base + 8u64*i + j] = 0u32 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn kem_tomsg(msg: u64, s: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let m : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let mut byte : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let c : u64 = (KPOOL[base + 8u64*i + j] as u64) % KQ
+            let mut t : u64 = ((c << 1u64) + 1664u64) / KQ
+            t = t & 1u64
+            byte = byte | (t << j)
+            j = j + 1u64
+        }
+        m[i] = (byte & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ---- compress / decompress (dv = message-poly v; du = u-vector polys) ----
+ * compress: t = (coeff*2^d + q/2) / q & mask ; decompress: (t*q + 2^(d-1)) / 2^d */
+fn kem_compress_dv(s: u64, buf: u64, off: u64, dv: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let o : *u8 = buf as *u8
+    if dv == 4u64 {
+        let mut i : u64 = 0u64
+        while i < 128u64 {
+            let x0 : u64 = (((KPOOL[base + 2u64*i] as u64) * 16u64 + 1664u64) / KQ) & 0xFu64
+            let x1 : u64 = (((KPOOL[base + 2u64*i + 1u64] as u64) * 16u64 + 1664u64) / KQ) & 0xFu64
+            o[off + i] = ((x0 | (x1 << 4u64)) & 0xFFu64) as u8
+            i = i + 1u64
+        }
+    } else {
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            let t0 : u64 = (((KPOOL[base + 8u64*i] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t1 : u64 = (((KPOOL[base + 8u64*i + 1u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t2 : u64 = (((KPOOL[base + 8u64*i + 2u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t3 : u64 = (((KPOOL[base + 8u64*i + 3u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t4 : u64 = (((KPOOL[base + 8u64*i + 4u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t5 : u64 = (((KPOOL[base + 8u64*i + 5u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t6 : u64 = (((KPOOL[base + 8u64*i + 6u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            let t7 : u64 = (((KPOOL[base + 8u64*i + 7u64] as u64) * 32u64 + 1664u64) / KQ) & 0x1Fu64
+            o[off + 5u64*i]        = ((t0 | (t1 << 5u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 1u64] = (((t1 >> 3u64) | (t2 << 2u64) | (t3 << 7u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 2u64] = (((t3 >> 1u64) | (t4 << 4u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 3u64] = (((t4 >> 4u64) | (t5 << 1u64) | (t6 << 6u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 4u64] = (((t6 >> 2u64) | (t7 << 3u64)) & 0xFFu64) as u8
+            i = i + 1u64
+        }
+    }
+    return 0i32
+}
+fn kem_decompress_dv(s: u64, buf: u64, off: u64, dv: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let o : *u8 = buf as *u8
+    if dv == 4u64 {
+        let mut i : u64 = 0u64
+        while i < 128u64 {
+            let r : u64 = o[off + i] as u64
+            KPOOL[base + 2u64*i]        = (((r & 0xFu64) * KQ + 8u64) / 16u64) as u32
+            KPOOL[base + 2u64*i + 1u64] = (((r >> 4u64) * KQ + 8u64) / 16u64) as u32
+            i = i + 1u64
+        }
+    } else {
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            let r0 : u64 = o[off + 5u64*i] as u64
+            let r1 : u64 = o[off + 5u64*i + 1u64] as u64
+            let r2 : u64 = o[off + 5u64*i + 2u64] as u64
+            let r3 : u64 = o[off + 5u64*i + 3u64] as u64
+            let r4 : u64 = o[off + 5u64*i + 4u64] as u64
+            let t0 : u64 = r0 & 0x1Fu64
+            let t1 : u64 = ((r0 >> 5u64) | (r1 << 3u64)) & 0x1Fu64
+            let t2 : u64 = (r1 >> 2u64) & 0x1Fu64
+            let t3 : u64 = ((r1 >> 7u64) | (r2 << 1u64)) & 0x1Fu64
+            let t4 : u64 = ((r2 >> 4u64) | (r3 << 4u64)) & 0x1Fu64
+            let t5 : u64 = (r3 >> 1u64) & 0x1Fu64
+            let t6 : u64 = ((r3 >> 6u64) | (r4 << 2u64)) & 0x1Fu64
+            let t7 : u64 = (r4 >> 3u64) & 0x1Fu64
+            KPOOL[base + 8u64*i]        = ((t0 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 1u64] = ((t1 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 2u64] = ((t2 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 3u64] = ((t3 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 4u64] = ((t4 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 5u64] = ((t5 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 6u64] = ((t6 * KQ + 16u64) / 32u64) as u32
+            KPOOL[base + 8u64*i + 7u64] = ((t7 * KQ + 16u64) / 32u64) as u32
+            i = i + 1u64
+        }
+    }
+    return 0i32
+}
+fn kem_compress_du(s: u64, buf: u64, off: u64, du: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let o : *u8 = buf as *u8
+    if du == 10u64 {
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            let t0 : u64 = (((KPOOL[base + 4u64*i] as u64) * 1024u64 + 1664u64) / KQ) & 0x3FFu64
+            let t1 : u64 = (((KPOOL[base + 4u64*i + 1u64] as u64) * 1024u64 + 1664u64) / KQ) & 0x3FFu64
+            let t2 : u64 = (((KPOOL[base + 4u64*i + 2u64] as u64) * 1024u64 + 1664u64) / KQ) & 0x3FFu64
+            let t3 : u64 = (((KPOOL[base + 4u64*i + 3u64] as u64) * 1024u64 + 1664u64) / KQ) & 0x3FFu64
+            o[off + 5u64*i]        = (t0 & 0xFFu64) as u8
+            o[off + 5u64*i + 1u64] = (((t0 >> 8u64) | (t1 << 2u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 2u64] = (((t1 >> 6u64) | (t2 << 4u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 3u64] = (((t2 >> 4u64) | (t3 << 6u64)) & 0xFFu64) as u8
+            o[off + 5u64*i + 4u64] = ((t3 >> 2u64) & 0xFFu64) as u8
+            i = i + 1u64
+        }
+    } else {
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            let t0 : u64 = (((KPOOL[base + 8u64*i] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t1 : u64 = (((KPOOL[base + 8u64*i + 1u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t2 : u64 = (((KPOOL[base + 8u64*i + 2u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t3 : u64 = (((KPOOL[base + 8u64*i + 3u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t4 : u64 = (((KPOOL[base + 8u64*i + 4u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t5 : u64 = (((KPOOL[base + 8u64*i + 5u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t6 : u64 = (((KPOOL[base + 8u64*i + 6u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            let t7 : u64 = (((KPOOL[base + 8u64*i + 7u64] as u64) * 2048u64 + 1664u64) / KQ) & 0x7FFu64
+            o[off + 11u64*i]        = (t0 & 0xFFu64) as u8
+            o[off + 11u64*i + 1u64] = (((t0 >> 8u64) | (t1 << 3u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 2u64] = (((t1 >> 5u64) | (t2 << 6u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 3u64] = ((t2 >> 2u64) & 0xFFu64) as u8
+            o[off + 11u64*i + 4u64] = (((t2 >> 10u64) | (t3 << 1u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 5u64] = (((t3 >> 7u64) | (t4 << 4u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 6u64] = (((t4 >> 4u64) | (t5 << 7u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 7u64] = ((t5 >> 1u64) & 0xFFu64) as u8
+            o[off + 11u64*i + 8u64] = (((t5 >> 9u64) | (t6 << 2u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 9u64] = (((t6 >> 6u64) | (t7 << 5u64)) & 0xFFu64) as u8
+            o[off + 11u64*i + 10u64] = ((t7 >> 3u64) & 0xFFu64) as u8
+            i = i + 1u64
+        }
+    }
+    return 0i32
+}
+fn kem_decompress_du(s: u64, buf: u64, off: u64, du: u64) -> i32 {
+    let base : u64 = s * 256u64
+    let o : *u8 = buf as *u8
+    if du == 10u64 {
+        let mut i : u64 = 0u64
+        while i < 64u64 {
+            let c0 : u64 = o[off + 5u64*i] as u64
+            let c1 : u64 = o[off + 5u64*i + 1u64] as u64
+            let c2 : u64 = o[off + 5u64*i + 2u64] as u64
+            let c3 : u64 = o[off + 5u64*i + 3u64] as u64
+            let c4 : u64 = o[off + 5u64*i + 4u64] as u64
+            let t0 : u64 = (c0 | ((c1 & 0x3u64) << 8u64)) & 0x3FFu64
+            let t1 : u64 = ((c1 >> 2u64) | ((c2 & 0xFu64) << 6u64)) & 0x3FFu64
+            let t2 : u64 = ((c2 >> 4u64) | ((c3 & 0x3Fu64) << 4u64)) & 0x3FFu64
+            let t3 : u64 = ((c3 >> 6u64) | (c4 << 2u64)) & 0x3FFu64
+            KPOOL[base + 4u64*i]        = ((t0 * KQ + 512u64) / 1024u64) as u32
+            KPOOL[base + 4u64*i + 1u64] = ((t1 * KQ + 512u64) / 1024u64) as u32
+            KPOOL[base + 4u64*i + 2u64] = ((t2 * KQ + 512u64) / 1024u64) as u32
+            KPOOL[base + 4u64*i + 3u64] = ((t3 * KQ + 512u64) / 1024u64) as u32
+            i = i + 1u64
+        }
+    } else {
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            let c0 : u64 = o[off + 11u64*i] as u64
+            let c1 : u64 = o[off + 11u64*i + 1u64] as u64
+            let c2 : u64 = o[off + 11u64*i + 2u64] as u64
+            let c3 : u64 = o[off + 11u64*i + 3u64] as u64
+            let c4 : u64 = o[off + 11u64*i + 4u64] as u64
+            let c5 : u64 = o[off + 11u64*i + 5u64] as u64
+            let c6 : u64 = o[off + 11u64*i + 6u64] as u64
+            let c7 : u64 = o[off + 11u64*i + 7u64] as u64
+            let c8 : u64 = o[off + 11u64*i + 8u64] as u64
+            let c9 : u64 = o[off + 11u64*i + 9u64] as u64
+            let c10 : u64 = o[off + 11u64*i + 10u64] as u64
+            let t0 : u64 = (c0 | ((c1 & 0x7u64) << 8u64)) & 0x7FFu64
+            let t1 : u64 = ((c1 >> 3u64) | ((c2 & 0x3Fu64) << 5u64)) & 0x7FFu64
+            let t2 : u64 = ((c2 >> 6u64) | (c3 << 2u64) | ((c4 & 0x1u64) << 10u64)) & 0x7FFu64
+            let t3 : u64 = ((c4 >> 1u64) | ((c5 & 0xFu64) << 7u64)) & 0x7FFu64
+            let t4 : u64 = ((c5 >> 4u64) | ((c6 & 0x7Fu64) << 4u64)) & 0x7FFu64
+            let t5 : u64 = ((c6 >> 7u64) | (c7 << 1u64) | ((c8 & 0x3u64) << 9u64)) & 0x7FFu64
+            let t6 : u64 = ((c8 >> 2u64) | ((c9 & 0x1Fu64) << 6u64)) & 0x7FFu64
+            let t7 : u64 = ((c9 >> 5u64) | (c10 << 3u64)) & 0x7FFu64
+            KPOOL[base + 8u64*i]        = ((t0 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 1u64] = ((t1 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 2u64] = ((t2 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 3u64] = ((t3 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 4u64] = ((t4 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 5u64] = ((t5 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 6u64] = ((t6 * KQ + 1024u64) / 2048u64) as u32
+            KPOOL[base + 8u64*i + 7u64] = ((t7 * KQ + 1024u64) / 2048u64) as u32
+            i = i + 1u64
+        }
+    }
+    return 0i32
+}
+
+/* ---- Samplers ---- */
+var KEM_SIN  : [u8; 34]
+var KEM_SBUF : [u8; 2016]
+var KEM_NIN  : [u8; 33]
+var KEM_NBUF : [u8; 256]
+
+/* poly_uniform: SHAKE128(rho || ib || jb), 12-bit rejection (2 coeffs/3 bytes) */
+fn kem_poly_uniform(s: u64, rho_addr: u64, ib: u64, jb: u64) -> i32 {
+    let rho : *u8 = rho_addr as *u8
+    let si  : *u8 = &KEM_SIN as *u8
+    let mut t : u64 = 0u64
+    while t < 32u64 { si[t] = rho[t] ; t = t + 1u64 }
+    si[32] = (ib & 0xFFu64) as u8
+    si[33] = (jb & 0xFFu64) as u8
+    keccak_state_zero(&KEM_SST as u64)
+    keccak_absorb(&KEM_SST as u64, &KEM_SIN as u64, 34u64, keccak_pack_rate_dom(168u32, 0x1Fu8))
+    keccak_squeeze(&KEM_SST as u64, &KEM_SBUF as u64, 2016u64, 168u32)
+    let buf : *u8 = &KEM_SBUF as *u8
+    let base : u64 = s * 256u64
+    let mut ctr : u64 = 0u64
+    let mut kk : u64 = 0u64
+    while kk + 3u64 <= 2016u64 {
+        if ctr < 256u64 {
+            let d1 : u64 = ((buf[kk] as u64) | ((buf[kk + 1u64] as u64) << 8u64)) & 0xFFFu64
+            if d1 < KQ { KPOOL[base + ctr] = d1 as u32 ; ctr = ctr + 1u64 }
+            if ctr < 256u64 {
+                let d2 : u64 = ((buf[kk + 1u64] as u64) >> 4u64) | ((buf[kk + 2u64] as u64) << 4u64)
+                if d2 < KQ { KPOOL[base + ctr] = d2 as u32 ; ctr = ctr + 1u64 }
+            }
+        }
+        kk = kk + 3u64
+    }
+    return 0i32
+}
+var KEM_SST : [u8; 200]
+
+/* getnoise: SHAKE256(seed || nonce), eta*64 bytes -> cbd */
+fn kem_getnoise(s: u64, seed_addr: u64, nonce: u64, eta: u64) -> i32 {
+    let sd : *u8 = seed_addr as *u8
+    let ni : *u8 = &KEM_NIN as *u8
+    let mut t : u64 = 0u64
+    while t < 32u64 { ni[t] = sd[t] ; t = t + 1u64 }
+    ni[32] = (nonce & 0xFFu64) as u8
+    shake256_oneshot(&KEM_NIN as u64, 33u64, &KEM_NBUF as u64, eta * 64u64)
+    kem_cbd(s, &KEM_NBUF as u64, 0u64, eta)
+    return 0i32
+}
+
+fn kem_gen_matrix(a_base: u64, rho_addr: u64, k: u64, transposed: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < k {
+        let mut j : u64 = 0u64
+        while j < k {
+            if transposed == 1u64 {
+                kem_poly_uniform(a_base + i*k + j, rho_addr, i, j)
+            } else {
+                kem_poly_uniform(a_base + i*k + j, rho_addr, j, i)
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* pointwise_acc: r = sum_i basemul(a[i], b[i]) in NTT domain.  ACC slot 43. */
+fn kem_pointwise_acc(rs: u64, a_base: u64, b_base: u64, k: u64) -> i32 {
+    kem_basemul(rs, a_base + 0u64, b_base + 0u64)
+    let mut i : u64 = 1u64
+    while i < k {
+        kem_basemul(43u64, a_base + i, b_base + i)
+        kem_add(rs, 43u64)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ---- K-PKE ---- (keygen slots: A=0 s=16 e=20 t=24; enc: At=0 t=16 r=20 e1=24 u=28 v=40 e2=41 mp=42) */
+var KEM_G64 : [u8; 64]
+var KEM_GIN : [u8; 33]
+
+fn kem_kpke_keygen(pk: u64, sk_pke: u64, seed_addr: u64, k: u64) -> i32 {
+    let eta1 : u64 = kem_eta1(k)
+    /* G = SHA3-512(seed || k) -> rho(0..32) sigma(32..64) */
+    let gi : *u8 = &KEM_GIN as *u8
+    let sd : *u8 = seed_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { gi[i] = sd[i] ; i = i + 1u64 }
+    gi[32] = (k & 0xFFu64) as u8
+    sha3_512_oneshot(&KEM_GIN as u64, 33u64, &KEM_G64 as u64)
+    let rho_addr : u64 = &KEM_G64 as u64
+    let sigma_addr : u64 = (&KEM_G64 as u64) + 32u64
+    kem_gen_matrix(0u64, rho_addr, k, 0u64)
+    i = 0u64
+    while i < k { kem_getnoise(16u64 + i, sigma_addr, i, eta1) ; i = i + 1u64 }
+    i = 0u64
+    while i < k { kem_getnoise(20u64 + i, sigma_addr, k + i, eta1) ; i = i + 1u64 }
+    kem_vec_ntt(16u64, k)
+    kem_vec_ntt(20u64, k)
+    i = 0u64
+    while i < k { kem_pointwise_acc(24u64 + i, 0u64 + i*k, 16u64, k) ; i = i + 1u64 }
+    i = 0u64
+    while i < k { kem_add(24u64 + i, 20u64 + i) ; i = i + 1u64 }
+    /* pk = tobytes(t) || rho ; sk_pke = tobytes(s) */
+    i = 0u64
+    while i < k { kem_tobytes(24u64 + i, pk, 384u64*i) ; i = i + 1u64 }
+    let pkr : *u8 = (pk + 384u64*k) as *u8
+    let g8  : *u8 = rho_addr as *u8
+    i = 0u64
+    while i < 32u64 { pkr[i] = g8[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < k { kem_tobytes(16u64 + i, sk_pke, 384u64*i) ; i = i + 1u64 }
+    return 0i32
+}
+fn kem_vec_ntt(base: u64, k: u64) -> i32 { let mut i : u64 = 0u64 while i < k { kem_ntt(base + i) ; i = i + 1u64 } return 0i32 }
+fn kem_vec_invntt(base: u64, k: u64) -> i32 { let mut i : u64 = 0u64 while i < k { kem_invntt(base + i) ; i = i + 1u64 } return 0i32 }
+
+fn kem_kpke_enc(ct: u64, pk: u64, msg: u64, coins: u64, k: u64) -> i32 {
+    let eta1 : u64 = kem_eta1(k)
+    let eta2 : u64 = kem_eta2(k)
+    let du : u64 = kem_du(k)
+    let dv : u64 = kem_dv(k)
+    /* t = frombytes(pk) (16..); rho = pk + 384k */
+    let mut i : u64 = 0u64
+    while i < k { kem_frombytes(16u64 + i, pk, 384u64*i) ; i = i + 1u64 }
+    let rho_addr : u64 = pk + 384u64*k
+    kem_gen_matrix(0u64, rho_addr, k, 1u64)
+    i = 0u64
+    while i < k { kem_getnoise(20u64 + i, coins, i, eta1) ; i = i + 1u64 }
+    i = 0u64
+    while i < k { kem_getnoise(24u64 + i, coins, k + i, eta2) ; i = i + 1u64 }
+    kem_getnoise(41u64, coins, 2u64*k, eta2)
+    kem_vec_ntt(20u64, k)
+    /* u = At*r (invntt) + e1 (28..) */
+    i = 0u64
+    while i < k { kem_pointwise_acc(28u64 + i, 0u64 + i*k, 20u64, k) ; i = i + 1u64 }
+    kem_vec_invntt(28u64, k)
+    i = 0u64
+    while i < k { kem_add(28u64 + i, 24u64 + i) ; i = i + 1u64 }
+    /* v = t*r (invntt) + e2 + frommsg (40) */
+    kem_pointwise_acc(40u64, 16u64, 20u64, k)
+    kem_invntt(40u64)
+    kem_add(40u64, 41u64)
+    kem_frommsg(42u64, msg)
+    kem_add(40u64, 42u64)
+    /* ct = compress_du(u) || compress_dv(v) */
+    let ustride : u64 = du * 32u64
+    i = 0u64
+    while i < k { kem_compress_du(28u64 + i, ct, ustride * i, du) ; i = i + 1u64 }
+    kem_compress_dv(40u64, ct, ustride * k, dv)
+    return 0i32
+}
+
+fn kem_kpke_dec(msg: u64, sk_pke: u64, ct: u64, k: u64) -> i32 {
+    let du : u64 = kem_du(k)
+    let dv : u64 = kem_dv(k)
+    let ustride : u64 = du * 32u64
+    /* u = decompress_du(ct) (0..); v = decompress_dv (40); s = frombytes(sk) (16..) */
+    let mut i : u64 = 0u64
+    while i < k { kem_decompress_du(0u64 + i, ct, ustride * i, du) ; i = i + 1u64 }
+    kem_decompress_dv(40u64, ct, ustride * k, dv)
+    i = 0u64
+    while i < k { kem_frombytes(16u64 + i, sk_pke, 384u64*i) ; i = i + 1u64 }
+    kem_vec_ntt(0u64, k)
+    /* mp = s*u (invntt) (42); mp = v - mp; msg = tomsg(mp) */
+    kem_pointwise_acc(42u64, 16u64, 0u64, k)
+    kem_invntt(42u64)
+    let vb : u64 = 40u64 * 256u64
+    let mb : u64 = 42u64 * 256u64
+    i = 0u64
+    while i < 256u64 {
+        KPOOL[mb + i] = (((KPOOL[vb + i] as u64) + KQ - (KPOOL[mb + i] as u64)) % KQ) as u32
+        i = i + 1u64
+    }
+    kem_tomsg(msg, 42u64)
+    return 0i32
+}
+
+/* ---- ML-KEM FO wrapper ---- */
+var KEM_HPK   : [u8; 32]
+var KEM_KR    : [u8; 64]
+var KEM_GIN2  : [u8; 64]
+var KEM_MPR   : [u8; 32]
+var KEM_CTCHK : [u8; 1568]
+var KEM_ZCT   : [u8; 1600]
+
+fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
+    if k < 2u64 { return 0i32 - 1i32 }
+    if k > 4u64 { return 0i32 - 1i32 }
+    let pkbytes : u64 = 384u64*k + 32u64
+    let skpke : u64 = 384u64*k
+    kem_kpke_keygen(pk, sk, seed, k)
+    /* sk = sk_pke || pk || H(pk) || z */
+    let skp : *u8 = (sk + skpke) as *u8
+    let pkp : *u8 = pk as *u8
+    let mut i : u64 = 0u64
+    while i < pkbytes { skp[i] = pkp[i] ; i = i + 1u64 }
+    sha3_256_oneshot(pk, pkbytes, sk + skpke + pkbytes)
+    let sdp : *u8 = seed as *u8
+    let zp  : *u8 = (sk + skpke + pkbytes + 32u64) as *u8
+    i = 0u64
+    while i < 32u64 { zp[i] = sdp[32u64 + i] ; i = i + 1u64 }
+    return 0i32
+}
+
+fn iii_mlkem_encaps(k: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 @export {
+    if k < 2u64 { return 0i32 - 1i32 }
+    if k > 4u64 { return 0i32 - 1i32 }
+    let pkbytes : u64 = 384u64*k + 32u64
+    sha3_256_oneshot(pk, pkbytes, &KEM_HPK as u64)
+    let gi : *u8 = &KEM_GIN2 as *u8
+    let cp : *u8 = coins as *u8
+    let hp : *u8 = &KEM_HPK as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { gi[i] = cp[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { gi[32u64 + i] = hp[i] ; i = i + 1u64 }
+    sha3_512_oneshot(&KEM_GIN2 as u64, 64u64, &KEM_KR as u64)
+    kem_kpke_enc(ct, pk, coins, (&KEM_KR as u64) + 32u64, k)
+    let ssp : *u8 = ss as *u8
+    let kr  : *u8 = &KEM_KR as *u8
+    i = 0u64
+    while i < 32u64 { ssp[i] = kr[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -> i32 @export {
+    if k < 2u64 { return 0i32 - 1i32 }
+    if k > 4u64 { return 0i32 - 1i32 }
+    let pkbytes : u64 = 384u64*k + 32u64
+    let skpke : u64 = 384u64*k
+    let pk_addr : u64 = sk + skpke
+    let hpk_addr : u64 = sk + skpke + pkbytes
+    let z_addr : u64 = sk + skpke + pkbytes + 32u64
+    let du : u64 = kem_du(k)
+    let dv : u64 = kem_dv(k)
+    let ctlen : u64 = du * 32u64 * k + dv * 32u64
+    kem_kpke_dec(&KEM_MPR as u64, sk, ct, k)
+    /* Kr = G(m' || H(pk)) */
+    let gi : *u8 = &KEM_GIN2 as *u8
+    let mp : *u8 = &KEM_MPR as *u8
+    let hp : *u8 = hpk_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { gi[i] = mp[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { gi[32u64 + i] = hp[i] ; i = i + 1u64 }
+    sha3_512_oneshot(&KEM_GIN2 as u64, 64u64, &KEM_KR as u64)
+    /* re-encrypt + compare */
+    kem_kpke_enc(&KEM_CTCHK as u64, pk_addr, &KEM_MPR as u64, (&KEM_KR as u64) + 32u64, k)
+    let cc : *u8 = &KEM_CTCHK as *u8
+    let ctp : *u8 = ct as *u8
+    let mut diff : u64 = 0u64
+    i = 0u64
+    while i < ctlen {
+        diff = diff | ((cc[i] as u64) ^ (ctp[i] as u64))
+        i = i + 1u64
+    }
+    let ssp : *u8 = ss as *u8
+    let kr  : *u8 = &KEM_KR as *u8
+    if diff == 0u64 {
+        i = 0u64
+        while i < 32u64 { ssp[i] = kr[i] ; i = i + 1u64 }
+        return 0i32
+    }
+    /* implicit reject: ss = SHAKE256(z || ct) */
+    let zc : *u8 = &KEM_ZCT as *u8
+    let zp : *u8 = z_addr as *u8
+    i = 0u64
+    while i < 32u64 { zc[i] = zp[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < ctlen { zc[32u64 + i] = ctp[i] ; i = i + 1u64 }
+    shake256_oneshot(&KEM_ZCT as u64, 32u64 + ctlen, ss, 32u64)
+    return 0i32
+}

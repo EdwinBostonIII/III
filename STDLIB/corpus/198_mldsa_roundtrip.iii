@@ -1,0 +1,44 @@
+/* III conformance corpus 198 -- Stage 4.4.1: native .iii ML-DSA (FIPS 204)
+ * round-trip.  ML-DSA-44 (level 2): keygen(seed) -> sign(msg) -> verify must
+ * ACCEPT (rc 0); a 1-bit signature tamper must be REJECTED (rc != 0).
+ * The substrate's first native .iii post-quantum signature.  Exit 99.
+ *
+ * keygen exact-match vs the CRYPTO-AGILITY C ref is verified separately;
+ * this pins the end-to-end sign/verify consistency + forgery rejection.
+ */
+module corpus_198
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+
+fn main() -> u64 {
+    let seed : *u8 = malloc(64u64)
+    let pk   : *u8 = malloc(2048u64)
+    let sk   : *u8 = malloc(5120u64)
+    let sig  : *u8 = malloc(4096u64)
+    let slb  : *u8 = malloc(16u64)
+    let msg  : *u8 = malloc(64u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 { seed[i] = ((0x42u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { msg[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    iii_mldsa_keygen(2u64, seed as u64, pk as u64, sk as u64)
+    let sr : i32 = iii_mldsa_sign(2u64, sk as u64, msg as u64, 32u64, sig as u64, slb as u64)
+    if sr != 0i32 { free(seed) ; free(pk) ; free(sk) ; free(sig) ; free(slb) ; free(msg) ; return 1u64 }
+    let sl : u64 = (slb[0] as u64) | ((slb[1] as u64) << 8u64) | ((slb[2] as u64) << 16u64) | ((slb[3] as u64) << 24u64)
+    let v : i32 = iii_mldsa_verify(2u64, pk as u64, msg as u64, 32u64, sig as u64, sl)
+    if v != 0i32 { free(seed) ; free(pk) ; free(sk) ; free(sig) ; free(slb) ; free(msg) ; return 2u64 }
+    sig[0] = sig[0] ^ 0x01u8
+    let v2 : i32 = iii_mldsa_verify(2u64, pk as u64, msg as u64, 32u64, sig as u64, sl)
+    free(seed)
+    free(pk)
+    free(sk)
+    free(sig)
+    free(slb)
+    free(msg)
+    if v2 == 0i32 { return 3u64 }
+    return 99u64
+}

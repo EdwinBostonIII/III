@@ -1,0 +1,65 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_babel_text.iii
+ *
+ * Transform pattern: FORM_BABEL_JSON → FORM_BABEL_TEXT
+ * FROZEN SPEC §7B.6 slot 23; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Reformats a Babel JSON envelope into a human-readable line-oriented
+ * text representation. Each top-level field becomes a "key: value" line.
+ */
+
+module omnia_tp_babel_text
+
+fn tp_bt_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+/* Reformat: replace ',' with '\n', strip surrounding {/}, leave colons. */
+fn tp_babel_text(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut in_off : u64 = 0u64
+    let mut out_off : u64 = 0u64
+    let mut depth : u32 = 0u32
+    while in_off < src_len {
+        if out_off >= dst_cap { return 0u64 }
+        let bp : *u8 = (src + in_off) as *u8
+        let c : u8 = bp[0u64]
+        if c == 123u8 {
+            /* '{' increases depth; emit nothing at top level */
+            depth = depth + 1u32
+            if depth > 1u32 {
+                tp_bt_emit(dst_buf, out_off, c)
+                out_off = out_off + 1u64
+            }
+        }
+        if c == 125u8 {
+            depth = depth - 1u32
+            if depth >= 1u32 {
+                tp_bt_emit(dst_buf, out_off, c)
+                out_off = out_off + 1u64
+            }
+        }
+        if c == 44u8 {
+            if depth == 1u32 {
+                tp_bt_emit(dst_buf, out_off, 10u8)
+                out_off = out_off + 1u64
+            }
+            if depth != 1u32 {
+                tp_bt_emit(dst_buf, out_off, c)
+                out_off = out_off + 1u64
+            }
+        }
+        if c != 123u8 {
+            if c != 125u8 {
+                if c != 44u8 {
+                    tp_bt_emit(dst_buf, out_off, c)
+                    out_off = out_off + 1u64
+                }
+            }
+        }
+        in_off = in_off + 1u64
+    }
+    return out_off
+}

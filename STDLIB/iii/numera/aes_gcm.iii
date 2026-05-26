@@ -1,0 +1,568 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\aes_gcm.iii
+ *
+ * III STDLIB - numera::aes_gcm
+ *
+ * NIST SP 800-38D AES-128-GCM authenticated encryption.
+ * Combines aes.iii's AES-128 encrypt block with GHASH (multiplication
+ * in GF(2^128) using reduction polynomial x^128 + x^7 + x^2 + x + 1).
+ *
+ * Public API (singleton state, like sha256/sha512/aes):
+ *
+ *   aes_gcm_init  (key:*u8, nonce:*u8, nonce_len:u64) -> i32
+ *     Initialise key schedule, hash subkey H, and J0 from a 96-bit
+ *     nonce.  Resets GHASH accumulator and length counters.
+ *     Only nonce_len == 12 is supported (NIST recommendation).
+ *
+ *   aes_gcm_aad   (aad:*u8, aad_len:u64) -> i32
+ *     Feed Additional Authenticated Data into GHASH.  May be called
+ *     once between init and seal/open.  Padding to 16-byte blocks is
+ *     handled internally.
+ *
+ *   aes_gcm_seal  (pt:*u8, pt_len:u64, ct_out:*u8, tag_out:*u8) -> i32
+ *     Encrypt plaintext into ct_out (same length) and write the
+ *     16-byte authentication tag into tag_out.
+ *
+ *   aes_gcm_open  (ct:*u8, ct_len:u64, pt_out:*u8, tag_in:*u8) -> u8
+ *     Decrypt ciphertext into pt_out and verify the tag.  Returns 1u8
+ *     if the tag is valid, 0u8 otherwise.  When the tag is invalid,
+ *     pt_out content is undefined (do NOT use).
+ *
+ * Algorithm:
+ *   H  = AES_K(0^128)                                     (hash subkey)
+ *   J0 = nonce || 0^31 || 1                               (96-bit nonce path)
+ *   For i = 1, 2, ...   counter Y_i = inc32(Y_{i-1}, Y_0 = J0)
+ *   Plaintext blocks XORed with AES_K(Y_i):  ciphertext.
+ *   GHASH = chain over (AAD_padded || C_padded || len_block).
+ *   tag   = MSB_128(GHASH XOR AES_K(J0)).
+ *
+ * GHASH multiplication (NIST SP 800-38D Algorithm 1, bit-serial):
+ *   Z = 0; V = Y;
+ *   for i = 0..127:
+ *     if X_i = 1: Z ^= V                       (X_i = leftmost bit of X)
+ *     if V_127 = 0: V = V >> 1                  (rightmost bit of V)
+ *     else:         V = (V >> 1) ^ R            (R = 0xE1 || 0^120)
+ *
+ * NIH: zero externs.  Builds atop aes.iii (encrypt block) and
+ * memoria/arena (working buffers).  W3 forbids taking &GLOBAL[0], so
+ * all buffers passed to aes_encrypt_block live in arena-backed memory.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_aes_gcm
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn aes128_set_key(key: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes256_set_key(key: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
+/* RITCHIE §3.5: PCLMULQDQ availability gate for the GHASH SIMD path.
+ * Composed-proxy on AES-NI, matching the sanctioned cpufeat_has_bmi2
+ * (<-AVX2) precedent in cpufeat.iii: PCLMULQDQ (CPUID.1:ECX bit 1) was
+ * co-introduced with AES-NI (CPUID.1:ECX bit 25) -- Intel Westmere
+ * (2010), AMD Bulldozer (2011) -- and no shipping x86-64 CPU exposes
+ * one without the other.  PCLMULQDQ also implies SSSE3 (pshufb) and
+ * SSE2 (the surrounding pxor/shifts), both of the same or earlier era.
+ * The actual GF(2^128) bit-identity is proven by KAT 62/63/69 + the
+ * scalar(force)==pclmul(force) comparison in corpus 90, independent of
+ * this gate. */
+extern @abi(c-msvc-x64) fn cpufeat_has_aesni() -> u8 from "cpufeat.iii"
+
+const GCM_OK         : i32 =  0i32
+const GCM_E_INIT     : i32 = -1i32
+const GCM_E_NONCE    : i32 = -2i32
+
+/* ---- Module-scope arena and buffers (16 bytes each, arena-backed) ---- */
+
+var GCM_ARENA       : u64 = 0u64
+var GCM_H_BUF       : u64 = 0u64    /* hash subkey H = AES_K(0^128) */
+var GCM_J0_BUF      : u64 = 0u64    /* initial counter J0 */
+var GCM_CTR_BUF     : u64 = 0u64    /* current counter Y_i */
+var GCM_KS_BUF      : u64 = 0u64    /* keystream block AES_K(Y_i) */
+var GCM_GHASH_BUF   : u64 = 0u64    /* GHASH accumulator */
+var GCM_TMP_V_BUF   : u64 = 0u64    /* GHASH multiplication scratch V */
+var GCM_TMP_Z_BUF   : u64 = 0u64    /* GHASH multiplication scratch Z */
+var GCM_BLOCK_BUF   : u64 = 0u64    /* zero-padded data block for GHASH */
+var GCM_LEN_BUF     : u64 = 0u64    /* length block: aad_bits || ct_bits BE */
+var GCM_TAGENC_BUF  : u64 = 0u64    /* AES_K(J0), used for final tag */
+var GCM_HP_BUF      : u64 = 0u64    /* §3.5 preconditioned H = bswap(H)<<1 mod poly (PCLMULQDQ) */
+
+var GCM_AAD_LEN     : u64 = 0u64
+var GCM_PT_LEN      : u64 = 0u64
+var GCM_INITED      : u8  = 0u8
+
+/* ---- §3.5 GHASH SIMD (PCLMULQDQ) dispatch state ---- */
+var GCM_FORCE       : u32 = 0u32    /* 0=auto, 1=scalar, 2=pclmul (KAT bit-identity override) */
+var GCM_BSWAP       : [u8; 16]      /* byte-reverse mask for pshufb (lane i <- 15-i) */
+var GCM_BSWAP_INIT  : u8  = 0u8
+
+/* ---- Allocate arena and buffers on first init ---- */
+
+fn gcm_alloc_buffers() -> i32 {
+    if GCM_ARENA != 0u64 { return GCM_OK }
+    GCM_ARENA = arena_new(4096u64)
+    if GCM_ARENA == 0u64 { return GCM_E_INIT }
+    GCM_H_BUF      = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_J0_BUF     = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_CTR_BUF    = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_KS_BUF     = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_GHASH_BUF  = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_TMP_V_BUF  = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_TMP_Z_BUF  = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_BLOCK_BUF  = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_LEN_BUF    = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_TAGENC_BUF = arena_alloc1(GCM_ARENA, 16u64)
+    GCM_HP_BUF     = arena_alloc1(GCM_ARENA, 16u64)
+    return GCM_OK
+}
+
+fn gcm_zero16(buf_addr: u64) -> i32 {
+    let p : *u8 = buf_addr as *u8
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        p[i] = 0u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn gcm_copy16(src_addr: u64, dst_addr: u64) -> i32 {
+    let sp : *u8 = src_addr as *u8
+    let dp : *u8 = dst_addr as *u8
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        dp[i] = sp[i]
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn gcm_xor16_inplace(dst_addr: u64, src_addr: u64) -> i32 {
+    let dp : *u8 = dst_addr as *u8
+    let sp : *u8 = src_addr as *u8
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let dv : u32 = dp[i] as u32
+        let sv : u32 = sp[i] as u32
+        dp[i] = (dv ^ sv) as u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* ---- GF(2^128) multiplication (in-place: GHASH_BUF *= H) ---- */
+
+/* Scalar baseline: NIST SP 800-38D Algorithm 1 (bit-serial), the
+ * canonical reference the PCLMULQDQ path below must match bit-for-bit. */
+fn gcm_ghash_mul_scalar() -> i32 {
+    let acc : *u8 = GCM_GHASH_BUF as *u8
+    let h   : *u8 = GCM_H_BUF as *u8
+    let v   : *u8 = GCM_TMP_V_BUF as *u8
+    let z   : *u8 = GCM_TMP_Z_BUF as *u8
+    /* Z = 0, V = H */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        z[i] = 0u8
+        v[i] = h[i]
+        i = i + 1u32
+    }
+    let mut bit : u32 = 0u32
+    while bit < 128u32 {
+        let byte_idx : u32 = bit >> 3u32
+        let bit_in_byte : u32 = 7u32 - (bit & 7u32)
+        let acc_byte : u32 = acc[byte_idx] as u32
+        let acc_bit : u32 = (acc_byte >> bit_in_byte) & 1u32
+        if acc_bit == 1u32 {
+            let mut j : u32 = 0u32
+            while j < 16u32 {
+                z[j] = ((z[j] as u32) ^ (v[j] as u32)) as u8
+                j = j + 1u32
+            }
+        }
+        let v_lsb : u32 = (v[15] as u32) & 1u32
+        let mut k : u32 = 15u32
+        while k > 0u32 {
+            let cur : u32 = v[k] as u32
+            let above_low : u32 = (v[k - 1u32] as u32) & 1u32
+            v[k] = ((cur >> 1u32) | (above_low << 7u32)) as u8
+            k = k - 1u32
+        }
+        let v0_cur : u32 = v[0] as u32
+        v[0] = (v0_cur >> 1u32) as u8
+        if v_lsb == 1u32 {
+            let v0_xor : u32 = v[0] as u32
+            v[0] = (v0_xor ^ 0xE1u32) as u8
+        }
+        bit = bit + 1u32
+    }
+    /* Copy Z back to ACC */
+    let mut m : u32 = 0u32
+    while m < 16u32 {
+        acc[m] = z[m]
+        m = m + 1u32
+    }
+    return 0i32
+}
+
+/* Fill the pshufb byte-reverse mask once (lane i <- byte 15-i). */
+fn gcm_bswap_init() -> i32 {
+    if GCM_BSWAP_INIT == 1u8 { return 0i32 }
+    GCM_BSWAP[0]  = 15u8
+    GCM_BSWAP[1]  = 14u8
+    GCM_BSWAP[2]  = 13u8
+    GCM_BSWAP[3]  = 12u8
+    GCM_BSWAP[4]  = 11u8
+    GCM_BSWAP[5]  = 10u8
+    GCM_BSWAP[6]  =  9u8
+    GCM_BSWAP[7]  =  8u8
+    GCM_BSWAP[8]  =  7u8
+    GCM_BSWAP[9]  =  6u8
+    GCM_BSWAP[10] =  5u8
+    GCM_BSWAP[11] =  4u8
+    GCM_BSWAP[12] =  3u8
+    GCM_BSWAP[13] =  2u8
+    GCM_BSWAP[14] =  1u8
+    GCM_BSWAP[15] =  0u8
+    GCM_BSWAP_INIT = 1u8
+    return 0i32
+}
+
+/* Precondition the hash subkey for the PCLMULQDQ path: HP = (bswap H) << 1
+ * mod (x^128 + x^7 + x^2 + x + 1), in little-endian polynomial order.  The
+ * <<1 (field multiply by x) cancels the off-by-one that GCM's bit-reflection
+ * introduces into a carryless multiply, so Xi_le * HP equals the reflected
+ * GCM product (OpenSSL/Gueron gcm_init "H<<1" step).  Recomputed each init
+ * (H changes per key).  pshufb byte-reverses without bit-reversing within
+ * bytes, so the x^128 overflow reduces with the GCM doubling constant for
+ * THIS domain (OpenSSL .L0x1c2_polynomial: byte0 ^= 0x01, byte15 ^= 0xC2)
+ * -- NOT the 0x87 of a fully bit-reversed value. */
+fn gcm_precompute_hp() -> i32 {
+    let h  : *u8 = GCM_H_BUF as *u8
+    let hp : *u8 = GCM_HP_BUF as *u8
+    /* Byte-reverse H into little-endian polynomial order. */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        hp[i] = h[15u32 - i]
+        i = i + 1u32
+    }
+    /* 128-bit doubling (multiply by x): left-shift 1, reduce on overflow. */
+    let mut carry : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < 16u32 {
+        let b : u32 = hp[j] as u32
+        hp[j] = (((b << 1u32) | carry) & 0xFFu32) as u8
+        carry = (b >> 7u32) & 1u32
+        j = j + 1u32
+    }
+    if carry == 1u32 {
+        let b0 : u32 = hp[0] as u32
+        hp[0] = (b0 ^ 0x01u32) as u8
+        let b15 : u32 = hp[15] as u32
+        hp[15] = (b15 ^ 0xC2u32) as u8
+    }
+    return 0i32
+}
+
+/* PCLMULQDQ GF(2^128) multiply (in-place: GHASH_BUF *= H), bit-identical
+ * to gcm_ghash_mul_scalar.  Multiplies the bswapped accumulator against the
+ * preconditioned subkey HP = bswap(H)<<1 mod poly (gcm_precompute_hp): the
+ * <<1 cancels the bit-reflection off-by-one of a carryless multiply
+ * (OpenSSL/Gueron gcm_init + gcm_gmult_clmul).  acc is bswapped (pshufb
+ * GCM_BSWAP) into little-endian polynomial order; HP is already in that
+ * order.  Karatsuba 3-pclmul product + the canonical two-phase shift
+ * reduction for the GCM polynomial; result bswapped back before store.
+ * rax/rcx/rdx + xmm0..5 all Win64 caller-saved.  Pure SSE/SSSE3 (no VEX)
+ * -> no vzeroupper; pclmulqdq/pshufb operands are registers, the 3 memory
+ * touches are movdqu -> no alignment need. */
+fn gcm_ghash_mul_pclmul() -> i32 {
+    gcm_bswap_init()
+    metal {
+    leaq L_GCM_GHASH_BUF(%rip), %rax
+    movq (%rax), %rax
+    leaq L_GCM_HP_BUF(%rip), %rcx
+    movq (%rcx), %rcx
+    leaq L_GCM_BSWAP(%rip), %rdx
+    movdqu (%rax), %xmm0
+    movdqu (%rcx), %xmm2
+    movdqu (%rdx), %xmm5
+    pshufb %xmm5, %xmm0
+    pshufd $0x4E, %xmm2, %xmm4
+    pxor %xmm2, %xmm4
+    movdqa %xmm0, %xmm1
+    pshufd $0x4E, %xmm0, %xmm3
+    pxor %xmm0, %xmm3
+    pclmulqdq $0x00, %xmm2, %xmm0
+    pclmulqdq $0x11, %xmm2, %xmm1
+    pclmulqdq $0x00, %xmm4, %xmm3
+    pxor %xmm0, %xmm3
+    pxor %xmm1, %xmm3
+    movdqa %xmm3, %xmm4
+    psrldq $8, %xmm3
+    pslldq $8, %xmm4
+    pxor %xmm3, %xmm1
+    pxor %xmm4, %xmm0
+    movdqa %xmm0, %xmm4
+    movdqa %xmm0, %xmm3
+    psllq $5, %xmm0
+    pxor %xmm0, %xmm3
+    psllq $1, %xmm0
+    pxor %xmm3, %xmm0
+    psllq $57, %xmm0
+    movdqa %xmm0, %xmm3
+    pslldq $8, %xmm0
+    psrldq $8, %xmm3
+    pxor %xmm4, %xmm0
+    pxor %xmm3, %xmm1
+    movdqa %xmm0, %xmm4
+    psrlq $1, %xmm0
+    pxor %xmm4, %xmm1
+    pxor %xmm0, %xmm4
+    psrlq $5, %xmm0
+    pxor %xmm4, %xmm0
+    psrlq $1, %xmm0
+    pxor %xmm1, %xmm0
+    pshufb %xmm5, %xmm0
+    movdqu %xmm0, (%rax)
+    }
+    return 0i32
+}
+
+/* Dispatch: AES-NI(=PCLMULQDQ) -> pclmul, else scalar; GCM_FORCE
+ * overrides for KAT bit-identity testing.  Mandate 7: structural
+ * CPUID-feature dispatch only -- no observed-traffic threshold. */
+fn gcm_ghash_mul() -> i32 {
+    if GCM_FORCE == 1u32 { return gcm_ghash_mul_scalar() }
+    if GCM_FORCE == 2u32 { return gcm_ghash_mul_pclmul() }
+    if cpufeat_has_aesni() == 1u8 { return gcm_ghash_mul_pclmul() }
+    return gcm_ghash_mul_scalar()
+}
+
+fn gcm_force_path(p: u32) -> i32 @export { GCM_FORCE = p ; return 0i32 }
+
+/* ---- GHASH update with one 16-byte block (block already in BLOCK_BUF) ---- */
+
+fn gcm_ghash_block_in_buf() -> i32 {
+    gcm_xor16_inplace(GCM_GHASH_BUF, GCM_BLOCK_BUF)
+    gcm_ghash_mul()
+    return 0i32
+}
+
+/* ---- Increment last 32 bits of CTR_BUF as big-endian u32 ---- */
+
+fn gcm_inc32_ctr() -> i32 {
+    let cp : *u8 = GCM_CTR_BUF as *u8
+    let b15 : u32 = cp[15] as u32
+    if b15 < 0xFFu32 {
+        cp[15] = (b15 + 1u32) as u8
+        return 0i32
+    }
+    cp[15] = 0u8
+    let b14 : u32 = cp[14] as u32
+    if b14 < 0xFFu32 {
+        cp[14] = (b14 + 1u32) as u8
+        return 0i32
+    }
+    cp[14] = 0u8
+    let b13 : u32 = cp[13] as u32
+    if b13 < 0xFFu32 {
+        cp[13] = (b13 + 1u32) as u8
+        return 0i32
+    }
+    cp[13] = 0u8
+    let b12 : u32 = cp[12] as u32
+    cp[12] = ((b12 + 1u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* ---- Init ---- */
+
+/* Common post-key-set initialisation: derive H, J0, reset state. */
+fn gcm_init_after_key(nonce: *u8, nonce_len: u64) -> i32 {
+    /* H = AES_K(0^128).  Use KS_BUF as temporary zero-block source. */
+    gcm_zero16(GCM_KS_BUF)
+    aes_encrypt_block(GCM_KS_BUF as *u8, GCM_H_BUF as *u8)
+    /* Precondition H for the PCLMULQDQ GHASH path (no-op for scalar). */
+    gcm_precompute_hp()
+    /* J0 from nonce (96-bit only). */
+    if nonce_len != 12u64 { return GCM_E_NONCE }
+    let j0p : *u8 = GCM_J0_BUF as *u8
+    let mut k : u32 = 0u32
+    while k < 12u32 {
+        j0p[k] = nonce[k]
+        k = k + 1u32
+    }
+    j0p[12] = 0u8
+    j0p[13] = 0u8
+    j0p[14] = 0u8
+    j0p[15] = 1u8
+    /* Reset GHASH state and length counters. */
+    gcm_zero16(GCM_GHASH_BUF)
+    GCM_AAD_LEN = 0u64
+    GCM_PT_LEN  = 0u64
+    GCM_INITED  = 1u8
+    return GCM_OK
+}
+
+fn aes_gcm_init(key: *u8, nonce: *u8, nonce_len: u64) -> i32 @export {
+    if gcm_alloc_buffers() != GCM_OK { return GCM_E_INIT }
+    aes128_set_key(key)
+    return gcm_init_after_key(nonce, nonce_len)
+}
+
+fn aes_gcm_init_256(key: *u8, nonce: *u8, nonce_len: u64) -> i32 @export {
+    if gcm_alloc_buffers() != GCM_OK { return GCM_E_INIT }
+    aes256_set_key(key)
+    return gcm_init_after_key(nonce, nonce_len)
+}
+
+/* ---- AAD ingestion ---- */
+
+fn gcm_load_partial_block(src: *u8, src_off: u64, chunk: u64) -> i32 {
+    let bp : *u8 = GCM_BLOCK_BUF as *u8
+    let mut q : u64 = 0u64
+    while q < 16u64 {
+        if q < chunk {
+            bp[q] = src[src_off + q]
+        } else {
+            bp[q] = 0u8
+        }
+        q = q + 1u64
+    }
+    return 0i32
+}
+
+fn aes_gcm_aad(aad: *u8, aad_len: u64) -> i32 @export {
+    if GCM_INITED == 0u8 { return GCM_E_INIT }
+    let mut p : u64 = 0u64
+    while p < aad_len {
+        let mut chunk : u64 = 16u64
+        if p + chunk > aad_len { chunk = aad_len - p }
+        gcm_load_partial_block(aad, p, chunk)
+        gcm_ghash_block_in_buf()
+        p = p + chunk
+    }
+    GCM_AAD_LEN = GCM_AAD_LEN + aad_len
+    return GCM_OK
+}
+
+/* ---- CTR mode encryption (in-place into ct, reading from pt) ---- */
+
+fn gcm_ctr_xor(pt: *u8, pt_len: u64, ct: *u8) -> i32 {
+    /* CTR starts as J0; first encrypt is for inc32(J0). */
+    gcm_copy16(GCM_J0_BUF, GCM_CTR_BUF)
+    let cp : *u8 = GCM_CTR_BUF as *u8
+    let ksp : *u8 = GCM_KS_BUF as *u8
+    let mut pos : u64 = 0u64
+    while pos < pt_len {
+        gcm_inc32_ctr()
+        aes_encrypt_block(cp, ksp)
+        let mut chunk : u64 = 16u64
+        if pos + chunk > pt_len { chunk = pt_len - pos }
+        let mut k : u64 = 0u64
+        while k < chunk {
+            let pv : u32 = pt[pos + k] as u32
+            let kv : u32 = ksp[k] as u32
+            ct[pos + k] = (pv ^ kv) as u8
+            k = k + 1u64
+        }
+        pos = pos + chunk
+    }
+    return 0i32
+}
+
+/* ---- GHASH the ciphertext blocks ---- */
+
+fn gcm_ghash_data(data: *u8, data_len: u64) -> i32 {
+    let mut p : u64 = 0u64
+    while p < data_len {
+        let mut chunk : u64 = 16u64
+        if p + chunk > data_len { chunk = data_len - p }
+        gcm_load_partial_block(data, p, chunk)
+        gcm_ghash_block_in_buf()
+        p = p + chunk
+    }
+    return 0i32
+}
+
+/* ---- Build length block and feed into GHASH ---- */
+
+fn gcm_ghash_lengths() -> i32 {
+    let lp : *u8 = GCM_LEN_BUF as *u8
+    let aad_bits : u64 = GCM_AAD_LEN * 8u64
+    let pt_bits  : u64 = GCM_PT_LEN  * 8u64
+    let mut z : u32 = 0u32
+    while z < 8u32 {
+        let shift : u64 = (56u32 - z * 8u32) as u64
+        lp[z] = ((aad_bits >> shift) & 0xFFu64) as u8
+        z = z + 1u32
+    }
+    let mut zz : u32 = 0u32
+    while zz < 8u32 {
+        let shift : u64 = (56u32 - zz * 8u32) as u64
+        lp[8u32 + zz] = ((pt_bits >> shift) & 0xFFu64) as u8
+        zz = zz + 1u32
+    }
+    /* XOR length block into GHASH, multiply. */
+    gcm_xor16_inplace(GCM_GHASH_BUF, GCM_LEN_BUF)
+    gcm_ghash_mul()
+    return 0i32
+}
+
+/* ---- Compute final 16-byte tag ---- */
+
+fn gcm_compute_tag(tag_out: *u8) -> i32 {
+    aes_encrypt_block(GCM_J0_BUF as *u8, GCM_TAGENC_BUF as *u8)
+    let gp : *u8 = GCM_GHASH_BUF as *u8
+    let tp : *u8 = GCM_TAGENC_BUF as *u8
+    let mut t : u32 = 0u32
+    while t < 16u32 {
+        let gv : u32 = gp[t] as u32
+        let tv : u32 = tp[t] as u32
+        tag_out[t] = (gv ^ tv) as u8
+        t = t + 1u32
+    }
+    return 0i32
+}
+
+/* ---- Public seal ---- */
+
+fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 @crystal @side_channel_resistant @constant_time @dynamic_impact(perf=200, ux=0) @export {
+    if GCM_INITED == 0u8 { return GCM_E_INIT }
+    /* CTR-encrypt pt → ct_out. */
+    gcm_ctr_xor(pt, pt_len, ct_out)
+    GCM_PT_LEN = pt_len
+    /* GHASH the ciphertext. */
+    gcm_ghash_data(ct_out, pt_len)
+    /* GHASH the length block. */
+    gcm_ghash_lengths()
+    /* Tag = GHASH XOR AES_K(J0). */
+    gcm_compute_tag(tag_out)
+    return GCM_OK
+}
+
+/* ---- Public open ---- */
+
+fn aes_gcm_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 @crystal @side_channel_resistant @constant_time @dynamic_impact(perf=200, ux=0) @export {
+    if GCM_INITED == 0u8 { return 0u8 }
+    /* GHASH the ciphertext FIRST (before decrypting), so we don't
+     * conflate plaintext bytes into the tag computation. */
+    gcm_ghash_data(ct, ct_len)
+    GCM_PT_LEN = ct_len
+    gcm_ghash_lengths()
+    /* Compute expected tag into TAGENC_BUF reused; compare against tag_in. */
+    aes_encrypt_block(GCM_J0_BUF as *u8, GCM_TAGENC_BUF as *u8)
+    let gp : *u8 = GCM_GHASH_BUF as *u8
+    let tp : *u8 = GCM_TAGENC_BUF as *u8
+    let mut diff : u32 = 0u32
+    let mut t : u32 = 0u32
+    while t < 16u32 {
+        let expected : u32 = (gp[t] as u32) ^ (tp[t] as u32)
+        let received : u32 = tag_in[t] as u32
+        diff = diff | (expected ^ received)
+        t = t + 1u32
+    }
+    if diff != 0u32 { return 0u8 }
+    /* Tag valid: decrypt by CTR-XOR (CTR mode is symmetric). */
+    gcm_ctr_xor(ct, ct_len, pt_out)
+    return 1u8
+}

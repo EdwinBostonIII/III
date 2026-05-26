@@ -1,0 +1,5 @@
+module corpus_01
+
+fn main() -> u64 {
+    return 7
+}

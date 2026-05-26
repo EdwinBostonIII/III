@@ -1,0 +1,304 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\crystal_deps.iii
+ *
+ * III STDLIB - omnia::crystal_deps  --  Crystal-ID dependency graph navigator.
+ *
+ * Lattice plan Step 0001.  Renamed from omnia/sid.iii (III-APOTHEOSIS M24#3 /
+ * migration 5): the navigator no longer squats on the `sid` name, which is
+ * reserved for COMPILER/BOOT/sid.iii (Side-effect Inverse Derivation, Ring
+ * R-2/R-1 compiler internals).  The exported sid_* symbols are retained
+ * (link-stable; they are this navigator's own domain, distinct from the
+ * compiler SID's symbols).  See NOTES/III-NAMESPACES.md.
+ *
+ * Public surface:
+ *   sid_dependency_graph(arena, crystal_id)        -> vec_u64 of direct deps
+ *   sid_transitive_closure(arena, seeds_vec)       -> vec_u64 of all reachable
+ *   sid_provenance_delta(old_root_ptr, new_root_ptr, step_no) -> crystal_id
+ *   sid_visualize(arena, crystal_id)               -> vec_u8 (utf-8 string)
+ *
+ * Internals use:
+ *   omnia/crystal.iii    crystal_edges_count, crystal_edges_at, crystal_mint
+ *   omnia/vec.iii        vec_u64_*, vec_u8_*
+ *   omnia/queue.iii      queue_u64_*
+ *   omnia/map.iii        map_u32_u32_* (visited set)
+ *   sanctus/mhash.iii    mhash_begin/domain/payload/final
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00 (pure traversals).
+ */
+
+module omnia_crystal_deps
+
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_at(id: u64, idx: u32) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_push(id: u64, v: u64) -> i32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
+
+extern @abi(c-msvc-x64) fn vec_u8_new(arena_id: u64, hard_max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u8_push(id: u64, b: u32) -> i32 from "vec.iii"
+
+extern @abi(c-msvc-x64) fn queue_u64_new(arena_id: u64, hard_max: u64) -> u64 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u64_push(id: u64, v: u64) -> i32 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u64_pop(id: u64) -> u8 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u64_pop_value() -> u64 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u64_empty(id: u64) -> u8 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u64_drop(id: u64) -> i32 from "queue.iii"
+
+extern @abi(c-msvc-x64) fn map_u32u32_new(arena_id: u64, hard_max: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_put(id: u64, k: u32, v: u32) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_contains(id: u64, k: u32) -> u8 from "map.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const SID_INVALID         : u64 = 0u64
+const SID_OK              : i32 =  0i32
+const SID_E_BADID         : i32 = -1i32
+const SID_E_OOM           : i32 = -2i32
+const SID_E_OVERFLOW      : i32 = -3i32
+
+const SID_MAX_CLOSURE     : u64 = 4096u64
+const SID_VIS_MAX_BYTES   : u64 = 8192u64
+
+/* ─── Internal: site-hash scratch for sid_provenance_delta ───────── */
+
+var SID_DELTA_DOMAIN      : [u8; 17]      /* "provenance_delta" + NUL pad */
+var SID_DELTA_DOMAIN_INIT : u8 = 0u8
+var SID_DELTA_SITE        : [u8; 32]
+
+fn sid_init_delta_domain() -> u32 {
+    if SID_DELTA_DOMAIN_INIT == 1u8 { return 0u32 }
+    /* "provenance_delta" -- 16 bytes; pad slot 16 with 0. */
+    SID_DELTA_DOMAIN[0u64]  = 112u8   /* p */
+    SID_DELTA_DOMAIN[1u64]  = 114u8   /* r */
+    SID_DELTA_DOMAIN[2u64]  = 111u8   /* o */
+    SID_DELTA_DOMAIN[3u64]  = 118u8   /* v */
+    SID_DELTA_DOMAIN[4u64]  = 101u8   /* e */
+    SID_DELTA_DOMAIN[5u64]  = 110u8   /* n */
+    SID_DELTA_DOMAIN[6u64]  =  97u8   /* a */
+    SID_DELTA_DOMAIN[7u64]  = 110u8   /* n */
+    SID_DELTA_DOMAIN[8u64]  =  99u8   /* c */
+    SID_DELTA_DOMAIN[9u64]  = 101u8   /* e */
+    SID_DELTA_DOMAIN[10u64] =  95u8   /* _ */
+    SID_DELTA_DOMAIN[11u64] = 100u8   /* d */
+    SID_DELTA_DOMAIN[12u64] = 101u8   /* e */
+    SID_DELTA_DOMAIN[13u64] = 108u8   /* l */
+    SID_DELTA_DOMAIN[14u64] = 116u8   /* t */
+    SID_DELTA_DOMAIN[15u64] =  97u8   /* a */
+    SID_DELTA_DOMAIN[16u64] =   0u8
+    SID_DELTA_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+/* ─── sid_dependency_graph ──────────────────────────────────────── */
+
+/* Returns a freshly-allocated vec_u64 of crystal_ids that are direct
+ * (1-hop) dependents of the supplied id, in insertion order.  Returns
+ * SID_INVALID (0) on any error. */
+fn sid_dependency_graph(arena_id: u64, id: u64) -> u64 @export {
+    if arena_id == 0u64 { return SID_INVALID }
+    if id == 0u64       { return SID_INVALID }
+    let n : u32 = crystal_edges_count(id)
+    let cap : u64 = (n as u64) + 1u64
+    let v : u64 = vec_u64_new(arena_id, cap)
+    if v == 0u64 { return SID_INVALID }
+    let mut i : u32 = 0u32
+    while i < n {
+        let child : u64 = crystal_edges_at(id, i)
+        vec_u64_push(v, child)
+        i = i + 1u32
+    }
+    return v
+}
+
+/* ─── sid_transitive_closure ────────────────────────────────────── */
+
+/* BFS from each seed id, yielding a vec_u64 of unique crystal_ids
+ * reachable from any seed.  Returns SID_INVALID on overflow or OOM.
+ *
+ * Visited set: map_u32_u32 with key = (id & 0xFFFFFFFF) -- safe since
+ * crystal_ids fit easily in 32 bits (slot+1, ≤257).  Ordering: BFS
+ * insertion (deterministic given identical seed order). */
+fn sid_transitive_closure(arena_id: u64, seeds_vec: u64) -> u64 @export {
+    if arena_id == 0u64  { return SID_INVALID }
+    if seeds_vec == 0u64 { return SID_INVALID }
+    let q : u64 = queue_u64_new(arena_id, SID_MAX_CLOSURE)
+    if q == 0u64 { return SID_INVALID }
+    let visited : u64 = map_u32u32_new(arena_id, SID_MAX_CLOSURE)
+    if visited == 0u64 { return SID_INVALID }
+    let result : u64 = vec_u64_new(arena_id, SID_MAX_CLOSURE)
+    if result == 0u64 { return SID_INVALID }
+
+    /* Enqueue all seeds. */
+    let nseeds : u64 = vec_u64_count(seeds_vec)
+    let mut s : u64 = 0u64
+    while s < nseeds {
+        let seed : u64 = vec_u64_at(seeds_vec, s)
+        let key : u32 = (seed & 0xFFFFFFFFu64) as u32
+        if map_u32u32_contains(visited, key) == 0u8 {
+            map_u32u32_put(visited, key, 1u32)
+            queue_u64_push(q, seed)
+            vec_u64_push(result, seed)
+        }
+        s = s + 1u64
+    }
+
+    /* BFS. */
+    let mut overflow : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if queue_u64_empty(q) == 1u8 { going = 0u8 }
+        if going == 1u8 {
+            queue_u64_pop(q)
+            let cur : u64 = queue_u64_pop_value()
+            let n : u32 = crystal_edges_count(cur)
+            let mut i : u32 = 0u32
+            while i < n {
+                if overflow == 0u8 {
+                    let child : u64 = crystal_edges_at(cur, i)
+                    let ckey : u32 = (child & 0xFFFFFFFFu64) as u32
+                    if map_u32u32_contains(visited, ckey) == 0u8 {
+                        map_u32u32_put(visited, ckey, 1u32)
+                        if vec_u64_count(result) >= SID_MAX_CLOSURE {
+                            overflow = 1u8
+                        }
+                        if overflow == 0u8 {
+                            vec_u64_push(result, child)
+                            queue_u64_push(q, child)
+                        }
+                    }
+                }
+                i = i + 1u32
+            }
+        }
+    }
+
+    queue_u64_drop(q)
+    if overflow == 1u8 { return SID_INVALID }
+    return result
+}
+
+/* ─── sid_provenance_delta ──────────────────────────────────────── */
+
+/* Mint an informational crystal whose site_hash binds together the
+ * "provenance_delta" domain string, a 32-byte old root, and a 32-byte
+ * new root.  Caller passes step_no via cause_seq.  Returns crystal_id
+ * (slot+1) or 0 on failure. */
+fn sid_provenance_delta(old_root_ptr: u64, new_root_ptr: u64, step_no: u64) -> u64 @export {
+    if old_root_ptr == 0u64 { return SID_INVALID }
+    if new_root_ptr == 0u64 { return SID_INVALID }
+    sid_init_delta_domain()
+    mhash_begin()
+    mhash_domain(&SID_DELTA_DOMAIN as u64, 16u64)
+    mhash_payload(old_root_ptr, 32u64)
+    mhash_payload(new_root_ptr, 32u64)
+    mhash_final(&SID_DELTA_SITE as u64)
+    /* error_code = 0 (informational), cap_id = 0 (no capability binding),
+     * cause_seq = caller-supplied step_no.
+     * crystal_mint truncates over-sized sit_hash internally to 32 bytes. */
+    return crystal_mint(0u32, &SID_DELTA_SITE as u64, 0u64, step_no)
+}
+
+/* ─── sid_visualize ─────────────────────────────────────────────── */
+
+/* Module-scope decimal scratch (W4: no function-local var arrays). */
+var SID_DEC_BUF : [u8; 24]
+
+/* Append decimal representation of v into vec_u8 dst. */
+fn sid_emit_dec_u64(dst: u64, v: u64) -> i32 {
+    if v == 0u64 {
+        return vec_u8_push(dst, 48u32)        /* '0' */
+    }
+    let mut x : u64 = v
+    let mut n : u64 = 0u64
+    while x > 0u64 {
+        SID_DEC_BUF[n] = ((x % 10u64) + 48u64) as u8
+        x = x / 10u64
+        n = n + 1u64
+    }
+    /* emit reversed */
+    let mut k : u64 = n
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if k == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            k = k - 1u64
+            vec_u8_push(dst, SID_DEC_BUF[k] as u32)
+        }
+    }
+    return SID_OK
+}
+
+fn sid_emit_str(dst: u64, src: u64, len: u64) -> i32 {
+    let p : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        vec_u8_push(dst, p[i] as u32)
+        i = i + 1u64
+    }
+    return SID_OK
+}
+
+/* Module-scope literals used by sid_visualize. */
+var SID_VIS_HEADER       : [u8; 8]    /* "crystal_" */
+var SID_VIS_ARROW        : [u8; 6]    /* "  -> "    + nul slack */
+var SID_VIS_NL           : [u8; 1]    /* "\n" */
+var SID_VIS_LIT_INIT     : u8 = 0u8
+
+fn sid_init_vis_literals() -> u32 {
+    if SID_VIS_LIT_INIT == 1u8 { return 0u32 }
+    /* "crystal_" -- 8 bytes */
+    SID_VIS_HEADER[0u64] =  99u8     /* c */
+    SID_VIS_HEADER[1u64] = 114u8     /* r */
+    SID_VIS_HEADER[2u64] = 121u8     /* y */
+    SID_VIS_HEADER[3u64] = 115u8     /* s */
+    SID_VIS_HEADER[4u64] = 116u8     /* t */
+    SID_VIS_HEADER[5u64] =  97u8     /* a */
+    SID_VIS_HEADER[6u64] = 108u8     /* l */
+    SID_VIS_HEADER[7u64] =  95u8     /* _ */
+    /* "  -> " -- 5 bytes (slot 5 unused) */
+    SID_VIS_ARROW[0u64] =  32u8       /* space */
+    SID_VIS_ARROW[1u64] =  32u8
+    SID_VIS_ARROW[2u64] =  45u8       /* - */
+    SID_VIS_ARROW[3u64] =  62u8       /* > */
+    SID_VIS_ARROW[4u64] =  32u8
+    SID_VIS_ARROW[5u64] =   0u8
+    SID_VIS_NL[0u64]    =  10u8       /* \n */
+    SID_VIS_LIT_INIT = 1u8
+    return 0u32
+}
+
+/* Produce a vec_u8 (utf-8) of the form:
+ *   crystal_<id>\n
+ *     -> crystal_<dep1>\n
+ *     -> crystal_<dep2>\n
+ *   ...
+ */
+fn sid_visualize(arena_id: u64, id: u64) -> u64 @export {
+    if arena_id == 0u64 { return SID_INVALID }
+    if id == 0u64       { return SID_INVALID }
+    sid_init_vis_literals()
+    let dst : u64 = vec_u8_new(arena_id, SID_VIS_MAX_BYTES)
+    if dst == 0u64 { return SID_INVALID }
+    /* header: "crystal_<id>\n" */
+    sid_emit_str(dst, &SID_VIS_HEADER as u64, 8u64)
+    sid_emit_dec_u64(dst, id)
+    sid_emit_str(dst, &SID_VIS_NL as u64, 1u64)
+    /* per-edge: "  -> crystal_<child>\n" */
+    let n : u32 = crystal_edges_count(id)
+    let mut i : u32 = 0u32
+    while i < n {
+        let child : u64 = crystal_edges_at(id, i)
+        sid_emit_str(dst, &SID_VIS_ARROW as u64, 5u64)
+        sid_emit_str(dst, &SID_VIS_HEADER as u64, 8u64)
+        sid_emit_dec_u64(dst, child)
+        sid_emit_str(dst, &SID_VIS_NL as u64, 1u64)
+        i = i + 1u32
+    }
+    return dst
+}

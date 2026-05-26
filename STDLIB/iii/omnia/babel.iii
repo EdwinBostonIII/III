@@ -1,0 +1,127 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\babel.iii
+ *
+ * III STDLIB - omnia::babel
+ *
+ * Babel envelope codec (JSON form, baseline).
+ * FROZEN SPEC §11, §Z.C.11; ADR-RES-007.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.90.
+ *
+ * babel_version = 1. envelope_mhash covers all other fields with
+ * byte-stable JSON ordering (sorted lexicographically by field name).
+ */
+
+module omnia_babel
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const BABEL_VERSION : u32 = 1u32
+
+/* Domain "BABEL_ENV_V1" 16 bytes NUL-padded */
+var BABEL_ENV_DOM : [u8; 16] = [66u8, 65u8, 66u8, 69u8, 76u8, 95u8, 69u8, 78u8, 86u8, 95u8, 86u8, 49u8, 0u8, 0u8, 0u8, 0u8]
+
+const BABEL_OK         : i32 =  0i32
+const BABEL_E_OVERFLOW : i32 = -1i32
+const BABEL_E_VERSION  : i32 = -2i32
+
+var BABEL_BUFFER : [u8; 65536]
+var BABEL_BUFFER_USED : u32 = 0u32
+
+var BABEL_HEX_CHARS : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+
+fn babel_buf_byte(ch: u8) -> i32 {
+    if BABEL_BUFFER_USED >= 65536u32 { return BABEL_E_OVERFLOW }
+    BABEL_BUFFER[BABEL_BUFFER_USED] = ch
+    BABEL_BUFFER_USED = BABEL_BUFFER_USED + 1u32
+    return BABEL_OK
+}
+
+fn babel_buf_str(s: u64, n: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < n {
+        let bp : *u8 = (s + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        babel_buf_byte(bp[0u64])
+        i = i + 1u32
+    }
+    return BABEL_OK
+}
+
+fn babel_buf_hex16(v: u64) -> i32 {
+    /* Emit 16 hex chars MSB-first; uses != against -1 sentinel for u8 loop */
+    let mut i : u32 = 16u32
+    while i != 0u32 {
+        i = i - 1u32
+        let nibble : u32 = ((v >> (((i as u64) & 0xFu64) * 4u64)) & 0xFu64) as u32
+        babel_buf_byte(BABEL_HEX_CHARS[nibble])
+    }
+    return BABEL_OK
+}
+
+fn babel_buf_hex_bytes(src: u64, n: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < n {
+        let bp : *u8 = (src + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        let byte : u8 = bp[0u64]
+        babel_buf_byte(BABEL_HEX_CHARS[((byte >> 4u8) & 0xFu8) as u32])
+        babel_buf_byte(BABEL_HEX_CHARS[(byte & 0xFu8) as u32])
+        i = i + 1u32
+    }
+    return BABEL_OK
+}
+
+var BABEL_DECIMAL_DIGITS : [u8; 21]
+
+fn babel_buf_decimal(v: u64) -> i32 {
+    if v == 0u64 {
+        babel_buf_byte(48u8)
+        return BABEL_OK
+    }
+    let mut n : u32 = 0u32
+    let mut x : u64 = v
+    while x != 0u64 {
+        BABEL_DECIMAL_DIGITS[n] = ((x % 10u64) & 0xFFu64) as u8 + 48u8
+        x = x / 10u64
+        n = n + 1u32
+    }
+    let mut i : u32 = n
+    while i != 0u32 {
+        i = i - 1u32
+        babel_buf_byte(BABEL_DECIMAL_DIGITS[i])
+    }
+    return BABEL_OK
+}
+
+fn babel_reset() -> i32 @export {
+    BABEL_BUFFER_USED = 0u32
+    return BABEL_OK
+}
+
+fn babel_used() -> u32 @export {
+    return BABEL_BUFFER_USED
+}
+
+fn babel_byte_at(i: u32) -> u8 @export {
+    if i >= BABEL_BUFFER_USED { return 0u8 }
+    return BABEL_BUFFER[i]
+}
+
+/* Compute envelope_mhash of a buffer slice (covers all bytes emitted so far). */
+fn babel_compute_envelope_mhash(out_32: u64) -> i32 @export {
+    mhash_begin()
+    mhash_domain((&BABEL_ENV_DOM) as u64, 12u64)
+    mhash_payload((&BABEL_BUFFER) as u64, BABEL_BUFFER_USED as u64)
+    mhash_final(out_32)
+    return BABEL_OK
+}
+
+fn babel_version() -> u32 @export {
+    return BABEL_VERSION
+}
+
+fn babel_check_version(v: u32) -> u8 @export {
+    if v == BABEL_VERSION { return 1u8 }
+    return 0u8
+}

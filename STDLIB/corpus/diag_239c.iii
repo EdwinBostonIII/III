@@ -1,0 +1,48 @@
+/* Diag: serialize each handshake (reset between) and dump sid byte 0. */
+module diag_239c
+
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_session_id_byte(channel_id: u64, i: u32) -> u32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+var BP : [u8; 32]
+var A_SK : [u8; 32]
+var B_SK : [u8; 32]
+var A_PK : [u8; 32]
+var B_PK : [u8; 32]
+
+fn _fill(buf: *u8, base: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { buf[i] = ((base + i) & 0xFFu64) as u8; i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let bp : *u8 = (&BP) as *u8
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+    let a_sk : *u8 = (&A_SK) as *u8
+    let b_sk : *u8 = (&B_SK) as *u8
+    _fill(a_sk, 0x11u64)
+    _fill(b_sk, 0x40u64)
+    let a_pk : *u8 = (&A_PK) as *u8
+    let b_pk : *u8 = (&B_PK) as *u8
+    x25519(a_pk, a_sk, bp)
+    x25519(b_pk, b_sk, bp)
+
+    sc_reset_all()
+    let ch_a : u64 = sc_handshake_init(b_pk as u64, a_sk as u64)
+    let v_a : u32 = sc_session_id_byte(ch_a, 0u32)
+
+    sc_reset_all()
+    let ch_b : u64 = sc_handshake_init(a_pk as u64, b_sk as u64)
+    let v_b : u32 = sc_session_id_byte(ch_b, 0u32)
+
+    /* If x25519 is symmetric (which diag_x25519 confirmed), v_a should == v_b. */
+    if v_a == v_b { return 99u64 }
+    /* Encode (v_a << 8) | v_b — but exit codes are u8 on Linux conventions.
+     * We just exit 1 to signal mismatch. */
+    return 1u64
+}

@@ -1,0 +1,81 @@
+/* STDLIB/iii/katabasis/gate_verdict.iii
+ *
+ * KATABASIS increment 8 -- the gate-verdict pipeline (plan 6.2 verdicts, plan
+ * 4.2 six-step order).  The III Gate verifies a cross-ring cycle in a fixed
+ * order -- seal, cap, hexad, SID, perform, witness -- and SHORT-CIRCUITS on the
+ * first failing step, emitting that step's verdict.  This module is the gate's
+ * decision contract as a total function: given the five gating-check outcomes,
+ * it yields the verdict; OK only when all five pass.  Every status is a
+ * witnessed verdict (a rejection is as auditable as a success, plan 6.2).
+ *
+ * Pure total functions -- no metal, no I/O.  The check OUTCOMES are computed by
+ * the real substrate elsewhere (seal = numera content-address + Anchor sig; cap
+ * = the wallet; hexad = cycle_admit; SID = the inverse derivation); this module
+ * is the order + verdict logic that consumes them.  KAT: corpus 602.  Ring R0.
+ */
+module katabasis_gate_verdict
+
+/* Verdicts (plan 6.2). */
+const KGV_OK                  : u32 = 0u32
+const KGV_REJECT_SEAL         : u32 = 1u32
+const KGV_REJECT_CAP          : u32 = 2u32
+const KGV_REJECT_HEXAD        : u32 = 3u32
+const KGV_REJECT_IRREVERSIBLE : u32 = 4u32
+const KGV_FAIL_CLOSED         : u32 = 5u32
+
+/* Gate steps in canonical order (plan 4.2). */
+const KGV_STEP_NONE    : u32 = 0u32
+const KGV_STEP_SEAL    : u32 = 1u32
+const KGV_STEP_CAP     : u32 = 2u32
+const KGV_STEP_HEXAD   : u32 = 3u32
+const KGV_STEP_SID     : u32 = 4u32
+const KGV_STEP_PERFORM : u32 = 5u32
+const KGV_STEP_WITNESS : u32 = 6u32
+
+/* The verdict a step yields if it REJECTS (steps 1..4 are gating checks; a
+ * perform failure is fail-closed; passing the witness step completes the OK
+ * path). */
+fn katabasis_gate_step_verdict(step: u32) -> u32 @export {
+    let s : u32 = step
+    if s == KGV_STEP_SEAL    { return KGV_REJECT_SEAL }
+    if s == KGV_STEP_CAP     { return KGV_REJECT_CAP }
+    if s == KGV_STEP_HEXAD   { return KGV_REJECT_HEXAD }
+    if s == KGV_STEP_SID     { return KGV_REJECT_IRREVERSIBLE }
+    if s == KGV_STEP_PERFORM { return KGV_FAIL_CLOSED }
+    if s == KGV_STEP_WITNESS { return KGV_OK }
+    return KGV_FAIL_CLOSED
+}
+
+/* The next step after `step` passes (the canonical pipeline order);
+ * NONE (0) once WITNESS has completed. */
+fn katabasis_gate_next_step(step: u32) -> u32 @export {
+    let s : u32 = step
+    if s == KGV_STEP_SEAL    { return KGV_STEP_CAP }
+    if s == KGV_STEP_CAP     { return KGV_STEP_HEXAD }
+    if s == KGV_STEP_HEXAD   { return KGV_STEP_SID }
+    if s == KGV_STEP_SID     { return KGV_STEP_PERFORM }
+    if s == KGV_STEP_PERFORM { return KGV_STEP_WITNESS }
+    if s == KGV_STEP_WITNESS { return KGV_STEP_NONE }
+    return KGV_STEP_NONE
+}
+
+/* The short-circuit gate pipeline (plan 4.2): the five gating-check outcomes as
+ * a bitmask (bit0 seal, bit1 cap, bit2 hexad, bit3 sid, bit4 perform; 1 = the
+ * check passed).  The FIRST failing step in order decides the verdict; OK only
+ * if all five pass. */
+fn katabasis_gate_decide(checks: u32) -> u32 @export {
+    let c : u32 = checks
+    if (c & 1u32)  == 0u32 { return KGV_REJECT_SEAL }
+    if (c & 2u32)  == 0u32 { return KGV_REJECT_CAP }
+    if (c & 4u32)  == 0u32 { return KGV_REJECT_HEXAD }
+    if (c & 8u32)  == 0u32 { return KGV_REJECT_IRREVERSIBLE }
+    if (c & 16u32) == 0u32 { return KGV_FAIL_CLOSED }
+    return KGV_OK
+}
+
+/* Is this verdict the success verdict? */
+fn katabasis_verdict_is_ok(verdict: u32) -> u8 @export {
+    let v : u32 = verdict
+    if v == KGV_OK { return 1u8 }
+    return 0u8
+}

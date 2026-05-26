@@ -1,0 +1,105 @@
+/* STDLIB/iii/omnia/xii_lower_with.iii -- mig4 Step 8d: lower the CONTEXT domain (FWITH) through XII.
+ * Unlike FCOMPOSE/FTHEN (clean monoids), FWITH is a LEFT-UNITAL, RIGHT-ABSORBING structure -- a real
+ * finding: the four composition operators do NOT share one algebra.  "a with b" associates, the
+ * empty context is a LEFT identity, but a null on the RIGHT annihilates (composing onto an absent
+ * context yields the absent context).  Additive (a consumer of canonicalise; engine untouched); the
+ * engine's own rules ARE the structure's laws (read from xii_rewrite.iii):
+ *   - product        a ~ b = FWITH(a, b)
+ *   - unit/zero      e     = the K06 null leaf  (LEFT identity AND right zero -- the asymmetry)
+ *   - atoms          = inert K13 leaves (CAP_NONE; referenced by NO FWITH rule)
+ * The laws:
+ *   - associativity   R003  FWITH(FWITH(a,b),c) -> FWITH(a,FWITH(b,c))   [right-nested NF]
+ *   - LEFT identity   R016  FWITH(K06null, a)   -> a       (apply_R016 = child_b)
+ *   - RIGHT zero      R036  FWITH(a, K06null)   -> K06null (apply_R036 = child_b = the null) -- NOT a
+ * So xii_canonicalise of an encoded context expression strips a leading empty context but COLLAPSES
+ * to nothing when a trailing context is empty.  Gated by xad_admit.  The KAT proves the ASYMMETRY:
+ * e~a -> a but a~e -> e, so FWITH is provably NOT a monoid (left-unital != right-unital).
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_admission only.  Determinism: integer-only; ==/!= compares; single-line fns; eval results
+ * bound to locals before struct_eq (param-spill-safe).
+ */
+module omnia_xii_lower_with
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLW_FWITH    : u8  = 20u8    /* the context operator */
+const XLW_K06      : u8  = 5u8     /* K06 null = LEFT identity AND right zero */
+const XLW_ATOM     : u8  = 12u8    /* K13: CAP_NONE + inert under every FWITH rule */
+const XLW_NULL_REF : u32 = 0xFFFFFFFFu32
+
+/* the empty context: a LEFT identity (R016) and a RIGHT zero (R036) -- the same K06 null leaf. */
+fn xlw_unit() -> u32 @export { return xii_term_make_basis(XLW_K06, xii_rewrite_null_form()) }
+fn xlw_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLW_ATOM, sf) }
+fn xlw_with(a: u32, b: u32) -> u32 @export { return xii_term_make_fusion2(XLW_FWITH, a, b) }
+fn xlw_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.  Proves the left-unital/right-absorbing
+ * laws by canonicalisation -- associativity (1), LEFT identity e~a->a (2), RIGHT zero a~e->e (3);
+ * the keystone ASYMMETRY teeth -- e~a != a~e, so FWITH is provably NOT a monoid (4); non-commutative
+ * (5); determinism (6); ADMITTED (7). */
+fn xlw_selftest() -> u64 @export {
+    /* (1) ASSOCIATIVITY (pure atoms, no null): (a~b)~c and a~(b~c) reach the same NF. */
+    xii_term_arena_reset()
+    let l : u32 = xlw_with(xlw_with(xlw_atom(1u32), xlw_atom(2u32)), xlw_atom(3u32))
+    let r : u32 = xlw_with(xlw_atom(1u32), xlw_with(xlw_atom(2u32), xlw_atom(3u32)))
+    let nfl : u32 = xlw_eval(l)
+    let nfr : u32 = xlw_eval(r)
+    if xii_rewrite_struct_eq(nfl, nfr) != 1u8 { return 1u64 }
+
+    /* (2) LEFT IDENTITY (R016): e~a -> a. */
+    xii_term_arena_reset()
+    let ea : u32 = xlw_with(xlw_unit(), xlw_atom(1u32))
+    let a2 : u32 = xlw_atom(1u32)
+    let nea : u32 = xlw_eval(ea)
+    if xii_rewrite_struct_eq(nea, a2) != 1u8 { return 2u64 }
+
+    /* (3) RIGHT ZERO (R036): a~e -> e  (collapses to the empty context, NOT to a). */
+    xii_term_arena_reset()
+    let ae : u32 = xlw_with(xlw_atom(1u32), xlw_unit())
+    let e3 : u32 = xlw_unit()
+    let nae : u32 = xlw_eval(ae)
+    if xii_rewrite_struct_eq(nae, e3) != 1u8 { return 3u64 }
+
+    /* (4) THE ASYMMETRY (keystone teeth): e~a -> a but a~e -> e, so e~a != a~e -- FWITH is provably
+     * NOT a monoid (a monoid's identity is two-sided). */
+    xii_term_arena_reset()
+    let lhs_ea : u32 = xlw_with(xlw_unit(), xlw_atom(1u32))
+    let lhs_ae : u32 = xlw_with(xlw_atom(1u32), xlw_unit())
+    let n_ea : u32 = xlw_eval(lhs_ea)
+    let n_ae : u32 = xlw_eval(lhs_ae)
+    if xii_rewrite_struct_eq(n_ea, n_ae) != 0u8 { return 4u64 }
+
+    /* (5) NON-COMMUTATIVE (teeth): a~b != b~a. */
+    xii_term_arena_reset()
+    let abx : u32 = xlw_with(xlw_atom(1u32), xlw_atom(2u32))
+    let bax : u32 = xlw_with(xlw_atom(2u32), xlw_atom(1u32))
+    let nab : u32 = xlw_eval(abx)
+    let nba : u32 = xlw_eval(bax)
+    if xii_rewrite_struct_eq(nab, nba) != 0u8 { return 5u64 }
+
+    /* (6) DETERMINISM. */
+    xii_term_arena_reset()
+    let d1 : u32 = xlw_with(xlw_atom(1u32), xlw_with(xlw_atom(2u32), xlw_unit()))
+    let d2 : u32 = xlw_with(xlw_atom(1u32), xlw_with(xlw_atom(2u32), xlw_unit()))
+    let nd1 : u32 = xlw_eval(d1)
+    let nd2 : u32 = xlw_eval(d2)
+    if xii_rewrite_struct_eq(nd1, nd2) != 1u8 { return 6u64 }
+
+    /* (7) ADMITTED (Step 6). */
+    if xad_admit() != 1u32 { return 7u64 }
+
+    return 99u64
+}
+
+/* xii_lower_with EMBODIES the CONTEXT operator lowered onto XII: "a with b" is FWITH, the empty
+ * context K06 is a LEFT identity but a RIGHT zero, and the engine's own R003 (assoc) + R016 (left-id)
+ * + R036 (right-zero) rules ARE the structure -- so canonicalising strips a leading empty context
+ * yet collapses a trailing one.  The verified finding that the four composition operators have
+ * DIFFERENT algebras (FCOMPOSE/FTHEN monoids; FWITH left-unital-right-absorbing); Step-6-admitted. */

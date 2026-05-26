@@ -1,0 +1,46 @@
+/* corpus/362_xii_sml_full_chain.iii — SML full launch chain */
+
+module corpus_362_xii_sml_full_chain
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn xii_sml_verify_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 from "xii_sml.iii"
+extern @abi(c-msvc-x64) fn xii_sml_last_error() -> u32 from "xii_sml.iii"
+
+var MANIFEST_362 : [u8; 1040]
+var GOLDEN_MHASH_362 : [u8; 32]
+var TAMPERED_GOLDEN_362 : [u8; 32]
+
+fn main() -> u64 {
+    /* Build a synthetic 1040-byte manifest with deterministic pattern. */
+    let mut i : u32 = 0u32
+    while i < 1040u32 {
+        MANIFEST_362[i] = ((i * 7u32) & 0xFFu32) as u8
+        i = i + 1u32
+    }
+
+    /* Compute golden mhash. */
+    sha256_oneshot(&MANIFEST_362 as *u8, 1040u64, &GOLDEN_MHASH_362 as *u8)
+
+    /* SML should ACCEPT matching golden. */
+    let rc1 : u32 = xii_sml_verify_manifest(&MANIFEST_362 as *u8, 1040u32, &GOLDEN_MHASH_362 as *u8)
+    if rc1 != 0u32 { return 1u64 }
+
+    /* Tamper a byte; SML should REJECT. */
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        TAMPERED_GOLDEN_362[j] = GOLDEN_MHASH_362[j]
+        j = j + 1u32
+    }
+    TAMPERED_GOLDEN_362[5] = TAMPERED_GOLDEN_362[5] ^ 0xFFu8
+
+    let rc2 : u32 = xii_sml_verify_manifest(&MANIFEST_362 as *u8, 1040u32, &TAMPERED_GOLDEN_362 as *u8)
+    if rc2 == 0u32 { return 2u64 }
+    if xii_sml_last_error() != 3u32 { return 3u64 }   /* XSL_E_MANIFEST_TAMPER */
+
+    /* Wrong-size manifest: REJECT. */
+    let rc3 : u32 = xii_sml_verify_manifest(&MANIFEST_362 as *u8, 512u32, &GOLDEN_MHASH_362 as *u8)
+    if rc3 == 0u32 { return 4u64 }
+    if xii_sml_last_error() != 2u32 { return 5u64 }   /* XSL_E_NO_MANIFEST */
+
+    return 0u64
+}

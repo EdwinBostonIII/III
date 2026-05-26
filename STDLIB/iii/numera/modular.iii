@@ -1,0 +1,119 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\modular.iii
+ *
+ * III STDLIB - numera::modular
+ *
+ * Modular arithmetic over u32 / u64 with explicit modulus argument.
+ * No assumptions about modulus primality (so this also covers
+ * generic arithmetic mod n).  For u64 multiplication we use
+ * 64-bit-safe mul-mod via repeated doubling to avoid overflow.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module numera_modular
+
+const MOD_OK     : i32 =  0i32
+const MOD_E_ZERO : i32 = -1i32
+
+fn mod_u32_add(a: u32, b: u32, m: u32) -> u32 @export {
+    if m == 0u32 { return 0u32 }
+    let am : u32 = a % m
+    let bm : u32 = b % m
+    let s : u32 = (am + bm) & 0xFFFFFFFFu32
+    if s < am { return (s - m) & 0xFFFFFFFFu32 }     /* wrap-around */
+    if s >= m { return (s - m) & 0xFFFFFFFFu32 }
+    return s
+}
+
+fn mod_u32_sub(a: u32, b: u32, m: u32) -> u32 @export {
+    if m == 0u32 { return 0u32 }
+    let am : u32 = a % m
+    let bm : u32 = b % m
+    if am >= bm { return (am - bm) & 0xFFFFFFFFu32 }
+    return ((am + m) - bm) & 0xFFFFFFFFu32
+}
+
+fn mod_u32_mul(a: u32, b: u32, m: u32) -> u32 @export {
+    if m == 0u32 { return 0u32 }
+    let am : u64 = (a % m) as u64
+    let bm : u64 = (b % m) as u64
+    let prod : u64 = am * bm
+    let r : u64 = prod % (m as u64)
+    return (r & 0xFFFFFFFFu64) as u32
+}
+
+fn mod_u32_pow(base: u32, exp: u32, m: u32) -> u32 @export {
+    if m == 0u32 { return 0u32 }
+    if m == 1u32 { return 0u32 }
+    let mut result : u32 = 1u32
+    let mut b : u32 = base % m
+    let mut e : u32 = exp
+    while e > 0u32 {
+        if (e & 1u32) == 1u32 {
+            result = mod_u32_mul(result, b, m)
+        }
+        e = e >> 1u32
+        if e > 0u32 {
+            b = mod_u32_mul(b, b, m)
+        }
+    }
+    return result
+}
+
+/* --- u64 modular --- */
+
+fn mod_u64_add(a: u64, b: u64, m: u64) -> u64 @export {
+    if m == 0u64 { return 0u64 }
+    let am : u64 = a % m
+    let bm : u64 = b % m
+    /* Avoid overflow: if am + bm overflows, equivalent to am + bm - 2^64,
+     * and (am + bm) >= m always after that. */
+    let s : u64 = am + bm
+    if s < am { return s - m }       /* overflowed: high carry consumed by -m */
+    if s >= m { return s - m }
+    return s
+}
+
+fn mod_u64_sub(a: u64, b: u64, m: u64) -> u64 @export {
+    if m == 0u64 { return 0u64 }
+    let am : u64 = a % m
+    let bm : u64 = b % m
+    if am >= bm { return am - bm }
+    return (am + m) - bm
+}
+
+/* mul-mod via doubling-and-adding ("Russian peasant") to avoid overflow. */
+fn mod_u64_mul(a: u64, b: u64, m: u64) -> u64 @export {
+    if m == 0u64 { return 0u64 }
+    let mut result : u64 = 0u64
+    let mut x : u64 = a % m
+    let mut y : u64 = b % m
+    while y > 0u64 {
+        if (y & 1u64) == 1u64 {
+            result = mod_u64_add(result, x, m)
+        }
+        y = y >> 1u64
+        if y > 0u64 {
+            x = mod_u64_add(x, x, m)
+        }
+    }
+    return result
+}
+
+fn mod_u64_pow(base: u64, exp: u64, m: u64) -> u64 @export {
+    if m == 0u64 { return 0u64 }
+    if m == 1u64 { return 0u64 }
+    let mut result : u64 = 1u64
+    let mut b : u64 = base % m
+    let mut e : u64 = exp
+    while e > 0u64 {
+        if (e & 1u64) == 1u64 {
+            result = mod_u64_mul(result, b, m)
+        }
+        e = e >> 1u64
+        if e > 0u64 {
+            b = mod_u64_mul(b, b, m)
+        }
+    }
+    return result
+}

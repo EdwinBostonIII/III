@@ -1,0 +1,367 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\unify.iii
+ *
+ * III STDLIB - omnia::unify
+ *
+ * Bounded Robinson unification with occurs check.
+ * FROZEN SPEC §6, §Z.C.5; ADR-RES-003.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Limits:
+ *   UNIFY_MAX_TERMS    256
+ *   UNIFY_MAX_VARS      64
+ *   UNIFY_MAX_SUBSTS    64
+ *   UNIFY_MAX_DEPTH     16
+ *   UNIFY_MAX_ARITY     32
+ *   UNIFY_MAX_ARGS_POOL 1024
+ *
+ * Buffer (8720 bytes per resolve()-call, stack/arena allocated):
+ *    @0      terms_used : u32
+ *    @4      substs_used : u32
+ *    @8      args_used : u32
+ *    @12     pool_used : u32
+ *    @16     term_table : term_t[256] = 4096 bytes
+ *    @4112   subst_table : (u32,u32)[64] = 512 bytes
+ *    @4624   args_pool : u32[1024] = 4096 bytes
+ *    @8720   end
+ *
+ * term_t (16 bytes): kind:u8, arity:u8, _pad:u16, head:u32, payload:u64
+ *
+ * Termination proof: §6.6 of FROZEN SPEC.
+ */
+
+module omnia_unify
+
+extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u32, align: u8) -> u64 from "arena.iii"
+
+const TERM_KIND_VAR    : u8 = 1u8
+const TERM_KIND_CONST  : u8 = 2u8
+const TERM_KIND_STRUCT : u8 = 3u8
+const TERM_KIND_CAP    : u8 = 4u8
+const TERM_KIND_HEXAD  : u8 = 5u8
+
+const UNIFY_MAX_TERMS    : u32 = 256u32
+const UNIFY_MAX_VARS     : u32 = 64u32
+const UNIFY_MAX_SUBSTS   : u32 = 64u32
+const UNIFY_MAX_DEPTH    : u32 = 16u32
+const UNIFY_MAX_ARITY    : u8  = 32u8
+const UNIFY_MAX_ARGS_POOL: u32 = 1024u32
+
+const TERM_BYTES : u32 = 16u32
+
+const OFF_TERMS_USED  : u32 = 0u32
+const OFF_SUBSTS_USED : u32 = 4u32
+const OFF_ARGS_USED   : u32 = 8u32
+const OFF_POOL_USED   : u32 = 12u32
+const OFF_TERM_TABLE  : u32 = 16u32
+const OFF_SUBST_TABLE : u32 = 4112u32
+const OFF_ARGS_POOL   : u32 = 4624u32
+const UNIFY_BUF_SIZE  : u32 = 8720u32
+
+const UNIFY_OK   : u8 = 1u8
+const UNIFY_FAIL : u8 = 0u8
+
+const UNIFY_INVALID : u32 = 0xFFFFFFFFu32
+
+/* ── byte-discipline helpers (HC-12) ── */
+
+fn read_u32_le(p: u64) -> u32 @export {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn write_u32_le(p: u64, v: u32) -> i32 @export {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn read_u64_le(p: u64) -> u64 @export {
+    let lo : u64 = (read_u32_le(p) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (read_u32_le(p + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn write_u64_le(p: u64, v: u64) -> i32 @export {
+    write_u32_le(p, (v & 0xFFFFFFFFu64) as u32)
+    write_u32_le(p + 4u64, ((v >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+/* ── buffer init / term-table ── */
+
+fn unify_init(buf: u64) -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < UNIFY_BUF_SIZE {
+        let bp : *u8 = (buf + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn term_offset(buf: u64, term_id: u32) -> u64 {
+    let masked_id : u64 = (term_id as u64) & 0xFFFFFFFFu64
+    let off : u64 = (OFF_TERM_TABLE as u64) + masked_id * (TERM_BYTES as u64)
+    return buf + off
+}
+
+fn term_kind(buf: u64, term_id: u32) -> u8 @export {
+    let p : *u8 = (term_offset(buf, term_id)) as *u8
+    return p[0u64]
+}
+
+fn term_arity(buf: u64, term_id: u32) -> u8 @export {
+    let p : *u8 = (term_offset(buf, term_id) + 1u64) as *u8
+    return p[0u64]
+}
+
+fn term_head(buf: u64, term_id: u32) -> u32 @export {
+    return read_u32_le(term_offset(buf, term_id) + 4u64)
+}
+
+fn term_payload(buf: u64, term_id: u32) -> u64 @export {
+    return read_u64_le(term_offset(buf, term_id) + 8u64)
+}
+
+/* term_set split into 4-param phases to comply with W2 discipline. */
+fn term_set_kind_arity(buf: u64, term_id: u32, kind: u8, arity: u8) -> i32 {
+    let p : u64 = term_offset(buf, term_id)
+    let pk : *u8 = (p) as *u8
+    let pa : *u8 = (p + 1u64) as *u8
+    let pp0 : *u8 = (p + 2u64) as *u8
+    let pp1 : *u8 = (p + 3u64) as *u8
+    pk[0u64] = kind
+    pa[0u64] = arity
+    pp0[0u64] = 0u8
+    pp1[0u64] = 0u8
+    return 0i32
+}
+
+fn term_set_head_payload(buf: u64, term_id: u32, head: u32, payload: u64) -> i32 {
+    let p : u64 = term_offset(buf, term_id)
+    write_u32_le(p + 4u64, head)
+    write_u64_le(p + 8u64, payload)
+    return 0i32
+}
+
+fn unify_make_var(buf: u64) -> u32 @export {
+    let used : u32 = read_u32_le(buf + (OFF_TERMS_USED as u64))
+    if used >= UNIFY_MAX_TERMS { return UNIFY_INVALID }
+    term_set_kind_arity(buf, used, TERM_KIND_VAR, 0u8)
+    term_set_head_payload(buf, used, 0u32, 0u64)
+    write_u32_le(buf + (OFF_TERMS_USED as u64), used + 1u32)
+    return used
+}
+
+fn unify_make_const(buf: u64, payload: u64) -> u32 @export {
+    let used : u32 = read_u32_le(buf + (OFF_TERMS_USED as u64))
+    if used >= UNIFY_MAX_TERMS { return UNIFY_INVALID }
+    term_set_kind_arity(buf, used, TERM_KIND_CONST, 0u8)
+    term_set_head_payload(buf, used, 0u32, payload)
+    write_u32_le(buf + (OFF_TERMS_USED as u64), used + 1u32)
+    return used
+}
+
+fn unify_make_cap(buf: u64, cap_id: u64) -> u32 @export {
+    let used : u32 = read_u32_le(buf + (OFF_TERMS_USED as u64))
+    if used >= UNIFY_MAX_TERMS { return UNIFY_INVALID }
+    term_set_kind_arity(buf, used, TERM_KIND_CAP, 0u8)
+    term_set_head_payload(buf, used, 0u32, cap_id)
+    write_u32_le(buf + (OFF_TERMS_USED as u64), used + 1u32)
+    return used
+}
+
+fn unify_make_hexad(buf: u64, hk: u8) -> u32 @export {
+    let used : u32 = read_u32_le(buf + (OFF_TERMS_USED as u64))
+    if used >= UNIFY_MAX_TERMS { return UNIFY_INVALID }
+    term_set_kind_arity(buf, used, TERM_KIND_HEXAD, 0u8)
+    term_set_head_payload(buf, used, 0u32, (hk as u64) & 0xFFu64)
+    write_u32_le(buf + (OFF_TERMS_USED as u64), used + 1u32)
+    return used
+}
+
+fn unify_make_struct(buf: u64, head: u32, args_first_idx: u32, arity: u8) -> u32 @export {
+    if arity > UNIFY_MAX_ARITY { return UNIFY_INVALID }
+    let used : u32 = read_u32_le(buf + (OFF_TERMS_USED as u64))
+    if used >= UNIFY_MAX_TERMS { return UNIFY_INVALID }
+    term_set_kind_arity(buf, used, TERM_KIND_STRUCT, arity)
+    let payload : u64 = (args_first_idx as u64) & 0xFFFFFFFFu64
+    term_set_head_payload(buf, used, head, payload)
+    write_u32_le(buf + (OFF_TERMS_USED as u64), used + 1u32)
+    return used
+}
+
+fn unify_alloc_args(buf: u64, count: u8) -> u32 @export {
+    let used : u32 = read_u32_le(buf + (OFF_ARGS_USED as u64))
+    let need : u32 = (count as u32) & 0xFFu32
+    if (used + need) > UNIFY_MAX_ARGS_POOL { return UNIFY_INVALID }
+    write_u32_le(buf + (OFF_ARGS_USED as u64), used + need)
+    return used
+}
+
+fn unify_set_arg(buf: u64, args_first_idx: u32, slot: u8, term_id: u32) -> i32 @export {
+    let masked_first : u64 = (args_first_idx as u64) & 0xFFFFFFFFu64
+    let masked_slot : u64 = (slot as u64) & 0xFFu64
+    let off : u64 = (OFF_ARGS_POOL as u64) + (masked_first + masked_slot) * 4u64
+    write_u32_le(buf + off, term_id)
+    return 0i32
+}
+
+fn term_arg(buf: u64, parent: u32, slot: u8) -> u32 @export {
+    let args_first : u32 = (term_payload(buf, parent) & 0xFFFFFFFFu64) as u32
+    let masked_first : u64 = (args_first as u64) & 0xFFFFFFFFu64
+    let masked_slot : u64 = (slot as u64) & 0xFFu64
+    let off : u64 = (OFF_ARGS_POOL as u64) + (masked_first + masked_slot) * 4u64
+    return read_u32_le(buf + off)
+}
+
+/* ── substitution ── */
+
+fn subst_bind(buf: u64, var_id: u32, term_id: u32) -> u8 @export {
+    let used : u32 = read_u32_le(buf + (OFF_SUBSTS_USED as u64))
+    if used >= UNIFY_MAX_SUBSTS { return 0u8 }
+    let off : u64 = (OFF_SUBST_TABLE as u64) + ((used as u64) & 0xFFFFFFFFu64) * 8u64
+    write_u32_le(buf + off, var_id)
+    write_u32_le(buf + off + 4u64, term_id)
+    write_u32_le(buf + (OFF_SUBSTS_USED as u64), used + 1u32)
+    return 1u8
+}
+
+fn unify_walk(buf: u64, t: u32) -> u32 @export {
+    let mut cur : u32 = t
+    let mut steps : u32 = 0u32
+    while steps < UNIFY_MAX_DEPTH {
+        let kind : u8 = term_kind(buf, cur)
+        if kind != TERM_KIND_VAR { return cur }
+        let used : u32 = read_u32_le(buf + (OFF_SUBSTS_USED as u64))
+        let mut found : u32 = UNIFY_INVALID
+        let mut i : u32 = 0u32
+        while i < used {
+            let off : u64 = (OFF_SUBST_TABLE as u64) + ((i as u64) & 0xFFFFFFFFu64) * 8u64
+            let v : u32 = read_u32_le(buf + off)
+            if v == cur {
+                found = read_u32_le(buf + off + 4u64)
+                i = used   /* break */
+            }
+            i = i + 1u32
+        }
+        if found == UNIFY_INVALID { return cur }
+        cur = found
+        steps = steps + 1u32
+    }
+    return cur
+}
+
+fn unify_occurs_check(buf: u64, var_id: u32, t_in: u32) -> u8 @export {
+    let t : u32 = unify_walk(buf, t_in)
+    if t == var_id { return 1u8 }
+    let kt : u8 = term_kind(buf, t)
+    if kt == TERM_KIND_STRUCT {
+        let n : u8 = term_arity(buf, t)
+        let mut i : u8 = 0u8
+        while i < n {
+            if unify_occurs_check(buf, var_id, term_arg(buf, t, i)) == 1u8 { return 1u8 }
+            i = i + 1u8
+        }
+    }
+    return 0u8
+}
+
+fn unify(buf: u64, a_in: u32, b_in: u32) -> u8 @export {
+    let a : u32 = unify_walk(buf, a_in)
+    let b : u32 = unify_walk(buf, b_in)
+    if a == b { return 1u8 }
+    let ka : u8 = term_kind(buf, a)
+    let kb : u8 = term_kind(buf, b)
+    if ka == TERM_KIND_VAR {
+        if unify_occurs_check(buf, a, b) == 1u8 { return 0u8 }
+        return subst_bind(buf, a, b)
+    }
+    if kb == TERM_KIND_VAR {
+        if unify_occurs_check(buf, b, a) == 1u8 { return 0u8 }
+        return subst_bind(buf, b, a)
+    }
+    if ka != kb { return 0u8 }
+    if ka == TERM_KIND_CONST {
+        if term_payload(buf, a) == term_payload(buf, b) { return 1u8 }
+        return 0u8
+    }
+    if ka == TERM_KIND_CAP {
+        if term_payload(buf, a) == term_payload(buf, b) { return 1u8 }
+        return 0u8
+    }
+    if ka == TERM_KIND_HEXAD {
+        if term_payload(buf, a) == term_payload(buf, b) { return 1u8 }
+        return 0u8
+    }
+    if ka == TERM_KIND_STRUCT {
+        if term_head(buf, a) != term_head(buf, b) { return 0u8 }
+        if term_arity(buf, a) != term_arity(buf, b) { return 0u8 }
+        let n : u8 = term_arity(buf, a)
+        let mut i : u8 = 0u8
+        while i < n {
+            let ai : u32 = term_arg(buf, a, i)
+            let bi : u32 = term_arg(buf, b, i)
+            if unify(buf, ai, bi) == 0u8 { return 0u8 }
+            i = i + 1u8
+        }
+        return 1u8
+    }
+    return 0u8
+}
+
+fn unify_lookup_var(buf: u64, var_id: u32) -> u64 @export {
+    let used : u32 = read_u32_le(buf + (OFF_SUBSTS_USED as u64))
+    let mut i : u32 = 0u32
+    while i < used {
+        let off : u64 = (OFF_SUBST_TABLE as u64) + ((i as u64) & 0xFFFFFFFFu64) * 8u64
+        let v : u32 = read_u32_le(buf + off)
+        if v == var_id {
+            let term_id : u32 = read_u32_le(buf + off + 4u64)
+            return ((term_id as u64) & 0xFFFFFFFFu64) << 1u64
+        }
+        i = i + 1u32
+    }
+    return 0x1u64
+}
+
+fn unify_export_subst_to_resolver_buf(buf: u64, dst_256b: u64) -> i32 @export {
+    let used : u32 = read_u32_le(buf + (OFF_SUBSTS_USED as u64))
+    let mut i : u32 = 0u32
+    while i < 64u32 {
+        let dst_off : u64 = ((i as u64) & 0xFFFFFFFFu64) * 8u64
+        if i < used {
+            let src_off : u64 = (OFF_SUBST_TABLE as u64) + ((i as u64) & 0xFFFFFFFFu64) * 8u64
+            let v : u32 = read_u32_le(buf + src_off)
+            let t : u32 = read_u32_le(buf + src_off + 4u64)
+            write_u32_le(dst_256b + dst_off, v)
+            write_u32_le(dst_256b + dst_off + 4u64, t)
+        }
+        if i >= used {
+            write_u32_le(dst_256b + dst_off, 0xFFFFFFFFu32)
+            write_u32_le(dst_256b + dst_off + 4u64, 0xFFFFFFFFu32)
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn unify_buf_new(arena_id: u64) -> u64 @export {
+    let p : u64 = arena_alloc(arena_id, UNIFY_BUF_SIZE, 16u8)
+    if p != 0u64 { unify_init(p) }
+    return p
+}

@@ -1,0 +1,109 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\fold.iii
+ *
+ * III STDLIB - omnia::fold
+ *
+ * Sealed accumulation over an iter_u8.  Apply a step function to each
+ * element with a running u32 accumulator; return the final value.
+ * The fold is total because the underlying iter is bounded; no
+ * closures, so the step is a function pointer (u64) of signature
+ * (acc: u32, byte: u32) -> u32.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.
+ */
+
+module omnia_fold
+
+extern @abi(c-msvc-x64) fn iter_u8_next(id: u64) -> u32 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_remaining(id: u64) -> u64 from "iter.iii"
+
+const FOLD_END : u32 = 0x100u32
+
+/* Reduce iter_u8 with `step(acc, byte)` starting from `init`.
+ * step is a u64 fn-ptr; calling syntax `(step as fn-ptr)(acc, byte)`.
+ * Phase B note: iiis-2 only supports calling u64-typed identifiers
+ * directly, so we declare a local `let f : u64 = step` then invoke. */
+
+fn fold_u8_u32_sum(iter_id: u64) -> u32 @export {
+    /* Concrete fold: sum of bytes, mod 2^32. */
+    let mut acc : u32 = 0u32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(iter_id)
+        if v == FOLD_END { done = 1u8 }
+        if done == 0u8 {
+            acc = (acc + v) & 0xFFFFFFFFu32
+        }
+    }
+    return acc
+}
+
+fn fold_u8_u32_xor(iter_id: u64) -> u32 @export {
+    let mut acc : u32 = 0u32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(iter_id)
+        if v == FOLD_END { done = 1u8 }
+        if done == 0u8 {
+            acc = (acc ^ v) & 0xFFFFFFFFu32
+        }
+    }
+    return acc
+}
+
+fn fold_u8_u32_max(iter_id: u64) -> u32 @export {
+    let mut acc : u32 = 0u32
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(iter_id)
+        if v == FOLD_END { done = 1u8 }
+        if done == 0u8 {
+            if v > acc { acc = v }
+        }
+    }
+    return acc
+}
+
+fn fold_u8_u32_min(iter_id: u64) -> u32 @export {
+    let mut acc : u32 = 0xFFu32
+    let mut done : u8 = 0u8
+    let mut seen : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(iter_id)
+        if v == FOLD_END { done = 1u8 }
+        if done == 0u8 {
+            seen = 1u8
+            if v < acc { acc = v }
+        }
+    }
+    if seen == 0u8 { return 0u32 }
+    return acc
+}
+
+fn fold_u8_u32_count(iter_id: u64) -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(iter_id)
+        if v == FOLD_END { done = 1u8 }
+        if done == 0u8 {
+            n = n + 1u64
+        }
+    }
+    return n
+}
+
+/* Generic fn-ptr fold: callers pass a u64 fn-ptr that has the C ABI
+ * `uint32_t step(uint32_t acc, uint32_t byte)`. */
+fn fold_u8_u32_via_fn(iter_id: u64, init: u32, step: u64) -> u32 @export {
+    let f : u64 = step
+    let mut acc : u32 = init
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let v : u32 = iter_u8_next(iter_id)
+        if v == FOLD_END { done = 1u8 }
+        if done == 0u8 {
+            acc = (f(acc, v)) & 0xFFFFFFFFu32
+        }
+    }
+    return acc
+}

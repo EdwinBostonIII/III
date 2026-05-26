@@ -1,0 +1,26 @@
+module corpus_39
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_expected_hexad(p: u64, h: u8) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap: u64, kid: u8, ring: u8, hex: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    let pre : u32 = witness_count()
+    let intent : u64 = intent_new(1u8)
+    intent_set_expected_hexad(intent, 1u8)
+    call_context_init_set(1u64, 0u8, 2u8, 1u8)
+    call_context_init_set_extras(0u64, 0u16)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 0u64 }
+    let r : u64 = resolve(pattern_set_global(), intent, ctx)
+    let post : u32 = witness_count()
+    if (post - pre) < 1u32 { return 0u64 }
+    return 1u64
+}

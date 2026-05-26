@@ -1,0 +1,442 @@
+/* III/STDLIB/iii/aether/shape_negotiator.iii -- Layer 6, Module 35 (gospel).
+ *
+ * III STDLIB - aether::shape_negotiator
+ *
+ * Lift local presheaf sections (probe outcomes) to a coherent sheaf section
+ * (global hardware classification) by iterated MaxSAT over the deterministic
+ * CDCL solver (numera/sat.iii).  Hard clauses (-a | -b) per conflict edge;
+ * unit soft clauses (accept_s) preferring acceptance; on UNSAT peel the
+ * lex-smallest-op-id probe still in an ACTIVE conflict and re-solve until SAT.
+ * Publishes a SHAPE_LIFTED witness; capability-gated on the amend right.
+ *
+ * Hexad: kind_motion + kind_witness.  Ring: R0.  K: 0.99.
+ * Discipline: W2, W8, W9, W10, W12, W13, W14, W15.  PREFIX SHAPEN_.
+ *
+ * SPEC NOTES (intent preserved):
+ *   - sat.iii is BUILT (spec's "NOT-YET-BUILT" is stale, build_stdlib:552);
+ *     API verified: sat_init(u32)->i32, sat_add_clause(*u32,u32)->i32,
+ *     sat_solve()->i32, sat_value(vr:u32)->u8, SAT_SAT=1, SAT_UNSAT=2,
+ *     literal = (var<<1)|sign (neg => |1).  sat_value param is `vr` (not the
+ *     reserved keyword `var` the spec skeleton used).
+ *   - clause arrays built via the PROVEN sat_t_add2 pattern: array-index fill
+ *     (SHAPEN_CL2[0]=..) + `&SHAPEN_CL2 as *u32` (array-index and *u32-index
+ *     agree -- sat's own selftest depends on it).
+ *   - SHAPEN_VALUE/OP_ID/CONCAT are [u64;4096] (1024 ids x 4 u64), the proven
+ *     WH_PROD_ID id-array idiom (byte-pointer 32-byte copies), NOT [u8;32768].
+ *   - sn_val_ptr/sn_op_ptr use ((&ARR as u64)+off) as *u8 (G3/G4), NOT the
+ *     spec skeleton's &ARR[expr] element-address hazard.
+ *   - G7: sn_negotiate is M8 capability-gated (env_cap + CAP_RIGHT_AMEND).
+ */
+
+module aether_shape_negotiator
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn sat_init(n_vars: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_add_clause(lits: *u32, n_lits: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_solve() -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_value(vr: u32) -> u8 from "sat.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+
+// --- KAT-harness externs ---
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+const SHAPEN_OK           : i32 =  0i32
+const SHAPEN_E_BAD        : i32 = -1i32
+const SHAPEN_E_CAP        : i32 = -2i32
+const SHAPEN_SENT         : u32 = 0xFFFFFFFFu32
+const SHAPEN_SAT_SAT_RC   : i32 =  1i32
+const SHAPEN_SAT_UNSAT_RC : i32 =  2i32
+const SHAPEN_MAX_SEC      : u32 = 1024u32
+const SHAPEN_MAXSEC_U64   : u64 = 1024u64
+const SHAPEN_MAX_CONF     : u32 = 8192u32
+const SHAPEN_ID_BYTES     : u64 = 32u64
+const SHAPEN_PILLAR       : u16 = 6u16
+const SHAPEN_PHASE        : u8  = 5u8
+const SHAPEN_RIGHT_AMEND  : u64 = 0x4000u64
+
+var SHAPEN_LIVE        : [u8;  1024]
+var SHAPEN_OPEN        : [u32; 1024]
+var SHAPEN_VALUE       : [u64; 4096]   // 1024 ids x 4 u64 (32768 bytes; id-array idiom)
+var SHAPEN_OP_ID       : [u64; 4096]
+var SHAPEN_ACCEPT_VAR  : [u32; 1024]
+var SHAPEN_ACCEPTED    : [u8;  1024]
+var SHAPEN_DROPPED     : [u8;  1024]
+var SHAPEN_COUNT       : u32 = 0u32
+
+var SHAPEN_CONF_A      : [u32; 8192]
+var SHAPEN_CONF_B      : [u32; 8192]
+var SHAPEN_CONF_COUNT  : u32 = 0u32
+
+var SHAPEN_PRODUCER    : [u8; 32]
+var SHAPEN_OPID_LIFT   : [u8; 32]
+var SHAPEN_OPID_STR    : [u8; 30]      // "aether::shape_negotiator::lift" (producer = first 24)
+var SHAPEN_INITED      : u8 = 0u8
+
+/* module-scope scratch (Trap 7: no function-local var arrays) */
+var SHAPEN_CL2         : [u32; 2]
+var SHAPEN_CL1         : [u32; 1]
+var SHAPEN_INC         : [u8; 32]
+var SHAPEN_OUTC        : [u8; 32]
+var SHAPEN_FID         : [u8; 32]
+var SHAPEN_PL4         : [u8; 4]
+var SHAPEN_ORDER       : [u32; 1024]
+var SHAPEN_CONCAT      : [u64; 4096]   // 1024 ids x 4 u64
+
+/* self-test scratch */
+var SHAPEN_T_A         : [u8; 32]
+var SHAPEN_T_B         : [u8; 32]
+var SHAPEN_T_C         : [u8; 32]
+var SHAPEN_T_O0        : [u8; 32]
+var SHAPEN_T_O1        : [u8; 32]
+var SHAPEN_T_O2        : [u8; 32]
+var SHAPEN_T_IDA       : [u8; 32]
+var SHAPEN_T_IDB       : [u8; 32]
+
+// =========================== internal helpers ===========================
+
+fn sn_build_tags() -> i32 {
+    let sp : *u8 = (&SHAPEN_OPID_STR as u64) as *u8
+    sp[0u64]  = 0x61u8  sp[1u64]  = 0x65u8  sp[2u64]  = 0x74u8  sp[3u64]  = 0x68u8  sp[4u64]  = 0x65u8  sp[5u64]  = 0x72u8
+    sp[6u64]  = 0x3Au8  sp[7u64]  = 0x3Au8
+    sp[8u64]  = 0x73u8  sp[9u64]  = 0x68u8  sp[10u64] = 0x61u8  sp[11u64] = 0x70u8  sp[12u64] = 0x65u8
+    sp[13u64] = 0x5Fu8
+    sp[14u64] = 0x6Eu8  sp[15u64] = 0x65u8  sp[16u64] = 0x67u8  sp[17u64] = 0x6Fu8  sp[18u64] = 0x74u8  sp[19u64] = 0x69u8  sp[20u64] = 0x61u8  sp[21u64] = 0x74u8  sp[22u64] = 0x6Fu8  sp[23u64] = 0x72u8
+    sp[24u64] = 0x3Au8  sp[25u64] = 0x3Au8
+    sp[26u64] = 0x6Cu8  sp[27u64] = 0x69u8  sp[28u64] = 0x66u8  sp[29u64] = 0x74u8
+    return SHAPEN_OK
+}
+
+fn sn_val_ptr(slot: u32) -> *u8 { return ((&SHAPEN_VALUE as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+fn sn_op_ptr(slot: u32) -> *u8 { return ((&SHAPEN_OP_ID as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+
+// 1 iff slot is live and not dropped (active in the current MaxSAT instance).
+fn sn_active(slot: u64) -> u8 {
+    if SHAPEN_LIVE[slot] != 1u8 { return 0u8 }
+    if SHAPEN_DROPPED[slot] != 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn sn_encode_and_solve() -> i32 {
+    sat_init(SHAPEN_COUNT)
+    let clp2 : *u32 = &SHAPEN_CL2 as *u32
+    let cn : u64 = (SHAPEN_CONF_COUNT as u64) & 0xFFFFFFFFu64
+    let mut c : u64 = 0u64
+    while c < cn {
+        let aj : u64 = (SHAPEN_CONF_A[c] as u64) & 0xFFFFFFFFu64
+        let bj : u64 = (SHAPEN_CONF_B[c] as u64) & 0xFFFFFFFFu64
+        if sn_active(aj) == 1u8 {
+            if sn_active(bj) == 1u8 {
+                SHAPEN_CL2[0u64] = (SHAPEN_ACCEPT_VAR[aj] << 1u32) | 1u32
+                SHAPEN_CL2[1u64] = (SHAPEN_ACCEPT_VAR[bj] << 1u32) | 1u32
+                sat_add_clause(clp2, 2u32)
+            }
+        }
+        c = c + 1u64
+    }
+    let clp1 : *u32 = &SHAPEN_CL1 as *u32
+    let mut s : u64 = 0u64
+    while s < SHAPEN_MAXSEC_U64 {
+        if sn_active(s) == 1u8 {
+            SHAPEN_CL1[0u64] = SHAPEN_ACCEPT_VAR[s] << 1u32
+            sat_add_clause(clp1, 1u32)
+        }
+        s = s + 1u64
+    }
+    return sat_solve()
+}
+
+// Consider endpoint ep against the running best (lex-min op id).  ep is known active.
+fn sn_peel_consider(best: u32, ep: u32) -> u32 {
+    if best == SHAPEN_SENT { return ep }
+    if ident_cmp(sn_op_ptr(ep), sn_op_ptr(best)) == -1i32 { return ep }
+    return best
+}
+
+fn sn_peel_target() -> u32 {
+    let mut best : u32 = SHAPEN_SENT
+    let cn : u64 = (SHAPEN_CONF_COUNT as u64) & 0xFFFFFFFFu64
+    let mut c : u64 = 0u64
+    while c < cn {
+        let a : u32 = SHAPEN_CONF_A[c]
+        let b : u32 = SHAPEN_CONF_B[c]
+        if sn_active((a as u64) & 0xFFFFFFFFu64) == 1u8 {
+            if sn_active((b as u64) & 0xFFFFFFFFu64) == 1u8 {
+                best = sn_peel_consider(best, a)
+                best = sn_peel_consider(best, b)
+            }
+        }
+        c = c + 1u64
+    }
+    return best
+}
+
+fn sn_read_model() -> i32 {
+    let mut s : u64 = 0u64
+    while s < SHAPEN_MAXSEC_U64 {
+        if SHAPEN_LIVE[s] == 1u8 {
+            SHAPEN_ACCEPTED[s] = 0u8
+            if SHAPEN_DROPPED[s] == 0u8 {
+                if sat_value(SHAPEN_ACCEPT_VAR[s]) == 1u8 { SHAPEN_ACCEPTED[s] = 1u8 }
+            }
+        }
+        s = s + 1u64
+    }
+    return SHAPEN_OK
+}
+
+fn sn_publish_and_count() -> i32 {
+    wh_chain_root((&SHAPEN_INC as u64) as *u8)
+    sn_global_section((&SHAPEN_OUTC as u64) as *u8)
+    let mut cnt : u32 = 0u32
+    let mut k : u64 = 0u64
+    while k < SHAPEN_MAXSEC_U64 {
+        if SHAPEN_LIVE[k] == 1u8 {
+            if SHAPEN_ACCEPTED[k] == 1u8 { cnt = cnt + 1u32 }
+        }
+        k = k + 1u64
+    }
+    let pp : *u8 = (&SHAPEN_PL4 as u64) as *u8
+    pp[0u64] = (cnt & 0xFFu32) as u8
+    pp[1u64] = ((cnt >> 8u32) & 0xFFu32) as u8
+    pp[2u64] = ((cnt >> 16u32) & 0xFFu32) as u8
+    pp[3u64] = ((cnt >> 24u32) & 0xFFu32) as u8
+    wh_publish((&SHAPEN_PRODUCER as u64) as *u8, (&SHAPEN_OPID_LIFT as u64) as *u8, (&SHAPEN_INC as u64) as *u8, (&SHAPEN_OUTC as u64) as *u8, 0u8, SHAPEN_PHASE, SHAPEN_PILLAR, pp, 0u32, pp, 4u32, (&SHAPEN_FID as u64) as *u8)
+    return cnt as i32
+}
+
+// =========================== public surface ===========================
+
+fn sn_init() -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < SHAPEN_MAXSEC_U64 {
+        SHAPEN_LIVE[i] = 0u8
+        SHAPEN_ACCEPTED[i] = 0u8
+        SHAPEN_DROPPED[i] = 0u8
+        i = i + 1u64
+    }
+    SHAPEN_COUNT = 0u32
+    SHAPEN_CONF_COUNT = 0u32
+    sn_build_tags()
+    ident_from_bytes((&SHAPEN_OPID_STR as u64) as *u8, 24u64, (&SHAPEN_PRODUCER as u64) as *u8)
+    ident_from_bytes((&SHAPEN_OPID_STR as u64) as *u8, 30u64, (&SHAPEN_OPID_LIFT as u64) as *u8)
+    SHAPEN_INITED = 1u8
+    return SHAPEN_OK
+}
+
+fn sn_register_section(open_set: u32, value: *u8, op_id: *u8) -> u32 @export {
+    if SHAPEN_INITED == 0u8 { sn_init() }
+    let mut chosen : u32 = SHAPEN_SENT
+    let mut i : u64 = 0u64
+    while i < SHAPEN_MAXSEC_U64 {
+        if chosen == SHAPEN_SENT {
+            if SHAPEN_LIVE[i] == 0u8 { chosen = i as u32 }
+        }
+        i = i + 1u64
+    }
+    if chosen == SHAPEN_SENT { return SHAPEN_SENT }
+    let cj : u64 = (chosen as u64) & 0xFFFFFFFFu64
+    SHAPEN_OPEN[cj] = open_set
+    ident_copy(value, sn_val_ptr(chosen))
+    ident_copy(op_id, sn_op_ptr(chosen))
+    SHAPEN_ACCEPT_VAR[cj] = chosen + 1u32
+    SHAPEN_ACCEPTED[cj] = 0u8
+    SHAPEN_DROPPED[cj] = 0u8
+    SHAPEN_LIVE[cj] = 1u8
+    SHAPEN_COUNT = SHAPEN_COUNT + 1u32
+    return chosen
+}
+
+fn sn_declare_conflict(a: u32, b: u32) -> i32 @export {
+    let va : u32 = a
+    let vb : u32 = b
+    if va >= SHAPEN_MAX_SEC { return SHAPEN_E_BAD }
+    if vb >= SHAPEN_MAX_SEC { return SHAPEN_E_BAD }
+    if SHAPEN_LIVE[(va as u64) & 0xFFFFFFFFu64] != 1u8 { return SHAPEN_E_BAD }
+    if SHAPEN_LIVE[(vb as u64) & 0xFFFFFFFFu64] != 1u8 { return SHAPEN_E_BAD }
+    if SHAPEN_CONF_COUNT >= SHAPEN_MAX_CONF { return SHAPEN_E_BAD }
+    let cc : u64 = (SHAPEN_CONF_COUNT as u64) & 0xFFFFFFFFu64
+    SHAPEN_CONF_A[cc] = va
+    SHAPEN_CONF_B[cc] = vb
+    SHAPEN_CONF_COUNT = SHAPEN_CONF_COUNT + 1u32
+    return SHAPEN_OK
+}
+
+fn sn_negotiate(env_cap: u64) -> i32 @export {
+    let ec : u64 = env_cap
+    if cap_verify_rights(ec, SHAPEN_RIGHT_AMEND) == 0u8 { return SHAPEN_E_CAP }
+    if SHAPEN_INITED == 0u8 { sn_init() }
+    let bound : u64 = (SHAPEN_COUNT as u64) + 1u64
+    let mut iter : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if iter >= bound { done = 1u8 }
+        if done == 0u8 {
+            let r : i32 = sn_encode_and_solve()
+            if r == SHAPEN_SAT_SAT_RC {
+                sn_read_model()
+                done = 1u8
+            }
+            if r == SHAPEN_SAT_UNSAT_RC {
+                let peel : u32 = sn_peel_target()
+                if peel == SHAPEN_SENT { done = 1u8 }
+                if peel != SHAPEN_SENT { SHAPEN_DROPPED[(peel as u64) & 0xFFFFFFFFu64] = 1u8 }
+            }
+            iter = iter + 1u64
+        }
+    }
+    return sn_publish_and_count()
+}
+
+fn sn_is_accepted(slot: u32) -> u8 @export {
+    let vs : u32 = slot
+    if vs >= SHAPEN_MAX_SEC { return 0u8 }
+    let sj : u64 = (vs as u64) & 0xFFFFFFFFu64
+    if SHAPEN_LIVE[sj] != 1u8 { return 0u8 }
+    return SHAPEN_ACCEPTED[sj]
+}
+
+fn sn_global_section(out_id: *u8) -> i32 @export {
+    let mut n : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < SHAPEN_MAXSEC_U64 {
+        if SHAPEN_LIVE[i] == 1u8 {
+            if SHAPEN_ACCEPTED[i] == 1u8 {
+                SHAPEN_ORDER[n] = i as u32
+                n = n + 1u64
+            }
+        }
+        i = i + 1u64
+    }
+    let mut p : u64 = 1u64
+    while p < n {
+        let mut q : u64 = p
+        while q > 0u64 {
+            let lo : u32 = SHAPEN_ORDER[q - 1u64]
+            let hi : u32 = SHAPEN_ORDER[q]
+            let cmp : i32 = ident_cmp(sn_val_ptr(lo), sn_val_ptr(hi))
+            if cmp == 1i32 {
+                SHAPEN_ORDER[q - 1u64] = hi
+                SHAPEN_ORDER[q] = lo
+                q = q - 1u64
+            }
+            if cmp != 1i32 { q = 0u64 }
+        }
+        p = p + 1u64
+    }
+    let cp : *u8 = (&SHAPEN_CONCAT as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < n {
+        let src : *u8 = sn_val_ptr(SHAPEN_ORDER[k])
+        let base : u64 = k * 32u64
+        let mut z : u64 = 0u64
+        while z < 32u64 { cp[base + z] = src[z]  z = z + 1u64 }
+        k = k + 1u64
+    }
+    ident_from_bytes(cp, n * 32u64, out_id)
+    return SHAPEN_OK
+}
+
+// =========================== self-test ===========================
+
+fn sn_st_fill(p: u64, b: u8) -> i32 {
+    let pp : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { pp[i] = b  i = i + 1u64 }
+    return SHAPEN_OK
+}
+
+// KAT-1: no conflicts => accept all 3.
+fn sn_st_k1() -> u64 {
+    sn_init()
+    sn_st_fill(&SHAPEN_T_A as u64, 0x10u8)
+    sn_st_fill(&SHAPEN_T_B as u64, 0x20u8)
+    sn_st_fill(&SHAPEN_T_C as u64, 0x30u8)
+    sn_st_fill(&SHAPEN_T_O0 as u64, 0x01u8)
+    sn_st_fill(&SHAPEN_T_O1 as u64, 0x02u8)
+    sn_st_fill(&SHAPEN_T_O2 as u64, 0x03u8)
+    sn_register_section(0u32, (&SHAPEN_T_A as u64) as *u8, (&SHAPEN_T_O0 as u64) as *u8)
+    sn_register_section(1u32, (&SHAPEN_T_B as u64) as *u8, (&SHAPEN_T_O1 as u64) as *u8)
+    sn_register_section(2u32, (&SHAPEN_T_C as u64) as *u8, (&SHAPEN_T_O2 as u64) as *u8)
+    if sn_negotiate(1u64) != 3i32 { return 1u64 }
+    if sn_is_accepted(0u32) != 1u8 { return 2u64 }
+    if sn_is_accepted(1u32) != 1u8 { return 3u64 }
+    if sn_is_accepted(2u32) != 1u8 { return 4u64 }
+    return 0u64
+}
+
+// KAT-2: one conflict => peel lex-smallest op id, accept the other.
+fn sn_st_k2() -> u64 {
+    sn_init()
+    sn_st_fill(&SHAPEN_T_A as u64, 0xA0u8)
+    sn_st_fill(&SHAPEN_T_B as u64, 0xB0u8)
+    sn_st_fill(&SHAPEN_T_O0 as u64, 0x00u8)   // OA lex-smaller
+    sn_st_fill(&SHAPEN_T_O1 as u64, 0x01u8)   // OB lex-larger
+    sn_register_section(0u32, (&SHAPEN_T_A as u64) as *u8, (&SHAPEN_T_O0 as u64) as *u8)
+    sn_register_section(1u32, (&SHAPEN_T_B as u64) as *u8, (&SHAPEN_T_O1 as u64) as *u8)
+    if sn_declare_conflict(0u32, 1u32) != SHAPEN_OK { return 10u64 }
+    if sn_negotiate(1u64) != 1i32 { return 11u64 }
+    if sn_is_accepted(0u32) != 0u8 { return 12u64 }   // OA peeled
+    if sn_is_accepted(1u32) != 1u8 { return 13u64 }   // OB kept
+    return 0u64
+}
+
+// KAT-3: global section is order-invariant (canonical, sort fired).
+fn sn_st_k3() -> u64 {
+    sn_st_fill(&SHAPEN_T_A as u64, 0x02u8)   // V_hi
+    sn_st_fill(&SHAPEN_T_B as u64, 0x01u8)   // V_lo  (ident_cmp(V_lo,V_hi) == -1)
+    sn_st_fill(&SHAPEN_T_O0 as u64, 0x05u8)
+    sn_st_fill(&SHAPEN_T_O1 as u64, 0x06u8)
+    sn_init()
+    sn_register_section(0u32, (&SHAPEN_T_A as u64) as *u8, (&SHAPEN_T_O0 as u64) as *u8)   // V_hi first
+    sn_register_section(1u32, (&SHAPEN_T_B as u64) as *u8, (&SHAPEN_T_O1 as u64) as *u8)   // V_lo second
+    if sn_negotiate(1u64) != 2i32 { return 20u64 }
+    sn_global_section((&SHAPEN_T_IDA as u64) as *u8)
+    sn_init()
+    sn_register_section(0u32, (&SHAPEN_T_B as u64) as *u8, (&SHAPEN_T_O1 as u64) as *u8)   // V_lo first (reversed)
+    sn_register_section(1u32, (&SHAPEN_T_A as u64) as *u8, (&SHAPEN_T_O0 as u64) as *u8)   // V_hi second
+    if sn_negotiate(1u64) != 2i32 { return 21u64 }
+    sn_global_section((&SHAPEN_T_IDB as u64) as *u8)
+    if ident_eq((&SHAPEN_T_IDA as u64) as *u8, (&SHAPEN_T_IDB as u64) as *u8) != 1u8 { return 22u64 }
+    return 0u64
+}
+
+// KAT-4: capability gate FAILS closed (denial refuses to mutate or witness).
+fn sn_st_k4() -> u64 {
+    sn_init()
+    sn_st_fill(&SHAPEN_T_A as u64, 0x40u8)
+    sn_st_fill(&SHAPEN_T_B as u64, 0x50u8)
+    sn_st_fill(&SHAPEN_T_O0 as u64, 0x07u8)
+    sn_st_fill(&SHAPEN_T_O1 as u64, 0x08u8)
+    sn_register_section(0u32, (&SHAPEN_T_A as u64) as *u8, (&SHAPEN_T_O0 as u64) as *u8)
+    sn_register_section(1u32, (&SHAPEN_T_B as u64) as *u8, (&SHAPEN_T_O1 as u64) as *u8)
+    let bad : u64 = cap_attenuate(1u64, 0x0800u64, 0u64)
+    if bad == 0u64 { return 30u64 }
+    let nb : u64 = wh_next_idx()
+    if sn_negotiate(bad) != SHAPEN_E_CAP { return 31u64 }
+    if sn_is_accepted(0u32) != 0u8 { return 32u64 }
+    if sn_is_accepted(1u32) != 0u8 { return 33u64 }
+    if wh_next_idx() != nb { return 34u64 }
+    return 0u64
+}
+
+fn sn_selftest() -> u64 @export {
+    wh_init(0u64)
+    cap_env_init()
+    let r1 : u64 = sn_st_k1()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = sn_st_k2()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = sn_st_k3()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = sn_st_k4()
+    if r4 != 0u64 { return r4 }
+    return 99u64
+}

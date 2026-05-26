@@ -1,0 +1,34 @@
+/* NEGATIVE-COMPILE test for Stage 3.6 multi-hop type-alias resolution.
+ *
+ * THIS FILE MUST FAIL TO COMPILE.  Consumed by
+ * scripts/test_type_alias_multihop_negative.sh, which asserts
+ * non-zero exit + `III_INTENT_KIND_VIOLATION` marker.
+ *
+ * The param's kind is carried by a 3-HOP alias chain
+ * (CKind -> BKind -> AKind = u64 @hexad_kind(1u64)); the arg's binding
+ * declares an inline @hexad_kind(6u64).  Kinds 1 vs 6 differ -> the
+ * static intent-kind check at the call site must reject.
+ *
+ * This DISTINGUISHES multi-hop from single-hop: with the old single-hop
+ * resolver, CKind's kind resolves to "unknown" (the chain is 3 deep, the
+ * resolver stopped at rhs=BKind), the check is SKIPPED, and the file
+ * COMPILES.  Only multi-hop resolution (CKind->BKind->AKind) recovers
+ * kind 1 and rejects the mismatch.
+ */
+module corpus_275_neg
+
+type AKind = u64 @hexad_kind(1u64)
+type BKind = AKind
+type CKind = BKind
+
+fn _wants_form(x: CKind) -> u64 {
+    return x
+}
+
+fn main() -> u64 {
+    let compose_val : u64 @hexad_kind(6u64) = 0u64
+    /* Mismatch: callee's param resolves (3-hop) to kind 1; arg binding
+     * declares kind 6.  Multi-hop resolution catches this. */
+    let r : u64 = _wants_form(compose_val)
+    return r
+}

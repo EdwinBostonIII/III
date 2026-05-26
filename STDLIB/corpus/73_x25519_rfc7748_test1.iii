@@ -1,0 +1,71 @@
+/* X25519 KAT: RFC 7748 §5.2 Test 1.
+ *   scalar = a5 46 e3 6b f0 52 7c 9d 3b 16 15 4b 82 46 5e dd
+ *            62 14 4c 0a c1 fc 5a 18 50 6a 22 44 ba 44 9a c4
+ *   u      = e6 db 68 67 58 30 30 db 35 94 c1 a4 24 b1 5f 7c
+ *            72 66 24 ec 26 b3 35 3b 10 a9 03 a6 d0 ab 1c 4c
+ *   X25519(scalar, u) =
+ *            c3 da 55 37 9d e9 c6 90 8e 94 ea 4d f2 8d 08 4f
+ *            32 ec cf 03 49 1c 71 f7 54 b4 07 55 77 a2 85 52
+ *
+ * Exit = first byte of result = 0xC3 = 195.
+ */
+module corpus_73
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+fn fill_scalar(s: *u8) -> i32 {
+    s[0]  = 0xA5u8; s[1]  = 0x46u8; s[2]  = 0xE3u8; s[3]  = 0x6Bu8
+    s[4]  = 0xF0u8; s[5]  = 0x52u8; s[6]  = 0x7Cu8; s[7]  = 0x9Du8
+    s[8]  = 0x3Bu8; s[9]  = 0x16u8; s[10] = 0x15u8; s[11] = 0x4Bu8
+    s[12] = 0x82u8; s[13] = 0x46u8; s[14] = 0x5Eu8; s[15] = 0xDDu8
+    s[16] = 0x62u8; s[17] = 0x14u8; s[18] = 0x4Cu8; s[19] = 0x0Au8
+    s[20] = 0xC1u8; s[21] = 0xFCu8; s[22] = 0x5Au8; s[23] = 0x18u8
+    s[24] = 0x50u8; s[25] = 0x6Au8; s[26] = 0x22u8; s[27] = 0x44u8
+    s[28] = 0xBAu8; s[29] = 0x44u8; s[30] = 0x9Au8; s[31] = 0xC4u8
+    return 0i32
+}
+
+fn fill_u(u: *u8) -> i32 {
+    u[0]  = 0xE6u8; u[1]  = 0xDBu8; u[2]  = 0x68u8; u[3]  = 0x67u8
+    u[4]  = 0x58u8; u[5]  = 0x30u8; u[6]  = 0x30u8; u[7]  = 0xDBu8
+    u[8]  = 0x35u8; u[9]  = 0x94u8; u[10] = 0xC1u8; u[11] = 0xA4u8
+    u[12] = 0x24u8; u[13] = 0xB1u8; u[14] = 0x5Fu8; u[15] = 0x7Cu8
+    u[16] = 0x72u8; u[17] = 0x66u8; u[18] = 0x24u8; u[19] = 0xECu8
+    u[20] = 0x26u8; u[21] = 0xB3u8; u[22] = 0x35u8; u[23] = 0x3Bu8
+    u[24] = 0x10u8; u[25] = 0xA9u8; u[26] = 0x03u8; u[27] = 0xA6u8
+    u[28] = 0xD0u8; u[29] = 0xABu8; u[30] = 0x1Cu8; u[31] = 0x4Cu8
+    return 0i32
+}
+
+fn check_result(r: *u8) -> u64 {
+    if r[0]  != 0xC3u8 { return 1u64 }
+    if r[1]  != 0xDAu8 { return 2u64 }
+    if r[2]  != 0x55u8 { return 3u64 }
+    if r[3]  != 0x37u8 { return 4u64 }
+    if r[4]  != 0x9Du8 { return 5u64 }
+    if r[5]  != 0xE9u8 { return 6u64 }
+    if r[6]  != 0xC6u8 { return 7u64 }
+    if r[7]  != 0x90u8 { return 8u64 }
+    if r[15] != 0x4Fu8 { return 9u64 }
+    if r[16] != 0x32u8 { return 10u64 }
+    if r[23] != 0xF7u8 { return 11u64 }
+    if r[24] != 0x54u8 { return 12u64 }
+    if r[31] != 0x52u8 { return 13u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let scalar : *u8 = malloc(32u64)
+    let u_in   : *u8 = malloc(32u64)
+    let out    : *u8 = malloc(32u64)
+    fill_scalar(scalar)
+    fill_u(u_in)
+    x25519(out, scalar, u_in)
+    let err : u64 = check_result(out)
+    if err != 0u64 { return err }
+    let result : u64 = out[0] as u64
+    free(scalar); free(u_in); free(out)
+    return result
+}

@@ -1,0 +1,189 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\transform_patterns.iii
+ *
+ * III STDLIB - omnia::transform_patterns
+ *
+ * Register the 24 transform patterns at boot, with real fn-pointers to
+ * the per-codec implementations.
+ * FROZEN SPEC §7B.6, §Z.C.7; ADR-RES-006.
+ *
+ * Slots 18..41. Each pattern's dispatch_fn is the corresponding tp_*.iii
+ * codec. The g_transform_attrs side-table records (src_form, dst_form,
+ * transform_fn) for each slot.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ */
+
+module omnia_transform_patterns
+
+extern @abi(c-msvc-x64) fn pattern_template_zero(buf: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_id(buf: u64, mod_mh: u64, name: u64, name_len: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_dispatch(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_activation_base(buf: u64, b: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_hexad_kind(buf: u64, h: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_ring(buf: u64, r: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_k_value(buf: u64, k: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_specialisation_of(buf: u64, parent: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_binding_kind(buf: u64, slot: u8, k: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+
+/* The 24 codec entry-point names -- extern declarations let us take their address */
+extern @abi(c-msvc-x64) fn tp_iii_to_asm(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_asm.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_babel_json.iii"
+extern @abi(c-msvc-x64) fn tp_babel_json_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_json_to_iii.iii"
+extern @abi(c-msvc-x64) fn tp_asm_to_pe(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_asm_to_pe.iii"
+extern @abi(c-msvc-x64) fn tp_ast_bin_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ast_bin_to_iii.iii"
+extern @abi(c-msvc-x64) fn tp_babel_cbor_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_cbor_json.iii"
+extern @abi(c-msvc-x64) fn tp_babel_json_cbor(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_json_cbor.iii"
+extern @abi(c-msvc-x64) fn tp_babel_text(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_text.iii"
+extern @abi(c-msvc-x64) fn tp_ripple_dot(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ripple_dot.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_ast_bin(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_ast_bin.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_c99(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_c99.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_latex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_latex.iii"
+extern @abi(c-msvc-x64) fn tp_x86_disasm(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_x86_disasm.iii"
+extern @abi(c-msvc-x64) fn tp_pe_hex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_pe_hex.iii"
+extern @abi(c-msvc-x64) fn tp_ripple_md(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ripple_md.iii"
+extern @abi(c-msvc-x64) fn tp_ast_dot(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ast_dot.iii"
+extern @abi(c-msvc-x64) fn tp_babel_text_back(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_text_back.iii"
+extern @abi(c-msvc-x64) fn tp_iii_hex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_hex.iii"
+extern @abi(c-msvc-x64) fn tp_c99hdr_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_c99hdr_to_iii.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_md(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_md.iii"
+extern @abi(c-msvc-x64) fn tp_x86_assemble(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_x86_assemble.iii"
+extern @abi(c-msvc-x64) fn tp_raw_hex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_raw_hex.iii"
+extern @abi(c-msvc-x64) fn tp_ast_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ast_to_babel_json.iii"
+extern @abi(c-msvc-x64) fn tp_babel_json_to_ast(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_json_to_ast.iii"
+
+var TX_MODULE_MHASH : [u8; 32]
+var TX_TEMPLATE_BUF : [u8; 168]
+var TX_NAME_BUF : [u8; 8]
+
+/* Side table: 24 entries × 24 bytes (src:u32, dst:u32, fn:u64, _pad:u64) */
+var g_transform_fn_table : [u8; 576]
+
+fn tp_table_set(idx: u32, src_form: u8, dst_form: u8, fn_ptr: u64) -> i32 {
+    if idx >= 24u32 { return -1i32 }
+    let base : u64 = (&g_transform_fn_table) as u64
+    let off : u64 = ((idx as u64) & 0xFFu64) * 24u64
+    let pf : *u8 = (base + off) as *u8
+    let pd : *u8 = (base + off + 1u64) as *u8
+    pf[0u64] = src_form
+    pd[0u64] = dst_form
+    /* Store fn_ptr at offset+8 */
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let pp : *u8 = (base + off + 8u64 + ((k as u64) & 0x7u64)) as *u8
+        pp[0u64] = ((fn_ptr >> ((k & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        k = k + 1u32
+    }
+    return 0i32
+}
+
+fn tp_table_get_fn(idx: u32) -> u64 {
+    if idx >= 24u32 { return 0u64 }
+    let base : u64 = (&g_transform_fn_table) as u64
+    let off : u64 = ((idx as u64) & 0xFFu64) * 24u64
+    let mut v : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let pp : *u8 = (base + off + 8u64 + ((k as u64) & 0x7u64)) as *u8
+        v = v | (((pp[0u64] as u64) & 0xFFu64) << (((k as u64) & 0x7u64) * 8u64))
+        k = k + 1u32
+    }
+    return v
+}
+
+fn tp_table_get_src(idx: u32) -> u8 @export {
+    if idx >= 24u32 { return 0u8 }
+    let base : u64 = (&g_transform_fn_table) as u64
+    let off : u64 = ((idx as u64) & 0xFFu64) * 24u64
+    let pf : *u8 = (base + off) as *u8
+    return pf[0u64]
+}
+
+fn tp_table_get_dst(idx: u32) -> u8 @export {
+    if idx >= 24u32 { return 0u8 }
+    let base : u64 = (&g_transform_fn_table) as u64
+    let off : u64 = ((idx as u64) & 0xFFu64) * 24u64
+    let pd : *u8 = (base + off + 1u64) as *u8
+    return pd[0u64]
+}
+
+fn tp_table_call(idx: u32, src: u64, src_len: u64, dst: u64) -> u64 @export {
+    let f : u64 = tp_table_get_fn(idx)
+    if f == 0u64 { return 0u64 }
+    /* Indirect call via u64 fn-pointer (per fold.iii pattern). */
+    return f(src, src_len, dst, 1048576u64)
+}
+
+fn _tx_register(slot: u32, src_form: u8, dst_form: u8, fn_ptr: u64) -> i32 {
+    pattern_template_zero((&TX_TEMPLATE_BUF) as u64)
+    TX_NAME_BUF[0] = 116u8
+    TX_NAME_BUF[1] = ((slot / 10u32) & 0xFFu32) as u8 + 48u8
+    TX_NAME_BUF[2] = (slot % 10u32 & 0xFFu32) as u8 + 48u8
+    TX_NAME_BUF[3] = 0u8
+    pattern_template_set_id((&TX_TEMPLATE_BUF) as u64, (&TX_MODULE_MHASH) as u64, (&TX_NAME_BUF) as u64, 3u32)
+    pattern_template_set_activation_base((&TX_TEMPLATE_BUF) as u64, 900000000u64)
+    pattern_template_set_hexad_kind((&TX_TEMPLATE_BUF) as u64, 6u8)
+    pattern_template_set_ring((&TX_TEMPLATE_BUF) as u64, 2u8)
+    pattern_template_set_k_value((&TX_TEMPLATE_BUF) as u64, 950000000u64)
+    pattern_template_set_specialisation_of((&TX_TEMPLATE_BUF) as u64, 12u64)
+    pattern_template_set_dispatch((&TX_TEMPLATE_BUF) as u64, fn_ptr)
+    pattern_template_set_binding_kind((&TX_TEMPLATE_BUF) as u64, 1u8, src_form)
+    pattern_template_set_binding_kind((&TX_TEMPLATE_BUF) as u64, 2u8, dst_form)
+    pattern_register(slot, (&TX_TEMPLATE_BUF) as u64)
+    /* Side table index = slot - 18 (transform base shifted with 18-primitive collapse). */
+    tp_table_set(slot - 18u32, src_form, dst_form, fn_ptr)
+    return 0i32
+}
+
+fn transform_register_all() -> i32 @export {
+    /* Use u64 variable to take address of fn (per III's address-of-fn pattern). */
+    let f16 : u64 = tp_iii_to_asm
+    let f17 : u64 = tp_iii_to_babel_json
+    let f18 : u64 = tp_babel_json_to_iii
+    let f19 : u64 = tp_asm_to_pe
+    let f20 : u64 = tp_ast_bin_to_iii
+    let f21 : u64 = tp_babel_cbor_json
+    let f22 : u64 = tp_babel_json_cbor
+    let f23 : u64 = tp_babel_text
+    let f24 : u64 = tp_ripple_dot
+    let f25 : u64 = tp_iii_to_ast_bin
+    let f26 : u64 = tp_iii_to_c99
+    let f27 : u64 = tp_iii_to_latex
+    let f28 : u64 = tp_x86_disasm
+    let f29 : u64 = tp_pe_hex
+    let f30 : u64 = tp_ripple_md
+    let f31 : u64 = tp_ast_dot
+    let f32 : u64 = tp_babel_text_back
+    let f33 : u64 = tp_iii_hex
+    let f34 : u64 = tp_c99hdr_to_iii
+    let f35 : u64 = tp_iii_to_md
+    let f36 : u64 = tp_x86_assemble
+    let f37 : u64 = tp_raw_hex
+    let f38 : u64 = tp_ast_to_babel_json
+    let f39 : u64 = tp_babel_json_to_ast
+    _tx_register(18u32, 1u8, 3u8, f16)
+    _tx_register(19u32, 1u8, 2u8, f17)
+    _tx_register(20u32, 2u8, 1u8, f18)
+    _tx_register(21u32, 3u8, 5u8, f19)
+    _tx_register(22u32, 7u8, 1u8, f20)
+    _tx_register(23u32, 8u8, 2u8, f21)
+    _tx_register(24u32, 2u8, 8u8, f22)
+    _tx_register(25u32, 2u8, 9u8, f23)
+    _tx_register(26u32, 14u8, 13u8, f24)
+    _tx_register(27u32, 1u8, 7u8, f25)
+    _tx_register(28u32, 1u8, 4u8, f26)
+    _tx_register(29u32, 1u8, 10u8, f27)
+    _tx_register(30u32, 15u8, 3u8, f28)
+    _tx_register(31u32, 5u8, 12u8, f29)
+    _tx_register(32u32, 14u8, 11u8, f30)
+    _tx_register(33u32, 7u8, 13u8, f31)
+    _tx_register(34u32, 9u8, 2u8, f32)
+    _tx_register(35u32, 1u8, 12u8, f33)
+    _tx_register(36u32, 16u8, 1u8, f34)
+    _tx_register(37u32, 1u8, 11u8, f35)
+    _tx_register(38u32, 3u8, 15u8, f36)
+    _tx_register(39u32, 17u8, 12u8, f37)
+    _tx_register(40u32, 7u8, 2u8, f38)
+    _tx_register(41u32, 2u8, 7u8, f39)
+    return 0i32
+}

@@ -1,0 +1,101 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\obs_observatory.iii
+ *
+ * III STDLIB - omnia::obs_observatory -- 12-family threshold rollup.
+ *
+ * Lattice plan Phase 14c Step 0142.  Twelve named indicator families,
+ * each with a current value and a threshold.  When current > threshold,
+ * the family fires; the collapsed-state bitmask reports all firing
+ * families in a single u32.  Useful for SLA monitoring and
+ * \"OBSERVATORY collapse\" -- the system has crossed a meaningful
+ * boundary in this dimension.
+ *
+ * Families are opaque numeric identifiers 0..11; convention is that
+ * the caller assigns semantic meaning (e.g. 0=K-floor, 1=witness-lag,
+ * 2=peer-divergence, etc.).  Hardcoded-dynamism: the family-tag
+ * mapping is established by the caller in a sealed const, NOT
+ * registered at runtime.
+ *
+ * Public surface:
+ *   obs_observatory_set_threshold(family, t)            -> i32
+ *   obs_observatory_threshold(family)                   -> u64
+ *   obs_observatory_update(family, v)                   -> i32
+ *   obs_observatory_value(family)                       -> u64
+ *   obs_observatory_family_alarm(family)                -> u8
+ *   obs_observatory_collapsed_state()                   -> u32
+ *   obs_observatory_clear()                             -> i32
+ *
+ * Hexad: kind_origin (sealed observation).  Ring: R3.  K: 0.99.
+ */
+
+module omnia_obs_observatory
+
+const OBSO_OK             : i32 =  0i32
+const OBSO_E_BADID        : i32 = -1i32
+
+const OBSO_FAMILIES       : u32 = 12u32
+
+var OBSO_VALUE     : [u64; 12]
+var OBSO_THRESHOLD : [u64; 12]
+var OBSO_FIRING    : [u8;  12]
+
+fn obs_observatory_set_threshold(family: u32, t: u64) -> i32 @export {
+    let f_l : u32 = family
+    let t_l : u64 = t
+    if f_l >= OBSO_FAMILIES { return OBSO_E_BADID }
+    OBSO_THRESHOLD[f_l] = t_l
+    return OBSO_OK
+}
+
+fn obs_observatory_threshold(family: u32) -> u64 @export {
+    let f_l : u32 = family
+    if f_l >= OBSO_FAMILIES { return 0u64 }
+    return OBSO_THRESHOLD[f_l]
+}
+
+fn obs_observatory_update(family: u32, v: u64) -> i32 @export {
+    let f_l : u32 = family
+    let v_l : u64 = v
+    if f_l >= OBSO_FAMILIES { return OBSO_E_BADID }
+    OBSO_VALUE[f_l] = v_l
+    /* Fire iff value > threshold (strict). */
+    let mut fire : u8 = 0u8
+    if v_l > OBSO_THRESHOLD[f_l] { fire = 1u8 }
+    OBSO_FIRING[f_l] = fire
+    return OBSO_OK
+}
+
+fn obs_observatory_value(family: u32) -> u64 @export {
+    let f_l : u32 = family
+    if f_l >= OBSO_FAMILIES { return 0u64 }
+    return OBSO_VALUE[f_l]
+}
+
+fn obs_observatory_family_alarm(family: u32) -> u8 @export {
+    let f_l : u32 = family
+    if f_l >= OBSO_FAMILIES { return 0u8 }
+    return OBSO_FIRING[f_l]
+}
+
+fn obs_observatory_collapsed_state() -> u32 @export {
+    let mut bits : u32 = 0u32
+    let mut f : u32 = 0u32
+    while f < OBSO_FAMILIES {
+        if OBSO_FIRING[f] == 1u8 {
+            let bit : u32 = 1u32 << f
+            bits = bits | bit
+        }
+        f = f + 1u32
+    }
+    return bits
+}
+
+fn obs_observatory_clear() -> i32 @export {
+    let mut f : u32 = 0u32
+    while f < OBSO_FAMILIES {
+        OBSO_VALUE[f]     = 0u64
+        OBSO_THRESHOLD[f] = 0u64
+        OBSO_FIRING[f]    = 0u8
+        f = f + 1u32
+    }
+    return OBSO_OK
+}

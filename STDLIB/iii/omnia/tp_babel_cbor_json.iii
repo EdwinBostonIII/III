@@ -1,0 +1,78 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_babel_cbor_json.iii
+ *
+ * Transform pattern: FORM_BABEL_CBOR → FORM_BABEL_JSON
+ * FROZEN SPEC §7B.6 slot 21; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Inverse of tp_babel_json_cbor. Decodes CBOR byte-string (major type 2)
+ * and emits the payload bytes (which are the JSON envelope).
+ */
+
+module omnia_tp_babel_cbor_json
+
+fn tp_bcj_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_babel_cbor_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if src_len < 1u64 { return 0u64 }
+    let bp0 : *u8 = (src) as *u8
+    let h : u8 = bp0[0u64]
+    let mut payload_off : u64 = 0u64
+    let mut payload_len : u64 = 0u64
+    /* Major type must be 2 (byte string): top 3 bits = 010 */
+    if (h & 0xE0u8) != 0x40u8 { return 0u64 }
+    let info : u8 = h & 0x1Fu8
+    if info < 24u8 {
+        payload_off = 1u64
+        payload_len = (info as u64) & 0x1Fu64
+    }
+    if info == 24u8 {
+        if src_len < 2u64 { return 0u64 }
+        let bp1 : *u8 = (src + 1u64) as *u8
+        payload_off = 2u64
+        payload_len = (bp1[0u64] as u64) & 0xFFu64
+    }
+    if info == 25u8 {
+        if src_len < 3u64 { return 0u64 }
+        let bp1 : *u8 = (src + 1u64) as *u8
+        let bp2 : *u8 = (src + 2u64) as *u8
+        payload_off = 3u64
+        payload_len = (((bp1[0u64] as u64) & 0xFFu64) << 8u64) | ((bp2[0u64] as u64) & 0xFFu64)
+    }
+    if info == 26u8 {
+        if src_len < 5u64 { return 0u64 }
+        payload_off = 5u64
+        let mut k : u32 = 0u32
+        while k < 4u32 {
+            let bp : *u8 = (src + 1u64 + ((k as u64) & 0x7u64)) as *u8
+            let shift : u64 = ((3u64 - ((k as u64) & 0x3u64)) * 8u64)
+            payload_len = payload_len | (((bp[0u64] as u64) & 0xFFu64) << shift)
+            k = k + 1u32
+        }
+    }
+    if info == 27u8 {
+        if src_len < 9u64 { return 0u64 }
+        payload_off = 9u64
+        let mut k : u32 = 0u32
+        while k < 8u32 {
+            let bp : *u8 = (src + 1u64 + ((k as u64) & 0xFu64)) as *u8
+            let shift : u64 = ((7u64 - ((k as u64) & 0x7u64)) * 8u64)
+            payload_len = payload_len | (((bp[0u64] as u64) & 0xFFu64) << shift)
+            k = k + 1u32
+        }
+    }
+    if payload_off + payload_len > src_len { return 0u64 }
+    if payload_len > dst_cap { return 0u64 }
+    /* Copy payload */
+    let mut j : u64 = 0u64
+    while j < payload_len {
+        let bp : *u8 = (src + payload_off + j) as *u8
+        tp_bcj_emit(dst_buf, j, bp[0u64])
+        j = j + 1u64
+    }
+    return payload_len
+}

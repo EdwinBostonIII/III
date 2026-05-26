@@ -1,0 +1,6 @@
+/* 665 — cad: one suite-tagged content-address; byte-equivalence to
+ * sha256/keccak256 (oneshot) + the SHA Crown == sha256_oneshot, with negative
+ * arms (bad suite, null). M1 collapse byte-equivalence gate. */
+module corpus_665
+extern @abi(c-msvc-x64) fn cad_selftest() -> u64 from "cad.iii"
+fn main() -> u64 { return cad_selftest() }

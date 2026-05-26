@@ -1,0 +1,19 @@
+/* option_u32: some(42) unwrap_or = 42; none unwrap_or(99) = 99 */
+module corpus_a09
+
+extern @abi(c-msvc-x64) fn option_u32_some(v: u32) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u32_none() -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u32_is_some(o: u64) -> u8 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u32_unwrap_or(o: u64, default: u32) -> u64 from "option.iii"
+
+fn main() -> u64 {
+    let s : u64 = option_u32_some(42u32)
+    if option_u32_is_some(s) != 1u8 { return 1u64 }
+    let v1 : u32 = (option_u32_unwrap_or(s, 7u32)) as u32
+    if v1 != 42u32 { return 2u64 }
+    let n : u64 = option_u32_none()
+    if option_u32_is_some(n) != 0u8 { return 3u64 }
+    let v2 : u32 = (option_u32_unwrap_or(n, 99u32)) as u32
+    if v2 != 99u32 { return 4u64 }
+    return 99u64
+}

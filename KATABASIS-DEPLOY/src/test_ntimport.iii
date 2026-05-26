@@ -1,0 +1,17 @@
+module test_ntimport
+
+/* Chunk-1 capability probe (NOT for deployment; compile + link + disasm only).
+   Verifies cg_r0 emits BARE symbol names for PascalCase ntoskrnl externs so ld + the
+   kernel import lib synthesize a real PE import directory + IAT. The two calls below are
+   1-arg (cg_r0's <=4-arg path is already correct); >4-arg passing is a separate chunk.
+   The calls pass 0 deliberately -- this image is NEVER loaded; it exists to prove the
+   import-table machinery, verified statically via objdump -p. */
+
+extern @abi(c-msvc-x64) fn IoDeleteSymbolicLink(name: u64) -> i32 from "ntoskrnl"
+extern @abi(c-msvc-x64) fn IoDeleteDevice(dev: u64) -> i32 from "ntoskrnl"
+
+fn driver_entry(driver_object: u64, registry_path: u64) -> u64 {
+    IoDeleteSymbolicLink(0u64)
+    IoDeleteDevice(0u64)
+    return 0xc00000bbu64
+}

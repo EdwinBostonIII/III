@@ -1,0 +1,21 @@
+/* Encode codepoint U+00E9 (é, 2 bytes 0xC3 0xA9), decode back = 0xE9 = 233 */
+module corpus_a18
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn rune_utf8_encode(cp: u32, out: u64) -> u32 from "rune.iii"
+extern @abi(c-msvc-x64) fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 from "rune.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(4u64)
+    let n : u32 = rune_utf8_encode(0xE9u32, buf as u64)
+    if n != 2u32 { return 1u64 }
+    if buf[0] != 0xC3u8 { return 2u64 }
+    if buf[1] != 0xA9u8 { return 3u64 }
+    let cp_buf : *u8 = malloc(4u64)
+    let used : u32 = rune_utf8_decode(buf as u64, 2u64, cp_buf as u64)
+    if used != 2u32 { return 4u64 }
+    let cp : u32 = (cp_buf[0] as u32) | ((cp_buf[1] as u32) << 8u32) | ((cp_buf[2] as u32) << 16u32) | ((cp_buf[3] as u32) << 24u32)
+    free(buf); free(cp_buf)
+    return cp as u64
+}

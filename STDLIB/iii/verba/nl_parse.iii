@@ -1,0 +1,1008 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\nl_parse.iii
+ *
+ * III STDLIB - verba::nl_parse (Phase E.2 of Intent Calculus v1.0)
+ *
+ * Deterministic thematic-role tagger over the token stream produced by
+ * nl_lex. Recognises three sentence kinds and extracts role-bearing
+ * fragments. NO statistics. NO heuristics. Same input -> same output.
+ *
+ * Sentence kinds:
+ *   NLP_KIND_IMPERATIVE  - leading VERB ("send X from Y to Z")
+ *   NLP_KIND_DECLARATIVE - NP + VERB + (NP|PP)*  ("the buffer encrypts the message")
+ *   NLP_KIND_INTERROGATIVE - leading "is"|"are"|"can"|"does" + NP + ADJ?
+ *
+ * Role tagging (one fragment per role-bearing span):
+ *   NLP_ROLE_VERB         - the head verb
+ *   NLP_ROLE_AGENT        - subject of declarative, or NP after BY (passive)
+ *   NLP_ROLE_PATIENT      - direct object (first NP after verb in imperative)
+ *   NLP_ROLE_SOURCE       - NP after FROM
+ *   NLP_ROLE_DESTINATION  - NP after TO|INTO
+ *   NLP_ROLE_INSTRUMENT   - NP after WITH|BY
+ *   NLP_ROLE_LOCATION     - NP after IN|AT|ON|WITHIN
+ *   NLP_ROLE_BENEFICIARY  - NP after FOR
+ *   NLP_ROLE_OF           - NP after OF (mereological)
+ *   NLP_ROLE_QUANTIFIER   - NUMBER attached to a NOUN ("32 bytes" -> role_target=PATIENT, qty=32)
+ *
+ * Fragment record (16 bytes, packed):
+ *   u32 role_id
+ *   u32 head_tok_idx     (the head noun/verb)
+ *   u16 span_start_tok
+ *   u16 span_end_tok     (exclusive)
+ *   u32 quantifier       (numeric prefix; 0 if absent)
+ *
+ * Parse forest: when a sentence admits two equally-valid attachments
+ * (e.g., PP-attachment ambiguity), nl_parse emits both fragment lists.
+ *
+ * Hexad: kind_form. Ring: R3. K: 1.00.
+ */
+
+module verba_nl_parse
+
+extern @abi(c-msvc-x64) fn nl_token_type(tok: u64) -> u8 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_span_start(tok: u64) -> u32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_span_end(tok: u64) -> u32 from "nl_lex.iii"
+
+const NLP_TOK_VOID       : u8 =  0u8
+const NLP_TOK_VERB       : u8 =  1u8
+const NLP_TOK_NOUN       : u8 =  2u8
+const NLP_TOK_ADJ        : u8 =  3u8
+const NLP_TOK_ADV        : u8 =  4u8
+const NLP_TOK_PREP       : u8 =  5u8
+const NLP_TOK_DET        : u8 =  6u8
+const NLP_TOK_NUMBER     : u8 =  7u8
+const NLP_TOK_STRING_LIT : u8 =  8u8
+const NLP_TOK_IDENT      : u8 =  9u8
+const NLP_TOK_ROLE       : u8 = 10u8
+const NLP_TOK_PUNCT      : u8 = 11u8
+const NLP_TOK_EOL        : u8 = 12u8
+
+const NLP_KIND_UNKNOWN       : u32 = 0u32
+const NLP_KIND_IMPERATIVE    : u32 = 1u32
+const NLP_KIND_DECLARATIVE   : u32 = 2u32
+const NLP_KIND_INTERROGATIVE : u32 = 3u32
+
+const NLP_ROLE_VERB        : u32 =  1u32
+const NLP_ROLE_AGENT       : u32 =  2u32
+const NLP_ROLE_PATIENT     : u32 =  3u32
+const NLP_ROLE_SOURCE      : u32 =  4u32
+const NLP_ROLE_DESTINATION : u32 =  5u32
+const NLP_ROLE_INSTRUMENT  : u32 =  6u32
+const NLP_ROLE_LOCATION    : u32 =  7u32
+const NLP_ROLE_BENEFICIARY : u32 =  8u32
+const NLP_ROLE_OF          : u32 =  9u32
+const NLP_ROLE_TOPIC       : u32 = 10u32
+const NLP_ROLE_REASON      : u32 = 11u32
+const NLP_ROLE_CONDITION   : u32 = 12u32
+const NLP_ROLE_MODAL       : u32 = 13u32
+const NLP_ROLE_CONJ        : u32 = 14u32
+
+/* Coordinating-conjunction word_ids (sealed range from nl_lex Phase E.5).
+ * Registered with TYPE=NL_TOK_PREP in the lexicon (no CONJ token type
+ * exists); discriminated here by word_id range via _np_is_conjunction.
+ * Sentence-final occurrence triggers conjunction-recursion in the
+ * imperative/declarative handlers up to a depth cap of 3. */
+const NL_W_AND  : u32 = 178u32
+const NL_W_OR   : u32 = 179u32
+const NL_W_BUT  : u32 = 180u32
+const NL_W_THEN : u32 = 181u32
+
+/* Conjunction-recursion depth cap. Bound on stack growth so a degenerate
+ * "send and send and send and send" collapses cleanly after three coupled
+ * clauses. The depth lives in bits 60..63 of the existing packed_idx_fc
+ * u64; bits 32..59 still hold frag_count (28 bits = 268M, far above
+ * NL_MAX_FRAGS = 64). Bits 0..31 hold idx as before. */
+const NLP_CONJ_MAX_DEPTH   : u32 = 3u32
+const NLP_CONJ_DEPTH_SHIFT : u64 = 60u64
+const NLP_CONJ_DEPTH_MASK  : u64 = 0xF000000000000000u64
+const NLP_CONJ_FC_MASK     : u64 = 0x0FFFFFFF00000000u64
+
+/* Modality kinds packed into MODAL fragment's `quant` slot. */
+const NLP_MOD_NONE           : u32 = 0u32
+const NLP_MOD_STRONG         : u32 = 1u32
+const NLP_MOD_POSSIBLE       : u32 = 2u32
+const NLP_MOD_COUNTERFACTUAL : u32 = 3u32
+const NLP_MOD_ASPECTUAL      : u32 = 4u32
+
+/* Modal aux word_ids (sealed range from nl_lex Phase E.4). */
+const NL_W_IS     : u32 = 151u32
+const NL_W_ARE    : u32 = 152u32
+const NL_W_CAN    : u32 = 153u32
+const NL_W_DOES   : u32 = 154u32
+const NL_W_DO     : u32 = 155u32
+const NL_W_WILL   : u32 = 156u32
+const NL_W_SHOULD : u32 = 157u32
+const NL_W_COULD  : u32 = 158u32
+const NL_W_WOULD  : u32 = 159u32
+const NL_W_MIGHT  : u32 = 160u32
+const NL_W_MAY    : u32 = 161u32
+const NL_W_HAS    : u32 = 162u32
+const NL_W_HAVE   : u32 = 163u32
+const NL_W_WAS    : u32 = 164u32
+const NL_W_WERE   : u32 = 165u32
+
+/* Word ids for prepositions (from nl_lex sealed lexicon). */
+const NL_W_FROM    : u32 = 88u32
+const NL_W_TO      : u32 = 89u32
+const NL_W_WITH    : u32 = 90u32
+const NL_W_OF      : u32 = 91u32
+const NL_W_IN      : u32 = 92u32
+const NL_W_INTO    : u32 = 93u32
+const NL_W_ON      : u32 = 94u32
+const NL_W_AT      : u32 = 95u32
+const NL_W_BY      : u32 = 96u32
+const NL_W_FOR     : u32 = 97u32
+const NL_W_AGAINST : u32 = 98u32
+const NL_W_THROUGH : u32 = 99u32
+const NL_W_BETWEEN : u32 = 100u32
+const NL_W_OUT     : u32 = 101u32
+const NL_W_WITHIN  : u32 = 102u32
+
+/* Subordinator word_ids (sealed range from nl_lex Phase E.5).
+ * These appear as PREP-typed tokens but introduce a full clause
+ * rather than a single NP. The parser dispatches on word_id to
+ * decide between PP-attachment and subordinate-clause recursion. */
+const NL_W_BECAUSE : u32 = 175u32
+const NL_W_WHILE   : u32 = 176u32
+const NL_W_IF      : u32 = 177u32
+
+const NL_PARSE_OK         : i32 =  0i32
+const NL_PARSE_E_NULL     : i32 = -1i32
+const NL_PARSE_E_OVERFLOW : i32 = -2i32
+const NL_PARSE_E_NO_VERB  : i32 = -3i32
+const NL_PARSE_E_EMPTY    : i32 = -4i32
+
+const NL_FRAG_BYTES  : u32 = 16u32
+const NL_MAX_FRAGS   : u32 = 64u32
+
+/* Interrogative-auxiliary word_id range. Sentence-initial VERB tokens
+ * with word_ids in [NLP_AUX_LO, NLP_AUX_HI] flag INTERROGATIVE. */
+const NLP_AUX_LO : u32 = 151u32
+const NLP_AUX_HI : u32 = 165u32
+
+fn _np_is_aux_word(word_id: u32) -> u8 {
+    let w : u32 = word_id
+    if w < NLP_AUX_LO { return 0u8 }
+    if w > NLP_AUX_HI { return 0u8 }
+    return 1u8
+}
+
+/* True if word_id falls in the sealed modal-auxiliary range
+ * [NLP_AUX_LO, NLP_AUX_HI] (151..165). Used by the DECLARATIVE branch
+ * to recognise INTERNAL modals appearing between AGENT and main VERB:
+ * "you must encrypt the buffer", "the server should respond". */
+fn _np_is_modal_aux(word_id: u32) -> u8 {
+    let w_l : u32 = word_id
+    if w_l < NLP_AUX_LO { return 0u8 }
+    if w_l > NLP_AUX_HI { return 0u8 }
+    return 1u8
+}
+
+/* Classify a modal aux word_id into a modality_id (compile-time table).
+ *   STRONG (1)         : should, will       (must, shall not in lexicon)
+ *   POSSIBLE (2)       : may, might, can
+ *   COUNTERFACTUAL (3) : would, could       (could resolves here)
+ *   ASPECTUAL (4)      : is, are, do, does, has, have, was, were
+ * Returns NLP_MOD_NONE for word_ids outside the modal range. */
+fn _np_modality_of(word_id: u32) -> u32 {
+    let w_l : u32 = word_id
+    if w_l == NL_W_SHOULD { return NLP_MOD_STRONG }
+    if w_l == NL_W_WILL   { return NLP_MOD_STRONG }
+    if w_l == NL_W_MAY    { return NLP_MOD_POSSIBLE }
+    if w_l == NL_W_MIGHT  { return NLP_MOD_POSSIBLE }
+    if w_l == NL_W_CAN    { return NLP_MOD_POSSIBLE }
+    if w_l == NL_W_WOULD  { return NLP_MOD_COUNTERFACTUAL }
+    if w_l == NL_W_COULD  { return NLP_MOD_COUNTERFACTUAL }
+    if w_l == NL_W_HAS    { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_HAVE   { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_WAS    { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_WERE   { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_IS     { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_ARE    { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_DO     { return NLP_MOD_ASPECTUAL }
+    if w_l == NL_W_DOES   { return NLP_MOD_ASPECTUAL }
+    return NLP_MOD_NONE
+}
+
+/* True if a PREP-typed token's word_id belongs to the subordinator
+ * range (because, while, if). These introduce a full mini-sentence
+ * rather than a single NP, so the parser must recurse instead of
+ * dispatching to _np_handle_pp. */
+fn _np_is_subordinator(word_id: u32) -> u8 {
+    let w_l : u32 = word_id
+    if w_l == NL_W_BECAUSE { return 1u8 }
+    if w_l == NL_W_WHILE   { return 1u8 }
+    if w_l == NL_W_IF      { return 1u8 }
+    return 0u8
+}
+
+/* Classify a subordinator word_id into its semantic role:
+ *   because -> NLP_ROLE_REASON
+ *   while   -> NLP_ROLE_CONDITION (temporal context)
+ *   if      -> NLP_ROLE_CONDITION (conditional)
+ * Returns NLP_ROLE_TOPIC as a defensive fallback. */
+fn _np_role_for_subordinator(word_id: u32) -> u32 {
+    let w_l : u32 = word_id
+    if w_l == NL_W_BECAUSE { return NLP_ROLE_REASON }
+    if w_l == NL_W_WHILE   { return NLP_ROLE_CONDITION }
+    if w_l == NL_W_IF      { return NLP_ROLE_CONDITION }
+    return NLP_ROLE_TOPIC
+}
+
+/* True if a PREP-typed token's word_id is a coordinating conjunction
+ * (and | or | but | then). The lexicon stores these with TYPE=PREP
+ * because no CONJ token type exists in the sealed type table; we
+ * discriminate here by word_id range. Conjunctions trigger clause
+ * recursion (not PP-attachment) in the imperative/declarative paths,
+ * up to a depth cap of NLP_CONJ_MAX_DEPTH = 3. */
+fn _np_is_conjunction(word_id: u32) -> u8 {
+    let w_l : u32 = word_id
+    if w_l == NL_W_AND  { return 1u8 }
+    if w_l == NL_W_OR   { return 1u8 }
+    if w_l == NL_W_BUT  { return 1u8 }
+    if w_l == NL_W_THEN { return 1u8 }
+    return 0u8
+}
+
+/* Pack (idx, frag_count, depth) into a single u64 for recursive
+ * dispatch. Layout:
+ *   bits  0..31 : idx
+ *   bits 32..59 : frag_count (28 bits; NL_MAX_FRAGS = 64 fits trivially)
+ *   bits 60..63 : conjunction-recursion depth (0..15; cap at 3)
+ * The encoding is backward-compatible with non-recursive entry:
+ * with depth=0 the high 4 bits are 0 and existing `>> 32 & 0xFFFFFFFF`
+ * readers see the original frag_count. */
+fn _np_pack_idx_fc_depth(idx: u32, frag_count: u32, depth: u32) -> u64 {
+    let i_l : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let f_l : u64 = ((frag_count as u64) & 0x0FFFFFFFu64) << 32u64
+    let d_l : u64 = ((depth as u64) & 0xFu64) << NLP_CONJ_DEPTH_SHIFT
+    return i_l | f_l | d_l
+}
+
+/* ---- helpers ---- */
+
+fn _np_role_for_prep(word_id: u32) -> u32 {
+    let w_l : u32 = word_id
+    if w_l == NL_W_FROM    { return NLP_ROLE_SOURCE }
+    if w_l == NL_W_TO      { return NLP_ROLE_DESTINATION }
+    if w_l == NL_W_INTO    { return NLP_ROLE_DESTINATION }
+    if w_l == NL_W_WITH    { return NLP_ROLE_INSTRUMENT }
+    if w_l == NL_W_BY      { return NLP_ROLE_INSTRUMENT }
+    if w_l == NL_W_OF      { return NLP_ROLE_OF }
+    if w_l == NL_W_IN      { return NLP_ROLE_LOCATION }
+    if w_l == NL_W_ON      { return NLP_ROLE_LOCATION }
+    if w_l == NL_W_AT      { return NLP_ROLE_LOCATION }
+    if w_l == NL_W_WITHIN  { return NLP_ROLE_LOCATION }
+    if w_l == NL_W_FOR     { return NLP_ROLE_BENEFICIARY }
+    if w_l == NL_W_AGAINST { return NLP_ROLE_TOPIC }
+    if w_l == NL_W_THROUGH { return NLP_ROLE_LOCATION }
+    if w_l == NL_W_BETWEEN { return NLP_ROLE_LOCATION }
+    if w_l == NL_W_OUT     { return NLP_ROLE_SOURCE }
+    return NLP_ROLE_TOPIC
+}
+
+fn _np_token_at(tokens_ptr: u64, idx: u32) -> u64 {
+    let t_l : u64 = tokens_ptr
+    let i_l : u32 = idx
+    let pp : *u64 = (t_l + ((i_l as u64) * 8u64)) as *u64
+    return pp[0u64]
+}
+
+fn _np_is_np_starter(tt: u8) -> u8 {
+    let t_l : u8 = tt
+    if t_l == NLP_TOK_DET     { return 1u8 }
+    if t_l == NLP_TOK_ADJ     { return 1u8 }
+    if t_l == NLP_TOK_NOUN    { return 1u8 }
+    if t_l == NLP_TOK_NUMBER  { return 1u8 }
+    if t_l == NLP_TOK_IDENT   { return 1u8 }
+    if t_l == NLP_TOK_STRING_LIT { return 1u8 }
+    return 0u8
+}
+
+fn _np_is_np_internal(tt: u8) -> u8 {
+    let t_l : u8 = tt
+    if _np_is_np_starter(t_l) == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* Scan a noun phrase starting at tokens[idx]. Returns packed:
+ *   bits 0..15  : start_tok
+ *   bits 16..31 : end_tok_exclusive
+ *   bits 32..63 : quantifier (NUMBER prefix; 0 if absent) */
+fn _np_scan_np(tokens_ptr: u64, count: u32, idx: u32) -> u64 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let mut j : u32 = idx
+    let mut quant : u32 = 0u32
+    let mut head_seen : u8 = 0u8
+    let mut going : u8 = 1u8
+    let start : u32 = j
+    while going == 1u8 {
+        if j >= n_l {
+            going = 0u8
+        } else {
+            let tok : u64 = _np_token_at(t_l, j)
+            let tt  : u8  = nl_token_type(tok)
+            if _np_is_np_internal(tt) == 1u8 {
+                if tt == NLP_TOK_NUMBER {
+                    if head_seen == 0u8 { quant = nl_token_word_id(tok) }
+                }
+                if tt == NLP_TOK_NOUN { head_seen = 1u8 }
+                if tt == NLP_TOK_IDENT { head_seen = 1u8 }
+                if tt == NLP_TOK_STRING_LIT { head_seen = 1u8 }
+                /* A trailing NUMBER acts as object-id, e.g. "handle 4". */
+                if tt == NLP_TOK_NUMBER {
+                    if head_seen == 1u8 {
+                        quant = nl_token_word_id(tok)
+                        j = j + 1u32
+                        going = 0u8
+                    } else {
+                        j = j + 1u32
+                    }
+                } else {
+                    j = j + 1u32
+                }
+            } else {
+                going = 0u8
+            }
+        }
+    }
+    let s_l : u64 = (start as u64) & 0xFFFFu64
+    let e_l : u64 = ((j as u64) & 0xFFFFu64) << 16u64
+    let q_l : u64 = ((quant as u64) & 0xFFFFFFFFu64) << 32u64
+    return s_l | e_l | q_l
+}
+
+/* Write fragment at out_frag_ptr + idx*16. 4-arg signature; meta packed:
+ *   packed_idx_max  = (max_frags << 32) | idx
+ *   packed_rhq      = (quant << 32) | (role << 16) | head_tok
+ *   span_packed     = span (lo16=start, mid16=end)
+ */
+fn _np_emit_fragment(out_frag_ptr: u64, packed_idx_max: u64, packed_rhq: u64, span_packed: u64) -> i32 {
+    let o_l : u64 = out_frag_ptr
+    let pim : u64 = packed_idx_max
+    let prhq: u64 = packed_rhq
+    let p_l : u64 = span_packed
+    let i_l : u32 = (pim & 0xFFFFFFFFu64) as u32
+    let m_l : u32 = ((pim >> 32u64) & 0xFFFFFFFFu64) as u32
+    let h_l : u32 = (prhq & 0xFFFFu64) as u32
+    let r_l : u32 = ((prhq >> 16u64) & 0xFFFFu64) as u32
+    let q_l : u32 = ((prhq >> 32u64) & 0xFFFFFFFFu64) as u32
+    if i_l >= m_l { return NL_PARSE_E_OVERFLOW }
+    let base : u64 = o_l + ((i_l as u64) * 16u64)
+    let f0 : *u32 = base as *u32
+    let f1 : *u32 = (base + 4u64) as *u32
+    let f2 : *u32 = (base + 8u64) as *u32
+    let f3 : *u32 = (base + 12u64) as *u32
+    f0[0u64] = r_l
+    f1[0u64] = h_l
+    let span_lo : u32 = (p_l & 0xFFFFu64) as u32
+    let span_hi : u32 = ((p_l >> 16u64) & 0xFFFFu64) as u32
+    f2[0u64] = span_lo | (span_hi << 16u32)
+    f3[0u64] = q_l
+    return NL_PARSE_OK
+}
+
+fn _np_pack_idx_max(idx: u32, max_frags: u32) -> u64 {
+    let i_l : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let m_l : u64 = ((max_frags as u64) & 0xFFFFFFFFu64) << 32u64
+    return i_l | m_l
+}
+
+fn _np_pack_rhq(role: u32, head_tok: u32, quant: u32) -> u64 {
+    let h_l : u64 = (head_tok as u64) & 0xFFFFu64
+    let r_l : u64 = ((role as u64) & 0xFFFFu64) << 16u64
+    let q_l : u64 = ((quant as u64) & 0xFFFFFFFFu64) << 32u64
+    return h_l | r_l | q_l
+}
+
+/* Find the head noun (or ident/string) in a span [start, end). Returns
+ * the token index, or 0xFFFFFFFF if none. */
+fn _np_head_of(tokens_ptr: u64, start: u32, end: u32) -> u32 {
+    let t_l : u64 = tokens_ptr
+    let s_l : u32 = start
+    let e_l : u32 = end
+    let mut j : u32 = s_l
+    let mut last_head : u32 = 0xFFFFFFFFu32
+    while j < e_l {
+        let tok : u64 = _np_token_at(t_l, j)
+        let tt  : u8  = nl_token_type(tok)
+        if tt == NLP_TOK_NOUN { last_head = j }
+        if tt == NLP_TOK_IDENT { last_head = j }
+        if tt == NLP_TOK_STRING_LIT { last_head = j }
+        j = j + 1u32
+    }
+    return last_head
+}
+
+/* Skip leading punctuation/EOL tokens. */
+fn _np_skip_pad(tokens_ptr: u64, count: u32, idx: u32) -> u32 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let mut j : u32 = idx
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= n_l {
+            going = 0u8
+        } else {
+            let tok : u64 = _np_token_at(t_l, j)
+            let tt  : u8  = nl_token_type(tok)
+            if tt == NLP_TOK_PUNCT {
+                j = j + 1u32
+            } else if tt == NLP_TOK_EOL {
+                j = j + 1u32
+            } else {
+                going = 0u8
+            }
+        }
+    }
+    return j
+}
+
+/* Imperative branch helper. Returns packed (final_i << 32) | frag_count_after,
+ * or 0xFFFFFFFFFFFFFFFFu64 on error.
+ *
+ * Conjunction-recursion: when the parsed clause is followed by a
+ * coordinating conjunction (and|or|but|then) and the recursion depth
+ * encoded in bits 60..63 of packed_idx_fc is below NLP_CONJ_MAX_DEPTH,
+ * a NLP_ROLE_CONJ fragment is emitted and the handler recurses for the
+ * coordinated clause. */
+fn _np_handle_imperative(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, packed_idx_fc: u64) -> u64 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let f_l : u64 = out_fragments_ptr
+    let pif : u64 = packed_idx_fc
+    let mut i : u32 = (pif & 0xFFFFFFFFu64) as u32
+    let mut frag_count : u32 = ((pif >> 32u64) & 0x0FFFFFFFu64) as u32
+    let depth : u32 = ((pif >> NLP_CONJ_DEPTH_SHIFT) & 0xFu64) as u32
+    let verb_idx : u32 = i
+    let v_span : u64 = ((verb_idx as u64) & 0xFFFFu64) | (((verb_idx as u64 + 1u64) & 0xFFFFu64) << 16u64)
+    let im1 : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+    let rhq1 : u64 = _np_pack_rhq(NLP_ROLE_VERB, verb_idx, 0u32)
+    if _np_emit_fragment(f_l, im1, rhq1, v_span) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+    frag_count = frag_count + 1u32
+    i = i + 1u32
+    i = _np_skip_pad(t_l, n_l, i)
+    if i < n_l {
+        let next_tok : u64 = _np_token_at(t_l, i)
+        let next_tt  : u8  = nl_token_type(next_tok)
+        if _np_is_np_starter(next_tt) == 1u8 {
+            let np_p : u64 = _np_scan_np(t_l, n_l, i)
+            let np_s : u32 = (np_p & 0xFFFFu64) as u32
+            let np_e : u32 = ((np_p >> 16u64) & 0xFFFFu64) as u32
+            let q    : u32 = ((np_p >> 32u64) & 0xFFFFFFFFu64) as u32
+            let head : u32 = _np_head_of(t_l, np_s, np_e)
+            let im2 : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+            let rhq2 : u64 = _np_pack_rhq(NLP_ROLE_PATIENT, head, q)
+            if _np_emit_fragment(f_l, im2, rhq2, np_p) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+            frag_count = frag_count + 1u32
+            i = np_e
+        }
+    }
+    /* Subsequent PPs. Conjunctions are also TYPE=PREP in the lexicon
+     * but must NOT be consumed here -- they belong to the conjunction-
+     * recursion tail below. Break the loop cleanly with `i` preserved. */
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        i = _np_skip_pad(t_l, n_l, i)
+        if i >= n_l {
+            going = 0u8
+        } else {
+            let tok2 : u64 = _np_token_at(t_l, i)
+            let tt2  : u8  = nl_token_type(tok2)
+            if tt2 == NLP_TOK_PREP {
+                let prep_w_imp : u32 = nl_token_word_id(tok2)
+                if _np_is_conjunction(prep_w_imp) == 1u8 {
+                    going = 0u8
+                } else if _np_is_subordinator(prep_w_imp) == 1u8 {
+                    NL_SUB_ROLE = _np_role_for_subordinator(prep_w_imp)
+                    let pif_s : u64 = (i as u64) | (((frag_count as u64) & 0xFFFFFFFFu64) << 32u64)
+                    let r_s : u64 = _np_handle_subordinate(t_l, n_l, f_l, pif_s)
+                    if r_s == 0xFFFFFFFFFFFFFFFFu64 {
+                        going = 0u8
+                    } else {
+                        i = (r_s & 0xFFFFFFFFu64) as u32
+                        frag_count = ((r_s >> 32u64) & 0xFFFFFFFFu64) as u32
+                    }
+                } else {
+                    i = _np_handle_pp(t_l, n_l, f_l, _np_pack_idx_max(i, frag_count))
+                    if i == 0xFFFFFFFFu32 {
+                        going = 0u8
+                    } else {
+                        let new_fc : u32 = _np_get_imp_fc(t_l, n_l, f_l, i)
+                        /* fc accumulator updated externally via shared scratch; here
+                         * we re-derive from the helper's encoding. */
+                        frag_count = new_fc
+                    }
+                }
+            } else {
+                going = 0u8
+            }
+        }
+    }
+    /* Conjunction-recursion tail: "send X and forward Y", "lock M then
+     * signal E", "open F or create N". Emits a CONJ fragment for the
+     * connector token, then recurses into the imperative parser for the
+     * coordinated clause. Depth bound prevents unbounded stack growth. */
+    if depth < NLP_CONJ_MAX_DEPTH {
+        let scan_i : u32 = _np_skip_pad(t_l, n_l, i)
+        if scan_i < n_l {
+            let conj_tok : u64 = _np_token_at(t_l, scan_i)
+            let conj_tt  : u8  = nl_token_type(conj_tok)
+            if conj_tt == NLP_TOK_PREP {
+                let conj_w : u32 = nl_token_word_id(conj_tok)
+                if _np_is_conjunction(conj_w) == 1u8 {
+                    let c_span : u64 = ((scan_i as u64) & 0xFFFFu64) | (((scan_i as u64 + 1u64) & 0xFFFFu64) << 16u64)
+                    let im_c  : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+                    let rhq_c : u64 = _np_pack_rhq(NLP_ROLE_CONJ, scan_i, conj_w)
+                    if _np_emit_fragment(f_l, im_c, rhq_c, c_span) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+                    frag_count = frag_count + 1u32
+                    /* Always advance past the CONJ token even if recursion
+                     * cannot proceed; otherwise the returned `i` would
+                     * backtrack over a frag we already emitted. */
+                    i = scan_i + 1u32
+                    let next_i : u32 = _np_skip_pad(t_l, n_l, i)
+                    if next_i < n_l {
+                        let next2_tok : u64 = _np_token_at(t_l, next_i)
+                        let next2_tt  : u8  = nl_token_type(next2_tok)
+                        if next2_tt == NLP_TOK_VERB {
+                            let pif_r : u64 = _np_pack_idx_fc_depth(next_i, frag_count, depth + 1u32)
+                            let r_c : u64 = _np_handle_imperative(t_l, n_l, f_l, pif_r)
+                            if r_c != 0xFFFFFFFFFFFFFFFFu64 {
+                                i = (r_c & 0xFFFFFFFFu64) as u32
+                                frag_count = ((r_c >> 32u64) & 0xFFFFFFFFu64) as u32
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let i_lo : u64 = (i as u64) & 0xFFFFFFFFu64
+    let fc_hi : u64 = ((frag_count as u64) & 0xFFFFFFFFu64) << 32u64
+    return i_lo | fc_hi
+}
+
+fn _np_get_imp_fc(_t: u64, _n: u32, _f: u64, packed: u32) -> u32 {
+    /* helper consumed by the PP-loop encoding; extracts the upper word
+     * stashed in the shared scratch. */
+    return NL_IMP_LOOP_FC
+}
+
+var NL_IMP_LOOP_FC : u32 = 0u32
+
+fn _np_handle_pp(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, packed_idx_fc: u64) -> u32 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let f_l : u64 = out_fragments_ptr
+    let pif : u64 = packed_idx_fc
+    let mut i : u32 = (pif & 0xFFFFFFFFu64) as u32
+    let mut frag_count : u32 = ((pif >> 32u64) & 0xFFFFFFFFu64) as u32
+    let prep_tok : u64 = _np_token_at(t_l, i)
+    let prep_w : u32 = nl_token_word_id(prep_tok)
+    let pp_role : u32 = _np_role_for_prep(prep_w)
+    i = i + 1u32
+    i = _np_skip_pad(t_l, n_l, i)
+    if i >= n_l { return 0xFFFFFFFFu32 }
+    let np_tok : u64 = _np_token_at(t_l, i)
+    let np_tt  : u8  = nl_token_type(np_tok)
+    if _np_is_np_starter(np_tt) == 0u8 { return 0xFFFFFFFFu32 }
+    let np_p2 : u64 = _np_scan_np(t_l, n_l, i)
+    let np_s2 : u32 = (np_p2 & 0xFFFFu64) as u32
+    let np_e2 : u32 = ((np_p2 >> 16u64) & 0xFFFFu64) as u32
+    let q2    : u32 = ((np_p2 >> 32u64) & 0xFFFFFFFFu64) as u32
+    let head2 : u32 = _np_head_of(t_l, np_s2, np_e2)
+    let im3 : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+    let rhq3 : u64 = _np_pack_rhq(pp_role, head2, q2)
+    if _np_emit_fragment(f_l, im3, rhq3, np_p2) != NL_PARSE_OK { return 0xFFFFFFFFu32 }
+    frag_count = frag_count + 1u32
+    NL_IMP_LOOP_FC = frag_count
+    return np_e2
+}
+
+/* Shared scratch for the subordinator role. Set by the caller
+ * IMMEDIATELY before invoking _np_handle_subordinate. The 4-arg
+ * signature (iiis-0 trap) prevents passing role as a parameter. */
+var NL_SUB_ROLE : u32 = 0u32
+
+/* Subordinate-clause helper. Consumes a subordinator token at
+ * tokens[i] (because | while | if) and parses the following
+ * mini-declarative clause "NP VERB (NP | ADJ)?". Emits one
+ * fragment tagged with NL_SUB_ROLE whose head is the predicate's
+ * verb (or, when the clause copula-elides to a bare adjective,
+ * the adjective itself). The fragment span covers the entire
+ * subordinate clause for downstream calculus consumption.
+ *
+ * Returns packed (final_i << 32) | frag_count_after, or
+ * 0xFFFFFFFFFFFFFFFFu64 on overflow / malformed clause. The
+ * caller restores its own role context after the call. */
+fn _np_handle_subordinate(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, packed_idx_fc: u64) -> u64 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let f_l : u64 = out_fragments_ptr
+    let pif : u64 = packed_idx_fc
+    let mut i : u32 = (pif & 0xFFFFFFFFu64) as u32
+    let mut frag_count : u32 = ((pif >> 32u64) & 0xFFFFFFFFu64) as u32
+    let role : u32 = NL_SUB_ROLE
+    let clause_start : u32 = i
+    /* (1) Skip the subordinator token itself. */
+    i = i + 1u32
+    i = _np_skip_pad(t_l, n_l, i)
+    if i >= n_l { return 0xFFFFFFFFFFFFFFFFu64 }
+    /* (2) Parse the subordinate subject NP (may be absent for an
+     * imperative-style sub-clause like "if encrypted"). */
+    let mut sub_pred_idx : u32 = i
+    let s_tok : u64 = _np_token_at(t_l, i)
+    let s_tt  : u8  = nl_token_type(s_tok)
+    if _np_is_np_starter(s_tt) == 1u8 {
+        let s_np : u64 = _np_scan_np(t_l, n_l, i)
+        let s_np_e : u32 = ((s_np >> 16u64) & 0xFFFFu64) as u32
+        i = s_np_e
+        i = _np_skip_pad(t_l, n_l, i)
+    }
+    /* (3) Parse the subordinate VERB (or bare ADJ in copula-elision). */
+    if i >= n_l { return 0xFFFFFFFFFFFFFFFFu64 }
+    let v_tok : u64 = _np_token_at(t_l, i)
+    let v_tt  : u8  = nl_token_type(v_tok)
+    if v_tt == NLP_TOK_VERB {
+        sub_pred_idx = i
+        i = i + 1u32
+        i = _np_skip_pad(t_l, n_l, i)
+        /* (4) Optional predicate complement: NP or ADJ. */
+        if i < n_l {
+            let c_tok : u64 = _np_token_at(t_l, i)
+            let c_tt  : u8  = nl_token_type(c_tok)
+            if c_tt == NLP_TOK_ADJ {
+                i = i + 1u32
+            } else if _np_is_np_starter(c_tt) == 1u8 {
+                let c_np : u64 = _np_scan_np(t_l, n_l, i)
+                let c_np_e : u32 = ((c_np >> 16u64) & 0xFFFFu64) as u32
+                i = c_np_e
+            }
+        }
+    } else if v_tt == NLP_TOK_ADJ {
+        sub_pred_idx = i
+        i = i + 1u32
+    } else {
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    /* (5) Emit a single TOPIC-style fragment tagged with the
+     * supplied role; head = predicate token, span = full clause. */
+    let span_p : u64 = ((clause_start as u64) & 0xFFFFu64) | (((i as u64) & 0xFFFFu64) << 16u64)
+    let im_s : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+    let rhq_s : u64 = _np_pack_rhq(role, sub_pred_idx, 0u32)
+    if _np_emit_fragment(f_l, im_s, rhq_s, span_p) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+    frag_count = frag_count + 1u32
+    let i_lo : u64 = (i as u64) & 0xFFFFFFFFu64
+    let fc_hi : u64 = ((frag_count as u64) & 0xFFFFFFFFu64) << 32u64
+    return i_lo | fc_hi
+}
+
+/* Declarative branch helper. Returns packed (final_i << 32) | frag_count,
+ * or 0xFFFFFFFFFFFFFFFFu64 on error.
+ *
+ * Conjunction-recursion: when the parsed clause is followed by a
+ * coordinating conjunction (and|or|but|then) AND a fresh NP-starter
+ * (i.e., a new subject), and the depth encoded in bits 60..63 of
+ * packed_idx_fc is below NLP_CONJ_MAX_DEPTH, a NLP_ROLE_CONJ fragment
+ * is emitted and the handler recurses for the coordinated clause. */
+fn _np_handle_declarative(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, packed_idx_fc: u64) -> u64 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let f_l : u64 = out_fragments_ptr
+    let pif : u64 = packed_idx_fc
+    let mut i : u32 = (pif & 0xFFFFFFFFu64) as u32
+    let mut frag_count : u32 = ((pif >> 32u64) & 0x0FFFFFFFu64) as u32
+    let depth : u32 = ((pif >> NLP_CONJ_DEPTH_SHIFT) & 0xFu64) as u32
+    let subj_p : u64 = _np_scan_np(t_l, n_l, i)
+    let subj_s : u32 = (subj_p & 0xFFFFu64) as u32
+    let subj_e : u32 = ((subj_p >> 16u64) & 0xFFFFu64) as u32
+    let subj_q : u32 = ((subj_p >> 32u64) & 0xFFFFFFFFu64) as u32
+    let subj_h : u32 = _np_head_of(t_l, subj_s, subj_e)
+    i = subj_e
+    i = _np_skip_pad(t_l, n_l, i)
+    if i >= n_l { return 0xFFFFFFFFFFFFFFFFu64 }
+    let v_tok : u64 = _np_token_at(t_l, i)
+    let v_tt  : u8  = nl_token_type(v_tok)
+    if v_tt != NLP_TOK_VERB { return 0xFFFFFFFFFFFFFFFFu64 }
+    let im_a : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+    let rhq_a : u64 = _np_pack_rhq(NLP_ROLE_AGENT, subj_h, subj_q)
+    if _np_emit_fragment(f_l, im_a, rhq_a, subj_p) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+    frag_count = frag_count + 1u32
+    /* INTERNAL MODAL recognition: AGENT [MODAL] VERB.
+     * If the current VERB token's word_id is in the modal-aux range AND
+     * is followed by another VERB, emit MODAL fragment (with modality_id
+     * packed into quant) and advance past it before the main VERB. */
+    let v_word_id : u32 = nl_token_word_id(v_tok)
+    if _np_is_modal_aux(v_word_id) == 1u8 {
+        let mut peek : u32 = i + 1u32
+        peek = _np_skip_pad(t_l, n_l, peek)
+        if peek < n_l {
+            let peek_tok : u64 = _np_token_at(t_l, peek)
+            let peek_tt  : u8  = nl_token_type(peek_tok)
+            if peek_tt == NLP_TOK_VERB {
+                let mod_id : u32 = _np_modality_of(v_word_id)
+                let m_span : u64 = ((i as u64) & 0xFFFFu64) | (((i as u64 + 1u64) & 0xFFFFu64) << 16u64)
+                let im_m  : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+                let rhq_m : u64 = _np_pack_rhq(NLP_ROLE_MODAL, i, mod_id)
+                if _np_emit_fragment(f_l, im_m, rhq_m, m_span) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+                frag_count = frag_count + 1u32
+                i = peek
+            }
+        }
+    }
+    let v_span : u64 = ((i as u64) & 0xFFFFu64) | (((i as u64 + 1u64) & 0xFFFFu64) << 16u64)
+    let im_v : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+    let rhq_v : u64 = _np_pack_rhq(NLP_ROLE_VERB, i, 0u32)
+    if _np_emit_fragment(f_l, im_v, rhq_v, v_span) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+    frag_count = frag_count + 1u32
+    i = i + 1u32
+    i = _np_skip_pad(t_l, n_l, i)
+    if i < n_l {
+        let nxt_tok : u64 = _np_token_at(t_l, i)
+        let nxt_tt  : u8  = nl_token_type(nxt_tok)
+        if _np_is_np_starter(nxt_tt) == 1u8 {
+            let p2 : u64 = _np_scan_np(t_l, n_l, i)
+            let p2e : u32 = ((p2 >> 16u64) & 0xFFFFu64) as u32
+            let p2q : u32 = ((p2 >> 32u64) & 0xFFFFFFFFu64) as u32
+            let p2s : u32 = (p2 & 0xFFFFu64) as u32
+            let p2h : u32 = _np_head_of(t_l, p2s, p2e)
+            let im_p : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+            let rhq_p : u64 = _np_pack_rhq(NLP_ROLE_PATIENT, p2h, p2q)
+            if _np_emit_fragment(f_l, im_p, rhq_p, p2) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+            frag_count = frag_count + 1u32
+            i = p2e
+        }
+    }
+    /* Subordinate-clause tail: "... because X contains Y", "... while
+     * the channel is open", "... if peer responds". Recognised only
+     * when the next non-pad token is a subordinator-PREP. */
+    let mut sub_going_d : u8 = 1u8
+    while sub_going_d == 1u8 {
+        i = _np_skip_pad(t_l, n_l, i)
+        if i >= n_l {
+            sub_going_d = 0u8
+        } else {
+            let tok_d : u64 = _np_token_at(t_l, i)
+            let tt_d  : u8  = nl_token_type(tok_d)
+            if tt_d == NLP_TOK_PREP {
+                let prep_w_d : u32 = nl_token_word_id(tok_d)
+                if _np_is_subordinator(prep_w_d) == 1u8 {
+                    NL_SUB_ROLE = _np_role_for_subordinator(prep_w_d)
+                    let pif_d : u64 = (i as u64) | (((frag_count as u64) & 0xFFFFFFFFu64) << 32u64)
+                    let r_d : u64 = _np_handle_subordinate(t_l, n_l, f_l, pif_d)
+                    if r_d == 0xFFFFFFFFFFFFFFFFu64 {
+                        sub_going_d = 0u8
+                    } else {
+                        i = (r_d & 0xFFFFFFFFu64) as u32
+                        frag_count = ((r_d >> 32u64) & 0xFFFFFFFFu64) as u32
+                    }
+                } else {
+                    sub_going_d = 0u8
+                }
+            } else {
+                sub_going_d = 0u8
+            }
+        }
+    }
+    /* Conjunction-recursion tail: "the buffer encrypts X and the queue
+     * forwards Y", "the agent signs M then the witness verifies N".
+     * Emits a CONJ fragment for the connector token, then recurses into
+     * the declarative parser when a fresh NP-starter (new subject)
+     * follows. Depth bound prevents unbounded stack growth. */
+    if depth < NLP_CONJ_MAX_DEPTH {
+        let scan_i_d : u32 = _np_skip_pad(t_l, n_l, i)
+        if scan_i_d < n_l {
+            let conj_tok_d : u64 = _np_token_at(t_l, scan_i_d)
+            let conj_tt_d  : u8  = nl_token_type(conj_tok_d)
+            if conj_tt_d == NLP_TOK_PREP {
+                let conj_w_d : u32 = nl_token_word_id(conj_tok_d)
+                if _np_is_conjunction(conj_w_d) == 1u8 {
+                    let c_span_d : u64 = ((scan_i_d as u64) & 0xFFFFu64) | (((scan_i_d as u64 + 1u64) & 0xFFFFu64) << 16u64)
+                    let im_c_d  : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+                    let rhq_c_d : u64 = _np_pack_rhq(NLP_ROLE_CONJ, scan_i_d, conj_w_d)
+                    if _np_emit_fragment(f_l, im_c_d, rhq_c_d, c_span_d) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+                    frag_count = frag_count + 1u32
+                    /* Always advance past the CONJ token even if recursion
+                     * cannot proceed; otherwise the returned `i` would
+                     * backtrack over a frag we already emitted. */
+                    i = scan_i_d + 1u32
+                    let next_i_d : u32 = _np_skip_pad(t_l, n_l, i)
+                    if next_i_d < n_l {
+                        let next2_tok_d : u64 = _np_token_at(t_l, next_i_d)
+                        let next2_tt_d  : u8  = nl_token_type(next2_tok_d)
+                        if _np_is_np_starter(next2_tt_d) == 1u8 {
+                            let pif_r_d : u64 = _np_pack_idx_fc_depth(next_i_d, frag_count, depth + 1u32)
+                            let r_c_d : u64 = _np_handle_declarative(t_l, n_l, f_l, pif_r_d)
+                            if r_c_d != 0xFFFFFFFFFFFFFFFFu64 {
+                                i = (r_c_d & 0xFFFFFFFFu64) as u32
+                                frag_count = ((r_c_d >> 32u64) & 0xFFFFFFFFu64) as u32
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let i_lo : u64 = (i as u64) & 0xFFFFFFFFu64
+    let fc_hi : u64 = ((frag_count as u64) & 0xFFFFFFFFu64) << 32u64
+    return i_lo | fc_hi
+}
+
+/* Interrogative branch helper. AUX VERB + (NP) + (ADJ | NP). Emits:
+ *   - VERB fragment for the auxiliary itself
+ *   - AGENT fragment for the NP after the AUX (the subject)
+ *   - TOPIC fragment for the predicate (ADJ-led or NP-led)
+ *
+ * Returns packed (final_i << 32) | frag_count, or 0xFFFFFFFFFFFFFFFFu64
+ * on overflow. */
+fn _np_handle_interrogative(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, packed_idx_fc: u64) -> u64 {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let f_l : u64 = out_fragments_ptr
+    let pif : u64 = packed_idx_fc
+    let mut i : u32 = (pif & 0xFFFFFFFFu64) as u32
+    let mut frag_count : u32 = ((pif >> 32u64) & 0xFFFFFFFFu64) as u32
+
+    /* Emit VERB fragment for the auxiliary. */
+    let aux_idx : u32 = i
+    let v_span : u64 = ((aux_idx as u64) & 0xFFFFu64) | (((aux_idx as u64 + 1u64) & 0xFFFFu64) << 16u64)
+    let im_v : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+    let rhq_v : u64 = _np_pack_rhq(NLP_ROLE_VERB, aux_idx, 0u32)
+    if _np_emit_fragment(f_l, im_v, rhq_v, v_span) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+    frag_count = frag_count + 1u32
+    i = i + 1u32
+
+    /* AGENT (subject NP) after the auxiliary. */
+    i = _np_skip_pad(t_l, n_l, i)
+    if i < n_l {
+        let next_tok : u64 = _np_token_at(t_l, i)
+        let next_tt  : u8  = nl_token_type(next_tok)
+        if _np_is_np_starter(next_tt) == 1u8 {
+            let np_p : u64 = _np_scan_np(t_l, n_l, i)
+            let np_s : u32 = (np_p & 0xFFFFu64) as u32
+            let np_e : u32 = ((np_p >> 16u64) & 0xFFFFu64) as u32
+            let q    : u32 = ((np_p >> 32u64) & 0xFFFFFFFFu64) as u32
+            let head : u32 = _np_head_of(t_l, np_s, np_e)
+            let im_a : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+            let rhq_a : u64 = _np_pack_rhq(NLP_ROLE_AGENT, head, q)
+            if _np_emit_fragment(f_l, im_a, rhq_a, np_p) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+            frag_count = frag_count + 1u32
+            i = np_e
+        }
+    }
+
+    /* TOPIC: predicate (ADJ-led or NP-led). */
+    i = _np_skip_pad(t_l, n_l, i)
+    if i < n_l {
+        let pred_tok : u64 = _np_token_at(t_l, i)
+        let pred_tt  : u8  = nl_token_type(pred_tok)
+        if pred_tt == NLP_TOK_ADJ {
+            /* Single ADJ as predicate. */
+            let p_span : u64 = ((i as u64) & 0xFFFFu64) | (((i as u64 + 1u64) & 0xFFFFu64) << 16u64)
+            let im_t : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+            let rhq_t : u64 = _np_pack_rhq(NLP_ROLE_TOPIC, i, 0u32)
+            if _np_emit_fragment(f_l, im_t, rhq_t, p_span) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+            frag_count = frag_count + 1u32
+            i = i + 1u32
+        } else if _np_is_np_starter(pred_tt) == 1u8 {
+            let np_p2 : u64 = _np_scan_np(t_l, n_l, i)
+            let np_s2 : u32 = (np_p2 & 0xFFFFu64) as u32
+            let np_e2 : u32 = ((np_p2 >> 16u64) & 0xFFFFu64) as u32
+            let q2    : u32 = ((np_p2 >> 32u64) & 0xFFFFFFFFu64) as u32
+            let head2 : u32 = _np_head_of(t_l, np_s2, np_e2)
+            let im_t2 : u64 = _np_pack_idx_max(frag_count, NL_MAX_FRAGS)
+            let rhq_t2 : u64 = _np_pack_rhq(NLP_ROLE_TOPIC, head2, q2)
+            if _np_emit_fragment(f_l, im_t2, rhq_t2, np_p2) != NL_PARSE_OK { return 0xFFFFFFFFFFFFFFFFu64 }
+            frag_count = frag_count + 1u32
+            i = np_e2
+        }
+    }
+
+    let i_lo : u64 = (i as u64) & 0xFFFFFFFFu64
+    let fc_hi : u64 = ((frag_count as u64) & 0xFFFFFFFFu64) << 32u64
+    return i_lo | fc_hi
+}
+
+/* ---- top-level: nl_parse_recognize ----
+ * 4-arg signature; out_meta_ptr -> [u32 frag_count, u32 kind].
+ */
+fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_meta_ptr: u64) -> i32 @export {
+    let t_l : u64 = tokens_ptr
+    let n_l : u32 = count
+    let f_l : u64 = out_fragments_ptr
+    let m_l : u64 = out_meta_ptr
+    if t_l == 0u64 { return NL_PARSE_E_NULL }
+    if f_l == 0u64 { return NL_PARSE_E_NULL }
+    if m_l == 0u64 { return NL_PARSE_E_NULL }
+    let cnt_p : *u32 = m_l as *u32
+    let knd_p : *u32 = (m_l + 4u64) as *u32
+
+    let mut i : u32 = _np_skip_pad(t_l, n_l, 0u32)
+    if i >= n_l { return NL_PARSE_E_EMPTY }
+
+    let mut frag_count : u32 = 0u32
+    let mut kind : u32 = NLP_KIND_UNKNOWN
+
+    let first_tok : u64 = _np_token_at(t_l, i)
+    let first_tt  : u8  = nl_token_type(first_tok)
+
+    if first_tt == NLP_TOK_VERB {
+        /* Distinguish INTERROGATIVE (sentence-initial auxiliary) from
+         * IMPERATIVE (any other VERB at sentence start). */
+        let first_word_id : u32 = nl_token_word_id(first_tok)
+        if _np_is_aux_word(first_word_id) == 1u8 {
+            kind = NLP_KIND_INTERROGATIVE
+            let pif_q : u64 = _np_pack_idx_max(i, frag_count)
+            let rq : u64 = _np_handle_interrogative(t_l, n_l, f_l, pif_q)
+            if rq == 0xFFFFFFFFFFFFFFFFu64 {
+                cnt_p[0u64] = 0u32
+                knd_p[0u64] = NLP_KIND_UNKNOWN
+                return NL_PARSE_E_OVERFLOW
+            }
+            frag_count = ((rq >> 32u64) & 0xFFFFFFFFu64) as u32
+        } else {
+            kind = NLP_KIND_IMPERATIVE
+            let pif : u64 = _np_pack_idx_max(i, frag_count)
+            let r : u64 = _np_handle_imperative(t_l, n_l, f_l, pif)
+            if r == 0xFFFFFFFFFFFFFFFFu64 {
+                cnt_p[0u64] = 0u32
+                knd_p[0u64] = NLP_KIND_UNKNOWN
+                return NL_PARSE_E_OVERFLOW
+            }
+            frag_count = ((r >> 32u64) & 0xFFFFFFFFu64) as u32
+        }
+    } else if _np_is_np_starter(first_tt) == 1u8 {
+        let pif2 : u64 = _np_pack_idx_max(i, frag_count)
+        let r2 : u64 = _np_handle_declarative(t_l, n_l, f_l, pif2)
+        if r2 != 0xFFFFFFFFFFFFFFFFu64 {
+            kind = NLP_KIND_DECLARATIVE
+            frag_count = ((r2 >> 32u64) & 0xFFFFFFFFu64) as u32
+        }
+    }
+
+    cnt_p[0u64] = frag_count
+    knd_p[0u64] = kind
+    if kind == NLP_KIND_UNKNOWN { return NL_PARSE_E_NO_VERB }
+    return NL_PARSE_OK
+}
+
+/* Accessors for reading back fragments. */
+
+fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 @export {
+    let f_l : u64 = frags_ptr
+    let i_l : u32 = idx
+    let p : *u32 = (f_l + ((i_l as u64) * 16u64)) as *u32
+    return p[0u64]
+}
+
+fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 @export {
+    let f_l : u64 = frags_ptr
+    let i_l : u32 = idx
+    let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 4u64) as *u32
+    return p[0u64]
+}
+
+fn nl_parse_frag_span_start(frags_ptr: u64, idx: u32) -> u32 @export {
+    let f_l : u64 = frags_ptr
+    let i_l : u32 = idx
+    let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 8u64) as *u32
+    return p[0u64] & 0xFFFFu32
+}
+
+fn nl_parse_frag_span_end(frags_ptr: u64, idx: u32) -> u32 @export {
+    let f_l : u64 = frags_ptr
+    let i_l : u32 = idx
+    let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 8u64) as *u32
+    return (p[0u64] >> 16u32) & 0xFFFFu32
+}
+
+fn nl_parse_frag_quantifier(frags_ptr: u64, idx: u32) -> u32 @export {
+    let f_l : u64 = frags_ptr
+    let i_l : u32 = idx
+    let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 12u64) as *u32
+    return p[0u64]
+}
+
+fn nl_parse_frag_bytes() -> u32 @export { return NL_FRAG_BYTES }
+fn nl_parse_max_frags() -> u32 @export { return NL_MAX_FRAGS }

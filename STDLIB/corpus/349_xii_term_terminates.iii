@@ -1,0 +1,32 @@
+/* corpus/349_xii_term_terminates.iii  -- Termination: deep nested COMPOSE */
+
+module corpus_349_xii_term_terminates
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise_last_steps() -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_is_canonical(t: u32) -> u8 from "xii_canonicalise.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* route-S: associativity is STRUCTURAL, so a deep COMPOSE chain is canonical BY CONSTRUCTION --
+     * make_fusion2 re-associates at every step and the chain never needs an R001 rewrite (retired).
+     * The strongest possible termination result: the associativity normal form costs ZERO steps. */
+    let mut cur : u32 = xii_term_make_basis(1u8, 1u32)
+    let mut i : u32 = 0u32
+    while i < 15u32 {
+        let next : u32 = xii_term_make_basis(1u8, i + 10u32)
+        cur = xii_term_make_fusion2(18u8, cur, next)
+        i = i + 1u32
+    }
+    /* the constructed chain is ALREADY canonical (right-nested, ascending-sorted spine). */
+    if xii_is_canonical(cur) != 1u8 { return 1u64 }
+    let canon : u32 = xii_canonicalise(cur)
+    if xii_is_canonical(canon) != 1u8 { return 2u64 }
+    /* canonicalisation terminates within the MPO bound (associativity contributes zero steps). */
+    let steps : u32 = xii_canonicalise_last_steps()
+    if steps > 4096u32 { return 3u64 }
+    return 0u64
+}

@@ -1,0 +1,9 @@
+/* 663 -- reflection_constrained: bounded self-reflection capability (R-3).
+ * Forbidden-self-set EXACT + enforced at entry AND construct (defense-in-depth
+ * W46/M13/M20), M8 cap gate fails closed, bounded property buffer (no wrap),
+ * REAL proof construction (pt_alloc->add_inference(AXIOM, target||property)->
+ * finalize->pt_verify) + budget-exhausted negative, propose-not-ratify queue
+ * (synthesis+clause kind tagging, distinct ids), uninit/null/bad-slot negatives. */
+module corpus_663
+extern @abi(c-msvc-x64) fn rc_selftest() -> u64 from "reflection_constrained.iii"
+fn main() -> u64 { return rc_selftest() }

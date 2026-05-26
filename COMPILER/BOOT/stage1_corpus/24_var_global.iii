@@ -1,0 +1,8 @@
+module corpus_24
+
+var counter: u64 = 10
+
+fn main() -> u64 {
+    counter = counter + 32
+    return counter
+}

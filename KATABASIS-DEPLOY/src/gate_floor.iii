@@ -1,0 +1,530 @@
+module gate_floor
+
+/* KATABASIS Ring-1 FLOOR loader -- #19a (teardown-first). A DEDICATED, ISOLATED standing driver for
+   the dangerous Ring-1 work, kept entirely separate from the proven gate_ioctl.sys so a wedge here
+   never touches the gate. driver_entry creates \Device\IIIKatabasisFloor + \??\IIIKatabasisFloor,
+   installs CREATE/CLOSE/DEVICE_CONTROL + DriverUnload, returns STATUS_SUCCESS (resident).
+
+   #19a exposes TWO read/safe IOCTLs -- NO SVM enable, NO VMRUN yet:
+     IOCTL_FLOOR_PROBE   = 0x222000 : re-read SVM capability from THIS driver (confirms the floor's
+                           own cpuid/rdmsr shims see the same ground truth I0 read). out 4 x u64.
+     IOCTL_SVM_DISABLE   = 0x222004 : the TEARDOWN primitive (PD-4 teardown-first). On a PINNED core
+                           ([S8] SVM is per-core): rdmsr EFER -> clear ONLY bit 12 (SVME) -> wrmsr EFER
+                           -> read back. With SVME currently 0 this writes EFER's own value (0x4d01 ->
+                           0x4d01): a provable NO-OP that exercises the first privileged WRMSR + the
+                           exact RMW mask BEFORE any enable exists. out 3 x u64 {efer_before, written,
+                           efer_after}. When #19b adds enable, this disable is already proven on metal. */
+
+/* --- floor ntoskrnl shims (KATABASIS-DEPLOY/src/floor_abi.s) --- */
+extern @abi(c-msvc-x64) fn iii_kfo_create_device(drv: u64, out: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_create_symlink() -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_complete_request(irp: u64, boost: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_delete_device(dev: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_delete_symlink() -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_cpuid(leaf: u32, subleaf: u32, out4: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_readmsr(msr: u32) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_writemsr(msr: u32, value: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_pin_core(affinity_mask: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_unpin_core(old_affinity: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_alloc_contig(bytes: u64, highest_phys: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_phys_addr(virt: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_free_contig(virt: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_build_vmcb(region_virt: u64, region_phys: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_svm_vmrun(region_virt: u64, region_phys: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_vmrun_once(region_virt: u64, region_phys: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_write_guest_loop(region_virt: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_raise_dispatch() -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_lower_irql(old_irql: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_copy_qwords(dst: u64, src: u64, nq: u64) -> u64 from "floor_abi.s"
+extern @abi(c-msvc-x64) fn iii_kfo_write_guest_request(region_virt: u64) -> u64 from "floor_abi.s"
+
+/* --- I3: the gate-admit closure (same modules as the Tier-3 resident gate) --- */
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 from "seal.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 from "admit.iii"
+extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+
+/* --- driver state --- */
+var G_FDEVOBJ : [u64; 1]    /* the created floor PDEVICE_OBJECT (for DriverUnload) */
+var G_FCPUID  : [u64; 2]    /* probe scratch: 4 packed u32 from CPUID (read as 2 u64) */
+var G_FSEAL   : [u8; 32]    /* I3: the cycle content-address seal */
+var G_FWRONG  : [u8; 32]    /* I3: a DIFFERENT cycle's seal (for the REJECT_SEAL case) */
+
+/* --- WDM struct accessors (x64 offsets; cg_r0 is 8-byte-uniform so index = byteoff/8) --- */
+fn wdm_current_stack(irp: u64) -> u64 { return (irp as *u64)[23u64] }              /* IRP.Tail.Overlay.CurrentStackLocation @0xB8 */
+fn wdm_ioctl_code(stk: u64) -> u32 { return ((stk as *u64)[3u64] & 0xFFFFFFFFu64) as u32 } /* IO_STACK.Parameters.DeviceIoControl.IoControlCode @0x18 */
+fn wdm_system_buffer(irp: u64) -> u64 { return (irp as *u64)[3u64] }               /* IRP.AssociatedIrp.SystemBuffer @0x18 */
+fn wdm_set_status(irp: u64, status: u64, info: u64) -> i32 {
+    (irp as *u64)[6u64] = status                                                   /* IRP.IoStatus.Status @0x30 */
+    (irp as *u64)[7u64] = info                                                     /* IRP.IoStatus.Information @0x38 */
+    return 0i32
+}
+
+/* --- IRP_MJ_CREATE / IRP_MJ_CLOSE: succeed immediately --- */
+fn floor_create(device_object: u64, irp: u64) -> u64 {
+    wdm_set_status(irp, 0u64, 0u64)
+    iii_kfo_complete_request(irp, 0u64)
+    return 0u64
+}
+fn floor_close(device_object: u64, irp: u64) -> u64 {
+    wdm_set_status(irp, 0u64, 0u64)
+    iii_kfo_complete_request(irp, 0u64)
+    return 0u64
+}
+
+/* --- the gate decision, reading the 6-value cycle request the guest wrote to the shared area
+   (region+0x20000 = qword idx 16384..16389: family, target_kind, target, action_hexad, cap_rights,
+   seal_mode). ONE pointer param (cg_r0 supports <=4 params; pass aggregates by pointer, not scalars).
+   Returns the verdict (0=OK 1=SEAL 2=CAP 3=HEXAD); seal_mode==1 claims a DIFFERENT cycle's seal. --- */
+fn floor_gate_decide(rv: u64) -> u64 {
+    xii_term_arena_reset()
+    let root : u64 = cap_env_init()
+    let cap  : u64 = cap_attenuate(root, (rv as *u64)[16388u64], 0u64)
+    let a    : u32 = katabasis_cycle_act(((rv as *u64)[16384u64] & 0xFFFFFFFFu64) as u32, ((rv as *u64)[16385u64] & 0xFFFFFFFFu64) as u32, (rv as *u64)[16386u64], ((rv as *u64)[16387u64] & 0xFFFFFFFFu64) as u32)
+    let c    : u32 = katabasis_cycle_under_cap(a, cap as u32)
+    katabasis_cycle_seal(c, &G_FSEAL as u64)
+    let mut seal : u64 = &G_FSEAL as u64
+    if (rv as *u64)[16389u64] == 1u64 {
+        let a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+        let c2 : u32 = katabasis_cycle_under_cap(a2, cap as u32)
+        katabasis_cycle_seal(c2, &G_FWRONG as u64)
+        seal = &G_FWRONG as u64
+    }
+    return katabasis_gate_admit(c, seal) as u64
+}
+
+/* --- I3-iii: the guest AUTHORS its own request. The host sets the guest's RAX to the shared-area GPA
+   (region_phys+0x20000) before VMRUN; the guest writes its 6-value cycle request there + VMMCALLs; the
+   host reads the request the GUEST wrote, gates it (floor_gate_decide), writes the verdict to the guest's
+   RAX, advances RIP, RESUMES; the guest carries the verdict to its 2nd VMMCALL (echo). Proves the guest is
+   a full participant -- it authors the request, not R3. out: [0]exit [1]verdict [2]echoed [3]authored_family
+   [4]region_phys. --- */
+fn floor_gate_self(buf: u64) -> u64 {
+    let rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+    if rv == 0u64 { return 0u64 }
+    let rp : u64 = iii_kfo_phys_addr(rv)
+    iii_kfo_build_vmcb(rv, rp)
+    iii_kfo_write_guest_request(rv)                       /* install the guest that authors its request */
+    (rv as *u64)[191u64] = rp + 0x20000u64                /* guest RAX @0x5F8 = the shared-area GPA */
+    let aff  : u64 = iii_kfo_pin_core(1u64)
+    let irql : u64 = iii_kfo_raise_dispatch()
+    let e0 : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e0 | 0x1000u64)
+    iii_kfo_writemsr(0xC0010117u32, rp + 0x1000u64)
+    (buf as *u64)[1u64] = 0xFFFFFFFFu64
+    (buf as *u64)[2u64] = 0xFFFFFFFFu64
+    (buf as *u64)[3u64] = 0u64
+    let mut iter : u64 = 0u64
+    let mut run  : u64 = 1u64
+    let mut ex   : u64 = 0u64
+    while run == 1u64 {
+        ex = iii_kfo_vmrun_once(rv, rp)
+        if ex != 0x81u64 { run = 0u64 }
+        if run == 1u64 {
+            if iter == 0u64 {
+                /* the guest wrote its 6-value request to region+0x20000; floor_gate_decide reads + gates it */
+                let verdict : u64 = floor_gate_decide(rv)
+                (rv as *u64)[191u64] = verdict                        /* verdict -> guest RAX */
+                (buf as *u64)[1u64] = verdict
+                (buf as *u64)[3u64] = (rv as *u64)[16384u64] & 0xFFFFFFFFu64   /* the guest's authored family */
+                (rv as *u64)[175u64] = (rv as *u64)[175u64] + 3u64
+                iter = 1u64
+            } else {
+                (buf as *u64)[2u64] = (rv as *u64)[191u64] & 0xFFFFFFFFu64
+                run = 0u64
+            }
+        }
+    }
+    let e : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e & 0xFFFFFFFFFFFFEFFFu64)
+    iii_kfo_writemsr(0xC0010117u32, 0u64)
+    iii_kfo_lower_irql(irql)
+    iii_kfo_unpin_core(aff)
+    iii_kfo_free_contig(rv)
+    (buf as *u64)[0u64] = ex
+    (buf as *u64)[4u64] = rp
+    return 40u64
+}
+
+/* --- I3-ii: the resume-loop gate, in ITS OWN function (so floor_ioctl's local count stays under cg_r0's
+   per-function limit -- extracting this was required: inlined, the late locals spilled to global refs).
+   Reads the 6-tuple from buf, runs the VMRUN resume loop: adjudicate the guest's 1st VMMCALL with the full
+   gate, write the verdict to its RAX, RESUME; the guest carries the verdict (no instruction between the two
+   VMMCALLs) to its 2nd VMMCALL where we read it back (echo). Gate runs with SVM active + guest paused ->
+   DISPATCH IRQL. Writes {exitcode, verdict, echoed, phys} to buf. Returns output length (0 = alloc fail). */
+fn floor_gate_loop(buf: u64) -> u64 {
+    let family : u32 = (buf as *u64)[0u64] as u32
+    let tk     : u32 = (buf as *u64)[1u64] as u32
+    let tgt    : u64 = (buf as *u64)[2u64]
+    let ah     : u32 = (buf as *u64)[3u64] as u32
+    let crts   : u64 = (buf as *u64)[4u64]
+    let smode  : u64 = (buf as *u64)[5u64]
+    let rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+    if rv == 0u64 { return 0u64 }
+    let rp : u64 = iii_kfo_phys_addr(rv)
+    iii_kfo_build_vmcb(rv, rp)
+    iii_kfo_write_guest_loop(rv)                       /* 2-VMMCALL resume-protocol guest */
+    let aff  : u64 = iii_kfo_pin_core(1u64)
+    let irql : u64 = iii_kfo_raise_dispatch()          /* [S18] no preemption while SVM active */
+    let e0   : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e0 | 0x1000u64)            /* enable SVM (once) */
+    iii_kfo_writemsr(0xC0010117u32, rp + 0x1000u64)            /* VM_HSAVE_PA (once) */
+    (buf as *u64)[1u64] = 0xFFFFFFFFu64    /* default verdict (gate-not-run sentinel) */
+    (buf as *u64)[2u64] = 0xFFFFFFFFu64    /* default echoed */
+    let mut iter : u64 = 0u64
+    let mut run  : u64 = 1u64
+    let mut ex   : u64 = 0u64
+    while run == 1u64 {
+        ex = iii_kfo_vmrun_once(rv, rp)
+        if ex != 0x81u64 { run = 0u64 }
+        if run == 1u64 {
+            if iter == 0u64 {
+                xii_term_arena_reset()
+                let root : u64 = cap_env_init()
+                let cap  : u64 = cap_attenuate(root, crts, 0u64)
+                let a    : u32 = katabasis_cycle_act(family, tk, tgt, ah)
+                let c    : u32 = katabasis_cycle_under_cap(a, cap as u32)
+                katabasis_cycle_seal(c, &G_FSEAL as u64)
+                let mut seal : u64 = &G_FSEAL as u64
+                if smode == 1u64 {
+                    let a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+                    let c2 : u32 = katabasis_cycle_under_cap(a2, cap as u32)
+                    katabasis_cycle_seal(c2, &G_FWRONG as u64)
+                    seal = &G_FWRONG as u64
+                }
+                let verdict : u64 = katabasis_gate_admit(c, seal) as u64
+                (rv as *u64)[191u64] = verdict                          /* verdict -> guest RAX @0x5F8 */
+                (buf as *u64)[1u64] = verdict                           /* verdict -> output (in-scope) */
+                (rv as *u64)[175u64] = (rv as *u64)[175u64] + 3u64       /* advance guest RIP @0x578 past VMMCALL */
+                iter = 1u64
+            } else {
+                (buf as *u64)[2u64] = (rv as *u64)[191u64] & 0xFFFFFFFFu64  /* guest carried verdict in RAX -> output */
+                run = 0u64
+            }
+        }
+    }
+    let e : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e & 0xFFFFFFFFFFFFEFFFu64)   /* disable SVM */
+    iii_kfo_writemsr(0xC0010117u32, 0u64)                       /* clear VM_HSAVE_PA */
+    iii_kfo_lower_irql(irql)
+    iii_kfo_unpin_core(aff)
+    iii_kfo_free_contig(rv)
+    (buf as *u64)[0u64] = ex
+    (buf as *u64)[3u64] = rp
+    return 32u64
+}
+
+/* --- I4: NPT page-fault interception, in its own function (cg_r0 local-limit discipline). Marks the guest
+   CODE page's NPT entry NOT-PRESENT so the very first instruction fetch faults (#VMEXIT_NPF=0x400); the host
+   reads the faulting GPA (VMCB.EXITINFO2@0x080), maps the page present, and RESUMES WITHOUT advancing RIP
+   (the fetch re-executes); the guest then runs its VMMCALL (0x81). TLB_CONTROL=1 flushes the NPT on each
+   VMRUN so the remap takes effect. Proves III MEDIATES guest memory -- the §0.6 NPT-CoW/observe basis. The
+   guest (vmmcall;hlt) makes no arbitrary memory access; its only fault is its own code-fetch. out:
+   [0]iter [1]faulting_gpa [2]npf_exit(0x400) [3]vmmcall_exit(0x81) [4]region_phys. */
+fn floor_npt_loop(buf: u64) -> u64 {
+    let rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+    if rv == 0u64 { return 0u64 }
+    let rp : u64 = iii_kfo_phys_addr(rv)
+    iii_kfo_build_vmcb(rv, rp)                                /* default vmmcall;hlt guest + full NPT identity */
+    let cidx : u64 = (rp + 0xA000u64) >> 21u64                /* 2MB NPT index covering the code page */
+    (rv as *u64)[2048u64 + cidx] = (rv as *u64)[2048u64 + cidx] & 0xFFFFFFFFFFFFFFFEu64  /* clear present (bit0) */
+    let aff  : u64 = iii_kfo_pin_core(1u64)
+    let irql : u64 = iii_kfo_raise_dispatch()
+    let e0   : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e0 | 0x1000u64)           /* enable SVM */
+    iii_kfo_writemsr(0xC0010117u32, rp + 0x1000u64)           /* VM_HSAVE_PA */
+    (buf as *u64)[1u64] = 0u64       /* faulting GPA (0 = no NPF) */
+    (buf as *u64)[2u64] = 0u64       /* NPF exit (0 = none seen) */
+    (buf as *u64)[3u64] = 0u64       /* VMMCALL exit (0 = guest never ran) */
+    let mut iter : u64 = 0u64
+    let mut run  : u64 = 1u64
+    let mut ex   : u64 = 0u64
+    while run == 1u64 {
+        ex = iii_kfo_vmrun_once(rv, rp)
+        if ex == 0x400u64 {
+            let gpa  : u64 = (rv as *u64)[16u64]              /* EXITINFO2 @0x080 = faulting GPA */
+            let fidx : u64 = (gpa >> 21u64) & 0x7FFu64
+            (rv as *u64)[2048u64 + fidx] = (fidx << 21u64) | 0xE7u64   /* MAP the page present (no RIP advance) */
+            (buf as *u64)[1u64] = gpa
+            (buf as *u64)[2u64] = ex
+        }
+        if ex == 0x81u64 {
+            (buf as *u64)[3u64] = ex                          /* the guest RAN after the page was mapped */
+            run = 0u64
+        }
+        if ex != 0x400u64 {
+            if ex != 0x81u64 { run = 0u64 }                   /* unexpected exit -> stop */
+        }
+        iter = iter + 1u64
+        if iter > 3u64 { run = 0u64 }                         /* hard iteration bound (safety) */
+    }
+    let e : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e & 0xFFFFFFFFFFFFEFFFu64)   /* disable SVM */
+    iii_kfo_writemsr(0xC0010117u32, 0u64)                       /* clear VM_HSAVE_PA */
+    iii_kfo_lower_irql(irql)
+    iii_kfo_unpin_core(aff)
+    iii_kfo_free_contig(rv)
+    (buf as *u64)[0u64] = iter
+    (buf as *u64)[4u64] = rp
+    return 40u64
+}
+
+/* --- Chunk B / [E7]: VMRUN + full VMCB diag-copy to R3 (fault-as-data forensics). Build the VMCB, VMRUN
+   the disposable guest, copy the VMCB control(128q)+state-save(64q)=1536B to the output buffer, tear down.
+   R3 then reads the COMPLETE post-exit VMCB (EXITCODE@0x70, guest RIP@0x578, RAX@0x5F8, segments, CRs, ...)
+   -- the forensic capture that makes any unexpected exit inspectable. out: 1536 bytes. */
+fn floor_vmrun_diag(buf: u64) -> u64 {
+    let rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+    if rv == 0u64 { return 0u64 }
+    let rp : u64 = iii_kfo_phys_addr(rv)
+    iii_kfo_build_vmcb(rv, rp)
+    let aff  : u64 = iii_kfo_pin_core(1u64)
+    let irql : u64 = iii_kfo_raise_dispatch()
+    let e0 : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e0 | 0x1000u64)           /* enable SVM */
+    iii_kfo_writemsr(0xC0010117u32, rp + 0x1000u64)           /* VM_HSAVE_PA */
+    iii_kfo_vmrun_once(rv, rp)                                /* run the guest; EXITCODE lands in the VMCB */
+    iii_kfo_copy_qwords(buf, rv, 192u64)                      /* VMCB control(128q)+state(64q)=1536B -> R3 */
+    let e : u64 = iii_kfo_readmsr(0xC0000080u32)
+    iii_kfo_writemsr(0xC0000080u32, e & 0xFFFFFFFFFFFFEFFFu64)   /* disable SVM */
+    iii_kfo_writemsr(0xC0010117u32, 0u64)                       /* clear VM_HSAVE_PA */
+    iii_kfo_lower_irql(irql)
+    iii_kfo_unpin_core(aff)
+    iii_kfo_free_contig(rv)
+    return 1536u64
+}
+
+/* --- IRP_MJ_DEVICE_CONTROL: the floor's probe + teardown primitive --- */
+fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
+    let stk  : u64 = wdm_current_stack(irp)
+    let code : u32 = wdm_ioctl_code(stk)
+    let buf  : u64 = wdm_system_buffer(irp)
+    let mut status : u64 = 0xC0000010u64   /* STATUS_INVALID_DEVICE_REQUEST */
+    let mut info   : u64 = 0u64
+    if code == 0x222000u32 {
+        /* IOCTL_FLOOR_PROBE: same read-only SVM read as I0, from the floor driver. VM_CR gated behind
+           the SVM CPUID bit (a bit Intel never sets) -> RDMSR cannot #GP. out: [0]=svm [1]=efer [2]=vmcr [3]=ecx. */
+        iii_kfo_cpuid(0x80000001u32, 0u32, &G_FCPUID as u64)
+        let ecx80     : u64 = G_FCPUID[1u64] & 0xFFFFFFFFu64
+        let svm_avail : u64 = (ecx80 >> 2u64) & 1u64
+        let efer      : u64 = iii_kfo_readmsr(0xC0000080u32)
+        let mut vmcr  : u64 = 0u64
+        if svm_avail == 1u64 { vmcr = iii_kfo_readmsr(0xC0010114u32) }
+        (buf as *u64)[0u64] = svm_avail
+        (buf as *u64)[1u64] = efer
+        (buf as *u64)[2u64] = vmcr
+        (buf as *u64)[3u64] = ecx80
+        status = 0u64
+        info   = 32u64
+    }
+    if code == 0x222004u32 {
+        /* IOCTL_SVM_DISABLE (PD-4 teardown-first): pin core 0, read EFER, clear ONLY bit 12 (SVME),
+           write back, read back, unpin. ~0x1000 = 0xFFFFFFFFFFFFEFFF preserves every other EFER bit
+           (LME/LMA/NXE/FFXSR/SCE) -> long mode intact. With SVME=0 this is EFER 0x4d01 -> 0x4d01 (no-op). */
+        let oldaff : u64 = iii_kfo_pin_core(1u64)                 /* pin to CPU 0 (affinity bit 0) */
+        let efer0  : u64 = iii_kfo_readmsr(0xC0000080u32)
+        let efer1  : u64 = efer0 & 0xFFFFFFFFFFFFEFFFu64          /* clear SVME (bit 12) only */
+        iii_kfo_writemsr(0xC0000080u32, efer1)
+        let efer2  : u64 = iii_kfo_readmsr(0xC0000080u32)         /* confirm */
+        iii_kfo_unpin_core(oldaff)
+        (buf as *u64)[0u64] = efer0
+        (buf as *u64)[1u64] = efer1
+        (buf as *u64)[2u64] = efer2
+        status = 0u64
+        info   = 24u64
+    }
+    if code == 0x222008u32 {
+        /* IOCTL_SVM_HOSTMODE (#19b): ENTER + EXIT SVM host mode, NO VMCB, NO VMRUN. Proves the first
+           STATE-CHANGING SVM enable + the contiguous region + VM_HSAVE_PA, fully reversed. On a pinned
+           core ([S8]): enable (EFER|=0x1000 -> 0x5d01), set VM_HSAVE_PA=region_phys+0x1000 (the HostSave
+           area; only READ by VMRUN, so storing it here is inert), clear it, disable (EFER&=~0x1000 ->
+           0x4d01). SVMDIS=0 (proven) -> no #GP. out: [0]=efer_before [1]=efer_enabled [2]=efer_after
+           [3]=region_virt [4]=region_phys. */
+        let hm_rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)   /* 256KB, highest phys <4GB */
+        let mut hm_rp : u64 = 0u64
+        if hm_rv != 0u64 { hm_rp = iii_kfo_phys_addr(hm_rv) }
+        let hm_aff : u64 = iii_kfo_pin_core(1u64)                           /* pin CPU 0 */
+        let hm_e0  : u64 = iii_kfo_readmsr(0xC0000080u32)
+        iii_kfo_writemsr(0xC0000080u32, hm_e0 | 0x1000u64)                 /* ENABLE SVM (set SVME) */
+        let hm_e1  : u64 = iii_kfo_readmsr(0xC0000080u32)                  /* expect 0x5d01 */
+        if hm_rp != 0u64 {
+            iii_kfo_writemsr(0xC0010117u32, hm_rp + 0x1000u64)             /* VM_HSAVE_PA = HostSave area */
+            iii_kfo_writemsr(0xC0010117u32, 0u64)                          /* clear (no VMRUN; hygiene) */
+        }
+        iii_kfo_writemsr(0xC0000080u32, hm_e1 & 0xFFFFFFFFFFFFEFFFu64)     /* DISABLE SVM (clear SVME) */
+        let hm_e2  : u64 = iii_kfo_readmsr(0xC0000080u32)                  /* expect 0x4d01 */
+        iii_kfo_unpin_core(hm_aff)
+        if hm_rv != 0u64 { iii_kfo_free_contig(hm_rv) }
+        (buf as *u64)[0u64] = hm_e0
+        (buf as *u64)[1u64] = hm_e1
+        (buf as *u64)[2u64] = hm_e2
+        (buf as *u64)[3u64] = hm_rv
+        (buf as *u64)[4u64] = hm_rp
+        status = 0u64
+        info   = 40u64
+    }
+    if code == 0x22200Cu32 {
+        /* IOCTL_VMCB_BUILD (#19c-i): build the VMCB+NPT+guest code in a fresh region, read back the
+           critical fields for verification, free. NO SVM enable, NO VMRUN -- memory-only, cannot wedge.
+           Reads via (region as *u64)[byteoff/8]; dword fields come back paired in their 8-byte chunk. */
+        let bv_rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+        if bv_rv != 0u64 {
+            let bv_rp : u64 = iii_kfo_phys_addr(bv_rv)
+            iii_kfo_build_vmcb(bv_rv, bv_rp)
+            (buf as *u64)[0u64]  = (bv_rv as *u64)[1u64]      /* 0x008: INTERCEPT_EXC | MISC1<<32 */
+            (buf as *u64)[1u64]  = (bv_rv as *u64)[2u64]      /* 0x010: INTERCEPT_MISC2 */
+            (buf as *u64)[2u64]  = (bv_rv as *u64)[11u64]     /* 0x058: GUEST_ASID | TLB_CONTROL<<32 */
+            (buf as *u64)[3u64]  = (bv_rv as *u64)[18u64]     /* 0x090: NP_ENABLE */
+            (buf as *u64)[4u64]  = (bv_rv as *u64)[22u64]     /* 0x0B0: N_CR3 (= phys+0x2000) */
+            (buf as *u64)[5u64]  = (bv_rv as *u64)[154u64]    /* 0x4D0: EFER */
+            (buf as *u64)[6u64]  = (bv_rv as *u64)[171u64]    /* 0x558: CR0 */
+            (buf as *u64)[7u64]  = (bv_rv as *u64)[175u64]    /* 0x578: RIP (= phys+0xA000) */
+            (buf as *u64)[8u64]  = (bv_rv as *u64)[1024u64]   /* 0x2000: PML4[0] (= (phys+0x3000)|0x67) */
+            (buf as *u64)[9u64]  = (bv_rv as *u64)[2048u64]   /* 0x4000: PD[0] (= 0xE7) */
+            (buf as *u64)[10u64] = (bv_rv as *u64)[5120u64]   /* 0xA000: guest code (0F 01 D9 F4) */
+            (buf as *u64)[11u64] = bv_rp                      /* region_phys (for relative checks) */
+            iii_kfo_free_contig(bv_rv)
+            status = 0u64
+            info   = 96u64
+        }
+    }
+    if code == 0x222010u32 {
+        /* IOCTL_SVM_VMRUN (#19c-ii / I2): THE VMRUN MOMENT. Build the (verified) VMCB, pin core 0, enable
+           SVM + VMRUN the one-VMMCALL throwaway guest, read EXITCODE (expect 0x081 = VMEXIT_VMMCALL), read
+           post-exit forensics, disable SVM + clear VM_HSAVE_PA, unpin, free. Contained + reversible: the
+           guest executes VMMCALL immediately (intercepted -> #VMEXIT, never reaches its HLT); NPT confines
+           it to the region's identity-mapped 4GB; CLGI/STGI mask interrupts across VMRUN; pinned core. */
+        let vr_rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+        if vr_rv != 0u64 {
+            let vr_rp   : u64 = iii_kfo_phys_addr(vr_rv)
+            iii_kfo_build_vmcb(vr_rv, vr_rp)
+            let vr_aff  : u64 = iii_kfo_pin_core(1u64)
+            let vr_exit : u64 = iii_kfo_svm_vmrun(vr_rv, vr_rp)   /* enable + bracket + EXITCODE */
+            let vr_ei1  : u64 = (vr_rv as *u64)[15u64]            /* 0x078 EXITINFO1 (post-VMRUN) */
+            let vr_rip  : u64 = (vr_rv as *u64)[175u64]           /* 0x578 guest RIP (post-VMRUN) */
+            let vr_e    : u64 = iii_kfo_readmsr(0xC0000080u32)    /* teardown, same pinned core */
+            iii_kfo_writemsr(0xC0000080u32, vr_e & 0xFFFFFFFFFFFFEFFFu64)  /* disable SVM */
+            iii_kfo_writemsr(0xC0010117u32, 0u64)                 /* clear VM_HSAVE_PA */
+            iii_kfo_unpin_core(vr_aff)
+            iii_kfo_free_contig(vr_rv)
+            (buf as *u64)[0u64] = vr_exit
+            (buf as *u64)[1u64] = vr_ei1
+            (buf as *u64)[2u64] = vr_rip
+            (buf as *u64)[3u64] = vr_rp
+            status = 0u64
+            info   = 32u64
+        }
+    }
+    if code == 0x222014u32 {
+        /* IOCTL_GATE_AT_VMEXIT (I3-i): the Ring-1 VMEXIT TRIGGERS the gate decision. Build the proven VMCB,
+           VMRUN the VMMCALL guest (exit 0x81), tear SVM fully down; THEN -- only if the guest VMMCALL'd --
+           run the full katabasis gate (cycle_act -> under_cap -> seal -> admit) on R3's 6-tuple request ->
+           verdict. The gate is pure BSS-arena compute (no privileged op), run AFTER SVM is down so the
+           dangerous window stays exactly I2-small. in: [0]family [1]target_kind [2]target [3]action_hexad
+           [4]cap_rights [5]seal_mode. out: [0]exitcode [1]verdict(0xFFFFFFFF=gate-not-run) [2]guest_rip [3]phys. */
+        let g3_family : u32 = (buf as *u64)[0u64] as u32
+        let g3_tk     : u32 = (buf as *u64)[1u64] as u32
+        let g3_tgt    : u64 = (buf as *u64)[2u64]
+        let g3_ah     : u32 = (buf as *u64)[3u64] as u32
+        let g3_crts   : u64 = (buf as *u64)[4u64]
+        let g3_smode  : u64 = (buf as *u64)[5u64]
+        let g3_rv : u64 = iii_kfo_alloc_contig(0x40000u64, 0xFFFFFFFFu64)
+        if g3_rv != 0u64 {
+            let g3_rp : u64 = iii_kfo_phys_addr(g3_rv)
+            iii_kfo_build_vmcb(g3_rv, g3_rp)
+            let g3_aff  : u64 = iii_kfo_pin_core(1u64)
+            let g3_exit : u64 = iii_kfo_svm_vmrun(g3_rv, g3_rp)
+            let g3_rip  : u64 = (g3_rv as *u64)[175u64]           /* 0x578 guest RIP (post-#VMEXIT) */
+            let g3_e    : u64 = iii_kfo_readmsr(0xC0000080u32)
+            iii_kfo_writemsr(0xC0000080u32, g3_e & 0xFFFFFFFFFFFFEFFFu64)  /* disable SVM */
+            iii_kfo_writemsr(0xC0010117u32, 0u64)                 /* clear VM_HSAVE_PA */
+            iii_kfo_unpin_core(g3_aff)
+            iii_kfo_free_contig(g3_rv)
+            let mut g3_verdict : u64 = 0xFFFFFFFFu64              /* sentinel: gate not run (no VMMCALL exit) */
+            if g3_exit == 0x81u64 {
+                /* the guest's Ring-1 hypercall authorizes the gate decision (pure compute, SVM already down) */
+                xii_term_arena_reset()
+                let g3_root : u64 = cap_env_init()
+                let g3_cap  : u64 = cap_attenuate(g3_root, g3_crts, 0u64)
+                let g3_a    : u32 = katabasis_cycle_act(g3_family, g3_tk, g3_tgt, g3_ah)
+                let g3_c    : u32 = katabasis_cycle_under_cap(g3_a, g3_cap as u32)
+                katabasis_cycle_seal(g3_c, &G_FSEAL as u64)
+                let mut g3_seal : u64 = &G_FSEAL as u64
+                if g3_smode == 1u64 {
+                    let g3_a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+                    let g3_c2 : u32 = katabasis_cycle_under_cap(g3_a2, g3_cap as u32)
+                    katabasis_cycle_seal(g3_c2, &G_FWRONG as u64)
+                    g3_seal = &G_FWRONG as u64
+                }
+                g3_verdict = katabasis_gate_admit(g3_c, g3_seal) as u64
+            }
+            (buf as *u64)[0u64] = g3_exit
+            (buf as *u64)[1u64] = g3_verdict
+            (buf as *u64)[2u64] = g3_rip
+            (buf as *u64)[3u64] = g3_rp
+            status = 0u64
+            info   = 32u64
+        }
+    }
+    if code == 0x222018u32 {
+        /* IOCTL_GATE_LOOP (I3-ii): the RESUME LOOP. Adjudicate the guest's 1st VMMCALL, write the verdict to
+           its RAX, advance RIP, RESUME; the guest carries the verdict (no instruction between the two
+           VMMCALLs) to its 2nd VMMCALL, where we read it back (echo). Rehearses the I5 loop with a disposable
+           guest. The gate runs with SVM active + a paused guest -> raised to DISPATCH (no preemption). in:
+           6-tuple. out: [0]exitcode [1]verdict [2]echoed(==verdict proves host->guest->host) [3]region_phys. */
+        let g4_info : u64 = floor_gate_loop(buf)   /* extracted -> its own local table (cg_r0 per-fn limit) */
+        if g4_info != 0u64 {
+            status = 0u64
+            info   = g4_info
+        }
+    }
+    if code == 0x22201Cu32 {
+        let g5_info : u64 = floor_npt_loop(buf)    /* I4: NPT page-fault interception */
+        if g5_info != 0u64 {
+            status = 0u64
+            info   = g5_info
+        }
+    }
+    if code == 0x222020u32 {
+        let g6_info : u64 = floor_vmrun_diag(buf)  /* [E7]: VMRUN + full VMCB diag-copy to R3 */
+        if g6_info != 0u64 {
+            status = 0u64
+            info   = g6_info
+        }
+    }
+    if code == 0x222024u32 {
+        let g7_info : u64 = floor_gate_self(buf)   /* I3-iii: the guest authors its own request */
+        if g7_info != 0u64 {
+            status = 0u64
+            info   = g7_info
+        }
+    }
+    wdm_set_status(irp, status, info)
+    iii_kfo_complete_request(irp, 0u64)
+    return status
+}
+
+/* --- DriverUnload: tear down symlink + device --- */
+fn floor_unload(driver_object: u64) -> u64 {
+    iii_kfo_delete_symlink()
+    iii_kfo_delete_device(G_FDEVOBJ[0u64])
+    return 0u64
+}
+
+/* --- DriverEntry: create device, install dispatch + unload, create symlink, stay resident --- */
+fn driver_entry(driver_object: u64, registry_path: u64) -> u64 {
+    sha256_sched_force(1u32)        /* I3: force scalar SHA-256 (no AVX-512 in kernel; EVEX unsafe) */
+    keccak_chi_force_path(1u32)     /* I3: force scalar keccak */
+    iii_kfo_create_device(driver_object, &G_FDEVOBJ as u64)
+    (driver_object as *u64)[13u64] = &floor_unload as u64   /* DRIVER_OBJECT.DriverUnload @0x68 */
+    (driver_object as *u64)[14u64] = &floor_create as u64   /* MajorFunction[IRP_MJ_CREATE=0] @0x70 */
+    (driver_object as *u64)[16u64] = &floor_close as u64    /* MajorFunction[IRP_MJ_CLOSE=2] @0x80 */
+    (driver_object as *u64)[28u64] = &floor_ioctl as u64    /* MajorFunction[IRP_MJ_DEVICE_CONTROL=14] @0xE0 */
+    iii_kfo_create_symlink()
+    return 0u64    /* STATUS_SUCCESS -> resident */
+}

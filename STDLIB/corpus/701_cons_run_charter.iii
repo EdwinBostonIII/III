@@ -1,0 +1,19 @@
+/* 701_cons_run_charter.iii -- MIGRATION 6 CORE (H7 "one conscience"): the constitution's
+ * own TERMINAL GATE.  cons_run_charter folds cons_clause_holds (the M10 paired-falsifier
+ * keystone) over a registry of (verify, falsify, good_opv, bad_opv) clause-pairs -- GREEN
+ * (99) iff EVERY pair HOLDS (verify accepts the good op-view AND falsify FIRES on the bad),
+ * else the 1-based index of the first failing pair (RED).  The structural mirror of
+ * charter_terminal (corpus 700) one level into the constitution.  This selftest proves: a
+ * holding clause-pair; two registered pairs fold GREEN; GREEN is reproducible; a CANARY pair
+ * whose falsify ([FALSE]) cannot catch its bad witness drives the gate RED at its 1-based
+ * index (prove-the-negative -- a real falsifier, not vacuously green); and the LTL fold --
+ * an ALWAYS(constitution-predicate) clause holds over an all-phase>=1 chain segment and
+ * reddens over a window containing a phase-0 fragment (mig6 gap (c), the carried-but-unfolded
+ * LTL field wired through the existing bounded model checker).
+ * Main-corpus convention: rc 99 = pass; 1..9 = which fold/keystone assertion failed;
+ * 20..22 = which LTL-fold assertion failed. */
+module corpus_701
+
+extern @abi(c-msvc-x64) fn cons_run_charter_selftest() -> u64 from "constitution.iii"
+
+fn main() -> u64 { return cons_run_charter_selftest() }

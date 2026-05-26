@@ -1,0 +1,16 @@
+/* 819 -- mig4 Step 9: caller migration (additive form).  Drives xlp_selftest: a structured program
+ * built from the Step 7-8 lowered operators (compose/if/loop) computes by canonicalisation, and the
+ * three domains INTEROPERATE -- decision in sequence (1), decision in iteration (2), iteration in
+ * decision (3), the GRAND MIX loop/decision/composition reducing through branch-lift + equal-branch
+ * + loop-distribute in one canonicalisation (4); the prove-the-negative TEETH that a genuine mixed
+ * program is preserved (5); determinism (6); the whole rule set is ADMITTED by Step 6 (7).  Exit 99
+ * = all hold -- arbitrary structured computation routes through the one engine.  Gated by run_corpus.sh. */
+module corpus_819
+
+extern @abi(c-msvc-x64) fn xlp_selftest() -> u64 from "xii_lower_program.iii"
+
+fn main() -> u64 {
+    let r : u64 = xlp_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

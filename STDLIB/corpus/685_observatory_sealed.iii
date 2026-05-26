@@ -1,0 +1,51 @@
+/* 685_observatory_sealed.iii -- M28 keystone: the OBSERVATORY's thresholds are SEALED --
+ * they NEVER adapt from observed data (the no-statistical-learning tenet; apotheosis M28 Key
+ * Move illegal move = "adapts a threshold at runtime from data").  173 gates firing/un-firing
+ * + the strict-> boundary + OOB, but reads thresholds only BEFORE the update stream and never
+ * re-checks them after -- so an adaptive (forbidden-ML) threshold would pass 173.  This KAT
+ * closes that: set T=100, push a stream of values (incl. extremes 5000/99999 and minima 10/50),
+ * assert threshold(f) STILL ==100 after EACH (no drift UP to the maxima, no drift DOWN to the
+ * minima), and that firing STILL uses exactly T=100 (101 fires, 99 + 100 do not) -- proving the
+ * threshold is SET, never LEARNED.  A second family confirms independence + sealing.
+ * Exit 99 = all hold; 1..N = the failing check.  CORPUS-ONLY (obs_observatory is complete). */
+module corpus_685
+
+extern @abi(c-msvc-x64) fn obs_observatory_clear() -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_set_threshold(family: u32, t: u64) -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_threshold(family: u32) -> u64 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_update(family: u32, v: u64) -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_family_alarm(family: u32) -> u8 from "obs_observatory.iii"
+
+fn main() -> u64 {
+    obs_observatory_clear()
+    obs_observatory_set_threshold(3u32, 100u64)
+    if obs_observatory_threshold(3u32) != 100u64 { return 1u64 }
+
+    /* push a stream of values incl. extremes; the threshold must NOT adapt to ANY of them. */
+    obs_observatory_update(3u32, 50u64)
+    if obs_observatory_threshold(3u32) != 100u64 { return 2u64 }      /* did not drift DOWN to 50 */
+    obs_observatory_update(3u32, 500u64)
+    if obs_observatory_threshold(3u32) != 100u64 { return 3u64 }      /* did not drift UP to 500 */
+    obs_observatory_update(3u32, 5000u64)
+    if obs_observatory_threshold(3u32) != 100u64 { return 4u64 }      /* not to 5000 */
+    obs_observatory_update(3u32, 99999u64)
+    if obs_observatory_threshold(3u32) != 100u64 { return 5u64 }      /* not to 99999 */
+    obs_observatory_update(3u32, 10u64)
+    if obs_observatory_threshold(3u32) != 100u64 { return 6u64 }      /* not to 10 */
+
+    /* the threshold is STILL exactly 100: 101 fires, 99 + 100 do not (no learned drift). */
+    obs_observatory_update(3u32, 101u64)
+    if obs_observatory_family_alarm(3u32) != 1u8 { return 7u64 }      /* 101 > 100 -> fires */
+    obs_observatory_update(3u32, 99u64)
+    if obs_observatory_family_alarm(3u32) != 0u8 { return 8u64 }      /* 99 <= 100 -> no fire (not drifted to 10) */
+    obs_observatory_update(3u32, 100u64)
+    if obs_observatory_family_alarm(3u32) != 0u8 { return 9u64 }      /* 100 > 100? NO (strict) -> no fire */
+
+    /* a DIFFERENT family's threshold is independent + also sealed. */
+    obs_observatory_set_threshold(7u32, 2000u64)
+    obs_observatory_update(7u32, 50000u64)
+    if obs_observatory_threshold(7u32) != 2000u64 { return 10u64 }    /* family 7 did not adapt either */
+    if obs_observatory_threshold(3u32) != 100u64 { return 11u64 }     /* family 3 unaffected by family 7's stream */
+
+    return 99u64
+}

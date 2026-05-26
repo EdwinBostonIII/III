@@ -1,0 +1,99 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\tempora\calendar.iii
+ *
+ * III STDLIB - tempora::calendar
+ *
+ * Civil-calendar conversions: Unix timestamp (seconds since epoch
+ * 1970-01-01 UTC) to/from year-month-day-hour-min-sec.  Uses Howard
+ * Hinnant's algorithms (constexpr-friendly, no lookup tables, exact
+ * for the proleptic Gregorian calendar across the full i64 range).
+ *
+ * Public API:
+ *   cal_unix_to_civil(unix_seconds:u64) -> i32
+ *      Stores y, m, d, hh, mm, ss in CAL_LAST_*.
+ *   cal_civil_to_unix(year:u32, month:u32, day:u32) -> u64
+ *      Returns seconds since 1970-01-01 (assuming midnight UTC).
+ *   cal_last_year() -> u32
+ *   cal_last_month() -> u32
+ *   cal_last_day() -> u32
+ *   cal_last_hour() -> u32
+ *   cal_last_min() -> u32
+ *   cal_last_sec() -> u32
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00.
+ */
+
+module tempora_calendar
+
+const CAL_OK : i32 = 0i32
+
+var CAL_LAST_YEAR  : u32 = 0u32
+var CAL_LAST_MONTH : u32 = 0u32
+var CAL_LAST_DAY   : u32 = 0u32
+var CAL_LAST_HOUR  : u32 = 0u32
+var CAL_LAST_MIN   : u32 = 0u32
+var CAL_LAST_SEC   : u32 = 0u32
+
+/* days_from_civil(y, m, d): returns days since 1970-01-01.
+ * Algorithm by Howard Hinnant. */
+fn cal_days_from_civil(y_in: u32, m: u32, d: u32) -> u64 {
+    /* Hinnant: y -= (m <= 2) */
+    let mut y : u32 = y_in
+    if m <= 2u32 { y = y - 1u32 }
+    let era : u32 = y / 400u32
+    let yoe : u32 = y - era * 400u32
+    let mut mp : u32 = m
+    if m > 2u32 { mp = m - 3u32 } else { mp = m + 9u32 }
+    let doy : u32 = (153u32 * mp + 2u32) / 5u32 + d - 1u32
+    let doe : u32 = yoe * 365u32 + yoe / 4u32 - yoe / 100u32 + doy
+    /* days = era * 146097 + doe - 719468 (epoch shift to 1970-01-01) */
+    let days_since_0 : u64 = (era as u64) * 146097u64 + (doe as u64)
+    return days_since_0 - 719468u64
+}
+
+fn cal_civil_to_unix(year: u32, month: u32, day: u32) -> u64 @export {
+    let days : u64 = cal_days_from_civil(year, month, day)
+    return days * 86400u64
+}
+
+/* civil_from_days: inverse of days_from_civil. */
+fn cal_civil_from_days(days_unix: u64) -> i32 {
+    /* z = days + 719468 (shift to civil-from-0 epoch) */
+    let z : u64 = days_unix + 719468u64
+    let era : u64 = z / 146097u64
+    let doe : u64 = z - era * 146097u64
+    let yoe_n : u64 = doe - doe / 1460u64 + doe / 36524u64 - doe / 146096u64
+    let yoe : u64 = yoe_n / 365u64
+    let y_zero : u64 = yoe + era * 400u64
+    let doy : u64 = doe - (365u64 * yoe + yoe / 4u64 - yoe / 100u64)
+    let mp : u64 = (5u64 * doy + 2u64) / 153u64
+    let d : u64 = doy - (153u64 * mp + 2u64) / 5u64 + 1u64
+    let mut m : u64 = mp + 3u64
+    if mp >= 10u64 { m = mp - 9u64 }
+    let mut y : u64 = y_zero
+    if m <= 2u64 { y = y_zero + 1u64 }
+    CAL_LAST_YEAR  = y as u32
+    CAL_LAST_MONTH = m as u32
+    CAL_LAST_DAY   = d as u32
+    return CAL_OK
+}
+
+fn cal_unix_to_civil(unix_seconds: u64) -> i32 @export {
+    let days : u64 = unix_seconds / 86400u64
+    let secs_in_day : u64 = unix_seconds - days * 86400u64
+    cal_civil_from_days(days)
+    let hh : u64 = secs_in_day / 3600u64
+    let mm_after_h : u64 = secs_in_day - hh * 3600u64
+    let mm : u64 = mm_after_h / 60u64
+    let ss : u64 = mm_after_h - mm * 60u64
+    CAL_LAST_HOUR = hh as u32
+    CAL_LAST_MIN  = mm as u32
+    CAL_LAST_SEC  = ss as u32
+    return CAL_OK
+}
+
+fn cal_last_year() -> u32 @export { return CAL_LAST_YEAR }
+fn cal_last_month() -> u32 @export { return CAL_LAST_MONTH }
+fn cal_last_day() -> u32 @export { return CAL_LAST_DAY }
+fn cal_last_hour() -> u32 @export { return CAL_LAST_HOUR }
+fn cal_last_min() -> u32 @export { return CAL_LAST_MIN }
+fn cal_last_sec() -> u32 @export { return CAL_LAST_SEC }

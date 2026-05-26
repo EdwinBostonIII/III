@@ -1,0 +1,289 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\crypt_ed25519.iii
+ *
+ * III STDLIB - numera::crypt_ed25519 -- RFC 8032 Ed25519 sign/verify/pubkey.
+ *
+ * Point arithmetic delegates to numera/fe25519.iii (fixed-size allocation-free
+ * GF(2^255-19) field + extended-twisted-Edwards group law, ~1000x faster than
+ * the prior arbitrary-precision bigint path).  This module retains only:
+ *   - SHA-512 (the RFC 8032 hash), via sha512.iii;
+ *   - the order-L scalar arithmetic (r, k, S, h mod L) -- a handful of bigint
+ *     ops per sign/verify, NOT a hot path -- via bigint.iii / bigint_div.iii;
+ *   - byte<->bigint LE marshalling (ed_bi_from_le32/64, ed_bi_to_le32).
+ * fe25519 takes scalars as 32 LE bytes; mod-L results are marshalled to bytes
+ * before scalar multiplication.
+ *
+ * Public API (unchanged):
+ *   ed25519_sign(seed,pk,msg,len,sig) -> u8     RFC 8032 detached signature
+ *   ed25519_pubkey(seed,out_pk) -> u8           pk = compress([clamp h]B)
+ *   ed25519_verify(pk,msg,len,sig) -> u8        1 = valid
+ *   ed25519_sign_c4(keys,msg,len,sig) -> u8     4-arg composition wrapper
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.97.  KAT: RFC 8032 (corpus 193-197).
+ */
+module numera_crypt_ed25519
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_final(out: *u8) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_scalar_mul_base(scalar: u64, out: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_scalar_mul_pt(scalar: u64, base: u64, out: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_compress(p: u64, out: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_decompress(comp: u64, pout: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 from "fe25519.iii"
+
+/* L = group order, for scalar mod-L (set per call by ed_init). */
+var ED_L_ID : u64 = 0u64
+/* fe25519 point buffers (32 u64 = 256 bytes; X@0 Y@64 Z@128 T@192). */
+var EDP_R   : [u64; 32]
+var EDP_A   : [u64; 32]
+var EDP_LHS : [u64; 32]
+var EDP_HA  : [u64; 32]
+var EDP_RHS : [u64; 32]
+/* byte scratch for scalars / compressed points. */
+var EDB_A   : [u8; 32]
+var EDB_R   : [u8; 32]
+var EDB_H   : [u8; 32]
+var EDB_LHS : [u8; 32]
+var EDB_RHS : [u8; 32]
+
+/* ===== bigint LE marshalling (kept verbatim from the bigint era) ===== */
+fn ed_le_u64(addr: u64) -> u64 {
+    let p : *u8 = addr as *u8
+    let b0 : u64 = p[0u64] as u64  let b1 : u64 = p[1u64] as u64
+    let b2 : u64 = p[2u64] as u64  let b3 : u64 = p[3u64] as u64
+    let b4 : u64 = p[4u64] as u64  let b5 : u64 = p[5u64] as u64
+    let b6 : u64 = p[6u64] as u64  let b7 : u64 = p[7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+fn ed_bi_from_le32(arena: u64, addr: u64) -> u64 {
+    let b : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(b, 0u64, ed_le_u64(addr + 0u64))
+    bigint_set_limb(b, 1u64, ed_le_u64(addr + 8u64))
+    bigint_set_limb(b, 2u64, ed_le_u64(addr + 16u64))
+    bigint_set_limb(b, 3u64, ed_le_u64(addr + 24u64))
+    bigint_set_len(b, 4u64)
+    return b
+}
+fn ed_bi_from_le64(arena: u64, addr: u64) -> u64 {
+    let b : u64 = bigint_new(arena, 8u64)
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        bigint_set_limb(b, i, ed_le_u64(addr + i * 8u64))
+        i = i + 1u64
+    }
+    bigint_set_len(b, 8u64)
+    return b
+}
+fn ed_bi_to_le32(bi: u64, out_addr: u64) -> i32 {
+    let p : *u8 = out_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let limb : u64 = bigint_get_limb(bi, i)
+        let base : u64 = i * 8u64
+        p[base + 0u64] = (limb & 0xFFu64) as u8
+        p[base + 1u64] = ((limb >> 8u64) & 0xFFu64) as u8
+        p[base + 2u64] = ((limb >> 16u64) & 0xFFu64) as u8
+        p[base + 3u64] = ((limb >> 24u64) & 0xFFu64) as u8
+        p[base + 4u64] = ((limb >> 32u64) & 0xFFu64) as u8
+        p[base + 5u64] = ((limb >> 40u64) & 0xFFu64) as u8
+        p[base + 6u64] = ((limb >> 48u64) & 0xFFu64) as u8
+        p[base + 7u64] = ((limb >> 56u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn ed_bi_const4(arena: u64, l0: u64, l1: u64, l2: u64) -> u64 {
+    let b : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(b, 0u64, l0)
+    bigint_set_limb(b, 1u64, l1)
+    bigint_set_limb(b, 2u64, l2)
+    return b
+}
+fn ed_bi_const4_top(b: u64, l3: u64) -> i32 {
+    bigint_set_limb(b, 3u64, l3)
+    bigint_set_len(b, 4u64)
+    return 0i32
+}
+/* L = 2^252 + 27742317777372353535851937790883648493 */
+fn ed_build_l(arena: u64) -> u64 {
+    let b : u64 = ed_bi_const4(arena, 0x5812631a5cf5d3edu64, 0x14def9dea2f79cd6u64, 0x0000000000000000u64)
+    ed_bi_const4_top(b, 0x1000000000000000u64)
+    return b
+}
+
+fn ed_init(arena: u64) -> i32 {
+    ED_L_ID = ed_build_l(arena)
+    fe25519_init()
+    return 0i32
+}
+fn ed_teardown() -> i32 {
+    bigint_drop(ED_L_ID)
+    ED_L_ID = 0u64
+    return 0i32
+}
+
+/* ===== h = SHA-512(R || A || M) mod L (kept verbatim) ===== */
+fn ed_hash_first_half(R_addr: u64, A_addr: u64) -> i32 {
+    sha512_init()
+    sha512_update(R_addr as *u8, 32u64)
+    sha512_update(A_addr as *u8, 32u64)
+    return 0i32
+}
+fn ed_hash_finalize(arena: u64, msg: u64, msg_len: u64) -> u64 {
+    sha512_update(msg as *u8, msg_len)
+    let buf : u64 = arena_alloc1(arena, 64u64)
+    if buf == 0u64 { return 0u64 }
+    sha512_final(buf as *u8)
+    /* SHA-512 digest byte 0 = LSByte of the LE integer; read as 64 LE bytes. */
+    let h_unmod : u64 = ed_bi_from_le64(arena, buf)
+    let h : u64 = bigint_mod(arena, h_unmod, ED_L_ID)
+    bigint_drop(h_unmod)
+    return h
+}
+
+fn arena_new_call_helper() -> u64 {
+    /* No bigint point ops remain; only small mod-L scalar bigints + SHA-512
+     * scratch (a few KiB).  16 MiB is ample for the bump arena across a
+     * full sign/verify. */
+    return arena_new(1u64 << 24u64)
+}
+fn arena_drop_call_helper(id: u64) -> i32 { return arena_drop(id) }
+
+/* ===== Public pubkey: pk = compress([clamp(SHA-512(seed)[0:32])]B) ===== */
+fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 @export {
+    let arena : u64 = arena_new_call_helper()
+    if arena == 0u64 { return 0u8 }
+    ed_init(arena)
+    sha512_init()
+    sha512_update(seed, 32u64)
+    let hbuf : u64 = arena_alloc1(arena, 64u64)
+    if hbuf == 0u64 { ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8 }
+    sha512_final(hbuf as *u8)
+    let hp : *u8 = hbuf as *u8
+    let mut ci : u64 = 0u64
+    while ci < 32u64 { EDB_A[ci] = hp[ci] ; ci = ci + 1u64 }
+    EDB_A[0u64]  = EDB_A[0u64]  & 248u8
+    EDB_A[31u64] = EDB_A[31u64] & 127u8
+    EDB_A[31u64] = EDB_A[31u64] | 64u8
+    ed_scalar_mul_base(&EDB_A as u64, &EDP_A as u64)
+    ed_compress(&EDP_A as u64, out_pk as u64)
+    ed_teardown()
+    arena_drop_call_helper(arena)
+    return 1u8
+}
+
+/* Keypair from a 32-byte seed: pk = compress([clamp h]B); the 64-byte expanded
+ * private key is seed(32) || pk(32) (libsodium convention).  Returns 0u32 on
+ * success.  Used by the Founders-Anchor ceremony (gen_xii_anchor_keypair.c). */
+fn ed25519_keypair_from_seed(seed_32: *u8, pubkey_32: *u8, privkey_64: *u8) -> u32 @export {
+    if ed25519_pubkey(seed_32, pubkey_32) != 1u8 { return 1u32 }
+    let mut i : u64 = 0u64
+    while i < 32u64 { privkey_64[i] = seed_32[i]  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { privkey_64[32u64 + i] = pubkey_32[i]  i = i + 1u64 }
+    return 0u32
+}
+
+/* ===== Public sign (RFC 8032) ===== */
+fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 @export {
+    let arena : u64 = arena_new_call_helper()
+    if arena == 0u64 { return 0u8 }
+    ed_init(arena)
+    let pk_addr : u64 = pk as u64
+    let sig_addr : u64 = sig_out as u64
+    let msg_addr : u64 = msg as u64
+    sha512_init()
+    sha512_update(seed, 32u64)
+    let hbuf : u64 = arena_alloc1(arena, 64u64)
+    if hbuf == 0u64 { ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8 }
+    sha512_final(hbuf as *u8)
+    let hp : *u8 = hbuf as *u8
+    /* a = clamp(h[0:32]) (bytes) */
+    let mut ci : u64 = 0u64
+    while ci < 32u64 { EDB_A[ci] = hp[ci] ; ci = ci + 1u64 }
+    EDB_A[0u64]  = EDB_A[0u64]  & 248u8
+    EDB_A[31u64] = EDB_A[31u64] & 127u8
+    EDB_A[31u64] = EDB_A[31u64] | 64u8
+    /* r = SHA-512(prefix || msg) mod L */
+    sha512_init()
+    sha512_update((hbuf + 32u64) as *u8, 32u64)
+    let r : u64 = ed_hash_finalize(arena, msg_addr, msg_len)
+    if r == 0u64 { ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8 }
+    /* R = [r]B, compress into sig[0:32] */
+    ed_bi_to_le32(r, &EDB_R as u64)
+    ed_scalar_mul_base(&EDB_R as u64, &EDP_R as u64)
+    ed_compress(&EDP_R as u64, sig_addr)
+    /* k = SHA-512(R || pk || msg) mod L */
+    ed_hash_first_half(sig_addr, pk_addr)
+    let k : u64 = ed_hash_finalize(arena, msg_addr, msg_len)
+    if k == 0u64 { bigint_drop(r) ; ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8 }
+    /* S = (k*a + r) mod L into sig[32:64] */
+    let a : u64 = ed_bi_from_le32(arena, &EDB_A as u64)
+    let ka : u64 = bigint_mul(arena, k, a)
+    let kar : u64 = bigint_add(arena, ka, r)
+    let S : u64 = bigint_mod(arena, kar, ED_L_ID)
+    ed_bi_to_le32(S, sig_addr + 32u64)
+    bigint_drop(r)  bigint_drop(k)  bigint_drop(a)  bigint_drop(ka)  bigint_drop(kar)  bigint_drop(S)
+    ed_teardown()
+    arena_drop_call_helper(arena)
+    return 1u8
+}
+
+fn ed25519_sign_c4(keys: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 @export {
+    let kp : u64 = keys as u64
+    let seed : *u8 = kp as *u8
+    let pk : *u8 = (kp + 32u64) as *u8
+    return ed25519_sign(seed, pk, msg, msg_len, sig_out)
+}
+
+/* ===== Public verify: 1 iff [S]B == R + [h]A (cofactorless) ===== */
+fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 @export {
+    let arena : u64 = arena_new_call_helper()
+    if arena == 0u64 { return 0u8 }
+    ed_init(arena)
+    let sig_addr : u64 = sig as u64
+    let pk_addr : u64 = pubkey as u64
+    if ed_decompress(sig_addr, &EDP_R as u64) != 0i32 {
+        ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8
+    }
+    if ed_decompress(pk_addr, &EDP_A as u64) != 0i32 {
+        ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8
+    }
+    /* reject S >= L */
+    let S : u64 = ed_bi_from_le32(arena, sig_addr + 32u64)
+    if bigint_cmp(S, ED_L_ID) != -1i32 {
+        bigint_drop(S) ; ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8
+    }
+    bigint_drop(S)
+    /* h = SHA-512(R || A || M) mod L (bytes) */
+    ed_hash_first_half(sig_addr, pk_addr)
+    let h : u64 = ed_hash_finalize(arena, msg as u64, msg_len)
+    if h == 0u64 { ed_teardown() ; arena_drop_call_helper(arena) ; return 0u8 }
+    ed_bi_to_le32(h, &EDB_H as u64)
+    bigint_drop(h)
+    /* lhs = [S]B (S = sig[32:64] bytes); rhs = R + [h]A */
+    ed_scalar_mul_base(sig_addr + 32u64, &EDP_LHS as u64)
+    ed_scalar_mul_pt(&EDB_H as u64, &EDP_A as u64, &EDP_HA as u64)
+    ed_pt_add(&EDP_R as u64, &EDP_HA as u64, &EDP_RHS as u64)
+    ed_compress(&EDP_LHS as u64, &EDB_LHS as u64)
+    ed_compress(&EDP_RHS as u64, &EDB_RHS as u64)
+    let mut eq : u8 = 1u8
+    let mut ci : u64 = 0u64
+    while ci < 32u64 { if EDB_LHS[ci] != EDB_RHS[ci] { eq = 0u8 }  ci = ci + 1u64 }
+    ed_teardown()
+    arena_drop_call_helper(arena)
+    return eq
+}

@@ -1,0 +1,21 @@
+/* 814 -- mig4 Step 5: the termination / measure-decrease gate.  Drives xtm_selftest: the
+ * kind-aware assoc-penalty measures mis-nesting in BOTH directions and node_count measures size,
+ * and the lexicographic-triple comparator rejects non-decreases (1-9); THE GATE is GREEN over the
+ * whole live rule set -- every firing rule strictly decreases the triple (canon_weight, node_count,
+ * assoc_penalty) (10); THE FINDING in three parts -- the associativity rules R001-R004 are weight+
+ * size-preserving but penalty-decreasing DEC_P (11-18); the FIF branch-lift rules R005-R012 are
+ * weight-preserving but size-decreasing DEC_N -- the class that forced the node_count component
+ * (19-22); the collapse R037 and trit R101 rules strictly decrease canon_weight DEC_W (23-24);
+ * reproducible (25); and the gate has TEETH -- a fabricated weight-increase / size-increase / flat
+ * delta is each rejected by the same triple arithmetic (26-28).  Exit 99 = all hold.  With Step-4
+ * local confluence on root overlaps, this is Newman's termination half: the canonicaliser is a
+ * terminating, confluent normaliser on the reorderable set.  Gated by run_corpus.sh. */
+module corpus_814
+
+extern @abi(c-msvc-x64) fn xtm_selftest() -> u64 from "xii_termination.iii"
+
+fn main() -> u64 {
+    let r : u64 = xtm_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

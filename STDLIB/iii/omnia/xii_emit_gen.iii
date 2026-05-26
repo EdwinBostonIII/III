@@ -1,0 +1,388 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_emit_gen.iii
+ *
+ * III STDLIB - omnia::xii_emit_gen
+ *
+ * Per-target byte-slice generator for the 144 Horizon patterns.
+ * Per DOCS/III-XII.md S26.7 + S26.12.
+ *
+ * For each (horizon_id, target) pair (144 * 7 = 1008 combinations), this
+ * module produces the deterministic byte sequence that LDIL inlines at
+ * the call site. The generator is a function of:
+ *   1. The Horizon pattern's metadata (hexad, primary_op, K-cost) from
+ *      omnia/xii_horizon.iii.
+ *   2. The per-target instruction templates (per S26.7).
+ *   3. The CT lowering discipline (per S26.6) if the pattern's ct_kind > 0.
+ *
+ * Deterministic content-addressing: the cell mhash is
+ *   SHA-256(u8(horizon_id) || u8(target) || u16_le(size) || payload).
+ *
+ * Hexad: kind_compose. Ring: R0. K: per-pattern.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_emit_gen
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_k_cost(id: u32) -> u32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_ct_kind(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_nop_fill(target: u32, out: *u8, count: u32) -> u32 from "xii_nop_tables.iii"
+extern @abi(c-msvc-x64) fn xii_kernel_emit_fragment(kind: u8, target: u8, out: *u8) -> u32 from "xii_kernel_emit.iii"
+
+const XEG_MAX_PAYLOAD : u32 = 512u32
+
+/* ------------------------------------------------------------------ */
+/* Per-target prologue / epilogue.                                     */
+/* Each target has a fixed prologue (function preamble) and epilogue   */
+/* (function postamble) wrapping the pattern's body.                   */
+/* ------------------------------------------------------------------ */
+
+/* x86_avx512 / x86_avx2 / x86_scalar_ct prologue:
+ *   48 89 5C 24 08    mov [rsp+8], rbx     (5 bytes)
+ *   57                push rdi             (1 byte)
+ *   56                push rsi             (1 byte)
+ *   48 83 EC 30       sub rsp, 0x30        (4 bytes)
+ *  Total: 11 bytes */
+fn _prologue_x86(out: *u8) -> u32 {
+    out[0u64] = 0x48u8
+    out[1u64] = 0x89u8
+    out[2u64] = 0x5Cu8
+    out[3u64] = 0x24u8
+    out[4u64] = 0x08u8
+    out[5u64] = 0x57u8
+    out[6u64] = 0x56u8
+    out[7u64] = 0x48u8
+    out[8u64] = 0x83u8
+    out[9u64] = 0xECu8
+    out[10u64] = 0x30u8
+    return 11u32
+}
+
+fn _epilogue_x86(out: *u8) -> u32 {
+    out[0u64] = 0x48u8
+    out[1u64] = 0x83u8
+    out[2u64] = 0xC4u8
+    out[3u64] = 0x30u8
+    out[4u64] = 0x5Eu8
+    out[5u64] = 0x5Fu8
+    out[6u64] = 0x48u8
+    out[7u64] = 0x8Bu8
+    out[8u64] = 0x5Cu8
+    out[9u64] = 0x24u8
+    out[10u64] = 0x08u8
+    out[11u64] = 0xC3u8
+    return 12u32
+}
+
+/* arm64 prologue: stp x29, x30, [sp, -16]! ; mov x29, sp ; 8 bytes */
+fn _prologue_arm64(out: *u8) -> u32 {
+    out[0u64] = 0xFDu8
+    out[1u64] = 0x7Bu8
+    out[2u64] = 0xBFu8
+    out[3u64] = 0xA9u8
+    out[4u64] = 0xFDu8
+    out[5u64] = 0x03u8
+    out[6u64] = 0x00u8
+    out[7u64] = 0x91u8
+    return 8u32
+}
+
+fn _epilogue_arm64(out: *u8) -> u32 {
+    out[0u64] = 0xFDu8
+    out[1u64] = 0x7Bu8
+    out[2u64] = 0xC1u8
+    out[3u64] = 0xA8u8
+    out[4u64] = 0xC0u8
+    out[5u64] = 0x03u8
+    out[6u64] = 0x5Fu8
+    out[7u64] = 0xD6u8
+    return 8u32
+}
+
+/* RISC-V prologue: addi sp, sp, -16 ; sd ra, 0(sp) ; sd s0, 8(sp) ; 12 bytes */
+fn _prologue_riscv(out: *u8) -> u32 {
+    out[0u64] = 0x13u8
+    out[1u64] = 0x01u8
+    out[2u64] = 0x01u8
+    out[3u64] = 0xFFu8
+    out[4u64] = 0x23u8
+    out[5u64] = 0x30u8
+    out[6u64] = 0x11u8
+    out[7u64] = 0x00u8
+    out[8u64] = 0x23u8
+    out[9u64] = 0x34u8
+    out[10u64] = 0x81u8
+    out[11u64] = 0x00u8
+    return 12u32
+}
+
+fn _epilogue_riscv(out: *u8) -> u32 {
+    out[0u64] = 0x03u8
+    out[1u64] = 0x30u8
+    out[2u64] = 0x01u8
+    out[3u64] = 0x00u8
+    out[4u64] = 0x03u8
+    out[5u64] = 0x34u8
+    out[6u64] = 0x81u8
+    out[7u64] = 0x00u8
+    out[8u64] = 0x13u8
+    out[9u64] = 0x01u8
+    out[10u64] = 0x01u8
+    out[11u64] = 0x01u8
+    out[12u64] = 0x67u8
+    out[13u64] = 0x80u8
+    out[14u64] = 0x00u8
+    out[15u64] = 0x00u8
+    return 16u32
+}
+
+/* Cortex-M prologue: push {lr}; push {r7, lr}; 4 bytes total */
+fn _prologue_cortex_m(out: *u8) -> u32 {
+    out[0u64] = 0x00u8
+    out[1u64] = 0xB5u8
+    out[2u64] = 0x80u8
+    out[3u64] = 0xB5u8
+    return 4u32
+}
+
+fn _epilogue_cortex_m(out: *u8) -> u32 {
+    out[0u64] = 0x80u8
+    out[1u64] = 0xBDu8
+    return 2u32
+}
+
+fn _prologue_emit(target: u32, out: *u8) -> u32 {
+    if target == 0u32 { return _prologue_x86(out) }
+    if target == 1u32 { return _prologue_x86(out) }
+    if target == 2u32 { return _prologue_x86(out) }
+    if target == 3u32 { return _prologue_arm64(out) }
+    if target == 4u32 { return _prologue_arm64(out) }
+    if target == 5u32 { return _prologue_riscv(out) }
+    if target == 6u32 { return _prologue_cortex_m(out) }
+    return 0u32
+}
+
+fn _epilogue_emit(target: u32, out: *u8) -> u32 {
+    if target == 0u32 { return _epilogue_x86(out) }
+    if target == 1u32 { return _epilogue_x86(out) }
+    if target == 2u32 { return _epilogue_x86(out) }
+    if target == 3u32 { return _epilogue_arm64(out) }
+    if target == 4u32 { return _epilogue_arm64(out) }
+    if target == 5u32 { return _epilogue_riscv(out) }
+    if target == 6u32 { return _epilogue_cortex_m(out) }
+    return 0u32
+}
+
+/* Byte-count probes. Mirror the prologue/epilogue dispatchers above but
+ * return the size without writing -- used by xii_emit_gen_produce to
+ * reject expected_size requests that can't fit prologue+epilogue. The
+ * lengths must match the emit functions exactly:
+ *
+ *   target 0..2 (x86): prologue 11 bytes, epilogue 12 bytes
+ *   target 3..4 (arm64): prologue 8 bytes, epilogue 8 bytes
+ *   target 5 (riscv64): prologue 12 bytes, epilogue 16 bytes
+ *   target 6 (cortex-m): prologue 4 bytes, epilogue 2 bytes
+ */
+fn _prologue_emit_len(target: u32) -> u32 {
+    if target == 0u32 { return 11u32 }
+    if target == 1u32 { return 11u32 }
+    if target == 2u32 { return 11u32 }
+    if target == 3u32 { return 8u32 }
+    if target == 4u32 { return 8u32 }
+    if target == 5u32 { return 12u32 }
+    if target == 6u32 { return 4u32 }
+    return 0u32
+}
+
+fn _epilogue_emit_len(target: u32) -> u32 {
+    if target == 0u32 { return 12u32 }
+    if target == 1u32 { return 12u32 }
+    if target == 2u32 { return 12u32 }
+    if target == 3u32 { return 8u32 }
+    if target == 4u32 { return 8u32 }
+    if target == 5u32 { return 16u32 }
+    if target == 6u32 { return 2u32 }
+    return 0u32
+}
+
+/* ------------------------------------------------------------------ */
+/* Body emit: a per-(horizon_id, target) byte sequence.                */
+/* Two paths:                                                          */
+/*   1. Hand-curated override (xii_emit_gen_override): full assembly   */
+/*      sequence for composite patterns -- crypto hot-paths, atomics,  */
+/*      etc.  Takes precedence when registered.                        */
+/*   2. Structural fallback (_structural_body): emits the REAL ISA     */
+/*      bytes of the horizon's primary-op kernel from xii_kernel_emit. */
+/*      Every productive (horizon, target) cell that lacks an override */
+/*      lands real machine code, not noise.                            */
+/* ------------------------------------------------------------------ */
+
+const XEG_OVERRIDE_CAP : u32 = 256u32
+var XEG_OVERRIDE_KEYS : [u8; 1024]   /* 256 * 4: (horizon_id, target, size_lo, size_hi) */
+var XEG_OVERRIDE_PAYLOAD : [u8; 65536] /* 256 * 256 byte max */
+var XEG_OVERRIDE_USED : u32 = 0u32
+
+fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 @export {
+    if XEG_OVERRIDE_USED >= XEG_OVERRIDE_CAP { return -1i32 }
+    if (size as u32) > 256u32 { return -1i32 }
+    let key_off : u32 = XEG_OVERRIDE_USED * 4u32
+    XEG_OVERRIDE_KEYS[key_off]        = horizon_id
+    XEG_OVERRIDE_KEYS[key_off + 1u32] = target
+    XEG_OVERRIDE_KEYS[key_off + 2u32] = (size as u32 & 0xFFu32) as u8
+    XEG_OVERRIDE_KEYS[key_off + 3u32] = ((size as u32 >> 8u32) & 0xFFu32) as u8
+    let pay_off : u32 = XEG_OVERRIDE_USED * 256u32
+    let mut i : u32 = 0u32
+    while i < (size as u32) {
+        XEG_OVERRIDE_PAYLOAD[pay_off + i] = payload[i as u64]
+        i = i + 1u32
+    }
+    XEG_OVERRIDE_USED = XEG_OVERRIDE_USED + 1u32
+    return 0i32
+}
+
+fn _find_override(horizon_id: u8, target: u8) -> u32 {
+    let mut i : u32 = 0u32
+    while i < XEG_OVERRIDE_USED {
+        let off : u32 = i * 4u32
+        if XEG_OVERRIDE_KEYS[off] == horizon_id { if XEG_OVERRIDE_KEYS[off + 1u32] == target { return i } }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* Structural body emit: for every (horizon, target) cell that does not
+ * have a hand-curated override, emit the REAL ISA bytes of the
+ * horizon's primary-op kernel from xii_kernel_emit.iii.  These are the
+ * 168 sealed fragments (24 kernels x 7 targets) of S26.7.  The
+ * result is executable machine code that implements the horizon's
+ * primary operation -- not directly the full composite semantics of
+ * patterns like F.LOOP(...) but the kernel itself runs correctly when
+ * inlined and the cell's SHA-256 is bit-deterministic.
+ *
+ * Replaces the prior SHA-256-derived noise body that this function
+ * used to emit.  EVERY one of the 126 productive horizons x 7 targets
+ * = 882 cells now lands real ISA bytes.  Composite patterns can still
+ * be hand-curated via xii_emit_gen_override to override this fallback
+ * with a fully-elaborated assembly sequence.
+ *
+ * If the requested body_size is smaller than the kernel fragment, the
+ * fragment is truncated.  If larger, the kernel fragment is followed
+ * by target-appropriate NOP padding -- xii_emit_gen_produce wraps the
+ * result with a final return-bytes block via _epilogue_emit. */
+fn _structural_body(horizon_id: u8, target: u8, body_size: u32, out: *u8) -> u32 {
+    let primary : u8 = xii_horizon_primary_op(horizon_id as u32)
+    let frag_len : u32 = xii_kernel_emit_fragment(primary, target, out)
+    if frag_len == 0u32 { return 0u32 }
+    if frag_len >= body_size { return body_size }
+    let pad_count : u32 = body_size - frag_len
+    let pad_ptr : *u8 = (out as u64 + frag_len as u64) as *u8
+    xii_nop_fill(target as u32, pad_ptr, pad_count)
+    return body_size
+}
+
+fn if_min(a: u32, b: u32) -> u32 {
+    if a < b { return a }
+    return b
+}
+
+/* ------------------------------------------------------------------ */
+/* Top-level: produce the full byte slice for (horizon_id, target).    */
+/* Writes prologue + body + epilogue (+ NOP pad up to expected_size).  */
+/* Returns the actual byte count written.                              */
+/* ------------------------------------------------------------------ */
+
+fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 @export {
+    if horizon_id >= 144u32 { return 0u32 }
+    if target >= 7u32 { return 0u32 }
+    if xii_horizon_is_productive(horizon_id) != 1u8 { return 0u32 }
+    if expected_size > XEG_MAX_PAYLOAD { return 0u32 }
+
+    /* Compute prologue/epilogue lengths up-front so we can reject
+     * expected_size values that are too small (otherwise the
+     * `expected_size - written - epilogue_reserve` arithmetic below
+     * would underflow in u32 and clobber the output buffer). */
+    let plen_probe : u32 = _prologue_emit_len(target)
+    let elen_probe : u32 = _epilogue_emit_len(target)
+    if expected_size < (plen_probe + elen_probe) { return 0u32 }
+
+    let mut written : u32 = 0u32
+
+    /* Prologue. */
+    let plen : u32 = _prologue_emit(target, out)
+    written = plen
+
+    /* Body. */
+    let body_start : u32 = written
+    let override_idx : u32 = _find_override(horizon_id as u8, target as u8)
+    /* Subtract is safe: expected_size >= plen + elen >= plen + elen. */
+    let body_size_target : u32 = expected_size - plen_probe - elen_probe
+    let mut body_written : u32 = 0u32
+    if override_idx != 0xFFFFFFFFu32 {
+        let key_off : u32 = override_idx * 4u32
+        let size_lo : u32 = XEG_OVERRIDE_KEYS[key_off + 2u32] as u32
+        let size_hi : u32 = (XEG_OVERRIDE_KEYS[key_off + 3u32] as u32) << 8u32
+        let size : u32 = size_lo | size_hi
+        let pay_off : u32 = override_idx * 256u32
+        let copy_n : u32 = if_min(size, body_size_target)
+        let mut i : u32 = 0u32
+        while i < copy_n {
+            out[(body_start + i) as u64] = XEG_OVERRIDE_PAYLOAD[pay_off + i]
+            i = i + 1u32
+        }
+        body_written = copy_n
+    } else {
+        let k : u32 = xii_horizon_k_cost(horizon_id)
+        let body_sz : u32 = if_min(k * 4u32, body_size_target)
+        let body_ptr_offset : u64 = (body_start as u64)
+        let out_at_body : *u8 = (out as u64 + body_ptr_offset) as *u8
+        body_written = _structural_body(horizon_id as u8, target as u8, body_sz, out_at_body)
+    }
+    written = written + body_written
+
+    /* Epilogue. */
+    let elen_at : u64 = (written as u64)
+    let out_at_ep : *u8 = (out as u64 + elen_at) as *u8
+    let elen : u32 = _epilogue_emit(target, out_at_ep)
+    written = written + elen
+
+    /* NOP-pad up to expected_size. */
+    if written < expected_size {
+        let pad_count : u32 = expected_size - written
+        let out_at_pad : *u8 = (out as u64 + (written as u64)) as *u8
+        let pad_written : u32 = xii_nop_fill(target, out_at_pad, pad_count)
+        written = written + pad_written
+    }
+
+    return written
+}
+
+/* Compute the cell mhash for (horizon_id, target, size, payload). */
+fn xii_emit_gen_cell_mhash(horizon_id: u32, target: u32, size: u32, payload_ptr: *u8, out_32: *u8) -> i32 @export {
+    /* Build prefix: u8(horizon_id) || u8(target) || u16_le(size). */
+    XEG_PREFIX[0u32] = horizon_id as u8
+    XEG_PREFIX[1u32] = target as u8
+    XEG_PREFIX[2u32] = (size & 0xFFu32) as u8
+    XEG_PREFIX[3u32] = ((size >> 8u32) & 0xFFu32) as u8
+    return _sha256_prefix_then_payload(&XEG_PREFIX as *u8, 4u32, payload_ptr, size, out_32)
+}
+
+var XEG_PREFIX : [u8; 4]
+var XEG_MHASH_SCRATCH : [u8; 4096]
+
+fn _sha256_prefix_then_payload(prefix: *u8, prefix_len: u32, payload: *u8, payload_size: u32, out_32: *u8) -> i32 {
+    if (prefix_len + payload_size) > 4096u32 { return -1i32 }
+    let mut i : u32 = 0u32
+    while i < prefix_len {
+        XEG_MHASH_SCRATCH[i] = prefix[i as u64]
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < payload_size {
+        XEG_MHASH_SCRATCH[prefix_len + j] = payload[j as u64]
+        j = j + 1u32
+    }
+    sha256_oneshot(&XEG_MHASH_SCRATCH as *u8, (prefix_len + payload_size) as u64, out_32)
+    return 0i32
+}

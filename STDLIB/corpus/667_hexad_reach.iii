@@ -1,0 +1,8 @@
+/* 667 — hexad safety: reach == exactly 144/729 + the 729-wide reachability
+ * predicate (independent recompute) + the 6 PFS bricking ops non-reachable
+ * (untypable) + pfs_kind round-trip + compose6 closure over the reachable set
+ * + a bricking hexad stays non-reachable under compose. M3 hexad-safety gate
+ * (closes the previously-unguarded M3 falsifier). */
+module corpus_667
+extern @abi(c-msvc-x64) fn iii_hexad_reach_selftest() -> u64 from "hexad_reach.iii"
+fn main() -> u64 { return iii_hexad_reach_selftest() }

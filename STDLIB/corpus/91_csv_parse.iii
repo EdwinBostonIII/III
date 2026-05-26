@@ -1,0 +1,40 @@
+/* CSV parser test:
+ *   "a,b,c\nd,e,f\n"  ->  2 rows, 3 cols each
+ */
+module corpus_91
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_row_count(id: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_count(id: u64, row: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_base(id: u64, row: u64, col: u64) -> u64 from "csv.iii"
+extern @abi(c-msvc-x64) fn csv_field_len(id: u64, row: u64, col: u64) -> u64 from "csv.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(12u64)
+    /* "a,b,c\nd,e,f\n" — 12 bytes */
+    buf[0] = 97u8;  buf[1] = 44u8; buf[2] = 98u8; buf[3] = 44u8
+    buf[4] = 99u8;  buf[5] = 10u8
+    buf[6] = 100u8; buf[7] = 44u8; buf[8] = 101u8; buf[9] = 44u8
+    buf[10] = 102u8; buf[11] = 10u8
+    let t : u64 = csv_parse(a, buf as u64, 12u64)
+    if t == 0u64 { return 1u64 }
+    if csv_row_count(t) != 2u64 { return 2u64 }
+    if csv_field_count(t, 0u64) != 3u64 { return 3u64 }
+    if csv_field_count(t, 1u64) != 3u64 { return 4u64 }
+    /* row 0, col 0 = "a" (1 byte at offset 0) */
+    if csv_field_len(t, 0u64, 0u64) != 1u64 { return 5u64 }
+    let p00 : *u8 = csv_field_base(t, 0u64, 0u64) as *u8
+    if p00[0] != 97u8 { return 6u64 }
+    /* row 1, col 2 = "f" */
+    if csv_field_len(t, 1u64, 2u64) != 1u64 { return 7u64 }
+    let p12 : *u8 = csv_field_base(t, 1u64, 2u64) as *u8
+    if p12[0] != 102u8 { return 8u64 }
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

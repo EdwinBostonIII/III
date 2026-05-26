@@ -1,0 +1,180 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fed_admit.iii
+ *
+ * III STDLIB - aether::fed_admit -- planetary-tier admission gate.
+ *
+ * Lattice plan Phase 14k Step 0191.  Composes fed_sybil (PoW + sov-sig
+ * Sybil resistance) and fed_eclipse (peer-set health) into the
+ * planetary-tier admission decision.  A peer is eligible for the
+ * PLANETARY tier (fed_tier id = 5) only when ALL gates fire:
+ *
+ *   G0: peer is sybil-admitted (fed_sybil_admitted == 1)
+ *   G1: local eclipse alarm is OFF (set fingerprint matches reference,
+ *       within byte-divergence threshold)
+ *   G2: peer's sybil score >= FED_ADMIT_MIN_SCORE
+ *
+ * Public surface:
+ *   fed_admit_planetary_min_score()                                 -> u64
+ *   fed_admit_planetary_gate_status(peer_id_ptr)                    -> u32
+ *   fed_admit_eligible(peer_id_ptr)                                 -> u8
+ *   fed_admit_to_planetary(slot, peer_id_ptr)                       -> i32
+ *   fed_admit_with_pow_proof(node_id, pow_nonce, packed_meta)       -> i32
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module aether_fed_admit
+
+extern @abi(c-msvc-x64) fn fed_sybil_admitted(peer_id_ptr: u64) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_score(peer_id_ptr: u64) -> u64 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_pow_verify(peer_id_ptr: u64, nonce: u64, bits: u32) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_alarm() -> u8 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn hs_verify_qc(qc: *u8, qc_len: u32) -> u8 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn fed_tier_register(slot: u32, tier_id: u32, peer_root_ptr: u64) -> i32 from "fed_tier.iii"
+
+const FED_ADMIT_OK             : i32 =  0i32
+const FED_ADMIT_E_NULL         : i32 = -1i32
+const FED_ADMIT_E_GATE         : i32 = -2i32
+const FED_ADMIT_E_TIER         : i32 = -3i32
+const FED_ADMIT_E_POW          : i32 = -4i32
+const FED_ADMIT_E_TIER_RANGE   : i32 = -5i32
+const FED_ADMIT_E_SCORE        : i32 = -6i32
+const FED_ADMIT_E_QC           : i32 = -7i32   /* 4th gate: HotStuff QC over the admission decision */
+
+const FED_ADMIT_MIN_SCORE      : u64 = 16000000u64   /* 16 difficulty bits * 1e6 */
+const FED_ADMIT_PLANETARY_TIER : u32 = 5u32
+
+const FED_ADMIT_BIT_SYBIL      : u32 = 0x01u32
+const FED_ADMIT_BIT_ECLIPSE_OK : u32 = 0x02u32
+const FED_ADMIT_BIT_SCORE      : u32 = 0x04u32
+const FED_ADMIT_BIT_QC         : u32 = 0x08u32   /* HotStuff QC gate (4th); checked in fed_admit_with_qc_proof, not in the 3-gate planetary status */
+const FED_ADMIT_BIT_ALL        : u32 = 0x07u32   /* sybil | eclipse | score (planetary 3-gate eligibility) */
+
+/* PoW-proof admission: tier-indexed leading-zero-bit requirements.
+ * tier 0 (planetary) = 32 bits = 4 leading zero bytes
+ * tier 1 (galactic)  = 48 bits = 6 leading zero bytes
+ * tier 2 (sovereign) = 64 bits = 8 leading zero bytes
+ */
+const FED_ADMIT_POW_TIER_PLANETARY : u32 = 0u32
+const FED_ADMIT_POW_TIER_GALACTIC  : u32 = 1u32
+const FED_ADMIT_POW_TIER_SOVEREIGN : u32 = 2u32
+const FED_ADMIT_POW_BITS_PLANETARY : u32 = 32u32
+const FED_ADMIT_POW_BITS_GALACTIC  : u32 = 48u32
+const FED_ADMIT_POW_BITS_SOVEREIGN : u32 = 64u32
+
+/* 32-byte scratch buffer materializing node_id (u64) as a peer-id-shaped
+ * input for fed_sybil_pow_verify / fed_sybil_score.  The high 24 bytes
+ * are zero; the low 8 bytes hold node_id in little-endian order.  This is
+ * a sealed cryptographic projection -- not observational state. */
+var FED_ADMIT_NODE_ID_BUF : [u8; 32]
+
+fn fed_admit_planetary_min_score() -> u64 @export {
+    return FED_ADMIT_MIN_SCORE
+}
+
+fn fed_admit_planetary_gate_status(peer_id_ptr: u64) -> u32 @export {
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return 0u32 }
+    let mut bits : u32 = 0u32
+    if fed_sybil_admitted(p_l) == 1u8 {
+        bits = bits | FED_ADMIT_BIT_SYBIL
+    }
+    if fed_eclipse_alarm() == 0u8 {
+        bits = bits | FED_ADMIT_BIT_ECLIPSE_OK
+    }
+    let score : u64 = fed_sybil_score(p_l)
+    if score >= FED_ADMIT_MIN_SCORE {
+        bits = bits | FED_ADMIT_BIT_SCORE
+    }
+    return bits
+}
+
+fn fed_admit_eligible(peer_id_ptr: u64) -> u8 @export {
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return 0u8 }
+    let bits : u32 = fed_admit_planetary_gate_status(p_l)
+    if bits == FED_ADMIT_BIT_ALL { return 1u8 }
+    return 0u8
+}
+
+fn fed_admit_to_planetary(slot: u32, peer_id_ptr: u64) -> i32 @export {
+    let s_l : u32 = slot
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return FED_ADMIT_E_NULL }
+    if fed_admit_eligible(p_l) != 1u8 { return FED_ADMIT_E_GATE }
+    let rc : i32 = fed_tier_register(s_l, FED_ADMIT_PLANETARY_TIER, p_l)
+    if rc != 0i32 { return FED_ADMIT_E_TIER }
+    return FED_ADMIT_OK
+}
+
+/* Materialize node_id as a 32-byte peer-id-shaped buffer.  Low 8 bytes
+ * hold node_id little-endian; high 24 bytes are zeroed.  Byte-wise stores
+ * via *u8 to avoid the iiis-0 u32-pointer-store-width trap. */
+fn _fed_admit_pack_node_id(node_id: u64) -> u32 {
+    let n_l : u64 = node_id
+    let buf_p : *u8 = (&FED_ADMIT_NODE_ID_BUF) as u64 as *u8
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        buf_p[k] = ((n_l >> (k * 8u64)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    let mut z : u64 = 8u64
+    while z < 32u64 {
+        buf_p[z] = 0u8
+        z = z + 1u64
+    }
+    return 0u32
+}
+
+/* Map a tier id (low subfield of packed_meta high half) to the required
+ * leading-zero-bit count.  Returns 0 for unknown tiers (sentinel). */
+fn _fed_admit_pow_bits_for_tier(tier: u32) -> u32 {
+    let t_l : u32 = tier & 0xFFFFFFFFu32
+    if t_l == FED_ADMIT_POW_TIER_PLANETARY { return FED_ADMIT_POW_BITS_PLANETARY }
+    if t_l == FED_ADMIT_POW_TIER_GALACTIC  { return FED_ADMIT_POW_BITS_GALACTIC  }
+    if t_l == FED_ADMIT_POW_TIER_SOVEREIGN { return FED_ADMIT_POW_BITS_SOVEREIGN }
+    return 0u32
+}
+
+/* fed_admit_with_pow_proof -- hardened admission with caller-supplied PoW.
+ *
+ * packed_meta layout:
+ *   bits 32..63 : tier id (0 = planetary, 1 = galactic, 2 = sovereign)
+ *   bits  0..31 : minimum sybil score required for admission
+ *
+ * Behavior:
+ *   1. Materialize node_id as a 32-byte peer-id buffer (sealed projection).
+ *   2. Resolve PoW difficulty (bits) from tier; reject unknown tiers.
+ *   3. Verify pow_nonce via fed_sybil_pow_verify at the tier-required bits.
+ *   4. Read sybil score; require score >= threshold (low 32 of packed_meta).
+ *   5. On success, dispatch to fed_admit_to_planetary using slot 0.
+ *
+ * Returns FED_ADMIT_OK (0) on success, or a negative error code.  No
+ * observational state, no thresholds learned from history -- every gate
+ * is sealed-input-only.
+ */
+fn fed_admit_with_qc_proof(node_id: u64, pow_nonce: u64, packed_meta: u64, qc_ptr: *u8) -> i32 @export {
+    let n_l : u64 = node_id
+    let w_l : u64 = pow_nonce
+    let m_l : u64 = packed_meta
+    if (qc_ptr as u64) == 0u64 { return FED_ADMIT_E_NULL }
+    let tier      : u32 = ((m_l >> 32u64) & 0xFFFFFFFFu64) as u32
+    let threshold : u64 = m_l & 0xFFFFFFFFu64
+    let bits      : u32 = _fed_admit_pow_bits_for_tier(tier)
+    if bits == 0u32 { return FED_ADMIT_E_TIER_RANGE }
+    _fed_admit_pack_node_id(n_l)
+    let buf_addr : u64 = (&FED_ADMIT_NODE_ID_BUF) as u64
+    if fed_sybil_pow_verify(buf_addr, w_l, bits) != 1u8 { return FED_ADMIT_E_POW }
+    let score : u64 = fed_sybil_score(buf_addr)
+    if score < threshold { return FED_ADMIT_E_SCORE }
+    /* 4th gate (gospel L24432): the admission decision must be backed by a
+     * HotStuff quorum certificate (>= 2f+1 verified Ed25519 signatures). QC
+     * length derived from its n_sigs field (qc[40..44]): 44 + n_sigs*64.
+     * Checked last so a failing sybil/pow/score gate is reported first. */
+    let qp : *u8 = qc_ptr
+    let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
+    let qc_len : u32 = 44u32 + n_sigs * 64u32
+    if hs_verify_qc(qp, qc_len) != 1u8 { return FED_ADMIT_E_QC }
+    let rc : i32 = fed_admit_to_planetary(0u32, buf_addr)
+    if rc != FED_ADMIT_OK { return rc }
+    return FED_ADMIT_OK
+}

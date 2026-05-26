@@ -1,0 +1,267 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\q128.iii
+ *
+ * III STDLIB - numera::q128
+ *
+ * Unsigned 128-bit integer stored as two u64 limbs (hi, lo) inside
+ * a slot table.  Phase B caps "Q128" at unsigned 128-bit; the
+ * full rational form (numerator / denominator both 128-bit) is a
+ * Phase C addition once @specialize lands.
+ *
+ * Operations:
+ *   - add, sub, mul (mod 2^128), shift_left, shift_right
+ *   - compare, eq
+ *   - from_u64, to_u64_lo, to_u64_hi
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure modular arithmetic).
+ */
+
+module numera_q128
+
+const Q128_INVALID : u64 = 0u64
+const Q128_SLOTS   : u32 = 64u32
+
+var Q128_HI   : [u64; 64]
+var Q128_LO   : [u64; 64]
+var Q128_LIVE : [u8;  64]
+
+fn q128_alloc() -> u32 {
+    let mut i : u32 = 0u32
+    while i < Q128_SLOTS {
+        if Q128_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn q128_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (Q128_SLOTS as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if Q128_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* --- Construction --- */
+
+fn q128_from_u64(v: u64) -> u64 @export {
+    let s : u32 = q128_alloc()
+    if s == 0xFFFFFFFFu32 { return Q128_INVALID }
+    Q128_HI[s] = 0u64
+    Q128_LO[s] = v
+    Q128_LIVE[s] = 1u8
+    return (s as u64) + 1u64
+}
+
+fn q128_from_pair(hi: u64, lo: u64) -> u64 @export {
+    let s : u32 = q128_alloc()
+    if s == 0xFFFFFFFFu32 { return Q128_INVALID }
+    Q128_HI[s] = hi
+    Q128_LO[s] = lo
+    Q128_LIVE[s] = 1u8
+    return (s as u64) + 1u64
+}
+
+fn q128_drop(id: u64) -> u8 @export {
+    let s : u32 = q128_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    Q128_LIVE[s] = 0u8
+    Q128_HI[s] = 0u64
+    Q128_LO[s] = 0u64
+    return 1u8
+}
+
+/* --- Accessors --- */
+
+fn q128_lo(id: u64) -> u64 @export {
+    let s : u32 = q128_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return Q128_LO[s]
+}
+
+fn q128_hi(id: u64) -> u64 @export {
+    let s : u32 = q128_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return Q128_HI[s]
+}
+
+/* --- Comparison --- */
+
+fn q128_eq(a: u64, b: u64) -> u8 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return 0u8 }
+    if sb == 0xFFFFFFFFu32 { return 0u8 }
+    if Q128_HI[sa] != Q128_HI[sb] { return 0u8 }
+    if Q128_LO[sa] != Q128_LO[sb] { return 0u8 }
+    return 1u8
+}
+
+/* Returns -1 if a<b, 0 if equal, 1 if a>b. */
+fn q128_cmp(a: u64, b: u64) -> i32 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return 0i32 }
+    if sb == 0xFFFFFFFFu32 { return 0i32 }
+    let ha : u64 = Q128_HI[sa]
+    let hb : u64 = Q128_HI[sb]
+    if ha < hb { return -1i32 }
+    if ha > hb { return 1i32 }
+    let la : u64 = Q128_LO[sa]
+    let lb : u64 = Q128_LO[sb]
+    if la < lb { return -1i32 }
+    if la > lb { return 1i32 }
+    return 0i32
+}
+
+/* --- Addition: 128-bit wrapping add --- */
+
+fn q128_add(a: u64, b: u64) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    if sb == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let la : u64 = Q128_LO[sa]
+    let lb : u64 = Q128_LO[sb]
+    let lo_sum : u64 = la + lb
+    let mut carry : u64 = 0u64
+    if lo_sum < la { carry = 1u64 }
+    let hi_sum : u64 = Q128_HI[sa] + Q128_HI[sb] + carry
+    return q128_from_pair(hi_sum, lo_sum)
+}
+
+/* --- Subtraction: 128-bit wrapping sub --- */
+
+fn q128_sub(a: u64, b: u64) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    if sb == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let la : u64 = Q128_LO[sa]
+    let lb : u64 = Q128_LO[sb]
+    let lo_diff : u64 = la - lb
+    let mut borrow : u64 = 0u64
+    if la < lb { borrow = 1u64 }
+    let hi_diff : u64 = Q128_HI[sa] - Q128_HI[sb] - borrow
+    return q128_from_pair(hi_diff, lo_diff)
+}
+
+/* --- Shift left --- */
+
+fn q128_shl(a: u64, n: u32) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let mut shift : u32 = n
+    if shift >= 128u32 { return q128_from_pair(0u64, 0u64) }
+    let lo : u64 = Q128_LO[sa]
+    let hi : u64 = Q128_HI[sa]
+    if shift == 0u32 { return q128_from_pair(hi, lo) }
+    if shift < 64u32 {
+        let new_lo : u64 = lo << (shift as u64)
+        let cross : u64 = lo >> ((64u32 - shift) as u64)
+        let new_hi_a : u64 = hi << (shift as u64)
+        let new_hi : u64 = new_hi_a | cross
+        return q128_from_pair(new_hi, new_lo)
+    }
+    /* shift >= 64 */
+    let s2 : u32 = shift - 64u32
+    let new_hi : u64 = lo << (s2 as u64)
+    return q128_from_pair(new_hi, 0u64)
+}
+
+/* --- Shift right --- */
+
+fn q128_shr(a: u64, n: u32) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let mut shift : u32 = n
+    if shift >= 128u32 { return q128_from_pair(0u64, 0u64) }
+    let lo : u64 = Q128_LO[sa]
+    let hi : u64 = Q128_HI[sa]
+    if shift == 0u32 { return q128_from_pair(hi, lo) }
+    if shift < 64u32 {
+        let new_hi : u64 = hi >> (shift as u64)
+        let cross : u64 = hi << ((64u32 - shift) as u64)
+        let new_lo_a : u64 = lo >> (shift as u64)
+        let new_lo : u64 = new_lo_a | cross
+        return q128_from_pair(new_hi, new_lo)
+    }
+    /* shift >= 64 */
+    let s2 : u32 = shift - 64u32
+    let new_lo : u64 = hi >> (s2 as u64)
+    return q128_from_pair(0u64, new_lo)
+}
+
+/* --- Multiplication: 128 = 64x64 + 64x64 + 64x64 + 64x64 partial,
+ * keeping only the low 128 bits (mod 2^128). --- */
+
+fn q128_mul(a: u64, b: u64) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    if sb == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let a_hi : u64 = Q128_HI[sa]
+    let a_lo : u64 = Q128_LO[sa]
+    let b_hi : u64 = Q128_HI[sb]
+    let b_lo : u64 = Q128_LO[sb]
+    /* result_hi = a_lo*b_hi + a_hi*b_lo + (a_lo*b_lo >> 64)  (mod 2^64)
+     * result_lo = a_lo * b_lo  (mod 2^64)
+     * The (a_lo*b_lo >> 64) requires expanding via 32x32 partial products. */
+    let alo_lo : u64 = a_lo & 0xFFFFFFFFu64
+    let alo_shifted : u64 = a_lo >> 32u64
+    let alo_hi : u64 = alo_shifted & 0xFFFFFFFFu64
+    let blo_lo : u64 = b_lo & 0xFFFFFFFFu64
+    let blo_shifted : u64 = b_lo >> 32u64
+    let blo_hi : u64 = blo_shifted & 0xFFFFFFFFu64
+    let p_lolo : u64 = alo_lo * blo_lo
+    let p_lohi : u64 = alo_lo * blo_hi
+    let p_hilo : u64 = alo_hi * blo_lo
+    let p_hihi : u64 = alo_hi * blo_hi
+    let p_lolo_top : u64 = p_lolo >> 32u64
+    let p_lohi_lo : u64 = p_lohi & 0xFFFFFFFFu64
+    let p_hilo_lo : u64 = p_hilo & 0xFFFFFFFFu64
+    let m1 : u64 = p_lolo_top + p_lohi_lo
+    let m2 : u64 = m1 + p_hilo_lo
+    let m_hi : u64 = m2 >> 32u64
+    let p_lohi_hi : u64 = p_lohi >> 32u64
+    let p_hilo_hi : u64 = p_hilo >> 32u64
+    let alo_blo_hi : u64 = p_hihi + p_lohi_hi + p_hilo_hi + m_hi
+    /* a_lo * b_lo high 64 bits */
+    let cross_a : u64 = a_lo * b_hi
+    let cross_b : u64 = a_hi * b_lo
+    let result_hi : u64 = alo_blo_hi + cross_a + cross_b
+    let result_lo : u64 = a_lo * b_lo
+    return q128_from_pair(result_hi, result_lo)
+}
+
+/* --- Bitwise --- */
+
+fn q128_or(a: u64, b: u64) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    if sb == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let hi : u64 = Q128_HI[sa] | Q128_HI[sb]
+    let lo : u64 = Q128_LO[sa] | Q128_LO[sb]
+    return q128_from_pair(hi, lo)
+}
+
+fn q128_xor(a: u64, b: u64) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    if sb == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let hi : u64 = Q128_HI[sa] ^ Q128_HI[sb]
+    let lo : u64 = Q128_LO[sa] ^ Q128_LO[sb]
+    return q128_from_pair(hi, lo)
+}
+
+fn q128_and(a: u64, b: u64) -> u64 @export {
+    let sa : u32 = q128_slot_of(a)
+    let sb : u32 = q128_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return Q128_INVALID }
+    if sb == 0xFFFFFFFFu32 { return Q128_INVALID }
+    let hi : u64 = Q128_HI[sa] & Q128_HI[sb]
+    let lo : u64 = Q128_LO[sa] & Q128_LO[sb]
+    return q128_from_pair(hi, lo)
+}

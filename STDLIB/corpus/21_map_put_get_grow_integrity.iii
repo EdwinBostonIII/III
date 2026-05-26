@@ -1,0 +1,80 @@
+/* Map: insert 20 entries (forces grow from 16 -> 32), get each back,
+ * remove one, verify integrity changes after mutation. */
+module corpus_b21
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn map_u32u32_new(arena: u64, hard: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_put(id: u64, k: u32, v: u32) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_get(id: u64, k: u32) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_contains(id: u64, k: u32) -> u8 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_remove(id: u64, k: u32) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_len(id: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_capacity(id: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_drop(id: u64) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_integrity_compute(id: u64, out: u64) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_integrity_byte(id: u64, i: u32) -> u32 from "map.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+    let m : u64 = map_u32u32_new(a, 256u64)
+    if m == 0u64 { return 2u64 }
+    /* Insert 20 entries: key i, value i*7. */
+    let mut i : u32 = 0u32
+    while i < 20u32 {
+        let v : u32 = (i * 7u32) & 0xFFFFFFFFu32
+        let rc : i32 = map_u32u32_put(m, i, v)
+        if rc != 0i32 { return 3u64 }
+        i = i + 1u32
+    }
+    if map_u32u32_len(m) != 20u64 { return 4u64 }
+    /* Capacity must have grown beyond 16 (initial). */
+    let cap : u64 = map_u32u32_capacity(m)
+    if cap < 32u64 { return 5u64 }
+    /* Get each back. */
+    let mut j : u32 = 0u32
+    while j < 20u32 {
+        let r : u64 = map_u32u32_get(m, j)
+        if (r & 1u64) != 1u64 { return 6u64 }
+        let v : u32 = ((r >> 1u64) & 0xFFFFFFFFu64) as u32
+        let want : u32 = (j * 7u32) & 0xFFFFFFFFu32
+        if v != want { return 7u64 }
+        j = j + 1u32
+    }
+    /* Contains for present and absent. */
+    if map_u32u32_contains(m, 5u32) != 1u8 { return 8u64 }
+    if map_u32u32_contains(m, 999u32) != 0u8 { return 9u64 }
+    /* Compute integrity into a 32-byte buffer; cache first 16. */
+    let mac1 : *u8 = malloc(32u64)
+    if map_integrity_compute(m, mac1 as u64) != 0i32 { return 10u64 }
+    /* Mutate: remove key 5. */
+    let removed : u64 = map_u32u32_remove(m, 5u32)
+    if (removed & 1u64) != 1u64 { return 11u64 }
+    let removed_v : u32 = ((removed >> 1u64) & 0xFFFFFFFFu64) as u32
+    if removed_v != 35u32 { return 12u64 }
+    if map_u32u32_contains(m, 5u32) != 0u8 { return 13u64 }
+    if map_u32u32_len(m) != 19u64 { return 14u64 }
+    /* Recompute integrity; bytes must differ. */
+    let mac2 : *u8 = malloc(32u64)
+    if map_integrity_compute(m, mac2 as u64) != 0i32 { return 15u64 }
+    let mut differ : u8 = 0u8
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        if mac1[k as u64] != mac2[k as u64] { differ = 1u8 }
+        k = k + 1u32
+    }
+    if differ != 1u8 { return 16u64 }
+    /* map_integrity_byte returns the cached MAC byte. */
+    let stored0 : u32 = map_integrity_byte(m, 0u32)
+    if stored0 == 0x100u32 { return 17u64 }
+    if (stored0 & 0xFFu32) != (mac2[0u64] as u32) { return 18u64 }
+    /* Cleanup. */
+    free(mac1)
+    free(mac2)
+    map_u32u32_drop(m)
+    arena_drop(a)
+    return 99u64
+}

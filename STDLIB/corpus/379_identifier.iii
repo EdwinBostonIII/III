@@ -1,0 +1,5 @@
+/* 379 — Layer-0 canonical identifiers: ident_from_bytes==Keccak256, constant-
+ * time eq, lexicographic cmp, copy, u64 encoding, zero/is_zero. */
+module corpus_379
+extern @abi(c-msvc-x64) fn ident_selftest() -> u64 from "identifier.iii"
+fn main() -> u64 { return ident_selftest() }

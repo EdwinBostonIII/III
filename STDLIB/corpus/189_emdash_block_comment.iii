@@ -1,0 +1,9 @@
+/* III conformance corpus 189 -- Stage 3.15: em-dash in block comment.
+ * The iiis-0 lexer once terminated a block comment early at U+2014
+ * (em-dash), lexing the rest as code.  Fixed: this comment contains an
+ * em-dash — and continues with words after it that must stay inside
+ * the comment.  If the U+2014 still terminated the comment, "and
+ * continues..." would lex as code and the file would not compile.
+ * Exit = 99. */
+module corpus_189
+fn main() -> u64 { return 99u64 }

@@ -1,0 +1,21 @@
+module corpus_54
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn transform_pattern_set_init(arena: u64) -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn transform_pattern_set_get() -> u64 from "transform.iii"
+
+fn main() -> u64 {
+    /* Verifies that the transform-pattern set is initialised and contains
+     * the 24 transform patterns. The full FORM_III → FORM_X86_ASM
+     * round-trip requires per-codec authoring (FROZEN SPEC §F.D.TP);
+     * this test confirms only the registration and set-init layer. */
+    resolution_init()
+    let arena : u64 = arena_new(65536u64)
+    if arena == 0u64 { return 0u64 }
+    let set : u64 = transform_pattern_set_init(arena)
+    if set == 0u64 { return 0u64 }
+    let got : u64 = transform_pattern_set_get()
+    if got != set { return 0u64 }
+    return 1u64
+}

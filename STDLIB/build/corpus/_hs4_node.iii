@@ -1,0 +1,169 @@
+/* V1 Stage 5 — 4-node HotStuff socket harness: NODE.
+ *
+ * One of "four instances of iiis-2.exe compiled hotstuff.iii".  Connects to the
+ * coordinator (127.0.0.1:COORD_PORT, the test network), then runs a command
+ * loop: the coordinator assigns this node's id + peer keys + keypair (INIT),
+ * tells the leader to propose, relays blocks/votes to handle, and queries the
+ * committed head.  All consensus is the real aether/hotstuff.iii.
+ *
+ * Frame: [len u32 LE][payload].  payload[0] = opcode.
+ */
+module hs4_node
+
+extern @abi(c-msvc-x64) fn net_init() -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn hs_init(node_id: u32, peers: *u8, n_peers: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_set_keypair(kp: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_propose(payload_mhash: *u8, out_block: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_handle_vote(msg: *u8, msg_len: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_committed_head(out_mhash: *u8) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn hs_tick(elapsed_ms: u32) -> i32 from "hotstuff.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn Sleep(ms: u32) -> u32 from "kernel32"
+
+const COORD_PORT : u32 = 19220u32
+
+var N_SOCK   : [u64; 1]
+var N_HDR    : [u8; 4]
+var N_IN     : [u8; 600]
+var N_OUT    : [u8; 600]
+var N_KP     : [u8; 64]
+var N_SI     : [u8; 40]
+var N_BLOCK  : [u8; 424]
+var N_HEAD   : [u8; 32]
+var N_SADDR  : [u8; 16]
+var N_ID     : [u32; 1]
+
+fn n_recv_all(addr: u64, n: u64) -> i32 {
+    let mut got : u64 = 0u64
+    while got < n {
+        let r : i32 = net_tcp_recv(N_SOCK[0], addr + got, n - got)
+        if r <= 0i32 { return 0i32 - 1i32 }
+        got = got + (r as u64)
+    }
+    return 0i32
+}
+fn n_send_all(addr: u64, n: u64) -> i32 {
+    let mut sent : u64 = 0u64
+    while sent < n {
+        let s : i32 = net_tcp_send(N_SOCK[0], addr + sent, n - sent)
+        if s <= 0i32 { return 0i32 - 1i32 }
+        sent = sent + (s as u64)
+    }
+    return 0i32
+}
+fn n_rd_u32(addr: u64) -> u32 {
+    let p : *u8 = addr as *u8
+    return (p[0u64] as u32) | ((p[1u64] as u32) << 8u32) | ((p[2u64] as u32) << 16u32) | ((p[3u64] as u32) << 24u32)
+}
+fn n_wr_u32(addr: u64, v: u32) -> i32 {
+    let p : *u8 = addr as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+fn n_send_frame(n: u64) -> i32 {
+    n_wr_u32(&N_HDR as u64, n as u32)
+    if n_send_all(&N_HDR as u64, 4u64) != 0i32 { return 0i32 - 1i32 }
+    return n_send_all(&N_OUT as u64, n)
+}
+
+fn hs4_do_init() -> i32 {
+    N_ID[0] = n_rd_u32((&N_IN as u64) + 1u64)
+    hs_init(N_ID[0], ((&N_IN as u64) + 5u64) as *u8, 4u32)
+    let mut i : u64 = 0u64
+    while i < 64u64 { N_KP[i] = N_IN[133u64 + i]  i = i + 1u64 }
+    hs_set_keypair((&N_KP as u64) as *u8)
+    N_OUT[0u64] = 0x4Fu8
+    return n_send_frame(1u64)
+}
+fn hs4_do_propose() -> i32 {
+    let rc : i32 = hs_propose(((&N_IN as u64) + 1u64) as *u8, (&N_BLOCK as u64) as *u8)
+    if rc == 0i32 {
+        let mut i : u64 = 0u64
+        while i < 424u64 { N_OUT[i] = N_BLOCK[i]  i = i + 1u64 }
+        return n_send_frame(424u64)
+    }
+    N_OUT[0u64] = 0x58u8
+    return n_send_frame(1u64)
+}
+fn hs4_do_handle_block() -> i32 {
+    let rc : i32 = hs_handle_propose(((&N_IN as u64) + 1u64) as *u8, 424u32)
+    n_wr_u32(&N_OUT as u64, rc as u32)
+    return n_send_frame(4u64)
+}
+fn hs4_do_make_vote() -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { N_OUT[i] = N_IN[1u64 + i]  N_SI[i] = N_IN[1u64 + i]  i = i + 1u64 }
+    i = 0u64
+    while i < 8u64 { N_OUT[32u64 + i] = N_IN[33u64 + i]  N_SI[32u64 + i] = N_IN[33u64 + i]  i = i + 1u64 }
+    n_wr_u32((&N_OUT as u64) + 40u64, N_ID[0])
+    ed25519_sign((&N_KP as u64) as *u8, ((&N_KP as u64) + 32u64) as *u8, (&N_SI as u64) as *u8, 40u64, ((&N_OUT as u64) + 44u64) as *u8)
+    return n_send_frame(108u64)
+}
+fn hs4_do_handle_vote() -> i32 {
+    let rc : i32 = hs_handle_vote(((&N_IN as u64) + 1u64) as *u8, 108u32)
+    n_wr_u32(&N_OUT as u64, rc as u32)
+    return n_send_frame(4u64)
+}
+fn hs4_do_get_head() -> i32 {
+    hs_committed_head((&N_HEAD as u64) as *u8)
+    let mut i : u64 = 0u64
+    while i < 32u64 { N_OUT[i] = N_HEAD[i]  i = i + 1u64 }
+    return n_send_frame(32u64)
+}
+fn hs4_do_tick() -> i32 {              /* advance the view (timeout) */
+    hs_tick(6000u32)
+    N_OUT[0u64] = 0x4Fu8
+    return n_send_frame(1u64)
+}
+
+fn main() -> u64 {
+    net_init()
+    let cap : u64 = cap_attenuate(cap_env_init(), 0x20u64, 0xFFFFFFFFFFFFFFFFu64)
+    net_pack_sockaddr_ipv4(&N_SADDR as u64, 0x7F000001u32, COORD_PORT)
+    N_SOCK[0] = 0u64
+    let mut tries : u32 = 0u32
+    while tries < 400u32 {
+        if N_SOCK[0] == 0u64 {
+            let h : u64 = net_tcp_connect_ipv4(cap, &N_SADDR as u64, 16u32)
+            if h != 0u64 { N_SOCK[0] = h } else { Sleep(25u32) }
+        }
+        tries = tries + 1u32
+    }
+    if N_SOCK[0] == 0u64 { return 1u64 }
+    let mut running : u8 = 1u8
+    while running == 1u8 {
+        if n_recv_all(&N_HDR as u64, 4u64) != 0i32 { running = 0u8 }
+        let mut flen : u32 = 0u32
+        if running == 1u8 {
+            flen = n_rd_u32(&N_HDR as u64)
+            if (flen as u64) > 600u64 { running = 0u8 }
+        }
+        if running == 1u8 {
+            if n_recv_all(&N_IN as u64, flen as u64) != 0i32 { running = 0u8 }
+        }
+        if running == 1u8 {
+            let op : u8 = N_IN[0u64]
+            if op == 0x49u8 { hs4_do_init() }
+            if op == 0x50u8 { hs4_do_propose() }
+            if op == 0x42u8 { hs4_do_handle_block() }
+            if op == 0x56u8 { hs4_do_make_vote() }
+            if op == 0x48u8 { hs4_do_handle_vote() }
+            if op == 0x43u8 { hs4_do_get_head() }
+            if op == 0x54u8 { hs4_do_tick() }
+            if op == 0x44u8 { running = 0u8 }
+        }
+    }
+    net_close(N_SOCK[0])
+    return 99u64
+}

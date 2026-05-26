@@ -1,0 +1,60 @@
+/* 392 -- KATABASIS increment 3: the nine descent cycle families (plan 3.0).
+ * Asserts the faithful taxonomy: each family's safety class + SID inverse kind,
+ * the dangerous trio (F2/F5/F9, the safe-write law of plan 3.9), and that every
+ * valid family has a derivable inverse (invariant #4).
+ * Exit 99 = all hold; 1..32 = the index of the failing assertion. */
+module corpus_392_katabasis_cycle_family
+
+extern @abi(c-msvc-x64) fn katabasis_cycle_family_valid(family: u32) -> u8 from "cycle_family.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_family_class(family: u32) -> u32 from "cycle_family.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_family_inverse(family: u32) -> u32 from "cycle_family.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_is_dangerous(family: u32) -> u8 from "cycle_family.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_has_inverse(family: u32) -> u8 from "cycle_family.iii"
+
+fn main() -> u64 {
+    /* validity: 1..9 valid; 0 and 10 invalid */
+    if katabasis_cycle_family_valid(0u32)  != 0u8 { return 1u64 }
+    if katabasis_cycle_family_valid(1u32)  != 1u8 { return 2u64 }
+    if katabasis_cycle_family_valid(9u32)  != 1u8 { return 3u64 }
+    if katabasis_cycle_family_valid(10u32) != 0u8 { return 4u64 }
+
+    /* safety classes (plan 3.0): READ_ONLY=1 WRITE_NEG=2 DESCEND_NEG=3
+     * POSITIVE=4 OBSERVE=5 GOVERNANCE=6 */
+    if katabasis_cycle_family_class(1u32) != 1u32 { return 5u64 }
+    if katabasis_cycle_family_class(2u32) != 2u32 { return 6u64 }
+    if katabasis_cycle_family_class(3u32) != 1u32 { return 7u64 }
+    if katabasis_cycle_family_class(4u32) != 4u32 { return 8u64 }
+    if katabasis_cycle_family_class(5u32) != 3u32 { return 9u64 }
+    if katabasis_cycle_family_class(6u32) != 5u32 { return 10u64 }
+    if katabasis_cycle_family_class(7u32) != 1u32 { return 11u64 }
+    if katabasis_cycle_family_class(8u32) != 6u32 { return 12u64 }
+    if katabasis_cycle_family_class(9u32) != 2u32 { return 13u64 }
+
+    /* SID inverse kinds (plan 3.0): IDENTITY=1 RECORDED=2 COW=3 VMEXIT=4
+     * GPU=5 CAP=6 */
+    if katabasis_cycle_family_inverse(1u32) != 1u32 { return 14u64 }
+    if katabasis_cycle_family_inverse(2u32) != 2u32 { return 15u64 }
+    if katabasis_cycle_family_inverse(3u32) != 1u32 { return 16u64 }
+    if katabasis_cycle_family_inverse(4u32) != 3u32 { return 17u64 }
+    if katabasis_cycle_family_inverse(5u32) != 4u32 { return 18u64 }
+    if katabasis_cycle_family_inverse(6u32) != 1u32 { return 19u64 }
+    if katabasis_cycle_family_inverse(7u32) != 1u32 { return 20u64 }
+    if katabasis_cycle_family_inverse(8u32) != 6u32 { return 21u64 }
+    if katabasis_cycle_family_inverse(9u32) != 5u32 { return 22u64 }
+
+    /* the dangerous trio shares the safe-write law (plan 3.9): F2, F5, F9 */
+    if katabasis_cycle_is_dangerous(1u32) != 0u8 { return 23u64 }
+    if katabasis_cycle_is_dangerous(2u32) != 1u8 { return 24u64 }
+    if katabasis_cycle_is_dangerous(3u32) != 0u8 { return 25u64 }
+    if katabasis_cycle_is_dangerous(5u32) != 1u8 { return 26u64 }
+    if katabasis_cycle_is_dangerous(6u32) != 0u8 { return 27u64 }
+    if katabasis_cycle_is_dangerous(9u32) != 1u8 { return 28u64 }
+
+    /* invariant #4: every valid family has a derivable inverse; invalid does not */
+    if katabasis_cycle_has_inverse(1u32)  != 1u8 { return 29u64 }
+    if katabasis_cycle_has_inverse(8u32)  != 1u8 { return 30u64 }
+    if katabasis_cycle_has_inverse(0u32)  != 0u8 { return 31u64 }
+    if katabasis_cycle_has_inverse(10u32) != 0u8 { return 32u64 }
+
+    return 99u64
+}

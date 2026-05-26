@@ -1,0 +1,130 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\obs_metric.iii
+ *
+ * III STDLIB - omnia::obs_metric -- counter / gauge / histogram metrics.
+ *
+ * Lattice plan Phase 14c Step 0140.  64-slot fixed metric registry.
+ * Each slot has a kind tag (counter / gauge / histogram), a primary
+ * u64 value, and a secondary u64 (count for histogram, last-update
+ * timestamp for gauge, lifetime-total for counter).
+ *
+ * Hardcoded-dynamism: kind is an opaque u32 the caller interprets;
+ * obs_metric_observe enforces the type-correct update path
+ * (counter += delta, gauge = v, histogram tracks min/max/count/sum).
+ *
+ * Public surface:
+ *   obs_metric_register(slot, kind)                     -> i32
+ *   obs_metric_kind(slot)                               -> u32
+ *   obs_metric_inc_counter(slot, delta)                 -> i32
+ *   obs_metric_set_gauge(slot, v)                       -> i32
+ *   obs_metric_observe_histogram(slot, v)               -> i32
+ *   obs_metric_value(slot)                              -> u64
+ *   obs_metric_secondary(slot)                          -> u64
+ *   obs_metric_count()                                  -> u32
+ *   obs_metric_clear_all()                              -> i32
+ *
+ * Kinds:
+ *   OBSM_KIND_COUNTER     = 1   (monotonic, value = sum of deltas)
+ *   OBSM_KIND_GAUGE       = 2   (last-write-wins, value = latest)
+ *   OBSM_KIND_HISTOGRAM   = 3   (value = sum, secondary = count)
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_obs_metric
+
+const OBSM_OK             : i32 =  0i32
+const OBSM_E_BADID        : i32 = -1i32
+const OBSM_E_BADKIND      : i32 = -2i32
+const OBSM_E_NOT_REG      : i32 = -3i32
+
+const OBSM_SLOTS          : u32 = 64u32
+
+const OBSM_KIND_NONE      : u32 = 0u32
+const OBSM_KIND_COUNTER   : u32 = 1u32
+const OBSM_KIND_GAUGE     : u32 = 2u32
+const OBSM_KIND_HISTOGRAM : u32 = 3u32
+
+var OBSM_KIND  : [u32; 64]
+var OBSM_VALUE : [u64; 64]
+var OBSM_SECON : [u64; 64]
+
+fn obs_metric_register(slot: u32, kind: u32) -> i32 @export {
+    let s_l : u32 = slot
+    let k_l : u32 = kind
+    if s_l >= OBSM_SLOTS { return OBSM_E_BADID }
+    if k_l == OBSM_KIND_NONE { return OBSM_E_BADKIND }
+    if k_l > OBSM_KIND_HISTOGRAM { return OBSM_E_BADKIND }
+    OBSM_KIND[s_l]  = k_l
+    OBSM_VALUE[s_l] = 0u64
+    OBSM_SECON[s_l] = 0u64
+    return OBSM_OK
+}
+
+fn obs_metric_kind(slot: u32) -> u32 @export {
+    let s_l : u32 = slot
+    if s_l >= OBSM_SLOTS { return OBSM_KIND_NONE }
+    return OBSM_KIND[s_l]
+}
+
+fn obs_metric_inc_counter(slot: u32, delta: u64) -> i32 @export {
+    let s_l : u32 = slot
+    let d_l : u64 = delta
+    if s_l >= OBSM_SLOTS { return OBSM_E_BADID }
+    if OBSM_KIND[s_l] != OBSM_KIND_COUNTER { return OBSM_E_BADKIND }
+    OBSM_VALUE[s_l] = OBSM_VALUE[s_l] + d_l
+    OBSM_SECON[s_l] = OBSM_SECON[s_l] + 1u64   /* observation count */
+    return OBSM_OK
+}
+
+fn obs_metric_set_gauge(slot: u32, v: u64) -> i32 @export {
+    let s_l : u32 = slot
+    let v_l : u64 = v
+    if s_l >= OBSM_SLOTS { return OBSM_E_BADID }
+    if OBSM_KIND[s_l] != OBSM_KIND_GAUGE { return OBSM_E_BADKIND }
+    OBSM_VALUE[s_l] = v_l
+    OBSM_SECON[s_l] = OBSM_SECON[s_l] + 1u64   /* update count */
+    return OBSM_OK
+}
+
+fn obs_metric_observe_histogram(slot: u32, v: u64) -> i32 @export {
+    let s_l : u32 = slot
+    let v_l : u64 = v
+    if s_l >= OBSM_SLOTS { return OBSM_E_BADID }
+    if OBSM_KIND[s_l] != OBSM_KIND_HISTOGRAM { return OBSM_E_BADKIND }
+    OBSM_VALUE[s_l] = OBSM_VALUE[s_l] + v_l    /* sum */
+    OBSM_SECON[s_l] = OBSM_SECON[s_l] + 1u64   /* count */
+    return OBSM_OK
+}
+
+fn obs_metric_value(slot: u32) -> u64 @export {
+    let s_l : u32 = slot
+    if s_l >= OBSM_SLOTS { return 0u64 }
+    return OBSM_VALUE[s_l]
+}
+
+fn obs_metric_secondary(slot: u32) -> u64 @export {
+    let s_l : u32 = slot
+    if s_l >= OBSM_SLOTS { return 0u64 }
+    return OBSM_SECON[s_l]
+}
+
+fn obs_metric_count() -> u32 @export {
+    let mut count : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < OBSM_SLOTS {
+        if OBSM_KIND[s] != OBSM_KIND_NONE { count = count + 1u32 }
+        s = s + 1u32
+    }
+    return count
+}
+
+fn obs_metric_clear_all() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < OBSM_SLOTS {
+        OBSM_KIND[s]  = OBSM_KIND_NONE
+        OBSM_VALUE[s] = 0u64
+        OBSM_SECON[s] = 0u64
+        s = s + 1u32
+    }
+    return OBSM_OK
+}

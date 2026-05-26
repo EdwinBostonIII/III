@@ -1,0 +1,397 @@
+/* III/STDLIB/iii/aether/distress_witness.iii -- Layer 11, Module 48 (gospel).
+ *
+ * Signed distress witness producer.  On a constitutionally significant anomaly
+ * (Tier-2/3 recovery, triple-check disagreement, predicted quiescence,
+ * forbidden write, audit failure) it freezes the local context-awareness
+ * snapshot, signs kind||len||payload||snapshot||node_id with the node
+ * COMMUNICATION key (separate from the witness key so one key's compromise
+ * never reveals the other -- M-level key separation), publishes a witness
+ * fragment via wh_publish (chained, signed-in-transit -- W16/M6), and records
+ * the frag id in a bounded federation-correlation outbox ring.
+ *
+ * Distress kinds: TIER2_RECOVERY, TIER3_RECOVERY, TC_DISAGREE_21,
+ *   TC_DISAGREE_FATAL, PREDICTIVE_QUIESCENCE, FORBIDDEN_WRITE, AUDIT_FAILURE.
+ *
+ * Public API:
+ *   dw_init(comm_cap)                            -> i32 (M8 capability gate)
+ *   dw_produce(kind, payload, payload_len, args) -> u64 (frag idx; sentinel on fail)
+ *   dw_outbox_count()                            -> u32
+ *   dw_outbox_at(idx, out_frag_id)               -> i32
+ *   dw_last_frag_id(out_frag_id)                 -> i32
+ *
+ * args bundle (W2 fold): args[0..8] = comm_cap (LE u64, reserved/future);
+ *                        args[8..40] = out_frag_id sink (written on success).
+ *   (The cap is captured at dw_init; dw_produce reads no cap from args -- it
+ *    re-verifies the stored DWIT_COMM_CAP, revocation-safe.  args carries the
+ *    write-through frag id so callers keep the gospel's single-call ergonomics.)
+ *
+ * NON-REENTRANT: module-scope assembly scratch; witness emission is serialized
+ *   through the single-writer wh_publish/at_advance, which is correct.
+ * Hexad: kind_witness (+ kind_passage).  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (<=4 params), W5 (LE byte-exact), W8 (static arenas),
+ *             W9/W10/W12 (neg-i32 errors, u8 flags, sentinel return),
+ *             W13 (<=20 locals), W14 (counter loops, no break), W15 (no
+ *             recursion), W16 (reversible revtag).
+ *
+ * SPEC CORRECTIONS applied here (the .spec.md is authoritative on intent, but
+ *   carries two arithmetic slips, fixed to honour the intent):
+ *   1. opid string "aether::distress_witness::produce" is 33 bytes, not the
+ *      spec's stated 32 (a..witness = 24, then "::produce" = 9 -> 33).  Both
+ *      ids derive from one DWIT_OPID_STR[33]: producer = ident_from_bytes(_,24),
+ *      opid = ident_from_bytes(_,33).
+ *   2. node_identity.iii + context_awareness.iii are BUILT (spec said
+ *      NOT-YET-BUILT); the externs below bind to their real providers and
+ *      dw_selftest runs the full KAT vertical now, not in a deferred phase.
+ *   3. antecedent source is a dedicated DWIT_PREV_FRAG buffer, never the
+ *      DWIT_LAST_FRAG that receives wh_publish's out_frag_id (eliminates any
+ *      read-vs-write aliasing on the same 32 bytes inside wh_publish).
+ *   4. all buffer access is via *u8 byte pointers (stride-1, contiguous);
+ *      DWIT_OUTBOX is [u64;16384] (4096 ids x 4 u64) per the WH_PROD_ID
+ *      frugal id-array idiom -- never [u8;131072] (Trap 19 8x reservation).
+ */
+module aether_distress_witness
+
+/* --- runtime dependencies (signatures verified against real providers) --- */
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_is_zero(a: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ni_communication_sign(msg: *u8, msg_len: u64, out_sig: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_node_id(out_id: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ca_anomaly_score() -> u64 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn ca_metric_at(metric: u32) -> u64 from "context_awareness.iii"
+
+/* --- KAT-harness externs (drive the substrate for the gated self-test) --- */
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ni_init(args: *u8) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ca_init() -> i32 from "context_awareness.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_ante_count(idx: u64) -> u32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_ante(idx: u64, ante_idx: u32, out_id: *u8) -> i32 from "witness_hook.iii"
+
+const DWIT_OK            : i32 =  0i32
+const DWIT_E_BAD         : i32 = -1i32
+const DWIT_E_CAP         : i32 = -2i32
+const DWIT_E_PAYLOAD     : i32 = -3i32
+const DWIT_E_FULL        : i32 = -4i32
+
+const DWIT_KIND_TIER2_RECOVERY        : u8 = 1u8
+const DWIT_KIND_TIER3_RECOVERY        : u8 = 2u8
+const DWIT_KIND_TC_DISAGREE_21        : u8 = 3u8
+const DWIT_KIND_TC_DISAGREE_FATAL     : u8 = 4u8
+const DWIT_KIND_PREDICTIVE_QUIESCENCE : u8 = 5u8
+const DWIT_KIND_FORBIDDEN_WRITE       : u8 = 6u8
+const DWIT_KIND_AUDIT_FAILURE         : u8 = 7u8
+const DWIT_KIND_MIN                   : u8 = 1u8
+const DWIT_KIND_MAX                   : u8 = 7u8
+
+const DWIT_MAX_OUTBOX      : u32 = 4096u32
+const DWIT_RING_MASK       : u32 = 4095u32     /* DWIT_MAX_OUTBOX-1 (power-of-two ring mask, Trap 11) */
+const DWIT_PAYLOAD_MAX     : u32 = 3968u32     /* 4096 - 5(hdr) - 16(snap) - 32(nid) - 64(sig) */
+const DWIT_HDR_BYTES       : u64 = 5u64        /* 1B kind + 4B LE u32 payload_len */
+const DWIT_PILLAR          : u16 = 7u16        /* aether/federation pillar */
+const DWIT_PHASE           : u8  = 10u8        /* distress phase tag */
+const DWIT_REVTAG          : u8  = 1u8         /* reversible-emission tag (W16) */
+const DWIT_REQUIRED_RIGHTS : u64 = 0x1800u64   /* CAP_RIGHT_CRYPTO_SIGN(0x1000)|CAP_RIGHT_ATTEST(0x0800) */
+const DWIT_U64_SENT        : u64 = 0xFFFFFFFFFFFFFFFFu64
+const DWIT_METRIC_EM_DIST  : u32 = 15u32       /* entropy-monitor distance metric index */
+
+/* 4096 fragment ids x 32 bytes = 131072 bytes = 16384 u64 (WH_PROD_ID idiom). */
+var DWIT_OUTBOX     : [u64; 16384]
+var DWIT_OUT_COUNT  : u32 = 0u32
+var DWIT_OUT_HEAD   : u32 = 0u32
+var DWIT_PRODUCER   : [u8; 32]
+var DWIT_OPID       : [u8; 32]
+var DWIT_OPID_STR   : [u8; 33]      /* "aether::distress_witness::produce" (producer = first 24) */
+var DWIT_COMM_CAP   : u64 = 0u64
+var DWIT_INITED     : u8  = 0u8
+var DWIT_BUF        : [u8; 4096]    /* distress-message assembly scratch */
+var DWIT_SIG        : [u8; 64]      /* Ed25519 detached signature scratch */
+var DWIT_IN_C       : [u8; 32]      /* in_commit = wh_chain_root */
+var DWIT_OUT_C      : [u8; 32]      /* out_commit = ident_from_bytes(assembled msg) */
+var DWIT_NODE_ID    : [u8; 32]      /* ni_node_id sink */
+var DWIT_LAST_FRAG  : [u8; 32]      /* wh_publish out_frag_id sink (most recent) */
+var DWIT_PREV_FRAG  : [u8; 32]      /* previous frag id (antecedent source; never aliased with LAST) */
+var DWIT_HAVE_PREV  : u8  = 0u8
+
+/* --- self-test scratch --- */
+var DWIT_T_PAY      : [u8; 64]
+var DWIT_T_FRAG     : [u8; 32]
+var DWIT_T_FRAG2    : [u8; 32]
+var DWIT_T_ARGS     : [u8; 40]
+var DWIT_NI_HW      : [u8; 8]       /* node-id hw seed "HW0" */
+var DWIT_NI_BS      : [u8; 8]       /* node-id bootstrap seed "BS0" */
+var DWIT_NI_ARGS    : [u8; 32]      /* NodeIdInitArgs bundle */
+
+/* ============================ internal helpers ============================ */
+
+/* Byte pointer to outbox ring slot idx (idx caller-bounded < 4096; widen-mask
+ * before the multiply per Trap 4). */
+fn dwit_outbox_ptr(idx: u32) -> *u8 { return ((&DWIT_OUTBOX as u64) + ((idx as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+
+/* Fill DWIT_OPID_STR with the 33 ASCII bytes of the canonical op name. */
+fn dwit_build_optag() -> i32 {
+    let sp : *u8 = (&DWIT_OPID_STR as u64) as *u8
+    sp[0u64]  = 0x61u8  sp[1u64]  = 0x65u8  sp[2u64]  = 0x74u8  sp[3u64]  = 0x68u8  sp[4u64]  = 0x65u8  sp[5u64]  = 0x72u8
+    sp[6u64]  = 0x3Au8  sp[7u64]  = 0x3Au8
+    sp[8u64]  = 0x64u8  sp[9u64]  = 0x69u8  sp[10u64] = 0x73u8  sp[11u64] = 0x74u8  sp[12u64] = 0x72u8  sp[13u64] = 0x65u8  sp[14u64] = 0x73u8  sp[15u64] = 0x73u8
+    sp[16u64] = 0x5Fu8
+    sp[17u64] = 0x77u8  sp[18u64] = 0x69u8  sp[19u64] = 0x74u8  sp[20u64] = 0x6Eu8  sp[21u64] = 0x65u8  sp[22u64] = 0x73u8  sp[23u64] = 0x73u8
+    sp[24u64] = 0x3Au8  sp[25u64] = 0x3Au8
+    sp[26u64] = 0x70u8  sp[27u64] = 0x72u8  sp[28u64] = 0x6Fu8  sp[29u64] = 0x64u8  sp[30u64] = 0x75u8  sp[31u64] = 0x63u8  sp[32u64] = 0x65u8
+    return DWIT_OK
+}
+
+/* Antecedent pointer + count (M6/W16 intra-distress-stream hash linkage). */
+fn dwit_ante_ptr() -> u64 {
+    if DWIT_HAVE_PREV == 1u8 { return &DWIT_PREV_FRAG as u64 }
+    return &DWIT_OUT_C as u64
+}
+fn dwit_ante_count() -> u32 {
+    if DWIT_HAVE_PREV == 1u8 { return 1u32 }
+    return 0u32
+}
+
+/* Assemble the distress message into DWIT_BUF; return assembled length (off),
+ * or 0 on signing failure (off is never 0 on success -- header is 5 bytes). */
+fn dwit_assemble(vkind: u8, pp: u64, plen: u32) -> u64 {
+    let bpp : *u8 = (&DWIT_BUF as u64) as *u8
+    let pl  : u64 = (plen as u64) & 0xFFFFFFFFu64
+    bpp[0u64] = vkind
+    bpp[1u64] = (pl & 0xFFu64) as u8
+    bpp[2u64] = ((pl >> 8u64) & 0xFFu64) as u8
+    bpp[3u64] = ((pl >> 16u64) & 0xFFu64) as u8
+    bpp[4u64] = ((pl >> 24u64) & 0xFFu64) as u8
+    let mut off : u64 = 5u64
+    let src : *u8 = pp as *u8
+    let mut i : u64 = 0u64
+    while i < pl { bpp[off + i] = src[i]  i = i + 1u64 }
+    off = off + pl
+    let score : u64 = ca_anomaly_score()
+    let mut j : u64 = 0u64
+    while j < 8u64 { bpp[off + j] = ((score >> (j * 8u64)) & 0xFFu64) as u8  j = j + 1u64 }
+    off = off + 8u64
+    let emd : u64 = ca_metric_at(DWIT_METRIC_EM_DIST)
+    let mut k : u64 = 0u64
+    while k < 8u64 { bpp[off + k] = ((emd >> (k * 8u64)) & 0xFFu64) as u8  k = k + 1u64 }
+    off = off + 8u64
+    ni_node_id((&DWIT_NODE_ID as u64) as *u8)
+    let nidp : *u8 = (&DWIT_NODE_ID as u64) as *u8
+    let mut m : u64 = 0u64
+    while m < 32u64 { bpp[off + m] = nidp[m]  m = m + 1u64 }
+    off = off + 32u64
+    if ni_communication_sign(bpp, off, (&DWIT_SIG as u64) as *u8) != 0i32 { return 0u64 }
+    let sigp : *u8 = (&DWIT_SIG as u64) as *u8
+    let mut n : u64 = 0u64
+    while n < 64u64 { bpp[off + n] = sigp[n]  n = n + 1u64 }
+    off = off + 64u64
+    return off
+}
+
+/* Record a successful publication: write-through to args[8..40], append to the
+ * outbox ring, advance head (power-of-two mask), saturate count, and roll the
+ * antecedent chain (PREV <- LAST) so the next produce cites this fragment. */
+fn dwit_record(ap: u64) -> i32 {
+    ident_copy((&DWIT_LAST_FRAG as u64) as *u8, (ap + 8u64) as *u8)
+    ident_copy((&DWIT_LAST_FRAG as u64) as *u8, dwit_outbox_ptr(DWIT_OUT_HEAD))
+    DWIT_OUT_HEAD = (DWIT_OUT_HEAD + 1u32) & DWIT_RING_MASK
+    if DWIT_OUT_COUNT < DWIT_MAX_OUTBOX { DWIT_OUT_COUNT = DWIT_OUT_COUNT + 1u32 }
+    ident_copy((&DWIT_LAST_FRAG as u64) as *u8, (&DWIT_PREV_FRAG as u64) as *u8)
+    DWIT_HAVE_PREV = 1u8
+    return DWIT_OK
+}
+
+/* ============================== public API =============================== */
+
+fn dw_init(comm_cap: u64) -> i32 @export {
+    let cc : u64 = comm_cap
+    DWIT_OUT_COUNT = 0u32
+    DWIT_OUT_HEAD  = 0u32
+    DWIT_HAVE_PREV = 0u8
+    dwit_build_optag()
+    ident_from_bytes((&DWIT_OPID_STR as u64) as *u8, 24u64, (&DWIT_PRODUCER as u64) as *u8)
+    ident_from_bytes((&DWIT_OPID_STR as u64) as *u8, 33u64, (&DWIT_OPID as u64) as *u8)
+    if cap_verify_rights(cc, DWIT_REQUIRED_RIGHTS) != 1u8 { DWIT_INITED = 0u8  return DWIT_E_CAP }
+    DWIT_COMM_CAP = cc
+    DWIT_INITED = 1u8
+    return DWIT_OK
+}
+
+fn dw_produce(kind: u8, payload: *u8, payload_len: u32, args: *u8) -> u64 @export {
+    let vkind : u8  = kind
+    let plen  : u32 = payload_len
+    let pp    : u64 = payload as u64
+    let ap    : u64 = args as u64
+    if DWIT_INITED == 0u8 { return DWIT_U64_SENT }
+    if vkind < DWIT_KIND_MIN { return DWIT_U64_SENT }
+    if vkind > DWIT_KIND_MAX { return DWIT_U64_SENT }
+    if plen > DWIT_PAYLOAD_MAX { return DWIT_U64_SENT }
+    if cap_verify_rights(DWIT_COMM_CAP, DWIT_REQUIRED_RIGHTS) != 1u8 { return DWIT_U64_SENT }
+    let off : u64 = dwit_assemble(vkind, pp, plen)
+    if off == 0u64 { return DWIT_U64_SENT }
+    wh_chain_root((&DWIT_IN_C as u64) as *u8)
+    ident_from_bytes((&DWIT_BUF as u64) as *u8, off, (&DWIT_OUT_C as u64) as *u8)
+    let ante  : u64 = dwit_ante_ptr()
+    let nante : u32 = dwit_ante_count()
+    let fidx  : u64 = wh_publish((&DWIT_PRODUCER as u64) as *u8, (&DWIT_OPID as u64) as *u8, (&DWIT_IN_C as u64) as *u8, (&DWIT_OUT_C as u64) as *u8, DWIT_REVTAG, DWIT_PHASE, DWIT_PILLAR, ante as *u8, nante, (&DWIT_BUF as u64) as *u8, off as u32, (&DWIT_LAST_FRAG as u64) as *u8)
+    if fidx == DWIT_U64_SENT { return DWIT_U64_SENT }
+    dwit_record(ap)
+    return fidx
+}
+
+fn dw_outbox_count() -> u32 @export { return DWIT_OUT_COUNT }
+
+fn dw_outbox_at(idx: u32, out_frag_id: *u8) -> i32 @export {
+    let vi : u32 = idx
+    if vi >= DWIT_OUT_COUNT { return DWIT_E_BAD }
+    let ri : u32 = (DWIT_OUT_HEAD + DWIT_MAX_OUTBOX - DWIT_OUT_COUNT + vi) & DWIT_RING_MASK
+    ident_copy(dwit_outbox_ptr(ri), out_frag_id)
+    return DWIT_OK
+}
+
+fn dw_last_frag_id(out_frag_id: *u8) -> i32 @export {
+    if DWIT_HAVE_PREV == 0u8 { return DWIT_E_BAD }
+    ident_copy((&DWIT_LAST_FRAG as u64) as *u8, out_frag_id)
+    return DWIT_OK
+}
+
+/* ============================== self-test ================================ */
+
+/* Replicate node_identity's proven selftest NodeIdInitArgs bundle (hw="HW0",
+ * bs="BS0", 3-byte seeds), written via *u8 byte pointers (stride-1 == ni_init's
+ * *u8 read).  args[0..8]=hw ptr, [8..12]=hw len(3), [16..24]=bs ptr, [24..28]=bs len(3). */
+fn dwit_st_build_ni_args() -> i32 {
+    let hwp : *u8 = (&DWIT_NI_HW as u64) as *u8
+    let bsp : *u8 = (&DWIT_NI_BS as u64) as *u8
+    hwp[0u64] = 0x48u8  hwp[1u64] = 0x57u8  hwp[2u64] = 0x30u8
+    bsp[0u64] = 0x42u8  bsp[1u64] = 0x53u8  bsp[2u64] = 0x30u8
+    let ap : *u8 = (&DWIT_NI_ARGS as u64) as *u8
+    let hwa : u64 = &DWIT_NI_HW as u64
+    let bsa : u64 = &DWIT_NI_BS as u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { ap[i] = ((hwa >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    ap[8u64]  = 0x03u8  ap[9u64]  = 0x00u8  ap[10u64] = 0x00u8  ap[11u64] = 0x00u8
+    ap[12u64] = 0x00u8  ap[13u64] = 0x00u8  ap[14u64] = 0x00u8  ap[15u64] = 0x00u8
+    let mut j : u64 = 0u64
+    while j < 8u64 { ap[16u64 + j] = ((bsa >> (j * 8u64)) & 0xFFu64) as u8  j = j + 1u64 }
+    ap[24u64] = 0x03u8  ap[25u64] = 0x00u8  ap[26u64] = 0x00u8  ap[27u64] = 0x00u8
+    ap[28u64] = 0x00u8  ap[29u64] = 0x00u8  ap[30u64] = 0x00u8  ap[31u64] = 0x00u8
+    return DWIT_OK
+}
+
+/* Bring up the full substrate vertical the producer depends on. */
+fn dwit_st_init() -> u64 {
+    wh_init(0u64)
+    cap_env_init()
+    dwit_st_build_ni_args()
+    if ni_init((&DWIT_NI_ARGS as u64) as *u8) != 0i32 { return 1u64 }
+    if ca_init() != 0i32 { return 2u64 }
+    return 0u64
+}
+
+/* KAT-1: M8 capability gate -- FAILS closed on insufficient rights (proves the
+ * rights mask, not mere existence) and on an unregistered id; passes on root. */
+fn dw_selftest_k1() -> u64 {
+    DWIT_INITED = 0u8
+    let bad : u64 = cap_attenuate(1u64, 0x0800u64, 0u64)   /* child of root: ATTEST only, no CRYPTO_SIGN */
+    if bad == 0u64 { return 9u64 }
+    if dw_init(bad) != DWIT_E_CAP { return 10u64 }          /* missing CRYPTO_SIGN -> refused */
+    if DWIT_INITED != 0u8 { return 11u64 }                  /* refusal leaves producer disarmed */
+    if dw_init(0xDEADu64) != DWIT_E_CAP { return 12u64 }    /* unregistered id -> refused */
+    if dw_init(1u64) != DWIT_OK { return 13u64 }            /* root (all rights) -> armed */
+    if DWIT_INITED != 1u8 { return 14u64 }
+    return 0u64
+}
+
+/* KAT-2: produce -> outbox round-trip, monotone fragment index (exactly one
+ * wh_publish per produce), write-through id == outbox[0] == last_frag_id, and
+ * two distinct-kind productions yield distinct ids + count 2. */
+fn dw_selftest_k2() -> u64 {
+    if dw_init(1u64) != DWIT_OK { return 19u64 }
+    let tp : *u8 = (&DWIT_T_PAY as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 64u64 { tp[i] = ((i * 3u64 + 1u64) & 0xFFu64) as u8  i = i + 1u64 }
+    let pre : u64 = wh_next_idx()
+    let idx0 : u64 = dw_produce(DWIT_KIND_TIER2_RECOVERY, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8)
+    if idx0 != pre { return 20u64 }
+    if dw_outbox_count() != 1u32 { return 21u64 }
+    if dw_outbox_at(0u32, (&DWIT_T_FRAG as u64) as *u8) != DWIT_OK { return 22u64 }
+    if ident_is_zero((&DWIT_T_FRAG as u64) as *u8) != 0u8 { return 23u64 }
+    if ident_eq((&DWIT_T_FRAG as u64) as *u8, ((&DWIT_T_ARGS as u64) + 8u64) as *u8) != 1u8 { return 24u64 }
+    if dw_last_frag_id((&DWIT_T_FRAG2 as u64) as *u8) != DWIT_OK { return 25u64 }
+    if ident_eq((&DWIT_T_FRAG as u64) as *u8, (&DWIT_T_FRAG2 as u64) as *u8) != 1u8 { return 26u64 }
+    let idx1 : u64 = dw_produce(DWIT_KIND_AUDIT_FAILURE, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8)
+    if idx1 != (idx0 + 1u64) { return 27u64 }
+    if dw_outbox_count() != 2u32 { return 28u64 }
+    if dw_outbox_at(0u32, (&DWIT_T_FRAG as u64) as *u8) != DWIT_OK { return 29u64 }
+    if dw_outbox_at(1u32, (&DWIT_T_FRAG2 as u64) as *u8) != DWIT_OK { return 30u64 }
+    if ident_eq((&DWIT_T_FRAG as u64) as *u8, (&DWIT_T_FRAG2 as u64) as *u8) != 0u8 { return 31u64 }
+    return 0u64
+}
+
+/* KAT-3: M6 antecedent chaining -- read the RECORDED antecedent set from the
+ * witness hook (not a confounded id-difference): first distress fragment cites
+ * 0 antecedents; the second cites exactly 1, and it IS the first's id. */
+fn dw_selftest_k3() -> u64 {
+    if dw_init(1u64) != DWIT_OK { return 39u64 }
+    let tp : *u8 = (&DWIT_T_PAY as u64) as *u8
+    let a0 : u64 = wh_next_idx()
+    if dw_produce(DWIT_KIND_TIER2_RECOVERY, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8) == DWIT_U64_SENT { return 40u64 }
+    if dw_last_frag_id((&DWIT_T_FRAG as u64) as *u8) != DWIT_OK { return 41u64 }   /* fragment a0's id */
+    let a1 : u64 = wh_next_idx()
+    if dw_produce(DWIT_KIND_AUDIT_FAILURE, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8) == DWIT_U64_SENT { return 42u64 }
+    if wh_get_ante_count(a0) != 0u32 { return 43u64 }                              /* first frag: no antecedent */
+    if wh_get_ante_count(a1) != 1u32 { return 44u64 }                              /* second frag: exactly one */
+    if wh_get_ante(a1, 0u32, (&DWIT_T_FRAG2 as u64) as *u8) != 0i32 { return 45u64 }
+    if ident_eq((&DWIT_T_FRAG as u64) as *u8, (&DWIT_T_FRAG2 as u64) as *u8) != 1u8 { return 46u64 }  /* antecedent == a0's id */
+    return 0u64
+}
+
+/* KAT-4: payload-bound negative -- over-long payload refused (sentinel), no
+ * fragment emitted, outbox untouched. */
+fn dw_selftest_k4() -> u64 {
+    if dw_init(1u64) != DWIT_OK { return 49u64 }
+    let tp : *u8 = (&DWIT_T_PAY as u64) as *u8
+    let nb : u64 = wh_next_idx()
+    if dw_produce(DWIT_KIND_FORBIDDEN_WRITE, tp, DWIT_PAYLOAD_MAX + 1u32, (&DWIT_T_ARGS as u64) as *u8) != DWIT_U64_SENT { return 50u64 }
+    if wh_next_idx() != nb { return 51u64 }
+    if dw_outbox_count() != 0u32 { return 52u64 }
+    return 0u64
+}
+
+/* KAT-5: uninit + bad-kind negatives -- uninitialized produce refused; kind 0
+ * (< MIN) and kind 8 (> MAX) refused; no emission on any. */
+fn dw_selftest_k5() -> u64 {
+    let tp : *u8 = (&DWIT_T_PAY as u64) as *u8
+    DWIT_INITED = 0u8
+    if dw_produce(DWIT_KIND_TIER2_RECOVERY, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8) != DWIT_U64_SENT { return 59u64 }
+    if dw_init(1u64) != DWIT_OK { return 60u64 }
+    let nb : u64 = wh_next_idx()
+    if dw_produce(0u8, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8) != DWIT_U64_SENT { return 61u64 }
+    if dw_produce(8u8, tp, 64u32, (&DWIT_T_ARGS as u64) as *u8) != DWIT_U64_SENT { return 62u64 }
+    if wh_next_idx() != nb { return 63u64 }
+    if dw_outbox_count() != 0u32 { return 64u64 }
+    return 0u64
+}
+
+fn dw_selftest() -> u64 @export {
+    let si : u64 = dwit_st_init()
+    if si != 0u64 { return si }
+    let r1 : u64 = dw_selftest_k1()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = dw_selftest_k2()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = dw_selftest_k3()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = dw_selftest_k4()
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = dw_selftest_k5()
+    if r5 != 0u64 { return r5 }
+    return 99u64
+}

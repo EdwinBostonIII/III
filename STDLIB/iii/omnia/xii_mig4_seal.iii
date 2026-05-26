@@ -1,0 +1,212 @@
+/* STDLIB/iii/omnia/xii_mig4_seal.iii -- mig4 Step 10: retire the syntactic path + SEAL.
+ * The terminal step of "route all computation through XII".  Steps 1-9 built the declarative rule
+ * layer (1-3), proved the engine confluent-as-used + terminating + admitted (4-6), lowered the
+ * structured-programming trinity (7-8), and migrated a caller (9).  Step 10 closes the chain with:
+ *
+ *   (A) THE TERMINAL GATE -- xms_run_terminal folds ALL thirteen mig4 stage selftests
+ *       (xrp/xro/cpe/xjn/xtm/xad/xlc/xld/xli/xlp/xlt/xlw/xlu) into ONE verdict: GREEN (99) iff every stage holds,
+ *       else the 1-based index of the first failing stage.  This is the single "migration complete"
+ *       certificate -- the syntactic path is RETIRED in the sense that every lowered computation now
+ *       reduces through the one engine and the whole chain is proven green as a unit (not just per-test).
+ *
+ *   (B) THE CONTENT-ADDRESS SEAL -- xms_seal_digest hashes (via cad) a canonical battery of the
+ *       lowered domains' NORMAL FORMS: a composition product, a collapsing decision, a folding loop,
+ *       and the grand mix.  Each NF is walked kind-aware (basis/TRIT_VAL = leaf; FCOMPOSE/FTHEN/FWITH/
+ *       FUNDER/TRIT-op = 2 children; FIF = 3; FLOOP = body only, count in aux) and every node's
+ *       (kind, subform, aux) is streamed into the digest.  The seal is the migration's behavioural
+ *       fingerprint: any future drift in a rule or the engine that changes a normal form changes the
+ *       seal.  Proven DETERMINISTIC (hashing twice agrees) and non-trivial (non-zero) -- a golden
+ *       value is deliberately NOT pinned (the rule set may legitimately evolve; the lib mhash is the
+ *       byte-level drift gate; this seal pins reproducibility of the migrated SEMANTICS).
+ *
+ * Gated by xad_admit.  Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: the Steps 1-9 mig4 modules +
+ * xii_term + xii_canonicalise + cad only.  Determinism: integer-only; ==/!= compares; single-line
+ * fns; byte-by-byte LE writes (no wide-store trap); module-scope scratch (no local arrays); the
+ * cad address idiom (&BUF as u64).
+ */
+module omnia_xii_mig4_seal
+
+extern @abi(c-msvc-x64) fn xrp_selftest() -> u64 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xro_selftest() -> u64 from "xii_rule_overlap.iii"
+extern @abi(c-msvc-x64) fn cpe_selftest() -> u64 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn xjn_selftest() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xtm_selftest() -> u64 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn xad_selftest() -> u64 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xlc_selftest() -> u64 from "xii_lower_compose.iii"
+extern @abi(c-msvc-x64) fn xld_selftest() -> u64 from "xii_lower_decide.iii"
+extern @abi(c-msvc-x64) fn xli_selftest() -> u64 from "xii_lower_iterate.iii"
+extern @abi(c-msvc-x64) fn xlp_selftest() -> u64 from "xii_lower_program.iii"
+extern @abi(c-msvc-x64) fn xlt_selftest() -> u64 from "xii_lower_then.iii"
+extern @abi(c-msvc-x64) fn xlw_selftest() -> u64 from "xii_lower_with.iii"
+extern @abi(c-msvc-x64) fn xlu_selftest() -> u64 from "xii_lower_under.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const XMS_NULL_REF : u32 = 0xFFFFFFFFu32
+const XMS_SUITE    : u32 = 0u32     /* cad suite 0 = SHA-256 (same as katabasis/seal.iii) */
+const XMS_FCOMPOSE : u8  = 18u8
+const XMS_FTHEN    : u8  = 19u8
+const XMS_FWITH    : u8  = 20u8
+const XMS_FUNDER   : u8  = 21u8
+const XMS_FIF      : u8  = 22u8
+const XMS_FLOOP    : u8  = 23u8
+const XMS_TVAL     : u8  = 24u8
+const XMS_K01      : u8  = 0u8
+const XMS_K12      : u8  = 11u8
+const XMS_K13      : u8  = 12u8
+const XMS_NODEMARK : u8  = 0xFFu8   /* null-child marker in the serialisation */
+
+var XMS_NODE : [u8; 16]    /* one node's serialised bytes: kind(1) subform(4 LE) aux(8 LE) = 13 */
+var XMS_DIG1 : [u8; 32]
+var XMS_DIG2 : [u8; 32]
+
+/* stream one node's (kind, subform, aux) into the open cad digest -- 13 bytes, little-endian,
+ * byte-by-byte (no wide store). */
+fn _xms_feed_node(t: u32) -> i32 {
+    let sf : u32 = xii_term_get_subform(t)
+    let ax : u64 = xii_term_get_aux(t)
+    XMS_NODE[0u64] = xii_term_get_kind(t)
+    XMS_NODE[1u64] = (sf & 0xFFu32) as u8
+    XMS_NODE[2u64] = ((sf >> 8u32) & 0xFFu32) as u8
+    XMS_NODE[3u64] = ((sf >> 16u32) & 0xFFu32) as u8
+    XMS_NODE[4u64] = ((sf >> 24u32) & 0xFFu32) as u8
+    XMS_NODE[5u64] = (ax & 0xFFu64) as u8
+    XMS_NODE[6u64] = ((ax >> 8u64) & 0xFFu64) as u8
+    XMS_NODE[7u64] = ((ax >> 16u64) & 0xFFu64) as u8
+    XMS_NODE[8u64] = ((ax >> 24u64) & 0xFFu64) as u8
+    XMS_NODE[9u64] = ((ax >> 32u64) & 0xFFu64) as u8
+    XMS_NODE[10u64] = ((ax >> 40u64) & 0xFFu64) as u8
+    XMS_NODE[11u64] = ((ax >> 48u64) & 0xFFu64) as u8
+    XMS_NODE[12u64] = ((ax >> 56u64) & 0xFFu64) as u8
+    cad_payload((&XMS_NODE as u64), 13u64)
+    return 0i32
+}
+
+/* walk a term NF, streaming every node into the digest.  Kind-aware child arity (FLOOP = body only,
+ * its count already captured in aux; FIF = 3 children; basis/TRIT_VAL = leaf; else 2). */
+fn _xms_walk(t: u32) -> i32 {
+    if t == XMS_NULL_REF {
+        XMS_NODE[0u64] = XMS_NODEMARK
+        cad_payload((&XMS_NODE as u64), 1u64)
+        return 0i32
+    }
+    _xms_feed_node(t)
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= 17u8 { return 0i32 }
+    if kind == XMS_TVAL { return 0i32 }
+    if kind == XMS_FLOOP { _xms_walk(xii_term_get_child_a(t))  return 0i32 }
+    _xms_walk(xii_term_get_child_a(t))
+    _xms_walk(xii_term_get_child_b(t))
+    if kind == XMS_FIF { _xms_walk(xii_term_get_child_c(t)) }
+    return 0i32
+}
+
+/* SEAL: hash the canonical battery of lowered-domain normal forms into the 32-byte digest at
+ * out_addr.  Deterministic (canonicalise is deterministic) -> the migration's behavioural fingerprint. */
+fn xms_seal_digest(out_addr: u64) -> i32 @export {
+    cad_begin(XMS_SUITE)
+    /* item 1: composition product  (a.b).c -> a.(b.c) */
+    xii_term_arena_reset()
+    let t1 : u32 = xii_term_make_fusion2(XMS_FCOMPOSE, xii_term_make_fusion2(XMS_FCOMPOSE, xii_term_make_basis(XMS_K12, 1u32), xii_term_make_basis(XMS_K12, 2u32)), xii_term_make_basis(XMS_K12, 3u32))
+    let n1 : u32 = xii_canonicalise(t1)
+    _xms_walk(n1)
+    /* item 2: collapsing decision  if(p,x,x) -> x */
+    xii_term_arena_reset()
+    let t2 : u32 = xii_term_make_if(xii_term_make_basis(XMS_K01, 1u32), xii_term_make_basis(XMS_K12, 1u32), xii_term_make_basis(XMS_K12, 1u32))
+    let n2 : u32 = xii_canonicalise(t2)
+    _xms_walk(n2)
+    /* item 3: folding loop  loop(loop(b,2),3) -> loop(b,6) */
+    xii_term_arena_reset()
+    let t3 : u32 = xii_term_make_loop(xii_term_make_loop(xii_term_make_basis(XMS_K12, 1u32), 2u64), 3u64)
+    let n3 : u32 = xii_canonicalise(t3)
+    _xms_walk(n3)
+    /* item 4: the grand mix  loop(if(p, a.b, a.b), 2) -> loop(a,2).loop(b,2) */
+    xii_term_arena_reset()
+    let mix_in : u32 = xii_term_make_if(xii_term_make_basis(XMS_K01, 1u32), xii_term_make_fusion2(XMS_FCOMPOSE, xii_term_make_basis(XMS_K12, 1u32), xii_term_make_basis(XMS_K12, 2u32)), xii_term_make_fusion2(XMS_FCOMPOSE, xii_term_make_basis(XMS_K12, 1u32), xii_term_make_basis(XMS_K12, 2u32)))
+    let t4 : u32 = xii_term_make_loop(mix_in, 2u64)
+    let n4 : u32 = xii_canonicalise(t4)
+    _xms_walk(n4)
+    /* items 5-7: the three further composition operators' associativity normal forms -- FTHEN and
+     * FWITH right-nest, FUNDER left-nests; folding their NFs makes the seal fingerprint ALL SIX
+     * lowered composition operators, not only FCOMPOSE. */
+    xii_term_arena_reset()
+    let t5 : u32 = xii_term_make_fusion2(XMS_FTHEN, xii_term_make_fusion2(XMS_FTHEN, xii_term_make_basis(XMS_K13, 1u32), xii_term_make_basis(XMS_K13, 2u32)), xii_term_make_basis(XMS_K13, 3u32))
+    let n5 : u32 = xii_canonicalise(t5)
+    _xms_walk(n5)
+    xii_term_arena_reset()
+    let t6 : u32 = xii_term_make_fusion2(XMS_FWITH, xii_term_make_fusion2(XMS_FWITH, xii_term_make_basis(XMS_K13, 1u32), xii_term_make_basis(XMS_K13, 2u32)), xii_term_make_basis(XMS_K13, 3u32))
+    let n6 : u32 = xii_canonicalise(t6)
+    _xms_walk(n6)
+    xii_term_arena_reset()
+    let t7 : u32 = xii_term_make_fusion2(XMS_FUNDER, xii_term_make_basis(XMS_K13, 1u32), xii_term_make_fusion2(XMS_FUNDER, xii_term_make_basis(XMS_K13, 2u32), xii_term_make_basis(XMS_K13, 3u32)))
+    let n7 : u32 = xii_canonicalise(t7)
+    _xms_walk(n7)
+    cad_final(out_addr)
+    return 0i32
+}
+
+/* THE TERMINAL GATE: fold all thirteen mig4 stage selftests into one verdict.  GREEN (99) iff every
+ * stage holds; else the 1-based index of the first failing stage (1=xrp .. 10=xlp, 11=xlt then,
+ * 12=xlw with, 13=xlu under -- the four composition-operator lowerings included). */
+fn xms_run_terminal() -> u64 @export {
+    if xrp_selftest() != 99u64 { return 1u64 }
+    if xro_selftest() != 99u64 { return 2u64 }
+    if cpe_selftest() != 99u64 { return 3u64 }
+    if xjn_selftest() != 99u64 { return 4u64 }
+    if xtm_selftest() != 99u64 { return 5u64 }
+    if xad_selftest() != 99u64 { return 6u64 }
+    if xlc_selftest() != 99u64 { return 7u64 }
+    if xld_selftest() != 99u64 { return 8u64 }
+    if xli_selftest() != 99u64 { return 9u64 }
+    if xlp_selftest() != 99u64 { return 10u64 }
+    if xlt_selftest() != 99u64 { return 11u64 }
+    if xlw_selftest() != 99u64 { return 12u64 }
+    if xlu_selftest() != 99u64 { return 13u64 }
+    return 99u64
+}
+
+/* KAT: 99 = all pass; a distinct code per failed check.
+ * Proves: the terminal gate folds all ten mig4 stages GREEN as one verdict (1); the content-address
+ * seal is DETERMINISTIC -- the canonical battery hashes identically twice (2) -- and non-trivial (3);
+ * the migrated rule set is ADMITTED (4).  Together: the migration is complete (fold) and sealed (digest). */
+fn xms_selftest() -> u64 @export {
+    /* (1) the terminal fold: every mig4 stage green, as one certificate. */
+    if xms_run_terminal() != 99u64 { return 1u64 }
+
+    /* (2) the seal is deterministic: the canonical battery hashes identically twice. */
+    xms_seal_digest((&XMS_DIG1 as u64))
+    xms_seal_digest((&XMS_DIG2 as u64))
+    if cad_eq((&XMS_DIG1 as u64) as *u8, (&XMS_DIG2 as u64) as *u8) != 1u8 { return 2u64 }
+
+    /* (3) the seal is non-trivial (it actually hashed the normal forms, not an empty/zero digest). */
+    if cad_is_zero((&XMS_DIG1 as u64) as *u8) != 0u8 { return 3u64 }
+
+    /* (4) the migrated rule set is ADMITTED (root-confluent + terminating, Step 6). */
+    if xad_admit() != 1u32 { return 4u64 }
+
+    return 99u64
+}
+
+/* xii_mig4_seal EMBODIES the close of the migration: the terminal gate certifies all ten mig4 stages
+ * green as ONE verdict (the syntactic path retired -- every lowered computation reduces through the
+ * one engine, proven as a unit), and the content-address seal pins the migrated semantics' normal
+ * forms into a deterministic, drift-sensitive fingerprint.  mig4 -- route all (structured) computation
+ * through XII -- is complete and sealed. */

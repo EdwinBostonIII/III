@@ -1,0 +1,560 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\cost_calculus.iii
+ *
+ * III STDLIB - numera::cost_calculus
+ *
+ * Closed-form mapping from an operation/dependency graph to a six-entry
+ * cost vector (latency, throughput, regpressure, icache, dcache, energy)
+ * under the cost lattice.  Pure deterministic evaluation; runs the
+ * micro-architectural simulator (Module 21, ma_simulate) for latency,
+ * then exact integer polynomials over per-opcode tables for the rest.
+ *
+ * Public API:
+ *   cc_init() -> i32
+ *   cc_set_energy(opcode: u32, energy: u32) -> i32
+ *   cc_set_size(opcode: u32, size: u32) -> i32
+ *   cc_set_dcache(opcode: u32, dcache: u32) -> i32
+ *   cc_evaluate(req: *u8, out_cost: *u64) -> i32
+ *   cc_evaluate_witnessed(req: *u8, out_cost: *u64, wcap: u64) -> i32
+ *   cc_selftest() -> u64
+ *
+ * req aggregate (W2; 32 bytes, little-endian):
+ *   +0  u64 ops_ptr | +8  u64 n | +16 u64 deps_ptr | +24 u64 dep_n
+ *
+ * out_cost (48 bytes, six u64):
+ *   c[0] latency  c[1] throughput  c[2] register pressure
+ *   c[3] icache footprint  c[4] dcache footprint  c[5] energy
+ * The six-dim *u64 contract is shared byte-for-byte with cost_lattice.iii
+ * (numera::cost_lattice); no cl_* extern is declared (sibling consumer).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure; no allocation, no I/O).
+ * Not reentrant: CCALC_LIVE_UNTIL / CCALC_CYCLES / the witness scratch are
+ * serialized scratch (cg_superopt evaluates candidates serially).
+ *
+ * Trap notes (AGENT-BRIEFING SS3 + Wave-1 additions):
+ *  - Trap 1:  every fn signature and extern is single-line.
+ *  - Trap 2:  every module-level const/var is CCALC_-prefixed (grep-clean;
+ *             the gospel CC_ prefix collided with omnia/call_context.iii).
+ *  - Trap 3:  no signed (<,<=,>,>=) compare anywhere; error codes are
+ *             negative i32 compared only by ==/!= (W11); all ordering is on
+ *             unsigned u32/u64.
+ *  - Trap 4:  u32 indices/values masked & CCALC_U32_MASK before pointer math.
+ *  - Trap 5:  no value-bearing write through a *u32 pointer; table writes are
+ *             full-width [u32;..] element stores; out_cost writes are *u64.
+ *  - Trap 7:  no function-local var arrays; LIVE_UNTIL/CYCLES/witness buffers
+ *             are module scope.
+ *  - Trap 8:  no `else` on the pure path (guarded early-returns).
+ *  - Trap 9:  ASCII -- only; no em-dash.
+ *  - Trap 11: throughput `/cycles` reloads the divisor from CCALC_CYCLES[0]
+ *             into a settled local after the ma_simulate call; no `%` anywhere.
+ *  - Trap 18: the only `/` is (CCALC_TP_SCALE*n)/cycles with provably
+ *             < 2^63 operands (TP_SCALE*n <= 1000*1024 = 1024000; cycles>=1),
+ *             so the signed idivq miscompile cannot misbehave (both positive).
+ */
+
+module numera_cost_calculus
+
+extern @abi(c-msvc-x64) fn ma_simulate(ops: *u32, n: u32, deps: *u32, dep_n: u32, out_cycles: *u64) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_init() -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+
+const CCALC_OK         : i32 =  0i32
+const CCALC_E_OPCODE   : i32 = -1i32
+const CCALC_E_NULL     : i32 = -2i32
+const CCALC_E_NOPS     : i32 = -3i32
+const CCALC_E_NDEPS    : i32 = -4i32
+const CCALC_E_DEPIDX   : i32 = -5i32
+const CCALC_E_SIM      : i32 = -6i32
+const CCALC_E_CAP      : i32 = -7i32
+
+const CCALC_MAX_OPCODE : u32 = 4096u32
+const CCALC_MAX_OPS    : u32 = 1024u32
+const CCALC_MAX_DEPS   : u32 = 4096u32
+const CCALC_REQ_BYTES  : u64 = 32u64
+const CCALC_DIM        : u64 = 6u64
+const CCALC_TP_SCALE   : u64 = 1000u64
+const CCALC_U32_MASK   : u64 = 0xFFFFFFFFu64
+
+/* Witness serialization bound: MAX_OPS*4 + MAX_DEPS*2*4 + 16 (n,dep_n) bytes.
+ *   = 1024*4 + 4096*8 + 16 = 4096 + 32768 + 16 = 36880 bytes. */
+const CCALC_SER_BYTES  : u64 = 36880u64
+
+var CCALC_ENERGY     : [u32; 4096]
+var CCALC_SIZE       : [u32; 4096]
+var CCALC_DCACHE     : [u32; 4096]
+var CCALC_LIVE_UNTIL : [u32; 1024]
+var CCALC_CYCLES     : [u64; 1]
+
+/* --- witnessed-variant module scratch (Trap 7; serialized, not reentrant) --- */
+var CCALC_SER        : [u8; 36880]  /* canonical request graph serialization */
+var CCALC_REQ_HASH   : [u8; 32]     /* in_commit  = Keccak256(serialized graph) */
+var CCALC_COST_HASH  : [u8; 32]     /* out_commit = Keccak256(out_cost 48 bytes) */
+var CCALC_PRODUCER   : [u8; 32]     /* deterministic constant producer id (all-zero) */
+var CCALC_OP         : [u8; 32]     /* deterministic constant op id (all-zero) */
+var CCALC_WCAP_PAY   : [u8; 8]      /* wcap bound into the fragment payload (LE) */
+var CCALC_FRAG_SINK  : [u8; 32]     /* fragment-id sink */
+
+/* --- selftest scratch (Trap 7) --- */
+var CCALC_T_REQ      : [u8; 32]     /* a KAT request aggregate */
+var CCALC_T_OPS      : [u32; 8]     /* KAT opcode array */
+var CCALC_T_DEPS     : [u32; 16]    /* KAT dependency-pair array */
+var CCALC_T_COST     : [u64; 6]     /* KAT output cost vector */
+
+/* --- little-endian u64 load over the *u8 request aggregate.
+ * Read-only; eight byte loads shift-assembled (no *u32 store; Trap 5 safe;
+ * the byte index never enters pointer math beyond *u8 += const). --- */
+fn cc_load_u64_le(base: *u8, off: u64) -> u64 {
+    let b0 : u64 = base[off + 0u64] as u64
+    let b1 : u64 = base[off + 1u64] as u64
+    let b2 : u64 = base[off + 2u64] as u64
+    let b3 : u64 = base[off + 3u64] as u64
+    let b4 : u64 = base[off + 4u64] as u64
+    let b5 : u64 = base[off + 5u64] as u64
+    let b6 : u64 = base[off + 6u64] as u64
+    let b7 : u64 = base[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+/* --- typed u32 element load over a *u32 array at a masked index (Trap 4).
+ * idx already masked & CCALC_U32_MASK by the caller; we re-mask defensively. --- */
+fn cc_load_u32(arr: *u32, idx: u64) -> u32 {
+    let i : u64 = idx & 0xFFFFFFFFu64
+    return arr[i]
+}
+
+fn cc_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CCALC_MAX_OPCODE {
+        CCALC_ENERGY[i] = 1u32
+        CCALC_SIZE[i]   = 4u32
+        CCALC_DCACHE[i] = 0u32
+        i = i + 1u32
+    }
+    return CCALC_OK
+}
+
+fn cc_set_energy(opcode: u32, energy: u32) -> i32 @export {
+    if opcode >= CCALC_MAX_OPCODE { return CCALC_E_OPCODE }
+    CCALC_ENERGY[opcode] = energy
+    return CCALC_OK
+}
+
+fn cc_set_size(opcode: u32, size: u32) -> i32 @export {
+    if opcode >= CCALC_MAX_OPCODE { return CCALC_E_OPCODE }
+    CCALC_SIZE[opcode] = size
+    return CCALC_OK
+}
+
+fn cc_set_dcache(opcode: u32, dcache: u32) -> i32 @export {
+    if opcode >= CCALC_MAX_OPCODE { return CCALC_E_OPCODE }
+    CCALC_DCACHE[opcode] = dcache
+    return CCALC_OK
+}
+
+/* --- Validate every opcode in ops[0..n) is < CCALC_MAX_OPCODE.
+ * Returns CCALC_OK or CCALC_E_OPCODE.  Sentinel loop (W14). --- */
+fn cc_check_opcodes(ops: *u32, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    let mut bad : i32 = CCALC_OK
+    while i < n {
+        let op : u32 = cc_load_u32(ops, i)
+        if op >= CCALC_MAX_OPCODE { bad = CCALC_E_OPCODE ; i = n }
+        if i != n { i = i + 1u64 }
+    }
+    return bad
+}
+
+/* --- Validate every dep (consumer,producer) index in [0,dep_n) is < n.
+ * deps is the flat (consumer,producer) pair array; pair d is at 2d,2d+1.
+ * Returns CCALC_OK or CCALC_E_DEPIDX.  Sentinel loop (W14). --- */
+fn cc_check_deps(deps: *u32, dep_n: u64, n32: u32) -> i32 {
+    let mut d : u64 = 0u64
+    let mut bad : i32 = CCALC_OK
+    while d < dep_n {
+        let consumer : u32 = cc_load_u32(deps, d * 2u64)
+        let producer : u32 = cc_load_u32(deps, d * 2u64 + 1u64)
+        if consumer >= n32 { bad = CCALC_E_DEPIDX }
+        if producer >= n32 { bad = CCALC_E_DEPIDX }
+        if bad != CCALC_OK { d = dep_n }
+        if d != dep_n { d = d + 1u64 }
+    }
+    return bad
+}
+
+/* --- Register pressure: exact max simultaneously-live operands.
+ * LIVE_UNTIL[i] = last index a value defined at i stays live; extended by
+ * each (consumer,producer) dep (a value lives until its last consumer).
+ * Peak sweep: at point k, count values m in [0,k] with LIVE_UNTIL[m] >= k.
+ * O(n^2), n <= 1024 (bounded, M19).  All compares unsigned (Trap 3 safe). --- */
+fn cc_regpressure(deps: *u32, dep_n: u64, n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n {
+        CCALC_LIVE_UNTIL[i] = i as u32
+        i = i + 1u64
+    }
+    let mut d : u64 = 0u64
+    while d < dep_n {
+        let consumer : u32 = cc_load_u32(deps, d * 2u64)
+        let producer : u32 = cc_load_u32(deps, d * 2u64 + 1u64)
+        let pidx : u64 = (producer as u64) & 0xFFFFFFFFu64
+        if consumer > CCALC_LIVE_UNTIL[pidx] { CCALC_LIVE_UNTIL[pidx] = consumer }
+        d = d + 1u64
+    }
+    let mut max_live : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < n {
+        let mut live_here : u64 = 0u64
+        let mut m : u64 = 0u64
+        while m <= k {
+            let lu : u64 = CCALC_LIVE_UNTIL[m] as u64
+            if lu >= k { live_here = live_here + 1u64 }
+            m = m + 1u64
+        }
+        if live_here > max_live { max_live = live_here }
+        k = k + 1u64
+    }
+    return max_live
+}
+
+/* --- Sum a per-opcode u32 table over ops[0..n) into a u64 (footprint/energy).
+ * tbl is one of CCALC_SIZE / CCALC_DCACHE / CCALC_ENERGY passed by address;
+ * every ops[i] already validated < CCALC_MAX_OPCODE by cc_check_opcodes. --- */
+fn cc_sum_table(ops: *u32, n: u64, tbl: *u32) -> u64 {
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let op : u64 = (cc_load_u32(ops, i) as u64) & 0xFFFFFFFFu64
+        acc = acc + (tbl[op] as u64)
+        i = i + 1u64
+    }
+    return acc
+}
+
+fn cc_evaluate(req: *u8, out_cost: *u64) -> i32 @export {
+    /* A null out_cost cannot be zeroed -- guard it BEFORE Step 0 dereferences
+     * it (the M5 zero-fill must FOLLOW the null check, never precede it; the
+     * null-out_cost negative KAT crashed here otherwise). */
+    if (out_cost as u64) == 0u64 { return CCALC_E_NULL }
+
+    /* Step 0 -- zero the output before any fallible step (M5 no-garbage). */
+    let mut z : u64 = 0u64
+    while z < CCALC_DIM {
+        out_cost[z] = 0u64
+        z = z + 1u64
+    }
+
+    /* Step 1 -- decode the request aggregate. */
+    if (req as u64) == 0u64 { return CCALC_E_NULL }
+    let ops_ptr   : u64 = cc_load_u64_le(req, 0u64)
+    let n_raw     : u64 = cc_load_u64_le(req, 8u64)
+    let deps_ptr  : u64 = cc_load_u64_le(req, 16u64)
+    let dep_n_raw : u64 = cc_load_u64_le(req, 24u64)
+    if ops_ptr == 0u64 { return CCALC_E_NULL }
+    let n     : u64 = n_raw & CCALC_U32_MASK
+    let dep_n : u64 = dep_n_raw & CCALC_U32_MASK
+
+    /* Step 2 -- bound checks (closes the gospel overflow; M19 boundedness). */
+    if n == 0u64 { return CCALC_E_NOPS }
+    if n > (CCALC_MAX_OPS as u64) { return CCALC_E_NOPS }
+    if dep_n > (CCALC_MAX_DEPS as u64) { return CCALC_E_NDEPS }
+    if deps_ptr == 0u64 {
+        if dep_n != 0u64 { return CCALC_E_NULL }
+    }
+    let n32    : u32 = n as u32
+    let depn32 : u32 = dep_n as u32
+    let ops  : *u32 = ops_ptr as *u32
+    let deps : *u32 = deps_ptr as *u32
+    let opbad : i32 = cc_check_opcodes(ops, n)
+    if opbad != CCALC_OK { return CCALC_E_OPCODE }
+    let depbad : i32 = cc_check_deps(deps, dep_n, n32)
+    if depbad != CCALC_OK { return CCALC_E_DEPIDX }
+
+    /* Step 3 -- latency via the simulator (Trap 11: reload from module cell). */
+    CCALC_CYCLES[0u64] = 0u64
+    let sim_rc : i32 = ma_simulate(ops, n32, deps, depn32, (&CCALC_CYCLES as u64) as *u64)
+    if sim_rc != CCALC_OK { return CCALC_E_SIM }
+    let cycles : u64 = CCALC_CYCLES[0u64]
+    out_cost[0u64] = cycles
+
+    /* Step 4 -- throughput (fixed-point, 3 decimal digits; Trap 11/18). */
+    if cycles == 0u64 {
+        out_cost[1u64] = 0u64
+    }
+    if cycles != 0u64 {
+        let divisor  : u64 = CCALC_CYCLES[0u64]
+        let dividend : u64 = CCALC_TP_SCALE * n
+        out_cost[1u64] = dividend / divisor
+    }
+
+    /* Step 5 -- register pressure (exact live-span; M4 no-heuristic). */
+    out_cost[2u64] = cc_regpressure(deps, dep_n, n)
+
+    /* Step 6 -- i-cache footprint = sum CCALC_SIZE[ops[i]]. */
+    out_cost[3u64] = cc_sum_table(ops, n, (&CCALC_SIZE as u64) as *u32)
+
+    /* Step 7 -- d-cache footprint = sum CCALC_DCACHE[ops[i]]. */
+    out_cost[4u64] = cc_sum_table(ops, n, (&CCALC_DCACHE as u64) as *u32)
+
+    /* Step 8 -- energy = sum CCALC_ENERGY[ops[i]]. */
+    out_cost[5u64] = cc_sum_table(ops, n, (&CCALC_ENERGY as u64) as *u32)
+
+    return CCALC_OK
+}
+
+/* --- Serialize the canonical request graph into CCALC_SER, return byte len.
+ * Layout: n (4 LE bytes) || dep_n (4 LE bytes) || ops[0..n) each u32 LE ||
+ *         deps[0..2*dep_n) each u32 LE.  Bounded by CCALC_SER_BYTES.
+ * Byte stores through *u8 (Trap 5 safe).  Caller has validated bounds. --- */
+fn cc_serialize(ops: *u32, n: u64, deps: *u32, dep_n: u64) -> u64 {
+    let p : *u8 = (&CCALC_SER as u64) as *u8
+    let mut pos : u64 = 0u64
+    p[0u64] = (n & 0xFFu64) as u8
+    p[1u64] = ((n >> 8u64)  & 0xFFu64) as u8
+    p[2u64] = ((n >> 16u64) & 0xFFu64) as u8
+    p[3u64] = ((n >> 24u64) & 0xFFu64) as u8
+    p[4u64] = (dep_n & 0xFFu64) as u8
+    p[5u64] = ((dep_n >> 8u64)  & 0xFFu64) as u8
+    p[6u64] = ((dep_n >> 16u64) & 0xFFu64) as u8
+    p[7u64] = ((dep_n >> 24u64) & 0xFFu64) as u8
+    pos = 8u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let op : u32 = cc_load_u32(ops, i)
+        let ov : u64 = (op as u64) & 0xFFFFFFFFu64
+        p[pos + 0u64] = (ov & 0xFFu64) as u8
+        p[pos + 1u64] = ((ov >> 8u64)  & 0xFFu64) as u8
+        p[pos + 2u64] = ((ov >> 16u64) & 0xFFu64) as u8
+        p[pos + 3u64] = ((ov >> 24u64) & 0xFFu64) as u8
+        pos = pos + 4u64
+        i = i + 1u64
+    }
+    let twon : u64 = dep_n * 2u64
+    let mut j : u64 = 0u64
+    while j < twon {
+        let dv32 : u32 = cc_load_u32(deps, j)
+        let dv : u64 = (dv32 as u64) & 0xFFFFFFFFu64
+        p[pos + 0u64] = (dv & 0xFFu64) as u8
+        p[pos + 1u64] = ((dv >> 8u64)  & 0xFFu64) as u8
+        p[pos + 2u64] = ((dv >> 16u64) & 0xFFu64) as u8
+        p[pos + 3u64] = ((dv >> 24u64) & 0xFFu64) as u8
+        pos = pos + 4u64
+        j = j + 1u64
+    }
+    return pos
+}
+
+/* --- Zero a 32-byte module-scope id buffer (hand-rolled; no extern). --- */
+fn cc_zero32(buf: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        buf[i] = 0u8
+        i = i + 1u64
+    }
+    return CCALC_OK
+}
+
+fn cc_evaluate_witnessed(req: *u8, out_cost: *u64, wcap: u64) -> i32 @export {
+    /* Reject the unwitnessed capability (M8; no silent unwitnessed transition). */
+    if wcap == 0u64 { return CCALC_E_CAP }
+
+    /* Run the full pure evaluation; propagate any failure unchanged (no witness
+     * on failure -- W16 reversibility: nothing emitted, nothing to undo). */
+    let rc : i32 = cc_evaluate(req, out_cost)
+    if rc != CCALC_OK { return rc }
+
+    /* Re-decode the (already-validated) request to serialize the canonical
+     * graph for the in_commit hash.  Bounds were proven in cc_evaluate. */
+    let ops_ptr  : u64 = cc_load_u64_le(req, 0u64)
+    let n        : u64 = cc_load_u64_le(req, 8u64) & CCALC_U32_MASK
+    let deps_ptr : u64 = cc_load_u64_le(req, 16u64)
+    let dep_n    : u64 = cc_load_u64_le(req, 24u64) & CCALC_U32_MASK
+    let ops  : *u32 = ops_ptr as *u32
+    let deps : *u32 = deps_ptr as *u32
+    let ser_len : u64 = cc_serialize(ops, n, deps, dep_n)
+
+    /* in_commit  = Keccak256(canonical serialized request graph). */
+    cad_oneshot(1u32, (&CCALC_SER as u64) as *u8, ser_len, (&CCALC_REQ_HASH as u64) as *u8)   /* H2: in_commit via cad (suite 1 = KECCAK256; byte-identical) */
+    /* out_commit = Keccak256(out_cost 48 bytes = CCALC_DIM * 8). */
+    cad_oneshot(1u32, (out_cost as u64) as *u8, CCALC_DIM * 8u64, (&CCALC_COST_HASH as u64) as *u8)   /* H2: out_commit via cad (byte-identical) */
+
+    /* Bind wcap into the fragment payload (8 bytes LE) -- the capability is
+     * recorded in the witnessed fragment (M10 recomputable). */
+    let wp : *u8 = (&CCALC_WCAP_PAY as u64) as *u8
+    wp[0u64] = (wcap & 0xFFu64) as u8
+    wp[1u64] = ((wcap >> 8u64)  & 0xFFu64) as u8
+    wp[2u64] = ((wcap >> 16u64) & 0xFFu64) as u8
+    wp[3u64] = ((wcap >> 24u64) & 0xFFu64) as u8
+    wp[4u64] = ((wcap >> 32u64) & 0xFFu64) as u8
+    wp[5u64] = ((wcap >> 40u64) & 0xFFu64) as u8
+    wp[6u64] = ((wcap >> 48u64) & 0xFFu64) as u8
+    wp[7u64] = ((wcap >> 56u64) & 0xFFu64) as u8
+
+    /* Deterministic constant producer/op ids (all-zero canonical). */
+    cc_zero32((&CCALC_PRODUCER as u64) as *u8)
+    cc_zero32((&CCALC_OP as u64) as *u8)
+
+    /* Publish one fragment binding (req-hash -> cost-hash) under wcap. */
+    let nullante : *u8 = 0u64 as *u8
+    let fid : u64 = wh_publish((&CCALC_PRODUCER as u64) as *u8, (&CCALC_OP as u64) as *u8, (&CCALC_REQ_HASH as u64) as *u8, (&CCALC_COST_HASH as u64) as *u8, 0u8, 0u8, 0u16, nullante, 0u32, wp, 8u32, (&CCALC_FRAG_SINK as u64) as *u8)
+    if fid == 0xFFFFFFFFFFFFFFFFu64 { return CCALC_E_CAP }
+    return CCALC_OK
+}
+
+/* --- Embedded KAT selftest.  Returns 99u64 on full pass; a distinct small
+ * non-99 code at each failed check (diagnosable).  Mirrors wh_selftest, etc.
+ * Drives the spec's KAT-1..4 plus a witnessed smoke-check and the negative
+ * cases (M-discipline: prove the gates REJECT bad input).
+ *
+ * Setup: ma_init() (the simulator defaults -- issue=4, every latency=1) then
+ * cc_init() (SIZE=4, ENERGY=1, DCACHE=0 per opcode). --- */
+fn cc_selftest() -> u64 @export {
+    if ma_init() != CCALC_OK { return 1u64 }
+    if cc_init()  != CCALC_OK { return 2u64 }
+
+    let reqp  : *u8  = (&CCALC_T_REQ as u64) as *u8
+    let costp : *u64 = (&CCALC_T_COST as u64) as *u64
+    let opsp  : *u32 = (&CCALC_T_OPS as u64) as *u32
+    let depsp : *u32 = (&CCALC_T_DEPS as u64) as *u32
+    let opsa  : u64  = &CCALC_T_OPS as u64
+    let depsa : u64  = &CCALC_T_DEPS as u64
+
+    /* ---- KAT-1: single op, no deps. ops=[7], n=1, dep_n=0. ---- */
+    CCALC_T_OPS[0u32] = 7u32
+    cc_pack_req(reqp, opsa, 1u64, 0u64, 0u64)
+    if cc_evaluate(reqp, costp) != CCALC_OK { return 3u64 }
+    if CCALC_T_COST[0u32] != 1u64    { return 4u64 }   /* latency    */
+    if CCALC_T_COST[1u32] != 1000u64 { return 5u64 }   /* throughput */
+    if CCALC_T_COST[2u32] != 1u64    { return 6u64 }   /* regpressure */
+    if CCALC_T_COST[3u32] != 4u64    { return 7u64 }   /* icache     */
+    if CCALC_T_COST[4u32] != 0u64    { return 8u64 }   /* dcache     */
+    if CCALC_T_COST[5u32] != 1u64    { return 9u64 }   /* energy     */
+
+    /* ---- KAT-2: linear chain. custom opcode 3 (size=8,dcache=2,energy=5).
+     * ops=[1,2,3], n=3, deps=[1,0, 2,1], dep_n=2. ---- */
+    if cc_set_size(3u32, 8u32)   != CCALC_OK { return 10u64 }
+    if cc_set_dcache(3u32, 2u32) != CCALC_OK { return 11u64 }
+    if cc_set_energy(3u32, 5u32) != CCALC_OK { return 12u64 }
+    CCALC_T_OPS[0u32] = 1u32
+    CCALC_T_OPS[1u32] = 2u32
+    CCALC_T_OPS[2u32] = 3u32
+    CCALC_T_DEPS[0u32] = 1u32  CCALC_T_DEPS[1u32] = 0u32
+    CCALC_T_DEPS[2u32] = 2u32  CCALC_T_DEPS[3u32] = 1u32
+    cc_pack_req(reqp, opsa, 3u64, depsa, 2u64)
+    if cc_evaluate(reqp, costp) != CCALC_OK { return 13u64 }
+    if CCALC_T_COST[2u32] != 2u64  { return 14u64 }    /* regpressure = 2 */
+    if CCALC_T_COST[3u32] != 16u64 { return 15u64 }    /* icache 4+4+8    */
+    if CCALC_T_COST[4u32] != 2u64  { return 16u64 }    /* dcache 0+0+2    */
+    if CCALC_T_COST[5u32] != 7u64  { return 17u64 }    /* energy 1+1+5    */
+    /* latency = 3 (serialized chain, each latency 1); throughput (1000*3)/3. */
+    if CCALC_T_COST[0u32] != 3u64    { return 18u64 }
+    if CCALC_T_COST[1u32] != 1000u64 { return 19u64 }
+
+    /* ---- KAT-3(a): n==0 -> E_NOPS, out_cost zeroed (M5). ---- */
+    CCALC_T_COST[0u32] = 9u64  CCALC_T_COST[1u32] = 9u64  CCALC_T_COST[2u32] = 9u64
+    CCALC_T_COST[3u32] = 9u64  CCALC_T_COST[4u32] = 9u64  CCALC_T_COST[5u32] = 9u64
+    CCALC_T_OPS[0u32] = 0u32
+    cc_pack_req(reqp, opsa, 0u64, 0u64, 0u64)
+    if cc_evaluate(reqp, costp) != CCALC_E_NOPS { return 20u64 }
+    if cc_cost_all_zero(costp) != 1u64 { return 21u64 }
+
+    /* ---- KAT-3(b): opcode 4096 (== MAX_OPCODE) -> E_OPCODE, zeroed. ---- */
+    CCALC_T_OPS[0u32] = 4096u32
+    cc_pack_req(reqp, opsa, 1u64, 0u64, 0u64)
+    if cc_evaluate(reqp, costp) != CCALC_E_OPCODE { return 22u64 }
+    if cc_cost_all_zero(costp) != 1u64 { return 23u64 }
+
+    /* ---- KAT-3(c): producer index 2 >= n=2 -> E_DEPIDX, zeroed.
+     * ops=[0,0], n=2, deps=[0,2], dep_n=1. ---- */
+    CCALC_T_OPS[0u32] = 0u32  CCALC_T_OPS[1u32] = 0u32
+    CCALC_T_DEPS[0u32] = 0u32  CCALC_T_DEPS[1u32] = 2u32
+    cc_pack_req(reqp, opsa, 2u64, depsa, 1u64)
+    if cc_evaluate(reqp, costp) != CCALC_E_DEPIDX { return 24u64 }
+    if cc_cost_all_zero(costp) != 1u64 { return 25u64 }
+
+    /* ---- KAT-3(d): n=1025 (> MAX_OPS) -> E_NOPS, zeroed (overflow proof). ---- */
+    CCALC_T_OPS[0u32] = 0u32
+    cc_pack_req(reqp, opsa, 1025u64, 0u64, 0u64)
+    if cc_evaluate(reqp, costp) != CCALC_E_NOPS { return 26u64 }
+    if cc_cost_all_zero(costp) != 1u64 { return 27u64 }
+
+    /* ---- Negative: null req / null out_cost -> E_NULL. ---- */
+    let nullb : *u8  = 0u64 as *u8
+    let nullc : *u64 = 0u64 as *u64
+    if cc_evaluate(nullb, costp) != CCALC_E_NULL { return 28u64 }
+    CCALC_T_OPS[0u32] = 7u32
+    cc_pack_req(reqp, opsa, 1u64, 0u64, 0u64)
+    if cc_evaluate(reqp, nullc) != CCALC_E_NULL { return 29u64 }
+
+    /* ---- Negative: ops_ptr == 0 in the aggregate -> E_NULL. ---- */
+    cc_pack_req(reqp, 0u64, 1u64, 0u64, 0u64)
+    if cc_evaluate(reqp, costp) != CCALC_E_NULL { return 30u64 }
+
+    /* ---- Negative: deps_ptr == 0 but dep_n > 0 -> E_NULL. ---- */
+    CCALC_T_OPS[0u32] = 0u32  CCALC_T_OPS[1u32] = 0u32
+    cc_pack_req(reqp, opsa, 2u64, 0u64, 1u64)
+    if cc_evaluate(reqp, costp) != CCALC_E_NULL { return 31u64 }
+
+    /* ---- Setter bound: opcode == MAX_OPCODE -> E_OPCODE. ---- */
+    if cc_set_energy(4096u32, 1u32) != CCALC_E_OPCODE { return 32u64 }
+    if cc_set_size(4096u32, 1u32)   != CCALC_E_OPCODE { return 33u64 }
+    if cc_set_dcache(4096u32, 1u32) != CCALC_E_OPCODE { return 34u64 }
+
+    /* ---- Witnessed: wcap==0 rejected -> E_CAP (no silent transition). ---- */
+    CCALC_T_OPS[0u32] = 7u32
+    cc_pack_req(reqp, opsa, 1u64, 0u64, 0u64)
+    if cc_evaluate_witnessed(reqp, costp, 0u64) != CCALC_E_CAP { return 35u64 }
+
+    /* ---- Witnessed happy path: wh_init then a valid wcap publishes. ---- */
+    if wh_init(0u64) != 0i32 { return 36u64 }
+    if cc_evaluate_witnessed(reqp, costp, 1u64) != CCALC_OK { return 37u64 }
+    /* The witnessed run reproduces the pure cost vector (KAT-1) exactly. */
+    if CCALC_T_COST[0u32] != 1u64    { return 38u64 }
+    if CCALC_T_COST[1u32] != 1000u64 { return 39u64 }
+    /* in_commit must equal an independent Keccak256 of the serialized graph. */
+    keccak256_oneshot(&CCALC_SER as u64, 12u64, &CCALC_COST_HASH as u64)
+    let mut h : u64 = 0u64
+    while h < 32u64 {
+        if CCALC_REQ_HASH[h] != CCALC_COST_HASH[h] { return 40u64 }
+        h = h + 1u64
+    }
+
+    return 99u64
+}
+
+/* --- Pack a request aggregate at reqp (32 bytes LE) from scalar fields.
+ * Helper for the selftest; mirrors the W2 layout exactly. --- */
+fn cc_pack_req(reqp: *u8, ops_ptr: u64, n: u64, deps_ptr: u64, dep_n: u64) -> i32 {
+    cc_store_u64_le(reqp, 0u64,  ops_ptr)
+    cc_store_u64_le(reqp, 8u64,  n)
+    cc_store_u64_le(reqp, 16u64, deps_ptr)
+    cc_store_u64_le(reqp, 24u64, dep_n)
+    return CCALC_OK
+}
+
+/* --- little-endian u64 store over *u8 (byte stores; Trap 5 safe). --- */
+fn cc_store_u64_le(base: *u8, off: u64, v: u64) -> i32 {
+    base[off + 0u64] = (v & 0xFFu64) as u8
+    base[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    base[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    base[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    base[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    base[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    base[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    base[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return CCALC_OK
+}
+
+/* --- Return 1u64 iff out_cost[0..CCALC_DIM) are all zero, else 0u64. --- */
+fn cc_cost_all_zero(out_cost: *u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut ok : u64 = 1u64
+    while i < CCALC_DIM {
+        if out_cost[i] != 0u64 { ok = 0u64 }
+        i = i + 1u64
+    }
+    return ok
+}

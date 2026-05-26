@@ -1,0 +1,37 @@
+/* HMAC-SHA256 KAT: RFC 4231 Test Case 1.
+ *   key = 0x0b * 20
+ *   msg = "Hi There"
+ *   tag = b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7
+ *
+ * Exit = first byte of tag = 0xB0 = 176.
+ */
+module corpus_79
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn hmac_sha256(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
+extern @abi(c-msvc-x64) fn hmac_sha256_tag(out_32: *u8) -> i32 from "hmac.iii"
+
+fn main() -> u64 {
+    let key : *u8 = malloc(20u64)
+    let msg : *u8 = malloc(8u64)
+    let tag : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 20u64 { key[i] = 0x0Bu8; i = i + 1u64 }
+    msg[0] = 72u8;  msg[1] = 105u8; msg[2] = 32u8;  msg[3] = 84u8
+    msg[4] = 104u8; msg[5] = 101u8; msg[6] = 114u8; msg[7] = 101u8
+    hmac_sha256(key, 20u64, msg, 8u64)
+    hmac_sha256_tag(tag)
+    if tag[0]  != 0xB0u8 { return 1u64 }
+    if tag[1]  != 0x34u8 { return 2u64 }
+    if tag[2]  != 0x4Cu8 { return 3u64 }
+    if tag[3]  != 0x61u8 { return 4u64 }
+    if tag[4]  != 0xD8u8 { return 5u64 }
+    if tag[5]  != 0xDBu8 { return 6u64 }
+    if tag[15] != 0x2Bu8 { return 7u64 }
+    if tag[16] != 0x88u8 { return 8u64 }
+    if tag[31] != 0xF7u8 { return 9u64 }
+    let result : u64 = tag[0] as u64
+    free(key); free(msg); free(tag)
+    return result
+}

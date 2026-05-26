@@ -1,0 +1,37 @@
+/* set_u32: insert 5 distinct values, contains all, remove one, len-=1 */
+module corpus_b22
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn set_u32_new(arena: u64, hard: u64) -> u64 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_insert(id: u64, k: u32) -> i32 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_contains(id: u64, k: u32) -> u8 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_remove(id: u64, k: u32) -> u8 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_len(id: u64) -> u64 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_drop(id: u64) -> i32 from "set.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(8192u64)
+    let s : u64 = set_u32_new(a, 32u64)
+    if s == 0u64 { return 1u64 }
+    set_u32_insert(s, 11u32)
+    set_u32_insert(s, 22u32)
+    set_u32_insert(s, 33u32)
+    set_u32_insert(s, 44u32)
+    set_u32_insert(s, 55u32)
+    if set_u32_len(s) != 5u64 { return 2u64 }
+    if set_u32_contains(s, 22u32) != 1u8 { return 3u64 }
+    if set_u32_contains(s, 99u32) != 0u8 { return 4u64 }
+    /* duplicate insert should not grow length */
+    set_u32_insert(s, 22u32)
+    if set_u32_len(s) != 5u64 { return 5u64 }
+    /* remove */
+    if set_u32_remove(s, 33u32) != 1u8 { return 6u64 }
+    if set_u32_contains(s, 33u32) != 0u8 { return 7u64 }
+    if set_u32_len(s) != 4u64 { return 8u64 }
+    /* remove non-existent */
+    if set_u32_remove(s, 999u32) != 0u8 { return 9u64 }
+    set_u32_drop(s)
+    arena_drop(a)
+    return 99u64
+}

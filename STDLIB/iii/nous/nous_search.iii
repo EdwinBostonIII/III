@@ -1,0 +1,324 @@
+/* STDLIB/iii/nous/nous_search.iii -- the Search Trichotomy closure (nous Phase 1).
+ *
+ * III has two regimes and this module closes the SEARCH one (the EVALUATION one is
+ * closed by xii_canonicalise's cap-gap, surfaced here as nous_eval_checked, B-7).
+ *
+ * A budgeted search resolves to exactly one of three TYPED outcomes the engine cannot
+ * bypass:
+ *   NOUS_SATURATED -- the search reached a state proving its result canonical (e.g.
+ *                     e-graph saturated = the equality set is complete).  Oracle-INDEP.
+ *   NOUS_GAP       -- budget spent before certification.  Returns a witnessed
+ *                     uncertainty gap (unc_gap_root); propagates only into gap-accepting
+ *                     contexts, never hardens into a trusted artifact.  Oracle-DEP.
+ *   NOUS_REFUTED   -- a proof no answer exists (unsat / no representable term).  Canonical.
+ *
+ * The keystone safety property (nous_classify): SATURATED requires BOTH saturation and
+ * an answer; a budget-hit (not-saturated) can NEVER be tagged SATURATED -- it is GAP.
+ * This is what stops an oracle-dependent value escaping disguised as a determined one.
+ *
+ * Reproducibility key, SPLIT by outcome (B-5):
+ *   canonical key (SATURATED/REFUTED) = cad(input | rule-set-ver | cost-linearization-ver)
+ *     -- OMITS nous weights + budget, so a certified result is true regardless of which
+ *     nous found it; the certified commons accumulates across nous retrainings.
+ *   gap key (GAP) = cad(input | rule-set-ver | costlin-ver | weights-addr | budget | tiebreak)
+ *     -- the full tuple; resumable gaps are version-pinned.
+ *
+ * Budget (nous_budget_make): a sealed, deterministic, cost-denominated quantity
+ * (step/node count or a cost-lattice scalar).  WALL-CLOCK IS REJECTED AT CONSTRUCTION
+ * (non-deterministic -> would break replay).  The seal (cad over the budget fields)
+ * makes tampering detectable.
+ *
+ * Witnessing (wh_publish) of each search's key+outcome lands with nous_commons (P5);
+ * this module computes the key + classifies.  The COMPILER/BOOT cg_* const-fold
+ * eval-gap fallback wiring (B-7) is a compiler-team concern (touching the C trust root
+ * triggers the crash protocol); the contract is nous_eval_checked + xii_canonicalise's
+ * documented gapped() flag.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: libc + III only.  Determinism:
+ * integer-only; byte-wise LE (no u32/u64 store-width traps); u64 indices; single-line fns.
+ */
+module nous_search
+
+/* trichotomy tags */
+const NOUS_SATURATED : u8 = 0u8
+const NOUS_GAP       : u8 = 1u8
+const NOUS_REFUTED   : u8 = 2u8
+
+/* budget kinds */
+const NOUS_BUDGET_STEPS     : u8 = 0u8
+const NOUS_BUDGET_COST      : u8 = 1u8
+const NOUS_BUDGET_WALLCLOCK : u8 = 255u8   /* rejected at construction (non-deterministic) */
+
+/* gap construction */
+const NOUS_GAP_UNC_KIND : u8  = 0u8        /* = UNC_ESSENTIAL (budget gap is essential-for-now) */
+const NOUS_GAP_REASON   : u32 = 0x4E55u32  /* non-zero reason code "nous budget exhausted" */
+
+/* search status */
+const NOUS_SR_OK    : i32 = 0i32
+const NOUS_SR_EBAD  : i32 = -1i32
+const NOUS_SR_EWALL : i32 = -2i32          /* wall-clock budget refused */
+
+/* egraph client */
+const NOUS_EG_OK         : i32 = 0i32      /* = EGRAPH_OK */
+const NOUS_EG_SENT       : u32 = 0xFFFFFFFFu32
+const NOUS_CLIENT_EGRAPH : u32 = 0u32
+
+const NOUS_CAD_KECCAK : u32 = 1u32
+const NOUS_KEY_MAXLEN : u64 = 3900u64
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn unc_gap_root(kind: u8, reason: u32) -> u32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_well_formed(gid: u32) -> u8 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise_gapped() -> u8 from "xii_canonicalise.iii"
+
+var NOUS_KEY_BUF  : [u8; 4096]
+var NOUS_SEAL_DIG : [u8; 32]
+/* selftest scratch */
+var NOUS_BUD      : [u64; 4]
+var NOUS_K1       : [u8; 32]
+var NOUS_K2       : [u8; 32]
+var NOUS_W1       : [u8; 32]
+var NOUS_W2       : [u8; 32]
+var NOUS_KIN      : [u8; 8]
+var NOUS_OC       : [u8; 4]
+var NOUS_SR_SYM   : [u8; 32]
+var NOUS_SR_CHILD : [u32; 8]
+var NOUS_SR_REQ   : [u32; 8]
+var NOUS_SR_OUT   : [u32; 16]
+var NOUS_SR_OUTN  : [u32; 2]
+
+/* ---- byte-wise little-endian codecs (trap-safe: no wide stores) ---- */
+fn _nous_put_u64(buf: *u8, off: u64, v: u64) {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let sh : u64 = i * 8u64
+        buf[off + i] = ((v >> sh) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+}
+fn _nous_get_u64(buf: *u8, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let b : u64 = buf[off + i] as u64
+        let sh : u64 = i * 8u64
+        v = v | (b << sh)
+        i = i + 1u64
+    }
+    return v
+}
+
+/* ---- the trichotomy decision (the safety keystone) ----
+ * SATURATED demands saturation AND an answer; a budget-hit is GAP, never SATURATED;
+ * a complete set with no term is REFUTED, but only when actually saturated. */
+fn nous_classify(saturated: u8, has_answer: u8) -> u8 @export {
+    if has_answer == 1u8 {
+        if saturated == 1u8 { return NOUS_SATURATED }
+        return NOUS_GAP
+    }
+    if saturated == 1u8 { return NOUS_REFUTED }
+    return NOUS_GAP
+}
+
+/* ---- sealed budget (wall-clock rejected) ---- */
+fn _nous_budget_seal(b: *u64) -> u64 {
+    let bp : *u8 = (b as u64) as *u8
+    let dig : *u8 = (&NOUS_SEAL_DIG as u64) as *u8
+    cad_oneshot(NOUS_CAD_KECCAK, bp, 24u64, dig)
+    return _nous_get_u64(dig, 0u64)
+}
+fn nous_budget_make(steps: u32, cost_cap: u64, kind: u8, out: *u64) -> i32 @export {
+    if (out as u64) == 0u64 { return NOUS_SR_EBAD }
+    if kind == NOUS_BUDGET_WALLCLOCK { return NOUS_SR_EWALL }
+    if kind > NOUS_BUDGET_COST { return NOUS_SR_EBAD }
+    out[0u64] = kind as u64
+    out[1u64] = steps as u64
+    out[2u64] = cost_cap
+    out[3u64] = _nous_budget_seal(out)
+    return NOUS_SR_OK
+}
+fn nous_budget_ok(b: *u64) -> u8 @export {
+    if (b as u64) == 0u64 { return 0u8 }
+    let s : u64 = _nous_budget_seal(b)
+    if s == b[3u64] { return 1u8 }
+    return 0u8
+}
+fn nous_budget_steps(b: *u64) -> u32 @export {
+    return (b[1u64] & 0xFFFFFFFFu64) as u32
+}
+
+/* ---- reproducibility keys (split by outcome, B-5) ---- */
+fn nous_key_canonical(input: *u8, len: u64, ruleset_ver: u64, costlin_ver: u64, out32: *u8) -> i32 @export {
+    if (out32 as u64) == 0u64 { return NOUS_SR_EBAD }
+    if len > NOUS_KEY_MAXLEN { return NOUS_SR_EBAD }
+    if len > 0u64 { if (input as u64) == 0u64 { return NOUS_SR_EBAD } }
+    let buf : *u8 = (&NOUS_KEY_BUF as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < len { buf[i] = input[i]  i = i + 1u64 }
+    _nous_put_u64(buf, len, ruleset_ver)
+    _nous_put_u64(buf, len + 8u64, costlin_ver)
+    return cad_oneshot(NOUS_CAD_KECCAK, buf, len + 16u64, out32)
+}
+fn nous_key_gap(input: *u8, len: u64, ruleset_ver: u64, costlin_ver: u64, weights_addr: *u8, budget_steps: u32, tiebreak: u64, out32: *u8) -> i32 @export {
+    if (out32 as u64) == 0u64 { return NOUS_SR_EBAD }
+    if (weights_addr as u64) == 0u64 { return NOUS_SR_EBAD }
+    if len > NOUS_KEY_MAXLEN { return NOUS_SR_EBAD }
+    if len > 0u64 { if (input as u64) == 0u64 { return NOUS_SR_EBAD } }
+    let buf : *u8 = (&NOUS_KEY_BUF as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < len { buf[i] = input[i]  i = i + 1u64 }
+    _nous_put_u64(buf, len, ruleset_ver)
+    _nous_put_u64(buf, len + 8u64, costlin_ver)
+    let mut j : u64 = 0u64
+    while j < 32u64 { buf[len + 16u64 + j] = weights_addr[j]  j = j + 1u64 }
+    _nous_put_u64(buf, len + 48u64, budget_steps as u64)
+    _nous_put_u64(buf, len + 56u64, tiebreak)
+    return cad_oneshot(NOUS_CAD_KECCAK, buf, len + 64u64, out32)
+}
+
+/* ---- the e-graph client (canonical search) ----
+ * saturated within budget + extractable => SATURATED; budget hit + extractable => GAP
+ * (witnessed via unc_gap_root); complete set + no extractable term => REFUTED. */
+fn nous_search_egraph(b: *u64, req: *u32, out_term: *u32, out_n: *u32, out_outcome: *u8) -> i32 @export {
+    if (out_outcome as u64) == 0u64 { return NOUS_SR_EBAD }
+    if nous_budget_ok(b) == 0u8 { return NOUS_SR_EBAD }
+    let budget : u32 = nous_budget_steps(b)
+    let steps : u32 = eg_saturate(budget)
+    let mut sat : u8 = 0u8
+    if steps < budget { sat = 1u8 }
+    let rc : i32 = eg_extract(req, out_term, out_n)
+    let mut ans : u8 = 0u8
+    if rc == NOUS_EG_OK { if out_n[0u64] > 0u32 { ans = 1u8 } }
+    let outcome : u8 = nous_classify(sat, ans)
+    if outcome == NOUS_GAP {
+        let gid : u32 = unc_gap_root(NOUS_GAP_UNC_KIND, NOUS_GAP_REASON)
+        if unc_well_formed(gid) == 0u8 { return NOUS_SR_EBAD }
+    }
+    out_outcome[0u64] = outcome
+    return NOUS_SR_OK
+}
+
+/* generic dispatch by client kind (kind-tag, never a fn pointer); sat/smt/groebner
+ * clients plug in as later kinds. */
+fn nous_search_run(client_kind: u32, b: *u64, req: *u32, out_term: *u32, out_n: *u32, out_outcome: *u8) -> i32 @export {
+    if client_kind == NOUS_CLIENT_EGRAPH { return nous_search_egraph(b, req, out_term, out_n, out_outcome) }
+    return NOUS_SR_EBAD
+}
+
+/* ---- evaluation-regime closure (B-7) ----
+ * canonicalise t; on a step-cap GAP the result is the semantically-equal but
+ * non-canonical partial reduction -- sound to use as-is, never an error.  A caller in
+ * a non-gap-accepting context (const-fold) uses the result unoptimized; out_gapped
+ * records which. */
+fn nous_eval_checked(t: u32, out_gapped: *u8) -> u32 @export {
+    let r : u32 = xii_canonicalise(t)
+    if (out_gapped as u64) != 0u64 { out_gapped[0u64] = xii_canonicalise_gapped() }
+    return r
+}
+
+fn nous_search_selftest() -> u64 @export {
+    /* 1. the classification keystone, exhaustively (4 quadrants) */
+    if nous_classify(1u8, 1u8) != NOUS_SATURATED { return 1u64 }
+    if nous_classify(0u8, 1u8) != NOUS_GAP       { return 2u64 }   /* budget-hit w/ answer -> GAP, NOT SATURATED */
+    if nous_classify(1u8, 0u8) != NOUS_REFUTED   { return 3u64 }
+    if nous_classify(0u8, 0u8) != NOUS_GAP       { return 4u64 }   /* budget-hit w/o answer -> GAP, NOT REFUTED */
+
+    /* 2. sealed budget + wall-clock rejection + tamper detection */
+    let bp : *u64 = (&NOUS_BUD as u64) as *u64
+    if nous_budget_make(100u32, 0u64, NOUS_BUDGET_STEPS, bp) != NOUS_SR_OK { return 5u64 }
+    if nous_budget_ok(bp) != 1u8 { return 6u64 }
+    if nous_budget_steps(bp) != 100u32 { return 7u64 }
+    if nous_budget_make(10u32, 0u64, NOUS_BUDGET_WALLCLOCK, bp) != NOUS_SR_EWALL { return 8u64 }
+    nous_budget_make(100u32, 0u64, NOUS_BUDGET_STEPS, bp)
+    NOUS_BUD[1u64] = 999u64
+    if nous_budget_ok(bp) != 0u8 { return 9u64 }
+
+    /* 3. keys: canonical determinism + ruleset sensitivity; gap depends on weights;
+     * canonical (no weights) differs from gap (with weights) */
+    let mut z : u64 = 0u64
+    while z < 8u64 { NOUS_KIN[z] = (z + 1u64) as u8  z = z + 1u64 }
+    let kin : *u8 = (&NOUS_KIN as u64) as *u8
+    let k1 : *u8 = (&NOUS_K1 as u64) as *u8
+    let k2 : *u8 = (&NOUS_K2 as u64) as *u8
+    nous_key_canonical(kin, 8u64, 1u64, 1u64, k1)
+    nous_key_canonical(kin, 8u64, 1u64, 1u64, k2)
+    if cad_eq(k1, k2) != 1u8 { return 10u64 }
+    nous_key_canonical(kin, 8u64, 2u64, 1u64, k2)
+    if cad_eq(k1, k2) == 1u8 { return 11u64 }
+    let w1 : *u8 = (&NOUS_W1 as u64) as *u8
+    let w2 : *u8 = (&NOUS_W2 as u64) as *u8
+    z = 0u64
+    while z < 32u64 { NOUS_W1[z] = 0xAAu8  NOUS_W2[z] = 0xBBu8  z = z + 1u64 }
+    nous_key_gap(kin, 8u64, 1u64, 1u64, w1, 100u32, 0u64, k1)
+    nous_key_gap(kin, 8u64, 1u64, 1u64, w2, 100u32, 0u64, k2)
+    if cad_eq(k1, k2) == 1u8 { return 12u64 }
+    nous_key_canonical(kin, 8u64, 1u64, 1u64, k1)
+    nous_key_gap(kin, 8u64, 1u64, 1u64, w1, 100u32, 0u64, k2)
+    if cad_eq(k1, k2) == 1u8 { return 13u64 }
+
+    let oc   : *u8  = (&NOUS_OC as u64) as *u8
+    let reqp : *u32 = (&NOUS_SR_REQ as u64) as *u32
+    let otp  : *u32 = (&NOUS_SR_OUT as u64) as *u32
+    let onp  : *u32 = (&NOUS_SR_OUTN as u64) as *u32
+    let symp : *u8  = (&NOUS_SR_SYM as u64) as *u8
+    let chp  : *u32 = (&NOUS_SR_CHILD as u64) as *u32
+
+    /* 4a. e-graph SATURATED: one node, generous budget */
+    eg_init()
+    z = 0u64
+    while z < 32u64 { NOUS_SR_SYM[z] = 0u8  z = z + 1u64 }
+    NOUS_SR_SYM[0u64] = 1u8
+    let cls : u32 = eg_add(symp, chp, 0u32)
+    if cls == NOUS_EG_SENT { return 14u64 }
+    NOUS_SR_REQ[0u64] = cls
+    NOUS_SR_REQ[1u64] = 1u32
+    NOUS_SR_REQ[2u64] = 1u32
+    nous_budget_make(100u32, 0u64, NOUS_BUDGET_STEPS, bp)
+    if nous_search_egraph(bp, reqp, otp, onp, oc) != NOUS_SR_OK { return 15u64 }
+    if NOUS_OC[0u64] != NOUS_SATURATED { return 16u64 }
+
+    /* 4b. e-graph GAP: same one-node problem, zero budget (no certification) */
+    eg_init()
+    z = 0u64
+    while z < 32u64 { NOUS_SR_SYM[z] = 0u8  z = z + 1u64 }
+    NOUS_SR_SYM[0u64] = 1u8
+    let cls2 : u32 = eg_add(symp, chp, 0u32)
+    if cls2 == NOUS_EG_SENT { return 17u64 }
+    NOUS_SR_REQ[0u64] = cls2
+    NOUS_SR_REQ[1u64] = 1u32
+    NOUS_SR_REQ[2u64] = 1u32
+    nous_budget_make(0u32, 0u64, NOUS_BUDGET_STEPS, bp)
+    if nous_search_egraph(bp, reqp, otp, onp, oc) != NOUS_SR_OK { return 18u64 }
+    if NOUS_OC[0u64] != NOUS_GAP { return 19u64 }
+
+    /* 4c. e-graph REFUTED: empty graph (saturated, but no extractable term) */
+    eg_init()
+    NOUS_SR_REQ[0u64] = 0u32
+    NOUS_SR_REQ[1u64] = 0u32
+    nous_budget_make(100u32, 0u64, NOUS_BUDGET_STEPS, bp)
+    if nous_search_egraph(bp, reqp, otp, onp, oc) != NOUS_SR_OK { return 20u64 }
+    if NOUS_OC[0u64] != NOUS_REFUTED { return 21u64 }
+
+    /* 5. dispatch: unknown client refused; egraph kind routes */
+    if nous_search_run(99u32, bp, reqp, otp, onp, oc) != NOUS_SR_EBAD { return 22u64 }
+    eg_init()
+    NOUS_SR_REQ[0u64] = 0u32
+    NOUS_SR_REQ[1u64] = 0u32
+    nous_budget_make(100u32, 0u64, NOUS_BUDGET_STEPS, bp)
+    if nous_search_run(NOUS_CLIENT_EGRAPH, bp, reqp, otp, onp, oc) != NOUS_SR_OK { return 23u64 }
+    if NOUS_OC[0u64] != NOUS_REFUTED { return 24u64 }
+
+    /* 6. evaluation-gap fallback (B-7): a NULL term canonicalises to itself, not gapped */
+    let gflag : *u8 = (&NOUS_OC as u64) as *u8
+    let er : u32 = nous_eval_checked(0xFFFFFFFFu32, gflag)
+    if er != 0xFFFFFFFFu32 { return 25u64 }
+    if NOUS_OC[0u64] != 0u8 { return 26u64 }
+
+    return 99u64
+}

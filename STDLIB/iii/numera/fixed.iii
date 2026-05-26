@@ -1,0 +1,113 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\fixed.iii
+ *
+ * III STDLIB - numera::fixed
+ *
+ * Q32.32 fixed-point: 32 integer bits + 32 fractional bits stored
+ * inside a u64.  Operations are exact for the integer portion,
+ * truncating for the fractional.  Sign is unsigned in this
+ * implementation; signed Q31.32 is a Phase C addition.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_fixed
+
+const FIX_FRAC_BITS : u32 = 32u32
+const FIX_ONE       : u64 = 0x100000000u64    /* 1.0 in Q32.32 = 2^32 */
+const FIX_HALF      : u64 = 0x80000000u64     /* 0.5 in Q32.32 = 2^31 */
+
+fn fix_from_u32(v: u32) -> u64 @export {
+    return (v as u64) << 32u64
+}
+
+fn fix_to_u32_truncate(q: u64) -> u32 @export {
+    return ((q >> 32u64) & 0xFFFFFFFFu64) as u32
+}
+
+fn fix_to_u32_round(q: u64) -> u32 @export {
+    let r : u64 = q + FIX_HALF
+    return ((r >> 32u64) & 0xFFFFFFFFu64) as u32
+}
+
+fn fix_frac(q: u64) -> u32 @export {
+    return (q & 0xFFFFFFFFu64) as u32
+}
+
+fn fix_add(a: u64, b: u64) -> u64 @export {
+    return a + b
+}
+
+fn fix_sub(a: u64, b: u64) -> u64 @export {
+    return a - b
+}
+
+/* mul: (a * b) >> 32, with a 128-bit intermediate computed via
+ * schoolbook 64x64 split.  Each line keeps at most one parenthesised
+ * subexpression to keep iiis-2's parser happy. */
+fn fix_mul(a: u64, b: u64) -> u64 @export {
+    let a_shifted : u64 = a >> 32u64
+    let a_hi : u64 = a_shifted & 0xFFFFFFFFu64
+    let a_lo : u64 = a & 0xFFFFFFFFu64
+    let b_shifted : u64 = b >> 32u64
+    let b_hi : u64 = b_shifted & 0xFFFFFFFFu64
+    let b_lo : u64 = b & 0xFFFFFFFFu64
+    let pp_lo_lo : u64 = a_lo * b_lo
+    let pp_lo_hi : u64 = a_lo * b_hi
+    let pp_hi_lo : u64 = a_hi * b_lo
+    let pp_hi_hi : u64 = a_hi * b_hi
+    let lo_lo_high : u64 = pp_lo_lo >> 32u64
+    let pp_lo_hi_lo : u64 = pp_lo_hi & 0xFFFFFFFFu64
+    let pp_hi_lo_lo : u64 = pp_hi_lo & 0xFFFFFFFFu64
+    let mid_a : u64 = lo_lo_high + pp_lo_hi_lo
+    let mid : u64 = mid_a + pp_hi_lo_lo
+    let mid_high : u64 = mid >> 32u64
+    let mid_low : u64 = mid & 0xFFFFFFFFu64
+    let pp_lo_hi_hi : u64 = pp_lo_hi >> 32u64
+    let pp_hi_lo_hi : u64 = pp_hi_lo >> 32u64
+    let pp_hi_hi_lo : u64 = pp_hi_hi & 0xFFFFFFFFu64
+    let s1 : u64 = pp_hi_hi_lo + pp_lo_hi_hi
+    let s2 : u64 = s1 + pp_hi_lo_hi
+    let bits_64_95 : u64 = s2 + mid_high
+    let high_part : u64 = bits_64_95 << 32u64
+    return high_part | mid_low
+}
+
+fn fix_div(a: u64, b: u64) -> u64 @export {
+    if b == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    /* (a << 32) / b - but (a << 32) overflows for large a.  Approach:
+     * compute a / b first (integer Q part), then ((a mod b) << 32) / b
+     * for the fractional part. */
+    let int_part : u64 = a / b
+    let rem      : u64 = a % b
+    let mut frac_part : u64 = 0u64
+    if rem != 0u64 {
+        /* (rem << 32) / b: rem fits in 32 bits OR less only after
+         * dividing.  Worst-case rem could be up to b-1 which is up
+         * to 2^64-2, so rem << 32 overflows.  Instead long-divide
+         * by repeated subtract-and-shift: compute frac_part bit by
+         * bit. */
+        let mut acc : u64 = rem
+        let mut bit : u32 = 32u32
+        while bit > 0u32 {
+            bit = bit - 1u32
+            acc = acc << 1u64
+            if acc >= b {
+                acc = acc - b
+                let bit_u64 : u64 = bit as u64
+                let one_shifted : u64 = 1u64 << bit_u64
+                frac_part = frac_part | one_shifted
+            }
+        }
+    }
+    return (int_part << 32u64) | (frac_part & 0xFFFFFFFFu64)
+}
+
+fn fix_eq(a: u64, b: u64) -> u8 @export {
+    if a == b { return 1u8 }
+    return 0u8
+}
+
+fn fix_lt(a: u64, b: u64) -> u8 @export {
+    if a < b { return 1u8 }
+    return 0u8
+}

@@ -1,0 +1,10 @@
+module corpus_22
+
+extern @abi(ioctl) fn alloc_block(n: u64) -> *u64 from "fake"
+
+fn main() -> u64 {
+    let mut buf: u64 = 0
+    let p: *u64 = &buf
+    p[0] = 99
+    return p[0]
+}

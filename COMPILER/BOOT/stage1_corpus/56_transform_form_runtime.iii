@@ -1,0 +1,32 @@
+module corpus_56
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn transform_pattern_set_init(arena: u64) -> u64 from "transform.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap: u64, kid: u8, ring: u8, hex: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn transform_form_invoke(src: u64, len: u64, ctx: u64) -> u64 from "transform_form.iii"
+extern @abi(c-msvc-x64) fn transform_form_src_form() -> u32 from "transform_form.iii"
+extern @abi(c-msvc-x64) fn transform_form_dst_form() -> u32 from "transform_form.iii"
+
+/* "src=1, dst=3, input=0xCAFE" */
+var SPEC : [u8; 26] = [
+    115u8, 114u8, 99u8, 61u8, 49u8, 44u8, 32u8,
+    100u8, 115u8, 116u8, 61u8, 51u8, 44u8, 32u8,
+    105u8, 110u8, 112u8, 117u8, 116u8, 61u8, 48u8, 120u8, 67u8, 65u8, 70u8, 69u8
+]
+
+fn main() -> u64 {
+    resolution_init()
+    let arena : u64 = arena_new(65536u64)
+    transform_pattern_set_init(arena)
+    call_context_init_set(1u64, 0u8, 2u8, 6u8)
+    call_context_init_set_extras(arena, 0u16)
+    let ctx : u64 = call_context_new()
+    let _r : u64 = transform_form_invoke((&SPEC) as u64, 26u64, ctx)
+    /* Verify the parser populated the side state correctly. */
+    if transform_form_src_form() != 1u32 { return 10u64 }
+    if transform_form_dst_form() != 3u32 { return 20u64 }
+    return 1u64
+}

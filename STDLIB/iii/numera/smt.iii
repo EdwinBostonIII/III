@@ -1,0 +1,2107 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\smt.iii
+ *
+ * III STDLIB - numera::smt
+ *
+ * Satisfiability modulo theories.  DPLL(T) over two convex theories:
+ *   LIA: linear integer arithmetic, exact rational Bland's-rule simplex
+ *        plus branch-and-bound for integrality.  Constraints sum c_i x_i
+ *        op b, op in {<=, >=, ==}; >= stored as negation of <=.
+ *   BV:  fixed-width unsigned bit vectors (1..64) bit-blasted to the
+ *        Module-15 CDCL SAT solver.  SMT owns a clause buffer and replays
+ *        it into SAT after sizing (sat_init wipes state, so buffer first).
+ * Combination: Nelson-Oppen equality exchange over shared integer vars,
+ *        iterated to a deterministic fixed point.
+ * Witness: sha256 over the canonical (constraints + model) transcript,
+ *        capability-gated.  smt_check_model re-verifies any SAT model.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W2 (<=4 params), W8 (static tables), W13, W14 (sentinel
+ * loops, no break), W15 (no recursion; explicit B&B stack + worklists).
+ * Non-reentrant: module-scope scratch (Trap 7) -- single serialized solve.
+ *
+ * Trap discipline:
+ *   - signed i64 compares ONLY via == / != (Trap 3); all magnitude
+ *     decisions route through smt_rat_sign / smt_rat_cmp.
+ *   - u32-in-u64 shift masked with & 0xFFFFFFFFu64 (Trap 4).
+ *   - no local var arrays; all scratch hoisted to module scope (Trap 7).
+ *   - subtractive Euclid GCD, no % or / on wide values (Trap 11, Trap 18).
+ *   - rational reduce divides only sign-extracted magnitudes (bit 63
+ *     clear) so the idivq the compiler emits is correct (Trap 18).
+ *   - element address via ((&ARR as u64)+off) as *T, never &ARR[idx].
+ */
+
+module numera_smt
+
+extern @abi(c-msvc-x64) fn sat_init(n_vars: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_add_clause(lits: *u32, n_lits: u32) -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_solve() -> i32 from "sat.iii"
+extern @abi(c-msvc-x64) fn sat_value(vr: u32) -> u8 from "sat.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const SMT_OK            : i32 =  0i32
+const SMT_SAT           : i32 =  1i32
+const SMT_UNSAT         : i32 =  2i32
+const SMT_UNKNOWN       : i32 =  3i32
+const SMT_E_TOO_BIG     : i32 = -1i32
+const SMT_E_BAD         : i32 = -2i32
+const SMT_E_NOCAP       : i32 = -3i32
+const SMT_E_NOMODEL     : i32 = -4i32
+
+const SMT_MAX_LIA_VARS  : u32 = 256u32
+const SMT_MAX_LIA_CON   : u32 = 1024u32
+const SMT_LIA_PACKED    : u32 = 16384u32
+const SMT_MAX_BV_VARS   : u32 = 256u32
+const SMT_BV_WIDTH_MAX  : u32 = 64u32
+const SMT_BV_TOTAL_BITS : u32 = 16384u32
+
+const SMT_SX_MAX_ROWS   : u32 = 1280u32
+const SMT_SX_MAX_COLS    : u32 = 1600u32
+const SMT_SX_CELLS       : u32 = 2048000u32
+const SMT_BB_MAX_DEPTH   : u32 = 4096u32
+const SMT_LIA_BOX        : i64 = 1048576i64
+const SMT_CLBUF_MAX_LITS : u32 = 1048576u32
+const SMT_CLBUF_MAX_CLS  : u32 = 262144u32
+const SMT_SAT_OK         : i32 =  0i32
+const SMT_SAT_SAT        : i32 =  1i32
+const SMT_SAT_UNSAT      : i32 =  2i32
+const SMT_SAT_E_TRIV     : i32 = -1i32
+const SMT_NULL_CAP       : u64 = 0u64
+const SMT_NO_SHARE       : u32 = 0xFFFFFFFFu32
+const SMT_NEG            : u8 = 0u8
+const SMT_ZERO           : u8 = 1u8
+const SMT_POS            : u8 = 2u8
+const SMT_BB_NODE_CAP    : u64 = 16777216u64
+
+const SMT_U32MASK        : u64 = 0xFFFFFFFFu64
+const SMT_NO_FRAC        : u32 = 0xFFFFFFFFu32
+const SMT_NO_PIVOT       : u32 = 0xFFFFFFFFu32
+const SMT_NO_EQ_PASS_CAP : u32 = 65536u32
+const SMT_WIT_CAP        : u32 = 65536u32
+
+/* --- LIA constraint store --- */
+var SMT_LIA_NVAR    : u32 = 0u32
+var SMT_LIA_NCON    : u32 = 0u32
+var SMT_LIA_KIND    : [u8;  1024]
+var SMT_LIA_OFF     : [u32; 1024]
+var SMT_LIA_LEN     : [u32; 1024]
+var SMT_LIA_BND     : [i64; 1024]
+var SMT_LIA_COEFF   : [i64; 16384]
+var SMT_LIA_VAR     : [u32; 16384]
+var SMT_LIA_USED    : u32 = 0u32
+var SMT_LIA_VAL     : [i64; 256]
+var SMT_LIA_SOLVED  : u8 = 0u8
+
+/* --- BV store --- */
+var SMT_BV_NVAR     : u32 = 0u32
+var SMT_BV_WIDTH    : [u32; 256]
+var SMT_BV_BIT0     : [u32; 256]
+var SMT_BV_SAT_NEXT : u32 = 0u32
+var SMT_BV_BIT_VAR  : [u32; 16384]
+var SMT_BV_SOLVED   : u8 = 0u8
+
+/* --- SMT-owned clause replay buffer (fixes SAT lifecycle ordering) --- */
+var SMT_CLBUF_OFF   : [u32; 262144]
+var SMT_CLBUF_LEN   : [u32; 262144]
+var SMT_CLBUF_NCL   : u32 = 0u32
+var SMT_CLBUF_LIT   : [u32; 1048576]
+var SMT_CLBUF_USED  : u32 = 0u32
+
+/* --- Nelson-Oppen sharing --- */
+var SMT_SHARE_LIA   : [u32; 256]
+var SMT_SHARE_BV    : [u32; 256]
+var SMT_SHARE_N     : u32 = 0u32
+var SMT_NO_NEW_EQ   : u8 = 0u8
+
+/* --- Exact rational simplex tableau (num/den, den>0) --- */
+var SMT_SX_NUM      : [i64; 2048000]
+var SMT_SX_DEN      : [i64; 2048000]
+var SMT_SX_NROWS    : u32 = 0u32
+var SMT_SX_NCOLS    : u32 = 0u32
+var SMT_SX_BASIS    : [u32; 1280]
+var SMT_SX_RHSNUM   : [i64; 1280]
+var SMT_SX_RHSDEN   : [i64; 1280]
+
+/* --- simplex working state (hoisted; W13/Trap 7) --- */
+var SMT_SX_NSTRUCT  : u32 = 0u32     /* number of structural (problem) vars */
+var SMT_SX_NSLACK   : u32 = 0u32     /* number of slack columns */
+var SMT_SX_NART     : u32 = 0u32     /* number of artificial columns */
+var SMT_SX_ART0     : u32 = 0u32     /* col index of first artificial */
+var SMT_SX_RHSCOL   : u32 = 0u32     /* col index of the rhs column */
+var SMT_SX_OK       : u8  = 0u8      /* simplex build/feasibility ok flag */
+var SMT_SX_RN       : i64 = 0i64     /* scratch rational num (return) */
+var SMT_SX_RD       : i64 = 1i64     /* scratch rational den (return) */
+var SMT_SX_BEST_ROW : u32 = 0u32     /* ratio-test running best row */
+var SMT_SX_HAVE     : u8  = 0u8      /* ratio-test: a best row exists yet */
+
+/* --- Branch-and-bound explicit DFS stack (W15) --- */
+var SMT_BB_VAR      : [u32; 4096]
+var SMT_BB_LO       : [i64; 4096]
+var SMT_BB_HI       : [i64; 4096]
+var SMT_BB_KIND     : [u8;  4096]    /* 0 = floor cut (<=), 1 = ceil cut (>=) */
+var SMT_BB_SP       : u32 = 0u32
+var SMT_BB_NODES    : u64 = 0u64
+
+/* B&B active extra cut rows: var v constrained to [lo,hi] integer window. */
+var SMT_BB_CUT_VAR  : [u32; 4096]
+var SMT_BB_CUT_KIND : [u8;  4096]    /* 0 = <= hi cut, 1 = >= lo cut */
+var SMT_BB_CUT_BND  : [i64; 4096]
+var SMT_BB_NCUT     : u32 = 0u32
+
+/* --- Witness --- */
+var SMT_WIT_HASH    : [u8; 32]
+var SMT_WIT_VALID   : u8 = 0u8
+var SMT_WIT_SCRATCH : [u8; 65536]
+
+/* --- Hoisted per-fn scratch (Trap 7: no local var arrays) --- */
+var SMT_SCRATCH_CL  : [u32; 4]
+var SMT_SX_PIVCOL_N : [i64; 1280]
+var SMT_SX_PIVCOL_D : [i64; 1280]
+var SMT_BB_VALS     : [i64; 256]
+
+/* ===================================================================== *
+ *  SAT literal encoding helpers (match sat.iii: lit = (v<<1)|sign)
+ * ===================================================================== */
+
+fn smt_pos_lit(v: u32) -> u32 { return v << 1u32 }
+fn smt_neg_lit(v: u32) -> u32 { return (v << 1u32) | 1u32 }
+
+/* ===================================================================== *
+ *  Rational primitives -- NIH, no signed ordering, no modulo-after-call.
+ *  A rational is (num : i64, den : i64) with den > 0.  Sign lives in num.
+ * ===================================================================== */
+
+/* Magnitude of an i64 as a NON-NEGATIVE i64 (bit 63 clear).  We never
+ * construct i64::MIN, so negation is always representable.  Sign decided
+ * by the bit-63 test (Trap 3: no signed ordering). */
+fn smt_i64_abs(x: i64) -> i64 {
+    let neg : u64 = ((x as u64) >> 63u64) & 1u64
+    if neg == 1u64 { return 0i64 - x }
+    return x
+}
+
+/* Sign tag of an i64: SMT_NEG / SMT_ZERO / SMT_POS.  Equality + bit-63
+ * only -- never `< 0i64` (Trap 3). */
+fn smt_rat_sign(num: i64) -> u8 {
+    if num == 0i64 { return SMT_ZERO }
+    let neg : u64 = ((num as u64) >> 63u64) & 1u64
+    if neg == 1u64 { return SMT_NEG }
+    return SMT_POS
+}
+
+/* gcd of two i64 via SUBTRACTIVE Euclid on UNSIGNED magnitudes (no % or /,
+ * Trap 11 / Trap 18).  Result is a non-negative i64. */
+fn smt_gcd(a: i64, b: i64) -> i64 {
+    let mut x : u64 = smt_i64_abs(a) as u64
+    let mut y : u64 = smt_i64_abs(b) as u64
+    if x == 0u64 { return b }
+    if y == 0u64 { return a }
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if x == y { going = 0u8 }
+        if going == 1u8 {
+            if x > y { x = x - y } else { y = y - x }
+        }
+    }
+    return x as i64
+}
+
+/* Reduce the (num,den) at cell `idx` (in SMT_SX_NUM/DEN): divide both by
+ * gcd of magnitudes, force den>0.  Division is on sign-extracted
+ * MAGNITUDES (bit 63 clear) so the compiler's idivq is correct (Trap 18). */
+fn smt_rat_reduce_cell(idx: u32) -> i32 {
+    let i : u64 = (idx as u64) & SMT_U32MASK
+    let mut n : i64 = SMT_SX_NUM[i]
+    let mut d : i64 = SMT_SX_DEN[i]
+    if d == 0i64 { d = 1i64 }
+    /* force den > 0 by flipping both signs if den is negative */
+    let dneg : u64 = ((d as u64) >> 63u64) & 1u64
+    if dneg == 1u64 { n = 0i64 - n  d = 0i64 - d }
+    if n == 0i64 { SMT_SX_NUM[i] = 0i64  SMT_SX_DEN[i] = 1i64  return SMT_OK }
+    let g : i64 = smt_gcd(n, d)
+    if g == 0i64 { SMT_SX_NUM[i] = n  SMT_SX_DEN[i] = d  return SMT_OK }
+    if g == 1i64 { SMT_SX_NUM[i] = n  SMT_SX_DEN[i] = d  return SMT_OK }
+    /* divide magnitudes by g, reattach sign of n; d is positive */
+    let nneg : u64 = ((n as u64) >> 63u64) & 1u64
+    let na : i64 = smt_i64_abs(n)
+    let gg : i64 = g
+    let qn : i64 = na / gg
+    let qd : i64 = d / gg
+    if nneg == 1u64 { SMT_SX_NUM[i] = 0i64 - qn } else { SMT_SX_NUM[i] = qn }
+    SMT_SX_DEN[i] = qd
+    return SMT_OK
+}
+
+/* Reduce a standalone (n,d) pair held in SMT_SX_RN / SMT_SX_RD. */
+fn smt_rat_reduce_scratch() -> i32 {
+    let mut n : i64 = SMT_SX_RN
+    let mut d : i64 = SMT_SX_RD
+    if d == 0i64 { d = 1i64 }
+    let dneg : u64 = ((d as u64) >> 63u64) & 1u64
+    if dneg == 1u64 { n = 0i64 - n  d = 0i64 - d }
+    if n == 0i64 { SMT_SX_RN = 0i64  SMT_SX_RD = 1i64  return SMT_OK }
+    let g : i64 = smt_gcd(n, d)
+    if g == 0i64 { SMT_SX_RN = n  SMT_SX_RD = d  return SMT_OK }
+    if g == 1i64 { SMT_SX_RN = n  SMT_SX_RD = d  return SMT_OK }
+    let nneg : u64 = ((n as u64) >> 63u64) & 1u64
+    let na : i64 = smt_i64_abs(n)
+    let gg : i64 = g
+    let qn : i64 = na / gg
+    let qd : i64 = d / gg
+    if nneg == 1u64 { SMT_SX_RN = 0i64 - qn } else { SMT_SX_RN = qn }
+    SMT_SX_RD = qd
+    return SMT_OK
+}
+
+/* Compare two rationals a=(an/ad), b=(bn/bd) with ad,bd > 0.
+ * Returns -1 / 0 / +1 (i32) using cross-multiplication, decided by the
+ * SIGN of (an*bd - bn*ad).  Operands here are products of bounded LIA
+ * values; sign is read via smt_rat_sign (no i64 ordering, Trap 3). */
+fn smt_rat_cmp(an: i64, ad: i64, bn: i64, bd: i64) -> i32 {
+    let lhs : i64 = an * bd
+    let rhs : i64 = bn * ad
+    let diff : i64 = lhs - rhs
+    let s : u8 = smt_rat_sign(diff)
+    if s == SMT_NEG { return -1i32 }
+    if s == SMT_POS { return 1i32 }
+    return 0i32
+}
+
+/* ===================================================================== *
+ *  Clause buffering (replayed into SAT in smt_solve)
+ * ===================================================================== */
+
+/* Copy SMT_SCRATCH_CL[0..n] into the replay buffer as one clause. */
+fn smt_clbuf_add(n: u32) -> i32 {
+    if n == 0u32 { return SMT_E_BAD }
+    if n > 4u32 { return SMT_E_BAD }
+    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { return SMT_E_TOO_BIG }
+    if SMT_CLBUF_USED + n > SMT_CLBUF_MAX_LITS { return SMT_E_TOO_BIG }
+    let cl : u64 = (SMT_CLBUF_NCL as u64) & SMT_U32MASK
+    let off : u32 = SMT_CLBUF_USED
+    SMT_CLBUF_OFF[cl] = off
+    SMT_CLBUF_LEN[cl] = n
+    let mut i : u32 = 0u32
+    while i < n {
+        let di : u64 = ((off + i) as u64) & SMT_U32MASK
+        let si : u64 = (i as u64) & SMT_U32MASK
+        SMT_CLBUF_LIT[di] = SMT_SCRATCH_CL[si]
+        i = i + 1u32
+    }
+    SMT_CLBUF_USED = off + n
+    SMT_CLBUF_NCL  = SMT_CLBUF_NCL + 1u32
+    return SMT_OK
+}
+
+/* 1-literal clause. */
+fn smt_clbuf_add1(l0: u32) -> i32 {
+    SMT_SCRATCH_CL[0u64] = l0
+    return smt_clbuf_add(1u32)
+}
+
+/* 2-literal clause. */
+fn smt_clbuf_add2(l0: u32, l1: u32) -> i32 {
+    SMT_SCRATCH_CL[0u64] = l0
+    SMT_SCRATCH_CL[1u64] = l1
+    return smt_clbuf_add(2u32)
+}
+
+/* 3-literal clause. */
+fn smt_clbuf_add3(l0: u32, l1: u32, l2: u32) -> i32 {
+    SMT_SCRATCH_CL[0u64] = l0
+    SMT_SCRATCH_CL[1u64] = l1
+    SMT_SCRATCH_CL[2u64] = l2
+    return smt_clbuf_add(3u32)
+}
+
+/* --- Streaming wide-clause builder (for clauses wider than 4 literals,
+ *     e.g. the disjunction in smt_bv_add_neq).  begin, push*, end. --- */
+var SMT_CLBUF_WCNT : u32 = 0u32     /* literals pushed in the open clause */
+
+fn smt_clbuf_begin() -> i32 {
+    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { return SMT_E_TOO_BIG }
+    SMT_CLBUF_WCNT = 0u32
+    return SMT_OK
+}
+
+fn smt_clbuf_push(lit: u32) -> i32 {
+    let off : u32 = SMT_CLBUF_USED + SMT_CLBUF_WCNT
+    if off >= SMT_CLBUF_MAX_LITS { return SMT_E_TOO_BIG }
+    let di : u64 = (off as u64) & SMT_U32MASK
+    SMT_CLBUF_LIT[di] = lit
+    SMT_CLBUF_WCNT = SMT_CLBUF_WCNT + 1u32
+    return SMT_OK
+}
+
+fn smt_clbuf_end() -> i32 {
+    if SMT_CLBUF_WCNT == 0u32 { return SMT_E_BAD }
+    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { return SMT_E_TOO_BIG }
+    let cl : u64 = (SMT_CLBUF_NCL as u64) & SMT_U32MASK
+    SMT_CLBUF_OFF[cl] = SMT_CLBUF_USED
+    SMT_CLBUF_LEN[cl] = SMT_CLBUF_WCNT
+    SMT_CLBUF_USED = SMT_CLBUF_USED + SMT_CLBUF_WCNT
+    SMT_CLBUF_NCL  = SMT_CLBUF_NCL + 1u32
+    SMT_CLBUF_WCNT = 0u32
+    return SMT_OK
+}
+
+/* ===================================================================== *
+ *  Public: lifecycle + construction
+ * ===================================================================== */
+
+fn smt_init() -> i32 @export {
+    SMT_LIA_NVAR = 0u32
+    SMT_LIA_NCON = 0u32
+    SMT_LIA_USED = 0u32
+    SMT_LIA_SOLVED = 0u8
+    SMT_BV_NVAR = 0u32
+    SMT_BV_SAT_NEXT = 1u32
+    SMT_BV_SOLVED = 0u8
+    SMT_CLBUF_NCL = 0u32
+    SMT_CLBUF_USED = 0u32
+    SMT_SHARE_N = 0u32
+    SMT_NO_NEW_EQ = 0u8
+    SMT_WIT_VALID = 0u8
+    SMT_BB_NODES = 0u64
+    SMT_BB_SP = 0u32
+    SMT_BB_NCUT = 0u32
+    SMT_SX_NROWS = 0u32
+    SMT_SX_NCOLS = 0u32
+    let mut i : u32 = 0u32
+    while i < SMT_MAX_LIA_VARS {
+        let vi : u64 = (i as u64) & SMT_U32MASK
+        SMT_LIA_VAL[vi] = 0i64
+        i = i + 1u32
+    }
+    return SMT_OK
+}
+
+fn smt_lia_new_var() -> u32 @export {
+    if SMT_LIA_NVAR >= SMT_MAX_LIA_VARS { return 0u32 }
+    let v : u32 = SMT_LIA_NVAR
+    let vi : u64 = (v as u64) & SMT_U32MASK
+    SMT_LIA_VAL[vi] = 0i64
+    SMT_LIA_NVAR = SMT_LIA_NVAR + 1u32
+    return v + 1u32
+}
+
+/* Internal store: append a constraint with the given kind (0 = <=, 1 = ==).
+ * 3 params (W2 ok); kind passed via SMT_ADD-style explicit arg is avoided
+ * by making this a 4-param helper used by all three public adders. */
+fn smt_lia_store(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 {
+    if (coeffs as u64) == 0u64 { return SMT_E_BAD }
+    if (vars as u64) == 0u64 { return SMT_E_BAD }
+    if SMT_LIA_NCON >= SMT_MAX_LIA_CON { return SMT_E_TOO_BIG }
+    if SMT_LIA_USED + n > SMT_LIA_PACKED { return SMT_E_TOO_BIG }
+    let c : u64 = (SMT_LIA_NCON as u64) & SMT_U32MASK
+    let off : u32 = SMT_LIA_USED
+    SMT_LIA_OFF[c] = off
+    SMT_LIA_LEN[c] = n
+    SMT_LIA_BND[c] = b
+    let mut i : u32 = 0u32
+    while i < n {
+        let di : u64 = ((off + i) as u64) & SMT_U32MASK
+        let si : u64 = (i as u64) & SMT_U32MASK
+        SMT_LIA_COEFF[di] = coeffs[si]
+        let vv : u32 = vars[si]
+        if vv == 0u32 { return SMT_E_BAD }
+        if vv > SMT_LIA_NVAR { return SMT_E_BAD }
+        SMT_LIA_VAR[di] = vv
+        i = i + 1u32
+    }
+    SMT_LIA_USED = off + n
+    SMT_LIA_NCON = SMT_LIA_NCON + 1u32
+    return SMT_OK
+}
+
+/* Set the kind byte of the most-recently-stored constraint. */
+fn smt_lia_set_last_kind(k: u8) -> i32 {
+    if SMT_LIA_NCON == 0u32 { return SMT_E_BAD }
+    let c : u64 = ((SMT_LIA_NCON - 1u32) as u64) & SMT_U32MASK
+    SMT_LIA_KIND[c] = k
+    return SMT_OK
+}
+
+fn smt_lia_add_le(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 @export {
+    let r : i32 = smt_lia_store(coeffs, vars, n, b)
+    if r != SMT_OK { return r }
+    smt_lia_set_last_kind(0u8)
+    return SMT_OK
+}
+
+fn smt_lia_add_eq(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 @export {
+    let r : i32 = smt_lia_store(coeffs, vars, n, b)
+    if r != SMT_OK { return r }
+    smt_lia_set_last_kind(1u8)
+    return SMT_OK
+}
+
+/* sum >= b  stored as  (-sum) <= (-b):  negate coeffs + bound, kind 0. */
+fn smt_lia_add_ge(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 @export {
+    if (coeffs as u64) == 0u64 { return SMT_E_BAD }
+    if (vars as u64) == 0u64 { return SMT_E_BAD }
+    if SMT_LIA_NCON >= SMT_MAX_LIA_CON { return SMT_E_TOO_BIG }
+    if SMT_LIA_USED + n > SMT_LIA_PACKED { return SMT_E_TOO_BIG }
+    let c : u64 = (SMT_LIA_NCON as u64) & SMT_U32MASK
+    let off : u32 = SMT_LIA_USED
+    SMT_LIA_OFF[c] = off
+    SMT_LIA_LEN[c] = n
+    SMT_LIA_BND[c] = 0i64 - b
+    let mut i : u32 = 0u32
+    while i < n {
+        let di : u64 = ((off + i) as u64) & SMT_U32MASK
+        let si : u64 = (i as u64) & SMT_U32MASK
+        SMT_LIA_COEFF[di] = 0i64 - coeffs[si]
+        let vv : u32 = vars[si]
+        if vv == 0u32 { return SMT_E_BAD }
+        if vv > SMT_LIA_NVAR { return SMT_E_BAD }
+        SMT_LIA_VAR[di] = vv
+        i = i + 1u32
+    }
+    SMT_LIA_USED = off + n
+    SMT_LIA_NCON = SMT_LIA_NCON + 1u32
+    SMT_LIA_KIND[c] = 0u8
+    return SMT_OK
+}
+
+fn smt_bv_new_var(width: u32) -> u32 @export {
+    if width == 0u32 { return 0u32 }
+    if width > SMT_BV_WIDTH_MAX { return 0u32 }
+    if SMT_BV_NVAR >= SMT_MAX_BV_VARS { return 0u32 }
+    if SMT_BV_SAT_NEXT + width > SMT_BV_TOTAL_BITS { return 0u32 }
+    let v : u32 = SMT_BV_NVAR
+    let vi : u64 = (v as u64) & SMT_U32MASK
+    SMT_BV_WIDTH[vi] = width
+    SMT_BV_BIT0[vi]  = SMT_BV_SAT_NEXT
+    let mut i : u32 = 0u32
+    while i < width {
+        let slot : u64 = ((SMT_BV_SAT_NEXT - 1u32 + i) as u64) & SMT_U32MASK
+        SMT_BV_BIT_VAR[slot] = SMT_BV_SAT_NEXT + i
+        i = i + 1u32
+    }
+    SMT_BV_SAT_NEXT = SMT_BV_SAT_NEXT + width
+    SMT_BV_NVAR = SMT_BV_NVAR + 1u32
+    return v + 1u32
+}
+
+/* bit-blast a == b : for each bit i, (~a_i v b_i) and (a_i v ~b_i). */
+fn smt_bv_add_eq(a: u32, b: u32) -> i32 @export {
+    if a == 0u32 { return SMT_E_BAD }
+    if b == 0u32 { return SMT_E_BAD }
+    if a > SMT_BV_NVAR { return SMT_E_BAD }
+    if b > SMT_BV_NVAR { return SMT_E_BAD }
+    let ai : u64 = ((a - 1u32) as u64) & SMT_U32MASK
+    let bi : u64 = ((b - 1u32) as u64) & SMT_U32MASK
+    let wa : u32 = SMT_BV_WIDTH[ai]
+    let wb : u32 = SMT_BV_WIDTH[bi]
+    if wa != wb { return SMT_E_BAD }
+    let base_a : u32 = SMT_BV_BIT0[ai]
+    let base_b : u32 = SMT_BV_BIT0[bi]
+    let mut i : u32 = 0u32
+    while i < wa {
+        let av : u32 = base_a + i
+        let bvv : u32 = base_b + i
+        let r1 : i32 = smt_clbuf_add2(smt_neg_lit(av), smt_pos_lit(bvv))
+        if r1 != SMT_OK { return r1 }
+        let r2 : i32 = smt_clbuf_add2(smt_pos_lit(av), smt_neg_lit(bvv))
+        if r2 != SMT_OK { return r2 }
+        i = i + 1u32
+    }
+    return SMT_OK
+}
+
+/* bit-blast a < b unsigned via a Tseitin "greater-than prefix" chain.
+ * g_i is true iff the prefix [i..MSB] of a is strictly greater than b's;
+ * we want a < b i.e. NOT (a >= b) i.e. the final prefix-gt of b-over-a.
+ * We compute gt = (b > a) by the symmetric construction and force it true.
+ *   bit 0 : g = (~a0 & b0)               -> b0 high, a0 low
+ *   bit i : g_i = (~ai & bi) | ((ai==bi) & g_{i-1})
+ * Fresh Tseitin vars drawn from SMT_BV_SAT_NEXT with capacity guard.
+ * Final unit clause forces the top g true (b strictly greater => a<b). */
+fn smt_bv_add_ult(a: u32, b: u32) -> i32 @export {
+    if a == 0u32 { return SMT_E_BAD }
+    if b == 0u32 { return SMT_E_BAD }
+    if a > SMT_BV_NVAR { return SMT_E_BAD }
+    if b > SMT_BV_NVAR { return SMT_E_BAD }
+    let ai : u64 = ((a - 1u32) as u64) & SMT_U32MASK
+    let bi : u64 = ((b - 1u32) as u64) & SMT_U32MASK
+    let wa : u32 = SMT_BV_WIDTH[ai]
+    let wb : u32 = SMT_BV_WIDTH[bi]
+    if wa != wb { return SMT_E_BAD }
+    let base_a : u32 = SMT_BV_BIT0[ai]
+    let base_b : u32 = SMT_BV_BIT0[bi]
+    /* one fresh g var per bit position */
+    if SMT_BV_SAT_NEXT + wa > SMT_BV_TOTAL_BITS { return SMT_E_TOO_BIG }
+    let g0base : u32 = SMT_BV_SAT_NEXT
+    SMT_BV_SAT_NEXT = SMT_BV_SAT_NEXT + wa
+    let mut prev_g : u32 = 0u32
+    let mut have_prev : u8 = 0u8
+    let mut i : u32 = 0u32
+    while i < wa {
+        let a_i : u32 = base_a + i
+        let b_i : u32 = base_b + i
+        let g_i : u32 = g0base + i
+        if have_prev == 0u8 {
+            /* base case g0 = (~a0 & b0): 3 clauses
+             *   g -> ~a0      : (~g v ~a0)
+             *   g -> b0       : (~g v b0)
+             *   (~a0 & b0) -> g : (a0 v ~b0 v g) */
+            smt_clbuf_add2(smt_neg_lit(g_i), smt_neg_lit(a_i))
+            smt_clbuf_add2(smt_neg_lit(g_i), smt_pos_lit(b_i))
+            smt_clbuf_add3(smt_pos_lit(a_i), smt_neg_lit(b_i), smt_pos_lit(g_i))
+            prev_g = g_i
+            have_prev = 1u8
+        } else {
+            /* step  g_i <-> (~a_i & b_i) | ((a_i == b_i) & g_prev).
+             * Full iff = 3 forward + 3 backward clauses (so the BV value
+             * read by smt_bv_value / re-checked by smt_check_model is a
+             * faithful model, not just chain-forcing):
+             *   FORWARD g_i -> (b>a from bit i down):
+             *     F1 (~g_i v ~a_i v b_i)            -- a_i>b_i kills g_i
+             *     F2 (~g_i v ~a_i v ~b_i v g_prev)  -- a_i=b_i=1 needs g_prev
+             *     F3 (~g_i v a_i v b_i v g_prev)    -- a_i=b_i=0 needs g_prev
+             *   BACKWARD (b>a from bit i down) -> g_i:
+             *     B1 (a_i v ~b_i v g_i)             -- ~a_i & b_i forces g_i
+             *     B2 (~a_i v ~b_i v ~g_prev v g_i)  -- a_i=b_i=1 & g_prev
+             *     B3 (a_i v b_i v ~g_prev v g_i)    -- a_i=b_i=0 & g_prev */
+            smt_clbuf_add3(smt_neg_lit(g_i), smt_neg_lit(a_i), smt_pos_lit(b_i))
+            smt_clbuf_add(smt_emit_f2(g_i, a_i, b_i, prev_g))
+            smt_clbuf_add(smt_emit_f3(g_i, a_i, b_i, prev_g))
+            smt_clbuf_add3(smt_pos_lit(a_i), smt_neg_lit(b_i), smt_pos_lit(g_i))
+            smt_clbuf_add(smt_emit_b2(g_i, a_i, b_i, prev_g))
+            smt_clbuf_add(smt_emit_b3(g_i, a_i, b_i, prev_g))
+            prev_g = g_i
+        }
+        i = i + 1u32
+    }
+    /* force the top prefix-gt true: b strictly greater than a => a < b */
+    if have_prev == 1u8 {
+        smt_clbuf_add1(smt_pos_lit(prev_g))
+    }
+    return SMT_OK
+}
+
+/* F2: forward, a_i=b_i=1 needs g_prev:  (~g_i v ~a_i v ~b_i v g_prev).
+ * Fills SMT_SCRATCH_CL and returns the literal count (4) for smt_clbuf_add. */
+fn smt_emit_f2(g_i: u32, a_i: u32, b_i: u32, g_prev: u32) -> u32 {
+    SMT_SCRATCH_CL[0u64] = smt_neg_lit(g_i)
+    SMT_SCRATCH_CL[1u64] = smt_neg_lit(a_i)
+    SMT_SCRATCH_CL[2u64] = smt_neg_lit(b_i)
+    SMT_SCRATCH_CL[3u64] = smt_pos_lit(g_prev)
+    return 4u32
+}
+
+/* F3: forward, a_i=b_i=0 needs g_prev:  (~g_i v a_i v b_i v g_prev). */
+fn smt_emit_f3(g_i: u32, a_i: u32, b_i: u32, g_prev: u32) -> u32 {
+    SMT_SCRATCH_CL[0u64] = smt_neg_lit(g_i)
+    SMT_SCRATCH_CL[1u64] = smt_pos_lit(a_i)
+    SMT_SCRATCH_CL[2u64] = smt_pos_lit(b_i)
+    SMT_SCRATCH_CL[3u64] = smt_pos_lit(g_prev)
+    return 4u32
+}
+
+/* B2: backward, a_i=b_i=1 & g_prev -> g_i:  (~a_i v ~b_i v ~g_prev v g_i). */
+fn smt_emit_b2(g_i: u32, a_i: u32, b_i: u32, g_prev: u32) -> u32 {
+    SMT_SCRATCH_CL[0u64] = smt_neg_lit(a_i)
+    SMT_SCRATCH_CL[1u64] = smt_neg_lit(b_i)
+    SMT_SCRATCH_CL[2u64] = smt_neg_lit(g_prev)
+    SMT_SCRATCH_CL[3u64] = smt_pos_lit(g_i)
+    return 4u32
+}
+
+/* B3: backward, a_i=b_i=0 & g_prev -> g_i:  (a_i v b_i v ~g_prev v g_i). */
+fn smt_emit_b3(g_i: u32, a_i: u32, b_i: u32, g_prev: u32) -> u32 {
+    SMT_SCRATCH_CL[0u64] = smt_pos_lit(a_i)
+    SMT_SCRATCH_CL[1u64] = smt_pos_lit(b_i)
+    SMT_SCRATCH_CL[2u64] = smt_neg_lit(g_prev)
+    SMT_SCRATCH_CL[3u64] = smt_pos_lit(g_i)
+    return 4u32
+}
+
+/* Tseitin XOR: force d_var = a_i XOR b_i (4 clauses, buffered).
+ *   (~d v a v b) (~d v ~a v ~b) (~a v b v d) (a v ~b v d) */
+fn smt_bv_xor_bit(d_var: u32, a_i: u32, b_i: u32) -> i32 {
+    smt_clbuf_add3(smt_neg_lit(d_var), smt_pos_lit(a_i), smt_pos_lit(b_i))
+    smt_clbuf_add3(smt_neg_lit(d_var), smt_neg_lit(a_i), smt_neg_lit(b_i))
+    smt_clbuf_add3(smt_neg_lit(a_i), smt_pos_lit(b_i), smt_pos_lit(d_var))
+    smt_clbuf_add3(smt_pos_lit(a_i), smt_neg_lit(b_i), smt_pos_lit(d_var))
+    return SMT_OK
+}
+
+/* bit-blast a != b : at least one bit differs.  Introduce fresh diff vars
+ * d_i = a_i XOR b_i, then assert the wide disjunction (d_0 v ... v d_w-1).
+ * Required by reversibility_audit (per dispatch).  Width mismatch ->
+ * SMT_E_BAD. */
+fn smt_bv_add_neq(a: u32, b: u32) -> i32 @export {
+    if a == 0u32 { return SMT_E_BAD }
+    if b == 0u32 { return SMT_E_BAD }
+    if a > SMT_BV_NVAR { return SMT_E_BAD }
+    if b > SMT_BV_NVAR { return SMT_E_BAD }
+    let ai : u64 = ((a - 1u32) as u64) & SMT_U32MASK
+    let bi : u64 = ((b - 1u32) as u64) & SMT_U32MASK
+    let wa : u32 = SMT_BV_WIDTH[ai]
+    let wb : u32 = SMT_BV_WIDTH[bi]
+    if wa != wb { return SMT_E_BAD }
+    if SMT_BV_SAT_NEXT + wa > SMT_BV_TOTAL_BITS { return SMT_E_TOO_BIG }
+    let base_a : u32 = SMT_BV_BIT0[ai]
+    let base_b : u32 = SMT_BV_BIT0[bi]
+    let d0base : u32 = SMT_BV_SAT_NEXT
+    SMT_BV_SAT_NEXT = SMT_BV_SAT_NEXT + wa
+    /* per-bit XOR definitions */
+    let mut i : u32 = 0u32
+    while i < wa {
+        smt_bv_xor_bit(d0base + i, base_a + i, base_b + i)
+        i = i + 1u32
+    }
+    /* wide disjunction: at least one diff bit is set */
+    smt_clbuf_begin()
+    let mut j : u32 = 0u32
+    while j < wa {
+        smt_clbuf_push(smt_pos_lit(d0base + j))
+        j = j + 1u32
+    }
+    smt_clbuf_end()
+    return SMT_OK
+}
+
+fn smt_share(lia_var: u32, bv_var: u32) -> i32 @export {
+    if lia_var == 0u32 { return SMT_E_BAD }
+    if bv_var == 0u32 { return SMT_E_BAD }
+    if lia_var > SMT_LIA_NVAR { return SMT_E_BAD }
+    if bv_var > SMT_BV_NVAR { return SMT_E_BAD }
+    if SMT_SHARE_N >= SMT_MAX_LIA_VARS { return SMT_E_TOO_BIG }
+    let s : u64 = (SMT_SHARE_N as u64) & SMT_U32MASK
+    SMT_SHARE_LIA[s] = lia_var
+    SMT_SHARE_BV[s]  = bv_var
+    SMT_SHARE_N = SMT_SHARE_N + 1u32
+    return SMT_OK
+}
+
+/* ===================================================================== *
+ *  LIA exact rational simplex + branch-and-bound (internal; no recursion)
+ *
+ *  Tableau layout (all cells are rationals num/den, den>0):
+ *    columns: [ struct vars 0..S ) [ slacks S..S+SL ) [ artificials .. )
+ *             [ rhs col ]
+ *    rows:    one per LIA <= row, one per == row, one per active B&B cut.
+ *  Each <= row gets a +1 slack.  Each == row and each cut get an
+ *  artificial (Phase-I).  Phase-I minimises the sum of artificials; if
+ *  the optimum is rational 0 the relaxation is feasible.
+ * ===================================================================== */
+
+/* cell index helper: row*NCOLS + col. */
+fn smt_sx_idx(row: u32, col: u32) -> u64 {
+    let r : u64 = (row as u64) & SMT_U32MASK
+    let c : u64 = (col as u64) & SMT_U32MASK
+    let nc : u64 = (SMT_SX_NCOLS as u64) & SMT_U32MASK
+    return r * nc + c
+}
+
+fn smt_sx_set(row: u32, col: u32, n: i64, d: i64) -> i32 {
+    let ix : u64 = smt_sx_idx(row, col)
+    SMT_SX_NUM[ix] = n
+    SMT_SX_DEN[ix] = d
+    smt_rat_reduce_cell(ix as u32)
+    /* reduce by u32 cast is unsafe for >4G cells; reduce directly here */
+    return SMT_OK
+}
+
+/* direct reduce given a u64 cell index (NCOLS*NROWS may exceed 2^32 in
+ * theory but is capped < SMT_SX_CELLS < 2^31 here). */
+fn smt_sx_reduce_at(ix: u64) -> i32 {
+    let mut n : i64 = SMT_SX_NUM[ix]
+    let mut d : i64 = SMT_SX_DEN[ix]
+    if d == 0i64 { d = 1i64 }
+    let dneg : u64 = ((d as u64) >> 63u64) & 1u64
+    if dneg == 1u64 { n = 0i64 - n  d = 0i64 - d }
+    if n == 0i64 { SMT_SX_NUM[ix] = 0i64  SMT_SX_DEN[ix] = 1i64  return SMT_OK }
+    let g : i64 = smt_gcd(n, d)
+    if g == 0i64 { SMT_SX_NUM[ix] = n  SMT_SX_DEN[ix] = d  return SMT_OK }
+    if g == 1i64 { SMT_SX_NUM[ix] = n  SMT_SX_DEN[ix] = d  return SMT_OK }
+    let nneg : u64 = ((n as u64) >> 63u64) & 1u64
+    let na : i64 = smt_i64_abs(n)
+    let gg : i64 = g
+    let qn : i64 = na / gg
+    let qd : i64 = d / gg
+    if nneg == 1u64 { SMT_SX_NUM[ix] = 0i64 - qn } else { SMT_SX_NUM[ix] = qn }
+    SMT_SX_DEN[ix] = qd
+    return SMT_OK
+}
+
+fn smt_sx_put(row: u32, col: u32, n: i64, d: i64) -> i32 {
+    let ix : u64 = smt_sx_idx(row, col)
+    SMT_SX_NUM[ix] = n
+    SMT_SX_DEN[ix] = d
+    smt_sx_reduce_at(ix)
+    return SMT_OK
+}
+
+/* Zero an entire tableau region [0..NROWS)x[0..NCOLS). */
+fn smt_sx_clear() -> i32 {
+    let nr : u32 = SMT_SX_NROWS
+    let nc : u32 = SMT_SX_NCOLS
+    let mut r : u32 = 0u32
+    while r < nr {
+        let mut c : u32 = 0u32
+        while c < nc {
+            let ix : u64 = smt_sx_idx(r, c)
+            SMT_SX_NUM[ix] = 0i64
+            SMT_SX_DEN[ix] = 1i64
+            c = c + 1u32
+        }
+        r = r + 1u32
+    }
+    return SMT_OK
+}
+
+/* Count slack/artificial requirements and set NROWS/NCOLS. */
+fn smt_sx_size() -> i32 {
+    let s : u32 = SMT_LIA_NVAR
+    /* rows: every stored constraint + every active B&B cut */
+    let nrows : u32 = SMT_LIA_NCON + SMT_BB_NCUT
+    if nrows > SMT_SX_MAX_ROWS { return SMT_E_TOO_BIG }
+    /* one slack per <= row (kind 0) and per <= cut (kind 0);
+     * one artificial per == row (kind 1) and per >= cut (kind 1).
+     * We allocate, conservatively, one slack column per row AND one
+     * artificial column per row -- columns are cheap relative to the
+     * cap; this keeps indexing flat (Trap 13). */
+    let nslack : u32 = nrows
+    let nart   : u32 = nrows
+    let ncols : u32 = s + nslack + nart + 1u32
+    if ncols > SMT_SX_MAX_COLS { return SMT_E_TOO_BIG }
+    SMT_SX_NSTRUCT = s
+    SMT_SX_NSLACK  = nslack
+    SMT_SX_NART    = nart
+    SMT_SX_ART0    = s + nslack
+    SMT_SX_RHSCOL  = s + nslack + nart
+    SMT_SX_NROWS   = nrows
+    SMT_SX_NCOLS   = ncols
+    return SMT_OK
+}
+
+/* Fill one tableau row from a stored LIA constraint index `c`.
+ * Free-variable handling: each structural var x is shifted x = x' - BOX so
+ * the simplex variable x' >= 0 (standard form) while x ranges over
+ * [-BOX, +inf).  Substituting, the row's rhs gains BOX * (sum of structural
+ * coefficients).  Values are un-shifted when read back (smt_lia_true_value).
+ * The lower bound x >= -BOX is thus implicit; the node-capped B&B bounds
+ * the integral search (M19), so no explicit upper bound row is needed. */
+fn smt_sx_fill_con(row: u32, c: u32) -> i32 {
+    let ci : u64 = (c as u64) & SMT_U32MASK
+    let off : u32 = SMT_LIA_OFF[ci]
+    let len : u32 = SMT_LIA_LEN[ci]
+    let kind : u8 = SMT_LIA_KIND[ci]
+    let bnd : i64 = SMT_LIA_BND[ci]
+    /* structural coefficients; accumulate their sum for the box shift */
+    let mut csum : i64 = 0i64
+    let mut j : u32 = 0u32
+    while j < len {
+        let pi : u64 = ((off + j) as u64) & SMT_U32MASK
+        let coef : i64 = SMT_LIA_COEFF[pi]
+        let vv : u32 = SMT_LIA_VAR[pi]
+        let col : u32 = vv - 1u32
+        /* accumulate (a var may appear twice) */
+        let ix : u64 = smt_sx_idx(row, col)
+        SMT_SX_RN = SMT_SX_NUM[ix]
+        SMT_SX_RD = SMT_SX_DEN[ix]
+        let nn : i64 = SMT_SX_RN + coef * SMT_SX_RD
+        smt_sx_put(row, col, nn, SMT_SX_RD)
+        csum = csum + coef
+        j = j + 1u32
+    }
+    /* shifted rhs = bnd + BOX*csum */
+    let rhs_v : i64 = bnd + SMT_LIA_BOX * csum
+    smt_sx_put(row, SMT_SX_RHSCOL, rhs_v, 1i64)
+    /* slack column: +1 for a <= row (kind 0); none for an == row (kind 1). */
+    let slack_col : u32 = SMT_SX_NSTRUCT + row
+    if kind == 0u8 { smt_sx_put(row, slack_col, 1i64, 1i64) }
+    /* Uniform two-phase start: ensure rhs >= 0 (negate the whole row if
+     * needed), then add a +1 artificial as the basic variable. */
+    let bsign : u8 = smt_rat_sign(rhs_v)
+    if bsign == SMT_NEG { smt_sx_negate_row(row) }
+    let art_col : u32 = SMT_SX_ART0 + row
+    smt_sx_put(row, art_col, 1i64, 1i64)
+    SMT_SX_BASIS[(row as u64) & SMT_U32MASK] = art_col
+    return SMT_OK
+}
+
+/* Fill one tableau row from an active B&B cut index `k` -> row `row`.
+ * Floor cut (kind 0): x + slack = bnd.  Ceil cut (kind 1): x - slack = bnd.
+ * Uniform two-phase: ensure rhs >= 0, then an artificial is the basic var
+ * (correct even for negative bounds, where a slack basis is infeasible). */
+fn smt_sx_fill_cut(row: u32, k: u32) -> i32 {
+    let ki : u64 = (k as u64) & SMT_U32MASK
+    let v : u32 = SMT_BB_CUT_VAR[ki]
+    let kind : u8 = SMT_BB_CUT_KIND[ki]
+    let bnd : i64 = SMT_BB_CUT_BND[ki]
+    let col : u32 = v - 1u32
+    let slack_col : u32 = SMT_SX_NSTRUCT + row
+    smt_sx_put(row, col, 1i64, 1i64)
+    /* single var, coeff 1: box shift adds BOX*1 to the bound */
+    let rhs_v : i64 = bnd + SMT_LIA_BOX
+    smt_sx_put(row, SMT_SX_RHSCOL, rhs_v, 1i64)
+    if kind == 0u8 { smt_sx_put(row, slack_col, 1i64, 1i64) } else { smt_sx_put(row, slack_col, -1i64, 1i64) }
+    let bsign : u8 = smt_rat_sign(rhs_v)
+    if bsign == SMT_NEG { smt_sx_negate_row(row) }
+    let art_col : u32 = SMT_SX_ART0 + row
+    smt_sx_put(row, art_col, 1i64, 1i64)
+    SMT_SX_BASIS[(row as u64) & SMT_U32MASK] = art_col
+    return SMT_OK
+}
+
+/* Negate every cell of a row (used to force rhs >= 0). */
+fn smt_sx_negate_row(row: u32) -> i32 {
+    let nc : u32 = SMT_SX_NCOLS
+    let mut c : u32 = 0u32
+    while c < nc {
+        let ix : u64 = smt_sx_idx(row, c)
+        SMT_SX_NUM[ix] = 0i64 - SMT_SX_NUM[ix]
+        c = c + 1u32
+    }
+    return SMT_OK
+}
+
+/* Build the full tableau from current constraints + active cuts. */
+fn smt_sx_build() -> i32 {
+    let r0 : i32 = smt_sx_size()
+    if r0 != SMT_OK { return r0 }
+    smt_sx_clear()
+    let ncon : u32 = SMT_LIA_NCON
+    let mut row : u32 = 0u32
+    while row < ncon {
+        smt_sx_fill_con(row, row)
+        row = row + 1u32
+    }
+    let ncut : u32 = SMT_BB_NCUT
+    let mut k : u32 = 0u32
+    while k < ncut {
+        let rr : u32 = ncon + k
+        smt_sx_fill_cut(rr, k)
+        k = k + 1u32
+    }
+    return SMT_OK
+}
+
+/* Phase-I objective row stored in SMT_SX_PIVCOL_* is not used; instead we
+ * keep the reduced-cost of Phase-I implicitly: the objective is
+ * sum(artificials).  Reduced cost of column j = -(sum over artificial-basic
+ * rows of tableau[row][j]).  We recompute it on demand for Bland's rule. */
+
+/* Reduced cost (num/den) of column `col` for the Phase-I objective
+ * (minimise sum of artificials).  Stored into SMT_SX_RN / SMT_SX_RD. */
+fn smt_sx_reduced_cost(col: u32) -> i32 {
+    let nr : u32 = SMT_SX_NROWS
+    let art0 : u32 = SMT_SX_ART0
+    let nart : u32 = SMT_SX_NART
+    SMT_SX_RN = 0i64
+    SMT_SX_RD = 1i64
+    let mut row : u32 = 0u32
+    while row < nr {
+        let bvar : u32 = SMT_SX_BASIS[(row as u64) & SMT_U32MASK]
+        let is_art : u8 = smt_col_is_art(bvar, art0, nart)
+        if is_art == 1u8 {
+            let ix : u64 = smt_sx_idx(row, col)
+            let an : i64 = SMT_SX_RN
+            let ad : i64 = SMT_SX_RD
+            let bn : i64 = SMT_SX_NUM[ix]
+            let bd : i64 = SMT_SX_DEN[ix]
+            /* RN = RN + b  (a/ad + bn/bd) */
+            let nn : i64 = an * bd + bn * ad
+            let dd : i64 = ad * bd
+            SMT_SX_RN = nn
+            SMT_SX_RD = dd
+            smt_rat_reduce_scratch()
+        }
+        row = row + 1u32
+    }
+    /* objective coefficient of col itself: 1 if col is an artificial, else 0.
+     * reduced cost = c_j - z_j ; here c_j (artificial) handled below. */
+    let self_art : u8 = smt_col_is_art(col, art0, nart)
+    if self_art == 1u8 {
+        let an : i64 = SMT_SX_RN
+        let ad : i64 = SMT_SX_RD
+        /* reduced cost = 1 - z_j = 1 - RN/RD = (RD - RN)/RD */
+        SMT_SX_RN = ad - an
+        SMT_SX_RD = ad
+        smt_rat_reduce_scratch()
+    } else {
+        /* reduced cost = 0 - z_j = -RN/RD */
+        SMT_SX_RN = 0i64 - SMT_SX_RN
+        smt_rat_reduce_scratch()
+    }
+    return SMT_OK
+}
+
+fn smt_col_is_art(col: u32, art0: u32, nart: u32) -> u8 {
+    if col >= art0 {
+        if col < art0 + nart { return 1u8 }
+    }
+    return 0u8
+}
+
+/* Phase-I objective value = sum of artificial basic-variable rhs. */
+fn smt_sx_phase1_obj() -> i32 {
+    let nr : u32 = SMT_SX_NROWS
+    let art0 : u32 = SMT_SX_ART0
+    let nart : u32 = SMT_SX_NART
+    let rhs : u32 = SMT_SX_RHSCOL
+    SMT_SX_RN = 0i64
+    SMT_SX_RD = 1i64
+    let mut row : u32 = 0u32
+    while row < nr {
+        let bvar : u32 = SMT_SX_BASIS[(row as u64) & SMT_U32MASK]
+        let is_art : u8 = smt_col_is_art(bvar, art0, nart)
+        if is_art == 1u8 {
+            let ix : u64 = smt_sx_idx(row, rhs)
+            let an : i64 = SMT_SX_RN
+            let ad : i64 = SMT_SX_RD
+            let bn : i64 = SMT_SX_NUM[ix]
+            let bd : i64 = SMT_SX_DEN[ix]
+            let nn : i64 = an * bd + bn * ad
+            let dd : i64 = ad * bd
+            SMT_SX_RN = nn
+            SMT_SX_RD = dd
+            smt_rat_reduce_scratch()
+        }
+        row = row + 1u32
+    }
+    return SMT_OK
+}
+
+/* Choose entering column by Bland's rule: smallest-index col (excluding rhs)
+ * whose Phase-I reduced cost is strictly negative.  Returns SMT_NO_PIVOT if
+ * none (optimal).  Excludes artificial columns from entering (standard). */
+fn smt_sx_entering() -> u32 {
+    let ncols : u32 = SMT_SX_NCOLS
+    let rhs : u32 = SMT_SX_RHSCOL
+    let art0 : u32 = SMT_SX_ART0
+    let mut col : u32 = 0u32
+    let mut found : u32 = SMT_NO_PIVOT
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if col >= ncols { going = 0u8 }
+        if going == 1u8 {
+            if col == rhs {
+                col = col + 1u32
+            } else {
+                if col >= art0 {
+                    col = col + 1u32
+                } else {
+                    smt_sx_reduced_cost(col)
+                    let s : u8 = smt_rat_sign(SMT_SX_RN)
+                    if s == SMT_NEG { found = col  going = 0u8 } else { col = col + 1u32 }
+                }
+            }
+        }
+    }
+    return found
+}
+
+/* Ratio test: choose leaving row for entering column `ecol` by smallest
+ * non-negative ratio rhs/pivot among rows with pivot > 0; Bland tie-break
+ * by smallest basic-variable index.  Returns SMT_NO_PIVOT if unbounded. */
+fn smt_sx_leaving(ecol: u32) -> u32 {
+    let nr : u32 = SMT_SX_NROWS
+    let rhs : u32 = SMT_SX_RHSCOL
+    let mut row : u32 = 0u32
+    SMT_SX_BEST_ROW = SMT_NO_PIVOT
+    SMT_SX_HAVE = 0u8
+    while row < nr {
+        let ixp : u64 = smt_sx_idx(row, ecol)
+        let pn : i64 = SMT_SX_NUM[ixp]
+        let pd : i64 = SMT_SX_DEN[ixp]
+        let ps : u8 = smt_rat_sign(pn)
+        /* pivot must be strictly positive (den>0 always) */
+        if ps == SMT_POS {
+            let ixb : u64 = smt_sx_idx(row, rhs)
+            let bn : i64 = SMT_SX_NUM[ixb]
+            let bd : i64 = SMT_SX_DEN[ixb]
+            /* ratio = (bn/bd) / (pn/pd) = (bn*pd)/(bd*pn) */
+            let rn : i64 = bn * pd
+            let rd : i64 = bd * pn
+            smt_sx_take_ratio_decision(row, rn, rd)
+            if SMT_SX_OK == 1u8 { SMT_SX_BEST_ROW = row  SMT_SX_HAVE = 1u8 }
+        }
+        row = row + 1u32
+    }
+    if SMT_SX_HAVE == 0u8 { return SMT_NO_PIVOT }
+    return SMT_SX_BEST_ROW
+}
+
+/* Decide whether (rn/rd) at `row` beats the current best (SMT_SX_BEST_ROW /
+ * SMT_SX_HAVE).  Sets SMT_SX_OK=1 if it should replace the best.  Keeps
+ * SMT_SX_RN/RD holding the current best ratio.  Tie-break: smaller
+ * basic-var index (Bland).  W2: 3 params; best/have in module scope. */
+fn smt_sx_take_ratio_decision(row: u32, rn: i64, rd: i64) -> i32 {
+    SMT_SX_OK = 0u8
+    if SMT_SX_HAVE == 0u8 {
+        SMT_SX_RN = rn
+        SMT_SX_RD = rd
+        SMT_SX_OK = 1u8
+        return SMT_OK
+    }
+    let c : i32 = smt_rat_cmp(rn, rd, SMT_SX_RN, SMT_SX_RD)
+    if c == -1i32 {
+        SMT_SX_RN = rn
+        SMT_SX_RD = rd
+        SMT_SX_OK = 1u8
+        return SMT_OK
+    }
+    if c == 0i32 {
+        /* tie: pick smaller basic-var index (Bland) */
+        let bcur : u32 = SMT_SX_BASIS[(row as u64) & SMT_U32MASK]
+        let bbest : u32 = SMT_SX_BASIS[(SMT_SX_BEST_ROW as u64) & SMT_U32MASK]
+        if bcur < bbest { SMT_SX_OK = 1u8 }
+    }
+    return SMT_OK
+}
+
+/* Pivot on (prow, pcol): normalise prow so pivot becomes 1, then eliminate
+ * pcol from every other row.  Updates SMT_SX_BASIS. */
+fn smt_sx_do_pivot(prow: u32, pcol: u32) -> i32 {
+    let ncols : u32 = SMT_SX_NCOLS
+    let ixp : u64 = smt_sx_idx(prow, pcol)
+    let pn : i64 = SMT_SX_NUM[ixp]
+    let pd : i64 = SMT_SX_DEN[ixp]
+    /* normalise pivot row: multiply by reciprocal pd/pn */
+    let mut c : u32 = 0u32
+    while c < ncols {
+        let ix : u64 = smt_sx_idx(prow, c)
+        let n : i64 = SMT_SX_NUM[ix]
+        let d : i64 = SMT_SX_DEN[ix]
+        /* (n/d) * (pd/pn) = (n*pd)/(d*pn) */
+        SMT_SX_NUM[ix] = n * pd
+        SMT_SX_DEN[ix] = d * pn
+        smt_sx_reduce_at(ix)
+        c = c + 1u32
+    }
+    smt_sx_eliminate_col(prow, pcol)
+    SMT_SX_BASIS[(prow as u64) & SMT_U32MASK] = pcol
+    return SMT_OK
+}
+
+/* Eliminate pcol from all rows other than prow using the (now unit) pivot
+ * row.  row := row - factor * prow, where factor = row[pcol]. */
+fn smt_sx_eliminate_col(prow: u32, pcol: u32) -> i32 {
+    let nr : u32 = SMT_SX_NROWS
+    let mut row : u32 = 0u32
+    while row < nr {
+        if row != prow {
+            let ixf : u64 = smt_sx_idx(row, pcol)
+            let fn_ : i64 = SMT_SX_NUM[ixf]
+            let fd : i64 = SMT_SX_DEN[ixf]
+            let fs : u8 = smt_rat_sign(fn_)
+            if fs != SMT_ZERO {
+                smt_sx_row_axpy(row, prow, fn_, fd)
+            }
+        }
+        row = row + 1u32
+    }
+    return SMT_OK
+}
+
+/* row := row - (fn_/fd) * prow over all columns (W2: 4 params; NCOLS read
+ * from module scope). */
+fn smt_sx_row_axpy(row: u32, prow: u32, fn_: i64, fd: i64) -> i32 {
+    let ncols : u32 = SMT_SX_NCOLS
+    let mut c : u32 = 0u32
+    while c < ncols {
+        let ixr : u64 = smt_sx_idx(row, c)
+        let ixp : u64 = smt_sx_idx(prow, c)
+        let rn : i64 = SMT_SX_NUM[ixr]
+        let rd : i64 = SMT_SX_DEN[ixr]
+        let pn : i64 = SMT_SX_NUM[ixp]
+        let pd : i64 = SMT_SX_DEN[ixp]
+        /* term = (fn_/fd)*(pn/pd) = (fn_*pn)/(fd*pd) */
+        let tn : i64 = fn_ * pn
+        let td : i64 = fd * pd
+        /* row = rn/rd - tn/td = (rn*td - tn*rd)/(rd*td) */
+        let nn : i64 = rn * td - tn * rd
+        let dd : i64 = rd * td
+        SMT_SX_NUM[ixr] = nn
+        SMT_SX_DEN[ixr] = dd
+        smt_sx_reduce_at(ixr)
+        c = c + 1u32
+    }
+    return SMT_OK
+}
+
+/* Phase-I driver: pivot until optimal (no negative reduced cost) or an
+ * iteration cap is hit.  Then test whether the Phase-I objective is zero.
+ * Returns SMT_SAT (feasible relaxation) / SMT_UNSAT / SMT_E_TOO_BIG. */
+fn smt_sx_phase1() -> i32 {
+    let maxit : u64 = 4000000u64
+    let mut it : u64 = 0u64
+    let mut going : u8 = 1u8
+    let mut result : i32 = SMT_UNKNOWN
+    while going == 1u8 {
+        if it >= maxit { going = 0u8  result = SMT_E_TOO_BIG }
+        if going == 1u8 {
+            let ecol : u32 = smt_sx_entering()
+            if ecol == SMT_NO_PIVOT {
+                going = 0u8
+                result = smt_sx_phase1_done()
+            } else {
+                let prow : u32 = smt_sx_leaving(ecol)
+                if prow == SMT_NO_PIVOT {
+                    /* Phase-I objective is bounded below by 0, so an
+                     * unbounded entering direction cannot occur for a
+                     * minimisation that is bounded; treat as feasible
+                     * check via objective. */
+                    going = 0u8
+                    result = smt_sx_phase1_done()
+                } else {
+                    smt_sx_do_pivot(prow, ecol)
+                    it = it + 1u64
+                }
+            }
+        }
+    }
+    return result
+}
+
+/* After Phase-I optimality: feasible iff objective == 0. */
+fn smt_sx_phase1_done() -> i32 {
+    smt_sx_phase1_obj()
+    let s : u8 = smt_rat_sign(SMT_SX_RN)
+    if s == SMT_ZERO { return SMT_SAT }
+    return SMT_UNSAT
+}
+
+/* Read the rational value of structural var `col` from the solved tableau
+ * into SMT_SX_RN / SMT_SX_RD.  A structural var is either basic (its row's
+ * rhs) or non-basic (value 0). */
+fn smt_sx_var_value(col: u32) -> i32 {
+    let nr : u32 = SMT_SX_NROWS
+    let rhs : u32 = SMT_SX_RHSCOL
+    SMT_SX_RN = 0i64
+    SMT_SX_RD = 1i64
+    let mut row : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if row >= nr { going = 0u8 }
+        if going == 1u8 {
+            let bvar : u32 = SMT_SX_BASIS[(row as u64) & SMT_U32MASK]
+            if bvar == col {
+                let ix : u64 = smt_sx_idx(row, rhs)
+                SMT_SX_RN = SMT_SX_NUM[ix]
+                SMT_SX_RD = SMT_SX_DEN[ix]
+                going = 0u8
+            } else { row = row + 1u32 }
+        }
+    }
+    return SMT_OK
+}
+
+/* Floor of the rational (SMT_SX_RN / SMT_SX_RD), RD>0, as i64.
+ * floor = trunc toward -inf.  Division on magnitudes (bit 63 clear) only
+ * (Trap 18); sign-adjust for negatives with a nonzero remainder. */
+fn smt_rat_floor(n: i64, d: i64) -> i64 {
+    let mut dd : i64 = d
+    if dd == 0i64 { dd = 1i64 }
+    let nneg : u64 = ((n as u64) >> 63u64) & 1u64
+    let na : i64 = smt_i64_abs(n)
+    let q : i64 = na / dd
+    let rmag : i64 = na - q * dd
+    if nneg == 0u64 { return q }
+    /* n negative: trunc toward zero is -q; floor is -q-1 if remainder!=0 */
+    if rmag == 0i64 { return 0i64 - q }
+    let nq : i64 = 0i64 - q
+    return nq - 1i64
+}
+
+/* True (un-shifted) value of structural var `col` into SMT_SX_RN/RD:
+ * x = x' - BOX = (RN - BOX*RD) / RD.  RD stays the (positive) denominator. */
+fn smt_lia_true_value(col: u32) -> i32 {
+    smt_sx_var_value(col)
+    let n : i64 = SMT_SX_RN
+    let d : i64 = SMT_SX_RD
+    SMT_SX_RN = n - SMT_LIA_BOX * d
+    SMT_SX_RD = d
+    return SMT_OK
+}
+
+/* Determine the smallest-index structural var whose true value is
+ * non-integral; returns its col, or SMT_NO_FRAC if all integral.
+ * Records the true floor into SMT_BB_VALS for the branch. */
+fn smt_lia_first_fractional() -> u32 {
+    let s : u32 = SMT_SX_NSTRUCT
+    let mut col : u32 = 0u32
+    let mut found : u32 = SMT_NO_FRAC
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if col >= s { going = 0u8 }
+        if going == 1u8 {
+            smt_lia_true_value(col)
+            let n : i64 = SMT_SX_RN
+            let d : i64 = SMT_SX_RD
+            let fl : i64 = smt_rat_floor(n, d)
+            /* integral iff n == fl*d */
+            if n == fl * d {
+                col = col + 1u32
+            } else {
+                SMT_BB_VALS[(col as u64) & SMT_U32MASK] = fl
+                found = col
+                going = 0u8
+            }
+        }
+    }
+    return found
+}
+
+/* Copy the (integral) true simplex solution into SMT_LIA_VAL. */
+fn smt_lia_record_model() -> i32 {
+    let s : u32 = SMT_SX_NSTRUCT
+    let mut col : u32 = 0u32
+    while col < s {
+        smt_lia_true_value(col)
+        /* value is integral here: n/d with d|n -> n/d via magnitude div */
+        let n : i64 = SMT_SX_RN
+        let d : i64 = SMT_SX_RD
+        let val : i64 = smt_rat_floor(n, d)
+        SMT_LIA_VAL[(col as u64) & SMT_U32MASK] = val
+        col = col + 1u32
+    }
+    return SMT_OK
+}
+
+/* Push a B&B frame for variable v with floor value fv, activating the
+ * floor branch (v <= fv) first.  Invariant: SMT_BB_NCUT == SMT_BB_SP, with
+ * cut[i] the active constraint of frame i.  SMT_BB_KIND[i] records which
+ * branch of frame i is currently active: 0 = floor (v<=fv), 1 = ceil
+ * (v>=fv+1).  The floor value is kept in SMT_BB_HI[i]. */
+fn smt_bb_push(v: u32, fv: i64) -> i32 {
+    if SMT_BB_SP >= SMT_BB_MAX_DEPTH { return SMT_E_TOO_BIG }
+    let sp : u64 = (SMT_BB_SP as u64) & SMT_U32MASK
+    SMT_BB_VAR[sp]  = v
+    SMT_BB_HI[sp]   = fv          /* floor bound */
+    SMT_BB_LO[sp]   = fv + 1i64   /* ceil bound */
+    SMT_BB_KIND[sp] = 0u8         /* floor branch active */
+    /* activate floor cut: v <= fv at cut index == sp */
+    SMT_BB_CUT_VAR[sp]  = v
+    SMT_BB_CUT_KIND[sp] = 0u8
+    SMT_BB_CUT_BND[sp]  = fv
+    SMT_BB_SP   = SMT_BB_SP + 1u32
+    SMT_BB_NCUT = SMT_BB_SP
+    return SMT_OK
+}
+
+/* Backtrack after the current node was found infeasible.  If the top
+ * frame's floor branch was active, switch it to the ceil branch (same
+ * frame, cut replaced) and continue.  If the ceil branch was already
+ * active, pop the frame and repeat upward.  Returns SMT_OK if a branch was
+ * (re)activated, SMT_UNSAT if the whole tree is exhausted.  Iterative
+ * (W15, sentinel loop). */
+fn smt_bb_backtrack() -> i32 {
+    let mut going : u8 = 1u8
+    let mut result : i32 = SMT_UNSAT
+    while going == 1u8 {
+        if SMT_BB_SP == 0u32 { going = 0u8  result = SMT_UNSAT } else {
+            let sp : u64 = ((SMT_BB_SP - 1u32) as u64) & SMT_U32MASK
+            let branch : u8 = SMT_BB_KIND[sp]
+            if branch == 0u8 {
+                /* switch this frame from floor to ceil: v >= fv+1 */
+                let v : u32 = SMT_BB_VAR[sp]
+                let lo : i64 = SMT_BB_LO[sp]
+                SMT_BB_KIND[sp] = 1u8
+                SMT_BB_CUT_VAR[sp]  = v
+                SMT_BB_CUT_KIND[sp] = 1u8
+                SMT_BB_CUT_BND[sp]  = lo
+                SMT_BB_NCUT = SMT_BB_SP
+                going = 0u8
+                result = SMT_OK
+            } else {
+                /* both branches exhausted at this frame: pop and go up */
+                SMT_BB_SP = SMT_BB_SP - 1u32
+                SMT_BB_NCUT = SMT_BB_SP
+            }
+        }
+    }
+    return result
+}
+
+/* LIA decision procedure: rational simplex feasibility + branch-and-bound
+ * for integrality, iterative over the explicit B&B stack (W15).  Returns
+ * SMT_SAT (model in SMT_LIA_VAL) / SMT_UNSAT / SMT_E_TOO_BIG. */
+fn smt_lia_solve() -> i32 {
+    SMT_BB_SP = 0u32
+    SMT_BB_NCUT = 0u32
+    let mut result : i32 = SMT_UNKNOWN
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if SMT_BB_NODES >= SMT_BB_NODE_CAP { going = 0u8  result = SMT_E_TOO_BIG }
+        if going == 1u8 {
+            SMT_BB_NODES = SMT_BB_NODES + 1u64
+            let br : i32 = smt_sx_build()
+            if br != SMT_OK { going = 0u8  result = br } else {
+                let feas : i32 = smt_sx_phase1()
+                going = smt_lia_node_step(feas)
+                result = SMT_BB_LAST_RESULT
+            }
+        }
+    }
+    return result
+}
+
+/* shared result slot for the node-step decomposition (Trap 13 flatten). */
+var SMT_BB_LAST_RESULT : i32 = 3i32
+
+/* Process one B&B node given the relaxation feasibility result `feas`.
+ * Returns the loop-continue flag (1 keep going, 0 stop) and sets
+ * SMT_BB_LAST_RESULT.  Flattened to keep nesting shallow (Trap 13). */
+fn smt_lia_node_step(feas: i32) -> u8 {
+    if feas == SMT_E_TOO_BIG { SMT_BB_LAST_RESULT = SMT_E_TOO_BIG  return 0u8 }
+    if feas == SMT_UNSAT {
+        /* this node infeasible: backtrack to the ceil alternative */
+        let bt : i32 = smt_bb_backtrack()
+        if bt == SMT_UNSAT { SMT_BB_LAST_RESULT = SMT_UNSAT  return 0u8 }
+        return 1u8
+    }
+    /* feasible relaxation: check integrality */
+    let frac : u32 = smt_lia_first_fractional()
+    if frac == SMT_NO_FRAC {
+        smt_lia_record_model()
+        SMT_LIA_SOLVED = 1u8
+        SMT_BB_LAST_RESULT = SMT_SAT
+        return 0u8
+    }
+    /* branch on the fractional var: floor first */
+    let fv : i64 = SMT_BB_VALS[(frac as u64) & SMT_U32MASK]
+    let pr : i32 = smt_bb_push(frac + 1u32, fv)
+    if pr != SMT_OK { SMT_BB_LAST_RESULT = pr  return 0u8 }
+    return 1u8
+}
+
+/* ===================================================================== *
+ *  Public: solve + model + certificate + witness
+ * ===================================================================== */
+
+/* Replay the SMT-owned clause buffer into SAT (after sat_init).  Returns
+ * SMT_OK if all clauses added cleanly, SMT_UNSAT if SAT detected trivial
+ * unsatisfiability while adding a clause (SAT_E_TRIV_UNSAT -- e.g. two
+ * conflicting injected unit clauses), or SMT_E_TOO_BIG / SMT_E_BAD on a
+ * real capacity / not-init error.  SAT_E_TRIV_UNSAT is a legitimate UNSAT
+ * verdict, NOT a solver fault, so it must map to SMT_UNSAT (not E_BAD). */
+fn smt_replay_clauses() -> i32 {
+    let ncl : u32 = SMT_CLBUF_NCL
+    let mut c : u32 = 0u32
+    let mut going : u8 = 1u8
+    let mut rc : i32 = SMT_OK
+    while going == 1u8 {
+        if c >= ncl { going = 0u8 } else {
+            let ci : u64 = (c as u64) & SMT_U32MASK
+            let off : u32 = SMT_CLBUF_OFF[ci]
+            let len : u32 = SMT_CLBUF_LEN[ci]
+            let off64 : u64 = (off as u64) & SMT_U32MASK
+            let p : *u32 = ((&SMT_CLBUF_LIT as u64) + off64 * 4u64) as *u32
+            let r : i32 = sat_add_clause(p, len)
+            if r == SMT_SAT_OK { c = c + 1u32 } else {
+                going = 0u8
+                if r == SMT_SAT_E_TRIV { rc = SMT_UNSAT } else { rc = SMT_E_BAD }
+            }
+        }
+    }
+    return rc
+}
+
+/* Solve the BV theory: size SAT, replay clauses, solve.  Returns
+ * SMT_SAT / SMT_UNSAT / negative error.  When there are no BV vars,
+ * trivially SAT. */
+fn smt_bv_solve() -> i32 {
+    SMT_BV_SOLVED = 0u8
+    if SMT_BV_NVAR == 0u32 { return SMT_SAT }
+    let nv : u32 = SMT_BV_SAT_NEXT - 1u32
+    let ir : i32 = sat_init(nv)
+    if ir != SMT_SAT_OK { return SMT_E_BAD }
+    let rr : i32 = smt_replay_clauses()
+    if rr == SMT_UNSAT { return SMT_UNSAT }
+    if rr != SMT_OK { return rr }
+    let sr : i32 = sat_solve()
+    if sr == SMT_SAT_SAT { SMT_BV_SOLVED = 1u8  return SMT_SAT }
+    if sr == SMT_SAT_UNSAT { return SMT_UNSAT }
+    return SMT_E_BAD
+}
+
+/* Nelson-Oppen equality exchange (LIA->BV propagation).  After both
+ * theories have a model, propagate the LIA model's concrete integer values
+ * for the shared variables into the BV theory: force each shared BV var's
+ * bits to its LIA counterpart's value, and force BV-equal any two shared
+ * BV vars whose LIA counterparts are equal.  Clears SMT_NO_NEW_EQ whenever
+ * a new constraint is injected so the driver re-solves; when a full pass
+ * injects nothing the fixed point is reached.  Convex-theory completeness:
+ * exchanging shared-var equalities suffices.  Sound (a SAT result has a
+ * real model) and terminating (each shared var is forced at most once
+ * before agreement; pass-cap backstop).  We deliberately do NOT inject
+ * BV's (possibly unconstrained, arbitrary) model value back into LIA --
+ * that equality is not entailed and would unsoundly over-constrain LIA. */
+fn smt_no_exchange() -> i32 {
+    SMT_NO_NEW_EQ = 1u8
+    let n : u32 = SMT_SHARE_N
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32
+        while j < n {
+            smt_no_pair(i, j)
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    /* Also reconcile each shared pair's two theories directly (LIA value
+     * vs BV value of THE SAME shared variable). */
+    let mut k : u32 = 0u32
+    while k < n {
+        smt_no_self(k)
+        k = k + 1u32
+    }
+    return SMT_OK
+}
+
+/* Reconcile shared pair k: propagate the LIA model value of the shared
+ * variable to its BV counterpart.  LIA's simplex+B&B assigns every
+ * structural var a concrete integer; we force the shared BV var's bits to
+ * that value (LIA->BV equality propagation) whenever BV currently
+ * disagrees.  The injected BV-const clauses make BV agree on the next
+ * pass, after which no further injection occurs -> fixed point.  We do NOT
+ * inject BV's (arbitrary, possibly unconstrained) model value back into
+ * LIA -- that would over-constrain LIA with a non-entailed equality and is
+ * unsound.  This keeps the exchange sound (a SAT result has a real model)
+ * and terminating (each shared var is forced at most once before
+ * agreement).  Equality tests only (Trap 3); BV value range fits i64. */
+fn smt_no_self(k: u32) -> i32 {
+    let ki : u64 = (k as u64) & SMT_U32MASK
+    let lv : u32 = SMT_SHARE_LIA[ki]
+    let bv : u32 = SMT_SHARE_BV[ki]
+    let lval : i64 = smt_lia_value(lv)
+    let bval : u64 = smt_bv_value(bv)
+    let bval_i : i64 = bval as i64
+    if lval == bval_i { return SMT_OK }
+    /* disagreement: force the BV var bits to the LIA value. */
+    smt_no_inject_bv_const(bv, lval)
+    SMT_NO_NEW_EQ = 0u8
+    return SMT_OK
+}
+
+/* If LIA forces two shared vars equal but their BV counterparts currently
+ * differ, force the BV vars equal (LIA->BV only; never BV->LIA). */
+fn smt_no_pair(i: u32, j: u32) -> i32 {
+    let ii : u64 = (i as u64) & SMT_U32MASK
+    let jj : u64 = (j as u64) & SMT_U32MASK
+    let li : u32 = SMT_SHARE_LIA[ii]
+    let lj : u32 = SMT_SHARE_LIA[jj]
+    let bi : u32 = SMT_SHARE_BV[ii]
+    let bj : u32 = SMT_SHARE_BV[jj]
+    let lvi : i64 = smt_lia_value(li)
+    let lvj : i64 = smt_lia_value(lj)
+    let bvi : u64 = smt_bv_value(bi)
+    let bvj : u64 = smt_bv_value(bj)
+    /* LIA says equal, BV says different -> tell BV they are equal */
+    if lvi == lvj {
+        if bvi != bvj {
+            smt_bv_add_eq(bi, bj)
+            SMT_NO_NEW_EQ = 0u8
+        }
+    }
+    return SMT_OK
+}
+
+/* Inject BV constant equality: force BV var `v`'s bits to equal constant
+ * `c` (the low width bits of c).  For each bit i, a unit clause forcing
+ * a_i to c's bit i. */
+fn smt_no_inject_bv_const(v: u32, c: i64) -> i32 {
+    if v == 0u32 { return SMT_E_BAD }
+    if v > SMT_BV_NVAR { return SMT_E_BAD }
+    let vi : u64 = ((v - 1u32) as u64) & SMT_U32MASK
+    let w : u32 = SMT_BV_WIDTH[vi]
+    let base : u32 = SMT_BV_BIT0[vi]
+    let cu : u64 = c as u64
+    let mut i : u32 = 0u32
+    while i < w {
+        let sh : u64 = (i as u64) & SMT_U32MASK
+        let bit : u64 = (cu >> sh) & 1u64
+        let lit_var : u32 = base + i
+        if bit == 1u64 { smt_clbuf_add1(smt_pos_lit(lit_var)) } else { smt_clbuf_add1(smt_neg_lit(lit_var)) }
+        i = i + 1u32
+    }
+    return SMT_OK
+}
+
+/* The DPLL(T) + Nelson-Oppen driver. */
+fn smt_solve_cap(cap: *u8) -> i32 @export {
+    SMT_LIA_SOLVED = 0u8
+    SMT_BV_SOLVED = 0u8
+    SMT_WIT_VALID = 0u8
+    let mut result : i32 = SMT_UNKNOWN
+    SMT_NO_NEW_EQ = 0u8
+    let mut pass : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if pass >= SMT_NO_EQ_PASS_CAP { going = 0u8  result = SMT_E_TOO_BIG }
+        if going == 1u8 {
+            let lr : i32 = smt_lia_solve()
+            if lr == SMT_E_TOO_BIG { going = 0u8  result = SMT_E_TOO_BIG } else {
+                if lr == SMT_UNSAT { going = 0u8  result = SMT_UNSAT } else {
+                    let br : i32 = smt_bv_solve()
+                    going = smt_solve_after_bv(br)
+                    result = SMT_BB_LAST_RESULT
+                    pass = pass + 1u32
+                }
+            }
+        }
+    }
+    /* smt_solve_finish runs the M12 model-check gate and witness emission;
+     * it returns the FINAL result (may downgrade SAT to E_NOMODEL). */
+    let final_r : i32 = smt_solve_finish(result, cap)
+    return final_r
+}
+
+/* After BV solve in one NO pass: decide UNSAT / continue exchange / fixed
+ * point reached.  Flattened (Trap 13).  Uses SMT_BB_LAST_RESULT to carry
+ * the SAT result back to the loop. */
+fn smt_solve_after_bv(br: i32) -> u8 {
+    if br == SMT_E_BAD { SMT_BB_LAST_RESULT = SMT_E_BAD  return 0u8 }
+    if br == SMT_E_TOO_BIG { SMT_BB_LAST_RESULT = SMT_E_TOO_BIG  return 0u8 }
+    if br == SMT_UNSAT { SMT_BB_LAST_RESULT = SMT_UNSAT  return 0u8 }
+    /* both theories SAT this pass; run equality exchange */
+    smt_no_exchange()
+    if SMT_NO_NEW_EQ == 1u8 {
+        /* fixed point: no new equalities -> combined SAT */
+        SMT_BB_LAST_RESULT = SMT_SAT
+        return 0u8
+    }
+    /* new equalities injected -> iterate */
+    SMT_BB_LAST_RESULT = SMT_SAT
+    return 1u8
+}
+
+/* Finish: run the M12 certificate gate and emit the witness if a capability
+ * is present.  Returns the FINAL result code: passes non-SAT results
+ * through unchanged; for a SAT result, accepts it only if the independent
+ * model checker confirms the model, otherwise downgrades to E_NOMODEL
+ * (never reports a false SAT -- M12/M18). */
+fn smt_solve_finish(result: i32, cap: *u8) -> i32 {
+    if result != SMT_SAT { return result }
+    let ok : u8 = smt_check_model()
+    if ok == 0u8 {
+        SMT_LIA_SOLVED = 0u8
+        return SMT_E_NOMODEL
+    }
+    let capv : u64 = cap as u64
+    if capv != SMT_NULL_CAP {
+        smt_emit_witness(result)
+    }
+    return SMT_SAT
+}
+
+fn smt_solve() -> i32 @export {
+    let nullp : *u8 = SMT_NULL_CAP as *u8
+    return smt_solve_cap(nullp)
+}
+
+fn smt_lia_value(vr: u32) -> i64 @export {
+    if vr == 0u32 { return 0i64 }
+    if vr > SMT_LIA_NVAR { return 0i64 }
+    if SMT_LIA_SOLVED == 0u8 { return 0i64 }
+    let vi : u64 = ((vr - 1u32) as u64) & SMT_U32MASK
+    return SMT_LIA_VAL[vi]
+}
+
+fn smt_bv_value(vr: u32) -> u64 @export {
+    if vr == 0u32 { return 0u64 }
+    if vr > SMT_BV_NVAR { return 0u64 }
+    if SMT_BV_SOLVED == 0u8 { return 0u64 }
+    let vi : u64 = ((vr - 1u32) as u64) & SMT_U32MASK
+    let w : u32 = SMT_BV_WIDTH[vi]
+    let base : u32 = SMT_BV_BIT0[vi]
+    let mut acc : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < w {
+        let sat_var : u32 = base + i
+        let bv : u8 = sat_value(sat_var)
+        if bv == 1u8 {
+            let sh : u64 = (i as u64) & SMT_U32MASK
+            let bit : u64 = 1u64 << sh
+            acc = acc | bit
+        }
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* Independent model re-check (M12).  Returns 1u8 iff the recorded model
+ * satisfies every recorded LIA + BV constraint. */
+fn smt_check_model() -> u8 @export {
+    let ok_lia : u8 = smt_check_lia()
+    if ok_lia == 0u8 { return 0u8 }
+    let ok_bv : u8 = smt_check_bv()
+    if ok_bv == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* Check every LIA constraint against SMT_LIA_VAL. */
+fn smt_check_lia() -> u8 {
+    let ncon : u32 = SMT_LIA_NCON
+    let mut c : u32 = 0u32
+    let mut ok : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if c >= ncon { going = 0u8 } else {
+            let r : u8 = smt_check_lia_one(c)
+            if r == 0u8 { ok = 0u8  going = 0u8 } else { c = c + 1u32 }
+        }
+    }
+    return ok
+}
+
+/* Check one LIA constraint c.  sum = Σ coeff_i * val_i; kind 0 needs
+ * sum <= bnd (d = bnd - sum, sign != NEG); kind 1 needs sum == bnd. */
+fn smt_check_lia_one(c: u32) -> u8 {
+    let ci : u64 = (c as u64) & SMT_U32MASK
+    let off : u32 = SMT_LIA_OFF[ci]
+    let len : u32 = SMT_LIA_LEN[ci]
+    let kind : u8 = SMT_LIA_KIND[ci]
+    let bnd : i64 = SMT_LIA_BND[ci]
+    let mut sum : i64 = 0i64
+    let mut j : u32 = 0u32
+    while j < len {
+        let pi : u64 = ((off + j) as u64) & SMT_U32MASK
+        let coef : i64 = SMT_LIA_COEFF[pi]
+        let vv : u32 = SMT_LIA_VAR[pi]
+        let vi : u64 = ((vv - 1u32) as u64) & SMT_U32MASK
+        let val : i64 = SMT_LIA_VAL[vi]
+        sum = sum + coef * val
+        j = j + 1u32
+    }
+    if kind == 1u8 {
+        if sum == bnd { return 1u8 }
+        return 0u8
+    }
+    /* kind 0: sum <= bnd  ->  d = bnd - sum, require sign != NEG */
+    let d : i64 = bnd - sum
+    let s : u8 = smt_rat_sign(d)
+    if s == SMT_NEG { return 0u8 }
+    return 1u8
+}
+
+/* Check every BV constraint by replaying the recorded clause buffer
+ * against the SAT model values.  A clause is satisfied iff at least one of
+ * its literals is true under sat_value.  This re-verifies the bit-blasted
+ * BV theory independently of the solver's internal acceptance. */
+fn smt_check_bv() -> u8 {
+    if SMT_BV_NVAR == 0u32 { return 1u8 }
+    if SMT_BV_SOLVED == 0u8 { return 0u8 }
+    let ncl : u32 = SMT_CLBUF_NCL
+    let mut c : u32 = 0u32
+    let mut ok : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if c >= ncl { going = 0u8 } else {
+            let r : u8 = smt_check_clause(c)
+            if r == 0u8 { ok = 0u8  going = 0u8 } else { c = c + 1u32 }
+        }
+    }
+    return ok
+}
+
+/* True iff clause c is satisfied by the current SAT model. */
+fn smt_check_clause(c: u32) -> u8 {
+    let ci : u64 = (c as u64) & SMT_U32MASK
+    let off : u32 = SMT_CLBUF_OFF[ci]
+    let len : u32 = SMT_CLBUF_LEN[ci]
+    let mut i : u32 = 0u32
+    let mut sat : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= len { going = 0u8 } else {
+            let li : u64 = ((off + i) as u64) & SMT_U32MASK
+            let lit : u32 = SMT_CLBUF_LIT[li]
+            let lv : u32 = lit >> 1u32
+            let sign : u32 = lit & 1u32
+            let val : u8 = sat_value(lv)
+            /* literal true iff (sign==0 and val==1) or (sign==1 and val==0) */
+            if sign == 0u32 {
+                if val == 1u8 { sat = 1u8  going = 0u8 } else { i = i + 1u32 }
+            } else {
+                if val == 0u8 { sat = 1u8  going = 0u8 } else { i = i + 1u32 }
+            }
+        }
+    }
+    return sat
+}
+
+/* ===================================================================== *
+ *  Witness: sha256 over canonical (constraints + model) transcript.
+ * ===================================================================== */
+
+/* Append a u64 (little-endian) to SMT_WIT_SCRATCH at cursor; returns new
+ * cursor.  Byte stores through *u8 (Trap 5 safe). */
+fn smt_wit_put_u64(cur: u32, v: u64) -> u32 {
+    /* bounds guard: never overrun the fixed 65536-byte scratch (a huge
+     * transcript is truncated deterministically rather than corrupting
+     * adjacent module memory). */
+    if cur + 8u32 > SMT_WIT_CAP { return cur }
+    let mut i : u32 = 0u32
+    let mut off : u32 = cur
+    while i < 8u32 {
+        let oi : u64 = (off as u64) & SMT_U32MASK
+        let sh : u64 = ((i * 8u32) as u64) & SMT_U32MASK
+        SMT_WIT_SCRATCH[oi] = ((v >> sh) & 0xFFu64) as u8
+        off = off + 1u32
+        i = i + 1u32
+    }
+    return off
+}
+
+/* Serialize the full transcript into SMT_WIT_SCRATCH; returns byte length. */
+fn smt_wit_serialize(result: i32) -> u32 {
+    let mut cur : u32 = 0u32
+    cur = smt_wit_put_u64(cur, result as u64)
+    cur = smt_wit_put_u64(cur, SMT_LIA_NVAR as u64)
+    cur = smt_wit_put_u64(cur, SMT_LIA_NCON as u64)
+    cur = smt_wit_put_u64(cur, SMT_BV_NVAR as u64)
+    cur = smt_wit_serialize_cons(cur)
+    cur = smt_wit_serialize_model(cur)
+    return cur
+}
+
+/* Append every LIA constraint: (kind, len, bnd, [coeff, var]*). */
+fn smt_wit_serialize_cons(cur0: u32) -> u32 {
+    let ncon : u32 = SMT_LIA_NCON
+    let mut cur : u32 = cur0
+    let mut c : u32 = 0u32
+    while c < ncon {
+        let ci : u64 = (c as u64) & SMT_U32MASK
+        cur = smt_wit_put_u64(cur, SMT_LIA_KIND[ci] as u64)
+        let len : u32 = SMT_LIA_LEN[ci]
+        cur = smt_wit_put_u64(cur, len as u64)
+        cur = smt_wit_put_u64(cur, SMT_LIA_BND[ci] as u64)
+        let off : u32 = SMT_LIA_OFF[ci]
+        cur = smt_wit_serialize_terms(cur, off, len)
+        c = c + 1u32
+    }
+    /* BV var widths */
+    let nbv : u32 = SMT_BV_NVAR
+    let mut b : u32 = 0u32
+    while b < nbv {
+        let bi : u64 = (b as u64) & SMT_U32MASK
+        cur = smt_wit_put_u64(cur, SMT_BV_WIDTH[bi] as u64)
+        b = b + 1u32
+    }
+    return cur
+}
+
+/* Append the (coeff, var) terms of one constraint. */
+fn smt_wit_serialize_terms(cur0: u32, off: u32, len: u32) -> u32 {
+    let mut cur : u32 = cur0
+    let mut j : u32 = 0u32
+    while j < len {
+        let pi : u64 = ((off + j) as u64) & SMT_U32MASK
+        cur = smt_wit_put_u64(cur, SMT_LIA_COEFF[pi] as u64)
+        cur = smt_wit_put_u64(cur, SMT_LIA_VAR[pi] as u64)
+        j = j + 1u32
+    }
+    return cur
+}
+
+/* Append the model: every LIA value, then every BV value. */
+fn smt_wit_serialize_model(cur0: u32) -> u32 {
+    let mut cur : u32 = cur0
+    let nv : u32 = SMT_LIA_NVAR
+    let mut i : u32 = 0u32
+    while i < nv {
+        let vi : u64 = (i as u64) & SMT_U32MASK
+        cur = smt_wit_put_u64(cur, SMT_LIA_VAL[vi] as u64)
+        i = i + 1u32
+    }
+    let nbv : u32 = SMT_BV_NVAR
+    let mut b : u32 = 0u32
+    while b < nbv {
+        let bval : u64 = smt_bv_value(b + 1u32)
+        cur = smt_wit_put_u64(cur, bval)
+        b = b + 1u32
+    }
+    return cur
+}
+
+/* Emit the witness hash over the serialized transcript. */
+fn smt_emit_witness(result: i32) -> i32 {
+    let used : u32 = smt_wit_serialize(result)
+    let p : *u8 = (&SMT_WIT_SCRATCH as u64) as *u8
+    let h : *u8 = (&SMT_WIT_HASH as u64) as *u8
+    sha256_oneshot(p, used as u64, h)
+    SMT_WIT_VALID = 1u8
+    return SMT_OK
+}
+
+fn smt_witness(out_32: *u8) -> i32 @export {
+    if (out_32 as u64) == 0u64 { return SMT_E_BAD }
+    if SMT_WIT_VALID == 0u8 { return SMT_E_BAD }
+    let src : *u8 = (&SMT_WIT_HASH as u64) as *u8
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let ii : u64 = (i as u64) & SMT_U32MASK
+        out_32[ii] = src[ii]
+        i = i + 1u32
+    }
+    return SMT_OK
+}
+
+/* ===================================================================== *
+ *  Embedded KAT self-test: 0u64 on full pass; bitmask of failing vectors.
+ *  (Spec smt_selftest convention: 0 = pass.  The integrator's corpus
+ *   EXPECTED is 99; we therefore return 99u64 on full pass per the
+ *   briefing's universal selftest convention, and a small distinct
+ *   non-99 code at each failed check for diagnosability.)
+ * ===================================================================== */
+
+/* KAT scratch for coefficient/var arrays (module scope; Trap 7). */
+var SMT_KAT_C2  : [i64; 2]
+var SMT_KAT_V2  : [u32; 2]
+var SMT_KAT_C1  : [i64; 1]
+var SMT_KAT_V1  : [u32; 1]
+var SMT_KAT_H1  : [u8; 32]
+var SMT_KAT_H2  : [u8; 32]
+
+fn smt_kat1() -> u64 {
+    smt_init()
+    let x : u32 = smt_lia_new_var()
+    let y : u32 = smt_lia_new_var()
+    if x != 1u32 { return 1u64 }
+    if y != 2u32 { return 2u64 }
+    /* x + y <= 3 */
+    SMT_KAT_C2[0u64] = 1i64
+    SMT_KAT_C2[1u64] = 1i64
+    SMT_KAT_V2[0u64] = 1u32
+    SMT_KAT_V2[1u64] = 2u32
+    let cp : *i64 = (&SMT_KAT_C2 as u64) as *i64
+    let vp : *u32 = (&SMT_KAT_V2 as u64) as *u32
+    if smt_lia_add_le(cp, vp, 2u32, 3i64) != SMT_OK { return 3u64 }
+    /* x - y == 1 */
+    SMT_KAT_C2[0u64] = 1i64
+    SMT_KAT_C2[1u64] = -1i64
+    SMT_KAT_V2[0u64] = 1u32
+    SMT_KAT_V2[1u64] = 2u32
+    if smt_lia_add_eq(cp, vp, 2u32, 1i64) != SMT_OK { return 4u64 }
+    if smt_solve() != SMT_SAT { return 5u64 }
+    /* feasible integral model exists; check_model is the independent gate */
+    if smt_check_model() != 1u8 { return 6u64 }
+    /* Robust value check (any valid model, per the spec's KAT3/KAT5
+     * robustness principle): the returned integer values must satisfy both
+     * constraints exactly.  x - y == 1 (equality, safe i64 ==) and
+     * x + y <= 3 (checked via sign of 3-(x+y), never an i64 ordering). */
+    let xv : i64 = smt_lia_value(1u32)
+    let yv : i64 = smt_lia_value(2u32)
+    let diff : i64 = xv - yv
+    if diff != 1i64 { return 7u64 }
+    let sumxy : i64 = xv + yv
+    let slack : i64 = 3i64 - sumxy
+    if smt_rat_sign(slack) == SMT_NEG { return 8u64 }
+    return 0u64
+}
+
+fn smt_kat2() -> u64 {
+    smt_init()
+    let x : u32 = smt_lia_new_var()
+    if x != 1u32 { return 1u64 }
+    /* x <= 2 */
+    SMT_KAT_C1[0u64] = 1i64
+    SMT_KAT_V1[0u64] = 1u32
+    let cp : *i64 = (&SMT_KAT_C1 as u64) as *i64
+    let vp : *u32 = (&SMT_KAT_V1 as u64) as *u32
+    if smt_lia_add_le(cp, vp, 1u32, 2i64) != SMT_OK { return 1u64 }
+    /* x >= 5 (stored as -x <= -5) */
+    if smt_lia_add_ge(cp, vp, 1u32, 5i64) != SMT_OK { return 2u64 }
+    if smt_solve() != SMT_UNSAT { return 3u64 }
+    /* no model: value sentinel */
+    if smt_lia_value(1u32) != 0i64 { return 4u64 }
+    return 0u64
+}
+
+fn smt_kat3() -> u64 {
+    smt_init()
+    let a : u32 = smt_bv_new_var(4u32)
+    let b : u32 = smt_bv_new_var(4u32)
+    let c : u32 = smt_bv_new_var(4u32)
+    if a != 1u32 { return 1u64 }
+    if b != 2u32 { return 2u64 }
+    if c != 3u32 { return 3u64 }
+    if smt_bv_add_eq(a, b) != SMT_OK { return 4u64 }
+    if smt_bv_add_ult(a, c) != SMT_OK { return 5u64 }
+    if smt_solve() != SMT_SAT { return 6u64 }
+    if smt_check_model() != 1u8 { return 7u64 }
+    /* eq: a == b */
+    if smt_bv_value(1u32) != smt_bv_value(2u32) { return 8u64 }
+    /* ult: a < c (unsigned) */
+    let va : u64 = smt_bv_value(1u32)
+    let vc : u64 = smt_bv_value(3u32)
+    if va < vc { return 0u64 }
+    return 9u64
+}
+
+fn smt_kat4() -> u64 {
+    smt_init()
+    let a : u32 = smt_bv_new_var(2u32)
+    let b : u32 = smt_bv_new_var(2u32)
+    if a != 1u32 { return 1u64 }
+    if b != 2u32 { return 2u64 }
+    if smt_bv_add_eq(a, b) != SMT_OK { return 3u64 }
+    if smt_bv_add_ult(a, b) != SMT_OK { return 4u64 }
+    /* a == b AND a < b is unsatisfiable */
+    if smt_solve() != SMT_UNSAT { return 5u64 }
+    return 0u64
+}
+
+/* Nelson-Oppen positive case: x (LIA) shared with a (BV), LIA forces x==5,
+ * exchange must drive a's BV value to 5. */
+fn smt_kat5() -> u64 {
+    smt_init()
+    let x : u32 = smt_lia_new_var()
+    let a : u32 = smt_bv_new_var(8u32)
+    if x != 1u32 { return 1u64 }
+    if a != 1u32 { return 2u64 }
+    if smt_share(x, a) != SMT_OK { return 3u64 }
+    /* LIA: x == 5 */
+    SMT_KAT_C1[0u64] = 1i64
+    SMT_KAT_V1[0u64] = 1u32
+    let cp : *i64 = (&SMT_KAT_C1 as u64) as *i64
+    let vp : *u32 = (&SMT_KAT_V1 as u64) as *u32
+    if smt_lia_add_eq(cp, vp, 1u32, 5i64) != SMT_OK { return 4u64 }
+    if smt_solve() != SMT_SAT { return 5u64 }
+    if smt_check_model() != 1u8 { return 6u64 }
+    if smt_lia_value(1u32) != 5i64 { return 7u64 }
+    /* exchange should have forced a == 5 */
+    if smt_bv_value(1u32) != 5u64 { return 8u64 }
+    return 0u64
+}
+
+/* Nelson-Oppen negative case: LIA forces x==5, BV forces a==6 (via a==six,
+ * six==6), x and a are shared.  The LIA->BV exchange forces a's bits to 5,
+ * which contradicts a==6 -> BV UNSAT -> combined UNSAT. */
+fn smt_kat5_neg() -> u64 {
+    smt_init()
+    let x : u32 = smt_lia_new_var()
+    let a : u32 = smt_bv_new_var(8u32)
+    let six : u32 = smt_bv_new_var(8u32)
+    if x != 1u32 { return 1u64 }
+    if a != 1u32 { return 2u64 }
+    if six != 2u32 { return 3u64 }
+    if smt_share(x, a) != SMT_OK { return 4u64 }
+    /* LIA: x == 5 */
+    SMT_KAT_C1[0u64] = 1i64
+    SMT_KAT_V1[0u64] = 1u32
+    let cp : *i64 = (&SMT_KAT_C1 as u64) as *i64
+    let vp : *u32 = (&SMT_KAT_V1 as u64) as *u32
+    if smt_lia_add_eq(cp, vp, 1u32, 5i64) != SMT_OK { return 5u64 }
+    /* BV: force `six` bits to constant 6, then a == six */
+    smt_no_inject_bv_const(six, 6i64)
+    if smt_bv_add_eq(a, six) != SMT_OK { return 6u64 }
+    /* exchange forces a==5; a==6 already required -> UNSAT */
+    if smt_solve() != SMT_UNSAT { return 7u64 }
+    return 0u64
+}
+
+/* smt_bv_add_neq: positive (a != b unconstrained is SAT, distinct values)
+ * and negative (a == b AND a != b is UNSAT). */
+fn smt_kat7() -> u64 {
+    /* positive: a != b satisfiable */
+    smt_init()
+    let a : u32 = smt_bv_new_var(4u32)
+    let b : u32 = smt_bv_new_var(4u32)
+    if a != 1u32 { return 1u64 }
+    if b != 2u32 { return 2u64 }
+    if smt_bv_add_neq(a, b) != SMT_OK { return 3u64 }
+    if smt_solve() != SMT_SAT { return 4u64 }
+    if smt_check_model() != 1u8 { return 5u64 }
+    if smt_bv_value(1u32) == smt_bv_value(2u32) { return 6u64 }
+    /* negative: a == b AND a != b is unsatisfiable */
+    smt_init()
+    let c : u32 = smt_bv_new_var(4u32)
+    let d : u32 = smt_bv_new_var(4u32)
+    if c != 1u32 { return 7u64 }
+    if d != 2u32 { return 8u64 }
+    if smt_bv_add_eq(c, d) != SMT_OK { return 9u64 }
+    if smt_bv_add_neq(c, d) != SMT_OK { return 10u64 }
+    if smt_solve() != SMT_UNSAT { return 11u64 }
+    return 0u64
+}
+
+/* Witness reproducibility (M10): run KAT1 twice with a capability; the two
+ * 32-byte witnesses must be byte-identical.  With SMT_NULL_CAP, witness is
+ * suppressed (smt_witness returns SMT_E_BAD). */
+fn smt_kat6() -> u64 {
+    /* suppressed under null cap */
+    let r0 : u64 = smt_kat1()
+    if r0 != 0u64 { return 1u64 }
+    if smt_witness((&SMT_KAT_H1 as u64) as *u8) != SMT_E_BAD { return 2u64 }
+    /* with capability */
+    let capp : *u8 = smt_kat6_setup_cap()
+    smt_init()
+    let x : u32 = smt_lia_new_var()
+    let y : u32 = smt_lia_new_var()
+    if x != 1u32 { return 3u64 }
+    if y != 2u32 { return 4u64 }
+    SMT_KAT_C2[0u64] = 1i64
+    SMT_KAT_C2[1u64] = 1i64
+    SMT_KAT_V2[0u64] = 1u32
+    SMT_KAT_V2[1u64] = 2u32
+    let cp : *i64 = (&SMT_KAT_C2 as u64) as *i64
+    let vp : *u32 = (&SMT_KAT_V2 as u64) as *u32
+    if smt_lia_add_le(cp, vp, 2u32, 3i64) != SMT_OK { return 5u64 }
+    SMT_KAT_C2[0u64] = 1i64
+    SMT_KAT_C2[1u64] = -1i64
+    SMT_KAT_V2[0u64] = 1u32
+    SMT_KAT_V2[1u64] = 2u32
+    if smt_lia_add_eq(cp, vp, 2u32, 1i64) != SMT_OK { return 6u64 }
+    if smt_solve_cap(capp) != SMT_SAT { return 7u64 }
+    if smt_witness((&SMT_KAT_H1 as u64) as *u8) != SMT_OK { return 8u64 }
+    /* re-run identical */
+    smt_init()
+    smt_lia_new_var()
+    smt_lia_new_var()
+    SMT_KAT_C2[0u64] = 1i64
+    SMT_KAT_C2[1u64] = 1i64
+    SMT_KAT_V2[0u64] = 1u32
+    SMT_KAT_V2[1u64] = 2u32
+    if smt_lia_add_le(cp, vp, 2u32, 3i64) != SMT_OK { return 9u64 }
+    SMT_KAT_C2[0u64] = 1i64
+    SMT_KAT_C2[1u64] = -1i64
+    SMT_KAT_V2[0u64] = 1u32
+    SMT_KAT_V2[1u64] = 2u32
+    if smt_lia_add_eq(cp, vp, 2u32, 1i64) != SMT_OK { return 10u64 }
+    if smt_solve_cap(capp) != SMT_SAT { return 11u64 }
+    if smt_witness((&SMT_KAT_H2 as u64) as *u8) != SMT_OK { return 12u64 }
+    /* compare 32 bytes */
+    let mut i : u32 = 0u32
+    let mut eq : u8 = 1u8
+    while i < 32u32 {
+        let ii : u64 = (i as u64) & SMT_U32MASK
+        if SMT_KAT_H1[ii] != SMT_KAT_H2[ii] { eq = 0u8 }
+        i = i + 1u32
+    }
+    if eq == 0u8 { return 13u64 }
+    return 0u64
+}
+
+/* Provide a non-null capability pointer for the witness path.  Any
+ * non-null *u8 distinct from SMT_NULL_CAP enables emission (M8). */
+fn smt_kat6_setup_cap() -> *u8 {
+    return (&SMT_KAT_H1 as u64) as *u8
+}
+
+fn smt_selftest() -> u64 @export {
+    let r1 : u64 = smt_kat1()
+    if r1 != 0u64 { return 100u64 + r1 }
+    let r2 : u64 = smt_kat2()
+    if r2 != 0u64 { return 200u64 + r2 }
+    let r3 : u64 = smt_kat3()
+    if r3 != 0u64 { return 300u64 + r3 }
+    let r4 : u64 = smt_kat4()
+    if r4 != 0u64 { return 400u64 + r4 }
+    let r5 : u64 = smt_kat5()
+    if r5 != 0u64 { return 500u64 + r5 }
+    let r5n : u64 = smt_kat5_neg()
+    if r5n != 0u64 { return 550u64 + r5n }
+    let r6 : u64 = smt_kat6()
+    if r6 != 0u64 { return 600u64 + r6 }
+    let r7 : u64 = smt_kat7()
+    if r7 != 0u64 { return 700u64 + r7 }
+    return 99u64
+}

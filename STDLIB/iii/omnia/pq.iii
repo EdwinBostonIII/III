@@ -1,0 +1,246 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\pq.iii
+ *
+ * III STDLIB - omnia::pq
+ *
+ * Min-priority queue (binary heap).  Each entry pairs a u64 priority
+ * with a u32 payload; pq_pop_min returns the entry with the smallest
+ * priority.  Hard capacity declared at construction.
+ *
+ * Phase B: pq_u64u32 only (priority u64, payload u32).
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.
+ */
+
+module omnia_pq
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+const PQ_INVALID : u64 = 0u64
+const PQ_OK      : i32 = 0i32
+const PQ_E_FULL  : i32 = -1i32
+const PQ_E_EMPTY : i32 = -2i32
+const PQ_E_BADID : i32 = -3i32
+const PQ_E_OOM   : i32 = -4i32
+
+const PQ_MAX_INSTANCES : u32 = 16u32
+
+var PQ_ARENA       : [u64; 16]
+var PQ_PRIO_BASE   : [u64; 16]   /* u64 priorities array               */
+var PQ_PAY_BASE    : [u64; 16]   /* u32 payloads array                 */
+var PQ_LEN         : [u64; 16]
+var PQ_HARD        : [u64; 16]
+var PQ_LIVE        : [u8;  16]
+
+/* --- Byte-level accessors --- */
+
+fn pq_load_u64_le(base: u64, idx: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let off : u64 = idx * 8u64
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn pq_store_u64_le(base: u64, idx: u64, v: u64) -> u32 {
+    let p : *u8 = base as *u8
+    let off : u64 = idx * 8u64
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0u32
+}
+
+fn pq_load_u32_le(base: u64, idx: u64) -> u32 {
+    let p : *u8 = base as *u8
+    let off : u64 = idx * 4u64
+    let b0 : u32 = p[off + 0u64] as u32
+    let b1 : u32 = p[off + 1u64] as u32
+    let b2 : u32 = p[off + 2u64] as u32
+    let b3 : u32 = p[off + 3u64] as u32
+    return (b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)) & 0xFFFFFFFFu32
+}
+
+fn pq_store_u32_le(base: u64, idx: u64, v: u32) -> u32 {
+    let p : *u8 = base as *u8
+    let off : u64 = idx * 4u64
+    p[off + 0u64] = (v & 0xFFu32) as u8
+    p[off + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn pq_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (PQ_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if PQ_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* --- Heap operations --- */
+
+fn pq_swap(slot: u32, a: u64, b: u64) -> u32 {
+    let prio_base : u64 = PQ_PRIO_BASE[slot]
+    let pay_base  : u64 = PQ_PAY_BASE[slot]
+    let pa : u64 = pq_load_u64_le(prio_base, a)
+    let pb : u64 = pq_load_u64_le(prio_base, b)
+    pq_store_u64_le(prio_base, a, pb)
+    pq_store_u64_le(prio_base, b, pa)
+    let xa : u32 = pq_load_u32_le(pay_base, a)
+    let xb : u32 = pq_load_u32_le(pay_base, b)
+    pq_store_u32_le(pay_base, a, xb)
+    pq_store_u32_le(pay_base, b, xa)
+    return 0u32
+}
+
+fn pq_sift_up(slot: u32, idx: u64) -> u32 {
+    let prio_base : u64 = PQ_PRIO_BASE[slot]
+    let mut i : u64 = idx
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if i == 0u64 { done = 1u8 }
+        if done == 0u8 {
+            let parent : u64 = (i - 1u64) / 2u64
+            let pp : u64 = pq_load_u64_le(prio_base, parent)
+            let pi : u64 = pq_load_u64_le(prio_base, i)
+            if pi < pp {
+                pq_swap(slot, i, parent)
+                i = parent
+            }
+            if pi >= pp { done = 1u8 }
+        }
+    }
+    return 0u32
+}
+
+fn pq_sift_down(slot: u32, idx: u64) -> u32 {
+    let len : u64 = PQ_LEN[slot]
+    let prio_base : u64 = PQ_PRIO_BASE[slot]
+    let mut i : u64 = idx
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let left : u64 = i * 2u64 + 1u64
+        let right : u64 = i * 2u64 + 2u64
+        if left >= len { done = 1u8 }
+        if done == 0u8 {
+            let mut smallest : u64 = i
+            let pi : u64 = pq_load_u64_le(prio_base, i)
+            let pl : u64 = pq_load_u64_le(prio_base, left)
+            let mut sp : u64 = pi
+            if pl < sp { smallest = left; sp = pl }
+            if right < len {
+                let pr : u64 = pq_load_u64_le(prio_base, right)
+                if pr < sp { smallest = right; sp = pr }
+            }
+            if smallest == i { done = 1u8 }
+            if done == 0u8 {
+                pq_swap(slot, i, smallest)
+                i = smallest
+            }
+        }
+    }
+    return 0u32
+}
+
+/* --- Public --- */
+
+fn pq_u64u32_new(arena_id: u64, hard_max: u64) -> u64 @export {
+    if hard_max == 0u64 { return PQ_INVALID }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < PQ_MAX_INSTANCES {
+        if PQ_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return PQ_INVALID }
+    let prio : u64 = arena_alloc1(arena_id, hard_max * 8u64)
+    if prio == 0u64 { return PQ_INVALID }
+    let pay : u64 = arena_alloc1(arena_id, hard_max * 4u64)
+    if pay == 0u64 { return PQ_INVALID }
+    PQ_ARENA[slot]     = arena_id
+    PQ_PRIO_BASE[slot] = prio
+    PQ_PAY_BASE[slot]  = pay
+    PQ_LEN[slot]       = 0u64
+    PQ_HARD[slot]      = hard_max
+    PQ_LIVE[slot]      = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn pq_u64u32_drop(id: u64) -> i32 @export {
+    let s : u32 = pq_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return PQ_E_BADID }
+    PQ_LIVE[s]     = 0u8
+    PQ_ARENA[s]    = 0u64
+    PQ_PRIO_BASE[s]= 0u64
+    PQ_PAY_BASE[s] = 0u64
+    PQ_LEN[s]      = 0u64
+    PQ_HARD[s]     = 0u64
+    return PQ_OK
+}
+
+fn pq_u64u32_push(id: u64, prio: u64, payload: u32) -> i32 @export {
+    let s : u32 = pq_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return PQ_E_BADID }
+    if PQ_LEN[s] >= PQ_HARD[s] { return PQ_E_FULL }
+    let len : u64 = PQ_LEN[s]
+    pq_store_u64_le(PQ_PRIO_BASE[s], len, prio)
+    pq_store_u32_le(PQ_PAY_BASE[s], len, payload)
+    PQ_LEN[s] = len + 1u64
+    pq_sift_up(s, len)
+    return PQ_OK
+}
+
+/* Returns option_u32 encoding of the payload of the popped min element. */
+fn pq_u64u32_pop_min_payload(id: u64) -> u64 @export {
+    let s : u32 = pq_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let len : u64 = PQ_LEN[s]
+    if len == 0u64 { return 0u64 }
+    let payload : u32 = pq_load_u32_le(PQ_PAY_BASE[s], 0u64)
+    let last : u64 = len - 1u64
+    if last > 0u64 {
+        pq_swap(s, 0u64, last)
+    }
+    PQ_LEN[s] = last
+    if last > 0u64 {
+        pq_sift_down(s, 0u64)
+    }
+    return ((payload as u64) << 1u64) | 1u64
+}
+
+fn pq_u64u32_peek_min_priority(id: u64) -> u64 @export {
+    let s : u32 = pq_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if PQ_LEN[s] == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    return pq_load_u64_le(PQ_PRIO_BASE[s], 0u64)
+}
+
+fn pq_u64u32_len(id: u64) -> u64 @export {
+    let s : u32 = pq_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return PQ_LEN[s]
+}
+
+fn pq_u64u32_capacity(id: u64) -> u64 @export {
+    let s : u32 = pq_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return PQ_HARD[s]
+}
+

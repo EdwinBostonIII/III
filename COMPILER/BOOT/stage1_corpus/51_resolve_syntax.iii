@@ -1,0 +1,14 @@
+module corpus_51
+
+/* Verifies that programs unaffected by the resolver still compile after the
+ * resolver runtime is linked. (The full intent/pattern/resolve syntax in
+ * source form awaits Phase C0001-C0002 lexer/parser updates.) */
+
+fn other(x: u64) -> u64 {
+    return x + 1u64
+}
+
+fn main() -> u64 {
+    let v : u64 = other(41u64)
+    return v
+}

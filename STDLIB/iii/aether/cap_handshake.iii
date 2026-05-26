@@ -1,0 +1,271 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\cap_handshake.iii
+ *
+ * III STDLIB - aether::cap_handshake
+ *
+ * Capability handshake (Phase D.2 of the Intent Calculus v1.0 wire
+ * stack). Replaces OAuth/JWT-style auth: peers exchange pattern_set
+ * digests; the negotiation completes with a sealed session cap_id
+ * derived from both digests.
+ *
+ * Policy: for v1.0, two peers are compatible iff their pattern_set
+ * digests are EQUAL (i.e., same closure). Future versions will allow
+ * intersection-based compatibility per the FROZEN SPEC's
+ * pattern-subset rules.
+ *
+ * The session cap_id is sha256("III_CAP_SESS" || my_digest ||
+ * peer_digest) truncated to first 8 bytes -- deterministic, replayable,
+ * and bound to both digests so any tampering on either side breaks
+ * subsequent operations.
+ *
+ * Hexad: kind_origin (capability transfer is an origin operation).
+ * Ring: R0. K: 0.95.
+ */
+
+module aether_cap_handshake
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_cap_ref(out_buf: u64, cap_ref: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_seal_id(in_buf: u64) -> u64 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+
+const CAP_HANDSHAKE_SEAL  : u64 = 0xCAB0CAB0CAB0CAB0u64
+const CAP_HANDSHAKE_FACET_OFFER : u8 = 0xF0u8
+
+const CHS_OK             : i32 =  0i32
+const CHS_E_NULL         : i32 = -1i32
+const CHS_E_BAD_SEAL     : i32 = -2i32
+const CHS_E_BAD_CRC      : i32 = -3i32
+const CHS_E_INCOMPATIBLE : i32 = -4i32
+const CHS_E_FULL         : i32 = -5i32
+
+const CHS_SESSION_CAP : u32 = 64u32
+
+var CHS_SESSION_PEER_DIGEST : [u8; 2048]   /* 64 * 32 */
+var CHS_SESSION_CAP_ID      : [u64; 64]
+var CHS_SESSION_LIVE        : [u8; 64]
+var CHS_SESSION_USED        : u32 = 0u32
+
+/* ---------------- internal helpers ---------------- */
+
+/* Derive a session cap_id by hashing (my_digest, peer_digest). */
+fn _cap_derive_session_id(my_dig: u64, peer_dig: u64) -> u64 {
+    let l_my   : u64 = my_dig
+    let l_peer : u64 = peer_dig
+    sha256_init()
+    /* Domain "III_CAP_SESS" (12 bytes) */
+    sha256_update_byte(73u32)   /* I */
+    sha256_update_byte(73u32)
+    sha256_update_byte(73u32)
+    sha256_update_byte(95u32)   /* _ */
+    sha256_update_byte(67u32)   /* C */
+    sha256_update_byte(65u32)   /* A */
+    sha256_update_byte(80u32)   /* P */
+    sha256_update_byte(95u32)
+    sha256_update_byte(83u32)   /* S */
+    sha256_update_byte(69u32)   /* E */
+    sha256_update_byte(83u32)
+    sha256_update_byte(83u32)
+    /* my_digest (32B) */
+    let mut a : u32 = 0u32
+    while a < 32u32 {
+        let bp : *u8 = (l_my + ((a as u64) & 0xFFu64)) as *u8
+        sha256_update_byte((bp[0u64] as u32) & 0xFFu32)
+        a = a + 1u32
+    }
+    /* peer_digest (32B) */
+    let mut b : u32 = 0u32
+    while b < 32u32 {
+        let bp : *u8 = (l_peer + ((b as u64) & 0xFFu64)) as *u8
+        sha256_update_byte((bp[0u64] as u32) & 0xFFu32)
+        b = b + 1u32
+    }
+    sha256_finalize_internal()
+    let mut h : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let bv : u64 = (sha256_digest_byte(i) & 0xFFu32) as u64
+        h = h | (bv << ((i & 0x7u32) * 8u32))
+        i = i + 1u32
+    }
+    return h
+}
+
+fn _cap_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < CHS_SESSION_CAP {
+        if CHS_SESSION_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn _cap_find(session_cap_id: u64) -> u32 {
+    let l : u64 = session_cap_id
+    let mut i : u32 = 0u32
+    while i < CHS_SESSION_CAP {
+        if CHS_SESSION_LIVE[i] == 1u8 {
+            if CHS_SESSION_CAP_ID[i] == l { return i }
+        }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* Compare two 32-byte digests for equality. */
+fn _cap_digest_eq(a: u64, b: u64) -> u8 {
+    let l_a : u64 = a
+    let l_b : u64 = b
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let pa : *u8 = (l_a + i) as *u8
+        let pb : *u8 = (l_b + i) as *u8
+        if pa[0u64] != pb[0u64] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* ---------------- public surface ---------------- */
+
+/* Build an offer envelope into out_offer_buf. The buffer must hold
+ * at least header_bytes + 32 bytes. Returns the total wire length. */
+fn cap_offer_pattern_set(my_pset_digest_ptr: u64, out_offer_buf: u64) -> u32 @export {
+    let l_dig : u64 = my_pset_digest_ptr
+    let l_buf : u64 = out_offer_buf
+    if l_dig == 0u64 { return 0u32 }
+    if l_buf == 0u64 { return 0u32 }
+    babel_wire_init(l_buf)
+    babel_wire_set_seal_id(l_buf, CAP_HANDSHAKE_SEAL)
+    babel_wire_set_cap_ref(l_buf, 0u64)
+    babel_wire_set_intent_id(l_buf, CAP_HANDSHAKE_SEAL)   /* self-binding */
+    babel_wire_set_ctx_digest(l_buf, l_dig)
+    babel_wire_set_facet(l_buf, CAP_HANDSHAKE_FACET_OFFER)
+    babel_wire_set_payload(l_buf, l_dig, 32u32)
+    return babel_wire_finalize(l_buf)
+}
+
+/* Inspect an incoming offer + my own pattern_set digest. Returns 1
+ * if compatible (digests match), 0 otherwise. Verifies CRC + seal. */
+fn cap_accept_offer(offer_buf: u64, offer_len: u32, my_pset_digest_ptr: u64) -> u8 @export {
+    let l_off : u64 = offer_buf
+    let l_len : u32 = offer_len
+    let l_my  : u64 = my_pset_digest_ptr
+    if l_off == 0u64 { return 0u8 }
+    if l_my  == 0u64 { return 0u8 }
+    if babel_wire_verify_crc(l_off, l_len) != 1u8 { return 0u8 }
+    if babel_wire_verify_seal(l_off, CAP_HANDSHAKE_SEAL) != 1u8 { return 0u8 }
+    if babel_wire_unpack_facet(l_off) != CAP_HANDSHAKE_FACET_OFFER { return 0u8 }
+    if babel_wire_unpack_payload_len(l_off) != 32u32 { return 0u8 }
+    /* Compare each payload byte with my digest. */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let mine_b : *u8 = (l_my + ((i as u64) & 0xFFu64)) as *u8
+        let peer_b : u32 = babel_wire_unpack_payload_byte(l_off, i)
+        if (mine_b[0u64] as u32) != peer_b { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* Allocate a session cap binding (my_digest, peer_digest). Returns
+ * the deterministic cap_id, or 0 on failure (incompatible / full). */
+fn cap_negotiate_session(my_pset_digest_ptr: u64, peer_pset_digest_ptr: u64) -> u64 @export {
+    let l_my   : u64 = my_pset_digest_ptr
+    let l_peer : u64 = peer_pset_digest_ptr
+    if l_my   == 0u64 { return 0u64 }
+    if l_peer == 0u64 { return 0u64 }
+    if _cap_digest_eq(l_my, l_peer) != 1u8 { return 0u64 }   /* incompatible */
+    let s : u32 = _cap_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let cap_id : u64 = _cap_derive_session_id(l_my, l_peer)
+    /* Store peer digest for replay verification. */
+    let off : u32 = s * 32u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let src : *u8 = (l_peer + i) as *u8
+        CHS_SESSION_PEER_DIGEST[off + (i as u32)] = src[0u64]
+        i = i + 1u64
+    }
+    CHS_SESSION_CAP_ID[s] = cap_id
+    CHS_SESSION_LIVE[s]   = 1u8
+    if CHS_SESSION_USED < CHS_SESSION_CAP {
+        CHS_SESSION_USED = CHS_SESSION_USED + 1u32
+    }
+    return cap_id
+}
+
+/* Verify that the given session cap_id is live + bound to the given
+ * peer digest. */
+fn cap_session_verify(session_cap_id: u64, peer_pset_digest_ptr: u64) -> u8 @export {
+    let l_cap  : u64 = session_cap_id
+    let l_peer : u64 = peer_pset_digest_ptr
+    if l_peer == 0u64 { return 0u8 }
+    let s : u32 = _cap_find(l_cap)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    let off : u32 = s * 32u32
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let stored : u8 = CHS_SESSION_PEER_DIGEST[off + i]
+        let bp     : *u8 = (l_peer + ((i as u64) & 0xFFu64)) as *u8
+        if stored != bp[0u64] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+fn cap_session_drop(session_cap_id: u64) -> i32 @export {
+    let l : u64 = session_cap_id
+    let s : u32 = _cap_find(l)
+    if s == 0xFFFFFFFFu32 { return CHS_E_NULL }
+    let off : u32 = s * 32u32
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        CHS_SESSION_PEER_DIGEST[off + i] = 0u8
+        i = i + 1u32
+    }
+    CHS_SESSION_CAP_ID[s] = 0u64
+    CHS_SESSION_LIVE[s]   = 0u8
+    if CHS_SESSION_USED > 0u32 { CHS_SESSION_USED = CHS_SESSION_USED - 1u32 }
+    return CHS_OK
+}
+
+fn cap_session_count() -> u32 @export {
+    return CHS_SESSION_USED
+}
+
+fn cap_session_capacity() -> u32 @export {
+    return CHS_SESSION_CAP
+}
+
+fn cap_handshake_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CHS_SESSION_CAP {
+        CHS_SESSION_CAP_ID[i] = 0u64
+        CHS_SESSION_LIVE[i]   = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    let total : u32 = CHS_SESSION_CAP * 32u32
+    while j < total {
+        CHS_SESSION_PEER_DIGEST[j] = 0u8
+        j = j + 1u32
+    }
+    CHS_SESSION_USED = 0u32
+    return CHS_OK
+}

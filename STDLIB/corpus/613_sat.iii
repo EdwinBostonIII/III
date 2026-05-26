@@ -1,0 +1,4 @@
+/* 613 — sat: deterministic CDCL SAT solver (fixed decision rule, no learned heuristics). */
+module corpus_613
+extern @abi(c-msvc-x64) fn sat_selftest() -> u64 from "sat.iii"
+fn main() -> u64 { return sat_selftest() }

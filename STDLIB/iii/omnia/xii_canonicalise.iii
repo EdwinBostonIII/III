@@ -1,0 +1,218 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_canonicalise.iii
+ *
+ * III STDLIB - omnia::xii_canonicalise
+ *
+ * XII canonicalisation algorithm. Per DOCS/III-XII.md S9.6 + S14.4.
+ *
+ * Walks the term tree bottom-up; for every node, applies the 40 sealed
+ * reduction rules (via omnia/xii_rewrite.iii) to fixpoint. Termination
+ * is guaranteed by the MPO weight ordering of S9.3; confluence is
+ * established by the 117 critical pair convergence proof (S9.2 / S26.15).
+ *
+ * Algorithm:
+ *   canonicalise(t):
+ *     if t is NULL: return NULL
+ *     if t is basis kernel: return t (basis kernels are already canonical)
+ *     for each child c of t: c <- canonicalise(c)
+ *     while xii_rewrite_apply_one(t) changes t:
+ *       t <- changed term
+ *       if t is a different node (e.g., new compose root):
+ *         canonicalise t again (it may have a new structure)
+ *     return t
+ *
+ * Termination bound: the MPO weight of the input term. Each rule firing
+ * strictly decreases this weight (Theorem 9.3); after at most
+ * weight(T_initial) firings, no rule applies.
+ *
+ * Hexad: kind_compose. Ring: R0. K: per-term.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_canonicalise
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+
+extern @abi(c-msvc-x64) fn xii_basis_mpo_weight(kind: u8) -> u32 from "xii_basis.iii"
+
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+const XCN_K01_FORM     : u8 = 0u8
+const XCN_K18_REFLECT  : u8 = 17u8
+const XCN_FCOMPOSE     : u8 = 18u8
+const XCN_FTHEN        : u8 = 19u8
+const XCN_FWITH        : u8 = 20u8
+const XCN_FUNDER       : u8 = 21u8
+const XCN_FIF          : u8 = 22u8
+const XCN_FLOOP        : u8 = 23u8
+
+const XCN_NULL_REF     : u32 = 0xFFFFFFFFu32
+
+/* Hard termination cap: 4096 rule firings per canonicalisation. The MPO
+ * weight bound guarantees termination well within this. */
+const XCN_MAX_REWRITE_STEPS : u32 = 4096u32
+
+var XCN_STEPS_LAST : u32 = 0u32
+/* A-1 (nous): set on step-cap overshoot.  MPO weights are k_cost*1000-scale, so
+ * there is no proof that step-count <= XCN_MAX_REWRITE_STEPS under every rewrite
+ * order; the cap CAN bind (e.g. a worse proposer order).  A gapped result is
+ * semantically equal to the input (rewriting preserves meaning) but is NOT a
+ * canonical form and must never be treated as one. */
+var XCN_GAPPED : u8 = 0u8
+
+fn xii_canonicalise_last_steps() -> u32 @export {
+    return XCN_STEPS_LAST
+}
+
+/* ------------------------------------------------------------------ */
+/* MPO weight: recursive sum used as termination bound.                */
+/* ------------------------------------------------------------------ */
+
+fn xii_canon_weight(t: u32) -> u32 @export {
+    if t == XCN_NULL_REF { return 0u32 }
+    let kind : u8 = xii_term_get_kind(t)
+    let w_self : u32 = xii_basis_mpo_weight(kind)
+
+    if kind <= XCN_K18_REFLECT {
+        /* Basis kernel: weight is K-cost * 1000. */
+        return w_self
+    }
+
+    /* Fusion: weight = w_self + max(child weights) + 1 (depth tiebreaker) */
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let wa : u32 = xii_canon_weight(a)
+    let wb : u32 = xii_canon_weight(b)
+    let mut max_w : u32 = wa
+    if wb > max_w { max_w = wb }
+
+    if kind == XCN_FIF {
+        let c : u32 = xii_term_get_child_c(t)
+        let wc : u32 = xii_canon_weight(c)
+        if wc > max_w { max_w = wc }
+    }
+
+    /* Iterative LOOP weight: include the loop count as a multiplier on body. */
+    if kind == XCN_FLOOP {
+        let count : u64 = xii_term_get_aux(t)
+        if count > 1u64 {
+            /* Bound the multiplied weight to u32 max. */
+            let mult : u64 = (max_w as u64) * count
+            max_w = 0xFFFFFFFFu32
+            if mult <= 0xFFFFFFFFu64 { max_w = mult as u32 }
+        }
+    }
+
+    return w_self + max_w + 1u32
+}
+
+/* ------------------------------------------------------------------ */
+/* Canonicalise: bottom-up recursive normalisation.                    */
+/* Returns the (possibly new) term ref. May mutate t in place.         */
+/* ------------------------------------------------------------------ */
+
+fn xii_canonicalise(t: u32) -> u32 @export {
+    XCN_STEPS_LAST = 0u32
+    XCN_GAPPED = 0u8
+    return _canon_walk_cap(t, XCN_MAX_REWRITE_STEPS)
+}
+
+/* Explicit-budget entry (A-1): canonicalise under a caller-provided step cap.
+ * corpus/675 uses a tiny cap to force + verify the gap-on-cap-hit without building
+ * a >4096-step term. */
+fn xii_canonicalise_capped(t: u32, cap: u32) -> u32 @export {
+    XCN_STEPS_LAST = 0u32
+    XCN_GAPPED = 0u8
+    return _canon_walk_cap(t, cap)
+}
+
+/* A-1: did the last (capped) canonicalise hit the cap?  1 = gapped (the result is a
+ * non-canonical, order-dependent partial reduction).  The differential gate compares
+ * this flag alongside the result; a value-context caller that sees 1 must treat the
+ * result as the un-reduced (semantically-equal) term, never as canonical. */
+fn xii_canonicalise_gapped() -> u8 @export {
+    return XCN_GAPPED
+}
+
+fn _canon_walk_cap(t: u32, cap: u32) -> u32 {
+    if t == XCN_NULL_REF { return t }
+    let kind : u8 = xii_term_get_kind(t)
+
+    /* Basis kernels are canonical by definition. */
+    if kind <= XCN_K18_REFLECT { return t }
+
+    /* Recursively canonicalise children first (bottom-up). */
+    let a : u32 = xii_term_get_child_a(t)
+    let a_canon : u32 = _canon_walk_cap(a, cap)
+    if a_canon != a { xii_term_set_child_a(t, a_canon) }
+
+    let b : u32 = xii_term_get_child_b(t)
+    let b_canon : u32 = _canon_walk_cap(b, cap)
+    if b_canon != b { xii_term_set_child_b(t, b_canon) }
+
+    if kind == XCN_FIF {
+        let c : u32 = xii_term_get_child_c(t)
+        let c_canon : u32 = _canon_walk_cap(c, cap)
+        if c_canon != c { xii_term_set_child_c(t, c_canon) }
+    }
+
+    /* Apply rules at this node until no rule fires. Bounded by MPO weight
+     * (well below the cap for realistic inputs).
+     *
+     * Note: rules in xii_rewrite mutate t in place and return the SAME
+     * ref.  Use xii_rewrite_last_rule_fired() (0 = no rule) as the
+     * firing signal instead of pointer-equality on the result. */
+    let mut cur : u32 = t
+    let mut steps : u32 = 0u32
+    while steps < cap {
+        let next : u32 = xii_rewrite_apply_one(cur)
+        let fired : u32 = xii_rewrite_last_rule_fired()
+        if fired == 0u32 { return cur }
+        /* A rule fired. The mutated node may have introduced new
+         * sub-structure that wasn't canonicalised yet, so re-canonicalise
+         * the (possibly new) result before continuing. */
+        cur = _canon_walk_cap(next, cap)
+        steps = steps + 1u32
+        XCN_STEPS_LAST = XCN_STEPS_LAST + 1u32
+    }
+    /* Step cap reached (A-1).  Under the fixed order this is the §9.4 "impossible
+     * for a well-formed term" / Manifest-tamper case; under a nous proposer order
+     * it can also mean this order took more steps than the cap allows.  Either way
+     * we must NOT return cur as a canonical form: flag the gap.  cur is a valid,
+     * semantically-equal partial reduction (sound to use, not canonical). */
+    XCN_GAPPED = 1u8
+    return cur
+}
+
+/* ------------------------------------------------------------------ */
+/* Canonical-form predicate                                            */
+/* ------------------------------------------------------------------ */
+
+fn xii_is_canonical(t: u32) -> u8 @export {
+    if t == XCN_NULL_REF { return 1u8 }
+    /* A term is canonical iff no rule fires at its root AND every child
+     * is canonical.  apply_one mutates in place and returns the same
+     * ref; use last_rule_fired() as the firing signal. */
+    let next : u32 = xii_rewrite_apply_one(t)
+    let fired : u32 = xii_rewrite_last_rule_fired()
+    if fired != 0u32 { return 0u8 }
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= XCN_K18_REFLECT { return 1u8 }
+    let a : u32 = xii_term_get_child_a(t)
+    if xii_is_canonical(a) == 0u8 { return 0u8 }
+    let b : u32 = xii_term_get_child_b(t)
+    if xii_is_canonical(b) == 0u8 { return 0u8 }
+    if kind == XCN_FIF {
+        let c : u32 = xii_term_get_child_c(t)
+        if xii_is_canonical(c) == 0u8 { return 0u8 }
+    }
+    return 1u8
+}

@@ -1,0 +1,7 @@
+module corpus_03
+
+fn main() -> u64 {
+    let x: u64 = 10
+    let y: u64 = 22
+    return x + y
+}

@@ -1,0 +1,21 @@
+/* 810 -- mig4 Step 1: declarative rule LHS patterns.  Drives xrp_selftest, which proves:
+ * (a) the 49-rule structural descriptor table is complete + well-formed (count=49, first
+ *     rid=1, last rid=105, every root a valid XII kind);
+ * (b) FAITHFULNESS -- the structural matcher is a SOUND SUPERSET of the hand matchers: a
+ *     hand-firing witness across every rule shape (assoc / null-identity / sort /
+ *     idempotent / null-collapse / loop / then-null / trivial-lift / trit unary+binary)
+ *     also structurally matches, with the hand fire confirmed via apply_specific +
+ *     last_rule_fired (so a bad witness is caught, not silently passed);
+ * (c) the matcher DISCRIMINATES (negative arms): a bare TRIT_VAL, a plain FCOMPOSE whose
+ *     children miss the kind constraints, and an unknown rule-id all reject.
+ * Exit 99 = all hold; 1..5 = table integrity; 10..20 = a faithfulness witness; 30..34 = a
+ * negative arm leaked.  Gated by run_corpus.sh as the mig4 Step-1 faithfulness gate. */
+module corpus_810
+
+extern @abi(c-msvc-x64) fn xrp_selftest() -> u64 from "xii_rule_patterns.iii"
+
+fn main() -> u64 {
+    let r : u64 = xrp_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

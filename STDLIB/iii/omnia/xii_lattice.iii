@@ -1,0 +1,198 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_lattice.iii
+ *
+ * III STDLIB - omnia::xii_lattice
+ *
+ * Content-addressed Lattice cell store. Per DOCS/III-XII.md S12.
+ *
+ * Each cell: 48 bytes (44 used + 4 alignment).
+ *   0..31  : cell_mhash (SHA-256 of payload)
+ *   32..35 : payload_offset (u32 into xii_lattice.bin)
+ *   36..39 : payload_size (u32)
+ *   40     : ct_kind (0..8)
+ *   41     : prov_xform_id (0..16)
+ *   42     : flags (bit 0 = is_horizon, bit 1 = is_inlined_by_ldil, bit 2 = is_ct)
+ *   43     : reserved
+ *   44..47 : pad
+ *
+ * Total cells (curated): 16,128 (per S26.9 feasible-circumstance count).
+ * For this initial implementation we use a 1024-cell working store sufficient
+ * for corpus tests; full 16,128 cells are loaded from xii_lattice.bin at
+ * Phase XII-ζ Final Seal.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_lattice
+
+const XL_CELL_BYTES : u32 = 48u32
+const XL_CELL_CAP   : u32 = 1024u32
+const XL_STORE_BYTES : u32 = 49152u32 /* 1024 * 48 */
+
+var XII_LATTICE_STORE : [u8; 49152]
+var XII_LATTICE_USED : u32 = 0u32
+var XII_LATTICE_INIT_DONE : u8 = 0u8
+
+/* Payload arena: the actual cell byte sequences (machine code). */
+const XL_PAYLOAD_ARENA_BYTES : u32 = 524288u32 /* 512 KiB working store */
+var XII_LATTICE_PAYLOAD : [u8; 524288]
+var XII_LATTICE_PAYLOAD_NEXT : u32 = 0u32
+
+/* ------------------------------------------------------------------ */
+/* Byte-level codecs                                                   */
+/* ------------------------------------------------------------------ */
+
+fn _lat_write_u32(off: u32, val: u32) -> i32 {
+    XII_LATTICE_STORE[off]        = (val & 0xFFu32) as u8
+    XII_LATTICE_STORE[off + 1u32] = ((val >> 8u32) & 0xFFu32) as u8
+    XII_LATTICE_STORE[off + 2u32] = ((val >> 16u32) & 0xFFu32) as u8
+    XII_LATTICE_STORE[off + 3u32] = ((val >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn _lat_read_u32(off: u32) -> u32 {
+    let b0 : u32 = XII_LATTICE_STORE[off] as u32
+    let b1 : u32 = XII_LATTICE_STORE[off + 1u32] as u32
+    let b2 : u32 = XII_LATTICE_STORE[off + 2u32] as u32
+    let b3 : u32 = XII_LATTICE_STORE[off + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* ------------------------------------------------------------------ */
+/* Lifecycle                                                           */
+/* ------------------------------------------------------------------ */
+
+fn xii_lattice_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < XL_STORE_BYTES {
+        XII_LATTICE_STORE[i] = 0u8
+        i = i + 1u32
+    }
+    XII_LATTICE_USED = 0u32
+    XII_LATTICE_PAYLOAD_NEXT = 0u32
+    XII_LATTICE_INIT_DONE = 1u8
+    return 0i32
+}
+
+fn xii_lattice_capacity() -> u32 @export {
+    return XL_CELL_CAP
+}
+
+fn xii_lattice_used() -> u32 @export {
+    return XII_LATTICE_USED
+}
+
+/* ------------------------------------------------------------------ */
+/* Cell allocation + access                                            */
+/* ------------------------------------------------------------------ */
+
+/* Allocate a fresh cell, store its payload bytes, write metadata.
+ * Returns the cell index, or 0xFFFFFFFF on overflow. */
+fn xii_lattice_alloc_cell(payload_ptr: *u8, payload_size: u32, ct_kind: u8, prov_xform_id: u8, flags: u8, mhash_ptr: *u8) -> u32 @export {
+    if XII_LATTICE_INIT_DONE == 0u8 { xii_lattice_reset() }
+    if XII_LATTICE_USED >= XL_CELL_CAP { return 0xFFFFFFFFu32 }
+    let payload_off : u32 = XII_LATTICE_PAYLOAD_NEXT
+    if (payload_off + payload_size) > XL_PAYLOAD_ARENA_BYTES { return 0xFFFFFFFFu32 }
+
+    /* Copy payload. */
+    let mut i : u32 = 0u32
+    while i < payload_size {
+        XII_LATTICE_PAYLOAD[payload_off + i] = payload_ptr[i as u64]
+        i = i + 1u32
+    }
+    XII_LATTICE_PAYLOAD_NEXT = payload_off + payload_size
+
+    /* Write metadata. */
+    let idx : u32 = XII_LATTICE_USED
+    let off : u32 = idx * XL_CELL_BYTES
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        XII_LATTICE_STORE[off + j] = mhash_ptr[j as u64]
+        j = j + 1u32
+    }
+    _lat_write_u32(off + 32u32, payload_off)
+    _lat_write_u32(off + 36u32, payload_size)
+    XII_LATTICE_STORE[off + 40u32] = ct_kind
+    XII_LATTICE_STORE[off + 41u32] = prov_xform_id
+    XII_LATTICE_STORE[off + 42u32] = flags
+    XII_LATTICE_STORE[off + 43u32] = 0u8
+    XII_LATTICE_USED = idx + 1u32
+    return idx
+}
+
+fn xii_lattice_cell_mhash_ptr(cell_idx: u32) -> u64 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u64 }
+    let off : u32 = cell_idx * XL_CELL_BYTES
+    return (&XII_LATTICE_STORE as u64) + (off as u64)
+}
+
+fn xii_lattice_cell_payload_offset(cell_idx: u32) -> u32 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u32 }
+    return _lat_read_u32((cell_idx * XL_CELL_BYTES) + 32u32)
+}
+
+fn xii_lattice_cell_payload_size(cell_idx: u32) -> u32 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u32 }
+    return _lat_read_u32((cell_idx * XL_CELL_BYTES) + 36u32)
+}
+
+fn xii_lattice_cell_payload_ptr(cell_idx: u32) -> u64 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u64 }
+    let p_off : u32 = xii_lattice_cell_payload_offset(cell_idx)
+    return (&XII_LATTICE_PAYLOAD as u64) + (p_off as u64)
+}
+
+fn xii_lattice_cell_ct_kind(cell_idx: u32) -> u8 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u8 }
+    return XII_LATTICE_STORE[(cell_idx * XL_CELL_BYTES) + 40u32]
+}
+
+fn xii_lattice_cell_prov_xform(cell_idx: u32) -> u8 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u8 }
+    return XII_LATTICE_STORE[(cell_idx * XL_CELL_BYTES) + 41u32]
+}
+
+fn xii_lattice_cell_flags(cell_idx: u32) -> u8 @export {
+    if cell_idx >= XII_LATTICE_USED { return 0u8 }
+    return XII_LATTICE_STORE[(cell_idx * XL_CELL_BYTES) + 42u32]
+}
+
+/* ------------------------------------------------------------------ */
+/* Lookup by (horizon_id, circ_encoding) — uses a sealed 2-level map.  */
+/* Maps {horizon_id (0..143) × circ (0..2^20)} -> cell_idx.            */
+/* For the initial implementation we use a flat 144 * 16 entry table   */
+/* (sufficient for corpus tests; full table is generated at curation). */
+/* ------------------------------------------------------------------ */
+
+const XL_LOOKUP_PER_HORIZON : u32 = 16u32
+const XL_LOOKUP_ENTRIES : u32 = 2304u32 /* 144 * 16 */
+var XII_LATTICE_LOOKUP : [u8; 9216] /* 2304 * 4 bytes per cell_idx */
+
+fn xii_lattice_lookup_set(horizon_id: u8, circ_slot: u32, cell_idx: u32) -> i32 @export {
+    if horizon_id >= 144u8 { return -1i32 }
+    if circ_slot >= XL_LOOKUP_PER_HORIZON { return -1i32 }
+    let off : u32 = (((horizon_id as u32) * XL_LOOKUP_PER_HORIZON) + circ_slot) * 4u32
+    XII_LATTICE_LOOKUP[off]        = (cell_idx & 0xFFu32) as u8
+    XII_LATTICE_LOOKUP[off + 1u32] = ((cell_idx >> 8u32) & 0xFFu32) as u8
+    XII_LATTICE_LOOKUP[off + 2u32] = ((cell_idx >> 16u32) & 0xFFu32) as u8
+    XII_LATTICE_LOOKUP[off + 3u32] = ((cell_idx >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn xii_lattice_lookup(horizon_id: u8, circ_slot: u32) -> u32 @export {
+    if horizon_id >= 144u8 { return 0xFFFFFFFFu32 }
+    if circ_slot >= XL_LOOKUP_PER_HORIZON { return 0xFFFFFFFFu32 }
+    let off : u32 = (((horizon_id as u32) * XL_LOOKUP_PER_HORIZON) + circ_slot) * 4u32
+    let b0 : u32 = XII_LATTICE_LOOKUP[off] as u32
+    let b1 : u32 = XII_LATTICE_LOOKUP[off + 1u32] as u32
+    let b2 : u32 = XII_LATTICE_LOOKUP[off + 2u32] as u32
+    let b3 : u32 = XII_LATTICE_LOOKUP[off + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* Map a 24-bit circumstance to a 4-bit circ_slot (the high 16 bits of D2..D6
+ * are folded down for the lookup; the full Manifest holds 16128 entries). */
+fn xii_lattice_circ_to_slot(circ: u32) -> u32 @export {
+    return (circ & 0xFu32) ^ ((circ >> 12u32) & 0xFu32)
+}

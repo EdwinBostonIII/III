@@ -1,0 +1,121 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\tempora\duration.iii
+ *
+ * III STDLIB - tempora::duration
+ *
+ * Typed duration as a u64 nanosecond count.  Phase B keeps it
+ * unsigned; Phase C will add signed durations once @discriminated
+ * lands.  Saturation at u64 max instead of overflow.
+ *
+ * iiis-2 quirk W11: u64 division of large dividends (e.g. DUR_MAX/k
+ * for k a small constant) returns 0.  We therefore use precomputed
+ * saturation thresholds rather than runtime division.
+ *
+ * Hexad: kind_motion.  Ring: R0.  K: 1.00.
+ */
+
+module tempora_duration
+
+const DUR_NANOS_PER_MICRO  : u64 = 1000u64
+const DUR_NANOS_PER_MILLI  : u64 = 1000000u64
+const DUR_NANOS_PER_SECOND : u64 = 1000000000u64
+const DUR_NANOS_PER_MINUTE : u64 = 60000000000u64
+const DUR_NANOS_PER_HOUR   : u64 = 3600000000000u64
+const DUR_MAX              : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Precomputed saturation thresholds for from_X conversions.  Each
+ * LIMIT is floor(DUR_MAX / scale) - i.e. the largest input that does
+ * not overflow u64 when multiplied by scale. */
+const DUR_LIMIT_MICROS  : u64 = 18446744073709551u64
+const DUR_LIMIT_MILLIS  : u64 = 18446744073709u64
+const DUR_LIMIT_SECONDS : u64 = 18446744073u64
+const DUR_LIMIT_MINUTES : u64 = 307445734u64
+const DUR_LIMIT_HOURS   : u64 = 5124095u64
+
+fn duration_from_nanos(n: u64) -> u64 @export {
+    return n
+}
+
+fn duration_from_micros(n: u64) -> u64 @export {
+    if n > DUR_LIMIT_MICROS { return DUR_MAX }
+    return n * DUR_NANOS_PER_MICRO
+}
+
+fn duration_from_millis(n: u64) -> u64 @export {
+    if n > DUR_LIMIT_MILLIS { return DUR_MAX }
+    return n * DUR_NANOS_PER_MILLI
+}
+
+fn duration_from_seconds(n: u64) -> u64 @export {
+    if n > DUR_LIMIT_SECONDS { return DUR_MAX }
+    return n * DUR_NANOS_PER_SECOND
+}
+
+fn duration_from_minutes(n: u64) -> u64 @export {
+    if n > DUR_LIMIT_MINUTES { return DUR_MAX }
+    return n * DUR_NANOS_PER_MINUTE
+}
+
+fn duration_from_hours(n: u64) -> u64 @export {
+    if n > DUR_LIMIT_HOURS { return DUR_MAX }
+    return n * DUR_NANOS_PER_HOUR
+}
+
+fn duration_to_nanos(d: u64) -> u64 @export {
+    return d
+}
+
+fn duration_to_millis(d: u64) -> u64 @export {
+    return d / DUR_NANOS_PER_MILLI
+}
+
+fn duration_to_seconds(d: u64) -> u64 @export {
+    return d / DUR_NANOS_PER_SECOND
+}
+
+fn duration_add(a: u64, b: u64) -> u64 @export {
+    let s : u64 = a + b
+    if s < a { return DUR_MAX }
+    return s
+}
+
+fn duration_sub(a: u64, b: u64) -> u64 @export {
+    if b > a { return 0u64 }
+    return a - b
+}
+
+fn duration_mul_u32(a: u64, k: u32) -> u64 @export {
+    if k == 0u32 { return 0u64 }
+    let kk : u64 = k as u64
+    let p : u64 = a * kk
+    if kk > 1u64 {
+        if p < a { return DUR_MAX }
+    }
+    let q : u64 = p / kk
+    if q != a { return DUR_MAX }
+    return p
+}
+
+fn duration_div_u32(a: u64, k: u32) -> u64 @export {
+    if k == 0u32 { return DUR_MAX }
+    return a / (k as u64)
+}
+
+fn duration_eq(a: u64, b: u64) -> u8 @export {
+    if a == b { return 1u8 }
+    return 0u8
+}
+
+fn duration_lt(a: u64, b: u64) -> u8 @export {
+    if a < b { return 1u8 }
+    return 0u8
+}
+
+fn duration_min(a: u64, b: u64) -> u64 @export {
+    if a < b { return a }
+    return b
+}
+
+fn duration_max(a: u64, b: u64) -> u64 @export {
+    if a > b { return a }
+    return b
+}

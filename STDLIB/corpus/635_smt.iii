@@ -1,0 +1,4 @@
+/* 635 — smt: DPLL(T) Nelson-Oppen (BV bit-blast + LIA exact-rational simplex). */
+module corpus_635
+extern @abi(c-msvc-x64) fn smt_selftest() -> u64 from "smt.iii"
+fn main() -> u64 { return smt_selftest() }

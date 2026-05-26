@@ -1,0 +1,115 @@
+/* STDLIB/iii/omnia/hexad_mobius.iii
+ *
+ * III HEXAD section 7 -- Mobius Hexads (bidirectional inverse pair).
+ * Native .iii port of HEXAD/src/hexad_mobius.c.
+ *
+ * Buffer of three u32 fields: forward (u16 in u32), inverse, coherence_floor
+ * in parts-per-million.  The C double in zero..one is carried as a u32 ppm;
+ * default 920000 corresponds to 0.92 of full scale.
+ *
+ * The inverse is the active-negation of forward: pillars two..five negated,
+ * pillars one and six unchanged.  Active-negation is involutive, so the pair
+ * round-trips and forward plus inverse cancels to ZERO on the active band.
+ *
+ * Hexad kind_essence.  Ring R0.  K floor 0.98.
+ */
+module omnia_hexad_mobius
+
+extern @abi(c-msvc-x64) fn iii_hexad_active_neg(h: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_trit_sum(a: i32, b: i32) -> i32 from "trit.iii"
+
+const HXM_FLOOR_Q : u32 = 920000u32      /* III_MOBIUS_FLOOR_Q = 0.92 */
+
+var HXM_FW : [i32; 6]
+var HXM_IV : [i32; 6]
+
+fn iii_hexad_mobius_make(buf_addr: u64, fwd: u16, floor_ppm: u32) -> i32 @export {
+    let p : *u32 = buf_addr as *u32
+    p[0u64] = fwd as u32
+    p[1u64] = iii_hexad_active_neg(fwd) as u32
+    let mut fl : u32 = floor_ppm
+    if fl == 0u32 { fl = HXM_FLOOR_Q }
+    p[2u64] = fl
+    return 0i32
+}
+
+/* inverse == active_neg(forward) and active_neg(inverse) == forward. */
+fn iii_hexad_mobius_valid(buf_addr: u64) -> u8 @export {
+    let p : *u32 = buf_addr as *u32
+    let fw : u16 = p[0u64] as u16
+    let iv : u16 = p[1u64] as u16
+    if iii_hexad_active_neg(fw) != iv { return 0u8 }
+    if iii_hexad_active_neg(iv) != fw { return 0u8 }
+    return 1u8
+}
+
+/* active band (idx 1..4) cancels under SUM; idx 0 and 5 unchanged. */
+fn iii_hexad_mobius_roundtrip(buf_addr: u64) -> u8 @export {
+    let p : *u32 = buf_addr as *u32
+    if iii_hexad_unpack6(p[0u64] as u16, &HXM_FW as u64) == 0u8 { return 0u8 }
+    if iii_hexad_unpack6(p[1u64] as u16, &HXM_IV as u64) == 0u8 { return 0u8 }
+    let mut i : u64 = 1u64
+    while i < 5u64 {
+        if iii_trit_sum(HXM_FW[i], HXM_IV[i]) != 0i32 { return 0u8 }
+        i = i + 1u64
+    }
+    if HXM_FW[0u64] != HXM_IV[0u64] { return 0u8 }
+    if HXM_FW[5u64] != HXM_IV[5u64] { return 0u8 }
+    return 1u8
+}
+
+fn iii_hexad_mobius_admits(buf_addr: u64, current_q_ppm: u32) -> u8 @export {
+    let p : *u32 = buf_addr as *u32
+    if current_q_ppm < p[2u64] { return 0u8 }
+    return 1u8
+}
+
+fn iii_hexad_mobius_forward(buf_addr: u64) -> u16 @export { let p : *u32 = buf_addr as *u32  return p[0u64] as u16 }
+fn iii_hexad_mobius_inverse(buf_addr: u64) -> u16 @export { let p : *u32 = buf_addr as *u32  return p[1u64] as u16 }
+fn iii_hexad_mobius_floor(buf_addr: u64) -> u32 @export   { let p : *u32 = buf_addr as *u32  return p[2u64] }
+
+/* ---- M8 keystone: exhaustive Mobius round-trip falsifier (apotheosis M8; M3 debt paid) ----
+ * The one inverse concept projected onto the M3 safety lattice: active-negation is involutive,
+ * so the forward/inverse pair round-trips and cancels to ZERO on the active band. Verified over
+ * EVERY one of the 729 valid hexads, with the involution stated independently (active_neg compose
+ * vs roundtrip's unpack+trit_sum -- two paths, one law), plus prove-the-negative arms.
+ * Buffers are the 3-u32 (forward, inverse, floor_ppm) layout the API operates on (W7: module
+ * scope, no local var arrays). Main-corpus convention: 99 = pass; 1..12 = which check failed. */
+var HXM_KAT_BUF : [u32; 3]
+var HXM_KAT_BAD : [u32; 3]
+
+fn iii_hexad_mobius_selftest() -> u64 @export {
+    let mut h : u64 = 0u64
+    while h < 729u64 {
+        let hv : u16 = h as u16
+        iii_hexad_mobius_make(&HXM_KAT_BUF as u64, hv, 0u32)
+        /* structurally valid: iv == active_neg(fw) AND active_neg(iv) == fw (involution) */
+        if iii_hexad_mobius_valid(&HXM_KAT_BUF as u64) != 1u8 { return 1u64 }
+        /* round-trip law via the independent path (unpack + trit_sum cancellation) */
+        if iii_hexad_mobius_roundtrip(&HXM_KAT_BUF as u64) != 1u8 { return 2u64 }
+        if iii_hexad_mobius_forward(&HXM_KAT_BUF as u64) != hv { return 3u64 }
+        if iii_hexad_mobius_inverse(&HXM_KAT_BUF as u64) != iii_hexad_active_neg(hv) { return 4u64 }
+        /* the involution theorem stated INDEPENDENTLY (active_neg compose, not trit_sum) */
+        if iii_hexad_active_neg(iii_hexad_active_neg(hv)) != hv { return 5u64 }
+        /* floor_ppm 0 defaults to HXM_FLOOR_Q (920000) */
+        if iii_hexad_mobius_floor(&HXM_KAT_BUF as u64) != 920000u32 { return 6u64 }
+        h = h + 1u64
+    }
+    /* ---- negatives: the gates REJECT a non-inverse / non-cancelling pair ----
+     * h=2 unpacks to [+1,-1,-1,-1,-1,-1]; its active band (idx 1..4 = -1) is nonzero, so
+     * active_neg(2) != 2. Build the correct pair, then CORRUPT the inverse field to fw. */
+    iii_hexad_mobius_make(&HXM_KAT_BAD as u64, 2u16, 0u32)
+    let bp : *u32 = (&HXM_KAT_BAD as u64) as *u32
+    bp[1u64] = 2u32
+    if iii_hexad_mobius_valid(&HXM_KAT_BAD as u64) != 0u8 { return 7u64 }
+    if iii_hexad_mobius_roundtrip(&HXM_KAT_BAD as u64) != 0u8 { return 8u64 }
+    /* coherence floor gate: below refused, at/above admitted */
+    iii_hexad_mobius_make(&HXM_KAT_BUF as u64, 0u16, 920000u32)
+    if iii_hexad_mobius_admits(&HXM_KAT_BUF as u64, 919999u32) != 0u8 { return 9u64 }
+    if iii_hexad_mobius_admits(&HXM_KAT_BUF as u64, 920000u32) != 1u8 { return 10u64 }
+    if iii_hexad_mobius_admits(&HXM_KAT_BUF as u64, 920001u32) != 1u8 { return 11u64 }
+    /* defensive: an out-of-range hexad (>=729) yields the 0 sentinel, never a wild unpack */
+    if iii_hexad_active_neg(729u16) != 0u16 { return 12u64 }
+    return 99u64
+}

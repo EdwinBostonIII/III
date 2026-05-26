@@ -1,0 +1,9 @@
+/* 669 — sovval: the Sovereign Value, the one currency {payload,hexad,witness,cost}.
+ * sv_make Refuses a non-reachable hexad (M3) or over-budget cost (M13); sv_op
+ * composes all four facets (payload=M4 sound/precise, hexad=M3 compose6+reachable,
+ * cost=M13 join, witness=M1 cad), preserves the invariant (closure), and its
+ * cost-Refuse gate fires on an injected over-budget input; witness is deterministic.
+ * M5 currency gate. */
+module corpus_669
+extern @abi(c-msvc-x64) fn sv_selftest() -> u64 from "sovval.iii"
+fn main() -> u64 { return sv_selftest() }

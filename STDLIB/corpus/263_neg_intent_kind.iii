@@ -1,0 +1,26 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\263_neg_intent_kind.iii
+ *
+ * NEGATIVE-COMPILE test for iiis-1 first-class intent types static
+ * check at call sites.
+ *
+ * THIS FILE MUST FAIL TO COMPILE.  It is consumed by
+ * scripts/test_intent_kind_static_negative.sh, which asserts
+ * non-zero exit + `III_INTENT_KIND_VIOLATION` marker in the
+ * produced asm stream.
+ *
+ * Violation: param declares `@hexad_kind(1u64)` (FORM); the arg's
+ * let-binding declares `@hexad_kind(6u64)` (COMPOSE).  The kinds
+ * differ; the static check rejects.
+ */
+module corpus_263_neg
+
+fn _wants_form(x: u64 @hexad_kind(1u64)) -> u64 {
+    return x
+}
+
+fn main() -> u64 {
+    let compose_val : u64 @hexad_kind(6u64) = 0u64
+    /* Mismatch: callee wants kind 1, arg's binding declares kind 6. */
+    let r : u64 = _wants_form(compose_val)
+    return r
+}

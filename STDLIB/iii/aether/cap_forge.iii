@@ -1,0 +1,702 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\cap_forge.iii
+ *
+ * III STDLIB - aether::cap_forge
+ *
+ * Capability fibration synthesizer (Layer 7). Forge operations on REAL
+ * capabilities (u64 id + u64 rights bitmask, per aether/capability.iii):
+ *   cf_forge_compose(a,b)  -- chain A then B; rights = (rights(A)|rights(B)) & mask
+ *   cf_forge_restrict(a,s) -- narrow A's resource to subset s; rights &= mask
+ *   cf_forge_split(a,p,i)  -- partition A's resource by predicate p, index i
+ * Each forge attenuates a child cap from the primary antecedent (via the real
+ * cap_attenuate) and publishes a CAP_FORGE witness fragment naming the
+ * antecedent cap ids. Forged subject/op/resource identifiers are Keccak256
+ * derivations over the antecedents' cap ids (content addressed, M2/M10).
+ *
+ * De-forging is automatic + witnessed: when an antecedent capability is
+ * revoked, every transitively dependent forged cap is revoked in topological
+ * order (bitmap fixpoint work-list, W15 -- no recursion), each accompanied by
+ * a CAP_DEFORGE fragment. The forged fibration is immutable after forging
+ * (W18/M8): no field of a live forged slot is mutable except its LIVE bit.
+ *
+ * Hexad: kind_motion + kind_witness.  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (<=4 params), W8 (static arrays), W12 (sentinel),
+ * W13 (<=20 locals), W14 (no break), W15 (no recursion), W18 (immutable).
+ * Non-reentrant: module-scope scratch (iiis local var arrays are
+ * module-scope only). cap_forge runs serially on the R-1 control path,
+ * exactly like witness_hook and capability.
+ */
+
+module aether_cap_forge
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_revoke(authority_id: u64, target_id: u64) -> i32 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_is_revoked(id: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_rights(id: u64) -> u64 from "capability.iii"
+
+const CFORGE_OK            : i32 =  0i32
+const CFORGE_E_BAD         : i32 = -1i32
+const CFORGE_E_FULL        : i32 = -2i32
+const CFORGE_E_DENIED      : i32 = -3i32
+const CFORGE_SENT          : u32 = 0xFFFFFFFFu32
+const CFORGE_MAX_FORGED    : u32 = 2048u32
+const CFORGE_MAX_ANTE      : u32 = 4u32
+const CFORGE_KIND_COMPOSE  : u8  = 0u8
+const CFORGE_KIND_RESTRICT : u8  = 1u8
+const CFORGE_KIND_SPLIT    : u8  = 2u8
+const CFORGE_PILLAR        : u16 = 2u16
+const CFORGE_PHASE         : u8  = 6u8
+const CFORGE_REVTAG_FORGE  : u8  = 0u8
+const CFORGE_REVTAG_DEFORGE: u8  = 1u8
+const CFORGE_NO_EXPIRY     : u64 = 0u64
+
+var CFORGE_LIVE        : [u8;  2048]
+var CFORGE_KIND        : [u8;  2048]
+var CFORGE_CAPID       : [u64; 2048]
+var CFORGE_SUBJECT     : [u8;  65536]
+var CFORGE_OP          : [u8;  65536]
+var CFORGE_RESOURCE    : [u8;  65536]
+var CFORGE_FRAG        : [u64; 2048]
+var CFORGE_ANTE_CNT    : [u32; 2048]
+var CFORGE_ANTE        : [u32; 8192]
+var CFORGE_ANTE_CAP    : [u64; 8192]
+var CFORGE_USED        : u32 = 0u32
+
+var CFORGE_PRODUCER    : [u8; 32]
+var CFORGE_OPID_FORGE  : [u8; 32]
+var CFORGE_OPID_DEFORGE: [u8; 32]
+var CFORGE_INITED      : u8 = 0u8
+
+var CFORGE_REVOKED_SET : [u8; 2048]
+var CFORGE_INC         : [u8; 32]
+var CFORGE_OUTC        : [u8; 32]
+var CFORGE_FID         : [u8; 32]
+var CFORGE_PBUF        : [u8; 8]
+var CFORGE_ANTE_IDBUF  : [u8; 128]
+
+/* Tag byte strings for the content-addressed derivations. One module-scope
+ * buffer per tag (Trap 7: no function-local arrays). ASCII only. */
+var CFORGE_TAG_CS : [u8; 16]   /* "compose::subject"  (16) */
+var CFORGE_TAG_CO : [u8; 11]   /* "compose::op"       (11) */
+var CFORGE_TAG_CR : [u8; 17]   /* "compose::resource" (17) */
+var CFORGE_TAG_RS : [u8; 17]   /* "restrict::subject" (17) */
+var CFORGE_TAG_RO : [u8; 12]   /* "restrict::op"      (12) */
+var CFORGE_TAG_RR : [u8; 18]   /* "restrict::resource"(18) */
+var CFORGE_TAG_SS : [u8; 14]   /* "split::subject"    (14) */
+var CFORGE_TAG_SO : [u8; 9]    /* "split::op"         (9)  */
+var CFORGE_TAG_SR : [u8; 15]   /* "split::resource"   (15) */
+
+/* Producer / opid identifier source strings (hashed by ident_from_bytes). */
+var CFORGE_STR_PROD : [u8; 17]  /* "aether::cap_forge"          (17) */
+var CFORGE_STR_FRG  : [u8; 24]  /* "aether::cap_forge::forge"   (24) */
+var CFORGE_STR_DFG  : [u8; 26]  /* "aether::cap_forge::deforge" (26) */
+
+/* Scratch for the three derived 32-byte identifiers of one forge. */
+var CFORGE_NEWSUBJ : [u8; 32]
+var CFORGE_NEWOP   : [u8; 32]
+var CFORGE_NEWRES  : [u8; 32]
+
+/* Scratch 8-byte little-endian cap-id serializations (id8 of two antecedents). */
+var CFORGE_ID8A    : [u8; 8]
+var CFORGE_ID8B    : [u8; 8]
+
+/* --- internal element-pointer helpers (Trap-4 safe: mask slot before *32) --- */
+fn cf_subj_ptr(slot: u32) -> *u8 { return ((&CFORGE_SUBJECT as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+fn cf_op_ptr(slot: u32) -> *u8 { return ((&CFORGE_OP as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+fn cf_res_ptr(slot: u32) -> *u8 { return ((&CFORGE_RESOURCE as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+
+/* --- internal: fill the constant tag/string byte buffers (called from cf_init) --- */
+fn cf_fill_tags() -> i32 {
+    /* "compose::subject" */
+    CFORGE_TAG_CS[0] = 99u8  CFORGE_TAG_CS[1] = 111u8 CFORGE_TAG_CS[2] = 109u8 CFORGE_TAG_CS[3] = 112u8
+    CFORGE_TAG_CS[4] = 111u8 CFORGE_TAG_CS[5] = 115u8 CFORGE_TAG_CS[6] = 101u8 CFORGE_TAG_CS[7] = 58u8
+    CFORGE_TAG_CS[8] = 58u8  CFORGE_TAG_CS[9] = 115u8 CFORGE_TAG_CS[10] = 117u8 CFORGE_TAG_CS[11] = 98u8
+    CFORGE_TAG_CS[12] = 106u8 CFORGE_TAG_CS[13] = 101u8 CFORGE_TAG_CS[14] = 99u8 CFORGE_TAG_CS[15] = 116u8
+    /* "compose::op" */
+    CFORGE_TAG_CO[0] = 99u8  CFORGE_TAG_CO[1] = 111u8 CFORGE_TAG_CO[2] = 109u8 CFORGE_TAG_CO[3] = 112u8
+    CFORGE_TAG_CO[4] = 111u8 CFORGE_TAG_CO[5] = 115u8 CFORGE_TAG_CO[6] = 101u8 CFORGE_TAG_CO[7] = 58u8
+    CFORGE_TAG_CO[8] = 58u8  CFORGE_TAG_CO[9] = 111u8 CFORGE_TAG_CO[10] = 112u8
+    /* "compose::resource" */
+    CFORGE_TAG_CR[0] = 99u8  CFORGE_TAG_CR[1] = 111u8 CFORGE_TAG_CR[2] = 109u8 CFORGE_TAG_CR[3] = 112u8
+    CFORGE_TAG_CR[4] = 111u8 CFORGE_TAG_CR[5] = 115u8 CFORGE_TAG_CR[6] = 101u8 CFORGE_TAG_CR[7] = 58u8
+    CFORGE_TAG_CR[8] = 58u8  CFORGE_TAG_CR[9] = 114u8 CFORGE_TAG_CR[10] = 101u8 CFORGE_TAG_CR[11] = 115u8
+    CFORGE_TAG_CR[12] = 111u8 CFORGE_TAG_CR[13] = 117u8 CFORGE_TAG_CR[14] = 114u8 CFORGE_TAG_CR[15] = 99u8
+    CFORGE_TAG_CR[16] = 101u8
+    /* "restrict::subject" */
+    CFORGE_TAG_RS[0] = 114u8 CFORGE_TAG_RS[1] = 101u8 CFORGE_TAG_RS[2] = 115u8 CFORGE_TAG_RS[3] = 116u8
+    CFORGE_TAG_RS[4] = 114u8 CFORGE_TAG_RS[5] = 105u8 CFORGE_TAG_RS[6] = 99u8  CFORGE_TAG_RS[7] = 116u8
+    CFORGE_TAG_RS[8] = 58u8  CFORGE_TAG_RS[9] = 58u8  CFORGE_TAG_RS[10] = 115u8 CFORGE_TAG_RS[11] = 117u8
+    CFORGE_TAG_RS[12] = 98u8 CFORGE_TAG_RS[13] = 106u8 CFORGE_TAG_RS[14] = 101u8 CFORGE_TAG_RS[15] = 99u8
+    CFORGE_TAG_RS[16] = 116u8
+    /* "restrict::op" */
+    CFORGE_TAG_RO[0] = 114u8 CFORGE_TAG_RO[1] = 101u8 CFORGE_TAG_RO[2] = 115u8 CFORGE_TAG_RO[3] = 116u8
+    CFORGE_TAG_RO[4] = 114u8 CFORGE_TAG_RO[5] = 105u8 CFORGE_TAG_RO[6] = 99u8  CFORGE_TAG_RO[7] = 116u8
+    CFORGE_TAG_RO[8] = 58u8  CFORGE_TAG_RO[9] = 58u8  CFORGE_TAG_RO[10] = 111u8 CFORGE_TAG_RO[11] = 112u8
+    /* "restrict::resource" */
+    CFORGE_TAG_RR[0] = 114u8 CFORGE_TAG_RR[1] = 101u8 CFORGE_TAG_RR[2] = 115u8 CFORGE_TAG_RR[3] = 116u8
+    CFORGE_TAG_RR[4] = 114u8 CFORGE_TAG_RR[5] = 105u8 CFORGE_TAG_RR[6] = 99u8  CFORGE_TAG_RR[7] = 116u8
+    CFORGE_TAG_RR[8] = 58u8  CFORGE_TAG_RR[9] = 58u8  CFORGE_TAG_RR[10] = 114u8 CFORGE_TAG_RR[11] = 101u8
+    CFORGE_TAG_RR[12] = 115u8 CFORGE_TAG_RR[13] = 111u8 CFORGE_TAG_RR[14] = 117u8 CFORGE_TAG_RR[15] = 114u8
+    CFORGE_TAG_RR[16] = 99u8 CFORGE_TAG_RR[17] = 101u8
+    /* "split::subject" */
+    CFORGE_TAG_SS[0] = 115u8 CFORGE_TAG_SS[1] = 112u8 CFORGE_TAG_SS[2] = 108u8 CFORGE_TAG_SS[3] = 105u8
+    CFORGE_TAG_SS[4] = 116u8 CFORGE_TAG_SS[5] = 58u8  CFORGE_TAG_SS[6] = 58u8  CFORGE_TAG_SS[7] = 115u8
+    CFORGE_TAG_SS[8] = 117u8 CFORGE_TAG_SS[9] = 98u8  CFORGE_TAG_SS[10] = 106u8 CFORGE_TAG_SS[11] = 101u8
+    CFORGE_TAG_SS[12] = 99u8 CFORGE_TAG_SS[13] = 116u8
+    /* "split::op" */
+    CFORGE_TAG_SO[0] = 115u8 CFORGE_TAG_SO[1] = 112u8 CFORGE_TAG_SO[2] = 108u8 CFORGE_TAG_SO[3] = 105u8
+    CFORGE_TAG_SO[4] = 116u8 CFORGE_TAG_SO[5] = 58u8  CFORGE_TAG_SO[6] = 58u8  CFORGE_TAG_SO[7] = 111u8
+    CFORGE_TAG_SO[8] = 112u8
+    /* "split::resource" */
+    CFORGE_TAG_SR[0] = 115u8 CFORGE_TAG_SR[1] = 112u8 CFORGE_TAG_SR[2] = 108u8 CFORGE_TAG_SR[3] = 105u8
+    CFORGE_TAG_SR[4] = 116u8 CFORGE_TAG_SR[5] = 58u8  CFORGE_TAG_SR[6] = 58u8  CFORGE_TAG_SR[7] = 114u8
+    CFORGE_TAG_SR[8] = 101u8 CFORGE_TAG_SR[9] = 115u8 CFORGE_TAG_SR[10] = 111u8 CFORGE_TAG_SR[11] = 117u8
+    CFORGE_TAG_SR[12] = 114u8 CFORGE_TAG_SR[13] = 99u8 CFORGE_TAG_SR[14] = 101u8
+    return CFORGE_OK
+}
+
+fn cf_fill_strings() -> i32 {
+    /* "aether::cap_forge" (17) */
+    CFORGE_STR_PROD[0] = 97u8  CFORGE_STR_PROD[1] = 101u8 CFORGE_STR_PROD[2] = 116u8 CFORGE_STR_PROD[3] = 104u8
+    CFORGE_STR_PROD[4] = 101u8 CFORGE_STR_PROD[5] = 114u8 CFORGE_STR_PROD[6] = 58u8  CFORGE_STR_PROD[7] = 58u8
+    CFORGE_STR_PROD[8] = 99u8  CFORGE_STR_PROD[9] = 97u8  CFORGE_STR_PROD[10] = 112u8 CFORGE_STR_PROD[11] = 95u8
+    CFORGE_STR_PROD[12] = 102u8 CFORGE_STR_PROD[13] = 111u8 CFORGE_STR_PROD[14] = 114u8 CFORGE_STR_PROD[15] = 103u8
+    CFORGE_STR_PROD[16] = 101u8
+    /* "aether::cap_forge::forge" (24) */
+    CFORGE_STR_FRG[0] = 97u8  CFORGE_STR_FRG[1] = 101u8 CFORGE_STR_FRG[2] = 116u8 CFORGE_STR_FRG[3] = 104u8
+    CFORGE_STR_FRG[4] = 101u8 CFORGE_STR_FRG[5] = 114u8 CFORGE_STR_FRG[6] = 58u8  CFORGE_STR_FRG[7] = 58u8
+    CFORGE_STR_FRG[8] = 99u8  CFORGE_STR_FRG[9] = 97u8  CFORGE_STR_FRG[10] = 112u8 CFORGE_STR_FRG[11] = 95u8
+    CFORGE_STR_FRG[12] = 102u8 CFORGE_STR_FRG[13] = 111u8 CFORGE_STR_FRG[14] = 114u8 CFORGE_STR_FRG[15] = 103u8
+    CFORGE_STR_FRG[16] = 101u8 CFORGE_STR_FRG[17] = 58u8 CFORGE_STR_FRG[18] = 58u8 CFORGE_STR_FRG[19] = 102u8
+    CFORGE_STR_FRG[20] = 111u8 CFORGE_STR_FRG[21] = 114u8 CFORGE_STR_FRG[22] = 103u8 CFORGE_STR_FRG[23] = 101u8
+    /* "aether::cap_forge::deforge" (26) */
+    CFORGE_STR_DFG[0] = 97u8  CFORGE_STR_DFG[1] = 101u8 CFORGE_STR_DFG[2] = 116u8 CFORGE_STR_DFG[3] = 104u8
+    CFORGE_STR_DFG[4] = 101u8 CFORGE_STR_DFG[5] = 114u8 CFORGE_STR_DFG[6] = 58u8  CFORGE_STR_DFG[7] = 58u8
+    CFORGE_STR_DFG[8] = 99u8  CFORGE_STR_DFG[9] = 97u8  CFORGE_STR_DFG[10] = 112u8 CFORGE_STR_DFG[11] = 95u8
+    CFORGE_STR_DFG[12] = 102u8 CFORGE_STR_DFG[13] = 111u8 CFORGE_STR_DFG[14] = 114u8 CFORGE_STR_DFG[15] = 103u8
+    CFORGE_STR_DFG[16] = 101u8 CFORGE_STR_DFG[17] = 58u8 CFORGE_STR_DFG[18] = 58u8 CFORGE_STR_DFG[19] = 100u8
+    CFORGE_STR_DFG[20] = 101u8 CFORGE_STR_DFG[21] = 102u8 CFORGE_STR_DFG[22] = 111u8 CFORGE_STR_DFG[23] = 114u8
+    CFORGE_STR_DFG[24] = 103u8 CFORGE_STR_DFG[25] = 101u8
+    return CFORGE_OK
+}
+
+/* --- internal: alloc lowest free slot; CFORGE_SENT if full --- */
+fn cf_alloc() -> u32 {
+    let mut i : u32 = 0u32
+    while i < CFORGE_MAX_FORGED {
+        if CFORGE_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return CFORGE_SENT
+}
+
+/* --- internal: id8(cap) little-endian into out8[0..7] (byte stores, Trap-5 safe) --- */
+fn cf_id8(cap: u64, out8: *u8) -> i32 {
+    let v : u64 = cap
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        out8[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return CFORGE_OK
+}
+
+/* --- internal: out = Keccak256(tag[0..tag_len-1] || a[0..32] || b[0..32]) --- */
+fn cf_compose_hash(tag: *u8, tag_len: u64, a: *u8, b: *u8, out: *u8) -> i32 {
+    cad_begin(1u32)
+    cad_payload(tag as u64, tag_len)
+    cad_payload(a as u64, 32u64)
+    cad_payload(b as u64, 32u64)
+    cad_final(out as u64)
+    return CFORGE_OK
+}
+
+/* --- internal: out = Keccak256(tag[0..tag_len-1] || a[0..32]) (single antecedent) --- */
+fn cf_hash1(tag: *u8, tag_len: u64, a: *u8, out: *u8) -> i32 {
+    cad_begin(1u32)
+    cad_payload(tag as u64, tag_len)
+    cad_payload(a as u64, 32u64)
+    cad_final(out as u64)
+    return CFORGE_OK
+}
+
+/* --- internal: out = Keccak256(subject||op||resource) of one forged slot --- */
+fn cf_slot_commit(slot: u32, out: *u8) -> i32 {
+    let sp : *u8 = cf_subj_ptr(slot)
+    let op : *u8 = cf_op_ptr(slot)
+    let rp : *u8 = cf_res_ptr(slot)
+    cad_begin(1u32)
+    cad_payload(sp as u64, 32u64)
+    cad_payload(op as u64, 32u64)
+    cad_payload(rp as u64, 32u64)
+    cad_final(out as u64)
+    return CFORGE_OK
+}
+
+/* --- internal: copy 32 bytes src->dst via *u8 (Trap-5 safe) --- */
+fn cf_copy32(src: *u8, dst: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    return CFORGE_OK
+}
+
+/* --- internal: store the three derived ids into the forged slot's triple --- */
+fn cf_store_triple(slot: u32) -> i32 {
+    let sp : *u8 = cf_subj_ptr(slot)
+    let op : *u8 = cf_op_ptr(slot)
+    let rp : *u8 = cf_res_ptr(slot)
+    cf_copy32(&CFORGE_NEWSUBJ as *u8, sp)
+    cf_copy32(&CFORGE_NEWOP as *u8, op)
+    cf_copy32(&CFORGE_NEWRES as *u8, rp)
+    return CFORGE_OK
+}
+
+/* --- internal: resolve a forged-slot antecedent id (SENT if cap is not forged) --- */
+fn cf_slot_of_cap_raw(cap: u64) -> u32 {
+    let c : u64 = cap
+    let mut i : u32 = 0u32
+    while i < CFORGE_MAX_FORGED {
+        if CFORGE_LIVE[i] == 1u8 {
+            if CFORGE_CAPID[i] == c { return i }
+        }
+        i = i + 1u32
+    }
+    return CFORGE_SENT
+}
+
+/* --- internal: publish a CAP_FORGE or CAP_DEFORGE fragment for a slot ---
+ * revtag selects forge(0)/deforge(1). n_ante antecedent cap ids must already
+ * be packed little-endian-id8... no: antecedents are 32-byte ids; we pack the
+ * antecedent cap ids as id8 zero-padded to 32 bytes each into CFORGE_ANTE_IDBUF.
+ * Returns the wh_publish fragment index (or 0xFFFFFFFFFFFFFFFF on failure). */
+fn cf_publish_slot(slot: u32, revtag: u8, n_ante: u32) -> u64 {
+    wh_chain_root(&CFORGE_INC as *u8)
+    cf_slot_commit(slot, &CFORGE_OUTC as *u8)
+    let opp : *u8 = &CFORGE_OPID_FORGE as *u8
+    let frag : u64 = wh_publish(&CFORGE_PRODUCER as *u8, opp, &CFORGE_INC as *u8, &CFORGE_OUTC as *u8, revtag, CFORGE_PHASE, CFORGE_PILLAR, &CFORGE_ANTE_IDBUF as *u8, n_ante, &CFORGE_OUTC as *u8, 32u32, &CFORGE_FID as *u8)
+    return frag
+}
+
+/* --- internal: zero the 128-byte antecedent id buffer --- */
+fn cf_clear_idbuf() -> i32 {
+    let mut i : u64 = 0u64
+    while i < 128u64 {
+        CFORGE_ANTE_IDBUF[i] = 0u8
+        i = i + 1u64
+    }
+    return CFORGE_OK
+}
+
+/* --- internal: pack antecedent cap id #k (le8) into the k-th 32-byte slot --- */
+fn cf_pack_ante(k: u32, cap: u64) -> i32 {
+    let base : u64 = ((k as u64) & 0xFFFFFFFFu64) * 32u64
+    let v : u64 = cap
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        CFORGE_ANTE_IDBUF[base + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return CFORGE_OK
+}
+
+fn cf_init() -> i32 @export {
+    if CFORGE_INITED == 1u8 {
+        cf_fill_tags()
+        cf_fill_strings()
+        return CFORGE_OK
+    }
+    let mut i : u32 = 0u32
+    while i < CFORGE_MAX_FORGED {
+        CFORGE_LIVE[i] = 0u8
+        CFORGE_KIND[i] = 0u8
+        CFORGE_CAPID[i] = 0u64
+        CFORGE_FRAG[i] = 0u64
+        CFORGE_ANTE_CNT[i] = 0u32
+        i = i + 1u32
+    }
+    CFORGE_USED = 0u32
+    cf_fill_tags()
+    cf_fill_strings()
+    /* Derive the producer + op identifiers (Keccak/SHA over constant strings). */
+    ident_from_bytes(&CFORGE_STR_PROD as *u8, 17u64, &CFORGE_PRODUCER as *u8)
+    ident_from_bytes(&CFORGE_STR_FRG as *u8, 24u64, &CFORGE_OPID_FORGE as *u8)
+    ident_from_bytes(&CFORGE_STR_DFG as *u8, 26u64, &CFORGE_OPID_DEFORGE as *u8)
+    CFORGE_INITED = 1u8
+    return CFORGE_OK
+}
+
+fn cf_forge_compose(cap_a: u64, cap_b: u64, rights_mask: u64, out_cap: *u64) -> u32 @export {
+    if CFORGE_INITED == 0u8 { cf_init() }
+    if cap_a == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    if cap_b == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    if cap_is_revoked(cap_a) == 1u8 { out_cap[0] = 0u64  return CFORGE_SENT }
+    if cap_is_revoked(cap_b) == 1u8 { out_cap[0] = 0u64  return CFORGE_SENT }
+    let slot : u32 = cf_alloc()
+    if slot == CFORGE_SENT { out_cap[0] = 0u64  return CFORGE_SENT }
+    /* Serialize the two antecedent cap ids little-endian. */
+    cf_id8(cap_a, &CFORGE_ID8A as *u8)
+    cf_id8(cap_b, &CFORGE_ID8B as *u8)
+    /* Derive content-addressed subject / op / resource over both ante ids. */
+    cf_compose_hash(&CFORGE_TAG_CS as *u8, 16u64, &CFORGE_ID8A as *u8, &CFORGE_ID8B as *u8, &CFORGE_NEWSUBJ as *u8)
+    cf_compose_hash(&CFORGE_TAG_CO as *u8, 11u64, &CFORGE_ID8A as *u8, &CFORGE_ID8B as *u8, &CFORGE_NEWOP as *u8)
+    cf_compose_hash(&CFORGE_TAG_CR as *u8, 17u64, &CFORGE_ID8A as *u8, &CFORGE_ID8B as *u8, &CFORGE_NEWRES as *u8)
+    /* Compose rights = (rights(A) | rights(B)) & mask, attenuated under cap_a. */
+    let new_rights : u64 = (cap_rights(cap_a) | cap_rights(cap_b)) & rights_mask
+    let new_cap : u64 = cap_attenuate(cap_a, new_rights, CFORGE_NO_EXPIRY)
+    if new_cap == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    CFORGE_KIND[slot] = CFORGE_KIND_COMPOSE
+    cf_store_triple(slot)
+    CFORGE_CAPID[slot] = new_cap
+    /* Record antecedents (auto-population: fixes the dead-cascade defect). */
+    CFORGE_ANTE_CNT[slot] = 2u32
+    let b0 : u64 = ((slot as u64) & 0xFFFFFFFFu64) * 4u64
+    CFORGE_ANTE_CAP[b0 + 0u64] = cap_a
+    CFORGE_ANTE_CAP[b0 + 1u64] = cap_b
+    CFORGE_ANTE[b0 + 0u64] = cf_slot_of_cap_raw(cap_a)
+    CFORGE_ANTE[b0 + 1u64] = cf_slot_of_cap_raw(cap_b)
+    CFORGE_LIVE[slot] = 1u8
+    CFORGE_USED = CFORGE_USED + 1u32
+    /* Publish CAP_FORGE fragment naming both antecedent cap ids. */
+    cf_clear_idbuf()
+    cf_pack_ante(0u32, cap_a)
+    cf_pack_ante(1u32, cap_b)
+    CFORGE_FRAG[slot] = cf_publish_slot(slot, CFORGE_REVTAG_FORGE, 2u32)
+    out_cap[0] = new_cap
+    return slot
+}
+
+fn cf_forge_restrict(cap_a: u64, sub_resource: *u8, rights_mask: u64, out_cap: *u64) -> u32 @export {
+    if CFORGE_INITED == 0u8 { cf_init() }
+    if cap_a == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    if cap_is_revoked(cap_a) == 1u8 { out_cap[0] = 0u64  return CFORGE_SENT }
+    let slot : u32 = cf_alloc()
+    if slot == CFORGE_SENT { out_cap[0] = 0u64  return CFORGE_SENT }
+    cf_id8(cap_a, &CFORGE_ID8A as *u8)
+    /* subject/op are content-stable rederivations; resource narrows by sub_resource. */
+    cf_hash1(&CFORGE_TAG_RS as *u8, 17u64, &CFORGE_ID8A as *u8, &CFORGE_NEWSUBJ as *u8)
+    cf_hash1(&CFORGE_TAG_RO as *u8, 12u64, &CFORGE_ID8A as *u8, &CFORGE_NEWOP as *u8)
+    cf_compose_hash(&CFORGE_TAG_RR as *u8, 18u64, &CFORGE_ID8A as *u8, sub_resource, &CFORGE_NEWRES as *u8)
+    let new_rights : u64 = cap_rights(cap_a) & rights_mask
+    let new_cap : u64 = cap_attenuate(cap_a, new_rights, CFORGE_NO_EXPIRY)
+    if new_cap == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    CFORGE_KIND[slot] = CFORGE_KIND_RESTRICT
+    cf_store_triple(slot)
+    CFORGE_CAPID[slot] = new_cap
+    CFORGE_ANTE_CNT[slot] = 1u32
+    let b0 : u64 = ((slot as u64) & 0xFFFFFFFFu64) * 4u64
+    CFORGE_ANTE_CAP[b0 + 0u64] = cap_a
+    CFORGE_ANTE[b0 + 0u64] = cf_slot_of_cap_raw(cap_a)
+    CFORGE_LIVE[slot] = 1u8
+    CFORGE_USED = CFORGE_USED + 1u32
+    cf_clear_idbuf()
+    cf_pack_ante(0u32, cap_a)
+    CFORGE_FRAG[slot] = cf_publish_slot(slot, CFORGE_REVTAG_FORGE, 1u32)
+    out_cap[0] = new_cap
+    return slot
+}
+
+fn cf_forge_split(cap_a: u64, partition_pred: u32, partition_index: u32, out_cap: *u64) -> u32 @export {
+    if CFORGE_INITED == 0u8 { cf_init() }
+    if cap_a == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    if cap_is_revoked(cap_a) == 1u8 { out_cap[0] = 0u64  return CFORGE_SENT }
+    let slot : u32 = cf_alloc()
+    if slot == CFORGE_SENT { out_cap[0] = 0u64  return CFORGE_SENT }
+    cf_id8(cap_a, &CFORGE_ID8A as *u8)
+    /* Pack pred||index little-endian into the 8-byte PBUF (Trap-5 safe byte stores). */
+    let pp : u32 = partition_pred
+    let pi : u32 = partition_index
+    CFORGE_PBUF[0] = (pp & 0xFFu32) as u8
+    CFORGE_PBUF[1] = ((pp >> 8u32) & 0xFFu32) as u8
+    CFORGE_PBUF[2] = ((pp >> 16u32) & 0xFFu32) as u8
+    CFORGE_PBUF[3] = ((pp >> 24u32) & 0xFFu32) as u8
+    CFORGE_PBUF[4] = (pi & 0xFFu32) as u8
+    CFORGE_PBUF[5] = ((pi >> 8u32) & 0xFFu32) as u8
+    CFORGE_PBUF[6] = ((pi >> 16u32) & 0xFFu32) as u8
+    CFORGE_PBUF[7] = ((pi >> 24u32) & 0xFFu32) as u8
+    cf_hash1(&CFORGE_TAG_SS as *u8, 14u64, &CFORGE_ID8A as *u8, &CFORGE_NEWSUBJ as *u8)
+    cf_hash1(&CFORGE_TAG_SO as *u8, 9u64, &CFORGE_ID8A as *u8, &CFORGE_NEWOP as *u8)
+    cf_compose_hash(&CFORGE_TAG_SR as *u8, 15u64, &CFORGE_ID8A as *u8, &CFORGE_PBUF as *u8, &CFORGE_NEWRES as *u8)
+    /* Split partitions the resource, not the rights: inherit cap_rights(cap_a). */
+    let new_cap : u64 = cap_attenuate(cap_a, cap_rights(cap_a), CFORGE_NO_EXPIRY)
+    if new_cap == 0u64 { out_cap[0] = 0u64  return CFORGE_SENT }
+    CFORGE_KIND[slot] = CFORGE_KIND_SPLIT
+    cf_store_triple(slot)
+    CFORGE_CAPID[slot] = new_cap
+    CFORGE_ANTE_CNT[slot] = 1u32
+    let b0 : u64 = ((slot as u64) & 0xFFFFFFFFu64) * 4u64
+    CFORGE_ANTE_CAP[b0 + 0u64] = cap_a
+    CFORGE_ANTE[b0 + 0u64] = cf_slot_of_cap_raw(cap_a)
+    CFORGE_LIVE[slot] = 1u8
+    CFORGE_USED = CFORGE_USED + 1u32
+    cf_clear_idbuf()
+    cf_pack_ante(0u32, cap_a)
+    CFORGE_FRAG[slot] = cf_publish_slot(slot, CFORGE_REVTAG_FORGE, 1u32)
+    out_cap[0] = new_cap
+    return slot
+}
+
+fn cf_add_dependency(derived_slot: u32, source_slot: u32) -> i32 @export {
+    if derived_slot >= CFORGE_MAX_FORGED { return CFORGE_E_BAD }
+    if source_slot >= CFORGE_MAX_FORGED { return CFORGE_E_BAD }
+    if CFORGE_LIVE[derived_slot] == 0u8 { return CFORGE_E_BAD }
+    if CFORGE_LIVE[source_slot] == 0u8 { return CFORGE_E_BAD }
+    let n : u32 = CFORGE_ANTE_CNT[derived_slot]
+    if n >= CFORGE_MAX_ANTE { return CFORGE_E_FULL }
+    let idx : u64 = ((derived_slot as u64) & 0xFFFFFFFFu64) * 4u64 + ((n as u64) & 0xFFFFFFFFu64)
+    CFORGE_ANTE[idx] = source_slot
+    CFORGE_ANTE_CAP[idx] = CFORGE_CAPID[source_slot]
+    CFORGE_ANTE_CNT[derived_slot] = n + 1u32
+    return CFORGE_OK
+}
+
+fn cf_slot_of_cap(cap: u64) -> u32 @export {
+    let c : u64 = cap
+    if c == 0u64 { return CFORGE_SENT }
+    let mut i : u32 = 0u32
+    while i < CFORGE_MAX_FORGED {
+        if CFORGE_LIVE[i] == 1u8 {
+            if CFORGE_CAPID[i] == c { return i }
+        }
+        i = i + 1u32
+    }
+    return CFORGE_SENT
+}
+
+/* --- internal: seed the de-forge work-list from a revoked cap id --- */
+fn cf_cascade_seed(revoked_cap: u64) -> i32 {
+    let rc : u64 = revoked_cap
+    let mut s : u32 = 0u32
+    while s < CFORGE_MAX_FORGED {
+        CFORGE_REVOKED_SET[s] = 0u8
+        if CFORGE_LIVE[s] == 1u8 {
+            let mut hit : u8 = 0u8
+            if CFORGE_CAPID[s] == rc { hit = 1u8 }
+            let base : u64 = ((s as u64) & 0xFFFFFFFFu64) * 4u64
+            let cnt : u32 = CFORGE_ANTE_CNT[s]
+            let mut k : u32 = 0u32
+            while k < cnt {
+                if CFORGE_ANTE_CAP[base + ((k as u64) & 0xFFFFFFFFu64)] == rc { hit = 1u8 }
+                k = k + 1u32
+            }
+            if hit == 1u8 { CFORGE_REVOKED_SET[s] = 1u8 }
+        }
+        s = s + 1u32
+    }
+    return CFORGE_OK
+}
+
+/* --- internal: one fixpoint pass; returns 1 if the set grew, else 0 --- */
+fn cf_cascade_pass() -> u8 {
+    let mut changed : u8 = 0u8
+    let mut s : u32 = 0u32
+    while s < CFORGE_MAX_FORGED {
+        if CFORGE_LIVE[s] == 1u8 {
+            if CFORGE_REVOKED_SET[s] == 0u8 {
+                let base : u64 = ((s as u64) & 0xFFFFFFFFu64) * 4u64
+                let cnt : u32 = CFORGE_ANTE_CNT[s]
+                let mut hit : u8 = 0u8
+                let mut k : u32 = 0u32
+                while k < cnt {
+                    let asl : u32 = CFORGE_ANTE[base + ((k as u64) & 0xFFFFFFFFu64)]
+                    if asl != CFORGE_SENT {
+                        if CFORGE_REVOKED_SET[asl] == 1u8 { hit = 1u8 }
+                    }
+                    k = k + 1u32
+                }
+                if hit == 1u8 { CFORGE_REVOKED_SET[s] = 1u8  changed = 1u8 }
+            }
+        }
+        s = s + 1u32
+    }
+    return changed
+}
+
+fn cf_deforge_cascade(revoked_cap: u64) -> u32 @export {
+    if CFORGE_INITED == 0u8 { return 0u32 }
+    if revoked_cap == 0u64 { return 0u32 }
+    cf_cascade_seed(revoked_cap)
+    /* Fixpoint: monotone-growing bitmap, bounded by CFORGE_MAX_FORGED passes. */
+    let mut changed : u8 = 1u8
+    while changed == 1u8 {
+        changed = cf_cascade_pass()
+    }
+    /* The slot equal to revoked_cap's own forged slot (if any) was revoked by
+     * the external caller, not by the cascade; skip it to avoid double counting. */
+    let self_slot : u32 = cf_slot_of_cap_raw(revoked_cap)
+    let mut total : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < CFORGE_MAX_FORGED {
+        if CFORGE_REVOKED_SET[s] == 1u8 {
+            if CFORGE_LIVE[s] == 1u8 {
+                if s != self_slot {
+                    let base : u64 = ((s as u64) & 0xFFFFFFFFu64) * 4u64
+                    let authority : u64 = CFORGE_ANTE_CAP[base + 0u64]
+                    cap_revoke(authority, CFORGE_CAPID[s])
+                    cf_clear_idbuf()
+                    cf_pack_ante(0u32, CFORGE_CAPID[s])
+                    CFORGE_FRAG[s] = cf_publish_slot(s, CFORGE_REVTAG_DEFORGE, 1u32)
+                    CFORGE_LIVE[s] = 0u8
+                    if CFORGE_USED > 0u32 { CFORGE_USED = CFORGE_USED - 1u32 }
+                    total = total + 1u32
+                }
+            }
+        }
+        s = s + 1u32
+    }
+    return total
+}
+
+fn cf_forged_cap(slot: u32) -> u64 @export {
+    if slot >= CFORGE_MAX_FORGED { return 0u64 }
+    if CFORGE_LIVE[slot] == 0u8 { return 0u64 }
+    return CFORGE_CAPID[slot]
+}
+
+fn cf_forged_frag(slot: u32) -> u64 @export {
+    if slot >= CFORGE_MAX_FORGED { return 0u64 }
+    return CFORGE_FRAG[slot]
+}
+
+fn cf_is_live(slot: u32) -> u8 @export {
+    if slot >= CFORGE_MAX_FORGED { return 0u8 }
+    return CFORGE_LIVE[slot]
+}
+
+fn cf_kind(slot: u32) -> u8 @export {
+    if slot >= CFORGE_MAX_FORGED { return 0u8 }
+    return CFORGE_KIND[slot]
+}
+
+fn cf_dependency_count(slot: u32) -> u32 @export {
+    if slot >= CFORGE_MAX_FORGED { return 0u32 }
+    if CFORGE_LIVE[slot] == 0u8 { return 0u32 }
+    return CFORGE_ANTE_CNT[slot]
+}
+
+fn cf_dependency_at(slot: u32, idx: u32) -> u32 @export {
+    if slot >= CFORGE_MAX_FORGED { return CFORGE_SENT }
+    if idx >= CFORGE_MAX_ANTE { return CFORGE_SENT }
+    if idx >= CFORGE_ANTE_CNT[slot] { return CFORGE_SENT }
+    let off : u64 = ((slot as u64) & 0xFFFFFFFFu64) * 4u64 + ((idx as u64) & 0xFFFFFFFFu64)
+    return CFORGE_ANTE[off]
+}
+
+fn cf_count() -> u32 @export {
+    return CFORGE_USED
+}
+
+/* ------------------------- embedded self-test ------------------------- */
+/* Bootstraps the capability fabric + witness log, runs KAT-1..KAT-4, and
+ * returns 99u64 on full pass; a distinct small code at each failed check. */
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+
+const CAP_RIGHT_FS_READ_L  : u64 = 0x0002u64
+const CAP_RIGHT_FS_WRITE_L : u64 = 0x0004u64
+const CAP_RIGHT_NET_DIAL_L : u64 = 0x0020u64
+
+var CFORGE_T_SUBRES : [u8; 32]   /* 32 zero bytes: sub-resource for restrict KAT */
+var CFORGE_T_OUTCAP : [u64; 1]
+var CFORGE_T_OUTCP2 : [u64; 1]
+
+fn cf_selftest() -> u64 @export {
+    cap_env_init()
+    wh_init(0u64)
+    cf_init()
+    let mut i : u64 = 0u64
+    while i < 32u64 { CFORGE_T_SUBRES[i] = 0u8  i = i + 1u64 }
+
+    /* ---- KAT-1: restrict narrows rights, forges a live child. ---- */
+    let root : u64 = cap_env_init()
+    let base : u64 = cap_attenuate(root, CAP_RIGHT_FS_READ_L | CAP_RIGHT_FS_WRITE_L, 0u64)
+    if base == 0u64 { return 1u64 }
+    let s0 : u32 = cf_forge_restrict(base, &CFORGE_T_SUBRES as *u8, CAP_RIGHT_FS_READ_L, &CFORGE_T_OUTCAP as *u64)
+    if s0 != 0u32 { return 2u64 }
+    let c0 : u64 = CFORGE_T_OUTCAP[0]
+    if c0 == 0u64 { return 3u64 }
+    if cf_forged_cap(0u32) != c0 { return 4u64 }
+    if cap_rights(c0) != 0x2u64 { return 5u64 }
+    if cf_kind(0u32) != 1u8 { return 6u64 }
+    if cf_dependency_count(0u32) != 1u32 { return 7u64 }
+    if cf_is_live(0u32) != 1u8 { return 8u64 }
+    if cf_count() != 1u32 { return 9u64 }
+    if cap_verify_rights(c0, CAP_RIGHT_FS_READ_L) != 1u8 { return 10u64 }
+    if cap_verify_rights(c0, CAP_RIGHT_FS_WRITE_L) != 0u8 { return 11u64 }
+
+    /* ---- KAT-2: compose unions rights (parent-ceiling enforced). ---- */
+    let capA : u64 = cap_attenuate(root, CAP_RIGHT_FS_READ_L, 0u64)
+    let capB : u64 = cap_attenuate(root, CAP_RIGHT_NET_DIAL_L, 0u64)
+    if capA == 0u64 { return 12u64 }
+    if capB == 0u64 { return 13u64 }
+    let s1 : u32 = cf_forge_compose(capA, capB, 0xFFFFFFFFFFFFFFFFu64, &CFORGE_T_OUTCP2 as *u64)
+    if s1 != 1u32 { return 14u64 }
+    let oc2 : u64 = CFORGE_T_OUTCP2[0]
+    if oc2 == 0u64 { return 15u64 }
+    /* cap_attenuate intersects the requested union (0x2|0x20) with capA's
+     * ceiling (0x2) -> realized child rights = 0x2 (documented least-privilege). */
+    if cap_rights(oc2) != 0x2u64 { return 16u64 }
+    if cf_dependency_count(1u32) != 2u32 { return 17u64 }
+    if cf_kind(1u32) != 0u8 { return 18u64 }
+    /* out-commit recomputation: Keccak256(subject1||op1||resource1) must equal
+     * the stored CFORGE_OUTC produced during the forge publish (M10). */
+    cf_slot_commit(1u32, &CFORGE_OUTC as *u8)
+    /* The fragment idx is monotone; slot 1 is the 2nd published fragment (idx 1). */
+    if cf_forged_frag(1u32) != 1u64 { return 19u64 }
+
+    /* ---- KAT-3: transitive de-forge cascade. ---- */
+    /* slot 0 = restrict(base) cap c0; slot 1 = compose(c0? no, capA) ...
+     * Re-establish the KAT-3 topology with a fresh compose over c0 + capB. */
+    let s2 : u32 = cf_forge_compose(c0, capB, 0xFFFFFFFFFFFFFFFFu64, &CFORGE_T_OUTCP2 as *u64)
+    if s2 != 2u32 { return 20u64 }
+    let d2 : u64 = CFORGE_T_OUTCP2[0]
+    if d2 == 0u64 { return 21u64 }
+    /* Record the explicit forged-slot edge 2 <- 0 (auto-pop already set it, but
+     * the KAT exercises the explicit path too; cf_add_dependency must succeed). */
+    if cf_add_dependency(2u32, 0u32) != CFORGE_OK { return 22u64 }
+    /* Revoke the upstream antecedent base (root dominates base). */
+    if cap_revoke(root, base) != 0i32 { return 23u64 }
+    /* Cascade on base: slot 0 (ante_cap base) seeds; slot 2 (forged-slot ante 0)
+     * is marked in the fixpoint. Both forged caps revoked => return 2. */
+    let n_revoked : u32 = cf_deforge_cascade(base)
+    if n_revoked != 2u32 { return 24u64 }
+    if cf_is_live(0u32) != 0u8 { return 25u64 }
+    if cf_is_live(2u32) != 0u8 { return 26u64 }
+    if cap_is_revoked(c0) != 1u8 { return 27u64 }
+    if cap_is_revoked(d2) != 1u8 { return 28u64 }
+    /* Idempotent: nothing live depends on base now => 0. */
+    if cf_deforge_cascade(base) != 0u32 { return 29u64 }
+
+    /* ---- KAT-4: negative cases (prove the guards FAIL on bad input). ---- */
+    let cnt_before : u32 = cf_count()
+    /* invalid antecedent 0 -> sentinel, outcap 0, count unchanged. */
+    let bad0 : u32 = cf_forge_compose(0u64, capB, 0xFFu64, &CFORGE_T_OUTCAP as *u64)
+    if bad0 != CFORGE_SENT { return 30u64 }
+    if CFORGE_T_OUTCAP[0] != 0u64 { return 31u64 }
+    if cf_count() != cnt_before { return 32u64 }
+    /* restrict on a revoked cap -> sentinel (cap_is_revoked guard fires). c0 was
+     * revoked by the cascade above. */
+    let bad1 : u32 = cf_forge_restrict(c0, &CFORGE_T_SUBRES as *u8, CAP_RIGHT_FS_READ_L, &CFORGE_T_OUTCAP as *u64)
+    if bad1 != CFORGE_SENT { return 33u64 }
+    if CFORGE_T_OUTCAP[0] != 0u64 { return 34u64 }
+    if cf_count() != cnt_before { return 35u64 }
+    /* out-of-range dependency query -> sentinel. */
+    if cf_dependency_at(9999u32, 0u32) != CFORGE_SENT { return 36u64 }
+    /* cascade on cap 0 -> 0 (no slot names cap 0). */
+    if cf_deforge_cascade(0u64) != 0u32 { return 37u64 }
+    /* add_dependency on a dead slot -> error (slot 0 was de-forged). */
+    if cf_add_dependency(0u32, 1u32) != CFORGE_E_BAD { return 38u64 }
+
+    return 99u64
+}

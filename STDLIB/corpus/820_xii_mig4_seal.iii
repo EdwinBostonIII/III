@@ -1,0 +1,16 @@
+/* 820 -- mig4 Step 10: retire the syntactic path + SEAL (the terminal step).  Drives xms_selftest:
+ * the TERMINAL GATE folds all ten mig4 stage selftests (xrp/xro/cpe/xjn/xtm/xad/xlc/xld/xli/xlp) into
+ * one verdict -- the whole migration proven green as a unit (1); the CONTENT-ADDRESS SEAL hashes a
+ * canonical battery of the lowered domains' normal forms (composition product, collapsing decision,
+ * folding loop, grand mix) and is DETERMINISTIC -- the same battery hashes identically twice (2) --
+ * and non-trivial (3); the migrated rule set is ADMITTED (4).  Exit 99 = all hold -- mig4 ("route all
+ * structured computation through XII") is complete and sealed.  Gated by run_corpus.sh. */
+module corpus_820
+
+extern @abi(c-msvc-x64) fn xms_selftest() -> u64 from "xii_mig4_seal.iii"
+
+fn main() -> u64 {
+    let r : u64 = xms_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

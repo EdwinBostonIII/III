@@ -1,0 +1,45 @@
+# COMPILER/BOOT/iii_census.def
+#
+# SINGLE SOURCE OF TRUTH for the KATABASIS Silicon Census Crystal facts
+# (DOCS/III-KATABASIS.md plan 3.4 / FR-2).  The values were read off live
+# AD103/Ryzen hardware 2026-04-11 (plan 0.1-0.2); they are the EXPECTED census
+# against which the live ReadMetal census is drift-checked (plan 3.6).
+#
+# Regenerate the AUTO-GENERATED fact assignments inside katabasis_census_init()
+# in STDLIB/iii/katabasis/census.iii via:
+#     bash COMPILER/BOOT/gen_census.sh
+# The build's drift gate (gen_census.sh --check) fails if census.iii's generated
+# block diverges from this file -- so the verified silicon facts can NEVER drift
+# from their single source (plan 6.9 / FR-9).
+#
+# COUNT COUPLING: the count-dependent constants in census.iii MUST stay in step
+# with the number of rows here (N) -- gen_census.sh asserts each one, so a row
+# added/removed here without updating them fails the build:
+#     var KCEN_FACTS : [u64; N]                       (array dimension = N)
+#     katabasis_census_fact_count() -> ... return Nu64 (= N)
+#     katabasis_census_hash sha256 length = (8*N)u64   (16 facts -> 128 bytes)
+#
+# Fields (whitespace-delimited):  idx  value  comment(rest-of-line)
+#   idx     u64 decimal -- fact index, must be 0..N-1, ascending and contiguous.
+#   value   u64 literal -- the verified value as a III u64 literal (e.g. 0x..u64).
+#   comment              -- free ASCII text; emitted as the trailing /* ... */
+#                           (no em-dash, no '*/' -- iiis-0 comment-lexer traps).
+# Lines starting with '#' are comments. Blank lines ignored.
+# ---------------------------------------------------------------------------
+# idx  value             comment
+0      0x10DE2717u64      GPU PCI (VEN 0x10DE << 16 | DEV 0x2717)
+1      0xA1u64            GPU revision A1
+2      0x193000A1u64      NV_PMC_BOOT_0 (AD103 rev A1)
+3      76u64              SM count
+4      16376u64           VRAM (MB)
+5      0xFB000000u64      GPU BAR0 (MMIO regs)
+6      0xF800000000u64    GPU BAR1 (VRAM aperture)
+7      0xFC00000000u64    GPU BAR3 (RAMIN)
+8      0xFEE00000u64      CPU LAPIC
+9      0x03B00000u64      CPU SMU
+10     32u64              cpu_count (16C/32T)
+11     0x010000u64        GPU PCI bus 1, dev 0, fn 0
+12     0x110040u64        GSP Falcon MAILBOX0
+13     0x300000u64        VBIOS base
+14     0x820000u64        RUNLIST base
+15     0xFED40000u64      TPM TCG TIS

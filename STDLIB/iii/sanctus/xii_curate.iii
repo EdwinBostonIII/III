@@ -1,0 +1,156 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\xii_curate.iii
+ *
+ * III STDLIB - sanctus::xii_curate
+ *
+ * Trinity-gated curation ceremonies Ω1..Ω12.
+ * Per DOCS/III-XII.md S17 + S26.16.
+ *
+ * Each ceremony produces a sealed admit cert (114 bytes per S26.16) that
+ * is required before its corresponding curation artifact can be used.
+ * The 12 certs are concatenated into the Manifest's trinity_admit field
+ * (32-byte SHA-256 of concatenation, plus metadata).
+ *
+ * Hexad: kind_origin. Ring: R-3 (Founders-Anchor). K: 100.
+ *
+ * NIH: libc + Win32 only.
+ */
+
+module sanctus_xii_curate
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* The 12 ceremony ids. */
+const XCU_OMEGA_1_BASIS_DEFINITION    : u8 = 1u8
+const XCU_OMEGA_2_FUSION_DEFINITION   : u8 = 2u8
+const XCU_OMEGA_3_HJ_TABLE            : u8 = 3u8
+const XCU_OMEGA_4_DK_TABLE            : u8 = 4u8
+const XCU_OMEGA_5_RULE_CURATION       : u8 = 5u8
+const XCU_OMEGA_6_CONFLUENCE_PROOF    : u8 = 6u8
+const XCU_OMEGA_7_TERMINATION_PROOF   : u8 = 7u8
+const XCU_OMEGA_8_HORIZON_SELECTION   : u8 = 8u8
+const XCU_OMEGA_9_TARGET_MAPPING      : u8 = 9u8
+const XCU_OMEGA_10_MPHF_CONSTRUCTION  : u8 = 10u8
+const XCU_OMEGA_11_CIRC_FEASIBILITY   : u8 = 11u8
+const XCU_OMEGA_12_FINAL_SEAL         : u8 = 12u8
+
+/* Cert structure (114 bytes per S26.16):
+ *   0     : ceremony_id u8 (1..12)
+ *   1     : spec_version u8 (1)
+ *   2..3  : reserved_0 u16
+ *   4..19 : intent_crystal_lo[16]
+ *   20..35: cap_witness[16]
+ *   36..51: causality_crystal_hi[16]
+ *   52..67: sanctum_state_hi[16]
+ *   68..75: timestamp_utc u64 BE
+ *   76..79: sequence_no u32
+ *   80..81: flags u16 (bit 0: anchor_pre_admit; bit 1: trinity_post_admit)
+ *   82..113: signature_lo[32]
+ */
+const XCU_CERT_BYTES : u32 = 114u32
+
+/* Sealed storage for the 12 certs. */
+var XII_CURATE_CERTS : [u8; 1368]   /* 12 * 114 */
+var XII_CURATE_CERT_COUNT : u32 = 0u32
+var XII_CURATE_TRINITY_ADMIT : [u8; 56]
+
+/* Reset state. */
+fn xii_curate_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 1368u32 {
+        XII_CURATE_CERTS[i] = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 56u32 {
+        XII_CURATE_TRINITY_ADMIT[j] = 0u8
+        j = j + 1u32
+    }
+    XII_CURATE_CERT_COUNT = 0u32
+    return 0i32
+}
+
+/* Issue a ceremony cert. Returns 0 on success, -1 on failure. */
+fn xii_curate_issue(ceremony_id: u8, intent_crystal: *u8, cap_witness: *u8, causality: *u8, sanctum_state: *u8, timestamp_utc: u64, sequence_no: u32, signature: *u8) -> i32 @export {
+    if ceremony_id == 0u8 { return -1i32 }
+    if ceremony_id > 12u8 { return -1i32 }
+    if XII_CURATE_CERT_COUNT >= 12u32 { return -1i32 }
+
+    let off : u32 = XII_CURATE_CERT_COUNT * XCU_CERT_BYTES
+    XII_CURATE_CERTS[off]        = ceremony_id
+    XII_CURATE_CERTS[off + 1u32] = 1u8
+    XII_CURATE_CERTS[off + 2u32] = 0u8
+    XII_CURATE_CERTS[off + 3u32] = 0u8
+
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        XII_CURATE_CERTS[off + 4u32 + k]  = intent_crystal[k as u64]
+        XII_CURATE_CERTS[off + 20u32 + k] = cap_witness[k as u64]
+        XII_CURATE_CERTS[off + 36u32 + k] = causality[k as u64]
+        XII_CURATE_CERTS[off + 52u32 + k] = sanctum_state[k as u64]
+        k = k + 1u32
+    }
+
+    /* Timestamp BE u64. */
+    XII_CURATE_CERTS[off + 68u32] = ((timestamp_utc >> 56u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 69u32] = ((timestamp_utc >> 48u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 70u32] = ((timestamp_utc >> 40u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 71u32] = ((timestamp_utc >> 32u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 72u32] = ((timestamp_utc >> 24u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 73u32] = ((timestamp_utc >> 16u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 74u32] = ((timestamp_utc >> 8u64) & 0xFFu64) as u8
+    XII_CURATE_CERTS[off + 75u32] = (timestamp_utc & 0xFFu64) as u8
+
+    /* Sequence_no LE. */
+    XII_CURATE_CERTS[off + 76u32] = (sequence_no & 0xFFu32) as u8
+    XII_CURATE_CERTS[off + 77u32] = ((sequence_no >> 8u32) & 0xFFu32) as u8
+    XII_CURATE_CERTS[off + 78u32] = ((sequence_no >> 16u32) & 0xFFu32) as u8
+    XII_CURATE_CERTS[off + 79u32] = ((sequence_no >> 24u32) & 0xFFu32) as u8
+
+    /* Flags: both anchor_pre_admit + trinity_post_admit. */
+    XII_CURATE_CERTS[off + 80u32] = 0x03u8
+    XII_CURATE_CERTS[off + 81u32] = 0u8
+
+    /* Signature low 32 bytes. */
+    let mut s : u32 = 0u32
+    while s < 32u32 {
+        XII_CURATE_CERTS[off + 82u32 + s] = signature[s as u64]
+        s = s + 1u32
+    }
+
+    XII_CURATE_CERT_COUNT = XII_CURATE_CERT_COUNT + 1u32
+    return 0i32
+}
+
+/* Finalize: compute SHA-256 over all 12 certs + metadata = trinity_admit (56 bytes).
+ *   bytes 0..31  : SHA-256 of concatenated 12 * 114-byte certs
+ *   bytes 32..35 : u32 cert_count (12 LE)
+ *   bytes 36..39 : u32 curation_epoch_id
+ *   bytes 40..55 : 16 zero bytes (reserved)
+ */
+fn xii_curate_finalize(epoch_id: u32) -> i32 @export {
+    if XII_CURATE_CERT_COUNT != 12u32 { return -1i32 }
+    sha256_oneshot(&XII_CURATE_CERTS as *u8, 1368u64, &XII_CURATE_TRINITY_ADMIT as *u8)
+    XII_CURATE_TRINITY_ADMIT[32u32] = 12u8
+    XII_CURATE_TRINITY_ADMIT[33u32] = 0u8
+    XII_CURATE_TRINITY_ADMIT[34u32] = 0u8
+    XII_CURATE_TRINITY_ADMIT[35u32] = 0u8
+    XII_CURATE_TRINITY_ADMIT[36u32] = (epoch_id & 0xFFu32) as u8
+    XII_CURATE_TRINITY_ADMIT[37u32] = ((epoch_id >> 8u32) & 0xFFu32) as u8
+    XII_CURATE_TRINITY_ADMIT[38u32] = ((epoch_id >> 16u32) & 0xFFu32) as u8
+    XII_CURATE_TRINITY_ADMIT[39u32] = ((epoch_id >> 24u32) & 0xFFu32) as u8
+    /* bytes 40..55 are zero by initial reset */
+    return 0i32
+}
+
+fn xii_curate_trinity_admit_ptr() -> u64 @export {
+    return &XII_CURATE_TRINITY_ADMIT as u64
+}
+
+fn xii_curate_cert_count() -> u32 @export {
+    return XII_CURATE_CERT_COUNT
+}
+
+fn xii_curate_cert_ptr(idx: u32) -> u64 @export {
+    if idx >= 12u32 { return 0u64 }
+    return (&XII_CURATE_CERTS as u64) + ((idx * XCU_CERT_BYTES) as u64)
+}

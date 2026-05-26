@@ -1,0 +1,36 @@
+/* 601 -- KATABASIS increment 7: the legal ring-transition lattice (plan 4.6).
+ * Asserts the lawful ring crossings + their constructors, and that no ring may
+ * be skipped or ascended (and R-4 is never entered).  Ring params are src/dst
+ * because `from` is a reserved iii keyword.
+ * Exit 99 = all hold; 1..17 = the index of the failing assertion. */
+module corpus_601_katabasis_ring_lattice
+
+extern @abi(c-msvc-x64) fn katabasis_ring_constructor(src: u32, dst: u32) -> u32 from "ring_lattice.iii"
+extern @abi(c-msvc-x64) fn katabasis_ring_legal(src: u32, dst: u32) -> u8 from "ring_lattice.iii"
+
+fn main() -> u64 {
+    /* lawful crossings -> the right constructor (IOCTL=1 MAGIC_MSR=2 VMRUN=3 SKINIT=4 SMI=5) */
+    if katabasis_ring_constructor(0u32, 1u32) != 1u32 { return 1u64 }   /* R3->R0 IOCTL */
+    if katabasis_ring_constructor(1u32, 2u32) != 2u32 { return 2u64 }   /* R0->R-1 MAGIC_MSR */
+    if katabasis_ring_constructor(2u32, 2u32) != 3u32 { return 3u64 }   /* R-1->R-1 VMRUN */
+    if katabasis_ring_constructor(1u32, 3u32) != 4u32 { return 4u64 }   /* R0->R-2 SKINIT */
+    if katabasis_ring_constructor(2u32, 3u32) != 5u32 { return 5u64 }   /* R-1->R-2 SMI */
+
+    /* unlawful crossings -> NONE (0): skipping rings, ascending, entering R-4, self */
+    if katabasis_ring_constructor(0u32, 2u32) != 0u32 { return 6u64 }   /* R3->R-1 skip R0 */
+    if katabasis_ring_constructor(0u32, 3u32) != 0u32 { return 7u64 }   /* R3->R-2 skip */
+    if katabasis_ring_constructor(1u32, 0u32) != 0u32 { return 8u64 }   /* R0->R3 ascend */
+    if katabasis_ring_constructor(2u32, 1u32) != 0u32 { return 9u64 }   /* R-1->R0 ascend */
+    if katabasis_ring_constructor(3u32, 2u32) != 0u32 { return 10u64 }  /* R-2->R-1 ascend */
+    if katabasis_ring_constructor(2u32, 4u32) != 0u32 { return 11u64 }  /* R-1->R-4 (never entered) */
+    if katabasis_ring_constructor(0u32, 0u32) != 0u32 { return 12u64 }  /* R3->R3 self (no door) */
+
+    /* legality predicate */
+    if katabasis_ring_legal(0u32, 1u32) != 1u8 { return 13u64 }   /* R3->R0 legal */
+    if katabasis_ring_legal(2u32, 2u32) != 1u8 { return 14u64 }   /* R-1->R-1 legal */
+    if katabasis_ring_legal(0u32, 2u32) != 0u8 { return 15u64 }   /* R3->R-1 illegal */
+    if katabasis_ring_legal(1u32, 0u32) != 0u8 { return 16u64 }   /* ascend illegal */
+    if katabasis_ring_legal(2u32, 4u32) != 0u8 { return 17u64 }   /* enter R-4 illegal */
+
+    return 99u64
+}

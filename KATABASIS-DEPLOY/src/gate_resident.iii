@@ -1,0 +1,68 @@
+module gate_resident
+
+/* Tier-2 Inc-2: resident gate-DECISION driver.
+   DriverEntry runs the full 4-case KATABASIS gate selftest (mirrors corpus 609)
+   ENTIRELY IN RING 0 -- building sealed cycle terms in the xii_term BSS arena,
+   computing seals (SHA-256), checking capabilities + hexad admissibility -- and
+   returns the result as an NTSTATUS:
+     0xC00000BB (STATUS_NOT_SUPPORTED -> sc-start Win32 error 50)  iff ALL FOUR
+       verdicts are correct (OK / REJECT_SEAL / REJECT_CAP / REJECT_HEXAD) -- i.e.
+       the entire gate decision surface is verified running in-kernel; else
+     0xC00000E1..E4  = the index of the case whose verdict was wrong (raw NTSTATUS
+       visible in the System event log).
+   Returns an error in all cases, so Windows UNLOADS the driver immediately
+   (self-cleaning; no resident code, no reboot). No device, no ntoskrnl imports. */
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 from "seal.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 from "admit.iii"
+
+/* Kernel-safety: pin SHA-256 + Keccak to their scalar (GP-register) paths.
+   A Ring-0 driver must never issue AVX-512 (EVEX) without
+   KeSaveExtendedProcessorState. cpufeat_kernel.iii already reports
+   avx512f=0, but pinning the force-knobs is a second, independent
+   guarantee that the EVEX metal{} blocks are statically unreachable. */
+extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+
+var G_SEAL  : [u8; 32]
+var G_WRONG : [u8; 32]
+
+fn driver_entry(driver_object: u64, registry_path: u64) -> u64 {
+    sha256_sched_force(1u32)
+    keccak_chi_force_path(1u32)
+    xii_term_arena_reset()
+    let root : u64 = cap_env_init()
+    let wcap : u64 = cap_attenuate(root, 0x00200000u64, 0u64)
+    let dcap : u64 = cap_attenuate(root, 0x00800000u64, 0u64)
+
+    /* case 1: F2 WriteMetal to SHARED, capped by wcap, correctly sealed -> OK (0) */
+    let a1 : u32 = katabasis_cycle_act(2u32, 1u32, 0x20000u64, 728u32)
+    let c1 : u32 = katabasis_cycle_under_cap(a1, wcap as u32)
+    katabasis_cycle_seal(c1, &G_SEAL as u64)
+    if katabasis_gate_admit(c1, &G_SEAL as u64) != 0u32 { return 0xc00000e1u64 }
+
+    /* case 2: wrong seal -> REJECT_SEAL (1) */
+    let a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+    let c2 : u32 = katabasis_cycle_under_cap(a2, wcap as u32)
+    katabasis_cycle_seal(c2, &G_WRONG as u64)
+    if katabasis_gate_admit(c1, &G_WRONG as u64) != 1u32 { return 0xc00000e2u64 }
+
+    /* case 3: Descend-only cap on a WriteMetal cycle -> REJECT_CAP (2) */
+    let a3 : u32 = katabasis_cycle_act(2u32, 1u32, 0x20000u64, 728u32)
+    let c3 : u32 = katabasis_cycle_under_cap(a3, dcap as u32)
+    katabasis_cycle_seal(c3, &G_SEAL as u64)
+    if katabasis_gate_admit(c3, &G_SEAL as u64) != 2u32 { return 0xc00000e3u64 }
+
+    /* case 4: brick cycle (F2 to HSAVE 0x1000), correct cap+seal -> REJECT_HEXAD (3) */
+    let a4 : u32 = katabasis_cycle_act(2u32, 1u32, 0x1000u64, 728u32)
+    let c4 : u32 = katabasis_cycle_under_cap(a4, wcap as u32)
+    katabasis_cycle_seal(c4, &G_SEAL as u64)
+    if katabasis_gate_admit(c4, &G_SEAL as u64) != 3u32 { return 0xc00000e4u64 }
+
+    return 0xc00000bbu64
+}

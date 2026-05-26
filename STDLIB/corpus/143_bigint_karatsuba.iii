@@ -1,0 +1,62 @@
+/* Karatsuba multiplication agrees with schoolbook on small + large inputs. */
+module corpus_143
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_karatsuba(arena: u64, a: u64, b: u64) -> u64 from "bigint_karatsuba.iii"
+
+fn fill_pattern(id: u64, n: u64, base: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        bigint_set_limb(id, i, base + i)
+        i = i + 1u64
+    }
+    bigint_set_len(id, n)
+    return 0u32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 20u64)
+    if a == 0u64 { return 1u64 }
+
+    /* Small case: u64 × u64; karatsuba should fall through to schoolbook. */
+    let small_x : u64 = bigint_from_u64(a, 12345u64)
+    let small_y : u64 = bigint_from_u64(a, 67890u64)
+    let p1 : u64 = bigint_mul(a, small_x, small_y)
+    let p2 : u64 = bigint_mul_karatsuba(a, small_x, small_y)
+    if bigint_eq(p1, p2) != 1u8 { return 2u64 }
+    bigint_drop(p1); bigint_drop(p2); bigint_drop(small_x); bigint_drop(small_y)
+
+    /* Medium case: 64-limb × 64-limb (above KARA_THRESHOLD = 32). */
+    let med_x : u64 = bigint_new(a, 64u64)
+    let med_y : u64 = bigint_new(a, 64u64)
+    fill_pattern(med_x, 64u64, 0x1234567890ABCDEFu64)
+    fill_pattern(med_y, 64u64, 0xFEDCBA9876543210u64)
+
+    let q1 : u64 = bigint_mul(a, med_x, med_y)
+    let q2 : u64 = bigint_mul_karatsuba(a, med_x, med_y)
+    if bigint_eq(q1, q2) != 1u8 { return 3u64 }
+    bigint_drop(q1); bigint_drop(q2); bigint_drop(med_x); bigint_drop(med_y)
+
+    /* Larger case: 100-limb × 100-limb. */
+    let big_x : u64 = bigint_new(a, 100u64)
+    let big_y : u64 = bigint_new(a, 100u64)
+    fill_pattern(big_x, 100u64, 7u64)
+    fill_pattern(big_y, 100u64, 11u64)
+
+    let r1 : u64 = bigint_mul(a, big_x, big_y)
+    let r2 : u64 = bigint_mul_karatsuba(a, big_x, big_y)
+    if bigint_eq(r1, r2) != 1u8 { return 4u64 }
+
+    bigint_drop(r1); bigint_drop(r2); bigint_drop(big_x); bigint_drop(big_y)
+    arena_drop(a)
+    return 99u64
+}

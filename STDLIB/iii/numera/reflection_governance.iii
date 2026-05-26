@@ -1,0 +1,430 @@
+/* III/STDLIB/iii/numera/reflection_governance.iii -- Layer 7, Module 71.
+ *
+ * III STDLIB - numera::reflection_governance
+ *
+ * The R-3 governance gate that mediates EVERY reflection request (W32: no
+ * reflection bypasses this module).  Enforces target admissibility (forbidden
+ * foundations-of-trust set, M13/M20/W46), the reflect capability (M8),
+ * ratification of cp_reflect_bound + cp_no_self_soundness, emits a
+ * REFLECT_INVOCATION witness before dispatch (M6), then dispatches to
+ * reflection_constrained.iii.  The proof-term output is enqueued for
+ * ratification (via rc_propose_synthesis), never applied directly.
+ *
+ * Hexad: kind_cognition + kind_witness.  Ring: R-3.  K: 1.00.
+ *
+ * SPEC RECONCILIATION (the realized reflection_constrained differs from the
+ * gospel rg externs -- all three resolved):
+ *   1. Forbidden-id scheme = canonical PATH STRINGS (ident_from_bytes of the
+ *      module path) -- the verified substrate convention (constitution.iii uses
+ *      ident("numera::constitution",20)).  7 foundational modules, lengths
+ *      30/29/20/30/22/19/21 (hand-verified).  rg is the W32 primary gate.
+ *   2. rc_construct_proof is the realized AGGREGATE form -- dispatch drives
+ *      rc_request_begin -> rc_request_push_property -> rc_request_set_budget ->
+ *      rc_construct_proof(out), NOT the gospel 5-param call.
+ *   3. Ratification queue: after a successful proof construction, the term id is
+ *      enqueued via rc_propose_synthesis (so rg_queue_size reflects it).
+ *   - cons_find -> u32, sentinel CONS_SENT=0xFFFFFFFF (== compare; slot 0 valid).
+ *   - witness via wh_publish (not the ws_emit_fragment fiction).
+ *
+ * Discipline: W2 (requests folded to *u8 aggregates + module-staged fields),
+ * W8, W9/W11/W12, W14 (sentinel loops), W15 (no recursion).  The forbidden set
+ * is frozen at R-3 boot.
+ */
+
+module numera_reflection_governance
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn rc_request_begin(target_module: *u8, cap: u64) -> i32 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn rc_request_push_property(chunk: *u8, chunk_len: u32) -> i32 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn rc_request_set_budget(budget: *u8) -> i32 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn rc_construct_proof(out_term_id: *u8) -> i32 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn rc_propose_synthesis(spec_id: *u8, cap: u64, out_proposal_id: *u8) -> i32 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn rc_queue_size() -> u64 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn rc_dequeue(slot: u64, out_kind: *u8, out_payload: *u8, out_len: *u32) -> i32 from "reflection_constrained.iii"
+
+// --- KAT-harness externs ---
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn rc_init() -> i32 from "reflection_constrained.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+
+const RFLG_OK                 : i32 =  0i32
+const RFLG_E_NULL             : i32 = -1i32
+const RFLG_E_TARGET_FORBIDDEN : i32 = -2i32
+const RFLG_E_CLAUSE_ABSENT    : i32 = -3i32
+const RFLG_E_BUDGET_EXCEEDED  : i32 = -4i32
+const RFLG_E_DISPATCH_FAIL    : i32 = -5i32
+const RFLG_E_NOT_INITED       : i32 = -6i32
+const RFLG_E_K_TOO_LOW        : i32 = -7i32
+const RFLG_E_CAP_DENIED       : i32 = -8i32
+const RFLG_E_BAD_SLOT         : i32 = -9i32
+
+const RFLG_FORBIDDEN_SLOTS    : u64 = 16u64
+const RFLG_FORBIDDEN_SEED     : u64 = 7u64
+const RFLG_CAP_REFLECT        : u64 = 0x4000u64        // == CAP_RIGHT_AMEND
+const RFLG_CONS_SENT          : u32 = 0xFFFFFFFFu32     // == CONS_SENT
+const RFLG_RC_BUDGET_CODE     : i32 = -3i32            // == RFLC_E_BUDGET_EXHAUSTED (-> K_TOO_LOW)
+const RFLG_U64_SENT           : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var RFLG_INITED          : u8 = 0u8
+var RFLG_FORBIDDEN_IDS   : [u64; 64]      // 16 slots * 32 bytes (id-array idiom)
+var RFLG_FORBIDDEN_COUNT : u64 = 0u64
+
+var RFLG_PATH            : [u8; 32]       // path-string scratch (max 30)
+var RFLG_CLAUSE_LABEL    : [u8; 24]
+var RFLG_CLAUSE_ID       : [u8; 32]
+var RFLG_CLAUSE_LABEL2   : [u8; 24]
+var RFLG_CLAUSE_ID2      : [u8; 32]
+var RFLG_OPID            : [u8; 32]       // ident("REFLECT_INVOCATION")
+var RFLG_PAYLOAD         : [u8; 80]
+var RFLG_IN_C            : [u8; 32]
+var RFLG_OUT_C           : [u8; 32]
+var RFLG_ANTE            : [u8; 32]
+var RFLG_FRAG_ID         : [u8; 32]
+var RFLG_PROP_PID        : [u8; 32]       // rc_propose_synthesis out id sink
+
+// --- staged request fields (W2: rg_invoke loads the aggregate into these) ---
+var RFLG_REQ_TARGET      : u64 = 0u64     // ptr into the aggregate (inline 32B)
+var RFLG_REQ_BUDGET      : u64 = 0u64     // ptr into the aggregate (inline 32B)
+var RFLG_REQ_CAP         : u64 = 0u64
+var RFLG_REQ_PROPLEN     : u64 = 0u64
+var RFLG_REQ_PROPPTR     : u64 = 0u64
+var RFLG_REQ_OUTPTR      : u64 = 0u64
+
+// --- self-test scratch ---
+var RFLG_ST_INVREQ       : [u8; 96]
+var RFLG_ST_DEQREQ       : [u8; 88]
+var RFLG_ST_TARGET       : [u8; 32]
+var RFLG_ST_BENIGN       : [u8; 32]
+var RFLG_ST_PROP         : [u8; 64]
+var RFLG_ST_BUD          : [u8; 32]
+var RFLG_ST_OUT          : [u8; 32]
+var RFLG_ST_DEQKIND      : [u8; 8]
+var RFLG_ST_DEQPAY       : [u8; 4096]
+var RFLG_ST_DEQLEN       : [u32; 1]
+var RFLG_RATBUF          : [u64; 16]
+var RFLG_RATLABEL        : [u8; 24]
+
+// =========================== internal ===========================
+
+fn rg_forbidden_ptr(i: u64) -> *u8 { return ((&RFLG_FORBIDDEN_IDS as u64) + i * 32u64) as *u8 }
+
+// Read an LE u64 from base+off (byte-wise; Trap-4-safe -- no u32-slot widening).
+fn rg_load_u64(base: u64, off: u64) -> u64 {
+    let p : *u8 = (base + off) as *u8
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { v = v | ((p[i] as u64) << (i * 8u64))  i = i + 1u64 }
+    return v
+}
+
+// Derive FORBIDDEN_IDS[slot] = ident_from_bytes(RFLG_PATH[0..len]).
+fn rg_fill_id(slot: u64, len: u64) -> i32 {
+    ident_from_bytes((&RFLG_PATH as u64) as *u8, len, rg_forbidden_ptr(slot))
+    return RFLG_OK
+}
+
+/* The 7 foundational module path strings (byte-by-byte; lengths verified). */
+fn rg_p0() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x6Eu8 p[1u64]=0x75u8 p[2u64]=0x6Du8 p[3u64]=0x65u8 p[4u64]=0x72u8 p[5u64]=0x61u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x72u8 p[9u64]=0x65u8 p[10u64]=0x66u8 p[11u64]=0x6Cu8 p[12u64]=0x65u8 p[13u64]=0x63u8 p[14u64]=0x74u8 p[15u64]=0x69u8 p[16u64]=0x6Fu8 p[17u64]=0x6Eu8
+    p[18u64]=0x5Fu8 p[19u64]=0x63u8 p[20u64]=0x6Fu8 p[21u64]=0x6Eu8 p[22u64]=0x73u8 p[23u64]=0x74u8 p[24u64]=0x72u8 p[25u64]=0x61u8 p[26u64]=0x69u8 p[27u64]=0x6Eu8 p[28u64]=0x65u8 p[29u64]=0x64u8
+    return RFLG_OK }
+fn rg_p1() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x6Eu8 p[1u64]=0x75u8 p[2u64]=0x6Du8 p[3u64]=0x65u8 p[4u64]=0x72u8 p[5u64]=0x61u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x72u8 p[9u64]=0x65u8 p[10u64]=0x66u8 p[11u64]=0x6Cu8 p[12u64]=0x65u8 p[13u64]=0x63u8 p[14u64]=0x74u8 p[15u64]=0x69u8 p[16u64]=0x6Fu8 p[17u64]=0x6Eu8
+    p[18u64]=0x5Fu8 p[19u64]=0x67u8 p[20u64]=0x6Fu8 p[21u64]=0x76u8 p[22u64]=0x65u8 p[23u64]=0x72u8 p[24u64]=0x6Eu8 p[25u64]=0x61u8 p[26u64]=0x6Eu8 p[27u64]=0x63u8 p[28u64]=0x65u8
+    return RFLG_OK }
+fn rg_p2() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x6Eu8 p[1u64]=0x75u8 p[2u64]=0x6Du8 p[3u64]=0x65u8 p[4u64]=0x72u8 p[5u64]=0x61u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x63u8 p[9u64]=0x6Fu8 p[10u64]=0x6Eu8 p[11u64]=0x73u8 p[12u64]=0x74u8 p[13u64]=0x69u8 p[14u64]=0x74u8 p[15u64]=0x75u8 p[16u64]=0x74u8 p[17u64]=0x69u8 p[18u64]=0x6Fu8 p[19u64]=0x6Eu8
+    return RFLG_OK }
+fn rg_p3() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x6Eu8 p[1u64]=0x75u8 p[2u64]=0x6Du8 p[3u64]=0x65u8 p[4u64]=0x72u8 p[5u64]=0x61u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x63u8 p[9u64]=0x6Fu8 p[10u64]=0x6Eu8 p[11u64]=0x73u8 p[12u64]=0x74u8 p[13u64]=0x69u8 p[14u64]=0x74u8 p[15u64]=0x75u8 p[16u64]=0x74u8 p[17u64]=0x69u8 p[18u64]=0x6Fu8 p[19u64]=0x6Eu8
+    p[20u64]=0x5Fu8 p[21u64]=0x70u8 p[22u64]=0x72u8 p[23u64]=0x65u8 p[24u64]=0x73u8 p[25u64]=0x65u8 p[26u64]=0x72u8 p[27u64]=0x76u8 p[28u64]=0x65u8 p[29u64]=0x72u8
+    return RFLG_OK }
+fn rg_p4() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x6Eu8 p[1u64]=0x75u8 p[2u64]=0x6Du8 p[3u64]=0x65u8 p[4u64]=0x72u8 p[5u64]=0x61u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x71u8 p[9u64]=0x75u8 p[10u64]=0x69u8 p[11u64]=0x6Eu8 p[12u64]=0x65u8 p[13u64]=0x5Fu8 p[14u64]=0x76u8 p[15u64]=0x65u8 p[16u64]=0x72u8 p[17u64]=0x69u8 p[18u64]=0x66u8 p[19u64]=0x69u8 p[20u64]=0x65u8 p[21u64]=0x72u8
+    return RFLG_OK }
+fn rg_p5() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x61u8 p[1u64]=0x65u8 p[2u64]=0x74u8 p[3u64]=0x68u8 p[4u64]=0x65u8 p[5u64]=0x72u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x62u8 p[9u64]=0x6Fu8 p[10u64]=0x6Eu8 p[11u64]=0x65u8 p[12u64]=0x5Fu8 p[13u64]=0x6Du8 p[14u64]=0x61u8 p[15u64]=0x72u8 p[16u64]=0x72u8 p[17u64]=0x6Fu8 p[18u64]=0x77u8
+    return RFLG_OK }
+fn rg_p6() -> i32 { let p : *u8 = (&RFLG_PATH as u64) as *u8
+    p[0u64]=0x6Eu8 p[1u64]=0x75u8 p[2u64]=0x6Du8 p[3u64]=0x65u8 p[4u64]=0x72u8 p[5u64]=0x61u8 p[6u64]=0x3Au8 p[7u64]=0x3Au8
+    p[8u64]=0x77u8 p[9u64]=0x69u8 p[10u64]=0x74u8 p[11u64]=0x6Eu8 p[12u64]=0x65u8 p[13u64]=0x73u8 p[14u64]=0x73u8 p[15u64]=0x5Fu8 p[16u64]=0x73u8 p[17u64]=0x70u8 p[18u64]=0x69u8 p[19u64]=0x6Eu8 p[20u64]=0x65u8
+    return RFLG_OK }
+
+// Build the two governing clause ids (cp_reflect_bound=16, cp_no_self_soundness=20).
+fn rg_build_clause_ids() -> i32 {
+    let l : *u8 = (&RFLG_CLAUSE_LABEL as u64) as *u8
+    l[0u64]=0x63u8 l[1u64]=0x70u8 l[2u64]=0x5Fu8 l[3u64]=0x72u8 l[4u64]=0x65u8 l[5u64]=0x66u8 l[6u64]=0x6Cu8 l[7u64]=0x65u8
+    l[8u64]=0x63u8 l[9u64]=0x74u8 l[10u64]=0x5Fu8 l[11u64]=0x62u8 l[12u64]=0x6Fu8 l[13u64]=0x75u8 l[14u64]=0x6Eu8 l[15u64]=0x64u8
+    ident_from_bytes(l, 16u64, (&RFLG_CLAUSE_ID as u64) as *u8)
+    let m : *u8 = (&RFLG_CLAUSE_LABEL2 as u64) as *u8
+    m[0u64]=0x63u8 m[1u64]=0x70u8 m[2u64]=0x5Fu8 m[3u64]=0x6Eu8 m[4u64]=0x6Fu8 m[5u64]=0x5Fu8 m[6u64]=0x73u8 m[7u64]=0x65u8 m[8u64]=0x6Cu8 m[9u64]=0x66u8
+    m[10u64]=0x5Fu8 m[11u64]=0x73u8 m[12u64]=0x6Fu8 m[13u64]=0x75u8 m[14u64]=0x6Eu8 m[15u64]=0x64u8 m[16u64]=0x6Eu8 m[17u64]=0x65u8 m[18u64]=0x73u8 m[19u64]=0x73u8
+    ident_from_bytes(m, 20u64, (&RFLG_CLAUSE_ID2 as u64) as *u8)
+    return RFLG_OK
+}
+
+// Emit the REFLECT_INVOCATION witness (in=target, payload=tag||target||budget||cap).  0 ok, -1 sentinel.
+fn rg_emit_invocation() -> i32 {
+    let pp : *u8 = (&RFLG_PAYLOAD as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 80u64 { pp[z] = 0u8  z = z + 1u64 }
+    pp[0u64] = 0xE3u8
+    pp[1u64] = 0x08u8
+    let tp : *u8 = RFLG_REQ_TARGET as *u8
+    let mut a : u64 = 0u64
+    while a < 32u64 { pp[2u64 + a] = tp[a]  a = a + 1u64 }
+    let bp : *u8 = RFLG_REQ_BUDGET as *u8
+    let mut b : u64 = 0u64
+    while b < 32u64 { pp[34u64 + b] = bp[b]  b = b + 1u64 }
+    let cap : u64 = RFLG_REQ_CAP
+    let mut c : u64 = 0u64
+    while c < 8u64 { pp[66u64 + c] = ((cap >> (c * 8u64)) & 0xFFu64) as u8  c = c + 1u64 }
+    ident_copy(tp, (&RFLG_IN_C as u64) as *u8)
+    ident_zero((&RFLG_OUT_C as u64) as *u8)
+    ident_zero((&RFLG_ANTE as u64) as *u8)
+    let r : u64 = wh_publish(rg_forbidden_ptr(1u64), (&RFLG_OPID as u64) as *u8, (&RFLG_IN_C as u64) as *u8, (&RFLG_OUT_C as u64) as *u8, 0u8, 0u8, 0x0046u16, (&RFLG_ANTE as u64) as *u8, 0u32, pp, 74u32, (&RFLG_FRAG_ID as u64) as *u8)
+    if r == RFLG_U64_SENT { return RFLG_E_DISPATCH_FAIL }
+    return RFLG_OK
+}
+
+// Dispatch to reflection_constrained via the realized aggregate API + enqueue the term.
+fn rg_dispatch() -> i32 {
+    if rc_request_begin(RFLG_REQ_TARGET as *u8, RFLG_REQ_CAP) != 0i32 { return RFLG_E_DISPATCH_FAIL }
+    let plen : u32 = (RFLG_REQ_PROPLEN & 0xFFFFFFFFu64) as u32
+    if rc_request_push_property(RFLG_REQ_PROPPTR as *u8, plen) != 0i32 { return RFLG_E_DISPATCH_FAIL }
+    if rc_request_set_budget(RFLG_REQ_BUDGET as *u8) != 0i32 { return RFLG_E_DISPATCH_FAIL }
+    let d : i32 = rc_construct_proof(RFLG_REQ_OUTPTR as *u8)
+    if d == RFLG_RC_BUDGET_CODE { return RFLG_E_K_TOO_LOW }
+    if d != 0i32 { return RFLG_E_DISPATCH_FAIL }
+    if rc_propose_synthesis(RFLG_REQ_OUTPTR as *u8, RFLG_REQ_CAP, (&RFLG_PROP_PID as u64) as *u8) != 0i32 { return RFLG_E_DISPATCH_FAIL }
+    return RFLG_OK
+}
+
+// =========================== public surface ===========================
+
+fn rg_init() -> i32 @export {
+    if RFLG_INITED == 1u8 { return RFLG_OK }
+    let mut i : u64 = 0u64
+    while i < 64u64 { RFLG_FORBIDDEN_IDS[i] = 0u64  i = i + 1u64 }
+    rg_p0()  rg_fill_id(0u64, 30u64)
+    rg_p1()  rg_fill_id(1u64, 29u64)
+    rg_p2()  rg_fill_id(2u64, 20u64)
+    rg_p3()  rg_fill_id(3u64, 30u64)
+    rg_p4()  rg_fill_id(4u64, 22u64)
+    rg_p5()  rg_fill_id(5u64, 19u64)
+    rg_p6()  rg_fill_id(6u64, 21u64)
+    RFLG_FORBIDDEN_COUNT = 7u64
+    let o : *u8 = (&RFLG_OPID as u64) as *u8
+    o[0u64]=0x52u8 o[1u64]=0x45u8 o[2u64]=0x46u8 o[3u64]=0x4Cu8 o[4u64]=0x45u8 o[5u64]=0x43u8 o[6u64]=0x54u8 o[7u64]=0x5Fu8 o[8u64]=0x49u8
+    o[9u64]=0x4Eu8 o[10u64]=0x56u8 o[11u64]=0x4Fu8 o[12u64]=0x43u8 o[13u64]=0x41u8 o[14u64]=0x54u8 o[15u64]=0x49u8 o[16u64]=0x4Fu8 o[17u64]=0x4Eu8
+    ident_from_bytes(o, 18u64, (&RFLG_OPID as u64) as *u8)
+    RFLG_INITED = 1u8
+    return RFLG_OK
+}
+
+fn rg_forbidden_target(target: *u8) -> u8 @export {
+    if RFLG_INITED == 0u8 { return 1u8 }
+    if (target as u64) == 0u64 { return 1u8 }
+    let mut found : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < RFLG_FORBIDDEN_COUNT {
+        if found == 0u8 {
+            if ident_eq(rg_forbidden_ptr(i), target) == 1u8 { found = 1u8 }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+fn rg_invoke(req: *u8) -> i32 @export {
+    let rb : u64 = req as u64
+    if RFLG_INITED == 0u8 { return RFLG_E_NOT_INITED }
+    if rb == 0u64 { return RFLG_E_NULL }
+    RFLG_REQ_TARGET = rb + 0u64
+    RFLG_REQ_BUDGET = rb + 32u64
+    RFLG_REQ_CAP = rg_load_u64(rb, 64u64)
+    RFLG_REQ_PROPLEN = rg_load_u64(rb, 72u64)
+    RFLG_REQ_PROPPTR = rg_load_u64(rb, 80u64)
+    RFLG_REQ_OUTPTR = rg_load_u64(rb, 88u64)
+    if RFLG_REQ_PROPPTR == 0u64 { return RFLG_E_NULL }
+    if RFLG_REQ_OUTPTR == 0u64 { return RFLG_E_NULL }
+    if cap_verify_rights(RFLG_REQ_CAP, RFLG_CAP_REFLECT) != 1u8 { return RFLG_E_CAP_DENIED }
+    if rg_forbidden_target(RFLG_REQ_TARGET as *u8) == 1u8 { return RFLG_E_TARGET_FORBIDDEN }
+    rg_build_clause_ids()
+    if cons_find((&RFLG_CLAUSE_ID as u64) as *u8) == RFLG_CONS_SENT { return RFLG_E_CLAUSE_ABSENT }
+    if cons_find((&RFLG_CLAUSE_ID2 as u64) as *u8) == RFLG_CONS_SENT { return RFLG_E_CLAUSE_ABSENT }
+    if rg_emit_invocation() != RFLG_OK { return RFLG_E_DISPATCH_FAIL }
+    return rg_dispatch()
+}
+
+fn rg_queue_size() -> u64 @export {
+    if RFLG_INITED == 0u8 { return RFLG_U64_SENT }
+    return rc_queue_size()
+}
+
+fn rg_dequeue_proposal(req: *u8) -> i32 @export {
+    let rb : u64 = req as u64
+    if RFLG_INITED == 0u8 { return RFLG_E_NOT_INITED }
+    if rb == 0u64 { return RFLG_E_NULL }
+    let slot : u64 = rg_load_u64(rb, 0u64)
+    let out_kind : u64 = rg_load_u64(rb, 8u64)
+    let out_cap : u64 = rg_load_u64(rb, 16u64)
+    let out_len : u64 = rg_load_u64(rb, 24u64)
+    let out_payload : u64 = rg_load_u64(rb, 32u64)
+    if out_kind == 0u64 { return RFLG_E_NULL }
+    if out_len == 0u64 { return RFLG_E_NULL }
+    if out_payload == 0u64 { return RFLG_E_NULL }
+    if cap_verify_rights(out_cap, RFLG_CAP_REFLECT) != 1u8 { return RFLG_E_CAP_DENIED }
+    if slot >= rc_queue_size() { return RFLG_E_BAD_SLOT }
+    return rc_dequeue(slot, out_kind as *u8, out_payload as *u8, out_len as *u32)
+}
+
+// =========================== self-test ===========================
+
+fn rg_st_fill(p: u64, len: u64, b: u8) -> i32 {
+    let pp : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < len { pp[i] = b  i = i + 1u64 }
+    return RFLG_OK
+}
+
+// Ratify a clause (label at lp[0..len]) so cons_find finds it.  0 ok, -1 fail.
+fn rg_st_ratify(lp: u64, len: u64) -> i32 {
+    let reqbase : u64 = &RFLG_RATBUF as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = lp
+    rqp[2u64] = len
+    rqp[3u64] = lp
+    rqp[4u64] = 0u64
+    rqp[5u64] = lp
+    rqp[6u64] = 0u64
+    let fr : u64 = cons_ratify(reqbase as *u8)
+    if fr == RFLG_U64_SENT { return RFLG_E_DISPATCH_FAIL }
+    return RFLG_OK
+}
+
+fn rg_st_ratify_clause1() -> i32 {
+    let l : *u8 = (&RFLG_RATLABEL as u64) as *u8
+    l[0u64]=0x63u8 l[1u64]=0x70u8 l[2u64]=0x5Fu8 l[3u64]=0x72u8 l[4u64]=0x65u8 l[5u64]=0x66u8 l[6u64]=0x6Cu8 l[7u64]=0x65u8
+    l[8u64]=0x63u8 l[9u64]=0x74u8 l[10u64]=0x5Fu8 l[11u64]=0x62u8 l[12u64]=0x6Fu8 l[13u64]=0x75u8 l[14u64]=0x6Eu8 l[15u64]=0x64u8
+    return rg_st_ratify(&RFLG_RATLABEL as u64, 16u64)
+}
+fn rg_st_ratify_clause2() -> i32 {
+    let l : *u8 = (&RFLG_RATLABEL as u64) as *u8
+    l[0u64]=0x63u8 l[1u64]=0x70u8 l[2u64]=0x5Fu8 l[3u64]=0x6Eu8 l[4u64]=0x6Fu8 l[5u64]=0x5Fu8 l[6u64]=0x73u8 l[7u64]=0x65u8 l[8u64]=0x6Cu8 l[9u64]=0x66u8
+    l[10u64]=0x5Fu8 l[11u64]=0x73u8 l[12u64]=0x6Fu8 l[13u64]=0x75u8 l[14u64]=0x6Eu8 l[15u64]=0x64u8 l[16u64]=0x6Eu8 l[17u64]=0x65u8 l[18u64]=0x73u8 l[19u64]=0x73u8
+    return rg_st_ratify(&RFLG_RATLABEL as u64, 20u64)
+}
+
+// Build the RG_InvokeReq aggregate: target=RFLG_ST_BENIGN, budget=RFLG_ST_BUD,
+// cap, property=RFLG_ST_PROP (len), out=RFLG_ST_OUT.
+fn rg_st_build_invreq(cap: u64) -> i32 {
+    let rp : *u8 = (&RFLG_ST_INVREQ as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 96u64 { rp[z] = 0u8  z = z + 1u64 }
+    let tp : *u8 = (&RFLG_ST_BENIGN as u64) as *u8
+    let bp : *u8 = (&RFLG_ST_BUD as u64) as *u8
+    let mut a : u64 = 0u64
+    while a < 32u64 { rp[a] = tp[a]  rp[32u64 + a] = bp[a]  a = a + 1u64 }
+    let mut c : u64 = 0u64
+    while c < 8u64 { rp[64u64 + c] = ((cap >> (c * 8u64)) & 0xFFu64) as u8  c = c + 1u64 }
+    rp[72u64] = 32u8                                  // property_len = 32 (LE, low byte)
+    let ppv : u64 = &RFLG_ST_PROP as u64
+    let mut d : u64 = 0u64
+    while d < 8u64 { rp[80u64 + d] = ((ppv >> (d * 8u64)) & 0xFFu64) as u8  d = d + 1u64 }
+    let opv : u64 = &RFLG_ST_OUT as u64
+    let mut e : u64 = 0u64
+    while e < 8u64 { rp[88u64 + e] = ((opv >> (e * 8u64)) & 0xFFu64) as u8  e = e + 1u64 }
+    return RFLG_OK
+}
+
+// KAT-1: forbidden self-membership exact (proves negative: benign NOT forbidden).
+fn rg_st_k1() -> u64 {
+    rg_p1()
+    ident_from_bytes((&RFLG_PATH as u64) as *u8, 29u64, (&RFLG_ST_TARGET as u64) as *u8)   // numera::reflection_governance
+    if rg_forbidden_target((&RFLG_ST_TARGET as u64) as *u8) != 1u8 { return 1u64 }
+    rg_p2()
+    ident_from_bytes((&RFLG_PATH as u64) as *u8, 20u64, (&RFLG_ST_TARGET as u64) as *u8)   // numera::constitution
+    if rg_forbidden_target((&RFLG_ST_TARGET as u64) as *u8) != 1u8 { return 2u64 }
+    rg_st_fill(&RFLG_ST_BENIGN as u64, 32u64, 0x5Bu8)                                       // a non-foundational id
+    if rg_forbidden_target((&RFLG_ST_BENIGN as u64) as *u8) != 0u8 { return 3u64 }
+    return 0u64
+}
+
+// KAT-3: capability denial -- no witness, no dispatch.
+fn rg_st_k3(cap_bad: u64) -> u64 {
+    rg_st_build_invreq(cap_bad)
+    let nb : u64 = wh_next_idx()
+    let nq : u64 = rc_queue_size()
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_E_CAP_DENIED { return 30u64 }
+    if wh_next_idx() != nb { return 31u64 }
+    if rc_queue_size() != nq { return 32u64 }
+    return 0u64
+}
+
+// KAT-4: clause-absent gate (before ratify) + slot-0-present regression.
+fn rg_st_k4(cap_ok: u64) -> u64 {
+    rg_st_build_invreq(cap_ok)
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_E_CLAUSE_ABSENT { return 40u64 }
+    if rg_st_ratify_clause1() != RFLG_OK { return 41u64 }      // ratify cp_reflect_bound (may land at slot 0)
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_E_CLAUSE_ABSENT { return 42u64 }  // cp_no_self_soundness still absent -> slot 0 treated PRESENT, not sentinel
+    if rg_st_ratify_clause2() != RFLG_OK { return 43u64 }
+    return 0u64
+}
+
+// KAT-5: successful invoke enqueues a proposal (queue 0->1); honest queue size.
+fn rg_st_k5(cap_ok: u64) -> u64 {
+    if rg_queue_size() != 0u64 { return 50u64 }
+    rg_st_fill(&RFLG_ST_PROP as u64, 64u64, 0x2Cu8)
+    rg_st_fill(&RFLG_ST_BUD as u64, 32u64, 0u8)
+    let bp : *u8 = (&RFLG_ST_BUD as u64) as *u8
+    bp[0u64] = 100u8                                   // budget weight 100 (under ceiling)
+    rg_st_build_invreq(cap_ok)
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_OK { return 51u64 }
+    if rg_queue_size() != 1u64 { return 52u64 }
+    return 0u64
+}
+
+fn rg_selftest() -> u64 @export {
+    wh_init(0u64)
+    ws_init()
+    pt_init()
+    cap_env_init()
+    rc_init()
+    // KAT-2 uninited fail-safe (BEFORE rg_init): forbidden->1, invoke->E_NOT_INITED.
+    RFLG_INITED = 0u8
+    rg_st_fill(&RFLG_ST_BENIGN as u64, 32u64, 0x5Bu8)
+    if rg_forbidden_target((&RFLG_ST_BENIGN as u64) as *u8) != 1u8 { return 20u64 }
+    rg_st_build_invreq(1u64)
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_E_NOT_INITED { return 21u64 }
+    rg_init()
+    let cap_bad : u64 = cap_attenuate(1u64, 0x1000u64, 0u64)   // CRYPTO_SIGN, lacks AMEND(0x4000)
+    if cap_bad == 0u64 { return 60u64 }
+    let r1 : u64 = rg_st_k1()
+    if r1 != 0u64 { return r1 }
+    let r3 : u64 = rg_st_k3(cap_bad)
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = rg_st_k4(1u64)
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = rg_st_k5(1u64)
+    if r5 != 0u64 { return r5 }
+    return 99u64
+}

@@ -1,0 +1,41 @@
+/* 608 -- KATABASIS increment 14: descent capability verification (plan 4.2 step 2).
+ * Uses the REAL aether/capability algebra: attenuate WriteMetal- and Descend-only
+ * caps from the root, then verify each authorizes exactly its family and denies
+ * the other; the root authorizes all; an invalid family or cap is denied.
+ * Exit 99 = all hold; 1..13 = the index of the failing assertion. */
+module corpus_608_katabasis_caps
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn katabasis_family_required_right(family: u32) -> u64 from "caps.iii"
+extern @abi(c-msvc-x64) fn katabasis_cap_check(family: u32, cap_id: u64) -> u8 from "caps.iii"
+
+fn main() -> u64 {
+    /* the required-right mapping (descent bits) */
+    if katabasis_family_required_right(1u32) != 0x00100000u64 { return 1u64 }   /* F1 ReadMetal */
+    if katabasis_family_required_right(2u32) != 0x00200000u64 { return 2u64 }   /* F2 WriteMetal */
+    if katabasis_family_required_right(5u32) != 0x00800000u64 { return 3u64 }   /* F5 Descend */
+    if katabasis_family_required_right(9u32) != 0x04000000u64 { return 4u64 }   /* F9 Coproc */
+    if katabasis_family_required_right(0u32) != 0u64          { return 5u64 }   /* invalid */
+
+    /* the real cap algebra: root -> a WriteMetal-only cap */
+    let root : u64 = cap_env_init()
+    let wcap : u64 = cap_attenuate(root, 0x00200000u64, 0u64)
+    if katabasis_cap_check(2u32, wcap) != 1u8 { return 6u64 }   /* F2 authorized */
+    if katabasis_cap_check(5u32, wcap) != 0u8 { return 7u64 }   /* F5 NOT (no descend right) */
+
+    /* a Descend-only cap authorizes F5 but not F2 */
+    let dcap : u64 = cap_attenuate(root, 0x00800000u64, 0u64)
+    if katabasis_cap_check(5u32, dcap) != 1u8 { return 8u64 }
+    if katabasis_cap_check(2u32, dcap) != 0u8 { return 9u64 }
+
+    /* the root cap (all rights) authorizes any valid family */
+    if katabasis_cap_check(2u32, root) != 1u8 { return 10u64 }
+    if katabasis_cap_check(9u32, root) != 1u8 { return 11u64 }
+
+    /* an invalid family is denied even with the root; an invalid cap is denied */
+    if katabasis_cap_check(0u32, root) != 0u8 { return 12u64 }
+    if katabasis_cap_check(2u32, 0u64) != 0u8 { return 13u64 }
+
+    return 99u64
+}

@@ -1,0 +1,255 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\self_reformatter.iii
+ *
+ * III STDLIB - omnia::self_reformatter
+ *
+ * Phase 6 of the v1.0 pivot: the substrate's own R&D arm.
+ *
+ * The Self-Reformatter is a sealed structural scanner over the pattern
+ * set.  Triggered by a sealed-constant call counter (NOT by behavior),
+ * it walks the pattern set and proposes compositional abstractions for
+ * any pair of patterns (A, B) whose hexad kinds are adjacent AND whose
+ * K-values sum to within the K-threshold.  Each proposal is run through
+ * the full governance loop: propose -> sandbox -> prove -> tally ->
+ * promote -> seal.
+ *
+ * Mandate 7 (no observational learning):
+ *   - The scan reads STATIC structural fields only: hexad_kind, k_value,
+ *     dispatch_fp, pattern_id.  No call counts, no frequencies, no
+ *     timing signals enter the proposal decision.
+ *   - The trigger is a call counter, NOT an observation of behavior.
+ *     Counting resolve() calls is bookkeeping, not learning.
+ *   - Promotion criteria are STRUCTURAL EQUIVALENCE proofs in the
+ *     sandbox, not threshold-triggered votes on observed performance.
+ *
+ * NIH: builds on pattern_table + governance + intent_abstract (the IDSG
+ * 19th primitive).  No external dependencies beyond III stdlib.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.
+ */
+
+module omnia_self_reformatter
+
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_id(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_hexad_kind(p: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_k_value(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_dispatch_fn(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_ring(p: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+
+extern @abi(c-msvc-x64) fn hexad_adjacent(a: u8, b: u8) -> u8 from "resolver.iii"
+
+extern @abi(c-msvc-x64) fn intent_abstract(concrete_intent: u64, abstraction_seed: u64) -> u64 from "intent.iii"
+
+extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_sandbox(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_prove_equivalence(proposal_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64) -> u64 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_promote(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_seal(proposal_id: u64) -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_status(proposal_id: u64) -> u8 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_new_pid(proposal_id: u64) -> u32 from "governance.iii"
+
+/* Sealed constants. */
+const SR_OK              : i32 = 0i32
+const SR_E_NOT_DUE       : i32 = -1i32
+const SR_E_SEALED_LOCKED : i32 = -2i32
+
+/* Trigger interval: scan the pattern set every N resolve() calls.
+ * 100_000 chosen as a balance between latency (longer == less frequent
+ * scans) and proposal throughput (shorter == more abstractions found
+ * per unit wall time).  Sealed: changing this requires a separate
+ * governance promotion. */
+const SR_TRIGGER_INTERVAL : u64 = 100000u64
+
+/* K-threshold for compositional proposals.  When (k_a + k_b) > this,
+ * the composition would exceed the budget allowable for a single
+ * resolved binding, so we skip the proposal.  Matches the K-Threshold
+ * mandate (K >= 0.85 typical; sum cap at 1.00). */
+const SR_K_SUM_CAP : u64 = 1000000000u64   /* 1.0 in 1e-9 fixed-point */
+
+/* Pattern-set cap (must match pattern_table.iii PATTERN_TABLE_SLOTS). */
+const SR_PATTERN_CAP : u32 = 4096u32
+
+/* State. */
+var SR_CALL_COUNT      : u64 = 0u64
+var SR_LAST_SCAN_COUNT : u64 = 0u64
+var SR_TOTAL_PROPOSED  : u64 = 0u64
+var SR_TOTAL_PROMOTED  : u64 = 0u64
+var SR_TOTAL_REJECTED  : u64 = 0u64
+
+/* Rationale buffer (fixed-length, deterministic content for the propose
+ * call). */
+var SR_RATIONALE : [u8; 64]
+
+/* Public API. */
+
+/* Called from resolve() (or the runtime scheduler) on every resolution.
+ * Increments the sealed counter.  Returns SR_OK always (no decisions). */
+fn self_reformatter_tick() -> i32 @export {
+    SR_CALL_COUNT = SR_CALL_COUNT + 1u64
+    return SR_OK
+}
+
+fn self_reformatter_call_count() -> u64 @export {
+    return SR_CALL_COUNT
+}
+
+fn self_reformatter_total_proposed() -> u64 @export {
+    return SR_TOTAL_PROPOSED
+}
+
+fn self_reformatter_total_promoted() -> u64 @export {
+    return SR_TOTAL_PROMOTED
+}
+
+fn self_reformatter_total_rejected() -> u64 @export {
+    return SR_TOTAL_REJECTED
+}
+
+/* Is a scan due now?  Pure clock-tick check; no behavioral signal. */
+fn self_reformatter_is_due() -> u8 @export {
+    let delta : u64 = SR_CALL_COUNT - SR_LAST_SCAN_COUNT
+    if delta < SR_TRIGGER_INTERVAL { return 0u8 }
+    return 1u8
+}
+
+/* Construct the sealed rationale buffer for a proposal.  Format:
+ *   "III_SR_COMPOSE_" || pid_a_dec || "_" || pid_b_dec || \0 padding
+ * Deterministic content per (pid_a, pid_b) pair. */
+fn _sr_build_rationale(pid_a: u32, pid_b: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 64u32 {
+        SR_RATIONALE[i] = 0u8
+        i = i + 1u32
+    }
+    /* "III_SR_COMPOSE_" */
+    SR_RATIONALE[0]  = 73u8   /* I */
+    SR_RATIONALE[1]  = 73u8   /* I */
+    SR_RATIONALE[2]  = 73u8   /* I */
+    SR_RATIONALE[3]  = 95u8   /* _ */
+    SR_RATIONALE[4]  = 83u8   /* S */
+    SR_RATIONALE[5]  = 82u8   /* R */
+    SR_RATIONALE[6]  = 95u8   /* _ */
+    SR_RATIONALE[7]  = 67u8   /* C */
+    SR_RATIONALE[8]  = 79u8   /* O */
+    SR_RATIONALE[9]  = 77u8   /* M */
+    SR_RATIONALE[10] = 80u8   /* P */
+    SR_RATIONALE[11] = 79u8   /* O */
+    SR_RATIONALE[12] = 83u8   /* S */
+    SR_RATIONALE[13] = 69u8   /* E */
+    SR_RATIONALE[14] = 95u8   /* _ */
+    /* pid_a as decimal in bytes 15..23 (up to 8 digits). */
+    let mut idx : u32 = 23u32
+    let mut va  : u32 = pid_a
+    while va > 0u32 {
+        if idx >= 15u32 {
+            SR_RATIONALE[idx] = ((va % 10u32) + 48u32) as u8
+            idx = idx - 1u32
+        }
+        va = va / 10u32
+    }
+    /* pid_b as decimal in bytes 24..32. */
+    SR_RATIONALE[23] = 95u8   /* _ */
+    let mut idx_b : u32 = 32u32
+    let mut vb    : u32 = pid_b
+    while vb > 0u32 {
+        if idx_b >= 24u32 {
+            SR_RATIONALE[idx_b] = ((vb % 10u32) + 48u32) as u8
+            idx_b = idx_b - 1u32
+        }
+        vb = vb / 10u32
+    }
+    return 33u32   /* return length of the rationale prefix */
+}
+
+/* Attempt to promote one (a, b) composition.  Returns 1 if a new
+ * abstraction was sealed into the pattern set, 0 otherwise.  Pulled out
+ * of the scan double-loop to keep parser recursion shallow. */
+fn _sr_try_compose(a: u32, b: u32) -> u8 {
+    let pa : u64 = pattern_table_get(a)
+    if pa == 0u64 { return 0u8 }
+    let pb : u64 = pattern_table_get(b)
+    if pb == 0u64 { return 0u8 }
+    let fa : u64 = pattern_dispatch_fn(pa)
+    if fa == 0u64 { return 0u8 }
+    let fb : u64 = pattern_dispatch_fn(pb)
+    if fb == 0u64 { return 0u8 }
+    let ha : u8 = pattern_hexad_kind(pa)
+    let hb : u8 = pattern_hexad_kind(pb)
+    if hexad_adjacent(ha, hb) == 0u8 { return 0u8 }
+    let ka : u64 = pattern_k_value(pa)
+    let kb : u64 = pattern_k_value(pb)
+    let ksum : u64 = ka + kb
+    if ksum > SR_K_SUM_CAP { return 0u8 }
+
+    /* All four structural gates pass.  Build proposal. */
+    let _rlen : u32 = _sr_build_rationale(a, b)
+    let seed : u64 = ((a as u64) << 32u64) | (b as u64)
+    let concrete : u64 = (a as u64) | ((b as u64) << 16u64) | (0x494E5450u64 << 32u64)
+    let abst_intent : u64 = intent_abstract(concrete, seed)
+    if abst_intent == 0u64 { return 0u8 }
+
+    SR_TOTAL_PROPOSED = SR_TOTAL_PROPOSED + 1u64
+    let prop : u64 = governance_propose(0u64, abst_intent, (&SR_RATIONALE) as u64, 33u32)
+    if prop == 0u64 { return 0u8 }
+
+    governance_sandbox(prop)
+    let _proof : u64 = governance_prove_equivalence(prop, a, b, 0u64)
+    let pr_ok : i32 = governance_promote(prop)
+    if pr_ok != 0i32 {
+        SR_TOTAL_REJECTED = SR_TOTAL_REJECTED + 1u64
+        return 0u8
+    }
+    governance_seal(prop)
+    let new_pid : u32 = governance_new_pid(prop)
+    if new_pid == 0u32 { return 0u8 }
+    SR_TOTAL_PROMOTED = SR_TOTAL_PROMOTED + 1u64
+    return 1u8
+}
+
+/* Run one scan pass over the pattern set.  Triggered when
+ * self_reformatter_is_due() returns 1.
+ *
+ * Mandate 7: every gate in _sr_try_compose is STRUCTURAL.  No frequency
+ * counts, no timing, no observation.  An identical pattern set + same
+ * SR_CALL_COUNT produces an identical sequence of proposals.
+ *
+ * Returns number of abstractions PROMOTED in this scan. */
+fn self_reformatter_scan() -> u32 @export {
+    if self_reformatter_is_due() == 0u8 { return 0u32 }
+    if pattern_registry_is_sealed() == 0u8 { return 0u32 }
+
+    SR_LAST_SCAN_COUNT = SR_CALL_COUNT
+
+    let mut promoted : u32 = 0u32
+    let mut a : u32 = 0u32
+    while a < SR_PATTERN_CAP {
+        let mut b : u32 = (a + 1u32) & 0xFFFFFFFFu32
+        while b < SR_PATTERN_CAP {
+            if _sr_try_compose(a, b) == 1u8 {
+                promoted = promoted + 1u32
+            }
+            b = (b + 1u32) & 0xFFFFFFFFu32
+        }
+        a = (a + 1u32) & 0xFFFFFFFFu32
+    }
+
+    return promoted
+}
+
+/* Reset counters (for tests + replay).  Does NOT undo any promoted
+ * abstractions — those are sealed in the pattern registry and require
+ * an explicit governance reversal to undo. */
+fn self_reformatter_reset() -> i32 @export {
+    SR_CALL_COUNT      = 0u64
+    SR_LAST_SCAN_COUNT = 0u64
+    SR_TOTAL_PROPOSED  = 0u64
+    SR_TOTAL_PROMOTED  = 0u64
+    SR_TOTAL_REJECTED  = 0u64
+    return SR_OK
+}
+
+/* Trigger interval accessor (sealed constant readable for tests). */
+fn self_reformatter_trigger_interval() -> u64 @export {
+    return SR_TRIGGER_INTERVAL
+}

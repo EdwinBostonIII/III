@@ -1,0 +1,125 @@
+/* http_client: parse chunked transfer-encoded response.
+ *
+ * Wire input:
+ *   "HTTP/1.1 200 OK\r\n"
+ *   "Transfer-Encoding: chunked\r\n"
+ *   "\r\n"
+ *   "5\r\nHello\r\n"
+ *   "6\r\n World\r\n"
+ *   "0\r\n\r\n"
+ *
+ * Total raw bytes: 73.
+ * Decoded body: "Hello World" (11 bytes).
+ */
+module corpus_58
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_status(id: u64) -> u32 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_base(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_len(id: u64) -> u64 from "http_client.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(73u64)
+    /* "HTTP/1.1 200 OK\r\n" (17 bytes) */
+    buf[0]  = 72u8
+    buf[1]  = 84u8
+    buf[2]  = 84u8
+    buf[3]  = 80u8
+    buf[4]  = 47u8
+    buf[5]  = 49u8
+    buf[6]  = 46u8
+    buf[7]  = 49u8
+    buf[8]  = 32u8
+    buf[9]  = 50u8
+    buf[10] = 48u8
+    buf[11] = 48u8
+    buf[12] = 32u8
+    buf[13] = 79u8
+    buf[14] = 75u8
+    buf[15] = 13u8
+    buf[16] = 10u8
+    /* "Transfer-Encoding: chunked\r\n" (28 bytes) */
+    buf[17] = 84u8   /* T */
+    buf[18] = 114u8  /* r */
+    buf[19] = 97u8   /* a */
+    buf[20] = 110u8  /* n */
+    buf[21] = 115u8  /* s */
+    buf[22] = 102u8  /* f */
+    buf[23] = 101u8  /* e */
+    buf[24] = 114u8  /* r */
+    buf[25] = 45u8   /* - */
+    buf[26] = 69u8   /* E */
+    buf[27] = 110u8  /* n */
+    buf[28] = 99u8   /* c */
+    buf[29] = 111u8  /* o */
+    buf[30] = 100u8  /* d */
+    buf[31] = 105u8  /* i */
+    buf[32] = 110u8  /* n */
+    buf[33] = 103u8  /* g */
+    buf[34] = 58u8   /* : */
+    buf[35] = 32u8   /*   */
+    buf[36] = 99u8   /* c */
+    buf[37] = 104u8  /* h */
+    buf[38] = 117u8  /* u */
+    buf[39] = 110u8  /* n */
+    buf[40] = 107u8  /* k */
+    buf[41] = 101u8  /* e */
+    buf[42] = 100u8  /* d */
+    buf[43] = 13u8
+    buf[44] = 10u8
+    /* "\r\n" (2 bytes) */
+    buf[45] = 13u8
+    buf[46] = 10u8
+    /* "5\r\n" (3 bytes) */
+    buf[47] = 53u8   /* 5 */
+    buf[48] = 13u8
+    buf[49] = 10u8
+    /* "Hello" (5 bytes) */
+    buf[50] = 72u8
+    buf[51] = 101u8
+    buf[52] = 108u8
+    buf[53] = 108u8
+    buf[54] = 111u8
+    /* "\r\n" (2 bytes) */
+    buf[55] = 13u8
+    buf[56] = 10u8
+    /* "6\r\n" (3 bytes) */
+    buf[57] = 54u8   /* 6 */
+    buf[58] = 13u8
+    buf[59] = 10u8
+    /* " World" (6 bytes) */
+    buf[60] = 32u8   /* space */
+    buf[61] = 87u8   /* W */
+    buf[62] = 111u8  /* o */
+    buf[63] = 114u8  /* r */
+    buf[64] = 108u8  /* l */
+    buf[65] = 100u8  /* d */
+    /* "\r\n" (2 bytes) */
+    buf[66] = 13u8
+    buf[67] = 10u8
+    /* "0\r\n" (3 bytes) */
+    buf[68] = 48u8   /* 0 */
+    buf[69] = 13u8
+    buf[70] = 10u8
+    /* "\r\n" (2 bytes - trailer terminator) */
+    buf[71] = 13u8
+    buf[72] = 10u8
+    let resp : u64 = http_parse_response(a, buf as u64, 73u64)
+    if resp == 0u64 { return 1u64 }
+    if http_response_status(resp) != 200u32 { return 2u64 }
+    if http_response_body_len(resp) != 11u64 { return 3u64 }
+    let body : *u8 = http_response_body_base(resp) as *u8
+    if body[0] != 72u8 { return 4u64 }   /* H */
+    if body[4] != 111u8 { return 5u64 }  /* o */
+    if body[5] != 32u8 { return 6u64 }   /* space */
+    if body[6] != 87u8 { return 7u64 }   /* W */
+    if body[10] != 100u8 { return 8u64 } /* d */
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

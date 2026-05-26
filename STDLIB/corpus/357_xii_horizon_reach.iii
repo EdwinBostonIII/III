@@ -1,0 +1,17 @@
+/* corpus/357_xii_horizon_reach.iii — reach6 bitmap productive count */
+
+module corpus_357_xii_horizon_reach
+
+extern @abi(c-msvc-x64) fn xii_horizon_reach_productive_count() -> u32 from "xii_horizon_reach.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_reach_bit(id: u32) -> u8 from "xii_horizon_reach.iii"
+
+fn main() -> u64 {
+    let count : u32 = xii_horizon_reach_productive_count()
+    /* Expected: 126 productive (H001..H126 = bits 0..125). */
+    if count != 126u32 { return 1u64 }
+    if xii_horizon_reach_bit(0u32) != 1u8 { return 2u64 }
+    if xii_horizon_reach_bit(125u32) != 1u8 { return 3u64 }
+    if xii_horizon_reach_bit(126u32) != 0u8 { return 4u64 }
+    if xii_horizon_reach_bit(143u32) != 0u8 { return 5u64 }
+    return 0u64
+}

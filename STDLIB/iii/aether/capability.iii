@@ -1,0 +1,243 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\capability.iii
+ *
+ * III STDLIB - aether::capability
+ *
+ * Runtime capability tree.  Phase C ships the FUNCTIONALITY of the
+ * capability discipline (rights mask, attenuation, revocation,
+ * verification at every IO call) without the @cap modifier
+ * compile-time check; that static check arrives in Phase E once
+ * iiis grows the modifier.  Functionally identical: a cap is a u64
+ * id, attenuation produces a child cap with a subset right-mask,
+ * revocation marks a cap and all its descendants dead, every IO
+ * surface checks cap_verify before acting.
+ *
+ * Cap rights bitmask (the bit assignments are public spec):
+ *   bit  0  alloc
+ *   bit  1  fs_read
+ *   bit  2  fs_write
+ *   bit  3  fs_create
+ *   bit  4  fs_delete
+ *   bit  5  net_dial
+ *   bit  6  net_listen
+ *   bit  7  proc_exec
+ *   bit  8  time_read
+ *   bit  9  persist_read
+ *   bit 10  persist_write
+ *   bit 11  attest
+ *   bit 12  crypto_sign
+ *   bit 13  chronos_advance
+ *   bit 14  amend
+ *   bit 63  ENV (root only - no caller may mint this bit set)
+ *
+ * Cap id 0 is invalid.  Cap id 1 (CAP_ENV_ROOT) is the singleton
+ * env capability granted at program start.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.99.
+ *
+ * Discipline: ≤4 fn params; runtime cap_verify on every IO surface;
+ * descendants tracked via parent_id chain; revocation walks the chain.
+ */
+
+module aether_capability
+
+const CAP_INVALID  : u64 = 0u64
+const CAP_ENV_ROOT : u64 = 1u64
+
+const CAP_OK         : i32 =  0i32
+const CAP_E_BADID    : i32 = -1i32
+const CAP_E_DENIED   : i32 = -2i32
+const CAP_E_EXPIRED  : i32 = -3i32
+const CAP_E_FULL     : i32 = -4i32
+
+const CAP_RIGHT_ALLOC          : u64 = 0x0001u64
+const CAP_RIGHT_FS_READ        : u64 = 0x0002u64
+const CAP_RIGHT_FS_WRITE       : u64 = 0x0004u64
+const CAP_RIGHT_FS_CREATE      : u64 = 0x0008u64
+const CAP_RIGHT_FS_DELETE      : u64 = 0x0010u64
+const CAP_RIGHT_NET_DIAL       : u64 = 0x0020u64
+const CAP_RIGHT_NET_LISTEN     : u64 = 0x0040u64
+const CAP_RIGHT_PROC_EXEC      : u64 = 0x0080u64
+const CAP_RIGHT_TIME_READ      : u64 = 0x0100u64
+const CAP_RIGHT_PERSIST_READ   : u64 = 0x0200u64
+const CAP_RIGHT_PERSIST_WRITE  : u64 = 0x0400u64
+const CAP_RIGHT_ATTEST         : u64 = 0x0800u64
+const CAP_RIGHT_CRYPTO_SIGN    : u64 = 0x1000u64
+const CAP_RIGHT_CHRONOS_ADV    : u64 = 0x2000u64
+const CAP_RIGHT_AMEND          : u64 = 0x4000u64
+/* Resolution capability rights (FROZEN SPEC §0.9, ADR-RES-004).
+ * Bits 0x8000..0x10000 reserved; new resolution rights start at 0x10000. */
+const CAP_RIGHT_RESOLVE_INVOKE     : u64 = 0x00010000u64
+const CAP_RIGHT_PATTERN_REGISTER   : u64 = 0x00020000u64
+const CAP_RIGHT_TRANSFORM_RUN      : u64 = 0x00040000u64
+const CAP_RIGHT_ENV            : u64 = 0x8000000000000000u64
+
+/* Slot table - up to 256 simultaneous caps in this address space. */
+const CAP_MAX_INSTANCES : u32 = 256u32
+
+var CAP_RIGHTS    : [u64; 256]
+var CAP_PARENT    : [u64; 256]
+var CAP_EXPIRES   : [u64; 256]   /* 0 means "no expiry" */
+var CAP_REVOKED   : [u8;  256]
+var CAP_LIVE      : [u8;  256]
+
+/* --- Internal: lifecycle --- */
+
+fn cap_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < CAP_MAX_INSTANCES {
+        if CAP_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn cap_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (CAP_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if CAP_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* --- Bootstrap: env cap minted once at program start --- */
+
+var CAP_ENV_INITED : u8 = 0u8
+
+fn cap_env_init() -> u64 @export {
+    if CAP_ENV_INITED == 1u8 { return CAP_ENV_ROOT }
+    /* Slot 0 = env_cap.  Granted ALL rights including ENV bit. */
+    CAP_RIGHTS[0]  = 0xFFFFFFFFFFFFFFFFu64
+    CAP_PARENT[0]  = 0u64           /* root has no parent          */
+    CAP_EXPIRES[0] = 0u64           /* no expiry                    */
+    CAP_REVOKED[0] = 0u8
+    CAP_LIVE[0]    = 1u8
+    CAP_ENV_INITED = 1u8
+    return CAP_ENV_ROOT
+}
+
+/* --- Attenuation: child cap with rights = parent.rights AND mask --- */
+
+fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 @export {
+    let ps : u32 = cap_slot_of(parent_id)
+    if ps == 0xFFFFFFFFu32 { return CAP_INVALID }
+    if CAP_REVOKED[ps] == 1u8 { return CAP_INVALID }
+    /* Strip ENV bit; only the env_init may set it. */
+    let no_env_mask : u64 = 0x7FFFFFFFFFFFFFFFu64
+    let parent_rights : u64 = CAP_RIGHTS[ps] & no_env_mask
+    let child_rights : u64 = parent_rights & rights_mask
+    /* Expiry rule: child can never outlive parent. */
+    let parent_exp : u64 = CAP_EXPIRES[ps]
+    let mut child_exp : u64 = expires_at
+    if parent_exp != 0u64 {
+        if child_exp == 0u64 { child_exp = parent_exp }
+        if child_exp > parent_exp { child_exp = parent_exp }
+    }
+    let s : u32 = cap_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return CAP_INVALID }
+    CAP_RIGHTS[s]  = child_rights
+    CAP_PARENT[s]  = parent_id
+    CAP_EXPIRES[s] = child_exp
+    CAP_REVOKED[s] = 0u8
+    CAP_LIVE[s]    = 1u8
+    return (s as u64) + 1u64
+}
+
+/* --- Verification --- */
+
+fn cap_verify_rights(id: u64, required: u64) -> u8 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    if CAP_REVOKED[s] == 1u8 { return 0u8 }
+    /* Walk up the parent chain and check that no ancestor is revoked. */
+    let mut cur : u64 = id
+    let mut steps : u32 = 0u32
+    while cur != 0u64 {
+        if steps > CAP_MAX_INSTANCES { return 0u8 }   /* cycle guard */
+        let cs : u32 = cap_slot_of(cur)
+        if cs == 0xFFFFFFFFu32 { return 0u8 }
+        if CAP_REVOKED[cs] == 1u8 { return 0u8 }
+        cur = CAP_PARENT[cs]
+        steps = steps + 1u32
+    }
+    /* Rights check on the leaf (intersection has already been computed). */
+    let actual : u64 = CAP_RIGHTS[s]
+    if (actual & required) != required { return 0u8 }
+    return 1u8
+}
+
+fn cap_verify_at(id: u64, required: u64, now_unix: u64) -> u8 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    let exp : u64 = CAP_EXPIRES[s]
+    if exp != 0u64 {
+        if now_unix >= exp { return 0u8 }
+    }
+    return cap_verify_rights(id, required)
+}
+
+/* --- Revocation --- */
+
+fn cap_revoke(authority_id: u64, target_id: u64) -> i32 @export {
+    let auth : u32 = cap_slot_of(authority_id)
+    if auth == 0xFFFFFFFFu32 { return CAP_E_BADID }
+    /* Authority must dominate the target: target's parent chain must include authority. */
+    let mut cur : u64 = target_id
+    let mut steps : u32 = 0u32
+    let mut dominated : u8 = 0u8
+    while cur != 0u64 {
+        if steps > CAP_MAX_INSTANCES { return CAP_E_BADID }
+        if cur == authority_id { dominated = 1u8; cur = 0u64 }
+        if cur != 0u64 {
+            let cs : u32 = cap_slot_of(cur)
+            if cs == 0xFFFFFFFFu32 { return CAP_E_BADID }
+            cur = CAP_PARENT[cs]
+            steps = steps + 1u32
+        }
+    }
+    if dominated == 0u8 { return CAP_E_DENIED }
+    let ts : u32 = cap_slot_of(target_id)
+    if ts == 0xFFFFFFFFu32 { return CAP_E_BADID }
+    CAP_REVOKED[ts] = 1u8
+    return CAP_OK
+}
+
+/* --- Queries --- */
+
+fn cap_rights(id: u64) -> u64 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return CAP_RIGHTS[s]
+}
+
+fn cap_parent(id: u64) -> u64 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return CAP_PARENT[s]
+}
+
+fn cap_is_revoked(id: u64) -> u8 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 1u8 }
+    return CAP_REVOKED[s]
+}
+
+fn cap_expires_at(id: u64) -> u64 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return CAP_EXPIRES[s]
+}
+
+/* --- Cleanup --- */
+
+fn cap_drop(id: u64) -> i32 @export {
+    let s : u32 = cap_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return CAP_E_BADID }
+    if id == CAP_ENV_ROOT { return CAP_E_DENIED }   /* env cap immortal during process */
+    CAP_LIVE[s]    = 0u8
+    CAP_RIGHTS[s]  = 0u64
+    CAP_PARENT[s]  = 0u64
+    CAP_EXPIRES[s] = 0u64
+    CAP_REVOKED[s] = 0u8
+    return CAP_OK
+}

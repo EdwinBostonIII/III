@@ -1,0 +1,164 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\hmac.iii
+ *
+ * III STDLIB - numera::hmac
+ *
+ * RFC 2104 HMAC keyed-hash message authentication code.
+ * Variants:
+ *   - HMAC-SHA256: 64-byte block, 32-byte tag
+ *   - HMAC-SHA512: 128-byte block, 64-byte tag
+ *
+ * Public API (singleton state per HMAC variant):
+ *   hmac_sha256(key:*u8, key_len:u64, msg:*u8, msg_len:u64) -> i32
+ *   hmac_sha256_tag(out_32:*u8) -> i32
+ *
+ *   hmac_sha512(key:*u8, key_len:u64, msg:*u8, msg_len:u64) -> i32
+ *   hmac_sha512_tag(out_64:*u8) -> i32
+ *
+ * Algorithm (RFC 2104):
+ *   K' = if len(key) > B: hash(key)             [block size B]
+ *        elif len(key) < B: key padded with 0
+ *        else: key
+ *   ipad = K' XOR (0x36 * B)
+ *   opad = K' XOR (0x5C * B)
+ *   tag = hash(opad || hash(ipad || msg))
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_hmac
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_final(out_64: *u8) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+
+const HMAC_OK : i32 = 0i32
+const HMAC_E_INIT : i32 = -1i32
+
+const HMAC_SHA256_BLOCK : u32 = 64u32
+const HMAC_SHA256_TAG   : u32 = 32u32
+const HMAC_SHA512_BLOCK : u32 = 128u32
+const HMAC_SHA512_TAG   : u32 = 64u32
+
+/* Module-scope arena and buffers (allocated once on first call). */
+var HMAC_ARENA   : u64 = 0u64
+var HMAC_K_BUF   : u64 = 0u64    /* prepared key buffer (max 128 bytes) */
+var HMAC_PAD_BUF : u64 = 0u64    /* ipad or opad buffer (max 128 bytes) */
+var HMAC_INNER   : u64 = 0u64    /* inner hash output (max 64 bytes) */
+
+fn hmac_alloc_buffers() -> i32 {
+    if HMAC_ARENA != 0u64 { return HMAC_OK }
+    HMAC_ARENA = arena_new(4096u64)
+    if HMAC_ARENA == 0u64 { return HMAC_E_INIT }
+    HMAC_K_BUF   = arena_alloc1(HMAC_ARENA, 128u64)
+    HMAC_PAD_BUF = arena_alloc1(HMAC_ARENA, 128u64)
+    HMAC_INNER   = arena_alloc1(HMAC_ARENA, 64u64)
+    return HMAC_OK
+}
+
+fn hmac_zero(buf: u64, n: u64) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Prepare key K' into HMAC_K_BUF: pad to block_size with zeros, or
+ * (if too long) hash first then pad. */
+fn hmac_prepare_key_sha256(key: *u8, key_len: u64) -> i32 {
+    hmac_zero(HMAC_K_BUF, 64u64)
+    let kp : *u8 = HMAC_K_BUF as *u8
+    if key_len > 64u64 {
+        sha256_init()
+        sha256_update(key, key_len)
+        sha256_final(kp)
+        return 0i32
+    }
+    let mut i : u64 = 0u64
+    while i < key_len {
+        kp[i] = key[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn hmac_prepare_key_sha512(key: *u8, key_len: u64) -> i32 {
+    hmac_zero(HMAC_K_BUF, 128u64)
+    let kp : *u8 = HMAC_K_BUF as *u8
+    if key_len > 128u64 {
+        sha512_init()
+        sha512_update(key, key_len)
+        sha512_final(kp)
+        return 0i32
+    }
+    let mut i : u64 = 0u64
+    while i < key_len {
+        kp[i] = key[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Build pad (ipad or opad) by XORing K' with the constant byte (0x36 or 0x5C). */
+fn hmac_build_pad(constant: u32, block_size: u32) -> i32 {
+    let kp : *u8 = HMAC_K_BUF as *u8
+    let pp : *u8 = HMAC_PAD_BUF as *u8
+    let mut i : u32 = 0u32
+    while i < block_size {
+        let kb : u32 = kp[i] as u32
+        pp[i] = (kb ^ constant) as u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* HMAC-SHA256: compute tag into out_32. */
+fn hmac_sha256(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 @crystal @constant_time @export {
+    if hmac_alloc_buffers() != HMAC_OK { return HMAC_E_INIT }
+    hmac_prepare_key_sha256(key, key_len)
+    /* Inner: hash(ipad || msg) -> HMAC_INNER */
+    hmac_build_pad(0x36u32, 64u32)
+    sha256_init()
+    sha256_update(HMAC_PAD_BUF as *u8, 64u64)
+    sha256_update(msg, msg_len)
+    sha256_final(HMAC_INNER as *u8)
+    /* Outer: hash(opad || inner) -> tag (saved internally; caller calls
+     * hmac_sha256_tag to retrieve).  We store the SHA-256 final into
+     * HMAC_INNER (reusing) and the caller copies. */
+    hmac_build_pad(0x5Cu32, 64u32)
+    sha256_init()
+    sha256_update(HMAC_PAD_BUF as *u8, 64u64)
+    sha256_update(HMAC_INNER as *u8, 32u64)
+    /* Caller will invoke hmac_sha256_tag to get the final 32 bytes. */
+    return HMAC_OK
+}
+
+fn hmac_sha256_tag(out_32: *u8) -> i32 @export {
+    return sha256_final(out_32)
+}
+
+fn hmac_sha512(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 @crystal @constant_time @export {
+    if hmac_alloc_buffers() != HMAC_OK { return HMAC_E_INIT }
+    hmac_prepare_key_sha512(key, key_len)
+    hmac_build_pad(0x36u32, 128u32)
+    sha512_init()
+    sha512_update(HMAC_PAD_BUF as *u8, 128u64)
+    sha512_update(msg, msg_len)
+    sha512_final(HMAC_INNER as *u8)
+    hmac_build_pad(0x5Cu32, 128u32)
+    sha512_init()
+    sha512_update(HMAC_PAD_BUF as *u8, 128u64)
+    sha512_update(HMAC_INNER as *u8, 64u64)
+    return HMAC_OK
+}
+
+fn hmac_sha512_tag(out_64: *u8) -> i32 @export {
+    return sha512_final(out_64)
+}

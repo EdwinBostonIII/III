@@ -1,0 +1,15 @@
+/* 817 -- mig4 Step 8a: lower the DECISION domain (selection) through XII.  Drives xld_selftest: the
+ * decision-algebra LAWS hold by canonicalisation -- equal-branch collapse FIF(p,x,x)->x (1); the
+ * prove-the-negative TEETH that a genuine decision FIF(p,x,y) (x!=y) is preserved, not collapsed
+ * (2-3); suffix branch-lift R008 (4) + prefix branch-lift R007 (5); distinct decisions stay distinct
+ * (6); determinism (7); the rules realising it are ADMITTED by Step 6 (8).  Exit 99 = all hold --
+ * SELECTION is now XII canonicalisation.  Gated by run_corpus.sh. */
+module corpus_817
+
+extern @abi(c-msvc-x64) fn xld_selftest() -> u64 from "xii_lower_decide.iii"
+
+fn main() -> u64 {
+    let r : u64 = xld_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

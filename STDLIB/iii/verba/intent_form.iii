@@ -1,0 +1,301 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\intent_form.iii
+ *
+ * III STDLIB - verba::intent_form
+ *
+ * Runtime text-to-intent parser. Reads a string like:
+ *   "goal_kind=1, expected_hexad=1, arena=0xABCD, required=10, depth=2"
+ * and returns an intent_t* configured per the parsed fields.
+ *
+ * This is the hardcoded dynamicism approach to surface syntax: instead of
+ * extending iiis-0's parser, we provide a runtime parser that callers
+ * invoke explicitly. Result: no compiler modifications, no identifier
+ * conflicts, full dynamism via deterministic hand-rolled parsing.
+ *
+ * Recognised keys (all values are decimal u64, or hex with 0x prefix):
+ *   goal_kind        -- u8
+ *   expected_hexad   -- u8
+ *   arena            -- u64
+ *   required         -- u32 (required_guarantees bitmap)
+ *   cap              -- u64
+ *   depth            -- u16 (recursion_depth)
+ *   arg0..arg15      -- u64 (partial_args slots 0..15)
+ *
+ * Hexad: kind_form. Ring: R0. K: 0.95.
+ */
+
+module verba_intent_form
+
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_partial_arg(p: u64, slot: u32, v: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_required_guarantees(p: u64, m: u32) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_expected_hexad(p: u64, h: u8) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_arena(p: u64, a: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_cap(p: u64, c: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_recursion_depth(p: u64, d: u16) -> i32 from "intent.iii"
+
+const IF_MAX_KEY_LEN : u32 = 32u32
+
+var IF_KEY_BUF : [u8; 32]
+var IF_VAL_BUF : [u8; 64]
+
+fn if_is_alpha_or_underscore(c: u8) -> u8 {
+    if c == 95u8 { return 1u8 }   /* '_' */
+    if c >= 97u8 {
+        if c <= 122u8 { return 1u8 }   /* a-z */
+    }
+    if c >= 65u8 {
+        if c <= 90u8 { return 1u8 }    /* A-Z */
+    }
+    return 0u8
+}
+
+fn if_is_alnum_or_underscore(c: u8) -> u8 {
+    if if_is_alpha_or_underscore(c) == 1u8 { return 1u8 }
+    if c >= 48u8 {
+        if c <= 57u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn if_is_ws(c: u8) -> u8 {
+    if c == 32u8 { return 1u8 }
+    if c == 9u8 { return 1u8 }
+    if c == 10u8 { return 1u8 }
+    if c == 13u8 { return 1u8 }
+    return 0u8
+}
+
+fn if_skip_ws(src: u64, off: u64, len: u64) -> u64 {
+    let mut o : u64 = off
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        if if_is_ws(bp[0u64]) == 0u8 { return o }
+        o = o + 1u64
+    }
+    return o
+}
+
+/* Scan src for ',' starting at off. Returns offset just past the comma,
+ * or `len` if no comma found. */
+fn if_advance_past_comma(src: u64, off: u64, len: u64) -> u64 {
+    let mut o : u64 = off
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        if bp[0u64] == 44u8 {
+            return o + 1u64
+        }
+        o = o + 1u64
+    }
+    return len
+}
+
+/* Read identifier into IF_KEY_BUF; returns new offset and key length stored in IF_KEY_LEN. */
+var IF_KEY_LEN : u32 = 0u32
+
+fn if_read_key(src: u64, off: u64, len: u64) -> u64 {
+    IF_KEY_LEN = 0u32
+    let mut o : u64 = off
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        let c : u8 = bp[0u64]
+        if if_is_alnum_or_underscore(c) == 0u8 { return o }
+        if IF_KEY_LEN >= IF_MAX_KEY_LEN { return o }
+        IF_KEY_BUF[IF_KEY_LEN] = c
+        IF_KEY_LEN = IF_KEY_LEN + 1u32
+        o = o + 1u64
+    }
+    return o
+}
+
+/* Parse decimal or 0x-prefixed hex u64 starting at off. Returns new offset.
+ * Value stored in IF_PARSED_VAL. */
+var IF_PARSED_VAL : u64 = 0u64
+
+fn if_hex_digit(c: u8) -> u32 {
+    if c >= 48u8 {
+        if c <= 57u8 { return (c - 48u8) as u32 }
+    }
+    if c >= 97u8 {
+        if c <= 102u8 { return (c - 87u8) as u32 }
+    }
+    if c >= 65u8 {
+        if c <= 70u8 { return (c - 55u8) as u32 }
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn if_parse_value(src: u64, off: u64, len: u64) -> u64 {
+    IF_PARSED_VAL = 0u64
+    let mut o : u64 = off
+    if o >= len { return o }
+    /* Check for 0x prefix */
+    let bp0 : *u8 = (src + o) as *u8
+    if bp0[0u64] == 48u8 {
+        if (o + 1u64) < len {
+            let bp1 : *u8 = (src + o + 1u64) as *u8
+            if bp1[0u64] == 120u8 {
+                /* Hex */
+                o = o + 2u64
+                while o < len {
+                    let bp : *u8 = (src + o) as *u8
+                    let d : u32 = if_hex_digit(bp[0u64])
+                    if d == 0xFFFFFFFFu32 { return o }
+                    IF_PARSED_VAL = (IF_PARSED_VAL << 4u64) | (d as u64 & 0xFu64)
+                    o = o + 1u64
+                }
+                return o
+            }
+        }
+    }
+    /* Decimal */
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        let c : u8 = bp[0u64]
+        if c < 48u8 { return o }
+        if c > 57u8 { return o }
+        IF_PARSED_VAL = IF_PARSED_VAL * 10u64 + ((c - 48u8) as u64 & 0xFFu64)
+        o = o + 1u64
+    }
+    return o
+}
+
+/* String comparison helper: compare IF_KEY_BUF[0..IF_KEY_LEN] against a literal. */
+fn if_key_eq_2(a: u8, b: u8) -> u8 {
+    if IF_KEY_LEN != 2u32 { return 0u8 }
+    if IF_KEY_BUF[0u32] != a { return 0u8 }
+    if IF_KEY_BUF[1u32] != b { return 0u8 }
+    return 1u8
+}
+
+fn if_key_eq_3(a: u8, b: u8, c: u8) -> u8 {
+    if IF_KEY_LEN != 3u32 { return 0u8 }
+    if IF_KEY_BUF[0u32] != a { return 0u8 }
+    if IF_KEY_BUF[1u32] != b { return 0u8 }
+    if IF_KEY_BUF[2u32] != c { return 0u8 }
+    return 1u8
+}
+
+fn if_key_eq_str(s: u64, slen: u32) -> u8 {
+    if IF_KEY_LEN != slen { return 0u8 }
+    let mut i : u32 = 0u32
+    while i < slen {
+        let bp : *u8 = (s + ((i as u64) & 0xFFu64)) as *u8
+        if IF_KEY_BUF[i] != bp[0u64] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+var IF_STR_GOAL_KIND : [u8; 9] = [103u8, 111u8, 97u8, 108u8, 95u8, 107u8, 105u8, 110u8, 100u8]
+var IF_STR_EXPECTED_HEXAD : [u8; 14] = [101u8, 120u8, 112u8, 101u8, 99u8, 116u8, 101u8, 100u8, 95u8, 104u8, 101u8, 120u8, 97u8, 100u8]
+var IF_STR_REQUIRED : [u8; 8] = [114u8, 101u8, 113u8, 117u8, 105u8, 114u8, 101u8, 100u8]
+var IF_STR_DEPTH : [u8; 5] = [100u8, 101u8, 112u8, 116u8, 104u8]
+var IF_STR_ARENA : [u8; 5] = [97u8, 114u8, 101u8, 110u8, 97u8]
+
+fn if_apply_field(intent: u64) -> i32 {
+    /* "goal_kind" (9) -- but intent_new already ate goal_kind, so we update via ... wait.
+     * intent_new() takes goal_kind at construction. Subsequent goal_kind= sets are no-ops. */
+    if if_key_eq_str((&IF_STR_GOAL_KIND) as u64, 9u32) == 1u8 {
+        return 0i32
+    }
+    if if_key_eq_str((&IF_STR_EXPECTED_HEXAD) as u64, 14u32) == 1u8 {
+        intent_set_expected_hexad(intent, (IF_PARSED_VAL & 0xFFu64) as u8)
+        return 0i32
+    }
+    if if_key_eq_str((&IF_STR_REQUIRED) as u64, 8u32) == 1u8 {
+        intent_set_required_guarantees(intent, (IF_PARSED_VAL & 0xFFFFFFFFu64) as u32)
+        return 0i32
+    }
+    if if_key_eq_str((&IF_STR_ARENA) as u64, 5u32) == 1u8 {
+        intent_set_arena(intent, IF_PARSED_VAL)
+        return 0i32
+    }
+    if if_key_eq_str((&IF_STR_DEPTH) as u64, 5u32) == 1u8 {
+        intent_set_recursion_depth(intent, (IF_PARSED_VAL & 0xFFFFu64) as u16)
+        return 0i32
+    }
+    if if_key_eq_3(99u8, 97u8, 112u8) == 1u8 {   /* "cap" */
+        intent_set_cap(intent, IF_PARSED_VAL)
+        return 0i32
+    }
+    /* "argN" pattern: 4-byte key starting "arg" with digit suffix */
+    if IF_KEY_LEN >= 4u32 {
+        if IF_KEY_BUF[0u32] == 97u8 {
+            if IF_KEY_BUF[1u32] == 114u8 {
+                if IF_KEY_BUF[2u32] == 103u8 {
+                    /* digit(s) at index 3+ */
+                    let mut slot : u32 = 0u32
+                    let mut k : u32 = 3u32
+                    while k < IF_KEY_LEN {
+                        let d : u8 = IF_KEY_BUF[k]
+                        if d < 48u8 { return 0i32 }
+                        if d > 57u8 { return 0i32 }
+                        slot = slot * 10u32 + ((d - 48u8) as u32 & 0xFFu32)
+                        k = k + 1u32
+                    }
+                    if slot < 16u32 {
+                        intent_set_partial_arg(intent, slot, IF_PARSED_VAL)
+                    }
+                    return 0i32
+                }
+            }
+        }
+    }
+    return 0i32
+}
+
+/* Parse goal_kind from src; returns the value, advances offset. */
+fn if_extract_goal_kind(src: u64, len: u64) -> u8 {
+    let mut o : u64 = if_skip_ws(src, 0u64, len)
+    while o < len {
+        o = if_read_key(src, o, len)
+        o = if_skip_ws(src, o, len)
+        if o >= len { return 1u8 }
+        let bp : *u8 = (src + o) as *u8
+        if bp[0u64] == 61u8 {
+            o = o + 1u64
+            o = if_skip_ws(src, o, len)
+            o = if_parse_value(src, o, len)
+            if if_key_eq_str((&IF_STR_GOAL_KIND) as u64, 9u32) == 1u8 {
+                return (IF_PARSED_VAL & 0xFFu64) as u8
+            }
+        }
+        /* Advance past next comma (no break -- uses helper fn). */
+        o = if_advance_past_comma(src, o, len)
+        o = if_skip_ws(src, o, len)
+    }
+    return 1u8
+}
+
+/* Public API: parse text spec into a fresh intent_t* with all fields set. */
+fn intent_form_parse(src: u64, len: u64) -> u64 @export {
+    if src == 0u64 { return 0u64 }
+    if len == 0u64 { return 0u64 }
+    /* First pass: extract goal_kind to construct the intent */
+    let gk : u8 = if_extract_goal_kind(src, len)
+    let intent : u64 = intent_new(gk)
+    if intent == 0u64 { return 0u64 }
+    /* Second pass: parse all key=value pairs and apply non-goal_kind fields */
+    let mut o : u64 = if_skip_ws(src, 0u64, len)
+    while o < len {
+        o = if_read_key(src, o, len)
+        if IF_KEY_LEN == 0u32 {
+            o = o + 1u64
+        }
+        if IF_KEY_LEN > 0u32 {
+            o = if_skip_ws(src, o, len)
+            if o >= len { return intent }
+            let bp : *u8 = (src + o) as *u8
+            if bp[0u64] == 61u8 {
+                o = o + 1u64
+                o = if_skip_ws(src, o, len)
+                o = if_parse_value(src, o, len)
+                if_apply_field(intent)
+            }
+        }
+        /* Advance past next comma (no break -- uses helper fn). */
+        o = if_advance_past_comma(src, o, len)
+        o = if_skip_ws(src, o, len)
+    }
+    return intent
+}

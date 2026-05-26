@@ -1,0 +1,13 @@
+/* Sanity: just arena_new + arena_drop.  If THIS segfaults, the issue
+ * is in arena/region BSS / startup, not lru. */
+module corpus_133
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 1u64 }
+    arena_drop(a)
+    return 99u64
+}

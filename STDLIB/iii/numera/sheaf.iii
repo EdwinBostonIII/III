@@ -1,0 +1,659 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sheaf.iii
+ *
+ * III STDLIB - numera::sheaf  (Layer 3, Module 10)
+ *
+ * Presheaves and sheaves over a base of open sets with inclusion
+ * morphisms.  Base objects are open sets (32-byte ids); morphisms are
+ * inclusions U subset V; the sheaf condition is checked explicitly on
+ * pairwise overlaps Ui cap Uj.
+ *
+ * Open set slot:    32-byte id + live flag + parent slot (SENT if root).
+ * Section slot:     (presheaf id, open slot) -> 32-byte section id.
+ * Restriction slot: (parent open, child open, 32-byte transform id).
+ * Intersection slot:(open a, open b) -> intersection open slot (canonical
+ *                   unordered pair, smaller slot first).
+ *
+ * Hashing: keccak256_oneshot over a module-scope concat buffer (the
+ * substrate-wide reconciliation of the gospel streaming API; the
+ * streaming form clobbers param registers across init() -- see
+ * identifier.iii / content_addr.iii headers).
+ *
+ * The sheaf condition (gluing): a family of local sections {s_i} over a
+ * cover {U_i} of a parent open glues to a unique global section iff for
+ * every pair i<j the restrictions of s_i and s_j to the intersection
+ * U_i cap U_j agree.  A pair whose intersection is not registered is a
+ * refusal (ok=0), not vacuous agreement (the correctness fix over the
+ * gospel candidate, which silently skipped such pairs).  The glued global
+ * section is Keccak256 of the canonically sorted concatenation of the
+ * member section ids, hence independent of cover order.
+ *
+ * NON-REENTRANT: the scratch buffers (SH_IDS_BUF, SH_SWAP_BUF, SH_R_I,
+ * SH_R_J, SH_HASH_BUF) are module-scope.  Single-threaded verifier only;
+ * matches merkle.iii / content_addr.iii / identifier.iii.
+ *
+ * Public API:
+ *   sh_init() -> i32
+ *   sh_add_open(open_id, parent_slot) -> u32 ; sh_find_open(open_id) -> u32
+ *   sh_add_section(presheaf_id, open_slot, section_id) -> u32
+ *   sh_find_section(presheaf_id, open_slot) -> u32
+ *   sh_section_id(slot, out_id) -> i32
+ *   sh_add_restriction(parent, child, transform_id) -> u32
+ *   sh_find_restriction(parent, child) -> u32
+ *   sh_add_intersection(a, b, inter) -> u32 ; sh_find_intersection(a,b) -> u32
+ *   sh_restrict(section, parent, child, out_id) -> i32
+ *   sh_check_glue(cover, parent_open, out_global) -> u8
+ *     cover -> SHEAF_CoverReq { presheaf_id:[u8;32], n:u64, slots:[u32;n] }
+ *     layout: bytes 0..31 presheaf_id, 32..39 n (LE u64), 40.. slots (LE u32 each)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W2 (<=4 params), W8, W9, W10, W12, W13, W14, W15.
+ */
+
+module numera_sheaf
+
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const SHEAF_OK            : i32 =  0i32
+const SHEAF_E_FULL        : i32 = -1i32
+const SHEAF_E_BAD_SLOT    : i32 = -2i32
+const SHEAF_E_NO_RESTRICT : i32 = -3i32
+const SHEAF_E_NO_INTERSECT: i32 = -4i32
+const SHEAF_E_GLUE_FAIL   : i32 = -5i32
+
+const SHEAF_MAX_OPEN     : u32 = 2048u32
+const SHEAF_MAX_SECTION  : u32 = 8192u32
+const SHEAF_MAX_RESTRICT : u32 = 8192u32
+const SHEAF_MAX_INTER    : u32 = 4096u32
+const SHEAF_MAX_COVER    : u32 = 1024u32
+const SHEAF_IDBYTES      : u64 = 32u64
+const SHEAF_SENT         : u32 = 0xFFFFFFFFu32
+
+var SH_OPEN_LIVE   : [u8;  2048]
+var SH_OPEN_ID     : [u8;  65536]
+var SH_OPEN_PARENT : [u32; 2048]
+
+var SH_SEC_LIVE    : [u8;  8192]
+var SH_SEC_PRESHF  : [u8;  262144]
+var SH_SEC_OPEN    : [u32; 8192]
+var SH_SEC_ID      : [u8;  262144]
+
+var SH_RES_LIVE    : [u8;  8192]
+var SH_RES_PARENT  : [u32; 8192]
+var SH_RES_CHILD   : [u32; 8192]
+var SH_RES_XFORM   : [u8;  262144]
+
+var SH_INT_LIVE    : [u8;  4096]
+var SH_INT_A       : [u32; 4096]
+var SH_INT_B       : [u32; 4096]
+var SH_INT_INTER   : [u32; 4096]
+
+/* Hoisted scratch (Trap 7: no local var arrays) */
+var SH_IDS_BUF     : [u8;  32768]   /* SHEAF_MAX_COVER * 32 sorted-concat */
+var SH_SWAP_BUF    : [u8;  32]      /* insertion-sort swap temp */
+var SH_R_I         : [u8;  32]      /* restricted s_i temp */
+var SH_R_J         : [u8;  32]      /* restricted s_j temp */
+var SH_HASH_BUF    : [u8;  96]      /* sh_restrict concat: sec, xform, child */
+
+/* Selftest scratch */
+var SH_ST_O0   : [u8; 32]
+var SH_ST_O1   : [u8; 32]
+var SH_ST_O2   : [u8; 32]
+var SH_ST_O01  : [u8; 32]
+var SH_ST_P    : [u8; 32]
+var SH_ST_T    : [u8; 32]
+var SH_ST_T2   : [u8; 32]
+var SH_ST_SA   : [u8; 32]
+var SH_ST_SB   : [u8; 32]
+var SH_ST_OUT  : [u8; 32]
+var SH_ST_OUT2 : [u8; 32]
+var SH_ST_REF  : [u8; 32]
+var SH_ST_HBUF : [u8; 96]           /* selftest reference concat for sh_restrict */
+var SH_ST_RBUF : [u8; 64]           /* selftest reference concat for global section */
+var SH_ST_COVER: [u8; 4128]         /* CoverReq: 32 id + 8 n + up to 1024*4 slots */
+
+/* --- pointer helpers into the payload arrays (address-of-static stays in-file) --- */
+fn sh_open_id_ptr(slot: u32) -> *u8 { return (&SH_OPEN_ID as u64 + (slot as u64) * 32u64) as *u8 }
+fn sh_sec_presheaf_ptr(slot: u32) -> *u8 { return (&SH_SEC_PRESHF as u64 + (slot as u64) * 32u64) as *u8 }
+fn sh_sec_id_ptr(slot: u32) -> *u8 { return (&SH_SEC_ID as u64 + (slot as u64) * 32u64) as *u8 }
+fn sh_res_xform_ptr(slot: u32) -> *u8 { return (&SH_RES_XFORM as u64 + (slot as u64) * 32u64) as *u8 }
+
+/* Zero the four liveness arrays; payload arrays are write-before-read gated. */
+fn sh_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_OPEN { SH_OPEN_LIVE[i] = 0u8 ; i = i + 1u32 }
+    i = 0u32
+    while i < SHEAF_MAX_SECTION { SH_SEC_LIVE[i] = 0u8 ; i = i + 1u32 }
+    i = 0u32
+    while i < SHEAF_MAX_RESTRICT { SH_RES_LIVE[i] = 0u8 ; i = i + 1u32 }
+    i = 0u32
+    while i < SHEAF_MAX_INTER { SH_INT_LIVE[i] = 0u8 ; i = i + 1u32 }
+    return SHEAF_OK
+}
+
+/* First-match linear scan over live open slots (W14 sentinel: no break;
+ * equality work runs only while found == SENT). */
+fn sh_find_open(open_id: *u8) -> u32 @export {
+    let mut found : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_OPEN {
+        if SH_OPEN_LIVE[i] == 1u8 {
+            if found == SHEAF_SENT {
+                if ident_eq(sh_open_id_ptr(i), open_id) == 1u8 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* Idempotent insert: existing key returns its slot; else first free slot;
+ * SHEAF_SENT if the table is full (W12). */
+fn sh_add_open(open_id: *u8, parent_slot: u32) -> u32 @export {
+    let existing : u32 = sh_find_open(open_id)
+    if existing != SHEAF_SENT { return existing }
+    let mut slot : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_OPEN {
+        if slot == SHEAF_SENT {
+            if SH_OPEN_LIVE[i] == 0u8 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == SHEAF_SENT { return SHEAF_SENT }
+    ident_copy(open_id, sh_open_id_ptr(slot))
+    SH_OPEN_PARENT[slot] = parent_slot
+    SH_OPEN_LIVE[slot] = 1u8
+    return slot
+}
+
+/* Key (presheaf_id, open_slot); first match via the found==SENT gate (W14). */
+fn sh_find_section(presheaf_id: *u8, open_slot: u32) -> u32 @export {
+    let mut found : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_SECTION {
+        if SH_SEC_LIVE[i] == 1u8 {
+            if found == SHEAF_SENT {
+                if SH_SEC_OPEN[i] == open_slot {
+                    if ident_eq(sh_sec_presheaf_ptr(i), presheaf_id) == 1u8 { found = i }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* Idempotent with update semantics: a duplicate (presheaf, open) overwrites
+ * the stored section id and returns the existing slot; else allocate fresh. */
+fn sh_add_section(presheaf_id: *u8, open_slot: u32, section_id: *u8) -> u32 @export {
+    let existing : u32 = sh_find_section(presheaf_id, open_slot)
+    if existing != SHEAF_SENT {
+        ident_copy(section_id, sh_sec_id_ptr(existing))
+        return existing
+    }
+    let mut slot : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_SECTION {
+        if slot == SHEAF_SENT {
+            if SH_SEC_LIVE[i] == 0u8 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == SHEAF_SENT { return SHEAF_SENT }
+    ident_copy(presheaf_id, sh_sec_presheaf_ptr(slot))
+    SH_SEC_OPEN[slot] = open_slot
+    ident_copy(section_id, sh_sec_id_ptr(slot))
+    SH_SEC_LIVE[slot] = 1u8
+    return slot
+}
+
+/* Copy the stored section id to out; bounds + liveness guarded (W9). */
+fn sh_section_id(slot: u32, out_id: *u8) -> i32 @export {
+    if slot >= SHEAF_MAX_SECTION { return SHEAF_E_BAD_SLOT }
+    if SH_SEC_LIVE[slot] == 0u8 { return SHEAF_E_BAD_SLOT }
+    ident_copy(sh_sec_id_ptr(slot), out_id)
+    return SHEAF_OK
+}
+
+/* Key (parent, child) ordered: restriction goes parent -> child. */
+fn sh_find_restriction(parent: u32, child: u32) -> u32 @export {
+    let mut found : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_RESTRICT {
+        if SH_RES_LIVE[i] == 1u8 {
+            if found == SHEAF_SENT {
+                if SH_RES_PARENT[i] == parent {
+                    if SH_RES_CHILD[i] == child { found = i }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* Idempotent with transform-update semantics (a restriction map's identity
+ * is its transform id). */
+fn sh_add_restriction(parent: u32, child: u32, transform_id: *u8) -> u32 @export {
+    let existing : u32 = sh_find_restriction(parent, child)
+    if existing != SHEAF_SENT {
+        ident_copy(transform_id, sh_res_xform_ptr(existing))
+        return existing
+    }
+    let mut slot : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_RESTRICT {
+        if slot == SHEAF_SENT {
+            if SH_RES_LIVE[i] == 0u8 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == SHEAF_SENT { return SHEAF_SENT }
+    SH_RES_PARENT[slot] = parent
+    SH_RES_CHILD[slot] = child
+    ident_copy(transform_id, sh_res_xform_ptr(slot))
+    SH_RES_LIVE[slot] = 1u8
+    return slot
+}
+
+/* Key unordered {a,b}: match either argument order (W14 first match). */
+fn sh_find_intersection(a: u32, b: u32) -> u32 @export {
+    let mut found : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_INTER {
+        if SH_INT_LIVE[i] == 1u8 {
+            if found == SHEAF_SENT {
+                let ia : u32 = SH_INT_A[i]
+                let ib : u32 = SH_INT_B[i]
+                if ia == a { if ib == b { found = i } }
+                if ia == b { if ib == a { found = i } }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* Store canonically (smaller slot first) so one entry per unordered pair and
+ * ordering is bit-identical regardless of argument order (W5).  Idempotent. */
+fn sh_add_intersection(a: u32, b: u32, inter: u32) -> u32 @export {
+    let existing : u32 = sh_find_intersection(a, b)
+    if existing != SHEAF_SENT {
+        SH_INT_INTER[existing] = inter
+        return existing
+    }
+    let mut lo : u32 = a
+    let mut hi : u32 = b
+    if a > b { lo = b  hi = a }
+    let mut slot : u32 = SHEAF_SENT
+    let mut i : u32 = 0u32
+    while i < SHEAF_MAX_INTER {
+        if slot == SHEAF_SENT {
+            if SH_INT_LIVE[i] == 0u8 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == SHEAF_SENT { return SHEAF_SENT }
+    SH_INT_A[slot] = lo
+    SH_INT_B[slot] = hi
+    SH_INT_INTER[slot] = inter
+    SH_INT_LIVE[slot] = 1u8
+    return slot
+}
+
+/* Deterministic restriction transform:
+ *   out = Keccak256(section_id || transform_id || child_open_id).
+ * Guards: bad/dead section -> E_BAD_SLOT; no registered (parent,child)
+ * restriction -> E_NO_RESTRICT (refusal, not a guess; M4). */
+fn sh_restrict(section: u32, parent: u32, child: u32, out_id: *u8) -> i32 @export {
+    if section >= SHEAF_MAX_SECTION { return SHEAF_E_BAD_SLOT }
+    if SH_SEC_LIVE[section] == 0u8 { return SHEAF_E_BAD_SLOT }
+    let res : u32 = sh_find_restriction(parent, child)
+    if res == SHEAF_SENT { return SHEAF_E_NO_RESTRICT }
+    let sec_p : *u8 = sh_sec_id_ptr(section)
+    let xf_p  : *u8 = sh_res_xform_ptr(res)
+    let chld_p : *u8 = sh_open_id_ptr(child)
+    let mut k : u64 = 0u64
+    while k < SHEAF_IDBYTES {
+        SH_HASH_BUF[k]                    = sec_p[k]
+        SH_HASH_BUF[SHEAF_IDBYTES + k]    = xf_p[k]
+        SH_HASH_BUF[2u64*SHEAF_IDBYTES + k] = chld_p[k]
+        k = k + 1u64
+    }
+    cad_oneshot(1u32, (&SH_HASH_BUF as u64) as *u8, 96u64, (out_id as u64) as *u8)   /* H2: restriction id via cad (byte-identical) */
+    return SHEAF_OK
+}
+
+/* --- CoverReq aggregate readers (byte-wise, Traps 4/5 avoided) --- */
+fn sh_cover_n(cover: *u8) -> u64 {
+    let mut n : u64 = 0u64
+    n = n | (cover[32u64] as u64)
+    n = n | ((cover[33u64] as u64) << 8u64)
+    n = n | ((cover[34u64] as u64) << 16u64)
+    n = n | ((cover[35u64] as u64) << 24u64)
+    n = n | ((cover[36u64] as u64) << 32u64)
+    n = n | ((cover[37u64] as u64) << 40u64)
+    n = n | ((cover[38u64] as u64) << 48u64)
+    n = n | ((cover[39u64] as u64) << 56u64)
+    return n
+}
+fn sh_cover_slot(cover: *u8, k: u64) -> u32 {
+    let base : u64 = 40u64 + k * 4u64
+    let mut v : u32 = 0u32
+    v = v | (cover[base] as u32)
+    v = v | ((cover[base + 1u64] as u32) << 8u32)
+    v = v | ((cover[base + 2u64] as u32) << 16u32)
+    v = v | ((cover[base + 3u64] as u32) << 24u32)
+    return v
+}
+
+/* Internal helper: collect member section ids into SH_IDS_BUF.  Returns
+ * SHEAF_OK, or E_BAD_SLOT on over-bound n or a missing section.  The
+ * presheaf id lives at cover[0..31]. */
+fn sh_collect_ids(cover: *u8, n: u64) -> i32 {
+    let pre_p : *u8 = cover
+    let mut rc : i32 = SHEAF_OK
+    let mut k : u64 = 0u64
+    while k < n {
+        if rc == SHEAF_OK {
+            let u_k : u32 = sh_cover_slot(cover, k)
+            let sec : u32 = sh_find_section(pre_p, u_k)
+            if sec == SHEAF_SENT { rc = SHEAF_E_BAD_SLOT } else {
+                let src : *u8 = sh_sec_id_ptr(sec)
+                let dst_off : u64 = k * 32u64
+                let mut b : u64 = 0u64
+                while b < 32u64 {
+                    SH_IDS_BUF[dst_off + b] = src[b]
+                    b = b + 1u64
+                }
+            }
+        }
+        k = k + 1u64
+    }
+    return rc
+}
+
+/* Internal helper: in-place insertion sort of n 32-byte records in
+ * SH_IDS_BUF by ident_cmp (ascending lexicographic).  The inner index q
+ * drives its own loop condition (W14 sentinel; no break): on a > comparison
+ * (ident_cmp == 1) swap the 32 bytes and step down, else set q = 0 to end
+ * the run. */
+fn sh_sort_ids(n: u64) -> i32 {
+    let mut p : u64 = 1u64
+    while p < n {
+        let mut q : u64 = p
+        while q > 0u64 {
+            let prev_off : u64 = (q - 1u64) * 32u64
+            let cur_off  : u64 = q * 32u64
+            let prev_p : *u8 = (&SH_IDS_BUF as u64 + prev_off) as *u8
+            let cur_p  : *u8 = (&SH_IDS_BUF as u64 + cur_off) as *u8
+            let c : i32 = ident_cmp(prev_p, cur_p)
+            if c == 1i32 {
+                let mut b : u64 = 0u64
+                while b < 32u64 {
+                    SH_SWAP_BUF[b] = SH_IDS_BUF[prev_off + b]
+                    SH_IDS_BUF[prev_off + b] = SH_IDS_BUF[cur_off + b]
+                    SH_IDS_BUF[cur_off + b] = SH_SWAP_BUF[b]
+                    b = b + 1u64
+                }
+                q = q - 1u64
+            } else { q = 0u64 }
+        }
+        p = p + 1u64
+    }
+    return SHEAF_OK
+}
+
+/* Internal: canonical, order-independent global witness over the cover.
+ *   1. collect member section ids; 2. canonical-sort; 3. Keccak256 of the
+ *   sorted n*32 concat.  Bounds n <= SHEAF_MAX_COVER (W8). */
+fn sh_global_section(cover: *u8, out_id: *u8) -> i32 {
+    let n : u64 = sh_cover_n(cover)
+    if n > (SHEAF_MAX_COVER as u64) { return SHEAF_E_BAD_SLOT }
+    let crc : i32 = sh_collect_ids(cover, n)
+    if crc != SHEAF_OK { return crc }
+    sh_sort_ids(n)
+    cad_oneshot(1u32, (&SH_IDS_BUF as u64) as *u8, n * 32u64, (out_id as u64) as *u8)   /* H2: global section id via cad (byte-identical) */
+    return SHEAF_OK
+}
+
+/* Internal: does the pair (u_i, u_j) agree on its registered overlap?
+ * Returns 1u8 iff an intersection is registered AND both sections exist AND
+ * both restrict cleanly to the intersection AND the restrictions are byte
+ * equal.  A missing intersection returns 0u8 (refusal -- the correctness fix
+ * over the gospel candidate's silent skip).  presheaf id at cover[0..31]. */
+fn sh_pair_agrees(cover: *u8, u_i: u32, u_j: u32) -> u8 {
+    let int_slot : u32 = sh_find_intersection(u_i, u_j)
+    if int_slot == SHEAF_SENT { return 0u8 }
+    let inter : u32 = SH_INT_INTER[int_slot]
+    let pre_p : *u8 = cover
+    let sec_i : u32 = sh_find_section(pre_p, u_i)
+    if sec_i == SHEAF_SENT { return 0u8 }
+    let sec_j : u32 = sh_find_section(pre_p, u_j)
+    if sec_j == SHEAF_SENT { return 0u8 }
+    let nullp : *u8 = 0u64 as *u8
+    let ri : *u8 = (&SH_R_I as u64) as *u8
+    let rj : *u8 = (&SH_R_J as u64) as *u8
+    if ri == nullp { return 0u8 }
+    if rj == nullp { return 0u8 }
+    let rc_i : i32 = sh_restrict(sec_i, u_i, inter, ri)
+    if rc_i != SHEAF_OK { return 0u8 }
+    let rc_j : i32 = sh_restrict(sec_j, u_j, inter, rj)
+    if rc_j != SHEAF_OK { return 0u8 }
+    if ident_eq(ri, rj) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* The sheaf condition.  Reads presheaf_id/n/slots from the aggregate; guards
+ * n <= SHEAF_MAX_COVER.  Double loop i<j over the cover, all work gated by
+ * ok==1 (W14: a single disagreement latches ok=0 and the rest no-op without
+ * break).  out_global is written ONLY on a full glue (never on refusal). */
+fn sh_check_glue(cover: *u8, parent_open: u32, out_global: *u8) -> u8 @export {
+    let n : u64 = sh_cover_n(cover)
+    if n > (SHEAF_MAX_COVER as u64) { return 0u8 }
+    let mut ok : u8 = 1u8
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut j : u64 = i + 1u64
+        while j < n {
+            if ok == 1u8 {
+                let u_i : u32 = sh_cover_slot(cover, i)
+                let u_j : u32 = sh_cover_slot(cover, j)
+                if sh_pair_agrees(cover, u_i, u_j) == 0u8 { ok = 0u8 }
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    if ok == 1u8 {
+        let grc : i32 = sh_global_section(cover, out_global)
+        if grc != SHEAF_OK { ok = 0u8 }
+    }
+    return ok
+}
+
+/* --- selftest support --- */
+
+/* Fill a 32-byte buffer with a constant byte. */
+fn sh_st_fill(buf: *u8, val: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { buf[i] = val ; i = i + 1u64 }
+    return SHEAF_OK
+}
+
+/* Write the CoverReq header (presheaf id + n) and two slots into SH_ST_COVER. */
+fn sh_st_cover2(pre: *u8, n: u64, s0: u32, s1: u32) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SH_ST_COVER[i] = pre[i] ; i = i + 1u64 }
+    SH_ST_COVER[32u64] = (n & 0xFFu64) as u8
+    SH_ST_COVER[33u64] = ((n >> 8u64)  & 0xFFu64) as u8
+    SH_ST_COVER[34u64] = ((n >> 16u64) & 0xFFu64) as u8
+    SH_ST_COVER[35u64] = ((n >> 24u64) & 0xFFu64) as u8
+    SH_ST_COVER[36u64] = ((n >> 32u64) & 0xFFu64) as u8
+    SH_ST_COVER[37u64] = ((n >> 40u64) & 0xFFu64) as u8
+    SH_ST_COVER[38u64] = ((n >> 48u64) & 0xFFu64) as u8
+    SH_ST_COVER[39u64] = ((n >> 56u64) & 0xFFu64) as u8
+    SH_ST_COVER[40u64] = (s0 & 0xFFu32) as u8
+    SH_ST_COVER[41u64] = ((s0 >> 8u32)  & 0xFFu32) as u8
+    SH_ST_COVER[42u64] = ((s0 >> 16u32) & 0xFFu32) as u8
+    SH_ST_COVER[43u64] = ((s0 >> 24u32) & 0xFFu32) as u8
+    SH_ST_COVER[44u64] = (s1 & 0xFFu32) as u8
+    SH_ST_COVER[45u64] = ((s1 >> 8u32)  & 0xFFu32) as u8
+    SH_ST_COVER[46u64] = ((s1 >> 16u32) & 0xFFu32) as u8
+    SH_ST_COVER[47u64] = ((s1 >> 24u32) & 0xFFu32) as u8
+    return SHEAF_OK
+}
+
+/* Self-test.  99 = pass; otherwise the index of the first failing check.
+ * Exercises KAT-1..5 from the spec, including the two negative cases
+ * (disagreement refusal, missing-intersection refusal). */
+fn sh_selftest() -> u64 @export {
+    let p   : *u8 = (&SH_ST_P as u64)   as *u8
+    let t   : *u8 = (&SH_ST_T as u64)   as *u8
+    let t2  : *u8 = (&SH_ST_T2 as u64)  as *u8
+    let sa  : *u8 = (&SH_ST_SA as u64)  as *u8
+    let sb  : *u8 = (&SH_ST_SB as u64)  as *u8
+    let o0p : *u8 = (&SH_ST_O0 as u64)  as *u8
+    let o1p : *u8 = (&SH_ST_O1 as u64)  as *u8
+    let o2p : *u8 = (&SH_ST_O2 as u64)  as *u8
+    let o01p: *u8 = (&SH_ST_O01 as u64) as *u8
+    let outp: *u8 = (&SH_ST_OUT as u64) as *u8
+    let out2: *u8 = (&SH_ST_OUT2 as u64) as *u8
+    let refp: *u8 = (&SH_ST_REF as u64) as *u8
+    let coverp : *u8 = (&SH_ST_COVER as u64) as *u8
+
+    sh_st_fill(o0p, 0x00u8)
+    sh_st_fill(o1p, 0x01u8)
+    sh_st_fill(o2p, 0x02u8)
+    sh_st_fill(o01p, 0x33u8)
+    sh_st_fill(p,  0x50u8)
+    sh_st_fill(t,  0x77u8)
+    sh_st_fill(t2, 0x88u8)
+    sh_st_fill(sa, 0xA1u8)
+    sh_st_fill(sb, 0xB2u8)
+
+    /* ---- KAT-1: restriction is deterministic & equals the formula ---- */
+    sh_init()
+    let o0 : u32 = sh_add_open(o0p, SHEAF_SENT)
+    if o0 == SHEAF_SENT { return 1u64 }
+    let o1 : u32 = sh_add_open(o1p, o0)
+    if o1 == SHEAF_SENT { return 2u64 }
+    let s : u32 = sh_add_section(p, o0, sa)
+    if s == SHEAF_SENT { return 3u64 }
+    sh_add_restriction(o0, o1, t)
+    if sh_restrict(s, o0, o1, outp) != SHEAF_OK { return 4u64 }
+    /* reference: Keccak256(SA || T || O1) */
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        SH_ST_HBUF[k]          = sa[k]
+        SH_ST_HBUF[32u64 + k]  = t[k]
+        SH_ST_HBUF[64u64 + k]  = o1p[k]
+        k = k + 1u64
+    }
+    keccak256_oneshot(&SH_ST_HBUF as u64, 96u64, refp as u64)
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != SH_ST_REF[k] { return 5u64 }  k = k + 1u64 }
+    if SH_ST_OUT[0] == 0u8 { return 6u64 }                 /* sanity: non-zero */
+    /* determinism: re-restrict into out2, must match out */
+    if sh_restrict(s, o0, o1, out2) != SHEAF_OK { return 7u64 }
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != SH_ST_OUT2[k] { return 8u64 }  k = k + 1u64 }
+    /* no registered restriction -> refusal (o2 exists but no (o0,o2) restriction) */
+    let o2 : u32 = sh_add_open(o2p, o0)
+    if o2 == SHEAF_SENT { return 27u64 }
+    if sh_restrict(s, o0, o2, out2) != SHEAF_E_NO_RESTRICT { return 9u64 }
+    /* bad slot -> refusal */
+    if sh_restrict(SHEAF_MAX_SECTION, o0, o1, out2) != SHEAF_E_BAD_SLOT { return 10u64 }
+
+    /* ---- KAT-2: glue succeeds; global section order-independent ---- */
+    sh_init()
+    let g0 : u32 = sh_add_open(o0p, SHEAF_SENT)
+    let g1 : u32 = sh_add_open(o1p, SHEAF_SENT)
+    let g01 : u32 = sh_add_open(o01p, SHEAF_SENT)
+    if g01 == SHEAF_SENT { return 11u64 }
+    sh_add_intersection(g0, g1, g01)
+    sh_add_restriction(g0, g01, t)
+    sh_add_restriction(g1, g01, t)
+    /* same section id SA over both opens => restrictions to o01 agree */
+    sh_add_section(p, g0, sa)
+    sh_add_section(p, g1, sa)
+    sh_st_cover2(p, 2u64, g0, g1)
+    if sh_check_glue(coverp, SHEAF_SENT, outp) != 1u8 { return 12u64 }
+    /* reversed cover {g1,g0} => byte-identical global section */
+    sh_st_cover2(p, 2u64, g1, g0)
+    if sh_check_glue(coverp, SHEAF_SENT, out2) != 1u8 { return 13u64 }
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != SH_ST_OUT2[k] { return 14u64 }  k = k + 1u64 }
+    /* reference global section: Keccak256(SA || SA) (sorted concat, equal ids) */
+    k = 0u64
+    while k < 32u64 {
+        SH_ST_RBUF[k]         = sa[k]
+        SH_ST_RBUF[32u64 + k] = sa[k]
+        k = k + 1u64
+    }
+    keccak256_oneshot(&SH_ST_RBUF as u64, 64u64, refp as u64)
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != SH_ST_REF[k] { return 15u64 }  k = k + 1u64 }
+
+    /* ---- KAT-3: glue fails on disagreement; out_global untouched ---- */
+    sh_init()
+    let h0 : u32 = sh_add_open(o0p, SHEAF_SENT)
+    let h1 : u32 = sh_add_open(o1p, SHEAF_SENT)
+    let h01 : u32 = sh_add_open(o01p, SHEAF_SENT)
+    sh_add_intersection(h0, h1, h01)
+    sh_add_restriction(h0, h01, t)
+    sh_add_restriction(h1, h01, t)
+    sh_add_section(p, h0, sa)
+    sh_add_section(p, h1, sb)               /* SA != SB => restrictions differ */
+    sh_st_fill(outp, 0xEEu8)                /* poison */
+    sh_st_cover2(p, 2u64, h0, h1)
+    if sh_check_glue(coverp, SHEAF_SENT, outp) != 0u8 { return 16u64 }
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != 0xEEu8 { return 17u64 }  k = k + 1u64 }
+
+    /* ---- KAT-4: missing-intersection refusal (the Gap fix) ---- */
+    sh_init()
+    let m0 : u32 = sh_add_open(o0p, SHEAF_SENT)
+    let m1 : u32 = sh_add_open(o1p, SHEAF_SENT)
+    sh_add_section(p, m0, sa)
+    sh_add_section(p, m1, sa)               /* sections agree, but NO intersection registered */
+    sh_st_fill(outp, 0xEEu8)
+    sh_st_cover2(p, 2u64, m0, m1)
+    if sh_check_glue(coverp, SHEAF_SENT, outp) != 0u8 { return 18u64 }
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != 0xEEu8 { return 19u64 }  k = k + 1u64 }
+
+    /* ---- KAT-5: idempotent add & transform-update ---- */
+    sh_init()
+    let a0 : u32 = sh_add_open(o0p, SHEAF_SENT)
+    let a0b : u32 = sh_add_open(o0p, SHEAF_SENT)
+    if a0 != a0b { return 20u64 }                          /* idempotent open */
+    let a1 : u32 = sh_add_open(o1p, SHEAF_SENT)
+    let sx : u32 = sh_add_section(p, a0, sa)
+    let r1 : u32 = sh_add_restriction(a0, a1, t)
+    let r2 : u32 = sh_add_restriction(a0, a1, t2)          /* update transform */
+    if r1 != r2 { return 21u64 }                           /* same slot */
+    /* restriction now reflects T2: out == Keccak256(SA || T2 || O1) */
+    if sh_restrict(sx, a0, a1, outp) != SHEAF_OK { return 22u64 }
+    k = 0u64
+    while k < 32u64 {
+        SH_ST_HBUF[k]          = sa[k]
+        SH_ST_HBUF[32u64 + k]  = t2[k]
+        SH_ST_HBUF[64u64 + k]  = o1p[k]
+        k = k + 1u64
+    }
+    keccak256_oneshot(&SH_ST_HBUF as u64, 96u64, refp as u64)
+    k = 0u64
+    while k < 32u64 { if SH_ST_OUT[k] != SH_ST_REF[k] { return 23u64 }  k = k + 1u64 }
+    /* idempotent section update: re-add SB over a0 returns same slot, updates id */
+    let sx2 : u32 = sh_add_section(p, a0, sb)
+    if sx != sx2 { return 24u64 }
+    if sh_section_id(sx, out2) != SHEAF_OK { return 25u64 }
+    if ident_eq(out2, sb) != 1u8 { return 26u64 }
+
+    return 99u64
+}

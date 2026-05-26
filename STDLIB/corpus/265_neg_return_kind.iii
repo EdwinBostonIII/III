@@ -1,0 +1,20 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\265_neg_return_kind.iii
+ *
+ * NEGATIVE-COMPILE test for @returns_hexad static return-kind check.
+ *
+ * THIS FILE MUST FAIL TO COMPILE.  Consumed by
+ * scripts/test_return_kind_static_negative.sh.  Asserts non-zero
+ * exit + `III_RETURN_KIND_VIOLATION` marker.
+ *
+ * Violation: callee returns COMPOSE (6); let-binding declares FORM (1).
+ */
+module corpus_265_neg
+
+fn _make_compose() -> u64 @returns_hexad(6u64) {
+    return 0x6666u64
+}
+
+fn main() -> u64 {
+    let wrong : u64 @hexad_kind(1u64) = _make_compose()
+    return wrong
+}

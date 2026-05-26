@@ -1,0 +1,181 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\builder.iii
+ *
+ * III STDLIB - verba::builder
+ *
+ * Linear string builder over an arena.  Push bytes / runes / strings
+ * incrementally; seal to obtain an immutable (base, len) pair.
+ *
+ * Discipline: a builder is identified by an integer id; the arena
+ * backs the bytes.  In Phase A all builder state lives in module
+ * globals (one slot per active builder, max 32).  Future @specialize
+ * + @linear support will move state to a struct passed by value.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 0.99.
+ */
+
+module verba_builder
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn rune_utf8_encode(cp: u32, out_ptr: u64) -> u32 from "rune.iii"
+
+const BLD_MAX     : u32 = 32u32
+const BLD_INVALID : u64 = 0u64
+const BLD_OK      : i32 = 0i32
+const BLD_E_FULL  : i32 = -1i32
+const BLD_E_OOM   : i32 = -2i32
+const BLD_E_BADID : i32 = -3i32
+const BLD_E_SEALED: i32 = -4i32
+
+var BLD_ARENA   : [u64; 32]
+var BLD_BASE    : [u64; 32]
+var BLD_CAP     : [u64; 32]
+var BLD_LEN     : [u64; 32]
+var BLD_LIVE    : [u8;  32]
+var BLD_SEALED  : [u8;  32]
+
+fn builder_new(arena_id: u64, hint: u64) -> u64 @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < BLD_MAX {
+        if BLD_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return BLD_INVALID }
+    let mut cap : u64 = hint
+    if cap < 64u64 { cap = 64u64 }
+    let p : u64 = arena_alloc1(arena_id, cap)
+    if p == 0u64 { return BLD_INVALID }
+    BLD_ARENA[slot]  = arena_id
+    BLD_BASE[slot]   = p
+    BLD_CAP[slot]    = cap
+    BLD_LEN[slot]    = 0u64
+    BLD_LIVE[slot]   = 1u8
+    BLD_SEALED[slot] = 0u8
+    return (slot as u64) + 1u64
+}
+
+fn builder_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (BLD_MAX as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if BLD_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Ensure builder has room for `add` more bytes.  Re-allocates a larger
+ * buffer in the same arena and copies bytes if needed.  Returns 0 ok
+ * or BLD_E_OOM. */
+fn builder_grow(slot: u32, add: u64) -> i32 {
+    let cur_cap : u64 = BLD_CAP[slot]
+    let cur_len : u64 = BLD_LEN[slot]
+    let need : u64 = cur_len + add
+    if need <= cur_cap { return BLD_OK }
+    let mut new_cap : u64 = cur_cap * 2u64
+    if new_cap < 64u64 { new_cap = 64u64 }
+    while new_cap < need { new_cap = new_cap * 2u64 }
+    let arena_id : u64 = BLD_ARENA[slot]
+    let new_base : u64 = arena_alloc1(arena_id, new_cap)
+    if new_base == 0u64 { return BLD_E_OOM }
+    /* Copy existing bytes. */
+    let old_base : u64 = BLD_BASE[slot]
+    if cur_len > 0u64 {
+        let src : *u8 = old_base as *u8
+        let dst : *u8 = new_base as *u8
+        let mut i : u64 = 0u64
+        while i < cur_len {
+            dst[i] = src[i]
+            i = i + 1u64
+        }
+    }
+    BLD_BASE[slot] = new_base
+    BLD_CAP[slot] = new_cap
+    return BLD_OK
+}
+
+fn builder_push_byte(id: u64, b: u32) -> i32 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return BLD_E_BADID }
+    if BLD_SEALED[s] == 1u8 { return BLD_E_SEALED }
+    let rc : i32 = builder_grow(s, 1u64)
+    if rc != BLD_OK { return rc }
+    let base : u64 = BLD_BASE[s]
+    let len  : u64 = BLD_LEN[s]
+    let p : *u8 = base as *u8
+    p[len] = (b & 0xFFu32) as u8
+    BLD_LEN[s] = len + 1u64
+    return BLD_OK
+}
+
+fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 @export {
+    if src == 0u64 {
+        if n != 0u64 { return BLD_E_BADID }
+        return BLD_OK
+    }
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return BLD_E_BADID }
+    if BLD_SEALED[s] == 1u8 { return BLD_E_SEALED }
+    let rc : i32 = builder_grow(s, n)
+    if rc != BLD_OK { return rc }
+    let base : u64 = BLD_BASE[s]
+    let len : u64 = BLD_LEN[s]
+    let dst : *u8 = base as *u8
+    let sp  : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        dst[len + i] = sp[i]
+        i = i + 1u64
+    }
+    BLD_LEN[s] = len + n
+    return BLD_OK
+}
+
+fn builder_push_rune(id: u64, cp: u32) -> i32 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return BLD_E_BADID }
+    if BLD_SEALED[s] == 1u8 { return BLD_E_SEALED }
+    let rc : i32 = builder_grow(s, 4u64)
+    if rc != BLD_OK { return rc }
+    let base : u64 = BLD_BASE[s]
+    let len  : u64 = BLD_LEN[s]
+    let written : u32 = rune_utf8_encode(cp, base + len)
+    if written == 0u32 { return BLD_E_BADID }
+    BLD_LEN[s] = len + (written as u64)
+    return BLD_OK
+}
+
+fn builder_len(id: u64) -> u64 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return BLD_LEN[s]
+}
+
+fn builder_capacity(id: u64) -> u64 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return BLD_CAP[s]
+}
+
+/* Seal the builder: marks it immutable.  Returns base pointer; len
+ * available via builder_len.  After seal, further pushes return
+ * BLD_E_SEALED. */
+fn builder_seal(id: u64) -> u64 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    BLD_SEALED[s] = 1u8
+    return BLD_BASE[s]
+}
+
+fn builder_drop(id: u64) -> i32 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return BLD_E_BADID }
+    BLD_LIVE[s]   = 0u8
+    BLD_SEALED[s] = 0u8
+    BLD_BASE[s]   = 0u64
+    BLD_CAP[s]    = 0u64
+    BLD_LEN[s]    = 0u64
+    BLD_ARENA[s]  = 0u64
+    return BLD_OK
+}

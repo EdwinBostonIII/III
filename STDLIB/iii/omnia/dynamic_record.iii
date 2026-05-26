@@ -1,0 +1,106 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\dynamic_record.iii
+ *
+ * III STDLIB - omnia::dynamic_record
+ *
+ * Lattice plan Step 0022 (user-mode counterpart to cg_r3 @dynamic
+ * lowering).  At parse time, sema silently accepts @dynamic(ripple=auto|
+ * manual|off) on fn/cycle decls.  Runtime code that wants to act on
+ * a crystal's @dynamic mode registers the (crystal_id, mode) pair
+ * here.  ripple_execute and friends consult this table to decide
+ * whether to recompute or skip the dependent.
+ *
+ * Capacity: 256 records in a flat slot table.  Lookup is linear; the
+ * corpus has at most a few dozen @dynamic crystals so this is fine.
+ *
+ * Modes (mirror master plan + lex.h argument values):
+ *   DYNAMIC_RIPPLE_AUTO    = 1   "ripple=auto"   (re-seal automatically)
+ *   DYNAMIC_RIPPLE_MANUAL  = 2   "ripple=manual" (caller must request)
+ *   DYNAMIC_RIPPLE_OFF     = 3   "ripple=off"    (never re-seal)
+ *
+ * Hexad: kind_form (recording = sealed observation).  Ring: R0.  K: 1.00.
+ */
+
+module omnia_dynamic_record
+
+const DYNAMIC_RECORD_OK         : i32 =  0i32
+const DYNAMIC_RECORD_E_FULL     : i32 = -1i32
+const DYNAMIC_RECORD_E_BADID    : i32 = -2i32
+const DYNAMIC_RECORD_E_BAD_MODE : i32 = -3i32
+
+const DYNAMIC_RIPPLE_AUTO   : u32 = 1u32
+const DYNAMIC_RIPPLE_MANUAL : u32 = 2u32
+const DYNAMIC_RIPPLE_OFF    : u32 = 3u32
+
+const DYNAMIC_RECORD_MAX : u32 = 256u32
+
+var DYNAMIC_REC_ID    : [u64; 256]
+var DYNAMIC_REC_MODE  : [u32; 256]
+var DYNAMIC_REC_LIVE  : [u8;  256]
+var DYNAMIC_REC_COUNT : u32 = 0u32
+
+/* Find the slot holding `id`, or 0xFFFFFFFF if not present. */
+fn dynamic_find(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while i < DYNAMIC_RECORD_MAX {
+        if DYNAMIC_REC_LIVE[i] == 1u8 {
+            if DYNAMIC_REC_ID[i] == id {
+                if found == 0xFFFFFFFFu32 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+fn dynamic_record_register(id: u64, mode: u32) -> i32 @export {
+    if id == 0u64 { return DYNAMIC_RECORD_E_BADID }
+    if mode != DYNAMIC_RIPPLE_AUTO {
+        if mode != DYNAMIC_RIPPLE_MANUAL {
+            if mode != DYNAMIC_RIPPLE_OFF {
+                return DYNAMIC_RECORD_E_BAD_MODE
+            }
+        }
+    }
+    /* Update existing or allocate new slot. */
+    let existing : u32 = dynamic_find(id)
+    if existing != 0xFFFFFFFFu32 {
+        DYNAMIC_REC_MODE[existing] = mode
+        return DYNAMIC_RECORD_OK
+    }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < DYNAMIC_RECORD_MAX {
+        if DYNAMIC_REC_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return DYNAMIC_RECORD_E_FULL }
+    DYNAMIC_REC_ID[slot]   = id
+    DYNAMIC_REC_MODE[slot] = mode
+    DYNAMIC_REC_LIVE[slot] = 1u8
+    DYNAMIC_REC_COUNT = DYNAMIC_REC_COUNT + 1u32
+    return DYNAMIC_RECORD_OK
+}
+
+fn dynamic_record_lookup(id: u64) -> u32 @export {
+    let s : u32 = dynamic_find(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return DYNAMIC_REC_MODE[s]
+}
+
+fn dynamic_record_clear(id: u64) -> i32 @export {
+    let s : u32 = dynamic_find(id)
+    if s == 0xFFFFFFFFu32 { return DYNAMIC_RECORD_E_BADID }
+    DYNAMIC_REC_LIVE[s] = 0u8
+    DYNAMIC_REC_ID[s] = 0u64
+    DYNAMIC_REC_MODE[s] = 0u32
+    DYNAMIC_REC_COUNT = DYNAMIC_REC_COUNT - 1u32
+    return DYNAMIC_RECORD_OK
+}
+
+fn dynamic_record_count() -> u32 @export {
+    return DYNAMIC_REC_COUNT
+}

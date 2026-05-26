@@ -1,0 +1,238 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_basis.iii
+ *
+ * III STDLIB - omnia::xii_basis
+ *
+ * Basis-kernel metadata for XII algebra. Per DOCS/III-XII.md S3.1 + S5.3.
+ *
+ * Provides:
+ *   - K-cost per kernel
+ *   - Hexad kind per basis kernel
+ *   - Cap-class id per kernel
+ *   - MPO weight per kind (used by canonicalisation termination proof)
+ *
+ * All tables are sealed const lookups; the iiis-0 partial evaluator
+ * folds these at compile time when called with const args.
+ *
+ * Hexad: kind_form. Ring: R0. K: 1.0.
+ */
+
+module omnia_xii_basis
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+
+/* ------------------------------------------------------------------ */
+/* Re-declare kind constants for self-contained lookup.               */
+/* (Must match omnia/xii_term.iii)                                    */
+/* ------------------------------------------------------------------ */
+
+const XB_K01_FORM     : u8 = 0u8
+const XB_K02_BIND     : u8 = 1u8
+const XB_K03_CONVEY   : u8 = 2u8
+const XB_K04_MEAN     : u8 = 3u8
+const XB_K05_ACT      : u8 = 4u8
+const XB_K06_COMPOSE  : u8 = 5u8
+const XB_K07_SEAL     : u8 = 6u8
+const XB_K08_PROVE    : u8 = 7u8
+const XB_K09_QUERY    : u8 = 8u8
+const XB_K10_GRANT    : u8 = 9u8
+const XB_K11_GOVERN   : u8 = 10u8
+const XB_K12_THEN     : u8 = 11u8
+const XB_K13_WITH     : u8 = 12u8
+const XB_K14_UNDER    : u8 = 13u8
+const XB_K15_IF       : u8 = 14u8
+const XB_K16_LOOP     : u8 = 15u8
+const XB_K17_LIFT     : u8 = 16u8
+const XB_K18_REFLECT  : u8 = 17u8
+const XB_FCOMPOSE     : u8 = 18u8
+const XB_FTHEN        : u8 = 19u8
+const XB_FWITH        : u8 = 20u8
+const XB_FUNDER       : u8 = 21u8
+const XB_FIF          : u8 = 22u8
+const XB_FLOOP        : u8 = 23u8
+
+const XB_HEXAD_FORM      : u8 = 1u8
+const XB_HEXAD_SUBSTANCE : u8 = 2u8
+const XB_HEXAD_PASSAGE   : u8 = 3u8
+const XB_HEXAD_ESSENCE   : u8 = 4u8
+const XB_HEXAD_MOTION    : u8 = 5u8
+const XB_HEXAD_COMPOSE   : u8 = 6u8
+const XB_HEXAD_ORIGIN    : u8 = 7u8
+
+/* Cap class enumeration (16 sealed classes). */
+const XB_CAP_NONE    : u32 = 0u32
+const XB_CAP_BIND    : u32 = 1u32
+const XB_CAP_CONVEY  : u32 = 2u32
+const XB_CAP_MEAN    : u32 = 3u32
+const XB_CAP_ACT     : u32 = 4u32
+const XB_CAP_SEAL    : u32 = 5u32
+const XB_CAP_PROVE   : u32 = 6u32
+const XB_CAP_QUERY   : u32 = 7u32
+const XB_CAP_GRANT   : u32 = 8u32
+const XB_CAP_GOVERN  : u32 = 9u32
+const XB_CAP_LIFT    : u32 = 10u32
+const XB_CAP_REFLECT : u32 = 11u32
+const XB_CAP_BOOT    : u32 = 12u32
+const XB_CAP_LINK    : u32 = 13u32
+const XB_CAP_PE      : u32 = 14u32
+const XB_CAP_CURATE  : u32 = 15u32
+
+/* ------------------------------------------------------------------ */
+/* K-cost lookup (per DOCS/III-XII.md S3.1 K cost column).             */
+/* Returns 0 for unknown kinds.                                        */
+/* ------------------------------------------------------------------ */
+
+fn xii_basis_k_cost(kind: u8) -> u32 @export {
+    if kind == XB_K01_FORM    { return 1u32 }
+    if kind == XB_K02_BIND    { return 1u32 }
+    if kind == XB_K03_CONVEY  { return 4u32 }
+    if kind == XB_K04_MEAN    { return 1u32 }
+    if kind == XB_K05_ACT     { return 4u32 }
+    if kind == XB_K06_COMPOSE { return 1u32 }
+    if kind == XB_K07_SEAL    { return 12u32 }
+    if kind == XB_K08_PROVE   { return 24u32 }
+    if kind == XB_K09_QUERY   { return 4u32 }
+    if kind == XB_K10_GRANT   { return 1u32 }
+    if kind == XB_K11_GOVERN  { return 12u32 }
+    if kind == XB_K12_THEN    { return 1u32 }
+    if kind == XB_K13_WITH    { return 1u32 }
+    if kind == XB_K14_UNDER   { return 1u32 }
+    if kind == XB_K15_IF      { return 1u32 }
+    if kind == XB_K16_LOOP    { return 1u32 }
+    if kind == XB_K17_LIFT    { return 1u32 }
+    if kind == XB_K18_REFLECT { return 1u32 }
+    /* Fusion ops: cost is computed structurally from children; return
+     * the per-op overhead alone. The canonicaliser sums child K-costs. */
+    if kind == XB_FCOMPOSE { return 0u32 }
+    if kind == XB_FTHEN    { return 0u32 }
+    if kind == XB_FWITH    { return 0u32 }
+    if kind == XB_FUNDER   { return 0u32 }
+    if kind == XB_FIF      { return 0u32 }
+    if kind == XB_FLOOP    { return 0u32 }
+    return 0u32
+}
+
+/* ------------------------------------------------------------------ */
+/* Hexad-kind lookup (basis kernels only; fusion is computed by HJ).  */
+/* Per DOCS/III-XII.md S3.1 Hexad column + S4.3.                      */
+/* ------------------------------------------------------------------ */
+
+fn xii_basis_hexad(kind: u8) -> u8 @export {
+    if kind == XB_K01_FORM    { return XB_HEXAD_FORM }
+    if kind == XB_K02_BIND    { return XB_HEXAD_SUBSTANCE }
+    if kind == XB_K03_CONVEY  { return XB_HEXAD_PASSAGE }
+    if kind == XB_K04_MEAN    { return XB_HEXAD_ESSENCE }
+    if kind == XB_K05_ACT     { return XB_HEXAD_MOTION }
+    if kind == XB_K06_COMPOSE { return XB_HEXAD_COMPOSE }
+    if kind == XB_K07_SEAL    { return XB_HEXAD_ORIGIN }
+    if kind == XB_K08_PROVE   { return XB_HEXAD_ESSENCE }
+    if kind == XB_K09_QUERY   { return XB_HEXAD_ESSENCE }
+    if kind == XB_K10_GRANT   { return XB_HEXAD_ORIGIN }
+    if kind == XB_K11_GOVERN  { return XB_HEXAD_ORIGIN }
+    if kind == XB_K12_THEN    { return XB_HEXAD_COMPOSE }
+    if kind == XB_K13_WITH    { return XB_HEXAD_COMPOSE }
+    if kind == XB_K14_UNDER   { return XB_HEXAD_COMPOSE }
+    if kind == XB_K15_IF      { return XB_HEXAD_COMPOSE }
+    if kind == XB_K16_LOOP    { return XB_HEXAD_COMPOSE }
+    if kind == XB_K17_LIFT    { return XB_HEXAD_ORIGIN }
+    if kind == XB_K18_REFLECT { return XB_HEXAD_ESSENCE }
+    /* Fusion ops default to COMPOSE; actual hexad is HJ-computed. */
+    return XB_HEXAD_COMPOSE
+}
+
+/* ------------------------------------------------------------------ */
+/* Cap-class lookup (per kernel).                                      */
+/* ------------------------------------------------------------------ */
+
+fn xii_basis_cap_class(kind: u8) -> u32 @export {
+    if kind == XB_K01_FORM    { return XB_CAP_NONE }
+    if kind == XB_K02_BIND    { return XB_CAP_BIND }
+    if kind == XB_K03_CONVEY  { return XB_CAP_CONVEY }
+    if kind == XB_K04_MEAN    { return XB_CAP_MEAN }
+    if kind == XB_K05_ACT     { return XB_CAP_ACT }
+    if kind == XB_K06_COMPOSE { return XB_CAP_NONE }
+    if kind == XB_K07_SEAL    { return XB_CAP_SEAL }
+    if kind == XB_K08_PROVE   { return XB_CAP_PROVE }
+    if kind == XB_K09_QUERY   { return XB_CAP_QUERY }
+    if kind == XB_K10_GRANT   { return XB_CAP_GRANT }
+    if kind == XB_K11_GOVERN  { return XB_CAP_GOVERN }
+    if kind == XB_K12_THEN    { return XB_CAP_NONE }
+    if kind == XB_K13_WITH    { return XB_CAP_NONE }
+    if kind == XB_K14_UNDER   { return XB_CAP_NONE }
+    if kind == XB_K15_IF      { return XB_CAP_NONE }
+    if kind == XB_K16_LOOP    { return XB_CAP_NONE }
+    if kind == XB_K17_LIFT    { return XB_CAP_LIFT }
+    if kind == XB_K18_REFLECT { return XB_CAP_REFLECT }
+    return XB_CAP_NONE
+}
+
+/* ------------------------------------------------------------------ */
+/* MPO weight lookup (used by canonicalisation termination, S9.3).    */
+/* For basis kernels: K-cost * 1000.                                  */
+/* For fusion ops: per-op constants (1 for F.COMPOSE up to 5 for F.LOOP). */
+/* ------------------------------------------------------------------ */
+
+fn xii_basis_mpo_weight(kind: u8) -> u32 @export {
+    if kind <= XB_K18_REFLECT {
+        return xii_basis_k_cost(kind) * 1000u32
+    }
+    if kind == XB_FCOMPOSE { return 1u32 }
+    if kind == XB_FTHEN    { return 2u32 }
+    if kind == XB_FWITH    { return 2u32 }
+    if kind == XB_FUNDER   { return 3u32 }
+    if kind == XB_FIF      { return 4u32 }
+    if kind == XB_FLOOP    { return 5u32 }
+    return 0u32
+}
+
+/* ------------------------------------------------------------------ */
+/* Predicates                                                          */
+/* ------------------------------------------------------------------ */
+
+fn xii_basis_is_origin(kind: u8) -> u8 @export {
+    let h : u8 = xii_basis_hexad(kind)
+    if h == XB_HEXAD_ORIGIN { return 1u8 }
+    return 0u8
+}
+
+fn xii_basis_is_motion(kind: u8) -> u8 @export {
+    let h : u8 = xii_basis_hexad(kind)
+    if h == XB_HEXAD_MOTION { return 1u8 }
+    return 0u8
+}
+
+fn xii_basis_is_essence(kind: u8) -> u8 @export {
+    let h : u8 = xii_basis_hexad(kind)
+    if h == XB_HEXAD_ESSENCE { return 1u8 }
+    return 0u8
+}
+
+fn xii_basis_is_fusion_op(kind: u8) -> u8 @export {
+    if kind >= XB_FCOMPOSE { return 1u8 }
+    return 0u8
+}
+
+/* Highest legal kind */
+fn xii_basis_kind_max() -> u8 @export {
+    return XB_FLOOP
+}
+
+/* Helper: K-cost lookup by term ref */
+fn xii_basis_term_k_cost(term_ref: u32) -> u32 @export {
+    let k : u8 = xii_term_get_kind(term_ref)
+    return xii_basis_k_cost(k)
+}
+
+fn xii_basis_term_hexad(term_ref: u32) -> u8 @export {
+    let k : u8 = xii_term_get_kind(term_ref)
+    return xii_basis_hexad(k)
+}
+
+fn xii_basis_term_cap_class(term_ref: u32) -> u32 @export {
+    let k : u8 = xii_term_get_kind(term_ref)
+    return xii_basis_cap_class(k)
+}
+
+fn xii_basis_term_mpo_weight(term_ref: u32) -> u32 @export {
+    let k : u8 = xii_term_get_kind(term_ref)
+    return xii_basis_mpo_weight(k)
+}

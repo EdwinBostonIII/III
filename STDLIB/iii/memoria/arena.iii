@@ -1,0 +1,71 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\arena.iii
+ *
+ * III STDLIB - memoria::arena
+ *
+ * A bump arena over a region.  Phase A: arena and region are 1:1
+ * (each arena owns exactly one region).  This is the convenience
+ * surface most stdlib modules consume.
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 0.99.
+ */
+
+module memoria_arena
+
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_alloc(id: u64, n: u64, align: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_used(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_remaining(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_reset(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_capacity(id: u64) -> u64 from "region.iii"
+
+const ARENA_INVALID : u64 = 0u64
+
+/* Create an arena backed by a fresh region of `bytes` capacity. */
+fn arena_new(bytes: u64) -> u64 @export {
+    return region_create(bytes)
+}
+
+/* Drop an arena, freeing the underlying region. */
+fn arena_drop(arena_id: u64) -> i32 @export {
+    return region_release(arena_id)
+}
+
+/* Reset the arena's bump pointer, recycling all space allocated since
+ * creation or the previous reset.  All pointers handed out since then
+ * are STALE -- caller must clear any external state that references
+ * them BEFORE calling.  Used by crypto modules with bounded scratch. */
+fn arena_reset(arena_id: u64) -> i32 @export {
+    return region_reset(arena_id)
+}
+
+/* Allocate `n` bytes with `align`-byte alignment.  Returns ptr or 0. */
+fn arena_alloc(arena_id: u64, n: u64, align: u64) -> u64 @export {
+    return region_alloc(arena_id, n, align)
+}
+
+/* Allocate aligned to 8 bytes (the most common case). */
+fn arena_alloc8(arena_id: u64, n: u64) -> u64 @export {
+    return region_alloc(arena_id, n, 8u64)
+}
+
+/* Allocate aligned to 1 byte (packed bytes). */
+fn arena_alloc1(arena_id: u64, n: u64) -> u64 @export {
+    return region_alloc(arena_id, n, 1u64)
+}
+
+fn arena_used(arena_id: u64) -> u64 @export {
+    return region_used(arena_id)
+}
+
+fn arena_remaining(arena_id: u64) -> u64 @export {
+    return region_remaining(arena_id)
+}
+
+fn arena_capacity(arena_id: u64) -> u64 @export {
+    return region_capacity(arena_id)
+}
+
+/* arena_reset_safe and clear_fn registry moved to a separate module
+ * (memoria/arena_safe.iii) to avoid disturbing this file's BSS layout
+ * which other tests are sensitive to.  See lattice plan Step 0017. */

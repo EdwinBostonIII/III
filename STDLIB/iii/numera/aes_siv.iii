@@ -1,0 +1,250 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\aes_siv.iii
+ *
+ * III STDLIB - numera::aes_siv -- AES-SIV deterministic AEAD (RFC 5297).
+ * RITCHIE Stage 4.10.  AES-SIV-CMAC-256: 32-byte key = K1||K2 (two AES-128
+ * keys); K1 drives S2V (AES-CMAC), K2 drives AES-CTR.  Deterministic: same
+ * (key, AAD, plaintext) -> same output; misuse-resistant (no nonce).
+ *
+ *   S2V(K1, AAD, P):  D = CMAC(0^16); D = dbl(D) ^ CMAC(AAD);
+ *                     IV = (|P|>=16) ? CMAC(P xorend D)
+ *                                    : CMAC(dbl(D) ^ pad(P))
+ *   encrypt:  IV = S2V(...); Q = IV with bits 63,31 cleared;
+ *             CT = AES-CTR(K2, Q, P);  output = IV || CT
+ *   decrypt:  P = AES-CTR(K2, Q, CT); IV' = S2V(...); accept iff IV'==IV
+ *
+ * Public surface (single AAD component):
+ *   aes_siv_encrypt(key32, ad, ad_len, pt, pt_len, out) -> i32   (out = 16+pt_len)
+ *   aes_siv_decrypt(key32, ad, ad_len, in, in_len, pt_out) -> u8 (1=ok, 0=reject)
+ *
+ * The >=16 xorend path buffers the plaintext (<=65536 bytes; deterministic
+ * AEAD is for bounded data — key-wrap, re-encryption — not bulk streams).
+ *
+ * Hexad: kind_convey.  Ring: R3.  K: 1.00.
+ */
+
+module numera_aes_siv
+
+extern @abi(c-msvc-x64) fn aes128_set_key(key: u64) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: u64, out_block: u64) -> i32 from "aes.iii"
+
+var SIV_SUB1 : [u8; 16]    /* CMAC subkey K1 */
+var SIV_SUB2 : [u8; 16]    /* CMAC subkey K2 */
+var SIV_X    : [u8; 16]    /* CBC-MAC state */
+var SIV_TMP  : [u8; 16]    /* AES in/out scratch */
+var SIV_D    : [u8; 16]    /* S2V accumulator */
+var SIV_CM   : [u8; 16]    /* CMAC result scratch */
+var SIV_IV   : [u8; 16]    /* synthetic IV */
+var SIV_Q    : [u8; 16]    /* CTR counter */
+var SIV_KS   : [u8; 16]    /* CTR keystream */
+var SIV_TBUF : [u8; 65536] /* xorend materialization */
+
+fn siv_xor16(dst: u64, a: u64, b: u64) -> i32 {
+    let d : *u8 = dst as *u8
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 16u64 { d[i] = ((pa[i] as u64) ^ (pb[i] as u64)) as u8 ; i = i + 1u64 }
+    return 0i32
+}
+
+/* p[16] = dbl(p) in GF(2^128) (in place): left-shift 1, reduce by 0x87 if MSB set. */
+fn siv_dbl(p: u64) -> i32 {
+    let b : *u8 = p as *u8
+    let msb : u64 = (b[0] as u64) >> 7u64
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 16u64
+    while i > 0u64 {
+        i = i - 1u64
+        let v : u64 = b[i] as u64
+        b[i] = (((v << 1u64) | carry) & 0xFFu64) as u8
+        carry = (v >> 7u64) & 1u64
+    }
+    if msb == 1u64 { b[15] = ((b[15] as u64) ^ 0x87u64) as u8 }
+    return 0i32
+}
+
+/* CMAC subkeys: SUB1 = dbl(AES(0^16)); SUB2 = dbl(SUB1).  Call after set_key(K1). */
+fn siv_cmac_setup() -> i32 {
+    let mut i : u64 = 0u64
+    while i < 16u64 { SIV_TMP[i] = 0u8 ; i = i + 1u64 }
+    aes_encrypt_block(&SIV_TMP as u64, &SIV_SUB1 as u64)
+    siv_dbl(&SIV_SUB1 as u64)
+    i = 0u64
+    while i < 16u64 { SIV_SUB2[i] = SIV_SUB1[i] ; i = i + 1u64 }
+    siv_dbl(&SIV_SUB2 as u64)
+    return 0i32
+}
+
+/* CMAC(msg[msg_len]) -> tag_out[16].  K1 must be set + subkeys computed. */
+fn siv_cmac(msg: u64, msg_len: u64, tag_out: u64) -> i32 {
+    let m : *u8 = msg as *u8
+    let x : *u8 = &SIV_X as *u8
+    let mut i : u64 = 0u64
+    while i < 16u64 { x[i] = 0u8 ; i = i + 1u64 }
+    /* number of full blocks before the last; last-block handling */
+    let mut nfull : u64 = 0u64
+    let mut last_off : u64 = 0u64
+    let mut last_complete : u64 = 0u64
+    if msg_len == 0u64 {
+        nfull = 0u64
+        last_off = 0u64
+        last_complete = 0u64
+    } else {
+        let total : u64 = (msg_len + 15u64) / 16u64
+        nfull = total - 1u64
+        last_off = nfull * 16u64
+        if (msg_len % 16u64) == 0u64 { last_complete = 1u64 }
+    }
+    /* CBC-MAC over the full blocks */
+    let mut bi : u64 = 0u64
+    while bi < nfull {
+        let base : u64 = bi * 16u64
+        let mut j : u64 = 0u64
+        while j < 16u64 { SIV_TMP[j] = ((x[j] as u64) ^ (m[base + j] as u64)) as u8 ; j = j + 1u64 }
+        aes_encrypt_block(&SIV_TMP as u64, &SIV_X as u64)
+        bi = bi + 1u64
+    }
+    /* build last block M_last into SIV_TMP */
+    let lp : *u8 = &SIV_TMP as *u8
+    if last_complete == 1u64 {
+        let mut j : u64 = 0u64
+        while j < 16u64 { lp[j] = ((m[last_off + j] as u64) ^ (SIV_SUB1[j] as u64)) as u8 ; j = j + 1u64 }
+    } else {
+        let rem : u64 = msg_len - last_off
+        let mut j : u64 = 0u64
+        while j < 16u64 {
+            let mut mv : u64 = 0u64
+            if j < rem { mv = m[last_off + j] as u64 }
+            if j == rem { mv = 0x80u64 }
+            lp[j] = (mv ^ (SIV_SUB2[j] as u64)) as u8
+            j = j + 1u64
+        }
+    }
+    /* tag = AES(X ^ M_last) */
+    let mut j2 : u64 = 0u64
+    while j2 < 16u64 { SIV_TMP[j2] = ((x[j2] as u64) ^ (lp[j2] as u64)) as u8 ; j2 = j2 + 1u64 }
+    aes_encrypt_block(&SIV_TMP as u64, tag_out)
+    return 0i32
+}
+
+/* S2V over a single AAD + plaintext -> SIV_IV.  K1 set + subkeys done. */
+fn siv_s2v(ad: u64, ad_len: u64, pt: u64, pt_len: u64) -> i32 {
+    let mut i : u64 = 0u64
+    /* D = CMAC(0^16) */
+    while i < 16u64 { SIV_TMP[i] = 0u8 ; i = i + 1u64 }
+    siv_cmac(&SIV_TMP as u64, 16u64, &SIV_D as u64)
+    /* D = dbl(D) ^ CMAC(AAD) */
+    siv_dbl(&SIV_D as u64)
+    siv_cmac(ad, ad_len, &SIV_CM as u64)
+    siv_xor16(&SIV_D as u64, &SIV_D as u64, &SIV_CM as u64)
+    /* plaintext */
+    if pt_len >= 16u64 {
+        /* T = pt xorend D ; materialize, then CMAC */
+        let tb : *u8 = &SIV_TBUF as *u8
+        let pp : *u8 = pt as *u8
+        i = 0u64
+        while i < pt_len { tb[i] = pp[i] ; i = i + 1u64 }
+        let dp : *u8 = &SIV_D as *u8
+        let mut k : u64 = 0u64
+        while k < 16u64 {
+            let idx : u64 = pt_len - 16u64 + k
+            tb[idx] = ((tb[idx] as u64) ^ (dp[k] as u64)) as u8
+            k = k + 1u64
+        }
+        siv_cmac(&SIV_TBUF as u64, pt_len, &SIV_IV as u64)
+    } else {
+        /* T = dbl(D) ^ pad(pt) ; single block */
+        siv_dbl(&SIV_D as u64)
+        let dp : *u8 = &SIV_D as *u8
+        let pp : *u8 = pt as *u8
+        let mut k : u64 = 0u64
+        while k < 16u64 {
+            let mut pv : u64 = 0u64
+            if k < pt_len { pv = pp[k] as u64 }
+            if k == pt_len { pv = 0x80u64 }
+            SIV_TMP[k] = ((dp[k] as u64) ^ pv) as u8
+            k = k + 1u64
+        }
+        siv_cmac(&SIV_TMP as u64, 16u64, &SIV_IV as u64)
+    }
+    return 0i32
+}
+
+/* AES-CTR over K2 (must be set): SIV_Q = IV with bits 63,31 cleared, then
+ * crypt in/out for len bytes, incrementing Q (128-bit BE) per block. */
+fn siv_ctr(iv: u64, in_buf: u64, out_buf: u64, len: u64) -> i32 {
+    let qp : *u8 = &SIV_Q as *u8
+    let ivp : *u8 = iv as *u8
+    let mut i : u64 = 0u64
+    while i < 16u64 { qp[i] = ivp[i] ; i = i + 1u64 }
+    qp[8] = ((qp[8] as u64) & 0x7Fu64) as u8
+    qp[12] = ((qp[12] as u64) & 0x7Fu64) as u8
+    let ip : *u8 = in_buf as *u8
+    let op : *u8 = out_buf as *u8
+    let mut off : u64 = 0u64
+    while off < len {
+        aes_encrypt_block(&SIV_Q as u64, &SIV_KS as u64)
+        let ks : *u8 = &SIV_KS as *u8
+        let mut j : u64 = 0u64
+        let mut take : u64 = 16u64
+        if (len - off) < 16u64 { take = len - off }
+        while j < take { op[off + j] = ((ip[off + j] as u64) ^ (ks[j] as u64)) as u8 ; j = j + 1u64 }
+        /* Q = Q + 1 (128-bit big-endian) */
+        let mut c : u64 = 16u64
+        let mut go : u64 = 1u64
+        while go == 1u64 {
+            c = c - 1u64
+            let nv : u64 = ((qp[c] as u64) + 1u64) & 0xFFu64
+            qp[c] = nv as u8
+            if nv != 0u64 { go = 0u64 }
+            if c == 0u64 { go = 0u64 }
+        }
+        off = off + 16u64
+    }
+    return 0i32
+}
+
+fn aes_siv_encrypt(key32: u64, ad: u64, ad_len: u64, pt: u64, pt_len: u64, out: u64) -> i32 @export {
+    let k1 : u64 = key32
+    let k2 : u64 = key32 + 16u64
+    /* S2V under K1 */
+    aes128_set_key(k1)
+    siv_cmac_setup()
+    siv_s2v(ad, ad_len, pt, pt_len)
+    /* out = IV || CTR(K2, IV, pt) */
+    let op : *u8 = out as *u8
+    let ivp : *u8 = &SIV_IV as *u8
+    let mut i : u64 = 0u64
+    while i < 16u64 { op[i] = ivp[i] ; i = i + 1u64 }
+    aes128_set_key(k2)
+    siv_ctr(&SIV_IV as u64, pt, out + 16u64, pt_len)
+    return 0i32
+}
+
+fn aes_siv_decrypt(key32: u64, ad: u64, ad_len: u64, in_buf: u64, in_len: u64, pt_out: u64) -> u8 @export {
+    if in_len < 16u64 { return 0u8 }
+    let k1 : u64 = key32
+    let k2 : u64 = key32 + 16u64
+    let pt_len : u64 = in_len - 16u64
+    /* IV = in[0:16] */
+    let inp : *u8 = in_buf as *u8
+    let ivp : *u8 = &SIV_IV as *u8
+    let mut i : u64 = 0u64
+    while i < 16u64 { ivp[i] = inp[i] ; i = i + 1u64 }
+    /* P = CTR(K2, IV, in[16:]) */
+    aes128_set_key(k2)
+    siv_ctr(&SIV_IV as u64, in_buf + 16u64, pt_out, pt_len)
+    /* IV' = S2V(K1, AAD, P) into SIV_D-path; recompute and compare */
+    aes128_set_key(k1)
+    siv_cmac_setup()
+    /* save received IV before s2v overwrites SIV_IV (SIV_Q free post-CTR) */
+    let rp : *u8 = &SIV_Q as *u8
+    i = 0u64
+    while i < 16u64 { rp[i] = ivp[i] ; i = i + 1u64 }
+    siv_s2v(ad, ad_len, pt_out, pt_len)
+    let mut diff : u64 = 0u64
+    i = 0u64
+    while i < 16u64 { diff = diff | ((ivp[i] as u64) ^ (rp[i] as u64)) ; i = i + 1u64 }
+    if diff == 0u64 { return 1u8 }
+    return 0u8
+}

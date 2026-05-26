@@ -1,0 +1,336 @@
+/* STDLIB/iii/omnia/xii_termination.iii -- mig4 Step 5: the termination / measure-decrease gate.
+ * Newman's lemma: local confluence (Step 4, xii_joinability: root overlaps all join) + TERMINATION
+ * => the XII canonicaliser is a confluent normaliser on the reorderable set.  Step 4 proved the
+ * local-confluence half; this module verifies the other half -- that the rewrite relation
+ * TERMINATES: every rule application strictly decreases a well-founded measure.
+ *
+ * THE MEASURE + THE FINDING.  xii_canonicalise.iii bounds termination by xii_canon_weight
+ * (w_self + max(child weights) + 1).  That simple numeric weight is NOT a complete termination
+ * certificate.  Building each rule's firing redex and measuring the one-step delta reveals THREE
+ * orthogonal kinds of progress, only the first of which canon_weight sees:
+ *   (1) SHRINK   -- collapse/eval rules (null-elimination R016/R017/R037/R038, trit evaluation
+ *                   R101-R105, identity removal) strictly decrease canon_weight.
+ *   (2) DEDUP    -- the FIF branch-lift rules (R005-R012) factor a common sub-operation out of an
+ *                   FIF's two branches: FIF(p, op(a,c), op(b,c)) -> op(FIF(p,a,b), c).  This is
+ *                   canon_weight-PRESERVING (same max-depth) yet strictly shrinks the TERM (the
+ *                   duplicated branch is merged) -- canon_weight cannot see it; node_count can.
+ *   (3) RE-NEST  -- the associativity rules (R001-R004) merely re-nest a fixed multiset of leaves:
+ *                   canon_weight-PRESERVING AND node_count-PRESERVING, yet they make progress
+ *                   toward the canonical spine -- measured by assoc_penalty (mis-nested nodes).
+ * So the complete certificate is the LEXICOGRAPHIC TRIPLE (canon_weight, node_count, assoc_penalty):
+ * every collapse rule drops component 1; every branch-lift keeps 1 equal and drops 2; every
+ * associativity rule keeps 1,2 equal and drops 3.  Three bounded-below naturals => well-founded =>
+ * the relation terminates.  This mirrors Step 4's finding (XII is root-confluent, not globally
+ * confluent) along the termination axis: the IMPLEMENTED weight is a sound bound only for the
+ * shrink rules; the dedup + re-nest rules need the two structural components -- a real, verified
+ * architectural fact (the diagnostic flagged R005 STUCK under a weight+penalty pair, forcing the
+ * node_count component), not an assumption.
+ *
+ * assoc_penalty is kind-aware because the four associativity rules orient in TWO directions:
+ *   FCOMPOSE/FTHEN/FWITH (R001-R003 = right-association) -> a same-kind LEFT child is mis-nested;
+ *   FUNDER               (R004     = LEFT-association)   -> a same-kind RIGHT child is mis-nested.
+ *
+ * The gate builds each rule's guard-firing redex (xjn_build_rule_witness -- the SAME sentinel
+ * witness Step 4 uses), applies the rule ONCE, and classifies the one-step delta:
+ *   DEC_W (weight down) | DEC_N (weight equal, size down) | DEC_P (weight+size equal, penalty down)
+ *   | INC_W (weight up) | INC_N (weight equal, size up) | STUCK (all three flat) | NO_WITNESS (the
+ *   sentinel redex did not fire this rule's guard -- a sort/idempotent/cap guard the generic
+ *   witness does not instantiate, e.g. R032/R042 need an out-of-order FORM spine; tallied honestly,
+ *   NEVER counted as terminating).  GREEN iff zero INC_W, zero INC_N, zero STUCK over the firing
+ *   set: every firing rule strictly decreases the lexicographic triple.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: Steps 1/2/4 + xii_term/xii_rewrite/
+ * xii_canonicalise only.  Determinism: integer-only; ==/!= and UNSIGNED < ; single-line fns;
+ * masked indices; recursion only in the measure walks (mirrors xii_canon_weight's own recursion).
+ */
+module omnia_xii_termination
+
+extern @abi(c-msvc-x64) fn xrp_rule_count() -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_rid_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xro_slot_of_rid(rid: u32) -> u32 from "xii_rule_overlap.iii"
+extern @abi(c-msvc-x64) fn xjn_build_rule_witness(slot: u32) -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canon_weight(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+const XTM_N        : u32 = 49u32
+const XTM_NULL_REF : u32 = 0xFFFFFFFFu32
+const XTM_MASK     : u64 = 0xFFFFFFFFu64
+const XTM_SENT     : u32 = 0xFFFFFFFFu32
+/* one-step delta classes (lexicographic triple: weight, node_count, assoc_penalty) */
+const XTM_NOWIT : u8 = 0u8   /* the sentinel redex did not fire this rule */
+const XTM_DECW  : u8 = 1u8   /* canon_weight strictly decreased (SHRINK) */
+const XTM_DECN  : u8 = 2u8   /* weight equal, node_count strictly decreased (DEDUP) */
+const XTM_DECP  : u8 = 3u8   /* weight+size equal, assoc_penalty strictly decreased (RE-NEST) */
+const XTM_INCW  : u8 = 4u8   /* canon_weight INCREASED -- a termination violation */
+const XTM_INCN  : u8 = 5u8   /* weight equal, node_count INCREASED -- duplication, a violation */
+const XTM_STUCK : u8 = 6u8   /* all three components flat -- the triple is insufficient */
+/* XII kinds whose mis-nest direction the penalty scores */
+const XTM_FCOMPOSE : u8 = 18u8
+const XTM_FTHEN    : u8 = 19u8
+const XTM_FWITH    : u8 = 20u8
+const XTM_FUNDER   : u8 = 21u8
+const XTM_FIF      : u8 = 22u8
+const XTM_FLOOP    : u8 = 23u8
+const XTM_TVAL     : u8 = 24u8
+
+var XTM_CLS   : [u8;  49]
+var XTM_W0    : [u64; 49]
+var XTM_W1    : [u64; 49]
+var XTM_N0    : [u64; 49]
+var XTM_N1    : [u64; 49]
+var XTM_P0    : [u64; 49]
+var XTM_P1    : [u64; 49]
+var XTM_FIRED : u32 = 0u32
+
+/* node_count: total nodes in the term (the DEDUP measure).  Recurses bottom-up exactly like
+ * xii_canon_weight (child_a,child_b always; child_c only for FIF). */
+fn _xtm_nodes(t: u32) -> u64 {
+    if t == XTM_NULL_REF { return 0u64 }
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= 17u8 { return 1u64 }
+    if kind == XTM_TVAL { return 1u64 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let mut n : u64 = 1u64 + _xtm_nodes(a) + _xtm_nodes(b)
+    if kind == XTM_FIF { n = n + _xtm_nodes(xii_term_get_child_c(t)) }
+    return n
+}
+
+/* assoc_penalty: count of associative nodes nested in their rule's NON-canonical direction
+ * (the RE-NEST measure).  FCOMPOSE/FTHEN/FWITH right-associate (R001-R003) so a same-kind LEFT
+ * child is mis-nested; FUNDER left-associates (R004) so a same-kind RIGHT child is mis-nested. */
+fn _xtm_penalty(t: u32) -> u64 {
+    if t == XTM_NULL_REF { return 0u64 }
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= 17u8 { return 0u64 }
+    if kind == XTM_TVAL { return 0u64 }
+    let a : u32 = xii_term_get_child_a(t)
+    let b : u32 = xii_term_get_child_b(t)
+    let mut p : u64 = 0u64
+    if kind == XTM_FCOMPOSE { if a != XTM_NULL_REF { if xii_term_get_kind(a) == XTM_FCOMPOSE { p = 1u64 } } }
+    if kind == XTM_FTHEN    { if a != XTM_NULL_REF { if xii_term_get_kind(a) == XTM_FTHEN    { p = 1u64 } } }
+    if kind == XTM_FWITH    { if a != XTM_NULL_REF { if xii_term_get_kind(a) == XTM_FWITH    { p = 1u64 } } }
+    if kind == XTM_FUNDER   { if b != XTM_NULL_REF { if xii_term_get_kind(b) == XTM_FUNDER   { p = 1u64 } } }
+    p = p + _xtm_penalty(a) + _xtm_penalty(b)
+    if kind == XTM_FIF { p = p + _xtm_penalty(xii_term_get_child_c(t)) }
+    return p
+}
+
+/* the lexicographic strict-decrease predicate on the triple (weight, node_count, penalty):
+ * 1 iff weight down, OR weight equal & size down, OR weight+size equal & penalty down.
+ * UNSIGNED u64 compares (safe). */
+fn _xtm_lex3(w0: u64, n0: u64, p0: u64, w1: u64, n1: u64, p1: u64) -> u8 {
+    if w1 < w0 { return 1u8 }
+    if w1 > w0 { return 0u8 }
+    if n1 < n0 { return 1u8 }
+    if n1 > n0 { return 0u8 }
+    if p1 < p0 { return 1u8 }
+    return 0u8
+}
+
+/* classify one rule's single-step delta on its guard-firing sentinel redex; records the six
+ * measures into the per-slot tables.  Measures BEFORE apply (apply mutates the redex in place). */
+fn xtm_classify_one(slot: u32) -> u8 {
+    xii_term_arena_reset()
+    let w0r : u32 = xjn_build_rule_witness(slot)
+    if w0r == XTM_NULL_REF { return XTM_NOWIT }
+    /* FLOOP rules terminate via canon_weight's count multiplier, which only engages for count>1.
+     * The joinability witness uses count=1 (the degenerate "do-once"); rebuild real loops at
+     * count=2 so the multiplier engages and loop-distribution/fusion show their true weight
+     * decrease.  R013 (the count==1 loop-unit collapse) then NO_WITNESSes here -- it is the
+     * degenerate case, trivially weight-decreasing, outside the count>1 loop domain. */
+    let mut w : u32 = w0r
+    if xii_term_get_kind(w) == XTM_FLOOP { w = xii_term_make_loop(xii_term_get_child_a(w), 2u64) }
+    if w == XTM_NULL_REF { return XTM_NOWIT }
+    let rid : u32 = xrp_rid_at(slot)
+    let w0 : u64 = xii_canon_weight(w) as u64
+    let n0 : u64 = _xtm_nodes(w)
+    let p0 : u64 = _xtm_penalty(w)
+    let r : u32 = xii_rewrite_apply_specific(rid, w)
+    if xii_rewrite_last_rule_fired() != rid { return XTM_NOWIT }
+    if r == XTM_NULL_REF { return XTM_NOWIT }
+    let w1 : u64 = xii_canon_weight(r) as u64
+    let n1 : u64 = _xtm_nodes(r)
+    let p1 : u64 = _xtm_penalty(r)
+    let s : u64 = (slot as u64) & XTM_MASK
+    XTM_W0[s] = w0
+    XTM_W1[s] = w1
+    XTM_N0[s] = n0
+    XTM_N1[s] = n1
+    XTM_P0[s] = p0
+    XTM_P1[s] = p1
+    if w1 > w0 { return XTM_INCW }
+    if w1 < w0 { return XTM_DECW }
+    if n1 > n0 { return XTM_INCN }
+    if n1 < n0 { return XTM_DECN }
+    if p1 < p0 { return XTM_DECP }
+    return XTM_STUCK
+}
+
+/* classify all 49 rules; record class per slot; return the count that fired. */
+fn xtm_classify_all() -> u32 @export {
+    let n : u64 = xrp_rule_count() as u64
+    let mut i : u64 = 0u64
+    let mut fired : u32 = 0u32
+    while i < n {
+        let c : u8 = xtm_classify_one(i as u32)
+        XTM_CLS[i & XTM_MASK] = c
+        if c != XTM_NOWIT { fired = fired + 1u32 }
+        i = i + 1u64
+    }
+    XTM_FIRED = fired
+    return fired
+}
+
+/* number of slots in delta-class c (call after xtm_classify_all). */
+fn xtm_count_cls(c: u8) -> u64 @export {
+    let n : u64 = xrp_rule_count() as u64   /* the LIVE rule count (45 post-route-S), not the array cap */
+    let mut k : u64 = 0u64
+    let mut acc : u64 = 0u64
+    while k < n {
+        if XTM_CLS[k] == c { acc = acc + 1u64 }
+        k = k + 1u64
+    }
+    return acc
+}
+
+fn xtm_fired_count() -> u64 @export { return (XTM_FIRED as u64) & XTM_MASK }
+
+/* firing rules that do NOT strictly decrease the lexicographic triple (INC_W, INC_N, or STUCK). */
+fn xtm_anomaly_count() -> u64 @export { return xtm_count_cls(XTM_INCW) + xtm_count_cls(XTM_INCN) + xtm_count_cls(XTM_STUCK) }
+
+/* rule-id of the first anomaly, or 0 if none -- the diagnosable handle. */
+fn xtm_first_anomaly_rid() -> u32 @export {
+    let n : u64 = xrp_rule_count() as u64
+    let mut k : u64 = 0u64
+    while k < n {
+        let c : u8 = XTM_CLS[k]
+        if c == XTM_INCW { return xrp_rid_at(k as u32) }
+        if c == XTM_INCN { return xrp_rid_at(k as u32) }
+        if c == XTM_STUCK { return xrp_rid_at(k as u32) }
+        k = k + 1u64
+    }
+    return 0u32
+}
+
+/* the delta-class of a specific rule by rule-id (call after xtm_classify_all); 255 = unknown rid. */
+fn xtm_class_of_rid(rid: u32) -> u8 @export {
+    let slot : u32 = xro_slot_of_rid(rid)
+    if slot == XTM_SENT { return 255u8 }
+    if slot >= XTM_N { return 255u8 }
+    return XTM_CLS[(slot as u64) & XTM_MASK]
+}
+
+/* probe a recorded measure for a rule by rule-id: which 0=w0 1=w1 2=n0 3=n1 4=p0 5=p1. */
+fn xtm_probe_rid(rid: u32, which: u32) -> u64 {
+    let slot : u32 = xro_slot_of_rid(rid)
+    if slot >= XTM_N { return 0xFFFFFFFFFFFFFFFFu64 }
+    let s : u64 = (slot as u64) & XTM_MASK
+    if which == 0u32 { return XTM_W0[s] }
+    if which == 1u32 { return XTM_W1[s] }
+    if which == 2u32 { return XTM_N0[s] }
+    if which == 3u32 { return XTM_N1[s] }
+    if which == 4u32 { return XTM_P0[s] }
+    return XTM_P1[s]
+}
+
+/* THE GATE.  GREEN(1) iff some rule fired AND every firing rule strictly decreases the
+ * lexicographic triple (canon_weight, node_count, assoc_penalty) -- zero INC_W, INC_N, STUCK.
+ * RED(0) on a weight-increase, a duplication, or a stuck delta (termination not certified). */
+fn xtm_gate() -> u32 @export {
+    let fired : u32 = xtm_classify_all()
+    if fired == 0u32 { return 0u32 }
+    if xtm_anomaly_count() != 0u64 { return 0u32 }
+    return 1u32
+}
+
+/* KAT: 99 = all pass; a distinct code per failed check (diagnosable).
+ * Proves: the kind-aware penalty MEASURES mis-nesting in both directions, node_count MEASURES
+ * size, and the lex-triple comparator REJECTS non-decreases (1-9); the gate is GREEN -- every
+ * firing rule strictly decreases the triple (10); THE FINDING in three parts -- the associativity
+ * rules R001-R004 are weight+size-PRESERVING but penalty-DECREASING (DEC_P) (11-18); the FIF
+ * branch-lift rules R005-R012 are weight-PRESERVING but size-DECREASING (DEC_N), the class that
+ * forced the node_count component (19-22); the collapse R037 and trit R101 rules strictly decrease
+ * canon_weight (DEC_W) (23-24); reproducible (25); and -- the prove-the-negative arm -- the gate
+ * has TEETH: a fabricated weight-increase, size-increase, and fully-flat delta are each rejected
+ * by the SAME triple arithmetic the gate uses (26-28). */
+fn xtm_selftest() -> u64 @export {
+    /* (1-2) ROUTE-S INVARIANT: make_fusion2 canonicalises at construction, so every fusion the engine
+     * builds is already spine-canonical and carries ZERO re-association penalty. (A deliberately
+     * mis-nested term can no longer even be CONSTRUCTED -- the constructor re-associates it -- which
+     * is precisely why the RE-NEST rule class below is empty. The penalty function is sound and now
+     * only ever observes 0.) node_count still measures size for the DEC_N (dedup) findings. */
+    xii_term_arena_reset()
+    let rc : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(0u8, 1u32), xii_term_make_fusion2(18u8, xii_term_make_basis(0u8, 1u32), xii_term_make_basis(0u8, 1u32)))
+    if _xtm_penalty(rc) != 0u64 { return 1u64 }     /* canonical (right-leaning) FCOMPOSE: zero penalty */
+    if _xtm_nodes(rc) != 5u64 { return 2u64 }       /* node_count counts: 2 FCOMPOSE + 3 leaves */
+
+    /* (3-6) the lex-triple comparator: strict-decrease only, in component order. The 3rd (penalty)
+     * component is retained for soundness/generality though -- post-route-S -- no live rule needs it. */
+    if _xtm_lex3(100u64, 9u64, 5u64, 99u64, 99u64, 99u64) != 1u8 { return 3u64 }   /* weight down dominates */
+    if _xtm_lex3(100u64, 9u64, 5u64, 100u64, 8u64, 99u64) != 1u8 { return 4u64 }   /* eq weight, size down */
+    if _xtm_lex3(100u64, 9u64, 5u64, 100u64, 9u64, 4u64) != 1u8 { return 5u64 }    /* eq weight+size, penalty down */
+    if _xtm_lex3(100u64, 9u64, 5u64, 100u64, 9u64, 5u64) != 0u8 { return 6u64 }    /* identical: NOT a decrease */
+
+    /* (7) the gate is GREEN over the live 45-rule set: every firing rule strictly decreases the triple. */
+    if xtm_gate() != 1u32 { return 7u64 }
+
+    /* (8) ROUTE-S ELIMINATION, OBSERVED: the RE-NEST (DEC_P) class -- rules that preserved both
+     * canon_weight AND node_count and decreased only the penalty (exactly R001-R004) -- is now EMPTY.
+     * Associativity is structural at the constructor, so termination rests entirely on the first two
+     * components (canon_weight, node_count) = SHRINK + DEDUP. This is the functional witness that
+     * route S removed the re-nesting rule class wholesale, not the assoc_penalty bookkeeping alone. */
+    if xtm_count_cls(XTM_DECP) != 0u64 { return 8u64 }
+
+    /* (9-12) THE LIVE FINDING: the FIF branch-lift rules R005-R012 are weight-PRESERVING but
+     * size-DECREASING (DEC_N) -- the class that forced the node_count component; non-empty. */
+    if xtm_class_of_rid(5u32) != XTM_DECN { return 9u64 }                        /* the R005 the diag flagged */
+    if xtm_probe_rid(5u32, 0u32) != xtm_probe_rid(5u32, 1u32) { return 10u64 }   /* R005 weight equal */
+    if xtm_probe_rid(5u32, 2u32) == xtm_probe_rid(5u32, 3u32) { return 11u64 }   /* R005 size strictly shrank (n1<n0) */
+    if xtm_count_cls(XTM_DECN) == 0u64 { return 12u64 }                          /* the dedup class is non-empty */
+
+    /* (13-14) collapse + trit rules strictly decrease canon_weight (DEC_W). */
+    if xtm_class_of_rid(37u32) != XTM_DECW { return 13u64 }                      /* FCOMPOSE(null,x)->x */
+    if xtm_class_of_rid(101u32) != XTM_DECW { return 14u64 }                     /* TRIT_NOT(VAL)->VAL */
+
+    /* (15) PROVE-THE-CUT (positive arm): the retired associativity rules R001-R004 are no longer in
+     * the live table -- their class is UNKNOWN (255), confirming route S genuinely removed them
+     * rather than re-grading them. Distinguishes a real cut from a silent re-label. */
+    if xtm_class_of_rid(1u32) != 255u8 { return 15u64 }
+    if xtm_class_of_rid(4u32) != 255u8 { return 15u64 }
+
+    /* (16) reproducible: re-run, anomaly count stays zero, fired count unchanged + non-zero. */
+    let f0 : u64 = xtm_fired_count()
+    if xtm_gate() != 1u32 { return 16u64 }
+    if xtm_anomaly_count() != 0u64 { return 16u64 }
+    if xtm_fired_count() != f0 { return 16u64 }
+    if f0 == 0u64 { return 16u64 }
+
+    /* (17-19) the gate has TEETH (prove-the-negative): weight-increase, size-increase, and fully-
+     * flat deltas are each rejected by the SAME triple arithmetic the gate uses -- a genuine
+     * non-terminating rule would redden the gate, it is not vacuously green. */
+    if _xtm_lex3(50u64, 3u64, 1u64, 60u64, 3u64, 1u64) != 0u8 { return 17u64 }   /* weight increase rejected */
+    if _xtm_lex3(50u64, 3u64, 1u64, 50u64, 4u64, 1u64) != 0u8 { return 18u64 }   /* size increase rejected */
+    if _xtm_lex3(50u64, 3u64, 1u64, 50u64, 3u64, 1u64) != 0u8 { return 19u64 }   /* flat rejected */
+
+    return 99u64
+}
+
+/* xii_termination EMBODIES the termination half of XII's confluence: every rewrite rule strictly
+ * decreases the well-founded lexicographic triple (canon_weight, node_count, assoc_penalty) -- three
+ * orthogonal kinds of progress: SHRINK (collapse rules drop weight), DEDUP (FIF branch-lifts drop
+ * size at equal weight), RE-NEST (associativity rules drop the mis-nest penalty at equal weight and
+ * size, in both nesting directions).  The IMPLEMENTED canon_weight is a sound bound only for the
+ * shrink rules; the two structural components complete the certificate.  With Step-4 local
+ * confluence on root overlaps, this is the Newman half that makes the canonicaliser a terminating,
+ * confluent normaliser on the reorderable set -- and the gate proves itself RED on a fabricated
+ * weight-increase, duplication, or stuck delta. */

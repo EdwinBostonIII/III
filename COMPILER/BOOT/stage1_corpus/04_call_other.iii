@@ -1,0 +1,10 @@
+module corpus_04
+
+fn helper() -> u64 {
+    return 21
+}
+
+fn main() -> u64 {
+    let h: u64 = helper()
+    return h + h
+}

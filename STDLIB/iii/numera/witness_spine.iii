@@ -1,0 +1,512 @@
+/* numera/witness_spine.iii -- Layer 3, Module 12 (gospel).
+ * Master DAG over the witness chain: frag_id hash table + per-pillar /
+ * per-producer / per-operation reverse indices + per-epoch root store +
+ * from-seed chain replay verifier. Indexes fragments published by the
+ * witness hook; does not produce them. Hexad: kind_witness. Ring: R-1. K: 0.99.
+ * Discipline: W2, W8 (static tables), W13, W14. NOT reentrant (module scratch).
+ *
+ * The reverse-index layer: given a published witness fragment (produced by
+ * witness_hook), the spine records it into a frag_id -> index hash table and
+ * into per-pillar, per-producer, and per-operation-type lists, and it owns the
+ * per-epoch root store plus a from-seed chain-replay verifier. It does not
+ * produce fragments; it indexes and re-attests them.
+ *
+ * Determinism (M2/W5): all reductions are power-of-two masks (no modulo,
+ * Trap 11; no u64 division, Trap 18), all hashing is the proven keccak256
+ * sponge over a fixed byte order, no recursion (W15) -- every traversal is an
+ * explicit while over an index or a chain link, sentinel-flag driven (W14).
+ *
+ * NIH (M1): identifier + witness_hook + keccak256 only. No ML / heuristics
+ * (M3/M4): every decision is an exact array index, mask, or 32-byte compare.
+ */
+
+module numera_witness_spine
+
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_producer(idx: u64, out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_op_id(idx: u64, out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_pillar(idx: u64) -> u16 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_is_revoked(idx: u64) -> u8 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_epoch_close() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_epoch_index() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+const WSPINE_OK            : i32 =  0i32
+const WSPINE_E_FULL        : i32 = -1i32
+const WSPINE_E_NOT_FOUND   : i32 = -2i32
+const WSPINE_E_BAD         : i32 = -3i32
+
+const WSPINE_HASH_SIZE     : u64 = 2097152u64
+const WSPINE_HASH_MASK     : u64 = 2097151u64
+const WSPINE_MAX_EPOCHS    : u64 = 65536u64
+const WSPINE_MAX_PILLAR    : u32 = 16u32
+const WSPINE_PILLAR_CAP    : u64 = 65536u64
+const WSPINE_CHAIN_BUCKETS : u64 = 65536u64
+const WSPINE_CHAIN_NODES   : u64 = 2097152u64
+const WSPINE_ID_BYTES      : u64 = 32u64
+const WSPINE_NIL           : u32 = 0xFFFFFFFFu32
+const WSPINE_SENTINEL      : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Frag-id hash table (open addressing, linear probe). FOOTPRINT NOTE (.bss budget):
+ * iiis reserves 8 bytes per array element regardless of declared type, so a naive
+ * [u8; N] reserves 8N and a [u32; N] reserves 8N. Three frugal idioms keep capacity
+ * IDENTICAL (2Mi slots) while reserving only what the data needs:
+ *   (a) NO stored frag_id copy. The hook (witness_hook.iii) is the authoritative id
+ *       store; on lookup we recover the slot's id via wh_get_frag_id(slot_idx) and
+ *       compare. This removes the 2Mi*32 = 64 MiB id-copy table entirely (M1 NIH:
+ *       single source of truth for the id is the hook).
+ *   (b) idx table packed 2-per-u64 ([u64; (N+1)/2]): a fragment index is < 1Mi
+ *       (WH_MAX_FRAGMENTS), so it fits in 32 bits; two slots share one u64 word via
+ *       ws_pk2_get/set (shift/mask on the FULL word -- no u32-width store, Trap).
+ *   (c) live bitmap packed 8-per-u64 ([u64; (N+7)/8]) accessed by byte pointer
+ *       (the witness_hook [u64; bytes/8] idiom). 1 live byte per slot, 16->2 MiB.
+ * Capacity is unchanged (2Mi slots); only the representation changed. */
+var WSPINE_HT_IDX  : [u64; 1048576]    /* 2Mi indices packed 2-per-u64 */
+var WSPINE_HT_LIVE : [u64; 262144]     /* 2Mi live bytes (8-per-u64), byte-addressed */
+
+/* Per-epoch root store + recorded epoch end boundaries (for epoch-aware replay).
+ * WSPINE_EPOCH_START[e] holds the END boundary of epoch e (== wh_next_idx() at the
+ * moment epoch e closed), so epoch e spans [ (e==0 ? 0 : EPOCH_START[e-1]),
+ * EPOCH_START[e] ) -- the same span wh_epoch_close folded. */
+var WSPINE_EPOCH_ROOT  : [u64; 262144]   /* 64Ki * 32 bytes */
+var WSPINE_EPOCH_START : [u64; 65536]
+var WSPINE_EPOCH_COUNT : u64 = 0u64
+
+/* Per-pillar fragment lists. */
+var WSPINE_PILLAR_LEN : [u64; 16]
+var WSPINE_PILLAR_ARR : [u64; 1048576]   /* 16 * 64Ki */
+
+/* Producer / operation chained lists (intrusive, low-16-bit bucketed).
+ * 2 Mi node pool: ws_register pushes two nodes per fragment (producer + op) over
+ * the hook's 1 Mi fragment ceiling, so 2 Mi avoids silent E_FULL at 50 percent.
+ * Same three frugal idioms as the hash table (capacity 2Mi nodes, unchanged):
+ *   - NO stored key copy. A node's key is the producer-id (kind 0) or op-id
+ *     (kind 1) of fragment WSPINE_CHAIN_IDX[node]; the iterators recover it via
+ *     wh_get_producer / wh_get_op_id and compare. Removes 2Mi*32 = 64 MiB.
+ *   - next/idx packed 2-per-u64 (a node index and a fragment index both < 2Mi <
+ *     2^32, so 32 bits each).
+ *   - kind bitmap packed 8-per-u64, byte-addressed. */
+var WSPINE_PROD_CHAIN_HEAD : [u32; 65536]
+var WSPINE_OP_CHAIN_HEAD   : [u32; 65536]
+var WSPINE_CHAIN_NEXT      : [u64; 1048576]   /* 2Mi node-next links packed 2-per-u64 */
+var WSPINE_CHAIN_IDX       : [u64; 1048576]   /* 2Mi frag indices packed 2-per-u64 */
+var WSPINE_CHAIN_KIND      : [u64; 262144]    /* 2Mi kind bytes (8-per-u64), byte-addressed */
+var WSPINE_CHAIN_USED      : u32 = 0u32
+
+/* Module-scope scratch (Trap 7: no local var arrays). NOT reentrant.
+ * WSPINE_KCMP / WSPINE_KCMP2 hold the key recovered from the hook for the
+ * stored-index compare (replaces the deleted per-slot/per-node id copies). */
+var WSPINE_FID        : [u8; 32]
+var WSPINE_PID        : [u8; 32]
+var WSPINE_OID        : [u8; 32]
+var WSPINE_REPLAY_CUR : [u8; 32]
+var WSPINE_REPLAY_FID : [u8; 32]
+var WSPINE_KCMP        : [u8; 32]
+var WSPINE_KCMP2       : [u8; 32]
+
+/* ---- packed-table accessors (frugal-representation helpers) ----
+ * 2-per-u64: element i lives in word (i>>1); the low 32 bits when i is even, the
+ * high 32 bits when i is odd. get/set read-modify-write the FULL u64 word (never a
+ * narrow u32 store), so the u32-store-width trap cannot apply. Values stored are
+ * fragment / node indices, all < 2Mi, so the 32-bit field never truncates. */
+fn ws_pk2_get(base: u64, i: u64) -> u64 {
+    let wp : *u64 = ((base) + (i >> 1u64) * 8u64) as *u64
+    let word : u64 = wp[0u64]
+    if (i & 1u64) == 0u64 { return word & 0xFFFFFFFFu64 }
+    return (word >> 32u64) & 0xFFFFFFFFu64
+}
+fn ws_pk2_set(base: u64, i: u64, v: u64) -> i32 {
+    let wp : *u64 = ((base) + (i >> 1u64) * 8u64) as *u64
+    let cur : u64 = wp[0u64]
+    let vv : u64 = v & 0xFFFFFFFFu64
+    if (i & 1u64) == 0u64 { wp[0u64] = (cur & 0xFFFFFFFF00000000u64) | vv } else { wp[0u64] = (cur & 0x00000000FFFFFFFFu64) | (vv << 32u64) }
+    return 0i32
+}
+
+/* Zero owned tables: HT live bits, pillar lengths, chain heads, counters.
+ * Pure reset of owned state (M5/M9: re-callable, never bricks). */
+fn ws_init() -> i32 @export {
+    /* Live bitmap is 8-per-u64 packed: clear the (HASH_SIZE/8) backing words --
+     * zeroing the words zeroes all 2Mi live bytes (Trap 4: word index is u64). */
+    let mut i : u64 = 0u64
+    while i < (WSPINE_HASH_SIZE >> 3u64) { WSPINE_HT_LIVE[i] = 0u64  i = i + 1u64 }
+    let mut p : u64 = 0u64
+    while p < (WSPINE_MAX_PILLAR as u64) { WSPINE_PILLAR_LEN[p] = 0u64  p = p + 1u64 }
+    let mut b : u64 = 0u64
+    while b < WSPINE_CHAIN_BUCKETS {
+        WSPINE_PROD_CHAIN_HEAD[b] = WSPINE_NIL
+        WSPINE_OP_CHAIN_HEAD[b] = WSPINE_NIL
+        b = b + 1u64
+    }
+    WSPINE_CHAIN_USED = 0u32
+    WSPINE_EPOCH_COUNT = 0u64
+    return WSPINE_OK
+}
+
+/* Little-endian first 8 id bytes folded to a u64, reduced by power-of-two mask.
+ * Accumulated byte-by-byte (Trap 1: no multi-line expression). */
+fn ws_id_hash(id: *u8) -> u64 {
+    let mut h : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        h = h | ((id[i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return h & WSPINE_HASH_MASK
+}
+
+/* Open-addressing insert, linear probe. Sentinel loop (W14): the `done` flag
+ * drives `tries = WSPINE_HASH_SIZE` to exit, no break. h is already u64 (no Trap 4
+ * mask needed). No id copy is stored: the slot keeps only the fragment INDEX (packed
+ * 2-per-u64); the id is recovered from the hook on lookup. Live byte is set through a
+ * byte pointer into the 8-per-u64 packed bitmap. */
+fn ws_ht_insert(id: *u8, idx: u64) -> i32 {
+    let mut h : u64 = ws_id_hash(id)
+    let mut tries : u64 = 0u64
+    let mut done : u8 = 0u8
+    let mut result : i32 = WSPINE_E_FULL
+    while tries < WSPINE_HASH_SIZE {
+        let lp : *u8 = ((&WSPINE_HT_LIVE as u64) + h) as *u8
+        if lp[0u64] == 0u8 {
+            ws_pk2_set((&WSPINE_HT_IDX as u64), h, idx)
+            lp[0u64] = 1u8
+            result = WSPINE_OK
+            done = 1u8
+            tries = WSPINE_HASH_SIZE
+        } else {
+            h = (h + 1u64) & WSPINE_HASH_MASK
+            tries = tries + 1u64
+        }
+    }
+    return result
+}
+
+/* Read-only probe with empty-slot-terminates rule (correct for open addressing
+ * without deletion). `found` flag drives termination (W14). */
+fn ws_lookup_id(frag_id: *u8, out_idx: *u64) -> i32 @export {
+    let mut h : u64 = ws_id_hash(frag_id)
+    let mut tries : u64 = 0u64
+    let mut found : u8 = 0u8
+    let mut result : i32 = WSPINE_E_NOT_FOUND
+    while tries < WSPINE_HASH_SIZE {
+        let lp : *u8 = ((&WSPINE_HT_LIVE as u64) + h) as *u8
+        if lp[0u64] == 0u8 {
+            found = 1u8
+            tries = WSPINE_HASH_SIZE
+        } else {
+            let sidx : u64 = ws_pk2_get((&WSPINE_HT_IDX as u64), h)
+            wh_get_frag_id(sidx, (&WSPINE_KCMP as u64) as *u8)
+            if ident_eq((&WSPINE_KCMP as u64) as *u8, frag_id) == 1u8 {
+                out_idx[0u64] = sidx
+                result = WSPINE_OK
+                found = 1u8
+                tries = WSPINE_HASH_SIZE
+            } else {
+                h = (h + 1u64) & WSPINE_HASH_MASK
+                tries = tries + 1u64
+            }
+        }
+    }
+    return result
+}
+
+/* Low 16 bits of the id -> chain bucket, range 0..WSPINE_CHAIN_BUCKETS. Pure. */
+fn ws_chain_bucket(id: *u8) -> u64 {
+    return (id[0u64] as u64) | ((id[1u64] as u64) << 8u64)
+}
+
+/* Bounded intrusive list insert at head. Trap 4: mask the u32 node index to u64
+ * before any pointer math. E_FULL guard when the pool is exhausted. No key copy is
+ * stored: a node keeps only its fragment INDEX (packed 2-per-u64) and KIND (8-per-u64
+ * byte); the producer/op id is recovered from the hook during iteration. The next
+ * link (incl. the 0xFFFFFFFF NIL sentinel, which fits in 32 bits) is packed 2-per-u64. */
+fn ws_chain_push(kind: u8, id: *u8, idx: u64) -> i32 {
+    if (WSPINE_CHAIN_USED as u64 & 0xFFFFFFFFu64) >= WSPINE_CHAIN_NODES { return WSPINE_E_FULL }
+    let node : u32 = WSPINE_CHAIN_USED
+    let noff : u64 = (node as u64 & 0xFFFFFFFFu64)
+    ws_pk2_set((&WSPINE_CHAIN_IDX as u64), noff, idx)
+    let kp : *u8 = ((&WSPINE_CHAIN_KIND as u64) + noff) as *u8
+    kp[0u64] = kind
+    let bucket : u64 = ws_chain_bucket(id)
+    if kind == 0u8 {
+        ws_pk2_set((&WSPINE_CHAIN_NEXT as u64), noff, (WSPINE_PROD_CHAIN_HEAD[bucket] as u64 & 0xFFFFFFFFu64))
+        WSPINE_PROD_CHAIN_HEAD[bucket] = node
+    } else {
+        ws_pk2_set((&WSPINE_CHAIN_NEXT as u64), noff, (WSPINE_OP_CHAIN_HEAD[bucket] as u64 & 0xFFFFFFFFu64))
+        WSPINE_OP_CHAIN_HEAD[bucket] = node
+    }
+    WSPINE_CHAIN_USED = node + 1u32
+    return WSPINE_OK
+}
+
+/* Walk the bucket list from the head, sentinel loop while head != NIL (W14).
+ * Mask head to u64 before any pointer math (Trap 4). A node's KIND is a byte in the
+ * 8-per-u64 packed bitmap; its key is recovered from the hook -- producer id for
+ * kind 0, op id for kind 1 -- using the node's stored fragment index (packed
+ * 2-per-u64). A match requires KIND==kind AND a full 32-byte ident_eq against the
+ * recovered key (bucket collisions disambiguated exactly, M4 -- not heuristic). */
+fn ws_chain_iter_count(kind: u8, id: *u8) -> u64 {
+    let mut head : u32 = WSPINE_PROD_CHAIN_HEAD[ws_chain_bucket(id)]
+    if kind != 0u8 { head = WSPINE_OP_CHAIN_HEAD[ws_chain_bucket(id)] }
+    let mut count : u64 = 0u64
+    while head != WSPINE_NIL {
+        let hoff : u64 = (head as u64 & 0xFFFFFFFFu64)
+        let kp : *u8 = ((&WSPINE_CHAIN_KIND as u64) + hoff) as *u8
+        if kp[0u64] == kind {
+            let fidx : u64 = ws_pk2_get((&WSPINE_CHAIN_IDX as u64), hoff)
+            if kind == 0u8 { wh_get_producer(fidx, (&WSPINE_KCMP2 as u64) as *u8) } else { wh_get_op_id(fidx, (&WSPINE_KCMP2 as u64) as *u8) }
+            if ident_eq((&WSPINE_KCMP2 as u64) as *u8, id) == 1u8 { count = count + 1u64 }
+        }
+        head = ws_pk2_get((&WSPINE_CHAIN_NEXT as u64), hoff) as u32
+    }
+    return count
+}
+
+/* Walk the bucket list, return the k-th match's fragment index via a found flag
+ * (W14), else WSPINE_SENTINEL. Same Trap-4 mask + key-from-hook recovery + exact
+ * 32-byte match as count; the k-th match's fragment index is the value already
+ * recovered from the packed idx table. */
+fn ws_chain_iter_at(kind: u8, id: *u8, k: u64) -> u64 {
+    let mut head : u32 = WSPINE_PROD_CHAIN_HEAD[ws_chain_bucket(id)]
+    if kind != 0u8 { head = WSPINE_OP_CHAIN_HEAD[ws_chain_bucket(id)] }
+    let total : u64 = ws_chain_iter_count(kind, id)
+    if k >= total { return WSPINE_SENTINEL }
+    let target : u64 = (total - 1u64) - k
+    let mut seen : u64 = 0u64
+    let mut result : u64 = WSPINE_SENTINEL
+    let mut found : u8 = 0u8
+    while head != WSPINE_NIL {
+        let hoff : u64 = (head as u64 & 0xFFFFFFFFu64)
+        if found == 0u8 {
+            let kp : *u8 = ((&WSPINE_CHAIN_KIND as u64) + hoff) as *u8
+            if kp[0u64] == kind {
+                let fidx : u64 = ws_pk2_get((&WSPINE_CHAIN_IDX as u64), hoff)
+                if kind == 0u8 { wh_get_producer(fidx, (&WSPINE_KCMP2 as u64) as *u8) } else { wh_get_op_id(fidx, (&WSPINE_KCMP2 as u64) as *u8) }
+                if ident_eq((&WSPINE_KCMP2 as u64) as *u8, id) == 1u8 {
+                    if seen == target { result = fidx  found = 1u8 } else { seen = seen + 1u64 }
+                }
+            }
+        }
+        head = ws_pk2_get((&WSPINE_CHAIN_NEXT as u64), hoff) as u32
+    }
+    return result
+}
+
+/* The reverse-index builder, called by the hook after publish. Fetch the three
+ * ids into module scratch, insert frag_id->idx, append to the pillar list, and
+ * push a producer chain node and an op chain node. */
+fn ws_register(frag_idx: u64) -> i32 @export {
+    wh_get_frag_id(frag_idx, (&WSPINE_FID as u64) as *u8)
+    wh_get_producer(frag_idx, (&WSPINE_PID as u64) as *u8)
+    wh_get_op_id(frag_idx, (&WSPINE_OID as u64) as *u8)
+    ws_ht_insert((&WSPINE_FID as u64) as *u8, frag_idx)
+    let pillar : u32 = wh_get_pillar(frag_idx) as u32
+    if pillar < WSPINE_MAX_PILLAR {
+        let pu : u64 = (pillar as u64)
+        let len : u64 = WSPINE_PILLAR_LEN[pu]
+        if len < WSPINE_PILLAR_CAP {
+            WSPINE_PILLAR_ARR[pu * WSPINE_PILLAR_CAP + len] = frag_idx
+            WSPINE_PILLAR_LEN[pu] = len + 1u64
+        }
+    }
+    ws_chain_push(0u8, (&WSPINE_PID as u64) as *u8, frag_idx)
+    ws_chain_push(1u8, (&WSPINE_OID as u64) as *u8, frag_idx)
+    return WSPINE_OK
+}
+
+/* Pillar fragment count (0 when out of range). */
+fn ws_pillar_count(pillar: u16) -> u64 @export {
+    let pu : u64 = (pillar as u64)
+    if pu >= (WSPINE_MAX_PILLAR as u64) { return 0u64 }
+    return WSPINE_PILLAR_LEN[pu]
+}
+
+/* k-th fragment index recorded for a pillar, or WSPINE_SENTINEL out of range. */
+fn ws_pillar_at(pillar: u16, k: u64) -> u64 @export {
+    let pu : u64 = (pillar as u64)
+    if pu >= (WSPINE_MAX_PILLAR as u64) { return WSPINE_SENTINEL }
+    if k >= WSPINE_PILLAR_LEN[pu] { return WSPINE_SENTINEL }
+    return WSPINE_PILLAR_ARR[pu * WSPINE_PILLAR_CAP + k]
+}
+
+/* Producer / operation reverse-index wrappers over the two iterators. */
+fn ws_producer_count(producer: *u8) -> u64 @export {
+    return ws_chain_iter_count(0u8, producer)
+}
+fn ws_producer_at(producer: *u8, k: u64) -> u64 @export {
+    return ws_chain_iter_at(0u8, producer, k)
+}
+fn ws_operation_count(opid: *u8) -> u64 @export {
+    return ws_chain_iter_count(1u8, opid)
+}
+fn ws_operation_at(opid: *u8, k: u64) -> u64 @export {
+    return ws_chain_iter_at(1u8, opid, k)
+}
+
+/* Close an epoch: record this epoch's END boundary (wh_next_idx BEFORE the hook
+ * close), close the hook epoch (it folds the span and advances its root), then
+ * record the hook's now-current chain root as the epoch root (M6 anchor). */
+fn ws_epoch_close() -> u64 @export {
+    let boundary : u64 = wh_next_idx()
+    let e : u64 = wh_epoch_close()
+    if e < WSPINE_MAX_EPOCHS {
+        WSPINE_EPOCH_START[e] = boundary
+        wh_chain_root(((&WSPINE_EPOCH_ROOT as u64) + e * 32u64) as *u8)
+        WSPINE_EPOCH_COUNT = e + 1u64
+    }
+    return e
+}
+
+/* Recorded epoch root (the chain root immediately after epoch `epoch` closed). */
+fn ws_epoch_root(epoch: u64, out_root: *u8) -> i32 @export {
+    if epoch >= WSPINE_EPOCH_COUNT { return WSPINE_E_BAD }
+    ident_copy(((&WSPINE_EPOCH_ROOT as u64) + epoch * 32u64) as *u8, out_root)
+    return WSPINE_OK
+}
+
+/* The hook owns the authoritative chain root; the spine delegates. */
+fn ws_chain_root(out_root: *u8) -> i32 @export {
+    return wh_chain_root(out_root)
+}
+
+/* Epoch-aware replay (M10/M6 fix): recompute the authoritative chain root from
+ * the zero seed by folding every non-revoked fragment epoch by epoch, seeded
+ * with the prior root -- exactly as wh_epoch_close produced it. Returns 1 iff
+ * the recomputed root equals expected_root.
+ *
+ * Epoch e spans [start, end): start = (e==0 ? 0 : EPOCH_START[e-1]),
+ * end = EPOCH_START[e]. Each epoch fold is keccak256(prior_root || frag_id_i for
+ * non-revoked i in span). Nesting kept shallow (epoch while -> frag while -> if),
+ * no recursion (W15), sentinel-counted loops (W14). */
+fn ws_chain_replay_verify(expected_root: *u8) -> u8 @export {
+    let mut z : u64 = 0u64
+    while z < 32u64 { WSPINE_REPLAY_CUR[z] = 0u8  z = z + 1u64 }
+    let ec : u64 = WSPINE_EPOCH_COUNT
+    let mut e : u64 = 0u64
+    while e < ec {
+        let mut start : u64 = 0u64
+        if e != 0u64 { start = WSPINE_EPOCH_START[e - 1u64] }
+        let end : u64 = WSPINE_EPOCH_START[e]
+        cad_begin(1u32)
+        cad_payload((&WSPINE_REPLAY_CUR as u64), 32u64)
+        let mut j : u64 = start
+        while j < end {
+            if wh_is_revoked(j) == 0u8 {
+                wh_get_frag_id(j, (&WSPINE_REPLAY_FID as u64) as *u8)
+                cad_payload((&WSPINE_REPLAY_FID as u64), 32u64)
+            }
+            j = j + 1u64
+        }
+        cad_final((&WSPINE_REPLAY_CUR as u64))
+        e = e + 1u64
+    }
+    return ident_eq((&WSPINE_REPLAY_CUR as u64) as *u8, expected_root)
+}
+
+/* ---- self-test (99 = pass; distinct small code per failed check) ----
+ * Scenario S mirrors the spec KAT: wh_init(0); publish frag A (producer PA=i+1,
+ * op OX=i+50, pillar 7, 64B payload 3i+1), frag B (same PA/OX, pillar 7, payload
+ * with [0]^=0xFF -> distinct id), frag C (producer PB=i+9, op OX, pillar 3, empty
+ * payload). Then ws_init + ws_register 0,1,2. KAT-1 lookup (+ negative absent id),
+ * KAT-2 pillar/producer/op multiplicities, KAT-3 epoch root + replay (+ tamper
+ * negative). */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+
+var WSPINE_T_PA   : [u8; 32]
+var WSPINE_T_PB   : [u8; 32]
+var WSPINE_T_OX   : [u8; 32]
+var WSPINE_T_ZERO : [u8; 32]
+var WSPINE_T_PAY  : [u8; 64]
+var WSPINE_T_IDB  : [u8; 32]
+var WSPINE_T_OUT  : [u64; 1]
+var WSPINE_T_R    : [u8; 32]
+var WSPINE_T_R2   : [u8; 32]
+var WSPINE_T_FIDOUT : [u8; 32]   /* throwaway out_frag_id sink (keeps WSPINE_T_ZERO actually zero) */
+
+fn ws_selftest() -> u64 @export {
+    wh_init(0u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        WSPINE_T_PA[i] = (i + 1u64) as u8
+        WSPINE_T_PB[i] = (i + 9u64) as u8
+        WSPINE_T_OX[i] = (i + 50u64) as u8
+        WSPINE_T_ZERO[i] = 0u8
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 64u64 { WSPINE_T_PAY[i] = (i * 3u64 + 1u64) as u8  i = i + 1u64 }
+    /* frag A: PA, OX, pillar 7, payload 3i+1 */
+    let ia : u64 = wh_publish((&WSPINE_T_PA as u64) as *u8, (&WSPINE_T_OX as u64) as *u8,
+                              (&WSPINE_T_ZERO as u64) as *u8, (&WSPINE_T_ZERO as u64) as *u8,
+                              0u8, 0u8, 7u16, (&WSPINE_T_ZERO as u64) as *u8, 0u32,
+                              (&WSPINE_T_PAY as u64) as *u8, 64u32, (&WSPINE_T_FIDOUT as u64) as *u8)
+    if ia != 0u64 { return 1u64 }
+    /* frag B: same PA/OX/pillar 7, payload[0]^=0xFF -> distinct id */
+    WSPINE_T_PAY[0] = WSPINE_T_PAY[0] ^ 0xFFu8
+    let ib : u64 = wh_publish((&WSPINE_T_PA as u64) as *u8, (&WSPINE_T_OX as u64) as *u8,
+                              (&WSPINE_T_ZERO as u64) as *u8, (&WSPINE_T_ZERO as u64) as *u8,
+                              0u8, 0u8, 7u16, (&WSPINE_T_ZERO as u64) as *u8, 0u32,
+                              (&WSPINE_T_PAY as u64) as *u8, 64u32, (&WSPINE_T_FIDOUT as u64) as *u8)
+    if ib != 1u64 { return 2u64 }
+    /* frag C: PB, OX, pillar 3, empty payload */
+    let ic : u64 = wh_publish((&WSPINE_T_PB as u64) as *u8, (&WSPINE_T_OX as u64) as *u8,
+                              (&WSPINE_T_ZERO as u64) as *u8, (&WSPINE_T_ZERO as u64) as *u8,
+                              0u8, 0u8, 3u16, (&WSPINE_T_ZERO as u64) as *u8, 0u32,
+                              (&WSPINE_T_ZERO as u64) as *u8, 0u32, (&WSPINE_T_FIDOUT as u64) as *u8)
+    if ic != 2u64 { return 3u64 }
+    ws_init()
+    ws_register(0u64)
+    ws_register(1u64)
+    ws_register(2u64)
+    /* KAT-1: lookup frag B's id -> index 1 */
+    wh_get_frag_id(1u64, (&WSPINE_T_IDB as u64) as *u8)
+    if ws_lookup_id((&WSPINE_T_IDB as u64) as *u8, (&WSPINE_T_OUT as u64) as *u64) != WSPINE_OK { return 4u64 }
+    if WSPINE_T_OUT[0] != 1u64 { return 5u64 }
+    /* KAT-1 negative: all-zero id absent -> E_NOT_FOUND (empty-slot probe terminates) */
+    if ws_lookup_id((&WSPINE_T_ZERO as u64) as *u8, (&WSPINE_T_OUT as u64) as *u64) != WSPINE_E_NOT_FOUND { return 6u64 }
+    /* KAT-2: pillar multiplicities */
+    if ws_pillar_count(7u16) != 2u64 { return 7u64 }
+    if ws_pillar_at(7u16, 0u64) != 0u64 { return 8u64 }
+    if ws_pillar_at(7u16, 1u64) != 1u64 { return 9u64 }
+    if ws_pillar_at(7u16, 2u64) != WSPINE_SENTINEL { return 10u64 }
+    if ws_pillar_count(3u16) != 1u64 { return 11u64 }
+    if ws_pillar_at(3u16, 0u64) != 2u64 { return 12u64 }
+    /* KAT-2: producer / operation multiplicities */
+    if ws_producer_count((&WSPINE_T_PA as u64) as *u8) != 2u64 { return 13u64 }
+    if ws_producer_count((&WSPINE_T_PB as u64) as *u8) != 1u64 { return 14u64 }
+    if ws_operation_count((&WSPINE_T_OX as u64) as *u8) != 3u64 { return 15u64 }
+    if ws_operation_at((&WSPINE_T_OX as u64) as *u8, 2u64) != 2u64 { return 16u64 }
+    /* producer_at: PB's single fragment is index 2 */
+    if ws_producer_at((&WSPINE_T_PB as u64) as *u8, 0u64) != 2u64 { return 17u64 }
+    if ws_producer_at((&WSPINE_T_PB as u64) as *u8, 1u64) != WSPINE_SENTINEL { return 18u64 }
+    /* KAT-3: epoch close -> e==0, count==1 */
+    let ce : u64 = ws_epoch_close()
+    if ce != 0u64 { return 19u64 }
+    if WSPINE_EPOCH_COUNT != 1u64 { return 20u64 }
+    /* spine's recorded epoch root == hook's chain root */
+    if ws_epoch_root(0u64, (&WSPINE_T_R as u64) as *u8) != WSPINE_OK { return 21u64 }
+    wh_chain_root((&WSPINE_T_R2 as u64) as *u8)
+    if ident_eq((&WSPINE_T_R as u64) as *u8, (&WSPINE_T_R2 as u64) as *u8) != 1u8 { return 22u64 }
+    /* from-seed replay reproduces the root byte-identically */
+    if ws_chain_replay_verify((&WSPINE_T_R2 as u64) as *u8) != 1u8 { return 23u64 }
+    /* prove-the-negative: tamper one byte -> replay must reject */
+    WSPINE_T_R2[0] = WSPINE_T_R2[0] ^ 0x01u8
+    if ws_chain_replay_verify((&WSPINE_T_R2 as u64) as *u8) != 0u8 { return 24u64 }
+    /* epoch_root out-of-range guard */
+    if ws_epoch_root(1u64, (&WSPINE_T_R as u64) as *u8) != WSPINE_E_BAD { return 25u64 }
+    return 99u64
+}
+
+/* Ontological footer: witness_spine IS the substrate's queryable provenance
+ * index -- the master directed-acyclic graph over the entire witness chain. It
+ * embodies the reverse-index layer (frag_id -> index, per-pillar, per-producer,
+ * per-operation), owns the per-epoch root store, and re-attests the chain by
+ * recomputing its root from the seed, epoch by epoch, byte-identically to the
+ * hook. It does not produce fragments; it indexes and re-attests them. */

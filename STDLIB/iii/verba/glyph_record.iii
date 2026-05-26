@@ -1,0 +1,122 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_record.iii
+ *
+ * III STDLIB - verba::glyph_record -- Glyph V3 form for heterogeneous
+ * record (product type).
+ *
+ * Lattice plan Phase 14h Step 0176.  Stage-0 simplification: record
+ * stores up to 11 (field_id u32, value u64) pairs = 12 bytes per
+ * field.  All field values are u64; for non-u64 fields the caller
+ * encodes them as u64 (e.g., a u32 zero-extended, an i64 reinterpret,
+ * or a glyph_id pointing to a separate inline glyph).
+ *
+ * Payload layout (form_id = 0x34):
+ *   payload[0..3]     field_count   (u32 LE; max 11)
+ *   payload[4..7]     reserved
+ *   payload[8..151]   (field_id u32, value u64)[field_count]
+ *
+ * payload_len = 8 + field_count * 12.
+ *
+ * Public surface:
+ *   glyph_record_form_id()                                          -> u32 (0x34)
+ *   glyph_record_pack_begin(out_192)                                -> i32
+ *   glyph_record_pack_field(out_192, slot, field_id, value)         -> i32
+ *   glyph_record_pack_finalise(out_192, field_count)                -> i32
+ *   glyph_record_unpack_count(in_192)                               -> u32
+ *   glyph_record_unpack_field_id(in_192, slot)                      -> u32
+ *   glyph_record_unpack_field_value(in_192, slot)                   -> u64
+ *   glyph_record_validate(in_192)                                   -> u8
+ *
+ * Hexad: kind_compose.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_record
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u64_le(p: u64, v: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u32_le(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u64_le(p: u64) -> u64 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_RECORD : u32 = 0x34u32
+const GV3_REC_MAX_FIELDS : u32 = 11u32
+
+fn glyph_record_form_id() -> u32 @export { return GV3_FORM_RECORD }
+fn glyph_record_max_fields() -> u32 @export { return GV3_REC_MAX_FIELDS }
+
+fn glyph_record_pack_begin(out_192: u64) -> i32 @export {
+    let o_l : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_RECORD)
+    gv3_write_u32_le(o_l + 4u64, 8u32)   /* tentative; finalised later */
+    return 0i32
+}
+
+fn glyph_record_pack_field(out_192: u64, slot: u32, field_id: u32, value: u64) -> i32 @export {
+    let o_l  : u64 = out_192
+    let s_l  : u32 = slot
+    let f_l  : u32 = field_id
+    let v_l  : u64 = value
+    if o_l == 0u64 { return -1i32 }
+    if s_l >= GV3_REC_MAX_FIELDS { return -2i32 }
+    /* field record at offset 16 + slot * 12. */
+    let off : u64 = 16u64 + (s_l as u64) * 12u64
+    gv3_write_u32_le(o_l + off,         f_l)
+    gv3_write_u64_le(o_l + off + 4u64,  v_l)
+    return 0i32
+}
+
+fn glyph_record_pack_finalise(out_192: u64, field_count: u32) -> i32 @export {
+    let o_l : u64 = out_192
+    let n_l : u32 = field_count
+    if o_l == 0u64 { return -1i32 }
+    if n_l > GV3_REC_MAX_FIELDS { return -2i32 }
+    /* Set field_count at offset 8. */
+    gv3_write_u32_le(o_l + 8u64, n_l)
+    /* Update payload_len: 8 (header) + n*12. */
+    gv3_write_u32_le(o_l + 4u64, 8u32 + n_l * 12u32)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_record_unpack_count(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_RECORD { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 8u64)
+}
+
+fn glyph_record_unpack_field_id(in_192: u64, slot: u32) -> u32 @export {
+    let i_l : u64 = in_192
+    let s_l : u32 = slot
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_RECORD { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    let count : u32 = gv3_read_u32_le(i_l + 8u64)
+    if s_l >= count { return 0u32 }
+    let off : u64 = 16u64 + (s_l as u64) * 12u64
+    return gv3_read_u32_le(i_l + off)
+}
+
+fn glyph_record_unpack_field_value(in_192: u64, slot: u32) -> u64 @export {
+    let i_l : u64 = in_192
+    let s_l : u32 = slot
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_RECORD { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    let count : u32 = gv3_read_u32_le(i_l + 8u64)
+    if s_l >= count { return 0u64 }
+    let off : u64 = 16u64 + (s_l as u64) * 12u64 + 4u64
+    return gv3_read_u64_le(i_l + off)
+}
+
+fn glyph_record_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_RECORD { return 0u8 }
+    return gv3_validate(i_l)
+}

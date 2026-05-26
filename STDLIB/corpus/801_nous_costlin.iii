@@ -1,0 +1,16 @@
+/* 801 -- nous Phase 0.5: the cost linearization.  Drives nous_costlin_selftest, which
+ * proves the lexicographic total order over the 6-dim cost lattice is total +
+ * antisymmetric (facet0 dominates; lowest facet breaks ties), the bounded lex-packed
+ * scalar projection agrees with it, a huge facet clamps rather than overflows, the
+ * 32-byte content-address tiebreak is itself a strict order, and the version pin
+ * holds.  The negative arms live inside the selftest (antisymmetry, clamp, tie).
+ * Exit 99 = all hold; 1..11 = the failing sub-check. */
+module corpus_801
+
+extern @abi(c-msvc-x64) fn nous_costlin_selftest() -> u64 from "nous_costlin.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_costlin_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

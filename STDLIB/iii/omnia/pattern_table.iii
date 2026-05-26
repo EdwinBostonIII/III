@@ -1,0 +1,245 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\pattern_table.iii
+ *
+ * III STDLIB - omnia::pattern_table
+ *
+ * Sealed pattern registry.
+ * FROZEN SPEC §2.1.5, §Z.C.4.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 1.00.
+ *
+ * 4096 slots × 168 bytes/slot = 688,128 bytes.
+ *   Slots 0..15:   16 meta-patterns
+ *   Slots 16..39:  24 transform patterns
+ *   Slots 40..46:  7 codegen-call patterns
+ *   Slots 47..66:  20 codegen-AST-kind patterns
+ *   Slots 67..4095: zero-initialised; never written
+ *
+ * After pattern_registry_seal_global(): pattern_register returns 0
+ * unconditionally. HC-1 / ADR-RES-004 enforcement.
+ */
+
+module omnia_pattern_table
+
+extern @abi(c-msvc-x64) fn read_u32_le(p: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn write_u32_le(p: u64, v: u32) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn read_u64_le(p: u64) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn write_u64_le(p: u64, v: u64) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u32, align: u8) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const PATTERN_BYTES        : u32 = 168u32
+const PATTERN_REGISTRY_CAP : u32 = 4096u32
+const PATTERN_REGISTRY_USED_MAX : u32 = 100u32
+
+const PF_PATTERN_ID          : u32 = 0u32
+const PF_MODULE_MHASH        : u32 = 8u32
+const PF_ARITY               : u32 = 40u32
+const PF_BINDING_KINDS       : u32 = 41u32
+const PF_PREDICATE_FN        : u32 = 80u32
+const PF_UNIFY_FN            : u32 = 88u32
+const PF_DISPATCH_FN         : u32 = 96u32
+const PF_ACTIVATION_BASE     : u32 = 104u32
+const PF_GUARANTEES_PROVIDED : u32 = 112u32
+const PF_GUARANTEES_REQUIRED : u32 = 116u32
+const PF_HEXAD_KIND          : u32 = 120u32
+const PF_RING                : u32 = 121u32
+const PF_K_VALUE             : u32 = 128u32
+const PF_EFFECTS_MASK        : u32 = 136u32
+const PF_SPECIALISATION_OF   : u32 = 144u32
+const PF_PROOF_ID            : u32 = 152u32
+
+var g_pattern_table       : [u8; 688128]
+var g_pattern_table_used  : u32 = 0u32
+var g_pattern_table_sealed: u8  = 0u8
+var g_global_pattern_set  : [u8; 512]   /* 4096 bits */
+
+/* Domain "III_PAT_TABLE" 16 bytes */
+var PT_DOM_TBL : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 80u8, 65u8, 84u8, 95u8, 84u8, 65u8, 66u8, 76u8, 69u8, 0u8, 0u8, 0u8]
+var PT_DIGEST_OUT : [u8; 32]
+
+fn pattern_slot_ptr(idx: u32) -> u64 {
+    let base : u64 = (&g_pattern_table) as u64
+    let off  : u64 = ((idx as u64) & 0xFFFFFFFFu64) * (PATTERN_BYTES as u64)
+    return base + off
+}
+
+fn pattern_table_get(idx: u32) -> u64 @export {
+    if idx >= PATTERN_REGISTRY_CAP { return 0u64 }
+    let p : u64 = pattern_slot_ptr(idx)
+    let pid : u64 = read_u64_le(p + (PF_PATTERN_ID as u64))
+    if pid == 0u64 { return 0u64 }
+    return p
+}
+
+fn pattern_id(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_PATTERN_ID as u64))
+}
+
+fn pattern_module_mhash_byte(p: u64, i: u32) -> u8 @export {
+    if i >= 32u32 { return 0u8 }
+    let bp : *u8 = (p + (PF_MODULE_MHASH as u64) + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+    return bp[0u64]
+}
+
+fn pattern_arity(p: u64) -> u8 @export {
+    let bp : *u8 = (p + (PF_ARITY as u64)) as *u8
+    return bp[0u64]
+}
+
+fn pattern_binding_kind(p: u64, i: u32) -> u8 @export {
+    if i >= 32u32 { return 0u8 }
+    let bp : *u8 = (p + (PF_BINDING_KINDS as u64) + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+    return bp[0u64]
+}
+
+fn pattern_predicate_fn(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_PREDICATE_FN as u64))
+}
+
+fn pattern_unify_fn(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_UNIFY_FN as u64))
+}
+
+fn pattern_dispatch_fn(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_DISPATCH_FN as u64))
+}
+
+fn pattern_activation_base(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_ACTIVATION_BASE as u64))
+}
+
+fn pattern_guarantees_provided(p: u64) -> u32 @export {
+    return read_u32_le(p + (PF_GUARANTEES_PROVIDED as u64))
+}
+
+fn pattern_guarantees_required(p: u64) -> u32 @export {
+    return read_u32_le(p + (PF_GUARANTEES_REQUIRED as u64))
+}
+
+fn pattern_hexad_kind(p: u64) -> u8 @export {
+    let bp : *u8 = (p + (PF_HEXAD_KIND as u64)) as *u8
+    return bp[0u64]
+}
+
+fn pattern_ring(p: u64) -> u8 @export {
+    let bp : *u8 = (p + (PF_RING as u64)) as *u8
+    return bp[0u64]
+}
+
+fn pattern_k_value(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_K_VALUE as u64))
+}
+
+fn pattern_effects_mask(p: u64) -> u32 @export {
+    return read_u32_le(p + (PF_EFFECTS_MASK as u64))
+}
+
+fn pattern_specialisation_of(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_SPECIALISATION_OF as u64))
+}
+
+fn pattern_proof_id(p: u64) -> u64 @export {
+    return read_u64_le(p + (PF_PROOF_ID as u64))
+}
+
+fn pattern_register(slot: u32, p_template: u64) -> u8 @export {
+    /* HC-1 enforcement: post-seal returns 0 unconditionally */
+    if g_pattern_table_sealed == 1u8 { return 0u8 }
+    if slot >= PATTERN_REGISTRY_CAP { return 0u8 }
+    if slot >= PATTERN_REGISTRY_USED_MAX { return 0u8 }
+    /* Copy 168 bytes from template into slot */
+    let dst : u64 = pattern_slot_ptr(slot)
+    let mut i : u32 = 0u32
+    while i < PATTERN_BYTES {
+        let src_p : *u8 = (p_template + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        let dst_p : *u8 = (dst + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        dst_p[0u64] = src_p[0u64]
+        i = i + 1u32
+    }
+    /* Mark slot occupied in global set bitmap */
+    let byte_idx : u32 = (slot >> 3u32) & 0x1FFu32
+    let bit_idx  : u32 = slot & 0x7u32
+    let cur : u8 = g_global_pattern_set[byte_idx]
+    let shift_amt : u8 = (bit_idx & 0x7u32) as u8
+    let bit_val : u8 = 1u8 << shift_amt
+    g_global_pattern_set[byte_idx] = cur | bit_val
+    if slot >= g_pattern_table_used { g_pattern_table_used = slot + 1u32 }
+    return 1u8
+}
+
+fn pattern_registry_seal_global() -> u64 @export {
+    if g_pattern_table_sealed == 1u8 { return 0u64 }
+    g_pattern_table_sealed = 1u8
+    /* Compute mhash over the populated slots */
+    mhash_begin()
+    mhash_domain((&PT_DOM_TBL) as u64, 13u64)
+    let used_bytes : u32 = g_pattern_table_used * PATTERN_BYTES
+    mhash_payload((&g_pattern_table) as u64, used_bytes as u64)
+    mhash_final((&PT_DIGEST_OUT) as u64)
+    return read_u64_le((&PT_DIGEST_OUT) as u64)
+}
+
+fn pattern_registry_is_sealed() -> u8 @export {
+    return g_pattern_table_sealed
+}
+
+fn pattern_registry_used() -> u32 @export {
+    return g_pattern_table_used
+}
+
+fn pattern_registry_unseal_for_test() -> i32 @export {
+    /* TEST-ONLY: allow corpus 47 to inject corruption.
+     * In production builds (per @release_strip annotation in §Z.D.1),
+     * this function is omitted. Compiled here for test infrastructure. */
+    g_pattern_table_sealed = 0u8
+    return 0i32
+}
+
+/* ── pattern_set_t bitmap ── */
+
+fn pattern_set_new(arena_id: u64) -> u64 @export {
+    let p : u64 = arena_alloc(arena_id, 512u32, 16u8)
+    if p != 0u64 {
+        let mut i : u32 = 0u32
+        while i < 512u32 {
+            let bp : *u8 = (p + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+            bp[0u64] = 0u8
+            i = i + 1u32
+        }
+    }
+    return p
+}
+
+fn pattern_set_add(set_ptr: u64, slot: u32) -> i32 @export {
+    if slot >= PATTERN_REGISTRY_CAP { return -1i32 }
+    let byte_off : u64 = ((slot >> 3u32) & 0x1FFu32) as u64
+    let shift_amt : u8 = (slot & 0x7u32) as u8
+    let bp : *u8 = (set_ptr + byte_off) as *u8
+    let cur : u8 = bp[0u64]
+    let bit_val : u8 = 1u8 << shift_amt
+    bp[0u64] = cur | bit_val
+    return 0i32
+}
+
+fn pattern_set_has(set_ptr: u64, slot: u32) -> u8 @export {
+    if slot >= PATTERN_REGISTRY_CAP { return 0u8 }
+    let byte_off : u64 = ((slot >> 3u32) & 0x1FFu32) as u64
+    let shift_amt : u8 = (slot & 0x7u32) as u8
+    let bp : *u8 = (set_ptr + byte_off) as *u8
+    let cur : u8 = bp[0u64]
+    let shifted : u8 = cur >> shift_amt
+    return shifted & 0x1u8
+}
+
+fn pattern_set_verify(set_ptr: u64) -> u8 @export {
+    if set_ptr == 0u64 { return 0u8 }
+    if g_pattern_table_sealed == 0u8 { return 0u8 }
+    return 1u8
+}
+
+fn pattern_set_global() -> u64 @export {
+    return (&g_global_pattern_set) as u64
+}

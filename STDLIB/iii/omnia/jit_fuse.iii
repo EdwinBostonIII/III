@@ -1,0 +1,252 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\jit_fuse.iii
+ *
+ * III STDLIB - omnia::jit_fuse
+ *
+ * Bounded JIT fusion (Phase C.5 of the Intent Calculus v1.0
+ * performance stack). When the resolver sees the same (ctx_id,
+ * intent_seq_hash) pair repeat >= 3 times in a recent window, the
+ * fusion machinery records a candidate. On the third encounter the
+ * caller may invoke jit_fuse_emit to copy a small (<= 64 bytes,
+ * effectively <= 8 x86_64 host instructions) machine-code blob
+ * into a per-context fusion arena, returning a code address that
+ * subsequent calls can jump to directly -- amortising the dispatch
+ * cost to ~0c after the first warmup.
+ *
+ * Determinism: the observation count is a pure function of the
+ * input event sequence (resolver call order). FIFO eviction by
+ * insertion sequence preserves replay determinism. The fusion
+ * record's code blob is supplied by the caller (typically the
+ * codegen path); this module performs only the lifetime + lookup
+ * bookkeeping and the byte copy.
+ *
+ * Capacity: 64 fusion slots * 64 bytes per blob = 4 KiB code arena;
+ * +64 * (8 + 8 + 8 + 4 + 8 + 1) = ~3 KiB metadata. ~7 KiB BSS total.
+ *
+ * Allocated as a separate module to keep omnia/jit_swap.iii's BSS
+ * layout undisturbed.
+ *
+ * Hexad: kind_substance (machine-level mutation). Ring: R0. K: 0.99.
+ */
+
+module omnia_jit_fuse
+
+const FUSE_CAP             : u32 = 64u32
+const FUSE_BLOB_MAX        : u64 = 64u64
+const FUSE_OBSERVE_THRESHOLD : u32 = 3u32
+
+const FUSE_OK        : i32 =  0i32
+const FUSE_E_BADID   : i32 = -1i32
+const FUSE_E_FULL    : i32 = -2i32
+const FUSE_E_OOR     : i32 = -3i32
+const FUSE_E_NULL    : i32 = -4i32
+
+/* Per-fusion-slot metadata. */
+var FUSE_CTX_ID         : [u64; 64]
+var FUSE_INTENT_HASH    : [u64; 64]
+var FUSE_CODE_ADDR      : [u64; 64]
+var FUSE_CODE_LEN       : [u32; 64]
+var FUSE_OBSERVE_COUNT  : [u32; 64]
+var FUSE_SEQ            : [u64; 64]
+var FUSE_LIVE           : [u8;  64]
+
+/* Code arena: 64 slots * 64 bytes = 4 KiB. */
+var FUSE_CODE_ARENA     : [u8; 4096]
+
+var FUSE_USED            : u32 = 0u32
+var FUSE_CURRENT_SEQ     : u64 = 0u64
+
+/* Compute slot's arena base address (relative to FUSE_CODE_ARENA start). */
+fn _fuse_slot_arena_offset(slot: u32) -> u64 {
+    let l_slot : u32 = slot
+    return ((l_slot as u64) & 0xFFu64) * FUSE_BLOB_MAX
+}
+
+fn _fuse_find(ctx_id: u64, intent_hash: u64) -> u32 {
+    let l_ctx : u64 = ctx_id
+    let l_iH  : u64 = intent_hash
+    let mut i : u32 = 0u32
+    while i < FUSE_CAP {
+        if FUSE_LIVE[i] == 1u8 {
+            if FUSE_CTX_ID[i] == l_ctx {
+                if FUSE_INTENT_HASH[i] == l_iH { return i }
+            }
+        }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn _fuse_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < FUSE_CAP {
+        if FUSE_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    /* All live: evict lowest-seq slot. */
+    let mut victim : u32 = 0u32
+    let mut victim_seq : u64 = FUSE_SEQ[0]
+    let mut k : u32 = 1u32
+    while k < FUSE_CAP {
+        if FUSE_SEQ[k] < victim_seq {
+            victim_seq = FUSE_SEQ[k]
+            victim     = k
+        }
+        k = k + 1u32
+    }
+    /* Clear evicted slot's bytes in arena. */
+    let off : u64 = _fuse_slot_arena_offset(victim)
+    let mut j : u64 = 0u64
+    while j < FUSE_BLOB_MAX {
+        FUSE_CODE_ARENA[(off + j) as u32] = 0u8
+        j = j + 1u64
+    }
+    FUSE_LIVE[victim] = 0u8
+    return victim
+}
+
+/* ---------------- public surface ---------------- */
+
+/* Observe an event: ctx_id + intent's call signature hash + dispatch
+ * fp. Increments the per-(ctx, intent_hash) observation count. The
+ * dispatch_fp is recorded for later use by jit_fuse_emit when the
+ * caller decides to materialise the fusion (typically when count
+ * reaches FUSE_OBSERVE_THRESHOLD = 3).
+ *
+ * Returns:
+ *   FUSE_OK on success.
+ *   FUSE_E_FULL if no slot available and no eviction was possible
+ *     (all slots have current seq -- impossible in practice). */
+fn jit_fuse_observe(ctx_id: u64, intent_hash: u64, dispatch_fp: u64) -> i32 @export {
+    let l_ctx : u64 = ctx_id
+    let l_iH  : u64 = intent_hash
+    let l_fp  : u64 = dispatch_fp
+
+    FUSE_CURRENT_SEQ = FUSE_CURRENT_SEQ + 1u64
+
+    let existing : u32 = _fuse_find(l_ctx, l_iH)
+    if existing != 0xFFFFFFFFu32 {
+        FUSE_OBSERVE_COUNT[existing] = FUSE_OBSERVE_COUNT[existing] + 1u32
+        FUSE_SEQ[existing] = FUSE_CURRENT_SEQ
+        /* Update dispatch_fp so we always have the most recent. */
+        if l_fp != 0u64 {
+            FUSE_CODE_ADDR[existing] = l_fp
+        }
+        return FUSE_OK
+    }
+
+    let slot : u32 = _fuse_alloc_slot()
+    if slot >= FUSE_CAP { return FUSE_E_FULL }
+
+    FUSE_CTX_ID[slot]        = l_ctx
+    FUSE_INTENT_HASH[slot]   = l_iH
+    FUSE_CODE_ADDR[slot]     = l_fp
+    FUSE_CODE_LEN[slot]      = 0u32
+    FUSE_OBSERVE_COUNT[slot] = 1u32
+    FUSE_SEQ[slot]           = FUSE_CURRENT_SEQ
+    FUSE_LIVE[slot]          = 1u8
+    if FUSE_USED < FUSE_CAP { FUSE_USED = FUSE_USED + 1u32 }
+    return FUSE_OK
+}
+
+/* Emit a fused code blob into the arena. host_instr_blob_ptr points
+ * to <= FUSE_BLOB_MAX (= 64) bytes of host machine code; copied
+ * byte-by-byte into the slot's region of FUSE_CODE_ARENA.
+ *
+ * Returns the absolute code address (within FUSE_CODE_ARENA) on
+ * success, or 0 on failure (slot not found / blob too large / null
+ * pointer).
+ *
+ * Mandate 7 (no observational learning): emit is UNCONDITIONAL; the
+ * caller is responsible for whatever fusion-decision policy they want.
+ * The observe-count is preserved as DIAGNOSTIC information only --
+ * callers can read it via jit_fuse_observe_count to inform their own
+ * decision -- but emit itself never threshold-triggers. */
+fn jit_fuse_emit(ctx_id: u64, intent_hash: u64, host_instr_blob_ptr: u64, blob_len: u32) -> u64 @export {
+    let l_ctx : u64 = ctx_id
+    let l_iH  : u64 = intent_hash
+    let l_pp  : u64 = host_instr_blob_ptr
+    let l_len : u32 = blob_len
+
+    if l_pp == 0u64 { return 0u64 }
+    if l_len == 0u32 { return 0u64 }
+    if (l_len as u64) > FUSE_BLOB_MAX { return 0u64 }
+
+    let slot : u32 = _fuse_find(l_ctx, l_iH)
+    if slot == 0xFFFFFFFFu32 { return 0u64 }
+    /* No threshold-trigger gate (Mandate 7). */
+
+    /* Copy the blob into the arena, byte-by-byte. */
+    let arena_off : u64 = _fuse_slot_arena_offset(slot)
+    let mut j : u32 = 0u32
+    while j < l_len {
+        let src_b : *u8 = (l_pp + ((j as u64) & 0xFFFFFFFFu64)) as *u8
+        FUSE_CODE_ARENA[((arena_off as u32) + j)] = src_b[0u64]
+        j = j + 1u32
+    }
+    /* Pad remainder of slot with NOP (0x90) to avoid stale bytes. */
+    let mut p : u32 = l_len
+    while (p as u64) < FUSE_BLOB_MAX {
+        FUSE_CODE_ARENA[((arena_off as u32) + p)] = 0x90u8
+        p = p + 1u32
+    }
+    FUSE_CODE_LEN[slot]  = l_len
+    let arena_base : u64 = (&FUSE_CODE_ARENA) as u64
+    let abs_addr   : u64 = arena_base + arena_off
+    FUSE_CODE_ADDR[slot] = abs_addr
+    return abs_addr
+}
+
+/* jit_fuse_lookup: returns the absolute code address for the fused
+ * blob, or 0 if not present / not yet emitted. */
+fn jit_fuse_lookup(ctx_id: u64, intent_hash: u64) -> u64 @export {
+    let l_ctx : u64 = ctx_id
+    let l_iH  : u64 = intent_hash
+    let slot : u32 = _fuse_find(l_ctx, l_iH)
+    if slot == 0xFFFFFFFFu32 { return 0u64 }
+    if FUSE_CODE_LEN[slot] == 0u32 { return 0u64 }
+    return FUSE_CODE_ADDR[slot]
+}
+
+/* Diagnostic accessors. */
+fn jit_fuse_observe_count(ctx_id: u64, intent_hash: u64) -> u32 @export {
+    let l_ctx : u64 = ctx_id
+    let l_iH  : u64 = intent_hash
+    let slot : u32 = _fuse_find(l_ctx, l_iH)
+    if slot == 0xFFFFFFFFu32 { return 0u32 }
+    return FUSE_OBSERVE_COUNT[slot]
+}
+
+fn jit_fuse_used() -> u32 @export {
+    return FUSE_USED
+}
+
+fn jit_fuse_capacity() -> u32 @export {
+    return FUSE_CAP
+}
+
+fn jit_fuse_threshold() -> u32 @export {
+    return FUSE_OBSERVE_THRESHOLD
+}
+
+fn jit_fuse_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < FUSE_CAP {
+        FUSE_CTX_ID[i]        = 0u64
+        FUSE_INTENT_HASH[i]   = 0u64
+        FUSE_CODE_ADDR[i]     = 0u64
+        FUSE_CODE_LEN[i]      = 0u32
+        FUSE_OBSERVE_COUNT[i] = 0u32
+        FUSE_SEQ[i]           = 0u64
+        FUSE_LIVE[i]          = 0u8
+        i = i + 1u32
+    }
+    let mut j : u64 = 0u64
+    let total : u64 = (FUSE_CAP as u64) * FUSE_BLOB_MAX
+    while j < total {
+        FUSE_CODE_ARENA[j as u32] = 0u8
+        j = j + 1u64
+    }
+    FUSE_USED        = 0u32
+    FUSE_CURRENT_SEQ = 0u64
+    return FUSE_OK
+}

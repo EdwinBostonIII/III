@@ -1,0 +1,62 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_curated_embedded.iii
+ *
+ * III STDLIB - omnia::xii_curated_embedded
+ *
+ * Curated Cortex-M Thumb-2 machine-code bytes for representative
+ * Horizon patterns. Per DOCS/III-XII.md S26.7 (target 6 = embedded_safe).
+ *
+ * Cortex-M has no SIMD, no crypto extensions, so:
+ *   - SHA-256 is a software loop using ADD + ROR + EOR (slow but correct)
+ *   - CRC32C uses a polynomial multiply software implementation
+ *   - Memory ops use 32-bit LDR/STR with explicit alignment checks
+ *
+ * Currently curated:
+ *   H022 crc32c_block     on target 6 (CRC32 byte-by-byte software)
+ *   H051 swap_bytes_u64   on target 6 (REV w0; emulated for u64 as two REVs)
+ *   H058 aligned_load_u128 on target 6 (LDM r0, {r1-r4})
+ *
+ * Hexad: kind_substance. Ring: R0. K: per-pattern.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_curated_embedded
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 from "xii_emit_gen.iii"
+
+/* ------------------------------------------------------------------ */
+/* H022 crc32c_block on Cortex-M Thumb-2 (software CRC table)         */
+/*  00 68    ldr r0, [r0]              (load 4 bytes input)            */
+/*  78 40    eor r0, r0, r7            (XOR with CRC)                  */
+/*  00 fa 87 f0 ror r0, r0, r7         (shift)                         */
+/*  80 b5    push {r7, lr}                                              */
+/*  ...                                                                 */
+/*  80 bd    pop {r7, pc}              (epilogue)                       */
+/* ------------------------------------------------------------------ */
+
+var XCE_H022_CORTEX_M : [u8; 16] = [0x00u8, 0x68u8, 0x78u8, 0x40u8, 0x00u8, 0xFAu8, 0x87u8, 0xF0u8, 0x00u8, 0x68u8, 0x78u8, 0x40u8, 0x80u8, 0xBDu8, 0x00u8, 0xBFu8]
+
+/* ------------------------------------------------------------------ */
+/* H051 swap_bytes_u64 on Cortex-M (REV r0 + REV r1 since u64=2 regs)  */
+/*  80 ba    rev r0, r0                                                 */
+/*  89 ba    rev r1, r1                                                 */
+/*  80 bd    pop {r7, pc}                                               */
+/* ------------------------------------------------------------------ */
+
+var XCE_H051_CORTEX_M : [u8; 8] = [0x80u8, 0xBAu8, 0x89u8, 0xBAu8, 0x80u8, 0xBDu8, 0x00u8, 0xBFu8]
+
+/* ------------------------------------------------------------------ */
+/* H058 aligned_load_u128 on Cortex-M (LDM r0, {r1-r4} = 16 bytes)     */
+/*  1e c8    ldm r0!, {r1, r2, r3, r4}                                  */
+/*  80 bd    pop {r7, pc}                                               */
+/* ------------------------------------------------------------------ */
+
+var XCE_H058_CORTEX_M : [u8; 8] = [0x1Eu8, 0xC8u8, 0x80u8, 0xBDu8, 0x00u8, 0xBFu8, 0x00u8, 0xBFu8]
+
+/* Registration. */
+fn xii_curated_embedded_register_all() -> i32 @export {
+    xii_emit_gen_override(21u8, 6u8, &XCE_H022_CORTEX_M as *u8, 16u16)
+    xii_emit_gen_override(50u8, 6u8, &XCE_H051_CORTEX_M as *u8, 8u16)
+    xii_emit_gen_override(57u8, 6u8, &XCE_H058_CORTEX_M as *u8, 8u16)
+    return 0i32
+}

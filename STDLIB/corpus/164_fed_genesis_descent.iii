@@ -1,0 +1,160 @@
+/* Step 0192 verification: aether/fed_genesis genesis-vector binding +
+ * REAL per-step cryptographic descent chain replay.
+ *
+ * The chain is built cryptographically with the same recurrence the
+ * library verifies:  h[i+1] = SHA-256(DOMAIN || LE64(i) || h[i]) where
+ * DOMAIN = "III_FED_GENESIS_DESCENT_v1" (26 bytes).  This exercises real
+ * verification (not the old endpoint-only stub) and includes an
+ * interior-tamper case the stub would have wrongly accepted.
+ * See DOCS/FED-GENESIS-DESCENT.md. */
+module corpus_164
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_clear() -> i32 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_set(root_32_ptr: u64) -> i32 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_root_byte(i: u32) -> u32 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_is_set() -> u8 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_verify_descent(closure_root_ptr: u64, chain_ptr: u64, chain_steps: u32) -> u8 from "fed_genesis.iii"
+
+var C164_DOM : [u8; 26]
+var C164_BUF : [u8; 66]
+
+fn _c164_dom_init() -> i32 {
+    C164_DOM[0]  = 73u8
+    C164_DOM[1]  = 73u8
+    C164_DOM[2]  = 73u8
+    C164_DOM[3]  = 95u8
+    C164_DOM[4]  = 70u8
+    C164_DOM[5]  = 69u8
+    C164_DOM[6]  = 68u8
+    C164_DOM[7]  = 95u8
+    C164_DOM[8]  = 71u8
+    C164_DOM[9]  = 69u8
+    C164_DOM[10] = 78u8
+    C164_DOM[11] = 69u8
+    C164_DOM[12] = 83u8
+    C164_DOM[13] = 73u8
+    C164_DOM[14] = 83u8
+    C164_DOM[15] = 95u8
+    C164_DOM[16] = 68u8
+    C164_DOM[17] = 69u8
+    C164_DOM[18] = 83u8
+    C164_DOM[19] = 67u8
+    C164_DOM[20] = 69u8
+    C164_DOM[21] = 78u8
+    C164_DOM[22] = 84u8
+    C164_DOM[23] = 95u8
+    C164_DOM[24] = 118u8
+    C164_DOM[25] = 49u8
+    return 0i32
+}
+
+/* hout[0..32] = SHA-256(DOMAIN || LE64(idx) || hin[0..32]). */
+fn _c164_step(idx: u64, hin: u64, hout: u64) -> i32 {
+    let mut a : u64 = 0u64
+    while a < 26u64 {
+        C164_BUF[a] = C164_DOM[a]
+        a = a + 1u64
+    }
+    let mut b : u64 = 0u64
+    while b < 8u64 {
+        let shamt : u64 = b * 8u64
+        let bv : u64 = (idx >> shamt) & 0xFFu64
+        C164_BUF[26u64 + b] = bv as u8
+        b = b + 1u64
+    }
+    let hp : *u8 = hin as *u8
+    let mut e : u64 = 0u64
+    while e < 32u64 {
+        C164_BUF[34u64 + e] = hp[e]
+        e = e + 1u64
+    }
+    let op : *u8 = hout as *u8
+    sha256_oneshot(&C164_BUF as *u8, 66u64, op)
+    return 0i32
+}
+
+fn main() -> u64 {
+    fed_genesis_clear()
+    _c164_dom_init()
+
+    /* Pre-set state: not set, byte queries return sentinel 0x100. */
+    if fed_genesis_is_set() != 0u8 { return 1u64 }
+    if fed_genesis_root_byte(0u32) != 0x100u32 { return 2u64 }
+
+    /* Null pointer -> E_NULL = -1. */
+    if fed_genesis_set(0u64) != -1i32 { return 3u64 }
+
+    /* Set genesis root (deterministic 0x10..0x2F). */
+    let g : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        g[i] = (0x10u64 + i) as u8
+        i = i + 1u64
+    }
+    if fed_genesis_set(g as u64) != 0i32 { return 4u64 }
+    if fed_genesis_is_set() != 1u8 { return 5u64 }
+    if fed_genesis_root_byte(0u32) != 0x10u32 { return 6u64 }
+    if fed_genesis_root_byte(31u32) != 0x2fu32 { return 7u64 }
+    if fed_genesis_root_byte(32u32) != 0x100u32 { return 8u64 }
+
+    /* Refuse second set (already-set guard). */
+    if fed_genesis_set(g as u64) != -2i32 { return 9u64 }
+
+    /* Build a cryptographically-valid 3-hash chain:
+     * h0 = genesis; h1 = SHA-256(DOM||LE64(0)||h0); h2 = SHA-256(DOM||LE64(1)||h1). */
+    let chain : *u8 = malloc(96u64)
+    let mut k : u64 = 0u64
+    while k < 32u64 { chain[k] = (0x10u64 + k) as u8; k = k + 1u64 }
+    let h0p : u64 = chain as u64
+    let h1p : u64 = (chain as u64) + 32u64
+    let h2p : u64 = (chain as u64) + 64u64
+    _c164_step(0u64, h0p, h1p)
+    _c164_step(1u64, h1p, h2p)
+
+    /* closure_root = h2. */
+    let cr : *u8 = malloc(32u64)
+    let h2src : *u8 = h2p as *u8
+    let mut q : u64 = 0u64
+    while q < 32u64 { cr[q] = h2src[q]; q = q + 1u64 }
+
+    /* Valid chain (endpoints + every interior step replays) -> 1. */
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 3u32) != 1u8 { return 10u64 }
+
+    /* Tamper closure root -> reject. */
+    let cr_save : u8 = cr[31]
+    cr[31] = 0u8
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 3u32) != 0u8 { return 11u64 }
+    cr[31] = cr_save
+
+    /* Tamper chain start (h0) -> reject (endpoint AND first step break). */
+    let h0_save : u8 = chain[0]
+    chain[0] = 0u8
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 3u32) != 0u8 { return 12u64 }
+    chain[0] = h0_save
+
+    /* Restore -> valid again. */
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 3u32) != 1u8 { return 13u64 }
+
+    /* Zero-step chain -> reject. */
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 0u32) != 0u8 { return 14u64 }
+
+    /* Interior tamper: flip one byte of h1 (a MIDDLE hash) via the proven
+     * direct-index pattern (chain[32+5] = h1 byte 5).  Endpoints still
+     * match but the cryptographic chain is broken.  The Stage-0 stub
+     * would have WRONGLY accepted this; real replay must reject. */
+    let h1_save : u8 = chain[37]
+    chain[37] = chain[37] ^ 0x55u8
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 3u32) != 0u8 { return 15u64 }
+    chain[37] = h1_save
+
+    /* And restored once more -> valid. */
+    if fed_genesis_verify_descent(cr as u64, chain as u64, 3u32) != 1u8 { return 16u64 }
+
+    free(g)
+    free(chain)
+    free(cr)
+    return 99u64
+}

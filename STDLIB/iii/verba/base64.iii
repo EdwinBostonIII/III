@@ -1,0 +1,167 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\base64.iii
+ *
+ * III STDLIB - verba::base64
+ *
+ * RFC 4648 Base64 encode + decode.  Standard alphabet only (A-Z a-z
+ * 0-9 + / =).  URL-safe variant deferred (would just swap +/  →  -_ ).
+ *
+ * Public API (push to a builder):
+ *   base64_encode(builder_id, src_base, src_len) -> i32
+ *   base64_decode(builder_id, src_base, src_len) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_base64
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+
+const B64_OK : i32 = 0i32
+const B64_E_BADCHAR : i32 = -1i32
+const B64_E_BADPAD : i32 = -2i32
+
+/* Encode 6-bit value to ASCII byte. */
+fn b64_encode_6bit(v: u32) -> u32 {
+    let m : u32 = v & 0x3Fu32
+    if m < 26u32 { return 65u32 + m }              /* A-Z */
+    if m < 52u32 { return 97u32 + (m - 26u32) }    /* a-z */
+    if m < 62u32 { return 48u32 + (m - 52u32) }    /* 0-9 */
+    if m == 62u32 { return 43u32 }                 /* + */
+    return 47u32                                   /* / */
+}
+
+/* Decode ASCII byte to 6-bit value.  Returns 0xFF on invalid. */
+fn b64_decode_6bit(c: u32) -> u32 {
+    if c >= 65u32 {
+        if c <= 90u32 { return c - 65u32 }
+    }
+    if c >= 97u32 {
+        if c <= 122u32 { return c - 71u32 }
+    }
+    if c >= 48u32 {
+        if c <= 57u32 { return c + 4u32 }
+    }
+    if c == 43u32 { return 62u32 }
+    if c == 47u32 { return 63u32 }
+    return 0xFFu32
+}
+
+fn base64_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i + 3u64 <= src_len {
+        let b0 : u32 = p[i] as u32
+        let b1 : u32 = p[i + 1u64] as u32
+        let b2 : u32 = p[i + 2u64] as u32
+        let v : u32 = (b0 << 16u32) | (b1 << 8u32) | b2
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 18u32))
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 12u32))
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 6u32))
+        builder_push_byte(builder_id, b64_encode_6bit(v))
+        i = i + 3u64
+    }
+    let rem : u64 = src_len - i
+    if rem == 1u64 {
+        let b0 : u32 = p[i] as u32
+        let v : u32 = b0 << 16u32
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 18u32))
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 12u32))
+        builder_push_byte(builder_id, 61u32)   /* = */
+        builder_push_byte(builder_id, 61u32)   /* = */
+    }
+    if rem == 2u64 {
+        let b0 : u32 = p[i] as u32
+        let b1 : u32 = p[i + 1u64] as u32
+        let v : u32 = (b0 << 16u32) | (b1 << 8u32)
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 18u32))
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 12u32))
+        builder_push_byte(builder_id, b64_encode_6bit(v >> 6u32))
+        builder_push_byte(builder_id, 61u32)   /* = */
+    }
+    return B64_OK
+}
+
+/* URL-safe alphabet variant (RFC 4648 §5): same encoding but with
+ * '-' and '_' instead of '+' and '/'. */
+fn b64url_encode_6bit(v: u32) -> u32 {
+    let m : u32 = v & 0x3Fu32
+    if m < 26u32 { return 65u32 + m }
+    if m < 52u32 { return 97u32 + (m - 26u32) }
+    if m < 62u32 { return 48u32 + (m - 52u32) }
+    if m == 62u32 { return 45u32 }   /* - instead of + */
+    return 95u32                     /* _ instead of / */
+}
+
+fn base64url_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i + 3u64 <= src_len {
+        let b0 : u32 = p[i] as u32
+        let b1 : u32 = p[i + 1u64] as u32
+        let b2 : u32 = p[i + 2u64] as u32
+        let v : u32 = (b0 << 16u32) | (b1 << 8u32) | b2
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 18u32))
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 12u32))
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 6u32))
+        builder_push_byte(builder_id, b64url_encode_6bit(v))
+        i = i + 3u64
+    }
+    let rem : u64 = src_len - i
+    if rem == 1u64 {
+        let b0 : u32 = p[i] as u32
+        let v : u32 = b0 << 16u32
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 18u32))
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 12u32))
+        /* URL-safe omits padding by convention */
+    }
+    if rem == 2u64 {
+        let b0 : u32 = p[i] as u32
+        let b1 : u32 = p[i + 1u64] as u32
+        let v : u32 = (b0 << 16u32) | (b1 << 8u32)
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 18u32))
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 12u32))
+        builder_push_byte(builder_id, b64url_encode_6bit(v >> 6u32))
+    }
+    return B64_OK
+}
+
+fn base64_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
+    let p : *u8 = src_base as *u8
+    let mut i : u64 = 0u64
+    while i + 4u64 <= src_len {
+        let c0 : u32 = p[i] as u32
+        let c1 : u32 = p[i + 1u64] as u32
+        let c2 : u32 = p[i + 2u64] as u32
+        let c3 : u32 = p[i + 3u64] as u32
+        let d0 : u32 = b64_decode_6bit(c0)
+        let d1 : u32 = b64_decode_6bit(c1)
+        if d0 == 0xFFu32 { return B64_E_BADCHAR }
+        if d1 == 0xFFu32 { return B64_E_BADCHAR }
+        if c2 == 61u32 {
+            /* "XX==" → 1 byte */
+            if c3 != 61u32 { return B64_E_BADPAD }
+            let v : u32 = (d0 << 18u32) | (d1 << 12u32)
+            builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32)
+            i = i + 4u64
+        } else {
+            let d2 : u32 = b64_decode_6bit(c2)
+            if d2 == 0xFFu32 { return B64_E_BADCHAR }
+            if c3 == 61u32 {
+                /* "XXX=" → 2 bytes */
+                let v : u32 = (d0 << 18u32) | (d1 << 12u32) | (d2 << 6u32)
+                builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32)
+                builder_push_byte(builder_id, (v >> 8u32) & 0xFFu32)
+                i = i + 4u64
+            } else {
+                let d3 : u32 = b64_decode_6bit(c3)
+                if d3 == 0xFFu32 { return B64_E_BADCHAR }
+                let v : u32 = (d0 << 18u32) | (d1 << 12u32) | (d2 << 6u32) | d3
+                builder_push_byte(builder_id, (v >> 16u32) & 0xFFu32)
+                builder_push_byte(builder_id, (v >> 8u32) & 0xFFu32)
+                builder_push_byte(builder_id, v & 0xFFu32)
+                i = i + 4u64
+            }
+        }
+    }
+    return B64_OK
+}

@@ -1,0 +1,49 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_ast_bin_to_iii.iii
+ *
+ * Transform pattern: FORM_AST_BINARY → FORM_III
+ * FROZEN SPEC §7B.6 slot 20; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Decodes the binary AST emitted by tp_iii_to_ast_bin: verifies magic,
+ * reads len, copies body. Round-trip is byte-equal.
+ */
+
+module omnia_tp_ast_bin_to_iii
+
+var TP_ASTI_MAGIC : [u8; 8] = [73u8, 73u8, 73u8, 65u8, 83u8, 84u8, 66u8, 78u8]
+
+fn tp_asti_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_ast_bin_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if src_len < 16u64 { return 0u64 }
+    /* Verify magic */
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let bp : *u8 = (src + ((i as u64) & 0xFFu64)) as *u8
+        if bp[0u64] != TP_ASTI_MAGIC[i] { return 0u64 }
+        i = i + 1u32
+    }
+    /* Read length (8 bytes LE) */
+    let mut body_len : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let bp : *u8 = (src + 8u64 + ((k as u64) & 0xFu64)) as *u8
+        body_len = body_len | (((bp[0u64] as u64) & 0xFFu64) << (((k as u64) & 0x7u64) * 8u64))
+        k = k + 1u32
+    }
+    if 16u64 + body_len > src_len { return 0u64 }
+    if body_len > dst_cap { return 0u64 }
+    /* Copy body */
+    let mut j : u64 = 0u64
+    while j < body_len {
+        let bp : *u8 = (src + 16u64 + j) as *u8
+        tp_asti_emit(dst_buf, j, bp[0u64])
+        j = j + 1u64
+    }
+    return body_len
+}

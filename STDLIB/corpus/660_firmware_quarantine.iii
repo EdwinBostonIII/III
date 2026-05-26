@@ -1,0 +1,8 @@
+/* 660 -- firmware_quarantine: forbidden-region sheaf, anti-bricking (M5).
+ * Default firmware-ROM window forbidden (incl. top byte -- the G7 u64-overflow
+ * fix), RAM allowed, register + half-open boundary semantics, witnessed
+ * attempt-publish with reproducible payload, no-violation sentinel, and the M8
+ * capability gate failing closed (cap 0 + a no-amend cap; region count unchanged). */
+module corpus_660
+extern @abi(c-msvc-x64) fn fquar_selftest() -> u64 from "firmware_quarantine.iii"
+fn main() -> u64 { return fquar_selftest() }

@@ -1,0 +1,194 @@
+module stage1_walloc
+
+/* III Stage-1 Witness Identifier Allocator — .iii port of
+ * COMPILER/BOOT/witness_alloc.c.
+ *
+ * Mirrors the runtime ACC contract: cycle declarations get
+ * monotonically-allocated cycle_kind IDs starting at
+ * III_WALLOC_CYCLE_KIND_BASE = 0x0200; a per-module plan_anchor at
+ * III_WALLOC_PLAN_ANCHOR_BASE = 0x0C00.
+ *
+ * Stage-1 storage layout: a single heap-allocated u64 array holds
+ * the record table.  Each record occupies 6 consecutive u64 slots
+ * (one per field).  Indexing: record `i` field `f` is at
+ * `g_records[i * REC_W + f]`.
+ *
+ * Field layout (REC_W = 6):
+ *   0  decl_node    (AST node index of the cycle decl)
+ *   1  name_off     (offset into source buf, recorded for diagnostics)
+ *   2  name_len     (length of the cycle's name)
+ *   3  cycle_kind   (allocated u16, mirrored to cycle_descriptor_t.kind)
+ *   4  plan_anchor  (per-module witness anchor)
+ *   5  step_kind    ((CYCLE_CATEGORY << 16) | cycle_kind)
+ *
+ * Stage-1 deferred work:
+ *   - Reserved-range collision detection (kReservedRanges in C version)
+ *   - emit_manifest (line-oriented string output)
+ *   - anchor_mhash + verify (require sha256.iii — F-A7 follow-up)
+ *   - audit-sink callbacks
+ *   - cross-TU composition (multiple iii_walloc_run calls share counter)
+ *
+ * The C version has these but they are scaffolding; the lifecycle
+ * (create / register / lookup / seal / count) is the load-bearing
+ * surface and that is faithful in this port.
+ */
+
+extern @abi(c-msvc-x64) fn malloc(n: u64)              -> *u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn realloc(p: *u64, n: u64)    -> *u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u64)               -> u64  from "msvcrt"
+
+/* Allocator state — module-level.  Single instance per process; the
+ * C version uses a struct, but for Stage-1 a flat-globals lifecycle
+ * matches one logical allocator. */
+var g_records:           *u64
+var g_count:             u64 = 0
+var g_cap:               u64 = 0
+var g_next_cycle_kind:   u64 = 0
+var g_module_plan_anchor: u64 = 0
+var g_sealed:            u64 = 0
+
+const REC_W:              u64 = 6
+const CYCLE_KIND_BASE:    u64 = 0x0200
+const PLAN_ANCHOR_BASE:   u64 = 0x0C00
+const STEP_CATEGORY_CYCLE: u64 = 0x0000
+const INIT_CAP:           u64 = 256
+
+/* Lifecycle */
+fn iii_walloc_create() -> u64 {
+    g_cap = INIT_CAP
+    g_records = malloc(INIT_CAP * REC_W * 8)
+    g_count = 0
+    g_next_cycle_kind = CYCLE_KIND_BASE
+    g_module_plan_anchor = PLAN_ANCHOR_BASE
+    g_sealed = 0
+    return 0
+}
+
+fn iii_walloc_destroy() -> u64 {
+    if g_records as u64 > 0 {
+        free(g_records)
+    }
+    g_cap = 0
+    g_count = 0
+    return 0
+}
+
+/* Append a record.  Returns the assigned cycle_kind on success, or 0
+ * if the allocator is sealed or capacity is exhausted (Stage-1 has no
+ * realloc grow yet — bounded at INIT_CAP). */
+fn iii_walloc_register(decl_node: u64, name_off: u64, name_len: u64) -> u64 {
+    if g_sealed > 0 {
+        return 0
+    }
+    if g_count >= g_cap {
+        return 0
+    }
+    let assigned: u64 = g_next_cycle_kind
+    g_next_cycle_kind = g_next_cycle_kind + 1
+    let base: u64 = g_count * REC_W
+    g_records[base + 0] = decl_node
+    g_records[base + 1] = name_off
+    g_records[base + 2] = name_len
+    g_records[base + 3] = assigned
+    g_records[base + 4] = g_module_plan_anchor
+    /* step_kind = (category << 16) | cycle_kind; category is 0 for CYCLE band. */
+    g_records[base + 5] = (STEP_CATEGORY_CYCLE << 16) | assigned
+    g_count = g_count + 1
+    return assigned
+}
+
+/* Lookup by decl_node — linear scan (Stage-1; the C version uses the
+ * same approach plus an optional hash, deferred to a Stage-2 port). */
+fn iii_walloc_lookup_cycle_kind(decl_node: u64) -> u64 {
+    let mut i: u64 = 0
+    let mut base: u64 = 0
+    while i < g_count {
+        base = i * REC_W
+        if g_records[base + 0] == decl_node {
+            return g_records[base + 3]
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn iii_walloc_lookup_step_kind(decl_node: u64) -> u64 {
+    let mut i: u64 = 0
+    let mut base: u64 = 0
+    while i < g_count {
+        base = i * REC_W
+        if g_records[base + 0] == decl_node {
+            return g_records[base + 5]
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn iii_walloc_record_count() -> u64 {
+    return g_count
+}
+
+fn iii_walloc_seal() -> u64 {
+    g_sealed = 1
+    return 0
+}
+
+fn iii_walloc_is_sealed() -> u64 {
+    return g_sealed
+}
+
+/* Test driver — register 5 simulated cycle decls, exercise lookup,
+ * verify count + sealed semantics.
+ *
+ * Exit-code bit map:
+ *   bit 0:  cycle_kind for decl 100 == 0x0200
+ *   bit 1:  cycle_kind for decl 101 == 0x0201
+ *   bit 2:  cycle_kind for decl 104 == 0x0204
+ *   bit 3:  step_kind for decl 102 == 0x0202   (low byte of (0<<16)|0x202)
+ *           — the test exposes the LOW BYTE through an exit code
+ *           comparison, so we reduce step_kind via & 0xFF: 0x202 & 0xFF = 0x02.
+ *   bit 4:  count == 5
+ *   bit 5:  sealed transition: register after seal returns 0
+ *   bit 6:  is_sealed == 1
+ *   bit 7:  lookup unknown decl returns 0
+ *
+ * Pass = exit 255.
+ */
+fn main() -> u64 {
+    iii_walloc_create()
+    let k0: u64 = iii_walloc_register(100, 0, 5)
+    let k1: u64 = iii_walloc_register(101, 5, 6)
+    let k2: u64 = iii_walloc_register(102, 11, 4)
+    let k3: u64 = iii_walloc_register(103, 15, 7)
+    let k4: u64 = iii_walloc_register(104, 22, 3)
+    let mut score: u64 = 0
+    if iii_walloc_lookup_cycle_kind(100) == 0x0200 {
+        score = score | 1
+    }
+    if iii_walloc_lookup_cycle_kind(101) == 0x0201 {
+        score = score | 2
+    }
+    if iii_walloc_lookup_cycle_kind(104) == 0x0204 {
+        score = score | 4
+    }
+    if (iii_walloc_lookup_step_kind(102) & 0xFF) == 0x02 {
+        score = score | 8
+    }
+    if iii_walloc_record_count() == 5 {
+        score = score | 16
+    }
+    iii_walloc_seal()
+    let after_seal: u64 = iii_walloc_register(999, 0, 1)
+    if after_seal == 0 {
+        score = score | 32
+    }
+    if iii_walloc_is_sealed() == 1 {
+        score = score | 64
+    }
+    if iii_walloc_lookup_cycle_kind(9999) == 0 {
+        score = score | 128
+    }
+    iii_walloc_destroy()
+    return score
+}

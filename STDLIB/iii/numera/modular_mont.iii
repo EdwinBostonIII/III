@@ -1,0 +1,120 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\modular_mont.iii
+ *
+ * III STDLIB - numera::modular_mont
+ *
+ * Lattice plan Step 0032 -- Montgomery-form modular multiplication
+ * for u32-bounded moduli (modulus < 2^32 so all intermediate products
+ * fit in u64 without overflow).  This is the JIT-selectable fast path
+ * that the master plan calls for; classical schoolbook stays in
+ * `modular.iii` for moduli that don't fit the precondition.
+ *
+ *   mont_mul_u32(a: u64, b: u64, n: u64) -> u64
+ *      Returns (a * b) mod n where a, b ∈ [0, n) and n < 2^32.
+ *      Uses Montgomery REDC with R = 2^32.  Caller does NOT need to
+ *      pre-convert into Montgomery form -- this is a "single-shot"
+ *      multiply suitable for one-off ops; for repeated ops the caller
+ *      should convert into Montgomery form via mont_to_form / out via
+ *      mont_from_form (added below).
+ *
+ *   mont_pow_u32(base: u64, exp: u64, n: u64) -> u64
+ *      Computes base^exp mod n via square-and-multiply in Montgomery
+ *      form.  Same precondition n < 2^32.
+ *
+ *   mont_to_form(a: u64, n: u64) -> u64
+ *      Returns aR mod n.
+ *
+ *   mont_from_form(aR: u64, n: u64) -> u64
+ *      Returns a (the canonical residue) given Montgomery aR.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure modular arithmetic).
+ */
+
+module numera_modular_mont
+
+const MONT_R       : u64 = 0x100000000u64        /* 2^32 */
+const MONT_R_MASK  : u64 = 0xFFFFFFFFu64
+const MONT_R_SHIFT : u64 = 32u64
+
+/* Compute n_inv such that n * n_inv ≡ -1 (mod R) where R = 2^32.
+ * Newton's iteration: x_{k+1} = x_k * (2 - n * x_k) mod R.
+ * Start with x_0 = n (or 1 -- doubles each iteration; 5 iterations
+ * suffice for 32-bit precision). */
+fn mont_n_inv_neg(n: u64) -> u64 {
+    let n_l : u64 = n & MONT_R_MASK
+    let mut x : u64 = n_l
+    let mut k : u32 = 0u32
+    while k < 5u32 {
+        let prod : u64 = (n_l * x) & MONT_R_MASK
+        let two_minus : u64 = (2u64 - prod) & MONT_R_MASK
+        x = (x * two_minus) & MONT_R_MASK
+        k = k + 1u32
+    }
+    /* x is n^(-1) mod R; we want -n^(-1) mod R. */
+    let neg : u64 = (MONT_R - x) & MONT_R_MASK
+    return neg
+}
+
+/* REDC(t) = t * R^(-1) mod n.  Precondition: t < n * R, n < 2^32. */
+fn mont_redc(t: u64, n: u64, n_inv_neg: u64) -> u64 {
+    let n_l : u64 = n
+    let m : u64 = (((t & MONT_R_MASK) * n_inv_neg) & MONT_R_MASK)
+    let v : u64 = (t + m * n_l) >> MONT_R_SHIFT
+    if v >= n_l {
+        return v - n_l
+    }
+    return v
+}
+
+fn mont_to_form(a: u64, n: u64) -> u64 @export {
+    let a_l : u64 = a
+    let n_l : u64 = n
+    /* aR mod n: avoid overflow by reducing a first then shifting. */
+    let a_red : u64 = a_l % n_l
+    let shifted : u64 = (a_red << MONT_R_SHIFT) % n_l
+    return shifted
+}
+
+fn mont_from_form(a_R: u64, n: u64) -> u64 @export {
+    let n_l : u64 = n
+    let n_inv : u64 = mont_n_inv_neg(n_l)
+    return mont_redc(a_R, n_l, n_inv)
+}
+
+fn mont_mul_u32(a: u64, b: u64, n: u64) -> u64 @export {
+    let n_l : u64 = n
+    let n_inv : u64 = mont_n_inv_neg(n_l)
+    /* Convert both operands to Montgomery form, multiply, REDC twice. */
+    let a_R : u64 = mont_to_form(a, n_l)
+    let b_R : u64 = mont_to_form(b, n_l)
+    /* Mont-multiply: REDC(a_R * b_R) = a_R * b_R * R^(-1) mod n
+     *               = a * b * R mod n.  Then REDC again to remove the R. */
+    let prod_form : u64 = mont_redc(a_R * b_R, n_l, n_inv)
+    return mont_redc(prod_form, n_l, n_inv)
+}
+
+fn mont_pow_u32(base: u64, exp: u64, n: u64) -> u64 @export {
+    let base_l : u64 = base
+    let exp_l  : u64 = exp
+    let n_l    : u64 = n
+    if n_l == 0u64 { return 0u64 }
+    if n_l == 1u64 { return 0u64 }
+    if exp_l == 0u64 { return 1u64 }
+    let n_inv : u64 = mont_n_inv_neg(n_l)
+    let one_R : u64 = mont_to_form(1u64, n_l)
+    let base_R : u64 = mont_to_form(base_l, n_l)
+    let mut result_R : u64 = one_R
+    let mut cur_R    : u64 = base_R
+    let mut e        : u64 = exp_l
+    let mut going    : u8 = 1u8
+    while going == 1u8 {
+        if e == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            if (e & 1u64) == 1u64 {
+                result_R = mont_redc(result_R * cur_R, n_l, n_inv)
+            }
+            cur_R = mont_redc(cur_R * cur_R, n_l, n_inv)
+            e = e >> 1u64
+        }
+    }
+    return mont_from_form(result_R, n_l)
+}

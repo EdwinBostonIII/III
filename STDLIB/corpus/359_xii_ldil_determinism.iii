@@ -1,0 +1,32 @@
+/* corpus/359_xii_ldil_determinism.iii — LDIL produces bit-identical output across runs */
+
+module corpus_359_xii_ldil_determinism
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+
+var BUF_A4 : [u8; 256]
+var BUF_B4 : [u8; 256]
+
+fn main() -> u64 {
+    xii_horizon_init()
+    /* Run twice over 12 different (horizon_id, target) combinations; all must
+     * produce bit-identical byte sequences. */
+    let mut h : u32 = 0u32
+    while h < 12u32 {
+        let mut t : u32 = 0u32
+        while t < 7u32 {
+            let n1 : u32 = xii_emit_gen_produce(h, t, 256u32, &BUF_A4 as *u8)
+            let n2 : u32 = xii_emit_gen_produce(h, t, 256u32, &BUF_B4 as *u8)
+            if n1 != n2 { return 1u64 }
+            let mut i : u32 = 0u32
+            while i < n1 {
+                if BUF_A4[i] != BUF_B4[i] { return ((h * 100u32) + t + 2u32) as u64 }
+                i = i + 1u32
+            }
+            t = t + 1u32
+        }
+        h = h + 1u32
+    }
+    return 0u64
+}

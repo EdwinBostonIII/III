@@ -1,0 +1,811 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bigint.iii
+ *
+ * III STDLIB - numera::bigint
+ *
+ * Arbitrary-precision unsigned integer.  Storage: a contiguous span
+ * of u64 little-endian limbs in an arena (limb 0 is least
+ * significant).  A bigint is normalised: the highest limb is
+ * non-zero unless the value is zero (in which case len == 0).
+ *
+ * Phase B scope:
+ *   - Construction: new, from_u64, copy
+ *   - Queries: len_limbs, get_limb, is_zero
+ *   - Comparison: eq, cmp
+ *   - Addition: bigint_add (arena, a, b) -> result_id
+ *   - Subtraction: bigint_sub (precondition a >= b; caller checks)
+ *   - Single-limb multiply: bigint_mul_u64
+ *   - Full multiply: bigint_mul (schoolbook O(n*m))
+ *   - Bit shifts: bigint_shl_bits, bigint_shr_bits
+ *
+ * Phase C deferrals (named, justified):
+ *   - bigint_div / bigint_mod (Knuth Algorithm D - non-trivial)
+ *   - Karatsuba multiplication for n > 64 limbs (Phase C scaling)
+ *   - bigint_modpow (depends on div/mod)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (alloc may fail).
+ *
+ * Discipline: ≤4 fn params; mask u32 ops; address of static taken
+ * only inside this file.
+ */
+
+module numera_bigint
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+const BIGINT_INVALID  : u64 = 0u64
+const BIGINT_OK       : i32 = 0i32
+const BIGINT_E_OOM    : i32 = -1i32
+const BIGINT_E_BADID  : i32 = -2i32
+const BIGINT_E_RANGE  : i32 = -3i32
+const BIGINT_E_NEG    : i32 = -4i32       /* would-be-negative result */
+
+const BIGINT_SLOTS : u32 = 64u32
+
+var BIGINT_BASE  : [u64; 64]   /* pointer to limb array              */
+var BIGINT_LEN   : [u64; 64]   /* number of significant limbs         */
+var BIGINT_CAP   : [u64; 64]   /* allocated limb count                */
+var BIGINT_ARENA : [u64; 64]   /* backing arena                       */
+var BIGINT_LIVE  : [u8;  64]
+
+/* --- §3.5 AVX-512 8-wide partial-product primitive (vpmullq + vpmuludq) --- */
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+var BIG_VEC_SRC   : u64 = 0u64      /* byte addr of the current 8-limb group */
+var BIG_VEC_MUL   : u64 = 0u64      /* the multiplier (broadcast) */
+var BIG_VEC_LO    : [u64; 8]        /* per-group prod_lo[0..7] */
+var BIG_VEC_HI    : [u64; 8]        /* per-group prod_hi[0..7] */
+var BIG_VEC_FORCE : u32 = 0u32      /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
+
+/* --- u64 LE byte accessors over arena memory --- */
+
+fn big_load_u64_le(base: u64, idx: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let off : u64 = idx * 8u64
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn big_store_u64_le(base: u64, idx: u64, v: u64) -> u32 {
+    let p : *u8 = base as *u8
+    let off : u64 = idx * 8u64
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0u32
+}
+
+/* --- Slot management --- */
+
+fn big_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < BIGINT_SLOTS {
+        if BIGINT_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn big_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (BIGINT_SLOTS as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if BIGINT_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* --- Construction --- */
+
+fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 @export {
+    let s : u32 = big_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let mut cap : u64 = cap_limbs
+    if cap == 0u64 { cap = 1u64 }
+    let p : u64 = arena_alloc1(arena_id, cap * 8u64)
+    if p == 0u64 { return BIGINT_INVALID }
+    /* Zero the limbs. */
+    let mut i : u64 = 0u64
+    while i < cap {
+        big_store_u64_le(p, i, 0u64)
+        i = i + 1u64
+    }
+    BIGINT_BASE[s]  = p
+    BIGINT_LEN[s]   = 0u64
+    BIGINT_CAP[s]   = cap
+    BIGINT_ARENA[s] = arena_id
+    BIGINT_LIVE[s]  = 1u8
+    return (s as u64) + 1u64
+}
+
+fn bigint_from_u64(arena_id: u64, v: u64) -> u64 @export {
+    let id : u64 = bigint_new(arena_id, 1u64)
+    if id == 0u64 { return BIGINT_INVALID }
+    if v != 0u64 {
+        let s : u32 = big_slot_of(id)
+        big_store_u64_le(BIGINT_BASE[s], 0u64, v)
+        BIGINT_LEN[s] = 1u64
+    }
+    return id
+}
+
+fn bigint_drop(id: u64) -> i32 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return BIGINT_E_BADID }
+    BIGINT_LIVE[s]  = 0u8
+    BIGINT_BASE[s]  = 0u64
+    BIGINT_LEN[s]   = 0u64
+    BIGINT_CAP[s]   = 0u64
+    BIGINT_ARENA[s] = 0u64
+    return BIGINT_OK
+}
+
+/* Sweep every bigint slot whose backing arena == arena_id and free it.
+ * The arena's memory is about to be released; the bigint slots referenced
+ * point into that memory and MUST be invalidated, otherwise subsequent
+ * bigint allocations see stale slots as "live" and the slot table fills
+ * up after a few arena cycles -- the bigint allocator then returns
+ * BIGINT_INVALID and downstream crypto (x25519, fp_*, etc.) silently
+ * uses stale state, producing identical outputs for distinct inputs.
+ *
+ * Callers (x25519, ed25519, every per-call arena consumer) MUST invoke
+ * this immediately before arena_drop / region_release. */
+fn bigint_drop_arena(arena_id: u64) -> i32 @export {
+    let l_aid : u64 = arena_id
+    let mut i : u32 = 0u32
+    while i < BIGINT_SLOTS {
+        if BIGINT_LIVE[i] == 1u8 {
+            if BIGINT_ARENA[i] == l_aid {
+                BIGINT_LIVE[i]  = 0u8
+                BIGINT_BASE[i]  = 0u64
+                BIGINT_LEN[i]   = 0u64
+                BIGINT_CAP[i]   = 0u64
+                BIGINT_ARENA[i] = 0u64
+            }
+        }
+        i = i + 1u32
+    }
+    return BIGINT_OK
+}
+
+/* Diagnostic: count currently-live bigint slots.  Used by tests to
+ * detect slot leaks across crypto operations. */
+fn bigint_live_count() -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < BIGINT_SLOTS {
+        if BIGINT_LIVE[i] == 1u8 { n = n + 1u32 }
+        i = i + 1u32
+    }
+    return n
+}
+
+/* Copy a bigint into a freshly-allocated slot (same arena). */
+fn bigint_copy(arena_id: u64, src_id: u64) -> u64 @export {
+    let ss : u32 = big_slot_of(src_id)
+    if ss == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let src_len : u64 = BIGINT_LEN[ss]
+    let mut cap : u64 = src_len
+    if cap == 0u64 { cap = 1u64 }
+    let new_id : u64 = bigint_new(arena_id, cap)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let src_base : u64 = BIGINT_BASE[ss]
+    let dst_base : u64 = BIGINT_BASE[ds]
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let v : u64 = big_load_u64_le(src_base, i)
+        big_store_u64_le(dst_base, i, v)
+        i = i + 1u64
+    }
+    BIGINT_LEN[ds] = src_len
+    return new_id
+}
+
+/* --- Queries --- */
+
+fn bigint_len_limbs(id: u64) -> u64 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return BIGINT_LEN[s]
+}
+
+fn bigint_capacity_limbs(id: u64) -> u64 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return BIGINT_CAP[s]
+}
+
+fn bigint_get_limb(id: u64, i: u64) -> u64 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if i >= BIGINT_LEN[s] { return 0u64 }
+    return big_load_u64_le(BIGINT_BASE[s], i)
+}
+
+fn bigint_is_zero(id: u64) -> u8 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 1u8 }
+    if BIGINT_LEN[s] == 0u64 { return 1u8 }
+    return 0u8
+}
+
+fn bigint_to_u64_lo(id: u64) -> u64 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if BIGINT_LEN[s] == 0u64 { return 0u64 }
+    return big_load_u64_le(BIGINT_BASE[s], 0u64)
+}
+
+/* --- Phase D extensions: limb setter + length setter for bigint_div --- */
+
+fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return -2i32 }
+    if i >= BIGINT_CAP[s] { return -3i32 }
+    big_store_u64_le(BIGINT_BASE[s], i, v)
+    if i >= BIGINT_LEN[s] {
+        if v != 0u64 {
+            BIGINT_LEN[s] = i + 1u64
+        }
+    }
+    return 0i32
+}
+
+fn bigint_set_len(id: u64, len: u64) -> i32 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return -2i32 }
+    if len > BIGINT_CAP[s] { return -3i32 }
+    BIGINT_LEN[s] = len
+    return 0i32
+}
+
+/* Strip trailing zero limbs from `id` in-place (length-only update; the
+ * underlying memory is unchanged).  Idempotent.  Used to canonicalise
+ * results from operations that don't normalise (notably bigint_add) so
+ * bigint_eq and bigint_cmp behave correctly. */
+fn bigint_normalize(id: u64) -> i32 @export {
+    let s : u32 = big_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return -2i32 }
+    let base : u64 = BIGINT_BASE[s]
+    let mut len : u64 = BIGINT_LEN[s]
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if len == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            let v : u64 = big_load_u64_le(base, len - 1u64)
+            if v != 0u64 {
+                going = 0u8
+            } else {
+                len = len - 1u64
+            }
+        }
+    }
+    BIGINT_LEN[s] = len
+    return 0i32
+}
+
+/* Copy src's limbs into dst (overwriting; dst.cap must be >= src.len) */
+fn bigint_assign(dst: u64, src: u64) -> i32 @export {
+    let ds : u32 = big_slot_of(dst)
+    let ss : u32 = big_slot_of(src)
+    if ds == 0xFFFFFFFFu32 { return -2i32 }
+    if ss == 0xFFFFFFFFu32 { return -2i32 }
+    let src_len : u64 = BIGINT_LEN[ss]
+    if src_len > BIGINT_CAP[ds] { return -3i32 }
+    let src_base : u64 = BIGINT_BASE[ss]
+    let dst_base : u64 = BIGINT_BASE[ds]
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let v : u64 = big_load_u64_le(src_base, i)
+        big_store_u64_le(dst_base, i, v)
+        i = i + 1u64
+    }
+    /* Zero out remaining limbs above src_len up to dst's old len (so dst
+     * is normalised). */
+    let dst_old_len : u64 = BIGINT_LEN[ds]
+    let mut j : u64 = src_len
+    while j < dst_old_len {
+        big_store_u64_le(dst_base, j, 0u64)
+        j = j + 1u64
+    }
+    BIGINT_LEN[ds] = src_len
+    return 0i32
+}
+
+/* --- Comparison --- */
+
+/* Value equality: treats two bigints as equal if their stored values
+ * are equal as integers, regardless of whether one is stored with
+ * trailing zero limbs.  This is the user-correct semantics; length-
+ * strict equality was a leaky storage abstraction that broke on
+ * outputs from operations that don't normalise. */
+fn bigint_eq(a: u64, b: u64) -> u8 @export {
+    let sa : u32 = big_slot_of(a)
+    let sb : u32 = big_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return 0u8 }
+    if sb == 0xFFFFFFFFu32 { return 0u8 }
+    let la : u64 = BIGINT_LEN[sa]
+    let lb : u64 = BIGINT_LEN[sb]
+    let mut max_len : u64 = la
+    if lb > max_len { max_len = lb }
+    let abase : u64 = BIGINT_BASE[sa]
+    let bbase : u64 = BIGINT_BASE[sb]
+    let mut i : u64 = 0u64
+    while i < max_len {
+        let mut av : u64 = 0u64
+        let mut bv : u64 = 0u64
+        if i < la { av = big_load_u64_le(abase, i) }
+        if i < lb { bv = big_load_u64_le(bbase, i) }
+        if av != bv { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* W16 workaround: extern callers cannot reliably read u8 returns
+ * (upper bits of return register undefined per C ABI for sub-word
+ * returns).  This wrapper does the comparison locally and returns
+ * u64 (full register, reliable across extern boundary). */
+fn bigint_eq_u64(a: u64, b: u64) -> u64 @export {
+    if bigint_eq(a, b) == 1u8 { return 1u64 }
+    return 0u64
+}
+
+/* Compute effective length (ignoring trailing zero limbs) of a bigint. */
+fn big_effective_len(base: u64, len: u64) -> u64 {
+    let mut e : u64 = len
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if e == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            let v : u64 = big_load_u64_le(base, e - 1u64)
+            if v != 0u64 { going = 0u8 }
+            if going == 1u8 { e = e - 1u64 }
+        }
+    }
+    return e
+}
+
+/* Value comparison: returns -1 if a<b, 0 if equal, +1 if a>b.
+ * Treats trailing zero limbs as equivalent. */
+fn bigint_cmp(a: u64, b: u64) -> i32 @export {
+    let sa : u32 = big_slot_of(a)
+    let sb : u32 = big_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return 0i32 }
+    if sb == 0xFFFFFFFFu32 { return 0i32 }
+    let abase : u64 = BIGINT_BASE[sa]
+    let bbase : u64 = BIGINT_BASE[sb]
+    let ela : u64 = big_effective_len(abase, BIGINT_LEN[sa])
+    let elb : u64 = big_effective_len(bbase, BIGINT_LEN[sb])
+    if ela < elb { return -1i32 }
+    if ela > elb { return 1i32 }
+    if ela == 0u64 { return 0i32 }
+    let mut i : u64 = ela
+    while i > 0u64 {
+        i = i - 1u64
+        let av : u64 = big_load_u64_le(abase, i)
+        let bv : u64 = big_load_u64_le(bbase, i)
+        if av < bv { return -1i32 }
+        if av > bv { return 1i32 }
+    }
+    return 0i32
+}
+
+/* --- Addition: bigint + bigint -> new bigint --- */
+
+fn bigint_add(arena_id: u64, a: u64, b: u64) -> u64 @export {
+    let sa : u32 = big_slot_of(a)
+    let sb : u32 = big_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    if sb == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let la : u64 = BIGINT_LEN[sa]
+    let lb : u64 = BIGINT_LEN[sb]
+    let mut max_len : u64 = la
+    if lb > max_len { max_len = lb }
+    let result_cap : u64 = max_len + 1u64
+    let new_id : u64 = bigint_new(arena_id, result_cap)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let abase : u64 = BIGINT_BASE[sa]
+    let bbase : u64 = BIGINT_BASE[sb]
+    let dbase : u64 = BIGINT_BASE[ds]
+    let mut i : u64 = 0u64
+    let mut carry : u64 = 0u64
+    while i < max_len {
+        let mut av : u64 = 0u64
+        let mut bv : u64 = 0u64
+        if i < la { av = big_load_u64_le(abase, i) }
+        if i < lb { bv = big_load_u64_le(bbase, i) }
+        let s1 : u64 = av + bv
+        let mut new_carry : u64 = 0u64
+        if s1 < av { new_carry = 1u64 }
+        let s2 : u64 = s1 + carry
+        if s2 < s1 { new_carry = new_carry + 1u64 }
+        big_store_u64_le(dbase, i, s2)
+        carry = new_carry
+        i = i + 1u64
+    }
+    let mut final_len : u64 = max_len
+    if carry != 0u64 {
+        big_store_u64_le(dbase, max_len, carry)
+        final_len = max_len + 1u64
+    }
+    BIGINT_LEN[ds] = final_len
+    /* Carry guarantees the top limb is non-zero, but if there's no
+     * carry the top limb might be zero from cancelling operand bits.
+     * Normalise so callers see a canonical length. */
+    if carry == 0u64 {
+        bigint_normalize(new_id)
+    }
+    return new_id
+}
+
+/* --- Subtraction: a - b where a >= b. Returns INVALID on underflow. --- */
+
+fn bigint_sub(arena_id: u64, a: u64, b: u64) -> u64 @export {
+    let sa : u32 = big_slot_of(a)
+    let sb : u32 = big_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    if sb == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    if bigint_cmp(a, b) == -1i32 { return BIGINT_INVALID }
+    let la : u64 = BIGINT_LEN[sa]
+    let lb : u64 = BIGINT_LEN[sb]
+    let new_id : u64 = bigint_new(arena_id, la)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let abase : u64 = BIGINT_BASE[sa]
+    let bbase : u64 = BIGINT_BASE[sb]
+    let dbase : u64 = BIGINT_BASE[ds]
+    let mut i : u64 = 0u64
+    let mut borrow : u64 = 0u64
+    while i < la {
+        let av : u64 = big_load_u64_le(abase, i)
+        let mut bv : u64 = 0u64
+        if i < lb { bv = big_load_u64_le(bbase, i) }
+        let s1 : u64 = av - bv
+        let mut new_borrow : u64 = 0u64
+        if av < bv { new_borrow = 1u64 }
+        let s2 : u64 = s1 - borrow
+        if s1 < borrow { new_borrow = new_borrow + 1u64 }
+        big_store_u64_le(dbase, i, s2)
+        borrow = new_borrow
+        i = i + 1u64
+    }
+    /* Normalise: drop high zero limbs. */
+    let mut new_len : u64 = la
+    while new_len > 0u64 {
+        let v : u64 = big_load_u64_le(dbase, new_len - 1u64)
+        if v != 0u64 { BIGINT_LEN[ds] = new_len; return new_id }
+        new_len = new_len - 1u64
+    }
+    BIGINT_LEN[ds] = 0u64
+    return new_id
+}
+
+/* --- Multiplication by a single u64 --- */
+
+/* ---- §3.5 8-wide partial-product fill: BIG_VEC_LO/HI[k] = src[k]*mul ---- */
+
+/* Scalar reference (bit-identity baseline): the exact (prod_lo, prod_hi)
+ * formula, for the 8 limbs of the group at BIG_VEC_SRC times BIG_VEC_MUL. */
+fn _big_mul8_scalar() -> i32 {
+    let mul : u64 = BIG_VEC_MUL
+    let slo : u64 = mul & 0xFFFFFFFFu64
+    let shi : u64 = (mul >> 32u64) & 0xFFFFFFFFu64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let limb : u64 = big_load_u64_le(BIG_VEC_SRC, k)
+        let llo : u64 = limb & 0xFFFFFFFFu64
+        let lhi : u64 = (limb >> 32u64) & 0xFFFFFFFFu64
+        let p_ll : u64 = llo * slo
+        let p_lh : u64 = llo * shi
+        let p_hl : u64 = lhi * slo
+        let p_hh : u64 = lhi * shi
+        let mid : u64 = (p_ll >> 32u64) + (p_lh & 0xFFFFFFFFu64) + (p_hl & 0xFFFFFFFFu64)
+        BIG_VEC_HI[k] = p_hh + (p_lh >> 32u64) + (p_hl >> 32u64) + (mid >> 32u64)
+        BIG_VEC_LO[k] = limb * mul
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+/* AVX-512: 8 limbs at BIG_VEC_SRC times BIG_VEC_MUL.  prod_lo via vpmullq
+ * (64x64->lo64, AVX-512DQ); prod_hi via 4x vpmuludq (32x32->64) + the
+ * scalar's exact overflow-free recombination (mid<2^34).  Bit-identical
+ * to _big_mul8_scalar.  zmm0..5 + rax/rcx/rdx all Win64 caller-saved. */
+fn _big_mul8_avx512() -> i32 {
+    metal {
+    leaq L_BIG_VEC_SRC(%rip), %rax
+    movq (%rax), %rax
+    leaq L_BIG_VEC_MUL(%rip), %rcx
+    vpbroadcastq (%rcx), %zmm2
+    vmovdqu64 (%rax), %zmm0
+    vpmullq %zmm2, %zmm0, %zmm4
+    leaq L_BIG_VEC_LO(%rip), %rdx
+    vmovdqu64 %zmm4, (%rdx)
+    vpsrlq $32, %zmm0, %zmm1
+    vpsrlq $32, %zmm2, %zmm3
+    vpmuludq %zmm2, %zmm0, %zmm4
+    vpmuludq %zmm3, %zmm1, %zmm5
+    vpmuludq %zmm3, %zmm0, %zmm0
+    vpmuludq %zmm2, %zmm1, %zmm1
+    vpsrlq $32, %zmm0, %zmm2
+    vpaddq %zmm2, %zmm5, %zmm5
+    vpsrlq $32, %zmm1, %zmm3
+    vpaddq %zmm3, %zmm5, %zmm5
+    vpternlogq $0xFF, %zmm2, %zmm2, %zmm2
+    vpsrlq $32, %zmm2, %zmm2
+    vpsrlq $32, %zmm4, %zmm3
+    vpandq %zmm2, %zmm0, %zmm0
+    vpaddq %zmm0, %zmm3, %zmm3
+    vpandq %zmm2, %zmm1, %zmm1
+    vpaddq %zmm1, %zmm3, %zmm3
+    vpsrlq $32, %zmm3, %zmm3
+    vpaddq %zmm3, %zmm5, %zmm5
+    leaq L_BIG_VEC_HI(%rip), %rdx
+    vmovdqu64 %zmm5, (%rdx)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* Dispatch: AVX-512 on capable hosts, else scalar; BIG_VEC_FORCE overrides
+ * for KAT bit-identity testing.  Mandate 7: structural CPUID dispatch. */
+fn _big_mul8() -> i32 {
+    if BIG_VEC_FORCE == 1u32 { return _big_mul8_scalar() }
+    if BIG_VEC_FORCE == 2u32 { return _big_mul8_avx512() }
+    if cpufeat_has_avx512f() == 1u8 { return _big_mul8_avx512() }
+    return _big_mul8_scalar()
+}
+
+fn bigint_force_path(p: u32) -> i32 @export { BIG_VEC_FORCE = p ; return 0i32 }
+
+fn bigint_mul_u64(arena_id: u64, a: u64, scalar: u64) -> u64 @export {
+    let sa : u32 = big_slot_of(a)
+    if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let la : u64 = BIGINT_LEN[sa]
+    if la == 0u64 { return bigint_from_u64(arena_id, 0u64) }
+    if scalar == 0u64 { return bigint_from_u64(arena_id, 0u64) }
+    let result_cap : u64 = la + 1u64
+    let new_id : u64 = bigint_new(arena_id, result_cap)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let abase : u64 = BIGINT_BASE[sa]
+    let dbase : u64 = BIGINT_BASE[ds]
+    let mut carry : u64 = 0u64
+    let mut g : u64 = 0u64
+    /* §3.5: SIMD-fill 8-limb groups (BIG_VEC_LO/HI = limb*scalar), then a
+     * scalar carry pass.  Bit-identical to the per-limb scalar formula. */
+    while g + 8u64 <= la {
+        BIG_VEC_SRC = abase + g * 8u64
+        BIG_VEC_MUL = scalar
+        _big_mul8()
+        let mut k : u64 = 0u64
+        while k < 8u64 {
+            let lo_v : u64 = BIG_VEC_LO[k]
+            let lwc : u64 = lo_v + carry
+            let mut nc : u64 = BIG_VEC_HI[k]
+            if lwc < lo_v { nc = nc + 1u64 }
+            big_store_u64_le(dbase, g + k, lwc)
+            carry = nc
+            k = k + 1u64
+        }
+        g = g + 8u64
+    }
+    /* Scalar remainder (< 8 limbs). */
+    while g < la {
+        let limb : u64 = big_load_u64_le(abase, g)
+        let llo : u64 = limb & 0xFFFFFFFFu64
+        let lhi : u64 = (limb >> 32u64) & 0xFFFFFFFFu64
+        let slo : u64 = scalar & 0xFFFFFFFFu64
+        let shi : u64 = (scalar >> 32u64) & 0xFFFFFFFFu64
+        let p_ll : u64 = llo * slo
+        let p_lh : u64 = llo * shi
+        let p_hl : u64 = lhi * slo
+        let p_hh : u64 = lhi * shi
+        let mid : u64 = (p_ll >> 32u64) + (p_lh & 0xFFFFFFFFu64) + (p_hl & 0xFFFFFFFFu64)
+        let prod_hi : u64 = p_hh + (p_lh >> 32u64) + (p_hl >> 32u64) + (mid >> 32u64)
+        let prod_lo : u64 = limb * scalar
+        let lo_with_carry : u64 = prod_lo + carry
+        let mut new_carry : u64 = prod_hi
+        if lo_with_carry < prod_lo { new_carry = new_carry + 1u64 }
+        big_store_u64_le(dbase, g, lo_with_carry)
+        carry = new_carry
+        g = g + 1u64
+    }
+    let mut result_len : u64 = la
+    if carry != 0u64 {
+        big_store_u64_le(dbase, la, carry)
+        result_len = la + 1u64
+    }
+    BIGINT_LEN[ds] = result_len
+    if carry == 0u64 {
+        bigint_normalize(new_id)
+    }
+    return new_id
+}
+
+/* --- Multiplication: bigint * bigint (schoolbook) --- */
+
+fn bigint_mul(arena_id: u64, a: u64, b: u64) -> u64 @export {
+    let sa : u32 = big_slot_of(a)
+    let sb : u32 = big_slot_of(b)
+    if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    if sb == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let la : u64 = BIGINT_LEN[sa]
+    let lb : u64 = BIGINT_LEN[sb]
+    if la == 0u64 { return bigint_from_u64(arena_id, 0u64) }
+    if lb == 0u64 { return bigint_from_u64(arena_id, 0u64) }
+    let result_cap : u64 = la + lb
+    let new_id : u64 = bigint_new(arena_id, result_cap)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let abase : u64 = BIGINT_BASE[sa]
+    let bbase : u64 = BIGINT_BASE[sb]
+    let dbase : u64 = BIGINT_BASE[ds]
+    /* zero result limbs already done by bigint_new */
+    let mut i : u64 = 0u64
+    while i < la {
+        let ai : u64 = big_load_u64_le(abase, i)
+        let mut carry : u64 = 0u64
+        let mut g : u64 = 0u64
+        /* §3.5: SIMD-fill 8-limb groups (BIG_VEC_LO/HI = b[g+k]*ai), then a
+         * scalar accumulate-into-result pass.  Bit-identical to the
+         * per-limb scalar formula. */
+        while g + 8u64 <= lb {
+            BIG_VEC_SRC = bbase + g * 8u64
+            BIG_VEC_MUL = ai
+            _big_mul8()
+            let mut k : u64 = 0u64
+            while k < 8u64 {
+                let cur : u64 = big_load_u64_le(dbase, i + g + k)
+                let s1 : u64 = cur + BIG_VEC_LO[k]
+                let mut c2 : u64 = 0u64
+                if s1 < cur { c2 = 1u64 }
+                let s2 : u64 = s1 + carry
+                if s2 < s1 { c2 = c2 + 1u64 }
+                big_store_u64_le(dbase, i + g + k, s2)
+                carry = BIG_VEC_HI[k] + c2
+                k = k + 1u64
+            }
+            g = g + 8u64
+        }
+        /* Scalar remainder (< 8 limbs). */
+        while g < lb {
+            let bj : u64 = big_load_u64_le(bbase, g)
+            let cur : u64 = big_load_u64_le(dbase, i + g)
+            let alo : u64 = ai & 0xFFFFFFFFu64
+            let ahi : u64 = (ai >> 32u64) & 0xFFFFFFFFu64
+            let blo : u64 = bj & 0xFFFFFFFFu64
+            let bhi : u64 = (bj >> 32u64) & 0xFFFFFFFFu64
+            let p_ll : u64 = alo * blo
+            let p_lh : u64 = alo * bhi
+            let p_hl : u64 = ahi * blo
+            let p_hh : u64 = ahi * bhi
+            let mid : u64 = (p_ll >> 32u64) + (p_lh & 0xFFFFFFFFu64) + (p_hl & 0xFFFFFFFFu64)
+            let prod_hi : u64 = p_hh + (p_lh >> 32u64) + (p_hl >> 32u64) + (mid >> 32u64)
+            let prod_lo : u64 = ai * bj
+            let s1 : u64 = cur + prod_lo
+            let mut c2 : u64 = 0u64
+            if s1 < cur { c2 = 1u64 }
+            let s2 : u64 = s1 + carry
+            if s2 < s1 { c2 = c2 + 1u64 }
+            big_store_u64_le(dbase, i + g, s2)
+            carry = prod_hi + c2
+            g = g + 1u64
+        }
+        if carry != 0u64 {
+            let cur : u64 = big_load_u64_le(dbase, i + lb)
+            big_store_u64_le(dbase, i + lb, cur + carry)
+        }
+        i = i + 1u64
+    }
+    /* Determine final length: walk down from result_cap. */
+    let mut result_len : u64 = result_cap
+    while result_len > 0u64 {
+        let v : u64 = big_load_u64_le(dbase, result_len - 1u64)
+        if v != 0u64 { BIGINT_LEN[ds] = result_len; return new_id }
+        result_len = result_len - 1u64
+    }
+    BIGINT_LEN[ds] = 0u64
+    return new_id
+}
+
+/* --- Bit shifts --- */
+
+fn bigint_shl_bits(arena_id: u64, a: u64, bits: u64) -> u64 @export {
+    let sa : u32 = big_slot_of(a)
+    if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let la : u64 = BIGINT_LEN[sa]
+    if la == 0u64 { return bigint_from_u64(arena_id, 0u64) }
+    if bits == 0u64 { return bigint_copy(arena_id, a) }
+    let limb_shift : u64 = bits / 64u64
+    let bit_shift  : u64 = bits % 64u64
+    let result_cap : u64 = la + limb_shift + 1u64
+    let new_id : u64 = bigint_new(arena_id, result_cap)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let abase : u64 = BIGINT_BASE[sa]
+    let dbase : u64 = BIGINT_BASE[ds]
+    let mut i : u64 = 0u64
+    let mut carry : u64 = 0u64
+    while i < la {
+        let limb : u64 = big_load_u64_le(abase, i)
+        let mut shifted : u64 = limb
+        let mut new_carry : u64 = 0u64
+        if bit_shift > 0u64 {
+            shifted = limb << bit_shift
+            new_carry = limb >> (64u64 - bit_shift)
+        }
+        let v : u64 = shifted | carry
+        big_store_u64_le(dbase, i + limb_shift, v)
+        carry = new_carry
+        i = i + 1u64
+    }
+    let mut result_len : u64 = la + limb_shift
+    if carry != 0u64 {
+        big_store_u64_le(dbase, la + limb_shift, carry)
+        result_len = la + limb_shift + 1u64
+    }
+    BIGINT_LEN[ds] = result_len
+    /* Normalise: input may have been un-normalised, or shift may produce
+     * trailing zero limbs at the top. */
+    if carry == 0u64 {
+        bigint_normalize(new_id)
+    }
+    return new_id
+}
+
+fn bigint_shr_bits(arena_id: u64, a: u64, bits: u64) -> u64 @export {
+    let sa : u32 = big_slot_of(a)
+    if sa == 0xFFFFFFFFu32 { return BIGINT_INVALID }
+    let la : u64 = BIGINT_LEN[sa]
+    if la == 0u64 { return bigint_from_u64(arena_id, 0u64) }
+    if bits == 0u64 { return bigint_copy(arena_id, a) }
+    let limb_shift : u64 = bits / 64u64
+    let bit_shift  : u64 = bits % 64u64
+    if limb_shift >= la { return bigint_from_u64(arena_id, 0u64) }
+    let result_cap : u64 = la - limb_shift
+    let new_id : u64 = bigint_new(arena_id, result_cap)
+    if new_id == 0u64 { return BIGINT_INVALID }
+    let ds : u32 = big_slot_of(new_id)
+    let abase : u64 = BIGINT_BASE[sa]
+    let dbase : u64 = BIGINT_BASE[ds]
+    let mut i : u64 = 0u64
+    while i < result_cap {
+        let src_idx : u64 = i + limb_shift
+        let mut v : u64 = big_load_u64_le(abase, src_idx)
+        if bit_shift > 0u64 {
+            v = v >> bit_shift
+            if src_idx + 1u64 < la {
+                let next_limb : u64 = big_load_u64_le(abase, src_idx + 1u64)
+                let cross : u64 = next_limb << (64u64 - bit_shift)
+                v = v | cross
+            }
+        }
+        big_store_u64_le(dbase, i, v)
+        i = i + 1u64
+    }
+    /* Normalise. */
+    let mut result_len : u64 = result_cap
+    while result_len > 0u64 {
+        let v : u64 = big_load_u64_le(dbase, result_len - 1u64)
+        if v != 0u64 { BIGINT_LEN[ds] = result_len; return new_id }
+        result_len = result_len - 1u64
+    }
+    BIGINT_LEN[ds] = 0u64
+    return new_id
+}

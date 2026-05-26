@@ -1,0 +1,15 @@
+/* 692_h6_charter.iii -- H6 ("one kernel") as a self-falsifying constitutional clause.
+ *
+ * Every value is a CIC term (M9): the one kernel (safety_type.iii, the safety algebra as
+ * CIC inductive typing) admits the constructible value (a reachable hexad is well-typed)
+ * and makes bricking a TYPE ERROR (a non-reachable hexad is BOTTOM, not a runtime reject).
+ * The paired verify-AND-falsify clause is folded by a terminal-gate run_charter that is
+ * GREEN iff the clause both holds on its good witness and catches its bad witness; the
+ * negative arm proves the gate goes RED on a deliberately-false canary.
+ *
+ * Main-corpus convention: rc 99 on pass; 1..8 = which check failed. */
+module corpus_692
+
+extern @abi(c-msvc-x64) fn h6_selftest() -> u64 from "h6_charter.iii"
+
+fn main() -> u64 { return h6_selftest() }

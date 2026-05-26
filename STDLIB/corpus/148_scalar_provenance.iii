@@ -1,0 +1,23 @@
+/* scalar_provenance: overflow → crystal_id, no overflow → 0. */
+module corpus_148
+
+extern @abi(c-msvc-x64) fn sp_u32_add(a: u32, b: u32) -> u64 from "scalar_provenance.iii"
+extern @abi(c-msvc-x64) fn sp_u64_mul(a: u64, b: u64) -> u64 from "scalar_provenance.iii"
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+
+fn main() -> u64 {
+    /* No overflow: returns 0. */
+    if sp_u32_add(1u32, 2u32) != 0u64 { return 1u64 }
+
+    /* Overflow: returns crystal_id with code 0x5101. */
+    let cryst : u64 = sp_u32_add(0xFFFFFFFFu32, 1u32)
+    if cryst == 0u64 { return 2u64 }
+    if crystal_code(cryst) != 0x5101u32 { return 3u64 }
+    crystal_drop(cryst)
+
+    /* No overflow: returns 0. */
+    if sp_u64_mul(100u64, 200u64) != 0u64 { return 4u64 }
+
+    return 99u64
+}

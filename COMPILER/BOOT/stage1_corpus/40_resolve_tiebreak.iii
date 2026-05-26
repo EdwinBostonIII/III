@@ -1,0 +1,24 @@
+module corpus_40
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn tiebreak(a: u32, b: u32) -> u8 from "resolver.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    /* Slot 0 (mp_form_request) vs slot 8 (mp_type_narrow): pattern_id of 0
+     * was registered first so its hash differs deterministically. The
+     * tiebreak result is determined by ordering on those two pattern_ids. */
+    let r1 : u8 = tiebreak(0u32, 8u32)
+    /* r1 ∈ {1, 2}. Identical-slot tiebreak returns 0. */
+    let r2 : u8 = tiebreak(0u32, 0u32)
+    if r2 != 0u8 { return 0u64 }
+    /* Inverse pair must invert: (a,b) → x ⇒ (b,a) → opposite of x */
+    let r3 : u8 = tiebreak(8u32, 0u32)
+    if r1 == 1u8 {
+        if r3 != 2u8 { return 0u64 }
+    }
+    if r1 == 2u8 {
+        if r3 != 1u8 { return 0u64 }
+    }
+    return 1u64
+}

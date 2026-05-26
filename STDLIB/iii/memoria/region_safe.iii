@@ -1,0 +1,46 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\region_safe.iii
+ *
+ * III STDLIB - memoria::region_safe
+ *
+ * Lattice plan Step 0018 -- companion to arena_safe.iii.  Same
+ * clear_done discipline applied to region ids directly.
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 0.99.
+ */
+
+module memoria_region_safe
+
+extern @abi(c-msvc-x64) fn region_reset(id: u64) -> i32 from "region.iii"
+
+const REGSAFE_OK             : i32 =  0i32
+const REGSAFE_E_BADID        : i32 = -3i32
+const REGSAFE_E_UNCLEARED    : i32 = -6i32
+const REGSAFE_REG_MAX        : u32 = 64u32
+
+var REGSAFE_CLEAR_FN : [u64; 64]
+
+fn region_register_clear_fn(id: u64, clear_fn_addr: u64) -> i32 @export {
+    if id == 0u64 { return REGSAFE_E_BADID }
+    let idx : u64 = id - 1u64
+    if idx >= (REGSAFE_REG_MAX as u64) { return REGSAFE_E_BADID }
+    REGSAFE_CLEAR_FN[idx] = clear_fn_addr
+    return REGSAFE_OK
+}
+
+fn region_clear_fn_addr(id: u64) -> u64 @export {
+    if id == 0u64 { return 0u64 }
+    let idx : u64 = id - 1u64
+    if idx >= (REGSAFE_REG_MAX as u64) { return 0u64 }
+    return REGSAFE_CLEAR_FN[idx]
+}
+
+fn region_reset_safe(id: u64, clear_done: u8) -> i32 @export {
+    if id == 0u64 { return REGSAFE_E_BADID }
+    let idx : u64 = id - 1u64
+    if idx >= (REGSAFE_REG_MAX as u64) { return REGSAFE_E_BADID }
+    let fa : u64 = REGSAFE_CLEAR_FN[idx]
+    if fa != 0u64 {
+        if clear_done != 1u8 { return REGSAFE_E_UNCLEARED }
+    }
+    return region_reset(id)
+}

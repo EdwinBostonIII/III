@@ -1,0 +1,6 @@
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/54_transform_iii_to_asm.exe.o:fake:(.text+0x10): undefined reference to `resolution_init'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/54_transform_iii_to_asm.exe.o:fake:(.text+0x2e): undefined reference to `arena_new'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/54_transform_iii_to_asm.exe.o:fake:(.text+0x84): undefined reference to `transform_pattern_set_init'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/54_transform_iii_to_asm.exe.o:fake:(.text+0xd4): undefined reference to `transform_pattern_set_get'
+collect2.exe: error: ld returned 1 exit status
+iiis-0: link failed

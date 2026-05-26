@@ -1,0 +1,126 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\closure.iii
+ *
+ * III STDLIB - sanctus::closure
+ *
+ * Storage for the program's stdlib closure-root mhash (the SEAL.mhash
+ * tree_root for the build).  A program calls closure_set(ptr) once at
+ * startup with a pointer to its embedded 32-byte closure root; later
+ * code reads via closure_byte(i) or, e.g., feeds the address into
+ * attest_self.
+ *
+ * Phase D: the program is responsible for embedding the closure root
+ * (e.g., from build_stdlib.sh's SEAL.mhash output) and calling
+ * closure_set at startup.  Phase E auto-embeds the closure root as
+ * a generated constant in the linked binary.
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.
+ */
+
+module sanctus_closure
+
+const CLOSURE_OK         : i32 =  0i32
+const CLOSURE_E_BADID    : i32 = -1i32
+
+var CLOSURE_ROOT : [u8; 32]
+var CLOSURE_SET_FLAG : u8 = 0u8
+
+fn closure_set(root_ptr: u64) -> i32 @export {
+    if root_ptr == 0u64 { return CLOSURE_E_BADID }
+    let p : *u8 = root_ptr as *u8
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        CLOSURE_ROOT[i] = p[i as u64]
+        i = i + 1u32
+    }
+    CLOSURE_SET_FLAG = 1u8
+    return CLOSURE_OK
+}
+
+fn closure_is_set() -> u8 @export {
+    return CLOSURE_SET_FLAG
+}
+
+fn closure_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    if CLOSURE_SET_FLAG == 0u8 { return 0x100u32 }
+    return CLOSURE_ROOT[i] as u32
+}
+
+/* Compare two 32-byte buffers via constant-time equality.  Useful
+ * for verifying the closure root matches the build seal at startup. */
+fn closure_eq(addr_a: u64, addr_b: u64) -> u8 @export {
+    if addr_a == 0u64 { return 0u8 }
+    if addr_b == 0u64 { return 0u8 }
+    let pa : *u8 = addr_a as *u8
+    let pb : *u8 = addr_b as *u8
+    let mut diff : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let av : u32 = pa[i] as u32
+        let bv : u32 = pb[i] as u32
+        diff = diff | (av ^ bv)
+        i = i + 1u64
+    }
+    if diff == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* Verify whether the runtime-set closure root matches a build-time
+ * value pointed to by addr.  Returns 1 on match. */
+fn closure_verify_against(addr: u64) -> u8 @export {
+    if CLOSURE_SET_FLAG == 0u8 { return 0u8 }
+    if addr == 0u64 { return 0u8 }
+    let pa : *u8 = addr as *u8
+    let mut diff : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let bv : u32 = pa[i] as u32
+        let cv : u32 = CLOSURE_ROOT[i as u64] as u32
+        diff = diff | (bv ^ cv)
+        i = i + 1u64
+    }
+    if diff == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* Resolver seal extension (FROZEN SPEC §15.1, ADR-RES-009).
+ * The resolver seal lives in sanctus/seal_resolver.iii and is computed
+ * at boot. closure_root_with_resolver computes the layered SHA-256 of
+ * (existing closure root || resolver seal). Used by Q7 / M22 to confirm
+ * the closure absorbs SEAL_RESOLVER.mhash. */
+
+extern @abi(c-msvc-x64) fn seal_resolver_byte(i: u32) -> u8 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_is_computed() -> u8 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+var CLOSURE_ROOT_WITH_RESOLVER : [u8; 32]
+var CLOSURE_RWR_COMPUTED : u8 = 0u8
+var CLOSURE_RESOLVER_MH : [u8; 32]
+
+fn closure_compute_with_resolver() -> i32 @export {
+    if CLOSURE_SET_FLAG == 0u8 { return CLOSURE_E_BADID }
+    if seal_resolver_is_computed() == 0u8 { return CLOSURE_E_BADID }
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        CLOSURE_RESOLVER_MH[i] = seal_resolver_byte(i)
+        i = i + 1u32
+    }
+    mhash_begin()
+    mhash_payload(&CLOSURE_ROOT as u64, 32u64)
+    mhash_payload(&CLOSURE_RESOLVER_MH as u64, 32u64)
+    mhash_final(&CLOSURE_ROOT_WITH_RESOLVER as u64)
+    CLOSURE_RWR_COMPUTED = 1u8
+    return CLOSURE_OK
+}
+
+fn closure_with_resolver_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    if CLOSURE_RWR_COMPUTED == 0u8 { return 0x100u32 }
+    return CLOSURE_ROOT_WITH_RESOLVER[i] as u32
+}
+
+fn closure_with_resolver_is_computed() -> u8 @export {
+    return CLOSURE_RWR_COMPUTED
+}

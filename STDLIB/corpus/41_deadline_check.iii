@@ -1,0 +1,32 @@
+/* deadline: check ok before, late after */
+module corpus_c41
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn instant_now_sealed(cap: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_tick(id: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+extern @abi(c-msvc-x64) fn deadline_in(time_cap: u64, delta_ns: u64, on_late: u8) -> u64 from "deadline.iii"
+extern @abi(c-msvc-x64) fn deadline_check(id: u64, now_tick: u64) -> i32 from "deadline.iii"
+extern @abi(c-msvc-x64) fn deadline_remaining(id: u64, now_tick: u64) -> u64 from "deadline.iii"
+extern @abi(c-msvc-x64) fn deadline_drop(id: u64) -> i32 from "deadline.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let time_cap : u64 = cap_attenuate(env, 0x100u64, 0u64)
+    /* deadline 60 seconds from now */
+    let dl : u64 = deadline_in(time_cap, 60000000000u64, 0u8)
+    if dl == 0u64 { return 1u64 }
+    /* now should be well before the deadline */
+    let now_inst : u64 = instant_now_sealed(time_cap)
+    let now_tick : u64 = instant_tick(now_inst)
+    instant_drop(now_inst)
+    if deadline_check(dl, now_tick) != 0i32 { return 2u64 }
+    if deadline_remaining(dl, now_tick) == 0u64 { return 3u64 }
+    /* Synthetic far-future tick triggers late */
+    let far : u64 = now_tick + 120000u64        /* 120 seconds in ms */
+    if deadline_check(dl, far) != -2i32 { return 4u64 }
+    if deadline_remaining(dl, far) != 0u64 { return 5u64 }
+    deadline_drop(dl)
+    return 99u64
+}

@@ -1,0 +1,112 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\field_crystal.iii
+ *
+ * III STDLIB - numera::field_crystal
+ *
+ * Lattice plan Step 0027 -- provenance-bearing wrappers around Fp ops.
+ *
+ *   fp_inv_with_crystal(arena, a, p) -> u64
+ *      If a == 0 mod p OR p < 2, mints an "fp_inv_failure" crystal whose
+ *      site_hash binds (a, p) and returns its crystal_id (NEVER 0).
+ *      The crystal's `error_code` distinguishes the failure mode.
+ *      On success, returns the bigint_id of the inverse (caller can
+ *      distinguish from a crystal_id by querying crystal_slot_of_pub --
+ *      a bigint id will not be a valid crystal slot).
+ *
+ *   fp_inv_unwrap_or_invalid(maybe_crystal) -> u64
+ *      Reverse path: returns BIGINT_INVALID (0) if the supplied id is
+ *      a crystal (i.e. fp_inv failed); otherwise returns the bigint_id
+ *      unchanged (success path).  Caller can then bigint_drop normally.
+ *
+ *   fp_inv_failure_crystal_for(maybe_crystal) -> u64
+ *      Returns the crystal_id if maybe_crystal IS a crystal, else 0.
+ *
+ * Hexad: kind_form (provenance).  Ring: R0.  K: 0.99.
+ */
+
+module numera_field_crystal
+
+extern @abi(c-msvc-x64) fn fp_inv_fermat(arena: u64, a: u64, p: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_slot_of_pub(id: u64) -> u32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const FIELD_CRYSTAL_FAIL_ZERO    : u32 = 0xFC01u32     /* a ≡ 0 mod p */
+const FIELD_CRYSTAL_FAIL_TINY_P  : u32 = 0xFC02u32     /* p < 2 */
+
+var FC_DOMAIN     : [u8; 16]    /* "fp_inv_failure\0" */
+var FC_DOMAIN_INIT : u8 = 0u8
+var FC_A_BUF      : [u8; 8]
+var FC_P_BUF      : [u8; 8]
+var FC_SITE       : [u8; 32]
+
+fn fc_init_domain() -> u32 {
+    if FC_DOMAIN_INIT == 1u8 { return 0u32 }
+    FC_DOMAIN[0u64]  = 102u8     /* f */
+    FC_DOMAIN[1u64]  = 112u8     /* p */
+    FC_DOMAIN[2u64]  =  95u8     /* _ */
+    FC_DOMAIN[3u64]  = 105u8     /* i */
+    FC_DOMAIN[4u64]  = 110u8     /* n */
+    FC_DOMAIN[5u64]  = 118u8     /* v */
+    FC_DOMAIN[6u64]  =  95u8
+    FC_DOMAIN[7u64]  = 102u8     /* f */
+    FC_DOMAIN[8u64]  =  97u8     /* a */
+    FC_DOMAIN[9u64]  = 105u8     /* i */
+    FC_DOMAIN[10u64] = 108u8     /* l */
+    FC_DOMAIN[11u64] = 117u8     /* u */
+    FC_DOMAIN[12u64] = 114u8     /* r */
+    FC_DOMAIN[13u64] = 101u8     /* e */
+    FC_DOMAIN[14u64] = 0u8
+    FC_DOMAIN[15u64] = 0u8
+    FC_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+fn fc_pack_u64(buf_addr: u64, v: u64) -> u32 {
+    let p : *u8 = buf_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn fp_inv_with_crystal(arena: u64, a: u64, p: u64) -> u64 @export {
+    let r : u64 = fp_inv_fermat(arena, a, p)
+    if r != 0u64 { return r }
+    /* Failure path: mint a crystal carrying the inputs. */
+    fc_init_domain()
+    fc_pack_u64(&FC_A_BUF as u64, a)
+    fc_pack_u64(&FC_P_BUF as u64, p)
+    mhash_begin()
+    mhash_domain(&FC_DOMAIN as u64, 14u64)
+    mhash_payload(&FC_A_BUF as u64, 8u64)
+    mhash_payload(&FC_P_BUF as u64, 8u64)
+    mhash_final(&FC_SITE as u64)
+    /* error_code distinguishes failure mode based on whether a is zero. */
+    let mut code : u32 = FIELD_CRYSTAL_FAIL_TINY_P
+    if bigint_is_zero(a) == 1u8 { code = FIELD_CRYSTAL_FAIL_ZERO }
+    return crystal_mint(code, &FC_SITE as u64, 0u64, p)
+}
+
+fn fp_inv_unwrap_or_invalid(maybe: u64) -> u64 @export {
+    if maybe == 0u64 { return 0u64 }
+    if crystal_slot_of_pub(maybe) != 0xFFFFFFFFu32 {
+        /* It's a crystal -- caller wanted the inverse but got failure. */
+        return 0u64
+    }
+    return maybe
+}
+
+fn fp_inv_failure_crystal_for(maybe: u64) -> u64 @export {
+    if maybe == 0u64 { return 0u64 }
+    if crystal_slot_of_pub(maybe) == 0xFFFFFFFFu32 { return 0u64 }
+    return maybe
+}

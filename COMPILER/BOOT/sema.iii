@@ -1,0 +1,2058 @@
+/* sema.iii — Stage-0 .iii port of sema.c
+ *
+ * Mirror of COMPILER/BOOT/sema.c (1440 lines) authored under iiis-0
+ * dialect.  Behavioural parity with the C reference: same gates D-1..
+ * D-12, same error codes, same side-table queries.  No placeholders,
+ * no skipped checks, NIH only (ADR-021).
+ *
+ * Pre-established Stage-0 dialect notes carried from earlier ports:
+ *   - No `;` separator (only inside [T; N]).
+ *   - No char literals 'X' — use numeric byte values.
+ *   - No multi-line binary expressions.
+ *   - `(0u64 as *u8)` parses as start of hexad literal — drop parens.
+ *   - `&IDENT[i]` parses as `(&IDENT)[i]` (postfix-tighter); use
+ *     `(&IDENT as u64) + (i as u64) * scale` for element addresses.
+ *   - `@export` MUST be inline at end of fn signature.
+ *   - Parser recursion limit ~8 nesting levels — factor deep nests
+ *     into helper functions.
+ *   - No `break`/`continue` — sentinel-flag refactor.
+ *   - No `if` as expression — use `let mut x : T = b; if cond { x = a }`.
+ */
+
+module sema
+
+/* ─── Externs from C side (AST + hexad_check + sema accessors) ────── */
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_len(ast: u64) -> u64 from "ast.c"
+
+extern @abi(c-msvc-x64) fn iii_hexad_check_init() -> u32 from "hexad_check.c"
+extern @abi(c-msvc-x64) fn iii_hexad_packed_admitted(packed: u32) -> u8 from "hexad_check.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_load_u8(ptr: u64) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_forward_block(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_compromise_block(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_where(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_guard(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_rollback(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_pos_line(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pos_col(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_set_binder_id_u32(ast: u64, node: u32, binder: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_synth_ring_set(ast: u64, mask: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_fn_modifier_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_cycle_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_type_modifier_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_mobius_modifier_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_mobius_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_mobius_forward(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_extern_abi(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_sealed_seal_id(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_struct_field_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_struct_field_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_var_init(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_modifier_arg_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_arg_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_ring_mask(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_hexad_node(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_tier_kind(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_epoch_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_for_var_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_if_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_then(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_metal_ring_mask(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_metal_asm_str_idx(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_metal_asm_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_frame_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_frame_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_pattern(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_ident_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_ident_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_literal_node(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_hexad_trit_at(ast: u64, node: u32, pillar: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_param_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_lo(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_hexad_trit_at(ast: u64, node: u32, pillar: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_range_lo(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_range_hi(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_struct_decl_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_struct_decl_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_hexad_check_init_c() -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_hexad_packed_admitted_c(packed: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_hexad_pack_pillars_c(p0: u32, p1: u32, p2: u32, p3: u32, p4: u32, p5: u32) -> u32 from "sema_accessors.c"
+
+/* ─── Constants (mirror sema.c & ast.h) ───────────────────────────── */
+
+const SEMA_E_OK              : i32 = 0i32
+const SEMA_E_DECL_DUP        : i32 = 1i32
+const SEMA_E_IDENT_UNRESOLVED: i32 = 2i32
+const SEMA_E_HEXAD_MISSING   : i32 = 3i32
+const SEMA_E_HEXAD_UNREP     : i32 = 4i32
+const SEMA_E_RING_MALFORMED  : i32 = 5i32
+const SEMA_E_RING_MISSING    : i32 = 6i32
+const SEMA_E_IRPD_RAW        : i32 = 7i32
+const SEMA_E_METAL_RING      : i32 = 8i32
+const SEMA_E_EXTERN_ABI      : i32 = 9i32
+const SEMA_E_SEAL_COLLISION  : i32 = 10i32
+const SEMA_E_ERROR_NODE      : i32 = 11i32
+const SEMA_E_PFS_BRICK       : i32 = 12i32
+const SEMA_E_OOM             : i32 = 99i32
+
+const SEMA_RING_R3   : u32 = 0x01u32
+const SEMA_RING_R0   : u32 = 0x02u32
+const SEMA_RING_RM1  : u32 = 0x04u32
+const SEMA_RING_RM2  : u32 = 0x08u32
+const SEMA_RING_ANY  : u32 = 0x0Fu32
+
+const SEMA_ABI_C_MSVC_X64    : u32 = 1u32
+const SEMA_ABI_IOCTL         : u32 = 5u32
+
+const SEMA_TRIT_NEG : u32 = 0u32
+const SEMA_TRIT_ZERO: u32 = 1u32
+const SEMA_TRIT_POS : u32 = 2u32
+
+const SEMA_UN_NEG   : u32 = 1u32
+
+/* AST kind constants — values mirror ast.h enum order. */
+const SEMA_K_MODULE                     : u32 = 1u32
+const SEMA_K_USE                        : u32 = 2u32
+const SEMA_K_CYCLE_DECL                 : u32 = 3u32
+const SEMA_K_FN_DECL                    : u32 = 4u32
+const SEMA_K_TYPE_DECL                  : u32 = 5u32
+const SEMA_K_CONST_DECL                 : u32 = 6u32
+const SEMA_K_EXTERN_DECL                : u32 = 7u32
+const SEMA_K_MOBIUS_CANDIDATE_DECL      : u32 = 8u32
+const SEMA_K_SCHEMA_DECL                : u32 = 9u32
+const SEMA_K_SEALED_CALL_METHOD_DECL    : u32 = 11u32
+const SEMA_K_PARAM                      : u32 = 12u32
+const SEMA_K_MODIFIER                   : u32 = 14u32
+const SEMA_K_STMT_LET                   : u32 = 20u32
+const SEMA_K_STMT_WAVEFRONT             : u32 = 21u32
+const SEMA_K_STMT_SANCTUM_ENTER         : u32 = 22u32
+const SEMA_K_STMT_METAL                 : u32 = 23u32
+const SEMA_K_STMT_FOR                   : u32 = 24u32
+const SEMA_K_STMT_MATCH                 : u32 = 25u32
+const SEMA_K_STMT_RETURN                : u32 = 26u32
+const SEMA_K_STMT_ASSIGN                : u32 = 27u32
+const SEMA_K_STMT_EXPR                  : u32 = 28u32
+const SEMA_K_FORWARD_BLOCK              : u32 = 29u32
+const SEMA_K_COMPROMISE_BLOCK           : u32 = 30u32
+const SEMA_K_MATCH_ARM                  : u32 = 31u32
+const SEMA_K_PAT_LITERAL                : u32 = 32u32
+const SEMA_K_PAT_IDENT                  : u32 = 33u32
+const SEMA_K_PAT_HEXAD                  : u32 = 34u32
+const SEMA_K_EXPR_INT                   : u32 = 37u32
+const SEMA_K_EXPR_HEX                   : u32 = 38u32
+const SEMA_K_EXPR_MHASH                 : u32 = 39u32
+const SEMA_K_EXPR_STR                   : u32 = 40u32
+const SEMA_K_EXPR_BOOL                  : u32 = 41u32
+const SEMA_K_EXPR_TRIT                  : u32 = 42u32
+const SEMA_K_EXPR_HEXAD                 : u32 = 43u32
+const SEMA_K_EXPR_UNIT                  : u32 = 44u32
+const SEMA_K_EXPR_IDENT                 : u32 = 45u32
+const SEMA_K_EXPR_CALL                  : u32 = 46u32
+const SEMA_K_EXPR_FIELD                 : u32 = 47u32
+const SEMA_K_EXPR_INDEX                 : u32 = 48u32
+const SEMA_K_EXPR_BINARY                : u32 = 49u32
+const SEMA_K_EXPR_UNARY                 : u32 = 50u32
+const SEMA_K_EXPR_BLOCK                 : u32 = 51u32
+const SEMA_K_EXPR_MATCH                 : u32 = 52u32
+const SEMA_K_EXPR_PAREN                 : u32 = 53u32
+const SEMA_K_EXPR_RAW_ASM               : u32 = 54u32
+const SEMA_K_RING_SET                   : u32 = 55u32
+const SEMA_K_HEXAD_NAME                 : u32 = 56u32
+const SEMA_K_ARG                        : u32 = 57u32
+const SEMA_K_EXPR_HOLE                  : u32 = 60u32
+const SEMA_K_EXPR_PARALLEL              : u32 = 61u32
+const SEMA_K_ERROR_NODE                 : u32 = 62u32
+const SEMA_K_STMT_IF                    : u32 = 69u32
+const SEMA_K_STMT_WHILE                 : u32 = 70u32
+const SEMA_K_EXPR_RANGE                 : u32 = 71u32
+const SEMA_K_EXPR_CAST                  : u32 = 72u32
+const SEMA_K_EXPR_SIZEOF                : u32 = 73u32
+const SEMA_K_VAR_DECL                   : u32 = 74u32
+const SEMA_K_STRUCT_DECL                : u32 = 75u32
+
+/* Caps. */
+const SEMA_NAME_CAP        : u32 = 64u32         /* per-decl name byte cap */
+const SEMA_DECL_CAP        : u32 = 1024u32
+const SEMA_ANNO_CAP        : u32 = 1024u32
+const SEMA_STRUCT_CAP      : u32 = 256u32
+const SEMA_STRUCT_FIELD_CAP: u32 = 64u32
+const SEMA_ERR_CAP         : u32 = 256u32
+const SEMA_LOCAL_CAP       : u32 = 256u32
+const SEMA_SEAL_SCAN_CAP   : u32 = 64u32
+const SEMA_HEXAD_DEFAULT_IRPD : u32 = 377u32   /* sema.c::SEMA_KNOWN_HEXAD_FOR_IRPD_METHOD */
+const SEMA_HEXAD_UNSET     : u32 = 0xFFFFu32
+
+/* ─── Module-global state (single SEMA instance) ──────────────────── */
+
+var SEMA_SENTINEL : [u8; 1]
+var SEMA_AST      : u64 = 0u64
+var SEMA_INIT     : u8  = 0u8
+var SEMA_RAN      : u8  = 0u8
+var SEMA_CURRENT_CYCLE : u32 = 0u32
+
+/* Arena for interned name copies (NUL-terminated). */
+var SEMA_ARENA      : [u8; 262144]
+var SEMA_ARENA_USED : u32 = 0u32
+
+/* Decl table — SoA. */
+var SEMA_DECLS_NAME_OFF : [u32; 1024]
+var SEMA_DECLS_NAME_LEN : [u32; 1024]
+var SEMA_DECLS_NODE     : [u32; 1024]
+var SEMA_DECLS_KIND     : [u32; 1024]
+var SEMA_DECL_COUNT     : u32 = 0u32
+
+/* Anno table — SoA, one row per decl that has annotations. */
+var SEMA_ANNO_NODE      : [u32; 1024]
+var SEMA_ANNO_HEXAD     : [u32; 1024]   /* packed u16 in low 16 bits */
+var SEMA_ANNO_RING      : [u32; 1024]
+var SEMA_ANNO_TIER      : [u32; 1024]
+var SEMA_ANNO_EPOCH_LO  : [u32; 1024]
+var SEMA_ANNO_EPOCH_HI  : [u32; 1024]
+var SEMA_ANNO_ABI       : [u32; 1024]
+var SEMA_ANNO_COUNT     : u32 = 0u32
+
+/* Struct layout table — SoA + flat field arrays.
+ * Field index for struct s, slot j = s * SEMA_STRUCT_FIELD_CAP + j. */
+var SEMA_STRUCT_NODE         : [u32; 256]
+var SEMA_STRUCT_NAME_OFF     : [u32; 256]
+var SEMA_STRUCT_NAME_LEN     : [u32; 256]
+var SEMA_STRUCT_FIELD_COUNT  : [u32; 256]
+var SEMA_STRUCT_FIELD_NAME_OFF : [u32; 16384]
+var SEMA_STRUCT_FIELD_NAME_LEN : [u32; 16384]
+var SEMA_STRUCT_COUNT        : u32 = 0u32
+
+/* Error queue — SoA. */
+var SEMA_ERR_CODE  : [i32; 256]
+var SEMA_ERR_LINE  : [u32; 256]
+var SEMA_ERR_COL   : [u32; 256]
+var SEMA_ERR_HEXAD : [u32; 256]
+var SEMA_ERR_NODE  : [u32; 256]
+var SEMA_ERR_MSG_PTR : [u64; 256]
+var SEMA_ERR_COUNT : u32 = 0u32
+
+/* Local stack (scoped variable bindings during walk). */
+var SEMA_LOCAL_NAME_OFF : [u32; 256]
+var SEMA_LOCAL_NAME_LEN : [u32; 256]
+var SEMA_LOCAL_BINDER   : [u32; 256]
+var SEMA_LOCAL_DEF      : [u32; 256]
+var SEMA_LOCAL_COUNT    : u32 = 0u32
+var SEMA_NEXT_BINDER    : u32 = 1u32
+
+/* Error-name strings (codes 0..12 + 99 mapped to slot 13, plus "UNKNOWN" 14). */
+var SEMA_ENAME_BUF  : [u8; 384]
+var SEMA_ENAME_OFF  : [u32; 16]
+var SEMA_ENAME_LEN  : [u32; 16]
+var SEMA_ENAME_INIT : u8 = 0u8
+
+/* Static IRPD method names (20), PFS pillar names (6), raw priv opcode
+ * mnemonics (13), builtin idents, type idents — for D-2 / D-5 / D-10. */
+
+var SEMA_IRPD_BUF      : [u8; 384]
+var SEMA_IRPD_OFF      : [u32; 24]
+var SEMA_IRPD_LEN      : [u32; 24]
+var SEMA_IRPD_COUNT    : u32 = 0u32
+var SEMA_IRPD_INIT     : u8 = 0u8
+
+var SEMA_PFS_BUF       : [u8; 64]
+var SEMA_PFS_OFF       : [u32; 8]
+var SEMA_PFS_LEN       : [u32; 8]
+var SEMA_PFS_COUNT     : u32 = 0u32
+
+var SEMA_RAWOP_BUF     : [u8; 192]
+var SEMA_RAWOP_OFF     : [u32; 16]
+var SEMA_RAWOP_LEN     : [u32; 16]
+var SEMA_RAWOP_COUNT   : u32 = 0u32
+
+var SEMA_BUILTIN_BUF   : [u8; 1024]
+var SEMA_BUILTIN_OFF   : [u32; 64]
+var SEMA_BUILTIN_LEN   : [u32; 64]
+var SEMA_BUILTIN_COUNT : u32 = 0u32
+
+/* ─── Low-level byte/word helpers ─────────────────────────────────── */
+
+fn s_load_u8(p: u64) -> u32 { return iii_ast_load_u8(p) }
+fn s_store_u8(p: u64, v: u32) -> u32 { iii_ast_store_u8(p, v) ; return 0u32 }
+
+fn s_to_lower(b: u32) -> u32 {
+    if b >= 65u32 {
+        if b <= 90u32 { return b + 32u32 }
+    }
+    return b
+}
+
+/* ─── Arena ────────────────────────────────────────────────────────── */
+
+fn s_arena_alloc(n: u32) -> u32 {
+    let used : u32 = SEMA_ARENA_USED
+    if (used + n) > 262144u32 { return 0xFFFFFFFFu32 }
+    SEMA_ARENA_USED = used + n
+    return used
+}
+
+fn s_arena_addr(off: u32) -> u64 {
+    return (&SEMA_ARENA as u64) + (off as u64)
+}
+
+/* Copy `len` bytes from source-buffer slice (off,len) into the arena;
+ * NUL-terminate.  Returns arena offset, or 0xFFFFFFFFu32 on OOM. */
+fn s_arena_strdup(src_off: u32, len: u32) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let aoff : u32 = s_arena_alloc(len + 1u32)
+    if aoff == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    let mut i : u32 = 0u32
+    while i < len {
+        let b : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        s_store_u8(s_arena_addr(aoff + i), b)
+        i = i + 1u32
+    }
+    s_store_u8(s_arena_addr(aoff + len), 0u32)
+    return aoff
+}
+
+/* Same as s_arena_strdup but lowercases each byte. */
+fn s_arena_strdup_lower(src_off: u32, len: u32) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let aoff : u32 = s_arena_alloc(len + 1u32)
+    if aoff == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    let mut i : u32 = 0u32
+    while i < len {
+        let b : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        s_store_u8(s_arena_addr(aoff + i), s_to_lower(b))
+        i = i + 1u32
+    }
+    s_store_u8(s_arena_addr(aoff + len), 0u32)
+    return aoff
+}
+
+/* ─── String/slice equality ───────────────────────────────────────── */
+
+/* Compare two arena slices (each NUL-terminated; lengths supplied) for
+ * exact byte equality. */
+fn s_arena_slice_eq(a_off: u32, a_len: u32, b_off: u32, b_len: u32) -> u32 {
+    if a_len != b_len { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < a_len {
+        if s_load_u8(s_arena_addr(a_off + i)) != s_load_u8(s_arena_addr(b_off + i)) { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* Compare an arena slice (off,len) byte-equal to a NUL-terminated cstr
+ * at address cstr_addr. */
+fn s_arena_eq_cstr(off: u32, len: u32, cstr_addr: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < len {
+        let a : u32 = s_load_u8(s_arena_addr(off + i))
+        let b : u32 = s_load_u8(cstr_addr + (i as u64))
+        if b == 0u32 { return 0u32 }
+        if a != b { return 0u32 }
+        i = i + 1u32
+    }
+    let r : u32 = s_load_u8(cstr_addr + (len as u64))
+    if r == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* Compare a source-buffer slice (off,len) byte-equal to a NUL-cstr. */
+fn s_src_eq_cstr(src_off: u32, len: u32, cstr_addr: u64) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut i : u32 = 0u32
+    while i < len {
+        let a : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        let b : u32 = s_load_u8(cstr_addr + (i as u64))
+        if b == 0u32 { return 0u32 }
+        if a != b { return 0u32 }
+        i = i + 1u32
+    }
+    let r : u32 = s_load_u8(cstr_addr + (len as u64))
+    if r == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* Same but lowercased on src side. */
+fn s_src_eq_cstr_lower(src_off: u32, len: u32, cstr_addr: u64) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut i : u32 = 0u32
+    while i < len {
+        let a : u32 = s_to_lower(s_load_u8(src_buf + ((src_off + i) as u64)))
+        let b : u32 = s_load_u8(cstr_addr + (i as u64))
+        if b == 0u32 { return 0u32 }
+        if a != b { return 0u32 }
+        i = i + 1u32
+    }
+    let r : u32 = s_load_u8(cstr_addr + (len as u64))
+    if r == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* ─── Init helpers for ENAME / IRPD / PFS / RAWOP / BUILTIN tables ── */
+
+fn s_ename_step(slot: u32, off: u32, len_ptr: u64, b: u32) -> u32 {
+    if b == 0u32 { return 0u32 }
+    let cur : u32 = s_load_u32_le(len_ptr)
+    s_store_u8((&SEMA_ENAME_BUF as u64) + ((off + cur) as u64), b)
+    s_store_u32_le(len_ptr, cur + 1u32)
+    return 0u32
+}
+
+fn s_load_u32_le(p: u64) -> u32 {
+    let b0 : u32 = iii_ast_load_u8(p + 0u64)
+    let b1 : u32 = iii_ast_load_u8(p + 1u64)
+    let b2 : u32 = iii_ast_load_u8(p + 2u64)
+    let b3 : u32 = iii_ast_load_u8(p + 3u64)
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn s_store_u32_le(p: u64, v: u32) -> u32 {
+    iii_ast_store_u8(p + 0u64, v & 0xFFu32)
+    iii_ast_store_u8(p + 1u64, (v >> 8u32) & 0xFFu32)
+    iii_ast_store_u8(p + 2u64, (v >> 16u32) & 0xFFu32)
+    iii_ast_store_u8(p + 3u64, (v >> 24u32) & 0xFFu32)
+    return 0u32
+}
+
+fn s_ename_write(slot: u32,
+                  b0: u32, b1: u32, b2: u32, b3: u32,
+                  b4: u32, b5: u32, b6: u32, b7: u32,
+                  b8: u32, b9: u32, b10: u32, b11: u32,
+                  b12: u32, b13: u32, b14: u32, b15: u32) -> u32 {
+    let off : u32 = SEMA_ENAME_OFF[slot]
+    let mut len : u32 = 0u32
+    s_ename_step(slot, off, &len, b0)
+    s_ename_step(slot, off, &len, b1)
+    s_ename_step(slot, off, &len, b2)
+    s_ename_step(slot, off, &len, b3)
+    s_ename_step(slot, off, &len, b4)
+    s_ename_step(slot, off, &len, b5)
+    s_ename_step(slot, off, &len, b6)
+    s_ename_step(slot, off, &len, b7)
+    s_ename_step(slot, off, &len, b8)
+    s_ename_step(slot, off, &len, b9)
+    s_ename_step(slot, off, &len, b10)
+    s_ename_step(slot, off, &len, b11)
+    s_ename_step(slot, off, &len, b12)
+    s_ename_step(slot, off, &len, b13)
+    s_ename_step(slot, off, &len, b14)
+    s_ename_step(slot, off, &len, b15)
+    SEMA_ENAME_LEN[slot] = len
+    s_store_u8((&SEMA_ENAME_BUF as u64) + ((off + len) as u64), 0u32)
+    if (slot + 1u32) < 16u32 {
+        SEMA_ENAME_OFF[slot + 1u32] = off + len + 1u32
+    }
+    return 0u32
+}
+
+fn s_init_ename_table() -> u32 {
+    SEMA_ENAME_OFF[0] = 0u32
+    /*  0 -> "OK" */
+    s_ename_write(0u32, 79u32, 75u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32)
+    /*  1 -> "TYPE-DECL-001"      duplicate decl                    */
+    s_ename_write(1u32, 84u32, 89u32, 80u32, 69u32, 45u32, 68u32, 69u32, 67u32, 76u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32, 0u32)
+    /*  2 -> "TYPE-IDENT-001"     ident unresolved                   */
+    s_ename_write(2u32, 84u32, 89u32, 80u32, 69u32, 45u32, 73u32, 68u32, 69u32, 78u32, 84u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32)
+    /*  3 -> "TYPE-HEXAD-001"     hexad missing on cycle             */
+    s_ename_write(3u32, 84u32, 89u32, 80u32, 69u32, 45u32, 72u32, 69u32, 88u32, 65u32, 68u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32)
+    /*  4 -> "TYPE-HEXAD-002"     hexad unrepresentable              */
+    s_ename_write(4u32, 84u32, 89u32, 80u32, 69u32, 45u32, 72u32, 69u32, 88u32, 65u32, 68u32, 45u32, 48u32, 48u32, 50u32, 0u32, 0u32)
+    /*  5 -> "TYPE-RING-001"      ring malformed                     */
+    s_ename_write(5u32, 84u32, 89u32, 80u32, 69u32, 45u32, 82u32, 73u32, 78u32, 71u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32, 0u32)
+    /*  6 -> "TYPE-RING-002"      ring missing                       */
+    s_ename_write(6u32, 84u32, 89u32, 80u32, 69u32, 45u32, 82u32, 73u32, 78u32, 71u32, 45u32, 48u32, 48u32, 50u32, 0u32, 0u32, 0u32)
+    /*  7 -> "TYPE-IRPD-001"      raw priv outside irpd              */
+    s_ename_write(7u32, 80u32, 65u32, 82u32, 83u32, 69u32, 45u32, 73u32, 82u32, 80u32, 68u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32)
+    /*  8 -> "TYPE-METAL-001"     metal ring not subset              */
+    s_ename_write(8u32, 84u32, 89u32, 80u32, 69u32, 45u32, 77u32, 69u32, 84u32, 65u32, 76u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32)
+    /*  9 -> "TYPE-EXTERN-001"    extern abi out of range            */
+    s_ename_write(9u32, 84u32, 89u32, 80u32, 69u32, 45u32, 69u32, 88u32, 84u32, 69u32, 82u32, 78u32, 45u32, 48u32, 48u32, 49u32, 0u32)
+    /* 10 -> "TYPE-SEAL-001"      seal_id collision                  */
+    s_ename_write(10u32, 84u32, 89u32, 80u32, 69u32, 45u32, 83u32, 69u32, 65u32, 76u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32, 0u32)
+    /* 11 -> "PARSE-NODE-001"     error_node propagation             */
+    s_ename_write(11u32, 84u32, 89u32, 80u32, 69u32, 45u32, 69u32, 82u32, 82u32, 79u32, 82u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32)
+    /* 12 -> "TYPE-PFS-001"       pfs pillar count mismatch          */
+    s_ename_write(12u32, 84u32, 89u32, 80u32, 69u32, 45u32, 80u32, 70u32, 83u32, 45u32, 48u32, 48u32, 49u32, 0u32, 0u32, 0u32, 0u32)
+    /* 13 -> "OOM"                slot for code 99                    */
+    s_ename_write(13u32, 79u32, 79u32, 77u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32)
+    /* 14 -> "UNKNOWN"            fallback                            */
+    s_ename_write(14u32, 85u32, 78u32, 75u32, 78u32, 79u32, 87u32, 78u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32)
+    return 0u32
+}
+
+
+/* ─── Decl table ──────────────────────────────────────────────────── */
+
+fn s_decl_table_lookup(name_off: u32, name_len: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_DECL_COUNT {
+        if s_arena_slice_eq(SEMA_DECLS_NAME_OFF[i], SEMA_DECLS_NAME_LEN[i], name_off, name_len) == 1u32 {
+            return SEMA_DECLS_NODE[i]
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_decl_table_lookup_cstr(cstr_addr: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_DECL_COUNT {
+        let off : u32 = SEMA_DECLS_NAME_OFF[i]
+        let len : u32 = SEMA_DECLS_NAME_LEN[i]
+        if s_arena_eq_cstr(off, len, cstr_addr) == 1u32 {
+            return SEMA_DECLS_NODE[i]
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_decl_table_add(name_off: u32, name_len: u32, node: u32, kind: u32) -> u32 {
+    if SEMA_DECL_COUNT >= SEMA_DECL_CAP { return 0u32 }
+    let slot : u32 = SEMA_DECL_COUNT
+    SEMA_DECLS_NAME_OFF[slot] = name_off
+    SEMA_DECLS_NAME_LEN[slot] = name_len
+    SEMA_DECLS_NODE[slot]     = node
+    SEMA_DECLS_KIND[slot]     = kind
+    SEMA_DECL_COUNT = slot + 1u32
+    return 1u32
+}
+
+/* ─── Anno table ──────────────────────────────────────────────────── */
+
+fn s_anno_find(node: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_ANNO_COUNT {
+        if SEMA_ANNO_NODE[i] == node { return i + 1u32 }   /* 1-based; 0 = not found */
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_anno_get_or_create(node: u32) -> u32 {
+    let f : u32 = s_anno_find(node)
+    if f != 0u32 { return f - 1u32 }
+    if SEMA_ANNO_COUNT >= SEMA_ANNO_CAP { return 0xFFFFFFFFu32 }
+    let slot : u32 = SEMA_ANNO_COUNT
+    SEMA_ANNO_NODE[slot]     = node
+    SEMA_ANNO_HEXAD[slot]    = SEMA_HEXAD_UNSET
+    SEMA_ANNO_RING[slot]     = 0u32
+    SEMA_ANNO_TIER[slot]     = 0u32
+    SEMA_ANNO_EPOCH_LO[slot] = 0u32
+    SEMA_ANNO_EPOCH_HI[slot] = 0u32
+    SEMA_ANNO_ABI[slot]      = 0u32
+    SEMA_ANNO_COUNT = slot + 1u32
+    return slot
+}
+
+/* ─── Struct layout table ─────────────────────────────────────────── */
+
+fn s_struct_find(decl_node: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_STRUCT_COUNT {
+        if SEMA_STRUCT_NODE[i] == decl_node { return i + 1u32 }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_struct_find_by_name_cstr(cstr_addr: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_STRUCT_COUNT {
+        let off : u32 = SEMA_STRUCT_NAME_OFF[i]
+        let len : u32 = SEMA_STRUCT_NAME_LEN[i]
+        if s_arena_eq_cstr(off, len, cstr_addr) == 1u32 {
+            return SEMA_STRUCT_NODE[i]
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_struct_alloc(decl_node: u32, name_off: u32, name_len: u32) -> u32 {
+    if SEMA_STRUCT_COUNT >= SEMA_STRUCT_CAP { return 0xFFFFFFFFu32 }
+    let slot : u32 = SEMA_STRUCT_COUNT
+    SEMA_STRUCT_NODE[slot] = decl_node
+    SEMA_STRUCT_NAME_OFF[slot] = name_off
+    SEMA_STRUCT_NAME_LEN[slot] = name_len
+    SEMA_STRUCT_FIELD_COUNT[slot] = 0u32
+    SEMA_STRUCT_COUNT = slot + 1u32
+    return slot
+}
+
+fn s_struct_add_field(s: u32, fname_off: u32, fname_len: u32) -> u32 {
+    let fcnt : u32 = SEMA_STRUCT_FIELD_COUNT[s]
+    if fcnt >= SEMA_STRUCT_FIELD_CAP { return 0u32 }
+    let idx : u32 = (s * SEMA_STRUCT_FIELD_CAP) + fcnt
+    SEMA_STRUCT_FIELD_NAME_OFF[idx] = fname_off
+    SEMA_STRUCT_FIELD_NAME_LEN[idx] = fname_len
+    SEMA_STRUCT_FIELD_COUNT[s] = fcnt + 1u32
+    return 1u32
+}
+
+fn s_struct_field_slot_cstr(s: u32, cstr_addr: u64) -> i32 {
+    let fcnt : u32 = SEMA_STRUCT_FIELD_COUNT[s]
+    let mut j : u32 = 0u32
+    while j < fcnt {
+        let idx : u32 = (s * SEMA_STRUCT_FIELD_CAP) + j
+        let off : u32 = SEMA_STRUCT_FIELD_NAME_OFF[idx]
+        let len : u32 = SEMA_STRUCT_FIELD_NAME_LEN[idx]
+        if s_arena_eq_cstr(off, len, cstr_addr) == 1u32 { return j as i32 }
+        j = j + 1u32
+    }
+    return -1i32
+}
+
+/* ─── Local stack ─────────────────────────────────────────────────── */
+
+fn s_local_push(name_off: u32, name_len: u32, def_node: u32) -> u32 {
+    if SEMA_LOCAL_COUNT >= SEMA_LOCAL_CAP { return 0u32 }
+    let slot : u32 = SEMA_LOCAL_COUNT
+    SEMA_LOCAL_NAME_OFF[slot] = name_off
+    SEMA_LOCAL_NAME_LEN[slot] = name_len
+    SEMA_LOCAL_BINDER[slot]   = def_node
+    SEMA_LOCAL_DEF[slot]      = def_node
+    SEMA_LOCAL_COUNT = slot + 1u32
+    SEMA_NEXT_BINDER = SEMA_NEXT_BINDER + 1u32
+    return def_node
+}
+
+/* Search top-down (most recently bound first) for a local matching the
+ * given source-buffer slice. Returns the binder id (>=1) or 0. */
+fn s_local_lookup_src(src_off: u32, src_len: u32) -> u32 {
+    if SEMA_LOCAL_COUNT == 0u32 { return 0u32 }
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut i : u32 = SEMA_LOCAL_COUNT
+    while i > 0u32 {
+        i = i - 1u32
+        let off : u32 = SEMA_LOCAL_NAME_OFF[i]
+        let len : u32 = SEMA_LOCAL_NAME_LEN[i]
+        if len == src_len {
+            let mut j : u32 = 0u32
+            let mut eq : u32 = 1u32
+            while j < len {
+                let a : u32 = s_load_u8(src_buf + ((off + j) as u64))
+                let b : u32 = s_load_u8(src_buf + ((src_off + j) as u64))
+                if a != b { eq = 0u32 ; j = len }
+                j = j + 1u32
+            }
+            if eq == 1u32 { return SEMA_LOCAL_BINDER[i] }
+        }
+    }
+    return 0u32
+}
+
+fn s_local_mark() -> u32 { return SEMA_LOCAL_COUNT }
+fn s_local_truncate(mark: u32) -> u32 { SEMA_LOCAL_COUNT = mark ; return 0u32 }
+
+/* ─── Position + error emission ───────────────────────────────────── */
+
+fn s_node_line(node: u32) -> u32 { return iii_ast_pos_line(SEMA_AST, node) }
+fn s_node_col(node: u32) -> u32  { return iii_ast_pos_col(SEMA_AST, node) }
+
+fn s_error_name_addr(code: i32) -> u64 {
+    let mut slot : u32 = 14u32     /* UNKNOWN */
+    if code == 0i32                       { slot = 0u32 }
+    if code == SEMA_E_DECL_DUP            { slot = 1u32 }
+    if code == SEMA_E_IDENT_UNRESOLVED    { slot = 2u32 }
+    if code == SEMA_E_HEXAD_MISSING       { slot = 3u32 }
+    if code == SEMA_E_HEXAD_UNREP         { slot = 4u32 }
+    if code == SEMA_E_RING_MALFORMED      { slot = 5u32 }
+    if code == SEMA_E_RING_MISSING        { slot = 6u32 }
+    if code == SEMA_E_IRPD_RAW            { slot = 7u32 }
+    if code == SEMA_E_METAL_RING          { slot = 8u32 }
+    if code == SEMA_E_EXTERN_ABI          { slot = 9u32 }
+    if code == SEMA_E_SEAL_COLLISION      { slot = 10u32 }
+    if code == SEMA_E_ERROR_NODE          { slot = 11u32 }
+    if code == SEMA_E_PFS_BRICK           { slot = 12u32 }
+    if code == SEMA_E_OOM                 { slot = 13u32 }
+    return (&SEMA_ENAME_BUF as u64) + (SEMA_ENAME_OFF[slot] as u64)
+}
+
+fn s_emit_error(code: i32, node: u32, hexad: u32) -> u32 {
+    if SEMA_ERR_COUNT >= SEMA_ERR_CAP { return 0u32 }
+    let slot : u32 = SEMA_ERR_COUNT
+    SEMA_ERR_CODE[slot]    = code
+    SEMA_ERR_LINE[slot]    = s_node_line(node)
+    SEMA_ERR_COL[slot]     = s_node_col(node)
+    SEMA_ERR_HEXAD[slot]   = hexad & 0xFFFFu32
+    SEMA_ERR_NODE[slot]    = node
+    SEMA_ERR_MSG_PTR[slot] = 0u64
+    SEMA_ERR_COUNT = slot + 1u32
+    return 0u32
+}
+
+extern @abi(c-msvc-x64) fn iii_ast_node_count_u32(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_trit_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+/* ─── Name table init helpers ─────────────────────────────────────── */
+
+/* Helpers that write a single byte into one of the 4 fixed-width name
+ * buffers; each entry is a 16-byte slot.  s_*_step skips NUL pads
+ * (so callers can pass 0u32 for trailing positions). */
+
+fn s_irpd_step(p: u32, c: u32) -> u32 {
+    if c == 0u32 { return p }
+    s_store_u8((&SEMA_IRPD_BUF as u64) + (p as u64), c)
+    return p + 1u32
+}
+fn s_irpd_write(slot: u32,
+                c0: u32, c1: u32, c2: u32, c3: u32, c4: u32, c5: u32, c6: u32, c7: u32,
+                c8: u32, c9: u32, c10: u32, c11: u32, c12: u32, c13: u32, c14: u32, c15: u32) -> u32 {
+    let base : u32 = slot * 16u32
+    let mut p : u32 = base
+    SEMA_IRPD_OFF[slot] = base
+    p = s_irpd_step(p, c0)  ; p = s_irpd_step(p, c1)  ; p = s_irpd_step(p, c2)  ; p = s_irpd_step(p, c3)
+    p = s_irpd_step(p, c4)  ; p = s_irpd_step(p, c5)  ; p = s_irpd_step(p, c6)  ; p = s_irpd_step(p, c7)
+    p = s_irpd_step(p, c8)  ; p = s_irpd_step(p, c9)  ; p = s_irpd_step(p, c10) ; p = s_irpd_step(p, c11)
+    p = s_irpd_step(p, c12) ; p = s_irpd_step(p, c13) ; p = s_irpd_step(p, c14) ; p = s_irpd_step(p, c15)
+    SEMA_IRPD_LEN[slot] = p - base
+    return 0u32
+}
+
+fn s_pfs_step(p: u32, c: u32) -> u32 {
+    if c == 0u32 { return p }
+    s_store_u8((&SEMA_PFS_BUF as u64) + (p as u64), c)
+    return p + 1u32
+}
+fn s_pfs_write(slot: u32,
+               c0: u32, c1: u32, c2: u32, c3: u32, c4: u32, c5: u32, c6: u32, c7: u32,
+               c8: u32, c9: u32, c10: u32, c11: u32, c12: u32, c13: u32, c14: u32, c15: u32) -> u32 {
+    let base : u32 = slot * 16u32
+    let mut p : u32 = base
+    SEMA_PFS_OFF[slot] = base
+    p = s_pfs_step(p, c0)  ; p = s_pfs_step(p, c1)  ; p = s_pfs_step(p, c2)  ; p = s_pfs_step(p, c3)
+    p = s_pfs_step(p, c4)  ; p = s_pfs_step(p, c5)  ; p = s_pfs_step(p, c6)  ; p = s_pfs_step(p, c7)
+    p = s_pfs_step(p, c8)  ; p = s_pfs_step(p, c9)  ; p = s_pfs_step(p, c10) ; p = s_pfs_step(p, c11)
+    p = s_pfs_step(p, c12) ; p = s_pfs_step(p, c13) ; p = s_pfs_step(p, c14) ; p = s_pfs_step(p, c15)
+    SEMA_PFS_LEN[slot] = p - base
+    return 0u32
+}
+
+fn s_rawop_step(p: u32, c: u32) -> u32 {
+    if c == 0u32 { return p }
+    s_store_u8((&SEMA_RAWOP_BUF as u64) + (p as u64), c)
+    return p + 1u32
+}
+fn s_rawop_write(slot: u32,
+                 c0: u32, c1: u32, c2: u32, c3: u32, c4: u32, c5: u32, c6: u32, c7: u32,
+                 c8: u32, c9: u32, c10: u32, c11: u32, c12: u32, c13: u32, c14: u32, c15: u32) -> u32 {
+    let base : u32 = slot * 16u32
+    let mut p : u32 = base
+    SEMA_RAWOP_OFF[slot] = base
+    p = s_rawop_step(p, c0)  ; p = s_rawop_step(p, c1)  ; p = s_rawop_step(p, c2)  ; p = s_rawop_step(p, c3)
+    p = s_rawop_step(p, c4)  ; p = s_rawop_step(p, c5)  ; p = s_rawop_step(p, c6)  ; p = s_rawop_step(p, c7)
+    p = s_rawop_step(p, c8)  ; p = s_rawop_step(p, c9)  ; p = s_rawop_step(p, c10) ; p = s_rawop_step(p, c11)
+    p = s_rawop_step(p, c12) ; p = s_rawop_step(p, c13) ; p = s_rawop_step(p, c14) ; p = s_rawop_step(p, c15)
+    SEMA_RAWOP_LEN[slot] = p - base
+    return 0u32
+}
+
+fn s_builtin_step(p: u32, c: u32) -> u32 {
+    if c == 0u32 { return p }
+    s_store_u8((&SEMA_BUILTIN_BUF as u64) + (p as u64), c)
+    return p + 1u32
+}
+fn s_builtin_write(slot: u32,
+                   c0: u32, c1: u32, c2: u32, c3: u32, c4: u32, c5: u32, c6: u32, c7: u32,
+                   c8: u32, c9: u32, c10: u32, c11: u32, c12: u32, c13: u32, c14: u32, c15: u32) -> u32 {
+    let base : u32 = slot * 16u32
+    let mut p : u32 = base
+    SEMA_BUILTIN_OFF[slot] = base
+    p = s_builtin_step(p, c0)  ; p = s_builtin_step(p, c1)  ; p = s_builtin_step(p, c2)  ; p = s_builtin_step(p, c3)
+    p = s_builtin_step(p, c4)  ; p = s_builtin_step(p, c5)  ; p = s_builtin_step(p, c6)  ; p = s_builtin_step(p, c7)
+    p = s_builtin_step(p, c8)  ; p = s_builtin_step(p, c9)  ; p = s_builtin_step(p, c10) ; p = s_builtin_step(p, c11)
+    p = s_builtin_step(p, c12) ; p = s_builtin_step(p, c13) ; p = s_builtin_step(p, c14) ; p = s_builtin_step(p, c15)
+    SEMA_BUILTIN_LEN[slot] = p - base
+    return 0u32
+}
+
+/* IRPD method names — 20 entries, all lowercase ASCII.
+ * msr_write cr_write npt_write vmcb_field iommu_dte avic_tbl msrpm_bit iopm_bit
+ * pkru_write xcr0_write cap_acquire cap_release page_alloc page_free dpc_arm
+ * dpc_cancel nmi_install msr_read cr_read npt_read */
+fn s_init_irpd_table() -> u32 {
+    if SEMA_IRPD_INIT == 1u8 { return 0u32 }
+    s_irpd_write(0u32,  109u32,115u32,114u32, 95u32,119u32,114u32,105u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(1u32,   99u32,114u32, 95u32,119u32,114u32,105u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(2u32,  110u32,112u32,116u32, 95u32,119u32,114u32,105u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(3u32,  118u32,109u32, 99u32, 98u32, 95u32,102u32,105u32,101u32,108u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(4u32,  105u32,111u32,109u32,109u32,117u32, 95u32,100u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(5u32,   97u32,118u32,105u32, 99u32, 95u32,116u32, 98u32,108u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(6u32,  109u32,115u32,114u32,112u32,109u32, 95u32, 98u32,105u32,116u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(7u32,  105u32,111u32,112u32,109u32, 95u32, 98u32,105u32,116u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(8u32,  112u32,107u32,114u32,117u32, 95u32,119u32,114u32,105u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(9u32,  120u32, 99u32,114u32, 48u32, 95u32,119u32,114u32,105u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(10u32,  99u32, 97u32,112u32, 95u32, 97u32, 99u32,113u32,117u32,105u32,114u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(11u32,  99u32, 97u32,112u32, 95u32,114u32,101u32,108u32,101u32, 97u32,115u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(12u32, 112u32, 97u32,103u32,101u32, 95u32, 97u32,108u32,108u32,111u32, 99u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(13u32, 112u32, 97u32,103u32,101u32, 95u32,102u32,114u32,101u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(14u32, 100u32,112u32, 99u32, 95u32, 97u32,114u32,109u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(15u32, 100u32,112u32, 99u32, 95u32, 99u32, 97u32,110u32, 99u32,101u32,108u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(16u32, 110u32,109u32,105u32, 95u32,105u32,110u32,115u32,116u32, 97u32,108u32,108u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(17u32, 109u32,115u32,114u32, 95u32,114u32,101u32, 97u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(18u32,  99u32,114u32, 95u32,114u32,101u32, 97u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_irpd_write(19u32, 110u32,112u32,116u32, 95u32,114u32,101u32, 97u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    SEMA_IRPD_COUNT = 20u32
+    SEMA_IRPD_INIT = 1u8
+    return 0u32
+}
+
+/* PFS bricking-class names — 6 entries.
+ * capsule_update microcode_load bootorder_set real_nvram_write me_psp_mailbox smram_write */
+fn s_init_pfs_table() -> u32 {
+    s_pfs_write(0u32,  99u32, 97u32,112u32,115u32,117u32,108u32,101u32, 95u32,117u32,112u32,100u32, 97u32,116u32,101u32,  0u32,  0u32)
+    s_pfs_write(1u32, 109u32,105u32, 99u32,114u32,111u32, 99u32,111u32,100u32,101u32, 95u32,108u32,111u32, 97u32,100u32,  0u32,  0u32)
+    s_pfs_write(2u32,  98u32,111u32,111u32,116u32,111u32,114u32,100u32,101u32,114u32, 95u32,115u32,101u32,116u32,  0u32,  0u32,  0u32)
+    s_pfs_write(3u32, 114u32,101u32, 97u32,108u32, 95u32,110u32,118u32,114u32, 97u32,109u32, 95u32,119u32,114u32,105u32,116u32,101u32)
+    s_pfs_write(4u32, 109u32,101u32, 95u32,112u32,115u32,112u32, 95u32,109u32, 97u32,105u32,108u32, 98u32,111u32,120u32,  0u32,  0u32)
+    s_pfs_write(5u32, 115u32,109u32,114u32, 97u32,109u32, 95u32,119u32,114u32,105u32,116u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    SEMA_PFS_COUNT = 6u32
+    return 0u32
+}
+
+/* Raw priv opcode mnemonics — substring-search patterns inside lowered METAL asm.
+ * wrmsr wrmsrns wrmsrlist "mov cr" wrpkru invlpga invpcid vmrun vmload vmsave clgi stgi xsetbv */
+fn s_init_rawop_table() -> u32 {
+    s_rawop_write(0u32, 119u32,114u32,109u32,115u32,114u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(1u32, 119u32,114u32,109u32,115u32,114u32,110u32,115u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(2u32, 119u32,114u32,109u32,115u32,114u32,108u32,105u32,115u32,116u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(3u32, 109u32,111u32,118u32, 32u32, 99u32,114u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(4u32, 119u32,114u32,112u32,107u32,114u32,117u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(5u32, 105u32,110u32,118u32,108u32,112u32,103u32, 97u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(6u32, 105u32,110u32,118u32,112u32, 99u32,105u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(7u32, 118u32,109u32,114u32,117u32,110u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(8u32, 118u32,109u32,108u32,111u32, 97u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(9u32, 118u32,109u32,115u32, 97u32,118u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(10u32, 99u32,108u32,103u32,105u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(11u32,115u32,116u32,103u32,105u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_rawop_write(12u32,120u32,115u32,101u32,116u32, 98u32,118u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    SEMA_RAWOP_COUNT = 13u32
+    return 0u32
+}
+
+/* Builtin idents (lowercase: 0..12) + numeric-type idents (mixed-case: 13..28).
+ * lower:  irpd sanctum phase magic_msr ioctl vmrun trinity catalyst narrative amend true false current
+ * mixed:  u8 u16 u32 u64 i8 i16 i32 i64 bool q14 Witness Hexad Phase Glyph mhash Range */
+fn s_init_builtin_table_lower() -> u32 {
+    s_builtin_write(0u32,  105u32,114u32,112u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(1u32,  115u32, 97u32,110u32, 99u32,116u32,117u32,109u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(2u32,  112u32,104u32, 97u32,115u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(3u32,  109u32, 97u32,103u32,105u32, 99u32, 95u32,109u32,115u32,114u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(4u32,  105u32,111u32, 99u32,116u32,108u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(5u32,  118u32,109u32,114u32,117u32,110u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(6u32,  116u32,114u32,105u32,110u32,105u32,116u32,121u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(7u32,   99u32, 97u32,116u32, 97u32,108u32,121u32,115u32,116u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(8u32,  110u32, 97u32,114u32,114u32, 97u32,116u32,105u32,118u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(9u32,   97u32,109u32,101u32,110u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(10u32, 116u32,114u32,117u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(11u32, 102u32, 97u32,108u32,115u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    s_builtin_write(12u32,  99u32,117u32,114u32,114u32,101u32,110u32,116u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)
+    return 0u32
+}
+
+fn s_init_builtin_table_types() -> u32 {
+    s_builtin_write(13u32, 117u32, 56u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* u8 */
+    s_builtin_write(14u32, 117u32, 49u32, 54u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* u16 */
+    s_builtin_write(15u32, 117u32, 51u32, 50u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* u32 */
+    s_builtin_write(16u32, 117u32, 54u32, 52u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* u64 */
+    s_builtin_write(17u32, 105u32, 56u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* i8 */
+    s_builtin_write(18u32, 105u32, 49u32, 54u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* i16 */
+    s_builtin_write(19u32, 105u32, 51u32, 50u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* i32 */
+    s_builtin_write(20u32, 105u32, 54u32, 52u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* i64 */
+    s_builtin_write(21u32,  98u32,111u32,111u32,108u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* bool */
+    s_builtin_write(22u32, 113u32, 49u32, 52u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* q14 */
+    s_builtin_write(23u32,  87u32,105u32,116u32,110u32,101u32,115u32,115u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* Witness */
+    s_builtin_write(24u32,  72u32,101u32,120u32, 97u32,100u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* Hexad */
+    s_builtin_write(25u32,  80u32,104u32, 97u32,115u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* Phase */
+    s_builtin_write(26u32,  71u32,108u32,121u32,112u32,104u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* Glyph */
+    s_builtin_write(27u32, 109u32,104u32, 97u32,115u32,104u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* mhash */
+    s_builtin_write(28u32,  82u32, 97u32,110u32,103u32,101u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32,  0u32)  /* Range */
+    SEMA_BUILTIN_COUNT = 29u32
+    return 0u32
+}
+
+fn s_init_all_tables() -> u32 {
+    if SEMA_INIT == 1u8 { return 0u32 }
+    s_init_ename_table()
+    s_init_irpd_table()
+    s_init_pfs_table()
+    s_init_rawop_table()
+    s_init_builtin_table_lower()
+    s_init_builtin_table_types()
+    SEMA_INIT = 1u8
+    return 0u32
+}
+
+/* ─── Source-text vs. name-table comparisons ──────────────────────── */
+
+/* Compare a source slice (off,len) against entry `slot` in IRPD_BUF. */
+fn s_src_eq_irpd(src_off: u32, src_len: u32, slot: u32) -> u32 {
+    if src_len != SEMA_IRPD_LEN[slot] { return 0u32 }
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let base : u64 = (&SEMA_IRPD_BUF as u64) + (SEMA_IRPD_OFF[slot] as u64)
+    let mut i : u32 = 0u32
+    let mut eq : u32 = 1u32
+    while i < src_len {
+        let a : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        let b : u32 = s_load_u8(base + (i as u64))
+        if a != b { eq = 0u32 ; i = src_len }
+        i = i + 1u32
+    }
+    return eq
+}
+fn s_is_irpd_method_src(src_off: u32, src_len: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_IRPD_COUNT {
+        if s_src_eq_irpd(src_off, src_len, i) == 1u32 { return 1u32 }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* Lower-case slice compare against a PFS slot (PFS table is lowercase). */
+fn s_src_eq_pfs_lower(src_off: u32, src_len: u32, slot: u32) -> u32 {
+    if src_len != SEMA_PFS_LEN[slot] { return 0u32 }
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let base : u64 = (&SEMA_PFS_BUF as u64) + (SEMA_PFS_OFF[slot] as u64)
+    let mut i : u32 = 0u32
+    let mut eq : u32 = 1u32
+    while i < src_len {
+        let raw : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        let a : u32 = s_to_lower(raw)
+        let b : u32 = s_load_u8(base + (i as u64))
+        if a != b { eq = 0u32 ; i = src_len }
+        i = i + 1u32
+    }
+    return eq
+}
+fn s_is_pfs_brick_src_lower(src_off: u32, src_len: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_PFS_COUNT {
+        if s_src_eq_pfs_lower(src_off, src_len, i) == 1u32 { return 1u32 }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* Builtin lookup — case-sensitive (lower 0..12; types 13..28). */
+fn s_src_eq_builtin(src_off: u32, src_len: u32, slot: u32) -> u32 {
+    if src_len != SEMA_BUILTIN_LEN[slot] { return 0u32 }
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let base : u64 = (&SEMA_BUILTIN_BUF as u64) + (SEMA_BUILTIN_OFF[slot] as u64)
+    let mut i : u32 = 0u32
+    let mut eq : u32 = 1u32
+    while i < src_len {
+        let a : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        let b : u32 = s_load_u8(base + (i as u64))
+        if a != b { eq = 0u32 ; i = src_len }
+        i = i + 1u32
+    }
+    return eq
+}
+fn s_is_builtin_ident_src(src_off: u32, src_len: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < SEMA_BUILTIN_COUNT {
+        if s_src_eq_builtin(src_off, src_len, i) == 1u32 { return 1u32 }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* ─── Lower a source slice into a scratch buffer + raw-op substring scan ── */
+
+var SEMA_LOWER_BUF : [u8; 4096]
+var SEMA_LOWER_LEN : u32 = 0u32
+
+fn s_lower_into_scratch(src_off: u32, src_len: u32) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut copy : u32 = src_len
+    if copy > 4095u32 { copy = 4095u32 }
+    let mut i : u32 = 0u32
+    while i < copy {
+        let raw : u32 = s_load_u8(src_buf + ((src_off + i) as u64))
+        let lo  : u32 = s_to_lower(raw)
+        s_store_u8((&SEMA_LOWER_BUF as u64) + (i as u64), lo)
+        i = i + 1u32
+    }
+    s_store_u8((&SEMA_LOWER_BUF as u64) + (copy as u64), 0u32)
+    SEMA_LOWER_LEN = copy
+    return 0u32
+}
+
+fn s_lower_contains_pat(pat_addr: u64, pat_len: u32) -> u32 {
+    if pat_len == 0u32 { return 1u32 }
+    if pat_len > SEMA_LOWER_LEN { return 0u32 }
+    let max : u32 = SEMA_LOWER_LEN - pat_len + 1u32
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0u32
+    while i < max {
+        let mut j : u32 = 0u32
+        let mut eq : u32 = 1u32
+        while j < pat_len {
+            let a : u32 = s_load_u8((&SEMA_LOWER_BUF as u64) + ((i + j) as u64))
+            let b : u32 = s_load_u8(pat_addr + (j as u64))
+            if a != b { eq = 0u32 ; j = pat_len }
+            j = j + 1u32
+        }
+        if eq == 1u32 { found = 1u32 ; i = max }
+        i = i + 1u32
+    }
+    return found
+}
+
+fn s_lower_contains_irpd_literal() -> u32 {
+    /* "irpd" = 105 114 112 100 */
+    if SEMA_LOWER_LEN < 4u32 { return 0u32 }
+    let max : u32 = SEMA_LOWER_LEN - 3u32
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0u32
+    while i < max {
+        let a : u32 = s_load_u8((&SEMA_LOWER_BUF as u64) + (i as u64))
+        let b : u32 = s_load_u8((&SEMA_LOWER_BUF as u64) + ((i + 1u32) as u64))
+        let c : u32 = s_load_u8((&SEMA_LOWER_BUF as u64) + ((i + 2u32) as u64))
+        let d : u32 = s_load_u8((&SEMA_LOWER_BUF as u64) + ((i + 3u32) as u64))
+        if a == 105u32 {
+            if b == 114u32 {
+                if c == 112u32 {
+                    if d == 100u32 { found = 1u32 ; i = max }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* ─── Modifier-name comparisons (lowercase) ───────────────────────── */
+
+/* Hard-coded short modifier names — small set, easier inline than a table. */
+fn s_modname_eq(off: u32, len: u32, target_addr: u64, target_len: u32) -> u32 {
+    if len != target_len { return 0u32 }
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut i : u32 = 0u32
+    let mut eq : u32 = 1u32
+    while i < len {
+        let raw : u32 = s_load_u8(src_buf + ((off + i) as u64))
+        let lo  : u32 = s_to_lower(raw)
+        let b   : u32 = s_load_u8(target_addr + (i as u64))
+        if lo != b { eq = 0u32 ; i = len }
+        i = i + 1u32
+    }
+    return eq
+}
+
+/* Module-scope literals stored as BSS bytes, init at startup. */
+var SEMA_LITS_BUF  : [u8; 64]
+var SEMA_LITS_INIT : u8 = 0u8
+
+fn s_init_lits() -> u32 {
+    if SEMA_LITS_INIT == 1u8 { return 0u32 }
+    /* "ring"  off=0  len=4 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 0u64, 114u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 1u64, 105u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 2u64, 110u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 3u64, 103u32)
+    /* "hexad" off=4  len=5 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 4u64, 104u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 5u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 6u64, 120u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 7u64, 97u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 8u64, 100u32)
+    /* "safety" off=9 len=6 */
+    s_store_u8((&SEMA_LITS_BUF as u64) +  9u64, 115u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 10u64, 97u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 11u64, 102u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 12u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 13u64, 116u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 14u64, 121u32)
+    /* "tier" off=15 len=4 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 15u64, 116u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 16u64, 105u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 17u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 18u64, 114u32)
+    /* "epoch" off=19 len=5 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 19u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 20u64, 112u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 21u64, 111u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 22u64, 99u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 23u64, 104u32)
+    /* "irpd" off=24 len=4 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 24u64, 105u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 25u64, 114u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 26u64, 112u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 27u64, 100u32)
+    /* "R3" off=28 len=2 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 28u64, 82u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 29u64, 51u32)
+    /* "R0" off=30 len=2 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 30u64, 82u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 31u64, 48u32)
+    /* "any" off=32 len=3 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 32u64, 97u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 33u64, 110u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 34u64, 121u32)
+    /* "neg" off=35 len=3 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 35u64, 110u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 36u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 37u64, 103u32)
+    /* "zero" off=38 len=4 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 38u64, 122u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 39u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 40u64, 114u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 41u64, 111u32)
+    /* "pos" off=42 len=3 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 42u64, 112u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 43u64, 111u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 44u64, 115u32)
+    /* "transient" off=45 len=9 */
+    s_store_u8((&SEMA_LITS_BUF as u64) + 45u64, 116u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 46u64, 114u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 47u64, 97u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 48u64, 110u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 49u64, 115u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 50u64, 105u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 51u64, 101u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 52u64, 110u32)
+    s_store_u8((&SEMA_LITS_BUF as u64) + 53u64, 116u32)
+    SEMA_LITS_INIT = 1u8
+    return 0u32
+}
+
+fn s_lit_addr(off: u32) -> u64 { return (&SEMA_LITS_BUF as u64) + (off as u64) }
+
+/* ─── Modifier decoders ───────────────────────────────────────────── */
+
+fn s_decode_ring_arg_value(value_node: u32) -> u32 {
+    if value_node == 0u32 { return 0u32 }
+    let vk : u32 = iii_ast_node_kind(SEMA_AST, value_node)
+    if vk == SEMA_K_EXPR_IDENT {
+        let off : u32 = iii_ast_ident_name_offset(SEMA_AST, value_node)
+        let len : u32 = iii_ast_ident_name_length(SEMA_AST, value_node)
+        if s_modname_eq(off, len, s_lit_addr(28u32), 2u32) == 1u32 { return SEMA_RING_R3 }
+        if s_modname_eq(off, len, s_lit_addr(30u32), 2u32) == 1u32 { return SEMA_RING_R0 }
+        if s_modname_eq(off, len, s_lit_addr(32u32), 3u32) == 1u32 { return SEMA_RING_ANY }
+        return 0u32
+    }
+    if vk == SEMA_K_EXPR_INT {
+        let v : u64 = iii_ast_expr_int_u64(SEMA_AST, value_node)
+        if v == 3u64 { return SEMA_RING_R3 }
+        if v == 0u64 { return SEMA_RING_R0 }
+        return 0u32
+    }
+    if vk == SEMA_K_EXPR_UNARY {
+        let op : u32 = iii_ast_unary_op(SEMA_AST, value_node)
+        if op == SEMA_UN_NEG {
+            let oper : u32 = iii_ast_unary_operand(SEMA_AST, value_node)
+            if oper != 0u32 {
+                let ok : u32 = iii_ast_node_kind(SEMA_AST, oper)
+                if ok == SEMA_K_EXPR_INT {
+                    let v : u64 = iii_ast_expr_int_u64(SEMA_AST, oper)
+                    if v == 1u64 { return SEMA_RING_RM1 }
+                    if v == 2u64 { return SEMA_RING_RM2 }
+                }
+            }
+        }
+        return 0u32
+    }
+    return 0u32
+}
+
+fn s_decode_ring_args(modifier_node: u32) -> u32 {
+    let n : u32 = iii_ast_modifier_arg_count(SEMA_AST, modifier_node)
+    let mut mask : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let arg : u32 = iii_ast_modifier_arg_at(SEMA_AST, modifier_node, i)
+        if arg != 0u32 {
+            let ak : u32 = iii_ast_node_kind(SEMA_AST, arg)
+            if ak == SEMA_K_ARG {
+                let v : u32 = iii_ast_arg_value(SEMA_AST, arg)
+                mask = mask | s_decode_ring_arg_value(v)
+            }
+        }
+        i = i + 1u32
+    }
+    return mask
+}
+
+/* Decode a single hexad argument list:
+ *  - 1 arg, value is EXPR_HEXAD literal → pack via iii_hexad_pack_pillars_c
+ *  - 1 arg, value is EXPR_IDENT (named IRPD method) → return 377 (canonical IRPD-safe)
+ *  - 6 args, each EXPR_TRIT or EXPR_IDENT (NEG/ZERO/POS) → pack
+ *  - else → 0xFFFFu32 (unrep). */
+fn s_trit_from_value(value_node: u32) -> i32 {
+    if value_node == 0u32 { return -1i32 }
+    let vk : u32 = iii_ast_node_kind(SEMA_AST, value_node)
+    if vk == SEMA_K_EXPR_TRIT { return iii_ast_expr_trit_value(SEMA_AST, value_node) as i32 }
+    if vk == SEMA_K_EXPR_IDENT {
+        let off : u32 = iii_ast_ident_name_offset(SEMA_AST, value_node)
+        let len : u32 = iii_ast_ident_name_length(SEMA_AST, value_node)
+        if s_modname_eq(off, len, s_lit_addr(35u32), 3u32) == 1u32 { return SEMA_TRIT_NEG  as i32 }
+        if s_modname_eq(off, len, s_lit_addr(38u32), 4u32) == 1u32 { return SEMA_TRIT_ZERO as i32 }
+        if s_modname_eq(off, len, s_lit_addr(42u32), 3u32) == 1u32 { return SEMA_TRIT_POS  as i32 }
+    }
+    return -1i32
+}
+
+fn s_decode_hexad_args(modifier_node: u32) -> u32 {
+    let n : u32 = iii_ast_modifier_arg_count(SEMA_AST, modifier_node)
+    if n == 0u32 { return 0xFFFFu32 }
+    if n == 1u32 {
+        let arg : u32 = iii_ast_modifier_arg_at(SEMA_AST, modifier_node, 0u32)
+        if arg == 0u32 { return 0xFFFFu32 }
+        let ak : u32 = iii_ast_node_kind(SEMA_AST, arg)
+        if ak != SEMA_K_ARG { return 0xFFFFu32 }
+        let v : u32 = iii_ast_arg_value(SEMA_AST, arg)
+        if v == 0u32 { return 0xFFFFu32 }
+        let vk : u32 = iii_ast_node_kind(SEMA_AST, v)
+        if vk == SEMA_K_EXPR_HEXAD {
+            let t0 : u32 = iii_ast_expr_hexad_trit_at(SEMA_AST, v, 0u32)
+            let t1 : u32 = iii_ast_expr_hexad_trit_at(SEMA_AST, v, 1u32)
+            let t2 : u32 = iii_ast_expr_hexad_trit_at(SEMA_AST, v, 2u32)
+            let t3 : u32 = iii_ast_expr_hexad_trit_at(SEMA_AST, v, 3u32)
+            let t4 : u32 = iii_ast_expr_hexad_trit_at(SEMA_AST, v, 4u32)
+            let t5 : u32 = iii_ast_expr_hexad_trit_at(SEMA_AST, v, 5u32)
+            return iii_hexad_pack_pillars_c(t0, t1, t2, t3, t4, t5)
+        }
+        if vk == SEMA_K_EXPR_IDENT { return SEMA_HEXAD_DEFAULT_IRPD }
+        return 0xFFFFu32
+    }
+    if n == 6u32 {
+        let mut tr : u32 = 0u32
+        let mut k : u32 = 0u32
+        let mut bad : u32 = 0u32
+        let mut t0 : u32 = 0u32
+        let mut t1 : u32 = 0u32
+        let mut t2 : u32 = 0u32
+        let mut t3 : u32 = 0u32
+        let mut t4 : u32 = 0u32
+        let mut t5 : u32 = 0u32
+        while k < 6u32 {
+            let arg : u32 = iii_ast_modifier_arg_at(SEMA_AST, modifier_node, k)
+            if arg == 0u32 { bad = 1u32 ; k = 6u32 } else {
+                let ak : u32 = iii_ast_node_kind(SEMA_AST, arg)
+                if ak != SEMA_K_ARG { bad = 1u32 ; k = 6u32 } else {
+                    let v : u32 = iii_ast_arg_value(SEMA_AST, arg)
+                    let trv : i32 = s_trit_from_value(v)
+                    if trv < 0i32 { bad = 1u32 ; k = 6u32 } else {
+                        tr = trv as u32
+                        if k == 0u32 { t0 = tr }
+                        if k == 1u32 { t1 = tr }
+                        if k == 2u32 { t2 = tr }
+                        if k == 3u32 { t3 = tr }
+                        if k == 4u32 { t4 = tr }
+                        if k == 5u32 { t5 = tr }
+                    }
+                }
+            }
+            k = k + 1u32
+        }
+        if bad == 1u32 { return 0xFFFFu32 }
+        return iii_hexad_pack_pillars_c(t0, t1, t2, t3, t4, t5)
+    }
+    return 0xFFFFu32
+}
+
+fn s_check_extern_abi(decl_node: u32) -> u32 {
+    let abi : u32 = iii_ast_extern_abi(SEMA_AST, decl_node)
+    if abi < SEMA_ABI_C_MSVC_X64 { s_emit_error(SEMA_E_EXTERN_ABI, decl_node, 0u32) ; return 0u32 }
+    if abi > SEMA_ABI_IOCTL      { s_emit_error(SEMA_E_EXTERN_ABI, decl_node, 0u32) ; return 0u32 }
+    return 1u32
+}
+
+fn s_synthesise_ring_set(mask: u32) -> u32 {
+    if mask == 0u32 { return 0u32 }
+    iii_ast_synth_ring_set(SEMA_AST, mask)
+    return 0u32
+}
+
+/* ─── Decl name accessor ──────────────────────────────────────────── */
+
+/* Returns 1 and writes (off, len) into module-scope SEMA_TMP_NAME_OFF/LEN
+ * for any decl kind that has a name; 0 otherwise. */
+var SEMA_TMP_NAME_OFF : u32 = 0u32
+var SEMA_TMP_NAME_LEN : u32 = 0u32
+
+fn s_decl_name(decl_node: u32) -> u32 {
+    SEMA_TMP_NAME_OFF = 0u32
+    SEMA_TMP_NAME_LEN = 0u32
+    if decl_node == 0u32 { return 0u32 }
+    let k : u32 = iii_ast_node_kind(SEMA_AST, decl_node)
+    if k == SEMA_K_VAR_DECL {
+        SEMA_TMP_NAME_OFF = iii_ast_var_decl_name_off(SEMA_AST, decl_node)
+        SEMA_TMP_NAME_LEN = iii_ast_var_decl_name_len(SEMA_AST, decl_node)
+        return 1u32
+    }
+    if k == SEMA_K_STRUCT_DECL {
+        SEMA_TMP_NAME_OFF = iii_ast_struct_decl_name_off(SEMA_AST, decl_node)
+        SEMA_TMP_NAME_LEN = iii_ast_struct_decl_name_len(SEMA_AST, decl_node)
+        return 1u32
+    }
+    /* Generic accessor handles FN/CYCLE/TYPE/CONST/EXTERN/MOBIUS/SCHEMA/SEALED. */
+    SEMA_TMP_NAME_OFF = iii_ast_decl_name_offset(SEMA_AST, decl_node)
+    SEMA_TMP_NAME_LEN = iii_ast_decl_name_length(SEMA_AST, decl_node)
+    if SEMA_TMP_NAME_LEN == 0u32 { return 0u32 }
+    return 1u32
+}
+
+/* Returns the modifier-list count for a decl (0 if kind has no modifiers). */
+fn s_decl_modifier_count(decl_node: u32) -> u32 {
+    let k : u32 = iii_ast_node_kind(SEMA_AST, decl_node)
+    if k == SEMA_K_CYCLE_DECL  { return iii_ast_cycle_modifier_count(SEMA_AST, decl_node) }
+    if k == SEMA_K_FN_DECL     { return iii_ast_fn_modifier_count(SEMA_AST, decl_node) }
+    if k == SEMA_K_TYPE_DECL   { return iii_ast_type_modifier_count(SEMA_AST, decl_node) }
+    if k == SEMA_K_MOBIUS_CANDIDATE_DECL { return iii_ast_mobius_modifier_count(SEMA_AST, decl_node) }
+    return 0u32
+}
+
+fn s_decl_modifier_at(decl_node: u32, idx: u32) -> u32 {
+    let k : u32 = iii_ast_node_kind(SEMA_AST, decl_node)
+    if k == SEMA_K_CYCLE_DECL  { return iii_ast_cycle_modifier_at(SEMA_AST, decl_node, idx) }
+    if k == SEMA_K_FN_DECL     { return iii_ast_fn_modifier_at(SEMA_AST, decl_node, idx) }
+    if k == SEMA_K_TYPE_DECL   { return iii_ast_type_modifier_at(SEMA_AST, decl_node, idx) }
+    if k == SEMA_K_MOBIUS_CANDIDATE_DECL { return iii_ast_mobius_modifier_at(SEMA_AST, decl_node, idx) }
+    return 0u32
+}
+
+/* ─── Body walk — per-kind helpers + dispatcher ───────────────────── */
+
+var SEMA_CURRENT_RING_MASK : u32 = 0u32
+
+fn s_walk_arg_node(node: u32) -> u32 {
+    s_walk_node(iii_ast_arg_value(SEMA_AST, node))
+    return 0u32
+}
+
+fn s_walk_forward_block(node: u32) -> u32 {
+    let n : u32 = iii_ast_forward_block_stmt_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_forward_block_stmt_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_walk_expr_block(node: u32) -> u32 {
+    let mark : u32 = s_local_mark()
+    let n : u32 = iii_ast_block_stmt_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_block_stmt_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    s_local_truncate(mark)
+    return 0u32
+}
+
+fn s_walk_stmt_let(node: u32) -> u32 {
+    s_walk_node(iii_ast_let_value(SEMA_AST, node))
+    let off : u32 = iii_ast_let_name_off(SEMA_AST, node)
+    let len : u32 = iii_ast_let_name_len(SEMA_AST, node)
+    if len > 0u32 { s_local_push(off, len, node) }
+    return 0u32
+}
+
+fn s_walk_stmt_for(node: u32) -> u32 {
+    s_walk_node(iii_ast_for_iter(SEMA_AST, node))
+    let mark : u32 = s_local_mark()
+    let off : u32 = iii_ast_for_var_off(SEMA_AST, node)
+    let len : u32 = iii_ast_for_var_len(SEMA_AST, node)
+    if len > 0u32 { s_local_push(off, len, node) }
+    s_walk_node(iii_ast_for_where(SEMA_AST, node))
+    s_walk_node(iii_ast_for_body(SEMA_AST, node))
+    s_local_truncate(mark)
+    return 0u32
+}
+
+fn s_walk_stmt_match(node: u32) -> u32 {
+    s_walk_node(iii_ast_match_stmt_scrutinee(SEMA_AST, node))
+    let n : u32 = iii_ast_match_stmt_arm_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_match_stmt_arm_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_walk_expr_match(node: u32) -> u32 {
+    s_walk_node(iii_ast_match_expr_scrutinee(SEMA_AST, node))
+    let n : u32 = iii_ast_match_expr_arm_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_match_expr_arm_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_walk_match_arm(node: u32) -> u32 {
+    let mark : u32 = s_local_mark()
+    let pat : u32 = iii_ast_match_arm_pattern(SEMA_AST, node)
+    if pat != 0u32 {
+        let pk : u32 = iii_ast_node_kind(SEMA_AST, pat)
+        if pk == SEMA_K_PAT_IDENT {
+            let off : u32 = iii_ast_pat_ident_name_off(SEMA_AST, pat)
+            let len : u32 = iii_ast_pat_ident_name_len(SEMA_AST, pat)
+            if len > 0u32 { s_local_push(off, len, node) }
+        }
+    }
+    s_walk_node(iii_ast_match_arm_guard(SEMA_AST, node))
+    s_walk_node(iii_ast_match_arm_body(SEMA_AST, node))
+    s_local_truncate(mark)
+    return 0u32
+}
+
+fn s_walk_stmt_wavefront(node: u32) -> u32 {
+    let n : u32 = iii_ast_wavefront_node_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_wavefront_node_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    s_walk_node(iii_ast_wavefront_rollback(SEMA_AST, node))
+    return 0u32
+}
+
+fn s_walk_stmt_sanctum_enter(node: u32) -> u32 {
+    let mark : u32 = s_local_mark()
+    let off : u32 = iii_ast_sanctum_enter_frame_off(SEMA_AST, node)
+    let len : u32 = iii_ast_sanctum_enter_frame_len(SEMA_AST, node)
+    if len > 0u32 { s_local_push(off, len, node) }
+    s_walk_node(iii_ast_sanctum_enter_body(SEMA_AST, node))
+    s_local_truncate(mark)
+    return 0u32
+}
+
+fn s_walk_stmt_metal(node: u32) -> u32 {
+    let mr : u32 = iii_ast_metal_ring_mask(SEMA_AST, node)
+    if mr != 0u32 {
+        if SEMA_CURRENT_RING_MASK != 0u32 {
+            let bad : u32 = mr & (255u32 ^ (SEMA_CURRENT_RING_MASK & 255u32))
+            if bad != 0u32 { s_emit_error(SEMA_E_METAL_RING, node, 0u32) }
+        }
+    }
+    let off : u32 = iii_ast_metal_asm_str_idx(SEMA_AST, node)
+    let len : u32 = iii_ast_metal_asm_len(SEMA_AST, node)
+    let src_len : u64 = iii_ast_source_len(SEMA_AST)
+    if len > 0u32 {
+        if (off as u64) + (len as u64) <= src_len {
+            s_lower_into_scratch(off, len)
+            let has_irpd : u32 = s_lower_contains_irpd_literal()
+            if has_irpd == 0u32 {
+                let mut i : u32 = 0u32
+                let mut hit : u32 = 0u32
+                while i < SEMA_RAWOP_COUNT {
+                    if hit == 0u32 {
+                        let pat_addr : u64 = (&SEMA_RAWOP_BUF as u64) + (SEMA_RAWOP_OFF[i] as u64)
+                        let pat_len  : u32 = SEMA_RAWOP_LEN[i]
+                        if s_lower_contains_pat(pat_addr, pat_len) == 1u32 {
+                            s_emit_error(SEMA_E_IRPD_RAW, node, 0u32)
+                            hit = 1u32
+                        }
+                    }
+                    i = i + 1u32
+                }
+            }
+        }
+    }
+    return 0u32
+}
+
+fn s_walk_expr_call(node: u32) -> u32 {
+    let callee : u32 = iii_ast_call_callee(SEMA_AST, node)
+    s_walk_node(callee)
+    let n : u32 = iii_ast_call_arg_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_call_arg_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    if callee != 0u32 {
+        let ck : u32 = iii_ast_node_kind(SEMA_AST, callee)
+        if ck == SEMA_K_EXPR_FIELD {
+            let obj : u32 = iii_ast_field_object(SEMA_AST, callee)
+            if obj != 0u32 {
+                let ok : u32 = iii_ast_node_kind(SEMA_AST, obj)
+                if ok == SEMA_K_EXPR_IDENT {
+                    let oo : u32 = iii_ast_ident_name_offset(SEMA_AST, obj)
+                    let ol : u32 = iii_ast_ident_name_length(SEMA_AST, obj)
+                    if s_modname_eq(oo, ol, s_lit_addr(24u32), 4u32) == 1u32 {
+                        let fo : u32 = iii_ast_field_name_offset(SEMA_AST, callee)
+                        let fl : u32 = iii_ast_field_name_length(SEMA_AST, callee)
+                        if s_is_pfs_brick_src_lower(fo, fl) == 1u32 {
+                            s_emit_error(SEMA_E_PFS_BRICK, node, 0u32)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 0u32
+}
+
+fn s_walk_expr_parallel(node: u32) -> u32 {
+    let n : u32 = iii_ast_parallel_branch_count(SEMA_AST, node)
+    let mut i : u32 = 0u32
+    while i < n {
+        s_walk_node(iii_ast_parallel_branch_at(SEMA_AST, node, i))
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn s_walk_expr_ident(node: u32) -> u32 {
+    let off : u32 = iii_ast_ident_name_offset(SEMA_AST, node)
+    let len : u32 = iii_ast_ident_name_length(SEMA_AST, node)
+    if len == 0u32 { return 0u32 }
+    let bid : u32 = s_local_lookup_src(off, len)
+    if bid != 0u32 {
+        iii_ast_set_binder_id_u32(SEMA_AST, node, bid)
+        return 0u32
+    }
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut i : u32 = 0u32
+    while i < SEMA_DECL_COUNT {
+        let dn_off : u32 = SEMA_DECLS_NAME_OFF[i]
+        let dn_len : u32 = SEMA_DECLS_NAME_LEN[i]
+        if dn_len == len {
+            let mut j : u32 = 0u32
+            let mut eq : u32 = 1u32
+            while j < len {
+                let a : u32 = s_load_u8(s_arena_addr(dn_off + j))
+                let b : u32 = s_load_u8(src_buf + ((off + j) as u64))
+                if a != b { eq = 0u32 ; j = len }
+                j = j + 1u32
+            }
+            if eq == 1u32 {
+                iii_ast_set_binder_id_u32(SEMA_AST, node, SEMA_DECLS_NODE[i])
+                return 0u32
+            }
+        }
+        i = i + 1u32
+    }
+    if s_is_builtin_ident_src(off, len) == 1u32 { return 0u32 }
+    s_emit_error(SEMA_E_IDENT_UNRESOLVED, node, 0u32)
+    return 0u32
+}
+
+fn s_walk_node(node: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let k : u32 = iii_ast_node_kind(SEMA_AST, node)
+    if k == SEMA_K_ERROR_NODE     { s_emit_error(SEMA_E_ERROR_NODE, node, 0u32) ; return 0u32 }
+    if k == SEMA_K_FORWARD_BLOCK  { return s_walk_forward_block(node) }
+    if k == SEMA_K_EXPR_BLOCK     { return s_walk_expr_block(node) }
+    if k == SEMA_K_STMT_LET       { return s_walk_stmt_let(node) }
+    if k == SEMA_K_STMT_EXPR      { s_walk_node(iii_ast_expr_stmt_expr(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_STMT_RETURN    { s_walk_node(iii_ast_return_value(SEMA_AST, node))    ; return 0u32 }
+    if k == SEMA_K_STMT_ASSIGN    { s_walk_node(iii_ast_assign_lvalue(SEMA_AST, node)) ; s_walk_node(iii_ast_assign_value(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_STMT_FOR       { return s_walk_stmt_for(node) }
+    if k == SEMA_K_STMT_IF        { s_walk_node(iii_ast_if_cond(SEMA_AST, node)) ; s_walk_node(iii_ast_if_then(SEMA_AST, node)) ; s_walk_node(iii_ast_if_else(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_STMT_WHILE     { s_walk_node(iii_ast_while_cond(SEMA_AST, node)) ; s_walk_node(iii_ast_while_body(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_RANGE     { s_walk_node(iii_ast_range_lo(SEMA_AST, node)) ; s_walk_node(iii_ast_range_hi(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_CAST      { s_walk_node(iii_ast_cast_value(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_SIZEOF    { return 0u32 }
+    if k == SEMA_K_STMT_MATCH     { return s_walk_stmt_match(node) }
+    if k == SEMA_K_EXPR_MATCH     { return s_walk_expr_match(node) }
+    if k == SEMA_K_MATCH_ARM      { return s_walk_match_arm(node) }
+    if k == SEMA_K_STMT_WAVEFRONT { return s_walk_stmt_wavefront(node) }
+    if k == SEMA_K_STMT_SANCTUM_ENTER { return s_walk_stmt_sanctum_enter(node) }
+    if k == SEMA_K_STMT_METAL     { return s_walk_stmt_metal(node) }
+    if k == SEMA_K_EXPR_CALL      { return s_walk_expr_call(node) }
+    if k == SEMA_K_EXPR_FIELD     { s_walk_node(iii_ast_field_object(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_INDEX     { s_walk_node(iii_ast_index_object(SEMA_AST, node)) ; s_walk_node(iii_ast_index_index(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_BINARY    { s_walk_node(iii_ast_binary_lhs(SEMA_AST, node)) ; s_walk_node(iii_ast_binary_rhs(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_UNARY     { s_walk_node(iii_ast_unary_operand(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_PAREN     { s_walk_node(iii_ast_paren_inner(SEMA_AST, node)) ; return 0u32 }
+    if k == SEMA_K_EXPR_PARALLEL  { return s_walk_expr_parallel(node) }
+    if k == SEMA_K_EXPR_IDENT     { return s_walk_expr_ident(node) }
+    if k == SEMA_K_ARG            { return s_walk_arg_node(node) }
+    return 0u32
+}
+
+/* ─── Pass 1 — top-level decl registration + modifier resolution ──── */
+
+fn s_decode_modifier_for_decl(decl_node: u32, mod_node: u32, anno: u32) -> u32 {
+    let mname_off : u32 = iii_ast_modifier_name_offset(SEMA_AST, mod_node)
+    let mname_len : u32 = iii_ast_modifier_name_length(SEMA_AST, mod_node)
+    if s_modname_eq(mname_off, mname_len, s_lit_addr(0u32), 4u32) == 1u32 {
+        let parser_mask : u32 = iii_ast_modifier_ring_mask(SEMA_AST, mod_node)
+        if parser_mask != 0u32 { SEMA_ANNO_RING[anno] = parser_mask }
+        if SEMA_ANNO_RING[anno] == 0u32 {
+            SEMA_ANNO_RING[anno] = s_decode_ring_args(mod_node)
+        }
+        return 0u32
+    }
+    if s_modname_eq(mname_off, mname_len, s_lit_addr(4u32), 5u32) == 1u32 {
+        SEMA_ANNO_HEXAD[anno] = s_decode_hexad_args(mod_node)
+        return 0u32
+    }
+    if s_modname_eq(mname_off, mname_len, s_lit_addr(9u32), 6u32) == 1u32 {
+        SEMA_ANNO_HEXAD[anno] = s_decode_hexad_args(mod_node)
+        return 0u32
+    }
+    if s_modname_eq(mname_off, mname_len, s_lit_addr(15u32), 4u32) == 1u32 {
+        SEMA_ANNO_TIER[anno] = iii_ast_modifier_tier_kind(SEMA_AST, mod_node)
+        return 0u32
+    }
+    if s_modname_eq(mname_off, mname_len, s_lit_addr(19u32), 5u32) == 1u32 {
+        let ev_lo : u32 = (iii_ast_modifier_epoch_value(SEMA_AST, mod_node) as u32)
+        SEMA_ANNO_EPOCH_LO[anno] = ev_lo
+        return 0u32
+    }
+    let _ud : u32 = decl_node
+    return 0u32
+}
+
+fn s_register_struct_layout(decl_node: u32) -> u32 {
+    let name_off : u32 = iii_ast_struct_decl_name_off(SEMA_AST, decl_node)
+    let name_len : u32 = iii_ast_struct_decl_name_len(SEMA_AST, decl_node)
+    let aoff : u32 = s_arena_strdup(name_off, name_len)
+    let s : u32 = s_struct_alloc(decl_node, aoff, name_len)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    let n : u32 = iii_ast_struct_field_count(SEMA_AST, decl_node)
+    let mut i : u32 = 0u32
+    while i < n {
+        let fp : u32 = iii_ast_struct_field_at(SEMA_AST, decl_node, i)
+        if fp != 0u32 {
+            let pk : u32 = iii_ast_node_kind(SEMA_AST, fp)
+            if pk == SEMA_K_PARAM {
+                let fo : u32 = iii_ast_param_name_off(SEMA_AST, fp)
+                let fl : u32 = iii_ast_param_name_len(SEMA_AST, fp)
+                let fa : u32 = s_arena_strdup(fo, fl)
+                s_struct_add_field(s, fa, fl)
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* Module-scope seen list (avoids stack array). */
+var SEMA_SEAL_SEEN     : [u32; 64]
+var SEMA_SEAL_SEEN_N   : u32 = 0u32
+
+fn s_seal_scan() -> u32 {
+    SEMA_SEAL_SEEN_N = 0u32
+    let total : u32 = iii_ast_node_count_u32(SEMA_AST)
+    let mut k : u32 = 0u32
+    while k < total {
+        let kk : u32 = iii_ast_node_kind(SEMA_AST, k)
+        if kk == SEMA_K_SEALED_CALL_METHOD_DECL {
+            let sid : u32 = iii_ast_sealed_seal_id(SEMA_AST, k)
+            let mut z : u32 = 0u32
+            let mut dup : u32 = 0u32
+            while z < SEMA_SEAL_SEEN_N {
+                if SEMA_SEAL_SEEN[z] == sid { dup = 1u32 ; z = SEMA_SEAL_SEEN_N }
+                z = z + 1u32
+            }
+            if dup == 1u32 { s_emit_error(SEMA_E_SEAL_COLLISION, k, 0u32) }
+            if SEMA_SEAL_SEEN_N < SEMA_SEAL_SCAN_CAP {
+                SEMA_SEAL_SEEN[SEMA_SEAL_SEEN_N] = sid
+                SEMA_SEAL_SEEN_N = SEMA_SEAL_SEEN_N + 1u32
+            }
+        }
+        k = k + 1u32
+    }
+    return 0u32
+}
+
+fn s_pass1_module() -> u32 {
+    let mod_node : u32 = iii_ast_root_module(SEMA_AST)
+    if mod_node == 0u32 { s_emit_error(SEMA_E_ERROR_NODE, 0u32, 0u32) ; return 0u32 }
+    let mk : u32 = iii_ast_node_kind(SEMA_AST, mod_node)
+    if mk != SEMA_K_MODULE { s_emit_error(SEMA_E_ERROR_NODE, mod_node, 0u32) ; return 0u32 }
+    let nd : u32 = iii_ast_module_decl_count(SEMA_AST, mod_node)
+    let mut i : u32 = 0u32
+    while i < nd {
+        let didx : u32 = iii_ast_module_decl_at(SEMA_AST, mod_node, i)
+        if didx != 0u32 {
+            let dk : u32 = iii_ast_node_kind(SEMA_AST, didx)
+            if dk == SEMA_K_ERROR_NODE {
+                s_emit_error(SEMA_E_ERROR_NODE, didx, 0u32)
+            } else {
+                if s_decl_name(didx) == 1u32 {
+                    let n_src_off : u32 = SEMA_TMP_NAME_OFF
+                    let n_src_len : u32 = SEMA_TMP_NAME_LEN
+                    let prior : u32 = s_decl_table_lookup_src(n_src_off, n_src_len)
+                    if prior != 0u32 {
+                        s_emit_error(SEMA_E_DECL_DUP, didx, 0u32)
+                    } else {
+                        let aoff : u32 = s_arena_strdup(n_src_off, n_src_len)
+                        if aoff != 0xFFFFFFFFu32 {
+                            s_decl_table_add(aoff, n_src_len, didx, dk)
+                        }
+                    }
+                }
+                let anno : u32 = s_anno_get_or_create(didx)
+                if anno != 0xFFFFFFFFu32 {
+                    let mc : u32 = s_decl_modifier_count(didx)
+                    let mut j : u32 = 0u32
+                    while j < mc {
+                        let mn : u32 = s_decl_modifier_at(didx, j)
+                        if mn != 0u32 {
+                            let mk2 : u32 = iii_ast_node_kind(SEMA_AST, mn)
+                            if mk2 == SEMA_K_MODIFIER {
+                                s_decode_modifier_for_decl(didx, mn, anno)
+                            }
+                        }
+                        j = j + 1u32
+                    }
+                    if dk == SEMA_K_CYCLE_DECL {
+                        if SEMA_ANNO_RING[anno] != 0u32 {
+                            s_synthesise_ring_set(SEMA_ANNO_RING[anno])
+                        }
+                        if SEMA_ANNO_HEXAD[anno] == SEMA_HEXAD_UNSET {
+                            s_emit_error(SEMA_E_HEXAD_MISSING, didx, 0u32)
+                        } else {
+                            if iii_hexad_packed_admitted_c(SEMA_ANNO_HEXAD[anno]) == 0u32 {
+                                s_emit_error(SEMA_E_HEXAD_UNREP, didx, SEMA_ANNO_HEXAD[anno])
+                            }
+                        }
+                        if SEMA_ANNO_RING[anno] == 0u32 {
+                            s_emit_error(SEMA_E_RING_MISSING, didx, 0u32)
+                        }
+                    }
+                    if dk == SEMA_K_EXTERN_DECL {
+                        s_check_extern_abi(didx)
+                    }
+                    if dk == SEMA_K_STRUCT_DECL {
+                        s_register_struct_layout(didx)
+                    }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    s_seal_scan()
+    return 0u32
+}
+
+/* Decl-table source-text lookup helper used by pass1. */
+fn s_decl_table_lookup_src(src_off: u32, src_len: u32) -> u32 {
+    let src_buf : u64 = iii_ast_source_buf(SEMA_AST)
+    let mut i : u32 = 0u32
+    while i < SEMA_DECL_COUNT {
+        let dn_off : u32 = SEMA_DECLS_NAME_OFF[i]
+        let dn_len : u32 = SEMA_DECLS_NAME_LEN[i]
+        if dn_len == src_len {
+            let mut j : u32 = 0u32
+            let mut eq : u32 = 1u32
+            while j < src_len {
+                let a : u32 = s_load_u8(s_arena_addr(dn_off + j))
+                let b : u32 = s_load_u8(src_buf + ((src_off + j) as u64))
+                if a != b { eq = 0u32 ; j = src_len }
+                j = j + 1u32
+            }
+            if eq == 1u32 { return SEMA_DECLS_NODE[i] }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* ─── Pass 2 — body walk ──────────────────────────────────────────── */
+
+fn s_pass2_decl(decl_node: u32) -> u32 {
+    let dk : u32 = iii_ast_node_kind(SEMA_AST, decl_node)
+    let mut params_count : u32 = 0u32
+    let mut body : u32 = 0u32
+    let mut ring : u32 = 0u32
+    if dk == SEMA_K_CYCLE_DECL {
+        params_count = iii_ast_cycle_param_count(SEMA_AST, decl_node)
+        body = iii_ast_cycle_forward_block(SEMA_AST, decl_node)
+        let a : u32 = s_anno_find(decl_node)
+        if a != 0u32 { ring = SEMA_ANNO_RING[a - 1u32] }
+    }
+    if dk == SEMA_K_FN_DECL {
+        params_count = iii_ast_fn_param_count(SEMA_AST, decl_node)
+        body = iii_ast_fn_body(SEMA_AST, decl_node)
+        let a : u32 = s_anno_find(decl_node)
+        if a != 0u32 { ring = SEMA_ANNO_RING[a - 1u32] }
+    }
+    if dk == SEMA_K_MOBIUS_CANDIDATE_DECL {
+        body = iii_ast_mobius_forward(SEMA_AST, decl_node)
+        let a : u32 = s_anno_find(decl_node)
+        if a != 0u32 { ring = SEMA_ANNO_RING[a - 1u32] }
+    }
+    if dk == SEMA_K_SEALED_CALL_METHOD_DECL {
+        params_count = iii_ast_sealed_param_count(SEMA_AST, decl_node)
+        body = iii_ast_sealed_body(SEMA_AST, decl_node)
+    }
+    let mark : u32 = s_local_mark()
+    let mut p : u32 = 0u32
+    while p < params_count {
+        let pn : u32 = 0u32
+        let mut pp : u32 = 0u32
+        if dk == SEMA_K_CYCLE_DECL  { pp = iii_ast_cycle_param_at(SEMA_AST, decl_node, p) }
+        if dk == SEMA_K_FN_DECL     { pp = iii_ast_fn_param_at(SEMA_AST, decl_node, p) }
+        if dk == SEMA_K_SEALED_CALL_METHOD_DECL { pp = iii_ast_sealed_param_at(SEMA_AST, decl_node, p) }
+        let _upn : u32 = pn
+        if pp != 0u32 {
+            let pk : u32 = iii_ast_node_kind(SEMA_AST, pp)
+            if pk == SEMA_K_PARAM {
+                let off : u32 = iii_ast_param_name_off(SEMA_AST, pp)
+                let len : u32 = iii_ast_param_name_len(SEMA_AST, pp)
+                if len > 0u32 { s_local_push(off, len, pp) }
+            }
+        }
+        p = p + 1u32
+    }
+    SEMA_CURRENT_RING_MASK = ring
+    if body != 0u32 { s_walk_node(body) }
+    s_local_truncate(mark)
+    return 0u32
+}
+
+fn s_pass2_module() -> u32 {
+    let mod_node : u32 = iii_ast_root_module(SEMA_AST)
+    if mod_node == 0u32 { return 0u32 }
+    let nd : u32 = iii_ast_module_decl_count(SEMA_AST, mod_node)
+    let mut i : u32 = 0u32
+    while i < nd {
+        let didx : u32 = iii_ast_module_decl_at(SEMA_AST, mod_node, i)
+        if didx != 0u32 {
+            SEMA_CURRENT_CYCLE = didx
+            s_pass2_decl(didx)
+        }
+        i = i + 1u32
+    }
+    SEMA_CURRENT_CYCLE = 0u32
+    return 0u32
+}
+
+/* ─── Public API (13 exports matching sema.h ABI) ─────────────────── */
+
+fn iii_sema_create(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    SEMA_AST = ast
+    SEMA_RAN = 0u8
+    SEMA_DECL_COUNT = 0u32
+    SEMA_ANNO_COUNT = 0u32
+    SEMA_STRUCT_COUNT = 0u32
+    SEMA_ERR_COUNT = 0u32
+    SEMA_LOCAL_COUNT = 0u32
+    SEMA_NEXT_BINDER = 1u32
+    SEMA_ARENA_USED = 0u32
+    SEMA_CURRENT_CYCLE = 0u32
+    SEMA_CURRENT_RING_MASK = 0u32
+    s_init_lits()
+    s_init_all_tables()
+    return (&SEMA_SENTINEL as u64)
+}
+
+fn iii_sema_destroy(s: u64) -> u32 @export {
+    let _us : u64 = s
+    SEMA_AST = 0u64
+    SEMA_RAN = 0u8
+    SEMA_DECL_COUNT = 0u32
+    SEMA_ANNO_COUNT = 0u32
+    SEMA_STRUCT_COUNT = 0u32
+    SEMA_ERR_COUNT = 0u32
+    SEMA_LOCAL_COUNT = 0u32
+    SEMA_ARENA_USED = 0u32
+    return 0u32
+}
+
+fn iii_sema_run(s: u64) -> i32 @export {
+    let _us : u64 = s
+    if SEMA_AST == 0u64 { return 0i32 }
+    if SEMA_RAN == 1u8 {
+        if SEMA_ERR_COUNT == 0u32 { return 1i32 }
+        return 0i32
+    }
+    SEMA_RAN = 1u8
+    iii_hexad_check_init_c()
+    s_pass1_module()
+    s_pass2_module()
+    if SEMA_ERR_COUNT == 0u32 { return 1i32 }
+    return 0i32
+}
+
+fn iii_sema_error_count(s: u64) -> u32 @export {
+    let _us : u64 = s
+    return SEMA_ERR_COUNT
+}
+
+fn iii_sema_error_at(s: u64, idx: u32, out: u64) -> u32 @export {
+    let _us : u64 = s
+    if out == 0u64 { return 0u32 }
+    /* Zero 32 bytes first (iii_sema_error_t layout). */
+    let mut z : u32 = 0u32
+    while z < 32u32 {
+        s_store_u8(out + (z as u64), 0u32)
+        z = z + 1u32
+    }
+    if idx >= SEMA_ERR_COUNT { return 0u32 }
+    /* code @0 (i32, 4 bytes) */
+    let code : i32 = SEMA_ERR_CODE[idx]
+    s_store_u32_le(out + 0u64, code as u32)
+    /* line @4 (u32) */
+    s_store_u32_le(out + 4u64, SEMA_ERR_LINE[idx])
+    /* col @8  (u32) */
+    s_store_u32_le(out + 8u64, SEMA_ERR_COL[idx])
+    /* hexad @12 (u16) — store low 16 bits */
+    let h : u32 = SEMA_ERR_HEXAD[idx] & 0xFFFFu32
+    s_store_u8(out + 12u64,  h        & 0xFFu32)
+    s_store_u8(out + 13u64, (h >> 8u32) & 0xFFu32)
+    /* ast_node @16 (u32) — pad @14..15 left zero */
+    s_store_u32_le(out + 16u64, SEMA_ERR_NODE[idx])
+    /* message @24 (u64) — leave zero (main.c handles NULL) */
+    return 0u32
+}
+
+fn iii_sema_error_name(code: i32) -> u64 @export {
+    return s_error_name_addr(code)
+}
+
+fn iii_sema_ast(s: u64) -> u64 @export {
+    let _us : u64 = s
+    return SEMA_AST
+}
+
+fn iii_sema_lookup_decl(s: u64, name: u64) -> u32 @export {
+    let _us : u64 = s
+    if name == 0u64 { return 0u32 }
+    return s_decl_table_lookup_cstr(name)
+}
+
+fn iii_sema_cycle_hexad(s: u64, cycle_decl_node: u32) -> u32 @export {
+    let _us : u64 = s
+    let a : u32 = s_anno_find(cycle_decl_node)
+    if a == 0u32 { return 0xFFFFu32 }
+    return SEMA_ANNO_HEXAD[a - 1u32] & 0xFFFFu32
+}
+
+fn iii_sema_cycle_ring_mask(s: u64, cycle_decl_node: u32) -> u32 @export {
+    let _us : u64 = s
+    let a : u32 = s_anno_find(cycle_decl_node)
+    if a == 0u32 { return 0u32 }
+    return SEMA_ANNO_RING[a - 1u32]
+}
+
+fn iii_sema_struct_size_slots(s: u64, struct_decl_node: u32) -> u32 @export {
+    let _us : u64 = s
+    let r : u32 = s_struct_find(struct_decl_node)
+    if r == 0u32 { return 0u32 }
+    return SEMA_STRUCT_FIELD_COUNT[r - 1u32]
+}
+
+fn iii_sema_struct_field_slot(s: u64, struct_decl_node: u32, field_name: u64) -> i32 @export {
+    let _us : u64 = s
+    if field_name == 0u64 { return -1i32 }
+    let r : u32 = s_struct_find(struct_decl_node)
+    if r == 0u32 { return -1i32 }
+    return s_struct_field_slot_cstr(r - 1u32, field_name)
+}
+
+fn iii_sema_struct_decl_for_name(s: u64, name: u64) -> u32 @export {
+    let _us : u64 = s
+    if name == 0u64 { return 0u32 }
+    return s_struct_find_by_name_cstr(name)
+}

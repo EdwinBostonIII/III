@@ -1,0 +1,106 @@
+/* STDLIB/iii/omnia/xii_lower_under.iii -- mig4 Step 8e: lower the SCOPING domain (FUNDER) through XII.
+ * The last composition operator, and a fourth DISTINCT algebra: FUNDER is LEFT-associative with a
+ * RIGHT ZERO and NO left identity.  "a under b" (a scoped beneath b) nests to the LEFT, and scoping
+ * under an absent scope (a null on the right) annihilates.  Additive (a consumer of canonicalise;
+ * engine untouched); the engine's own rules ARE the structure's laws (read from xii_rewrite.iii):
+ *   - product        a / b = FUNDER(a, b)
+ *   - zero           e     = the K06 null leaf (a RIGHT zero; NOT a left identity)
+ *   - atoms          = inert K13 leaves (CAP_NONE; referenced by NO FUNDER null rule)
+ * The laws:
+ *   - LEFT-assoc      R004  FUNDER(a, FUNDER(b,c)) -> FUNDER(FUNDER(a,b), c)   [LEFT-nested NF]
+ *   - RIGHT zero      R039  FUNDER(a, K06null)     -> K06null  (apply_R039 = child_b = the null)
+ * So xii_canonicalise of an encoded scoping expression LEFT-nests it (opposite to FCOMPOSE/FTHEN's
+ * right-nesting) and collapses a trailing empty scope.  Gated by xad_admit.  The KAT proves both
+ * asymmetries: the NF is LEFT-nested (not right), and e/a does NOT reduce (no left identity) while
+ * a/e -> e (right zero) -- a fourth algebra, distinct from the two monoids and from FWITH.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_admission only.  Determinism: integer-only; ==/!= compares; single-line fns; eval results
+ * bound to locals before struct_eq (param-spill-safe).
+ */
+module omnia_xii_lower_under
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLU_FUNDER   : u8  = 21u8    /* the scoping operator */
+const XLU_K06      : u8  = 5u8     /* K06 null = RIGHT zero (NOT a left identity) */
+const XLU_ATOM     : u8  = 12u8    /* K13: CAP_NONE + inert under every FUNDER null rule */
+const XLU_NULL_REF : u32 = 0xFFFFFFFFu32
+
+/* the empty scope: a RIGHT zero (R039).  It is NOT a left identity (no FUNDER(K06,a)->a rule). */
+fn xlu_zero() -> u32 @export { return xii_term_make_basis(XLU_K06, xii_rewrite_null_form()) }
+fn xlu_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLU_ATOM, sf) }
+fn xlu_under(a: u32, b: u32) -> u32 @export { return xii_term_make_fusion2(XLU_FUNDER, a, b) }
+fn xlu_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.  Proves the left-assoc/right-zero laws by
+ * canonicalisation -- LEFT-associativity (1), NF is the LEFT-nested word (2), the constructor
+ * left-nests STRUCTURALLY at zero rewrite cost (3, route-S), RIGHT zero a/e->e (4); the keystone ASYMMETRY teeth --
+ * e/a does NOT reduce (no left identity) (5); determinism (6); ADMITTED (7). */
+fn xlu_selftest() -> u64 @export {
+    /* (1) LEFT-ASSOCIATIVITY: (a/b)/c and a/(b/c) reach the same NF. */
+    xii_term_arena_reset()
+    let l : u32 = xlu_under(xlu_under(xlu_atom(1u32), xlu_atom(2u32)), xlu_atom(3u32))
+    let r : u32 = xlu_under(xlu_atom(1u32), xlu_under(xlu_atom(2u32), xlu_atom(3u32)))
+    let nfl : u32 = xlu_eval(l)
+    let nfr : u32 = xlu_eval(r)
+    if xii_rewrite_struct_eq(nfl, nfr) != 1u8 { return 1u64 }
+
+    /* (2) NF is the LEFT-nested word (a/b)/c. */
+    xii_term_arena_reset()
+    let rin : u32 = xlu_under(xlu_atom(1u32), xlu_under(xlu_atom(2u32), xlu_atom(3u32)))
+    let lword : u32 = xlu_under(xlu_under(xlu_atom(1u32), xlu_atom(2u32)), xlu_atom(3u32))
+    let nrin : u32 = xlu_eval(rin)
+    if xii_rewrite_struct_eq(nrin, lword) != 1u8 { return 2u64 }
+
+    /* (3) route-S: FUNDER left-association is STRUCTURAL.  xlu_under (make_fusion2) builds the
+     * LEFT-nested form a/(b/c) -> (a/b)/c AT CONSTRUCTION (R004 retired), so the raw input already
+     * EQUALS the left-nested word (a/b)/c and xlu_eval is a fixpoint on it.  The "teeth" is now the
+     * constructor itself: left-nesting happens with ZERO rewrite steps (the strongest form of the law). */
+    xii_term_arena_reset()
+    let rin2 : u32 = xlu_under(xlu_atom(1u32), xlu_under(xlu_atom(2u32), xlu_atom(3u32)))
+    let lword2 : u32 = xlu_under(xlu_under(xlu_atom(1u32), xlu_atom(2u32)), xlu_atom(3u32))
+    if xii_rewrite_struct_eq(rin2, lword2) != 1u8 { return 3u64 }   /* constructor already left-nested */
+    let nrin2 : u32 = xlu_eval(rin2)
+    if xii_rewrite_struct_eq(nrin2, rin2) != 1u8 { return 8u64 }    /* eval is a fixpoint (already canonical) */
+
+    /* (4) RIGHT zero (R039): a/e -> e. */
+    xii_term_arena_reset()
+    let ae : u32 = xlu_under(xlu_atom(1u32), xlu_zero())
+    let e4 : u32 = xlu_zero()
+    let nae : u32 = xlu_eval(ae)
+    if xii_rewrite_struct_eq(nae, e4) != 1u8 { return 4u64 }
+
+    /* (5) NO LEFT IDENTITY (keystone teeth): e/a does NOT reduce to a (FUNDER has a right zero but
+     * no left identity) -- contrast with a/e -> e above.  canon(e/a) stays the FUNDER term != a. */
+    xii_term_arena_reset()
+    let ea : u32 = xlu_under(xlu_zero(), xlu_atom(1u32))
+    let a5 : u32 = xlu_atom(1u32)
+    let nea : u32 = xlu_eval(ea)
+    if xii_rewrite_struct_eq(nea, a5) != 0u8 { return 5u64 }
+
+    /* (6) DETERMINISM. */
+    xii_term_arena_reset()
+    let d1 : u32 = xlu_under(xlu_atom(1u32), xlu_under(xlu_atom(2u32), xlu_atom(3u32)))
+    let d2 : u32 = xlu_under(xlu_atom(1u32), xlu_under(xlu_atom(2u32), xlu_atom(3u32)))
+    let nd1 : u32 = xlu_eval(d1)
+    let nd2 : u32 = xlu_eval(d2)
+    if xii_rewrite_struct_eq(nd1, nd2) != 1u8 { return 6u64 }
+
+    /* (7) ADMITTED (Step 6). */
+    if xad_admit() != 1u32 { return 7u64 }
+
+    return 99u64
+}
+
+/* xii_lower_under EMBODIES the SCOPING operator lowered onto XII: "a under b" is FUNDER, it LEFT-nests
+ * (R004, opposite to FCOMPOSE/FTHEN), the empty scope K06 is a RIGHT zero (R039) with no left
+ * identity, and the engine's own rules ARE that structure.  The fourth and last distinct composition
+ * algebra -- two monoids (FCOMPOSE/FTHEN), one left-unital-right-absorbing (FWITH), one left-assoc-
+ * right-absorbing (FUNDER) -- completing the lowering of every binary fusion operator; Step-6-admitted. */

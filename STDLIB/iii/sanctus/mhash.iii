@@ -1,0 +1,81 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\mhash.iii
+ *
+ * III STDLIB - sanctus::mhash
+ *
+ * Domain-separated SHA-256 with a streaming API (the Crown).
+ *
+ * FOLDED INTO numera/cad.iii (Module 1, apotheosis): mhash_* are thin,
+ * BYTE-IDENTICAL delegations to the one suite-tagged content-address primitive
+ * (cad, SHA-256 Crown suite).  cad_domain replicates the exact 0x00-separator
+ * discipline (sha256_update + sha256_update_byte(0), the &GLOBAL[0] workaround),
+ * so every digest is unchanged for the 22 mhash consumers.  The public mhash_*
+ * surface + all DOM_* domain constants are preserved.
+ *
+ * Discipline:
+ *   1. mhash_begin()
+ *   2. mhash_domain(d, dlen)        // optional, may be skipped
+ *   3. mhash_payload(p, plen)       // may be called multiple times
+ *   4. mhash_final(out)
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.  NIH: cad.iii (-> sha256.iii).
+ */
+
+module sanctus_mhash
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_domain(domain: u64, domain_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+const MHASH_OK     : i32 = 0i32
+const MHASH_E_NULL : i32 = -1i32
+const MHASH_SHA_SUITE : u32 = 0u32   /* cad CAD_SUITE_SHA256 (the Crown suite) */
+
+/* Resolver mhash domain strings (FROZEN SPEC §0.10, ADR-RES-013).
+ * Each is exactly 16 bytes; NUL-padded. Used as input to SHA-256
+ * via mhash_domain() for resolution witness mhash composition.
+ */
+const DOM_RESOLVE_OK_LEN     : u64 = 16u64
+const DOM_RESOLVE_FAIL_LEN   : u64 = 16u64
+const DOM_RESOLVE_AMBIG_LEN  : u64 = 16u64
+const DOM_RESOLVE_KUF_LEN    : u64 = 16u64
+const DOM_RESOLVE_TAMPER_LEN : u64 = 16u64
+
+var DOM_RESOLVE_OK     : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 79u8, 75u8, 0u8, 0u8]
+var DOM_RESOLVE_FAIL   : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 70u8, 65u8, 73u8, 76u8]
+var DOM_RESOLVE_AMBIG  : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 65u8, 77u8, 66u8, 71u8]
+var DOM_RESOLVE_KUF    : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 75u8, 85u8, 70u8, 0u8]
+var DOM_RESOLVE_TAMPER : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 84u8, 65u8, 77u8, 80u8]
+
+/* Babel envelope mhash domain (ADR-RES-007). 16 bytes, NUL-padded. */
+const DOM_BABEL_ENV_V1_LEN : u64 = 16u64
+var DOM_BABEL_ENV_V1 : [u8; 16] = [66u8, 65u8, 66u8, 69u8, 76u8, 95u8, 69u8, 78u8, 86u8, 95u8, 86u8, 49u8, 0u8, 0u8, 0u8, 0u8]
+
+/* Resolver-internal mhash domains: identity, binding, intent, ctx, arena_intent.
+ * 16 bytes each, NUL-padded. */
+var DOM_PAT_ID         : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 80u8, 65u8, 84u8, 95u8, 73u8, 68u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]
+var DOM_RESOLVE_BIND   : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 66u8, 73u8, 78u8, 68u8]
+var DOM_RESOLVE_MSG    : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 77u8, 83u8, 71u8, 0u8]
+var DOM_CTX_ID         : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 67u8, 67u8, 84u8, 88u8, 95u8, 73u8, 68u8, 0u8, 0u8, 0u8, 0u8, 0u8]
+var DOM_CTX_DIG        : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 67u8, 67u8, 84u8, 88u8, 95u8, 68u8, 73u8, 71u8, 0u8, 0u8, 0u8, 0u8]
+var DOM_ARENA_INTENT   : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 65u8, 82u8, 69u8, 78u8, 65u8, 95u8, 73u8, 78u8, 84u8, 69u8, 78u8, 84u8]
+var DOM_TX_SITE        : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 84u8, 88u8, 70u8, 95u8, 83u8, 73u8, 84u8, 69u8, 0u8, 0u8, 0u8, 0u8]
+var DOM_PAT_TABLE      : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 80u8, 65u8, 84u8, 95u8, 84u8, 65u8, 66u8, 76u8, 69u8, 0u8, 0u8, 0u8]
+var DOM_SEAL_RESOLVER  : [u8; 16] = [83u8, 69u8, 65u8, 76u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 82u8, 0u8, 0u8, 0u8]
+var DOM_RIPPLE_EQ_PTN  : [u8; 16] = [114u8, 105u8, 112u8, 112u8, 108u8, 101u8, 95u8, 101u8, 113u8, 117u8, 105u8, 118u8, 95u8, 112u8, 116u8, 110u8]
+
+fn mhash_begin() -> i32 @export {
+    return cad_begin(MHASH_SHA_SUITE)
+}
+
+fn mhash_domain(domain: u64, domain_len: u64) -> i32 @export {
+    return cad_domain(domain, domain_len)
+}
+
+fn mhash_payload(payload: u64, payload_len: u64) -> i32 @export {
+    return cad_payload(payload, payload_len)
+}
+
+fn mhash_final(out_32: u64) -> i32 @export {
+    return cad_final(out_32)
+}

@@ -1,0 +1,113 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\proof_ripple.iii
+ *
+ * III STDLIB - omnia::proof_ripple -- equivalence certificates for the
+ * Living Sealed Lattice ripple engine.
+ *
+ * Lattice plan Step 0019.  Provides the runtime user-mode counterpart
+ * to COMPILER/BOOT/proof.iii's compile-time certificate machinery.
+ *
+ *   proof_ripple_equivalence(old_id, new_id, corpus_witness_ptr) -> u64
+ *      Mints a crystal whose site_hash binds:
+ *          - the domain literal "ripple_equiv"
+ *          - old crystal_id (8 bytes LE)
+ *          - new crystal_id (8 bytes LE)
+ *          - 32-byte corpus witness mhash (caller-supplied)
+ *      Returns the crystal_id.  The crystal can be `crystal_verify`'d
+ *      later to confirm the equivalence binding has not been forged.
+ *
+ *   proof_ripple_verify(cert_id, old_id, new_id, corpus_witness_ptr) -> u8
+ *      Returns 1 iff the cert's site_hash matches a freshly recomputed
+ *      hash from the same inputs (and crystal_verify on cert succeeds).
+ *
+ * Hexad: kind_form (proof = sealed evidence).  Ring: R0.  K: 1.00.
+ */
+
+module omnia_proof_ripple
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_site_byte(id: u64, i: u32) -> u32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const PROOF_RIPPLE_INVALID  : u64 = 0u64
+const PROOF_RIPPLE_KIND     : u32 = 0xE001u32       /* informational error code */
+
+var PR_DOMAIN     : [u8; 12]   /* "ripple_equiv" */
+var PR_DOMAIN_INIT : u8 = 0u8
+var PR_OLD_BUF    : [u8; 8]
+var PR_NEW_BUF    : [u8; 8]
+var PR_SITE       : [u8; 32]
+var PR_RECHECK    : [u8; 32]
+
+fn pr_init_domain() -> u32 {
+    if PR_DOMAIN_INIT == 1u8 { return 0u32 }
+    PR_DOMAIN[0u64]  = 114u8     /* r */
+    PR_DOMAIN[1u64]  = 105u8     /* i */
+    PR_DOMAIN[2u64]  = 112u8     /* p */
+    PR_DOMAIN[3u64]  = 112u8     /* p */
+    PR_DOMAIN[4u64]  = 108u8     /* l */
+    PR_DOMAIN[5u64]  = 101u8     /* e */
+    PR_DOMAIN[6u64]  =  95u8     /* _ */
+    PR_DOMAIN[7u64]  = 101u8     /* e */
+    PR_DOMAIN[8u64]  = 113u8     /* q */
+    PR_DOMAIN[9u64]  = 117u8     /* u */
+    PR_DOMAIN[10u64] = 105u8     /* i */
+    PR_DOMAIN[11u64] = 118u8     /* v */
+    PR_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+fn pr_pack_u64(buf_addr: u64, v: u64) -> u32 {
+    let p : *u8 = buf_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn proof_ripple_equivalence(old_id: u64, new_id: u64, corpus_witness_ptr: u64) -> u64 @export {
+    if corpus_witness_ptr == 0u64 { return PROOF_RIPPLE_INVALID }
+    pr_init_domain()
+    pr_pack_u64(&PR_OLD_BUF as u64, old_id)
+    pr_pack_u64(&PR_NEW_BUF as u64, new_id)
+    mhash_begin()
+    mhash_domain(&PR_DOMAIN as u64, 12u64)
+    mhash_payload(&PR_OLD_BUF as u64, 8u64)
+    mhash_payload(&PR_NEW_BUF as u64, 8u64)
+    mhash_payload(corpus_witness_ptr, 32u64)
+    mhash_final(&PR_SITE as u64)
+    return crystal_mint(PROOF_RIPPLE_KIND, &PR_SITE as u64, 0u64, new_id)
+}
+
+fn proof_ripple_verify(cert_id: u64, old_id: u64, new_id: u64, corpus_witness_ptr: u64) -> u8 @export {
+    if cert_id == 0u64 { return 0u8 }
+    if corpus_witness_ptr == 0u64 { return 0u8 }
+    if crystal_verify(cert_id) != 1u8 { return 0u8 }
+    pr_init_domain()
+    pr_pack_u64(&PR_OLD_BUF as u64, old_id)
+    pr_pack_u64(&PR_NEW_BUF as u64, new_id)
+    mhash_begin()
+    mhash_domain(&PR_DOMAIN as u64, 12u64)
+    mhash_payload(&PR_OLD_BUF as u64, 8u64)
+    mhash_payload(&PR_NEW_BUF as u64, 8u64)
+    mhash_payload(corpus_witness_ptr, 32u64)
+    mhash_final(&PR_RECHECK as u64)
+    /* Compare PR_RECHECK against the cert's stored site_hash byte-by-byte. */
+    let mut i : u32 = 0u32
+    let mut diff : u8 = 0u8
+    while i < 32u32 {
+        let stored : u32 = crystal_site_byte(cert_id, i)
+        let fresh  : u8  = PR_RECHECK[i as u64]
+        if stored != (fresh as u32) { diff = 1u8 }
+        i = i + 1u32
+    }
+    if diff == 1u8 { return 0u8 }
+    return 1u8
+}

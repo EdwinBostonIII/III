@@ -1,0 +1,12 @@
+/* Lattice plan Step 0002: @crystal modifier is parser-recognized,
+ * sema-accepted, codegen no-op.  A function tagged with @crystal
+ * compiles and runs identically to the un-tagged version. */
+module corpus_98
+
+fn answer() -> u64 @crystal {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return answer()
+}

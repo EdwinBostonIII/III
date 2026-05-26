@@ -1,0 +1,302 @@
+/* STDLIB/iii/omnia/xii_rule_patterns.iii -- mig4 Step 1: declarative rule LHS patterns.
+ *
+ * Turns the 49 hand-coded matchers (match_R001..R044 + match_TRIT_* in xii_rewrite.iii)
+ * into DATA: a structural LHS pattern per rule that a unifier (Step 2) can overlap-test
+ * for critical-pair enumeration (Step 3).  Per DOCS/III-MIG4-STEP1-SPEC.md the
+ * declarative LHS captures only term STRUCTURE -- root kind + each child's required kind
+ * -- because overlap detection needs structure, not the side-conditions; the guards
+ * (struct_eq, cap, bit-field, table, subform sentinels) and the RHS stay in the engine,
+ * referenced not re-implemented.  Faithfulness is therefore a SOUND OVER-APPROXIMATION:
+ * wherever the hand matcher fires, the structural pattern matches (pattern is a superset of
+ * Step 3 enumerates AT LEAST every real overlap (never misses a critical pair) and Step 4
+ * checks joinability on concrete instances.  This is an ADDITIVE module -- it changes no
+ * engine behaviour; the cascade keeps using its matchers (differential gate stays green).
+ *
+ * Descriptor per rule: (rule_id, root_kind, child_a_kind, child_b_kind, child_c_kind),
+ * where a child kind = XRP_ANY (unconstrained / free pattern variable) or a specific XII
+ * kind.  Depth-1 child-kind constraints suffice for all 49 (a nested-fusion constraint
+ * like R001's "child_a is FCOMPOSE" is captured as ca_kind=FCOMPOSE with its grandchildren
+ * free -- the sound over-approximation).
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite only.
+ * Determinism: integer-only; u64 descriptor arrays (Trap 19-safe); masked indices;
+ * ==/!= compares; single-line fns; explicit slot scan (no recursion).
+ */
+module omnia_xii_rule_patterns
+
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+const XRP_N         : u32 = 45u32   /* route-S: R001-R004 retired (was 49); associativity is structural */
+const XRP_ANY       : u64 = 255u64           /* child kind: unconstrained / free variable */
+const XRP_NULL_REF  : u32 = 0xFFFFFFFFu32
+const XRP_SENT      : u32 = 0xFFFFFFFFu32
+const XRP_U32MASK   : u64 = 0xFFFFFFFFu64
+/* XII kinds (mirror xii_rewrite's XRW_*; basis 0-17, fusion 18-23, trit 24-29) */
+const XRP_K01 : u64 = 0u64    const XRP_K04 : u64 = 3u64    const XRP_K05 : u64 = 4u64
+const XRP_K06 : u64 = 5u64    const XRP_K07 : u64 = 6u64    const XRP_K08 : u64 = 7u64
+const XRP_K09 : u64 = 8u64    const XRP_K10 : u64 = 9u64    const XRP_K11 : u64 = 10u64
+const XRP_K12 : u64 = 11u64   const XRP_K17 : u64 = 16u64   const XRP_K18 : u64 = 17u64
+const XRP_FCOMPOSE : u64 = 18u64  const XRP_FTHEN : u64 = 19u64  const XRP_FWITH : u64 = 20u64
+const XRP_FUNDER : u64 = 21u64    const XRP_FIF : u64 = 22u64    const XRP_FLOOP : u64 = 23u64
+const XRP_TVAL : u64 = 24u64   const XRP_TNOT : u64 = 25u64   const XRP_TAND : u64 = 26u64
+const XRP_TOR : u64 = 27u64    const XRP_TSUM : u64 = 28u64   const XRP_TMUL : u64 = 29u64
+/* subform sentinels (for the KAT witnesses; these are guard refinements, not structure) */
+const XRP_NULLGROUND : u32 = 0xFFFFFFFFu32   const XRP_TRIVLIFT : u32 = 0xFFFFFFFDu32
+
+var XRP_RID  : [u64; 49]
+var XRP_ROOT : [u64; 49]
+var XRP_CA   : [u64; 49]
+var XRP_CB   : [u64; 49]
+var XRP_CC   : [u64; 49]
+
+fn _xrp_set(slot: u64, rid: u64, root: u64, ca: u64, cb: u64, cc: u64) -> i32 {
+    XRP_RID[slot] = rid
+    XRP_ROOT[slot] = root
+    XRP_CA[slot] = ca
+    XRP_CB[slot] = cb
+    XRP_CC[slot] = cc
+    return 0i32
+}
+
+/* Fill the 45-rule structural descriptor table (route-S: R001-R004 RETIRED -- associativity is
+ * structural at xii_term.make_fusion2, so the 4 associativity rules are gone). Rows verified
+ * against xii_rewrite.iii's match_R005..R044 + match_TRIT_*. Slots auto-assign 0..44 via _xrp_add's
+ * running counter -- no manual slot numbers, so no renumbering error. */
+fn _xrp_add(s: u64, rid: u64, root: u64, ca: u64, cb: u64, cc: u64) -> u64 {
+    _xrp_set(s, rid, root, ca, cb, cc)
+    return s + 1u64
+}
+
+fn _xrp_fill() {
+    let mut s : u64 = 0u64
+    s = _xrp_add(s, 5u64,   XRP_FIF,      XRP_ANY,      XRP_FTHEN,    XRP_FTHEN)
+    s = _xrp_add(s, 6u64,   XRP_FIF,      XRP_ANY,      XRP_FTHEN,    XRP_FTHEN)
+    s = _xrp_add(s, 7u64,   XRP_FIF,      XRP_ANY,      XRP_FCOMPOSE, XRP_FCOMPOSE)
+    s = _xrp_add(s, 8u64,   XRP_FIF,      XRP_ANY,      XRP_FCOMPOSE, XRP_FCOMPOSE)
+    s = _xrp_add(s, 9u64,   XRP_FIF,      XRP_ANY,      XRP_FWITH,    XRP_FWITH)
+    s = _xrp_add(s, 10u64,  XRP_FIF,      XRP_ANY,      XRP_FWITH,    XRP_FWITH)
+    s = _xrp_add(s, 11u64,  XRP_FIF,      XRP_ANY,      XRP_FUNDER,   XRP_FUNDER)
+    s = _xrp_add(s, 12u64,  XRP_FIF,      XRP_ANY,      XRP_FUNDER,   XRP_FUNDER)
+    s = _xrp_add(s, 13u64,  XRP_FLOOP,    XRP_ANY,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 14u64,  XRP_FLOOP,    XRP_FLOOP,    XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 15u64,  XRP_FLOOP,    XRP_FCOMPOSE, XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 16u64,  XRP_FWITH,    XRP_K06,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 17u64,  XRP_FCOMPOSE, XRP_ANY,      XRP_K06,      XRP_ANY)
+    s = _xrp_add(s, 18u64,  XRP_FIF,      XRP_K01,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 19u64,  XRP_FIF,      XRP_K01,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 20u64,  XRP_FUNDER,   XRP_K10,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 21u64,  XRP_FTHEN,    XRP_K12,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 22u64,  XRP_FTHEN,    XRP_ANY,      XRP_K12,      XRP_ANY)
+    s = _xrp_add(s, 23u64,  XRP_FCOMPOSE, XRP_K10,      XRP_K10,      XRP_ANY)
+    s = _xrp_add(s, 24u64,  XRP_FTHEN,    XRP_K17,      XRP_K17,      XRP_ANY)
+    s = _xrp_add(s, 25u64,  XRP_K17,      XRP_ANY,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 26u64,  XRP_FTHEN,    XRP_K06,      XRP_K07,      XRP_ANY)
+    s = _xrp_add(s, 27u64,  XRP_FCOMPOSE, XRP_K07,      XRP_K08,      XRP_ANY)
+    s = _xrp_add(s, 28u64,  XRP_FCOMPOSE, XRP_K05,      XRP_K05,      XRP_ANY)
+    s = _xrp_add(s, 29u64,  XRP_FTHEN,    XRP_K05,      XRP_K05,      XRP_ANY)
+    s = _xrp_add(s, 30u64,  XRP_FIF,      XRP_ANY,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 31u64,  XRP_FTHEN,    XRP_K04,      XRP_K04,      XRP_ANY)
+    s = _xrp_add(s, 32u64,  XRP_FCOMPOSE, XRP_K01,      XRP_K01,      XRP_ANY)
+    s = _xrp_add(s, 33u64,  XRP_FCOMPOSE, XRP_K09,      XRP_K09,      XRP_ANY)
+    s = _xrp_add(s, 34u64,  XRP_FCOMPOSE, XRP_K18,      XRP_K18,      XRP_ANY)
+    s = _xrp_add(s, 35u64,  XRP_FTHEN,    XRP_K11,      XRP_K11,      XRP_ANY)
+    s = _xrp_add(s, 36u64,  XRP_FWITH,    XRP_ANY,      XRP_K06,      XRP_ANY)
+    s = _xrp_add(s, 37u64,  XRP_FCOMPOSE, XRP_K06,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 38u64,  XRP_FCOMPOSE, XRP_K06,      XRP_K06,      XRP_ANY)
+    s = _xrp_add(s, 39u64,  XRP_FUNDER,   XRP_ANY,      XRP_K06,      XRP_ANY)
+    s = _xrp_add(s, 40u64,  XRP_FIF,      XRP_ANY,      XRP_K06,      XRP_K06)
+    s = _xrp_add(s, 41u64,  XRP_FLOOP,    XRP_K06,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 42u64,  XRP_FCOMPOSE, XRP_K01,      XRP_FCOMPOSE, XRP_ANY)
+    s = _xrp_add(s, 43u64,  XRP_FTHEN,    XRP_K17,      XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 44u64,  XRP_FTHEN,    XRP_ANY,      XRP_K17,      XRP_ANY)
+    s = _xrp_add(s, 101u64, XRP_TNOT,     XRP_TVAL,     XRP_ANY,      XRP_ANY)
+    s = _xrp_add(s, 102u64, XRP_TAND,     XRP_TVAL,     XRP_TVAL,     XRP_ANY)
+    s = _xrp_add(s, 103u64, XRP_TOR,      XRP_TVAL,     XRP_TVAL,     XRP_ANY)
+    s = _xrp_add(s, 104u64, XRP_TSUM,     XRP_TVAL,     XRP_TVAL,     XRP_ANY)
+    s = _xrp_add(s, 105u64, XRP_TMUL,     XRP_TVAL,     XRP_TVAL,     XRP_ANY)
+}
+
+fn _xrp_ensure() {
+    if XRP_RID[0u64] == 0u64 { _xrp_fill() }
+}
+
+/* slot holding rule_id, or XRP_SENT. */
+fn _xrp_slot(rid: u32) -> u32 {
+    _xrp_ensure()
+    let r : u64 = (rid as u64) & XRP_U32MASK
+    let mut i : u64 = 0u64
+    while i < 49u64 {
+        if XRP_RID[i] == r { return i as u32 }
+        i = i + 1u64
+    }
+    return XRP_SENT
+}
+
+/* a child satisfies a kind constraint: ANY always; else not-NULL and kind matches. */
+fn _xrp_child_ok(child: u32, kc: u64) -> u8 {
+    if kc == XRP_ANY { return 1u8 }
+    if child == XRP_NULL_REF { return 0u8 }
+    if (xii_term_get_kind(child) as u64) == kc { return 1u8 }
+    return 0u8
+}
+
+/* Structural LHS match: 1 iff t's root kind + each child's kind satisfy rule rid's
+ * descriptor.  Read-only; a sound over-approximation of match_Rrid (guards excluded). */
+fn xrp_struct_match(rid: u32, t: u32) -> u8 @export {
+    if t == XRP_NULL_REF { return 0u8 }
+    let slot : u32 = _xrp_slot(rid)
+    if slot == XRP_SENT { return 0u8 }
+    let sb : u64 = (slot as u64) & XRP_U32MASK
+    if (xii_term_get_kind(t) as u64) != XRP_ROOT[sb] { return 0u8 }
+    if _xrp_child_ok(xii_term_get_child_a(t), XRP_CA[sb]) == 0u8 { return 0u8 }
+    if _xrp_child_ok(xii_term_get_child_b(t), XRP_CB[sb]) == 0u8 { return 0u8 }
+    if _xrp_child_ok(xii_term_get_child_c(t), XRP_CC[sb]) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* --- descriptor accessors (the Step-2 unifier reads the patterns through these) --- */
+fn xrp_rule_count() -> u32 @export { _xrp_ensure()  return XRP_N }
+fn xrp_rid_at(slot: u32) -> u32 @export { _xrp_ensure()  if slot >= XRP_N { return XRP_SENT }  return (XRP_RID[(slot as u64) & XRP_U32MASK] & XRP_U32MASK) as u32 }
+fn xrp_root_at(slot: u32) -> u32 @export { _xrp_ensure()  if slot >= XRP_N { return XRP_SENT }  return (XRP_ROOT[(slot as u64) & XRP_U32MASK] & XRP_U32MASK) as u32 }
+fn xrp_ca_at(slot: u32) -> u32 @export { _xrp_ensure()  if slot >= XRP_N { return XRP_SENT }  return (XRP_CA[(slot as u64) & XRP_U32MASK] & XRP_U32MASK) as u32 }
+fn xrp_cb_at(slot: u32) -> u32 @export { _xrp_ensure()  if slot >= XRP_N { return XRP_SENT }  return (XRP_CB[(slot as u64) & XRP_U32MASK] & XRP_U32MASK) as u32 }
+fn xrp_cc_at(slot: u32) -> u32 @export { _xrp_ensure()  if slot >= XRP_N { return XRP_SENT }  return (XRP_CC[(slot as u64) & XRP_U32MASK] & XRP_U32MASK) as u32 }
+
+/* Faithfulness check on one witness: struct-match BEFORE the (possibly mutating) hand
+ * apply; then confirm the hand rule fired AND the structural pattern matched (superset).
+ * Returns 1 = ok; 2 = the witness did not fire the hand rule (bad witness); 3 = hand
+ * fired but the structural pattern MISSED it (a real faithfulness failure). */
+fn _xrp_check(rid: u32, t: u32) -> u8 {
+    let sm : u8 = xrp_struct_match(rid, t)
+    xii_rewrite_apply_specific(rid, t)
+    if xii_rewrite_last_rule_fired() != rid { return 2u8 }
+    if sm != 1u8 { return 3u8 }
+    return 1u8
+}
+
+/* a minimal term of XII kind k: a basis leaf for basis/trit-val kinds, else a node of that
+ * kind with leaf children (struct_match checks only the kind, so leaf children suffice to
+ * witness the kind constraint).  Defined before its caller _xrp_child_or_leaf. */
+fn _xrp_make_kind(k: u64) -> u32 {
+    if k <= 17u64 { return xii_term_make_basis(k as u8, 0u32) }
+    if k == 24u64 { return xii_term_make_basis(24u8, 1u32) }
+    if k == 22u64 { return xii_term_make_if(xii_term_make_basis(0u8, 0u32), xii_term_make_basis(0u8, 0u32), xii_term_make_basis(0u8, 0u32)) }
+    if k == 23u64 { return xii_term_make_loop(xii_term_make_basis(0u8, 0u32), 0u64) }
+    return xii_term_make_fusion2(k as u8, xii_term_make_basis(0u8, 0u32), xii_term_make_basis(0u8, 0u32))
+}
+
+/* a typed child of kind kc, or a generic FORM leaf when kc is ANY. */
+fn _xrp_child_or_leaf(kc: u64) -> u32 {
+    if kc == XRP_ANY { return xii_term_make_basis(0u8, 0u32) }
+    return _xrp_make_kind(kc)
+}
+
+/* a term matching descriptor[slot] exactly: root kind + each constrained child's kind (ANY
+ * children get a generic leaf).  Witnesses that the matcher ACCEPTS the rule's shape. */
+fn _xrp_shape_term(slot: u64) -> u32 {
+    let root : u64 = XRP_ROOT[slot]
+    if root <= 17u64 { return xii_term_make_basis(root as u8, 0u32) }
+    if root == 24u64 { return xii_term_make_basis(24u8, 1u32) }
+    let child_a : u32 = _xrp_child_or_leaf(XRP_CA[slot])
+    let child_b : u32 = _xrp_child_or_leaf(XRP_CB[slot])
+    if root == 22u64 { return xii_term_make_if(child_a, child_b, _xrp_child_or_leaf(XRP_CC[slot])) }
+    if root == 23u64 { return xii_term_make_loop(child_a, 0u64) }
+    return xii_term_make_fusion2(root as u8, child_a, child_b)
+}
+
+fn xrp_selftest() -> u64 @export {
+    _xrp_ensure()
+    /* structural integrity: full table, first/last rids correct, roots in range */
+    if xrp_rule_count() != 45u32 { return 1u64 }
+    if XRP_RID[0u64] != 5u64 { return 2u64 }       /* route-S: R001-R004 retired; first rule is now R005 */
+    if XRP_RID[39u64] != 44u64 { return 3u64 }     /* last R-rule R044 at slot 39 (40 R-rules, 5..44) */
+    if XRP_RID[44u64] != 105u64 { return 4u64 }    /* last trit rule R105 at slot 44 */
+    let mut i : u64 = 0u64
+    while i < 45u64 {
+        if XRP_ROOT[i] > 29u64 { return 5u64 }       /* every root is a valid XII kind */
+        i = i + 1u64
+    }
+
+    /* shape-acceptance over ALL 45 rows: build a term matching each descriptor exactly and
+     * assert the matcher accepts it -- exercises every row, covering R025's basis root, the FIF
+     * double-branch family (R005-R012, R040), and R042's nested fusion.  Returns 40+slot on reject. */
+    let mut s : u64 = 0u64
+    while s < 45u64 {
+        xii_term_arena_reset()
+        let rid_s : u32 = (XRP_RID[s] & XRP_U32MASK) as u32
+        if xrp_struct_match(rid_s, _xrp_shape_term(s)) != 1u8 { return 40u64 + s }
+        s = s + 1u64
+    }
+
+    /* faithfulness battery: per shape, a hand-firing witness must also structurally match.
+     * apply_specific isolates the single rule, so cascade order is irrelevant here. (R001-R004
+     * retired under route S -- associativity is structural at xii_term.make_fusion2 -- so there is
+     * no R001 faithfulness witness; R005+ are unaffected.) */
+    let f1 : u32 = 1u32       /* a generic FORM subform value, reused across witnesses */
+    /* R017 null-right identity: FCOMPOSE(F, K06_NULL) */
+    xii_term_arena_reset()
+    let a17 : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(0u8, f1), xii_term_make_basis(5u8, XRP_NULLGROUND))
+    if _xrp_check(17u32, a17) != 1u8 { return 11u64 }
+    /* R032 FORM sort: FCOMPOSE(FORM(5), FORM(2)) -- 5 > 2 fires */
+    xii_term_arena_reset()
+    let a32 : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(0u8, 5u32), xii_term_make_basis(0u8, 2u32))
+    if _xrp_check(32u32, a32) != 1u8 { return 12u64 }
+    /* R033 idempotent QUERY: FCOMPOSE(QUERY(7), QUERY(7)) */
+    xii_term_arena_reset()
+    let a33 : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(8u8, 7u32), xii_term_make_basis(8u8, 7u32))
+    if _xrp_check(33u32, a33) != 1u8 { return 13u64 }
+    /* R037 null-left: FCOMPOSE(K06_NULL, F) */
+    xii_term_arena_reset()
+    let a37 : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(5u8, XRP_NULLGROUND), xii_term_make_basis(0u8, f1))
+    if _xrp_check(37u32, a37) != 1u8 { return 14u64 }
+    /* R038 null-both: FCOMPOSE(K06_NULL, K06_NULL) */
+    xii_term_arena_reset()
+    let a38 : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(5u8, XRP_NULLGROUND), xii_term_make_basis(5u8, XRP_NULLGROUND))
+    if _xrp_check(38u32, a38) != 1u8 { return 15u64 }
+    /* R021 then-null left: FTHEN(K12_NULL, F) */
+    xii_term_arena_reset()
+    let a21 : u32 = xii_term_make_fusion2(19u8, xii_term_make_basis(11u8, XRP_NULLGROUND), xii_term_make_basis(0u8, f1))
+    if _xrp_check(21u32, a21) != 1u8 { return 16u64 }
+    /* R044 trivial-lift right identity: FTHEN(F, LIFT_TRIVIAL) */
+    xii_term_arena_reset()
+    let a44 : u32 = xii_term_make_fusion2(19u8, xii_term_make_basis(0u8, f1), xii_term_make_basis(16u8, XRP_TRIVLIFT))
+    if _xrp_check(44u32, a44) != 1u8 { return 17u64 }
+    /* R013 loop-unit: FLOOP(F, 1) */
+    xii_term_arena_reset()
+    let a13 : u32 = xii_term_make_loop(xii_term_make_basis(0u8, f1), 1u64)
+    if _xrp_check(13u32, a13) != 1u8 { return 18u64 }
+    /* R101 TRIT_NOT(VAL) [unary] */
+    xii_term_arena_reset()
+    let a101 : u32 = xii_term_make_fusion2(25u8, xii_term_make_basis(24u8, 1u32), xii_term_make_basis(24u8, 1u32))
+    if _xrp_check(101u32, a101) != 1u8 { return 19u64 }
+    /* R102 TRIT_AND(VAL,VAL) */
+    xii_term_arena_reset()
+    let a102 : u32 = xii_term_make_fusion2(26u8, xii_term_make_basis(24u8, 2u32), xii_term_make_basis(24u8, 0u32))
+    if _xrp_check(102u32, a102) != 1u8 { return 20u64 }
+
+    /* NEGATIVE arms: structure that the pattern must REJECT (prove the matcher discriminates). */
+    xii_term_arena_reset()
+    let nv : u32 = xii_term_make_basis(24u8, 1u32)        /* a bare TRIT_VAL: no rule's root */
+    if xrp_struct_match(7u32, nv) != 0u8 { return 30u64 }    /* R007 root is FIF, not VAL (R001 retired) */
+    if xrp_struct_match(102u32, nv) != 0u8 { return 31u64 }  /* R102 root is TRIT_AND, not VAL */
+    /* a FCOMPOSE(FORM,FORM): R007 (root FIF) rejects by root; R017 (cb=K06) rejects because child_b
+     * is FORM, not K06 -- proving the matcher discriminates on both root and child kind. */
+    xii_term_arena_reset()
+    let ff : u32 = xii_term_make_fusion2(18u8, xii_term_make_basis(0u8, f1), xii_term_make_basis(0u8, f1))
+    if xrp_struct_match(7u32, ff) != 0u8 { return 32u64 }    /* R007 root FIF != FCOMPOSE */
+    if xrp_struct_match(17u32, ff) != 0u8 { return 33u64 }   /* R017 child_b FORM != K06 */
+    /* unknown rule id -> no slot -> no match */
+    if xrp_struct_match(777u32, ff) != 0u8 { return 34u64 }
+
+    return 99u64
+}

@@ -1,0 +1,311 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\call_context.iii
+ *
+ * III STDLIB - omnia::call_context
+ *
+ * First-class call context for resolution.
+ * FROZEN SPEC sec 2.1.3, sec Z.C.1.
+ *
+ * ALSO: the canonical L0 (implicit) provenance representation per the
+ * Intent Calculus v1.0 three-level lazy-crystal architecture
+ * (sanctus/calculus_v1.iii sec provenance levels). The L0 fields live
+ * at the existing struct offsets:
+ *
+ *   off  field
+ *    8..39  provenance_root_bytes (32 bytes, copied from witness root)
+ *    40     kchain_id            (u8)
+ *    64..71 caller_pattern_id    (u64)
+ *    80..81 recursion_depth_hi    (high u16 of u64 at offset 80)
+ *
+ * No additional bytes are required for L0 -- the call_context_t
+ * already carries the full L0 provenance state. The
+ * call_context_l0_provenance_hash accessor emits an 8-byte hash
+ * (SHA-256 truncated) over the canonical L0 fields, used by reflect
+ * to upgrade L0 -> L1 on demand without minting a full crystal.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 1.00.
+ */
+
+module omnia_call_context
+
+extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn witness_root_byte(i: u32) -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const CC_BYTES         : u32 = 96u32
+const CC_TABLE_CAP     : u32 = 512u32
+
+var g_cc_table : [u8; 49152]
+var g_cc_used  : u32 = 0u32
+
+const CC_OK : i32 = 0i32
+
+var DOM_CCTX_ID : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 67u8, 67u8, 84u8, 88u8, 95u8, 73u8, 68u8, 0u8, 0u8, 0u8, 0u8, 0u8]
+var DOM_CCTX_DIG : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 67u8, 67u8, 84u8, 88u8, 95u8, 68u8, 73u8, 71u8, 0u8, 0u8, 0u8, 0u8]
+
+var CC_IDX_BYTES : [u8; 4]
+var CC_CAP_BYTES : [u8; 8]
+var CC_OUT_32 : [u8; 32]
+
+var CC_INIT_CAP_ID : u64 = 0u64
+var CC_INIT_KCHAIN_ID : u8 = 0u8
+var CC_INIT_RING : u8 = 0u8
+var CC_INIT_HEXAD_KIND : u8 = 0u8
+var CC_INIT_ARENA_ID : u64 = 0u64
+var CC_INIT_DEPTH : u16 = 0u16
+
+fn write_u32_at(p: u64, v: u32) -> i32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn read_u32_at(p: u64) -> u32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn write_u64_at(p: u64, v: u64) -> i32 {
+    write_u32_at(p, (v & 0xFFFFFFFFu64) as u32)
+    write_u32_at(p + 4u64, ((v >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+fn read_u64_at(p: u64) -> u64 {
+    let lo : u64 = (read_u32_at(p) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (read_u32_at(p + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn cc_slot_ptr(idx: u32) -> u64 {
+    let base : u64 = (&g_cc_table) as u64
+    let masked : u64 = (idx as u64) & 0xFFFFFFFFu64
+    return base + masked * (CC_BYTES as u64)
+}
+
+fn cc_zero(p: u64) -> i32 {
+    let mut i : u32 = 0u32
+    while i < CC_BYTES {
+        let bp : *u8 = (p + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u32
+    }
+    return CC_OK
+}
+
+fn cc_compute_ctx_id(p: u64, idx: u32, cap_id: u64) -> i32 {
+    mhash_begin()
+    mhash_domain((&DOM_CCTX_ID) as u64, 11u64)
+    CC_IDX_BYTES[0] = (idx & 0xFFu32) as u8
+    CC_IDX_BYTES[1] = ((idx >> 8u32) & 0xFFu32) as u8
+    CC_IDX_BYTES[2] = ((idx >> 16u32) & 0xFFu32) as u8
+    CC_IDX_BYTES[3] = ((idx >> 24u32) & 0xFFu32) as u8
+    mhash_payload((&CC_IDX_BYTES) as u64, 4u64)
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        CC_CAP_BYTES[k] = ((cap_id >> ((k & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        k = k + 1u32
+    }
+    mhash_payload((&CC_CAP_BYTES) as u64, 8u64)
+    mhash_final((&CC_OUT_32) as u64)
+    let ctx_id : u64 = read_u64_at((&CC_OUT_32) as u64)
+    write_u64_at(p, ctx_id)
+    return CC_OK
+}
+
+fn cc_copy_provenance(p: u64) -> i32 {
+    let mut wi : u32 = 0u32
+    while wi < 32u32 {
+        let bp : *u8 = (p + 8u64 + ((wi as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = (witness_root_byte(wi) & 0xFFu32) as u8
+        wi = wi + 1u32
+    }
+    return CC_OK
+}
+
+fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 @export {
+    CC_INIT_CAP_ID = cap_id
+    CC_INIT_KCHAIN_ID = kchain_id
+    CC_INIT_RING = ring
+    CC_INIT_HEXAD_KIND = hexad_kind
+    return CC_OK
+}
+
+fn call_context_init_set_extras(arena_id: u64, depth: u16) -> i32 @export {
+    CC_INIT_ARENA_ID = arena_id
+    CC_INIT_DEPTH = depth
+    return CC_OK
+}
+
+fn call_context_new() -> u64 @export {
+    if g_cc_used >= CC_TABLE_CAP { return 0u64 }
+    let idx : u32 = g_cc_used
+    g_cc_used = g_cc_used + 1u32
+    let p : u64 = cc_slot_ptr(idx)
+    cc_zero(p)
+    cc_compute_ctx_id(p, idx, CC_INIT_CAP_ID)
+    cc_copy_provenance(p)
+    let pk : *u8 = (p + 40u64) as *u8
+    pk[0u64] = CC_INIT_KCHAIN_ID
+    write_u64_at(p + 48u64, kchain_current(CC_INIT_KCHAIN_ID as u64))
+    write_u64_at(p + 56u64, CC_INIT_CAP_ID)
+    write_u64_at(p + 64u64, 0u64)
+    let phk : *u8 = (p + 72u64) as *u8
+    phk[0u64] = CC_INIT_HEXAD_KIND
+    let pr : *u8 = (p + 73u64) as *u8
+    pr[0u64] = CC_INIT_RING
+    let depth_64 : u64 = (CC_INIT_DEPTH as u64) & 0xFFFFu64
+    write_u64_at(p + 80u64, depth_64 << 48u64)
+    write_u64_at(p + 88u64, CC_INIT_ARENA_ID)
+    return p
+}
+
+fn call_context_id(p: u64) -> u64 @export { return read_u64_at(p) }
+fn call_context_k_at_entry(p: u64) -> u64 @export { return read_u64_at(p + 48u64) }
+fn call_context_cap_id(p: u64) -> u64 @export { return read_u64_at(p + 56u64) }
+fn call_context_caller_pattern_id(p: u64) -> u64 @export { return read_u64_at(p + 64u64) }
+fn call_context_arena_id(p: u64) -> u64 @export { return read_u64_at(p + 88u64) }
+
+fn call_context_kchain_id(p: u64) -> u8 @export {
+    let pk : *u8 = (p + 40u64) as *u8
+    return pk[0u64]
+}
+
+fn call_context_hexad_kind(p: u64) -> u8 @export {
+    let pk : *u8 = (p + 72u64) as *u8
+    return pk[0u64]
+}
+
+fn call_context_ring(p: u64) -> u8 @export {
+    let pr : *u8 = (p + 73u64) as *u8
+    return pr[0u64]
+}
+
+fn call_context_recursion_depth(p: u64) -> u16 @export {
+    let e : u64 = read_u64_at(p + 80u64)
+    return ((e >> 48u64) & 0xFFFFu64) as u16
+}
+
+fn call_context_provenance_root_byte(p: u64, i: u32) -> u8 @export {
+    if i >= 32u32 { return 0u8 }
+    let bp : *u8 = (p + 8u64 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+    return bp[0u64]
+}
+
+fn call_context_set_caller_pattern_id(p: u64, pat_id: u64) -> i32 @export {
+    write_u64_at(p + 64u64, pat_id)
+    return CC_OK
+}
+
+fn call_context_digest(p: u64, out_32: u64) -> i32 @export {
+    mhash_begin()
+    mhash_domain((&DOM_CCTX_DIG) as u64, 12u64)
+    mhash_payload(p, CC_BYTES as u64)
+    mhash_final(out_32)
+    return CC_OK
+}
+
+fn call_context_verify(p: u64) -> u8 @export {
+    let base : u64 = (&g_cc_table) as u64
+    if p < base { return 0u8 }
+    let span : u64 = (CC_TABLE_CAP as u64) * (CC_BYTES as u64)
+    if p >= base + span { return 0u8 }
+    let off : u64 = p - base
+    if (off % (CC_BYTES as u64)) != 0u64 { return 0u8 }
+    return 1u8
+}
+
+fn call_context_table_used() -> u32 @export {
+    return g_cc_used
+}
+
+fn call_context_table_reset() -> i32 @export {
+    g_cc_used = 0u32
+    let mut i : u32 = 0u32
+    let total : u32 = CC_TABLE_CAP * CC_BYTES
+    while i < total {
+        let bp : *u8 = ((&g_cc_table) as u64 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u32
+    }
+    return CC_OK
+}
+
+/* L0 provenance hash: 8 bytes derived from canonical L0 fields.
+ *   SHA-256("III_L0_PROV" || caller_pattern_id || kchain_id || depth ||
+ *           provenance_root[0..8])
+ * truncated to first 8 bytes (birthday-safe to 4B values per
+ * sanctus/calculus_v1.iii sec provenance levels).
+ *
+ * The 8-byte output is L1-compatible: callers (omnia/crystal.iii's
+ * mini_crystal_mint) can copy it directly into MINI_CRYSTAL_HASH[slot]
+ * to upgrade L0 -> L1 without minting a full crystal. */
+var DOM_L0_PROV   : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 76u8, 48u8, 95u8, 80u8, 82u8, 79u8, 86u8, 0u8, 0u8, 0u8, 0u8, 0u8]
+var L0_TMP_BUF8   : [u8; 8]
+var L0_TMP_OUT32  : [u8; 32]
+
+fn call_context_l0_provenance_hash(p: u64, out_8: u64) -> i32 @export {
+    let l_p   : u64 = p
+    let l_out : u64 = out_8
+    if l_p == 0u64 { return -1i32 }
+    if l_out == 0u64 { return -1i32 }
+    if call_context_verify(l_p) != 1u8 { return -2i32 }
+
+    /* Read L0 fields. */
+    let caller_pid  : u64 = read_u64_at(l_p + 64u64)
+    let kchain_id   : u8  = call_context_kchain_id(l_p)
+    let depth_u16   : u16 = call_context_recursion_depth(l_p)
+    let depth_u64   : u64 = (depth_u16 as u64) & 0xFFFFu64
+
+    mhash_begin()
+    mhash_domain((&DOM_L0_PROV) as u64, 11u64)
+
+    /* caller_pattern_id (8 bytes LE) */
+    let mut bi : u32 = 0u32
+    while bi < 8u32 {
+        L0_TMP_BUF8[bi] = ((caller_pid >> ((bi & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        bi = bi + 1u32
+    }
+    mhash_payload((&L0_TMP_BUF8) as u64, 8u64)
+
+    /* kchain_id (1 byte) */
+    L0_TMP_BUF8[0] = kchain_id
+    mhash_payload((&L0_TMP_BUF8) as u64, 1u64)
+
+    /* depth (8 bytes LE) */
+    bi = 0u32
+    while bi < 8u32 {
+        L0_TMP_BUF8[bi] = ((depth_u64 >> ((bi & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        bi = bi + 1u32
+    }
+    mhash_payload((&L0_TMP_BUF8) as u64, 8u64)
+
+    /* provenance_root first 8 bytes */
+    mhash_payload(l_p + 8u64, 8u64)
+
+    mhash_final((&L0_TMP_OUT32) as u64)
+
+    /* Copy first 8 bytes of the 32-byte digest into out_8. */
+    let dst : *u8 = l_out as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        dst[i] = L0_TMP_OUT32[i as u32]
+        i = i + 1u64
+    }
+    return CC_OK
+}

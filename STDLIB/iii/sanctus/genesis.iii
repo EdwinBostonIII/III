@@ -1,0 +1,101 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\genesis.iii
+ *
+ * III STDLIB - sanctus::genesis -- substrate genesis-vector binding.
+ *
+ * Lattice plan Phase 14m Step 0197.  Stores the local closure-root of
+ * THIS substrate's first sealed build (the genesis vector for our
+ * own lineage, distinct from fed_genesis.iii which is the
+ * federation-tier peer-admission genesis).
+ *
+ * Tracks the seal-step distance from genesis: each ripple_commit
+ * increments \`distance_steps\` by 1.  Distance is the count of
+ * sealed transitions since genesis -- a deterministic integer that
+ * uniquely identifies our position on the closure_root chain.
+ *
+ * Public surface:
+ *   genesis_set(root_32_ptr)                   -> i32
+ *   genesis_root_byte(i)                       -> u32
+ *   genesis_is_set()                           -> u8
+ *   genesis_distance_steps()                   -> u64
+ *   genesis_advance(seal_step_mhash_32_ptr)    -> i32
+ *   genesis_current_root_byte(i)               -> u32
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.
+ */
+
+module sanctus_genesis
+
+const SGEN_OK             : i32 =  0i32
+const SGEN_E_NULL         : i32 = -1i32
+const SGEN_E_ALREADY_SET  : i32 = -2i32
+const SGEN_E_NOT_SET      : i32 = -3i32
+
+var SGEN_GENESIS_ROOT : [u8; 32]
+var SGEN_GENESIS_INIT : u8 = 0u8
+
+var SGEN_CURRENT_ROOT : [u8; 32]
+var SGEN_DISTANCE     : u64 = 0u64
+
+fn genesis_set(root_32_ptr: u64) -> i32 @export {
+    let r_l : u64 = root_32_ptr
+    if r_l == 0u64 { return SGEN_E_NULL }
+    if SGEN_GENESIS_INIT == 1u8 { return SGEN_E_ALREADY_SET }
+    let p : *u8 = r_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        SGEN_GENESIS_ROOT[i] = p[i]
+        SGEN_CURRENT_ROOT[i] = p[i]
+        i = i + 1u64
+    }
+    SGEN_GENESIS_INIT = 1u8
+    SGEN_DISTANCE     = 0u64
+    return SGEN_OK
+}
+
+fn genesis_root_byte(i: u32) -> u32 @export {
+    let i_l : u32 = i
+    if i_l >= 32u32 { return 0x100u32 }
+    if SGEN_GENESIS_INIT == 0u8 { return 0x100u32 }
+    return SGEN_GENESIS_ROOT[i_l] as u32
+}
+
+fn genesis_is_set() -> u8 @export {
+    return SGEN_GENESIS_INIT
+}
+
+fn genesis_distance_steps() -> u64 @export {
+    return SGEN_DISTANCE
+}
+
+fn genesis_advance(seal_step_mhash_32_ptr: u64) -> i32 @export {
+    let p_l : u64 = seal_step_mhash_32_ptr
+    if p_l == 0u64 { return SGEN_E_NULL }
+    if SGEN_GENESIS_INIT == 0u8 { return SGEN_E_NOT_SET }
+    let p : *u8 = p_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        SGEN_CURRENT_ROOT[i] = p[i]
+        i = i + 1u64
+    }
+    SGEN_DISTANCE = SGEN_DISTANCE + 1u64
+    return SGEN_OK
+}
+
+fn genesis_current_root_byte(i: u32) -> u32 @export {
+    let i_l : u32 = i
+    if i_l >= 32u32 { return 0x100u32 }
+    if SGEN_GENESIS_INIT == 0u8 { return 0x100u32 }
+    return SGEN_CURRENT_ROOT[i_l] as u32
+}
+
+fn genesis_clear() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        SGEN_GENESIS_ROOT[i] = 0u8
+        SGEN_CURRENT_ROOT[i] = 0u8
+        i = i + 1u32
+    }
+    SGEN_GENESIS_INIT = 0u8
+    SGEN_DISTANCE     = 0u64
+    return SGEN_OK
+}

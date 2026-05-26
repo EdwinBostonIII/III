@@ -1,0 +1,67 @@
+/* uri percent enc/dec round-trip:
+ *   src = "Hello, World!"
+ *   encoded should be "Hello%2C%20World%21"
+ *   decoded should be back to "Hello, World!"
+ */
+module corpus_67
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn uri_pct_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "uri.iii"
+extern @abi(c-msvc-x64) fn uri_pct_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "uri.iii"
+
+fn fill_src(p: *u8) -> i32 {
+    /* "Hello, World!" — 13 bytes */
+    p[0]  = 72u8;  p[1]  = 101u8; p[2]  = 108u8; p[3]  = 108u8
+    p[4]  = 111u8; p[5]  = 44u8;  p[6]  = 32u8;  p[7]  = 87u8
+    p[8]  = 111u8; p[9]  = 114u8; p[10] = 108u8; p[11] = 100u8
+    p[12] = 33u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let src : *u8 = malloc(13u64)
+    fill_src(src)
+    /* Encode */
+    let enc_b : u64 = builder_new(a, 64u64)
+    if enc_b == 0u64 { return 1u64 }
+    uri_pct_encode(enc_b, src as u64, 13u64)
+    /* Expected encoded: "Hello%2C%20World%21" — 19 bytes
+     * Plain bytes:    H  e  l  l  o  %  2  C  %  2  0  W  o  r  l  d  %  2  1 */
+    let enc_len : u64 = builder_len(enc_b)
+    if enc_len != 19u64 { return 100u64 + enc_len }
+    let enc : *u8 = builder_seal(enc_b) as *u8
+    if enc[0]  != 72u8  { return 2u64 }   /* H */
+    if enc[4]  != 111u8 { return 3u64 }   /* o */
+    if enc[5]  != 37u8  { return 4u64 }   /* % */
+    if enc[6]  != 50u8  { return 5u64 }   /* 2 */
+    if enc[7]  != 67u8  { return 6u64 }   /* C */
+    if enc[8]  != 37u8  { return 7u64 }   /* % */
+    if enc[9]  != 50u8  { return 8u64 }   /* 2 */
+    if enc[10] != 48u8  { return 9u64 }   /* 0 */
+    if enc[11] != 87u8  { return 10u64 }  /* W */
+    if enc[16] != 37u8  { return 11u64 }  /* % */
+    if enc[17] != 50u8  { return 12u64 }  /* 2 */
+    if enc[18] != 49u8  { return 13u64 }  /* 1 */
+    /* Decode encoded back to plain text */
+    let dec_b : u64 = builder_new(a, 64u64)
+    if dec_b == 0u64 { return 14u64 }
+    uri_pct_decode(dec_b, enc as u64, 19u64)
+    let dec_len : u64 = builder_len(dec_b)
+    if dec_len != 13u64 { return 200u64 + dec_len }
+    let dec : *u8 = builder_seal(dec_b) as *u8
+    let mut i : u64 = 0u64
+    while i < 13u64 {
+        if dec[i] != src[i] { return 50u64 + i }
+        i = i + 1u64
+    }
+    free(src)
+    arena_drop(a)
+    return 99u64
+}

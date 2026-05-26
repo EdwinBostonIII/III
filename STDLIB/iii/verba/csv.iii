@@ -1,0 +1,215 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\csv.iii
+ *
+ * III STDLIB - verba::csv
+ *
+ * RFC 4180 CSV parser.  Comma-separated, CRLF (or LF) row terminators,
+ * double-quote field quoting with embedded "" → ".
+ *
+ * Public API:
+ *   csv_parse(arena:u64, raw_base:u64, raw_len:u64) -> u64
+ *      Returns 1-indexed table id, 0 on failure.
+ *   csv_row_count(id:u64) -> u64
+ *   csv_field_count(id:u64, row:u64) -> u64
+ *   csv_field_base(id:u64, row:u64, col:u64) -> u64
+ *   csv_field_len(id:u64, row:u64, col:u64) -> u64
+ *   csv_drop(id:u64) -> i32
+ *
+ * Storage: parallel slot arrays for tables; per-cell parallel arrays
+ * indexed by (row * MAX_COLS + col).
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module verba_csv
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+
+const CSV_OK : i32 = 0i32
+const CSV_E_BADID : i32 = -1i32
+const CSV_E_TOOMANY : i32 = -2i32
+
+const CSV_TABLE_MAX : u32 = 16u32
+const CSV_ROW_MAX   : u64 = 1024u64
+const CSV_COL_MAX   : u64 = 32u64
+const CSV_CELL_MAX  : u64 = 32768u64    /* 1024 * 32 */
+
+var CSV_ROW_COUNT : [u64; 16]
+var CSV_LIVE      : [u8;  16]
+
+/* Per-cell storage: row r col c -> index (r * 32 + c) within a table.
+ * Tables are indexed 0..CSV_TABLE_MAX-1; the per-cell arrays are
+ * sized for table 0..15 with row 0..1023 col 0..31. */
+var CSV_FIELD_BASE : [u64; 524288]   /* 16 * 1024 * 32 */
+var CSV_FIELD_LEN  : [u64; 524288]
+var CSV_COL_COUNT  : [u64; 16384]    /* 16 * 1024 -- col count per row */
+
+fn csv_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < CSV_TABLE_MAX {
+        if CSV_LIVE[i] == 0u8 {
+            CSV_LIVE[i] = 1u8
+            CSV_ROW_COUNT[i] = 0u64
+            return i
+        }
+        i = i + 1u32
+    }
+    return CSV_TABLE_MAX
+}
+
+fn csv_resolve(id: u64) -> u32 {
+    if id == 0u64 { return CSV_TABLE_MAX }
+    let idx_u64 : u64 = id - 1u64
+    if idx_u64 >= (CSV_TABLE_MAX as u64) { return CSV_TABLE_MAX }
+    let idx : u32 = idx_u64 as u32
+    if CSV_LIVE[idx] == 0u8 { return CSV_TABLE_MAX }
+    return idx
+}
+
+fn csv_field_index(table_idx: u32, row: u64, col: u64) -> u64 {
+    return (table_idx as u64) * 1024u64 * 32u64 + row * 32u64 + col
+}
+
+fn csv_row_col_index(table_idx: u32, row: u64) -> u64 {
+    return (table_idx as u64) * 1024u64 + row
+}
+
+fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
+    let table : u32 = csv_alloc_slot()
+    if table >= CSV_TABLE_MAX { return 0u64 }
+    let p : *u8 = raw_base as *u8
+    let mut pos : u64 = 0u64
+    let mut row : u64 = 0u64
+    let mut col : u64 = 0u64
+    while pos < raw_len {
+        if row >= CSV_ROW_MAX {
+            CSV_LIVE[table] = 0u8
+            return 0u64
+        }
+        if col >= CSV_COL_MAX {
+            CSV_LIVE[table] = 0u8
+            return 0u64
+        }
+        let b : u32 = p[pos] as u32
+        let mut field_start : u64 = pos
+        let mut field_len : u64 = 0u64
+        let mut quoted : u8 = 0u8
+        if b == 34u32 {
+            /* Quoted field */
+            quoted = 1u8
+            pos = pos + 1u64
+            field_start = pos
+            /* Allocate temp buffer for unescaped content; for simplicity
+             * we point to raw bytes and accept that "" sequences will
+             * appear as " in the spans (consumer can handle). */
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                if pos >= raw_len { going = 0u8 }
+                if going == 1u8 {
+                    let c : u32 = p[pos] as u32
+                    if c == 34u32 {
+                        /* Check for "" escape */
+                        if pos + 1u64 < raw_len {
+                            if p[pos + 1u64] == 34u8 {
+                                pos = pos + 2u64
+                            }
+                            if p[pos] != 34u8 { /* if not escaped, was a closing quote */
+                                going = 0u8
+                            }
+                        }
+                        if going == 1u8 {
+                            if pos >= raw_len { going = 0u8 }
+                        }
+                        if going == 1u8 {
+                            /* still going, must have been escape */
+                        }
+                    }
+                    if going == 1u8 { pos = pos + 1u64 }
+                }
+            }
+            field_len = pos - field_start
+            if pos < raw_len {
+                if p[pos] == 34u8 { pos = pos + 1u64 }   /* skip closing quote */
+            }
+        } else {
+            /* Unquoted field: until ',' or CR/LF or EOF */
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                if pos >= raw_len { going = 0u8 }
+                if going == 1u8 {
+                    let c : u32 = p[pos] as u32
+                    if c == 44u32 { going = 0u8 }      /* , */
+                    if c == 13u32 { going = 0u8 }      /* CR */
+                    if c == 10u32 { going = 0u8 }      /* LF */
+                    if going == 1u8 { pos = pos + 1u64 }
+                }
+            }
+            field_len = pos - field_start
+        }
+        /* Store field */
+        let fi : u64 = csv_field_index(table, row, col)
+        CSV_FIELD_BASE[fi] = raw_base + field_start
+        CSV_FIELD_LEN[fi]  = field_len
+        col = col + 1u64
+        let rc_idx : u64 = csv_row_col_index(table, row)
+        CSV_COL_COUNT[rc_idx] = col
+        /* Look at separator */
+        if pos < raw_len {
+            let s : u32 = p[pos] as u32
+            if s == 44u32 {
+                pos = pos + 1u64
+                /* Continue same row, next column */
+            }
+            if s == 13u32 {
+                pos = pos + 1u64
+                if pos < raw_len {
+                    if p[pos] == 10u8 { pos = pos + 1u64 }
+                }
+                row = row + 1u64
+                col = 0u64
+            }
+            if s == 10u32 {
+                pos = pos + 1u64
+                row = row + 1u64
+                col = 0u64
+            }
+        }
+    }
+    /* If last field didn't end with newline, count the row anyway */
+    if col > 0u64 {
+        row = row + 1u64
+    }
+    CSV_ROW_COUNT[table] = row
+    return (table as u64) + 1u64
+}
+
+fn csv_row_count(id: u64) -> u64 @export {
+    let idx : u32 = csv_resolve(id)
+    if idx == CSV_TABLE_MAX { return 0u64 }
+    return CSV_ROW_COUNT[idx]
+}
+
+fn csv_field_count(id: u64, row: u64) -> u64 @export {
+    let idx : u32 = csv_resolve(id)
+    if idx == CSV_TABLE_MAX { return 0u64 }
+    if row >= CSV_ROW_COUNT[idx] { return 0u64 }
+    return CSV_COL_COUNT[csv_row_col_index(idx, row)]
+}
+
+fn csv_field_base(id: u64, row: u64, col: u64) -> u64 @export {
+    let idx : u32 = csv_resolve(id)
+    if idx == CSV_TABLE_MAX { return 0u64 }
+    return CSV_FIELD_BASE[csv_field_index(idx, row, col)]
+}
+
+fn csv_field_len(id: u64, row: u64, col: u64) -> u64 @export {
+    let idx : u32 = csv_resolve(id)
+    if idx == CSV_TABLE_MAX { return 0u64 }
+    return CSV_FIELD_LEN[csv_field_index(idx, row, col)]
+}
+
+fn csv_drop(id: u64) -> i32 @export {
+    let idx : u32 = csv_resolve(id)
+    if idx == CSV_TABLE_MAX { return CSV_E_BADID }
+    CSV_LIVE[idx] = 0u8
+    return CSV_OK
+}

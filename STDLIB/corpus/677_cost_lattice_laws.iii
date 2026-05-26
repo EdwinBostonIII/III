@@ -1,0 +1,72 @@
+/* 677_cost_lattice_laws.iii -- M13 keystone: the cost lattice's axioms (additive over 615).
+ *
+ * cost_lattice.iii is a pure 6-dim microarch lattice: cl_join = lub (per-dim max), cl_meet = glb
+ * (per-dim min), cl_le_product = the product partial order. 615_cost_lattice already tests the
+ * join/meet values, idempotence, a<=join / glb<=a, and the bottom/top identities. This KAT closes
+ * the remaining lattice AXIOMS: commutativity, associativity, absorption, lub UNIVERSALITY (join
+ * is the LEAST upper bound -- below any looser common upper bound, not merely AN upper bound), and
+ * -- prove the negative -- incomparability (a genuine PARTIAL, not total, order). The apotheosis
+ * M13 falsifier: "a composite cost that isn't the lattice-join of its parts; an 'optimal'
+ * extraction that isn't lattice-minimal" -- the universality arm is exactly lattice-minimality.
+ *
+ * Main-corpus convention: rc 99 = pass; 1..12 = which check failed. */
+module corpus_677
+
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_join(c: *u64, cp: *u64, out: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_meet(c: *u64, cp: *u64, out: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_le_product(c: *u64, cp: *u64) -> u8 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_eq(c: *u64, cp: *u64) -> u8 from "cost_lattice.iii"
+
+var LCA  : [u64; 6]
+var LCB  : [u64; 6]
+var LCC  : [u64; 6]
+var LO1  : [u64; 6]
+var LO2  : [u64; 6]
+var LO3  : [u64; 6]
+var LCU  : [u64; 6]
+
+fn main() -> u64 {
+    cl_init()
+    let pa : *u64 = (&LCA as u64) as *u64
+    pa[0u64] = 5u64  pa[1u64] = 10u64  pa[2u64] = 2u64  pa[3u64] = 3u64  pa[4u64] = 4u64  pa[5u64] = 1u64
+    let pb : *u64 = (&LCB as u64) as *u64
+    pb[0u64] = 7u64  pb[1u64] = 6u64   pb[2u64] = 2u64  pb[3u64] = 1u64  pb[4u64] = 9u64  pb[5u64] = 0u64
+    let pc : *u64 = (&LCC as u64) as *u64
+    pc[0u64] = 2u64  pc[1u64] = 2u64   pc[2u64] = 8u64  pc[3u64] = 4u64  pc[4u64] = 1u64  pc[5u64] = 3u64
+    let po1 : *u64 = (&LO1 as u64) as *u64
+    let po2 : *u64 = (&LO2 as u64) as *u64
+    let po3 : *u64 = (&LO3 as u64) as *u64
+    let pu  : *u64 = (&LCU as u64) as *u64
+    /* commutativity: join and meet are symmetric. */
+    cl_join(pa, pb, po1)  cl_join(pb, pa, po2)
+    if cl_eq(po1, po2) != 1u8 { return 1u64 }
+    cl_meet(pa, pb, po1)  cl_meet(pb, pa, po2)
+    if cl_eq(po1, po2) != 1u8 { return 2u64 }
+    /* associativity: (A v B) v C == A v (B v C); same for meet. */
+    cl_join(pa, pb, po1)  cl_join(po1, pc, po2)
+    cl_join(pb, pc, po1)  cl_join(pa, po1, po3)
+    if cl_eq(po2, po3) != 1u8 { return 3u64 }
+    cl_meet(pa, pb, po1)  cl_meet(po1, pc, po2)
+    cl_meet(pb, pc, po1)  cl_meet(pa, po1, po3)
+    if cl_eq(po2, po3) != 1u8 { return 4u64 }
+    /* absorption: A v (A ^ B) == A ; A ^ (A v B) == A. */
+    cl_meet(pa, pb, po1)  cl_join(pa, po1, po2)
+    if cl_eq(po2, pa) != 1u8 { return 5u64 }
+    cl_join(pa, pb, po1)  cl_meet(pa, po1, po2)
+    if cl_eq(po2, pa) != 1u8 { return 6u64 }
+    /* lub universality: A v B is an upper bound of A and B, and lies BELOW a looser common upper
+     * bound CU (the join is the LEAST upper bound -- lattice-minimal), while CU is strictly above. */
+    cl_join(pa, pb, po1)                                   /* LO1 = A v B = (7,10,2,3,9,1) */
+    if cl_le_product(pa, po1) != 1u8 { return 7u64 }
+    if cl_le_product(pb, po1) != 1u8 { return 8u64 }
+    pu[0u64] = po1[0u64] + 50u64
+    pu[1u64] = po1[1u64]  pu[2u64] = po1[2u64]  pu[3u64] = po1[3u64]
+    pu[4u64] = po1[4u64]  pu[5u64] = po1[5u64]                /* CU = (57,10,2,3,9,1), a looser ub */
+    if cl_le_product(po1, pu) != 1u8 { return 9u64 }       /* A v B <= CU (least-ward) */
+    if cl_le_product(pu, po1) != 0u8 { return 10u64 }      /* CU strictly above A v B */
+    /* prove the negative: A and B are INCOMPARABLE (a genuine partial, not total, order). */
+    if cl_le_product(pa, pb) != 0u8 { return 11u64 }       /* A[1]=10 > B[1]=6 */
+    if cl_le_product(pb, pa) != 0u8 { return 12u64 }       /* B[0]=7 > A[0]=5 */
+    return 99u64
+}

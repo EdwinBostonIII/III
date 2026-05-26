@@ -1,0 +1,26 @@
+/* corpus/348_xii_conf_canon_idemp.iii  -- Canonicalisation idempotence */
+
+module corpus_348_xii_conf_canon_idemp
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_is_canonical(t: u32) -> u8 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* Build a complex term: F.COMPOSE(F.COMPOSE(K02_a, K02_b), K02_c) */
+    let a : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let b : u32 = xii_term_make_basis(1u8, 0x200u32)
+    let c : u32 = xii_term_make_basis(1u8, 0x300u32)
+    let inner : u32 = xii_term_make_fusion2(18u8, a, b)
+    let t : u32 = xii_term_make_fusion2(18u8, inner, c)
+    let canon1 : u32 = xii_canonicalise(t)
+    if xii_is_canonical(canon1) != 1u8 { return 1u64 }
+    /* Canonicalising the canonical form again returns the same term. */
+    let canon2 : u32 = xii_canonicalise(canon1)
+    if xii_rewrite_struct_eq(canon1, canon2) != 1u8 { return 2u64 }
+    return 0u64
+}

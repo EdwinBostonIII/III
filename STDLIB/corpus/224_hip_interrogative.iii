@@ -1,0 +1,118 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\224_hip_interrogative.iii
+ *
+ * III conformance corpus 224 -- HIP INTERROGATIVE classification + query
+ * intent projection (Phase E.4 closure of the documented Phase E gap).
+ *
+ * Cases:
+ *   A: "is buffer valid"     -> kind=INTERROGATIVE, count=1, FORM goal_kind
+ *      via intent_query(topic=valid, agent=buffer)
+ *   B: "are sockets sealed"  -> kind=INTERROGATIVE, count=1
+ *   C: "can process listen"  -> kind=INTERROGATIVE (AUX + NP + NP/VERB)
+ *   D: "send buffer"         -> kind=IMPERATIVE (regression: not interrog.)
+ *
+ * Exit code: 99 on full pass; 100..199 on case failure.
+ */
+
+module corpus_224
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_last_kind() -> u32 from "hip.iii"
+extern @abi(c-msvc-x64) fn intent_goal_kind(p: u64) -> u8 from "intent.iii"
+
+const C224_INTERROGATIVE : u32 = 3u32
+const C224_IMPERATIVE    : u32 = 1u32
+const C224_QUERY         : u8  = 9u8
+
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+fn _read_u64(buf: *u8, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        v = v | (((buf[off + i] as u64) & 0xFFu64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 {
+    buf[off] = b
+    return off + 1u64
+}
+
+fn _phrase_is_buffer_valid(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 105u8); o = _put(buf, o, 115u8)   /* is */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 98u8); o = _put(buf, o, 117u8); o = _put(buf, o, 102u8); o = _put(buf, o, 102u8); o = _put(buf, o, 101u8); o = _put(buf, o, 114u8)   /* buffer */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 118u8); o = _put(buf, o, 97u8); o = _put(buf, o, 108u8); o = _put(buf, o, 105u8); o = _put(buf, o, 100u8)   /* valid */
+    return o as u32
+}
+
+fn _phrase_are_sockets_sealed(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 97u8); o = _put(buf, o, 114u8); o = _put(buf, o, 101u8)   /* are */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 115u8); o = _put(buf, o, 111u8); o = _put(buf, o, 99u8); o = _put(buf, o, 107u8); o = _put(buf, o, 101u8); o = _put(buf, o, 116u8)   /* sockets — IDENT (not in lex) */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 115u8); o = _put(buf, o, 101u8); o = _put(buf, o, 97u8); o = _put(buf, o, 108u8); o = _put(buf, o, 101u8); o = _put(buf, o, 100u8)   /* sealed */
+    return o as u32
+}
+
+fn _phrase_send_buffer(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 115u8); o = _put(buf, o, 101u8); o = _put(buf, o, 110u8); o = _put(buf, o, 100u8)   /* send */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 98u8); o = _put(buf, o, 117u8); o = _put(buf, o, 102u8); o = _put(buf, o, 102u8); o = _put(buf, o, 101u8); o = _put(buf, o, 114u8)   /* buffer */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let text  : *u8 = malloc(128u64)
+    let cands : *u8 = malloc(64u64)
+    let meta  : *u8 = malloc(16u64)
+    if text  as u64 == 0u64 { return 1u64 }
+    if cands as u64 == 0u64 { return 2u64 }
+    if meta  as u64 == 0u64 { return 3u64 }
+    let mut zi : u64 = 0u64
+    while zi < 16u64 { meta[zi] = 0u8; zi = zi + 1u64 }
+
+    let unique : u32 = hip_class_unique()
+
+    /* === Case A: "is buffer valid" -> INTERROGATIVE + 1 query candidate. */
+    let len_a : u32 = _phrase_is_buffer_valid(text)
+    if hip_resolve(text as u64, len_a, cands as u64, meta as u64) != 0i32 { return 100u64 }
+    if _read_u32(meta, 4u64) != unique { return 101u64 }
+    if _read_u32(meta, 0u64) != 1u32   { return 102u64 }
+    if hip_last_kind() != C224_INTERROGATIVE { return 103u64 }
+    let id_a : u64 = _read_u64(cands, 0u64)
+    if id_a == 0u64 { return 104u64 }
+    if intent_goal_kind(id_a) != C224_QUERY { return 105u64 }
+
+    /* === Case B: "are sockets sealed" -> INTERROGATIVE. */
+    let len_b : u32 = _phrase_are_sockets_sealed(text)
+    if hip_resolve(text as u64, len_b, cands as u64, meta as u64) != 0i32 { return 110u64 }
+    if hip_last_kind() != C224_INTERROGATIVE { return 111u64 }
+    if _read_u32(meta, 0u64) != 1u32 { return 112u64 }
+
+    /* === Case D: "send buffer" -> IMPERATIVE (regression). */
+    let len_d : u32 = _phrase_send_buffer(text)
+    if hip_resolve(text as u64, len_d, cands as u64, meta as u64) != 0i32 { return 130u64 }
+    if hip_last_kind() != C224_IMPERATIVE { return 131u64 }
+
+    free(text)
+    free(cands)
+    free(meta)
+    return 99u64
+}

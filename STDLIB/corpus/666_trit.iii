@@ -1,0 +1,8 @@
+/* 666 — trit: the one ternary Kleene algebra. Exhaustive 3x3 spec tables for
+ * and/or/sum/mul vs independent hardcoded tables + Kleene laws (De Morgan,
+ * double-negation, ZERO annihilator, commutativity) + sub==sum(a,-b) + the
+ * asymmetric-weight witness (weight(NEG)+weight(POS)==-1) + valid negatives.
+ * M2 ternary-algebra gate (closes the previously-unguarded M2 falsifier). */
+module corpus_666
+extern @abi(c-msvc-x64) fn trit_selftest() -> u64 from "trit.iii"
+fn main() -> u64 { return trit_selftest() }

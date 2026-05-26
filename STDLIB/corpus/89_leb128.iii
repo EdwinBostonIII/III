@@ -1,0 +1,39 @@
+/* LEB128 round-trip:
+ *   624485 (0x98765) -> 0xE5 0x8E 0x26 (3 bytes)
+ *   round-trip back to 624485
+ */
+module corpus_89
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn leb128_encode_u64(value: u64, out: *u8) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_value() -> u64 from "leb128.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(10u64)
+    let n : u64 = leb128_encode_u64(624485u64, buf)
+    if n != 3u64 { return 1u64 }
+    if buf[0] != 0xE5u8 { return 2u64 }
+    if buf[1] != 0x8Eu8 { return 3u64 }
+    if buf[2] != 0x26u8 { return 4u64 }
+    /* Decode back */
+    let consumed : u64 = leb128_decode_u64(buf, 3u64)
+    if consumed != 3u64 { return 5u64 }
+    if leb128_last_value() != 624485u64 { return 6u64 }
+    /* Edge: encode 0 -> 1 byte 0x00 */
+    let n0 : u64 = leb128_encode_u64(0u64, buf)
+    if n0 != 1u64 { return 7u64 }
+    if buf[0] != 0u8 { return 8u64 }
+    /* Edge: encode 127 -> 1 byte 0x7F */
+    let n7 : u64 = leb128_encode_u64(127u64, buf)
+    if n7 != 1u64 { return 9u64 }
+    if buf[0] != 0x7Fu8 { return 10u64 }
+    /* Edge: encode 128 -> 2 bytes 0x80 0x01 */
+    let n128 : u64 = leb128_encode_u64(128u64, buf)
+    if n128 != 2u64 { return 11u64 }
+    if buf[0] != 0x80u8 { return 12u64 }
+    if buf[1] != 0x01u8 { return 13u64 }
+    free(buf)
+    return 99u64
+}

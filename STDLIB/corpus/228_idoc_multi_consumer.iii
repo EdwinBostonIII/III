@@ -1,0 +1,185 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\228_idoc_multi_consumer.iii
+ *
+ * III conformance corpus 228 -- IDoc multi-consumer simulation.
+ *
+ * One producer packs an IDoc with 4 distinct facets:
+ *   RENDER_DOM     "RDR" (3 bytes)
+ *   EXTRACT_DATA   "DATA" (4 bytes)
+ *   EXECUTE_CLIENT "EXE!" (4 bytes)
+ *   VALIDATE       "VLDR" (4 bytes)
+ *
+ * Five consumers with different capability masks each resolve a facet:
+ *   C1 caps=0x01 -> RENDER_DOM
+ *   C2 caps=0x02 -> EXTRACT_DATA
+ *   C3 caps=0x04 -> EXECUTE_CLIENT
+ *   C4 caps=0x08 -> VALIDATE
+ *   C5 caps=0x0F (all)  -> RENDER_DOM (first match wins)
+ *
+ * Each consumer's recovered facet's first byte must match the expected
+ * marker.
+ *
+ * Exit code: 99 on full pass; 1..N on specific consumer failure.
+ */
+
+module corpus_228
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_facet_len_ptr: u64) -> u8 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 from "idoc.iii"
+
+fn _put_ptr_u64(buf: *u8, off: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        buf[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn _put_u32(buf: *u8, off: u64, v: u32) -> i32 {
+    buf[off] = (v & 0xFFu32) as u8
+    buf[off + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    buf[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    buf[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn _resolve_check(env: *u8, caps: u8, expected_first_byte: u8, expected_len: u32) -> u32 {
+    let env_u : u64 = env as u64
+    let ofd : *u8 = malloc(8u64)
+    let ofl : *u8 = malloc(4u64)
+    let ofd_u : u64 = ofd as u64
+    let ofl_u : u64 = ofl as u64
+    if idoc_resolve_facet(env_u, caps, ofd_u, ofl_u) != 1u8 {
+        free(ofd); free(ofl)
+        return 1u32
+    }
+    /* Read recovered ptr (8-byte read at ofd) and length (4-byte read at ofl).
+     * Use byte-wise read to dodge iiis-0 u32 and u64 pointer 8-byte movq trap. */
+    let mut ptr : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        ptr = ptr | (((ofd[i] as u64) & 0xFFu64) << (i * 8u64))
+        i = i + 1u64
+    }
+    let mut len_v : u32 = 0u32
+    let mut j : u64 = 0u64
+    while j < 4u64 {
+        len_v = len_v | (((ofl[j] as u32) & 0xFFu32) << ((j as u32) * 8u32))
+        j = j + 1u64
+    }
+    if len_v != expected_len {
+        free(ofd); free(ofl)
+        return 2u32
+    }
+    let p : *u8 = ptr as *u8
+    if p[0u64] != expected_first_byte {
+        free(ofd); free(ofl)
+        return 3u32
+    }
+    free(ofd); free(ofl)
+    return 0u32
+}
+
+fn main() -> u64 {
+    let env : *u8 = malloc(512u64)
+    if env as u64 == 0u64 { return 1u64 }
+    let env_u : u64 = env as u64
+
+    babel_wire_init(env_u)
+    babel_wire_set_seal_id(env_u, 0xDEAD0228u64)
+    babel_wire_set_intent_id(env_u, 0x228u64)
+
+    let dig : *u8 = malloc(32u64)
+    let mut di : u64 = 0u64
+    while di < 32u64 { dig[di] = ((di + 11u64) & 0xFFu64) as u8; di = di + 1u64 }
+    babel_wire_set_ctx_digest(env_u, dig as u64)
+    babel_wire_set_facet(env_u, 0x0Fu8)
+
+    /* Build 4 facet payloads. */
+    let f_render : *u8 = malloc(3u64)
+    f_render[0u64] = 82u8   /* R */
+    f_render[1u64] = 68u8   /* D */
+    f_render[2u64] = 82u8   /* R */
+    let f_data : *u8 = malloc(4u64)
+    f_data[0u64] = 68u8     /* D */
+    f_data[1u64] = 65u8     /* A */
+    f_data[2u64] = 84u8     /* T */
+    f_data[3u64] = 65u8     /* A */
+    let f_exec : *u8 = malloc(4u64)
+    f_exec[0u64] = 69u8     /* E */
+    f_exec[1u64] = 88u8     /* X */
+    f_exec[2u64] = 69u8     /* E */
+    f_exec[3u64] = 33u8     /* ! */
+    let f_validate : *u8 = malloc(4u64)
+    f_validate[0u64] = 86u8 /* V */
+    f_validate[1u64] = 76u8 /* L */
+    f_validate[2u64] = 68u8 /* D */
+    f_validate[3u64] = 82u8 /* R */
+
+    let fids : *u8 = malloc(4u64)
+    fids[0u64] = 0x01u8
+    fids[1u64] = 0x02u8
+    fids[2u64] = 0x04u8
+    fids[3u64] = 0x08u8
+
+    let fdpa : *u8 = malloc(32u64)
+    let mut zfd : u64 = 0u64
+    while zfd < 32u64 { fdpa[zfd] = 0u8; zfd = zfd + 1u64 }
+    _put_ptr_u64(fdpa, 0u64,  f_render as u64)
+    _put_ptr_u64(fdpa, 8u64,  f_data as u64)
+    _put_ptr_u64(fdpa, 16u64, f_exec as u64)
+    _put_ptr_u64(fdpa, 24u64, f_validate as u64)
+
+    let flna : *u8 = malloc(16u64)
+    _put_u32(flna, 0u64, 3u32)
+    _put_u32(flna, 4u64, 4u32)
+    _put_u32(flna, 8u64, 4u32)
+    _put_u32(flna, 12u64, 4u32)
+
+    let hb : u32 = babel_wire_header_bytes()
+    let payload_addr : u64 = env_u + (hb as u64)
+    let plen : u32 = idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, payload_addr)
+    /* Expected: 4*5 + 3 + 4 + 4 + 4 = 35 */
+    if plen != 35u32 { return 2u64 }
+
+    let total : u32 = idoc_finalize(env_u, plen)
+    if total != (hb + plen) { return 3u64 }
+    if idoc_validate(env_u, total) != 1u8 { return 4u64 }
+
+    /* C1: caps=0x01 -> RENDER_DOM ("R", 3 bytes). */
+    let r1 : u32 = _resolve_check(env, 0x01u8, 82u8, 3u32)
+    if r1 != 0u32 { return (100u64 + (r1 as u64)) }
+
+    /* C2: caps=0x02 -> EXTRACT_DATA ("D", 4 bytes). */
+    let r2 : u32 = _resolve_check(env, 0x02u8, 68u8, 4u32)
+    if r2 != 0u32 { return (110u64 + (r2 as u64)) }
+
+    /* C3: caps=0x04 -> EXECUTE_CLIENT ("E", 4 bytes). */
+    let r3 : u32 = _resolve_check(env, 0x04u8, 69u8, 4u32)
+    if r3 != 0u32 { return (120u64 + (r3 as u64)) }
+
+    /* C4: caps=0x08 -> VALIDATE ("V", 4 bytes). */
+    let r4 : u32 = _resolve_check(env, 0x08u8, 86u8, 4u32)
+    if r4 != 0u32 { return (130u64 + (r4 as u64)) }
+
+    /* C5: caps=0x0F -> first match RENDER_DOM ("R", 3 bytes). */
+    let r5 : u32 = _resolve_check(env, 0x0Fu8, 82u8, 3u32)
+    if r5 != 0u32 { return (140u64 + (r5 as u64)) }
+
+    free(env); free(dig)
+    free(f_render); free(f_data); free(f_exec); free(f_validate)
+    free(fids); free(fdpa); free(flna)
+    return 99u64
+}

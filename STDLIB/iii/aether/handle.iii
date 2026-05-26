@@ -1,0 +1,132 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\handle.iii
+ *
+ * III STDLIB - aether::handle
+ *
+ * Opaque resource handle.  Each handle ties an OS-level resource (file
+ * descriptor / FILE* / socket) to a capability id.  Every read or
+ * write through a handle re-verifies the capability via cap_verify;
+ * a revoked or expired capability fails the verification and the IO
+ * returns HANDLE_E_DENIED without touching the OS resource.
+ *
+ * Phase C: handle slot table is module-singleton with 64 slots.
+ * Phase D will introduce per-arena handle pools via @specialize.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  K: 0.95 (alloc + cap may fail).
+ */
+
+module aether_handle
+
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+const HANDLE_INVALID  : u64 = 0u64
+const HANDLE_OK       : i32 =  0i32
+const HANDLE_E_BADID  : i32 = -1i32
+const HANDLE_E_DENIED : i32 = -2i32
+const HANDLE_E_FULL   : i32 = -3i32
+const HANDLE_E_DEAD   : i32 = -4i32
+
+const HANDLE_KIND_FILE   : u8 = 1u8
+const HANDLE_KIND_SOCKET : u8 = 2u8
+const HANDLE_KIND_PIPE   : u8 = 3u8
+const HANDLE_KIND_PROC   : u8 = 4u8
+
+const HANDLE_MAX_INSTANCES : u32 = 64u32
+
+var HANDLE_KIND   : [u8;  64]
+var HANDLE_FD     : [u64; 64]
+var HANDLE_CAP    : [u64; 64]
+var HANDLE_RIGHTS : [u64; 64]    /* required rights for ops on this handle */
+var HANDLE_LIVE   : [u8;  64]
+var HANDLE_CLOSED : [u8;  64]    /* closed but slot retained for audit (Phase C lite) */
+
+fn handle_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < HANDLE_MAX_INSTANCES {
+        if HANDLE_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn handle_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (HANDLE_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if HANDLE_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Allocate a handle.  Caller provides kind, OS fd, owning cap, and
+ * the rights mask required to use this handle. */
+fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 @export {
+    let s : u32 = handle_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return HANDLE_INVALID }
+    HANDLE_KIND[s]   = kind
+    HANDLE_FD[s]     = fd
+    HANDLE_CAP[s]    = cap_id
+    HANDLE_RIGHTS[s] = 0u64
+    HANDLE_LIVE[s]   = 1u8
+    HANDLE_CLOSED[s] = 0u8
+    return (s as u64) + 1u64
+}
+
+fn handle_set_rights(id: u64, required: u64) -> i32 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return HANDLE_E_BADID }
+    HANDLE_RIGHTS[s] = required
+    return HANDLE_OK
+}
+
+fn handle_kind(id: u64) -> u8 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return HANDLE_KIND[s]
+}
+
+fn handle_fd(id: u64) -> u64 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return HANDLE_FD[s]
+}
+
+fn handle_cap(id: u64) -> u64 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return HANDLE_CAP[s]
+}
+
+fn handle_is_open(id: u64) -> u8 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    if HANDLE_CLOSED[s] == 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* Verify a handle is open and its cap admits the required rights. */
+fn handle_verify(id: u64, required: u64) -> u8 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    if HANDLE_CLOSED[s] == 1u8 { return 0u8 }
+    return cap_verify_rights(HANDLE_CAP[s], required)
+}
+
+/* Mark a handle closed.  Audit fields retained until handle_drop. */
+fn handle_close(id: u64) -> i32 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return HANDLE_E_BADID }
+    HANDLE_CLOSED[s] = 1u8
+    return HANDLE_OK
+}
+
+fn handle_drop(id: u64) -> i32 @export {
+    let s : u32 = handle_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return HANDLE_E_BADID }
+    HANDLE_LIVE[s]   = 0u8
+    HANDLE_KIND[s]   = 0u8
+    HANDLE_FD[s]     = 0u64
+    HANDLE_CAP[s]    = 0u64
+    HANDLE_RIGHTS[s] = 0u64
+    HANDLE_CLOSED[s] = 0u8
+    return HANDLE_OK
+}

@@ -1,0 +1,38 @@
+/* corpus/358_xii_sml_anti_tamper.iii — SML anti-tamper acceptance test */
+
+module corpus_358_xii_sml_anti_tamper
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+var GOLDEN_MANIFEST : [u8; 64]
+var COMPUTED : [u8; 32]
+var TAMPERED_HASH : [u8; 32]
+
+fn main() -> u64 {
+    /* Setup: 64-byte synthetic manifest. */
+    let mut i : u32 = 0u32
+    while i < 64u32 {
+        GOLDEN_MANIFEST[i] = (i & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    sha256_oneshot(&GOLDEN_MANIFEST as *u8, 64u64, &COMPUTED as *u8)
+    /* Sanity: computed hash is non-zero. */
+    let mut zero_count : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        if COMPUTED[j] == 0u8 { zero_count = zero_count + 1u32 }
+        j = j + 1u32
+    }
+    if zero_count == 32u32 { return 1u64 }
+    /* Tamper: flip a byte; recompute; hashes must differ. */
+    GOLDEN_MANIFEST[10] = GOLDEN_MANIFEST[10] ^ 0xFFu8
+    sha256_oneshot(&GOLDEN_MANIFEST as *u8, 64u64, &TAMPERED_HASH as *u8)
+    let mut diff : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if COMPUTED[k] != TAMPERED_HASH[k] { diff = diff + 1u32 }
+        k = k + 1u32
+    }
+    if diff == 0u32 { return 2u64 }
+    return 0u64
+}

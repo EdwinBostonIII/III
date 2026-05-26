@@ -1,0 +1,131 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\scalar_provenance.iii
+ *
+ * III STDLIB - numera::scalar_provenance
+ *
+ * Lattice plan Step 0034 -- provenance wrappers around the scalar
+ * did_overflow predicates.  Each wrapper, when its underlying
+ * predicate reports overflow, mints a crystal whose error_code
+ * encodes the (signedness, op_kind) pair and whose site_hash
+ * binds (op_kind, a, b).  Callers can chain crystals across nested
+ * arithmetic via the returned ids.
+ *
+ * Public surface (returns crystal_id on overflow, 0 on no overflow):
+ *
+ *   sp_u32_add(a, b) -> u64
+ *   sp_u32_sub(a, b) -> u64
+ *   sp_u32_mul(a, b) -> u64
+ *   sp_u64_add(a, b) -> u64
+ *   sp_u64_sub(a, b) -> u64
+ *   sp_u64_mul(a, b) -> u64
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_scalar_provenance
+
+extern @abi(c-msvc-x64) fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_add_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_sub_did_underflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_mul_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const SP_OP_U32_ADD_CODE : u32 = 0x5101u32
+const SP_OP_U32_SUB_CODE : u32 = 0x5102u32
+const SP_OP_U32_MUL_CODE : u32 = 0x5103u32
+const SP_OP_U64_ADD_CODE : u32 = 0x5104u32
+const SP_OP_U64_SUB_CODE : u32 = 0x5105u32
+const SP_OP_U64_MUL_CODE : u32 = 0x5106u32
+
+var SP_DOMAIN     : [u8; 14]   /* "scalar_provenance" trimmed */
+var SP_DOMAIN_INIT : u8 = 0u8
+var SP_OP_BUF     : [u8; 4]
+var SP_A_BUF      : [u8; 8]
+var SP_B_BUF      : [u8; 8]
+var SP_SITE       : [u8; 32]
+
+fn sp_init_domain() -> u32 {
+    if SP_DOMAIN_INIT == 1u8 { return 0u32 }
+    SP_DOMAIN[0u64]  = 115u8     /* s */
+    SP_DOMAIN[1u64]  =  99u8     /* c */
+    SP_DOMAIN[2u64]  =  97u8     /* a */
+    SP_DOMAIN[3u64]  = 108u8     /* l */
+    SP_DOMAIN[4u64]  =  97u8     /* a */
+    SP_DOMAIN[5u64]  = 114u8     /* r */
+    SP_DOMAIN[6u64]  =  95u8     /* _ */
+    SP_DOMAIN[7u64]  = 112u8     /* p */
+    SP_DOMAIN[8u64]  = 114u8     /* r */
+    SP_DOMAIN[9u64]  = 111u8     /* o */
+    SP_DOMAIN[10u64] = 118u8     /* v */
+    SP_DOMAIN[11u64] = 0u8
+    SP_DOMAIN[12u64] = 0u8
+    SP_DOMAIN[13u64] = 0u8
+    SP_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+fn sp_pack_u32(buf_addr: u64, v: u32) -> u32 {
+    let p : *u8 = buf_addr as *u8
+    p[0u64] = (v & 0xFFu32) as u8
+    p[1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn sp_pack_u64(buf_addr: u64, v: u64) -> u32 {
+    let p : *u8 = buf_addr as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn sp_mint(op_code: u32, a64: u64, b64: u64) -> u64 {
+    sp_init_domain()
+    sp_pack_u32(&SP_OP_BUF as u64, op_code)
+    sp_pack_u64(&SP_A_BUF as u64, a64)
+    sp_pack_u64(&SP_B_BUF as u64, b64)
+    mhash_begin()
+    mhash_domain(&SP_DOMAIN as u64, 11u64)
+    mhash_payload(&SP_OP_BUF as u64, 4u64)
+    mhash_payload(&SP_A_BUF as u64, 8u64)
+    mhash_payload(&SP_B_BUF as u64, 8u64)
+    mhash_final(&SP_SITE as u64)
+    return crystal_mint(op_code, &SP_SITE as u64, 0u64, b64)
+}
+
+fn sp_u32_add(a: u32, b: u32) -> u64 @export {
+    if scalar_u32_add_did_overflow(a, b) == 0u8 { return 0u64 }
+    return sp_mint(SP_OP_U32_ADD_CODE, a as u64, b as u64)
+}
+fn sp_u32_sub(a: u32, b: u32) -> u64 @export {
+    if scalar_u32_sub_did_underflow(a, b) == 0u8 { return 0u64 }
+    return sp_mint(SP_OP_U32_SUB_CODE, a as u64, b as u64)
+}
+fn sp_u32_mul(a: u32, b: u32) -> u64 @export {
+    if scalar_u32_mul_did_overflow(a, b) == 0u8 { return 0u64 }
+    return sp_mint(SP_OP_U32_MUL_CODE, a as u64, b as u64)
+}
+fn sp_u64_add(a: u64, b: u64) -> u64 @export {
+    if scalar_u64_add_did_overflow(a, b) == 0u8 { return 0u64 }
+    return sp_mint(SP_OP_U64_ADD_CODE, a, b)
+}
+fn sp_u64_sub(a: u64, b: u64) -> u64 @export {
+    if scalar_u64_sub_did_underflow(a, b) == 0u8 { return 0u64 }
+    return sp_mint(SP_OP_U64_SUB_CODE, a, b)
+}
+fn sp_u64_mul(a: u64, b: u64) -> u64 @export {
+    if scalar_u64_mul_did_overflow(a, b) == 0u8 { return 0u64 }
+    return sp_mint(SP_OP_U64_MUL_CODE, a, b)
+}

@@ -1,0 +1,119 @@
+/* STDLIB/iii/katabasis/cycle_term.iii
+ *
+ * KATABASIS increment 11 -- descent cycles as canonical XII terms (plan 3.0).
+ * CHARIOT dispatched on an IOCTL number; III instead expresses every descent
+ * cycle as a term in the live 18-kernel XII Intent Calculus (omnia/xii_term),
+ * so "the family is read from the term's KERNEL, not an opcode" (plan 3.0).
+ *
+ * A descent cycle is, ontologically, an ACT performed UNDER a capability:
+ *
+ *     cycle  =  FUNDER( K05_ACT , K10_GRANT )
+ *                        |          |
+ *                        |          +-- subform = capability id
+ *                        +-- subform = (family<<24 | target_kind<<16 | action_hexad)
+ *                            aux     = the target value (address / MSR / port / cell)
+ *
+ * The family, target-kind, action hexad, target, and capability are therefore
+ * intrinsic to the term and read back from its structure -- there is no opcode
+ * table.  This composes the real XII term arena; no new representation.
+ *
+ * Pure term construction/inspection -- no metal.  KAT: corpus 605.  Ring R0.
+ */
+module katabasis_cycle_term
+
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, child_a: u32, child_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_aux(idx: u32, aux: u64) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_is_kind(idx: u32, kind: u8) -> u8 from "xii_term.iii"
+
+/* XII kernel kinds we use (mirror omnia/xii_term.iii). */
+const KCT_KIND_ACT    : u8 = 4u8     /* XII_KIND_K05_ACT */
+const KCT_KIND_GRANT  : u8 = 9u8     /* XII_KIND_K10_GRANT */
+const KCT_KIND_FUNDER : u8 = 21u8    /* XII_KIND_FUNDER */
+const KCT_NULL        : u32 = 0xFFFFFFFFu32   /* XII_NULL_REF */
+
+/* Build the ACT kernel of a descent cycle: kind K05_ACT, subform packs
+ * (family<<24 | target_kind<<16 | action_hexad), aux = the target value. */
+fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 @export {
+    let fam : u32 = family
+    let tk  : u32 = target_kind
+    let tgt : u64 = target
+    let ah  : u32 = action_hexad
+    let sub : u32 = ((fam << 24u32) | (tk << 16u32)) | (ah & 0xFFFFu32)
+    let act : u32 = xii_term_make_basis(KCT_KIND_ACT, sub)
+    if act == KCT_NULL { return KCT_NULL }
+    xii_term_set_aux(act, tgt)
+    return act
+}
+
+/* Wrap an ACT under a capability: FUNDER(act, GRANT(cap_id)) -- "this act,
+ * UNDER this capability" (plan 3.0 / invariant #3: no ambient authority). */
+fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 @export {
+    let a   : u32 = act_idx
+    let cid : u32 = cap_id
+    let cap : u32 = xii_term_make_basis(KCT_KIND_GRANT, cid)
+    if cap == KCT_NULL { return KCT_NULL }
+    return xii_term_make_fusion2(KCT_KIND_FUNDER, a, cap)
+}
+
+/* The ACT kernel of a cycle term (child_a of the FUNDER, or the term itself if
+ * it is already a bare ACT). */
+fn katabasis_cycle_act_of(cycle_idx: u32) -> u32 @export {
+    let c : u32 = cycle_idx
+    if xii_term_is_kind(c, KCT_KIND_FUNDER) == 1u8 { return xii_term_get_child_a(c) }
+    return c
+}
+
+/* Read the family from the cycle term's kernel (plan 3.0). */
+fn katabasis_cycle_family(cycle_idx: u32) -> u32 @export {
+    let c   : u32 = cycle_idx
+    let act : u32 = katabasis_cycle_act_of(c)
+    let sub : u32 = xii_term_get_subform(act)
+    return (sub >> 24u32) & 0xFFu32
+}
+
+/* Read the target-kind from the cycle term's kernel. */
+fn katabasis_cycle_target_kind(cycle_idx: u32) -> u32 @export {
+    let c   : u32 = cycle_idx
+    let act : u32 = katabasis_cycle_act_of(c)
+    let sub : u32 = xii_term_get_subform(act)
+    return (sub >> 16u32) & 0xFFu32
+}
+
+/* Read the action hexad from the cycle term's kernel. */
+fn katabasis_cycle_action_hexad(cycle_idx: u32) -> u32 @export {
+    let c   : u32 = cycle_idx
+    let act : u32 = katabasis_cycle_act_of(c)
+    let sub : u32 = xii_term_get_subform(act)
+    return sub & 0xFFFFu32
+}
+
+/* Read the target value (the ACT's aux). */
+fn katabasis_cycle_target(cycle_idx: u32) -> u64 @export {
+    let c   : u32 = cycle_idx
+    let act : u32 = katabasis_cycle_act_of(c)
+    return xii_term_get_aux(act)
+}
+
+/* Read the capability id (the GRANT child of the FUNDER); 0 if not wrapped. */
+fn katabasis_cycle_cap(cycle_idx: u32) -> u32 @export {
+    let c : u32 = cycle_idx
+    if xii_term_is_kind(c, KCT_KIND_FUNDER) == 0u8 { return 0u32 }
+    let cap : u32 = xii_term_get_child_b(c)
+    return xii_term_get_subform(cap)
+}
+
+/* Is `cycle_idx` a well-formed cycle term: FUNDER(ACT, GRANT)? */
+fn katabasis_cycle_is_wellformed(cycle_idx: u32) -> u8 @export {
+    let c : u32 = cycle_idx
+    if xii_term_is_kind(c, KCT_KIND_FUNDER) == 0u8 { return 0u8 }
+    let a : u32 = xii_term_get_child_a(c)
+    let b : u32 = xii_term_get_child_b(c)
+    if xii_term_is_kind(a, KCT_KIND_ACT) == 0u8 { return 0u8 }
+    if xii_term_is_kind(b, KCT_KIND_GRANT) == 0u8 { return 0u8 }
+    return 1u8
+}

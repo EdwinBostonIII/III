@@ -1,0 +1,128 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_set.iii
+ *
+ * III STDLIB - verba::glyph_set -- Glyph V3 form for homogeneous set.
+ *
+ * Lattice plan Phase 14h Step 0174.  Identical encoding to glyph_vec
+ * but a distinct form_id (0x32).  Caller is responsible for
+ * deduplication and (optionally) sort-order at pack time.  Stage-0
+ * does not enforce uniqueness; the contract is "the bytes here
+ * encode a set, and any duplicate-element invariants are asserted by
+ * the caller's higher-level type system."
+ *
+ * Public surface:
+ *   glyph_set_form_id()                                                    -> u32 (0x32)
+ *   glyph_set_pack(elem_form_id, elem_count, elem_size, src_ptr, out_192)  -> i32
+ *   glyph_set_unpack_count(in_192)                                         -> u32
+ *   glyph_set_unpack_elem_form_id(in_192)                                  -> u32
+ *   glyph_set_unpack_elements(in_192, dst_ptr, dst_cap_bytes)              -> i32
+ *   glyph_set_validate(in_192)                                             -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_set
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u32_le(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_payload_len(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_SET : u32 = 0x32u32
+
+fn glyph_set_form_id() -> u32 @export { return GV3_FORM_SET }
+
+fn glyph_set_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u64 @export {
+    let l_f : u64 = (elem_form_id as u64) & 0xFFFFFFFFu64
+    let l_c : u64 = ((elem_count as u64) & 0xFFFFu64) << 32u64
+    let l_s : u64 = ((elem_size  as u64) & 0xFFFFu64) << 48u64
+    return l_f | l_c | l_s
+}
+
+/* 3-u64-arg signature = composition-dispatch ABI: glyph_set_pack is
+ * registered in iii_compositions.def and is invoked via the prespec
+ * fn(a,b,c,d:u64) trampoline, so it must take <=4 u64 args.  Do NOT widen
+ * to a multi-arg form -- that would break composition dispatch (the
+ * trampoline passes 4 u64s; extra typed params would read garbage).  The
+ * iiis-0 5+-arg trap this also dodged is independently fixed (Stage 3.9,
+ * corpus 277); the packing now stands on the composition ABI alone. */
+fn glyph_set_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 @export {
+    let pm   : u64 = packed_meta
+    let ef_l : u32 = (pm & 0xFFFFFFFFu64) as u32
+    let ec_l : u32 = ((pm >> 32u64) & 0xFFFFu64) as u32
+    let es_l : u32 = ((pm >> 48u64) & 0xFFFFu64) as u32
+    let s_l  : u64 = src_ptr
+    let o_l  : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    if es_l == 0u32 { return -2i32 }
+    if es_l > 144u32 { return -2i32 }
+    let total : u64 = (ec_l as u64) * (es_l as u64)
+    if total > 144u64 { return -3i32 }
+    if s_l == 0u64 {
+        if ec_l != 0u32 { return -1i32 }
+    }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64,  GV3_FORM_SET)
+    gv3_write_u32_le(o_l + 4u64,  8u32 + (total as u32))
+    gv3_write_u32_le(o_l + 8u64,  ef_l)
+    gv3_write_u32_le(o_l + 12u64, ec_l)
+    if s_l != 0u64 {
+        let sp : *u8 = s_l as *u8
+        let dp : *u8 = (o_l + 16u64) as *u8
+        let mut i : u64 = 0u64
+        while i < total {
+            dp[i] = sp[i]
+            i = i + 1u64
+        }
+    }
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_set_unpack_count(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_SET { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 12u64)
+}
+
+fn glyph_set_unpack_elem_form_id(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_SET { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 8u64)
+}
+
+fn glyph_set_unpack_elements(in_192: u64, dst_ptr: u64, dst_cap_bytes: u32) -> i32 @export {
+    let i_l : u64 = in_192
+    let d_l : u64 = dst_ptr
+    let c_l : u32 = dst_cap_bytes
+    if i_l == 0u64 { return -1i32 }
+    if d_l == 0u64 { return -1i32 }
+    if gv3_form_id(i_l) != GV3_FORM_SET { return -2i32 }
+    if gv3_validate(i_l) != 1u8 { return -3i32 }
+    let plen : u32 = gv3_payload_len(i_l)
+    if plen < 8u32 { return -4i32 }
+    let elem_bytes : u32 = plen - 8u32
+    if elem_bytes > c_l { return -5i32 }
+    let sp : *u8 = (i_l + 16u64) as *u8
+    let dp : *u8 = d_l as *u8
+    let mut k : u64 = 0u64
+    let n : u64 = (elem_bytes as u64) & 0xFFFFFFFFu64
+    while k < n {
+        dp[k] = sp[k]
+        k = k + 1u64
+    }
+    return elem_bytes as i32
+}
+
+fn glyph_set_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_SET { return 0u8 }
+    return gv3_validate(i_l)
+}

@@ -1,0 +1,948 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\resolver.iii
+ *
+ * III RESOLUTION PRIMITIVE.
+ * FROZEN SPEC §2.2, §5, §Z.C.2; ADR-RES-001..016.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.90.
+ *
+ * CONTRACT (this file):
+ *   - No f32/f64. No clock. No random. No telemetry feedback.
+ *   - All arithmetic saturating fixed-point u64.
+ *   - All pointer math u32-masked into u64.
+ *   - Signed-i64 ordering compares forbidden; use != only.
+ *   - 11 numbered steps in resolve(); no step 12; no shortcut path.
+ */
+
+module omnia_resolver
+
+/* Activation coefficients (FROZEN SPEC §5; ADR-RES-001) */
+const RESOLVER_BASE_ROOT_META_PATTERN     : u64 = 1000000000u64
+const RESOLVER_BASE_FORM_PATTERN          : u64 = 1000000000u64
+const RESOLVER_BASE_COMPOSE_PATTERN       : u64 =  900000000u64
+const RESOLVER_BASE_PASSAGE_PATTERN       : u64 =  900000000u64
+const RESOLVER_BASE_ESSENCE_PATTERN       : u64 =  900000000u64
+const RESOLVER_BASE_MOTION_PATTERN        : u64 =  900000000u64
+const RESOLVER_BASE_SUBSTANCE_PATTERN     : u64 =  900000000u64
+const RESOLVER_BASE_ORIGIN_PATTERN        : u64 = 1000000000u64
+const RESOLVER_BASE_DEFAULT_PATTERN       : u64 =  500000000u64
+const RESOLVER_BASE_SPECIALISATION_BUMP   : u64 =  200000000u64
+
+const RESOLVER_W_GUARANTEE_LINEAR_MATCH        : u64 = 100000000u64
+const RESOLVER_W_GUARANTEE_BOUNDED_MATCH       : u64 = 100000000u64
+const RESOLVER_W_GUARANTEE_CONSTANT_TIME_MATCH : u64 = 100000000u64
+const RESOLVER_W_GUARANTEE_PURE_MATCH          : u64 = 100000000u64
+const RESOLVER_W_GUARANTEE_SEAL_MATCH          : u64 = 100000000u64
+const RESOLVER_W_HEXAD_EXACT                   : u64 = 100000000u64
+const RESOLVER_W_HEXAD_NEAR                    : u64 =  50000000u64
+const RESOLVER_W_RING_EXACT                    : u64 = 100000000u64
+const RESOLVER_W_RING_LOWER_OK                 : u64 =  50000000u64
+const RESOLVER_W_K_DEPTH_PER_LEVEL             : u64 =  10000000u64
+const RESOLVER_W_K_DEPTH_CAP                   : u64 =  80000000u64
+const RESOLVER_W_ARENA_AFFINITY                : u64 =  30000000u64
+const RESOLVER_W_PROOF_BACKED_SPECIALISATION   : u64 = 200000000u64
+const RESOLVER_W_INTENT_FLAG_LOWERING          : u64 =  20000000u64
+const RESOLVER_W_PARTIAL_ARG_BOUND             : u64 =   5000000u64
+
+const RESOLVER_P_GUARANTEE_VIOLATION : u64 =  500000000u64
+const RESOLVER_P_HEXAD_FAR           : u64 =  200000000u64
+const RESOLVER_P_RING_HIGHER         : u64 = 1000000000u64
+const RESOLVER_P_EFFECTS_UNDECLARED  : u64 =  700000000u64
+const RESOLVER_P_ARITY_MISMATCH      : u64 =  300000000u64
+
+const RESOLVE_MIN_SCORE              : u64 = 100000000u64
+const RESOLVE_AMBIGUITY_EPSILON      : u64 =         0u64
+const RESOLVER_MAX_RECURSION_DEPTH   : u32 =         8u32
+
+/* Hexad / Ring / Goal kinds -- prefixed to avoid linker collisions with
+ * other modules that define the same constants. */
+const RV_HEXAD_FORM       : u8 = 1u8
+const RV_HEXAD_SUBSTANCE  : u8 = 2u8
+const RV_HEXAD_PASSAGE    : u8 = 3u8
+const RV_HEXAD_ESSENCE    : u8 = 4u8
+const RV_HEXAD_MOTION     : u8 = 5u8
+const RV_HEXAD_COMPOSE    : u8 = 6u8
+const RV_HEXAD_ORIGIN     : u8 = 7u8
+
+const RV_RING_RM2 : u8 = 0u8
+const RV_RING_RM1 : u8 = 1u8
+const RV_RING_R0  : u8 = 2u8
+const RV_RING_R3  : u8 = 3u8
+
+/* Primitive ids matching verba/intent.iii (CORE-CALCULUS-V1.0). */
+const RV_PRIMITIVE_COMPOSE : u8 =  6u8
+const RV_PRIMITIVE_REFLECT : u8 = 18u8
+
+const GUARANTEE_LINEAR        : u32 = 0x00000001u32
+const GUARANTEE_BOUNDED       : u32 = 0x00000002u32
+const GUARANTEE_CONSTANT_TIME : u32 = 0x00000004u32
+const GUARANTEE_PURE          : u32 = 0x00000008u32
+const GUARANTEE_SEAL          : u32 = 0x00000010u32
+
+/* Error codes (re-declared here for resolver-internal use) */
+const E_RESOLVE_NOMATCH        : u32 = 0xE100u32
+const E_RESOLVE_AMBIGUOUS      : u32 = 0xE101u32
+const E_RESOLVE_K_UNDERFLOW    : u32 = 0xE102u32
+const E_RESOLVE_DEPTH          : u32 = 0xE103u32
+const E_RESOLVE_REGISTRY_TAMPER: u32 = 0xE105u32
+const E_RESOLVE_INTENT_TAMPER  : u32 = 0xE106u32
+const E_RESOLVE_CTX_TAMPER     : u32 = 0xE107u32
+const E_RESOLVE_CAP_DENIED     : u32 = 0xE108u32
+
+/* Externs */
+extern @abi(c-msvc-x64) fn pattern_set_verify(set: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_set_has(set: u64, idx: u32) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_id(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_module_mhash_byte(p: u64, i: u32) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_activation_base(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_specialisation_of(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_hexad_kind(p: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_ring(p: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_guarantees_provided(p: u64) -> u32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_k_value(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_predicate_fn(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_unify_fn(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_dispatch_fn(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_effects_mask(p: u64) -> u32 from "pattern_table.iii"
+
+extern @abi(c-msvc-x64) fn intent_verify(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_id(p: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_goal_kind(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_args_mask(p: u64) -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_required_guarantees(p: u64) -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_arena_id(p: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_expected_hexad_kind(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_recursion_depth(p: u64) -> u16 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_arg(p: u64, slot: u32) -> u64 from "intent.iii"
+
+extern @abi(c-msvc-x64) fn memo_key(set: u64, intent: u64, ctx_digest_ptr: u64) -> u64 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_lookup(key: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_pattern_id(slot: u32) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_dispatch_fp(slot: u32) -> u64 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 from "resolver_memo.iii"
+
+extern @abi(c-msvc-x64) fn call_context_verify(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_kchain_id(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_cap_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn call_context_ring(p: u64) -> u8 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_arena_id(p: u64) -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_recursion_depth(p: u64) -> u16 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_digest(p: u64, out_32b: u64) -> i32 from "call_context.iii"
+
+extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn witness_append_k(mhash_ptr: u64, cap_id: u64, k_fixed: u64) -> i32 from "witness.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal_edges.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+extern @abi(c-msvc-x64) fn sat_add_u64(a: u64, b: u64) -> u64 from "sat_arith.iii"
+extern @abi(c-msvc-x64) fn sat_sub_u64(a: u64, b: u64) -> u64 from "sat_arith.iii"
+extern @abi(c-msvc-x64) fn sat_mul_u64(a: u64, b: u64) -> u64 from "sat_arith.iii"
+extern @abi(c-msvc-x64) fn popcount_u32(x: u32) -> u32 from "sat_arith.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+/* Phase C.4: Software Resolution Unit (hand-written asm, scalar v1.0;
+ * AVX-2 inlining is a v1.1 layer that preserves this ABI). */
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "resolver_unit"
+/* Phase C.5: hand-written hot fast path (COMPILER/BOOT/resolver_hot.s).
+ * Returns 0 on miss (caller falls through), or (payload | 0x8000...) on
+ * success.  MSB is the success flag; mask it off and return payload. */
+extern @abi(c-msvc-x64) fn iii_resolve_hot(set: u64, intent: u64, ctx: u64) -> u64 from "resolver_hot"
+
+/* Mhash domain bytes (16 each, NUL-padded) */
+var RESV_DOM_OK     : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 79u8, 75u8, 0u8, 0u8]
+var RESV_DOM_FAIL   : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 70u8, 65u8, 73u8, 76u8]
+var RESV_DOM_AMBIG  : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 65u8, 77u8, 66u8, 71u8]
+var RESV_DOM_KUF    : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 75u8, 85u8, 70u8, 0u8]
+var RESV_DOM_TAMPER : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 84u8, 65u8, 77u8, 80u8]
+/* "III_RESOLVE_BIND" -- 16 bytes -- domain for binding_digest per FROZEN SPEC §6.8 */
+var RESV_DOM_BIND   : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 66u8, 73u8, 78u8, 68u8]
+
+/* Module-level scratch buffers (not reentrant -- caller serializes). */
+var RES_MHASH    : [u8; 32]
+var RES_DIG      : [u8; 32]
+var RES_BIND_DIG : [u8; 32]
+var RES_BUF8     : [u8; 8]
+var RES_BUF4     : [u8; 4]
+
+/* Last-resolution event state (Phase B.3 -- reflect primitive).
+ * Updated at the end of every successful resolve() invocation. The
+ * reflect primitive (PRIMITIVE_REFLECT = 18) reads these to expose
+ * meta-observation of the in-flight resolution. */
+var RES_LAST_PATTERN_ID  : u64 = 0u64
+var RES_LAST_INTENT_ID   : u64 = 0u64
+var RES_LAST_K_NOW       : u64 = 0u64
+var RES_LAST_DEPTH       : u64 = 0u64
+var RES_LAST_BEST_SCORE  : u64 = 0u64
+var RES_LAST_DISPATCH_FP : u64 = 0u64
+
+/* Phase C.5: ctx_digest single-entry cache.  Keyed by ctx pointer; on
+ * cache hit the previously-computed 32-byte SHA-256 is copied into the
+ * caller's out buffer instead of recomputing the hash.  Correctness:
+ * call_context_digest(ctx, _) hashes only the bytes pointed to by ctx,
+ * so any external mutation of *ctx invalidates the cache.  Resolve()
+ * never mutates *ctx (kchain_compose mutates a SEPARATE kchain table,
+ * not ctx itself), so the cache is safe across the resolve hot path.
+ * The cache key is a *u64 stored in a 1-element array so taking its
+ * address is well-defined under iiis-0's documented byte-array rule. */
+var RES_CTX_CACHE_PTR : [u64; 1]
+var RES_CTX_CACHE_DIG : [u8; 32]
+
+/* Phase C.5 diagnostic: counts how many times the memo-hit fast path
+ * fires.  Useful for bench corpora to verify the fast path is actually
+ * exercised (vs silently falling through to the slow path). */
+var RES_FAST_PATH_HITS : [u64; 1]
+
+fn resolver_fast_path_hits() -> u64 @export {
+    return RES_FAST_PATH_HITS[0u64]
+}
+
+fn resolver_fast_path_hits_reset() -> i32 @export {
+    RES_FAST_PATH_HITS[0u64] = 0u64
+    return 0i32
+}
+
+fn _res_ctx_digest_cached(ctx: u64, out_32: u64) -> i32 {
+    let l_ctx : u64 = ctx
+    let l_out : u64 = out_32
+    if RES_CTX_CACHE_PTR[0u64] == l_ctx {
+        let in_p  : *u8 = (&RES_CTX_CACHE_DIG) as u64 as *u8
+        let out_p : *u8 = l_out as *u8
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            out_p[i] = in_p[i]
+            i = i + 1u64
+        }
+        return 0i32
+    }
+    call_context_digest(l_ctx, l_out)
+    RES_CTX_CACHE_PTR[0u64] = l_ctx
+    let src : *u8 = l_out as *u8
+    let dst : *u8 = (&RES_CTX_CACHE_DIG) as u64 as *u8
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        dst[j] = src[j]
+        j = j + 1u64
+    }
+    return 0i32
+}
+
+/* ── helpers ── */
+
+fn hexad_adjacent(a: u8, b: u8) -> u8 @export {
+    if a == RV_HEXAD_FORM { if b == RV_HEXAD_COMPOSE { return 1u8 } }
+    if a == RV_HEXAD_COMPOSE { if b == RV_HEXAD_FORM { return 1u8 } }
+    if a == RV_HEXAD_COMPOSE { if b == RV_HEXAD_ORIGIN { return 1u8 } }
+    if a == RV_HEXAD_ORIGIN { if b == RV_HEXAD_COMPOSE { return 1u8 } }
+    if a == RV_HEXAD_SUBSTANCE { if b == RV_HEXAD_ESSENCE { return 1u8 } }
+    if a == RV_HEXAD_ESSENCE { if b == RV_HEXAD_SUBSTANCE { return 1u8 } }
+    if a == RV_HEXAD_MOTION { if b == RV_HEXAD_ESSENCE { return 1u8 } }
+    if a == RV_HEXAD_ESSENCE { if b == RV_HEXAD_MOTION { return 1u8 } }
+    if a == RV_HEXAD_PASSAGE { if b == RV_HEXAD_COMPOSE { return 1u8 } }
+    if a == RV_HEXAD_COMPOSE { if b == RV_HEXAD_PASSAGE { return 1u8 } }
+    return 0u8
+}
+
+fn pr_less_than_cr(p_ring: u8, c_ring: u8) -> u8 @export {
+    if p_ring == c_ring { return 0u8 }
+    if p_ring == RV_RING_RM2 {
+        if c_ring == RV_RING_RM1 { return 1u8 }
+        if c_ring == RV_RING_R0  { return 1u8 }
+        if c_ring == RV_RING_R3  { return 1u8 }
+    }
+    if p_ring == RV_RING_RM1 {
+        if c_ring == RV_RING_R0 { return 1u8 }
+        if c_ring == RV_RING_R3 { return 1u8 }
+    }
+    if p_ring == RV_RING_R0 {
+        if c_ring == RV_RING_R3 { return 1u8 }
+    }
+    return 0u8
+}
+
+/* §5.1: resolver_score */
+fn resolver_score(p: u64, intent: u64, ctx: u64) -> u64 @export {
+    let mut s : u64 = pattern_activation_base(p)
+
+    /* specialisation bump */
+    if pattern_specialisation_of(p) != 0u64 {
+        s = sat_add_u64(s, RESOLVER_BASE_SPECIALISATION_BUMP)
+        s = sat_add_u64(s, RESOLVER_W_PROOF_BACKED_SPECIALISATION)
+    }
+
+    /* hexad alignment */
+    let pk : u8 = pattern_hexad_kind(p)
+    let ik : u8 = intent_expected_hexad_kind(intent)
+    if ik == 0xFFu8 {
+        s = sat_add_u64(s, RESOLVER_W_HEXAD_EXACT)
+    }
+    if ik != 0xFFu8 {
+        if pk == ik {
+            s = sat_add_u64(s, RESOLVER_W_HEXAD_EXACT)
+        }
+        if pk != ik {
+            if hexad_adjacent(pk, ik) == 1u8 {
+                s = sat_add_u64(s, RESOLVER_W_HEXAD_NEAR)
+            }
+            if hexad_adjacent(pk, ik) == 0u8 {
+                s = sat_sub_u64(s, RESOLVER_P_HEXAD_FAR)
+            }
+        }
+    }
+
+    /* ring alignment */
+    let pr : u8 = pattern_ring(p)
+    let cr : u8 = call_context_ring(ctx)
+    if pr == cr {
+        s = sat_add_u64(s, RESOLVER_W_RING_EXACT)
+    }
+    if pr != cr {
+        if pr_less_than_cr(pr, cr) == 1u8 {
+            s = sat_add_u64(s, RESOLVER_W_RING_LOWER_OK)
+        }
+        if pr_less_than_cr(pr, cr) == 0u8 {
+            s = sat_sub_u64(s, RESOLVER_P_RING_HIGHER)
+        }
+    }
+
+    /* guarantees */
+    let req  : u32 = intent_required_guarantees(intent)
+    let prov : u32 = pattern_guarantees_provided(p)
+    let missing : u32 = req & (~prov)
+    if missing != 0u32 {
+        s = sat_sub_u64(s, RESOLVER_P_GUARANTEE_VIOLATION)
+    }
+    if (req & GUARANTEE_LINEAR) != 0u32 {
+        if (prov & GUARANTEE_LINEAR) != 0u32 {
+            s = sat_add_u64(s, RESOLVER_W_GUARANTEE_LINEAR_MATCH)
+        }
+    }
+    if (req & GUARANTEE_BOUNDED) != 0u32 {
+        if (prov & GUARANTEE_BOUNDED) != 0u32 {
+            s = sat_add_u64(s, RESOLVER_W_GUARANTEE_BOUNDED_MATCH)
+        }
+    }
+    if (req & GUARANTEE_CONSTANT_TIME) != 0u32 {
+        if (prov & GUARANTEE_CONSTANT_TIME) != 0u32 {
+            s = sat_add_u64(s, RESOLVER_W_GUARANTEE_CONSTANT_TIME_MATCH)
+        }
+    }
+    if (req & GUARANTEE_PURE) != 0u32 {
+        if (prov & GUARANTEE_PURE) != 0u32 {
+            s = sat_add_u64(s, RESOLVER_W_GUARANTEE_PURE_MATCH)
+        }
+    }
+    if (req & GUARANTEE_SEAL) != 0u32 {
+        if (prov & GUARANTEE_SEAL) != 0u32 {
+            s = sat_add_u64(s, RESOLVER_W_GUARANTEE_SEAL_MATCH)
+        }
+    }
+
+    /* K-depth bump (capped, u64-safe ordering per ADR-RES-016) */
+    let depth_u16 : u16 = call_context_recursion_depth(ctx)
+    let depth_u64 : u64 = (depth_u16 as u64) & 0xFFFFu64
+    let kd : u64 = sat_mul_u64(depth_u64, RESOLVER_W_K_DEPTH_PER_LEVEL)
+    let mut kd_capped : u64 = kd
+    if kd > RESOLVER_W_K_DEPTH_CAP {
+        kd_capped = RESOLVER_W_K_DEPTH_CAP
+    }
+    s = sat_add_u64(s, kd_capped)
+
+    /* arena affinity */
+    let ia : u64 = intent_arena_id(intent)
+    if ia != 0u64 {
+        if ia == call_context_arena_id(ctx) {
+            s = sat_add_u64(s, RESOLVER_W_ARENA_AFFINITY)
+        }
+    }
+
+    /* compose-intent flag (lowering bonus applies whenever intent is a
+     * compose-class primitive and pattern is hexad-compose-aligned). */
+    if intent_goal_kind(intent) == RV_PRIMITIVE_COMPOSE {
+        if pattern_hexad_kind(p) == RV_HEXAD_COMPOSE {
+            s = sat_add_u64(s, RESOLVER_W_INTENT_FLAG_LOWERING)
+        }
+    }
+
+    /* partial-args bound bonus */
+    let mask  : u32 = intent_partial_args_mask(intent)
+    let bound : u32 = popcount_u32(mask)
+    let bonus : u64 = sat_mul_u64((bound as u64) & 0xFFFFFFFFu64, RESOLVER_W_PARTIAL_ARG_BOUND)
+    s = sat_add_u64(s, bonus)
+
+    return s
+}
+
+/* §2.6: tiebreak */
+fn tiebreak(a_id: u32, b_id: u32) -> u8 @export {
+    let a : u64 = pattern_table_get(a_id)
+    let b : u64 = pattern_table_get(b_id)
+    let pa : u64 = pattern_id(a)
+    let pb : u64 = pattern_id(b)
+    if pa != pb {
+        if pa < pb { return 1u8 }
+        if pa > pb { return 2u8 }
+    }
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let ba : u8 = pattern_module_mhash_byte(a, i)
+        let bb : u8 = pattern_module_mhash_byte(b, i)
+        if ba != bb {
+            if ba < bb { return 1u8 }
+            if ba > bb { return 2u8 }
+        }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+/* Helpers for byte access */
+fn write_u32_le_local(p: u64, v: u32) -> i32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+/* ── failure path ── */
+
+fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export {
+    if call_context_verify(ctx) == 1u8 {
+        call_context_digest(ctx, (&RES_DIG) as u64)
+    }
+    if call_context_verify(ctx) == 0u8 {
+        let mut zi : u32 = 0u32
+        while zi < 32u32 { RES_DIG[zi] = 0u8; zi = zi + 1u32 }
+    }
+
+    mhash_begin()
+
+    if error_code == E_RESOLVE_REGISTRY_TAMPER {
+        mhash_domain((&RESV_DOM_TAMPER) as u64, 16u64)
+    }
+    if error_code == E_RESOLVE_INTENT_TAMPER {
+        mhash_domain((&RESV_DOM_TAMPER) as u64, 16u64)
+    }
+    if error_code == E_RESOLVE_CTX_TAMPER {
+        mhash_domain((&RESV_DOM_TAMPER) as u64, 16u64)
+    }
+    if error_code == E_RESOLVE_AMBIGUOUS {
+        mhash_domain((&RESV_DOM_AMBIG) as u64, 16u64)
+    }
+    /* E_RESOLVE_CAP_DENIED uses the default RESV_DOM_FAIL domain below
+     * (privacy: external observer cannot distinguish CAP_DENIED from
+     * NOMATCH — preserves AI safety property that callers cannot probe
+     * pattern existence by capability exhaustion). */
+    if error_code == E_RESOLVE_K_UNDERFLOW {
+        mhash_domain((&RESV_DOM_KUF) as u64, 16u64)
+    }
+    if error_code != E_RESOLVE_REGISTRY_TAMPER {
+        if error_code != E_RESOLVE_INTENT_TAMPER {
+            if error_code != E_RESOLVE_CTX_TAMPER {
+                if error_code != E_RESOLVE_AMBIGUOUS {
+                    if error_code != E_RESOLVE_K_UNDERFLOW {
+                        mhash_domain((&RESV_DOM_FAIL) as u64, 16u64)
+                    }
+                }
+            }
+        }
+    }
+
+    let mut iid : u64 = 0u64
+    if intent_verify(intent) == 1u8 { iid = intent_id(intent) }
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        RES_BUF8[i] = ((iid >> ((i & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    mhash_payload((&RES_DIG) as u64, 32u64)
+    RES_BUF4[0] = (error_code & 0xFFu32) as u8
+    RES_BUF4[1] = ((error_code >> 8u32) & 0xFFu32) as u8
+    RES_BUF4[2] = ((error_code >> 16u32) & 0xFFu32) as u8
+    RES_BUF4[3] = ((error_code >> 24u32) & 0xFFu32) as u8
+    mhash_payload((&RES_BUF4) as u64, 4u64)
+    RES_BUF4[0] = 0u8
+    RES_BUF4[1] = 0u8
+    RES_BUF4[2] = 0u8
+    RES_BUF4[3] = 0u8
+    mhash_payload((&RES_BUF4) as u64, 4u64)
+    mhash_final((&RES_MHASH) as u64)
+
+    let mut cap_id_v : u64 = 0u64
+    if call_context_verify(ctx) == 1u8 { cap_id_v = call_context_cap_id(ctx) }
+    let mut k_now : u64 = 0u64
+    if call_context_verify(ctx) == 1u8 {
+        k_now = kchain_current(call_context_kchain_id(ctx) as u64)
+    }
+    let cid : u64 = crystal_mint(error_code, (&RES_MHASH) as u64, cap_id_v, iid)
+    crystal_edges_add(iid, cid)
+    witness_append_k((&RES_MHASH) as u64, cap_id_v, k_now)
+
+    /* Encode as result_u64_err: tag bit 0 = 1, payload = error_code */
+    let payload : u64 = ((error_code as u64) & 0xFFFFFFFFu64) << 1u64
+    return payload | 1u64
+}
+
+/* ── the resolve primitive ── */
+
+fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
+
+    /* Phase C.5: hand-asm hot fast path. */
+    let hot : u64 = iii_resolve_hot(set, intent, ctx)
+    if hot != 0u64 {
+        let payload : u64 = hot & 0x7FFFFFFFFFFFFFFFu64
+        return payload
+    }
+
+    /* Step 1: validate */
+    if pattern_set_verify(set) == 0u8 {
+        return resolve_fail(E_RESOLVE_REGISTRY_TAMPER, set, intent, ctx)
+    }
+    if intent_verify(intent) == 0u8 {
+        return resolve_fail(E_RESOLVE_INTENT_TAMPER, set, intent, ctx)
+    }
+    if call_context_verify(ctx) == 0u8 {
+        return resolve_fail(E_RESOLVE_CTX_TAMPER, set, intent, ctx)
+    }
+
+    /* Step 1b: depth gate */
+    let depth_u16 : u16 = call_context_recursion_depth(ctx)
+    let depth_u32 : u32 = (depth_u16 as u32) & 0xFFFFu32
+    if depth_u32 != 0u32 {
+        if depth_u32 >= RESOLVER_MAX_RECURSION_DEPTH {
+            return resolve_fail(E_RESOLVE_DEPTH, set, intent, ctx)
+        }
+    }
+
+    /* Step 2: ctx digest (cached by ctx pointer; SHA-256 only on miss). */
+    _res_ctx_digest_cached(ctx, (&RES_DIG) as u64)
+
+    /* Phase C.3: memoization. Compute the content-addressed key over
+     * (set, intent, ctx_digest); on cache hit, skip Steps 3-5 (the
+     * candidate enumeration + tiebreak) and re-enter at Step 6 with
+     * the cached pattern. Score is recomputed for the single cached
+     * pattern so the witness mhash is bit-identical to the cold path.
+     * Determinism: insertion order = call order; FIFO eviction is
+     * stable; witness records the resolution outcome, not the cache. */
+    let memo_k : u64 = memo_key(set, intent_id(intent), (&RES_DIG) as u64)
+    let memo_slot : u32 = memo_lookup(memo_k)
+    let mut best_id    : u32 = 0xFFFFFFFFu32
+    let mut best_score : u64 = 0u64
+    let mut next_id    : u32 = 0xFFFFFFFFu32
+    let mut next_score : u64 = 0u64
+    let mut memo_hit   : u8  = 0u8
+    if memo_slot != 0xFFFFFFFFu32 {
+        let cached_pid : u32 = memo_pattern_id(memo_slot)
+        let cached_p   : u64 = pattern_table_get(cached_pid)
+        if cached_p != 0u64 {
+            best_id    = cached_pid
+            memo_hit   = 1u8
+        }
+    }
+
+    /* Phase C.5 HOT FAST PATH: memo hit -> skip Steps 3,4,5,8,9,10.
+     *
+     * The cold-path resolution that produced this memo entry already
+     * emitted the (binding_digest, OK_witness) pair into the witness
+     * chain.  Memo hits are repeated INVOCATIONS of an existing,
+     * audited binding -- they don't add new audit information, so we
+     * skip the binding_digest mhash and the witness_append_k entirely.
+     *
+     * What we still must do on every hit:
+     *   - Step 6: kchain_compose (K-cost is per-invocation, not per-binding).
+     *   - Step 7: dispatch (the dispatch is the actual work).
+     *   - Update RES_LAST_PATTERN_ID / _INTENT_ID / _K_NOW / _DEPTH /
+     *     _DISPATCH_FP for reflect() introspection.
+     *
+     * What we omit on hit (preserves bit-identity vs cold path):
+     *   - resolver_score recompute (best_score not used post-Step-5).
+     *   - Step 4 nomatch (memo would never store a sub-min-score winner).
+     *   - Step 5 tiebreak (memo stored the unique winner from cold).
+     *   - Step 8 binding_digest (already audited at cold time).
+     *   - Step 9-10 OK witness (already audited at cold time).
+     *   - memo_insert (entry already present; FIFO order stable).
+     *
+     * Mandate 7: this is structural memoization (content-addressed by
+     * (set, intent_id, ctx_digest)).  It is NOT observational learning;
+     * the cache key is sealed input, not observed frequency.
+     *
+     * Performance target: <500 cycles per HOT call.  Achieved by the
+     * combination of (a) ctx_digest cache (~50 cycles vs ~2000 for
+     * fresh SHA-256), (b) memo_lookup (~50), (c) kchain_compose (~50),
+     * (d) trivial dispatch (~10), (e) state writes (~30). */
+    /* Phase C.5 HOT FAST PATH: memo hit -> skip Steps 3,4,5,8,9,10.
+     * See documentation block above (preserved through the bisect). */
+    if memo_hit == 1u8 {
+        RES_FAST_PATH_HITS[0u64] = RES_FAST_PATH_HITS[0u64] + 1u64
+        let cached_p : u64 = pattern_table_get(best_id)
+        if cached_p == 0u64 {
+            return resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)
+        }
+        let kid_h    : u8  = call_context_kchain_id(ctx)
+        let pk_v_h   : u64 = pattern_k_value(cached_p)
+        let kok_h    : u8  = kchain_compose(kid_h as u64, pk_v_h)
+        if kok_h == 0u8 {
+            return resolve_fail(E_RESOLVE_K_UNDERFLOW, set, intent, ctx)
+        }
+        let dispatch_fp_h : u64 = pattern_dispatch_fn(cached_p)
+        let mut value_h : u64 = 0u64
+        let gk_h : u8 = intent_goal_kind(intent)
+        if gk_h == RV_PRIMITIVE_REFLECT {
+            let scope_u64_h : u64 = intent_partial_arg(intent, 0u32)
+            let scope_h     : u32 = (scope_u64_h & 0xFFFFFFFFu64) as u32
+            value_h = reflect(scope_h)
+        }
+        if gk_h != RV_PRIMITIVE_REFLECT {
+            if dispatch_fp_h != 0u64 {
+                let f_h : u64 = dispatch_fp_h
+                value_h = f_h(0u64, 0u64, 0u64, ctx)
+            }
+        }
+        RES_LAST_PATTERN_ID  = pattern_id(cached_p)
+        RES_LAST_INTENT_ID   = intent_id(intent)
+        RES_LAST_K_NOW       = kchain_current(kid_h as u64)
+        RES_LAST_DEPTH       = (depth_u32 as u64) & 0xFFFFFFFFu64
+        RES_LAST_DISPATCH_FP = dispatch_fp_h
+        let payload_h : u64 = (value_h & 0x7FFFFFFFFFFFFFFFu64) << 1u64
+        return payload_h
+    }
+
+    /* Step 3: enumerate candidates (skipped on memo hit).
+     *
+     * Phase C.4: when memo missed, delegate the inner pattern-walk to
+     * the hand-written Software Resolution Unit (resolver_unit.s) when
+     * the CPU has AVX-2. The asm produces bit-identical
+     * (best_id, best_score) and we still execute Steps 4..11 (nomatch,
+     * tiebreak, K-composition, witness emit) here.
+     *
+     * The asm path packs (best_id << 32) | best_score into a single
+     * u64 return; we unpack into best_id and best_score, leaving
+     * next_id/next_score = 0xFFFFFFFFu32/0 (the asm does not yet
+     * expose the runner-up; tiebreak below will succeed only when
+     * best_score is unique).
+     *
+     * On no-AVX-2 hosts we walk the loop in-line, exactly as before.
+     */
+    if memo_hit == 0u8 {
+        if cpufeat_has_avx2() == 1u8 {
+            let packed : u64 = iii_resolver_unit_resolve(set, intent, ctx)
+            best_id    = ((packed >> 32u64) & 0xFFFFFFFFu64) as u32
+            best_score = packed & 0xFFFFFFFFu64
+        } else {
+            let mut i : u32 = 0u32
+            while i < 4096u32 {
+                if pattern_set_has(set, i) == 1u8 {
+                    let p : u64 = pattern_table_get(i)
+                    if p != 0u64 {
+                        let s : u64 = resolver_score(p, intent, ctx)
+                        if s > best_score {
+                            next_id    = best_id
+                            next_score = best_score
+                            best_id    = i
+                            best_score = s
+                        }
+                        if s <= best_score {
+                            if s > next_score {
+                                next_id    = i
+                                next_score = s
+                            }
+                        }
+                    }
+                }
+                i = (i + 1u32) & 0xFFFFFFFFu32
+            }
+        }
+    }
+
+    /* Step 4: nomatch */
+    if best_score < RESOLVE_MIN_SCORE {
+        return resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)
+    }
+
+    /* Step 5: tiebreak */
+    if best_score == next_score {
+        let tb : u8 = tiebreak(best_id, next_id)
+        if tb == 0u8 {
+            return resolve_fail(E_RESOLVE_AMBIGUOUS, set, intent, ctx)
+        }
+        if tb == 2u8 {
+            best_id = next_id
+        }
+    }
+
+    /* Step 6: K composition.  Validate p_win before deref: pattern_table_get
+     * returns 0u64 when best_id is out-of-range OR when the slot isn't
+     * registered (pid == 0).  Without this guard we deref NULL via
+     * pattern_k_value/pattern_dispatch_fn at offsets 128/96 -> SEGV. */
+    let p_win : u64 = pattern_table_get(best_id)
+    if p_win == 0u64 {
+        return resolve_fail(E_RESOLVE_NOMATCH, set, intent, ctx)
+    }
+
+    /* Step 6a: capability gate.  Phase 2 Step F: when the pattern
+     * declares non-zero effects_mask AND the ctx has a non-zero cap_id,
+     * verify the caller's cap holds the required rights via
+     * cap_verify_rights.  Denied -> E_RESOLVE_CAP_DENIED (NOMATCH-class
+     * failure preserving privacy: the AI substrate can't learn that
+     * a pattern exists by probing past this gate).
+     *
+     * Mandate 7: the capability set is sealed input (cap_attenuate from
+     * an authority), not observed.  The check is structural: required
+     * mask AND rights mask == required mask.  No frequency, no learning.
+     *
+     * Compatibility: legacy code paths with cap_id == 0 (no capability
+     * context) and meta-patterns with effects_mask == 0 are unaffected
+     * — both gates default to "off when there's nothing to enforce". */
+    let cap_id_v : u64 = call_context_cap_id(ctx)
+    let p_effects : u32 = pattern_effects_mask(p_win)
+    if cap_id_v != 0u64 {
+        if p_effects != 0u32 {
+            let p_eff64 : u64 = (p_effects as u64) & 0xFFFFFFFFu64
+            if cap_verify_rights(cap_id_v, p_eff64) == 0u8 {
+                return resolve_fail(E_RESOLVE_CAP_DENIED, set, intent, ctx)
+            }
+        }
+    }
+
+    let kid   : u8  = call_context_kchain_id(ctx)
+    let pk_v  : u64 = pattern_k_value(p_win)
+    let kok   : u8  = kchain_compose(kid as u64, pk_v)
+    if kok == 0u8 {
+        return resolve_fail(E_RESOLVE_K_UNDERFLOW, set, intent, ctx)
+    }
+
+    /* Step 7: dispatch via indirect call through pattern.dispatch_fn.
+     * iiis-0 supports indirect call via u64 fn-pointer per fold.iii's
+     * established pattern: `let f : u64 = step; f(args)`. We load the
+     * dispatch_fn from the pattern_t and invoke it with the conventional
+     * 4-arg signature (src=0, src_len=0, dst=0, ctx). Patterns that
+     * expect different signatures must be invoked through their
+     * specialised wrappers (e.g., transform.iii calls tp_table_call). */
+    let dispatch_fp : u64 = pattern_dispatch_fn(p_win)
+    let mut value : u64 = 0u64
+    /* Phase B.3: PRIMITIVE_REFLECT short-circuits the indirect dispatch
+     * and calls reflect() directly. The intent's partial_args[0]
+     * carries the scope id (0..4); see verba/intent.iii intent_reflect. */
+    let gk_reflect : u8 = intent_goal_kind(intent)
+    if gk_reflect == RV_PRIMITIVE_REFLECT {
+        let scope_u64 : u64 = intent_partial_arg(intent, 0u32)
+        let scope     : u32 = (scope_u64 & 0xFFFFFFFFu64) as u32
+        value = reflect(scope)
+    }
+    if gk_reflect != RV_PRIMITIVE_REFLECT {
+        if dispatch_fp != 0u64 {
+            let f : u64 = dispatch_fp
+            value = f(0u64, 0u64, 0u64, ctx)
+        }
+    }
+
+    /* Step 8: binding_digest per FROZEN SPEC §6.8.
+     * SHA256("III_RESOLVE_BIND" || pattern_id_le8 || intent_id_le8 ||
+     *        num_substs_le4 (=0) || dispatch_fp_le8 || value_le8).
+     * num_substs is 0 because the baseline resolver routes purely by score;
+     * unify is invoked when patterns are wired with non-null unify_fn (Stage-2).
+     * dispatch_fp and value are folded in so the digest reflects the actual
+     * binding produced -- same (set,intent,ctx) → same fp/value → same digest. */
+    let pid_v : u64 = pattern_id(p_win)
+    let iid_v : u64 = intent_id(intent)
+    mhash_begin()
+    mhash_domain((&RESV_DOM_BIND) as u64, 16u64)
+    let mut bk : u32 = 0u32
+    while bk < 8u32 {
+        RES_BUF8[bk] = ((pid_v >> ((bk & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        bk = bk + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    bk = 0u32
+    while bk < 8u32 {
+        RES_BUF8[bk] = ((iid_v >> ((bk & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        bk = bk + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    RES_BUF4[0] = 0u8; RES_BUF4[1] = 0u8; RES_BUF4[2] = 0u8; RES_BUF4[3] = 0u8
+    mhash_payload((&RES_BUF4) as u64, 4u64)
+    bk = 0u32
+    while bk < 8u32 {
+        RES_BUF8[bk] = ((dispatch_fp >> ((bk & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        bk = bk + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    bk = 0u32
+    while bk < 8u32 {
+        RES_BUF8[bk] = ((value >> ((bk & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        bk = bk + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    mhash_final((&RES_BIND_DIG) as u64)
+
+    /* Step 9-10: emit OK witness */
+    mhash_begin()
+    mhash_domain((&RESV_DOM_OK) as u64, 16u64)
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        RES_BUF8[k] = ((pid_v >> ((k & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        k = k + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    k = 0u32
+    while k < 8u32 {
+        RES_BUF8[k] = ((iid_v >> ((k & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        k = k + 1u32
+    }
+    mhash_payload((&RES_BUF8) as u64, 8u64)
+    mhash_payload((&RES_DIG) as u64, 32u64)
+    mhash_payload((&RES_BIND_DIG) as u64, 32u64)
+    let score_low4 : u32 = (best_score & 0xFFFFFFFFu64) as u32
+    RES_BUF4[0] = (score_low4 & 0xFFu32) as u8
+    RES_BUF4[1] = ((score_low4 >> 8u32) & 0xFFu32) as u8
+    RES_BUF4[2] = ((score_low4 >> 16u32) & 0xFFu32) as u8
+    RES_BUF4[3] = ((score_low4 >> 24u32) & 0xFFu32) as u8
+    mhash_payload((&RES_BUF4) as u64, 4u64)
+    mhash_final((&RES_MHASH) as u64)
+
+    let cap_v : u64 = call_context_cap_id(ctx)
+    let k_now : u64 = kchain_current(call_context_kchain_id(ctx) as u64)
+    witness_append_k((&RES_MHASH) as u64, cap_v, k_now)
+
+    /* Phase B.3: capture last-resolution event for reflect primitive.
+     * Note: resolve()'s local is depth_u32; mask + widen to u64 here. */
+    RES_LAST_PATTERN_ID  = pid_v
+    RES_LAST_INTENT_ID   = iid_v
+    RES_LAST_K_NOW       = k_now
+    RES_LAST_DEPTH       = (depth_u32 as u64) & 0xFFFFFFFFu64
+    RES_LAST_BEST_SCORE  = best_score
+    RES_LAST_DISPATCH_FP = dispatch_fp
+
+    /* Phase C.3: insert into memo on cache miss. On hit, the entry is
+     * already present (and FIFO-stable; no re-insertion needed). */
+    if memo_hit == 0u8 {
+        memo_insert(memo_k, best_id, dispatch_fp)
+    }
+
+    /* Step 11: return ok (tag bit 0 = 0) */
+    let payload : u64 = (value & 0x7FFFFFFFFFFFFFFFu64) << 1u64
+    return payload
+}
+
+/* ================================================================ */
+/* Phase B.3: reflect primitive + last-event accessor                */
+/*                                                                    */
+/* reflect(scope) is the meta-observation primitive (PRIMITIVE_REFLECT*/
+/* = 18 in the Intent Calculus v1.0). It exposes the resolver's      */
+/* internal state without going through indirect dispatch.            */
+/*                                                                    */
+/* scope encoding (per sanctus/calculus_v1.iii sec A.2):              */
+/*   0 = current K-cost (kchain value at last resolve)                */
+/*   1 = current recursion depth (last resolve)                       */
+/*   2 = last winning pattern_id                                      */
+/*   3 = bit-packed caller pattern-id chain (depth <= 8 entries,      */
+/*       8 bits each; this is the L0 implicit provenance encoded     */
+/*       inline; depth bits in the high byte)                         */
+/*   4 = last winning score                                           */
+/*                                                                    */
+/* The scope=3 encoding is a bounded summary of the call_context      */
+/* parent chain. iiis-0 has no fn-ptr-walk introspection at this      */
+/* level, so the encoding stores RES_LAST_PATTERN_ID in the low byte  */
+/* and RES_LAST_INTENT_ID in the next 7 bytes. This is sufficient    */
+/* for governance_observe_and_propose's pattern-recurrence detection. */
+/*                                                                    */
+/* All unrecognised scope values return 0u64.                         */
+/* ================================================================ */
+
+const REFLECT_SCOPE_K_COST     : u32 = 0u32
+const REFLECT_SCOPE_DEPTH      : u32 = 1u32
+const REFLECT_SCOPE_PATTERN_ID : u32 = 2u32
+const REFLECT_SCOPE_CHAIN      : u32 = 3u32
+const REFLECT_SCOPE_SCORE      : u32 = 4u32
+
+fn reflect(scope: u32) -> u64 @export {
+    let l_scope : u32 = scope
+    if l_scope == REFLECT_SCOPE_K_COST     { return RES_LAST_K_NOW }
+    if l_scope == REFLECT_SCOPE_DEPTH      { return RES_LAST_DEPTH }
+    if l_scope == REFLECT_SCOPE_PATTERN_ID { return RES_LAST_PATTERN_ID }
+    if l_scope == REFLECT_SCOPE_CHAIN {
+        /* Bit-pack: low byte = pattern_id & 0xFF; next 7 bytes from
+         * intent_id (which encodes the slot of construction).
+         * Bounded summary of the recent resolution lineage. */
+        let pid_lo  : u64 = RES_LAST_PATTERN_ID & 0xFFu64
+        let iid_hi7 : u64 = (RES_LAST_INTENT_ID & 0x00FFFFFFFFFFFFFFu64) << 8u64
+        return iid_hi7 | pid_lo
+    }
+    if l_scope == REFLECT_SCOPE_SCORE { return RES_LAST_BEST_SCORE }
+    return 0u64
+}
+
+/* Emit a 64-byte struct describing the last resolution event.
+ * Layout:
+ *   off  field
+ *    0   intent_id        u64
+ *    8   pattern_id       u64
+ *   16   best_score       u64
+ *   24   k_now            u64
+ *   32   dispatch_fp      u64
+ *   40   depth            u64 (low u16 carries the actual depth)
+ *   48   reserved         u64 (=0)
+ *   56   reserved         u64 (=0)
+ *
+ * out_64 is a caller-owned 64-byte buffer. Returns 0 on success. */
+fn resolver_last_event(out_64: u64) -> i32 @export {
+    let l_out : u64 = out_64
+    if l_out == 0u64 { return -1i32 }
+    /* Helper inline: write u64 LE to (l_out + off). */
+    let mut idx : u32 = 0u32
+    while idx < 8u32 {
+        let bp : *u8 = (l_out + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((RES_LAST_INTENT_ID >> ((idx & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        idx = idx + 1u32
+    }
+    idx = 0u32
+    while idx < 8u32 {
+        let bp : *u8 = (l_out + 8u64 + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((RES_LAST_PATTERN_ID >> ((idx & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        idx = idx + 1u32
+    }
+    idx = 0u32
+    while idx < 8u32 {
+        let bp : *u8 = (l_out + 16u64 + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((RES_LAST_BEST_SCORE >> ((idx & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        idx = idx + 1u32
+    }
+    idx = 0u32
+    while idx < 8u32 {
+        let bp : *u8 = (l_out + 24u64 + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((RES_LAST_K_NOW >> ((idx & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        idx = idx + 1u32
+    }
+    idx = 0u32
+    while idx < 8u32 {
+        let bp : *u8 = (l_out + 32u64 + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((RES_LAST_DISPATCH_FP >> ((idx & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        idx = idx + 1u32
+    }
+    idx = 0u32
+    while idx < 8u32 {
+        let bp : *u8 = (l_out + 40u64 + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((RES_LAST_DEPTH >> ((idx & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        idx = idx + 1u32
+    }
+    /* Reserved bytes 48..63 set to zero. */
+    idx = 48u32
+    while idx < 64u32 {
+        let bp : *u8 = (l_out + ((idx as u64) & 0xFFu64)) as *u8
+        bp[0u64] = 0u8
+        idx = idx + 1u32
+    }
+    return 0i32
+}

@@ -1,0 +1,70 @@
+/* III conformance corpus 197 -- Stage 4.1: Ed25519 SIGN over a LONG message
+ * (the RFC 8032 §7.1 Test 1024 path: a >1 KiB message spanning many
+ * SHA-512 blocks).  RFC Test 1024 uses a fixed 1023-byte vector; rather
+ * than hand-transcribe 1023 bytes (error-prone), this exercises the SAME
+ * code path with a deterministic 1023-byte message and uses verify as the
+ * oracle (verify is now correct -- §4.1 forgery fix).  The exact-RFC-byte
+ * match for the algorithm is proven by Test 1/2/3 (corpus 193/195/196);
+ * this adds the multi-block long-message coverage.
+ *
+ *   keypair: RFC Test 1 (seed 9d61..7f60, pk d75a..511a)
+ *   sign(1023-byte msg) -> verify == 1 ; tamper -> verify == 0.  Exit 99.
+ */
+module corpus_197
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+
+fn fill_seed(p: *u8) -> i32 {
+    p[0]  = 0x9Du8; p[1]  = 0x61u8; p[2]  = 0xB1u8; p[3]  = 0x9Du8
+    p[4]  = 0xEFu8; p[5]  = 0xFDu8; p[6]  = 0x5Au8; p[7]  = 0x60u8
+    p[8]  = 0xBAu8; p[9]  = 0x84u8; p[10] = 0x4Au8; p[11] = 0xF4u8
+    p[12] = 0x92u8; p[13] = 0xECu8; p[14] = 0x2Cu8; p[15] = 0xC4u8
+    p[16] = 0x44u8; p[17] = 0x49u8; p[18] = 0xC5u8; p[19] = 0x69u8
+    p[20] = 0x7Bu8; p[21] = 0x32u8; p[22] = 0x69u8; p[23] = 0x19u8
+    p[24] = 0x70u8; p[25] = 0x3Bu8; p[26] = 0xACu8; p[27] = 0x03u8
+    p[28] = 0x1Cu8; p[29] = 0xAEu8; p[30] = 0x7Fu8; p[31] = 0x60u8
+    return 0i32
+}
+
+fn fill_pubkey(p: *u8) -> i32 {
+    p[0]  = 0xD7u8; p[1]  = 0x5Au8; p[2]  = 0x98u8; p[3]  = 0x01u8
+    p[4]  = 0x82u8; p[5]  = 0xB1u8; p[6]  = 0x0Au8; p[7]  = 0xB7u8
+    p[8]  = 0xD5u8; p[9]  = 0x4Bu8; p[10] = 0xFEu8; p[11] = 0xD3u8
+    p[12] = 0xC9u8; p[13] = 0x64u8; p[14] = 0x07u8; p[15] = 0x3Au8
+    p[16] = 0x0Eu8; p[17] = 0xE1u8; p[18] = 0x72u8; p[19] = 0xF3u8
+    p[20] = 0xDAu8; p[21] = 0xA6u8; p[22] = 0x23u8; p[23] = 0x25u8
+    p[24] = 0xAFu8; p[25] = 0x02u8; p[26] = 0x1Au8; p[27] = 0x68u8
+    p[28] = 0xF7u8; p[29] = 0x07u8; p[30] = 0x51u8; p[31] = 0x1Au8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let seed   : *u8 = malloc(32u64)
+    let pubkey : *u8 = malloc(32u64)
+    let sig    : *u8 = malloc(64u64)
+    let msg    : *u8 = malloc(1023u64)
+    fill_seed(seed)
+    fill_pubkey(pubkey)
+    /* deterministic 1023-byte message (multi SHA-512 block) */
+    let mut i : u64 = 0u64
+    while i < 1023u64 {
+        msg[i] = ((i * 131u64 + 17u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    let src : u8 = ed25519_sign(seed, pubkey, msg, 1023u64, sig)
+    if src != 1u8 { free(seed) ; free(pubkey) ; free(sig) ; free(msg) ; return 1u64 }
+    let v : u8 = ed25519_verify(pubkey, msg, 1023u64, sig)
+    if v != 1u8 { free(seed) ; free(pubkey) ; free(sig) ; free(msg) ; return 2u64 }
+    /* tamper a middle byte of the message -> signature must no longer verify */
+    msg[500u64] = msg[500u64] ^ 0x01u8
+    let v2 : u8 = ed25519_verify(pubkey, msg, 1023u64, sig)
+    free(seed)
+    free(pubkey)
+    free(sig)
+    free(msg)
+    if v2 == 1u8 { return 3u64 }
+    return 99u64
+}

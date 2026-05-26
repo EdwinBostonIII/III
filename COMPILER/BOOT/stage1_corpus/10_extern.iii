@@ -1,0 +1,7 @@
+module corpus_10
+
+extern @abi(ioctl) fn dummy(c: u64) -> u64 from "fake"
+
+fn main() -> u64 {
+    return 0
+}

@@ -1,0 +1,72 @@
+/* json: parse primitive values - null, true, false, integers, strings */
+module corpus_f52
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, base: u64, len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_kind(id: u64) -> u8 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_base(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_len(id: u64) -> u64 from "json.iii"
+
+fn parse_lit(arena: u64, lit: *u8, len: u64) -> u64 {
+    return json_parse(arena, lit as u64, len)
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+
+    /* "null" */
+    let n_buf : *u8 = malloc(4u64)
+    n_buf[0]=110u8; n_buf[1]=117u8; n_buf[2]=108u8; n_buf[3]=108u8
+    let r1 : u64 = parse_lit(a, n_buf, 4u64)
+    if r1 == 0u64 { return 1u64 }
+    if json_kind(r1) != 1u8 { return 2u64 }   /* JSON_KIND_NULL */
+
+    /* "true" */
+    let t_buf : *u8 = malloc(4u64)
+    t_buf[0]=116u8; t_buf[1]=114u8; t_buf[2]=117u8; t_buf[3]=101u8
+    let r2 : u64 = parse_lit(a, t_buf, 4u64)
+    if r2 == 0u64 { return 3u64 }
+    if json_kind(r2) != 3u8 { return 4u64 }   /* JSON_KIND_TRUE */
+
+    /* "false" */
+    let f_buf : *u8 = malloc(5u64)
+    f_buf[0]=102u8; f_buf[1]=97u8; f_buf[2]=108u8; f_buf[3]=115u8; f_buf[4]=101u8
+    let r3 : u64 = parse_lit(a, f_buf, 5u64)
+    if r3 == 0u64 { return 5u64 }
+    if json_kind(r3) != 2u8 { return 6u64 }   /* JSON_KIND_FALSE */
+
+    /* "42" */
+    let n42 : *u8 = malloc(2u64)
+    n42[0]=52u8; n42[1]=50u8
+    let r4 : u64 = parse_lit(a, n42, 2u64)
+    if r4 == 0u64 { return 7u64 }
+    if json_kind(r4) != 4u8 { return 8u64 }   /* JSON_KIND_NUM */
+    if json_int(r4) != 42i64 { return 9u64 }
+
+    /* "-17" */
+    let nm17 : *u8 = malloc(3u64)
+    nm17[0]=45u8; nm17[1]=49u8; nm17[2]=55u8
+    let r5 : u64 = parse_lit(a, nm17, 3u64)
+    if r5 == 0u64 { return 10u64 }
+    if json_int(r5) != -17i64 { return 11u64 }
+
+    /* "\"hi\\n\"" -> "hi\n" 3 bytes */
+    let s_buf : *u8 = malloc(6u64)
+    s_buf[0]=34u8; s_buf[1]=104u8; s_buf[2]=105u8; s_buf[3]=92u8; s_buf[4]=110u8; s_buf[5]=34u8
+    let r6 : u64 = parse_lit(a, s_buf, 6u64)
+    if r6 == 0u64 { return 12u64 }
+    if json_kind(r6) != 5u8 { return 13u64 }   /* JSON_KIND_STR */
+    if json_string_len(r6) != 3u64 { return 14u64 }
+    let str_p : *u8 = json_string_base(r6) as *u8
+    if str_p[0] != 104u8 { return 15u64 }   /* h */
+    if str_p[1] != 105u8 { return 16u64 }   /* i */
+    if str_p[2] != 10u8  { return 17u64 }   /* \n */
+
+    free(n_buf); free(t_buf); free(f_buf); free(n42); free(nm17); free(s_buf)
+    arena_drop(a)
+    return 99u64
+}

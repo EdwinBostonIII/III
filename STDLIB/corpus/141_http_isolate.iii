@@ -1,0 +1,32 @@
+/* Isolate where http_parse_response segfaults. */
+module corpus_141
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    let buf : *u8 = malloc(43u64)
+    /* "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello" */
+    buf[0]=72u8; buf[1]=84u8; buf[2]=84u8; buf[3]=80u8; buf[4]=47u8
+    buf[5]=49u8; buf[6]=46u8; buf[7]=49u8; buf[8]=32u8; buf[9]=50u8
+    buf[10]=48u8; buf[11]=48u8; buf[12]=32u8; buf[13]=79u8; buf[14]=75u8
+    buf[15]=13u8; buf[16]=10u8
+    buf[17]=67u8; buf[18]=111u8; buf[19]=110u8; buf[20]=116u8; buf[21]=101u8
+    buf[22]=110u8; buf[23]=116u8; buf[24]=45u8; buf[25]=76u8; buf[26]=101u8
+    buf[27]=110u8; buf[28]=103u8; buf[29]=116u8; buf[30]=104u8; buf[31]=58u8
+    buf[32]=32u8; buf[33]=53u8; buf[34]=13u8; buf[35]=10u8
+    buf[36]=13u8; buf[37]=10u8
+    buf[38]=72u8; buf[39]=101u8; buf[40]=108u8; buf[41]=108u8; buf[42]=111u8
+
+    let resp : u64 = http_parse_response(a, buf as u64, 43u64)
+    if resp == 0u64 { return 2u64 }
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

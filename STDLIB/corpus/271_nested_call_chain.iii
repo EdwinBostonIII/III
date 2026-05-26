@@ -1,0 +1,31 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\271_nested_call_chain.iii
+ *
+ * III conformance corpus 271 -- nested-call propagation of @returns_hexad
+ * through the param-kind cross-rule check.
+ *
+ * Tests: `outer(middle(inner(x)))` where every link declares
+ * @returns_hexad / @hexad_kind for kind COMPOSE.  Each individual
+ * call-site check fires; the chain propagates structurally.
+ *
+ * Mandate 7: each check is local at one call site; nested calls
+ * compose because emission walks bottom-up.
+ */
+module corpus_271
+
+fn inner() -> u64 @returns_hexad(6u64) { return 0x10u64 }
+fn middle(x: u64 @hexad_kind(6u64)) -> u64 @returns_hexad(6u64) { return x * 2u64 }
+fn outer(y: u64 @hexad_kind(6u64)) -> u64 { return y + 1u64 }
+
+fn main() -> u64 {
+    /* Each call-site check fires structurally:
+     *   inner()       -> kind 6 (return)
+     *   middle(inner()) -> inner's @returns_hexad(6) matches
+     *                       middle's param @hexad_kind(6); passes.
+     *                       middle's return is @returns_hexad(6).
+     *   outer(...)    -> middle's @returns_hexad(6) matches
+     *                     outer's param @hexad_kind(6); passes.
+     */
+    let r : u64 = outer(middle(inner()))
+    if r != 0x21u64 { return 1u64 }
+    return 99u64
+}

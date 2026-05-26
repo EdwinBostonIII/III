@@ -1,0 +1,290 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\quality.iii
+ *
+ * III STDLIB - sanctus::quality
+ *
+ * Quality gates Q1..Q6 for the Living Sealed Lattice plan.
+ *
+ *   Q1  corpus pass       -- this run's pass count >= prior run's
+ *   Q2  mhash determinism -- two consecutive build mhashes are equal
+ *   Q3  golden-mhash      -- built artifact mhash matches the golden file
+ *   Q4  witness growth    -- append-only growth (count monotone, root chains)
+ *   Q5  K-floor           -- K stays >= floor (default 0.85 * 1e9)
+ *   Q6  layered seal      -- new_root = sha256(domain "III_SEAL_STEP" ||
+ *                                              step_no_le_4 || prev_root_32)
+ *
+ * Returns u32 bitmask: bit N set ⇔ gate Q(N+1) satisfied.  Aggregate mask
+ * is 0x3F when all six pass.
+ *
+ * Discipline:
+ *   - W1 (u32 ops masked) · W2 (≤4 params/fn) · W4 (flat accessor)
+ *   - W7 (no break/continue) · W13 (≤20 named locals) · W14 (sentinel-loop)
+ *   - Inputs supplied via setters before quality_gate_check is called
+ *     (avoids exceeding W2 in any single signature).
+ *   - mhash composition follows sanctus::mhash discipline
+ *     (begin → domain → payload* → final).
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.
+ *
+ * NOT part of R1 sealed surface.  Module is operational; its API may
+ * evolve as the lattice plan matures.  See NOTES/LATTICE-CHANGELOG.md.
+ */
+
+module sanctus_quality
+
+extern @abi(c-msvc-x64) fn kchain_is_underflow(id: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_floor(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn closure_eq(addr_a: u64, addr_b: u64) -> u8 from "closure.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+/* ─── Constants ──────────────────────────────────────────────────── */
+
+const QUALITY_OK         : i32 =  0i32
+const QUALITY_E_NULL_ARG : i32 = -1i32
+
+const QUALITY_Q1_CORPUS    : u32 = 0x01u32
+const QUALITY_Q2_DETERMIN  : u32 = 0x02u32
+const QUALITY_Q3_GOLDEN    : u32 = 0x04u32
+const QUALITY_Q4_WITNESS   : u32 = 0x08u32
+const QUALITY_Q5_KFLOOR    : u32 = 0x10u32
+const QUALITY_Q6_LAYERSEAL : u32 = 0x20u32
+/* Q7 (Resolution Determinism, FROZEN SPEC §1.2.7, ADR-RES-011).
+ * Implementation in sanctus/quality_q7.iii. */
+const QUALITY_Q7_RESOLVE   : u32 = 0x40u32
+const QUALITY_ALL_MASK     : u32 = 0x7Fu32
+
+/* ─── Module-scope state ─────────────────────────────────────────── */
+
+/* Q1 inputs */
+var QUALITY_PREV_CORPUS_PASS : u32 = 0u32
+var QUALITY_THIS_CORPUS_PASS : u32 = 0u32
+
+/* Q2 inputs (32-byte mhashes from two consecutive deterministic builds) */
+var QUALITY_MHASH_A          : [u8; 32]
+var QUALITY_MHASH_B          : [u8; 32]
+var QUALITY_MHASH_PAIR_SET   : u8 = 0u8
+
+/* Q3 inputs */
+var QUALITY_ACTUAL           : [u8; 32]
+var QUALITY_GOLDEN           : [u8; 32]
+var QUALITY_GOLDEN_SET       : u8 = 0u8
+
+/* Q4 inputs */
+var QUALITY_PREV_W_COUNT     : u32 = 0u32
+var QUALITY_NEW_W_COUNT      : u32 = 0u32
+var QUALITY_PREV_W_ROOT      : [u8; 32]
+var QUALITY_NEW_W_ROOT       : [u8; 32]
+var QUALITY_W_SET            : u8 = 0u8
+
+/* Q5 inputs */
+var QUALITY_KCHAIN_ID        : u64 = 0u64
+
+/* Q6 inputs */
+var QUALITY_PREV_SEAL_ROOT   : [u8; 32]
+var QUALITY_NEW_SEAL_ROOT    : [u8; 32]
+var QUALITY_SEAL_STEP_NO     : u32 = 0u32
+var QUALITY_SEAL_SET         : u8 = 0u8
+
+/* Q6 scratch */
+var QUALITY_SEAL_DOMAIN      : [u8; 13]      /* "III_SEAL_STEP" */
+var QUALITY_SEAL_STEP_BYTES  : [u8; 4]
+var QUALITY_SEAL_EXPECTED    : [u8; 32]
+var QUALITY_SEAL_DOMAIN_INIT : u8 = 0u8
+
+/* ─── Internal: lazy init for the seal-step domain string ──────── */
+
+fn q_init_seal_domain() -> u32 {
+    if QUALITY_SEAL_DOMAIN_INIT == 1u8 { return 0u32 }
+    /* "III_SEAL_STEP" */
+    QUALITY_SEAL_DOMAIN[0u64]  = 73u8   /* I */
+    QUALITY_SEAL_DOMAIN[1u64]  = 73u8   /* I */
+    QUALITY_SEAL_DOMAIN[2u64]  = 73u8   /* I */
+    QUALITY_SEAL_DOMAIN[3u64]  = 95u8   /* _ */
+    QUALITY_SEAL_DOMAIN[4u64]  = 83u8   /* S */
+    QUALITY_SEAL_DOMAIN[5u64]  = 69u8   /* E */
+    QUALITY_SEAL_DOMAIN[6u64]  = 65u8   /* A */
+    QUALITY_SEAL_DOMAIN[7u64]  = 76u8   /* L */
+    QUALITY_SEAL_DOMAIN[8u64]  = 95u8   /* _ */
+    QUALITY_SEAL_DOMAIN[9u64]  = 83u8   /* S */
+    QUALITY_SEAL_DOMAIN[10u64] = 84u8   /* T */
+    QUALITY_SEAL_DOMAIN[11u64] = 69u8   /* E */
+    QUALITY_SEAL_DOMAIN[12u64] = 80u8   /* P */
+    QUALITY_SEAL_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+/* ─── Setters ───────────────────────────────────────────────────── */
+
+fn quality_set_corpus(prev_pass: u32, this_pass: u32) -> i32 @export {
+    QUALITY_PREV_CORPUS_PASS = prev_pass & 0xFFFFFFFFu32
+    QUALITY_THIS_CORPUS_PASS = this_pass & 0xFFFFFFFFu32
+    return QUALITY_OK
+}
+
+fn quality_set_mhash_pair(a_ptr: u64, b_ptr: u64) -> i32 @export {
+    if a_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    if b_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    let pa : *u8 = a_ptr as *u8
+    let pb : *u8 = b_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        QUALITY_MHASH_A[i] = pa[i]
+        QUALITY_MHASH_B[i] = pb[i]
+        i = i + 1u64
+    }
+    QUALITY_MHASH_PAIR_SET = 1u8
+    return QUALITY_OK
+}
+
+fn quality_set_golden(actual_ptr: u64, golden_ptr: u64) -> i32 @export {
+    if actual_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    if golden_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    let pa : *u8 = actual_ptr as *u8
+    let pg : *u8 = golden_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        QUALITY_ACTUAL[i] = pa[i]
+        QUALITY_GOLDEN[i] = pg[i]
+        i = i + 1u64
+    }
+    QUALITY_GOLDEN_SET = 1u8
+    return QUALITY_OK
+}
+
+fn quality_set_witness_counts(prev_count: u32, new_count: u32) -> i32 @export {
+    QUALITY_PREV_W_COUNT = prev_count & 0xFFFFFFFFu32
+    QUALITY_NEW_W_COUNT  = new_count  & 0xFFFFFFFFu32
+    return QUALITY_OK
+}
+
+fn quality_set_witness_roots(prev_ptr: u64, new_ptr: u64) -> i32 @export {
+    if prev_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    if new_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    let pp : *u8 = prev_ptr as *u8
+    let np : *u8 = new_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        QUALITY_PREV_W_ROOT[i] = pp[i]
+        QUALITY_NEW_W_ROOT[i]  = np[i]
+        i = i + 1u64
+    }
+    QUALITY_W_SET = 1u8
+    return QUALITY_OK
+}
+
+fn quality_set_kchain(id: u64) -> i32 @export {
+    QUALITY_KCHAIN_ID = id
+    return QUALITY_OK
+}
+
+fn quality_set_seal(prev_ptr: u64, new_ptr: u64, step_no: u32) -> i32 @export {
+    if prev_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    if new_ptr == 0u64 { return QUALITY_E_NULL_ARG }
+    let pp : *u8 = prev_ptr as *u8
+    let np : *u8 = new_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        QUALITY_PREV_SEAL_ROOT[i] = pp[i]
+        QUALITY_NEW_SEAL_ROOT[i]  = np[i]
+        i = i + 1u64
+    }
+    QUALITY_SEAL_STEP_NO = step_no & 0xFFFFFFFFu32
+    QUALITY_SEAL_SET = 1u8
+    return QUALITY_OK
+}
+
+/* ─── Per-gate predicates ───────────────────────────────────────── */
+
+/* Q1: this run's pass count must be at least the prior run's. */
+fn quality_check_q1_corpus() -> u8 @export {
+    if QUALITY_THIS_CORPUS_PASS >= QUALITY_PREV_CORPUS_PASS { return 1u8 }
+    return 0u8
+}
+
+/* Q2: two 32-byte mhashes are byte-for-byte equal. */
+fn quality_check_q2_deterministic() -> u8 @export {
+    if QUALITY_MHASH_PAIR_SET == 0u8 { return 0u8 }
+    return closure_eq(&QUALITY_MHASH_A as u64, &QUALITY_MHASH_B as u64)
+}
+
+/* Q3: golden-mhash match -- actual equals golden. */
+fn quality_check_q3_golden() -> u8 @export {
+    if QUALITY_GOLDEN_SET == 0u8 { return 0u8 }
+    return closure_eq(&QUALITY_ACTUAL as u64, &QUALITY_GOLDEN as u64)
+}
+
+/* Q4: append-only growth.
+ *   - new_count must not be < prev_count
+ *   - if counts equal: roots must match
+ *   - if counts grew:  roots must differ
+ */
+fn quality_check_q4_witness_growth() -> u8 @export {
+    if QUALITY_W_SET == 0u8 { return 0u8 }
+    if QUALITY_NEW_W_COUNT < QUALITY_PREV_W_COUNT { return 0u8 }
+    let same : u8 = closure_eq(&QUALITY_PREV_W_ROOT as u64,
+                               &QUALITY_NEW_W_ROOT as u64)
+    if QUALITY_NEW_W_COUNT == QUALITY_PREV_W_COUNT {
+        if same == 1u8 { return 1u8 }
+        return 0u8
+    }
+    /* grew → roots must differ */
+    if same == 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* Q5: K-floor preservation. */
+fn quality_check_q5_kfloor() -> u8 @export {
+    if QUALITY_KCHAIN_ID == 0u64 { return 1u8 }
+    if kchain_is_underflow(QUALITY_KCHAIN_ID) == 1u8 { return 0u8 }
+    let cur : u64 = kchain_current(QUALITY_KCHAIN_ID)
+    let flr : u64 = kchain_floor(QUALITY_KCHAIN_ID)
+    if cur >= flr { return 1u8 }
+    return 0u8
+}
+
+/* Q6: layered seal continuity.
+ *   expected = sha256(domain "III_SEAL_STEP" || step_no_le_4 || prev_root_32)
+ *   pass     = (expected == new_root)
+ *
+ *   Step 0 (genesis) -- accept any prev/new since chain hasn't started yet.
+ */
+fn quality_check_q6_layered_seal() -> u8 @export {
+    if QUALITY_SEAL_SET == 0u8 { return 0u8 }
+    if QUALITY_SEAL_STEP_NO == 0u32 { return 1u8 }
+    q_init_seal_domain()
+    let s : u32 = QUALITY_SEAL_STEP_NO
+    QUALITY_SEAL_STEP_BYTES[0u64] = (s & 0xFFu32) as u8
+    QUALITY_SEAL_STEP_BYTES[1u64] = ((s >> 8u32)  & 0xFFu32) as u8
+    QUALITY_SEAL_STEP_BYTES[2u64] = ((s >> 16u32) & 0xFFu32) as u8
+    QUALITY_SEAL_STEP_BYTES[3u64] = ((s >> 24u32) & 0xFFu32) as u8
+    mhash_begin()
+    mhash_domain(&QUALITY_SEAL_DOMAIN as u64, 13u64)
+    mhash_payload(&QUALITY_SEAL_STEP_BYTES as u64, 4u64)
+    mhash_payload(&QUALITY_PREV_SEAL_ROOT as u64, 32u64)
+    mhash_final(&QUALITY_SEAL_EXPECTED as u64)
+    return closure_eq(&QUALITY_SEAL_EXPECTED as u64,
+                      &QUALITY_NEW_SEAL_ROOT as u64)
+}
+
+/* ─── Aggregator + public mask getters ──────────────────────────── */
+
+fn quality_all_mask() -> u32 @export {
+    return QUALITY_ALL_MASK
+}
+
+extern @abi(c-msvc-x64) fn quality_check_q7_resolution() -> u8 from "quality_q7.iii"
+
+fn quality_gate_check() -> u32 @export {
+    let mut bits : u32 = 0u32
+    if quality_check_q1_corpus() == 1u8         { bits = bits | QUALITY_Q1_CORPUS }
+    if quality_check_q2_deterministic() == 1u8  { bits = bits | QUALITY_Q2_DETERMIN }
+    if quality_check_q3_golden() == 1u8         { bits = bits | QUALITY_Q3_GOLDEN }
+    if quality_check_q4_witness_growth() == 1u8 { bits = bits | QUALITY_Q4_WITNESS }
+    if quality_check_q5_kfloor() == 1u8         { bits = bits | QUALITY_Q5_KFLOOR }
+    if quality_check_q6_layered_seal() == 1u8   { bits = bits | QUALITY_Q6_LAYERSEAL }
+    if quality_check_q7_resolution() == 1u8     { bits = bits | QUALITY_Q7_RESOLVE }
+    return bits & QUALITY_ALL_MASK
+}

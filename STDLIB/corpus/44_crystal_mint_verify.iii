@@ -1,0 +1,36 @@
+/* crystal: mint then verify; tampering with cap_id detected */
+module corpus_d44
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn crystal_mint(code: u32, site: u64, cap: u64, cause: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_cap(id: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_set_k(id: u64, k_fixed: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+
+fn main() -> u64 {
+    let site : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        site[i] = (i + 1u64) as u8
+        i = i + 1u64
+    }
+    let c1 : u64 = crystal_mint(42u32, site as u64, 100u64, 0u64)
+    if c1 == 0u64 { return 1u64 }
+    if crystal_code(c1) != 42u32 { return 2u64 }
+    if crystal_cap(c1) != 100u64 { return 3u64 }
+    if crystal_verify(c1) != 1u8 { return 4u64 }
+    /* set_k recomputes MAC; verify still works */
+    crystal_set_k(c1, 950000000u64)
+    if crystal_verify(c1) != 1u8 { return 5u64 }
+    /* mint another with different code -> different MAC */
+    let c2 : u64 = crystal_mint(99u32, site as u64, 100u64, c1)
+    if c2 == 0u64 { return 6u64 }
+    if crystal_verify(c2) != 1u8 { return 7u64 }
+    crystal_drop(c1)
+    crystal_drop(c2)
+    free(site)
+    return 99u64
+}

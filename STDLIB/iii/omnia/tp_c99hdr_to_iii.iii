@@ -1,0 +1,129 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_c99hdr_to_iii.iii
+ *
+ * Transform pattern: FORM_C99_HEADER → FORM_III
+ * FROZEN SPEC §7B.6 slot 34; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Scans a C99 header for `extern` function declarations and emits
+ * III `extern @abi(c-msvc-x64) fn ... from "<header>.iii"` lines.
+ *
+ * Discipline: ≤4 parameters per function. State held in module vars.
+ */
+
+module omnia_tp_c99hdr_to_iii
+
+var TP_C99HI_PREFIX : [u8; 27] = [
+    101u8, 120u8, 116u8, 101u8, 114u8, 110u8, 32u8, 64u8, 97u8, 98u8, 105u8, 40u8, 99u8, 45u8, 109u8, 115u8,
+    118u8, 99u8, 45u8, 120u8, 54u8, 52u8, 41u8, 32u8, 102u8, 110u8, 32u8
+]
+var TP_EXTERN_KEYWORD : [u8; 6] = [101u8, 120u8, 116u8, 101u8, 114u8, 110u8]
+
+/* Module-level state shared across helpers (each call sets these once). */
+var TPCH_SRC : u64 = 0u64
+var TPCH_SRC_LEN : u64 = 0u64
+var TPCH_DST : u64 = 0u64
+var TPCH_DST_CAP : u64 = 0u64
+var TPCH_OUT_OFF : u64 = 0u64
+
+fn tp_c99hi_emit_at(off: u64, b: u8) -> i32 {
+    let p : *u8 = (TPCH_DST + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_c99hi_skip_ws(off: u64) -> u64 {
+    let mut o : u64 = off
+    while o < TPCH_SRC_LEN {
+        let bp : *u8 = (TPCH_SRC + o) as *u8
+        let c : u8 = bp[0u64]
+        let mut is_ws : u8 = 0u8
+        if c == 32u8 { is_ws = 1u8 }
+        if c == 9u8 { is_ws = 1u8 }
+        if c == 10u8 { is_ws = 1u8 }
+        if c == 13u8 { is_ws = 1u8 }
+        if is_ws == 0u8 { return o }
+        o = o + 1u64
+    }
+    return o
+}
+
+fn tp_c99hi_find_byte(off: u64, c: u8) -> u64 {
+    let mut o : u64 = off
+    while o < TPCH_SRC_LEN {
+        let bp : *u8 = (TPCH_SRC + o) as *u8
+        if bp[0u64] == c { return o }
+        o = o + 1u64
+    }
+    return o
+}
+
+fn tp_c99hi_is_extern(off: u64) -> u8 {
+    if (off + 6u64) > TPCH_SRC_LEN { return 0u8 }
+    let mut i : u32 = 0u32
+    while i < 6u32 {
+        let bp : *u8 = (TPCH_SRC + off + ((i as u64) & 0x7u64)) as *u8
+        if bp[0u64] != TP_EXTERN_KEYWORD[i] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+fn tp_c99hi_emit_prefix() -> u8 {
+    if (TPCH_OUT_OFF + 27u64) > TPCH_DST_CAP { return 0u8 }
+    let mut p : u32 = 0u32
+    while p < 27u32 {
+        tp_c99hi_emit_at(TPCH_OUT_OFF, TP_C99HI_PREFIX[p])
+        TPCH_OUT_OFF = TPCH_OUT_OFF + 1u64
+        p = p + 1u32
+    }
+    return 1u8
+}
+
+fn tp_c99hi_copy_range(start: u64, stop: u64) -> u8 {
+    let mut s : u64 = start
+    while s < stop {
+        if TPCH_OUT_OFF >= TPCH_DST_CAP { return 0u8 }
+        let bp : *u8 = (TPCH_SRC + s) as *u8
+        tp_c99hi_emit_at(TPCH_OUT_OFF, bp[0u64])
+        TPCH_OUT_OFF = TPCH_OUT_OFF + 1u64
+        s = s + 1u64
+    }
+    return 1u8
+}
+
+fn tp_c99hi_emit_decl(in_off: u64, semi: u64) -> u8 {
+    if tp_c99hi_emit_prefix() == 0u8 { return 0u8 }
+    if tp_c99hi_copy_range(in_off + 6u64, semi) == 0u8 { return 0u8 }
+    if TPCH_OUT_OFF >= TPCH_DST_CAP { return 0u8 }
+    tp_c99hi_emit_at(TPCH_OUT_OFF, 10u8)
+    TPCH_OUT_OFF = TPCH_OUT_OFF + 1u64
+    return 1u8
+}
+
+fn tp_c99hdr_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    TPCH_SRC = src
+    TPCH_SRC_LEN = src_len
+    TPCH_DST = dst_buf
+    TPCH_DST_CAP = dst_cap
+    TPCH_OUT_OFF = 0u64
+    let mut in_off : u64 = 0u64
+    while in_off < src_len {
+        in_off = tp_c99hi_skip_ws(in_off)
+        if in_off >= src_len { return TPCH_OUT_OFF }
+        let bp : *u8 = (src + in_off) as *u8
+        if bp[0u64] == 35u8 {
+            in_off = tp_c99hi_find_byte(in_off, 10u8)
+            in_off = in_off + 1u64
+        }
+        if bp[0u64] != 35u8 {
+            let semi : u64 = tp_c99hi_find_byte(in_off, 59u8)
+            if semi >= src_len { return TPCH_OUT_OFF }
+            if tp_c99hi_is_extern(in_off) == 1u8 {
+                if tp_c99hi_emit_decl(in_off, semi) == 0u8 { return 0u64 }
+            }
+            in_off = semi + 1u64
+        }
+    }
+    return TPCH_OUT_OFF
+}

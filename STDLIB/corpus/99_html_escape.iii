@@ -1,0 +1,80 @@
+/* HTML escape/unescape roundtrip. */
+module corpus_99
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn html_escape(builder_id: u64, src: *u8, src_len: u64) -> i32 from "html_escape.iii"
+extern @abi(c-msvc-x64) fn html_unescape(builder_id: u64, src: *u8, src_len: u64) -> i32 from "html_escape.iii"
+
+fn make_str(buf: *u8, s: *u8, len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < len {
+        buf[i] = s[i]
+        i = i + 1u64
+    }
+    return len
+}
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(256u64)
+    let a : u64 = arena_new(8192u64)
+
+    /* Input: <a href="x">'&'</a> -- 19 chars */
+    let n : u64 = make_str(buf, "<a href=\"x\">'&'</a>", 19u64)
+
+    let b1 : u64 = builder_new(a, 256u64)
+    html_escape(b1, buf, n)
+    let elen : u64 = builder_len(b1)
+    let enc : *u8 = builder_seal(b1) as *u8
+
+    /* Expected: &lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;
+     *  &lt;        4
+     *  a           1
+     *  ' '         1
+     *  h           1
+     *  r           1
+     *  e           1
+     *  f           1
+     *  =           1
+     *  &quot;      6
+     *  x           1
+     *  &quot;      6
+     *  &gt;        4
+     *  &#39;       5
+     *  &amp;       5
+     *  &#39;       5
+     *  &lt;        4
+     *  /           1
+     *  a           1
+     *  &gt;        4   = 53
+     */
+    if elen != 53u64 { return 1u64 }
+    if enc[0] != 38u8 { return 2u64 }
+    if enc[1] != 108u8 { return 3u64 }
+    if enc[2] != 116u8 { return 4u64 }
+    if enc[3] != 59u8 { return 5u64 }
+
+    /* Roundtrip via unescape */
+    let b2 : u64 = builder_new(a, 256u64)
+    html_unescape(b2, enc, elen)
+    let dlen : u64 = builder_len(b2)
+    let dec : *u8 = builder_seal(b2) as *u8
+
+    if dlen != n { return 6u64 }
+    let mut i : u64 = 0u64
+    while i < n {
+        if dec[i] != buf[i] { return 7u64 }
+        i = i + 1u64
+    }
+    builder_drop(b2)
+    builder_drop(b1)
+    arena_drop(a)
+    free(buf)
+    return 99u64
+}

@@ -1,0 +1,53 @@
+/* ULID generate + format. Verifies 26-char Crockford Base32 output
+ * and that timestamp prefix encodes correctly. */
+module corpus_93
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn xoshiro_seed(s0: u64, s1: u64, s2: u64, s3: u64) -> i32 from "xoshiro.iii"
+extern @abi(c-msvc-x64) fn ulid_generate(timestamp_ms: u64, out_16: *u8) -> i32 from "ulid.iii"
+extern @abi(c-msvc-x64) fn ulid_format(ulid_16: *u8, out_26: *u8) -> i32 from "ulid.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(16u64)
+    let str : *u8 = malloc(26u64)
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    /* Use a simple well-known timestamp 0x123456789AB (12 hex digits = 48 bits)
+     *   = 1250999896491 ms.  Bytes: 01 23 45 67 89 AB */
+    ulid_generate(0x123456789ABu64, buf)
+    if buf[0] != 0x01u8 { return 1u64 }
+    if buf[1] != 0x23u8 { return 2u64 }
+    if buf[2] != 0x45u8 { return 3u64 }
+    if buf[3] != 0x67u8 { return 4u64 }
+    if buf[4] != 0x89u8 { return 5u64 }
+    if buf[5] != 0xABu8 { return 6u64 }
+    /* Format to 26 chars */
+    ulid_format(buf, str)
+    /* Verify all chars are valid Crockford Base32 (0-9 A-Z minus I L O U) */
+    let mut i : u64 = 0u64
+    while i < 26u64 {
+        let c : u8 = str[i]
+        let mut valid : u8 = 0u8
+        if c >= 48u8 {
+            if c <= 57u8 { valid = 1u8 }   /* 0-9 */
+        }
+        if c >= 65u8 {
+            if c <= 90u8 {
+                /* Excludes I(73) L(76) O(79) U(85) */
+                if c != 73u8 {
+                    if c != 76u8 {
+                        if c != 79u8 {
+                            if c != 85u8 {
+                                valid = 1u8
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if valid == 0u8 { return 100u64 + i }
+        i = i + 1u64
+    }
+    free(buf); free(str)
+    return 99u64
+}

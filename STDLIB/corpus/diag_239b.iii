@@ -1,0 +1,64 @@
+/* Diag: encode sid byte 0 of each channel into exit code via base mapping. */
+module diag_239b
+
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_session_id_byte(channel_id: u64, i: u32) -> u32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+var BP : [u8; 32]
+var A_SK : [u8; 32]
+var B_SK : [u8; 32]
+var C_SK : [u8; 32]
+var A_PK : [u8; 32]
+var B_PK : [u8; 32]
+var C_PK : [u8; 32]
+
+fn _fill(buf: *u8, base: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { buf[i] = ((base + i) & 0xFFu64) as u8; i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    sc_reset_all()
+    let bp : *u8 = (&BP) as *u8
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+    let a_sk : *u8 = (&A_SK) as *u8
+    let b_sk : *u8 = (&B_SK) as *u8
+    let c_sk : *u8 = (&C_SK) as *u8
+    _fill(a_sk, 0x11u64)
+    _fill(b_sk, 0x40u64)
+    _fill(c_sk, 0x80u64)
+    let a_pk : *u8 = (&A_PK) as *u8
+    let b_pk : *u8 = (&B_PK) as *u8
+    let c_pk : *u8 = (&C_PK) as *u8
+    x25519(a_pk, a_sk, bp)
+    x25519(b_pk, b_sk, bp)
+    x25519(c_pk, c_sk, bp)
+
+    let ch_ab_a : u64 = sc_handshake_init(b_pk as u64, a_sk as u64)
+    let ch_ab_b : u64 = sc_handshake_init(a_pk as u64, b_sk as u64)
+    let ch_bc_b : u64 = sc_handshake_init(c_pk as u64, b_sk as u64)
+    let ch_bc_c : u64 = sc_handshake_init(b_pk as u64, c_sk as u64)
+    let ch_ac_a : u64 = sc_handshake_init(c_pk as u64, a_sk as u64)
+    let ch_ac_c : u64 = sc_handshake_init(a_pk as u64, c_sk as u64)
+
+    /* Bitmap: bit 0 = ab_a/ab_b match (expected 1).
+     *         bit 1 = bc_b/bc_c match (expected 1).
+     *         bit 2 = ac_a/ac_c match (expected 1).
+     *         bit 3 = ab_a/bc_b differ (expected 1).
+     *         bit 4 = ab_a/ac_a differ (expected 1).
+     *         bit 5 = bc_b/ac_a differ (expected 1).
+     *  All bits set => 0x3F = 63.  Anything else exposes the bug. */
+    let mut bits : u64 = 0u64
+    if sc_session_id_byte(ch_ab_a, 0u32) == sc_session_id_byte(ch_ab_b, 0u32) { bits = bits | 1u64 }
+    if sc_session_id_byte(ch_bc_b, 0u32) == sc_session_id_byte(ch_bc_c, 0u32) { bits = bits | 2u64 }
+    if sc_session_id_byte(ch_ac_a, 0u32) == sc_session_id_byte(ch_ac_c, 0u32) { bits = bits | 4u64 }
+    if sc_session_id_byte(ch_ab_a, 0u32) != sc_session_id_byte(ch_bc_b, 0u32) { bits = bits | 8u64 }
+    if sc_session_id_byte(ch_ab_a, 0u32) != sc_session_id_byte(ch_ac_a, 0u32) { bits = bits | 16u64 }
+    if sc_session_id_byte(ch_bc_b, 0u32) != sc_session_id_byte(ch_ac_a, 0u32) { bits = bits | 32u64 }
+    return bits
+}

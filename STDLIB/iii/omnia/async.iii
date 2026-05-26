@@ -1,0 +1,355 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\async.iii
+ *
+ * III STDLIB - omnia::async
+ *
+ * Lattice plan Step 0055 -- minimal cooperative async runtime.
+ *
+ * Because iiis-0 has no first-class function pointers, this module
+ * exposes a *task-state primitive library* rather than a runtime
+ * that itself calls user code.  The user's main loop drives the
+ * scheduler by:
+ *
+ *   1. calling async_next_ready(rt) to obtain a READY task_id;
+ *   2. inspecting async_task_kind(rt, task_id) to decide which
+ *      handler to invoke (a `when` cascade in user code);
+ *   3. running the handler;
+ *   4. recording the outcome via async_yield / async_block /
+ *      async_complete.
+ *
+ * This keeps the runtime fully NIH-faithful while still
+ * delivering the four-state @variant task FSM
+ * { READY, BLOCKED, COMPLETE, CANCELLED } that the lattice plan
+ * requires.
+ *
+ * Public surface (Step 0055):
+ *   async_runtime_new(arena_id, max_tasks)        -> rt_id
+ *   async_runtime_free(rt_id)                     -> i32
+ *   async_spawn(rt, kind, ctx)                    -> task_id
+ *   async_task_state(rt, task_id)                 -> u32
+ *   async_task_kind(rt, task_id)                  -> u64
+ *   async_task_ctx(rt, task_id)                   -> u64
+ *   async_task_result(rt, task_id)                -> u64
+ *   async_set_state(rt, task_id, state)           -> i32
+ *   async_complete(rt, task_id, result)           -> i32
+ *   async_block(rt, task_id)                      -> i32
+ *   async_yield_now(rt)                           -> i32
+ *   async_next_ready(rt)                          -> task_id
+ *   async_await(rt, task_id)                      -> result_or_0
+ *   async_select(rt, tasks_vec)                   -> task_id_or_0
+ *   async_alive_count(rt)                         -> u32
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_async
+
+extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+
+/* @variant task state -- must remain stable; user code reads these
+ * constants when dispatching on async_task_state. */
+const OMNIA_ASYNC_STATE_READY     : u32 = 0u32
+const OMNIA_ASYNC_STATE_BLOCKED   : u32 = 1u32
+const OMNIA_ASYNC_STATE_COMPLETE  : u32 = 2u32
+const OMNIA_ASYNC_STATE_CANCEL    : u32 = 3u32
+
+const OMNIA_ASYNC_OK             : i32 =  0i32
+const OMNIA_ASYNC_E_BADID        : i32 = -1i32
+const OMNIA_ASYNC_E_FULL         : i32 = -2i32
+const OMNIA_ASYNC_E_BADSTATE     : i32 = -3i32
+
+const OMNIA_ASYNC_RT_MAX         : u32 =  16u32
+const OMNIA_ASYNC_TASKS_PER_RT   : u32 =  64u32
+
+/* Per-runtime SoA tables.
+ * 16 runtimes * 64 tasks max = 1024 task slots. */
+var OMNIA_ASYNC_RT_LIVE        : [u8;  16]
+var OMNIA_ASYNC_RT_ARENA       : [u64; 16]
+var OMNIA_ASYNC_RT_MAX_TASKS   : [u32; 16]
+var OMNIA_ASYNC_RT_RR_HEAD     : [u32; 16]
+
+var OMNIA_ASYNC_TASK_LIVE      : [u8;  1024]
+var OMNIA_ASYNC_TASK_STATE     : [u32; 1024]
+var OMNIA_ASYNC_TASK_KIND      : [u64; 1024]
+var OMNIA_ASYNC_TASK_CTX       : [u64; 1024]
+var OMNIA_ASYNC_TASK_RESULT    : [u64; 1024]
+
+/* --- helpers ---------------------------------------------------------- */
+
+fn _async_rt_slot_of(rt_id: u64) -> u32 {
+    let id_l : u64 = rt_id
+    if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = (id_l - 1u64) & 0xFu64
+    let s_u32 : u32 = s as u32
+    if s_u32 >= OMNIA_ASYNC_RT_MAX { return 0xFFFFFFFFu32 }
+    if OMNIA_ASYNC_RT_LIVE[s_u32] == 0u8 { return 0xFFFFFFFFu32 }
+    return s_u32
+}
+
+fn _async_task_global_idx(rt_slot: u32, task_id: u64) -> u32 {
+    let id_l : u64 = task_id
+    if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    let local : u64 = (id_l - 1u64) & 0x3Fu64
+    let local_u32 : u32 = local as u32
+    if local_u32 >= OMNIA_ASYNC_TASKS_PER_RT { return 0xFFFFFFFFu32 }
+    let g : u32 = rt_slot * OMNIA_ASYNC_TASKS_PER_RT + local_u32
+    if g >= 1024u32 { return 0xFFFFFFFFu32 }
+    if OMNIA_ASYNC_TASK_LIVE[g] == 0u8 { return 0xFFFFFFFFu32 }
+    return g
+}
+
+/* --- runtime lifecycle ----------------------------------------------- */
+
+fn async_runtime_new(arena_id: u64, max_tasks: u32) -> u64 @export {
+    let arena_l : u64 = arena_id
+    let mt_l    : u32 = max_tasks
+    if mt_l == 0u32 { return 0u64 }
+    if mt_l > OMNIA_ASYNC_TASKS_PER_RT { return 0u64 }
+    let mut s     : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while s < OMNIA_ASYNC_RT_MAX {
+        if OMNIA_ASYNC_RT_LIVE[s] == 0u8 {
+            if found == 0xFFFFFFFFu32 { found = s }
+        }
+        s = s + 1u32
+    }
+    if found == 0xFFFFFFFFu32 { return 0u64 }
+    OMNIA_ASYNC_RT_LIVE[found]      = 1u8
+    OMNIA_ASYNC_RT_ARENA[found]     = arena_l
+    OMNIA_ASYNC_RT_MAX_TASKS[found] = mt_l
+    OMNIA_ASYNC_RT_RR_HEAD[found]   = 0u32
+    /* Zero out the per-task slots for this runtime. */
+    let mut t : u32 = 0u32
+    while t < OMNIA_ASYNC_TASKS_PER_RT {
+        let g : u32 = found * OMNIA_ASYNC_TASKS_PER_RT + t
+        OMNIA_ASYNC_TASK_LIVE[g]   = 0u8
+        OMNIA_ASYNC_TASK_STATE[g]  = 0u32
+        OMNIA_ASYNC_TASK_KIND[g]   = 0u64
+        OMNIA_ASYNC_TASK_CTX[g]    = 0u64
+        OMNIA_ASYNC_TASK_RESULT[g] = 0u64
+        t = t + 1u32
+    }
+    return (found as u64) + 1u64
+}
+
+fn async_runtime_free(rt_id: u64) -> i32 @export {
+    let id_l : u64 = rt_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return OMNIA_ASYNC_E_BADID }
+    let mut t : u32 = 0u32
+    while t < OMNIA_ASYNC_TASKS_PER_RT {
+        let g : u32 = s * OMNIA_ASYNC_TASKS_PER_RT + t
+        OMNIA_ASYNC_TASK_LIVE[g]   = 0u8
+        OMNIA_ASYNC_TASK_STATE[g]  = 0u32
+        OMNIA_ASYNC_TASK_KIND[g]   = 0u64
+        OMNIA_ASYNC_TASK_CTX[g]    = 0u64
+        OMNIA_ASYNC_TASK_RESULT[g] = 0u64
+        t = t + 1u32
+    }
+    OMNIA_ASYNC_RT_LIVE[s]      = 0u8
+    OMNIA_ASYNC_RT_ARENA[s]     = 0u64
+    OMNIA_ASYNC_RT_MAX_TASKS[s] = 0u32
+    OMNIA_ASYNC_RT_RR_HEAD[s]   = 0u32
+    return OMNIA_ASYNC_OK
+}
+
+/* --- task lifecycle -------------------------------------------------- */
+
+fn async_spawn(rt_id: u64, kind: u64, ctx: u64) -> u64 @export {
+    let id_l   : u64 = rt_id
+    let kind_l : u64 = kind
+    let ctx_l  : u64 = ctx
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let cap : u32 = OMNIA_ASYNC_RT_MAX_TASKS[s]
+    let mut t     : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while t < cap {
+        let g : u32 = s * OMNIA_ASYNC_TASKS_PER_RT + t
+        if OMNIA_ASYNC_TASK_LIVE[g] == 0u8 {
+            if found == 0xFFFFFFFFu32 { found = t }
+        }
+        t = t + 1u32
+    }
+    if found == 0xFFFFFFFFu32 { return 0u64 }
+    let gi : u32 = s * OMNIA_ASYNC_TASKS_PER_RT + found
+    OMNIA_ASYNC_TASK_LIVE[gi]   = 1u8
+    OMNIA_ASYNC_TASK_STATE[gi]  = OMNIA_ASYNC_STATE_READY
+    OMNIA_ASYNC_TASK_KIND[gi]   = kind_l
+    OMNIA_ASYNC_TASK_CTX[gi]    = ctx_l
+    OMNIA_ASYNC_TASK_RESULT[gi] = 0u64
+    return (found as u64) + 1u64
+}
+
+/* --- accessors ------------------------------------------------------- */
+
+fn async_task_state(rt_id: u64, task_id: u64) -> u32 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    return OMNIA_ASYNC_TASK_STATE[g]
+}
+
+fn async_task_kind(rt_id: u64, task_id: u64) -> u64 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return 0u64 }
+    return OMNIA_ASYNC_TASK_KIND[g]
+}
+
+fn async_task_ctx(rt_id: u64, task_id: u64) -> u64 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return 0u64 }
+    return OMNIA_ASYNC_TASK_CTX[g]
+}
+
+fn async_task_result(rt_id: u64, task_id: u64) -> u64 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return 0u64 }
+    return OMNIA_ASYNC_TASK_RESULT[g]
+}
+
+/* --- state transitions ----------------------------------------------- */
+
+fn async_set_state(rt_id: u64, task_id: u64, state: u32) -> i32 @export {
+    let id_l    : u64 = rt_id
+    let task_l  : u64 = task_id
+    let state_l : u32 = state
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return OMNIA_ASYNC_E_BADID }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return OMNIA_ASYNC_E_BADID }
+    if state_l > 3u32 { return OMNIA_ASYNC_E_BADSTATE }
+    OMNIA_ASYNC_TASK_STATE[g] = state_l
+    return OMNIA_ASYNC_OK
+}
+
+fn async_complete(rt_id: u64, task_id: u64, result: u64) -> i32 @export {
+    let id_l    : u64 = rt_id
+    let task_l  : u64 = task_id
+    let res_l   : u64 = result
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return OMNIA_ASYNC_E_BADID }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return OMNIA_ASYNC_E_BADID }
+    OMNIA_ASYNC_TASK_RESULT[g] = res_l
+    OMNIA_ASYNC_TASK_STATE[g]  = OMNIA_ASYNC_STATE_COMPLETE
+    return OMNIA_ASYNC_OK
+}
+
+fn async_block(rt_id: u64, task_id: u64) -> i32 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    return async_set_state(id_l, task_l, OMNIA_ASYNC_STATE_BLOCKED)
+}
+
+fn async_cancel(rt_id: u64, task_id: u64) -> i32 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    return async_set_state(id_l, task_l, OMNIA_ASYNC_STATE_CANCEL)
+}
+
+fn async_yield_now(rt_id: u64) -> i32 @export {
+    let id_l : u64 = rt_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return OMNIA_ASYNC_E_BADID }
+    let cap  : u32 = OMNIA_ASYNC_RT_MAX_TASKS[s]
+    let head : u32 = OMNIA_ASYNC_RT_RR_HEAD[s]
+    let mut nx : u32 = head + 1u32
+    if nx >= cap { nx = 0u32 }
+    OMNIA_ASYNC_RT_RR_HEAD[s] = nx
+    return OMNIA_ASYNC_OK
+}
+
+/* --- scheduler ------------------------------------------------------- */
+
+fn async_next_ready(rt_id: u64) -> u64 @export {
+    let id_l : u64 = rt_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let cap  : u32 = OMNIA_ASYNC_RT_MAX_TASKS[s]
+    let head : u32 = OMNIA_ASYNC_RT_RR_HEAD[s]
+    let mut tries : u32 = 0u32
+    let mut cur   : u32 = head
+    while tries < cap {
+        let g : u32 = s * OMNIA_ASYNC_TASKS_PER_RT + cur
+        if OMNIA_ASYNC_TASK_LIVE[g] == 1u8 {
+            if OMNIA_ASYNC_TASK_STATE[g] == OMNIA_ASYNC_STATE_READY {
+                let mut nx : u32 = cur + 1u32
+                if nx >= cap { nx = 0u32 }
+                OMNIA_ASYNC_RT_RR_HEAD[s] = nx
+                return (cur as u64) + 1u64
+            }
+        }
+        cur = cur + 1u32
+        if cur >= cap { cur = 0u32 }
+        tries = tries + 1u32
+    }
+    return 0u64
+}
+
+fn async_await(rt_id: u64, task_id: u64) -> u64 @export {
+    let id_l   : u64 = rt_id
+    let task_l : u64 = task_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let g : u32 = _async_task_global_idx(s, task_l)
+    if g == 0xFFFFFFFFu32 { return 0u64 }
+    /* Passive predicate: returns the result if COMPLETE, 0 otherwise.
+     * The user-driven scheduler loop is responsible for advancing
+     * other tasks; this function does not spin internally because
+     * iiis-0 cannot dispatch user fn pointers. */
+    if OMNIA_ASYNC_TASK_STATE[g] == OMNIA_ASYNC_STATE_COMPLETE {
+        return OMNIA_ASYNC_TASK_RESULT[g]
+    }
+    return 0u64
+}
+
+fn async_select(rt_id: u64, tasks_vec: u64) -> u64 @export {
+    let id_l    : u64 = rt_id
+    let vec_l   : u64 = tasks_vec
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let n : u32 = (vec_u64_count(vec_l) & 0xFFFFFFFFu64) as u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let tid : u64 = vec_u64_at(vec_l, i as u64)
+        let g : u32 = _async_task_global_idx(s, tid)
+        if g != 0xFFFFFFFFu32 {
+            if OMNIA_ASYNC_TASK_STATE[g] == OMNIA_ASYNC_STATE_COMPLETE {
+                return tid
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+fn async_alive_count(rt_id: u64) -> u32 @export {
+    let id_l : u64 = rt_id
+    let s : u32 = _async_rt_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    let cap : u32 = OMNIA_ASYNC_RT_MAX_TASKS[s]
+    let mut count : u32 = 0u32
+    let mut t     : u32 = 0u32
+    while t < cap {
+        let g : u32 = s * OMNIA_ASYNC_TASKS_PER_RT + t
+        if OMNIA_ASYNC_TASK_LIVE[g] == 1u8 { count = count + 1u32 }
+        t = t + 1u32
+    }
+    return count
+}

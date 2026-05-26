@@ -1,0 +1,26 @@
+/* 397 — V1 Stage 7.2: iter @specialize (class-B, memory-element iteration).
+ * Sets up a u16 buffer via the verified span_u16_store, then iterates with the
+ * generated iter_u16_* (element reads by width through *T).  Exit 99 = pass. */
+module corpus_397_iter_specialize
+
+extern @abi(c-msvc-x64) fn span_u16_store(base: u64, len: u64, idx: u64, value: u16) -> i32 from "span.iii"
+extern @abi(c-msvc-x64) fn iter_u16_new(base: u64, len: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u16_next(id: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u16_remaining(id: u64) -> u64 from "iter.iii"
+
+var ITER_SCRATCH : [u8; 64]
+
+fn main() -> u64 {
+    let base : u64 = &ITER_SCRATCH as u64
+    /* three u16 elements: 100, 200, 300. */
+    span_u16_store(base, 8u64, 0u64, 100u16)
+    span_u16_store(base, 8u64, 1u64, 200u16)
+    span_u16_store(base, 8u64, 2u64, 300u16)
+    let it : u64 = iter_u16_new(base, 3u64)
+    if iter_u16_remaining(it) != 3u64 { return 1u64 }
+    if iter_u16_next(it) != 100u64 { return 2u64 }
+    if iter_u16_next(it) != 200u64 { return 3u64 }
+    if iter_u16_next(it) != 300u64 { return 4u64 }
+    if iter_u16_remaining(it) != 0u64 { return 5u64 }
+    return 99u64
+}

@@ -1,0 +1,21 @@
+module corpus_48
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn closure_set(root_ptr: u64) -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn mandate_audit(kchain_id: u64, mhash_matched: u8) -> u32 from "mandate.iii"
+
+var DUMMY_ROOT : [u8; 32]
+
+fn main() -> u64 {
+    /* Set a closure root so closure_compute_with_resolver can run */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        DUMMY_ROOT[i] = 0xAAu8
+        i = i + 1u32
+    }
+    closure_set((&DUMMY_ROOT) as u64)
+    resolution_init()
+    let m : u32 = mandate_audit(0u64, 1u8)
+    if (m & 0x00200000u32) != 0u32 { return 1u64 }
+    return 0u64
+}

@@ -1,0 +1,71 @@
+/* AES-128-GCM open: encrypt then decrypt, verify tag check passes and
+ * plaintext recovers exactly.  Test with the same NIST Test 2 vector.
+ *
+ * Then test that tag-tampering causes open to return 0u8.
+ *
+ * Exit = 99 on success.
+ */
+module corpus_63
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn aes_gcm_init(key: *u8, nonce: *u8, nonce_len: u64) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 from "aes_gcm.iii"
+
+fn fill_pattern(p: *u8, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = (i + 0x10u64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn zero_buf(p: *u8, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let key   : *u8 = malloc(16u64)
+    let nonce : *u8 = malloc(12u64)
+    let pt    : *u8 = malloc(48u64)
+    let ct    : *u8 = malloc(48u64)
+    let tag   : *u8 = malloc(16u64)
+    let pt_decrypted : *u8 = malloc(48u64)
+    fill_pattern(key, 16u64)
+    fill_pattern(nonce, 12u64)
+    fill_pattern(pt, 48u64)
+    /* seal */
+    aes_gcm_init(key, nonce, 12u64)
+    aes_gcm_seal(pt, 48u64, ct, tag)
+    /* open with original tag */
+    aes_gcm_init(key, nonce, 12u64)
+    let ok : u8 = aes_gcm_open(ct, 48u64, pt_decrypted, tag)
+    if ok != 1u8 { return 1u64 }
+    /* verify pt_decrypted matches original pt */
+    let mut i : u64 = 0u64
+    while i < 48u64 {
+        if pt_decrypted[i] != pt[i] {
+            return 2u64 + i
+        }
+        i = i + 1u64
+    }
+    /* tamper with tag, verify open rejects */
+    tag[0] = (tag[0] as u32 ^ 1u32) as u8
+    aes_gcm_init(key, nonce, 12u64)
+    let ok_tampered : u8 = aes_gcm_open(ct, 48u64, pt_decrypted, tag)
+    if ok_tampered != 0u8 { return 51u64 }
+    free(key)
+    free(nonce)
+    free(pt)
+    free(ct)
+    free(tag)
+    free(pt_decrypted)
+    return 99u64
+}

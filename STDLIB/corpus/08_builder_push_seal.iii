@@ -1,0 +1,31 @@
+/* Builder: push 'a','b','c' then seal; verify length 3 and bytes match */
+module corpus_a08
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 1u64 }
+    let b : u64 = builder_new(a, 16u64)
+    if b == 0u64 { return 2u64 }
+    builder_push_byte(b, 97u32)
+    builder_push_byte(b, 98u32)
+    builder_push_byte(b, 99u32)
+    let base : u64 = builder_seal(b)
+    if base == 0u64 { return 3u64 }
+    let len : u64 = builder_len(b)
+    if len != 3u64 { return 4u64 }
+    let p : *u8 = base as *u8
+    if p[0] != 97u8 { return 5u64 }
+    if p[1] != 98u8 { return 6u64 }
+    if p[2] != 99u8 { return 7u64 }
+    builder_drop(b)
+    arena_drop(a)
+    return 99u64
+}

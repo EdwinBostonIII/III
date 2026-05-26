@@ -1,0 +1,38 @@
+/* III conformance corpus 209 -- Stage 4.11: native .iii ECDSA-P384.
+ * Constant-time fp384 (curve field) + ec384 (RCB complete add, double-and-add-
+ * always scalar mul; k=1·G==Gx384 verified) + fn384 (scalar field mod n384) +
+ * ecdsa_p384.  Round-trip: keygen(d)->Q; sign(d,z,k)->sig; verify(Q,z,sig)==
+ * accept; signature tamper -> reject; message tamper -> reject.  Exit 99.
+ */
+module corpus_209
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_keygen(d: u64, pub_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_sign(d: u64, z: u64, k: u64, sig_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p384.iii"
+
+var D : [u8; 48]
+var Z : [u8; 48]
+var K : [u8; 48]
+var PUB : [u8; 96]
+var SIG : [u8; 96]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { D[i] = ((i + 2u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { K[i] = ((i + 0x31u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { Z[i] = ((i + 0x51u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    iii_ecdsa_p384_keygen(&D as u64, &PUB as u64)
+    iii_ecdsa_p384_sign(&D as u64, &Z as u64, &K as u64, &SIG as u64)
+    let v : u8 = iii_ecdsa_p384_verify_x(&PUB as u64, (&PUB as u64) + 48u64, &Z as u64, &SIG as u64)
+    if v != 1u8 { return 1u64 }
+    SIG[0] = SIG[0] ^ 0x01u8
+    let v2 : u8 = iii_ecdsa_p384_verify_x(&PUB as u64, (&PUB as u64) + 48u64, &Z as u64, &SIG as u64)
+    if v2 != 0u8 { return 2u64 }
+    SIG[0] = SIG[0] ^ 0x01u8
+    Z[0] = Z[0] ^ 0x01u8
+    let v3 : u8 = iii_ecdsa_p384_verify_x(&PUB as u64, (&PUB as u64) + 48u64, &Z as u64, &SIG as u64)
+    if v3 != 0u8 { return 3u64 }
+    return 99u64
+}

@@ -1,0 +1,16 @@
+/* Lattice plan Step 0014: @arena_reset_safe(external_clear_fn=my_clear). */
+module corpus_117
+
+fn my_clear(arena_id: u64) -> i32 {
+    let unused : u64 = arena_id
+    return 0i32
+}
+
+fn use_arena(arena_id: u64) -> u64 @arena_reset_safe(external_clear_fn=my_clear) {
+    let unused : u64 = arena_id
+    return 42u64
+}
+
+fn main() -> u64 {
+    return use_arena(0u64)
+}

@@ -1,0 +1,202 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fed_seal.iii
+ *
+ * III STDLIB - aether::fed_seal -- cross-tier seal anchoring.
+ *
+ * Lattice plan Phase 14k Step 0193.  Anchors the closure-root of each
+ * lower tier into the next-higher tier's seal record.  The chain is
+ * append-only (HC-1 discipline): once an (child_tier, child_root) pair
+ * is anchored, it cannot be reassigned.
+ *
+ *   HOST       --(anchor)--> CLUSTER seal record
+ *   CLUSTER    --(anchor)--> REGION seal record
+ *   REGION     --(anchor)--> SOVEREIGN seal record
+ *   SOVEREIGN  --(anchor)--> PLANETARY seal record
+ *
+ * Public surface:
+ *   fed_seal_anchor(child_tier, child_root_ptr,
+ *                   parent_tier, parent_root_ptr)            -> i32
+ *   fed_seal_lookup_anchor(child_tier, child_root_ptr)       -> u32
+ *   fed_seal_anchor_count()                                  -> u32
+ *   fed_seal_compute_chain_root(out_32_ptr)                  -> i32
+ *   fed_seal_anchor_byte(slot, off, idx)                     -> u32
+ *
+ * Hexad: kind_origin.  Ring: R3.  K: 1.00.
+ */
+
+module aether_fed_seal
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn hs_verify_qc(qc: *u8, qc_len: u32) -> u8 from "hotstuff.iii"
+
+const FED_SEAL_OK             : i32 =  0i32
+const FED_SEAL_E_NULL         : i32 = -1i32
+const FED_SEAL_E_BADTIER      : i32 = -2i32
+const FED_SEAL_E_FULL         : i32 = -3i32
+const FED_SEAL_E_ALREADY      : i32 = -4i32
+const FED_SEAL_E_QC           : i32 = -5i32   /* HotStuff QC over the cross-tier anchor decision did not verify */
+
+const FED_SEAL_SLOTS          : u32 = 256u32
+
+/* Per-slot SoA storage. */
+var FED_SEAL_LIVE        : [u8;  256]
+var FED_SEAL_CHILD_TIER  : [u32; 256]
+var FED_SEAL_PARENT_TIER : [u32; 256]
+var FED_SEAL_CHILD_ROOT  : [u8;  8192]   /* 256 * 32 bytes */
+var FED_SEAL_PARENT_ROOT : [u8;  8192]
+var FED_SEAL_USED        : u32 = 0u32
+
+/* Domain "FED_SEAL_CHAIN" 16 bytes. */
+var FED_SEAL_DOM : [u8; 16] = [70u8, 69u8, 68u8, 95u8, 83u8, 69u8, 65u8, 76u8, 95u8, 67u8, 72u8, 65u8, 73u8, 78u8, 0u8, 0u8]
+
+fn _fseal_eq32(a_ptr: u64, b_ptr: u64) -> u8 {
+    let pa : *u8 = a_ptr as *u8
+    let pb : *u8 = b_ptr as *u8
+    let mut i : u64 = 0u64
+    let mut diff : u8 = 0u8
+    while i < 32u64 {
+        let av : u8 = pa[i]
+        let bv : u8 = pb[i]
+        if av != bv { diff = 1u8 }
+        i = i + 1u64
+    }
+    if diff == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn _fseal_valid_tier(t: u32) -> u8 {
+    let t_l : u32 = t
+    if t_l < 1u32 { return 0u8 }
+    if t_l > 5u32 { return 0u8 }
+    return 1u8
+}
+
+fn fed_seal_anchor_count() -> u32 @export {
+    return FED_SEAL_USED
+}
+
+/* QC-gated cross-tier anchor (gospel L24432): the Tier-3 / Bedrock cross-tier
+ * anchor must be backed by a HotStuff quorum certificate over the anchor
+ * decision.  qc_len is derived from the QC's n_sigs field (qc[40..44]). */
+fn fed_seal_anchor_with_qc(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8) -> i32 @export {
+    if (qc_ptr as u64) == 0u64 { return FED_SEAL_E_NULL }
+    let qp : *u8 = qc_ptr
+    let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
+    let qc_len : u32 = 44u32 + n_sigs * 64u32
+    if hs_verify_qc(qp, qc_len) != 1u8 { return FED_SEAL_E_QC }
+    return fed_seal_anchor(child_tier, child_root_ptr, parent_tier, parent_root_ptr)
+}
+
+fn fed_seal_lookup_anchor(child_tier: u32, child_root_ptr: u64) -> u32 @export {
+    let ct_l : u32 = child_tier
+    let cr_l : u64 = child_root_ptr
+    if cr_l == 0u64 { return 0xFFFFFFFFu32 }
+    let mut s : u32 = 0u32
+    while s < FED_SEAL_USED {
+        if FED_SEAL_LIVE[s] == 1u8 {
+            if FED_SEAL_CHILD_TIER[s] == ct_l {
+                let slot_root_base : u64 = (&FED_SEAL_CHILD_ROOT) as u64 + (s as u64) * 32u64
+                if _fseal_eq32(slot_root_base, cr_l) == 1u8 { return s }
+            }
+        }
+        s = s + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 @export {
+    let ct_l : u32 = child_tier
+    let cr_l : u64 = child_root_ptr
+    let pt_l : u32 = parent_tier
+    let pr_l : u64 = parent_root_ptr
+    if cr_l == 0u64 { return FED_SEAL_E_NULL }
+    if pr_l == 0u64 { return FED_SEAL_E_NULL }
+    if _fseal_valid_tier(ct_l) == 0u8 { return FED_SEAL_E_BADTIER }
+    if _fseal_valid_tier(pt_l) == 0u8 { return FED_SEAL_E_BADTIER }
+    /* Parent must be strictly higher tier than child. */
+    if pt_l <= ct_l { return FED_SEAL_E_BADTIER }
+
+    /* Append-only: refuse re-anchoring of an existing (child_tier, child_root). */
+    if fed_seal_lookup_anchor(ct_l, cr_l) != 0xFFFFFFFFu32 { return FED_SEAL_E_ALREADY }
+
+    if FED_SEAL_USED >= FED_SEAL_SLOTS { return FED_SEAL_E_FULL }
+    let s : u32 = FED_SEAL_USED
+    FED_SEAL_LIVE[s]        = 1u8
+    FED_SEAL_CHILD_TIER[s]  = ct_l
+    FED_SEAL_PARENT_TIER[s] = pt_l
+
+    let dst_c : u64 = (&FED_SEAL_CHILD_ROOT)  as u64 + (s as u64) * 32u64
+    let dst_p : u64 = (&FED_SEAL_PARENT_ROOT) as u64 + (s as u64) * 32u64
+    let dpc : *u8 = dst_c as *u8
+    let dpp : *u8 = dst_p as *u8
+    let spc : *u8 = cr_l as *u8
+    let spp : *u8 = pr_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dpc[i] = spc[i]
+        dpp[i] = spp[i]
+        i = i + 1u64
+    }
+
+    FED_SEAL_USED = FED_SEAL_USED + 1u32
+    return FED_SEAL_OK
+}
+
+fn fed_seal_anchor_byte(slot: u32, child_or_parent: u32, idx: u32) -> u32 @export {
+    let s_l : u32 = slot
+    let cp  : u32 = child_or_parent
+    let i_l : u32 = idx
+    if s_l >= FED_SEAL_SLOTS { return 0x100u32 }
+    if i_l >= 32u32 { return 0x100u32 }
+    if FED_SEAL_LIVE[s_l] == 0u8 { return 0x100u32 }
+    if cp == 0u32 {
+        return FED_SEAL_CHILD_ROOT[(s_l as u64) * 32u64 + (i_l as u64)] as u32
+    }
+    return FED_SEAL_PARENT_ROOT[(s_l as u64) * 32u64 + (i_l as u64)] as u32
+}
+
+/* Compute chain-root mhash over all anchor records.  Each record
+ * contributes 4 + 4 + 32 + 32 = 72 bytes (child_tier, parent_tier,
+ * child_root, parent_root) in slot order. */
+fn fed_seal_compute_chain_root(out_32_ptr: u64) -> i32 @export {
+    let o_l : u64 = out_32_ptr
+    if o_l == 0u64 { return FED_SEAL_E_NULL }
+    mhash_begin()
+    mhash_domain((&FED_SEAL_DOM) as u64, 14u64)
+    let mut s : u32 = 0u32
+    while s < FED_SEAL_USED {
+        if FED_SEAL_LIVE[s] == 1u8 {
+            let ct : u32 = FED_SEAL_CHILD_TIER[s]
+            let pt : u32 = FED_SEAL_PARENT_TIER[s]
+            mhash_payload((&ct) as u64, 4u64)
+            mhash_payload((&pt) as u64, 4u64)
+            let cb : u64 = (&FED_SEAL_CHILD_ROOT)  as u64 + (s as u64) * 32u64
+            let pb : u64 = (&FED_SEAL_PARENT_ROOT) as u64 + (s as u64) * 32u64
+            mhash_payload(cb, 32u64)
+            mhash_payload(pb, 32u64)
+        }
+        s = s + 1u32
+    }
+    mhash_final(o_l)
+    return FED_SEAL_OK
+}
+
+fn fed_seal_clear() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < FED_SEAL_SLOTS {
+        FED_SEAL_LIVE[s]        = 0u8
+        FED_SEAL_CHILD_TIER[s]  = 0u32
+        FED_SEAL_PARENT_TIER[s] = 0u32
+        s = s + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8192u32 {
+        FED_SEAL_CHILD_ROOT[i]  = 0u8
+        FED_SEAL_PARENT_ROOT[i] = 0u8
+        i = i + 1u32
+    }
+    FED_SEAL_USED = 0u32
+    return FED_SEAL_OK
+}

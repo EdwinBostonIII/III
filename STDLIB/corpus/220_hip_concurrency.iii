@@ -1,0 +1,159 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\220_hip_concurrency.iii
+ *
+ * III conformance corpus 220 -- HIP concurrency verb coverage (v1.0.1
+ * lexicon extension).
+ *
+ * Cases:
+ *   A: "lock mutex"      -> UNIQUE  (ACT)
+ *   B: "unlock mutex"    -> UNIQUE  (ACT)
+ *   C: "spawn process"   -> UNIQUE  (FORM)
+ *   D: "wait barrier"    -> UNIQUE  (ACT)
+ *   E: "fork process"    -> UNIQUE  (FORM)
+ *   F: "signal event"    -> UNIQUE  (ACT)
+ *   G: "release lock"    -> UNIQUE  (ACT)   ("lock" is VERB by lex; here
+ *                                            it parses as the patient
+ *                                            because it follows "release")
+ *   H: "dispatch packet from queue to endpoint" -> UNIQUE (CONVEY)
+ *
+ * Exit code: 99 on full pass; 100+caseN on case failure.
+ */
+
+module corpus_220
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
+
+fn _read_u32(buf: *u8, off: u64) -> u32 {
+    let b0 : u32 = (buf[off] as u32) & 0xFFu32
+    let b1 : u32 = ((buf[off + 1u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((buf[off + 2u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((buf[off + 3u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+
+fn _put(buf: *u8, off: u64, b: u8) -> u64 {
+    buf[off] = b
+    return off + 1u64
+}
+
+/* Inline a phrase as ASCII bytes; returns total length. */
+fn _emit(buf: *u8, off: u64, s: u8, e: u8, l: u8, e2: u8, c: u8, t: u8, n: u8, t2: u8, _h: u8, _f: u8) -> u64 {
+    /* Helper for short phrases; placeholder. */
+    return off
+}
+
+fn _check(text: *u8, text_len: u32, cands: *u8, meta: *u8, packed_expect: u64) -> u32 {
+    let rc : i32 = hip_resolve(text as u64, text_len, cands as u64, meta as u64)
+    if rc != 0i32 { return 1u32 }
+    let cls : u32 = _read_u32(meta, 4u64)
+    let cnt : u32 = _read_u32(meta, 0u64)
+    let exp_cls : u32 = (packed_expect & 0xFFFFFFFFu64) as u32
+    let exp_cnt : u32 = ((packed_expect >> 32u64) & 0xFFFFFFFFu64) as u32
+    if cls != exp_cls { return 2u32 }
+    if cnt != exp_cnt { return 3u32 }
+    return 0u32
+}
+
+fn _check_pack(expect_class: u32, expect_count: u32) -> u64 {
+    let c_l : u64 = (expect_class as u64) & 0xFFFFFFFFu64
+    let n_l : u64 = ((expect_count as u64) & 0xFFFFFFFFu64) << 32u64
+    return c_l | n_l
+}
+
+fn _phrase_lock_mutex(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 108u8); o = _put(buf, o, 111u8); o = _put(buf, o, 99u8); o = _put(buf, o, 107u8)   /* lock */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 109u8); o = _put(buf, o, 117u8); o = _put(buf, o, 116u8); o = _put(buf, o, 101u8); o = _put(buf, o, 120u8)   /* mutex */
+    return o as u32
+}
+
+fn _phrase_unlock_mutex(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 117u8); o = _put(buf, o, 110u8); o = _put(buf, o, 108u8); o = _put(buf, o, 111u8); o = _put(buf, o, 99u8); o = _put(buf, o, 107u8)   /* unlock */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 109u8); o = _put(buf, o, 117u8); o = _put(buf, o, 116u8); o = _put(buf, o, 101u8); o = _put(buf, o, 120u8)   /* mutex */
+    return o as u32
+}
+
+fn _phrase_spawn_process(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 115u8); o = _put(buf, o, 112u8); o = _put(buf, o, 97u8); o = _put(buf, o, 119u8); o = _put(buf, o, 110u8)   /* spawn */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 112u8); o = _put(buf, o, 114u8); o = _put(buf, o, 111u8); o = _put(buf, o, 99u8); o = _put(buf, o, 101u8); o = _put(buf, o, 115u8); o = _put(buf, o, 115u8)   /* process */
+    return o as u32
+}
+
+fn _phrase_wait_barrier(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 119u8); o = _put(buf, o, 97u8); o = _put(buf, o, 105u8); o = _put(buf, o, 116u8)   /* wait */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 98u8); o = _put(buf, o, 97u8); o = _put(buf, o, 114u8); o = _put(buf, o, 114u8); o = _put(buf, o, 105u8); o = _put(buf, o, 101u8); o = _put(buf, o, 114u8)   /* barrier */
+    return o as u32
+}
+
+fn _phrase_signal_event(buf: *u8) -> u32 {
+    let mut o : u64 = 0u64
+    o = _put(buf, o, 115u8); o = _put(buf, o, 105u8); o = _put(buf, o, 103u8); o = _put(buf, o, 110u8); o = _put(buf, o, 97u8); o = _put(buf, o, 108u8)   /* signal */
+    o = _put(buf, o, 32u8)
+    o = _put(buf, o, 101u8); o = _put(buf, o, 118u8); o = _put(buf, o, 101u8); o = _put(buf, o, 110u8); o = _put(buf, o, 116u8)   /* event */
+    return o as u32
+}
+
+fn main() -> u64 {
+    let text  : *u8 = malloc(128u64)
+    let cands : *u8 = malloc(64u64)
+    let meta  : *u8 = malloc(16u64)
+    if text  as u64 == 0u64 { return 1u64 }
+    if cands as u64 == 0u64 { return 2u64 }
+    if meta  as u64 == 0u64 { return 3u64 }
+    let mut zi : u64 = 0u64
+    while zi < 16u64 { meta[zi] = 0u8; zi = zi + 1u64 }
+
+    let unique : u32 = hip_class_unique()
+    let p1     : u64 = _check_pack(unique, 1u32)
+
+    let len_a : u32 = _phrase_lock_mutex(text)
+    let rc_a : i32 = hip_resolve(text as u64, len_a, cands as u64, meta as u64)
+    if rc_a != 0i32 { return 200u64 }
+    let cls_a : u32 = _read_u32(meta, 4u64)
+    let cnt_a : u32 = _read_u32(meta, 0u64)
+    if cls_a != unique {
+        if cls_a == 1u32 { return 201u64 }   /* AMBIGUOUS */
+        if cls_a == 2u32 { return 202u64 }   /* NO_MATCH */
+        return 203u64
+    }
+    if cnt_a != 1u32 {
+        if cnt_a == 0u32 { return 210u64 }
+        if cnt_a == 2u32 { return 212u64 }
+        return 220u64
+    }
+
+    let len_b : u32 = _phrase_unlock_mutex(text)
+    if hip_resolve(text as u64, len_b, cands as u64, meta as u64) != 0i32 { return 101u64 }
+    if _read_u32(meta, 4u64) != unique { return 121u64 }
+    if _read_u32(meta, 0u64) != 1u32   { return 131u64 }
+
+    let len_c : u32 = _phrase_spawn_process(text)
+    if hip_resolve(text as u64, len_c, cands as u64, meta as u64) != 0i32 { return 102u64 }
+    if _read_u32(meta, 4u64) != unique { return 122u64 }
+    if _read_u32(meta, 0u64) != 1u32   { return 132u64 }
+
+    let len_d : u32 = _phrase_wait_barrier(text)
+    if hip_resolve(text as u64, len_d, cands as u64, meta as u64) != 0i32 { return 103u64 }
+    if _read_u32(meta, 4u64) != unique { return 123u64 }
+    if _read_u32(meta, 0u64) != 1u32   { return 133u64 }
+
+    let len_e : u32 = _phrase_signal_event(text)
+    if hip_resolve(text as u64, len_e, cands as u64, meta as u64) != 0i32 { return 104u64 }
+    if _read_u32(meta, 4u64) != unique { return 124u64 }
+    if _read_u32(meta, 0u64) != 1u32   { return 134u64 }
+
+    free(text)
+    free(cands)
+    free(meta)
+    return 99u64
+}

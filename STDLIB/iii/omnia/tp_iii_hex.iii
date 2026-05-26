@@ -1,0 +1,16 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_hex.iii
+ *
+ * Transform pattern: FORM_III → FORM_HEX_DUMP
+ * FROZEN SPEC §7B.6 slot 33; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ * III source bytes are valid raw bytes; this transform delegates to tp_raw_hex.
+ */
+
+module omnia_tp_iii_hex
+
+extern @abi(c-msvc-x64) fn tp_raw_hex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_raw_hex.iii"
+
+fn tp_iii_hex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    return tp_raw_hex(src, src_len, dst_buf, dst_cap)
+}

@@ -1,0 +1,23 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\252_nested_comments.iii
+ *
+ * III conformance corpus 252 -- nested /* */ block comments.
+ *
+ * Regression test for the Phase-3-Step-1 iiis-0.1 lexer fix that adds
+ * depth-tracking to the block-comment scanner.  Before the fix, a `/*`
+ * inside a block comment did not increment depth; the first inner `*/`
+ * closed the outer comment, leaking the remaining text as code.
+ *
+ * Outer comment containing nested:
+ *   /* this is a nested inner comment */
+ * still inside outer.
+ *
+ * Outer with two-level nesting:
+ *   /* level 1 /* level 2 */ back at level 1 */
+ * back at outer.
+ */
+module corpus_252
+
+fn main() -> u64 {
+    /* outer with nested /* inner */ still outer */
+    return 99u64
+}

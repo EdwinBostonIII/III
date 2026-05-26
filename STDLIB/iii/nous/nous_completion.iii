@@ -1,0 +1,117 @@
+/* STDLIB/iii/nous/nous_completion.iii -- confluence-completion acceleration (nous P4).
+ *
+ * The load-bearing first job of the proposer: Knuth-Bendix-style completion.  For each
+ * divergent critical pair, nous proposes joining rewrites; the engine CHECKS each (every
+ * proposal must canonicalise the two sides to the same normal form -- the join is never
+ * trusted, always re-checked).  The completion resolves into the trichotomy:
+ *   SATURATED -- ALL critical pairs join => the rule family is confluent; ship a
+ *                cad-sealed convergence certificate.
+ *   GAP       -- budget spent before all pairs were checked => REFUSE the promotion; the
+ *                engine stays in its last proven-confluent state (the bones do not break).
+ *   REFUTED   -- a pair does NOT join (non-orientable) => reject the family with proof.
+ *
+ * THE SAFETY PROPERTY (the negative arm): SATURATED requires EVERY pair checked AND
+ * joined.  A budget that checks only some pairs yields GAP, never SATURATED -- a partial
+ * completion can never masquerade as a proven-confluent one.  This is the completion
+ * analogue of nous_search's keystone.
+ *
+ * At M13 there are no new rule families, so the critical pairs here are SYNTHETIC
+ * (constructed trit-op overlaps): a commutative AND pair joins (min is symmetric); an
+ * AND-vs-OR pair does not (min != max).  The live dynamic critical-pair enumeration, sealed by the
+ * Confluence-Core Certificate (xii_conf_cert; route-S retired the static xii_critpairs), is the M14
+ * wiring (B-8); this module proves the completion DISCIPLINE now.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_canonicalise + cad.
+ * Determinism: integer-only; ==/!= compares; single-line fns.  (Tags NOUS_CMP_* are
+ * distinct from nous_search's NOUS_* to avoid the trap-2 link-global collision.)
+ */
+module nous_completion
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const NOUS_CMP_SATURATED : u8  = 0u8
+const NOUS_CMP_GAP       : u8  = 1u8
+const NOUS_CMP_REFUTED   : u8  = 2u8
+const NOUS_CMP_TRIT_VAL  : u8  = 24u8
+const NOUS_CMP_TRIT_AND  : u8  = 26u8
+const NOUS_CMP_TRIT_OR   : u8  = 27u8
+const NOUS_CMP_CAD_KECCAK : u32 = 1u32
+
+var NOUS_CMP_CERT : [u8; 32]   /* cad-sealed SATURATED convergence certificate */
+var NOUS_CMP_TAG  : [u8; 4]    /* cert preimage: the verdict byte */
+
+fn cmp_mkval(v: i32) -> u32 { return xii_term_make_basis(NOUS_CMP_TRIT_VAL, (v + 1i32) as u32) }
+
+/* Does the critical pair (opa(a0,a1), opb(b0,b1)) JOIN?  Build both in one arena,
+ * canonicalise each, and compare normal forms.  1 = joins (confluent at this overlap). */
+fn cmp_pair_joins(opa: u8, a0: i32, a1: i32, opb: u8, b0: i32, b1: i32) -> u8 {
+    xii_term_arena_reset()
+    let ta : u32 = xii_term_make_fusion2(opa, cmp_mkval(a0), cmp_mkval(a1))
+    let tb : u32 = xii_term_make_fusion2(opb, cmp_mkval(b0), cmp_mkval(b1))
+    let ra : u32 = xii_canonicalise(ta)
+    let rb : u32 = xii_canonicalise(tb)
+    return xii_rewrite_struct_eq(ra, rb)
+}
+
+/* Run completion over n_pairs synthetic critical pairs under a pair-budget.  If
+ * force_nonjoin=1, pair 0 is the non-joinable AND-vs-OR overlap (the REFUTED witness). */
+fn nous_complete(n_pairs: u32, budget: u32, force_nonjoin: u8) -> u8 @export {
+    let mut checked : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n_pairs {
+        if checked >= budget { return NOUS_CMP_GAP }   /* budget spent: pairs unchecked -> cannot certify */
+        let mut joins : u8 = 0u8
+        if force_nonjoin == 1u8 {
+            if i == 0u32 {
+                joins = cmp_pair_joins(NOUS_CMP_TRIT_AND, -1i32, 1i32, NOUS_CMP_TRIT_OR, -1i32, 1i32)
+            } else {
+                joins = cmp_pair_joins(NOUS_CMP_TRIT_AND, -1i32, 1i32, NOUS_CMP_TRIT_AND, 1i32, -1i32)
+            }
+        } else {
+            joins = cmp_pair_joins(NOUS_CMP_TRIT_AND, -1i32, 1i32, NOUS_CMP_TRIT_AND, 1i32, -1i32)
+        }
+        if joins != 1u8 { return NOUS_CMP_REFUTED }    /* non-joinable overlap -> reject the family */
+        checked = checked + 1u32
+        i = i + 1u32
+    }
+    return NOUS_CMP_SATURATED                          /* every pair checked AND joined -> confluent */
+}
+
+/* On SATURATED, seal the convergence certificate (cad of the verdict).  Returns 0 if
+ * sealed (and the family may be promoted), -1 if the completion did not saturate (no
+ * cert -- promotion refused). */
+fn nous_complete_cert(n_pairs: u32, budget: u32, out32: *u8) -> i32 @export {
+    if (out32 as u64) == 0u64 { return -1i32 }
+    let outcome : u8 = nous_complete(n_pairs, budget, 0u8)
+    if outcome != NOUS_CMP_SATURATED { return -1i32 }
+    NOUS_CMP_TAG[0u64] = NOUS_CMP_SATURATED
+    cad_oneshot(NOUS_CMP_CAD_KECCAK, (&NOUS_CMP_TAG as u64) as *u8, 1u64, out32)
+    return 0i32
+}
+
+fn nous_completion_selftest() -> u64 @export {
+    /* all 3 joinable pairs, generous budget -> SATURATED */
+    if nous_complete(3u32, 5u32, 0u8) != NOUS_CMP_SATURATED { return 1u64 }
+    /* same family, budget < pairs -> GAP (promotion refused; NOT certified) */
+    if nous_complete(3u32, 2u32, 0u8) != NOUS_CMP_GAP { return 2u64 }
+    if nous_complete(3u32, 0u32, 0u8) != NOUS_CMP_GAP { return 3u64 }
+    /* a non-joinable pair present -> REFUTED */
+    if nous_complete(3u32, 5u32, 1u8) != NOUS_CMP_REFUTED { return 4u64 }
+    /* the negative arm: a partial check (budget<pairs) must NOT be SATURATED */
+    if nous_complete(3u32, 1u32, 0u8) == NOUS_CMP_SATURATED { return 5u64 }
+    /* direct join witnesses */
+    if cmp_pair_joins(NOUS_CMP_TRIT_AND, -1i32, 1i32, NOUS_CMP_TRIT_AND, 1i32, -1i32) != 1u8 { return 6u64 }  /* commutative -> joins */
+    if cmp_pair_joins(NOUS_CMP_TRIT_AND, -1i32, 1i32, NOUS_CMP_TRIT_OR, -1i32, 1i32) != 0u8 { return 7u64 }   /* AND != OR -> not joinable */
+    /* SATURATED ships a non-zero cad cert; a non-saturating completion ships none */
+    let c : *u8 = (&NOUS_CMP_CERT as u64) as *u8
+    if nous_complete_cert(3u32, 5u32, c) != 0i32 { return 8u64 }
+    if cad_is_zero(c) != 0u8 { return 9u64 }
+    if nous_complete_cert(3u32, 2u32, c) != -1i32 { return 10u64 }   /* GAP -> no cert (promotion refused) */
+    return 99u64
+}

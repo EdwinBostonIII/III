@@ -1,0 +1,279 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\babel_wire.iii
+ *
+ * III STDLIB - aether::babel_wire
+ *
+ * Binary wire envelope for the III sovereign web (Phase D.1 of the
+ * Intent Calculus v1.0 wire stack). 68-byte fixed header + variable
+ * payload + 4-byte trailing CRC32 over header bytes [0..63].
+ *
+ * Layout:
+ *
+ *   off  field           type/size
+ *    0   seal_id         u64
+ *    8   cap_ref         u64
+ *   16   intent_id       u64
+ *   24   ctx_digest      u8[32]
+ *   56   facet_id        u8
+ *   57   payload_len     u32
+ *   61   reserved        u8[3]      (must be zero)
+ *   64   crc32           u32        (over bytes [0..63])
+ *   68   payload         u8[payload_len]
+ *
+ * Total wire length = 68 + payload_len bytes.
+ *
+ * API discipline (per CLAUDE.md / iiis-0 traps): every public fn
+ * takes <= 4 parameters; defensive local copies at function entry.
+ * A multi-step setter API replaces the 8-arg "pack everything" form.
+ *
+ * Hexad: kind_passage. Ring: R0. K: 0.95.
+ */
+
+module aether_babel_wire
+
+extern @abi(c-msvc-x64) fn crc32_oneshot(data: *u8, len: u64) -> u32 from "crc32.iii"
+
+const BABEL_WIRE_HEADER_BYTES : u32 = 68u32
+
+const BABEL_WIRE_OK             : i32 =  0i32
+const BABEL_WIRE_E_NULL         : i32 = -1i32
+const BABEL_WIRE_E_BAD_CRC      : i32 = -2i32
+const BABEL_WIRE_E_BAD_SEAL     : i32 = -3i32
+const BABEL_WIRE_E_BAD_LEN      : i32 = -4i32
+
+/* ---------------- internal helpers ---------------- */
+
+fn _bw_write_u64_le(buf: u64, off: u64, v: u64) -> i32 {
+    let l_buf : u64 = buf
+    let l_off : u64 = off
+    let l_v   : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bp : *u8 = (l_buf + l_off + i) as *u8
+        bp[0u64] = ((l_v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return BABEL_WIRE_OK
+}
+
+fn _bw_read_u64_le(buf: u64, off: u64) -> u64 {
+    let l_buf : u64 = buf
+    let l_off : u64 = off
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bp : *u8 = (l_buf + l_off + i) as *u8
+        let b  : u64 = (bp[0u64] as u64) & 0xFFu64
+        v = v | (b << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+fn _bw_write_u32_le(buf: u64, off: u64, v: u32) -> i32 {
+    let l_buf : u64 = buf
+    let l_off : u64 = off
+    let l_v   : u32 = v
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        let bp : *u8 = (l_buf + l_off + ((i as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((l_v >> (i * 8u32)) & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    return BABEL_WIRE_OK
+}
+
+fn _bw_read_u32_le(buf: u64, off: u64) -> u32 {
+    let l_buf : u64 = buf
+    let l_off : u64 = off
+    let mut v : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        let bp : *u8 = (l_buf + l_off + ((i as u64) & 0xFFu64)) as *u8
+        let b  : u32 = (bp[0u64] as u32) & 0xFFu32
+        v = v | (b << (i * 8u32))
+        i = i + 1u32
+    }
+    return v
+}
+
+/* ---------------- public surface ---------------- */
+
+/* Initialise the envelope buffer: zero the 68-byte header. The caller
+ * must allocate at least 68 + max_payload_len bytes. */
+fn babel_wire_init(out_buf: u64) -> i32 @export {
+    let l_buf : u64 = out_buf
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    let mut i : u64 = 0u64
+    while i < (BABEL_WIRE_HEADER_BYTES as u64) {
+        let bp : *u8 = (l_buf + i) as *u8
+        bp[0u64] = 0u8
+        i = i + 1u64
+    }
+    return BABEL_WIRE_OK
+}
+
+fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 @export {
+    let l_buf : u64 = out_buf
+    let l_v   : u64 = seal_id
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    return _bw_write_u64_le(l_buf, 0u64, l_v)
+}
+
+fn babel_wire_set_cap_ref(out_buf: u64, cap_ref: u64) -> i32 @export {
+    let l_buf : u64 = out_buf
+    let l_v   : u64 = cap_ref
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    return _bw_write_u64_le(l_buf, 8u64, l_v)
+}
+
+fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 @export {
+    let l_buf : u64 = out_buf
+    let l_v   : u64 = intent_id
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    return _bw_write_u64_le(l_buf, 16u64, l_v)
+}
+
+/* Copy 32 bytes from digest_ptr into the ctx_digest field. */
+fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 @export {
+    let l_buf : u64 = out_buf
+    let l_dig : u64 = digest_ptr
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    if l_dig == 0u64 { return BABEL_WIRE_E_NULL }
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let src : *u8 = (l_dig + i) as *u8
+        let dst : *u8 = (l_buf + 24u64 + i) as *u8
+        dst[0u64] = src[0u64]
+        i = i + 1u64
+    }
+    return BABEL_WIRE_OK
+}
+
+fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 @export {
+    let l_buf : u64 = out_buf
+    let l_f   : u8  = facet_id
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    let p : *u8 = (l_buf + 56u64) as *u8
+    p[0u64] = l_f
+    return BABEL_WIRE_OK
+}
+
+/* Copy `payload_len` bytes from payload_ptr to offset 68; record the
+ * length in the header. Caller must have allocated 68 + payload_len
+ * bytes. */
+fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 @export {
+    let l_buf : u64 = out_buf
+    let l_pp  : u64 = payload_ptr
+    let l_len : u32 = payload_len
+    if l_buf == 0u64 { return BABEL_WIRE_E_NULL }
+    if l_len > 0u32 {
+        if l_pp == 0u64 { return BABEL_WIRE_E_NULL }
+    }
+    /* Write payload_len at offset 57 (u32 LE). */
+    _bw_write_u32_le(l_buf, 57u64, l_len)
+    /* Copy payload bytes. */
+    let mut i : u32 = 0u32
+    while i < l_len {
+        let src : *u8 = (l_pp + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        let dst : *u8 = (l_buf + 68u64 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        dst[0u64] = src[0u64]
+        i = i + 1u32
+    }
+    return BABEL_WIRE_OK
+}
+
+/* Compute and store the CRC32 of header bytes [0..63]. Returns the
+ * total wire length (68 + payload_len) on success. */
+fn babel_wire_finalize(out_buf: u64) -> u32 @export {
+    let l_buf : u64 = out_buf
+    if l_buf == 0u64 { return 0u32 }
+    let payload_len : u32 = _bw_read_u32_le(l_buf, 57u64)
+    /* Zero the reserved bytes [61..63] for canonical encoding. */
+    let r0 : *u8 = (l_buf + 61u64) as *u8
+    let r1 : *u8 = (l_buf + 62u64) as *u8
+    let r2 : *u8 = (l_buf + 63u64) as *u8
+    r0[0u64] = 0u8
+    r1[0u64] = 0u8
+    r2[0u64] = 0u8
+    /* CRC32 over [0..63] (64 bytes). */
+    let crc : u32 = crc32_oneshot(l_buf as *u8, 64u64)
+    _bw_write_u32_le(l_buf, 64u64, crc)
+    return BABEL_WIRE_HEADER_BYTES + payload_len
+}
+
+/* ---------------- unpack accessors ---------------- */
+
+fn babel_wire_unpack_seal_id(in_buf: u64) -> u64 @export {
+    let l_buf : u64 = in_buf
+    if l_buf == 0u64 { return 0u64 }
+    return _bw_read_u64_le(l_buf, 0u64)
+}
+
+fn babel_wire_unpack_cap_ref(in_buf: u64) -> u64 @export {
+    let l_buf : u64 = in_buf
+    if l_buf == 0u64 { return 0u64 }
+    return _bw_read_u64_le(l_buf, 8u64)
+}
+
+fn babel_wire_unpack_intent_id(in_buf: u64) -> u64 @export {
+    let l_buf : u64 = in_buf
+    if l_buf == 0u64 { return 0u64 }
+    return _bw_read_u64_le(l_buf, 16u64)
+}
+
+fn babel_wire_unpack_ctx_digest_byte(in_buf: u64, i: u32) -> u32 @export {
+    let l_buf : u64 = in_buf
+    let l_i   : u32 = i
+    if l_buf == 0u64 { return 0x100u32 }
+    if l_i >= 32u32 { return 0x100u32 }
+    let bp : *u8 = (l_buf + 24u64 + ((l_i as u64) & 0xFFu64)) as *u8
+    return (bp[0u64] as u32) & 0xFFu32
+}
+
+fn babel_wire_unpack_facet(in_buf: u64) -> u8 @export {
+    let l_buf : u64 = in_buf
+    if l_buf == 0u64 { return 0u8 }
+    let p : *u8 = (l_buf + 56u64) as *u8
+    return p[0u64]
+}
+
+fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 @export {
+    let l_buf : u64 = in_buf
+    if l_buf == 0u64 { return 0u32 }
+    return _bw_read_u32_le(l_buf, 57u64)
+}
+
+fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 @export {
+    let l_buf : u64 = in_buf
+    let l_i   : u32 = i
+    if l_buf == 0u64 { return 0x100u32 }
+    let plen : u32 = _bw_read_u32_le(l_buf, 57u64)
+    if l_i >= plen { return 0x100u32 }
+    let bp : *u8 = (l_buf + 68u64 + ((l_i as u64) & 0xFFFFFFFFu64)) as *u8
+    return (bp[0u64] as u32) & 0xFFu32
+}
+
+/* Verify the trailing CRC32 over header bytes [0..63]. */
+fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 @export {
+    let l_buf : u64 = in_buf
+    let l_len : u32 = in_len
+    if l_buf == 0u64 { return 0u8 }
+    if l_len < BABEL_WIRE_HEADER_BYTES { return 0u8 }
+    let stored : u32 = _bw_read_u32_le(l_buf, 64u64)
+    let recomp : u32 = crc32_oneshot(l_buf as *u8, 64u64)
+    if stored == recomp { return 1u8 }
+    return 0u8
+}
+
+fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 @export {
+    let l_buf : u64 = in_buf
+    let l_exp : u64 = expected_seal
+    if l_buf == 0u64 { return 0u8 }
+    let actual : u64 = _bw_read_u64_le(l_buf, 0u64)
+    if actual == l_exp { return 1u8 }
+    return 0u8
+}
+
+fn babel_wire_header_bytes() -> u32 @export {
+    return BABEL_WIRE_HEADER_BYTES
+}

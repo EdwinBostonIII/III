@@ -1,0 +1,2034 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\prespec.iii
+ *
+ * III STDLIB - omnia::prespec
+ *
+ * Pre-specialization registry for the partial evaluator (Phase C.1).
+ *
+ * The registry maps a content-addressed composition hash to a sealed
+ * direct-dispatch entry: at compile time, when cg_r3 sees a static-
+ * intent call site whose composition_hash matches a registered entry,
+ * it emits a 5-byte rel32 call directly to the dispatch fp -- erasing
+ * the resolver code path entirely (Phase C.6 partial-evaluator hook).
+ *
+ * Registry state is populated at boot via prespec_register_compositions.
+ * Each entry is:
+ *
+ *   composition_hash : u64    SHA-256 truncated to 64 bits over
+ *                              (intent_primitive_id || hexad_bag ||
+ *                               arg_typegram).
+ *   intent_primitive : u8     PRIMITIVE_* id (verba/intent.iii).
+ *   hexad_bag        : u8     packed hexad alignments (lower 7 bits =
+ *                              hexad set; bit 7 reserved).
+ *   k_value          : u64    fixed-point K * 1e9.
+ *   dispatch_fp      : u64    function-pointer to the canonical lowered
+ *                              implementation (typically a single
+ *                              hand-tuned routine in numera or omnia).
+ *
+ * Capacity: 256 entries (~16 KiB BSS). Lookup is linear. The cg_r3
+ * partial evaluator queries via prespec_lookup; on hit it emits the
+ * direct call. On miss it falls through to the full resolve() path
+ * (which itself benefits from omnia/resolver_memo and omnia/jit_fuse).
+ *
+ * Determinism: register order is deterministic (callers register in a
+ * fixed boot sequence); lookups are pure function of composition_hash.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 1.00.
+ */
+
+module omnia_prespec
+
+const PRESPEC_CAP : u32 = 256u32
+
+const PRESPEC_OK         : i32 =  0i32
+const PRESPEC_E_FULL     : i32 = -1i32
+const PRESPEC_E_BAD_ID   : i32 = -2i32
+const PRESPEC_NOT_FOUND  : u32 = 0xFFFFFFFFu32
+
+/* Storage. */
+var PRESPEC_HASH      : [u64; 256]
+var PRESPEC_PRIMITIVE : [u8;  256]
+var PRESPEC_HEXAD_BAG : [u8;  256]
+var PRESPEC_K_VALUE   : [u64; 256]
+var PRESPEC_DISPATCH  : [u64; 256]
+var PRESPEC_LIVE      : [u8;  256]
+var PRESPEC_USED      : u32 = 0u32
+
+/* Register a composition. 4-arg signature (avoids iiis-0 5+ stack-arg
+ * codegen issue). The metadata fields are packed:
+ *
+ *   packed_meta layout:
+ *     bits 0..7    = intent_primitive (PRIMITIVE_* id, 1..18)
+ *     bits 8..15   = hexad_bag (lower 7 bits = HEXAD set; bit 7 reserved)
+ *     bits 16..47  = k_value low 32 bits (K * 1e9 fits comfortably)
+ *     bits 48..63  = reserved (must be zero)
+ *
+ * Returns:
+ *   PRESPEC_OK on success
+ *   PRESPEC_E_FULL when the registry is at capacity
+ *
+ * Idempotent: re-registering the same composition_hash updates in place. */
+fn prespec_register(composition_hash: u64,
+                    packed_meta: u64,
+                    dispatch_fp: u64,
+                    fallback_pid: u32) -> i32 @export {
+    let l_h    : u64 = composition_hash
+    let l_pm   : u64 = packed_meta
+    let l_fp   : u64 = dispatch_fp
+    let _l_fb  : u32 = fallback_pid    /* reserved for future use */
+
+    let l_pid  : u8  = (l_pm & 0xFFu64) as u8
+    let l_bag  : u8  = ((l_pm >> 8u64) & 0xFFu64) as u8
+    let l_k    : u64 = (l_pm >> 16u64) & 0xFFFFFFFFu64
+
+    /* Idempotent update path. */
+    let mut i : u32 = 0u32
+    while i < PRESPEC_CAP {
+        if PRESPEC_LIVE[i] == 1u8 {
+            if PRESPEC_HASH[i] == l_h {
+                PRESPEC_PRIMITIVE[i] = l_pid
+                PRESPEC_HEXAD_BAG[i] = l_bag
+                PRESPEC_K_VALUE[i]   = l_k
+                PRESPEC_DISPATCH[i]  = l_fp
+                return PRESPEC_OK
+            }
+        }
+        i = i + 1u32
+    }
+
+    /* New entry. */
+    let mut j : u32 = 0u32
+    while j < PRESPEC_CAP {
+        if PRESPEC_LIVE[j] == 0u8 {
+            PRESPEC_HASH[j]      = l_h
+            PRESPEC_PRIMITIVE[j] = l_pid
+            PRESPEC_HEXAD_BAG[j] = l_bag
+            PRESPEC_K_VALUE[j]   = l_k
+            PRESPEC_DISPATCH[j]  = l_fp
+            PRESPEC_LIVE[j]      = 1u8
+            if PRESPEC_USED < PRESPEC_CAP { PRESPEC_USED = PRESPEC_USED + 1u32 }
+            return PRESPEC_OK
+        }
+        j = j + 1u32
+    }
+    return PRESPEC_E_FULL
+}
+
+/* Convenience packer for callers building packed_meta inline. */
+fn prespec_pack_meta(intent_primitive: u8, hexad_bag: u8, k_value: u32) -> u64 @export {
+    let l_pid : u64 = (intent_primitive as u64) & 0xFFu64
+    let l_bag : u64 = ((hexad_bag as u64) & 0xFFu64) << 8u64
+    let l_k   : u64 = ((k_value as u64) & 0xFFFFFFFFu64) << 16u64
+    return l_pid | l_bag | l_k
+}
+
+/* Lookup by composition hash. Returns slot index or PRESPEC_NOT_FOUND. */
+fn prespec_lookup(composition_hash: u64) -> u32 @export {
+    let l_h : u64 = composition_hash
+    let mut i : u32 = 0u32
+    while i < PRESPEC_CAP {
+        if PRESPEC_LIVE[i] == 1u8 {
+            if PRESPEC_HASH[i] == l_h { return i }
+        }
+        i = i + 1u32
+    }
+    return PRESPEC_NOT_FOUND
+}
+
+/* Per-slot accessors (used by cg_r3 partial-evaluator hook). */
+fn prespec_dispatch_fp(slot: u32) -> u64 @export {
+    let l : u32 = slot
+    if l >= PRESPEC_CAP { return 0u64 }
+    if PRESPEC_LIVE[l] != 1u8 { return 0u64 }
+    return PRESPEC_DISPATCH[l]
+}
+
+fn prespec_primitive(slot: u32) -> u8 @export {
+    let l : u32 = slot
+    if l >= PRESPEC_CAP { return 0u8 }
+    if PRESPEC_LIVE[l] != 1u8 { return 0u8 }
+    return PRESPEC_PRIMITIVE[l]
+}
+
+fn prespec_k_value(slot: u32) -> u64 @export {
+    let l : u32 = slot
+    if l >= PRESPEC_CAP { return 0u64 }
+    if PRESPEC_LIVE[l] != 1u8 { return 0u64 }
+    return PRESPEC_K_VALUE[l]
+}
+
+fn prespec_hexad_bag(slot: u32) -> u8 @export {
+    let l : u32 = slot
+    if l >= PRESPEC_CAP { return 0u8 }
+    if PRESPEC_LIVE[l] != 1u8 { return 0u8 }
+    return PRESPEC_HEXAD_BAG[l]
+}
+
+fn prespec_used() -> u32 @export {
+    return PRESPEC_USED
+}
+
+fn prespec_capacity() -> u32 @export {
+    return PRESPEC_CAP
+}
+
+fn prespec_drop(slot: u32) -> i32 @export {
+    let l : u32 = slot
+    if l >= PRESPEC_CAP { return PRESPEC_E_BAD_ID }
+    if PRESPEC_LIVE[l] != 1u8 { return PRESPEC_E_BAD_ID }
+    PRESPEC_LIVE[l]      = 0u8
+    PRESPEC_HASH[l]      = 0u64
+    PRESPEC_PRIMITIVE[l] = 0u8
+    PRESPEC_HEXAD_BAG[l] = 0u8
+    PRESPEC_K_VALUE[l]   = 0u64
+    PRESPEC_DISPATCH[l]  = 0u64
+    if PRESPEC_USED > 0u32 { PRESPEC_USED = PRESPEC_USED - 1u32 }
+    return PRESPEC_OK
+}
+
+/* Bulk registration of well-known compositions (Phase C.1).
+ *
+ * Single source of truth: COMPILER/BOOT/iii_compositions.def.
+ * The block below between the AUTO-GENERATED sentinels is rewritten
+ * by COMPILER/BOOT/gen_compositions.sh whenever the .def changes.
+ * cg_r3.c reads the SAME .def via the generated iii_compositions.h.
+ * Drift is structurally impossible.
+ *
+ * synthetic_composition_hash encoding (mirrors iii_compositions.h):
+ *   bits 0..15  = sequence index
+ *   bits 16..23 = primitive_id
+ *   bits 24..31 = hexad_bag
+ *   bits 32..63 = synthetic-marker 0x494E5450 ("INTP")
+ */
+fn prespec_register_compositions() -> u32 @export {
+    let mut count : u32 = 0u32
+/* === BEGIN AUTO-GENERATED FROM iii_compositions.def === */
+    /* SEQ_IDX 256 entries follow; encoding mirrors
+     * iii_composition_synth_hash() in iii_compositions.h. */
+    {
+        let h : u64 = _prespec_synth_hash(100u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&sha256_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(101u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 940000000u32)
+        let f : u64 = (&sha512_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(102u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&blake2s_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(103u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 945000000u32)
+        let f : u64 = (&sha3_256_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(104u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 940000000u32)
+        let f : u64 = (&sha3_512_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(105u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 940000000u32)
+        let f : u64 = (&shake128_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(106u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 935000000u32)
+        let f : u64 = (&shake256_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(107u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&crc32_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(108u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 955000000u32)
+        let f : u64 = (&murmur3_32) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(109u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&hkdf_sha256_extract) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(110u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&hkdf_sha256_expand) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(111u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&pbkdf2_sha256_derive) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(112u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 945000000u32)
+        let f : u64 = (&hmac_sha256) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(113u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 940000000u32)
+        let f : u64 = (&hmac_sha512) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(114u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&sha256_dispatch_oneshot) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(120u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&x25519) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(121u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 870000000u32)
+        let f : u64 = (&chacha20_set_state) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(122u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 880000000u32)
+        let f : u64 = (&chacha20_keystream) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(123u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 870000000u32)
+        let f : u64 = (&chacha20_xor) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(124u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 900000000u32)
+        let f : u64 = (&poly1305_set_key) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(125u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 900000000u32)
+        let f : u64 = (&poly1305_update) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(126u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 900000000u32)
+        let f : u64 = (&poly1305_finalize) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(127u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&aead_chacha20_poly1305_seal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(128u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&aead_chacha20_poly1305_open) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(129u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 870000000u32)
+        let f : u64 = (&aes128_set_key) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(130u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 870000000u32)
+        let f : u64 = (&aes256_set_key) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(131u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 880000000u32)
+        let f : u64 = (&aes_encrypt_block) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(132u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 880000000u32)
+        let f : u64 = (&aes_decrypt_block) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(133u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&aes_gcm_seal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(134u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&aes_gcm_open) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(140u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 850000000u32)
+        let f : u64 = (&ed25519_verify) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(141u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 850000000u32)
+        let f : u64 = (&ed25519_sign_c4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(142u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 850000000u32)
+        let f : u64 = (&pq_keygen_c4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(143u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 850000000u32)
+        let f : u64 = (&pq_sign_c4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(144u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 850000000u32)
+        let f : u64 = (&pq_verify_c4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(145u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&pq_encaps_c4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(146u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 860000000u32)
+        let f : u64 = (&pq_decaps_c4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(150u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&bigint_add) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(151u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&bigint_sub) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(152u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&bigint_mul_u64) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(153u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 870000000u32)
+        let f : u64 = (&bigint_mul) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(154u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 870000000u32)
+        let f : u64 = (&bigint_mul_karatsuba) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(155u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 870000000u32)
+        let f : u64 = (&bigint_div_qr) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(156u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&bigint_div_u64) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(157u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&bigint_mod) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(158u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 860000000u32)
+        let f : u64 = (&bigint_modpow) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(159u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&bigint_cmp) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(170u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&fp_add) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(171u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&fp_sub) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(172u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&fp_mul) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(173u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&fp_pow) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(174u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 870000000u32)
+        let f : u64 = (&fp_inv_fermat) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(175u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&fp_div) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(176u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 870000000u32)
+        let f : u64 = (&fp_inv_with_crystal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(180u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&mod_u32_pow) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(181u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&mod_u64_pow) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(182u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&mont_mul_u32) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(183u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 900000000u32)
+        let f : u64 = (&mont_pow_u32) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(184u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 955000000u32)
+        let f : u64 = (&q128_add) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(185u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 955000000u32)
+        let f : u64 = (&q128_sub) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(186u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 955000000u32)
+        let f : u64 = (&q128_mul) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(187u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&q128_shl) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(188u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&q128_shr) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(189u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&fix_mul) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(190u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 955000000u32)
+        let f : u64 = (&hex_encode) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(191u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&hex_decode) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(192u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&endian_load_u64_le) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(193u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&endian_store_u64_le) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(194u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&xoshiro_next_u64) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(200u32, 1u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x02u8, 980000000u32)
+        let f : u64 = (&arena_new) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(201u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&arena_drop) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(202u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&arena_reset) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(203u32, 1u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x02u8, 980000000u32)
+        let f : u64 = (&arena_alloc) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(204u32, 1u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x02u8, 980000000u32)
+        let f : u64 = (&arena_alloc8) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(205u32, 1u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x02u8, 980000000u32)
+        let f : u64 = (&arena_alloc1) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(206u32, 1u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x02u8, 980000000u32)
+        let f : u64 = (&region_create) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(207u32, 1u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x02u8, 980000000u32)
+        let f : u64 = (&region_alloc) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(208u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&region_seal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(209u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&region_reset) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(210u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&region_release) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(211u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&span_u8_store) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(212u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&span_u8_fill) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(213u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&span_u8_copy) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(214u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&span_u8_find) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(215u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&arena_reset_safe) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(216u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&region_reset_safe) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(300u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 970000000u32)
+        let f : u64 = (&cap_env_init) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(301u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&cap_attenuate) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(302u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&cap_verify_rights) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(303u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&cap_verify_at) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(304u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&cap_revoke) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(305u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&cap_offer_pattern_set) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(306u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&cap_accept_offer) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(307u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&cap_negotiate_session) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(308u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&cap_session_verify) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(309u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&cap_session_drop) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(310u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&babel_wire_set_seal_id) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(311u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&babel_wire_set_intent_id) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(312u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&babel_wire_set_ctx_digest) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(313u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&babel_wire_set_facet) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(314u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&babel_wire_set_payload) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(315u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 970000000u32)
+        let f : u64 = (&babel_wire_finalize) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(316u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&babel_wire_verify_crc) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(317u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&babel_wire_verify_seal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(318u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&idoc_pack_payload) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(319u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 970000000u32)
+        let f : u64 = (&idoc_finalize) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(320u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 980000000u32)
+        let f : u64 = (&idoc_resolve_facet) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(321u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&idoc_validate) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(322u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 970000000u32)
+        let f : u64 = (&sc_handshake_init) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(323u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&sc_send) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(324u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&sc_recv) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(325u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&sc_close) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(330u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 920000000u32)
+        let f : u64 = (&fed_genesis_set) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(331u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&fed_genesis_verify_descent) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(332u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 920000000u32)
+        let f : u64 = (&fed_admit_to_planetary) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(333u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 980000000u32)
+        let f : u64 = (&fed_admit_eligible) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(334u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 920000000u32)
+        let f : u64 = (&fed_sybil_admit) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(335u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&fed_sybil_pow_verify) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(336u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 980000000u32)
+        let f : u64 = (&fed_sybil_score) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(337u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 970000000u32)
+        let f : u64 = (&fed_seal_anchor) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(338u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 980000000u32)
+        let f : u64 = (&fed_seal_lookup_anchor) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(339u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 970000000u32)
+        let f : u64 = (&fed_seal_compute_chain_root) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(340u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 920000000u32)
+        let f : u64 = (&fed_eclipse_compute_my_fingerprint) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(341u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 920000000u32)
+        let f : u64 = (&fed_eclipse_alarm) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(342u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 920000000u32)
+        let f : u64 = (&fed_tier_register) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(350u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&handle_alloc) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(351u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 980000000u32)
+        let f : u64 = (&handle_kind) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(352u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&handle_verify) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(353u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&handle_close) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(354u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&fs_open) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(355u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&fs_read) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(356u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&fs_write) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(357u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&fs_seek) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(358u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&net_tcp_connect_ipv4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(359u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&net_tcp_send) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(360u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&net_tcp_recv) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(361u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&net_close) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(362u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&net_pack_sockaddr_ipv4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(370u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&http_parse_request) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(371u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&http_parse_response) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(372u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&http_send_status) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(373u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&http_send_body) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(374u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&http_format_crystal_header) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(375u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&inet_parse_ipv4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(376u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 950000000u32)
+        let f : u64 = (&inet_format_ipv4) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(400u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&closure_set) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(401u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&closure_verify_against) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(402u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 970000000u32)
+        let f : u64 = (&closure_compute_with_resolver) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(403u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&calculus_init) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(404u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&calculus_primitive_hexad) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(405u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&calculus_primitive_k_cost) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(406u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&calculus_primitive_param_schema) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(407u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&calculus_primitive_ring_min) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(408u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&calculus_primitive_count) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(409u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&calculus_root_mhash) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(410u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&calculus_verify_completeness) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(411u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&attest_self) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(412u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&attest_eq) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(413u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_check_m1) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(414u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_check_m5) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(415u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_check_m9) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(416u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_check_m10) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(417u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_check_m14_via_match) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(418u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_check_m15) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(419u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&mandate_audit) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(420u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&kchain_new) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(421u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 970000000u32)
+        let f : u64 = (&kchain_compose) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(422u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&kchain_current) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(423u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&kchain_is_underflow) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(424u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&kchain_readmit) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(425u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&catalyst_register) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(426u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&catalyst_promotable) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(427u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&demote_record) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(428u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&demote_was_demoted) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(500u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&intent_form) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(501u32, 2u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(2u8, 0x02u8, 950000000u32)
+        let f : u64 = (&intent_bind) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(502u32, 3u8, 0x04u8)
+        let m : u64 = prespec_pack_meta(3u8, 0x04u8, 900000000u32)
+        let f : u64 = (&intent_convey) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(503u32, 4u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(4u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&intent_mean) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(504u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 900000000u32)
+        let f : u64 = (&intent_act) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(505u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 980000000u32)
+        let f : u64 = (&intent_compose) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(506u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 1000000000u32)
+        let f : u64 = (&intent_seal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(507u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&intent_prove) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(508u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&intent_query) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(509u32, 10u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(10u8, 0x40u8, 950000000u32)
+        let f : u64 = (&intent_grant) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(510u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 950000000u32)
+        let f : u64 = (&intent_govern) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(511u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 1000000000u32)
+        let f : u64 = (&intent_then) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(512u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 1000000000u32)
+        let f : u64 = (&intent_with) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(513u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 1000000000u32)
+        let f : u64 = (&intent_under) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(514u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 1000000000u32)
+        let f : u64 = (&intent_if) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(515u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 950000000u32)
+        let f : u64 = (&intent_loop) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(516u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 900000000u32)
+        let f : u64 = (&intent_lift) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(517u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 1000000000u32)
+        let f : u64 = (&intent_reflect) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(532u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 1000000000u32)
+        let f : u64 = (&intent_abstract) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(518u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_u32_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(519u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_u64_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(520u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_bytes_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(521u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_str_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(522u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_set_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(523u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_map_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(524u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_proof_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(525u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_crystal_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(526u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_recursive_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(527u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&glyph_witness_pack) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(528u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&nl_lex_register_hash) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(529u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 950000000u32)
+        let f : u64 = (&nl_lex_tokenize) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(530u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 980000000u32)
+        let f : u64 = (&nl_parse_recognize) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(531u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 980000000u32)
+        let f : u64 = (&hip_resolve) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(600u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 950000000u32)
+        let f : u64 = (&resolve) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(601u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 920000000u32)
+        let f : u64 = (&resolver_score) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(602u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&pattern_register) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(603u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&pattern_table_get) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(604u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 925000000u32)
+        let f : u64 = (&pattern_set_new) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(605u32, 2u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(2u8, 0x02u8, 910000000u32)
+        let f : u64 = (&pattern_set_add) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(606u32, 2u8, 0x02u8)
+        let m : u64 = prespec_pack_meta(2u8, 0x02u8, 910000000u32)
+        let f : u64 = (&pattern_set_has) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(607u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&pattern_set_verify) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(608u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 910000000u32)
+        let f : u64 = (&memo_lookup) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(609u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 910000000u32)
+        let f : u64 = (&memo_dispatch_fp) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(610u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 940000000u32)
+        let f : u64 = (&memo_insert) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(611u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 900000000u32)
+        let f : u64 = (&memo_reset) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(612u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 960000000u32)
+        let f : u64 = (&jit_fuse_observe) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(613u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 970000000u32)
+        let f : u64 = (&jit_fuse_emit) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(614u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 950000000u32)
+        let f : u64 = (&jit_fuse_lookup) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(615u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 930000000u32)
+        let f : u64 = (&hw_offload_register) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(616u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 920000000u32)
+        let f : u64 = (&hw_offload_lookup) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(617u32, 11u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(11u8, 0x40u8, 990000000u32)
+        let f : u64 = (&governance_propose) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(618u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 960000000u32)
+        let f : u64 = (&governance_sandbox) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(619u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 970000000u32)
+        let f : u64 = (&governance_promote) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(620u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 990000000u32)
+        let f : u64 = (&governance_seal) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(621u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 920000000u32)
+        let f : u64 = (&governance_vote) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(622u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 920000000u32)
+        let f : u64 = (&governance_tally) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(623u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 930000000u32)
+        let f : u64 = (&governance_threshold_met) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(624u32, 9u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(9u8, 0x08u8, 940000000u32)
+        let f : u64 = (&governance_observe_and_propose) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(625u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&proof_ripple_equivalence_pattern) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(626u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 990000000u32)
+        let f : u64 = (&proof_ripple_corpus_equiv) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(627u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 980000000u32)
+        let f : u64 = (&transform) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(628u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&sandbox_new) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(629u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
+        let f : u64 = (&ripple_execute_native) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(630u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 985000000u32)
+        let f : u64 = (&mini_crystal_mint) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(631u32, 5u8, 0x10u8)
+        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 960000000u32)
+        let f : u64 = (&mini_crystal_promote_to_full) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(632u32, 1u8, 0x01u8)
+        let m : u64 = prespec_pack_meta(1u8, 0x01u8, 930000000u32)
+        let f : u64 = (&call_context_new) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(700u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&cal_civil_to_unix) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(701u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&cal_unix_to_civil) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(702u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&duration_from_seconds) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(703u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&duration_add) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(704u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&duration_sub) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(705u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&duration_mul_u32) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(706u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&duration_eq) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(707u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&duration_lt) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(708u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&rfc3339_format) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(709u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&rfc3339_parse) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(710u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 990000000u32)
+        let f : u64 = (&deadline_at) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(711u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 990000000u32)
+        let f : u64 = (&deadline_in) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(712u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&deadline_check) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(713u32, 7u8, 0x40u8)
+        let m : u64 = prespec_pack_meta(7u8, 0x40u8, 990000000u32)
+        let f : u64 = (&instant_now_sealed) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(714u32, 8u8, 0x08u8)
+        let m : u64 = prespec_pack_meta(8u8, 0x08u8, 980000000u32)
+        let f : u64 = (&instant_verify) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+    {
+        let h : u64 = _prespec_synth_hash(715u32, 6u8, 0x20u8)
+        let m : u64 = prespec_pack_meta(6u8, 0x20u8, 990000000u32)
+        let f : u64 = (&instant_diff_ticks) as u64
+        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
+    }
+/* === END AUTO-GENERATED FROM iii_compositions.def === */
+    return count
+}
+
+/* Externs for the dispatch_fp-bound functions. Auto-generated from
+ * COMPILER/BOOT/iii_compositions.def by gen_compositions.sh. The
+ * signatures here use the generic 4-u64 form -- iiis-0's `(&fn) as u64`
+ * only needs the symbol to be visible as an extern, not the precise
+ * signature, since address-of doesn't dispatch through the call. */
+/* === BEGIN AUTO-GENERATED EXTERNS FROM iii_compositions.def === */
+extern @abi(c-msvc-x64) fn sha256_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sha512_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn blake2s_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sha3_512_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn shake128_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn shake256_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn crc32_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn murmur3_32(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hkdf_sha256_extract(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hkdf_sha256_expand(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_derive(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hmac_sha256(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hmac_sha512(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sha256_dispatch_oneshot(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn x25519(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn chacha20_set_state(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn chacha20_keystream(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn chacha20_xor(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn poly1305_set_key(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn poly1305_update(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn poly1305_finalize(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_seal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_open(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aes128_set_key(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aes256_set_key(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aes_decrypt_block(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_seal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_open(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign_c4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pq_keygen_c4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pq_sign_c4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pq_verify_c4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pq_encaps_c4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pq_decaps_c4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_add(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_karatsuba(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_div_u64(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_add(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_sub(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_mul(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_pow(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_inv_fermat(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_div(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fp_inv_with_crystal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mod_u32_pow(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mod_u64_pow(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mont_mul_u32(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mont_pow_u32(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn q128_add(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn q128_sub(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn q128_mul(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn q128_shl(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn q128_shr(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fix_mul(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hex_encode(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hex_decode(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn endian_load_u64_le(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn endian_store_u64_le(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn xoshiro_next_u64(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_new(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_drop(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_reset(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_alloc(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_alloc1(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn region_create(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn region_alloc(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn region_seal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn region_reset(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn region_release(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn span_u8_store(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn span_u8_fill(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn span_u8_copy(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn span_u8_find(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_reset_safe(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn region_reset_safe(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_env_init(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_verify_at(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_revoke(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_offer_pattern_set(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_accept_offer(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_negotiate_session(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_session_verify(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cap_session_drop(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_seal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn idoc_pack_payload(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn idoc_finalize(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn idoc_resolve_facet(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn idoc_validate(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sc_handshake_init(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sc_send(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sc_recv(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sc_close(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_set(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_verify_descent(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_admit_to_planetary(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_admit_eligible(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_admit(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_pow_verify(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_score(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_seal_lookup_anchor(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_seal_compute_chain_root(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_compute_my_fingerprint(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_alarm(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fed_tier_register(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn handle_kind(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn handle_verify(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn handle_close(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fs_open(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fs_read(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fs_write(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn fs_seek(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn net_close(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn http_parse_request(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn http_send_status(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn http_send_body(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn http_format_crystal_header(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn inet_parse_ipv4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn inet_format_ipv4(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn closure_set(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn closure_verify_against(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn closure_compute_with_resolver(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_init(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_hexad(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_k_cost(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_param_schema(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_ring_min(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_count(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_root_mhash(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn calculus_verify_completeness(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn attest_self(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn attest_eq(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m1(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m5(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m9(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m10(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m14_via_match(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m15(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mandate_audit(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn kchain_new(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn kchain_compose(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn kchain_current(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn kchain_is_underflow(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn kchain_readmit(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn catalyst_register(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn catalyst_promotable(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn demote_record(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn demote_was_demoted(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_form(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_bind(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_convey(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_mean(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_act(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_compose(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_seal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_prove(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_query(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_grant(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_govern(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_then(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_with(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_under(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_if(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_loop(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_lift(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_reflect(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn intent_abstract(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_u32_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_bytes_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_str_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_set_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_map_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_proof_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_crystal_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_recursive_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn glyph_witness_pack(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn nl_lex_register_hash(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn nl_parse_recognize(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hip_resolve(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn resolve(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn resolver_score(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pattern_register(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pattern_set_new(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pattern_set_add(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pattern_set_has(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn pattern_set_verify(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn memo_lookup(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn memo_dispatch_fp(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn memo_insert(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn memo_reset(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn jit_fuse_observe(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn jit_fuse_emit(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn jit_fuse_lookup(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hw_offload_register(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn hw_offload_lookup(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_propose(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_sandbox(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_promote(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_seal(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_vote(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_tally(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_threshold_met(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn governance_observe_and_propose(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_equivalence_pattern(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn transform(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn sandbox_new(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_mint(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_promote_to_full(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn call_context_new(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cal_civil_to_unix(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn cal_unix_to_civil(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn duration_from_seconds(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn duration_add(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn duration_sub(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn duration_mul_u32(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn duration_eq(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn duration_lt(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn rfc3339_format(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn rfc3339_parse(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn deadline_at(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn deadline_in(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn deadline_check(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn instant_now_sealed(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn instant_verify(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn instant_diff_ticks(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+/* === END AUTO-GENERATED EXTERNS FROM iii_compositions.def === */
+
+/* Synthetic composition_hash for bulk-registered entries. Avoids
+ * collision with run-time hashes via a fixed marker word. */
+fn _prespec_synth_hash(seq_idx: u32, primitive_id: u8, hexad_bag: u8) -> u64 {
+    let s_l : u64 = (seq_idx as u64) & 0xFFFFu64
+    let p_l : u64 = ((primitive_id as u64) & 0xFFu64) << 16u64
+    let b_l : u64 = ((hexad_bag as u64) & 0xFFu64) << 24u64
+    let m_l : u64 = 0x494E5450u64 << 32u64    /* "INTP" marker */
+    return s_l | p_l | b_l | m_l
+}
+
+fn prespec_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < PRESPEC_CAP {
+        PRESPEC_LIVE[i]      = 0u8
+        PRESPEC_HASH[i]      = 0u64
+        PRESPEC_PRIMITIVE[i] = 0u8
+        PRESPEC_HEXAD_BAG[i] = 0u8
+        PRESPEC_K_VALUE[i]   = 0u64
+        PRESPEC_DISPATCH[i]  = 0u64
+        i = i + 1u32
+    }
+    PRESPEC_USED = 0u32
+    return PRESPEC_OK
+}

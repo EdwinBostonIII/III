@@ -1,0 +1,53 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\272_cross_fn_pe.iii
+ *
+ * III conformance corpus 272 — iiis-2 cross-function PE narrowing.
+ *
+ * Verifies that the Phase 3 Step K iiis-2 lift extends the Phase C.6
+ * Partial Evaluator across function boundaries: when a `resolve()`
+ * call takes an intent argument that traces (through a let-binding)
+ * to a user-defined fn whose body provably returns a literal-derived
+ * intent_form/convey/act, the resolver narrows the whole chain to
+ * a direct `leaq <dispatch_fn>(%rip), %rax` instead of emitting the
+ * runtime resolve() dispatch.
+ *
+ * Compile-time test: the static narrowing eliminates the resolver
+ * runtime call.  Functional test: the returned fp is non-zero.
+ *
+ * Mandate 7: pure structural analysis of return statements; no
+ * observation, no learning, no runtime state.
+ */
+module corpus_272
+
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+
+/* User fn whose body provably returns a literal-derived intent.
+ * iiis-2 cross-fn PE classifies this as having static-resolvable
+ * return-intent provenance.  form_id 100 maps to sha256_oneshot in
+ * iii_compositions.def. */
+fn build_sha256_intent_via_helper() -> u64 {
+    return intent_form(100u64)
+}
+
+fn use_cross_fn_pe() -> u64 {
+    let set : u64 = pattern_set_global()
+    let ctx : u64 = call_context_new()
+    /* Intent comes from a USER FN, not a direct intent_form() call.
+     * iiis-1 single-stmt PE alone cannot narrow this — the immediate
+     * callee is build_sha256_intent_via_helper, not intent_form.
+     * iiis-2 cross-fn PE recurses into the user fn's return statement,
+     * confirms it returns intent_form(100u64), and narrows resolve()
+     * to `leaq sha256_oneshot(%rip), %rax`. */
+    let intent : u64 = build_sha256_intent_via_helper()
+    let fp : u64 = resolve(set, intent, ctx)
+    if fp == 0u64 { return 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r : u64 = use_cross_fn_pe()
+    if r != 0u64 { return r }
+    return 99u64
+}

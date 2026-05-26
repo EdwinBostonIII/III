@@ -1,0 +1,106 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\dynamic_impact.iii
+ *
+ * III STDLIB - omnia::dynamic_impact
+ *
+ * Lattice plan Step 0025 (user-mode counterpart to sema's planned
+ * @dynamic_impact analysis pass).  Records per-crystal expected perf
+ * and UX deltas in basis-points (signed; encoded as u32 two's-comp).
+ *
+ *   register(crystal_id, perf_bp, ux_bp) -> i32
+ *   perf_bp(crystal_id) -> u32
+ *   ux_bp(crystal_id) -> u32
+ *   aggregate_perf() -> i64   (sum of all registered perf_bp, signed)
+ *   aggregate_ux()   -> i64   (same for ux)
+ *
+ * Capacity: 256 records.
+ *
+ * Hexad: kind_form (recording).  Ring: R0.  K: 1.00.
+ */
+
+module omnia_dynamic_impact
+
+const IMPACT_OK         : i32 =  0i32
+const IMPACT_E_BADID    : i32 = -1i32
+const IMPACT_E_FULL     : i32 = -2i32
+
+const IMPACT_MAX : u32 = 256u32
+
+var IMPACT_ID    : [u64; 256]
+var IMPACT_PERF  : [u32; 256]
+var IMPACT_UX    : [u32; 256]
+var IMPACT_LIVE  : [u8;  256]
+var IMPACT_COUNT : u32 = 0u32
+
+fn impact_find(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while i < IMPACT_MAX {
+        if IMPACT_LIVE[i] == 1u8 {
+            if IMPACT_ID[i] == id {
+                if found == 0xFFFFFFFFu32 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+fn dynamic_impact_register(id: u64, perf_bp: u32, ux_bp: u32) -> i32 @export {
+    if id == 0u64 { return IMPACT_E_BADID }
+    let existing : u32 = impact_find(id)
+    if existing != 0xFFFFFFFFu32 {
+        IMPACT_PERF[existing] = perf_bp & 0xFFFFFFFFu32
+        IMPACT_UX[existing]   = ux_bp   & 0xFFFFFFFFu32
+        return IMPACT_OK
+    }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < IMPACT_MAX {
+        if IMPACT_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return IMPACT_E_FULL }
+    IMPACT_ID[slot]   = id
+    IMPACT_PERF[slot] = perf_bp & 0xFFFFFFFFu32
+    IMPACT_UX[slot]   = ux_bp   & 0xFFFFFFFFu32
+    IMPACT_LIVE[slot] = 1u8
+    IMPACT_COUNT = IMPACT_COUNT + 1u32
+    return IMPACT_OK
+}
+
+fn dynamic_impact_perf_bp(id: u64) -> u32 @export {
+    let s : u32 = impact_find(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return IMPACT_PERF[s]
+}
+
+fn dynamic_impact_ux_bp(id: u64) -> u32 @export {
+    let s : u32 = impact_find(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return IMPACT_UX[s]
+}
+
+fn dynamic_impact_count() -> u32 @export {
+    return IMPACT_COUNT
+}
+
+/* Aggregate sum (treating values as signed i32 sign-extended to i64).
+ * Returned via two u64 sentinels because iii has no i64 return. */
+var IMPACT_SUM_PERF_LO : u64 = 0u64
+var IMPACT_SUM_PERF_HI : u64 = 0u64
+
+fn dynamic_impact_aggregate_perf_lo() -> u64 @export {
+    let mut sum : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < IMPACT_MAX {
+        if IMPACT_LIVE[i] == 1u8 {
+            sum = sum + (IMPACT_PERF[i] as u64)
+        }
+        i = i + 1u32
+    }
+    IMPACT_SUM_PERF_LO = sum
+    return sum
+}

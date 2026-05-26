@@ -1,0 +1,251 @@
+/* omnia/sovval.iii — Module 5 (apotheosis): the Sovereign Value, the one currency.
+ *
+ * SovVal = { payload, hexad, witness, cost } -- the single value every boundary
+ * trades. A total sv_op composes all four facets; the value is REFUSED for a
+ * non-reachable hexad (M3) or an over-budget cost (M13). Assembled from the four
+ * proven facet-organs: payload = M4 (uncertainty / typed gap), hexad = M3
+ * (hexad_algebra/hexad_reach), cost = M13 (cost_lattice), witness = M1 (cad).
+ *
+ * Cell layout (112 bytes, u64-aligned to dodge sub-word pointer traps; by ptr):
+ *   [  0.. 16) payload : M4 ucell (tag@0 KNOWN/GAP, i64 body@8)
+ *   [ 16.. 24) hexad   : u64 (the 6-trit safety hexad, 0..728)
+ *   [ 24.. 32) status  : u64 (SV_STATUS_OK=0 | SV_STATUS_REFUSED=1)
+ *   [ 32.. 64) witness : 32-byte cad content-address of the value's provenance
+ *   [ 64..112) cost    : u64[6] six-dim microarch cost vector
+ *
+ * The @variant payload codegen + @sovereign boundary checker (the systemwide
+ * "every boundary trades only SovVals" lift) are the compiler-level migrations
+ * #2/#3 -- documented hooks, not this .iii increment.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: uncertainty + hexad + cost_lattice + cad.
+ */
+module omnia_sovval
+
+extern @abi(c-msvc-x64) fn unc_apply(op: u32, a: *u8, b: *u8, out: *u8) -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_set_known(cell: *u8, v: i64) -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_set_gap(cell: *u8, gid: u32) -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_is_gap(cell: *u8) -> u8 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_known_val(cell: *u8) -> i64 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_gap_root(kind: u8, reason: u32) -> u32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn cl_join(c: *u64, cp: *u64, out: *u64) -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_le_product(c: *u64, cp: *u64) -> u8 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const SV_OK      : i32 = 0i32
+const SV_REFUSED : i32 = 1i32
+const SV_E_NULL  : i32 = -1i32
+const SV_STATUS_OK      : u64 = 0u64
+const SV_STATUS_REFUSED : u64 = 1u64
+const SV_OFF_HEXAD   : u64 = 16u64
+const SV_OFF_STATUS  : u64 = 24u64
+const SV_OFF_WITNESS : u64 = 32u64
+const SV_OFF_COST    : u64 = 64u64
+const SV_ADD : u32 = 0u32
+const SV_MUL : u32 = 2u32
+
+/* mig3 (H1 "one value"): the named SovVal boundary type.  A TRANSPARENT alias of the
+ * 112-byte cell pointer -- ABI-IDENTICAL to *u8, so marking a boundary param `: SovVal`
+ * is a pure annotation (zero consumer breakage, no ABI change).  It carries the
+ * @sovereign_value marker that the @sovereign boundary checker resolves via the
+ * corpus-269 alias-modifier mechanism (the cg_r3 intent-type chase, extended for
+ * @sovereign): a `@sovereign fn` requires EVERY boundary param to be a SovVal, so "a
+ * raw value crossing a sovereign boundary" becomes a COMPILE error -- H1, the
+ * systemwide lift.  The existing sv_* API stays *u8; sovereign boundaries opt in by
+ * declaring `: SovVal` (a per-module alias, like corpus 269's intent types).
+ * Until the cg_r3 @sovereign checker lands, the marker parses and is inert. */
+type SovVal = *u8 @sovereign_value
+
+var SV_BUDGET : [u64; 6]
+var SV_WBUF   : [u8; 72]
+var SV_INITED : u8 = 0u8
+/* selftest scratch */
+var SV_A    : [u8; 112]
+var SV_B    : [u8; 112]
+var SV_O    : [u8; 112]
+var SV_PC   : [u8; 16]
+var SV_COST_LO : [u64; 6]
+var SV_COST_HI : [u64; 6]
+var SV_W1   : [u8; 32]
+var SV_W2   : [u8; 32]
+
+fn sv_init() -> i32 @export {
+    if SV_INITED == 1u8 { return SV_OK }
+    let mut i : u64 = 0u64
+    while i < 6u64 { SV_BUDGET[i] = 1000000u64  i = i + 1u64 }
+    SV_INITED = 1u8
+    return SV_OK
+}
+
+/* ----------------------------- facet accessors ---------------------------- */
+fn sv_hexad(sv: *u8) -> u64 @export {
+    let p : *u64 = (sv as u64 + SV_OFF_HEXAD) as *u64
+    return p[0u64]
+}
+fn sv_set_hexad(sv: *u8, h: u64) -> i32 @export {
+    let p : *u64 = (sv as u64 + SV_OFF_HEXAD) as *u64
+    p[0u64] = h
+    return SV_OK
+}
+fn sv_status(sv: *u8) -> u64 @export {
+    let p : *u64 = (sv as u64 + SV_OFF_STATUS) as *u64
+    return p[0u64]
+}
+fn sv_set_status(sv: *u8, s: u64) -> i32 @export {
+    let p : *u64 = (sv as u64 + SV_OFF_STATUS) as *u64
+    p[0u64] = s
+    return SV_OK
+}
+fn sv_is_refused(sv: *u8) -> u8 @export {
+    if sv_status(sv) == SV_STATUS_REFUSED { return 1u8 }
+    return 0u8
+}
+fn sv_cost_ptr(sv: *u8) -> *u64 @export {
+    return (sv as u64 + SV_OFF_COST) as *u64
+}
+fn sv_witness_ptr(sv: *u8) -> *u8 @export {
+    return (sv as u64 + SV_OFF_WITNESS) as *u8
+}
+
+/* copy n bytes from src to dst (both *u8). */
+fn sv_copy(dst: *u8, src: *u8, n: u64) -> i32 {
+    let d : *u8 = dst
+    let s : *u8 = src
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    return SV_OK
+}
+
+/* witness = cad(payload || hexad || cost) -- the M1 content-address commitment. */
+fn sv_witness_recompute(sv: *u8) -> i32 @export {
+    let wb : *u8 = (&SV_WBUF as u64) as *u8
+    /* payload + hexad are contiguous at [0..24) */
+    sv_copy(wb, sv, 24u64)
+    /* cost [64..112) -> wbuf[24..72) */
+    sv_copy((wb as u64 + 24u64) as *u8, (sv as u64 + SV_OFF_COST) as *u8, 48u64)
+    cad_oneshot(0u32, wb, 72u64, sv_witness_ptr(sv))
+    return SV_OK
+}
+
+/* ----------------------------- constructor -------------------------------- */
+fn sv_make(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 @export {
+    sv_init()
+    if (payload_cell as u64) == 0u64 { return SV_E_NULL }
+    if (cost as u64) == 0u64 { return SV_E_NULL }
+    if (out as u64) == 0u64 { return SV_E_NULL }
+    sv_copy(out, payload_cell, 16u64)
+    sv_set_hexad(out, hexad)
+    sv_copy((out as u64 + SV_OFF_COST) as *u8, cost as *u8, 48u64)
+    /* Refuse a non-reachable hexad (M3) */
+    if iii_hexad_reachable(hexad as u16) == 0u8 {
+        sv_set_status(out, SV_STATUS_REFUSED)
+        return SV_REFUSED
+    }
+    /* Refuse an over-budget cost (M13: cost must be <= the K-floor ceiling) */
+    if cl_le_product(sv_cost_ptr(out), &SV_BUDGET as *u64) == 0u8 {
+        sv_set_status(out, SV_STATUS_REFUSED)
+        return SV_REFUSED
+    }
+    sv_set_status(out, SV_STATUS_OK)
+    sv_witness_recompute(out)
+    return SV_OK
+}
+
+/* ----------------------------- total compose ------------------------------ */
+fn sv_op(op: u32, a: *u8, b: *u8, out: *u8) -> i32 @export {
+    sv_init()
+    if (a as u64) == 0u64 { return SV_E_NULL }
+    if (b as u64) == 0u64 { return SV_E_NULL }
+    if (out as u64) == 0u64 { return SV_E_NULL }
+    /* payload (M4): total + sound + precise */
+    unc_apply(op, a, b, out)
+    /* hexad (M3): compose; Refuse if non-reachable */
+    let h : u16 = iii_hexad_compose6(sv_hexad(a) as u16, sv_hexad(b) as u16)
+    if iii_hexad_reachable(h) == 0u8 {
+        sv_set_status(out, SV_STATUS_REFUSED)
+        return SV_REFUSED
+    }
+    sv_set_hexad(out, h as u64)
+    /* cost (M13): join (lub); Refuse if over budget */
+    cl_join(sv_cost_ptr(a), sv_cost_ptr(b), sv_cost_ptr(out))
+    if cl_le_product(sv_cost_ptr(out), &SV_BUDGET as *u64) == 0u8 {
+        sv_set_status(out, SV_STATUS_REFUSED)
+        return SV_REFUSED
+    }
+    sv_set_status(out, SV_STATUS_OK)
+    sv_witness_recompute(out)
+    return SV_OK
+}
+
+/* ----------------------------- the falsifier KAT -------------------------- */
+fn sv_selftest() -> u64 @export {
+    sv_init()
+    let a : *u8 = (&SV_A as u64) as *u8
+    let b : *u8 = (&SV_B as u64) as *u8
+    let o : *u8 = (&SV_O as u64) as *u8
+    let pc : *u8 = (&SV_PC as u64) as *u8
+    let lo : *u64 = (&SV_COST_LO as u64) as *u64
+    let hi : *u64 = (&SV_COST_HI as u64) as *u64
+    let mut i : u64 = 0u64
+    while i < 6u64 { SV_COST_LO[i] = 1u64  SV_COST_HI[i] = 1u64  i = i + 1u64 }
+    SV_COST_HI[0u64] = 2000000u64    /* exceeds SV_BUDGET[0]=1000000 */
+    /* 1. sv_make OK path: reachable hexad 728 (all-POS) + within-budget cost + Known payload */
+    unc_set_known(pc, 7i64)
+    if sv_make(pc, 728u64, lo, a) != SV_OK { return 1u64 }
+    if sv_is_refused(a) != 0u8 { return 2u64 }
+    if unc_is_gap(a) != 0u8 { return 3u64 }
+    if unc_known_val(a) != 7i64 { return 4u64 }
+    /* 2. Refuse a non-reachable hexad (catastrophe gate): hexad 0 has pillar0=NEG -> unreachable */
+    if sv_make(pc, 0u64, lo, o) != SV_REFUSED { return 5u64 }
+    if sv_is_refused(o) != 1u8 { return 6u64 }
+    /* 3. Refuse an over-budget cost */
+    if sv_make(pc, 728u64, hi, o) != SV_REFUSED { return 7u64 }
+    if sv_is_refused(o) != 1u8 { return 8u64 }
+    /* 4. sv_op sound payload: Known(7) + Known(5) -> Known(12), status OK */
+    unc_set_known(pc, 5i64)
+    if sv_make(pc, 728u64, lo, b) != SV_OK { return 9u64 }
+    if sv_op(SV_ADD, a, b, o) != SV_OK { return 10u64 }
+    if unc_is_gap(o) != 0u8 { return 11u64 }
+    if unc_known_val(o) != 12i64 { return 12u64 }
+    if sv_is_refused(o) != 0u8 { return 13u64 }
+    /* 5. sv_op precise gap: Known(0) * Gap -> Known(0) (M4 annihilator carried through) */
+    unc_set_known(pc, 0i64)
+    if sv_make(pc, 728u64, lo, a) != SV_OK { return 14u64 }
+    unc_set_gap(pc, unc_gap_root(1u8, 50u32))
+    if sv_make(pc, 728u64, lo, b) != SV_OK { return 15u64 }
+    if sv_op(SV_MUL, a, b, o) != SV_OK { return 16u64 }
+    if unc_is_gap(o) != 0u8 { return 17u64 }
+    if unc_known_val(o) != 0i64 { return 18u64 }
+    /* 6. sv_op PRESERVES the invariant: valid + valid -> OK + within-budget (closure:
+     *    compose6(reachable,reachable)=reachable, join(<=B,<=B)<=B). The real Refuse
+     *    enforcement is at sv_make (steps 2-3, the boundary); sv_op preserves it. */
+    unc_set_known(pc, 3i64)
+    if sv_make(pc, 728u64, lo, a) != SV_OK { return 19u64 }
+    unc_set_known(pc, 4i64)
+    if sv_make(pc, 728u64, lo, b) != SV_OK { return 20u64 }
+    if sv_op(SV_ADD, a, b, o) != SV_OK { return 21u64 }
+    if cl_le_product(sv_cost_ptr(o), &SV_BUDGET as *u64) != 1u8 { return 22u64 }
+    if iii_hexad_reachable(sv_hexad(o) as u16) != 1u8 { return 23u64 }
+    /* 7. sv_op cost-Refuse gate FIRES (white-box: inject an over-budget cost into a valid
+     *    SovVal, then compose -> the join exceeds budget -> Refused; proves the gate live). */
+    unc_set_known(pc, 1i64)
+    sv_make(pc, 728u64, lo, a)
+    let acp : *u64 = sv_cost_ptr(a)
+    acp[0u64] = 2000000u64
+    if sv_op(SV_ADD, a, b, o) != SV_REFUSED { return 24u64 }
+    if sv_is_refused(o) != 1u8 { return 25u64 }
+    /* 8. witness determinism: the same value twice -> identical cad witness (M1) */
+    unc_set_known(pc, 7i64)
+    sv_make(pc, 728u64, lo, a)
+    sv_copy((&SV_W1 as u64) as *u8, sv_witness_ptr(a), 32u64)
+    sv_make(pc, 728u64, lo, b)
+    sv_copy((&SV_W2 as u64) as *u8, sv_witness_ptr(b), 32u64)
+    let w1 : *u8 = (&SV_W1 as u64) as *u8
+    let w2 : *u8 = (&SV_W2 as u64) as *u8
+    let mut acc : u32 = 0u32
+    i = 0u64
+    while i < 32u64 { acc = acc | ((w1[i] as u32) ^ (w2[i] as u32))  i = i + 1u64 }
+    if acc != 0u32 { return 26u64 }
+    return 99u64
+}

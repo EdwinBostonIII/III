@@ -1,0 +1,21 @@
+module corpus_33
+
+extern @abi(c-msvc-x64) fn unify_buf_new(arena_id: u64) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_var(buf: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_const(buf: u64, payload: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify(buf: u64, a: u32, b: u32) -> u8 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_lookup_var(buf: u64, v: u32) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(65536u64)
+    let buf : u64 = unify_buf_new(arena)
+    if buf == 0u64 { return 0u64 }
+    let v : u32 = unify_make_var(buf)
+    let c : u32 = unify_make_const(buf, 42u64)
+    let ok : u8 = unify(buf, v, c)
+    if ok != 1u8 { return 0u64 }
+    let r : u64 = unify_lookup_var(buf, v)
+    if (r & 1u64) != 0u64 { return 0u64 }
+    return 1u64
+}

@@ -1,0 +1,84 @@
+/* STDLIB/iii/nous/nous_value.iii -- the faculty as a sealed value (nous Phase 3, ADR-N1).
+ *
+ * nous is itself a first-class, reproducible, witnessed value: its weights are
+ * content-addressed (cad) and versioned, and its per-call cost is bounded.  This is the
+ * SovVal-ready description of the faculty -- the facets a sovval cell carries:
+ *   weights-addr -- cad(KECCAK256, policy parameters || version): the content-address of
+ *                   the exact ranker that produced a search.  Enters the GAP
+ *                   reproducibility key ONLY (B-5) -- a CERTIFIED result is oracle-
+ *                   agnostic, so the canonical key omits it and the certified commons
+ *                   survives a retrain (a new weights-addr); a GAP is oracle-dependent,
+ *                   so its key pins this addr.
+ *   version      -- pins the policy <-> rule-set pairing; a rule extension forces a
+ *                   reseal + reversion (guardrail 6).
+ *   cost-bound   -- the policy's bounded per-call work (selection sort over 49 rules),
+ *                   so engaging nous can never blow an unbounded cost.
+ *
+ * (Full sovval-cell construction via sv_make is the user's M5 surface; this module
+ * exposes the facets so that wrapping is a drop-in, without coupling to a churning M5.)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: cad.iii only.  Determinism:
+ * integer-only; byte-wise LE store; single-line fns.
+ */
+module nous_value
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const NOUS_VERSION        : u64 = 1u64
+const NOUS_VAL_CAD_KECCAK : u32 = 1u32
+const NOUS_VAL_RBASE      : u64 = 200u64    /* mirrors nous_policy (params, not behaviour) */
+const NOUS_VAL_BONUS_TRIT : u64 = 1000u64
+const NOUS_VAL_BONUS_FUS  : u64 = 500u64
+const NOUS_VAL_COST_BOUND : u64 = 2401u64   /* 49*49 selection-sort comparisons, bounded */
+const NOUS_VAL_OK         : i32 = 0i32
+
+var NOUS_VAL_WBUF   : [u8; 32]
+var NOUS_VAL_WADDR  : [u8; 32]
+var NOUS_VAL_WADDR2 : [u8; 32]
+
+fn _nous_val_put(off: u64, v: u64) {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let sh : u64 = i * 8u64
+        NOUS_VAL_WBUF[off + i] = ((v >> sh) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+}
+
+fn nous_version() -> u64 @export {
+    return NOUS_VERSION
+}
+
+fn nous_value_cost_bound() -> u64 @export {
+    return NOUS_VAL_COST_BOUND
+}
+
+/* The content-address of the policy weights: cad over (RBASE || BONUS_TRIT || BONUS_FUS
+ * || VERSION), 4 * 8 = 32 bytes.  Deterministic; non-zero. */
+fn nous_weights_addr(out32: *u8) -> i32 @export {
+    if (out32 as u64) == 0u64 { return -1i32 }
+    _nous_val_put(0u64,  NOUS_VAL_RBASE)
+    _nous_val_put(8u64,  NOUS_VAL_BONUS_TRIT)
+    _nous_val_put(16u64, NOUS_VAL_BONUS_FUS)
+    _nous_val_put(24u64, NOUS_VERSION)
+    return cad_oneshot(NOUS_VAL_CAD_KECCAK, (&NOUS_VAL_WBUF as u64) as *u8, 32u64, out32)
+}
+
+fn nous_value_selftest() -> u64 @export {
+    if nous_version() != NOUS_VERSION { return 1u64 }
+    if nous_value_cost_bound() != NOUS_VAL_COST_BOUND { return 2u64 }
+    let a : *u8 = (&NOUS_VAL_WADDR as u64) as *u8
+    if nous_weights_addr(a) != NOUS_VAL_OK { return 3u64 }
+    if cad_is_zero(a) != 0u8 { return 4u64 }            /* weights-addr is a real (non-zero) content-address */
+    /* determinism: same params -> same address */
+    let b : *u8 = (&NOUS_VAL_WADDR2 as u64) as *u8
+    if nous_weights_addr(b) != NOUS_VAL_OK { return 5u64 }
+    if cad_eq(a, b) != 1u8 { return 6u64 }
+    /* null out refused */
+    let nz : u64 = 0u64
+    let np : *u8 = nz as *u8
+    if nous_weights_addr(np) != -1i32 { return 7u64 }
+    return 99u64
+}

@@ -1,0 +1,99 @@
+/* omnia::sid — sid_transitive_closure performs BFS from a seed-vec
+ * and yields every reachable crystal_id (including the seeds).
+ *
+ * Build: A → B → D and A → C → D (diamond).  Seed = {A}.
+ * Closure must be {A, B, C, D} with no duplicates. */
+module corpus_96
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_push(id: u64, v: u64) -> i32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+
+extern @abi(c-msvc-x64) fn sid_transitive_closure(arena_id: u64, seeds_vec: u64) -> u64 from "crystal_deps.iii"
+
+fn fill_site(p: *u8, base: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = base + (i as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn closure_contains(closure_vec: u64, target: u64) -> u8 {
+    let n : u64 = vec_u64_count(closure_vec)
+    let mut i : u64 = 0u64
+    let mut found : u8 = 0u8
+    while i < n {
+        if vec_u64_at(closure_vec, i) == target { found = 1u8 }
+        i = i + 1u64
+    }
+    return found
+}
+
+fn main() -> u64 {
+    let site : *u8 = malloc(32u64)
+    fill_site(site, 0u8)
+
+    let ar : u64 = arena_new(1u64 << 20u64)
+    if ar == 0u64 { return 1u64 }
+
+    let a : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let b : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let c : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let d : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    if a == 0u64 { return 2u64 }
+    if b == 0u64 { return 3u64 }
+    if c == 0u64 { return 4u64 }
+    if d == 0u64 { return 5u64 }
+
+    crystal_edges_init(a, ar)
+    crystal_edges_init(b, ar)
+    crystal_edges_init(c, ar)
+    crystal_edges_init(d, ar)
+
+    /* Diamond: A → {B, C}; B → {D}; C → {D}. */
+    crystal_edges_add(a, b)
+    crystal_edges_add(a, c)
+    crystal_edges_add(b, d)
+    crystal_edges_add(c, d)
+
+    let seeds : u64 = vec_u64_new(ar, 4u64)
+    if seeds == 0u64 { return 6u64 }
+    vec_u64_push(seeds, a)
+
+    let cl : u64 = sid_transitive_closure(ar, seeds)
+    if cl == 0u64 { return 7u64 }
+    if vec_u64_count(cl) != 4u64 { return 8u64 }
+
+    if closure_contains(cl, a) != 1u8 { return 9u64 }
+    if closure_contains(cl, b) != 1u8 { return 10u64 }
+    if closure_contains(cl, c) != 1u8 { return 11u64 }
+    if closure_contains(cl, d) != 1u8 { return 12u64 }
+
+    /* Two seeds, both already in the closure → still 4 unique entries. */
+    let seeds2 : u64 = vec_u64_new(ar, 4u64)
+    vec_u64_push(seeds2, a)
+    vec_u64_push(seeds2, b)
+    let cl2 : u64 = sid_transitive_closure(ar, seeds2)
+    if cl2 == 0u64 { return 13u64 }
+    if vec_u64_count(cl2) != 4u64 { return 14u64 }
+
+    crystal_drop(a); crystal_drop(b); crystal_drop(c); crystal_drop(d)
+    arena_drop(ar)
+    free(site)
+    return 99u64
+}

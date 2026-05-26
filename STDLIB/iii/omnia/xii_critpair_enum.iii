@@ -1,0 +1,137 @@
+/* STDLIB/iii/omnia/xii_critpair_enum.iii -- mig4 Step 3: dynamic critical-pair enumeration.
+ * Walks the LIVE rule set (xrp_rule_count rules) and, using Step 2's overlap predicates
+ * (xii_rule_overlap), RECORDS every candidate critical pair into a table the Step-4
+ * joinability gate will iterate.  "Dynamic" = it enumerates over whatever rules the
+ * descriptor table currently holds, so adding a rule family (a later step) automatically
+ * extends the pair set -- replacing xii_critpairs.iii's hardcoded 117.  Per the plan B-8.
+ *
+ * A critical-pair entry is (kind, slot_i, slot_j, pos):
+ *   kind=0 ROOT    -- rules i<j unify at the root (pos unused, =0).
+ *   kind=1 SUBTERM -- rule i's root rewrites rule j's child at position pos (0=ca,1=cb,2=cc).
+ * The enumeration set is EXACTLY what Step 2's xro_count_overlaps counts; the keystone KAT
+ * assertion is cpe_enumerate() == xro_count_overlaps() -- the recorded table is complete and
+ * consistent with the independent counter (neither over- nor under-records).
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: xii_rule_patterns + xii_rule_overlap.
+ * Determinism: integer-only; ==/!= and UNSIGNED < compares; single-line fns; no recursion;
+ * no u64 div/mod; parallel [u64;N] tables indexed by a bounded counter (no pointer math).
+ */
+module omnia_xii_critpair_enum
+
+extern @abi(c-msvc-x64) fn xrp_rule_count() -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xro_root_overlap(slot_i: u32, slot_j: u32) -> u8 from "xii_rule_overlap.iii"
+extern @abi(c-msvc-x64) fn xro_subterm_overlap(slot_i: u32, slot_j: u32, pos: u32) -> u8 from "xii_rule_overlap.iii"
+extern @abi(c-msvc-x64) fn xro_slot_of_rid(rid: u32) -> u32 from "xii_rule_overlap.iii"
+extern @abi(c-msvc-x64) fn xro_count_overlaps() -> u32 from "xii_rule_overlap.iii"
+
+const CPE_MAX : u64 = 2048u64
+
+var CPE_KIND : [u64; 2048]
+var CPE_SI   : [u64; 2048]
+var CPE_SJ   : [u64; 2048]
+var CPE_POS  : [u64; 2048]
+var CPE_N    : [u64; 4]
+
+/* Enumerate all candidate critical pairs into the table; returns the TRUE count (the table
+ * stores up to CPE_MAX; CPE_N[0] holds the true count).  Refills on each call (deterministic).
+ * Mirrors xro_count_overlaps's traversal exactly so the two stay in lockstep. */
+fn cpe_enumerate() -> u32 @export {
+    let n : u64 = xrp_rule_count() as u64
+    let mut cnt : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut j : u64 = i + 1u64
+        while j < n {
+            if xro_root_overlap(i as u32, j as u32) == 1u8 {
+                if cnt < CPE_MAX { CPE_KIND[cnt] = 0u64  CPE_SI[cnt] = i  CPE_SJ[cnt] = j  CPE_POS[cnt] = 0u64 }
+                cnt = cnt + 1u64
+            }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    let mut a : u64 = 0u64
+    while a < n {
+        let mut b : u64 = 0u64
+        while b < n {
+            let mut p : u64 = 0u64
+            while p < 3u64 {
+                if xro_subterm_overlap(a as u32, b as u32, p as u32) == 1u8 {
+                    if cnt < CPE_MAX { CPE_KIND[cnt] = 1u64  CPE_SI[cnt] = a  CPE_SJ[cnt] = b  CPE_POS[cnt] = p }
+                    cnt = cnt + 1u64
+                }
+                p = p + 1u64
+            }
+            b = b + 1u64
+        }
+        a = a + 1u64
+    }
+    CPE_N[0u64] = cnt
+    return cnt as u32
+}
+
+fn cpe_count() -> u32 @export { return cpe_enumerate() }
+
+/* the number of pairs actually STORED (== true count when it fits in CPE_MAX). */
+fn _cpe_stored() -> u64 {
+    let mut lim : u64 = CPE_N[0u64]
+    if lim > CPE_MAX { lim = CPE_MAX }
+    return lim
+}
+
+/* 1 iff the table holds an entry (kind, si, sj, pos).  Assumes cpe_enumerate ran. */
+fn cpe_contains(kind: u64, si: u64, sj: u64, pos: u64) -> u8 @export {
+    let lim : u64 = _cpe_stored()
+    let mut k : u64 = 0u64
+    while k < lim {
+        if CPE_KIND[k] == kind { if CPE_SI[k] == si { if CPE_SJ[k] == sj { if CPE_POS[k] == pos { return 1u8 } } } }
+        k = k + 1u64
+    }
+    return 0u8
+}
+
+/* --- entry accessors (the Step-4 joinability gate iterates the table through these) --- */
+fn cpe_kind_at(idx: u32) -> u64 @export { let i : u64 = (idx as u64) & 0xFFFFFFFFu64  if i >= CPE_MAX { return 0u64 }  return CPE_KIND[i] }
+fn cpe_si_at(idx: u32) -> u32 @export { let i : u64 = (idx as u64) & 0xFFFFFFFFu64  if i >= CPE_MAX { return 0xFFFFFFFFu32 }  return (CPE_SI[i] & 0xFFFFFFFFu64) as u32 }
+fn cpe_sj_at(idx: u32) -> u32 @export { let i : u64 = (idx as u64) & 0xFFFFFFFFu64  if i >= CPE_MAX { return 0xFFFFFFFFu32 }  return (CPE_SJ[i] & 0xFFFFFFFFu64) as u32 }
+fn cpe_pos_at(idx: u32) -> u32 @export { let i : u64 = (idx as u64) & 0xFFFFFFFFu64  if i >= CPE_MAX { return 0xFFFFFFFFu32 }  return (CPE_POS[i] & 0xFFFFFFFFu64) as u32 }
+
+/* 1 iff a ROOT overlap between rule rid_a and rid_b is recorded (slots ordered lo<hi). */
+fn cpe_has_root_rids(rid_a: u32, rid_b: u32) -> u8 {
+    let sa : u64 = xro_slot_of_rid(rid_a) as u64
+    let sb : u64 = xro_slot_of_rid(rid_b) as u64
+    if sa < sb { return cpe_contains(0u64, sa, sb, 0u64) }
+    return cpe_contains(0u64, sb, sa, 0u64)
+}
+
+fn cpe_selftest() -> u64 @export {
+    let n1 : u32 = cpe_enumerate()
+    if n1 == 0u32 { return 1u64 }
+    /* KEYSTONE: the recorded set equals Step 2's independent counter (complete + consistent) */
+    if (n1 as u64) != (xro_count_overlaps() as u64) { return 2u64 }
+    /* enumeration is deterministic */
+    let n2 : u32 = cpe_enumerate()
+    if n1 != n2 { return 3u64 }
+    /* did not overflow the table (true count fits, so every entry is actually stored) */
+    if (n1 as u64) > CPE_MAX { return 4u64 }
+
+    /* the documented joining pre-emptions are recorded as ROOT overlaps */
+    if cpe_has_root_rids(37u32, 38u32) != 1u8 { return 10u64 }   /* R038 with R037 */
+    if cpe_has_root_rids(30u32, 40u32) != 1u8 { return 11u64 }   /* R040 with R030 */
+    if cpe_has_root_rids(13u32, 41u32) != 1u8 { return 12u64 }   /* R041 with R013 */
+    /* the VACUOUS pre-emption (R041 vs R014, disjoint loop bodies) is NOT recorded */
+    if cpe_has_root_rids(14u32, 41u32) != 0u8 { return 13u64 }
+
+    /* a SUBTERM overlap recorded; a genuine non-overlap excluded (route-S: R001-R004 retired, so
+     * the live FLOOP family is the witness -- R013 root FLOOP rewrites R014's ca=FLOOP). */
+    let s13 : u64 = xro_slot_of_rid(13u32) as u64
+    let s14 : u64 = xro_slot_of_rid(14u32) as u64
+    let s37 : u64 = xro_slot_of_rid(37u32) as u64
+    if cpe_contains(1u64, s13, s14, 0u64) != 1u8 { return 20u64 }  /* R013 rewrites R014's FLOOP ca */
+    if cpe_contains(1u64, s37, s14, 0u64) != 0u8 { return 21u64 }  /* R037 (root FCOMPOSE) cannot rewrite a FLOOP ca */
+
+    /* accessor smoke: the first recorded entry's kind is ROOT(0) or SUBTERM(1) */
+    if cpe_kind_at(0u32) > 1u64 { return 30u64 }
+
+    return 99u64
+}

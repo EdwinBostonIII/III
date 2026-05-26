@@ -1,0 +1,715 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\slhdsa.iii
+ *
+ * III STDLIB - numera::slhdsa -- SLH-DSA (FIPS 205 / SPHINCS+) signature.
+ * RITCHIE Stage 4.4.3: native .iii port of CRYPTO-AGILITY/src/slhdsa.c.
+ * SHA-256-based parameter sets {128s,192s,256s}; hash truncated to n bytes.
+ * Hash-based (no NTT): hypertree of d Merkle trees of WOTS+ public keys,
+ * with FORS few-time signatures at the bottom.
+ *
+ * H_n/PRF/PRF_msg = SHA-256(...)[0..n]; H_msg = SHAKE-256 (incremental over
+ * keccak_f1600, arbitrary msg).  ADRS = 32-byte FIPS-205 address.
+ *
+ * Public surface (byte-compatible with the C ref for cross-KAT):
+ *   iii_slhdsa_keygen(lv, seed, pk, sk) -> i32
+ *   iii_slhdsa_sign(lv, sk, msg, msglen, sig, siglen) -> i32
+ *   iii_slhdsa_verify(lv, pk, msg, msglen, sig, siglen) -> i32
+ *
+ * Hexad: kind_prove.  Ring: R3.  K: 1.00.
+ */
+
+module numera_slhdsa
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+
+/* ---- per-level params (lv 0=128s, 1=192s, 2=256s) ---- */
+fn slh_n(lv: u64) -> u64 { if lv == 0u64 { return 16u64 } if lv == 1u64 { return 24u64 } return 32u64 }
+fn slh_h(lv: u64) -> u64 { if lv == 2u64 { return 64u64 } return 63u64 }
+fn slh_d(lv: u64) -> u64 { if lv == 2u64 { return 8u64 } return 7u64 }
+fn slh_hp(lv: u64) -> u64 { if lv == 2u64 { return 8u64 } return 9u64 }
+fn slh_a(lv: u64) -> u64 { if lv == 0u64 { return 12u64 } return 14u64 }
+fn slh_kf(lv: u64) -> u64 { if lv == 0u64 { return 14u64 } if lv == 1u64 { return 17u64 } return 22u64 }
+fn slh_len1(lv: u64) -> u64 { return 2u64 * slh_n(lv) }       /* 8n/4, w=16 */
+fn slh_len2(lv: u64) -> u64 { return 3u64 }                   /* floor(log_w(len1*(w-1)))+1 = 3 for all S sets */
+fn slh_len(lv: u64) -> u64 { return slh_len1(lv) + 3u64 }
+fn slh_sig_bytes(lv: u64) -> u64 {
+    let n : u64 = slh_n(lv)
+    return n + slh_kf(lv) * (n + slh_a(lv) * n) + slh_d(lv) * (slh_len(lv) * n + slh_hp(lv) * n)
+}
+
+/* ---- ADRS pool (8 slots of 32 bytes); slot index passed to setters/hashes ---- */
+var SLH_ADRS : [u8; 256]
+
+fn adrs_zero(s: u64) -> i32 {
+    let b : u64 = s * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 { SLH_ADRS[b + i] = 0u8 ; i = i + 1u64 }
+    return 0i32
+}
+fn adrs_copy(dst: u64, src: u64) -> i32 {
+    let db : u64 = dst * 32u64
+    let sb : u64 = src * 32u64
+    let mut i : u64 = 0u64
+    while i < 32u64 { SLH_ADRS[db + i] = SLH_ADRS[sb + i] ; i = i + 1u64 }
+    return 0i32
+}
+fn adrs_set4(s: u64, off: u64, v: u64) -> i32 {
+    let b : u64 = s * 32u64 + off
+    SLH_ADRS[b]        = ((v >> 24u64) & 0xFFu64) as u8
+    SLH_ADRS[b + 1u64] = ((v >> 16u64) & 0xFFu64) as u8
+    SLH_ADRS[b + 2u64] = ((v >> 8u64) & 0xFFu64) as u8
+    SLH_ADRS[b + 3u64] = (v & 0xFFu64) as u8
+    return 0i32
+}
+fn adrs_set_layer(s: u64, v: u64) -> i32 { return adrs_set4(s, 0u64, v) }
+fn adrs_set_tree(s: u64, v: u64) -> i32 {
+    let b : u64 = s * 32u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { SLH_ADRS[b + 8u64 + i] = ((v >> (8u64 * (7u64 - i))) & 0xFFu64) as u8 ; i = i + 1u64 }
+    return 0i32
+}
+fn adrs_set_type(s: u64, t: u64) -> i32 {
+    adrs_set4(s, 16u64, t)
+    let b : u64 = s * 32u64
+    let mut i : u64 = 0u64
+    while i < 12u64 { SLH_ADRS[b + 20u64 + i] = 0u8 ; i = i + 1u64 }
+    return 0i32
+}
+fn adrs_set_keypair(s: u64, v: u64) -> i32 { return adrs_set4(s, 20u64, v) }
+fn adrs_set_chain(s: u64, v: u64) -> i32 { return adrs_set4(s, 24u64, v) }
+fn adrs_set_hash(s: u64, v: u64) -> i32 { return adrs_set4(s, 28u64, v) }
+fn adrs_set_tree_height(s: u64, v: u64) -> i32 { return adrs_set4(s, 24u64, v) }
+fn adrs_set_tree_index(s: u64, v: u64) -> i32 { return adrs_set4(s, 28u64, v) }
+
+/* ---- Hash primitives ---- */
+var SLH_HBUF : [u8; 4096]   /* H_n/PRF input concat scratch */
+var SLH_H32  : [u8; 32]     /* SHA-256 output */
+
+/* H_n(out, n, seed[seedlen], adrs_slot, msg[msglen]) = SHA256(seed||adrs||msg)[0..n] */
+fn slh_H_n(out: u64, n: u64, seed: u64, seedlen: u64, adrs_slot: u64, msg: u64, msglen: u64) -> i32 {
+    let hb : *u8 = &SLH_HBUF as *u8
+    let sp : *u8 = seed as *u8
+    let mp : *u8 = msg as *u8
+    let ab : u64 = adrs_slot * 32u64
+    let mut i : u64 = 0u64
+    while i < seedlen { hb[i] = sp[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { hb[seedlen + i] = SLH_ADRS[ab + i] ; i = i + 1u64 }
+    i = 0u64
+    while i < msglen { hb[seedlen + 32u64 + i] = mp[i] ; i = i + 1u64 }
+    sha256_oneshot(&SLH_HBUF as u64, seedlen + 32u64 + msglen, &SLH_H32 as u64)
+    let op : *u8 = out as *u8
+    i = 0u64
+    while i < n { op[i] = SLH_H32[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* PRF(out, n, pkseed, skseed, adrs_slot) = SHA256(pkseed || adrs || skseed)[0..n] */
+fn slh_PRF(out: u64, n: u64, pkseed: u64, skseed: u64, adrs_slot: u64) -> i32 {
+    let hb : *u8 = &SLH_HBUF as *u8
+    let pp : *u8 = pkseed as *u8
+    let sk : *u8 = skseed as *u8
+    let ab : u64 = adrs_slot * 32u64
+    let mut i : u64 = 0u64
+    while i < n { hb[i] = pp[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { hb[n + i] = SLH_ADRS[ab + i] ; i = i + 1u64 }
+    i = 0u64
+    while i < n { hb[n + 32u64 + i] = sk[i] ; i = i + 1u64 }
+    sha256_oneshot(&SLH_HBUF as u64, n + 32u64 + n, &SLH_H32 as u64)
+    let op : *u8 = out as *u8
+    i = 0u64
+    while i < n { op[i] = SLH_H32[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* PRF_msg(out, n, skprf, opt_rand, msg[msglen]) = SHA256(skprf||opt_rand||msg)[0..n] */
+fn slh_PRF_msg(out: u64, n: u64, skprf: u64, opt_rand: u64, msg: u64, msglen: u64) -> i32 {
+    let hb : *u8 = &SLH_HBUF as *u8
+    let sp : *u8 = skprf as *u8
+    let op2 : *u8 = opt_rand as *u8
+    let mp : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    while i < n { hb[i] = sp[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < n { hb[n + i] = op2[i] ; i = i + 1u64 }
+    i = 0u64
+    while i < msglen { hb[2u64*n + i] = mp[i] ; i = i + 1u64 }
+    sha256_oneshot(&SLH_HBUF as u64, 2u64*n + msglen, &SLH_H32 as u64)
+    let op : *u8 = out as *u8
+    i = 0u64
+    while i < n { op[i] = SLH_H32[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* H_msg = SHAKE256(R || pk || msg, outlen) -- incremental over keccak_f1600 (arbitrary msg) */
+var SLH_KST  : [u8; 200]
+var SLH_KPOS : [u64; 1]
+fn slh_sh_init() -> i32 { keccak_state_zero(&SLH_KST as u64) SLH_KPOS[0] = 0u64 return 0i32 }
+fn slh_sh_absorb(addr: u64, len: u64) -> i32 {
+    let st : *u8 = &SLH_KST as *u8
+    let m : *u8 = addr as *u8
+    let mut pos : u64 = SLH_KPOS[0]
+    let mut i : u64 = 0u64
+    while i < len {
+        st[pos] = st[pos] ^ m[i]
+        pos = pos + 1u64
+        if pos == 136u64 { keccak_f1600(&SLH_KST as u64) pos = 0u64 }
+        i = i + 1u64
+    }
+    SLH_KPOS[0] = pos
+    return 0i32
+}
+fn slh_sh_finish(out: u64, outlen: u64) -> i32 {
+    let st : *u8 = &SLH_KST as *u8
+    let pos : u64 = SLH_KPOS[0]
+    st[pos] = st[pos] ^ 0x1Fu8
+    st[135] = st[135] ^ 0x80u8
+    keccak_f1600(&SLH_KST as u64)
+    keccak_squeeze(&SLH_KST as u64, out, outlen, 136u32)
+    return 0i32
+}
+fn slh_H_msg(out: u64, outlen: u64, r: u64, n: u64, pk: u64, pklen: u64, msg: u64, msglen: u64) -> i32 {
+    slh_sh_init()
+    slh_sh_absorb(r, n)
+    slh_sh_absorb(pk, pklen)
+    slh_sh_absorb(msg, msglen)
+    slh_sh_finish(out, outlen)
+    return 0i32
+}
+
+fn adrs_get4(s: u64, off: u64) -> u64 {
+    let b : u64 = s * 32u64 + off
+    return ((SLH_ADRS[b] as u64) << 24u64) | ((SLH_ADRS[b + 1u64] as u64) << 16u64) | ((SLH_ADRS[b + 2u64] as u64) << 8u64) | (SLH_ADRS[b + 3u64] as u64)
+}
+
+/* ---- WOTS+ ---- (ADRS: in-slot passed; derives skadrs=3, hashadrs=4, pk_adrs=5) */
+var SLH_CHAINS : [u8; 2176]   /* len*n, len<=67 n<=32 */
+var SLH_SKI    : [u8; 32]
+var SLH_CAT    : [u8; 64]
+var SLH_LEN    : [u64; 100]
+var SLH_WPK    : [u8; 32]
+var SLH_LEAF   : [u8; 32]
+
+/* wots_chain(out, n, in, start, steps, pkseed, adrs_slot): out = F^steps(in) */
+fn slh_wots_chain(out: u64, n: u64, in_addr: u64, start: u64, steps: u64, pkseed: u64, adrs_slot: u64) -> i32 {
+    let o : *u8 = out as *u8
+    let ip : *u8 = in_addr as *u8
+    let mut j : u64 = 0u64
+    while j < n { o[j] = ip[j] ; j = j + 1u64 }
+    let mut i : u64 = start
+    while i < start + steps {
+        adrs_set_hash(adrs_slot, i)
+        slh_H_n(out, n, pkseed, n, adrs_slot, out, n)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn slh_wots_chain_lengths(n: u64, len1: u64, len2: u64, msg: u64) -> i32 {
+    let m : *u8 = msg as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        SLH_LEN[2u64*i]        = (m[i] as u64) >> 4u64
+        SLH_LEN[2u64*i + 1u64] = (m[i] as u64) & 0x0Fu64
+        i = i + 1u64
+    }
+    let mut csum : u64 = 0u64
+    i = 0u64
+    while i < len1 { csum = csum + (15u64 - SLH_LEN[i]) ; i = i + 1u64 }
+    let shift : u64 = (8u64 - ((len2 * 4u64) % 8u64)) % 8u64
+    csum = csum << shift
+    let csum_bytes : u64 = (len2 * 4u64 + 7u64) / 8u64
+    /* cs[csum_bytes] big-endian from csum */
+    let mut cs0 : u64 = 0u64
+    let mut cs1 : u64 = 0u64
+    if csum_bytes == 1u64 {
+        cs0 = csum & 0xFFu64
+    } else {
+        cs0 = (csum >> 8u64) & 0xFFu64
+        cs1 = csum & 0xFFu64
+    }
+    i = 0u64
+    while i < len2 {
+        let csb : u64 = (i / 2u64)
+        let mut byte : u64 = cs0
+        if csb == 1u64 { byte = cs1 }
+        if (i % 2u64) == 0u64 {
+            SLH_LEN[len1 + i] = byte >> 4u64
+        } else {
+            SLH_LEN[len1 + i] = byte & 0x0Fu64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn slh_wots_pkgen(pk_out: u64, n: u64, len: u64, skseed: u64, pkseed: u64, in_slot: u64) -> i32 {
+    let kp : u64 = adrs_get4(in_slot, 20u64)
+    adrs_copy(3u64, in_slot)
+    adrs_set_type(3u64, 5u64)        /* ADRS_WOTS_PRF */
+    adrs_set_keypair(3u64, kp)
+    let mut i : u64 = 0u64
+    while i < len {
+        adrs_set_chain(3u64, i)
+        adrs_set_hash(3u64, 0u64)
+        slh_PRF(&SLH_SKI as u64, n, pkseed, skseed, 3u64)
+        adrs_copy(4u64, in_slot)
+        adrs_set_chain(4u64, i)
+        slh_wots_chain((&SLH_CHAINS as u64) + i*n, n, &SLH_SKI as u64, 0u64, 15u64, pkseed, 4u64)
+        i = i + 1u64
+    }
+    adrs_copy(5u64, in_slot)
+    adrs_set_type(5u64, 1u64)        /* ADRS_WOTS_PK */
+    slh_H_n(pk_out, n, pkseed, n, 5u64, &SLH_CHAINS as u64, len * n)
+    return 0i32
+}
+
+fn slh_wots_sign(sig: u64, n: u64, len: u64, len1: u64, len2: u64, msg: u64, skseed: u64, pkseed: u64, in_slot: u64) -> i32 {
+    slh_wots_chain_lengths(n, len1, len2, msg)
+    let kp : u64 = adrs_get4(in_slot, 20u64)
+    adrs_copy(3u64, in_slot)
+    adrs_set_type(3u64, 5u64)
+    adrs_set_keypair(3u64, kp)
+    let mut i : u64 = 0u64
+    while i < len {
+        adrs_set_chain(3u64, i)
+        adrs_set_hash(3u64, 0u64)
+        slh_PRF(&SLH_SKI as u64, n, pkseed, skseed, 3u64)
+        adrs_copy(4u64, in_slot)
+        adrs_set_chain(4u64, i)
+        slh_wots_chain(sig + i*n, n, &SLH_SKI as u64, 0u64, SLH_LEN[i], pkseed, 4u64)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn slh_wots_pk_from_sig(pk_out: u64, n: u64, len: u64, len1: u64, len2: u64, sig: u64, msg: u64, pkseed: u64, in_slot: u64) -> i32 {
+    slh_wots_chain_lengths(n, len1, len2, msg)
+    let mut i : u64 = 0u64
+    while i < len {
+        adrs_copy(4u64, in_slot)
+        adrs_set_chain(4u64, i)
+        slh_wots_chain((&SLH_CHAINS as u64) + i*n, n, sig + i*n, SLH_LEN[i], 15u64 - SLH_LEN[i], pkseed, 4u64)
+        i = i + 1u64
+    }
+    adrs_copy(5u64, in_slot)
+    adrs_set_type(5u64, 1u64)
+    slh_H_n(pk_out, n, pkseed, n, 5u64, &SLH_CHAINS as u64, len * n)
+    return 0i32
+}
+
+/* compute_root_from_path: fold leaf up through auth path (Merkle).  ADRS slot 6. */
+fn slh_compute_root(root: u64, n: u64, height: u64, leaf_idx: u64, leaf: u64, auth: u64, pkseed: u64, layer: u64, tree: u64, is_fors: u64) -> i32 {
+    let cur : *u8 = &SLH_LEAF as *u8
+    let lf : *u8 = leaf as *u8
+    let au : *u8 = auth as *u8
+    let ct : *u8 = &SLH_CAT as *u8
+    let mut j : u64 = 0u64
+    while j < n { cur[j] = lf[j] ; j = j + 1u64 }
+    let mut h : u64 = 0u64
+    while h < height {
+        adrs_zero(6u64)
+        adrs_set_layer(6u64, layer)
+        adrs_set_tree(6u64, tree)
+        if is_fors == 1u64 { adrs_set_type(6u64, 3u64) } else { adrs_set_type(6u64, 2u64) }
+        adrs_set_tree_height(6u64, h + 1u64)
+        adrs_set_tree_index(6u64, leaf_idx >> (h + 1u64))
+        if ((leaf_idx >> h) & 1u64) == 1u64 {
+            j = 0u64
+            while j < n { ct[j] = au[h*n + j] ; j = j + 1u64 }
+            j = 0u64
+            while j < n { ct[n + j] = cur[j] ; j = j + 1u64 }
+        } else {
+            j = 0u64
+            while j < n { ct[j] = cur[j] ; j = j + 1u64 }
+            j = 0u64
+            while j < n { ct[n + j] = au[h*n + j] ; j = j + 1u64 }
+        }
+        slh_H_n(&SLH_LEAF as u64, n, pkseed, n, 6u64, &SLH_CAT as u64, 2u64*n)
+        h = h + 1u64
+    }
+    let rt : *u8 = root as *u8
+    j = 0u64
+    while j < n { rt[j] = cur[j] ; j = j + 1u64 }
+    return 0i32
+}
+
+/* fors_indices: extract kf indices of `a` bits each from digest */
+var SLH_FIDX : [u64; 64]
+fn slh_fors_indices(kf: u64, a: u64, digest: u64) -> i32 {
+    let d : *u8 = digest as *u8
+    let mut bit : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < kf {
+        let mut v : u64 = 0u64
+        let mut b : u64 = 0u64
+        while b < a {
+            let byte : u64 = bit / 8u64
+            let off : u64 = 7u64 - (bit % 8u64)
+            v = (v << 1u64) | (((d[byte] as u64) >> off) & 1u64)
+            bit = bit + 1u64
+            b = b + 1u64
+        }
+        SLH_FIDX[i] = v
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ---- treehash stacks (module-scope; local arrays unsupported) ---- */
+var SLH_STACK : [u8; 544]   /* (max depth ~16) * 32 */
+var SLH_HH    : [u64; 18]
+var SLH_ROOTS : [u8; 768]   /* kf*n, kf<=22 n<=32 */
+var SLH_FLEAF : [u8; 32]
+
+/* FORS subtree root: tree-hash 2^height FORS leaves from `lo` -> out (slot 5 leaf, 6 parent) */
+fn slh_fors_subtree(out: u64, n: u64, layer: u64, tree: u64, lo: u64, height: u64, skseed: u64, pkseed: u64) -> i32 {
+    let leaves : u64 = 1u64 << height
+    let mut top : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < leaves {
+        adrs_zero(5u64)
+        adrs_set_layer(5u64, layer)
+        adrs_set_tree(5u64, tree)
+        adrs_set_type(5u64, 6u64)        /* FORS_PRF */
+        adrs_set_tree_height(5u64, 0u64)
+        adrs_set_tree_index(5u64, lo + j)
+        slh_PRF(&SLH_SKI as u64, n, pkseed, skseed, 5u64)
+        adrs_zero(5u64)
+        adrs_set_layer(5u64, layer)
+        adrs_set_tree(5u64, tree)
+        adrs_set_type(5u64, 3u64)        /* FORS_TREE */
+        adrs_set_tree_height(5u64, 0u64)
+        adrs_set_tree_index(5u64, lo + j)
+        slh_H_n((&SLH_STACK as u64) + top*n, n, pkseed, n, 5u64, &SLH_SKI as u64, n)
+        SLH_HH[top] = 0u64
+        top = top + 1u64
+        let mut go : u64 = 1u64
+        while go == 1u64 {
+            go = 0u64
+            if top >= 2u64 {
+                if SLH_HH[top - 1u64] == SLH_HH[top - 2u64] {
+                    adrs_zero(6u64)
+                    adrs_set_layer(6u64, layer)
+                    adrs_set_tree(6u64, tree)
+                    adrs_set_type(6u64, 3u64)
+                    adrs_set_tree_height(6u64, SLH_HH[top - 1u64] + 1u64)
+                    adrs_set_tree_index(6u64, (lo + j) >> (SLH_HH[top - 1u64] + 1u64))
+                    slh_H_n((&SLH_STACK as u64) + (top - 2u64)*n, n, pkseed, n, 6u64, (&SLH_STACK as u64) + (top - 2u64)*n, 2u64*n)
+                    top = top - 1u64
+                    SLH_HH[top - 1u64] = SLH_HH[top - 1u64] + 1u64
+                    go = 1u64
+                }
+            }
+        }
+        j = j + 1u64
+    }
+    let o : *u8 = out as *u8
+    let st : *u8 = &SLH_STACK as *u8
+    let mut k : u64 = 0u64
+    while k < n { o[k] = st[k] ; k = k + 1u64 }
+    return 0i32
+}
+
+fn slh_fors_sign_and_root(sig_out: u64, root_out: u64, n: u64, a: u64, kf: u64, digest: u64, skseed: u64, pkseed: u64, layer: u64, tree: u64) -> i32 {
+    slh_fors_indices(kf, a, digest)
+    let per : u64 = n + a * n
+    let mut t : u64 = 0u64
+    while t < kf {
+        let leaf_offset : u64 = t << a
+        let leaf_idx : u64 = SLH_FIDX[t]
+        let sk_dst : u64 = sig_out + t * per
+        /* sk_i = PRF(FORS_PRF, leaf_offset+leaf_idx) */
+        adrs_zero(7u64)
+        adrs_set_layer(7u64, layer)
+        adrs_set_tree(7u64, tree)
+        adrs_set_type(7u64, 6u64)
+        adrs_set_tree_height(7u64, 0u64)
+        adrs_set_tree_index(7u64, leaf_offset + leaf_idx)
+        slh_PRF(sk_dst, n, pkseed, skseed, 7u64)
+        /* auth path */
+        let auth : u64 = sk_dst + n
+        let mut h : u64 = 0u64
+        while h < a {
+            let sibling_idx : u64 = (leaf_idx >> h) ^ 1u64
+            let sublo : u64 = leaf_offset + (sibling_idx << h)
+            slh_fors_subtree(auth + h*n, n, layer, tree, sublo, h, skseed, pkseed)
+            h = h + 1u64
+        }
+        /* tree root */
+        adrs_zero(7u64)
+        adrs_set_layer(7u64, layer)
+        adrs_set_tree(7u64, tree)
+        adrs_set_type(7u64, 3u64)
+        adrs_set_tree_height(7u64, 0u64)
+        adrs_set_tree_index(7u64, leaf_offset + leaf_idx)
+        slh_H_n(&SLH_FLEAF as u64, n, pkseed, n, 7u64, sk_dst, n)
+        slh_compute_root((&SLH_ROOTS as u64) + t*n, n, a, leaf_offset + leaf_idx, &SLH_FLEAF as u64, auth, pkseed, layer, tree, 1u64)
+        t = t + 1u64
+    }
+    adrs_zero(7u64)
+    adrs_set_layer(7u64, layer)
+    adrs_set_tree(7u64, tree)
+    adrs_set_type(7u64, 4u64)            /* FORS_ROOTS */
+    slh_H_n(root_out, n, pkseed, n, 7u64, &SLH_ROOTS as u64, kf * n)
+    return 0i32
+}
+
+fn slh_fors_pk_from_sig(pk_out: u64, n: u64, a: u64, kf: u64, sig: u64, digest: u64, pkseed: u64, layer: u64, tree: u64) -> i32 {
+    slh_fors_indices(kf, a, digest)
+    let per : u64 = n + a * n
+    let mut t : u64 = 0u64
+    while t < kf {
+        let sk_i : u64 = sig + t * per
+        let auth : u64 = sk_i + n
+        let leaf_offset : u64 = t << a
+        let leaf_idx : u64 = SLH_FIDX[t]
+        adrs_zero(7u64)
+        adrs_set_layer(7u64, layer)
+        adrs_set_tree(7u64, tree)
+        adrs_set_type(7u64, 3u64)
+        adrs_set_tree_height(7u64, 0u64)
+        adrs_set_tree_index(7u64, leaf_offset + leaf_idx)
+        slh_H_n(&SLH_FLEAF as u64, n, pkseed, n, 7u64, sk_i, n)
+        slh_compute_root((&SLH_ROOTS as u64) + t*n, n, a, leaf_offset + leaf_idx, &SLH_FLEAF as u64, auth, pkseed, layer, tree, 1u64)
+        t = t + 1u64
+    }
+    adrs_zero(7u64)
+    adrs_set_layer(7u64, layer)
+    adrs_set_tree(7u64, tree)
+    adrs_set_type(7u64, 4u64)
+    slh_H_n(pk_out, n, pkseed, n, 7u64, &SLH_ROOTS as u64, kf * n)
+    return 0i32
+}
+
+/* XMSS subtree root: tree-hash 2^height WOTS leaves from `lo` (wadrs slot 2, parent slot 6) */
+fn slh_xmss_subtree(out: u64, n: u64, len: u64, layer: u64, tree: u64, lo: u64, height: u64, skseed: u64, pkseed: u64) -> i32 {
+    let leaves : u64 = 1u64 << height
+    let mut top : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < leaves {
+        adrs_zero(2u64)
+        adrs_set_layer(2u64, layer)
+        adrs_set_tree(2u64, tree)
+        adrs_set_type(2u64, 0u64)        /* WOTS_HASH */
+        adrs_set_keypair(2u64, lo + j)
+        slh_wots_pkgen((&SLH_STACK as u64) + top*n, n, len, skseed, pkseed, 2u64)
+        SLH_HH[top] = 0u64
+        top = top + 1u64
+        let mut go : u64 = 1u64
+        while go == 1u64 {
+            go = 0u64
+            if top >= 2u64 {
+                if SLH_HH[top - 1u64] == SLH_HH[top - 2u64] {
+                    adrs_zero(6u64)
+                    adrs_set_layer(6u64, layer)
+                    adrs_set_tree(6u64, tree)
+                    adrs_set_type(6u64, 2u64)        /* TREE */
+                    adrs_set_tree_height(6u64, SLH_HH[top - 1u64] + 1u64)
+                    adrs_set_tree_index(6u64, (lo + j) >> (SLH_HH[top - 1u64] + 1u64))
+                    slh_H_n((&SLH_STACK as u64) + (top - 2u64)*n, n, pkseed, n, 6u64, (&SLH_STACK as u64) + (top - 2u64)*n, 2u64*n)
+                    top = top - 1u64
+                    SLH_HH[top - 1u64] = SLH_HH[top - 1u64] + 1u64
+                    go = 1u64
+                }
+            }
+        }
+        j = j + 1u64
+    }
+    let o : *u8 = out as *u8
+    let st : *u8 = &SLH_STACK as *u8
+    let mut k : u64 = 0u64
+    while k < n { o[k] = st[k] ; k = k + 1u64 }
+    return 0i32
+}
+
+/* xmss_sign_and_root: WOTS sig + auth path + climb -> root_out (n).  adrs slot 2. */
+fn slh_xmss_sign_and_root(sig_out: u64, root_out: u64, n: u64, len: u64, len1: u64, len2: u64, hp: u64, msg: u64, skseed: u64, pkseed: u64, layer: u64, tree: u64, leaf_idx: u64) -> i32 {
+    adrs_zero(2u64)
+    adrs_set_layer(2u64, layer)
+    adrs_set_tree(2u64, tree)
+    adrs_set_type(2u64, 0u64)
+    adrs_set_keypair(2u64, leaf_idx)
+    slh_wots_sign(sig_out, n, len, len1, len2, msg, skseed, pkseed, 2u64)
+    /* leaf = wots_pkgen (adrs still WOTS_HASH keypair=leaf_idx) */
+    adrs_zero(2u64)
+    adrs_set_layer(2u64, layer)
+    adrs_set_tree(2u64, tree)
+    adrs_set_type(2u64, 0u64)
+    adrs_set_keypair(2u64, leaf_idx)
+    slh_wots_pkgen(&SLH_WPK as u64, n, len, skseed, pkseed, 2u64)
+    let auth : u64 = sig_out + len * n
+    let mut h : u64 = 0u64
+    while h < hp {
+        let sibling_lo : u64 = ((leaf_idx >> h) ^ 1u64) << h
+        slh_xmss_subtree(auth + h*n, n, len, layer, tree, sibling_lo, h, skseed, pkseed)
+        h = h + 1u64
+    }
+    slh_compute_root(root_out, n, hp, leaf_idx, &SLH_WPK as u64, auth, pkseed, layer, tree, 0u64)
+    return 0i32
+}
+
+fn slh_xmss_pk_from_sig(root_out: u64, n: u64, len: u64, len1: u64, len2: u64, hp: u64, msg: u64, sig: u64, pkseed: u64, layer: u64, tree: u64, leaf_idx: u64) -> i32 {
+    adrs_zero(2u64)
+    adrs_set_layer(2u64, layer)
+    adrs_set_tree(2u64, tree)
+    adrs_set_type(2u64, 0u64)
+    adrs_set_keypair(2u64, leaf_idx)
+    slh_wots_pk_from_sig(&SLH_WPK as u64, n, len, len1, len2, sig, msg, pkseed, 2u64)
+    let auth : u64 = sig + len * n
+    slh_compute_root(root_out, n, hp, leaf_idx, &SLH_WPK as u64, auth, pkseed, layer, tree, 0u64)
+    return 0i32
+}
+
+/* ---- top-level keygen / sign / verify ---- */
+var SLH_KPK   : [u8; 64]
+var SLH_KR    : [u8; 32]
+var SLH_KDIG  : [u8; 64]
+var SLH_KFR   : [u8; 32]
+var SLH_KCUR  : [u8; 32]
+var SLH_KNXT  : [u8; 32]
+var SLH_KROOT : [u8; 32]
+
+fn slh_copy(dst: u64, src: u64, len: u64) -> i32 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < len { d[i] = s[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* low-bit mask = (1<<bits)-1; bare top-level shift dodges the nested-paren
+ * (literal<<var) partial-hexad misparse (§4.4.1 trap family). */
+fn slh_lowmask(bits: u64) -> u64 {
+    let sh : u64 = 1u64 << bits
+    return sh - 1u64
+}
+
+fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
+    let n : u64 = slh_n(lv)
+    let d : u64 = slh_d(lv)
+    let hp : u64 = slh_hp(lv)
+    let len : u64 = slh_len(lv)
+    let skseed : u64 = seed
+    let pkseed : u64 = seed + 2u64*n
+    slh_xmss_subtree(&SLH_KROOT as u64, n, len, d - 1u64, 0u64, 0u64, hp, skseed, pkseed)
+    slh_copy(pk, pkseed, n)
+    slh_copy(pk + n, &SLH_KROOT as u64, n)
+    slh_copy(sk, seed, n)                 /* skseed */
+    slh_copy(sk + n, seed + n, n)         /* skprf */
+    slh_copy(sk + 2u64*n, pkseed, n)      /* pkseed */
+    slh_copy(sk + 3u64*n, &SLH_KROOT as u64, n)  /* root */
+    return 0i32
+}
+
+fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    let n : u64 = slh_n(lv)
+    let h : u64 = slh_h(lv)
+    let d : u64 = slh_d(lv)
+    let hp : u64 = slh_hp(lv)
+    let a : u64 = slh_a(lv)
+    let kf : u64 = slh_kf(lv)
+    let len : u64 = slh_len(lv)
+    let len1 : u64 = slh_len1(lv)
+    let len2 : u64 = slh_len2(lv)
+    let skseed : u64 = sk
+    let skprf : u64 = sk + n
+    let pkseed : u64 = sk + 2u64*n
+    let root : u64 = sk + 3u64*n
+    slh_copy(&SLH_KPK as u64, pkseed, n)
+    slh_copy((&SLH_KPK as u64) + n, root, n)
+    slh_PRF_msg(&SLH_KR as u64, n, skprf, pkseed, msg, msglen)
+    slh_copy(sig, &SLH_KR as u64, n)
+    let top_bits : u64 = h - hp
+    let leaf_bits : u64 = hp
+    let md_kf : u64 = (kf * a + 7u64) / 8u64
+    let tib : u64 = (top_bits + 7u64) / 8u64
+    let lib : u64 = (leaf_bits + 7u64) / 8u64
+    let md_len : u64 = md_kf + tib + lib
+    slh_H_msg(&SLH_KDIG as u64, md_len, &SLH_KR as u64, n, &SLH_KPK as u64, 2u64*n, msg, msglen)
+    let dg : *u8 = &SLH_KDIG as *u8
+    let mut tree_idx : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < tib { tree_idx = (tree_idx << 8u64) | (dg[md_kf + i] as u64) ; i = i + 1u64 }
+    tree_idx = tree_idx & slh_lowmask(top_bits)
+    let mut leaf_idx : u64 = 0u64
+    i = 0u64
+    while i < lib { leaf_idx = (leaf_idx << 8u64) | (dg[md_kf + tib + i] as u64) ; i = i + 1u64 }
+    leaf_idx = leaf_idx & slh_lowmask(leaf_bits)
+    let mut p : u64 = sig + n
+    slh_fors_sign_and_root(p, &SLH_KFR as u64, n, a, kf, &SLH_KDIG as u64, skseed, pkseed, 0u64, tree_idx)
+    p = p + kf * (n + a * n)
+    slh_copy(&SLH_KCUR as u64, &SLH_KFR as u64, n)
+    let mut cur_tree : u64 = tree_idx
+    let mut cur_leaf : u64 = leaf_idx
+    let mut layer : u64 = 0u64
+    while layer < d {
+        slh_xmss_sign_and_root(p, &SLH_KNXT as u64, n, len, len1, len2, hp, &SLH_KCUR as u64, skseed, pkseed, layer, cur_tree, cur_leaf)
+        p = p + len * n + hp * n
+        slh_copy(&SLH_KCUR as u64, &SLH_KNXT as u64, n)
+        cur_leaf = cur_tree & slh_lowmask(hp)
+        cur_tree = cur_tree >> hp
+        layer = layer + 1u64
+    }
+    let slp : *u8 = siglen as *u8
+    let total : u64 = slh_sig_bytes(lv)
+    let mut b : u64 = 0u64
+    while b < 8u64 { slp[b] = ((total >> (8u64 * b)) & 0xFFu64) as u8 ; b = b + 1u64 }
+    return 0i32
+}
+
+fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    let n : u64 = slh_n(lv)
+    let h : u64 = slh_h(lv)
+    let d : u64 = slh_d(lv)
+    let hp : u64 = slh_hp(lv)
+    let a : u64 = slh_a(lv)
+    let kf : u64 = slh_kf(lv)
+    let len : u64 = slh_len(lv)
+    let len1 : u64 = slh_len1(lv)
+    let len2 : u64 = slh_len2(lv)
+    if siglen != slh_sig_bytes(lv) { return 0i32 - 1i32 }
+    let pkseed : u64 = pk
+    let root : u64 = pk + n
+    let top_bits : u64 = h - hp
+    let leaf_bits : u64 = hp
+    let md_kf : u64 = (kf * a + 7u64) / 8u64
+    let tib : u64 = (top_bits + 7u64) / 8u64
+    let lib : u64 = (leaf_bits + 7u64) / 8u64
+    let md_len : u64 = md_kf + tib + lib
+    slh_H_msg(&SLH_KDIG as u64, md_len, sig, n, pk, 2u64*n, msg, msglen)
+    let dg : *u8 = &SLH_KDIG as *u8
+    let mut tree_idx : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < tib { tree_idx = (tree_idx << 8u64) | (dg[md_kf + i] as u64) ; i = i + 1u64 }
+    tree_idx = tree_idx & slh_lowmask(top_bits)
+    let mut leaf_idx : u64 = 0u64
+    i = 0u64
+    while i < lib { leaf_idx = (leaf_idx << 8u64) | (dg[md_kf + tib + i] as u64) ; i = i + 1u64 }
+    leaf_idx = leaf_idx & slh_lowmask(leaf_bits)
+    let mut p : u64 = sig + n
+    slh_fors_pk_from_sig(&SLH_KFR as u64, n, a, kf, p, &SLH_KDIG as u64, pkseed, 0u64, tree_idx)
+    p = p + kf * (n + a * n)
+    slh_copy(&SLH_KCUR as u64, &SLH_KFR as u64, n)
+    let mut cur_tree : u64 = tree_idx
+    let mut cur_leaf : u64 = leaf_idx
+    let mut layer : u64 = 0u64
+    while layer < d {
+        slh_xmss_pk_from_sig(&SLH_KNXT as u64, n, len, len1, len2, hp, &SLH_KCUR as u64, p, pkseed, layer, cur_tree, cur_leaf)
+        p = p + len * n + hp * n
+        slh_copy(&SLH_KCUR as u64, &SLH_KNXT as u64, n)
+        cur_leaf = cur_tree & slh_lowmask(hp)
+        cur_tree = cur_tree >> hp
+        layer = layer + 1u64
+    }
+    let cur : *u8 = &SLH_KCUR as *u8
+    let rt : *u8 = root as *u8
+    let mut diff : u64 = 0u64
+    i = 0u64
+    while i < n { diff = diff | ((cur[i] as u64) ^ (rt[i] as u64)) ; i = i + 1u64 }
+    if diff == 0u64 { return 0i32 }
+    return 0i32 - 1i32
+}

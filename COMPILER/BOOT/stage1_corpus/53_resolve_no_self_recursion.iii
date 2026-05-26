@@ -1,0 +1,14 @@
+module corpus_53
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn resolver_self_call_count() -> u32 from "resolver_replay.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    let pre : u32 = resolver_self_call_count()
+    /* No resolver-driven calls within this function — pre/post should match. */
+    let _x : u64 = 1u64 + 1u64
+    let post : u32 = resolver_self_call_count()
+    if (post - pre) == 0u32 { return 1u64 }
+    return 0u64
+}

@@ -1,0 +1,18 @@
+/* 811 -- mig4 Step 2: the LHS unifier + critical-overlap predicates.  Drives xro_selftest:
+ * kind-unification (ANY unifies with anything; two distinct concrete kinds do not); ROOT
+ * overlap on the documented joining pre-emptions (R038/R037, R040/R030, R041/R013) and on
+ * genuine non-overlaps (FCOMPOSE vs FTHEN root; FCOMPOSE ca K01 vs K09; and the VACUOUS
+ * R041/R014 pre-emption -- disjoint loop bodies, so no real critical pair); SUBTERM overlap
+ * (R037 rewriting R001's FCOMPOSE child_a; a self-overlap; and a variable-position
+ * non-overlap); and a deterministic, non-empty enumeration over the whole table.  Exit 99 =
+ * all hold; 1..5 unify; 6..7 slot; 10..15 root; 20..23 subterm; 30..31 enumeration.
+ * Gated by run_corpus.sh as the mig4 Step-2 gate (consumes Step 1's xii_rule_patterns). */
+module corpus_811
+
+extern @abi(c-msvc-x64) fn xro_selftest() -> u64 from "xii_rule_overlap.iii"
+
+fn main() -> u64 {
+    let r : u64 = xro_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

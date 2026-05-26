@@ -1,0 +1,144 @@
+/* STDLIB/iii/omnia/hexad_algebra.iii
+ *
+ * III HEXAD — §1/§2 asymmetric ternary algebra + hexad packing.
+ * Native .iii port of HEXAD/src/hexad_algebra.c (V1 Stage 7 hexad stdlib).
+ *
+ * A "trit" is a balanced ternary value: NEG = -1, ZERO = 0, POS = +1.
+ * (Compared by equality only — never by ordering, per the i32 trap.)
+ *
+ *   NOT : NEG<->POS, ZERO->ZERO            (= -a)
+ *   AND : NEG dominates; POS iff both POS
+ *   OR  : POS dominates; NEG iff both NEG
+ *   SUM : NEG-biased add, clamped          (= clamp(a+b,-1,+1))
+ *   MUL : NEG*NEG=POS, ZERO annihilator    (= a*b)
+ *
+ * A "hexad" is 6 trits packed base-3 (little-endian by pillar) into a u16,
+ * range 0..728.  Pillars 1..6 (index 0..5):
+ *   inverse_derivability, causality_depth, consent_recency,
+ *   replication_tier, adversariality_class, coherence_impact.
+ *
+ * §2.4 compose: AND on pillars 1..4 (idx 0..3), OR on pillars 5..6 (idx 4..5).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.  NIH: libc + III only.
+ */
+module omnia_hexad_algebra
+
+const HXA_HEXAD_MAX : u32 = 729u32    /* 3^6 */
+
+/* The ternary algebra lives in numera/trit.iii (Module 2); the hexad ops below
+ * compose those trit ops, externed here. The trit layer was extracted so the one
+ * algebra is shared by M3 (hexad) and M4 (gap). */
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_or(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_sum(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_sub(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_mul(a: i32, b: i32) -> i32 from "trit.iii"
+
+/* Scratch trit arrays (iii local var arrays are module-scope only). */
+var HXA_TA : [i32; 6]
+var HXA_TB : [i32; 6]
+var HXA_TO : [i32; 6]
+
+/* ----------------------------- hexad pack/unpack --------------------- */
+
+/* pack 6 trits at `pillars_addr` (6 x i32, -1/0/1) base-3 LE into a u16. */
+fn iii_hexad_pack6(pillars_addr: u64) -> u16 @export {
+    let p : *i32 = pillars_addr as *i32
+    let mut v : u32 = 0u32
+    let mut base : u32 = 1u32
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        let idx : u32 = (p[i] + 1i32) as u32     /* trit -1/0/1 -> idx 0/1/2 */
+        v = v + idx * base
+        base = base * 3u32
+        i = i + 1u64
+    }
+    return v as u16
+}
+
+/* unpack a packed hexad into 6 trits at `out_addr`; 0 if out of range. */
+fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 @export {
+    if (h as u32) >= HXA_HEXAD_MAX { return 0u8 }
+    let o : *i32 = out_addr as *i32
+    let mut v : u32 = h as u32
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        let q : u32 = v / 3u32
+        let idx : u32 = v - q * 3u32              /* v % 3 without the modulo trap */
+        o[i] = (idx as i32) - 1i32                /* idx 0/1/2 -> trit -1/0/1 */
+        v = q
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* the trit of pillar `p` (0..5) of a packed hexad.  Module-LOCAL (no @export):
+ * the only cross-module consumers of an `iii_hexad_pillar` symbol are the compiler's
+ * own BOOT/hexad_check (its homonym) and the HEXAD subsystem -- this omnia copy has
+ * ZERO callers, so de-globalising it removes the iiis-2 link-universe name clash with
+ * BOOT/hexad_check (the cartographer Trap-2 hazard) without touching either consumer.
+ * Mirrors the CONVERGENCE-AUDIT s3.18 const->module-local resolution. */
+fn iii_hexad_pillar(h: u16, p: u32) -> i32 {
+    if p >= 6u32 { return 0i32 }
+    if iii_hexad_unpack6(h, &HXA_TA as u64) == 0u8 { return 0i32 }
+    return HXA_TA[p as u64]
+}
+
+fn iii_hexad_eq6(a: u16, b: u16) -> u8 @export {
+    if a == b { return 1u8 }
+    return 0u8
+}
+
+/* §2.4 compose: AND on idx 0..3, OR on idx 4..5. */
+fn iii_hexad_compose6(a: u16, b: u16) -> u16 @export {
+    if iii_hexad_unpack6(a, &HXA_TA as u64) == 0u8 { return 0u16 }
+    if iii_hexad_unpack6(b, &HXA_TB as u64) == 0u8 { return 0u16 }
+    let mut i : u64 = 0u64
+    while i < 4u64 { HXA_TO[i] = iii_trit_and(HXA_TA[i], HXA_TB[i])  i = i + 1u64 }
+    i = 4u64
+    while i < 6u64 { HXA_TO[i] = iii_trit_or(HXA_TA[i], HXA_TB[i])  i = i + 1u64 }
+    return iii_hexad_pack6(&HXA_TO as u64)
+}
+
+/* element-wise broadcast of SUM / SUB / MUL across all 6 pillars. */
+fn iii_hexad_add(a: u16, b: u16) -> u16 @export {
+    if iii_hexad_unpack6(a, &HXA_TA as u64) == 0u8 { return 0u16 }
+    if iii_hexad_unpack6(b, &HXA_TB as u64) == 0u8 { return 0u16 }
+    let mut i : u64 = 0u64
+    while i < 6u64 { HXA_TO[i] = iii_trit_sum(HXA_TA[i], HXA_TB[i])  i = i + 1u64 }
+    return iii_hexad_pack6(&HXA_TO as u64)
+}
+
+fn iii_hexad_sub(a: u16, b: u16) -> u16 @export {
+    if iii_hexad_unpack6(a, &HXA_TA as u64) == 0u8 { return 0u16 }
+    if iii_hexad_unpack6(b, &HXA_TB as u64) == 0u8 { return 0u16 }
+    let mut i : u64 = 0u64
+    while i < 6u64 { HXA_TO[i] = iii_trit_sub(HXA_TA[i], HXA_TB[i])  i = i + 1u64 }
+    return iii_hexad_pack6(&HXA_TO as u64)
+}
+
+fn iii_hexad_mul(a: u16, b: u16) -> u16 @export {
+    if iii_hexad_unpack6(a, &HXA_TA as u64) == 0u8 { return 0u16 }
+    if iii_hexad_unpack6(b, &HXA_TB as u64) == 0u8 { return 0u16 }
+    let mut i : u64 = 0u64
+    while i < 6u64 { HXA_TO[i] = iii_trit_mul(HXA_TA[i], HXA_TB[i])  i = i + 1u64 }
+    return iii_hexad_pack6(&HXA_TO as u64)
+}
+
+/* negate every pillar (NOT). */
+fn iii_hexad_neg6(h: u16) -> u16 @export {
+    if iii_hexad_unpack6(h, &HXA_TA as u64) == 0u8 { return 0u16 }
+    let mut i : u64 = 0u64
+    while i < 6u64 { HXA_TO[i] = 0i32 - HXA_TA[i]  i = i + 1u64 }
+    return iii_hexad_pack6(&HXA_TO as u64)
+}
+
+/* negate only the active pillars 2..5 (idx 1..4) — §2 active-negation. */
+fn iii_hexad_active_neg(h: u16) -> u16 @export {
+    if iii_hexad_unpack6(h, &HXA_TA as u64) == 0u8 { return 0u16 }
+    let mut i : u64 = 0u64
+    while i < 6u64 { HXA_TO[i] = HXA_TA[i]  i = i + 1u64 }
+    i = 1u64
+    while i < 5u64 { HXA_TO[i] = 0i32 - HXA_TA[i]  i = i + 1u64 }
+    return iii_hexad_pack6(&HXA_TO as u64)
+}

@@ -1,0 +1,64 @@
+/* corpus/360_xii_e2e_demo.iii — End-to-end XII demo
+ *
+ * Build a complex function term, canonicalise, verify Horizon match,
+ * generate machine code, verify Lattice cell mhash. */
+
+module corpus_360_xii_e2e_demo
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_is_canonical(t: u32) -> u8 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_productive_count() -> u32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_cell_mhash(horizon_id: u32, target: u32, size: u32, payload_ptr: *u8, out_32: *u8) -> i32 from "xii_emit_gen.iii"
+
+var E2E_PAYLOAD : [u8; 256]
+var E2E_MHASH : [u8; 32]
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    xii_horizon_init()
+
+    /* 1. Productive count is 126. */
+    if xii_horizon_productive_count() != 126u32 { return 1u64 }
+
+    /* 2. H001 (ed25519_sign) is productive. */
+    if xii_horizon_is_productive(0u32) != 1u8 { return 2u64 }
+
+    /* 3. H127 (guard cell) is not productive. */
+    if xii_horizon_is_productive(126u32) != 0u8 { return 3u64 }
+
+    /* 4. Build F.COMPOSE(F.COMPOSE(K02_a, K02_b), K02_c) and canonicalise.
+     *    R001 should fire, yielding right-associated form. */
+    let a : u32 = xii_term_make_basis(1u8, 0x100u32)
+    let b : u32 = xii_term_make_basis(1u8, 0x200u32)
+    let c : u32 = xii_term_make_basis(1u8, 0x300u32)
+    let inner : u32 = xii_term_make_fusion2(18u8, a, b)
+    let t : u32 = xii_term_make_fusion2(18u8, inner, c)
+    let canon : u32 = xii_canonicalise(t)
+    if xii_is_canonical(canon) != 1u8 { return 4u64 }
+
+    /* 5. Generate poly1305_mac payload for x86_avx2 (target 1). */
+    let size : u32 = xii_emit_gen_produce(4u32, 1u32, 128u32, &E2E_PAYLOAD as *u8)
+    if size == 0u32 { return 5u64 }
+    if size > 128u32 { return 6u64 }
+
+    /* 6. Compute cell mhash. */
+    let rc : i32 = xii_emit_gen_cell_mhash(4u32, 1u32, size, &E2E_PAYLOAD as *u8, &E2E_MHASH as *u8)
+    if rc != 0i32 { return 7u64 }
+
+    /* 7. mhash is non-zero. */
+    let mut zero_n : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if E2E_MHASH[i] == 0u8 { zero_n = zero_n + 1u32 }
+        i = i + 1u32
+    }
+    if zero_n == 32u32 { return 8u64 }
+
+    return 0u64
+}

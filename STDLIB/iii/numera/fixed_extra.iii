@@ -1,0 +1,193 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\fixed_extra.iii
+ *
+ * III STDLIB - numera::fixed_extra
+ *
+ * Lattice plan Step 0033 -- additional fixed-point instantiations beyond
+ * the existing Q32.32 in numera/fixed.iii.  Three monomorphic widths,
+ * each with a complete arithmetic surface:
+ *
+ *   Q16.16:  16 integer bits + 16 fractional bits, packed into u32.
+ *   Q24.8:   24 integer bits + 8 fractional bits, packed into u32.
+ *   Q48.16:  48 integer bits + 16 fractional bits, packed into u64.
+ *
+ * For each format f:
+ *   f_from_int(i) -> u64                   -- pack integer i (low bits)
+ *   f_to_int(x) -> u64                     -- extract integer part
+ *   f_add(a, b) -> u64                     -- saturating add (caps at max)
+ *   f_sub(a, b) -> u64                     -- saturating sub (floors at 0)
+ *   f_mul(a, b) -> u64                     -- multiply with scaling
+ *   f_div(a, b) -> u64                     -- divide with scaling (b != 0)
+ *
+ * Storage is unsigned (no negative values) for simplicity.  Saturation
+ * is the @bounded(min=0, max=MAX) discipline mentioned by the master
+ * plan.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (saturation may quietly cap).
+ */
+
+module numera_fixed_extra
+
+/* ─── Q16.16 (u32-packed) ──────────────────────────────────────── */
+
+const FX16_FRAC_BITS : u64 = 16u64
+const FX16_SCALE     : u64 = 0x10000u64       /* 1 << 16 = 65536 */
+const FX16_MASK      : u64 = 0xFFFFFFFFu64
+const FX16_MAX       : u64 = 0xFFFFFFFFu64    /* saturate cap */
+
+fn fx16_from_int(i: u64) -> u64 @export {
+    let v : u64 = i << FX16_FRAC_BITS
+    if v > FX16_MAX { return FX16_MAX }
+    return v & FX16_MASK
+}
+
+fn fx16_to_int(x: u64) -> u64 @export {
+    return (x & FX16_MASK) >> FX16_FRAC_BITS
+}
+
+fn fx16_add(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX16_MASK
+    let bb : u64 = b & FX16_MASK
+    let s : u64 = aa + bb
+    if s > FX16_MAX { return FX16_MAX }
+    return s
+}
+
+fn fx16_sub(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX16_MASK
+    let bb : u64 = b & FX16_MASK
+    if bb > aa { return 0u64 }
+    return aa - bb
+}
+
+fn fx16_mul(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX16_MASK
+    let bb : u64 = b & FX16_MASK
+    let prod : u64 = aa * bb
+    let scaled : u64 = prod >> FX16_FRAC_BITS
+    if scaled > FX16_MAX { return FX16_MAX }
+    return scaled
+}
+
+fn fx16_div(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX16_MASK
+    let bb : u64 = b & FX16_MASK
+    if bb == 0u64 { return FX16_MAX }
+    let scaled : u64 = aa << FX16_FRAC_BITS
+    let q : u64 = scaled / bb
+    if q > FX16_MAX { return FX16_MAX }
+    return q
+}
+
+/* ─── Q24.8 (u32-packed) ───────────────────────────────────────── */
+
+const FX24_FRAC_BITS : u64 = 8u64
+const FX24_SCALE     : u64 = 0x100u64
+const FX24_MASK      : u64 = 0xFFFFFFFFu64
+const FX24_MAX       : u64 = 0xFFFFFFFFu64
+
+fn fx24_from_int(i: u64) -> u64 @export {
+    let v : u64 = i << FX24_FRAC_BITS
+    if v > FX24_MAX { return FX24_MAX }
+    return v & FX24_MASK
+}
+
+fn fx24_to_int(x: u64) -> u64 @export {
+    return (x & FX24_MASK) >> FX24_FRAC_BITS
+}
+
+fn fx24_add(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX24_MASK
+    let bb : u64 = b & FX24_MASK
+    let s : u64 = aa + bb
+    if s > FX24_MAX { return FX24_MAX }
+    return s
+}
+
+fn fx24_sub(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX24_MASK
+    let bb : u64 = b & FX24_MASK
+    if bb > aa { return 0u64 }
+    return aa - bb
+}
+
+fn fx24_mul(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX24_MASK
+    let bb : u64 = b & FX24_MASK
+    let prod : u64 = aa * bb
+    let scaled : u64 = prod >> FX24_FRAC_BITS
+    if scaled > FX24_MAX { return FX24_MAX }
+    return scaled
+}
+
+fn fx24_div(a: u64, b: u64) -> u64 @export {
+    let aa : u64 = a & FX24_MASK
+    let bb : u64 = b & FX24_MASK
+    if bb == 0u64 { return FX24_MAX }
+    let scaled : u64 = aa << FX24_FRAC_BITS
+    let q : u64 = scaled / bb
+    if q > FX24_MAX { return FX24_MAX }
+    return q
+}
+
+/* ─── Q48.16 (u64) ─────────────────────────────────────────────── */
+
+const FX48_FRAC_BITS : u64 = 16u64
+const FX48_SCALE     : u64 = 0x10000u64
+const FX48_MAX       : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn fx48_from_int(i: u64) -> u64 @export {
+    /* If i << 16 would overflow u64, saturate. */
+    if i > 0xFFFFFFFFFFFFu64 { return FX48_MAX }
+    return i << FX48_FRAC_BITS
+}
+
+fn fx48_to_int(x: u64) -> u64 @export {
+    return x >> FX48_FRAC_BITS
+}
+
+fn fx48_add(a: u64, b: u64) -> u64 @export {
+    /* Saturating add: detect overflow via wrap. */
+    let s : u64 = a + b
+    if s < a { return FX48_MAX }
+    return s
+}
+
+fn fx48_sub(a: u64, b: u64) -> u64 @export {
+    if b > a { return 0u64 }
+    return a - b
+}
+
+fn fx48_mul(a: u64, b: u64) -> u64 @export {
+    /* For Q48.16 with bounded inputs (a, b ≤ 2^48), a*b ≤ 2^96 -- overflows
+     * u64.  We split into high/low 32-bit halves and saturate. */
+    let a_hi : u64 = a >> 32u64
+    let a_lo : u64 = a & 0xFFFFFFFFu64
+    let b_hi : u64 = b >> 32u64
+    let b_lo : u64 = b & 0xFFFFFFFFu64
+    /* Cross products */
+    let p_lolo : u64 = a_lo * b_lo
+    let p_lohi : u64 = a_lo * b_hi
+    let p_hilo : u64 = a_hi * b_lo
+    let p_hihi : u64 = a_hi * b_hi
+    /* After scale-shift by 16, the result is approximately
+     * (a/2^16) * (b/2^16) * 2^16 = a*b / 2^16 .  We need only u64-fit
+     * detection: if a_hi or b_hi is non-zero AND product would overflow,
+     * saturate.  Conservative approximation: any combination of high
+     * halves indicates risk of overflow after >> 16. */
+    if p_hihi != 0u64 { return FX48_MAX }
+    let mid : u64 = p_lohi + p_hilo
+    if mid < p_lohi { return FX48_MAX }
+    /* Combine: result = (p_lolo + (mid << 32)) >> 16 */
+    /* Detect overflow on the (mid << 32) shift when mid >= 2^32. */
+    if mid >> 32u64 != 0u64 { return FX48_MAX }
+    let combined : u64 = p_lolo + (mid << 32u64)
+    if combined < p_lolo { return FX48_MAX }
+    return combined >> FX48_FRAC_BITS
+}
+
+fn fx48_div(a: u64, b: u64) -> u64 @export {
+    if b == 0u64 { return FX48_MAX }
+    /* result = (a << 16) / b -- careful of (a << 16) overflow. */
+    if a > (FX48_MAX >> FX48_FRAC_BITS) { return FX48_MAX }
+    return (a << FX48_FRAC_BITS) / b
+}

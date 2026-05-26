@@ -1,0 +1,4 @@
+/* 619 — curry_howard: proofs-as-programs correspondence (program<->proof, verify, emit). */
+module corpus_619
+extern @abi(c-msvc-x64) fn curryh_selftest() -> u64 from "curry_howard.iii"
+fn main() -> u64 { return curryh_selftest() }

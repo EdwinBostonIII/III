@@ -1,0 +1,47 @@
+/* witness: append 3 entries, verify chain replays to same root */
+module corpus_c42
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn witness_init() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_append(mh: u64, cap: u64, epoch: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_root_byte(i: u32) -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_verify_chain() -> u8 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_entry_cap(idx: u32) -> u64 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_entry_epoch(idx: u32) -> u64 from "witness.iii"
+
+fn main() -> u64 {
+    witness_init()
+    let mh1 : *u8 = malloc(32u64)
+    let mh2 : *u8 = malloc(32u64)
+    let mh3 : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        mh1[i] = (i + 1u64) as u8
+        mh2[i] = (i + 33u64) as u8
+        mh3[i] = (i + 65u64) as u8
+        i = i + 1u64
+    }
+    if witness_append(mh1 as u64, 100u64, 7u64) != 0i32 { return 1u64 }
+    if witness_append(mh2 as u64, 200u64, 8u64) != 0i32 { return 2u64 }
+    if witness_append(mh3 as u64, 300u64, 9u64) != 0i32 { return 3u64 }
+    if witness_count() != 3u32 { return 4u64 }
+    /* Chain root must be non-zero and self-consistent. */
+    let mut nonzero : u8 = 0u8
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if witness_root_byte(k) != 0u32 { nonzero = 1u8 }
+        k = k + 1u32
+    }
+    if nonzero != 1u8 { return 5u64 }
+    if witness_verify_chain() != 1u8 { return 6u64 }
+    /* Entry queries */
+    if witness_entry_cap(0u32) != 100u64 { return 7u64 }
+    if witness_entry_epoch(1u32) != 8u64 { return 8u64 }
+    if witness_entry_cap(2u32) != 300u64 { return 9u64 }
+    free(mh1)
+    free(mh2)
+    free(mh3)
+    return 99u64
+}

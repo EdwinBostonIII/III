@@ -1,0 +1,26 @@
+/* corpus/282_xii_K03_convey.iii
+ * XII Phase α conformance: K03 CONVEY basis kernel.
+ * Expected: kind=2, K-cost=4, hexad=PASSAGE(3), cap_class=CONVEY(2).
+ */
+
+module corpus_282_xii_K03_convey
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_is_basis(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_basis_k_cost(kind: u8) -> u32 from "xii_basis.iii"
+extern @abi(c-msvc-x64) fn xii_basis_hexad(kind: u8) -> u8 from "xii_basis.iii"
+extern @abi(c-msvc-x64) fn xii_basis_cap_class(kind: u8) -> u32 from "xii_basis.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let t : u32 = xii_term_make_basis(2u8, 0u32)
+    if t == 0xFFFFFFFFu32 { return 100u64 }
+    if xii_term_get_kind(t) != 2u8 { return 1u64 }
+    if xii_term_is_basis(t) != 1u8 { return 2u64 }
+    if xii_basis_k_cost(2u8) != 4u32 { return 3u64 }
+    if xii_basis_hexad(2u8) != 3u8 { return 4u64 }
+    if xii_basis_cap_class(2u8) != 2u32 { return 5u64 }
+    return 0u64
+}

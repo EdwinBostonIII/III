@@ -1,0 +1,175 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\sandbox_ctor.iii
+ *
+ * III STDLIB - omnia::sandbox_ctor -- sandbox lifecycle primitives.
+ *
+ * Lattice plan Phase 14l Step 0194.  A sandbox is a labelled execution
+ * envelope with capability set and memory/CPU quotas.  Stage-0
+ * implementation: pure metadata table -- sandbox state, quotas, and
+ * result are stored in a 64-slot SoA registry.  Process-isolation /
+ * seccomp wiring lands in a future R0 step that can call Win32
+ * CreateProcess or POSIX clone() through the host's syscall layer.
+ *
+ * Linearity discipline: each sandbox_id is intended to be use-once
+ * (caller must \`sandbox_drop\` exactly once).  iiis-0 cannot enforce
+ * @linear at compile time, so the runtime registry refuses double-drop
+ * via the LIVE flag.
+ *
+ * Public surface:
+ *   sandbox_new(cap_set, mem_cap_bytes, cpu_cap_micros)         -> u64
+ *   sandbox_drop(sb_id)                                         -> i32
+ *   sandbox_state(sb_id)                                        -> u32
+ *   sandbox_set_state(sb_id, state)                             -> i32
+ *   sandbox_cap_set(sb_id)                                      -> u64
+ *   sandbox_mem_cap(sb_id)                                      -> u64
+ *   sandbox_cpu_cap(sb_id)                                      -> u64
+ *   sandbox_set_result(sb_id, result)                           -> i32
+ *   sandbox_result(sb_id)                                       -> u64
+ *   sandbox_count()                                             -> u32
+ *   sandbox_clear_all()                                         -> i32
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_sandbox_ctor
+
+const SBX_OK             : i32 =  0i32
+const SBX_E_BADID        : i32 = -1i32
+const SBX_E_FULL         : i32 = -2i32
+const SBX_E_BADSTATE     : i32 = -3i32
+
+const SBX_SLOTS          : u32 = 64u32
+
+const SBX_STATE_CREATED   : u32 = 0u32
+const SBX_STATE_RUNNING   : u32 = 1u32
+const SBX_STATE_COMPLETED : u32 = 2u32
+const SBX_STATE_CANCELLED : u32 = 3u32
+
+var SBX_LIVE        : [u8;  64]
+var SBX_STATE       : [u32; 64]
+var SBX_CAP_SET     : [u64; 64]
+var SBX_MEM_CAP     : [u64; 64]
+var SBX_CPU_CAP     : [u64; 64]
+var SBX_RESULT      : [u64; 64]
+
+fn _sbx_slot_of(sb_id: u64) -> u32 {
+    let id_l : u64 = sb_id
+    if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = (id_l - 1u64) & 0x3Fu64
+    let s_u32 : u32 = s as u32
+    if s_u32 >= SBX_SLOTS { return 0xFFFFFFFFu32 }
+    if SBX_LIVE[s_u32] == 0u8 { return 0xFFFFFFFFu32 }
+    return s_u32
+}
+
+fn sandbox_new(cap_set: u64, mem_cap_bytes: u64, cpu_cap_micros: u64) -> u64 @export {
+    let cs_l : u64 = cap_set
+    let mc_l : u64 = mem_cap_bytes
+    let cp_l : u64 = cpu_cap_micros
+    let mut s : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while s < SBX_SLOTS {
+        if SBX_LIVE[s] == 0u8 {
+            if found == 0xFFFFFFFFu32 { found = s }
+        }
+        s = s + 1u32
+    }
+    if found == 0xFFFFFFFFu32 { return 0u64 }
+    SBX_LIVE[found]    = 1u8
+    SBX_STATE[found]   = SBX_STATE_CREATED
+    SBX_CAP_SET[found] = cs_l
+    SBX_MEM_CAP[found] = mc_l
+    SBX_CPU_CAP[found] = cp_l
+    SBX_RESULT[found]  = 0u64
+    return (found as u64) + 1u64
+}
+
+fn sandbox_drop(sb_id: u64) -> i32 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return SBX_E_BADID }
+    SBX_LIVE[s]    = 0u8
+    SBX_STATE[s]   = 0u32
+    SBX_CAP_SET[s] = 0u64
+    SBX_MEM_CAP[s] = 0u64
+    SBX_CPU_CAP[s] = 0u64
+    SBX_RESULT[s]  = 0u64
+    return SBX_OK
+}
+
+fn sandbox_state(sb_id: u64) -> u32 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    return SBX_STATE[s]
+}
+
+fn sandbox_set_state(sb_id: u64, state: u32) -> i32 @export {
+    let id_l : u64 = sb_id
+    let st_l : u32 = state
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return SBX_E_BADID }
+    if st_l > 3u32 { return SBX_E_BADSTATE }
+    SBX_STATE[s] = st_l
+    return SBX_OK
+}
+
+fn sandbox_cap_set(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBX_CAP_SET[s]
+}
+
+fn sandbox_mem_cap(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBX_MEM_CAP[s]
+}
+
+fn sandbox_cpu_cap(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBX_CPU_CAP[s]
+}
+
+fn sandbox_set_result(sb_id: u64, result: u64) -> i32 @export {
+    let id_l : u64 = sb_id
+    let r_l  : u64 = result
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return SBX_E_BADID }
+    SBX_RESULT[s] = r_l
+    return SBX_OK
+}
+
+fn sandbox_result(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbx_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBX_RESULT[s]
+}
+
+fn sandbox_count() -> u32 @export {
+    let mut count : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < SBX_SLOTS {
+        if SBX_LIVE[s] == 1u8 { count = count + 1u32 }
+        s = s + 1u32
+    }
+    return count
+}
+
+fn sandbox_clear_all() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < SBX_SLOTS {
+        SBX_LIVE[s]    = 0u8
+        SBX_STATE[s]   = 0u32
+        SBX_CAP_SET[s] = 0u64
+        SBX_MEM_CAP[s] = 0u64
+        SBX_CPU_CAP[s] = 0u64
+        SBX_RESULT[s]  = 0u64
+        s = s + 1u32
+    }
+    return SBX_OK
+}

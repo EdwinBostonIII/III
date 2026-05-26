@@ -1,0 +1,113 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\222_babel_wire_tamper.iii
+ *
+ * III conformance corpus 222 -- babel_wire tamper detection.
+ *
+ * Asserts:
+ *   1. Pristine envelope verifies via babel_wire_verify_crc -> 1.
+ *   2. Single-byte tamper at every header offset 0..63 -> verify
+ *      returns 0 (CRC mismatch).
+ *   3. babel_wire CRC covers ONLY the 64-byte header; payload tamper
+ *      is INVISIBLE to babel_wire_verify_crc (by design -- payload
+ *      integrity is provided by IDoc structural validation + sealed
+ *      channel AEAD at higher layers).
+ *   4. After restoring the tampered byte, verify returns 1 again.
+ *
+ * Exit code: 99 on full pass; 100+offset on tamper-detection failure.
+ */
+
+module corpus_222
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+fn main() -> u64 {
+    let env : *u8 = malloc(256u64)
+    if env as u64 == 0u64 { return 1u64 }
+    let env_u : u64 = env as u64
+
+    babel_wire_init(env_u)
+    babel_wire_set_seal_id(env_u, 0x0123456789ABCDEFu64)
+    babel_wire_set_intent_id(env_u, 0xDEADBEEF12345678u64)
+
+    let dig : *u8 = malloc(32u64)
+    let mut di : u64 = 0u64
+    while di < 32u64 {
+        dig[di] = ((di * 7u64 + 1u64) & 0xFFu64) as u8
+        di = di + 1u64
+    }
+    babel_wire_set_ctx_digest(env_u, dig as u64)
+    babel_wire_set_facet(env_u, 0x05u8)
+
+    let payload : *u8 = malloc(16u64)
+    let mut pi : u64 = 0u64
+    while pi < 16u64 {
+        payload[pi] = ((pi * 17u64 + 3u64) & 0xFFu64) as u8
+        pi = pi + 1u64
+    }
+    babel_wire_set_payload(env_u, payload as u64, 16u32)
+
+    let total : u32 = babel_wire_finalize(env_u)
+    let hb : u32 = babel_wire_header_bytes()
+    if total != (hb + 16u32) { return 2u64 }
+
+    /* Pristine -> verify == 1. */
+    if babel_wire_verify_crc(env_u, total) != 1u8 { return 3u64 }
+
+    /* Tamper each header byte 0..63 and re-verify. */
+    let mut off : u64 = 0u64
+    while off < 64u64 {
+        /* Skip the CRC slot itself (offsets 64..67 are CRC; we're under
+         * 64 here so always tampering header content). */
+        let original : u8 = env[off]
+        env[off] = original ^ 0x01u8
+        if babel_wire_verify_crc(env_u, total) != 0u8 {
+            /* This tamper was NOT detected -- failure. */
+            free(env); free(dig); free(payload)
+            return (100u64 + off)
+        }
+        env[off] = original
+        /* After restore, verify should pass. */
+        if babel_wire_verify_crc(env_u, total) != 1u8 {
+            free(env); free(dig); free(payload)
+            return (200u64 + off)
+        }
+        off = off + 1u64
+    }
+
+    /* Tamper a payload byte. babel_wire's CRC covers only the
+     * 64-byte header, so payload tampering is INVISIBLE to it (by
+     * design; higher layers provide payload integrity). Verify still
+     * returns 1. */
+    let p_off : u64 = (hb as u64) + 0u64
+    let p_orig : u8 = env[p_off]
+    env[p_off] = p_orig ^ 0x55u8
+    if babel_wire_verify_crc(env_u, total) != 1u8 {
+        free(env); free(dig); free(payload)
+        return 4u64
+    }
+    env[p_off] = p_orig
+    if babel_wire_verify_crc(env_u, total) != 1u8 { return 5u64 }
+
+    /* Also tamper the CRC slot itself (offset 64..67). After flipping
+     * one CRC byte, verify must fail. */
+    let crc_off : u64 = 64u64
+    let crc_orig : u8 = env[crc_off]
+    env[crc_off] = crc_orig ^ 0x01u8
+    if babel_wire_verify_crc(env_u, total) != 0u8 { return 6u64 }
+    env[crc_off] = crc_orig
+
+    free(env)
+    free(dig)
+    free(payload)
+    return 99u64
+}

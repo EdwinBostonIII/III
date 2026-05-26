@@ -1,0 +1,583 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\hexad_check.iii
+ *
+ * III Stage-0 Hexad Admission Bitmap — .iii port of hexad_check.c.
+ * ABI-compatible drop-in replacement for hexad_check.o.
+ *
+ * Same Stage-0 codegen workarounds as ceiling.iii: SHA-256 working state
+ * lives in module-scope globals (single-shot, not reentrant); K table
+ * initialised by an explicit one-shot function rather than const-array
+ * literal; no pillar arrays passed by value — `*u8` everywhere.
+ */
+
+module hexad_check
+
+/* ─── Public ABI constants (mirror hexad_check.h) ──────────────────── */
+
+const III_HEXAD_PILLAR_COUNT  : u32 = 6u32
+const III_HEXAD_BITMAP_SLOTS  : u32 = 729u32
+const III_HEXAD_BITMAP_BYTES  : u32 = 144u32
+const III_HEXAD_TRIT_NEG      : u8  = 0u8
+const III_HEXAD_TRIT_ZERO     : u8  = 1u8
+const III_HEXAD_TRIT_POS      : u8  = 2u8
+const III_HEXAD_TRIT_INVALID  : u8  = 3u8
+const III_BRICK__COUNT        : u32 = 6u32
+const HX_INVALID_PACKED       : u32 = 0xFFFFu32
+
+/* AST trits (mirror ast.h::iii_ast_trit_t). */
+const III_TRIT_AST_NEG     : u32 = 0u32
+const III_TRIT_AST_ZERO    : u32 = 1u32
+const III_TRIT_AST_POS     : u32 = 2u32
+const III_TRIT_AST_INVALID : u32 = 3u32
+
+/* ─── State ────────────────────────────────────────────────────────── */
+
+var HXBM       : [u8; 144]
+var HXBM_INIT  : u8 = 0u8
+
+/* ─── Bricking-class table (flattened 6×6 of u8 trits) ─────────────── */
+/* Order matches HXC_BRICK_PILLARS in hexad_check.c. */
+var HXC_BRICK_PILLARS : [u8; 36] = [
+    /* CAPSULE_UPDATE   (NEG, NEG, NEG, NEG, ZERO, ZERO) */
+    0u8, 0u8, 0u8, 0u8, 1u8, 1u8,
+    /* MICROCODE_LOAD   (NEG, NEG, NEG, ZERO, ZERO, ZERO) */
+    0u8, 0u8, 0u8, 1u8, 1u8, 1u8,
+    /* BOOTORDER_SET    (NEG, NEG, ZERO, NEG, ZERO, ZERO) */
+    0u8, 0u8, 1u8, 0u8, 1u8, 1u8,
+    /* REAL_NVRAM_WRITE (NEG, ZERO, NEG, NEG, ZERO, ZERO) */
+    0u8, 1u8, 0u8, 0u8, 1u8, 1u8,
+    /* ME_PSP_MAILBOX   (ZERO, NEG, NEG, NEG, ZERO, ZERO) */
+    1u8, 0u8, 0u8, 0u8, 1u8, 1u8,
+    /* SMRAM_WRITE      (NEG, NEG, NEG, NEG, NEG, ZERO) */
+    0u8, 0u8, 0u8, 0u8, 0u8, 1u8
+]
+
+/* Brick name strings (null-terminated; one var per brick). */
+var BRICK_NAME_0 : [u8; 15] = [99u8,97u8,112u8,115u8,117u8,108u8,101u8,95u8,117u8,112u8,100u8,97u8,116u8,101u8,0u8]
+var BRICK_NAME_1 : [u8; 15] = [109u8,105u8,99u8,114u8,111u8,99u8,111u8,100u8,101u8,95u8,108u8,111u8,97u8,100u8,0u8]
+var BRICK_NAME_2 : [u8; 14] = [98u8,111u8,111u8,116u8,111u8,114u8,100u8,101u8,114u8,95u8,115u8,101u8,116u8,0u8]
+var BRICK_NAME_3 : [u8; 17] = [114u8,101u8,97u8,108u8,95u8,110u8,118u8,114u8,97u8,109u8,95u8,119u8,114u8,105u8,116u8,101u8,0u8]
+var BRICK_NAME_4 : [u8; 15] = [109u8,101u8,95u8,112u8,115u8,112u8,95u8,109u8,97u8,105u8,108u8,98u8,111u8,120u8,0u8]
+var BRICK_NAME_5 : [u8; 12] = [115u8,109u8,114u8,97u8,109u8,95u8,119u8,114u8,105u8,116u8,101u8,0u8]
+var BRICK_NAME_UNK : [u8; 8] = [117u8,110u8,107u8,110u8,111u8,119u8,110u8,0u8]
+
+/* ─── SHA-256 working state (single-shot; not reentrant) ───────────── */
+
+var HX_K       : [u32; 64]
+var HX_K_INIT  : u8 = 0u8
+var HX_W       : [u32; 64]
+var HX_H       : [u32; 8]
+var HX_BUF     : [u8; 64]
+var HX_BUFLEN  : u32 = 0u32
+var HX_BITS    : u64 = 0u64
+
+/* Scratch pillar buffers used in the public composition / negation
+ * helpers (avoids local arrays which segfault in iiis-0). */
+var SCR_PA : [u8; 6]
+var SCR_PB : [u8; 6]
+var SCR_PC : [u8; 6]
+var SCR_BR : [u8; 6]
+
+/* ─── SHA-256 helpers ──────────────────────────────────────────────── */
+
+fn hx_rotr(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+fn hx_init_k_once() -> u32 {
+    if HX_K_INIT == 1u8 { return 0u32 }
+    HX_K[0]  = 0x428a2f98u32; HX_K[1]  = 0x71374491u32
+    HX_K[2]  = 0xb5c0fbcfu32; HX_K[3]  = 0xe9b5dba5u32
+    HX_K[4]  = 0x3956c25bu32; HX_K[5]  = 0x59f111f1u32
+    HX_K[6]  = 0x923f82a4u32; HX_K[7]  = 0xab1c5ed5u32
+    HX_K[8]  = 0xd807aa98u32; HX_K[9]  = 0x12835b01u32
+    HX_K[10] = 0x243185beu32; HX_K[11] = 0x550c7dc3u32
+    HX_K[12] = 0x72be5d74u32; HX_K[13] = 0x80deb1feu32
+    HX_K[14] = 0x9bdc06a7u32; HX_K[15] = 0xc19bf174u32
+    HX_K[16] = 0xe49b69c1u32; HX_K[17] = 0xefbe4786u32
+    HX_K[18] = 0x0fc19dc6u32; HX_K[19] = 0x240ca1ccu32
+    HX_K[20] = 0x2de92c6fu32; HX_K[21] = 0x4a7484aau32
+    HX_K[22] = 0x5cb0a9dcu32; HX_K[23] = 0x76f988dau32
+    HX_K[24] = 0x983e5152u32; HX_K[25] = 0xa831c66du32
+    HX_K[26] = 0xb00327c8u32; HX_K[27] = 0xbf597fc7u32
+    HX_K[28] = 0xc6e00bf3u32; HX_K[29] = 0xd5a79147u32
+    HX_K[30] = 0x06ca6351u32; HX_K[31] = 0x14292967u32
+    HX_K[32] = 0x27b70a85u32; HX_K[33] = 0x2e1b2138u32
+    HX_K[34] = 0x4d2c6dfcu32; HX_K[35] = 0x53380d13u32
+    HX_K[36] = 0x650a7354u32; HX_K[37] = 0x766a0abbu32
+    HX_K[38] = 0x81c2c92eu32; HX_K[39] = 0x92722c85u32
+    HX_K[40] = 0xa2bfe8a1u32; HX_K[41] = 0xa81a664bu32
+    HX_K[42] = 0xc24b8b70u32; HX_K[43] = 0xc76c51a3u32
+    HX_K[44] = 0xd192e819u32; HX_K[45] = 0xd6990624u32
+    HX_K[46] = 0xf40e3585u32; HX_K[47] = 0x106aa070u32
+    HX_K[48] = 0x19a4c116u32; HX_K[49] = 0x1e376c08u32
+    HX_K[50] = 0x2748774cu32; HX_K[51] = 0x34b0bcb5u32
+    HX_K[52] = 0x391c0cb3u32; HX_K[53] = 0x4ed8aa4au32
+    HX_K[54] = 0x5b9cca4fu32; HX_K[55] = 0x682e6ff3u32
+    HX_K[56] = 0x748f82eeu32; HX_K[57] = 0x78a5636fu32
+    HX_K[58] = 0x84c87814u32; HX_K[59] = 0x8cc70208u32
+    HX_K[60] = 0x90befffau32; HX_K[61] = 0xa4506cebu32
+    HX_K[62] = 0xbef9a3f7u32; HX_K[63] = 0xc67178f2u32
+    HX_K_INIT = 1u8
+    return 0u32
+}
+
+fn hx_sha_init() -> u32 {
+    HX_H[0] = 0x6a09e667u32; HX_H[1] = 0xbb67ae85u32
+    HX_H[2] = 0x3c6ef372u32; HX_H[3] = 0xa54ff53au32
+    HX_H[4] = 0x510e527fu32; HX_H[5] = 0x9b05688cu32
+    HX_H[6] = 0x1f83d9abu32; HX_H[7] = 0x5be0cd19u32
+    HX_BITS = 0u64
+    HX_BUFLEN = 0u32
+    return 0u32
+}
+
+fn hx_sha_block() -> u32 {
+    for i in 0..16 {
+        let i4: u32 = (i as u32) * 4u32
+        let b0: u32 = HX_BUF[i4 + 0u32] as u32
+        let b1: u32 = HX_BUF[i4 + 1u32] as u32
+        let b2: u32 = HX_BUF[i4 + 2u32] as u32
+        let b3: u32 = HX_BUF[i4 + 3u32] as u32
+        HX_W[i] = (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3
+    }
+    for j in 16..64 {
+        let w15: u32 = HX_W[j - 15]
+        let w2:  u32 = HX_W[j - 2]
+        let s0: u32 = hx_rotr(w15, 7u32) ^ hx_rotr(w15, 18u32) ^ (w15 >> 3u32)
+        let s1: u32 = hx_rotr(w2, 17u32) ^ hx_rotr(w2, 19u32) ^ (w2 >> 10u32)
+        HX_W[j] = HX_W[j - 16] + s0 + HX_W[j - 7] + s1
+    }
+    let mut a: u32 = HX_H[0]
+    let mut b: u32 = HX_H[1]
+    let mut c: u32 = HX_H[2]
+    let mut d: u32 = HX_H[3]
+    let mut e: u32 = HX_H[4]
+    let mut f: u32 = HX_H[5]
+    let mut g: u32 = HX_H[6]
+    let mut h: u32 = HX_H[7]
+    for i in 0..64 {
+        let S1: u32 = hx_rotr(e, 6u32) ^ hx_rotr(e, 11u32) ^ hx_rotr(e, 25u32)
+        let ch: u32 = (e & f) ^ ((~e) & g)
+        let t1: u32 = h + S1 + ch + HX_K[i] + HX_W[i]
+        let S0: u32 = hx_rotr(a, 2u32) ^ hx_rotr(a, 13u32) ^ hx_rotr(a, 22u32)
+        let mj: u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2: u32 = S0 + mj
+        h = g; g = f; f = e
+        e = d + t1
+        d = c; c = b; b = a
+        a = t1 + t2
+    }
+    HX_H[0] = HX_H[0] + a
+    HX_H[1] = HX_H[1] + b
+    HX_H[2] = HX_H[2] + c
+    HX_H[3] = HX_H[3] + d
+    HX_H[4] = HX_H[4] + e
+    HX_H[5] = HX_H[5] + f
+    HX_H[6] = HX_H[6] + g
+    HX_H[7] = HX_H[7] + h
+    return 0u32
+}
+
+fn hx_sha_update(data: *u8, len: u64) -> u32 {
+    HX_BITS = HX_BITS + (len * 8u64)
+    let mut off: u64 = 0u64
+    let mut rem: u64 = len
+    while rem > 0u64 {
+        let mut take: u64 = 64u64 - (HX_BUFLEN as u64)
+        if take > rem { take = rem }
+        for k in 0..64 {
+            if (k as u64) < take {
+                HX_BUF[HX_BUFLEN + (k as u32)] = data[off + (k as u64)]
+            }
+        }
+        HX_BUFLEN = HX_BUFLEN + (take as u32)
+        off = off + take
+        rem = rem - take
+        if HX_BUFLEN == 64u32 {
+            hx_sha_block()
+            HX_BUFLEN = 0u32
+        }
+    }
+    return 0u32
+}
+
+fn hx_sha_update_byte(b: u8) -> u32 {
+    HX_BITS = HX_BITS + 8u64
+    HX_BUF[HX_BUFLEN] = b
+    HX_BUFLEN = HX_BUFLEN + 1u32
+    if HX_BUFLEN == 64u32 {
+        hx_sha_block()
+        HX_BUFLEN = 0u32
+    }
+    return 0u32
+}
+
+fn hx_sha_final(out: *u8) -> u32 {
+    let final_bits: u64 = HX_BITS
+    hx_sha_update_byte(0x80u8)
+    while HX_BUFLEN != 56u32 {
+        hx_sha_update_byte(0u8)
+    }
+    hx_sha_update_byte(((final_bits >> 56u64) & 0xffu64) as u8)
+    hx_sha_update_byte(((final_bits >> 48u64) & 0xffu64) as u8)
+    hx_sha_update_byte(((final_bits >> 40u64) & 0xffu64) as u8)
+    hx_sha_update_byte(((final_bits >> 32u64) & 0xffu64) as u8)
+    hx_sha_update_byte(((final_bits >> 24u64) & 0xffu64) as u8)
+    hx_sha_update_byte(((final_bits >> 16u64) & 0xffu64) as u8)
+    hx_sha_update_byte(((final_bits >>  8u64) & 0xffu64) as u8)
+    hx_sha_update_byte(( final_bits          & 0xffu64) as u8)
+    for i in 0..8 {
+        let hi: u32 = HX_H[i]
+        let i4: u32 = (i as u32) * 4u32
+        out[i4 + 0u32] = ((hi >> 24u32) & 0xffu32) as u8
+        out[i4 + 1u32] = ((hi >> 16u32) & 0xffu32) as u8
+        out[i4 + 2u32] = ((hi >>  8u32) & 0xffu32) as u8
+        out[i4 + 3u32] = ( hi          & 0xffu32) as u8
+    }
+    return 0u32
+}
+
+/* ─── Trit helpers ────────────────────────────────────────────────── */
+
+fn hx_trit_valid(t: u8) -> u32 {
+    if t == 0u8 { return 1u32 }
+    if t == 1u8 { return 1u32 }
+    if t == 2u8 { return 1u32 }
+    return 0u32
+}
+
+fn hx_trit_compose(a: u8, b: u8) -> u8 {
+    if hx_trit_valid(a) == 0u32 { return 3u8 }
+    if hx_trit_valid(b) == 0u32 { return 3u8 }
+    if a == 1u8 { return b }
+    if b == 1u8 { return a }
+    if a == 0u8 { return 0u8 }
+    if b == 0u8 { return 0u8 }
+    return 2u8
+}
+
+fn hx_trit_neg(a: u8) -> u8 {
+    if a == 0u8 { return 2u8 }
+    if a == 2u8 { return 0u8 }
+    if a == 1u8 { return 1u8 }
+    return 3u8
+}
+
+/* Pillar-position-aware compose operands (III-HEXAD.md S2.4; encoding here is
+ * NEG=0, ZERO=1, POS=2).  AND: NEG dominates, POS iff both POS, else ZERO.
+ * OR: POS dominates, NEG iff both NEG, else ZERO. */
+fn hx_trit_and(a: u8, b: u8) -> u8 {
+    if hx_trit_valid(a) == 0u32 { return 3u8 }
+    if hx_trit_valid(b) == 0u32 { return 3u8 }
+    if a == 0u8 { return 0u8 }
+    if b == 0u8 { return 0u8 }
+    if a == 1u8 { return 1u8 }
+    if b == 1u8 { return 1u8 }
+    return 2u8
+}
+fn hx_trit_or(a: u8, b: u8) -> u8 {
+    if hx_trit_valid(a) == 0u32 { return 3u8 }
+    if hx_trit_valid(b) == 0u32 { return 3u8 }
+    if a == 2u8 { return 2u8 }
+    if b == 2u8 { return 2u8 }
+    if a == 1u8 { return 1u8 }
+    if b == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* ─── Public: pack / unpack ───────────────────────────────────────── */
+
+fn iii_hexad_pack_pillars(pillars: *u8) -> u32 @export {
+    let zero: u64 = 0u64
+    if (pillars as u64) == zero { return 0xFFFFu32 }
+    let mut v: u32 = 0u32
+    let mut base: u32 = 1u32
+    for i in 0..6 {
+        let t: u8 = pillars[i as u32]
+        if hx_trit_valid(t) == 0u32 { return 0xFFFFu32 }
+        v = v + (t as u32) * base
+        base = base * 3u32
+    }
+    return v & 0xFFFFu32
+}
+
+fn iii_hexad_unpack_pillars(packed: u32, out: *u8) -> u32 @export {
+    let zero: u64 = 0u64
+    if (out as u64) == zero { return 0u32 }
+    if packed >= 729u32 {
+        for i in 0..6 { out[i as u32] = 3u8 }
+        return 0u32
+    }
+    let mut p: u32 = packed
+    for i in 0..6 {
+        out[i as u32] = (p % 3u32) as u8
+        p = p / 3u32
+    }
+    return 0u32
+}
+
+fn iii_hexad_pillar(packed: u32, pillar_index: u32) -> u8 @export {
+    if pillar_index >= 6u32 { return 3u8 }
+    if packed >= 729u32 { return 3u8 }
+    let mut v: u32 = packed
+    let mut i: u32 = 0u32
+    while i < pillar_index {
+        v = v / 3u32
+        i = i + 1u32
+    }
+    return (v % 3u32) as u8
+}
+
+/* ─── AST-trit ↔ pillar-trit bridge ───────────────────────────────── */
+
+fn hx_trit_from_ast(t: u32) -> u8 {
+    if t == 0u32 { return 0u8 }
+    if t == 1u32 { return 1u8 }
+    if t == 2u32 { return 2u8 }
+    return 3u8
+}
+
+fn hx_trit_to_ast(t: u8) -> u32 {
+    if t == 0u8 { return 0u32 }
+    if t == 1u8 { return 1u32 }
+    if t == 2u8 { return 2u32 }
+    return 3u32
+}
+
+/* C side passes iii_ast_trit_t as a 4-byte enum; cg_r3 only knows
+ * byte-stride for *u8 and quad-stride for everything else, so we read
+ * the low byte of each 4-byte slot directly via *u8 view.  Avoids
+ * binding intermediate `let` slots inside the loop body — cg_r3's
+ * local-symbol lookup mis-resolves names emitted after for-counter
+ * slot allocation. */
+fn iii_hexad_pack_from_ast_trits(trits: *u8) -> u32 @export {
+    let zero: u64 = 0u64
+    if (trits as u64) == zero { return 0xFFFFu32 }
+    /* unrolled — six pillars × 4-byte stride. */
+    let p0: u8 = hx_trit_from_ast(trits[0u32] as u32)
+    if p0 == 3u8 { return 0xFFFFu32 }
+    let p1: u8 = hx_trit_from_ast(trits[4u32] as u32)
+    if p1 == 3u8 { return 0xFFFFu32 }
+    let p2: u8 = hx_trit_from_ast(trits[8u32] as u32)
+    if p2 == 3u8 { return 0xFFFFu32 }
+    let p3: u8 = hx_trit_from_ast(trits[12u32] as u32)
+    if p3 == 3u8 { return 0xFFFFu32 }
+    let p4: u8 = hx_trit_from_ast(trits[16u32] as u32)
+    if p4 == 3u8 { return 0xFFFFu32 }
+    let p5: u8 = hx_trit_from_ast(trits[20u32] as u32)
+    if p5 == 3u8 { return 0xFFFFu32 }
+    SCR_PA[0u32] = p0
+    SCR_PA[1u32] = p1
+    SCR_PA[2u32] = p2
+    SCR_PA[3u32] = p3
+    SCR_PA[4u32] = p4
+    SCR_PA[5u32] = p5
+    return iii_hexad_pack_pillars(SCR_PA as *u8)
+}
+
+fn iii_hexad_unpack_to_ast_trits(packed: u32, out: *u8) -> u32 @export {
+    let zero: u64 = 0u64
+    if (out as u64) == zero { return 0u32 }
+    iii_hexad_unpack_pillars(packed, SCR_PA as *u8)
+    let v0: u32 = hx_trit_to_ast(SCR_PA[0u32])
+    let v1: u32 = hx_trit_to_ast(SCR_PA[1u32])
+    let v2: u32 = hx_trit_to_ast(SCR_PA[2u32])
+    let v3: u32 = hx_trit_to_ast(SCR_PA[3u32])
+    let v4: u32 = hx_trit_to_ast(SCR_PA[4u32])
+    let v5: u32 = hx_trit_to_ast(SCR_PA[5u32])
+    out[0u32]  = (v0 & 0xffu32) as u8
+    out[1u32]  = 0u8
+    out[2u32]  = 0u8
+    out[3u32]  = 0u8
+    out[4u32]  = (v1 & 0xffu32) as u8
+    out[5u32]  = 0u8
+    out[6u32]  = 0u8
+    out[7u32]  = 0u8
+    out[8u32]  = (v2 & 0xffu32) as u8
+    out[9u32]  = 0u8
+    out[10u32] = 0u8
+    out[11u32] = 0u8
+    out[12u32] = (v3 & 0xffu32) as u8
+    out[13u32] = 0u8
+    out[14u32] = 0u8
+    out[15u32] = 0u8
+    out[16u32] = (v4 & 0xffu32) as u8
+    out[17u32] = 0u8
+    out[18u32] = 0u8
+    out[19u32] = 0u8
+    out[20u32] = (v5 & 0xffu32) as u8
+    out[21u32] = 0u8
+    out[22u32] = 0u8
+    out[23u32] = 0u8
+    return 0u32
+}
+
+/* ─── Public: composition ─────────────────────────────────────────── */
+
+fn iii_hexad_compose_packed(a: u32, b: u32) -> u32 @export {
+    if a >= 729u32 { return 0xFFFFu32 }
+    if b >= 729u32 { return 0xFFFFu32 }
+    iii_hexad_unpack_pillars(a, SCR_PA as *u8)
+    iii_hexad_unpack_pillars(b, SCR_PB as *u8)
+    /* S2.4 pillar-position-aware: AND on pillars 1..4 (idx 0..3),
+     * OR on pillars 5..6 (idx 4..5).  Was a uniform hx_trit_compose; that
+     * was the spec defect this Stage-7 fix corrects. */
+    for i in 0..4 {
+        let c: u8 = hx_trit_and(SCR_PA[i as u32], SCR_PB[i as u32])
+        if c == 3u8 { return 0xFFFFu32 }
+        SCR_PC[i as u32] = c
+    }
+    for i in 4..6 {
+        let c: u8 = hx_trit_or(SCR_PA[i as u32], SCR_PB[i as u32])
+        if c == 3u8 { return 0xFFFFu32 }
+        SCR_PC[i as u32] = c
+    }
+    return iii_hexad_pack_pillars(SCR_PC as *u8)
+}
+
+fn iii_hexad_neg_packed(packed: u32) -> u32 @export {
+    if packed >= 729u32 { return 0xFFFFu32 }
+    iii_hexad_unpack_pillars(packed, SCR_PA as *u8)
+    for i in 0..6 {
+        SCR_PA[i as u32] = hx_trit_neg(SCR_PA[i as u32])
+    }
+    return iii_hexad_pack_pillars(SCR_PA as *u8)
+}
+
+fn iii_hexad_active_neg_packed(packed: u32) -> u32 @export {
+    if packed >= 729u32 { return 0xFFFFu32 }
+    iii_hexad_unpack_pillars(packed, SCR_PA as *u8)
+    /* Flip pillars 1..4; preserve 0 and 5. */
+    SCR_PA[1u32] = hx_trit_neg(SCR_PA[1u32])
+    SCR_PA[2u32] = hx_trit_neg(SCR_PA[2u32])
+    SCR_PA[3u32] = hx_trit_neg(SCR_PA[3u32])
+    SCR_PA[4u32] = hx_trit_neg(SCR_PA[4u32])
+    return iii_hexad_pack_pillars(SCR_PA as *u8)
+}
+
+/* ─── Public: PFS table ───────────────────────────────────────────── */
+
+fn brick_load_pillars(which: u32) {
+    let base: u32 = which * 6u32
+    SCR_BR[0u32] = HXC_BRICK_PILLARS[base + 0u32]
+    SCR_BR[1u32] = HXC_BRICK_PILLARS[base + 1u32]
+    SCR_BR[2u32] = HXC_BRICK_PILLARS[base + 2u32]
+    SCR_BR[3u32] = HXC_BRICK_PILLARS[base + 3u32]
+    SCR_BR[4u32] = HXC_BRICK_PILLARS[base + 4u32]
+    SCR_BR[5u32] = HXC_BRICK_PILLARS[base + 5u32]
+}
+
+fn iii_hexad_brick_packed(which: u32) -> u32 @export {
+    if which >= 6u32 { return 0xFFFFu32 }
+    brick_load_pillars(which)
+    return iii_hexad_pack_pillars(SCR_BR as *u8)
+}
+
+fn iii_hexad_brick_name(which: u32) -> u64 @export {
+    if which == 0u32 { return BRICK_NAME_0 as u64 }
+    if which == 1u32 { return BRICK_NAME_1 as u64 }
+    if which == 2u32 { return BRICK_NAME_2 as u64 }
+    if which == 3u32 { return BRICK_NAME_3 as u64 }
+    if which == 4u32 { return BRICK_NAME_4 as u64 }
+    if which == 5u32 { return BRICK_NAME_5 as u64 }
+    return BRICK_NAME_UNK as u64
+}
+
+/* ─── Bitmap init ─────────────────────────────────────────────────── */
+
+fn iii_hexad_check_init() -> u32 @export {
+    if HXBM_INIT == 1u8 { return 0u32 }
+    /* Default: every bit in the 144 bytes set. */
+    for i in 0..144 {
+        HXBM[i as u32] = 0xffu8
+    }
+    /* Clear bits past 728 (slots 729..1151) — bits in bytes 91..143 high
+     * portions.  Walk bit-by-bit for byte-canonical parity. */
+    let mut bit: u32 = 729u32
+    while bit < 1152u32 {
+        let by: u32 = bit / 8u32
+        let bo: u32 = bit % 8u32
+        let mask_u32: u32 = 1u32 << bo
+        let mask: u8 = mask_u32 as u8
+        HXBM[by] = HXBM[by] & (~mask)
+        bit = bit + 1u32
+    }
+    /* Clear the six bricking hexads. */
+    let mut b: u32 = 0u32
+    while b < 6u32 {
+        brick_load_pillars(b)
+        let p: u32 = iii_hexad_pack_pillars(SCR_BR as *u8)
+        if p < 729u32 {
+            let by: u32 = p / 8u32
+            let bo: u32 = p % 8u32
+            let mask_u32: u32 = 1u32 << bo
+            let mask: u8 = mask_u32 as u8
+            HXBM[by] = HXBM[by] & (~mask)
+        }
+        b = b + 1u32
+    }
+    HXBM_INIT = 1u8
+    return 0u32
+}
+
+fn iii_hexad_check_is_init() -> u32 @export {
+    if HXBM_INIT == 1u8 { return 1u32 }
+    return 0u32
+}
+
+/* ─── Public: admission queries ───────────────────────────────────── */
+
+fn iii_hexad_packed_admitted(packed: u32) -> u32 @export {
+    iii_hexad_check_init()
+    if packed >= 729u32 { return 0u32 }
+    let by: u32 = packed / 8u32
+    let bo: u32 = packed % 8u32
+    let bit: u8 = (HXBM[by] >> (bo as u8)) & 1u8
+    if bit == 1u8 { return 1u32 }
+    return 0u32
+}
+
+fn iii_hexad_pillars_admitted(pillars: *u8) -> u32 @export {
+    let zero: u64 = 0u64
+    if (pillars as u64) == zero { return 0u32 }
+    let p: u32 = iii_hexad_pack_pillars(pillars)
+    if p == 0xFFFFu32 { return 0u32 }
+    return iii_hexad_packed_admitted(p)
+}
+
+/* ─── Public: witness / introspection ─────────────────────────────── */
+
+fn iii_hexad_canonical_bytes(out: *u8) -> u32 @export {
+    iii_hexad_check_init()
+    let zero: u64 = 0u64
+    if (out as u64) == zero { return 0u32 }
+    for i in 0..144 {
+        out[i as u32] = HXBM[i as u32]
+    }
+    return 0u32
+}
+
+fn iii_hexad_bitmap_mhash(out: *u8) -> u32 @export {
+    iii_hexad_check_init()
+    let zero: u64 = 0u64
+    if (out as u64) == zero { return 0u32 }
+    hx_init_k_once()
+    hx_sha_init()
+    hx_sha_update(HXBM as *u8, 144u64)
+    hx_sha_final(out)
+    return 0u32
+}
+
+fn iii_hexad_count_admitted() -> u32 @export {
+    iii_hexad_check_init()
+    let mut n: u32 = 0u32
+    let mut i: u32 = 0u32
+    while i < 729u32 {
+        let by: u32 = i / 8u32
+        let bo: u32 = i % 8u32
+        let bit: u8 = (HXBM[by] >> (bo as u8)) & 1u8
+        if bit == 1u8 { n = n + 1u32 }
+        i = i + 1u32
+    }
+    return n
+}

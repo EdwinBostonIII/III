@@ -1,0 +1,9 @@
+=== CERT-BASELINE Tue May 26 11:37:56 UTC 2026 ===
+iiis-0.exe: 515c0b2082be53b891ccb1d79b712a650e35c63a6d3fa4d3916826004831f672
+iiis-1.exe: a82dc08ef4689c7ea36329d1a20a4ee3786d9b843b7d230e28ed83845862ac0c
+iiis-2.exe: d995857132c13b6eafe0176a6003074b75f7c2e7bff48ea381c37bb33e2071e0
+iiis-3.exe: d995857132c13b6eafe0176a6003074b75f7c2e7bff48ea381c37bb33e2071e0
+libiii_native.a: da6325022f01d5e6dbd87f2bff96e120f2b7d3474da2d25512db651a32262ae5
+iiis-1.mhash(golden): a82dc08ef4689c7ea36329d1a20a4ee3786d9b843b7d230e28ed83845862ac0c
+BASELINE non-joins = 35 (expect 35)
+run_corpus baseline: PASS=456 FAIL=0 SKIP=98 | run_xii: 93/0 | non-joins=35 | iiis2==iiis3 d9958571 | GATE PASSED

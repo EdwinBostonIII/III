@@ -1,0 +1,321 @@
+/* numera/uncertainty.iii — Module 4 (apotheosis): the one typed gap.
+ *
+ * A gap is not a null and not an error: it is a typed value carrying WHY it is
+ * unknown and WHAT caused it.  Operating on an unknown produces a DERIVED gap
+ * whose antecedents are the gaps that caused it -- a content-addressed (cad/M1)
+ * provenance DAG walkable to root causes.  The ZERO-inhabited reading of the M2
+ * ternary algebra.
+ *
+ * Arithmetic is TOTAL (never raises), SOUND (known op known = the right value),
+ * and maximally PRECISE: 0 * unknown == Known(0) (the multiplicative annihilator
+ * holds even when the other operand is unknown), and div-by-zero is an essential
+ * gap, never a trap.
+ *
+ * Value cell (ucell, 16 bytes by pointer): [0]=tag (0=KNOWN,1=GAP); [8..16)=i64
+ * body (the known value, or the gap-id widened to i64).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: cad.iii (-> keccak256.iii).
+ */
+module numera_uncertainty
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const UNC_OK         : i32 = 0i32
+const UNC_TAG_KNOWN  : u8 = 0u8
+const UNC_TAG_GAP    : u8 = 1u8
+const UNC_ESSENTIAL  : u8 = 0u8
+const UNC_HOLE       : u8 = 1u8
+const UNC_REDACTED   : u8 = 2u8
+const UNC_DERIVED    : u8 = 3u8
+const UNC_ADD : u32 = 0u32
+const UNC_SUB : u32 = 1u32
+const UNC_MUL : u32 = 2u32
+const UNC_DIV : u32 = 3u32
+const UNC_R_DIV0       : u32 = 1u32
+const UNC_R_DERIVED    : u32 = 2u32
+const UNC_R_ARENA_FULL : u32 = 3u32
+const UNC_MAX     : u32 = 1024u32
+const UNC_U32MASK : u64 = 4294967295u64
+
+var UNC_KIND   : [u8;  1024]
+var UNC_REASON : [u32; 1024]
+var UNC_A0     : [u32; 1024]
+var UNC_A1     : [u32; 1024]
+var UNC_NA     : [u8;  1024]
+var UNC_NEXT   : u32 = 0u32
+var UNC_INITED : u8  = 0u8
+var UNC_STACK  : [u32; 1024]
+var UNC_ADDRBUF : [u8; 16]
+/* selftest scratch */
+var UNC_CA : [u8; 16]
+var UNC_CB : [u8; 16]
+var UNC_CO : [u8; 16]
+var UNC_AD1 : [u8; 32]
+var UNC_AD2 : [u8; 32]
+var UNC_ROOTS : [u32; 8]
+
+/* slot 0 = the arena-full / ill-request sentinel: a well-formed essential gap. */
+fn unc_init() -> i32 @export {
+    if UNC_INITED == 1u8 { return UNC_OK }
+    UNC_KIND[0u64] = UNC_ESSENTIAL
+    UNC_REASON[0u64] = UNC_R_ARENA_FULL
+    UNC_A0[0u64] = 0u32
+    UNC_A1[0u64] = 0u32
+    UNC_NA[0u64] = 0u8
+    UNC_NEXT = 1u32
+    UNC_INITED = 1u8
+    return UNC_OK
+}
+
+/* ----------------------------- ucell accessors ---------------------------- */
+fn unc_set_known(cell: *u8, v: i64) -> i32 @export {
+    let cp : *u8 = cell
+    cp[0u64] = UNC_TAG_KNOWN
+    let bp : *i64 = (cell as u64 + 8u64) as *i64
+    bp[0u64] = v
+    return UNC_OK
+}
+fn unc_set_gap(cell: *u8, gid: u32) -> i32 @export {
+    let cp : *u8 = cell
+    cp[0u64] = UNC_TAG_GAP
+    let bp : *i64 = (cell as u64 + 8u64) as *i64
+    bp[0u64] = gid as i64
+    return UNC_OK
+}
+fn unc_is_gap(cell: *u8) -> u8 @export {
+    let cp : *u8 = cell
+    if cp[0u64] == UNC_TAG_GAP { return 1u8 }
+    return 0u8
+}
+fn unc_known_val(cell: *u8) -> i64 @export {
+    let bp : *i64 = (cell as u64 + 8u64) as *i64
+    return bp[0u64]
+}
+fn unc_gap_id(cell: *u8) -> u32 @export {
+    let bp : *i64 = (cell as u64 + 8u64) as *i64
+    return ((bp[0u64] as u64) & UNC_U32MASK) as u32
+}
+
+/* ----------------------------- gap allocation ----------------------------- */
+fn unc_gap_root(kind: u8, reason: u32) -> u32 @export {
+    unc_init()
+    if reason == 0u32 { return 0u32 }
+    if UNC_NEXT >= UNC_MAX { return 0u32 }
+    let id : u32 = UNC_NEXT
+    let s : u64 = id as u64
+    UNC_KIND[s] = kind
+    UNC_REASON[s] = reason
+    UNC_A0[s] = 0u32
+    UNC_A1[s] = 0u32
+    UNC_NA[s] = 0u8
+    UNC_NEXT = UNC_NEXT + 1u32
+    return id
+}
+fn unc_gap_derived(a0: u32, a1: u32, na: u8, reason: u32) -> u32 @export {
+    unc_init()
+    if reason == 0u32 { return 0u32 }
+    if na == 0u8 { return 0u32 }
+    if UNC_NEXT >= UNC_MAX { return 0u32 }
+    let id : u32 = UNC_NEXT
+    let s : u64 = id as u64
+    UNC_KIND[s] = UNC_DERIVED
+    UNC_REASON[s] = reason
+    UNC_A0[s] = a0
+    UNC_A1[s] = a1
+    UNC_NA[s] = na
+    UNC_NEXT = UNC_NEXT + 1u32
+    return id
+}
+
+/* ----------------------------- the total/sound/precise op ----------------- */
+fn unc_apply(op: u32, a: *u8, b: *u8, out: *u8) -> i32 @export {
+    unc_init()
+    let ag : u8 = unc_is_gap(a)
+    let bg : u8 = unc_is_gap(b)
+    /* precise annihilator: MUL by a KNOWN 0 -> Known(0), even if the other is a gap */
+    if op == UNC_MUL {
+        if ag == 0u8 {
+            if unc_known_val(a) == 0i64 { return unc_set_known(out, 0i64) }
+        }
+        if bg == 0u8 {
+            if unc_known_val(b) == 0i64 { return unc_set_known(out, 0i64) }
+        }
+    }
+    /* both known: compute (div-by-0 -> essential gap, never a trap) */
+    if ag == 0u8 {
+        if bg == 0u8 {
+            let av : i64 = unc_known_val(a)
+            let bv : i64 = unc_known_val(b)
+            if op == UNC_ADD { return unc_set_known(out, av + bv) }
+            if op == UNC_SUB { return unc_set_known(out, av - bv) }
+            if op == UNC_MUL { return unc_set_known(out, av * bv) }
+            if op == UNC_DIV {
+                if bv == 0i64 { return unc_set_gap(out, unc_gap_root(UNC_ESSENTIAL, UNC_R_DIV0)) }
+                return unc_set_known(out, av / bv)
+            }
+            return unc_set_known(out, 0i64)
+        }
+    }
+    /* >= 1 gap: derived gap whose antecedents are the gap operands */
+    let mut a0 : u32 = 0u32
+    let mut a1 : u32 = 0u32
+    let mut na : u8 = 0u8
+    if ag == 1u8 { a0 = unc_gap_id(a)  na = 1u8 }
+    if bg == 1u8 {
+        if na == 0u8 { a0 = unc_gap_id(b)  na = 1u8 }
+        if na == 1u8 {
+            if ag == 1u8 { a1 = unc_gap_id(b)  na = 2u8 }
+        }
+    }
+    return unc_set_gap(out, unc_gap_derived(a0, a1, na, UNC_R_DERIVED))
+}
+
+/* ----------------------------- provenance (worklist; no recursion, W15) --- */
+fn unc_root_causes(gid: u32, out_ids: *u32, cap: u32) -> u32 @export {
+    unc_init()
+    let op : *u32 = out_ids
+    let mut sp : u64 = 1u64
+    UNC_STACK[0u64] = gid
+    let mut count : u32 = 0u32
+    while sp > 0u64 {
+        sp = sp - 1u64
+        let g : u32 = UNC_STACK[sp]
+        let gs : u64 = g as u64
+        if UNC_NA[gs] == 0u8 {
+            if count < cap { op[count as u64] = g  count = count + 1u32 }
+        }
+        if UNC_NA[gs] != 0u8 {
+            if sp < (UNC_MAX as u64) { UNC_STACK[sp] = UNC_A0[gs]  sp = sp + 1u64 }
+            if UNC_NA[gs] == 2u8 {
+                if sp < (UNC_MAX as u64) { UNC_STACK[sp] = UNC_A1[gs]  sp = sp + 1u64 }
+            }
+        }
+    }
+    return count
+}
+
+fn unc_well_formed(gid: u32) -> u8 @export {
+    unc_init()
+    let mut sp : u64 = 1u64
+    UNC_STACK[0u64] = gid
+    while sp > 0u64 {
+        sp = sp - 1u64
+        let g : u32 = UNC_STACK[sp]
+        let gs : u64 = g as u64
+        if UNC_REASON[gs] == 0u32 { return 0u8 }
+        if UNC_KIND[gs] == UNC_DERIVED {
+            if UNC_NA[gs] == 0u8 { return 0u8 }
+        }
+        if UNC_NA[gs] != 0u8 {
+            if sp < (UNC_MAX as u64) { UNC_STACK[sp] = UNC_A0[gs]  sp = sp + 1u64 }
+            if UNC_NA[gs] == 2u8 {
+                if sp < (UNC_MAX as u64) { UNC_STACK[sp] = UNC_A1[gs]  sp = sp + 1u64 }
+            }
+        }
+    }
+    return 1u8
+}
+
+/* ----------------------------- content address (M1) ----------------------- */
+fn unc_gap_addr(gid: u32, out: *u8) -> i32 @export {
+    unc_init()
+    let gs : u64 = gid as u64
+    let bp : *u8 = (&UNC_ADDRBUF as u64) as *u8
+    bp[0u64] = UNC_KIND[gs]
+    let r : u32 = UNC_REASON[gs]
+    bp[1u64] = (r & 0xFFu32) as u8
+    bp[2u64] = ((r >> 8u32) & 0xFFu32) as u8
+    bp[3u64] = ((r >> 16u32) & 0xFFu32) as u8
+    bp[4u64] = ((r >> 24u32) & 0xFFu32) as u8
+    let x0 : u32 = UNC_A0[gs]
+    bp[5u64] = (x0 & 0xFFu32) as u8
+    bp[6u64] = ((x0 >> 8u32) & 0xFFu32) as u8
+    bp[7u64] = ((x0 >> 16u32) & 0xFFu32) as u8
+    bp[8u64] = ((x0 >> 24u32) & 0xFFu32) as u8
+    let x1 : u32 = UNC_A1[gs]
+    bp[9u64]  = (x1 & 0xFFu32) as u8
+    bp[10u64] = ((x1 >> 8u32) & 0xFFu32) as u8
+    bp[11u64] = ((x1 >> 16u32) & 0xFFu32) as u8
+    bp[12u64] = ((x1 >> 24u32) & 0xFFu32) as u8
+    bp[13u64] = UNC_NA[gs]
+    cad_oneshot(1u32, bp, 14u64, out)
+    return UNC_OK
+}
+
+/* ----------------------------- the falsifier KAT -------------------------- */
+fn unc_selftest() -> u64 @export {
+    unc_init()
+    let ca : *u8 = (&UNC_CA as u64) as *u8
+    let cb : *u8 = (&UNC_CB as u64) as *u8
+    let co : *u8 = (&UNC_CO as u64) as *u8
+    /* 1. sound: known op known = the right value (also: total, returns OK + writes out) */
+    unc_set_known(ca, 7i64)
+    unc_set_known(cb, 5i64)
+    unc_apply(UNC_ADD, ca, cb, co)
+    if unc_is_gap(co) != 0u8 { return 1u64 }
+    if unc_known_val(co) != 12i64 { return 2u64 }
+    unc_apply(UNC_SUB, ca, cb, co)
+    if unc_known_val(co) != 2i64 { return 3u64 }
+    unc_apply(UNC_MUL, ca, cb, co)
+    if unc_known_val(co) != 35i64 { return 4u64 }
+    unc_set_known(ca, 35i64)
+    unc_apply(UNC_DIV, ca, cb, co)
+    if unc_known_val(co) != 7i64 { return 5u64 }
+    unc_set_known(ca, -7i64)
+    unc_set_known(cb, 2i64)
+    unc_apply(UNC_DIV, ca, cb, co)
+    if unc_known_val(co) != -3i64 { return 6u64 }   /* toward zero */
+    /* 2. precise annihilator: 0 * unknown == Known(0) */
+    let g1 : u32 = unc_gap_root(UNC_HOLE, 10u32)
+    unc_set_known(ca, 0i64)
+    unc_set_gap(cb, g1)
+    unc_apply(UNC_MUL, ca, cb, co)
+    if unc_is_gap(co) != 0u8 { return 7u64 }
+    if unc_known_val(co) != 0i64 { return 8u64 }
+    unc_apply(UNC_MUL, cb, ca, co)
+    if unc_is_gap(co) != 0u8 { return 9u64 }
+    if unc_known_val(co) != 0i64 { return 10u64 }
+    /* 3. div-by-zero = essential gap (total, no trap) */
+    unc_set_known(ca, 1i64)
+    unc_set_known(cb, 0i64)
+    unc_apply(UNC_DIV, ca, cb, co)
+    if unc_is_gap(co) != 1u8 { return 11u64 }
+    if UNC_KIND[unc_gap_id(co) as u64] != UNC_ESSENTIAL { return 12u64 }
+    /* 4. derived gap has non-empty provenance + well-formed + root_causes */
+    unc_set_known(ca, 1i64)
+    unc_set_gap(cb, g1)
+    unc_apply(UNC_ADD, ca, cb, co)
+    if unc_is_gap(co) != 1u8 { return 13u64 }
+    let dg : u32 = unc_gap_id(co)
+    if UNC_KIND[dg as u64] != UNC_DERIVED { return 14u64 }
+    if UNC_NA[dg as u64] == 0u8 { return 15u64 }
+    if unc_well_formed(dg) != 1u8 { return 16u64 }
+    let rc : *u32 = (&UNC_ROOTS as u64) as *u32
+    if unc_root_causes(dg, rc, 8u32) != 1u32 { return 17u64 }
+    if rc[0u64] != g1 { return 18u64 }
+    /* 5. root_causes walks a chain g1 <- g2 <- g3 to the single root g1 */
+    let g2 : u32 = unc_gap_derived(g1, 0u32, 1u8, 20u32)
+    let g3 : u32 = unc_gap_derived(g2, 0u32, 1u8, 21u32)
+    if unc_root_causes(g3, rc, 8u32) != 1u32 { return 19u64 }
+    if rc[0u64] != g1 { return 20u64 }
+    if unc_well_formed(g3) != 1u8 { return 21u64 }
+    /* 6. well_formed negatives (white-box inject into a free high slot) */
+    UNC_KIND[900u64] = UNC_ESSENTIAL
+    UNC_REASON[900u64] = 0u32
+    UNC_NA[900u64] = 0u8
+    if unc_well_formed(900u32) != 0u8 { return 22u64 }
+    UNC_KIND[901u64] = UNC_DERIVED
+    UNC_REASON[901u64] = 5u32
+    UNC_NA[901u64] = 0u8
+    if unc_well_formed(901u32) != 0u8 { return 23u64 }
+    /* 7. addr determinism + distinctness (M1) */
+    let ad1 : *u8 = (&UNC_AD1 as u64) as *u8
+    let ad2 : *u8 = (&UNC_AD2 as u64) as *u8
+    unc_gap_addr(g1, ad1)
+    unc_gap_addr(g1, ad2)
+    if cad_eq(ad1, ad2) != 1u8 { return 24u64 }
+    unc_gap_addr(g2, ad2)
+    if cad_eq(ad1, ad2) == 1u8 { return 25u64 }
+    return 99u64
+}

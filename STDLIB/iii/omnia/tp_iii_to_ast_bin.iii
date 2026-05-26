@@ -1,0 +1,47 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_ast_bin.iii
+ *
+ * Transform pattern: FORM_III → FORM_AST_BINARY
+ * FROZEN SPEC §7B.6 slot 25; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Emits a binary AST representation: a fixed 16-byte header followed by
+ * the source bytes verbatim. The header records (magic, version, src_len).
+ * This is a baseline that round-trips through tp_ast_bin_to_iii.
+ */
+
+module omnia_tp_iii_to_ast_bin
+
+/* Magic: "IIIASTBN" 8 bytes */
+var TP_AST_MAGIC : [u8; 8] = [73u8, 73u8, 73u8, 65u8, 83u8, 84u8, 66u8, 78u8]
+
+fn tp_ast_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_iii_to_ast_bin(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if 16u64 + src_len > dst_cap { return 0u64 }
+    /* Magic (8 bytes) */
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        tp_ast_emit(dst_buf, (i as u64) & 0xFFu64, TP_AST_MAGIC[i])
+        i = i + 1u32
+    }
+    /* src_len LE u64 (8 bytes) */
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let b : u8 = ((src_len >> ((k & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        tp_ast_emit(dst_buf, 8u64 + ((k as u64) & 0xFu64), b)
+        k = k + 1u32
+    }
+    /* Body */
+    let mut j : u64 = 0u64
+    while j < src_len {
+        let bp : *u8 = (src + j) as *u8
+        tp_ast_emit(dst_buf, 16u64 + j, bp[0u64])
+        j = j + 1u64
+    }
+    return 16u64 + src_len
+}

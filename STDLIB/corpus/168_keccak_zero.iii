@@ -1,0 +1,16 @@
+/* Diagnostic: Keccak-f[1600] on all-zero state. After 24 rounds,
+ * lane 0 = 0xF1258F7940E1DDE7 (FIPS 202 test vector).
+ * First byte little-endian = 0xE7 = 231.
+ */
+module corpus_168
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+
+fn main() -> u64 {
+    let s : *u8 = malloc(200u64)
+    keccak_state_zero(s as u64)
+    keccak_f1600(s as u64)
+    return s[0] as u64
+}

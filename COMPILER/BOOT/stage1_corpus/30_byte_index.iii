@@ -1,0 +1,16 @@
+module corpus_30
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+fn main() -> u64 {
+    let buf: *u8 = malloc(8)
+    /* write 4 bytes via lvalue index, read back via rvalue index */
+    buf[0] = 10
+    buf[1] = 20
+    buf[2] = 12
+    buf[3] = 0
+    let sum: u64 = buf[0] + buf[1] + buf[2]
+    free(buf)
+    return sum
+}

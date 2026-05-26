@@ -1,0 +1,141 @@
+module stage1_ceiling
+
+/* III Stage-1 Ceiling Membership Ledger — .iii port of
+ * COMPILER/BOOT/ceiling.c, demonstrating Phase B Path A.
+ *
+ * Bitmap layout: 1024 × u64 = 8192 bytes = 65,536 bits, indexed by
+ * cycle_kind (16-bit).  Same byte-equivalent layout on little-endian
+ * x86_64 as the C version's u8[8192], so the eventual SHA-256 over
+ * the byte sequence produces an identical mhash.
+ *
+ * Differences from the C version:
+ *   - SHA-256 + bitmap_mhash + canonical_bytes are pending (require
+ *     porting ~80 lines of FIPS-180-4 implementation; tracked as F8.5+
+ *     follow-up).  The lifecycle / admission / popcount surface IS
+ *     fully ported.
+ *   - Stage-1 grammar uniformly uses u64; the C ceiling_t enum and
+ *     bool sealed flag become u64 here (1 = true, 0 = false).
+ *
+ * Bit-set discipline (matches C behavior on little-endian byte order):
+ *   admit/deny/test/popcount index by `kind / 64` for the u64 word
+ *   and `kind % 64` for the bit position within that word.  This is
+ *   byte-equivalent on little-endian to the C version's
+ *   `bitmap[kind/8] op (1 << (kind%8))` because the mapping
+ *   (byte_pos = kind/8, bit_pos = kind%8) lifts to
+ *   (word_pos = kind/64, bit_pos = kind%64) under little-endian
+ *   word packing.
+ */
+
+var g_ceil_bitmap: [u64; 1024]
+var g_ceil_init:   u64 = 0
+var g_ceil_sealed: u64 = 0
+
+fn iii_ceil_init_denied() -> u64 {
+    let mut i: u64 = 0
+    while i < 1024 {
+        g_ceil_bitmap[i] = 0
+        i = i + 1
+    }
+    g_ceil_init = 1
+    g_ceil_sealed = 0
+    return 0
+}
+
+fn iii_ceil_admit_kind(cycle_kind: u64) -> u64 {
+    if g_ceil_sealed > 0 {
+        return 1
+    }
+    g_ceil_init = 1
+    let word_idx: u64 = cycle_kind / 64
+    let bit_pos:  u64 = cycle_kind % 64
+    let mask:     u64 = 1 << bit_pos
+    g_ceil_bitmap[word_idx] = g_ceil_bitmap[word_idx] | mask
+    return 0
+}
+
+fn iii_ceil_deny_kind(cycle_kind: u64) -> u64 {
+    if g_ceil_sealed > 0 {
+        return 1
+    }
+    g_ceil_init = 1
+    let word_idx: u64 = cycle_kind / 64
+    let bit_pos:  u64 = cycle_kind % 64
+    let mask:     u64 = 1 << bit_pos
+    let inv:      u64 = ~mask
+    g_ceil_bitmap[word_idx] = g_ceil_bitmap[word_idx] & inv
+    return 0
+}
+
+fn iii_ceil_admitted_kind(cycle_kind: u64) -> u64 {
+    if g_ceil_init == 0 {
+        return 0
+    }
+    let word_idx: u64 = cycle_kind / 64
+    let bit_pos:  u64 = cycle_kind % 64
+    let word:     u64 = g_ceil_bitmap[word_idx]
+    let shifted:  u64 = word >> bit_pos
+    return shifted & 1
+}
+
+fn iii_ceil_seal() -> u64 {
+    g_ceil_sealed = 1
+    return 0
+}
+
+fn iii_ceil_is_sealed() -> u64 {
+    return g_ceil_sealed
+}
+
+fn iii_ceil_count_admitted() -> u64 {
+    if g_ceil_init == 0 {
+        return 0
+    }
+    let mut total: u64 = 0
+    let mut i: u64 = 0
+    while i < 1024 {
+        let mut w: u64 = g_ceil_bitmap[i]
+        while w > 0 {
+            total = total + (w & 1)
+            w = w >> 1
+        }
+        i = i + 1
+    }
+    return total
+}
+
+/* Test driver: admits a few cycle_kinds, seals, queries.  Exit code
+ * encodes the test outcomes:
+ *   bit 0: admitted_kind(0x0200) returns 1
+ *   bit 1: admitted_kind(0x0201) returns 1
+ *   bit 2: admitted_kind(0x0300) returns 0
+ *   bit 3: count_admitted returns 2
+ *   bit 4: is_sealed returns 1
+ *   bit 5: post-seal admit returns 1 (sealed reject)
+ * Pass = exit 63 (0b111111); failure modes leave gaps in the bits.
+ */
+fn main() -> u64 {
+    iii_ceil_init_denied()
+    iii_ceil_admit_kind(512)        /* 0x0200 */
+    iii_ceil_admit_kind(513)        /* 0x0201 */
+    let mut score: u64 = 0
+    if iii_ceil_admitted_kind(512) == 1 {
+        score = score | 1
+    }
+    if iii_ceil_admitted_kind(513) == 1 {
+        score = score | 2
+    }
+    if iii_ceil_admitted_kind(768) == 0 {
+        score = score | 4
+    }
+    if iii_ceil_count_admitted() == 2 {
+        score = score | 8
+    }
+    iii_ceil_seal()
+    if iii_ceil_is_sealed() == 1 {
+        score = score | 16
+    }
+    if iii_ceil_admit_kind(514) == 1 {
+        score = score | 32
+    }
+    return score
+}

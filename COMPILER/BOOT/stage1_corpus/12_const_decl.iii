@@ -1,0 +1,7 @@
+module corpus_12
+
+const ANSWER: u64 = 42
+
+fn main() -> u64 {
+    return ANSWER
+}

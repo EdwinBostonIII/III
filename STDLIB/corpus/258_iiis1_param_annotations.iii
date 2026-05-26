@@ -1,0 +1,11 @@
+/* Diag: parameter-level type annotation parse. */
+module corpus_258
+
+fn f(a: u64 @hexad_kind(FORM), b: u64 @hexad_kind(COMPOSE)) -> u64 {
+    return a + b
+}
+
+fn main() -> u64 {
+    if f(1u64, 2u64) != 3u64 { return 1u64 }
+    return 99u64
+}

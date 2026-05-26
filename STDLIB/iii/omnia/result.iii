@@ -1,0 +1,131 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\result.iii
+ *
+ * III STDLIB - omnia::result   (V1 Stage 7.2: @specialize-monomorphised)
+ *
+ * Error-as-value with provenance.  Two encodings by ok-payload width:
+ *
+ *   <=32-bit + bool  -- inline.  bit 0 = tag (0 = ok, 1 = err); bits 1.. carry
+ *     the ok value (or the err code).  The inline ops are the single generic
+ *     `result__<op><T>` specialised over the integer alphabet via @specialize,
+ *     emitting `result_<type>_<op>`.  err codes are always u32; unwrap_or
+ *     returns the raw u64 ok payload (caller casts).
+ *
+ *   u64  -- side-table (u63 < u64); a 256-slot table holding ok value, err
+ *     code, and tag.  Kept hand-written since the encoding differs per width.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 0.99.
+ */
+
+module omnia_result
+
+const RES_TAG_OK  : u64 = 0u64
+const RES_TAG_ERR : u64 = 1u64
+
+/* Resolution error codes (FROZEN SPEC §0.8, ADR-RES-014).
+ * 19 codes, namespaced 0xE100..0xE112. Closed set. */
+const RESOLUTION_E_NOMATCH         : u32 = 0xE100u32
+const RESOLUTION_E_AMBIGUOUS       : u32 = 0xE101u32
+const RESOLUTION_E_K_UNDERFLOW     : u32 = 0xE102u32
+const RESOLUTION_E_DEPTH           : u32 = 0xE103u32
+const RESOLUTION_E_CAP_DENIED      : u32 = 0xE104u32
+const RESOLUTION_E_REGISTRY_TAMPER : u32 = 0xE105u32
+const RESOLUTION_E_INTENT_TAMPER   : u32 = 0xE106u32
+const RESOLUTION_E_CTX_TAMPER      : u32 = 0xE107u32
+const RESOLUTION_E_UNIFY_FAILED    : u32 = 0xE108u32
+const RESOLUTION_E_DISPATCH_FAULT  : u32 = 0xE109u32
+const RESOLUTION_E_GUARANTEE_VIOL  : u32 = 0xE10Au32
+const RESOLUTION_E_HEXAD_MISMATCH  : u32 = 0xE10Bu32
+const RESOLUTION_E_RING_VIOLATION  : u32 = 0xE10Cu32
+const RESOLUTION_E_INTENT_INVALID  : u32 = 0xE10Du32
+const RESOLUTION_E_REGISTRY_FULL   : u32 = 0xE10Eu32
+const RESOLUTION_E_ARITY_OVERFLOW  : u32 = 0xE10Fu32
+const RESOLUTION_E_OCCURS_CHECK    : u32 = 0xE110u32
+const RESOLUTION_E_BUFFER_OVERFLOW : u32 = 0xE111u32
+const RESOLUTION_E_DETERMINISM_BUG : u32 = 0xE112u32
+
+/* ─── inline tag-in-low-bit, @specialize over the integer alphabet ───── */
+
+fn result__ok<T>(v: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { return ((v as u64) << 1u64) | RES_TAG_OK }
+fn result__err<T>(code: u32) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { return ((code as u64) << 1u64) | RES_TAG_ERR }
+fn result__is_ok<T>(r: u64) -> u8 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) == 0u64 { return 1u8 } return 0u8 }
+fn result__is_err<T>(r: u64) -> u8 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) == 1u64 { return 1u8 } return 0u8 }
+fn result__unwrap_or<T>(r: u64, default: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) != 0u64 { return default as u64 } return r >> 1u64 }
+fn result__err_code<T>(r: u64) -> u32 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (r & 1u64) == 0u64 { return 0u32 } return ((r >> 1u64) & 0xFFFFFFFFu64) as u32 }
+
+/* ─── u64 ok payloads: side-table (u63 < u64) ───────────────────────── */
+
+const RES_SLOTS : u32 = 256u32
+
+var RES_OK_VAL  : [u64; 256]
+var RES_ERR_CODE: [u32; 256]
+var RES_TAG     : [u8;  256]    /* 0 = ok, 1 = err */
+var RES_LIVE    : [u8;  256]
+
+fn result_u64_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < RES_SLOTS {
+        if RES_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn result_u64_ok(v: u64) -> u64 @export {
+    let s : u32 = result_u64_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    RES_OK_VAL[s]   = v
+    RES_ERR_CODE[s] = 0u32
+    RES_TAG[s]      = 0u8
+    RES_LIVE[s]     = 1u8
+    return (s as u64) + 1u64
+}
+
+fn result_u64_err(code: u32) -> u64 @export {
+    let s : u32 = result_u64_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    RES_OK_VAL[s]   = 0u64
+    RES_ERR_CODE[s] = code
+    RES_TAG[s]      = 1u8
+    RES_LIVE[s]     = 1u8
+    return (s as u64) + 1u64
+}
+
+fn result_u64_slot_of(r: u64) -> u32 {
+    if r == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = r - 1u64
+    if s >= (RES_SLOTS as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if RES_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+fn result_u64_is_ok(r: u64) -> u8 @export {
+    let s : u32 = result_u64_slot_of(r)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    if RES_TAG[s] == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn result_u64_unwrap_or(r: u64, default: u64) -> u64 @export {
+    let s : u32 = result_u64_slot_of(r)
+    if s == 0xFFFFFFFFu32 { return default }
+    if RES_TAG[s] != 0u8 { return default }
+    return RES_OK_VAL[s]
+}
+
+fn result_u64_err_code(r: u64) -> u32 @export {
+    let s : u32 = result_u64_slot_of(r)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    if RES_TAG[s] == 0u8 { return 0u32 }
+    return RES_ERR_CODE[s]
+}
+
+fn result_u64_drop(r: u64) -> u8 @export {
+    let s : u32 = result_u64_slot_of(r)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    RES_LIVE[s]     = 0u8
+    RES_OK_VAL[s]   = 0u64
+    RES_ERR_CODE[s] = 0u32
+    RES_TAG[s]      = 0u8
+    return 1u8
+}

@@ -1,0 +1,115 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\246_ai_resolve.iii
+ *
+ * III conformance corpus 246 -- AI top-level entry point (ai_resolve).
+ *
+ * The ai_resolve(text, len, cap_id) surface is III's user-facing
+ * intelligence interface: parse natural-language prose into an intent,
+ * resolve against the sealed pattern set with capability binding, return
+ * a witnessed result.
+ *
+ * Asserts:
+ *   1. ai_resolve with NULL text or zero length returns C246_AI_FAIL.
+ *   2. ai_resolve with prose that HIP-2 classifies as ambiguous returns
+ *      C246_AI_FAIL (privacy: ambiguous folds to fail, callers cannot
+ *      probe pattern existence).
+ *   3. ai_resolve with prose that HIP-2 classifies as no-match returns
+ *      C246_AI_FAIL.
+ *   4. ai_resolve_last_class() reflects the HIP classification of the
+ *      most recent call (UNIQUE / AMBIGUOUS / NO_MATCH).
+ *   5. After a failed call, ai_resolve_last_intent() and
+ *      ai_resolve_last_result() are 0 (no leakage of partial state).
+ *   6. Two consecutive identical calls produce identical
+ *      (last_class, last_intent, last_result) -- determinism property.
+ *
+ * Note on Mandate 7: the AI surface inherits the resolver's structural
+ * guarantees.  No frequency, no learning, no probing.  Same prose +
+ * same cap_id + same sealed pattern set -> same witnessed result.
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_246
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+
+extern @abi(c-msvc-x64) fn ai_resolve(text_ptr: u64, text_len: u32, cap_id: u64) -> u64 from "ai_resolve.iii"
+extern @abi(c-msvc-x64) fn ai_resolve_last_class() -> u32 from "ai_resolve.iii"
+extern @abi(c-msvc-x64) fn ai_resolve_last_intent() -> u64 from "ai_resolve.iii"
+extern @abi(c-msvc-x64) fn ai_resolve_last_result() -> u64 from "ai_resolve.iii"
+extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_no_match() -> u32 from "hip.iii"
+
+const C246_AI_FAIL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Pre-allocated text buffers for the corpus inputs. */
+var TEXT_AMBIG : [u8; 32]
+var TEXT_GIBBR : [u8; 32]
+
+fn _set_bytes(p: *u8, src: u64, n: u64) -> i32 {
+    let src_p : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = src_p[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    resolution_init()
+
+    /* Assertion 1: NULL text -> fail. */
+    let r_null : u64 = ai_resolve(0u64, 8u32, 0u64)
+    if r_null != C246_AI_FAIL { return 1u64 }
+
+    /* Assertion 1b: zero length -> fail. */
+    let r_zerolen : u64 = ai_resolve((&TEXT_AMBIG) as u64, 0u32, 0u64)
+    if r_zerolen != C246_AI_FAIL { return 2u64 }
+
+    /* After a fail call, last_intent and last_result should be 0
+     * (no partial-state leakage). */
+    if ai_resolve_last_intent() != 0u64 { return 3u64 }
+    if ai_resolve_last_result() != 0u64 { return 4u64 }
+
+    /* Assertion 2/3: prose that doesn't match any HIP-2 production
+     * yields NO_MATCH classification, ai_resolve returns FAIL.
+     *
+     * Build "qzxqz" (5 gibberish bytes) -- unlikely to match the
+     * 492-entry lexicon. */
+    TEXT_GIBBR[0u64] = 113u8   /* q */
+    TEXT_GIBBR[1u64] = 122u8   /* z */
+    TEXT_GIBBR[2u64] = 120u8   /* x */
+    TEXT_GIBBR[3u64] = 113u8   /* q */
+    TEXT_GIBBR[4u64] = 122u8   /* z */
+
+    let r_gib : u64 = ai_resolve((&TEXT_GIBBR) as u64, 5u32, 0u64)
+    if r_gib != C246_AI_FAIL { return 5u64 }
+    /* class is either NO_MATCH or AMBIGUOUS; both must fold to fail.
+     * UNIQUE would have surfaced an intent, so it must NOT equal UNIQUE. */
+    let cls_gib : u32 = ai_resolve_last_class()
+    let unique_class : u32 = hip_class_unique()
+    if cls_gib == unique_class { return 6u64 }
+
+    /* Assertion 5: last_intent + last_result remain 0 after fail. */
+    if ai_resolve_last_intent() != 0u64 { return 7u64 }
+    if ai_resolve_last_result() != 0u64 { return 8u64 }
+
+    /* Assertion 6: determinism.  Re-run the same gibberish input twice;
+     * both must produce identical (class, intent, result) tuple. */
+    let r1 : u64 = ai_resolve((&TEXT_GIBBR) as u64, 5u32, 0u64)
+    let c1 : u32 = ai_resolve_last_class()
+    let i1 : u64 = ai_resolve_last_intent()
+    let s1 : u64 = ai_resolve_last_result()
+
+    let r2 : u64 = ai_resolve((&TEXT_GIBBR) as u64, 5u32, 0u64)
+    let c2 : u32 = ai_resolve_last_class()
+    let i2 : u64 = ai_resolve_last_intent()
+    let s2 : u64 = ai_resolve_last_result()
+
+    if r1 != r2 { return 10u64 }
+    if c1 != c2 { return 11u64 }
+    if i1 != i2 { return 12u64 }
+    if s1 != s2 { return 13u64 }
+
+    return 99u64
+}

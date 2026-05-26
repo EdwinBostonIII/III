@@ -1,0 +1,52 @@
+/* Q16.16, Q24.8, Q48.16 fixed-point arithmetic. */
+module corpus_147
+
+extern @abi(c-msvc-x64) fn fx16_from_int(i: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_to_int(x: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_add(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_mul(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx16_div(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_from_int(i: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx24_to_int(x: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_from_int(i: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_to_int(x: u64) -> u64 from "fixed_extra.iii"
+extern @abi(c-msvc-x64) fn fx48_mul(a: u64, b: u64) -> u64 from "fixed_extra.iii"
+
+fn main() -> u64 {
+    /* Q16.16: int round-trip */
+    let a : u64 = fx16_from_int(7u64)
+    if fx16_to_int(a) != 7u64 { return 1u64 }
+
+    /* Q16.16: 3.0 + 4.0 = 7.0 */
+    let three : u64 = fx16_from_int(3u64)
+    let four  : u64 = fx16_from_int(4u64)
+    let sum   : u64 = fx16_add(three, four)
+    if fx16_to_int(sum) != 7u64 { return 2u64 }
+
+    /* Q16.16: 5.0 * 6.0 = 30.0 */
+    let five : u64 = fx16_from_int(5u64)
+    let six  : u64 = fx16_from_int(6u64)
+    let prod : u64 = fx16_mul(five, six)
+    if fx16_to_int(prod) != 30u64 { return 3u64 }
+
+    /* Q16.16: 100.0 / 4.0 = 25.0 */
+    let hundred : u64 = fx16_from_int(100u64)
+    let q       : u64 = fx16_div(hundred, four)
+    if fx16_to_int(q) != 25u64 { return 4u64 }
+
+    /* Q24.8: int round-trip */
+    let b : u64 = fx24_from_int(123u64)
+    if fx24_to_int(b) != 123u64 { return 5u64 }
+
+    /* Q48.16: int round-trip on a value beyond u32 */
+    let big : u64 = fx48_from_int(0x1234567u64)
+    if fx48_to_int(big) != 0x1234567u64 { return 6u64 }
+
+    /* Q48.16: 100 * 200 = 20000 (in fixed form) */
+    let h48 : u64 = fx48_from_int(100u64)
+    let t48 : u64 = fx48_from_int(200u64)
+    let m48 : u64 = fx48_mul(h48, t48)
+    if fx48_to_int(m48) != 20000u64 { return 7u64 }
+
+    return 99u64
+}

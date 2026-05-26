@@ -1,0 +1,419 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\fe25519.iii
+ *
+ * III STDLIB - numera::fe25519 -- fixed-size, allocation-free GF(2^255-19)
+ * field + Ed25519 group law.  Replaces the arbitrary-precision bigint path
+ * in crypt_ed25519's point arithmetic (~1000x faster: ~us vs ~ms per mul).
+ *
+ * Representation: a field element is 8 u64 limbs, each < 2^32 (radix 2^32),
+ * so every partial product a[i]*b[j] < 2^64 fits a u64 with no manual 128-bit
+ * arithmetic.  Reduction folds the high half via 2^256 == 38 (mod p) plus <=2
+ * conditional subtractions of p (freeze) for canonical output.
+ *
+ * A point is 32 u64 (4 extended coords X,Y,Z,T at byte offsets 0,64,128,192).
+ * The complete add formula (add-2008-hwcd-3, a=-1, d non-square) serves both
+ * addition and doubling.
+ *
+ * All module vars are FZ_-prefixed so their global L_FZ_* symbols never
+ * collide with another module's or a corpus test's generic var names under
+ * the corpus's --whole-archive link (the module-var global-symbol trap).
+ *
+ * Public surface (pointer-based, reentrant via caller buffers):
+ *   fe25519_init() -> i32                          (set constants; call once)
+ *   ed_pt_add(p,q,r) -> i32                         R = P + Q
+ *   ed_scalar_mul_base(scalar32, out) -> i32        out = scalar * B
+ *   ed_scalar_mul_pt(scalar32, base, out) -> i32    out = scalar * base
+ *   ed_compress(p, out32) -> i32                    point -> 32 bytes
+ *   ed_decompress(comp32, pout) -> i32              32 bytes -> point (0 ok)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.  KAT: RFC8032 (corpus 193-197)
+ * via crypt_ed25519 + the fe25519 self-test (corpus 388).
+ */
+module numera_fe25519
+
+var FZ_T   : [u64; 16]
+var FZ_S   : [u64; 9]
+var FZ_P   : [u64; 8]
+var FZ_2P  : [u64; 8]
+var FZ_PM2 : [u8; 32]
+var FZ_PP3D8 : [u8; 32]
+var FZ_ACC : [u64; 8]
+var FZ_TMP : [u64; 8]
+var FZ_2D  : [u64; 8]
+var FZ_TWO : [u64; 8]
+var FZ_DD  : [u64; 8]
+var FZ_SQRTM1 : [u64; 8]
+var FZ_ONE : [u64; 8]
+var FZ_ZERO : [u64; 8]
+var FZ_EQ1 : [u64; 8]
+var FZ_EQ2 : [u64; 8]
+var FZ_A : [u64;8]  var FZ_B : [u64;8]  var FZ_C : [u64;8]  var FZ_DT : [u64;8]
+var FZ_E : [u64;8]  var FZ_F : [u64;8]  var FZ_G : [u64;8]  var FZ_H : [u64;8]
+var FZ_T1 : [u64;8] var FZ_T2 : [u64;8]
+var FZ_BASE : [u64; 32]
+var FZ_PACC : [u64; 32]
+var FZ_ZINV : [u64;8]  var FZ_AX : [u64;8]  var FZ_AY : [u64;8]
+var FZ_DCMP : [u8;32]
+var FZ_Y : [u64;8]  var FZ_YY : [u64;8]  var FZ_U : [u64;8]  var FZ_V : [u64;8]  var FZ_VINV : [u64;8]
+var FZ_W : [u64;8]  var FZ_X : [u64;8]  var FZ_XX : [u64;8] var FZ_X2 : [u64;8]
+var FZ_CB : [u8;32]
+
+fn fz_copy(src: u64, dst: u64) -> i32 {
+    let sp : *u64 = src as *u64
+    let dp : *u64 = dst as *u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { dp[k] = sp[k]  k = k + 1u64 }
+    return 0i32
+}
+fn fz_decode(src: u64, dst: u64) -> i32 {
+    let sp : *u8 = src as *u8
+    let dp : *u64 = dst as *u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let b0 : u64 = sp[k * 4u64] as u64
+        let b1 : u64 = sp[k * 4u64 + 1u64] as u64
+        let b2 : u64 = sp[k * 4u64 + 2u64] as u64
+        let b3 : u64 = sp[k * 4u64 + 3u64] as u64
+        dp[k] = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fz_encode(src: u64, dst: u64) -> i32 {
+    let sp : *u64 = src as *u64
+    let dp : *u8 = dst as *u8
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let v : u64 = sp[k]
+        dp[k * 4u64]        = (v & 0xFFu64) as u8
+        dp[k * 4u64 + 1u64] = ((v >> 8u64) & 0xFFu64) as u8
+        dp[k * 4u64 + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+        dp[k * 4u64 + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fz_mul(a: u64, b: u64, r: u64) -> i32 {
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let rp : *u64 = r as *u64
+    let mut k : u64 = 0u64
+    while k < 16u64 { FZ_T[k] = 0u64  k = k + 1u64 }
+    k = 0u64
+    let mut clo : u64 = 0u64
+    while k < 15u64 {
+        let mut acc_lo : u64 = clo
+        let mut acc_hi : u64 = 0u64
+        let mut i : u64 = 0u64
+        if k > 7u64 { i = k - 7u64 }
+        let mut iend : u64 = k
+        if iend > 7u64 { iend = 7u64 }
+        while i <= iend {
+            let prod : u64 = ap[i] * bp[k - i]
+            let tmp : u64 = acc_lo + prod
+            if tmp < acc_lo { acc_hi = acc_hi + 1u64 }
+            acc_lo = tmp
+            i = i + 1u64
+        }
+        FZ_T[k] = acc_lo & 0xFFFFFFFFu64
+        clo = (acc_lo >> 32u64) | (acc_hi << 32u64)
+        k = k + 1u64
+    }
+    FZ_T[15u64] = clo
+    let mut carry : u64 = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = FZ_T[k] + 38u64 * FZ_T[k + 8u64] + carry
+        rp[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    let mut extra : u64 = 38u64 * carry
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    extra = 38u64 * extra
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fz_sq(a: u64, r: u64) -> i32 { return fz_mul(a, a, r) }
+fn fz_add(a: u64, b: u64, r: u64) -> i32 {
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let rp : *u64 = r as *u64
+    let mut carry : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let acc : u64 = ap[k] + bp[k] + carry
+        rp[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    let mut extra : u64 = 38u64 * carry
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fz_sub(a: u64, b: u64, r: u64) -> i32 {
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let rp : *u64 = r as *u64
+    let mut carry : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let acc : u64 = ap[k] + FZ_2P[k] + carry
+        FZ_S[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    FZ_S[8u64] = carry
+    let mut borrow : u64 = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let sub : u64 = bp[k] + borrow
+        if FZ_S[k] >= sub { FZ_S[k] = FZ_S[k] - sub  borrow = 0u64 }
+        else { FZ_S[k] = (FZ_S[k] + 0x100000000u64) - sub  borrow = 1u64 }
+        k = k + 1u64
+    }
+    FZ_S[8u64] = FZ_S[8u64] - borrow
+    let mut c2 : u64 = 38u64 * FZ_S[8u64]
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = FZ_S[k] + c2
+        rp[k] = acc & 0xFFFFFFFFu64
+        c2 = acc >> 32u64
+        k = k + 1u64
+    }
+    c2 = 38u64 * c2
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + c2
+        rp[k] = acc & 0xFFFFFFFFu64
+        c2 = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fz_ge(r: u64, m: u64) -> u8 {
+    let rp : *u64 = r as *u64
+    let mp : *u64 = m as *u64
+    let mut k : u64 = 8u64
+    while k > 0u64 {
+        let idx : u64 = k - 1u64
+        if rp[idx] > mp[idx] { return 1u8 }
+        if rp[idx] < mp[idx] { return 0u8 }
+        k = k - 1u64
+    }
+    return 1u8
+}
+fn fz_subm(r: u64, m: u64) -> i32 {
+    let rp : *u64 = r as *u64
+    let mp : *u64 = m as *u64
+    let mut borrow : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let sub : u64 = mp[k] + borrow
+        if rp[k] >= sub { rp[k] = rp[k] - sub  borrow = 0u64 }
+        else { rp[k] = (rp[k] + 0x100000000u64) - sub  borrow = 1u64 }
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fz_freeze(r: u64) -> i32 {
+    if fz_ge(r, &FZ_P as u64) == 1u8 { fz_subm(r, &FZ_P as u64) }
+    if fz_ge(r, &FZ_P as u64) == 1u8 { fz_subm(r, &FZ_P as u64) }
+    return 0i32
+}
+fn fz_pow(a: u64, exp: u64, r: u64) -> i32 {
+    let ep : *u8 = exp as *u8
+    FZ_ACC[0u64] = 1u64
+    let mut k : u64 = 1u64
+    while k < 8u64 { FZ_ACC[k] = 0u64  k = k + 1u64 }
+    let mut j : u64 = 0u64
+    while j < 256u64 {
+        let bit_idx : u64 = 255u64 - j
+        fz_sq(&FZ_ACC as u64, &FZ_TMP as u64)
+        fz_copy(&FZ_TMP as u64, &FZ_ACC as u64)
+        let byte : u64 = ep[bit_idx >> 3u64] as u64
+        let bit : u64 = (byte >> (bit_idx & 7u64)) & 1u64
+        if bit == 1u64 {
+            fz_mul(&FZ_ACC as u64, a, &FZ_TMP as u64)
+            fz_copy(&FZ_TMP as u64, &FZ_ACC as u64)
+        }
+        j = j + 1u64
+    }
+    fz_copy(&FZ_ACC as u64, r)
+    return 0i32
+}
+fn fz_invert(a: u64, r: u64) -> i32 { return fz_pow(a, &FZ_PM2 as u64, r) }
+fn fz_eq(a: u64, b: u64) -> u8 {
+    fz_copy(a, &FZ_EQ1 as u64)  fz_copy(b, &FZ_EQ2 as u64)
+    fz_freeze(&FZ_EQ1 as u64)   fz_freeze(&FZ_EQ2 as u64)
+    let mut k : u64 = 0u64
+    while k < 8u64 { if FZ_EQ1[k] != FZ_EQ2[k] { return 0u8 }  k = k + 1u64 }
+    return 1u8
+}
+
+fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 @export {
+    let px : u64 = p          let py : u64 = p + 64u64   let pz : u64 = p + 128u64  let pt : u64 = p + 192u64
+    let qx : u64 = q          let qy : u64 = q + 64u64   let qz : u64 = q + 128u64  let qt : u64 = q + 192u64
+    let rx : u64 = r          let ry : u64 = r + 64u64   let rz : u64 = r + 128u64  let rt : u64 = r + 192u64
+    fz_sub(py, px, &FZ_T1 as u64)  fz_sub(qy, qx, &FZ_T2 as u64)  fz_mul(&FZ_T1 as u64, &FZ_T2 as u64, &FZ_A as u64)
+    fz_add(py, px, &FZ_T1 as u64)  fz_add(qy, qx, &FZ_T2 as u64)  fz_mul(&FZ_T1 as u64, &FZ_T2 as u64, &FZ_B as u64)
+    fz_mul(pt, qt, &FZ_T1 as u64)  fz_mul(&FZ_T1 as u64, &FZ_2D as u64, &FZ_C as u64)
+    fz_mul(pz, qz, &FZ_T1 as u64)  fz_mul(&FZ_T1 as u64, &FZ_TWO as u64, &FZ_DT as u64)
+    fz_sub(&FZ_B as u64, &FZ_A as u64, &FZ_E as u64)  fz_sub(&FZ_DT as u64, &FZ_C as u64, &FZ_F as u64)
+    fz_add(&FZ_DT as u64, &FZ_C as u64, &FZ_G as u64)  fz_add(&FZ_B as u64, &FZ_A as u64, &FZ_H as u64)
+    fz_mul(&FZ_E as u64, &FZ_F as u64, rx)  fz_mul(&FZ_G as u64, &FZ_H as u64, ry)
+    fz_mul(&FZ_E as u64, &FZ_H as u64, rt)  fz_mul(&FZ_F as u64, &FZ_G as u64, rz)
+    return 0i32
+}
+fn ed_pt_copy(src: u64, dst: u64) -> i32 {
+    let sp : *u64 = src as *u64
+    let dp : *u64 = dst as *u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { dp[k] = sp[k]  k = k + 1u64 }
+    return 0i32
+}
+fn ed_set_identity(p: u64) -> i32 {
+    let pp : *u64 = p as *u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { pp[k] = 0u64  k = k + 1u64 }
+    pp[8u64] = 1u64
+    pp[16u64] = 1u64
+    return 0i32
+}
+fn ed_scalar_mul_pt(scalar: u64, base: u64, r: u64) -> i32 @export {
+    let sp : *u8 = scalar as *u8
+    ed_set_identity(r)
+    let mut j : u64 = 0u64
+    while j < 256u64 {
+        let bit_idx : u64 = 255u64 - j
+        ed_pt_add(r, r, &FZ_PACC as u64)
+        ed_pt_copy(&FZ_PACC as u64, r)
+        let byte : u64 = sp[bit_idx >> 3u64] as u64
+        let bit : u64 = (byte >> (bit_idx & 7u64)) & 1u64
+        if bit == 1u64 {
+            ed_pt_add(r, base, &FZ_PACC as u64)
+            ed_pt_copy(&FZ_PACC as u64, r)
+        }
+        j = j + 1u64
+    }
+    return 0i32
+}
+fn ed_scalar_mul_base(scalar: u64, r: u64) -> i32 @export {
+    return ed_scalar_mul_pt(scalar, &FZ_BASE as u64, r)
+}
+fn ed_compress(p: u64, out: u64) -> i32 @export {
+    fz_invert(p + 128u64, &FZ_ZINV as u64)
+    fz_mul(p, &FZ_ZINV as u64, &FZ_AX as u64)
+    fz_mul(p + 64u64, &FZ_ZINV as u64, &FZ_AY as u64)
+    fz_freeze(&FZ_AX as u64)
+    fz_freeze(&FZ_AY as u64)
+    fz_encode(&FZ_AY as u64, out)
+    let op : *u8 = out as *u8
+    let xb : u64 = FZ_AX[0u64] & 1u64
+    op[31u64] = op[31u64] | ((xb << 7u64) as u8)
+    return 0i32
+}
+fn ed_decompress(comp: u64, pout: u64) -> i32 @export {
+    let cp : *u8 = comp as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { FZ_DCMP[k] = cp[k]  k = k + 1u64 }
+    FZ_DCMP[31u64] = FZ_DCMP[31u64] & 0x7Fu8
+    fz_decode(&FZ_DCMP as u64, &FZ_Y as u64)
+    let xsign : u64 = (cp[31u64] >> 7u64) as u64 & 1u64
+    fz_sq(&FZ_Y as u64, &FZ_YY as u64)
+    fz_sub(&FZ_YY as u64, &FZ_ONE as u64, &FZ_U as u64)
+    fz_mul(&FZ_YY as u64, &FZ_DD as u64, &FZ_V as u64)
+    fz_add(&FZ_V as u64, &FZ_ONE as u64, &FZ_V as u64)
+    fz_invert(&FZ_V as u64, &FZ_VINV as u64)
+    fz_mul(&FZ_U as u64, &FZ_VINV as u64, &FZ_W as u64)
+    fz_pow(&FZ_W as u64, &FZ_PP3D8 as u64, &FZ_X as u64)
+    fz_sq(&FZ_X as u64, &FZ_XX as u64)
+    if fz_eq(&FZ_XX as u64, &FZ_W as u64) == 0u8 {
+        fz_mul(&FZ_X as u64, &FZ_SQRTM1 as u64, &FZ_X2 as u64)
+        fz_copy(&FZ_X2 as u64, &FZ_X as u64)
+    }
+    fz_sq(&FZ_X as u64, &FZ_XX as u64)
+    if fz_eq(&FZ_XX as u64, &FZ_W as u64) == 0u8 { return 1i32 }
+    fz_freeze(&FZ_X as u64)
+    let xb : u64 = FZ_X[0u64] & 1u64
+    if xb != xsign {
+        fz_sub(&FZ_ZERO as u64, &FZ_X as u64, &FZ_X2 as u64)
+        fz_copy(&FZ_X2 as u64, &FZ_X as u64)
+    }
+    fz_copy(&FZ_X as u64, pout)
+    fz_copy(&FZ_Y as u64, pout + 64u64)
+    let zp : *u64 = (pout + 128u64) as *u64
+    zp[0u64] = 1u64
+    k = 1u64
+    while k < 8u64 { zp[k] = 0u64  k = k + 1u64 }
+    fz_mul(&FZ_X as u64, &FZ_Y as u64, pout + 192u64)
+    return 0i32
+}
+
+fn fe25519_init() -> i32 @export {
+    FZ_P[0u64] = 0xFFFFFFEDu64   FZ_2P[0u64] = 0xFFFFFFDAu64
+    let mut k : u64 = 1u64
+    while k < 7u64 { FZ_P[k] = 0xFFFFFFFFu64  FZ_2P[k] = 0xFFFFFFFFu64  k = k + 1u64 }
+    FZ_P[7u64] = 0x7FFFFFFFu64   FZ_2P[7u64] = 0xFFFFFFFFu64
+    k = 0u64  while k < 8u64 { FZ_TWO[k] = 0u64  FZ_ONE[k] = 0u64  FZ_ZERO[k] = 0u64  k = k + 1u64 }
+    FZ_TWO[0u64] = 2u64   FZ_ONE[0u64] = 1u64
+    k = 0u64  while k < 32u64 { FZ_PM2[k] = 0xFFu8  FZ_PP3D8[k] = 0xFFu8  k = k + 1u64 }
+    FZ_PM2[0u64] = 0xEBu8   FZ_PM2[31u64] = 0x7Fu8
+    FZ_PP3D8[0u64] = 0xFEu8  FZ_PP3D8[31u64] = 0x0Fu8
+    /* 2d */
+    FZ_CB[0u64]=0x59u8 FZ_CB[1u64]=0xf1u8 FZ_CB[2u64]=0xb2u8 FZ_CB[3u64]=0x26u8 FZ_CB[4u64]=0x94u8 FZ_CB[5u64]=0x9bu8 FZ_CB[6u64]=0xd6u8 FZ_CB[7u64]=0xebu8
+    FZ_CB[8u64]=0x56u8 FZ_CB[9u64]=0xb1u8 FZ_CB[10u64]=0x83u8 FZ_CB[11u64]=0x82u8 FZ_CB[12u64]=0x9au8 FZ_CB[13u64]=0x14u8 FZ_CB[14u64]=0xe0u8 FZ_CB[15u64]=0x00u8
+    FZ_CB[16u64]=0x30u8 FZ_CB[17u64]=0xd1u8 FZ_CB[18u64]=0xf3u8 FZ_CB[19u64]=0xeeu8 FZ_CB[20u64]=0xf2u8 FZ_CB[21u64]=0x80u8 FZ_CB[22u64]=0x8eu8 FZ_CB[23u64]=0x19u8
+    FZ_CB[24u64]=0xe7u8 FZ_CB[25u64]=0xfcu8 FZ_CB[26u64]=0xdfu8 FZ_CB[27u64]=0x56u8 FZ_CB[28u64]=0xdcu8 FZ_CB[29u64]=0xd9u8 FZ_CB[30u64]=0x06u8 FZ_CB[31u64]=0x24u8
+    fz_decode(&FZ_CB as u64, &FZ_2D as u64)
+    /* d */
+    FZ_CB[0u64]=0xa3u8 FZ_CB[1u64]=0x78u8 FZ_CB[2u64]=0x59u8 FZ_CB[3u64]=0x13u8 FZ_CB[4u64]=0xcau8 FZ_CB[5u64]=0x4du8 FZ_CB[6u64]=0xebu8 FZ_CB[7u64]=0x75u8
+    FZ_CB[8u64]=0xabu8 FZ_CB[9u64]=0xd8u8 FZ_CB[10u64]=0x41u8 FZ_CB[11u64]=0x41u8 FZ_CB[12u64]=0x4du8 FZ_CB[13u64]=0x0au8 FZ_CB[14u64]=0x70u8 FZ_CB[15u64]=0x00u8
+    FZ_CB[16u64]=0x98u8 FZ_CB[17u64]=0xe8u8 FZ_CB[18u64]=0x79u8 FZ_CB[19u64]=0x77u8 FZ_CB[20u64]=0x79u8 FZ_CB[21u64]=0x40u8 FZ_CB[22u64]=0xc7u8 FZ_CB[23u64]=0x8cu8
+    FZ_CB[24u64]=0x73u8 FZ_CB[25u64]=0xfeu8 FZ_CB[26u64]=0x6fu8 FZ_CB[27u64]=0x2bu8 FZ_CB[28u64]=0xeeu8 FZ_CB[29u64]=0x6cu8 FZ_CB[30u64]=0x03u8 FZ_CB[31u64]=0x52u8
+    fz_decode(&FZ_CB as u64, &FZ_DD as u64)
+    /* sqrt(-1) */
+    FZ_CB[0u64]=0xb0u8 FZ_CB[1u64]=0xa0u8 FZ_CB[2u64]=0x0eu8 FZ_CB[3u64]=0x4au8 FZ_CB[4u64]=0x27u8 FZ_CB[5u64]=0x1bu8 FZ_CB[6u64]=0xeeu8 FZ_CB[7u64]=0xc4u8
+    FZ_CB[8u64]=0x78u8 FZ_CB[9u64]=0xe4u8 FZ_CB[10u64]=0x2fu8 FZ_CB[11u64]=0xadu8 FZ_CB[12u64]=0x06u8 FZ_CB[13u64]=0x18u8 FZ_CB[14u64]=0x43u8 FZ_CB[15u64]=0x2fu8
+    FZ_CB[16u64]=0xa7u8 FZ_CB[17u64]=0xd7u8 FZ_CB[18u64]=0xfbu8 FZ_CB[19u64]=0x3du8 FZ_CB[20u64]=0x99u8 FZ_CB[21u64]=0x00u8 FZ_CB[22u64]=0x4du8 FZ_CB[23u64]=0x2bu8
+    FZ_CB[24u64]=0x0bu8 FZ_CB[25u64]=0xdfu8 FZ_CB[26u64]=0xc1u8 FZ_CB[27u64]=0x4fu8 FZ_CB[28u64]=0x80u8 FZ_CB[29u64]=0x24u8 FZ_CB[30u64]=0x83u8 FZ_CB[31u64]=0x2bu8
+    fz_decode(&FZ_CB as u64, &FZ_SQRTM1 as u64)
+    /* base point B: X<-BX, Y<-BY, Z<-1, T<-BT */
+    FZ_CB[0u64]=0x1au8 FZ_CB[1u64]=0xd5u8 FZ_CB[2u64]=0x25u8 FZ_CB[3u64]=0x8fu8 FZ_CB[4u64]=0x60u8 FZ_CB[5u64]=0x2du8 FZ_CB[6u64]=0x56u8 FZ_CB[7u64]=0xc9u8
+    FZ_CB[8u64]=0xb2u8 FZ_CB[9u64]=0xa7u8 FZ_CB[10u64]=0x25u8 FZ_CB[11u64]=0x95u8 FZ_CB[12u64]=0x60u8 FZ_CB[13u64]=0xc7u8 FZ_CB[14u64]=0x2cu8 FZ_CB[15u64]=0x69u8
+    FZ_CB[16u64]=0x5cu8 FZ_CB[17u64]=0xdcu8 FZ_CB[18u64]=0xd6u8 FZ_CB[19u64]=0xfdu8 FZ_CB[20u64]=0x31u8 FZ_CB[21u64]=0xe2u8 FZ_CB[22u64]=0xa4u8 FZ_CB[23u64]=0xc0u8
+    FZ_CB[24u64]=0xfeu8 FZ_CB[25u64]=0x53u8 FZ_CB[26u64]=0x6eu8 FZ_CB[27u64]=0xcdu8 FZ_CB[28u64]=0xd3u8 FZ_CB[29u64]=0x36u8 FZ_CB[30u64]=0x69u8 FZ_CB[31u64]=0x21u8
+    fz_decode(&FZ_CB as u64, &FZ_BASE as u64)
+    FZ_CB[0u64]=0x58u8 FZ_CB[1u64]=0x66u8 FZ_CB[2u64]=0x66u8 FZ_CB[3u64]=0x66u8 FZ_CB[4u64]=0x66u8 FZ_CB[5u64]=0x66u8 FZ_CB[6u64]=0x66u8 FZ_CB[7u64]=0x66u8
+    FZ_CB[8u64]=0x66u8 FZ_CB[9u64]=0x66u8 FZ_CB[10u64]=0x66u8 FZ_CB[11u64]=0x66u8 FZ_CB[12u64]=0x66u8 FZ_CB[13u64]=0x66u8 FZ_CB[14u64]=0x66u8 FZ_CB[15u64]=0x66u8
+    FZ_CB[16u64]=0x66u8 FZ_CB[17u64]=0x66u8 FZ_CB[18u64]=0x66u8 FZ_CB[19u64]=0x66u8 FZ_CB[20u64]=0x66u8 FZ_CB[21u64]=0x66u8 FZ_CB[22u64]=0x66u8 FZ_CB[23u64]=0x66u8
+    FZ_CB[24u64]=0x66u8 FZ_CB[25u64]=0x66u8 FZ_CB[26u64]=0x66u8 FZ_CB[27u64]=0x66u8 FZ_CB[28u64]=0x66u8 FZ_CB[29u64]=0x66u8 FZ_CB[30u64]=0x66u8 FZ_CB[31u64]=0x66u8
+    fz_decode(&FZ_CB as u64, (&FZ_BASE as u64) + 64u64)
+    let bz : *u64 = ((&FZ_BASE as u64) + 128u64) as *u64
+    bz[0u64] = 1u64
+    let mut z : u64 = 1u64
+    while z < 8u64 { bz[z] = 0u64  z = z + 1u64 }
+    FZ_CB[0u64]=0xa3u8 FZ_CB[1u64]=0xddu8 FZ_CB[2u64]=0xb7u8 FZ_CB[3u64]=0xa5u8 FZ_CB[4u64]=0xb3u8 FZ_CB[5u64]=0x8au8 FZ_CB[6u64]=0xdeu8 FZ_CB[7u64]=0x6du8
+    FZ_CB[8u64]=0xf5u8 FZ_CB[9u64]=0x52u8 FZ_CB[10u64]=0x51u8 FZ_CB[11u64]=0x77u8 FZ_CB[12u64]=0x80u8 FZ_CB[13u64]=0x9fu8 FZ_CB[14u64]=0xf0u8 FZ_CB[15u64]=0x20u8
+    FZ_CB[16u64]=0x7du8 FZ_CB[17u64]=0xe3u8 FZ_CB[18u64]=0xabu8 FZ_CB[19u64]=0x64u8 FZ_CB[20u64]=0x8eu8 FZ_CB[21u64]=0x4eu8 FZ_CB[22u64]=0xeau8 FZ_CB[23u64]=0x66u8
+    FZ_CB[24u64]=0x65u8 FZ_CB[25u64]=0x76u8 FZ_CB[26u64]=0x8bu8 FZ_CB[27u64]=0xd7u8 FZ_CB[28u64]=0x0fu8 FZ_CB[29u64]=0x5fu8 FZ_CB[30u64]=0x87u8 FZ_CB[31u64]=0x67u8
+    fz_decode(&FZ_CB as u64, (&FZ_BASE as u64) + 192u64)
+    return 0i32
+}

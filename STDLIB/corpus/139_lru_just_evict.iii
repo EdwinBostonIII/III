@@ -1,0 +1,19 @@
+/* Just eviction call — no count check.  If THIS exits 99 then the
+ * count check (lru_count) is the segfault site, not lru_put. */
+module corpus_139
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn lru_new(arena: u64, capacity: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_put(id: u64, key: u32, value: u64) -> i32 from "lru.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let c : u64 = lru_new(a, 3u64)
+    if c == 0u64 { return 1u64 }
+    if lru_put(c, 1u32, 100u64) != 0i32 { return 2u64 }
+    if lru_put(c, 2u32, 200u64) != 0i32 { return 3u64 }
+    if lru_put(c, 3u32, 300u64) != 0i32 { return 4u64 }
+    let r : i32 = lru_put(c, 4u32, 400u64)
+    /* Don't even check r — just return. */
+    return 99u64
+}

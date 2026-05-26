@@ -1,0 +1,16 @@
+/* 699 -- h13_charter: the H13 ("one language") falsifier as a run_charter constitutional clause.
+ *
+ * H13: no C survives save the bootstrap trust root + cic.c; everything else is corpus-green
+ * .iii.  The runtime-checkable core: the ONE .iii sha256 -- which REPLACED the 14x C
+ * sha256.c (retired in M24) -- produces the EXACT FIPS-180-2 "abc" digest, AND cad routes to
+ * that same backend (no second hash path), so the C copies are genuinely redundant/retirable;
+ * the falsify arm proves the .iii sha256 is the real FIPS function (it REJECTS a byte-flipped
+ * wrong digest), not a stub; and run_charter is a REAL terminal gate -- GREEN on the H13
+ * faithfulness clause, RED at index 2 on an injected canary that claims the wrong digest holds.
+ * The structural companion is scripts/verify_sha256_dedup.sh (zero C sha256.c copies remain).
+ * Main-corpus convention: rc 99 = pass; 1..10 = which h13_selftest assertion failed. */
+module corpus_699
+
+extern @abi(c-msvc-x64) fn h13_selftest() -> u64 from "h13_charter.iii"
+
+fn main() -> u64 { return h13_selftest() }

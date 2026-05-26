@@ -1,0 +1,8 @@
+/* 661 -- shape_negotiator: presheaf->sheaf lift by iterated MaxSAT over the
+ * deterministic CDCL solver (numera/sat.iii).  No-conflict accept-all, one-
+ * conflict deterministic lex-min-op-id peel, order-invariant canonical global
+ * section (proven non-tautologically via opposite registration orders), and the
+ * M8 capability gate failing closed (no-amend cap -> E_CAP, no mutation/witness). */
+module corpus_661
+extern @abi(c-msvc-x64) fn sn_selftest() -> u64 from "shape_negotiator.iii"
+fn main() -> u64 { return sn_selftest() }

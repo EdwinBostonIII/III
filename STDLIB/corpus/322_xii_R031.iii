@@ -1,0 +1,32 @@
+/* corpus/322_xii_R031.iii  -- R031 [L2] Mean transitivity */
+
+module corpus_322_xii_R031
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* K04 MEAN subform: low 9=lhs, next 9=rhs, high 9=equiv_kind.
+     * a: equiv_kind=1, lhs=0xA, rhs=0xB => 0x00040000 | (0xB<<9) | 0xA = 0x000418Au32
+     * b: equiv_kind=1, lhs=0xB, rhs=0xC => 0x00040000 | (0xC<<9) | 0xB = 0x0004198Bu32
+     * R031 fires: rhs(a) = lhs(b) = 0xB
+     * result: lhs=0xA, rhs=0xC, equiv_kind=1 => 0x0004198Au32 */
+    let a : u32 = xii_term_make_basis(3u8, 0x0004018Au32)
+    let b : u32 = xii_term_make_basis(3u8, 0x0004018Bu32)
+    /* Actually need the bit pattern. a: equiv_kind<<18 | rhs<<9 | lhs.
+       lhs=0xA (10), rhs=0xB (11), eq=1: 1<<18=0x40000, 0xB<<9=0x1600, 10=0xA => 0x41600|0xA=0x4160A
+       b: lhs=0xB, rhs=0xC, eq=1: 1<<18=0x40000, 0xC<<9=0x1800, 0xB => 0x4180B */
+    /* Rebuild with correct values */
+    let a2 : u32 = xii_term_make_basis(3u8, 0x4160Au32)
+    let b2 : u32 = xii_term_make_basis(3u8, 0x4180Bu32)
+    let t : u32 = xii_term_make_fusion2(19u8, a2, b2)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 31u32 { return 1u64 }
+    if xii_term_get_kind(r) != 3u8 { return 2u64 }
+    return 0u64
+}

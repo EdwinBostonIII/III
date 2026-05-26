@@ -1,0 +1,112 @@
+/* STDLIB/iii/katabasis/cycle_family.iii
+ *
+ * KATABASIS increment 3 -- the nine descent cycle families (plan 3.0).
+ * CHARIOT's ~90 IOCTLs collapse into nine hexad-distinguished families; this
+ * module is the faithful taxonomy: each family's SAFETY CLASS and its SID
+ * INVERSE KIND, the "dangerous trio" (F2/F5/F9 share the one safe-write law,
+ * plan 3.9), and invariant #4 (every cycle has a derivable inverse).
+ *
+ * Pure total functions over small ids -- no metal, no I/O, no state.  This is
+ * the cycle taxonomy the Gate dispatch reads from a term's kernel (plan 3.0),
+ * NOT an IOCTL number.  User-mode KAT-verifiable (corpus 392).  Ring R0.  K 1.00.
+ */
+module katabasis_cycle_family
+
+/* The nine families (plan 3.0 table). */
+const KCF_F1_READ_METAL  : u32 = 1u32
+const KCF_F2_WRITE_METAL : u32 = 2u32
+const KCF_F3_CENSUS      : u32 = 3u32
+const KCF_F4_SNAPSHOT    : u32 = 4u32
+const KCF_F5_DESCEND     : u32 = 5u32
+const KCF_F6_OBSERVE     : u32 = 6u32
+const KCF_F7_SELF_VERIFY : u32 = 7u32
+const KCF_F8_CAP_OP      : u32 = 8u32
+const KCF_F9_COPROC      : u32 = 9u32
+
+/* Safety classes (plan 3.0 "Hexad class" column). */
+const KCF_CLASS_NONE        : u32 = 0u32
+const KCF_CLASS_READ_ONLY   : u32 = 1u32   /* F1, F3, F7: no structural NEG, self-inverse */
+const KCF_CLASS_WRITE_NEG   : u32 = 2u32   /* F2, F9: NEG-gated metal write (allowlisted target) */
+const KCF_CLASS_DESCEND_NEG : u32 = 3u32   /* F5: NEG-gated, the dangerous instruction (VMRUN) */
+const KCF_CLASS_POSITIVE    : u32 = 4u32   /* F4: structural-positive (creates pre-images) */
+const KCF_CLASS_OBSERVE     : u32 = 5u32   /* F6: observe-only, cannot write */
+const KCF_CLASS_GOVERNANCE  : u32 = 6u32   /* F8: Trinity-gated capability governance */
+
+/* SID inverse kinds (plan 3.0 "Inverse (SID)" column). */
+const KCF_INV_NONE     : u32 = 0u32
+const KCF_INV_IDENTITY : u32 = 1u32   /* reads/observation: self-inverse */
+const KCF_INV_RECORDED : u32 = 2u32   /* WriteMetal: recorded prior value / CoW pre-image */
+const KCF_INV_COW      : u32 = 3u32   /* Snapshot/Reverse: the CoW restore */
+const KCF_INV_VMEXIT   : u32 = 4u32   /* Descend: VMEXIT + captured host/guest state */
+const KCF_INV_GPU      : u32 = 5u32   /* CoprocDispatch: GPU-context restore / re-dispatch */
+const KCF_INV_CAP      : u32 = 6u32   /* CapOp: the capability revoke/descent path */
+
+/* === BEGIN AUTO-GENERATED FROM iii_cycle_family.def === */
+/* GENERATED FROM iii_cycle_family.def by gen_cycle_family.sh -- DO NOT EDIT BY HAND. */
+/* A family id is valid iff it is one of the nine (1..9). */
+fn katabasis_cycle_family_valid(family: u32) -> u8 @export {
+    let f : u32 = family
+    if f == KCF_F1_READ_METAL  { return 1u8 }
+    if f == KCF_F2_WRITE_METAL { return 1u8 }
+    if f == KCF_F3_CENSUS      { return 1u8 }
+    if f == KCF_F4_SNAPSHOT    { return 1u8 }
+    if f == KCF_F5_DESCEND     { return 1u8 }
+    if f == KCF_F6_OBSERVE     { return 1u8 }
+    if f == KCF_F7_SELF_VERIFY { return 1u8 }
+    if f == KCF_F8_CAP_OP      { return 1u8 }
+    if f == KCF_F9_COPROC      { return 1u8 }
+    return 0u8
+}
+
+/* The safety class of a family (plan 3.0). */
+fn katabasis_cycle_family_class(family: u32) -> u32 @export {
+    let f : u32 = family
+    if f == KCF_F1_READ_METAL  { return KCF_CLASS_READ_ONLY }
+    if f == KCF_F2_WRITE_METAL { return KCF_CLASS_WRITE_NEG }
+    if f == KCF_F3_CENSUS      { return KCF_CLASS_READ_ONLY }
+    if f == KCF_F4_SNAPSHOT    { return KCF_CLASS_POSITIVE }
+    if f == KCF_F5_DESCEND     { return KCF_CLASS_DESCEND_NEG }
+    if f == KCF_F6_OBSERVE     { return KCF_CLASS_OBSERVE }
+    if f == KCF_F7_SELF_VERIFY { return KCF_CLASS_READ_ONLY }
+    if f == KCF_F8_CAP_OP      { return KCF_CLASS_GOVERNANCE }
+    if f == KCF_F9_COPROC      { return KCF_CLASS_WRITE_NEG }
+    return KCF_CLASS_NONE
+}
+
+/* The SID inverse kind of a family (plan 3.0). */
+fn katabasis_cycle_family_inverse(family: u32) -> u32 @export {
+    let f : u32 = family
+    if f == KCF_F1_READ_METAL  { return KCF_INV_IDENTITY }
+    if f == KCF_F2_WRITE_METAL { return KCF_INV_RECORDED }
+    if f == KCF_F3_CENSUS      { return KCF_INV_IDENTITY }
+    if f == KCF_F4_SNAPSHOT    { return KCF_INV_COW }
+    if f == KCF_F5_DESCEND     { return KCF_INV_VMEXIT }
+    if f == KCF_F6_OBSERVE     { return KCF_INV_IDENTITY }
+    if f == KCF_F7_SELF_VERIFY { return KCF_INV_IDENTITY }
+    if f == KCF_F8_CAP_OP      { return KCF_INV_CAP }
+    if f == KCF_F9_COPROC      { return KCF_INV_GPU }
+    return KCF_INV_NONE
+}
+
+/* The three dangerous families (F2 WriteMetal, F5 Descend, F9 CoprocDispatch)
+ * share the one safe-write law (plan 3.9): any such cycle whose host effect is
+ * unprovable is rehearsed in a throwaway guest first.  1 = dangerous. */
+fn katabasis_cycle_is_dangerous(family: u32) -> u8 @export {
+    let f : u32 = family
+    if f == KCF_F2_WRITE_METAL { return 1u8 }
+    if f == KCF_F5_DESCEND     { return 1u8 }
+    if f == KCF_F9_COPROC      { return 1u8 }
+    return 0u8
+}
+/* === END AUTO-GENERATED FROM iii_cycle_family.def === */
+
+/* Invariant #4: every cycle has a derivable inverse.  True for all nine valid
+ * families (none maps to KCF_INV_NONE); a family whose inverse could not be
+ * derived would be irreversible-typed and admissible only in the observe
+ * class.  Returns 1 iff `family` is valid and has a concrete inverse kind. */
+fn katabasis_cycle_has_inverse(family: u32) -> u8 @export {
+    let f : u32 = family
+    if katabasis_cycle_family_valid(f) == 0u8 { return 0u8 }
+    if katabasis_cycle_family_inverse(f) == KCF_INV_NONE { return 0u8 }
+    return 1u8
+}

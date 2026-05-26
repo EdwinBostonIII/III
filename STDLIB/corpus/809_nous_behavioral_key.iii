@@ -1,0 +1,17 @@
+/* 809 -- nous: the behavioral dedup key (closes the realizable slice of Agent-9's
+ * "category.iii dedups on a SYNTACTIC key" finding).  Drives nous_bkey_selftest: a
+ * SYNTACTIC key (raw term) DIFFERS for AND(a,b) vs AND(b,a) -- so a syntactic-keyed
+ * registry admits the duplicate; the BEHAVIORAL key (content-address of the XII normal
+ * form) MATCHES -- catching it; and a behaviorally-different term (OR) keeps a distinct
+ * key.  The null-out arm is refused.  Exit 99 = all hold; 1..9 = the failing sub-check.
+ *
+ * Gated by run_nous_corpus.sh alongside cat_add_morphism_xii's use of nous_bkey. */
+module corpus_809
+
+extern @abi(c-msvc-x64) fn nous_bkey_selftest() -> u64 from "nous_behavioral_key.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_bkey_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

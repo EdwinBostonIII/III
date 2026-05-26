@@ -1,0 +1,4 @@
+/* §4.14 driver: witness-chain pruning + rollup KAT. exit 99 = pass. */
+module zkp_probe
+extern @abi(c-msvc-x64) fn zk_prune_kat_x() -> u64 from "zk_prune.iii"
+fn main() -> u64 { return zk_prune_kat_x() }

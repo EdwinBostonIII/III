@@ -1,0 +1,666 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\temporal_logic.iii
+ *
+ * III STDLIB - numera::temporal_logic
+ *
+ * LTL formula representation and bounded model checking over the witness
+ * chain. Twelve tags: ATOM, NOT, AND, OR, IMPL, NEXT(X), ALWAYS(G),
+ * EVENT(F), UNTIL(U), ONCE(O), HIST(H), SINCE(S). Finite-trace semantics.
+ *
+ * Evaluation is NON-RECURSIVE (W15): a (node,position) fixpoint table is
+ * filled bottom-up in arena order -- propositional pass per position, then
+ * each temporal node by closed-form O(L) DP over its child's full row.
+ * No recursion, no pointer stack: arena post-order IS the eval order.
+ *
+ * opv aggregate for cons_eval_predicate: 68 bytes laid out as
+ *   op_producer(u8[32] @0) op_id(u8[32] @32) op_phase(u8 @64)
+ *   op_revtag(u8 @65) op_pillar(u16 @66) -- matches cons_op_view.
+ *
+ * Note: wh_get_rev_tag does not exist in witness_hook.iii; wh_is_revoked(idx)
+ * is used instead (returns 0/1 whether the fragment is revoked).
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (<=4 params), W8 (fixed pools), W13 (<=20 locals -- selftest
+ *   split into tl_kat_fg/ux/past/guards helpers), W14 (no break), W15 (no
+ *   recursion -- fixpoint table). Trap 7: all scratch is module scope;
+ *   model checking is serialized / non-reentrant.
+ *
+ * Self-test: tl_selftest() -> u64 returns 99 on full KAT pass.
+ */
+
+module numera_temporal_logic
+
+extern @abi(c-msvc-x64) fn wh_get_producer(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_op_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_phase(idx: u64) -> u8 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_pillar(idx: u64) -> u16 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_is_revoked(idx: u64) -> u8 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_ante_count(idx: u64) -> u32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_ante(idx: u64, ante_idx: u32, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_eval_predicate(slot: u32, opv: *u8, ante_ids: *u8, n_ante: u32) -> u8 from "constitution.iii"
+
+const TLOGIC_OK           : i32 =  0i32
+const TLOGIC_E_FULL       : i32 = -1i32
+const TLOGIC_E_BAD        : i32 = -2i32
+const TLOGIC_SENT         : u32 = 0xFFFFFFFFu32
+
+const TLOGIC_TAG_ATOM     : u8 =  0u8
+const TLOGIC_TAG_NOT      : u8 =  1u8
+const TLOGIC_TAG_AND      : u8 =  2u8
+const TLOGIC_TAG_OR       : u8 =  3u8
+const TLOGIC_TAG_IMPL     : u8 =  4u8
+const TLOGIC_TAG_NEXT     : u8 =  5u8
+const TLOGIC_TAG_ALWAYS   : u8 =  6u8
+const TLOGIC_TAG_EVENT    : u8 =  7u8
+const TLOGIC_TAG_UNTIL    : u8 =  8u8
+const TLOGIC_TAG_ONCE     : u8 =  9u8
+const TLOGIC_TAG_HIST     : u8 = 10u8
+const TLOGIC_TAG_SINCE    : u8 = 11u8
+
+const TLOGIC_MAX_FORMULA  : u32 = 256u32
+const TLOGIC_MAX_NODES    : u32 = 65536u32
+const TLOGIC_MAX_SEG      : u64 = 4096u64
+const TLOGIC_MAX_SUBF     : u32 = 1024u32
+const TLOGIC_ANTE_MAX     : u32 = 32u32
+const TLOGIC_ID_LEN       : u64 = 32u64
+
+/* --- Formula slot table (bound = TLOGIC_MAX_FORMULA = 256). --- */
+var TL_F_LIVE   : [u8;  256]
+var TL_F_ROOT   : [u32; 256]
+var TL_F_START  : [u32; 256]
+var TL_F_END    : [u32; 256]
+
+/* --- Flat node arena (bound = TLOGIC_MAX_NODES = 65536). --- */
+var TL_NODE_TAG  : [u8;  65536]
+var TL_NODE_A    : [u32; 65536]
+var TL_NODE_B    : [u32; 65536]
+var TL_NODE_USED : u32 = 0u32
+
+/* Fixpoint table; dim = MAX_SUBF * MAX_SEG = 4194304 bytes.
+ * Frugal (Trap 19): [u64; 524288] = exactly 4194304 bytes BSS each. */
+var TL_VAL        : [u64; 524288]
+var TL_VAL_FILLED : [u64; 524288]
+
+/* Serialized atomic-eval scratch (Trap 7). */
+var TL_SCR_PROD  : [u8; 32]
+var TL_SCR_OP    : [u8; 32]
+var TL_SCR_ANTE  : [u8; 1024]
+var TL_SCR_OPV   : [u8; 68]
+
+var TL_LAST_ERR  : i32 = 0i32
+
+/* Module-scope KAT scratch (Trap 7). */
+var TL_T_A0  : [u8; 8]
+var TL_T_A1  : [u8; 8]
+
+/* === Byte-level table access (frugal u64 backing). === */
+
+fn tl_val_get(s: u64, p: u64) -> u8 {
+    let idx : u64 = s * TLOGIC_MAX_SEG + p
+    let bp : *u8 = (&TL_VAL as u64 + idx) as *u8
+    return bp[0u64]
+}
+
+fn tl_val_set(s: u64, p: u64, v: u8) -> i32 {
+    let idx : u64 = s * TLOGIC_MAX_SEG + p
+    let bp : *u8 = (&TL_VAL as u64 + idx) as *u8
+    bp[0u64] = v
+    return 0i32
+}
+
+fn tl_filled_set(s: u64, p: u64, v: u8) -> i32 {
+    let idx : u64 = s * TLOGIC_MAX_SEG + p
+    let bp : *u8 = (&TL_VAL_FILLED as u64 + idx) as *u8
+    bp[0u64] = v
+    return 0i32
+}
+
+/* === Lifecycle === */
+
+fn tl_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < TLOGIC_MAX_FORMULA {
+        TL_F_LIVE[i] = 0u8
+        TL_F_ROOT[i] = TLOGIC_SENT
+        TL_F_START[i] = 0u32
+        TL_F_END[i] = 0u32
+        i = i + 1u32
+    }
+    TL_NODE_USED = 0u32
+    TL_LAST_ERR = TLOGIC_OK
+    return TLOGIC_OK
+}
+
+fn tl_alloc_formula() -> u32 @export {
+    let mut found : u32 = TLOGIC_SENT
+    let mut i : u32 = 0u32
+    while i < TLOGIC_MAX_FORMULA {
+        if TL_F_LIVE[i] == 0u8 {
+            if found == TLOGIC_SENT { found = i }
+        }
+        i = i + 1u32
+    }
+    if found == TLOGIC_SENT { return TLOGIC_SENT }
+    TL_F_LIVE[found] = 1u8
+    TL_F_ROOT[found] = TLOGIC_SENT
+    TL_F_START[found] = TL_NODE_USED
+    TL_F_END[found] = TL_NODE_USED
+    return found
+}
+
+fn tl_drop_formula(slot: u32) -> i32 @export {
+    if slot >= TLOGIC_MAX_FORMULA { return TLOGIC_E_BAD }
+    if TL_F_LIVE[slot] == 0u8 { return TLOGIC_E_BAD }
+    if TL_F_END[slot] == TL_NODE_USED { TL_NODE_USED = TL_F_START[slot] }
+    TL_F_LIVE[slot] = 0u8
+    TL_F_ROOT[slot] = TLOGIC_SENT
+    return TLOGIC_OK
+}
+
+fn tl_node_count(slot: u32) -> u32 @export {
+    if slot >= TLOGIC_MAX_FORMULA { return 0u32 }
+    if TL_F_LIVE[slot] == 0u8 { return 0u32 }
+    return TL_F_END[slot] - TL_F_START[slot]
+}
+
+fn tl_node_append(slot: u32, tag: u8, a: u32, b: u32) -> u32 {
+    if slot >= TLOGIC_MAX_FORMULA { return TLOGIC_SENT }
+    if TL_F_LIVE[slot] == 0u8 { return TLOGIC_SENT }
+    if TL_NODE_USED >= TLOGIC_MAX_NODES { return TLOGIC_SENT }
+    let nc : u32 = TL_NODE_USED - TL_F_START[slot]
+    if nc >= TLOGIC_MAX_SUBF { return TLOGIC_SENT }
+    let idx : u32 = TL_NODE_USED
+    TL_NODE_TAG[idx] = tag
+    TL_NODE_A[idx] = a
+    TL_NODE_B[idx] = b
+    TL_NODE_USED = idx + 1u32
+    TL_F_END[slot] = TL_NODE_USED
+    return idx
+}
+
+fn tl_append_atom(slot: u32, pred_slot: u32) -> u32 @export {
+    return tl_node_append(slot, TLOGIC_TAG_ATOM, pred_slot, 0u32)
+}
+
+fn tl_append_not(slot: u32, child: u32) -> u32 @export {
+    return tl_node_append(slot, TLOGIC_TAG_NOT, child, 0u32)
+}
+
+fn tl_append_bin(slot: u32, tag: u8, l: u32, r: u32) -> u32 @export {
+    return tl_node_append(slot, tag, l, r)
+}
+
+fn tl_append_unary_temp(slot: u32, tag: u8, child: u32) -> u32 @export {
+    return tl_node_append(slot, tag, child, 0u32)
+}
+
+fn tl_set_root(slot: u32, root: u32) -> i32 @export {
+    if slot >= TLOGIC_MAX_FORMULA { return TLOGIC_E_BAD }
+    if TL_F_LIVE[slot] == 0u8 { return TLOGIC_E_BAD }
+    TL_F_ROOT[slot] = root
+    return TLOGIC_OK
+}
+
+/* === Atomic evaluation ===
+ * Marshal fragment fields into TL_SCR_OPV (cons_op_view 68 bytes) and
+ * TL_SCR_ANTE, then call cons_eval_predicate. Bad input -> 0 (M5). */
+fn tl_eval_atom(pred_slot: u32, position: u64) -> u8 {
+    if pred_slot == TLOGIC_SENT { return 0u8 }
+    let ovp : *u8 = &TL_SCR_OPV as u64 as *u8
+    let mut zi : u64 = 0u64
+    while zi < 68u64 { ovp[zi] = 0u8 ; zi = zi + 1u64 }
+    let proddst : *u8 = &TL_SCR_PROD as u64 as *u8
+    wh_get_producer(position, proddst)
+    let mut ci : u64 = 0u64
+    while ci < TLOGIC_ID_LEN { ovp[ci] = proddst[ci] ; ci = ci + 1u64 }
+    let opdst : *u8 = &TL_SCR_OP as u64 as *u8
+    wh_get_op_id(position, opdst)
+    let mut oi : u64 = 0u64
+    while oi < TLOGIC_ID_LEN { ovp[32u64 + oi] = opdst[oi] ; oi = oi + 1u64 }
+    ovp[64u64] = wh_get_phase(position)
+    ovp[65u64] = wh_is_revoked(position)
+    let pil : u16 = wh_get_pillar(position)
+    ovp[66u64] = (pil & 0xFFu16) as u8
+    ovp[67u64] = ((pil >> 8u16) & 0xFFu16) as u8
+    let mut n_ante : u32 = wh_get_ante_count(position)
+    if n_ante > TLOGIC_ANTE_MAX { n_ante = TLOGIC_ANTE_MAX }
+    let ante_base : u64 = &TL_SCR_ANTE as u64
+    let mut k : u32 = 0u32
+    while k < n_ante {
+        let km : u64 = (k as u64) & 0xFFFFFFFFu64
+        wh_get_ante(position, k, (ante_base + km * 32u64) as *u8)
+        k = k + 1u32
+    }
+    return cons_eval_predicate(pred_slot, ovp, ante_base as *u8, n_ante)
+}
+
+/* === Pass-1 helper: propositional node at (abs_pos, rel_p). ===
+ * abs_pos used only for ATOM; all others read child cells at rel_p. */
+fn tl_prop_node(n: u32, start: u32, abs_pos: u64, rel_p: u64) -> i32 {
+    let loc : u64 = ((n - start) as u64) & 0xFFFFFFFFu64
+    let tag : u8 = TL_NODE_TAG[n]
+    if tag == TLOGIC_TAG_ATOM {
+        let v : u8 = tl_eval_atom(TL_NODE_A[n], abs_pos)
+        tl_val_set(loc, rel_p, v)
+        tl_filled_set(loc, rel_p, 1u8)
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_NOT {
+        let cloc : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let cv : u8 = tl_val_get(cloc, rel_p)
+        let mut nv : u8 = 1u8
+        if cv != 0u8 { nv = 0u8 }
+        tl_val_set(loc, rel_p, nv)
+        tl_filled_set(loc, rel_p, 1u8)
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_AND {
+        let lc : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let rc : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
+        tl_val_set(loc, rel_p, tl_val_get(lc, rel_p) & tl_val_get(rc, rel_p))
+        tl_filled_set(loc, rel_p, 1u8)
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_OR {
+        let lc2 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let rc2 : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
+        tl_val_set(loc, rel_p, tl_val_get(lc2, rel_p) | tl_val_get(rc2, rel_p))
+        tl_filled_set(loc, rel_p, 1u8)
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_IMPL {
+        let lci : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let rci : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
+        let av : u8 = tl_val_get(lci, rel_p)
+        let bv : u8 = tl_val_get(rci, rel_p)
+        let mut iv : u8 = bv
+        if av == 0u8 { iv = 1u8 }
+        tl_val_set(loc, rel_p, iv)
+        tl_filled_set(loc, rel_p, 1u8)
+        return TLOGIC_OK
+    }
+    return TLOGIC_OK
+}
+
+/* === Pass-2 helper: temporal node, fill all positions. === */
+fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
+    let loc : u64 = ((n - start) as u64) & 0xFFFFFFFFu64
+    let tag : u8 = TL_NODE_TAG[n]
+    if tag == TLOGIC_TAG_NEXT {
+        let cloc : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let mut p : u64 = 0u64
+        while p < ll {
+            let nxt : u64 = p + 1u64
+            let mut v : u8 = 0u8
+            if nxt < ll { v = tl_val_get(cloc, nxt) }
+            tl_val_set(loc, p, v)
+            tl_filled_set(loc, p, 1u8)
+            p = p + 1u64
+        }
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_ALWAYS {
+        let cloc2 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let last : u64 = ll - 1u64
+        tl_val_set(loc, last, tl_val_get(cloc2, last))
+        tl_filled_set(loc, last, 1u8)
+        let mut q : u64 = last
+        while q > 0u64 {
+            q = q - 1u64
+            tl_val_set(loc, q, tl_val_get(cloc2, q) & tl_val_get(loc, q + 1u64))
+            tl_filled_set(loc, q, 1u8)
+        }
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_EVENT {
+        let cloc3 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let last3 : u64 = ll - 1u64
+        tl_val_set(loc, last3, tl_val_get(cloc3, last3))
+        tl_filled_set(loc, last3, 1u8)
+        let mut q3 : u64 = last3
+        while q3 > 0u64 {
+            q3 = q3 - 1u64
+            tl_val_set(loc, q3, tl_val_get(cloc3, q3) | tl_val_get(loc, q3 + 1u64))
+            tl_filled_set(loc, q3, 1u8)
+        }
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_UNTIL {
+        let philoc : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let psiloc : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
+        let last4 : u64 = ll - 1u64
+        tl_val_set(loc, last4, tl_val_get(psiloc, last4))
+        tl_filled_set(loc, last4, 1u8)
+        let mut q4 : u64 = last4
+        while q4 > 0u64 {
+            q4 = q4 - 1u64
+            let psiv : u8 = tl_val_get(psiloc, q4)
+            let phiv : u8 = tl_val_get(philoc, q4)
+            let uv : u8 = tl_val_get(loc, q4 + 1u64)
+            tl_val_set(loc, q4, psiv | (phiv & uv))
+            tl_filled_set(loc, q4, 1u8)
+        }
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_ONCE {
+        let cloc5 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        tl_val_set(loc, 0u64, tl_val_get(cloc5, 0u64))
+        tl_filled_set(loc, 0u64, 1u8)
+        let mut p5 : u64 = 1u64
+        while p5 < ll {
+            tl_val_set(loc, p5, tl_val_get(cloc5, p5) | tl_val_get(loc, p5 - 1u64))
+            tl_filled_set(loc, p5, 1u8)
+            p5 = p5 + 1u64
+        }
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_HIST {
+        let cloc6 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        tl_val_set(loc, 0u64, tl_val_get(cloc6, 0u64))
+        tl_filled_set(loc, 0u64, 1u8)
+        let mut p6 : u64 = 1u64
+        while p6 < ll {
+            tl_val_set(loc, p6, tl_val_get(cloc6, p6) & tl_val_get(loc, p6 - 1u64))
+            tl_filled_set(loc, p6, 1u8)
+            p6 = p6 + 1u64
+        }
+        return TLOGIC_OK
+    }
+    if tag == TLOGIC_TAG_SINCE {
+        let philoc7 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
+        let psiloc7 : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
+        tl_val_set(loc, 0u64, tl_val_get(psiloc7, 0u64))
+        tl_filled_set(loc, 0u64, 1u8)
+        let mut p7 : u64 = 1u64
+        while p7 < ll {
+            let psiv7 : u8 = tl_val_get(psiloc7, p7)
+            let phiv7 : u8 = tl_val_get(philoc7, p7)
+            let sv7 : u8 = tl_val_get(loc, p7 - 1u64)
+            tl_val_set(loc, p7, psiv7 | (phiv7 & sv7))
+            tl_filled_set(loc, p7, 1u8)
+            p7 = p7 + 1u64
+        }
+        return TLOGIC_OK
+    }
+    return TLOGIC_OK
+}
+
+/* === Table fill (W15 non-recursive core). === */
+fn tl_fill_table(slot: u32, chain_start: u64, chain_end: u64) -> i32 {
+    if slot >= TLOGIC_MAX_FORMULA { TL_LAST_ERR = TLOGIC_E_BAD ; return TLOGIC_E_BAD }
+    if TL_F_LIVE[slot] == 0u8 { TL_LAST_ERR = TLOGIC_E_BAD ; return TLOGIC_E_BAD }
+    if chain_end < chain_start { TL_LAST_ERR = TLOGIC_E_BAD ; return TLOGIC_E_BAD }
+    if chain_start == chain_end { TL_LAST_ERR = TLOGIC_E_BAD ; return TLOGIC_E_BAD }
+    let ll : u64 = chain_end - chain_start
+    if ll > TLOGIC_MAX_SEG { TL_LAST_ERR = TLOGIC_E_FULL ; return TLOGIC_E_FULL }
+    let st : u32 = TL_F_START[slot]
+    let en : u32 = TL_F_END[slot]
+    if en < st { TL_LAST_ERR = TLOGIC_E_BAD ; return TLOGIC_E_BAD }
+    let nsub : u32 = en - st
+    if nsub == 0u32 { TL_LAST_ERR = TLOGIC_E_BAD ; return TLOGIC_E_BAD }
+    if nsub > TLOGIC_MAX_SUBF { TL_LAST_ERR = TLOGIC_E_FULL ; return TLOGIC_E_FULL }
+    let sub64 : u64 = (nsub as u64) & 0xFFFFFFFFu64
+    let mut rs : u64 = 0u64
+    while rs < sub64 {
+        let mut rp : u64 = 0u64
+        while rp < ll {
+            tl_val_set(rs, rp, 0u8)
+            tl_filled_set(rs, rp, 0u8)
+            rp = rp + 1u64
+        }
+        rs = rs + 1u64
+    }
+    let mut pp : u64 = 0u64
+    while pp < ll {
+        let abs_pos : u64 = chain_start + pp
+        let mut ni : u32 = st
+        while ni < en {
+            let tg : u8 = TL_NODE_TAG[ni]
+            if tg < TLOGIC_TAG_NEXT { tl_prop_node(ni, st, abs_pos, pp) }
+            ni = ni + 1u32
+        }
+        pp = pp + 1u64
+    }
+    let mut ti : u32 = st
+    while ti < en {
+        let tg2 : u8 = TL_NODE_TAG[ti]
+        if tg2 >= TLOGIC_TAG_NEXT { tl_temp_node(ti, st, ll) }
+        ti = ti + 1u32
+    }
+    TL_LAST_ERR = TLOGIC_OK
+    return TLOGIC_OK
+}
+
+fn tl_eval(slot: u32, chain_start: u64, chain_end: u64, position: u64) -> u8 @export {
+    if slot >= TLOGIC_MAX_FORMULA { return 0u8 }
+    if TL_F_LIVE[slot] == 0u8 { return 0u8 }
+    if TL_F_ROOT[slot] == TLOGIC_SENT { return 0u8 }
+    if position < chain_start { return 0u8 }
+    if position >= chain_end { return 0u8 }
+    let rc : i32 = tl_fill_table(slot, chain_start, chain_end)
+    if rc != TLOGIC_OK { return 0u8 }
+    let root : u32 = TL_F_ROOT[slot]
+    let st : u32 = TL_F_START[slot]
+    if root < st { return 0u8 }
+    let loc : u64 = ((root - st) as u64) & 0xFFFFFFFFu64
+    return tl_val_get(loc, position - chain_start)
+}
+
+fn tl_holds_on_segment(slot: u32, chain_start: u64, chain_end: u64) -> u8 @export {
+    if slot >= TLOGIC_MAX_FORMULA { return 0u8 }
+    if TL_F_LIVE[slot] == 0u8 { return 0u8 }
+    if TL_F_ROOT[slot] == TLOGIC_SENT { return 0u8 }
+    let rc : i32 = tl_fill_table(slot, chain_start, chain_end)
+    if rc != TLOGIC_OK { return 0u8 }
+    let ll : u64 = chain_end - chain_start
+    let root : u32 = TL_F_ROOT[slot]
+    let st : u32 = TL_F_START[slot]
+    if root < st { return 0u8 }
+    let loc : u64 = ((root - st) as u64) & 0xFFFFFFFFu64
+    let mut ok : u8 = tl_val_get(loc, 0u64)
+    let mut p : u64 = 1u64
+    while p < ll {
+        ok = ok & tl_val_get(loc, p)
+        p = p + 1u64
+    }
+    return ok
+}
+
+/* ================================================================
+ * Self-test. Returns 99u64 on full pass.
+ *
+ * KAT design: inject pre-computed atom truth rows into TL_VAL to
+ * bypass tl_eval_atom (which requires constitution.iii at link time).
+ * tl_kat_run does the non-atom prop pass + temporal DP pass.
+ * Split into sub-functions to keep locals <= 20 (W13).
+ *
+ * Fixture [0,8): A0 true at {2,5}; A1 true at {0,1,2,3}.
+ * ================================================================ */
+
+fn tl_kat_inject(s: u64, ll: u64, tbl: *u8) -> i32 {
+    let mut p : u64 = 0u64
+    while p < ll {
+        tl_val_set(s, p, tbl[p])
+        tl_filled_set(s, p, 1u8)
+        p = p + 1u64
+    }
+    return 0i32
+}
+
+fn tl_kat_run(slot: u32, ll: u64) -> i32 {
+    let st : u32 = TL_F_START[slot]
+    let en : u32 = TL_F_END[slot]
+    if en < st { return TLOGIC_E_BAD }
+    let mut pp : u64 = 0u64
+    while pp < ll {
+        let mut ni : u32 = st
+        while ni < en {
+            let tg : u8 = TL_NODE_TAG[ni]
+            if tg > TLOGIC_TAG_ATOM {
+                if tg < TLOGIC_TAG_NEXT { tl_prop_node(ni, st, pp, pp) }
+            }
+            ni = ni + 1u32
+        }
+        pp = pp + 1u64
+    }
+    let mut ti : u32 = st
+    while ti < en {
+        let tg2 : u8 = TL_NODE_TAG[ti]
+        if tg2 >= TLOGIC_TAG_NEXT { tl_temp_node(ti, st, ll) }
+        ti = ti + 1u32
+    }
+    return TLOGIC_OK
+}
+
+/* KAT 1-2: F A0 and G A1. Returns 0 on pass, error code on fail. */
+fn tl_kat_fg() -> u64 {
+    let a0p : *u8 = &TL_T_A0 as u64 as *u8
+    let a1p : *u8 = &TL_T_A1 as u64 as *u8
+    let f1 : u32 = tl_alloc_formula()
+    if f1 == TLOGIC_SENT { return 1u64 }
+    let a0n1 : u32 = tl_append_atom(f1, 0u32)
+    if a0n1 == TLOGIC_SENT { return 2u64 }
+    let fa0n : u32 = tl_append_unary_temp(f1, TLOGIC_TAG_EVENT, a0n1)
+    if fa0n == TLOGIC_SENT { return 3u64 }
+    if tl_set_root(f1, fa0n) != TLOGIC_OK { return 4u64 }
+    tl_kat_inject(0u64, 8u64, a0p)
+    tl_kat_run(f1, 8u64)
+    if tl_val_get(1u64, 0u64) != 1u8 { return 10u64 }
+    if tl_val_get(1u64, 6u64) != 0u8 { return 11u64 }
+    if tl_val_get(1u64, 5u64) != 1u8 { return 12u64 }
+    let f2 : u32 = tl_alloc_formula()
+    if f2 == TLOGIC_SENT { return 20u64 }
+    let a1n2 : u32 = tl_append_atom(f2, 1u32)
+    if a1n2 == TLOGIC_SENT { return 21u64 }
+    let ga1n : u32 = tl_append_unary_temp(f2, TLOGIC_TAG_ALWAYS, a1n2)
+    if ga1n == TLOGIC_SENT { return 22u64 }
+    if tl_set_root(f2, ga1n) != TLOGIC_OK { return 23u64 }
+    tl_kat_inject(0u64, 8u64, a1p)
+    tl_kat_run(f2, 8u64)
+    if tl_val_get(1u64, 0u64) != 0u8 { return 25u64 }
+    tl_kat_inject(0u64, 4u64, a1p)
+    tl_kat_run(f2, 4u64)
+    if tl_val_get(1u64, 0u64) != 1u8 { return 27u64 }
+    return 0u64
+}
+
+/* KAT 3-4: A1 U A0 and X(NOT A0). Returns 0 on pass. */
+fn tl_kat_ux() -> u64 {
+    let a0p : *u8 = &TL_T_A0 as u64 as *u8
+    let a1p : *u8 = &TL_T_A1 as u64 as *u8
+    let f3 : u32 = tl_alloc_formula()
+    if f3 == TLOGIC_SENT { return 30u64 }
+    let a1n3 : u32 = tl_append_atom(f3, 1u32)
+    let a0n3 : u32 = tl_append_atom(f3, 0u32)
+    let un3 : u32 = tl_append_bin(f3, TLOGIC_TAG_UNTIL, a1n3, a0n3)
+    if un3 == TLOGIC_SENT { return 31u64 }
+    tl_set_root(f3, un3)
+    tl_kat_inject(0u64, 8u64, a1p)
+    tl_kat_inject(1u64, 8u64, a0p)
+    tl_kat_run(f3, 8u64)
+    if tl_val_get(2u64, 0u64) != 1u8 { return 32u64 }
+    if tl_val_get(2u64, 4u64) != 0u8 { return 33u64 }
+    if tl_val_get(2u64, 2u64) != 1u8 { return 34u64 }
+    let f4 : u32 = tl_alloc_formula()
+    if f4 == TLOGIC_SENT { return 40u64 }
+    let a0n4 : u32 = tl_append_atom(f4, 0u32)
+    let notn4 : u32 = tl_append_not(f4, a0n4)
+    let xn4 : u32 = tl_append_unary_temp(f4, TLOGIC_TAG_NEXT, notn4)
+    if xn4 == TLOGIC_SENT { return 41u64 }
+    tl_set_root(f4, xn4)
+    tl_kat_inject(0u64, 8u64, a0p)
+    tl_kat_run(f4, 8u64)
+    if tl_val_get(1u64, 2u64) != 0u8 { return 45u64 }
+    if tl_val_get(1u64, 3u64) != 1u8 { return 46u64 }
+    if tl_val_get(2u64, 1u64) != 0u8 { return 42u64 }
+    if tl_val_get(2u64, 2u64) != 1u8 { return 43u64 }
+    if tl_val_get(2u64, 7u64) != 0u8 { return 44u64 }
+    return 0u64
+}
+
+/* KAT 5: O A0, H A1, A1 S A0 (past operators). Returns 0 on pass. */
+fn tl_kat_past() -> u64 {
+    let a0p : *u8 = &TL_T_A0 as u64 as *u8
+    let a1p : *u8 = &TL_T_A1 as u64 as *u8
+    let f5 : u32 = tl_alloc_formula()
+    if f5 == TLOGIC_SENT { return 50u64 }
+    let a0n5 : u32 = tl_append_atom(f5, 0u32)
+    let on5 : u32 = tl_append_unary_temp(f5, TLOGIC_TAG_ONCE, a0n5)
+    if on5 == TLOGIC_SENT { return 51u64 }
+    tl_set_root(f5, on5)
+    tl_kat_inject(0u64, 8u64, a0p)
+    tl_kat_run(f5, 8u64)
+    if tl_val_get(1u64, 5u64) != 1u8 { return 52u64 }
+    if tl_val_get(1u64, 1u64) != 0u8 { return 53u64 }
+    let f6 : u32 = tl_alloc_formula()
+    if f6 == TLOGIC_SENT { return 60u64 }
+    let a1n6 : u32 = tl_append_atom(f6, 1u32)
+    let hn6 : u32 = tl_append_unary_temp(f6, TLOGIC_TAG_HIST, a1n6)
+    if hn6 == TLOGIC_SENT { return 61u64 }
+    tl_set_root(f6, hn6)
+    tl_kat_inject(0u64, 8u64, a1p)
+    tl_kat_run(f6, 8u64)
+    if tl_val_get(1u64, 3u64) != 1u8 { return 62u64 }
+    if tl_val_get(1u64, 4u64) != 0u8 { return 63u64 }
+    let f7 : u32 = tl_alloc_formula()
+    if f7 == TLOGIC_SENT { return 70u64 }
+    let a1n7 : u32 = tl_append_atom(f7, 1u32)
+    let a0n7 : u32 = tl_append_atom(f7, 0u32)
+    let sn7 : u32 = tl_append_bin(f7, TLOGIC_TAG_SINCE, a1n7, a0n7)
+    if sn7 == TLOGIC_SENT { return 71u64 }
+    tl_set_root(f7, sn7)
+    tl_kat_inject(0u64, 8u64, a1p)
+    tl_kat_inject(1u64, 8u64, a0p)
+    tl_kat_run(f7, 8u64)
+    if tl_val_get(2u64, 5u64) != 1u8 { return 72u64 }
+    if tl_val_get(2u64, 3u64) != 1u8 { return 73u64 }
+    if tl_val_get(2u64, 4u64) != 0u8 { return 74u64 }
+    return 0u64
+}
+
+/* KAT 6-7: refusal gate + drop/count. Returns 0 on pass. */
+fn tl_kat_guards() -> u64 {
+    let f8 : u32 = tl_alloc_formula()
+    if f8 == TLOGIC_SENT { return 80u64 }
+    let a0n8 : u32 = tl_append_atom(f8, 0u32)
+    tl_set_root(f8, a0n8)
+    let big_end : u64 = 4097u64
+    let rc6 : i32 = tl_fill_table(f8, 0u64, big_end)
+    if rc6 != TLOGIC_E_FULL { return 81u64 }
+    if TL_LAST_ERR != TLOGIC_E_FULL { return 82u64 }
+    let ev6 : u8 = tl_eval(f8, 0u64, big_end, 0u64)
+    if ev6 != 0u8 { return 83u64 }
+    let f9 : u32 = tl_alloc_formula()
+    if f9 == TLOGIC_SENT { return 90u64 }
+    let a0n9 : u32 = tl_append_atom(f9, 0u32)
+    if tl_node_count(f9) != 1u32 { return 91u64 }
+    let notn9 : u32 = tl_append_not(f9, a0n9)
+    if tl_node_count(f9) != 2u32 { return 92u64 }
+    let st9 : u32 = TL_F_START[f9]
+    if tl_drop_formula(f9) != TLOGIC_OK { return 93u64 }
+    let f9b : u32 = tl_alloc_formula()
+    if f9b == TLOGIC_SENT { return 94u64 }
+    if TL_F_START[f9b] != st9 { return 95u64 }
+    tl_drop_formula(f9b)
+    let _d : u32 = notn9
+    return 0u64
+}
+
+fn tl_selftest() -> u64 @export {
+    tl_init()
+    let a0p : *u8 = &TL_T_A0 as u64 as *u8
+    let a1p : *u8 = &TL_T_A1 as u64 as *u8
+    a0p[0u64] = 0u8  a0p[1u64] = 0u8  a0p[2u64] = 1u8  a0p[3u64] = 0u8
+    a0p[4u64] = 0u8  a0p[5u64] = 1u8  a0p[6u64] = 0u8  a0p[7u64] = 0u8
+    a1p[0u64] = 1u8  a1p[1u64] = 1u8  a1p[2u64] = 1u8  a1p[3u64] = 1u8
+    a1p[4u64] = 0u8  a1p[5u64] = 0u8  a1p[6u64] = 0u8  a1p[7u64] = 0u8
+    let r1 : u64 = tl_kat_fg()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = tl_kat_ux()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = tl_kat_past()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = tl_kat_guards()
+    if r4 != 0u64 { return r4 }
+    return 99u64
+}

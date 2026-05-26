@@ -1,0 +1,14 @@
+/* 671_hexad_mobius.iii -- M8 keystone: the Mobius inverse round-trips on the M3 safety lattice.
+ *
+ * Exhaustive over all 729 valid hexads: active-negation is involutive, so forward+inverse cancels
+ * to ZERO on the active band (the one inverse concept projected onto the safety lattice -- the M3
+ * debt the apotheosis M8 names). The involution is verified two ways (active_neg compose and the
+ * independent unpack+trit_sum round-trip), plus prove-the-negative arms (a corrupted inverse
+ * makes both valid() and roundtrip() reject) and the coherence-floor gate.
+ *
+ * Main-corpus convention: rc 99 on pass; 1..12 = which check failed. */
+module corpus_671
+
+extern @abi(c-msvc-x64) fn iii_hexad_mobius_selftest() -> u64 from "hexad_mobius.iii"
+
+fn main() -> u64 { return iii_hexad_mobius_selftest() }

@@ -1,0 +1,4 @@
+/* 624 — node_identity: per-host identity, 3 ed25519 keypairs from seed, sign/verify. */
+module corpus_624
+extern @abi(c-msvc-x64) fn ni_selftest() -> u64 from "node_identity.iii"
+fn main() -> u64 { return ni_selftest() }

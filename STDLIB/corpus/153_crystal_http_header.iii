@@ -1,0 +1,47 @@
+/* Step 0054 verification: http_format_crystal_header emits a syntactically
+ * valid X-Crystal-HTTP header for a known 32-byte root.
+ *
+ * Header layout:  "X-Crystal-HTTP: " (16 bytes) || 64 hex digits || "\r\n"
+ * Total: 82 bytes.
+ */
+module corpus_153
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn http_format_crystal_header(out_buf: u64, out_cap: u64, root_ptr: u64) -> u64 from "http.iii"
+
+fn main() -> u64 {
+    let root : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        root[i] = (i & 0xFFu64) as u8
+        i = i + 1u64
+    }
+
+    let buf : *u8 = malloc(128u64)
+    let n : u64 = http_format_crystal_header(buf as u64, 128u64, root as u64)
+    if n != 82u64 { return 1u64 }
+
+    /* Prefix "X-Crystal-HTTP: " (16 bytes). */
+    if buf[0u64]  !=  88u8 { return 2u64 }   /* X */
+    if buf[1u64]  !=  45u8 { return 3u64 }   /* - */
+    if buf[2u64]  !=  67u8 { return 4u64 }   /* C */
+    if buf[14u64] !=  58u8 { return 5u64 }   /* : */
+    if buf[15u64] !=  32u8 { return 6u64 }   /* space */
+
+    /* Hex of byte 0 = 0x00 → "00". */
+    if buf[16u64] !=  48u8 { return 7u64 }   /* 0 */
+    if buf[17u64] !=  48u8 { return 8u64 }
+
+    /* Hex of byte 31 = 0x1F → "1f". */
+    if buf[78u64] !=  49u8 { return 9u64 }   /* 1 */
+    if buf[79u64] != 102u8 { return 10u64 }  /* f */
+
+    /* CRLF terminator. */
+    if buf[80u64] != 13u8 { return 11u64 }
+    if buf[81u64] != 10u8 { return 12u64 }
+
+    free(buf)
+    free(root)
+    return 99u64
+}

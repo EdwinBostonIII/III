@@ -1,0 +1,87 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\tempora\rfc3339.iii
+ *
+ * III STDLIB - tempora::rfc3339
+ *
+ * RFC 3339 / ISO 8601 datetime formatting and parsing (basic subset).
+ * Format: YYYY-MM-DDTHH:MM:SSZ (20 chars).
+ *
+ * Public API:
+ *   rfc3339_format(unix_seconds:u64, out_20:*u8) -> i32
+ *      Writes "YYYY-MM-DDTHH:MM:SSZ" (20 bytes).
+ *   rfc3339_parse(src:*u8, src_len:u64) -> u64
+ *      Returns Unix seconds; 0xFFFFFFFFFFFFFFFF on error.
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module tempora_rfc3339
+
+extern @abi(c-msvc-x64) fn cal_unix_to_civil(unix_seconds: u64) -> i32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_civil_to_unix(year: u32, month: u32, day: u32) -> u64 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_year() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_month() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_day() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_hour() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_min() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_sec() -> u32 from "calendar.iii"
+
+fn rfc_digit(d: u32) -> u8 {
+    return (48u32 + (d & 0xFu32)) as u8
+}
+
+fn rfc_emit2(out: *u8, off: u64, v: u32) -> i32 {
+    out[off]      = rfc_digit(v / 10u32)
+    out[off + 1u64] = rfc_digit(v % 10u32)
+    return 0i32
+}
+
+fn rfc_emit4(out: *u8, off: u64, v: u32) -> i32 {
+    out[off + 0u64] = rfc_digit(v / 1000u32)
+    out[off + 1u64] = rfc_digit((v / 100u32) % 10u32)
+    out[off + 2u64] = rfc_digit((v / 10u32) % 10u32)
+    out[off + 3u64] = rfc_digit(v % 10u32)
+    return 0i32
+}
+
+fn rfc3339_format(unix_seconds: u64, out_20: *u8) -> i32 @export {
+    cal_unix_to_civil(unix_seconds)
+    rfc_emit4(out_20, 0u64, cal_last_year())
+    out_20[4] = 45u8   /* - */
+    rfc_emit2(out_20, 5u64, cal_last_month())
+    out_20[7] = 45u8
+    rfc_emit2(out_20, 8u64, cal_last_day())
+    out_20[10] = 84u8   /* T */
+    rfc_emit2(out_20, 11u64, cal_last_hour())
+    out_20[13] = 58u8   /* : */
+    rfc_emit2(out_20, 14u64, cal_last_min())
+    out_20[16] = 58u8
+    rfc_emit2(out_20, 17u64, cal_last_sec())
+    out_20[19] = 90u8   /* Z */
+    return 0i32
+}
+
+fn rfc_parse2(src: *u8, off: u64) -> u32 {
+    let d0 : u32 = src[off] as u32 - 48u32
+    let d1 : u32 = src[off + 1u64] as u32 - 48u32
+    return d0 * 10u32 + d1
+}
+
+fn rfc_parse4(src: *u8, off: u64) -> u32 {
+    let d0 : u32 = src[off + 0u64] as u32 - 48u32
+    let d1 : u32 = src[off + 1u64] as u32 - 48u32
+    let d2 : u32 = src[off + 2u64] as u32 - 48u32
+    let d3 : u32 = src[off + 3u64] as u32 - 48u32
+    return d0 * 1000u32 + d1 * 100u32 + d2 * 10u32 + d3
+}
+
+fn rfc3339_parse(src: *u8, src_len: u64) -> u64 @export {
+    if src_len < 20u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let year : u32 = rfc_parse4(src, 0u64)
+    let month : u32 = rfc_parse2(src, 5u64)
+    let day : u32 = rfc_parse2(src, 8u64)
+    let hour : u32 = rfc_parse2(src, 11u64)
+    let min : u32 = rfc_parse2(src, 14u64)
+    let sec : u32 = rfc_parse2(src, 17u64)
+    let day_secs : u64 = (hour as u64) * 3600u64 + (min as u64) * 60u64 + (sec as u64)
+    return cal_civil_to_unix(year, month, day) + day_secs
+}

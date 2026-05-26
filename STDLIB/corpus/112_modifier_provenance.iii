@@ -1,0 +1,10 @@
+/* Lattice plan Step 0009: @provenance modifier. */
+module corpus_112
+
+fn traced() -> u64 @provenance {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return traced()
+}

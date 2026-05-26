@@ -1,0 +1,28 @@
+/* 395 — V1 Stage 7.2: result @specialize alphabet extension.
+ * Exercises the newly-generated result_<type>_<op> symbols beyond u32: u16
+ * (lossless ok), i32 (sign round-trip), and the err/err_code path.  Proves the
+ * generic result__<op><T> monomorphised correctly per type.  Exit 99 = pass. */
+module corpus_395_result_specialize
+
+extern @abi(c-msvc-x64) fn result_u16_ok(v: u16) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u16_unwrap_or(r: u64, d: u16) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_ok(v: i32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_unwrap_or(r: u64, d: i32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_err(c: u32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_is_ok(r: u64) -> u8 from "result.iii"
+extern @abi(c-msvc-x64) fn result_i32_err_code(r: u64) -> u32 from "result.iii"
+
+fn main() -> u64 {
+    /* u16 ok: lossless inline round-trip. */
+    let a : u64 = result_u16_ok(40000u16)
+    if (result_u16_unwrap_or(a, 0u16)) != 40000u64 { return 1u64 }
+    /* i32 ok: -5 sign round-trips through the low 32 bits. */
+    let b : u64 = result_i32_ok(-5i32)
+    let r : i32 = (result_i32_unwrap_or(b, 0i32)) as i32
+    if r != -5i32 { return 2u64 }
+    /* i32 err: err code path. */
+    let e : u64 = result_i32_err(0xE100u32)
+    if result_i32_is_ok(e) != 0u8 { return 3u64 }
+    if result_i32_err_code(e) != 0xE100u32 { return 4u64 }
+    return 99u64
+}

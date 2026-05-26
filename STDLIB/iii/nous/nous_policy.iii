@@ -1,0 +1,186 @@
+/* STDLIB/iii/nous/nous_policy.iii -- the deterministic integer proposer (nous Phase 3).
+ *
+ * The real ranker.  It orders the live rewrite rules for a given context kind by a kind-aware BLOCK
+ * reorder (ADR-N11; detailed below) -- NOT a free permutation of "certified-reorderable rules".  Its
+ * SAFETY is enforced empirically by the differential gate (verify_nous_differential.sh) -- every
+ * corpus verdict is unchanged -- AND, post-route-S, PROVEN by the confluence-core certificate: the
+ * reorderable-set authority is omnia/xii_conf_cert.xcc_reorderable (sealed + verified in corpus 826),
+ * which decides for any rule pair whether reordering is sound (1 iff no non-joining overlap).
+ *
+ * THE CONFLUENCE-SAFETY CONSTRAINT (proven, not assumed).  The R-rule cascade order is
+ * NOT a free permutation: R038 and R040 are SPECIALIZATIONS that MUST fire before the
+ * general rules they overlap (R037/R017 for R038, R030 for R040 -- see xii_rewrite.iii's
+ * apply_one).  An early free-score-sort that reordered the R-rules into ascending order
+ * was caught RED by the differential gate on exactly 341_xii_R038 and 343_xii_R040.  So
+ * the certified-reorderable structure is: the trit block (kinds 25-29, LHS-DISJOINT from
+ * every R-rule -> zero critical pairs) may move freely relative to the R-block; WITHIN
+ * the R-block the proven cascade order is preserved (ADR-N11: uncertified relative
+ * positions stay fixed).
+ *
+ * The policy is therefore a kind-aware BLOCK reorder:
+ *   trit-kind context (24-29): [trit block] ++ [R-block in cascade order]  -- try the
+ *                              trit rules first (the only ones that can match a trit term).
+ *   otherwise:                 [R-block in cascade order] ++ [trit block]  -- = the cascade.
+ * Both are confluence-safe; the policy changes the ORDER, never the normal form.  A
+ * richer trained model (ADR-N2) may later reorder WITHIN a confluence-equivalence class, but must
+ * keep the gate green AND gate every candidate swap through xcc_reorderable(a, b) -- the certificate's
+ * proven reorderability relation.  That is the equivalence-class SOURCE this policy is bound to: the
+ * trit block is xcc-reorderable with every R-rule (LHS-disjoint, zero critical pairs), while a
+ * collapse/sort rule and the lift rule it has a non-joining subterm overlap with are NOT reorderable
+ * (different confluence classes) -- so a within-class reorderer permutes within a class, never across.
+ * The current block reorder already respects this: it never swaps across the proven non-join boundary.
+ *
+ * nous_policy_score is an advisory kind-affinity metric (a hook for that future model);
+ * the SAFE ordering is the block construction in nous_policy_rank, not a free score-sort.
+ *
+ * Hexad: kind_quiescence.  Ring: R0.  K: 1.00.  NIH: nous_features only.  Determinism:
+ * integer-only; u64 indices; ==/!= + UNSIGNED ordering; single-line fns.
+ */
+module nous_policy
+
+extern @abi(c-msvc-x64) fn nous_feat_kind(t: u32) -> u32 from "nous_features.iii"
+
+const NOUS_POL_N          : u32 = 49u32   /* 44 R-rule slots (R001-R004 retired by route S, retained inert for cascade/permutation + differential-gate stability) + 5 trit */
+const NOUS_POL_TRIT_LO    : u32 = 101u32
+const NOUS_POL_TRIT_HI    : u32 = 105u32
+const NOUS_POL_KTRIT_LO   : u32 = 24u32   /* trit kinds 24-29 */
+const NOUS_POL_KTRIT_HI   : u32 = 29u32
+const NOUS_POL_KFUS_LO    : u32 = 18u32   /* fusion kinds 18-23 */
+const NOUS_POL_KFUS_HI    : u32 = 23u32
+const NOUS_POL_RBASE      : u32 = 200u32
+const NOUS_POL_BONUS_TRIT : u64 = 1000u64
+const NOUS_POL_BONUS_FUS  : u64 = 500u64
+const NOUS_POL_U32MASK    : u64 = 0xFFFFFFFFu64
+
+var NOUS_POL_RCASC : [u64; 64]   /* the 44 R-rules in cascade order (filled lazily) */
+var NOUS_POL_OUT   : [u64; 64]   /* selftest scratch */
+var NOUS_POL_OUT2  : [u64; 64]
+var NOUS_POL_SEEN  : [u8;  128]
+
+/* Fill the R-block in EXACT cascade order (matches xii_rewrite_apply_one, minus the
+ * trit block and the dead second R040): 38,40,1..12,41,13..23,43,44,24..32,42,33..37,39. */
+fn _nous_pol_fill() {
+    NOUS_POL_RCASC[0u64] = 38u64
+    NOUS_POL_RCASC[1u64] = 40u64
+    let mut i : u64 = 0u64
+    while i < 12u64 { NOUS_POL_RCASC[2u64 + i] = 1u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[14u64] = 41u64
+    i = 0u64
+    while i < 11u64 { NOUS_POL_RCASC[15u64 + i] = 13u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[26u64] = 43u64
+    NOUS_POL_RCASC[27u64] = 44u64
+    i = 0u64
+    while i < 9u64 { NOUS_POL_RCASC[28u64 + i] = 24u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[37u64] = 42u64
+    i = 0u64
+    while i < 5u64 { NOUS_POL_RCASC[38u64 + i] = 33u64 + i  i = i + 1u64 }
+    NOUS_POL_RCASC[43u64] = 39u64
+}
+
+/* Advisory kind-affinity (NOT used for ordering -- see header).  Higher = a likelier
+ * match for this kind: trit rules for a trit kind, structural rules for a fusion kind. */
+fn nous_policy_score(rule_id: u32, kind: u32) -> u64 @export {
+    let mut base : u64 = 0u64
+    if rule_id < NOUS_POL_RBASE { base = (NOUS_POL_RBASE - rule_id) as u64 }
+    let mut bonus : u64 = 0u64
+    if kind >= NOUS_POL_KTRIT_LO {
+        if kind <= NOUS_POL_KTRIT_HI {
+            if rule_id >= NOUS_POL_TRIT_LO {
+                if rule_id <= NOUS_POL_TRIT_HI { bonus = NOUS_POL_BONUS_TRIT }
+            }
+        }
+    }
+    if kind >= NOUS_POL_KFUS_LO {
+        if kind <= NOUS_POL_KFUS_HI {
+            if rule_id <= 44u32 { bonus = NOUS_POL_BONUS_FUS }
+        }
+    }
+    return base + bonus
+}
+
+/* The confluence-safe block reorder.  Returns a FULL PERMUTATION of the 49 certified
+ * rules: trit block first for a trit-kind context, else the cascade order. */
+fn nous_policy_rank(ctx_term: u32, kind: u32, out: *u64, cap: u32) -> u32 @export {
+    if (out as u64) == 0u64 { return 0u32 }
+    if NOUS_POL_RCASC[0u64] == 0u64 { _nous_pol_fill() }
+    let capn : u64 = cap as u64
+    let mut w : u64 = 0u64
+    let mut trit_first : u8 = 0u8
+    if kind >= NOUS_POL_KTRIT_LO {
+        if kind <= NOUS_POL_KTRIT_HI { trit_first = 1u8 }
+    }
+    if trit_first == 1u8 {
+        let mut i : u64 = 0u64
+        while i < 5u64 {
+            if w < capn { out[w] = 101u64 + i  w = w + 1u64 }
+            i = i + 1u64
+        }
+        i = 0u64
+        while i < 44u64 {
+            if w < capn { out[w] = NOUS_POL_RCASC[i]  w = w + 1u64 }
+            i = i + 1u64
+        }
+    } else {
+        let mut i : u64 = 0u64
+        while i < 44u64 {
+            if w < capn { out[w] = NOUS_POL_RCASC[i]  w = w + 1u64 }
+            i = i + 1u64
+        }
+        i = 0u64
+        while i < 5u64 {
+            if w < capn { out[w] = 101u64 + i  w = w + 1u64 }
+            i = i + 1u64
+        }
+    }
+    return w as u32
+}
+
+fn nous_policy_selftest() -> u64 @export {
+    /* advisory score is deterministic + kind-aware */
+    if nous_policy_score(102u32, 26u32) != nous_policy_score(102u32, 26u32) { return 1u64 }
+    if nous_policy_score(102u32, 26u32) <= nous_policy_score(1u32, 26u32) { return 2u64 }
+
+    let buf : *u64 = (&NOUS_POL_OUT as u64) as *u64
+    /* trit-kind context: trit block first, then the cascade R-order */
+    let n : u32 = nous_policy_rank(0u32, 26u32, buf, 64u32)
+    if n != NOUS_POL_N { return 3u64 }
+    if NOUS_POL_OUT[0u64] != 101u64 { return 4u64 }
+    if NOUS_POL_OUT[4u64] != 105u64 { return 5u64 }
+    if NOUS_POL_OUT[5u64] != 38u64 { return 6u64 }     /* R-block begins with R038 (cascade order) */
+    if NOUS_POL_OUT[6u64] != 40u64 { return 7u64 }     /* then R040 -- the required priority is kept */
+
+    /* fusion-kind context: the cascade order exactly (R-block then trit) */
+    nous_policy_rank(0u32, 20u32, buf, 64u32)
+    if NOUS_POL_OUT[0u64] != 38u64 { return 8u64 }     /* R038 first, as the cascade demands */
+    if NOUS_POL_OUT[1u64] != 40u64 { return 9u64 }     /* R040 second */
+    if NOUS_POL_OUT[44u64] != 101u64 { return 10u64 }  /* trit block after all 44 R-rules */
+
+    /* FULL PERMUTATION: every certified rule exactly once (no drop, no dup) */
+    let mut z : u64 = 0u64
+    while z < 128u64 { NOUS_POL_SEEN[z] = 0u8  z = z + 1u64 }
+    let mut i : u64 = 0u64
+    let mut cnt : u32 = 0u32
+    while i < 49u64 {
+        let rid : u64 = NOUS_POL_OUT[i]
+        if rid >= 128u64 { return 11u64 }
+        if NOUS_POL_SEEN[rid] != 0u8 { return 12u64 }
+        NOUS_POL_SEEN[rid] = 1u8
+        cnt = cnt + 1u32
+        i = i + 1u64
+    }
+    if cnt != 49u32 { return 13u64 }
+    i = 1u64
+    while i < 45u64 { if NOUS_POL_SEEN[i] != 1u8 { return 14u64 }  i = i + 1u64 }
+    i = 101u64
+    while i < 106u64 { if NOUS_POL_SEEN[i] != 1u8 { return 15u64 }  i = i + 1u64 }
+
+    /* determinism: re-rank, byte-identical */
+    let buf2 : *u64 = (&NOUS_POL_OUT2 as u64) as *u64
+    nous_policy_rank(0u32, 26u32, buf2, 64u32)
+    /* OUT currently holds the fusion order; recompute the trit order into OUT to match */
+    nous_policy_rank(0u32, 26u32, buf, 64u32)
+    i = 0u64
+    while i < 49u64 { if NOUS_POL_OUT[i] != NOUS_POL_OUT2[i] { return 16u64 }  i = i + 1u64 }
+
+    return 99u64
+}

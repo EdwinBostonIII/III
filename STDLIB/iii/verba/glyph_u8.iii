@@ -1,0 +1,56 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_u8.iii
+ *
+ * III STDLIB - verba::glyph_u8 -- Glyph V3 form for u8.
+ *
+ * Lattice plan Phase 14h Step 0165.  Encodes a u8 value into the
+ * canonical 192-byte glyph; payload_len = 1, payload[0] = value.
+ *
+ * Public surface:
+ *   glyph_u8_form_id()                       -> u32   (returns 0x10)
+ *   glyph_u8_pack(v, out_192)                -> i32
+ *   glyph_u8_unpack(in_192)                  -> u32   (returns u8 as u32; 0x100 on bad form)
+ *   glyph_u8_validate(in_192)                -> u8    (1 iff form_id matches AND mhash valid)
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_u8
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u8(p: u64, v: u8) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u8(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_U8 : u32 = 0x10u32
+
+fn glyph_u8_form_id() -> u32 @export { return GV3_FORM_U8 }
+
+fn glyph_u8_pack(v: u8, out_192: u64) -> i32 @export {
+    let v_l : u8  = v
+    let o_l : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_U8)
+    gv3_write_u32_le(o_l + 4u64, 1u32)
+    gv3_write_u8(o_l + 8u64, v_l)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_u8_unpack(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0x100u32 }
+    if gv3_form_id(i_l) != GV3_FORM_U8 { return 0x100u32 }
+    if gv3_validate(i_l) != 1u8 { return 0x100u32 }
+    return gv3_read_u8(i_l + 8u64)
+}
+
+fn glyph_u8_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_U8 { return 0u8 }
+    return gv3_validate(i_l)
+}

@@ -1,0 +1,7 @@
+/* 383 — V1 Stage 5 HotStuff BFT: 4 distinct Ed25519 keypairs, n=4 quorum 3;
+ * propose -> handle_propose (sig+leader+safety) -> QC compose/verify (+tamper)
+ * -> vote aggregation (duplicate + bad-signature rejection, quorum phase-advance)
+ * -> three-tier dispatch (Bedrock/Field/Speculative). */
+module corpus_383
+extern @abi(c-msvc-x64) fn hs_selftest() -> u64 from "hotstuff.iii"
+fn main() -> u64 { return hs_selftest() }

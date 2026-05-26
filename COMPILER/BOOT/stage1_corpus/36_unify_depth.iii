@@ -1,0 +1,32 @@
+module corpus_36
+
+extern @abi(c-msvc-x64) fn unify_buf_new(arena_id: u64) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_var(buf: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_struct(buf: u64, head: u32, args_first: u32, arity: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_alloc_args(buf: u64, n: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_set_arg(buf: u64, args_first: u32, slot: u8, term: u32) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify(buf: u64, a: u32, b: u32) -> u8 from "unify.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(65536u64)
+    let buf : u64 = unify_buf_new(arena)
+    if buf == 0u64 { return 0u64 }
+    /* Build nested f(f(f(...(v_inner)...))). Then unify a fresh var v_outer
+     * with that structure. Since v_outer does not occur in the structure,
+     * occurs_check returns 0, and unify SUCCEEDS by binding v_outer.
+     * The point of this test: depth-walking is bounded; deep terms don't
+     * cause stack overflow. Expected: unify returns 1 (success). */
+    let v_inner : u32 = unify_make_var(buf)
+    let mut prev : u32 = v_inner
+    let mut depth : u32 = 0u32
+    while depth < 20u32 {
+        let args : u32 = unify_alloc_args(buf, 1u8)
+        unify_set_arg(buf, args, 0u8, prev)
+        prev = unify_make_struct(buf, 200u32, args, 1u8)
+        depth = depth + 1u32
+    }
+    let v_outer : u32 = unify_make_var(buf)
+    let ok : u8 = unify(buf, v_outer, prev)
+    return ok as u64
+}

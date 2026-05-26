@@ -1,0 +1,4 @@
+/* 627 — cap_forge: forge capabilities (immutable fibrations W18) + de-forge cascade. */
+module corpus_627
+extern @abi(c-msvc-x64) fn cf_selftest() -> u64 from "cap_forge.iii"
+fn main() -> u64 { return cf_selftest() }

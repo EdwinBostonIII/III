@@ -1,0 +1,63 @@
+/* memoria::arena + memoria::region — reset_safe with clear_done flag
+ * blocks reset when a clear_fn is registered but not yet invoked. */
+module corpus_121
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_used(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_register_clear_fn(id: u64, addr: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_clear_fn_addr(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset_safe(id: u64, clear_done: u8) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_alloc(id: u64, n: u64, align: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_used(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_register_clear_fn(id: u64, addr: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_clear_fn_addr(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_reset_safe(id: u64, clear_done: u8) -> i32 from "region.iii"
+
+fn main() -> u64 {
+    /* arena path */
+    let a : u64 = arena_new(1u64 << 12u64)
+    if a == 0u64 { return 1u64 }
+    let _p1 : u64 = arena_alloc8(a, 64u64)
+    if arena_used(a) == 0u64 { return 2u64 }
+
+    /* No clear_fn registered → reset_safe with clear_done=0 succeeds. */
+    if arena_reset_safe(a, 0u8) != 0i32 { return 3u64 }
+    if arena_used(a) != 0u64 { return 4u64 }
+
+    /* Register a non-zero clear_fn address (sentinel value, not invoked). */
+    if arena_register_clear_fn(a, 0xDEADBEEFu64) != 0i32 { return 5u64 }
+    if arena_clear_fn_addr(a) != 0xDEADBEEFu64 { return 6u64 }
+
+    /* Now reset_safe(clear_done=0) MUST refuse. */
+    let _p2 : u64 = arena_alloc8(a, 64u64)
+    if arena_reset_safe(a, 0u8) != -1i32 { return 7u64 }
+    /* And reset_safe(clear_done=1) succeeds. */
+    if arena_reset_safe(a, 1u8) != 0i32 { return 8u64 }
+    if arena_used(a) != 0u64 { return 9u64 }
+    arena_drop(a)
+
+    /* region path */
+    let r : u64 = region_create(1u64 << 12u64)
+    if r == 0u64 { return 10u64 }
+    let _q1 : u64 = region_alloc(r, 64u64, 8u64)
+    if region_used(r) == 0u64 { return 11u64 }
+
+    if region_reset_safe(r, 0u8) != 0i32 { return 12u64 }
+    if region_used(r) != 0u64 { return 13u64 }
+
+    if region_register_clear_fn(r, 0xCAFEBABEu64) != 0i32 { return 14u64 }
+    if region_clear_fn_addr(r) != 0xCAFEBABEu64 { return 15u64 }
+
+    let _q2 : u64 = region_alloc(r, 64u64, 8u64)
+    if region_reset_safe(r, 0u8) != -6i32 { return 16u64 }
+    if region_reset_safe(r, 1u8) != 0i32 { return 17u64 }
+    if region_used(r) != 0u64 { return 18u64 }
+    region_release(r)
+
+    return 99u64
+}

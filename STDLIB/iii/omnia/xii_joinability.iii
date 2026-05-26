@@ -1,0 +1,274 @@
+/* STDLIB/iii/omnia/xii_joinability.iii -- mig4 Step 4: the dynamic joinability gate.
+ * For every critical pair Step 3 (xii_critpair_enum) enumerated, decide whether the two
+ * competing rewrites JOIN -- reach the same canonical form -- which is the local-confluence
+ * obligation (Newman + termination => global confluence).  Replaces xii_critpairs.iii's
+ * hand-written per-pair checks with a constructor-driven gate over the live enumerated set.
+ *
+ * Per critical pair (kind, slot_i, slot_j, pos):
+ *   - BUILD a concrete witness redex from the rules' structural descriptors, instantiating
+ *     each constrained child with a guard-firing instance via the kind->sentinel map
+ *     (_xjn_inst): compose-null/then-null = K06/K12 + NULL_GROUND, trivial-lift = K17 +
+ *     TRIVIAL_LIFT, grant-noop = K10 + NOOP_GRANT, FLOOP count=1, else a generic instance.
+ *   - ROOT overlap: build the shared redex, apply rule i and rule j on fresh copies, converge.
+ *   - SUBTERM overlap: build rule j's redex with child[pos] = rule i's redex; path A applies
+ *     j at the root, path B applies i at the child then canonicalises (the CP-003 pattern).
+ *   - Verdict: JOIN(1) if both fired and the canonical forms are struct_eq; NONJOIN(0) if both
+ *     fired but diverged (a confluence VIOLATION); NO_WITNESS(2) if the constructed witness did
+ *     not fire both rules -- a spurious structural overlap (guard-incompatible) or a guard this
+ *     constructor does not yet instantiate (cap/table/bitfield/PE-const).  NO_WITNESS is tallied
+ *     honestly, NEVER claimed as joined.
+ * The gate is GREEN iff zero NONJOIN over the enumerated set (no confluence violation found).
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: Steps 1-3 + xii_term/xii_rewrite/
+ * xii_canonicalise only.  Determinism: integer-only; ==/!= and UNSIGNED < ; single-line fns;
+ * no recursion (the engine's canonicalise is the only nested reduction); no u64 div/mod.
+ */
+module omnia_xii_joinability
+
+extern @abi(c-msvc-x64) fn xrp_rid_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_root_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_ca_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_cb_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_cc_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn cpe_enumerate() -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_kind_at(idx: u32) -> u64 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_si_at(idx: u32) -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_sj_at(idx: u32) -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn cpe_pos_at(idx: u32) -> u32 from "xii_critpair_enum.iii"
+extern @abi(c-msvc-x64) fn xro_slot_of_rid(rid: u32) -> u32 from "xii_rule_overlap.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_noop_grant_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_trivial_lift_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+
+const XJN_ANY      : u64 = 255u64
+const XJN_NULL_REF : u32 = 0xFFFFFFFFu32
+const XJN_JOIN     : u8  = 1u8
+const XJN_NONJOIN  : u8  = 0u8
+const XJN_NOWIT    : u8  = 2u8
+
+var XJN_TALLY : [u64; 4]   /* [0]=join  [1]=no_witness  [2]=nonjoin  [3]=total */
+var XJN_NJ    : [u64; 4]   /* first NONJOIN: [0]=rid_i [1]=rid_j [2]=kind [3]=pos */
+var XJN_NJ_I  : [u64; 128] /* every NONJOIN: rewriter rule-id (rid_i) */
+var XJN_NJ_J  : [u64; 128] /* every NONJOIN: rewritten rule-id (rid_j) */
+var XJN_NJ_P  : [u64; 128] /* every NONJOIN: position */
+
+/* A guard-firing instance of an XII kind (the kind->sentinel map). */
+fn _xjn_inst(kind: u64) -> u32 {
+    if kind == 5u64   { return xii_term_make_basis(5u8,  xii_rewrite_null_form()) }
+    if kind == 11u64  { return xii_term_make_basis(11u8, xii_rewrite_null_form()) }
+    if kind == 16u64  { return xii_term_make_basis(16u8, xii_rewrite_trivial_lift_form()) }
+    if kind == 9u64   { return xii_term_make_basis(9u8,  xii_rewrite_noop_grant_form()) }
+    if kind == 255u64 { return xii_term_make_basis(0u8, 1u32) }
+    if kind == 22u64  { return xii_term_make_if(xii_term_make_basis(0u8, 1u32), xii_term_make_basis(0u8, 1u32), xii_term_make_basis(0u8, 1u32)) }
+    if kind == 23u64  { return xii_term_make_loop(xii_term_make_basis(0u8, 1u32), 1u64) }
+    if kind == 24u64  { return xii_term_make_basis(24u8, 1u32) }
+    if kind <= 17u64  { return xii_term_make_basis(kind as u8, 1u32) }
+    return xii_term_make_fusion2(kind as u8, xii_term_make_basis(0u8, 1u32), xii_term_make_basis(0u8, 1u32))
+}
+
+/* the witness child kind at a position: the non-ANY of the two rules' constraints. */
+fn _xjn_child_kind(ci: u64, cj: u64) -> u64 {
+    if ci != XJN_ANY { return ci }
+    return cj
+}
+
+/* Build a redex satisfying both rules' structural LHS (slot_i==slot_j = a single rule). */
+fn _xjn_build_witness(slot_i: u32, slot_j: u32) -> u32 {
+    let root : u64 = xrp_root_at(slot_i) as u64
+    let cak : u64 = _xjn_child_kind(xrp_ca_at(slot_i) as u64, xrp_ca_at(slot_j) as u64)
+    let cbk : u64 = _xjn_child_kind(xrp_cb_at(slot_i) as u64, xrp_cb_at(slot_j) as u64)
+    let cck : u64 = _xjn_child_kind(xrp_cc_at(slot_i) as u64, xrp_cc_at(slot_j) as u64)
+    if root <= 17u64 { return _xjn_inst(root) }
+    if root == 22u64 { return xii_term_make_if(_xjn_inst(cak), _xjn_inst(cbk), _xjn_inst(cck)) }
+    if root == 23u64 { return xii_term_make_loop(_xjn_inst(cak), 1u64) }
+    return xii_term_make_fusion2(root as u8, _xjn_inst(cak), _xjn_inst(cbk))
+}
+
+/* mig4 Step 5 reuse: a single rule's guard-firing redex (slot==slot in the witness builder).
+ * @export so xii_termination (the MPO-decrease gate) measures each rule's weight + assoc-penalty
+ * decrease on the SAME sentinel-instantiated redex this joinability gate uses -- one witness
+ * source, so the two gates' "this rule fired" sets coincide exactly. */
+fn xjn_build_rule_witness(slot: u32) -> u32 @export { return _xjn_build_witness(slot, slot) }
+
+/* JOINABILITY primitive: both reduce to the same canonical form. */
+fn xjn_converge(a: u32, b: u32) -> u8 @export {
+    if a == XJN_NULL_REF { return 0u8 }
+    if b == XJN_NULL_REF { return 0u8 }
+    let ca : u32 = xii_canonicalise(a)
+    let cb : u32 = xii_canonicalise(b)
+    return xii_rewrite_struct_eq(ca, cb)
+}
+
+/* ROOT overlap: both rules fire at the root of a shared redex. */
+fn xjn_check_root(slot_i: u32, slot_j: u32) -> u8 @export {
+    let rid_i : u32 = xrp_rid_at(slot_i)
+    let rid_j : u32 = xrp_rid_at(slot_j)
+    xii_term_arena_reset()
+    let wa : u32 = _xjn_build_witness(slot_i, slot_j)
+    let ra : u32 = xii_rewrite_apply_specific(rid_i, wa)
+    if xii_rewrite_last_rule_fired() != rid_i { return XJN_NOWIT }
+    let wb : u32 = _xjn_build_witness(slot_i, slot_j)
+    let rb : u32 = xii_rewrite_apply_specific(rid_j, wb)
+    if xii_rewrite_last_rule_fired() != rid_j { return XJN_NOWIT }
+    if xjn_converge(ra, rb) == 1u8 { return XJN_JOIN }
+    return XJN_NONJOIN
+}
+
+/* place ref at child position pos of t. */
+fn _xjn_set_child(t: u32, pos: u32, ref: u32) -> i32 {
+    if pos == 0u32 { return xii_term_set_child_a(t, ref) }
+    if pos == 1u32 { return xii_term_set_child_b(t, ref) }
+    return xii_term_set_child_c(t, ref)
+}
+
+/* SUBTERM overlap: rule i rewrites rule j's child at pos (inner vs outer redex). */
+fn xjn_check_subterm(slot_i: u32, slot_j: u32, pos: u32) -> u8 @export {
+    let rid_i : u32 = xrp_rid_at(slot_i)
+    let rid_j : u32 = xrp_rid_at(slot_j)
+    xii_term_arena_reset()
+    /* Path A: j's redex with child[pos] = i's redex; apply j at the root. */
+    let wa : u32 = _xjn_build_witness(slot_j, slot_j)
+    let cha : u32 = _xjn_build_witness(slot_i, slot_i)
+    _xjn_set_child(wa, pos, cha)
+    let ra : u32 = xii_rewrite_apply_specific(rid_j, wa)
+    if xii_rewrite_last_rule_fired() != rid_j { return XJN_NOWIT }
+    /* Path B: fresh redex; apply i at child[pos], swap the rewritten child back. */
+    let wb : u32 = _xjn_build_witness(slot_j, slot_j)
+    let chb : u32 = _xjn_build_witness(slot_i, slot_i)
+    _xjn_set_child(wb, pos, chb)
+    let chp : u32 = xii_rewrite_apply_specific(rid_i, chb)
+    if xii_rewrite_last_rule_fired() != rid_i { return XJN_NOWIT }
+    _xjn_set_child(wb, pos, chp)
+    if xjn_converge(ra, wb) == 1u8 { return XJN_JOIN }
+    return XJN_NONJOIN
+}
+
+/* one verdict for the pair at table index k. */
+fn _xjn_check_idx(k: u32) -> u8 {
+    let kind : u64 = cpe_kind_at(k)
+    let si : u32 = cpe_si_at(k)
+    let sj : u32 = cpe_sj_at(k)
+    if kind == 0u64 { return xjn_check_root(si, sj) }
+    return xjn_check_subterm(si, sj, cpe_pos_at(k))
+}
+
+/* The gate: iterate the enumerated table, tally verdicts.  GREEN(1) iff zero NONJOIN. */
+fn xjn_gate() -> u32 @export {
+    let n : u64 = cpe_enumerate() as u64
+    let mut join : u64 = 0u64
+    let mut nowit : u64 = 0u64
+    let mut nonjoin : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < n {
+        let v : u8 = _xjn_check_idx(k as u32)
+        if v == 1u8 { join = join + 1u64 }
+        if v == 2u8 { nowit = nowit + 1u64 }
+        if v == 0u8 {
+            if nonjoin < 128u64 { XJN_NJ_I[nonjoin] = xrp_rid_at(cpe_si_at(k as u32)) as u64  XJN_NJ_J[nonjoin] = xrp_rid_at(cpe_sj_at(k as u32)) as u64  XJN_NJ_P[nonjoin] = cpe_pos_at(k as u32) as u64 }
+            nonjoin = nonjoin + 1u64
+        }
+        k = k + 1u64
+    }
+    XJN_TALLY[0u64] = join
+    XJN_TALLY[1u64] = nowit
+    XJN_TALLY[2u64] = nonjoin
+    XJN_TALLY[3u64] = n
+    if nonjoin == 0u64 { return 1u32 }
+    return 0u32
+}
+
+fn xjn_join_count() -> u64 @export { return XJN_TALLY[0u64] }
+fn xjn_nowit_count() -> u64 @export { return XJN_TALLY[1u64] }
+fn xjn_nonjoin_count() -> u64 @export { return XJN_TALLY[2u64] }
+fn xjn_njtab_i(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_I[i] }
+fn xjn_njtab_j(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_J[i] }
+fn xjn_njtab_p(k: u32) -> u64 @export { let i : u64 = (k as u64) & 0xFFFFFFFFu64  if i >= 128u64 { return 0u64 }  return XJN_NJ_P[i] }
+
+/* v in [lo,hi] (unsigned compares -- safe). */
+fn _xjn_in(v: u64, lo: u64, hi: u64) -> u8 { if v < lo { return 0u8 } if v > hi { return 0u8 } return 1u8 }
+
+/* count of recorded NONJOINs that are NOT (rewriter in assoc R001-R003 AND rewritten in
+ * guarded-lift R005-R012) -- i.e., outside the associativity x lift conflict family. */
+fn xjn_nj_unexpected() -> u64 @export {
+    let mut lim : u64 = XJN_TALLY[2u64]
+    if lim > 128u64 { lim = 128u64 }
+    let mut bad : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < lim {
+        if _xjn_in(XJN_NJ_I[k], 1u64, 3u64) == 0u8 { bad = bad + 1u64 } else { if _xjn_in(XJN_NJ_J[k], 5u64, 12u64) == 0u8 { bad = bad + 1u64 } }
+        k = k + 1u64
+    }
+    return bad
+}
+
+/* ROOT-overlap-only gate: GREEN(1) iff every ROOT critical pair joins (the confluence-
+ * certified, reorderable set).  Separate from the full gate, which also walks the SUBTERM
+ * overlaps -- the class where the hand-117 proof is incomplete (see xjn_selftest). */
+fn xjn_gate_root() -> u32 @export {
+    let n : u64 = cpe_enumerate() as u64
+    let mut nj : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < n {
+        if cpe_kind_at(k as u32) == 0u64 {
+            if xjn_check_root(cpe_si_at(k as u32), cpe_sj_at(k as u32)) == 0u8 { nj = nj + 1u64 }
+        }
+        k = k + 1u64
+    }
+    if nj == 0u64 { return 1u32 }
+    return 0u32
+}
+
+/* root-overlap verdict by rule-ids (KAT convenience; root check is symmetric in i,j). */
+fn xjn_check_root_rids(rid_a: u32, rid_b: u32) -> u8 {
+    return xjn_check_root(xro_slot_of_rid(rid_a), xro_slot_of_rid(rid_b))
+}
+
+fn xjn_selftest() -> u64 @export {
+    /* the sentinel-constructible documented pre-emptions JOIN (dynamic confluence proof) */
+    if xjn_check_root_rids(37u32, 38u32) != 1u8 { return 10u64 }   /* R038 with R037 -> join */
+    if xjn_check_root_rids(13u32, 41u32) != 1u8 { return 11u64 }   /* R041 with R013 -> join */
+
+    /* the convergence primitive has TEETH (negative control -- not a tautology) */
+    xii_term_arena_reset()
+    let f1 : u32 = xii_term_make_basis(0u8, 1u32)
+    let f2 : u32 = xii_term_make_basis(0u8, 2u32)
+    if xjn_converge(f1, f2) != 0u8 { return 20u64 }   /* distinct FORMs do NOT converge */
+    xii_term_arena_reset()
+    let g1 : u32 = xii_term_make_basis(0u8, 7u32)
+    let g2 : u32 = xii_term_make_basis(0u8, 7u32)
+    if xjn_converge(g1, g2) != 1u8 { return 21u64 }   /* identical FORMs converge */
+
+    /* ROOT-overlap confluence is GREEN: every root critical pair joins. */
+    if xjn_gate_root() != 1u32 { return 30u64 }
+
+    /* THE POST-ROUTE-S FINDING: associativity (R001-R004) is now STRUCTURAL at xii_term.make_fusion2
+     * (left/right-nesting unrepresentable), so every assoc-involved critical pair is gone -- the
+     * named R001 x R008 pair can no longer even form (R001 is retired). The full gate's residual is
+     * exactly the 20 lift-family subterm non-joins (down from 35 pre-route-S) -- the set the
+     * confluence certificate's C.1 step discharges. The hand-117 CRY-XII-CONF-001 global-confluence
+     * claim is retracted (DOCS/III-XII.md S9.2); this gate is the honest, re-runnable residual record. */
+    xjn_gate()
+    if xjn_nonjoin_count() != 20u64 { return 35u64 }
+
+    /* the full gate is deterministic, and the partition is non-trivial (some pairs join). */
+    xjn_gate()
+    let nj_a : u64 = xjn_nonjoin_count()
+    let jn_a : u64 = xjn_join_count()
+    xjn_gate()
+    if xjn_nonjoin_count() != nj_a { return 40u64 }
+    if jn_a == 0u64 { return 41u64 }
+
+    return 99u64
+}

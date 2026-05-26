@@ -1,0 +1,12 @@
+/* 673_constitution_holds.iii -- M10 keystone: the paired-falsifier mechanism.
+ *
+ * Realizes apotheosis M10 gap (a): HOLDS = verify(good) AND falsify(bad) -- a constitutional
+ * clause must not merely pass a good witness, it must CATCH a constructed bad witness. Proves a
+ * falsifiable clause HOLDS, the falsify discriminates (fires on bad, not on good), and -- prove
+ * the negative -- a clause whose falsify cannot catch its bad witness, or whose verify rejects
+ * the good witness, does NOT hold. Main-corpus convention: rc 99 = pass; 1..6 = which check. */
+module corpus_673
+
+extern @abi(c-msvc-x64) fn cons_holds_selftest() -> u64 from "constitution.iii"
+
+fn main() -> u64 { return cons_holds_selftest() }

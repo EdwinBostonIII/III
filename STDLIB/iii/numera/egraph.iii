@@ -1,0 +1,1307 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\egraph.iii
+ *
+ * III STDLIB - numera::egraph
+ *
+ * E-graphs with deterministic, bounded equality saturation and
+ * minimum-cost extraction.  Single global instance (NOT reentrant):
+ * all scratch + worklists are module-scope (Trap 7).  Congruence via
+ * union-find + open-addressed hashcons; saturation = bounded rule
+ * application + rebuild; extraction = bounded min-cost DP + preorder
+ * emit.  No recursion (W15): the matcher and instantiator use explicit
+ * worklist stacks.  No modulo (slot reduction is a power-of-two mask).
+ *
+ * Skeleton encoding (flat preorder u32 entries):
+ *   variable : (var_idx << 1) | 1            (low bit set)
+ *   symbol   : (sym_slot << 1) | (arity<<16) (low bit clear)
+ * so sym_slot occupies bits 1..15, arity bits 16..23.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ * Discipline: W2, W8, W9, W10, W12, W13, W14, W15.
+ */
+
+module numera_egraph
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+
+const EGRAPH_OK           : i32 =  0i32
+const EGRAPH_E_FULL       : i32 = -1i32
+const EGRAPH_E_BAD        : i32 = -2i32
+const EGRAPH_E_RULE       : i32 = -3i32
+const EGRAPH_SENT         : u32 = 0xFFFFFFFFu32
+const EGRAPH_INF_COST     : u32 = 0xFFFFFFFFu32
+
+const EGRAPH_MAX_SYMS     : u32 = 4096u32
+const EGRAPH_MAX_NODES    : u32 = 131072u32
+const EGRAPH_MAX_CLASS    : u32 = 131072u32
+const EGRAPH_MAX_CHILDREN : u32 = 8u32
+const EGRAPH_HT_SIZE      : u64 = 262144u64
+const EGRAPH_HT_MASK      : u64 = 262143u64
+const EGRAPH_MAX_RULES    : u32 = 256u32
+const EGRAPH_RULE_AREA    : u32 = 65536u32
+const EGRAPH_MAX_VARS     : u32 = 16u32
+const EGRAPH_MAX_PASSES   : u32 = 4096u32
+const EGRAPH_KEYBUF_CAP   : u64 = 64u64
+const EGRAPH_MATCH_STK    : u32 = 8192u32
+const EGRAPH_INST_STK     : u32 = 8192u32
+const EGRAPH_EXT_STK_CAP  : u32 = 131072u32
+const EGRAPH_SYMBYTES     : u64 = 32u64
+const EGRAPH_U32MASK      : u64 = 0xFFFFFFFFu64
+
+/* Symbol table: a symbol is a 32-byte identifier. */
+var EGRAPH_SYM_LIVE  : [u8;  4096]
+var EGRAPH_SYM_ID    : [u8;  131072]
+var EGRAPH_SYM_USED  : u32 = 0u32
+
+/* E-nodes: symbol slot + up to 8 child eclass ids (stride 8). */
+var EGRAPH_N_LIVE    : [u8;  131072]
+var EGRAPH_N_SYM     : [u32; 131072]
+var EGRAPH_N_NARGS   : [u32; 131072]
+var EGRAPH_N_ARGS    : [u32; 1048576]
+var EGRAPH_N_ECLASS  : [u32; 131072]
+var EGRAPH_N_USED    : u32 = 0u32
+
+/* E-classes: union-find. */
+var EGRAPH_CL_LIVE   : [u8;  131072]
+var EGRAPH_CL_PAR    : [u32; 131072]
+var EGRAPH_CL_RANK   : [u32; 131072]
+var EGRAPH_CL_USED   : u32 = 0u32
+
+/* Hashcons: (sym,args) -> node id, open addressing. */
+var EGRAPH_HT_LIVE   : [u8;  262144]
+var EGRAPH_HT_NODE   : [u32; 262144]
+
+/* Rewrite rules: flat preorder skeletons in a shared arena. */
+var EGRAPH_RULE_LIVE    : [u8;  256]
+var EGRAPH_RULE_LHS_OFF : [u32; 256]
+var EGRAPH_RULE_LHS_LEN : [u32; 256]
+var EGRAPH_RULE_RHS_OFF : [u32; 256]
+var EGRAPH_RULE_RHS_LEN : [u32; 256]
+var EGRAPH_RULE_BUF     : [u32; 65536]
+var EGRAPH_RULE_USED    : u32 = 0u32
+
+/* Hoisted scratch (Trap 7 -- no in-function var arrays). */
+var EGRAPH_KEYBUF    : [u8;  64]
+var EGRAPH_HASHOUT   : [u8;  32]
+var EGRAPH_CANON     : [u32; 8]
+var EGRAPH_BINDS     : [u32; 16]
+var EGRAPH_SYMBUF    : [u8;  32]
+var EGRAPH_IARGS     : [u32; 8]
+var EGRAPH_CLASS_COST : [u32; 131072]
+var EGRAPH_CLASS_NODE : [u32; 131072]
+
+/* Explicit worklist stacks (W15 recursion elimination). */
+var EGRAPH_M_POS     : [u32; 8192]
+var EGRAPH_M_CLS     : [u32; 8192]
+var EGRAPH_M_CHOICE  : [u32; 8192]     /* next candidate node id to try */
+var EGRAPH_M_NPUSH   : [u32; 8192]     /* children dispatched this attempt; SENT = not yet committed */
+var EGRAPH_M_AR      : [u32; 8192]     /* arity of committed candidate */
+var EGRAPH_M_CAND    : [u32; 8192]     /* committed candidate node id */
+var EGRAPH_M_BSAVE   : [u32; 131072]   /* MATCH_STK * MAX_VARS */
+var EGRAPH_MSP       : u32 = 0u32      /* match stack pointer (shared with helpers) */
+var EGRAPH_MFAIL     : u8  = 0u8       /* match fail-propagation flag */
+var EGRAPH_MOFF      : u32 = 0u32      /* current rule LHS skeleton offset */
+var EGRAPH_I_POS     : [u32; 8192]
+var EGRAPH_I_ARITY   : [u32; 8192]
+var EGRAPH_I_DONE    : [u32; 8192]     /* children collected so far per frame */
+var EGRAPH_I_ACC     : [u32; 65536]    /* INST_STK * 8 */
+var EGRAPH_EXT_STK   : [u32; 131072]
+var EGRAPH_ESP       : u32 = 0u32      /* extraction emit stack pointer */
+var EGRAPH_EEMIT     : u32 = 0u32      /* entries emitted so far */
+var EGRAPH_ERC       : i32 = 0i32      /* extraction emit return code */
+var EGRAPH_EOUT      : u64 = 0u64      /* out_term base address (emit target) */
+
+/* KAT scratch (32-byte symbol ids + extraction request/output). */
+var EGRAPH_K_SYM     : [u8;  32]
+var EGRAPH_K_CHILD   : [u32; 8]
+var EGRAPH_K_REQ     : [u32; 64]
+var EGRAPH_K_OUT     : [u32; 64]
+var EGRAPH_K_OUTN    : [u32; 4]
+var EGRAPH_K_RULE    : [u32; 64]
+var EGRAPH_K_OUT2    : [u32; 64]
+var EGRAPH_K_OUTN2   : [u32; 4]
+
+/* ---- private helpers ---- */
+
+/* Build a 32-byte symbol id into EGRAPH_SYMBUF: first byte = tag, rest 0. */
+fn eg_symbuf_set(tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < EGRAPH_SYMBYTES { EGRAPH_SYMBUF[i] = 0u8 ; i = i + 1u64 }
+    EGRAPH_SYMBUF[0u64] = tag
+    return 0i32
+}
+
+/* Bump-allocate a class: PAR[c]=c, RANK[c]=0, live.  Full -> EGRAPH_SENT. */
+fn eg_new_class() -> u32 {
+    if EGRAPH_CL_USED >= EGRAPH_MAX_CLASS { return EGRAPH_SENT }
+    let c : u32 = EGRAPH_CL_USED
+    EGRAPH_CL_PAR[c]  = c
+    EGRAPH_CL_RANK[c] = 0u32
+    EGRAPH_CL_LIVE[c] = 1u8
+    EGRAPH_CL_USED = EGRAPH_CL_USED + 1u32
+    return c
+}
+
+/* Serialize (sym, canonicalized args) into EGRAPH_KEYBUF, hash once via
+ * ident_from_bytes (Keccak256), fold 8 LE digest bytes, mask to a slot. */
+fn eg_hash_key(sym: u32, args: *u32, n: u32) -> u64 {
+    let s : u64 = (sym as u64) & EGRAPH_U32MASK
+    EGRAPH_KEYBUF[0u64] = (s & 0xFFu64) as u8
+    EGRAPH_KEYBUF[1u64] = ((s >> 8u64)  & 0xFFu64) as u8
+    EGRAPH_KEYBUF[2u64] = ((s >> 16u64) & 0xFFu64) as u8
+    EGRAPH_KEYBUF[3u64] = ((s >> 24u64) & 0xFFu64) as u8
+    let mut off : u64 = 4u64
+    let mut i : u32 = 0u32
+    while i < n {
+        let ai : u64 = (i as u64) & EGRAPH_U32MASK
+        let raw : u32 = args[ai]
+        let cv : u32 = eg_find(raw)
+        let c : u64 = (cv as u64) & EGRAPH_U32MASK
+        EGRAPH_KEYBUF[off + 0u64] = (c & 0xFFu64) as u8
+        EGRAPH_KEYBUF[off + 1u64] = ((c >> 8u64)  & 0xFFu64) as u8
+        EGRAPH_KEYBUF[off + 2u64] = ((c >> 16u64) & 0xFFu64) as u8
+        EGRAPH_KEYBUF[off + 3u64] = ((c >> 24u64) & 0xFFu64) as u8
+        off = off + 4u64
+        i = i + 1u32
+    }
+    let kp : *u8 = (&EGRAPH_KEYBUF) as u64 as *u8
+    let op : *u8 = (&EGRAPH_HASHOUT) as u64 as *u8
+    ident_from_bytes(kp, off, op)
+    let h0 : u64 = EGRAPH_HASHOUT[0u64] as u64
+    let h1 : u64 = EGRAPH_HASHOUT[1u64] as u64
+    let h2 : u64 = EGRAPH_HASHOUT[2u64] as u64
+    let h3 : u64 = EGRAPH_HASHOUT[3u64] as u64
+    let h4 : u64 = EGRAPH_HASHOUT[4u64] as u64
+    let h5 : u64 = EGRAPH_HASHOUT[5u64] as u64
+    let h6 : u64 = EGRAPH_HASHOUT[6u64] as u64
+    let h7 : u64 = EGRAPH_HASHOUT[7u64] as u64
+    let lo : u64 = h0 | (h1 << 8u64) | (h2 << 16u64) | (h3 << 24u64)
+    let hi : u64 = (h4 << 32u64) | (h5 << 40u64) | (h6 << 48u64) | (h7 << 56u64)
+    let h : u64 = lo | hi
+    return h & EGRAPH_HT_MASK
+}
+
+/* Does e-node `node` carry symbol `sym`, arity `n`, and canonical children
+ * matching eg_find(args[i]) for all i?  One sentinel flag, no break (W14). */
+fn eg_node_matches(node: u32, sym: u32, args: *u32, n: u32) -> u8 {
+    let nb : u64 = (node as u64) & EGRAPH_U32MASK
+    if EGRAPH_N_SYM[nb] != sym { return 0u8 }
+    if EGRAPH_N_NARGS[nb] != n { return 0u8 }
+    let nap : *u32 = (&EGRAPH_N_ARGS) as u64 as *u32
+    let base : u64 = nb * 8u64
+    let mut i : u32 = 0u32
+    let mut ok : u8 = 1u8
+    while i < n {
+        if ok == 1u8 {
+            let ib : u64 = (i as u64) & EGRAPH_U32MASK
+            let stored : u32 = nap[base + ib]
+            let want : u32 = args[ib]
+            if eg_find(stored) != eg_find(want) { ok = 0u8 }
+        }
+        i = i + 1u32
+    }
+    return ok
+}
+
+/* Open-addressing lookup: return node id of a structurally-equal live entry,
+ * or EGRAPH_SENT on miss.  Bounded by EGRAPH_HT_SIZE probes (M19). */
+fn eg_lookup(sym: u32, args: *u32, n: u32) -> u32 {
+    let h : u64 = eg_hash_key(sym, args, n)
+    let mut slot : u64 = h
+    let mut probes : u64 = 0u64
+    let mut result : u32 = EGRAPH_SENT
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if probes >= EGRAPH_HT_SIZE { going = 0u8 }
+        if going == 1u8 {
+            if EGRAPH_HT_LIVE[slot] == 0u8 {
+                going = 0u8
+            } else {
+                let node : u32 = EGRAPH_HT_NODE[slot]
+                let m : u8 = eg_node_matches(node, sym, args, n)
+                if m == 1u8 {
+                    result = node
+                    going = 0u8
+                } else {
+                    slot = (slot + 1u64) & EGRAPH_HT_MASK
+                    probes = probes + 1u64
+                }
+            }
+        }
+    }
+    return result
+}
+
+/* Insert (sym,args)->node at the first empty slot on the probe path. */
+fn eg_ht_insert(sym: u32, args: *u32, n: u32, node: u32) -> i32 {
+    let h : u64 = eg_hash_key(sym, args, n)
+    let mut slot : u64 = h
+    let mut probes : u64 = 0u64
+    let mut rc : i32 = EGRAPH_E_FULL
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if probes >= EGRAPH_HT_SIZE { going = 0u8 }
+        if going == 1u8 {
+            if EGRAPH_HT_LIVE[slot] == 0u8 {
+                EGRAPH_HT_LIVE[slot] = 1u8
+                EGRAPH_HT_NODE[slot] = node
+                rc = EGRAPH_OK
+                going = 0u8
+            } else {
+                slot = (slot + 1u64) & EGRAPH_HT_MASK
+                probes = probes + 1u64
+            }
+        }
+    }
+    return rc
+}
+
+/* Span (number of preorder entries) of the subtree rooted at RULE_BUF[off+pos].
+ * Iterative skip-count via arity bits -- no recursion (W15). */
+fn eg_skel_span(off: u32, pos: u32) -> u32 {
+    let bp : *u32 = (&EGRAPH_RULE_BUF) as u64 as *u32
+    let ob : u64 = (off as u64) & EGRAPH_U32MASK
+    let mut p : u64 = (pos as u64) & EGRAPH_U32MASK
+    let mut remaining : u64 = 1u64
+    let mut count : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if remaining == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            let e : u32 = bp[ob + p]
+            count = count + 1u64
+            remaining = remaining - 1u64
+            if (e & 1u32) == 0u32 {
+                let arity : u64 = ((e >> 16u32) as u64) & 0xFFu64
+                remaining = remaining + arity
+            }
+            p = p + 1u64
+        }
+    }
+    return count as u32
+}
+
+/* Skeleton position of child `which` (0-based) of the symbol entry at `pos`.
+ * Walks preceding sibling spans.  Caller guarantees `pos` is a symbol. */
+fn eg_child_pos(off: u32, pos: u32, which: u32) -> u32 {
+    let mut cp : u32 = pos + 1u32
+    let mut k : u32 = 0u32
+    while k < which {
+        let span : u32 = eg_skel_span(off, cp)
+        cp = cp + span
+        k = k + 1u32
+    }
+    return cp
+}
+
+/* ---- public API ---- */
+
+fn eg_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < EGRAPH_MAX_SYMS { EGRAPH_SYM_LIVE[i] = 0u8 ; i = i + 1u32 }
+    i = 0u32
+    while i < EGRAPH_MAX_NODES {
+        EGRAPH_N_LIVE[i] = 0u8
+        EGRAPH_CL_LIVE[i] = 0u8
+        i = i + 1u32
+    }
+    let mut j : u64 = 0u64
+    while j < EGRAPH_HT_SIZE { EGRAPH_HT_LIVE[j] = 0u8 ; j = j + 1u64 }
+    i = 0u32
+    while i < EGRAPH_MAX_RULES { EGRAPH_RULE_LIVE[i] = 0u8 ; i = i + 1u32 }
+    EGRAPH_SYM_USED  = 0u32
+    EGRAPH_N_USED    = 0u32
+    EGRAPH_CL_USED   = 0u32
+    EGRAPH_RULE_USED = 0u32
+    return EGRAPH_OK
+}
+
+fn eg_intern_symbol(sym_id: *u8) -> u32 @export {
+    if (sym_id as u64) == 0u64 { return EGRAPH_SENT }
+    let mut i : u32 = 0u32
+    let mut found : u32 = EGRAPH_SENT
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= EGRAPH_SYM_USED { going = 0u8 }
+        if going == 1u8 {
+            if EGRAPH_SYM_LIVE[i] == 1u8 {
+                let ib : u64 = (i as u64) & EGRAPH_U32MASK
+                let slot_addr : u64 = ((&EGRAPH_SYM_ID) as u64) + ib * EGRAPH_SYMBYTES
+                let eq : u8 = ident_eq(slot_addr as *u8, sym_id)
+                if eq == 1u8 {
+                    found = i
+                    going = 0u8
+                }
+            }
+            if going == 1u8 { i = i + 1u32 }
+        }
+    }
+    if found != EGRAPH_SENT { return found }
+    if EGRAPH_SYM_USED >= EGRAPH_MAX_SYMS { return EGRAPH_SENT }
+    let slot : u32 = EGRAPH_SYM_USED
+    let sb : u64 = (slot as u64) & EGRAPH_U32MASK
+    let dst_addr : u64 = ((&EGRAPH_SYM_ID) as u64) + sb * EGRAPH_SYMBYTES
+    ident_copy(sym_id, dst_addr as *u8)
+    EGRAPH_SYM_LIVE[slot] = 1u8
+    EGRAPH_SYM_USED = EGRAPH_SYM_USED + 1u32
+    return slot
+}
+
+fn eg_find(a: u32) -> u32 @export {
+    if a == EGRAPH_SENT { return EGRAPH_SENT }
+    let mut root : u32 = a
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let rb : u64 = (root as u64) & EGRAPH_U32MASK
+        let par : u32 = EGRAPH_CL_PAR[rb]
+        if par == root {
+            going = 0u8
+        } else {
+            root = par
+        }
+    }
+    /* Path compression: rewire every node on the path to root. */
+    let mut cur : u32 = a
+    let mut comp : u8 = 1u8
+    while comp == 1u8 {
+        let cb : u64 = (cur as u64) & EGRAPH_U32MASK
+        let next : u32 = EGRAPH_CL_PAR[cb]
+        if next == root {
+            comp = 0u8
+        } else {
+            EGRAPH_CL_PAR[cb] = root
+            cur = next
+        }
+    }
+    return root
+}
+
+fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 @export {
+    if n > EGRAPH_MAX_CHILDREN { return EGRAPH_SENT }
+    let sym : u32 = eg_intern_symbol(sym_id)
+    if sym == EGRAPH_SENT { return EGRAPH_SENT }
+    let cap : *u32 = (&EGRAPH_CANON) as u64 as *u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let ib : u64 = (i as u64) & EGRAPH_U32MASK
+        let raw : u32 = children[ib]
+        cap[ib] = eg_find(raw)
+        i = i + 1u32
+    }
+    let canon_p : *u32 = (&EGRAPH_CANON) as u64 as *u32
+    let existing : u32 = eg_lookup(sym, canon_p, n)
+    if existing != EGRAPH_SENT {
+        let eb : u64 = (existing as u64) & EGRAPH_U32MASK
+        return eg_find(EGRAPH_N_ECLASS[eb])
+    }
+    if EGRAPH_N_USED >= EGRAPH_MAX_NODES { return EGRAPH_SENT }
+    let node : u32 = EGRAPH_N_USED
+    let nb : u64 = (node as u64) & EGRAPH_U32MASK
+    EGRAPH_N_SYM[nb]   = sym
+    EGRAPH_N_NARGS[nb] = n
+    let nap : *u32 = (&EGRAPH_N_ARGS) as u64 as *u32
+    let nbase : u64 = nb * 8u64
+    let mut k : u32 = 0u32
+    while k < n {
+        let kb : u64 = (k as u64) & EGRAPH_U32MASK
+        nap[nbase + kb] = cap[kb]
+        k = k + 1u32
+    }
+    let cl : u32 = eg_new_class()
+    if cl == EGRAPH_SENT { return EGRAPH_SENT }
+    EGRAPH_N_ECLASS[nb] = cl
+    EGRAPH_N_LIVE[nb] = 1u8
+    EGRAPH_N_USED = EGRAPH_N_USED + 1u32
+    let cp2 : *u32 = (&EGRAPH_CANON) as u64 as *u32
+    eg_ht_insert(sym, cp2, n, node)
+    return cl
+}
+
+fn eg_union(a: u32, b: u32) -> u32 @export {
+    if a == EGRAPH_SENT { return EGRAPH_SENT }
+    if b == EGRAPH_SENT { return EGRAPH_SENT }
+    let ra : u32 = eg_find(a)
+    let rb : u32 = eg_find(b)
+    if ra == rb { return ra }
+    let rab : u64 = (ra as u64) & EGRAPH_U32MASK
+    let rbb : u64 = (rb as u64) & EGRAPH_U32MASK
+    let ranks_a : u32 = EGRAPH_CL_RANK[rab]
+    let ranks_b : u32 = EGRAPH_CL_RANK[rbb]
+    let mut hi : u32 = ra
+    let mut lo : u32 = rb
+    if ranks_a == ranks_b {
+        /* tie -> lower id wins (M2 determinism) */
+        if ra < rb { hi = ra ; lo = rb } else { hi = rb ; lo = ra }
+        let hib : u64 = (hi as u64) & EGRAPH_U32MASK
+        EGRAPH_CL_RANK[hib] = EGRAPH_CL_RANK[hib] + 1u32
+    } else {
+        if ranks_a > ranks_b { hi = ra ; lo = rb } else { hi = rb ; lo = ra }
+    }
+    let lob : u64 = (lo as u64) & EGRAPH_U32MASK
+    EGRAPH_CL_PAR[lob] = hi
+    return hi
+}
+
+/* One node's congruence step: canonicalize its children, hashcons-lookup,
+ * insert-or-merge.  Returns 1 if a non-trivial union occurred, else 0. */
+fn eg_rebuild_node(ni: u32) -> u32 {
+    let nb : u64 = (ni as u64) & EGRAPH_U32MASK
+    if EGRAPH_N_LIVE[nb] == 0u8 { return 0u32 }
+    let nap : *u32 = (&EGRAPH_N_ARGS) as u64 as *u32
+    let sym : u32 = EGRAPH_N_SYM[nb]
+    let arity : u32 = EGRAPH_N_NARGS[nb]
+    let nbase : u64 = nb * 8u64
+    let mut k : u32 = 0u32
+    while k < arity {
+        let kb : u64 = (k as u64) & EGRAPH_U32MASK
+        nap[nbase + kb] = eg_find(nap[nbase + kb])
+        k = k + 1u32
+    }
+    let argp : *u32 = (nbase * 4u64 + ((&EGRAPH_N_ARGS) as u64)) as *u32
+    let prior : u32 = eg_lookup(sym, argp, arity)
+    if prior == EGRAPH_SENT { eg_ht_insert(sym, argp, arity, ni) ; return 0u32 }
+    if prior == ni { return 0u32 }
+    let pb : u64 = (prior as u64) & EGRAPH_U32MASK
+    let ca : u32 = eg_find(EGRAPH_N_ECLASS[nb])
+    let cb : u32 = eg_find(EGRAPH_N_ECLASS[pb])
+    if ca == cb { return 0u32 }
+    let merged : u32 = eg_union(ca, cb)
+    EGRAPH_N_ECLASS[nb] = merged
+    EGRAPH_N_ECLASS[pb] = merged
+    return 1u32
+}
+
+fn eg_rebuild() -> u32 @export {
+    let mut passes : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if passes >= EGRAPH_MAX_PASSES { going = 0u8 }
+        if going == 1u8 {
+            passes = passes + 1u32
+            /* wipe hashcons for this pass */
+            let mut s : u64 = 0u64
+            while s < EGRAPH_HT_SIZE { EGRAPH_HT_LIVE[s] = 0u8 ; s = s + 1u64 }
+            let mut changed : u8 = 0u8
+            let mut ni : u32 = 0u32
+            while ni < EGRAPH_N_USED {
+                let u : u32 = eg_rebuild_node(ni)
+                if u == 1u32 { changed = 1u8 }
+                ni = ni + 1u32
+            }
+            if changed == 0u8 { going = 0u8 }
+        }
+    }
+    return passes
+}
+
+fn eg_register_rule(rule: *u32) -> u32 @export {
+    if (rule as u64) == 0u64 { return EGRAPH_SENT }
+    let lhs_n : u32 = rule[0u64]
+    let rhs_n : u32 = rule[1u64]
+    if lhs_n < 1u32 { return EGRAPH_SENT }
+    let total : u32 = lhs_n + rhs_n
+    if (EGRAPH_RULE_USED + total) > EGRAPH_RULE_AREA { return EGRAPH_SENT }
+    if EGRAPH_RULE_USED >= EGRAPH_RULE_AREA { return EGRAPH_SENT }
+    /* validate every entry well-formed */
+    let mut i : u32 = 0u32
+    let mut bad : u8 = 0u8
+    while i < total {
+        if bad == 0u8 {
+            let ib : u64 = ((i + 2u32) as u64) & EGRAPH_U32MASK
+            let e : u32 = rule[ib]
+            if (e & 1u32) == 1u32 {
+                let vi : u32 = e >> 1u32
+                if vi >= EGRAPH_MAX_VARS { bad = 1u8 }
+            } else {
+                let ar : u32 = (e >> 16u32) & 0xFFu32
+                if ar > EGRAPH_MAX_CHILDREN { bad = 1u8 }
+            }
+        }
+        i = i + 1u32
+    }
+    if bad == 1u8 { return EGRAPH_SENT }
+    /* find first free rule slot (ascending) */
+    let mut rid : u32 = EGRAPH_SENT
+    let mut r : u32 = 0u32
+    let mut scan : u8 = 1u8
+    while scan == 1u8 {
+        if r >= EGRAPH_MAX_RULES { scan = 0u8 }
+        if scan == 1u8 {
+            if EGRAPH_RULE_LIVE[r] == 0u8 {
+                rid = r
+                scan = 0u8
+            } else {
+                r = r + 1u32
+            }
+        }
+    }
+    if rid == EGRAPH_SENT { return EGRAPH_SENT }
+    let bp : *u32 = (&EGRAPH_RULE_BUF) as u64 as *u32
+    let lhs_off : u32 = EGRAPH_RULE_USED
+    let mut a : u32 = 0u32
+    while a < lhs_n {
+        let ab : u64 = ((a + 2u32) as u64) & EGRAPH_U32MASK
+        let db : u64 = ((lhs_off + a) as u64) & EGRAPH_U32MASK
+        bp[db] = rule[ab]
+        a = a + 1u32
+    }
+    let rhs_off : u32 = lhs_off + lhs_n
+    let mut c : u32 = 0u32
+    while c < rhs_n {
+        let cb : u64 = ((lhs_n + c + 2u32) as u64) & EGRAPH_U32MASK
+        let db : u64 = ((rhs_off + c) as u64) & EGRAPH_U32MASK
+        bp[db] = rule[cb]
+        c = c + 1u32
+    }
+    EGRAPH_RULE_LHS_OFF[rid] = lhs_off
+    EGRAPH_RULE_LHS_LEN[rid] = lhs_n
+    EGRAPH_RULE_RHS_OFF[rid] = rhs_off
+    EGRAPH_RULE_RHS_LEN[rid] = rhs_n
+    EGRAPH_RULE_LIVE[rid] = 1u8
+    EGRAPH_RULE_USED = EGRAPH_RULE_USED + total
+    return rid
+}
+
+/* Save / restore all MAX_VARS bindings into a frame slot of EGRAPH_M_BSAVE. */
+fn eg_binds_save(frame: u32) -> i32 {
+    let fb : u64 = ((frame as u64) & EGRAPH_U32MASK) * (EGRAPH_MAX_VARS as u64)
+    let mut v : u32 = 0u32
+    while v < EGRAPH_MAX_VARS {
+        let vb : u64 = (v as u64) & EGRAPH_U32MASK
+        EGRAPH_M_BSAVE[fb + vb] = EGRAPH_BINDS[vb]
+        v = v + 1u32
+    }
+    return 0i32
+}
+fn eg_binds_restore(frame: u32) -> i32 {
+    let fb : u64 = ((frame as u64) & EGRAPH_U32MASK) * (EGRAPH_MAX_VARS as u64)
+    let mut v : u32 = 0u32
+    while v < EGRAPH_MAX_VARS {
+        let vb : u64 = (v as u64) & EGRAPH_U32MASK
+        EGRAPH_BINDS[vb] = EGRAPH_M_BSAVE[fb + vb]
+        v = v + 1u32
+    }
+    return 0i32
+}
+
+/* Push a fresh obligation frame (uncommitted).  Snapshots bindings.  Sets
+ * EGRAPH_MFAIL on stack overflow (conservative match-fail, never UB). */
+fn eg_m_push(pos: u32, cls: u32, cursor: u32) -> i32 {
+    if EGRAPH_MSP >= EGRAPH_MATCH_STK { EGRAPH_MFAIL = 1u8 ; return EGRAPH_E_FULL }
+    let f : u64 = (EGRAPH_MSP as u64) & EGRAPH_U32MASK
+    EGRAPH_M_POS[f]    = pos
+    EGRAPH_M_CLS[f]    = cls
+    EGRAPH_M_CHOICE[f] = cursor
+    EGRAPH_M_NPUSH[f]  = EGRAPH_SENT       /* uncommitted */
+    EGRAPH_M_AR[f]     = 0u32
+    EGRAPH_M_CAND[f]   = EGRAPH_SENT
+    eg_binds_save(EGRAPH_MSP)
+    EGRAPH_MSP = EGRAPH_MSP + 1u32
+    return EGRAPH_OK
+}
+
+/* Handle a variable obligation at the top frame: bind or consistency-check.
+ * Pop on success; set MFAIL + pop on conflict. */
+fn eg_m_var(top: u32, entry: u32) -> i32 {
+    let tb : u64 = (top as u64) & EGRAPH_U32MASK
+    let tgt : u32 = EGRAPH_M_CLS[tb]
+    let vi : u32 = entry >> 1u32
+    let vib : u64 = (vi as u64) & EGRAPH_U32MASK
+    let cur : u32 = EGRAPH_BINDS[vib]
+    if cur == EGRAPH_SENT { EGRAPH_BINDS[vib] = tgt ; EGRAPH_MSP = EGRAPH_MSP - 1u32 ; return EGRAPH_OK }
+    if cur == tgt { EGRAPH_MSP = EGRAPH_MSP - 1u32 ; return EGRAPH_OK }
+    eg_binds_restore(top)
+    EGRAPH_MSP = EGRAPH_MSP - 1u32
+    EGRAPH_MFAIL = 1u8
+    return EGRAPH_OK
+}
+
+/* Dispatch child number `which` (0-based) of the committed symbol frame `top`
+ * onto the stack.  Caller has validated bounds. */
+fn eg_m_dispatch_child(top: u32, which: u32) -> i32 {
+    let tb : u64 = (top as u64) & EGRAPH_U32MASK
+    let pos : u32 = EGRAPH_M_POS[tb]
+    let cand : u32 = EGRAPH_M_CAND[tb]
+    let cb : u64 = (cand as u64) & EGRAPH_U32MASK
+    let nap : *u32 = (&EGRAPH_N_ARGS) as u64 as *u32
+    let cbase : u64 = cb * 8u64
+    let wb : u64 = (which as u64) & EGRAPH_U32MASK
+    let child_pos : u32 = eg_child_pos(EGRAPH_MOFF, pos, which)
+    let child_cls : u32 = eg_find(nap[cbase + wb])
+    eg_m_push(child_pos, child_cls, 0u32)
+    return EGRAPH_OK
+}
+
+/* Uncommitted symbol frame at `top`: find the next candidate node and commit
+ * it (dispatch child 0, or succeed immediately if arity 0).  No candidate ->
+ * MFAIL + pop. */
+fn eg_m_sym_commit(top: u32, entry: u32) -> i32 {
+    let tb : u64 = (top as u64) & EGRAPH_U32MASK
+    let tgt : u32 = EGRAPH_M_CLS[tb]
+    let want_sym : u32 = (entry >> 1u32) & 0x7FFFu32
+    let want_ar  : u32 = (entry >> 16u32) & 0xFFu32
+    let start : u32 = EGRAPH_M_CHOICE[tb]
+    let cand : u32 = eg_find_cand(tgt, want_sym, want_ar, start)
+    if cand == EGRAPH_SENT {
+        eg_binds_restore(top)
+        EGRAPH_MSP = EGRAPH_MSP - 1u32
+        EGRAPH_MFAIL = 1u8
+        return EGRAPH_OK
+    }
+    EGRAPH_M_CHOICE[tb] = cand + 1u32      /* cursor for backtrack re-entry */
+    EGRAPH_M_CAND[tb]   = cand
+    EGRAPH_M_AR[tb]     = want_ar
+    EGRAPH_M_NPUSH[tb]  = 0u32             /* committed, 0 children dispatched */
+    if want_ar == 0u32 { EGRAPH_MSP = EGRAPH_MSP - 1u32 ; return EGRAPH_OK }
+    EGRAPH_M_NPUSH[tb] = 1u32
+    eg_m_dispatch_child(top, 0u32)
+    return EGRAPH_OK
+}
+
+/* Committed symbol frame at `top`, MFAIL==0 (a child just succeeded): dispatch
+ * the next child, or succeed + pop when all children are done. */
+fn eg_m_sym_advance(top: u32) -> i32 {
+    let tb : u64 = (top as u64) & EGRAPH_U32MASK
+    let ar : u32 = EGRAPH_M_AR[tb]
+    let done : u32 = EGRAPH_M_NPUSH[tb]
+    if done >= ar { EGRAPH_MSP = EGRAPH_MSP - 1u32 ; return EGRAPH_OK }
+    EGRAPH_M_NPUSH[tb] = done + 1u32
+    eg_m_dispatch_child(top, done)
+    return EGRAPH_OK
+}
+
+/* Committed symbol frame at `top`, MFAIL==1 (a child failed): clear fail,
+ * restore this frame's bindings, and retry the NEXT candidate node (re-commit
+ * from scratch).  If none remains, the failure propagates (frame pops, fail
+ * stays set for the parent). */
+fn eg_m_sym_retry(top: u32, entry: u32) -> i32 {
+    EGRAPH_MFAIL = 0u8
+    eg_binds_restore(top)
+    let tb : u64 = (top as u64) & EGRAPH_U32MASK
+    EGRAPH_M_NPUSH[tb] = EGRAPH_SENT       /* mark uncommitted; commit re-finds */
+    eg_m_sym_commit(top, entry)
+    return EGRAPH_OK
+}
+
+/* One matcher step on the current top frame.  Reads its skeleton entry and
+ * dispatches to the variable / symbol-commit / symbol-advance / symbol-retry
+ * handlers.  Shallow by construction (W15 nesting-limit safe). */
+fn eg_m_step() -> i32 {
+    let top : u32 = EGRAPH_MSP - 1u32
+    let tb : u64 = (top as u64) & EGRAPH_U32MASK
+    let pos : u32 = EGRAPH_M_POS[tb]
+    let bp : *u32 = (&EGRAPH_RULE_BUF) as u64 as *u32
+    let ob : u64 = (EGRAPH_MOFF as u64) & EGRAPH_U32MASK
+    let pb : u64 = (pos as u64) & EGRAPH_U32MASK
+    let entry : u32 = bp[ob + pb]
+    let committed : u32 = EGRAPH_M_NPUSH[tb]
+    if EGRAPH_MFAIL == 1u8 {
+        /* a child failed; only symbol frames can absorb it (retry next cand) */
+        if (entry & 1u32) == 1u32 { eg_binds_restore(top) ; EGRAPH_MSP = EGRAPH_MSP - 1u32 ; return EGRAPH_OK }
+        if committed == EGRAPH_SENT { eg_binds_restore(top) ; EGRAPH_MSP = EGRAPH_MSP - 1u32 ; return EGRAPH_OK }
+        eg_m_sym_retry(top, entry)
+        return EGRAPH_OK
+    }
+    if (entry & 1u32) == 1u32 { eg_m_var(top, entry) ; return EGRAPH_OK }
+    if committed == EGRAPH_SENT { eg_m_sym_commit(top, entry) ; return EGRAPH_OK }
+    eg_m_sym_advance(top)
+    return EGRAPH_OK
+}
+
+/* Explicit-stack DFS matcher with deterministic backtracking (W15).
+ * Matches the LHS of rule `rid` against the specific node `root_node`.
+ * Fills EGRAPH_BINDS on success; first match in node-id order. */
+fn eg_match(rid: u32, root_node: u32) -> u8 {
+    let rb : u64 = (rid as u64) & EGRAPH_U32MASK
+    EGRAPH_MOFF = EGRAPH_RULE_LHS_OFF[rb]
+    /* clear bindings */
+    let mut v : u32 = 0u32
+    while v < EGRAPH_MAX_VARS {
+        let vb : u64 = (v as u64) & EGRAPH_U32MASK
+        EGRAPH_BINDS[vb] = EGRAPH_SENT
+        v = v + 1u32
+    }
+    let rnb : u64 = (root_node as u64) & EGRAPH_U32MASK
+    let root_cls : u32 = eg_find(EGRAPH_N_ECLASS[rnb])
+    EGRAPH_MSP = 0u32
+    EGRAPH_MFAIL = 0u8
+    /* root obligation: matched against the specific node (cursor=root_node,
+     * and eg_find_cand starting there will only accept >= root_node in the
+     * same class -- so the root binds to exactly root_node first). */
+    eg_m_push(0u32, root_cls, root_node)
+    let mut result : u8 = 0u8
+    let mut running : u8 = 1u8
+    while running == 1u8 {
+        if EGRAPH_MSP == 0u32 {
+            /* stack drained: success iff we did not fail out */
+            if EGRAPH_MFAIL == 0u8 { result = 1u8 }
+            running = 0u8
+        }
+        if running == 1u8 { eg_m_step() }
+    }
+    return result
+}
+
+/* Find the next live node id >= start whose canonical class == tgt, symbol ==
+ * want_sym, arity == want_ar.  Returns EGRAPH_SENT if none.  Ascending scan. */
+fn eg_find_cand(tgt: u32, want_sym: u32, want_ar: u32, start: u32) -> u32 {
+    let mut n : u32 = start
+    let mut result : u32 = EGRAPH_SENT
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if n >= EGRAPH_N_USED { going = 0u8 }
+        if going == 1u8 {
+            let nb : u64 = (n as u64) & EGRAPH_U32MASK
+            if EGRAPH_N_LIVE[nb] == 1u8 {
+                if EGRAPH_N_SYM[nb] == want_sym {
+                    if EGRAPH_N_NARGS[nb] == want_ar {
+                        if eg_find(EGRAPH_N_ECLASS[nb]) == tgt {
+                            result = n
+                            going = 0u8
+                        }
+                    }
+                }
+            }
+            if going == 1u8 { n = n + 1u32 }
+        }
+    }
+    return result
+}
+
+/* Explicit post-order build of the RHS of rule `rid` under EGRAPH_BINDS.
+ * Returns the resulting e-class id, or EGRAPH_SENT on overflow / failure. */
+fn eg_instantiate(rid: u32) -> u32 {
+    let rb : u64 = (rid as u64) & EGRAPH_U32MASK
+    let off : u32 = EGRAPH_RULE_RHS_OFF[rb]
+    let bp : *u32 = (&EGRAPH_RULE_BUF) as u64 as *u32
+    let ob : u64 = (off as u64) & EGRAPH_U32MASK
+    let iap : *u32 = (&EGRAPH_I_ACC) as u64 as *u32
+    let mut sp : u32 = 0u32
+    /* push root frame at RHS pos 0 */
+    EGRAPH_I_POS[sp]   = 0u32
+    EGRAPH_I_ARITY[sp] = 0u32
+    EGRAPH_I_DONE[sp]  = 0u32
+    sp = sp + 1u32
+    let mut result : u32 = EGRAPH_SENT
+    let mut running : u8 = 1u8
+    let mut child_ready : u8 = 0u8
+    let mut child_val : u32 = EGRAPH_SENT
+    while running == 1u8 {
+        if sp == 0u32 {
+            running = 0u8
+        }
+        if running == 1u8 {
+            let top : u32 = sp - 1u32
+            let tb : u64 = (top as u64) & EGRAPH_U32MASK
+            if child_ready == 1u8 {
+                /* a completed child returns its class to this frame's acc */
+                let done : u32 = EGRAPH_I_DONE[tb]
+                let accbase : u64 = ((top as u64) & EGRAPH_U32MASK) * 8u64
+                let dbk : u64 = (done as u64) & EGRAPH_U32MASK
+                iap[accbase + dbk] = child_val
+                EGRAPH_I_DONE[tb] = done + 1u32
+                child_ready = 0u8
+            }
+            let pos : u32 = EGRAPH_I_POS[tb]
+            let pb : u64 = (pos as u64) & EGRAPH_U32MASK
+            let entry : u32 = bp[ob + pb]
+            if (entry & 1u32) == 1u32 {
+                /* variable: resolve immediately to its binding, return to parent */
+                let vi : u32 = entry >> 1u32
+                let vib : u64 = (vi as u64) & EGRAPH_U32MASK
+                let bound : u32 = EGRAPH_BINDS[vib]
+                if bound == EGRAPH_SENT {
+                    running = 0u8
+                } else {
+                    child_val = bound
+                    child_ready = 1u8
+                    sp = sp - 1u32
+                    if sp == 0u32 {
+                        result = bound
+                        running = 0u8
+                        child_ready = 0u8
+                    }
+                }
+            } else {
+                let want_ar : u32 = (entry >> 16u32) & 0xFFu32
+                let done : u32 = EGRAPH_I_DONE[tb]
+                if done < want_ar {
+                    /* descend into next child */
+                    EGRAPH_I_ARITY[tb] = want_ar
+                    let child_pos : u32 = eg_child_pos(off, pos, done)
+                    if sp >= EGRAPH_INST_STK {
+                        running = 0u8
+                    } else {
+                        let nb2 : u64 = (sp as u64) & EGRAPH_U32MASK
+                        EGRAPH_I_POS[nb2]   = child_pos
+                        EGRAPH_I_ARITY[nb2] = 0u32
+                        EGRAPH_I_DONE[nb2]  = 0u32
+                        sp = sp + 1u32
+                    }
+                } else {
+                    /* all children collected -> build node via eg_add */
+                    let sym : u32 = (entry >> 1u32) & 0x7FFFu32
+                    let sb : u64 = (sym as u64) & EGRAPH_U32MASK
+                    let src_addr : u64 = ((&EGRAPH_SYM_ID) as u64) + sb * EGRAPH_SYMBYTES
+                    let dst_addr : u64 = (&EGRAPH_SYMBUF) as u64
+                    ident_copy(src_addr as *u8, dst_addr as *u8)
+                    let accbase : u64 = ((top as u64) & EGRAPH_U32MASK) * 8u64
+                    let iarg : *u32 = (&EGRAPH_IARGS) as u64 as *u32
+                    let mut k : u32 = 0u32
+                    while k < want_ar {
+                        let kb : u64 = (k as u64) & EGRAPH_U32MASK
+                        iarg[kb] = iap[accbase + kb]
+                        k = k + 1u32
+                    }
+                    let symp : *u8 = (&EGRAPH_SYMBUF) as u64 as *u8
+                    let argp : *u32 = (&EGRAPH_IARGS) as u64 as *u32
+                    let new_cl : u32 = eg_add(symp, argp, want_ar)
+                    if new_cl == EGRAPH_SENT {
+                        running = 0u8
+                    } else {
+                        child_val = new_cl
+                        child_ready = 1u8
+                        sp = sp - 1u32
+                        if sp == 0u32 {
+                            result = new_cl
+                            running = 0u8
+                            child_ready = 0u8
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return result
+}
+
+/* Apply rule `rid` across all live nodes; count one union per non-trivial
+ * merge (M4 exactness).  Returns number of unions performed. */
+fn eg_apply_rule(rid: u32) -> u32 {
+    let mut unions : u32 = 0u32
+    let mut node : u32 = 0u32
+    while node < EGRAPH_N_USED {
+        let nb : u64 = (node as u64) & EGRAPH_U32MASK
+        if EGRAPH_N_LIVE[nb] == 1u8 {
+            let m : u8 = eg_match(rid, node)
+            if m == 1u8 {
+                let new_cl : u32 = eg_instantiate(rid)
+                if new_cl != EGRAPH_SENT {
+                    let prev_cl : u32 = eg_find(EGRAPH_N_ECLASS[nb])
+                    let pc : u32 = eg_find(prev_cl)
+                    let nc : u32 = eg_find(new_cl)
+                    if pc != nc {
+                        eg_union(pc, nc)
+                        unions = unions + 1u32
+                    }
+                }
+            }
+        }
+        node = node + 1u32
+    }
+    return unions
+}
+
+fn eg_saturate(max_steps: u32) -> u32 @export {
+    let mut step : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if step >= max_steps { going = 0u8 }
+        if going == 1u8 {
+            let mut changed : u8 = 0u8
+            let mut r : u32 = 0u32
+            while r < EGRAPH_MAX_RULES {
+                let rb : u64 = (r as u64) & EGRAPH_U32MASK
+                if EGRAPH_RULE_LIVE[rb] == 1u8 {
+                    let u : u32 = eg_apply_rule(r)
+                    if u > 0u32 { changed = 1u8 }
+                }
+                r = r + 1u32
+            }
+            eg_rebuild()
+            step = step + 1u32
+            if changed == 0u8 { going = 0u8 }
+        }
+    }
+    return step
+}
+
+/* Min-cost candidate for node `ni` = costs[sym] + sum(child class min-costs),
+ * saturating-clamped just below EGRAPH_INF_COST.  Returns EGRAPH_INF_COST if
+ * the symbol is out of range or any child class is still infinite. */
+fn eg_extract_node_cost(ni: u32, req: *u32, sym_count: u32) -> u32 {
+    let nb : u64 = (ni as u64) & EGRAPH_U32MASK
+    let sym : u32 = EGRAPH_N_SYM[nb]
+    if sym >= sym_count { return EGRAPH_INF_COST }
+    let arity : u32 = EGRAPH_N_NARGS[nb]
+    let symb : u64 = (sym as u64) & EGRAPH_U32MASK
+    let costp : *u32 = (&EGRAPH_CLASS_COST) as u64 as *u32
+    let nap : *u32 = (&EGRAPH_N_ARGS) as u64 as *u32
+    let nbase : u64 = nb * 8u64
+    let mut total : u64 = req[symb + 2u64] as u64
+    let mut k : u32 = 0u32
+    let mut finite : u8 = 1u8
+    while k < arity {
+        if finite == 1u8 {
+            let kb : u64 = (k as u64) & EGRAPH_U32MASK
+            let child_cls : u32 = eg_find(nap[nbase + kb])
+            let ccb : u64 = (child_cls as u64) & EGRAPH_U32MASK
+            let cc : u32 = costp[ccb]
+            if cc == EGRAPH_INF_COST { finite = 0u8 } else { total = eg_sat_add(total, cc as u64) }
+        }
+        k = k + 1u32
+    }
+    if finite == 0u8 { return EGRAPH_INF_COST }
+    return total as u32
+}
+
+/* Saturating add, clamped at EGRAPH_INF_COST - 1 (exact bounded arith, M15). */
+fn eg_sat_add(a: u64, b: u64) -> u64 {
+    let s : u64 = a + b
+    let cap : u64 = (EGRAPH_INF_COST as u64) - 1u64
+    if s >= (EGRAPH_INF_COST as u64) { return cap }
+    return s
+}
+
+/* Relax node `ni` into its class's DP entry.  Returns 1 if it improved. */
+fn eg_extract_relax(ni: u32, req: *u32, sym_count: u32) -> u32 {
+    let nb : u64 = (ni as u64) & EGRAPH_U32MASK
+    if EGRAPH_N_LIVE[nb] == 0u8 { return 0u32 }
+    let cand : u32 = eg_extract_node_cost(ni, req, sym_count)
+    if cand == EGRAPH_INF_COST { return 0u32 }
+    let costp : *u32 = (&EGRAPH_CLASS_COST) as u64 as *u32
+    let nodep : *u32 = (&EGRAPH_CLASS_NODE) as u64 as *u32
+    let mycls : u32 = eg_find(EGRAPH_N_ECLASS[nb])
+    let mcb : u64 = (mycls as u64) & EGRAPH_U32MASK
+    if cand >= costp[mcb] { return 0u32 }
+    costp[mcb] = cand
+    nodep[mcb] = ni
+    return 1u32
+}
+
+/* Emit one node onto out_term, push its children (descending -> pop ascending)
+ * onto EGRAPH_EXT_STK.  Operates on module emit state (EGRAPH_ESP/EEMIT/ERC).
+ * `cl` is the class to expand. */
+fn eg_extract_emit(cl: u32) -> i32 {
+    let nodep : *u32 = (&EGRAPH_CLASS_NODE) as u64 as *u32
+    let nap : *u32 = (&EGRAPH_N_ARGS) as u64 as *u32
+    let otp : *u32 = (EGRAPH_EOUT) as *u32
+    let clc : u32 = eg_find(cl)
+    let clb : u64 = (clc as u64) & EGRAPH_U32MASK
+    let nid : u32 = nodep[clb]
+    if nid == EGRAPH_SENT { EGRAPH_ERC = EGRAPH_E_BAD ; return EGRAPH_OK }
+    let nb : u64 = (nid as u64) & EGRAPH_U32MASK
+    let eb : u64 = (EGRAPH_EEMIT as u64) & EGRAPH_U32MASK
+    otp[eb] = EGRAPH_N_SYM[nb]
+    EGRAPH_EEMIT = EGRAPH_EEMIT + 1u32
+    let arity : u32 = EGRAPH_N_NARGS[nb]
+    let nbase : u64 = nb * 8u64
+    let mut kk : u32 = arity
+    let mut pushok : u8 = 1u8
+    while kk > 0u32 {
+        kk = kk - 1u32
+        if pushok == 1u8 {
+            if EGRAPH_ESP >= EGRAPH_EXT_STK_CAP { EGRAPH_ERC = EGRAPH_E_FULL ; pushok = 0u8 }
+            if pushok == 1u8 {
+                let kb : u64 = (kk as u64) & EGRAPH_U32MASK
+                let child_cls : u32 = eg_find(nap[nbase + kb])
+                let nsb : u64 = (EGRAPH_ESP as u64) & EGRAPH_U32MASK
+                EGRAPH_EXT_STK[nsb] = child_cls
+                EGRAPH_ESP = EGRAPH_ESP + 1u32
+            }
+        }
+    }
+    return EGRAPH_OK
+}
+
+fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 @export {
+    if (req as u64) == 0u64 { return EGRAPH_E_BAD }
+    if (out_term as u64) == 0u64 { return EGRAPH_E_BAD }
+    if (out_n as u64) == 0u64 { return EGRAPH_E_BAD }
+    let root : u32 = req[0u64]
+    let sym_count : u32 = req[1u64]
+    let costp : *u32 = (&EGRAPH_CLASS_COST) as u64 as *u32
+    let nodep : *u32 = (&EGRAPH_CLASS_NODE) as u64 as *u32
+    /* init DP tables over live classes */
+    let mut c : u32 = 0u32
+    while c < EGRAPH_CL_USED {
+        let cb : u64 = (c as u64) & EGRAPH_U32MASK
+        costp[cb] = EGRAPH_INF_COST
+        nodep[cb] = EGRAPH_SENT
+        c = c + 1u32
+    }
+    /* relaxation to fixpoint, bounded by EGRAPH_MAX_PASSES (M19) */
+    let mut passes : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if passes >= EGRAPH_MAX_PASSES { going = 0u8 }
+        if going == 1u8 {
+            passes = passes + 1u32
+            let mut changed : u8 = 0u8
+            let mut ni : u32 = 0u32
+            while ni < EGRAPH_N_USED {
+                let r : u32 = eg_extract_relax(ni, req, sym_count)
+                if r == 1u32 { changed = 1u8 }
+                ni = ni + 1u32
+            }
+            if changed == 0u8 { going = 0u8 }
+        }
+    }
+    /* preorder emit via explicit stack (module emit state) */
+    EGRAPH_EOUT = (out_term as u64)
+    EGRAPH_ESP = 0u32
+    EGRAPH_EEMIT = 0u32
+    EGRAPH_ERC = EGRAPH_OK
+    let rootc : u32 = eg_find(root)
+    /* Reject an unmapped / out-of-range root class (negative-case gate, KAT 4).
+     * The DP-init loop only covers [0, EGRAPH_CL_USED), so EGRAPH_CLASS_NODE is
+     * only SENT-initialized for live classes; an out-of-range root (e.g. on an
+     * empty graph, where EGRAPH_CL_USED == 0) would otherwise read a stale
+     * (BSS-zero / prior-run) node id and emit garbage instead of refusing.
+     * Range-check first, THEN the per-class representative sentinel. */
+    if rootc >= EGRAPH_CL_USED { return EGRAPH_E_BAD }
+    let rcb : u64 = (rootc as u64) & EGRAPH_U32MASK
+    if nodep[rcb] == EGRAPH_SENT { return EGRAPH_E_BAD }
+    EGRAPH_EXT_STK[0u64] = rootc
+    EGRAPH_ESP = 1u32
+    let mut running : u8 = 1u8
+    while running == 1u8 {
+        if EGRAPH_ESP == 0u32 { running = 0u8 }
+        if EGRAPH_ERC != EGRAPH_OK { running = 0u8 }
+        if running == 1u8 {
+            EGRAPH_ESP = EGRAPH_ESP - 1u32
+            let spb : u64 = (EGRAPH_ESP as u64) & EGRAPH_U32MASK
+            let cl : u32 = EGRAPH_EXT_STK[spb]
+            eg_extract_emit(cl)
+        }
+    }
+    if EGRAPH_ERC == EGRAPH_OK { out_n[0u64] = EGRAPH_EEMIT }
+    return EGRAPH_ERC
+}
+
+fn eg_class_count() -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < EGRAPH_CL_USED {
+        let ib : u64 = (i as u64) & EGRAPH_U32MASK
+        if EGRAPH_CL_LIVE[ib] == 1u8 { n = n + 1u32 }
+        i = i + 1u32
+    }
+    return n
+}
+
+fn eg_node_count() -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < EGRAPH_N_USED {
+        let ib : u64 = (i as u64) & EGRAPH_U32MASK
+        if EGRAPH_N_LIVE[ib] == 1u8 { n = n + 1u32 }
+        i = i + 1u32
+    }
+    return n
+}
+
+/* ---- self-test (99 = pass) ---- */
+fn eg_selftest() -> u64 @export {
+    /* ---- KAT 1: congruence closure  a==b => f(a)==f(b) ---- */
+    eg_init()
+    let symp : *u8 = (&EGRAPH_K_SYM) as u64 as *u8
+    let chp  : *u32 = (&EGRAPH_K_CHILD) as u64 as *u32
+    /* symbol 'a' (tag 1), arity 0 */
+    eg_symbuf_set_kat(1u8)
+    let ca : u32 = eg_add(symp, chp, 0u32)
+    if ca == EGRAPH_SENT { return 1u64 }
+    eg_symbuf_set_kat(2u8)
+    let cb : u32 = eg_add(symp, chp, 0u32)
+    if cb == EGRAPH_SENT { return 2u64 }
+    /* f(a), f(b) */
+    eg_symbuf_set_kat(3u8)
+    EGRAPH_K_CHILD[0u32] = ca
+    let cfa : u32 = eg_add(symp, chp, 1u32)
+    if cfa == EGRAPH_SENT { return 3u64 }
+    eg_symbuf_set_kat(3u8)
+    EGRAPH_K_CHILD[0u32] = cb
+    let cfb : u32 = eg_add(symp, chp, 1u32)
+    if cfb == EGRAPH_SENT { return 4u64 }
+    if eg_find(cfa) == eg_find(cfb) { return 5u64 }       /* must differ initially */
+    eg_union(ca, cb)
+    let passes : u32 = eg_rebuild()
+    if passes < 2u32 { return 6u64 }
+    if eg_find(cfa) != eg_find(cfb) { return 7u64 }       /* congruence propagated */
+
+    /* ---- KAT 2: hashcons identity (idempotent add) ---- */
+    eg_init()
+    eg_symbuf_set_kat(1u8)
+    let k2a : u32 = eg_add(symp, chp, 0u32)
+    if k2a == EGRAPH_SENT { return 8u64 }
+    eg_symbuf_set_kat(3u8)
+    EGRAPH_K_CHILD[0u32] = k2a
+    let c1 : u32 = eg_add(symp, chp, 1u32)
+    let nc1 : u32 = eg_node_count()
+    eg_symbuf_set_kat(3u8)
+    EGRAPH_K_CHILD[0u32] = k2a
+    let c2 : u32 = eg_add(symp, chp, 1u32)
+    let nc2 : u32 = eg_node_count()
+    if c1 != c2 { return 9u64 }
+    if nc1 != nc2 { return 10u64 }
+
+    /* ---- KAT 4 (run before 3): empty-graph extraction refusal ---- */
+    eg_init()
+    EGRAPH_K_REQ[0u32] = 0u32      /* root = class 0 (unmapped) */
+    EGRAPH_K_REQ[1u32] = 0u32      /* sym_count = 0 */
+    let reqp0 : *u32 = (&EGRAPH_K_REQ) as u64 as *u32
+    let otp0  : *u32 = (&EGRAPH_K_OUT) as u64 as *u32
+    let onp0  : *u32 = (&EGRAPH_K_OUTN) as u64 as *u32
+    let bad_rc : i32 = eg_extract(reqp0, otp0, onp0)
+    if bad_rc != EGRAPH_E_BAD { return 11u64 }
+
+    /* ---- KAT 4b: malformed-rule rejection (prove the gate FAILS on bad
+     * input).  A var index == EGRAPH_MAX_VARS is out of range; register MUST
+     * refuse with EGRAPH_SENT.  Also lhs_n == 0 must refuse. ---- */
+    eg_init()
+    EGRAPH_K_RULE[0u32] = 1u32                       /* lhs_n */
+    EGRAPH_K_RULE[1u32] = 0u32                       /* rhs_n */
+    EGRAPH_K_RULE[2u32] = eg_enc_var(EGRAPH_MAX_VARS)   /* out-of-range var */
+    let rulep_bad : *u32 = (&EGRAPH_K_RULE) as u64 as *u32
+    if eg_register_rule(rulep_bad) != EGRAPH_SENT { return 60u64 }
+    EGRAPH_K_RULE[0u32] = 0u32                       /* lhs_n == 0 (illegal) */
+    EGRAPH_K_RULE[1u32] = 1u32
+    EGRAPH_K_RULE[2u32] = eg_enc_var(0u32)
+    if eg_register_rule(rulep_bad) != EGRAPH_SENT { return 61u64 }
+
+    /* ---- KAT 3: rewrite + saturate + extract (mul(x,two) -> shl(x,one)) ---- */
+    let r3 : u64 = eg_kat3(0u8)
+    if r3 != 0u64 { return 12u64 + r3 }
+
+    /* ---- KAT 5: determinism / bit-identity replay of KAT 3 ---- */
+    let r5 : u64 = eg_kat3(1u8)
+    if r5 != 0u64 { return 30u64 + r5 }
+    /* cross-run identity of the two replay snapshots */
+    if EGRAPH_K_OUTN[0u32] != EGRAPH_K_OUTN2[0u32] { return 50u64 }
+    let nout : u32 = EGRAPH_K_OUTN[0u32]
+    let mut i : u32 = 0u32
+    while i < nout {
+        let ib : u64 = (i as u64) & EGRAPH_U32MASK
+        if EGRAPH_K_OUT[ib] != EGRAPH_K_OUT2[ib] { return 51u64 }
+        i = i + 1u32
+    }
+    return 99u64
+}
+
+/* Skeleton encoders (kept as helpers so KAT rule-building has no leading-paren
+ * literal expressions, which the parser's hexad path mis-reads). */
+fn eg_enc_sym(slot: u32, arity: u32) -> u32 {
+    let lo : u32 = slot << 1u32
+    let ar : u32 = arity << 16u32
+    return lo | ar
+}
+fn eg_enc_var(idx: u32) -> u32 {
+    let lo : u32 = idx << 1u32
+    return lo | 1u32
+}
+
+/* KAT-3 body, parameterized by snapshot slot (0 -> OUT/OUTN, 1 -> OUT2/OUTN2).
+ * Returns 0 on success, else a small non-zero local failure code. */
+fn eg_kat3(slot: u8) -> u64 {
+    eg_init()
+    let symp : *u8 = (&EGRAPH_K_SYM) as u64 as *u8
+    let chp  : *u32 = (&EGRAPH_K_CHILD) as u64 as *u32
+    /* symbols: mul=10, shl=11, x=12, two=13, one=14 (tags); interned in
+     * add-order so slot ids are deterministic. */
+    eg_symbuf_set_kat(12u8)                       /* x */
+    let cx : u32 = eg_add(symp, chp, 0u32)
+    eg_symbuf_set_kat(13u8)                       /* two */
+    let ctwo : u32 = eg_add(symp, chp, 0u32)
+    eg_symbuf_set_kat(14u8)                       /* one */
+    let cone : u32 = eg_add(symp, chp, 0u32)
+    eg_symbuf_set_kat(10u8)                       /* mul(x,two) */
+    EGRAPH_K_CHILD[0u32] = cx
+    EGRAPH_K_CHILD[1u32] = ctwo
+    let cmul : u32 = eg_add(symp, chp, 2u32)
+    if cmul == EGRAPH_SENT { return 1u64 }
+    /* intern shl so its slot exists for the rule + costs */
+    eg_symbuf_set_kat(11u8)                       /* shl(x,one) seed (creates slot) */
+    EGRAPH_K_CHILD[0u32] = cx
+    EGRAPH_K_CHILD[1u32] = cone
+    let cshl_seed : u32 = eg_add(symp, chp, 2u32)
+    if cshl_seed == EGRAPH_SENT { return 2u64 }
+    /* fetch concrete symbol slots */
+    let s_mul : u32 = eg_sym_slot(10u8)
+    let s_shl : u32 = eg_sym_slot(11u8)
+    let s_two : u32 = eg_sym_slot(13u8)
+    let s_one : u32 = eg_sym_slot(14u8)
+    let s_x   : u32 = eg_sym_slot(12u8)
+    if s_mul == EGRAPH_SENT { return 3u64 }
+    if s_shl == EGRAPH_SENT { return 4u64 }
+    /* rule: LHS mul(?0, two) -> RHS shl(?0, one)
+     * LHS preorder: [mul(arity2), ?0, two(arity0)]   (3 entries)
+     * RHS preorder: [shl(arity2), ?0, one(arity0)]   (3 entries) */
+    let e_mul : u32 = eg_enc_sym(s_mul, 2u32)
+    let e_two : u32 = eg_enc_sym(s_two, 0u32)
+    let e_shl : u32 = eg_enc_sym(s_shl, 2u32)
+    let e_one : u32 = eg_enc_sym(s_one, 0u32)
+    let e_v0  : u32 = eg_enc_var(0u32)
+    EGRAPH_K_RULE[0u32] = 3u32                /* lhs_n */
+    EGRAPH_K_RULE[1u32] = 3u32                /* rhs_n */
+    EGRAPH_K_RULE[2u32] = e_mul               /* mul/2 */
+    EGRAPH_K_RULE[3u32] = e_v0                /* ?0 */
+    EGRAPH_K_RULE[4u32] = e_two               /* two/0 */
+    EGRAPH_K_RULE[5u32] = e_shl               /* shl/2 */
+    EGRAPH_K_RULE[6u32] = e_v0                /* ?0 */
+    EGRAPH_K_RULE[7u32] = e_one               /* one/0 */
+    let rulep : *u32 = (&EGRAPH_K_RULE) as u64 as *u32
+    let rid : u32 = eg_register_rule(rulep)
+    if rid == EGRAPH_SENT { return 5u64 }
+    eg_saturate(8u32)
+    /* costs: mul=10, shl=1, x=1, two=1, one=1 -> shl form is cheaper */
+    let mut cc : u32 = 0u32
+    while cc < EGRAPH_MAX_VARS { EGRAPH_K_REQ[cc] = 0u32 ; cc = cc + 1u32 }
+    EGRAPH_K_REQ[0u32] = eg_find(cmul)            /* root */
+    EGRAPH_K_REQ[1u32] = EGRAPH_SYM_USED          /* sym_count */
+    let cb_mul : u64 = ((s_mul + 2u32) as u64) & EGRAPH_U32MASK
+    let cb_shl : u64 = ((s_shl + 2u32) as u64) & EGRAPH_U32MASK
+    let cb_x   : u64 = ((s_x   + 2u32) as u64) & EGRAPH_U32MASK
+    let cb_two : u64 = ((s_two + 2u32) as u64) & EGRAPH_U32MASK
+    let cb_one : u64 = ((s_one + 2u32) as u64) & EGRAPH_U32MASK
+    EGRAPH_K_REQ[cb_mul] = 10u32
+    EGRAPH_K_REQ[cb_shl] = 1u32
+    EGRAPH_K_REQ[cb_x]   = 1u32
+    EGRAPH_K_REQ[cb_two] = 1u32
+    EGRAPH_K_REQ[cb_one] = 1u32
+    let reqp : *u32 = (&EGRAPH_K_REQ) as u64 as *u32
+    if slot == 0u8 {
+        let otp : *u32 = (&EGRAPH_K_OUT) as u64 as *u32
+        let onp : *u32 = (&EGRAPH_K_OUTN) as u64 as *u32
+        let xrc : i32 = eg_extract(reqp, otp, onp)
+        if xrc != EGRAPH_OK { return 6u64 }
+        if EGRAPH_K_OUTN[0u32] != 3u32 { return 7u64 }
+        if EGRAPH_K_OUT[0u32] != s_shl { return 8u64 }
+    } else {
+        let otp : *u32 = (&EGRAPH_K_OUT2) as u64 as *u32
+        let onp : *u32 = (&EGRAPH_K_OUTN2) as u64 as *u32
+        let xrc : i32 = eg_extract(reqp, otp, onp)
+        if xrc != EGRAPH_OK { return 6u64 }
+        if EGRAPH_K_OUTN2[0u32] != 3u32 { return 7u64 }
+        if EGRAPH_K_OUT2[0u32] != s_shl { return 8u64 }
+    }
+    return 0u64
+}
+
+/* KAT helper: set EGRAPH_K_SYM to a 32-byte id (tag byte + zeros). */
+fn eg_symbuf_set_kat(tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < EGRAPH_SYMBYTES { EGRAPH_K_SYM[i] = 0u8 ; i = i + 1u64 }
+    EGRAPH_K_SYM[0u64] = tag
+    return 0i32
+}
+
+/* KAT helper: intern-or-find the slot for a tag-byte symbol (no allocation
+ * beyond what eg_add already did). */
+fn eg_sym_slot(tag: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < EGRAPH_SYMBYTES { EGRAPH_K_SYM[i] = 0u8 ; i = i + 1u64 }
+    EGRAPH_K_SYM[0u64] = tag
+    let symp : *u8 = (&EGRAPH_K_SYM) as u64 as *u8
+    return eg_intern_symbol(symp)
+}

@@ -1,0 +1,61 @@
+/* III conformance corpus 206 -- Stage 4.9: XChaCha20-Poly1305 (192-bit nonce).
+ *  (a) HChaCha20(key=0x00..1f, nonce16=0x40..4f) subkey cross-checked vs C-ref:
+ *      [0..8]=0 27 56 241 188 101 74 4 ; [30,31]=212 125 ; Σ b[i]*(i+1)=70661.
+ *  (b) XChaCha20-Poly1305 seal->open round-trip recovers plaintext (open=1).
+ *  (c) tag tamper -> open=0 (reject).
+ * Exit 99.
+ */
+module corpus_206
+
+extern @abi(c-msvc-x64) fn hchacha20(key: u64, nonce16: u64, subkey_out: u64) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn xchacha20_poly1305_seal(key: u64, nonce24: u64, aad: u64, aad_len: u64, pt: u64, pt_len: u64, ct_out: u64, tag_out: u64) -> i32 from "xchacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn xchacha20_poly1305_open(key: u64, nonce24: u64, aad: u64, aad_len: u64, ct: u64, ct_len: u64, pt_out: u64, tag_in: u64) -> u8 from "xchacha20_poly1305.iii"
+
+var HK  : [u8; 32]
+var HN  : [u8; 16]
+var SK  : [u8; 32]
+var K   : [u8; 32]
+var N24 : [u8; 24]
+var AD  : [u8; 12]
+var PT  : [u8; 32]
+var CT  : [u8; 32]
+var TG  : [u8; 16]
+var PT2 : [u8; 32]
+
+fn main() -> u64 {
+    /* (a) HChaCha20 subkey cross-check */
+    let mut i : u64 = 0u64
+    while i < 32u64 { HK[i] = (i & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 16u64 { HN[i] = ((0x40u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    hchacha20(&HK as u64, &HN as u64, &SK as u64)
+    if SK[0] != 0u8   { return 1u64 }
+    if SK[1] != 27u8  { return 2u64 }
+    if SK[2] != 56u8  { return 3u64 }
+    if SK[7] != 4u8   { return 4u64 }
+    if SK[30] != 212u8 { return 5u64 }
+    if SK[31] != 125u8 { return 6u64 }
+    let mut sum : u64 = 0u64
+    i = 0u64
+    while i < 32u64 { sum = sum + (SK[i] as u64) * (i + 1u64) ; i = i + 1u64 }
+    if sum != 70661u64 { return 7u64 }
+    /* (b) round-trip */
+    i = 0u64
+    while i < 32u64 { K[i] = ((0x90u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 24u64 { N24[i] = ((0x10u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 12u64 { AD[i] = ((i * 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { PT[i] = ((i * 7u64 + 1u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    xchacha20_poly1305_seal(&K as u64, &N24 as u64, &AD as u64, 12u64, &PT as u64, 32u64, &CT as u64, &TG as u64)
+    let v : u8 = xchacha20_poly1305_open(&K as u64, &N24 as u64, &AD as u64, 12u64, &CT as u64, 32u64, &PT2 as u64, &TG as u64)
+    if v != 1u8 { return 8u64 }
+    i = 0u64
+    while i < 32u64 { if PT2[i] != PT[i] { return 9u64 } i = i + 1u64 }
+    /* (c) tamper tag -> reject */
+    TG[0] = TG[0] ^ 0x01u8
+    let v2 : u8 = xchacha20_poly1305_open(&K as u64, &N24 as u64, &AD as u64, 12u64, &CT as u64, 32u64, &PT2 as u64, &TG as u64)
+    if v2 != 0u8 { return 10u64 }
+    return 99u64
+}

@@ -1,0 +1,34 @@
+module iii_sha256
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(handle_id: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(handle_id: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn _write(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
+var BUF : [u8; 4096]
+var DIG : [u8; 32]
+var HEX : [u8; 70]
+fn _nib(v: u8) -> u8 { if v < 10u8 { return (48u8 + v) }  return (87u8 + v) }
+fn main(argc: i32, argv: u64) -> u64 {
+    if argc < 2i32 { return 2u64 }
+    let pa : *u64 = argv as *u64
+    let path : u64 = pa[1u64]
+    let fscap : u64 = cap_attenuate(cap_env_init(), 0x0002u64, 0u64)
+    let h : u64 = fs_open(fscap, path, 1u32)
+    if h == 0u64 { return 3u64 }
+    sha256_init()
+    let mut n : u64 = fs_read(h, (&BUF as u64), 4096u64)
+    while n > 0u64 {
+        sha256_update((&BUF as u64) as *u8, n)
+        n = fs_read(h, (&BUF as u64), 4096u64)
+    }
+    fs_close(h)
+    sha256_final((&DIG as u64) as *u8)
+    let mut i : u64 = 0u64
+    while i < 32u64 { HEX[i*2u64]=_nib((DIG[i] >> 4u8) & 0x0Fu8)  HEX[(i*2u64)+1u64]=_nib(DIG[i] & 0x0Fu8)  i = i + 1u64 }
+    HEX[64u64]=10u8  _write(1i32, (&HEX as u64) as *u8, 65u32)
+    return 0u64
+}

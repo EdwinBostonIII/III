@@ -1,0 +1,98 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\218_prespec_compositions.iii
+ *
+ * III conformance corpus 218 -- prespec_register_compositions bulk
+ * population. Verifies the v1.0 partial Phase C.1 registration: the
+ * full composition set from COMPILER/BOOT/iii_compositions.def (the
+ * single source of truth) is registered with real dispatch_fp values
+ * bound to actual exported symbols via (&FN_NAME) as u64.
+ *
+ * Asserts:
+ *   1. prespec_reset clears the registry to 0.
+ *   2. prespec_register_compositions returns the .def cardinality (251).
+ *   3. prespec_used returns 251 after registration.
+ *   4. A representative sample of the synthetic hashes is reachable
+ *      via prespec_lookup (NUMERA hashes + KEX/cipher + sanctus).
+ *   5. The dispatch_fp for each registered slot is non-zero (bound to
+ *      a real exported symbol).
+ *   6. Distinct primitives have distinct dispatch_fp values.
+ *   7. Re-running prespec_register_compositions is idempotent (same N
+ *      hashes -> updates in place; used count stays at N).
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_218
+
+extern @abi(c-msvc-x64) fn prespec_reset() -> i32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_register_compositions() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_used() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_lookup(composition_hash: u64) -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_dispatch_fp(slot: u32) -> u64 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_primitive(slot: u32) -> u8 from "prespec.iii"
+
+/* Mirror the synthetic hash encoding from prespec.iii. */
+fn _synth(seq_idx: u32, primitive_id: u8, hexad_bag: u8) -> u64 {
+    let s_l : u64 = (seq_idx as u64) & 0xFFFFu64
+    let p_l : u64 = ((primitive_id as u64) & 0xFFu64) << 16u64
+    let b_l : u64 = ((hexad_bag as u64) & 0xFFu64) << 24u64
+    let m_l : u64 = 0x494E5450u64 << 32u64
+    return s_l | p_l | b_l | m_l
+}
+
+fn main() -> u64 {
+    prespec_reset()
+    if prespec_used() != 0u32 { return 1u64 }
+
+    /* The bulk-registration ships the full COMPILER/BOOT/iii_compositions.def
+     * set (256 entries; +1 ed25519_sign_c4 §4.1, +5 PQ pq_*_c4 §4.4.5). The constant below
+     * tracks the .def cardinality one-to-one; it updates in lock-step with
+     * the .def. */
+    let n : u32 = prespec_register_compositions()
+    if n != 256u32 { return 2u64 }
+    if prespec_used() != 256u32 { return 3u64 }
+
+    /* Lookup a representative sample of canonical synthetic hashes
+     * (matches the .def block layout: NUMERA hashes at 100..119,
+     * cipher/KEX at 120..139, sanctus at 140..). */
+    let h_sha256  : u64 = _synth(100u32, 1u8, 0x01u8)
+    let h_sha512  : u64 = _synth(101u32, 1u8, 0x01u8)
+    let h_blake2s : u64 = _synth(102u32, 1u8, 0x01u8)
+    let h_x25519  : u64 = _synth(120u32, 3u8, 0x04u8)
+    let h_chacha  : u64 = _synth(122u32, 3u8, 0x04u8)
+
+    let s_sha256  : u32 = prespec_lookup(h_sha256)
+    if s_sha256 == 0xFFFFFFFFu32 { return 4u64 }
+    if prespec_primitive(s_sha256) != 1u8 { return 5u64 }
+    /* Dispatch_fp is a real exported-symbol address; must be non-zero. */
+    if prespec_dispatch_fp(s_sha256) == 0u64 { return 6u64 }
+
+    let s_sha512  : u32 = prespec_lookup(h_sha512)
+    if s_sha512 == 0xFFFFFFFFu32 { return 7u64 }
+    if prespec_primitive(s_sha512) != 1u8 { return 8u64 }
+
+    let s_blake : u32 = prespec_lookup(h_blake2s)
+    if s_blake == 0xFFFFFFFFu32 { return 9u64 }
+
+    let s_x25519 : u32 = prespec_lookup(h_x25519)
+    if s_x25519 == 0xFFFFFFFFu32 { return 10u64 }
+    if prespec_primitive(s_x25519) != 3u8 { return 11u64 }
+
+    let s_chacha : u32 = prespec_lookup(h_chacha)
+    if s_chacha == 0xFFFFFFFFu32 { return 12u64 }
+
+    /* Distinct primitives -> distinct dispatch_fps. */
+    if prespec_dispatch_fp(s_sha256) == prespec_dispatch_fp(s_sha512) { return 13u64 }
+    if prespec_dispatch_fp(s_sha256) == prespec_dispatch_fp(s_x25519) { return 14u64 }
+
+    /* Idempotence: re-register; same count (in-place update). */
+    let n2 : u32 = prespec_register_compositions()
+    if n2 != 256u32 { return 15u64 }
+    if prespec_used() != 256u32 { return 16u64 }
+
+    /* Lookup of unknown synthetic hash returns NOT_FOUND.  SEQ=9999
+     * with primitive=1, hexad=0x01 is well outside any .def block. */
+    let h_unknown : u64 = _synth(9999u32, 1u8, 0x01u8)
+    if prespec_lookup(h_unknown) != 0xFFFFFFFFu32 { return 17u64 }
+
+    return 99u64
+}

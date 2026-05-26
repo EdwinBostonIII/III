@@ -1,0 +1,13 @@
+/* 713 — mig3 (H1) Part 2: SovVal-flow PROPAGATION, NEGATIVE arm.
+ * THIS FILE MUST FAIL TO COMPILE.
+ * `source` is a SovVal source (returns @sovereign_value-typed data); its result
+ * flows into `trusted`'s plain *u8 param — a containment breach.  cg_r3's
+ * r3_chk_param_sovereign MUST emit III_SOVEREIGN_FLOW_VIOLATION and reject it.
+ * This is the heart of "III applies the law systematically": only `source` is
+ * marked; the leak is caught at the call site automatically, no per-fn marking.
+ * Validated by the run_corpus *_neg contract (non-zero compile rc = PASS). */
+module corpus_713
+type SovVal = *u8 @sovereign_value
+fn source() -> SovVal { return 0u64 as *u8 }
+fn trusted(p: *u8) -> u64 { return 0u64 }
+fn main() -> u64 { return trusted(source()) }

@@ -1,0 +1,91 @@
+/* III conformance corpus 196 -- Stage 4.1: Ed25519 SIGN, RFC 8032 §7.1 Test 3.
+ *   seed: c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7
+ *   pk:   fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025
+ *   msg:  af 82  (2 bytes)
+ *   sig:  6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac
+ *         18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a
+ * sign must produce the exact RFC sig + verify + tamper-reject.  Exit 99.
+ */
+module corpus_196
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+
+fn fill_seed(p: *u8) -> i32 {
+    p[0]  = 0xC5u8; p[1]  = 0xAAu8; p[2]  = 0x8Du8; p[3]  = 0xF4u8
+    p[4]  = 0x3Fu8; p[5]  = 0x9Fu8; p[6]  = 0x83u8; p[7]  = 0x7Bu8
+    p[8]  = 0xEDu8; p[9]  = 0xB7u8; p[10] = 0x44u8; p[11] = 0x2Fu8
+    p[12] = 0x31u8; p[13] = 0xDCu8; p[14] = 0xB7u8; p[15] = 0xB1u8
+    p[16] = 0x66u8; p[17] = 0xD3u8; p[18] = 0x85u8; p[19] = 0x35u8
+    p[20] = 0x07u8; p[21] = 0x6Fu8; p[22] = 0x09u8; p[23] = 0x4Bu8
+    p[24] = 0x85u8; p[25] = 0xCEu8; p[26] = 0x3Au8; p[27] = 0x2Eu8
+    p[28] = 0x0Bu8; p[29] = 0x44u8; p[30] = 0x58u8; p[31] = 0xF7u8
+    return 0i32
+}
+
+fn fill_pubkey(p: *u8) -> i32 {
+    p[0]  = 0xFCu8; p[1]  = 0x51u8; p[2]  = 0xCDu8; p[3]  = 0x8Eu8
+    p[4]  = 0x62u8; p[5]  = 0x18u8; p[6]  = 0xA1u8; p[7]  = 0xA3u8
+    p[8]  = 0x8Du8; p[9]  = 0xA4u8; p[10] = 0x7Eu8; p[11] = 0xD0u8
+    p[12] = 0x02u8; p[13] = 0x30u8; p[14] = 0xF0u8; p[15] = 0x58u8
+    p[16] = 0x08u8; p[17] = 0x16u8; p[18] = 0xEDu8; p[19] = 0x13u8
+    p[20] = 0xBAu8; p[21] = 0x33u8; p[22] = 0x03u8; p[23] = 0xACu8
+    p[24] = 0x5Du8; p[25] = 0xEBu8; p[26] = 0x91u8; p[27] = 0x15u8
+    p[28] = 0x48u8; p[29] = 0x90u8; p[30] = 0x80u8; p[31] = 0x25u8
+    return 0i32
+}
+
+fn fill_expected(s: *u8) -> i32 {
+    s[0]  = 0x62u8; s[1]  = 0x91u8; s[2]  = 0xD6u8; s[3]  = 0x57u8
+    s[4]  = 0xDEu8; s[5]  = 0xECu8; s[6]  = 0x24u8; s[7]  = 0x02u8
+    s[8]  = 0x48u8; s[9]  = 0x27u8; s[10] = 0xE6u8; s[11] = 0x9Cu8
+    s[12] = 0x3Au8; s[13] = 0xBEu8; s[14] = 0x01u8; s[15] = 0xA3u8
+    s[16] = 0x0Cu8; s[17] = 0xE5u8; s[18] = 0x48u8; s[19] = 0xA2u8
+    s[20] = 0x84u8; s[21] = 0x74u8; s[22] = 0x3Au8; s[23] = 0x44u8
+    s[24] = 0x5Eu8; s[25] = 0x36u8; s[26] = 0x80u8; s[27] = 0xD7u8
+    s[28] = 0xDBu8; s[29] = 0x5Au8; s[30] = 0xC3u8; s[31] = 0xACu8
+    s[32] = 0x18u8; s[33] = 0xFFu8; s[34] = 0x9Bu8; s[35] = 0x53u8
+    s[36] = 0x8Du8; s[37] = 0x16u8; s[38] = 0xF2u8; s[39] = 0x90u8
+    s[40] = 0xAEu8; s[41] = 0x67u8; s[42] = 0xF7u8; s[43] = 0x60u8
+    s[44] = 0x98u8; s[45] = 0x4Du8; s[46] = 0xC6u8; s[47] = 0x59u8
+    s[48] = 0x4Au8; s[49] = 0x7Cu8; s[50] = 0x15u8; s[51] = 0xE9u8
+    s[52] = 0x71u8; s[53] = 0x6Eu8; s[54] = 0xD2u8; s[55] = 0x8Du8
+    s[56] = 0xC0u8; s[57] = 0x27u8; s[58] = 0xBEu8; s[59] = 0xCEu8
+    s[60] = 0xEAu8; s[61] = 0x1Eu8; s[62] = 0xC4u8; s[63] = 0x0Au8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let seed     : *u8 = malloc(32u64)
+    let pubkey   : *u8 = malloc(32u64)
+    let expected : *u8 = malloc(64u64)
+    let sig      : *u8 = malloc(64u64)
+    let msg      : *u8 = malloc(2u64)
+    fill_seed(seed)
+    fill_pubkey(pubkey)
+    fill_expected(expected)
+    msg[0] = 0xAFu8
+    msg[1] = 0x82u8
+    let src : u8 = ed25519_sign(seed, pubkey, msg, 2u64, sig)
+    if src != 1u8 { free(seed) ; free(pubkey) ; free(expected) ; free(sig) ; free(msg) ; return 1u64 }
+    let mut i : u64 = 0u64
+    let mut mism : u64 = 0u64
+    while i < 64u64 {
+        if sig[i] != expected[i] { mism = mism + 1u64 }
+        i = i + 1u64
+    }
+    if mism != 0u64 { free(seed) ; free(pubkey) ; free(expected) ; free(sig) ; free(msg) ; return 2u64 }
+    let v : u8 = ed25519_verify(pubkey, msg, 2u64, sig)
+    if v != 1u8 { free(seed) ; free(pubkey) ; free(expected) ; free(sig) ; free(msg) ; return 3u64 }
+    sig[0] = sig[0] ^ 0x01u8
+    let v2 : u8 = ed25519_verify(pubkey, msg, 2u64, sig)
+    free(seed)
+    free(pubkey)
+    free(expected)
+    free(sig)
+    free(msg)
+    if v2 == 1u8 { return 4u64 }
+    return 99u64
+}

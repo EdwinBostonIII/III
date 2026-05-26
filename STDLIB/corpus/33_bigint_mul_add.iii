@@ -1,0 +1,69 @@
+/* bigint: (2^64 - 1) * 2 = 2^65 - 2 (2 limbs)
+ *         (2^64) * (2^64) = 2^128 (3 limbs, high=1)
+ *         (2^64 - 1) + 1 = 2^64 (2 limbs) */
+module corpus_b33
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, s: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    /* (2^64 - 1) * 2 */
+    let max64 : u64 = bigint_from_u64(a, 0xFFFFFFFFFFFFFFFFu64)
+    let two : u64 = bigint_from_u64(a, 2u64)
+    let prod1 : u64 = bigint_mul_u64(a, max64, 2u64)
+    if bigint_len_limbs(prod1) != 2u64 { return 2u64 }
+    if bigint_get_limb(prod1, 0u64) != 0xFFFFFFFFFFFFFFFEu64 { return 3u64 }
+    if bigint_get_limb(prod1, 1u64) != 1u64 { return 4u64 }
+
+    /* (2^64) = bigint(1) << 64; verify it's 2 limbs (1, 0) */
+    let one : u64 = bigint_from_u64(a, 1u64)
+    let shifted : u64 = bigint_shl_bits(a, one, 64u64)
+    if bigint_len_limbs(shifted) != 2u64 { return 5u64 }
+    if bigint_get_limb(shifted, 0u64) != 0u64 { return 6u64 }
+    if bigint_get_limb(shifted, 1u64) != 1u64 { return 7u64 }
+
+    /* (2^64) * (2^64) = 2^128 -> 3 limbs (0, 0, 1) */
+    let prod2 : u64 = bigint_mul(a, shifted, shifted)
+    if bigint_len_limbs(prod2) != 3u64 { return 8u64 }
+    if bigint_get_limb(prod2, 0u64) != 0u64 { return 9u64 }
+    if bigint_get_limb(prod2, 1u64) != 0u64 { return 10u64 }
+    if bigint_get_limb(prod2, 2u64) != 1u64 { return 11u64 }
+
+    /* (2^64 - 1) + 1 = 2^64 -> equal to `shifted` */
+    let plus1 : u64 = bigint_add(a, max64, one)
+    if bigint_eq(plus1, shifted) != 1u8 { return 12u64 }
+
+    /* (2^64) - (2^64 - 1) = 1 */
+    let diff : u64 = bigint_sub(a, shifted, max64)
+    if bigint_eq(diff, one) != 1u8 { return 13u64 }
+
+    /* cmp ordering */
+    if bigint_cmp(max64, shifted) != -1i32 { return 14u64 }
+    if bigint_cmp(shifted, max64) != 1i32 { return 15u64 }
+    if bigint_cmp(one, one) != 0i32 { return 16u64 }
+
+    bigint_drop(max64)
+    bigint_drop(two)
+    bigint_drop(one)
+    bigint_drop(shifted)
+    bigint_drop(prod1)
+    bigint_drop(prod2)
+    bigint_drop(plus1)
+    bigint_drop(diff)
+    arena_drop(a)
+    return 99u64
+}

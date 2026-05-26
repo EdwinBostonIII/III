@@ -1,0 +1,140 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\xii_nop_tables.iii
+ *
+ * III STDLIB - numera::xii_nop_tables
+ *
+ * Per-target NOP encodings for LDIL placeholder fill. Per DOCS/III-XII.md S26.12.3.
+ *
+ * Target ids match xii_circ.iii (0..6):
+ *   0 x86_avx512: Intel multi-byte NOP family (1, 2, 4, 8, 16 bytes)
+ *   1 x86_avx2:   same as target 0
+ *   2 x86_scalar_ct: 0x90 only (single-byte NOPs for branch-target safety)
+ *   3 arm64_neon: 0x1F 0x20 0x03 0xD5 (4-byte ARM NOP)
+ *   4 arm64_sve2: same as target 3
+ *   5 riscv64_v:  0x13 0x00 0x00 0x00 (4-byte RV NOP)
+ *   6 embedded_safe: 0x00 0xBF (2-byte Cortex-M Thumb-2 NOP)
+ *
+ * Hexad: kind_form. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only.
+ */
+
+module numera_xii_nop_tables
+
+/* Fill `out` with `count` bytes of target-specific NOP encoding.
+ * Returns the count written (== count on success, 0 on bad target). */
+fn xii_nop_fill(target: u32, out: *u8, count: u32) -> u32 @export {
+    if target == 0u32 { return _fill_x86(out, count) }
+    if target == 1u32 { return _fill_x86(out, count) }
+    if target == 2u32 { return _fill_x86_scalar(out, count) }
+    if target == 3u32 { return _fill_arm64(out, count) }
+    if target == 4u32 { return _fill_arm64(out, count) }
+    if target == 5u32 { return _fill_riscv(out, count) }
+    if target == 6u32 { return _fill_cortex_m(out, count) }
+    return 0u32
+}
+
+/* x86 multi-byte NOP fill. Uses Intel's recommended sequences:
+ *   1-byte: 0x90
+ *   2-byte: 0x66 0x90
+ *   4-byte: 0x0F 0x1F 0x40 0x00
+ *   8-byte: 0x0F 0x1F 0x84 0x00 0x00 0x00 0x00 0x00
+ *   16-byte: NOP DWORD ptr[EAX + EAX*1 + 00] x 2 (16 bytes)
+ * Strategy: greedy largest-first. */
+fn _fill_x86(out: *u8, count: u32) -> u32 {
+    let mut remaining : u32 = count
+    let mut off : u32 = 0u32
+    while remaining >= 8u32 {
+        out[(off + 0u32) as u64] = 0x0Fu8
+        out[(off + 1u32) as u64] = 0x1Fu8
+        out[(off + 2u32) as u64] = 0x84u8
+        out[(off + 3u32) as u64] = 0x00u8
+        out[(off + 4u32) as u64] = 0x00u8
+        out[(off + 5u32) as u64] = 0x00u8
+        out[(off + 6u32) as u64] = 0x00u8
+        out[(off + 7u32) as u64] = 0x00u8
+        off = off + 8u32
+        remaining = remaining - 8u32
+    }
+    while remaining >= 4u32 {
+        out[(off + 0u32) as u64] = 0x0Fu8
+        out[(off + 1u32) as u64] = 0x1Fu8
+        out[(off + 2u32) as u64] = 0x40u8
+        out[(off + 3u32) as u64] = 0x00u8
+        off = off + 4u32
+        remaining = remaining - 4u32
+    }
+    while remaining >= 2u32 {
+        out[(off + 0u32) as u64] = 0x66u8
+        out[(off + 1u32) as u64] = 0x90u8
+        off = off + 2u32
+        remaining = remaining - 2u32
+    }
+    if remaining == 1u32 {
+        out[off as u64] = 0x90u8
+        off = off + 1u32
+    }
+    return off
+}
+
+/* x86 scalar CT: single-byte NOPs only (branch-target safe). */
+fn _fill_x86_scalar(out: *u8, count: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < count {
+        out[i as u64] = 0x90u8
+        i = i + 1u32
+    }
+    return count
+}
+
+/* ARM64 NOP: 0x1F 0x20 0x03 0xD5 (4-byte aligned). */
+fn _fill_arm64(out: *u8, count: u32) -> u32 {
+    /* count must be multiple of 4 for clean fill; we round down. */
+    let aligned : u32 = count & 0xFFFFFFFCu32
+    let mut i : u32 = 0u32
+    while i < aligned {
+        out[(i + 0u32) as u64] = 0x1Fu8
+        out[(i + 1u32) as u64] = 0x20u8
+        out[(i + 2u32) as u64] = 0x03u8
+        out[(i + 3u32) as u64] = 0xD5u8
+        i = i + 4u32
+    }
+    return aligned
+}
+
+/* RISC-V NOP: 0x13 0x00 0x00 0x00 = addi x0, x0, 0 (4-byte). */
+fn _fill_riscv(out: *u8, count: u32) -> u32 {
+    let aligned : u32 = count & 0xFFFFFFFCu32
+    let mut i : u32 = 0u32
+    while i < aligned {
+        out[(i + 0u32) as u64] = 0x13u8
+        out[(i + 1u32) as u64] = 0x00u8
+        out[(i + 2u32) as u64] = 0x00u8
+        out[(i + 3u32) as u64] = 0x00u8
+        i = i + 4u32
+    }
+    return aligned
+}
+
+/* Cortex-M Thumb-2 NOP: 0x00 0xBF (2-byte). */
+fn _fill_cortex_m(out: *u8, count: u32) -> u32 {
+    let aligned : u32 = count & 0xFFFFFFFEu32
+    let mut i : u32 = 0u32
+    while i < aligned {
+        out[(i + 0u32) as u64] = 0x00u8
+        out[(i + 1u32) as u64] = 0xBFu8
+        i = i + 2u32
+    }
+    return aligned
+}
+
+/* Single NOP-byte length (for the smallest unit of each target). */
+fn xii_nop_unit_size(target: u32) -> u32 @export {
+    if target == 0u32 { return 1u32 }
+    if target == 1u32 { return 1u32 }
+    if target == 2u32 { return 1u32 }
+    if target == 3u32 { return 4u32 }
+    if target == 4u32 { return 4u32 }
+    if target == 5u32 { return 4u32 }
+    if target == 6u32 { return 2u32 }
+    return 0u32
+}

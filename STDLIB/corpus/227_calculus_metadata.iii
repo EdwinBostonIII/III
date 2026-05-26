@@ -1,0 +1,109 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\227_calculus_metadata.iii
+ *
+ * III conformance corpus 227 -- calculus v1.0 metadata sealing.
+ *
+ * Asserts the calculus's identity is fixed and matches v1.0:
+ *   1. version major=1, minor=0, primitive_count=19
+ *   2. Each primitive has hexad in [1..7], k_cost > 0, schema != 0
+ *   3. root_mhash is deterministic + non-zero
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_227
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn calculus_init() -> i32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_version_major() -> u32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_version_minor() -> u32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_count() -> u32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_hexad(p_id: u32) -> u8 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_k_cost(p_id: u32) -> u64 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_param_schema(p_id: u32) -> u64 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_primitive_ring_min(p_id: u32) -> u8 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_root_mhash(out_32: u64) -> i32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn calculus_root_mhash_byte(i: u32) -> u32 from "calculus_v1.iii"
+
+/* Per-primitive metadata sanity. Returns 0 on pass, error code on fail. */
+fn _check_primitive_metadata() -> u32 {
+    let mut p : u32 = 1u32
+    while p <= 19u32 {
+        let h : u8 = calculus_primitive_hexad(p)
+        if h < 1u8 { return 10u32 }
+        if h > 7u8 { return 11u32 }
+        let k : u64 = calculus_primitive_k_cost(p)
+        if k == 0u64 { return 12u32 }
+        if k > 1000000000u64 { return 13u32 }
+        let sch : u64 = calculus_primitive_param_schema(p)
+        if sch == 0u64 { return 14u32 }
+        /* ring is encoded as a u8 (R0=2, R-1=1, R-2=0); skip range
+         * check since ring may use the high-bit as a sign flag. */
+        calculus_primitive_ring_min(p)
+        p = p + 1u32
+    }
+    return 0u32
+}
+
+/* Compare buf and buf2 for byte-equality over n bytes. */
+fn _bytes_equal(buf: *u8, buf2: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n {
+        if buf[i] != buf2[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Sum of byte values over n bytes. */
+fn _byte_sum(buf: *u8, n: u64) -> u32 {
+    let mut s : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < n {
+        let bv : u32 = (buf[i] as u32) & 0xFFu32
+        s = s + bv
+        i = i + 1u64
+    }
+    return s
+}
+
+/* Verify byte-by-byte read matches the buffer fill. */
+fn _check_byte_accessor(buf: *u8) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let b : u32 = calculus_root_mhash_byte(i) & 0xFFu32
+        let buf_b : u32 = (buf[(i as u64) & 0xFFu64] as u32) & 0xFFu32
+        if b != buf_b { return 22u32 }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    calculus_init()
+
+    if calculus_version_major() != 1u32 { return 1u64 }
+    if calculus_version_minor() != 0u32 { return 2u64 }
+    if calculus_primitive_count() != 19u32 { return 3u64 }
+
+    let pe : u32 = _check_primitive_metadata()
+    if pe != 0u32 { return (pe as u64) }
+
+    let buf : *u8 = malloc(32u64)
+    if buf as u64 == 0u64 { return 20u64 }
+    if calculus_root_mhash(buf as u64) != 0i32 { return 21u64 }
+
+    let ae : u32 = _check_byte_accessor(buf)
+    if ae != 0u32 { return (ae as u64) }
+
+    let buf2 : *u8 = malloc(32u64)
+    if calculus_root_mhash(buf2 as u64) != 0i32 { return 23u64 }
+    if _bytes_equal(buf, buf2, 32u64) != 1u8 { return 24u64 }
+
+    if _byte_sum(buf, 32u64) == 0u32 { return 25u64 }
+
+    free(buf)
+    free(buf2)
+    return 99u64
+}

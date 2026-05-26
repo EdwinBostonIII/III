@@ -1,0 +1,4 @@
+/* 626 — topology_atlas: federation topology BFS distance/neighbors/domains + canonical atlas hash. */
+module corpus_626
+extern @abi(c-msvc-x64) fn topoa_selftest() -> u64 from "topology_atlas.iii"
+fn main() -> u64 { return topoa_selftest() }

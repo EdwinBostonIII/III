@@ -1,0 +1,45 @@
+/* 603 -- KATABASIS increment 9: the Census Crystal (plan 3.4 / FR-2).
+ * Asserts the verified §0.1-0.2 silicon facts, fact-level drift detection, and
+ * that the crystal hash is reproducible (content-addressed) and non-zero.
+ * Exit 99 = all hold; 1..17 = the index of the failing assertion. */
+module corpus_603_katabasis_census
+
+extern @abi(c-msvc-x64) fn katabasis_census_fact_count() -> u64 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_fact(idx: u64) -> u64 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_fact_matches(idx: u64, value: u64) -> u8 from "census.iii"
+extern @abi(c-msvc-x64) fn katabasis_census_hash(out_addr: u64) -> i32 from "census.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+var T_HASH_A : [u8; 32]
+var T_HASH_B : [u8; 32]
+
+fn main() -> u64 {
+    if katabasis_census_fact_count() != 16u64 { return 1u64 }
+
+    /* the verified §0.1-0.2 facts */
+    if katabasis_census_fact(0u64)  != 0x10DE2717u64   { return 2u64 }   /* GPU VEN<<16|DEV */
+    if katabasis_census_fact(2u64)  != 0x193000A1u64   { return 3u64 }   /* PMC_BOOT_0 (AD103 A1) */
+    if katabasis_census_fact(3u64)  != 76u64           { return 4u64 }   /* SM count */
+    if katabasis_census_fact(4u64)  != 16376u64        { return 5u64 }   /* VRAM MB */
+    if katabasis_census_fact(5u64)  != 0xFB000000u64   { return 6u64 }   /* BAR0 */
+    if katabasis_census_fact(6u64)  != 0xF800000000u64 { return 7u64 }   /* BAR1 */
+    if katabasis_census_fact(7u64)  != 0xFC00000000u64 { return 8u64 }   /* BAR3 */
+    if katabasis_census_fact(10u64) != 32u64           { return 9u64 }   /* cpu_count */
+    if katabasis_census_fact(15u64) != 0xFED40000u64   { return 10u64 }  /* TPM TIS */
+    if katabasis_census_fact(16u64) != 0u64            { return 11u64 }  /* out of range -> 0 */
+
+    /* fact-level drift detection */
+    if katabasis_census_fact_matches(2u64, 0x193000A1u64) != 1u8 { return 12u64 }  /* exact match */
+    if katabasis_census_fact_matches(2u64, 0x193000A2u64) != 0u8 { return 13u64 }  /* one-bit drift */
+    if katabasis_census_fact_matches(5u64, 0xFB000000u64) != 1u8 { return 14u64 }
+    if katabasis_census_fact_matches(5u64, 0xFC000000u64) != 0u8 { return 15u64 }  /* drift */
+
+    /* the Census Crystal identity: reproducible (content-addressed) + non-zero */
+    katabasis_census_hash(&T_HASH_A as u64)
+    katabasis_census_hash(&T_HASH_B as u64)
+    if cad_eq(&T_HASH_A as *u8, &T_HASH_B as *u8) != 1u8 { return 16u64 }   /* two runs byte-identical */
+    if cad_is_zero(&T_HASH_A as *u8) != 0u8 { return 17u64 }                /* the hash is non-zero */
+
+    return 99u64
+}

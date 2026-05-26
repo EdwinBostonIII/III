@@ -1,0 +1,4 @@
+/* 632 — constitution: append-only clauses + bytecode predicate interpreter (W19). */
+module corpus_632
+extern @abi(c-msvc-x64) fn cons_selftest() -> u64 from "constitution.iii"
+fn main() -> u64 { return cons_selftest() }

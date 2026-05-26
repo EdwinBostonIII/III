@@ -1,0 +1,56 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\248_signed_compare.iii
+ *
+ * III conformance corpus 248 -- signed integer ordering compares.
+ *
+ * Regression test for the Phase-3-Step-1 iiis-0.1 codegen fix that
+ * introduces type-aware setcc emission.  Before the fix, iiis-0 emitted
+ * `setb` (unsigned below) for every `<` operator, producing silent wrong
+ * answers for negative i64 operands (e.g. -5i64 < 1i64 returned 0).
+ *
+ * Asserts the four ordering operators work correctly on signed i64 with
+ * negative inputs.  Exit 99 = pass; any non-99 = a specific compare
+ * regressed.
+ */
+module corpus_248
+
+fn _eq_i32(a: i32, b: i32) -> u8 { if a == b { return 1u8 } return 0u8 }
+fn _ne_i32(a: i32, b: i32) -> u8 { if a != b { return 1u8 } return 0u8 }
+
+fn _lt_i64(a: i64, b: i64) -> u8 {
+    /* This is the path the trap docs say SIGSEGVs.  We exercise it. */
+    if a < b { return 1u8 }
+    return 0u8
+}
+
+fn _le_i64(a: i64, b: i64) -> u8 { if a <= b { return 1u8 } return 0u8 }
+fn _gt_i64(a: i64, b: i64) -> u8 { if a > b { return 1u8 } return 0u8 }
+fn _ge_i64(a: i64, b: i64) -> u8 { if a >= b { return 1u8 } return 0u8 }
+
+fn main() -> u64 {
+    /* Sanity: equality / inequality on signed ints. */
+    if _eq_i32(3i32, 3i32) != 1u8 { return 1u64 }
+    if _eq_i32(3i32, 4i32) != 0u8 { return 2u64 }
+    if _ne_i32(3i32, 4i32) != 1u8 { return 3u64 }
+
+    /* Signed ordering compares — these SHOULD work but the trap doc
+     * says iiis-0 SIGSEGVs.  Each call below is a focused probe. */
+    if _lt_i64(1i64, 5i64) != 1u8 { return 10u64 }
+    if _lt_i64(5i64, 1i64) != 0u8 { return 11u64 }
+    if _lt_i64(-5i64, 1i64) != 1u8 { return 12u64 }
+    if _lt_i64(1i64, -5i64) != 0u8 { return 13u64 }
+
+    if _le_i64(3i64, 3i64) != 1u8 { return 20u64 }
+    if _le_i64(3i64, 4i64) != 1u8 { return 21u64 }
+    if _le_i64(4i64, 3i64) != 0u8 { return 22u64 }
+
+    if _gt_i64(5i64, 1i64) != 1u8 { return 30u64 }
+    if _gt_i64(1i64, 5i64) != 0u8 { return 31u64 }
+    if _gt_i64(-1i64, -5i64) != 1u8 { return 32u64 }
+
+    if _ge_i64(3i64, 3i64) != 1u8 { return 40u64 }
+    if _ge_i64(5i64, 1i64) != 1u8 { return 41u64 }
+    if _ge_i64(1i64, 5i64) != 0u8 { return 42u64 }
+    if _ge_i64(-1i64, -1i64) != 1u8 { return 43u64 }
+
+    return 99u64
+}

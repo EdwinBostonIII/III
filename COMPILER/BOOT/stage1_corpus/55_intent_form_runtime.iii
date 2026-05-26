@@ -1,0 +1,27 @@
+module corpus_55
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn intent_form_parse(src: u64, len: u64) -> u64 from "intent_form.iii"
+extern @abi(c-msvc-x64) fn intent_goal_kind(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_expected_hexad_kind(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_required_guarantees(p: u64) -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_arena_id(p: u64) -> u64 from "intent.iii"
+
+/* "goal_kind=1, expected_hexad=2, required=10, arena=0xABCD" */
+var SPEC : [u8; 56] = [
+    103u8, 111u8, 97u8, 108u8, 95u8, 107u8, 105u8, 110u8, 100u8, 61u8, 49u8, 44u8, 32u8,
+    101u8, 120u8, 112u8, 101u8, 99u8, 116u8, 101u8, 100u8, 95u8, 104u8, 101u8, 120u8, 97u8, 100u8, 61u8, 50u8, 44u8, 32u8,
+    114u8, 101u8, 113u8, 117u8, 105u8, 114u8, 101u8, 100u8, 61u8, 49u8, 48u8, 44u8, 32u8,
+    97u8, 114u8, 101u8, 110u8, 97u8, 61u8, 48u8, 120u8, 65u8, 66u8, 67u8, 68u8
+]
+
+fn main() -> u64 {
+    resolution_init()
+    let i : u64 = intent_form_parse((&SPEC) as u64, 56u64)
+    if i == 0u64 { return 10u64 }
+    if intent_goal_kind(i) != 1u8 { return 20u64 }
+    if intent_expected_hexad_kind(i) != 2u8 { return 30u64 }
+    if intent_required_guarantees(i) != 10u32 { return 40u64 }
+    if intent_arena_id(i) != 0xABCDu64 { return 50u64 }
+    return 1u64
+}

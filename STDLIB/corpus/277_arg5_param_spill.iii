@@ -1,0 +1,39 @@
+/* III conformance corpus 277 -- Stage 3.9: 5+-arg parameter-spill regression.
+ *
+ * The CLAUDE.md trap registry documented an "iiis-0 5+-arg parameter-spill
+ * bug": the compiler did not spill Win64 register params (rcx/rdx/r8/r9) to
+ * the stack unless a param was used multiply or assigned to a local, so a
+ * single-use param read from an UNINITIALIZED stack slot.
+ *
+ * Stage 3.9 verified (probe + iiis-0 disassembly of f6) that the bug is
+ * GONE: the prologue UNCONDITIONALLY spills all four register params plus
+ * the stack args (5th/6th from caller-frame +0x30/+0x38) into local slots,
+ * regardless of use count.  This is the permanent regression pin -- it
+ * exercises 5- and 6-arg functions with single-use params, including the
+ * worst case (single-use params forwarded straight to another fn).
+ *
+ * Exit = 99 on success; 1..5 = the specific case that regressed.
+ */
+module corpus_277
+
+fn f5(a: u32, b: u32, c: u32, d: u32, e: u32) -> u32 {
+    return a + b * 2u32 + c * 3u32 + d * 4u32 + e * 5u32
+}
+
+fn f6(a: u32, b: u32, c: u32, d: u32, e: u32, g: u32) -> u32 {
+    return a + b * 2u32 + c * 3u32 + d * 4u32 + e * 5u32 + g * 6u32
+}
+
+/* Worst case: single-use params passed straight to another fn. */
+fn relay6(a: u32, b: u32, c: u32, d: u32, e: u32, g: u32) -> u32 {
+    return f6(a, b, c, d, e, g)
+}
+
+fn main() -> u64 {
+    if f5(10u32, 11u32, 12u32, 13u32, 14u32) != 190u32 { return 1u64 }
+    if f6(10u32, 11u32, 12u32, 13u32, 14u32, 15u32) != 280u32 { return 2u64 }
+    if relay6(10u32, 11u32, 12u32, 13u32, 14u32, 15u32) != 280u32 { return 3u64 }
+    if f6(1u32, 0u32, 0u32, 0u32, 0u32, 0u32) != 1u32 { return 4u64 }
+    if f6(0u32, 0u32, 0u32, 0u32, 0u32, 7u32) != 42u32 { return 5u64 }
+    return 99u64
+}

@@ -1,0 +1,11 @@
+/* §4.12 driver: Groth16 over BLS12-381 — QAP engine + full setup/prove/verify KAT. */
+module zksn_probe
+extern @abi(c-msvc-x64) fn zk_snark_poly_selftest() -> u64 from "zk_snark.iii"
+extern @abi(c-msvc-x64) fn zk_snark_kat() -> u64 from "zk_snark.iii"
+fn main() -> u64 {
+    let a : u64 = zk_snark_poly_selftest()
+    if a != 99u64 { return a }
+    let b : u64 = zk_snark_kat()
+    if b != 99u64 { return 100u64 + b }
+    return 99u64
+}

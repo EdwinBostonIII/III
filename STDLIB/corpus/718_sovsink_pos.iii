@@ -1,0 +1,23 @@
+/* 718 -- mig3 boundary contract COMPLETE: SINK acceptance + sanitiser, POSITIVE.
+ * Demonstrates the full membrane contract has no false positives once both duals
+ * are integrated:
+ *   - recv_into FILLS a SovVal buffer  (@sovereign_value @sovereign_out source);
+ *   - send_out ACCEPTS that SovVal buffer (@sovereign_value SINK) -- the echo/proxy
+ *     line that WOULD be a III_SOVEREIGN_FLOW_VIOLATION without the sink mark
+ *     (cf. 713/717, which prove a SovVal arg into a PLAIN param is still rejected);
+ *   - sanitise takes the SovVal buffer and returns a TRUSTED (plain) value, which
+ *     then flows freely into trusted logic -- the declassification boundary.
+ * All three are legal -> compiles, links, runs, returns 99. EXPECTED=99. */
+module corpus_718
+type SovBuf = u64 @sovereign_value
+fn recv_into(buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 { return n }
+fn send_out(buf: u64 @sovereign_value, n: u64) -> u64 { return n }
+fn sanitise(buf: u64 @sovereign_value) -> u64 { return 99u64 }
+fn trusted(x: u64) -> u64 { return x }
+fn main() -> u64 {
+    let buf : SovBuf = 0u64
+    let got : u64 = recv_into(buf, 8u64)
+    let sent : u64 = send_out(buf, got)
+    let clean : u64 = sanitise(buf)
+    return trusted(clean)
+}

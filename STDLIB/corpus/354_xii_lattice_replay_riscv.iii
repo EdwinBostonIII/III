@@ -1,0 +1,22 @@
+/* corpus/354_xii_lattice_replay_riscv.iii — Lattice replay (riscv64_v target=5) */
+
+module corpus_354_xii_lattice_replay_riscv
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+
+var BUF_A3 : [u8; 256]
+var BUF_B3 : [u8; 256]
+
+fn main() -> u64 {
+    xii_horizon_init()
+    let n1 : u32 = xii_emit_gen_produce(11u32, 5u32, 256u32, &BUF_A3 as *u8)
+    let n2 : u32 = xii_emit_gen_produce(11u32, 5u32, 256u32, &BUF_B3 as *u8)
+    if n1 != n2 { return 1u64 }
+    let mut i : u32 = 0u32
+    while i < n1 {
+        if BUF_A3[i] != BUF_B3[i] { return 2u64 }
+        i = i + 1u32
+    }
+    return 0u64
+}

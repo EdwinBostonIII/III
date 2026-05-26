@@ -1,0 +1,22 @@
+/* corpus/365_xii_anchor_invariant.iii — Founders-Anchor PFK invariant ACCEPT */
+
+module corpus_365_xii_anchor_invariant
+
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn anchor_check_no_bricking() -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn anchor_check_govern_admit() -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn anchor_check_24_crypto() -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn anchor_check_8_ct_classes() -> u8 from "anchor_xii.iii"
+
+fn main() -> u64 {
+    xii_horizon_init()
+    /* Sub-check 1: no bricking. */
+    if anchor_check_no_bricking() != 0u8 { return 1u64 }
+    /* Sub-check 2: GOVERN admit. */
+    if anchor_check_govern_admit() != 0u8 { return 2u64 }
+    /* Sub-check 3: 24 crypto patterns productive. */
+    if anchor_check_24_crypto() != 0u8 { return 3u64 }
+    /* Sub-check 6: 8 CT classes intact. */
+    if anchor_check_8_ct_classes() != 0u8 { return 6u64 }
+    return 0u64
+}

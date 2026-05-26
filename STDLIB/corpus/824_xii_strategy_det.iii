@@ -1,0 +1,7 @@
+/* 824 -- Confluence-Core Certificate, Tier 1 (strategy determinism). xii_strategy_det proves,
+ * by OBSERVING the engine (not asserting), that xii_canonicalise is a deterministic total
+ * function: idempotent + two independent builds reduce identically + root overlaps all join +
+ * bottom-up (subterm reduced first) + prove-the-negative teeth. 99 = GREEN. */
+module corpus_824
+extern @abi(c-msvc-x64) fn xsd_selftest() -> u64 from "xii_strategy_det.iii"
+fn main() -> u64 { return xsd_selftest() }

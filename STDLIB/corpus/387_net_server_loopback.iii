@@ -1,0 +1,46 @@
+/* 387 — aether/net + tcp server primitives (Phase E): capability-gated
+ * listen/accept over a loopback TCP connection.  Mints a LISTEN|DIAL cap,
+ * binds+listens on 127.0.0.1:19191, connects to it, accepts, and round-trips
+ * a 5-byte message — proving net_tcp_listen_ipv4 / net_tcp_accept work. */
+module corpus_387
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn net_init() -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
+
+var SADDR : [u8; 16]
+var MSG   : [u8; 8]
+var RBUF  : [u8; 8]
+
+fn main() -> u64 {
+    let root : u64 = cap_env_init()
+    if root == 0u64 { return 1u64 }
+    let cap : u64 = cap_attenuate(root, 0x60u64, 0xFFFFFFFFFFFFFFFFu64)   /* LISTEN|DIAL */
+    if cap == 0u64 { return 2u64 }
+    net_init()
+    net_pack_sockaddr_ipv4(&SADDR as u64, 0x7F000001u32, 19191u32)        /* 127.0.0.1:19191 */
+    let lh : u64 = net_tcp_listen_ipv4(cap, &SADDR as u64, 16u32)
+    if lh == 0u64 { return 3u64 }
+    let ch : u64 = net_tcp_connect_ipv4(cap, &SADDR as u64, 16u32)
+    if ch == 0u64 { return 4u64 }
+    let ah : u64 = net_tcp_accept(lh, cap)
+    if ah == 0u64 { return 5u64 }
+    MSG[0] = 0x50u8  MSG[1] = 0x49u8  MSG[2] = 0x4Eu8  MSG[3] = 0x47u8  MSG[4] = 0x21u8   /* "PING!" */
+    let sent : i32 = net_tcp_send(ch, &MSG as u64, 5u64)
+    if sent != 5i32 { return 6u64 }
+    let got : i32 = net_tcp_recv(ah, &RBUF as u64, 5u64)
+    if got != 5i32 { return 7u64 }
+    let mut i : u64 = 0u64
+    while i < 5u64 { if RBUF[i] != MSG[i] { return 8u64 }  i = i + 1u64 }
+    net_close(ch)
+    net_close(ah)
+    net_close(lh)
+    return 99u64
+}

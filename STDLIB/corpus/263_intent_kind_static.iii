@@ -1,0 +1,56 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\263_intent_kind_static.iii
+ *
+ * III conformance corpus 263 -- iiis-1 first-class intent types
+ * (parameter-level @hexad_kind static check at call sites).
+ *
+ * When a callee fn parameter declares an inline `@hexad_kind(K_p)`
+ * annotation on its type, AND the actual argument is an ident bound
+ * to a let/param/var whose declared type also carries `@hexad_kind(K_a)`,
+ * the codegen REJECTS the call if K_a != K_p with the marker
+ * `# III_INTENT_KIND_VIOLATION:`.
+ *
+ * This file is the POSITIVE case: all callsite arg-bindings carry
+ * matching hexad kinds, so codegen proceeds and runtime succeeds.
+ *
+ * The NEGATIVE case is in 263_neg_intent_kind.iii, verified by
+ * scripts/test_intent_kind_static_negative.sh.
+ *
+ * Mandate 7: pure structural integer-equality on declared metadata.
+ */
+module corpus_263
+
+/* Two fns whose parameter declares a typed-intent kind. */
+fn _consume_form(x: u64 @hexad_kind(1u64)) -> u64 {
+    return x + 0x1000u64
+}
+
+fn _consume_compose(x: u64 @hexad_kind(6u64)) -> u64 {
+    return x + 0x6000u64
+}
+
+fn main() -> u64 {
+    /* Bind a value carrying FORM kind (1). */
+    let form_val : u64 @hexad_kind(1u64) = 0x100u64
+    /* Bind a value carrying COMPOSE kind (6). */
+    let compose_val : u64 @hexad_kind(6u64) = 0x600u64
+
+    /* Both calls have matching kinds -> codegen accepts, runtime runs. */
+    let r1 : u64 = _consume_form(form_val)
+    if r1 != 0x1100u64 { return 1u64 }
+
+    let r2 : u64 = _consume_compose(compose_val)
+    if r2 != 0x6600u64 { return 2u64 }
+
+    /* Untyped literal args bypass the static check (literal has no
+     * binding), runtime check (none here) lets them through. */
+    let r3 : u64 = _consume_form(0x200u64)
+    if r3 != 0x1200u64 { return 3u64 }
+
+    /* Untyped binding (no @hexad_kind on let) bypasses the static
+     * check -- TIGHTENING is opt-in. */
+    let untyped : u64 = 0x300u64
+    let r4 : u64 = _consume_compose(untyped)
+    if r4 != 0x6300u64 { return 4u64 }
+
+    return 99u64
+}

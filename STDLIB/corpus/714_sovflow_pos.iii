@@ -1,0 +1,10 @@
+/* 714 — mig3 (H1) Part 2: SovVal-flow PROPAGATION, POSITIVE arm.
+ * `source` returns SovVal; it flows into `handler`'s SovVal param — contained,
+ * legal, no violation.  Proves the propagation does not false-reject a properly
+ * sovereign-typed data path (companion to the 713 negative).  main returns
+ * handler(source()) = 99 = GREEN. */
+module corpus_714
+type SovVal = *u8 @sovereign_value
+fn source() -> SovVal { return 0u64 as *u8 }
+fn handler(p: SovVal) -> u64 { return 99u64 }
+fn main() -> u64 { return handler(source()) }

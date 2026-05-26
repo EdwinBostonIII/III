@@ -1,0 +1,163 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\parse.iii
+ *
+ * III STDLIB - verba::parse
+ *
+ * Basic parser primitives over byte buffers.  Each primitive takes
+ * a (base, len, pos) cursor triple and returns a packed result:
+ *   bit 63 = success (1) / failure (0)
+ *   bits 0..62 = new pos (on success) or 0 (on failure)
+ *
+ * For value-bearing parsers, callers chain the new position into
+ * subsequent calls and use auxiliary getters to extract the parsed
+ * value.  This avoids the need for closures, allocation, or
+ * @specialize.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module verba_parse
+
+const PARSE_OK_BIT : u64 = 0x8000000000000000u64
+const PARSE_FAIL   : u64 = 0u64
+
+/* Slot for the most recent parsed-decimal value. */
+var PARSE_LAST_DECIMAL : u32 = 0u32
+
+/* --- Byte primitives --- */
+
+fn parse_match_byte(base: u64, len: u64, pos: u64, b: u32) -> u64 @export {
+    if pos >= len { return PARSE_FAIL }
+    let p : *u8 = base as *u8
+    let actual : u8 = p[pos]
+    let want : u8 = (b & 0xFFu32) as u8
+    if actual != want { return PARSE_FAIL }
+    return PARSE_OK_BIT | (pos + 1u64)
+}
+
+fn parse_skip_ascii_ws(base: u64, len: u64, pos: u64) -> u64 @export {
+    let p : *u8 = base as *u8
+    let mut i : u64 = pos
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if i >= len { done = 1u8 }
+        if done == 0u8 {
+            let c : u8 = p[i]
+            let mut is_ws : u8 = 0u8
+            if c == 0x20u8 { is_ws = 1u8 }
+            if c == 0x09u8 { is_ws = 1u8 }
+            if c == 0x0Au8 { is_ws = 1u8 }
+            if c == 0x0Du8 { is_ws = 1u8 }
+            if is_ws == 0u8 { done = 1u8 }
+            if is_ws == 1u8 { i = i + 1u64 }
+        }
+    }
+    return PARSE_OK_BIT | i
+}
+
+fn parse_take_while_ascii_alpha(base: u64, len: u64, pos: u64) -> u64 @export {
+    let p : *u8 = base as *u8
+    let mut i : u64 = pos
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if i >= len { done = 1u8 }
+        if done == 0u8 {
+            let c : u8 = p[i]
+            let mut is_alpha : u8 = 0u8
+            if c >= 0x41u8 {
+                if c <= 0x5Au8 { is_alpha = 1u8 }
+            }
+            if c >= 0x61u8 {
+                if c <= 0x7Au8 { is_alpha = 1u8 }
+            }
+            if is_alpha == 0u8 { done = 1u8 }
+            if is_alpha == 1u8 { i = i + 1u64 }
+        }
+    }
+    if i == pos { return PARSE_FAIL }
+    return PARSE_OK_BIT | i
+}
+
+/* Literal-match uses a 2-step API to keep within the 4-argument
+ * function-parameter cap: caller stages the literal via
+ * parse_set_pending_lit, then consumes it at the cursor with
+ * parse_consume_lit.  Multiple literals across nested parsers are
+ * supported as long as set/consume are paired. */
+
+var PARSE_LIT_BASE : u64 = 0u64
+var PARSE_LIT_LEN  : u64 = 0u64
+
+fn parse_set_pending_lit(lit_base: u64, lit_len: u64) -> u32 @export {
+    PARSE_LIT_BASE = lit_base
+    PARSE_LIT_LEN  = lit_len
+    return 0u32
+}
+
+fn parse_consume_lit(base: u64, len: u64, pos: u64) -> u64 @export {
+    let lit_len : u64 = PARSE_LIT_LEN
+    if pos + lit_len > len { return PARSE_FAIL }
+    let p : *u8 = base as *u8
+    let lp : *u8 = PARSE_LIT_BASE as *u8
+    let mut i : u64 = 0u64
+    while i < lit_len {
+        if p[pos + i] != lp[i] { return PARSE_FAIL }
+        i = i + 1u64
+    }
+    return PARSE_OK_BIT | (pos + lit_len)
+}
+
+/* --- Decimal u32 --- */
+
+fn parse_decimal_u32(base: u64, len: u64, pos: u64) -> u64 @export {
+    let p : *u8 = base as *u8
+    let mut i : u64 = pos
+    let mut value : u32 = 0u32
+    let mut digits : u64 = 0u64
+    let mut overflowed : u8 = 0u8
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        if i >= len { done = 1u8 }
+        if done == 0u8 {
+            let c : u8 = p[i]
+            if c < 0x30u8 { done = 1u8 }
+            if c > 0x39u8 { done = 1u8 }
+            if done == 0u8 {
+                let d : u32 = (c - 0x30u8) as u32
+                /* Overflow check: value * 10 + d > 0xFFFFFFFF */
+                let max_div_10 : u32 = 0x19999999u32   /* 0xFFFFFFFF / 10 */
+                if value > max_div_10 { overflowed = 1u8 }
+                if overflowed == 0u8 {
+                    let v10 : u32 = (value * 10u32) & 0xFFFFFFFFu32
+                    let v10d : u32 = (v10 + d) & 0xFFFFFFFFu32
+                    if v10d < v10 { overflowed = 1u8 }
+                    value = v10d
+                }
+                i = i + 1u64
+                digits = digits + 1u64
+            }
+        }
+    }
+    if digits == 0u64 { return PARSE_FAIL }
+    if overflowed == 1u8 { return PARSE_FAIL }
+    PARSE_LAST_DECIMAL = value
+    return PARSE_OK_BIT | i
+}
+
+fn parse_last_decimal_u32() -> u32 @export {
+    return PARSE_LAST_DECIMAL
+}
+
+/* --- Cursor utilities --- */
+
+fn parse_is_ok(packed: u64) -> u8 @export {
+    if (packed & PARSE_OK_BIT) != 0u64 { return 1u8 }
+    return 0u8
+}
+
+fn parse_pos(packed: u64) -> u64 @export {
+    return packed & 0x7FFFFFFFFFFFFFFFu64
+}
+
+fn parse_at_eof(base: u64, len: u64, pos: u64) -> u8 @export {
+    if pos >= len { return 1u8 }
+    return 0u8
+}

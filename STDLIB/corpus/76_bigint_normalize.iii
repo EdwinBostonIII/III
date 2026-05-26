@@ -1,0 +1,61 @@
+/* bigint_normalize + value-equality semantics:
+ *
+ *   - bigint_eq treats values equal regardless of stored length
+ *     (un-normalized vs normalized representations of the same value)
+ *   - bigint_cmp likewise ignores trailing zero limbs
+ *   - bigint_normalize trims trailing zero limbs in-place (canonical form)
+ *   - bigint_add normalizes its output (canonical no-carry case)
+ */
+module corpus_76
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* Build value 5 in two storage forms. */
+    let small : u64 = bigint_from_u64(a, 5u64)
+    let big : u64 = bigint_new(a, 4u64)
+    bigint_set_limb(big, 0u64, 5u64)
+    bigint_set_len(big, 4u64)
+    /* Value-equality: bigint_eq treats them equal regardless of length. */
+    if bigint_eq(small, big) != 1u8 { return 1u64 }
+    /* Value-comparison: bigint_cmp likewise. */
+    if bigint_cmp(small, big) != 0i32 { return 2u64 }
+    /* Normalize the long-form to length 1. */
+    if bigint_len_limbs(big) != 4u64 { return 3u64 }
+    bigint_normalize(big)
+    if bigint_len_limbs(big) != 1u64 { return 4u64 }
+    /* Equality still holds. */
+    if bigint_eq(small, big) != 1u8 { return 5u64 }
+    /* bigint_add of two zero-valued length-4 bigints normalizes to length 0. */
+    let zero4 : u64 = bigint_new(a, 4u64)
+    bigint_set_limb(zero4, 0u64, 0u64)
+    bigint_set_limb(zero4, 1u64, 0u64)
+    bigint_set_limb(zero4, 2u64, 0u64)
+    bigint_set_limb(zero4, 3u64, 0u64)
+    bigint_set_len(zero4, 4u64)
+    let sum : u64 = bigint_add(a, zero4, zero4)
+    if bigint_len_limbs(sum) != 0u64 { return 6u64 }
+    /* bigint_add of value 5 + value 0 (both length 4) → value 5 normalized. */
+    let big5 : u64 = bigint_new(a, 4u64)
+    bigint_set_limb(big5, 0u64, 5u64)
+    bigint_set_len(big5, 4u64)
+    let sum5 : u64 = bigint_add(a, big5, zero4)
+    if bigint_len_limbs(sum5) != 1u64 { return 7u64 }
+    if bigint_eq(sum5, small) != 1u8 { return 8u64 }
+    bigint_drop(small); bigint_drop(big); bigint_drop(zero4)
+    bigint_drop(sum); bigint_drop(big5); bigint_drop(sum5)
+    arena_drop(a)
+    return 99u64
+}

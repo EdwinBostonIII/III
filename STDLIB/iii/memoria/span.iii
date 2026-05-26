@@ -1,0 +1,146 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\span.iii
+ *
+ * III STDLIB - memoria::span
+ *
+ * Bounds-checked byte view.  A span is just (base_ptr, length) - all
+ * operations validate bounds at the API surface.  Out-of-bounds is a
+ * typed error (returns 0xFF for loads, 1 for store rc), never UB.
+ *
+ * Phase A scope: u8 spans only.  u16/u32/u64 spans deferred until
+ * @specialize lands.
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 0.99.
+ */
+
+module memoria_span
+
+const SPAN_OK         : i32 =  0i32
+const SPAN_E_BOUNDS   : i32 = -1i32
+const SPAN_E_NULL     : i32 = -2i32
+
+/* Load u8 at index, bounds-checked.  Returns u32 (0..255) or 0x100 on OOB. */
+fn span_u8_load(base: u64, len: u64, idx: u64) -> u32 @export {
+    if base == 0u64 { return 0x100u32 }
+    if idx >= len { return 0x100u32 }
+    let p : *u8 = base as *u8
+    let v : u8 = p[idx]
+    return v as u32
+}
+
+/* Store u8 at index, bounds-checked.  Returns SPAN_OK or SPAN_E_BOUNDS. */
+fn span_u8_store(base: u64, len: u64, idx: u64, value: u32) -> i32 @export {
+    if base == 0u64 { return SPAN_E_NULL }
+    if idx >= len { return SPAN_E_BOUNDS }
+    let p : *u8 = base as *u8
+    p[idx] = (value & 0xFFu32) as u8
+    return SPAN_OK
+}
+
+/* Fill span with byte value. */
+fn span_u8_fill(base: u64, len: u64, value: u32) -> i32 @export {
+    if base == 0u64 { return SPAN_E_NULL }
+    let v : u8 = (value & 0xFFu32) as u8
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        p[i] = v
+        i = i + 1u64
+    }
+    return SPAN_OK
+}
+
+/* Copy `n` bytes from src to dst. dst+n and src+n must not exceed
+ * dst_len and src_len respectively. */
+fn span_u8_copy(dst: u64, dst_len: u64, src: u64, src_len: u64, n: u64) -> i32 @export {
+    if dst == 0u64 { return SPAN_E_NULL }
+    if src == 0u64 { return SPAN_E_NULL }
+    if n > dst_len { return SPAN_E_BOUNDS }
+    if n > src_len { return SPAN_E_BOUNDS }
+    let dp : *u8 = dst as *u8
+    let sp : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    return SPAN_OK
+}
+
+/* Compare first `n` bytes of two spans.  Returns 0 if equal, -1 if
+ * a < b, +1 if a > b.  Either span may be shorter than n; treat as
+ * inequality at first differing byte / out-of-bounds. */
+fn span_u8_cmp(a: u64, a_len: u64, b: u64, b_len: u64, n: u64) -> i32 @export {
+    if a == 0u64 { return -2i32 }
+    if b == 0u64 { return -2i32 }
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        if i >= a_len { return -1i32 }
+        if i >= b_len { return  1i32 }
+        let av : u8 = ap[i]
+        let bv : u8 = bp[i]
+        if av < bv { return -1i32 }
+        if av > bv { return  1i32 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Find first occurrence of byte `needle` in span; returns offset or len. */
+fn span_u8_find(base: u64, len: u64, needle: u32) -> u64 @export {
+    if base == 0u64 { return len }
+    let n : u8 = (needle & 0xFFu32) as u8
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        if p[i] == n { return i }
+        i = i + 1u64
+    }
+    return len
+}
+
+/* ─── generic element spans (V1 Stage 7.2) ──────────────────────────────
+ * @specialize over the non-u8 integer widths.  *T indexing; the cg
+ * sizeof(T)/stride + indexed load/store width derive from the @specialize
+ * binding (r3_type_ref_byte_size).  Contract: load returns the element as u64
+ * (OOB -> 0; bounds-check via idx<len or the store rc separately); store/fill
+ * are bounds-checked.  u8 keeps its hand-written 0x100-sentinel API above. */
+
+fn span__load<T>(base: u64, len: u64, idx: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    if base == 0u64 { return 0u64 }
+    if idx >= len { return 0u64 }
+    let p : *T = base as *T
+    let v : T = p[idx]
+    return v as u64
+}
+
+fn span__store<T>(base: u64, len: u64, idx: u64, value: T) -> i32 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    if base == 0u64 { return SPAN_E_NULL }
+    if idx >= len { return SPAN_E_BOUNDS }
+    let p : *T = base as *T
+    p[idx] = value
+    return SPAN_OK
+}
+
+fn span__fill<T>(base: u64, len: u64, value: T) -> i32 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    if base == 0u64 { return SPAN_E_NULL }
+    let p : *T = base as *T
+    let mut i : u64 = 0u64
+    while i < len {
+        p[i] = value
+        i = i + 1u64
+    }
+    return SPAN_OK
+}
+
+fn span__find<T>(base: u64, len: u64, needle: T) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    if base == 0u64 { return len }
+    let p : *T = base as *T
+    let mut i : u64 = 0u64
+    while i < len {
+        if p[i] == needle { return i }
+        i = i + 1u64
+    }
+    return len
+}

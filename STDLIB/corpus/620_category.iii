@@ -1,0 +1,4 @@
+/* 620 — category: objects/morphisms/composition/identity/pullback/pushout/coequalizer. */
+module corpus_620
+extern @abi(c-msvc-x64) fn cat_kat() -> u64 from "category.iii"
+fn main() -> u64 { return cat_kat() }

@@ -1,0 +1,50 @@
+/* Diagnostic: measure bench_now_p() overhead alone. */
+module diag_bench
+
+extern @abi(c-msvc-x64) fn bench_now_p() -> u64 from "bench.iii"
+extern @abi(c-msvc-x64) fn bench_warmup() -> i32 from "bench.iii"
+
+var DELTAS : [u64; 100]
+
+fn _sort100(n: u64) -> i32 {
+    let mut i : u64 = 1u64
+    while i < n {
+        let key : u64 = DELTAS[i]
+        let mut j : u64 = i
+        let mut placed : u8 = 0u8
+        while j != 0u64 {
+            let prev : u64 = DELTAS[j - 1u64]
+            if prev > key {
+                DELTAS[j] = prev
+                j = j - 1u64
+            } else {
+                DELTAS[j] = key
+                placed = 1u8
+                j = 0u64
+            }
+        }
+        if placed == 0u8 { DELTAS[0u64] = key }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    bench_warmup()
+    let n : u64 = 100u64
+    let mut k : u64 = 0u64
+    while k < n {
+        let t0 : u64 = bench_now_p()
+        let t1 : u64 = bench_now_p()
+        DELTAS[k] = t1 - t0
+        k = k + 1u64
+    }
+    _sort100(n)
+    let med : u64 = DELTAS[50u64]
+    /* Encode median in exit code. */
+    if med >= 10000u64 { return 200u64 }
+    if med >= 1000u64 { return 150u64 }
+    if med >= 500u64 { return 100u64 }
+    if med >= 100u64 { return 50u64 }
+    return (med & 0xFFu64)
+}

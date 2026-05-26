@@ -1,0 +1,134 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_recursive.iii
+ *
+ * III STDLIB - verba::glyph_recursive -- Glyph V3 form for nested glyph
+ * reference.  A 192-byte glyph cannot contain another full 192-byte
+ * glyph inline (would require 384+ bytes), so glyph_recursive stores
+ * a content-addressable reference to the inner glyph: its 32-byte
+ * mhash plus arena coordinates for retrieval.
+ *
+ * Lattice plan Phase 14h Step 0180.
+ *
+ * Payload layout (form_id = 0x50):
+ *   payload[ 0..31]  inner_glyph_mhash_32  (full 32-byte SHA-256 of inner glyph's [0..160))
+ *   payload[32..39]  arena_id              (u64 LE)
+ *   payload[40..47]  arena_offset          (u64 LE)
+ *   payload[48..51]  inner_form_id         (u32 LE - lookup hint)
+ *   payload[52..151] reserved (100 bytes, zero-padded)
+ *
+ * payload_len = 52.
+ *
+ * Verification: caller retrieves the inner glyph via (arena_id,
+ * offset), computes its mhash, and confirms it matches the recorded
+ * inner_glyph_mhash_32.  This makes recursive glyphs content-
+ * addressable across arena resets -- same inner glyph always has the
+ * same mhash regardless of where it's stored.
+ *
+ * Public surface:
+ *   glyph_recursive_form_id()                                                  -> u32 (0x50)
+ *   glyph_recursive_pack(inner_mhash_32, arena_id, offset, inner_form, out)    -> i32
+ *   glyph_recursive_unpack_mhash_byte(in_192, i)                               -> u32
+ *   glyph_recursive_unpack_arena_id(in_192)                                    -> u64
+ *   glyph_recursive_unpack_offset(in_192)                                      -> u64
+ *   glyph_recursive_unpack_inner_form(in_192)                                  -> u32
+ *   glyph_recursive_validate(in_192)                                           -> u8
+ *
+ * Hexad: kind_compose (recursive composition).  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_recursive
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u64_le(p: u64, v: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u32_le(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u64_le(p: u64) -> u64 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_RECURSIVE : u32 = 0x50u32
+
+fn glyph_recursive_form_id() -> u32 @export { return GV3_FORM_RECURSIVE }
+
+fn glyph_recursive_pack_offset_form(arena_offset: u32, inner_form_id: u32) -> u64 @export {
+    let l_f : u64 = (inner_form_id as u64) & 0xFFFFFFFFu64
+    let l_o : u64 = ((arena_offset as u64) & 0xFFFFFFFFu64) << 32u64
+    return l_f | l_o
+}
+
+/* 4-u64-arg signature = composition-dispatch ABI: glyph_recursive_pack is
+ * registered in iii_compositions.def and invoked via the prespec
+ * fn(a,b,c,d:u64) trampoline, so it must take <=4 u64 args -- do NOT widen.
+ * packed_offset_form packs: bits 0..31 = inner_form_id (u32); arena_id and
+ * arena_offset are separate u64 args.  (The iiis-0 5+-arg trap this also
+ * dodged is fixed -- Stage 3.9, corpus 277 -- but the packing remains the
+ * composition ABI.) */
+fn glyph_recursive_pack(inner_mhash_32_ptr: u64, arena_id: u64, packed_offset_form: u64, out_192: u64) -> i32 @export {
+    let m_l  : u64 = inner_mhash_32_ptr
+    let a_l  : u64 = arena_id
+    let pof  : u64 = packed_offset_form
+    let o_l  : u64 = out_192
+    /* Decode: bits 0..31 = inner_form_id; bits 32..63 = arena_offset (u32). */
+    let if_l  : u32 = (pof & 0xFFFFFFFFu64) as u32
+    let off_l : u64 = (pof >> 32u64) & 0xFFFFFFFFu64
+    if o_l == 0u64 { return -1i32 }
+    if m_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_RECURSIVE)
+    gv3_write_u32_le(o_l + 4u64, 52u32)
+    /* Copy inner_mhash_32 into payload[0..32] (file offset 8..40). */
+    let sp : *u8 = m_l as *u8
+    let dp : *u8 = (o_l + 8u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    gv3_write_u64_le(o_l + 40u64, a_l)
+    gv3_write_u64_le(o_l + 48u64, off_l)
+    gv3_write_u32_le(o_l + 56u64, if_l)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_recursive_unpack_mhash_byte(in_192: u64, i: u32) -> u32 @export {
+    let i_l : u64 = in_192
+    let idx : u32 = i
+    if i_l == 0u64 { return 0x100u32 }
+    if idx >= 32u32 { return 0x100u32 }
+    if gv3_form_id(i_l) != GV3_FORM_RECURSIVE { return 0x100u32 }
+    if gv3_validate(i_l) != 1u8 { return 0x100u32 }
+    let bp : *u8 = (i_l + 8u64 + (idx as u64)) as *u8
+    return bp[0u64] as u32
+}
+
+fn glyph_recursive_unpack_arena_id(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_RECURSIVE { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 40u64)
+}
+
+fn glyph_recursive_unpack_offset(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_RECURSIVE { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 48u64)
+}
+
+fn glyph_recursive_unpack_inner_form(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_RECURSIVE { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 56u64)
+}
+
+fn glyph_recursive_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_RECURSIVE { return 0u8 }
+    return gv3_validate(i_l)
+}

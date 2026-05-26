@@ -1,0 +1,571 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\topology_atlas.iii
+ *
+ * III STDLIB - aether::topology_atlas -- the hardware adjacency sheaf.
+ *
+ * Objects: physical hardware regions (core / numa / memory-bank / pci /
+ * iommu-group / cache-domain / interrupt-ctl / power-island).
+ * Morphisms: typed undirected adjacency edges.  Queries: minimum-edge
+ * distance, neighborhood, and same-domain (equivalence closure) under a
+ * given edge kind.  Publishes a canonical TOPOLOGY_ATLAS witness fragment
+ * over the content-sorted region and edge lists, so the commitment is a
+ * pure function of the graph, not of insertion history.
+ *
+ * Generalizes verbatim to a federation peer/link atlas (regions become
+ * peers, edges become links) -- same abstract machine, no semantic change.
+ *
+ * Hexad: kind_essence + kind_witness.  Ring: R0.  K: 0.99.
+ * Discipline: W2 (<=4 params), W8 (static bounds), W13 (<=20 locals),
+ *             W14 (sentinel-flag loops, no break), W15 (no recursion;
+ *             BFS uses an explicit module-scope queue).  All comments
+ *             ASCII (Trap 9).  Single-threaded / non-reentrant: BFS and
+ *             publish use module-scope scratch (Gap/Fix #6 -- callers
+ *             serialize topology queries).
+ */
+
+module aether_topology_atlas
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+
+const TOPOA_OK    : i32 =  0i32
+const TOPOA_E_BAD : i32 = -1i32
+const TOPOA_SENT  : u32 = 0xFFFFFFFFu32
+
+const TOPOA_KIND_CORE          : u8 = 0u8
+const TOPOA_KIND_NUMA          : u8 = 1u8
+const TOPOA_KIND_MEMORY_BANK   : u8 = 2u8
+const TOPOA_KIND_PCI_DEVICE    : u8 = 3u8
+const TOPOA_KIND_IOMMU_GROUP   : u8 = 4u8
+const TOPOA_KIND_CACHE_DOMAIN  : u8 = 5u8
+const TOPOA_KIND_INTERRUPT_CTL : u8 = 6u8
+const TOPOA_KIND_POWER_ISLAND  : u8 = 7u8
+
+const TOPOA_EK_SAME_SOCKET     : u8 = 0u8
+const TOPOA_EK_SAME_NUMA       : u8 = 1u8
+const TOPOA_EK_PCIE_PATH       : u8 = 2u8
+const TOPOA_EK_CACHE_COHERENT  : u8 = 3u8
+const TOPOA_EK_SHARED_INTERRUPT: u8 = 4u8
+const TOPOA_EK_SAME_POWER      : u8 = 5u8
+
+const TOPOA_MAX_REGIONS : u32 = 4096u32
+const TOPOA_MAX_EDGES   : u32 = 16384u32
+const TOPOA_ID_BYTES    : u64 = 32u64
+const TOPOA_U32MASK     : u64 = 0xFFFFFFFFu64
+const TOPOA_PILLAR      : u16 = 6u16
+const TOPOA_PHASE       : u8  = 5u8
+
+var TOPOA_R_LIVE   : [u8;  4096]
+var TOPOA_R_ID     : [u8;  131072]
+var TOPOA_R_KIND   : [u8;  4096]
+var TOPOA_R_COUNT  : u32 = 0u32
+
+var TOPOA_E_LIVE   : [u8;  16384]
+var TOPOA_E_A      : [u32; 16384]
+var TOPOA_E_B      : [u32; 16384]
+var TOPOA_E_KIND   : [u8;  16384]
+var TOPOA_E_COUNT  : u32 = 0u32
+
+var TOPOA_BFS_DIST : [u32; 4096]
+var TOPOA_BFS_QUEUE: [u32; 4096]
+var TOPOA_ORDER    : [u32; 4096]
+var TOPOA_E_ORDER  : [u32; 16384]
+var TOPOA_KB1      : [u8; 1]
+var TOPOA_OUTC     : [u8; 32]
+var TOPOA_INC      : [u8; 32]
+var TOPOA_FID      : [u8; 32]
+
+var TOPOA_PRODUCER : [u8; 32]
+var TOPOA_OPID_PUB : [u8; 32]
+var TOPOA_INITED   : u8 = 0u8
+
+/* Fixed producer / op-id source strings (ASCII).  Lengths: 22 and 31. */
+var TOPOA_S_PROD   : [u8; 22]
+var TOPOA_S_OPID   : [u8; 31]
+
+/* Selftest scratch (module scope -- no local var arrays, Trap 7). */
+var TOPOA_T_ID     : [u8; 4]
+var TOPOA_T_OUT    : [u32; 4096]
+var TOPOA_T_N      : [u32; 1]
+var TOPOA_T_CP     : [u8; 32]
+var TOPOA_T_FID    : [u8; 32]
+
+/* Byte-pointer into the region-id table.  Mask slot before pointer math (Trap 4). */
+fn topoa_r_id_ptr(slot: u32) -> *u8 { return ((&TOPOA_R_ID as u64) + ((slot as u64) & TOPOA_U32MASK) * TOPOA_ID_BYTES) as *u8 }
+
+/* Materialize the two fixed identity strings into their byte buffers, then
+ * hash each into a 32-byte identifier.  Kept as a flat helper so topoa_init
+ * stays shallow (Trap 13). */
+fn topoa_build_idents() -> i32 {
+    let pp : *u8 = (&TOPOA_S_PROD as u64) as *u8
+    pp[0u64] = 97u8   pp[1u64] = 101u8  pp[2u64] = 116u8  pp[3u64] = 104u8
+    pp[4u64] = 101u8  pp[5u64] = 114u8  pp[6u64] = 58u8   pp[7u64] = 58u8
+    pp[8u64] = 116u8  pp[9u64] = 111u8  pp[10u64] = 112u8 pp[11u64] = 111u8
+    pp[12u64] = 108u8 pp[13u64] = 111u8 pp[14u64] = 103u8 pp[15u64] = 121u8
+    pp[16u64] = 95u8  pp[17u64] = 97u8  pp[18u64] = 116u8 pp[19u64] = 108u8
+    pp[20u64] = 97u8  pp[21u64] = 115u8
+    let op : *u8 = (&TOPOA_S_OPID as u64) as *u8
+    op[0u64] = 97u8   op[1u64] = 101u8  op[2u64] = 116u8  op[3u64] = 104u8
+    op[4u64] = 101u8  op[5u64] = 114u8  op[6u64] = 58u8   op[7u64] = 58u8
+    op[8u64] = 116u8  op[9u64] = 111u8  op[10u64] = 112u8 op[11u64] = 111u8
+    op[12u64] = 108u8 op[13u64] = 111u8 op[14u64] = 103u8 op[15u64] = 121u8
+    op[16u64] = 95u8  op[17u64] = 97u8  op[18u64] = 116u8 op[19u64] = 108u8
+    op[20u64] = 97u8  op[21u64] = 115u8 op[22u64] = 58u8  op[23u64] = 58u8
+    op[24u64] = 112u8 op[25u64] = 117u8 op[26u64] = 98u8  op[27u64] = 108u8
+    op[28u64] = 105u8 op[29u64] = 115u8 op[30u64] = 104u8
+    ident_from_bytes(pp, 22u64, (&TOPOA_PRODUCER as u64) as *u8)
+    ident_from_bytes(op, 31u64, (&TOPOA_OPID_PUB as u64) as *u8)
+    return TOPOA_OK
+}
+
+fn topoa_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < TOPOA_MAX_REGIONS {
+        TOPOA_R_LIVE[(i as u64) & TOPOA_U32MASK] = 0u8
+        i = i + 1u32
+    }
+    let mut e : u32 = 0u32
+    while e < TOPOA_MAX_EDGES {
+        TOPOA_E_LIVE[(e as u64) & TOPOA_U32MASK] = 0u8
+        e = e + 1u32
+    }
+    TOPOA_R_COUNT = 0u32
+    TOPOA_E_COUNT = 0u32
+    topoa_build_idents()
+    TOPOA_INITED = 1u8
+    return TOPOA_OK
+}
+
+fn topoa_register_region(region_id: *u8, kind: u8) -> u32 @export {
+    if TOPOA_INITED == 0u8 { topoa_init() }
+    if (region_id as u64) == 0u64 { return TOPOA_SENT }
+    let k : u8 = kind
+    let mut i : u32 = 0u32
+    let mut slot : u32 = TOPOA_SENT
+    let mut scan : u8 = 1u8
+    while scan == 1u8 {
+        if i >= TOPOA_MAX_REGIONS { scan = 0u8 }
+        if scan == 1u8 {
+            let ib : u64 = (i as u64) & TOPOA_U32MASK
+            if TOPOA_R_LIVE[ib] == 0u8 {
+                ident_copy(region_id, topoa_r_id_ptr(i))
+                TOPOA_R_KIND[ib] = k
+                TOPOA_R_LIVE[ib] = 1u8
+                TOPOA_R_COUNT = TOPOA_R_COUNT + 1u32
+                slot = i
+                scan = 0u8
+            }
+            i = i + 1u32
+        }
+    }
+    return slot
+}
+
+fn topoa_add_edge(a: u32, b: u32, edge_kind: u8) -> i32 @export {
+    let ax : u32 = a
+    let bx : u32 = b
+    let ek : u8 = edge_kind
+    if ax >= TOPOA_MAX_REGIONS { return TOPOA_E_BAD }
+    if bx >= TOPOA_MAX_REGIONS { return TOPOA_E_BAD }
+    if TOPOA_R_LIVE[(ax as u64) & TOPOA_U32MASK] == 0u8 { return TOPOA_E_BAD }
+    if TOPOA_R_LIVE[(bx as u64) & TOPOA_U32MASK] == 0u8 { return TOPOA_E_BAD }
+    let mut e : u32 = 0u32
+    let mut rc : i32 = TOPOA_E_BAD
+    let mut scan : u8 = 1u8
+    while scan == 1u8 {
+        if e >= TOPOA_MAX_EDGES { scan = 0u8 }
+        if scan == 1u8 {
+            let eb : u64 = (e as u64) & TOPOA_U32MASK
+            if TOPOA_E_LIVE[eb] == 0u8 {
+                TOPOA_E_A[eb] = ax
+                TOPOA_E_B[eb] = bx
+                TOPOA_E_KIND[eb] = ek
+                TOPOA_E_LIVE[eb] = 1u8
+                TOPOA_E_COUNT = TOPOA_E_COUNT + 1u32
+                rc = TOPOA_OK
+                scan = 0u8
+            }
+            e = e + 1u32
+        }
+    }
+    return rc
+}
+
+/* The undirected endpoint opposite cur on live edge e of matching kind, or
+ * TOPOA_SENT if e is dead / wrong-kind / not incident to cur.  Flat helper
+ * to keep the BFS and neighbor loops shallow (Trap 13). */
+fn topoa_edge_other(e: u32, cur: u32, edge_kind: u8) -> u32 {
+    let eb : u64 = (e as u64) & TOPOA_U32MASK
+    if TOPOA_E_LIVE[eb] == 0u8 { return TOPOA_SENT }
+    if TOPOA_E_KIND[eb] != edge_kind { return TOPOA_SENT }
+    let ea : u32 = TOPOA_E_A[eb]
+    let eo : u32 = TOPOA_E_B[eb]
+    if ea == cur { return eo }
+    if eo == cur { return ea }
+    return TOPOA_SENT
+}
+
+/* Relax every neighbor of cur under edge_kind into the BFS frontier:
+ * unvisited reachable endpoints get dist[cur]+1 and are enqueued at qt.
+ * Returns the new tail.  Flat helper (Trap 13). */
+fn topoa_bfs_relax(cur: u32, edge_kind: u8, qt: u32) -> u32 {
+    let cb : u64 = (cur as u64) & TOPOA_U32MASK
+    let nd : u32 = TOPOA_BFS_DIST[cb] + 1u32
+    let mut tail : u32 = qt
+    let mut e : u32 = 0u32
+    while e < TOPOA_MAX_EDGES {
+        let other : u32 = topoa_edge_other(e, cur, edge_kind)
+        if other != TOPOA_SENT {
+            let ob : u64 = (other as u64) & TOPOA_U32MASK
+            if TOPOA_BFS_DIST[ob] == TOPOA_SENT {
+                TOPOA_BFS_DIST[ob] = nd
+                TOPOA_BFS_QUEUE[(tail as u64) & TOPOA_U32MASK] = other
+                tail = tail + 1u32
+            }
+        }
+        e = e + 1u32
+    }
+    return tail
+}
+
+fn topoa_distance(a: u32, b: u32, edge_kind: u8) -> u32 @export {
+    let ax : u32 = a
+    let bx : u32 = b
+    let ek : u8 = edge_kind
+    if ax >= TOPOA_MAX_REGIONS { return TOPOA_SENT }
+    if bx >= TOPOA_MAX_REGIONS { return TOPOA_SENT }
+    if TOPOA_R_LIVE[(ax as u64) & TOPOA_U32MASK] == 0u8 { return TOPOA_SENT }
+    if TOPOA_R_LIVE[(bx as u64) & TOPOA_U32MASK] == 0u8 { return TOPOA_SENT }
+    if ax == bx { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < TOPOA_MAX_REGIONS {
+        TOPOA_BFS_DIST[(i as u64) & TOPOA_U32MASK] = TOPOA_SENT
+        i = i + 1u32
+    }
+    TOPOA_BFS_DIST[(ax as u64) & TOPOA_U32MASK] = 0u32
+    TOPOA_BFS_QUEUE[0u64] = ax
+    let mut qh : u32 = 0u32
+    let mut qt : u32 = 1u32
+    let mut result : u32 = TOPOA_SENT
+    let mut found : u8 = 0u8
+    while qh < qt {
+        if found == 0u8 {
+            let cur : u32 = TOPOA_BFS_QUEUE[(qh as u64) & TOPOA_U32MASK]
+            qh = qh + 1u32
+            if cur == bx {
+                result = TOPOA_BFS_DIST[(cur as u64) & TOPOA_U32MASK]
+                found = 1u8
+            }
+            if found == 0u8 {
+                qt = topoa_bfs_relax(cur, ek, qt)
+            }
+        }
+        if found == 1u8 { qh = qt }
+    }
+    return result
+}
+
+fn topoa_neighbors(a: u32, edge_kind: u8, out: *u32, out_n: *u32) -> i32 @export {
+    let ax : u32 = a
+    let ek : u8 = edge_kind
+    if (out as u64) == 0u64 { return TOPOA_E_BAD }
+    if (out_n as u64) == 0u64 { return TOPOA_E_BAD }
+    if ax >= TOPOA_MAX_REGIONS { return TOPOA_E_BAD }
+    if TOPOA_R_LIVE[(ax as u64) & TOPOA_U32MASK] == 0u8 { return TOPOA_E_BAD }
+    let mut n : u32 = 0u32
+    let mut e : u32 = 0u32
+    while e < TOPOA_MAX_EDGES {
+        let other : u32 = topoa_edge_other(e, ax, ek)
+        if other != TOPOA_SENT {
+            out[(n as u64) & TOPOA_U32MASK] = other
+            n = n + 1u32
+        }
+        e = e + 1u32
+    }
+    out_n[0u64] = n
+    return TOPOA_OK
+}
+
+fn topoa_in_same_domain(a: u32, b: u32, edge_kind: u8) -> u8 @export {
+    let d : u32 = topoa_distance(a, b, edge_kind)
+    if d != TOPOA_SENT { return 1u8 }
+    return 0u8
+}
+
+/* Collect live region slots into TOPOA_ORDER ascending, then insertion-sort
+ * by 32-byte region_id (ident_cmp == 1i32 -> left greater -> swap).  The
+ * active flag drives the inner while condition itself; q decrements only on
+ * a real swap (iiis insertion-sort active-flag trap).  Returns live count. */
+fn topoa_collect_regions() -> u32 {
+    let mut n : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < TOPOA_MAX_REGIONS {
+        if TOPOA_R_LIVE[(i as u64) & TOPOA_U32MASK] == 1u8 {
+            TOPOA_ORDER[(n as u64) & TOPOA_U32MASK] = i
+            n = n + 1u32
+        }
+        i = i + 1u32
+    }
+    let mut p : u32 = 1u32
+    while p < n {
+        let mut q : u32 = p
+        let mut active : u8 = 1u8
+        while active == 1u8 {
+            if q == 0u32 { active = 0u8 } else {
+                let lo : u32 = TOPOA_ORDER[((q - 1u32) as u64) & TOPOA_U32MASK]
+                let ro : u32 = TOPOA_ORDER[(q as u64) & TOPOA_U32MASK]
+                let c : i32 = ident_cmp(topoa_r_id_ptr(lo), topoa_r_id_ptr(ro))
+                if c == 1i32 {
+                    TOPOA_ORDER[((q - 1u32) as u64) & TOPOA_U32MASK] = ro
+                    TOPOA_ORDER[(q as u64) & TOPOA_U32MASK] = lo
+                    q = q - 1u32
+                } else { active = 0u8 }
+            }
+        }
+        p = p + 1u32
+    }
+    return n
+}
+
+/* Canonical endpoint of live edge slot e: the lexicographically smaller of
+ * its two region ids when which_hi == 0u8, the larger when which_hi == 1u8.
+ * Because edges are UNDIRECTED, the commitment must not depend on whether an
+ * endpoint was stored as A or B; this helper picks the orientation purely
+ * from the ids, so (A,B) and (B,A) yield the identical (lo,hi) pair (Gap/Fix
+ * #5 -- order independence within an edge, not just across edges).  ident_cmp
+ * is read by equality only (== -1i32), never an ordered signed compare
+ * (Trap 3).  Flat helper -- keeps the edge sort and hash shallow (Trap 13). */
+fn topoa_edge_end_id(e: u32, which_hi: u8) -> *u8 {
+    let eb : u64 = (e as u64) & TOPOA_U32MASK
+    let pa : *u8 = topoa_r_id_ptr(TOPOA_E_A[eb])
+    let pb : *u8 = topoa_r_id_ptr(TOPOA_E_B[eb])
+    let c : i32 = ident_cmp(pa, pb)
+    if c == 1i32 {
+        if which_hi == 0u8 { return pb }
+        return pa
+    }
+    if which_hi == 0u8 { return pa }
+    return pb
+}
+
+/* Order predicate for two live edge slots ea, eb by the canonical triple
+ * (lo_id, hi_id, edge_kind): returns 1u8 when ea must precede eb (ea < eb).
+ * Endpoint ids taken in canonical (id-sorted) orientation via topoa_edge_end_id
+ * so an undirected edge sorts identically regardless of stored A/B direction;
+ * compared via ident_cmp (equality reads only); kind via unsigned byte
+ * compare.  Flat helper -- keeps the edge sort shallow (Trap 13). */
+fn topoa_edge_lt(ea: u32, eb: u32) -> u8 {
+    let xa : u64 = (ea as u64) & TOPOA_U32MASK
+    let xb : u64 = (eb as u64) & TOPOA_U32MASK
+    let la : *u8 = topoa_edge_end_id(ea, 0u8)
+    let lb : *u8 = topoa_edge_end_id(eb, 0u8)
+    let ca : i32 = ident_cmp(la, lb)
+    if ca == 1i32  { return 0u8 }
+    if ca == -1i32 { return 1u8 }
+    let ma : *u8 = topoa_edge_end_id(ea, 1u8)
+    let mb : *u8 = topoa_edge_end_id(eb, 1u8)
+    let cb : i32 = ident_cmp(ma, mb)
+    if cb == 1i32  { return 0u8 }
+    if cb == -1i32 { return 1u8 }
+    let ka : u8 = TOPOA_E_KIND[xa]
+    let kb : u8 = TOPOA_E_KIND[xb]
+    if ka < kb { return 1u8 }
+    return 0u8
+}
+
+/* Collect live edge slots into TOPOA_E_ORDER, then insertion-sort by the
+ * canonical (A_id, B_id, kind) order so the commitment is a function of the
+ * graph, not of edge-insertion history (Gap/Fix #5).  Same active-flag
+ * descent as topoa_collect_regions.  Returns live edge count. */
+fn topoa_collect_edges() -> u32 {
+    let mut n : u32 = 0u32
+    let mut e : u32 = 0u32
+    while e < TOPOA_MAX_EDGES {
+        if TOPOA_E_LIVE[(e as u64) & TOPOA_U32MASK] == 1u8 {
+            TOPOA_E_ORDER[(n as u64) & TOPOA_U32MASK] = e
+            n = n + 1u32
+        }
+        e = e + 1u32
+    }
+    let mut p : u32 = 1u32
+    while p < n {
+        let mut q : u32 = p
+        let mut active : u8 = 1u8
+        while active == 1u8 {
+            if q == 0u32 { active = 0u8 } else {
+                let lo : u32 = TOPOA_E_ORDER[((q - 1u32) as u64) & TOPOA_U32MASK]
+                let ro : u32 = TOPOA_E_ORDER[(q as u64) & TOPOA_U32MASK]
+                if topoa_edge_lt(ro, lo) == 1u8 {
+                    TOPOA_E_ORDER[((q - 1u32) as u64) & TOPOA_U32MASK] = ro
+                    TOPOA_E_ORDER[(q as u64) & TOPOA_U32MASK] = lo
+                    q = q - 1u32
+                } else { active = 0u8 }
+            }
+        }
+        p = p + 1u32
+    }
+    return n
+}
+
+/* Stream the canonical atlas into Keccak256 -> TOPOA_OUTC.  Regions in
+ * content order (id then kind byte); edges in canonical order (A_id, B_id,
+ * then kind byte).  Flat helper so topoa_publish_atlas stays shallow. */
+fn topoa_hash_atlas() -> i32 {
+    let nr : u32 = topoa_collect_regions()
+    let ne : u32 = topoa_collect_edges()
+    let kb : *u8 = (&TOPOA_KB1 as u64) as *u8
+    cad_begin(1u32)
+    let mut r : u32 = 0u32
+    while r < nr {
+        let slot : u32 = TOPOA_ORDER[(r as u64) & TOPOA_U32MASK]
+        cad_payload(topoa_r_id_ptr(slot) as u64, TOPOA_ID_BYTES)
+        kb[0u64] = TOPOA_R_KIND[(slot as u64) & TOPOA_U32MASK]
+        cad_payload(kb as u64, 1u64)
+        r = r + 1u32
+    }
+    let mut k : u32 = 0u32
+    while k < ne {
+        let eslot : u32 = TOPOA_E_ORDER[(k as u64) & TOPOA_U32MASK]
+        let es : u64 = (eslot as u64) & TOPOA_U32MASK
+        cad_payload(topoa_edge_end_id(eslot, 0u8) as u64, TOPOA_ID_BYTES)
+        cad_payload(topoa_edge_end_id(eslot, 1u8) as u64, TOPOA_ID_BYTES)
+        kb[0u64] = TOPOA_E_KIND[es]
+        cad_payload(kb as u64, 1u64)
+        k = k + 1u32
+    }
+    cad_final((&TOPOA_OUTC as u64))
+    return TOPOA_OK
+}
+
+fn topoa_publish_atlas() -> u64 @export {
+    if TOPOA_INITED == 0u8 { topoa_init() }
+    topoa_hash_atlas()
+    wh_chain_root((&TOPOA_INC as u64) as *u8)
+    let prod : *u8 = (&TOPOA_PRODUCER as u64) as *u8
+    let opid : *u8 = (&TOPOA_OPID_PUB as u64) as *u8
+    let inc  : *u8 = (&TOPOA_INC as u64) as *u8
+    let outc : *u8 = (&TOPOA_OUTC as u64) as *u8
+    let fid  : *u8 = (&TOPOA_FID as u64) as *u8
+    return wh_publish(prod, opid, inc, outc, 0u8, TOPOA_PHASE, TOPOA_PILLAR, outc, 0u32, outc, 32u32, fid)
+}
+
+/* ------------------------------------------------------------------ */
+/* Embedded KAT (99 = full pass; distinct small code per failed check).  */
+/* ------------------------------------------------------------------ */
+
+/* Register a single-byte id (the ascii char c) of kind CORE; returns slot. */
+fn topoa_t_reg(c: u8) -> u32 {
+    let tp : *u8 = (&TOPOA_T_ID as u64) as *u8
+    tp[0u64] = c
+    let mut z : u64 = 1u64
+    while z < 4u64 { tp[z] = 0u8 ; z = z + 1u64 }
+    ident_from_bytes(tp, 1u64, tp)
+    return topoa_register_region(tp, TOPOA_KIND_CORE)
+}
+
+fn topoa_selftest() -> u64 @export {
+    wh_init(1u64)
+
+    /* ---- Vector 1: distance / line graph A-B-C-D under SAME_NUMA ---- */
+    topoa_init()
+    let r0 : u32 = topoa_t_reg(65u8)
+    let r1 : u32 = topoa_t_reg(66u8)
+    let r2 : u32 = topoa_t_reg(67u8)
+    let r3 : u32 = topoa_t_reg(68u8)
+    if r0 != 0u32 { return 1u64 }
+    if r3 != 3u32 { return 2u64 }
+    if topoa_add_edge(0u32, 1u32, TOPOA_EK_SAME_NUMA) != TOPOA_OK { return 3u64 }
+    if topoa_add_edge(1u32, 2u32, TOPOA_EK_SAME_NUMA) != TOPOA_OK { return 4u64 }
+    if topoa_add_edge(2u32, 3u32, TOPOA_EK_SAME_NUMA) != TOPOA_OK { return 5u64 }
+    if topoa_distance(0u32, 3u32, TOPOA_EK_SAME_NUMA) != 3u32 { return 6u64 }
+    if topoa_distance(0u32, 2u32, TOPOA_EK_SAME_NUMA) != 2u32 { return 7u64 }
+    if topoa_distance(3u32, 0u32, TOPOA_EK_SAME_NUMA) != 3u32 { return 8u64 }
+    if topoa_distance(0u32, 0u32, TOPOA_EK_SAME_NUMA) != 0u32 { return 9u64 }
+    if topoa_distance(0u32, 3u32, TOPOA_EK_SAME_SOCKET) != TOPOA_SENT { return 10u64 }
+    if topoa_in_same_domain(0u32, 3u32, TOPOA_EK_SAME_NUMA) != 1u8 { return 11u64 }
+    if topoa_in_same_domain(0u32, 3u32, TOPOA_EK_SAME_SOCKET) != 0u8 { return 12u64 }
+
+    /* ---- Negative case: a dead / out-of-range endpoint must REJECT ---- */
+    if topoa_add_edge(0u32, 9000u32, TOPOA_EK_SAME_NUMA) != TOPOA_E_BAD { return 13u64 }
+    if topoa_add_edge(0u32, 100u32, TOPOA_EK_SAME_NUMA) != TOPOA_E_BAD { return 14u64 }
+    if topoa_distance(0u32, 9000u32, TOPOA_EK_SAME_NUMA) != TOPOA_SENT { return 15u64 }
+
+    /* ---- Vector 2: neighbors and a disconnected region ---- */
+    let r4 : u32 = topoa_t_reg(69u8)
+    if r4 != 4u32 { return 16u64 }
+    let op : *u32 = (&TOPOA_T_OUT as u64) as *u32
+    let np : *u32 = (&TOPOA_T_N as u64) as *u32
+    if topoa_neighbors(1u32, TOPOA_EK_SAME_NUMA, op, np) != TOPOA_OK { return 17u64 }
+    if TOPOA_T_N[0u64] != 2u32 { return 18u64 }
+    if TOPOA_T_OUT[0u64] != 0u32 { return 19u64 }
+    if TOPOA_T_OUT[1u64] != 2u32 { return 20u64 }
+    if topoa_distance(0u32, 4u32, TOPOA_EK_SAME_NUMA) != TOPOA_SENT { return 21u64 }
+    if topoa_neighbors(4u32, TOPOA_EK_SAME_NUMA, op, np) != TOPOA_OK { return 22u64 }
+    if TOPOA_T_N[0u64] != 0u32 { return 23u64 }
+
+    /* ---- Vector 3a: empty-atlas commitment == Keccak256("") ---- */
+    topoa_init()
+    topoa_hash_atlas()
+    let cp : *u8 = (&TOPOA_OUTC as u64) as *u8
+    if cp[0u64]  != 0xc5u8 { return 24u64 }
+    if cp[1u64]  != 0xd2u8 { return 25u64 }
+    if cp[2u64]  != 0x46u8 { return 26u64 }
+    if cp[31u64] != 0x70u8 { return 27u64 }
+
+    /* ---- Vector 3b: canonical publish is insertion-order independent ----
+     * Atlas P: ids "A","B", edge (0,1) SAME_SOCKET.  Atlas Q: ids "B","A"
+     * (reversed), edge (0,1) SAME_SOCKET.  Content-sorted commitment of Q
+     * must equal P. */
+    topoa_init()
+    topoa_t_reg(65u8)
+    topoa_t_reg(66u8)
+    topoa_add_edge(0u32, 1u32, TOPOA_EK_SAME_SOCKET)
+    topoa_hash_atlas()
+    let mut s : u64 = 0u64
+    while s < 32u64 { TOPOA_T_CP[s] = cp[s] ; s = s + 1u64 }
+
+    topoa_init()
+    topoa_t_reg(66u8)
+    topoa_t_reg(65u8)
+    topoa_add_edge(0u32, 1u32, TOPOA_EK_SAME_SOCKET)
+    topoa_hash_atlas()
+    let mut diff : u32 = 0u32
+    let mut t : u64 = 0u64
+    while t < 32u64 {
+        if TOPOA_T_CP[t] != cp[t] { diff = 1u32 }
+        t = t + 1u64
+    }
+    if diff != 0u32 { return 28u64 }
+
+    /* Distinctness guard: a non-empty atlas must NOT hash to the empty vector
+     * (proves the region/edge stream actually feeds the sponge). */
+    if cp[0u64] == 0xc5u8 {
+        if cp[1u64] == 0xd2u8 {
+            if cp[31u64] == 0x70u8 { return 29u64 }
+        }
+    }
+
+    /* ---- Vector 4: witness chaining -- publish records a recomputable
+     * fragment whose id round-trips via wh_get_frag_id. ---- */
+    let idx : u64 = topoa_publish_atlas()
+    if idx == 0xFFFFFFFFFFFFFFFFu64 { return 30u64 }
+    wh_get_frag_id(idx, (&TOPOA_T_FID as u64) as *u8)
+    let fa : *u8 = (&TOPOA_T_FID as u64) as *u8
+    let fb : *u8 = (&TOPOA_FID as u64) as *u8
+    let mut fdiff : u32 = 0u32
+    let mut u : u64 = 0u64
+    while u < 32u64 {
+        if fa[u] != fb[u] { fdiff = 1u32 }
+        u = u + 1u64
+    }
+    if fdiff != 0u32 { return 31u64 }
+
+    return 99u64
+}

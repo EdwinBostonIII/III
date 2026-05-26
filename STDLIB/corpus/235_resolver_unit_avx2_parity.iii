@@ -1,0 +1,138 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\235_resolver_unit_avx2_parity.iii
+ *
+ * III conformance corpus 235 -- Phase C.4: AVX-2 path BIT-IDENTITY parity.
+ *
+ * The hand-written asm in COMPILER/BOOT/resolver_unit.s now uses AVX-2
+ * for batched zero-skip + parallel pointer gather. This test asserts
+ * the AVX-2-batched path produces output BIT-IDENTICAL to a pure-iii
+ * scalar reference (`_ref_resolve_scalar`) that mirrors resolver.iii's
+ * Step 3 inner loop:
+ *
+ *     for i in 0..4096:
+ *         if pattern_set_has(set, i) == 1:
+ *             p = pattern_table_get(i)
+ *             if p != 0:
+ *                 s = resolver_score(p, intent, ctx)
+ *                 if s > best_score:
+ *                     ...rotate; best <- (i, s)
+ *                 elif s > next_score:
+ *                     ...next <- (i, s)
+ *
+ * The reference returns ((best_id & 0xFFFFFFFF) << 32) | (best_score &
+ * 0xFFFFFFFF) -- identical packing to the asm.
+ *
+ * Five distinct intents are tested; each must produce bit-identical
+ * packed u64 from both paths.
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure (each intent
+ * index 0..4 contributes failure codes 1+2k for asm-returned-0 and
+ * 2+2k for asm != ref).
+ */
+
+module corpus_235
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_set_has(set: u64, idx: u32) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn resolver_score(p: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_bind(arena_id: u64, size_bytes: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_compose(left_intent: u64, right_intent: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_seal(value_handle: u64, seal_id: u64) -> u64 from "intent.iii"
+
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+
+extern @abi(c-msvc-x64) fn iii_resolver_unit_resolve(set_ptr: u64, intent_ptr: u64, ctx_ptr: u64) -> u64 from "resolver_unit"
+
+/* Pure-iii reference walk. Mirrors resolver.iii::resolve Step 3 inner
+ * loop exactly (strict-> tiebreak; same packing). Returns the same u64
+ * the asm must return. */
+fn _ref_resolve_scalar(set: u64, intent: u64, ctx: u64) -> u64 {
+    let mut best_id    : u32 = 0xFFFFFFFFu32
+    let mut best_score : u64 = 0u64
+    let mut next_id    : u32 = 0xFFFFFFFFu32
+    let mut next_score : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < 4096u32 {
+        if pattern_set_has(set, i) == 1u8 {
+            let p : u64 = pattern_table_get(i)
+            if p != 0u64 {
+                let s : u64 = resolver_score(p, intent, ctx)
+                if s > best_score {
+                    next_id    = best_id
+                    next_score = best_score
+                    best_id    = i
+                    best_score = s
+                }
+                if s <= best_score {
+                    if s > next_score {
+                        next_id    = i
+                        next_score = s
+                    }
+                }
+            }
+        }
+        i = (i + 1u32) & 0xFFFFFFFFu32
+    }
+    /* Pack identically to the asm. */
+    let id64    : u64 = (best_id as u64) & 0xFFFFFFFFu64
+    let score64 : u64 = best_score & 0xFFFFFFFFu64
+    return (id64 << 32u64) | score64
+}
+
+fn _check_parity(set: u64, intent: u64, ctx: u64,
+                 zero_code: u64, mismatch_code: u64) -> u64 {
+    let asm_pkd : u64 = iii_resolver_unit_resolve(set, intent, ctx)
+    if asm_pkd == 0u64 { return zero_code }
+    let ref_pkd : u64 = _ref_resolve_scalar(set, intent, ctx)
+    if asm_pkd != ref_pkd { return mismatch_code }
+    return 0u64
+}
+
+fn main() -> u64 {
+    resolution_init()
+
+    let set : u64 = pattern_set_global()
+    if set == 0u64 { return 99u64 - 99u64 + 100u64 }  /* sanity: 100 = no set */
+
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 101u64 }
+
+    /* ─ five distinct intents covering different hexad classes ─ */
+
+    /* Intent 0: form(0) — INTENT_HEXAD_FORM */
+    let i0 : u64 = intent_form(0u64)
+    if i0 == 0u64 { return 102u64 }
+    let r0 : u64 = _check_parity(set, i0, ctx, 1u64, 2u64)
+    if r0 != 0u64 { return r0 }
+
+    /* Intent 1: act(0, 1) — INTENT_HEXAD_MOTION */
+    let i1 : u64 = intent_act(0u64, 1u64)
+    if i1 == 0u64 { return 103u64 }
+    let r1 : u64 = _check_parity(set, i1, ctx, 3u64, 4u64)
+    if r1 != 0u64 { return r1 }
+
+    /* Intent 2: bind(7, 64) — INTENT_HEXAD_SUBSTANCE */
+    let i2 : u64 = intent_bind(7u64, 64u64)
+    if i2 == 0u64 { return 104u64 }
+    let r2 : u64 = _check_parity(set, i2, ctx, 5u64, 6u64)
+    if r2 != 0u64 { return r2 }
+
+    /* Intent 3: compose(i0, i1) — INTENT_HEXAD_COMPOSE */
+    let i3 : u64 = intent_compose(i0, i1)
+    if i3 == 0u64 { return 105u64 }
+    let r3 : u64 = _check_parity(set, i3, ctx, 7u64, 8u64)
+    if r3 != 0u64 { return r3 }
+
+    /* Intent 4: seal(42, 99) — INTENT_HEXAD_ORIGIN */
+    let i4 : u64 = intent_seal(42u64, 99u64)
+    if i4 == 0u64 { return 106u64 }
+    let r4 : u64 = _check_parity(set, i4, ctx, 9u64, 10u64)
+    if r4 != 0u64 { return r4 }
+
+    /* All 5 intents produced bit-identical asm vs scalar output. */
+    return 99u64
+}

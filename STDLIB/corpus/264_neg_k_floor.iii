@@ -1,0 +1,30 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\264_neg_k_floor.iii
+ *
+ * NEGATIVE-COMPILE test for the @k_max static K-floor check.
+ *
+ * THIS FILE MUST FAIL TO COMPILE.  Consumed by
+ * scripts/test_k_floor_static_negative.sh, which asserts
+ * non-zero exit + `III_K_FLOOR_VIOLATION` marker.
+ *
+ * Violation: caller's @k_max(400000000) declares it can enter at
+ * K=0.4, but callee's @k_max(800000000) requires K>=0.8 -- the
+ * caller would inevitably hit denial at K in [0.4, 0.8).  Static
+ * check fires; codegen rejects.
+ */
+module corpus_264_neg
+
+fn _leaf_high_k(ctx: u64) -> u64 @k_max(800000000u64) {
+    let _unused : u64 = ctx
+    return 0xDDDDu64
+}
+
+/* Caller floor 0.4 < callee floor 0.8 -- violation. */
+fn _caller_low_k(ctx: u64) -> u64 @k_max(400000000u64) {
+    let _unused : u64 = ctx
+    let r : u64 = _leaf_high_k(ctx)
+    return r
+}
+
+fn main() -> u64 {
+    return 0u64
+}

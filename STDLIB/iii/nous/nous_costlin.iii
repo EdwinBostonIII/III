@@ -1,0 +1,136 @@
+/* STDLIB/iii/nous/nous_costlin.iii -- the cost linearization (nous Phase 0.5, B-3).
+ *
+ * The cost lattice (numera/cost_lattice.iii) is 6-dimensional -- a PARTIAL order, so
+ * "minimal-cost" has a Pareto frontier, not a unique minimum.  A CERTIFIED-SATURATED
+ * search cannot claim optimality without a TOTAL order to be optimal under.  This
+ * module declares the canonical one: a lexicographic order over the six facets, with
+ * the term's 32-byte content-address as the final tiebreak, versioned so the version
+ * enters the search reproducibility key (a result is "optimal" only relative to a
+ * named linearization).  nous_charter (Phase 2) ratifies this as a constitutional
+ * clause; the version pin makes the choice auditable.
+ *
+ * nous_cost_compare is the canonical total order (exact, over full u64 facets).
+ * nous_cost_scalar is a BOUNDED lex-packed projection (a tractable proxy fed to the
+ * e-graph DP extractor, numera/egraph.iii eg_extract over its scalar EGRAPH_CLASS_COST):
+ * each facet clamped to 10 bits, packed most-significant-first, so facet0 dominates --
+ * faithful to the lex order for bounded costs.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: self-contained (integer compares).
+ * Determinism: u64/u8 UNSIGNED ordering only (trap-3 is SIGNED i32/i64 ordering, not
+ * this); no u64 div/mod (trap-18); the scalar uses shifts + a small mul only.
+ */
+module nous_costlin
+
+const NOUS_COST_DIM       : u64 = 6u64
+const NOUS_COSTLIN_VER    : u64 = 1u64
+const NOUS_COST_CLAMP     : u64 = 1023u64    /* 10-bit facet clamp for the scalar */
+const NOUS_OK             : i32 = 0i32
+
+/* selftest scratch (Trap 7) */
+var NOUS_CL_A   : [u64; 6]
+var NOUS_CL_B   : [u64; 6]
+var NOUS_CL_AD  : [u8; 32]
+var NOUS_CL_BD  : [u8; 32]
+
+fn nous_costlin_version() -> u64 @export {
+    return NOUS_COSTLIN_VER
+}
+
+/* The canonical total order over cost vectors: lexicographic over the 6 facets.
+ * -1 = c precedes cp, 1 = c follows cp, 0 = all facets equal (caller breaks the tie
+ * with nous_addr_compare on the content-addresses). */
+fn nous_cost_compare(c: *u64, cp: *u64) -> i32 @export {
+    if (c as u64) == 0u64 { return 0i32 }
+    if (cp as u64) == 0u64 { return 0i32 }
+    let mut i : u64 = 0u64
+    while i < NOUS_COST_DIM {
+        let a : u64 = c[i]
+        let b : u64 = cp[i]
+        if a < b { return -1i32 }
+        if a > b { return 1i32 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* The final tiebreak: lexicographic over two 32-byte content-addresses.  Used only
+ * when nous_cost_compare returns 0, giving a strict total order over (cost, address). */
+fn nous_addr_compare(a: *u8, b: *u8) -> i32 @export {
+    if (a as u64) == 0u64 { return 0i32 }
+    if (b as u64) == 0u64 { return 0i32 }
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let x : u8 = a[i]
+        let y : u8 = b[i]
+        if x < y { return -1i32 }
+        if x > y { return 1i32 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Bounded lex-packed scalar projection: facet0 in bits 50..59 (most significant) down
+ * to facet5 in bits 0..9, each clamped to 10 bits.  facet0 dominates (a difference in
+ * facet0 outweighs all lower facets), faithful to the lex order for clamped costs.
+ * Fed to the e-graph DP so its minimum is the lex-minimum under this linearization. */
+fn nous_cost_scalar(c: *u64) -> u64 @export {
+    if (c as u64) == 0u64 { return 0u64 }
+    let mut s : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < NOUS_COST_DIM {
+        let mut f : u64 = c[i]
+        if f > NOUS_COST_CLAMP { f = NOUS_COST_CLAMP }
+        let shift : u64 = (5u64 - i) * 10u64
+        s = s | (f << shift)
+        i = i + 1u64
+    }
+    return s
+}
+
+fn nous_costlin_selftest() -> u64 @export {
+    let a : *u64 = (&NOUS_CL_A as u64) as *u64
+    let b : *u64 = (&NOUS_CL_B as u64) as *u64
+    let mut i : u64 = 0u64
+    while i < 6u64 { NOUS_CL_A[i] = 0u64  NOUS_CL_B[i] = 0u64  i = i + 1u64 }
+
+    /* facet0 dominates: [1,0,...] follows [0,9,9,9,9,9] (the lex order, not a sum) */
+    NOUS_CL_A[0u64] = 1u64
+    NOUS_CL_B[1u64] = 9u64  NOUS_CL_B[2u64] = 9u64  NOUS_CL_B[3u64] = 9u64
+    NOUS_CL_B[4u64] = 9u64  NOUS_CL_B[5u64] = 9u64
+    if nous_cost_compare(a, b) != 1i32 { return 1u64 }
+    if nous_cost_compare(b, a) != -1i32 { return 2u64 }      /* antisymmetric */
+    /* the scalar agrees: facet0=1 outweighs big lower facets */
+    if nous_cost_scalar(a) <= nous_cost_scalar(b) { return 3u64 }
+
+    /* lowest facet breaks a tie when higher facets equal */
+    i = 0u64
+    while i < 6u64 { NOUS_CL_A[i] = 0u64  NOUS_CL_B[i] = 0u64  i = i + 1u64 }
+    NOUS_CL_A[5u64] = 1u64
+    NOUS_CL_B[5u64] = 2u64
+    if nous_cost_compare(a, b) != -1i32 { return 4u64 }
+    if nous_cost_scalar(a) >= nous_cost_scalar(b) { return 5u64 }
+
+    /* equal cost vectors compare 0 -> the content-address tiebreak decides */
+    i = 0u64
+    while i < 6u64 { NOUS_CL_B[i] = NOUS_CL_A[i]  i = i + 1u64 }
+    if nous_cost_compare(a, b) != 0i32 { return 6u64 }
+    let ad : *u8 = (&NOUS_CL_AD as u64) as *u8
+    let bd : *u8 = (&NOUS_CL_BD as u64) as *u8
+    i = 0u64
+    while i < 32u64 { NOUS_CL_AD[i] = 0u8  NOUS_CL_BD[i] = 0u8  i = i + 1u64 }
+    NOUS_CL_AD[0u64] = 1u8
+    NOUS_CL_BD[0u64] = 2u8
+    if nous_addr_compare(ad, bd) != -1i32 { return 7u64 }
+    if nous_addr_compare(bd, ad) != 1i32 { return 8u64 }
+    NOUS_CL_BD[0u64] = 1u8
+    if nous_addr_compare(ad, bd) != 0i32 { return 9u64 }     /* identical addresses tie */
+
+    /* clamp: a huge facet saturates rather than overflowing the bit-field */
+    i = 0u64
+    while i < 6u64 { NOUS_CL_A[i] = 0u64  i = i + 1u64 }
+    NOUS_CL_A[5u64] = 0xFFFFFFFFFFFFFFFFu64
+    if nous_cost_scalar(a) != NOUS_COST_CLAMP { return 10u64 }   /* clamped to 1023 in bits 0..9 */
+
+    if nous_costlin_version() != NOUS_COSTLIN_VER { return 11u64 }
+    return 99u64
+}

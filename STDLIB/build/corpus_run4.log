@@ -1,0 +1,362 @@
+[run_corpus] iiis = /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+============================================================
+ STDLIB Conformance Corpus
+============================================================
+  PASS  01_scalar_u32_add_wrap : exit=42
+  PASS  02_sha256_kat_abc : exit=186
+  PASS  03_region_create_alloc_release : exit=99
+  PASS  04_span_load_store : exit=66
+  PASS  05_arena_alloc_used : exit=99
+  PASS  06_rune_ascii_lower : exit=104
+  PASS  07_string_byte_eq : exit=99
+  PASS  08_builder_push_seal : exit=99
+  PASS  09_option_u32_unwrap : exit=99
+  PASS  10_result_u32_ok_err : exit=99
+  PASS  11_iter_u8_count : exit=99
+  PASS  12_vec_u8_push_at : exit=99
+  PASS  13_mhash_domain_separation : exit=99
+  PASS  14_kchain_compose_underflow : exit=99
+  PASS  15_sha256_kat_empty : exit=227
+  PASS  16_hex_encode_roundtrip : exit=99
+  PASS  17_string_starts_with : exit=99
+  PASS  18_rune_utf8_encode_round : exit=233
+  PASS  19_vec_u8_max_bound : exit=99
+  PASS  20_iter_u8_skip : exit=99
+  PASS  21_map_put_get_grow_integrity : exit=99
+  PASS  22_set_insert_contains_remove : exit=99
+  PASS  23_queue_fifo_order : exit=99
+  PASS  24_pq_min_order : exit=99
+  PASS  25_fold_sum_xor_max : exit=99
+  PASS  26_zip_count : exit=99
+  PASS  27_either_left_right_swap : exit=99
+  PASS  28_checked_overflow : exit=99
+  PASS  29_modular_pow : exit=99
+  PASS  30_fixed_q32_arithmetic : exit=99
+  PASS  31_q128_add_shift : exit=99
+  PASS  32_parse_decimal : exit=99
+  PASS  33_bigint_mul_add : exit=99
+  PASS  34_format_decimal_hex : exit=99
+  PASS  35_regex_basic : exit=99
+  PASS  36_capability_attenuate_revoke : exit=99
+  PASS  37_handle_open_close : exit=99
+  PASS  38_fs_write_read_roundtrip : exit=99
+  PASS  39_instant_now_seal_verify : exit=99
+  PASS  40_duration_arithmetic : exit=99
+  PASS  41_deadline_check : exit=99
+  PASS  42_witness_chain_verify : exit=99
+  PASS  43_attest_self_nonce : exit=99
+  PASS  44_crystal_mint_verify : exit=99
+  PASS  45_mandate_audit_full : exit=99
+  PASS  46_closure_set_verify : exit=99
+  PASS  47_bigint_div_u64 : exit=99
+  PASS  48_bigint_div_qr : exit=99
+  PASS  49_field_fp_arithmetic : exit=99
+  PASS  50_normalise_ascii : exit=99
+  PASS  51_net_pack_sockaddr : exit=99
+  PASS  52_json_parse_primitives : exit=99
+  PASS  53_json_parse_compound : exit=99
+  PASS  54_json_roundtrip : exit=99
+  PASS  55_sha512_kat_abc : exit=221
+  PASS  56_sha512_kat_empty : exit=207
+  PASS  57_http_parse_content_length : exit=99
+  PASS  58_http_parse_chunked : exit=99
+  PASS  59_ed25519_rfc8032_test1 : exit=99
+  PASS  60_aes128_fips197_kat : exit=105
+  PASS  61_aes128_decrypt_roundtrip : exit=99
+  PASS  62_aes_gcm_nist_test2_seal : exit=99
+  PASS  63_aes_gcm_open_roundtrip : exit=99
+  PASS  64_http_parse_request : exit=99
+  PASS  65_http_send_response : exit=99
+  PASS  66_uri_parse : exit=99
+  PASS  67_uri_pct_encode_decode : exit=99
+  PASS  68_aes256_fips197_kat : exit=142
+  PASS  69_aes256_gcm_nist_test14 : exit=99
+  PASS  70_chacha20_block_kat : exit=16
+  PASS  71_poly1305_rfc8439_kat : exit=168
+  PASS  72_chacha20_poly1305_aead_rfc8439 : exit=99
+  PASS  73_x25519_rfc7748_test1 : exit=195
+  PASS  74_ed25519_rfc8032_test2 : exit=99
+  PASS  75_ed25519_rfc8032_test3 : exit=99
+  PASS  76_bigint_normalize : exit=99
+  PASS  77_arena_reset : exit=99
+  PASS  78_normalise_nfd_nfc : exit=99
+  PASS  79_hmac_sha256_rfc4231 : exit=176
+  PASS  80_base64_round_trip : exit=99
+  PASS  81_hkdf_sha256_rfc5869 : exit=60
+  PASS  82_crc32_kat : exit=203
+  PASS  83_blake2s_kat : exit=80
+  PASS  84_xoshiro_determinism : exit=99
+  PASS  85_ini_parse : exit=99
+  PASS  86_pbkdf2_sha256_rfc7914 : exit=85
+  PASS  87_uuid_v4_format : exit=99
+  PASS  88_murmur3_kat : exit=186
+  PASS  89_leb128 : exit=99
+  PASS  91_csv_parse : exit=99
+  PASS  92_base32_kat : exit=99
+  PASS  93_ulid_format : exit=99
+  PASS  94_calendar_round_trip : exit=99
+  PASS  95_rfc3339 : exit=99
+  PASS  96_timing_safe_eq : exit=99
+  PASS  97_endian : exit=99
+  PASS  98_path : exit=99
+  PASS  99_html_escape : exit=99
+  PASS  100_quality_gate_aggregate : exit=99
+  PASS  101_sid_direct_graph : exit=99
+  PASS  102_sid_transitive_closure : exit=99
+  PASS  103_sid_visualize_utf8 : exit=99
+  PASS  104_modifier_crystal : exit=42
+  PASS  105_crystal_edges_baseline : exit=99
+  PASS  106_modifier_dynamic : exit=1
+  PASS  107_modifier_sealed : exit=7
+  PASS  108_modifier_linear : exit=42
+  PASS  109_modifier_bounded : exit=42
+  PASS  110_modifier_variant : exit=42
+  PASS  111_modifier_k : exit=42
+  PASS  112_modifier_provenance : exit=42
+  PASS  113_modifier_constant_time : exit=99
+  PASS  114_modifier_side_channel_resistant : exit=42
+  PASS  115_modifier_dynamic_impact : exit=42
+  PASS  116_modifier_provenance_linked_error : exit=42
+  PASS  117_modifier_arena_reset_safe : exit=42
+  PASS  118_modifier_crystal_self_attest : exit=42
+  PASS  119_ripple_analyze_baseline : exit=99
+  PASS  120_ripple_execute_strict : exit=99
+  PASS  121_arena_region_reset_safe : exit=99
+  PASS  122_stress_arena_1k_resets : exit=99
+  PASS  123_consumer_hello_arena : exit=99
+  PASS  124_proof_ripple_witness : exit=99
+  PASS  125_bitops : exit=99
+  PASS  126_inet_ipv4 : exit=99
+  PASS  127_semver : exit=99
+  PASS  128_glob : exit=99
+  PASS  128_self_host_ripple : exit=99
+  PASS  129_list : exit=99
+  PASS  130_lru : exit=99
+  PASS  131_field_inv_crystal : exit=99
+  PASS  132_lru_debug_isolate : exit=99
+  PASS  133_arena_only : exit=99
+  PASS  134_lru_new_only : exit=99
+  PASS  135_lru_capacity : exit=99
+  PASS  136_lru_put_one : exit=99
+  PASS  137_lru_put_three : exit=99
+  PASS  138_lru_put_evict : exit=99
+  PASS  139_lru_just_evict : exit=99
+  PASS  140_modifier_strict_length : exit=42
+  PASS  141_http_isolate : exit=99
+  PASS  142_http_header_find : exit=99
+  PASS  143_bigint_karatsuba : exit=99
+  PASS  144_q128_to_f64 : exit=99
+  PASS  145_checked_crystal : exit=99
+  PASS  146_modular_mont : exit=99
+  PASS  147_fixed_extra : exit=99
+  PASS  148_scalar_provenance : exit=99
+  PASS  149_cpufeat_dispatch : exit=99
+  PASS  150_cpufeat_only : exit=99
+  PASS  151_sha256_dispatch_kat : exit=99
+  PASS  152_dispatch_only : exit=99
+  PASS  153_crystal_http_header : exit=99
+  PASS  154_async_runtime_basic : exit=99
+  PASS  155_sha3_256_kat_abc : exit=99
+  PASS  156_sha3_512_kat_abc : exit=99
+  PASS  157_shake128_kat_empty : exit=99
+  PASS  158_shake256_kat_empty : exit=99
+  PASS  159_fed_tier_basic : exit=99
+  PASS  160_fed_sybil_pow : exit=99
+  PASS  161_fed_eclipse_basic : exit=99
+  PASS  162_sha3_diag : exit=183
+  PASS  163_fed_admit_gates : exit=99
+  PASS  164_fed_genesis_descent : exit=99
+  PASS  165_fed_seal_anchor : exit=99
+  PASS  166_sandbox_lifecycle : exit=99
+  PASS  167_merkle_basic : exit=99
+  PASS  168_keccak_zero : exit=231
+  PASS  169_sha3_256_empty : exit=167
+  PASS  170_obs_log_basic : exit=99
+  PASS  171_obs_metric_kinds : exit=99
+  PASS  172_obs_trace_tree : exit=99
+  PASS  173_obs_observatory_collapse : exit=99
+  PASS  174_catalyst_gates : exit=99
+  PASS  175_genesis_distance : exit=99
+  PASS  176_promote_demote_lifecycle : exit=99
+  PASS  177_glyph_v3_roundtrip : exit=99
+  PASS  178_glyph_v3_remainder : exit=99
+  PASS  179_dynamic_ripple_stub : exit=99
+  PASS  200_calculus_18_primitives : exit=99
+  PASS  201_lazy_crystal_levels : exit=99
+  PASS  202_memo_determinism : exit=99
+  PASS  203_jit_fuse_amortized : exit=99
+  PASS  204_prespec_hw_offload : exit=99
+  PASS  205_governance_full_loop : exit=99
+  PASS  206_observe_and_propose : exit=99
+  PASS  207_babel_wire_roundtrip : exit=99
+  PASS  208_cap_handshake : exit=99
+  PASS  209_idoc_roundtrip : exit=99
+  PASS  210_sealed_channel_handshake : exit=99
+  PASS  211_hip_resolve : exit=99
+  PASS  212_hip_verb_coverage : exit=99
+  PASS  213_reflect_introspection : exit=99
+  PASS  214_hip_intent_validation : exit=99
+  PASS  215_sealed_channel_session_id : exit=99
+  PASS  216_proof_ripple_equiv : exit=99
+  PASS  217_e2e_hip_idoc : exit=99
+  PASS  218_prespec_compositions : exit=99
+  PASS  219_witness_chain : exit=99
+  PASS  220_hip_concurrency : exit=99
+  PASS  221_hip_punctuation : exit=99
+  PASS  222_babel_wire_tamper : exit=99
+  PASS  223_mini_crystal_lifecycle : exit=99
+  PASS  224_hip_interrogative : exit=99
+  PASS  225_sealed_channel_multimsg : exit=99
+  PASS  226_intent_composition : exit=99
+  PASS  227_calculus_metadata : exit=99
+  PASS  228_idoc_multi_consumer : exit=99
+  PASS  229_governance_no_autoproposal : exit=99
+  PASS  230_memo_content_addressing : exit=99
+  PASS  231_calculus_idempotence : exit=99
+  PASS  232_pe_static_zero_overhead : exit=99
+  PASS  233_resolver_unit_dispatch : exit=99
+  PASS  234_compositions_ssot_drift : exit=99
+  PASS  235_resolver_unit_avx2_parity : exit=99
+  PASS  236_idsg_abstract_reflect : exit=99
+  SKIP  237_insel_cycle_bench : perf benchmark -- owned by run_bench_corpus.sh
+  PASS  238_resolver_unit_avx512_parity : exit=99
+  PASS  239_fed_multi_node_mesh : exit=99
+  PASS  240_fed_e2e_admit_ceremony : exit=99
+  PASS  241_hip2_complex_sentences : exit=99
+  SKIP  242_bench_resolver : perf benchmark -- owned by run_bench_corpus.sh
+  SKIP  243_bench_sealed_channel : perf benchmark -- owned by run_bench_corpus.sh
+  SKIP  244_bench_hip_idoc : perf benchmark -- owned by run_bench_corpus.sh
+  PASS  245_self_reformatter : exit=99
+  PASS  246_ai_resolve : exit=99
+  PASS  247_first_domain_pattern_set : exit=99
+  PASS  248_signed_compare : exit=99
+  PASS  249_u32_indexed_access : exit=99
+  PASS  250_multiline_fn : exit=99
+  PASS  251_newline_else : exit=99
+  PASS  252_nested_comments : exit=99
+  PASS  253_hex_underscores : exit=99
+  PASS  254_mut_param : exit=99
+  PASS  255_let_discard : exit=99
+  PASS  256_local_arrays : exit=99
+  PASS  257_iiis1_fn_annotations : exit=99
+  PASS  258_iiis1_param_annotations : exit=99
+  PASS  259_cap_required : exit=99
+  PASS  260_k_max : exit=99
+  PASS  261_hexad_kind : exit=99
+  PASS  262_cap_flow_static : exit=99
+  PASS  262_neg_cap_flow : negative-compile correctly rejected (rc=14)
+  PASS  263_intent_kind_static : exit=99
+  PASS  263_neg_intent_kind : negative-compile correctly rejected (rc=14)
+  PASS  264_k_floor_static : exit=99
+  PASS  264_neg_k_floor : negative-compile correctly rejected (rc=14)
+  PASS  265_neg_return_kind : negative-compile correctly rejected (rc=14)
+  PASS  265_return_kind_static : exit=99
+  PASS  266_all_rules_combined : exit=99
+  PASS  267_call_arg_cross_check : exit=99
+  PASS  267_neg_call_arg : negative-compile correctly rejected (rc=14)
+  PASS  268_iiis2_loop_break_continue : exit=99
+  PASS  269_iiis2_type_alias : exit=99
+  PASS  269_neg_type_alias : negative-compile correctly rejected (rc=14)
+  PASS  270_substrate_integration : exit=99
+  PASS  271_nested_call_chain : exit=99
+  PASS  272_cross_fn_pe : exit=99
+  SKIP  280_xii_K01_form : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  281_xii_K02_bind : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  282_xii_K03_convey : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  283_xii_K04_mean : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  284_xii_K05_act : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  285_xii_K06_compose : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  286_xii_K07_seal : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  287_xii_K08_prove : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  288_xii_K09_query : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  289_xii_K10_grant : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  290_xii_K11_govern : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  291_xii_K12_then : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  292_xii_K13_with : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  293_xii_K14_under : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  294_xii_K15_if : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  295_xii_K16_loop : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  296_xii_K17_lift : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  297_xii_K18_reflect : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  298_xii_FCOMPOSE : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  299_bit_identity_probe : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  299_xii_FTHEN : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  300_xii_FWITH : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  301_xii_FUNDER : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  302_xii_FIF : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  303_xii_FLOOP : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  304_xii_R001 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  305_xii_R002 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  306_xii_R003 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  307_xii_R004 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  308_xii_R005 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  309_xii_R013 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  310_xii_R014 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  311_xii_R016 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  312_xii_R017 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  313_xii_R018 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  314_xii_R019 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  315_xii_R020 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  316_xii_R023 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  317_xii_R024 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  318_xii_R025 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  319_xii_R026 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  320_xii_R027 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  321_xii_R030 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  322_xii_R031 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  323_xii_R032 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  324_xii_R006 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  325_xii_R007 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  326_xii_R008 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  327_xii_R009 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  328_xii_R010 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  329_xii_R011 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  330_xii_R012 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  331_xii_R015 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  332_xii_R021 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  333_xii_R022 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  334_xii_R028 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  335_xii_R029 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  336_xii_R033 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  337_xii_R034 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  338_xii_R035 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  339_xii_R036 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  340_xii_R037 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  341_xii_R038 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  342_xii_R039 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  343_xii_R040 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  344_xii_conf_critpairs : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  345_xii_conf_hj_assoc : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  346_xii_conf_hj_commut : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  347_xii_conf_dk_symm : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  348_xii_conf_canon_idemp : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  349_xii_term_terminates : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  350_xii_term_term_loop : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  351_xii_term_term_mixed : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  352_xii_lattice_replay_avx2 : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  353_xii_lattice_replay_arm : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  354_xii_lattice_replay_riscv : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  355_xii_mphf_construct : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  356_xii_mphf_lookup : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  357_xii_horizon_reach : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  358_xii_sml_anti_tamper : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  359_xii_ldil_determinism : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  360_xii_e2e_demo : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  361_xii_curated_crypto : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  362_xii_sml_full_chain : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  363_xii_atm_tamper : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  364_xii_horizon_metadata : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  365_xii_anchor_invariant : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  366_xii_circ_feasibility : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  367_xii_full_pipeline : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  368_xii_curated_riscv : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  369_xii_curated_embedded : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  370_xii_kernel_emit : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  371_xii_critpairs_real : XII corpus -- owned by run_xii_corpus.sh
+  SKIP  372_xii_antidrift_full : XII corpus -- owned by run_xii_corpus.sh
+------------------------------------------------------------
+  PASS=254  FAIL=0  SKIP=98  TOTAL=254
+  (SKIP = XII corpus 280..372 [run_xii_corpus.sh] + perf
+   benchmarks 237/242/243/244 [run_bench_corpus.sh])
+============================================================
+CORPUS4_DONE rc=0

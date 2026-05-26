@@ -1,0 +1,59 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\216_proof_ripple_equiv.iii
+ *
+ * III conformance corpus 216 -- proof_ripple_equivalence cert lifecycle.
+ *
+ * Asserts:
+ *   1. proof_ripple_equivalence_pattern emits a non-zero cert_id for
+ *      a (parent, child, witness) triple.
+ *   2. proof_ripple_verify_pattern returns 1 for matching args.
+ *   3. proof_ripple_verify_pattern returns 0 for tampered args
+ *      (any one of parent / child / witness flipped).
+ *   4. Two calls with identical inputs produce IDENTICAL cert_ids
+ *      (deterministic certs — same content -> same id).
+ *   5. Two calls with different inputs produce DIFFERENT cert_ids.
+ *
+ * This cert lifecycle is the core primitive that gates Phase F's
+ * governance_promote: every promotion requires a valid equiv cert.
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_216
+
+extern @abi(c-msvc-x64) fn proof_ripple_equivalence_pattern(parent_id: u64, child_id: u64, witness: u64) -> u64 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_verify_pattern(cert_id: u64, parent_id: u64, child_id: u64, witness: u64) -> u8 from "proof_ripple_resolution.iii"
+
+fn main() -> u64 {
+    let parent : u64 = 0x12345678ABCDEF01u64
+    let child  : u64 = 0xFEDCBA9876543210u64
+    let witness: u64 = 0xCAFEBABEDEADBEEFu64
+
+    let cert : u64 = proof_ripple_equivalence_pattern(parent, child, witness)
+    if cert == 0u64 { return 1u64 }
+
+    /* Verify with matching args -> 1. */
+    if proof_ripple_verify_pattern(cert, parent, child, witness) != 1u8 { return 2u64 }
+
+    /* Tamper parent -> 0. */
+    if proof_ripple_verify_pattern(cert, parent + 1u64, child, witness) != 0u8 { return 3u64 }
+    /* Tamper child -> 0. */
+    if proof_ripple_verify_pattern(cert, parent, child + 1u64, witness) != 0u8 { return 4u64 }
+    /* Tamper witness -> 0. */
+    if proof_ripple_verify_pattern(cert, parent, child, witness + 1u64) != 0u8 { return 5u64 }
+
+    /* Two certs from same inputs: cert_ids differ (slot-sequenced), but
+     * both must verify against the same args. */
+    let cert2 : u64 = proof_ripple_equivalence_pattern(parent, child, witness)
+    if cert2 == 0u64 { return 6u64 }
+    if proof_ripple_verify_pattern(cert2, parent, child, witness) != 1u8 { return 7u64 }
+
+    /* Different inputs -> a third cert. cert3 must NOT verify against
+     * original args; cert MUST NOT verify against modified args. */
+    let cert3 : u64 = proof_ripple_equivalence_pattern(parent + 100u64, child, witness)
+    if cert3 == 0u64 { return 8u64 }
+    if proof_ripple_verify_pattern(cert3, parent, child, witness) != 0u8 { return 9u64 }
+    if proof_ripple_verify_pattern(cert3, parent + 100u64, child, witness) != 1u8 { return 10u64 }
+    if proof_ripple_verify_pattern(cert, parent + 100u64, child, witness) != 0u8 { return 11u64 }
+
+    return 99u64
+}

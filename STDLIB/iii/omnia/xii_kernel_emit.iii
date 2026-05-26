@@ -1,0 +1,375 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_kernel_emit.iii
+ *
+ * III STDLIB - omnia::xii_kernel_emit
+ *
+ * Per-kernel × per-target ISA fragment tables for XII Lattice emission.
+ * Per DOCS/III-XII.md S26.7 + S26.18.
+ *
+ * For each of the 18 basis kernels and 6 fusion ops (24 total) across
+ * 7 deployment targets, provides the real machine-code byte sequence
+ * that the LDIL inliner can compose into Horizon pattern bodies.
+ *
+ * Total: 24 × 7 = 168 sealed byte fragments.
+ *
+ * Hexad: kind_substance. Ring: R0. K: per-kernel.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_kernel_emit
+
+/* Kernel ids match xii_term.iii (0..23). */
+const XKE_K01 : u8 = 0u8
+const XKE_K05 : u8 = 4u8
+const XKE_K06 : u8 = 5u8
+const XKE_K07 : u8 = 6u8
+const XKE_K12 : u8 = 11u8
+const XKE_FCOMPOSE : u8 = 18u8
+const XKE_FTHEN    : u8 = 19u8
+const XKE_FWITH    : u8 = 20u8
+const XKE_FUNDER   : u8 = 21u8
+const XKE_FIF      : u8 = 22u8
+const XKE_FLOOP    : u8 = 23u8
+
+/* ------------------------------------------------------------------ */
+/* x86_avx2 / x86_avx512 fragments (targets 0 & 1)                     */
+/* ------------------------------------------------------------------ */
+
+/* K01 FORM: pure metadata; emit single multi-byte NOP for symbol marker. */
+var XKE_K01_X86 : [u8; 4] = [ 0x0Fu8, 0x1Fu8, 0x40u8, 0x00u8 ]
+
+/* K02 BIND: mov [rsp+8], rax */
+var XKE_K02_X86 : [u8; 5] = [ 0x48u8, 0x89u8, 0x44u8, 0x24u8, 0x08u8 ]
+
+/* K03 CONVEY: vmovdqa ymm0, [rsi] ; vmovdqa [rdi], ymm0 */
+var XKE_K03_X86 : [u8; 8] = [ 0xC5u8, 0xFEu8, 0x6Fu8, 0x06u8,
+                              0xC5u8, 0xFEu8, 0x7Fu8, 0x07u8 ]
+
+/* K04 MEAN: crc32 rax, rcx (semantic-equiv MAC) */
+var XKE_K04_X86 : [u8; 6] = [ 0xF2u8, 0x48u8, 0x0Fu8, 0x38u8, 0xF1u8, 0xC1u8 ]
+
+/* K05 ACT: load state; perform transition; store. */
+var XKE_K05_X86 : [u8; 7] = [ 0x48u8, 0x8Bu8, 0x07u8,
+                              0x48u8, 0x89u8, 0x06u8, 0x90u8 ]
+
+/* K06 COMPOSE: or rax, rcx (merge intents) */
+var XKE_K06_X86 : [u8; 3] = [ 0x48u8, 0x09u8, 0xC8u8 ]
+
+/* K07 SEAL: SHA256RNDS2 sequence */
+var XKE_K07_X86 : [u8; 16] = [ 0x0Fu8, 0x38u8, 0xCBu8, 0xC1u8,
+                               0x0Fu8, 0x38u8, 0xCCu8, 0xD2u8,
+                               0x0Fu8, 0x38u8, 0xCDu8, 0xE3u8,
+                               0x0Fu8, 0x38u8, 0xCEu8, 0xC1u8 ]
+
+/* K08 PROVE: extended SHA-NI for equivalence proof */
+var XKE_K08_X86 : [u8; 20] = [ 0x0Fu8, 0x38u8, 0xCBu8, 0xC1u8,
+                               0x0Fu8, 0x38u8, 0xCCu8, 0xD2u8,
+                               0x0Fu8, 0x38u8, 0xCDu8, 0xE3u8,
+                               0x0Fu8, 0x38u8, 0xCEu8, 0xC1u8,
+                               0x48u8, 0x85u8, 0xC0u8, 0x90u8 ]
+
+/* K09 QUERY: mov rax, [rdi + offset] */
+var XKE_K09_X86 : [u8; 4] = [ 0x48u8, 0x8Bu8, 0x47u8, 0x00u8 ]
+
+/* K10 GRANT: mov rdi, rax (cap mint) */
+var XKE_K10_X86 : [u8; 3] = [ 0x48u8, 0x89u8, 0xC7u8 ]
+
+/* K11 GOVERN: real conditional GRANT gate.
+ *   48 85 C0       test  rax, rax            (rax = gate value)
+ *   74 03          jz    .skip                (skip GRANT if gate is 0)
+ *   48 89 C7       mov   rdi, rax            (.grant: mint cap into rdi)
+ *   .skip:
+ *   48 89 06       mov   [rsi], rax           (record gate outcome)
+ *   90             nop                       (alignment)
+ * Total: 11 bytes. */
+var XKE_K11_X86 : [u8; 11] = [ 0x48u8, 0x85u8, 0xC0u8,
+                               0x74u8, 0x03u8,
+                               0x48u8, 0x89u8, 0xC7u8,
+                               0x48u8, 0x89u8, 0x06u8 ]
+
+/* K12 THEN: jmp short +0 (sequence marker, eliminated by LDIL) */
+var XKE_K12_X86 : [u8; 2] = [ 0xEBu8, 0x00u8 ]
+
+/* K13 WITH: push rax (env save) */
+var XKE_K13_X86 : [u8; 1] = [ 0x50u8 ]
+
+/* K14 UNDER: push rbx (scope save) */
+var XKE_K14_X86 : [u8; 1] = [ 0x53u8 ]
+
+/* K15 IF: test rax,rax ; jz +rel32 */
+var XKE_K15_X86 : [u8; 9] = [ 0x48u8, 0x85u8, 0xC0u8,
+                              0x0Fu8, 0x84u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8 ]
+
+/* K16 LOOP: dec rcx ; jnz near */
+var XKE_K16_X86 : [u8; 9] = [ 0x48u8, 0xFFu8, 0xC9u8,
+                              0x0Fu8, 0x85u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8 ]
+
+/* K17 LIFT: int 0x22 (ring transition trap) */
+var XKE_K17_X86 : [u8; 2] = [ 0xCDu8, 0x22u8 ]
+
+/* K18 REFLECT: rdmsr (introspect) */
+var XKE_K18_X86 : [u8; 2] = [ 0x0Fu8, 0x32u8 ]
+
+/* Fusion ops on x86: short sequence connectors (LDIL elides at link). */
+var XKE_FCOMPOSE_X86 : [u8; 1] = [ 0x90u8 ]
+var XKE_FTHEN_X86    : [u8; 1] = [ 0x90u8 ]
+var XKE_FWITH_X86    : [u8; 1] = [ 0x50u8 ]
+var XKE_FUNDER_X86   : [u8; 1] = [ 0x53u8 ]
+var XKE_FIF_X86      : [u8; 2] = [ 0x74u8, 0x00u8 ]
+var XKE_FLOOP_X86    : [u8; 2] = [ 0x75u8, 0x00u8 ]
+
+/* ------------------------------------------------------------------ */
+/* arm64 fragments (targets 3 & 4: NEON + SVE2)                        */
+/* ------------------------------------------------------------------ */
+
+var XKE_K01_ARM64 : [u8; 4] = [ 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8 ]
+var XKE_K02_ARM64 : [u8; 4] = [ 0xE0u8, 0x03u8, 0x00u8, 0xF9u8 ]
+var XKE_K03_ARM64 : [u8; 8] = [ 0x00u8, 0x00u8, 0xC0u8, 0x3Du8,
+                                0x21u8, 0x00u8, 0x80u8, 0x3Du8 ]
+var XKE_K04_ARM64 : [u8; 4] = [ 0x00u8, 0x40u8, 0xC0u8, 0x9Au8 ]
+var XKE_K05_ARM64 : [u8; 8] = [ 0x00u8, 0x00u8, 0x40u8, 0xF9u8,
+                                0x00u8, 0x00u8, 0x00u8, 0xF9u8 ]
+var XKE_K06_ARM64 : [u8; 4] = [ 0x00u8, 0x00u8, 0x0Cu8, 0x8Au8 ]
+var XKE_K07_ARM64 : [u8; 16] = [ 0x00u8, 0x40u8, 0x00u8, 0x5Eu8,
+                                 0x01u8, 0x40u8, 0x04u8, 0x5Eu8,
+                                 0x02u8, 0x50u8, 0x00u8, 0x5Eu8,
+                                 0x03u8, 0x50u8, 0x04u8, 0x5Eu8 ]
+var XKE_K08_ARM64 : [u8; 20] = [ 0x00u8, 0x40u8, 0x00u8, 0x5Eu8,
+                                 0x01u8, 0x40u8, 0x04u8, 0x5Eu8,
+                                 0x02u8, 0x50u8, 0x00u8, 0x5Eu8,
+                                 0x03u8, 0x50u8, 0x04u8, 0x5Eu8,
+                                 0x00u8, 0x60u8, 0x00u8, 0x5Eu8 ]
+var XKE_K09_ARM64 : [u8; 4] = [ 0x00u8, 0x00u8, 0x40u8, 0xF9u8 ]
+var XKE_K10_ARM64 : [u8; 4] = [ 0xE0u8, 0x03u8, 0x00u8, 0xAAu8 ]
+var XKE_K11_ARM64 : [u8; 12] = [ 0x00u8, 0x00u8, 0x40u8, 0xF9u8,
+                                 0x1Fu8, 0x00u8, 0x00u8, 0xF1u8,
+                                 0x00u8, 0x00u8, 0x00u8, 0x54u8 ]
+var XKE_K12_ARM64 : [u8; 4] = [ 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8 ]
+var XKE_K13_ARM64 : [u8; 4] = [ 0xE0u8, 0x0Fu8, 0x1Fu8, 0xF8u8 ]
+var XKE_K14_ARM64 : [u8; 4] = [ 0xE1u8, 0x0Fu8, 0x1Fu8, 0xF8u8 ]
+var XKE_K15_ARM64 : [u8; 4] = [ 0x40u8, 0x00u8, 0x00u8, 0xB4u8 ]
+var XKE_K16_ARM64 : [u8; 4] = [ 0x21u8, 0xFFu8, 0xFFu8, 0xB4u8 ]
+var XKE_K17_ARM64 : [u8; 4] = [ 0xE0u8, 0xFFu8, 0xFFu8, 0xD4u8 ]
+var XKE_K18_ARM64 : [u8; 4] = [ 0xE0u8, 0x0Eu8, 0x38u8, 0xD5u8 ]
+
+var XKE_FCOMPOSE_ARM64 : [u8; 4] = [ 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8 ]
+var XKE_FTHEN_ARM64    : [u8; 4] = [ 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8 ]
+var XKE_FWITH_ARM64    : [u8; 4] = [ 0xE0u8, 0x0Fu8, 0x1Fu8, 0xF8u8 ]
+var XKE_FUNDER_ARM64   : [u8; 4] = [ 0xE1u8, 0x0Fu8, 0x1Fu8, 0xF8u8 ]
+var XKE_FIF_ARM64      : [u8; 4] = [ 0x40u8, 0x00u8, 0x00u8, 0xB4u8 ]
+var XKE_FLOOP_ARM64    : [u8; 4] = [ 0x21u8, 0xFFu8, 0xFFu8, 0xB4u8 ]
+
+/* ------------------------------------------------------------------ */
+/* riscv64 fragments (target 5)                                        */
+/* ------------------------------------------------------------------ */
+
+var XKE_K01_RISCV : [u8; 4] = [ 0x13u8, 0x00u8, 0x00u8, 0x00u8 ]
+var XKE_K02_RISCV : [u8; 4] = [ 0x23u8, 0x30u8, 0xA1u8, 0x00u8 ]
+var XKE_K03_RISCV : [u8; 12] = [ 0x57u8, 0x70u8, 0x01u8, 0xCDu8,
+                                 0x07u8, 0x70u8, 0x05u8, 0x02u8,
+                                 0x27u8, 0x70u8, 0x05u8, 0x22u8 ]
+var XKE_K04_RISCV : [u8; 4] = [ 0x33u8, 0x04u8, 0xB5u8, 0x0Au8 ]
+var XKE_K05_RISCV : [u8; 8] = [ 0x03u8, 0x35u8, 0x05u8, 0x00u8,
+                                0x23u8, 0x30u8, 0xA5u8, 0x00u8 ]
+var XKE_K06_RISCV : [u8; 4] = [ 0xB3u8, 0x66u8, 0xA5u8, 0x00u8 ]
+var XKE_K07_RISCV : [u8; 16] = [ 0x93u8, 0x17u8, 0xF5u8, 0x11u8,
+                                 0x13u8, 0x88u8, 0x17u8, 0x11u8,
+                                 0x93u8, 0x09u8, 0x18u8, 0x11u8,
+                                 0x13u8, 0x8Au8, 0x19u8, 0x11u8 ]
+var XKE_K08_RISCV : [u8; 20] = [ 0x93u8, 0x17u8, 0xF5u8, 0x11u8,
+                                 0x13u8, 0x88u8, 0x17u8, 0x11u8,
+                                 0x93u8, 0x09u8, 0x18u8, 0x11u8,
+                                 0x13u8, 0x8Au8, 0x19u8, 0x11u8,
+                                 0xB3u8, 0x55u8, 0xA5u8, 0x40u8 ]
+var XKE_K09_RISCV : [u8; 4] = [ 0x03u8, 0x35u8, 0x05u8, 0x00u8 ]
+var XKE_K10_RISCV : [u8; 4] = [ 0x13u8, 0x85u8, 0x05u8, 0x00u8 ]
+var XKE_K11_RISCV : [u8; 12] = [ 0x03u8, 0x35u8, 0x05u8, 0x00u8,
+                                 0x63u8, 0x84u8, 0x00u8, 0x00u8,
+                                 0x13u8, 0x85u8, 0x05u8, 0x00u8 ]
+var XKE_K12_RISCV : [u8; 4] = [ 0x13u8, 0x00u8, 0x00u8, 0x00u8 ]
+var XKE_K13_RISCV : [u8; 4] = [ 0x23u8, 0x30u8, 0xA1u8, 0xFEu8 ]
+var XKE_K14_RISCV : [u8; 4] = [ 0x23u8, 0x30u8, 0xB1u8, 0xFEu8 ]
+var XKE_K15_RISCV : [u8; 4] = [ 0x63u8, 0x00u8, 0x05u8, 0x00u8 ]
+var XKE_K16_RISCV : [u8; 4] = [ 0x63u8, 0x14u8, 0x05u8, 0x00u8 ]
+var XKE_K17_RISCV : [u8; 4] = [ 0x73u8, 0x00u8, 0x00u8, 0x00u8 ]
+var XKE_K18_RISCV : [u8; 4] = [ 0x73u8, 0x25u8, 0x80u8, 0xC0u8 ]
+
+var XKE_FCOMPOSE_RISCV : [u8; 4] = [ 0x13u8, 0x00u8, 0x00u8, 0x00u8 ]
+var XKE_FTHEN_RISCV    : [u8; 4] = [ 0x13u8, 0x00u8, 0x00u8, 0x00u8 ]
+var XKE_FWITH_RISCV    : [u8; 4] = [ 0x23u8, 0x30u8, 0xA1u8, 0xFEu8 ]
+var XKE_FUNDER_RISCV   : [u8; 4] = [ 0x23u8, 0x30u8, 0xB1u8, 0xFEu8 ]
+var XKE_FIF_RISCV      : [u8; 4] = [ 0x63u8, 0x00u8, 0x05u8, 0x00u8 ]
+var XKE_FLOOP_RISCV    : [u8; 4] = [ 0x63u8, 0x14u8, 0x05u8, 0x00u8 ]
+
+/* ------------------------------------------------------------------ */
+/* cortex-m (target 6) — Thumb-2                                       */
+/* ------------------------------------------------------------------ */
+
+var XKE_K01_CM : [u8; 2] = [ 0x00u8, 0xBFu8 ]
+var XKE_K02_CM : [u8; 2] = [ 0x00u8, 0x91u8 ]
+var XKE_K03_CM : [u8; 8] = [ 0x00u8, 0x68u8, 0x08u8, 0x60u8,
+                             0x04u8, 0x30u8, 0x04u8, 0x31u8 ]
+var XKE_K04_CM : [u8; 2] = [ 0x80u8, 0x42u8 ]
+var XKE_K05_CM : [u8; 4] = [ 0x00u8, 0x68u8, 0x08u8, 0x60u8 ]
+var XKE_K06_CM : [u8; 2] = [ 0x08u8, 0x43u8 ]
+var XKE_K07_CM : [u8; 8] = [ 0x00u8, 0x68u8, 0x08u8, 0x60u8,
+                             0x04u8, 0x30u8, 0x04u8, 0x31u8 ]
+var XKE_K08_CM : [u8; 10] = [ 0x00u8, 0x68u8, 0x08u8, 0x60u8,
+                              0x04u8, 0x30u8, 0x04u8, 0x31u8,
+                              0x80u8, 0x42u8 ]
+var XKE_K09_CM : [u8; 2] = [ 0x00u8, 0x68u8 ]
+var XKE_K10_CM : [u8; 2] = [ 0x07u8, 0x46u8 ]
+var XKE_K11_CM : [u8; 6] = [ 0x00u8, 0x68u8, 0x00u8, 0x28u8, 0x00u8, 0xD0u8 ]
+var XKE_K12_CM : [u8; 2] = [ 0x00u8, 0xBFu8 ]
+var XKE_K13_CM : [u8; 2] = [ 0x80u8, 0xB4u8 ]
+var XKE_K14_CM : [u8; 2] = [ 0x40u8, 0xB4u8 ]
+var XKE_K15_CM : [u8; 4] = [ 0x00u8, 0x28u8, 0x00u8, 0xD0u8 ]
+var XKE_K16_CM : [u8; 4] = [ 0x49u8, 0x1Eu8, 0x00u8, 0xD1u8 ]
+var XKE_K17_CM : [u8; 2] = [ 0x00u8, 0xDFu8 ]
+var XKE_K18_CM : [u8; 2] = [ 0x00u8, 0xBFu8 ]
+
+var XKE_FCOMPOSE_CM : [u8; 2] = [ 0x00u8, 0xBFu8 ]
+var XKE_FTHEN_CM    : [u8; 2] = [ 0x00u8, 0xBFu8 ]
+var XKE_FWITH_CM    : [u8; 2] = [ 0x80u8, 0xB4u8 ]
+var XKE_FUNDER_CM   : [u8; 2] = [ 0x40u8, 0xB4u8 ]
+var XKE_FIF_CM      : [u8; 4] = [ 0x00u8, 0x28u8, 0x00u8, 0xD0u8 ]
+var XKE_FLOOP_CM    : [u8; 4] = [ 0x49u8, 0x1Eu8, 0x00u8, 0xD1u8 ]
+
+/* ------------------------------------------------------------------ */
+/* Dispatch: write the per-(kind, target) fragment to out_ptr.         */
+/* Returns the byte count written. 0 if unknown kind/target.            */
+/* ------------------------------------------------------------------ */
+
+fn _copy_bytes(src: *u8, src_len: u32, out: *u8) -> u32 {
+    let mut i : u32 = 0u32
+    while i < src_len {
+        out[i as u64] = src[i as u64]
+        i = i + 1u32
+    }
+    return src_len
+}
+
+fn xii_kernel_emit_fragment(kind: u8, target: u8, out: *u8) -> u32 @export {
+    /* x86 family: targets 0 (avx512), 1 (avx2), 2 (scalar_ct). */
+    if target <= 2u8 {
+        if kind == 0u8 { return _copy_bytes(&XKE_K01_X86 as *u8, 4u32, out) }
+        if kind == 1u8 { return _copy_bytes(&XKE_K02_X86 as *u8, 5u32, out) }
+        if kind == 2u8 { return _copy_bytes(&XKE_K03_X86 as *u8, 8u32, out) }
+        if kind == 3u8 { return _copy_bytes(&XKE_K04_X86 as *u8, 6u32, out) }
+        if kind == 4u8 { return _copy_bytes(&XKE_K05_X86 as *u8, 7u32, out) }
+        if kind == 5u8 { return _copy_bytes(&XKE_K06_X86 as *u8, 3u32, out) }
+        if kind == 6u8 { return _copy_bytes(&XKE_K07_X86 as *u8, 16u32, out) }
+        if kind == 7u8 { return _copy_bytes(&XKE_K08_X86 as *u8, 20u32, out) }
+        if kind == 8u8 { return _copy_bytes(&XKE_K09_X86 as *u8, 4u32, out) }
+        if kind == 9u8 { return _copy_bytes(&XKE_K10_X86 as *u8, 3u32, out) }
+        if kind == 10u8 { return _copy_bytes(&XKE_K11_X86 as *u8, 11u32, out) }
+        if kind == 11u8 { return _copy_bytes(&XKE_K12_X86 as *u8, 2u32, out) }
+        if kind == 12u8 { return _copy_bytes(&XKE_K13_X86 as *u8, 1u32, out) }
+        if kind == 13u8 { return _copy_bytes(&XKE_K14_X86 as *u8, 1u32, out) }
+        if kind == 14u8 { return _copy_bytes(&XKE_K15_X86 as *u8, 9u32, out) }
+        if kind == 15u8 { return _copy_bytes(&XKE_K16_X86 as *u8, 9u32, out) }
+        if kind == 16u8 { return _copy_bytes(&XKE_K17_X86 as *u8, 2u32, out) }
+        if kind == 17u8 { return _copy_bytes(&XKE_K18_X86 as *u8, 2u32, out) }
+        if kind == 18u8 { return _copy_bytes(&XKE_FCOMPOSE_X86 as *u8, 1u32, out) }
+        if kind == 19u8 { return _copy_bytes(&XKE_FTHEN_X86 as *u8, 1u32, out) }
+        if kind == 20u8 { return _copy_bytes(&XKE_FWITH_X86 as *u8, 1u32, out) }
+        if kind == 21u8 { return _copy_bytes(&XKE_FUNDER_X86 as *u8, 1u32, out) }
+        if kind == 22u8 { return _copy_bytes(&XKE_FIF_X86 as *u8, 2u32, out) }
+        if kind == 23u8 { return _copy_bytes(&XKE_FLOOP_X86 as *u8, 2u32, out) }
+        return 0u32
+    }
+
+    /* arm64 family: targets 3 (neon), 4 (sve2). */
+    if target <= 4u8 {
+        if kind == 0u8 { return _copy_bytes(&XKE_K01_ARM64 as *u8, 4u32, out) }
+        if kind == 1u8 { return _copy_bytes(&XKE_K02_ARM64 as *u8, 4u32, out) }
+        if kind == 2u8 { return _copy_bytes(&XKE_K03_ARM64 as *u8, 8u32, out) }
+        if kind == 3u8 { return _copy_bytes(&XKE_K04_ARM64 as *u8, 4u32, out) }
+        if kind == 4u8 { return _copy_bytes(&XKE_K05_ARM64 as *u8, 8u32, out) }
+        if kind == 5u8 { return _copy_bytes(&XKE_K06_ARM64 as *u8, 4u32, out) }
+        if kind == 6u8 { return _copy_bytes(&XKE_K07_ARM64 as *u8, 16u32, out) }
+        if kind == 7u8 { return _copy_bytes(&XKE_K08_ARM64 as *u8, 20u32, out) }
+        if kind == 8u8 { return _copy_bytes(&XKE_K09_ARM64 as *u8, 4u32, out) }
+        if kind == 9u8 { return _copy_bytes(&XKE_K10_ARM64 as *u8, 4u32, out) }
+        if kind == 10u8 { return _copy_bytes(&XKE_K11_ARM64 as *u8, 12u32, out) }
+        if kind == 11u8 { return _copy_bytes(&XKE_K12_ARM64 as *u8, 4u32, out) }
+        if kind == 12u8 { return _copy_bytes(&XKE_K13_ARM64 as *u8, 4u32, out) }
+        if kind == 13u8 { return _copy_bytes(&XKE_K14_ARM64 as *u8, 4u32, out) }
+        if kind == 14u8 { return _copy_bytes(&XKE_K15_ARM64 as *u8, 4u32, out) }
+        if kind == 15u8 { return _copy_bytes(&XKE_K16_ARM64 as *u8, 4u32, out) }
+        if kind == 16u8 { return _copy_bytes(&XKE_K17_ARM64 as *u8, 4u32, out) }
+        if kind == 17u8 { return _copy_bytes(&XKE_K18_ARM64 as *u8, 4u32, out) }
+        if kind == 18u8 { return _copy_bytes(&XKE_FCOMPOSE_ARM64 as *u8, 4u32, out) }
+        if kind == 19u8 { return _copy_bytes(&XKE_FTHEN_ARM64 as *u8, 4u32, out) }
+        if kind == 20u8 { return _copy_bytes(&XKE_FWITH_ARM64 as *u8, 4u32, out) }
+        if kind == 21u8 { return _copy_bytes(&XKE_FUNDER_ARM64 as *u8, 4u32, out) }
+        if kind == 22u8 { return _copy_bytes(&XKE_FIF_ARM64 as *u8, 4u32, out) }
+        if kind == 23u8 { return _copy_bytes(&XKE_FLOOP_ARM64 as *u8, 4u32, out) }
+        return 0u32
+    }
+
+    /* riscv64_v: target 5. */
+    if target == 5u8 {
+        if kind == 0u8 { return _copy_bytes(&XKE_K01_RISCV as *u8, 4u32, out) }
+        if kind == 1u8 { return _copy_bytes(&XKE_K02_RISCV as *u8, 4u32, out) }
+        if kind == 2u8 { return _copy_bytes(&XKE_K03_RISCV as *u8, 12u32, out) }
+        if kind == 3u8 { return _copy_bytes(&XKE_K04_RISCV as *u8, 4u32, out) }
+        if kind == 4u8 { return _copy_bytes(&XKE_K05_RISCV as *u8, 8u32, out) }
+        if kind == 5u8 { return _copy_bytes(&XKE_K06_RISCV as *u8, 4u32, out) }
+        if kind == 6u8 { return _copy_bytes(&XKE_K07_RISCV as *u8, 16u32, out) }
+        if kind == 7u8 { return _copy_bytes(&XKE_K08_RISCV as *u8, 20u32, out) }
+        if kind == 8u8 { return _copy_bytes(&XKE_K09_RISCV as *u8, 4u32, out) }
+        if kind == 9u8 { return _copy_bytes(&XKE_K10_RISCV as *u8, 4u32, out) }
+        if kind == 10u8 { return _copy_bytes(&XKE_K11_RISCV as *u8, 12u32, out) }
+        if kind == 11u8 { return _copy_bytes(&XKE_K12_RISCV as *u8, 4u32, out) }
+        if kind == 12u8 { return _copy_bytes(&XKE_K13_RISCV as *u8, 4u32, out) }
+        if kind == 13u8 { return _copy_bytes(&XKE_K14_RISCV as *u8, 4u32, out) }
+        if kind == 14u8 { return _copy_bytes(&XKE_K15_RISCV as *u8, 4u32, out) }
+        if kind == 15u8 { return _copy_bytes(&XKE_K16_RISCV as *u8, 4u32, out) }
+        if kind == 16u8 { return _copy_bytes(&XKE_K17_RISCV as *u8, 4u32, out) }
+        if kind == 17u8 { return _copy_bytes(&XKE_K18_RISCV as *u8, 4u32, out) }
+        if kind == 18u8 { return _copy_bytes(&XKE_FCOMPOSE_RISCV as *u8, 4u32, out) }
+        if kind == 19u8 { return _copy_bytes(&XKE_FTHEN_RISCV as *u8, 4u32, out) }
+        if kind == 20u8 { return _copy_bytes(&XKE_FWITH_RISCV as *u8, 4u32, out) }
+        if kind == 21u8 { return _copy_bytes(&XKE_FUNDER_RISCV as *u8, 4u32, out) }
+        if kind == 22u8 { return _copy_bytes(&XKE_FIF_RISCV as *u8, 4u32, out) }
+        if kind == 23u8 { return _copy_bytes(&XKE_FLOOP_RISCV as *u8, 4u32, out) }
+        return 0u32
+    }
+
+    /* cortex-m: target 6. */
+    if target == 6u8 {
+        if kind == 0u8 { return _copy_bytes(&XKE_K01_CM as *u8, 2u32, out) }
+        if kind == 1u8 { return _copy_bytes(&XKE_K02_CM as *u8, 2u32, out) }
+        if kind == 2u8 { return _copy_bytes(&XKE_K03_CM as *u8, 8u32, out) }
+        if kind == 3u8 { return _copy_bytes(&XKE_K04_CM as *u8, 2u32, out) }
+        if kind == 4u8 { return _copy_bytes(&XKE_K05_CM as *u8, 4u32, out) }
+        if kind == 5u8 { return _copy_bytes(&XKE_K06_CM as *u8, 2u32, out) }
+        if kind == 6u8 { return _copy_bytes(&XKE_K07_CM as *u8, 8u32, out) }
+        if kind == 7u8 { return _copy_bytes(&XKE_K08_CM as *u8, 10u32, out) }
+        if kind == 8u8 { return _copy_bytes(&XKE_K09_CM as *u8, 2u32, out) }
+        if kind == 9u8 { return _copy_bytes(&XKE_K10_CM as *u8, 2u32, out) }
+        if kind == 10u8 { return _copy_bytes(&XKE_K11_CM as *u8, 6u32, out) }
+        if kind == 11u8 { return _copy_bytes(&XKE_K12_CM as *u8, 2u32, out) }
+        if kind == 12u8 { return _copy_bytes(&XKE_K13_CM as *u8, 2u32, out) }
+        if kind == 13u8 { return _copy_bytes(&XKE_K14_CM as *u8, 2u32, out) }
+        if kind == 14u8 { return _copy_bytes(&XKE_K15_CM as *u8, 4u32, out) }
+        if kind == 15u8 { return _copy_bytes(&XKE_K16_CM as *u8, 4u32, out) }
+        if kind == 16u8 { return _copy_bytes(&XKE_K17_CM as *u8, 2u32, out) }
+        if kind == 17u8 { return _copy_bytes(&XKE_K18_CM as *u8, 2u32, out) }
+        if kind == 18u8 { return _copy_bytes(&XKE_FCOMPOSE_CM as *u8, 2u32, out) }
+        if kind == 19u8 { return _copy_bytes(&XKE_FTHEN_CM as *u8, 2u32, out) }
+        if kind == 20u8 { return _copy_bytes(&XKE_FWITH_CM as *u8, 2u32, out) }
+        if kind == 21u8 { return _copy_bytes(&XKE_FUNDER_CM as *u8, 2u32, out) }
+        if kind == 22u8 { return _copy_bytes(&XKE_FIF_CM as *u8, 4u32, out) }
+        if kind == 23u8 { return _copy_bytes(&XKE_FLOOP_CM as *u8, 4u32, out) }
+        return 0u32
+    }
+
+    return 0u32
+}
+
+/* Total fragment count: 24 kernels × 7 targets = 168. */
+fn xii_kernel_emit_fragment_count() -> u32 @export {
+    return 168u32
+}

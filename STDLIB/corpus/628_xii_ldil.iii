@@ -1,0 +1,4 @@
+/* 628 — xii_ldil: Layered Deterministic IL (pruned-SSA, typed values, phi, typechecker). */
+module corpus_628
+extern @abi(c-msvc-x64) fn ldil_selftest() -> u64 from "xii_ldil.iii"
+fn main() -> u64 { return ldil_selftest() }

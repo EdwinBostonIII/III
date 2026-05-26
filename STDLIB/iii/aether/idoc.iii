@@ -1,0 +1,223 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\idoc.iii
+ *
+ * III STDLIB - aether::idoc
+ *
+ * IDoc artifact (Phase D.4 of the Intent Calculus v1.0 wire stack).
+ * Replaces HTML/JSON-API: a single envelope with up to 4 facets, each
+ * targeting a different consumer capability:
+ *
+ *   IDOC_FACET_RENDER_DOM      0x01  -- visual rendering surface
+ *   IDOC_FACET_EXTRACT_DATA    0x02  -- structured data extraction
+ *   IDOC_FACET_EXECUTE_CLIENT  0x04  -- client-side script execution
+ *   IDOC_FACET_VALIDATE        0x08  -- schema validation
+ *
+ * Wire format (built on aether/babel_wire):
+ *   header (68 bytes): seal_id, cap_ref, intent_id, ctx_digest,
+ *                      facets_mask (in facet_id field), payload_len
+ *   payload: 4 facet records back-to-back, each:
+ *       u8  facet_id
+ *       u32 facet_len   (LE)
+ *       u8[facet_len] facet_data
+ *
+ * Receiver uses idoc_resolve_facet to pick the FIRST facet whose
+ * facet_id is set in my_caps mask. Returns pointer into the wire
+ * buffer (no copy).
+ *
+ * Hexad: kind_form (data artifact). Ring: R0. K: 0.95.
+ */
+
+module aether_idoc
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_cap_ref(out_buf: u64, cap_ref: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+const IDOC_FACET_RENDER_DOM     : u8 = 0x01u8
+const IDOC_FACET_EXTRACT_DATA   : u8 = 0x02u8
+const IDOC_FACET_EXECUTE_CLIENT : u8 = 0x04u8
+const IDOC_FACET_VALIDATE       : u8 = 0x08u8
+
+const IDOC_FACET_RECORD_HEADER  : u32 = 5u32   /* u8 facet_id + u32 facet_len */
+
+const IDOC_OK            : i32 =  0i32
+const IDOC_E_NULL        : i32 = -1i32
+const IDOC_E_BAD_CRC     : i32 = -2i32
+const IDOC_E_BAD_FACET   : i32 = -3i32
+const IDOC_E_NO_MATCH    : i32 = -4i32
+
+/* Internal helper: write u32 LE into buffer at offset. */
+fn _idoc_write_u32_le(buf: u64, off: u64, v: u32) -> i32 {
+    let l_buf : u64 = buf
+    let l_off : u64 = off
+    let l_v   : u32 = v
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        let bp : *u8 = (l_buf + l_off + ((i as u64) & 0xFFu64)) as *u8
+        bp[0u64] = ((l_v >> (i * 8u32)) & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    return IDOC_OK
+}
+
+fn _idoc_read_u32_le(buf: u64, off: u64) -> u32 {
+    let l_buf : u64 = buf
+    let l_off : u64 = off
+    let mut v : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        let bp : *u8 = (l_buf + l_off + ((i as u64) & 0xFFu64)) as *u8
+        let b  : u32 = (bp[0u64] as u32) & 0xFFu32
+        v = v | (b << (i * 8u32))
+        i = i + 1u32
+    }
+    return v
+}
+
+/* Pack the IDoc payload from up to 4 (facet_id, data, len) tuples into
+ * out_payload_ptr. Caller has separately allocated a babel_wire buffer
+ * with sufficient capacity.
+ *
+ * 4-arg signature: facet_count is encoded in the low byte of
+ * (count_and_flags). */
+fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64) -> u32 @export {
+    let fids_l : u64 = facet_ids_ptr
+    let fdps_l : u64 = facet_data_ptrs_ptr
+    let flns_l : u64 = facet_lens_ptr
+    let out_l  : u64 = out_payload_ptr
+    if fids_l == 0u64 { return 0u32 }
+    if fdps_l == 0u64 { return 0u32 }
+    if flns_l == 0u64 { return 0u32 }
+    if out_l  == 0u64 { return 0u32 }
+    /* Reads:
+     *   facet_ids[i] : u8
+     *   facet_data_ptrs[i] : u64
+     *   facet_lens[i] : u32
+     * for i in 0..4. Skip facets with len == 0. */
+    let mut total_off : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        let id_p   : *u8  = (fids_l + ((i as u64) & 0xFFu64)) as *u8
+        let dpa    : u64 = fdps_l + ((i as u64) & 0xFFu64) * 8u64
+        let lna    : u64 = flns_l + ((i as u64) & 0xFFu64) * 4u64
+        let dp_pp  : *u64 = dpa as *u64
+        let len_p  : u32  = _idoc_read_u32_le(flns_l, ((i as u64) & 0xFFu64) * 4u64)
+        let dp_v   : u64  = dp_pp[0u64]
+        if len_p > 0u32 {
+            /* Write 1-byte facet_id. */
+            let header_bp : *u8 = (out_l + (total_off as u64)) as *u8
+            header_bp[0u64] = id_p[0u64]
+            /* Write 4-byte LE facet_len. */
+            _idoc_write_u32_le(out_l, (total_off as u64) + 1u64, len_p)
+            /* Copy facet bytes. */
+            let mut j : u32 = 0u32
+            while j < len_p {
+                let src : *u8 = (dp_v + ((j as u64) & 0xFFFFFFFFu64)) as *u8
+                let dst : *u8 = (out_l + (total_off as u64) + 5u64 + ((j as u64) & 0xFFFFFFFFu64)) as *u8
+                dst[0u64] = src[0u64]
+                j = j + 1u32
+            }
+            total_off = total_off + 5u32 + len_p
+        }
+        i = i + 1u32
+    }
+    return total_off
+}
+
+/* idoc_finalize: wrap a payload (already built by idoc_pack_payload)
+ * inside a babel_wire envelope. seal_id, intent_id, ctx_digest_ptr +
+ * facets_mask are caller-supplied via separate setter calls; this
+ * just runs the babel_wire finalize step. */
+fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 @export {
+    let l_buf : u64 = out_buf
+    let l_len : u32 = payload_len
+    if l_buf == 0u64 { return 0u32 }
+    /* The caller has populated the header via babel_wire setters; the
+     * payload was written into out_buf+68. We need to set payload_len
+     * via babel_wire_set_payload (with payload_ptr = out_buf+68). */
+    let payload_addr : u64 = l_buf + (babel_wire_header_bytes() as u64)
+    babel_wire_set_payload(l_buf, payload_addr, l_len)
+    return babel_wire_finalize(l_buf)
+}
+
+/* idoc_resolve_facet: scans the wire's payload looking for a facet
+ * whose facet_id is set in my_caps. Returns 1 if found (with the
+ * facet's data offset + length written via the setter pair); 0 if no
+ * matching facet found.
+ *
+ * Output: facet_data_ptr is a pointer-to-pointer; *facet_data_ptr is
+ * set to the address INSIDE the wire buffer where the facet's data
+ * starts. *facet_len_ptr is the facet's length. */
+fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_facet_len_ptr: u64) -> u8 @export {
+    let l_buf : u64 = idoc_buf
+    let l_cap : u8  = my_caps
+    let l_dp  : u64 = out_facet_data_ptr
+    let l_lp  : u64 = out_facet_len_ptr
+    if l_buf == 0u64 { return 0u8 }
+    if l_dp  == 0u64 { return 0u8 }
+    if l_lp  == 0u64 { return 0u8 }
+    let plen : u32 = babel_wire_unpack_payload_len(l_buf)
+    let payload_base : u64 = l_buf + (babel_wire_header_bytes() as u64)
+    let mut off : u32 = 0u32
+    while off < plen {
+        let fid_b : *u8 = (payload_base + (off as u64)) as *u8
+        let fid   : u8  = fid_b[0u64]
+        let flen  : u32 = _idoc_read_u32_le(payload_base, (off as u64) + 1u64)
+        if (fid & l_cap) != 0u8 {
+            /* Match. */
+            let data_ptr : u64 = payload_base + (off as u64) + 5u64
+            let dp_dst   : *u64 = l_dp as *u64
+            let lp_dst   : *u32 = l_lp as *u32
+            dp_dst[0u64] = data_ptr
+            lp_dst[0u64] = flen
+            return 1u8
+        }
+        off = off + 5u32 + flen
+    }
+    return 0u8
+}
+
+/* idoc_facet_count: count the facets in the IDoc payload (diagnostic). */
+fn idoc_facet_count(idoc_buf: u64) -> u32 @export {
+    let l_buf : u64 = idoc_buf
+    if l_buf == 0u64 { return 0u32 }
+    let plen : u32 = babel_wire_unpack_payload_len(l_buf)
+    let payload_base : u64 = l_buf + (babel_wire_header_bytes() as u64)
+    let mut count : u32 = 0u32
+    let mut off : u32 = 0u32
+    while off < plen {
+        let flen : u32 = _idoc_read_u32_le(payload_base, (off as u64) + 1u64)
+        count = count + 1u32
+        off = off + 5u32 + flen
+    }
+    return count
+}
+
+/* idoc_validate: verify CRC + structural sanity. */
+fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 @export {
+    let l_buf : u64 = idoc_buf
+    let l_len : u32 = idoc_len
+    if l_buf == 0u64 { return 0u8 }
+    if babel_wire_verify_crc(l_buf, l_len) != 1u8 { return 0u8 }
+    /* Structural: walk payload; ensure each facet's len fits. */
+    let plen : u32 = babel_wire_unpack_payload_len(l_buf)
+    let mut off : u32 = 0u32
+    let payload_base : u64 = l_buf + (babel_wire_header_bytes() as u64)
+    while off < plen {
+        if (off + 5u32) > plen { return 0u8 }
+        let flen : u32 = _idoc_read_u32_le(payload_base, (off as u64) + 1u64)
+        let next : u32 = off + 5u32 + flen
+        if next > plen { return 0u8 }
+        off = next
+    }
+    return 1u8
+}

@@ -1,0 +1,1320 @@
+/* III Stage-0 Ring 0 codegen — cg_r0.c port to .iii.
+ * Windows kernel-mode (.sys / Driver/Cycle dispatch).  ABI-compatible with
+ * cg_r0.h.  Singleton state, MS x64 calling convention, SEH frame brackets,
+ * 28-entry IRP dispatch table, IRQL/SAL/D14 secmem emission.  All AST and
+ * file I/O routed through accessor surfaces (NIH, no third-party libs).
+ */
+
+module cgr0
+
+const R0_OK: u32 = 0u32
+const R0_E_NULL_ARG: u32 = 1u32
+const R0_E_IO: u32 = 2u32
+const R0_E_UNSUPPORTED: u32 = 3u32
+const R0_E_SIG_MISMATCH: u32 = 10u32
+const R0_E_IRP_DUP: u32 = 11u32
+const R0_E_IRQL_VIOLATION: u32 = 12u32
+const R0_E_RING_WALL: u32 = 13u32
+const R0_E_RETURN_DISCIPLINE: u32 = 14u32
+const R0_E_STACK_OVER: u32 = 15u32
+const R0_E_SEALED: u32 = 16u32
+const R0_E_INTERNAL: u32 = 99u32
+
+const R0_FRAME_RESERVE: u32 = 1024u32
+const R0_MAX_LOCALS: u32 = 64u32
+const R0_MAX_IRP: u32 = 28u32
+const R0_RING_MASK_R0: u32 = 4u32
+
+const R0_K_MODULE: u32 = 1u32
+const R0_K_CYCLE_DECL: u32 = 3u32
+const R0_K_FN_DECL: u32 = 4u32
+const R0_K_SEALED: u32 = 11u32
+const R0_K_PARAM: u32 = 12u32
+const R0_K_MODIFIER: u32 = 14u32
+const R0_K_TYPE_REF: u32 = 15u32
+const R0_K_TYPE_PTR: u32 = 16u32
+const R0_K_TYPE_ARR: u32 = 17u32
+const R0_K_TYPE_TUP: u32 = 18u32
+const R0_K_TYPE_FN: u32 = 19u32
+const R0_K_STMT_LET: u32 = 20u32
+const R0_K_STMT_WAVEFRONT: u32 = 21u32
+const R0_K_STMT_SANCTUM_ENTER: u32 = 22u32
+const R0_K_STMT_METAL: u32 = 23u32
+const R0_K_STMT_FOR: u32 = 24u32
+const R0_K_STMT_MATCH: u32 = 25u32
+const R0_K_STMT_RETURN: u32 = 26u32
+const R0_K_STMT_ASSIGN: u32 = 27u32
+const R0_K_STMT_EXPR: u32 = 28u32
+const R0_K_STMT_IF: u32 = 69u32
+const R0_K_STMT_WHILE: u32 = 70u32
+const R0_K_FORWARD_BLOCK: u32 = 29u32
+const R0_K_MATCH_ARM: u32 = 31u32
+const R0_K_PAT_LITERAL: u32 = 32u32
+const R0_K_PAT_IDENT: u32 = 33u32
+const R0_K_PAT_HEXAD: u32 = 34u32
+const R0_K_PAT_WILDCARD: u32 = 35u32
+const R0_K_EXPR_INT: u32 = 37u32
+const R0_K_EXPR_HEX: u32 = 38u32
+const R0_K_EXPR_MHASH: u32 = 39u32
+const R0_K_EXPR_STR: u32 = 40u32
+const R0_K_EXPR_BOOL: u32 = 41u32
+const R0_K_EXPR_TRIT: u32 = 42u32
+const R0_K_EXPR_HEXAD: u32 = 43u32
+const R0_K_EXPR_UNIT: u32 = 44u32
+const R0_K_EXPR_IDENT: u32 = 45u32
+const R0_K_EXPR_CALL: u32 = 46u32
+const R0_K_EXPR_FIELD: u32 = 47u32
+const R0_K_EXPR_INDEX: u32 = 48u32
+const R0_K_EXPR_BINARY: u32 = 49u32
+const R0_K_EXPR_UNARY: u32 = 50u32
+const R0_K_EXPR_BLOCK: u32 = 51u32
+const R0_K_EXPR_MATCH: u32 = 52u32
+const R0_K_EXPR_PAREN: u32 = 53u32
+const R0_K_EXPR_RAW_ASM: u32 = 54u32
+const R0_K_ARG: u32 = 57u32
+const R0_K_CONST_DECL: u32 = 6u32
+const R0_K_VAR_DECL: u32 = 74u32
+const R0_K_EXTERN_DECL: u32 = 7u32
+const R0_K_EXPR_PARALLEL: u32 = 61u32
+const R0_K_EXPR_CAST: u32 = 72u32
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_iter(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_where(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_stmt_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_scrutinee(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_guard(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_wavefront_node_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sanctum_enter_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_hex_value_lo(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_hex_value_hi(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_bool_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_str_payload_idx(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_raw_asm_str_idx(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_raw_asm_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_mhash_byte_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_call_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_call_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_ast_sealed_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_sealed_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_modifier_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_param_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_param_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_forward_block(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_var_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_metal_asm_str_idx(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_metal_asm_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_pattern(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_ident_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_ident_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_literal_node(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_pat_hexad_trit_at(ast: u64, node: u32, pillar: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_trit_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_hexad_trit_at(ast: u64, node: u32, pillar: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_string_payload_addr_c(ast: u64, idx: u32) -> u64 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_string_payload_count_c(ast: u64) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_arg_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_arg_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_ring_mask(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_modifier_count(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "sema_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_cg_r0_fwrite_c(out_handle: u64, addr: u64, n: u64) -> i32 from "cg_r0_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_r0_sha_init_c() from "cg_r0_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_r0_sha_update_c(addr: u64, n: u64) from "cg_r0_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_r0_sha_snapshot_c(out32: u64) from "cg_r0_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_r0_irp_mj_lookup_c(addr: u64, len: u64) -> i32 from "cg_r0_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_r0_api_min_irql_c(addr: u64, len: u64) -> i32 from "cg_r0_accessors.c"
+extern @abi(c-msvc-x64) fn iii_cg_r0_irql_sym_c(addr: u64, len: u64) -> i32 from "cg_r0_accessors.c"
+
+extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "emit_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "emit_accessors.c"
+
+/* Tier-2 Inc-1: module-level data decl accessors (GAP-5), copied verbatim from cg_r3. */
+extern @abi(c-msvc-x64) fn iii_ast_node_binder_id(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_count(ast: u64, node: u32) -> u64 from "ast_accessors.c"
+/* Tier-2 Inc-2 crash fix: if/while accessors (cg_r0 was missing control flow). */
+extern @abi(c-msvc-x64) fn iii_ast_if_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_then(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+
+var R0_SENTINEL: [u8; 1]
+var R0_G_AST: u64 = 0u64
+var R0_G_SEMA: u64 = 0u64
+var R0_G_SID: u64 = 0u64
+var R0_G_WALLOC: u64 = 0u64
+var R0_G_OUT: u64 = 0u64
+var R0_G_SEALED: u32 = 0u32
+var R0_G_LOCAL_COUNT: u32 = 0u32
+var R0_G_STACK_DEPTH: u32 = 0u32
+var R0_G_LABEL_COUNTER: u32 = 0u32
+var R0_G_FRAME_BYTES: u32 = 1024u32
+var R0_G_LAST_ERROR: u32 = 0u32
+var R0_G_CUR_MAX_IRQL: u32 = 2u32
+var R0_G_CUR_PAGED: u32 = 0u32
+var R0_G_CUR_SECMEM: u32 = 0u32
+var R0_G_CUR_RETURNS_NTSTATUS: u32 = 0u32
+var R0_G_EMITTED_RETURN: u32 = 0u32
+var R0_G_HAS_DRIVER_ENTRY: u32 = 0u32
+var R0_LOCAL_OFF: [u32; 64]
+var R0_LOCAL_LEN: [u32; 64]
+var R0_IRP_HANDLER_NODE: [u32; 28]
+var R0_IRP_HANDLER_DECL_OFF: [u32; 28]
+var R0_IRP_HANDLER_DECL_LEN: [u32; 28]
+var R0_IRP_HANDLER_VALID: [u32; 28]
+
+var R0_NUMBUF: [u8; 32]
+var R0_TMPNAME: [u8; 256]
+var R0_MHASH_CACHE: [u8; 32]
+
+var R0_STR_HDR1 : [u8; 63] = [35u8, 32u8, 73u8, 73u8, 73u8, 32u8, 83u8, 116u8, 97u8, 103u8, 101u8, 45u8, 48u8, 32u8, 82u8, 105u8, 110u8, 103u8, 45u8, 48u8, 32u8, 99u8, 111u8, 100u8, 101u8, 103u8, 101u8, 110u8, 32u8, 111u8, 117u8, 116u8, 112u8, 117u8, 116u8, 32u8, 40u8, 87u8, 105u8, 110u8, 100u8, 111u8, 119u8, 115u8, 32u8, 107u8, 101u8, 114u8, 110u8, 101u8, 108u8, 45u8, 109u8, 111u8, 100u8, 101u8, 32u8, 46u8, 115u8, 121u8, 115u8, 41u8, 10u8]
+const R0_STR_HDR1_LEN : u64 = 63u64
+var R0_STR_HDR2 : [u8; 28] = [35u8, 32u8, 79u8, 117u8, 116u8, 112u8, 117u8, 116u8, 32u8, 98u8, 105u8, 110u8, 97u8, 114u8, 121u8, 58u8, 32u8, 105u8, 105u8, 105u8, 115u8, 45u8, 48u8, 46u8, 115u8, 121u8, 115u8, 10u8]
+const R0_STR_HDR2_LEN : u64 = 28u64
+var R0_STR_ATTSYNTAX : [u8; 16] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 116u8, 116u8, 95u8, 115u8, 121u8, 110u8, 116u8, 97u8, 120u8, 10u8]
+const R0_STR_ATTSYNTAX_LEN : u64 = 16u64
+var R0_SEC_RDATA_DR : [u8; 25] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 100u8, 97u8, 116u8, 97u8, 44u8, 34u8, 100u8, 114u8, 34u8, 10u8]
+const R0_SEC_RDATA_DR_LEN : u64 = 25u64
+var R0_SEC_TEXT : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8]
+const R0_SEC_TEXT_LEN : u64 = 19u64
+var R0_SEC_OPEN : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8]
+const R0_SEC_OPEN_LEN : u64 = 13u64
+var R0_SEC_TAIL : [u8; 27] = [44u8, 34u8, 120u8, 114u8, 34u8, 32u8, 32u8, 47u8, 42u8, 32u8, 80u8, 69u8, 47u8, 67u8, 79u8, 70u8, 70u8, 32u8, 195u8, 130u8, 194u8, 167u8, 54u8, 32u8, 42u8, 47u8, 10u8]
+const R0_SEC_TAIL_LEN : u64 = 27u64
+var R0_SEC_INIT : [u8; 4] = [73u8, 78u8, 73u8, 84u8]
+const R0_SEC_INIT_LEN : u64 = 4u64
+var R0_SEC_PAGE : [u8; 4] = [80u8, 65u8, 71u8, 69u8]
+const R0_SEC_PAGE_LEN : u64 = 4u64
+var R0_SEC_DOTTEXT : [u8; 5] = [46u8, 116u8, 101u8, 120u8, 116u8]
+const R0_SEC_DOTTEXT_LEN : u64 = 5u64
+var R0_SEC_IRP_DR : [u8; 49] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 100u8, 97u8, 116u8, 97u8, 44u8, 34u8, 100u8, 114u8, 34u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 50u8, 58u8, 32u8, 73u8, 82u8, 80u8, 32u8, 100u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 32u8, 42u8, 47u8, 10u8]
+const R0_SEC_IRP_DR_LEN : u64 = 49u64
+var R0_STR_GLOBAL : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8]
+const R0_STR_GLOBAL_LEN : u64 = 12u64
+var R0_STR_NDS : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 46u8, 110u8, 111u8, 95u8, 100u8, 101u8, 97u8, 100u8, 95u8, 115u8, 116u8, 114u8, 105u8, 112u8, 32u8]
+const R0_STR_NDS_LEN : u64 = 19u64
+var R0_STR_D12_TAIL : [u8; 12] = [32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 50u8, 32u8, 42u8, 47u8, 10u8]
+const R0_STR_D12_TAIL_LEN : u64 = 12u64
+var R0_STR_DRIVER_ENTRY : [u8; 11] = [68u8, 114u8, 105u8, 118u8, 101u8, 114u8, 69u8, 110u8, 116u8, 114u8, 121u8]
+const R0_STR_DRIVER_ENTRY_LEN : u64 = 11u64
+var R0_STR_DRIVER_NL : [u8; 12] = [68u8, 114u8, 105u8, 118u8, 101u8, 114u8, 69u8, 110u8, 116u8, 114u8, 121u8, 10u8]
+const R0_STR_DRIVER_NL_LEN : u64 = 12u64
+var R0_STR_DRIVER_COL : [u8; 13] = [68u8, 114u8, 105u8, 118u8, 101u8, 114u8, 69u8, 110u8, 116u8, 114u8, 121u8, 58u8, 10u8]
+const R0_STR_DRIVER_COL_LEN : u64 = 13u64
+var R0_STR_COLONNL : [u8; 2] = [58u8, 10u8]
+const R0_STR_COLONNL_LEN : u64 = 2u64
+var R0_STR_NL : [u8; 1] = [10u8]
+const R0_STR_NL_LEN : u64 = 1u64
+var R0_STR_SP : [u8; 1] = [32u8]
+const R0_STR_SP_LEN : u64 = 1u64
+var R0_PFX_LP : [u8; 4] = [76u8, 95u8, 112u8, 95u8]
+const R0_PFX_LP_LEN : u64 = 4u64
+var R0_PFX_DECL : [u8; 4] = [76u8, 95u8, 100u8, 95u8]
+const R0_PFX_DECL_LEN : u64 = 4u64
+var R0_PFX_FIELD : [u8; 4] = [76u8, 95u8, 102u8, 95u8]
+const R0_PFX_FIELD_LEN : u64 = 4u64
+var R0_PFX_STR : [u8; 6] = [76u8, 95u8, 115u8, 116u8, 114u8, 95u8]
+const R0_PFX_STR_LEN : u64 = 6u64
+var R0_PFX_MHASH : [u8; 8] = [76u8, 95u8, 109u8, 104u8, 97u8, 115u8, 104u8, 95u8]
+const R0_PFX_MHASH_LEN : u64 = 8u64
+var R0_PFX_FORTOP : [u8; 10] = [76u8, 95u8, 102u8, 111u8, 114u8, 95u8, 116u8, 111u8, 112u8, 95u8]
+const R0_PFX_FORTOP_LEN : u64 = 10u64
+var R0_PFX_FOREND : [u8; 10] = [76u8, 95u8, 102u8, 111u8, 114u8, 95u8, 101u8, 110u8, 100u8, 95u8]
+const R0_PFX_FOREND_LEN : u64 = 10u64
+var R0_PFX_FORCONT : [u8; 15] = [76u8, 95u8, 102u8, 111u8, 114u8, 95u8, 99u8, 111u8, 110u8, 116u8, 105u8, 110u8, 117u8, 101u8, 95u8]
+const R0_PFX_FORCONT_LEN : u64 = 15u64
+var R0_PFX_MATCHEND : [u8; 12] = [76u8, 95u8, 109u8, 97u8, 116u8, 99u8, 104u8, 95u8, 101u8, 110u8, 100u8, 95u8]
+const R0_PFX_MATCHEND_LEN : u64 = 12u64
+var R0_PFX_LIFELSE : [u8; 10] = [76u8, 95u8, 105u8, 102u8, 95u8, 101u8, 108u8, 115u8, 101u8, 95u8]
+const R0_PFX_LIFELSE_LEN : u64 = 10u64
+var R0_PFX_LIFEND : [u8; 9] = [76u8, 95u8, 105u8, 102u8, 95u8, 101u8, 110u8, 100u8, 95u8]
+const R0_PFX_LIFEND_LEN : u64 = 9u64
+var R0_PFX_SKIP : [u8; 7] = [76u8, 95u8, 115u8, 107u8, 105u8, 112u8, 95u8]
+const R0_PFX_SKIP_LEN : u64 = 7u64
+var R0_STR_SEH_PROC : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 104u8, 95u8, 112u8, 114u8, 111u8, 99u8, 32u8]
+const R0_STR_SEH_PROC_LEN : u64 = 14u64
+var R0_STR_SEH_PUSHRBP : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 104u8, 95u8, 112u8, 117u8, 115u8, 104u8, 114u8, 101u8, 103u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8]
+const R0_STR_SEH_PUSHRBP_LEN : u64 = 22u64
+var R0_STR_SEH_STKALLOC : [u8; 25] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 104u8, 95u8, 115u8, 116u8, 97u8, 99u8, 107u8, 97u8, 108u8, 108u8, 111u8, 99u8, 32u8, 49u8, 48u8, 50u8, 52u8, 10u8]
+const R0_STR_SEH_STKALLOC_LEN : u64 = 25u64
+var R0_STR_SEH_ENDPRO : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 104u8, 95u8, 101u8, 110u8, 100u8, 112u8, 114u8, 111u8, 108u8, 111u8, 103u8, 117u8, 101u8, 10u8]
+const R0_STR_SEH_ENDPRO_LEN : u64 = 21u64
+var R0_STR_SEH_ENDPROC : [u8; 17] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 104u8, 95u8, 101u8, 110u8, 100u8, 112u8, 114u8, 111u8, 99u8, 10u8]
+const R0_STR_SEH_ENDPROC_LEN : u64 = 17u64
+var R0_CMT_IRQL_OPEN : [u8; 25] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 73u8, 82u8, 81u8, 76u8, 95u8, 82u8, 69u8, 81u8, 85u8, 73u8, 82u8, 69u8, 83u8, 95u8, 77u8, 65u8, 88u8, 40u8]
+const R0_CMT_IRQL_OPEN_LEN : u64 = 25u64
+var R0_CMT_IRQL_CLOSE : [u8; 5] = [41u8, 32u8, 42u8, 47u8, 10u8]
+const R0_CMT_IRQL_CLOSE_LEN : u64 = 5u64
+var R0_CMT_SAL_OPEN : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 83u8, 65u8, 76u8, 58u8, 32u8]
+const R0_CMT_SAL_OPEN_LEN : u64 = 12u64
+var R0_CMT_SAL_CLOSE : [u8; 4] = [32u8, 42u8, 47u8, 10u8]
+const R0_CMT_SAL_CLOSE_LEN : u64 = 4u64
+var R0_CMT_WIT_ENTER : [u8; 38] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 32u8, 101u8, 110u8, 116u8, 101u8, 114u8, 32u8, 40u8, 68u8, 57u8, 44u8, 32u8, 65u8, 68u8, 82u8, 45u8, 48u8, 50u8, 52u8, 41u8, 32u8, 42u8, 47u8, 10u8]
+const R0_CMT_WIT_ENTER_LEN : u64 = 38u64
+var R0_CMT_WIT_EXIT : [u8; 37] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 32u8, 101u8, 120u8, 105u8, 116u8, 32u8, 40u8, 68u8, 57u8, 44u8, 32u8, 65u8, 68u8, 82u8, 45u8, 48u8, 50u8, 52u8, 41u8, 32u8, 42u8, 47u8, 10u8]
+const R0_CMT_WIT_EXIT_LEN : u64 = 37u64
+var R0_CMT_D7_FALL : [u8; 49] = [32u8, 32u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 55u8, 58u8, 32u8, 102u8, 97u8, 108u8, 108u8, 45u8, 116u8, 104u8, 114u8, 111u8, 117u8, 103u8, 104u8, 32u8, 195u8, 162u8, 194u8, 134u8, 194u8, 146u8, 32u8, 83u8, 84u8, 65u8, 84u8, 85u8, 83u8, 95u8, 83u8, 85u8, 67u8, 67u8, 69u8, 83u8, 83u8, 32u8, 42u8, 47u8, 10u8]
+const R0_CMT_D7_FALL_LEN : u64 = 49u64
+var R0_CMT_D14_SEC_ENT : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 109u8, 102u8, 101u8, 110u8, 99u8, 101u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 52u8, 32u8, 115u8, 101u8, 99u8, 109u8, 101u8, 109u8, 32u8, 101u8, 110u8, 116u8, 114u8, 121u8, 32u8, 42u8, 47u8, 10u8]
+const R0_CMT_D14_SEC_ENT_LEN : u64 = 35u64
+var R0_CMT_D14_SEC_EXIT : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 102u8, 101u8, 110u8, 99u8, 101u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 52u8, 32u8, 115u8, 101u8, 99u8, 109u8, 101u8, 109u8, 32u8, 101u8, 120u8, 105u8, 116u8, 32u8, 42u8, 47u8, 10u8]
+const R0_CMT_D14_SEC_EXIT_LEN : u64 = 34u64
+var R0_CMT_SEC_FENCE : [u8; 11] = [32u8, 32u8, 32u8, 32u8, 115u8, 102u8, 101u8, 110u8, 99u8, 101u8, 10u8]
+const R0_CMT_SEC_FENCE_LEN : u64 = 11u64
+var R0_CMT_D14_TAIL : [u8; 18] = [32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 52u8, 32u8, 115u8, 101u8, 99u8, 109u8, 101u8, 109u8, 32u8, 42u8, 47u8]
+const R0_CMT_D14_TAIL_LEN : u64 = 18u64
+var R0_STR_IF_OPEN : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 46u8, 105u8, 102u8, 32u8]
+const R0_STR_IF_OPEN_LEN : u64 = 8u64
+var R0_STR_IF_GT2048 : [u8; 8] = [32u8, 62u8, 32u8, 50u8, 48u8, 52u8, 56u8, 10u8]
+const R0_STR_IF_GT2048_LEN : u64 = 8u64
+var R0_STR_WARN_FRAME : [u8; 59] = [32u8, 32u8, 32u8, 32u8, 46u8, 119u8, 97u8, 114u8, 110u8, 105u8, 110u8, 103u8, 32u8, 34u8, 73u8, 73u8, 73u8, 95u8, 67u8, 71u8, 95u8, 82u8, 48u8, 58u8, 32u8, 102u8, 114u8, 97u8, 109u8, 101u8, 32u8, 62u8, 32u8, 50u8, 75u8, 66u8, 32u8, 111u8, 110u8, 32u8, 49u8, 50u8, 75u8, 66u8, 32u8, 107u8, 101u8, 114u8, 110u8, 101u8, 108u8, 32u8, 115u8, 116u8, 97u8, 99u8, 107u8, 34u8, 10u8]
+const R0_STR_WARN_FRAME_LEN : u64 = 59u64
+var R0_STR_ENDIF : [u8; 11] = [32u8, 32u8, 32u8, 32u8, 46u8, 101u8, 110u8, 100u8, 105u8, 102u8, 10u8]
+const R0_STR_ENDIF_LEN : u64 = 11u64
+var R0_STR_PUSHRBP : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8]
+const R0_STR_PUSHRBP_LEN : u64 = 15u64
+var R0_STR_MOVRSPRBP : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 115u8, 112u8, 44u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8]
+const R0_STR_MOVRSPRBP_LEN : u64 = 20u64
+var R0_STR_SUBRSP : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8]
+const R0_STR_SUBRSP_LEN : u64 = 10u64
+var R0_STR_RSP_NL : [u8; 7] = [44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const R0_STR_RSP_NL_LEN : u64 = 7u64
+var R0_STR_EPILOGUE : [u8; 43] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 116u8, 113u8, 10u8]
+const R0_STR_EPILOGUE_LEN : u64 = 43u64
+var R0_STR_WIT_RCX_ENT : [u8; 36] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 49u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 32u8, 32u8, 47u8, 42u8, 32u8, 73u8, 73u8, 73u8, 87u8, 95u8, 69u8, 78u8, 84u8, 69u8, 82u8, 32u8, 42u8, 47u8, 10u8]
+const R0_STR_WIT_RCX_ENT_LEN : u64 = 36u64
+var R0_STR_WIT_RCX_EXT : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 50u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 32u8, 32u8, 47u8, 42u8, 32u8, 73u8, 73u8, 73u8, 87u8, 95u8, 69u8, 88u8, 73u8, 84u8, 32u8, 42u8, 47u8, 10u8]
+const R0_STR_WIT_RCX_EXT_LEN : u64 = 35u64
+var R0_STR_WIT_SUB32 : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8, 51u8, 50u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const R0_STR_WIT_SUB32_LEN : u64 = 19u64
+var R0_STR_WIT_ADD32 : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 36u8, 51u8, 50u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const R0_STR_WIT_ADD32_LEN : u64 = 19u64
+var R0_STR_WIT_CALL : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8, 105u8, 105u8, 105u8, 95u8, 119u8, 105u8, 116u8, 110u8, 101u8, 115u8, 115u8, 95u8, 101u8, 109u8, 105u8, 116u8, 95u8, 107u8, 101u8, 114u8, 110u8, 101u8, 108u8, 10u8]
+const R0_STR_WIT_CALL_LEN : u64 = 34u64
+var R0_STR_WIT_PUSHRAX : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_WIT_PUSHRAX_LEN : u64 = 15u64
+var R0_STR_WIT_POPRAX : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_WIT_POPRAX_LEN : u64 = 14u64
+var R0_REG_RCX : [u8; 3] = [114u8, 99u8, 120u8]
+const R0_REG_RCX_LEN : u64 = 3u64
+var R0_REG_RDX : [u8; 3] = [114u8, 100u8, 120u8]
+const R0_REG_RDX_LEN : u64 = 3u64
+var R0_REG_R8 : [u8; 2] = [114u8, 56u8]
+const R0_REG_R8_LEN : u64 = 2u64
+var R0_REG_R9 : [u8; 2] = [114u8, 57u8]
+const R0_REG_R9_LEN : u64 = 2u64
+var R0_REG_RAX : [u8; 3] = [114u8, 97u8, 120u8]
+const R0_REG_RAX_LEN : u64 = 3u64
+var R0_STR_MOVQ_PCT : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8]
+const R0_STR_MOVQ_PCT_LEN : u64 = 10u64
+var R0_STR_COMMA_DASH : [u8; 3] = [44u8, 32u8, 45u8]
+const R0_STR_COMMA_DASH_LEN : u64 = 3u64
+var R0_STR_RBP_NL : [u8; 7] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 10u8]
+const R0_STR_RBP_NL_LEN : u64 = 7u64
+var R0_STR_MOVQ_LD : [u8; 9] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8]
+const R0_STR_MOVQ_LD_LEN : u64 = 9u64
+var R0_STR_MOVQ_RAX_C : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8]
+const R0_STR_MOVQ_RAX_C_LEN : u64 = 15u64
+var R0_STR_LEAQ : [u8; 9] = [32u8, 32u8, 32u8, 32u8, 108u8, 101u8, 97u8, 113u8, 32u8]
+const R0_STR_LEAQ_LEN : u64 = 9u64
+var R0_STR_RIPCM_PCT : [u8; 9] = [40u8, 37u8, 114u8, 105u8, 112u8, 41u8, 44u8, 32u8, 37u8]
+const R0_STR_RIPCM_PCT_LEN : u64 = 9u64
+var R0_STR_RIP_PAREN : [u8; 7] = [40u8, 37u8, 114u8, 105u8, 112u8, 41u8, 10u8]
+const R0_STR_RIP_PAREN_LEN : u64 = 7u64
+var R0_STR_COMMA_SP : [u8; 2] = [44u8, 32u8]
+const R0_STR_COMMA_SP_LEN : u64 = 2u64
+var R0_STR_DOL : [u8; 1] = [36u8]
+const R0_STR_DOL_LEN : u64 = 1u64
+var R0_STR_DOL0RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 48u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_DOL0RAX_LEN : u64 = 18u64
+var R0_STR_DOL1RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 49u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_DOL1RAX_LEN : u64 = 18u64
+var R0_STR_MOVABS0 : [u8; 52] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 97u8, 98u8, 115u8, 113u8, 32u8, 36u8, 48u8, 120u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 48u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 32u8, 32u8, 47u8, 42u8, 32u8, 83u8, 84u8, 65u8, 84u8, 85u8, 83u8, 95u8, 83u8, 85u8, 67u8, 67u8, 69u8, 83u8, 83u8, 32u8, 42u8, 47u8, 10u8]
+const R0_STR_MOVABS0_LEN : u64 = 52u64
+var R0_STR_MOVABSQ_OPEN : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 97u8, 98u8, 115u8, 113u8, 32u8, 36u8, 48u8, 120u8]
+const R0_STR_MOVABSQ_OPEN_LEN : u64 = 15u64
+var R0_STR_COMMA_RAX_NL : [u8; 7] = [44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_COMMA_RAX_NL_LEN : u64 = 7u64
+var R0_STR_COMMA_RCX_NL : [u8; 7] = [44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const R0_STR_COMMA_RCX_NL_LEN : u64 = 7u64
+var R0_STR_COMMA_RDX_NL : [u8; 7] = [44u8, 32u8, 37u8, 114u8, 100u8, 120u8, 10u8]
+const R0_STR_COMMA_RDX_NL_LEN : u64 = 7u64
+var R0_STR_DOL0_DASH : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 36u8, 48u8, 44u8, 32u8, 45u8]
+const R0_STR_DOL0_DASH_LEN : u64 = 14u64
+var R0_STR_DASH_OPEN : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 45u8]
+const R0_STR_DASH_OPEN_LEN : u64 = 10u64
+var R0_STR_BPCMA_RAX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_BPCMA_RAX_LEN : u64 = 13u64
+var R0_STR_BPCMA_RCX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const R0_STR_BPCMA_RCX_LEN : u64 = 13u64
+var R0_STR_DEREF_RAX : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_DEREF_RAX_LEN : u64 = 22u64
+var R0_STR_INDEX_LD : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_INDEX_LD_LEN : u64 = 29u64
+var R0_STR_INDEX_ST : [u8; 29] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 10u8]
+const R0_STR_INDEX_ST_LEN : u64 = 29u64
+var R0_STR_INDEX_NTI : [u8; 50] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 110u8, 116u8, 105u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 44u8, 37u8, 114u8, 99u8, 120u8, 44u8, 56u8, 41u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 52u8, 32u8, 115u8, 101u8, 99u8, 109u8, 101u8, 109u8, 32u8, 42u8, 47u8, 10u8]
+const R0_STR_INDEX_NTI_LEN : u64 = 50u64
+var R0_STR_NTI_RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 110u8, 116u8, 105u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8]
+const R0_STR_NTI_RAX_LEN : u64 = 18u64
+var R0_STR_PUSHRAX_NL : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_PUSHRAX_NL_LEN : u64 = 15u64
+var R0_STR_POPRAX_NL : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_POPRAX_NL_LEN : u64 = 14u64
+var R0_STR_POPRCX_NL : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const R0_STR_POPRCX_NL_LEN : u64 = 14u64
+var R0_STR_POPRDX_NL : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 10u8]
+const R0_STR_POPRDX_NL_LEN : u64 = 14u64
+var R0_STR_POPR8_NL : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 56u8, 10u8]
+const R0_STR_POPR8_NL_LEN : u64 = 13u64
+var R0_STR_POPR9_NL : [u8; 13] = [32u8, 32u8, 32u8, 32u8, 112u8, 111u8, 112u8, 113u8, 32u8, 37u8, 114u8, 57u8, 10u8]
+const R0_STR_POPR9_NL_LEN : u64 = 13u64
+var R0_STR_ADDQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_ADDQ_LEN : u64 = 20u64
+var R0_STR_SUBQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SUBQ_LEN : u64 = 20u64
+var R0_STR_IMULQ : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 105u8, 109u8, 117u8, 108u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_IMULQ_LEN : u64 = 21u64
+var R0_STR_IDIV : [u8; 24] = [32u8, 32u8, 32u8, 32u8, 99u8, 113u8, 116u8, 111u8, 10u8, 32u8, 32u8, 32u8, 32u8, 105u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const R0_STR_IDIV_LEN : u64 = 24u64
+var R0_STR_IDIVMOD : [u8; 44] = [32u8, 32u8, 32u8, 32u8, 99u8, 113u8, 116u8, 111u8, 10u8, 32u8, 32u8, 32u8, 32u8, 105u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_IDIVMOD_LEN : u64 = 44u64
+var R0_STR_ANDQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 110u8, 100u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_ANDQ_LEN : u64 = 20u64
+var R0_STR_ORQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_ORQ_LEN : u64 = 19u64
+var R0_STR_XORQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_XORQ_LEN : u64 = 20u64
+var R0_STR_SHLQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 115u8, 104u8, 108u8, 113u8, 32u8, 37u8, 99u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SHLQ_LEN : u64 = 19u64
+var R0_STR_SHRQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 115u8, 104u8, 114u8, 113u8, 32u8, 37u8, 99u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SHRQ_LEN : u64 = 19u64
+var R0_STR_NEGQ : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 110u8, 101u8, 103u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_NEGQ_LEN : u64 = 14u64
+var R0_STR_NOTQ : [u8; 14] = [32u8, 32u8, 32u8, 32u8, 110u8, 111u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_NOTQ_LEN : u64 = 14u64
+var R0_STR_XORRAX : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_XORRAX_LEN : u64 = 20u64
+var R0_STR_ADD1RAX : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 36u8, 49u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_ADD1RAX_LEN : u64 = 18u64
+var R0_STR_TESTRSTNE : [u8; 56] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_TESTRSTNE_LEN : u64 = 56u64
+var R0_STR_TESTRSTE : [u8; 55] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_TESTRSTE_LEN : u64 = 55u64
+var R0_STR_CMP_RCX_RAX : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 99u8, 109u8, 112u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_CMP_RCX_RAX_LEN : u64 = 20u64
+var R0_STR_SETE : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SETE_LEN : u64 = 34u64
+var R0_STR_SETNE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 110u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SETNE_LEN : u64 = 35u64
+var R0_STR_SETL : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 108u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SETL_LEN : u64 = 34u64
+var R0_STR_SETLE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 108u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SETLE_LEN : u64 = 35u64
+var R0_STR_SETG : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 103u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SETG_LEN : u64 = 34u64
+var R0_STR_SETGE : [u8; 35] = [32u8, 32u8, 32u8, 32u8, 115u8, 101u8, 116u8, 103u8, 101u8, 32u8, 37u8, 97u8, 108u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 122u8, 98u8, 113u8, 32u8, 37u8, 97u8, 108u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_SETGE_LEN : u64 = 35u64
+var R0_STR_TESTRRAX : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 116u8, 101u8, 115u8, 116u8, 113u8, 32u8, 37u8, 114u8, 97u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_TESTRRAX_LEN : u64 = 21u64
+var R0_STR_JZ : [u8; 7] = [32u8, 32u8, 32u8, 32u8, 106u8, 122u8, 32u8]
+const R0_STR_JZ_LEN : u64 = 7u64
+var R0_STR_JNE : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 106u8, 110u8, 101u8, 32u8]
+const R0_STR_JNE_LEN : u64 = 8u64
+var R0_STR_JGE : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 106u8, 103u8, 101u8, 32u8]
+const R0_STR_JGE_LEN : u64 = 8u64
+var R0_STR_JMP : [u8; 8] = [32u8, 32u8, 32u8, 32u8, 106u8, 109u8, 112u8, 32u8]
+const R0_STR_JMP_LEN : u64 = 8u64
+var R0_STR_CMPQ_RCX_RAX_NL : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 99u8, 109u8, 112u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_CMPQ_RCX_RAX_NL_LEN : u64 = 20u64
+var R0_STR_CALLQ : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8]
+const R0_STR_CALLQ_LEN : u64 = 10u64
+var R0_STR_CALL_INDIR : [u8; 16] = [32u8, 32u8, 32u8, 32u8, 99u8, 97u8, 108u8, 108u8, 113u8, 32u8, 42u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R0_STR_CALL_INDIR_LEN : u64 = 16u64
+var R0_STR_SUB32_RSP : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 115u8, 117u8, 98u8, 113u8, 32u8, 36u8, 51u8, 50u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const R0_STR_SUB32_RSP_LEN : u64 = 19u64
+var R0_STR_ADD32_RSP : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 97u8, 100u8, 100u8, 113u8, 32u8, 36u8, 51u8, 50u8, 44u8, 32u8, 37u8, 114u8, 115u8, 112u8, 10u8]
+const R0_STR_ADD32_RSP_LEN : u64 = 19u64
+var R0_STR_ASCII_OPEN : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 115u8, 99u8, 105u8, 105u8, 32u8, 34u8]
+const R0_STR_ASCII_OPEN_LEN : u64 = 12u64
+var R0_STR_ASCII_CLOSE : [u8; 4] = [92u8, 48u8, 34u8, 10u8]
+const R0_STR_ASCII_CLOSE_LEN : u64 = 4u64
+var R0_STR_BACKSLASH_N : [u8; 2] = [92u8, 110u8]
+const R0_STR_BACKSLASH_N_LEN : u64 = 2u64
+var R0_STR_BACKSLASH : [u8; 1] = [92u8]
+const R0_STR_BACKSLASH_LEN : u64 = 1u64
+var R0_STR_DQUOTE : [u8; 1] = [34u8]
+const R0_STR_DQUOTE_LEN : u64 = 1u64
+var R0_SYM_IRPTBL : [u8; 21] = [95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 68u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 84u8, 97u8, 98u8, 108u8, 101u8]
+const R0_SYM_IRPTBL_LEN : u64 = 21u64
+var R0_SYM_IRPTBL_LBL : [u8; 23] = [95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 68u8, 105u8, 115u8, 112u8, 97u8, 116u8, 99u8, 104u8, 84u8, 97u8, 98u8, 108u8, 101u8, 58u8, 10u8]
+const R0_SYM_IRPTBL_LBL_LEN : u64 = 23u64
+var R0_SYM_IRP_NOIMP : [u8; 22] = [95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 78u8, 111u8, 116u8, 73u8, 109u8, 112u8, 108u8, 101u8, 109u8, 101u8, 110u8, 116u8, 101u8, 100u8]
+const R0_SYM_IRP_NOIMP_LEN : u64 = 22u64
+var R0_SYM_IRP_NOIMP_LBL : [u8; 24] = [95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 78u8, 111u8, 116u8, 73u8, 109u8, 112u8, 108u8, 101u8, 109u8, 101u8, 110u8, 116u8, 101u8, 100u8, 58u8, 10u8]
+const R0_SYM_IRP_NOIMP_LBL_LEN : u64 = 24u64
+var R0_SYM_IRP_NOIMP_NL : [u8; 23] = [95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 78u8, 111u8, 116u8, 73u8, 109u8, 112u8, 108u8, 101u8, 109u8, 101u8, 110u8, 116u8, 101u8, 100u8, 10u8]
+const R0_SYM_IRP_NOIMP_NL_LEN : u64 = 23u64
+var R0_SYM_IRP_NOIMP_WD : [u8; 44] = [32u8, 32u8, 32u8, 32u8, 46u8, 119u8, 101u8, 97u8, 107u8, 32u8, 95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 78u8, 111u8, 116u8, 73u8, 109u8, 112u8, 108u8, 101u8, 109u8, 101u8, 110u8, 116u8, 101u8, 100u8, 32u8, 32u8, 47u8, 42u8, 32u8, 68u8, 49u8, 50u8, 32u8, 42u8, 47u8, 10u8]
+const R0_SYM_IRP_NOIMP_WD_LEN : u64 = 44u64
+var R0_STR_QUAD_NOIMP : [u8; 46] = [32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 95u8, 105u8, 105u8, 105u8, 95u8, 73u8, 114u8, 112u8, 78u8, 111u8, 116u8, 73u8, 109u8, 112u8, 108u8, 101u8, 109u8, 101u8, 110u8, 116u8, 101u8, 100u8, 32u8, 32u8, 47u8, 42u8, 32u8, 73u8, 82u8, 80u8, 95u8, 77u8, 74u8, 61u8, 48u8, 120u8]
+const R0_STR_QUAD_NOIMP_LEN : u64 = 46u64
+var R0_STR_QUAD : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8]
+const R0_STR_QUAD_LEN : u64 = 10u64
+var R0_STR_IRP_TAIL : [u8; 4] = [32u8, 42u8, 47u8, 10u8]
+const R0_STR_IRP_TAIL_LEN : u64 = 4u64
+var R0_STR_IRP_TAIL_OPEN : [u8; 14] = [32u8, 32u8, 47u8, 42u8, 32u8, 73u8, 82u8, 80u8, 95u8, 77u8, 74u8, 61u8, 48u8, 120u8]
+const R0_STR_IRP_TAIL_OPEN_LEN : u64 = 14u64
+var R0_STR_NOIMP_BODY : [u8; 67] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 97u8, 98u8, 115u8, 113u8, 32u8, 36u8, 48u8, 120u8, 67u8, 48u8, 48u8, 48u8, 48u8, 48u8, 66u8, 66u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 32u8, 32u8, 47u8, 42u8, 32u8, 83u8, 84u8, 65u8, 84u8, 85u8, 83u8, 95u8, 78u8, 79u8, 84u8, 95u8, 83u8, 85u8, 80u8, 80u8, 79u8, 82u8, 84u8, 69u8, 68u8, 32u8, 42u8, 47u8, 10u8, 32u8, 32u8, 32u8, 32u8, 114u8, 101u8, 116u8, 113u8, 10u8]
+const R0_STR_NOIMP_BODY_LEN : u64 = 67u64
+var R0_STR_SIG_MISMATCH : [u8; 84] = [35u8, 32u8, 73u8, 73u8, 73u8, 95u8, 67u8, 71u8, 95u8, 82u8, 48u8, 95u8, 69u8, 95u8, 83u8, 73u8, 71u8, 95u8, 77u8, 73u8, 83u8, 77u8, 65u8, 84u8, 67u8, 72u8, 58u8, 32u8, 68u8, 114u8, 105u8, 118u8, 101u8, 114u8, 69u8, 110u8, 116u8, 114u8, 121u8, 32u8, 109u8, 117u8, 115u8, 116u8, 32u8, 116u8, 97u8, 107u8, 101u8, 32u8, 40u8, 80u8, 68u8, 82u8, 73u8, 86u8, 69u8, 82u8, 95u8, 79u8, 66u8, 74u8, 69u8, 67u8, 84u8, 44u8, 32u8, 80u8, 85u8, 78u8, 73u8, 67u8, 79u8, 68u8, 69u8, 95u8, 83u8, 84u8, 82u8, 73u8, 78u8, 71u8, 41u8, 10u8]
+const R0_STR_SIG_MISMATCH_LEN : u64 = 84u64
+var R0_STR_HEX_TBL : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+const R0_STR_HEX_TBL_LEN : u64 = 16u64
+var R0_ENAME_OK : [u8; 2] = [79u8, 75u8]
+const R0_ENAME_OK_LEN : u64 = 2u64
+var R0_ENAME_NULL_ARG : [u8; 8] = [78u8, 85u8, 76u8, 76u8, 95u8, 65u8, 82u8, 71u8]
+const R0_ENAME_NULL_ARG_LEN : u64 = 8u64
+var R0_ENAME_IO : [u8; 2] = [73u8, 79u8]
+const R0_ENAME_IO_LEN : u64 = 2u64
+var R0_ENAME_UNSUPPORTED : [u8; 11] = [85u8, 78u8, 83u8, 85u8, 80u8, 80u8, 79u8, 82u8, 84u8, 69u8, 68u8]
+const R0_ENAME_UNSUPPORTED_LEN : u64 = 11u64
+var R0_ENAME_SIG_MISMATCH : [u8; 12] = [83u8, 73u8, 71u8, 95u8, 77u8, 73u8, 83u8, 77u8, 65u8, 84u8, 67u8, 72u8]
+const R0_ENAME_SIG_MISMATCH_LEN : u64 = 12u64
+var R0_ENAME_IRP_DUP : [u8; 7] = [73u8, 82u8, 80u8, 95u8, 68u8, 85u8, 80u8]
+const R0_ENAME_IRP_DUP_LEN : u64 = 7u64
+var R0_ENAME_IRQL_VIOLATION : [u8; 14] = [73u8, 82u8, 81u8, 76u8, 95u8, 86u8, 73u8, 79u8, 76u8, 65u8, 84u8, 73u8, 79u8, 78u8]
+const R0_ENAME_IRQL_VIOLATION_LEN : u64 = 14u64
+var R0_ENAME_RING_WALL : [u8; 9] = [82u8, 73u8, 78u8, 71u8, 95u8, 87u8, 65u8, 76u8, 76u8]
+const R0_ENAME_RING_WALL_LEN : u64 = 9u64
+var R0_ENAME_RETURN_DISCIPLINE : [u8; 17] = [82u8, 69u8, 84u8, 85u8, 82u8, 78u8, 95u8, 68u8, 73u8, 83u8, 67u8, 73u8, 80u8, 76u8, 73u8, 78u8, 69u8]
+const R0_ENAME_RETURN_DISCIPLINE_LEN : u64 = 17u64
+var R0_ENAME_STACK_OVER : [u8; 10] = [83u8, 84u8, 65u8, 67u8, 75u8, 95u8, 79u8, 86u8, 69u8, 82u8]
+const R0_ENAME_STACK_OVER_LEN : u64 = 10u64
+var R0_ENAME_INTERNAL : [u8; 8] = [73u8, 78u8, 84u8, 69u8, 82u8, 78u8, 65u8, 76u8]
+const R0_ENAME_INTERNAL_LEN : u64 = 8u64
+var R0_ENAME_UNKNOWN : [u8; 9] = [60u8, 117u8, 110u8, 107u8, 110u8, 111u8, 119u8, 110u8, 62u8]
+const R0_ENAME_UNKNOWN_LEN : u64 = 9u64
+var R0_MOD_PAGED : [u8; 5] = [112u8, 97u8, 103u8, 101u8, 100u8]
+const R0_MOD_PAGED_LEN : u64 = 5u64
+var R0_MOD_SECMEM : [u8; 6] = [115u8, 101u8, 99u8, 109u8, 101u8, 109u8]
+const R0_MOD_SECMEM_LEN : u64 = 6u64
+var R0_MOD_ENTRY : [u8; 5] = [101u8, 110u8, 116u8, 114u8, 121u8]
+const R0_MOD_ENTRY_LEN : u64 = 5u64
+var R0_MOD_IRQL_MAX : [u8; 8] = [105u8, 114u8, 113u8, 108u8, 95u8, 109u8, 97u8, 120u8]
+const R0_MOD_IRQL_MAX_LEN : u64 = 8u64
+var R0_MOD_IRP_HANDLER : [u8; 11] = [105u8, 114u8, 112u8, 95u8, 104u8, 97u8, 110u8, 100u8, 108u8, 101u8, 114u8]
+const R0_MOD_IRP_HANDLER_LEN : u64 = 11u64
+var R0_MOD_SAL : [u8; 3] = [115u8, 97u8, 108u8]
+const R0_MOD_SAL_LEN : u64 = 3u64
+var R0_MOD_RING : [u8; 4] = [114u8, 105u8, 110u8, 103u8]
+const R0_MOD_RING_LEN : u64 = 4u64
+var R0_NAME_DRIVER_ENTRY : [u8; 12] = [100u8, 114u8, 105u8, 118u8, 101u8, 114u8, 95u8, 101u8, 110u8, 116u8, 114u8, 121u8]
+const R0_NAME_DRIVER_ENTRY_LEN : u64 = 12u64
+
+/* Tier-2 Inc-1: module-data section directives + 8-byte-uniform data prefixes (GAP-5). */
+var R0_SEC_RODATA : [u8; 21] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 111u8, 100u8, 97u8, 116u8, 97u8, 10u8]
+const R0_SEC_RODATA_LEN : u64 = 21u64
+var R0_SEC_DATA : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 100u8, 97u8, 116u8, 97u8, 10u8]
+const R0_SEC_DATA_LEN : u64 = 19u64
+var R0_SEC_BSS : [u8; 18] = [32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 98u8, 115u8, 115u8, 10u8]
+const R0_SEC_BSS_LEN : u64 = 18u64
+var R0_STR_QUAD0X : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 113u8, 117u8, 97u8, 100u8, 32u8, 48u8, 120u8]
+const R0_STR_QUAD0X_LEN : u64 = 12u64
+var R0_STR_ZERO_PFX : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 122u8, 101u8, 114u8, 111u8, 32u8]
+const R0_STR_ZERO_PFX_LEN : u64 = 10u64
+var R0_LIT_VALUE : u64 = 0u64
+
+/* ─────────────── output sink primitives ─────────────── */
+fn r0_emit_bytes(addr: u64, n: u64) -> u32 { if R0_G_SEALED != 0u32 { R0_G_LAST_ERROR = R0_E_SEALED; return R0_E_SEALED }; if n == 0u64 { return R0_OK }; if R0_G_OUT != 0u64 { if iii_cg_r0_fwrite_c(R0_G_OUT, addr, n) != 0i32 { R0_G_LAST_ERROR = R0_E_IO; return R0_E_IO } }; iii_cg_r0_sha_update_c(addr, n); return R0_OK }
+fn r0_emit_arr(addr: u64, n: u64) -> u32 { return r0_emit_bytes(addr, n) }
+fn r0_emit_ch(ch: u32) -> u32 { R0_NUMBUF[0] = (ch & 0xffu32) as u8; return r0_emit_bytes(&R0_NUMBUF as u64, 1u64) }
+fn r0_emit_dec(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { R0_NUMBUF[0]=48u8; return r0_emit_bytes(&R0_NUMBUF as u64, 1u64) }; while v > 0u64 { R0_NUMBUF[n] = (48u64 + (v % 10u64)) as u8; n = n + 1u32; v = v / 10u64 }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = R0_NUMBUF[a]; R0_NUMBUF[a] = R0_NUMBUF[b]; R0_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return r0_emit_bytes(&R0_NUMBUF as u64, n as u64) }
+fn r0_emit_hex(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { R0_NUMBUF[0]=48u8; return r0_emit_bytes(&R0_NUMBUF as u64, 1u64) }; while v > 0u64 { let d: u64 = v & 15u64; if d < 10u64 { R0_NUMBUF[n] = (48u64 + d) as u8 } else { R0_NUMBUF[n] = (87u64 + d) as u8 }; n = n + 1u32; v = v >> 4u64 }; let mut a: u32 = 0u32; let mut b: u32 = n - 1u32; while a < b { let tmp: u8 = R0_NUMBUF[a]; R0_NUMBUF[a] = R0_NUMBUF[b]; R0_NUMBUF[b] = tmp; a = a + 1u32; b = b - 1u32 }; return r0_emit_bytes(&R0_NUMBUF as u64, n as u64) }
+
+/* ─────────────── identifier / source helpers ─────────────── */
+fn r0_is_sym_char(b: u32) -> u32 { if b >= 65u32 { if b <= 90u32 { return 1u32 } }; if b >= 97u32 { if b <= 122u32 { return 1u32 } }; if b >= 48u32 { if b <= 57u32 { return 1u32 } }; if b == 95u32 { return 1u32 }; return 0u32 }
+fn r0_emit_decl_label(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(R0_G_AST); r0_emit_arr(&R0_PFX_LP as u64, R0_PFX_LP_LEN); let mut i: u32 = 0u32; while i < len { let b: u32 = iii_emit_buf_read_u8_c(src, (off+i) as u64); if r0_is_sym_char(b) == 1u32 { r0_emit_ch(b) } else { r0_emit_ch(95u32) }; i = i + 1u32 }; return R0_OK }
+/* Emit a symbol name VERBATIM (no L_p_ prefix) -- for DLL-imported kernel APIs so ld + the
+   kernel import lib synthesize a real PE import directory + IAT. Mirrors r3_emit_sym_run. */
+fn r0_emit_sym_run(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(R0_G_AST); let mut i: u32 = 0u32; while i < len { let b: u32 = iii_emit_buf_read_u8_c(src, (off+i) as u64); if r0_is_sym_char(b) == 1u32 { r0_emit_ch(b) } else { r0_emit_ch(95u32) }; i = i + 1u32 }; return R0_OK }
+/* 1 iff a call callee is a kernel-API import: bound to an EXTERN_DECL whose name is PascalCase
+   (the absolute NT export convention; every .iii symbol is snake_case). Such calls emit BARE;
+   .iii @export cross-module calls keep the L_p_ prefix. Early-return form (no mut flag). */
+fn r0_callee_is_kernel_import(callee: u32, name_off: u32) -> u32 {
+    let bid: u32 = iii_ast_node_binder_id(R0_G_AST, callee)
+    if bid == 0u32 { return 0u32 }
+    if iii_ast_node_kind(R0_G_AST, bid) != R0_K_EXTERN_DECL { return 0u32 }
+    let fch: u32 = iii_emit_buf_read_u8_c(iii_ast_source_buf(R0_G_AST), name_off as u64)
+    if fch >= 65u32 { if fch <= 90u32 { return 1u32 } }
+    return 0u32
+}
+fn r0_name_eq_lit(off: u32, len: u32, lit_addr: u64, lit_len: u64) -> u32 { if (len as u64) != lit_len { return 0u32 }; let src: u64 = iii_ast_source_buf(R0_G_AST); if iii_emit_memcmp_c(src + (off as u64), lit_addr, lit_len) == 0i32 { return 1u32 }; return 0u32 }
+
+fn r0_local_lookup(off: u32, len: u32) -> i32 { let src: u64 = iii_ast_source_buf(R0_G_AST); let mut i: u32 = 0u32; while i < R0_G_LOCAL_COUNT { if R0_LOCAL_LEN[i] == len { if iii_emit_memcmp_c(src + (R0_LOCAL_OFF[i] as u64), src + (off as u64), len as u64) == 0i32 { return i as i32 } }; i = i + 1u32 }; return -1i32 }
+fn r0_local_add(off: u32, len: u32) -> i32 { if R0_G_LOCAL_COUNT >= R0_MAX_LOCALS { R0_G_LAST_ERROR = R0_E_INTERNAL; return -1i32 }; R0_LOCAL_OFF[R0_G_LOCAL_COUNT] = off; R0_LOCAL_LEN[R0_G_LOCAL_COUNT] = len; let s: i32 = R0_G_LOCAL_COUNT as i32; R0_G_LOCAL_COUNT = R0_G_LOCAL_COUNT + 1u32; return s }
+fn r0_push_rax() -> u32 { r0_emit_arr(&R0_STR_PUSHRAX_NL as u64, R0_STR_PUSHRAX_NL_LEN); R0_G_STACK_DEPTH = R0_G_STACK_DEPTH + 1u32; return R0_OK }
+fn r0_pop_rax() -> u32 { r0_emit_arr(&R0_STR_POPRAX_NL as u64, R0_STR_POPRAX_NL_LEN); if R0_G_STACK_DEPTH > 0u32 { R0_G_STACK_DEPTH = R0_G_STACK_DEPTH - 1u32 }; return R0_OK }
+fn r0_pop_rcx() -> u32 { r0_emit_arr(&R0_STR_POPRCX_NL as u64, R0_STR_POPRCX_NL_LEN); if R0_G_STACK_DEPTH > 0u32 { R0_G_STACK_DEPTH = R0_G_STACK_DEPTH - 1u32 }; return R0_OK }
+fn r0_pop_rdx() -> u32 { r0_emit_arr(&R0_STR_POPRDX_NL as u64, R0_STR_POPRDX_NL_LEN); if R0_G_STACK_DEPTH > 0u32 { R0_G_STACK_DEPTH = R0_G_STACK_DEPTH - 1u32 }; return R0_OK }
+fn r0_emit_movabs_rax(v: u64) -> u32 { r0_emit_arr(&R0_STR_MOVABSQ_OPEN as u64, R0_STR_MOVABSQ_OPEN_LEN); r0_emit_hex(v); r0_emit_arr(&R0_STR_COMMA_RAX_NL as u64, R0_STR_COMMA_RAX_NL_LEN); return R0_OK }
+fn r0_emit_load_slot(slot: u32) -> u32 { r0_emit_arr(&R0_STR_DASH_OPEN as u64, R0_STR_DASH_OPEN_LEN); r0_emit_dec(((slot+1u32)*8u32) as u64); r0_emit_arr(&R0_STR_BPCMA_RAX as u64, R0_STR_BPCMA_RAX_LEN); return R0_OK }
+fn r0_emit_store_rax_slot(slot: u32) -> u32 { r0_emit_arr(&R0_STR_MOVQ_RAX_C as u64, R0_STR_MOVQ_RAX_C_LEN); r0_emit_ch(45u32); r0_emit_dec(((slot+1u32)*8u32) as u64); r0_emit_arr(&R0_STR_RBP_NL as u64, R0_STR_RBP_NL_LEN); return R0_OK }
+
+fn r0_pack_hexad_expr(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_expr_hexad_trit_at(R0_G_AST, node, i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
+fn r0_pack_hexad_pat(node: u32) -> u64 { let mut v: u32 = 0u32; let mut i: u32 = 0u32; while i < 6u32 { let t: u32 = iii_ast_pat_hexad_trit_at(R0_G_AST, node, i) & 3u32; v = v | (t << (2u32*i)); i = i + 1u32 }; return v as u64 }
+
+fn r0_emit_str_label(idx: u32) -> u32 { r0_emit_arr(&R0_PFX_STR as u64, R0_PFX_STR_LEN); r0_emit_dec(idx as u64); return R0_OK }
+fn r0_emit_field_label(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(R0_G_AST); r0_emit_arr(&R0_PFX_FIELD as u64, R0_PFX_FIELD_LEN); let mut i: u32 = 0u32; while i < len { let b: u32 = iii_emit_buf_read_u8_c(src, (off+i) as u64); if r0_is_sym_char(b) == 1u32 { r0_emit_ch(b) } else { r0_emit_ch(95u32) }; i = i + 1u32 }; return R0_OK }
+fn r0_emit_mhash_label(node: u32) -> u32 { r0_emit_arr(&R0_PFX_MHASH as u64, R0_PFX_MHASH_LEN); r0_emit_dec(node as u64); return R0_OK }
+
+/* ─────────────── modifier walking ─────────────── */
+fn r0_fn_or_cycle_mod_count(node: u32, kind: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_modifier_count(R0_G_AST, node) }; return iii_ast_fn_modifier_count(R0_G_AST, node) }
+fn r0_fn_or_cycle_mod_at(node: u32, kind: u32, i: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_modifier_at(R0_G_AST, node, i) }; return iii_ast_fn_modifier_at(R0_G_AST, node, i) }
+
+fn r0_mod_find(node: u32, kind: u32, name_addr: u64, name_len: u64) -> u32 { let mc: u32 = r0_fn_or_cycle_mod_count(node, kind); let mut i: u32 = 0u32; while i < mc { let m: u32 = r0_fn_or_cycle_mod_at(node, kind, i); let no: u32 = iii_ast_modifier_name_offset(R0_G_AST, m); let nl: u32 = iii_ast_modifier_name_length(R0_G_AST, m); if r0_name_eq_lit(no, nl, name_addr, name_len) == 1u32 { return m }; i = i + 1u32 }; return 0u32 }
+
+fn r0_mod_first_int(m: u32) -> u64 { if m == 0u32 { return 0u64 }; let ac: u32 = iii_ast_modifier_arg_count(R0_G_AST, m); if ac == 0u32 { return 0u64 }; let a: u32 = iii_ast_modifier_arg_at(R0_G_AST, m, 0u32); let v: u32 = iii_ast_arg_value(R0_G_AST, a); let k: u32 = iii_ast_node_kind(R0_G_AST, v); if k == R0_K_EXPR_INT { return iii_ast_expr_int_u64(R0_G_AST, v) }; if k == R0_K_EXPR_IDENT { let off: u32 = iii_ast_ident_name_offset(R0_G_AST, v); let len: u32 = iii_ast_ident_name_length(R0_G_AST, v); let src: u64 = iii_ast_source_buf(R0_G_AST); let irql: i32 = iii_cg_r0_irql_sym_c(src + (off as u64), len as u64); if irql >= 0i32 { return irql as u64 }; let mj: i32 = iii_cg_r0_irp_mj_lookup_c(src + (off as u64), len as u64); if mj >= 0i32 { return mj as u64 } }; return 0u64 }
+
+fn r0_mod_first_ident_irp(m: u32) -> i32 { if m == 0u32 { return -1i32 }; let ac: u32 = iii_ast_modifier_arg_count(R0_G_AST, m); if ac == 0u32 { return -1i32 }; let a: u32 = iii_ast_modifier_arg_at(R0_G_AST, m, 0u32); let v: u32 = iii_ast_arg_value(R0_G_AST, a); let k: u32 = iii_ast_node_kind(R0_G_AST, v); if k == R0_K_EXPR_IDENT { let off: u32 = iii_ast_ident_name_offset(R0_G_AST, v); let len: u32 = iii_ast_ident_name_length(R0_G_AST, v); let src: u64 = iii_ast_source_buf(R0_G_AST); return iii_cg_r0_irp_mj_lookup_c(src + (off as u64), len as u64) }; if k == R0_K_EXPR_INT { return (iii_ast_expr_int_u64(R0_G_AST, v) & 0xffu64) as i32 }; return -1i32 }
+
+fn r0_ring_ok(node: u32, kind: u32) -> u32 { let m: u32 = r0_mod_find(node, kind, &R0_MOD_RING as u64, R0_MOD_RING_LEN); if m == 0u32 { return 1u32 }; let mask: u32 = iii_ast_modifier_ring_mask(R0_G_AST, m); if mask == 0u32 { return 1u32 }; if (mask & R0_RING_MASK_R0) != 0u32 { return 1u32 }; return 0u32 }
+
+/* ─────────────── pattern compare/bind ─────────────── */
+fn r0_emit_pattern_compare(pat: u32, end_label_id: u32) -> u32 { let pk: u32 = iii_ast_node_kind(R0_G_AST, pat); if pk == R0_K_PAT_WILDCARD { return R0_OK }; if pk == R0_K_PAT_LITERAL { let lit: u32 = iii_ast_pat_literal_node(R0_G_AST, pat); let lk: u32 = iii_ast_node_kind(R0_G_AST, lit); let mut v: u64 = 0u64; if lk == R0_K_EXPR_INT { v = iii_ast_expr_int_u64(R0_G_AST, lit) }; if lk == R0_K_EXPR_HEX { v = (iii_ast_hex_value_lo(R0_G_AST, lit) as u64) | ((iii_ast_hex_value_hi(R0_G_AST, lit) as u64) << 32u64) }; if lk == R0_K_EXPR_BOOL { v = iii_ast_bool_value(R0_G_AST, lit) as u64 }; if lk == R0_K_EXPR_TRIT { v = iii_ast_expr_trit_value(R0_G_AST, lit) as u64 }; r0_emit_arr(&R0_STR_MOVABSQ_OPEN as u64, R0_STR_MOVABSQ_OPEN_LEN); r0_emit_hex(v); r0_emit_arr(&R0_STR_COMMA_RCX_NL as u64, R0_STR_COMMA_RCX_NL_LEN); r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_JNE as u64, R0_STR_JNE_LEN); r0_emit_arr(&R0_PFX_MATCHEND as u64, R0_PFX_MATCHEND_LEN); r0_emit_dec(end_label_id as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); return R0_OK }; if pk == R0_K_PAT_HEXAD { r0_emit_arr(&R0_STR_MOVABSQ_OPEN as u64, R0_STR_MOVABSQ_OPEN_LEN); r0_emit_hex(r0_pack_hexad_pat(pat)); r0_emit_arr(&R0_STR_COMMA_RCX_NL as u64, R0_STR_COMMA_RCX_NL_LEN); r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_JNE as u64, R0_STR_JNE_LEN); r0_emit_arr(&R0_PFX_MATCHEND as u64, R0_PFX_MATCHEND_LEN); r0_emit_dec(end_label_id as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); return R0_OK }; if pk == R0_K_PAT_IDENT { let off: u32 = iii_ast_pat_ident_name_off(R0_G_AST, pat); let len: u32 = iii_ast_pat_ident_name_len(R0_G_AST, pat); let mut s: i32 = r0_local_lookup(off, len); if s < 0i32 { s = r0_local_add(off, len) }; if s >= 0i32 { r0_emit_store_rax_slot(s as u32) }; return R0_OK }; return R0_OK }
+
+
+/* ─────────────── emit_expr ─────────────── */
+fn r0_emit_expr(node: u32) -> u32 {
+    if node == 0u32 { return R0_OK }
+    let k: u32 = iii_ast_node_kind(R0_G_AST, node)
+    if k == R0_K_EXPR_INT { r0_emit_movabs_rax(iii_ast_expr_int_u64(R0_G_AST, node)); r0_push_rax(); return R0_OK }
+    if k == R0_K_EXPR_HEX { let lo: u64 = iii_ast_hex_value_lo(R0_G_AST, node) as u64; let hi: u64 = iii_ast_hex_value_hi(R0_G_AST, node) as u64; r0_emit_movabs_rax(lo | (hi << 32u64)); r0_push_rax(); return R0_OK }
+    if k == R0_K_EXPR_BOOL { if iii_ast_bool_value(R0_G_AST, node) != 0u32 { r0_emit_arr(&R0_STR_DOL1RAX as u64, R0_STR_DOL1RAX_LEN) } else { r0_emit_arr(&R0_STR_DOL0RAX as u64, R0_STR_DOL0RAX_LEN) }; r0_push_rax(); return R0_OK }
+    if k == R0_K_EXPR_TRIT { r0_emit_movabs_rax(iii_ast_expr_trit_value(R0_G_AST, node) as u64); r0_push_rax(); return R0_OK }
+    if k == R0_K_EXPR_UNIT { r0_emit_arr(&R0_STR_XORRAX as u64, R0_STR_XORRAX_LEN); r0_push_rax(); return R0_OK }
+    if k == R0_K_EXPR_HEXAD { r0_emit_movabs_rax(r0_pack_hexad_expr(node)); r0_push_rax(); return R0_OK }
+    if k == R0_K_EXPR_STR {
+        let idx: u32 = iii_ast_str_payload_idx(R0_G_AST, node)
+        r0_emit_arr(&R0_STR_LEAQ as u64, R0_STR_LEAQ_LEN)
+        r0_emit_str_label(idx)
+        r0_emit_arr(&R0_STR_RIPCM_PCT as u64, R0_STR_RIPCM_PCT_LEN)
+        r0_emit_arr(&R0_REG_RAX as u64, R0_REG_RAX_LEN)
+        r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_MHASH {
+        r0_emit_arr(&R0_STR_LEAQ as u64, R0_STR_LEAQ_LEN)
+        r0_emit_mhash_label(node)
+        r0_emit_arr(&R0_STR_RIPCM_PCT as u64, R0_STR_RIPCM_PCT_LEN)
+        r0_emit_arr(&R0_REG_RAX as u64, R0_REG_RAX_LEN)
+        r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_PAREN { return r0_emit_expr(iii_ast_paren_inner(R0_G_AST, node)) }
+    /* Tier-2 crash #2 fix: cg_r0 is 8-byte-uniform (narrows nowhere), so a cast is a value
+       pass-through on the uniform 64-bit representation -- mirror PAREN. Missing this case made
+       `&X as *u8` / `X as u64` emit NOTHING, shifting call-argument registers (BSOD: out_ptr=0x30). */
+    if k == R0_K_EXPR_CAST { return r0_emit_expr(iii_ast_cast_value(R0_G_AST, node)) }
+    if k == R0_K_EXPR_BLOCK { return r0_emit_block(node) }
+    if k == R0_K_EXPR_IDENT {
+        let off: u32 = iii_ast_ident_name_offset(R0_G_AST, node)
+        let len: u32 = iii_ast_ident_name_length(R0_G_AST, node)
+        let s: i32 = r0_local_lookup(off, len)
+        if s >= 0i32 { r0_emit_arr(&R0_STR_DASH_OPEN as u64, R0_STR_DASH_OPEN_LEN); r0_emit_dec((((s as u32)+1u32)*8u32) as u64); r0_emit_arr(&R0_STR_BPCMA_RAX as u64, R0_STR_BPCMA_RAX_LEN); r0_push_rax(); return R0_OK }
+        /* Tier-2 Inc-1: module CONST / non-array VAR -> load VALUE (movq), not address.
+           Functions, var-arrays, and unbound idents fall through to leaq (address). */
+        let bid: u32 = iii_ast_node_binder_id(R0_G_AST, node)
+        if bid != 0u32 {
+            let bk: u32 = iii_ast_node_kind(R0_G_AST, bid)
+            if bk == R0_K_CONST_DECL { r0_emit_arr(&R0_STR_MOVQ_LD as u64, R0_STR_MOVQ_LD_LEN); r0_emit_decl_label(off, len); r0_emit_arr(&R0_STR_RIPCM_PCT as u64, R0_STR_RIPCM_PCT_LEN); r0_emit_arr(&R0_REG_RAX as u64, R0_REG_RAX_LEN); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); r0_push_rax(); return R0_OK }
+            if bk == R0_K_VAR_DECL {
+                let vt: u32 = iii_ast_var_decl_type(R0_G_AST, bid)
+                let mut is_arr: u32 = 0u32
+                if vt != 0u32 { if iii_ast_node_kind(R0_G_AST, vt) == R0_K_TYPE_ARR { is_arr = 1u32 } }
+                if is_arr == 0u32 { r0_emit_arr(&R0_STR_MOVQ_LD as u64, R0_STR_MOVQ_LD_LEN); r0_emit_decl_label(off, len); r0_emit_arr(&R0_STR_RIPCM_PCT as u64, R0_STR_RIPCM_PCT_LEN); r0_emit_arr(&R0_REG_RAX as u64, R0_REG_RAX_LEN); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); r0_push_rax(); return R0_OK }
+            }
+        }
+        r0_emit_arr(&R0_STR_LEAQ as u64, R0_STR_LEAQ_LEN)
+        r0_emit_decl_label(off, len)
+        r0_emit_arr(&R0_STR_RIPCM_PCT as u64, R0_STR_RIPCM_PCT_LEN)
+        r0_emit_arr(&R0_REG_RAX as u64, R0_REG_RAX_LEN)
+        r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_UNARY {
+        let inner: u32 = iii_ast_unary_operand(R0_G_AST, node)
+        let op: u32 = iii_ast_unary_op(R0_G_AST, node)
+        let ie: u32 = r0_emit_expr(inner); if ie != R0_OK { return ie }; r0_pop_rax()
+        if op == 1u32 { r0_emit_arr(&R0_STR_NEGQ as u64, R0_STR_NEGQ_LEN) }
+        if op == 2u32 { r0_emit_arr(&R0_STR_TESTRSTE as u64, R0_STR_TESTRSTE_LEN) }
+        if op == 3u32 { r0_emit_arr(&R0_STR_NOTQ as u64, R0_STR_NOTQ_LEN) }
+        if op == 4u32 { r0_emit_arr(&R0_STR_DEREF_RAX as u64, R0_STR_DEREF_RAX_LEN) }
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_BINARY {
+        let lhs: u32 = iii_ast_binary_lhs(R0_G_AST, node)
+        let rhs: u32 = iii_ast_binary_rhs(R0_G_AST, node)
+        let op: u32 = iii_ast_binary_op(R0_G_AST, node)
+        let le: u32 = r0_emit_expr(lhs); if le != R0_OK { return le }; let re: u32 = r0_emit_expr(rhs); if re != R0_OK { return re }; r0_pop_rcx(); r0_pop_rax()
+        if op == 1u32 { r0_emit_arr(&R0_STR_ADDQ as u64, R0_STR_ADDQ_LEN) }
+        if op == 2u32 { r0_emit_arr(&R0_STR_SUBQ as u64, R0_STR_SUBQ_LEN) }
+        if op == 3u32 { r0_emit_arr(&R0_STR_IMULQ as u64, R0_STR_IMULQ_LEN) }
+        if op == 4u32 { r0_emit_arr(&R0_STR_IDIV as u64, R0_STR_IDIV_LEN) }
+        if op == 5u32 { r0_emit_arr(&R0_STR_IDIVMOD as u64, R0_STR_IDIVMOD_LEN) }
+        if op == 6u32 { r0_emit_arr(&R0_STR_ANDQ as u64, R0_STR_ANDQ_LEN) }
+        if op == 7u32 { r0_emit_arr(&R0_STR_ORQ as u64, R0_STR_ORQ_LEN) }
+        if op == 8u32 { r0_emit_arr(&R0_STR_XORQ as u64, R0_STR_XORQ_LEN) }
+        if op == 9u32 { r0_emit_arr(&R0_STR_SHLQ as u64, R0_STR_SHLQ_LEN) }
+        if op == 10u32 { r0_emit_arr(&R0_STR_SHRQ as u64, R0_STR_SHRQ_LEN) }
+        if op == 11u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETE as u64, R0_STR_SETE_LEN) }
+        if op == 12u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETNE as u64, R0_STR_SETNE_LEN) }
+        if op == 13u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETL as u64, R0_STR_SETL_LEN) }
+        if op == 14u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETLE as u64, R0_STR_SETLE_LEN) }
+        if op == 15u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETG as u64, R0_STR_SETG_LEN) }
+        if op == 16u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETGE as u64, R0_STR_SETGE_LEN) }
+        if op == 17u32 { r0_emit_arr(&R0_STR_TESTRRAX as u64, R0_STR_TESTRRAX_LEN); r0_emit_arr(&R0_STR_SETNE as u64, R0_STR_SETNE_LEN) }
+        if op == 18u32 { r0_emit_arr(&R0_STR_ORQ as u64, R0_STR_ORQ_LEN); r0_emit_arr(&R0_STR_TESTRRAX as u64, R0_STR_TESTRRAX_LEN); r0_emit_arr(&R0_STR_SETNE as u64, R0_STR_SETNE_LEN) }
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_FIELD {
+        let obj: u32 = iii_ast_field_object(R0_G_AST, node)
+        let oe: u32 = r0_emit_expr(obj); if oe != R0_OK { return oe }; r0_pop_rax()
+        r0_emit_arr(&R0_STR_LEAQ as u64, R0_STR_LEAQ_LEN)
+        r0_emit_field_label(iii_ast_field_name_offset(R0_G_AST, node), iii_ast_field_name_length(R0_G_AST, node))
+        r0_emit_arr(&R0_STR_RIPCM_PCT as u64, R0_STR_RIPCM_PCT_LEN)
+        r0_emit_arr(&R0_REG_RCX as u64, R0_REG_RCX_LEN)
+        r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_emit_arr(&R0_STR_ADDQ as u64, R0_STR_ADDQ_LEN)
+        r0_emit_arr(&R0_STR_DEREF_RAX as u64, R0_STR_DEREF_RAX_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_INDEX {
+        let obj: u32 = iii_ast_index_object(R0_G_AST, node)
+        let idx: u32 = iii_ast_index_index(R0_G_AST, node)
+        let oe2: u32 = r0_emit_expr(obj); if oe2 != R0_OK { return oe2 }; let ie2: u32 = r0_emit_expr(idx); if ie2 != R0_OK { return ie2 }; r0_pop_rcx(); r0_pop_rax()
+        r0_emit_arr(&R0_STR_INDEX_LD as u64, R0_STR_INDEX_LD_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_CALL {
+        let callee: u32 = iii_ast_call_callee(R0_G_AST, node)
+        let argc: u32 = iii_ast_call_arg_count(R0_G_AST, node)
+        let mut i: u32 = 0u32
+        while i < argc { let a: u32 = iii_ast_call_arg_at(R0_G_AST, node, i); let ae: u32 = r0_emit_expr(iii_ast_arg_value(R0_G_AST, a)); if ae != R0_OK { return ae }; i = i + 1u32 }
+        if argc >= 4u32 { r0_emit_arr(&R0_STR_POPR9_NL as u64, R0_STR_POPR9_NL_LEN); R0_G_STACK_DEPTH = R0_G_STACK_DEPTH - 1u32 }
+        if argc >= 3u32 { r0_emit_arr(&R0_STR_POPR8_NL as u64, R0_STR_POPR8_NL_LEN); R0_G_STACK_DEPTH = R0_G_STACK_DEPTH - 1u32 }
+        if argc >= 2u32 { r0_pop_rdx() }
+        if argc >= 1u32 { r0_pop_rcx() }
+        r0_emit_arr(&R0_STR_SUB32_RSP as u64, R0_STR_SUB32_RSP_LEN)
+        let ck: u32 = iii_ast_node_kind(R0_G_AST, callee)
+        if ck == R0_K_EXPR_IDENT {
+            let kapi_off: u32 = iii_ast_ident_name_offset(R0_G_AST, callee)
+            let kapi_len: u32 = iii_ast_ident_name_length(R0_G_AST, callee)
+            r0_emit_arr(&R0_STR_CALLQ as u64, R0_STR_CALLQ_LEN)
+            if r0_callee_is_kernel_import(callee, kapi_off) == 1u32 { r0_emit_sym_run(kapi_off, kapi_len) } else { r0_emit_decl_label(kapi_off, kapi_len) }
+            r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        } else { let cee: u32 = r0_emit_expr(callee); if cee != R0_OK { return cee }; r0_pop_rax(); r0_emit_arr(&R0_STR_CALL_INDIR as u64, R0_STR_CALL_INDIR_LEN) }
+        r0_emit_arr(&R0_STR_ADD32_RSP as u64, R0_STR_ADD32_RSP_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_MATCH {
+        let scrut: u32 = iii_ast_match_expr_scrutinee(R0_G_AST, node)
+        let armc: u32 = iii_ast_match_expr_arm_count(R0_G_AST, node)
+        let endid: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let se2: u32 = r0_emit_expr(scrut); if se2 != R0_OK { return se2 }; r0_pop_rax()
+        let mut i: u32 = 0u32
+        while i < armc { let arm: u32 = iii_ast_match_expr_arm_at(R0_G_AST, node, i); let pat: u32 = iii_ast_match_arm_pattern(R0_G_AST, arm); r0_emit_pattern_compare(pat, endid); let body: u32 = iii_ast_match_arm_body(R0_G_AST, arm); let be: u32 = r0_emit_expr(body); if be != R0_OK { return be }; r0_pop_rax(); r0_emit_arr(&R0_STR_JMP as u64, R0_STR_JMP_LEN); r0_emit_arr(&R0_PFX_MATCHEND as u64, R0_PFX_MATCHEND_LEN); r0_emit_dec(endid as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); i = i + 1u32 }
+        r0_emit_arr(&R0_PFX_MATCHEND as u64, R0_PFX_MATCHEND_LEN); r0_emit_dec(endid as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    if k == R0_K_EXPR_RAW_ASM {
+        let idx: u32 = iii_ast_raw_asm_str_idx(R0_G_AST, node)
+        let addr: u64 = iii_ast_string_payload_addr_c(R0_G_AST, idx)
+        let len: u32 = iii_ast_raw_asm_len(R0_G_AST, node)
+        r0_emit_bytes(addr, len as u64)
+        r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_emit_arr(&R0_STR_XORRAX as u64, R0_STR_XORRAX_LEN)
+        r0_push_rax(); return R0_OK
+    }
+    R0_G_LAST_ERROR = R0_E_UNSUPPORTED; return R0_E_UNSUPPORTED
+}
+
+/* ─────────────── emit_stmt ─────────────── */
+fn r0_emit_stmt(node: u32) -> u32 {
+    if node == 0u32 { return R0_OK }
+    let k: u32 = iii_ast_node_kind(R0_G_AST, node)
+    if k == R0_K_STMT_LET {
+        let v: u32 = iii_ast_let_value(R0_G_AST, node)
+        let off: u32 = iii_ast_let_name_off(R0_G_AST, node)
+        let len: u32 = iii_ast_let_name_len(R0_G_AST, node)
+        let mut s: i32 = r0_local_lookup(off, len)
+        if s < 0i32 { s = r0_local_add(off, len) }
+        if v != 0u32 { let ve: u32 = r0_emit_expr(v); if ve != R0_OK { return ve }; r0_pop_rax(); if s >= 0i32 { r0_emit_store_rax_slot(s as u32) } }
+        return R0_OK
+    }
+    if k == R0_K_STMT_EXPR { let xe: u32 = r0_emit_expr(iii_ast_expr_stmt_expr(R0_G_AST, node)); if xe != R0_OK { return xe }; r0_pop_rax(); return R0_OK }
+    if k == R0_K_STMT_RETURN {
+        let v: u32 = iii_ast_return_value(R0_G_AST, node)
+        if v != 0u32 { let rve: u32 = r0_emit_expr(v); if rve != R0_OK { return rve }; r0_pop_rax() } else { r0_emit_arr(&R0_STR_MOVABS0 as u64, R0_STR_MOVABS0_LEN) }
+        if R0_G_CUR_SECMEM != 0u32 { r0_emit_arr(&R0_CMT_D14_SEC_EXIT as u64, R0_CMT_D14_SEC_EXIT_LEN) }
+        /* BUG-2 fix: save %rax (return value) with TWO pushes so %rsp stays 16-byte aligned
+           across the witness EXIT call (MS x64 wants rsp%16==8 at the callee entry). */
+        r0_emit_arr(&R0_STR_WIT_PUSHRAX as u64, R0_STR_WIT_PUSHRAX_LEN)
+        r0_emit_arr(&R0_STR_WIT_PUSHRAX as u64, R0_STR_WIT_PUSHRAX_LEN)
+        r0_emit_arr(&R0_STR_WIT_RCX_EXT as u64, R0_STR_WIT_RCX_EXT_LEN)
+        r0_emit_arr(&R0_STR_WIT_SUB32 as u64, R0_STR_WIT_SUB32_LEN)
+        r0_emit_arr(&R0_STR_WIT_CALL as u64, R0_STR_WIT_CALL_LEN)
+        r0_emit_arr(&R0_STR_WIT_ADD32 as u64, R0_STR_WIT_ADD32_LEN)
+        r0_emit_arr(&R0_STR_WIT_POPRAX as u64, R0_STR_WIT_POPRAX_LEN)
+        r0_emit_arr(&R0_STR_WIT_POPRAX as u64, R0_STR_WIT_POPRAX_LEN)
+        r0_emit_arr(&R0_STR_EPILOGUE as u64, R0_STR_EPILOGUE_LEN)
+        R0_G_EMITTED_RETURN = 1u32
+        return R0_OK
+    }
+    if k == R0_K_STMT_ASSIGN {
+        let lv: u32 = iii_ast_assign_lvalue(R0_G_AST, node)
+        let val: u32 = iii_ast_assign_value(R0_G_AST, node)
+        let vae: u32 = r0_emit_expr(val); if vae != R0_OK { return vae }; r0_pop_rax()
+        let lk: u32 = iii_ast_node_kind(R0_G_AST, lv)
+        if lk == R0_K_EXPR_IDENT {
+            let off: u32 = iii_ast_ident_name_offset(R0_G_AST, lv)
+            let len: u32 = iii_ast_ident_name_length(R0_G_AST, lv)
+            let s: i32 = r0_local_lookup(off, len)
+            if s >= 0i32 { r0_emit_store_rax_slot(s as u32); return R0_OK }
+            r0_emit_arr(&R0_STR_MOVQ_RAX_C as u64, R0_STR_MOVQ_RAX_C_LEN)
+            r0_emit_decl_label(off, len)
+            r0_emit_arr(&R0_STR_RIP_PAREN as u64, R0_STR_RIP_PAREN_LEN)
+            return R0_OK
+        }
+        if lk == R0_K_EXPR_INDEX {
+            let obj: u32 = iii_ast_index_object(R0_G_AST, lv)
+            let idx: u32 = iii_ast_index_index(R0_G_AST, lv)
+            /* BUG-3 fix: value is already in %rax (pre-emitted above). Push it, then
+               evaluate obj and idx onto the operand stack and pop idx->rcx, obj->rax,
+               val->rdx so the store `movq %rdx,(%rax,%rcx,8)` writes val to [obj+idx*8].
+               The old code saved val into -8(%rbp) -- which ALIASES local slot 0 -- then
+               reloaded it over obj and stored an unset %rdx. */
+            r0_push_rax()
+            let aoe: u32 = r0_emit_expr(obj); if aoe != R0_OK { return aoe }; let aie: u32 = r0_emit_expr(idx); if aie != R0_OK { return aie }
+            r0_pop_rcx(); r0_pop_rax(); r0_pop_rdx()
+            if R0_G_CUR_SECMEM != 0u32 { r0_emit_arr(&R0_STR_INDEX_NTI as u64, R0_STR_INDEX_NTI_LEN) } else { r0_emit_arr(&R0_STR_INDEX_ST as u64, R0_STR_INDEX_ST_LEN) }
+            return R0_OK
+        }
+        return R0_OK
+    }
+    if k == R0_K_STMT_IF {
+        let lbl_else: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let lbl_end: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let cond: u32 = iii_ast_if_cond(R0_G_AST, node)
+        let then_b: u32 = iii_ast_if_then(R0_G_AST, node)
+        let else_b: u32 = iii_ast_if_else(R0_G_AST, node)
+        let ce2: u32 = r0_emit_expr(cond); if ce2 != R0_OK { return ce2 }; r0_pop_rax()
+        r0_emit_arr(&R0_STR_TESTRRAX as u64, R0_STR_TESTRRAX_LEN)
+        r0_emit_arr(&R0_STR_JZ as u64, R0_STR_JZ_LEN)
+        if else_b != 0u32 { r0_emit_arr(&R0_PFX_LIFELSE as u64, R0_PFX_LIFELSE_LEN); r0_emit_dec(lbl_else as u64) } else { r0_emit_arr(&R0_PFX_LIFEND as u64, R0_PFX_LIFEND_LEN); r0_emit_dec(lbl_end as u64) }
+        r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        let te: u32 = r0_emit_block(then_b); if te != R0_OK { return te }
+        if else_b != 0u32 {
+            r0_emit_arr(&R0_STR_JMP as u64, R0_STR_JMP_LEN); r0_emit_arr(&R0_PFX_LIFEND as u64, R0_PFX_LIFEND_LEN); r0_emit_dec(lbl_end as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+            r0_emit_arr(&R0_PFX_LIFELSE as u64, R0_PFX_LIFELSE_LEN); r0_emit_dec(lbl_else as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+            let ek: u32 = iii_ast_node_kind(R0_G_AST, else_b)
+            if ek == R0_K_STMT_IF { let ee: u32 = r0_emit_stmt(else_b); if ee != R0_OK { return ee } } else { let eb: u32 = r0_emit_block(else_b); if eb != R0_OK { return eb } }
+        }
+        r0_emit_arr(&R0_PFX_LIFEND as u64, R0_PFX_LIFEND_LEN); r0_emit_dec(lbl_end as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        return R0_OK
+    }
+    if k == R0_K_STMT_WHILE {
+        let lbl_top: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let lbl_end: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let wcond: u32 = iii_ast_while_cond(R0_G_AST, node)
+        let wbody: u32 = iii_ast_while_body(R0_G_AST, node)
+        r0_emit_arr(&R0_PFX_FORTOP as u64, R0_PFX_FORTOP_LEN); r0_emit_dec(lbl_top as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        let wce: u32 = r0_emit_expr(wcond); if wce != R0_OK { return wce }; r0_pop_rax()
+        r0_emit_arr(&R0_STR_TESTRRAX as u64, R0_STR_TESTRRAX_LEN)
+        r0_emit_arr(&R0_STR_JZ as u64, R0_STR_JZ_LEN); r0_emit_arr(&R0_PFX_FOREND as u64, R0_PFX_FOREND_LEN); r0_emit_dec(lbl_end as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        let we: u32 = r0_emit_block(wbody); if we != R0_OK { return we }
+        r0_emit_arr(&R0_STR_JMP as u64, R0_STR_JMP_LEN); r0_emit_arr(&R0_PFX_FORTOP as u64, R0_PFX_FORTOP_LEN); r0_emit_dec(lbl_top as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_emit_arr(&R0_PFX_FOREND as u64, R0_PFX_FOREND_LEN); r0_emit_dec(lbl_end as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        return R0_OK
+    }
+    if k == R0_K_STMT_FOR {
+        let iter: u32 = iii_ast_for_iter(R0_G_AST, node)
+        let body: u32 = iii_ast_for_body(R0_G_AST, node)
+        let off: u32 = iii_ast_for_var_off(R0_G_AST, node)
+        let len: u32 = iii_ast_for_var_len(R0_G_AST, node)
+        let mut s: i32 = r0_local_lookup(off, len)
+        if s < 0i32 { s = r0_local_add(off, len) }
+        let topid: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let fie: u32 = r0_emit_expr(iter); if fie != R0_OK { return fie }; r0_pop_rax(); if s >= 0i32 { r0_emit_store_rax_slot(s as u32) }
+        r0_emit_arr(&R0_PFX_FORTOP as u64, R0_PFX_FORTOP_LEN); r0_emit_dec(topid as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        if s >= 0i32 { r0_emit_load_slot(s as u32) }
+        r0_emit_arr(&R0_STR_TESTRRAX as u64, R0_STR_TESTRRAX_LEN)
+        r0_emit_arr(&R0_STR_JZ as u64, R0_STR_JZ_LEN)
+        r0_emit_arr(&R0_PFX_FOREND as u64, R0_PFX_FOREND_LEN); r0_emit_dec(topid as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        let fbe: u32 = r0_emit_block(body); if fbe != R0_OK { return fbe }
+        if s >= 0i32 { r0_emit_load_slot(s as u32); r0_emit_arr(&R0_STR_ADD1RAX as u64, R0_STR_ADD1RAX_LEN); r0_emit_store_rax_slot(s as u32) }
+        r0_emit_arr(&R0_STR_JMP as u64, R0_STR_JMP_LEN); r0_emit_arr(&R0_PFX_FORTOP as u64, R0_PFX_FORTOP_LEN); r0_emit_dec(topid as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        r0_emit_arr(&R0_PFX_FOREND as u64, R0_PFX_FOREND_LEN); r0_emit_dec(topid as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        return R0_OK
+    }
+    if k == R0_K_STMT_MATCH {
+        let scrut: u32 = iii_ast_match_stmt_scrutinee(R0_G_AST, node)
+        let armc: u32 = iii_ast_match_stmt_arm_count(R0_G_AST, node)
+        let endid: u32 = R0_G_LABEL_COUNTER; R0_G_LABEL_COUNTER = R0_G_LABEL_COUNTER + 1u32
+        let se2: u32 = r0_emit_expr(scrut); if se2 != R0_OK { return se2 }; r0_pop_rax()
+        let mut i: u32 = 0u32
+        while i < armc { let arm: u32 = iii_ast_match_stmt_arm_at(R0_G_AST, node, i); let pat: u32 = iii_ast_match_arm_pattern(R0_G_AST, arm); r0_emit_pattern_compare(pat, endid); let body: u32 = iii_ast_match_arm_body(R0_G_AST, arm); let be: u32 = r0_emit_expr(body); if be != R0_OK { return be }; r0_pop_rax(); r0_emit_arr(&R0_STR_JMP as u64, R0_STR_JMP_LEN); r0_emit_arr(&R0_PFX_MATCHEND as u64, R0_PFX_MATCHEND_LEN); r0_emit_dec(endid as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); i = i + 1u32 }
+        r0_emit_arr(&R0_PFX_MATCHEND as u64, R0_PFX_MATCHEND_LEN); r0_emit_dec(endid as u64); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+        return R0_OK
+    }
+    if k == R0_K_STMT_WAVEFRONT {
+        let nc: u32 = iii_ast_wavefront_node_count(R0_G_AST, node)
+        let mut i: u32 = 0u32
+        while i < nc { let we2: u32 = r0_emit_stmt(iii_ast_wavefront_node_at(R0_G_AST, node, i)); if we2 != R0_OK { return we2 }; i = i + 1u32 }
+        return R0_OK
+    }
+    if k == R0_K_STMT_SANCTUM_ENTER { R0_G_LAST_ERROR = R0_E_UNSUPPORTED; return R0_E_UNSUPPORTED }
+    if k == R0_K_STMT_METAL {
+        let idx: u32 = iii_ast_metal_asm_str_idx(R0_G_AST, node)
+        let addr: u64 = iii_ast_string_payload_addr_c(R0_G_AST, idx)
+        let len: u32 = iii_ast_metal_asm_len(R0_G_AST, node)
+        r0_emit_bytes(addr, len as u64); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+        return R0_OK
+    }
+    return r0_emit_expr(node)
+}
+
+fn r0_emit_block(node: u32) -> u32 { if node == 0u32 { return R0_OK }; let k: u32 = iii_ast_node_kind(R0_G_AST, node); if k == R0_K_FORWARD_BLOCK { let n: u32 = iii_ast_forward_block_stmt_count(R0_G_AST, node); let mut i: u32 = 0u32; while i < n { let se: u32 = r0_emit_stmt(iii_ast_forward_block_stmt_at(R0_G_AST, node, i)); if se != R0_OK { return se }; i = i + 1u32 }; return R0_OK }; if k == R0_K_EXPR_BLOCK { let n: u32 = iii_ast_block_stmt_count(R0_G_AST, node); let mut i: u32 = 0u32; while i < n { let se: u32 = r0_emit_stmt(iii_ast_block_stmt_at(R0_G_AST, node, i)); if se != R0_OK { return se }; i = i + 1u32 }; return R0_OK }; return r0_emit_stmt(node) }
+
+
+/* ─────────────── compute_function_attributes / select_section ─────────────── */
+fn r0_compute_attrs(node: u32, kind: u32) -> u32 {
+    R0_G_CUR_MAX_IRQL = 2u32; R0_G_CUR_PAGED = 0u32; R0_G_CUR_SECMEM = 0u32; R0_G_CUR_RETURNS_NTSTATUS = 1u32
+    let m_paged: u32 = r0_mod_find(node, kind, &R0_MOD_PAGED as u64, R0_MOD_PAGED_LEN); if m_paged != 0u32 { R0_G_CUR_PAGED = 1u32 }
+    let m_sec: u32 = r0_mod_find(node, kind, &R0_MOD_SECMEM as u64, R0_MOD_SECMEM_LEN); if m_sec != 0u32 { R0_G_CUR_SECMEM = 1u32 }
+    let m_irql: u32 = r0_mod_find(node, kind, &R0_MOD_IRQL_MAX as u64, R0_MOD_IRQL_MAX_LEN); if m_irql != 0u32 { let v: u64 = r0_mod_first_int(m_irql); R0_G_CUR_MAX_IRQL = (v & 0xffu64) as u32 }
+    return R0_OK
+}
+
+fn r0_emit_section_for(node: u32, kind: u32) -> u32 {
+    r0_emit_arr(&R0_SEC_OPEN as u64, R0_SEC_OPEN_LEN)
+    let m_entry: u32 = r0_mod_find(node, kind, &R0_MOD_ENTRY as u64, R0_MOD_ENTRY_LEN)
+    if m_entry != 0u32 { r0_emit_arr(&R0_SEC_INIT as u64, R0_SEC_INIT_LEN) } else { if R0_G_CUR_PAGED != 0u32 { r0_emit_arr(&R0_SEC_PAGE as u64, R0_SEC_PAGE_LEN) } else { r0_emit_arr(&R0_SEC_DOTTEXT as u64, R0_SEC_DOTTEXT_LEN) } }
+    r0_emit_arr(&R0_SEC_TAIL as u64, R0_SEC_TAIL_LEN)
+    return R0_OK
+}
+
+fn r0_emit_param_sal(p: u32) -> u32 {
+    let t: u32 = iii_ast_param_type(R0_G_AST, p)
+    if t == 0u32 { return R0_OK }
+    let mc: u32 = iii_ast_type_modifier_count(R0_G_AST, t)
+    let mut i: u32 = 0u32
+    while i < mc {
+        let m: u32 = iii_ast_type_modifier_at(R0_G_AST, t, i)
+        let no: u32 = iii_ast_modifier_name_offset(R0_G_AST, m)
+        let nl: u32 = iii_ast_modifier_name_length(R0_G_AST, m)
+        if r0_name_eq_lit(no, nl, &R0_MOD_SAL as u64, R0_MOD_SAL_LEN) == 1u32 {
+            r0_emit_arr(&R0_CMT_SAL_OPEN as u64, R0_CMT_SAL_OPEN_LEN)
+            let ac: u32 = iii_ast_modifier_arg_count(R0_G_AST, m)
+            let mut j: u32 = 0u32
+            while j < ac { let a: u32 = iii_ast_modifier_arg_at(R0_G_AST, m, j); let v: u32 = iii_ast_arg_value(R0_G_AST, a); let vk: u32 = iii_ast_node_kind(R0_G_AST, v); if vk == R0_K_EXPR_STR { let idx: u32 = iii_ast_str_payload_idx(R0_G_AST, v); let addr: u64 = iii_ast_string_payload_addr_c(R0_G_AST, idx); let mut k: u64 = 0u64; while iii_emit_buf_read_u8_c(addr, k) != 0u32 { k = k + 1u64 }; r0_emit_bytes(addr, k) }; j = j + 1u32; if j < ac { r0_emit_arr(&R0_STR_COMMA_SP as u64, R0_STR_COMMA_SP_LEN) } }
+            r0_emit_arr(&R0_CMT_SAL_CLOSE as u64, R0_CMT_SAL_CLOSE_LEN)
+        }
+        i = i + 1u32
+    }
+    return R0_OK
+}
+
+fn r0_get_name_off(node: u32, kind: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_name_off(R0_G_AST, node) }; if kind == R0_K_SEALED { return iii_ast_sealed_call_name_off(R0_G_AST, node) }; return iii_ast_fn_name_off(R0_G_AST, node) }
+fn r0_get_name_len(node: u32, kind: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_name_len(R0_G_AST, node) }; if kind == R0_K_SEALED { return iii_ast_sealed_call_name_len(R0_G_AST, node) }; return iii_ast_fn_name_len(R0_G_AST, node) }
+fn r0_get_param_count(node: u32, kind: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_param_count(R0_G_AST, node) }; if kind == R0_K_SEALED { return iii_ast_sealed_param_count(R0_G_AST, node) }; return iii_ast_fn_param_count(R0_G_AST, node) }
+fn r0_get_param_at(node: u32, kind: u32, i: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_param_at(R0_G_AST, node, i) }; if kind == R0_K_SEALED { return iii_ast_sealed_param_at(R0_G_AST, node, i) }; return iii_ast_fn_param_at(R0_G_AST, node, i) }
+fn r0_get_body(node: u32, kind: u32) -> u32 { if kind == R0_K_CYCLE_DECL { return iii_ast_cycle_forward_block(R0_G_AST, node) }; if kind == R0_K_SEALED { return iii_ast_sealed_body(R0_G_AST, node) }; return iii_ast_fn_body(R0_G_AST, node) }
+
+/* ─────────────── emit_function ─────────────── */
+fn r0_emit_function(node: u32, kind: u32) -> u32 {
+    R0_G_LOCAL_COUNT = 0u32; R0_G_STACK_DEPTH = 0u32; R0_G_FRAME_BYTES = 1024u32; R0_G_EMITTED_RETURN = 0u32
+    /* NOTE: R0_G_LABEL_COUNTER is module-global (monotonic across functions), NOT reset here.
+       Resetting per-function made every function restart at L_if_end_0/L_for_top_0 etc., so
+       once functions contained if/while/match/for the labels collided (duplicate symbol at
+       assemble). Mirrors cg_r3, which resets the counter once in create. */
+    r0_compute_attrs(node, kind)
+    let name_off: u32 = r0_get_name_off(node, kind)
+    let name_len: u32 = r0_get_name_len(node, kind)
+    let pc: u32 = r0_get_param_count(node, kind)
+    let body: u32 = r0_get_body(node, kind)
+    let m_entry: u32 = r0_mod_find(node, kind, &R0_MOD_ENTRY as u64, R0_MOD_ENTRY_LEN)
+    let mut is_driver_entry: u32 = 0u32
+    if m_entry != 0u32 { is_driver_entry = 1u32 } else { is_driver_entry = r0_name_eq_lit(name_off, name_len, &R0_NAME_DRIVER_ENTRY as u64, R0_NAME_DRIVER_ENTRY_LEN) }
+    if is_driver_entry == 1u32 { R0_G_HAS_DRIVER_ENTRY = 1u32 }
+    if is_driver_entry == 1u32 { if pc != 2u32 { r0_emit_arr(&R0_STR_SIG_MISMATCH as u64, R0_STR_SIG_MISMATCH_LEN); R0_G_LAST_ERROR = R0_E_SIG_MISMATCH; return R0_E_SIG_MISMATCH } }
+    r0_emit_section_for(node, kind)
+    r0_emit_arr(&R0_CMT_IRQL_OPEN as u64, R0_CMT_IRQL_OPEN_LEN); r0_emit_dec(R0_G_CUR_MAX_IRQL as u64); r0_emit_arr(&R0_CMT_IRQL_CLOSE as u64, R0_CMT_IRQL_CLOSE_LEN)
+    let mut pi: u32 = 0u32
+    while pi < pc { let p: u32 = r0_get_param_at(node, kind, pi); r0_emit_param_sal(p); pi = pi + 1u32 }
+    r0_emit_arr(&R0_STR_GLOBAL as u64, R0_STR_GLOBAL_LEN); r0_emit_decl_label(name_off, name_len); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+    if is_driver_entry == 1u32 { r0_emit_arr(&R0_STR_GLOBAL as u64, R0_STR_GLOBAL_LEN); r0_emit_arr(&R0_STR_DRIVER_NL as u64, R0_STR_DRIVER_NL_LEN) }
+    r0_emit_decl_label(name_off, name_len); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+    if is_driver_entry == 1u32 { r0_emit_arr(&R0_STR_DRIVER_COL as u64, R0_STR_DRIVER_COL_LEN) }
+    r0_emit_arr(&R0_STR_SEH_PROC as u64, R0_STR_SEH_PROC_LEN); r0_emit_decl_label(name_off, name_len); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+    r0_emit_arr(&R0_STR_PUSHRBP as u64, R0_STR_PUSHRBP_LEN)
+    r0_emit_arr(&R0_STR_SEH_PUSHRBP as u64, R0_STR_SEH_PUSHRBP_LEN)
+    r0_emit_arr(&R0_STR_MOVRSPRBP as u64, R0_STR_MOVRSPRBP_LEN)
+    r0_emit_arr(&R0_STR_SUBRSP as u64, R0_STR_SUBRSP_LEN); r0_emit_dec(R0_G_FRAME_BYTES as u64); r0_emit_arr(&R0_STR_RSP_NL as u64, R0_STR_RSP_NL_LEN)
+    r0_emit_arr(&R0_STR_SEH_STKALLOC as u64, R0_STR_SEH_STKALLOC_LEN)
+    r0_emit_arr(&R0_STR_SEH_ENDPRO as u64, R0_STR_SEH_ENDPRO_LEN)
+    if R0_G_CUR_SECMEM != 0u32 { r0_emit_arr(&R0_CMT_D14_SEC_ENT as u64, R0_CMT_D14_SEC_ENT_LEN) }
+    /* BUG-1 fix: spill MS x64 first 4 params to slots BEFORE the witness ENTER call.
+       The witness ENTER sets %rcx = IIIW_ENTER and the call may clobber volatiles, so
+       rcx/rdx/r8/r9 (the parameters) MUST be saved to their frame slots first. */
+    let mut spi: u32 = 0u32
+    let mut pmax: u32 = pc
+    if pc > 4u32 { pmax = 4u32 }
+    while spi < pmax {
+        let p: u32 = r0_get_param_at(node, kind, spi)
+        let off: u32 = iii_ast_param_name_off(R0_G_AST, p)
+        let len: u32 = iii_ast_param_name_len(R0_G_AST, p)
+        let s: i32 = r0_local_add(off, len)
+        if s >= 0i32 {
+            r0_emit_arr(&R0_STR_MOVQ_PCT as u64, R0_STR_MOVQ_PCT_LEN)
+            if spi == 0u32 { r0_emit_arr(&R0_REG_RCX as u64, R0_REG_RCX_LEN) }
+            if spi == 1u32 { r0_emit_arr(&R0_REG_RDX as u64, R0_REG_RDX_LEN) }
+            if spi == 2u32 { r0_emit_arr(&R0_REG_R8 as u64, R0_REG_R8_LEN) }
+            if spi == 3u32 { r0_emit_arr(&R0_REG_R9 as u64, R0_REG_R9_LEN) }
+            r0_emit_arr(&R0_STR_COMMA_DASH as u64, R0_STR_COMMA_DASH_LEN)
+            r0_emit_dec((((s as u32)+1u32)*8u32) as u64)
+            r0_emit_arr(&R0_STR_RBP_NL as u64, R0_STR_RBP_NL_LEN)
+        }
+        spi = spi + 1u32
+    }
+    r0_emit_arr(&R0_CMT_WIT_ENTER as u64, R0_CMT_WIT_ENTER_LEN)
+    r0_emit_arr(&R0_STR_WIT_RCX_ENT as u64, R0_STR_WIT_RCX_ENT_LEN)
+    r0_emit_arr(&R0_STR_WIT_SUB32 as u64, R0_STR_WIT_SUB32_LEN)
+    r0_emit_arr(&R0_STR_WIT_CALL as u64, R0_STR_WIT_CALL_LEN)
+    r0_emit_arr(&R0_STR_WIT_ADD32 as u64, R0_STR_WIT_ADD32_LEN)
+    let body_e: u32 = r0_emit_block(body)
+    if body_e != R0_OK { R0_G_LAST_ERROR = body_e; return body_e }
+    if R0_G_EMITTED_RETURN == 0u32 {
+        r0_emit_arr(&R0_CMT_D7_FALL as u64, R0_CMT_D7_FALL_LEN)
+        r0_emit_arr(&R0_STR_MOVABS0 as u64, R0_STR_MOVABS0_LEN)
+        if R0_G_CUR_SECMEM != 0u32 { r0_emit_arr(&R0_CMT_D14_SEC_EXIT as u64, R0_CMT_D14_SEC_EXIT_LEN) }
+        /* BUG-2 fix: TWO pushes keep %rsp 16-byte aligned across the witness EXIT call. */
+        r0_emit_arr(&R0_STR_WIT_PUSHRAX as u64, R0_STR_WIT_PUSHRAX_LEN)
+        r0_emit_arr(&R0_STR_WIT_PUSHRAX as u64, R0_STR_WIT_PUSHRAX_LEN)
+        r0_emit_arr(&R0_STR_WIT_RCX_EXT as u64, R0_STR_WIT_RCX_EXT_LEN)
+        r0_emit_arr(&R0_STR_WIT_SUB32 as u64, R0_STR_WIT_SUB32_LEN)
+        r0_emit_arr(&R0_STR_WIT_CALL as u64, R0_STR_WIT_CALL_LEN)
+        r0_emit_arr(&R0_STR_WIT_ADD32 as u64, R0_STR_WIT_ADD32_LEN)
+        r0_emit_arr(&R0_STR_WIT_POPRAX as u64, R0_STR_WIT_POPRAX_LEN)
+        r0_emit_arr(&R0_STR_WIT_POPRAX as u64, R0_STR_WIT_POPRAX_LEN)
+        r0_emit_arr(&R0_STR_EPILOGUE as u64, R0_STR_EPILOGUE_LEN)
+    }
+    r0_emit_arr(&R0_STR_SEH_ENDPROC as u64, R0_STR_SEH_ENDPROC_LEN)
+    return R0_OK
+}
+
+/* ─────────────── IRP dispatch table ─────────────── */
+fn r0_record_irp_handler(node: u32, kind: u32) -> u32 {
+    let m: u32 = r0_mod_find(node, kind, &R0_MOD_IRP_HANDLER as u64, R0_MOD_IRP_HANDLER_LEN)
+    if m == 0u32 { return R0_OK }
+    let mj: i32 = r0_mod_first_ident_irp(m)
+    if mj < 0i32 { return R0_OK }
+    if (mj as u32) >= R0_MAX_IRP { return R0_OK }
+    let idx: u32 = mj as u32
+    if R0_IRP_HANDLER_VALID[idx] != 0u32 { R0_G_LAST_ERROR = R0_E_IRP_DUP; return R0_E_IRP_DUP }
+    R0_IRP_HANDLER_NODE[idx] = node
+    R0_IRP_HANDLER_DECL_OFF[idx] = r0_get_name_off(node, kind)
+    R0_IRP_HANDLER_DECL_LEN[idx] = r0_get_name_len(node, kind)
+    R0_IRP_HANDLER_VALID[idx] = 1u32
+    return R0_OK
+}
+
+fn r0_emit_irp_dispatch_table() -> u32 {
+    r0_emit_arr(&R0_SEC_IRP_DR as u64, R0_SEC_IRP_DR_LEN)
+    r0_emit_arr(&R0_STR_GLOBAL as u64, R0_STR_GLOBAL_LEN); r0_emit_arr(&R0_SYM_IRPTBL as u64, R0_SYM_IRPTBL_LEN); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+    r0_emit_arr(&R0_SYM_IRPTBL_LBL as u64, R0_SYM_IRPTBL_LBL_LEN)
+    let mut i: u32 = 0u32
+    while i < R0_MAX_IRP {
+        if R0_IRP_HANDLER_VALID[i] != 0u32 {
+            r0_emit_arr(&R0_STR_QUAD as u64, R0_STR_QUAD_LEN)
+            r0_emit_decl_label(R0_IRP_HANDLER_DECL_OFF[i], R0_IRP_HANDLER_DECL_LEN[i])
+            r0_emit_arr(&R0_STR_IRP_TAIL_OPEN as u64, R0_STR_IRP_TAIL_OPEN_LEN)
+            r0_emit_hex(i as u64)
+            r0_emit_arr(&R0_STR_IRP_TAIL as u64, R0_STR_IRP_TAIL_LEN)
+        } else {
+            r0_emit_arr(&R0_STR_QUAD_NOIMP as u64, R0_STR_QUAD_NOIMP_LEN)
+            r0_emit_hex(i as u64)
+            r0_emit_arr(&R0_STR_IRP_TAIL as u64, R0_STR_IRP_TAIL_LEN)
+        }
+        i = i + 1u32
+    }
+    r0_emit_arr(&R0_SEC_TEXT as u64, R0_SEC_TEXT_LEN)
+    r0_emit_arr(&R0_SYM_IRP_NOIMP_WD as u64, R0_SYM_IRP_NOIMP_WD_LEN)
+    r0_emit_arr(&R0_SYM_IRP_NOIMP_LBL as u64, R0_SYM_IRP_NOIMP_LBL_LEN)
+    r0_emit_arr(&R0_STR_NOIMP_BODY as u64, R0_STR_NOIMP_BODY_LEN)
+    return R0_OK
+}
+
+/* ─────────────── string pool emission (pass over all string payloads) ─────────────── */
+fn r0_emit_string_pool() -> u32 {
+    let n: u32 = iii_ast_string_payload_count_c(R0_G_AST)
+    if n == 0u32 { return R0_OK }
+    r0_emit_arr(&R0_SEC_RDATA_DR as u64, R0_SEC_RDATA_DR_LEN)
+    let mut i: u32 = 0u32
+    while i < n {
+        let addr: u64 = iii_ast_string_payload_addr_c(R0_G_AST, i)
+        if addr != 0u64 {
+            r0_emit_str_label(i); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+            r0_emit_arr(&R0_STR_ASCII_OPEN as u64, R0_STR_ASCII_OPEN_LEN)
+            let mut k: u64 = 0u64
+            while iii_emit_buf_read_u8_c(addr, k) != 0u32 {
+                let b: u32 = iii_emit_buf_read_u8_c(addr, k)
+                if b == 34u32 { r0_emit_arr(&R0_STR_BACKSLASH as u64, R0_STR_BACKSLASH_LEN); r0_emit_ch(34u32) } else { if b == 92u32 { r0_emit_arr(&R0_STR_BACKSLASH as u64, R0_STR_BACKSLASH_LEN); r0_emit_ch(92u32) } else { if b == 10u32 { r0_emit_arr(&R0_STR_BACKSLASH_N as u64, R0_STR_BACKSLASH_N_LEN) } else { r0_emit_ch(b) } } }
+                k = k + 1u64
+            }
+            r0_emit_arr(&R0_STR_ASCII_CLOSE as u64, R0_STR_ASCII_CLOSE_LEN)
+        }
+        i = i + 1u32
+    }
+    return R0_OK
+}
+
+/* ─────────────── public exports ─────────────── */
+fn iii_cg_r0_create(ast: u64, sema: u64, sid: u64, walloc: u64) -> u64 @export { if ast == 0u64 { return 0u64 }; R0_G_AST = ast; R0_G_SEMA = sema; R0_G_SID = sid; R0_G_WALLOC = walloc; R0_G_OUT = 0u64; R0_G_SEALED = 0u32; R0_G_LAST_ERROR = R0_OK; R0_G_LOCAL_COUNT = 0u32; R0_G_STACK_DEPTH = 0u32; R0_G_LABEL_COUNTER = 0u32; let mut i: u32 = 0u32; while i < R0_MAX_IRP { R0_IRP_HANDLER_VALID[i] = 0u32; R0_IRP_HANDLER_NODE[i] = 0u32; R0_IRP_HANDLER_DECL_OFF[i] = 0u32; R0_IRP_HANDLER_DECL_LEN[i] = 0u32; i = i + 1u32 }; iii_cg_r0_sha_init_c(); return &R0_SENTINEL as u64 }
+
+fn iii_cg_r0_destroy(cg: u64) @export { R0_G_AST = 0u64; R0_G_SEMA = 0u64; R0_G_SID = 0u64; R0_G_WALLOC = 0u64; R0_G_OUT = 0u64; R0_G_SEALED = 0u32; return }
+
+/* Tier-2 Inc-1: module-level data emission (GAP-5; mirrors cg_r3 r3_emit_data_decls).
+   cg_r0 is 8-byte-uniform (indexing is *8, BSS reserves count*8), so all data is
+   emitted as .quad (8-byte slots) / .zero count*8 -- NOT width-packed like cg_r3. */
+fn r0_lit_u64_compute(node: u32) -> u32 {
+    R0_LIT_VALUE = 0u64
+    if node == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(R0_G_AST, node)
+    if k == R0_K_EXPR_INT { R0_LIT_VALUE = iii_ast_expr_int_u64(R0_G_AST, node); return 1u32 }
+    if k == R0_K_EXPR_HEX { let lo: u64 = iii_ast_hex_value_lo(R0_G_AST, node) as u64; let hi: u64 = iii_ast_hex_value_hi(R0_G_AST, node) as u64; R0_LIT_VALUE = lo | (hi << 32u64); return 1u32 }
+    if k == R0_K_EXPR_UNARY {
+        let op: u32 = iii_ast_unary_op(R0_G_AST, node)
+        if op == 1u32 {
+            let inner: u32 = iii_ast_unary_operand(R0_G_AST, node)
+            let ik: u32 = iii_ast_node_kind(R0_G_AST, inner)
+            if ik == R0_K_EXPR_INT { let b: u64 = iii_ast_expr_int_u64(R0_G_AST, inner); R0_LIT_VALUE = 0u64 - b; return 1u32 }
+            if ik == R0_K_EXPR_HEX { let lo2: u64 = iii_ast_hex_value_lo(R0_G_AST, inner) as u64; let hi2: u64 = iii_ast_hex_value_hi(R0_G_AST, inner) as u64; let bb: u64 = lo2 | (hi2 << 32u64); R0_LIT_VALUE = 0u64 - bb; return 1u32 }
+        }
+    }
+    return 0u32
+}
+fn r0_emit_global_decl_label(off: u32, len: u32) -> u32 {
+    r0_emit_arr(&R0_STR_GLOBAL as u64, R0_STR_GLOBAL_LEN); r0_emit_decl_label(off, len); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+    r0_emit_decl_label(off, len); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+    return R0_OK
+}
+fn r0_emit_local_decl_label(off: u32, len: u32) -> u32 {
+    r0_emit_decl_label(off, len); r0_emit_arr(&R0_STR_COLONNL as u64, R0_STR_COLONNL_LEN)
+    return R0_OK
+}
+fn r0_emit_data_decls() -> u32 {
+    let root: u32 = iii_ast_root_module(R0_G_AST); if root == 0u32 { return R0_OK }
+    let dc: u32 = iii_ast_module_decl_count(R0_G_AST, root)
+    let mut current_section: u32 = 0u32
+    let mut i: u32 = 0u32
+    while i < dc {
+        let d: u32 = iii_ast_module_decl_at(R0_G_AST, root, i)
+        let dk: u32 = iii_ast_node_kind(R0_G_AST, d)
+        if dk == R0_K_CONST_DECL {
+            let v: u32 = iii_ast_const_decl_value(R0_G_AST, d)
+            let vk: u32 = iii_ast_node_kind(R0_G_AST, v)
+            let no: u32 = iii_ast_const_decl_name_off(R0_G_AST, d)
+            let nl: u32 = iii_ast_const_decl_name_len(R0_G_AST, d)
+            if vk == R0_K_EXPR_PARALLEL {
+                if current_section != 1u32 { r0_emit_arr(&R0_SEC_RODATA as u64, R0_SEC_RODATA_LEN); current_section = 1u32 }
+                r0_emit_local_decl_label(no, nl)
+                let bc: u32 = iii_ast_parallel_branch_count(R0_G_AST, v)
+                let mut k: u32 = 0u32
+                while k < bc { let eid: u32 = iii_ast_parallel_branch_at(R0_G_AST, v, k); r0_lit_u64_compute(eid); r0_emit_arr(&R0_STR_QUAD0X as u64, R0_STR_QUAD0X_LEN); r0_emit_hex(R0_LIT_VALUE); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); k = k + 1u32 }
+            } else {
+                let okv: u32 = r0_lit_u64_compute(v)
+                if okv == 1u32 {
+                    if current_section != 1u32 { r0_emit_arr(&R0_SEC_RODATA as u64, R0_SEC_RODATA_LEN); current_section = 1u32 }
+                    r0_emit_local_decl_label(no, nl)
+                    r0_emit_arr(&R0_STR_QUAD0X as u64, R0_STR_QUAD0X_LEN); r0_emit_hex(R0_LIT_VALUE); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+                }
+            }
+        }
+        if dk == R0_K_VAR_DECL {
+            let vno: u32 = iii_ast_var_decl_name_off(R0_G_AST, d)
+            let vnl: u32 = iii_ast_var_decl_name_len(R0_G_AST, d)
+            let init: u32 = iii_ast_var_decl_init(R0_G_AST, d)
+            let vt: u32 = iii_ast_var_decl_type(R0_G_AST, d)
+            let mut handled: u32 = 0u32
+            if init != 0u32 {
+                let ik: u32 = iii_ast_node_kind(R0_G_AST, init)
+                if ik == R0_K_EXPR_PARALLEL {
+                    if current_section != 2u32 { r0_emit_arr(&R0_SEC_DATA as u64, R0_SEC_DATA_LEN); current_section = 2u32 }
+                    r0_emit_global_decl_label(vno, vnl)
+                    let bc2: u32 = iii_ast_parallel_branch_count(R0_G_AST, init)
+                    let mut k2: u32 = 0u32
+                    while k2 < bc2 { let eid2: u32 = iii_ast_parallel_branch_at(R0_G_AST, init, k2); r0_lit_u64_compute(eid2); r0_emit_arr(&R0_STR_QUAD0X as u64, R0_STR_QUAD0X_LEN); r0_emit_hex(R0_LIT_VALUE); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN); k2 = k2 + 1u32 }
+                    handled = 1u32
+                } else {
+                    let okv2: u32 = r0_lit_u64_compute(init)
+                    if okv2 == 1u32 {
+                        if current_section != 2u32 { r0_emit_arr(&R0_SEC_DATA as u64, R0_SEC_DATA_LEN); current_section = 2u32 }
+                        r0_emit_global_decl_label(vno, vnl)
+                        r0_emit_arr(&R0_STR_QUAD0X as u64, R0_STR_QUAD0X_LEN); r0_emit_hex(R0_LIT_VALUE); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+                        handled = 1u32
+                    }
+                }
+            }
+            if handled == 0u32 {
+                let mut bs: u64 = 8u64
+                if vt != 0u32 { let tk: u32 = iii_ast_node_kind(R0_G_AST, vt); if tk == R0_K_TYPE_ARR { bs = iii_ast_type_array_count(R0_G_AST, vt) * 8u64 } }
+                if current_section != 3u32 { r0_emit_arr(&R0_SEC_BSS as u64, R0_SEC_BSS_LEN); current_section = 3u32 }
+                r0_emit_global_decl_label(vno, vnl)
+                r0_emit_arr(&R0_STR_ZERO_PFX as u64, R0_STR_ZERO_PFX_LEN); r0_emit_dec(bs); r0_emit_arr(&R0_STR_NL as u64, R0_STR_NL_LEN)
+            }
+        }
+        i = i + 1u32
+    }
+    return R0_OK
+}
+
+/* Tier-2 Inc-2: emit the IRP dispatch table only for a real driver module (one with
+   @irp_handler cycles). A pure logic module must NOT emit it -- otherwise every linked
+   cg_r0 .o defines `_iii_IrpDispatchTable` and the link fails (multiple definition). */
+fn r0_any_irp_handler() -> u32 { let mut i: u32 = 0u32; while i < R0_MAX_IRP { if R0_IRP_HANDLER_VALID[i] != 0u32 { return 1u32 }; i = i + 1u32 }; return 0u32 }
+
+fn iii_cg_r0_emit_module(cg: u64, out: u64) -> u32 @export {
+    if cg == 0u64 { return R0_E_NULL_ARG }
+    if out == 0u64 { R0_G_LAST_ERROR = R0_E_NULL_ARG; return R0_E_NULL_ARG }
+    if R0_G_SEALED != 0u32 { R0_G_LAST_ERROR = R0_E_SEALED; return R0_E_SEALED }
+    R0_G_OUT = out
+    R0_G_HAS_DRIVER_ENTRY = 0u32
+    R0_G_LABEL_COUNTER = 0u32
+    r0_emit_arr(&R0_STR_HDR1 as u64, R0_STR_HDR1_LEN)
+    r0_emit_arr(&R0_STR_HDR2 as u64, R0_STR_HDR2_LEN)
+    r0_emit_arr(&R0_STR_ATTSYNTAX as u64, R0_STR_ATTSYNTAX_LEN)
+    r0_emit_string_pool()
+    r0_emit_data_decls()
+    let root: u32 = iii_ast_root_module(R0_G_AST)
+    if root == 0u32 { R0_G_LAST_ERROR = R0_E_INTERNAL; return R0_E_INTERNAL }
+    let dc: u32 = iii_ast_module_decl_count(R0_G_AST, root)
+    /* pass 1: harvest IRP handlers */
+    let mut i: u32 = 0u32
+    while i < dc {
+        let d: u32 = iii_ast_module_decl_at(R0_G_AST, root, i)
+        let dk: u32 = iii_ast_node_kind(R0_G_AST, d)
+        if dk == R0_K_FN_DECL { r0_record_irp_handler(d, dk) }
+        if dk == R0_K_CYCLE_DECL { r0_record_irp_handler(d, dk) }
+        i = i + 1u32
+    }
+    /* pass 2: emit functions (R0-eligible only) */
+    let mut j: u32 = 0u32
+    while j < dc {
+        let d: u32 = iii_ast_module_decl_at(R0_G_AST, root, j)
+        let dk: u32 = iii_ast_node_kind(R0_G_AST, d)
+        if dk == R0_K_FN_DECL { if r0_ring_ok(d, dk) == 1u32 { let e: u32 = r0_emit_function(d, dk); if e != R0_OK { return e } } }
+        if dk == R0_K_CYCLE_DECL { if r0_ring_ok(d, dk) == 1u32 { let e2: u32 = r0_emit_function(d, dk); if e2 != R0_OK { return e2 } } }
+        if dk == R0_K_SEALED { if r0_ring_ok(d, dk) == 1u32 { let e3: u32 = r0_emit_function(d, dk); if e3 != R0_OK { return e3 } } }
+        j = j + 1u32
+    }
+    /* Emit the IRP dispatch table for a real driver module (driver_entry present) OR a
+       module with @irp_handler cycles. The driver's table (.quad symbol refs) also gives
+       the .sys its base relocations (.reloc), making it a standard relocatable kernel image.
+       Pure logic modules emit no table -> no duplicate _iii_IrpDispatchTable at link. */
+    if R0_G_HAS_DRIVER_ENTRY == 1u32 { r0_emit_irp_dispatch_table() }
+    if R0_G_HAS_DRIVER_ENTRY == 0u32 { if r0_any_irp_handler() == 1u32 { r0_emit_irp_dispatch_table() } }
+    iii_cg_r0_sha_snapshot_c(&R0_MHASH_CACHE as u64)
+    return R0_OK
+}
+
+fn iii_cg_r0_get_witness(cg: u64, out32: u64) -> u32 @export { if cg == 0u64 { return R0_E_NULL_ARG }; if out32 == 0u64 { return R0_E_NULL_ARG }; iii_emit_memcpy_c(out32, &R0_MHASH_CACHE as u64, 32u64); return R0_OK }
+
+fn iii_cg_r0_last_error(cg: u64) -> u32 @export { if cg == 0u64 { return R0_E_NULL_ARG }; return R0_G_LAST_ERROR }
+
+fn iii_cg_r0_error_name(code: u32) -> u64 @export {
+    if code == R0_OK { return &R0_ENAME_OK as u64 }
+    if code == R0_E_NULL_ARG { return &R0_ENAME_NULL_ARG as u64 }
+    if code == R0_E_IO { return &R0_ENAME_IO as u64 }
+    if code == R0_E_UNSUPPORTED { return &R0_ENAME_UNSUPPORTED as u64 }
+    if code == R0_E_SIG_MISMATCH { return &R0_ENAME_SIG_MISMATCH as u64 }
+    if code == R0_E_IRP_DUP { return &R0_ENAME_IRP_DUP as u64 }
+    if code == R0_E_IRQL_VIOLATION { return &R0_ENAME_IRQL_VIOLATION as u64 }
+    if code == R0_E_RING_WALL { return &R0_ENAME_RING_WALL as u64 }
+    if code == R0_E_RETURN_DISCIPLINE { return &R0_ENAME_RETURN_DISCIPLINE as u64 }
+    if code == R0_E_STACK_OVER { return &R0_ENAME_STACK_OVER as u64 }
+    if code == R0_E_INTERNAL { return &R0_ENAME_INTERNAL as u64 }
+    return &R0_ENAME_UNKNOWN as u64
+}

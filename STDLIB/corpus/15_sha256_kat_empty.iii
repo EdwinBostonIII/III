@@ -1,0 +1,16 @@
+/* SHA-256("") first byte = 0xE3 = 227 */
+module corpus_a15
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out: *u8) -> u32 from "sha256.iii"
+
+fn main() -> u64 {
+    let dummy : *u8 = malloc(1u64)
+    dummy[0] = 0u8
+    let out : *u8 = malloc(32u64)
+    sha256_oneshot(dummy, 0u64, out)
+    let v : u8 = out[0]
+    free(dummy); free(out)
+    return v as u64
+}

@@ -1,0 +1,3747 @@
+/* ============================================================================
+ * ast.iii - Stage-1 .iii port of ast.c (RITCHIE Stage 2.2).
+ *
+ * Byte-equivalent re-implementation of the C reference ast.c (2849 LOC):
+ * the four-pool Merkle DAG, open-addressed hash-cons, position side-table,
+ * list / string / annotation arenas, zipper, resumable walk-state, canonical
+ * serialiser, and diff.  Mirrors lex.iii's discipline: the opaque container
+ * and every node live in malloc'd blocks accessed by byte offset (iiis-0
+ * cannot deref C structs natively); heap + byte + SHA-256 come from the
+ * generic lex_runtime.c helpers (NIH-clean, already linked into iiis-1; no
+ * 7th SHA-256 copy).  All layout constants are offsetof-verified against
+ * ast.h / ast_internal.h (CONVERGENCE-AUDIT S2.2).
+ *
+ * iiis-0 trap discipline (lex_port_audit S4): single-line fn decls, <=4 args,
+ * no break/continue (sentinel flags), unsigned u64 ordering only, byte values
+ * not char literals, NUL-pool for any returned C-string, ASCII comments with
+ * balanced slash-star markers, helpers to stay under the ~8 parser recursion
+ * ceiling, malloc+memcpy+free growth (no realloc extern).
+ * ============================================================================ */
+
+module ast
+
+/* --- Generic C-side runtime helpers (shared with lex.iii) ---------------- */
+extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_free_c(p: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u32_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u64_c(addr: u64, off: u64, v: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memset_c(dst: u64, v: u32, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_init(s: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update(s: u64, data: u64, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u8(s: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u16(s: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u32(s: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u64(s: u64, v: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_final(s: u64, out32: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fwrite_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fread_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_tmpfile_c() -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_ftell_c(file: u64) -> i64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_rewind_c(file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fclose_c(file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputs_c(str: u64, file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
+
+const III_AST_SHA256_STATE_BYTES: u64 = 112u64
+
+/* --- AST node kinds (ast.h:132-260; probe-verified, 79 total) ------------ */
+const III_AST_NULL: u32 = 0u32
+const III_AST_MODULE: u32 = 1u32
+const III_AST_USE: u32 = 2u32
+const III_AST_CYCLE_DECL: u32 = 3u32
+const III_AST_FN_DECL: u32 = 4u32
+const III_AST_TYPE_DECL: u32 = 5u32
+const III_AST_CONST_DECL: u32 = 6u32
+const III_AST_EXTERN_DECL: u32 = 7u32
+const III_AST_MOBIUS_CANDIDATE_DECL: u32 = 8u32
+const III_AST_SCHEMA_DECL: u32 = 9u32
+const III_AST_SCHEMA_FIELD: u32 = 10u32
+const III_AST_SEALED_CALL_METHOD_DECL: u32 = 11u32
+const III_AST_PARAM: u32 = 12u32
+const III_AST_TYPE_PARAM: u32 = 13u32
+const III_AST_MODIFIER: u32 = 14u32
+const III_AST_TYPE_REF: u32 = 15u32
+const III_AST_TYPE_PTR: u32 = 16u32
+const III_AST_TYPE_ARRAY: u32 = 17u32
+const III_AST_TYPE_TUPLE: u32 = 18u32
+const III_AST_TYPE_FN: u32 = 19u32
+const III_AST_STMT_LET: u32 = 20u32
+const III_AST_STMT_WAVEFRONT: u32 = 21u32
+const III_AST_STMT_SANCTUM_ENTER: u32 = 22u32
+const III_AST_STMT_METAL: u32 = 23u32
+const III_AST_STMT_FOR: u32 = 24u32
+const III_AST_STMT_MATCH: u32 = 25u32
+const III_AST_STMT_RETURN: u32 = 26u32
+const III_AST_STMT_ASSIGN: u32 = 27u32
+const III_AST_STMT_EXPR: u32 = 28u32
+const III_AST_FORWARD_BLOCK: u32 = 29u32
+const III_AST_COMPROMISE_BLOCK: u32 = 30u32
+const III_AST_MATCH_ARM: u32 = 31u32
+const III_AST_PAT_LITERAL: u32 = 32u32
+const III_AST_PAT_IDENT: u32 = 33u32
+const III_AST_PAT_HEXAD: u32 = 34u32
+const III_AST_PAT_WILDCARD: u32 = 35u32
+const III_AST_PAT_TUPLE: u32 = 36u32
+const III_AST_EXPR_INT: u32 = 37u32
+const III_AST_EXPR_HEX: u32 = 38u32
+const III_AST_EXPR_MHASH: u32 = 39u32
+const III_AST_EXPR_STR: u32 = 40u32
+const III_AST_EXPR_BOOL: u32 = 41u32
+const III_AST_EXPR_TRIT: u32 = 42u32
+const III_AST_EXPR_HEXAD: u32 = 43u32
+const III_AST_EXPR_UNIT: u32 = 44u32
+const III_AST_EXPR_IDENT: u32 = 45u32
+const III_AST_EXPR_CALL: u32 = 46u32
+const III_AST_EXPR_FIELD: u32 = 47u32
+const III_AST_EXPR_INDEX: u32 = 48u32
+const III_AST_EXPR_BINARY: u32 = 49u32
+const III_AST_EXPR_UNARY: u32 = 50u32
+const III_AST_EXPR_BLOCK: u32 = 51u32
+const III_AST_EXPR_MATCH: u32 = 52u32
+const III_AST_EXPR_PAREN: u32 = 53u32
+const III_AST_EXPR_RAW_ASM: u32 = 54u32
+const III_AST_RING_SET: u32 = 55u32
+const III_AST_HEXAD_NAME: u32 = 56u32
+const III_AST_ARG: u32 = 57u32
+const III_AST_EXPR_TYPE: u32 = 58u32
+const III_AST_TYPE_OF: u32 = 59u32
+const III_AST_EXPR_HOLE: u32 = 60u32
+const III_AST_EXPR_PARALLEL: u32 = 61u32
+const III_AST_ERROR_NODE: u32 = 62u32
+const III_AST_ADR_DECL: u32 = 63u32
+const III_AST_CONFORMANCE_CLAIM_DECL: u32 = 64u32
+const III_AST_TEST_CASE_DECL: u32 = 65u32
+const III_AST_RATIONALE_DECL: u32 = 66u32
+const III_AST_OPERATOR_INTENT: u32 = 67u32
+const III_AST_USER_NODE: u32 = 68u32
+const III_AST_STMT_IF: u32 = 69u32
+const III_AST_STMT_WHILE: u32 = 70u32
+const III_AST_EXPR_RANGE: u32 = 71u32
+const III_AST_EXPR_CAST: u32 = 72u32
+const III_AST_EXPR_SIZEOF: u32 = 73u32
+const III_AST_VAR_DECL: u32 = 74u32
+const III_AST_STRUCT_DECL: u32 = 75u32
+const III_AST_STMT_LOOP: u32 = 76u32
+const III_AST_STMT_BREAK: u32 = 77u32
+const III_AST_STMT_CONTINUE: u32 = 78u32
+const III_AST_KIND_COUNT: u32 = 79u32
+
+/* --- Binary / unary / trit / abi / schema-field / compromise / pos enums - */
+const III_BIN_ADD: u32 = 1u32
+const III_BIN_SUB: u32 = 2u32
+const III_BIN_MUL: u32 = 3u32
+const III_BIN_DIV: u32 = 4u32
+const III_BIN_MOD: u32 = 5u32
+const III_BIN_AND: u32 = 6u32
+const III_BIN_OR: u32 = 7u32
+const III_BIN_XOR: u32 = 8u32
+const III_BIN_SHL: u32 = 9u32
+const III_BIN_SHR: u32 = 10u32
+const III_BIN_EQ: u32 = 11u32
+const III_BIN_NEQ: u32 = 12u32
+const III_BIN_LT: u32 = 13u32
+const III_BIN_LE: u32 = 14u32
+const III_BIN_GT: u32 = 15u32
+const III_BIN_GE: u32 = 16u32
+const III_BIN_LAND: u32 = 17u32
+const III_BIN_LOR: u32 = 18u32
+const III_BIN_IN: u32 = 19u32
+const III_BIN_COMPOSE: u32 = 20u32
+
+const III_UN_NEG: u32 = 1u32
+const III_UN_NOT: u32 = 2u32
+const III_UN_BNOT: u32 = 3u32
+const III_UN_DEREF: u32 = 4u32
+const III_UN_ADDR: u32 = 5u32
+
+/* (III_TRIT_AST_* enum values are owned by hexad_check.iii; ast.iii's canonical
+ * serializer reads the trit value byte directly from the node, so the consts
+ * are not re-declared here -- doing so duplicates the L_III_TRIT_AST_* module
+ * globals at link, the iiis-0 module-const-global trap.) */
+
+const III_ABI_C_MSVC_X64: u32 = 1u32
+const III_ABI_C_SYSV_X64: u32 = 2u32
+const III_ABI_VMRUN_TRAMPOLINE: u32 = 3u32
+const III_ABI_MAGIC_MSR: u32 = 4u32
+const III_ABI_IOCTL: u32 = 5u32
+
+const III_SCH_F_ACCUMULATOR: u32 = 1u32
+const III_SCH_F_THRESHOLD: u32 = 2u32
+const III_SCH_F_SAMPLE_SOURCE: u32 = 3u32
+const III_SCH_F_MAX_RECORDS: u32 = 4u32
+const III_SCH_F_PLAN_ANCHOR: u32 = 5u32
+
+const III_COMPROMISE_NOTE: u32 = 1u32
+const III_COMPROMISE_LOW: u32 = 2u32
+const III_COMPROMISE_MEDIUM: u32 = 3u32
+const III_COMPROMISE_HIGH: u32 = 4u32
+const III_COMPROMISE_CRITICAL: u32 = 5u32
+
+const III_POS_PHYSICAL: u32 = 0u32
+const III_POS_SYNTHETIC: u32 = 1u32
+
+/* --- Node-flag bits ------------------------------------------------------ */
+const III_AST_FLAG_NONE: u32 = 0u32
+const III_AST_FLAG_SYNTHETIC: u32 = 1u32
+const III_AST_FLAG_ERROR: u32 = 2u32
+const III_AST_FLAG_INTERNED: u32 = 4u32
+
+/* --- Pool encoding (ast.h:312-330): node_index = (pool<<28)|slot --------- */
+const III_AST_POOL_SHIFT: u64 = 28u64
+const III_AST_SLOT_MASK: u64 = 268435455u64       /* 0x0FFFFFFF */
+const III_AST_POOL_NULL: u32 = 0u32
+const III_AST_POOL_SMALL: u32 = 1u32
+const III_AST_POOL_MEDIUM: u32 = 2u32
+const III_AST_POOL_LARGE: u32 = 3u32
+const III_AST_POOL_USER: u32 = 4u32
+
+/* node handle <-> (pool, slot) */
+fn ast_node_make(pool: u32, slot: u64) -> u32 {
+    return (((pool as u64) << III_AST_POOL_SHIFT) | (slot & III_AST_SLOT_MASK)) as u32
+}
+fn ast_node_pool(idx: u32) -> u32 {
+    return (((idx as u64) >> III_AST_POOL_SHIFT) & 15u64) as u32
+}
+fn ast_node_slot(idx: u32) -> u64 {
+    return (idx as u64) & III_AST_SLOT_MASK
+}
+
+/* --- Node record layout (offsetof-verified: 48 bytes) -------------------- */
+const NODE_BYTES: u64 = 48u64
+const NODE_OFF_KIND: u64 = 0u64       /* u32 */
+const NODE_OFF_FLAGS: u64 = 4u64      /* u16 */
+const NODE_OFF_U: u64 = 8u64          /* union payload base, 40 bytes */
+
+/* --- Container layout (struct iii_ast, offsetof-verified: 520 bytes) ----- */
+const AST_BYTES: u64 = 520u64
+const AST_OFF_SOURCE_BUF: u64 = 0u64
+const AST_OFF_SOURCE_LEN: u64 = 8u64
+const AST_OFF_SOURCE_PATH: u64 = 16u64
+const AST_OFF_PARSER_VERSION_MHASH: u64 = 24u64
+const AST_OFF_TOKEN_STREAM_MHASH: u64 = 56u64
+const AST_OFF_SOURCE_MHASH: u64 = 88u64
+const AST_OFF_GRAMMAR_MHASH: u64 = 120u64
+const AST_OFF_ROOT_MODULE_MHASH: u64 = 152u64
+const AST_OFF_SMALL_NODES: u64 = 184u64
+const AST_OFF_MEDIUM_NODES: u64 = 192u64
+const AST_OFF_LARGE_NODES: u64 = 200u64
+const AST_OFF_USER_NODES: u64 = 208u64
+const AST_OFF_SMALL_COUNT: u64 = 216u64
+const AST_OFF_SMALL_CAP: u64 = 220u64
+const AST_OFF_MEDIUM_COUNT: u64 = 224u64
+const AST_OFF_MEDIUM_CAP: u64 = 228u64
+const AST_OFF_LARGE_COUNT: u64 = 232u64
+const AST_OFF_LARGE_CAP: u64 = 236u64
+const AST_OFF_USER_COUNT: u64 = 240u64
+const AST_OFF_USER_CAP: u64 = 244u64
+const AST_OFF_SMALL_MHASH: u64 = 248u64
+const AST_OFF_MEDIUM_MHASH: u64 = 256u64
+const AST_OFF_LARGE_MHASH: u64 = 264u64
+const AST_OFF_USER_MHASH: u64 = 272u64
+const AST_OFF_SMALL_POS_FIRST: u64 = 280u64
+const AST_OFF_MEDIUM_POS_FIRST: u64 = 288u64
+const AST_OFF_LARGE_POS_FIRST: u64 = 296u64
+const AST_OFF_USER_POS_FIRST: u64 = 304u64
+const AST_OFF_SMALL_BINDER: u64 = 312u64
+const AST_OFF_MEDIUM_BINDER: u64 = 320u64
+const AST_OFF_LARGE_BINDER: u64 = 328u64
+const AST_OFF_USER_BINDER: u64 = 336u64
+const AST_OFF_SMALL_DOC: u64 = 344u64
+const AST_OFF_MEDIUM_DOC: u64 = 352u64
+const AST_OFF_LARGE_DOC: u64 = 360u64
+const AST_OFF_USER_DOC: u64 = 368u64
+const AST_OFF_POSITIONS: u64 = 376u64
+const AST_OFF_POSITION_COUNT: u64 = 384u64
+const AST_OFF_POSITION_CAP: u64 = 388u64
+const AST_OFF_LIST_ARENA: u64 = 392u64
+const AST_OFF_LIST_CAP: u64 = 400u64
+const AST_OFF_LIST_USED: u64 = 404u64
+const AST_OFF_STRING_PAYLOADS: u64 = 408u64
+const AST_OFF_STRING_PAYLOAD_COUNT: u64 = 416u64
+const AST_OFF_STRING_PAYLOAD_CAP: u64 = 420u64
+const AST_OFF_HASHCONS: u64 = 424u64
+const AST_OFF_HASHCONS_CAP: u64 = 432u64
+const AST_OFF_HASHCONS_COUNT: u64 = 436u64
+const AST_OFF_ANNOTATIONS: u64 = 440u64
+const AST_OFF_ANNOTATION_CAP: u64 = 448u64
+const AST_OFF_ANNOTATION_COUNT: u64 = 452u64
+const AST_OFF_ANNOTATION_BLOBS: u64 = 456u64
+const AST_OFF_ANNOTATION_BLOB_USED: u64 = 464u64
+const AST_OFF_ANNOTATION_BLOB_CAP: u64 = 468u64
+const AST_OFF_PHASE_ARENA: u64 = 472u64
+const AST_OFF_PHASE_ARENA_USED: u64 = 480u64
+const AST_OFF_PHASE_ARENA_CAP: u64 = 484u64
+const AST_OFF_USER_KINDS: u64 = 488u64
+const AST_OFF_USER_KIND_CAP: u64 = 496u64
+const AST_OFF_USER_KIND_COUNT: u64 = 500u64
+const AST_OFF_NEXT_BINDER_ID: u64 = 504u64
+const AST_OFF_NEXT_HOLE_ID: u64 = 508u64
+const AST_OFF_ROOT_MODULE: u64 = 512u64
+
+/* --- Sub-struct sizes (offsetof-verified) -------------------------------- */
+const HASHCONS_SLOT_BYTES: u64 = 36u64    /* mhash[32]@0, node_index u32@32 */
+const HC_OFF_MHASH: u64 = 0u64
+const HC_OFF_NODE_INDEX: u64 = 32u64
+const POSITION_RECORD_BYTES: u64 = 48u64  /* iii_ast_position_t pos@0, i32 next@44 */
+const POSREC_OFF_NEXT: u64 = 44u64
+const ANNOTATION_SLOT_BYTES: u64 = 40u64
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.2 -- lifecycle.  Mirrors ast.c iii_grow_cap (155-163),
+ * the per-pool array accessors + iii_pool_grow (275-399), iii_pool_node
+ * (401-421), iii_ast_create (425-491), iii_ast_destroy (493-525).  Per-pool
+ * field offsets via small if-cascade helpers (pool is 1..4).  Growth is
+ * malloc+memcpy+free (no realloc extern), lockstep across the 5 parallel
+ * arrays {nodes(48B), mhash(32B), pos_first(i32, init -1), binder(u32,0),
+ * doc(u32,0)}; unsigned compares done in u64 to avoid any u32-ordering doubt.
+ * ============================================================================ */
+
+/* iii_grow_cap: 16, then double until >= need; 0 on u32 overflow. */
+fn ast_grow_cap(cap: u32, need: u32) -> u32 {
+    let mut nc: u32 = 16u32
+    if cap != 0u32 { nc = cap }
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if (nc as u64) >= (need as u64) { done = 1u32 }
+        if done == 0u32 {
+            if (nc as u64) > 2147483647u64 { return 0u32 }
+            nc = nc * 2u32
+        }
+    }
+    return nc
+}
+
+/* Per-pool container-field offsets (pool in 1..4). */
+fn ast_off_nodes(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_NODES }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_NODES }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_NODES }
+    return AST_OFF_USER_NODES
+}
+fn ast_off_count(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_COUNT }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_COUNT }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_COUNT }
+    return AST_OFF_USER_COUNT
+}
+fn ast_off_cap(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_CAP }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_CAP }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_CAP }
+    return AST_OFF_USER_CAP
+}
+fn ast_off_mhash(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_MHASH }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_MHASH }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_MHASH }
+    return AST_OFF_USER_MHASH
+}
+fn ast_off_pos_first(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_POS_FIRST }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_POS_FIRST }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_POS_FIRST }
+    return AST_OFF_USER_POS_FIRST
+}
+fn ast_off_binder(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_BINDER }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_BINDER }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_BINDER }
+    return AST_OFF_USER_BINDER
+}
+fn ast_off_doc(pool: u32) -> u64 {
+    if pool == III_AST_POOL_SMALL { return AST_OFF_SMALL_DOC }
+    if pool == III_AST_POOL_MEDIUM { return AST_OFF_MEDIUM_DOC }
+    if pool == III_AST_POOL_LARGE { return AST_OFF_LARGE_DOC }
+    return AST_OFF_USER_DOC
+}
+
+/* Grow one parallel array: malloc newcap*elem, copy oldcap*elem, free old,
+ * zero the new tail.  Returns new base, or 0 on OOM. */
+fn ast_grow_one(old: u64, oldcap: u64, newcap: u64, elem: u64) -> u64 {
+    let np: u64 = iii_lex_malloc_c(newcap * elem)
+    if np == 0u64 { return 0u64 }
+    if old != 0u64 {
+        iii_lex_memcpy_c(np, old, oldcap * elem)
+        iii_lex_free_c(old)
+    }
+    iii_lex_memset_c(np + oldcap * elem, 0u32, (newcap - oldcap) * elem)
+    return np
+}
+
+/* Grow a pool's 5 parallel arrays in lockstep to >= need_slots. */
+fn ast_pool_grow(ast: u64, pool: u32, need_slots: u32) -> u32 {
+    let cap_off: u64 = ast_off_cap(pool)
+    let cur_cap: u32 = iii_lex_read_u32_c(ast, cap_off)
+    if (need_slots as u64) <= (cur_cap as u64) { return 1u32 }
+    let new_cap: u32 = ast_grow_cap(cur_cap, need_slots)
+    if new_cap == 0u32 { return 0u32 }
+    let oc: u64 = cur_cap as u64
+    let ncp: u64 = new_cap as u64
+
+    let nodes_off: u64 = ast_off_nodes(pool)
+    let nn: u64 = ast_grow_one(iii_lex_read_u64_c(ast, nodes_off), oc, ncp, NODE_BYTES)
+    if nn == 0u64 { return 0u32 }
+    iii_lex_write_u64_c(ast, nodes_off, nn)
+
+    let mh_off: u64 = ast_off_mhash(pool)
+    let nm: u64 = ast_grow_one(iii_lex_read_u64_c(ast, mh_off), oc, ncp, 32u64)
+    if nm == 0u64 { return 0u32 }
+    iii_lex_write_u64_c(ast, mh_off, nm)
+
+    /* pos_first: i32 array; new tail must be -1 (0xFFFFFFFF), not 0. */
+    let pf_off: u64 = ast_off_pos_first(pool)
+    let oldpf: u64 = iii_lex_read_u64_c(ast, pf_off)
+    let npf: u64 = iii_lex_malloc_c(ncp * 4u64)
+    if npf == 0u64 { return 0u32 }
+    if oldpf != 0u64 {
+        iii_lex_memcpy_c(npf, oldpf, oc * 4u64)
+        iii_lex_free_c(oldpf)
+    }
+    iii_lex_memset_c(npf + oc * 4u64, 255u32, (ncp - oc) * 4u64)
+    iii_lex_write_u64_c(ast, pf_off, npf)
+
+    let bd_off: u64 = ast_off_binder(pool)
+    let nb: u64 = ast_grow_one(iii_lex_read_u64_c(ast, bd_off), oc, ncp, 4u64)
+    if nb == 0u64 { return 0u32 }
+    iii_lex_write_u64_c(ast, bd_off, nb)
+
+    let dc_off: u64 = ast_off_doc(pool)
+    let nd: u64 = ast_grow_one(iii_lex_read_u64_c(ast, dc_off), oc, ncp, 4u64)
+    if nd == 0u64 { return 0u32 }
+    iii_lex_write_u64_c(ast, dc_off, nd)
+
+    iii_lex_write_u32_c(ast, cap_off, new_cap)
+    return 1u32
+}
+
+/* Address of node `slot` in `pool` (or 0 if slot >= count). */
+fn ast_pool_node(ast: u64, pool: u32, slot: u64) -> u64 {
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0u64 }
+    let base: u64 = iii_lex_read_u64_c(ast, ast_off_nodes(pool))
+    return base + slot * NODE_BYTES
+}
+
+/* Public: create an AST container.  Reserves slot 0 of each pool as the
+ * III_AST_NULL sentinel; inits the list / string-payload / hashcons arenas. */
+fn iii_ast_create(source_buf: u64, source_len: u64, source_path: u64) -> u64 @export {
+    let ast: u64 = iii_lex_malloc_c(AST_BYTES)
+    if ast == 0u64 { return 0u64 }
+    iii_lex_memset_c(ast, 0u32, AST_BYTES)
+    iii_lex_write_u64_c(ast, AST_OFF_SOURCE_BUF, source_buf)
+    iii_lex_write_u64_c(ast, AST_OFF_SOURCE_LEN, source_len)
+    iii_lex_write_u64_c(ast, AST_OFF_SOURCE_PATH, source_path)
+
+    /* Reserve slot 0 (NULL sentinel) in all four pools. */
+    if ast_pool_grow(ast, III_AST_POOL_SMALL, 1u32) == 0u32 { iii_lex_free_c(ast) ; return 0u64 }
+    if ast_pool_grow(ast, III_AST_POOL_MEDIUM, 1u32) == 0u32 { iii_lex_free_c(ast) ; return 0u64 }
+    if ast_pool_grow(ast, III_AST_POOL_LARGE, 1u32) == 0u32 { iii_lex_free_c(ast) ; return 0u64 }
+    if ast_pool_grow(ast, III_AST_POOL_USER, 1u32) == 0u32 { iii_lex_free_c(ast) ; return 0u64 }
+    /* slot 0 node.kind = III_AST_NULL (0); memset already zeroed it. */
+    iii_lex_write_u32_c(ast, AST_OFF_SMALL_COUNT, 1u32)
+    iii_lex_write_u32_c(ast, AST_OFF_MEDIUM_COUNT, 1u32)
+    iii_lex_write_u32_c(ast, AST_OFF_LARGE_COUNT, 1u32)
+    iii_lex_write_u32_c(ast, AST_OFF_USER_COUNT, 1u32)
+
+    let la: u64 = iii_lex_malloc_c(64u64 * 4u64)
+    if la == 0u64 { iii_lex_free_c(ast) ; return 0u64 }
+    iii_lex_memset_c(la, 0u32, 64u64 * 4u64)
+    iii_lex_write_u64_c(ast, AST_OFF_LIST_ARENA, la)
+    iii_lex_write_u32_c(ast, AST_OFF_LIST_CAP, 64u32)
+    iii_lex_write_u32_c(ast, AST_OFF_LIST_USED, 0u32)
+
+    let sp: u64 = iii_lex_malloc_c(16u64 * 8u64)
+    if sp == 0u64 { iii_lex_free_c(ast) ; return 0u64 }
+    iii_lex_memset_c(sp, 0u32, 16u64 * 8u64)
+    iii_lex_write_u64_c(ast, AST_OFF_STRING_PAYLOADS, sp)
+    iii_lex_write_u32_c(ast, AST_OFF_STRING_PAYLOAD_CAP, 16u32)
+    iii_lex_write_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT, 0u32)
+
+    let hc: u64 = iii_lex_malloc_c(256u64 * HASHCONS_SLOT_BYTES)
+    if hc == 0u64 { iii_lex_free_c(ast) ; return 0u64 }
+    iii_lex_memset_c(hc, 0u32, 256u64 * HASHCONS_SLOT_BYTES)
+    iii_lex_write_u64_c(ast, AST_OFF_HASHCONS, hc)
+    iii_lex_write_u32_c(ast, AST_OFF_HASHCONS_CAP, 256u32)
+    iii_lex_write_u32_c(ast, AST_OFF_HASHCONS_COUNT, 0u32)
+
+    iii_lex_write_u32_c(ast, AST_OFF_NEXT_BINDER_ID, 1u32)
+    iii_lex_write_u32_c(ast, AST_OFF_NEXT_HOLE_ID, 1u32)
+    iii_lex_write_u32_c(ast, AST_OFF_ROOT_MODULE, 0u32)
+    return ast
+}
+
+/* Free one heap pointer stored at container offset `off` (if non-NULL). */
+fn ast_free_at(ast: u64, off: u64) -> u32 {
+    let p: u64 = iii_lex_read_u64_c(ast, off)
+    if p != 0u64 { iii_lex_free_c(p) }
+    return 0u32
+}
+
+fn iii_ast_destroy(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    ast_free_at(ast, AST_OFF_SMALL_NODES)
+    ast_free_at(ast, AST_OFF_MEDIUM_NODES)
+    ast_free_at(ast, AST_OFF_LARGE_NODES)
+    ast_free_at(ast, AST_OFF_USER_NODES)
+    ast_free_at(ast, AST_OFF_SMALL_MHASH)
+    ast_free_at(ast, AST_OFF_MEDIUM_MHASH)
+    ast_free_at(ast, AST_OFF_LARGE_MHASH)
+    ast_free_at(ast, AST_OFF_USER_MHASH)
+    ast_free_at(ast, AST_OFF_SMALL_POS_FIRST)
+    ast_free_at(ast, AST_OFF_MEDIUM_POS_FIRST)
+    ast_free_at(ast, AST_OFF_LARGE_POS_FIRST)
+    ast_free_at(ast, AST_OFF_USER_POS_FIRST)
+    ast_free_at(ast, AST_OFF_SMALL_BINDER)
+    ast_free_at(ast, AST_OFF_MEDIUM_BINDER)
+    ast_free_at(ast, AST_OFF_LARGE_BINDER)
+    ast_free_at(ast, AST_OFF_USER_BINDER)
+    ast_free_at(ast, AST_OFF_SMALL_DOC)
+    ast_free_at(ast, AST_OFF_MEDIUM_DOC)
+    ast_free_at(ast, AST_OFF_LARGE_DOC)
+    ast_free_at(ast, AST_OFF_USER_DOC)
+    ast_free_at(ast, AST_OFF_POSITIONS)
+    ast_free_at(ast, AST_OFF_LIST_ARENA)
+    ast_free_at(ast, AST_OFF_STRING_PAYLOADS)
+    ast_free_at(ast, AST_OFF_HASHCONS)
+    ast_free_at(ast, AST_OFF_ANNOTATIONS)
+    ast_free_at(ast, AST_OFF_ANNOTATION_BLOBS)
+    ast_free_at(ast, AST_OFF_PHASE_ARENA)
+    ast_free_at(ast, AST_OFF_USER_KINDS)
+    iii_lex_free_c(ast)
+    return 0u32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.3 -- witness setters/accessors + source accessors + root
+ * getter.  Mirrors ast.c iii_ast_set_parser_version/token_stream/source/grammar
+ * + get_witnesses + root_module_mhash + source_buf/len/path + root_module
+ * (527-574).  recompute_root_mhash + set_root_module depend on node_mhash
+ * (canonical-bytes, ported §2.2.6-12) -> done in §2.2.15.
+ * ============================================================================ */
+
+fn iii_ast_set_parser_version(ast: u64, mhash: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if mhash == 0u64 { return 0u32 }
+    iii_lex_memcpy_c(ast + AST_OFF_PARSER_VERSION_MHASH, mhash, 32u64)
+    return 0u32
+}
+fn iii_ast_set_token_stream_mhash(ast: u64, mhash: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if mhash == 0u64 { return 0u32 }
+    iii_lex_memcpy_c(ast + AST_OFF_TOKEN_STREAM_MHASH, mhash, 32u64)
+    return 0u32
+}
+fn iii_ast_set_source_mhash(ast: u64, mhash: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if mhash == 0u64 { return 0u32 }
+    iii_lex_memcpy_c(ast + AST_OFF_SOURCE_MHASH, mhash, 32u64)
+    return 0u32
+}
+fn iii_ast_set_grammar_mhash(ast: u64, mhash: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if mhash == 0u64 { return 0u32 }
+    iii_lex_memcpy_c(ast + AST_OFF_GRAMMAR_MHASH, mhash, 32u64)
+    return 0u32
+}
+
+/* 5-arg API: params assigned to locals first (defeats the single-use spill
+ * trap) before each conditional memcpy. */
+fn iii_ast_get_witnesses(ast: u64, out_pv: u64, out_ts: u64, out_src: u64, out_gram: u64) -> u32 @export {
+    let a: u64 = ast
+    let pv: u64 = out_pv
+    let ts: u64 = out_ts
+    let sr: u64 = out_src
+    let gr: u64 = out_gram
+    if a == 0u64 { return 0u32 }
+    if pv != 0u64 { iii_lex_memcpy_c(pv, a + AST_OFF_PARSER_VERSION_MHASH, 32u64) }
+    if ts != 0u64 { iii_lex_memcpy_c(ts, a + AST_OFF_TOKEN_STREAM_MHASH, 32u64) }
+    if sr != 0u64 { iii_lex_memcpy_c(sr, a + AST_OFF_SOURCE_MHASH, 32u64) }
+    if gr != 0u64 { iii_lex_memcpy_c(gr, a + AST_OFF_GRAMMAR_MHASH, 32u64) }
+    return 0u32
+}
+
+/* Pointer to the 32-byte root-module mhash field (NULL if ast NULL). */
+fn iii_ast_root_module_mhash(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return ast + AST_OFF_ROOT_MODULE_MHASH
+}
+
+fn iii_ast_source_buf(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(ast, AST_OFF_SOURCE_BUF)
+}
+fn iii_ast_source_len(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(ast, AST_OFF_SOURCE_LEN)
+}
+fn iii_ast_source_path(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(ast, AST_OFF_SOURCE_PATH)
+}
+fn iii_ast_root_module(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(ast, AST_OFF_ROOT_MODULE)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.4 -- pool dispatch + position arena + alloc_node +
+ * position accessors.  Mirrors ast.c iii_pool_for_kind (172-258),
+ * iii_position_arena_grow (585-596), iii_position_chain_prepend (598-607),
+ * iii_ast_alloc_node (611-653), iii_pool_pos_first_read +
+ * iii_ast_position_count/at/first/add/add_synthetic (1503-1570).
+ * Position chain sentinel is -1 stored as i32; walked as u32 != 0xFFFFFFFF
+ * (never a signed `>=`, which is the iiis-0 ordering-compare trap).
+ * ============================================================================ */
+
+/* Position-record sub-offsets (iii_ast_position_t = 44B; record = 48B). */
+const POSITION_T_BYTES: u64 = 44u64
+const POS_OFF_KIND: u64 = 0u64
+const POS_PHYS_START: u64 = 4u64
+const POS_PHYS_END: u64 = 8u64
+const POS_PHYS_LINE: u64 = 12u64
+const POS_PHYS_COL: u64 = 16u64
+const POS_SYN_SRC: u64 = 4u64
+const POS_SYN_MHASH: u64 = 8u64
+const POS_SYN_RAT: u64 = 40u64
+/* iii_src_pos_t (alloc_node `pos` arg) = 16B. */
+const SRCPOS_START: u64 = 0u64
+const SRCPOS_END: u64 = 4u64
+const SRCPOS_LINE: u64 = 8u64
+const SRCPOS_COL: u64 = 12u64
+const POS_SENTINEL: u32 = 4294967295u32       /* -1 as u32 */
+
+/* kind -> pool table (default LARGE; explicit SMALL/MEDIUM/USER overrides),
+ * mirroring ast.c iii_pool_for_kind's switch + default. */
+var KIND_POOL : [u8; 80]
+var KIND_POOL_INIT : u8 = 0u8
+
+fn kp_set(k: u32, p: u32) -> u32 {
+    iii_lex_write_u8_at_c(&KIND_POOL as u64, k as u64, p)
+    return 0u32
+}
+fn kind_pool_init() -> u32 {
+    if KIND_POOL_INIT == 1u8 { return 0u32 }
+    iii_lex_memset_c(&KIND_POOL as u64, III_AST_POOL_LARGE, 80u64)   /* default LARGE=3 */
+    kp_set(III_AST_NULL, III_AST_POOL_NULL)
+    /* SMALL (14) */
+    kp_set(III_AST_EXPR_BOOL, III_AST_POOL_SMALL)
+    kp_set(III_AST_EXPR_TRIT, III_AST_POOL_SMALL)
+    kp_set(III_AST_EXPR_UNIT, III_AST_POOL_SMALL)
+    kp_set(III_AST_PAT_WILDCARD, III_AST_POOL_SMALL)
+    kp_set(III_AST_RING_SET, III_AST_POOL_SMALL)
+    kp_set(III_AST_HEXAD_NAME, III_AST_POOL_SMALL)
+    kp_set(III_AST_COMPROMISE_BLOCK, III_AST_POOL_SMALL)
+    kp_set(III_AST_PAT_LITERAL, III_AST_POOL_SMALL)
+    kp_set(III_AST_STMT_RETURN, III_AST_POOL_SMALL)
+    kp_set(III_AST_STMT_EXPR, III_AST_POOL_SMALL)
+    kp_set(III_AST_EXPR_PAREN, III_AST_POOL_SMALL)
+    kp_set(III_AST_EXPR_TYPE, III_AST_POOL_SMALL)
+    kp_set(III_AST_TYPE_OF, III_AST_POOL_SMALL)
+    kp_set(III_AST_EXPR_HOLE, III_AST_POOL_SMALL)
+    /* MEDIUM (31) */
+    kp_set(III_AST_EXPR_INT, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_HEX, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_IDENT, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_FIELD, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_INDEX, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_UNARY, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_BINARY, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_STR, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_PAT_HEXAD, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_HEXAD, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_PAT_IDENT, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_PAT_TUPLE, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_MATCH_ARM, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_PARAM, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_TYPE_PARAM, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_CONST_DECL, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_USE, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_STMT_LET, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_STMT_ASSIGN, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_TYPE_PTR, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_TYPE_ARRAY, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_TYPE_TUPLE, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_TYPE_FN, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_STMT_SANCTUM_ENTER, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_STMT_METAL, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_STMT_FOR, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_STMT_MATCH, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_MATCH, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_EXPR_PARALLEL, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_ARG, III_AST_POOL_MEDIUM)
+    kp_set(III_AST_RATIONALE_DECL, III_AST_POOL_MEDIUM)
+    /* USER (1) */
+    kp_set(III_AST_USER_NODE, III_AST_POOL_USER)
+    KIND_POOL_INIT = 1u8
+    return 0u32
+}
+fn iii_pool_for_kind(kind: u32) -> u32 {
+    kind_pool_init()
+    if kind >= 80u32 { return III_AST_POOL_LARGE }
+    return iii_lex_read_u8_at_c(&KIND_POOL as u64, kind as u64)
+}
+
+/* Grow the position arena to >= need records (48B each). */
+fn iii_position_arena_grow(ast: u64, need: u32) -> u32 {
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_POSITION_CAP)
+    if (need as u64) <= (cap as u64) { return 1u32 }
+    let new_cap: u32 = ast_grow_cap(cap, need)
+    if new_cap == 0u32 { return 0u32 }
+    let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_POSITIONS)
+    let np: u64 = ast_grow_one(old, cap as u64, new_cap as u64, POSITION_RECORD_BYTES)
+    if np == 0u64 { return 0u32 }
+    iii_lex_write_u64_c(ast, AST_OFF_POSITIONS, np)
+    iii_lex_write_u32_c(ast, AST_OFF_POSITION_CAP, new_cap)
+    return 1u32
+}
+
+/* Prepend a position record (pos_ptr -> 44B) to the chain headed at first_addr
+ * (the address of a pos_first[slot] i32 entry). */
+fn iii_position_chain_prepend(ast: u64, first_addr: u64, pos_ptr: u64) -> u32 {
+    let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_POSITION_COUNT)
+    if iii_position_arena_grow(ast, cnt + 1u32) == 0u32 { return 0u32 }
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_POSITIONS)
+    let rec: u64 = base + (cnt as u64) * POSITION_RECORD_BYTES
+    iii_lex_memcpy_c(rec, pos_ptr, POSITION_T_BYTES)
+    let old_head: u32 = iii_lex_read_u32_c(first_addr, 0u64)
+    iii_lex_write_u32_c(rec, POSREC_OFF_NEXT, old_head)
+    iii_lex_write_u32_c(first_addr, 0u64, cnt)
+    iii_lex_write_u32_c(ast, AST_OFF_POSITION_COUNT, cnt + 1u32)
+    return 1u32
+}
+
+/* Scratch position struct (consumed synchronously by chain_prepend). */
+var POS_SCRATCH : [u8; 48]
+
+/* Allocate a freshly-typed node in its kind's pool; record physical position. */
+fn iii_ast_alloc_node(ast: u64, kind: u32, pos: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if kind >= III_AST_KIND_COUNT { return 0u32 }
+    let pool: u32 = iii_pool_for_kind(kind)
+    if pool == III_AST_POOL_NULL { return 0u32 }
+    let cnt_off: u64 = ast_off_count(pool)
+    let cur: u32 = iii_lex_read_u32_c(ast, cnt_off)
+    if ast_pool_grow(ast, pool, cur + 1u32) == 0u32 { return 0u32 }
+    let slot: u64 = cur as u64
+    iii_lex_write_u32_c(ast, cnt_off, cur + 1u32)
+    let nodes: u64 = iii_lex_read_u64_c(ast, ast_off_nodes(pool))
+    let node: u64 = nodes + slot * NODE_BYTES
+    iii_lex_memset_c(node, 0u32, NODE_BYTES)
+    iii_lex_write_u32_c(node, NODE_OFF_KIND, kind)
+    /* side-tables: mhash=0, pos_first=-1, binder=0, doc=0 */
+    let mhb: u64 = iii_lex_read_u64_c(ast, ast_off_mhash(pool))
+    iii_lex_memset_c(mhb + slot * 32u64, 0u32, 32u64)
+    let pfb: u64 = iii_lex_read_u64_c(ast, ast_off_pos_first(pool))
+    iii_lex_write_u32_c(pfb + slot * 4u64, 0u64, POS_SENTINEL)
+    let bdb: u64 = iii_lex_read_u64_c(ast, ast_off_binder(pool))
+    iii_lex_write_u32_c(bdb + slot * 4u64, 0u64, 0u32)
+    let dcb: u64 = iii_lex_read_u64_c(ast, ast_off_doc(pool))
+    iii_lex_write_u32_c(dcb + slot * 4u64, 0u64, 0u32)
+    /* record physical position if provided */
+    if pos != 0u64 {
+        iii_lex_memset_c(&POS_SCRATCH as u64, 0u32, 48u64)
+        iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_OFF_KIND, III_POS_PHYSICAL)
+        iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_PHYS_START, iii_lex_read_u32_c(pos, SRCPOS_START))
+        iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_PHYS_END, iii_lex_read_u32_c(pos, SRCPOS_END))
+        iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_PHYS_LINE, iii_lex_read_u32_c(pos, SRCPOS_LINE))
+        iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_PHYS_COL, iii_lex_read_u32_c(pos, SRCPOS_COL))
+        iii_position_chain_prepend(ast, pfb + slot * 4u64, &POS_SCRATCH as u64)
+    }
+    return ast_node_make(pool, slot)
+}
+
+/* Read pos_first[slot] (sentinel 0xFFFFFFFF if slot out of range). */
+fn iii_pool_pos_first_read(ast: u64, pool: u32, slot: u64) -> u32 {
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return POS_SENTINEL }
+    let pfb: u64 = iii_lex_read_u64_c(ast, ast_off_pos_first(pool))
+    return iii_lex_read_u32_c(pfb + slot * 4u64, 0u64)
+}
+
+fn iii_ast_position_count(ast: u64, node_index: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if node_index == 0u32 { return 0u64 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_POSITIONS)
+    let mut cur: u32 = iii_pool_pos_first_read(ast, pool, slot)
+    let mut n: u64 = 0u64
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if cur == POS_SENTINEL { done = 1u32 }
+        if done == 0u32 {
+            n = n + 1u64
+            cur = iii_lex_read_u32_c(base + (cur as u64) * POSITION_RECORD_BYTES, POSREC_OFF_NEXT)
+        }
+    }
+    return n
+}
+
+fn ast_position_at_inner(ast: u64, node_index: u32, i: u64, out: u64) -> i32 {
+    if ast == 0u64 { return 0i32 }
+    if out == 0u64 { return 0i32 }
+    if node_index == 0u32 { return 0i32 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_POSITIONS)
+    let mut cur: u32 = iii_pool_pos_first_read(ast, pool, slot)
+    let mut k: u64 = 0u64
+    let mut done: u32 = 0u32
+    let mut found: i32 = 0i32
+    while done == 0u32 {
+        if cur == POS_SENTINEL { done = 1u32 }
+        if done == 0u32 {
+            if k == i {
+                iii_lex_memcpy_c(out, base + (cur as u64) * POSITION_RECORD_BYTES, POSITION_T_BYTES)
+                found = 1i32
+                done = 1u32
+            }
+            if done == 0u32 {
+                k = k + 1u64
+                cur = iii_lex_read_u32_c(base + (cur as u64) * POSITION_RECORD_BYTES, POSREC_OFF_NEXT)
+            }
+        }
+    }
+    return found
+}
+
+fn iii_ast_position_at(ast: u64, node_index: u32, i: u64, out: u64) -> i32 @export {
+    return ast_position_at_inner(ast, node_index, i, out)
+}
+
+fn iii_ast_position_first(ast: u64, node_index: u32, out: u64) -> i32 @export {
+    return ast_position_at_inner(ast, node_index, 0u64, out)
+}
+
+fn iii_ast_position_add(ast: u64, node_index: u32, pos: u64) -> i32 @export {
+    if ast == 0u64 { return 0i32 }
+    if pos == 0u64 { return 0i32 }
+    if node_index == 0u32 { return 0i32 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0i32 }
+    let pfb: u64 = iii_lex_read_u64_c(ast, ast_off_pos_first(pool))
+    if iii_position_chain_prepend(ast, pfb + slot * 4u64, pos) == 1u32 { return 1i32 }
+    return 0i32
+}
+
+fn iii_ast_position_add_synthetic(ast: u64, node_index: u32, src: u32, mhash: u64, rat: u32) -> i32 @export {
+    let a: u64 = ast
+    let ni: u32 = node_index
+    let sn: u32 = src
+    let mh: u64 = mhash
+    let rt: u32 = rat
+    iii_lex_memset_c(&POS_SCRATCH as u64, 0u32, 48u64)
+    iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_OFF_KIND, III_POS_SYNTHETIC)
+    iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_SYN_SRC, sn)
+    if mh != 0u64 { iii_lex_memcpy_c((&POS_SCRATCH as u64) + POS_SYN_MHASH, mh, 32u64) }
+    iii_lex_write_u32_c(&POS_SCRATCH as u64, POS_SYN_RAT, rt)
+    return iii_ast_position_add(a, ni, &POS_SCRATCH as u64)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.6-12 -- per-node mhash + canonical-bytes serializer (A1,
+ * the Merkle-DAG core).  Mirrors ast.c iii_ast_node_mhash (1487-1499) +
+ * iii_canonical_src_text/list/child (768-805) + iii_canonical_node_bytes
+ * (807-1186).  Field addresses are node + NODE_OFF_U(8) + payload-offset
+ * (offsetof-measured, CONVERGENCE-AUDIT §2.2.6-prep).  list/src_text are
+ * {offset@0, count|length@4}.  Zero-mhash for absent children fed as 32 zero
+ * bytes (8x update_u32(0), identical SHA input to update(zero,32)).
+ * ============================================================================ */
+
+const LIST_OFF_OFFSET: u64 = 0u64
+const LIST_OFF_COUNT: u64 = 4u64
+const SRCTEXT_OFF_OFFSET: u64 = 0u64
+const SRCTEXT_OFF_LENGTH: u64 = 4u64
+
+/* Pointer to a node's stored 32-byte mhash (0 if absent / out of range). */
+fn iii_ast_node_mhash(ast: u64, node_index: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if node_index == 0u32 { return 0u64 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0u64 }
+    let mhb: u64 = iii_lex_read_u64_c(ast, ast_off_mhash(pool))
+    return mhb + slot * 32u64
+}
+
+fn ast_update_zero32(h: u64) -> u32 {
+    let mut i: u32 = 0u32
+    while i != 8u32 {
+        iii_sha256_update_u32(h, 0u32)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* Hash a src_text handle (t_addr -> {offset@0,length@4}): length then bytes. */
+fn ast_canon_src_text(h: u64, ast: u64, t_addr: u64) -> u32 {
+    let off: u32 = iii_lex_read_u32_c(t_addr, SRCTEXT_OFF_OFFSET)
+    let len: u32 = iii_lex_read_u32_c(t_addr, SRCTEXT_OFF_LENGTH)
+    iii_sha256_update_u32(h, len)
+    if len != 0u32 {
+        let src: u64 = iii_lex_read_u64_c(ast, AST_OFF_SOURCE_BUF)
+        let slen: u64 = iii_lex_read_u64_c(ast, AST_OFF_SOURCE_LEN)
+        if src != 0u64 {
+            if (off as u64) + (len as u64) <= slen {
+                iii_sha256_update(h, src + (off as u64), len as u64)
+            }
+        }
+    }
+    return 0u32
+}
+
+/* Feed a child node-index's mhash (or 32 zeros if 0 / unhashed). */
+fn ast_canon_child(h: u64, ast: u64, child: u32) -> u32 {
+    if child == 0u32 { ast_update_zero32(h) ; return 0u32 }
+    let mh: u64 = iii_ast_node_mhash(ast, child)
+    if mh == 0u64 { ast_update_zero32(h) ; return 0u32 }
+    iii_sha256_update(h, mh, 32u64)
+    return 0u32
+}
+
+/* Hash a list handle (list_addr -> {offset@0,count@4}): count then child mhashes. */
+fn ast_canon_list(h: u64, ast: u64, list_addr: u64) -> u32 {
+    let off: u32 = iii_lex_read_u32_c(list_addr, LIST_OFF_OFFSET)
+    let cnt: u32 = iii_lex_read_u32_c(list_addr, LIST_OFF_COUNT)
+    iii_sha256_update_u32(h, cnt)
+    let la: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+    let mut i: u32 = 0u32
+    while i != cnt {
+        let child: u32 = iii_lex_read_u32_c(la, ((off as u64) + (i as u64)) * 4u64)
+        ast_canon_child(h, ast, child)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* Hash the 6-trit hexad payload at node+8 (6 u32 read as low-byte each). */
+fn ast_canon_hexad6(h: u64, node: u64) -> u32 {
+    let mut i: u64 = 0u64
+    while i != 6u64 {
+        iii_sha256_update_u8(h, iii_lex_read_u32_c(node, 8u64 + i * 4u64))
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* Canonical byte serialisation of a node (kind, flags, then per-kind payload).
+ * Per-kind cascade with early return; payload-less kinds (NULL/UNIT/WILDCARD/
+ * BREAK/CONTINUE/unknown) fall through to the trailing return after kind+flags. */
+fn ast_canonical_node_bytes(h: u64, ast: u64, node: u64) -> u32 {
+    let kind: u32 = iii_lex_read_u32_c(node, NODE_OFF_KIND)
+    iii_sha256_update_u32(h, kind)
+    iii_sha256_update_u16(h, iii_lex_read_u32_c(node, NODE_OFF_FLAGS) & 65535u32)
+
+    if kind == III_AST_MODULE {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_list(h, ast, node + 24u64)
+        ast_canon_list(h, ast, node + 32u64)
+        return 0u32
+    }
+    if kind == III_AST_USE {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_src_text(h, ast, node + 20u64)
+        return 0u32
+    }
+    if kind == III_AST_CYCLE_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        ast_canon_list(h, ast, node + 28u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 36u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 40u64))
+        return 0u32
+    }
+    if kind == III_AST_FN_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        ast_canon_list(h, ast, node + 28u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 36u64))
+        /* Stage 7.1: hash generic type-params (node+40) only when present, so
+         * ordinary fns keep a byte-identical canonical mhash. count @ node+44. */
+        let tpc: u32 = iii_lex_read_u32_c(node, 44u64)
+        if tpc > 0u32 { ast_canon_list(h, ast, node + 40u64) }
+        return 0u32
+    }
+    if kind == III_AST_TYPE_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        ast_canon_list(h, ast, node + 28u64)
+        return 0u32
+    }
+    if kind == III_AST_CONST_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 20u64))
+        return 0u32
+    }
+    if kind == III_AST_EXTERN_DECL {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_src_text(h, ast, node + 12u64)
+        ast_canon_list(h, ast, node + 20u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 28u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 32u64))
+        return 0u32
+    }
+    if kind == III_AST_MOBIUS_CANDIDATE_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 20u64))
+        ast_canon_list(h, ast, node + 24u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 32u64))
+        return 0u32
+    }
+    if kind == III_AST_SCHEMA_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        return 0u32
+    }
+    if kind == III_AST_SCHEMA_FIELD {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_src_text(h, ast, node + 12u64)
+        ast_canon_list(h, ast, node + 20u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 28u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 32u64))
+        return 0u32
+    }
+    if kind == III_AST_SEALED_CALL_METHOD_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 28u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 32u64))
+        return 0u32
+    }
+    if kind == III_AST_PARAM {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_TYPE_PARAM {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_src_text(h, ast, node + 16u64)
+        return 0u32
+    }
+    if kind == III_AST_MODIFIER {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 24u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 28u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 32u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 36u64))
+        return 0u32
+    }
+    if kind == III_AST_TYPE_REF {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_list(h, ast, node + 24u64)
+        return 0u32
+    }
+    if kind == III_AST_TYPE_PTR {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_list(h, ast, node + 12u64)
+        return 0u32
+    }
+    if kind == III_AST_TYPE_ARRAY {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update_u64(h, iii_lex_read_u64_c(node, 16u64))
+        ast_canon_list(h, ast, node + 24u64)
+        return 0u32
+    }
+    if kind == III_AST_TYPE_TUPLE {
+        ast_canon_list(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        return 0u32
+    }
+    if kind == III_AST_TYPE_FN {
+        ast_canon_list(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_list(h, ast, node + 20u64)
+        return 0u32
+    }
+    if kind == III_AST_STMT_LET {
+        iii_sha256_update_u8(h, iii_lex_read_u8_at_c(node, 8u64))
+        ast_canon_src_text(h, ast, node + 12u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 20u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_WAVEFRONT {
+        ast_canon_list(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_SANCTUM_ENTER {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_METAL {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 12u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_FOR {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 20u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_MATCH {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_list(h, ast, node + 12u64)
+        return 0u32
+    }
+    if kind == III_AST_STMT_RETURN {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_ASSIGN {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_EXPR {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_FORWARD_BLOCK {
+        ast_canon_list(h, ast, node + 8u64)
+        return 0u32
+    }
+    if kind == III_AST_COMPROMISE_BLOCK {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_MATCH_ARM {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_PAT_LITERAL {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_PAT_IDENT {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        return 0u32
+    }
+    if kind == III_AST_PAT_HEXAD {
+        ast_canon_hexad6(h, node)
+        return 0u32
+    }
+    if kind == III_AST_PAT_TUPLE {
+        ast_canon_list(h, ast, node + 8u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_INT {
+        iii_sha256_update_u64(h, iii_lex_read_u64_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_HEX {
+        iii_sha256_update_u64(h, iii_lex_read_u64_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_MHASH {
+        iii_sha256_update(h, node + 8u64, 32u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_STR {
+        let spi: u32 = iii_lex_read_u32_c(node, 8u64)
+        let sl: u32 = iii_lex_read_u32_c(node, 12u64)
+        iii_sha256_update_u32(h, spi)
+        iii_sha256_update_u32(h, sl)
+        let spc: u32 = iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT)
+        if spi < spc {
+            let spb: u64 = iii_lex_read_u64_c(ast, AST_OFF_STRING_PAYLOADS)
+            let payload: u64 = iii_lex_read_u64_c(spb + (spi as u64) * 8u64, 0u64)
+            if payload != 0u64 {
+                if sl != 0u32 { iii_sha256_update(h, payload, sl as u64) }
+            }
+        }
+        return 0u32
+    }
+    if kind == III_AST_EXPR_BOOL {
+        iii_sha256_update_u8(h, iii_lex_read_u8_at_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_TRIT {
+        iii_sha256_update_u8(h, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_HEXAD {
+        ast_canon_hexad6(h, node)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_IDENT {
+        ast_canon_src_text(h, ast, node + 8u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_CALL {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_list(h, ast, node + 12u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_FIELD {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_src_text(h, ast, node + 12u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_INDEX {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_BINARY {
+        iii_sha256_update_u8(h, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_UNARY {
+        iii_sha256_update_u8(h, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_BLOCK {
+        ast_canon_list(h, ast, node + 8u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_MATCH {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_list(h, ast, node + 12u64)
+        return 0u32
+    }
+    if kind == III_AST_EXPR_PAREN {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_RAW_ASM {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_RING_SET {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_HEXAD_NAME {
+        ast_canon_src_text(h, ast, node + 8u64)
+        return 0u32
+    }
+    if kind == III_AST_ARG {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_TYPE {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_TYPE_OF {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_HOLE {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_PARALLEL {
+        ast_canon_list(h, ast, node + 8u64)
+        return 0u32
+    }
+    if kind == III_AST_ERROR_NODE {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 12u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 16u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 20u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_ADR_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_src_text(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        ast_canon_list(h, ast, node + 28u64)
+        return 0u32
+    }
+    if kind == III_AST_CONFORMANCE_CLAIM_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_src_text(h, ast, node + 16u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_TEST_CASE_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 20u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_RATIONALE_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_OPERATOR_INTENT {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update(h, node + 12u64, 32u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 44u64))
+        return 0u32
+    }
+    if kind == III_AST_USER_NODE {
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_list(h, ast, node + 12u64)
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 20u64))
+        iii_sha256_update_u32(h, iii_lex_read_u32_c(node, 24u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_IF {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_WHILE {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_STMT_LOOP {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_RANGE {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_CAST {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 12u64))
+        return 0u32
+    }
+    if kind == III_AST_EXPR_SIZEOF {
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 8u64))
+        iii_sha256_update_u64(h, iii_lex_read_u64_c(node, 16u64))
+        return 0u32
+    }
+    if kind == III_AST_STRUCT_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_list(h, ast, node + 16u64)
+        return 0u32
+    }
+    if kind == III_AST_VAR_DECL {
+        ast_canon_src_text(h, ast, node + 8u64)
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 16u64))
+        ast_canon_child(h, ast, iii_lex_read_u32_c(node, 20u64))
+        return 0u32
+    }
+    return 0u32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.5 -- open-addressed hash-cons (A2) + intern_node.  Mirrors
+ * ast.c iii_hashcons_grow/lookup/insert (657-711) + iii_ast_intern_node
+ * (713-764).  Slot = 36B {mhash[32]@0, node_index u32@32}; probe key =
+ * mhash[0..3] little-endian & (cap-1); cap is a power of two.  intern computes
+ * the node's canonical mhash, stores it in the side-table, and either dedups
+ * (drop fresh slot + migrate its position chain to the existing node) or
+ * inserts (set INTERNED + add to the table).
+ * ============================================================================ */
+
+/* Probe key from the first 4 mhash bytes (little-endian). */
+fn ast_hc_hash(mh_addr: u64) -> u32 {
+    let b0: u32 = iii_lex_read_u8_at_c(mh_addr, 0u64)
+    let b1: u32 = iii_lex_read_u8_at_c(mh_addr, 1u64)
+    let b2: u32 = iii_lex_read_u8_at_c(mh_addr, 2u64)
+    let b3: u32 = iii_lex_read_u8_at_c(mh_addr, 3u64)
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* Grow the hash-cons table to keep load < 50% (need*2 <= cap), rehashing. */
+fn ast_hashcons_grow(ast: u64, need: u32) -> u32 {
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_CAP)
+    if (need as u64) * 2u64 <= (cap as u64) { return 1u32 }
+    let mut nc: u32 = 256u32
+    if cap != 0u32 { nc = cap * 2u32 }
+    let mut grown: u32 = 0u32
+    while grown == 0u32 {
+        if (nc as u64) >= (need as u64) * 2u64 { grown = 1u32 }
+        if grown == 0u32 {
+            if (nc as u64) > 2147483647u64 { return 0u32 }
+            nc = nc * 2u32
+        }
+    }
+    let np: u64 = iii_lex_malloc_c((nc as u64) * HASHCONS_SLOT_BYTES)
+    if np == 0u64 { return 0u32 }
+    iii_lex_memset_c(np, 0u32, (nc as u64) * HASHCONS_SLOT_BYTES)
+    let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_HASHCONS)
+    let mask: u32 = nc - 1u32
+    let mut i: u32 = 0u32
+    while i != cap {
+        let oslot: u64 = old + (i as u64) * HASHCONS_SLOT_BYTES
+        let oni: u32 = iii_lex_read_u32_c(oslot, HC_OFF_NODE_INDEX)
+        if oni != 0u32 {
+            let mut pos: u32 = ast_hc_hash(oslot) & mask
+            let mut placed: u32 = 0u32
+            while placed == 0u32 {
+                let nslot: u64 = np + (pos as u64) * HASHCONS_SLOT_BYTES
+                if iii_lex_read_u32_c(nslot, HC_OFF_NODE_INDEX) == 0u32 {
+                    iii_lex_memcpy_c(nslot, oslot, HASHCONS_SLOT_BYTES)
+                    placed = 1u32
+                }
+                if placed == 0u32 { pos = (pos + 1u32) & mask }
+            }
+        }
+        i = i + 1u32
+    }
+    if old != 0u64 { iii_lex_free_c(old) }
+    iii_lex_write_u64_c(ast, AST_OFF_HASHCONS, np)
+    iii_lex_write_u32_c(ast, AST_OFF_HASHCONS_CAP, nc)
+    return 1u32
+}
+
+/* Look up node-index by mhash (0 if absent). */
+fn ast_hashcons_lookup(ast: u64, mh_addr: u64) -> u32 {
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_CAP)
+    if cap == 0u32 { return 0u32 }
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_HASHCONS)
+    let mask: u32 = cap - 1u32
+    let mut pos: u32 = ast_hc_hash(mh_addr) & mask
+    let mut result: u32 = 0u32
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        let slot: u64 = base + (pos as u64) * HASHCONS_SLOT_BYTES
+        let ni: u32 = iii_lex_read_u32_c(slot, HC_OFF_NODE_INDEX)
+        if ni == 0u32 { done = 1u32 }
+        if done == 0u32 {
+            if iii_lex_memcmp_c(slot, mh_addr, 32u64) == 0i32 {
+                result = ni
+                done = 1u32
+            }
+            if done == 0u32 { pos = (pos + 1u32) & mask }
+        }
+    }
+    return result
+}
+
+/* Insert (mhash, node_index) (grows first). */
+fn ast_hashcons_insert(ast: u64, mh_addr: u64, node_index: u32) -> u32 {
+    let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_COUNT)
+    if ast_hashcons_grow(ast, cnt + 1u32) == 0u32 { return 0u32 }
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_CAP)
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_HASHCONS)
+    let mask: u32 = cap - 1u32
+    let mut pos: u32 = ast_hc_hash(mh_addr) & mask
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        let slot: u64 = base + (pos as u64) * HASHCONS_SLOT_BYTES
+        if iii_lex_read_u32_c(slot, HC_OFF_NODE_INDEX) == 0u32 {
+            iii_lex_memcpy_c(slot, mh_addr, 32u64)
+            iii_lex_write_u32_c(slot, HC_OFF_NODE_INDEX, node_index)
+            done = 1u32
+        }
+        if done == 0u32 { pos = (pos + 1u32) & mask }
+    }
+    iii_lex_write_u32_c(ast, AST_OFF_HASHCONS_COUNT, cnt + 1u32)
+    return 1u32
+}
+
+/* Migrate the fresh slot's position chain onto the existing node (dedup). */
+fn ast_intern_migrate_pos(ast: u64, fresh: u32, existing: u32) -> u32 {
+    let fpool: u32 = ast_node_pool(fresh)
+    let fslot: u64 = ast_node_slot(fresh)
+    let epool: u32 = ast_node_pool(existing)
+    let eslot: u64 = ast_node_slot(existing)
+    let ecnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(epool))
+    if (eslot as u64) >= (ecnt as u64) { return 0u32 }
+    let new_head: u64 = iii_lex_read_u64_c(ast, ast_off_pos_first(fpool)) + fslot * 4u64
+    let old_head: u64 = iii_lex_read_u64_c(ast, ast_off_pos_first(epool)) + eslot * 4u64
+    let positions: u64 = iii_lex_read_u64_c(ast, AST_OFF_POSITIONS)
+    let mut cur: u32 = iii_lex_read_u32_c(new_head, 0u64)
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if cur == POS_SENTINEL { done = 1u32 }
+        if done == 0u32 {
+            let rec: u64 = positions + (cur as u64) * POSITION_RECORD_BYTES
+            let nxt: u32 = iii_lex_read_u32_c(rec, POSREC_OFF_NEXT)
+            iii_lex_write_u32_c(rec, POSREC_OFF_NEXT, iii_lex_read_u32_c(old_head, 0u64))
+            iii_lex_write_u32_c(old_head, 0u64, cur)
+            cur = nxt
+        }
+    }
+    iii_lex_write_u32_c(new_head, 0u64, POS_SENTINEL)
+    return 0u32
+}
+
+/* Intern a freshly-allocated node: compute its canonical mhash, dedup or insert. */
+fn iii_ast_intern_node(ast: u64, freshly: u32) -> u32 @export {
+    if ast == 0u64 { return freshly }
+    if freshly == 0u32 { return freshly }
+    let pool: u32 = ast_node_pool(freshly)
+    let slot: u64 = ast_node_slot(freshly)
+    let node: u64 = ast_pool_node(ast, pool, slot)
+    if node == 0u64 { return freshly }
+    let mhb: u64 = iii_lex_read_u64_c(ast, ast_off_mhash(pool)) + slot * 32u64
+    let h: u64 = iii_lex_malloc_c(III_AST_SHA256_STATE_BYTES)
+    if h == 0u64 { return freshly }
+    iii_sha256_init(h)
+    ast_canonical_node_bytes(h, ast, node)
+    iii_sha256_final(h, mhb)
+    iii_lex_free_c(h)
+    let existing: u32 = ast_hashcons_lookup(ast, mhb)
+    if existing != 0u32 {
+        let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+        if cnt == (slot as u32) + 1u32 { iii_lex_write_u32_c(ast, ast_off_count(pool), cnt - 1u32) }
+        ast_intern_migrate_pos(ast, freshly, existing)
+        return existing
+    }
+    let fl: u32 = iii_lex_read_u32_c(node, NODE_OFF_FLAGS)
+    iii_lex_write_u32_c(node, NODE_OFF_FLAGS, fl | III_AST_FLAG_INTERNED)
+    ast_hashcons_insert(ast, mhb, freshly)
+    return freshly
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.13 + 2.2.14 -- string interning + list arena.  Mirrors
+ * ast.c iii_ast_intern_string/string_payload_count/get (1313-1343),
+ * iii_ast_list_begin/push/commit/extend (1190-1242), open-list create/push/
+ * commit/destroy (1253-1309), iii_ast_list_at (1385-1391).  iii_ast_list_t is
+ * 8B {offset@0,count@4}: returned packed in rax (offset=low32,count=high32),
+ * passed-by-value in one register.  The open-list is opaque (parser holds the
+ * ptr only) so its 24B layout {ast@0,items@8,count@16,cap@20} is self-chosen.
+ * ============================================================================ */
+
+const OL_BYTES: u64 = 24u64
+const OL_OFF_AST: u64 = 0u64
+const OL_OFF_ITEMS: u64 = 8u64
+const OL_OFF_COUNT: u64 = 16u64
+const OL_OFF_CAP: u64 = 20u64
+
+fn iii_ast_intern_string(ast: u64, payload: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT)
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_CAP)
+    if cnt == cap {
+        let nc: u32 = ast_grow_cap(cap, cap + 1u32)
+        if nc == 0u32 { return 0u32 }
+        let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_STRING_PAYLOADS)
+        let np: u64 = ast_grow_one(old, cap as u64, nc as u64, 8u64)
+        if np == 0u64 { return 0u32 }
+        iii_lex_write_u64_c(ast, AST_OFF_STRING_PAYLOADS, np)
+        iii_lex_write_u32_c(ast, AST_OFF_STRING_PAYLOAD_CAP, nc)
+    }
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_STRING_PAYLOADS)
+    iii_lex_write_u64_c(base + (cnt as u64) * 8u64, 0u64, payload)
+    iii_lex_write_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT, cnt + 1u32)
+    return cnt
+}
+fn iii_ast_string_payload_count(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT)
+}
+fn iii_ast_string_payload_get(ast: u64, idx: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT)
+    if idx >= cnt { return 0u64 }
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_STRING_PAYLOADS)
+    return iii_lex_read_u64_c(base + (idx as u64) * 8u64, 0u64)
+}
+
+fn iii_ast_list_begin(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+}
+
+/* push node_index onto the master list arena (list_start is ignored, LIFO). */
+fn iii_ast_list_push(ast: u64, list_start: u32, node_index: u32) -> i32 @export {
+    if ast == 0u64 { return 0i32 }
+    let used: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_CAP)
+    if used == cap {
+        let nc: u32 = ast_grow_cap(cap, cap + 1u32)
+        if nc == 0u32 { return 0i32 }
+        let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+        let np: u64 = ast_grow_one(old, cap as u64, nc as u64, 4u64)
+        if np == 0u64 { return 0i32 }
+        iii_lex_write_u64_c(ast, AST_OFF_LIST_ARENA, np)
+        iii_lex_write_u32_c(ast, AST_OFF_LIST_CAP, nc)
+    }
+    let la: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+    iii_lex_write_u32_c(la + (used as u64) * 4u64, 0u64, node_index)
+    iii_lex_write_u32_c(ast, AST_OFF_LIST_USED, used + 1u32)
+    return 1i32
+}
+
+/* commit -> packed iii_ast_list_t (offset=list_start, count=used-list_start). */
+fn iii_ast_list_commit(ast: u64, list_start: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let used: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+    let count: u32 = used - list_start
+    return (list_start as u64) | ((count as u64) << 32u64)
+}
+
+fn iii_ast_list_extend(ast: u64, existing: u64, node_index: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let mut ex_off: u32 = 0u32
+    let mut ex_cnt: u32 = 0u32
+    if existing != 0u64 {
+        ex_off = iii_lex_read_u32_c(existing, LIST_OFF_OFFSET)
+        ex_cnt = iii_lex_read_u32_c(existing, LIST_OFF_COUNT)
+    }
+    if ex_cnt == 0u32 {
+        let s: u32 = iii_ast_list_begin(ast)
+        if iii_ast_list_push(ast, s, node_index) == 0i32 { return 0u64 }
+        return iii_ast_list_commit(ast, s)
+    }
+    let used: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+    if (ex_off + ex_cnt) != used { return 0u64 }
+    if iii_ast_list_push(ast, ex_off, node_index) == 0i32 { return 0u64 }
+    return (ex_off as u64) | (((ex_cnt + 1u32) as u64) << 32u64)
+}
+
+fn iii_ast_open_list_create(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let ol: u64 = iii_lex_malloc_c(OL_BYTES)
+    if ol == 0u64 { return 0u64 }
+    iii_lex_memset_c(ol, 0u32, OL_BYTES)
+    iii_lex_write_u64_c(ol, OL_OFF_AST, ast)
+    return ol
+}
+fn iii_ast_open_list_push(ol: u64, node_index: u32) -> i32 @export {
+    if ol == 0u64 { return 0i32 }
+    let cnt: u32 = iii_lex_read_u32_c(ol, OL_OFF_COUNT)
+    let cap: u32 = iii_lex_read_u32_c(ol, OL_OFF_CAP)
+    if cnt == cap {
+        let mut nc: u32 = 8u32
+        if cap != 0u32 { nc = cap * 2u32 }
+        let old: u64 = iii_lex_read_u64_c(ol, OL_OFF_ITEMS)
+        let np: u64 = ast_grow_one(old, cap as u64, nc as u64, 4u64)
+        if np == 0u64 { return 0i32 }
+        iii_lex_write_u64_c(ol, OL_OFF_ITEMS, np)
+        iii_lex_write_u32_c(ol, OL_OFF_CAP, nc)
+    }
+    let items: u64 = iii_lex_read_u64_c(ol, OL_OFF_ITEMS)
+    iii_lex_write_u32_c(items + (cnt as u64) * 4u64, 0u64, node_index)
+    iii_lex_write_u32_c(ol, OL_OFF_COUNT, cnt + 1u32)
+    return 1i32
+}
+fn iii_ast_open_list_destroy(ol: u64) -> u32 @export {
+    if ol == 0u64 { return 0u32 }
+    let items: u64 = iii_lex_read_u64_c(ol, OL_OFF_ITEMS)
+    if items != 0u64 { iii_lex_free_c(items) }
+    iii_lex_free_c(ol)
+    return 0u32
+}
+fn iii_ast_open_list_commit(ast: u64, ol: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if ol == 0u64 { return 0u64 }
+    let used: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+    let olcnt: u32 = iii_lex_read_u32_c(ol, OL_OFF_COUNT)
+    if olcnt != 0u32 {
+        let need: u32 = used + olcnt
+        let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_CAP)
+        if need > cap {
+            let nc: u32 = ast_grow_cap(cap, need)
+            if nc == 0u32 { iii_ast_open_list_destroy(ol) ; return 0u64 }
+            let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+            let np: u64 = ast_grow_one(old, cap as u64, nc as u64, 4u64)
+            if np == 0u64 { iii_ast_open_list_destroy(ol) ; return 0u64 }
+            iii_lex_write_u64_c(ast, AST_OFF_LIST_ARENA, np)
+            iii_lex_write_u32_c(ast, AST_OFF_LIST_CAP, nc)
+        }
+        let la: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+        let items: u64 = iii_lex_read_u64_c(ol, OL_OFF_ITEMS)
+        iii_lex_memcpy_c(la + (used as u64) * 4u64, items, (olcnt as u64) * 4u64)
+        iii_lex_write_u32_c(ast, AST_OFF_LIST_USED, used + olcnt)
+    }
+    iii_ast_open_list_destroy(ol)
+    return (used as u64) | ((olcnt as u64) << 32u64)
+}
+
+/* list_at: list passed packed (offset=low32, count=high32). */
+fn iii_ast_list_at(ast: u64, list_packed: u64, i: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    let off: u32 = (list_packed & 4294967295u64) as u32
+    let cnt: u32 = (list_packed >> 32u64) as u32
+    if i >= cnt { return 0u32 }
+    let used: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+    if (off + i) >= used { return 0u32 }
+    let la: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+    return iii_lex_read_u32_c(la + ((off + i) as u64) * 4u64, 0u64)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.15a -- read accessors + root recompute.  Mirrors ast.c
+ * iii_ast_get/get_mut (1347-1363), node_count (1365-1371), pool_count
+ * (1373-1383), recompute_root_mhash (559-569), set_root_module (576-581).
+ * (kind_name NUL-pool ships in §2.2.15b.)
+ * ============================================================================ */
+
+fn iii_ast_get(ast: u64, node_index: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if node_index == 0u32 { return iii_lex_read_u64_c(ast, AST_OFF_SMALL_NODES) }
+    return ast_pool_node(ast, ast_node_pool(node_index), ast_node_slot(node_index))
+}
+fn iii_ast_get_mut(ast: u64, node_index: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if node_index == 0u32 { return iii_lex_read_u64_c(ast, AST_OFF_SMALL_NODES) }
+    return ast_pool_node(ast, ast_node_pool(node_index), ast_node_slot(node_index))
+}
+
+/* Distinct node count (sum of pool counts minus the 4 NULL sentinels). */
+fn iii_ast_node_count(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let s: u64 = iii_lex_read_u32_c(ast, AST_OFF_SMALL_COUNT) as u64
+    let m: u64 = iii_lex_read_u32_c(ast, AST_OFF_MEDIUM_COUNT) as u64
+    let l: u64 = iii_lex_read_u32_c(ast, AST_OFF_LARGE_COUNT) as u64
+    let u: u64 = iii_lex_read_u32_c(ast, AST_OFF_USER_COUNT) as u64
+    return (s + m + l + u) - 4u64
+}
+
+fn iii_ast_pool_count(ast: u64, pool: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let mut ok: u32 = 0u32
+    if pool == III_AST_POOL_SMALL { ok = 1u32 }
+    if pool == III_AST_POOL_MEDIUM { ok = 1u32 }
+    if pool == III_AST_POOL_LARGE { ok = 1u32 }
+    if pool == III_AST_POOL_USER { ok = 1u32 }
+    if ok == 0u32 { return 0u64 }
+    let c: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if c == 0u32 { return 0u64 }
+    return (c - 1u32) as u64
+}
+
+fn iii_ast_recompute_root_mhash(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    let rm: u32 = iii_lex_read_u32_c(ast, AST_OFF_ROOT_MODULE)
+    if rm == 0u32 {
+        iii_lex_memset_c(ast + AST_OFF_ROOT_MODULE_MHASH, 0u32, 32u64)
+        return 0u32
+    }
+    let mh: u64 = iii_ast_node_mhash(ast, rm)
+    if mh != 0u64 { iii_lex_memcpy_c(ast + AST_OFF_ROOT_MODULE_MHASH, mh, 32u64) }
+    if mh == 0u64 { iii_lex_memset_c(ast + AST_OFF_ROOT_MODULE_MHASH, 0u32, 32u64) }
+    return 0u32
+}
+
+fn iii_ast_set_root_module(ast: u64, node_index: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    iii_lex_write_u32_c(ast, AST_OFF_ROOT_MODULE, node_index)
+    iii_ast_recompute_root_mhash(ast)
+    return 0u32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.16 -- binder-id (M1) + doc-comment (G1) side-tables.
+ * Mirrors ast.c alloc_binder_id/node_binder_id/set_binder_id (1574-1603) +
+ * leading_doc_comment/set_leading_doc_comment (1605-1629).  All use the raw
+ * per-pool count (incl the slot-0 sentinel).
+ * ============================================================================ */
+
+fn iii_ast_alloc_binder_id(ast: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    let id: u32 = iii_lex_read_u32_c(ast, AST_OFF_NEXT_BINDER_ID)
+    iii_lex_write_u32_c(ast, AST_OFF_NEXT_BINDER_ID, id + 1u32)
+    return id
+}
+fn iii_ast_node_binder_id(ast: u64, node_index: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node_index == 0u32 { return 0u32 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0u32 }
+    let base: u64 = iii_lex_read_u64_c(ast, ast_off_binder(pool))
+    return iii_lex_read_u32_c(base + slot * 4u64, 0u64)
+}
+fn iii_ast_set_binder_id(ast: u64, node_index: u32, binder_id: u32) -> i32 @export {
+    if ast == 0u64 { return 0i32 }
+    if node_index == 0u32 { return 0i32 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0i32 }
+    let base: u64 = iii_lex_read_u64_c(ast, ast_off_binder(pool))
+    iii_lex_write_u32_c(base + slot * 4u64, 0u64, binder_id)
+    return 1i32
+}
+fn iii_ast_leading_doc_comment(ast: u64, node_index: u32) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if node_index == 0u32 { return 0u32 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0u32 }
+    let base: u64 = iii_lex_read_u64_c(ast, ast_off_doc(pool))
+    return iii_lex_read_u32_c(base + slot * 4u64, 0u64)
+}
+fn iii_ast_set_leading_doc_comment(ast: u64, node_index: u32, doc_comment_node: u32) -> i32 @export {
+    if ast == 0u64 { return 0i32 }
+    if node_index == 0u32 { return 0i32 }
+    let pool: u32 = ast_node_pool(node_index)
+    let slot: u64 = ast_node_slot(node_index)
+    let cnt: u32 = iii_lex_read_u32_c(ast, ast_off_count(pool))
+    if slot >= (cnt as u64) { return 0i32 }
+    let base: u64 = iii_lex_read_u64_c(ast, ast_off_doc(pool))
+    iii_lex_write_u32_c(base + slot * 4u64, 0u64, doc_comment_node)
+    return 1i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.15b -- kind_name (79-name NUL-pool).  Mirrors ast.c
+ * III_AST_KIND_NAMES + iii_ast_kind_name (1395-1483).  iiis-0 literals are not
+ * NUL-terminated, so each name is copied + NUL'd into AKN_POOL once; kind_name
+ * returns a stable pool offset (or "<bad-kind>" for out-of-range).  Lengths
+ * strlen-measured.  Names match ast.c exactly (e.g. MOBIUS_CANDIDATE, not
+ * ..._DECL).
+ * ============================================================================ */
+var AKN_POOL : [u8; 1024]
+var AKN_OFF  : [u32; 80]
+var AKN_BAD  : u32 = 0u32
+var AKN_NEXT : u64 = 0u64
+var AKN_INIT : u8 = 0u8
+
+fn akn_add(kind: u32, lit: u64, litlen: u64) -> u32 {
+    let base: u64 = (&AKN_POOL as u64) + AKN_NEXT
+    iii_lex_memcpy_c(base, lit, litlen)
+    iii_lex_write_u8_at_c(base + litlen, 0u64, 0u32)
+    iii_lex_write_u32_c(&AKN_OFF as u64, (kind as u64) * 4u64, AKN_NEXT as u32)
+    AKN_NEXT = AKN_NEXT + litlen + 1u64
+    return 0u32
+}
+fn akn_init() -> u32 {
+    if AKN_INIT == 1u8 { return 0u32 }
+    akn_add(III_AST_NULL, "NULL" as u64, 4u64)
+    akn_add(III_AST_MODULE, "MODULE" as u64, 6u64)
+    akn_add(III_AST_USE, "USE" as u64, 3u64)
+    akn_add(III_AST_CYCLE_DECL, "CYCLE_DECL" as u64, 10u64)
+    akn_add(III_AST_FN_DECL, "FN_DECL" as u64, 7u64)
+    akn_add(III_AST_TYPE_DECL, "TYPE_DECL" as u64, 9u64)
+    akn_add(III_AST_CONST_DECL, "CONST_DECL" as u64, 10u64)
+    akn_add(III_AST_EXTERN_DECL, "EXTERN_DECL" as u64, 11u64)
+    akn_add(III_AST_MOBIUS_CANDIDATE_DECL, "MOBIUS_CANDIDATE" as u64, 16u64)
+    akn_add(III_AST_SCHEMA_DECL, "SCHEMA_DECL" as u64, 11u64)
+    akn_add(III_AST_SCHEMA_FIELD, "SCHEMA_FIELD" as u64, 12u64)
+    akn_add(III_AST_SEALED_CALL_METHOD_DECL, "SEALED_CALL_METHOD" as u64, 18u64)
+    akn_add(III_AST_PARAM, "PARAM" as u64, 5u64)
+    akn_add(III_AST_TYPE_PARAM, "TYPE_PARAM" as u64, 10u64)
+    akn_add(III_AST_MODIFIER, "MODIFIER" as u64, 8u64)
+    akn_add(III_AST_TYPE_REF, "TYPE_REF" as u64, 8u64)
+    akn_add(III_AST_TYPE_PTR, "TYPE_PTR" as u64, 8u64)
+    akn_add(III_AST_TYPE_ARRAY, "TYPE_ARRAY" as u64, 10u64)
+    akn_add(III_AST_TYPE_TUPLE, "TYPE_TUPLE" as u64, 10u64)
+    akn_add(III_AST_TYPE_FN, "TYPE_FN" as u64, 7u64)
+    akn_add(III_AST_STMT_LET, "STMT_LET" as u64, 8u64)
+    akn_add(III_AST_STMT_WAVEFRONT, "STMT_WAVEFRONT" as u64, 14u64)
+    akn_add(III_AST_STMT_SANCTUM_ENTER, "STMT_SANCTUM_ENTER" as u64, 18u64)
+    akn_add(III_AST_STMT_METAL, "STMT_METAL" as u64, 10u64)
+    akn_add(III_AST_STMT_FOR, "STMT_FOR" as u64, 8u64)
+    akn_add(III_AST_STMT_MATCH, "STMT_MATCH" as u64, 10u64)
+    akn_add(III_AST_STMT_RETURN, "STMT_RETURN" as u64, 11u64)
+    akn_add(III_AST_STMT_ASSIGN, "STMT_ASSIGN" as u64, 11u64)
+    akn_add(III_AST_STMT_EXPR, "STMT_EXPR" as u64, 9u64)
+    akn_add(III_AST_FORWARD_BLOCK, "FORWARD_BLOCK" as u64, 13u64)
+    akn_add(III_AST_COMPROMISE_BLOCK, "COMPROMISE_BLOCK" as u64, 16u64)
+    akn_add(III_AST_MATCH_ARM, "MATCH_ARM" as u64, 9u64)
+    akn_add(III_AST_PAT_LITERAL, "PAT_LITERAL" as u64, 11u64)
+    akn_add(III_AST_PAT_IDENT, "PAT_IDENT" as u64, 9u64)
+    akn_add(III_AST_PAT_HEXAD, "PAT_HEXAD" as u64, 9u64)
+    akn_add(III_AST_PAT_WILDCARD, "PAT_WILDCARD" as u64, 12u64)
+    akn_add(III_AST_PAT_TUPLE, "PAT_TUPLE" as u64, 9u64)
+    akn_add(III_AST_EXPR_INT, "EXPR_INT" as u64, 8u64)
+    akn_add(III_AST_EXPR_HEX, "EXPR_HEX" as u64, 8u64)
+    akn_add(III_AST_EXPR_MHASH, "EXPR_MHASH" as u64, 10u64)
+    akn_add(III_AST_EXPR_STR, "EXPR_STR" as u64, 8u64)
+    akn_add(III_AST_EXPR_BOOL, "EXPR_BOOL" as u64, 9u64)
+    akn_add(III_AST_EXPR_TRIT, "EXPR_TRIT" as u64, 9u64)
+    akn_add(III_AST_EXPR_HEXAD, "EXPR_HEXAD" as u64, 10u64)
+    akn_add(III_AST_EXPR_UNIT, "EXPR_UNIT" as u64, 9u64)
+    akn_add(III_AST_EXPR_IDENT, "EXPR_IDENT" as u64, 10u64)
+    akn_add(III_AST_EXPR_CALL, "EXPR_CALL" as u64, 9u64)
+    akn_add(III_AST_EXPR_FIELD, "EXPR_FIELD" as u64, 10u64)
+    akn_add(III_AST_EXPR_INDEX, "EXPR_INDEX" as u64, 10u64)
+    akn_add(III_AST_EXPR_BINARY, "EXPR_BINARY" as u64, 11u64)
+    akn_add(III_AST_EXPR_UNARY, "EXPR_UNARY" as u64, 10u64)
+    akn_add(III_AST_EXPR_BLOCK, "EXPR_BLOCK" as u64, 10u64)
+    akn_add(III_AST_EXPR_MATCH, "EXPR_MATCH" as u64, 10u64)
+    akn_add(III_AST_EXPR_PAREN, "EXPR_PAREN" as u64, 10u64)
+    akn_add(III_AST_EXPR_RAW_ASM, "EXPR_RAW_ASM" as u64, 12u64)
+    akn_add(III_AST_RING_SET, "RING_SET" as u64, 8u64)
+    akn_add(III_AST_HEXAD_NAME, "HEXAD_NAME" as u64, 10u64)
+    akn_add(III_AST_ARG, "ARG" as u64, 3u64)
+    akn_add(III_AST_EXPR_TYPE, "EXPR_TYPE" as u64, 9u64)
+    akn_add(III_AST_TYPE_OF, "TYPE_OF" as u64, 7u64)
+    akn_add(III_AST_EXPR_HOLE, "EXPR_HOLE" as u64, 9u64)
+    akn_add(III_AST_EXPR_PARALLEL, "EXPR_PARALLEL" as u64, 13u64)
+    akn_add(III_AST_ERROR_NODE, "ERROR_NODE" as u64, 10u64)
+    akn_add(III_AST_ADR_DECL, "ADR_DECL" as u64, 8u64)
+    akn_add(III_AST_CONFORMANCE_CLAIM_DECL, "CONFORMANCE_CLAIM" as u64, 17u64)
+    akn_add(III_AST_TEST_CASE_DECL, "TEST_CASE" as u64, 9u64)
+    akn_add(III_AST_RATIONALE_DECL, "RATIONALE" as u64, 9u64)
+    akn_add(III_AST_OPERATOR_INTENT, "OPERATOR_INTENT" as u64, 15u64)
+    akn_add(III_AST_USER_NODE, "USER_NODE" as u64, 9u64)
+    akn_add(III_AST_STMT_IF, "STMT_IF" as u64, 7u64)
+    akn_add(III_AST_STMT_WHILE, "STMT_WHILE" as u64, 10u64)
+    akn_add(III_AST_EXPR_RANGE, "EXPR_RANGE" as u64, 10u64)
+    akn_add(III_AST_EXPR_CAST, "EXPR_CAST" as u64, 9u64)
+    akn_add(III_AST_EXPR_SIZEOF, "EXPR_SIZEOF" as u64, 11u64)
+    akn_add(III_AST_VAR_DECL, "VAR_DECL" as u64, 8u64)
+    akn_add(III_AST_STRUCT_DECL, "STRUCT_DECL" as u64, 11u64)
+    akn_add(III_AST_STMT_LOOP, "STMT_LOOP" as u64, 9u64)
+    akn_add(III_AST_STMT_BREAK, "STMT_BREAK" as u64, 10u64)
+    akn_add(III_AST_STMT_CONTINUE, "STMT_CONTINUE" as u64, 13u64)
+    /* out-of-range fallback */
+    AKN_BAD = AKN_NEXT as u32
+    let bb: u64 = (&AKN_POOL as u64) + AKN_NEXT
+    iii_lex_memcpy_c(bb, "<bad-kind>" as u64, 10u64)
+    iii_lex_write_u8_at_c(bb + 10u64, 0u64, 0u32)
+    AKN_NEXT = AKN_NEXT + 11u64
+    AKN_INIT = 1u8
+    return 0u32
+}
+fn iii_ast_kind_name(k: u32) -> u64 @export {
+    akn_init()
+    if k >= III_AST_KIND_COUNT { return (&AKN_POOL as u64) + (AKN_BAD as u64) }
+    let off: u32 = iii_lex_read_u32_c(&AKN_OFF as u64, (k as u64) * 4u64)
+    return (&AKN_POOL as u64) + (off as u64)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.17 -- checkpoint / rollback (E1).  Mirrors ast.c
+ * iii_ast_checkpoint (1633-1649) + iii_ast_rollback (1651-1689).  The 44-byte
+ * iii_ast_checkpoint_t {11 u32 @ 0,4,..,40} exceeds 8 bytes, so Win64 returns
+ * it via a hidden sret pointer (rcx) and passes it by value via a pointer
+ * (rdx).  So checkpoint(out_ptr, ast) writes the 11 fields to *out and returns
+ * out; rollback(ast, cp_ptr) reads them from *cp_ptr.  Rollback truncates
+ * hash-cons entries whose node-index slot is now beyond the boundary, then
+ * restores the 10 restored counts (hashcons_count is decremented in place).
+ * ============================================================================ */
+
+const CP_SMALL: u64 = 0u64
+const CP_MEDIUM: u64 = 4u64
+const CP_LARGE: u64 = 8u64
+const CP_USER: u64 = 12u64
+const CP_LIST_USED: u64 = 16u64
+const CP_STRP: u64 = 20u64
+const CP_POS: u64 = 24u64
+const CP_ANN: u64 = 28u64
+const CP_ANNBLOB: u64 = 32u64
+const CP_HC: u64 = 36u64
+const CP_NBID: u64 = 40u64
+
+fn iii_ast_checkpoint(out: u64, ast: u64) -> u64 @export {
+    if out == 0u64 { return out }
+    if ast == 0u64 { iii_lex_memset_c(out, 0u32, 44u64) ; return out }
+    iii_lex_write_u32_c(out, CP_SMALL, iii_lex_read_u32_c(ast, AST_OFF_SMALL_COUNT))
+    iii_lex_write_u32_c(out, CP_MEDIUM, iii_lex_read_u32_c(ast, AST_OFF_MEDIUM_COUNT))
+    iii_lex_write_u32_c(out, CP_LARGE, iii_lex_read_u32_c(ast, AST_OFF_LARGE_COUNT))
+    iii_lex_write_u32_c(out, CP_USER, iii_lex_read_u32_c(ast, AST_OFF_USER_COUNT))
+    iii_lex_write_u32_c(out, CP_LIST_USED, iii_lex_read_u32_c(ast, AST_OFF_LIST_USED))
+    iii_lex_write_u32_c(out, CP_STRP, iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT))
+    iii_lex_write_u32_c(out, CP_POS, iii_lex_read_u32_c(ast, AST_OFF_POSITION_COUNT))
+    iii_lex_write_u32_c(out, CP_ANN, iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_COUNT))
+    iii_lex_write_u32_c(out, CP_ANNBLOB, iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_BLOB_USED))
+    iii_lex_write_u32_c(out, CP_HC, iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_COUNT))
+    iii_lex_write_u32_c(out, CP_NBID, iii_lex_read_u32_c(ast, AST_OFF_NEXT_BINDER_ID))
+    return out
+}
+
+fn iii_ast_rollback(ast: u64, cp_ptr: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if cp_ptr == 0u64 { return 0u32 }
+    let cs: u32 = iii_lex_read_u32_c(cp_ptr, CP_SMALL)
+    let cm: u32 = iii_lex_read_u32_c(cp_ptr, CP_MEDIUM)
+    let cl: u32 = iii_lex_read_u32_c(cp_ptr, CP_LARGE)
+    let cu: u32 = iii_lex_read_u32_c(cp_ptr, CP_USER)
+    /* Truncate hash-cons entries whose node now lies beyond the boundary. */
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_CAP)
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_HASHCONS)
+    let mut i: u32 = 0u32
+    while i != cap {
+        let saddr: u64 = base + (i as u64) * HASHCONS_SLOT_BYTES
+        let ni: u32 = iii_lex_read_u32_c(saddr, HC_OFF_NODE_INDEX)
+        if ni != 0u32 {
+            let p: u32 = ast_node_pool(ni)
+            let s: u64 = ast_node_slot(ni)
+            let mut drop: u32 = 0u32
+            if p == III_AST_POOL_SMALL  { if s >= (cs as u64) { drop = 1u32 } }
+            if p == III_AST_POOL_MEDIUM { if s >= (cm as u64) { drop = 1u32 } }
+            if p == III_AST_POOL_LARGE  { if s >= (cl as u64) { drop = 1u32 } }
+            if p == III_AST_POOL_USER   { if s >= (cu as u64) { drop = 1u32 } }
+            if drop == 1u32 {
+                iii_lex_memset_c(saddr, 0u32, HASHCONS_SLOT_BYTES)
+                let hc: u32 = iii_lex_read_u32_c(ast, AST_OFF_HASHCONS_COUNT)
+                if hc > 0u32 { iii_lex_write_u32_c(ast, AST_OFF_HASHCONS_COUNT, hc - 1u32) }
+            }
+        }
+        i = i + 1u32
+    }
+    iii_lex_write_u32_c(ast, AST_OFF_SMALL_COUNT, cs)
+    iii_lex_write_u32_c(ast, AST_OFF_MEDIUM_COUNT, cm)
+    iii_lex_write_u32_c(ast, AST_OFF_LARGE_COUNT, cl)
+    iii_lex_write_u32_c(ast, AST_OFF_USER_COUNT, cu)
+    iii_lex_write_u32_c(ast, AST_OFF_LIST_USED, iii_lex_read_u32_c(cp_ptr, CP_LIST_USED))
+    iii_lex_write_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT, iii_lex_read_u32_c(cp_ptr, CP_STRP))
+    iii_lex_write_u32_c(ast, AST_OFF_POSITION_COUNT, iii_lex_read_u32_c(cp_ptr, CP_POS))
+    iii_lex_write_u32_c(ast, AST_OFF_ANNOTATION_COUNT, iii_lex_read_u32_c(cp_ptr, CP_ANN))
+    iii_lex_write_u32_c(ast, AST_OFF_ANNOTATION_BLOB_USED, iii_lex_read_u32_c(cp_ptr, CP_ANNBLOB))
+    iii_lex_write_u32_c(ast, AST_OFF_NEXT_BINDER_ID, iii_lex_read_u32_c(cp_ptr, CP_NBID))
+    return 0u32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.18a -- iterate_children (callback child enumeration).
+ * Mirrors ast.c iii_ast_iterate_children (1693-1928).  The callback fn-pointer
+ * is invoked via iiis-0's indirect-call form `fnp(a,b,c,d,e)` (5-arg, proven).
+ * Each child slot carries a NUL-terminated slot-kind string from SLOT_POOL.
+ * CRITICAL: ast.c's switch has NO arms for the 10 Phase-B kinds (STMT_IF/
+ * WHILE/LOOP/BREAK/CONTINUE/RANGE/CAST/SIZEOF/VAR_DECL/STRUCT_DECL) -- they hit
+ * default and enumerate no children.  This port mirrors that exactly (byte-
+ * equivalence; NOT a "fix").
+ * ============================================================================ */
+
+var SLOT_POOL : [u8; 512]
+var SLOT_OFF  : [u32; 48]
+var SLOT_INIT : u8 = 0u8
+var SLOT_NEXT : u64 = 0u64
+
+fn slot_add(id: u32, lit: u64, litlen: u64) -> u32 {
+    let base: u64 = (&SLOT_POOL as u64) + SLOT_NEXT
+    iii_lex_memcpy_c(base, lit, litlen)
+    iii_lex_write_u8_at_c(base + litlen, 0u64, 0u32)
+    iii_lex_write_u32_c(&SLOT_OFF as u64, (id as u64) * 4u64, SLOT_NEXT as u32)
+    SLOT_NEXT = SLOT_NEXT + litlen + 1u64
+    return 0u32
+}
+fn slot_init() -> u32 {
+    if SLOT_INIT == 1u8 { return 0u32 }
+    slot_add(0u32, "modifiers" as u64, 9u64)
+    slot_add(1u32, "uses" as u64, 4u64)
+    slot_add(2u32, "decls" as u64, 5u64)
+    slot_add(3u32, "closure" as u64, 7u64)
+    slot_add(4u32, "params" as u64, 6u64)
+    slot_add(5u32, "return_type" as u64, 11u64)
+    slot_add(6u32, "forward" as u64, 7u64)
+    slot_add(7u32, "compromise" as u64, 10u64)
+    slot_add(8u32, "body" as u64, 4u64)
+    slot_add(9u32, "type_params" as u64, 11u64)
+    slot_add(10u32, "rhs" as u64, 3u64)
+    slot_add(11u32, "type" as u64, 4u64)
+    slot_add(12u32, "value" as u64, 5u64)
+    slot_add(13u32, "in_type" as u64, 7u64)
+    slot_add(14u32, "out_type" as u64, 8u64)
+    slot_add(15u32, "fields" as u64, 6u64)
+    slot_add(16u32, "args" as u64, 4u64)
+    slot_add(17u32, "expr" as u64, 4u64)
+    slot_add(18u32, "hexad" as u64, 5u64)
+    slot_add(19u32, "type_args" as u64, 9u64)
+    slot_add(20u32, "inner" as u64, 5u64)
+    slot_add(21u32, "components" as u64, 10u64)
+    slot_add(22u32, "nodes" as u64, 5u64)
+    slot_add(23u32, "on_rollback" as u64, 11u64)
+    slot_add(24u32, "iter" as u64, 4u64)
+    slot_add(25u32, "where" as u64, 5u64)
+    slot_add(26u32, "scrutinee" as u64, 9u64)
+    slot_add(27u32, "arms" as u64, 4u64)
+    slot_add(28u32, "lvalue" as u64, 6u64)
+    slot_add(29u32, "stmts" as u64, 5u64)
+    slot_add(30u32, "pattern" as u64, 7u64)
+    slot_add(31u32, "guard" as u64, 5u64)
+    slot_add(32u32, "literal" as u64, 7u64)
+    slot_add(33u32, "payload_pats" as u64, 12u64)
+    slot_add(34u32, "callee" as u64, 6u64)
+    slot_add(35u32, "object" as u64, 6u64)
+    slot_add(36u32, "index" as u64, 5u64)
+    slot_add(37u32, "lhs" as u64, 3u64)
+    slot_add(38u32, "operand" as u64, 7u64)
+    slot_add(39u32, "branches" as u64, 8u64)
+    slot_add(40u32, "proof" as u64, 5u64)
+    slot_add(41u32, "precondition" as u64, 12u64)
+    slot_add(42u32, "action" as u64, 6u64)
+    slot_add(43u32, "postcondition" as u64, 13u64)
+    slot_add(44u32, "term" as u64, 4u64)
+    slot_add(45u32, "type_hint" as u64, 9u64)
+    slot_add(46u32, "witness" as u64, 7u64)
+    slot_add(47u32, "children" as u64, 8u64)
+    SLOT_INIT = 1u8
+    return 0u32
+}
+fn slot_str(id: u32) -> u64 {
+    slot_init()
+    let off: u32 = iii_lex_read_u32_c(&SLOT_OFF as u64, (id as u64) * 4u64)
+    return (&SLOT_POOL as u64) + (off as u64)
+}
+
+/* iter-ctx buffer: {fn@0, ctx@8, ast@16, node@24(u32), err@28(i32)} = 32B. */
+const IC_FN: u64 = 0u64
+const IC_CTX: u64 = 8u64
+const IC_AST: u64 = 16u64
+const IC_NODE: u64 = 24u64
+const IC_ERR: u64 = 28u64
+
+fn ast_iter_child(ic: u64, child: u32, slot_id: u32) -> i32 {
+    let err: u32 = iii_lex_read_u32_c(ic, IC_ERR)
+    if err != 0u32 { return err as i32 }
+    if child == 0u32 { return 0i32 }
+    let fnp: u64 = iii_lex_read_u64_c(ic, IC_FN)
+    let ctx: u64 = iii_lex_read_u64_c(ic, IC_CTX)
+    let ast: u64 = iii_lex_read_u64_c(ic, IC_AST)
+    let parent: u32 = iii_lex_read_u32_c(ic, IC_NODE)
+    let slotp: u64 = slot_str(slot_id)
+    let r: u32 = fnp(ast, parent, child, slotp, ctx)
+    if r != 0u32 { iii_lex_write_u32_c(ic, IC_ERR, r) }
+    return r as i32
+}
+fn ast_iter_list(ic: u64, list_addr: u64, slot_id: u32) -> i32 {
+    let off: u32 = iii_lex_read_u32_c(list_addr, LIST_OFF_OFFSET)
+    let cnt: u32 = iii_lex_read_u32_c(list_addr, LIST_OFF_COUNT)
+    let ast: u64 = iii_lex_read_u64_c(ic, IC_AST)
+    let la: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
+    let mut i: u32 = 0u32
+    let mut res: i32 = 0i32
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if i == cnt { done = 1u32 }
+        if done == 0u32 {
+            let child: u32 = iii_lex_read_u32_c(la + ((off as u64) + (i as u64)) * 4u64, 0u64)
+            res = ast_iter_child(ic, child, slot_id)
+            if res != 0i32 { done = 1u32 }
+            i = i + 1u32
+        }
+    }
+    return res
+}
+
+/* Per-kind child enumeration (early return per arm; leaves + the 10 Phase-B
+ * kinds fall through to the trailing return 0 -- mirrors ast.c default). */
+fn ast_iter_dispatch(ic: u64, np: u64, kind: u32) -> i32 {
+    if kind == III_AST_MODULE {
+        ast_iter_list(ic, np + 16u64, 0u32)
+        ast_iter_list(ic, np + 24u64, 1u32)
+        ast_iter_list(ic, np + 32u64, 2u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_USE {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 3u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_CYCLE_DECL {
+        ast_iter_list(ic, np + 16u64, 4u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 5u32)
+        ast_iter_list(ic, np + 28u64, 0u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 36u64), 6u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 40u64), 7u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_FN_DECL {
+        ast_iter_list(ic, np + 16u64, 4u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 5u32)
+        ast_iter_list(ic, np + 28u64, 0u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 36u64), 8u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_DECL {
+        ast_iter_list(ic, np + 16u64, 9u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 10u32)
+        ast_iter_list(ic, np + 28u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_CONST_DECL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 11u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 20u64), 12u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXTERN_DECL {
+        ast_iter_list(ic, np + 20u64, 4u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 28u64), 5u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_MOBIUS_CANDIDATE_DECL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 13u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 20u64), 14u32)
+        ast_iter_list(ic, np + 24u64, 0u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 32u64), 6u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_SCHEMA_DECL {
+        ast_iter_list(ic, np + 16u64, 15u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_SCHEMA_FIELD {
+        ast_iter_list(ic, np + 20u64, 16u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 28u64), 17u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_SEALED_CALL_METHOD_DECL {
+        ast_iter_list(ic, np + 16u64, 4u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 5u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 32u64), 8u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_PARAM {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 11u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_MODIFIER {
+        ast_iter_list(ic, np + 16u64, 16u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 28u64), 18u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_REF {
+        ast_iter_list(ic, np + 16u64, 19u32)
+        ast_iter_list(ic, np + 24u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_PTR {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 20u32)
+        ast_iter_list(ic, np + 12u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_ARRAY {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 20u32)
+        ast_iter_list(ic, np + 24u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_TUPLE {
+        ast_iter_list(ic, np + 8u64, 21u32)
+        ast_iter_list(ic, np + 16u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_FN {
+        ast_iter_list(ic, np + 8u64, 4u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 5u32)
+        ast_iter_list(ic, np + 20u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_LET {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 20u64), 11u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 12u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_WAVEFRONT {
+        ast_iter_list(ic, np + 8u64, 0u32)
+        ast_iter_list(ic, np + 16u64, 22u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 23u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_SANCTUM_ENTER {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 8u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_FOR {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 24u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 20u64), 25u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 8u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_MATCH {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 26u32)
+        ast_iter_list(ic, np + 12u64, 27u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_RETURN {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 12u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_ASSIGN {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 28u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 12u64), 12u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_STMT_EXPR {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 17u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_FORWARD_BLOCK {
+        ast_iter_list(ic, np + 8u64, 29u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_MATCH_ARM {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 30u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 12u64), 31u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 8u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_PAT_LITERAL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 32u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_PAT_IDENT {
+        ast_iter_list(ic, np + 16u64, 33u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_PAT_TUPLE {
+        ast_iter_list(ic, np + 8u64, 21u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_CALL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 34u32)
+        ast_iter_list(ic, np + 12u64, 16u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_FIELD {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 35u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_INDEX {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 35u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 12u64), 36u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_BINARY {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 12u64), 37u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 10u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_UNARY {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 12u64), 38u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_BLOCK {
+        ast_iter_list(ic, np + 8u64, 29u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_MATCH {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 26u32)
+        ast_iter_list(ic, np + 12u64, 27u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_PAREN {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 20u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_ARG {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 12u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_TYPE {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 11u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TYPE_OF {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 44u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_HOLE {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 8u64), 45u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_EXPR_PARALLEL {
+        ast_iter_list(ic, np + 8u64, 39u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_ADR_DECL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 8u32)
+        ast_iter_list(ic, np + 28u64, 0u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_CONFORMANCE_CLAIM_DECL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 40u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_TEST_CASE_DECL {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 16u64), 41u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 20u64), 42u32)
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 24u64), 43u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_OPERATOR_INTENT {
+        ast_iter_child(ic, iii_lex_read_u32_c(np, 44u64), 46u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    if kind == III_AST_USER_NODE {
+        ast_iter_list(ic, np + 12u64, 47u32)
+        return iii_lex_read_u32_c(ic, IC_ERR) as i32
+    }
+    return 0i32
+}
+
+fn iii_ast_iterate_children(ast: u64, node: u32, fn_ptr: u64, ctx: u64) -> i32 @export {
+    if ast == 0u64 { return 0i32 - 1i32 }
+    if fn_ptr == 0u64 { return 0i32 - 1i32 }
+    let np: u64 = iii_ast_get(ast, node)
+    if np == 0u64 { return 0i32 - 1i32 }
+    let kind: u32 = iii_lex_read_u32_c(np, NODE_OFF_KIND)
+    let ic: u64 = iii_lex_malloc_c(32u64)
+    if ic == 0u64 { return 0i32 - 1i32 }
+    iii_lex_write_u64_c(ic, IC_FN, fn_ptr)
+    iii_lex_write_u64_c(ic, IC_CTX, ctx)
+    iii_lex_write_u64_c(ic, IC_AST, ast)
+    iii_lex_write_u32_c(ic, IC_NODE, node)
+    iii_lex_write_u32_c(ic, IC_ERR, 0u32)
+    let r: i32 = ast_iter_dispatch(ic, np, kind)
+    iii_lex_free_c(ic)
+    return r
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.18b -- walk_pre / walk_post (callback recursion).  Mirrors
+ * ast.c iii_walk_child_visit + iii_ast_walk_pre/walk_post (1940-1976).  Uses
+ * iiis-0 forward-reference support (proven): the walk inners forward-ref
+ * `ast_walk_child_visit as u64` and pass it to iterate_children, which invokes
+ * it; it recurses back into the inners.  visit_fn is fn(ast,node,depth,ctx);
+ * depth is always 0 (mirrors ast.c, where each walk_pre/post resets depth -- a
+ * latent ast.c quirk replicated for byte-equivalence).  walk_ctx =
+ * {fn@0,ctx@8,err@16(i32),post@20(u8)}=32B.
+ * ============================================================================ */
+
+const WC_BYTES: u64 = 32u64
+const WC_FN: u64 = 0u64
+const WC_CTX: u64 = 8u64
+const WC_ERR: u64 = 16u64
+const WC_POST: u64 = 20u64
+
+fn ast_walk_pre_inner(ast: u64, root: u32, fnp: u64, ctx: u64) -> i32 {
+    if ast == 0u64 { return 0i32 }
+    if fnp == 0u64 { return 0i32 }
+    if root == 0u32 { return 0i32 }
+    let r0: u32 = fnp(ast, root, 0u32, ctx)
+    if r0 != 0u32 { return r0 as i32 }
+    let w: u64 = iii_lex_malloc_c(WC_BYTES)
+    if w == 0u64 { return 0i32 }
+    iii_lex_memset_c(w, 0u32, WC_BYTES)
+    iii_lex_write_u64_c(w, WC_FN, fnp)
+    iii_lex_write_u64_c(w, WC_CTX, ctx)
+    iii_lex_write_u8_at_c(w, WC_POST, 0u32)
+    let r: i32 = iii_ast_iterate_children(ast, root, ast_walk_child_visit as u64, w)
+    iii_lex_free_c(w)
+    return r
+}
+
+fn ast_walk_post_inner(ast: u64, root: u32, fnp: u64, ctx: u64) -> i32 {
+    if ast == 0u64 { return 0i32 }
+    if fnp == 0u64 { return 0i32 }
+    if root == 0u32 { return 0i32 }
+    let w: u64 = iii_lex_malloc_c(WC_BYTES)
+    if w == 0u64 { return 0i32 }
+    iii_lex_memset_c(w, 0u32, WC_BYTES)
+    iii_lex_write_u64_c(w, WC_FN, fnp)
+    iii_lex_write_u64_c(w, WC_CTX, ctx)
+    iii_lex_write_u8_at_c(w, WC_POST, 1u32)
+    let r: i32 = iii_ast_iterate_children(ast, root, ast_walk_child_visit as u64, w)
+    iii_lex_free_c(w)
+    if r != 0i32 { return r }
+    let r2: u32 = fnp(ast, root, 0u32, ctx)
+    return r2 as i32
+}
+
+fn ast_walk_child_visit(ast: u64, parent: u32, child: u32, slot_kind: u64, ctx: u64) -> i32 {
+    let w: u64 = ctx
+    let err: u32 = iii_lex_read_u32_c(w, WC_ERR)
+    if err != 0u32 { return err as i32 }
+    let fnp: u64 = iii_lex_read_u64_c(w, WC_FN)
+    let wctx: u64 = iii_lex_read_u64_c(w, WC_CTX)
+    let post: u32 = iii_lex_read_u8_at_c(w, WC_POST)
+    let mut r: i32 = 0i32
+    if post == 1u32 { r = ast_walk_post_inner(ast, child, fnp, wctx) }
+    if post == 0u32 { r = ast_walk_pre_inner(ast, child, fnp, wctx) }
+    if r != 0i32 { iii_lex_write_u32_c(w, WC_ERR, r as u32) }
+    return r
+}
+
+fn iii_ast_walk_pre(ast: u64, root: u32, fn_ptr: u64, ctx: u64) -> i32 @export {
+    return ast_walk_pre_inner(ast, root, fn_ptr, ctx)
+}
+fn iii_ast_walk_post(ast: u64, root: u32, fn_ptr: u64, ctx: u64) -> i32 @export {
+    return ast_walk_post_inner(ast, root, fn_ptr, ctx)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.19 -- zipper (I1).  Mirrors ast.c iii_ast_zipper_*
+ * (1994-2059).  The zipper struct is opaque (callers hold the ptr only), so
+ * the layout is self-chosen: {ast@0, cur@8(u32), depth@12(u32), stack@16}.
+ * Each frame = {parent_node@0(u32), child_index@4(u32)} = 8B; stack[1024].
+ * descend/sibling collect the current/parent's children via iterate_children +
+ * a collect callback into a {count@0, children@4(u32[1024])} = 4100B scratch.
+ * sibling's signed delta is handled via the high-bit (avoids the iiis-0
+ * signed-ordering-compare trap).
+ * ============================================================================ */
+
+const ZIP_BYTES: u64 = 8208u64
+const ZIP_AST: u64 = 0u64
+const ZIP_CUR: u64 = 8u64
+const ZIP_DEPTH: u64 = 12u64
+const ZIP_STACK: u64 = 16u64
+const ZCOLLECT_BYTES: u64 = 4100u64
+
+fn ast_zipper_collect_child(ast: u64, parent: u32, child: u32, slot_kind: u64, ctx: u64) -> i32 {
+    let count: u32 = iii_lex_read_u32_c(ctx, 0u64)
+    if count < 1024u32 {
+        iii_lex_write_u32_c(ctx, 4u64 + (count as u64) * 4u64, child)
+        iii_lex_write_u32_c(ctx, 0u64, count + 1u32)
+    }
+    return 0i32
+}
+
+fn iii_ast_zipper_at(ast: u64, node_index: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let z: u64 = iii_lex_malloc_c(ZIP_BYTES)
+    if z == 0u64 { return 0u64 }
+    iii_lex_memset_c(z, 0u32, ZIP_BYTES)
+    iii_lex_write_u64_c(z, ZIP_AST, ast)
+    iii_lex_write_u32_c(z, ZIP_CUR, node_index)
+    iii_lex_write_u32_c(z, ZIP_DEPTH, 0u32)
+    return z
+}
+fn iii_ast_zipper_destroy(z: u64) -> u32 @export {
+    if z != 0u64 { iii_lex_free_c(z) }
+    return 0u32
+}
+fn iii_ast_zipper_node(z: u64) -> u32 @export {
+    if z == 0u64 { return 0u32 }
+    return iii_lex_read_u32_c(z, ZIP_CUR)
+}
+fn iii_ast_zipper_depth(z: u64) -> u64 @export {
+    if z == 0u64 { return 0u64 }
+    return iii_lex_read_u32_c(z, ZIP_DEPTH) as u64
+}
+
+fn iii_ast_zipper_descend(z: u64, child_index: u32) -> i32 @export {
+    if z == 0u64 { return 0i32 }
+    let depth: u32 = iii_lex_read_u32_c(z, ZIP_DEPTH)
+    if depth >= 1024u32 { return 0i32 }
+    let ast: u64 = iii_lex_read_u64_c(z, ZIP_AST)
+    let cur: u32 = iii_lex_read_u32_c(z, ZIP_CUR)
+    let c: u64 = iii_lex_malloc_c(ZCOLLECT_BYTES)
+    if c == 0u64 { return 0i32 }
+    iii_lex_write_u32_c(c, 0u64, 0u32)
+    let rc: i32 = iii_ast_iterate_children(ast, cur, ast_zipper_collect_child as u64, c)
+    if rc != 0i32 { iii_lex_free_c(c) ; return 0i32 }
+    let count: u32 = iii_lex_read_u32_c(c, 0u64)
+    if child_index >= count { iii_lex_free_c(c) ; return 0i32 }
+    let frame: u64 = z + ZIP_STACK + (depth as u64) * 8u64
+    iii_lex_write_u32_c(frame, 0u64, cur)
+    iii_lex_write_u32_c(frame, 4u64, child_index)
+    iii_lex_write_u32_c(z, ZIP_DEPTH, depth + 1u32)
+    iii_lex_write_u32_c(z, ZIP_CUR, iii_lex_read_u32_c(c, 4u64 + (child_index as u64) * 4u64))
+    iii_lex_free_c(c)
+    return 1i32
+}
+
+fn iii_ast_zipper_ascend(z: u64) -> i32 @export {
+    if z == 0u64 { return 0i32 }
+    let depth: u32 = iii_lex_read_u32_c(z, ZIP_DEPTH)
+    if depth == 0u32 { return 0i32 }
+    let nd: u32 = depth - 1u32
+    iii_lex_write_u32_c(z, ZIP_DEPTH, nd)
+    let frame: u64 = z + ZIP_STACK + (nd as u64) * 8u64
+    iii_lex_write_u32_c(z, ZIP_CUR, iii_lex_read_u32_c(frame, 0u64))
+    return 1i32
+}
+
+fn iii_ast_zipper_sibling(z: u64, delta: i32) -> i32 @export {
+    if z == 0u64 { return 0i32 }
+    let depth: u32 = iii_lex_read_u32_c(z, ZIP_DEPTH)
+    if depth == 0u32 { return 0i32 }
+    let frame: u64 = z + ZIP_STACK + ((depth - 1u32) as u64) * 8u64
+    let parent: u32 = iii_lex_read_u32_c(frame, 0u64)
+    let cidx: u32 = iii_lex_read_u32_c(frame, 4u64)
+    let ast: u64 = iii_lex_read_u64_c(z, ZIP_AST)
+    let c: u64 = iii_lex_malloc_c(ZCOLLECT_BYTES)
+    if c == 0u64 { return 0i32 }
+    iii_lex_write_u32_c(c, 0u64, 0u32)
+    let rc: i32 = iii_ast_iterate_children(ast, parent, ast_zipper_collect_child as u64, c)
+    if rc != 0i32 { iii_lex_free_c(c) ; return 0i32 }
+    let count: u32 = iii_lex_read_u32_c(c, 0u64)
+    let du: u32 = delta as u32
+    let mut new_idx: u32 = 0u32
+    let mut ok: u32 = 0u32
+    if (du & 2147483648u32) == 0u32 {
+        new_idx = cidx + du
+        if new_idx < count { ok = 1u32 }
+    }
+    if (du & 2147483648u32) != 0u32 {
+        let mag: u32 = 0u32 - du
+        if mag <= cidx {
+            new_idx = cidx - mag
+            ok = 1u32
+        }
+    }
+    if ok == 0u32 { iii_lex_free_c(c) ; return 0i32 }
+    iii_lex_write_u32_c(frame, 4u64, new_idx)
+    iii_lex_write_u32_c(z, ZIP_CUR, iii_lex_read_u32_c(c, 4u64 + (new_idx as u64) * 4u64))
+    iii_lex_free_c(c)
+    return 1i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.20a -- walk-state (V1) step-based iterator.  Mirrors ast.c
+ * iii_ast_walk_state_create/destroy/step/done (2085-2179).  Opaque ws =
+ * {ast@0, stack@8(heap ptr), depth@16(u32), cap@20(u32), post@24(u8),
+ * done@25(u8)}=32B.  Heap frame = {node@0,depth@4,next_child@8,child_count@12,
+ * children@16(u32[1024])}=4112B.  CRITICAL: ast.c's pre-order step has a
+ * documented bug -- after emitting a node it sets next_child=1 (an "emitted"
+ * sentinel that conflates with "child[0] consumed"), so PRE-ORDER SKIPS
+ * child[0] of every node.  Post-order is correct.  This port mirrors the bug
+ * exactly (byte-equivalence; the comment at ast.c:2131-2136 acknowledges it).
+ * ============================================================================ */
+
+const WS_BYTES: u64 = 32u64
+const WS_AST: u64 = 0u64
+const WS_STACK: u64 = 8u64
+const WS_DEPTH: u64 = 16u64
+const WS_CAP: u64 = 20u64
+const WS_POST: u64 = 24u64
+const WS_DONE: u64 = 25u64
+const WF_BYTES: u64 = 4112u64
+const WF_NODE: u64 = 0u64
+const WF_DEPTH: u64 = 4u64
+const WF_NEXT: u64 = 8u64
+const WF_CCOUNT: u64 = 12u64
+const WF_CHILDREN: u64 = 16u64
+
+/* Collect node's children into frame.children + frame.child_count. */
+fn ast_ws_collect_into(ast: u64, node: u32, frame: u64) -> u32 {
+    iii_lex_write_u32_c(frame, WF_CCOUNT, 0u32)
+    let c: u64 = iii_lex_malloc_c(ZCOLLECT_BYTES)
+    if c == 0u64 { return 0u32 }
+    iii_lex_write_u32_c(c, 0u64, 0u32)
+    iii_ast_iterate_children(ast, node, ast_zipper_collect_child as u64, c)
+    let cnt: u32 = iii_lex_read_u32_c(c, 0u64)
+    iii_lex_write_u32_c(frame, WF_CCOUNT, cnt)
+    if cnt != 0u32 { iii_lex_memcpy_c(frame + WF_CHILDREN, c + 4u64, (cnt as u64) * 4u64) }
+    iii_lex_free_c(c)
+    return 0u32
+}
+
+fn iii_ast_walk_state_create(ast: u64, root: u32, post_order: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if root == 0u32 { return 0u64 }
+    let ws: u64 = iii_lex_malloc_c(WS_BYTES)
+    if ws == 0u64 { return 0u64 }
+    iii_lex_memset_c(ws, 0u32, WS_BYTES)
+    iii_lex_write_u64_c(ws, WS_AST, ast)
+    let cap: u32 = 64u32
+    let stack: u64 = iii_lex_malloc_c((cap as u64) * WF_BYTES)
+    if stack == 0u64 { iii_lex_free_c(ws) ; return 0u64 }
+    iii_lex_memset_c(stack, 0u32, (cap as u64) * WF_BYTES)
+    iii_lex_write_u64_c(ws, WS_STACK, stack)
+    iii_lex_write_u32_c(ws, WS_CAP, cap)
+    let mut pv: u32 = 0u32
+    if post_order != 0u32 { pv = 1u32 }
+    iii_lex_write_u8_at_c(ws, WS_POST, pv)
+    iii_lex_write_u8_at_c(ws, WS_DONE, 0u32)
+    iii_lex_write_u32_c(stack, WF_NODE, root)
+    iii_lex_write_u32_c(stack, WF_DEPTH, 0u32)
+    ast_ws_collect_into(ast, root, stack)
+    iii_lex_write_u32_c(stack, WF_NEXT, 0u32)
+    iii_lex_write_u32_c(ws, WS_DEPTH, 1u32)
+    return ws
+}
+
+fn iii_ast_walk_state_destroy(ws: u64) -> u32 @export {
+    if ws == 0u64 { return 0u32 }
+    let stack: u64 = iii_lex_read_u64_c(ws, WS_STACK)
+    if stack != 0u64 { iii_lex_free_c(stack) }
+    iii_lex_free_c(ws)
+    return 0u32
+}
+
+fn iii_ast_walk_state_done(ws: u64) -> i32 @export {
+    if ws == 0u64 { return 1i32 }
+    if iii_lex_read_u8_at_c(ws, WS_DONE) != 0u32 { return 1i32 }
+    return 0i32
+}
+
+fn iii_ast_walk_state_step(ws: u64, out_node: u64, out_depth: u64) -> i32 @export {
+    if ws == 0u64 { return 0i32 }
+    if iii_lex_read_u8_at_c(ws, WS_DONE) != 0u32 { return 0i32 }
+    let ast: u64 = iii_lex_read_u64_c(ws, WS_AST)
+    let post: u32 = iii_lex_read_u8_at_c(ws, WS_POST)
+    let mut result: i32 = 0i32
+    let mut loop_done: u32 = 0u32
+    while loop_done == 0u32 {
+        let depth: u32 = iii_lex_read_u32_c(ws, WS_DEPTH)
+        let mut step: u32 = 0u32
+        if depth == 0u32 {
+            iii_lex_write_u8_at_c(ws, WS_DONE, 1u32)
+            result = 0i32
+            loop_done = 1u32
+            step = 1u32
+        }
+        if step == 0u32 {
+            let stack: u64 = iii_lex_read_u64_c(ws, WS_STACK)
+            let top: u64 = stack + ((depth - 1u32) as u64) * WF_BYTES
+            let nc: u32 = iii_lex_read_u32_c(top, WF_NEXT)
+            let cc: u32 = iii_lex_read_u32_c(top, WF_CCOUNT)
+            if post == 0u32 {
+                if nc == 0u32 {
+                    if out_node != 0u64 { iii_lex_write_u32_c(out_node, 0u64, iii_lex_read_u32_c(top, WF_NODE)) }
+                    if out_depth != 0u64 { iii_lex_write_u32_c(out_depth, 0u64, iii_lex_read_u32_c(top, WF_DEPTH)) }
+                    iii_lex_write_u32_c(top, WF_NEXT, 1u32)
+                    result = 1i32
+                    loop_done = 1u32
+                    step = 1u32
+                }
+            }
+            if step == 0u32 {
+                if nc < cc {
+                    let child: u32 = iii_lex_read_u32_c(top + WF_CHILDREN, (nc as u64) * 4u64)
+                    iii_lex_write_u32_c(top, WF_NEXT, nc + 1u32)
+                    let cap: u32 = iii_lex_read_u32_c(ws, WS_CAP)
+                    let mut grow_ok: u32 = 1u32
+                    if depth >= cap {
+                        let ncap: u32 = cap * 2u32
+                        let old: u64 = iii_lex_read_u64_c(ws, WS_STACK)
+                        let np: u64 = iii_lex_malloc_c((ncap as u64) * WF_BYTES)
+                        if np == 0u64 {
+                            iii_lex_write_u8_at_c(ws, WS_DONE, 1u32)
+                            result = 0i32
+                            loop_done = 1u32
+                            grow_ok = 0u32
+                        }
+                        if grow_ok == 1u32 {
+                            iii_lex_memcpy_c(np, old, (cap as u64) * WF_BYTES)
+                            iii_lex_free_c(old)
+                            iii_lex_write_u64_c(ws, WS_STACK, np)
+                            iii_lex_write_u32_c(ws, WS_CAP, ncap)
+                        }
+                    }
+                    if grow_ok == 1u32 {
+                        let stack2: u64 = iii_lex_read_u64_c(ws, WS_STACK)
+                        let top2: u64 = stack2 + ((depth - 1u32) as u64) * WF_BYTES
+                        let td: u32 = iii_lex_read_u32_c(top2, WF_DEPTH)
+                        let nf: u64 = stack2 + (depth as u64) * WF_BYTES
+                        iii_lex_memset_c(nf, 0u32, WF_BYTES)
+                        iii_lex_write_u32_c(nf, WF_NODE, child)
+                        iii_lex_write_u32_c(nf, WF_DEPTH, td + 1u32)
+                        ast_ws_collect_into(ast, child, nf)
+                        iii_lex_write_u32_c(nf, WF_NEXT, 0u32)
+                        iii_lex_write_u32_c(ws, WS_DEPTH, depth + 1u32)
+                    }
+                    step = 1u32
+                }
+            }
+            if step == 0u32 {
+                if post != 0u32 {
+                    if out_node != 0u64 { iii_lex_write_u32_c(out_node, 0u64, iii_lex_read_u32_c(top, WF_NODE)) }
+                    if out_depth != 0u64 { iii_lex_write_u32_c(out_depth, 0u64, iii_lex_read_u32_c(top, WF_DEPTH)) }
+                    iii_lex_write_u32_c(ws, WS_DEPTH, depth - 1u32)
+                    result = 1i32
+                    loop_done = 1u32
+                }
+                if post == 0u32 {
+                    iii_lex_write_u32_c(ws, WS_DEPTH, depth - 1u32)
+                }
+                step = 1u32
+            }
+        }
+    }
+    return result
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.20b -- walk-state serialize / deserialize.  Mirrors ast.c
+ * (2181-2280).  Format: "IIIWLKST"(8) ver(u32=1) post(u8) done(u8) depth(u64)
+ * cap(u64), then `depth` frames {node,depth,next_child,child_count(u32 each),
+ * children[child_count](u32)}, then a SHA-256 trailer over everything prior.
+ * Deserialize trusts its input (skips the SHA verify, per ast.c:2275-2278).
+ * ============================================================================ */
+
+fn ast_ws_ser_need(ws: u64) -> u64 {
+    let depth: u32 = iii_lex_read_u32_c(ws, WS_DEPTH)
+    let stack: u64 = iii_lex_read_u64_c(ws, WS_STACK)
+    let mut need: u64 = 30u64
+    let mut i: u32 = 0u32
+    while i != depth {
+        let cc: u32 = iii_lex_read_u32_c(stack + (i as u64) * WF_BYTES, WF_CCOUNT)
+        need = need + 16u64 + (cc as u64) * 4u64
+        i = i + 1u32
+    }
+    return need + 32u64
+}
+
+fn iii_ast_walk_state_serialize(ws: u64, out: u64, cap: u64) -> u64 @export {
+    if ws == 0u64 { return 0u64 }
+    let need: u64 = ast_ws_ser_need(ws)
+    if out == 0u64 { return need }
+    if cap < need { return need }
+    let h: u64 = iii_lex_malloc_c(III_AST_SHA256_STATE_BYTES)
+    if h == 0u64 { return 0u64 }
+    iii_sha256_init(h)
+    let mut off: u64 = 0u64
+    iii_lex_memcpy_c(out + off, "IIIWLKST" as u64, 8u64) ; off = off + 8u64
+    iii_sha256_update(h, "IIIWLKST" as u64, 8u64)
+    iii_lex_write_u32_c(out, off, 1u32) ; off = off + 4u64
+    iii_sha256_update_u32(h, 1u32)
+    let post: u32 = iii_lex_read_u8_at_c(ws, WS_POST)
+    iii_lex_write_u8_at_c(out, off, post) ; off = off + 1u64
+    iii_sha256_update_u8(h, post)
+    let done: u32 = iii_lex_read_u8_at_c(ws, WS_DONE)
+    iii_lex_write_u8_at_c(out, off, done) ; off = off + 1u64
+    iii_sha256_update_u8(h, done)
+    let depth: u32 = iii_lex_read_u32_c(ws, WS_DEPTH)
+    iii_lex_write_u64_c(out, off, depth as u64) ; off = off + 8u64
+    iii_sha256_update_u64(h, depth as u64)
+    let capf: u32 = iii_lex_read_u32_c(ws, WS_CAP)
+    iii_lex_write_u64_c(out, off, capf as u64) ; off = off + 8u64
+    iii_sha256_update_u64(h, capf as u64)
+    let stack: u64 = iii_lex_read_u64_c(ws, WS_STACK)
+    let mut i: u32 = 0u32
+    while i != depth {
+        let f: u64 = stack + (i as u64) * WF_BYTES
+        let nd: u32 = iii_lex_read_u32_c(f, WF_NODE)
+        iii_lex_write_u32_c(out, off, nd) ; off = off + 4u64 ; iii_sha256_update_u32(h, nd)
+        let dp: u32 = iii_lex_read_u32_c(f, WF_DEPTH)
+        iii_lex_write_u32_c(out, off, dp) ; off = off + 4u64 ; iii_sha256_update_u32(h, dp)
+        let ncx: u32 = iii_lex_read_u32_c(f, WF_NEXT)
+        iii_lex_write_u32_c(out, off, ncx) ; off = off + 4u64 ; iii_sha256_update_u32(h, ncx)
+        let cc: u32 = iii_lex_read_u32_c(f, WF_CCOUNT)
+        iii_lex_write_u32_c(out, off, cc) ; off = off + 4u64 ; iii_sha256_update_u32(h, cc)
+        let mut j: u32 = 0u32
+        while j != cc {
+            let cv: u32 = iii_lex_read_u32_c(f + WF_CHILDREN, (j as u64) * 4u64)
+            iii_lex_write_u32_c(out, off, cv) ; off = off + 4u64 ; iii_sha256_update_u32(h, cv)
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    iii_sha256_final(h, out + off)
+    off = off + 32u64
+    iii_lex_free_c(h)
+    return off
+}
+
+fn iii_ast_walk_state_deserialize(ast: u64, bytes: u64, len: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if bytes == 0u64 { return 0u64 }
+    if len < 62u64 { return 0u64 }
+    if iii_lex_memcmp_c(bytes, "IIIWLKST" as u64, 8u64) != 0i32 { return 0u64 }
+    let ver: u32 = iii_lex_read_u32_c(bytes, 8u64)
+    if ver != 1u32 { return 0u64 }
+    let post: u32 = iii_lex_read_u8_at_c(bytes, 12u64)
+    let done: u32 = iii_lex_read_u8_at_c(bytes, 13u64)
+    let d: u64 = iii_lex_read_u64_c(bytes, 14u64)
+    let c: u64 = iii_lex_read_u64_c(bytes, 22u64)
+    let mut off: u64 = 30u64
+    let ws: u64 = iii_lex_malloc_c(WS_BYTES)
+    if ws == 0u64 { return 0u64 }
+    iii_lex_memset_c(ws, 0u32, WS_BYTES)
+    iii_lex_write_u64_c(ws, WS_AST, ast)
+    iii_lex_write_u8_at_c(ws, WS_POST, post)
+    iii_lex_write_u8_at_c(ws, WS_DONE, done)
+    iii_lex_write_u32_c(ws, WS_DEPTH, d as u32)
+    let mut capf: u64 = c
+    if c == 0u64 { capf = d + 16u64 }
+    if c < d { capf = d + 16u64 }
+    iii_lex_write_u32_c(ws, WS_CAP, capf as u32)
+    let stack: u64 = iii_lex_malloc_c(capf * WF_BYTES)
+    if stack == 0u64 { iii_lex_free_c(ws) ; return 0u64 }
+    iii_lex_memset_c(stack, 0u32, capf * WF_BYTES)
+    iii_lex_write_u64_c(ws, WS_STACK, stack)
+    let dd: u32 = d as u32
+    let mut i: u32 = 0u32
+    let mut fail: u32 = 0u32
+    while i != dd {
+        if fail == 0u32 {
+            if (off + 16u64) > len { fail = 1u32 }
+            if fail == 0u32 {
+                let f: u64 = stack + (i as u64) * WF_BYTES
+                iii_lex_write_u32_c(f, WF_NODE, iii_lex_read_u32_c(bytes, off)) ; off = off + 4u64
+                iii_lex_write_u32_c(f, WF_DEPTH, iii_lex_read_u32_c(bytes, off)) ; off = off + 4u64
+                iii_lex_write_u32_c(f, WF_NEXT, iii_lex_read_u32_c(bytes, off)) ; off = off + 4u64
+                let cc: u32 = iii_lex_read_u32_c(bytes, off) ; off = off + 4u64
+                iii_lex_write_u32_c(f, WF_CCOUNT, cc)
+                let mut j: u32 = 0u32
+                while j != cc {
+                    if fail == 0u32 {
+                        if (off + 4u64) > len { fail = 1u32 }
+                        if fail == 0u32 {
+                            iii_lex_write_u32_c(f + WF_CHILDREN, (j as u64) * 4u64, iii_lex_read_u32_c(bytes, off))
+                            off = off + 4u64
+                        }
+                    }
+                    j = j + 1u32
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    if fail == 1u32 { iii_ast_walk_state_destroy(ws) ; return 0u64 }
+    return ws
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.21 -- diff (J1).  Mirrors ast.c iii_diff_recurse +
+ * iii_ast_diff (2290-2333).  Lockstep mhash compare: equal mhash => identical
+ * subtree (prune); else record the (old_node,new_node) pair and, if same kind,
+ * recurse pairwise over min(child counts) children (collected via
+ * iterate_children).  dc = {out@0,cap@8(u64),produced@16(u64)}=24B; diff_pair =
+ * {old_node@0,new_node@4}=8B.  All params assigned to locals (spill-trap dodge).
+ * ============================================================================ */
+
+fn ast_diff_recurse(old_ast: u64, old_node: u32, new_ast: u64, new_node: u32, dc: u64) -> u32 {
+    let oa: u64 = old_ast
+    let na: u64 = new_ast
+    let on: u32 = old_node
+    let nn: u32 = new_node
+    let d: u64 = dc
+    let omh: u64 = iii_ast_node_mhash(oa, on)
+    let nmh: u64 = iii_ast_node_mhash(na, nn)
+    if omh != 0u64 {
+        if nmh != 0u64 {
+            if iii_lex_memcmp_c(omh, nmh, 32u64) == 0i32 { return 0u32 }
+        }
+    }
+    let produced: u64 = iii_lex_read_u64_c(d, 16u64)
+    let cap: u64 = iii_lex_read_u64_c(d, 8u64)
+    let out: u64 = iii_lex_read_u64_c(d, 0u64)
+    if produced < cap {
+        if out != 0u64 {
+            iii_lex_write_u32_c(out + produced * 8u64, 0u64, on)
+            iii_lex_write_u32_c(out + produced * 8u64, 4u64, nn)
+        }
+    }
+    iii_lex_write_u64_c(d, 16u64, produced + 1u64)
+    let onp: u64 = iii_ast_get(oa, on)
+    let nnp: u64 = iii_ast_get(na, nn)
+    if onp == 0u64 { return 0u32 }
+    if nnp == 0u64 { return 0u32 }
+    if iii_lex_read_u32_c(onp, NODE_OFF_KIND) != iii_lex_read_u32_c(nnp, NODE_OFF_KIND) { return 0u32 }
+    let oc: u64 = iii_lex_malloc_c(ZCOLLECT_BYTES)
+    if oc == 0u64 { return 0u32 }
+    let nc: u64 = iii_lex_malloc_c(ZCOLLECT_BYTES)
+    if nc == 0u64 { iii_lex_free_c(oc) ; return 0u32 }
+    iii_lex_write_u32_c(oc, 0u64, 0u32)
+    iii_lex_write_u32_c(nc, 0u64, 0u32)
+    iii_ast_iterate_children(oa, on, ast_zipper_collect_child as u64, oc)
+    iii_ast_iterate_children(na, nn, ast_zipper_collect_child as u64, nc)
+    let ocount: u32 = iii_lex_read_u32_c(oc, 0u64)
+    let ncount: u32 = iii_lex_read_u32_c(nc, 0u64)
+    let mut common: u32 = ocount
+    if ncount < ocount { common = ncount }
+    let mut i: u32 = 0u32
+    while i != common {
+        let och: u32 = iii_lex_read_u32_c(oc + 4u64, (i as u64) * 4u64)
+        let nch: u32 = iii_lex_read_u32_c(nc + 4u64, (i as u64) * 4u64)
+        ast_diff_recurse(oa, och, na, nch, d)
+        i = i + 1u32
+    }
+    iii_lex_free_c(oc)
+    iii_lex_free_c(nc)
+    return 0u32
+}
+
+fn iii_ast_diff(old_ast: u64, old_root: u32, new_ast: u64, new_root: u32, out: u64, cap: u64) -> u64 @export {
+    let oa: u64 = old_ast
+    let orr: u32 = old_root
+    let nia: u64 = new_ast
+    let nrr: u32 = new_root
+    let o: u64 = out
+    let cp: u64 = cap
+    let d: u64 = iii_lex_malloc_c(24u64)
+    if d == 0u64 { return 0u64 }
+    iii_lex_write_u64_c(d, 0u64, o)
+    iii_lex_write_u64_c(d, 8u64, cp)
+    iii_lex_write_u64_c(d, 16u64, 0u64)
+    ast_diff_recurse(oa, orr, nia, nrr, d)
+    let produced: u64 = iii_lex_read_u64_c(d, 16u64)
+    iii_lex_free_c(d)
+    return produced
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.22 -- annotations (L1).  LOAD-BEARING (proof.iii + sid.iii
+ * call iii_ast_annotate).  Mirrors ast.c iii_phase_hash/intern_phase/
+ * annotation_grow/iii_ast_annotate/get_annotation/annotation_count
+ * (2337-2482).  Phase strings are NUL-terminated C strings (NIH strlen/str_eq).
+ * key = FNV-1a(phase) folded with node_index; phase interned (ptr-equality
+ * match); open-addressed slots {key@0,node@8,boff@12,blen@16,phase@24,used@32}
+ * =40B; separate blob arena.
+ * ============================================================================ */
+
+const ASLOT_BYTES: u64 = 40u64
+const ASLOT_KEY: u64 = 0u64
+const ASLOT_NODE: u64 = 8u64
+const ASLOT_BOFF: u64 = 12u64
+const ASLOT_BLEN: u64 = 16u64
+const ASLOT_PHASE: u64 = 24u64
+const ASLOT_USED: u64 = 32u64
+const UK_BYTES: u64 = 16u64
+const UK_ID: u64 = 0u64
+const UK_NAME: u64 = 8u64
+
+fn ast_strlen(s: u64) -> u64 {
+    let mut i: u64 = 0u64
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if iii_lex_read_u8_at_c(s, i) == 0u32 { done = 1u32 }
+        if done == 0u32 { i = i + 1u64 }
+    }
+    return i
+}
+fn ast_str_eq(a: u64, b: u64) -> u32 {
+    let mut i: u64 = 0u64
+    let mut res: u32 = 2u32
+    while res == 2u32 {
+        let ca: u32 = iii_lex_read_u8_at_c(a, i)
+        let cb: u32 = iii_lex_read_u8_at_c(b, i)
+        if ca != cb { res = 0u32 }
+        if res == 2u32 {
+            if ca == 0u32 { res = 1u32 }
+            if res == 2u32 { i = i + 1u64 }
+        }
+    }
+    return res
+}
+fn ast_phase_hash(phase: u64, node_index: u32) -> u64 {
+    let mut h: u64 = 0xCBF29CE484222325
+    if phase != 0u64 {
+        let mut i: u64 = 0u64
+        let mut done: u32 = 0u32
+        while done == 0u32 {
+            let b: u32 = iii_lex_read_u8_at_c(phase, i)
+            if b == 0u32 { done = 1u32 }
+            if done == 0u32 {
+                h = h ^ (b as u64)
+                h = h * 0x100000001B3
+                i = i + 1u64
+            }
+        }
+    }
+    h = h ^ (node_index as u64)
+    h = h * 0x100000001B3
+    return h
+}
+fn ast_intern_phase(ast: u64, phase: u64) -> u64 {
+    if phase == 0u64 { return 0u64 }
+    let arena0: u64 = iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA)
+    let used0: u64 = iii_lex_read_u32_c(ast, AST_OFF_PHASE_ARENA_USED) as u64
+    let mut off: u64 = 0u64
+    let mut found: u64 = 0u64
+    let mut scanning: u32 = 1u32
+    while scanning == 1u32 {
+        if off >= used0 { scanning = 0u32 }
+        if scanning == 1u32 {
+            let cand: u64 = arena0 + off
+            if ast_str_eq(cand, phase) == 1u32 { found = cand ; scanning = 0u32 }
+            if scanning == 1u32 { off = off + ast_strlen(cand) + 1u64 }
+        }
+    }
+    if found != 0u64 { return found }
+    let len: u64 = ast_strlen(phase) + 1u64
+    let cap: u64 = iii_lex_read_u32_c(ast, AST_OFF_PHASE_ARENA_CAP) as u64
+    if used0 + len > cap {
+        let mut ncap: u64 = 256u64
+        if cap != 0u64 { ncap = cap * 2u64 }
+        let mut g: u32 = 0u32
+        while g == 0u32 {
+            if ncap >= used0 + len { g = 1u32 }
+            if g == 0u32 { ncap = ncap * 2u64 }
+        }
+        let np: u64 = iii_lex_malloc_c(ncap)
+        if np == 0u64 { return 0u64 }
+        iii_lex_memset_c(np, 0u32, ncap)
+        if arena0 != 0u64 {
+            if used0 != 0u64 { iii_lex_memcpy_c(np, arena0, used0) }
+            iii_lex_free_c(arena0)
+        }
+        iii_lex_write_u64_c(ast, AST_OFF_PHASE_ARENA, np)
+        iii_lex_write_u32_c(ast, AST_OFF_PHASE_ARENA_CAP, ncap as u32)
+    }
+    let arena: u64 = iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA)
+    let dst: u64 = arena + used0
+    iii_lex_memcpy_c(dst, phase, len)
+    iii_lex_write_u32_c(ast, AST_OFF_PHASE_ARENA_USED, (used0 + len) as u32)
+    return dst
+}
+fn ast_annotation_grow(ast: u64, need: u32) -> u32 {
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_CAP)
+    if (need as u64) * 2u64 <= (cap as u64) { return 1u32 }
+    let mut ncap: u32 = 64u32
+    if cap != 0u32 { ncap = cap * 2u32 }
+    let mut g: u32 = 0u32
+    while g == 0u32 {
+        if (ncap as u64) >= (need as u64) * 2u64 { g = 1u32 }
+        if g == 0u32 { ncap = ncap * 2u32 }
+    }
+    let np: u64 = iii_lex_malloc_c((ncap as u64) * ASLOT_BYTES)
+    if np == 0u64 { return 0u32 }
+    iii_lex_memset_c(np, 0u32, (ncap as u64) * ASLOT_BYTES)
+    let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_ANNOTATIONS)
+    let mask: u32 = ncap - 1u32
+    let mut i: u32 = 0u32
+    while i != cap {
+        let os: u64 = old + (i as u64) * ASLOT_BYTES
+        if iii_lex_read_u8_at_c(os, ASLOT_USED) != 0u32 {
+            let kh: u64 = iii_lex_read_u64_c(os, ASLOT_KEY)
+            let mut pos: u32 = (kh & (mask as u64)) as u32
+            let mut placed: u32 = 0u32
+            while placed == 0u32 {
+                let ns: u64 = np + (pos as u64) * ASLOT_BYTES
+                if iii_lex_read_u8_at_c(ns, ASLOT_USED) == 0u32 {
+                    iii_lex_memcpy_c(ns, os, ASLOT_BYTES)
+                    placed = 1u32
+                }
+                if placed == 0u32 { pos = (pos + 1u32) & mask }
+            }
+        }
+        i = i + 1u32
+    }
+    if old != 0u64 { iii_lex_free_c(old) }
+    iii_lex_write_u64_c(ast, AST_OFF_ANNOTATIONS, np)
+    iii_lex_write_u32_c(ast, AST_OFF_ANNOTATION_CAP, ncap)
+    return 1u32
+}
+
+fn iii_ast_annotate(ast: u64, phase: u64, node_index: u32, blob: u64, blob_len: u64) -> i32 @export {
+    let a: u64 = ast
+    let ph: u64 = phase
+    let ni: u32 = node_index
+    let bl: u64 = blob
+    let blen: u64 = blob_len
+    if a == 0u64 { return 0i32 }
+    if ph == 0u64 { return 0i32 }
+    let cnt: u32 = iii_lex_read_u32_c(a, AST_OFF_ANNOTATION_COUNT)
+    if ast_annotation_grow(a, cnt + 1u32) == 0u32 { return 0i32 }
+    let iphase: u64 = ast_intern_phase(a, ph)
+    if iphase == 0u64 { return 0i32 }
+    let key: u64 = ast_phase_hash(iphase, ni)
+    let bused: u32 = iii_lex_read_u32_c(a, AST_OFF_ANNOTATION_BLOB_USED)
+    let bcap: u32 = iii_lex_read_u32_c(a, AST_OFF_ANNOTATION_BLOB_CAP)
+    if (bused as u64) + blen > (bcap as u64) {
+        let mut ncb: u64 = 256u64
+        if bcap != 0u32 { ncb = (bcap as u64) * 2u64 }
+        let mut g2: u32 = 0u32
+        while g2 == 0u32 {
+            if ncb >= (bused as u64) + blen { g2 = 1u32 }
+            if g2 == 0u32 { ncb = ncb * 2u64 }
+        }
+        let oldb: u64 = iii_lex_read_u64_c(a, AST_OFF_ANNOTATION_BLOBS)
+        let npb: u64 = iii_lex_malloc_c(ncb)
+        if npb == 0u64 { return 0i32 }
+        if oldb != 0u64 {
+            if bused != 0u32 { iii_lex_memcpy_c(npb, oldb, bused as u64) }
+            iii_lex_free_c(oldb)
+        }
+        iii_lex_write_u64_c(a, AST_OFF_ANNOTATION_BLOBS, npb)
+        iii_lex_write_u32_c(a, AST_OFF_ANNOTATION_BLOB_CAP, ncb as u32)
+    }
+    let blob_off: u32 = bused
+    let blobs: u64 = iii_lex_read_u64_c(a, AST_OFF_ANNOTATION_BLOBS)
+    if bl != 0u64 {
+        if blen != 0u64 { iii_lex_memcpy_c(blobs + (blob_off as u64), bl, blen) }
+    }
+    iii_lex_write_u32_c(a, AST_OFF_ANNOTATION_BLOB_USED, bused + (blen as u32))
+    let cap: u32 = iii_lex_read_u32_c(a, AST_OFF_ANNOTATION_CAP)
+    let base: u64 = iii_lex_read_u64_c(a, AST_OFF_ANNOTATIONS)
+    let mask: u32 = cap - 1u32
+    let mut pos: u32 = (key & (mask as u64)) as u32
+    let mut done: u32 = 0u32
+    let mut result: i32 = 0i32
+    while done == 0u32 {
+        let slot: u64 = base + (pos as u64) * ASLOT_BYTES
+        if iii_lex_read_u8_at_c(slot, ASLOT_USED) == 0u32 {
+            iii_lex_write_u64_c(slot, ASLOT_KEY, key)
+            iii_lex_write_u32_c(slot, ASLOT_NODE, ni)
+            iii_lex_write_u64_c(slot, ASLOT_PHASE, iphase)
+            iii_lex_write_u32_c(slot, ASLOT_BOFF, blob_off)
+            iii_lex_write_u32_c(slot, ASLOT_BLEN, blen as u32)
+            iii_lex_write_u8_at_c(slot, ASLOT_USED, 1u32)
+            iii_lex_write_u32_c(a, AST_OFF_ANNOTATION_COUNT, cnt + 1u32)
+            result = 1i32
+            done = 1u32
+        }
+        if done == 0u32 {
+            let mut matched: u32 = 0u32
+            if iii_lex_read_u64_c(slot, ASLOT_KEY) == key {
+                if iii_lex_read_u32_c(slot, ASLOT_NODE) == ni {
+                    if iii_lex_read_u64_c(slot, ASLOT_PHASE) == iphase { matched = 1u32 }
+                }
+            }
+            if matched == 1u32 {
+                iii_lex_write_u32_c(slot, ASLOT_BOFF, blob_off)
+                iii_lex_write_u32_c(slot, ASLOT_BLEN, blen as u32)
+                result = 1i32
+                done = 1u32
+            }
+            if done == 0u32 { pos = (pos + 1u32) & mask }
+        }
+    }
+    return result
+}
+
+fn iii_ast_get_annotation(ast: u64, phase: u64, node_index: u32, out_blob: u64, out_blob_len: u64) -> i32 @export {
+    let a: u64 = ast
+    let ph: u64 = phase
+    let ni: u32 = node_index
+    let ob: u64 = out_blob
+    let obl: u64 = out_blob_len
+    if a == 0u64 { return 0i32 }
+    if ph == 0u64 { return 0i32 }
+    if ob == 0u64 { return 0i32 }
+    if obl == 0u64 { return 0i32 }
+    let cap: u32 = iii_lex_read_u32_c(a, AST_OFF_ANNOTATION_CAP)
+    if cap == 0u32 { return 0i32 }
+    let arena: u64 = iii_lex_read_u64_c(a, AST_OFF_PHASE_ARENA)
+    let used: u64 = iii_lex_read_u32_c(a, AST_OFF_PHASE_ARENA_USED) as u64
+    let mut off: u64 = 0u64
+    let mut iphase: u64 = 0u64
+    let mut scanning: u32 = 1u32
+    while scanning == 1u32 {
+        if off >= used { scanning = 0u32 }
+        if scanning == 1u32 {
+            let cand: u64 = arena + off
+            if ast_str_eq(cand, ph) == 1u32 { iphase = cand ; scanning = 0u32 }
+            if scanning == 1u32 { off = off + ast_strlen(cand) + 1u64 }
+        }
+    }
+    if iphase == 0u64 { return 0i32 }
+    let key: u64 = ast_phase_hash(iphase, ni)
+    let base: u64 = iii_lex_read_u64_c(a, AST_OFF_ANNOTATIONS)
+    let mask: u32 = cap - 1u32
+    let mut pos: u32 = (key & (mask as u64)) as u32
+    let mut done: u32 = 0u32
+    let mut result: i32 = 0i32
+    while done == 0u32 {
+        let slot: u64 = base + (pos as u64) * ASLOT_BYTES
+        if iii_lex_read_u8_at_c(slot, ASLOT_USED) == 0u32 { done = 1u32 }
+        if done == 0u32 {
+            let mut matched: u32 = 0u32
+            if iii_lex_read_u64_c(slot, ASLOT_KEY) == key {
+                if iii_lex_read_u32_c(slot, ASLOT_NODE) == ni {
+                    if iii_lex_read_u64_c(slot, ASLOT_PHASE) == iphase { matched = 1u32 }
+                }
+            }
+            if matched == 1u32 {
+                let blobs: u64 = iii_lex_read_u64_c(a, AST_OFF_ANNOTATION_BLOBS)
+                let boff: u32 = iii_lex_read_u32_c(slot, ASLOT_BOFF)
+                iii_lex_write_u64_c(ob, 0u64, blobs + (boff as u64))
+                iii_lex_write_u64_c(obl, 0u64, iii_lex_read_u32_c(slot, ASLOT_BLEN) as u64)
+                result = 1i32
+                done = 1u32
+            }
+            if done == 0u32 { pos = (pos + 1u32) & mask }
+        }
+    }
+    return result
+}
+
+fn iii_ast_annotation_count(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_COUNT) as u64
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.23 -- user-kind registry (C1).  Mirrors ast.c
+ * iii_ast_register_user_kind/user_kind_name/user_kind_count (2486-2516).  Names
+ * are interned in the shared phase arena.  user_kinds[] entries = {id@0,name@8}
+ * =16B.
+ * ============================================================================ */
+
+fn iii_ast_register_user_kind(ast: u64, name: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if name == 0u64 { return 0u32 }
+    let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_COUNT)
+    let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_CAP)
+    if cnt == cap {
+        let mut ncap: u32 = 16u32
+        if cap != 0u32 { ncap = cap * 2u32 }
+        let old: u64 = iii_lex_read_u64_c(ast, AST_OFF_USER_KINDS)
+        let np: u64 = ast_grow_one(old, cap as u64, ncap as u64, UK_BYTES)
+        if np == 0u64 { return 0u32 }
+        iii_lex_write_u64_c(ast, AST_OFF_USER_KINDS, np)
+        iii_lex_write_u32_c(ast, AST_OFF_USER_KIND_CAP, ncap)
+    }
+    let iname: u64 = ast_intern_phase(ast, name)
+    if iname == 0u64 { return 0u32 }
+    let id: u32 = cnt + 1u32
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_USER_KINDS)
+    let slot: u64 = base + (cnt as u64) * UK_BYTES
+    iii_lex_write_u32_c(slot, UK_ID, id)
+    iii_lex_write_u64_c(slot, UK_NAME, iname)
+    iii_lex_write_u32_c(ast, AST_OFF_USER_KIND_COUNT, cnt + 1u32)
+    return id
+}
+fn iii_ast_user_kind_name(ast: u64, user_kind_id: u32) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if user_kind_id == 0u32 { return 0u64 }
+    let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_COUNT)
+    if user_kind_id > cnt { return 0u64 }
+    let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_USER_KINDS)
+    let slot: u64 = base + ((user_kind_id - 1u32) as u64) * UK_BYTES
+    return iii_lex_read_u64_c(slot, UK_NAME)
+}
+fn iii_ast_user_kind_count(ast: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    return iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_COUNT) as u64
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.24a -- serialize (Q1).  Mirrors ast.c iii_ast_serialize +
+ * iii_ast_serialize_buf (2548-2651).  Format "IIIASTBN"+ver+reserved + 5
+ * witness mhashes + root/binder/hole ids + 4 pool counts + per-pool
+ * {nodes,mhash,pos_first,binder,doc} bulk arrays + positions + list arena +
+ * string_payload_count + annotations(phase_arena+blobs+used slots) + user-kinds
+ * + SHA-256 trailer.  FILE* carried as u64; raw stream via lex_runtime helpers.
+ * ============================================================================ */
+
+var AST_IO_SCRATCH : [u8; 8]
+
+fn ast_emit_bytes(file: u64, h: u64, ptr: u64, n: u64) -> u32 {
+    if n != 0u64 { iii_lex_fwrite_c(ptr, n, file) }
+    iii_sha256_update(h, ptr, n)
+    return 0u32
+}
+fn ast_emit_u32(file: u64, h: u64, v: u32) -> u32 {
+    iii_lex_write_u32_c(&AST_IO_SCRATCH as u64, 0u64, v)
+    iii_lex_fwrite_c(&AST_IO_SCRATCH as u64, 4u64, file)
+    iii_sha256_update_u32(h, v)
+    return 0u32
+}
+fn ast_emit_pool(out: u64, h: u64, ast: u64, pool: u32, count: u32) -> u32 {
+    let c: u64 = count as u64
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, ast_off_nodes(pool)), c * NODE_BYTES)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, ast_off_mhash(pool)), c * 32u64)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, ast_off_pos_first(pool)), c * 4u64)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, ast_off_binder(pool)), c * 4u64)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, ast_off_doc(pool)), c * 4u64)
+    return 0u32
+}
+
+fn iii_ast_serialize(ast: u64, out: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    if out == 0u64 { return 0u64 }
+    let h: u64 = iii_lex_malloc_c(III_AST_SHA256_STATE_BYTES)
+    if h == 0u64 { return 0u64 }
+    iii_sha256_init(h)
+    ast_emit_bytes(out, h, "IIIASTBN" as u64, 8u64)
+    ast_emit_u32(out, h, 1u32)
+    ast_emit_u32(out, h, 0u32)
+    ast_emit_bytes(out, h, ast + AST_OFF_PARSER_VERSION_MHASH, 32u64)
+    ast_emit_bytes(out, h, ast + AST_OFF_TOKEN_STREAM_MHASH, 32u64)
+    ast_emit_bytes(out, h, ast + AST_OFF_SOURCE_MHASH, 32u64)
+    ast_emit_bytes(out, h, ast + AST_OFF_GRAMMAR_MHASH, 32u64)
+    ast_emit_bytes(out, h, ast + AST_OFF_ROOT_MODULE_MHASH, 32u64)
+    ast_emit_u32(out, h, iii_lex_read_u32_c(ast, AST_OFF_ROOT_MODULE))
+    ast_emit_u32(out, h, iii_lex_read_u32_c(ast, AST_OFF_NEXT_BINDER_ID))
+    ast_emit_u32(out, h, iii_lex_read_u32_c(ast, AST_OFF_NEXT_HOLE_ID))
+    let sc: u32 = iii_lex_read_u32_c(ast, AST_OFF_SMALL_COUNT)
+    let mc: u32 = iii_lex_read_u32_c(ast, AST_OFF_MEDIUM_COUNT)
+    let lc: u32 = iii_lex_read_u32_c(ast, AST_OFF_LARGE_COUNT)
+    let uc: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_COUNT)
+    ast_emit_u32(out, h, sc)
+    ast_emit_u32(out, h, mc)
+    ast_emit_u32(out, h, lc)
+    ast_emit_u32(out, h, uc)
+    ast_emit_pool(out, h, ast, III_AST_POOL_SMALL, sc)
+    ast_emit_pool(out, h, ast, III_AST_POOL_MEDIUM, mc)
+    ast_emit_pool(out, h, ast, III_AST_POOL_LARGE, lc)
+    ast_emit_pool(out, h, ast, III_AST_POOL_USER, uc)
+    let pc: u32 = iii_lex_read_u32_c(ast, AST_OFF_POSITION_COUNT)
+    ast_emit_u32(out, h, pc)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, AST_OFF_POSITIONS), (pc as u64) * POSITION_RECORD_BYTES)
+    let lu: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
+    ast_emit_u32(out, h, lu)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA), (lu as u64) * 4u64)
+    ast_emit_u32(out, h, iii_lex_read_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT))
+    let acnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_COUNT)
+    let ablob: u32 = iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_BLOB_USED)
+    let pau: u32 = iii_lex_read_u32_c(ast, AST_OFF_PHASE_ARENA_USED)
+    ast_emit_u32(out, h, acnt)
+    ast_emit_u32(out, h, ablob)
+    ast_emit_u32(out, h, pau)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA), pau as u64)
+    ast_emit_bytes(out, h, iii_lex_read_u64_c(ast, AST_OFF_ANNOTATION_BLOBS), ablob as u64)
+    let acap: u32 = iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_CAP)
+    let abase: u64 = iii_lex_read_u64_c(ast, AST_OFF_ANNOTATIONS)
+    let parena: u64 = iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA)
+    let mut i: u32 = 0u32
+    while i != acap {
+        let slot: u64 = abase + (i as u64) * ASLOT_BYTES
+        if iii_lex_read_u8_at_c(slot, ASLOT_USED) != 0u32 {
+            ast_emit_u32(out, h, (iii_lex_read_u64_c(slot, ASLOT_PHASE) - parena) as u32)
+            ast_emit_u32(out, h, iii_lex_read_u32_c(slot, ASLOT_NODE))
+            ast_emit_u32(out, h, iii_lex_read_u32_c(slot, ASLOT_BOFF))
+            ast_emit_u32(out, h, iii_lex_read_u32_c(slot, ASLOT_BLEN))
+        }
+        i = i + 1u32
+    }
+    let ukc: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_COUNT)
+    ast_emit_u32(out, h, ukc)
+    let ukbase: u64 = iii_lex_read_u64_c(ast, AST_OFF_USER_KINDS)
+    let mut j: u32 = 0u32
+    while j != ukc {
+        let uk: u64 = ukbase + (j as u64) * UK_BYTES
+        ast_emit_u32(out, h, iii_lex_read_u32_c(uk, UK_ID))
+        ast_emit_u32(out, h, (iii_lex_read_u64_c(uk, UK_NAME) - parena) as u32)
+        j = j + 1u32
+    }
+    let mhb: u64 = iii_lex_malloc_c(32u64)
+    if mhb == 0u64 { iii_lex_free_c(h) ; return 0u64 }
+    iii_sha256_final(h, mhb)
+    iii_lex_fwrite_c(mhb, 32u64, out)
+    iii_lex_free_c(mhb)
+    iii_lex_free_c(h)
+    return 0u64
+}
+
+fn iii_ast_serialize_buf(ast: u64, out: u64, cap: u64) -> u64 @export {
+    if ast == 0u64 { return 0u64 }
+    let t: u64 = iii_lex_tmpfile_c()
+    if t == 0u64 { return 0u64 }
+    iii_ast_serialize(ast, t)
+    let sz: i64 = iii_lex_ftell_c(t)
+    if ((sz as u64) & 0x8000000000000000) != 0u64 { iii_lex_fclose_c(t) ; return 0u64 }
+    let szu: u64 = sz as u64
+    if out == 0u64 { iii_lex_fclose_c(t) ; return szu }
+    if cap < szu { iii_lex_fclose_c(t) ; return szu }
+    iii_lex_rewind_c(t)
+    let got: u64 = iii_lex_fread_c(out, szu, t)
+    iii_lex_fclose_c(t)
+    return got
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.24b -- deserialize (Q1).  Mirrors ast.c iii_ast_deserialize
+ * + iii_ast_deserialize_buf (2656-2804).  Symmetric to serialize: validate
+ * magic+version, create, read witnesses + counts, grow + bulk-read each pool +
+ * side-tables, positions, list arena, string count, annotations (phase arena +
+ * blobs + slots replayed via iii_ast_annotate), user-kinds.  SHA trailer not
+ * verified (per ast.c).  fread-ok gated by a fail flag (mirrors goto fail).
+ * ============================================================================ */
+
+fn ast_fread_ok(file: u64, ptr: u64, n: u64) -> u32 {
+    if iii_lex_fread_c(ptr, n, file) == n { return 1u32 }
+    return 0u32
+}
+/* read a u32: returns (value | (ok<<32)); 0 if the 4-byte read fell short. */
+fn ast_fread_u32v(file: u64) -> u64 {
+    if iii_lex_fread_c(&AST_IO_SCRATCH as u64, 4u64, file) != 4u64 { return 0u64 }
+    return (iii_lex_read_u32_c(&AST_IO_SCRATCH as u64, 0u64) as u64) | 0x100000000u64
+}
+fn ast_read_pool(file: u64, ast: u64, pool: u32, count: u32) -> u32 {
+    let c: u64 = count as u64
+    let mut ok: u32 = ast_fread_ok(file, iii_lex_read_u64_c(ast, ast_off_nodes(pool)), c * NODE_BYTES)
+    if ok == 1u32 { ok = ast_fread_ok(file, iii_lex_read_u64_c(ast, ast_off_mhash(pool)), c * 32u64) }
+    if ok == 1u32 { ok = ast_fread_ok(file, iii_lex_read_u64_c(ast, ast_off_pos_first(pool)), c * 4u64) }
+    if ok == 1u32 { ok = ast_fread_ok(file, iii_lex_read_u64_c(ast, ast_off_binder(pool)), c * 4u64) }
+    if ok == 1u32 { ok = ast_fread_ok(file, iii_lex_read_u64_c(ast, ast_off_doc(pool)), c * 4u64) }
+    return ok
+}
+
+fn iii_ast_deserialize(in_file: u64) -> u64 @export {
+    if in_file == 0u64 { return 0u64 }
+    if ast_fread_ok(in_file, &AST_IO_SCRATCH as u64, 8u64) == 0u32 { return 0u64 }
+    if iii_lex_memcmp_c(&AST_IO_SCRATCH as u64, "IIIASTBN" as u64, 8u64) != 0i32 { return 0u64 }
+    let rv: u64 = ast_fread_u32v(in_file)
+    if (rv >> 32u64) == 0u64 { return 0u64 }
+    if ast_fread_u32v(in_file) == 0u64 { return 0u64 }
+    if (rv & 0xFFFFFFFFu64) != 1u64 { return 0u64 }
+    let ast: u64 = iii_ast_create(0u64, 0u64, 0u64)
+    if ast == 0u64 { return 0u64 }
+    let mut fail: u32 = 0u32
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_PARSER_VERSION_MHASH, 32u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_TOKEN_STREAM_MHASH, 32u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_SOURCE_MHASH, 32u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_GRAMMAR_MHASH, 32u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_ROOT_MODULE_MHASH, 32u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_ROOT_MODULE, 4u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_NEXT_BINDER_ID, 4u64) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_fread_ok(in_file, ast + AST_OFF_NEXT_HOLE_ID, 4u64) == 0u32 { fail = 1u32 } }
+    let mut sc: u32 = 0u32
+    let mut mc: u32 = 0u32
+    let mut lc: u32 = 0u32
+    let mut uc: u32 = 0u32
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; sc = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; mc = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; lc = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; uc = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 { if ast_pool_grow(ast, III_AST_POOL_SMALL, sc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_pool_grow(ast, III_AST_POOL_MEDIUM, mc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_pool_grow(ast, III_AST_POOL_LARGE, lc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_pool_grow(ast, III_AST_POOL_USER, uc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 {
+        iii_lex_write_u32_c(ast, AST_OFF_SMALL_COUNT, sc)
+        iii_lex_write_u32_c(ast, AST_OFF_MEDIUM_COUNT, mc)
+        iii_lex_write_u32_c(ast, AST_OFF_LARGE_COUNT, lc)
+        iii_lex_write_u32_c(ast, AST_OFF_USER_COUNT, uc)
+    }
+    if fail == 0u32 { if ast_read_pool(in_file, ast, III_AST_POOL_SMALL, sc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_read_pool(in_file, ast, III_AST_POOL_MEDIUM, mc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_read_pool(in_file, ast, III_AST_POOL_LARGE, lc) == 0u32 { fail = 1u32 } }
+    if fail == 0u32 { if ast_read_pool(in_file, ast, III_AST_POOL_USER, uc) == 0u32 { fail = 1u32 } }
+    /* positions */
+    let mut pc: u32 = 0u32
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; pc = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 {
+        if pc != 0u32 {
+            if iii_position_arena_grow(ast, pc) == 0u32 { fail = 1u32 }
+            if fail == 0u32 { if ast_fread_ok(in_file, iii_lex_read_u64_c(ast, AST_OFF_POSITIONS), (pc as u64) * POSITION_RECORD_BYTES) == 0u32 { fail = 1u32 } }
+            if fail == 0u32 { iii_lex_write_u32_c(ast, AST_OFF_POSITION_COUNT, pc) }
+        }
+    }
+    /* list arena */
+    let mut lu: u32 = 0u32
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; lu = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 {
+        let lcap: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_CAP)
+        if lu > lcap {
+            let ncap: u32 = ast_grow_cap(lcap, lu)
+            if ncap == 0u32 { fail = 1u32 }
+            if fail == 0u32 {
+                let np: u64 = ast_grow_one(iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA), lcap as u64, ncap as u64, 4u64)
+                if np == 0u64 { fail = 1u32 }
+                if fail == 0u32 { iii_lex_write_u64_c(ast, AST_OFF_LIST_ARENA, np) ; iii_lex_write_u32_c(ast, AST_OFF_LIST_CAP, ncap) }
+            }
+        }
+    }
+    if fail == 0u32 {
+        if lu != 0u32 { if ast_fread_ok(in_file, iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA), (lu as u64) * 4u64) == 0u32 { fail = 1u32 } }
+    }
+    if fail == 0u32 { iii_lex_write_u32_c(ast, AST_OFF_LIST_USED, lu) }
+    /* string payload count */
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; iii_lex_write_u32_c(ast, AST_OFF_STRING_PAYLOAD_COUNT, (r & 0xFFFFFFFFu64) as u32) }
+    /* annotations */
+    let mut ac: u32 = 0u32
+    let mut ablob: u32 = 0u32
+    let mut pau: u32 = 0u32
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; ac = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; ablob = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; pau = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 {
+        if pau != 0u32 {
+            let pcap: u32 = iii_lex_read_u32_c(ast, AST_OFF_PHASE_ARENA_CAP)
+            if pau > pcap {
+                let np: u64 = ast_grow_one(iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA), pcap as u64, pau as u64, 1u64)
+                if np == 0u64 { fail = 1u32 }
+                if fail == 0u32 { iii_lex_write_u64_c(ast, AST_OFF_PHASE_ARENA, np) ; iii_lex_write_u32_c(ast, AST_OFF_PHASE_ARENA_CAP, pau) }
+            }
+            if fail == 0u32 { if ast_fread_ok(in_file, iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA), pau as u64) == 0u32 { fail = 1u32 } }
+            if fail == 0u32 { iii_lex_write_u32_c(ast, AST_OFF_PHASE_ARENA_USED, pau) }
+        }
+    }
+    if fail == 0u32 {
+        if ablob != 0u32 {
+            let bcap: u32 = iii_lex_read_u32_c(ast, AST_OFF_ANNOTATION_BLOB_CAP)
+            let np: u64 = ast_grow_one(iii_lex_read_u64_c(ast, AST_OFF_ANNOTATION_BLOBS), bcap as u64, ablob as u64, 1u64)
+            if np == 0u64 { fail = 1u32 }
+            if fail == 0u32 {
+                iii_lex_write_u64_c(ast, AST_OFF_ANNOTATION_BLOBS, np)
+                iii_lex_write_u32_c(ast, AST_OFF_ANNOTATION_BLOB_CAP, ablob)
+                if ast_fread_ok(in_file, np, ablob as u64) == 0u32 { fail = 1u32 }
+                if fail == 0u32 { iii_lex_write_u32_c(ast, AST_OFF_ANNOTATION_BLOB_USED, ablob) }
+            }
+        }
+    }
+    if fail == 0u32 {
+        let mut i: u32 = 0u32
+        while i != ac {
+            if fail == 0u32 {
+                let r1: u64 = ast_fread_u32v(in_file)
+                let r2: u64 = ast_fread_u32v(in_file)
+                let r3: u64 = ast_fread_u32v(in_file)
+                let r4: u64 = ast_fread_u32v(in_file)
+                if (r1 >> 32u64) == 0u64 { fail = 1u32 }
+                if (r2 >> 32u64) == 0u64 { fail = 1u32 }
+                if (r3 >> 32u64) == 0u64 { fail = 1u32 }
+                if (r4 >> 32u64) == 0u64 { fail = 1u32 }
+                if fail == 0u32 {
+                    let phase_off: u32 = (r1 & 0xFFFFFFFFu64) as u32
+                    let pa_used: u32 = iii_lex_read_u32_c(ast, AST_OFF_PHASE_ARENA_USED)
+                    if phase_off >= pa_used { fail = 1u32 }
+                    if fail == 0u32 {
+                        let phase: u64 = iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA) + (phase_off as u64)
+                        let blobs: u64 = iii_lex_read_u64_c(ast, AST_OFF_ANNOTATION_BLOBS)
+                        let blen: u64 = r4 & 0xFFFFFFFFu64
+                        /* Copy the blob to a stable temp first: iii_ast_annotate
+                         * grows (malloc+memcpy+free) the blob arena, which would
+                         * dangle a `blobs+off` pointer mid-call (ast.c gets away
+                         * with this via realloc; we must not). */
+                        let tmp: u64 = iii_lex_malloc_c(blen + 1u64)
+                        if tmp == 0u64 { fail = 1u32 }
+                        if fail == 0u32 {
+                            if blen != 0u64 { iii_lex_memcpy_c(tmp, blobs + (r3 & 0xFFFFFFFFu64), blen) }
+                            iii_ast_annotate(ast, phase, (r2 & 0xFFFFFFFFu64) as u32, tmp, blen)
+                            iii_lex_free_c(tmp)
+                        }
+                    }
+                }
+            }
+            i = i + 1u32
+        }
+    }
+    /* user kinds */
+    let mut ukc: u32 = 0u32
+    if fail == 0u32 { let r: u64 = ast_fread_u32v(in_file) ; if (r >> 32u64) == 0u64 { fail = 1u32 } ; ukc = (r & 0xFFFFFFFFu64) as u32 }
+    if fail == 0u32 {
+        let mut i: u32 = 0u32
+        while i != ukc {
+            if fail == 0u32 {
+                let r1: u64 = ast_fread_u32v(in_file)
+                let r2: u64 = ast_fread_u32v(in_file)
+                if (r1 >> 32u64) == 0u64 { fail = 1u32 }
+                if (r2 >> 32u64) == 0u64 { fail = 1u32 }
+                if fail == 0u32 {
+                    let name_off: u32 = (r2 & 0xFFFFFFFFu64) as u32
+                    let pa_used: u32 = iii_lex_read_u32_c(ast, AST_OFF_PHASE_ARENA_USED)
+                    if name_off >= pa_used { fail = 1u32 }
+                    if fail == 0u32 {
+                        let cnt: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_COUNT)
+                        let cap: u32 = iii_lex_read_u32_c(ast, AST_OFF_USER_KIND_CAP)
+                        if cnt == cap {
+                            let mut nc: u32 = 16u32
+                            if cap != 0u32 { nc = cap * 2u32 }
+                            let np: u64 = ast_grow_one(iii_lex_read_u64_c(ast, AST_OFF_USER_KINDS), cap as u64, nc as u64, UK_BYTES)
+                            if np == 0u64 { fail = 1u32 }
+                            if fail == 0u32 { iii_lex_write_u64_c(ast, AST_OFF_USER_KINDS, np) ; iii_lex_write_u32_c(ast, AST_OFF_USER_KIND_CAP, nc) }
+                        }
+                        if fail == 0u32 {
+                            let base: u64 = iii_lex_read_u64_c(ast, AST_OFF_USER_KINDS)
+                            let slot: u64 = base + (cnt as u64) * UK_BYTES
+                            iii_lex_write_u32_c(slot, UK_ID, (r1 & 0xFFFFFFFFu64) as u32)
+                            iii_lex_write_u64_c(slot, UK_NAME, iii_lex_read_u64_c(ast, AST_OFF_PHASE_ARENA) + (name_off as u64))
+                            iii_lex_write_u32_c(ast, AST_OFF_USER_KIND_COUNT, cnt + 1u32)
+                        }
+                    }
+                }
+            }
+            i = i + 1u32
+        }
+    }
+    if fail == 1u32 { iii_ast_destroy(ast) ; return 0u64 }
+    return ast
+}
+
+fn iii_ast_deserialize_buf(bytes: u64, len: u64) -> u64 @export {
+    if bytes == 0u64 { return 0u64 }
+    if len == 0u64 { return 0u64 }
+    let t: u64 = iii_lex_tmpfile_c()
+    if t == 0u64 { return 0u64 }
+    if iii_lex_fwrite_c(bytes, len, t) != len { iii_lex_fclose_c(t) ; return 0u64 }
+    iii_lex_rewind_c(t)
+    let ast: u64 = iii_ast_deserialize(t)
+    iii_lex_fclose_c(t)
+    return ast
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.2.24c -- debug_dump.  Mirrors ast.c iii_dump_pre +
+ * iii_ast_debug_dump (2806-2849).  walk_pre over root; per node print
+ * "[<hex8>] <kind>" + optional position + " mhash=<hex16>" + newline.  fprintf
+ * is replaced by manual hex8/hex2/dec emit; fixed punctuation written via
+ * fwrite-with-length (iiis-0 string literals are not NUL-terminated, so fputs
+ * of a literal would overrun -- only kind_name (from the NUL-pool) uses fputs).
+ * ============================================================================ */
+
+var DUMP_SCRATCH : [u8; 16]
+
+fn ast_dump_hex8(out: u64, v: u32) -> u32 {
+    let mut i: u32 = 0u32
+    while i != 8u32 {
+        let nib: u32 = (v >> ((7u32 - i) * 4u32)) & 15u32
+        let mut ch: u32 = 48u32 + nib
+        if nib >= 10u32 { ch = 87u32 + nib }
+        iii_lex_fputc_c(ch, out)
+        i = i + 1u32
+    }
+    return 0u32
+}
+fn ast_dump_hex2(out: u64, v: u32) -> u32 {
+    let hi: u32 = (v >> 4u32) & 15u32
+    let lo: u32 = v & 15u32
+    let mut c1: u32 = 48u32 + hi
+    if hi >= 10u32 { c1 = 87u32 + hi }
+    let mut c2: u32 = 48u32 + lo
+    if lo >= 10u32 { c2 = 87u32 + lo }
+    iii_lex_fputc_c(c1, out)
+    iii_lex_fputc_c(c2, out)
+    return 0u32
+}
+fn ast_dump_dec(out: u64, v: u32) -> u32 {
+    if v == 0u32 { iii_lex_fputc_c(48u32, out) ; return 0u32 }
+    let mut n: u32 = v
+    let mut len: u32 = 0u32
+    while n != 0u32 {
+        iii_lex_write_u8_at_c(&DUMP_SCRATCH as u64, len as u64, 48u32 + (n % 10u32))
+        n = n / 10u32
+        len = len + 1u32
+    }
+    let mut i: u32 = len
+    while i != 0u32 {
+        i = i - 1u32
+        iii_lex_fputc_c(iii_lex_read_u8_at_c(&DUMP_SCRATCH as u64, i as u64), out)
+    }
+    return 0u32
+}
+
+fn ast_dump_pre(ast: u64, node_index: u32, depth: u32, ctx: u64) -> i32 {
+    let out: u64 = ctx
+    let np: u64 = iii_ast_get(ast, node_index)
+    if np == 0u64 { return 0i32 }
+    let mut i: u32 = 0u32
+    while i != depth {
+        iii_lex_fwrite_c("  " as u64, 2u64, out)
+        i = i + 1u32
+    }
+    iii_lex_fwrite_c("[" as u64, 1u64, out)
+    ast_dump_hex8(out, node_index)
+    iii_lex_fwrite_c("] " as u64, 2u64, out)
+    iii_lex_fputs_c(iii_ast_kind_name(iii_lex_read_u32_c(np, NODE_OFF_KIND)), out)
+    let posbuf: u64 = iii_lex_malloc_c(POSITION_T_BYTES)
+    if posbuf != 0u64 {
+        if ast_position_at_inner(ast, node_index, 0u64, posbuf) == 1i32 {
+            let pk: u32 = iii_lex_read_u32_c(posbuf, POS_OFF_KIND)
+            if pk == III_POS_PHYSICAL {
+                iii_lex_fwrite_c(" @ " as u64, 3u64, out)
+                ast_dump_dec(out, iii_lex_read_u32_c(posbuf, POS_PHYS_LINE))
+                iii_lex_fwrite_c(":" as u64, 1u64, out)
+                ast_dump_dec(out, iii_lex_read_u32_c(posbuf, POS_PHYS_COL))
+                iii_lex_fwrite_c(".." as u64, 2u64, out)
+                let eb: u32 = iii_lex_read_u32_c(posbuf, POS_PHYS_END)
+                let sb: u32 = iii_lex_read_u32_c(posbuf, POS_PHYS_START)
+                let cl: u32 = iii_lex_read_u32_c(posbuf, POS_PHYS_COL)
+                ast_dump_dec(out, eb - sb + cl)
+            }
+            if pk == III_POS_SYNTHETIC {
+                iii_lex_fwrite_c(" @ synthetic from " as u64, 18u64, out)
+                ast_dump_hex8(out, iii_lex_read_u32_c(posbuf, POS_SYN_SRC))
+            }
+        }
+        iii_lex_free_c(posbuf)
+    }
+    let mh: u64 = iii_ast_node_mhash(ast, node_index)
+    if mh != 0u64 {
+        iii_lex_fwrite_c(" mhash=" as u64, 7u64, out)
+        let mut j: u32 = 0u32
+        while j != 8u32 {
+            ast_dump_hex2(out, iii_lex_read_u8_at_c(mh, j as u64))
+            j = j + 1u32
+        }
+    }
+    iii_lex_fputc_c(10u32, out)
+    return 0i32
+}
+
+fn iii_ast_debug_dump(ast: u64, root: u32, out: u64) -> u32 @export {
+    if ast == 0u64 { return 0u32 }
+    if out == 0u64 { return 0u32 }
+    iii_ast_walk_pre(ast, root, ast_dump_pre as u64, out)
+    return 0u32
+}
+
+/* CP-AST-001 + Stage 2.2.1..2.2.24 (serialize/deserialize/debug_dump done).
+ * The ast.c -> ast.iii port is COMPLETE.  Next: §2.2.25 -- drop ast_impl.c from
+ * build_iiis1.sh, rebuild iiis-1, verify iiis-0 == iiis-1 fixpoint + corpus.
+ */

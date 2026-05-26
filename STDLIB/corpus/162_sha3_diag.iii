@@ -1,0 +1,15 @@
+/* Diagnostic: print SHA3-512("abc") first byte for diagnosis. */
+module corpus_162
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha3_512_oneshot(input_ptr: u64, input_len: u64, out_64: u64) -> u32 from "sha3_512.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(3u64)
+    buf[0] = 97u8
+    buf[1] = 98u8
+    buf[2] = 99u8
+    let out : *u8 = malloc(64u64)
+    sha3_512_oneshot(buf as u64, 3u64, out as u64)
+    return out[0] as u64
+}

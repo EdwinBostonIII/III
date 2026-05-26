@@ -1,0 +1,10 @@
+/* Lattice plan Step 0011: @side_channel_resistant + @constant_time pair. */
+module corpus_114
+
+fn scr() -> u64 @side_channel_resistant @constant_time {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return scr()
+}

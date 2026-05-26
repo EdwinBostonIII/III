@@ -1,0 +1,266 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\xii_antidrift.iii
+ *
+ * III STDLIB - sanctus::xii_antidrift
+ *
+ * Anti-drift verification suite. Per DOCS/III-XII.md S18 + S26.17.
+ *
+ * Eight runtime checks:
+ *   1. Manifest mhash matches golden
+ *   2. Lattice cells re-derive byte-equal
+ *   3. reach6 bitmap matches embedded golden
+ *   4. Confluence empirical (10,000 random terms)
+ *   5. Confluence structural: root-overlap + termination gates (supersedes the 117-pair hand
+ *      enumeration; route-S made associativity structural -- see xjn_gate_root + xtm_gate)
+ *   6. MPHF collision-free (144 patterns)
+ *   7. Hexad reach6 invariant
+ *   8. Founders-Anchor signature valid
+ *
+ * Hexad: kind_essence. Ring: R0. K: 32.
+ *
+ * NIH: libc only.
+ */
+
+module sanctus_xii_antidrift
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_gate_root() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xtm_gate() -> u32 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn xii_hj_assoc_full_check() -> u32 from "xii_hj.iii"
+extern @abi(c-msvc-x64) fn xii_savings_init() -> i32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_savings_symmetry_check() -> u32 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_reach_productive_count() -> u32 from "xii_horizon_reach.iii"
+extern @abi(c-msvc-x64) fn xii_chd_verify_collision_free() -> u32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, signature: *u8) -> u32 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+
+const XAD_OK            : u32 = 0u32
+const XAD_E_MANIFEST    : u32 = 1u32
+const XAD_E_LATTICE     : u32 = 2u32
+const XAD_E_REACH6      : u32 = 3u32
+const XAD_E_CONFLUENCE  : u32 = 4u32
+const XAD_E_CRITPAIRS   : u32 = 5u32
+const XAD_E_MPHF        : u32 = 6u32
+const XAD_E_HEXAD       : u32 = 7u32
+const XAD_E_ANCHOR_SIG  : u32 = 8u32
+
+var XAD_COMPUTED : [u8; 32]
+
+/* Check 1: Manifest mhash. */
+fn xii_antidrift_check_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 @export {
+    sha256_oneshot(manifest_ptr, manifest_size as u64, &XAD_COMPUTED as *u8)
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if XAD_COMPUTED[k] != golden_mhash[k as u64] { return XAD_E_MANIFEST }
+        k = k + 1u32
+    }
+    return XAD_OK
+}
+
+/* Check 3: reach6 bitmap productive-count invariant. */
+fn xii_antidrift_check_reach6() -> u32 @export {
+    let count : u32 = xii_horizon_reach_productive_count()
+    if count != 126u32 { return XAD_E_REACH6 }
+    return XAD_OK
+}
+
+/* Check 5: confluence of the canonicaliser (structural, route-S). The hand-enumerated 117 critical
+ * pairs are SUPERSEDED by the Confluence-Core proof: root-overlap confluence (every root critical
+ * pair joins -- xjn_gate_root) AND termination (every live rule strictly decreases the lexicographic
+ * measure -- xtm_gate). By Newman's lemma the two together certify the canonicaliser is a confluent
+ * normaliser on the reorderable set -- a rule-count-independent guarantee, stronger than the retired
+ * enumeration, and itself the drift target (any rewrite-engine drift reddens one of the two gates). */
+fn xii_antidrift_check_critpairs() -> u32 @export {
+    xjn_gate()
+    if xjn_gate_root() != 1u32 { return XAD_E_CRITPAIRS }
+    if xtm_gate() != 1u32 { return XAD_E_CRITPAIRS }
+    return XAD_OK
+}
+
+/* Check 6: MPHF collision-free (requires CHD construction done first). */
+fn xii_antidrift_check_mphf() -> u32 @export {
+    let fails : u32 = xii_chd_verify_collision_free()
+    if fails != 0u32 { return XAD_E_MPHF }
+    return XAD_OK
+}
+
+/* Check 7: hexad reach6 invariant (HJ associativity 343/343). */
+fn xii_antidrift_check_hexad() -> u32 @export {
+    let fails : u32 = xii_hj_assoc_full_check()
+    if fails > 0u32 { return XAD_E_HEXAD }
+    return XAD_OK
+}
+
+/* Check sub-table for ΔK symmetry. */
+fn xii_antidrift_check_dk_symmetry() -> u32 @export {
+    xii_savings_init()
+    let fails : u32 = xii_savings_symmetry_check()
+    if fails > 0u32 { return XAD_E_LATTICE }
+    return XAD_OK
+}
+
+/* Check 2: walk every record in the LDIL audit section and re-derive
+ * each cell's SHA-256 against the embedded expected_cell_mhash. The
+ * audit-record layout is the 64-byte iii_xii_ldil_audit_record
+ * (S26.12.2): bytes 0..7 = text_offset (LE u64), bytes 16..19 =
+ * payload_size (LE u32), bytes 24..55 = expected_cell_mhash[32]. */
+fn xii_antidrift_check_lattice(text_section: *u8, audit_records: *u8, record_count: u32) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < record_count {
+        let rec_off : u32 = i * 64u32
+        let b0 : u64 = audit_records[(rec_off + 0u32) as u64] as u64
+        let b1 : u64 = audit_records[(rec_off + 1u32) as u64] as u64
+        let b2 : u64 = audit_records[(rec_off + 2u32) as u64] as u64
+        let b3 : u64 = audit_records[(rec_off + 3u32) as u64] as u64
+        let b4 : u64 = audit_records[(rec_off + 4u32) as u64] as u64
+        let b5 : u64 = audit_records[(rec_off + 5u32) as u64] as u64
+        let b6 : u64 = audit_records[(rec_off + 6u32) as u64] as u64
+        let b7 : u64 = audit_records[(rec_off + 7u32) as u64] as u64
+        let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+        let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+        let text_offset : u64 = lo | hi
+
+        let p0 : u32 = audit_records[(rec_off + 16u32) as u64] as u32
+        let p1 : u32 = audit_records[(rec_off + 17u32) as u64] as u32
+        let p2 : u32 = audit_records[(rec_off + 18u32) as u64] as u32
+        let p3 : u32 = audit_records[(rec_off + 19u32) as u64] as u32
+        let payload_size : u32 = p0 | (p1 << 8u32) | (p2 << 16u32) | (p3 << 24u32)
+
+        let cell_ptr : *u8 = (text_section as u64 + text_offset) as *u8
+        sha256_oneshot(cell_ptr, payload_size as u64, &XAD_COMPUTED as *u8)
+
+        let mut k : u32 = 0u32
+        while k < 32u32 {
+            if XAD_COMPUTED[k] != audit_records[(rec_off + 24u32 + k) as u64] {
+                return XAD_E_LATTICE
+            }
+            k = k + 1u32
+        }
+        i = i + 1u32
+    }
+    return XAD_OK
+}
+
+/* xorshift32 PRNG (deterministic; used only for empirical-confluence
+ * sampling -- no observational learning here, just synthetic-term
+ * generation from a sealed seed). */
+var XAD_RNG_STATE : u32 = 0x12345678u32
+
+fn _ad_rng_next() -> u32 {
+    let mut x : u32 = XAD_RNG_STATE
+    x = x ^ (x << 13u32)
+    x = x ^ (x >> 17u32)
+    x = x ^ (x << 5u32)
+    XAD_RNG_STATE = x
+    return x
+}
+
+fn _ad_build_random_term(depth: u32) -> u32 {
+    if depth == 0u32 {
+        let kind_pick : u8 = (_ad_rng_next() % 18u32) as u8
+        let sub : u32 = _ad_rng_next() & 0xFFu32
+        return xii_term_make_basis(kind_pick, sub)
+    }
+    let op_pick : u32 = (_ad_rng_next() % 6u32) + 18u32  /* 18..23 = fusion ops */
+    let a : u32 = _ad_build_random_term(depth - 1u32)
+    let b : u32 = _ad_build_random_term(depth - 1u32)
+    return xii_term_make_fusion2(op_pick as u8, a, b)
+}
+
+/* Check 4: empirical confluence -- generate N random terms; for each,
+ * drive two genuinely different reduction paths from the same starting
+ * term and verify their canonical forms agree.
+ *
+ *   Path A: full canonicalisation (xii_canonicalise to fixpoint).
+ *   Path B: apply ONE random matching rule first via apply_specific,
+ *           then full canonicalisation.
+ *
+ * Confluence says both must converge to the same normal form (Newman +
+ * termination ⇒ unique normal form per term). The two paths only agree
+ * if confluence actually holds on the random sample. A two-call-same-
+ * canonicalise comparison would be tautological (deterministic function)
+ * and would prove nothing. */
+fn xii_antidrift_check_confluence_empirical(n_samples: u32, seed: u32) -> u32 @export {
+    XAD_RNG_STATE = seed
+    if XAD_RNG_STATE == 0u32 { XAD_RNG_STATE = 0xABCDEF01u32 }
+    let mut i : u32 = 0u32
+    while i < n_samples {
+        xii_term_arena_reset()
+        let depth : u32 = (_ad_rng_next() % 4u32) + 1u32
+        let saved_state : u32 = XAD_RNG_STATE
+
+        /* Path A: build term, canonicalise from scratch. */
+        let t_a : u32 = _ad_build_random_term(depth)
+        let canon_a : u32 = xii_canonicalise(t_a)
+
+        /* Path B: rebuild the same shape, drive ONE random rule at the
+         * root via apply_specific, then canonicalise. If the rule
+         * doesn't match the root the dispatcher returns XCP_NULL_REF,
+         * in which case we canonicalise the original term (path B
+         * collapses onto path A and trivially agrees). Otherwise path
+         * B's prefix is one extra reduction step ahead of path A, and
+         * canonicalisation has to bring both to the same normal form. */
+        xii_term_arena_reset()
+        XAD_RNG_STATE = saved_state
+        let t_b : u32 = _ad_build_random_term(depth)
+        let try_rule : u32 = (_ad_rng_next() % 40u32) + 1u32
+        let stepped : u32 = xii_rewrite_apply_specific(try_rule, t_b)
+        if stepped == 0xFFFFFFFFu32 {
+            let canon_b_a : u32 = xii_canonicalise(t_b)
+            if xii_rewrite_struct_eq(canon_a, canon_b_a) == 0u8 {
+                return XAD_E_CONFLUENCE
+            }
+        } else {
+            let canon_b_b : u32 = xii_canonicalise(stepped)
+            if xii_rewrite_struct_eq(canon_a, canon_b_b) == 0u8 {
+                return XAD_E_CONFLUENCE
+            }
+        }
+        i = i + 1u32
+    }
+    return XAD_OK
+}
+
+/* Check 8: Founders-Anchor Ed25519 signature over manifest[0..0x32F]. */
+fn xii_antidrift_check_anchor_sig(manifest_ptr: *u8) -> u32 @export {
+    let pubkey : *u8 = (manifest_ptr as u64 + 0x310u64) as *u8
+    let signature : *u8 = (manifest_ptr as u64 + 0x330u64) as *u8
+    let rc : u32 = ed25519_verify(pubkey, manifest_ptr, 0x330u64, signature)
+    if rc != 0u32 { return XAD_E_ANCHOR_SIG }
+    return XAD_OK
+}
+
+/* Aggregate check: runs ALL eight anti-drift checks in S18 order.
+ * Returns the first failing check code, or XAD_OK if every check passes.
+ *
+ * Caller supplies the LDIL audit section (text_section + audit_records +
+ * record_count) so check 2 can re-derive each cell. confluence_samples
+ * defaults to 1024 in production builds; corpus tests may pass a smaller
+ * value (e.g. 64) for fast smokes. */
+fn xii_antidrift_check_all(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8, text_section: *u8, audit_records: *u8, record_count: u32, confluence_samples: u32) -> u32 @export {
+    let rc1 : u32 = xii_antidrift_check_manifest(manifest_ptr, manifest_size, golden_mhash)
+    if rc1 != XAD_OK { return rc1 }
+    let rc2 : u32 = xii_antidrift_check_lattice(text_section, audit_records, record_count)
+    if rc2 != XAD_OK { return rc2 }
+    let rc3 : u32 = xii_antidrift_check_reach6()
+    if rc3 != XAD_OK { return rc3 }
+    let rc4 : u32 = xii_antidrift_check_confluence_empirical(confluence_samples, 0xC0FFEE42u32)
+    if rc4 != XAD_OK { return rc4 }
+    let rc5 : u32 = xii_antidrift_check_critpairs()
+    if rc5 != XAD_OK { return rc5 }
+    let rc6 : u32 = xii_antidrift_check_mphf()
+    if rc6 != XAD_OK { return rc6 }
+    let rc7 : u32 = xii_antidrift_check_hexad()
+    if rc7 != XAD_OK { return rc7 }
+    let rc8 : u32 = xii_antidrift_check_anchor_sig(manifest_ptr)
+    if rc8 != XAD_OK { return rc8 }
+    let rc9 : u32 = xii_antidrift_check_dk_symmetry()
+    if rc9 != XAD_OK { return rc9 }
+    return XAD_OK
+}

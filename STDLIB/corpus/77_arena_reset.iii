@@ -1,0 +1,39 @@
+/* arena_reset: after reset, the bump pointer returns to 0, so a
+ * subsequent allocation returns the same address as the first one
+ * (since we use the same alignment). */
+module corpus_77
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc1(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_used(id: u64) -> u64 from "arena.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* Initial state */
+    if arena_used(a) != 0u64 { return 1u64 }
+    /* Allocate 32 bytes */
+    let p1 : u64 = arena_alloc1(a, 32u64)
+    if p1 == 0u64 { return 2u64 }
+    if arena_used(a) != 32u64 { return 3u64 }
+    /* Allocate another 64 bytes */
+    let p2 : u64 = arena_alloc1(a, 64u64)
+    if p2 == 0u64 { return 4u64 }
+    if arena_used(a) != 96u64 { return 5u64 }
+    /* p2 should be p1 + 32 */
+    if p2 != p1 + 32u64 { return 6u64 }
+    /* Reset the arena */
+    arena_reset(a)
+    if arena_used(a) != 0u64 { return 7u64 }
+    /* Allocate 32 bytes again — should return SAME address as p1. */
+    let p3 : u64 = arena_alloc1(a, 32u64)
+    if p3 != p1 { return 8u64 }
+    if arena_used(a) != 32u64 { return 9u64 }
+    /* Reset and allocate at fresh — confirm reset is repeatable. */
+    arena_reset(a)
+    let p4 : u64 = arena_alloc1(a, 32u64)
+    if p4 != p1 { return 10u64 }
+    arena_drop(a)
+    return 99u64
+}

@@ -1,0 +1,7 @@
+module corpus_15
+
+const GREETING: u64 = 0x4847
+
+fn main() -> u64 {
+    return GREETING
+}

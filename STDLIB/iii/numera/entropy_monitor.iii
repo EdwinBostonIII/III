@@ -1,0 +1,448 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\entropy_monitor.iii
+ *
+ * III STDLIB - numera::entropy_monitor
+ *
+ * Per-hot-path timing buffer + deterministic finite-field NTT spectrum,
+ * baseline registration (capability-gated), exact in-field distance, and
+ * a keccak256 witness fragment over (path_id, algebraic-time, spectrum).
+ *
+ * Deterministic spectral ACCOUNTANT -- it computes exact closed-form
+ * measures over recorded inputs. It does NOT learn, adapt, count-and-
+ * promote, or threshold-trigger (M3/M4). Any anomaly DECISION is the
+ * caller's; this module only reports algebraic distance.
+ *
+ * NTT parameters (all verified against an independent bigint reference):
+ *   prime p     = 998244353   (p-1 = 2^23 * 7 * 17)
+ *   prim root g = 3
+ *   length    N = 64 = 2^6
+ *   omega = g^((p-1)/N) mod p = 922799308   (primitive 64th root)
+ *   omega^64 == 1, omega^32 == p-1 (primitivity), omega^2 == 452798380
+ *
+ * NOT REENTRANT: ENTROPY_SCRATCH_A/B, ENTROPY_WIT_SPEC and ENTROPY_WIT_BUF
+ * are module-scope (Trap 7 forbids local var arrays). Call entropy_spectrum /
+ * entropy_witness serially -- same single-threaded substrate hot-path
+ * accounting serialization that keccak256_* and mlkem KEM_* scratch rely on.
+ *
+ * Public API:
+ *   entropy_init() -> i32
+ *   entropy_register_path(path_id: *u8) -> u32
+ *   entropy_sample(path_slot: u32, time_value: u64) -> i32
+ *   entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32
+ *   entropy_set_baseline(path_slot: u32, spectrum: *u64, cap: u64) -> i32  -- M8 cap-gated
+ *   entropy_distance(path_slot: u32, spectrum: *u64) -> u64
+ *   entropy_witness(path_slot: u32, out_hash: *u8) -> i32                  -- M6/M10/W16
+ *   entropy_selftest() -> u64                                              -- KAT carrier (99 = pass)
+ *
+ * Cost bounds (M19, data-independent):
+ *   init:     256 slot-zeroings + one ~24-step powmod (omega)
+ *   spectrum: 64 bit-reversals + 6 w_step powmods + 384 butterflies
+ *   distance: 64 field ops (submod + mulmod + addmod)
+ *
+ * Hexad: kind_witness + kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_entropy_monitor
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn at_advance() -> u64 from "algebraic_time.iii"
+
+const ENTROPY_OK           : i32 =  0i32
+const ENTROPY_E_BAD        : i32 = -1i32
+const ENTROPY_E_CAP        : i32 = -2i32
+const ENTROPY_E_NOBASE     : i32 = -3i32
+const ENTROPY_E_RANGE      : i32 = -4i32
+
+const ENTROPY_PRIME        : u64 = 998244353u64
+const ENTROPY_GROOT        : u64 = 3u64
+const ENTROPY_N            : u32 = 64u32
+const ENTROPY_LOG2N        : u32 = 6u32
+const ENTROPY_MAX_PATHS    : u32 = 256u32
+const ENTROPY_ID_LEN       : u64 = 32u64
+const ENTROPY_INVALID_SLOT : u32 = 0xFFFFFFFFu32
+
+var ENTROPY_LIVE       : [u8;  256]
+var ENTROPY_PATH_ID    : [u8;  8192]      // 256 * 32, flattened
+var ENTROPY_BUF        : [u64; 16384]     // 256 * 64, flattened row-major slot*64+idx
+var ENTROPY_BUF_HEAD   : [u32; 256]
+var ENTROPY_BUF_LEN    : [u32; 256]
+var ENTROPY_BASELINE   : [u64; 16384]     // 256 * 64, flattened
+var ENTROPY_BASE_SET   : [u8;  256]
+var ENTROPY_SCRATCH_A  : [u64; 64]        // NTT natural-order scratch (Trap-7 fix)
+var ENTROPY_SCRATCH_B  : [u64; 64]        // NTT working scratch (Trap-7 fix)
+var ENTROPY_WIT_SPEC   : [u64; 64]        // witness spectrum scratch (distinct from SCRATCH_A/B)
+var ENTROPY_WIT_BUF    : [u8;  296]       // 32 id + 8 at-stamp + 256 trunc-spectrum
+var ENTROPY_WIT_HASH   : [u8;  32]        // discarded-output scratch for set_baseline fold
+var ENTROPY_OMEGA      : u64 = 0u64
+var ENTROPY_INITED     : u8  = 0u8
+
+// KAT scratch (module scope -- Trap 7)
+var ENTROPY_KAT_ID     : [u8;  32]
+var ENTROPY_KAT_SPEC   : [u64; 64]
+var ENTROPY_KAT_SPEC2  : [u64; 64]
+var ENTROPY_KAT_H1     : [u8;  32]
+var ENTROPY_KAT_H2     : [u8;  32]
+
+// --- private helpers ---
+
+/* (la * lb) mod p. Params pinned to locals at entry (single-use param ->
+ * spill-forced) so the % divisor ENTROPY_PRIME is a module-const immediate
+ * and NO function call precedes the % (Trap 11 stale-divisor avoidance).
+ * Verified non-overflow: (p-1)^2 = 996491786299899904 < 2^64. */
+fn entropy_mulmod(a: u64, b: u64) -> u64 {
+    let la : u64 = a
+    let lb : u64 = b
+    return (la * lb) % ENTROPY_PRIME
+}
+
+/* (a + b) mod p. a,b < p < 2^30 so a+b never overflows u64 (M15). */
+fn entropy_addmod(a: u64, b: u64) -> u64 {
+    let s : u64 = a + b
+    if s >= ENTROPY_PRIME { return s - ENTROPY_PRIME }
+    return s
+}
+
+/* (a - b) mod p, total, no underflow. */
+fn entropy_submod(a: u64, b: u64) -> u64 {
+    if a >= b { return a - b }
+    return (a + ENTROPY_PRIME) - b
+}
+
+/* base^exp mod p via square-and-multiply; sentinel while-loop (W14, no break). */
+fn entropy_powmod(base: u64, exp: u64) -> u64 {
+    let mut r : u64 = 1u64
+    let mut bb : u64 = base % ENTROPY_PRIME
+    let mut e : u64 = exp
+    while e > 0u64 {
+        if (e & 1u64) == 1u64 { r = entropy_mulmod(r, bb) }
+        bb = entropy_mulmod(bb, bb)
+        e = e >> 1u64
+    }
+    return r
+}
+
+/* reverse the low ENTROPY_LOG2N (=6) bits of x; sentinel while-loop (W14). */
+fn entropy_bitrev(x: u32) -> u32 {
+    let mut r : u32 = 0u32
+    let mut v : u32 = x
+    let mut i : u32 = 0u32
+    while i < ENTROPY_LOG2N {
+        r = (r << 1u32) | (v & 1u32)
+        v = v >> 1u32
+        i = i + 1u32
+    }
+    return r
+}
+
+// --- public API ---
+
+/* Zero all slot state; derive omega = g^((p-1)/N). Pure function of the three
+ * compile-time constants -> identical on every CPU (M2). (p-1)/N is a /
+ * (not %) by a constant-ish divisor with no preceding call -> Trap-11 safe. */
+fn entropy_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < ENTROPY_MAX_PATHS {
+        ENTROPY_LIVE[i]     = 0u8
+        ENTROPY_BUF_HEAD[i] = 0u32
+        ENTROPY_BUF_LEN[i]  = 0u32
+        ENTROPY_BASE_SET[i] = 0u8
+        i = i + 1u32
+    }
+    let exp : u64 = (ENTROPY_PRIME - 1u64) / (ENTROPY_N as u64)
+    ENTROPY_OMEGA  = entropy_powmod(ENTROPY_GROOT, exp)
+    ENTROPY_INITED = 1u8
+    return ENTROPY_OK
+}
+
+/* First-free-slot scan; copy 32-byte path id; reset circular buffer.
+ * Table full -> ENTROPY_INVALID_SLOT (W12 sentinel-typed return). */
+fn entropy_register_path(path_id: *u8) -> u32 @export {
+    let mut i : u32 = 0u32
+    while i < ENTROPY_MAX_PATHS {
+        if ENTROPY_LIVE[i] == 0u8 {
+            let pbase : u64 = (i as u64 & 0xFFFFFFFFu64) * ENTROPY_ID_LEN
+            let mut k : u64 = 0u64
+            while k < ENTROPY_ID_LEN {
+                ENTROPY_PATH_ID[pbase + k] = path_id[k]
+                k = k + 1u64
+            }
+            ENTROPY_LIVE[i]     = 1u8
+            ENTROPY_BUF_HEAD[i] = 0u32
+            ENTROPY_BUF_LEN[i]  = 0u32
+            ENTROPY_BASE_SET[i] = 0u8
+            return i
+        }
+        i = i + 1u32
+    }
+    return ENTROPY_INVALID_SLOT
+}
+
+/* Reduce v mod ENTROPY_PRIME for ANY u64 v.  Trap 18: a bare `v % P` compiles
+ * as a signed idivq -> wrong once bit 63 of v is set, and time_value is an
+ * external u64.  Split v into 32-bit halves so every inner reduction acts on a
+ * value < P*2^32 < 2^62 < 2^63, where idivq is correct.  Leaf: no call before
+ * any %, so Trap 11 (stale divisor) does not apply. */
+fn entropy_umod_prime(v: u64) -> u64 {
+    let hi  : u64 = (v >> 32u64) & 0xFFFFFFFFu64
+    let lo  : u64 = v & 0xFFFFFFFFu64
+    let r32 : u64 = 4294967296u64 % ENTROPY_PRIME
+    let hir : u64 = (hi % ENTROPY_PRIME) * r32
+    let s   : u64 = (hir % ENTROPY_PRIME) + (lo % ENTROPY_PRIME)
+    return s % ENTROPY_PRIME
+}
+
+/* Append time_value (reduced mod p) to the slot's circular buffer.
+ * base masked (Trap 4); head advance via & 63 pow2 mask (Trap-11 fix);
+ * reduction via entropy_umod_prime so any u64 time_value reduces correctly
+ * (Trap 18: a bare `tv % P` would be a signed idivq once tv >= 2^63). */
+fn entropy_sample(path_slot: u32, time_value: u64) -> i32 @export {
+    let slot : u32 = path_slot
+    let tv : u64 = time_value
+    if slot >= ENTROPY_MAX_PATHS { return ENTROPY_E_BAD }
+    if ENTROPY_LIVE[slot] == 0u8 { return ENTROPY_E_BAD }
+    let base : u64 = (slot as u64 & 0xFFFFFFFFu64) * (ENTROPY_N as u64)
+    let head : u32 = ENTROPY_BUF_HEAD[slot]
+    ENTROPY_BUF[base + (head as u64)] = entropy_umod_prime(tv)
+    ENTROPY_BUF_HEAD[slot] = (head + 1u32) & 63u32
+    if ENTROPY_BUF_LEN[slot] < ENTROPY_N { ENTROPY_BUF_LEN[slot] = ENTROPY_BUF_LEN[slot] + 1u32 }
+    return ENTROPY_OK
+}
+
+/* Iterative decimation-in-time NTT over GF(p). Trap-7 fix: module-scope
+ * ENTROPY_SCRATCH_A/B. No recursion (W15). Window linearized chronologically;
+ * idx via & 63 pow2 mask (Trap-11). 384 butterflies + 64 bitrev + 6 powmods. */
+fn entropy_spectrum(path_slot: u32, out_spectrum: *u64) -> i32 @export {
+    let slot : u32 = path_slot
+    if slot >= ENTROPY_MAX_PATHS { return ENTROPY_E_BAD }
+    if ENTROPY_LIVE[slot] == 0u8 { return ENTROPY_E_BAD }
+    let base : u64 = (slot as u64 & 0xFFFFFFFFu64) * (ENTROPY_N as u64)
+    let len : u32 = ENTROPY_BUF_LEN[slot]
+    let head : u32 = ENTROPY_BUF_HEAD[slot]
+    // 1. linearize the circular buffer in chronological order (zero-pad)
+    let mut i : u32 = 0u32
+    while i < ENTROPY_N {
+        if i < len {
+            let idx : u32 = (head + ENTROPY_N - len + i) & 63u32
+            ENTROPY_SCRATCH_A[i] = ENTROPY_BUF[base + (idx as u64)]
+        }
+        if i >= len { ENTROPY_SCRATCH_A[i] = 0u64 }
+        i = i + 1u32
+    }
+    // 2. bit-reversal permutation (width ENTROPY_LOG2N = 6)
+    let mut j : u32 = 0u32
+    while j < ENTROPY_N {
+        let rj : u32 = entropy_bitrev(j)
+        ENTROPY_SCRATCH_B[rj] = ENTROPY_SCRATCH_A[j]
+        j = j + 1u32
+    }
+    // 3. iterative Cooley-Tukey butterflies over GF(p)
+    let mut size : u32 = 2u32
+    while size <= ENTROPY_N {
+        let half : u32 = size >> 1u32
+        let w_step : u64 = entropy_powmod(ENTROPY_OMEGA, (ENTROPY_N / size) as u64)
+        let mut k : u32 = 0u32
+        while k < ENTROPY_N {
+            let mut w : u64 = 1u64
+            let mut q : u32 = 0u32
+            while q < half {
+                let u : u64 = ENTROPY_SCRATCH_B[k + q]
+                let v : u64 = entropy_mulmod(w, ENTROPY_SCRATCH_B[k + q + half])
+                ENTROPY_SCRATCH_B[k + q]        = entropy_addmod(u, v)
+                ENTROPY_SCRATCH_B[k + q + half] = entropy_submod(u, v)
+                w = entropy_mulmod(w, w_step)
+                q = q + 1u32
+            }
+            k = k + size
+        }
+        size = size << 1u32
+    }
+    // 4. copy result out (genuine u64 store -- Trap 5 N/A)
+    let mut m : u32 = 0u32
+    while m < ENTROPY_N {
+        out_spectrum[m] = ENTROPY_SCRATCH_B[m]
+        m = m + 1u32
+    }
+    return ENTROPY_OK
+}
+
+/* M8 capability gate BEFORE any mutation: refuse cap == 0. Install baseline
+ * spectrum, then fold the privileged event into the witness chain (M6/M10/W16).
+ * Overwrite-idempotent, never bricks (M5). */
+fn entropy_set_baseline(path_slot: u32, spectrum: *u64, cap: u64) -> i32 @export {
+    if cap == 0u64 { return ENTROPY_E_CAP }
+    let slot : u32 = path_slot
+    if slot >= ENTROPY_MAX_PATHS { return ENTROPY_E_BAD }
+    if ENTROPY_LIVE[slot] == 0u8 { return ENTROPY_E_BAD }
+    let base : u64 = (slot as u64 & 0xFFFFFFFFu64) * (ENTROPY_N as u64)
+    let mut i : u32 = 0u32
+    while i < ENTROPY_N {
+        ENTROPY_BASELINE[base + (i as u64)] = spectrum[i]
+        i = i + 1u32
+    }
+    ENTROPY_BASE_SET[slot] = 1u8
+    // M6/M10/W16: emit a witness fragment marking the privileged install
+    entropy_witness(slot, (&ENTROPY_WIT_HASH as u64) as *u8)
+    return ENTROPY_OK
+}
+
+/* Exact in-field squared-Euclidean distance Sum (s_i - b_i)^2 mod p between
+ * the supplied spectrum and the stored baseline. Closed-form measure (M4); no
+ * learning, no threshold (M3). Full-register u64 return (W16). Invalid slot or
+ * unset baseline -> 0u64. */
+fn entropy_distance(path_slot: u32, spectrum: *u64) -> u64 @export {
+    let slot : u32 = path_slot
+    if slot >= ENTROPY_MAX_PATHS { return 0u64 }
+    if ENTROPY_BASE_SET[slot] == 0u8 { return 0u64 }
+    let base : u64 = (slot as u64 & 0xFFFFFFFFu64) * (ENTROPY_N as u64)
+    let mut acc : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < ENTROPY_N {
+        let b : u64 = ENTROPY_BASELINE[base + (i as u64)]
+        let d : u64 = entropy_submod(spectrum[i], b)
+        acc = entropy_addmod(acc, entropy_mulmod(d, d))
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* Deterministic witness pre-image over a FIXED algebraic-time stamp; pure given
+ * (slot state, stamp). Bytes 0..32 = path id; 32..40 = stamp LE byte-by-byte
+ * (Trap 5 safe-serialize idiom); 40..296 = current spectrum low-4-bytes per
+ * element, byte-serialized. keccak256 -> out_hash. The spectrum is computed
+ * into ENTROPY_WIT_SPEC (distinct from SCRATCH_A/B). */
+fn entropy_witness_core(slot: u32, stamp: u64, out_hash: *u8) -> i32 {
+    if slot >= ENTROPY_MAX_PATHS { return ENTROPY_E_BAD }
+    if ENTROPY_LIVE[slot] == 0u8 { return ENTROPY_E_BAD }
+    let pbase : u64 = (slot as u64 & 0xFFFFFFFFu64) * ENTROPY_ID_LEN
+    // bytes 0..32 = path id
+    let mut i : u64 = 0u64
+    while i < ENTROPY_ID_LEN {
+        ENTROPY_WIT_BUF[i] = ENTROPY_PATH_ID[pbase + i]
+        i = i + 1u64
+    }
+    // bytes 32..40 = stamp little-endian, byte-by-byte (Trap 5)
+    let st : u64 = stamp
+    let mut s : u64 = 0u64
+    while s < 8u64 {
+        ENTROPY_WIT_BUF[32u64 + s] = ((st >> (s * 8u64)) & 0xFFu64) as u8
+        s = s + 1u64
+    }
+    // compute current spectrum into ENTROPY_WIT_SPEC
+    entropy_spectrum(slot, (&ENTROPY_WIT_SPEC as u64) as *u64)
+    // bytes 40..296 = low 4 bytes of each spectrum element, byte-serialized (Trap 5)
+    let mut e : u64 = 0u64
+    while e < (ENTROPY_N as u64) {
+        let val : u64 = ENTROPY_WIT_SPEC[e]
+        let off : u64 = 40u64 + e * 4u64
+        ENTROPY_WIT_BUF[off + 0u64] = (val & 0xFFu64) as u8
+        ENTROPY_WIT_BUF[off + 1u64] = ((val >> 8u64)  & 0xFFu64) as u8
+        ENTROPY_WIT_BUF[off + 2u64] = ((val >> 16u64) & 0xFFu64) as u8
+        ENTROPY_WIT_BUF[off + 3u64] = ((val >> 24u64) & 0xFFu64) as u8
+        e = e + 1u64
+    }
+    cad_oneshot(1u32, (&ENTROPY_WIT_BUF as u64) as *u8, 296u64, (out_hash as u64) as *u8)   /* H2: witness hash via cad (byte-identical) */
+    return ENTROPY_OK
+}
+
+/* Public witness: PUBLISH a fragment -> advance algebraic time, then build the
+ * pre-image with that fresh monotone stamp (W16/W17). Each emission gets a
+ * strictly-increasing stamp (algebraic_time.iii contract: +1 per published
+ * fragment). M6 chains by hash; M10 byte-recomputable from recorded inputs. */
+fn entropy_witness(path_slot: u32, out_hash: *u8) -> i32 @export {
+    let slot : u32 = path_slot
+    if slot >= ENTROPY_MAX_PATHS { return ENTROPY_E_BAD }
+    if ENTROPY_LIVE[slot] == 0u8 { return ENTROPY_E_BAD }
+    let stamp : u64 = at_advance()
+    return entropy_witness_core(slot, stamp, out_hash)
+}
+
+/* KAT carrier (house pattern, 99 = pass; distinct small code per failed check
+ * so a failure is diagnosable). Full-register u64 return (W16). Includes the
+ * M8 negative case (KAT 7: gate MUST reject cap == 0 and NOT mutate). */
+fn entropy_selftest() -> u64 @export {
+    entropy_init()
+
+    // KAT 1: omega derivation + primitivity
+    if ENTROPY_OMEGA != 922799308u64 { return 1u64 }
+    if entropy_powmod(ENTROPY_OMEGA, 64u64) != 1u64 { return 2u64 }
+    if entropy_powmod(ENTROPY_OMEGA, 32u64) != 998244352u64 { return 3u64 }
+
+    // KAT 5: mulmod guard (Trap 11) -- run early, gates the NTT correctness
+    if entropy_mulmod(998244352u64, 998244352u64) != 1u64 { return 4u64 }
+    if entropy_mulmod(2u64, 998244352u64) != 998244351u64 { return 5u64 }
+
+    // register a path for the spectral KATs
+    let mut z : u64 = 0u64
+    while z < 32u64 { ENTROPY_KAT_ID[z] = (z + 1u64) as u8  z = z + 1u64 }
+    let slot : u32 = entropy_register_path((&ENTROPY_KAT_ID as u64) as *u8)
+    if slot == ENTROPY_INVALID_SLOT { return 6u64 }
+
+    // KAT 2: impulse [5,0,...] -> flat spectrum all 5
+    entropy_sample(slot, 5u64)
+    if entropy_spectrum(slot, (&ENTROPY_KAT_SPEC as u64) as *u64) != ENTROPY_OK { return 7u64 }
+    let mut k : u32 = 0u32
+    while k < 64u32 {
+        if ENTROPY_KAT_SPEC[k] != 5u64 { return 8u64 }
+        k = k + 1u32
+    }
+
+    // KAT 3: constant 7 (64 samples) -> X0 = 448, rest 0
+    let slot3 : u32 = entropy_register_path((&ENTROPY_KAT_ID as u64) as *u8)
+    if slot3 == ENTROPY_INVALID_SLOT { return 9u64 }
+    let mut c : u32 = 0u32
+    while c < 64u32 { entropy_sample(slot3, 7u64)  c = c + 1u32 }
+    if entropy_spectrum(slot3, (&ENTROPY_KAT_SPEC as u64) as *u64) != ENTROPY_OK { return 10u64 }
+    if ENTROPY_KAT_SPEC[0] != 448u64 { return 11u64 }
+    let mut k3 : u32 = 1u32
+    while k3 < 64u32 {
+        if ENTROPY_KAT_SPEC[k3] != 0u64 { return 12u64 }
+        k3 = k3 + 1u32
+    }
+
+    // KAT 4: delta-at-1 chronological [0,1,0,...] -> X1 = omega, X2 = omega^2
+    let slot4 : u32 = entropy_register_path((&ENTROPY_KAT_ID as u64) as *u8)
+    if slot4 == ENTROPY_INVALID_SLOT { return 13u64 }
+    entropy_sample(slot4, 0u64)
+    entropy_sample(slot4, 1u64)
+    if entropy_spectrum(slot4, (&ENTROPY_KAT_SPEC as u64) as *u64) != ENTROPY_OK { return 14u64 }
+    if ENTROPY_KAT_SPEC[1] != 922799308u64 { return 15u64 }
+    if ENTROPY_KAT_SPEC[2] != 452798380u64 { return 16u64 }
+
+    // KAT 6: distance self-consistency. baseline = const-7 spectrum (slot3).
+    if entropy_spectrum(slot3, (&ENTROPY_KAT_SPEC as u64) as *u64) != ENTROPY_OK { return 17u64 }
+    if entropy_set_baseline(slot3, (&ENTROPY_KAT_SPEC as u64) as *u64, 1u64) != ENTROPY_OK { return 18u64 }
+    if entropy_distance(slot3, (&ENTROPY_KAT_SPEC as u64) as *u64) != 0u64 { return 19u64 }
+    // S' = baseline but bin 0 + 1
+    let mut q : u32 = 0u32
+    while q < 64u32 { ENTROPY_KAT_SPEC2[q] = ENTROPY_KAT_SPEC[q]  q = q + 1u32 }
+    ENTROPY_KAT_SPEC2[0] = ENTROPY_KAT_SPEC[0] + 1u64
+    if entropy_distance(slot3, (&ENTROPY_KAT_SPEC2 as u64) as *u64) != 1u64 { return 20u64 }
+
+    // KAT 7: capability refusal (M8 negative case -- prove the gate FAILS).
+    let slot7 : u32 = entropy_register_path((&ENTROPY_KAT_ID as u64) as *u8)
+    if slot7 == ENTROPY_INVALID_SLOT { return 21u64 }
+    let before : u8 = ENTROPY_BASE_SET[slot7]
+    if entropy_set_baseline(slot7, (&ENTROPY_KAT_SPEC as u64) as *u64, 0u64) != ENTROPY_E_CAP { return 22u64 }
+    if ENTROPY_BASE_SET[slot7] != before { return 23u64 }   // proved: NO mutation occurred
+
+    // KAT 8: witness determinism (M10). Same buffer + same stamp -> byte-identical;
+    // one-sample change -> different. Uses the pure core with a FIXED stamp.
+    entropy_witness_core(slot3, 7u64, (&ENTROPY_KAT_H1 as u64) as *u8)
+    entropy_witness_core(slot3, 7u64, (&ENTROPY_KAT_H2 as u64) as *u8)
+    let mut w : u32 = 0u32
+    while w < 32u32 {
+        if ENTROPY_KAT_H1[w] != ENTROPY_KAT_H2[w] { return 24u64 }
+        w = w + 1u32
+    }
+    // mutate one sample on slot3 -> witness must differ
+    entropy_sample(slot3, 42u64)
+    entropy_witness_core(slot3, 7u64, (&ENTROPY_KAT_H2 as u64) as *u8)
+    let mut diff : u8 = 0u8
+    let mut d2 : u32 = 0u32
+    while d2 < 32u32 {
+        if ENTROPY_KAT_H1[d2] != ENTROPY_KAT_H2[d2] { diff = 1u8 }
+        d2 = d2 + 1u32
+    }
+    if diff == 0u8 { return 25u64 }
+
+    return 99u64
+}

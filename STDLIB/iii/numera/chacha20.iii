@@ -1,0 +1,374 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\chacha20.iii
+ *
+ * III STDLIB - numera::chacha20
+ *
+ * RFC 8439 ChaCha20 stream cipher.
+ *   - 32-byte key
+ *   - 12-byte nonce (96 bits)
+ *   - 32-bit counter
+ *   - 64-byte block size, 20 rounds (10 column + diagonal pairs)
+ *
+ * Public API (singleton like AES):
+ *   chacha20_set_state  (key:*u8, nonce:*u8, counter:u32) -> i32
+ *   chacha20_keystream  (out_64:*u8) -> i32          one block, advances counter
+ *   chacha20_xor        (in:*u8, in_len:u64, out:*u8) -> i32
+ *
+ * State (16 u32 words, RFC 8439 §2.3):
+ *   words 0-3:   "expand 32-byte k" constants
+ *   words 4-11:  key (8 u32 LE)
+ *   word  12:    counter
+ *   words 13-15: nonce (3 u32 LE)
+ *
+ * Quarter-round (RFC 8439 §2.1):
+ *   a += b; d ^= a; d <<<= 16
+ *   c += d; b ^= c; b <<<= 12
+ *   a += b; d ^= a; d <<<= 8
+ *   c += d; b ^= c; b <<<= 7
+ *
+ * Block (RFC 8439 §2.3): 10 iterations each of:
+ *   QR(0,4,8,12) QR(1,5,9,13) QR(2,6,10,14) QR(3,7,11,15)   (column round)
+ *   QR(0,5,10,15) QR(1,6,11,12) QR(2,7,8,13) QR(3,4,9,14)   (diagonal round)
+ * Then add original state to working state, serialize as 16 u32 LE = 64 bytes.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_chacha20
+
+const CC20_BLOCK_BYTES : u32 = 64u32
+
+var CC20_STATE : [u32; 16]    /* canonical state */
+var CC20_WORK  : [u32; 16]    /* working state during block */
+var CC20_KS    : [u8;  64]    /* keystream output buffer */
+var CC20_FORCE : u32          /* RITCHIE §3.5 dispatch override: 0=auto, 1=scalar, 2=avx512, 3=avx2 */
+
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+
+/* ---- Helpers: load/store u32 LE ---- */
+
+fn cc20_load_u32_le(p: *u8, off: u32) -> u32 {
+    let b0 : u32 = p[off + 0u32] as u32
+    let b1 : u32 = p[off + 1u32] as u32
+    let b2 : u32 = p[off + 2u32] as u32
+    let b3 : u32 = p[off + 3u32] as u32
+    return (b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)) & 0xFFFFFFFFu32
+}
+
+/* ---- Quarter-round on CC20_WORK ---- */
+
+fn cc20_quarter_round(ai: u32, bi: u32, ci: u32, di: u32) -> i32 {
+    let mut a : u32 = CC20_WORK[ai]
+    let mut b : u32 = CC20_WORK[bi]
+    let mut c : u32 = CC20_WORK[ci]
+    let mut d : u32 = CC20_WORK[di]
+    a = (a + b) & 0xFFFFFFFFu32
+    d = (d ^ a) & 0xFFFFFFFFu32
+    d = ((d << 16u32) | (d >> 16u32)) & 0xFFFFFFFFu32
+    c = (c + d) & 0xFFFFFFFFu32
+    b = (b ^ c) & 0xFFFFFFFFu32
+    b = ((b << 12u32) | (b >> 20u32)) & 0xFFFFFFFFu32
+    a = (a + b) & 0xFFFFFFFFu32
+    d = (d ^ a) & 0xFFFFFFFFu32
+    d = ((d << 8u32) | (d >> 24u32)) & 0xFFFFFFFFu32
+    c = (c + d) & 0xFFFFFFFFu32
+    b = (b ^ c) & 0xFFFFFFFFu32
+    b = ((b << 7u32) | (b >> 25u32)) & 0xFFFFFFFFu32
+    CC20_WORK[ai] = a
+    CC20_WORK[bi] = b
+    CC20_WORK[ci] = c
+    CC20_WORK[di] = d
+    return 0i32
+}
+
+/* ---- Block function (scalar): keystream into CC20_KS, advance counter ---- */
+
+fn cc20_block_into_ks_scalar() -> i32 {
+    /* Copy state to work. */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        CC20_WORK[i] = CC20_STATE[i]
+        i = i + 1u32
+    }
+    /* 10 double-rounds. */
+    let mut r : u32 = 0u32
+    while r < 10u32 {
+        cc20_quarter_round(0u32, 4u32,  8u32, 12u32)
+        cc20_quarter_round(1u32, 5u32,  9u32, 13u32)
+        cc20_quarter_round(2u32, 6u32, 10u32, 14u32)
+        cc20_quarter_round(3u32, 7u32, 11u32, 15u32)
+        cc20_quarter_round(0u32, 5u32, 10u32, 15u32)
+        cc20_quarter_round(1u32, 6u32, 11u32, 12u32)
+        cc20_quarter_round(2u32, 7u32,  8u32, 13u32)
+        cc20_quarter_round(3u32, 4u32,  9u32, 14u32)
+        r = r + 1u32
+    }
+    /* Add original state, serialize LE. */
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        let sum : u32 = (CC20_WORK[k] + CC20_STATE[k]) & 0xFFFFFFFFu32
+        let off : u32 = k * 4u32
+        CC20_KS[off + 0u32] = (sum & 0xFFu32) as u8
+        CC20_KS[off + 1u32] = ((sum >> 8u32)  & 0xFFu32) as u8
+        CC20_KS[off + 2u32] = ((sum >> 16u32) & 0xFFu32) as u8
+        CC20_KS[off + 3u32] = ((sum >> 24u32) & 0xFFu32) as u8
+        k = k + 1u32
+    }
+    /* Increment counter (32-bit wrap). */
+    CC20_STATE[12] = (CC20_STATE[12] + 1u32) & 0xFFFFFFFFu32
+    return 0i32
+}
+
+/* ---- HChaCha20 (XChaCha20 subkey derivation, §4.9) ----
+ * subkey = (state words 0..3 || 12..15) after 20 rounds, NO final add.
+ * State = constants || key(8 words) || nonce16(4 words).  Reuses
+ * cc20_quarter_round on CC20_WORK (sequential w.r.t. block fns; no clash). */
+fn hchacha20(key: *u8, nonce16: *u8, subkey_out: *u8) -> i32 @export {
+    CC20_WORK[0] = 0x61707865u32
+    CC20_WORK[1] = 0x3320646eu32
+    CC20_WORK[2] = 0x79622d32u32
+    CC20_WORK[3] = 0x6b206574u32
+    let mut i : u32 = 0u32
+    while i < 8u32 { CC20_WORK[4u32 + i] = cc20_load_u32_le(key, i * 4u32) ; i = i + 1u32 }
+    i = 0u32
+    while i < 4u32 { CC20_WORK[12u32 + i] = cc20_load_u32_le(nonce16, i * 4u32) ; i = i + 1u32 }
+    let mut r : u32 = 0u32
+    while r < 10u32 {
+        cc20_quarter_round(0u32, 4u32,  8u32, 12u32)
+        cc20_quarter_round(1u32, 5u32,  9u32, 13u32)
+        cc20_quarter_round(2u32, 6u32, 10u32, 14u32)
+        cc20_quarter_round(3u32, 7u32, 11u32, 15u32)
+        cc20_quarter_round(0u32, 5u32, 10u32, 15u32)
+        cc20_quarter_round(1u32, 6u32, 11u32, 12u32)
+        cc20_quarter_round(2u32, 7u32,  8u32, 13u32)
+        cc20_quarter_round(3u32, 4u32,  9u32, 14u32)
+        r = r + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 4u32 {
+        let w : u32 = CC20_WORK[j]
+        let off : u32 = j * 4u32
+        subkey_out[off + 0u32] = (w & 0xFFu32) as u8
+        subkey_out[off + 1u32] = ((w >> 8u32)  & 0xFFu32) as u8
+        subkey_out[off + 2u32] = ((w >> 16u32) & 0xFFu32) as u8
+        subkey_out[off + 3u32] = ((w >> 24u32) & 0xFFu32) as u8
+        j = j + 1u32
+    }
+    j = 0u32
+    while j < 4u32 {
+        let w : u32 = CC20_WORK[12u32 + j]
+        let off : u32 = 16u32 + j * 4u32
+        subkey_out[off + 0u32] = (w & 0xFFu32) as u8
+        subkey_out[off + 1u32] = ((w >> 8u32)  & 0xFFu32) as u8
+        subkey_out[off + 2u32] = ((w >> 16u32) & 0xFFu32) as u8
+        subkey_out[off + 3u32] = ((w >> 24u32) & 0xFFu32) as u8
+        j = j + 1u32
+    }
+    return 0i32
+}
+
+/* ---- Block function (AVX-512 / EVEX.128): RITCHIE §3.5 ----
+ * The classic 4-row SIMD ChaCha20 (rows = state[0..3],[4..7],[8..11],
+ * [12..15] in xmm0..3), using EVEX vprold for the 16/12/8/7 rotations
+ * and vpshufd (0x39/0x4E/0x93) for column<->diagonal lane rotation.
+ * Bit-identical to cc20_block_into_ks_scalar: same 10 double-rounds,
+ * add-original (reloaded from L_CC20_STATE before the counter bump),
+ * little-endian store to L_CC20_KS (vmovdqu lane order == scalar LE),
+ * then `addl $1, 48(%rax)` = STATE[12]+1 (32-bit wrap).  Registers
+ * rax(STATE)/rcx(round ctr)/rdx(KS) + xmm0..3 are all Win64
+ * caller-saved, so no callee-saved spill is needed. */
+fn cc20_block_into_ks_avx512() -> i32 {
+    metal {
+    leaq L_CC20_STATE(%rip), %rax
+    vmovdqu (%rax), %xmm0
+    vmovdqu 16(%rax), %xmm1
+    vmovdqu 32(%rax), %xmm2
+    vmovdqu 48(%rax), %xmm3
+    movl $10, %ecx
+.Lcc20_avx_rnd:
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprold $16, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprold $12, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprold $8, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprold $7, %xmm1, %xmm1
+    vpshufd $0x39, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x93, %xmm3, %xmm3
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprold $16, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprold $12, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxord %xmm0, %xmm3, %xmm3
+    vprold $8, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxord %xmm2, %xmm1, %xmm1
+    vprold $7, %xmm1, %xmm1
+    vpshufd $0x93, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x39, %xmm3, %xmm3
+    decl %ecx
+    jnz .Lcc20_avx_rnd
+    vpaddd (%rax), %xmm0, %xmm0
+    vpaddd 16(%rax), %xmm1, %xmm1
+    vpaddd 32(%rax), %xmm2, %xmm2
+    vpaddd 48(%rax), %xmm3, %xmm3
+    leaq L_CC20_KS(%rip), %rdx
+    vmovdqu %xmm0, (%rdx)
+    vmovdqu %xmm1, 16(%rdx)
+    vmovdqu %xmm2, 32(%rdx)
+    vmovdqu %xmm3, 48(%rdx)
+    addl $1, 48(%rax)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* ---- Block function (AVX2 / VEX.128): RITCHIE §3.5 ----
+ * Same 4-row SIMD as the AVX-512 path, but AVX2 has no vprold, so each
+ * rotl(x,n) is vpslld $n + vpsrld $(32-n) + vpor (xmm4 = temp), and
+ * vpxor (VEX) replaces vpxord.  Bit-identical to scalar + AVX-512.
+ * rax/rcx/rdx + xmm0..4 are all Win64 caller-saved. */
+fn cc20_block_into_ks_avx2() -> i32 {
+    metal {
+    leaq L_CC20_STATE(%rip), %rax
+    vmovdqu (%rax), %xmm0
+    vmovdqu 16(%rax), %xmm1
+    vmovdqu 32(%rax), %xmm2
+    vmovdqu 48(%rax), %xmm3
+    movl $10, %ecx
+.Lcc20_avx2_rnd:
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpslld $16, %xmm3, %xmm4
+    vpsrld $16, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpslld $12, %xmm1, %xmm4
+    vpsrld $20, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpslld $8, %xmm3, %xmm4
+    vpsrld $24, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpslld $7, %xmm1, %xmm4
+    vpsrld $25, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpshufd $0x39, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x93, %xmm3, %xmm3
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpslld $16, %xmm3, %xmm4
+    vpsrld $16, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpslld $12, %xmm1, %xmm4
+    vpsrld $20, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpaddd %xmm1, %xmm0, %xmm0
+    vpxor %xmm0, %xmm3, %xmm3
+    vpslld $8, %xmm3, %xmm4
+    vpsrld $24, %xmm3, %xmm3
+    vpor %xmm4, %xmm3, %xmm3
+    vpaddd %xmm3, %xmm2, %xmm2
+    vpxor %xmm2, %xmm1, %xmm1
+    vpslld $7, %xmm1, %xmm4
+    vpsrld $25, %xmm1, %xmm1
+    vpor %xmm4, %xmm1, %xmm1
+    vpshufd $0x93, %xmm1, %xmm1
+    vpshufd $0x4E, %xmm2, %xmm2
+    vpshufd $0x39, %xmm3, %xmm3
+    decl %ecx
+    jnz .Lcc20_avx2_rnd
+    vpaddd (%rax), %xmm0, %xmm0
+    vpaddd 16(%rax), %xmm1, %xmm1
+    vpaddd 32(%rax), %xmm2, %xmm2
+    vpaddd 48(%rax), %xmm3, %xmm3
+    leaq L_CC20_KS(%rip), %rdx
+    vmovdqu %xmm0, (%rdx)
+    vmovdqu %xmm1, 16(%rdx)
+    vmovdqu %xmm2, 32(%rdx)
+    vmovdqu %xmm3, 48(%rdx)
+    addl $1, 48(%rax)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* iiis-2 cpufeat dispatch: AVX-512 > AVX2 > scalar.
+ * CC20_FORCE (settable via cc20_force_path) overrides for KAT
+ * bit-identity testing.  Mandate 7: structural CPUID dispatch only. */
+fn cc20_block_into_ks() -> i32 {
+    if CC20_FORCE == 1u32 { return cc20_block_into_ks_scalar() }
+    if CC20_FORCE == 2u32 { return cc20_block_into_ks_avx512() }
+    if CC20_FORCE == 3u32 { return cc20_block_into_ks_avx2() }
+    if cpufeat_has_avx512f() == 1u8 { return cc20_block_into_ks_avx512() }
+    if cpufeat_has_avx2() == 1u8 { return cc20_block_into_ks_avx2() }
+    return cc20_block_into_ks_scalar()
+}
+
+fn cc20_force_path(p: u32) -> i32 @export { CC20_FORCE = p ; return 0i32 }
+
+/* ---- Public API ---- */
+
+fn chacha20_set_state(key: *u8, nonce: *u8, counter: u32) -> i32 @crystal @constant_time @export {
+    CC20_STATE[0] = 0x61707865u32   /* "expa" */
+    CC20_STATE[1] = 0x3320646Eu32   /* "nd 3" */
+    CC20_STATE[2] = 0x79622D32u32   /* "2-by" */
+    CC20_STATE[3] = 0x6B206574u32   /* "te k" */
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        CC20_STATE[4u32 + i] = cc20_load_u32_le(key, i * 4u32)
+        i = i + 1u32
+    }
+    CC20_STATE[12] = counter & 0xFFFFFFFFu32
+    let mut j : u32 = 0u32
+    while j < 3u32 {
+        CC20_STATE[13u32 + j] = cc20_load_u32_le(nonce, j * 4u32)
+        j = j + 1u32
+    }
+    return 0i32
+}
+
+fn chacha20_keystream(out: *u8) -> i32 @crystal @constant_time @export {
+    cc20_block_into_ks()
+    let mut i : u32 = 0u32
+    while i < 64u32 {
+        out[i] = CC20_KS[i]
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn chacha20_xor(in_buf: *u8, in_len: u64, out_buf: *u8) -> i32 @crystal @constant_time @export {
+    let mut pos : u64 = 0u64
+    while pos < in_len {
+        cc20_block_into_ks()
+        let mut chunk : u64 = 64u64
+        if pos + chunk > in_len { chunk = in_len - pos }
+        let mut k : u64 = 0u64
+        while k < chunk {
+            let iv : u32 = in_buf[pos + k] as u32
+            let kv : u32 = CC20_KS[k] as u32
+            out_buf[pos + k] = (iv ^ kv) as u8
+            k = k + 1u64
+        }
+        pos = pos + chunk
+    }
+    return 0i32
+}

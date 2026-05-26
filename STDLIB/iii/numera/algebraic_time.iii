@@ -1,0 +1,55 @@
+/* numera/algebraic_time.iii — Layer 0, Module 03 (gospel): monotonic algebraic time.
+ *
+ * A strictly monotonic u64 counter advanced by exactly one on every published
+ * witness fragment via at_advance (only witness_hook.iii may advance it). Read
+ * by any module needing the current time stamp.
+ *
+ * Hexad: kind_essence.  Ring: R-1.  K: 1.00.
+ * Discipline: W7 (module-scope lifecycle); only one writer (the hook).
+ * (u64 ordering compares are safe — the iiis SIGSEGV trap is signed-i64 only.)
+ */
+module numera_algebraic_time
+
+const AT_OK : i32 = 0i32
+
+var AT_CURRENT : u64 = 0u64
+
+fn at_current() -> u64 @export {
+    return AT_CURRENT
+}
+fn at_advance() -> u64 @export {
+    AT_CURRENT = AT_CURRENT + 1u64
+    return AT_CURRENT
+}
+fn at_compare(t_a: u64, t_b: u64) -> i32 @export {
+    if t_a < t_b { return -1i32 }
+    if t_a > t_b { return 1i32 }
+    return 0i32
+}
+fn at_distance(t_a: u64, t_b: u64) -> u64 @export {
+    if t_a >= t_b { return t_a - t_b }
+    return t_b - t_a
+}
+/* Initialize algebraic time from the master ledger at boot (the ledger's
+ * fragment count is the boot-time value; the seed provides the initial). */
+fn at_init(initial: u64) -> i32 @export {
+    AT_CURRENT = initial
+    return AT_OK
+}
+
+/* Self-test.  99 = pass. */
+fn at_selftest() -> u64 @export {
+    at_init(0u64)
+    if at_current() != 0u64 { return 1u64 }
+    if at_advance() != 1u64 { return 2u64 }
+    if at_advance() != 2u64 { return 3u64 }
+    if at_current() != 2u64 { return 4u64 }
+    if at_compare(1u64, 2u64) != -1i32 { return 5u64 }
+    if at_compare(5u64, 5u64) != 0i32 { return 6u64 }
+    if at_compare(9u64, 2u64) != 1i32 { return 7u64 }
+    if at_distance(3u64, 10u64) != 7u64 { return 8u64 }
+    if at_distance(10u64, 3u64) != 7u64 { return 9u64 }
+    at_init(100u64)
+    if at_current() != 100u64 { return 10u64 }
+    return 99u64
+}

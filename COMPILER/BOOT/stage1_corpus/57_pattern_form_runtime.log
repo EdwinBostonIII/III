@@ -1,0 +1,3 @@
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/COMPILER/BOOT/stage1_corpus/57_pattern_form_runtime.exe.o:fake:(.text+0x14a): undefined reference to `pattern_form_parse'
+collect2.exe: error: ld returned 1 exit status
+iiis-0: link failed

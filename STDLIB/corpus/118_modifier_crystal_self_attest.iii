@@ -1,0 +1,11 @@
+/* Lattice plan Step 0015: @crystal @crystal_self_attest pair.
+ * Mints the function's call-result via attest_quote_self at runtime. */
+module corpus_118
+
+fn proof_emit() -> u64 @crystal @crystal_self_attest {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return proof_emit()
+}

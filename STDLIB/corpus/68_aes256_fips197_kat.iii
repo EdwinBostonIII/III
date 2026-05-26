@@ -1,0 +1,69 @@
+/* AES-256 KAT: FIPS 197 Appendix C.3
+ *   key = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+ *   pt  = 00112233445566778899aabbccddeeff
+ *   ct  = 8ea2b7ca516745bfeafc49904b496089
+ *
+ * Exit = first byte of ciphertext = 0x8E = 142.
+ */
+module corpus_68
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn aes256_set_key(key: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_decrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
+
+fn fill_key(k: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        k[i] = i as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn fill_pt(p: *u8) -> i32 {
+    p[0]  = 0x00u8; p[1]  = 0x11u8; p[2]  = 0x22u8; p[3]  = 0x33u8
+    p[4]  = 0x44u8; p[5]  = 0x55u8; p[6]  = 0x66u8; p[7]  = 0x77u8
+    p[8]  = 0x88u8; p[9]  = 0x99u8; p[10] = 0xAAu8; p[11] = 0xBBu8
+    p[12] = 0xCCu8; p[13] = 0xDDu8; p[14] = 0xEEu8; p[15] = 0xFFu8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let key : *u8 = malloc(32u64)
+    let pt  : *u8 = malloc(16u64)
+    let ct  : *u8 = malloc(16u64)
+    let dec : *u8 = malloc(16u64)
+    fill_key(key)
+    fill_pt(pt)
+    aes256_set_key(key)
+    aes_encrypt_block(pt, ct)
+    /* Verify expected ciphertext: 8E A2 B7 CA 51 67 45 BF EA FC 49 90 4B 49 60 89 */
+    if ct[0]  != 0x8Eu8 { return 1u64 }
+    if ct[1]  != 0xA2u8 { return 2u64 }
+    if ct[2]  != 0xB7u8 { return 3u64 }
+    if ct[3]  != 0xCAu8 { return 4u64 }
+    if ct[4]  != 0x51u8 { return 5u64 }
+    if ct[5]  != 0x67u8 { return 6u64 }
+    if ct[6]  != 0x45u8 { return 7u64 }
+    if ct[7]  != 0xBFu8 { return 8u64 }
+    if ct[8]  != 0xEAu8 { return 9u64 }
+    if ct[9]  != 0xFCu8 { return 10u64 }
+    if ct[10] != 0x49u8 { return 11u64 }
+    if ct[11] != 0x90u8 { return 12u64 }
+    if ct[12] != 0x4Bu8 { return 13u64 }
+    if ct[13] != 0x49u8 { return 14u64 }
+    if ct[14] != 0x60u8 { return 15u64 }
+    if ct[15] != 0x89u8 { return 16u64 }
+    /* Decrypt round-trip */
+    aes_decrypt_block(ct, dec)
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        if dec[i] != pt[i] { return 50u64 + i }
+        i = i + 1u64
+    }
+    let result : u64 = ct[0] as u64
+    free(key); free(pt); free(ct); free(dec)
+    return result
+}

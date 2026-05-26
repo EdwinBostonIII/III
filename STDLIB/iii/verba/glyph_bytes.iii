@@ -1,0 +1,88 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_bytes.iii
+ *
+ * III STDLIB - verba::glyph_bytes -- Glyph V3 form for variable-length
+ * byte buffer.  payload_len = byte_count (≤ 152), payload = bytes.
+ *
+ * Lattice plan Phase 14h Step 0171.  For data exceeding 152 bytes,
+ * caller hashes the data externally and packs an arena handle as
+ * (mhash_32 || arena_id_8 || offset_8 || length_8) which fits the
+ * 152-byte payload comfortably.  Stage-0 only handles the inline
+ * case (payload_len ≤ 152).
+ *
+ * Public surface:
+ *   glyph_bytes_form_id()                              -> u32 (0x21)
+ *   glyph_bytes_pack(src_ptr, src_len, out_192)        -> i32
+ *   glyph_bytes_unpack(in_192, dst_ptr, dst_cap)       -> i32 (bytes written)
+ *   glyph_bytes_validate(in_192)                       -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_bytes
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_payload_len(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_payload_cap() -> u32 from "glyph_core.iii"
+
+const GV3_FORM_BYTES : u32 = 0x21u32
+
+fn glyph_bytes_form_id() -> u32 @export { return GV3_FORM_BYTES }
+
+fn glyph_bytes_pack(src_ptr: u64, src_len: u32, out_192: u64) -> i32 @export {
+    let s_l : u64 = src_ptr
+    let n_l : u32 = src_len
+    let o_l : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    if n_l > 152u32 { return -2i32 }
+    if s_l == 0u64 {
+        if n_l != 0u32 { return -1i32 }
+    }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_BYTES)
+    gv3_write_u32_le(o_l + 4u64, n_l)
+    /* Copy src into payload. */
+    if s_l != 0u64 {
+        let sp : *u8 = s_l as *u8
+        let dp : *u8 = (o_l + 8u64) as *u8
+        let mut i : u64 = 0u64
+        let n_u64 : u64 = (n_l as u64) & 0xFFFFFFFFu64
+        while i < n_u64 {
+            dp[i] = sp[i]
+            i = i + 1u64
+        }
+    }
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_bytes_unpack(in_192: u64, dst_ptr: u64, dst_cap: u32) -> i32 @export {
+    let i_l : u64 = in_192
+    let d_l : u64 = dst_ptr
+    let c_l : u32 = dst_cap
+    if i_l == 0u64 { return -1i32 }
+    if d_l == 0u64 { return -1i32 }
+    if gv3_form_id(i_l) != GV3_FORM_BYTES { return -2i32 }
+    if gv3_validate(i_l) != 1u8 { return -3i32 }
+    let n : u32 = gv3_payload_len(i_l)
+    if n > c_l { return -4i32 }
+    let sp : *u8 = (i_l + 8u64) as *u8
+    let dp : *u8 = d_l as *u8
+    let mut i : u64 = 0u64
+    let n_u64 : u64 = (n as u64) & 0xFFFFFFFFu64
+    while i < n_u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    return n as i32
+}
+
+fn glyph_bytes_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_BYTES { return 0u8 }
+    return gv3_validate(i_l)
+}

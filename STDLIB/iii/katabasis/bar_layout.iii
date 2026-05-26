@@ -1,0 +1,85 @@
+/* STDLIB/iii/katabasis/bar_layout.iii
+ *
+ * KATABASIS increment 4 -- the GPU BAR-window write typing: the F9
+ * CoprocDispatch counterpart of the SVM-offset typing (svm_layout.iii).  Per
+ * the plan (FR-7, 5.4) and the 0.6 BSOD post-mortem, the ONLY physical write
+ * targets proven contained-within-the-GPU (harmless to the host kernel) are
+ * the AD103 BARs: BAR0 (MMIO regs), BAR1 (VRAM aperture), BAR3 (RAMIN).  A
+ * metal write to any other physical address -- host RAM, kernel text, the
+ * LAPIC, the SVM region, the gaps between BARs -- is UNREPRESENTABLE: it gets
+ * the structural-NEG brick hexad (324), so composing it with the write action
+ * is non-reachable.  "Writes confined to BAR0/1/3 by hexad, not a userspace
+ * allowlist alone" (FR-7).
+ *
+ * Verified addresses (plan 0.2 / the 0.6 allowlist, read off live AD103 silicon
+ * 2026-04-11):
+ *   BAR0  0xFB000000   .. 0xFC000000     (16 MB NV control registers)
+ *   BAR1  0xF800000000 .. 0xF900000000   (VRAM aperture; the 0.6 allowlist window)
+ *   BAR3  0xFC00000000 .. 0xFC02000000   (32 MB RAMIN / GPU contexts)
+ *
+ * Pure data + total functions over u64 physical addresses and the live hexad
+ * algebra.  No metal, no I/O.  User-mode KAT-verifiable (corpus 393).  Ring R0.
+ */
+module katabasis_bar_layout
+
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+/* BAR region ids (0 = not a GPU BAR -> forbidden). */
+const KBAR_REGION_NONE : u32 = 0u32
+const KBAR_REGION_BAR0 : u32 = 1u32
+const KBAR_REGION_BAR1 : u32 = 2u32
+const KBAR_REGION_BAR3 : u32 = 3u32
+
+/* === BEGIN AUTO-GENERATED FROM iii_bar_layout.def === */
+/* GENERATED FROM iii_bar_layout.def by gen_bar_layout.sh -- DO NOT EDIT BY HAND. */
+/* Verified BAR bounds (ascending; plan 0.2 / the 0.6 allowlist).  u64 unsigned. */
+const KBAR_BAR0_LO : u64 = 0xFB000000u64
+const KBAR_BAR0_HI : u64 = 0xFC000000u64
+const KBAR_BAR1_LO : u64 = 0xF800000000u64
+const KBAR_BAR1_HI : u64 = 0xF900000000u64
+const KBAR_BAR3_LO : u64 = 0xFC00000000u64
+const KBAR_BAR3_HI : u64 = 0xFC02000000u64
+
+/* Classify a physical address into its GPU BAR (or NONE).  Ascending cascade
+ * using only unsigned `<` (the signed-compare trap is signed-only; the BAR
+ * bounds are monotone ascending so a `<` cascade is exact). */
+fn katabasis_bar_region(phys: u64) -> u32 @export {
+    let p : u64 = phys
+    if p < KBAR_BAR0_LO { return KBAR_REGION_NONE }   /* below BAR0: host RAM / low MMIO */
+    if p < KBAR_BAR0_HI { return KBAR_REGION_BAR0 }   /* BAR0 */
+    if p < KBAR_BAR1_LO { return KBAR_REGION_NONE }   /* gap: BAR0 end .. BAR1 start */
+    if p < KBAR_BAR1_HI { return KBAR_REGION_BAR1 }   /* BAR1 */
+    if p < KBAR_BAR3_LO { return KBAR_REGION_NONE }   /* gap: BAR1 end .. BAR3 start */
+    if p < KBAR_BAR3_HI { return KBAR_REGION_BAR3 }   /* BAR3 */
+    return KBAR_REGION_NONE   /* above BAR3 */
+}
+/* === END AUTO-GENERATED FROM iii_bar_layout.def === */
+
+/* The region's representative hexad: 728 (all-POS, reachable) for BAR0/1/3;
+ * 324 (structural-NEG brick) for any non-BAR physical address. */
+fn katabasis_bar_region_hexad(phys: u64) -> u16 @export {
+    let p : u64 = phys
+    if katabasis_bar_region(p) == KBAR_REGION_NONE { return 324u16 }
+    return 728u16
+}
+
+/* A CoprocDispatch (F9) write to physical `phys` is admissible iff the positive
+ * write action composed with the target region's hexad stays reachable -- i.e.
+ * iff `phys` is inside a GPU BAR.  Any other target is UNREPRESENTABLE.
+ * 1 = admissible, 0 = forbidden. */
+fn katabasis_bar_write_admissible(phys: u64) -> u8 @export {
+    let p : u64 = phys
+    return iii_hexad_reachable(iii_hexad_compose6(728u16, katabasis_bar_region_hexad(p)))
+}
+
+/* Action-parameterized admission (parallel to svm_cycle_admissible): a
+ * CoprocDispatch with the given action hexad to physical `phys` is admissible
+ * iff the action composed with the target BAR hexad stays reachable -- so a
+ * structural-NEG action is refused even to a valid BAR, and any non-BAR target
+ * is forbidden for any action.  1 = admissible, 0 = forbidden. */
+fn katabasis_bar_cycle_admissible(action: u16, phys: u64) -> u8 @export {
+    let a : u16 = action
+    let p : u64 = phys
+    return iii_hexad_reachable(iii_hexad_compose6(a, katabasis_bar_region_hexad(p)))
+}

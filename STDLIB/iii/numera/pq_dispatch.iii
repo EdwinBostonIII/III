@@ -1,0 +1,111 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\pq_dispatch.iii
+ *
+ * III STDLIB - numera::pq_dispatch -- uniform post-quantum crypto surface.
+ * RITCHIE Stage 4.4.4: one entry point per primitive that routes a FIPS suite
+ * id to the right scheme module (mldsa / mlkem / slhdsa) at the right level.
+ *
+ * Suite ids (CRYPTO-AGILITY/include/iii/crypto_suites.h):
+ *   ML-KEM-512/768/1024   = 0x0101 / 0x0102 / 0x0103   (mlkem k = 2/3/4)
+ *   ML-DSA-44/65/87        = 0x0111 / 0x0112 / 0x0113   (mldsa level = 2/3/5)
+ *   SLH-DSA-128S/192S/256S = 0x0121 / 0x0122 / 0x0123   (slhdsa lv = 0/1/2)
+ * Family = (suite & 0xFFF0): 0x0100 KEM, 0x0110 sign-lattice, 0x0120 sign-hash.
+ *
+ * Returns the scheme rc, or -1 (E_BAD_SUITE) for an unroutable suite or a
+ * primitive the family doesn't support (e.g. sign on a KEM suite).
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module numera_pq_dispatch
+
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_keygen(k: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_encaps(k: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+
+fn pq_mlkem_k(suite: u64) -> u64 { return (suite & 0xFu64) + 1u64 }       /* 0x0101->2 .. 0x0103->4 */
+fn pq_slh_lv(suite: u64) -> u64 { return (suite & 0xFu64) - 1u64 }        /* 0x0121->0 .. 0x0123->2 */
+fn pq_mldsa_level(suite: u64) -> u64 {                                    /* 44->2 65->3 87->5 */
+    let lo : u64 = suite & 0xFu64
+    if lo == 1u64 { return 2u64 }
+    if lo == 2u64 { return 3u64 }
+    return 5u64
+}
+
+fn iii_pq_keygen(suite: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
+    let fam : u64 = suite & 0xFFF0u64
+    if fam == 0x0100u64 { return iii_mlkem_keygen(pq_mlkem_k(suite), seed, pk, sk) }
+    if fam == 0x0110u64 { return iii_mldsa_keygen(pq_mldsa_level(suite), seed, pk, sk) }
+    if fam == 0x0120u64 { return iii_slhdsa_keygen(pq_slh_lv(suite), seed, pk, sk) }
+    return 0i32 - 1i32
+}
+
+fn iii_pq_sign(suite: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    let fam : u64 = suite & 0xFFF0u64
+    if fam == 0x0110u64 { return iii_mldsa_sign(pq_mldsa_level(suite), sk, msg, msglen, sig, siglen) }
+    if fam == 0x0120u64 { return iii_slhdsa_sign(pq_slh_lv(suite), sk, msg, msglen, sig, siglen) }
+    return 0i32 - 1i32
+}
+
+fn iii_pq_verify(suite: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    let fam : u64 = suite & 0xFFF0u64
+    if fam == 0x0110u64 { return iii_mldsa_verify(pq_mldsa_level(suite), pk, msg, msglen, sig, siglen) }
+    if fam == 0x0120u64 { return iii_slhdsa_verify(pq_slh_lv(suite), pk, msg, msglen, sig, siglen) }
+    return 0i32 - 1i32
+}
+
+fn iii_pq_encaps(suite: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 @export {
+    let fam : u64 = suite & 0xFFF0u64
+    if fam == 0x0100u64 { return iii_mlkem_encaps(pq_mlkem_k(suite), pk, coins, ct, ss) }
+    return 0i32 - 1i32
+}
+
+fn iii_pq_decaps(suite: u64, sk: u64, ct: u64, ss: u64) -> i32 @export {
+    let fam : u64 = suite & 0xFFF0u64
+    if fam == 0x0100u64 { return iii_mlkem_decaps(pq_mlkem_k(suite), sk, ct, ss) }
+    return 0i32 - 1i32
+}
+
+/* ---- 4-arg composition wrappers (composition-table ABI is strictly
+ * (u64,u64,u64,u64)->u64; ops needing >4 args read the overflow from an
+ * `ext` u64-array pointer).  Registered in iii_compositions.def.  Return
+ * 0 on success, 1 on failure. ---- */
+fn pq_ext_u64(ext: u64, idx: u64) -> u64 {
+    let p : *u8 = ext as *u8
+    let b : u64 = idx * 8u64
+    return (p[b] as u64) | ((p[b + 1u64] as u64) << 8u64) | ((p[b + 2u64] as u64) << 16u64) | ((p[b + 3u64] as u64) << 24u64) | ((p[b + 4u64] as u64) << 32u64) | ((p[b + 5u64] as u64) << 40u64) | ((p[b + 6u64] as u64) << 48u64) | ((p[b + 7u64] as u64) << 56u64)
+}
+
+fn pq_keygen_c4(suite: u64, seed: u64, pk: u64, sk: u64) -> u64 @export {
+    if iii_pq_keygen(suite, seed, pk, sk) == 0i32 { return 0u64 }
+    return 1u64
+}
+fn pq_sign_c4(suite: u64, sk: u64, msg: u64, ext: u64) -> u64 @export {
+    let msglen : u64 = pq_ext_u64(ext, 0u64)
+    let sig : u64 = pq_ext_u64(ext, 1u64)
+    let siglen : u64 = pq_ext_u64(ext, 2u64)
+    if iii_pq_sign(suite, sk, msg, msglen, sig, siglen) == 0i32 { return 0u64 }
+    return 1u64
+}
+fn pq_verify_c4(suite: u64, pk: u64, msg: u64, ext: u64) -> u64 @export {
+    let msglen : u64 = pq_ext_u64(ext, 0u64)
+    let sig : u64 = pq_ext_u64(ext, 1u64)
+    let siglen : u64 = pq_ext_u64(ext, 2u64)
+    if iii_pq_verify(suite, pk, msg, msglen, sig, siglen) == 0i32 { return 0u64 }
+    return 1u64
+}
+fn pq_encaps_c4(suite: u64, pk: u64, coins: u64, ext: u64) -> u64 @export {
+    let ct : u64 = pq_ext_u64(ext, 0u64)
+    let ss : u64 = pq_ext_u64(ext, 1u64)
+    if iii_pq_encaps(suite, pk, coins, ct, ss) == 0i32 { return 0u64 }
+    return 1u64
+}
+fn pq_decaps_c4(suite: u64, sk: u64, ct: u64, ss: u64) -> u64 @export {
+    if iii_pq_decaps(suite, sk, ct, ss) == 0i32 { return 0u64 }
+    return 1u64
+}

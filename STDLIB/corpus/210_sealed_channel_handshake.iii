@@ -1,0 +1,172 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\210_sealed_channel_handshake.iii
+ *
+ * III conformance corpus 210 -- Phase D.3: sealed_channel
+ *
+ * Asserts:
+ *   1. Two parties (Alice, Bob) compute identical 32-byte derived keys
+ *      via x25519 ECDH.
+ *   2. Alice seals a 16-byte plaintext; Bob opens it; recovered
+ *      plaintext matches original.
+ *   3. Tag tampering (flip one byte of MAC) makes Bob's open return
+ *      SC_E_BAD_TAG (-4).
+ *   4. sc_close zeroes the channel; sc_count returns 0 after both
+ *      parties close.
+ *
+ * Determinism: identical input keypairs -> identical derived keys
+ * (verified bit-by-bit via sc_derived_key_byte).
+ *
+ * Exit code: 99 on full pass; 1..N for specific failure point.
+ */
+
+module corpus_210
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_close(channel_id: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_count() -> u32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_derived_key_byte(channel_id: u64, i: u32) -> u32 from "sealed_channel.iii"
+
+fn main() -> u64 {
+    /* Reset to clean state. */
+    sc_reset_all()
+
+    /* x25519 basepoint = 9, then 31 zero bytes (little-endian u-coord). */
+    let bp : *u8 = malloc(32u64)
+    if bp as u64 == 0u64 { return 1u64 }
+    bp[0u64] = 9u8
+    let mut i : u64 = 1u64
+    while i < 32u64 {
+        bp[i] = 0u8
+        i = i + 1u64
+    }
+
+    /* Alice's secret: bytes 0x01..0x20. */
+    let alice_sk : *u8 = malloc(32u64)
+    let mut a : u64 = 0u64
+    while a < 32u64 {
+        alice_sk[a] = ((a + 1u64) & 0xFFu64) as u8
+        a = a + 1u64
+    }
+
+    /* Bob's secret: bytes 0x40..0x5F. */
+    let bob_sk : *u8 = malloc(32u64)
+    let mut b : u64 = 0u64
+    while b < 32u64 {
+        bob_sk[b] = ((0x40u64 + b) & 0xFFu64) as u8
+        b = b + 1u64
+    }
+
+    /* Compute public keys. */
+    let alice_pk : *u8 = malloc(32u64)
+    let bob_pk   : *u8 = malloc(32u64)
+    if x25519(alice_pk, alice_sk, bp) != 0i32 { return 2u64 }
+    if x25519(bob_pk,   bob_sk,    bp) != 0i32 { return 3u64 }
+
+    /* Alice's view: peer pubkey = bob_pk, my secret = alice_sk. */
+    let alice_ch : u64 = sc_handshake_init(bob_pk as u64, alice_sk as u64)
+    if alice_ch == 0u64 { return 4u64 }
+
+    /* Bob's view: peer pubkey = alice_pk, my secret = bob_sk. */
+    let bob_ch : u64 = sc_handshake_init(alice_pk as u64, bob_sk as u64)
+    if bob_ch == 0u64 { return 5u64 }
+
+    /* Verify identical derived keys. */
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        let av : u32 = sc_derived_key_byte(alice_ch, k)
+        let bv : u32 = sc_derived_key_byte(bob_ch,   k)
+        if av != bv { return 6u64 }
+        if av == 0x100u32 { return 7u64 }
+        k = k + 1u32
+    }
+
+    /* sc_count should be 2. */
+    if sc_count() != 2u32 { return 8u64 }
+
+    /* Alice seals 16-byte plaintext "HELLO_WORLD_TEST" -> 16 bytes. */
+    let pt_len : u32 = 16u32
+    let pt : *u8 = malloc(16u64)
+    pt[0u64]  = 72u8   /* H */
+    pt[1u64]  = 69u8   /* E */
+    pt[2u64]  = 76u8   /* L */
+    pt[3u64]  = 76u8   /* L */
+    pt[4u64]  = 79u8   /* O */
+    pt[5u64]  = 95u8   /* _ */
+    pt[6u64]  = 87u8   /* W */
+    pt[7u64]  = 79u8   /* O */
+    pt[8u64]  = 82u8   /* R */
+    pt[9u64]  = 76u8   /* L */
+    pt[10u64] = 68u8   /* D */
+    pt[11u64] = 95u8   /* _ */
+    pt[12u64] = 84u8   /* T */
+    pt[13u64] = 69u8   /* E */
+    pt[14u64] = 83u8   /* S */
+    pt[15u64] = 84u8   /* T */
+
+    /* Snapshot original PT (sc_send is in-place). */
+    let pt_orig : *u8 = malloc(16u64)
+    let mut s : u64 = 0u64
+    while s < 16u64 {
+        pt_orig[s] = pt[s]
+        s = s + 1u64
+    }
+
+    let tag : *u8 = malloc(16u64)
+    if sc_send(alice_ch, pt as u64, pt_len, tag as u64) != 0i32 { return 9u64 }
+
+    /* Verify pt buffer is now ciphertext (not plaintext). */
+    let mut diffs : u32 = 0u32
+    let mut d : u64 = 0u64
+    while d < 16u64 {
+        if pt[d] != pt_orig[d] { diffs = diffs + 1u32 }
+        d = d + 1u64
+    }
+    if diffs == 0u32 { return 10u64 }   /* still plaintext -- not encrypted */
+
+    /* Bob opens (in-place decrypt). */
+    if sc_recv(bob_ch, pt as u64, pt_len, tag as u64) != 0i32 { return 11u64 }
+
+    /* Verify recovered plaintext matches original. */
+    let mut e : u64 = 0u64
+    while e < 16u64 {
+        if pt[e] != pt_orig[e] { return 12u64 }
+        e = e + 1u64
+    }
+
+    /* === Tag-tamper test ===
+     * Reseal a 2nd message with alice (uses alice's tx_nonce=1; bob's
+     * rx_nonce will also be 1).  Then flip 1 bit of the tag.  Bob's
+     * open must return SC_E_BAD_TAG (-4). */
+    let mut p : u64 = 0u64
+    while p < 16u64 {
+        pt[p] = pt_orig[p]
+        p = p + 1u64
+    }
+    if sc_send(alice_ch, pt as u64, pt_len, tag as u64) != 0i32 { return 13u64 }
+    /* Flip one bit of the tag. */
+    tag[0u64] = tag[0u64] ^ 0x01u8
+    let recv_rc : i32 = sc_recv(bob_ch, pt as u64, pt_len, tag as u64)
+    if recv_rc != -4i32 { return 14u64 }   /* SC_E_BAD_TAG */
+
+    /* Close both channels; verify count drops. */
+    if sc_close(alice_ch) != 0i32 { return 15u64 }
+    if sc_close(bob_ch)   != 0i32 { return 16u64 }
+    if sc_count() != 0u32 { return 17u64 }
+
+    free(bp)
+    free(alice_sk)
+    free(bob_sk)
+    free(alice_pk)
+    free(bob_pk)
+    free(pt)
+    free(pt_orig)
+    free(tag)
+    return 99u64
+}

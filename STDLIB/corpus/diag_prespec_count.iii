@@ -1,0 +1,18 @@
+/* Diag: report actual prespec_register_compositions count via exit code. */
+module diag_prespec_count
+
+extern @abi(c-msvc-x64) fn prespec_register_compositions() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_reset() -> i32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_used() -> u32 from "prespec.iii"
+
+fn main() -> u64 {
+    prespec_reset()
+    let n : u32 = prespec_register_compositions()
+    let u : u32 = prespec_used()
+    /* Encode: high byte = used, low byte = n.  Exit code is the low byte
+     * but we shift by 1 so we can detect both.  Use: n*100 + u, mod 65535.
+     * Simpler: return (n - 1) * 256 + (u & 0xFF) so we get distinguishable
+     * codes; we want to see what n actually is. */
+    let lo : u64 = (n as u64) & 0xFFu64
+    return lo
+}

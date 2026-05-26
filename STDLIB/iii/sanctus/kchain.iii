@@ -1,0 +1,136 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\kchain.iii
+ *
+ * III STDLIB - sanctus::kchain
+ *
+ * K-value chain tracking with floor enforcement (data-only Phase A).
+ *
+ * Per III mandate M15, K(call) >= 0.85 by default.  This module
+ * tracks K-values in fixed-point representation (K * 1_000_000_000)
+ * and provides multiplicative composition.
+ *
+ * Phase A scope: pure data tracking and floor checks.  Trinity
+ * re-admission (slot 1 invocation when chain underflows) deferred
+ * to Phase C with @sealed(slot=N) modifier support.
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.
+ */
+
+module sanctus_kchain
+
+const KCHAIN_SCALE       : u64 = 1000000000u64       /* 1e9 */
+const KCHAIN_FLOOR       : u64 = 850000000u64        /* 0.85 * 1e9 */
+const KCHAIN_FULL        : u64 = 1000000000u64       /* 1.00 * 1e9 */
+const KCHAIN_INVALID     : u64 = 0xFFFFFFFFFFFFFFFFu64
+const KCHAIN_MAX         : u32 = 32u32
+
+var KCHAIN_FLOOR_FX : [u64; 32]
+var KCHAIN_CURRENT  : [u64; 32]
+var KCHAIN_UNDERFLOW: [u8;  32]
+var KCHAIN_READMITS : [u32; 32]
+var KCHAIN_LIVE     : [u8;  32]
+
+fn kchain_new(custom_floor: u64) -> u64 @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < KCHAIN_MAX {
+        if KCHAIN_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return KCHAIN_INVALID }
+    let mut floor : u64 = custom_floor
+    if floor == 0u64 { floor = KCHAIN_FLOOR }
+    if floor > KCHAIN_FULL { floor = KCHAIN_FULL }
+    KCHAIN_FLOOR_FX[slot]  = floor
+    KCHAIN_CURRENT[slot]   = KCHAIN_FULL
+    KCHAIN_UNDERFLOW[slot] = 0u8
+    KCHAIN_READMITS[slot]  = 0u32
+    KCHAIN_LIVE[slot]      = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn kchain_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    if id == KCHAIN_INVALID { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (KCHAIN_MAX as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if KCHAIN_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Compose: current K *= k_call (both in fixed-point of 1e9 scale). */
+fn kchain_compose(id: u64, k_call_fx: u64) -> u8 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    if k_call_fx > KCHAIN_FULL { return 0u8 }
+    let cur : u64 = KCHAIN_CURRENT[s]
+    /* product = (cur * k_call) / KCHAIN_SCALE  (fixed-point multiply) */
+    let prod_lo : u64 = cur * k_call_fx
+    /* For exact computation we'd need u128.  Approximate via division
+     * after the multiply.  Both operands < 1e9 < 2^30, product < 2^60,
+     * still fits in u64.  Divide by 1e9 to renormalise. */
+    let new_cur : u64 = prod_lo / KCHAIN_SCALE
+    KCHAIN_CURRENT[s] = new_cur
+    if new_cur < KCHAIN_FLOOR_FX[s] {
+        KCHAIN_UNDERFLOW[s] = 1u8
+    }
+    return 1u8
+}
+
+fn kchain_current(id: u64) -> u64 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return KCHAIN_CURRENT[s]
+}
+
+fn kchain_floor(id: u64) -> u64 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return KCHAIN_FLOOR }
+    return KCHAIN_FLOOR_FX[s]
+}
+
+fn kchain_is_underflow(id: u64) -> u8 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return KCHAIN_UNDERFLOW[s]
+}
+
+fn kchain_readmit_count(id: u64) -> u32 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return KCHAIN_READMITS[s]
+}
+
+/* Manual re-admission: in Phase A this just resets current to KCHAIN_FULL
+ * and increments the readmit counter.  In Phase C this will invoke
+ * Sanctum slot 1 (DRTM_RELAUNCH) and require Trinity admission. */
+fn kchain_readmit(id: u64) -> u8 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    KCHAIN_CURRENT[s]   = KCHAIN_FULL
+    KCHAIN_UNDERFLOW[s] = 0u8
+    KCHAIN_READMITS[s]  = KCHAIN_READMITS[s] + 1u32
+    return 1u8
+}
+
+fn kchain_drop(id: u64) -> u8 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    KCHAIN_LIVE[s]       = 0u8
+    KCHAIN_FLOOR_FX[s]   = 0u64
+    KCHAIN_CURRENT[s]    = 0u64
+    KCHAIN_UNDERFLOW[s]  = 0u8
+    KCHAIN_READMITS[s]   = 0u32
+    return 1u8
+}
+
+/* Convert a Q1.30 (or any 1e9-scaled) integer to a u32 percentage * 100,
+ * for human reporting.  Returns 0..10000 (= 0%..100% * 100). */
+fn kchain_to_basis_points(k_fx: u64) -> u32 @export {
+    /* basis points = K * 10000 = (k_fx * 10000) / KCHAIN_SCALE */
+    let scaled : u64 = k_fx * 10000u64
+    let bp : u64 = scaled / KCHAIN_SCALE
+    return (bp & 0xFFFFFFFFu64) as u32
+}

@@ -1,0 +1,51 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_latex.iii
+ *
+ * Transform pattern: FORM_III → FORM_LATEX
+ * FROZEN SPEC §7B.6 slot 27; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Wraps III source in \begin{verbatim}...\end{verbatim}, escaping \, {, }, $.
+ */
+
+module omnia_tp_iii_to_latex
+
+var TP_LX_HEADER : [u8; 18] = [92u8, 98u8, 101u8, 103u8, 105u8, 110u8, 123u8, 118u8, 101u8, 114u8, 98u8, 97u8, 116u8, 105u8, 109u8, 125u8, 10u8, 0u8]
+var TP_LX_FOOTER : [u8; 17] = [10u8, 92u8, 101u8, 110u8, 100u8, 123u8, 118u8, 101u8, 114u8, 98u8, 97u8, 116u8, 105u8, 109u8, 125u8, 10u8, 0u8]
+
+fn tp_iii_to_latex_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_iii_to_latex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut dst_off : u64 = 0u64
+    /* Header (17 bytes excluding NUL) */
+    let mut h : u32 = 0u32
+    while h < 17u32 {
+        if dst_off >= dst_cap { return 0u64 }
+        tp_iii_to_latex_emit(dst_buf, dst_off, TP_LX_HEADER[h])
+        dst_off = dst_off + 1u64
+        h = h + 1u32
+    }
+    /* Body: verbatim is mostly raw, but the closing \end{verbatim} must
+     * not appear inside; we trust the input has no such literal. Copy 1:1. */
+    let mut j : u64 = 0u64
+    while j < src_len {
+        if dst_off >= dst_cap { return 0u64 }
+        let bp : *u8 = (src + j) as *u8
+        tp_iii_to_latex_emit(dst_buf, dst_off, bp[0u64])
+        dst_off = dst_off + 1u64
+        j = j + 1u64
+    }
+    /* Footer (16 bytes excluding NUL) */
+    let mut f : u32 = 0u32
+    while f < 16u32 {
+        if dst_off >= dst_cap { return 0u64 }
+        tp_iii_to_latex_emit(dst_buf, dst_off, TP_LX_FOOTER[f])
+        dst_off = dst_off + 1u64
+        f = f + 1u32
+    }
+    return dst_off
+}

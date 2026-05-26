@@ -1,0 +1,125 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\crystal_edges.iii
+ *
+ * III STDLIB - omnia::crystal_edges
+ *
+ * Lattice plan Step 0000g (separated from omnia/crystal.iii for BSS
+ * stability -- see comment block in crystal.iii).
+ *
+ * Per-crystal outgoing-edge graph storage.  Each crystal_id can carry
+ * up to CRYSTAL_MAX_EDGES outgoing edges, stored in a 128-byte
+ * arena-allocated block (16 × u64 entries).  An aggregate K value
+ * (1e9 fixed-point kchain composition) is also tracked per crystal.
+ *
+ * Public surface:
+ *   crystal_edges_init(id, arena_id) -> i32
+ *   crystal_edges_add(parent_id, child_id) -> i32
+ *   crystal_edges_count(id) -> u32
+ *   crystal_edges_cap(id) -> u32
+ *   crystal_edges_at(id, idx) -> u64
+ *   crystal_edges_aggregate_k(id) -> u64
+ *
+ * Hexad: kind_form (graph structure).  Ring: R-1.  K: 1.00.
+ */
+
+module omnia_crystal_edges
+
+extern @abi(c-msvc-x64) fn crystal_slot_of_pub(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_k(id: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+const CE_OK              : i32 =  0i32
+const CE_E_BADID         : i32 = -1i32
+const CE_E_FULL          : i32 = -2i32
+const CE_E_NO_ARENA      : i32 = -3i32
+const CE_E_EDGES_FULL    : i32 = -4i32
+
+const CE_MAX_EDGES        : u32 = 16u32
+const CE_SLOT_BYTES       : u64 = 128u64    /* 16 × u64 */
+const CE_SLOT_MAX         : u32 = 256u32
+
+var CE_BASE : [u64; 256]
+var CE_LEN  : [u32; 256]
+var CE_CAP  : [u32; 256]
+var CE_K    : [u64; 256]
+
+fn crystal_edges_init(id: u64, arena_id: u64) -> i32 @export {
+    let s : u32 = crystal_slot_of_pub(id)
+    if s == 0xFFFFFFFFu32 { return CE_E_BADID }
+    if arena_id == 0u64   { return CE_E_NO_ARENA }
+    let base : u64 = arena_alloc8(arena_id, CE_SLOT_BYTES)
+    if base == 0u64       { return CE_E_FULL }
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < CE_SLOT_BYTES {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    CE_BASE[s] = base
+    CE_LEN[s]  = 0u32
+    CE_CAP[s]  = CE_MAX_EDGES
+    CE_K[s]    = 1000000000u64
+    return CE_OK
+}
+
+fn crystal_edges_add(parent_id: u64, child_id: u64) -> i32 @export {
+    let s : u32 = crystal_slot_of_pub(parent_id)
+    if s == 0xFFFFFFFFu32        { return CE_E_BADID }
+    let cs : u32 = crystal_slot_of_pub(child_id)
+    if cs == 0xFFFFFFFFu32       { return CE_E_BADID }
+    if CE_BASE[s] == 0u64        { return CE_E_NO_ARENA }
+    let len : u32 = CE_LEN[s]
+    if len >= CE_CAP[s]          { return CE_E_EDGES_FULL }
+    let base : u64 = CE_BASE[s]
+    let off  : u64 = (len as u64) * 8u64
+    let p : *u8 = (base + off) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((child_id >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    CE_LEN[s] = len + 1u32
+    let pk : u64 = CE_K[s]
+    let ck : u64 = crystal_k(child_id)
+    let prod : u64 = pk * ck
+    CE_K[s] = prod / 1000000000u64
+    return CE_OK
+}
+
+fn crystal_edges_count(id: u64) -> u32 @export {
+    let s : u32 = crystal_slot_of_pub(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return CE_LEN[s]
+}
+
+fn crystal_edges_cap(id: u64) -> u32 @export {
+    let s : u32 = crystal_slot_of_pub(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return CE_CAP[s]
+}
+
+fn crystal_edges_at(id: u64, idx: u32) -> u64 @export {
+    let s : u32 = crystal_slot_of_pub(id)
+    if s == 0xFFFFFFFFu32        { return 0u64 }
+    if idx >= CE_LEN[s]          { return 0u64 }
+    let base : u64 = CE_BASE[s]
+    if base == 0u64              { return 0u64 }
+    let off : u64 = (idx as u64) * 8u64
+    let p : *u8 = (base + off) as *u8
+    let b0 : u64 = p[0u64] as u64
+    let b1 : u64 = p[1u64] as u64
+    let b2 : u64 = p[2u64] as u64
+    let b3 : u64 = p[3u64] as u64
+    let b4 : u64 = p[4u64] as u64
+    let b5 : u64 = p[5u64] as u64
+    let b6 : u64 = p[6u64] as u64
+    let b7 : u64 = p[7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn crystal_edges_aggregate_k(id: u64) -> u64 @export {
+    let s : u32 = crystal_slot_of_pub(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return CE_K[s]
+}

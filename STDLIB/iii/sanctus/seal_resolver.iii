@@ -1,0 +1,173 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\seal_resolver.iii
+ *
+ * III STDLIB - sanctus::seal_resolver
+ *
+ * SEAL_RESOLVER.mhash computation and verify.
+ * FROZEN SPEC §1.4.6, §15.1, ADR-RES-009.
+ *
+ * Covers:
+ *   (1) the 33 activation coefficients (encoded as a frozen byte array)
+ *   (2) the 16 meta-pattern templates + 24 transform + 27 codegen = 67 slots
+ *   (3) the 5 resolution mhash domain strings
+ *
+ * Computed at boot once; verified at every Q7 invocation.
+ *
+ * Hexad: kind_origin (Crown).  Ring: R0.  K: 1.00.
+ */
+
+module sanctus_seal_resolver
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const SEAL_RESOLVER_BYTES : u32 = 32u32
+
+var g_seal_resolver_mhash    : [u8; 32]
+var g_seal_resolver_computed : u8 = 0u8
+
+/* Domain "SEAL_RESOLVER" 16 bytes NUL-padded */
+var SEAL_RESOLVER_DOM : [u8; 16] = [83u8, 69u8, 65u8, 76u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 82u8, 0u8, 0u8, 0u8]
+
+/* Encoded coefficient table (FROZEN SPEC §5).
+ * 33 u64 values × 8 bytes = 264 bytes, little-endian.
+ * Any change to a coefficient changes this byte array, changing the seal. */
+var COEFF_TABLE_BYTES : [u8; 264] = [
+    /* RESOLVER_BASE_ROOT_META_PATTERN = 1_000_000_000 */
+    0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_FORM_PATTERN = 1_000_000_000 */
+    0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_COMPOSE_PATTERN = 900_000_000 */
+    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_PASSAGE_PATTERN = 900_000_000 */
+    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_ESSENCE_PATTERN = 900_000_000 */
+    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_MOTION_PATTERN = 900_000_000 */
+    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_SUBSTANCE_PATTERN = 900_000_000 */
+    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_ORIGIN_PATTERN = 1_000_000_000 */
+    0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_DEFAULT_PATTERN = 500_000_000 */
+    0x00u8, 0x65u8, 0xCDu8, 0x1Du8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_BASE_SPECIALISATION_BUMP = 200_000_000 */
+    0x00u8, 0xC2u8, 0xEBu8, 0x0Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_GUARANTEE_LINEAR_MATCH = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_GUARANTEE_BOUNDED_MATCH = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_GUARANTEE_CONSTANT_TIME_MATCH = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_GUARANTEE_PURE_MATCH = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_GUARANTEE_SEAL_MATCH = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_HEXAD_EXACT = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_HEXAD_NEAR = 50_000_000 */
+    0x80u8, 0xF0u8, 0xFAu8, 0x02u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_RING_EXACT = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_RING_LOWER_OK = 50_000_000 */
+    0x80u8, 0xF0u8, 0xFAu8, 0x02u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_K_DEPTH_PER_LEVEL = 10_000_000 */
+    0x80u8, 0x96u8, 0x98u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_K_DEPTH_CAP = 80_000_000 */
+    0x00u8, 0x1Eu8, 0xC4u8, 0x04u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_ARENA_AFFINITY = 30_000_000 */
+    0x80u8, 0xC3u8, 0xC9u8, 0x01u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_PROOF_BACKED_SPECIALISATION = 200_000_000 */
+    0x00u8, 0xC2u8, 0xEBu8, 0x0Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_INTENT_FLAG_LOWERING = 20_000_000 */
+    0x00u8, 0x2Du8, 0x31u8, 0x01u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_W_PARTIAL_ARG_BOUND = 5_000_000 */
+    0x40u8, 0x4Bu8, 0x4Cu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_P_GUARANTEE_VIOLATION = 500_000_000 */
+    0x00u8, 0x65u8, 0xCDu8, 0x1Du8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_P_HEXAD_FAR = 200_000_000 */
+    0x00u8, 0xC2u8, 0xEBu8, 0x0Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_P_RING_HIGHER = 1_000_000_000 */
+    0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_P_EFFECTS_UNDECLARED = 700_000_000 */
+    0x00u8, 0xFFu8, 0x7Eu8, 0x29u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_P_ARITY_MISMATCH = 300_000_000 */
+    0x00u8, 0xA3u8, 0xE1u8, 0x11u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVE_MIN_SCORE = 100_000_000 */
+    0x00u8, 0xE1u8, 0xF5u8, 0x05u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVE_AMBIGUITY_EPSILON = 0 */
+    0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    /* RESOLVER_MAX_RECURSION_DEPTH = 8 (stored as u64 for stride consistency) */
+    0x08u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8
+]
+
+/* Five mhash domain strings (FROZEN SPEC §0.10) -- 80 bytes total. */
+var DOMAIN_STRINGS_BYTES : [u8; 80] = [
+    73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 79u8, 75u8, 0u8, 0u8,
+    73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 70u8, 65u8, 73u8, 76u8,
+    73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 65u8, 77u8, 66u8, 71u8,
+    73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 75u8, 85u8, 70u8, 0u8,
+    73u8, 73u8, 73u8, 95u8, 82u8, 69u8, 83u8, 79u8, 76u8, 86u8, 69u8, 95u8, 84u8, 65u8, 77u8, 80u8
+]
+
+extern @abi(c-msvc-x64) fn pattern_registry_used() -> u32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+
+fn seal_resolver_compute() -> i32 @export {
+    mhash_begin()
+    mhash_domain(&SEAL_RESOLVER_DOM as u64, 13u64)
+    /* (1) coefficient table */
+    mhash_payload(&COEFF_TABLE_BYTES as u64, 264u64)
+    /* (2) registered slots -- walk used range */
+    let used : u32 = pattern_registry_used()
+    let mut i : u32 = 0u32
+    while i < used {
+        let p : u64 = pattern_table_get(i)
+        if p != 0u64 {
+            mhash_payload(p, 168u64)
+        }
+        i = i + 1u32
+    }
+    /* (3) the 5 domain strings concatenated */
+    mhash_payload(&DOMAIN_STRINGS_BYTES as u64, 80u64)
+    mhash_final(&g_seal_resolver_mhash as u64)
+    g_seal_resolver_computed = 1u8
+    return 0i32
+}
+
+fn seal_resolver_byte(i: u32) -> u8 @export {
+    if i >= SEAL_RESOLVER_BYTES { return 0u8 }
+    return g_seal_resolver_mhash[i]
+}
+
+fn seal_resolver_is_computed() -> u8 @export {
+    return g_seal_resolver_computed
+}
+
+var SEAL_RESOLVER_SAVED : [u8; 32]
+
+fn seal_resolver_verify() -> u8 @export {
+    if g_seal_resolver_computed == 0u8 { return 0u8 }
+    /* Recompute and compare byte-for-byte against the snapshot. */
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        SEAL_RESOLVER_SAVED[k] = g_seal_resolver_mhash[k]
+        k = k + 1u32
+    }
+    seal_resolver_compute()
+    let mut all_match : u8 = 1u8
+    k = 0u32
+    while k < 32u32 {
+        if SEAL_RESOLVER_SAVED[k] != g_seal_resolver_mhash[k] { all_match = 0u8 }
+        k = k + 1u32
+    }
+    return all_match
+}
+
+fn closure_includes_resolver_seal() -> u8 @export {
+    /* In Phase R0030, the closure root computation is updated to
+     * absorb g_seal_resolver_mhash. Phase R-pre-0030 returns 0
+     * (computed flag false) so M22 returns 0 until seal is computed. */
+    return g_seal_resolver_computed
+}

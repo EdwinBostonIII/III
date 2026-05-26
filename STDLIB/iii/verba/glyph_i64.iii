@@ -1,0 +1,57 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_i64.iii
+ *
+ * III STDLIB - verba::glyph_i64 -- Glyph V3 form for i64 (two's-complement
+ * bit-pattern stored as u64).  payload_len = 8.
+ *
+ * Lattice plan Phase 14h Step 0168.
+ *
+ * Public surface:
+ *   glyph_i64_form_id()             -> u32 (0x13)
+ *   glyph_i64_pack(v, out_192)      -> i32
+ *   glyph_i64_unpack(in_192)        -> i64
+ *   glyph_i64_validate(in_192)      -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_i64
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u64_le(p: u64, v: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u64_le(p: u64) -> u64 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_I64 : u32 = 0x13u32
+
+fn glyph_i64_form_id() -> u32 @export { return GV3_FORM_I64 }
+
+fn glyph_i64_pack(v: i64, out_192: u64) -> i32 @export {
+    let v_l : i64 = v
+    let o_l : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_I64)
+    gv3_write_u32_le(o_l + 4u64, 8u32)
+    /* Two's-complement bit pattern via reinterpret. */
+    gv3_write_u64_le(o_l + 8u64, v_l as u64)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_i64_unpack(in_192: u64) -> i64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0i64 }
+    if gv3_form_id(i_l) != GV3_FORM_I64 { return 0i64 }
+    if gv3_validate(i_l) != 1u8 { return 0i64 }
+    return gv3_read_u64_le(i_l + 8u64) as i64
+}
+
+fn glyph_i64_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_I64 { return 0u8 }
+    return gv3_validate(i_l)
+}

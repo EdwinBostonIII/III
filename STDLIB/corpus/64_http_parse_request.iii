@@ -1,0 +1,82 @@
+/* http_server: parse "GET /index.html HTTP/1.1\r\nHost: example.com\r\n
+ *                     Content-Length: 5\r\n\r\nHello"
+ *
+ * Verify: method=GET, target=/index.html, header_count=2, body=Hello.
+ */
+module corpus_64
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_request(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_method_base(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_method_len(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_target_base(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_target_len(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_header_count(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_body_base(id: u64) -> u64 from "http_server.iii"
+extern @abi(c-msvc-x64) fn http_request_body_len(id: u64) -> u64 from "http_server.iii"
+
+fn fill_buf(buf: *u8) -> i32 {
+    /* "GET " (4) */
+    buf[0] = 71u8; buf[1] = 69u8; buf[2] = 84u8; buf[3] = 32u8
+    /* "/index.html" (11) */
+    buf[4]  = 47u8;  buf[5]  = 105u8; buf[6]  = 110u8; buf[7]  = 100u8
+    buf[8]  = 101u8; buf[9]  = 120u8; buf[10] = 46u8;  buf[11] = 104u8
+    buf[12] = 116u8; buf[13] = 109u8; buf[14] = 108u8
+    /* " HTTP/1.1\r\n" (11) */
+    buf[15] = 32u8;  buf[16] = 72u8;  buf[17] = 84u8;  buf[18] = 84u8
+    buf[19] = 80u8;  buf[20] = 47u8;  buf[21] = 49u8;  buf[22] = 46u8
+    buf[23] = 49u8;  buf[24] = 13u8;  buf[25] = 10u8
+    /* "Host: example.com\r\n" (19) */
+    buf[26] = 72u8;  buf[27] = 111u8; buf[28] = 115u8; buf[29] = 116u8
+    buf[30] = 58u8;  buf[31] = 32u8;  buf[32] = 101u8; buf[33] = 120u8
+    buf[34] = 97u8;  buf[35] = 109u8; buf[36] = 112u8; buf[37] = 108u8
+    buf[38] = 101u8; buf[39] = 46u8;  buf[40] = 99u8;  buf[41] = 111u8
+    buf[42] = 109u8; buf[43] = 13u8;  buf[44] = 10u8
+    /* "Content-Length: 5\r\n" (19) */
+    buf[45] = 67u8;  buf[46] = 111u8; buf[47] = 110u8; buf[48] = 116u8
+    buf[49] = 101u8; buf[50] = 110u8; buf[51] = 116u8; buf[52] = 45u8
+    buf[53] = 76u8;  buf[54] = 101u8; buf[55] = 110u8; buf[56] = 103u8
+    buf[57] = 116u8; buf[58] = 104u8; buf[59] = 58u8;  buf[60] = 32u8
+    buf[61] = 53u8;  buf[62] = 13u8;  buf[63] = 10u8
+    /* "\r\n" (2) */
+    buf[64] = 13u8;  buf[65] = 10u8
+    /* "Hello" (5) */
+    buf[66] = 72u8;  buf[67] = 101u8; buf[68] = 108u8; buf[69] = 108u8
+    buf[70] = 111u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(71u64)
+    fill_buf(buf)
+    let req : u64 = http_parse_request(a, buf as u64, 71u64)
+    if req == 0u64 { return 1u64 }
+    /* method = "GET" */
+    if http_request_method_len(req) != 3u64 { return 2u64 }
+    let mp : *u8 = http_request_method_base(req) as *u8
+    if mp[0] != 71u8 { return 3u64 }   /* G */
+    if mp[1] != 69u8 { return 4u64 }   /* E */
+    if mp[2] != 84u8 { return 5u64 }   /* T */
+    /* target = "/index.html" */
+    if http_request_target_len(req) != 11u64 { return 6u64 }
+    let tp : *u8 = http_request_target_base(req) as *u8
+    if tp[0]  != 47u8  { return 7u64 }   /* / */
+    if tp[10] != 108u8 { return 8u64 }   /* l */
+    /* header count = 2 */
+    if http_request_header_count(req) != 2u64 { return 9u64 }
+    /* body = "Hello" */
+    if http_request_body_len(req) != 5u64 { return 10u64 }
+    let bp : *u8 = http_request_body_base(req) as *u8
+    if bp[0] != 72u8  { return 11u64 }   /* H */
+    if bp[1] != 101u8 { return 12u64 }   /* e */
+    if bp[2] != 108u8 { return 13u64 }   /* l */
+    if bp[3] != 108u8 { return 14u64 }   /* l */
+    if bp[4] != 111u8 { return 15u64 }   /* o */
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

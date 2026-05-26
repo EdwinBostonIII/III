@@ -1,0 +1,596 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\math_library.iii
+ *
+ * III STDLIB -- numera::math_library
+ *
+ * The curated mathematical library: the append-only, curated index of admitted
+ * theorem carriers. Admits a carrier only after (a) the cp_library_admit
+ * constitutional clause is present, (b) the carrier is tc_verify-clean,
+ * (c) it is not already present, and (d) its entire declared dependency closure
+ * is already present in the library (M14/W45). Serves citation queries
+ * (lib_cite, W49), ordered retrieval (lib_at), and refinement admission
+ * (lib_refine) that records the refinee identifier as provenance while
+ * retaining the original entry forever. Every admission emits a replayable
+ * witness fragment (M6/M10).
+ *
+ * Hexad: kind_essence + kind_cognition.  Ring: R0.  K: 1.00.
+ *
+ * NIH: depends on identifier.iii (BUILT), theorem_carrier.iii (NYB M62),
+ *      constitution.iii (NYB M13), witness_hook.iii (BUILT).
+ *
+ * Discipline:
+ *   W2:  all public fns <=4 params.
+ *   W8:  slot table statically sized (MATHLIB_SLOTS = 65536).
+ *   W11: signed i64 comparisons by == / != only (sentinel = -1i64).
+ *   W13: <=20 named locals per fn.
+ *   W14: sentinel loops -- no break.
+ *   W15: no recursion.
+ *   M14/W45: dependency closure on every admission.
+ *   W49: citation only of present entries.
+ *   Trap 1: all fn signatures on one physical line.
+ *   Trap 2: all module-level consts carry MATHLIB_ prefix.
+ *   Trap 7: no local var arrays -- all scratch at module scope (MATHLIB_S_*).
+ *   Trap 19: large buffers declared [u64; bytes/8], accessed via byte pointer.
+ *   Non-reentrant: lib_admit/lib_refine use module-scope scratch (single-
+ *   ceremony, serialized admission).
+ *   Emit-before-commit (G6): wh_publish is called before the slot is committed
+ *   so an emit failure leaves no un-witnessed live entry.
+ */
+
+module numera_math_library
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn tc_verify(carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_get_dependencies(carrier_id: *u8, out_buf: *u8, out_cap: u32, out_count: *u32) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+/* Integration-tier KAT vertical: build a verifiable proof term -> carry it ->
+ * tc_verify -> ratify cp_library_admit -> lib_admit (the real 5-module path). */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn tc_init() -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_pack_alloc_req(req_out: *u8, statement: *u8, statement_len: u32, ptids_and_deps: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+
+/* Error constants -- all prefixed MATHLIB_ (Trap 2 / linker-global). */
+const MATHLIB_OK              : i32 =  0i32
+const MATHLIB_E_NULL          : i32 = -1i32
+const MATHLIB_E_FULL          : i32 = -2i32
+const MATHLIB_E_ABSENT        : i32 = -3i32
+const MATHLIB_E_DUPLICATE     : i32 = -4i32
+const MATHLIB_E_VERIFY_FAIL   : i32 = -5i32
+const MATHLIB_E_DEP_ABSENT    : i32 = -6i32
+const MATHLIB_E_CLAUSE_ABSENT : i32 = -7i32
+const MATHLIB_E_NOT_INITED    : i32 = -8i32
+const MATHLIB_E_EMIT_FAIL     : i32 = -9i32
+
+/* Sizing constants. */
+const MATHLIB_SLOTS           : u64 = 65536u64
+const MATHLIB_ID_BYTES        : u64 = 32u64
+const MATHLIB_MAX_DEPS        : u64 = 64u64
+const MATHLIB_DEP_BUF_BYTES   : u64 = 2048u64
+const MATHLIB_CONS_SENT       : u32 = 0xFFFFFFFFu32
+
+/* ---- module-scope state ----
+ *
+ * Large byte-addressed buffers are declared [u64; bytes/8] rather than
+ * [u8; bytes]: iiis allocates 8 bytes per array element (the u64-slot
+ * model), so [u8; B] would reserve 8*B BSS bytes and blow the 2 GiB
+ * small-code-model RIP-relative limit. [u64; B/8] reserves exactly B
+ * bytes. Access is always via byte-pointer arithmetic
+ *   ((&ARR as u64) + offset) as *u8
+ * so the backing type is transparent (Trap 19).
+ *
+ * MATHLIB_CARRIER_IDS: 65536 * 32 = 2 097 152 bytes -> [u64; 262144]
+ * MATHLIB_REFINES:     65536 * 32 = 2 097 152 bytes -> [u64; 262144]
+ * MATHLIB_LIVE:        65536 bytes                  -> [u8; 65536] (8x=512KB, OK)
+ * MATHLIB_S_DEPS:      2048 bytes                   -> [u64; 256]
+ * All other MATHLIB_S_* scratch: <=80 bytes (tiny).
+ */
+var MATHLIB_INITED        : u8  = 0u8
+var MATHLIB_CARRIER_IDS   : [u64; 262144]    /* 65536 * 32 bytes -- admitted carrier ids */
+var MATHLIB_LIVE          : [u8; 65536]      /* 1 = slot occupied */
+var MATHLIB_REFINES       : [u64; 262144]    /* 65536 * 32 bytes -- refinee id (zero = base admission) */
+var MATHLIB_COUNT         : u64 = 0u64       /* live carrier count */
+
+/* --- serialized scratch (lib_admit/lib_refine are non-reentrant) --- */
+var MATHLIB_S_CLAUSE_ID   : [u8; 32]         /* cp_library_admit clause id */
+var MATHLIB_S_LABEL       : [u8; 16]         /* "cp_library_admit" ASCII bytes */
+var MATHLIB_S_DEPS        : [u64; 256]       /* tc_get_dependencies output (64*32=2048 bytes) */
+var MATHLIB_S_PAYLOAD     : [u8; 80]         /* witness payload (tag + carrier id + capability id) */
+var MATHLIB_S_PRODUCER    : [u8; 32]         /* zero producer id */
+var MATHLIB_S_OPID        : [u8; 32]         /* zero op id */
+var MATHLIB_S_IN_C        : [u8; 32]         /* in-commit = carrier id */
+var MATHLIB_S_OUT_C       : [u8; 32]         /* zero out-commit */
+var MATHLIB_S_ANTE        : [u8; 32]         /* antecedent scratch (n_ante = 0) */
+/* Integration-tier KAT scratch (the lib_admit positive vertical). */
+var MATHLIB_KAT_TID       : [u8; 32]         /* proof-term id from pt_alloc */
+var MATHLIB_KAT_ARGS      : [u64; 8]         /* pt_add_inference args aggregate (64 bytes) */
+var MATHLIB_KAT_CID       : [u8; 32]         /* carrier id from tc_alloc */
+var MATHLIB_KAT_STMT      : [u8; 8]          /* tiny theorem statement */
+var MATHLIB_KAT_PAB       : [u64; 3]         /* tc ptids_and_deps (ptid, dep, dep_count=0) */
+var MATHLIB_KAT_REQ       : [u64; 8]         /* tc_pack_alloc_req output (64 bytes) */
+var MATHLIB_KAT_CREQ      : [u64; 16]        /* cons_ratify request (out_cid sink at byte 64) */
+var MATHLIB_KAT_CAP       : [u8; 32]         /* non-null curator capability stub */
+var MATHLIB_KAT_OUT       : [u8; 32]         /* lib_admit out_frag sink */
+
+/* =====================================================================
+ * lib_init -- Initialize the library; idempotent.
+ * Returns MATHLIB_OK.
+ * ===================================================================*/
+fn lib_init() -> i32 @export {
+    if MATHLIB_INITED == 1u8 { return MATHLIB_OK }
+    let mut i : u64 = 0u64
+    while i < MATHLIB_SLOTS {
+        MATHLIB_LIVE[i] = 0u8
+        i = i + 1u64
+    }
+    MATHLIB_COUNT = 0u64
+    MATHLIB_INITED = 1u8
+    return MATHLIB_OK
+}
+
+/* =====================================================================
+ * lib_find (internal helper) -- linear scan for carrier_id.
+ * Returns slot index as i64, or -1i64 if not found.
+ * Sentinel compared only by == / != (W11 -- no signed ordering).
+ * No recursion (W15). Sentinel-loop (W14 -- no break).
+ * ===================================================================*/
+fn lib_find(carrier_id: *u8) -> i64 {
+    let mut i : u64 = 0u64
+    let mut found : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    while i < MATHLIB_SLOTS {
+        if sentinel == 0u8 {
+            if MATHLIB_LIVE[i] == 1u8 {
+                let slot_p : *u8 = ((&MATHLIB_CARRIER_IDS as u64) + i * 32u64) as *u8
+                if ident_eq(slot_p, carrier_id) == 1u8 {
+                    found = i as i64
+                    sentinel = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* =====================================================================
+ * lib_admit -- Full admission ceremony.
+ * Steps (emit-before-commit, G6 -- atomic w.r.t. witness):
+ *   1. Init + null guards.
+ *   2. Constitutional clause gate (W49/M14).
+ *   3. tc_verify gate.
+ *   4. Duplicate gate (append-only).
+ *   5. Dependency-closure gate (M14/W45).
+ *   6. Slot search (first free slot).
+ *   7. Build + emit witness fragment (wh_publish) BEFORE committing.
+ *   8. On emit success: commit slot (LIVE, COUNT, carrier id, zero refine).
+ *   9. Return MATHLIB_OK.
+ * Returns MATHLIB_OK on success, MATHLIB_E_* on failure.
+ * Params: 3 (+ implicit receiver) -- W2 satisfied.
+ * ===================================================================*/
+fn lib_admit(carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 @export {
+    /* Step 1 -- guards. */
+    if MATHLIB_INITED == 0u8 { return MATHLIB_E_NOT_INITED }
+    if (carrier_id as u64) == 0u64 { return MATHLIB_E_NULL }
+    if (curator_capability as u64) == 0u64 { return MATHLIB_E_NULL }
+    if (out_frag_id as u64) == 0u64 { return MATHLIB_E_NULL }
+
+    /* Step 2 -- constitutional clause gate (W49/M14).
+     * Build ASCII "cp_library_admit" (16 bytes) into MATHLIB_S_LABEL,
+     * hash to MATHLIB_S_CLAUSE_ID, call cons_find.
+     * Presence = NOT the sentinel (MATHLIB_CONS_SENT = 0xFFFFFFFF).
+     * G2 fix: cons_find returns u32; absence sentinel is 0xFFFFFFFFu32,
+     * NOT 0i32 -- the gospel's != 0i32 was doubly wrong. */
+    let lp : *u8 = (&MATHLIB_S_LABEL as u64) as *u8
+    lp[0u64]  = 99u8
+    lp[1u64]  = 112u8
+    lp[2u64]  = 95u8
+    lp[3u64]  = 108u8
+    lp[4u64]  = 105u8
+    lp[5u64]  = 98u8
+    lp[6u64]  = 114u8
+    lp[7u64]  = 97u8
+    lp[8u64]  = 114u8
+    lp[9u64]  = 121u8
+    lp[10u64] = 95u8
+    lp[11u64] = 97u8
+    lp[12u64] = 100u8
+    lp[13u64] = 109u8
+    lp[14u64] = 105u8
+    lp[15u64] = 116u8
+    let clp : *u8 = (&MATHLIB_S_CLAUSE_ID as u64) as *u8
+    ident_from_bytes(lp, 16u64, clp)
+    let cfound : u32 = cons_find(clp)
+    if cfound == MATHLIB_CONS_SENT { return MATHLIB_E_CLAUSE_ABSENT }
+
+    /* Step 3 -- tc_verify gate. */
+    let vr : i32 = tc_verify(carrier_id)
+    if vr != 0i32 { return MATHLIB_E_VERIFY_FAIL }
+
+    /* Step 4 -- duplicate gate (append-only). */
+    let dup_slot : i64 = lib_find(carrier_id)
+    if dup_slot != -1i64 { return MATHLIB_E_DUPLICATE }
+
+    /* Step 5 -- dependency-closure gate (M14/W45).
+     * tc_get_dependencies writes up to 64 ids (2048 bytes) into MATHLIB_S_DEPS.
+     * Trap 4: dcount is u32; mask to u64 before pointer math. */
+    let dep_buf : *u8 = (&MATHLIB_S_DEPS as u64) as *u8
+    let dcount_ref : *u32 = (&MATHLIB_S_DEPS as u64) as *u32
+    let mut dcount_store : u32 = 0u32
+    let dcr : *u32 = (&dcount_store as u64) as *u32
+    let dep_rc : i32 = tc_get_dependencies(carrier_id, dep_buf, 2048u32, dcr)
+    if dep_rc != 0i32 { return MATHLIB_E_VERIFY_FAIL }
+    let dcount_u32 : u32 = dcount_store
+    let dcount : u64 = (dcount_u32 as u64) & 0xFFFFFFFFu64
+    let mut d : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while d < dcount {
+        if ok == 1u8 {
+            let dp : *u8 = ((&MATHLIB_S_DEPS as u64) + d * 32u64) as *u8
+            let dep_slot : i64 = lib_find(dp)
+            if dep_slot == -1i64 { ok = 0u8 }
+        }
+        d = d + 1u64
+    }
+    if ok == 0u8 { return MATHLIB_E_DEP_ABSENT }
+
+    /* Step 6 -- find first free slot. */
+    let mut si : u64 = 0u64
+    let mut slot : i64 = -1i64
+    let mut sfound : u8 = 0u8
+    while si < MATHLIB_SLOTS {
+        if sfound == 0u8 {
+            if MATHLIB_LIVE[si] == 0u8 {
+                slot = si as i64
+                sfound = 1u8
+            }
+        }
+        si = si + 1u64
+    }
+    if slot == -1i64 { return MATHLIB_E_FULL }
+    let s : u64 = (slot as u64) & 0xFFFFFFFFFFFFFFFFu64
+
+    /* Step 7 -- build witness payload and emit (emit BEFORE slot commit, G6).
+     * Payload layout (72 bytes used, 80 allocated):
+     *   [0]    = 0xE3 (admit tag byte 0)
+     *   [1]    = 0x0C (admit tag byte 1)
+     *   [2..8) = 0x00 (reserved, explicitly zeroed -- G5/M10 bit-reproducibility)
+     *   [8..40)  = carrier_id (32 bytes)
+     *   [40..72) = curator_capability (32 bytes)
+     * payload_len = 72u32 (only the used bytes are hashed). */
+    let pp : *u8 = (&MATHLIB_S_PAYLOAD as u64) as *u8
+    pp[0u64] = 0xE3u8
+    pp[1u64] = 0x0Cu8
+    pp[2u64] = 0u8
+    pp[3u64] = 0u8
+    pp[4u64] = 0u8
+    pp[5u64] = 0u8
+    pp[6u64] = 0u8
+    pp[7u64] = 0u8
+    let mut pi : u64 = 0u64
+    while pi < 32u64 {
+        pp[8u64 + pi]  = carrier_id[pi]
+        pp[40u64 + pi] = curator_capability[pi]
+        pi = pi + 1u64
+    }
+
+    /* Zero the wh_publish scratch fields. */
+    let prodp  : *u8 = (&MATHLIB_S_PRODUCER as u64) as *u8
+    let opidp  : *u8 = (&MATHLIB_S_OPID as u64) as *u8
+    let outcp  : *u8 = (&MATHLIB_S_OUT_C as u64) as *u8
+    let antep  : *u8 = (&MATHLIB_S_ANTE as u64) as *u8
+    let incp   : *u8 = (&MATHLIB_S_IN_C as u64) as *u8
+    let mut zi : u64 = 0u64
+    while zi < 32u64 {
+        prodp[zi] = 0u8
+        opidp[zi] = 0u8
+        outcp[zi] = 0u8
+        antep[zi] = 0u8
+        zi = zi + 1u64
+    }
+    ident_copy(carrier_id, incp)
+
+    /* Emit fragment -- capture u64 result; fail sentinel = 0xFFFFFFFFFFFFFFFFu64. */
+    let emit_r : u64 = wh_publish(prodp, opidp, incp, outcp, 0u8, 0u8, 0u16, antep, 0u32, pp, 72u32, out_frag_id)
+    if emit_r == 0xFFFFFFFFFFFFFFFFu64 { return MATHLIB_E_EMIT_FAIL }
+
+    /* Step 8 -- commit slot (only on successful emit). */
+    let carrier_slot_p : *u8 = ((&MATHLIB_CARRIER_IDS as u64) + s * 32u64) as *u8
+    let refine_slot_p  : *u8 = ((&MATHLIB_REFINES as u64) + s * 32u64) as *u8
+    ident_copy(carrier_id, carrier_slot_p)
+    ident_zero(refine_slot_p)
+    MATHLIB_LIVE[s] = 1u8
+    MATHLIB_COUNT = MATHLIB_COUNT + 1u64
+
+    return MATHLIB_OK
+}
+
+/* =====================================================================
+ * lib_cite -- W49: returns MATHLIB_OK iff the carrier is present.
+ * ===================================================================*/
+fn lib_cite(carrier_id: *u8) -> i32 @export {
+    if MATHLIB_INITED == 0u8 { return MATHLIB_E_NOT_INITED }
+    if (carrier_id as u64) == 0u64 { return MATHLIB_E_NULL }
+    let cs : i64 = lib_find(carrier_id)
+    if cs == -1i64 { return MATHLIB_E_ABSENT }
+    return MATHLIB_OK
+}
+
+/* =====================================================================
+ * lib_size -- returns live carrier count; total, never errors.
+ * ===================================================================*/
+fn lib_size() -> u64 @export {
+    return MATHLIB_COUNT
+}
+
+/* =====================================================================
+ * lib_at -- retrieve carrier id by admission slot index.
+ * index >= MATHLIB_SLOTS: u64 unsigned ordering compare -- Trap 3 N/A.
+ * ===================================================================*/
+fn lib_at(index: u64, out_carrier_id: *u8) -> i32 @export {
+    if MATHLIB_INITED == 0u8 { return MATHLIB_E_NOT_INITED }
+    if (out_carrier_id as u64) == 0u64 { return MATHLIB_E_NULL }
+    if index >= MATHLIB_SLOTS { return MATHLIB_E_ABSENT }
+    if MATHLIB_LIVE[index] == 0u8 { return MATHLIB_E_ABSENT }
+    let src_p : *u8 = ((&MATHLIB_CARRIER_IDS as u64) + index * 32u64) as *u8
+    ident_copy(src_p, out_carrier_id)
+    return MATHLIB_OK
+}
+
+/* =====================================================================
+ * lib_refine -- admit new_carrier_id with prior_carrier_id as provenance.
+ * 1. Null guards (4 params, W2).
+ * 2. Verify prior_carrier_id is present (provenance integrity).
+ * 3. Delegate to lib_admit for new_carrier_id (propagates all gates).
+ * 4. On success: write prior_carrier_id into MATHLIB_REFINES[slot].
+ * Both prior and new entries coexist forever (append-only, M14).
+ * ===================================================================*/
+fn lib_refine(prior_carrier_id: *u8, new_carrier_id: *u8, curator_capability: *u8, out_frag_id: *u8) -> i32 @export {
+    if MATHLIB_INITED == 0u8 { return MATHLIB_E_NOT_INITED }
+    if (prior_carrier_id as u64) == 0u64 { return MATHLIB_E_NULL }
+    if (new_carrier_id as u64) == 0u64 { return MATHLIB_E_NULL }
+    if (curator_capability as u64) == 0u64 { return MATHLIB_E_NULL }
+    if (out_frag_id as u64) == 0u64 { return MATHLIB_E_NULL }
+
+    /* Refinee must already be present -- provenance integrity. */
+    let prior_s : i64 = lib_find(prior_carrier_id)
+    if prior_s == -1i64 { return MATHLIB_E_ABSENT }
+
+    /* Admit the new carrier (full ceremony + witness emit). */
+    let admit_result : i32 = lib_admit(new_carrier_id, curator_capability, out_frag_id)
+    if admit_result != 0i32 { return admit_result }
+
+    /* Record refinee provenance into the new entry's refine slot.
+     * lib_find now succeeds because lib_admit just committed it. */
+    let new_s : i64 = lib_find(new_carrier_id)
+    if new_s != -1i64 {
+        let rs : u64 = (new_s as u64) & 0xFFFFFFFFFFFFFFFFu64
+        let refine_p : *u8 = ((&MATHLIB_REFINES as u64) + rs * 32u64) as *u8
+        ident_copy(prior_carrier_id, refine_p)
+    }
+    return MATHLIB_OK
+}
+
+/* =====================================================================
+ * MATHLIB_SELFTEST scratch (module-scope, not local -- Trap 7).
+ * ===================================================================*/
+var MATHLIB_ST_ID0    : [u8; 32]    /* synthetic carrier id for selftest */
+var MATHLIB_ST_ID1    : [u8; 32]
+var MATHLIB_ST_ID2    : [u8; 32]
+var MATHLIB_ST_FRAG   : [u8; 32]
+var MATHLIB_ST_RETBUF : [u8; 32]
+var MATHLIB_ST_MSG0   : [u8; 8]     /* short ASCII label for ident_from_bytes */
+var MATHLIB_ST_MSG1   : [u8; 8]
+var MATHLIB_ST_MSG2   : [u8; 8]
+var MATHLIB_ST_CAP    : [u8; 32]    /* dummy capability */
+
+/* =====================================================================
+ * mathlib_selftest -- embedded KAT; returns 99u64 on full pass.
+ * Each failed check returns a distinct small non-99 code.
+ *
+ * KAT coverage (spec KAT vectors 1-4; 5-7 require theorem_carrier +
+ * constitution + wh_init fixtures from the integrator harness, so
+ * they are checked structurally / guard-only here):
+ *
+ *  1. Not-inited guard (negative): before lib_init all guarded fns
+ *     return MATHLIB_E_NOT_INITED (-8).
+ *  2. Init idempotence + empty state: lib_init x2 -> 0i32;
+ *     lib_size() == 0u64; lib_cite(any) -> -3; lib_at(0,buf) -> -3.
+ *  3. Null-pointer guards (negative): lib_admit/cite/at/refine
+ *     each return MATHLIB_E_NULL on null pointers.
+ *  4. Duplicate gate (negative): after a manual slot insertion the
+ *     internal lib_find detects the duplicate slot correctly (proves
+ *     the equality logic works on known ids before linking theorem_carrier).
+ *  5. lib_at out-of-range -> MATHLIB_E_ABSENT.
+ *  6. lib_refine with absent prior -> MATHLIB_E_ABSENT.
+ *
+ * Notes: lib_admit's full ceremony (cons_find + tc_verify + wh_publish)
+ * requires constitution + theorem_carrier + witness_hook to be inited by
+ * the harness before the integrator-run KAT vectors 3-7 can be exercised.
+ * The guards tested here fire before those calls and are thus complete.
+ * ===================================================================*/
+/* Integration-tier KAT (the lib_admit POSITIVE vertical the base KATs defer to
+ * direct-slot insertion).  Stands up the full 5-module path: build a verifiable
+ * single-AXIOM proof term -> tc_alloc a LEAF carrier citing it -> tc_verify ->
+ * ratify cp_library_admit -> lib_admit succeeds.  cons_ratify uses the label
+ * lib_admit writes as a side effect on its first (clause-absent) call (the
+ * clause gate precedes tc_verify), exactly like memo_lattice's vertical.
+ * Returns 0 on full pass, or a distinct 60..70 code. */
+fn mathlib_kat_admit() -> u64 {
+    pt_init()
+    tc_init()
+    wh_init(0u64)
+    lib_init()
+    /* --- Verifiable single-axiom proof term (pt_kat Vector 1/7 shape). --- */
+    if pt_alloc((&MATHLIB_KAT_TID as u64) as *u8) != 0i32 { return 60u64 }
+    let abase : u64 = &MATHLIB_KAT_ARGS as u64
+    let ap : *u8 = abase as *u8
+    let mut zi : u64 = 0u64
+    while zi < 64u64 { ap[zi] = 0u8  zi = zi + 1u64 }
+    let tp : *u8 = (&MATHLIB_KAT_TID as u64) as *u8
+    let mut ti : u64 = 0u64
+    while ti < 32u64 { ap[ti] = tp[ti]  ti = ti + 1u64 }
+    /* args: [32]=PT_RULE_AXIOM(0x01), [36..40)=pcount=0, [40..44)=clen=1, [44]=concl. */
+    ap[32u64] = 0x01u8
+    ap[40u64] = 1u8
+    ap[44u64] = 0x41u8
+    if pt_add_inference(ap) != 0i32 { return 61u64 }
+    if pt_finalize((&MATHLIB_KAT_TID as u64) as *u8) != 0i32 { return 62u64 }
+    if pt_verify((&MATHLIB_KAT_TID as u64) as *u8) != 0i32 { return 63u64 }
+    /* --- Carry it into a LEAF carrier (dep_count=0 -> dep-closure gate vacuous). --- */
+    let pabbase : u64 = &MATHLIB_KAT_PAB as u64
+    let pabp : *u64 = pabbase as *u64
+    pabp[0u64] = &MATHLIB_KAT_TID as u64
+    pabp[1u64] = &MATHLIB_KAT_TID as u64
+    pabp[2u64] = 0u64
+    MATHLIB_KAT_STMT[0u64] = 0x41u8
+    if tc_pack_alloc_req((&MATHLIB_KAT_REQ as u64) as *u8, (&MATHLIB_KAT_STMT as u64) as *u8, 1u32, pabbase as *u8) != 0i32 { return 64u64 }
+    if tc_alloc((&MATHLIB_KAT_REQ as u64) as *u8, (&MATHLIB_KAT_CID as u64) as *u8) != 0i32 { return 65u64 }
+    if tc_verify((&MATHLIB_KAT_CID as u64) as *u8) != 0i32 { return 66u64 }
+    /* --- First lib_admit: clause not yet ratified -> CLAUSE_ABSENT, but it writes
+     * "cp_library_admit" into MATHLIB_S_LABEL (Step 2 precedes Step 3 tc_verify). --- */
+    if lib_admit((&MATHLIB_KAT_CID as u64) as *u8, (&MATHLIB_KAT_CAP as u64) as *u8, (&MATHLIB_KAT_OUT as u64) as *u8) != MATHLIB_E_CLAUSE_ABSENT { return 67u64 }
+    /* Ratify that exact clause via cons_ratify (textual = the populated label). */
+    let creqbase : u64 = &MATHLIB_KAT_CREQ as u64
+    let lab : u64 = &MATHLIB_S_LABEL as u64
+    let crp : *u64 = creqbase as *u64
+    crp[0u64] = creqbase + 64u64
+    crp[1u64] = lab
+    crp[2u64] = 16u64
+    crp[3u64] = lab
+    crp[4u64] = 0u64
+    crp[5u64] = lab
+    crp[6u64] = 0u64
+    if cons_ratify(creqbase as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 68u64 }
+    /* --- Now lib_admit succeeds: clause ratified, carrier tc_verify-clean, leaf. --- */
+    if lib_admit((&MATHLIB_KAT_CID as u64) as *u8, (&MATHLIB_KAT_CAP as u64) as *u8, (&MATHLIB_KAT_OUT as u64) as *u8) != MATHLIB_OK { return 69u64 }
+    /* Negative: re-admit the same carrier -> DUPLICATE (append-only). */
+    if lib_admit((&MATHLIB_KAT_CID as u64) as *u8, (&MATHLIB_KAT_CAP as u64) as *u8, (&MATHLIB_KAT_OUT as u64) as *u8) != MATHLIB_E_DUPLICATE { return 70u64 }
+    return 0u64
+}
+
+fn mathlib_selftest() -> u64 @export {
+    /* KAT 1 -- not-inited guard (negative case: prove gates FAIL closed). */
+    MATHLIB_INITED = 0u8
+    MATHLIB_COUNT  = 0u64
+    let mut ki : u64 = 0u64
+    while ki < MATHLIB_SLOTS {
+        MATHLIB_LIVE[ki] = 0u8
+        ki = ki + 1u64
+    }
+
+    /* Build a dummy carrier id: hash of byte 0x01. */
+    let m0p : *u8 = (&MATHLIB_ST_MSG0 as u64) as *u8
+    m0p[0u64] = 1u8
+    let id0p : *u8 = (&MATHLIB_ST_ID0 as u64) as *u8
+    ident_from_bytes(m0p, 1u64, id0p)
+
+    let capp : *u8 = (&MATHLIB_ST_CAP as u64) as *u8
+    let fragp : *u8 = (&MATHLIB_ST_FRAG as u64) as *u8
+
+    /* Not-inited: lib_admit must return E_NOT_INITED. */
+    let r_ni_admit : i32 = lib_admit(id0p, capp, fragp)
+    if r_ni_admit != MATHLIB_E_NOT_INITED { return 1u64 }
+
+    /* Not-inited: lib_cite must return E_NOT_INITED. */
+    let r_ni_cite : i32 = lib_cite(id0p)
+    if r_ni_cite != MATHLIB_E_NOT_INITED { return 2u64 }
+
+    /* Not-inited: lib_at must return E_NOT_INITED. */
+    let retbuf : *u8 = (&MATHLIB_ST_RETBUF as u64) as *u8
+    let r_ni_at : i32 = lib_at(0u64, retbuf)
+    if r_ni_at != MATHLIB_E_NOT_INITED { return 3u64 }
+
+    /* KAT 2 -- init idempotence + empty state. */
+    let r_init1 : i32 = lib_init()
+    if r_init1 != MATHLIB_OK { return 10u64 }
+    let r_init2 : i32 = lib_init()
+    if r_init2 != MATHLIB_OK { return 11u64 }
+    let sz0 : u64 = lib_size()
+    if sz0 != 0u64 { return 12u64 }
+
+    /* cite + at on empty library: must return MATHLIB_E_ABSENT. */
+    let r_cite_empty : i32 = lib_cite(id0p)
+    if r_cite_empty != MATHLIB_E_ABSENT { return 13u64 }
+    let r_at_empty : i32 = lib_at(0u64, retbuf)
+    if r_at_empty != MATHLIB_E_ABSENT { return 14u64 }
+
+    /* KAT 3 -- null-pointer guards (negative: prove gates FAIL on null). */
+    let nullp : *u8 = 0u64 as *u8
+    let r_null_admit : i32 = lib_admit(nullp, capp, fragp)
+    if r_null_admit != MATHLIB_E_NULL { return 20u64 }
+    let r_null_cite : i32 = lib_cite(nullp)
+    if r_null_cite != MATHLIB_E_NULL { return 21u64 }
+    let r_null_at : i32 = lib_at(0u64, nullp)
+    if r_null_at != MATHLIB_E_NULL { return 22u64 }
+    let m1p : *u8 = (&MATHLIB_ST_MSG1 as u64) as *u8
+    m1p[0u64] = 2u8
+    let id1p : *u8 = (&MATHLIB_ST_ID1 as u64) as *u8
+    ident_from_bytes(m1p, 1u64, id1p)
+    let r_null_refine : i32 = lib_refine(nullp, id1p, capp, fragp)
+    if r_null_refine != MATHLIB_E_NULL { return 23u64 }
+
+    /* KAT 4 -- lib_find / duplicate detection via direct slot insertion.
+     * Manually insert id0p at slot 0 to test lib_find identity logic
+     * without requiring theorem_carrier or constitution to be inited. */
+    let manual_slot_p : *u8 = ((&MATHLIB_CARRIER_IDS as u64) + 0u64 * 32u64) as *u8
+    ident_copy(id0p, manual_slot_p)
+    MATHLIB_LIVE[0u64] = 1u8
+    MATHLIB_COUNT = 1u64
+
+    /* lib_find must find slot 0. */
+    let fnd0 : i64 = lib_find(id0p)
+    if fnd0 != 0i64 { return 30u64 }
+
+    /* lib_cite must succeed now (slot 0 is live and id matches). */
+    let r_cite_live : i32 = lib_cite(id0p)
+    if r_cite_live != MATHLIB_OK { return 31u64 }
+
+    /* lib_size must return 1. */
+    let sz1 : u64 = lib_size()
+    if sz1 != 1u64 { return 32u64 }
+
+    /* lib_at(0, buf) must succeed and return the same id. */
+    let r_at_live : i32 = lib_at(0u64, retbuf)
+    if r_at_live != MATHLIB_OK { return 33u64 }
+    if ident_eq(retbuf, id0p) != 1u8 { return 34u64 }
+
+    /* lib_find for a different id must return -1i64. */
+    let m2p : *u8 = (&MATHLIB_ST_MSG2 as u64) as *u8
+    m2p[0u64] = 3u8
+    let id2p : *u8 = (&MATHLIB_ST_ID2 as u64) as *u8
+    ident_from_bytes(m2p, 1u64, id2p)
+    let fnd_absent : i64 = lib_find(id2p)
+    if fnd_absent != -1i64 { return 35u64 }
+
+    /* KAT 5 -- lib_at out-of-range. */
+    let r_oor : i32 = lib_at(MATHLIB_SLOTS, retbuf)
+    if r_oor != MATHLIB_E_ABSENT { return 40u64 }
+    let r_oor2 : i32 = lib_at(65535u64, retbuf)
+    if r_oor2 != MATHLIB_E_ABSENT { return 41u64 }
+
+    /* KAT 6 -- lib_refine with absent prior (negative: must return E_ABSENT). */
+    let r_ref_abs : i32 = lib_refine(id2p, id0p, capp, fragp)
+    if r_ref_abs != MATHLIB_E_ABSENT { return 50u64 }
+
+    /* KAT 7 (integration tier): the lib_admit POSITIVE vertical (proof term ->
+     * carrier -> tc_verify -> ratify -> admit), now that all deps are built. */
+    let ka : u64 = mathlib_kat_admit()
+    if ka != 0u64 { return ka }
+
+    /* Restore clean state for integration. */
+    MATHLIB_INITED = 0u8
+    MATHLIB_COUNT  = 0u64
+    MATHLIB_LIVE[0u64] = 0u8
+
+    return 99u64
+}

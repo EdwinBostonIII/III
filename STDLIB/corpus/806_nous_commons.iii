@@ -1,0 +1,15 @@
+/* 806 -- nous Phase 5: the cumulative certified commons.  Drives nous_commons_selftest:
+ * content-addressed deposit is IDEMPOTENT (same content+key = no-op; same-key different-
+ * content refused as a conflict); a lookup is a free hit RE-VERIFIED by its certificate;
+ * the negative arm -- a tampered entry fails re-verification and is served as a MISS, never
+ * a certified result; GAP frontiers are append-only (versioned) and nous_gap_resume reaches
+ * CERTIFIED from the stored frontier (not from scratch).  Exit 99 = all hold; 1..16 = check. */
+module corpus_806
+
+extern @abi(c-msvc-x64) fn nous_commons_selftest() -> u64 from "nous_commons.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_commons_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

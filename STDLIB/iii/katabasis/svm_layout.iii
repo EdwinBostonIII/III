@@ -1,0 +1,104 @@
+/* STDLIB/iii/katabasis/svm_layout.iii
+ *
+ * KATABASIS -- the AMD-SVM region hexad typing table + the WriteMetal admission
+ * predicate.  The keystone brick defense of the III descent (DOCS/III-KATABASIS.md
+ * plan 4.7 / ADR-004): the verified 256 KB SVM region (plan 0.4) is given a
+ * per-offset hexad class so that a WriteMetal cycle naming a hypervisor-critical
+ * offset (VMCB / HOST_SAVE / NPT / GUEST / HV_STATE / DIAG) is structurally
+ * UNREPRESENTABLE -- composing the positive write action with a structural-NEG
+ * target stays non-reachable under the live hexad reachability bitmap
+ * (omnia/hexad_reach.iii).  The plan-0.6 BSOD (a write to HOST_SAVE @ 0x1000)
+ * cannot be expressed, not merely guarded.
+ *
+ * THE REGION TABLE IS SINGLE-SOURCED (plan 6.9): the classifier + per-offset
+ * hexad below are GENERATED from COMPILER/BOOT/iii_svm_layout.def by
+ * gen_svm_layout.sh; the build's drift gate (gen_svm_layout.sh --check) fails
+ * if they diverge, so the safety typing can never drift from the layout.
+ *
+ * Pure data + total functions over the existing hexad algebra.  KAT: corpus
+ * 390 (typing) + 391 (cycle-term dominance).  Ring R0.  K 1.00.
+ *
+ * Hexad encoding: a hexad is a u16 in [0,728]; 728 = all-POS (reachable);
+ * 324 = the capsule_update brick pattern (non-reachable).  compose6 ANDs
+ * pillars 1..4 (NEG absorbs), so a positive write composed with a structural-
+ * NEG target is non-reachable -- sticky NEG, the plan-4.7 mechanism.
+ */
+module katabasis_svm_layout
+
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+/* Region ids (0 = out of the 256 KB SVM window).  The iii_svm_layout.def
+ * `name` column maps to KSVM_REGION_<NAME>; these ids are the stable enum the
+ * generated classifier returns. */
+const KSVM_REGION_OOB      : u32 = 0u32
+const KSVM_REGION_VMCB     : u32 = 1u32
+const KSVM_REGION_HSAVE    : u32 = 2u32
+const KSVM_REGION_NPT      : u32 = 3u32
+const KSVM_REGION_GUEST    : u32 = 4u32
+const KSVM_REGION_ML_STATE : u32 = 5u32
+const KSVM_REGION_SHARED   : u32 = 6u32
+const KSVM_REGION_HV_STATE : u32 = 7u32
+const KSVM_REGION_DIAG     : u32 = 8u32
+
+/* === BEGIN AUTO-GENERATED FROM iii_svm_layout.def === */
+/* GENERATED FROM iii_svm_layout.def -- DO NOT EDIT BY HAND.
+ * Regenerate: bash COMPILER/BOOT/gen_svm_layout.sh
+ * The SVM-offset region classifier + per-offset hexad, single-sourced so
+ * the plan-4.7 safety typing cannot drift from the plan-0.4 layout. */
+fn katabasis_svm_region(offset: u32) -> u32 @export {
+    let o : u32 = offset
+    if o < 0x01000u32 { return KSVM_REGION_VMCB }
+    if o < 0x02000u32 { return KSVM_REGION_HSAVE }
+    if o < 0x0A000u32 { return KSVM_REGION_NPT }
+    if o < 0x10000u32 { return KSVM_REGION_GUEST }
+    if o < 0x20000u32 { return KSVM_REGION_ML_STATE }
+    if o < 0x3E000u32 { return KSVM_REGION_SHARED }
+    if o < 0x3F000u32 { return KSVM_REGION_HV_STATE }
+    if o < 0x40000u32 { return KSVM_REGION_DIAG }
+    return KSVM_REGION_OOB
+}
+
+fn katabasis_svm_region_hexad(offset: u32) -> u16 @export {
+    let o : u32 = offset
+    if o < 0x01000u32 { return 324u16 }
+    if o < 0x02000u32 { return 324u16 }
+    if o < 0x0A000u32 { return 324u16 }
+    if o < 0x10000u32 { return 324u16 }
+    if o < 0x20000u32 { return 728u16 }
+    if o < 0x3E000u32 { return 728u16 }
+    if o < 0x3F000u32 { return 324u16 }
+    if o < 0x40000u32 { return 324u16 }
+    return 324u16
+}
+/* === END AUTO-GENERATED FROM iii_svm_layout.def === */
+
+/* Keystone (plan 4.7): a WriteMetal cycle to `offset` is admissible iff the
+ * positive write action (all-POS = 728) composed with the target region's hexad
+ * stays reachable.  For a structural-NEG region the composition is non-reachable,
+ * so the write is UNREPRESENTABLE.  Returns 1 = admissible, 0 = forbidden. */
+fn katabasis_svm_write_admissible(offset: u32) -> u8 @export {
+    let o : u32 = offset
+    return iii_hexad_reachable(iii_hexad_compose6(728u16, katabasis_svm_region_hexad(o)))
+}
+
+/* The effective hexad of a WriteMetal cycle: the write ACTION hexad composed
+ * with the TARGET region's hexad (compose6 ANDs pillars 1..4, so a structural-
+ * NEG in either makes the whole cycle non-reachable -- the cycle-term form of
+ * the plan-4.7 invariant). */
+fn katabasis_svm_cycle_hexad(action: u16, offset: u32) -> u16 @export {
+    let a : u16 = action
+    let o : u32 = offset
+    let th : u16 = katabasis_svm_region_hexad(o)
+    return iii_hexad_compose6(a, th)
+}
+
+/* A WriteMetal cycle with the given action hexad targeting `offset` is
+ * admissible iff its effective hexad is reachable.  Robust target-dominance:
+ * for ANY action a brick target yields a non-reachable cycle.  1 = admissible. */
+fn katabasis_svm_cycle_admissible(action: u16, offset: u32) -> u8 @export {
+    let a : u16 = action
+    let o : u32 = offset
+    let e : u16 = katabasis_svm_cycle_hexad(a, o)
+    return iii_hexad_reachable(e)
+}

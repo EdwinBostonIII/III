@@ -1,0 +1,61 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\206_observe_and_propose.iii
+ *
+ * III conformance corpus 206 -- Phase F.3: reflect-driven discovery.
+ *
+ * Asserts:
+ *   1. governance_observe_and_propose(0) returns 0; observe history
+ *      remains empty.
+ *   2. With reflect(scope=2) returning 0 (no resolutions occurred in
+ *      this process), observe_and_propose(N) walks N steps but creates
+ *      0 proposals (the 0 pattern_id is treated as "no event").
+ *   3. governance_observe_reset clears the observation history.
+ *   4. Diagnostic accessors return expected values.
+ *
+ * The recurring-pattern proposal path requires the resolver to be
+ * driven with actual intents in this process, which involves full
+ * pattern-set construction. That integration test belongs to a
+ * separate end-to-end suite (Phase F integration tests).
+ *
+ * Exit code: 99 on full pass; 1..N for specific failures.
+ */
+
+module corpus_206
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn governance_reset() -> i32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_proposal_count() -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_observe_and_propose(replay_count: u32) -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_observe_history_len() -> u32 from "governance.iii"
+extern @abi(c-msvc-x64) fn governance_observe_reset() -> i32 from "governance.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    governance_reset()
+
+    /* ---- 1. observe_and_propose(0) is a no-op. ---- */
+    if governance_observe_and_propose(0u32) != 0u32 { return 1u64 }
+    if governance_observe_history_len() != 0u32 { return 2u64 }
+    if governance_proposal_count() != 0u32 { return 3u64 }
+
+    /* ---- 2. With no real resolutions in this process, reflect(2)
+     * returns 0u64; the observer skips appending zero events; no
+     * proposals generated. ---- */
+    if governance_observe_and_propose(8u32) != 0u32 { return 4u64 }
+    if governance_observe_history_len() != 0u32 { return 5u64 }
+    if governance_proposal_count() != 0u32 { return 6u64 }
+
+    /* ---- 3. observe_reset is idempotent on empty history. ---- */
+    if governance_observe_reset() != 0i32 { return 7u64 }
+    if governance_observe_history_len() != 0u32 { return 8u64 }
+
+    /* ---- 4. Repeated observe calls keep the history at 0 when no
+     * resolutions occur. ---- */
+    let mut i : u32 = 0u32
+    while i < 4u32 {
+        if governance_observe_and_propose(2u32) != 0u32 { return 9u64 }
+        i = i + 1u32
+    }
+    if governance_observe_history_len() != 0u32 { return 10u64 }
+
+    return 99u64
+}

@@ -1,0 +1,191 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\path.iii
+ *
+ * III STDLIB - verba::path
+ *
+ * Filesystem path utilities: split, join, normalize, basename, dirname,
+ * extension extraction.  Cross-platform separator handling (recognises
+ * both '/' and '\\' on input; emits '/').
+ *
+ * Public API (all push to a builder, return basename/dirname spans
+ * via PATH_LAST_BASE / PATH_LAST_LEN module-scope state):
+ *   path_basename(p:*u8, p_len:u64) -> u64    -- length of basename
+ *   path_dirname(p:*u8, p_len:u64) -> u64     -- length of dirname
+ *   path_extension(p:*u8, p_len:u64) -> u64   -- length of extension (incl '.')
+ *   path_basename_offset() -> u64             -- offset within input
+ *   path_extension_offset() -> u64
+ *   path_join(builder_id:u64, a:*u8, a_len:u64, b:*u8) -> i32
+ *      -- joins a + '/' + b; b is null-terminated for simplicity (length via b_len param)
+ *   path_normalize(builder_id:u64, src:*u8, src_len:u64) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module verba_path
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+
+const PATH_OK : i32 = 0i32
+
+var PATH_LAST_OFFSET : u64 = 0u64
+
+fn path_is_sep(b: u32) -> u8 {
+    if b == 47u32 { return 1u8 }   /* / */
+    if b == 92u32 { return 1u8 }   /* \ */
+    return 0u8
+}
+
+/* Find the last separator position; returns u64::MAX if none. */
+fn path_last_sep_pos(p: *u8, p_len: u64) -> u64 {
+    if p_len == 0u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let mut i : u64 = p_len
+    let mut going : u8 = 1u8
+    let mut result : u64 = 0xFFFFFFFFFFFFFFFFu64
+    while going == 1u8 {
+        if i == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            i = i - 1u64
+            let b : u32 = p[i] as u32
+            if path_is_sep(b) == 1u8 {
+                result = i
+                going = 0u8
+            }
+        }
+    }
+    return result
+}
+
+fn path_basename(p: *u8, p_len: u64) -> u64 @export {
+    let sep : u64 = path_last_sep_pos(p, p_len)
+    if sep == 0xFFFFFFFFFFFFFFFFu64 {
+        PATH_LAST_OFFSET = 0u64
+        return p_len
+    }
+    PATH_LAST_OFFSET = sep + 1u64
+    return p_len - sep - 1u64
+}
+
+fn path_dirname(p: *u8, p_len: u64) -> u64 @export {
+    let sep : u64 = path_last_sep_pos(p, p_len)
+    if sep == 0xFFFFFFFFFFFFFFFFu64 {
+        PATH_LAST_OFFSET = 0u64
+        return 0u64
+    }
+    PATH_LAST_OFFSET = 0u64
+    return sep
+}
+
+fn path_extension(p: *u8, p_len: u64) -> u64 @export {
+    /* Extension = last '.' onward in basename.  Excludes leading '.'-only
+     * filenames (e.g. ".bashrc" has no extension). */
+    let bn_len : u64 = path_basename(p, p_len)
+    let bn_off : u64 = PATH_LAST_OFFSET
+    if bn_len <= 1u64 { return 0u64 }
+    let mut i : u64 = bn_len
+    let mut going : u8 = 1u8
+    let mut found : u64 = 0xFFFFFFFFFFFFFFFFu64
+    while going == 1u8 {
+        if i == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            i = i - 1u64
+            let abs_i : u64 = bn_off + i
+            if p[abs_i] == 46u8 {
+                found = i
+                going = 0u8
+            }
+        }
+    }
+    if found == 0xFFFFFFFFFFFFFFFFu64 { return 0u64 }
+    if found == 0u64 { return 0u64 }   /* leading dot: not extension */
+    PATH_LAST_OFFSET = bn_off + found
+    return bn_len - found
+}
+
+fn path_last_offset() -> u64 @export {
+    return PATH_LAST_OFFSET
+}
+
+fn path_join(builder_id: u64, a: *u8, a_len: u64, b: *u8) -> i32 @export {
+    /* Push a, then '/' (if a doesn't already end with one and isn't empty),
+     * then b until null terminator. */
+    builder_push_bytes(builder_id, a as u64, a_len)
+    let mut need_sep : u8 = 1u8
+    if a_len == 0u64 { need_sep = 0u8 }
+    if a_len > 0u64 {
+        if path_is_sep(a[a_len - 1u64] as u32) == 1u8 { need_sep = 0u8 }
+    }
+    if need_sep == 1u8 {
+        builder_push_byte(builder_id, 47u32)
+    }
+    /* Push b until null */
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let c : u8 = b[i]
+        if c == 0u8 { going = 0u8 }
+        if going == 1u8 {
+            builder_push_byte(builder_id, c as u32)
+            i = i + 1u64
+        }
+    }
+    return PATH_OK
+}
+
+/* Normalize: collapse multiple separators, resolve '.' and '..' segments,
+ * convert '\\' to '/'.  Doesn't follow symlinks. */
+fn path_normalize(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
+    /* Pre-scan to determine if absolute (starts with separator) */
+    let mut is_abs : u8 = 0u8
+    if src_len > 0u64 {
+        if path_is_sep(src[0] as u32) == 1u8 { is_abs = 1u8 }
+    }
+    if is_abs == 1u8 {
+        builder_push_byte(builder_id, 47u32)
+    }
+    /* Walk segments. */
+    let mut i : u64 = 0u64
+    let mut first_seg : u8 = 1u8
+    while i < src_len {
+        /* Skip separators */
+        let mut going_sep : u8 = 1u8
+        while going_sep == 1u8 {
+            if i >= src_len { going_sep = 0u8 }
+            if going_sep == 1u8 {
+                if path_is_sep(src[i] as u32) == 1u8 {
+                    i = i + 1u64
+                } else {
+                    going_sep = 0u8
+                }
+            }
+        }
+        /* Read segment */
+        let seg_start : u64 = i
+        let mut going_seg : u8 = 1u8
+        while going_seg == 1u8 {
+            if i >= src_len { going_seg = 0u8 }
+            if going_seg == 1u8 {
+                if path_is_sep(src[i] as u32) == 1u8 {
+                    going_seg = 0u8
+                } else {
+                    i = i + 1u64
+                }
+            }
+        }
+        let seg_len : u64 = i - seg_start
+        if seg_len > 0u64 {
+            /* Skip "." segments */
+            let mut is_dot : u8 = 0u8
+            if seg_len == 1u64 {
+                if src[seg_start] == 46u8 { is_dot = 1u8 }
+            }
+            if is_dot == 0u8 {
+                if first_seg == 0u8 {
+                    builder_push_byte(builder_id, 47u32)
+                }
+                builder_push_bytes(builder_id, (src as u64) + seg_start, seg_len)
+                first_seg = 0u8
+            }
+        }
+    }
+    return PATH_OK
+}

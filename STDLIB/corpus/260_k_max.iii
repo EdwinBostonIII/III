@@ -1,0 +1,93 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\260_k_max.iii
+ *
+ * III conformance corpus 260 -- @k_max iiis-1 annotation with runtime
+ * prologue enforcement.
+ *
+ * Phase 3 Step 3: a fn annotated @k_max(N) and accepting a `ctx`
+ * parameter checks kchain_current(ctx.kchain_id) >= N at prologue.
+ * Insufficient K budget → return 0xFFFFFFFFFFFFFFFF (same sentinel
+ * as @cap_required denial, preserving the privacy property that
+ * external observers cannot distinguish denial modes).
+ *
+ * Asserts:
+ *   1. Fn called with sufficient K → normal return.
+ *   2. Fn called with insufficient K → sentinel return.
+ *   3. Multiple @-modifiers compose: a fn with both @cap_required AND
+ *      @k_max checks both gates (cap first, then K).
+ */
+module corpus_260
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+
+const C260_FAIL_SENTINEL : u64 = 0xFFFFFFFFFFFFFFFFu64
+const C260_RIGHT_CRYPTO  : u64 = 0x1000u64
+
+/* Fn requires 500_000_000 K (= 0.5 in 1e-9 fixed-point). */
+fn _budget_op(ctx: u64) -> u64 @k_max(500000000u64) {
+    let _unused : u64 = ctx
+    return 0xAA55u64
+}
+
+/* Fn with both cap AND K requirements. */
+fn _combined_op(ctx: u64) -> u64 @cap_required(0x1000u64) @k_max(500000000u64) {
+    let _unused : u64 = ctx
+    return 0xCAFEu64
+}
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    if env == 0u64 { return 1u64 }
+
+    let cap_signing : u64 = cap_attenuate(env, C260_RIGHT_CRYPTO, 0u64)
+    if cap_signing == 0u64 { return 2u64 }
+
+    /* Build ctx with kchain at full K (1.0 in 1e-9 = 1_000_000_000). */
+    let kch_full : u64 = kchain_new(0u64)
+    if kch_full == 0xFFFFFFFFFFFFFFFFu64 { return 3u64 }
+    call_context_init_set(cap_signing, kch_full as u8, 2u8, 1u8)
+    let ctx_full : u64 = call_context_new()
+    if ctx_full == 0u64 { return 4u64 }
+
+    /* Assertion 1: full K budget → fn runs normally. */
+    let r_ok : u64 = _budget_op(ctx_full)
+    if r_ok != 0xAA55u64 { return 5u64 }
+
+    /* Drain K below the required threshold via kchain_compose.
+     * kchain_compose is MULTIPLICATIVE: new_cur = cur * k_call / 1e9.
+     * Starting at 1.0, composing with 0.4 yields 0.4 — below the
+     * 0.5 threshold required by _budget_op. */
+    let _ok1 : u8 = kchain_compose(kch_full, 400000000u64)
+    let cur_after_drain : u64 = kchain_current(kch_full)
+    if cur_after_drain >= 500000000u64 { return 6u64 }
+
+    /* Assertion 2: insufficient K → sentinel. */
+    let r_denied : u64 = _budget_op(ctx_full)
+    if r_denied != C260_FAIL_SENTINEL { return 7u64 }
+
+    /* Build a fresh ctx with full K for the combined test. */
+    let kch_combo : u64 = kchain_new(0u64)
+    if kch_combo == 0xFFFFFFFFFFFFFFFFu64 { return 8u64 }
+    call_context_init_set(cap_signing, kch_combo as u8, 2u8, 1u8)
+    let ctx_combo : u64 = call_context_new()
+    if ctx_combo == 0u64 { return 9u64 }
+
+    /* Assertion 3a: combined fn with cap+K both satisfied → normal. */
+    let r_combo_ok : u64 = _combined_op(ctx_combo)
+    if r_combo_ok != 0xCAFEu64 { return 10u64 }
+
+    /* Build a ctx WITHOUT the cap (cap_id=0); both gates should fail
+     * with same sentinel.  Cap gate fires first per emission order. */
+    let kch_nocap : u64 = kchain_new(0u64)
+    call_context_init_set(0u64, kch_nocap as u8, 2u8, 1u8)
+    let ctx_nocap : u64 = call_context_new()
+    let r_combo_nocap : u64 = _combined_op(ctx_nocap)
+    if r_combo_nocap != C260_FAIL_SENTINEL { return 11u64 }
+
+    return 99u64
+}

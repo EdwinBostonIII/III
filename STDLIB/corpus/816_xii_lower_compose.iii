@@ -1,0 +1,17 @@
+/* 816 -- mig4 Step 7: lower the first domain (the composition monoid) through XII.  Drives
+ * xlc_selftest: the monoid AXIOMS hold by canonicalisation -- associativity (1), the normal form IS
+ * the right-nested free-monoid word so the XII result == the direct word (2), left/right/interior
+ * identity (3-5), the full word with identities stripped (6); the prove-the-negative TEETH -- the
+ * monoid is non-commutative (7), distinct words stay distinct (8), and is FREE / non-idempotent (9);
+ * e.e->e (10); determinism (11); and the rules realising it are ADMITTED by Step 6 (12).  Exit 99 =
+ * all hold -- the first demonstration that a domain's computation IS XII canonicalisation, the mig4
+ * thesis made concrete.  Gated by run_corpus.sh. */
+module corpus_816
+
+extern @abi(c-msvc-x64) fn xlc_selftest() -> u64 from "xii_lower_compose.iii"
+
+fn main() -> u64 {
+    let r : u64 = xlc_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

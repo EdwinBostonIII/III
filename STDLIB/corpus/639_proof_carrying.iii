@@ -1,0 +1,4 @@
+/* 639 — proof_carrying: proof-carrying code over GF(p) field arithmetic (galois), witnessed. */
+module corpus_639
+extern @abi(c-msvc-x64) fn pc_selftest() -> u64 from "proof_carrying.iii"
+fn main() -> u64 { return pc_selftest() }

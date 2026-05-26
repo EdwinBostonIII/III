@@ -1,0 +1,968 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\galois.iii
+ *
+ * III STDLIB - numera::galois
+ *
+ * Finite field arithmetic over GF(2^8), GF(2^128), GF(p) for prime p,
+ * plus Berlekamp-Massey LFSR synthesis and Lagrange interpolation over GF(p).
+ *
+ * GF(2^8) reduction polynomial: x^8 + x^4 + x^3 + x + 1 = 0x11B.
+ * GF(2^128) reduction polynomial: x^128 + x^7 + x^2 + x + 1 (low byte 0x87).
+ * GF(p): caller supplies prime p as a bigint id; a, base assumed < p.
+ *
+ * Public API:
+ *   GF(2^8) (value-typed, total, result in low byte of u32):
+ *     gf8_add(a, b)          XOR
+ *     gf8_mul(a, b)          Russian-peasant with 0x1B reduction
+ *     gf8_pow(base, exp)     square-and-multiply
+ *     gf8_inv(a)             Fermat: a^254 = a^(-1); inv(0)=0
+ *   GF(2^128) (16-byte LE, low byte = constant term; returns GF_OK/GF_E_INV):
+ *     gf128_add / gf128_mul / gf128_pow / gf128_inv
+ *   GF(p) (returns bigint id; 0u64 = failure):
+ *     gfp_add / gfp_sub / gfp_mul / gfp_inv (Fermat a^(p-2)) / gfp_pow
+ *   bm_decode(arena, syndromes_ptr, n, p, out_coeffs_ptr) -> L
+ *     Massey iteration; writes C(x) coeff ids into out_coeffs_ptr; returns
+ *     LFSR length L. out_coeffs_ptr[0]=0u64 and return 0 on failure.
+ *     Requires n <= GF_BM_MAX_N (bigint 64-slot ceiling).
+ *   lagrange_eval(arena, x_pts_ptr, y_pts_ptr, n, p, eval_at) -> bigint id
+ *     Unique degree n-1 polynomial through (x_i,y_i) evaluated at eval_at.
+ *     Requires distinct x_i mod p and n <= GF_LAG_MAX_N. 0u64 on failure.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (alloc may fail in GF(p)/BM/Lagrange).
+ *
+ * NIH: depends on bigint.iii, bigint_div.iii, arena.iii. No third-party code.
+ *
+ * Determinism: all paths are fixed-iteration integer/bit arithmetic; no FP,
+ * no IO, no entropy; outputs are bit-identical cross-run/cross-CPU. Every
+ * control decision is an exact algebraic test (== 1u32, bigint_is_zero,
+ * bigint_cmp == -1i32) -- no ML/heuristics/observational learning.
+ *
+ * Slot ceiling: bigint.iii has a hard 64-live-id table. bm_decode peaks at
+ * ~3n+6 live ids and lagrange_eval at ~2n+7, so both cap n at 16 (GF_BM_MAX_N
+ * / GF_LAG_MAX_N). Beyond the cap they fail clean (return 0 / out[0]=0) rather
+ * than corrupt the slot table -- M5, no-bricking.
+ *
+ * NOT REENTRANT: gf128_* use module-scope scratch (the GF128_MUL, POW, and
+ * INV buffer sets), disjoint across the inv -> pow -> mul -> add chain so calls do
+ * not self-clobber. Serialized use only (cf. crypt_ed25519 EDB_LHS/EDB_RHS).
+ *
+ * Discipline: <=4 fn params for gf8/gf128/gfp (bm_decode/lagrange_eval take
+ * 5/6 args -- the documented W2 aggregate exception for the coding-theory
+ * entry points); W13 (<=20 locals); W14 (sentinel loops, no break);
+ * W11 (i32 compared by equality only). Single-line fn decls; ASCII only.
+ */
+
+module numera_galois
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, m: u64) -> u64 from "bigint_div.iii"
+
+const GF_OK       : i32 =  0i32
+const GF_E_INV    : i32 = -1i32        // not invertible (zero element)
+const GF_E_OOM    : i32 = -2i32        // reserved: allocation failure (G7)
+
+const GF8_POLY    : u32 = 0x11Bu32     // x^8 + x^4 + x^3 + x + 1 (doc; runtime folds 0x1B)
+const GF128_R_LO  : u64 = 0x87u64      // low byte of x^128+x^7+x^2+x+1 = 0b10000111
+
+const GF_BM_MAX_N  : u64 = 16u64       // bm_decode n cap: peak ~3n+6 live bigints < 64 slots
+const GF_LAG_MAX_N : u64 = 16u64       // lagrange n cap: peak ~2n+7 live bigints < 64 slots
+
+// ---- GF(2^128) module-scope scratch (Trap 7: no local var arrays). ----
+// Disjoint sets across the inv -> pow -> mul -> add call chain. NOT reentrant.
+var GF128_MUL_Z : [u8; 16]
+var GF128_MUL_V : [u8; 16]
+var GF128_POW_R : [u8; 16]
+var GF128_POW_B : [u8; 16]
+var GF128_POW_T : [u8; 16]
+var GF128_INV_E : [u8; 16]
+
+// ============ GF(2^8) ============
+
+fn gf8_add(a: u32, b: u32) -> u32 @export {
+    return (a ^ b) & 0xFFu32
+}
+
+/* Russian-peasant multiply over GF(2)[x]/0x11B. 8 fixed steps; fold 0x1B
+ * (low 8 bits of 0x11B; the x^8 term drops via the 8-bit mask) when the
+ * pre-shift bit-7 was set. Total -- every input maps to a defined element. */
+fn gf8_mul(a: u32, b: u32) -> u32 @export {
+    let mut x : u32 = a & 0xFFu32
+    let mut y : u32 = b & 0xFFu32
+    let mut r : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        if (y & 1u32) == 1u32 { r = r ^ x }
+        let hi : u32 = x & 0x80u32
+        x = (x << 1u32) & 0xFFu32
+        if hi == 0x80u32 { x = x ^ 0x1Bu32 }
+        y = y >> 1u32
+        i = i + 1u32
+    }
+    return r & 0xFFu32
+}
+
+/* base^exp via square-and-multiply. exp>0 is an UNSIGNED u32 compare (Trap 3
+ * is signed-only, so safe). */
+fn gf8_pow(base: u32, exp: u32) -> u32 @export {
+    let mut r : u32 = 1u32
+    let mut b : u32 = base & 0xFFu32
+    let mut e : u32 = exp
+    while e > 0u32 {
+        if (e & 1u32) == 1u32 { r = gf8_mul(r, b) }
+        b = gf8_mul(b, b)
+        e = e >> 1u32
+    }
+    return r & 0xFFu32
+}
+
+/* Fermat: a^254 = a^(-1) in GF(2^8) (multiplicative group order 255).
+ * inv(0) = 0 (documented zero convention; keeps the function total). */
+fn gf8_inv(a: u32) -> u32 @export {
+    let am : u32 = a & 0xFFu32
+    if am == 0u32 { return 0u32 }
+    return gf8_pow(am, 254u32)
+}
+
+// ============ GF(2^128) ============ (16-byte LE, low byte = constant term)
+
+/* 16-byte copy (private helper). */
+fn gf128_copy(src: *u8, dst: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    return GF_OK
+}
+
+/* zero 16 bytes (private helper). */
+fn gf128_zero(out: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        out[i] = 0u8
+        i = i + 1u64
+    }
+    return GF_OK
+}
+
+/* shift-left 1 bit across 16 LE bytes (low byte = constant term, so the
+ * value's bit ordering is little-endian within and across bytes). Multiply by
+ * x raises every coefficient one degree: bit 7 of byte i (coeff x^(8i+7))
+ * carries into bit 0 of byte i+1 (coeff x^(8i+8)), so the carry propagates
+ * LOW-to-HIGH (byte 0 up to byte 15). Returns the bit shifted out of
+ * polynomial position 127 (the top bit of byte 15) -- the x^128 overflow. */
+fn gf128_shl1(v: *u8) -> u8 {
+    let mut i : u64 = 0u64
+    let mut carry : u8 = 0u8
+    while i < 16u64 {
+        let byte : u32 = v[i] as u32
+        let newbyte : u32 = ((byte << 1u32) & 0xFFu32) | (carry as u32)
+        let mut nc : u8 = 0u8
+        if (byte & 0x80u32) == 0x80u32 { nc = 1u8 }
+        v[i] = (newbyte & 0xFFu32) as u8
+        carry = nc
+        i = i + 1u64
+    }
+    return carry
+}
+
+/* 16-byte XOR. Reused as the GF(2^128) field add inside mul/pow. Total. */
+fn gf128_add(a: *u8, b: *u8, out: *u8) -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        let av : u32 = a[i] as u32
+        let bv : u32 = b[i] as u32
+        out[i] = ((av ^ bv) & 0xFFu32) as u8
+        i = i + 1u64
+    }
+    return GF_OK
+}
+
+/* Bit-serial peasant over GF(2)[x]/(x^128+x^7+x^2+x+1). z=0; v=a; for each of
+ * the 16 bytes of b, for each of 8 bits LSB-first: if set z ^= v; shift v left
+ * one bit; if the bit shifted out of pos 127 was 1, fold 0x87 into byte 0.
+ * 128 fixed iterations. Scratch z/v in module-scope GF128_MUL_Z/_V (Trap 7). */
+fn gf128_mul(a: *u8, b: *u8, out: *u8) -> i32 @export {
+    let z : *u8 = &GF128_MUL_Z as *u8
+    let v : *u8 = &GF128_MUL_V as *u8
+    gf128_zero(z)
+    gf128_copy(a, v)
+    let mut byi : u64 = 0u64
+    while byi < 16u64 {
+        let bb : u32 = b[byi] as u32
+        let mut bit : u32 = 0u32
+        while bit < 8u32 {
+            let mask : u32 = 1u32 << bit
+            if (bb & mask) == mask { gf128_add(z, v, z) }
+            let msb : u8 = gf128_shl1(v)
+            if msb == 1u8 {
+                let v0 : u32 = v[0u64] as u32
+                v[0u64] = ((v0 ^ (GF128_R_LO as u32)) & 0xFFu32) as u8
+            }
+            bit = bit + 1u32
+        }
+        byi = byi + 1u64
+    }
+    gf128_copy(z, out)
+    return GF_OK
+}
+
+/* Square-and-multiply, exp 16-byte LE. r=1 (byte 0 = 1), b=base; for each of
+ * 128 bits LSB-first: if set r=r*b; b=b*b. Scratch r/b/t in GF128_POW_R/_B/_T,
+ * disjoint from the MUL buffers so the nested gf128_mul does not corrupt pow. */
+fn gf128_pow(base: *u8, exp: *u8, out: *u8) -> i32 @export {
+    let r : *u8 = &GF128_POW_R as *u8
+    let b : *u8 = &GF128_POW_B as *u8
+    let t : *u8 = &GF128_POW_T as *u8
+    gf128_zero(r)
+    r[0u64] = 1u8
+    gf128_copy(base, b)
+    let mut byi : u64 = 0u64
+    while byi < 16u64 {
+        let eb : u32 = exp[byi] as u32
+        let mut bit : u32 = 0u32
+        while bit < 8u32 {
+            let mask : u32 = 1u32 << bit
+            if (eb & mask) == mask {
+                gf128_mul(r, b, t)
+                gf128_copy(t, r)
+            }
+            gf128_mul(b, b, t)
+            gf128_copy(t, b)
+            bit = bit + 1u32
+        }
+        byi = byi + 1u64
+    }
+    gf128_copy(r, out)
+    return GF_OK
+}
+
+/* Fermat: a^(2^128-2) = a^(-1). Zero-detect by OR of all 16 bytes -> GF_E_INV.
+ * Exponent 2^128-2 = byte0 0xFE then fifteen 0xFF (LE), in GF128_INV_E
+ * (disjoint from POW/MUL buffers since inv calls pow calls mul). */
+fn gf128_inv(a: *u8, out: *u8) -> i32 @export {
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        acc = acc | (a[i] as u32)
+        i = i + 1u64
+    }
+    if (acc & 0xFFu32) == 0u32 { return GF_E_INV }
+    let e : *u8 = &GF128_INV_E as *u8
+    e[0u64] = 0xFEu8
+    let mut j : u64 = 1u64
+    while j < 16u64 {
+        e[j] = 0xFFu8
+        j = j + 1u64
+    }
+    gf128_pow(a, e, out)
+    return GF_OK
+}
+
+// ============ GF(p) ============ (bigint ids; 0u64 = failure)
+
+/* a + b mod p.  s=a+b (OOM->0); r = s mod p; drop s. bigint_mod is a function
+ * call, not the % operator, so Trap 11 (modulo-after-call) does not apply. */
+fn gfp_add(arena: u64, a: u64, b: u64, p: u64) -> u64 @export {
+    let s : u64 = bigint_add(arena, a, b)
+    if s == 0u64 { return 0u64 }
+    let r : u64 = bigint_mod(arena, s, p)
+    bigint_drop(s)
+    return r
+}
+
+/* a - b mod p. cmp by equality only (W11/Trap 3). If a < b: r = (a+p)-b.
+ * Else: r = (a-b) mod p. Every early return drops its live intermediate (G4). */
+fn gfp_sub(arena: u64, a: u64, b: u64, p: u64) -> u64 @export {
+    let c : i32 = bigint_cmp(a, b)
+    if c == -1i32 {
+        let s : u64 = bigint_add(arena, a, p)
+        if s == 0u64 { return 0u64 }
+        let r : u64 = bigint_sub(arena, s, b)
+        bigint_drop(s)
+        return r
+    }
+    let d : u64 = bigint_sub(arena, a, b)
+    if d == 0u64 { return 0u64 }
+    let r2 : u64 = bigint_mod(arena, d, p)
+    bigint_drop(d)
+    return r2
+}
+
+/* a * b mod p. prod=a*b (OOM->0); r = prod mod p; drop prod. */
+fn gfp_mul(arena: u64, a: u64, b: u64, p: u64) -> u64 @export {
+    let prod : u64 = bigint_mul(arena, a, b)
+    if prod == 0u64 { return 0u64 }
+    let r : u64 = bigint_mod(arena, prod, p)
+    bigint_drop(prod)
+    return r
+}
+
+/* Fermat inverse over GF(p): a^(p-2) mod p. Precondition (caller-asserted,
+ * not tested): p prime, 0 < a < p. exp=p-2; modpow; OOM-guard two/exp. */
+fn gfp_inv(arena: u64, a: u64, p: u64) -> u64 @export {
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    if two == 0u64 { return 0u64 }
+    let exp : u64 = bigint_sub(arena, p, two)
+    bigint_drop(two)
+    if exp == 0u64 { return 0u64 }
+    let r : u64 = bigint_modpow(arena, a, exp, p)
+    bigint_drop(exp)
+    return r
+}
+
+/* base^exp mod p -- thin wrapper over bigint_modpow. */
+fn gfp_pow(arena: u64, base: u64, exp: u64, p: u64) -> u64 @export {
+    return bigint_modpow(arena, base, exp, p)
+}
+
+// ============ Lagrange interpolation over GF(p) ============
+//
+// Flattened into helpers to stay within the parser's 7-deep block-nesting
+// budget (function body + <=6 nested blocks). Per-call context lives in
+// module-scope LAG_* scalars (NOT reentrant; serialized use, same posture as
+// the gf128 scratch). lag_basis(i) builds the i-th numerator/denominator into
+// LAG_NUM/LAG_DEN; lag_term(i) folds y_i*num/den into LAG_ACC.
+
+var LAG_ARENA : u64 = 0u64
+var LAG_P     : u64 = 0u64
+var LAG_XP    : u64 = 0u64      // x_pts base (as *u64)
+var LAG_YP    : u64 = 0u64      // y_pts base (as *u64)
+var LAG_N     : u64 = 0u64
+var LAG_EA    : u64 = 0u64      // bigint id of eval_at
+var LAG_ACC   : u64 = 0u64      // running accumulator id
+var LAG_NUM   : u64 = 0u64      // current basis numerator id
+var LAG_DEN   : u64 = 0u64      // current basis denominator id
+
+/* One factor of the i-th basis product: multiply LAG_NUM by (eval_at - x_j)
+ * and LAG_DEN by (x_i - x_j), both mod p. Returns 1 ok / 0 on OOM (after
+ * dropping any transient it created). Depth: fn(1)->if(2). */
+fn lag_factor(xi: u64, j: u64) -> u8 {
+    let arena : u64 = LAG_ARENA
+    let p : u64 = LAG_P
+    let xp : *u64 = LAG_XP as *u64
+    let xj : u64 = xp[j]
+    let dnum : u64 = gfp_sub(arena, LAG_EA, xj, p)
+    let dden : u64 = gfp_sub(arena, xi, xj, p)
+    let mut step_ok : u8 = 1u8
+    if dnum == 0u64 { step_ok = 0u8 }
+    if dden == 0u64 { step_ok = 0u8 }
+    if step_ok == 0u8 {
+        if dnum != 0u64 { bigint_drop(dnum) }
+        if dden != 0u64 { bigint_drop(dden) }
+        return 0u8
+    }
+    let nn : u64 = gfp_mul(arena, LAG_NUM, dnum, p)
+    let nd : u64 = gfp_mul(arena, LAG_DEN, dden, p)
+    bigint_drop(dnum)
+    bigint_drop(dden)
+    bigint_drop(LAG_NUM)
+    bigint_drop(LAG_DEN)
+    LAG_NUM = nn
+    LAG_DEN = nd
+    if nn == 0u64 { return 0u8 }
+    if nd == 0u64 { return 0u8 }
+    return 1u8
+}
+
+/* Build LAG_NUM = Prod_{j!=i}(eval_at-x_j), LAG_DEN = Prod_{j!=i}(x_i-x_j).
+ * Returns 1 ok / 0 OOM. Depth: fn(1)->while(2)->if-ok(3)->if-skip(4). */
+fn lag_basis(i: u64) -> u8 {
+    let arena : u64 = LAG_ARENA
+    let xp : *u64 = LAG_XP as *u64
+    let xi : u64 = xp[i]
+    LAG_NUM = bigint_from_u64(arena, 1u64)
+    LAG_DEN = bigint_from_u64(arena, 1u64)
+    let mut ok : u8 = 1u8
+    if LAG_NUM == 0u64 { ok = 0u8 }
+    if LAG_DEN == 0u64 { ok = 0u8 }
+    let mut j : u64 = 0u64
+    while j < LAG_N {
+        if ok == 1u8 {
+            if j != i {
+                ok = lag_factor(xi, j)
+            }
+        }
+        j = j + 1u64
+    }
+    return ok
+}
+
+/* Fold term_i = y_i * LAG_NUM * LAG_DEN^(-1) into LAG_ACC (mod p). Returns
+ * 1 ok / 0 OOM (distinct-x precondition: LAG_DEN==0 => inv==0 => fail clean).
+ * Depth: fn(1)->if(2)->if(3). */
+fn lag_term(i: u64) -> u8 {
+    let arena : u64 = LAG_ARENA
+    let p : u64 = LAG_P
+    let yp : *u64 = LAG_YP as *u64
+    let den_inv : u64 = gfp_inv(arena, LAG_DEN, p)
+    if den_inv == 0u64 { return 0u8 }
+    let part1 : u64 = gfp_mul(arena, yp[i], LAG_NUM, p)
+    if part1 == 0u64 {
+        bigint_drop(den_inv)
+        return 0u8
+    }
+    let term : u64 = gfp_mul(arena, part1, den_inv, p)
+    bigint_drop(part1)
+    bigint_drop(den_inv)
+    if term == 0u64 { return 0u8 }
+    let new_acc : u64 = gfp_add(arena, LAG_ACC, term, p)
+    bigint_drop(term)
+    bigint_drop(LAG_ACC)
+    LAG_ACC = new_acc
+    if new_acc == 0u64 { return 0u8 }
+    return 1u8
+}
+
+/* L(eval_at) = Sum_i y_i * Prod_{j!=i}(eval_at-x_j)/(x_i-x_j) over GF(p).
+ * x_pts_ptr/y_pts_ptr are caller arrays of n bigint ids (as *u64). No
+ * recursion (W15); the doubly-nested product is split across lag_basis/
+ * lag_factor/lag_term. Every gfp and bigint result is OOM-checked; on any
+ * failure the live set is dropped and 0u64 returned (G5, M5). Caps n at
+ * GF_LAG_MAX_N (slot ceiling). Depth: fn(1)->while(2)->if(3). */
+fn lagrange_eval(arena: u64, x_pts_ptr: u64, y_pts_ptr: u64, n: u64, p: u64, eval_at: u64) -> u64 @export {
+    if n > GF_LAG_MAX_N { return 0u64 }
+    if n == 0u64 { return 0u64 }
+    LAG_ARENA = arena
+    LAG_P = p
+    LAG_XP = x_pts_ptr
+    LAG_YP = y_pts_ptr
+    LAG_N = n
+    LAG_NUM = 0u64
+    LAG_DEN = 0u64
+    LAG_EA = bigint_from_u64(arena, eval_at)
+    if LAG_EA == 0u64 { return 0u64 }
+    LAG_ACC = bigint_from_u64(arena, 0u64)
+    if LAG_ACC == 0u64 { bigint_drop(LAG_EA) ; return 0u64 }
+    let mut i : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while i < n {
+        if ok == 1u8 {
+            ok = lag_basis(i)
+            if ok == 1u8 { ok = lag_term(i) }
+            if LAG_NUM != 0u64 { bigint_drop(LAG_NUM) ; LAG_NUM = 0u64 }
+            if LAG_DEN != 0u64 { bigint_drop(LAG_DEN) ; LAG_DEN = 0u64 }
+        }
+        i = i + 1u64
+    }
+    bigint_drop(LAG_EA)
+    LAG_EA = 0u64
+    if ok == 0u8 {
+        if LAG_ACC != 0u64 { bigint_drop(LAG_ACC) }
+        LAG_ACC = 0u64
+        return 0u64
+    }
+    let result : u64 = LAG_ACC
+    LAG_ACC = 0u64
+    return result
+}
+
+// ============ Berlekamp-Massey over GF(p) ============
+//
+// Flattened into helpers to stay within the parser's 7-deep block-nesting
+// budget. Per-call context lives in module-scope BM_* scalars (NOT reentrant;
+// serialized use). C[] is the caller's out array; B[] and T[] are transient
+// arena id-arrays, all n+1 slots wide. Every alloc / gfp-op / copy is
+// OOM-checked; on failure every live id is dropped, out[0]=0, return 0 (G3,M5).
+
+var BM_ARENA : u64 = 0u64
+var BM_P     : u64 = 0u64
+var BM_N     : u64 = 0u64       // syndrome count n
+var BM_SP    : u64 = 0u64       // syndromes base (as *u64)
+var BM_CP    : u64 = 0u64       // C[] = out_coeffs base (as *u64)
+var BM_BP    : u64 = 0u64       // B[] transient base (as *u64)
+var BM_TP    : u64 = 0u64       // T[] transient base (as *u64)
+
+/* Discrepancy d = s_k + Sum_{i=1..L} C_i * s_{k-i} (mod p). Returns the id
+ * (0u64 = OOM, after dropping its partial). Depth: fn(1)->while(2)->if(3). */
+fn bm_discrepancy(k: u64, bl: u64) -> u64 {
+    let arena : u64 = BM_ARENA
+    let p : u64 = BM_P
+    let sp : *u64 = BM_SP as *u64
+    let cp : *u64 = BM_CP as *u64
+    let mut d : u64 = bigint_copy(arena, sp[k])
+    if d == 0u64 { return 0u64 }
+    let mut ii : u64 = 1u64
+    let mut ok : u8 = 1u8
+    while ii < (bl + 1u64) {
+        if ok == 1u8 {
+            let prod : u64 = gfp_mul(arena, cp[ii], sp[k - ii], p)
+            let nd : u64 = gfp_add(arena, d, prod, p)
+            if prod != 0u64 { bigint_drop(prod) }
+            bigint_drop(d)
+            d = nd
+            if prod == 0u64 { ok = 0u8 }
+            if nd == 0u64 { ok = 0u8 }
+        }
+        ii = ii + 1u64
+    }
+    if ok == 0u8 {
+        if d != 0u64 { bigint_drop(d) }
+        return 0u64
+    }
+    return d
+}
+
+/* Snapshot T = C (deep copy of every live C slot). Returns 1 ok / 0 OOM.
+ * Depth: fn(1)->while(2)->if(3). */
+fn bm_snapshot() -> u8 {
+    let arena : u64 = BM_ARENA
+    let cp : *u64 = BM_CP as *u64
+    let tp : *u64 = BM_TP as *u64
+    let mut si : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while si < (BM_N + 1u64) {
+        if ok == 1u8 {
+            let cv : u64 = cp[si]
+            if cv != 0u64 {
+                let cc : u64 = bigint_copy(arena, cv)
+                tp[si] = cc
+                if cc == 0u64 { ok = 0u8 }
+            }
+            if cv == 0u64 { tp[si] = 0u64 }
+        }
+        si = si + 1u64
+    }
+    return ok
+}
+
+/* One C-update term: C[jm] <- C[jm] - factor * B[j] (mod p). The slot may be
+ * empty (treated as 0). Returns 1 ok / 0 OOM. Depth: fn(1)->if(2)->if(3). */
+fn bm_update_one(factor: u64, j: u64, jm: u64) -> u8 {
+    let arena : u64 = BM_ARENA
+    let p : u64 = BM_P
+    let bp : *u64 = BM_BP as *u64
+    let cp : *u64 = BM_CP as *u64
+    let bj : u64 = bp[j]
+    if bj == 0u64 { return 1u8 }
+    let fb : u64 = gfp_mul(arena, factor, bj, p)
+    if fb == 0u64 { return 0u8 }
+    let cur : u64 = cp[jm]
+    let mut cur_id : u64 = cur
+    let mut made : u8 = 0u8
+    if cur_id == 0u64 {
+        cur_id = bigint_from_u64(arena, 0u64)
+        made = 1u8
+    }
+    if cur_id == 0u64 {
+        bigint_drop(fb)
+        return 0u8
+    }
+    let nc : u64 = gfp_sub(arena, cur_id, fb, p)
+    bigint_drop(fb)
+    if made == 1u8 { bigint_drop(cur_id) }
+    if nc == 0u64 { return 0u8 }
+    if cur != 0u64 { bigint_drop(cur) }
+    cp[jm] = nc
+    return 1u8
+}
+
+/* C(x) <- C(x) - factor * x^m * B(x): for all j with j+m <= n. Returns 1/0.
+ * Depth: fn(1)->while(2)->if(3). */
+fn bm_update(factor: u64, m: u64) -> u8 {
+    let mut j : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while j < (BM_N + 1u64) {
+        if ok == 1u8 {
+            if (j + m) < (BM_N + 1u64) {
+                ok = bm_update_one(factor, j, j + m)
+            }
+        }
+        j = j + 1u64
+    }
+    return ok
+}
+
+/* B <- T (move ids): drop old B[j], take T[j], clear T[j].
+ * Depth: fn(1)->while(2)->if(3). */
+fn bm_shift_b() -> i32 {
+    let bp : *u64 = BM_BP as *u64
+    let tp : *u64 = BM_TP as *u64
+    let mut bi : u64 = 0u64
+    while bi < (BM_N + 1u64) {
+        let oldb : u64 = bp[bi]
+        if oldb != 0u64 { bigint_drop(oldb) }
+        bp[bi] = tp[bi]
+        tp[bi] = 0u64
+        bi = bi + 1u64
+    }
+    return GF_OK
+}
+
+/* Drop every live id in the n+1-slot id-array at base (as *u64) and clear it.
+ * Depth: fn(1)->while(2)->if(3). */
+fn bm_drop_array(base: u64) -> i32 {
+    let ap : *u64 = base as *u64
+    let mut i : u64 = 0u64
+    while i < (BM_N + 1u64) {
+        let v : u64 = ap[i]
+        if v != 0u64 { bigint_drop(v) }
+        ap[i] = 0u64
+        i = i + 1u64
+    }
+    return GF_OK
+}
+
+/* Per-step core (d != 0 branch): build factor = d * b_scalar^-1, snapshot T=C
+ * if changing length, apply the C update, then either swap B<-T (length change:
+ * b_scalar<-d, also returns new L via BM_NEWL) or m++ . Returns 1 ok / 0 OOM.
+ * On the length-change path it consumes d as the new b_scalar; on the no-change
+ * path d is dropped here. The old b_scalar is dropped on the change path.
+ * Inputs/outputs of the scalar state travel through module-scope BM_* below. */
+var BM_BSCALAR : u64 = 0u64     // current b (last nonzero discrepancy)
+var BM_NEWL    : u64 = 0u64     // out: new L after a length change
+
+fn bm_step_nonzero(d: u64, k: u64, bl: u64, m: u64) -> u8 {
+    let arena : u64 = BM_ARENA
+    let p : u64 = BM_P
+    let b_inv : u64 = gfp_inv(arena, BM_BSCALAR, p)
+    if b_inv == 0u64 {
+        bigint_drop(d)
+        return 0u8
+    }
+    let factor : u64 = gfp_mul(arena, d, b_inv, p)
+    bigint_drop(b_inv)
+    if factor == 0u64 {
+        bigint_drop(d)
+        return 0u8
+    }
+    // Length-change predicate (2L <= k), expressed without signed/else (G11).
+    let mut do_change : u8 = 0u8
+    if (2u64 * bl) < (k + 1u64) { do_change = 1u8 }
+    if (2u64 * bl) == k { do_change = 1u8 }
+    let mut ok : u8 = 1u8
+    if do_change == 1u8 { ok = bm_snapshot() }
+    if ok == 1u8 { ok = bm_update(factor, m) }
+    bigint_drop(factor)
+    if ok == 0u8 {
+        bigint_drop(d)
+        return 0u8
+    }
+    if do_change == 1u8 {
+        bm_shift_b()
+        bigint_drop(BM_BSCALAR)
+        BM_BSCALAR = d
+        BM_NEWL = (k + 1u64) - bl
+    }
+    if do_change == 0u8 {
+        bigint_drop(d)
+        BM_NEWL = bl
+    }
+    return 1u8
+}
+
+/* Minimal-LFSR synthesis (classic Massey iteration, NIH). syndromes_ptr is a
+ * caller array of n bigint ids (as *u64); out_coeffs_ptr receives the n+1
+ * connection-poly coeff ids C_0..C_L (as *u64). Returns LFSR length L (a count,
+ * not a status); out[0]=0u64 and 0u64 on any failure. Caps n at GF_BM_MAX_N
+ * (slot ceiling). Depth: fn(1)->while(2)->if(3)->if(4). */
+fn bm_decode(arena: u64, syndromes_ptr: u64, n: u64, p: u64, out_coeffs_ptr: u64) -> u64 @export {
+    let cp : *u64 = out_coeffs_ptr as *u64
+    if n > GF_BM_MAX_N { cp[0u64] = 0u64 ; return 0u64 }
+    if n == 0u64 { cp[0u64] = 0u64 ; return 0u64 }
+    let nb : u64 = (n + 1u64) * 8u64
+    let b_arr : u64 = arena_alloc1(arena, nb)
+    if b_arr == 0u64 { cp[0u64] = 0u64 ; return 0u64 }
+    let t_arr : u64 = arena_alloc1(arena, nb)
+    if t_arr == 0u64 { cp[0u64] = 0u64 ; return 0u64 }
+    BM_ARENA = arena
+    BM_P = p
+    BM_N = n
+    BM_SP = syndromes_ptr
+    BM_CP = out_coeffs_ptr
+    BM_BP = b_arr
+    BM_TP = t_arr
+    let bp : *u64 = b_arr as *u64
+    let tp : *u64 = t_arr as *u64
+    // Zero all id slots so cleanup can skip empties.
+    let mut z : u64 = 0u64
+    while z < (n + 1u64) {
+        cp[z] = 0u64
+        bp[z] = 0u64
+        tp[z] = 0u64
+        z = z + 1u64
+    }
+    // C(x)=1, B(x)=1, b_scalar=1.
+    let c0 : u64 = bigint_from_u64(arena, 1u64)
+    let bb0 : u64 = bigint_from_u64(arena, 1u64)
+    BM_BSCALAR = bigint_from_u64(arena, 1u64)
+    let mut ok : u8 = 1u8
+    if c0 == 0u64 { ok = 0u8 }
+    if bb0 == 0u64 { ok = 0u8 }
+    if BM_BSCALAR == 0u64 { ok = 0u8 }
+    if ok == 0u8 {
+        if c0 != 0u64 { bigint_drop(c0) }
+        if bb0 != 0u64 { bigint_drop(bb0) }
+        if BM_BSCALAR != 0u64 { bigint_drop(BM_BSCALAR) }
+        BM_BSCALAR = 0u64
+        cp[0u64] = 0u64
+        return 0u64
+    }
+    cp[0u64] = c0
+    bp[0u64] = bb0
+    let mut bl : u64 = 0u64
+    let mut m : u64 = 1u64
+    let mut k : u64 = 0u64
+    while k < n {
+        if ok == 1u8 {
+            let d : u64 = bm_discrepancy(k, bl)
+            if d == 0u64 { ok = 0u8 }
+            if ok == 1u8 {
+                if bigint_is_zero(d) == 1u8 {
+                    bigint_drop(d)
+                    m = m + 1u64
+                }
+                if bigint_is_zero(d) == 0u8 {
+                    let changed : u8 = bm_step_nonzero(d, k, bl, m)
+                    if changed == 0u8 { ok = 0u8 }
+                    if changed == 1u8 {
+                        // bm_step_nonzero set m's successor implicitly: on a
+                        // length change m resets to 1, else m++. It reports the
+                        // new L in BM_NEWL; recompute m from whether L moved.
+                        if BM_NEWL == bl {
+                            m = m + 1u64
+                        }
+                        if BM_NEWL != bl {
+                            m = 1u64
+                        }
+                        bl = BM_NEWL
+                    }
+                }
+            }
+        }
+        k = k + 1u64
+    }
+    // Cleanup transients: B[], leftover T[], b_scalar.
+    bm_drop_array(b_arr)
+    bm_drop_array(t_arr)
+    if BM_BSCALAR != 0u64 { bigint_drop(BM_BSCALAR) }
+    BM_BSCALAR = 0u64
+    if ok == 0u8 {
+        bm_drop_array(out_coeffs_ptr)
+        cp[0u64] = 0u64
+        return 0u64
+    }
+    return bl
+}
+
+// ============ Embedded self-test (KAT vectors from the spec) ============
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+
+// GF(2^128) byte scratch for the selftest's operands/outputs (module scope:
+// Trap 7 -- no local var arrays). Distinct names from the algorithm buffers.
+var GFT_ONE : [u8; 16]
+var GFT_X   : [u8; 16]
+var GFT_A   : [u8; 16]
+var GFT_O1  : [u8; 16]
+var GFT_O2  : [u8; 16]
+
+/* Runs every spec KAT. Returns 99u64 on full pass; a distinct small code at
+ * the first failed check (so a failure is diagnosable). Includes negative-case
+ * assertions: gf8_inv(0)=0 and gf128_inv(0)=GF_E_INV (proves the zero element
+ * has no inverse), plus n>cap and bad-input rejection for bm/lagrange. */
+fn galois_selftest() -> u64 @export {
+    // ---- KAT 1/2: GF(2^8) multiply + inverse round-trip + edges ----
+    if gf8_add(0xAAu32, 0x55u32) != 0xFFu32 { return 1u64 }
+    if gf8_mul(0x57u32, 0x83u32) != 0xC1u32 { return 2u64 }
+    if gf8_mul(0x53u32, 0xCAu32) != 0x01u32 { return 3u64 }
+    if gf8_inv(0x53u32) != 0xCAu32 { return 4u64 }
+    if gf8_mul(0x53u32, gf8_inv(0x53u32)) != 0x01u32 { return 5u64 }
+    if gf8_inv(0u32) != 0u32 { return 6u64 }            // negative case: 0 has no inverse
+    if gf8_pow(0x02u32, 0u32) != 0x01u32 { return 7u64 }
+
+    // ---- KAT 3: GF(2^128) identity, char-2 add, inverse round-trip ----
+    let one : *u8 = &GFT_ONE as *u8
+    let xx  : *u8 = &GFT_X as *u8
+    let aa  : *u8 = &GFT_A as *u8
+    let o1  : *u8 = &GFT_O1 as *u8
+    let o2  : *u8 = &GFT_O2 as *u8
+    gf128_zero(one)
+    one[0u64] = 1u8                                     // multiplicative identity 01 00..00
+    gf128_zero(xx)
+    xx[0u64] = 0x53u8
+    xx[7u64] = 0x9Eu8                                   // an arbitrary nonzero element
+    // identity: one * x == x
+    gf128_mul(one, xx, o1)
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        if o1[i] != xx[i] { return 8u64 }
+        i = i + 1u64
+    }
+    // characteristic 2: x + x == 0
+    gf128_add(xx, xx, o1)
+    i = 0u64
+    while i < 16u64 {
+        if o1[i] != 0u8 { return 9u64 }
+        i = i + 1u64
+    }
+    // inverse round-trip: a * inv(a) == one, for a = 02 00..00
+    gf128_zero(aa)
+    aa[0u64] = 0x02u8
+    if gf128_inv(aa, o2) != GF_OK { return 10u64 }
+    gf128_mul(aa, o2, o1)
+    if o1[0u64] != 1u8 { return 11u64 }
+    i = 1u64
+    while i < 16u64 {
+        if o1[i] != 0u8 { return 12u64 }
+        i = i + 1u64
+    }
+    // negative case: inv(0) reports GF_E_INV (zero has no inverse)
+    gf128_zero(aa)
+    if gf128_inv(aa, o2) != GF_E_INV { return 13u64 }
+
+    // ---- KAT 4/5/6: GF(p), Lagrange, Berlekamp-Massey over p = 97 ----
+    let arena : u64 = arena_new(1u64 << 20u64)
+    if arena == 0u64 { return 14u64 }
+    let p : u64 = bigint_from_u64(arena, 97u64)
+    if p == 0u64 { return 15u64 }
+
+    // KAT 4: field laws with a=30, b=75.
+    let a30 : u64 = bigint_from_u64(arena, 30u64)
+    let b75 : u64 = bigint_from_u64(arena, 75u64)
+    if a30 == 0u64 { return 16u64 }
+    if b75 == 0u64 { return 17u64 }
+    // add: (30+75) mod 97 = 8
+    let radd : u64 = gfp_add(arena, a30, b75, p)
+    let e8 : u64 = bigint_from_u64(arena, 8u64)
+    if radd == 0u64 { return 18u64 }
+    if bigint_eq(radd, e8) != 1u8 { return 19u64 }
+    bigint_drop(radd)
+    bigint_drop(e8)
+    // sub: (30-75) mod 97 = 52
+    let rsub : u64 = gfp_sub(arena, a30, b75, p)
+    let e52 : u64 = bigint_from_u64(arena, 52u64)
+    if rsub == 0u64 { return 20u64 }
+    if bigint_eq(rsub, e52) != 1u8 { return 21u64 }
+    bigint_drop(rsub)
+    bigint_drop(e52)
+    // mul: (30*75) mod 97 = 19  (2250 = 97*23 + 19)
+    let rmul : u64 = gfp_mul(arena, a30, b75, p)
+    let e19 : u64 = bigint_from_u64(arena, 19u64)
+    if rmul == 0u64 { return 22u64 }
+    if bigint_eq(rmul, e19) != 1u8 { return 23u64 }
+    bigint_drop(rmul)
+    bigint_drop(e19)
+    // inv: gfp_mul(30, inv(30), 97) == 1
+    let inv30 : u64 = gfp_inv(arena, a30, p)
+    if inv30 == 0u64 { return 24u64 }
+    let chk : u64 = gfp_mul(arena, a30, inv30, p)
+    let e1 : u64 = bigint_from_u64(arena, 1u64)
+    if chk == 0u64 { return 25u64 }
+    if bigint_eq(chk, e1) != 1u8 { return 26u64 }
+    bigint_drop(chk)
+    bigint_drop(inv30)
+    // pow: 30^96 mod 97 == 1 (Fermat).
+    let e96 : u64 = bigint_from_u64(arena, 96u64)
+    if e96 == 0u64 { return 27u64 }
+    let rpow : u64 = gfp_pow(arena, a30, e96, p)
+    if rpow == 0u64 { return 28u64 }
+    if bigint_eq(rpow, e1) != 1u8 { return 29u64 }
+    bigint_drop(rpow)
+    bigint_drop(e96)
+    bigint_drop(e1)
+    bigint_drop(a30)
+    bigint_drop(b75)
+
+    // KAT 5: Lagrange. Points (1,1),(2,4),(3,9) on y=x^2; eval at 5 -> 25, 4 -> 16.
+    let xpts : u64 = arena_alloc1(arena, 3u64 * 8u64)
+    let ypts : u64 = arena_alloc1(arena, 3u64 * 8u64)
+    if xpts == 0u64 { return 30u64 }
+    if ypts == 0u64 { return 31u64 }
+    let xptr : *u64 = xpts as *u64
+    let yptr : *u64 = ypts as *u64
+    let x1 : u64 = bigint_from_u64(arena, 1u64)
+    let x2 : u64 = bigint_from_u64(arena, 2u64)
+    let x3 : u64 = bigint_from_u64(arena, 3u64)
+    let y1 : u64 = bigint_from_u64(arena, 1u64)
+    let y2 : u64 = bigint_from_u64(arena, 4u64)
+    let y3 : u64 = bigint_from_u64(arena, 9u64)
+    if x1 == 0u64 { return 32u64 }
+    if x2 == 0u64 { return 32u64 }
+    if x3 == 0u64 { return 32u64 }
+    if y1 == 0u64 { return 32u64 }
+    if y2 == 0u64 { return 32u64 }
+    if y3 == 0u64 { return 32u64 }
+    xptr[0u64] = x1
+    xptr[1u64] = x2
+    xptr[2u64] = x3
+    yptr[0u64] = y1
+    yptr[1u64] = y2
+    yptr[2u64] = y3
+    let lag5 : u64 = lagrange_eval(arena, xpts, ypts, 3u64, p, 5u64)
+    let e25 : u64 = bigint_from_u64(arena, 25u64)
+    if lag5 == 0u64 { return 33u64 }
+    if bigint_eq(lag5, e25) != 1u8 { return 34u64 }
+    bigint_drop(lag5)
+    bigint_drop(e25)
+    let lag4 : u64 = lagrange_eval(arena, xpts, ypts, 3u64, p, 4u64)
+    let e16 : u64 = bigint_from_u64(arena, 16u64)
+    if lag4 == 0u64 { return 35u64 }
+    if bigint_eq(lag4, e16) != 1u8 { return 36u64 }
+    bigint_drop(lag4)
+    bigint_drop(e16)
+    // negative case: n over the cap rejects (returns 0).
+    if lagrange_eval(arena, xpts, ypts, 17u64, p, 5u64) != 0u64 { return 37u64 }
+    bigint_drop(x1)
+    bigint_drop(x2)
+    bigint_drop(x3)
+    bigint_drop(y1)
+    bigint_drop(y2)
+    bigint_drop(y3)
+
+    // KAT 6: Berlekamp-Massey. Fibonacci mod 97: 1,1,2,3,5,8 -> L=2,
+    // C = [1, 96, 96] (1 - x - x^2 over GF(97)).
+    let syn : u64 = arena_alloc1(arena, 6u64 * 8u64)
+    let outc : u64 = arena_alloc1(arena, 8u64 * 8u64)
+    if syn == 0u64 { return 38u64 }
+    if outc == 0u64 { return 39u64 }
+    let synp : *u64 = syn as *u64
+    let s0 : u64 = bigint_from_u64(arena, 1u64)
+    let s1 : u64 = bigint_from_u64(arena, 1u64)
+    let s2 : u64 = bigint_from_u64(arena, 2u64)
+    let s3 : u64 = bigint_from_u64(arena, 3u64)
+    let s4 : u64 = bigint_from_u64(arena, 5u64)
+    let s5 : u64 = bigint_from_u64(arena, 8u64)
+    if s0 == 0u64 { return 40u64 }
+    if s1 == 0u64 { return 40u64 }
+    if s2 == 0u64 { return 40u64 }
+    if s3 == 0u64 { return 40u64 }
+    if s4 == 0u64 { return 40u64 }
+    if s5 == 0u64 { return 40u64 }
+    synp[0u64] = s0
+    synp[1u64] = s1
+    synp[2u64] = s2
+    synp[3u64] = s3
+    synp[4u64] = s4
+    synp[5u64] = s5
+    let bl : u64 = bm_decode(arena, syn, 6u64, p, outc)
+    if bl != 2u64 { return 41u64 }
+    let outp : *u64 = outc as *u64
+    let c_0 : u64 = outp[0u64]
+    let c_1 : u64 = outp[1u64]
+    let c_2 : u64 = outp[2u64]
+    if c_0 == 0u64 { return 42u64 }
+    if c_1 == 0u64 { return 43u64 }
+    if c_2 == 0u64 { return 44u64 }
+    let ec0 : u64 = bigint_from_u64(arena, 1u64)
+    let ec1 : u64 = bigint_from_u64(arena, 96u64)
+    let ec2 : u64 = bigint_from_u64(arena, 96u64)
+    if bigint_eq(c_0, ec0) != 1u8 { return 45u64 }
+    if bigint_eq(c_1, ec1) != 1u8 { return 46u64 }
+    if bigint_eq(c_2, ec2) != 1u8 { return 47u64 }
+    // negative case: n over the cap rejects (out[0]=0, return 0).
+    if bm_decode(arena, syn, 17u64, p, outc) != 0u64 { return 48u64 }
+    if outp[0u64] != 0u64 { return 49u64 }
+
+    return 99u64
+}

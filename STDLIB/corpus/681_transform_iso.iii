@@ -1,0 +1,62 @@
+/* 681_transform_iso.iii -- M17 keystone: a lossless transform is a round-trip identity (iso).
+ *
+ * The ~30 tp_* transforms are the morphisms of a representation category; the LOSSLESS ones are
+ * SID-isomorphisms whose falsifier (apotheosis M17 / Key Move) is "a lossless transform whose
+ * round-trip != identity." This KAT proves the canonical iso tp_iii_to_ast_bin <-> tp_ast_bin_to_iii
+ * (FORM_III <-> FORM_AST_BINARY): FORM_III -> AST-bin -> FORM_III is byte-identical over several
+ * lengths (incl. empty + full buffer), and -- prove the negative -- the decode REJECTS a tampered
+ * AST-bin (corrupted magic header -> 0), so a forgetful/malformed image is not silently accepted.
+ * (babel JSON<->CBOR is separately gated by 207_babel_wire_roundtrip.)
+ *
+ * Main-corpus convention: rc 99 = pass; 1..6 = which check failed. */
+module corpus_681
+
+extern @abi(c-msvc-x64) fn tp_iii_to_ast_bin(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_ast_bin.iii"
+extern @abi(c-msvc-x64) fn tp_ast_bin_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ast_bin_to_iii.iii"
+
+var TI_IN  : [u8; 64]
+var TI_AST : [u8; 128]
+var TI_OUT : [u8; 64]
+
+/* round-trip n bytes (filled with a deterministic pattern) through III->AST-bin->III;
+ * return 1u8 iff the iso holds (ast_len == 16+n, out_len == n, out bytes == in bytes). */
+fn ti_roundtrip(n: u64) -> u8 {
+    let pin : *u8 = (&TI_IN as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        pin[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    let ast_len : u64 = tp_iii_to_ast_bin(&TI_IN as u64, n, &TI_AST as u64, 128u64)
+    if ast_len != 16u64 + n { return 0u8 }
+    let out_len : u64 = tp_ast_bin_to_iii(&TI_AST as u64, ast_len, &TI_OUT as u64, 64u64)
+    if out_len != n { return 0u8 }
+    let pout : *u8 = (&TI_OUT as u64) as *u8
+    let mut acc : u32 = 0u32
+    let mut j : u64 = 0u64
+    while j < n {
+        acc = acc | ((pin[j] as u32) ^ (pout[j] as u32))
+        j = j + 1u64
+    }
+    if acc != 0u32 { return 0u8 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* the lossless iso round-trips to identity over several lengths (empty, 1, mid, full). */
+    if ti_roundtrip(0u64)  != 1u8 { return 1u64 }
+    if ti_roundtrip(1u64)  != 1u8 { return 2u64 }
+    if ti_roundtrip(17u64) != 1u8 { return 3u64 }
+    if ti_roundtrip(64u64) != 1u8 { return 4u64 }
+    /* prove the negative: a tampered AST-bin (corrupted magic header) is REJECTED by the decode. */
+    let n : u64 = 32u64
+    let pin : *u8 = (&TI_IN as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < n { pin[i] = 0x55u8  i = i + 1u64 }
+    let ast_len : u64 = tp_iii_to_ast_bin(&TI_IN as u64, n, &TI_AST as u64, 128u64)
+    if ast_len != 16u64 + n { return 5u64 }
+    let pa : *u8 = (&TI_AST as u64) as *u8
+    pa[0u64] = pa[0u64] ^ 0x01u8
+    if tp_ast_bin_to_iii(&TI_AST as u64, ast_len, &TI_OUT as u64, 64u64) != 0u64 { return 6u64 }
+    return 99u64
+}

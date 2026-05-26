@@ -1,0 +1,4 @@
+/* 631 — symbolic_regression: exact deterministic bounded symbolic search + Q32.32 verifier (no ML). */
+module corpus_631
+extern @abi(c-msvc-x64) fn symreg_selftest() -> u64 from "symbolic_regression.iii"
+fn main() -> u64 { return symreg_selftest() }

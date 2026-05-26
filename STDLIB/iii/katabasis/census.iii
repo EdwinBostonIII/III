@@ -1,0 +1,79 @@
+/* STDLIB/iii/katabasis/census.iii
+ *
+ * KATABASIS increment 9 -- the Census Crystal (plan 3.4 / FR-2).  The verified
+ * silicon facts (plan 0.1-0.2, read off live AD103/Ryzen hardware 2026-04-11)
+ * are held as a deterministic fact vector, content-hashed via numera/sha256 to
+ * yield the crystal's identity (the hash IS the identity, plan 3.4), and made
+ * drift-checkable: a measured fact that disagrees with the sealed expectation
+ * is a deterministic drift (the seed of CAP_SILICON_DRIFT, plan 3.6) -- never an
+ * anomaly score.  Two runs produce a byte-identical crystal (FR-2).
+ *
+ * The facts are the EXPECTED census; on real hardware the live census (built
+ * from ReadMetal cycles) is compared fact-by-fact against these.  Pure data +
+ * one sha256 over a fixed buffer -- no metal here.  KAT: corpus 603.  Ring R0.
+ */
+module katabasis_census
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* The 16 verified facts (plan 0.1-0.2). */
+var KCEN_FACTS : [u64; 16]
+var KCEN_INIT  : u8 = 0u8
+
+/* Populate the expected fact vector (idempotent). */
+fn katabasis_census_init() -> i32 @export {
+    if KCEN_INIT == 1u8 { return 0i32 }
+    /* === BEGIN AUTO-GENERATED FROM iii_census.def === */
+    /* GENERATED FROM iii_census.def by gen_census.sh -- DO NOT EDIT BY HAND. */
+    KCEN_FACTS[0u64]  = 0x10DE2717u64    /* GPU PCI (VEN 0x10DE << 16 | DEV 0x2717) */
+    KCEN_FACTS[1u64]  = 0xA1u64          /* GPU revision A1 */
+    KCEN_FACTS[2u64]  = 0x193000A1u64    /* NV_PMC_BOOT_0 (AD103 rev A1) */
+    KCEN_FACTS[3u64]  = 76u64            /* SM count */
+    KCEN_FACTS[4u64]  = 16376u64         /* VRAM (MB) */
+    KCEN_FACTS[5u64]  = 0xFB000000u64    /* GPU BAR0 (MMIO regs) */
+    KCEN_FACTS[6u64]  = 0xF800000000u64  /* GPU BAR1 (VRAM aperture) */
+    KCEN_FACTS[7u64]  = 0xFC00000000u64  /* GPU BAR3 (RAMIN) */
+    KCEN_FACTS[8u64]  = 0xFEE00000u64    /* CPU LAPIC */
+    KCEN_FACTS[9u64]  = 0x03B00000u64    /* CPU SMU */
+    KCEN_FACTS[10u64] = 32u64            /* cpu_count (16C/32T) */
+    KCEN_FACTS[11u64] = 0x010000u64      /* GPU PCI bus 1, dev 0, fn 0 */
+    KCEN_FACTS[12u64] = 0x110040u64      /* GSP Falcon MAILBOX0 */
+    KCEN_FACTS[13u64] = 0x300000u64      /* VBIOS base */
+    KCEN_FACTS[14u64] = 0x820000u64      /* RUNLIST base */
+    KCEN_FACTS[15u64] = 0xFED40000u64    /* TPM TCG TIS */
+    /* === END AUTO-GENERATED FROM iii_census.def === */
+    KCEN_INIT = 1u8
+    return 0i32
+}
+
+/* The number of facts in the census. */
+fn katabasis_census_fact_count() -> u64 @export { return 16u64 }
+
+/* Fact `idx` (the expected value), or 0 if out of range. */
+fn katabasis_census_fact(idx: u64) -> u64 @export {
+    katabasis_census_init()
+    let i : u64 = idx
+    if i < 16u64 { return KCEN_FACTS[i] }
+    return 0u64
+}
+
+/* Drift check at the fact level: does expected fact `idx` equal the measured
+ * `value`?  1 = matches, 0 = drift (or out of range).  The live census calls
+ * this for each measured silicon value; any 0 is a CAP_SILICON_DRIFT seed. */
+fn katabasis_census_fact_matches(idx: u64, value: u64) -> u8 @export {
+    katabasis_census_init()
+    let i : u64 = idx
+    let v : u64 = value
+    let f : u64 = katabasis_census_fact(i)
+    if f == v { return 1u8 }
+    return 0u8
+}
+
+/* The Census Crystal identity: sha256 over the 16-fact (128-byte) vector, into
+ * the 32-byte buffer at `out_addr`.  Content-addressed and reproducible. */
+fn katabasis_census_hash(out_addr: u64) -> i32 @export {
+    katabasis_census_init()
+    let o : u64 = out_addr
+    sha256_oneshot(&KCEN_FACTS as *u8, 128u64, o as *u8)
+    return 0i32
+}

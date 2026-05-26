@@ -1,0 +1,85 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\xoshiro.iii
+ *
+ * III STDLIB - numera::xoshiro
+ *
+ * xoshiro256** deterministic PRNG (Blackman & Vigna 2018), suitable
+ * for non-cryptographic randomness, simulations, hash mixing, fuzzing.
+ * 256-bit state, period 2^256 - 1.
+ *
+ * Public API (singleton state):
+ *   xoshiro_seed(s0:u64, s1:u64, s2:u64, s3:u64) -> i32
+ *   xoshiro_next_u64() -> u64
+ *   xoshiro_next_u32() -> u32
+ *   xoshiro_fill(out:*u8, len:u64) -> i32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.95 (non-crypto).
+ */
+
+module numera_xoshiro
+
+var XO_S0 : u64 = 0u64
+var XO_S1 : u64 = 0u64
+var XO_S2 : u64 = 0u64
+var XO_S3 : u64 = 0u64
+
+fn xo_rotl(x: u64, k: u64) -> u64 {
+    return (x << k) | (x >> (64u64 - k))
+}
+
+fn xoshiro_seed(s0: u64, s1: u64, s2: u64, s3: u64) -> i32 @k(value=1000000000) @export {
+    /* xoshiro requires non-zero state; if all-zero, substitute with
+     * a non-zero default (the SplitMix64 of seed=0 split into 4). */
+    if s0 == 0u64 {
+        if s1 == 0u64 {
+            if s2 == 0u64 {
+                if s3 == 0u64 {
+                    XO_S0 = 0xE220A8397B1DCDAFu64
+                    XO_S1 = 0x6E789E6AA1B965F4u64
+                    XO_S2 = 0x06C45D188009454Fu64
+                    XO_S3 = 0xF88BB8A8724C81ECu64
+                    return 0i32
+                }
+            }
+        }
+    }
+    XO_S0 = s0
+    XO_S1 = s1
+    XO_S2 = s2
+    XO_S3 = s3
+    return 0i32
+}
+
+fn xoshiro_next_u64() -> u64 @k(value=1000000000) @export {
+    let s1_x5 : u64 = XO_S1 * 5u64
+    let result : u64 = xo_rotl(s1_x5, 7u64) * 9u64
+    let t : u64 = XO_S1 << 17u64
+    XO_S2 = XO_S2 ^ XO_S0
+    XO_S3 = XO_S3 ^ XO_S1
+    XO_S1 = XO_S1 ^ XO_S2
+    XO_S0 = XO_S0 ^ XO_S3
+    XO_S2 = XO_S2 ^ t
+    XO_S3 = xo_rotl(XO_S3, 45u64)
+    return result
+}
+
+fn xoshiro_next_u32() -> u32 @k(value=1000000000) @export {
+    let v : u64 = xoshiro_next_u64()
+    return (v & 0xFFFFFFFFu64) as u32
+}
+
+fn xoshiro_fill(out: *u8, len: u64) -> i32 @k(value=1000000000) @export {
+    let mut pos : u64 = 0u64
+    while pos < len {
+        let v : u64 = xoshiro_next_u64()
+        let mut take : u64 = 8u64
+        if pos + take > len { take = len - pos }
+        let mut k : u64 = 0u64
+        while k < take {
+            let shift : u64 = k * 8u64
+            out[pos + k] = ((v >> shift) & 0xFFu64) as u8
+            k = k + 1u64
+        }
+        pos = pos + take
+    }
+    return 0i32
+}

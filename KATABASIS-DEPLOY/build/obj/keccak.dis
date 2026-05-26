@@ -1,0 +1,3538 @@
+
+KATABASIS-DEPLOY/build/obj/keccak.o:     file format pe-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <L_p__kk_init_rc>:
+       0:	55                   	push   rbp
+       1:	48 89 e5             	mov    rbp,rsp
+       4:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+       b:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+      12:	48 83 ec 20          	sub    rsp,0x20
+      16:	e8 00 00 00 00       	call   1b <L_p__kk_init_rc+0x1b>
+      1b:	48 83 c4 20          	add    rsp,0x20
+      1f:	48 8b 05 00 00 00 00 	mov    rax,QWORD PTR [rip+0x0]        # 26 <L_p__kk_init_rc+0x26>
+      26:	50                   	push   rax
+      27:	48 b8 01 00 00 00 00 	movabs rax,0x1
+      2e:	00 00 00 
+      31:	50                   	push   rax
+      32:	59                   	pop    rcx
+      33:	58                   	pop    rax
+      34:	48 39 c8             	cmp    rax,rcx
+      37:	0f 94 c0             	sete   al
+      3a:	48 0f b6 c0          	movzx  rax,al
+      3e:	50                   	push   rax
+      3f:	58                   	pop    rax
+      40:	48 85 c0             	test   rax,rax
+      43:	74 29                	je     6e <L_p__kk_init_rc+0x6e>
+      45:	48 b8 00 00 00 00 00 	movabs rax,0x0
+      4c:	00 00 00 
+      4f:	50                   	push   rax
+      50:	58                   	pop    rax
+      51:	50                   	push   rax
+      52:	50                   	push   rax
+      53:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+      5a:	48 83 ec 20          	sub    rsp,0x20
+      5e:	e8 00 00 00 00       	call   63 <L_p__kk_init_rc+0x63>
+      63:	48 83 c4 20          	add    rsp,0x20
+      67:	58                   	pop    rax
+      68:	58                   	pop    rax
+      69:	48 89 ec             	mov    rsp,rbp
+      6c:	5d                   	pop    rbp
+      6d:	c3                   	ret
+      6e:	48 b8 01 00 00 00 00 	movabs rax,0x1
+      75:	00 00 00 
+      78:	50                   	push   rax
+      79:	58                   	pop    rax
+      7a:	50                   	push   rax
+      7b:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 82 <L_p__kk_init_rc+0x82>
+      82:	50                   	push   rax
+      83:	48 b8 00 00 00 00 00 	movabs rax,0x0
+      8a:	00 00 00 
+      8d:	50                   	push   rax
+      8e:	59                   	pop    rcx
+      8f:	58                   	pop    rax
+      90:	5a                   	pop    rdx
+      91:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+      95:	48 b8 82 80 00 00 00 	movabs rax,0x8082
+      9c:	00 00 00 
+      9f:	50                   	push   rax
+      a0:	58                   	pop    rax
+      a1:	50                   	push   rax
+      a2:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # a9 <L_p__kk_init_rc+0xa9>
+      a9:	50                   	push   rax
+      aa:	48 b8 01 00 00 00 00 	movabs rax,0x1
+      b1:	00 00 00 
+      b4:	50                   	push   rax
+      b5:	59                   	pop    rcx
+      b6:	58                   	pop    rax
+      b7:	5a                   	pop    rdx
+      b8:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+      bc:	48 b8 8a 80 00 00 00 	movabs rax,0x800000000000808a
+      c3:	00 00 80 
+      c6:	50                   	push   rax
+      c7:	58                   	pop    rax
+      c8:	50                   	push   rax
+      c9:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # d0 <L_p__kk_init_rc+0xd0>
+      d0:	50                   	push   rax
+      d1:	48 b8 02 00 00 00 00 	movabs rax,0x2
+      d8:	00 00 00 
+      db:	50                   	push   rax
+      dc:	59                   	pop    rcx
+      dd:	58                   	pop    rax
+      de:	5a                   	pop    rdx
+      df:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+      e3:	48 b8 00 80 00 80 00 	movabs rax,0x8000000080008000
+      ea:	00 00 80 
+      ed:	50                   	push   rax
+      ee:	58                   	pop    rax
+      ef:	50                   	push   rax
+      f0:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # f7 <L_p__kk_init_rc+0xf7>
+      f7:	50                   	push   rax
+      f8:	48 b8 03 00 00 00 00 	movabs rax,0x3
+      ff:	00 00 00 
+     102:	50                   	push   rax
+     103:	59                   	pop    rcx
+     104:	58                   	pop    rax
+     105:	5a                   	pop    rdx
+     106:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     10a:	48 b8 8b 80 00 00 00 	movabs rax,0x808b
+     111:	00 00 00 
+     114:	50                   	push   rax
+     115:	58                   	pop    rax
+     116:	50                   	push   rax
+     117:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 11e <L_p__kk_init_rc+0x11e>
+     11e:	50                   	push   rax
+     11f:	48 b8 04 00 00 00 00 	movabs rax,0x4
+     126:	00 00 00 
+     129:	50                   	push   rax
+     12a:	59                   	pop    rcx
+     12b:	58                   	pop    rax
+     12c:	5a                   	pop    rdx
+     12d:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     131:	48 b8 01 00 00 80 00 	movabs rax,0x80000001
+     138:	00 00 00 
+     13b:	50                   	push   rax
+     13c:	58                   	pop    rax
+     13d:	50                   	push   rax
+     13e:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 145 <L_p__kk_init_rc+0x145>
+     145:	50                   	push   rax
+     146:	48 b8 05 00 00 00 00 	movabs rax,0x5
+     14d:	00 00 00 
+     150:	50                   	push   rax
+     151:	59                   	pop    rcx
+     152:	58                   	pop    rax
+     153:	5a                   	pop    rdx
+     154:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     158:	48 b8 81 80 00 80 00 	movabs rax,0x8000000080008081
+     15f:	00 00 80 
+     162:	50                   	push   rax
+     163:	58                   	pop    rax
+     164:	50                   	push   rax
+     165:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 16c <L_p__kk_init_rc+0x16c>
+     16c:	50                   	push   rax
+     16d:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     174:	00 00 00 
+     177:	50                   	push   rax
+     178:	59                   	pop    rcx
+     179:	58                   	pop    rax
+     17a:	5a                   	pop    rdx
+     17b:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     17f:	48 b8 09 80 00 00 00 	movabs rax,0x8000000000008009
+     186:	00 00 80 
+     189:	50                   	push   rax
+     18a:	58                   	pop    rax
+     18b:	50                   	push   rax
+     18c:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 193 <L_p__kk_init_rc+0x193>
+     193:	50                   	push   rax
+     194:	48 b8 07 00 00 00 00 	movabs rax,0x7
+     19b:	00 00 00 
+     19e:	50                   	push   rax
+     19f:	59                   	pop    rcx
+     1a0:	58                   	pop    rax
+     1a1:	5a                   	pop    rdx
+     1a2:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     1a6:	48 b8 8a 00 00 00 00 	movabs rax,0x8a
+     1ad:	00 00 00 
+     1b0:	50                   	push   rax
+     1b1:	58                   	pop    rax
+     1b2:	50                   	push   rax
+     1b3:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 1ba <L_p__kk_init_rc+0x1ba>
+     1ba:	50                   	push   rax
+     1bb:	48 b8 08 00 00 00 00 	movabs rax,0x8
+     1c2:	00 00 00 
+     1c5:	50                   	push   rax
+     1c6:	59                   	pop    rcx
+     1c7:	58                   	pop    rax
+     1c8:	5a                   	pop    rdx
+     1c9:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     1cd:	48 b8 88 00 00 00 00 	movabs rax,0x88
+     1d4:	00 00 00 
+     1d7:	50                   	push   rax
+     1d8:	58                   	pop    rax
+     1d9:	50                   	push   rax
+     1da:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 1e1 <L_p__kk_init_rc+0x1e1>
+     1e1:	50                   	push   rax
+     1e2:	48 b8 09 00 00 00 00 	movabs rax,0x9
+     1e9:	00 00 00 
+     1ec:	50                   	push   rax
+     1ed:	59                   	pop    rcx
+     1ee:	58                   	pop    rax
+     1ef:	5a                   	pop    rdx
+     1f0:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     1f4:	48 b8 09 80 00 80 00 	movabs rax,0x80008009
+     1fb:	00 00 00 
+     1fe:	50                   	push   rax
+     1ff:	58                   	pop    rax
+     200:	50                   	push   rax
+     201:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 208 <L_p__kk_init_rc+0x208>
+     208:	50                   	push   rax
+     209:	48 b8 0a 00 00 00 00 	movabs rax,0xa
+     210:	00 00 00 
+     213:	50                   	push   rax
+     214:	59                   	pop    rcx
+     215:	58                   	pop    rax
+     216:	5a                   	pop    rdx
+     217:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     21b:	48 b8 0a 00 00 80 00 	movabs rax,0x8000000a
+     222:	00 00 00 
+     225:	50                   	push   rax
+     226:	58                   	pop    rax
+     227:	50                   	push   rax
+     228:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 22f <L_p__kk_init_rc+0x22f>
+     22f:	50                   	push   rax
+     230:	48 b8 0b 00 00 00 00 	movabs rax,0xb
+     237:	00 00 00 
+     23a:	50                   	push   rax
+     23b:	59                   	pop    rcx
+     23c:	58                   	pop    rax
+     23d:	5a                   	pop    rdx
+     23e:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     242:	48 b8 8b 80 00 80 00 	movabs rax,0x8000808b
+     249:	00 00 00 
+     24c:	50                   	push   rax
+     24d:	58                   	pop    rax
+     24e:	50                   	push   rax
+     24f:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 256 <L_p__kk_init_rc+0x256>
+     256:	50                   	push   rax
+     257:	48 b8 0c 00 00 00 00 	movabs rax,0xc
+     25e:	00 00 00 
+     261:	50                   	push   rax
+     262:	59                   	pop    rcx
+     263:	58                   	pop    rax
+     264:	5a                   	pop    rdx
+     265:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     269:	48 b8 8b 00 00 00 00 	movabs rax,0x800000000000008b
+     270:	00 00 80 
+     273:	50                   	push   rax
+     274:	58                   	pop    rax
+     275:	50                   	push   rax
+     276:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 27d <L_p__kk_init_rc+0x27d>
+     27d:	50                   	push   rax
+     27e:	48 b8 0d 00 00 00 00 	movabs rax,0xd
+     285:	00 00 00 
+     288:	50                   	push   rax
+     289:	59                   	pop    rcx
+     28a:	58                   	pop    rax
+     28b:	5a                   	pop    rdx
+     28c:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     290:	48 b8 89 80 00 00 00 	movabs rax,0x8000000000008089
+     297:	00 00 80 
+     29a:	50                   	push   rax
+     29b:	58                   	pop    rax
+     29c:	50                   	push   rax
+     29d:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 2a4 <L_p__kk_init_rc+0x2a4>
+     2a4:	50                   	push   rax
+     2a5:	48 b8 0e 00 00 00 00 	movabs rax,0xe
+     2ac:	00 00 00 
+     2af:	50                   	push   rax
+     2b0:	59                   	pop    rcx
+     2b1:	58                   	pop    rax
+     2b2:	5a                   	pop    rdx
+     2b3:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     2b7:	48 b8 03 80 00 00 00 	movabs rax,0x8000000000008003
+     2be:	00 00 80 
+     2c1:	50                   	push   rax
+     2c2:	58                   	pop    rax
+     2c3:	50                   	push   rax
+     2c4:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 2cb <L_p__kk_init_rc+0x2cb>
+     2cb:	50                   	push   rax
+     2cc:	48 b8 0f 00 00 00 00 	movabs rax,0xf
+     2d3:	00 00 00 
+     2d6:	50                   	push   rax
+     2d7:	59                   	pop    rcx
+     2d8:	58                   	pop    rax
+     2d9:	5a                   	pop    rdx
+     2da:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     2de:	48 b8 02 80 00 00 00 	movabs rax,0x8000000000008002
+     2e5:	00 00 80 
+     2e8:	50                   	push   rax
+     2e9:	58                   	pop    rax
+     2ea:	50                   	push   rax
+     2eb:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 2f2 <L_p__kk_init_rc+0x2f2>
+     2f2:	50                   	push   rax
+     2f3:	48 b8 10 00 00 00 00 	movabs rax,0x10
+     2fa:	00 00 00 
+     2fd:	50                   	push   rax
+     2fe:	59                   	pop    rcx
+     2ff:	58                   	pop    rax
+     300:	5a                   	pop    rdx
+     301:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     305:	48 b8 80 00 00 00 00 	movabs rax,0x8000000000000080
+     30c:	00 00 80 
+     30f:	50                   	push   rax
+     310:	58                   	pop    rax
+     311:	50                   	push   rax
+     312:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 319 <L_p__kk_init_rc+0x319>
+     319:	50                   	push   rax
+     31a:	48 b8 11 00 00 00 00 	movabs rax,0x11
+     321:	00 00 00 
+     324:	50                   	push   rax
+     325:	59                   	pop    rcx
+     326:	58                   	pop    rax
+     327:	5a                   	pop    rdx
+     328:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     32c:	48 b8 0a 80 00 00 00 	movabs rax,0x800a
+     333:	00 00 00 
+     336:	50                   	push   rax
+     337:	58                   	pop    rax
+     338:	50                   	push   rax
+     339:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 340 <L_p__kk_init_rc+0x340>
+     340:	50                   	push   rax
+     341:	48 b8 12 00 00 00 00 	movabs rax,0x12
+     348:	00 00 00 
+     34b:	50                   	push   rax
+     34c:	59                   	pop    rcx
+     34d:	58                   	pop    rax
+     34e:	5a                   	pop    rdx
+     34f:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     353:	48 b8 0a 00 00 80 00 	movabs rax,0x800000008000000a
+     35a:	00 00 80 
+     35d:	50                   	push   rax
+     35e:	58                   	pop    rax
+     35f:	50                   	push   rax
+     360:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 367 <L_p__kk_init_rc+0x367>
+     367:	50                   	push   rax
+     368:	48 b8 13 00 00 00 00 	movabs rax,0x13
+     36f:	00 00 00 
+     372:	50                   	push   rax
+     373:	59                   	pop    rcx
+     374:	58                   	pop    rax
+     375:	5a                   	pop    rdx
+     376:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     37a:	48 b8 81 80 00 80 00 	movabs rax,0x8000000080008081
+     381:	00 00 80 
+     384:	50                   	push   rax
+     385:	58                   	pop    rax
+     386:	50                   	push   rax
+     387:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 38e <L_p__kk_init_rc+0x38e>
+     38e:	50                   	push   rax
+     38f:	48 b8 14 00 00 00 00 	movabs rax,0x14
+     396:	00 00 00 
+     399:	50                   	push   rax
+     39a:	59                   	pop    rcx
+     39b:	58                   	pop    rax
+     39c:	5a                   	pop    rdx
+     39d:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     3a1:	48 b8 80 80 00 00 00 	movabs rax,0x8000000000008080
+     3a8:	00 00 80 
+     3ab:	50                   	push   rax
+     3ac:	58                   	pop    rax
+     3ad:	50                   	push   rax
+     3ae:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 3b5 <L_p__kk_init_rc+0x3b5>
+     3b5:	50                   	push   rax
+     3b6:	48 b8 15 00 00 00 00 	movabs rax,0x15
+     3bd:	00 00 00 
+     3c0:	50                   	push   rax
+     3c1:	59                   	pop    rcx
+     3c2:	58                   	pop    rax
+     3c3:	5a                   	pop    rdx
+     3c4:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     3c8:	48 b8 01 00 00 80 00 	movabs rax,0x80000001
+     3cf:	00 00 00 
+     3d2:	50                   	push   rax
+     3d3:	58                   	pop    rax
+     3d4:	50                   	push   rax
+     3d5:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 3dc <L_p__kk_init_rc+0x3dc>
+     3dc:	50                   	push   rax
+     3dd:	48 b8 16 00 00 00 00 	movabs rax,0x16
+     3e4:	00 00 00 
+     3e7:	50                   	push   rax
+     3e8:	59                   	pop    rcx
+     3e9:	58                   	pop    rax
+     3ea:	5a                   	pop    rdx
+     3eb:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     3ef:	48 b8 08 80 00 80 00 	movabs rax,0x8000000080008008
+     3f6:	00 00 80 
+     3f9:	50                   	push   rax
+     3fa:	58                   	pop    rax
+     3fb:	50                   	push   rax
+     3fc:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 403 <L_p__kk_init_rc+0x403>
+     403:	50                   	push   rax
+     404:	48 b8 17 00 00 00 00 	movabs rax,0x17
+     40b:	00 00 00 
+     40e:	50                   	push   rax
+     40f:	59                   	pop    rcx
+     410:	58                   	pop    rax
+     411:	5a                   	pop    rdx
+     412:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     416:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     41d:	00 00 00 
+     420:	50                   	push   rax
+     421:	58                   	pop    rax
+     422:	48 89 05 00 00 00 00 	mov    QWORD PTR [rip+0x0],rax        # 429 <L_p__kk_init_rc+0x429>
+     429:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     430:	00 00 00 
+     433:	50                   	push   rax
+     434:	58                   	pop    rax
+     435:	50                   	push   rax
+     436:	50                   	push   rax
+     437:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     43e:	48 83 ec 20          	sub    rsp,0x20
+     442:	e8 00 00 00 00       	call   447 <L_p__kk_init_rc+0x447>
+     447:	48 83 c4 20          	add    rsp,0x20
+     44b:	58                   	pop    rax
+     44c:	58                   	pop    rax
+     44d:	48 89 ec             	mov    rsp,rbp
+     450:	5d                   	pop    rbp
+     451:	c3                   	ret
+
+0000000000000452 <L_p__kk_init_rho>:
+     452:	55                   	push   rbp
+     453:	48 89 e5             	mov    rbp,rsp
+     456:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     45d:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     464:	48 83 ec 20          	sub    rsp,0x20
+     468:	e8 00 00 00 00       	call   46d <L_p__kk_init_rho+0x1b>
+     46d:	48 83 c4 20          	add    rsp,0x20
+     471:	48 8b 05 08 00 00 00 	mov    rax,QWORD PTR [rip+0x8]        # 480 <L_p__kk_init_rho+0x2e>
+     478:	50                   	push   rax
+     479:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     480:	00 00 00 
+     483:	50                   	push   rax
+     484:	59                   	pop    rcx
+     485:	58                   	pop    rax
+     486:	48 39 c8             	cmp    rax,rcx
+     489:	0f 94 c0             	sete   al
+     48c:	48 0f b6 c0          	movzx  rax,al
+     490:	50                   	push   rax
+     491:	58                   	pop    rax
+     492:	48 85 c0             	test   rax,rax
+     495:	74 29                	je     4c0 <L_p__kk_init_rho+0x6e>
+     497:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     49e:	00 00 00 
+     4a1:	50                   	push   rax
+     4a2:	58                   	pop    rax
+     4a3:	50                   	push   rax
+     4a4:	50                   	push   rax
+     4a5:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     4ac:	48 83 ec 20          	sub    rsp,0x20
+     4b0:	e8 00 00 00 00       	call   4b5 <L_p__kk_init_rho+0x63>
+     4b5:	48 83 c4 20          	add    rsp,0x20
+     4b9:	58                   	pop    rax
+     4ba:	58                   	pop    rax
+     4bb:	48 89 ec             	mov    rsp,rbp
+     4be:	5d                   	pop    rbp
+     4bf:	c3                   	ret
+     4c0:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     4c7:	00 00 00 
+     4ca:	50                   	push   rax
+     4cb:	58                   	pop    rax
+     4cc:	50                   	push   rax
+     4cd:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 594 <L_p__kk_init_rho+0x142>
+     4d4:	50                   	push   rax
+     4d5:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     4dc:	00 00 00 
+     4df:	50                   	push   rax
+     4e0:	59                   	pop    rcx
+     4e1:	58                   	pop    rax
+     4e2:	5a                   	pop    rdx
+     4e3:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     4e7:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     4ee:	00 00 00 
+     4f1:	50                   	push   rax
+     4f2:	58                   	pop    rax
+     4f3:	50                   	push   rax
+     4f4:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 5bb <L_p__kk_init_rho+0x169>
+     4fb:	50                   	push   rax
+     4fc:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     503:	00 00 00 
+     506:	50                   	push   rax
+     507:	59                   	pop    rcx
+     508:	58                   	pop    rax
+     509:	5a                   	pop    rdx
+     50a:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     50e:	48 b8 3e 00 00 00 00 	movabs rax,0x3e
+     515:	00 00 00 
+     518:	50                   	push   rax
+     519:	58                   	pop    rax
+     51a:	50                   	push   rax
+     51b:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 5e2 <L_p__kk_init_rho+0x190>
+     522:	50                   	push   rax
+     523:	48 b8 02 00 00 00 00 	movabs rax,0x2
+     52a:	00 00 00 
+     52d:	50                   	push   rax
+     52e:	59                   	pop    rcx
+     52f:	58                   	pop    rax
+     530:	5a                   	pop    rdx
+     531:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     535:	48 b8 1c 00 00 00 00 	movabs rax,0x1c
+     53c:	00 00 00 
+     53f:	50                   	push   rax
+     540:	58                   	pop    rax
+     541:	50                   	push   rax
+     542:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 609 <L_p__kk_init_rho+0x1b7>
+     549:	50                   	push   rax
+     54a:	48 b8 03 00 00 00 00 	movabs rax,0x3
+     551:	00 00 00 
+     554:	50                   	push   rax
+     555:	59                   	pop    rcx
+     556:	58                   	pop    rax
+     557:	5a                   	pop    rdx
+     558:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     55c:	48 b8 1b 00 00 00 00 	movabs rax,0x1b
+     563:	00 00 00 
+     566:	50                   	push   rax
+     567:	58                   	pop    rax
+     568:	50                   	push   rax
+     569:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 630 <L_p__kk_init_rho+0x1de>
+     570:	50                   	push   rax
+     571:	48 b8 04 00 00 00 00 	movabs rax,0x4
+     578:	00 00 00 
+     57b:	50                   	push   rax
+     57c:	59                   	pop    rcx
+     57d:	58                   	pop    rax
+     57e:	5a                   	pop    rdx
+     57f:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     583:	48 b8 24 00 00 00 00 	movabs rax,0x24
+     58a:	00 00 00 
+     58d:	50                   	push   rax
+     58e:	58                   	pop    rax
+     58f:	50                   	push   rax
+     590:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 657 <L_p__kk_init_rho+0x205>
+     597:	50                   	push   rax
+     598:	48 b8 05 00 00 00 00 	movabs rax,0x5
+     59f:	00 00 00 
+     5a2:	50                   	push   rax
+     5a3:	59                   	pop    rcx
+     5a4:	58                   	pop    rax
+     5a5:	5a                   	pop    rdx
+     5a6:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     5aa:	48 b8 2c 00 00 00 00 	movabs rax,0x2c
+     5b1:	00 00 00 
+     5b4:	50                   	push   rax
+     5b5:	58                   	pop    rax
+     5b6:	50                   	push   rax
+     5b7:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 67e <L_p__kk_init_rho+0x22c>
+     5be:	50                   	push   rax
+     5bf:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     5c6:	00 00 00 
+     5c9:	50                   	push   rax
+     5ca:	59                   	pop    rcx
+     5cb:	58                   	pop    rax
+     5cc:	5a                   	pop    rdx
+     5cd:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     5d1:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     5d8:	00 00 00 
+     5db:	50                   	push   rax
+     5dc:	58                   	pop    rax
+     5dd:	50                   	push   rax
+     5de:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 6a5 <L_p__kk_init_rho+0x253>
+     5e5:	50                   	push   rax
+     5e6:	48 b8 07 00 00 00 00 	movabs rax,0x7
+     5ed:	00 00 00 
+     5f0:	50                   	push   rax
+     5f1:	59                   	pop    rcx
+     5f2:	58                   	pop    rax
+     5f3:	5a                   	pop    rdx
+     5f4:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     5f8:	48 b8 37 00 00 00 00 	movabs rax,0x37
+     5ff:	00 00 00 
+     602:	50                   	push   rax
+     603:	58                   	pop    rax
+     604:	50                   	push   rax
+     605:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 6cc <L_p__kk_init_rho+0x27a>
+     60c:	50                   	push   rax
+     60d:	48 b8 08 00 00 00 00 	movabs rax,0x8
+     614:	00 00 00 
+     617:	50                   	push   rax
+     618:	59                   	pop    rcx
+     619:	58                   	pop    rax
+     61a:	5a                   	pop    rdx
+     61b:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     61f:	48 b8 14 00 00 00 00 	movabs rax,0x14
+     626:	00 00 00 
+     629:	50                   	push   rax
+     62a:	58                   	pop    rax
+     62b:	50                   	push   rax
+     62c:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 6f3 <L_p__kk_init_rho+0x2a1>
+     633:	50                   	push   rax
+     634:	48 b8 09 00 00 00 00 	movabs rax,0x9
+     63b:	00 00 00 
+     63e:	50                   	push   rax
+     63f:	59                   	pop    rcx
+     640:	58                   	pop    rax
+     641:	5a                   	pop    rdx
+     642:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     646:	48 b8 03 00 00 00 00 	movabs rax,0x3
+     64d:	00 00 00 
+     650:	50                   	push   rax
+     651:	58                   	pop    rax
+     652:	50                   	push   rax
+     653:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 71a <L_p__kk_init_rho+0x2c8>
+     65a:	50                   	push   rax
+     65b:	48 b8 0a 00 00 00 00 	movabs rax,0xa
+     662:	00 00 00 
+     665:	50                   	push   rax
+     666:	59                   	pop    rcx
+     667:	58                   	pop    rax
+     668:	5a                   	pop    rdx
+     669:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     66d:	48 b8 0a 00 00 00 00 	movabs rax,0xa
+     674:	00 00 00 
+     677:	50                   	push   rax
+     678:	58                   	pop    rax
+     679:	50                   	push   rax
+     67a:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 741 <L_p__kk_init_rho+0x2ef>
+     681:	50                   	push   rax
+     682:	48 b8 0b 00 00 00 00 	movabs rax,0xb
+     689:	00 00 00 
+     68c:	50                   	push   rax
+     68d:	59                   	pop    rcx
+     68e:	58                   	pop    rax
+     68f:	5a                   	pop    rdx
+     690:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     694:	48 b8 2b 00 00 00 00 	movabs rax,0x2b
+     69b:	00 00 00 
+     69e:	50                   	push   rax
+     69f:	58                   	pop    rax
+     6a0:	50                   	push   rax
+     6a1:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 768 <L_p__kk_init_rho+0x316>
+     6a8:	50                   	push   rax
+     6a9:	48 b8 0c 00 00 00 00 	movabs rax,0xc
+     6b0:	00 00 00 
+     6b3:	50                   	push   rax
+     6b4:	59                   	pop    rcx
+     6b5:	58                   	pop    rax
+     6b6:	5a                   	pop    rdx
+     6b7:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     6bb:	48 b8 19 00 00 00 00 	movabs rax,0x19
+     6c2:	00 00 00 
+     6c5:	50                   	push   rax
+     6c6:	58                   	pop    rax
+     6c7:	50                   	push   rax
+     6c8:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 78f <L_p__kk_init_rho+0x33d>
+     6cf:	50                   	push   rax
+     6d0:	48 b8 0d 00 00 00 00 	movabs rax,0xd
+     6d7:	00 00 00 
+     6da:	50                   	push   rax
+     6db:	59                   	pop    rcx
+     6dc:	58                   	pop    rax
+     6dd:	5a                   	pop    rdx
+     6de:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     6e2:	48 b8 27 00 00 00 00 	movabs rax,0x27
+     6e9:	00 00 00 
+     6ec:	50                   	push   rax
+     6ed:	58                   	pop    rax
+     6ee:	50                   	push   rax
+     6ef:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 7b6 <L_p__kk_init_rho+0x364>
+     6f6:	50                   	push   rax
+     6f7:	48 b8 0e 00 00 00 00 	movabs rax,0xe
+     6fe:	00 00 00 
+     701:	50                   	push   rax
+     702:	59                   	pop    rcx
+     703:	58                   	pop    rax
+     704:	5a                   	pop    rdx
+     705:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     709:	48 b8 29 00 00 00 00 	movabs rax,0x29
+     710:	00 00 00 
+     713:	50                   	push   rax
+     714:	58                   	pop    rax
+     715:	50                   	push   rax
+     716:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 7dd <L_p__kk_init_rho+0x38b>
+     71d:	50                   	push   rax
+     71e:	48 b8 0f 00 00 00 00 	movabs rax,0xf
+     725:	00 00 00 
+     728:	50                   	push   rax
+     729:	59                   	pop    rcx
+     72a:	58                   	pop    rax
+     72b:	5a                   	pop    rdx
+     72c:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     730:	48 b8 2d 00 00 00 00 	movabs rax,0x2d
+     737:	00 00 00 
+     73a:	50                   	push   rax
+     73b:	58                   	pop    rax
+     73c:	50                   	push   rax
+     73d:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 804 <L_p__kk_init_rho+0x3b2>
+     744:	50                   	push   rax
+     745:	48 b8 10 00 00 00 00 	movabs rax,0x10
+     74c:	00 00 00 
+     74f:	50                   	push   rax
+     750:	59                   	pop    rcx
+     751:	58                   	pop    rax
+     752:	5a                   	pop    rdx
+     753:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     757:	48 b8 0f 00 00 00 00 	movabs rax,0xf
+     75e:	00 00 00 
+     761:	50                   	push   rax
+     762:	58                   	pop    rax
+     763:	50                   	push   rax
+     764:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 82b <L_p__kk_init_rho+0x3d9>
+     76b:	50                   	push   rax
+     76c:	48 b8 11 00 00 00 00 	movabs rax,0x11
+     773:	00 00 00 
+     776:	50                   	push   rax
+     777:	59                   	pop    rcx
+     778:	58                   	pop    rax
+     779:	5a                   	pop    rdx
+     77a:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     77e:	48 b8 15 00 00 00 00 	movabs rax,0x15
+     785:	00 00 00 
+     788:	50                   	push   rax
+     789:	58                   	pop    rax
+     78a:	50                   	push   rax
+     78b:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 852 <L_p__kk_init_rho+0x400>
+     792:	50                   	push   rax
+     793:	48 b8 12 00 00 00 00 	movabs rax,0x12
+     79a:	00 00 00 
+     79d:	50                   	push   rax
+     79e:	59                   	pop    rcx
+     79f:	58                   	pop    rax
+     7a0:	5a                   	pop    rdx
+     7a1:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     7a5:	48 b8 08 00 00 00 00 	movabs rax,0x8
+     7ac:	00 00 00 
+     7af:	50                   	push   rax
+     7b0:	58                   	pop    rax
+     7b1:	50                   	push   rax
+     7b2:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 879 <L_p__kk_init_rho+0x427>
+     7b9:	50                   	push   rax
+     7ba:	48 b8 13 00 00 00 00 	movabs rax,0x13
+     7c1:	00 00 00 
+     7c4:	50                   	push   rax
+     7c5:	59                   	pop    rcx
+     7c6:	58                   	pop    rax
+     7c7:	5a                   	pop    rdx
+     7c8:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     7cc:	48 b8 12 00 00 00 00 	movabs rax,0x12
+     7d3:	00 00 00 
+     7d6:	50                   	push   rax
+     7d7:	58                   	pop    rax
+     7d8:	50                   	push   rax
+     7d9:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 8a0 <L_p__kk_init_rho+0x44e>
+     7e0:	50                   	push   rax
+     7e1:	48 b8 14 00 00 00 00 	movabs rax,0x14
+     7e8:	00 00 00 
+     7eb:	50                   	push   rax
+     7ec:	59                   	pop    rcx
+     7ed:	58                   	pop    rax
+     7ee:	5a                   	pop    rdx
+     7ef:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     7f3:	48 b8 02 00 00 00 00 	movabs rax,0x2
+     7fa:	00 00 00 
+     7fd:	50                   	push   rax
+     7fe:	58                   	pop    rax
+     7ff:	50                   	push   rax
+     800:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 8c7 <L_p__kk_init_rho+0x475>
+     807:	50                   	push   rax
+     808:	48 b8 15 00 00 00 00 	movabs rax,0x15
+     80f:	00 00 00 
+     812:	50                   	push   rax
+     813:	59                   	pop    rcx
+     814:	58                   	pop    rax
+     815:	5a                   	pop    rdx
+     816:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     81a:	48 b8 3d 00 00 00 00 	movabs rax,0x3d
+     821:	00 00 00 
+     824:	50                   	push   rax
+     825:	58                   	pop    rax
+     826:	50                   	push   rax
+     827:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 8ee <L_p__kk_init_chi_idx+0x23>
+     82e:	50                   	push   rax
+     82f:	48 b8 16 00 00 00 00 	movabs rax,0x16
+     836:	00 00 00 
+     839:	50                   	push   rax
+     83a:	59                   	pop    rcx
+     83b:	58                   	pop    rax
+     83c:	5a                   	pop    rdx
+     83d:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     841:	48 b8 38 00 00 00 00 	movabs rax,0x38
+     848:	00 00 00 
+     84b:	50                   	push   rax
+     84c:	58                   	pop    rax
+     84d:	50                   	push   rax
+     84e:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 915 <L_p__kk_init_chi_idx+0x4a>
+     855:	50                   	push   rax
+     856:	48 b8 17 00 00 00 00 	movabs rax,0x17
+     85d:	00 00 00 
+     860:	50                   	push   rax
+     861:	59                   	pop    rcx
+     862:	58                   	pop    rax
+     863:	5a                   	pop    rdx
+     864:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     868:	48 b8 0e 00 00 00 00 	movabs rax,0xe
+     86f:	00 00 00 
+     872:	50                   	push   rax
+     873:	58                   	pop    rax
+     874:	50                   	push   rax
+     875:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 93c <L_p__kk_init_chi_idx+0x71>
+     87c:	50                   	push   rax
+     87d:	48 b8 18 00 00 00 00 	movabs rax,0x18
+     884:	00 00 00 
+     887:	50                   	push   rax
+     888:	59                   	pop    rcx
+     889:	58                   	pop    rax
+     88a:	5a                   	pop    rdx
+     88b:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     88f:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     896:	00 00 00 
+     899:	50                   	push   rax
+     89a:	58                   	pop    rax
+     89b:	48 89 05 08 00 00 00 	mov    QWORD PTR [rip+0x8],rax        # 8aa <L_p__kk_init_rho+0x458>
+     8a2:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     8a9:	00 00 00 
+     8ac:	50                   	push   rax
+     8ad:	58                   	pop    rax
+     8ae:	50                   	push   rax
+     8af:	50                   	push   rax
+     8b0:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     8b7:	48 83 ec 20          	sub    rsp,0x20
+     8bb:	e8 00 00 00 00       	call   8c0 <L_p__kk_init_rho+0x46e>
+     8c0:	48 83 c4 20          	add    rsp,0x20
+     8c4:	58                   	pop    rax
+     8c5:	58                   	pop    rax
+     8c6:	48 89 ec             	mov    rsp,rbp
+     8c9:	5d                   	pop    rbp
+     8ca:	c3                   	ret
+
+00000000000008cb <L_p__kk_init_chi_idx>:
+     8cb:	55                   	push   rbp
+     8cc:	48 89 e5             	mov    rbp,rsp
+     8cf:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     8d6:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     8dd:	48 83 ec 20          	sub    rsp,0x20
+     8e1:	e8 00 00 00 00       	call   8e6 <L_p__kk_init_chi_idx+0x1b>
+     8e6:	48 83 c4 20          	add    rsp,0x20
+     8ea:	48 8b 05 18 00 00 00 	mov    rax,QWORD PTR [rip+0x18]        # 909 <L_p__kk_init_chi_idx+0x3e>
+     8f1:	50                   	push   rax
+     8f2:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     8f9:	00 00 00 
+     8fc:	50                   	push   rax
+     8fd:	59                   	pop    rcx
+     8fe:	58                   	pop    rax
+     8ff:	48 39 c8             	cmp    rax,rcx
+     902:	0f 94 c0             	sete   al
+     905:	48 0f b6 c0          	movzx  rax,al
+     909:	50                   	push   rax
+     90a:	58                   	pop    rax
+     90b:	48 85 c0             	test   rax,rax
+     90e:	74 29                	je     939 <L_p__kk_init_chi_idx+0x6e>
+     910:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     917:	00 00 00 
+     91a:	50                   	push   rax
+     91b:	58                   	pop    rax
+     91c:	50                   	push   rax
+     91d:	50                   	push   rax
+     91e:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     925:	48 83 ec 20          	sub    rsp,0x20
+     929:	e8 00 00 00 00       	call   92e <L_p__kk_init_chi_idx+0x63>
+     92e:	48 83 c4 20          	add    rsp,0x20
+     932:	58                   	pop    rax
+     933:	58                   	pop    rax
+     934:	48 89 ec             	mov    rsp,rbp
+     937:	5d                   	pop    rbp
+     938:	c3                   	ret
+     939:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     940:	00 00 00 
+     943:	50                   	push   rax
+     944:	58                   	pop    rax
+     945:	50                   	push   rax
+     946:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # d25 <L_p__kk_load_lane+0x4a>
+     94d:	50                   	push   rax
+     94e:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     955:	00 00 00 
+     958:	50                   	push   rax
+     959:	59                   	pop    rcx
+     95a:	58                   	pop    rax
+     95b:	5a                   	pop    rdx
+     95c:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     960:	48 b8 02 00 00 00 00 	movabs rax,0x2
+     967:	00 00 00 
+     96a:	50                   	push   rax
+     96b:	58                   	pop    rax
+     96c:	50                   	push   rax
+     96d:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # d4c <L_p__kk_load_lane+0x71>
+     974:	50                   	push   rax
+     975:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     97c:	00 00 00 
+     97f:	50                   	push   rax
+     980:	59                   	pop    rcx
+     981:	58                   	pop    rax
+     982:	5a                   	pop    rdx
+     983:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     987:	48 b8 03 00 00 00 00 	movabs rax,0x3
+     98e:	00 00 00 
+     991:	50                   	push   rax
+     992:	58                   	pop    rax
+     993:	50                   	push   rax
+     994:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # d73 <L_p__kk_load_lane+0x98>
+     99b:	50                   	push   rax
+     99c:	48 b8 02 00 00 00 00 	movabs rax,0x2
+     9a3:	00 00 00 
+     9a6:	50                   	push   rax
+     9a7:	59                   	pop    rcx
+     9a8:	58                   	pop    rax
+     9a9:	5a                   	pop    rdx
+     9aa:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     9ae:	48 b8 04 00 00 00 00 	movabs rax,0x4
+     9b5:	00 00 00 
+     9b8:	50                   	push   rax
+     9b9:	58                   	pop    rax
+     9ba:	50                   	push   rax
+     9bb:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # d9a <L_p__kk_load_lane+0xbf>
+     9c2:	50                   	push   rax
+     9c3:	48 b8 03 00 00 00 00 	movabs rax,0x3
+     9ca:	00 00 00 
+     9cd:	50                   	push   rax
+     9ce:	59                   	pop    rcx
+     9cf:	58                   	pop    rax
+     9d0:	5a                   	pop    rdx
+     9d1:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     9d5:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     9dc:	00 00 00 
+     9df:	50                   	push   rax
+     9e0:	58                   	pop    rax
+     9e1:	50                   	push   rax
+     9e2:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # dc1 <L_p__kk_load_lane+0xe6>
+     9e9:	50                   	push   rax
+     9ea:	48 b8 04 00 00 00 00 	movabs rax,0x4
+     9f1:	00 00 00 
+     9f4:	50                   	push   rax
+     9f5:	59                   	pop    rcx
+     9f6:	58                   	pop    rax
+     9f7:	5a                   	pop    rdx
+     9f8:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     9fc:	48 b8 05 00 00 00 00 	movabs rax,0x5
+     a03:	00 00 00 
+     a06:	50                   	push   rax
+     a07:	58                   	pop    rax
+     a08:	50                   	push   rax
+     a09:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # de8 <L_p__kk_store_lane+0x7>
+     a10:	50                   	push   rax
+     a11:	48 b8 05 00 00 00 00 	movabs rax,0x5
+     a18:	00 00 00 
+     a1b:	50                   	push   rax
+     a1c:	59                   	pop    rcx
+     a1d:	58                   	pop    rax
+     a1e:	5a                   	pop    rdx
+     a1f:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     a23:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     a2a:	00 00 00 
+     a2d:	50                   	push   rax
+     a2e:	58                   	pop    rax
+     a2f:	50                   	push   rax
+     a30:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # e0f <L_p__kk_store_lane+0x2e>
+     a37:	50                   	push   rax
+     a38:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     a3f:	00 00 00 
+     a42:	50                   	push   rax
+     a43:	59                   	pop    rcx
+     a44:	58                   	pop    rax
+     a45:	5a                   	pop    rdx
+     a46:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     a4a:	48 b8 07 00 00 00 00 	movabs rax,0x7
+     a51:	00 00 00 
+     a54:	50                   	push   rax
+     a55:	58                   	pop    rax
+     a56:	50                   	push   rax
+     a57:	48 8d 05 d8 03 00 00 	lea    rax,[rip+0x3d8]        # e36 <L_p__kk_store_lane+0x55>
+     a5e:	50                   	push   rax
+     a5f:	48 b8 07 00 00 00 00 	movabs rax,0x7
+     a66:	00 00 00 
+     a69:	50                   	push   rax
+     a6a:	59                   	pop    rcx
+     a6b:	58                   	pop    rax
+     a6c:	5a                   	pop    rdx
+     a6d:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     a71:	48 b8 02 00 00 00 00 	movabs rax,0x2
+     a78:	00 00 00 
+     a7b:	50                   	push   rax
+     a7c:	58                   	pop    rax
+     a7d:	50                   	push   rax
+     a7e:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # e9d <L_p__kk_store_lane+0xbc>
+     a85:	50                   	push   rax
+     a86:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     a8d:	00 00 00 
+     a90:	50                   	push   rax
+     a91:	59                   	pop    rcx
+     a92:	58                   	pop    rax
+     a93:	5a                   	pop    rdx
+     a94:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     a98:	48 b8 03 00 00 00 00 	movabs rax,0x3
+     a9f:	00 00 00 
+     aa2:	50                   	push   rax
+     aa3:	58                   	pop    rax
+     aa4:	50                   	push   rax
+     aa5:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # ec4 <L_p__kk_store_lane+0xe3>
+     aac:	50                   	push   rax
+     aad:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     ab4:	00 00 00 
+     ab7:	50                   	push   rax
+     ab8:	59                   	pop    rcx
+     ab9:	58                   	pop    rax
+     aba:	5a                   	pop    rdx
+     abb:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     abf:	48 b8 04 00 00 00 00 	movabs rax,0x4
+     ac6:	00 00 00 
+     ac9:	50                   	push   rax
+     aca:	58                   	pop    rax
+     acb:	50                   	push   rax
+     acc:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # eeb <L_p_keccak_state_zero+0x24>
+     ad3:	50                   	push   rax
+     ad4:	48 b8 02 00 00 00 00 	movabs rax,0x2
+     adb:	00 00 00 
+     ade:	50                   	push   rax
+     adf:	59                   	pop    rcx
+     ae0:	58                   	pop    rax
+     ae1:	5a                   	pop    rdx
+     ae2:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     ae6:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     aed:	00 00 00 
+     af0:	50                   	push   rax
+     af1:	58                   	pop    rax
+     af2:	50                   	push   rax
+     af3:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # f12 <L_p_keccak_state_zero+0x4b>
+     afa:	50                   	push   rax
+     afb:	48 b8 03 00 00 00 00 	movabs rax,0x3
+     b02:	00 00 00 
+     b05:	50                   	push   rax
+     b06:	59                   	pop    rcx
+     b07:	58                   	pop    rax
+     b08:	5a                   	pop    rdx
+     b09:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     b0d:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     b14:	00 00 00 
+     b17:	50                   	push   rax
+     b18:	58                   	pop    rax
+     b19:	50                   	push   rax
+     b1a:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # f39 <L_p_keccak_state_zero+0x72>
+     b21:	50                   	push   rax
+     b22:	48 b8 04 00 00 00 00 	movabs rax,0x4
+     b29:	00 00 00 
+     b2c:	50                   	push   rax
+     b2d:	59                   	pop    rcx
+     b2e:	58                   	pop    rax
+     b2f:	5a                   	pop    rdx
+     b30:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     b34:	48 b8 05 00 00 00 00 	movabs rax,0x5
+     b3b:	00 00 00 
+     b3e:	50                   	push   rax
+     b3f:	58                   	pop    rax
+     b40:	50                   	push   rax
+     b41:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # f60 <L_p_keccak_state_zero+0x99>
+     b48:	50                   	push   rax
+     b49:	48 b8 05 00 00 00 00 	movabs rax,0x5
+     b50:	00 00 00 
+     b53:	50                   	push   rax
+     b54:	59                   	pop    rcx
+     b55:	58                   	pop    rax
+     b56:	5a                   	pop    rdx
+     b57:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     b5b:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     b62:	00 00 00 
+     b65:	50                   	push   rax
+     b66:	58                   	pop    rax
+     b67:	50                   	push   rax
+     b68:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # f87 <L_p_keccak_state_zero+0xc0>
+     b6f:	50                   	push   rax
+     b70:	48 b8 06 00 00 00 00 	movabs rax,0x6
+     b77:	00 00 00 
+     b7a:	50                   	push   rax
+     b7b:	59                   	pop    rcx
+     b7c:	58                   	pop    rax
+     b7d:	5a                   	pop    rdx
+     b7e:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     b82:	48 b8 07 00 00 00 00 	movabs rax,0x7
+     b89:	00 00 00 
+     b8c:	50                   	push   rax
+     b8d:	58                   	pop    rax
+     b8e:	50                   	push   rax
+     b8f:	48 8d 05 18 04 00 00 	lea    rax,[rip+0x418]        # fae <L_p_keccak_state_zero+0xe7>
+     b96:	50                   	push   rax
+     b97:	48 b8 07 00 00 00 00 	movabs rax,0x7
+     b9e:	00 00 00 
+     ba1:	50                   	push   rax
+     ba2:	59                   	pop    rcx
+     ba3:	58                   	pop    rax
+     ba4:	5a                   	pop    rdx
+     ba5:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     ba9:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     bb0:	00 00 00 
+     bb3:	50                   	push   rax
+     bb4:	58                   	pop    rax
+     bb5:	48 89 05 18 00 00 00 	mov    QWORD PTR [rip+0x18],rax        # bd4 <L_p__kk_init_chi_idx+0x309>
+     bbc:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     bc3:	00 00 00 
+     bc6:	50                   	push   rax
+     bc7:	58                   	pop    rax
+     bc8:	50                   	push   rax
+     bc9:	50                   	push   rax
+     bca:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     bd1:	48 83 ec 20          	sub    rsp,0x20
+     bd5:	e8 00 00 00 00       	call   bda <L_p__kk_init_chi_idx+0x30f>
+     bda:	48 83 c4 20          	add    rsp,0x20
+     bde:	58                   	pop    rax
+     bdf:	58                   	pop    rax
+     be0:	48 89 ec             	mov    rsp,rbp
+     be3:	5d                   	pop    rbp
+     be4:	c3                   	ret
+
+0000000000000be5 <L_p_keccak_rotl64>:
+     be5:	55                   	push   rbp
+     be6:	48 89 e5             	mov    rbp,rsp
+     be9:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     bf0:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+     bf4:	48 89 55 f0          	mov    QWORD PTR [rbp-0x10],rdx
+     bf8:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     bff:	48 83 ec 20          	sub    rsp,0x20
+     c03:	e8 00 00 00 00       	call   c08 <L_p_keccak_rotl64+0x23>
+     c08:	48 83 c4 20          	add    rsp,0x20
+     c0c:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+     c10:	50                   	push   rax
+     c11:	58                   	pop    rax
+     c12:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+     c16:	48 b8 3f 00 00 00 00 	movabs rax,0x3f
+     c1d:	00 00 00 
+     c20:	50                   	push   rax
+     c21:	59                   	pop    rcx
+     c22:	58                   	pop    rax
+     c23:	48 21 c8             	and    rax,rcx
+     c26:	50                   	push   rax
+     c27:	58                   	pop    rax
+     c28:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+     c2c:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+     c30:	50                   	push   rax
+     c31:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     c38:	00 00 00 
+     c3b:	50                   	push   rax
+     c3c:	59                   	pop    rcx
+     c3d:	58                   	pop    rax
+     c3e:	48 39 c8             	cmp    rax,rcx
+     c41:	0f 94 c0             	sete   al
+     c44:	48 0f b6 c0          	movzx  rax,al
+     c48:	50                   	push   rax
+     c49:	58                   	pop    rax
+     c4a:	48 85 c0             	test   rax,rax
+     c4d:	74 23                	je     c72 <L_p_keccak_rotl64+0x8d>
+     c4f:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+     c53:	50                   	push   rax
+     c54:	58                   	pop    rax
+     c55:	50                   	push   rax
+     c56:	50                   	push   rax
+     c57:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     c5e:	48 83 ec 20          	sub    rsp,0x20
+     c62:	e8 00 00 00 00       	call   c67 <L_p_keccak_rotl64+0x82>
+     c67:	48 83 c4 20          	add    rsp,0x20
+     c6b:	58                   	pop    rax
+     c6c:	58                   	pop    rax
+     c6d:	48 89 ec             	mov    rsp,rbp
+     c70:	5d                   	pop    rbp
+     c71:	c3                   	ret
+     c72:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+     c76:	50                   	push   rax
+     c77:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+     c7b:	50                   	push   rax
+     c7c:	59                   	pop    rcx
+     c7d:	58                   	pop    rax
+     c7e:	48 d3 e0             	shl    rax,cl
+     c81:	50                   	push   rax
+     c82:	58                   	pop    rax
+     c83:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+     c87:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+     c8b:	50                   	push   rax
+     c8c:	48 b8 40 00 00 00 00 	movabs rax,0x40
+     c93:	00 00 00 
+     c96:	50                   	push   rax
+     c97:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+     c9b:	50                   	push   rax
+     c9c:	59                   	pop    rcx
+     c9d:	58                   	pop    rax
+     c9e:	48 29 c8             	sub    rax,rcx
+     ca1:	50                   	push   rax
+     ca2:	59                   	pop    rcx
+     ca3:	58                   	pop    rax
+     ca4:	48 d3 e8             	shr    rax,cl
+     ca7:	50                   	push   rax
+     ca8:	58                   	pop    rax
+     ca9:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+     cad:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+     cb1:	50                   	push   rax
+     cb2:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+     cb6:	50                   	push   rax
+     cb7:	59                   	pop    rcx
+     cb8:	58                   	pop    rax
+     cb9:	48 09 c8             	or     rax,rcx
+     cbc:	50                   	push   rax
+     cbd:	58                   	pop    rax
+     cbe:	50                   	push   rax
+     cbf:	50                   	push   rax
+     cc0:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     cc7:	48 83 ec 20          	sub    rsp,0x20
+     ccb:	e8 00 00 00 00       	call   cd0 <L_p_keccak_rotl64+0xeb>
+     cd0:	48 83 c4 20          	add    rsp,0x20
+     cd4:	58                   	pop    rax
+     cd5:	58                   	pop    rax
+     cd6:	48 89 ec             	mov    rsp,rbp
+     cd9:	5d                   	pop    rbp
+     cda:	c3                   	ret
+
+0000000000000cdb <L_p__kk_load_lane>:
+     cdb:	55                   	push   rbp
+     cdc:	48 89 e5             	mov    rbp,rsp
+     cdf:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     ce6:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+     cea:	48 89 55 f0          	mov    QWORD PTR [rbp-0x10],rdx
+     cee:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     cf5:	48 83 ec 20          	sub    rsp,0x20
+     cf9:	e8 00 00 00 00       	call   cfe <L_p__kk_load_lane+0x23>
+     cfe:	48 83 c4 20          	add    rsp,0x20
+     d02:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+     d06:	50                   	push   rax
+     d07:	58                   	pop    rax
+     d08:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+     d0c:	48 b8 ff 00 00 00 00 	movabs rax,0xff
+     d13:	00 00 00 
+     d16:	50                   	push   rax
+     d17:	59                   	pop    rcx
+     d18:	58                   	pop    rax
+     d19:	48 21 c8             	and    rax,rcx
+     d1c:	50                   	push   rax
+     d1d:	58                   	pop    rax
+     d1e:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+     d22:	58                   	pop    rax
+     d23:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+     d27:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     d2e:	00 00 00 
+     d31:	50                   	push   rax
+     d32:	58                   	pop    rax
+     d33:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+     d37:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     d3e:	00 00 00 
+     d41:	50                   	push   rax
+     d42:	58                   	pop    rax
+     d43:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+     d47:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+     d4b:	50                   	push   rax
+     d4c:	48 b8 08 00 00 00 00 	movabs rax,0x8
+     d53:	00 00 00 
+     d56:	50                   	push   rax
+     d57:	59                   	pop    rcx
+     d58:	58                   	pop    rax
+     d59:	48 39 c8             	cmp    rax,rcx
+     d5c:	0f 9c c0             	setl   al
+     d5f:	48 0f b6 c0          	movzx  rax,al
+     d63:	50                   	push   rax
+     d64:	58                   	pop    rax
+     d65:	48 85 c0             	test   rax,rax
+     d68:	74 54                	je     dbe <L_p__kk_load_lane+0xe3>
+     d6a:	58                   	pop    rax
+     d6b:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+     d6f:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+     d73:	50                   	push   rax
+     d74:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+     d78:	50                   	push   rax
+     d79:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+     d7d:	50                   	push   rax
+     d7e:	48 b8 08 00 00 00 00 	movabs rax,0x8
+     d85:	00 00 00 
+     d88:	50                   	push   rax
+     d89:	59                   	pop    rcx
+     d8a:	58                   	pop    rax
+     d8b:	48 0f af c1          	imul   rax,rcx
+     d8f:	50                   	push   rax
+     d90:	59                   	pop    rcx
+     d91:	58                   	pop    rax
+     d92:	48 d3 e0             	shl    rax,cl
+     d95:	50                   	push   rax
+     d96:	59                   	pop    rcx
+     d97:	58                   	pop    rax
+     d98:	48 09 c8             	or     rax,rcx
+     d9b:	50                   	push   rax
+     d9c:	58                   	pop    rax
+     d9d:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+     da1:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+     da5:	50                   	push   rax
+     da6:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     dad:	00 00 00 
+     db0:	50                   	push   rax
+     db1:	59                   	pop    rcx
+     db2:	58                   	pop    rax
+     db3:	48 01 c8             	add    rax,rcx
+     db6:	50                   	push   rax
+     db7:	58                   	pop    rax
+     db8:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+     dbc:	eb 89                	jmp    d47 <L_p__kk_load_lane+0x6c>
+     dbe:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+     dc2:	50                   	push   rax
+     dc3:	58                   	pop    rax
+     dc4:	50                   	push   rax
+     dc5:	50                   	push   rax
+     dc6:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     dcd:	48 83 ec 20          	sub    rsp,0x20
+     dd1:	e8 00 00 00 00       	call   dd6 <L_p__kk_load_lane+0xfb>
+     dd6:	48 83 c4 20          	add    rsp,0x20
+     dda:	58                   	pop    rax
+     ddb:	58                   	pop    rax
+     ddc:	48 89 ec             	mov    rsp,rbp
+     ddf:	5d                   	pop    rbp
+     de0:	c3                   	ret
+
+0000000000000de1 <L_p__kk_store_lane>:
+     de1:	55                   	push   rbp
+     de2:	48 89 e5             	mov    rbp,rsp
+     de5:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     dec:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+     df0:	48 89 55 f0          	mov    QWORD PTR [rbp-0x10],rdx
+     df4:	4c 89 45 e8          	mov    QWORD PTR [rbp-0x18],r8
+     df8:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     dff:	48 83 ec 20          	sub    rsp,0x20
+     e03:	e8 00 00 00 00       	call   e08 <L_p__kk_store_lane+0x27>
+     e08:	48 83 c4 20          	add    rsp,0x20
+     e0c:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+     e10:	50                   	push   rax
+     e11:	58                   	pop    rax
+     e12:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+     e16:	48 b8 ff 00 00 00 00 	movabs rax,0xff
+     e1d:	00 00 00 
+     e20:	50                   	push   rax
+     e21:	59                   	pop    rcx
+     e22:	58                   	pop    rax
+     e23:	48 21 c8             	and    rax,rcx
+     e26:	50                   	push   rax
+     e27:	58                   	pop    rax
+     e28:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+     e2c:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+     e30:	50                   	push   rax
+     e31:	58                   	pop    rax
+     e32:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+     e36:	58                   	pop    rax
+     e37:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+     e3b:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     e42:	00 00 00 
+     e45:	50                   	push   rax
+     e46:	58                   	pop    rax
+     e47:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+     e4b:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+     e4f:	50                   	push   rax
+     e50:	48 b8 08 00 00 00 00 	movabs rax,0x8
+     e57:	00 00 00 
+     e5a:	50                   	push   rax
+     e5b:	59                   	pop    rcx
+     e5c:	58                   	pop    rax
+     e5d:	48 39 c8             	cmp    rax,rcx
+     e60:	0f 9c c0             	setl   al
+     e63:	48 0f b6 c0          	movzx  rax,al
+     e67:	50                   	push   rax
+     e68:	58                   	pop    rax
+     e69:	48 85 c0             	test   rax,rax
+     e6c:	74 30                	je     e9e <L_p__kk_store_lane+0xbd>
+     e6e:	58                   	pop    rax
+     e6f:	50                   	push   rax
+     e70:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+     e74:	50                   	push   rax
+     e75:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+     e79:	50                   	push   rax
+     e7a:	59                   	pop    rcx
+     e7b:	58                   	pop    rax
+     e7c:	5a                   	pop    rdx
+     e7d:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     e81:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+     e85:	50                   	push   rax
+     e86:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     e8d:	00 00 00 
+     e90:	50                   	push   rax
+     e91:	59                   	pop    rcx
+     e92:	58                   	pop    rax
+     e93:	48 01 c8             	add    rax,rcx
+     e96:	50                   	push   rax
+     e97:	58                   	pop    rax
+     e98:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+     e9c:	eb ad                	jmp    e4b <L_p__kk_store_lane+0x6a>
+     e9e:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     ea5:	00 00 00 
+     ea8:	50                   	push   rax
+     ea9:	58                   	pop    rax
+     eaa:	50                   	push   rax
+     eab:	50                   	push   rax
+     eac:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     eb3:	48 83 ec 20          	sub    rsp,0x20
+     eb7:	e8 00 00 00 00       	call   ebc <L_p__kk_store_lane+0xdb>
+     ebc:	48 83 c4 20          	add    rsp,0x20
+     ec0:	58                   	pop    rax
+     ec1:	58                   	pop    rax
+     ec2:	48 89 ec             	mov    rsp,rbp
+     ec5:	5d                   	pop    rbp
+     ec6:	c3                   	ret
+
+0000000000000ec7 <L_p_keccak_state_zero>:
+     ec7:	55                   	push   rbp
+     ec8:	48 89 e5             	mov    rbp,rsp
+     ecb:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     ed2:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+     ed6:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     edd:	48 83 ec 20          	sub    rsp,0x20
+     ee1:	e8 00 00 00 00       	call   ee6 <L_p_keccak_state_zero+0x1f>
+     ee6:	48 83 c4 20          	add    rsp,0x20
+     eea:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+     eee:	50                   	push   rax
+     eef:	58                   	pop    rax
+     ef0:	48 89 45 f0          	mov    QWORD PTR [rbp-0x10],rax
+     ef4:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+     ef8:	50                   	push   rax
+     ef9:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     f00:	00 00 00 
+     f03:	50                   	push   rax
+     f04:	59                   	pop    rcx
+     f05:	58                   	pop    rax
+     f06:	48 39 c8             	cmp    rax,rcx
+     f09:	0f 94 c0             	sete   al
+     f0c:	48 0f b6 c0          	movzx  rax,al
+     f10:	50                   	push   rax
+     f11:	58                   	pop    rax
+     f12:	48 85 c0             	test   rax,rax
+     f15:	74 26                	je     f3d <L_p_keccak_state_zero+0x76>
+     f17:	48 8b 05 08 00 00 00 	mov    rax,QWORD PTR [rip+0x8]        # f26 <L_p_keccak_state_zero+0x5f>
+     f1e:	50                   	push   rax
+     f1f:	58                   	pop    rax
+     f20:	50                   	push   rax
+     f21:	50                   	push   rax
+     f22:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     f29:	48 83 ec 20          	sub    rsp,0x20
+     f2d:	e8 00 00 00 00       	call   f32 <L_p_keccak_state_zero+0x6b>
+     f32:	48 83 c4 20          	add    rsp,0x20
+     f36:	58                   	pop    rax
+     f37:	58                   	pop    rax
+     f38:	48 89 ec             	mov    rsp,rbp
+     f3b:	5d                   	pop    rbp
+     f3c:	c3                   	ret
+     f3d:	58                   	pop    rax
+     f3e:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+     f42:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     f49:	00 00 00 
+     f4c:	50                   	push   rax
+     f4d:	58                   	pop    rax
+     f4e:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+     f52:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+     f56:	50                   	push   rax
+     f57:	48 b8 c8 00 00 00 00 	movabs rax,0xc8
+     f5e:	00 00 00 
+     f61:	50                   	push   rax
+     f62:	59                   	pop    rcx
+     f63:	58                   	pop    rax
+     f64:	48 39 c8             	cmp    rax,rcx
+     f67:	0f 9c c0             	setl   al
+     f6a:	48 0f b6 c0          	movzx  rax,al
+     f6e:	50                   	push   rax
+     f6f:	58                   	pop    rax
+     f70:	48 85 c0             	test   rax,rax
+     f73:	74 3b                	je     fb0 <L_p_keccak_state_zero+0xe9>
+     f75:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     f7c:	00 00 00 
+     f7f:	50                   	push   rax
+     f80:	58                   	pop    rax
+     f81:	50                   	push   rax
+     f82:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+     f86:	50                   	push   rax
+     f87:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+     f8b:	50                   	push   rax
+     f8c:	59                   	pop    rcx
+     f8d:	58                   	pop    rax
+     f8e:	5a                   	pop    rdx
+     f8f:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+     f93:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+     f97:	50                   	push   rax
+     f98:	48 b8 01 00 00 00 00 	movabs rax,0x1
+     f9f:	00 00 00 
+     fa2:	50                   	push   rax
+     fa3:	59                   	pop    rcx
+     fa4:	58                   	pop    rax
+     fa5:	48 01 c8             	add    rax,rcx
+     fa8:	50                   	push   rax
+     fa9:	58                   	pop    rax
+     faa:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+     fae:	eb a2                	jmp    f52 <L_p_keccak_state_zero+0x8b>
+     fb0:	48 8b 05 00 00 00 00 	mov    rax,QWORD PTR [rip+0x0]        # fb7 <L_p_keccak_state_zero+0xf0>
+     fb7:	50                   	push   rax
+     fb8:	58                   	pop    rax
+     fb9:	50                   	push   rax
+     fba:	50                   	push   rax
+     fbb:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+     fc2:	48 83 ec 20          	sub    rsp,0x20
+     fc6:	e8 00 00 00 00       	call   fcb <L_p_keccak_state_zero+0x104>
+     fcb:	48 83 c4 20          	add    rsp,0x20
+     fcf:	58                   	pop    rax
+     fd0:	58                   	pop    rax
+     fd1:	48 89 ec             	mov    rsp,rbp
+     fd4:	5d                   	pop    rbp
+     fd5:	c3                   	ret
+
+0000000000000fd6 <L_p__kk_chi_scalar>:
+     fd6:	55                   	push   rbp
+     fd7:	48 89 e5             	mov    rbp,rsp
+     fda:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+     fe1:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+     fe8:	48 83 ec 20          	sub    rsp,0x20
+     fec:	e8 00 00 00 00       	call   ff1 <L_p__kk_chi_scalar+0x1b>
+     ff1:	48 83 c4 20          	add    rsp,0x20
+     ff5:	48 b8 00 00 00 00 00 	movabs rax,0x0
+     ffc:	00 00 00 
+     fff:	50                   	push   rax
+    1000:	58                   	pop    rax
+    1001:	48 89 45 f8          	mov    QWORD PTR [rbp-0x8],rax
+    1005:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    1009:	50                   	push   rax
+    100a:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1011:	00 00 00 
+    1014:	50                   	push   rax
+    1015:	59                   	pop    rcx
+    1016:	58                   	pop    rax
+    1017:	48 39 c8             	cmp    rax,rcx
+    101a:	0f 9c c0             	setl   al
+    101d:	48 0f b6 c0          	movzx  rax,al
+    1021:	50                   	push   rax
+    1022:	58                   	pop    rax
+    1023:	48 85 c0             	test   rax,rax
+    1026:	0f 84 2b 02 00 00    	je     1257 <L_p__kk_chi_scalar+0x281>
+    102c:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1033:	00 00 00 
+    1036:	50                   	push   rax
+    1037:	58                   	pop    rax
+    1038:	48 89 45 f0          	mov    QWORD PTR [rbp-0x10],rax
+    103c:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1040:	50                   	push   rax
+    1041:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1048:	00 00 00 
+    104b:	50                   	push   rax
+    104c:	59                   	pop    rcx
+    104d:	58                   	pop    rax
+    104e:	48 39 c8             	cmp    rax,rcx
+    1051:	0f 9c c0             	setl   al
+    1054:	48 0f b6 c0          	movzx  rax,al
+    1058:	50                   	push   rax
+    1059:	58                   	pop    rax
+    105a:	48 85 c0             	test   rax,rax
+    105d:	0f 84 d4 01 00 00    	je     1237 <L_p__kk_chi_scalar+0x261>
+    1063:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1067:	50                   	push   rax
+    1068:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    106f:	00 00 00 
+    1072:	50                   	push   rax
+    1073:	59                   	pop    rcx
+    1074:	58                   	pop    rax
+    1075:	48 01 c8             	add    rax,rcx
+    1078:	50                   	push   rax
+    1079:	58                   	pop    rax
+    107a:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    107e:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    1082:	50                   	push   rax
+    1083:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    108a:	00 00 00 
+    108d:	50                   	push   rax
+    108e:	59                   	pop    rcx
+    108f:	58                   	pop    rax
+    1090:	48 39 c8             	cmp    rax,rcx
+    1093:	0f 9d c0             	setge  al
+    1096:	48 0f b6 c0          	movzx  rax,al
+    109a:	50                   	push   rax
+    109b:	58                   	pop    rax
+    109c:	48 85 c0             	test   rax,rax
+    109f:	74 1b                	je     10bc <L_p__kk_chi_scalar+0xe6>
+    10a1:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    10a5:	50                   	push   rax
+    10a6:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    10ad:	00 00 00 
+    10b0:	50                   	push   rax
+    10b1:	59                   	pop    rcx
+    10b2:	58                   	pop    rax
+    10b3:	48 29 c8             	sub    rax,rcx
+    10b6:	50                   	push   rax
+    10b7:	58                   	pop    rax
+    10b8:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    10bc:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    10c0:	50                   	push   rax
+    10c1:	48 b8 02 00 00 00 00 	movabs rax,0x2
+    10c8:	00 00 00 
+    10cb:	50                   	push   rax
+    10cc:	59                   	pop    rcx
+    10cd:	58                   	pop    rax
+    10ce:	48 01 c8             	add    rax,rcx
+    10d1:	50                   	push   rax
+    10d2:	58                   	pop    rax
+    10d3:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+    10d7:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    10db:	50                   	push   rax
+    10dc:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    10e3:	00 00 00 
+    10e6:	50                   	push   rax
+    10e7:	59                   	pop    rcx
+    10e8:	58                   	pop    rax
+    10e9:	48 39 c8             	cmp    rax,rcx
+    10ec:	0f 9d c0             	setge  al
+    10ef:	48 0f b6 c0          	movzx  rax,al
+    10f3:	50                   	push   rax
+    10f4:	58                   	pop    rax
+    10f5:	48 85 c0             	test   rax,rax
+    10f8:	74 1b                	je     1115 <L_p__kk_chi_scalar+0x13f>
+    10fa:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    10fe:	50                   	push   rax
+    10ff:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1106:	00 00 00 
+    1109:	50                   	push   rax
+    110a:	59                   	pop    rcx
+    110b:	58                   	pop    rax
+    110c:	48 29 c8             	sub    rax,rcx
+    110f:	50                   	push   rax
+    1110:	58                   	pop    rax
+    1111:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+    1115:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1119:	50                   	push   rax
+    111a:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1121:	00 00 00 
+    1124:	50                   	push   rax
+    1125:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    1129:	50                   	push   rax
+    112a:	59                   	pop    rcx
+    112b:	58                   	pop    rax
+    112c:	48 0f af c1          	imul   rax,rcx
+    1130:	50                   	push   rax
+    1131:	59                   	pop    rcx
+    1132:	58                   	pop    rax
+    1133:	48 01 c8             	add    rax,rcx
+    1136:	50                   	push   rax
+    1137:	58                   	pop    rax
+    1138:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+    113c:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    1140:	50                   	push   rax
+    1141:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1148:	00 00 00 
+    114b:	50                   	push   rax
+    114c:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    1150:	50                   	push   rax
+    1151:	59                   	pop    rcx
+    1152:	58                   	pop    rax
+    1153:	48 0f af c1          	imul   rax,rcx
+    1157:	50                   	push   rax
+    1158:	59                   	pop    rcx
+    1159:	58                   	pop    rax
+    115a:	48 01 c8             	add    rax,rcx
+    115d:	50                   	push   rax
+    115e:	58                   	pop    rax
+    115f:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+    1163:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    1167:	50                   	push   rax
+    1168:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    116f:	00 00 00 
+    1172:	50                   	push   rax
+    1173:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    1177:	50                   	push   rax
+    1178:	59                   	pop    rcx
+    1179:	58                   	pop    rax
+    117a:	48 0f af c1          	imul   rax,rcx
+    117e:	50                   	push   rax
+    117f:	59                   	pop    rcx
+    1180:	58                   	pop    rax
+    1181:	48 01 c8             	add    rax,rcx
+    1184:	50                   	push   rax
+    1185:	58                   	pop    rax
+    1186:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+    118a:	48 8d 05 88 02 00 00 	lea    rax,[rip+0x288]        # 1419 <L_p_keccak_chi_force_path+0xa>
+    1191:	50                   	push   rax
+    1192:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1196:	50                   	push   rax
+    1197:	59                   	pop    rcx
+    1198:	58                   	pop    rax
+    1199:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    119d:	50                   	push   rax
+    119e:	58                   	pop    rax
+    119f:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+    11a3:	48 8d 05 88 02 00 00 	lea    rax,[rip+0x288]        # 1432 <L_p_keccak_chi_force_path+0x23>
+    11aa:	50                   	push   rax
+    11ab:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+    11af:	50                   	push   rax
+    11b0:	59                   	pop    rcx
+    11b1:	58                   	pop    rax
+    11b2:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    11b6:	50                   	push   rax
+    11b7:	58                   	pop    rax
+    11b8:	48 89 45 b8          	mov    QWORD PTR [rbp-0x48],rax
+    11bc:	48 8d 05 88 02 00 00 	lea    rax,[rip+0x288]        # 144b <L_p_keccak_chi_force_path+0x3c>
+    11c3:	50                   	push   rax
+    11c4:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    11c8:	50                   	push   rax
+    11c9:	59                   	pop    rcx
+    11ca:	58                   	pop    rax
+    11cb:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    11cf:	50                   	push   rax
+    11d0:	58                   	pop    rax
+    11d1:	48 89 45 b0          	mov    QWORD PTR [rbp-0x50],rax
+    11d5:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+    11d9:	50                   	push   rax
+    11da:	48 8b 45 b8          	mov    rax,QWORD PTR [rbp-0x48]
+    11de:	50                   	push   rax
+    11df:	48 b8 ff ff ff ff ff 	movabs rax,0xffffffffffffffff
+    11e6:	ff ff ff 
+    11e9:	50                   	push   rax
+    11ea:	59                   	pop    rcx
+    11eb:	58                   	pop    rax
+    11ec:	48 31 c8             	xor    rax,rcx
+    11ef:	50                   	push   rax
+    11f0:	48 8b 45 b0          	mov    rax,QWORD PTR [rbp-0x50]
+    11f4:	50                   	push   rax
+    11f5:	59                   	pop    rcx
+    11f6:	58                   	pop    rax
+    11f7:	48 21 c8             	and    rax,rcx
+    11fa:	50                   	push   rax
+    11fb:	59                   	pop    rcx
+    11fc:	58                   	pop    rax
+    11fd:	48 31 c8             	xor    rax,rcx
+    1200:	50                   	push   rax
+    1201:	58                   	pop    rax
+    1202:	50                   	push   rax
+    1203:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1392 <L_p__kk_chi+0xca>
+    120a:	50                   	push   rax
+    120b:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    120f:	50                   	push   rax
+    1210:	59                   	pop    rcx
+    1211:	58                   	pop    rax
+    1212:	5a                   	pop    rdx
+    1213:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1217:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    121b:	50                   	push   rax
+    121c:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1223:	00 00 00 
+    1226:	50                   	push   rax
+    1227:	59                   	pop    rcx
+    1228:	58                   	pop    rax
+    1229:	48 01 c8             	add    rax,rcx
+    122c:	50                   	push   rax
+    122d:	58                   	pop    rax
+    122e:	48 89 45 f0          	mov    QWORD PTR [rbp-0x10],rax
+    1232:	e9 05 fe ff ff       	jmp    103c <L_p__kk_chi_scalar+0x66>
+    1237:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    123b:	50                   	push   rax
+    123c:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1243:	00 00 00 
+    1246:	50                   	push   rax
+    1247:	59                   	pop    rcx
+    1248:	58                   	pop    rax
+    1249:	48 01 c8             	add    rax,rcx
+    124c:	50                   	push   rax
+    124d:	58                   	pop    rax
+    124e:	48 89 45 f8          	mov    QWORD PTR [rbp-0x8],rax
+    1252:	e9 ae fd ff ff       	jmp    1005 <L_p__kk_chi_scalar+0x2f>
+    1257:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    125e:	00 00 00 
+    1261:	50                   	push   rax
+    1262:	58                   	pop    rax
+    1263:	50                   	push   rax
+    1264:	50                   	push   rax
+    1265:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    126c:	48 83 ec 20          	sub    rsp,0x20
+    1270:	e8 00 00 00 00       	call   1275 <L_p__kk_chi_scalar+0x29f>
+    1275:	48 83 c4 20          	add    rsp,0x20
+    1279:	58                   	pop    rax
+    127a:	58                   	pop    rax
+    127b:	48 89 ec             	mov    rsp,rbp
+    127e:	5d                   	pop    rbp
+    127f:	c3                   	ret
+
+0000000000001280 <L_p__kk_chi_avx512>:
+    1280:	55                   	push   rbp
+    1281:	48 89 e5             	mov    rbp,rsp
+    1284:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    128b:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    1292:	48 83 ec 20          	sub    rsp,0x20
+    1296:	e8 00 00 00 00       	call   129b <L_p__kk_chi_avx512+0x1b>
+    129b:	48 83 c4 20          	add    rsp,0x20
+    129f:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    12a6:	00 00 00 
+    12a9:	50                   	push   rax
+    12aa:	58                   	pop    rax
+    12ab:	50                   	push   rax
+    12ac:	50                   	push   rax
+    12ad:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    12b4:	48 83 ec 20          	sub    rsp,0x20
+    12b8:	e8 00 00 00 00       	call   12bd <L_p__kk_chi_avx512+0x3d>
+    12bd:	48 83 c4 20          	add    rsp,0x20
+    12c1:	58                   	pop    rax
+    12c2:	58                   	pop    rax
+    12c3:	48 89 ec             	mov    rsp,rbp
+    12c6:	5d                   	pop    rbp
+    12c7:	c3                   	ret
+
+00000000000012c8 <L_p__kk_chi>:
+    12c8:	55                   	push   rbp
+    12c9:	48 89 e5             	mov    rbp,rsp
+    12cc:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    12d3:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    12da:	48 83 ec 20          	sub    rsp,0x20
+    12de:	e8 00 00 00 00       	call   12e3 <L_p__kk_chi+0x1b>
+    12e3:	48 83 c4 20          	add    rsp,0x20
+    12e7:	48 8b 05 10 00 00 00 	mov    rax,QWORD PTR [rip+0x10]        # 12fe <L_p__kk_chi+0x36>
+    12ee:	50                   	push   rax
+    12ef:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    12f6:	00 00 00 
+    12f9:	50                   	push   rax
+    12fa:	59                   	pop    rcx
+    12fb:	58                   	pop    rax
+    12fc:	48 39 c8             	cmp    rax,rcx
+    12ff:	0f 94 c0             	sete   al
+    1302:	48 0f b6 c0          	movzx  rax,al
+    1306:	50                   	push   rax
+    1307:	58                   	pop    rax
+    1308:	48 85 c0             	test   rax,rax
+    130b:	74 2c                	je     1339 <L_p__kk_chi+0x71>
+    130d:	48 83 ec 20          	sub    rsp,0x20
+    1311:	e8 c0 fc ff ff       	call   fd6 <L_p__kk_chi_scalar>
+    1316:	48 83 c4 20          	add    rsp,0x20
+    131a:	50                   	push   rax
+    131b:	58                   	pop    rax
+    131c:	50                   	push   rax
+    131d:	50                   	push   rax
+    131e:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1325:	48 83 ec 20          	sub    rsp,0x20
+    1329:	e8 00 00 00 00       	call   132e <L_p__kk_chi+0x66>
+    132e:	48 83 c4 20          	add    rsp,0x20
+    1332:	58                   	pop    rax
+    1333:	58                   	pop    rax
+    1334:	48 89 ec             	mov    rsp,rbp
+    1337:	5d                   	pop    rbp
+    1338:	c3                   	ret
+    1339:	48 8b 05 10 00 00 00 	mov    rax,QWORD PTR [rip+0x10]        # 1350 <L_p__kk_chi+0x88>
+    1340:	50                   	push   rax
+    1341:	48 b8 02 00 00 00 00 	movabs rax,0x2
+    1348:	00 00 00 
+    134b:	50                   	push   rax
+    134c:	59                   	pop    rcx
+    134d:	58                   	pop    rax
+    134e:	48 39 c8             	cmp    rax,rcx
+    1351:	0f 94 c0             	sete   al
+    1354:	48 0f b6 c0          	movzx  rax,al
+    1358:	50                   	push   rax
+    1359:	58                   	pop    rax
+    135a:	48 85 c0             	test   rax,rax
+    135d:	74 2c                	je     138b <L_p__kk_chi+0xc3>
+    135f:	48 83 ec 20          	sub    rsp,0x20
+    1363:	e8 18 ff ff ff       	call   1280 <L_p__kk_chi_avx512>
+    1368:	48 83 c4 20          	add    rsp,0x20
+    136c:	50                   	push   rax
+    136d:	58                   	pop    rax
+    136e:	50                   	push   rax
+    136f:	50                   	push   rax
+    1370:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1377:	48 83 ec 20          	sub    rsp,0x20
+    137b:	e8 00 00 00 00       	call   1380 <L_p__kk_chi+0xb8>
+    1380:	48 83 c4 20          	add    rsp,0x20
+    1384:	58                   	pop    rax
+    1385:	58                   	pop    rax
+    1386:	48 89 ec             	mov    rsp,rbp
+    1389:	5d                   	pop    rbp
+    138a:	c3                   	ret
+    138b:	48 83 ec 20          	sub    rsp,0x20
+    138f:	e8 00 00 00 00       	call   1394 <L_p__kk_chi+0xcc>
+    1394:	48 83 c4 20          	add    rsp,0x20
+    1398:	50                   	push   rax
+    1399:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    13a0:	00 00 00 
+    13a3:	50                   	push   rax
+    13a4:	59                   	pop    rcx
+    13a5:	58                   	pop    rax
+    13a6:	48 39 c8             	cmp    rax,rcx
+    13a9:	0f 94 c0             	sete   al
+    13ac:	48 0f b6 c0          	movzx  rax,al
+    13b0:	50                   	push   rax
+    13b1:	58                   	pop    rax
+    13b2:	48 85 c0             	test   rax,rax
+    13b5:	74 2c                	je     13e3 <L_p__kk_chi+0x11b>
+    13b7:	48 83 ec 20          	sub    rsp,0x20
+    13bb:	e8 c0 fe ff ff       	call   1280 <L_p__kk_chi_avx512>
+    13c0:	48 83 c4 20          	add    rsp,0x20
+    13c4:	50                   	push   rax
+    13c5:	58                   	pop    rax
+    13c6:	50                   	push   rax
+    13c7:	50                   	push   rax
+    13c8:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    13cf:	48 83 ec 20          	sub    rsp,0x20
+    13d3:	e8 00 00 00 00       	call   13d8 <L_p__kk_chi+0x110>
+    13d8:	48 83 c4 20          	add    rsp,0x20
+    13dc:	58                   	pop    rax
+    13dd:	58                   	pop    rax
+    13de:	48 89 ec             	mov    rsp,rbp
+    13e1:	5d                   	pop    rbp
+    13e2:	c3                   	ret
+    13e3:	48 83 ec 20          	sub    rsp,0x20
+    13e7:	e8 ea fb ff ff       	call   fd6 <L_p__kk_chi_scalar>
+    13ec:	48 83 c4 20          	add    rsp,0x20
+    13f0:	50                   	push   rax
+    13f1:	58                   	pop    rax
+    13f2:	50                   	push   rax
+    13f3:	50                   	push   rax
+    13f4:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    13fb:	48 83 ec 20          	sub    rsp,0x20
+    13ff:	e8 00 00 00 00       	call   1404 <L_p__kk_chi+0x13c>
+    1404:	48 83 c4 20          	add    rsp,0x20
+    1408:	58                   	pop    rax
+    1409:	58                   	pop    rax
+    140a:	48 89 ec             	mov    rsp,rbp
+    140d:	5d                   	pop    rbp
+    140e:	c3                   	ret
+
+000000000000140f <L_p_keccak_chi_force_path>:
+    140f:	55                   	push   rbp
+    1410:	48 89 e5             	mov    rbp,rsp
+    1413:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    141a:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+    141e:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    1425:	48 83 ec 20          	sub    rsp,0x20
+    1429:	e8 00 00 00 00       	call   142e <L_p_keccak_chi_force_path+0x1f>
+    142e:	48 83 c4 20          	add    rsp,0x20
+    1432:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    1436:	50                   	push   rax
+    1437:	58                   	pop    rax
+    1438:	48 89 05 10 00 00 00 	mov    QWORD PTR [rip+0x10],rax        # 144f <L_p_keccak_chi_force_path+0x40>
+    143f:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1446:	00 00 00 
+    1449:	50                   	push   rax
+    144a:	58                   	pop    rax
+    144b:	50                   	push   rax
+    144c:	50                   	push   rax
+    144d:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1454:	48 83 ec 20          	sub    rsp,0x20
+    1458:	e8 00 00 00 00       	call   145d <L_p_keccak_chi_force_path+0x4e>
+    145d:	48 83 c4 20          	add    rsp,0x20
+    1461:	58                   	pop    rax
+    1462:	58                   	pop    rax
+    1463:	48 89 ec             	mov    rsp,rbp
+    1466:	5d                   	pop    rbp
+    1467:	c3                   	ret
+
+0000000000001468 <L_p_keccak_f1600>:
+    1468:	55                   	push   rbp
+    1469:	48 89 e5             	mov    rbp,rsp
+    146c:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    1473:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+    1477:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    147e:	48 83 ec 20          	sub    rsp,0x20
+    1482:	e8 00 00 00 00       	call   1487 <L_p_keccak_f1600+0x1f>
+    1487:	48 83 c4 20          	add    rsp,0x20
+    148b:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    148f:	50                   	push   rax
+    1490:	58                   	pop    rax
+    1491:	48 89 45 f0          	mov    QWORD PTR [rbp-0x10],rax
+    1495:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1499:	50                   	push   rax
+    149a:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    14a1:	00 00 00 
+    14a4:	50                   	push   rax
+    14a5:	59                   	pop    rcx
+    14a6:	58                   	pop    rax
+    14a7:	48 39 c8             	cmp    rax,rcx
+    14aa:	0f 94 c0             	sete   al
+    14ad:	48 0f b6 c0          	movzx  rax,al
+    14b1:	50                   	push   rax
+    14b2:	58                   	pop    rax
+    14b3:	48 85 c0             	test   rax,rax
+    14b6:	74 26                	je     14de <L_p_keccak_f1600+0x76>
+    14b8:	48 8b 05 08 00 00 00 	mov    rax,QWORD PTR [rip+0x8]        # 14c7 <L_p_keccak_f1600+0x5f>
+    14bf:	50                   	push   rax
+    14c0:	58                   	pop    rax
+    14c1:	50                   	push   rax
+    14c2:	50                   	push   rax
+    14c3:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    14ca:	48 83 ec 20          	sub    rsp,0x20
+    14ce:	e8 00 00 00 00       	call   14d3 <L_p_keccak_f1600+0x6b>
+    14d3:	48 83 c4 20          	add    rsp,0x20
+    14d7:	58                   	pop    rax
+    14d8:	58                   	pop    rax
+    14d9:	48 89 ec             	mov    rsp,rbp
+    14dc:	5d                   	pop    rbp
+    14dd:	c3                   	ret
+    14de:	48 83 ec 20          	sub    rsp,0x20
+    14e2:	e8 19 eb ff ff       	call   0 <L_p__kk_init_rc>
+    14e7:	48 83 c4 20          	add    rsp,0x20
+    14eb:	50                   	push   rax
+    14ec:	58                   	pop    rax
+    14ed:	48 83 ec 20          	sub    rsp,0x20
+    14f1:	e8 5c ef ff ff       	call   452 <L_p__kk_init_rho>
+    14f6:	48 83 c4 20          	add    rsp,0x20
+    14fa:	50                   	push   rax
+    14fb:	58                   	pop    rax
+    14fc:	48 83 ec 20          	sub    rsp,0x20
+    1500:	e8 c6 f3 ff ff       	call   8cb <L_p__kk_init_chi_idx>
+    1505:	48 83 c4 20          	add    rsp,0x20
+    1509:	50                   	push   rax
+    150a:	58                   	pop    rax
+    150b:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1512:	00 00 00 
+    1515:	50                   	push   rax
+    1516:	58                   	pop    rax
+    1517:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    151b:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    151f:	50                   	push   rax
+    1520:	48 b8 19 00 00 00 00 	movabs rax,0x19
+    1527:	00 00 00 
+    152a:	50                   	push   rax
+    152b:	59                   	pop    rcx
+    152c:	58                   	pop    rax
+    152d:	48 39 c8             	cmp    rax,rcx
+    1530:	0f 9c c0             	setl   al
+    1533:	48 0f b6 c0          	movzx  rax,al
+    1537:	50                   	push   rax
+    1538:	58                   	pop    rax
+    1539:	48 85 c0             	test   rax,rax
+    153c:	74 4d                	je     158b <L_p_keccak_f1600+0x123>
+    153e:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1542:	50                   	push   rax
+    1543:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    1547:	50                   	push   rax
+    1548:	5a                   	pop    rdx
+    1549:	59                   	pop    rcx
+    154a:	48 83 ec 20          	sub    rsp,0x20
+    154e:	e8 88 f7 ff ff       	call   cdb <L_p__kk_load_lane>
+    1553:	48 83 c4 20          	add    rsp,0x20
+    1557:	50                   	push   rax
+    1558:	58                   	pop    rax
+    1559:	50                   	push   rax
+    155a:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 16e9 <L_p_keccak_f1600+0x281>
+    1561:	50                   	push   rax
+    1562:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    1566:	50                   	push   rax
+    1567:	59                   	pop    rcx
+    1568:	58                   	pop    rax
+    1569:	5a                   	pop    rdx
+    156a:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    156e:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    1572:	50                   	push   rax
+    1573:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    157a:	00 00 00 
+    157d:	50                   	push   rax
+    157e:	59                   	pop    rcx
+    157f:	58                   	pop    rax
+    1580:	48 01 c8             	add    rax,rcx
+    1583:	50                   	push   rax
+    1584:	58                   	pop    rax
+    1585:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    1589:	eb 90                	jmp    151b <L_p_keccak_f1600+0xb3>
+    158b:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1592:	00 00 00 
+    1595:	50                   	push   rax
+    1596:	58                   	pop    rax
+    1597:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+    159b:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    159f:	50                   	push   rax
+    15a0:	48 b8 18 00 00 00 00 	movabs rax,0x18
+    15a7:	00 00 00 
+    15aa:	50                   	push   rax
+    15ab:	59                   	pop    rcx
+    15ac:	58                   	pop    rax
+    15ad:	48 39 c8             	cmp    rax,rcx
+    15b0:	0f 9c c0             	setl   al
+    15b3:	48 0f b6 c0          	movzx  rax,al
+    15b7:	50                   	push   rax
+    15b8:	58                   	pop    rax
+    15b9:	48 85 c0             	test   rax,rax
+    15bc:	0f 84 f1 06 00 00    	je     1cb3 <L_p_keccak_f1600+0x84b>
+    15c2:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    15c9:	00 00 00 
+    15cc:	50                   	push   rax
+    15cd:	58                   	pop    rax
+    15ce:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+    15d2:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    15d6:	50                   	push   rax
+    15d7:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    15de:	00 00 00 
+    15e1:	50                   	push   rax
+    15e2:	59                   	pop    rcx
+    15e3:	58                   	pop    rax
+    15e4:	48 39 c8             	cmp    rax,rcx
+    15e7:	0f 9c c0             	setl   al
+    15ea:	48 0f b6 c0          	movzx  rax,al
+    15ee:	50                   	push   rax
+    15ef:	58                   	pop    rax
+    15f0:	48 85 c0             	test   rax,rax
+    15f3:	0f 84 28 01 00 00    	je     1721 <L_p_keccak_f1600+0x2b9>
+    15f9:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1788 <L_p_keccak_f1600+0x320>
+    1600:	50                   	push   rax
+    1601:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1605:	50                   	push   rax
+    1606:	59                   	pop    rcx
+    1607:	58                   	pop    rax
+    1608:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    160c:	50                   	push   rax
+    160d:	58                   	pop    rax
+    160e:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+    1612:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 17a1 <L_p_keccak_f1600+0x339>
+    1619:	50                   	push   rax
+    161a:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    161e:	50                   	push   rax
+    161f:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1626:	00 00 00 
+    1629:	50                   	push   rax
+    162a:	59                   	pop    rcx
+    162b:	58                   	pop    rax
+    162c:	48 01 c8             	add    rax,rcx
+    162f:	50                   	push   rax
+    1630:	59                   	pop    rcx
+    1631:	58                   	pop    rax
+    1632:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1636:	50                   	push   rax
+    1637:	58                   	pop    rax
+    1638:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+    163c:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 17cb <L_p_keccak_f1600+0x363>
+    1643:	50                   	push   rax
+    1644:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1648:	50                   	push   rax
+    1649:	48 b8 0a 00 00 00 00 	movabs rax,0xa
+    1650:	00 00 00 
+    1653:	50                   	push   rax
+    1654:	59                   	pop    rcx
+    1655:	58                   	pop    rax
+    1656:	48 01 c8             	add    rax,rcx
+    1659:	50                   	push   rax
+    165a:	59                   	pop    rcx
+    165b:	58                   	pop    rax
+    165c:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1660:	50                   	push   rax
+    1661:	58                   	pop    rax
+    1662:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+    1666:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 17f5 <L_p_keccak_f1600+0x38d>
+    166d:	50                   	push   rax
+    166e:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1672:	50                   	push   rax
+    1673:	48 b8 0f 00 00 00 00 	movabs rax,0xf
+    167a:	00 00 00 
+    167d:	50                   	push   rax
+    167e:	59                   	pop    rcx
+    167f:	58                   	pop    rax
+    1680:	48 01 c8             	add    rax,rcx
+    1683:	50                   	push   rax
+    1684:	59                   	pop    rcx
+    1685:	58                   	pop    rax
+    1686:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    168a:	50                   	push   rax
+    168b:	58                   	pop    rax
+    168c:	48 89 45 b8          	mov    QWORD PTR [rbp-0x48],rax
+    1690:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 181f <L_p_keccak_f1600+0x3b7>
+    1697:	50                   	push   rax
+    1698:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    169c:	50                   	push   rax
+    169d:	48 b8 14 00 00 00 00 	movabs rax,0x14
+    16a4:	00 00 00 
+    16a7:	50                   	push   rax
+    16a8:	59                   	pop    rcx
+    16a9:	58                   	pop    rax
+    16aa:	48 01 c8             	add    rax,rcx
+    16ad:	50                   	push   rax
+    16ae:	59                   	pop    rcx
+    16af:	58                   	pop    rax
+    16b0:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    16b4:	50                   	push   rax
+    16b5:	58                   	pop    rax
+    16b6:	48 89 45 b0          	mov    QWORD PTR [rbp-0x50],rax
+    16ba:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+    16be:	50                   	push   rax
+    16bf:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    16c3:	50                   	push   rax
+    16c4:	59                   	pop    rcx
+    16c5:	58                   	pop    rax
+    16c6:	48 31 c8             	xor    rax,rcx
+    16c9:	50                   	push   rax
+    16ca:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+    16ce:	50                   	push   rax
+    16cf:	59                   	pop    rcx
+    16d0:	58                   	pop    rax
+    16d1:	48 31 c8             	xor    rax,rcx
+    16d4:	50                   	push   rax
+    16d5:	48 8b 45 b8          	mov    rax,QWORD PTR [rbp-0x48]
+    16d9:	50                   	push   rax
+    16da:	59                   	pop    rcx
+    16db:	58                   	pop    rax
+    16dc:	48 31 c8             	xor    rax,rcx
+    16df:	50                   	push   rax
+    16e0:	48 8b 45 b0          	mov    rax,QWORD PTR [rbp-0x50]
+    16e4:	50                   	push   rax
+    16e5:	59                   	pop    rcx
+    16e6:	58                   	pop    rax
+    16e7:	48 31 c8             	xor    rax,rcx
+    16ea:	50                   	push   rax
+    16eb:	58                   	pop    rax
+    16ec:	50                   	push   rax
+    16ed:	48 8d 05 88 03 00 00 	lea    rax,[rip+0x388]        # 1a7c <L_p_keccak_f1600+0x614>
+    16f4:	50                   	push   rax
+    16f5:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    16f9:	50                   	push   rax
+    16fa:	59                   	pop    rcx
+    16fb:	58                   	pop    rax
+    16fc:	5a                   	pop    rdx
+    16fd:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1701:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1705:	50                   	push   rax
+    1706:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    170d:	00 00 00 
+    1710:	50                   	push   rax
+    1711:	59                   	pop    rcx
+    1712:	58                   	pop    rax
+    1713:	48 01 c8             	add    rax,rcx
+    1716:	50                   	push   rax
+    1717:	58                   	pop    rax
+    1718:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+    171c:	e9 b1 fe ff ff       	jmp    15d2 <L_p_keccak_f1600+0x16a>
+    1721:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1728:	00 00 00 
+    172b:	50                   	push   rax
+    172c:	58                   	pop    rax
+    172d:	48 89 45 a8          	mov    QWORD PTR [rbp-0x58],rax
+    1731:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    1735:	50                   	push   rax
+    1736:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    173d:	00 00 00 
+    1740:	50                   	push   rax
+    1741:	59                   	pop    rcx
+    1742:	58                   	pop    rax
+    1743:	48 39 c8             	cmp    rax,rcx
+    1746:	0f 9c c0             	setl   al
+    1749:	48 0f b6 c0          	movzx  rax,al
+    174d:	50                   	push   rax
+    174e:	58                   	pop    rax
+    174f:	48 85 c0             	test   rax,rax
+    1752:	0f 84 31 01 00 00    	je     1889 <L_p_keccak_f1600+0x421>
+    1758:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    175c:	50                   	push   rax
+    175d:	48 b8 04 00 00 00 00 	movabs rax,0x4
+    1764:	00 00 00 
+    1767:	50                   	push   rax
+    1768:	59                   	pop    rcx
+    1769:	58                   	pop    rax
+    176a:	48 01 c8             	add    rax,rcx
+    176d:	50                   	push   rax
+    176e:	58                   	pop    rax
+    176f:	48 89 45 a0          	mov    QWORD PTR [rbp-0x60],rax
+    1773:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    1777:	50                   	push   rax
+    1778:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    177f:	00 00 00 
+    1782:	50                   	push   rax
+    1783:	59                   	pop    rcx
+    1784:	58                   	pop    rax
+    1785:	48 39 c8             	cmp    rax,rcx
+    1788:	0f 9d c0             	setge  al
+    178b:	48 0f b6 c0          	movzx  rax,al
+    178f:	50                   	push   rax
+    1790:	58                   	pop    rax
+    1791:	48 85 c0             	test   rax,rax
+    1794:	74 1b                	je     17b1 <L_p_keccak_f1600+0x349>
+    1796:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    179a:	50                   	push   rax
+    179b:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    17a2:	00 00 00 
+    17a5:	50                   	push   rax
+    17a6:	59                   	pop    rcx
+    17a7:	58                   	pop    rax
+    17a8:	48 29 c8             	sub    rax,rcx
+    17ab:	50                   	push   rax
+    17ac:	58                   	pop    rax
+    17ad:	48 89 45 a0          	mov    QWORD PTR [rbp-0x60],rax
+    17b1:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    17b5:	50                   	push   rax
+    17b6:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    17bd:	00 00 00 
+    17c0:	50                   	push   rax
+    17c1:	59                   	pop    rcx
+    17c2:	58                   	pop    rax
+    17c3:	48 01 c8             	add    rax,rcx
+    17c6:	50                   	push   rax
+    17c7:	58                   	pop    rax
+    17c8:	48 89 45 98          	mov    QWORD PTR [rbp-0x68],rax
+    17cc:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    17d0:	50                   	push   rax
+    17d1:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    17d8:	00 00 00 
+    17db:	50                   	push   rax
+    17dc:	59                   	pop    rcx
+    17dd:	58                   	pop    rax
+    17de:	48 39 c8             	cmp    rax,rcx
+    17e1:	0f 9d c0             	setge  al
+    17e4:	48 0f b6 c0          	movzx  rax,al
+    17e8:	50                   	push   rax
+    17e9:	58                   	pop    rax
+    17ea:	48 85 c0             	test   rax,rax
+    17ed:	74 1b                	je     180a <L_p_keccak_f1600+0x3a2>
+    17ef:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    17f3:	50                   	push   rax
+    17f4:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    17fb:	00 00 00 
+    17fe:	50                   	push   rax
+    17ff:	59                   	pop    rcx
+    1800:	58                   	pop    rax
+    1801:	48 29 c8             	sub    rax,rcx
+    1804:	50                   	push   rax
+    1805:	58                   	pop    rax
+    1806:	48 89 45 98          	mov    QWORD PTR [rbp-0x68],rax
+    180a:	48 8d 05 88 03 00 00 	lea    rax,[rip+0x388]        # 1b99 <L_p_keccak_f1600+0x731>
+    1811:	50                   	push   rax
+    1812:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    1816:	50                   	push   rax
+    1817:	59                   	pop    rcx
+    1818:	58                   	pop    rax
+    1819:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    181d:	50                   	push   rax
+    181e:	48 8d 05 88 03 00 00 	lea    rax,[rip+0x388]        # 1bad <L_p_keccak_f1600+0x745>
+    1825:	50                   	push   rax
+    1826:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    182a:	50                   	push   rax
+    182b:	59                   	pop    rcx
+    182c:	58                   	pop    rax
+    182d:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1831:	50                   	push   rax
+    1832:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1839:	00 00 00 
+    183c:	50                   	push   rax
+    183d:	5a                   	pop    rdx
+    183e:	59                   	pop    rcx
+    183f:	48 83 ec 20          	sub    rsp,0x20
+    1843:	e8 9d f3 ff ff       	call   be5 <L_p_keccak_rotl64>
+    1848:	48 83 c4 20          	add    rsp,0x20
+    184c:	50                   	push   rax
+    184d:	59                   	pop    rcx
+    184e:	58                   	pop    rax
+    184f:	48 31 c8             	xor    rax,rcx
+    1852:	50                   	push   rax
+    1853:	58                   	pop    rax
+    1854:	50                   	push   rax
+    1855:	48 8d 05 b0 03 00 00 	lea    rax,[rip+0x3b0]        # 1c0c <L_p_keccak_f1600+0x7a4>
+    185c:	50                   	push   rax
+    185d:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    1861:	50                   	push   rax
+    1862:	59                   	pop    rcx
+    1863:	58                   	pop    rax
+    1864:	5a                   	pop    rdx
+    1865:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1869:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    186d:	50                   	push   rax
+    186e:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1875:	00 00 00 
+    1878:	50                   	push   rax
+    1879:	59                   	pop    rcx
+    187a:	58                   	pop    rax
+    187b:	48 01 c8             	add    rax,rcx
+    187e:	50                   	push   rax
+    187f:	58                   	pop    rax
+    1880:	48 89 45 a8          	mov    QWORD PTR [rbp-0x58],rax
+    1884:	e9 a8 fe ff ff       	jmp    1731 <L_p_keccak_f1600+0x2c9>
+    1889:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1890:	00 00 00 
+    1893:	50                   	push   rax
+    1894:	58                   	pop    rax
+    1895:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    1899:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    189d:	50                   	push   rax
+    189e:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    18a5:	00 00 00 
+    18a8:	50                   	push   rax
+    18a9:	59                   	pop    rcx
+    18aa:	58                   	pop    rax
+    18ab:	48 39 c8             	cmp    rax,rcx
+    18ae:	0f 9c c0             	setl   al
+    18b1:	48 0f b6 c0          	movzx  rax,al
+    18b5:	50                   	push   rax
+    18b6:	58                   	pop    rax
+    18b7:	48 85 c0             	test   rax,rax
+    18ba:	0f 84 e2 00 00 00    	je     19a2 <L_p_keccak_f1600+0x53a>
+    18c0:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    18c7:	00 00 00 
+    18ca:	50                   	push   rax
+    18cb:	58                   	pop    rax
+    18cc:	48 89 45 88          	mov    QWORD PTR [rbp-0x78],rax
+    18d0:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    18d4:	50                   	push   rax
+    18d5:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    18dc:	00 00 00 
+    18df:	50                   	push   rax
+    18e0:	59                   	pop    rcx
+    18e1:	58                   	pop    rax
+    18e2:	48 39 c8             	cmp    rax,rcx
+    18e5:	0f 9c c0             	setl   al
+    18e8:	48 0f b6 c0          	movzx  rax,al
+    18ec:	50                   	push   rax
+    18ed:	58                   	pop    rax
+    18ee:	48 85 c0             	test   rax,rax
+    18f1:	0f 84 8b 00 00 00    	je     1982 <L_p_keccak_f1600+0x51a>
+    18f7:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    18fb:	50                   	push   rax
+    18fc:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1903:	00 00 00 
+    1906:	50                   	push   rax
+    1907:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    190b:	50                   	push   rax
+    190c:	59                   	pop    rcx
+    190d:	58                   	pop    rax
+    190e:	48 0f af c1          	imul   rax,rcx
+    1912:	50                   	push   rax
+    1913:	59                   	pop    rcx
+    1914:	58                   	pop    rax
+    1915:	48 01 c8             	add    rax,rcx
+    1918:	50                   	push   rax
+    1919:	58                   	pop    rax
+    191a:	48 89 45 80          	mov    QWORD PTR [rbp-0x80],rax
+    191e:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1aad <L_p_keccak_f1600+0x645>
+    1925:	50                   	push   rax
+    1926:	48 8b 45 80          	mov    rax,QWORD PTR [rbp-0x80]
+    192a:	50                   	push   rax
+    192b:	59                   	pop    rcx
+    192c:	58                   	pop    rax
+    192d:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1931:	50                   	push   rax
+    1932:	48 8d 05 b0 03 00 00 	lea    rax,[rip+0x3b0]        # 1ce9 <L_p_keccak_f1600+0x881>
+    1939:	50                   	push   rax
+    193a:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    193e:	50                   	push   rax
+    193f:	59                   	pop    rcx
+    1940:	58                   	pop    rax
+    1941:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1945:	50                   	push   rax
+    1946:	59                   	pop    rcx
+    1947:	58                   	pop    rax
+    1948:	48 31 c8             	xor    rax,rcx
+    194b:	50                   	push   rax
+    194c:	58                   	pop    rax
+    194d:	50                   	push   rax
+    194e:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1add <L_p_keccak_f1600+0x675>
+    1955:	50                   	push   rax
+    1956:	48 8b 45 80          	mov    rax,QWORD PTR [rbp-0x80]
+    195a:	50                   	push   rax
+    195b:	59                   	pop    rcx
+    195c:	58                   	pop    rax
+    195d:	5a                   	pop    rdx
+    195e:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1962:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    1966:	50                   	push   rax
+    1967:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    196e:	00 00 00 
+    1971:	50                   	push   rax
+    1972:	59                   	pop    rcx
+    1973:	58                   	pop    rax
+    1974:	48 01 c8             	add    rax,rcx
+    1977:	50                   	push   rax
+    1978:	58                   	pop    rax
+    1979:	48 89 45 88          	mov    QWORD PTR [rbp-0x78],rax
+    197d:	e9 4e ff ff ff       	jmp    18d0 <L_p_keccak_f1600+0x468>
+    1982:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    1986:	50                   	push   rax
+    1987:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    198e:	00 00 00 
+    1991:	50                   	push   rax
+    1992:	59                   	pop    rcx
+    1993:	58                   	pop    rax
+    1994:	48 01 c8             	add    rax,rcx
+    1997:	50                   	push   rax
+    1998:	58                   	pop    rax
+    1999:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    199d:	e9 f7 fe ff ff       	jmp    1899 <L_p_keccak_f1600+0x431>
+    19a2:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    19a9:	00 00 00 
+    19ac:	50                   	push   rax
+    19ad:	58                   	pop    rax
+    19ae:	48 89 85 78 ff ff ff 	mov    QWORD PTR [rbp-0x88],rax
+    19b5:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    19bc:	50                   	push   rax
+    19bd:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    19c4:	00 00 00 
+    19c7:	50                   	push   rax
+    19c8:	59                   	pop    rcx
+    19c9:	58                   	pop    rax
+    19ca:	48 39 c8             	cmp    rax,rcx
+    19cd:	0f 9c c0             	setl   al
+    19d0:	48 0f b6 c0          	movzx  rax,al
+    19d4:	50                   	push   rax
+    19d5:	58                   	pop    rax
+    19d6:	48 85 c0             	test   rax,rax
+    19d9:	0f 84 55 02 00 00    	je     1c34 <L_p_keccak_f1600+0x7cc>
+    19df:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    19e6:	00 00 00 
+    19e9:	50                   	push   rax
+    19ea:	58                   	pop    rax
+    19eb:	48 89 85 70 ff ff ff 	mov    QWORD PTR [rbp-0x90],rax
+    19f2:	48 8b 85 70 ff ff ff 	mov    rax,QWORD PTR [rbp-0x90]
+    19f9:	50                   	push   rax
+    19fa:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1a01:	00 00 00 
+    1a04:	50                   	push   rax
+    1a05:	59                   	pop    rcx
+    1a06:	58                   	pop    rax
+    1a07:	48 39 c8             	cmp    rax,rcx
+    1a0a:	0f 9c c0             	setl   al
+    1a0d:	48 0f b6 c0          	movzx  rax,al
+    1a11:	50                   	push   rax
+    1a12:	58                   	pop    rax
+    1a13:	48 85 c0             	test   rax,rax
+    1a16:	0f 84 f2 01 00 00    	je     1c0e <L_p_keccak_f1600+0x7a6>
+    1a1c:	48 8b 85 70 ff ff ff 	mov    rax,QWORD PTR [rbp-0x90]
+    1a23:	50                   	push   rax
+    1a24:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1a2b:	00 00 00 
+    1a2e:	50                   	push   rax
+    1a2f:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    1a36:	50                   	push   rax
+    1a37:	59                   	pop    rcx
+    1a38:	58                   	pop    rax
+    1a39:	48 0f af c1          	imul   rax,rcx
+    1a3d:	50                   	push   rax
+    1a3e:	59                   	pop    rcx
+    1a3f:	58                   	pop    rax
+    1a40:	48 01 c8             	add    rax,rcx
+    1a43:	50                   	push   rax
+    1a44:	58                   	pop    rax
+    1a45:	48 89 85 68 ff ff ff 	mov    QWORD PTR [rbp-0x98],rax
+    1a4c:	48 8b 85 70 ff ff ff 	mov    rax,QWORD PTR [rbp-0x90]
+    1a53:	50                   	push   rax
+    1a54:	48 b8 03 00 00 00 00 	movabs rax,0x3
+    1a5b:	00 00 00 
+    1a5e:	50                   	push   rax
+    1a5f:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    1a66:	50                   	push   rax
+    1a67:	59                   	pop    rcx
+    1a68:	58                   	pop    rax
+    1a69:	48 0f af c1          	imul   rax,rcx
+    1a6d:	50                   	push   rax
+    1a6e:	59                   	pop    rcx
+    1a6f:	58                   	pop    rax
+    1a70:	48 01 c8             	add    rax,rcx
+    1a73:	50                   	push   rax
+    1a74:	58                   	pop    rax
+    1a75:	48 89 85 60 ff ff ff 	mov    QWORD PTR [rbp-0xa0],rax
+    1a7c:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1a83:	50                   	push   rax
+    1a84:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1a8b:	00 00 00 
+    1a8e:	50                   	push   rax
+    1a8f:	59                   	pop    rcx
+    1a90:	58                   	pop    rax
+    1a91:	48 39 c8             	cmp    rax,rcx
+    1a94:	0f 9d c0             	setge  al
+    1a97:	48 0f b6 c0          	movzx  rax,al
+    1a9b:	50                   	push   rax
+    1a9c:	58                   	pop    rax
+    1a9d:	48 85 c0             	test   rax,rax
+    1aa0:	74 21                	je     1ac3 <L_p_keccak_f1600+0x65b>
+    1aa2:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1aa9:	50                   	push   rax
+    1aaa:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1ab1:	00 00 00 
+    1ab4:	50                   	push   rax
+    1ab5:	59                   	pop    rcx
+    1ab6:	58                   	pop    rax
+    1ab7:	48 29 c8             	sub    rax,rcx
+    1aba:	50                   	push   rax
+    1abb:	58                   	pop    rax
+    1abc:	48 89 85 60 ff ff ff 	mov    QWORD PTR [rbp-0xa0],rax
+    1ac3:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1aca:	50                   	push   rax
+    1acb:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1ad2:	00 00 00 
+    1ad5:	50                   	push   rax
+    1ad6:	59                   	pop    rcx
+    1ad7:	58                   	pop    rax
+    1ad8:	48 39 c8             	cmp    rax,rcx
+    1adb:	0f 9d c0             	setge  al
+    1ade:	48 0f b6 c0          	movzx  rax,al
+    1ae2:	50                   	push   rax
+    1ae3:	58                   	pop    rax
+    1ae4:	48 85 c0             	test   rax,rax
+    1ae7:	74 21                	je     1b0a <L_p_keccak_f1600+0x6a2>
+    1ae9:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1af0:	50                   	push   rax
+    1af1:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1af8:	00 00 00 
+    1afb:	50                   	push   rax
+    1afc:	59                   	pop    rcx
+    1afd:	58                   	pop    rax
+    1afe:	48 29 c8             	sub    rax,rcx
+    1b01:	50                   	push   rax
+    1b02:	58                   	pop    rax
+    1b03:	48 89 85 60 ff ff ff 	mov    QWORD PTR [rbp-0xa0],rax
+    1b0a:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1b11:	50                   	push   rax
+    1b12:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1b19:	00 00 00 
+    1b1c:	50                   	push   rax
+    1b1d:	59                   	pop    rcx
+    1b1e:	58                   	pop    rax
+    1b1f:	48 39 c8             	cmp    rax,rcx
+    1b22:	0f 9d c0             	setge  al
+    1b25:	48 0f b6 c0          	movzx  rax,al
+    1b29:	50                   	push   rax
+    1b2a:	58                   	pop    rax
+    1b2b:	48 85 c0             	test   rax,rax
+    1b2e:	74 21                	je     1b51 <L_p_keccak_f1600+0x6e9>
+    1b30:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1b37:	50                   	push   rax
+    1b38:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1b3f:	00 00 00 
+    1b42:	50                   	push   rax
+    1b43:	59                   	pop    rcx
+    1b44:	58                   	pop    rax
+    1b45:	48 29 c8             	sub    rax,rcx
+    1b48:	50                   	push   rax
+    1b49:	58                   	pop    rax
+    1b4a:	48 89 85 60 ff ff ff 	mov    QWORD PTR [rbp-0xa0],rax
+    1b51:	48 8b 85 70 ff ff ff 	mov    rax,QWORD PTR [rbp-0x90]
+    1b58:	50                   	push   rax
+    1b59:	58                   	pop    rax
+    1b5a:	48 89 85 58 ff ff ff 	mov    QWORD PTR [rbp-0xa8],rax
+    1b61:	48 8b 85 60 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa0]
+    1b68:	50                   	push   rax
+    1b69:	48 b8 05 00 00 00 00 	movabs rax,0x5
+    1b70:	00 00 00 
+    1b73:	50                   	push   rax
+    1b74:	48 8b 85 58 ff ff ff 	mov    rax,QWORD PTR [rbp-0xa8]
+    1b7b:	50                   	push   rax
+    1b7c:	59                   	pop    rcx
+    1b7d:	58                   	pop    rax
+    1b7e:	48 0f af c1          	imul   rax,rcx
+    1b82:	50                   	push   rax
+    1b83:	59                   	pop    rcx
+    1b84:	58                   	pop    rax
+    1b85:	48 01 c8             	add    rax,rcx
+    1b88:	50                   	push   rax
+    1b89:	58                   	pop    rax
+    1b8a:	48 89 85 50 ff ff ff 	mov    QWORD PTR [rbp-0xb0],rax
+    1b91:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1d20 <L_p_keccak_f1600+0x8b8>
+    1b98:	50                   	push   rax
+    1b99:	48 8b 85 50 ff ff ff 	mov    rax,QWORD PTR [rbp-0xb0]
+    1ba0:	50                   	push   rax
+    1ba1:	59                   	pop    rcx
+    1ba2:	58                   	pop    rax
+    1ba3:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1ba7:	50                   	push   rax
+    1ba8:	48 8d 05 c0 00 00 00 	lea    rax,[rip+0xc0]        # 1c6f <L_p_keccak_f1600+0x807>
+    1baf:	50                   	push   rax
+    1bb0:	48 8b 85 50 ff ff ff 	mov    rax,QWORD PTR [rbp-0xb0]
+    1bb7:	50                   	push   rax
+    1bb8:	59                   	pop    rcx
+    1bb9:	58                   	pop    rax
+    1bba:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1bbe:	50                   	push   rax
+    1bbf:	5a                   	pop    rdx
+    1bc0:	59                   	pop    rcx
+    1bc1:	48 83 ec 20          	sub    rsp,0x20
+    1bc5:	e8 1b f0 ff ff       	call   be5 <L_p_keccak_rotl64>
+    1bca:	48 83 c4 20          	add    rsp,0x20
+    1bce:	50                   	push   rax
+    1bcf:	58                   	pop    rax
+    1bd0:	50                   	push   rax
+    1bd1:	48 8d 05 88 02 00 00 	lea    rax,[rip+0x288]        # 1e60 <L_p_keccak_absorb+0xf4>
+    1bd8:	50                   	push   rax
+    1bd9:	48 8b 85 68 ff ff ff 	mov    rax,QWORD PTR [rbp-0x98]
+    1be0:	50                   	push   rax
+    1be1:	59                   	pop    rcx
+    1be2:	58                   	pop    rax
+    1be3:	5a                   	pop    rdx
+    1be4:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1be8:	48 8b 85 70 ff ff ff 	mov    rax,QWORD PTR [rbp-0x90]
+    1bef:	50                   	push   rax
+    1bf0:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1bf7:	00 00 00 
+    1bfa:	50                   	push   rax
+    1bfb:	59                   	pop    rcx
+    1bfc:	58                   	pop    rax
+    1bfd:	48 01 c8             	add    rax,rcx
+    1c00:	50                   	push   rax
+    1c01:	58                   	pop    rax
+    1c02:	48 89 85 70 ff ff ff 	mov    QWORD PTR [rbp-0x90],rax
+    1c09:	e9 e4 fd ff ff       	jmp    19f2 <L_p_keccak_f1600+0x58a>
+    1c0e:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    1c15:	50                   	push   rax
+    1c16:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1c1d:	00 00 00 
+    1c20:	50                   	push   rax
+    1c21:	59                   	pop    rcx
+    1c22:	58                   	pop    rax
+    1c23:	48 01 c8             	add    rax,rcx
+    1c26:	50                   	push   rax
+    1c27:	58                   	pop    rax
+    1c28:	48 89 85 78 ff ff ff 	mov    QWORD PTR [rbp-0x88],rax
+    1c2f:	e9 81 fd ff ff       	jmp    19b5 <L_p_keccak_f1600+0x54d>
+    1c34:	48 83 ec 20          	sub    rsp,0x20
+    1c38:	e8 8b f6 ff ff       	call   12c8 <L_p__kk_chi>
+    1c3d:	48 83 c4 20          	add    rsp,0x20
+    1c41:	50                   	push   rax
+    1c42:	58                   	pop    rax
+    1c43:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1dd2 <L_p_keccak_absorb+0x66>
+    1c4a:	50                   	push   rax
+    1c4b:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1c52:	00 00 00 
+    1c55:	50                   	push   rax
+    1c56:	59                   	pop    rcx
+    1c57:	58                   	pop    rax
+    1c58:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1c5c:	50                   	push   rax
+    1c5d:	48 8d 05 00 00 00 00 	lea    rax,[rip+0x0]        # 1c64 <L_p_keccak_f1600+0x7fc>
+    1c64:	50                   	push   rax
+    1c65:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    1c69:	50                   	push   rax
+    1c6a:	59                   	pop    rcx
+    1c6b:	58                   	pop    rax
+    1c6c:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1c70:	50                   	push   rax
+    1c71:	59                   	pop    rcx
+    1c72:	58                   	pop    rax
+    1c73:	48 31 c8             	xor    rax,rcx
+    1c76:	50                   	push   rax
+    1c77:	58                   	pop    rax
+    1c78:	50                   	push   rax
+    1c79:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1e08 <L_p_keccak_absorb+0x9c>
+    1c80:	50                   	push   rax
+    1c81:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1c88:	00 00 00 
+    1c8b:	50                   	push   rax
+    1c8c:	59                   	pop    rcx
+    1c8d:	58                   	pop    rax
+    1c8e:	5a                   	pop    rdx
+    1c8f:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1c93:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    1c97:	50                   	push   rax
+    1c98:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1c9f:	00 00 00 
+    1ca2:	50                   	push   rax
+    1ca3:	59                   	pop    rcx
+    1ca4:	58                   	pop    rax
+    1ca5:	48 01 c8             	add    rax,rcx
+    1ca8:	50                   	push   rax
+    1ca9:	58                   	pop    rax
+    1caa:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+    1cae:	e9 e8 f8 ff ff       	jmp    159b <L_p_keccak_f1600+0x133>
+    1cb3:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1cba:	00 00 00 
+    1cbd:	50                   	push   rax
+    1cbe:	58                   	pop    rax
+    1cbf:	48 89 85 48 ff ff ff 	mov    QWORD PTR [rbp-0xb8],rax
+    1cc6:	48 8b 85 48 ff ff ff 	mov    rax,QWORD PTR [rbp-0xb8]
+    1ccd:	50                   	push   rax
+    1cce:	48 b8 19 00 00 00 00 	movabs rax,0x19
+    1cd5:	00 00 00 
+    1cd8:	50                   	push   rax
+    1cd9:	59                   	pop    rcx
+    1cda:	58                   	pop    rax
+    1cdb:	48 39 c8             	cmp    rax,rcx
+    1cde:	0f 9c c0             	setl   al
+    1ce1:	48 0f b6 c0          	movzx  rax,al
+    1ce5:	50                   	push   rax
+    1ce6:	58                   	pop    rax
+    1ce7:	48 85 c0             	test   rax,rax
+    1cea:	74 5a                	je     1d46 <L_p_keccak_f1600+0x8de>
+    1cec:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1cf0:	50                   	push   rax
+    1cf1:	48 8b 85 48 ff ff ff 	mov    rax,QWORD PTR [rbp-0xb8]
+    1cf8:	50                   	push   rax
+    1cf9:	48 8d 05 88 01 00 00 	lea    rax,[rip+0x188]        # 1e88 <L_p_keccak_absorb+0x11c>
+    1d00:	50                   	push   rax
+    1d01:	48 8b 85 48 ff ff ff 	mov    rax,QWORD PTR [rbp-0xb8]
+    1d08:	50                   	push   rax
+    1d09:	59                   	pop    rcx
+    1d0a:	58                   	pop    rax
+    1d0b:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1d0f:	50                   	push   rax
+    1d10:	41 58                	pop    r8
+    1d12:	5a                   	pop    rdx
+    1d13:	59                   	pop    rcx
+    1d14:	48 83 ec 20          	sub    rsp,0x20
+    1d18:	e8 c4 f0 ff ff       	call   de1 <L_p__kk_store_lane>
+    1d1d:	48 83 c4 20          	add    rsp,0x20
+    1d21:	50                   	push   rax
+    1d22:	58                   	pop    rax
+    1d23:	48 8b 85 48 ff ff ff 	mov    rax,QWORD PTR [rbp-0xb8]
+    1d2a:	50                   	push   rax
+    1d2b:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1d32:	00 00 00 
+    1d35:	50                   	push   rax
+    1d36:	59                   	pop    rcx
+    1d37:	58                   	pop    rax
+    1d38:	48 01 c8             	add    rax,rcx
+    1d3b:	50                   	push   rax
+    1d3c:	58                   	pop    rax
+    1d3d:	48 89 85 48 ff ff ff 	mov    QWORD PTR [rbp-0xb8],rax
+    1d44:	eb 80                	jmp    1cc6 <L_p_keccak_f1600+0x85e>
+    1d46:	48 8b 05 00 00 00 00 	mov    rax,QWORD PTR [rip+0x0]        # 1d4d <L_p_keccak_f1600+0x8e5>
+    1d4d:	50                   	push   rax
+    1d4e:	58                   	pop    rax
+    1d4f:	50                   	push   rax
+    1d50:	50                   	push   rax
+    1d51:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1d58:	48 83 ec 20          	sub    rsp,0x20
+    1d5c:	e8 00 00 00 00       	call   1d61 <L_p_keccak_f1600+0x8f9>
+    1d61:	48 83 c4 20          	add    rsp,0x20
+    1d65:	58                   	pop    rax
+    1d66:	58                   	pop    rax
+    1d67:	48 89 ec             	mov    rsp,rbp
+    1d6a:	5d                   	pop    rbp
+    1d6b:	c3                   	ret
+
+0000000000001d6c <L_p_keccak_absorb>:
+    1d6c:	55                   	push   rbp
+    1d6d:	48 89 e5             	mov    rbp,rsp
+    1d70:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    1d77:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+    1d7b:	48 89 55 f0          	mov    QWORD PTR [rbp-0x10],rdx
+    1d7f:	4c 89 45 e8          	mov    QWORD PTR [rbp-0x18],r8
+    1d83:	4c 89 4d e0          	mov    QWORD PTR [rbp-0x20],r9
+    1d87:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    1d8e:	48 83 ec 20          	sub    rsp,0x20
+    1d92:	e8 00 00 00 00       	call   1d97 <L_p_keccak_absorb+0x2b>
+    1d97:	48 83 c4 20          	add    rsp,0x20
+    1d9b:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    1d9f:	50                   	push   rax
+    1da0:	58                   	pop    rax
+    1da1:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+    1da5:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    1da9:	50                   	push   rax
+    1daa:	58                   	pop    rax
+    1dab:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+    1daf:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    1db3:	50                   	push   rax
+    1db4:	58                   	pop    rax
+    1db5:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+    1db9:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    1dbd:	50                   	push   rax
+    1dbe:	58                   	pop    rax
+    1dbf:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+    1dc3:	58                   	pop    rax
+    1dc4:	48 89 45 b8          	mov    QWORD PTR [rbp-0x48],rax
+    1dc8:	58                   	pop    rax
+    1dc9:	48 89 45 b0          	mov    QWORD PTR [rbp-0x50],rax
+    1dcd:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1dd1:	50                   	push   rax
+    1dd2:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1dd9:	00 00 00 
+    1ddc:	50                   	push   rax
+    1ddd:	59                   	pop    rcx
+    1dde:	58                   	pop    rax
+    1ddf:	48 39 c8             	cmp    rax,rcx
+    1de2:	0f 94 c0             	sete   al
+    1de5:	48 0f b6 c0          	movzx  rax,al
+    1de9:	50                   	push   rax
+    1dea:	58                   	pop    rax
+    1deb:	48 85 c0             	test   rax,rax
+    1dee:	74 26                	je     1e16 <L_p_keccak_absorb+0xaa>
+    1df0:	48 8b 05 08 00 00 00 	mov    rax,QWORD PTR [rip+0x8]        # 1dff <L_p_keccak_absorb+0x93>
+    1df7:	50                   	push   rax
+    1df8:	58                   	pop    rax
+    1df9:	50                   	push   rax
+    1dfa:	50                   	push   rax
+    1dfb:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1e02:	48 83 ec 20          	sub    rsp,0x20
+    1e06:	e8 00 00 00 00       	call   1e0b <L_p_keccak_absorb+0x9f>
+    1e0b:	48 83 c4 20          	add    rsp,0x20
+    1e0f:	58                   	pop    rax
+    1e10:	58                   	pop    rax
+    1e11:	48 89 ec             	mov    rsp,rbp
+    1e14:	5d                   	pop    rbp
+    1e15:	c3                   	ret
+    1e16:	48 8b 45 b8          	mov    rax,QWORD PTR [rbp-0x48]
+    1e1a:	50                   	push   rax
+    1e1b:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1e22:	00 00 00 
+    1e25:	50                   	push   rax
+    1e26:	59                   	pop    rcx
+    1e27:	58                   	pop    rax
+    1e28:	48 39 c8             	cmp    rax,rcx
+    1e2b:	0f 94 c0             	sete   al
+    1e2e:	48 0f b6 c0          	movzx  rax,al
+    1e32:	50                   	push   rax
+    1e33:	58                   	pop    rax
+    1e34:	48 85 c0             	test   rax,rax
+    1e37:	74 26                	je     1e5f <L_p_keccak_absorb+0xf3>
+    1e39:	48 8b 05 10 00 00 00 	mov    rax,QWORD PTR [rip+0x10]        # 1e50 <L_p_keccak_absorb+0xe4>
+    1e40:	50                   	push   rax
+    1e41:	58                   	pop    rax
+    1e42:	50                   	push   rax
+    1e43:	50                   	push   rax
+    1e44:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1e4b:	48 83 ec 20          	sub    rsp,0x20
+    1e4f:	e8 00 00 00 00       	call   1e54 <L_p_keccak_absorb+0xe8>
+    1e54:	48 83 c4 20          	add    rsp,0x20
+    1e58:	58                   	pop    rax
+    1e59:	58                   	pop    rax
+    1e5a:	48 89 ec             	mov    rsp,rbp
+    1e5d:	5d                   	pop    rbp
+    1e5e:	c3                   	ret
+    1e5f:	48 8b 45 b8          	mov    rax,QWORD PTR [rbp-0x48]
+    1e63:	50                   	push   rax
+    1e64:	48 b8 c8 00 00 00 00 	movabs rax,0xc8
+    1e6b:	00 00 00 
+    1e6e:	50                   	push   rax
+    1e6f:	59                   	pop    rcx
+    1e70:	58                   	pop    rax
+    1e71:	48 39 c8             	cmp    rax,rcx
+    1e74:	0f 9f c0             	setg   al
+    1e77:	48 0f b6 c0          	movzx  rax,al
+    1e7b:	50                   	push   rax
+    1e7c:	58                   	pop    rax
+    1e7d:	48 85 c0             	test   rax,rax
+    1e80:	74 26                	je     1ea8 <L_p_keccak_absorb+0x13c>
+    1e82:	48 8b 05 10 00 00 00 	mov    rax,QWORD PTR [rip+0x10]        # 1e99 <L_p_keccak_absorb+0x12d>
+    1e89:	50                   	push   rax
+    1e8a:	58                   	pop    rax
+    1e8b:	50                   	push   rax
+    1e8c:	50                   	push   rax
+    1e8d:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    1e94:	48 83 ec 20          	sub    rsp,0x20
+    1e98:	e8 00 00 00 00       	call   1e9d <L_p_keccak_absorb+0x131>
+    1e9d:	48 83 c4 20          	add    rsp,0x20
+    1ea1:	58                   	pop    rax
+    1ea2:	58                   	pop    rax
+    1ea3:	48 89 ec             	mov    rsp,rbp
+    1ea6:	5d                   	pop    rbp
+    1ea7:	c3                   	ret
+    1ea8:	58                   	pop    rax
+    1ea9:	48 89 45 a8          	mov    QWORD PTR [rbp-0x58],rax
+    1ead:	58                   	pop    rax
+    1eae:	48 89 45 a0          	mov    QWORD PTR [rbp-0x60],rax
+    1eb2:	48 b8 ff 00 00 00 00 	movabs rax,0xff
+    1eb9:	00 00 00 
+    1ebc:	50                   	push   rax
+    1ebd:	59                   	pop    rcx
+    1ebe:	58                   	pop    rax
+    1ebf:	48 21 c8             	and    rax,rcx
+    1ec2:	50                   	push   rax
+    1ec3:	58                   	pop    rax
+    1ec4:	48 89 45 98          	mov    QWORD PTR [rbp-0x68],rax
+    1ec8:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1ecf:	00 00 00 
+    1ed2:	50                   	push   rax
+    1ed3:	58                   	pop    rax
+    1ed4:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    1ed8:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    1edc:	50                   	push   rax
+    1edd:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    1ee1:	50                   	push   rax
+    1ee2:	59                   	pop    rcx
+    1ee3:	58                   	pop    rax
+    1ee4:	48 01 c8             	add    rax,rcx
+    1ee7:	50                   	push   rax
+    1ee8:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    1eec:	50                   	push   rax
+    1eed:	59                   	pop    rcx
+    1eee:	58                   	pop    rax
+    1eef:	48 39 c8             	cmp    rax,rcx
+    1ef2:	0f 9e c0             	setle  al
+    1ef5:	48 0f b6 c0          	movzx  rax,al
+    1ef9:	50                   	push   rax
+    1efa:	58                   	pop    rax
+    1efb:	48 85 c0             	test   rax,rax
+    1efe:	0f 84 bf 00 00 00    	je     1fc3 <L_p_keccak_absorb+0x257>
+    1f04:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1f0b:	00 00 00 
+    1f0e:	50                   	push   rax
+    1f0f:	58                   	pop    rax
+    1f10:	48 89 45 88          	mov    QWORD PTR [rbp-0x78],rax
+    1f14:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    1f18:	50                   	push   rax
+    1f19:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    1f1d:	50                   	push   rax
+    1f1e:	59                   	pop    rcx
+    1f1f:	58                   	pop    rax
+    1f20:	48 39 c8             	cmp    rax,rcx
+    1f23:	0f 9c c0             	setl   al
+    1f26:	48 0f b6 c0          	movzx  rax,al
+    1f2a:	50                   	push   rax
+    1f2b:	58                   	pop    rax
+    1f2c:	48 85 c0             	test   rax,rax
+    1f2f:	74 63                	je     1f94 <L_p_keccak_absorb+0x228>
+    1f31:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    1f35:	50                   	push   rax
+    1f36:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    1f3a:	50                   	push   rax
+    1f3b:	59                   	pop    rcx
+    1f3c:	58                   	pop    rax
+    1f3d:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1f41:	50                   	push   rax
+    1f42:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    1f46:	50                   	push   rax
+    1f47:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    1f4b:	50                   	push   rax
+    1f4c:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    1f50:	50                   	push   rax
+    1f51:	59                   	pop    rcx
+    1f52:	58                   	pop    rax
+    1f53:	48 01 c8             	add    rax,rcx
+    1f56:	50                   	push   rax
+    1f57:	59                   	pop    rcx
+    1f58:	58                   	pop    rax
+    1f59:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    1f5d:	50                   	push   rax
+    1f5e:	59                   	pop    rcx
+    1f5f:	58                   	pop    rax
+    1f60:	48 31 c8             	xor    rax,rcx
+    1f63:	50                   	push   rax
+    1f64:	58                   	pop    rax
+    1f65:	50                   	push   rax
+    1f66:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    1f6a:	50                   	push   rax
+    1f6b:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    1f6f:	50                   	push   rax
+    1f70:	59                   	pop    rcx
+    1f71:	58                   	pop    rax
+    1f72:	5a                   	pop    rdx
+    1f73:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    1f77:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    1f7b:	50                   	push   rax
+    1f7c:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    1f83:	00 00 00 
+    1f86:	50                   	push   rax
+    1f87:	59                   	pop    rcx
+    1f88:	58                   	pop    rax
+    1f89:	48 01 c8             	add    rax,rcx
+    1f8c:	50                   	push   rax
+    1f8d:	58                   	pop    rax
+    1f8e:	48 89 45 88          	mov    QWORD PTR [rbp-0x78],rax
+    1f92:	eb 80                	jmp    1f14 <L_p_keccak_absorb+0x1a8>
+    1f94:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    1f98:	50                   	push   rax
+    1f99:	59                   	pop    rcx
+    1f9a:	48 83 ec 20          	sub    rsp,0x20
+    1f9e:	e8 c5 f4 ff ff       	call   1468 <L_p_keccak_f1600>
+    1fa3:	48 83 c4 20          	add    rsp,0x20
+    1fa7:	50                   	push   rax
+    1fa8:	58                   	pop    rax
+    1fa9:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    1fad:	50                   	push   rax
+    1fae:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    1fb2:	50                   	push   rax
+    1fb3:	59                   	pop    rcx
+    1fb4:	58                   	pop    rax
+    1fb5:	48 01 c8             	add    rax,rcx
+    1fb8:	50                   	push   rax
+    1fb9:	58                   	pop    rax
+    1fba:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    1fbe:	e9 15 ff ff ff       	jmp    1ed8 <L_p_keccak_absorb+0x16c>
+    1fc3:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    1fc7:	50                   	push   rax
+    1fc8:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    1fcc:	50                   	push   rax
+    1fcd:	59                   	pop    rcx
+    1fce:	58                   	pop    rax
+    1fcf:	48 29 c8             	sub    rax,rcx
+    1fd2:	50                   	push   rax
+    1fd3:	58                   	pop    rax
+    1fd4:	48 89 45 80          	mov    QWORD PTR [rbp-0x80],rax
+    1fd8:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    1fdf:	00 00 00 
+    1fe2:	50                   	push   rax
+    1fe3:	58                   	pop    rax
+    1fe4:	48 89 85 78 ff ff ff 	mov    QWORD PTR [rbp-0x88],rax
+    1feb:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    1ff2:	50                   	push   rax
+    1ff3:	48 8b 45 80          	mov    rax,QWORD PTR [rbp-0x80]
+    1ff7:	50                   	push   rax
+    1ff8:	59                   	pop    rcx
+    1ff9:	58                   	pop    rax
+    1ffa:	48 39 c8             	cmp    rax,rcx
+    1ffd:	0f 9c c0             	setl   al
+    2000:	48 0f b6 c0          	movzx  rax,al
+    2004:	50                   	push   rax
+    2005:	58                   	pop    rax
+    2006:	48 85 c0             	test   rax,rax
+    2009:	74 75                	je     2080 <L_p_keccak_absorb+0x314>
+    200b:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    200f:	50                   	push   rax
+    2010:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    2017:	50                   	push   rax
+    2018:	59                   	pop    rcx
+    2019:	58                   	pop    rax
+    201a:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    201e:	50                   	push   rax
+    201f:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    2023:	50                   	push   rax
+    2024:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    2028:	50                   	push   rax
+    2029:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    2030:	50                   	push   rax
+    2031:	59                   	pop    rcx
+    2032:	58                   	pop    rax
+    2033:	48 01 c8             	add    rax,rcx
+    2036:	50                   	push   rax
+    2037:	59                   	pop    rcx
+    2038:	58                   	pop    rax
+    2039:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    203d:	50                   	push   rax
+    203e:	59                   	pop    rcx
+    203f:	58                   	pop    rax
+    2040:	48 31 c8             	xor    rax,rcx
+    2043:	50                   	push   rax
+    2044:	58                   	pop    rax
+    2045:	50                   	push   rax
+    2046:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    204a:	50                   	push   rax
+    204b:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    2052:	50                   	push   rax
+    2053:	59                   	pop    rcx
+    2054:	58                   	pop    rax
+    2055:	5a                   	pop    rdx
+    2056:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    205a:	48 8b 85 78 ff ff ff 	mov    rax,QWORD PTR [rbp-0x88]
+    2061:	50                   	push   rax
+    2062:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    2069:	00 00 00 
+    206c:	50                   	push   rax
+    206d:	59                   	pop    rcx
+    206e:	58                   	pop    rax
+    206f:	48 01 c8             	add    rax,rcx
+    2072:	50                   	push   rax
+    2073:	58                   	pop    rax
+    2074:	48 89 85 78 ff ff ff 	mov    QWORD PTR [rbp-0x88],rax
+    207b:	e9 6b ff ff ff       	jmp    1feb <L_p_keccak_absorb+0x27f>
+    2080:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    2084:	50                   	push   rax
+    2085:	48 8b 45 80          	mov    rax,QWORD PTR [rbp-0x80]
+    2089:	50                   	push   rax
+    208a:	59                   	pop    rcx
+    208b:	58                   	pop    rax
+    208c:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    2090:	50                   	push   rax
+    2091:	48 8b 45 b0          	mov    rax,QWORD PTR [rbp-0x50]
+    2095:	50                   	push   rax
+    2096:	59                   	pop    rcx
+    2097:	58                   	pop    rax
+    2098:	48 31 c8             	xor    rax,rcx
+    209b:	50                   	push   rax
+    209c:	58                   	pop    rax
+    209d:	50                   	push   rax
+    209e:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    20a2:	50                   	push   rax
+    20a3:	48 8b 45 80          	mov    rax,QWORD PTR [rbp-0x80]
+    20a7:	50                   	push   rax
+    20a8:	59                   	pop    rcx
+    20a9:	58                   	pop    rax
+    20aa:	5a                   	pop    rdx
+    20ab:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    20af:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    20b3:	50                   	push   rax
+    20b4:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    20b8:	50                   	push   rax
+    20b9:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    20c0:	00 00 00 
+    20c3:	50                   	push   rax
+    20c4:	59                   	pop    rcx
+    20c5:	58                   	pop    rax
+    20c6:	48 29 c8             	sub    rax,rcx
+    20c9:	50                   	push   rax
+    20ca:	59                   	pop    rcx
+    20cb:	58                   	pop    rax
+    20cc:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    20d0:	50                   	push   rax
+    20d1:	48 b8 80 00 00 00 00 	movabs rax,0x80
+    20d8:	00 00 00 
+    20db:	50                   	push   rax
+    20dc:	59                   	pop    rcx
+    20dd:	58                   	pop    rax
+    20de:	48 31 c8             	xor    rax,rcx
+    20e1:	50                   	push   rax
+    20e2:	58                   	pop    rax
+    20e3:	50                   	push   rax
+    20e4:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    20e8:	50                   	push   rax
+    20e9:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    20ed:	50                   	push   rax
+    20ee:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    20f5:	00 00 00 
+    20f8:	50                   	push   rax
+    20f9:	59                   	pop    rcx
+    20fa:	58                   	pop    rax
+    20fb:	48 29 c8             	sub    rax,rcx
+    20fe:	50                   	push   rax
+    20ff:	59                   	pop    rcx
+    2100:	58                   	pop    rax
+    2101:	5a                   	pop    rdx
+    2102:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    2106:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    210a:	50                   	push   rax
+    210b:	59                   	pop    rcx
+    210c:	48 83 ec 20          	sub    rsp,0x20
+    2110:	e8 53 f3 ff ff       	call   1468 <L_p_keccak_f1600>
+    2115:	48 83 c4 20          	add    rsp,0x20
+    2119:	50                   	push   rax
+    211a:	58                   	pop    rax
+    211b:	48 8b 05 00 00 00 00 	mov    rax,QWORD PTR [rip+0x0]        # 2122 <L_p_keccak_absorb+0x3b6>
+    2122:	50                   	push   rax
+    2123:	58                   	pop    rax
+    2124:	50                   	push   rax
+    2125:	50                   	push   rax
+    2126:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    212d:	48 83 ec 20          	sub    rsp,0x20
+    2131:	e8 00 00 00 00       	call   2136 <L_p_keccak_absorb+0x3ca>
+    2136:	48 83 c4 20          	add    rsp,0x20
+    213a:	58                   	pop    rax
+    213b:	58                   	pop    rax
+    213c:	48 89 ec             	mov    rsp,rbp
+    213f:	5d                   	pop    rbp
+    2140:	c3                   	ret
+
+0000000000002141 <L_p_keccak_pack_rate_dom>:
+    2141:	55                   	push   rbp
+    2142:	48 89 e5             	mov    rbp,rsp
+    2145:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    214c:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+    2150:	48 89 55 f0          	mov    QWORD PTR [rbp-0x10],rdx
+    2154:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    215b:	48 83 ec 20          	sub    rsp,0x20
+    215f:	e8 00 00 00 00       	call   2164 <L_p_keccak_pack_rate_dom+0x23>
+    2164:	48 83 c4 20          	add    rsp,0x20
+    2168:	48 b8 ff ff ff ff 00 	movabs rax,0xffffffff
+    216f:	00 00 00 
+    2172:	50                   	push   rax
+    2173:	59                   	pop    rcx
+    2174:	58                   	pop    rax
+    2175:	48 21 c8             	and    rax,rcx
+    2178:	50                   	push   rax
+    2179:	58                   	pop    rax
+    217a:	48 89 45 e8          	mov    QWORD PTR [rbp-0x18],rax
+    217e:	48 b8 ff 00 00 00 00 	movabs rax,0xff
+    2185:	00 00 00 
+    2188:	50                   	push   rax
+    2189:	59                   	pop    rcx
+    218a:	58                   	pop    rax
+    218b:	48 21 c8             	and    rax,rcx
+    218e:	50                   	push   rax
+    218f:	48 b8 20 00 00 00 00 	movabs rax,0x20
+    2196:	00 00 00 
+    2199:	50                   	push   rax
+    219a:	59                   	pop    rcx
+    219b:	58                   	pop    rax
+    219c:	48 d3 e0             	shl    rax,cl
+    219f:	50                   	push   rax
+    21a0:	58                   	pop    rax
+    21a1:	48 89 45 e0          	mov    QWORD PTR [rbp-0x20],rax
+    21a5:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    21a9:	50                   	push   rax
+    21aa:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    21ae:	50                   	push   rax
+    21af:	59                   	pop    rcx
+    21b0:	58                   	pop    rax
+    21b1:	48 09 c8             	or     rax,rcx
+    21b4:	50                   	push   rax
+    21b5:	58                   	pop    rax
+    21b6:	50                   	push   rax
+    21b7:	50                   	push   rax
+    21b8:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    21bf:	48 83 ec 20          	sub    rsp,0x20
+    21c3:	e8 00 00 00 00       	call   21c8 <L_p_keccak_pack_rate_dom+0x87>
+    21c8:	48 83 c4 20          	add    rsp,0x20
+    21cc:	58                   	pop    rax
+    21cd:	58                   	pop    rax
+    21ce:	48 89 ec             	mov    rsp,rbp
+    21d1:	5d                   	pop    rbp
+    21d2:	c3                   	ret
+
+00000000000021d3 <L_p_keccak_squeeze>:
+    21d3:	55                   	push   rbp
+    21d4:	48 89 e5             	mov    rbp,rsp
+    21d7:	48 81 ec 00 04 00 00 	sub    rsp,0x400
+    21de:	48 89 4d f8          	mov    QWORD PTR [rbp-0x8],rcx
+    21e2:	48 89 55 f0          	mov    QWORD PTR [rbp-0x10],rdx
+    21e6:	4c 89 45 e8          	mov    QWORD PTR [rbp-0x18],r8
+    21ea:	4c 89 4d e0          	mov    QWORD PTR [rbp-0x20],r9
+    21ee:	48 c7 c1 01 00 00 00 	mov    rcx,0x1
+    21f5:	48 83 ec 20          	sub    rsp,0x20
+    21f9:	e8 00 00 00 00       	call   21fe <L_p_keccak_squeeze+0x2b>
+    21fe:	48 83 c4 20          	add    rsp,0x20
+    2202:	48 8b 45 f8          	mov    rax,QWORD PTR [rbp-0x8]
+    2206:	50                   	push   rax
+    2207:	58                   	pop    rax
+    2208:	48 89 45 d8          	mov    QWORD PTR [rbp-0x28],rax
+    220c:	48 8b 45 f0          	mov    rax,QWORD PTR [rbp-0x10]
+    2210:	50                   	push   rax
+    2211:	58                   	pop    rax
+    2212:	48 89 45 d0          	mov    QWORD PTR [rbp-0x30],rax
+    2216:	48 8b 45 e8          	mov    rax,QWORD PTR [rbp-0x18]
+    221a:	50                   	push   rax
+    221b:	58                   	pop    rax
+    221c:	48 89 45 c8          	mov    QWORD PTR [rbp-0x38],rax
+    2220:	48 8b 45 e0          	mov    rax,QWORD PTR [rbp-0x20]
+    2224:	50                   	push   rax
+    2225:	58                   	pop    rax
+    2226:	48 89 45 c0          	mov    QWORD PTR [rbp-0x40],rax
+    222a:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    222e:	50                   	push   rax
+    222f:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    2236:	00 00 00 
+    2239:	50                   	push   rax
+    223a:	59                   	pop    rcx
+    223b:	58                   	pop    rax
+    223c:	48 39 c8             	cmp    rax,rcx
+    223f:	0f 94 c0             	sete   al
+    2242:	48 0f b6 c0          	movzx  rax,al
+    2246:	50                   	push   rax
+    2247:	58                   	pop    rax
+    2248:	48 85 c0             	test   rax,rax
+    224b:	74 26                	je     2273 <L_p_keccak_squeeze+0xa0>
+    224d:	48 8b 05 08 00 00 00 	mov    rax,QWORD PTR [rip+0x8]        # 225c <L_p_keccak_squeeze+0x89>
+    2254:	50                   	push   rax
+    2255:	58                   	pop    rax
+    2256:	50                   	push   rax
+    2257:	50                   	push   rax
+    2258:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    225f:	48 83 ec 20          	sub    rsp,0x20
+    2263:	e8 00 00 00 00       	call   2268 <L_p_keccak_squeeze+0x95>
+    2268:	48 83 c4 20          	add    rsp,0x20
+    226c:	58                   	pop    rax
+    226d:	58                   	pop    rax
+    226e:	48 89 ec             	mov    rsp,rbp
+    2271:	5d                   	pop    rbp
+    2272:	c3                   	ret
+    2273:	48 8b 45 d0          	mov    rax,QWORD PTR [rbp-0x30]
+    2277:	50                   	push   rax
+    2278:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    227f:	00 00 00 
+    2282:	50                   	push   rax
+    2283:	59                   	pop    rcx
+    2284:	58                   	pop    rax
+    2285:	48 39 c8             	cmp    rax,rcx
+    2288:	0f 94 c0             	sete   al
+    228b:	48 0f b6 c0          	movzx  rax,al
+    228f:	50                   	push   rax
+    2290:	58                   	pop    rax
+    2291:	48 85 c0             	test   rax,rax
+    2294:	74 26                	je     22bc <L_p_keccak_squeeze+0xe9>
+    2296:	48 8b 05 08 00 00 00 	mov    rax,QWORD PTR [rip+0x8]        # 22a5 <L_p_keccak_squeeze+0xd2>
+    229d:	50                   	push   rax
+    229e:	58                   	pop    rax
+    229f:	50                   	push   rax
+    22a0:	50                   	push   rax
+    22a1:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    22a8:	48 83 ec 20          	sub    rsp,0x20
+    22ac:	e8 00 00 00 00       	call   22b1 <L_p_keccak_squeeze+0xde>
+    22b1:	48 83 c4 20          	add    rsp,0x20
+    22b5:	58                   	pop    rax
+    22b6:	58                   	pop    rax
+    22b7:	48 89 ec             	mov    rsp,rbp
+    22ba:	5d                   	pop    rbp
+    22bb:	c3                   	ret
+    22bc:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+    22c0:	50                   	push   rax
+    22c1:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    22c8:	00 00 00 
+    22cb:	50                   	push   rax
+    22cc:	59                   	pop    rcx
+    22cd:	58                   	pop    rax
+    22ce:	48 39 c8             	cmp    rax,rcx
+    22d1:	0f 94 c0             	sete   al
+    22d4:	48 0f b6 c0          	movzx  rax,al
+    22d8:	50                   	push   rax
+    22d9:	58                   	pop    rax
+    22da:	48 85 c0             	test   rax,rax
+    22dd:	74 26                	je     2305 <L_p_keccak_squeeze+0x132>
+    22df:	48 8b 05 10 00 00 00 	mov    rax,QWORD PTR [rip+0x10]        # 22f6 <L_p_keccak_squeeze+0x123>
+    22e6:	50                   	push   rax
+    22e7:	58                   	pop    rax
+    22e8:	50                   	push   rax
+    22e9:	50                   	push   rax
+    22ea:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    22f1:	48 83 ec 20          	sub    rsp,0x20
+    22f5:	e8 00 00 00 00       	call   22fa <L_p_keccak_squeeze+0x127>
+    22fa:	48 83 c4 20          	add    rsp,0x20
+    22fe:	58                   	pop    rax
+    22ff:	58                   	pop    rax
+    2300:	48 89 ec             	mov    rsp,rbp
+    2303:	5d                   	pop    rbp
+    2304:	c3                   	ret
+    2305:	48 8b 45 c0          	mov    rax,QWORD PTR [rbp-0x40]
+    2309:	50                   	push   rax
+    230a:	48 b8 c8 00 00 00 00 	movabs rax,0xc8
+    2311:	00 00 00 
+    2314:	50                   	push   rax
+    2315:	59                   	pop    rcx
+    2316:	58                   	pop    rax
+    2317:	48 39 c8             	cmp    rax,rcx
+    231a:	0f 9f c0             	setg   al
+    231d:	48 0f b6 c0          	movzx  rax,al
+    2321:	50                   	push   rax
+    2322:	58                   	pop    rax
+    2323:	48 85 c0             	test   rax,rax
+    2326:	74 26                	je     234e <L_p_keccak_squeeze+0x17b>
+    2328:	48 8b 05 10 00 00 00 	mov    rax,QWORD PTR [rip+0x10]        # 233f <L_p_keccak_squeeze+0x16c>
+    232f:	50                   	push   rax
+    2330:	58                   	pop    rax
+    2331:	50                   	push   rax
+    2332:	50                   	push   rax
+    2333:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    233a:	48 83 ec 20          	sub    rsp,0x20
+    233e:	e8 00 00 00 00       	call   2343 <L_p_keccak_squeeze+0x170>
+    2343:	48 83 c4 20          	add    rsp,0x20
+    2347:	58                   	pop    rax
+    2348:	58                   	pop    rax
+    2349:	48 89 ec             	mov    rsp,rbp
+    234c:	5d                   	pop    rbp
+    234d:	c3                   	ret
+    234e:	58                   	pop    rax
+    234f:	48 89 45 b8          	mov    QWORD PTR [rbp-0x48],rax
+    2353:	58                   	pop    rax
+    2354:	48 89 45 b0          	mov    QWORD PTR [rbp-0x50],rax
+    2358:	48 b8 ff 00 00 00 00 	movabs rax,0xff
+    235f:	00 00 00 
+    2362:	50                   	push   rax
+    2363:	59                   	pop    rcx
+    2364:	58                   	pop    rax
+    2365:	48 21 c8             	and    rax,rcx
+    2368:	50                   	push   rax
+    2369:	58                   	pop    rax
+    236a:	48 89 45 a8          	mov    QWORD PTR [rbp-0x58],rax
+    236e:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    2375:	00 00 00 
+    2378:	50                   	push   rax
+    2379:	58                   	pop    rax
+    237a:	48 89 45 a0          	mov    QWORD PTR [rbp-0x60],rax
+    237e:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    2382:	50                   	push   rax
+    2383:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    2387:	50                   	push   rax
+    2388:	59                   	pop    rcx
+    2389:	58                   	pop    rax
+    238a:	48 39 c8             	cmp    rax,rcx
+    238d:	0f 9c c0             	setl   al
+    2390:	48 0f b6 c0          	movzx  rax,al
+    2394:	50                   	push   rax
+    2395:	58                   	pop    rax
+    2396:	48 85 c0             	test   rax,rax
+    2399:	0f 84 0b 01 00 00    	je     24aa <L_p_keccak_squeeze+0x2d7>
+    239f:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    23a3:	50                   	push   rax
+    23a4:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    23a8:	50                   	push   rax
+    23a9:	59                   	pop    rcx
+    23aa:	58                   	pop    rax
+    23ab:	48 29 c8             	sub    rax,rcx
+    23ae:	50                   	push   rax
+    23af:	58                   	pop    rax
+    23b0:	48 89 45 98          	mov    QWORD PTR [rbp-0x68],rax
+    23b4:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    23b8:	50                   	push   rax
+    23b9:	58                   	pop    rax
+    23ba:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    23be:	48 8b 45 98          	mov    rax,QWORD PTR [rbp-0x68]
+    23c2:	50                   	push   rax
+    23c3:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    23c7:	50                   	push   rax
+    23c8:	59                   	pop    rcx
+    23c9:	58                   	pop    rax
+    23ca:	48 39 c8             	cmp    rax,rcx
+    23cd:	0f 9d c0             	setge  al
+    23d0:	48 0f b6 c0          	movzx  rax,al
+    23d4:	50                   	push   rax
+    23d5:	58                   	pop    rax
+    23d6:	48 85 c0             	test   rax,rax
+    23d9:	74 0a                	je     23e5 <L_p_keccak_squeeze+0x212>
+    23db:	48 8b 45 a8          	mov    rax,QWORD PTR [rbp-0x58]
+    23df:	50                   	push   rax
+    23e0:	58                   	pop    rax
+    23e1:	48 89 45 90          	mov    QWORD PTR [rbp-0x70],rax
+    23e5:	48 b8 00 00 00 00 00 	movabs rax,0x0
+    23ec:	00 00 00 
+    23ef:	50                   	push   rax
+    23f0:	58                   	pop    rax
+    23f1:	48 89 45 88          	mov    QWORD PTR [rbp-0x78],rax
+    23f5:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    23f9:	50                   	push   rax
+    23fa:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    23fe:	50                   	push   rax
+    23ff:	59                   	pop    rcx
+    2400:	58                   	pop    rax
+    2401:	48 39 c8             	cmp    rax,rcx
+    2404:	0f 9c c0             	setl   al
+    2407:	48 0f b6 c0          	movzx  rax,al
+    240b:	50                   	push   rax
+    240c:	58                   	pop    rax
+    240d:	48 85 c0             	test   rax,rax
+    2410:	74 4c                	je     245e <L_p_keccak_squeeze+0x28b>
+    2412:	48 8b 45 b8          	mov    rax,QWORD PTR [rbp-0x48]
+    2416:	50                   	push   rax
+    2417:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    241b:	50                   	push   rax
+    241c:	59                   	pop    rcx
+    241d:	58                   	pop    rax
+    241e:	48 8b 04 c8          	mov    rax,QWORD PTR [rax+rcx*8]
+    2422:	50                   	push   rax
+    2423:	58                   	pop    rax
+    2424:	50                   	push   rax
+    2425:	48 8b 45 b0          	mov    rax,QWORD PTR [rbp-0x50]
+    2429:	50                   	push   rax
+    242a:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    242e:	50                   	push   rax
+    242f:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    2433:	50                   	push   rax
+    2434:	59                   	pop    rcx
+    2435:	58                   	pop    rax
+    2436:	48 01 c8             	add    rax,rcx
+    2439:	50                   	push   rax
+    243a:	59                   	pop    rcx
+    243b:	58                   	pop    rax
+    243c:	5a                   	pop    rdx
+    243d:	48 89 14 c8          	mov    QWORD PTR [rax+rcx*8],rdx
+    2441:	48 8b 45 88          	mov    rax,QWORD PTR [rbp-0x78]
+    2445:	50                   	push   rax
+    2446:	48 b8 01 00 00 00 00 	movabs rax,0x1
+    244d:	00 00 00 
+    2450:	50                   	push   rax
+    2451:	59                   	pop    rcx
+    2452:	58                   	pop    rax
+    2453:	48 01 c8             	add    rax,rcx
+    2456:	50                   	push   rax
+    2457:	58                   	pop    rax
+    2458:	48 89 45 88          	mov    QWORD PTR [rbp-0x78],rax
+    245c:	eb 97                	jmp    23f5 <L_p_keccak_squeeze+0x222>
+    245e:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    2462:	50                   	push   rax
+    2463:	48 8b 45 90          	mov    rax,QWORD PTR [rbp-0x70]
+    2467:	50                   	push   rax
+    2468:	59                   	pop    rcx
+    2469:	58                   	pop    rax
+    246a:	48 01 c8             	add    rax,rcx
+    246d:	50                   	push   rax
+    246e:	58                   	pop    rax
+    246f:	48 89 45 a0          	mov    QWORD PTR [rbp-0x60],rax
+    2473:	48 8b 45 a0          	mov    rax,QWORD PTR [rbp-0x60]
+    2477:	50                   	push   rax
+    2478:	48 8b 45 c8          	mov    rax,QWORD PTR [rbp-0x38]
+    247c:	50                   	push   rax
+    247d:	59                   	pop    rcx
+    247e:	58                   	pop    rax
+    247f:	48 39 c8             	cmp    rax,rcx
+    2482:	0f 9c c0             	setl   al
+    2485:	48 0f b6 c0          	movzx  rax,al
+    2489:	50                   	push   rax
+    248a:	58                   	pop    rax
+    248b:	48 85 c0             	test   rax,rax
+    248e:	74 15                	je     24a5 <L_p_keccak_squeeze+0x2d2>
+    2490:	48 8b 45 d8          	mov    rax,QWORD PTR [rbp-0x28]
+    2494:	50                   	push   rax
+    2495:	59                   	pop    rcx
+    2496:	48 83 ec 20          	sub    rsp,0x20
+    249a:	e8 c9 ef ff ff       	call   1468 <L_p_keccak_f1600>
+    249f:	48 83 c4 20          	add    rsp,0x20
+    24a3:	50                   	push   rax
+    24a4:	58                   	pop    rax
+    24a5:	e9 d4 fe ff ff       	jmp    237e <L_p_keccak_squeeze+0x1ab>
+    24aa:	48 8b 05 00 00 00 00 	mov    rax,QWORD PTR [rip+0x0]        # 24b1 <L_p_keccak_squeeze+0x2de>
+    24b1:	50                   	push   rax
+    24b2:	58                   	pop    rax
+    24b3:	50                   	push   rax
+    24b4:	50                   	push   rax
+    24b5:	48 c7 c1 02 00 00 00 	mov    rcx,0x2
+    24bc:	48 83 ec 20          	sub    rsp,0x20
+    24c0:	e8 00 00 00 00       	call   24c5 <L_p_keccak_squeeze+0x2f2>
+    24c5:	48 83 c4 20          	add    rsp,0x20
+    24c9:	58                   	pop    rax
+    24ca:	58                   	pop    rax
+    24cb:	48 89 ec             	mov    rsp,rbp
+    24ce:	5d                   	pop    rbp
+    24cf:	c3                   	ret

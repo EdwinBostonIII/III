@@ -1,0 +1,92 @@
+/* 683_unify.iii -- M27 keystone (clause 3): the ONE Robinson unification engine
+ * (omnia/unify.iii), shared by kernel (M9) + resolver (M30), had ZERO corpus coverage.
+ * This KAT gates it end to end: var-binds-const (+ mgu via unify_walk), const clash
+ * (different payloads -> FAIL), structural unification f(X,b) ~ f(a,Y) (+ recursive mgu
+ * X to a, Y to b), head mismatch f vs g -> FAIL, the OCCURS CHECK X ~ f(X) -> FAIL (no
+ * infinite term), and arity mismatch f/1 vs f/2 -> FAIL.  Exit 99 = all hold; 1..N = the
+ * failing check.  CORPUS-ONLY (unify is complete; this proves the engine + its negatives). */
+module corpus_683
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn unify_buf_new(arena_id: u64) -> u64 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_init(buf: u64) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_var(buf: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_const(buf: u64, payload: u64) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_make_struct(buf: u64, head: u32, args_first_idx: u32, arity: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_alloc_args(buf: u64, count: u8) -> u32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_set_arg(buf: u64, args_first_idx: u32, slot: u8, term_id: u32) -> i32 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify(buf: u64, a_in: u32, b_in: u32) -> u8 from "unify.iii"
+extern @abi(c-msvc-x64) fn unify_walk(buf: u64, t: u32) -> u32 from "unify.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(16384u64)
+    if a == 0u64 { return 1u64 }
+    let buf : u64 = unify_buf_new(a)
+    if buf == 0u64 { return 2u64 }
+
+    /* === Test 1: var binds const (success + mgu) === */
+    let x1 : u32 = unify_make_var(buf)
+    let c42 : u32 = unify_make_const(buf, 42u64)
+    if unify(buf, x1, c42) != 1u8 { return 3u64 }
+    if unify_walk(buf, x1) != c42 { return 4u64 }   /* X now resolves to the const */
+
+    /* === Test 2: const clash (different payloads -> FAIL) === */
+    unify_init(buf)
+    let c100 : u32 = unify_make_const(buf, 100u64)
+    let c200 : u32 = unify_make_const(buf, 200u64)
+    if unify(buf, c100, c200) != 0u8 { return 5u64 }
+
+    /* === Test 3: structural unification f(X,b) ~ f(a,Y) (+ recursive mgu) === */
+    unify_init(buf)
+    let xv : u32 = unify_make_var(buf)
+    let cb : u32 = unify_make_const(buf, 0xBBu64)
+    let ar1 : u32 = unify_alloc_args(buf, 2u8)
+    unify_set_arg(buf, ar1, 0u8, xv)
+    unify_set_arg(buf, ar1, 1u8, cb)
+    let s1 : u32 = unify_make_struct(buf, 1u32, ar1, 2u8)
+    let ca : u32 = unify_make_const(buf, 0xAAu64)
+    let yv : u32 = unify_make_var(buf)
+    let ar2 : u32 = unify_alloc_args(buf, 2u8)
+    unify_set_arg(buf, ar2, 0u8, ca)
+    unify_set_arg(buf, ar2, 1u8, yv)
+    let s2 : u32 = unify_make_struct(buf, 1u32, ar2, 2u8)
+    if unify(buf, s1, s2) != 1u8 { return 6u64 }
+    if unify_walk(buf, xv) != ca { return 7u64 }   /* X bound to a */
+    if unify_walk(buf, yv) != cb { return 8u64 }   /* Y bound to b */
+
+    /* === Test 4: head mismatch f(a) vs g(a) -> FAIL === */
+    unify_init(buf)
+    let ha : u32 = unify_make_const(buf, 0xAAu64)
+    let arh1 : u32 = unify_alloc_args(buf, 1u8)
+    unify_set_arg(buf, arh1, 0u8, ha)
+    let sf : u32 = unify_make_struct(buf, 1u32, arh1, 1u8)
+    let arh2 : u32 = unify_alloc_args(buf, 1u8)
+    unify_set_arg(buf, arh2, 0u8, ha)
+    let sg : u32 = unify_make_struct(buf, 2u32, arh2, 1u8)
+    if unify(buf, sf, sg) != 0u8 { return 9u64 }
+
+    /* === Test 5: OCCURS CHECK X ~ f(X) -> FAIL (no infinite term) === */
+    unify_init(buf)
+    let xo : u32 = unify_make_var(buf)
+    let aro : u32 = unify_alloc_args(buf, 1u8)
+    unify_set_arg(buf, aro, 0u8, xo)
+    let fxo : u32 = unify_make_struct(buf, 1u32, aro, 1u8)
+    if unify(buf, xo, fxo) != 0u8 { return 10u64 }
+
+    /* === Test 6: arity mismatch f/1 vs f/2 -> FAIL === */
+    unify_init(buf)
+    let za : u32 = unify_make_const(buf, 0xAAu64)
+    let zb : u32 = unify_make_const(buf, 0xBBu64)
+    let arq1 : u32 = unify_alloc_args(buf, 1u8)
+    unify_set_arg(buf, arq1, 0u8, za)
+    let sf1 : u32 = unify_make_struct(buf, 1u32, arq1, 1u8)
+    let arq2 : u32 = unify_alloc_args(buf, 2u8)
+    unify_set_arg(buf, arq2, 0u8, za)
+    unify_set_arg(buf, arq2, 1u8, zb)
+    let sf2 : u32 = unify_make_struct(buf, 1u32, arq2, 2u8)
+    if unify(buf, sf1, sf2) != 0u8 { return 11u64 }
+
+    arena_drop(a)
+    return 99u64
+}

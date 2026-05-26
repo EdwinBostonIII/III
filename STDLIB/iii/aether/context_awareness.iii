@@ -1,0 +1,584 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\context_awareness.iii
+ *
+ * III STDLIB - aether::context_awareness
+ *
+ * The substrate's analytic environmental accountant.  It samples sixteen
+ * named pillar metrics into a context vector, computes a single fixed-point
+ * Coordinated Anomaly Detection (CAD) score as the sum of per-metric
+ * standardized squared POSITIVE deviations, maintains a 64-entry sliding
+ * window of those scores, fits an EXACT closed-form integer ordinary-least-
+ * squares line over the window, projects the score forward by a Quiescence
+ * drain horizon, and emits a PREDICTIVE_QUIESCENCE witness fragment when the
+ * projection crosses a constitutional threshold.
+ *
+ * This is a deterministic regression-and-projection pipeline, NOT a learner.
+ * There is no count-and-promote, no observe-and-adapt, no threshold-trained
+ * weight.  The baseline (mu, sigma) is set EXPLICITLY by the Quiescence cycle
+ * via ca_set_baseline; it is never inferred here.  The OLS slope/intercept are
+ * exact integer functions of the window's recorded scores over the fixed
+ * ordinal axis t = 0..n-1.  The trigger y_pred >= threshold compares against a
+ * constitutional threshold passed in by the caller.  (M3-clean.)
+ *
+ * Metric slot indices (0..15, positional; pushed by the orchestrator):
+ *    0  phase depth          8  granted-capability count
+ *    1  quiescence pressure  9  revoked-capability count
+ *    2  motion rate         10  consensus round latency
+ *    3  witness backlog     11  view-change frequency
+ *    4  payload pressure    12  eclipse-suspicion level
+ *    5  fragment fan-out    13  admission-rejection rate
+ *    6  epoch skew          14  arena-pressure index
+ *    7  revocation rate     15  entropy NTT spectral distance (Module 24)
+ *
+ * Sliding window: 64 most-recent anomaly scores.  Exact OLS slope b in Q16.16;
+ * prediction y = a + b*(n-1+h).  Witness: PREDICTIVE_QUIESCENCE on trigger.
+ *
+ * Overflow / unit convention (spec Gap 5, locked as option (b)):
+ *   The regression sums are accumulated as non-negative i64 with SATURATING
+ *   detection -- NO pre-shift of y.  A window whose sums stay within i64 (the
+ *   common regime; every standardized CAD score after clamping is small) yields
+ *   an EXACT integer slope; a pathological window that would overflow i64 sets
+ *   the saturation flag and is reported as slope 0 (degenerate), preserving
+ *   determinism without corrupting the common case.  Option (a) (right-shift y
+ *   by FP_SHIFT before accumulation) was rejected because it annihilates the
+ *   small-score regression that the spec's own KAT-3 (y_k = 2k, slope 131072)
+ *   exercises -- it would make the slope NOT exact for realistic scores.
+ *
+ * Hexad: kind_witness + kind_motion.  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (<=4 params), W8 (fixed bounds), W13 (<=20 locals),
+ *   W14 (no break -- sentinel-flag loops), W15 (no recursion).
+ * PREFIX = CTXA_  (CA_ collides with content_addr.iii's L_CA_OK; Trap 2).
+ * Self-test fn: ctxa_selftest (NOT ca_selftest -- that symbol is already
+ *   exported by numera/content_addr.iii; a second ca_selftest would be a
+ *   duplicate linker symbol).  Mirrors wh_selftest/hs_selftest naming.
+ */
+
+module aether_context_awareness
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+
+const CTXA_OK        : i32 =  0i32
+const CTXA_E_BAD     : i32 = -1i32
+
+const CTXA_N_METRICS : u32 = 16u32
+const CTXA_WIN_SIZE  : u32 = 64u32
+const CTXA_WIN_MASK  : u32 = 63u32
+const CTXA_FP_SHIFT  : u32 = 16u32
+const CTXA_FP_ONE    : u64 = 65536u64
+const CTXA_FP_ONE_I  : i64 = 65536i64
+const CTXA_DEV_MAX   : u64 = 0xFFFFFFFFu64
+const CTXA_U64_MAX   : u64 = 0xFFFFFFFFFFFFFFFFu64
+const CTXA_I64_MAX_U : u64 = 0x7FFFFFFFFFFFFFFFu64
+const CTXA_PREMUL_GUARD : u64 = 0xFFFFFFFFFFFFu64
+
+/* Full-window closed-form reference (t=0..63); KAT / doc anchors only --
+ * the live code recomputes Sum_t / Sum_t2 / den from the actual prefix n,
+ * so partial windows (before the ring fills) are exact. */
+const CTXA_SUM_T     : u64 = 2016u64
+const CTXA_SUM_T2    : u64 = 85344u64
+const CTXA_DET       : u64 = 1397760u64
+
+var CTXA_METRIC      : [u64; 16]
+var CTXA_BASE_MU     : [u64; 16]
+var CTXA_BASE_SIGMA  : [u64; 16]
+var CTXA_WIN_SCORE   : [u64; 64]
+var CTXA_WIN_HEAD    : u32 = 0u32
+var CTXA_WIN_FULL    : u8  = 0u8
+
+var CTXA_PRODUCER    : [u8; 32]
+var CTXA_OPID_PREDICT: [u8; 32]
+var CTXA_NAME        : [u8; 48]
+var CTXA_INITED      : u8  = 0u8
+
+/* Regression accumulators (module-scope: a single window walk fills them, and
+ * both ca_trend_coefficient and ca_predict read them -- this also keeps the
+ * sums out of the param-spill / modulo-after-call hazard, since nothing is
+ * returned across a call then reused in arithmetic). */
+var CTXA_SUM_Y       : i64 = 0i64
+var CTXA_SUM_T_R     : i64 = 0i64
+var CTXA_SUM_T2_R    : i64 = 0i64
+var CTXA_SUM_TY      : i64 = 0i64
+var CTXA_SAT         : u8  = 0u8     /* 1 if any sum saturated i64 (degenerate window) */
+var CTXA_N_R         : u32 = 0u32    /* the n used for the last window walk */
+
+/* Witness scratch hoisted from ca_check_quiescence (Trap 7: no local var arrays). */
+var CTXA_INC         : [u8; 32]
+var CTXA_OUTC        : [u8; 32]
+var CTXA_PL          : [u8; 24]
+var CTXA_FID         : [u8; 32]
+
+/* ---- name seeding: "aether::context_awareness::predictive_quiescence" ----
+ * The first 25 bytes are "aether::context_awareness" (the producer name); the
+ * full 48 bytes are the predictive-quiescence op id name.  .iii has no string
+ * literal -> *u8 form, so the bytes are populated explicitly (house idiom,
+ * cf. fed_genesis FOUNDERS_ANCHOR_DOMAIN). */
+fn ca_seed_name() -> i32 {
+    CTXA_NAME[0u64] = 97u8
+    CTXA_NAME[1u64] = 101u8
+    CTXA_NAME[2u64] = 116u8
+    CTXA_NAME[3u64] = 104u8
+    CTXA_NAME[4u64] = 101u8
+    CTXA_NAME[5u64] = 114u8
+    CTXA_NAME[6u64] = 58u8
+    CTXA_NAME[7u64] = 58u8
+    CTXA_NAME[8u64] = 99u8
+    CTXA_NAME[9u64] = 111u8
+    CTXA_NAME[10u64] = 110u8
+    CTXA_NAME[11u64] = 116u8
+    CTXA_NAME[12u64] = 101u8
+    CTXA_NAME[13u64] = 120u8
+    CTXA_NAME[14u64] = 116u8
+    CTXA_NAME[15u64] = 95u8
+    CTXA_NAME[16u64] = 97u8
+    CTXA_NAME[17u64] = 119u8
+    CTXA_NAME[18u64] = 97u8
+    CTXA_NAME[19u64] = 114u8
+    CTXA_NAME[20u64] = 101u8
+    CTXA_NAME[21u64] = 110u8
+    CTXA_NAME[22u64] = 101u8
+    CTXA_NAME[23u64] = 115u8
+    CTXA_NAME[24u64] = 115u8
+    CTXA_NAME[25u64] = 58u8
+    CTXA_NAME[26u64] = 58u8
+    CTXA_NAME[27u64] = 112u8
+    CTXA_NAME[28u64] = 114u8
+    CTXA_NAME[29u64] = 101u8
+    CTXA_NAME[30u64] = 100u8
+    CTXA_NAME[31u64] = 105u8
+    CTXA_NAME[32u64] = 99u8
+    CTXA_NAME[33u64] = 116u8
+    CTXA_NAME[34u64] = 105u8
+    CTXA_NAME[35u64] = 118u8
+    CTXA_NAME[36u64] = 101u8
+    CTXA_NAME[37u64] = 95u8
+    CTXA_NAME[38u64] = 113u8
+    CTXA_NAME[39u64] = 117u8
+    CTXA_NAME[40u64] = 105u8
+    CTXA_NAME[41u64] = 101u8
+    CTXA_NAME[42u64] = 115u8
+    CTXA_NAME[43u64] = 99u8
+    CTXA_NAME[44u64] = 101u8
+    CTXA_NAME[45u64] = 110u8
+    CTXA_NAME[46u64] = 99u8
+    CTXA_NAME[47u64] = 101u8
+    return CTXA_OK
+}
+
+fn ca_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CTXA_N_METRICS {
+        CTXA_METRIC[i]     = 0u64
+        CTXA_BASE_MU[i]    = 0u64
+        CTXA_BASE_SIGMA[i] = CTXA_FP_ONE
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < CTXA_WIN_SIZE {
+        CTXA_WIN_SCORE[j] = 0u64
+        j = j + 1u32
+    }
+    CTXA_WIN_HEAD = 0u32
+    CTXA_WIN_FULL = 0u8
+    CTXA_SUM_Y    = 0i64
+    CTXA_SUM_T_R  = 0i64
+    CTXA_SUM_T2_R = 0i64
+    CTXA_SUM_TY   = 0i64
+    CTXA_SAT      = 0u8
+    CTXA_N_R      = 0u32
+    ca_seed_name()
+    let pn : *u8 = (&CTXA_NAME as u64) as *u8
+    let prod_out : *u8 = (&CTXA_PRODUCER as u64) as *u8
+    let opid_out : *u8 = (&CTXA_OPID_PREDICT as u64) as *u8
+    ident_from_bytes(pn, 25u64, prod_out)
+    ident_from_bytes(pn, 48u64, opid_out)
+    CTXA_INITED = 1u8
+    return CTXA_OK
+}
+
+fn ca_set_metric(metric: u32, value: u64) -> i32 @export {
+    if metric >= CTXA_N_METRICS { return CTXA_E_BAD }
+    CTXA_METRIC[metric] = value
+    return CTXA_OK
+}
+
+fn ca_set_baseline(metric: u32, mu: u64, sigma: u64) -> i32 @export {
+    if metric >= CTXA_N_METRICS { return CTXA_E_BAD }
+    CTXA_BASE_MU[metric] = mu
+    if sigma != 0u64 { CTXA_BASE_SIGMA[metric] = sigma }
+    if sigma == 0u64 { CTXA_BASE_SIGMA[metric] = CTXA_FP_ONE }
+    return CTXA_OK
+}
+
+fn ca_metric_at(metric: u32) -> u64 @export {
+    if metric >= CTXA_N_METRICS { return 0u64 }
+    return CTXA_METRIC[metric]
+}
+
+/* Divide-free unsigned u64/u64 (binary long division).  Trap 18: iiis emits a
+ * signed idivq for `u64 / u64`, which is WRONG once bit 63 of the dividend is
+ * set -- and scaled = delta*FP_ONE below reaches ~2^64.  Total: den==0 -> 0.
+ * The shifted-out top bit of rem (possible only when den > 2^63) means the
+ * true partial remainder is >= 2^64 > den, so we subtract unconditionally; the
+ * u64 wrap of (rem - den) is exact because the result is < den. */
+fn ca_udiv64(num: u64, den: u64) -> u64 {
+    if den == 0u64 { return 0u64 }
+    let mut q : u64 = 0u64
+    let mut rem : u64 = 0u64
+    let mut i : u64 = 64u64
+    while i > 0u64 {
+        i = i - 1u64
+        let topbit : u64 = (rem >> 63u64) & 1u64
+        let numbit : u64 = (num >> i) & 1u64
+        let shifted : u64 = rem << 1u64
+        rem = shifted | numbit
+        let bit : u64 = 1u64 << i
+        if topbit == 1u64 {
+            rem = rem - den
+            q = q | bit
+        } else {
+            if rem >= den {
+                rem = rem - den
+                q = q | bit
+            }
+        }
+    }
+    return q
+}
+
+/* Standardized positive deviation of metric i, in Q16.16 (clamped <= DEV_MAX
+ * so the downstream square is total).  x <= mu -> 0 (less activity than the
+ * baseline is not an anomaly).  Pre-multiply overflow guard (Gap 6): if
+ * delta >= U64_MAX>>16 the delta*FP_ONE would wrap, so treat as DEV_MAX. */
+fn ca_deviation(metric: u32) -> u64 {
+    let x  : u64 = CTXA_METRIC[metric]
+    let mu : u64 = CTXA_BASE_MU[metric]
+    if x <= mu { return 0u64 }
+    let delta : u64 = x - mu
+    if delta >= CTXA_PREMUL_GUARD { return CTXA_DEV_MAX }
+    let sigma  : u64 = CTXA_BASE_SIGMA[metric]
+    let scaled : u64 = delta * CTXA_FP_ONE
+    let d : u64 = ca_udiv64(scaled, sigma)
+    if d >= CTXA_DEV_MAX { return CTXA_DEV_MAX }
+    return d
+}
+
+/* Exact square with clamp: d < 2^32 => d*d < 2^64 exactly; at the ceiling
+ * return U64_MAX so the accumulator stays total. */
+fn ca_square_clamp(d: u64) -> u64 {
+    if d >= CTXA_DEV_MAX { return CTXA_U64_MAX }
+    return d * d
+}
+
+/* Saturating unsigned add (the sum<a wrap test is an UNSIGNED compare --
+ * permitted; Trap 3 forbids only SIGNED ordering compares). */
+fn ca_add_clamp(a: u64, b: u64) -> u64 {
+    let sum : u64 = a + b
+    if sum < a { return CTXA_U64_MAX }
+    return sum
+}
+
+/* CAD score: fixed-point sum of standardized squared positive deviations
+ * across all 16 metrics.  Bit-identical: every operand is a deterministic
+ * function of METRIC / BASE_*. */
+fn ca_anomaly_score() -> u64 @export {
+    let mut acc : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < CTXA_N_METRICS {
+        let dv : u64 = ca_deviation(i)
+        let sq : u64 = ca_square_clamp(dv)
+        acc = ca_add_clamp(acc, sq)
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* Write `score` into the ring at the head, advance head mod 64 (pow2 mask,
+ * Trap 11 / Gap 4), set WIN_FULL once the ring wraps.  Private so the public
+ * sampler and the KAT score-injection path share one ring discipline. */
+fn ca_ring_push(score: u64) -> i32 {
+    let h : u32 = CTXA_WIN_HEAD
+    CTXA_WIN_SCORE[h] = score
+    let nh : u32 = (h + 1u32) & CTXA_WIN_MASK
+    CTXA_WIN_HEAD = nh
+    if nh == 0u32 { CTXA_WIN_FULL = 1u8 }
+    return CTXA_OK
+}
+
+fn ca_record_sample() -> u64 @export {
+    if CTXA_INITED == 0u8 { ca_init() }
+    let score : u64 = ca_anomaly_score()
+    ca_ring_push(score)
+    return score
+}
+
+/* Available in-window sample count. */
+fn ca_window_n() -> u32 {
+    if CTXA_WIN_FULL == 1u8 { return CTXA_WIN_SIZE }
+    return CTXA_WIN_HEAD
+}
+
+/* Saturating non-negative i64 multiply (inputs already known >= 0).  Operates
+ * in the u64 domain so every compare is UNSIGNED (Trap 3 safe).  The divide
+ * I64_MAX_U / au is inline (no preceding call) and is a divide, not a modulo,
+ * so it is outside the param-spill modulo family.  Sets CTXA_SAT on overflow
+ * and returns I64_MAX_U as the saturated magnitude. */
+fn ca_mul_nn(au: u64, bu: u64) -> u64 {
+    if au == 0u64 { return 0u64 }
+    if bu == 0u64 { return 0u64 }
+    let lim : u64 = CTXA_I64_MAX_U / au
+    if bu > lim { CTXA_SAT = 1u8 ; return CTXA_I64_MAX_U }
+    return au * bu
+}
+
+/* Saturating non-negative i64 add (inputs already known >= 0, in u64 domain). */
+fn ca_add_nn(su: u64, term: u64) -> u64 {
+    let room : u64 = CTXA_I64_MAX_U - su
+    if term > room { CTXA_SAT = 1u8 ; return CTXA_I64_MAX_U }
+    return su + term
+}
+
+/* Walk the window once and fill the module-scope regression sums.  Oldest
+ * in-window sample maps to t=0, newest to t=n-1; sample k lives at ring index
+ * (WIN_HEAD + WIN_SIZE - n + k) & 63.  All terms are non-negative; the sums use
+ * saturating discipline (option (b)): a window that would overflow i64 sets
+ * CTXA_SAT and is treated as degenerate (slope 0) downstream.  y that does not
+ * fit i64 (bit 63 set) also marks saturation.  No pre-shift -> small scores
+ * regress EXACTLY (KAT-3). */
+fn ca_window_sums(n: u32) -> i32 {
+    CTXA_SUM_Y    = 0i64
+    CTXA_SUM_T_R  = 0i64
+    CTXA_SUM_T2_R = 0i64
+    CTXA_SUM_TY   = 0i64
+    CTXA_SAT      = 0u8
+    CTXA_N_R      = n
+    let base : u32 = (CTXA_WIN_HEAD + CTXA_WIN_SIZE - n) & CTXA_WIN_MASK
+    let mut sy  : u64 = 0u64
+    let mut st  : u64 = 0u64
+    let mut st2 : u64 = 0u64
+    let mut sty : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < n {
+        let idx : u32 = (base + k) & CTXA_WIN_MASK
+        let y : u64 = CTXA_WIN_SCORE[idx]
+        if ((y >> 63u64) & 1u64) == 1u64 { CTXA_SAT = 1u8 }
+        let tk : u64 = k as u64
+        sy  = ca_add_nn(sy, y)
+        st  = ca_add_nn(st, tk)
+        st2 = ca_add_nn(st2, ca_mul_nn(tk, tk))
+        sty = ca_add_nn(sty, ca_mul_nn(tk, y))
+        k = k + 1u32
+    }
+    CTXA_SUM_Y    = sy  as i64
+    CTXA_SUM_T_R  = st  as i64
+    CTXA_SUM_T2_R = st2 as i64
+    CTXA_SUM_TY   = sty as i64
+    return CTXA_OK
+}
+
+/* Exact closed-form integer OLS slope, written to *out_b as Q16.16.
+ * n = WIN_FULL ? 64 : WIN_HEAD.  n < 2 -> slope 0 (a line needs >= 2 points).
+ * num = n*sum_ty - sum_t*sum_y ; den = n*sum_t2 - (sum_t)^2 ; b_fp = num*FP/den.
+ * den == 0 or a saturated window -> slope 0 (compare-to-zero by == only). */
+fn ca_trend_coefficient(out_b: *i64) -> i32 @export {
+    if CTXA_INITED == 0u8 { return CTXA_E_BAD }
+    let n : u32 = ca_window_n()
+    if n < 2u32 { out_b[0u64] = 0i64 ; return CTXA_OK }
+    ca_window_sums(n)
+    if CTXA_SAT == 1u8 { out_b[0u64] = 0i64 ; return CTXA_OK }
+    let ni : i64 = n as i64
+    let num : i64 = ni * CTXA_SUM_TY - CTXA_SUM_T_R * CTXA_SUM_Y
+    let den : i64 = ni * CTXA_SUM_T2_R - CTXA_SUM_T_R * CTXA_SUM_T_R
+    if den == 0i64 { out_b[0u64] = 0i64 ; return CTXA_OK }
+    out_b[0u64] = (num * CTXA_FP_ONE_I) / den
+    return CTXA_OK
+}
+
+/* Exact line extrapolation.  n==0 -> 0.  a_fp = (sum_y*FP - b_fp*sum_t)/n
+ * (sum_y*FP lifts raw->Q16.16; b_fp*sum_t is already Q16.16 -- consistent
+ * units).  t_pred = (n-1)+horizon ; y_fp = a_fp + b_fp*t_pred.  Negative
+ * projection -> 0 via a SIGN-BIT test (Gap 3 / Trap 3: never `y_fp < 0i64`).
+ * Else (y_fp >> 16) back to raw units. */
+fn ca_predict(horizon: u32) -> u64 @export {
+    if CTXA_INITED == 0u8 { return 0u64 }
+    let n : u32 = ca_window_n()
+    if n == 0u32 { return 0u64 }
+    let mut b_fp : i64 = 0i64
+    ca_trend_coefficient(&b_fp)
+    ca_window_sums(n)
+    if CTXA_SAT == 1u8 { return 0u64 }
+    let ni : i64 = n as i64
+    let a_num : i64 = CTXA_SUM_Y * CTXA_FP_ONE_I - b_fp * CTXA_SUM_T_R
+    let a_fp : i64 = a_num / ni
+    let t_pred : i64 = (ni - 1i64) + (horizon as i64)
+    let y_fp : i64 = a_fp + b_fp * t_pred
+    if (((y_fp as u64) >> 63u64) & 1u64) == 1u64 { return 0u64 }
+    let y_raw : i64 = y_fp / CTXA_FP_ONE_I
+    return y_raw as u64
+}
+
+/* Exact predictive-quiescence trigger + witness.  init guard -> 0.
+ * y_pred = ca_predict(horizon).  y_pred < threshold (UNSIGNED compare --
+ * permitted) -> 0.  Otherwise publish a PREDICTIVE_QUIESCENCE fragment whose
+ * 24-byte payload is y_pred(8 LE) || threshold(8 LE) || horizon(4 LE) ||
+ * score_now low-4 (LE), so its frag id recomputes byte-identically from the
+ * recorded fields (M10).  revtag=0 (reversible), phase=9, pillar=5.
+ * Non-reentrant (uses module-scope scratch) -- invoked serially from the
+ * orchestrator's single drain step. */
+fn ca_check_quiescence(threshold: u64, horizon: u32) -> u8 @export {
+    if CTXA_INITED == 0u8 { return 0u8 }
+    let y_pred : u64 = ca_predict(horizon)
+    if y_pred < threshold { return 0u8 }
+    let score_now : u64 = ca_anomaly_score()
+    let inc_p  : *u8 = (&CTXA_INC as u64) as *u8
+    wh_chain_root(inc_p)
+    let pl : *u8 = (&CTXA_PL as u64) as *u8
+    pl[0u64]  = (y_pred & 0xFFu64) as u8
+    pl[1u64]  = ((y_pred >> 8u64)  & 0xFFu64) as u8
+    pl[2u64]  = ((y_pred >> 16u64) & 0xFFu64) as u8
+    pl[3u64]  = ((y_pred >> 24u64) & 0xFFu64) as u8
+    pl[4u64]  = ((y_pred >> 32u64) & 0xFFu64) as u8
+    pl[5u64]  = ((y_pred >> 40u64) & 0xFFu64) as u8
+    pl[6u64]  = ((y_pred >> 48u64) & 0xFFu64) as u8
+    pl[7u64]  = ((y_pred >> 56u64) & 0xFFu64) as u8
+    pl[8u64]  = (threshold & 0xFFu64) as u8
+    pl[9u64]  = ((threshold >> 8u64)  & 0xFFu64) as u8
+    pl[10u64] = ((threshold >> 16u64) & 0xFFu64) as u8
+    pl[11u64] = ((threshold >> 24u64) & 0xFFu64) as u8
+    pl[12u64] = ((threshold >> 32u64) & 0xFFu64) as u8
+    pl[13u64] = ((threshold >> 40u64) & 0xFFu64) as u8
+    pl[14u64] = ((threshold >> 48u64) & 0xFFu64) as u8
+    pl[15u64] = ((threshold >> 56u64) & 0xFFu64) as u8
+    pl[16u64] = ((horizon as u64) & 0xFFu64) as u8
+    pl[17u64] = (((horizon as u64) >> 8u64)  & 0xFFu64) as u8
+    pl[18u64] = (((horizon as u64) >> 16u64) & 0xFFu64) as u8
+    pl[19u64] = (((horizon as u64) >> 24u64) & 0xFFu64) as u8
+    pl[20u64] = (score_now & 0xFFu64) as u8
+    pl[21u64] = ((score_now >> 8u64)  & 0xFFu64) as u8
+    pl[22u64] = ((score_now >> 16u64) & 0xFFu64) as u8
+    pl[23u64] = ((score_now >> 24u64) & 0xFFu64) as u8
+    let outc_p : *u8 = (&CTXA_OUTC as u64) as *u8
+    ident_from_bytes(pl, 24u64, outc_p)
+    let prod_p : *u8 = (&CTXA_PRODUCER as u64) as *u8
+    let opid_p : *u8 = (&CTXA_OPID_PREDICT as u64) as *u8
+    let fid_p  : *u8 = (&CTXA_FID as u64) as *u8
+    wh_publish(prod_p, opid_p, inc_p, outc_p, 0u8, 9u8, 5u16, pl, 0u32, pl, 24u32, fid_p)
+    return 1u8
+}
+
+/* ---- KAT score-injection path (file-private; used only by the self-test) ----
+ * Drives a known score straight into the ring, bypassing the metric->score
+ * computation, so the regression KATs can assert exact slope/projection on a
+ * synthetic ramp. */
+fn ca_test_inject(score: u64) -> i32 {
+    if CTXA_INITED == 0u8 { ca_init() }
+    ca_ring_push(score)
+    return CTXA_OK
+}
+
+/* M10 verification helper for the self-test: rebuild the 24-byte payload from
+ * the known (y_pred, threshold, horizon, score_now) and hash it into CTXA_FID2,
+ * so the self-test can compare against the live out-commit CTXA_OUTC and confirm
+ * the fragment id is reproducible from the recorded fields. */
+var CTXA_PL2  : [u8; 24]
+var CTXA_FID2 : [u8; 32]
+fn ca_check_recompute_outc(y_pred: u64, threshold: u64, horizon: u32) -> i32 {
+    let score_now : u64 = ca_anomaly_score()
+    let p : *u8 = (&CTXA_PL2 as u64) as *u8
+    p[0u64]  = (y_pred & 0xFFu64) as u8
+    p[1u64]  = ((y_pred >> 8u64)  & 0xFFu64) as u8
+    p[2u64]  = ((y_pred >> 16u64) & 0xFFu64) as u8
+    p[3u64]  = ((y_pred >> 24u64) & 0xFFu64) as u8
+    p[4u64]  = ((y_pred >> 32u64) & 0xFFu64) as u8
+    p[5u64]  = ((y_pred >> 40u64) & 0xFFu64) as u8
+    p[6u64]  = ((y_pred >> 48u64) & 0xFFu64) as u8
+    p[7u64]  = ((y_pred >> 56u64) & 0xFFu64) as u8
+    p[8u64]  = (threshold & 0xFFu64) as u8
+    p[9u64]  = ((threshold >> 8u64)  & 0xFFu64) as u8
+    p[10u64] = ((threshold >> 16u64) & 0xFFu64) as u8
+    p[11u64] = ((threshold >> 24u64) & 0xFFu64) as u8
+    p[12u64] = ((threshold >> 32u64) & 0xFFu64) as u8
+    p[13u64] = ((threshold >> 40u64) & 0xFFu64) as u8
+    p[14u64] = ((threshold >> 48u64) & 0xFFu64) as u8
+    p[15u64] = ((threshold >> 56u64) & 0xFFu64) as u8
+    p[16u64] = ((horizon as u64) & 0xFFu64) as u8
+    p[17u64] = (((horizon as u64) >> 8u64)  & 0xFFu64) as u8
+    p[18u64] = (((horizon as u64) >> 16u64) & 0xFFu64) as u8
+    p[19u64] = (((horizon as u64) >> 24u64) & 0xFFu64) as u8
+    p[20u64] = (score_now & 0xFFu64) as u8
+    p[21u64] = ((score_now >> 8u64)  & 0xFFu64) as u8
+    p[22u64] = ((score_now >> 16u64) & 0xFFu64) as u8
+    p[23u64] = ((score_now >> 24u64) & 0xFFu64) as u8
+    let outp : *u8 = (&CTXA_FID2 as u64) as *u8
+    ident_from_bytes(p, 24u64, outp)
+    return CTXA_OK
+}
+
+/* Embedded self-test.  Returns 99u64 on full pass; a distinct small non-99
+ * code at each failed check (diagnosable).  Covers the spec KAT vectors,
+ * including negative / sentinel cases (prove the guards REJECT, not just pass).
+ */
+fn ctxa_selftest() -> u64 @export {
+    /* KAT-4a (sentinel, before init): bad index + uninitialised guard. */
+    ca_init()
+    if ca_set_metric(16u32, 1u64) != CTXA_E_BAD { return 1u64 }   /* index == N -> E_BAD */
+    if ca_metric_at(99u32) != 0u64 { return 2u64 }                /* OOR -> 0 sentinel */
+
+    /* KAT-1: single-metric standardized square, fixed point. */
+    ca_init()
+    ca_set_baseline(0u32, 100u64, 65536u64)
+    ca_set_metric(0u32, 110u64)
+    if ca_anomaly_score() != 100u64 { return 3u64 }               /* (10)^2 = 100 */
+    /* KAT-1 negative case: x below mu -> deviation 0 -> score 0. */
+    ca_set_metric(0u32, 50u64)
+    if ca_anomaly_score() != 0u64 { return 4u64 }                 /* x<=mu guard */
+
+    /* KAT-2: flat window -> zero slope, flat prediction, no trigger. */
+    ca_init()
+    let mut i : u32 = 0u32
+    while i < 64u32 { ca_record_sample() ; i = i + 1u32 }         /* every score 0 */
+    let mut b2 : i64 = 7i64
+    if ca_trend_coefficient(&b2) != CTXA_OK { return 5u64 }
+    if b2 != 0i64 { return 6u64 }
+    if ca_predict(4u32) != 0u64 { return 7u64 }
+    wh_init(0u64)
+    let cnt_before : u64 = wh_next_idx()
+    if ca_check_quiescence(1u64, 4u32) != 0u8 { return 8u64 }     /* 0 < 1 -> no trigger */
+    if wh_next_idx() != cnt_before { return 9u64 }                /* no fragment published */
+
+    /* KAT-3: exact positive linear ramp y_k = 2k -> exact slope + projection. */
+    ca_init()
+    let mut k : u32 = 0u32
+    while k < 64u32 { ca_test_inject((2u32 * k) as u64) ; k = k + 1u32 }
+    let mut b3 : i64 = 0i64
+    if ca_trend_coefficient(&b3) != CTXA_OK { return 10u64 }
+    if b3 != 131072i64 { return 11u64 }                           /* slope 2 in Q16.16 */
+    if ca_predict(0u32) != 126u64 { return 12u64 }                /* 2*63 */
+    if ca_predict(4u32) != 134u64 { return 13u64 }                /* 2*67 */
+    wh_init(0u64)
+    let cnt3 : u64 = wh_next_idx()
+    if ca_check_quiescence(130u64, 4u32) != 1u8 { return 14u64 }  /* 134 >= 130 -> trigger */
+    if wh_next_idx() != (cnt3 + 1u64) { return 15u64 }            /* exactly one fragment */
+    /* M10: re-derive the fragment's out-commit from the recorded payload and
+     * confirm it equals what ca_check_quiescence published (byte-identical). */
+    ca_check_recompute_outc(134u64, 130u64, 4u32)
+    let mut z : u64 = 0u64
+    let mut diff : u32 = 0u32
+    while z < 32u64 {
+        if CTXA_OUTC[z] != CTXA_FID2[z] { diff = 1u32 }
+        z = z + 1u64
+    }
+    if diff != 0u32 { return 16u64 }
+
+    /* KAT-4b: trend before init -> E_BAD (prove the init guard FAILS the bad
+     * path, not just passes the good one). */
+    CTXA_INITED = 0u8
+    let mut bg : i64 = 5i64
+    if ca_trend_coefficient(&bg) != CTXA_E_BAD { return 17u64 }
+    if ca_predict(1u32) != 0u64 { return 18u64 }
+    if ca_check_quiescence(0u64, 1u32) != 0u8 { return 19u64 }
+
+    return 99u64
+}

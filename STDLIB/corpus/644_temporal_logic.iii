@@ -1,0 +1,4 @@
+/* 644 — temporal_logic: bounded LTL (Finally/Globally/Until/past) over witness segments. */
+module corpus_644
+extern @abi(c-msvc-x64) fn tl_selftest() -> u64 from "temporal_logic.iii"
+fn main() -> u64 { return tl_selftest() }

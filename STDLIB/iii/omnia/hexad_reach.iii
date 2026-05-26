@@ -1,0 +1,159 @@
+/* STDLIB/iii/omnia/hexad_reach.iii
+ *
+ * III HEXAD — §3 reachability bitmap (xii_asym_reach6).
+ * Native .iii port of HEXAD/src/hexad_reach.c (V1 Stage 7 hexad stdlib).
+ *
+ * Storage: 144 bytes (1152 bits >= 729 hexads).  Bit h is set iff hexad h is
+ * admitted.  §3.3 structural rule: a hexad is admitted iff NONE of pillars
+ * 1..4 (index 0..3) is NEG.  The six PFS bricking hexads each have a NEG in
+ * some pillar 1..4 so the rule already excludes them; we additionally clear
+ * them explicitly (defense in depth).
+ *
+ * Admitted count = 2^4 * 3^2 = 144 (pillars 1..4 in {ZERO,POS}, 5..6 free).
+ *
+ * Hexad: kind_essence + kind_federation.  Ring: R0.  K: 1.00.
+ */
+module omnia_hexad_reach
+
+extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_pfs(op: u32) -> u16 from "hexad_pfs.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_pfs_kind(h: u16) -> u32 from "hexad_pfs.iii"
+
+const HXR_HEXAD_MAX  : u32 = 729u32
+const HXR_BITMAP_LEN : u64 = 144u64
+const HXR_PFS_COUNT  : u32 = 7u32
+
+var HXR_BITMAP : [u8; 144]
+var HXR_INIT   : u8 = 0u8
+var HXR_TRITS  : [i32; 6]
+
+fn _hxr_set_bit(i: u32) -> i32 {
+    let one : u32 = 1u32                      /* identifier-first: avoid (NUM ..) partial-hexad misparse */
+    let idx : u64 = (i >> 3u32) as u64
+    let bit : u8 = (one << (i & 7u32)) as u8
+    HXR_BITMAP[idx] = HXR_BITMAP[idx] | bit
+    return 0i32
+}
+fn _hxr_clear_bit(i: u32) -> i32 {
+    let one : u32 = 1u32
+    let idx : u64 = (i >> 3u32) as u64
+    let bit : u8 = (one << (i & 7u32)) as u8
+    HXR_BITMAP[idx] = HXR_BITMAP[idx] & (bit ^ 0xFFu8)
+    return 0i32
+}
+fn _hxr_get_bit(i: u32) -> u8 {
+    let idx : u64 = (i >> 3u32) as u64
+    return (HXR_BITMAP[idx] >> (i & 7u32)) & 1u8
+}
+
+fn iii_hexad_init() -> i32 @export {
+    if HXR_INIT == 1u8 { return 0i32 }
+    let mut i : u64 = 0u64
+    while i < HXR_BITMAP_LEN { HXR_BITMAP[i] = 0u8  i = i + 1u64 }
+    /* structural admission: no NEG in pillars 1..4 (idx 0..3) */
+    let mut h : u32 = 0u32
+    while h < HXR_HEXAD_MAX {
+        iii_hexad_unpack6(h as u16, &HXR_TRITS as u64)
+        let mut admitted : u8 = 1u8
+        let mut k : u64 = 0u64
+        while k < 4u64 {
+            if HXR_TRITS[k] == -1i32 { admitted = 0u8 }
+            k = k + 1u64
+        }
+        if admitted == 1u8 { _hxr_set_bit(h) }
+        h = h + 1u32
+    }
+    /* explicitly clear the six PFS bricking hexads */
+    let mut op : u32 = 1u32
+    while op < HXR_PFS_COUNT {
+        _hxr_clear_bit(iii_hexad_pfs(op) as u32)
+        op = op + 1u32
+    }
+    HXR_INIT = 1u8
+    return 0i32
+}
+
+fn iii_hexad_reachable(h: u16) -> u8 @export {
+    iii_hexad_init()
+    if (h as u32) >= HXR_HEXAD_MAX { return 0u8 }
+    return _hxr_get_bit(h as u32)
+}
+
+fn iii_hexad_bitmap_sha256(out_addr: u64) -> i32 @export {
+    iii_hexad_init()
+    sha256_oneshot(&HXR_BITMAP as *u8, HXR_BITMAP_LEN, out_addr as *u8)
+    return 0i32
+}
+
+fn iii_hexad_reachable_count() -> u64 @export {
+    iii_hexad_init()
+    let mut c : u64 = 0u64
+    let mut h : u32 = 0u32
+    while h < HXR_HEXAD_MAX {
+        c = c + (_hxr_get_bit(h) as u64)
+        h = h + 1u32
+    }
+    return c
+}
+
+/* internal monotone hooks used by hexad_dynamic.iii (never clear). */
+fn iii_hexad_internal_set_bit(h: u16) -> i32 @export {
+    iii_hexad_init()
+    if (h as u32) >= HXR_HEXAD_MAX { return -1i32 }
+    if _hxr_get_bit(h as u32) == 1u8 { return 0i32 }
+    _hxr_set_bit(h as u32)
+    return 1i32
+}
+fn iii_hexad_internal_get_bit(h: u16) -> i32 @export {
+    iii_hexad_init()
+    if (h as u32) >= HXR_HEXAD_MAX { return -1i32 }
+    return _hxr_get_bit(h as u32) as i32
+}
+
+/* Exhaustive hexad-safety KAT (the M3 Final falsifier made executable). 99 = pass.
+ *   1 count==144   2 729-wide predicate (independent recompute)   3 PFS reachable
+ *   4 pfs_kind round-trip   5 HPOS witness   6/7/8 compose6 closure over reachables
+ *   9 bricking stays unreachable under compose. */
+fn iii_hexad_reach_selftest() -> u64 @export {
+    iii_hexad_init()
+    /* 1. admitted count == 2^4 * 3^2 == 144 (also proves the 6 PFS clears were no-ops) */
+    if iii_hexad_reachable_count() != 144u64 { return 1u64 }
+    /* 2. the reachability bitmap matches the predicate, recomputed INDEPENDENTLY from unpack */
+    let mut h : u32 = 0u32
+    while h < HXR_HEXAD_MAX {
+        iii_hexad_unpack6(h as u16, &HXR_TRITS as u64)
+        let mut pred : u8 = 1u8
+        let mut k : u64 = 0u64
+        while k < 4u64 {
+            if HXR_TRITS[k] == -1i32 { pred = 0u8 }
+            k = k + 1u64
+        }
+        if iii_hexad_reachable(h as u16) != pred { return 2u64 }
+        h = h + 1u32
+    }
+    /* 3-4. the six PFS bricking ops are non-reachable (untypable) + reverse-lookup round-trip */
+    let mut op : u32 = 1u32
+    while op < 7u32 {
+        let pf : u16 = iii_hexad_pfs(op)
+        if iii_hexad_reachable(pf) != 0u8 { return 3u64 }
+        if iii_hexad_pfs_kind(pf) != op { return 4u64 }
+        op = op + 1u32
+    }
+    /* 5. HPOS = all-POS hexad (728) is the reachable closure witness */
+    if iii_hexad_reachable(728u16) != 1u8 { return 5u64 }
+    /* 6-8. compose6 keeps reachables reachable (AND=min on structural pillars preserves non-NEG) */
+    h = 0u32
+    while h < HXR_HEXAD_MAX {
+        if iii_hexad_reachable(h as u16) == 1u8 {
+            if iii_hexad_reachable(iii_hexad_compose6(h as u16, 728u16)) != 1u8 { return 6u64 }
+            if iii_hexad_reachable(iii_hexad_compose6(728u16, h as u16)) != 1u8 { return 7u64 }
+            if iii_hexad_reachable(iii_hexad_compose6(h as u16, h as u16)) != 1u8 { return 8u64 }
+        }
+        h = h + 1u32
+    }
+    /* 9. a bricking hexad composed with a reachable STAYS non-reachable (cannot be recovered) */
+    if iii_hexad_reachable(iii_hexad_compose6(iii_hexad_pfs(1u32), 728u16)) != 0u8 { return 9u64 }
+    return 99u64
+}

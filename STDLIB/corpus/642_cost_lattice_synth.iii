@@ -1,0 +1,4 @@
+/* 642 — cost_lattice_synth: cost-lattice synthesis (Pareto frontier over the cost semiring). */
+module corpus_642
+extern @abi(c-msvc-x64) fn cls_selftest() -> u64 from "cost_lattice_synth.iii"
+fn main() -> u64 { return cls_selftest() }

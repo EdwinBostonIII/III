@@ -1,0 +1,358 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\lru.iii
+ *
+ * III STDLIB - omnia::lru
+ *
+ * Bounded Least-Recently-Used cache.  Keys are u32, values are u64.
+ * On insert when full, evicts the LRU entry.  On lookup hit, the entry
+ * is promoted to MRU.  Implementation: doubly-linked list (head=MRU,
+ * tail=LRU) over a slot table, parallel-array storage.
+ *
+ *   lru_new(arena_id:u64, capacity:u64) -> u64
+ *   lru_put(id:u64, key:u32, value:u64) -> i32     0=ok, -1=evict-occurred (still ok)
+ *   lru_get(id:u64, key:u32) -> u64                value or LRU_INVALID
+ *   lru_count(id:u64) -> u64
+ *   lru_capacity(id:u64) -> u64
+ *   lru_drop(id:u64) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.97.
+ */
+
+module omnia_lru
+
+extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+const LRU_MAX_INSTANCES : u32 = 16u32
+const LRU_INVALID : u64 = 0xFFFFFFFFFFFFFFFFu64
+const LRU_OK      : i32 = 0i32
+const LRU_E_BADID : i32 = -2i32
+
+const LRU_NIL : u32 = 0xFFFFFFFFu32
+
+var LRU_LIVE      : [u8;  16]
+var LRU_ARENA     : [u64; 16]
+var LRU_KEYS_BASE : [u64; 16]    /* keys :u32[cap]   */
+var LRU_VALS_BASE : [u64; 16]    /* values :u64[cap] */
+var LRU_PREV_BASE : [u64; 16]    /* prev :u32[cap]   */
+var LRU_NEXT_BASE : [u64; 16]    /* next :u32[cap]   */
+var LRU_OCCUP_BASE: [u64; 16]    /* occupied :u8[cap] */
+var LRU_CAP       : [u64; 16]
+var LRU_LEN       : [u64; 16]
+var LRU_HEAD      : [u32; 16]    /* MRU */
+var LRU_TAIL      : [u32; 16]    /* LRU */
+
+fn lru_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (LRU_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if LRU_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* iiis-0 codegen bug: writing through a `*u32` pointer (`p[0] = v`)
+ * appears to emit an 8-byte store when the value originates from a
+ * u32-typed local (which iiis-0 stores in an 8-byte stack slot with
+ * unzeroed high bits).  Likewise, reading through a `*u32` pointer
+ * appears to emit an 8-byte load.  The helpers below sidestep the
+ * issue with explicit byte-by-byte load/store sequences over `*u8`. */
+
+fn lru_load_key(base: u64, idx: u32) -> u32 {
+    let base_l : u64 = base
+    let idx_l  : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let p : *u8 = (base_l + idx_l * 4u64) as *u8
+    let b0 : u32 = p[0u64] as u32
+    let b1 : u32 = p[1u64] as u32
+    let b2 : u32 = p[2u64] as u32
+    let b3 : u32 = p[3u64] as u32
+    return (b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)) & 0xFFFFFFFFu32
+}
+fn lru_store_key(base: u64, idx: u32, k: u32) -> i32 {
+    let base_l : u64 = base
+    let idx_l  : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let k_l    : u32 = k
+    let p : *u8 = (base_l + idx_l * 4u64) as *u8
+    p[0u64] = (k_l & 0xFFu32) as u8
+    p[1u64] = ((k_l >> 8u32)  & 0xFFu32) as u8
+    p[2u64] = ((k_l >> 16u32) & 0xFFu32) as u8
+    p[3u64] = ((k_l >> 24u32) & 0xFFu32) as u8
+    return LRU_OK
+}
+fn lru_load_val(base: u64, idx: u32) -> u64 {
+    let base_l : u64 = base
+    let idx_l  : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let p : *u8 = (base_l + idx_l * 8u64) as *u8
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        acc = acc | ((p[i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return acc
+}
+fn lru_store_val(base: u64, idx: u32, v: u64) -> i32 {
+    let base_l : u64 = base
+    let idx_l  : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let v_l    : u64 = v
+    let p : *u8 = (base_l + idx_l * 8u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((v_l >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return LRU_OK
+}
+fn lru_load_link(base: u64, idx: u32) -> u32 {
+    return lru_load_key(base, idx)
+}
+fn lru_store_link(base: u64, idx: u32, v: u32) -> i32 {
+    return lru_store_key(base, idx, v)
+}
+fn lru_load_occ(base: u64, idx: u32) -> u8 {
+    let base_l : u64 = base
+    let idx_l  : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let p : *u8 = (base_l + idx_l) as *u8
+    return p[0u64]
+}
+fn lru_store_occ(base: u64, idx: u32, v: u8) -> i32 {
+    let base_l : u64 = base
+    let idx_l  : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let v_l    : u8  = v
+    let p : *u8 = (base_l + idx_l) as *u8
+    p[0u64] = v_l
+    return LRU_OK
+}
+
+fn lru_new(arena_id: u64, capacity: u64) -> u64 @export {
+    if capacity == 0u64 { return 0u64 }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < LRU_MAX_INSTANCES {
+        if LRU_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return 0u64 }
+
+    let kbase : u64 = arena_alloc8(arena_id, capacity * 4u64)
+    if kbase == 0u64 { return 0u64 }
+    let vbase : u64 = arena_alloc8(arena_id, capacity * 8u64)
+    if vbase == 0u64 { return 0u64 }
+    let pbase : u64 = arena_alloc8(arena_id, capacity * 4u64)
+    if pbase == 0u64 { return 0u64 }
+    let nbase : u64 = arena_alloc8(arena_id, capacity * 4u64)
+    if nbase == 0u64 { return 0u64 }
+    let obase : u64 = arena_alloc8(arena_id, capacity)
+    if obase == 0u64 { return 0u64 }
+
+    let mut k : u64 = 0u64
+    while k < capacity {
+        lru_store_occ(obase, k as u32, 0u8)
+        k = k + 1u64
+    }
+
+    LRU_ARENA[slot]      = arena_id
+    LRU_KEYS_BASE[slot]  = kbase
+    LRU_VALS_BASE[slot]  = vbase
+    LRU_PREV_BASE[slot]  = pbase
+    LRU_NEXT_BASE[slot]  = nbase
+    LRU_OCCUP_BASE[slot] = obase
+    LRU_CAP[slot]  = capacity
+    LRU_LEN[slot]  = 0u64
+    LRU_HEAD[slot] = LRU_NIL
+    LRU_TAIL[slot] = LRU_NIL
+    LRU_LIVE[slot] = 1u8
+    return (slot as u64) + 1u64
+}
+
+/* Detach idx from the doubly-linked list, using byte-safe link
+ * load/store helpers (see iiis-0 *u32 codegen bug note above). */
+fn lru_detach(slot: u32, idx: u32) -> i32 {
+    let slot_l : u32 = slot
+    let idx_l  : u32 = idx
+    let pbase : u64 = LRU_PREV_BASE[slot_l]
+    let nbase : u64 = LRU_NEXT_BASE[slot_l]
+    let prev : u32 = lru_load_link(pbase, idx_l)
+    let next : u32 = lru_load_link(nbase, idx_l)
+    if prev == LRU_NIL {
+        LRU_HEAD[slot_l] = next
+    } else {
+        lru_store_link(nbase, prev, next)
+    }
+    if next == LRU_NIL {
+        LRU_TAIL[slot_l] = prev
+    } else {
+        lru_store_link(pbase, next, prev)
+    }
+    return LRU_OK
+}
+
+fn lru_push_front(slot: u32, idx: u32) -> i32 {
+    let slot_l : u32 = slot
+    let idx_l  : u32 = idx
+    let pbase : u64 = LRU_PREV_BASE[slot_l]
+    let nbase : u64 = LRU_NEXT_BASE[slot_l]
+    let old_head : u32 = LRU_HEAD[slot_l]
+    lru_store_link(pbase, idx_l, LRU_NIL)
+    lru_store_link(nbase, idx_l, old_head)
+    if old_head != LRU_NIL {
+        lru_store_link(pbase, old_head, idx_l)
+    }
+    LRU_HEAD[slot_l] = idx_l
+    if LRU_TAIL[slot_l] == LRU_NIL {
+        LRU_TAIL[slot_l] = idx_l
+    }
+    return LRU_OK
+}
+
+fn lru_find(slot: u32, key: u32) -> u32 {
+    let key_l : u32 = key                          /* force spill -- W2 dodge */
+    let slot_l : u32 = slot
+    let cap : u64 = LRU_CAP[slot_l]
+    let kbase : u64 = LRU_KEYS_BASE[slot_l]
+    let obase : u64 = LRU_OCCUP_BASE[slot_l]
+    let mut i : u64 = 0u64
+    while i < cap {
+        let idx : u32 = i as u32
+        if lru_load_occ(obase, idx) == 1u8 {
+            if lru_load_key(kbase, idx) == key_l { return idx }
+        }
+        i = i + 1u64
+    }
+    return LRU_NIL
+}
+
+fn lru_first_free(slot: u32) -> u32 {
+    let cap : u64 = LRU_CAP[slot]
+    let obase : u64 = LRU_OCCUP_BASE[slot]
+    let mut i : u64 = 0u64
+    while i < cap {
+        let idx : u32 = i as u32
+        if lru_load_occ(obase, idx) == 0u8 { return idx }
+        i = i + 1u64
+    }
+    return LRU_NIL
+}
+
+fn lru_put(id: u64, key: u32, value: u64) -> i32 @export {
+    let id_l : u64 = id
+    let key_l : u32 = key
+    let value_l : u64 = value
+    let s : u32 = lru_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return LRU_E_BADID }
+
+    let existing : u32 = lru_find(s, key_l)
+    if existing != LRU_NIL {
+        lru_store_val(LRU_VALS_BASE[s], existing, value_l)
+        lru_detach(s, existing)
+        lru_push_front(s, existing)
+        return LRU_OK
+    }
+
+    let mut idx : u32 = LRU_NIL
+    let mut evicted : u8 = 0u8
+    if LRU_LEN[s] < LRU_CAP[s] {
+        idx = lru_first_free(s)
+        LRU_LEN[s] = LRU_LEN[s] + 1u64
+    } else {
+        let tail_idx : u32 = LRU_TAIL[s]
+        if tail_idx == LRU_NIL { return LRU_E_BADID }
+        idx = tail_idx
+        evicted = 1u8
+    }
+    /* iiis-0 codegen bug: u32 stack slots are accessed via 8-byte
+     * movq, leaving garbage in the high 4 bytes when the source was
+     * a u32 array element.  Explicit mask forces the high half to
+     * zero before any pointer arithmetic. */
+    let idx64 : u64 = (idx as u64) & 0xFFFFFFFFu64
+
+    /* Phase A: write payload at idx via byte-safe helpers. */
+    let occ_b : u64 = LRU_OCCUP_BASE[s]
+    let key_b : u64 = LRU_KEYS_BASE[s]
+    let val_b : u64 = LRU_VALS_BASE[s]
+    let pbs_b : u64 = LRU_PREV_BASE[s]
+    let nxt_b : u64 = LRU_NEXT_BASE[s]
+    lru_store_occ(occ_b, idx, 1u8)
+    lru_store_key(key_b, idx, key_l)
+    lru_store_val(val_b, idx, value_l)
+
+    /* Phase B: linked-list maintenance via byte-safe helpers. */
+    if evicted == 1u8 {
+        let new_tail : u32 = lru_load_link(pbs_b, idx)
+        if new_tail != LRU_NIL {
+            lru_store_link(nxt_b, new_tail, LRU_NIL)
+            LRU_TAIL[s] = new_tail
+        } else {
+            LRU_TAIL[s] = idx
+        }
+    }
+
+    let old_head : u32 = LRU_HEAD[s]
+    if old_head != idx {
+        lru_store_link(pbs_b, idx, LRU_NIL)
+        lru_store_link(nxt_b, idx, old_head)
+        if old_head != LRU_NIL {
+            lru_store_link(pbs_b, old_head, idx)
+        }
+        LRU_HEAD[s] = idx
+        if LRU_TAIL[s] == LRU_NIL {
+            LRU_TAIL[s] = idx
+        }
+    }
+
+    /* idx64 was computed earlier for any direct pointer math; we kept
+     * it as a defensive check, no longer used directly in this fn. */
+    let _suppress_unused : u64 = idx64
+
+    if evicted == 1u8 { return -1i32 }
+    return LRU_OK
+}
+
+fn lru_get(id: u64, key: u32) -> u64 @export {
+    let id_l : u64 = id                            /* force spill */
+    let key_l : u32 = key
+    let s : u32 = lru_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return LRU_INVALID }
+    let idx : u32 = lru_find(s, key_l)
+    if idx == LRU_NIL { return LRU_INVALID }
+    let v : u64 = lru_load_val(LRU_VALS_BASE[s], idx)
+    lru_detach(s, idx)
+    lru_push_front(s, idx)
+    return v
+}
+
+fn lru_count(id: u64) -> u64 @export {
+    let s : u32 = lru_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return LRU_LEN[s]
+}
+
+fn lru_capacity(id: u64) -> u64 @export {
+    let s : u32 = lru_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return LRU_CAP[s]
+}
+
+/* Debug accessors -- for corpus self-test only. */
+fn lru_debug_key(id: u64, idx: u32) -> u32 @export {
+    let s : u32 = lru_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    return lru_load_key(LRU_KEYS_BASE[s], idx)
+}
+
+fn lru_debug_occ(id: u64, idx: u32) -> u8 @export {
+    let s : u32 = lru_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return lru_load_occ(LRU_OCCUP_BASE[s], idx)
+}
+
+fn lru_drop(id: u64) -> i32 @export {
+    let s : u32 = lru_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return LRU_E_BADID }
+    LRU_LIVE[s] = 0u8
+    LRU_LEN[s]  = 0u64
+    LRU_CAP[s]  = 0u64
+    LRU_HEAD[s] = LRU_NIL
+    LRU_TAIL[s] = LRU_NIL
+    return LRU_OK
+}

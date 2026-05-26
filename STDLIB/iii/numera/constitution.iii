@@ -1,0 +1,1145 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\constitution.iii
+ *
+ * III STDLIB -- numera::constitution
+ *
+ * Constitutional clauses, ratification, admissibility evaluation (W19).
+ *
+ * A clause is a first-class substrate object carrying a textual statement,
+ * an LTL formula, an admissibility-predicate bytecode, a witness-production
+ * rule, dependencies on prior clauses, and an effective epoch (algebraic
+ * time).  Clauses live in a fixed slot table keyed by
+ * clause_id = Keccak256(textual).  Ratification publishes a
+ * CLAUSE_RATIFICATION witness fragment whose payload follows the Part VII
+ * clause_payload schema.  The embedded admissibility predicate is a
+ * stack-machine bytecode (11 opcodes) evaluated by cons_eval_predicate
+ * against a candidate operation's view (producer, op-id, phase, pillar,
+ * revtag) plus its antecedent list.
+ *
+ * NON-REENTRANT: cons_ratify and cons_eval_predicate use module-scope
+ * scratch (Trap 7 forbids function-local var arrays).  Ratification and
+ * evaluation are a serialized R-1 ceremony (single-writer, like the
+ * witness hook, which is itself serialized), so this is safe.
+ *
+ * Predicate bytecode opcodes:
+ *   COP_TRUE  COP_FALSE  COP_AND  COP_OR  COP_NOT
+ *   COP_PRODUCER_EQ ci   COP_OP_EQ ci   COP_REVTAG_EQ v
+ *   COP_PHASE_GE v       COP_PILLAR_EQ lo hi   COP_HAS_ANTE ci
+ *
+ * Pred buffer layout: u8 const_count, then const_count * 32-byte id
+ * constants, then the instruction stream.
+ *
+ * Part VII clause_payload (little-endian throughout):
+ *   clause_id(32) | textual_len(u16) | textual | ltl_len(u32) | ltl |
+ *   pred_len(u32) | pred | witness_rule_len(u32) | witness_rule |
+ *   effective_epoch(u64) | dependency_count(u32)
+ * V1 ratify writes witness_rule_len = 0 and dependency_count = 0.
+ *
+ * Hexad: kind_essence.  Ring: R-1.  K: 1.00.
+ * Discipline: W2 (aggregate args), W8, W13, W14, W15.
+ */
+
+module numera_constitution
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
+
+/* KAT-only externs (used solely by cons_selftest to stand up the witness
+ * hook + algebraic time before exercising ratify; they resolve at link). */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+
+/* mig6 LTL-fold externs: drive the bounded model checker over a published
+ * algebraic_time chain, with an LTL atom that IS a constitution predicate
+ * (tl_eval_atom -> cons_eval_predicate, already linked the other way).  Used
+ * solely by cons_ltl_holds + cons_run_charter_selftest; resolve at link.
+ * wh_publish (above, :46) lays down chain fragments with chosen phases. */
+extern @abi(c-msvc-x64) fn tl_init() -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_alloc_formula() -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_atom(slot: u32, pred_slot: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_append_unary_temp(slot: u32, tag: u8, child: u32) -> u32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_set_root(slot: u32, root: u32) -> i32 from "temporal_logic.iii"
+extern @abi(c-msvc-x64) fn tl_holds_on_segment(slot: u32, chain_start: u64, chain_end: u64) -> u8 from "temporal_logic.iii"
+
+const CONS_OK          : i32 =  0i32
+const CONS_E_FULL      : i32 = -1i32
+const CONS_E_NOT_FOUND : i32 = -2i32
+const CONS_SENT        : u32 = 0xFFFFFFFFu32
+const CONS_U64_SENT    : u64 = 0xFFFFFFFFFFFFFFFFu64
+const CONS_MAX_CLAUSES : u32 = 1024u32
+const CONS_TEXT_AREA   : u64 = 1048576u64
+const CONS_LTL_AREA    : u64 = 1048576u64
+const CONS_PRED_AREA   : u64 = 524288u64
+const CONS_ID_BYTES    : u64 = 32u64
+const CONS_PL_MAX      : u64 = 8192u64
+const CONS_STACK_MAX   : u32 = 256u32
+
+const COP_TRUE        : u8 = 0x01u8
+const COP_FALSE       : u8 = 0x02u8
+const COP_AND         : u8 = 0x03u8
+const COP_OR          : u8 = 0x04u8
+const COP_NOT         : u8 = 0x05u8
+const COP_PRODUCER_EQ : u8 = 0x10u8
+const COP_OP_EQ       : u8 = 0x11u8
+const COP_REVTAG_EQ   : u8 = 0x12u8
+const COP_PHASE_GE    : u8 = 0x13u8
+const COP_PILLAR_EQ   : u8 = 0x14u8
+const COP_HAS_ANTE    : u8 = 0x15u8
+
+/* --- Slot tables (bound = 1024 clauses; W8 -- gospel ceiling). --- */
+var CONS_LIVE        : [u8;  1024]
+var CONS_ID          : [u8;  32768]
+var CONS_SUPERSEDES  : [u8;  32768]
+var CONS_TEXT_OFF    : [u64; 1024]
+var CONS_TEXT_LEN    : [u64; 1024]
+var CONS_LTL_OFF     : [u64; 1024]
+var CONS_LTL_LEN     : [u64; 1024]
+var CONS_PRED_OFF    : [u64; 1024]
+var CONS_PRED_LEN    : [u64; 1024]
+var CONS_EFFECTIVE   : [u64; 1024]
+
+/* --- Append arenas (W6/W7 -- explicit *_USED cursors reset by cons_init). --- */
+var CONS_TEXT_BUF    : [u8;  1048576]
+var CONS_TEXT_USED   : u64 = 0u64
+var CONS_LTL_BUF     : [u8;  1048576]
+var CONS_LTL_USED    : u64 = 0u64
+var CONS_PRED_BUF    : [u8;  524288]
+var CONS_PRED_USED   : u64 = 0u64
+
+/* --- Canonical ids + init flag. --- */
+var CONS_RATIFY_OPID : [u8; 32]
+var CONS_PRODUCER    : [u8; 32]
+var CONS_ZERO_ID     : [u8; 32]
+var CONS_INITED      : u8 = 0u8
+
+/* --- Hoisted scratch (Trap 7 -- no local var arrays).  Serialized use. --- */
+var CONS_CID    : [u8; 32]
+var CONS_IC     : [u8; 32]
+var CONS_PL_BUF : [u8; 8192]
+var CONS_STACK  : [u8; 256]
+
+/* --- Predicate-interpreter context (shared by the flat opcode helpers so
+ * each helper's body stays well under the parser nesting-depth limit,
+ * Trap 13).  Set by cons_eval_predicate before the dispatch loop. --- */
+var CONS_EV_LEN       : u64 = 0u64    /* predicate bytecode length          */
+var CONS_EV_BUF       : u64 = 0u64    /* byte addr of the bytecode start    */
+var CONS_EV_CTAB      : u64 = 0u64    /* byte addr of the const-id table    */
+var CONS_EV_IP        : u64 = 0u64    /* instruction pointer                */
+var CONS_EV_SP        : u32 = 0u32    /* stack pointer (depth of CONS_STACK)*/
+var CONS_EV_HALTED    : u8  = 0u8     /* set on bound violation / end       */
+var CONS_EV_OPPROD    : u64 = 0u64    /* byte addr of op_producer (32)      */
+var CONS_EV_OPID      : u64 = 0u64    /* byte addr of op_id (32)            */
+var CONS_EV_OPPHASE   : u8  = 0u8     /* op_phase                            */
+var CONS_EV_OPREVTAG  : u8  = 0u8     /* op_revtag                           */
+var CONS_EV_OPPILLAR  : u16 = 0u16    /* op_pillar                           */
+var CONS_EV_ANTE      : u64 = 0u64    /* byte addr of ante_ids               */
+var CONS_EV_NANTE     : u32 = 0u32    /* number of antecedents               */
+
+/* === Byte accessors (little-endian) over raw module/arg memory. === */
+
+fn cons_load_u16_le(base: u64, off: u64) -> u16 {
+    let p : *u8 = base as *u8
+    let b0 : u16 = p[off + 0u64] as u16
+    let b1 : u16 = p[off + 1u64] as u16
+    return b0 | (b1 << 8u16)
+}
+
+fn cons_load_u64_le(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+/* Address of CONS_ID slot row: &CONS_ID[slot*32].  Mask slot before the
+ * multiply (Trap 4).  Bound to a local first (Trap 16). */
+fn cons_id_ptr(slot: u32) -> *u8 {
+    let base : u64 = &CONS_ID as u64
+    let s64 : u64 = (slot as u64) & 0xFFFFFFFFu64
+    let addr : u64 = base + s64 * 32u64
+    return addr as *u8
+}
+
+/* Address of CONS_SUPERSEDES slot row. */
+fn cons_sup_ptr(slot: u32) -> *u8 {
+    let base : u64 = &CONS_SUPERSEDES as u64
+    let s64 : u64 = (slot as u64) & 0xFFFFFFFFu64
+    let addr : u64 = base + s64 * 32u64
+    return addr as *u8
+}
+
+/* === Lifecycle === */
+
+fn cons_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CONS_MAX_CLAUSES {
+        CONS_LIVE[i] = 0u8
+        i = i + 1u32
+    }
+    /* Canonical ids.  "numera::constitution::ratify" = 28 bytes;
+     * "numera::constitution" = 20 bytes.  Build the literals byte-by-byte
+     * into the text arena head (transient -- the cursor is reset below). */
+    let opidp : *u8 = &CONS_RATIFY_OPID as u64 as *u8
+    let prodp : *u8 = &CONS_PRODUCER as u64 as *u8
+    let tb : *u8 = &CONS_TEXT_BUF as u64 as *u8
+    /* "numera::constitution::ratify" */
+    tb[0u64]  = 0x6Eu8  tb[1u64]  = 0x75u8  tb[2u64]  = 0x6Du8  tb[3u64]  = 0x65u8
+    tb[4u64]  = 0x72u8  tb[5u64]  = 0x61u8  tb[6u64]  = 0x3Au8  tb[7u64]  = 0x3Au8
+    tb[8u64]  = 0x63u8  tb[9u64]  = 0x6Fu8  tb[10u64] = 0x6Eu8  tb[11u64] = 0x73u8
+    tb[12u64] = 0x74u8  tb[13u64] = 0x69u8  tb[14u64] = 0x74u8  tb[15u64] = 0x75u8
+    tb[16u64] = 0x74u8  tb[17u64] = 0x69u8  tb[18u64] = 0x6Fu8  tb[19u64] = 0x6Eu8
+    tb[20u64] = 0x3Au8  tb[21u64] = 0x3Au8  tb[22u64] = 0x72u8  tb[23u64] = 0x61u8
+    tb[24u64] = 0x74u8  tb[25u64] = 0x69u8  tb[26u64] = 0x66u8  tb[27u64] = 0x79u8
+    ident_from_bytes(tb, 28u64, opidp)
+    ident_from_bytes(tb, 20u64, prodp)
+    /* Zero the canonical zero-id, and the scratch ids. */
+    let zp : *u8 = &CONS_ZERO_ID as u64 as *u8
+    let mut z : u64 = 0u64
+    while z < CONS_ID_BYTES {
+        zp[z] = 0u8
+        z = z + 1u64
+    }
+    CONS_TEXT_USED = 0u64
+    CONS_LTL_USED  = 0u64
+    CONS_PRED_USED = 0u64
+    CONS_INITED = 1u8
+    return CONS_OK
+}
+
+/* Linear scan for clause_id; first-match flag, no break (W14). */
+fn cons_find(clause_id: *u8) -> u32 @export {
+    let mut found : u32 = CONS_SENT
+    let mut i : u32 = 0u32
+    while i < CONS_MAX_CLAUSES {
+        if CONS_LIVE[i] == 1u8 {
+            if found == CONS_SENT {
+                let rowp : *u8 = cons_id_ptr(i)
+                if ident_eq(rowp, clause_id) == 1u8 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* Export a live clause's 32-byte id by slot (added for constitution_preserver,
+ * Module 67).  Bounds + liveness gated; null/out-of-range/dead -> E_NOT_FOUND. */
+fn cons_id_export(slot: u32, out_id: *u8) -> i32 @export {
+    if (out_id as u64) == 0u64 { return CONS_E_NOT_FOUND }
+    if slot >= CONS_MAX_CLAUSES { return CONS_E_NOT_FOUND }
+    if CONS_LIVE[slot] == 0u8 { return CONS_E_NOT_FOUND }
+    ident_copy(cons_id_ptr(slot), out_id)
+    return CONS_OK
+}
+
+/* First free slot, else CONS_SENT.  Early return is not a break (W14). */
+fn cons_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < CONS_MAX_CLAUSES {
+        if CONS_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return CONS_SENT
+}
+
+/* Append `n` bytes from src into a *u8 arena at cursor `used`; caller
+ * has already bounds-checked.  Returns the new cursor. */
+fn cons_append(arena_base: u64, used: u64, src: u64, n: u64) -> u64 {
+    let dst : *u8 = (arena_base + used) as *u8
+    let sp : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        dst[i] = sp[i]
+        i = i + 1u64
+    }
+    return used + n
+}
+
+/* === Ratification === */
+/* req -> cons_ratify_req aggregate (56 bytes):
+ *   out_clause_id_ptr(u64 @0) textual_ptr(u64 @8) textual_len(u64 @16)
+ *   ltl_ptr(u64 @24) ltl_len(u64 @32) pred_ptr(u64 @40) pred_len(u64 @48) */
+fn cons_ratify(req: *u8) -> u64 @export {
+    if CONS_INITED == 0u8 { cons_init() }
+    let rq : u64 = req as u64
+    let out_cid    : u64 = cons_load_u64_le(rq, 0u64)
+    let textual    : u64 = cons_load_u64_le(rq, 8u64)
+    let textual_ln : u64 = cons_load_u64_le(rq, 16u64)
+    let ltl        : u64 = cons_load_u64_le(rq, 24u64)
+    let ltl_ln     : u64 = cons_load_u64_le(rq, 32u64)
+    let pred       : u64 = cons_load_u64_le(rq, 40u64)
+    let pred_ln    : u64 = cons_load_u64_le(rq, 48u64)
+    /* Arena bounds (W6).  All operands are arena-bounded u64 < 2^21, so no
+     * bit-63 risk -- the additions cannot wrap (Trap 18 not triggered). */
+    if (CONS_TEXT_USED + textual_ln) > CONS_TEXT_AREA { return CONS_U64_SENT }
+    if (CONS_LTL_USED  + ltl_ln)     > CONS_LTL_AREA  { return CONS_U64_SENT }
+    if (CONS_PRED_USED + pred_ln)    > CONS_PRED_AREA { return CONS_U64_SENT }
+    /* Payload-scratch bound (G5): 32 + 2 + textual + 4 + ltl + 4 + pred +
+     * 4(witness_rule_len) + 8(epoch) + 4(dep_count) = 58 + the three bodies. */
+    let pl_total : u64 = 58u64 + textual_ln + ltl_ln + pred_ln
+    if pl_total > CONS_PL_MAX { return CONS_U64_SENT }
+    /* Candidate clause id. */
+    let cidp : *u8 = &CONS_CID as u64 as *u8
+    ident_from_bytes(textual as *u8, textual_ln, cidp)
+    /* Duplicate check (G6 keeps out_clause_id meaningful even on refusal). */
+    if cons_find(cidp) != CONS_SENT {
+        ident_copy(cidp, out_cid as *u8)
+        return CONS_U64_SENT
+    }
+    let slot : u32 = cons_alloc_slot()
+    if slot == CONS_SENT { return CONS_U64_SENT }
+    /* Bind the clause id into the slot; zero its supersedes row. */
+    ident_copy(cidp, cons_id_ptr(slot))
+    let supp : *u8 = cons_sup_ptr(slot)
+    let mut zz : u64 = 0u64
+    while zz < CONS_ID_BYTES {
+        supp[zz] = 0u8
+        zz = zz + 1u64
+    }
+    /* Append text / ltl / pred; record offsets+lengths; advance cursors. */
+    let text_base : u64 = &CONS_TEXT_BUF as u64
+    let ltl_base  : u64 = &CONS_LTL_BUF as u64
+    let pred_base : u64 = &CONS_PRED_BUF as u64
+    CONS_TEXT_OFF[slot] = CONS_TEXT_USED
+    CONS_TEXT_LEN[slot] = textual_ln
+    CONS_TEXT_USED = cons_append(text_base, CONS_TEXT_USED, textual, textual_ln)
+    CONS_LTL_OFF[slot] = CONS_LTL_USED
+    CONS_LTL_LEN[slot] = ltl_ln
+    CONS_LTL_USED = cons_append(ltl_base, CONS_LTL_USED, ltl, ltl_ln)
+    CONS_PRED_OFF[slot] = CONS_PRED_USED
+    CONS_PRED_LEN[slot] = pred_ln
+    CONS_PRED_USED = cons_append(pred_base, CONS_PRED_USED, pred, pred_ln)
+    CONS_EFFECTIVE[slot] = at_current()
+    CONS_LIVE[slot] = 1u8
+    /* In-commit = clause id (the schema's in/out commitment). */
+    let icp : *u8 = &CONS_IC as u64 as *u8
+    ident_from_bytes(textual as *u8, textual_ln, icp)
+    /* Serialize the Part VII clause_payload into CONS_PL_BUF.  All multi-
+     * byte fields written byte-by-byte through *u8 (Trap 5-safe). */
+    let pl : *u8 = &CONS_PL_BUF as u64 as *u8
+    let mut off : u64 = 0u64
+    /* clause_id (32). */
+    let mut k : u64 = 0u64
+    while k < CONS_ID_BYTES {
+        pl[off + k] = cidp[k]
+        k = k + 1u64
+    }
+    off = off + CONS_ID_BYTES
+    /* textual_len (u16 LE). */
+    pl[off + 0u64] = (textual_ln & 0xFFu64) as u8
+    pl[off + 1u64] = ((textual_ln >> 8u64) & 0xFFu64) as u8
+    off = off + 2u64
+    off = cons_append(&CONS_PL_BUF as u64, off, textual, textual_ln)
+    /* ltl_len (u32 LE). */
+    pl[off + 0u64] = (ltl_ln & 0xFFu64) as u8
+    pl[off + 1u64] = ((ltl_ln >> 8u64)  & 0xFFu64) as u8
+    pl[off + 2u64] = ((ltl_ln >> 16u64) & 0xFFu64) as u8
+    pl[off + 3u64] = ((ltl_ln >> 24u64) & 0xFFu64) as u8
+    off = off + 4u64
+    off = cons_append(&CONS_PL_BUF as u64, off, ltl, ltl_ln)
+    /* pred_len (u32 LE). */
+    pl[off + 0u64] = (pred_ln & 0xFFu64) as u8
+    pl[off + 1u64] = ((pred_ln >> 8u64)  & 0xFFu64) as u8
+    pl[off + 2u64] = ((pred_ln >> 16u64) & 0xFFu64) as u8
+    pl[off + 3u64] = ((pred_ln >> 24u64) & 0xFFu64) as u8
+    off = off + 4u64
+    off = cons_append(&CONS_PL_BUF as u64, off, pred, pred_ln)
+    /* witness_rule_len (u32 LE = 0) -- G7: empty rule, V1 form. */
+    pl[off + 0u64] = 0u8  pl[off + 1u64] = 0u8  pl[off + 2u64] = 0u8  pl[off + 3u64] = 0u8
+    off = off + 4u64
+    /* effective_epoch (u64 LE). */
+    let ep : u64 = CONS_EFFECTIVE[slot]
+    pl[off + 0u64] = (ep & 0xFFu64) as u8
+    pl[off + 1u64] = ((ep >> 8u64)  & 0xFFu64) as u8
+    pl[off + 2u64] = ((ep >> 16u64) & 0xFFu64) as u8
+    pl[off + 3u64] = ((ep >> 24u64) & 0xFFu64) as u8
+    pl[off + 4u64] = ((ep >> 32u64) & 0xFFu64) as u8
+    pl[off + 5u64] = ((ep >> 40u64) & 0xFFu64) as u8
+    pl[off + 6u64] = ((ep >> 48u64) & 0xFFu64) as u8
+    pl[off + 7u64] = ((ep >> 56u64) & 0xFFu64) as u8
+    off = off + 8u64
+    /* dependency_count (u32 LE = 0). */
+    pl[off + 0u64] = 0u8  pl[off + 1u64] = 0u8  pl[off + 2u64] = 0u8  pl[off + 3u64] = 0u8
+    off = off + 4u64
+    /* Publish.  in_commit = CONS_IC, out_commit = clause id, antecedents =
+     * &CONS_ZERO_ID (G6).  payload_len fits u32 (<= CONS_PL_MAX). */
+    let pl_len : u32 = (off & 0xFFFFFFFFu64) as u32
+    let prodp : *u8 = &CONS_PRODUCER as u64 as *u8
+    let opidp : *u8 = &CONS_RATIFY_OPID as u64 as *u8
+    let zerop : *u8 = &CONS_ZERO_ID as u64 as *u8
+    let frag : u64 = wh_publish(prodp, opidp, icp, cidp, 0u8, 0u8, 0u16, zerop, 0u32, pl, pl_len, out_cid as *u8)
+    ident_copy(cidp, out_cid as *u8)
+    return frag
+}
+
+/* === Supersession === */
+/* req -> cons_supersede_req aggregate (64 bytes):
+ *   prior_id_ptr(u64 @0) then the cons_ratify_req fields at @8..@63.
+ * Depth-2 call chain (supersede -> ratify), NOT recursion (W15). */
+fn cons_supersede(req: *u8) -> u64 @export {
+    if CONS_INITED == 0u8 { cons_init() }
+    let rq : u64 = req as u64
+    let prior_id : u64 = cons_load_u64_le(rq, 0u64)
+    let prior_slot : u32 = cons_find(prior_id as *u8)
+    if prior_slot == CONS_SENT { return CONS_U64_SENT }
+    /* The embedded cons_ratify_req begins at @8 -- pass that subview. */
+    let subreq : *u8 = (rq + 8u64) as *u8
+    let frag : u64 = cons_ratify(subreq)
+    if frag == CONS_U64_SENT { return CONS_U64_SENT }
+    /* out_clause_id was written through the embedded req's @0 field, which
+     * is at absolute @8 of the supersede aggregate. */
+    let out_cid : u64 = cons_load_u64_le(rq, 8u64)
+    let new_slot : u32 = cons_find(out_cid as *u8)
+    if new_slot != CONS_SENT {
+        let supp : *u8 = cons_sup_ptr(new_slot)
+        let prip : *u8 = prior_id as *u8
+        let mut i : u64 = 0u64
+        while i < CONS_ID_BYTES {
+            supp[i] = prip[i]
+            i = i + 1u64
+        }
+    }
+    return frag
+}
+
+/* === Predicate interpreter === */
+/* Flat per-opcode helpers share CONS_EV_* context (Trap 13: keeps every
+ * body shallow).  Each returns nothing observable; it mutates the stack /
+ * ip / halted flag in place.  All pushes are bounded by CONS_STACK_MAX and
+ * all operand reads by ip+k <= len (G3) -- the interpreter is total. */
+
+fn cons_push(v: u8) -> i32 {
+    if CONS_EV_SP < CONS_STACK_MAX {
+        let sp64 : u64 = (CONS_EV_SP as u64) & 0xFFFFFFFFu64
+        CONS_STACK[sp64] = v
+        CONS_EV_SP = CONS_EV_SP + 1u32
+    } else {
+        CONS_EV_HALTED = 1u8
+    }
+    return 0i32
+}
+
+/* Read one operand byte at ip+rel if in range, else 0; caller has already
+ * verified ip+k <= len before reading. */
+fn cons_operand(rel: u64) -> u8 {
+    let bp : *u8 = CONS_EV_BUF as *u8
+    return bp[CONS_EV_IP + rel]
+}
+
+/* &const_table[ci*32].  Mask ci before the multiply (Trap 4, G4). */
+fn cons_const_ptr(ci: u8) -> *u8 {
+    let ci64 : u64 = (ci as u64) & 0xFFu64
+    let addr : u64 = CONS_EV_CTAB + ci64 * 32u64
+    return addr as *u8
+}
+
+/* COP_AND / COP_OR: fold top two if depth >= 2. is_and selects the op. */
+fn cons_fold2(is_and: u8) -> i32 {
+    if CONS_EV_SP >= 2u32 {
+        let a64 : u64 = ((CONS_EV_SP - 1u32) as u64) & 0xFFFFFFFFu64
+        let b64 : u64 = ((CONS_EV_SP - 2u32) as u64) & 0xFFFFFFFFu64
+        let a : u8 = CONS_STACK[a64]
+        let b : u8 = CONS_STACK[b64]
+        let mut r : u8 = a & b
+        if is_and == 0u8 { r = a | b }
+        CONS_STACK[b64] = r
+        CONS_EV_SP = CONS_EV_SP - 1u32
+    }
+    return 0i32
+}
+
+/* COP_NOT: logical-negate top if depth >= 1 (two if-writes, no ordering). */
+fn cons_not() -> i32 {
+    if CONS_EV_SP >= 1u32 {
+        let t64 : u64 = ((CONS_EV_SP - 1u32) as u64) & 0xFFFFFFFFu64
+        let v : u8 = CONS_STACK[t64]
+        if v == 0u8 { CONS_STACK[t64] = 1u8 }
+        if v != 0u8 { CONS_STACK[t64] = 0u8 }
+    }
+    return 0i32
+}
+
+/* COP_PRODUCER_EQ / COP_OP_EQ ci: 1-byte operand; push ident_eq against the
+ * selected op id.  is_producer picks producer vs op-id. */
+fn cons_id_eq(is_producer: u8) -> i32 {
+    if (CONS_EV_IP + 2u64) <= CONS_EV_LEN {
+        let ci : u8 = cons_operand(1u64)
+        let cp : *u8 = cons_const_ptr(ci)
+        let mut subj : u64 = CONS_EV_OPID
+        if is_producer == 1u8 { subj = CONS_EV_OPPROD }
+        let eqv : u8 = ident_eq(subj as *u8, cp)
+        cons_push(eqv)
+        CONS_EV_IP = CONS_EV_IP + 2u64
+    } else {
+        CONS_EV_HALTED = 1u8
+    }
+    return 0i32
+}
+
+/* COP_REVTAG_EQ v: 1-byte operand; push (v == op_revtag) (u8 equality). */
+fn cons_revtag_eq() -> i32 {
+    if (CONS_EV_IP + 2u64) <= CONS_EV_LEN {
+        let v : u8 = cons_operand(1u64)
+        let mut r : u8 = 0u8
+        if v == CONS_EV_OPREVTAG { r = 1u8 }
+        cons_push(r)
+        CONS_EV_IP = CONS_EV_IP + 2u64
+    } else {
+        CONS_EV_HALTED = 1u8
+    }
+    return 0i32
+}
+
+/* COP_PHASE_GE v: 1-byte operand; push (op_phase >= v) (unsigned u8, safe). */
+fn cons_phase_ge() -> i32 {
+    if (CONS_EV_IP + 2u64) <= CONS_EV_LEN {
+        let v : u8 = cons_operand(1u64)
+        let mut r : u8 = 0u8
+        if CONS_EV_OPPHASE >= v { r = 1u8 }
+        cons_push(r)
+        CONS_EV_IP = CONS_EV_IP + 2u64
+    } else {
+        CONS_EV_HALTED = 1u8
+    }
+    return 0i32
+}
+
+/* COP_PILLAR_EQ lo hi: 2-byte operand; reassemble u16; push equality. */
+fn cons_pillar_eq() -> i32 {
+    if (CONS_EV_IP + 3u64) <= CONS_EV_LEN {
+        let lo : u16 = cons_operand(1u64) as u16
+        let hi : u16 = cons_operand(2u64) as u16
+        let want : u16 = lo | (hi << 8u16)
+        let mut r : u8 = 0u8
+        if want == CONS_EV_OPPILLAR { r = 1u8 }
+        cons_push(r)
+        CONS_EV_IP = CONS_EV_IP + 3u64
+    } else {
+        CONS_EV_HALTED = 1u8
+    }
+    return 0i32
+}
+
+/* COP_HAS_ANTE ci: 1-byte operand; scan ante_ids for the const id; push hit.
+ * Inner counter loop with a hit flag (no break, W14). */
+fn cons_has_ante() -> i32 {
+    if (CONS_EV_IP + 2u64) <= CONS_EV_LEN {
+        let ci : u8 = cons_operand(1u64)
+        let cp : *u8 = cons_const_ptr(ci)
+        let abase : u64 = CONS_EV_ANTE
+        let n64 : u64 = (CONS_EV_NANTE as u64) & 0xFFFFFFFFu64
+        let mut hit : u8 = 0u8
+        let mut j : u64 = 0u64
+        while j < n64 {
+            let ap : *u8 = (abase + j * 32u64) as *u8
+            if ident_eq(ap, cp) == 1u8 { hit = 1u8 }
+            j = j + 1u64
+        }
+        cons_push(hit)
+        CONS_EV_IP = CONS_EV_IP + 2u64
+    } else {
+        CONS_EV_HALTED = 1u8
+    }
+    return 0i32
+}
+
+/* Dispatch one instruction at CONS_EV_IP (if-cascade, no select).  Single-
+ * byte opcodes advance ip by 1 here; operand-bearing opcodes advance inside
+ * their helper after the bound check. */
+fn cons_step() -> i32 {
+    let bp : *u8 = CONS_EV_BUF as *u8
+    let opc : u8 = bp[CONS_EV_IP]
+    if opc == COP_TRUE  { cons_push(1u8) ; CONS_EV_IP = CONS_EV_IP + 1u64 ; return 0i32 }
+    if opc == COP_FALSE { cons_push(0u8) ; CONS_EV_IP = CONS_EV_IP + 1u64 ; return 0i32 }
+    if opc == COP_AND   { cons_fold2(1u8) ; CONS_EV_IP = CONS_EV_IP + 1u64 ; return 0i32 }
+    if opc == COP_OR    { cons_fold2(0u8) ; CONS_EV_IP = CONS_EV_IP + 1u64 ; return 0i32 }
+    if opc == COP_NOT   { cons_not() ; CONS_EV_IP = CONS_EV_IP + 1u64 ; return 0i32 }
+    if opc == COP_PRODUCER_EQ { cons_id_eq(1u8) ; return 0i32 }
+    if opc == COP_OP_EQ       { cons_id_eq(0u8) ; return 0i32 }
+    if opc == COP_REVTAG_EQ   { cons_revtag_eq() ; return 0i32 }
+    if opc == COP_PHASE_GE    { cons_phase_ge() ; return 0i32 }
+    if opc == COP_PILLAR_EQ   { cons_pillar_eq() ; return 0i32 }
+    if opc == COP_HAS_ANTE    { cons_has_ante() ; return 0i32 }
+    /* Unknown opcode: halt cleanly (M5 no-bricking, total over arbitrary input). */
+    CONS_EV_HALTED = 1u8
+    return 0i32
+}
+
+/* opv -> cons_op_view (68 bytes):
+ *   op_producer(u8[32] @0) op_id(u8[32] @32) op_phase(u8 @64)
+ *   op_revtag(u8 @65) op_pillar(u16 @66) */
+fn cons_eval_predicate(slot: u32, opv: *u8, ante_ids: *u8, n_ante: u32) -> u8 @export {
+    if slot >= CONS_MAX_CLAUSES { return 0u8 }
+    if CONS_INITED == 0u8 { return 0u8 }
+    if CONS_LIVE[slot] == 0u8 { return 0u8 }
+    let len : u64 = CONS_PRED_LEN[slot]
+    if len == 0u64 { return 1u8 }
+    let off : u64 = CONS_PRED_OFF[slot]
+    let buf : u64 = (&CONS_PRED_BUF as u64) + off
+    let bp : *u8 = buf as *u8
+    /* Layout: u8 const_count, const_count*32-byte ids, then instructions. */
+    let cc : u8 = bp[0u64]
+    let cc64 : u64 = (cc as u64) & 0xFFu64
+    /* Decode op-view into context. */
+    let ov : u64 = opv as u64
+    CONS_EV_LEN      = len
+    CONS_EV_BUF      = buf
+    CONS_EV_CTAB     = buf + 1u64
+    CONS_EV_IP       = 1u64 + cc64 * 32u64
+    CONS_EV_SP       = 0u32
+    CONS_EV_HALTED   = 0u8
+    let ovp : *u8 = ov as *u8
+    CONS_EV_OPPROD   = ov + 0u64
+    CONS_EV_OPID     = ov + 32u64
+    CONS_EV_OPPHASE  = ovp[64u64]
+    CONS_EV_OPREVTAG = ovp[65u64]
+    CONS_EV_OPPILLAR = cons_load_u16_le(ov, 66u64)
+    CONS_EV_ANTE     = ante_ids as u64
+    CONS_EV_NANTE    = n_ante
+    /* Dispatch loop, gated by halted (W14, no break). */
+    while CONS_EV_IP < CONS_EV_LEN {
+        if CONS_EV_HALTED == 0u8 {
+            cons_step()
+        } else {
+            CONS_EV_IP = CONS_EV_LEN
+        }
+    }
+    /* Result: top of stack, or open (1) if the stack is empty. */
+    let mut result : u8 = 1u8
+    if CONS_EV_SP >= 1u32 {
+        let t64 : u64 = ((CONS_EV_SP - 1u32) as u64) & 0xFFFFFFFFu64
+        result = CONS_STACK[t64]
+    }
+    return result
+}
+
+/* === Self-test.  99 = pass.  Drives KAT vectors 1-5. === */
+
+/* KAT scratch (module-scope; Trap 7). */
+var CONS_T_REQ   : [u8; 64]     /* a ratify/supersede request aggregate    */
+var CONS_T_OUT   : [u8; 32]     /* out_clause_id sink                       */
+var CONS_T_TXT   : [u8; 32]     /* textual literal                          */
+var CONS_T_TXT2  : [u8; 32]     /* second textual literal                   */
+var CONS_T_PRED  : [u8; 512]    /* predicate bytecode under test            */
+var CONS_T_OPV   : [u8; 68]     /* op-view                                  */
+var CONS_T_ANTE  : [u8; 32]     /* one antecedent id                        */
+var CONS_T_PID   : [u8; 32]     /* a 32-byte producer/const id "P"          */
+var CONS_T_BID   : [u8; 32]     /* B's clause id (supersede)                */
+
+/* Store a u64 little-endian into CONS_T_REQ at byte offset. */
+fn cons_t_req_u64(off: u64, v: u64) -> i32 {
+    let p : *u8 = &CONS_T_REQ as u64 as *u8
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* Install a predicate directly into slot's CONS_PRED_BUF region + mark live,
+ * bypassing ratify, so the interpreter KATs are hermetic.  Copies pred_len
+ * bytes from CONS_T_PRED. */
+fn cons_t_install_pred(slot: u32, pred_len: u64) -> i32 {
+    let dst : *u8 = (&CONS_PRED_BUF as u64) as *u8
+    let src : *u8 = &CONS_T_PRED as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < pred_len {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    CONS_PRED_OFF[slot] = 0u64
+    CONS_PRED_LEN[slot] = pred_len
+    CONS_LIVE[slot] = 1u8
+    return 0i32
+}
+
+/* Build a minimal op-view in CONS_T_OPV: producer=P? id=P? phase, revtag,
+ * pillar.  set_prod/set_id pick whether CONS_T_PID is copied into the
+ * producer / id field (else left zero). */
+fn cons_t_opview(phase: u8, revtag: u8, pillar: u16) -> i32 {
+    let p : *u8 = &CONS_T_OPV as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < 68u64 {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    p[64u64] = phase
+    p[65u64] = revtag
+    p[66u64] = (pillar & 0xFFu16) as u8
+    p[67u64] = ((pillar >> 8u16) & 0xFFu16) as u8
+    return 0i32
+}
+
+fn cons_selftest() -> u64 @export {
+    /* Stand up algebraic time + witness hook (KAT-only). */
+    at_init(0u64)
+    wh_init(0u64)
+    cons_init()
+
+    let reqp : *u8 = &CONS_T_REQ as u64 as *u8
+    let outp : *u8 = &CONS_T_OUT as u64 as *u8
+    let txtp : *u8 = &CONS_T_TXT as u64 as *u8
+
+    /* ---- KAT 1: ratify "abc" round-trip + clause-id KAT + dup refusal. ---- */
+    txtp[0u64] = 0x61u8  txtp[1u64] = 0x62u8  txtp[2u64] = 0x63u8   /* "abc" */
+    cons_t_req_u64(0u64,  &CONS_T_OUT as u64)   /* out_clause_id_ptr */
+    cons_t_req_u64(8u64,  &CONS_T_TXT as u64)   /* textual_ptr       */
+    cons_t_req_u64(16u64, 3u64)                 /* textual_len       */
+    cons_t_req_u64(24u64, 0u64)                 /* ltl_ptr           */
+    cons_t_req_u64(32u64, 0u64)                 /* ltl_len           */
+    cons_t_req_u64(40u64, 0u64)                 /* pred_ptr          */
+    cons_t_req_u64(48u64, 0u64)                 /* pred_len          */
+    let f0 : u64 = cons_ratify(reqp)
+    if f0 == CONS_U64_SENT { return 1u64 }
+    if f0 != 0u64 { return 2u64 }               /* first publish -> frag 0 */
+    if outp[0u64]  != 0x4eu8 { return 3u64 }    /* Keccak256("abc")[0]  */
+    if outp[31u64] != 0x45u8 { return 4u64 }    /* Keccak256("abc")[31] */
+    if cons_find(outp) != 0u32 { return 5u64 }  /* slot 0 */
+    /* Re-ratify the same "abc" -> duplicate refused, no second slot. */
+    let f1 : u64 = cons_ratify(reqp)
+    if f1 != CONS_U64_SENT { return 6u64 }
+    if cons_alloc_slot() != 1u32 { return 7u64 } /* still only slot 0 used */
+
+    /* ---- KAT 2: boolean algebra (uses interpreter slot 5). ---- */
+    let predp : *u8 = &CONS_T_PRED as u64 as *u8
+    cons_t_opview(0u8, 0u8, 0u16)
+    let opvp : *u8 = &CONS_T_OPV as u64 as *u8
+    let nullp : *u8 = &CONS_ZERO_ID as u64 as *u8
+    /* [cc=0] TRUE FALSE OR -> 1 */
+    predp[0u64] = 0u8  predp[1u64] = COP_TRUE  predp[2u64] = COP_FALSE  predp[3u64] = COP_OR
+    cons_t_install_pred(5u32, 4u64)
+    if cons_eval_predicate(5u32, opvp, nullp, 0u32) != 1u8 { return 10u64 }
+    /* [cc=0] TRUE FALSE AND -> 0 */
+    predp[1u64] = COP_TRUE  predp[2u64] = COP_FALSE  predp[3u64] = COP_AND
+    cons_t_install_pred(5u32, 4u64)
+    if cons_eval_predicate(5u32, opvp, nullp, 0u32) != 0u8 { return 11u64 }
+    /* [cc=0] FALSE NOT -> 1 */
+    predp[1u64] = COP_FALSE  predp[2u64] = COP_NOT
+    cons_t_install_pred(5u32, 3u64)
+    if cons_eval_predicate(5u32, opvp, nullp, 0u32) != 1u8 { return 12u64 }
+    /* empty predicate (len 0) -> open -> 1 */
+    CONS_PRED_LEN[5u32] = 0u64
+    CONS_LIVE[5u32] = 1u8
+    if cons_eval_predicate(5u32, opvp, nullp, 0u32) != 1u8 { return 13u64 }
+
+    /* ---- KAT 3: attribute matches.  const pool = one id P. ---- */
+    let pidp : *u8 = &CONS_T_PID as u64 as *u8
+    let mut q : u64 = 0u64
+    while q < 32u64 {
+        pidp[q] = (0x10u64 + q) as u8       /* P = 0x10,0x11,...,0x2f */
+        q = q + 1u64
+    }
+    /* [cc=1][P bytes][PRODUCER_EQ 0]; op_producer = P -> 1. */
+    predp[0u64] = 1u8
+    let mut r : u64 = 0u64
+    while r < 32u64 {
+        predp[1u64 + r] = pidp[r]
+        r = r + 1u64
+    }
+    predp[33u64] = COP_PRODUCER_EQ  predp[34u64] = 0u8
+    cons_t_install_pred(6u32, 35u64)
+    /* op-view with producer = P. */
+    cons_t_opview(0u8, 0u8, 0u16)
+    let mut s : u64 = 0u64
+    while s < 32u64 {
+        opvp[s] = pidp[s]
+        s = s + 1u64
+    }
+    if cons_eval_predicate(6u32, opvp, nullp, 0u32) != 1u8 { return 20u64 }
+    /* op_producer != P (zero it) -> 0. */
+    cons_t_opview(0u8, 0u8, 0u16)
+    if cons_eval_predicate(6u32, opvp, nullp, 0u32) != 0u8 { return 21u64 }
+    /* [cc=0][PHASE_GE 5]; phase 7 -> 1, phase 3 -> 0. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PHASE_GE  predp[2u64] = 5u8
+    cons_t_install_pred(6u32, 3u64)
+    cons_t_opview(7u8, 0u8, 0u16)
+    if cons_eval_predicate(6u32, opvp, nullp, 0u32) != 1u8 { return 22u64 }
+    cons_t_opview(3u8, 0u8, 0u16)
+    if cons_eval_predicate(6u32, opvp, nullp, 0u32) != 0u8 { return 23u64 }
+    /* [cc=0][PILLAR_EQ 0x34 0x12]; pillar 0x1234 -> 1. */
+    predp[1u64] = COP_PILLAR_EQ  predp[2u64] = 0x34u8  predp[3u64] = 0x12u8
+    cons_t_install_pred(6u32, 4u64)
+    cons_t_opview(0u8, 0u8, 0x1234u16)
+    if cons_eval_predicate(6u32, opvp, nullp, 0u32) != 1u8 { return 24u64 }
+    /* [cc=1][P][HAS_ANTE 0]; ante=[P] n=1 -> 1; n=0 -> 0. */
+    predp[0u64] = 1u8
+    let mut t : u64 = 0u64
+    while t < 32u64 {
+        predp[1u64 + t] = pidp[t]
+        t = t + 1u64
+    }
+    predp[33u64] = COP_HAS_ANTE  predp[34u64] = 0u8
+    cons_t_install_pred(6u32, 35u64)
+    let antep : *u8 = &CONS_T_ANTE as u64 as *u8
+    let mut u : u64 = 0u64
+    while u < 32u64 {
+        antep[u] = pidp[u]
+        u = u + 1u64
+    }
+    cons_t_opview(0u8, 0u8, 0u16)
+    if cons_eval_predicate(6u32, opvp, antep, 1u32) != 1u8 { return 25u64 }
+    if cons_eval_predicate(6u32, opvp, antep, 0u32) != 0u8 { return 26u64 }
+
+    /* ---- KAT 4: supersede chains. ---- */
+    /* Ratify A = "alpha" via a fresh request. */
+    txtp[0u64] = 0x61u8  txtp[1u64] = 0x6Cu8  txtp[2u64] = 0x70u8
+    txtp[3u64] = 0x68u8  txtp[4u64] = 0x61u8                       /* "alpha" */
+    cons_t_req_u64(0u64,  &CONS_T_OUT as u64)
+    cons_t_req_u64(8u64,  &CONS_T_TXT as u64)
+    cons_t_req_u64(16u64, 5u64)
+    cons_t_req_u64(24u64, 0u64)  cons_t_req_u64(32u64, 0u64)
+    cons_t_req_u64(40u64, 0u64)  cons_t_req_u64(48u64, 0u64)
+    let fa : u64 = cons_ratify(reqp)
+    if fa == CONS_U64_SENT { return 30u64 }
+    /* Save A's id. */
+    let aidp : *u8 = &CONS_T_PID as u64 as *u8       /* reuse PID as A-id store */
+    ident_copy(outp, aidp)
+    let a_slot : u32 = cons_find(aidp)
+    if a_slot == CONS_SENT { return 31u64 }
+    /* Build supersede request: prior_id_ptr @0 = &A-id; embedded ratify_req
+     * @8.. for B = "beta". */
+    let txt2p : *u8 = &CONS_T_TXT2 as u64 as *u8
+    txt2p[0u64] = 0x62u8  txt2p[1u64] = 0x65u8  txt2p[2u64] = 0x74u8  txt2p[3u64] = 0x61u8  /* "beta" */
+    cons_t_req_u64(0u64,  &CONS_T_PID as u64)        /* prior_id_ptr -> A-id */
+    cons_t_req_u64(8u64,  &CONS_T_OUT as u64)        /* out_clause_id_ptr    */
+    cons_t_req_u64(16u64, &CONS_T_TXT2 as u64)       /* textual_ptr          */
+    cons_t_req_u64(24u64, 4u64)                      /* textual_len          */
+    cons_t_req_u64(32u64, 0u64)  cons_t_req_u64(40u64, 0u64)
+    cons_t_req_u64(48u64, 0u64)  cons_t_req_u64(56u64, 0u64)
+    let fb : u64 = cons_supersede(reqp)
+    if fb == CONS_U64_SENT { return 32u64 }
+    /* Save B's id. */
+    let bidp : *u8 = &CONS_T_BID as u64 as *u8
+    ident_copy(outp, bidp)
+    let b_slot : u32 = cons_find(bidp)
+    if b_slot == CONS_SENT { return 33u64 }
+    /* B's supersedes row == A's id. */
+    let bsup : *u8 = cons_sup_ptr(b_slot)
+    if ident_eq(bsup, aidp) != 1u8 { return 34u64 }
+    /* A still findable; supersession does not delete. */
+    if cons_find(aidp) != a_slot { return 35u64 }
+    if cons_find(bidp) != b_slot { return 36u64 }
+
+    /* ---- KAT 5: no-bricking (negative case -- guards fail closed). ---- */
+    /* [cc=0][AND] with empty stack -> sp stays 0 -> open -> 1 (no OOB). */
+    predp[0u64] = 0u8  predp[1u64] = COP_AND
+    cons_t_install_pred(7u32, 2u64)
+    cons_t_opview(0u8, 0u8, 0u16)
+    if cons_eval_predicate(7u32, opvp, nullp, 0u32) != 1u8 { return 40u64 }
+    /* [cc=0][PRODUCER_EQ] truncated (operand byte missing): ip+2 > len ->
+     * halt cleanly, no SIGSEGV.  Stack empty -> open -> 1. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PRODUCER_EQ
+    cons_t_install_pred(7u32, 2u64)
+    if cons_eval_predicate(7u32, opvp, nullp, 0u32) != 1u8 { return 41u64 }
+    /* 300 x TRUE against CONS_STACK_MAX=256: must halt at the 256th push,
+     * not overflow CONS_STACK.  After halt the top is 1 -> result 1. */
+    predp[0u64] = 0u8
+    let mut w : u64 = 0u64
+    while w < 300u64 {
+        predp[1u64 + w] = COP_TRUE
+        w = w + 1u64
+    }
+    cons_t_install_pred(7u32, 301u64)
+    if cons_eval_predicate(7u32, opvp, nullp, 0u32) != 1u8 { return 42u64 }
+    /* Prove the bound actually engaged: sp must be exactly CONS_STACK_MAX. */
+    if CONS_EV_SP != CONS_STACK_MAX { return 43u64 }
+    if CONS_EV_HALTED != 1u8 { return 44u64 }
+
+    return 99u64
+}
+
+/* ============================================================================
+ * M10 keystone: the paired-falsifier mechanism -- HOLDS = verify(good) AND
+ * falsify(bad). A clause is FALSIFIABLE when paired with a falsify-predicate in
+ * a SECOND slot: it must both admit the legitimate witness (verify accepts the
+ * good op-view) AND catch a constructed bad witness (falsify FIRES on the bad
+ * op-view). Realizes apotheosis M10 gap (a) -- "the clause must catch a
+ * constructed bad witness, not merely pass a good one" -- additively, reusing
+ * cons_eval_predicate over two slots (no schema/ratify change). The packed
+ * per-clause falsify field, the LTL fold, run_charter() as the build's terminal
+ * gate fusing all suites, the union-of-all-module-falsifiers, and the quine-seal
+ * are the deferred Pass-2/Final terminal-gate build.
+ * ============================================================================ */
+
+/* A clause (verify_slot) HOLDS against its falsifier (falsify_slot) iff verify
+ * ACCEPTS the good op-view AND falsify CATCHES (fires on) the bad op-view. */
+fn cons_clause_holds(verify_slot: u32, falsify_slot: u32, good_opv: *u8, bad_opv: *u8) -> u8 @export {
+    let np : *u8 = &CONS_ZERO_ID as u64 as *u8
+    let a : u8 = cons_eval_predicate(verify_slot, good_opv, np, 0u32)
+    if a != 1u8 { return 0u8 }
+    let b : u8 = cons_eval_predicate(falsify_slot, bad_opv, np, 0u32)
+    if b != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* KAT scratch (module-scope; Trap 7): two distinct op-views + a distinct-OFFSET
+ * predicate installer (cons_t_install_pred always uses offset 0, so it cannot
+ * hold verify AND falsify live at once -- the keystone needs both). */
+var CONS_H_GOOD : [u8; 68]
+var CONS_H_BAD  : [u8; 68]
+
+fn cons_h_install(slot: u32, off: u64, pred_len: u64) -> i32 {
+    let dst : *u8 = ((&CONS_PRED_BUF as u64) + off) as *u8
+    let src : *u8 = &CONS_T_PRED as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < pred_len {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    CONS_PRED_OFF[slot] = off
+    CONS_PRED_LEN[slot] = pred_len
+    CONS_LIVE[slot] = 1u8
+    return 0i32
+}
+
+/* M10 keystone falsifier (99 = pass). Proves: a falsifiable clause HOLDS; the
+ * falsify discriminates (fires on the bad view, NOT on the good); and -- prove
+ * the negative -- a clause whose falsify cannot catch its bad witness, or whose
+ * verify rejects the good witness, does NOT hold. 1..6 = which check failed. */
+fn cons_holds_selftest() -> u64 @export {
+    at_init(0u64)
+    wh_init(0u64)
+    cons_init()
+    let predp : *u8 = &CONS_T_PRED as u64 as *u8
+    let nullp : *u8 = &CONS_ZERO_ID as u64 as *u8
+    /* verify @ slot 10 (off 0): [0][PHASE_GE 5] -> accepts phase >= 5. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PHASE_GE  predp[2u64] = 5u8
+    cons_h_install(10u32, 0u64, 3u64)
+    /* falsify @ slot 11 (off 64): [0][PHASE_GE 5][NOT] -> fires iff phase < 5. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PHASE_GE  predp[2u64] = 5u8  predp[3u64] = COP_NOT
+    cons_h_install(11u32, 64u64, 4u64)
+    /* COP_FALSE @ slot 12 (off 128): never fires -- the broken verify/falsify. */
+    predp[0u64] = 0u8  predp[1u64] = COP_FALSE
+    cons_h_install(12u32, 128u64, 2u64)
+    /* good op-view: phase 7 (>=5); bad op-view: phase 3 (<5). */
+    let gp : *u8 = &CONS_H_GOOD as u64 as *u8
+    let bp : *u8 = &CONS_H_BAD as u64 as *u8
+    let mut z : u64 = 0u64
+    while z < 68u64 { gp[z] = 0u8  bp[z] = 0u8  z = z + 1u64 }
+    gp[64u64] = 7u8
+    bp[64u64] = 3u8
+    /* verify accepts the good witness. */
+    if cons_eval_predicate(10u32, gp, nullp, 0u32) != 1u8 { return 1u64 }
+    /* falsify catches the bad witness (fires). */
+    if cons_eval_predicate(11u32, bp, nullp, 0u32) != 1u8 { return 2u64 }
+    /* falsify is discriminating: it does NOT fire on the good witness (not vacuous). */
+    if cons_eval_predicate(11u32, gp, nullp, 0u32) != 0u8 { return 3u64 }
+    /* the mechanism: a falsifiable clause HOLDS (verify good AND falsify bad). */
+    if cons_clause_holds(10u32, 11u32, gp, bp) != 1u8 { return 4u64 }
+    /* prove the negative #1: a falsify that cannot catch its bad witness (COP_FALSE)
+     * -> the clause does NOT hold. */
+    if cons_clause_holds(10u32, 12u32, gp, bp) != 0u8 { return 5u64 }
+    /* prove the negative #2: a verify that rejects the good witness (COP_FALSE)
+     * -> the clause does NOT hold. */
+    if cons_clause_holds(12u32, 11u32, gp, bp) != 0u8 { return 6u64 }
+    return 99u64
+}
+
+/* ============================================================================
+ * MIGRATION 6 CORE (H7 -- "one conscience"): cons_run_charter, the constitution's
+ * own TERMINAL GATE.  This is the structural mirror of numera/charter_terminal
+ * (corpus 700) one level INTO the constitution: where charter_terminal folds the
+ * thirteen Harmony-Invariant *selftests*, this folds the constitution's own
+ * paired falsifiers -- cons_clause_holds over a registry of (verify, falsify,
+ * good_opv, bad_opv) clause-pairs.  GREEN (99) iff EVERY pair HOLDS (its verify
+ * accepts the good op-view AND its falsify FIRES on the bad op-view); else the
+ * 1-based index of the first failing pair (RED).  No schema/ratify change, no fn
+ * pointers -- a monomorphic fold over module-scope arrays, additively reusing the
+ * M10 keystone (cons_clause_holds, :868) and the 11-opcode VM (:569).
+ *
+ * Realizes apotheosis M6 gaps (b) "no cons_run_charter" and (c) "the LTL field is
+ * carried but never folded": cons_ltl_holds wires a clause's LTL formula through
+ * the existing bounded model checker (temporal_logic.iii / tl_holds_on_segment)
+ * over a replayable algebraic_time chain, the atom being a constitution predicate.
+ * The packed per-clause falsify field in the on-wire clause_payload schema, the
+ * union-of-all-module-falsifiers, and the behavioral quine-seal remain the
+ * deferred Final terminal-gate build (mig6 roadmap 4-5); this lands the CORE fold
+ * + the LTL activation + the prove-the-negative canary.
+ * ============================================================================ */
+
+const CONS_RC_MAX     : u32 = 32u32         /* W8 registry ceiling                     */
+const CONS_RC_GREEN   : u64 = 99u64         /* GREEN verdict; > RC_MAX so never a RED idx */
+
+/* --- clause-pair registry (W8-bounded; monomorphic fold, never a fn pointer).
+ * Each pair i is (verify_slot, falsify_slot, good_opv_addr, bad_opv_addr); HOLDS
+ * = cons_clause_holds over that 4-tuple.  Op-views are stored as byte addresses
+ * (the caller owns the 68-byte buffers, exactly as cons_clause_holds takes *u8). */
+var CONS_RC_VERIFY  : [u32; 32]
+var CONS_RC_FALSIFY : [u32; 32]
+var CONS_RC_GOOD    : [u64; 32]
+var CONS_RC_BAD     : [u64; 32]
+var CONS_RC_COUNT   : u32 = 0u32
+
+/* Reset the clause-pair registry. */
+fn cons_rc_init() -> i32 @export {
+    CONS_RC_COUNT = 0u32
+    return CONS_OK
+}
+
+/* Register a clause-pair (verify_slot, falsify_slot, good_opv, bad_opv).  Returns
+ * the 0-based slot, or CONS_E_FULL (-1) if the registry is full.  W2: 4 params. */
+fn cons_rc_register(verify_slot: u32, falsify_slot: u32, good_opv: *u8, bad_opv: *u8) -> i32 @export {
+    let n : u32 = CONS_RC_COUNT
+    if n >= CONS_RC_MAX { return CONS_E_FULL }
+    let slot : u64 = (n as u64) & 0xFFFFFFFFu64
+    CONS_RC_VERIFY[slot]  = verify_slot
+    CONS_RC_FALSIFY[slot] = falsify_slot
+    CONS_RC_GOOD[slot]    = good_opv as u64
+    CONS_RC_BAD[slot]     = bad_opv as u64
+    CONS_RC_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* THE CONSTITUTION'S TERMINAL GATE.  Fold cons_clause_holds over every registered
+ * clause-pair: GREEN (99) iff all hold; else the 1-based index of the first failing
+ * pair (RED).  Monomorphic loop; no fn pointers; bounded by CONS_RC_COUNT (W14, no
+ * break -- early return on the first RED). */
+fn cons_run_charter() -> u64 @export {
+    let n : u32 = CONS_RC_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx64 : u64 = (i as u64) & 0xFFFFFFFFu64
+        let vs : u32 = CONS_RC_VERIFY[idx64]
+        let fs : u32 = CONS_RC_FALSIFY[idx64]
+        let gp : *u8 = CONS_RC_GOOD[idx64] as *u8
+        let bp : *u8 = CONS_RC_BAD[idx64] as *u8
+        if cons_clause_holds(vs, fs, gp, bp) != 1u8 { return idx64 + 1u64 }
+        i = i + 1u32
+    }
+    return CONS_RC_GREEN
+}
+
+/* mig6 (c) -- THE LTL FOLD.  Evaluate a clause's LTL formula (root already built
+ * in temporal_logic formula `f_slot`) over the algebraic_time chain segment
+ * [chain_start, chain_end).  The formula's atoms ARE constitution predicates
+ * (tl_eval_atom marshals each chain fragment's facets and calls
+ * cons_eval_predicate), so an "always"-type clause HOLDS iff its predicate held
+ * at every fragment in the window.  Returns tl_holds_on_segment's verdict (1 =
+ * holds over the whole segment, 0 = reddens / bad input). */
+fn cons_ltl_holds(f_slot: u32, chain_start: u64, chain_end: u64) -> u8 @export {
+    return tl_holds_on_segment(f_slot, chain_start, chain_end)
+}
+
+/* === mig6 self-test.  99 = pass.  Distinct diagnostic code per failed check. ===
+ *
+ * Stands up the deps like cons_holds_selftest, installs verify [PHASE_GE 5] @slot
+ * 10, falsify [PHASE_GE 5][NOT] @slot 11, broken [FALSE] @slot 12 (offset-distinct
+ * installs via cons_h_install -- cons_t_install_pred can hold only one live).
+ * Registers >=2 HOLDING pairs -> asserts GREEN; asserts GREEN is reproducible
+ * (run twice); registers a CANARY pair whose falsify ([FALSE]) CANNOT catch its
+ * bad witness -> asserts run_charter returns that pair's 1-based RED index (the
+ * gate is a real falsifier, not vacuously green).  Then the LTL fold: a verify
+ * predicate [PHASE_GE 1] @slot 13 as an ALWAYS atom over a published chain holds
+ * where every fragment's phase >= 1, and reddens over a window containing a
+ * phase-0 fragment.
+ *
+ * Diagnostic map:
+ *   1  verify(10) does not accept the good op-view
+ *   2  falsify(11) does not fire on the bad op-view
+ *   3  cons_clause_holds(10,11,good,bad) != 1 (the holding clause-pair)
+ *   4  register pair 0 did not return slot 0
+ *   5  register pair 1 did not return slot 1
+ *   6  cons_run_charter() != GREEN with two holding pairs
+ *   7  cons_run_charter() not reproducible (second run != GREEN)
+ *   8  register canary pair did not return slot 2
+ *   9  cons_run_charter() did not return the canary's 1-based RED index (3)
+ *   20 LTL setup failed (formula alloc / atom / unary-temp / set_root / publish)
+ *   21 LTL "always" clause did not HOLD over the all-phase>=1 segment
+ *   22 LTL clause did not REDDEN over a window containing a phase-0 fragment
+ *   99 all checks passed
+ */
+var CONS_RC_GOODV : [u8; 68]    /* good op-view: phase 7 (>= 5)                   */
+var CONS_RC_BADV  : [u8; 68]    /* bad  op-view: phase 3 (<  5)                   */
+
+fn cons_run_charter_selftest() -> u64 @export {
+    at_init(0u64)
+    wh_init(0u64)
+    cons_init()
+    cons_rc_init()
+    let predp : *u8 = &CONS_T_PRED as u64 as *u8
+    let nullp : *u8 = &CONS_ZERO_ID as u64 as *u8
+    /* verify @ slot 10 (off 0): [0][PHASE_GE 5] -> accepts phase >= 5. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PHASE_GE  predp[2u64] = 5u8
+    cons_h_install(10u32, 0u64, 3u64)
+    /* falsify @ slot 11 (off 64): [0][PHASE_GE 5][NOT] -> fires iff phase < 5. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PHASE_GE  predp[2u64] = 5u8  predp[3u64] = COP_NOT
+    cons_h_install(11u32, 64u64, 4u64)
+    /* broken [FALSE] @ slot 12 (off 128): never fires -- a falsify that cannot catch. */
+    predp[0u64] = 0u8  predp[1u64] = COP_FALSE
+    cons_h_install(12u32, 128u64, 2u64)
+    /* good op-view: phase 7 (>=5); bad op-view: phase 3 (<5). */
+    let gp : *u8 = &CONS_RC_GOODV as u64 as *u8
+    let bp : *u8 = &CONS_RC_BADV as u64 as *u8
+    let mut z : u64 = 0u64
+    while z < 68u64 { gp[z] = 0u8  bp[z] = 0u8  z = z + 1u64 }
+    gp[64u64] = 7u8
+    bp[64u64] = 3u8
+    /* Sanity: verify accepts good; falsify fires on bad (the keystone's two arms). */
+    if cons_eval_predicate(10u32, gp, nullp, 0u32) != 1u8 { return 1u64 }
+    if cons_eval_predicate(11u32, bp, nullp, 0u32) != 1u8 { return 2u64 }
+    if cons_clause_holds(10u32, 11u32, gp, bp) != 1u8 { return 3u64 }
+    /* Register two HOLDING clause-pairs (both verify=10, falsify=11). */
+    if cons_rc_register(10u32, 11u32, gp, bp) != 0i32 { return 4u64 }
+    if cons_rc_register(10u32, 11u32, gp, bp) != 1i32 { return 5u64 }
+    /* GREEN: every registered pair HOLDS. */
+    if cons_run_charter() != CONS_RC_GREEN { return 6u64 }
+    /* Reproducible: the fold is deterministic over the same registry. */
+    if cons_run_charter() != CONS_RC_GREEN { return 7u64 }
+    /* CANARY (prove the negative): falsify ([FALSE], slot 12) CANNOT catch its bad
+     * witness -> the pair does NOT hold -> the fold reddens at this pair's 1-based
+     * index.  Registered as pair index 2 -> RED index 3. */
+    if cons_rc_register(10u32, 12u32, gp, bp) != 2i32 { return 8u64 }
+    if cons_run_charter() != 3u64 { return 9u64 }
+
+    /* ---- THE LTL FOLD (mig6 (c)): an "always"-type constitutional clause. ---- */
+    /* verify atom @ slot 13 (off 192): [0][PHASE_GE 1] -> a fragment satisfies the
+     * clause iff its phase >= 1. */
+    predp[0u64] = 0u8  predp[1u64] = COP_PHASE_GE  predp[2u64] = 1u8
+    cons_h_install(13u32, 192u64, 3u64)
+    /* Build the LTL formula ALWAYS(atom=slot13). */
+    tl_init()
+    let f : u32 = tl_alloc_formula()
+    if f == CONS_SENT { return 20u64 }
+    let atomn : u32 = tl_append_atom(f, 13u32)
+    if atomn == CONS_SENT { return 20u64 }
+    let alwaysn : u32 = tl_append_unary_temp(f, 6u8, atomn)  /* 6 = TLOGIC_TAG_ALWAYS */
+    if alwaysn == CONS_SENT { return 20u64 }
+    if tl_set_root(f, alwaysn) != 0i32 { return 20u64 }
+    /* Publish a chain of fragments with phase >= 1 at positions 0,1,2.  Producer/
+     * op-id/commits/antecedents = the canonical zero id (a valid 32-byte pointer);
+     * out_frag_id = null (wh_publish guards it).  wh_publish advances algebraic
+     * time, so positions are 0,1,2,... in order. */
+    let zerop : *u8 = &CONS_ZERO_ID as u64 as *u8
+    let nf0 : u64 = wh_publish(zerop, zerop, zerop, zerop, 0u8, 5u8, 0u16, zerop, 0u32, zerop, 0u32, 0u64 as *u8)
+    if nf0 != 0u64 { return 20u64 }
+    let nf1 : u64 = wh_publish(zerop, zerop, zerop, zerop, 0u8, 5u8, 0u16, zerop, 0u32, zerop, 0u32, 0u64 as *u8)
+    if nf1 != 1u64 { return 20u64 }
+    let nf2 : u64 = wh_publish(zerop, zerop, zerop, zerop, 0u8, 5u8, 0u16, zerop, 0u32, zerop, 0u32, 0u64 as *u8)
+    if nf2 != 2u64 { return 20u64 }
+    /* The "always" clause HOLDS over [0,3): every fragment's phase (5) >= 1. */
+    if cons_ltl_holds(f, 0u64, 3u64) != 1u8 { return 21u64 }
+    /* Publish two more: phase 5 at pos 3, phase 0 at pos 4. */
+    let nf3 : u64 = wh_publish(zerop, zerop, zerop, zerop, 0u8, 5u8, 0u16, zerop, 0u32, zerop, 0u32, 0u64 as *u8)
+    if nf3 != 3u64 { return 20u64 }
+    let nf4 : u64 = wh_publish(zerop, zerop, zerop, zerop, 0u8, 0u8, 0u16, zerop, 0u32, zerop, 0u32, 0u64 as *u8)
+    if nf4 != 4u64 { return 20u64 }
+    /* Prove the negative for LTL: over [3,5) the phase-0 fragment at pos 4 violates
+     * PHASE_GE 1, so the "always" clause REDDENS (does not hold). */
+    if cons_ltl_holds(f, 3u64, 5u64) != 0u8 { return 22u64 }
+
+    return 99u64
+}

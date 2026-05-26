@@ -1,0 +1,4 @@
+/* 614 — egraph: union-find + hashcons + congruence-closure rebuild + e-match + extract. */
+module corpus_614
+extern @abi(c-msvc-x64) fn eg_selftest() -> u64 from "egraph.iii"
+fn main() -> u64 { return eg_selftest() }

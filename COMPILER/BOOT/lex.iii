@@ -1,0 +1,2442 @@
+/* lex.iii - Stage-0 .iii port of lex.c (CP-029 foundation)
+ *
+ * Mirror of COMPILER/BOOT/lex.c (1772 LOC) under iiis-0 dialect.
+ * Behavioural parity required: same token kinds, same FNV-1a-64
+ * over raw bytes, same SHA-256 stream / arena mhash, same error
+ * codes, same intern IDs, same keyword tables.  Token-stream
+ * byte-equivalence is a Stage-1 acceptance gate.
+ *
+ * NOT YET in PORTED_TUS - sits beside lex.c without substituting it.
+ * Will be added once the full surface (create/destroy/next/peek/
+ * error_X+intern+locate+history+register_keyword+mhash+seal+etc.)
+ * is implemented and verified byte-for-byte against lex.c on the
+ * stage1_corpus.
+ *
+ * Dialect notes inherited from prior ports (sema/cg_r3):
+ *   - No `;` separator (only inside [T; N]).
+ *   - No char literals 'X' - use numeric byte values.
+ *   - `&local as u64` is fragile (param-spill bug); prefer globals
+ *     for out-pointer style returns.
+ *   - `(0u64 as *u8)` parses as start of hexad literal - drop parens.
+ *   - `&IDENT[i]` parses as `(&IDENT)[i]`; use offset arithmetic.
+ *   - @export inline at end of fn signature.
+ *   - Parser recursion limit ~8 nests; factor deep nests.
+ *   - No `break`/`continue` - sentinel-flag refactor.
+ *   - No `if` as expression - let mut + if-mutate.
+ */
+
+module lex
+
+/* --- Externs from C side (memcpy/memcmp/malloc/free helpers) ------ */
+
+extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_free_c(p: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u32_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u64_c(addr: u64, off: u64, v: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memset_c(dst: u64, v: u32, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "lex_runtime.c"
+
+/* --- Token kind constants (mirror iii_token_kind_t in lex.h) ------ */
+/* STABILITY: integer values are persisted in goldens and cross-TU
+ * dispatch tables.  APPEND ONLY - never reorder or reuse.  Numbering
+ * MUST match lex.h:139 enum exactly. */
+
+const III_TOK_INVALID: u32 = 0u32
+const III_TOK_EOF: u32 = 1u32
+const III_TOK_NEWLINE: u32 = 2u32
+const III_TOK_DOC_COMMENT: u32 = 3u32
+const III_TOK_IDENTIFIER: u32 = 4u32
+const III_TOK_INT_LITERAL: u32 = 5u32
+const III_TOK_HEX_LITERAL: u32 = 6u32
+const III_TOK_MHASH_LITERAL: u32 = 7u32
+const III_TOK_STRING_LITERAL: u32 = 8u32
+const III_TOK_STRING_BYTE: u32 = 9u32
+const III_TOK_STRING_RAW: u32 = 10u32
+const III_TOK_STRING_HEX: u32 = 11u32
+
+const III_TOK_KW_MODULE: u32 = 12u32
+const III_TOK_KW_USE: u32 = 13u32
+const III_TOK_KW_AS: u32 = 14u32
+const III_TOK_KW_CYCLE: u32 = 15u32
+const III_TOK_KW_FN: u32 = 16u32
+const III_TOK_KW_TYPE: u32 = 17u32
+const III_TOK_KW_CONST: u32 = 18u32
+const III_TOK_KW_EXTERN: u32 = 19u32
+const III_TOK_KW_MOBIUS_CANDIDATE: u32 = 20u32
+const III_TOK_KW_SCHEMA: u32 = 21u32
+const III_TOK_KW_OBSERVATORY: u32 = 22u32
+const III_TOK_KW_SEALED_CALL: u32 = 23u32
+const III_TOK_KW_FROM: u32 = 24u32
+
+const III_TOK_KW_LET: u32 = 25u32
+const III_TOK_KW_MUT: u32 = 26u32
+const III_TOK_KW_WAVEFRONT: u32 = 27u32
+const III_TOK_KW_SANCTUM_ENTER: u32 = 28u32
+const III_TOK_KW_METAL: u32 = 29u32
+const III_TOK_KW_FOR: u32 = 30u32
+const III_TOK_KW_IN: u32 = 31u32
+const III_TOK_KW_WHERE: u32 = 32u32
+const III_TOK_KW_MATCH: u32 = 33u32
+const III_TOK_KW_IF: u32 = 34u32
+const III_TOK_KW_RETURN: u32 = 35u32
+
+const III_TOK_KW_UNTIL: u32 = 36u32
+const III_TOK_KW_QUIESCENT: u32 = 37u32
+const III_TOK_KW_ON_ROLLBACK: u32 = 38u32
+
+const III_TOK_KW_FORWARD: u32 = 39u32
+const III_TOK_KW_COMPROMISE: u32 = 40u32
+
+const III_TOK_KW_TRUE: u32 = 41u32
+const III_TOK_KW_FALSE: u32 = 42u32
+
+const III_TOK_KW_AND: u32 = 43u32
+const III_TOK_KW_OR: u32 = 44u32
+const III_TOK_KW_COMPOSE: u32 = 45u32
+
+const III_TOK_KW_CURRENT: u32 = 46u32
+const III_TOK_KW_BUILD_TIME: u32 = 47u32
+const III_TOK_KW_ANY: u32 = 48u32
+
+const III_TOK_KW_NEG: u32 = 49u32
+const III_TOK_KW_ZERO: u32 = 50u32
+const III_TOK_KW_POS: u32 = 51u32
+const III_TOK_KW_TRIT_INVALID: u32 = 52u32
+
+const III_TOK_MOD_RING: u32 = 53u32
+const III_TOK_MOD_TIER: u32 = 54u32
+const III_TOK_MOD_SAFETY: u32 = 55u32
+const III_TOK_MOD_HEXAD: u32 = 56u32
+const III_TOK_MOD_TRACK: u32 = 57u32
+const III_TOK_MOD_CHRONOS: u32 = 58u32
+const III_TOK_MOD_CAP: u32 = 59u32
+const III_TOK_MOD_EPOCH: u32 = 60u32
+const III_TOK_MOD_PLAN_ANCHOR: u32 = 61u32
+const III_TOK_MOD_CLOSURE: u32 = 62u32
+const III_TOK_MOD_VERSION: u32 = 63u32
+const III_TOK_MOD_ABI: u32 = 64u32
+const III_TOK_MOD_PURE: u32 = 65u32
+const III_TOK_MOD_IRREVERSIBLE: u32 = 66u32
+const III_TOK_MOD_SANCTUM_ONLY: u32 = 67u32
+const III_TOK_MOD_SEAL_ID: u32 = 68u32
+
+const III_TOK_LPAREN: u32 = 69u32
+const III_TOK_RPAREN: u32 = 70u32
+const III_TOK_LBRACE: u32 = 71u32
+const III_TOK_RBRACE: u32 = 72u32
+const III_TOK_LBRACKET: u32 = 73u32
+const III_TOK_RBRACKET: u32 = 74u32
+const III_TOK_COMMA: u32 = 75u32
+const III_TOK_SEMI: u32 = 76u32
+const III_TOK_COLON: u32 = 77u32
+const III_TOK_DCOLON: u32 = 78u32
+const III_TOK_DOT: u32 = 79u32
+const III_TOK_AT: u32 = 80u32
+const III_TOK_PIPE: u32 = 81u32
+const III_TOK_UNDERSCORE: u32 = 82u32
+const III_TOK_ARROW: u32 = 83u32
+const III_TOK_FAT_ARROW: u32 = 84u32
+
+const III_TOK_OP_PLUS: u32 = 85u32
+const III_TOK_OP_MINUS: u32 = 86u32
+const III_TOK_OP_STAR: u32 = 87u32
+const III_TOK_OP_SLASH: u32 = 88u32
+const III_TOK_OP_PERCENT: u32 = 89u32
+const III_TOK_OP_AMP: u32 = 90u32
+const III_TOK_OP_CARET: u32 = 91u32
+const III_TOK_OP_TILDE: u32 = 92u32
+const III_TOK_OP_BANG: u32 = 93u32
+const III_TOK_OP_SHL: u32 = 94u32
+const III_TOK_OP_SHR: u32 = 95u32
+const III_TOK_OP_EQ: u32 = 96u32
+const III_TOK_OP_NEQ: u32 = 97u32
+const III_TOK_OP_LT: u32 = 98u32
+const III_TOK_OP_LE: u32 = 99u32
+const III_TOK_OP_GT: u32 = 100u32
+const III_TOK_OP_GE: u32 = 101u32
+const III_TOK_OP_ASSIGN: u32 = 102u32
+const III_TOK_OP_COLON_EQ: u32 = 103u32
+
+const III_TOK_KW_ELSE: u32 = 104u32
+const III_TOK_KW_WHILE: u32 = 105u32
+const III_TOK_OP_DOTDOT: u32 = 106u32
+const III_TOK_KW_SIZEOF: u32 = 107u32
+const III_TOK_KW_VAR: u32 = 108u32
+const III_TOK_KW_STRUCT: u32 = 109u32
+
+/* iiis-2 control-flow keywords (lex.h:290-292).  RITCHIE Stage 2.1.3 / DRT-LEX-001:
+ * the prior stub OMITTED these three, which mis-numbered every MOD_* below by 3
+ * and would have made the ported lexer emit modifier kinds the parser misreads.
+ * Verified against lex.h via an enum-value probe: LOOP=110 BREAK=111 CONTINUE=112. */
+const III_TOK_KW_LOOP: u32 = 110u32
+const III_TOK_KW_BREAK: u32 = 111u32
+const III_TOK_KW_CONTINUE: u32 = 112u32
+
+/* Lattice-plan modifiers (Phase 2).  Mirror lex.h:296-310 EXACTLY (probe-verified:
+ * MOD_CRYSTAL=113 .. MOD_STRICT_LENGTH=127). */
+const III_TOK_MOD_CRYSTAL: u32                  = 113u32       /* Step 0002 */
+const III_TOK_MOD_DYNAMIC: u32                  = 114u32       /* Step 0003 */
+const III_TOK_MOD_SEALED: u32                   = 115u32       /* Step 0004 */
+const III_TOK_MOD_LINEAR: u32                   = 116u32       /* Step 0005 */
+const III_TOK_MOD_BOUNDED: u32                  = 117u32       /* Step 0006 */
+const III_TOK_MOD_VARIANT: u32                  = 118u32       /* Step 0007 */
+const III_TOK_MOD_K: u32                        = 119u32       /* Step 0008 */
+const III_TOK_MOD_PROVENANCE: u32               = 120u32       /* Step 0009 */
+const III_TOK_MOD_CONSTANT_TIME: u32            = 121u32       /* Step 0010 */
+const III_TOK_MOD_SIDE_CHANNEL_RESISTANT: u32   = 122u32       /* Step 0011 */
+const III_TOK_MOD_DYNAMIC_IMPACT: u32           = 123u32       /* Step 0012 */
+const III_TOK_MOD_PROVENANCE_LINKED_ERROR: u32  = 124u32       /* Step 0013 */
+const III_TOK_MOD_ARENA_RESET_SAFE: u32         = 125u32       /* Step 0014 */
+const III_TOK_MOD_CRYSTAL_SELF_ATTEST: u32      = 126u32       /* Step 0015 */
+const III_TOK_MOD_STRICT_LENGTH: u32            = 127u32       /* Step 0028 */
+
+/* DRT-LEX-001: the prior stub declared 4 speculative resolution kinds
+ * (RESOLVE/INTENT/PATTERN/TRANSFORM = 125..128) that lex.h does NOT have.
+ * They are DROPPED — the .iii kind space must match lex.h's 128 exactly
+ * (the parser reads kinds; goldens persist them). Resolution-surface kinds
+ * land in BOTH lex.h and lex.iii together when the resolution parser ships. */
+
+/* RITCHIE Stage 3.5: '$' asm immediate prefix for metal{} blocks.
+ * Append-only (value 128), mirrors lex.h III_TOK_DOLLAR exactly. */
+const III_TOK_DOLLAR: u32 = 128u32
+const III_TOK_KIND_COUNT: u32 = 129u32
+
+/* --- Integer-literal type-suffix codes (D15) ---------------------- */
+
+const III_INT_SUFFIX_NONE: u32 = 0u32
+const III_INT_SUFFIX_I8: u32 = 1u32
+const III_INT_SUFFIX_I16: u32 = 2u32
+const III_INT_SUFFIX_I32: u32 = 3u32
+const III_INT_SUFFIX_I64: u32 = 4u32
+const III_INT_SUFFIX_U8: u32 = 5u32
+const III_INT_SUFFIX_U16: u32 = 6u32
+const III_INT_SUFFIX_U32: u32 = 7u32
+const III_INT_SUFFIX_U64: u32 = 8u32
+const III_INT_SUFFIX_USIZE: u32 = 9u32
+const III_INT_SUFFIX_ISIZE: u32 = 10u32
+const III_INT_SUFFIX_COUNT: u32 = 11u32
+
+/* --- Error codes (mirror lex.h:382) ------------------------------- */
+
+const III_LEX_OK: u32 = 0u32
+const III_LEX_E_UNTERMINATED_STRING: u32 = 1u32
+const III_LEX_E_UNTERMINATED_BLOCK_CMT: u32 = 2u32
+const III_LEX_E_BAD_HEX_DIGIT: u32 = 3u32
+const III_LEX_E_BAD_ESCAPE: u32 = 4u32
+const III_LEX_E_INVALID_BYTE: u32 = 5u32
+const III_LEX_E_OVERLONG_INT: u32 = 6u32
+const III_LEX_E_OVERLONG_MHASH: u32 = 7u32
+const III_LEX_E_TRUNCATED_MHASH: u32 = 8u32
+const III_LEX_E_OOM: u32 = 9u32
+const III_LEX_E_NULL_ARG: u32 = 10u32
+const III_LEX_E_BAD_HEX_PREFIX: u32 = 11u32
+const III_LEX_E_BAD_INT_SUFFIX: u32 = 12u32
+const III_LEX_E_BAD_STRING_PREFIX: u32 = 13u32
+const III_LEX_E_BAD_HEX_STRING: u32 = 14u32
+const III_LEX_E_DUPLICATE_KEYWORD: u32 = 15u32
+const III_LEX_E_KEYWORD_TABLE_FULL: u32 = 16u32
+const III_LEX_E_SEALED: u32 = 17u32
+
+const III_TOK_NO_DOC_COMMENT: u32 = 4294967295u32
+
+
+/* --- SHA-256 (FIPS 180-4) ----------------------------------------
+ * Hand-rolled, NIH.  Implementation lives in lex_runtime.c because
+ * iiis-0's codegen has bugs in tightly-packed u32 round arithmetic
+ * (same trap hit by cg_rm1, CP-028).  Caller allocates 112 bytes.
+ */
+const III_SHA256_STATE_BYTES: u64 = 112u64
+
+extern @abi(c-msvc-x64) fn iii_sha256_init(s: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update(s: u64, data: u64, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u8(s: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u16(s: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u32(s: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_update_u64(s: u64, v: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_sha256_final(s: u64, out32: u64) -> u32 from "lex_runtime.c"
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.2 — lex-state layout + chunk-arena + create/destroy.
+ *
+ * The lex state is OPAQUE to C callers (lex.h forward-declares it), so this
+ * layout is internal to lex.iii — chosen freely, only self-consistent.  The
+ * TOKEN layout (offsets verified via offsetof, see lex_port_audit.md) is the
+ * ONLY layout that must byte-match C, because the parser reads tokens.
+ * All heap access is via the lex_runtime.c u64-address helpers (iiis-0 cannot
+ * deref heap natively).  Dialect mirrors ceiling.iii.
+ * ============================================================================ */
+
+/* --- TOKEN buffer offsets (VERIFIED against C iii_token_t; size 104) ------ */
+const TOKEN_BYTES: u64 = 104u64
+const TOK_OFF_KIND: u64 = 0u64
+const TOK_OFF_START: u64 = 4u64
+const TOK_OFF_END: u64 = 8u64
+const TOK_OFF_LINE: u64 = 12u64
+const TOK_OFF_COL: u64 = 16u64
+const TOK_OFF_LOG_LINE: u64 = 20u64
+const TOK_OFF_LOG_COL: u64 = 24u64
+const TOK_OFF_LOG_PATH: u64 = 32u64
+const TOK_OFF_INT_VALUE: u64 = 40u64
+const TOK_OFF_INT_SUFFIX: u64 = 48u64
+const TOK_OFF_MHASH: u64 = 52u64
+const TOK_OFF_STRING_LEN: u64 = 84u64
+const TOK_OFF_STRING_PAYLOAD: u64 = 88u64
+const TOK_OFF_INTERNED_ID: u64 = 96u64
+const TOK_OFF_LEADING_DOC: u64 = 100u64
+
+/* --- ERROR record offsets (VERIFIED against C iii_lex_error_t; size 24) ---- */
+const LEX_ERR_BYTES: u64 = 24u64
+const ERR_OFF_CODE: u64 = 0u64
+const ERR_OFF_BYTE: u64 = 4u64
+const ERR_OFF_LINE: u64 = 8u64
+const ERR_OFF_COL: u64 = 12u64
+const ERR_OFF_MSG: u64 = 16u64
+
+/* --- LEX_STATE offsets (internal layout; opaque to C) --------------------- */
+const LEX_STATE_BYTES: u64 = 464u64
+const LEX_OFF_SRC: u64 = 0u64
+const LEX_OFF_LEN: u64 = 8u64
+const LEX_OFF_PATH: u64 = 16u64
+const LEX_OFF_POS: u64 = 24u64
+const LEX_OFF_LINE: u64 = 32u64
+const LEX_OFF_COL: u64 = 36u64
+const LEX_OFF_LOG_PATH: u64 = 40u64
+const LEX_OFF_LOG_LINE: u64 = 48u64
+const LEX_OFF_LOG_COL: u64 = 52u64
+const LEX_OFF_PEEK_VALID: u64 = 56u64
+const LEX_OFF_PEEK_STATUS: u64 = 60u64
+const LEX_OFF_MOD_PENDING: u64 = 64u64
+const LEX_OFF_PENDING_DOC: u64 = 68u64
+const LEX_OFF_SEALED: u64 = 72u64
+const LEX_OFF_ERRORS_PTR: u64 = 80u64
+const LEX_OFF_ERRORS_CNT: u64 = 88u64
+const LEX_OFF_ERRORS_CAP: u64 = 96u64
+const LEX_OFF_LSTART_PTR: u64 = 104u64
+const LEX_OFF_LSTART_CNT: u64 = 112u64
+const LEX_OFF_LSTART_CAP: u64 = 120u64
+const LEX_OFF_HIST_PTR: u64 = 128u64
+const LEX_OFF_HIST_CNT: u64 = 136u64
+const LEX_OFF_HIST_CAP: u64 = 144u64
+const LEX_OFF_INTERN_SLOTS: u64 = 152u64
+const LEX_OFF_INTERN_CAP: u64 = 160u64
+const LEX_OFF_INTERN_CNT: u64 = 168u64
+const LEX_OFF_INTERN_NEXT: u64 = 176u64
+const LEX_OFF_RTKW_PTR: u64 = 184u64
+const LEX_OFF_RTKW_CNT: u64 = 192u64
+const LEX_OFF_RTKW_CAP: u64 = 200u64
+const LEX_OFF_ARENA_HEAD: u64 = 208u64
+const LEX_OFF_ARENA_TOTAL: u64 = 216u64
+const LEX_OFF_ERR: u64 = 224u64
+const LEX_OFF_PEEK_TOK: u64 = 248u64
+const LEX_OFF_STREAM_SHA: u64 = 352u64
+
+/* --- Chunk-arena (stable pointers; header 24 bytes then payload) ---------- */
+const ARENA_HDR_BYTES: u64 = 24u64
+const ARENA_OFF_NEXT: u64 = 0u64
+const ARENA_OFF_CAP: u64 = 8u64
+const ARENA_OFF_USED: u64 = 16u64
+const ARENA_CHUNK_BYTES: u64 = 65536u64
+
+const INTERN_CAP_INIT: u64 = 1024u64
+const INTERN_SLOT_BYTES: u64 = 24u64
+
+fn lex_chunk_new(want: u64) -> u64 {
+    let mut cap: u64 = ARENA_CHUNK_BYTES
+    if want > cap { cap = want }
+    let c: u64 = iii_lex_malloc_c(ARENA_HDR_BYTES + cap)
+    if c == 0u64 { return 0u64 }
+    iii_lex_write_u64_c(c, ARENA_OFF_NEXT, 0u64)
+    iii_lex_write_u64_c(c, ARENA_OFF_CAP, cap)
+    iii_lex_write_u64_c(c, ARENA_OFF_USED, 0u64)
+    return c
+}
+
+/* Allocate n bytes from the lex state's arena; returns a stable heap address. */
+fn lex_arena_alloc(st: u64, n: u64) -> u64 {
+    if n == 0u64 { return 1u64 }
+    let head: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_HEAD)
+    let mut use_head: u32 = 0u32
+    if head != 0u64 {
+        let used: u64 = iii_lex_read_u64_c(head, ARENA_OFF_USED)
+        let cap: u64 = iii_lex_read_u64_c(head, ARENA_OFF_CAP)
+        if (used + n) <= cap { use_head = 1u32 }
+    }
+    if use_head == 0u32 {
+        let c: u64 = lex_chunk_new(n)
+        if c == 0u64 { return 0u64 }
+        iii_lex_write_u64_c(c, ARENA_OFF_NEXT, head)
+        iii_lex_write_u64_c(st, LEX_OFF_ARENA_HEAD, c)
+        let total: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_TOTAL)
+        let ccap: u64 = iii_lex_read_u64_c(c, ARENA_OFF_CAP)
+        iii_lex_write_u64_c(st, LEX_OFF_ARENA_TOTAL, total + ccap)
+    }
+    let h2: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_HEAD)
+    let used2: u64 = iii_lex_read_u64_c(h2, ARENA_OFF_USED)
+    let p: u64 = h2 + ARENA_HDR_BYTES + used2
+    iii_lex_write_u64_c(h2, ARENA_OFF_USED, used2 + n)
+    return p
+}
+
+fn lex_arena_destroy(st: u64) -> u32 {
+    let mut c: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_HEAD)
+    while c != 0u64 {
+        let nx: u64 = iii_lex_read_u64_c(c, ARENA_OFF_NEXT)
+        iii_lex_free_c(c)
+        c = nx
+    }
+    iii_lex_write_u64_c(st, LEX_OFF_ARENA_HEAD, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_ARENA_TOTAL, 0u64)
+    return 0u32
+}
+
+/* Append a line-start byte offset; grows the line_starts array on demand. */
+fn lex_record_line_start(st: u64, byte: u64) -> u32 {
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_LSTART_CNT)
+    let cap: u64 = iii_lex_read_u64_c(st, LEX_OFF_LSTART_CAP)
+    let mut ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_LSTART_PTR)
+    if cnt == cap {
+        let mut newcap: u64 = 64u64
+        if cap != 0u64 { newcap = cap * 2u64 }
+        let np: u64 = iii_lex_malloc_c(newcap * 4u64)
+        if np == 0u64 { return 1u32 }
+        if ptr != 0u64 {
+            iii_lex_memcpy_c(np, ptr, cnt * 4u64)
+            iii_lex_free_c(ptr)
+        }
+        ptr = np
+        iii_lex_write_u64_c(st, LEX_OFF_LSTART_PTR, np)
+        iii_lex_write_u64_c(st, LEX_OFF_LSTART_CAP, newcap)
+    }
+    iii_lex_write_u32_c(ptr, cnt * 4u64, byte as u32)
+    iii_lex_write_u64_c(st, LEX_OFF_LSTART_CNT, cnt + 1u64)
+    return 0u32
+}
+
+fn iii_lex_create(source_buf: u64, source_len: u64, source_path: u64) -> u64 @export {
+    let st: u64 = iii_lex_malloc_c(LEX_STATE_BYTES)
+    if st == 0u64 { return 0u64 }
+    iii_lex_write_u64_c(st, LEX_OFF_SRC, source_buf)
+    iii_lex_write_u64_c(st, LEX_OFF_LEN, source_len)
+    iii_lex_write_u64_c(st, LEX_OFF_PATH, source_path)
+    iii_lex_write_u64_c(st, LEX_OFF_POS, 0u64)
+    iii_lex_write_u32_c(st, LEX_OFF_LINE, 1u32)
+    iii_lex_write_u32_c(st, LEX_OFF_COL, 1u32)
+    iii_lex_write_u64_c(st, LEX_OFF_LOG_PATH, 0u64)
+    iii_lex_write_u32_c(st, LEX_OFF_LOG_LINE, 0u32)
+    iii_lex_write_u32_c(st, LEX_OFF_LOG_COL, 0u32)
+    iii_lex_write_u32_c(st, LEX_OFF_PEEK_VALID, 0u32)
+    iii_lex_write_u32_c(st, LEX_OFF_PEEK_STATUS, 0u32)
+    iii_lex_write_u32_c(st, LEX_OFF_MOD_PENDING, 0u32)
+    iii_lex_write_u32_c(st, LEX_OFF_PENDING_DOC, III_TOK_NO_DOC_COMMENT)
+    iii_lex_write_u32_c(st, LEX_OFF_SEALED, 0u32)
+    iii_lex_write_u64_c(st, LEX_OFF_ERRORS_PTR, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_ERRORS_CNT, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_ERRORS_CAP, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_LSTART_PTR, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_LSTART_CNT, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_LSTART_CAP, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_HIST_PTR, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_HIST_CNT, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_HIST_CAP, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_RTKW_PTR, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_RTKW_CNT, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_RTKW_CAP, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_ARENA_HEAD, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_ARENA_TOTAL, 0u64)
+    iii_lex_write_u32_c(st, LEX_OFF_ERR + ERR_OFF_CODE, III_LEX_OK)
+    iii_lex_write_u64_c(st, LEX_OFF_ERR + ERR_OFF_MSG, 0u64)
+    /* Intern table: zeroed slot array of INTERN_CAP_INIT entries, next_id=1. */
+    let slots: u64 = iii_lex_malloc_c(INTERN_CAP_INIT * INTERN_SLOT_BYTES)
+    if slots == 0u64 { iii_lex_free_c(st); return 0u64 }
+    iii_lex_write_u64_c(st, LEX_OFF_INTERN_SLOTS, slots)
+    iii_lex_write_u64_c(st, LEX_OFF_INTERN_CAP, INTERN_CAP_INIT)
+    iii_lex_write_u64_c(st, LEX_OFF_INTERN_CNT, 0u64)
+    iii_lex_write_u64_c(st, LEX_OFF_INTERN_NEXT, 1u64)
+    /* Streaming SHA-256 state embedded at LEX_OFF_STREAM_SHA. */
+    iii_sha256_init(st + LEX_OFF_STREAM_SHA)
+    /* Line 1 starts at byte 0. */
+    lex_record_line_start(st, 0u64)
+    return st
+}
+
+fn iii_lex_destroy(st: u64) -> u32 @export {
+    if st == 0u64 { return 0u32 }
+    let sealed: u32 = iii_lex_read_u32_c(st, LEX_OFF_SEALED)
+    if sealed == 0u32 {
+        lex_arena_destroy(st)
+    }
+    let slots: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_SLOTS)
+    if slots != 0u64 { iii_lex_free_c(slots) }
+    let errs: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_PTR)
+    if errs != 0u64 { iii_lex_free_c(errs) }
+    let lst: u64 = iii_lex_read_u64_c(st, LEX_OFF_LSTART_PTR)
+    if lst != 0u64 { iii_lex_free_c(lst) }
+    let hist: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_PTR)
+    if hist != 0u64 { iii_lex_free_c(hist) }
+    let rtkw: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_PTR)
+    if rtkw != 0u64 { iii_lex_free_c(rtkw) }
+    iii_lex_free_c(st)
+    return 0u32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.3 — keyword / modifier / runtime lookups + kind-name.
+ *
+ * iiis-0 string literals are addressable + correct (probe-verified: "module"
+ * as *u8 → byte0='m', memcmp case-sensitive), so the tables are eq-cascades
+ * against string literals — a faithful, exact mirror of lex.c's III_KEYWORDS
+ * (49 rows) and III_MOD_KEYWORDS (31 rows), same names + same kinds.
+ * ============================================================================ */
+
+/* Exact byte-compare of source[bytes..bytes+len) against a string literal. */
+fn lex_kw_eq(bytes: u64, len: u64, lit: u64, litlen: u64) -> u32 {
+    if len != litlen { return 0u32 }
+    if iii_lex_memcmp_c(bytes, lit, len) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+/* Standard keyword table (mirror of lex.c III_KEYWORDS, 49 rows). Returns the
+ * token kind or III_TOK_INVALID for non-keywords. */
+fn lex_lookup_keyword(bytes: u64, len: u64) -> u32 @export {
+    if lex_kw_eq(bytes, len, "INVALID" as u64, 7u64) == 1u32 { return III_TOK_KW_TRIT_INVALID }
+    if lex_kw_eq(bytes, len, "NEG" as u64, 3u64) == 1u32 { return III_TOK_KW_NEG }
+    if lex_kw_eq(bytes, len, "OBSERVATORY" as u64, 11u64) == 1u32 { return III_TOK_KW_OBSERVATORY }
+    if lex_kw_eq(bytes, len, "POS" as u64, 3u64) == 1u32 { return III_TOK_KW_POS }
+    if lex_kw_eq(bytes, len, "ZERO" as u64, 4u64) == 1u32 { return III_TOK_KW_ZERO }
+    if lex_kw_eq(bytes, len, "and" as u64, 3u64) == 1u32 { return III_TOK_KW_AND }
+    if lex_kw_eq(bytes, len, "any" as u64, 3u64) == 1u32 { return III_TOK_KW_ANY }
+    if lex_kw_eq(bytes, len, "as" as u64, 2u64) == 1u32 { return III_TOK_KW_AS }
+    if lex_kw_eq(bytes, len, "build_time" as u64, 10u64) == 1u32 { return III_TOK_KW_BUILD_TIME }
+    if lex_kw_eq(bytes, len, "compose" as u64, 7u64) == 1u32 { return III_TOK_KW_COMPOSE }
+    if lex_kw_eq(bytes, len, "compromise" as u64, 10u64) == 1u32 { return III_TOK_KW_COMPROMISE }
+    if lex_kw_eq(bytes, len, "const" as u64, 5u64) == 1u32 { return III_TOK_KW_CONST }
+    if lex_kw_eq(bytes, len, "current" as u64, 7u64) == 1u32 { return III_TOK_KW_CURRENT }
+    if lex_kw_eq(bytes, len, "cycle" as u64, 5u64) == 1u32 { return III_TOK_KW_CYCLE }
+    if lex_kw_eq(bytes, len, "else" as u64, 4u64) == 1u32 { return III_TOK_KW_ELSE }
+    if lex_kw_eq(bytes, len, "extern" as u64, 6u64) == 1u32 { return III_TOK_KW_EXTERN }
+    if lex_kw_eq(bytes, len, "false" as u64, 5u64) == 1u32 { return III_TOK_KW_FALSE }
+    if lex_kw_eq(bytes, len, "fn" as u64, 2u64) == 1u32 { return III_TOK_KW_FN }
+    if lex_kw_eq(bytes, len, "for" as u64, 3u64) == 1u32 { return III_TOK_KW_FOR }
+    if lex_kw_eq(bytes, len, "forward" as u64, 7u64) == 1u32 { return III_TOK_KW_FORWARD }
+    if lex_kw_eq(bytes, len, "from" as u64, 4u64) == 1u32 { return III_TOK_KW_FROM }
+    if lex_kw_eq(bytes, len, "if" as u64, 2u64) == 1u32 { return III_TOK_KW_IF }
+    if lex_kw_eq(bytes, len, "in" as u64, 2u64) == 1u32 { return III_TOK_KW_IN }
+    if lex_kw_eq(bytes, len, "let" as u64, 3u64) == 1u32 { return III_TOK_KW_LET }
+    if lex_kw_eq(bytes, len, "match" as u64, 5u64) == 1u32 { return III_TOK_KW_MATCH }
+    if lex_kw_eq(bytes, len, "metal" as u64, 5u64) == 1u32 { return III_TOK_KW_METAL }
+    if lex_kw_eq(bytes, len, "mobius_candidate" as u64, 16u64) == 1u32 { return III_TOK_KW_MOBIUS_CANDIDATE }
+    if lex_kw_eq(bytes, len, "module" as u64, 6u64) == 1u32 { return III_TOK_KW_MODULE }
+    if lex_kw_eq(bytes, len, "mut" as u64, 3u64) == 1u32 { return III_TOK_KW_MUT }
+    if lex_kw_eq(bytes, len, "on_rollback" as u64, 11u64) == 1u32 { return III_TOK_KW_ON_ROLLBACK }
+    if lex_kw_eq(bytes, len, "or" as u64, 2u64) == 1u32 { return III_TOK_KW_OR }
+    if lex_kw_eq(bytes, len, "quiescent" as u64, 9u64) == 1u32 { return III_TOK_KW_QUIESCENT }
+    if lex_kw_eq(bytes, len, "return" as u64, 6u64) == 1u32 { return III_TOK_KW_RETURN }
+    if lex_kw_eq(bytes, len, "sanctum_enter" as u64, 13u64) == 1u32 { return III_TOK_KW_SANCTUM_ENTER }
+    if lex_kw_eq(bytes, len, "schema" as u64, 6u64) == 1u32 { return III_TOK_KW_SCHEMA }
+    if lex_kw_eq(bytes, len, "sealed_call" as u64, 11u64) == 1u32 { return III_TOK_KW_SEALED_CALL }
+    if lex_kw_eq(bytes, len, "sizeof" as u64, 6u64) == 1u32 { return III_TOK_KW_SIZEOF }
+    if lex_kw_eq(bytes, len, "struct" as u64, 6u64) == 1u32 { return III_TOK_KW_STRUCT }
+    if lex_kw_eq(bytes, len, "true" as u64, 4u64) == 1u32 { return III_TOK_KW_TRUE }
+    if lex_kw_eq(bytes, len, "type" as u64, 4u64) == 1u32 { return III_TOK_KW_TYPE }
+    if lex_kw_eq(bytes, len, "until" as u64, 5u64) == 1u32 { return III_TOK_KW_UNTIL }
+    if lex_kw_eq(bytes, len, "use" as u64, 3u64) == 1u32 { return III_TOK_KW_USE }
+    if lex_kw_eq(bytes, len, "var" as u64, 3u64) == 1u32 { return III_TOK_KW_VAR }
+    if lex_kw_eq(bytes, len, "wavefront" as u64, 9u64) == 1u32 { return III_TOK_KW_WAVEFRONT }
+    if lex_kw_eq(bytes, len, "where" as u64, 5u64) == 1u32 { return III_TOK_KW_WHERE }
+    if lex_kw_eq(bytes, len, "while" as u64, 5u64) == 1u32 { return III_TOK_KW_WHILE }
+    if lex_kw_eq(bytes, len, "break" as u64, 5u64) == 1u32 { return III_TOK_KW_BREAK }
+    if lex_kw_eq(bytes, len, "continue" as u64, 8u64) == 1u32 { return III_TOK_KW_CONTINUE }
+    if lex_kw_eq(bytes, len, "loop" as u64, 4u64) == 1u32 { return III_TOK_KW_LOOP }
+    return III_TOK_INVALID
+}
+
+/* Modifier-keyword table (mirror of lex.c III_MOD_KEYWORDS, 31 rows). */
+fn lex_lookup_modifier_kw(bytes: u64, len: u64) -> u32 @export {
+    if lex_kw_eq(bytes, len, "abi" as u64, 3u64) == 1u32 { return III_TOK_MOD_ABI }
+    if lex_kw_eq(bytes, len, "arena_reset_safe" as u64, 16u64) == 1u32 { return III_TOK_MOD_ARENA_RESET_SAFE }
+    if lex_kw_eq(bytes, len, "bounded" as u64, 7u64) == 1u32 { return III_TOK_MOD_BOUNDED }
+    if lex_kw_eq(bytes, len, "cap" as u64, 3u64) == 1u32 { return III_TOK_MOD_CAP }
+    if lex_kw_eq(bytes, len, "chronos" as u64, 7u64) == 1u32 { return III_TOK_MOD_CHRONOS }
+    if lex_kw_eq(bytes, len, "closure" as u64, 7u64) == 1u32 { return III_TOK_MOD_CLOSURE }
+    if lex_kw_eq(bytes, len, "constant_time" as u64, 13u64) == 1u32 { return III_TOK_MOD_CONSTANT_TIME }
+    if lex_kw_eq(bytes, len, "crystal" as u64, 7u64) == 1u32 { return III_TOK_MOD_CRYSTAL }
+    if lex_kw_eq(bytes, len, "crystal_self_attest" as u64, 19u64) == 1u32 { return III_TOK_MOD_CRYSTAL_SELF_ATTEST }
+    if lex_kw_eq(bytes, len, "dynamic" as u64, 7u64) == 1u32 { return III_TOK_MOD_DYNAMIC }
+    if lex_kw_eq(bytes, len, "dynamic_impact" as u64, 14u64) == 1u32 { return III_TOK_MOD_DYNAMIC_IMPACT }
+    if lex_kw_eq(bytes, len, "epoch" as u64, 5u64) == 1u32 { return III_TOK_MOD_EPOCH }
+    if lex_kw_eq(bytes, len, "hexad" as u64, 5u64) == 1u32 { return III_TOK_MOD_HEXAD }
+    if lex_kw_eq(bytes, len, "irreversible" as u64, 12u64) == 1u32 { return III_TOK_MOD_IRREVERSIBLE }
+    if lex_kw_eq(bytes, len, "k" as u64, 1u64) == 1u32 { return III_TOK_MOD_K }
+    if lex_kw_eq(bytes, len, "linear" as u64, 6u64) == 1u32 { return III_TOK_MOD_LINEAR }
+    if lex_kw_eq(bytes, len, "plan_anchor" as u64, 11u64) == 1u32 { return III_TOK_MOD_PLAN_ANCHOR }
+    if lex_kw_eq(bytes, len, "provenance" as u64, 10u64) == 1u32 { return III_TOK_MOD_PROVENANCE }
+    if lex_kw_eq(bytes, len, "provenance_linked_error" as u64, 23u64) == 1u32 { return III_TOK_MOD_PROVENANCE_LINKED_ERROR }
+    if lex_kw_eq(bytes, len, "pure" as u64, 4u64) == 1u32 { return III_TOK_MOD_PURE }
+    if lex_kw_eq(bytes, len, "ring" as u64, 4u64) == 1u32 { return III_TOK_MOD_RING }
+    if lex_kw_eq(bytes, len, "safety" as u64, 6u64) == 1u32 { return III_TOK_MOD_SAFETY }
+    if lex_kw_eq(bytes, len, "sanctum_only" as u64, 12u64) == 1u32 { return III_TOK_MOD_SANCTUM_ONLY }
+    if lex_kw_eq(bytes, len, "seal_id" as u64, 7u64) == 1u32 { return III_TOK_MOD_SEAL_ID }
+    if lex_kw_eq(bytes, len, "sealed" as u64, 6u64) == 1u32 { return III_TOK_MOD_SEALED }
+    if lex_kw_eq(bytes, len, "side_channel_resistant" as u64, 22u64) == 1u32 { return III_TOK_MOD_SIDE_CHANNEL_RESISTANT }
+    if lex_kw_eq(bytes, len, "strict_length" as u64, 13u64) == 1u32 { return III_TOK_MOD_STRICT_LENGTH }
+    if lex_kw_eq(bytes, len, "tier" as u64, 4u64) == 1u32 { return III_TOK_MOD_TIER }
+    if lex_kw_eq(bytes, len, "track" as u64, 5u64) == 1u32 { return III_TOK_MOD_TRACK }
+    if lex_kw_eq(bytes, len, "variant" as u64, 7u64) == 1u32 { return III_TOK_MOD_VARIANT }
+    if lex_kw_eq(bytes, len, "version" as u64, 7u64) == 1u32 { return III_TOK_MOD_VERSION }
+    return III_TOK_INVALID
+}
+
+/* Runtime-registered keyword table (D2). Entry layout: name u64@0, len u64@8,
+ * kind u32@16; RTKW_ENTRY_BYTES = 24.  Linear scan over st's runtime_kw array. */
+const RTKW_ENTRY_BYTES: u64 = 24u64
+const RTKW_OFF_NAME: u64 = 0u64
+const RTKW_OFF_LEN: u64 = 8u64
+const RTKW_OFF_KIND: u64 = 16u64
+
+fn lex_lookup_runtime_kw(st: u64, bytes: u64, len: u64) -> u32 {
+    let ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_PTR)
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_CNT)
+    if ptr == 0u64 { return III_TOK_INVALID }
+    let mut i: u64 = 0u64
+    let mut found: u32 = III_TOK_INVALID
+    while i < cnt {
+        let e: u64 = ptr + (i * RTKW_ENTRY_BYTES)
+        let nlen: u64 = iii_lex_read_u64_c(e, RTKW_OFF_LEN)
+        if nlen == len {
+            let naddr: u64 = iii_lex_read_u64_c(e, RTKW_OFF_NAME)
+            if iii_lex_memcmp_c(naddr, bytes, len) == 0i32 {
+                found = iii_lex_read_u32_c(e, RTKW_OFF_KIND)
+                i = cnt
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* Token-kind → display-name.  iiis-0 string literals are NOT NUL-terminated
+ * (trap, lex_port_audit.md §4), so the names are copied + explicitly
+ * NUL-terminated into KN_POOL at first call; kind_name returns a stable
+ * pool offset that IS a valid C-string.  Mirror of lex.c III_TOKEN_KIND_NAMES
+ * (128 rows + "<unknown>" fallback). */
+var KN_POOL : [u8; 1280]
+var KN_OFF  : [u32; 129]
+var KN_UNK  : u32 = 0u32
+var KN_NEXT : u64 = 0u64
+var KN_INIT : u8 = 0u8
+
+fn kn_add(kind: u32, lit: u64, litlen: u64) -> u32 {
+    let base: u64 = (&KN_POOL as u64) + KN_NEXT
+    iii_lex_memcpy_c(base, lit, litlen)
+    iii_lex_write_u8_at_c(base + litlen, 0u64, 0u32)
+    iii_lex_write_u32_c(&KN_OFF as u64, (kind as u64) * 4u64, KN_NEXT as u32)
+    KN_NEXT = KN_NEXT + litlen + 1u64
+    return 0u32
+}
+
+fn kn_init() -> u32 {
+    if KN_INIT == 1u8 { return 0u32 }
+    kn_add(III_TOK_INVALID, "INVALID" as u64, 7u64)
+    kn_add(III_TOK_EOF, "EOF" as u64, 3u64)
+    kn_add(III_TOK_NEWLINE, "NEWLINE" as u64, 7u64)
+    kn_add(III_TOK_DOC_COMMENT, "DOC_COMMENT" as u64, 11u64)
+    kn_add(III_TOK_IDENTIFIER, "IDENTIFIER" as u64, 10u64)
+    kn_add(III_TOK_INT_LITERAL, "INT_LITERAL" as u64, 11u64)
+    kn_add(III_TOK_HEX_LITERAL, "HEX_LITERAL" as u64, 11u64)
+    kn_add(III_TOK_MHASH_LITERAL, "MHASH_LITERAL" as u64, 13u64)
+    kn_add(III_TOK_STRING_LITERAL, "STRING_LITERAL" as u64, 14u64)
+    kn_add(III_TOK_STRING_BYTE, "STRING_BYTE" as u64, 11u64)
+    kn_add(III_TOK_STRING_RAW, "STRING_RAW" as u64, 10u64)
+    kn_add(III_TOK_STRING_HEX, "STRING_HEX" as u64, 10u64)
+    kn_add(III_TOK_KW_MODULE, "module" as u64, 6u64)
+    kn_add(III_TOK_KW_USE, "use" as u64, 3u64)
+    kn_add(III_TOK_KW_AS, "as" as u64, 2u64)
+    kn_add(III_TOK_KW_CYCLE, "cycle" as u64, 5u64)
+    kn_add(III_TOK_KW_FN, "fn" as u64, 2u64)
+    kn_add(III_TOK_KW_TYPE, "type" as u64, 4u64)
+    kn_add(III_TOK_KW_CONST, "const" as u64, 5u64)
+    kn_add(III_TOK_KW_EXTERN, "extern" as u64, 6u64)
+    kn_add(III_TOK_KW_MOBIUS_CANDIDATE, "mobius_candidate" as u64, 16u64)
+    kn_add(III_TOK_KW_SCHEMA, "schema" as u64, 6u64)
+    kn_add(III_TOK_KW_OBSERVATORY, "OBSERVATORY" as u64, 11u64)
+    kn_add(III_TOK_KW_SEALED_CALL, "sealed_call" as u64, 11u64)
+    kn_add(III_TOK_KW_FROM, "from" as u64, 4u64)
+    kn_add(III_TOK_KW_LET, "let" as u64, 3u64)
+    kn_add(III_TOK_KW_MUT, "mut" as u64, 3u64)
+    kn_add(III_TOK_KW_WAVEFRONT, "wavefront" as u64, 9u64)
+    kn_add(III_TOK_KW_SANCTUM_ENTER, "sanctum_enter" as u64, 13u64)
+    kn_add(III_TOK_KW_METAL, "metal" as u64, 5u64)
+    kn_add(III_TOK_KW_FOR, "for" as u64, 3u64)
+    kn_add(III_TOK_KW_IN, "in" as u64, 2u64)
+    kn_add(III_TOK_KW_WHERE, "where" as u64, 5u64)
+    kn_add(III_TOK_KW_MATCH, "match" as u64, 5u64)
+    kn_add(III_TOK_KW_IF, "if" as u64, 2u64)
+    kn_add(III_TOK_KW_RETURN, "return" as u64, 6u64)
+    kn_add(III_TOK_KW_UNTIL, "until" as u64, 5u64)
+    kn_add(III_TOK_KW_QUIESCENT, "quiescent" as u64, 9u64)
+    kn_add(III_TOK_KW_ON_ROLLBACK, "on_rollback" as u64, 11u64)
+    kn_add(III_TOK_KW_FORWARD, "forward" as u64, 7u64)
+    kn_add(III_TOK_KW_COMPROMISE, "compromise" as u64, 10u64)
+    kn_add(III_TOK_KW_TRUE, "true" as u64, 4u64)
+    kn_add(III_TOK_KW_FALSE, "false" as u64, 5u64)
+    kn_add(III_TOK_KW_AND, "and" as u64, 3u64)
+    kn_add(III_TOK_KW_OR, "or" as u64, 2u64)
+    kn_add(III_TOK_KW_COMPOSE, "compose" as u64, 7u64)
+    kn_add(III_TOK_KW_CURRENT, "current" as u64, 7u64)
+    kn_add(III_TOK_KW_BUILD_TIME, "build_time" as u64, 10u64)
+    kn_add(III_TOK_KW_ANY, "any" as u64, 3u64)
+    kn_add(III_TOK_KW_NEG, "NEG" as u64, 3u64)
+    kn_add(III_TOK_KW_ZERO, "ZERO" as u64, 4u64)
+    kn_add(III_TOK_KW_POS, "POS" as u64, 3u64)
+    kn_add(III_TOK_KW_TRIT_INVALID, "INVALID" as u64, 7u64)
+    kn_add(III_TOK_MOD_RING, "@ring" as u64, 5u64)
+    kn_add(III_TOK_MOD_TIER, "@tier" as u64, 5u64)
+    kn_add(III_TOK_MOD_SAFETY, "@safety" as u64, 7u64)
+    kn_add(III_TOK_MOD_HEXAD, "@hexad" as u64, 6u64)
+    kn_add(III_TOK_MOD_TRACK, "@track" as u64, 6u64)
+    kn_add(III_TOK_MOD_CHRONOS, "@chronos" as u64, 8u64)
+    kn_add(III_TOK_MOD_CAP, "@cap" as u64, 4u64)
+    kn_add(III_TOK_MOD_EPOCH, "@epoch" as u64, 6u64)
+    kn_add(III_TOK_MOD_PLAN_ANCHOR, "@plan_anchor" as u64, 12u64)
+    kn_add(III_TOK_MOD_CLOSURE, "@closure" as u64, 8u64)
+    kn_add(III_TOK_MOD_VERSION, "@version" as u64, 8u64)
+    kn_add(III_TOK_MOD_ABI, "@abi" as u64, 4u64)
+    kn_add(III_TOK_MOD_PURE, "@pure" as u64, 5u64)
+    kn_add(III_TOK_MOD_IRREVERSIBLE, "@irreversible" as u64, 13u64)
+    kn_add(III_TOK_MOD_SANCTUM_ONLY, "@sanctum_only" as u64, 13u64)
+    kn_add(III_TOK_MOD_SEAL_ID, "@seal_id" as u64, 8u64)
+    kn_add(III_TOK_MOD_CRYSTAL, "@crystal" as u64, 8u64)
+    kn_add(III_TOK_MOD_DYNAMIC, "@dynamic" as u64, 8u64)
+    kn_add(III_TOK_MOD_SEALED, "@sealed" as u64, 7u64)
+    kn_add(III_TOK_MOD_LINEAR, "@linear" as u64, 7u64)
+    kn_add(III_TOK_MOD_BOUNDED, "@bounded" as u64, 8u64)
+    kn_add(III_TOK_MOD_VARIANT, "@variant" as u64, 8u64)
+    kn_add(III_TOK_MOD_K, "@k" as u64, 2u64)
+    kn_add(III_TOK_MOD_PROVENANCE, "@provenance" as u64, 11u64)
+    kn_add(III_TOK_MOD_CONSTANT_TIME, "@constant_time" as u64, 14u64)
+    kn_add(III_TOK_MOD_SIDE_CHANNEL_RESISTANT, "@side_channel_resistant" as u64, 23u64)
+    kn_add(III_TOK_MOD_DYNAMIC_IMPACT, "@dynamic_impact" as u64, 15u64)
+    kn_add(III_TOK_MOD_PROVENANCE_LINKED_ERROR, "@provenance_linked_error" as u64, 24u64)
+    kn_add(III_TOK_MOD_ARENA_RESET_SAFE, "@arena_reset_safe" as u64, 17u64)
+    kn_add(III_TOK_MOD_CRYSTAL_SELF_ATTEST, "@crystal_self_attest" as u64, 20u64)
+    kn_add(III_TOK_MOD_STRICT_LENGTH, "@strict_length" as u64, 14u64)
+    kn_add(III_TOK_LPAREN, "(" as u64, 1u64)
+    kn_add(III_TOK_RPAREN, ")" as u64, 1u64)
+    kn_add(III_TOK_LBRACE, "{" as u64, 1u64)
+    kn_add(III_TOK_RBRACE, "}" as u64, 1u64)
+    kn_add(III_TOK_LBRACKET, "[" as u64, 1u64)
+    kn_add(III_TOK_RBRACKET, "]" as u64, 1u64)
+    kn_add(III_TOK_COMMA, "," as u64, 1u64)
+    kn_add(III_TOK_SEMI, ";" as u64, 1u64)
+    kn_add(III_TOK_COLON, ":" as u64, 1u64)
+    kn_add(III_TOK_DCOLON, "::" as u64, 2u64)
+    kn_add(III_TOK_DOT, "." as u64, 1u64)
+    kn_add(III_TOK_AT, "@" as u64, 1u64)
+    kn_add(III_TOK_PIPE, "|" as u64, 1u64)
+    kn_add(III_TOK_UNDERSCORE, "_" as u64, 1u64)
+    kn_add(III_TOK_ARROW, "->" as u64, 2u64)
+    kn_add(III_TOK_FAT_ARROW, "=>" as u64, 2u64)
+    kn_add(III_TOK_OP_PLUS, "+" as u64, 1u64)
+    kn_add(III_TOK_OP_MINUS, "-" as u64, 1u64)
+    kn_add(III_TOK_OP_STAR, "*" as u64, 1u64)
+    kn_add(III_TOK_OP_SLASH, "/" as u64, 1u64)
+    kn_add(III_TOK_OP_PERCENT, "%" as u64, 1u64)
+    kn_add(III_TOK_OP_AMP, "&" as u64, 1u64)
+    kn_add(III_TOK_OP_CARET, "^" as u64, 1u64)
+    kn_add(III_TOK_DOLLAR, "$" as u64, 1u64)
+    kn_add(III_TOK_OP_TILDE, "~" as u64, 1u64)
+    kn_add(III_TOK_OP_BANG, "!" as u64, 1u64)
+    kn_add(III_TOK_OP_SHL, "<<" as u64, 2u64)
+    kn_add(III_TOK_OP_SHR, ">>" as u64, 2u64)
+    kn_add(III_TOK_OP_EQ, "==" as u64, 2u64)
+    kn_add(III_TOK_OP_NEQ, "!=" as u64, 2u64)
+    kn_add(III_TOK_OP_LT, "<" as u64, 1u64)
+    kn_add(III_TOK_OP_LE, "<=" as u64, 2u64)
+    kn_add(III_TOK_OP_GT, ">" as u64, 1u64)
+    kn_add(III_TOK_OP_GE, ">=" as u64, 2u64)
+    kn_add(III_TOK_OP_ASSIGN, "=" as u64, 1u64)
+    kn_add(III_TOK_OP_COLON_EQ, ":=" as u64, 2u64)
+    kn_add(III_TOK_KW_ELSE, "else" as u64, 4u64)
+    kn_add(III_TOK_KW_WHILE, "while" as u64, 5u64)
+    kn_add(III_TOK_OP_DOTDOT, ".." as u64, 2u64)
+    kn_add(III_TOK_KW_SIZEOF, "sizeof" as u64, 6u64)
+    kn_add(III_TOK_KW_VAR, "var" as u64, 3u64)
+    kn_add(III_TOK_KW_STRUCT, "struct" as u64, 6u64)
+    kn_add(III_TOK_KW_LOOP, "loop" as u64, 4u64)
+    kn_add(III_TOK_KW_BREAK, "break" as u64, 5u64)
+    kn_add(III_TOK_KW_CONTINUE, "continue" as u64, 8u64)
+    KN_UNK = KN_NEXT as u32
+    let ub: u64 = (&KN_POOL as u64) + KN_NEXT
+    iii_lex_memcpy_c(ub, "<unknown>" as u64, 9u64)
+    iii_lex_write_u8_at_c(ub + 9u64, 0u64, 0u32)
+    KN_NEXT = KN_NEXT + 10u64
+    KN_INIT = 1u8
+    return 0u32
+}
+
+fn iii_token_kind_name(k: u32) -> u64 @export {
+    kn_init()
+    if k >= III_TOK_KIND_COUNT { return (&KN_POOL as u64) + (KN_UNK as u64) }
+    let off: u32 = iii_lex_read_u32_c(&KN_OFF as u64, (k as u64) * 4u64)
+    return (&KN_POOL as u64) + (off as u64)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.4 — char-class predicates + source-position helpers.
+ * Char-class predicates take a byte value (u32) and return 0/1, mirroring
+ * lex.c's ASCII-only is_*.  Numeric byte literals (no char literals): the
+ * ASCII codes are 'A'=65 'Z'=90 'a'=97 'z'=122 '_'=95 '0'=48 '9'=57 'f'=102
+ * 'F'=70 ' '=32 '\t'=9 '\r'=13 '\n'=10.  Nested-if range checks (avoid && —
+ * rare in the ports).  Position helpers read/write the lex-state offsets.
+ * ============================================================================ */
+
+fn lex_is_alpha(b: u32) -> u32 {
+    if b >= 65u32 { if b <= 90u32 { return 1u32 } }
+    if b >= 97u32 { if b <= 122u32 { return 1u32 } }
+    if b == 95u32 { return 1u32 }
+    return 0u32
+}
+fn lex_is_digit(b: u32) -> u32 {
+    if b >= 48u32 { if b <= 57u32 { return 1u32 } }
+    return 0u32
+}
+fn lex_is_alnum(b: u32) -> u32 {
+    if lex_is_alpha(b) == 1u32 { return 1u32 }
+    if lex_is_digit(b) == 1u32 { return 1u32 }
+    return 0u32
+}
+fn lex_is_hex(b: u32) -> u32 {
+    if lex_is_digit(b) == 1u32 { return 1u32 }
+    if b >= 97u32 { if b <= 102u32 { return 1u32 } }
+    if b >= 65u32 { if b <= 70u32 { return 1u32 } }
+    return 0u32
+}
+fn lex_is_inline_ws(b: u32) -> u32 {
+    if b == 32u32 { return 1u32 }
+    if b == 9u32 { return 1u32 }
+    if b == 13u32 { return 1u32 }
+    return 0u32
+}
+fn lex_hex_value(b: u32) -> u32 {
+    if b >= 48u32 { if b <= 57u32 { return b - 48u32 } }
+    if b >= 97u32 { if b <= 102u32 { return (b - 97u32) + 10u32 } }
+    return (b - 65u32) + 10u32
+}
+
+fn lex_at_end(st: u64) -> u32 {
+    let pos: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let len: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if pos >= len { return 1u32 }
+    return 0u32
+}
+fn lex_peek_byte(st: u64) -> u32 {
+    let pos: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let len: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if pos >= len { return 0u32 }
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    return iii_lex_read_u8_at_c(src, pos)
+}
+fn lex_peek_byte_at(st: u64, off: u64) -> u32 {
+    let pos: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let len: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if (pos + off) >= len { return 0u32 }
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    return iii_lex_read_u8_at_c(src, pos + off)
+}
+fn lex_advance(st: u64) -> u32 {
+    let pos: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let len: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if pos >= len { return 0u32 }
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    let b: u32 = iii_lex_read_u8_at_c(src, pos)
+    iii_lex_write_u64_c(st, LEX_OFF_POS, pos + 1u64)
+    if b == 10u32 {
+        let line: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+        iii_lex_write_u32_c(st, LEX_OFF_LINE, line + 1u32)
+        iii_lex_write_u32_c(st, LEX_OFF_COL, 1u32)
+        lex_record_line_start(st, pos + 1u64)
+    }
+    if b != 10u32 {
+        let col: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+        iii_lex_write_u32_c(st, LEX_OFF_COL, col + 1u32)
+    }
+    return 0u32
+}
+
+/* Mirror the current (code, pos, line, col, msg) into st->err. */
+/* ---- Error-message NUL-pool (Stage 2.1.13) ----------------------------
+ * iiis-0 string literals are NOT NUL-terminated (lex_port_audit.md S4), but
+ * main.c reads iii_lex_error_t.message as a C string (json_emit + printf %s).
+ * So every error message is copied + NUL-terminated into MSG_POOL once, and
+ * the call sites pass a stable pool pointer via lex_msg(id).  Mirror of the
+ * verified KN_POOL kind-name pattern.  20 distinct messages, lengths measured
+ * by strlen (not hand-counted).  Site-specific text is preserved (e.g. the two
+ * UNTERMINATED_BLOCK_CMT messages and the two NULL_ARG messages differ). */
+const LEXMSG_NULL_OUT_BUF: u32 = 0u32
+const LEXMSG_SEALED: u32 = 1u32
+const LEXMSG_NULL_OUT_TOKEN: u32 = 2u32
+const LEXMSG_INVALID_BYTE: u32 = 3u32
+const LEXMSG_UNTERM_BLOCK: u32 = 4u32
+const LEXMSG_UNTERM_DOC: u32 = 5u32
+const LEXMSG_BAD_HEX_PREFIX: u32 = 6u32
+const LEXMSG_OVERLONG_MHASH: u32 = 7u32
+const LEXMSG_OVERLONG_INT: u32 = 8u32
+const LEXMSG_INT_OVERFLOW: u32 = 9u32
+const LEXMSG_BAD_SUFFIX: u32 = 10u32
+const LEXMSG_BAD_ESCAPE: u32 = 11u32
+const LEXMSG_BAD_HEX_ESCAPE: u32 = 12u32
+const LEXMSG_UNTERM_STR_QUOTE: u32 = 13u32
+const LEXMSG_UNTERM_STR_ESC: u32 = 14u32
+const LEXMSG_UNTERM_RAW: u32 = 15u32
+const LEXMSG_UNTERM_HSTR: u32 = 16u32
+const LEXMSG_HSTR_HEX_ONLY: u32 = 17u32
+const LEXMSG_HSTR_EVEN: u32 = 18u32
+const LEXMSG_PAYLOAD_OOM: u32 = 19u32
+
+var MSG_POOL : [u8; 768]
+var MSG_OFF  : [u32; 24]
+var MSG_NEXT : u64 = 0u64
+var MSG_INIT : u8 = 0u8
+
+fn msg_add(id: u32, lit: u64, litlen: u64) -> u32 {
+    let base: u64 = (&MSG_POOL as u64) + MSG_NEXT
+    iii_lex_memcpy_c(base, lit, litlen)
+    iii_lex_write_u8_at_c(base + litlen, 0u64, 0u32)
+    iii_lex_write_u32_c(&MSG_OFF as u64, (id as u64) * 4u64, MSG_NEXT as u32)
+    MSG_NEXT = MSG_NEXT + litlen + 1u64
+    return 0u32
+}
+
+fn msg_init() -> u32 {
+    if MSG_INIT == 1u8 { return 0u32 }
+    msg_add(LEXMSG_NULL_OUT_BUF, "NULL token output buffer" as u64, 24u64)
+    msg_add(LEXMSG_SEALED, "iii_lex_next called on sealed state" as u64, 35u64)
+    msg_add(LEXMSG_NULL_OUT_TOKEN, "NULL out_token" as u64, 14u64)
+    msg_add(LEXMSG_INVALID_BYTE, "byte not recognised as start of any token" as u64, 41u64)
+    msg_add(LEXMSG_UNTERM_BLOCK, "unterminated block comment" as u64, 26u64)
+    msg_add(LEXMSG_UNTERM_DOC, "unterminated doc-comment block" as u64, 30u64)
+    msg_add(LEXMSG_BAD_HEX_PREFIX, "0x prefix not followed by hex digits" as u64, 36u64)
+    msg_add(LEXMSG_OVERLONG_MHASH, "0x literal exceeds 64 hex digits" as u64, 32u64)
+    msg_add(LEXMSG_OVERLONG_INT, "hex integer 17..63 digits is neither u64 nor mhash" as u64, 50u64)
+    msg_add(LEXMSG_INT_OVERFLOW, "integer literal exceeds 2^64 - 1" as u64, 32u64)
+    msg_add(LEXMSG_BAD_SUFFIX, "unknown integer-literal suffix" as u64, 30u64)
+    msg_add(LEXMSG_BAD_ESCAPE, "unknown escape sequence" as u64, 23u64)
+    msg_add(LEXMSG_BAD_HEX_ESCAPE, "x escape needs exactly 2 hex digits" as u64, 35u64)
+    msg_add(LEXMSG_UNTERM_STR_QUOTE, "unterminated string (missing closing quote)" as u64, 43u64)
+    msg_add(LEXMSG_UNTERM_STR_ESC, "unterminated string (escape at EOF)" as u64, 35u64)
+    msg_add(LEXMSG_UNTERM_RAW, "unterminated raw string" as u64, 23u64)
+    msg_add(LEXMSG_UNTERM_HSTR, "unterminated h-string" as u64, 21u64)
+    msg_add(LEXMSG_HSTR_HEX_ONLY, "h\"...\" body must be hex digits only" as u64, 35u64)
+    msg_add(LEXMSG_HSTR_EVEN, "h\"...\" body must have even-length hex" as u64, 37u64)
+    msg_add(LEXMSG_PAYLOAD_OOM, "string-payload arena alloc failed" as u64, 33u64)
+    MSG_INIT = 1u8
+    return 0u32
+}
+
+/* Stable NUL-terminated pointer for error message `id`. */
+fn lex_msg(id: u32) -> u64 {
+    msg_init()
+    let off: u32 = iii_lex_read_u32_c(&MSG_OFF as u64, (id as u64) * 4u64)
+    return (&MSG_POOL as u64) + (off as u64)
+}
+
+fn lex_set_err(st: u64, code: u32, pos: u64, line: u32, col: u32, msg: u64) -> u32 {
+    iii_lex_write_u32_c(st, LEX_OFF_ERR + ERR_OFF_CODE, code)
+    iii_lex_write_u32_c(st, LEX_OFF_ERR + ERR_OFF_BYTE, pos as u32)
+    iii_lex_write_u32_c(st, LEX_OFF_ERR + ERR_OFF_LINE, line)
+    iii_lex_write_u32_c(st, LEX_OFF_ERR + ERR_OFF_COL, col)
+    iii_lex_write_u64_c(st, LEX_OFF_ERR + ERR_OFF_MSG, msg)
+    return 0u32
+}
+
+/* Append (code, msg) at the current position to the error log; grows on
+ * demand; mirrors into st->err.  Returns -1 (the lex error sentinel). */
+fn lex_record_error(st: u64, code: u32, msg: u64) -> i32 {
+    let pos: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let line: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let col: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_CNT)
+    let cap: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_CAP)
+    let mut ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_PTR)
+    if cnt == cap {
+        let mut newcap: u64 = 8u64
+        if cap != 0u64 { newcap = cap * 2u64 }
+        let np: u64 = iii_lex_malloc_c(newcap * LEX_ERR_BYTES)
+        if np == 0u64 {
+            lex_set_err(st, code, pos, line, col, msg)
+            return -1i32
+        }
+        if ptr != 0u64 {
+            iii_lex_memcpy_c(np, ptr, cnt * LEX_ERR_BYTES)
+            iii_lex_free_c(ptr)
+        }
+        ptr = np
+        iii_lex_write_u64_c(st, LEX_OFF_ERRORS_PTR, np)
+        iii_lex_write_u64_c(st, LEX_OFF_ERRORS_CAP, newcap)
+    }
+    let e: u64 = ptr + (cnt * LEX_ERR_BYTES)
+    iii_lex_write_u32_c(e, ERR_OFF_CODE, code)
+    iii_lex_write_u32_c(e, ERR_OFF_BYTE, pos as u32)
+    iii_lex_write_u32_c(e, ERR_OFF_LINE, line)
+    iii_lex_write_u32_c(e, ERR_OFF_COL, col)
+    iii_lex_write_u64_c(e, ERR_OFF_MSG, msg)
+    iii_lex_write_u64_c(st, LEX_OFF_ERRORS_CNT, cnt + 1u64)
+    lex_set_err(st, code, pos, line, col, msg)
+    return -1i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.5 — identifier intern table (D3).
+ * Open-addressed, FNV-1a-64-keyed, dense 1-based IDs, grow at 70% load.
+ * Slot layout (INTERN_SLOT_BYTES=24): start_byte u32@0, length u32@4,
+ * hash u64@8, id u32@16 (id==0 means empty).  Keyed by (src bytes), so the
+ * stored start_byte indexes into the lex-state src buffer.
+ * ============================================================================ */
+
+const FNV_OFFSET_64: u64 = 14695981039346656037u64
+const FNV_PRIME_64: u64 = 1099511628211u64
+const INTERN_OFF_START: u64 = 0u64
+const INTERN_OFF_LEN: u64 = 4u64
+const INTERN_OFF_HASH: u64 = 8u64
+const INTERN_OFF_ID: u64 = 16u64
+
+fn lex_fnv1a_64(addr: u64, len: u64) -> u64 {
+    let mut h: u64 = FNV_OFFSET_64
+    let mut i: u64 = 0u64
+    while i < len {
+        let b: u32 = iii_lex_read_u8_at_c(addr, i)
+        h = h ^ (b as u64)
+        h = h * FNV_PRIME_64
+        i = i + 1u64
+    }
+    return h
+}
+
+/* Rehash all live slots into a 2x-larger zeroed array.  Returns 0 / 1(OOM). */
+fn lex_intern_grow(st: u64) -> u32 {
+    let oldslots: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_SLOTS)
+    let oldcap: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_CAP)
+    let newcap: u64 = oldcap * 2u64
+    let newslots: u64 = iii_lex_malloc_c(newcap * INTERN_SLOT_BYTES)
+    if newslots == 0u64 { return 1u32 }
+    let newmask: u64 = newcap - 1u64
+    let mut i: u64 = 0u64
+    while i < oldcap {
+        let os: u64 = oldslots + (i * INTERN_SLOT_BYTES)
+        let oid: u32 = iii_lex_read_u32_c(os, INTERN_OFF_ID)
+        if oid != 0u32 {
+            let ohash: u64 = iii_lex_read_u64_c(os, INTERN_OFF_HASH)
+            let mut pos: u64 = ohash & newmask
+            let mut placed: u32 = 0u32
+            while placed == 0u32 {
+                let ns: u64 = newslots + (pos * INTERN_SLOT_BYTES)
+                let nid: u32 = iii_lex_read_u32_c(ns, INTERN_OFF_ID)
+                if nid == 0u32 {
+                    iii_lex_memcpy_c(ns, os, INTERN_SLOT_BYTES)
+                    placed = 1u32
+                }
+                if placed == 0u32 { pos = (pos + 1u64) & newmask }
+            }
+        }
+        i = i + 1u64
+    }
+    iii_lex_free_c(oldslots)
+    iii_lex_write_u64_c(st, LEX_OFF_INTERN_SLOTS, newslots)
+    iii_lex_write_u64_c(st, LEX_OFF_INTERN_CAP, newcap)
+    return 0u32
+}
+
+/* Find-or-insert (start,length,hash) into the intern table.  Returns the
+ * dense 1-based ID (0 only on OOM during grow). */
+fn lex_intern_get(st: u64, start: u64, length: u64, hash: u64) -> u32 {
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_CNT)
+    let cap: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_CAP)
+    if ((cnt + 1u64) * 10u64) >= (cap * 7u64) {
+        if lex_intern_grow(st) != 0u32 { return 0u32 }
+    }
+    let slots: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_SLOTS)
+    let cap2: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_CAP)
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    let mask: u64 = cap2 - 1u64
+    let mut pos: u64 = hash & mask
+    let mut result: u32 = 0u32
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        let slot: u64 = slots + (pos * INTERN_SLOT_BYTES)
+        let id: u32 = iii_lex_read_u32_c(slot, INTERN_OFF_ID)
+        if id == 0u32 {
+            let next: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_NEXT)
+            let cnt2: u64 = iii_lex_read_u64_c(st, LEX_OFF_INTERN_CNT)
+            iii_lex_write_u32_c(slot, INTERN_OFF_START, start as u32)
+            iii_lex_write_u32_c(slot, INTERN_OFF_LEN, length as u32)
+            iii_lex_write_u64_c(slot, INTERN_OFF_HASH, hash)
+            iii_lex_write_u32_c(slot, INTERN_OFF_ID, next as u32)
+            iii_lex_write_u64_c(st, LEX_OFF_INTERN_NEXT, next + 1u64)
+            iii_lex_write_u64_c(st, LEX_OFF_INTERN_CNT, cnt2 + 1u64)
+            result = next as u32
+            done = 1u32
+        }
+        if done == 0u32 {
+            let shash: u64 = iii_lex_read_u64_c(slot, INTERN_OFF_HASH)
+            if shash == hash {
+                let slen: u32 = iii_lex_read_u32_c(slot, INTERN_OFF_LEN)
+                if (slen as u64) == length {
+                    let sstart: u32 = iii_lex_read_u32_c(slot, INTERN_OFF_START)
+                    if iii_lex_memcmp_c(src + (sstart as u64), src + start, length) == 0i32 {
+                        result = id
+                        done = 1u32
+                    }
+                }
+            }
+        }
+        if done == 0u32 { pos = (pos + 1u64) & mask }
+    }
+    return result
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.6 — trivia skip + doc-comment scan.
+ * Factored into shallow helpers (stub: ~8-nest parser limit) using sentinel
+ * flags (no break/continue).  Byte literals: '/'=47 '*'=42 '\n'=10.
+ * NOTE (trap, lex_port_audit §4): error messages passed here are non-NUL
+ * string literals — diagnostic only, OFF the byte-equivalence path (token
+ * stream + error CODES are exact); message NUL-pooling is batched at 2.1.13.
+ * ============================================================================ */
+
+/* Consume the line-comment open marker then to (not incl) the next newline. */
+fn lex_skip_line_comment(st: u64) -> u32 {
+    lex_advance(st)
+    lex_advance(st)
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if lex_at_end(st) == 1u32 { done = 1u32 }
+        if done == 0u32 {
+            if lex_peek_byte(st) == 10u32 { done = 1u32 }
+        }
+        if done == 0u32 { lex_advance(st) }
+    }
+    return 0u32
+}
+
+/* Consume the block-comment open marker then to the matching close,
+ * supporting nesting.  Returns 0 on clean close, 1 if unterminated at EOF. */
+fn lex_skip_block_comment(st: u64) -> u32 {
+    lex_advance(st)
+    lex_advance(st)
+    let mut depth: u32 = 1u32
+    let mut closed: u32 = 0u32
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if lex_at_end(st) == 1u32 { done = 1u32 }
+        if done == 0u32 {
+            let c0: u32 = lex_peek_byte(st)
+            let c1: u32 = lex_peek_byte_at(st, 1u64)
+            let mut step: u32 = 0u32
+            if c0 == 47u32 { if c1 == 42u32 {
+                lex_advance(st) ; lex_advance(st) ; depth = depth + 1u32 ; step = 1u32
+            } }
+            if step == 0u32 { if c0 == 42u32 { if c1 == 47u32 {
+                lex_advance(st) ; lex_advance(st) ; depth = depth - 1u32
+                if depth == 0u32 { closed = 1u32 ; done = 1u32 }
+                step = 1u32
+            } } }
+            if step == 0u32 { lex_advance(st) }
+        }
+    }
+    if closed == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* Skip inline whitespace + normal line/block comments.  Stops at end,
+ * newline, a doc-comment start (triple-slash or slash-star-star), or any
+ * non-trivia byte.  Returns 1 on a fatal unterminated block comment, else 0. */
+fn lex_skip_trivia(st: u64) -> u32 {
+    let mut fatal: u32 = 0u32
+    let mut stop: u32 = 0u32
+    while stop == 0u32 {
+        if lex_at_end(st) == 1u32 { stop = 1u32 }
+        if stop == 0u32 {
+            let b: u32 = lex_peek_byte(st)
+            let b1: u32 = lex_peek_byte_at(st, 1u64)
+            let b2: u32 = lex_peek_byte_at(st, 2u64)
+            let mut handled: u32 = 0u32
+            if lex_is_inline_ws(b) == 1u32 { lex_advance(st) ; handled = 1u32 }
+            if handled == 0u32 { if b == 47u32 { if b1 == 47u32 {
+                if b2 == 47u32 { stop = 1u32 }
+                if b2 != 47u32 { lex_skip_line_comment(st) }
+                handled = 1u32
+            } } }
+            if handled == 0u32 { if b == 47u32 { if b1 == 42u32 {
+                if b2 == 42u32 { stop = 1u32 }
+                if b2 != 42u32 {
+                    let rc: u32 = lex_skip_block_comment(st)
+                    if rc == 1u32 {
+                        lex_record_error(st, III_LEX_E_UNTERMINATED_BLOCK_CMT, lex_msg(LEXMSG_UNTERM_BLOCK))
+                        fatal = 1u32 ; stop = 1u32
+                    }
+                }
+                handled = 1u32
+            } } }
+            if handled == 0u32 { stop = 1u32 }
+        }
+    }
+    return fatal
+}
+
+/* Scan a doc-comment (caller confirmed triple-slash line or slash-star-star
+ * block).  Writes DOC_COMMENT token fields + sets pending_doc_comment_byte.
+ * Returns 1 / -1. */
+fn lex_scan_doc_comment(st: u64, out: u64) -> i32 {
+    let start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let sline: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let scol: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    let b1: u32 = lex_peek_byte_at(st, 1u64)
+    let mut rc: i32 = 1i32
+    if b1 == 47u32 {
+        /* "///" line doc-comment: consume 3 slashes then to newline. */
+        lex_advance(st)
+        lex_advance(st)
+        lex_advance(st)
+        let mut done: u32 = 0u32
+        while done == 0u32 {
+            if lex_at_end(st) == 1u32 { done = 1u32 }
+            if done == 0u32 {
+                if lex_peek_byte(st) == 10u32 { done = 1u32 }
+            }
+            if done == 0u32 { lex_advance(st) }
+        }
+    }
+    if b1 != 47u32 {
+        /* slash-star-star block doc-comment. */
+        lex_advance(st)
+        lex_advance(st)
+        lex_advance(st)
+        let mut closed: u32 = 0u32
+        let mut done: u32 = 0u32
+        while done == 0u32 {
+            if lex_at_end(st) == 1u32 { done = 1u32 }
+            if done == 0u32 {
+                let c0: u32 = lex_peek_byte(st)
+                let c1: u32 = lex_peek_byte_at(st, 1u64)
+                let mut step: u32 = 0u32
+                if c0 == 42u32 { if c1 == 47u32 {
+                    lex_advance(st) ; lex_advance(st) ; closed = 1u32 ; done = 1u32 ; step = 1u32
+                } }
+                if step == 0u32 { lex_advance(st) }
+            }
+        }
+        if closed == 0u32 {
+            rc = lex_record_error(st, III_LEX_E_UNTERMINATED_BLOCK_CMT, lex_msg(LEXMSG_UNTERM_DOC))
+        }
+    }
+    if rc == 1i32 {
+        let endp: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+        iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_DOC_COMMENT)
+        iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+        iii_lex_write_u32_c(out, TOK_OFF_END, endp as u32)
+        iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+        iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+        iii_lex_write_u32_c(st, LEX_OFF_PENDING_DOC, start as u32)
+    }
+    return rc
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.7 — identifier / keyword scan.
+ * Scans an alnum run, then resolves: single underscore -> UNDERSCORE;
+ * when modifier_pending, a modifier-name match -> modifier kind; else a
+ * keyword-table match; else a runtime-kw match; else intern -> IDENTIFIER.
+ * Token-field writes inlined (a multi-field write helper would need 5+ args
+ * -> the iiis-0 parameter-spill trap).  Mirrors lex.c iii_scan_ident_or_keyword.
+ * ============================================================================ */
+fn lex_scan_ident_or_keyword(st: u64, out: u64) -> i32 {
+    let start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let sline: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let scol: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    let mut scan: u32 = 1u32
+    while scan == 1u32 {
+        if lex_at_end(st) == 1u32 { scan = 0u32 }
+        if scan == 1u32 {
+            if lex_is_alnum(lex_peek_byte(st)) == 0u32 { scan = 0u32 }
+        }
+        if scan == 1u32 { lex_advance(st) }
+    }
+    let endp: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let len: u64 = endp - start
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    let bytes: u64 = src + start
+    let mut kind: u32 = III_TOK_INVALID
+    let mut interned: u32 = 0u32
+
+    /* Single "_" is the wildcard punctuation. */
+    if len == 1u64 {
+        if iii_lex_read_u8_at_c(src, start) == 95u32 { kind = III_TOK_UNDERSCORE }
+    }
+    /* Modifier-keyword resolution when armed by a preceding '@'. */
+    if kind == III_TOK_INVALID {
+        let modp: u32 = iii_lex_read_u32_c(st, LEX_OFF_MOD_PENDING)
+        if modp == 1u32 {
+            let mk: u32 = lex_lookup_modifier_kw(bytes, len)
+            if mk != III_TOK_INVALID { kind = mk }
+        }
+    }
+    /* Standard keyword table. */
+    if kind == III_TOK_INVALID {
+        let kw: u32 = lex_lookup_keyword(bytes, len)
+        if kw != III_TOK_INVALID { kind = kw }
+    }
+    /* Runtime-registered keyword table. */
+    if kind == III_TOK_INVALID {
+        let rkw: u32 = lex_lookup_runtime_kw(st, bytes, len)
+        if rkw != III_TOK_INVALID { kind = rkw }
+    }
+    /* Plain identifier — intern + assign ID (D3). */
+    if kind == III_TOK_INVALID {
+        let hash: u64 = lex_fnv1a_64(bytes, len)
+        interned = lex_intern_get(st, start, len, hash)
+        kind = III_TOK_IDENTIFIER
+    }
+
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, kind)
+    iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_END, endp as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+    iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+    iii_lex_write_u32_c(out, TOK_OFF_INTERNED_ID, interned)
+    return 1i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.8 — number scan (int / hex / mhash) + int-suffix (D15).
+ * D11 boundary: 0x + exactly-64-hex -> MHASH_LITERAL; 0x + 1..16 -> HEX_LITERAL;
+ * 0x + 17..63 -> OVERLONG_INT; 0x + 65+ -> OVERLONG_MHASH; 0x + 0 ->
+ * BAD_HEX_PREFIX.  Underscores are hex digit-group separators (value/length
+ * ignore them); decimals do NOT take underscores (mirrors lex.c).  Byte
+ * literals: '0'=48 'x'=120 'X'=88 '_'=95 'i'=105 'u'=117.
+ * ============================================================================ */
+
+const INT_SUFFIX_ERR: u32 = 4294967295u32
+
+/* Scan an optional integer type suffix (i8..i64 / u8..u64 / usize / isize);
+ * returns the suffix code, or INT_SUFFIX_ERR (after recording BAD_INT_SUFFIX
+ * and rolling pos back). */
+fn lex_scan_int_suffix(st: u64) -> u32 {
+    if lex_at_end(st) == 1u32 { return III_INT_SUFFIX_NONE }
+    let b: u32 = lex_peek_byte(st)
+    if b != 105u32 { if b != 117u32 { return III_INT_SUFFIX_NONE } }
+    let suf_start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let mut scan: u32 = 1u32
+    while scan == 1u32 {
+        if lex_at_end(st) == 1u32 { scan = 0u32 }
+        if scan == 1u32 { if lex_is_alnum(lex_peek_byte(st)) == 0u32 { scan = 0u32 } }
+        if scan == 1u32 { lex_advance(st) }
+    }
+    let suf_end: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let n: u64 = suf_end - suf_start
+    let sa: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC) + suf_start
+    if lex_kw_eq(sa, n, "i8" as u64, 2u64) == 1u32 { return III_INT_SUFFIX_I8 }
+    if lex_kw_eq(sa, n, "i16" as u64, 3u64) == 1u32 { return III_INT_SUFFIX_I16 }
+    if lex_kw_eq(sa, n, "i32" as u64, 3u64) == 1u32 { return III_INT_SUFFIX_I32 }
+    if lex_kw_eq(sa, n, "i64" as u64, 3u64) == 1u32 { return III_INT_SUFFIX_I64 }
+    if lex_kw_eq(sa, n, "u8" as u64, 2u64) == 1u32 { return III_INT_SUFFIX_U8 }
+    if lex_kw_eq(sa, n, "u16" as u64, 3u64) == 1u32 { return III_INT_SUFFIX_U16 }
+    if lex_kw_eq(sa, n, "u32" as u64, 3u64) == 1u32 { return III_INT_SUFFIX_U32 }
+    if lex_kw_eq(sa, n, "u64" as u64, 3u64) == 1u32 { return III_INT_SUFFIX_U64 }
+    if lex_kw_eq(sa, n, "usize" as u64, 5u64) == 1u32 { return III_INT_SUFFIX_USIZE }
+    if lex_kw_eq(sa, n, "isize" as u64, 5u64) == 1u32 { return III_INT_SUFFIX_ISIZE }
+    iii_lex_write_u64_c(st, LEX_OFF_POS, suf_start)
+    lex_record_error(st, III_LEX_E_BAD_INT_SUFFIX, lex_msg(LEXMSG_BAD_SUFFIX))
+    return INT_SUFFIX_ERR
+}
+
+fn lex_scan_number(st: u64, out: u64) -> i32 {
+    let start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let sline: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let scol: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    let b0: u32 = lex_peek_byte(st)
+    let b1: u32 = lex_peek_byte_at(st, 1u64)
+    let mut is_hex_form: u32 = 0u32
+    if b0 == 48u32 { if b1 == 120u32 { is_hex_form = 1u32 } }
+    if b0 == 48u32 { if b1 == 88u32 { is_hex_form = 1u32 } }
+
+    if is_hex_form == 1u32 {
+        lex_advance(st)
+        lex_advance(st)
+        let hex_start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+        let mut hdc: u64 = 0u64
+        let mut hscan: u32 = 1u32
+        while hscan == 1u32 {
+            if lex_at_end(st) == 1u32 { hscan = 0u32 }
+            if hscan == 1u32 {
+                let c: u32 = lex_peek_byte(st)
+                if lex_is_hex(c) == 1u32 { hdc = hdc + 1u64 ; lex_advance(st) }
+                if lex_is_hex(c) == 0u32 {
+                    if c == 95u32 { lex_advance(st) }
+                    if c != 95u32 { hscan = 0u32 }
+                }
+            }
+        }
+        let hex_end: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+        if hdc == 0u64 {
+            iii_lex_write_u64_c(st, LEX_OFF_POS, start)
+            return lex_record_error(st, III_LEX_E_BAD_HEX_PREFIX, lex_msg(LEXMSG_BAD_HEX_PREFIX))
+        }
+        if hdc == 64u64 {
+            /* Assemble 32 mhash bytes, pairing nibbles, skipping underscores.
+             * took_hi guards so the lo-nibble branch never fires on the same
+             * iteration that just stored the hi nibble (no else in dialect). */
+            let mhbase: u64 = out + TOK_OFF_MHASH
+            let mut i: u64 = hex_start
+            let mut mi: u64 = 0u64
+            let mut nibble: u32 = 0u32
+            let mut have_hi: u32 = 0u32
+            while i < hex_end {
+                let c: u32 = iii_lex_read_u8_at_c(src, i)
+                if c != 95u32 {
+                    let v: u32 = lex_hex_value(c)
+                    let mut took_hi: u32 = 0u32
+                    if have_hi == 0u32 { nibble = v ; have_hi = 1u32 ; took_hi = 1u32 }
+                    if took_hi == 0u32 {
+                        let byte: u32 = (nibble << 4u32) | v
+                        iii_lex_write_u8_at_c(mhbase, mi, byte)
+                        mi = mi + 1u64
+                        have_hi = 0u32
+                    }
+                }
+                i = i + 1u64
+            }
+            iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_MHASH_LITERAL)
+            iii_lex_write_u64_c(out, TOK_OFF_INT_VALUE, 0u64)
+            iii_lex_write_u32_c(out, TOK_OFF_INT_SUFFIX, III_INT_SUFFIX_NONE)
+            iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+            iii_lex_write_u32_c(out, TOK_OFF_END, hex_end as u32)
+            iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+            iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+            return 1i32
+        }
+        if hdc > 64u64 {
+            return lex_record_error(st, III_LEX_E_OVERLONG_MHASH, lex_msg(LEXMSG_OVERLONG_MHASH))
+        }
+        if hdc > 16u64 {
+            return lex_record_error(st, III_LEX_E_OVERLONG_INT, lex_msg(LEXMSG_OVERLONG_INT))
+        }
+        /* 1..16 hex digits -> HEX_LITERAL */
+        let mut v: u64 = 0u64
+        let mut j: u64 = hex_start
+        while j < hex_end {
+            let c3: u32 = iii_lex_read_u8_at_c(src, j)
+            if c3 != 95u32 { v = (v << 4u64) | (lex_hex_value(c3) as u64) }
+            j = j + 1u64
+        }
+        let suf: u32 = lex_scan_int_suffix(st)
+        if suf == INT_SUFFIX_ERR { return -1i32 }
+        let endp: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+        iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_HEX_LITERAL)
+        iii_lex_write_u64_c(out, TOK_OFF_INT_VALUE, v)
+        iii_lex_write_u32_c(out, TOK_OFF_INT_SUFFIX, suf)
+        iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+        iii_lex_write_u32_c(out, TOK_OFF_END, endp as u32)
+        iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+        iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+        return 1i32
+    }
+
+    /* Decimal INT_LITERAL (no underscores, per lex.c). */
+    let mut dv: u64 = 0u64
+    let mut overflow: u32 = 0u32
+    let max_div: u64 = 1844674407370955161u64
+    let max_mod: u64 = 5u64
+    let mut dscan: u32 = 1u32
+    while dscan == 1u32 {
+        if lex_at_end(st) == 1u32 { dscan = 0u32 }
+        if dscan == 1u32 {
+            let c: u32 = lex_peek_byte(st)
+            if lex_is_digit(c) == 0u32 { dscan = 0u32 }
+            if lex_is_digit(c) == 1u32 {
+                let d: u64 = (c - 48u32) as u64
+                if dv > max_div { overflow = 1u32 }
+                if dv == max_div { if d > max_mod { overflow = 1u32 } }
+                dv = (dv * 10u64) + d
+                lex_advance(st)
+            }
+        }
+    }
+    if overflow == 1u32 {
+        return lex_record_error(st, III_LEX_E_OVERLONG_INT, lex_msg(LEXMSG_INT_OVERFLOW))
+    }
+    let suf2: u32 = lex_scan_int_suffix(st)
+    if suf2 == INT_SUFFIX_ERR { return -1i32 }
+    let endp2: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_INT_LITERAL)
+    iii_lex_write_u64_c(out, TOK_OFF_INT_VALUE, dv)
+    iii_lex_write_u32_c(out, TOK_OFF_INT_SUFFIX, suf2)
+    iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_END, endp2 as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+    iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+    return 1i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.9 — string scan (plain / byte / raw / hex), 2-pass.
+ * Pass 1 computes the decoded length; pass 2 decodes into the lex-state arena.
+ * prefix_byte: 0 plain, 98 'b', 114 'r', 104 'h'.  pos is at the prefix (or
+ * the opening quote for plain) on entry.  Byte literals: '"'=34 '\\'=92
+ * 'n'=110 'r'=114 't'=116 'x'=120.  Mirrors lex.c iii_scan_string_inner.
+ * Escape handling is factored into helpers to stay under the ~8-nest parser
+ * limit (stub note).  Error sentinel is i64 -1 compared via != (the signed
+ * ordering-compare trap forbids < / >=).
+ * ============================================================================ */
+
+/* Decoded byte for a simple (non-x) escape; identity for unknown. */
+fn lex_escape_byte(e: u32) -> u32 {
+    if e == 110u32 { return 10u32 }
+    if e == 114u32 { return 13u32 }
+    if e == 116u32 { return 9u32 }
+    if e == 34u32 { return 34u32 }
+    if e == 92u32 { return 92u32 }
+    return e
+}
+
+/* Validate the escape at `scan` (a backslash); return its source-advance
+ * (2 simple, 4 for \xHH) or -1 (after recording the error + setting pos). */
+fn lex_str_esc_advance(st: u64, scan: u64) -> i64 {
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    let slen: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if (scan + 1u64) >= slen {
+        iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+        lex_record_error(st, III_LEX_E_UNTERMINATED_STRING, lex_msg(LEXMSG_UNTERM_STR_ESC))
+        return -1i64
+    }
+    let e: u32 = iii_lex_read_u8_at_c(src, scan + 1u64)
+    if e == 110u32 { return 2i64 }
+    if e == 114u32 { return 2i64 }
+    if e == 116u32 { return 2i64 }
+    if e == 34u32 { return 2i64 }
+    if e == 92u32 { return 2i64 }
+    if e == 120u32 {
+        let mut bad: u32 = 0u32
+        if (scan + 3u64) >= slen { bad = 1u32 }
+        if bad == 0u32 { if lex_is_hex(iii_lex_read_u8_at_c(src, scan + 2u64)) == 0u32 { bad = 1u32 } }
+        if bad == 0u32 { if lex_is_hex(iii_lex_read_u8_at_c(src, scan + 3u64)) == 0u32 { bad = 1u32 } }
+        if bad == 1u32 {
+            iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+            lex_record_error(st, III_LEX_E_BAD_ESCAPE, lex_msg(LEXMSG_BAD_HEX_ESCAPE))
+            return -1i64
+        }
+        return 4i64
+    }
+    iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+    lex_record_error(st, III_LEX_E_BAD_ESCAPE, lex_msg(LEXMSG_BAD_ESCAPE))
+    return -1i64
+}
+
+fn lex_scan_string_inner(st: u64, out: u64, prefix_byte: u32) -> i32 {
+    let start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let sline: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let scol: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    let slen: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if prefix_byte != 0u32 { lex_advance(st) }
+    lex_advance(st)
+    let body: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let mut resolve_escapes: u32 = 1u32
+    if prefix_byte == 114u32 { resolve_escapes = 0u32 }
+    let mut hex_decode: u32 = 0u32
+    if prefix_byte == 104u32 { hex_decode = 1u32 }
+
+    /* ---- PASS 1: compute decoded_len using a local scan index ---- */
+    let mut decoded_len: u64 = 0u64
+    let mut scan: u64 = body
+    let mut perr: i32 = 0i32
+
+    if hex_decode == 1u32 {
+        let mut hexc: u64 = 0u64
+        let mut d1: u32 = 0u32
+        while d1 == 0u32 {
+            if scan >= slen { d1 = 1u32 }
+            if d1 == 0u32 {
+                let b: u32 = iii_lex_read_u8_at_c(src, scan)
+                if b == 34u32 { d1 = 1u32 }
+                if b != 34u32 {
+                    if lex_is_hex(b) == 0u32 {
+                        iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+                        perr = lex_record_error(st, III_LEX_E_BAD_HEX_STRING, lex_msg(LEXMSG_HSTR_HEX_ONLY))
+                        d1 = 1u32
+                    }
+                    if lex_is_hex(b) == 1u32 { hexc = hexc + 1u64 ; scan = scan + 1u64 }
+                }
+            }
+        }
+        if perr == 0i32 {
+            if scan >= slen {
+                iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+                perr = lex_record_error(st, III_LEX_E_UNTERMINATED_STRING, lex_msg(LEXMSG_UNTERM_HSTR))
+            }
+        }
+        if perr == 0i32 {
+            if (hexc & 1u64) != 0u64 {
+                iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+                perr = lex_record_error(st, III_LEX_E_BAD_HEX_STRING, lex_msg(LEXMSG_HSTR_EVEN))
+            }
+        }
+        decoded_len = hexc / 2u64
+    }
+    if hex_decode == 0u32 { if resolve_escapes == 0u32 {
+        /* raw: scan to closing quote verbatim. */
+        let mut d2: u32 = 0u32
+        while d2 == 0u32 {
+            if scan >= slen { d2 = 1u32 }
+            if d2 == 0u32 {
+                let b: u32 = iii_lex_read_u8_at_c(src, scan)
+                if b == 34u32 { d2 = 1u32 }
+                if b != 34u32 { decoded_len = decoded_len + 1u64 ; scan = scan + 1u64 }
+            }
+        }
+        if scan >= slen {
+            iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+            perr = lex_record_error(st, III_LEX_E_UNTERMINATED_STRING, lex_msg(LEXMSG_UNTERM_RAW))
+        }
+    } }
+    if hex_decode == 0u32 { if resolve_escapes == 1u32 {
+        /* plain / byte: escape-aware count (escape detail in lex_str_esc_advance). */
+        let mut d3: u32 = 0u32
+        while d3 == 0u32 {
+            if scan >= slen { d3 = 1u32 }
+            if d3 == 0u32 {
+                let b: u32 = iii_lex_read_u8_at_c(src, scan)
+                if b == 34u32 { d3 = 1u32 }
+                if b != 34u32 {
+                    if b == 92u32 {
+                        let adv: i64 = lex_str_esc_advance(st, scan)
+                        if adv == -1i64 { perr = -1i32 ; d3 = 1u32 }
+                        if adv != -1i64 { decoded_len = decoded_len + 1u64 ; scan = scan + (adv as u64) }
+                    }
+                    if b != 92u32 { decoded_len = decoded_len + 1u64 ; scan = scan + 1u64 }
+                }
+            }
+        }
+        if perr == 0i32 { if scan >= slen {
+            iii_lex_write_u64_c(st, LEX_OFF_POS, scan)
+            perr = lex_record_error(st, III_LEX_E_UNTERMINATED_STRING, lex_msg(LEXMSG_UNTERM_STR_QUOTE))
+        } }
+    } }
+    if perr != 0i32 { return perr }
+
+    let payload: u64 = lex_arena_alloc(st, decoded_len)
+    if payload == 0u64 { return lex_record_error(st, III_LEX_E_OOM, lex_msg(LEXMSG_PAYLOAD_OOM)) }
+
+    /* ---- PASS 2: decode into payload, advancing st->pos to the closing quote ---- */
+    let mut opos: u64 = 0u64
+    if hex_decode == 1u32 {
+        let mut h2: u32 = 0u32
+        while h2 == 0u32 {
+            if iii_lex_read_u8_at_c(src, iii_lex_read_u64_c(st, LEX_OFF_POS)) == 34u32 { h2 = 1u32 }
+            if h2 == 0u32 {
+                let p: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+                let hi: u32 = lex_hex_value(iii_lex_read_u8_at_c(src, p))
+                let lo: u32 = lex_hex_value(iii_lex_read_u8_at_c(src, p + 1u64))
+                iii_lex_write_u8_at_c(payload, opos, (hi << 4u32) | lo)
+                opos = opos + 1u64
+                lex_advance(st)
+                lex_advance(st)
+            }
+        }
+    }
+    if hex_decode == 0u32 { if resolve_escapes == 0u32 {
+        let mut r2: u32 = 0u32
+        while r2 == 0u32 {
+            let p: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+            if p >= slen { r2 = 1u32 }
+            if r2 == 0u32 { if iii_lex_read_u8_at_c(src, p) == 34u32 { r2 = 1u32 } }
+            if r2 == 0u32 {
+                iii_lex_write_u8_at_c(payload, opos, iii_lex_read_u8_at_c(src, p))
+                opos = opos + 1u64
+                lex_advance(st)
+            }
+        }
+    } }
+    if hex_decode == 0u32 { if resolve_escapes == 1u32 {
+        let mut e2: u32 = 0u32
+        while e2 == 0u32 {
+            let p: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+            if p >= slen { e2 = 1u32 }
+            if e2 == 0u32 { if iii_lex_read_u8_at_c(src, p) == 34u32 { e2 = 1u32 } }
+            if e2 == 0u32 {
+                let b: u32 = iii_lex_read_u8_at_c(src, p)
+                if b == 92u32 {
+                    let esc: u32 = iii_lex_read_u8_at_c(src, p + 1u64)
+                    if esc == 120u32 {
+                        let hi: u32 = lex_hex_value(iii_lex_read_u8_at_c(src, p + 2u64))
+                        let lo: u32 = lex_hex_value(iii_lex_read_u8_at_c(src, p + 3u64))
+                        iii_lex_write_u8_at_c(payload, opos, (hi << 4u32) | lo)
+                        opos = opos + 1u64
+                        lex_advance(st) ; lex_advance(st) ; lex_advance(st) ; lex_advance(st)
+                    }
+                    if esc != 120u32 {
+                        iii_lex_write_u8_at_c(payload, opos, lex_escape_byte(esc))
+                        opos = opos + 1u64
+                        lex_advance(st) ; lex_advance(st)
+                    }
+                }
+                if b != 92u32 {
+                    iii_lex_write_u8_at_c(payload, opos, b)
+                    opos = opos + 1u64
+                    lex_advance(st)
+                }
+            }
+        }
+    } }
+    /* consume closing quote */
+    lex_advance(st)
+
+    let mut kind: u32 = III_TOK_STRING_LITERAL
+    if prefix_byte == 98u32 { kind = III_TOK_STRING_BYTE }
+    if prefix_byte == 114u32 { kind = III_TOK_STRING_RAW }
+    if prefix_byte == 104u32 { kind = III_TOK_STRING_HEX }
+    let endp: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, kind)
+    iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_END, endp as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+    iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+    iii_lex_write_u32_c(out, TOK_OFF_STRING_LEN, decoded_len as u32)
+    iii_lex_write_u64_c(out, TOK_OFF_STRING_PAYLOAD, payload)
+    return 1i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.10 -- operator/punct emit + invalid-byte + next-token
+ * dispatch.  Mirrors lex.c iii_emit_single / iii_emit_double /
+ * iii_handle_invalid_byte / iii_next_internal.  The C reference uses a switch;
+ * iiis-0 has no switch, so the punctuation routing is a FLAT if-cascade of
+ * early returns (nesting depth 1; the double-char maximal-munch forms add one
+ * level) -- this keeps every branch well under the parser recursion-depth
+ * ceiling (trap #5, lex_port_audit S4).  Token positions are captured before
+ * any advance; the value fields (int_value/int_suffix/mhash/string_len/payload)
+ * stay zero from the dispatch's whole-token memset, exactly as lex.c memsets
+ * the output record before calling an emit helper.
+ * ============================================================================ */
+
+/* D10 recovery: record INVALID_BYTE, set kind, advance one byte. */
+fn lex_handle_invalid_byte(st: u64, out: u64) -> i32 {
+    let rc: i32 = lex_record_error(st, III_LEX_E_INVALID_BYTE, lex_msg(LEXMSG_INVALID_BYTE))
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_INVALID)
+    let p: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let n: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if p < n { lex_advance(st) }
+    return rc
+}
+
+/* Single-byte operator/punct: capture span, advance once, set kind + span. */
+fn lex_emit_single(st: u64, out: u64, kind: u32) -> i32 {
+    let start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let sline: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let scol: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    lex_advance(st)
+    let endp: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, kind)
+    iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_END, endp as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+    iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+    return 1i32
+}
+
+/* Two-byte operator (maximal munch): advance twice. */
+fn lex_emit_double(st: u64, out: u64, kind: u32) -> i32 {
+    let start: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    let sline: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+    let scol: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+    lex_advance(st)
+    lex_advance(st)
+    let endp: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, kind)
+    iii_lex_write_u32_c(out, TOK_OFF_START, start as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_END, endp as u32)
+    iii_lex_write_u32_c(out, TOK_OFF_LINE, sline)
+    iii_lex_write_u32_c(out, TOK_OFF_COL, scol)
+    return 1i32
+}
+
+/* Internal next-token dispatch.  Byte values: 10=newline 47=slash 42=star
+ * 34=dquote 98=b 114=r 104=h, punctuation per ASCII.  Returns 1 (token) /
+ * 0 (EOF) / -1 (fatal). */
+fn lex_next_internal(st: u64, out: u64) -> i32 {
+    if st == 0u64 { return -1i32 }
+    if out == 0u64 {
+        lex_record_error(st, III_LEX_E_NULL_ARG, lex_msg(LEXMSG_NULL_OUT_BUF))
+        return -1i32
+    }
+    let sealed: u32 = iii_lex_read_u32_c(st, LEX_OFF_SEALED)
+    if sealed == 1u32 {
+        return lex_record_error(st, III_LEX_E_SEALED, lex_msg(LEXMSG_SEALED))
+    }
+    /* Initialise out so error paths leave a well-formed record. */
+    iii_lex_memset_c(out, 0u32, TOKEN_BYTES)
+    iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_INVALID)
+    iii_lex_write_u32_c(out, TOK_OFF_LEADING_DOC, III_TOK_NO_DOC_COMMENT)
+
+    /* Skip non-doc trivia; an unterminated regular block comment is fatal
+     * (skip_trivia already recorded the error) -- recover by one byte. */
+    if lex_skip_trivia(st) == 1u32 {
+        let p0: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+        let n0: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+        if p0 < n0 { lex_advance(st) }
+        return -1i32
+    }
+
+    if lex_at_end(st) == 1u32 {
+        let p: u64 = iii_lex_read_u64_c(st, LEX_OFF_POS)
+        let ln: u32 = iii_lex_read_u32_c(st, LEX_OFF_LINE)
+        let cl: u32 = iii_lex_read_u32_c(st, LEX_OFF_COL)
+        iii_lex_write_u32_c(out, TOK_OFF_KIND, III_TOK_EOF)
+        iii_lex_write_u32_c(out, TOK_OFF_START, p as u32)
+        iii_lex_write_u32_c(out, TOK_OFF_END, p as u32)
+        iii_lex_write_u32_c(out, TOK_OFF_LINE, ln)
+        iii_lex_write_u32_c(out, TOK_OFF_COL, cl)
+        return 0i32
+    }
+
+    let b: u32 = lex_peek_byte(st)
+    let b1: u32 = lex_peek_byte_at(st, 1u64)
+    let b2: u32 = lex_peek_byte_at(st, 2u64)
+
+    /* Newline is a significant token. */
+    if b == 10u32 { return lex_emit_single(st, out, III_TOK_NEWLINE) }
+
+    /* Doc-comment forms: triple-slash line, or slash-star-star block. */
+    if b == 47u32 { if b1 == 47u32 { if b2 == 47u32 { return lex_scan_doc_comment(st, out) } } }
+    if b == 47u32 { if b1 == 42u32 { if b2 == 42u32 { return lex_scan_doc_comment(st, out) } } }
+
+    /* Prefixed string forms (b" / r" / h"). */
+    if b == 98u32  { if b1 == 34u32 { return lex_scan_string_inner(st, out, b) } }
+    if b == 114u32 { if b1 == 34u32 { return lex_scan_string_inner(st, out, b) } }
+    if b == 104u32 { if b1 == 34u32 { return lex_scan_string_inner(st, out, b) } }
+
+    /* Identifier / keyword, numeric literal, plain string. */
+    if lex_is_alpha(b) == 1u32 { return lex_scan_ident_or_keyword(st, out) }
+    if lex_is_digit(b) == 1u32 { return lex_scan_number(st, out) }
+    if b == 34u32 { return lex_scan_string_inner(st, out, 0u32) }
+
+    /* Single-byte punctuation / operators. */
+    if b == 40u32  { return lex_emit_single(st, out, III_TOK_LPAREN) }
+    if b == 41u32  { return lex_emit_single(st, out, III_TOK_RPAREN) }
+    if b == 123u32 { return lex_emit_single(st, out, III_TOK_LBRACE) }
+    if b == 125u32 { return lex_emit_single(st, out, III_TOK_RBRACE) }
+    if b == 91u32  { return lex_emit_single(st, out, III_TOK_LBRACKET) }
+    if b == 93u32  { return lex_emit_single(st, out, III_TOK_RBRACKET) }
+    if b == 44u32  { return lex_emit_single(st, out, III_TOK_COMMA) }
+    if b == 59u32  { return lex_emit_single(st, out, III_TOK_SEMI) }
+    if b == 64u32  { return lex_emit_single(st, out, III_TOK_AT) }
+    if b == 124u32 { return lex_emit_single(st, out, III_TOK_PIPE) }
+    if b == 126u32 { return lex_emit_single(st, out, III_TOK_OP_TILDE) }
+    if b == 43u32  { return lex_emit_single(st, out, III_TOK_OP_PLUS) }
+    if b == 42u32  { return lex_emit_single(st, out, III_TOK_OP_STAR) }
+    if b == 47u32  { return lex_emit_single(st, out, III_TOK_OP_SLASH) }
+    if b == 37u32  { return lex_emit_single(st, out, III_TOK_OP_PERCENT) }
+    if b == 38u32  { return lex_emit_single(st, out, III_TOK_OP_AMP) }
+    if b == 94u32  { return lex_emit_single(st, out, III_TOK_OP_CARET) }
+    if b == 36u32  { return lex_emit_single(st, out, III_TOK_DOLLAR) }  /* '$' — metal{} asm immediate prefix (Stage 3.5) */
+
+    /* Two-byte maximal-munch operators (one nesting level). */
+    if b == 46u32 {
+        if b1 == 46u32 { return lex_emit_double(st, out, III_TOK_OP_DOTDOT) }
+        return lex_emit_single(st, out, III_TOK_DOT)
+    }
+    if b == 45u32 {
+        if b1 == 62u32 { return lex_emit_double(st, out, III_TOK_ARROW) }
+        return lex_emit_single(st, out, III_TOK_OP_MINUS)
+    }
+    if b == 61u32 {
+        if b1 == 61u32 { return lex_emit_double(st, out, III_TOK_OP_EQ) }
+        if b1 == 62u32 { return lex_emit_double(st, out, III_TOK_FAT_ARROW) }
+        return lex_emit_single(st, out, III_TOK_OP_ASSIGN)
+    }
+    if b == 33u32 {
+        if b1 == 61u32 { return lex_emit_double(st, out, III_TOK_OP_NEQ) }
+        return lex_emit_single(st, out, III_TOK_OP_BANG)
+    }
+    if b == 60u32 {
+        if b1 == 60u32 { return lex_emit_double(st, out, III_TOK_OP_SHL) }
+        if b1 == 61u32 { return lex_emit_double(st, out, III_TOK_OP_LE) }
+        return lex_emit_single(st, out, III_TOK_OP_LT)
+    }
+    if b == 62u32 {
+        if b1 == 62u32 { return lex_emit_double(st, out, III_TOK_OP_SHR) }
+        if b1 == 61u32 { return lex_emit_double(st, out, III_TOK_OP_GE) }
+        return lex_emit_single(st, out, III_TOK_OP_GT)
+    }
+    if b == 58u32 {
+        if b1 == 58u32 { return lex_emit_double(st, out, III_TOK_DCOLON) }
+        if b1 == 61u32 { return lex_emit_double(st, out, III_TOK_OP_COLON_EQ) }
+        return lex_emit_single(st, out, III_TOK_COLON)
+    }
+
+    return lex_handle_invalid_byte(st, out)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.11 -- next_with_metadata + history + canonical SHA feed +
+ * public next/peek.  Mirrors lex.c iii_next_with_metadata / iii_history_append /
+ * iii_token_canonical_update / iii_lex_next / iii_lex_peek (lex.c:1465-1745).
+ * lex_token_canonical_update is built here because next_with_metadata feeds it
+ * into the running stream SHA on every emission (D1); Stage 2.1.12's public
+ * token_mhash / stream_mhash accessors reuse the same helper (back-reference).
+ * History growth uses the established malloc+memcpy+free idiom (lex.iii has no
+ * realloc extern; the C uses realloc -- observably identical, the history is an
+ * internal index queried by token, not by pointer).
+ * ============================================================================ */
+
+/* strlen over a NUL-terminated C string at ptr (logical_path canonicalisation). */
+fn lex_cstrlen(ptr: u64) -> u64 {
+    let mut n: u64 = 0u64
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        let b: u32 = iii_lex_read_u8_at_c(ptr, n)
+        if b == 0u32 { done = 1u32 }
+        if b != 0u32 { n = n + 1u64 }
+    }
+    return n
+}
+
+/* Feed one token's canonical serialisation (D1) into SHA-256 state h.  Field
+ * order MUST match lex.c iii_token_canonical_update exactly. */
+fn lex_token_canonical_update(h: u64, tok: u64) -> u32 {
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_KIND))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_START))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_END))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_LINE))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_COL))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_LOG_LINE))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_LOG_COL))
+    iii_sha256_update_u64(h, iii_lex_read_u64_c(tok, TOK_OFF_INT_VALUE))
+    iii_sha256_update_u8(h, iii_lex_read_u32_c(tok, TOK_OFF_INT_SUFFIX))
+    iii_sha256_update(h, tok + TOK_OFF_MHASH, 32u64)
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_STRING_LEN))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_INTERNED_ID))
+    iii_sha256_update_u32(h, iii_lex_read_u32_c(tok, TOK_OFF_LEADING_DOC))
+    let lp: u64 = iii_lex_read_u64_c(tok, TOK_OFF_LOG_PATH)
+    if lp == 0u64 { iii_sha256_update_u32(h, 0u32) }
+    if lp != 0u64 {
+        let lplen: u64 = lex_cstrlen(lp)
+        iii_sha256_update_u32(h, lplen as u32)
+        iii_sha256_update(h, lp, lplen)
+    }
+    let slen: u32 = iii_lex_read_u32_c(tok, TOK_OFF_STRING_LEN)
+    let spay: u64 = iii_lex_read_u64_c(tok, TOK_OFF_STRING_PAYLOAD)
+    if spay != 0u64 { if slen > 0u32 { iii_sha256_update(h, spay, slen as u64) } }
+    return 1u32
+}
+
+/* Append token to history (D7) -- all kinds except NEWLINE; EOF/INVALID kept. */
+fn lex_history_append(st: u64, tok: u64) -> u32 {
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_CNT)
+    let cap: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_CAP)
+    if cnt == cap {
+        let mut newcap: u64 = 256u64
+        if cap != 0u64 { newcap = cap * 2u64 }
+        let np: u64 = iii_lex_malloc_c(newcap * TOKEN_BYTES)
+        if np == 0u64 { return 0u32 }
+        let oldp: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_PTR)
+        if oldp != 0u64 {
+            iii_lex_memcpy_c(np, oldp, cnt * TOKEN_BYTES)
+            iii_lex_free_c(oldp)
+        }
+        iii_lex_write_u64_c(st, LEX_OFF_HIST_PTR, np)
+        iii_lex_write_u64_c(st, LEX_OFF_HIST_CAP, newcap)
+    }
+    let ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_PTR)
+    iii_lex_memcpy_c(ptr + cnt * TOKEN_BYTES, tok, TOKEN_BYTES)
+    iii_lex_write_u64_c(st, LEX_OFF_HIST_CNT, cnt + 1u64)
+    return 1u32
+}
+
+/* Wrapper around lex_next_internal: logical-position copy (D8), doc-comment
+ * attach + modifier_pending (D4/D19), history (D7), stream hash (D1). */
+fn lex_next_with_metadata(st: u64, out: u64) -> i32 {
+    let rc: i32 = lex_next_internal(st, out)
+    iii_lex_write_u32_c(out, TOK_OFF_LOG_LINE, iii_lex_read_u32_c(st, LEX_OFF_LOG_LINE))
+    iii_lex_write_u32_c(out, TOK_OFF_LOG_COL, iii_lex_read_u32_c(st, LEX_OFF_LOG_COL))
+    iii_lex_write_u64_c(out, TOK_OFF_LOG_PATH, iii_lex_read_u64_c(st, LEX_OFF_LOG_PATH))
+    if rc == 1i32 {
+        let k: u32 = iii_lex_read_u32_c(out, TOK_OFF_KIND)
+        let mut handled: u32 = 0u32
+        if k == III_TOK_NEWLINE { handled = 1u32 }
+        if k == III_TOK_DOC_COMMENT {
+            iii_lex_write_u32_c(out, TOK_OFF_LEADING_DOC, III_TOK_NO_DOC_COMMENT)
+            handled = 1u32
+        }
+        if k == III_TOK_AT {
+            iii_lex_write_u32_c(out, TOK_OFF_LEADING_DOC, iii_lex_read_u32_c(st, LEX_OFF_PENDING_DOC))
+            iii_lex_write_u32_c(st, LEX_OFF_PENDING_DOC, III_TOK_NO_DOC_COMMENT)
+            iii_lex_write_u32_c(st, LEX_OFF_MOD_PENDING, 1u32)
+            handled = 1u32
+        }
+        if handled == 0u32 {
+            iii_lex_write_u32_c(out, TOK_OFF_LEADING_DOC, iii_lex_read_u32_c(st, LEX_OFF_PENDING_DOC))
+            iii_lex_write_u32_c(st, LEX_OFF_PENDING_DOC, III_TOK_NO_DOC_COMMENT)
+            iii_lex_write_u32_c(st, LEX_OFF_MOD_PENDING, 0u32)
+        }
+    }
+    if rc != 1i32 {
+        iii_lex_write_u32_c(out, TOK_OFF_LEADING_DOC, III_TOK_NO_DOC_COMMENT)
+    }
+    let k2: u32 = iii_lex_read_u32_c(out, TOK_OFF_KIND)
+    if k2 != III_TOK_NEWLINE { lex_history_append(st, out) }
+    lex_token_canonical_update(st + LEX_OFF_STREAM_SHA, out)
+    return rc
+}
+
+/* Public: next token.  Returns a cached peek if present (without re-feeding
+ * history/stream -- the peek already fed them), else lexes a fresh token. */
+fn iii_lex_next(st: u64, out: u64) -> i32 @export {
+    if st == 0u64 { return -1i32 }
+    if out == 0u64 {
+        lex_record_error(st, III_LEX_E_NULL_ARG, lex_msg(LEXMSG_NULL_OUT_TOKEN))
+        return -1i32
+    }
+    let pv: u32 = iii_lex_read_u32_c(st, LEX_OFF_PEEK_VALID)
+    if pv == 1u32 {
+        iii_lex_memcpy_c(out, st + LEX_OFF_PEEK_TOK, TOKEN_BYTES)
+        iii_lex_write_u32_c(st, LEX_OFF_PEEK_VALID, 0u32)
+        return iii_lex_read_u32_c(st, LEX_OFF_PEEK_STATUS) as i32
+    }
+    return lex_next_with_metadata(st, out)
+}
+
+/* Public: peek one token ahead.  Fills + caches the lookahead on first call
+ * (which advances the lexer and feeds history/stream once); idempotent until
+ * the next iii_lex_next consumes it. */
+fn iii_lex_peek(st: u64, out: u64) -> i32 @export {
+    if st == 0u64 { return -1i32 }
+    if out == 0u64 {
+        lex_record_error(st, III_LEX_E_NULL_ARG, lex_msg(LEXMSG_NULL_OUT_TOKEN))
+        return -1i32
+    }
+    let pv: u32 = iii_lex_read_u32_c(st, LEX_OFF_PEEK_VALID)
+    if pv == 0u32 {
+        let rc: i32 = lex_next_with_metadata(st, st + LEX_OFF_PEEK_TOK)
+        iii_lex_write_u32_c(st, LEX_OFF_PEEK_STATUS, rc as u32)
+        iii_lex_write_u32_c(st, LEX_OFF_PEEK_VALID, 1u32)
+    }
+    iii_lex_memcpy_c(out, st + LEX_OFF_PEEK_TOK, TOKEN_BYTES)
+    return iii_lex_read_u32_c(st, LEX_OFF_PEEK_STATUS) as i32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.12 -- public mhash accessors.  Mirrors lex.c
+ * iii_token_mhash / iii_lex_stream_mhash / iii_lex_arena_mhash
+ * (lex.c:1507-1530, 1928-1942).  All three reuse the SHA-256 runtime; the
+ * 112-byte working state is malloc'd (lex.iii has no stack-struct), init'd,
+ * fed, finalised, freed.  stream_mhash finalises a COPY of the running stream
+ * state so the live stream can keep accumulating (final pads + mutates).
+ * ============================================================================ */
+
+/* One-shot per-token canonical content hash (D1). */
+fn iii_token_mhash(st: u64, tok: u64, out32: u64) -> u32 @export {
+    if tok == 0u64 {
+        if out32 != 0u64 { iii_lex_memset_c(out32, 0u32, 32u64) }
+        return 0u32
+    }
+    if out32 == 0u64 { return 0u32 }
+    let h: u64 = iii_lex_malloc_c(III_SHA256_STATE_BYTES)
+    if h == 0u64 { return 0u32 }
+    iii_sha256_init(h)
+    lex_token_canonical_update(h, tok)
+    iii_sha256_final(h, out32)
+    iii_lex_free_c(h)
+    return 1u32
+}
+
+/* Snapshot of the running stream content hash (D1): finalise a COPY so the
+ * live stream SHA is not consumed. */
+fn iii_lex_stream_mhash(st: u64, out32: u64) -> u32 @export {
+    if out32 == 0u64 { return 0u32 }
+    if st == 0u64 { iii_lex_memset_c(out32, 0u32, 32u64) ; return 0u32 }
+    let copy: u64 = iii_lex_malloc_c(III_SHA256_STATE_BYTES)
+    if copy == 0u64 { return 0u32 }
+    iii_lex_memcpy_c(copy, st + LEX_OFF_STREAM_SHA, III_SHA256_STATE_BYTES)
+    iii_sha256_final(copy, out32)
+    iii_lex_free_c(copy)
+    return 1u32
+}
+
+/* Hash of all arena payload bytes, walked head-first (most-recent chunk first;
+ * the alloc order is a deterministic function of the source bytes). */
+fn iii_lex_arena_mhash(st: u64, out32: u64) -> u32 @export {
+    if out32 == 0u64 { return 0u32 }
+    iii_lex_memset_c(out32, 0u32, 32u64)
+    if st == 0u64 { return 0u32 }
+    let h: u64 = iii_lex_malloc_c(III_SHA256_STATE_BYTES)
+    if h == 0u64 { return 0u32 }
+    iii_sha256_init(h)
+    let mut c: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_HEAD)
+    let mut done: u32 = 0u32
+    while done == 0u32 {
+        if c == 0u64 { done = 1u32 }
+        if done == 0u32 {
+            let used: u64 = iii_lex_read_u64_c(c, ARENA_OFF_USED)
+            iii_sha256_update(h, c + ARENA_HDR_BYTES, used)
+            c = iii_lex_read_u64_c(c, ARENA_OFF_NEXT)
+        }
+    }
+    iii_sha256_final(h, out32)
+    iii_lex_free_c(h)
+    return 1u32
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.13 -- public accessors.  Mirrors lex.c error-log / raw /
+ * fnv1a / locate / span / history / source-path / set-logical / register-kw /
+ * arena-bytes (lex.c:1749-1926).  All @export (public lex ABI).  Unsigned u64
+ * ordering compares only (the signed-i64 ordering trap does not apply; the
+ * sealed string scanner already relies on u64 >= / <).
+ * ============================================================================ */
+
+const RTKW_BYTES: u64 = 24u64
+
+fn iii_lex_error_count(st: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(st, LEX_OFF_ERRORS_CNT)
+}
+
+fn iii_lex_error_at(st: u64, i: u64, out_err: u64) -> i32 @export {
+    if st == 0u64 { return 0i32 }
+    if out_err == 0u64 { return 0i32 }
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_CNT)
+    if i >= cnt { return 0i32 }
+    let ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_PTR)
+    iii_lex_memcpy_c(out_err, ptr + i * LEX_ERR_BYTES, LEX_ERR_BYTES)
+    return 1i32
+}
+
+fn iii_lex_error_info(st: u64, out_err: u64) -> u32 @export {
+    if st == 0u64 { return 0u32 }
+    if out_err == 0u64 { return 0u32 }
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_CNT)
+    if cnt > 0u64 {
+        let ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_ERRORS_PTR)
+        iii_lex_memcpy_c(out_err, ptr + (cnt - 1u64) * LEX_ERR_BYTES, LEX_ERR_BYTES)
+    }
+    if cnt == 0u64 {
+        iii_lex_memcpy_c(out_err, st + LEX_OFF_ERR, LEX_ERR_BYTES)
+    }
+    return 0u32
+}
+
+fn iii_lex_source_path(st: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(st, LEX_OFF_PATH)
+}
+
+fn iii_token_raw(st: u64, tok: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    if tok == 0u64 { return 0u64 }
+    let start: u32 = iii_lex_read_u32_c(tok, TOK_OFF_START)
+    let len: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if (start as u64) > len { return 0u64 }
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    return src + (start as u64)
+}
+
+fn iii_token_raw_eq(st: u64, tok: u64, literal: u64) -> u32 @export {
+    if st == 0u64 { return 0u32 }
+    if tok == 0u64 { return 0u32 }
+    if literal == 0u64 { return 0u32 }
+    let s: u32 = iii_lex_read_u32_c(tok, TOK_OFF_START)
+    let e: u32 = iii_lex_read_u32_c(tok, TOK_OFF_END)
+    let len: u64 = (e as u64) - (s as u64)
+    let llen: u64 = lex_cstrlen(literal)
+    if llen != len { return 0u32 }
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    if iii_lex_memcmp_c(src + (s as u64), literal, len) == 0i32 { return 1u32 }
+    return 0u32
+}
+
+fn iii_token_fnv1a_64(st: u64, tok: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    if tok == 0u64 { return 0u64 }
+    let s: u32 = iii_lex_read_u32_c(tok, TOK_OFF_START)
+    let e: u32 = iii_lex_read_u32_c(tok, TOK_OFF_END)
+    let len: u64 = (e as u64) - (s as u64)
+    let src: u64 = iii_lex_read_u64_c(st, LEX_OFF_SRC)
+    return lex_fnv1a_64(src + (s as u64), len)
+}
+
+/* Binary search line_starts (u32[]) for the largest entry <= byte (D9). */
+fn iii_lex_locate(st: u64, byte: u32, out_line: u64, out_col: u64) -> i32 @export {
+    if st == 0u64 { return 0i32 }
+    if out_line == 0u64 { return 0i32 }
+    if out_col == 0u64 { return 0i32 }
+    let lcnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_LSTART_CNT)
+    if lcnt == 0u64 { return 0i32 }
+    let len: u64 = iii_lex_read_u64_c(st, LEX_OFF_LEN)
+    if (byte as u64) > len { return 0i32 }
+    let lptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_LSTART_PTR)
+    let mut lo: u64 = 0u64
+    let mut hi: u64 = lcnt
+    while lo + 1u64 < hi {
+        let mid: u64 = lo + (hi - lo) / 2u64
+        let lsmid: u32 = iii_lex_read_u32_c(lptr, mid * 4u64)
+        if (lsmid as u64) <= (byte as u64) { lo = mid }
+        if (lsmid as u64) > (byte as u64) { hi = mid }
+    }
+    let lslo: u32 = iii_lex_read_u32_c(lptr, lo * 4u64)
+    iii_lex_write_u32_c(out_line, 0u64, (lo + 1u64) as u32)
+    iii_lex_write_u32_c(out_col, 0u64, (byte - lslo) + 1u32)
+    return 1i32
+}
+
+fn iii_token_span_union(a: u64, b: u64, out_start: u64, out_end: u64) -> u32 @export {
+    if out_start == 0u64 { return 0u32 }
+    if out_end == 0u64 { return 0u32 }
+    if a == 0u64 {
+        if b == 0u64 {
+            iii_lex_write_u32_c(out_start, 0u64, 0u32)
+            iii_lex_write_u32_c(out_end, 0u64, 0u32)
+            return 0u32
+        }
+        iii_lex_write_u32_c(out_start, 0u64, iii_lex_read_u32_c(b, TOK_OFF_START))
+        iii_lex_write_u32_c(out_end, 0u64, iii_lex_read_u32_c(b, TOK_OFF_END))
+        return 0u32
+    }
+    if b == 0u64 {
+        iii_lex_write_u32_c(out_start, 0u64, iii_lex_read_u32_c(a, TOK_OFF_START))
+        iii_lex_write_u32_c(out_end, 0u64, iii_lex_read_u32_c(a, TOK_OFF_END))
+        return 0u32
+    }
+    let as_: u32 = iii_lex_read_u32_c(a, TOK_OFF_START)
+    let bs: u32 = iii_lex_read_u32_c(b, TOK_OFF_START)
+    let ae: u32 = iii_lex_read_u32_c(a, TOK_OFF_END)
+    let be: u32 = iii_lex_read_u32_c(b, TOK_OFF_END)
+    let mut os: u32 = as_
+    if (bs as u64) < (as_ as u64) { os = bs }
+    let mut oe: u32 = ae
+    if (be as u64) > (ae as u64) { oe = be }
+    iii_lex_write_u32_c(out_start, 0u64, os)
+    iii_lex_write_u32_c(out_end, 0u64, oe)
+    return 0u32
+}
+
+/* Binary search token history for the token whose span contains `byte`. */
+fn iii_lex_token_at_byte(st: u64, byte: u32, out_idx: u64) -> i32 @export {
+    if st == 0u64 { return 0i32 }
+    if out_idx == 0u64 { return 0i32 }
+    let hcnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_CNT)
+    if hcnt == 0u64 { return 0i32 }
+    let hptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_PTR)
+    let mut lo: u64 = 0u64
+    let mut hi: u64 = hcnt
+    while lo + 1u64 < hi {
+        let mid: u64 = lo + (hi - lo) / 2u64
+        let ms: u32 = iii_lex_read_u32_c(hptr + mid * TOKEN_BYTES, TOK_OFF_START)
+        if (ms as u64) <= (byte as u64) { lo = mid }
+        if (ms as u64) > (byte as u64) { hi = mid }
+    }
+    let ls: u32 = iii_lex_read_u32_c(hptr + lo * TOKEN_BYTES, TOK_OFF_START)
+    let le: u32 = iii_lex_read_u32_c(hptr + lo * TOKEN_BYTES, TOK_OFF_END)
+    if (ls as u64) <= (byte as u64) {
+        if (byte as u64) < (le as u64) {
+            iii_lex_write_u64_c(out_idx, 0u64, lo)
+            return 1i32
+        }
+    }
+    return 0i32
+}
+
+fn iii_lex_token_history_at(st: u64, i: u64, out_token: u64) -> i32 @export {
+    if st == 0u64 { return 0i32 }
+    if out_token == 0u64 { return 0i32 }
+    let hcnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_CNT)
+    if i >= hcnt { return 0i32 }
+    let hptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_PTR)
+    iii_lex_memcpy_c(out_token, hptr + i * TOKEN_BYTES, TOKEN_BYTES)
+    return 1i32
+}
+
+fn iii_lex_token_count(st: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(st, LEX_OFF_HIST_CNT)
+}
+
+fn iii_lex_set_logical_position(st: u64, path: u64, line: u32, col: u32) -> u32 @export {
+    if st == 0u64 { return 0u32 }
+    iii_lex_write_u64_c(st, LEX_OFF_LOG_PATH, path)
+    iii_lex_write_u32_c(st, LEX_OFF_LOG_LINE, line)
+    iii_lex_write_u32_c(st, LEX_OFF_LOG_COL, col)
+    return 0u32
+}
+
+/* Register a runtime keyword (D2): reject duplicates against all three tables,
+ * grow the runtime table (malloc+memcpy+free), copy the name into the arena. */
+fn iii_lex_register_keyword(st: u64, name: u64, name_len: u64, kind: u32) -> i32 @export {
+    if st == 0u64 { return III_LEX_E_NULL_ARG as i32 }
+    if name == 0u64 { return III_LEX_E_NULL_ARG as i32 }
+    let sealed: u32 = iii_lex_read_u32_c(st, LEX_OFF_SEALED)
+    if sealed == 1u32 { return III_LEX_E_SEALED as i32 }
+    if lex_lookup_keyword(name, name_len) != III_TOK_INVALID { return III_LEX_E_DUPLICATE_KEYWORD as i32 }
+    if lex_lookup_modifier_kw(name, name_len) != III_TOK_INVALID { return III_LEX_E_DUPLICATE_KEYWORD as i32 }
+    if lex_lookup_runtime_kw(st, name, name_len) != III_TOK_INVALID { return III_LEX_E_DUPLICATE_KEYWORD as i32 }
+    let cnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_CNT)
+    let cap: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_CAP)
+    if cnt == cap {
+        let mut newcap: u64 = 32u64
+        if cap != 0u64 { newcap = cap * 2u64 }
+        if newcap > 4096u64 { return III_LEX_E_KEYWORD_TABLE_FULL as i32 }
+        let np: u64 = iii_lex_malloc_c(newcap * RTKW_BYTES)
+        if np == 0u64 { return III_LEX_E_OOM as i32 }
+        let oldp: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_PTR)
+        if oldp != 0u64 {
+            iii_lex_memcpy_c(np, oldp, cnt * RTKW_BYTES)
+            iii_lex_free_c(oldp)
+        }
+        iii_lex_write_u64_c(st, LEX_OFF_RTKW_PTR, np)
+        iii_lex_write_u64_c(st, LEX_OFF_RTKW_CAP, newcap)
+    }
+    let copy: u64 = lex_arena_alloc(st, name_len)
+    if copy == 0u64 { return III_LEX_E_OOM as i32 }
+    iii_lex_memcpy_c(copy, name, name_len)
+    let ptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_PTR)
+    let e: u64 = ptr + cnt * RTKW_BYTES
+    iii_lex_write_u64_c(e, RTKW_OFF_NAME, copy)
+    iii_lex_write_u64_c(e, RTKW_OFF_LEN, name_len)
+    iii_lex_write_u32_c(e, RTKW_OFF_KIND, kind)
+    iii_lex_write_u64_c(st, LEX_OFF_RTKW_CNT, cnt + 1u64)
+    return III_LEX_OK as i32
+}
+
+fn iii_lex_arena_bytes(st: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    return iii_lex_read_u64_c(st, LEX_OFF_ARENA_TOTAL)
+}
+
+/* ============================================================================
+ * RITCHIE Stage 2.1.14 -- seal (D22 ownership transfer).  Mirrors lex.c
+ * iii_lex_seal (lex.c:1946-2023): collect every arena chunk's payload into one
+ * owned block, remap every history string_payload + runtime-kw name pointer
+ * from chunk-space into block-space, free the chunks, mark sealed.  The chunk
+ * search is factored into lex_seal_remap (4 args, flat) to stay under the
+ * parser recursion ceiling (trap #5).  Map entry = {src_data, dst_off, used}.
+ * ============================================================================ */
+
+const MAP_ENTRY_BYTES: u64 = 24u64
+const MAP_OFF_SRC: u64 = 0u64
+const MAP_OFF_DSTOFF: u64 = 8u64
+const MAP_OFF_USED: u64 = 16u64
+
+/* Find which chunk-map entry contains pointer p; return its block-space
+ * address, or p unchanged if not found in any chunk. */
+fn lex_seal_remap(p: u64, map: u64, chunk_count: u64, block: u64) -> u64 {
+    let mut j: u64 = 0u64
+    let mut result: u64 = p
+    let mut fnd: u32 = 0u32
+    while j < chunk_count {
+        if fnd == 0u32 {
+            let m: u64 = map + j * MAP_ENTRY_BYTES
+            let sd: u64 = iii_lex_read_u64_c(m, MAP_OFF_SRC)
+            let us: u64 = iii_lex_read_u64_c(m, MAP_OFF_USED)
+            let mut inr: u32 = 0u32
+            if p >= sd { if p < sd + us { inr = 1u32 } }
+            if inr == 1u32 {
+                let dof: u64 = iii_lex_read_u64_c(m, MAP_OFF_DSTOFF)
+                result = block + dof + (p - sd)
+                fnd = 1u32
+            }
+        }
+        j = j + 1u64
+    }
+    return result
+}
+
+fn iii_lex_seal(st: u64, out_owned_block: u64) -> u64 @export {
+    if st == 0u64 { return 0u64 }
+    if out_owned_block == 0u64 { return 0u64 }
+    iii_lex_write_u64_c(out_owned_block, 0u64, 0u64)
+    let sealed: u32 = iii_lex_read_u32_c(st, LEX_OFF_SEALED)
+    if sealed == 1u32 { return 0u64 }
+    /* Pass 1: total used bytes + chunk count (head-first). */
+    let mut total: u64 = 0u64
+    let mut chunk_count: u64 = 0u64
+    let mut c: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_HEAD)
+    let mut d1: u32 = 0u32
+    while d1 == 0u32 {
+        if c == 0u64 { d1 = 1u32 }
+        if d1 == 0u32 {
+            total = total + iii_lex_read_u64_c(c, ARENA_OFF_USED)
+            chunk_count = chunk_count + 1u64
+            c = iii_lex_read_u64_c(c, ARENA_OFF_NEXT)
+        }
+    }
+    if total == 0u64 {
+        iii_lex_write_u32_c(st, LEX_OFF_SEALED, 1u32)
+        return 0u64
+    }
+    let block: u64 = iii_lex_malloc_c(total)
+    if block == 0u64 { return 0u64 }
+    let map: u64 = iii_lex_malloc_c(chunk_count * MAP_ENTRY_BYTES)
+    if map == 0u64 { iii_lex_free_c(block) ; return 0u64 }
+    /* Pass 2: copy chunks head-first into the block; build the map. */
+    let mut off: u64 = 0u64
+    let mut i: u64 = 0u64
+    let mut c2: u64 = iii_lex_read_u64_c(st, LEX_OFF_ARENA_HEAD)
+    let mut d2: u32 = 0u32
+    while d2 == 0u32 {
+        if c2 == 0u64 { d2 = 1u32 }
+        if d2 == 0u32 {
+            let used: u64 = iii_lex_read_u64_c(c2, ARENA_OFF_USED)
+            let cdata: u64 = c2 + ARENA_HDR_BYTES
+            iii_lex_memcpy_c(block + off, cdata, used)
+            let m: u64 = map + i * MAP_ENTRY_BYTES
+            iii_lex_write_u64_c(m, MAP_OFF_SRC, cdata)
+            iii_lex_write_u64_c(m, MAP_OFF_DSTOFF, off)
+            iii_lex_write_u64_c(m, MAP_OFF_USED, used)
+            off = off + used
+            i = i + 1u64
+            c2 = iii_lex_read_u64_c(c2, ARENA_OFF_NEXT)
+        }
+    }
+    /* Remap history string_payload pointers (skip NULL / zero-length). */
+    let hptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_PTR)
+    let hcnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_HIST_CNT)
+    let mut t: u64 = 0u64
+    while t < hcnt {
+        let tok: u64 = hptr + t * TOKEN_BYTES
+        let p: u64 = iii_lex_read_u64_c(tok, TOK_OFF_STRING_PAYLOAD)
+        let slen: u32 = iii_lex_read_u32_c(tok, TOK_OFF_STRING_LEN)
+        let mut skip: u32 = 0u32
+        if p == 0u64 { skip = 1u32 }
+        if slen == 0u32 { skip = 1u32 }
+        if skip == 0u32 {
+            iii_lex_write_u64_c(tok, TOK_OFF_STRING_PAYLOAD, lex_seal_remap(p, map, chunk_count, block))
+        }
+        t = t + 1u64
+    }
+    /* Remap runtime-keyword name pointers. */
+    let rptr: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_PTR)
+    let rcnt: u64 = iii_lex_read_u64_c(st, LEX_OFF_RTKW_CNT)
+    let mut k: u64 = 0u64
+    while k < rcnt {
+        let e: u64 = rptr + k * RTKW_BYTES
+        let p: u64 = iii_lex_read_u64_c(e, RTKW_OFF_NAME)
+        if p != 0u64 {
+            iii_lex_write_u64_c(e, RTKW_OFF_NAME, lex_seal_remap(p, map, chunk_count, block))
+        }
+        k = k + 1u64
+    }
+    iii_lex_free_c(map)
+    lex_arena_destroy(st)
+    iii_lex_write_u32_c(st, LEX_OFF_SEALED, 1u32)
+    iii_lex_write_u64_c(out_owned_block, 0u64, block)
+    return total
+}
+
+/* CP-030 + Stage 2.1.2..2.1.14 (seal done).  Remaining 2.1.14 integration:
+ * full stage1_corpus byte-equivalence vs lex.c, then iiis-1 swap + fixpoint.
+ */

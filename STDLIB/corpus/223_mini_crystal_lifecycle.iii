@@ -1,0 +1,78 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\223_mini_crystal_lifecycle.iii
+ *
+ * III conformance corpus 223 -- L1 mini-crystal lifecycle (Phase B.2
+ * middle tier of the lazy-crystal architecture).
+ *
+ * Asserts:
+ *   1. mini_crystal_capacity() returns 65536.
+ *   2. Initial used count is 0.
+ *   3. mini_crystal_mint(va, pp, ks) returns a non-zero slot id.
+ *   4. mini_crystal_hash returns a non-zero, deterministic hash.
+ *   5. Two mints with identical inputs produce DIFFERENT slot ids
+ *      (slot allocation is sequence-based) but IDENTICAL hashes.
+ *   6. mini_crystal_drop reclaims the slot.
+ *   7. After drop, mini_crystal_hash returns 0 for the freed id.
+ *   8. mini_crystal_promote_to_full mints an L2 cert and drops L1.
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_223
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn mini_crystal_mint(value_addr: u64, parent_pattern_id: u64, kchain_state: u64) -> u64 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_hash(id: u64) -> u64 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_drop(id: u64) -> i32 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_promote_to_full(id: u64, error_code: u32, site_hash_ptr: u64, cap_id: u64) -> u64 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_used() -> u32 from "mini_crystal.iii"
+extern @abi(c-msvc-x64) fn mini_crystal_capacity() -> u32 from "mini_crystal.iii"
+
+fn main() -> u64 {
+    if mini_crystal_capacity() != 65536u32 { return 1u64 }
+
+    let used0 : u32 = mini_crystal_used()
+
+    /* Mint slot 1. */
+    let id1 : u64 = mini_crystal_mint(0x1234u64, 0x5678u64, 0xABCDu64)
+    if id1 == 0u64 { return 2u64 }
+    let h1 : u64 = mini_crystal_hash(id1)
+    if h1 == 0u64 { return 3u64 }
+    if mini_crystal_used() != (used0 + 1u32) { return 4u64 }
+
+    /* Mint slot 2 with IDENTICAL inputs. */
+    let id2 : u64 = mini_crystal_mint(0x1234u64, 0x5678u64, 0xABCDu64)
+    if id2 == 0u64 { return 5u64 }
+    if id2 == id1 { return 6u64 }   /* slot ids differ */
+    let h2 : u64 = mini_crystal_hash(id2)
+    if h2 != h1 { return 7u64 }     /* hashes match (content-deterministic) */
+
+    /* Mint with DIFFERENT inputs. */
+    let id3 : u64 = mini_crystal_mint(0x9999u64, 0x5678u64, 0xABCDu64)
+    let h3 : u64 = mini_crystal_hash(id3)
+    if h3 == h1 { return 8u64 }     /* different inputs → different hash */
+    if mini_crystal_used() != (used0 + 3u32) { return 9u64 }
+
+    /* Drop slot 2. */
+    if mini_crystal_drop(id2) != 0i32 { return 10u64 }
+    if mini_crystal_hash(id2) != 0u64 { return 11u64 }
+    if mini_crystal_used() != (used0 + 2u32) { return 12u64 }
+
+    /* Promote slot 1 to L2 full crystal. Need a 32-byte site_hash. */
+    let site : *u8 = malloc(32u64)
+    if site as u64 == 0u64 { return 13u64 }
+    let mut si : u64 = 0u64
+    while si < 32u64 {
+        site[si] = ((si * 13u64 + 7u64) & 0xFFu64) as u8
+        si = si + 1u64
+    }
+    let l2_id : u64 = mini_crystal_promote_to_full(id1, 0u32, site as u64, 1u64)
+    if l2_id == 0u64 { return 14u64 }
+    /* After promotion, the L1 slot is dropped. */
+    if mini_crystal_hash(id1) != 0u64 { return 15u64 }
+    if mini_crystal_used() != (used0 + 1u32) { return 16u64 }
+
+    free(site)
+    return 99u64
+}

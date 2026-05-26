@@ -1,0 +1,119 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_asm.iii
+ *
+ * Transform pattern: FORM_III → FORM_X86_ASM
+ * FROZEN SPEC §7B.6 slot 16; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Emits a valid GAS-format assembly file embedding the III source as
+ * a `.ascii` directive in the .rodata section. The output assembles
+ * cleanly and the III source is recoverable from the linked binary
+ * via objcopy --dump-section. This is a lossless 1:1 transformation.
+ */
+
+module omnia_tp_iii_to_asm
+
+var TP_ASM_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+/* "    .section .rodata\n    .global iii_src\niii_src:\n    .ascii \"" */
+var TP_ASM_PREFIX : [u8; 50] = [
+    32u8, 32u8, 32u8, 32u8, 46u8, 115u8, 101u8, 99u8, 116u8, 105u8, 111u8, 110u8, 32u8, 46u8, 114u8, 111u8,
+    100u8, 97u8, 116u8, 97u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8,
+    32u8, 105u8, 105u8, 105u8, 95u8, 115u8, 114u8, 99u8, 10u8, 105u8, 105u8, 105u8, 95u8, 115u8, 114u8,
+    99u8, 58u8, 10u8
+]
+/* "    .ascii \"" 12 bytes */
+var TP_ASM_LINE_PREFIX : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 97u8, 115u8, 99u8, 105u8, 105u8, 32u8, 34u8]
+/* "\"\n" 2 bytes */
+var TP_ASM_LINE_SUFFIX : [u8; 2] = [34u8, 10u8]
+
+fn tp_asm_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+/* Emit one byte with GAS string-literal escaping. Returns bytes written. */
+fn tp_asm_emit_escape(dst: u64, off: u64, b: u8) -> u32 {
+    if b == 34u8 {
+        tp_asm_emit(dst, off, 92u8)
+        tp_asm_emit(dst, off + 1u64, 34u8)
+        return 2u32
+    }
+    if b == 92u8 {
+        tp_asm_emit(dst, off, 92u8)
+        tp_asm_emit(dst, off + 1u64, 92u8)
+        return 2u32
+    }
+    if b == 10u8 {
+        tp_asm_emit(dst, off, 92u8)
+        tp_asm_emit(dst, off + 1u64, 110u8)
+        return 2u32
+    }
+    if b == 13u8 {
+        tp_asm_emit(dst, off, 92u8)
+        tp_asm_emit(dst, off + 1u64, 114u8)
+        return 2u32
+    }
+    if b == 9u8 {
+        tp_asm_emit(dst, off, 92u8)
+        tp_asm_emit(dst, off + 1u64, 116u8)
+        return 2u32
+    }
+    if b >= 32u8 {
+        if b < 127u8 {
+            tp_asm_emit(dst, off, b)
+            return 1u32
+        }
+    }
+    /* Octal escape \NNN for non-printables */
+    let d2 : u8 = (b >> 6u8) & 0x3u8
+    let d1 : u8 = (b >> 3u8) & 0x7u8
+    let d0 : u8 = b & 0x7u8
+    tp_asm_emit(dst, off, 92u8)
+    tp_asm_emit(dst, off + 1u64, 48u8 + d2)
+    tp_asm_emit(dst, off + 2u64, 48u8 + d1)
+    tp_asm_emit(dst, off + 3u64, 48u8 + d0)
+    return 4u32
+}
+
+fn tp_iii_to_asm(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut off : u64 = 0u64
+    /* Section prefix */
+    let mut p : u32 = 0u32
+    while p < 50u32 {
+        if off >= dst_cap { return 0u64 }
+        tp_asm_emit(dst_buf, off, TP_ASM_PREFIX[p])
+        off = off + 1u64
+        p = p + 1u32
+    }
+    /* Body: chunk source into ≤80-byte lines, each as `.ascii "..."` */
+    let mut j : u64 = 0u64
+    while j < src_len {
+        if off + 16u64 > dst_cap { return 0u64 }
+        /* Line prefix */
+        let mut lp : u32 = 0u32
+        while lp < 12u32 {
+            tp_asm_emit(dst_buf, off, TP_ASM_LINE_PREFIX[lp])
+            off = off + 1u64
+            lp = lp + 1u32
+        }
+        /* Up to 64 source bytes, escaping as we go */
+        let mut col : u32 = 0u32
+        while col < 64u32 {
+            if j >= src_len { col = 64u32 }
+            if col < 64u32 {
+                if off + 4u64 > dst_cap { return 0u64 }
+                let bp : *u8 = (src + j) as *u8
+                let written : u32 = tp_asm_emit_escape(dst_buf, off, bp[0u64])
+                off = off + ((written as u64) & 0xFu64)
+                j = j + 1u64
+                col = col + 1u32
+            }
+        }
+        /* Line suffix */
+        tp_asm_emit(dst_buf, off, TP_ASM_LINE_SUFFIX[0])
+        tp_asm_emit(dst_buf, off + 1u64, TP_ASM_LINE_SUFFIX[1])
+        off = off + 2u64
+    }
+    return off
+}

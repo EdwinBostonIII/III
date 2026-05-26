@@ -1,0 +1,16 @@
+/* 802 -- nous Phase 1: the Search Trichotomy closure.  Drives nous_search_selftest:
+ * the classification keystone (a budget-hit is NEVER tagged SATURATED), the sealed
+ * wall-clock-rejecting budget, the outcome-split reproducibility keys (canonical omits
+ * weights so certified truth survives retraining; gap includes them), the e-graph
+ * client producing all three outcomes (SATURATED / GAP / REFUTED), and the B-7
+ * evaluation-gap fallback.  Negative arms live inside the selftest.
+ * Exit 99 = all hold; 1..26 = the failing sub-check. */
+module corpus_802
+
+extern @abi(c-msvc-x64) fn nous_search_selftest() -> u64 from "nous_search.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_search_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

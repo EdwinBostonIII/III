@@ -1,0 +1,85 @@
+/* Diag: 6 simple sequential x25519 calls with distinct scalars + same peer.
+ * Each call writes to its own buffer. If the result is the same for calls
+ * 2 and 4, that's x25519 state corruption. */
+module diag_x25519_seq6
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+var BP   : [u8; 32]
+var SK0  : [u8; 32]
+var SK1  : [u8; 32]
+var SK2  : [u8; 32]
+var SK3  : [u8; 32]
+var SK4  : [u8; 32]
+var SK5  : [u8; 32]
+var PEER : [u8; 32]
+var OUT0 : [u8; 32]
+var OUT1 : [u8; 32]
+var OUT2 : [u8; 32]
+var OUT3 : [u8; 32]
+var OUT4 : [u8; 32]
+var OUT5 : [u8; 32]
+
+fn _fill(p: *u8, base: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = ((base + i) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn _diff(a: *u8, b: *u8) -> u32 {
+    let mut k : u64 = 0u64
+    let mut d : u32 = 0u32
+    while k < 32u64 {
+        if a[k] != b[k] { d = d + 1u32 }
+        k = k + 1u64
+    }
+    return d
+}
+
+fn main() -> u64 {
+    /* Basepoint and PEER. */
+    let bp : *u8 = (&BP) as *u8
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+    _fill((&PEER) as *u8, 0xC0u64)
+
+    /* 6 distinct scalars. */
+    _fill((&SK0) as *u8, 0x10u64)
+    _fill((&SK1) as *u8, 0x20u64)
+    _fill((&SK2) as *u8, 0x30u64)
+    _fill((&SK3) as *u8, 0x40u64)
+    _fill((&SK4) as *u8, 0x50u64)
+    _fill((&SK5) as *u8, 0x60u64)
+
+    /* 6 sequential x25519 calls. */
+    if x25519((&OUT0) as *u8, (&SK0) as *u8, (&PEER) as *u8) != 0i32 { return 10u64 }
+    if x25519((&OUT1) as *u8, (&SK1) as *u8, (&PEER) as *u8) != 0i32 { return 11u64 }
+    if x25519((&OUT2) as *u8, (&SK2) as *u8, (&PEER) as *u8) != 0i32 { return 12u64 }
+    if x25519((&OUT3) as *u8, (&SK3) as *u8, (&PEER) as *u8) != 0i32 { return 13u64 }
+    if x25519((&OUT4) as *u8, (&SK4) as *u8, (&PEER) as *u8) != 0i32 { return 14u64 }
+    if x25519((&OUT5) as *u8, (&SK5) as *u8, (&PEER) as *u8) != 0i32 { return 15u64 }
+
+    /* All 6 outputs must differ pairwise.  Report the first pair that
+     * collides. */
+    if _diff((&OUT0) as *u8, (&OUT1) as *u8) == 0u32 { return 20u64 }
+    if _diff((&OUT0) as *u8, (&OUT2) as *u8) == 0u32 { return 21u64 }
+    if _diff((&OUT0) as *u8, (&OUT3) as *u8) == 0u32 { return 22u64 }
+    if _diff((&OUT0) as *u8, (&OUT4) as *u8) == 0u32 { return 23u64 }
+    if _diff((&OUT0) as *u8, (&OUT5) as *u8) == 0u32 { return 24u64 }
+    if _diff((&OUT1) as *u8, (&OUT2) as *u8) == 0u32 { return 25u64 }
+    if _diff((&OUT1) as *u8, (&OUT3) as *u8) == 0u32 { return 26u64 }
+    if _diff((&OUT1) as *u8, (&OUT4) as *u8) == 0u32 { return 27u64 }
+    if _diff((&OUT1) as *u8, (&OUT5) as *u8) == 0u32 { return 28u64 }
+    if _diff((&OUT2) as *u8, (&OUT3) as *u8) == 0u32 { return 29u64 }
+    if _diff((&OUT2) as *u8, (&OUT4) as *u8) == 0u32 { return 30u64 }
+    if _diff((&OUT2) as *u8, (&OUT5) as *u8) == 0u32 { return 31u64 }
+    if _diff((&OUT3) as *u8, (&OUT4) as *u8) == 0u32 { return 32u64 }
+    if _diff((&OUT3) as *u8, (&OUT5) as *u8) == 0u32 { return 33u64 }
+    if _diff((&OUT4) as *u8, (&OUT5) as *u8) == 0u32 { return 34u64 }
+
+    return 99u64
+}

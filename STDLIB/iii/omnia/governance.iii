@@ -1,0 +1,560 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\governance.iii
+ *
+ * III STDLIB - omnia::governance
+ *
+ * Sealed-evolution pipeline for the Intent Calculus v1.0
+ * (sanctus/calculus_v1.iii). This module supersedes ADR-RES-008 and
+ * FROZEN SPEC III-RES-FROZEN-001 sec 0.2 (the prior "no governance"
+ * declaration). Under the calculus, surface evolution is sanctioned
+ * via this loop -- every promotion is sealed, every promotion has a
+ * machine-checkable equivalence proof (omnia/proof_ripple_resolution::
+ * proof_ripple_equivalence), every promotion appends to the witness
+ * chain.
+ *
+ * State machine:
+ *
+ *   GOV_PENDING   (0) -- proposal registered, awaiting sandbox.
+ *   GOV_SANDBOXED (1) -- proposal replayed in isolation (caller-side).
+ *   GOV_PROVEN    (2) -- proof_ripple_equivalence cert attached.
+ *   GOV_ACCEPTED  (3) -- 2/3 yes-quorum AND status was PROVEN.
+ *   GOV_REJECTED  (4) -- vote failed quorum.
+ *   GOV_SEALED    (5) -- final: witness emitted, tree_root bumped
+ *                        (downstream caller responsibility for
+ *                        pattern_register + reseal).
+ *
+ * Discipline: each public fn takes <= 4 u64 parameters -- this is the
+ * composition-dispatch ABI (governance_* are registered in
+ * iii_compositions.def and invoked via the prespec fn(a,b,c,d:u64)
+ * trampoline), so do NOT widen.  (The local-copy-at-entry idiom some fns
+ * use was the iiis-0 single-use parameter-spill workaround; that bug is
+ * fixed -- Stage 3.9, corpus 277 -- so the copy is now redundant though
+ * harmless.  The <=4-arg shape remains required by composition.)
+ *
+ * Hexad: kind_origin (the governance loop is an origin operation).
+ * Ring: R-2 (sealed). K: 0.95.
+ */
+
+module omnia_governance
+
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv(old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u64 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_old_pid(cert_id: u64) -> u32 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_new_pid(cert_id: u64) -> u32 from "proof_ripple_resolution.iii"
+
+extern @abi(c-msvc-x64) fn reflect(scope: u32) -> u64 from "resolver.iii"
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+
+extern @abi(c-msvc-x64) fn witness_append_k(mhash_ptr: u64, cap_id: u64, k_fixed: u64) -> i32 from "witness.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const GOV_PROPOSAL_CAP : u32 = 256u32
+
+/* Status. */
+const GOV_PENDING   : u8 = 0u8
+const GOV_SANDBOXED : u8 = 1u8
+const GOV_PROVEN    : u8 = 2u8
+const GOV_ACCEPTED  : u8 = 3u8
+const GOV_REJECTED  : u8 = 4u8
+const GOV_SEALED    : u8 = 5u8
+
+/* Vote codes. */
+const GOV_VOTE_NO_CODE     : u8 = 0u8
+const GOV_VOTE_YES_CODE    : u8 = 1u8
+const GOV_VOTE_ABSTAIN_CODE: u8 = 2u8
+
+/* Quorum: 2/3 of (yes+no) must be yes. Encoded as numerator/denominator
+ * fixed-point: yes * 3 >= 2 * (yes+no). */
+const GOV_QUORUM_NUM : u32 = 2u32
+const GOV_QUORUM_DEN : u32 = 3u32
+
+/* Error codes. */
+const GOV_OK              : i32 =  0i32
+const GOV_E_BAD_ID        : i32 = -1i32
+const GOV_E_FULL          : i32 = -2i32
+const GOV_E_BAD_STATE     : i32 = -3i32
+const GOV_E_BAD_VOTE      : i32 = -4i32
+const GOV_E_NULL          : i32 = -5i32
+const GOV_E_QUORUM_FAIL   : i32 = -6i32
+const GOV_E_NOT_PROVEN    : i32 = -7i32
+
+/* Sentinel for failed return values. */
+const GOV_INVALID_ID : u64 = 0u64
+
+/* Storage. */
+var GOV_INTENT         : [u64; 256]
+var GOV_RATIONALE_HASH : [u8;  8192]   /* 32B per slot */
+var GOV_PROPOSER_CAP   : [u64; 256]
+var GOV_STATUS         : [u8;  256]
+var GOV_PROOF_CERT     : [u64; 256]
+var GOV_NEW_PID        : [u32; 256]
+var GOV_VOTE_YES       : [u32; 256]
+var GOV_VOTE_NO        : [u32; 256]
+var GOV_VOTE_ABSTAIN   : [u32; 256]
+var GOV_LIVE           : [u8;  256]
+var GOV_USED           : u32 = 0u32
+
+/* Domain bytes (16) for mhash payloads. */
+var GOV_DOM_SEAL : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 71u8, 79u8, 86u8, 95u8, 83u8, 69u8, 65u8, 76u8, 95u8, 86u8, 49u8, 0u8]
+var GOV_TMP_BUF8 : [u8; 8]
+var GOV_SEAL_OUT : [u8; 32]
+
+/* ---------------- helpers ---------------- */
+
+fn _gov_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < GOV_PROPOSAL_CAP {
+        if GOV_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn _gov_slot_of(id: u64) -> u32 {
+    let l_id : u64 = id
+    if l_id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = l_id - 1u64
+    if s >= (GOV_PROPOSAL_CAP as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if GOV_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Compute sha256 of `len` bytes at `ptr` into the slot's rationale_hash field. */
+fn _gov_hash_rationale(slot: u32, ptr: u64, len: u32) -> i32 {
+    let l_slot : u32 = slot
+    let l_ptr  : u64 = ptr
+    let l_len  : u32 = len
+    sha256_init()
+    let mut i : u32 = 0u32
+    while i < l_len {
+        let bp : *u8 = (l_ptr + ((i as u64) & 0xFFFFFFFFu64)) as *u8
+        sha256_update_byte((bp[0u64] as u32) & 0xFFu32)
+        i = i + 1u32
+    }
+    sha256_finalize_internal()
+    let off : u32 = l_slot * 32u32
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        GOV_RATIONALE_HASH[off + j] = (sha256_digest_byte(j) & 0xFFu32) as u8
+        j = j + 1u32
+    }
+    return GOV_OK
+}
+
+/* ---------------- public surface ---------------- */
+
+/* Register a new proposal. Returns proposal_id (1-based) or 0 on error.
+ * 4 params -- all-register Win64 ABI. */
+fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 @export {
+    let l_pc  : u64 = proposer_cap
+    let l_ci  : u64 = change_intent
+    let l_rp  : u64 = rationale_ptr
+    let l_rl  : u32 = rationale_len
+
+    if l_ci == 0u64 { return GOV_INVALID_ID }
+
+    let s : u32 = _gov_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return GOV_INVALID_ID }
+
+    GOV_INTENT[s]       = l_ci
+    GOV_PROPOSER_CAP[s] = l_pc
+    GOV_STATUS[s]       = GOV_PENDING
+    GOV_PROOF_CERT[s]   = 0u64
+    GOV_NEW_PID[s]      = 0u32
+    GOV_VOTE_YES[s]     = 0u32
+    GOV_VOTE_NO[s]      = 0u32
+    GOV_VOTE_ABSTAIN[s] = 0u32
+    GOV_LIVE[s]         = 1u8
+
+    /* Hash the rationale (zero bytes hashed if rationale_len == 0). */
+    if l_rp != 0u64 {
+        _gov_hash_rationale(s, l_rp, l_rl)
+    }
+    if l_rp == 0u64 {
+        let off : u32 = s * 32u32
+        let mut k : u32 = 0u32
+        while k < 32u32 {
+            GOV_RATIONALE_HASH[off + k] = 0u8
+            k = k + 1u32
+        }
+    }
+
+    if GOV_USED < GOV_PROPOSAL_CAP { GOV_USED = GOV_USED + 1u32 }
+    return (s as u64) + 1u64
+}
+
+/* Mark a proposal as sandboxed. Caller-side: invokes sandbox_* fns
+ * separately; this fn records the lifecycle transition.
+ * Pre: status == GOV_PENDING. */
+fn governance_sandbox(proposal_id: u64) -> i32 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    if GOV_STATUS[s] != GOV_PENDING { return GOV_E_BAD_STATE }
+    GOV_STATUS[s] = GOV_SANDBOXED
+    return GOV_OK
+}
+
+/* Attach a proof_ripple_equivalence cert and transition to PROVEN.
+ * 4 params. Pre: status == GOV_SANDBOXED. */
+fn governance_prove_equivalence(proposal_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64) -> u64 @export {
+    let l_id  : u64 = proposal_id
+    let l_old : u32 = old_pid
+    let l_new : u32 = new_pid
+    let l_cwp : u64 = corpus_witness_ptr
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_INVALID_ID }
+    if GOV_STATUS[s] != GOV_SANDBOXED { return GOV_INVALID_ID }
+
+    /* Run the equivalence proof. corpus_count is encoded in the high
+     * 32 bits of l_cwp via a separate accessor; for v1.0 we accept a
+     * count of 0 to mean "trivial cert", non-zero requires the caller
+     * to also call proof_ripple_equivalence directly with the count.
+     * The cert is then attached. To keep the API at <=4 params, we
+     * accept the count via governance_prove_equivalence_with_count(). */
+    let cert : u64 = proof_ripple_corpus_equiv(l_old, l_new, l_cwp, 0u32)
+    if cert == 0u64 { return GOV_INVALID_ID }
+    GOV_PROOF_CERT[s] = cert
+    GOV_NEW_PID[s]    = l_new
+    GOV_STATUS[s]     = GOV_PROVEN
+    return cert
+}
+
+/* Variant: attach proof with a specific corpus_count. 4 params:
+ * (proposal_id, old_pid, new_pid_and_count_packed, corpus_witness_ptr).
+ *   new_pid_and_count_packed bits 0..31 = new_pid; bits 32..63 = count. */
+fn governance_prove_equivalence_with_count(proposal_id: u64, old_pid: u32, new_pid_and_count: u64, corpus_witness_ptr: u64) -> u64 @export {
+    let l_id  : u64 = proposal_id
+    let l_old : u32 = old_pid
+    let l_pc  : u64 = new_pid_and_count
+    let l_cwp : u64 = corpus_witness_ptr
+    let l_new : u32 = (l_pc & 0xFFFFFFFFu64) as u32
+    let l_cnt : u32 = ((l_pc >> 32u64) & 0xFFFFFFFFu64) as u32
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_INVALID_ID }
+    if GOV_STATUS[s] != GOV_SANDBOXED { return GOV_INVALID_ID }
+
+    let cert : u64 = proof_ripple_corpus_equiv(l_old, l_new, l_cwp, l_cnt)
+    if cert == 0u64 { return GOV_INVALID_ID }
+    GOV_PROOF_CERT[s] = cert
+    GOV_NEW_PID[s]    = l_new
+    GOV_STATUS[s]     = GOV_PROVEN
+    return cert
+}
+
+/* Cast a vote on a proposal. 3 params. Vote MUST be one of
+ * GOV_VOTE_NO_CODE / YES / ABSTAIN. */
+fn governance_vote(voter_cap: u64, proposal_id: u64, vote: u8) -> i32 @export {
+    let _l_vc : u64 = voter_cap   /* recorded for cap-confinement audit; not used yet */
+    let l_id  : u64 = proposal_id
+    let l_v   : u8  = vote
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    if l_v == GOV_VOTE_YES_CODE {
+        GOV_VOTE_YES[s] = GOV_VOTE_YES[s] + 1u32
+        return GOV_OK
+    }
+    if l_v == GOV_VOTE_NO_CODE {
+        GOV_VOTE_NO[s] = GOV_VOTE_NO[s] + 1u32
+        return GOV_OK
+    }
+    if l_v == GOV_VOTE_ABSTAIN_CODE {
+        GOV_VOTE_ABSTAIN[s] = GOV_VOTE_ABSTAIN[s] + 1u32
+        return GOV_OK
+    }
+    return GOV_E_BAD_VOTE
+}
+
+/* Tally: encoded (yes << 32) | (no << 16) | abstain. */
+fn governance_tally(proposal_id: u64) -> u64 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let yes : u64 = (GOV_VOTE_YES[s] as u64) & 0xFFFFFFFFu64
+    let no  : u64 = (GOV_VOTE_NO[s] as u64) & 0xFFFFFFFFu64
+    let abs_ : u64 = (GOV_VOTE_ABSTAIN[s] as u64) & 0xFFFFFFFFu64
+    return (yes << 32u64) | ((no & 0xFFFFu64) << 16u64) | (abs_ & 0xFFFFu64)
+}
+
+/* Check whether the threshold has been met: yes / (yes+no) >= 2/3. */
+fn governance_threshold_met(proposal_id: u64) -> u8 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    let yes : u32 = GOV_VOTE_YES[s]
+    let no  : u32 = GOV_VOTE_NO[s]
+    if yes == 0u32 {
+        if no == 0u32 { return 0u8 }
+    }
+    /* yes * GOV_QUORUM_DEN >= GOV_QUORUM_NUM * (yes + no)
+     * i.e., yes * 3 >= 2 * (yes + no). Using u64 arithmetic. */
+    let yes_u64 : u64 = (yes as u64) & 0xFFFFFFFFu64
+    let no_u64  : u64 = (no  as u64) & 0xFFFFFFFFu64
+    let lhs : u64 = yes_u64 * (GOV_QUORUM_DEN as u64)
+    let rhs : u64 = (yes_u64 + no_u64) * (GOV_QUORUM_NUM as u64)
+    if lhs >= rhs { return 1u8 }
+    return 0u8
+}
+
+/* Promote: status PROVEN + threshold met -> ACCEPTED.
+ * Pre: status == GOV_PROVEN. */
+fn governance_promote(proposal_id: u64) -> i32 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    if GOV_STATUS[s] != GOV_PROVEN { return GOV_E_NOT_PROVEN }
+    if governance_threshold_met(l_id) != 1u8 {
+        GOV_STATUS[s] = GOV_REJECTED
+        return GOV_E_QUORUM_FAIL
+    }
+    GOV_STATUS[s] = GOV_ACCEPTED
+    return GOV_OK
+}
+
+/* Seal: emit a witness entry binding the proposal's identity. status
+ * ACCEPTED -> SEALED. The witness's mhash is sha256("III_GOV_SEAL_V1"
+ * || proposal_id || cert || new_pid || rationale_hash). */
+fn governance_seal(proposal_id: u64) -> i32 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    if GOV_STATUS[s] != GOV_ACCEPTED { return GOV_E_BAD_STATE }
+
+    mhash_begin()
+    mhash_domain((&GOV_DOM_SEAL) as u64, 15u64)
+
+    /* proposal_id (u64 LE) */
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        GOV_TMP_BUF8[i] = ((l_id >> ((i & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    mhash_payload((&GOV_TMP_BUF8) as u64, 8u64)
+
+    /* cert (u64 LE) */
+    let cert : u64 = GOV_PROOF_CERT[s]
+    i = 0u32
+    while i < 8u32 {
+        GOV_TMP_BUF8[i] = ((cert >> ((i & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    mhash_payload((&GOV_TMP_BUF8) as u64, 8u64)
+
+    /* new_pid (u32 LE, zero-padded to 8) */
+    let npid : u32 = GOV_NEW_PID[s]
+    GOV_TMP_BUF8[0] = (npid & 0xFFu32) as u8
+    GOV_TMP_BUF8[1] = ((npid >>  8u32) & 0xFFu32) as u8
+    GOV_TMP_BUF8[2] = ((npid >> 16u32) & 0xFFu32) as u8
+    GOV_TMP_BUF8[3] = ((npid >> 24u32) & 0xFFu32) as u8
+    GOV_TMP_BUF8[4] = 0u8
+    GOV_TMP_BUF8[5] = 0u8
+    GOV_TMP_BUF8[6] = 0u8
+    GOV_TMP_BUF8[7] = 0u8
+    mhash_payload((&GOV_TMP_BUF8) as u64, 8u64)
+
+    /* rationale_hash (32B) */
+    let rh_off : u32 = s * 32u32
+    mhash_payload(((&GOV_RATIONALE_HASH) as u64) + (rh_off as u64), 32u64)
+
+    mhash_final((&GOV_SEAL_OUT) as u64)
+
+    /* Append to witness with K = 1.0e9 (fully sealed). */
+    witness_append_k((&GOV_SEAL_OUT) as u64, GOV_PROPOSER_CAP[s], 1000000000u64)
+
+    GOV_STATUS[s] = GOV_SEALED
+    return GOV_OK
+}
+
+/* Diagnostic accessors. */
+fn governance_status(proposal_id: u64) -> u8 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0xFFu8 }
+    return GOV_STATUS[s]
+}
+
+fn governance_cert(proposal_id: u64) -> u64 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return GOV_PROOF_CERT[s]
+}
+
+fn governance_intent(proposal_id: u64) -> u64 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return GOV_INTENT[s]
+}
+
+fn governance_new_pid(proposal_id: u64) -> u32 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return GOV_NEW_PID[s]
+}
+
+fn governance_proposer_cap(proposal_id: u64) -> u64 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return GOV_PROPOSER_CAP[s]
+}
+
+fn governance_rationale_hash_byte(proposal_id: u64, i: u32) -> u32 @export {
+    let l_id : u64 = proposal_id
+    let l_i  : u32 = i
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0x100u32 }
+    if l_i >= 32u32 { return 0x100u32 }
+    let off : u32 = s * 32u32
+    return GOV_RATIONALE_HASH[off + l_i] as u32
+}
+
+fn governance_proposal_count() -> u32 @export {
+    return GOV_USED
+}
+
+fn governance_capacity() -> u32 @export {
+    return GOV_PROPOSAL_CAP
+}
+
+fn governance_drop(proposal_id: u64) -> i32 @export {
+    let l_id : u64 = proposal_id
+    let s : u32 = _gov_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return GOV_E_BAD_ID }
+    GOV_INTENT[s]       = 0u64
+    GOV_PROPOSER_CAP[s] = 0u64
+    GOV_STATUS[s]       = 0u8
+    GOV_PROOF_CERT[s]   = 0u64
+    GOV_NEW_PID[s]      = 0u32
+    GOV_VOTE_YES[s]     = 0u32
+    GOV_VOTE_NO[s]      = 0u32
+    GOV_VOTE_ABSTAIN[s] = 0u32
+    GOV_LIVE[s]         = 0u8
+    let off : u32 = s * 32u32
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        GOV_RATIONALE_HASH[off + k] = 0u8
+        k = k + 1u32
+    }
+    if GOV_USED > 0u32 { GOV_USED = GOV_USED - 1u32 }
+    return GOV_OK
+}
+
+fn governance_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < GOV_PROPOSAL_CAP {
+        GOV_INTENT[i]       = 0u64
+        GOV_PROPOSER_CAP[i] = 0u64
+        GOV_STATUS[i]       = 0u8
+        GOV_PROOF_CERT[i]   = 0u64
+        GOV_NEW_PID[i]      = 0u32
+        GOV_VOTE_YES[i]     = 0u32
+        GOV_VOTE_NO[i]      = 0u32
+        GOV_VOTE_ABSTAIN[i] = 0u32
+        GOV_LIVE[i]         = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < (GOV_PROPOSAL_CAP * 32u32) {
+        GOV_RATIONALE_HASH[j] = 0u8
+        j = j + 1u32
+    }
+    GOV_USED = 0u32
+    /* Also clear the auto-observation history. */
+    let mut h : u32 = 0u32
+    while h < OBSERVE_HISTORY_CAP {
+        OBSERVE_HISTORY_PID[h] = 0u64
+        h = h + 1u32
+    }
+    OBSERVE_HISTORY_LEN  = 0u32
+    OBSERVE_HISTORY_NEXT = 0u32
+    return GOV_OK
+}
+
+/* ================================================================ */
+/* Phase F.3: reflect-driven recording                                */
+/*                                                                    */
+/* governance_observe_and_propose(replay_count) -- samples            */
+/* reflect(scope=2) (last winning pattern_id) `replay_count` times    */
+/* and appends each non-zero observation to a 16-slot ring history.   */
+/*                                                                    */
+/* IMPORTANT (Mandate 7 / no-observational-learning standard):        */
+/* This function NEVER auto-generates proposals based on observation  */
+/* counts or thresholds. Count-and-promote, observe-and-adapt, and    */
+/* threshold-trigger patterns are forbidden by the no-statistics      */
+/* standard ("ML in disguise"). Proposals MUST be explicit calls to   */
+/* governance_propose by an authoring caller.                         */
+/*                                                                    */
+/* The function's role is purely informational: it records the recent */
+/* resolution chain as a deterministic FIFO history accessible via   */
+/* governance_observe_history_len + sibling getters. A future caller  */
+/* may inspect the history to drive STRUCTURAL proposals (e.g. when  */
+/* a recorded pid has a known unused composition slot in pattern_     */
+/* table -- a property check, not a count check).                     */
+/*                                                                    */
+/* Returns 0 (no proposals are ever auto-generated).                  */
+/*                                                                    */
+/* Determinism: history buffer is FIFO; same call sequence produces   */
+/* same history state.                                                */
+/* ================================================================ */
+
+const OBSERVE_HISTORY_CAP : u32 = 16u32
+
+var OBSERVE_HISTORY_PID  : [u64; 16]
+var OBSERVE_HISTORY_LEN  : u32 = 0u32
+var OBSERVE_HISTORY_NEXT : u32 = 0u32
+
+fn governance_observe_and_propose(replay_count: u32) -> u32 @export {
+    let l_count : u32 = replay_count
+    let mut step : u32 = 0u32
+    while step < l_count {
+        let pid : u64 = reflect(2u32)
+        if pid != 0u64 {
+            /* Append to history (ring-buffer when full). NO COUNTING,
+             * NO THRESHOLD-TRIGGERED PROPOSAL EMISSION. */
+            if OBSERVE_HISTORY_LEN < OBSERVE_HISTORY_CAP {
+                OBSERVE_HISTORY_PID[OBSERVE_HISTORY_LEN] = pid
+                OBSERVE_HISTORY_LEN = OBSERVE_HISTORY_LEN + 1u32
+            } else {
+                OBSERVE_HISTORY_PID[OBSERVE_HISTORY_NEXT] = pid
+                OBSERVE_HISTORY_NEXT = (OBSERVE_HISTORY_NEXT + 1u32) & 0xFu32
+            }
+        }
+        step = step + 1u32
+    }
+    return 0u32   /* No auto-proposals; mandate 7. */
+}
+
+/* Diagnostic accessor: read a recorded pid from the observation
+ * history. Returns 0 if idx is out of range. */
+fn governance_observe_history_pid(idx: u32) -> u64 @export {
+    let l : u32 = idx
+    if l >= OBSERVE_HISTORY_LEN { return 0u64 }
+    return OBSERVE_HISTORY_PID[l]
+}
+
+/* Diagnostic: number of entries currently in the observation history. */
+fn governance_observe_history_len() -> u32 @export {
+    return OBSERVE_HISTORY_LEN
+}
+
+/* Reset only the observation history, preserving proposals. */
+fn governance_observe_reset() -> i32 @export {
+    let mut h : u32 = 0u32
+    while h < OBSERVE_HISTORY_CAP {
+        OBSERVE_HISTORY_PID[h] = 0u64
+        h = h + 1u32
+    }
+    OBSERVE_HISTORY_LEN  = 0u32
+    OBSERVE_HISTORY_NEXT = 0u32
+    return GOV_OK
+}

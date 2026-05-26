@@ -1,0 +1,4 @@
+/* 651 — branch_governance: constitution-gated branch retire/merge governance, witnessed. */
+module corpus_651
+extern @abi(c-msvc-x64) fn bg_selftest() -> u64 from "branch_governance.iii"
+fn main() -> u64 { return bg_selftest() }

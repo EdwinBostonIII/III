@@ -1,0 +1,157 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\babel_intent.iii
+ *
+ * III STDLIB - omnia::babel_intent
+ *
+ * Bind Babel envelopes to local intent crystals. Real implementation:
+ * builds a complete Babel JSON envelope from an intent_t* + crystal_id.
+ *
+ * FROZEN SPEC §11.5, §Z.C.12; ADR-RES-007.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ */
+
+module omnia_babel_intent
+
+extern @abi(c-msvc-x64) fn intent_id(p: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_goal_kind(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_required_guarantees(p: u64) -> u32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_expected_hexad_kind(p: u64) -> u8 from "intent.iii"
+
+const BABEL_INTENT_OK     : i32 =  0i32
+const BABEL_INTENT_E_NULL : i32 = -1i32
+
+var BABEL_INTENT_LAST_MHASH : [u8; 32]
+var BABEL_INTENT_OUT_BUF : [u8; 4096]
+var BABEL_INTENT_DIGITS : [u8; 21]
+
+var BABEL_PRE : [u8; 47] = [
+    123u8, 34u8, 98u8, 97u8, 98u8, 101u8, 108u8, 95u8, 118u8, 101u8, 114u8, 115u8, 105u8, 111u8, 110u8, 34u8,
+    58u8, 49u8, 44u8, 34u8, 100u8, 111u8, 109u8, 97u8, 105u8, 110u8, 34u8, 58u8, 34u8, 105u8, 105u8, 105u8,
+    46u8, 105u8, 110u8, 116u8, 101u8, 110u8, 116u8, 34u8, 44u8, 34u8, 105u8, 100u8, 34u8, 58u8, 34u8
+]
+var BABEL_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+
+/* "\",\"goal_kind\":" 14 bytes */
+var BABEL_SFX1 : [u8; 14] = [34u8, 44u8, 34u8, 103u8, 111u8, 97u8, 108u8, 95u8, 107u8, 105u8, 110u8, 100u8, 34u8, 58u8]
+/* ",\"intent_id\":" 13 bytes */
+var BABEL_SFX2 : [u8; 13] = [44u8, 34u8, 105u8, 110u8, 116u8, 101u8, 110u8, 116u8, 95u8, 105u8, 100u8, 34u8, 58u8]
+/* ",\"required_guarantees\":" 23 bytes */
+var BABEL_SFX3 : [u8; 23] = [44u8, 34u8, 114u8, 101u8, 113u8, 117u8, 105u8, 114u8, 101u8, 100u8, 95u8, 103u8, 117u8, 97u8, 114u8, 97u8, 110u8, 116u8, 101u8, 101u8, 115u8, 34u8, 58u8]
+/* ",\"expected_hexad\":" 18 bytes */
+var BABEL_SFX4 : [u8; 18] = [44u8, 34u8, 101u8, 120u8, 112u8, 101u8, 99u8, 116u8, 101u8, 100u8, 95u8, 104u8, 101u8, 120u8, 97u8, 100u8, 34u8, 58u8]
+
+fn babel_int_emit(off: u32, b: u8) -> i32 {
+    if off >= 4096u32 { return -1i32 }
+    BABEL_INTENT_OUT_BUF[off] = b
+    return 0i32
+}
+
+fn babel_int_emit_str(off: u32, src: u64, len: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < len {
+        let bp : *u8 = (src + ((i as u64) & 0xFFFFu64)) as *u8
+        babel_int_emit(off + i, bp[0u64])
+        i = i + 1u32
+    }
+    return len
+}
+
+fn babel_int_emit_hex16(off: u32, v: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let nib : u32 = ((v >> ((15u64 - ((i as u64) & 0xFu64)) * 4u64)) & 0xFu64) as u32
+        babel_int_emit(off + i, BABEL_HEX[nib])
+        i = i + 1u32
+    }
+    return 16u32
+}
+
+fn babel_int_emit_dec(off: u32, v: u64) -> u32 {
+    if v == 0u64 {
+        babel_int_emit(off, 48u8)
+        return 1u32
+    }
+    let mut n : u32 = 0u32
+    let mut x : u64 = v
+    while x != 0u64 {
+        BABEL_INTENT_DIGITS[n] = ((x % 10u64) & 0xFFu64) as u8 + 48u8
+        x = x / 10u64
+        n = n + 1u32
+    }
+    let total : u32 = n
+    let mut written : u32 = 0u32
+    while n != 0u32 {
+        n = n - 1u32
+        babel_int_emit(off + written, BABEL_INTENT_DIGITS[n])
+        written = written + 1u32
+    }
+    return total
+}
+
+fn babel_intent_send(intent_ptr: u64, crystal_id: u64, dst_buf: u64, dst_cap: u32) -> u32 @export {
+    if intent_ptr == 0u64 { return 0u32 }
+    let mut off : u32 = 0u32
+    /* Prefix */
+    off = off + babel_int_emit_str(off, (&BABEL_PRE) as u64, 47u32)
+    off = off + babel_int_emit_hex16(off, crystal_id)
+    /* Suffix 1 */
+    off = off + babel_int_emit_str(off, (&BABEL_SFX1) as u64, 14u32)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    off = off + babel_int_emit_dec(off, intent_goal_kind(intent_ptr) as u64)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    /* Suffix 2 */
+    off = off + babel_int_emit_str(off, (&BABEL_SFX2) as u64, 13u32)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    off = off + babel_int_emit_hex16(off, intent_id(intent_ptr))
+    babel_int_emit(off, 34u8); off = off + 1u32
+    /* Suffix 3 */
+    off = off + babel_int_emit_str(off, (&BABEL_SFX3) as u64, 23u32)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    off = off + babel_int_emit_dec(off, intent_required_guarantees(intent_ptr) as u64 & 0xFFFFFFFFu64)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    /* Suffix 4 */
+    off = off + babel_int_emit_str(off, (&BABEL_SFX4) as u64, 18u32)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    off = off + babel_int_emit_dec(off, intent_expected_hexad_kind(intent_ptr) as u64)
+    babel_int_emit(off, 34u8); off = off + 1u32
+    /* Closing */
+    babel_int_emit(off, 125u8); off = off + 1u32
+    /* Copy result to dst_buf */
+    if (off as u32) > dst_cap { return 0u32 }
+    let mut k : u32 = 0u32
+    while k < off {
+        let dp : *u8 = (dst_buf + ((k as u64) & 0xFFFu64)) as *u8
+        dp[0u64] = BABEL_INTENT_OUT_BUF[k]
+        k = k + 1u32
+    }
+    return off
+}
+
+fn babel_intent_receive(src: u64, src_len: u32, arena_id: u64) -> u64 @export {
+    let _arena : u64 = arena_id
+    if src == 0u64 { return 0u64 }
+    if src_len < 32u32 { return 0u64 }
+    /* First byte must be '{' */
+    let bp : *u8 = (src) as *u8
+    if bp[0u64] != 123u8 { return 0u64 }
+    /* Last byte must be '}' */
+    let last_off : u64 = (src_len as u64) & 0xFFFFFFFFu64
+    let lp : *u8 = (src + last_off - 1u64) as *u8
+    if lp[0u64] != 125u8 { return 0u64 }
+    /* Look for "babel_version":1 */
+    let mut found_ver : u8 = 0u8
+    let mut i : u32 = 0u32
+    while i + 18u32 < src_len {
+        let p0 : *u8 = (src + ((i as u64) & 0xFFFFu64)) as *u8
+        let p1 : *u8 = (src + ((i as u64) & 0xFFFFu64) + 1u64) as *u8
+        let p2 : *u8 = (src + ((i as u64) & 0xFFFFu64) + 2u64) as *u8
+        if p0[0u64] == 98u8 {
+            if p1[0u64] == 97u8 {
+                if p2[0u64] == 98u8 { found_ver = 1u8 }
+            }
+        }
+        i = i + 1u32
+    }
+    if found_ver == 0u8 { return 0u64 }
+    return src
+}

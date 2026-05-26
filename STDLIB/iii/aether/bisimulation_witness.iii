@@ -1,0 +1,308 @@
+/* III/STDLIB/iii/aether/bisimulation_witness.iii -- Layer 9, Module 80.
+ * Substrate-level bisimulation witness producer.  Composes computation_graph's
+ * shallow cg_bisimulate (op_id/in_commit/out_commit field-window [64,160)
+ * equality) with the deeper structural checks the primitive skips: that both
+ * fragments resolve in the chain-as-DAG (cg_resolve_fragment), and the
+ * cross-branch / cross-epoch context under which the equivalence holds.  Emits
+ * one canonical BISIMULATION_WITNESS fragment (V3 payload kind 0x10) whose
+ * payload carries the two computation ids and the base proof-term reference.
+ * W41: no equivalence claim without a bisimulation witness.
+ *
+ * Hexad: kind_witness.  Ring: R0.  K: 1.00.
+ * Discipline: W2 (4 params max), W8 (fixed arenas), W11 (==/!= signed compares),
+ *             W13 (<=20 locals), W14 (counter loops, no break), W15 (no recursion).
+ * Idioms: element-address via ((&ARR as u64)+off) as *u8; all scratch module-
+ *   scope (no local var arrays); ASCII -- in comments; equality-only signed
+ *   compares.  Param-spill hardening: left_fid/right_fid copied to module
+ *   buffers before any extern (Trap 11).
+ *
+ * SPEC FIX: the spec's BW_PAYLOAD_LEN=152 / [u8;152] is inconsistent with its
+ *   own payload layout (8-byte header + 5 x 32-byte ids = 168 bytes); corrected
+ *   to 168 here (the layout is the binding intent; KAT only inspects [0..104)).
+ */
+
+module aether_bisimulation_witness
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_is_zero(a: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cg_bisimulate(left_fid: *u8, right_fid: *u8, out_witness_fid: *u8) -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cg_resolve_fragment(fid: *u8, out_branch_id: *u8, out_position: *u64) -> i32 from "computation_graph.iii"
+
+/* KAT-setup externs (drive the substrate for the gated KATs 2-4). */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cg_init() -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+
+const BW_OK                : i32 =  0i32
+const BW_E_NULL            : i32 = -1i32
+const BW_E_NOT_INITED      : i32 = -2i32
+const BW_E_DENIED          : i32 = -3i32
+const BW_E_FRAGMENT_ABSENT : i32 = -4i32
+const BW_E_NOT_BISIMILAR   : i32 = -5i32
+const BW_E_EMIT            : i32 = -6i32
+
+const BW_IDENT_BYTES : u64 = 32u64
+const BW_REQ_RIGHTS  : u64 = 0x0800u64                  // CAP_RIGHT_ATTEST (capability.iii bit 11)
+const BW_U64_SENT    : u64 = 0xFFFFFFFFFFFFFFFFu64      // wh_publish failure sentinel
+const BW_PAYLOAD_TAG : u8  = 0xE3u8                     // V3 payload sentinel
+const BW_PAYLOAD_KIND: u8  = 0x10u8                     // BISIMULATION_WITNESS kind
+const BW_PAYLOAD_LEN : u32 = 168u32                     // 8 header + 5*32 ids (spec said 152 -- arithmetic error)
+const BW_OPTAG_LEN   : u64 = 23u64                      // "bw.bisimulation.witness"
+
+var BW_INITED        : u8  = 0u8
+var BW_LEFT_FID      : [u8; 32]
+var BW_RIGHT_FID     : [u8; 32]
+var BW_BASE_WITNESS  : [u8; 32]
+var BW_CTX_BRANCH    : [u8; 64]      /* left branch @[0..32), right @[32..64) */
+var BW_CTX_POS       : [u64; 2]      /* left pos @[0], right pos @[1] (NOT hashed) */
+var BW_PAYLOAD       : [u8; 168]
+var BW_ZERO_ID       : [u8; 32]
+var BW_SELF_PRODUCER : [u8; 32]
+var BW_BISIM_OPID    : [u8; 32]
+var BW_OPTAG         : [u8; 23]
+var BW_OUT_TMP       : [u8; 32]      /* wh_publish audit-fid sink (the returned witness id is the deterministic ident_from_bytes(payload), not this) */
+
+/* selftest scratch */
+var BW_T_L       : [u8; 32]
+var BW_T_R       : [u8; 32]
+var BW_T_R3      : [u8; 32]
+var BW_T_OUT     : [u8; 32]
+var BW_T_OC      : [u8; 32]
+var BW_T_PAY     : [u64; 26]      /* 208-byte source payload for KAT fragment emits (covers CG_OFF_BRANCH_ID=168..200 with deterministic zeros) */
+var BW_T_RDBK    : [u64; 24]      /* 192-byte read-back buffer for wh_get_payload */
+
+/* ============================ internal helpers ============================ */
+
+/* Resolve one fragment's chain context into slot 0 (left) or 1 (right):
+ * branch id -> BW_CTX_BRANCH[slot*32..], position -> BW_CTX_POS[slot]. */
+fn bw_resolve_ctx(fid: *u8, slot: u64) -> i32 {
+    let bp : *u8 = ((&BW_CTX_BRANCH as u64) + slot * 32u64) as *u8
+    let pp : *u64 = ((&BW_CTX_POS as u64) + slot * 8u64) as *u64
+    let r : i32 = cg_resolve_fragment(fid, bp, pp)
+    if r != 0i32 { return BW_E_FRAGMENT_ABSENT }
+    return BW_OK
+}
+
+/* Assemble the composite 0x10 payload from recorded context and publish one
+ * fragment via wh_publish.  Positions are deliberately NOT in the payload
+ * (M10: the witness fid must not depend on chain placement). */
+fn bw_emit_witness(out_witness_fid: *u8) -> i32 {
+    let plp : *u8 = (&BW_PAYLOAD as u64) as *u8
+    plp[0u64] = BW_PAYLOAD_TAG
+    plp[1u64] = BW_PAYLOAD_KIND
+    let mut z : u64 = 2u64
+    while z < 8u64 { plp[z] = 0u8  z = z + 1u64 }
+    let lp : *u8 = (&BW_LEFT_FID as u64) as *u8
+    let rp : *u8 = (&BW_RIGHT_FID as u64) as *u8
+    let basep : *u8 = (&BW_BASE_WITNESS as u64) as *u8
+    let cbp : *u8 = (&BW_CTX_BRANCH as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        plp[8u64 + k]   = lp[k]
+        plp[40u64 + k]  = rp[k]
+        plp[72u64 + k]  = basep[k]
+        plp[104u64 + k] = cbp[k]
+        plp[136u64 + k] = cbp[32u64 + k]
+        k = k + 1u64
+    }
+    /* Publish the audit fragment (its at_time-stamped fid lands in BW_OUT_TMP).
+     * The RETURNED witness id must be M10-reproducible (the spec's KAT-2 tests
+     * re-derivation byte-identity), so derive it as the deterministic content
+     * address of the payload -- NOT the wh_publish fid, which embeds at_time
+     * (same defect as cg_bisimulate bug #6; positions are already excluded from
+     * the payload per spec G7, so this id depends only on the two computations
+     * + base proof term + branch context). */
+    let idx : u64 = wh_publish((&BW_SELF_PRODUCER as u64) as *u8, (&BW_BISIM_OPID as u64) as *u8, (&BW_ZERO_ID as u64) as *u8, (&BW_ZERO_ID as u64) as *u8, 0u8, 0u8, 0u16, (&BW_ZERO_ID as u64) as *u8, 0u32, plp, BW_PAYLOAD_LEN, (&BW_OUT_TMP as u64) as *u8)
+    if idx == BW_U64_SENT { return BW_E_EMIT }
+    ident_from_bytes(plp, BW_PAYLOAD_LEN as u64, out_witness_fid)
+    return BW_OK
+}
+
+/* ================================ public API ============================== */
+
+fn bw_init() -> i32 @export {
+    if BW_INITED == 1u8 { return BW_OK }
+    ident_zero((&BW_ZERO_ID as u64) as *u8)
+    /* "bw.bisimulation.witness" = 23 ASCII bytes, written byte-by-byte. */
+    BW_OPTAG[0u64]  = 0x62u8   BW_OPTAG[1u64]  = 0x77u8   BW_OPTAG[2u64]  = 0x2Eu8
+    BW_OPTAG[3u64]  = 0x62u8   BW_OPTAG[4u64]  = 0x69u8   BW_OPTAG[5u64]  = 0x73u8
+    BW_OPTAG[6u64]  = 0x69u8   BW_OPTAG[7u64]  = 0x6Du8   BW_OPTAG[8u64]  = 0x75u8
+    BW_OPTAG[9u64]  = 0x6Cu8   BW_OPTAG[10u64] = 0x61u8   BW_OPTAG[11u64] = 0x74u8
+    BW_OPTAG[12u64] = 0x69u8   BW_OPTAG[13u64] = 0x6Fu8   BW_OPTAG[14u64] = 0x6Eu8
+    BW_OPTAG[15u64] = 0x2Eu8   BW_OPTAG[16u64] = 0x77u8   BW_OPTAG[17u64] = 0x69u8
+    BW_OPTAG[18u64] = 0x74u8   BW_OPTAG[19u64] = 0x6Eu8   BW_OPTAG[20u64] = 0x65u8
+    BW_OPTAG[21u64] = 0x73u8   BW_OPTAG[22u64] = 0x73u8
+    let tagp : *u8 = (&BW_OPTAG as u64) as *u8
+    ident_from_bytes(tagp, BW_OPTAG_LEN, (&BW_SELF_PRODUCER as u64) as *u8)
+    ident_from_bytes(tagp, BW_OPTAG_LEN, (&BW_BISIM_OPID as u64) as *u8)
+    BW_INITED = 1u8
+    return BW_OK
+}
+
+fn bw_construct_witness(left_fid: *u8, right_fid: *u8, out_witness_fid: *u8, cap_id: u64) -> i32 @export {
+    if BW_INITED == 0u8 { return BW_E_NOT_INITED }
+    if (left_fid as u64) == 0u64 { return BW_E_NULL }
+    if (right_fid as u64) == 0u64 { return BW_E_NULL }
+    if (out_witness_fid as u64) == 0u64 { return BW_E_NULL }
+    if cap_verify_rights(cap_id, BW_REQ_RIGHTS) == 0u8 { return BW_E_DENIED }
+    ident_copy(left_fid, (&BW_LEFT_FID as u64) as *u8)
+    ident_copy(right_fid, (&BW_RIGHT_FID as u64) as *u8)
+    let rl : i32 = bw_resolve_ctx((&BW_LEFT_FID as u64) as *u8, 0u64)
+    if rl != 0i32 { return BW_E_FRAGMENT_ABSENT }
+    let rr : i32 = bw_resolve_ctx((&BW_RIGHT_FID as u64) as *u8, 1u64)
+    if rr != 0i32 { return BW_E_FRAGMENT_ABSENT }
+    let bi : i32 = cg_bisimulate((&BW_LEFT_FID as u64) as *u8, (&BW_RIGHT_FID as u64) as *u8, (&BW_BASE_WITNESS as u64) as *u8)
+    if bi != 0i32 { return BW_E_NOT_BISIMILAR }
+    return bw_emit_witness(out_witness_fid)
+}
+
+/* ================================= selftest =============================== */
+
+/* Emit a KAT fragment: zero the 192-byte source payload, set window [64,160)
+ * to `win_byte`, publish with the caller's out_commit + register in the spine.
+ * Returns the wh_publish index (0xFFFF..FF sentinel on failure). */
+fn bw_t_emit(out_commit: *u8, win_byte: u8, out_fid: *u8) -> u64 {
+    let zp : *u8 = (&BW_ZERO_ID as u64) as *u8
+    let plp : *u8 = (&BW_T_PAY as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 208u64 { plp[i] = 0u8  i = i + 1u64 }
+    let mut w : u64 = 64u64
+    while w < 160u64 { plp[w] = win_byte  w = w + 1u64 }
+    /* 200-byte payload: [64,160) = bisim window; [160,168) = at_time (0);
+     * [168,200) = branch_id (0, deterministic) so cg_resolve_fragment reads our
+     * zeros, not stale CG_FRAG_L -- required for the M10 re-derivation check. */
+    let idx : u64 = wh_publish(zp, zp, zp, out_commit, 0u8, 0u8, 1u16, zp, 0u32, plp, 200u32, out_fid)
+    if idx != BW_U64_SENT { ws_register(idx) }
+    return idx
+}
+
+/* KAT-1: init + opid derivation (unconditional; closes the M11/M12 zero-id hole). */
+fn bw_selftest_k1() -> u64 {
+    BW_INITED = 0u8
+    bw_init()
+    if BW_INITED != 1u8 { return 1u64 }
+    if ident_is_zero((&BW_SELF_PRODUCER as u64) as *u8) != 0u8 { return 2u64 }
+    if ident_is_zero((&BW_BISIM_OPID as u64) as *u8) != 0u8 { return 3u64 }
+    if ident_eq((&BW_SELF_PRODUCER as u64) as *u8, (&BW_BISIM_OPID as u64) as *u8) != 1u8 { return 4u64 }
+    /* idempotent re-init keeps the ids. */
+    bw_init()
+    if BW_INITED != 1u8 { return 5u64 }
+    return 0u64
+}
+
+/* KAT-5: uninit + null guards (prove the negatives, before the substrate setup). */
+fn bw_selftest_k5() -> u64 {
+    BW_INITED = 0u8
+    let lp : *u8 = (&BW_T_L as u64) as *u8
+    let rp : *u8 = (&BW_T_R as u64) as *u8
+    let op : *u8 = (&BW_T_OUT as u64) as *u8
+    let nullp : *u8 = 0u64 as *u8
+    if bw_construct_witness(lp, rp, op, 1u64) != BW_E_NOT_INITED { return 50u64 }
+    bw_init()
+    if bw_construct_witness(nullp, rp, op, 1u64) != BW_E_NULL { return 51u64 }
+    if bw_construct_witness(lp, nullp, op, 1u64) != BW_E_NULL { return 52u64 }
+    if bw_construct_witness(lp, rp, nullp, 1u64) != BW_E_NULL { return 53u64 }
+    return 0u64
+}
+
+/* KATs 2/3/4 + fragment-absent: the full substrate vertical.
+ * wh/ws/cg/cap init -> emit L,R (bisimilar) + R3 (non-bisimilar) -> register ->
+ * positive emit, non-bisim refusal, cap refusal, fragment-absent refusal,
+ * each with the wh_next_idx no-emit-on-refusal check. */
+fn bw_selftest_substrate() -> u64 {
+    wh_init(0u64)
+    ws_init()
+    cg_init()
+    bw_init()
+    cap_env_init()
+    let ocp : *u8 = (&BW_T_OC as u64) as *u8
+    let lp : *u8 = (&BW_T_L as u64) as *u8
+    let rp : *u8 = (&BW_T_R as u64) as *u8
+    let r3p : *u8 = (&BW_T_R3 as u64) as *u8
+    let op : *u8 = (&BW_T_OUT as u64) as *u8
+    /* Emit L (window 0xAA, out_commit byte0=0xA0). */
+    ident_zero(ocp)  ocp[0u64] = 0xA0u8
+    if bw_t_emit(ocp, 0xAAu8, lp) == BW_U64_SENT { return 60u64 }
+    /* Emit R (window 0xAA -- bisimilar to L; out_commit byte0=0xB0 -> distinct fid). */
+    ident_zero(ocp)  ocp[0u64] = 0xB0u8
+    if bw_t_emit(ocp, 0xAAu8, rp) == BW_U64_SENT { return 61u64 }
+    /* Emit R3 (window 0xBB -- NOT bisimilar; out_commit byte0=0xC0). */
+    ident_zero(ocp)  ocp[0u64] = 0xC0u8
+    if bw_t_emit(ocp, 0xBBu8, r3p) == BW_U64_SENT { return 62u64 }
+    /* KAT-4: capability refusal (cap_id=0 invalid) -> DENIED, no emit. */
+    let n_before : u64 = wh_next_idx()
+    if bw_construct_witness(lp, rp, op, 0u64) != BW_E_DENIED { return 63u64 }
+    if wh_next_idx() != n_before { return 64u64 }
+    /* KAT-5c: fragment-absent (R3's bytes never registered? -- use a bogus id). */
+    ident_zero(op)
+    op[0u64] = 0x7Eu8
+    if bw_construct_witness(op, rp, (&BW_T_OUT as u64) as *u8, 1u64) != BW_E_FRAGMENT_ABSENT { return 65u64 }
+    /* KAT-3: non-bisimilar pair (L vs R3) -> NOT_BISIMILAR, no emit. */
+    let n_b3 : u64 = wh_next_idx()
+    if bw_construct_witness(lp, r3p, op, 1u64) != BW_E_NOT_BISIMILAR { return 66u64 }
+    if wh_next_idx() != n_b3 { return 67u64 }
+    /* KAT-2: bisimilar pair (L vs R) -> OK, out non-zero.  bw_construct_witness
+     * publishes exactly TWO fragments: cg_bisimulate's base-proof audit + bw's
+     * own composite 0x10 witness.  (The spec's "exactly 1" overlooked
+     * cg_bisimulate's own emission, which is real now that witness_spine is
+     * built; cg_resolve_fragment does not publish.) */
+    let n_b2 : u64 = wh_next_idx()
+    if bw_construct_witness(lp, rp, op, 1u64) != BW_OK { return 68u64 }
+    if ident_is_zero(op) != 0u8 { return 69u64 }
+    if wh_next_idx() != (n_b2 + 2u64) { return 70u64 }
+    return 0u64
+}
+
+/* KAT-2 payload inspection + M10 re-derivation determinism. */
+fn bw_selftest_payload() -> u64 {
+    /* The most recent witness (op = BW_T_OUT) -- re-derive the SAME pair and
+     * assert a byte-identical witness fid (positions excluded -> reproducible). */
+    let lp : *u8 = (&BW_T_L as u64) as *u8
+    let rp : *u8 = (&BW_T_R as u64) as *u8
+    let op : *u8 = (&BW_T_OUT as u64) as *u8
+    let op2 : *u8 = (&BW_T_OC as u64) as *u8
+    if bw_construct_witness(lp, rp, op2, 1u64) != BW_OK { return 80u64 }
+    if ident_eq(op, op2) != 1u8 { return 81u64 }
+    /* Inspect the published payload of the composite witness via its idx-1.
+     * (wh_next_idx-1 is the last published fragment = this re-derivation.) */
+    let last : u64 = wh_next_idx()
+    if last == 0u64 { return 82u64 }
+    let rdp : *u8 = (&BW_T_RDBK as u64) as *u8
+    let lenp : *u64 = ((&BW_T_RDBK as u64) + 184u64) as *u64
+    if wh_get_payload(last - 1u64, rdp, 192u64, lenp) != 0i32 { return 83u64 }
+    if rdp[0u64] != BW_PAYLOAD_TAG { return 84u64 }
+    if rdp[1u64] != BW_PAYLOAD_KIND { return 85u64 }
+    /* bytes [8..40) == L, [40..72) == R. */
+    let mut acc : u32 = 0u32
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        acc = acc | ((rdp[8u64 + k] as u32) ^ (BW_T_L[k] as u32))
+        acc = acc | ((rdp[40u64 + k] as u32) ^ (BW_T_R[k] as u32))
+        k = k + 1u64
+    }
+    if acc != 0u32 { return 86u64 }
+    /* base proof-term reference [72..104) is non-zero (cg_bisimulate emitted it). */
+    if ident_is_zero((&BW_BASE_WITNESS as u64) as *u8) != 0u8 { return 87u64 }
+    return 0u64
+}
+
+fn bw_selftest() -> u64 @export {
+    let r1 : u64 = bw_selftest_k1()
+    if r1 != 0u64 { return r1 }
+    let r5 : u64 = bw_selftest_k5()
+    if r5 != 0u64 { return r5 }
+    let rs : u64 = bw_selftest_substrate()
+    if rs != 0u64 { return rs }
+    let rp : u64 = bw_selftest_payload()
+    if rp != 0u64 { return rp }
+    return 99u64
+}

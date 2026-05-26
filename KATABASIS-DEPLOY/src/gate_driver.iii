@@ -1,0 +1,139 @@
+module gate_driver
+
+/* KATABASIS Tier-3: the R3-INVOKABLE gate. A standing kernel driver that exposes the full
+   gate DECISION to user mode over DeviceIoControl. driver_entry creates \Device\IIIKatabasisGate
+   + the \??\IIIKatabasisGate symlink (so R3 opens \\.\IIIKatabasisGate), installs IRP_MJ_CREATE/
+   CLOSE/DEVICE_CONTROL handlers + DriverUnload into the DRIVER_OBJECT, and returns STATUS_SUCCESS
+   so the driver STAYS RESIDENT (unlike the Tier-2 selftest which self-unloaded).
+
+   IOCTL_KATABASIS_ADMIT = CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
+                         = 0x222000. Input/Output share the METHOD_BUFFERED SystemBuffer.
+   Input  (6 x u64): [0]=family [1]=target_kind [2]=target [3]=action_hexad [4]=cap_rights
+                     [5]=seal_mode (0=seal the cycle correctly; 1=claim a DIFFERENT cycle's seal).
+   Output (1 x u64): [0]=verdict (0=OK 1=REJECT_SEAL 2=REJECT_CAP 3=REJECT_HEXAD).
+   The kernel builds the cycle in the xii_term arena, seals it (scalar SHA/keccak -- forced), and
+   runs katabasis_gate_admit; the seal never leaves the kernel (R3 cannot reproduce cg_r0's
+   self-consistent hash), so R3 drives verdicts via the cycle params + seal_mode, not by supplying
+   a seal. This is the gate decision, exactly as Tier-2 proved on metal, now queryable from R3. */
+
+/* --- ntoskrnl marshalling shims (KATABASIS-DEPLOY/src/kernel_abi.s; aligned, ABI-correct) --- */
+extern @abi(c-msvc-x64) fn iii_kio_create_device(drv: u64, out: u64) -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_create_symlink() -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_complete_request(irp: u64, boost: u64) -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_delete_device(dev: u64) -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_delete_symlink() -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_cpuid(leaf: u32, subleaf: u32, out4: u64) -> u64 from "kernel_abi.s"
+extern @abi(c-msvc-x64) fn iii_kio_readmsr(msr: u32) -> u64 from "kernel_abi.s"
+
+/* --- the gate-admit closure (same modules as the Tier-2 resident gate) --- */
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 from "seal.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 from "admit.iii"
+extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+
+/* --- driver state --- */
+var G_DEVOBJ : [u64; 1]    /* the created PDEVICE_OBJECT (for DriverUnload) */
+var G_SEAL   : [u8; 32]
+var G_WRONG  : [u8; 32]
+var G_CPUID  : [u64; 2]    /* I0 scratch: 4 packed u32 from CPUID (shim writes; read as 2 u64) */
+
+/* --- WDM struct accessors (x64 offsets; cg_r0 is 8-byte-uniform so index = byteoff/8) --- */
+fn wdm_current_stack(irp: u64) -> u64 { return (irp as *u64)[23u64] }              /* IRP.Tail.Overlay.CurrentStackLocation @0xB8 */
+fn wdm_ioctl_code(stk: u64) -> u32 { return ((stk as *u64)[3u64] & 0xFFFFFFFFu64) as u32 } /* IO_STACK.Parameters.DeviceIoControl.IoControlCode @0x18 */
+fn wdm_system_buffer(irp: u64) -> u64 { return (irp as *u64)[3u64] }               /* IRP.AssociatedIrp.SystemBuffer @0x18 */
+fn wdm_set_status(irp: u64, status: u64, info: u64) -> i32 {
+    (irp as *u64)[6u64] = status                                                   /* IRP.IoStatus.Status @0x30 */
+    (irp as *u64)[7u64] = info                                                     /* IRP.IoStatus.Information @0x38 */
+    return 0i32
+}
+
+/* --- IRP_MJ_CREATE / IRP_MJ_CLOSE: succeed immediately --- */
+fn gate_create(device_object: u64, irp: u64) -> u64 {
+    wdm_set_status(irp, 0u64, 0u64)
+    iii_kio_complete_request(irp, 0u64)
+    return 0u64
+}
+fn gate_close(device_object: u64, irp: u64) -> u64 {
+    wdm_set_status(irp, 0u64, 0u64)
+    iii_kio_complete_request(irp, 0u64)
+    return 0u64
+}
+
+/* --- IRP_MJ_DEVICE_CONTROL: the gate decision --- */
+fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
+    let stk  : u64 = wdm_current_stack(irp)
+    let code : u32 = wdm_ioctl_code(stk)
+    let buf  : u64 = wdm_system_buffer(irp)
+    let mut status : u64 = 0xC0000010u64   /* STATUS_INVALID_DEVICE_REQUEST */
+    let mut info   : u64 = 0u64
+    if code == 0x222000u32 {
+        let family : u32 = (buf as *u64)[0u64] as u32
+        let tk     : u32 = (buf as *u64)[1u64] as u32
+        let tgt    : u64 = (buf as *u64)[2u64]
+        let ah     : u32 = (buf as *u64)[3u64] as u32
+        let crts   : u64 = (buf as *u64)[4u64]
+        let smode  : u64 = (buf as *u64)[5u64]
+        xii_term_arena_reset()
+        let root : u64 = cap_env_init()
+        let cap  : u64 = cap_attenuate(root, crts, 0u64)
+        let a    : u32 = katabasis_cycle_act(family, tk, tgt, ah)
+        let c    : u32 = katabasis_cycle_under_cap(a, cap as u32)
+        katabasis_cycle_seal(c, &G_SEAL as u64)
+        let mut seal_addr : u64 = &G_SEAL as u64
+        if smode == 1u64 {
+            let a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+            let c2 : u32 = katabasis_cycle_under_cap(a2, cap as u32)
+            katabasis_cycle_seal(c2, &G_WRONG as u64)
+            seal_addr = &G_WRONG as u64
+        }
+        let verdict : u32 = katabasis_gate_admit(c, seal_addr)
+        (buf as *u64)[0u64] = verdict as u64
+        status = 0u64
+        info   = 8u64
+    }
+    if code == 0x222004u32 {
+        /* IOCTL_SVM_PROBE (Ring-1 I0, READ-ONLY): report SVM capability. No SVM enable, no VMRUN.
+           VM_CR (AMD-only) is read ONLY when CPUID(0x80000001).ECX[2]=SVM is set (a bit Intel never
+           sets) -> RDMSR cannot #GP. EFER is universal. out: [0]=svm_avail [1]=efer [2]=vm_cr [3]=ecx. */
+        iii_kio_cpuid(0x80000001u32, 0u32, &G_CPUID as u64)
+        let ecx80     : u64 = G_CPUID[1u64] & 0xFFFFFFFFu64
+        let svm_avail : u64 = (ecx80 >> 2u64) & 1u64
+        let efer      : u64 = iii_kio_readmsr(0xC0000080u32)
+        let mut vmcr  : u64 = 0u64
+        if svm_avail == 1u64 { vmcr = iii_kio_readmsr(0xC0010114u32) }
+        (buf as *u64)[0u64] = svm_avail
+        (buf as *u64)[1u64] = efer
+        (buf as *u64)[2u64] = vmcr
+        (buf as *u64)[3u64] = ecx80
+        status = 0u64
+        info   = 32u64
+    }
+    wdm_set_status(irp, status, info)
+    iii_kio_complete_request(irp, 0u64)
+    return status
+}
+
+/* --- DriverUnload: tear down symlink + device (installed at DRIVER_OBJECT+0x68) --- */
+fn gate_unload(driver_object: u64) -> u64 {
+    iii_kio_delete_symlink()
+    iii_kio_delete_device(G_DEVOBJ[0u64])
+    return 0u64
+}
+
+/* --- DriverEntry: create device, install dispatch + unload, create symlink, stay resident --- */
+fn driver_entry(driver_object: u64, registry_path: u64) -> u64 {
+    sha256_sched_force(1u32)
+    keccak_chi_force_path(1u32)
+    iii_kio_create_device(driver_object, &G_DEVOBJ as u64)
+    (driver_object as *u64)[13u64] = &gate_unload as u64   /* DRIVER_OBJECT.DriverUnload @0x68 */
+    (driver_object as *u64)[14u64] = &gate_create as u64   /* MajorFunction[IRP_MJ_CREATE=0] @0x70 */
+    (driver_object as *u64)[16u64] = &gate_close as u64    /* MajorFunction[IRP_MJ_CLOSE=2] @0x80 */
+    (driver_object as *u64)[28u64] = &gate_ioctl as u64    /* MajorFunction[IRP_MJ_DEVICE_CONTROL=14] @0xE0 */
+    iii_kio_create_symlink()
+    return 0u64    /* STATUS_SUCCESS -> resident */
+}

@@ -1,0 +1,22 @@
+/* STDLIB/iii/omnia/spec_probe.iii
+ *
+ * III STDLIB - omnia::spec_probe  (V1 Stage 7.1 @specialize end-to-end probe)
+ *
+ * A single generic identity function specialised over u8, i8, u32.  The
+ * codegen monomorphises it into the symbols `spec_probe_u8_id`,
+ * `spec_probe_i8_id`, `spec_probe_u32_id` (the gospel <module>_<type>_<op>
+ * mangling; the `__` marker in the template name is the type slot).
+ *
+ * The corpus test (390_specialize) externs those generated symbols and asserts
+ * width/sign-correct behaviour: the SAME 0xFF byte zero-extends to 0xFF under
+ * u8 but sign-extends to 0xFFFF_FFFF_FFFF_FFFF under i8 -- a distinction that
+ * can only hold if the per-type width-aware load is genuinely applied.
+ *
+ * Hexad kind_essence.  Ring R0.  K floor 0.99.
+ */
+module omnia_spec_probe
+
+fn spec_probe__id<T>(v: T) -> u64 @specialize(u8, i8, u32) @export { return v as u64 }
+
+/* §7.2 diagnostic: sizeof(T) under specialization (should be 1/2/4/8). */
+fn spec_probe__sz<T>() -> u64 @specialize(u8, u16, u32, u64) @export { return sizeof T }

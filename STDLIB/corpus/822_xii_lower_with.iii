@@ -1,0 +1,15 @@
+/* 822 -- mig4 Step 8d: lower the CONTEXT domain (FWITH) through XII.  Drives xlw_selftest: the
+ * left-unital/right-absorbing laws hold by canonicalisation -- associativity (1), LEFT identity
+ * e~a->a (2), RIGHT zero a~e->e (3); the keystone ASYMMETRY teeth -- e~a != a~e, so FWITH is provably
+ * NOT a monoid (4); non-commutative (5); determinism (6); ADMITTED by Step 6 (7).  Exit 99 = all hold
+ * -- the verified finding that FWITH is left-unital + right-absorbing, a different algebra from the
+ * FCOMPOSE/FTHEN monoids.  Gated by run_corpus.sh. */
+module corpus_822
+
+extern @abi(c-msvc-x64) fn xlw_selftest() -> u64 from "xii_lower_with.iii"
+
+fn main() -> u64 {
+    let r : u64 = xlw_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

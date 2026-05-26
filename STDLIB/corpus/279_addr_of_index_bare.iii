@@ -1,0 +1,39 @@
+/* III conformance corpus 279 -- Stage 3.11 Phase 3: bare `&G[i] as u64`.
+ *
+ * The W3 trap was a PARSER PRECEDENCE bug: the bare `&G[i] as u64` parsed
+ * as `&(G[i] as u64)` (the `as` cast bound tighter than unary `&`), so `&`
+ * applied to a cast-rvalue -> value load -> wild address -> segfault.
+ *
+ * Stage 3.11 Phase 3 fixed it: a new iiip_parse_cast level binds `as`
+ * LOOSER than unary, so `&G[i] as u64` == `(&G[i]) as u64` and yields the
+ * real element address.  This pins the BARE form (the documented W3 form);
+ * with it green, the W3 byte-at-a-time workarounds are no longer required.
+ *
+ * Exit = 99 on success.
+ */
+module corpus_279
+
+var G_BUF : [u8; 32]
+
+fn read_via_ptr(p: u64, idx: u64) -> u32 {
+    let pp : *u8 = p as *u8
+    return pp[idx] as u32
+}
+
+fn main() -> u64 {
+    let mut i : u32 = 0u32
+    while i < 32u32 { G_BUF[i] = (i + 100u32) as u8; i = i + 1u32 }
+    /* BARE address-of-index (no parens) -- the W3 form */
+    let base : u64 = &G_BUF[0u32] as u64
+    let pp : *u8 = base as *u8
+    if (pp[0u64] as u32) != 100u32 { return 1u64 }
+    if (pp[5u64] as u32) != 105u32 { return 2u64 }
+    /* bare, non-zero offset */
+    let mid : u64 = &G_BUF[8u32] as u64
+    let mp : *u8 = mid as *u8
+    if (mp[0u64] as u32) != 108u32 { return 3u64 }
+    /* bare, cross-fn pass */
+    if read_via_ptr(&G_BUF[16u32] as u64, 0u64) != 116u32 { return 4u64 }
+    if read_via_ptr(&G_BUF[3u32] as u64, 0u64) != 103u32 { return 5u64 }
+    return 99u64
+}

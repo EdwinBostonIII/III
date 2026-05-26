@@ -1,0 +1,16 @@
+/* 807 -- nous Phase 6: the in-tree training harness.  Drives nous_train_selftest:
+ * the boundary refuses an unsealed or zero-addressed weights artifact and accepts a
+ * sealed + content-addressed one; the federation poison wall admits only certified
+ * commons entries; trains-signal accounting counts SATURATED, GAP, and REFUTED (the
+ * policy learns the illegal too); an illegal outcome byte is refused; and the gap-rate
+ * dial falls as the policy strengthens (correctness invariant by the closure).
+ * Exit 99 = all hold; 1..11 = the failing check. */
+module corpus_807
+
+extern @abi(c-msvc-x64) fn nous_train_selftest() -> u64 from "nous_train.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_train_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

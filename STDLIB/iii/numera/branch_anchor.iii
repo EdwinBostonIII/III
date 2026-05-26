@@ -1,0 +1,666 @@
+/* III/STDLIB/iii/numera/branch_anchor.iii
+ *
+ * III STDLIB -- numera::branch_anchor
+ *
+ * Branch construction, retirement, and merge mediation. Branches are
+ * anchored at fragments declared admissible by branch_anchor_clause
+ * clauses (verified through computation_graph::cg_anchor_query). The
+ * canonical line's append-only invariant (W1, W19) is preserved by
+ * structurally isolating branch fragments through a non-canonical
+ * pillar and a branch_id antecedent; canonical is never appended to
+ * except through a clause-gated merge with a re-verified bisimulation.
+ *
+ * Hexad: kind_essence + kind_witness.  Ring: R0.  K: 1.00.
+ * NIH: identifier.iii, algebraic_time.iii, witness_hook.iii,
+ *      computation_graph.iii, constitution.iii.
+ * Discipline: M16 branch ratifiability; W34 anchored divergence;
+ *             W41 bisimulation witness; W42 clause-gated, re-verified merge.
+ *
+ * Non-reentrant: module-scope scratch buffers (Trap 7 forbids function-local
+ * var arrays). Serialized R0 ceremony; single-threaded substrate -- safe.
+ */
+
+module numera_branch_anchor
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_encode_u64(v: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cg_anchor_query(fid: *u8, out_clause_id: *u8) -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cg_bisimulate(left_fid: *u8, right_fid: *u8, out_witness_fid: *u8) -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+
+/* KAT-only externs (resolve at link; used to boot providers in selftest) */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+/* Integration-tier merge-vertical KAT externs (stand up a real anchored branch). */
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cg_init() -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cg_anchor_declare(fid: *u8, clause_id: *u8) -> i32 from "computation_graph.iii"
+
+/* -- error codes ----------------------------------------------------------- */
+const BANCHOR_OK               : i32 =  0i32
+const BANCHOR_E_NULL           : i32 = -1i32
+const BANCHOR_E_NOT_ANCHOR     : i32 = -2i32
+const BANCHOR_E_BRANCH_ABSENT  : i32 = -3i32
+const BANCHOR_E_BRANCH_RETIRED : i32 = -4i32
+const BANCHOR_E_NOT_BISIMILAR  : i32 = -5i32
+const BANCHOR_E_CLAUSE_ABSENT  : i32 = -6i32
+const BANCHOR_E_INDEX_FULL     : i32 = -7i32
+const BANCHOR_E_NOT_INITED     : i32 = -8i32
+const BANCHOR_E_EMIT           : i32 = -9i32
+
+/* -- sizing ---------------------------------------------------------------- */
+const BANCHOR_BRANCH_SLOTS     : u64 = 256u64
+const BANCHOR_PROPOSAL_SLOTS   : u64 = 256u64
+const BANCHOR_IDENT_BYTES      : u64 = 32u64
+const BANCHOR_U64_SENT         : u64 = 0xFFFFFFFFFFFFFFFFu64
+const BANCHOR_CONS_SENT        : u32 = 0xFFFFFFFFu32
+
+/* -- V3 payload kind sentinels (0xE3 catalog, Part VI) --------------------- */
+const BANCHOR_KIND_E3          : u8  = 0xE3u8
+const BANCHOR_KIND_CONTINUATION: u8  = 0x03u8
+const BANCHOR_KIND_MERGE       : u8  = 0x10u8
+
+/* -- pillar marker --------------------------------------------------------- */
+const BANCHOR_PILLAR_BRANCH    : u16 = 1u16
+
+/* -- init flag ------------------------------------------------------------- */
+var BANCHOR_INITED             : u8  = 0u8
+
+/* -- branch index (256 slots) ---------------------------------------------- */
+var BANCHOR_BRANCH_IDS         : [u8; 8192]
+var BANCHOR_BRANCH_ANCHORS     : [u8; 8192]
+var BANCHOR_BRANCH_HEADS       : [u8; 8192]
+var BANCHOR_BRANCH_LIVE        : [u8; 256]
+var BANCHOR_BRANCH_RETIRED     : [u8; 256]
+var BANCHOR_BRANCH_COUNT       : u64 = 0u64
+
+/* -- proposal index (256 slots) -------------------------------------------- */
+var BANCHOR_PROPOSAL_BRANCH    : [u8; 8192]
+var BANCHOR_PROPOSAL_TARGET    : [u8; 8192]
+var BANCHOR_PROPOSAL_WITNESS   : [u8; 8192]
+var BANCHOR_PROPOSAL_VERIFIED  : [u8; 256]
+var BANCHOR_PROPOSAL_LIVE      : [u8; 256]
+
+/* -- emission scratch (non-reentrant; serialized) -------------------------- */
+var BANCHOR_SEED_BUF           : [u8; 64]
+var BANCHOR_TIME_BUF           : [u8; 32]
+var BANCHOR_PAYLOAD            : [u8; 72]
+var BANCHOR_MERGE_PAYLOAD      : [u8; 40]
+var BANCHOR_ZERO_ID            : [u8; 32]
+var BANCHOR_RETIRE_LABEL       : [u8; 16]
+var BANCHOR_RETIRE_CID         : [u8; 32]
+var BANCHOR_MERGE_LABEL        : [u8; 16]
+var BANCHOR_MERGE_CID          : [u8; 32]
+var BANCHOR_WITNESS_FID        : [u8; 32]
+var BANCHOR_CLAUSE_SCRATCH     : [u8; 32]
+var BANCHOR_BRANCHID_TAG       : [u8; 32]
+
+/* -- selftest scratch ------------------------------------------------------ */
+var BANCHOR_T_REQ              : [u8; 160]
+var BANCHOR_T_BID              : [u8; 32]
+var BANCHOR_T_PID              : [u8; 32]
+var BANCHOR_T_ANC              : [u8; 32]
+/* merge-vertical KAT scratch: shared 192-byte payload (frugal [u64;24], Trap 19),
+ * reused out-commit + zeroed producer/op id, cons_ratify req buffer, target fids. */
+var BANCHOR_KAT_PL             : [u64; 24]
+var BANCHOR_KAT_OC             : [u8; 32]
+var BANCHOR_KAT_Z              : [u8; 32]
+var BANCHOR_KAT_REQ            : [u64; 16]
+var BANCHOR_KAT_TGT            : [u8; 32]
+var BANCHOR_KAT_TGTN           : [u8; 32]
+
+/* =========================================================================
+ * Private helpers
+ * ========================================================================= */
+
+/* Return the u64 address of BANCHOR_BRANCH_IDS slot `slot` (32-byte ident). */
+fn ba_branch_ptr(slot: u64) -> u64 {
+    return (&BANCHOR_BRANCH_IDS as u64) + slot * 32u64
+}
+
+/* Return the u64 address of BANCHOR_BRANCH_HEADS slot `slot`. */
+fn ba_branch_head_ptr(slot: u64) -> u64 {
+    return (&BANCHOR_BRANCH_HEADS as u64) + slot * 32u64
+}
+
+/* Return the u64 address of BANCHOR_BRANCH_ANCHORS slot `slot`. */
+fn ba_branch_anchor_ptr(slot: u64) -> u64 {
+    return (&BANCHOR_BRANCH_ANCHORS as u64) + slot * 32u64
+}
+
+/* Return the u64 address of BANCHOR_PROPOSAL_BRANCH slot `slot`. */
+fn ba_prop_branch_ptr(slot: u64) -> u64 {
+    return (&BANCHOR_PROPOSAL_BRANCH as u64) + slot * 32u64
+}
+
+/* Return the u64 address of BANCHOR_PROPOSAL_TARGET slot `slot`. */
+fn ba_prop_target_ptr(slot: u64) -> u64 {
+    return (&BANCHOR_PROPOSAL_TARGET as u64) + slot * 32u64
+}
+
+/* Return the u64 address of BANCHOR_PROPOSAL_WITNESS slot `slot`. */
+fn ba_prop_witness_ptr(slot: u64) -> u64 {
+    return (&BANCHOR_PROPOSAL_WITNESS as u64) + slot * 32u64
+}
+
+/* Linear search for a live branch slot matching branch_id.
+ * Returns the slot as i64 (>= 0) or -1i64 if absent.
+ * Sentinel-flag loop (W14 -- no break). Equality only (Trap 3/W11). */
+fn ba_branch_slot(branch_id: *u8) -> i64 {
+    let mut i : u64 = 0u64
+    let mut found : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    while i < BANCHOR_BRANCH_SLOTS {
+        if sentinel == 0u8 {
+            if BANCHOR_BRANCH_LIVE[i] == 1u8 {
+                let slot_p : *u8 = ba_branch_ptr(i) as *u8
+                if ident_eq(slot_p, branch_id) == 1u8 {
+                    found = i as i64
+                    sentinel = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* Linear search for a live proposal slot matching witness_fid.
+ * Returns the slot as i64 (>= 0) or -1i64 if absent. */
+fn ba_proposal_slot(witness_fid: *u8) -> i64 {
+    let mut i : u64 = 0u64
+    let mut found : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    while i < BANCHOR_PROPOSAL_SLOTS {
+        if sentinel == 0u8 {
+            if BANCHOR_PROPOSAL_LIVE[i] == 1u8 {
+                let wp : *u8 = ba_prop_witness_ptr(i) as *u8
+                if ident_eq(wp, witness_fid) == 1u8 {
+                    found = i as i64
+                    sentinel = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* Build BANCHOR_PAYLOAD (72 bytes) and emit a branch fragment via wh_publish.
+ * req layout: [0..32) branch_id, [32..64) op, [64..96) in_commit,
+ *             [96..128) out_commit, [128..160) out_fid (filled in place).
+ * Slot is the branch index (u64, already validated by caller). */
+fn ba_emit_branch_fragment(req: *u8, slot: u64) -> i32 {
+    let branch_id  : *u8 = (req as u64) as *u8
+    let op_p       : *u8 = ((req as u64) + 32u64) as *u8
+    let in_commit  : *u8 = ((req as u64) + 64u64) as *u8
+    let out_commit : *u8 = ((req as u64) + 96u64) as *u8
+    let out_fid    : *u8 = ((req as u64) + 128u64) as *u8
+    /* Build BRANCH_CONTINUATION payload (72 bytes):
+     * [0]=0xE3, [1]=0x03, [2..8)=0x00, [8..40)=in_commit, [40..72)=branch_id */
+    BANCHOR_PAYLOAD[0u64] = BANCHOR_KIND_E3
+    BANCHOR_PAYLOAD[1u64] = BANCHOR_KIND_CONTINUATION
+    BANCHOR_PAYLOAD[2u64] = 0u8
+    BANCHOR_PAYLOAD[3u64] = 0u8
+    BANCHOR_PAYLOAD[4u64] = 0u8
+    BANCHOR_PAYLOAD[5u64] = 0u8
+    BANCHOR_PAYLOAD[6u64] = 0u8
+    BANCHOR_PAYLOAD[7u64] = 0u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        BANCHOR_PAYLOAD[8u64 + k]  = in_commit[k]
+        BANCHOR_PAYLOAD[40u64 + k] = branch_id[k]
+        k = k + 1u64
+    }
+    /* Copy branch_id into antecedent tag for header branch_id tagging (§G6 fix). */
+    let mut m : u64 = 0u64
+    while m < 32u64 {
+        BANCHOR_BRANCHID_TAG[m] = branch_id[m]
+        m = m + 1u64
+    }
+    let prod_p  : *u8 = (&BANCHOR_ZERO_ID as u64) as *u8
+    let pay_p   : *u8 = (&BANCHOR_PAYLOAD as u64) as *u8
+    let ante_p  : *u8 = (&BANCHOR_BRANCHID_TAG as u64) as *u8
+    let idx : u64 = wh_publish(prod_p, op_p, in_commit, out_commit, 0u8, 0u8, BANCHOR_PILLAR_BRANCH, ante_p, 1u32, pay_p, 72u32, out_fid)
+    if idx == BANCHOR_U64_SENT { return BANCHOR_E_EMIT }
+    return BANCHOR_OK
+}
+
+/* Build BANCHOR_MERGE_PAYLOAD (40 bytes) and emit a canonical merge fragment.
+ * proposal_fid is the 32-byte proposal/witness fid.
+ * out_fid receives the new canonical fragment id. */
+fn ba_emit_merge_fragment(proposal_fid: *u8, out_fid: *u8) -> i32 {
+    /* MERGE_ATTESTATION payload: [0]=0xE3, [1]=0x10, [2..8)=0, [8..40)=proposal_fid */
+    BANCHOR_MERGE_PAYLOAD[0u64] = BANCHOR_KIND_E3
+    BANCHOR_MERGE_PAYLOAD[1u64] = BANCHOR_KIND_MERGE
+    BANCHOR_MERGE_PAYLOAD[2u64] = 0u8
+    BANCHOR_MERGE_PAYLOAD[3u64] = 0u8
+    BANCHOR_MERGE_PAYLOAD[4u64] = 0u8
+    BANCHOR_MERGE_PAYLOAD[5u64] = 0u8
+    BANCHOR_MERGE_PAYLOAD[6u64] = 0u8
+    BANCHOR_MERGE_PAYLOAD[7u64] = 0u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        BANCHOR_MERGE_PAYLOAD[8u64 + k] = proposal_fid[k]
+        k = k + 1u64
+    }
+    let prod_p : *u8 = (&BANCHOR_ZERO_ID as u64) as *u8
+    let pay_p  : *u8 = (&BANCHOR_MERGE_PAYLOAD as u64) as *u8
+    let ante_p : *u8 = (&BANCHOR_ZERO_ID as u64) as *u8
+    /* pillar = 0 (canonical); n_ante = 0 (no branch antecedent -- this is canonical) */
+    let idx : u64 = wh_publish(prod_p, prod_p, prod_p, prod_p, 0u8, 0u8, 0u16, ante_p, 0u32, pay_p, 40u32, out_fid)
+    if idx == BANCHOR_U64_SENT { return BANCHOR_E_EMIT }
+    return BANCHOR_OK
+}
+
+/* =========================================================================
+ * Public API
+ * ========================================================================= */
+
+/* Idempotent init. Zeros slot tables, computes and caches clause ids. */
+fn ba_init() -> i32 @export {
+    if BANCHOR_INITED == 1u8 { return BANCHOR_OK }
+    /* zero branch index */
+    let mut i : u64 = 0u64
+    while i < BANCHOR_BRANCH_SLOTS {
+        BANCHOR_BRANCH_LIVE[i]     = 0u8
+        BANCHOR_BRANCH_RETIRED[i]  = 0u8
+        i = i + 1u64
+    }
+    /* zero proposal index */
+    let mut j : u64 = 0u64
+    while j < BANCHOR_PROPOSAL_SLOTS {
+        BANCHOR_PROPOSAL_LIVE[j]     = 0u8
+        BANCHOR_PROPOSAL_VERIFIED[j] = 0u8
+        j = j + 1u64
+    }
+    BANCHOR_BRANCH_COUNT = 0u64
+    /* canonical zero id */
+    ident_zero((&BANCHOR_ZERO_ID as u64) as *u8)
+    /* cp_branch_retire clause id = Keccak256("cp_branch_retire") */
+    BANCHOR_RETIRE_LABEL[0u64]  = 99u8
+    BANCHOR_RETIRE_LABEL[1u64]  = 112u8
+    BANCHOR_RETIRE_LABEL[2u64]  = 95u8
+    BANCHOR_RETIRE_LABEL[3u64]  = 98u8
+    BANCHOR_RETIRE_LABEL[4u64]  = 114u8
+    BANCHOR_RETIRE_LABEL[5u64]  = 97u8
+    BANCHOR_RETIRE_LABEL[6u64]  = 110u8
+    BANCHOR_RETIRE_LABEL[7u64]  = 99u8
+    BANCHOR_RETIRE_LABEL[8u64]  = 104u8
+    BANCHOR_RETIRE_LABEL[9u64]  = 95u8
+    BANCHOR_RETIRE_LABEL[10u64] = 114u8
+    BANCHOR_RETIRE_LABEL[11u64] = 101u8
+    BANCHOR_RETIRE_LABEL[12u64] = 116u8
+    BANCHOR_RETIRE_LABEL[13u64] = 105u8
+    BANCHOR_RETIRE_LABEL[14u64] = 114u8
+    BANCHOR_RETIRE_LABEL[15u64] = 101u8
+    let rl_p   : *u8 = (&BANCHOR_RETIRE_LABEL as u64) as *u8
+    let rcid_p : *u8 = (&BANCHOR_RETIRE_CID as u64) as *u8
+    ident_from_bytes(rl_p, 16u64, rcid_p)
+    /* cp_branch_merge_ clause id = Keccak256("cp_branch_merge_") */
+    BANCHOR_MERGE_LABEL[0u64]  = 99u8
+    BANCHOR_MERGE_LABEL[1u64]  = 112u8
+    BANCHOR_MERGE_LABEL[2u64]  = 95u8
+    BANCHOR_MERGE_LABEL[3u64]  = 98u8
+    BANCHOR_MERGE_LABEL[4u64]  = 114u8
+    BANCHOR_MERGE_LABEL[5u64]  = 97u8
+    BANCHOR_MERGE_LABEL[6u64]  = 110u8
+    BANCHOR_MERGE_LABEL[7u64]  = 99u8
+    BANCHOR_MERGE_LABEL[8u64]  = 104u8
+    BANCHOR_MERGE_LABEL[9u64]  = 95u8
+    BANCHOR_MERGE_LABEL[10u64] = 109u8
+    BANCHOR_MERGE_LABEL[11u64] = 101u8
+    BANCHOR_MERGE_LABEL[12u64] = 114u8
+    BANCHOR_MERGE_LABEL[13u64] = 103u8
+    BANCHOR_MERGE_LABEL[14u64] = 101u8
+    BANCHOR_MERGE_LABEL[15u64] = 95u8
+    let ml_p   : *u8 = (&BANCHOR_MERGE_LABEL as u64) as *u8
+    let mcid_p : *u8 = (&BANCHOR_MERGE_CID as u64) as *u8
+    ident_from_bytes(ml_p, 16u64, mcid_p)
+    BANCHOR_INITED = 1u8
+    return BANCHOR_OK
+}
+
+/* Construct a new branch rooted at anchor_fid (must be an anchored fragment).
+ * Writes the fresh 32-byte branch_id into out_branch_id.
+ * W34: refuses any non-anchored divergence. */
+fn ba_construct(anchor_fid: *u8, out_branch_id: *u8) -> i32 @export {
+    if BANCHOR_INITED == 0u8 { return BANCHOR_E_NOT_INITED }
+    if (anchor_fid as u64) == 0u64 { return BANCHOR_E_NULL }
+    if (out_branch_id as u64) == 0u64 { return BANCHOR_E_NULL }
+    /* W34: branch may only root at an anchored fragment */
+    let cl_p : *u8 = (&BANCHOR_CLAUSE_SCRATCH as u64) as *u8
+    let q : i32 = cg_anchor_query(anchor_fid, cl_p)
+    if q != 0i32 { return BANCHOR_E_NOT_ANCHOR }
+    /* Find a free branch slot */
+    let mut i : u64 = 0u64
+    let mut slot : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    while i < BANCHOR_BRANCH_SLOTS {
+        if sentinel == 0u8 {
+            if BANCHOR_BRANCH_LIVE[i] == 0u8 {
+                slot = i as i64
+                sentinel = 1u8
+            }
+        }
+        i = i + 1u64
+    }
+    if slot == -1i64 { return BANCHOR_E_INDEX_FULL }
+    /* Compute fresh branch_id = Keccak256(anchor_fid || encode_u64(at_current())) */
+    let t : u64 = at_current()
+    let tb_p : *u8 = (&BANCHOR_TIME_BUF as u64) as *u8
+    ident_encode_u64(t, tb_p)
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        BANCHOR_SEED_BUF[k]         = anchor_fid[k]
+        BANCHOR_SEED_BUF[32u64 + k] = BANCHOR_TIME_BUF[k]
+        k = k + 1u64
+    }
+    let seed_p : *u8 = (&BANCHOR_SEED_BUF as u64) as *u8
+    ident_from_bytes(seed_p, 64u64, out_branch_id)
+    /* Record into the branch slot */
+    let s : u64 = slot as u64
+    ident_copy(out_branch_id, ba_branch_ptr(s) as *u8)
+    ident_copy(anchor_fid, ba_branch_anchor_ptr(s) as *u8)
+    ident_copy(anchor_fid, ba_branch_head_ptr(s) as *u8)
+    BANCHOR_BRANCH_LIVE[s]    = 1u8
+    BANCHOR_BRANCH_RETIRED[s] = 0u8
+    BANCHOR_BRANCH_COUNT = BANCHOR_BRANCH_COUNT + 1u64
+    return BANCHOR_OK
+}
+
+/* Append one fragment to branch B.
+ * req is a 160-byte ba_append_req aggregate (W2 aggregate-by-pointer):
+ *   [0..32)   branch_id
+ *   [32..64)  op
+ *   [64..96)  in_commit
+ *   [96..128) out_commit
+ *   [128..160) out_fid  (filled in place on success)
+ * W34: retired branches cannot accept new appends. */
+fn ba_append(req: *u8) -> i32 @export {
+    if BANCHOR_INITED == 0u8 { return BANCHOR_E_NOT_INITED }
+    if (req as u64) == 0u64 { return BANCHOR_E_NULL }
+    let branch_id : *u8 = (req as u64) as *u8
+    let sl : i64 = ba_branch_slot(branch_id)
+    if sl == -1i64 { return BANCHOR_E_BRANCH_ABSENT }
+    let s : u64 = sl as u64
+    if BANCHOR_BRANCH_RETIRED[s] == 1u8 { return BANCHOR_E_BRANCH_RETIRED }
+    let e : i32 = ba_emit_branch_fragment(req, s)
+    if e != 0i32 { return e }
+    /* Advance the recorded head to the newly-published fragment id */
+    let new_fid : *u8 = ((req as u64) + 128u64) as *u8
+    ident_copy(new_fid, ba_branch_head_ptr(s) as *u8)
+    return BANCHOR_OK
+}
+
+/* Retire branch B under the cp_branch_retire clause (M8/W34).
+ * After retirement, ba_append is rejected with BANCHOR_E_BRANCH_RETIRED. */
+fn ba_retire(branch_id: *u8) -> i32 @export {
+    if BANCHOR_INITED == 0u8 { return BANCHOR_E_NOT_INITED }
+    if (branch_id as u64) == 0u64 { return BANCHOR_E_NULL }
+    let sl : i64 = ba_branch_slot(branch_id)
+    if sl == -1i64 { return BANCHOR_E_BRANCH_ABSENT }
+    let s : u64 = sl as u64
+    /* Clause gate (§G3 fix): cons_find returns u32; sentinel 0xFFFFFFFFu32 = absent */
+    let rcid_p : *u8 = (&BANCHOR_RETIRE_CID as u64) as *u8
+    let f : u32 = cons_find(rcid_p)
+    if f == BANCHOR_CONS_SENT { return BANCHOR_E_CLAUSE_ABSENT }
+    BANCHOR_BRANCH_RETIRED[s] = 1u8
+    return BANCHOR_OK
+}
+
+/* Propose a merge of branch B into canonical target.
+ * Constructs the bisimulation witness via cg_bisimulate; records the proposal.
+ * out_proposal_fid receives the 32-byte proposal id (= the witness fid).
+ * W41: equivalence claim exists only as a checkable witness. */
+fn ba_merge_propose(branch_id: *u8, canonical_target_fid: *u8, out_proposal_fid: *u8) -> i32 @export {
+    if BANCHOR_INITED == 0u8 { return BANCHOR_E_NOT_INITED }
+    if (branch_id as u64) == 0u64 { return BANCHOR_E_NULL }
+    if (canonical_target_fid as u64) == 0u64 { return BANCHOR_E_NULL }
+    if (out_proposal_fid as u64) == 0u64 { return BANCHOR_E_NULL }
+    let sl : i64 = ba_branch_slot(branch_id)
+    if sl == -1i64 { return BANCHOR_E_BRANCH_ABSENT }
+    let s : u64 = sl as u64
+    /* Find a free proposal slot */
+    let mut i : u64 = 0u64
+    let mut pslot : i64 = -1i64
+    let mut sentinel : u8 = 0u8
+    while i < BANCHOR_PROPOSAL_SLOTS {
+        if sentinel == 0u8 {
+            if BANCHOR_PROPOSAL_LIVE[i] == 0u8 {
+                pslot = i as i64
+                sentinel = 1u8
+            }
+        }
+        i = i + 1u64
+    }
+    if pslot == -1i64 { return BANCHOR_E_INDEX_FULL }
+    let p : u64 = pslot as u64
+    /* W41: construct bisimulation witness between branch head and canonical target */
+    let head_p   : *u8 = ba_branch_head_ptr(s) as *u8
+    let wfid_p   : *u8 = (&BANCHOR_WITNESS_FID as u64) as *u8
+    let bisim : i32 = cg_bisimulate(head_p, canonical_target_fid, wfid_p)
+    if bisim != 0i32 { return BANCHOR_E_NOT_BISIMILAR }
+    /* Record the proposal -- §G4 fix: VERIFIED starts as 0 (proposer does NOT pre-verify) */
+    ident_copy(branch_id, ba_prop_branch_ptr(p) as *u8)
+    ident_copy(canonical_target_fid, ba_prop_target_ptr(p) as *u8)
+    ident_copy(wfid_p, ba_prop_witness_ptr(p) as *u8)
+    BANCHOR_PROPOSAL_LIVE[p]     = 1u8
+    BANCHOR_PROPOSAL_VERIFIED[p] = 0u8
+    /* out_proposal_fid = the witness fid IS the proposal id */
+    ident_copy(wfid_p, out_proposal_fid)
+    return BANCHOR_OK
+}
+
+/* Independently re-verify the bisimulation for proposal_fid.
+ * Re-runs cg_bisimulate from the recorded head+target; requires the
+ * re-derived witness to byte-match the proposed one (M10).
+ * §G4 fix: this is a real re-derivation, not a stored-flag check.
+ * M16/W42: a stale proposal (head moved) is rejected. */
+fn ba_verify_bisimulation(proposal_fid: *u8) -> i32 @export {
+    if BANCHOR_INITED == 0u8 { return BANCHOR_E_NOT_INITED }
+    if (proposal_fid as u64) == 0u64 { return BANCHOR_E_NULL }
+    let psl : i64 = ba_proposal_slot(proposal_fid)
+    if psl == -1i64 { return BANCHOR_E_NOT_BISIMILAR }
+    let p : u64 = psl as u64
+    /* Look up the branch to get its current head */
+    let pbr_p : *u8 = ba_prop_branch_ptr(p) as *u8
+    let bsl : i64 = ba_branch_slot(pbr_p)
+    if bsl == -1i64 { return BANCHOR_E_BRANCH_ABSENT }
+    let bs : u64 = bsl as u64
+    /* Re-run cg_bisimulate from recorded head and target */
+    let head_p   : *u8 = ba_branch_head_ptr(bs) as *u8
+    let tgt_p    : *u8 = ba_prop_target_ptr(p) as *u8
+    let wfid_p   : *u8 = (&BANCHOR_WITNESS_FID as u64) as *u8
+    let recheck : i32 = cg_bisimulate(head_p, tgt_p, wfid_p)
+    if recheck != 0i32 { return BANCHOR_E_NOT_BISIMILAR }
+    /* M10: re-derived witness must byte-match the stored one */
+    let stored_w : *u8 = ba_prop_witness_ptr(p) as *u8
+    if ident_eq(wfid_p, stored_w) == 0u8 { return BANCHOR_E_NOT_BISIMILAR }
+    BANCHOR_PROPOSAL_VERIFIED[p] = 1u8
+    return BANCHOR_OK
+}
+
+/* Commit a verified merge proposal into the canonical line.
+ * §G7 fix: requires cp_branch_merge_ clause (clause-gated like retire).
+ * Calls ba_verify_bisimulation internally (real re-derivation -- §G4 fix).
+ * Emits one canonical MERGE_ATTESTATION fragment. M5: only this fragment
+ * is added; no branch fragments are copied; canonical is never corrupted. */
+fn ba_merge_commit(proposal_fid: *u8) -> i32 @export {
+    if BANCHOR_INITED == 0u8 { return BANCHOR_E_NOT_INITED }
+    if (proposal_fid as u64) == 0u64 { return BANCHOR_E_NULL }
+    /* Clause gate (§G7 fix -- merge must be as clause-gated as retire) */
+    let mcid_p : *u8 = (&BANCHOR_MERGE_CID as u64) as *u8
+    let f : u32 = cons_find(mcid_p)
+    if f == BANCHOR_CONS_SENT { return BANCHOR_E_CLAUSE_ABSENT }
+    /* Verify (§G4 fix -- this is a real re-derivation, not a flag check) */
+    let v : i32 = ba_verify_bisimulation(proposal_fid)
+    if v != 0i32 { return v }
+    /* Emit canonical merge attestation fragment */
+    let wfid_p : *u8 = (&BANCHOR_WITNESS_FID as u64) as *u8
+    let e : i32 = ba_emit_merge_fragment(proposal_fid, wfid_p)
+    return e
+}
+
+/* Self-test. Returns 99u64 on full pass; returns a non-99 code identifying
+ * the first failing check. Exercises the pure-local / init-state invariants
+ * that do NOT require the not-yet-built cg_ / cons_ providers.
+ *
+ * What is tested without external providers:
+ *   Step 1: BANCHOR_E_NOT_INITED before ba_init (W12 uninit guard -- 5 fns).
+ *   Step 2: ba_init is idempotent.
+ *   Step 3: null-pointer guards after init.
+ *   Step 4: ba_branch_slot returns -1 on empty table (sentinel correctness).
+ *   Step 5: ba_proposal_slot returns -1 on empty table.
+ *   Step 6: BANCHOR_BRANCH_COUNT == 0 after init.
+ *   Step 7: BANCHOR_PROPOSAL_VERIFIED[0] == 0 after init.
+ *   Step 8: BANCHOR_RETIRE_LABEL[0] == 99u8 (ASCII c) -- init wrote literals.
+ *   Step 9: BANCHOR_MERGE_LABEL[10] == 109u8 (ASCII m) -- init wrote literals.
+ *
+ * Steps requiring providers are described in the spec KAT Vectors but
+ * cannot execute at compile-only / selftest time -- the integrator wires
+ * them in the corpus test (expected=99). */
+/* Merge-vertical KAT helper: publish a fragment carrying BANCHOR_KAT_PL as a
+ * 160-byte payload with zeroed producer/op/in + the caller's out_commit, then
+ * register it in the spine.  Returns 0 on success, -1 on publish failure. */
+fn ba_kat_emit(out_commit: *u8, out_fid: *u8) -> i32 {
+    let zp : *u8 = (&BANCHOR_KAT_Z as u64) as *u8
+    let plp : *u8 = (&BANCHOR_KAT_PL as u64) as *u8
+    let idx : u64 = wh_publish(zp, zp, zp, out_commit, 0u8, 0u8, BANCHOR_PILLAR_BRANCH, zp, 0u32, plp, 160u32, out_fid)
+    if idx == 0xFFFFFFFFFFFFFFFFu64 { return -1i32 }
+    return ws_register(idx)
+}
+
+/* Integration-tier merge vertical (the walk/bisim gap the base KAT defers):
+ * proves construct -> merge_propose -> verify -> commit over real anchored
+ * fragments, plus the non-bisimilar negative.  Depends on the bug-#6 fix
+ * (deterministic cg_bisimulate witness) so ba_verify_bisimulation's M10 byte-
+ * match re-derivation can succeed.  ONE cons_ratify of "cp_branch_merge_"
+ * serves both the cg_anchor_declare gate (any ratified clause) and the
+ * ba_merge_commit gate (needs exactly BANCHOR_MERGE_CID).  Returns 0 on full
+ * pass, or a distinct 80..89 code. */
+fn ba_kat_merge() -> u64 {
+    wh_init(0u64)
+    at_init(0u64)
+    ws_init()
+    cg_init()
+    BANCHOR_INITED = 0u8
+    ba_init()
+    /* Ratify cp_branch_merge_ (16 bytes; ba_init already populated
+     * BANCHOR_MERGE_LABEL with these bytes, and its id is BANCHOR_MERGE_CID). */
+    let reqbase : u64 = &BANCHOR_KAT_REQ as u64
+    let mlab : u64 = &BANCHOR_MERGE_LABEL as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = mlab
+    rqp[2u64] = 16u64
+    rqp[3u64] = mlab
+    rqp[4u64] = 0u64
+    rqp[5u64] = mlab
+    rqp[6u64] = 0u64
+    if cons_ratify(reqbase as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 80u64 }
+    /* Shared payload: zero 192 bytes, then window [64,160) = 0xAA. */
+    ident_zero((&BANCHOR_KAT_Z as u64) as *u8)
+    let plp : *u8 = (&BANCHOR_KAT_PL as u64) as *u8
+    let mut zz : u64 = 0u64
+    while zz < 192u64 { plp[zz] = 0u8  zz = zz + 1u64 }
+    let mut ww : u64 = 64u64
+    while ww < 160u64 { plp[ww] = 0xAAu8  ww = ww + 1u64 }
+    /* Anchor fragment (out_commit byte0 = 0xA0). */
+    let ocp : *u8 = (&BANCHOR_KAT_OC as u64) as *u8
+    ident_zero(ocp)
+    ocp[0u64] = 0xA0u8
+    if ba_kat_emit(ocp, (&BANCHOR_T_ANC as u64) as *u8) != 0i32 { return 81u64 }
+    /* Declare it a cg anchor under the ratified merge clause id. */
+    if cg_anchor_declare((&BANCHOR_T_ANC as u64) as *u8, (&BANCHOR_MERGE_CID as u64) as *u8) != 0i32 { return 82u64 }
+    /* Construct a branch rooted at the anchor (head := anchor). */
+    if ba_construct((&BANCHOR_T_ANC as u64) as *u8, (&BANCHOR_T_BID as u64) as *u8) != BANCHOR_OK { return 83u64 }
+    /* Target fragment with the SAME window (out_commit byte0 = 0xB0). */
+    ident_zero(ocp)
+    ocp[0u64] = 0xB0u8
+    if ba_kat_emit(ocp, (&BANCHOR_KAT_TGT as u64) as *u8) != 0i32 { return 84u64 }
+    /* Propose: head ~ target (identical window) -> OK, proposal recorded. */
+    if ba_merge_propose((&BANCHOR_T_BID as u64) as *u8, (&BANCHOR_KAT_TGT as u64) as *u8, (&BANCHOR_T_PID as u64) as *u8) != BANCHOR_OK { return 85u64 }
+    /* Independent re-derivation (M10/M12) -> OK (needs deterministic witness). */
+    if ba_verify_bisimulation((&BANCHOR_T_PID as u64) as *u8) != BANCHOR_OK { return 86u64 }
+    /* Commit (merge clause ratified, re-verify clean) -> OK. */
+    if ba_merge_commit((&BANCHOR_T_PID as u64) as *u8) != BANCHOR_OK { return 87u64 }
+    /* Negative: a target with one window byte flipped -> NOT_BISIMILAR. */
+    plp[100u64] = 0x55u8
+    ident_zero(ocp)
+    ocp[0u64] = 0xC0u8
+    if ba_kat_emit(ocp, (&BANCHOR_KAT_TGTN as u64) as *u8) != 0i32 { return 88u64 }
+    if ba_merge_propose((&BANCHOR_T_BID as u64) as *u8, (&BANCHOR_KAT_TGTN as u64) as *u8, (&BANCHOR_T_PID as u64) as *u8) != BANCHOR_E_NOT_BISIMILAR { return 89u64 }
+    return 0u64
+}
+
+fn ba_selftest() -> u64 @export {
+    /* Step 1: all public fns return BANCHOR_E_NOT_INITED before init */
+    BANCHOR_INITED = 0u8
+    let nullp : *u8 = 0u64 as *u8
+    let trid_p  : *u8 = (&BANCHOR_T_BID as u64) as *u8
+    let tanc_p  : *u8 = (&BANCHOR_T_ANC as u64) as *u8
+    let tpid_p  : *u8 = (&BANCHOR_T_PID as u64) as *u8
+    let treq_p  : *u8 = (&BANCHOR_T_REQ as u64) as *u8
+    if ba_construct(tanc_p, trid_p) != BANCHOR_E_NOT_INITED { return 1u64 }
+    if ba_append(treq_p) != BANCHOR_E_NOT_INITED { return 2u64 }
+    if ba_retire(trid_p) != BANCHOR_E_NOT_INITED { return 3u64 }
+    if ba_merge_propose(trid_p, tanc_p, tpid_p) != BANCHOR_E_NOT_INITED { return 4u64 }
+    if ba_verify_bisimulation(tpid_p) != BANCHOR_E_NOT_INITED { return 5u64 }
+    if ba_merge_commit(tpid_p) != BANCHOR_E_NOT_INITED { return 6u64 }
+    /* Step 2: ba_init succeeds and is idempotent */
+    if ba_init() != BANCHOR_OK { return 10u64 }
+    if ba_init() != BANCHOR_OK { return 11u64 }
+    /* Step 3: null-pointer guards after init */
+    if ba_construct(nullp, trid_p) != BANCHOR_E_NULL { return 20u64 }
+    if ba_construct(tanc_p, nullp) != BANCHOR_E_NULL { return 21u64 }
+    if ba_append(nullp) != BANCHOR_E_NULL { return 22u64 }
+    if ba_retire(nullp) != BANCHOR_E_NULL { return 23u64 }
+    if ba_merge_propose(nullp, tanc_p, tpid_p) != BANCHOR_E_NULL { return 24u64 }
+    if ba_merge_propose(trid_p, nullp, tpid_p) != BANCHOR_E_NULL { return 25u64 }
+    if ba_merge_propose(trid_p, tanc_p, nullp) != BANCHOR_E_NULL { return 26u64 }
+    if ba_verify_bisimulation(nullp) != BANCHOR_E_NULL { return 27u64 }
+    if ba_merge_commit(nullp) != BANCHOR_E_NULL { return 28u64 }
+    /* Step 4: ba_branch_slot on an all-zero id returns -1 (table is empty) */
+    let mut zi : u64 = 0u64
+    while zi < 32u64 {
+        BANCHOR_T_BID[zi] = 0u8
+        zi = zi + 1u64
+    }
+    if ba_branch_slot(trid_p) != -1i64 { return 30u64 }
+    /* Step 5: ba_proposal_slot on an all-zero id returns -1 (table is empty) */
+    if ba_proposal_slot(tpid_p) != -1i64 { return 31u64 }
+    /* Step 6: BANCHOR_BRANCH_COUNT is 0 after fresh init */
+    if BANCHOR_BRANCH_COUNT != 0u64 { return 40u64 }
+    /* Step 7: BANCHOR_PROPOSAL_VERIFIED[0] == 0 after init (§G4: propose does NOT pre-verify) */
+    if BANCHOR_PROPOSAL_VERIFIED[0u64] != 0u8 { return 41u64 }
+    /* Step 8: retire label byte 0 == 'c' (ASCII 99) -- init populated it correctly */
+    if BANCHOR_RETIRE_LABEL[0u64] != 99u8 { return 50u64 }
+    /* Step 9: merge label byte 10 == 'm' (ASCII 109) -- init populated it correctly */
+    if BANCHOR_MERGE_LABEL[10u64] != 109u8 { return 51u64 }
+    /* ba_retire on a non-existent branch returns BANCHOR_E_BRANCH_ABSENT */
+    if ba_retire(trid_p) != BANCHOR_E_BRANCH_ABSENT { return 60u64 }
+    /* ba_append on a non-existent branch (branch_id = T_REQ[0..32) = zeros) returns BRANCH_ABSENT */
+    let mut ri : u64 = 0u64
+    while ri < 160u64 {
+        BANCHOR_T_REQ[ri] = 0u8
+        ri = ri + 1u64
+    }
+    if ba_append(treq_p) != BANCHOR_E_BRANCH_ABSENT { return 61u64 }
+    /* ba_verify_bisimulation on an unknown proposal returns NOT_BISIMILAR */
+    if ba_verify_bisimulation(tpid_p) != BANCHOR_E_NOT_BISIMILAR { return 62u64 }
+    /* Confirm BANCHOR_BRANCH_COUNT still 0 (no successful construct occurred) */
+    if BANCHOR_BRANCH_COUNT != 0u64 { return 70u64 }
+    /* Step 10 (integration tier): the full merge vertical over real anchored
+     * fragments -- construct -> propose -> verify -> commit + the negative. */
+    let km : u64 = ba_kat_merge()
+    if km != 0u64 { return km }
+    return 99u64
+}

@@ -1,0 +1,930 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\witness_alloc.iii
+ *
+ * III Stage-0 Witness Identifier Allocator — .iii port of witness_alloc.c.
+ *
+ * Mirrors witness_alloc.h ABI exactly (link-compatible with C iiis-0).
+ * The opaque iii_walloc_state_t is collapsed to a module-singleton —
+ * iii_walloc_create returns a sentinel pointer, every other entry
+ * point ignores its `st` argument once create has been called.
+ *
+ * Stage-0 simplifications versus witness_alloc.c:
+ *   - Records live in a fixed-cap flat byte array (4096 records ×
+ *     20 bytes).  III_WALLOC_MAX_CYCLES is 0xFE00; in practice the
+ *     boot tree never approaches even 4096 cycles.  Excess returns
+ *     III_WALLOC_E_OOM mirroring the C path.
+ *   - Audit callback is silently dropped (Stage 0 has no fn-ptr
+ *     storage).  main.c does not install one.
+ *   - Reserved-range table is rebuilt on every call to
+ *     iii_walloc_reserved_ranges (idempotent).  Returned pointer is
+ *     the address of WA_RES_BUF[0].
+ *   - emit_manifest does an in-place insertion sort of a scratch
+ *     copy of the records (n ≤ 4096, O(n²) worst case is fine).
+ *
+ * Record layout (must match struct iii_walloc_record_t in
+ * witness_alloc.h, sizeof = 20):
+ *   off  type  field
+ *    0   u32   decl_node
+ *    4   u32   name_off
+ *    8   u32   name_len
+ *   12   u16   cycle_kind
+ *   14   u16   plan_anchor
+ *   16   u32   step_kind
+ *
+ * Reserved-range entry (must match struct iii_walloc_reserved_range_t,
+ * sizeof = 16 on x86-64 due to pointer alignment):
+ *   off  type   field
+ *    0   u16    lo
+ *    2   u16    hi
+ *    4   pad    (4 bytes)
+ *    8   *u8    what            (NUL-terminated cstring)
+ */
+
+module witness_alloc
+
+/* ─── ABI constants (mirror witness_alloc.h) ───────────────────────── */
+
+const WA_CYCLE_KIND_BASE      : u32 = 0x0200u32
+const WA_PLAN_ANCHOR_BASE     : u32 = 0x0C00u32
+const WA_STEP_CATEGORY_CYCLE  : u32 = 0x0000u32
+const WA_MAX_CYCLES           : u32 = 0xFE00u32
+
+/* Error codes (inlined as i32 literals throughout this file):
+ *   OK = 0, E_NULL_ARG = -1, E_INVALID_AST = -2,
+ *   E_RESERVED_RANGE = -3, E_EXHAUSTED = -4, E_DUPLICATE = -5,
+ *   E_OOM = -6, E_SEALED = -7, E_MISMATCH = -8. */
+
+/* AST kind constants — must match ast.h. */
+const WA_K_MODULE                  : u32 = 1u32
+const WA_K_CYCLE_DECL              : u32 = 3u32
+const WA_K_MOBIUS_CANDIDATE_DECL   : u32 = 8u32
+const WA_K_SEALED_CALL_METHOD_DECL : u32 = 11u32
+
+/* Stage-0 record cap.  Boot tree is far below this. */
+const WA_REC_CAP   : u32 = 4096u32
+const WA_REC_BYTES : u32 = 20u32   /* sizeof(iii_walloc_record_t) */
+
+/* ─── Externs from C side (AST + accessor surface) ─────────────────── */
+
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_decl_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+
+
+/* ─── Module-global state (single allocator instance) ──────────────── */
+
+var WA_SENTINEL : [u8; 1]
+
+var WA_RECORDS  : [u8; 81920]    /* 4096 records × 20 bytes */
+var WA_COUNT    : u32 = 0u32
+var WA_NEXT_K   : u32 = 0u32
+var WA_ANCHOR   : u32 = 0u32
+var WA_SEALED   : u8  = 0u8
+var WA_INIT     : u8  = 0u8
+
+/* Reserved-range tables: 9 entries × 16 bytes = 144. */
+var WA_RES_BUF      : [u8; 144]
+var WA_RES_INIT     : u8 = 0u8
+var WA_RES_NAME_NONE     : [u8; 8]
+var WA_RES_NAME_PAGE     : [u8; 8]
+var WA_RES_NAME_MSR      : [u8; 8]
+var WA_RES_NAME_TOPO     : [u8; 8]
+var WA_RES_NAME_DOMAIN   : [u8; 8]
+var WA_RES_NAME_COMPOSED : [u8; 16]
+var WA_RES_NAME_BRINGUP  : [u8; 8]
+var WA_RES_NAME_VMEXIT   : [u8; 8]
+var WA_RES_NAME_SUBSYS   : [u8; 8]
+
+/* Manifest scratch buffer (sorted copy of records). */
+var WA_SORT_BUF  : [u8; 81920]
+
+/* Domain-separation tag for anchor mhash. */
+var WA_DOMAIN      : [u8; 13]   /* "III_WALLOC_v1" */
+var WA_DOMAIN_INIT : u8 = 0u8
+
+/* SHA-256 working state (private to this TU). */
+var WA_K       : [u32; 64]
+var WA_K_INIT  : u8 = 0u8
+var WA_W       : [u32; 64]
+var WA_H       : [u32; 8]
+var WA_BUF     : [u8; 64]
+var WA_BUFLEN  : u32 = 0u32
+var WA_BITS    : u64 = 0u64
+var WA_SCRATCH4 : [u8; 4]
+
+/* ─── String initialisers (Stage 0 has no static const arrays) ─────── */
+
+fn wa_init_strings() -> u32 {
+    if WA_RES_INIT == 1u8 { return 0u32 }
+    WA_RES_NAME_NONE[0]     = 78u8 /* N */
+    WA_RES_NAME_NONE[1]     = 79u8 /* O */
+    WA_RES_NAME_NONE[2]     = 78u8 /* N */
+    WA_RES_NAME_NONE[3]     = 69u8 /* E */
+    WA_RES_NAME_NONE[4]     = 0u8
+
+    WA_RES_NAME_PAGE[0]     = 80u8 /* P */
+    WA_RES_NAME_PAGE[1]     = 65u8 /* A */
+    WA_RES_NAME_PAGE[2]     = 71u8 /* G */
+    WA_RES_NAME_PAGE[3]     = 69u8 /* E */
+    WA_RES_NAME_PAGE[4]     = 0u8
+
+    WA_RES_NAME_MSR[0]      = 77u8 /* M */
+    WA_RES_NAME_MSR[1]      = 83u8 /* S */
+    WA_RES_NAME_MSR[2]      = 82u8 /* R */
+    WA_RES_NAME_MSR[3]      = 0u8
+
+    WA_RES_NAME_TOPO[0]     = 84u8 /* T */
+    WA_RES_NAME_TOPO[1]     = 79u8 /* O */
+    WA_RES_NAME_TOPO[2]     = 80u8 /* P */
+    WA_RES_NAME_TOPO[3]     = 79u8 /* O */
+    WA_RES_NAME_TOPO[4]     = 0u8
+
+    WA_RES_NAME_DOMAIN[0]   = 68u8 /* D */
+    WA_RES_NAME_DOMAIN[1]   = 79u8 /* O */
+    WA_RES_NAME_DOMAIN[2]   = 77u8 /* M */
+    WA_RES_NAME_DOMAIN[3]   = 65u8 /* A */
+    WA_RES_NAME_DOMAIN[4]   = 73u8 /* I */
+    WA_RES_NAME_DOMAIN[5]   = 78u8 /* N */
+    WA_RES_NAME_DOMAIN[6]   = 0u8
+
+    WA_RES_NAME_COMPOSED[0] = 67u8 /* C */
+    WA_RES_NAME_COMPOSED[1] = 79u8 /* O */
+    WA_RES_NAME_COMPOSED[2] = 77u8 /* M */
+    WA_RES_NAME_COMPOSED[3] = 80u8 /* P */
+    WA_RES_NAME_COMPOSED[4] = 79u8 /* O */
+    WA_RES_NAME_COMPOSED[5] = 83u8 /* S */
+    WA_RES_NAME_COMPOSED[6] = 69u8 /* E */
+    WA_RES_NAME_COMPOSED[7] = 68u8 /* D */
+    WA_RES_NAME_COMPOSED[8] = 0u8
+
+    WA_RES_NAME_BRINGUP[0]  = 66u8 /* B */
+    WA_RES_NAME_BRINGUP[1]  = 82u8 /* R */
+    WA_RES_NAME_BRINGUP[2]  = 73u8 /* I */
+    WA_RES_NAME_BRINGUP[3]  = 78u8 /* N */
+    WA_RES_NAME_BRINGUP[4]  = 71u8 /* G */
+    WA_RES_NAME_BRINGUP[5]  = 85u8 /* U */
+    WA_RES_NAME_BRINGUP[6]  = 80u8 /* P */
+    WA_RES_NAME_BRINGUP[7]  = 0u8
+
+    WA_RES_NAME_VMEXIT[0]   = 86u8 /* V */
+    WA_RES_NAME_VMEXIT[1]   = 77u8 /* M */
+    WA_RES_NAME_VMEXIT[2]   = 69u8 /* E */
+    WA_RES_NAME_VMEXIT[3]   = 88u8 /* X */
+    WA_RES_NAME_VMEXIT[4]   = 73u8 /* I */
+    WA_RES_NAME_VMEXIT[5]   = 84u8 /* T */
+    WA_RES_NAME_VMEXIT[6]   = 0u8
+
+    WA_RES_NAME_SUBSYS[0]   = 83u8 /* S */
+    WA_RES_NAME_SUBSYS[1]   = 85u8 /* U */
+    WA_RES_NAME_SUBSYS[2]   = 66u8 /* B */
+    WA_RES_NAME_SUBSYS[3]   = 83u8 /* S */
+    WA_RES_NAME_SUBSYS[4]   = 89u8 /* Y */
+    WA_RES_NAME_SUBSYS[5]   = 83u8 /* S */
+    WA_RES_NAME_SUBSYS[6]   = 0u8
+
+    WA_RES_INIT = 1u8
+    return 0u32
+}
+
+fn wa_init_domain() -> u32 {
+    if WA_DOMAIN_INIT == 1u8 { return 0u32 }
+    WA_DOMAIN[0]  = 73u8  /* I */
+    WA_DOMAIN[1]  = 73u8  /* I */
+    WA_DOMAIN[2]  = 73u8  /* I */
+    WA_DOMAIN[3]  = 95u8  /* _ */
+    WA_DOMAIN[4]  = 87u8  /* W */
+    WA_DOMAIN[5]  = 65u8  /* A */
+    WA_DOMAIN[6]  = 76u8  /* L */
+    WA_DOMAIN[7]  = 76u8  /* L */
+    WA_DOMAIN[8]  = 79u8  /* O */
+    WA_DOMAIN[9]  = 67u8  /* C */
+    WA_DOMAIN[10] = 95u8  /* _ */
+    WA_DOMAIN[11] = 118u8 /* v */
+    WA_DOMAIN[12] = 49u8  /* 1 */
+    WA_DOMAIN_INIT = 1u8
+    return 0u32
+}
+
+/* Build the 9-entry reserved-range table directly into WA_RES_BUF.
+ * Layout per entry (16 bytes): u16 lo, u16 hi, u32 pad, u64 what_ptr. */
+fn wa_init_reserved() -> u32 {
+    wa_init_strings()
+    /* Entry 0: NONE     0x0000..0x0000 */
+    wa_res_set(0u32, 0x0000u32, 0x0000u32, &WA_RES_NAME_NONE[0]     as u64)
+    wa_res_set(1u32, 0x0010u32, 0x002Fu32, &WA_RES_NAME_PAGE[0]     as u64)
+    wa_res_set(2u32, 0x0030u32, 0x004Fu32, &WA_RES_NAME_MSR[0]      as u64)
+    wa_res_set(3u32, 0x0050u32, 0x006Fu32, &WA_RES_NAME_TOPO[0]     as u64)
+    wa_res_set(4u32, 0x0070u32, 0x008Fu32, &WA_RES_NAME_DOMAIN[0]   as u64)
+    wa_res_set(5u32, 0x0090u32, 0x00AFu32, &WA_RES_NAME_COMPOSED[0] as u64)
+    wa_res_set(6u32, 0x00B0u32, 0x00CFu32, &WA_RES_NAME_BRINGUP[0]  as u64)
+    wa_res_set(7u32, 0x00D0u32, 0x00EFu32, &WA_RES_NAME_VMEXIT[0]   as u64)
+    wa_res_set(8u32, 0x00F0u32, 0x01FFu32, &WA_RES_NAME_SUBSYS[0]   as u64)
+    return 0u32
+}
+
+fn wa_res_set(i: u32, lo: u32, hi: u32, what_ptr: u64) -> u32 {
+    let base : u32 = i * 16u32
+    /* u16 lo @ base+0  (LE) */
+    WA_RES_BUF[base + 0u32] = (lo & 0xFFu32) as u8
+    WA_RES_BUF[base + 1u32] = ((lo >> 8u32) & 0xFFu32) as u8
+    /* u16 hi @ base+2  (LE) */
+    WA_RES_BUF[base + 2u32] = (hi & 0xFFu32) as u8
+    WA_RES_BUF[base + 3u32] = ((hi >> 8u32) & 0xFFu32) as u8
+    /* u32 pad @ base+4 */
+    WA_RES_BUF[base + 4u32] = 0u8
+    WA_RES_BUF[base + 5u32] = 0u8
+    WA_RES_BUF[base + 6u32] = 0u8
+    WA_RES_BUF[base + 7u32] = 0u8
+    /* u64 what_ptr @ base+8 (LE) */
+    WA_RES_BUF[base + 8u32]  = (what_ptr & 0xFFu64) as u8
+    WA_RES_BUF[base + 9u32]  = ((what_ptr >> 8u64)  & 0xFFu64) as u8
+    WA_RES_BUF[base + 10u32] = ((what_ptr >> 16u64) & 0xFFu64) as u8
+    WA_RES_BUF[base + 11u32] = ((what_ptr >> 24u64) & 0xFFu64) as u8
+    WA_RES_BUF[base + 12u32] = ((what_ptr >> 32u64) & 0xFFu64) as u8
+    WA_RES_BUF[base + 13u32] = ((what_ptr >> 40u64) & 0xFFu64) as u8
+    WA_RES_BUF[base + 14u32] = ((what_ptr >> 48u64) & 0xFFu64) as u8
+    WA_RES_BUF[base + 15u32] = ((what_ptr >> 56u64) & 0xFFu64) as u8
+    return 0u32
+}
+
+fn wa_kind_is_reserved(k: u32) -> u8 {
+    /* 9 reserved bands; matches kReservedRanges in witness_alloc.c. */
+    if k <= 0x0000u32                                { return 1u8 }
+    if k >= 0x0010u32 { if k <= 0x002Fu32 { return 1u8 } }
+    if k >= 0x0030u32 { if k <= 0x004Fu32 { return 1u8 } }
+    if k >= 0x0050u32 { if k <= 0x006Fu32 { return 1u8 } }
+    if k >= 0x0070u32 { if k <= 0x008Fu32 { return 1u8 } }
+    if k >= 0x0090u32 { if k <= 0x00AFu32 { return 1u8 } }
+    if k >= 0x00B0u32 { if k <= 0x00CFu32 { return 1u8 } }
+    if k >= 0x00D0u32 { if k <= 0x00EFu32 { return 1u8 } }
+    if k >= 0x00F0u32 { if k <= 0x01FFu32 { return 1u8 } }
+    return 0u8
+}
+
+fn wa_decl_is_witnessable(k: u32) -> u8 {
+    if k == 3u32 { return 1u8 }   /* CYCLE_DECL */
+    if k == 8u32 { return 1u8 }   /* MOBIUS_CANDIDATE_DECL */
+    if k == 11u32 { return 1u8 }  /* SEALED_CALL_METHOD_DECL */
+    return 0u8
+}
+
+/* Deterministic per-module plan_anchor — FNV-style reduction over the
+ * module name bytes, masked into 0x0C00..0x0CFF. */
+fn wa_derive_plan_anchor(name_ptr: u64, len: u32) -> u32 {
+    let mut h : u32 = 0x0C00u32
+    let mut i : u32 = 0u32
+    while i < len {
+        let b : u8 = wa_load_u8(name_ptr + (i as u64))
+        h = (h * 31u32) ^ (b as u32)
+        i = i + 1u32
+    }
+    return 0x0C00u32 | (h & 0xFFu32)
+}
+
+/* Helper: read u8 from arbitrary u64 pointer.  Realised by an
+ * accessor in ast_accessors.c (iii_ast_source_slice already returns
+ * a pointer into the source buffer, but we need a raw u8 dereference
+ * for arbitrary addresses — implement by reusing source_slice when
+ * possible).  For simplicity, we keep wa_load_u8 internal: the only
+ * pointers it ever reads are within the AST source buffer (passed in
+ * via wa_derive_plan_anchor's name_ptr argument), so we delegate to
+ * a small C helper. */
+extern @abi(c-msvc-x64) fn iii_ast_load_u8(ptr: u64) -> u32 from "ast_accessors.c"
+
+fn wa_load_u8(ptr: u64) -> u8 {
+    return (iii_ast_load_u8(ptr) & 0xFFu32) as u8
+}
+
+/* ─── Record array accessors (flat byte buffer) ────────────────────── */
+
+fn wa_rec_set_u32(idx: u32, off: u32, v: u32) -> u32 {
+    let base : u32 = idx * 20u32 + off
+    WA_RECORDS[base + 0u32] = (v & 0xFFu32) as u8
+    WA_RECORDS[base + 1u32] = ((v >> 8u32) & 0xFFu32) as u8
+    WA_RECORDS[base + 2u32] = ((v >> 16u32) & 0xFFu32) as u8
+    WA_RECORDS[base + 3u32] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn wa_rec_set_u16(idx: u32, off: u32, v: u32) -> u32 {
+    let base : u32 = idx * 20u32 + off
+    WA_RECORDS[base + 0u32] = (v & 0xFFu32) as u8
+    WA_RECORDS[base + 1u32] = ((v >> 8u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn wa_rec_get_u32(idx: u32, off: u32) -> u32 {
+    let base : u32 = idx * 20u32 + off
+    let b0 : u32 = WA_RECORDS[base + 0u32] as u32
+    let b1 : u32 = WA_RECORDS[base + 1u32] as u32
+    let b2 : u32 = WA_RECORDS[base + 2u32] as u32
+    let b3 : u32 = WA_RECORDS[base + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn wa_rec_get_u16(idx: u32, off: u32) -> u32 {
+    let base : u32 = idx * 20u32 + off
+    let b0 : u32 = WA_RECORDS[base + 0u32] as u32
+    let b1 : u32 = WA_RECORDS[base + 1u32] as u32
+    return b0 | (b1 << 8u32)
+}
+
+/* ─── Lifecycle ────────────────────────────────────────────────────── */
+
+fn iii_walloc_create() -> u64 @export {
+    WA_COUNT  = 0u32
+    WA_NEXT_K = WA_CYCLE_KIND_BASE
+    WA_ANCHOR = WA_PLAN_ANCHOR_BASE
+    WA_SEALED = 0u8
+    WA_INIT   = 1u8
+    return &WA_SENTINEL as u64
+}
+
+fn iii_walloc_destroy(st: u64) @export {
+    /* No heap; just reset. */
+    WA_COUNT  = 0u32
+    WA_NEXT_K = WA_CYCLE_KIND_BASE
+    WA_ANCHOR = WA_PLAN_ANCHOR_BASE
+    WA_SEALED = 0u8
+    WA_INIT   = 0u8
+    return
+}
+
+fn iii_walloc_set_audit(st: u64, fn_ptr: u64, user: u64) @export {
+    /* Stage 0: audit callbacks are dropped.  main.c does not install
+     * one; future Stage-1 ports may add fn-ptr storage. */
+    return
+}
+
+fn iii_walloc_seal(st: u64) -> i32 @export {
+    if WA_INIT == 0u8 { return -1i32 }
+    WA_SEALED = 1u8
+    return 0i32
+}
+
+fn iii_walloc_is_sealed(st: u64) -> u8 @export {
+    if WA_SEALED == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* ─── Reserved-range query ─────────────────────────────────────────── */
+
+fn iii_walloc_reserved_ranges(out_count_ptr: u64) -> u64 @export {
+    wa_init_reserved()
+    if out_count_ptr != 0u64 {
+        wa_store_u32(out_count_ptr, 9u32)
+    }
+    return &WA_RES_BUF[0] as u64
+}
+
+extern @abi(c-msvc-x64) fn iii_ast_store_u32(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
+
+fn wa_store_u32(ptr: u64, v: u32) -> u32 {
+    return iii_ast_store_u32(ptr, v)
+}
+
+/* ─── Allocation ───────────────────────────────────────────────────── */
+
+fn iii_walloc_run(st: u64, ast: u64) -> i32 @export {
+    if WA_INIT == 0u8 { return -1i32 }
+    if ast == 0u64    { return -1i32 }
+    if WA_SEALED == 1u8 { return -7i32 }
+
+    let root : u32 = iii_ast_root_module(ast)
+    if root == 0u32 { return -2i32 }
+    let mod_kind : u32 = iii_ast_node_kind(ast, root)
+    if mod_kind != WA_K_MODULE { return -2i32 }
+
+    let src_buf : u64 = iii_ast_source_buf(ast)
+    if src_buf == 0u64 { return -2i32 }
+
+    let mod_name_off : u32 = iii_ast_module_name_offset(ast, root)
+    let mod_name_len : u32 = iii_ast_module_name_length(ast, root)
+    WA_ANCHOR = wa_derive_plan_anchor(src_buf + (mod_name_off as u64), mod_name_len)
+
+    let n : u32 = iii_ast_module_decl_count(ast, root)
+    let mut i : u32 = 0u32
+    while i < n {
+        let did    : u32 = iii_ast_module_decl_at(ast, root, i)
+        let kind   : u32 = iii_ast_node_kind(ast, did)
+        let is_w   : u8  = wa_decl_is_witnessable(kind)
+        if is_w == 1u8 {
+            if WA_NEXT_K > 0xFFFFu32 { return -4i32 }
+            let off : u32 = WA_NEXT_K - WA_CYCLE_KIND_BASE
+            if off >= WA_MAX_CYCLES { return -4i32 }
+            let k : u32 = WA_NEXT_K
+            let res : u8 = wa_kind_is_reserved(k)
+            if res == 1u8 { return -3i32 }
+
+            /* Defensive intra-state collision check (cheap; matches
+             * witness_alloc.c). */
+            let mut j : u32 = 0u32
+            while j < WA_COUNT {
+                let kj : u32 = wa_rec_get_u16(j, 12u32)
+                if kj == k { return -5i32 }
+                j = j + 1u32
+            }
+
+            if WA_COUNT >= WA_REC_CAP { return -6i32 }
+            let name_off : u32 = iii_ast_decl_name_offset(ast, did)
+            let name_len : u32 = iii_ast_decl_name_length(ast, did)
+            let step : u32 = (WA_STEP_CATEGORY_CYCLE << 16u32) | k
+
+            wa_rec_set_u32(WA_COUNT, 0u32,  did)
+            wa_rec_set_u32(WA_COUNT, 4u32,  name_off)
+            wa_rec_set_u32(WA_COUNT, 8u32,  name_len)
+            wa_rec_set_u16(WA_COUNT, 12u32, k)
+            wa_rec_set_u16(WA_COUNT, 14u32, WA_ANCHOR)
+            wa_rec_set_u32(WA_COUNT, 16u32, step)
+
+            WA_COUNT  = WA_COUNT + 1u32
+            WA_NEXT_K = WA_NEXT_K + 1u32
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* ─── Read-back ────────────────────────────────────────────────────── */
+
+fn iii_walloc_lookup(st: u64, decl_node: u32) -> u64 @export {
+    if WA_INIT == 0u8 { return 0u64 }
+    let mut i : u32 = 0u32
+    while i < WA_COUNT {
+        let dn : u32 = wa_rec_get_u32(i, 0u32)
+        if dn == decl_node {
+            return (&WA_RECORDS as u64) + (i as u64) * 20u64
+        }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+fn iii_walloc_record_count(st: u64) -> u32 @export {
+    if WA_INIT == 0u8 { return 0u32 }
+    return WA_COUNT
+}
+
+fn iii_walloc_record_at(st: u64, idx: u32) -> u64 @export {
+    if WA_INIT == 0u8 { return 0u64 }
+    if idx >= WA_COUNT { return 0u64 }
+    return (&WA_RECORDS as u64) + (idx as u64) * 20u64
+}
+
+/* ─── Manifest emission ────────────────────────────────────────────── */
+
+extern @abi(c-msvc-x64) fn iii_ast_store_u8(ptr: u64, v: u32) -> u32 from "ast_accessors.c"
+
+fn wa_emit_byte(buf: u64, cap: u64, pos: u64, c: u32) -> u64 {
+    if buf != 0u64 {
+        if pos < cap {
+            iii_ast_store_u8(buf + pos, c)
+        }
+    }
+    return pos + 1u64
+}
+
+fn wa_emit_hex(buf: u64, cap: u64, pos_in: u64, v: u32, width: u32) -> u64 {
+    let mut pos : u64 = pos_in
+    let mut i   : i32 = (width as i32) - 1i32
+    while i >= 0i32 {
+        let shift : u32 = (i as u32) * 4u32
+        let nib   : u32 = (v >> shift) & 0xFu32
+        let mut c : u32 = 0u32
+        if nib < 10u32 { c = 48u32 + nib }    /* '0' + nib */
+        if nib >= 10u32 { c = 97u32 + (nib - 10u32) } /* 'a' + nib-10 */
+        pos = wa_emit_byte(buf, cap, pos, c)
+        i = i - 1i32
+    }
+    return pos
+}
+
+/* Read u16 LE from WA_SORT_BUF at byte offset base. */
+fn wa_sb_u16(base: u32) -> u32 {
+    let lo : u32 = WA_SORT_BUF[base + 0u32] as u32
+    let hi : u32 = WA_SORT_BUF[base + 1u32] as u32
+    return lo | (hi << 8u32)
+}
+
+/* Read u32 LE from WA_SORT_BUF at byte offset base. */
+fn wa_sb_u32(base: u32) -> u32 {
+    let b0 : u32 = WA_SORT_BUF[base + 0u32] as u32
+    let b1 : u32 = WA_SORT_BUF[base + 1u32] as u32
+    let b2 : u32 = WA_SORT_BUF[base + 2u32] as u32
+    let b3 : u32 = WA_SORT_BUF[base + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* Insertion sort copy of records by cycle_kind ascending into
+ * WA_SORT_BUF, returning the count. */
+fn wa_sort_records() -> u32 {
+    let mut i : u32 = 0u32
+    while i < WA_COUNT {
+        /* Copy record i into WA_SORT_BUF[i*20..]. */
+        let mut b : u32 = 0u32
+        while b < 20u32 {
+            WA_SORT_BUF[i * 20u32 + b] = WA_RECORDS[i * 20u32 + b]
+            b = b + 1u32
+        }
+        i = i + 1u32
+    }
+    /* Insertion sort by cycle_kind (offset 12, u16 LE). */
+    let mut ii : u32 = 1u32
+    while ii < WA_COUNT {
+        let mut jj : u32 = ii
+        while jj > 0u32 {
+            let prev : u32 = jj - 1u32
+            let kp : u32 = wa_sb_u16(prev * 20u32 + 12u32)
+            let kj : u32 = wa_sb_u16(jj * 20u32 + 12u32)
+            if kj < kp {
+                /* Swap 20 bytes. */
+                let mut bb : u32 = 0u32
+                while bb < 20u32 {
+                    let tmp : u8 = WA_SORT_BUF[prev * 20u32 + bb]
+                    WA_SORT_BUF[prev * 20u32 + bb] = WA_SORT_BUF[jj * 20u32 + bb]
+                    WA_SORT_BUF[jj * 20u32 + bb] = tmp
+                    bb = bb + 1u32
+                }
+                jj = prev
+            }
+            if kj >= kp { jj = 0u32 }
+        }
+        ii = ii + 1u32
+    }
+    return WA_COUNT
+}
+
+fn iii_walloc_emit_manifest(st: u64, ast: u64, buf: u64, cap: u64) -> u64 @export {
+    if WA_INIT == 0u8 { return 0u64 }
+    if ast == 0u64    { return 0u64 }
+    wa_sort_records()
+    let src : u64 = iii_ast_source_buf(ast)
+    let mut pos : u64 = 0u64
+    let mut i   : u32 = 0u32
+    while i < WA_COUNT {
+        let base : u32 = i * 20u32
+        let ck : u32 = wa_sb_u16(base + 12u32)
+        let pa : u32 = wa_sb_u16(base + 14u32)
+        let sk : u32 = wa_sb_u32(base + 16u32)
+        let no : u32 = wa_sb_u32(base + 4u32)
+        let nl : u32 = wa_sb_u32(base + 8u32)
+
+        pos = wa_emit_hex(buf, cap, pos, ck, 4u32)
+        pos = wa_emit_byte(buf, cap, pos, 32u32) /* ' ' */
+        pos = wa_emit_hex(buf, cap, pos, sk, 8u32)
+        pos = wa_emit_byte(buf, cap, pos, 32u32)
+        pos = wa_emit_hex(buf, cap, pos, pa, 4u32)
+        pos = wa_emit_byte(buf, cap, pos, 32u32)
+        if src != 0u64 {
+            let mut j : u32 = 0u32
+            while j < nl {
+                let ch : u32 = iii_ast_load_u8(src + (no as u64) + (j as u64))
+                pos = wa_emit_byte(buf, cap, pos, ch)
+                j = j + 1u32
+            }
+        }
+        pos = wa_emit_byte(buf, cap, pos, 10u32) /* '\n' */
+        i = i + 1u32
+    }
+    if buf != 0u64 {
+        if cap > 0u64 {
+            let mut pp : u64 = pos
+            if pp >= cap { pp = cap - 1u64 }
+            iii_ast_store_u8(buf + pp, 0u32)
+        }
+    }
+    return pos
+}
+
+/* ─── SHA-256 (FIPS 180-4) — copied from proof.iii ─────────────────── */
+
+fn wa_rotr(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+fn wa_init_k_once() -> u32 {
+    if WA_K_INIT == 1u8 { return 0u32 }
+    WA_K[0]  = 0x428a2f98u32
+    WA_K[1]  = 0x71374491u32
+    WA_K[2]  = 0xb5c0fbcfu32
+    WA_K[3]  = 0xe9b5dba5u32
+    WA_K[4]  = 0x3956c25bu32
+    WA_K[5]  = 0x59f111f1u32
+    WA_K[6]  = 0x923f82a4u32
+    WA_K[7]  = 0xab1c5ed5u32
+    WA_K[8]  = 0xd807aa98u32
+    WA_K[9]  = 0x12835b01u32
+    WA_K[10] = 0x243185beu32
+    WA_K[11] = 0x550c7dc3u32
+    WA_K[12] = 0x72be5d74u32
+    WA_K[13] = 0x80deb1feu32
+    WA_K[14] = 0x9bdc06a7u32
+    WA_K[15] = 0xc19bf174u32
+    WA_K[16] = 0xe49b69c1u32
+    WA_K[17] = 0xefbe4786u32
+    WA_K[18] = 0x0fc19dc6u32
+    WA_K[19] = 0x240ca1ccu32
+    WA_K[20] = 0x2de92c6fu32
+    WA_K[21] = 0x4a7484aau32
+    WA_K[22] = 0x5cb0a9dcu32
+    WA_K[23] = 0x76f988dau32
+    WA_K[24] = 0x983e5152u32
+    WA_K[25] = 0xa831c66du32
+    WA_K[26] = 0xb00327c8u32
+    WA_K[27] = 0xbf597fc7u32
+    WA_K[28] = 0xc6e00bf3u32
+    WA_K[29] = 0xd5a79147u32
+    WA_K[30] = 0x06ca6351u32
+    WA_K[31] = 0x14292967u32
+    WA_K[32] = 0x27b70a85u32
+    WA_K[33] = 0x2e1b2138u32
+    WA_K[34] = 0x4d2c6dfcu32
+    WA_K[35] = 0x53380d13u32
+    WA_K[36] = 0x650a7354u32
+    WA_K[37] = 0x766a0abbu32
+    WA_K[38] = 0x81c2c92eu32
+    WA_K[39] = 0x92722c85u32
+    WA_K[40] = 0xa2bfe8a1u32
+    WA_K[41] = 0xa81a664bu32
+    WA_K[42] = 0xc24b8b70u32
+    WA_K[43] = 0xc76c51a3u32
+    WA_K[44] = 0xd192e819u32
+    WA_K[45] = 0xd6990624u32
+    WA_K[46] = 0xf40e3585u32
+    WA_K[47] = 0x106aa070u32
+    WA_K[48] = 0x19a4c116u32
+    WA_K[49] = 0x1e376c08u32
+    WA_K[50] = 0x2748774cu32
+    WA_K[51] = 0x34b0bcb5u32
+    WA_K[52] = 0x391c0cb3u32
+    WA_K[53] = 0x4ed8aa4au32
+    WA_K[54] = 0x5b9cca4fu32
+    WA_K[55] = 0x682e6ff3u32
+    WA_K[56] = 0x748f82eeu32
+    WA_K[57] = 0x78a5636fu32
+    WA_K[58] = 0x84c87814u32
+    WA_K[59] = 0x8cc70208u32
+    WA_K[60] = 0x90befffau32
+    WA_K[61] = 0xa4506cebu32
+    WA_K[62] = 0xbef9a3f7u32
+    WA_K[63] = 0xc67178f2u32
+    WA_K_INIT = 1u8
+    return 0u32
+}
+
+fn wa_sha_init() -> u32 {
+    wa_init_k_once()
+    WA_H[0] = 0x6a09e667u32
+    WA_H[1] = 0xbb67ae85u32
+    WA_H[2] = 0x3c6ef372u32
+    WA_H[3] = 0xa54ff53au32
+    WA_H[4] = 0x510e527fu32
+    WA_H[5] = 0x9b05688cu32
+    WA_H[6] = 0x1f83d9abu32
+    WA_H[7] = 0x5be0cd19u32
+    WA_BITS   = 0u64
+    WA_BUFLEN = 0u32
+    return 0u32
+}
+
+fn wa_sha_block() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let p0 : u32 = WA_BUF[i*4u32 + 0u32] as u32
+        let p1 : u32 = WA_BUF[i*4u32 + 1u32] as u32
+        let p2 : u32 = WA_BUF[i*4u32 + 2u32] as u32
+        let p3 : u32 = WA_BUF[i*4u32 + 3u32] as u32
+        WA_W[i] = (p0 << 24u32) | (p1 << 16u32) | (p2 << 8u32) | p3
+        i = i + 1u32
+    }
+    let mut ii : u32 = 16u32
+    while ii < 64u32 {
+        let w15 : u32 = WA_W[ii - 15u32]
+        let w2  : u32 = WA_W[ii - 2u32]
+        let s0  : u32 = wa_rotr(w15, 7u32) ^ wa_rotr(w15, 18u32) ^ (w15 >> 3u32)
+        let s1  : u32 = wa_rotr(w2, 17u32) ^ wa_rotr(w2, 19u32) ^ (w2 >> 10u32)
+        WA_W[ii] = WA_W[ii - 16u32] + s0 + WA_W[ii - 7u32] + s1
+        ii = ii + 1u32
+    }
+    let mut a : u32 = WA_H[0]
+    let mut b : u32 = WA_H[1]
+    let mut c : u32 = WA_H[2]
+    let mut d : u32 = WA_H[3]
+    let mut e : u32 = WA_H[4]
+    let mut f : u32 = WA_H[5]
+    let mut g : u32 = WA_H[6]
+    let mut h : u32 = WA_H[7]
+    let mut k : u32 = 0u32
+    while k < 64u32 {
+        let S1 : u32 = wa_rotr(e, 6u32) ^ wa_rotr(e, 11u32) ^ wa_rotr(e, 25u32)
+        let ch : u32 = (e & f) ^ ((~e) & g)
+        let t1 : u32 = h + S1 + ch + WA_K[k] + WA_W[k]
+        let S0 : u32 = wa_rotr(a, 2u32) ^ wa_rotr(a, 13u32) ^ wa_rotr(a, 22u32)
+        let mj : u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2 : u32 = S0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+        k = k + 1u32
+    }
+    WA_H[0] = WA_H[0] + a
+    WA_H[1] = WA_H[1] + b
+    WA_H[2] = WA_H[2] + c
+    WA_H[3] = WA_H[3] + d
+    WA_H[4] = WA_H[4] + e
+    WA_H[5] = WA_H[5] + f
+    WA_H[6] = WA_H[6] + g
+    WA_H[7] = WA_H[7] + h
+    return 0u32
+}
+
+fn wa_sha_update_ptr(p: u64, len: u64) -> u32 {
+    WA_BITS = WA_BITS + (len * 8u64)
+    let mut rem : u64 = len
+    let mut off : u64 = 0u64
+    while rem > 0u64 {
+        let mut take : u64 = 64u64 - (WA_BUFLEN as u64)
+        if take > rem { take = rem }
+        let mut k : u64 = 0u64
+        while k < take {
+            WA_BUF[(WA_BUFLEN as u64) + k] = (iii_ast_load_u8(p + off + k) & 0xFFu32) as u8
+            k = k + 1u64
+        }
+        WA_BUFLEN = WA_BUFLEN + (take as u32)
+        off = off + take
+        rem = rem - take
+        if WA_BUFLEN == 64u32 {
+            wa_sha_block()
+            WA_BUFLEN = 0u32
+        }
+    }
+    return 0u32
+}
+
+fn wa_sha_update_byte(b: u8) -> u32 {
+    WA_BITS = WA_BITS + 8u64
+    WA_BUF[WA_BUFLEN] = b
+    WA_BUFLEN = WA_BUFLEN + 1u32
+    if WA_BUFLEN == 64u32 {
+        wa_sha_block()
+        WA_BUFLEN = 0u32
+    }
+    return 0u32
+}
+
+fn wa_sha_update_arr8(arr_ptr: u64, len: u64) -> u32 {
+    let mut k : u64 = 0u64
+    while k < len {
+        let v : u32 = iii_ast_load_u8(arr_ptr + k)
+        wa_sha_update_byte((v & 0xFFu32) as u8)
+        k = k + 1u64
+    }
+    return 0u32
+}
+
+fn wa_absorb_u32_be(v: u32) -> u32 {
+    wa_sha_update_byte(((v >> 24u32) & 0xFFu32) as u8)
+    wa_sha_update_byte(((v >> 16u32) & 0xFFu32) as u8)
+    wa_sha_update_byte(((v >> 8u32)  & 0xFFu32) as u8)
+    wa_sha_update_byte((v & 0xFFu32) as u8)
+    return 0u32
+}
+
+fn wa_sha_final(out: u64) -> u32 {
+    let bits : u64 = WA_BITS
+    wa_sha_update_byte(0x80u8)
+    while WA_BUFLEN != 56u32 {
+        wa_sha_update_byte(0u8)
+    }
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u32 = 56u32 - i*8u32
+        WA_BUF[WA_BUFLEN] = ((bits >> (shift as u64)) & 0xFFu64) as u8
+        WA_BUFLEN = WA_BUFLEN + 1u32
+        i = i + 1u32
+    }
+    /* The padding above appended exactly 8 bytes — block must now flush. */
+    wa_sha_block()
+    WA_BUFLEN = 0u32
+
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let h : u32 = WA_H[j]
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 0u64, (h >> 24u32) & 0xFFu32)
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 1u64, (h >> 16u32) & 0xFFu32)
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 2u64, (h >> 8u32)  & 0xFFu32)
+        iii_ast_store_u8(out + ((j*4u32) as u64) + 3u64, h & 0xFFu32)
+        j = j + 1u32
+    }
+    return 0u32
+}
+
+fn iii_walloc_anchor_mhash(st: u64, ast: u64, out: u64) @export {
+    if out == 0u64 { return }
+    /* Zero-fill on null state, mirroring witness_alloc.c. */
+    if WA_INIT == 0u8 {
+        let mut z : u32 = 0u32
+        while z < 32u32 {
+            iii_ast_store_u8(out + (z as u64), 0u32)
+            z = z + 1u32
+        }
+        return
+    }
+    wa_init_domain()
+    wa_sha_init()
+    wa_sha_update_arr8(&WA_DOMAIN[0] as u64, 13u64)
+
+    let src : u64 = 0u64
+    let mut src_buf : u64 = 0u64
+    if ast != 0u64 { src_buf = iii_ast_source_buf(ast) }
+
+    let mut i : u32 = 0u32
+    while i < WA_COUNT {
+        let ck : u32 = wa_rec_get_u16(i, 12u32)
+        let no : u32 = wa_rec_get_u32(i, 4u32)
+        let nl : u32 = wa_rec_get_u32(i, 8u32)
+        wa_absorb_u32_be(ck)
+        wa_absorb_u32_be(no)
+        wa_absorb_u32_be(nl)
+        if src_buf != 0u64 {
+            wa_sha_update_ptr(src_buf + (no as u64), nl as u64)
+        }
+        i = i + 1u32
+    }
+    wa_sha_final(out)
+    return
+}
+
+/* ─── Reproducibility self-check ───────────────────────────────────── */
+
+fn iii_walloc_verify(st: u64, ast: u64) -> i32 @export {
+    if WA_INIT == 0u8 { return -1i32 }
+    if ast == 0u64 { return -1i32 }
+    let root : u32 = iii_ast_root_module(ast)
+    let mod_kind : u32 = iii_ast_node_kind(ast, root)
+    if mod_kind != WA_K_MODULE { return -2i32 }
+    let src : u64 = iii_ast_source_buf(ast)
+    if src == 0u64 { return -2i32 }
+
+    let mod_name_off : u32 = iii_ast_module_name_offset(ast, root)
+    let mod_name_len : u32 = iii_ast_module_name_length(ast, root)
+    let expected : u32 = wa_derive_plan_anchor(src + (mod_name_off as u64), mod_name_len)
+
+    let n : u32 = iii_ast_module_decl_count(ast, root)
+    let mut i : u32 = 0u32
+    while i < n {
+        let did    : u32 = iii_ast_module_decl_at(ast, root, i)
+        let kind   : u32 = iii_ast_node_kind(ast, did)
+        if wa_decl_is_witnessable(kind) == 1u8 {
+            let recp : u64 = iii_walloc_lookup(st, did)
+            if recp == 0u64 { return -8i32 }
+            /* The lookup returned the address of the record; we
+             * compare via the same byte-buffer slot index.  Find it
+             * by searching WA_RECORDS for the matching decl_node. */
+            let mut idx : u32 = 0u32
+            let mut found : u8 = 0u8
+            while idx < WA_COUNT {
+                let dn : u32 = wa_rec_get_u32(idx, 0u32)
+                if dn == did { found = 1u8; idx = WA_COUNT }
+                if found == 0u8 { idx = idx + 1u32 }
+            }
+            /* idx is now WA_COUNT; recompute by scanning again to
+             * find the matching slot index without using the
+             * sentinel-loop trick.  (Stage-0 control flow: keep it
+             * simple.) */
+            let mut k : u32 = 0u32
+            let mut slot : u32 = 0xFFFFFFFFu32
+            while k < WA_COUNT {
+                let dn2 : u32 = wa_rec_get_u32(k, 0u32)
+                if dn2 == did { slot = k }
+                k = k + 1u32
+            }
+            if slot == 0xFFFFFFFFu32 { return -8i32 }
+            let pa : u32 = wa_rec_get_u16(slot, 14u32)
+            if pa != expected { return -8i32 }
+            let ck : u32 = wa_rec_get_u16(slot, 12u32)
+            let sk : u32 = wa_rec_get_u32(slot, 16u32)
+            let want_sk : u32 = (WA_STEP_CATEGORY_CYCLE << 16u32) | ck
+            if sk != want_sk { return -8i32 }
+            if wa_kind_is_reserved(ck) == 1u8 { return -3i32 }
+            let no : u32 = wa_rec_get_u32(slot, 4u32)
+            let nl : u32 = wa_rec_get_u32(slot, 8u32)
+            let ano : u32 = iii_ast_decl_name_offset(ast, did)
+            let anl : u32 = iii_ast_decl_name_length(ast, did)
+            if no != ano { return -8i32 }
+            if nl != anl { return -8i32 }
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}

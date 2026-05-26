@@ -1,0 +1,35 @@
+/* parse "  42abc" -> skip ws, parse decimal -> 42, last_decimal == 42 */
+module corpus_b32
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn parse_skip_ascii_ws(base: u64, len: u64, pos: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_decimal_u32(base: u64, len: u64, pos: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_last_decimal_u32() -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_is_ok(packed: u64) -> u8 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_pos(packed: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_at_eof(base: u64, len: u64, pos: u64) -> u8 from "parse.iii"
+
+fn main() -> u64 {
+    let s : *u8 = malloc(7u64)
+    s[0] = 32u8     /* ' ' */
+    s[1] = 32u8     /* ' ' */
+    s[2] = 52u8     /* '4' */
+    s[3] = 50u8     /* '2' */
+    s[4] = 97u8     /* 'a' */
+    s[5] = 98u8     /* 'b' */
+    s[6] = 99u8     /* 'c' */
+    let r1 : u64 = parse_skip_ascii_ws(s as u64, 7u64, 0u64)
+    if parse_is_ok(r1) != 1u8 { return 1u64 }
+    let p1 : u64 = parse_pos(r1)
+    if p1 != 2u64 { return 2u64 }
+    let r2 : u64 = parse_decimal_u32(s as u64, 7u64, p1)
+    if parse_is_ok(r2) != 1u8 { return 3u64 }
+    let v : u32 = parse_last_decimal_u32()
+    if v != 42u32 { return 4u64 }
+    let p2 : u64 = parse_pos(r2)
+    if p2 != 4u64 { return 5u64 }
+    if parse_at_eof(s as u64, 7u64, p2) != 0u8 { return 6u64 }
+    free(s)
+    return 99u64
+}

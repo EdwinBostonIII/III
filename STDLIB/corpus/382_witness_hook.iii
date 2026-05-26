@@ -1,0 +1,6 @@
+/* 382 — Layer-2 witness publication hook (full 1M-fragment capacity): publish,
+ * payload round-trip, deterministic frag-id, distinct-id, revoke, epoch close,
+ * witness_append_resolution. */
+module corpus_382
+extern @abi(c-msvc-x64) fn wh_selftest() -> u64 from "witness_hook.iii"
+fn main() -> u64 { return wh_selftest() }

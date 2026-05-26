@@ -1,0 +1,238 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\pattern_form.iii
+ *
+ * III STDLIB - verba::pattern_form
+ *
+ * Runtime text-to-pattern-template parser. Reads a string like:
+ *   "activation=900000000, hexad=6, ring=2, k=950000000, parent=12"
+ * and populates a 168-byte pattern_t template buffer.
+ *
+ * Hardcoded dynamicism: surface syntax via deterministic hand-rolled
+ * parsing. The user passes a 168-byte buffer they've allocated; the
+ * parser fills it. Subsequent pattern_register() can install it.
+ *
+ * Recognised keys (decimal or 0x-prefixed hex u64):
+ *   activation       -- u64 (activation_base; capped at 2e9)
+ *   hexad            -- u8 (1..7)
+ *   ring             -- u8 (0..3)
+ *   k                -- u64 (k_value; capped at 1e9)
+ *   parent           -- u64 (specialisation_of)
+ *   guarantees_provided  -- u32
+ *   guarantees_required  -- u32
+ *   effects          -- u32
+ *
+ * Hexad: kind_form. Ring: R0. K: 0.95.
+ */
+
+module verba_pattern_form
+
+extern @abi(c-msvc-x64) fn pattern_template_zero(buf: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_activation_base(buf: u64, b: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_hexad_kind(buf: u64, h: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_ring(buf: u64, r: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_k_value(buf: u64, k: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_specialisation_of(buf: u64, parent: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_guarantees_provided(buf: u64, mask: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_guarantees_required(buf: u64, mask: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_effects_mask(buf: u64, mask: u32) -> i32 from "pattern.iii"
+
+const PF_MAX_KEY_LEN : u32 = 24u32
+
+var PF_KEY_BUF : [u8; 24]
+var PF_KEY_LEN : u32 = 0u32
+var PF_PARSED_VAL : u64 = 0u64
+var PF_TEMPLATE_BUF : u64 = 0u64
+
+fn pf_is_alpha_under(c: u8) -> u8 {
+    if c == 95u8 { return 1u8 }
+    if c >= 97u8 {
+        if c <= 122u8 { return 1u8 }
+    }
+    if c >= 65u8 {
+        if c <= 90u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn pf_is_alnum_under(c: u8) -> u8 {
+    if pf_is_alpha_under(c) == 1u8 { return 1u8 }
+    if c >= 48u8 {
+        if c <= 57u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn pf_is_ws(c: u8) -> u8 {
+    if c == 32u8 { return 1u8 }
+    if c == 9u8 { return 1u8 }
+    if c == 10u8 { return 1u8 }
+    if c == 13u8 { return 1u8 }
+    return 0u8
+}
+
+fn pf_skip_ws(src: u64, off: u64, len: u64) -> u64 {
+    let mut o : u64 = off
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        if pf_is_ws(bp[0u64]) == 0u8 { return o }
+        o = o + 1u64
+    }
+    return o
+}
+
+fn pf_advance_past_comma(src: u64, off: u64, len: u64) -> u64 {
+    let mut o : u64 = off
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        if bp[0u64] == 44u8 { return o + 1u64 }
+        o = o + 1u64
+    }
+    return len
+}
+
+fn pf_read_key(src: u64, off: u64, len: u64) -> u64 {
+    PF_KEY_LEN = 0u32
+    let mut o : u64 = off
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        let c : u8 = bp[0u64]
+        if pf_is_alnum_under(c) == 0u8 { return o }
+        if PF_KEY_LEN >= PF_MAX_KEY_LEN { return o }
+        PF_KEY_BUF[PF_KEY_LEN] = c
+        PF_KEY_LEN = PF_KEY_LEN + 1u32
+        o = o + 1u64
+    }
+    return o
+}
+
+fn pf_hex_digit(c: u8) -> u32 {
+    if c >= 48u8 {
+        if c <= 57u8 { return (c - 48u8) as u32 }
+    }
+    if c >= 97u8 {
+        if c <= 102u8 { return (c - 87u8) as u32 }
+    }
+    if c >= 65u8 {
+        if c <= 70u8 { return (c - 55u8) as u32 }
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn pf_parse_value(src: u64, off: u64, len: u64) -> u64 {
+    PF_PARSED_VAL = 0u64
+    let mut o : u64 = off
+    if o >= len { return o }
+    let bp0 : *u8 = (src + o) as *u8
+    if bp0[0u64] == 48u8 {
+        if (o + 1u64) < len {
+            let bp1 : *u8 = (src + o + 1u64) as *u8
+            if bp1[0u64] == 120u8 {
+                o = o + 2u64
+                while o < len {
+                    let bp : *u8 = (src + o) as *u8
+                    let d : u32 = pf_hex_digit(bp[0u64])
+                    if d == 0xFFFFFFFFu32 { return o }
+                    PF_PARSED_VAL = (PF_PARSED_VAL << 4u64) | (d as u64 & 0xFu64)
+                    o = o + 1u64
+                }
+                return o
+            }
+        }
+    }
+    while o < len {
+        let bp : *u8 = (src + o) as *u8
+        let c : u8 = bp[0u64]
+        if c < 48u8 { return o }
+        if c > 57u8 { return o }
+        PF_PARSED_VAL = PF_PARSED_VAL * 10u64 + ((c - 48u8) as u64 & 0xFFu64)
+        o = o + 1u64
+    }
+    return o
+}
+
+fn pf_key_eq_str(s: u64, slen: u32) -> u8 {
+    if PF_KEY_LEN != slen { return 0u8 }
+    let mut i : u32 = 0u32
+    while i < slen {
+        let bp : *u8 = (s + ((i as u64) & 0xFFu64)) as *u8
+        if PF_KEY_BUF[i] != bp[0u64] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+var PF_STR_ACTIVATION : [u8; 10] = [97u8, 99u8, 116u8, 105u8, 118u8, 97u8, 116u8, 105u8, 111u8, 110u8]
+var PF_STR_HEXAD : [u8; 5] = [104u8, 101u8, 120u8, 97u8, 100u8]
+var PF_STR_RING : [u8; 4] = [114u8, 105u8, 110u8, 103u8]
+var PF_STR_PARENT : [u8; 6] = [112u8, 97u8, 114u8, 101u8, 110u8, 116u8]
+var PF_STR_GUARANTEES_PROVIDED : [u8; 19] = [103u8, 117u8, 97u8, 114u8, 97u8, 110u8, 116u8, 101u8, 101u8, 115u8, 95u8, 112u8, 114u8, 111u8, 118u8, 105u8, 100u8, 101u8, 100u8]
+var PF_STR_GUARANTEES_REQUIRED : [u8; 19] = [103u8, 117u8, 97u8, 114u8, 97u8, 110u8, 116u8, 101u8, 101u8, 115u8, 95u8, 114u8, 101u8, 113u8, 117u8, 105u8, 114u8, 101u8, 100u8]
+var PF_STR_EFFECTS : [u8; 7] = [101u8, 102u8, 102u8, 101u8, 99u8, 116u8, 115u8]
+
+fn pf_apply_field() -> i32 {
+    if pf_key_eq_str((&PF_STR_ACTIVATION) as u64, 10u32) == 1u8 {
+        pattern_template_set_activation_base(PF_TEMPLATE_BUF, PF_PARSED_VAL)
+        return 0i32
+    }
+    if pf_key_eq_str((&PF_STR_HEXAD) as u64, 5u32) == 1u8 {
+        pattern_template_set_hexad_kind(PF_TEMPLATE_BUF, (PF_PARSED_VAL & 0xFFu64) as u8)
+        return 0i32
+    }
+    if pf_key_eq_str((&PF_STR_RING) as u64, 4u32) == 1u8 {
+        pattern_template_set_ring(PF_TEMPLATE_BUF, (PF_PARSED_VAL & 0xFFu64) as u8)
+        return 0i32
+    }
+    /* "k" (1) */
+    if PF_KEY_LEN == 1u32 {
+        if PF_KEY_BUF[0u32] == 107u8 {
+            pattern_template_set_k_value(PF_TEMPLATE_BUF, PF_PARSED_VAL)
+            return 0i32
+        }
+    }
+    if pf_key_eq_str((&PF_STR_PARENT) as u64, 6u32) == 1u8 {
+        pattern_template_set_specialisation_of(PF_TEMPLATE_BUF, PF_PARSED_VAL)
+        return 0i32
+    }
+    if pf_key_eq_str((&PF_STR_GUARANTEES_PROVIDED) as u64, 19u32) == 1u8 {
+        pattern_template_set_guarantees_provided(PF_TEMPLATE_BUF, (PF_PARSED_VAL & 0xFFFFFFFFu64) as u32)
+        return 0i32
+    }
+    if pf_key_eq_str((&PF_STR_GUARANTEES_REQUIRED) as u64, 19u32) == 1u8 {
+        pattern_template_set_guarantees_required(PF_TEMPLATE_BUF, (PF_PARSED_VAL & 0xFFFFFFFFu64) as u32)
+        return 0i32
+    }
+    if pf_key_eq_str((&PF_STR_EFFECTS) as u64, 7u32) == 1u8 {
+        pattern_template_set_effects_mask(PF_TEMPLATE_BUF, (PF_PARSED_VAL & 0xFFFFFFFFu64) as u32)
+        return 0i32
+    }
+    return 0i32
+}
+
+/* Parse text spec into the caller's 168-byte pattern_t template buffer. */
+fn pattern_form_parse(spec_src: u64, spec_len: u64, template_buf: u64) -> i32 @export {
+    if spec_src == 0u64 { return -1i32 }
+    if template_buf == 0u64 { return -1i32 }
+    pattern_template_zero(template_buf)
+    PF_TEMPLATE_BUF = template_buf
+    let mut o : u64 = pf_skip_ws(spec_src, 0u64, spec_len)
+    while o < spec_len {
+        o = pf_read_key(spec_src, o, spec_len)
+        if PF_KEY_LEN == 0u32 {
+            o = o + 1u64
+        }
+        if PF_KEY_LEN > 0u32 {
+            o = pf_skip_ws(spec_src, o, spec_len)
+            if o < spec_len {
+                let bp : *u8 = (spec_src + o) as *u8
+                if bp[0u64] == 61u8 {
+                    o = o + 1u64
+                    o = pf_skip_ws(spec_src, o, spec_len)
+                    o = pf_parse_value(spec_src, o, spec_len)
+                    pf_apply_field()
+                }
+            }
+        }
+        o = pf_advance_past_comma(spec_src, o, spec_len)
+        o = pf_skip_ws(spec_src, o, spec_len)
+    }
+    return 0i32
+}

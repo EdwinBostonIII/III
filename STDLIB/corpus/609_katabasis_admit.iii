@@ -1,0 +1,50 @@
+/* 609 -- KATABASIS increment 15: the fully autonomous gate (plan 4.2), end to end.
+ * Uses real capabilities (aether/capability) + real seals (Inc 13): builds sealed
+ * cycle terms and runs katabasis_gate_admit, which computes seal/cap/hexad/SID
+ * itself.  Verdicts: OK=0 REJECT_SEAL=1 REJECT_CAP=2 REJECT_HEXAD=3.
+ * Exit 99 = all hold; 1..4 = the index of the failing assertion. */
+module corpus_609_katabasis_admit
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 from "seal.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 from "admit.iii"
+
+var T_SEAL  : [u8; 32]
+var T_WRONG : [u8; 32]
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let root : u64 = cap_env_init()
+    let wcap : u64 = cap_attenuate(root, 0x00200000u64, 0u64)   /* WriteMetal right only */
+    let dcap : u64 = cap_attenuate(root, 0x00800000u64, 0u64)   /* Descend right only */
+
+    /* valid: F2 WriteMetal to SHARED, capped by wcap, correctly sealed -> OK */
+    let a1 : u32 = katabasis_cycle_act(2u32, 1u32, 0x20000u64, 728u32)
+    let c1 : u32 = katabasis_cycle_under_cap(a1, wcap as u32)
+    katabasis_cycle_seal(c1, &T_SEAL as u64)
+    if katabasis_gate_admit(c1, &T_SEAL as u64) != 0u32 { return 1u64 }   /* OK */
+
+    /* wrong seal (a different cycle's seal) -> REJECT_SEAL */
+    let a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+    let c2 : u32 = katabasis_cycle_under_cap(a2, wcap as u32)
+    katabasis_cycle_seal(c2, &T_WRONG as u64)
+    if katabasis_gate_admit(c1, &T_WRONG as u64) != 1u32 { return 2u64 }  /* REJECT_SEAL */
+
+    /* a Descend-only cap on a WriteMetal cycle -> REJECT_CAP */
+    let a3 : u32 = katabasis_cycle_act(2u32, 1u32, 0x20000u64, 728u32)
+    let c3 : u32 = katabasis_cycle_under_cap(a3, dcap as u32)
+    katabasis_cycle_seal(c3, &T_SEAL as u64)
+    if katabasis_gate_admit(c3, &T_SEAL as u64) != 2u32 { return 3u64 }   /* REJECT_CAP */
+
+    /* a brick cycle (F2 to HSAVE), correct cap + seal -> REJECT_HEXAD */
+    let a4 : u32 = katabasis_cycle_act(2u32, 1u32, 0x1000u64, 728u32)
+    let c4 : u32 = katabasis_cycle_under_cap(a4, wcap as u32)
+    katabasis_cycle_seal(c4, &T_SEAL as u64)
+    if katabasis_gate_admit(c4, &T_SEAL as u64) != 3u32 { return 4u64 }   /* REJECT_HEXAD */
+
+    return 99u64
+}

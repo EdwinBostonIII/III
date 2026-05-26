@@ -1,0 +1,17 @@
+/* 813 -- mig4 Step 4: the dynamic joinability gate.  Drives xjn_selftest: the
+ * sentinel-constructible documented pre-emptions JOIN (R038/R037, R041/R013 -- dynamic
+ * local-confluence proof); the convergence primitive has teeth (distinct FORMs do NOT
+ * converge, identical FORMs do); a SUBTERM critical pair joins (R037 rewriting R001's
+ * FCOMPOSE child); and THE GATE is GREEN over the whole enumerated critical-pair set --
+ * zero NONJOIN (no confluence violation), some pairs actually witnessed + joined,
+ * deterministic.  Exit 99 = all hold; 10..11 pre-emption; 20..21 convergence teeth; 25
+ * subterm; 30..33 gate.  Gated by run_corpus.sh (consumes Steps 1-3 + the engine). */
+module corpus_813
+
+extern @abi(c-msvc-x64) fn xjn_selftest() -> u64 from "xii_joinability.iii"
+
+fn main() -> u64 {
+    let r : u64 = xjn_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

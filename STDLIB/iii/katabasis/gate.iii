@@ -1,0 +1,50 @@
+/* STDLIB/iii/katabasis/gate.iii
+ *
+ * KATABASIS increment 12 -- the gate decision over a cycle term (plan 4.2).
+ * This is the III Gate's brain: given a sealed cycle TERM (Inc 11) and the
+ * outcomes of the seal + capability checks, it reads the cycle's family /
+ * target / action straight from the term's kernel, computes the hexad admission
+ * (cycle_admit, Inc 5) and the SID-inverse derivability (cycle_family, Inc 3) in
+ * full, and short-circuits in the §4.2 order (seal -> cap -> hexad -> sid),
+ * returning the gate verdict.  No metal is performed here -- this is the
+ * decision; performing + witnessing follow once the verdict is OK.
+ *
+ * The seal + capability OUTCOMES are produced by their own subsystems (the
+ * content-address/Anchor seal and the capability algebra); the hexad + SID
+ * checks are computed here, completely, from the cycle term.  KAT: corpus 606.
+ * Ring R0.  K 1.00.
+ */
+module katabasis_gate
+
+extern @abi(c-msvc-x64) fn katabasis_cycle_family(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_target_kind(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_target(cycle_idx: u32) -> u64 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_action_hexad(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_admit(family: u32, target_kind: u32, target: u64, action_hexad: u16) -> u8 from "cycle_admit.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_has_inverse(family: u32) -> u8 from "cycle_family.iii"
+
+/* Verdicts -- mirror gate_verdict.iii KGV_* (pinned by corpus 602). */
+const KG_OK                  : u32 = 0u32
+const KG_REJECT_SEAL         : u32 = 1u32
+const KG_REJECT_CAP          : u32 = 2u32
+const KG_REJECT_HEXAD        : u32 = 3u32
+const KG_REJECT_IRREVERSIBLE : u32 = 4u32
+
+/* The hexad-layer gate decision over a cycle term (plan 4.2 steps 1-4).
+ * seal_ok / cap_ok are the outcomes of the seal + capability checks (1 = pass).
+ * Returns the verdict; OK means "admissible -- proceed to perform + witness". */
+fn katabasis_gate_decide_term(cycle_idx: u32, seal_ok: u8, cap_ok: u8) -> u32 @export {
+    let ci : u32 = cycle_idx
+    let so : u8 = seal_ok
+    let co : u8 = cap_ok
+    if so == 0u8 { return KG_REJECT_SEAL }
+    if co == 0u8 { return KG_REJECT_CAP }
+    let fam : u32 = katabasis_cycle_family(ci)
+    let tk  : u32 = katabasis_cycle_target_kind(ci)
+    let tgt : u64 = katabasis_cycle_target(ci)
+    let ah  : u32 = katabasis_cycle_action_hexad(ci)
+    let ahv : u16 = ah as u16
+    if katabasis_cycle_admit(fam, tk, tgt, ahv) == 0u8 { return KG_REJECT_HEXAD }
+    if katabasis_cycle_has_inverse(fam) == 0u8 { return KG_REJECT_IRREVERSIBLE }
+    return KG_OK
+}

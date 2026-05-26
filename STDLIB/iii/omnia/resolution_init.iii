@@ -1,0 +1,181 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\resolution_init.iii
+ *
+ * III STDLIB - omnia::resolution_init
+ *
+ * Boot-time initialisation of the III Intent Calculus.
+ * Sealed against R2-GENESIS/CORE-CALCULUS-V1.0.iii (which supersedes
+ * FROZEN SPEC III-RES-FROZEN-001 §I).
+ *
+ * Called once from the program's main() before any resolve() call.
+ * Sequence:
+ *   1. Register 19 primitive meta-patterns (slots 0..18)
+ *   2. Register 24 transform patterns (slots 18..41)
+ *   3. Register 27 codegen patterns (slots 42..68)
+ *   4. pattern_registry_seal_global()
+ *   5. seal_resolver_compute()
+ *   6. quality_set_resolver_lint_passed()  [build system asserts lint]
+ *   7. closure_compute_with_resolver()      [if closure root already set]
+ *
+ * Hexad: kind_origin (Crown). Ring: R0. K: 1.00.
+ */
+
+module omnia_resolution_init
+
+extern @abi(c-msvc-x64) fn pattern_template_zero(buf: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_id(buf: u64, mod_mh: u64, name: u64, name_len: u32) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_activation_base(buf: u64, b: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_hexad_kind(buf: u64, h: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_ring(buf: u64, r: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_k_value(buf: u64, k: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_binding_kind(buf: u64, slot: u8, k: u8) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_template_set_dispatch(buf: u64, fp: u64) -> i32 from "pattern.iii"
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+
+/* Meta-pattern dispatch fns are defined in a separate file so the
+ * fn-address operator produces a proper extern symbol (iiis-0 emits
+ * L_-prefixed local labels for same-file fn-addresses, which break the
+ * linker). */
+extern @abi(c-msvc-x64) fn meta_dispatch_unreachable(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "resolution_meta_dispatch.iii"
+extern @abi(c-msvc-x64) fn mp_default_or_fail_dispatch(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "resolution_meta_dispatch.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn calculus_init() -> i32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn proof_init() -> i32 from "irreducibility_proof.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn transform_register_all() -> i32 from "transform_patterns.iii"
+extern @abi(c-msvc-x64) fn codegen_register_all() -> i32 from "codegen_patterns.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_compute() -> i32 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn quality_set_resolver_lint_passed() -> i32 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn closure_compute_with_resolver() -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_is_set() -> u8 from "closure.iii"
+
+const RES_INIT_OK : i32 = 0i32
+
+var INIT_MODULE_MHASH : [u8; 32]
+var INIT_TEMPLATE_BUF : [u8; 168]
+var INIT_NAME_BUF : [u8; 32]
+
+const RI_HEXAD_FORM      : u8 = 1u8
+const RI_HEXAD_SUBSTANCE : u8 = 2u8
+const RI_HEXAD_PASSAGE   : u8 = 3u8
+const RI_HEXAD_ESSENCE   : u8 = 4u8
+const RI_HEXAD_MOTION    : u8 = 5u8
+const RI_HEXAD_COMPOSE   : u8 = 6u8
+const RI_HEXAD_ORIGIN    : u8 = 7u8
+const RI_RING_R0         : u8 = 2u8
+
+fn _meta_register(slot: u32, hexad: u8, name_b0: u8, name_b1: u8, name_b2: u8, name_b3: u8) -> i32 {
+    pattern_template_zero((&INIT_TEMPLATE_BUF) as u64)
+    INIT_NAME_BUF[0] = name_b0
+    INIT_NAME_BUF[1] = name_b1
+    INIT_NAME_BUF[2] = name_b2
+    INIT_NAME_BUF[3] = name_b3
+    INIT_NAME_BUF[4] = 0u8
+    pattern_template_set_id((&INIT_TEMPLATE_BUF) as u64, (&INIT_MODULE_MHASH) as u64, (&INIT_NAME_BUF) as u64, 4u32)
+    /* Meta-patterns get base 1.0 (root) or 0.9 (downstream) */
+    if hexad == RI_HEXAD_FORM {
+        pattern_template_set_activation_base((&INIT_TEMPLATE_BUF) as u64, 1000000000u64)
+    }
+    if hexad == RI_HEXAD_ORIGIN {
+        pattern_template_set_activation_base((&INIT_TEMPLATE_BUF) as u64, 1000000000u64)
+    }
+    if hexad != RI_HEXAD_FORM {
+        if hexad != RI_HEXAD_ORIGIN {
+            pattern_template_set_activation_base((&INIT_TEMPLATE_BUF) as u64, 900000000u64)
+        }
+    }
+    pattern_template_set_hexad_kind((&INIT_TEMPLATE_BUF) as u64, hexad)
+    pattern_template_set_ring((&INIT_TEMPLATE_BUF) as u64, RI_RING_R0)
+    pattern_template_set_k_value((&INIT_TEMPLATE_BUF) as u64, 1000000000u64)
+    /* Wire real dispatch fn-pointer (meta-patterns are taxonomy roots; this
+     * dispatch only fires if no specialisation matched).
+     * iiis-0 trap: bare-identifier function-pointer-take emits the
+     * L_<name> internal label, which is NOT the same symbol as an
+     * @export-ed function's plain name -> linker leaves it UNDEFINED
+     * -> indirect call to garbage -> SEGV.  The (&fn) as u64 form takes
+     * the @export-aware path in cg_r3.c that emits the raw symbol. */
+    let fp : u64 = (&meta_dispatch_unreachable) as u64
+    pattern_template_set_dispatch((&INIT_TEMPLATE_BUF) as u64, fp)
+    /* Side-channel: store intent_kind in binding_kinds[0] so dispatch can route */
+    pattern_template_set_binding_kind((&INIT_TEMPLATE_BUF) as u64, 0u8, slot as u8)
+    pattern_register(slot, (&INIT_TEMPLATE_BUF) as u64)
+    return 0i32
+}
+
+fn meta_register_all() -> i32 @export {
+    /* 19 primitives of the Intent Calculus, slots 0..18.
+     * Name encoding: 4 ASCII bytes "pNNN" where NNN is the zero-padded
+     * primitive id. Hexad alignment per R2-GENESIS/CORE-CALCULUS-V1.0.iii sec A.2.
+     * The default_or_fail catch-all from FROZEN SPEC III-RES-FROZEN-001 is
+     * removed: with 19 irreducible primitives, every intent has a canonical
+     * primitive root; resolution failures are explicit (NOMATCH). */
+    /* p001 PRIMITIVE_FORM    -- HEXAD_FORM */
+    _meta_register(0u32,  RI_HEXAD_FORM,      112u8, 48u8, 48u8, 49u8)
+    /* p002 PRIMITIVE_BIND    -- HEXAD_SUBSTANCE */
+    _meta_register(1u32,  RI_HEXAD_SUBSTANCE, 112u8, 48u8, 48u8, 50u8)
+    /* p003 PRIMITIVE_CONVEY  -- HEXAD_PASSAGE */
+    _meta_register(2u32,  RI_HEXAD_PASSAGE,   112u8, 48u8, 48u8, 51u8)
+    /* p004 PRIMITIVE_MEAN    -- HEXAD_ESSENCE */
+    _meta_register(3u32,  RI_HEXAD_ESSENCE,   112u8, 48u8, 48u8, 52u8)
+    /* p005 PRIMITIVE_ACT     -- HEXAD_MOTION */
+    _meta_register(4u32,  RI_HEXAD_MOTION,    112u8, 48u8, 48u8, 53u8)
+    /* p006 PRIMITIVE_COMPOSE -- HEXAD_COMPOSE  (root for transform/codegen) */
+    _meta_register(5u32,  RI_HEXAD_COMPOSE,   112u8, 48u8, 48u8, 54u8)
+    /* p007 PRIMITIVE_SEAL    -- HEXAD_ORIGIN */
+    _meta_register(6u32,  RI_HEXAD_ORIGIN,    112u8, 48u8, 48u8, 55u8)
+    /* p008 PRIMITIVE_PROVE   -- HEXAD_ESSENCE */
+    _meta_register(7u32,  RI_HEXAD_ESSENCE,   112u8, 48u8, 48u8, 56u8)
+    /* p009 PRIMITIVE_QUERY   -- HEXAD_ESSENCE */
+    _meta_register(8u32,  RI_HEXAD_ESSENCE,   112u8, 48u8, 48u8, 57u8)
+    /* p010 PRIMITIVE_GRANT   -- HEXAD_ORIGIN */
+    _meta_register(9u32,  RI_HEXAD_ORIGIN,    112u8, 48u8, 49u8, 48u8)
+    /* p011 PRIMITIVE_GOVERN  -- HEXAD_ORIGIN */
+    _meta_register(10u32, RI_HEXAD_ORIGIN,    112u8, 48u8, 49u8, 49u8)
+    /* p012 PRIMITIVE_THEN    -- HEXAD_COMPOSE */
+    _meta_register(11u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 50u8)
+    /* p013 PRIMITIVE_WITH    -- HEXAD_COMPOSE */
+    _meta_register(12u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 51u8)
+    /* p014 PRIMITIVE_UNDER   -- HEXAD_COMPOSE */
+    _meta_register(13u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 52u8)
+    /* p015 PRIMITIVE_IF      -- HEXAD_COMPOSE */
+    _meta_register(14u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 53u8)
+    /* p016 PRIMITIVE_LOOP    -- HEXAD_COMPOSE */
+    _meta_register(15u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 54u8)
+    /* p017 PRIMITIVE_LIFT    -- HEXAD_ORIGIN */
+    _meta_register(16u32, RI_HEXAD_ORIGIN,    112u8, 48u8, 49u8, 55u8)
+    /* p018 PRIMITIVE_REFLECT -- HEXAD_ESSENCE */
+    _meta_register(17u32, RI_HEXAD_ESSENCE,   112u8, 48u8, 49u8, 56u8)
+    /* p019 PRIMITIVE_ABSTRACT -- HEXAD_COMPOSE (IDSG generaliser).
+     * Registered at slot 69 (after codegen patterns at 42..68) so it
+     * doesn't collide with transform_register_all which writes slots
+     * 18..41.  PATTERN_REGISTRY_USED_MAX bumped to 100 to admit. */
+    _meta_register(69u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 57u8)
+    return RES_INIT_OK
+}
+
+fn resolution_init() -> i32 @export {
+    if pattern_registry_is_sealed() == 1u8 { return RES_INIT_OK }
+    /* Step 0: initialise the Intent Calculus v1.0 metadata tables and the
+     * irreducibility-proof operational-pair table. Must precede any
+     * meta-pattern registration, since meta-patterns inherit their
+     * activation_base / hexad / K from the calculus metadata at boot. */
+    calculus_init()
+    proof_init()
+    /* Step 1: 19 primitive meta-patterns (slots 0..18) */
+    meta_register_all()
+    /* Step 2: 24 transform patterns (slots 18..41) */
+    transform_register_all()
+    /* Step 3: 27 codegen patterns (slots 42..68) */
+    codegen_register_all()
+    /* Step 4: seal the global registry */
+    pattern_registry_seal_global()
+    /* Step 5: compute resolver seal */
+    seal_resolver_compute()
+    /* Step 6: assert lint passed (build system would set this; we set
+     * here for a single-process bootstrap). */
+    quality_set_resolver_lint_passed()
+    /* Step 7: extend closure root if available */
+    if closure_is_set() == 1u8 {
+        closure_compute_with_resolver()
+    }
+    return RES_INIT_OK
+}

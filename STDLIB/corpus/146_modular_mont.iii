@@ -1,0 +1,38 @@
+/* Montgomery modular operations agree with classical %. */
+module corpus_146
+
+extern @abi(c-msvc-x64) fn mont_mul_u32(a: u64, b: u64, n: u64) -> u64 from "modular_mont.iii"
+extern @abi(c-msvc-x64) fn mont_pow_u32(base: u64, exp: u64, n: u64) -> u64 from "modular_mont.iii"
+extern @abi(c-msvc-x64) fn mont_to_form(a: u64, n: u64) -> u64 from "modular_mont.iii"
+extern @abi(c-msvc-x64) fn mont_from_form(a_R: u64, n: u64) -> u64 from "modular_mont.iii"
+
+fn main() -> u64 {
+    /* mont_to_form / mont_from_form is identity. */
+    let n1 : u64 = 1009u64        /* prime < 2^32 */
+    let a : u64 = 42u64
+    let aR : u64 = mont_to_form(a, n1)
+    let back : u64 = mont_from_form(aR, n1)
+    if back != 42u64 { return 1u64 + back }
+
+    /* mont_mul: 12345 * 67890 mod 1000003 */
+    let n : u64 = 1000003u64
+    let m : u64 = mont_mul_u32(12345u64, 67890u64, n)
+    let expected : u64 = (12345u64 * 67890u64) % n
+    if m != expected { return 2u64 + m }
+
+    /* mont_pow: 2^10 mod 1009 = 1024 mod 1009 = 15 */
+    let p : u64 = mont_pow_u32(2u64, 10u64, 1009u64)
+    if p != 15u64 { return 3u64 + p }
+
+    /* mont_pow: 3^15 mod 17 = 14348907 mod 17 = 6 */
+    let p2 : u64 = mont_pow_u32(3u64, 15u64, 17u64)
+    if p2 != 6u64 { return 4u64 + p2 }
+
+    /* edge: exp=0 → 1 */
+    if mont_pow_u32(99u64, 0u64, 7u64) != 1u64 { return 5u64 }
+
+    /* edge: n=1 → 0 (everything mod 1 is 0) */
+    if mont_pow_u32(99u64, 5u64, 1u64) != 0u64 { return 6u64 }
+
+    return 99u64
+}

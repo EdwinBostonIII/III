@@ -1,0 +1,29 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\timing_safe.iii
+ *
+ * III STDLIB - verba::timing_safe
+ *
+ * Constant-time byte comparison for cryptographic equality checks
+ * (MAC verification, password hashes, etc.).  Always processes the
+ * full length; no early exit on mismatch.
+ *
+ * Public API:
+ *   timing_safe_eq(a:*u8, b:*u8, len:u64) -> u32
+ *      Returns 1 if all bytes equal, 0 otherwise.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module verba_timing_safe
+
+fn timing_safe_eq(a: *u8, b: *u8, len: u64) -> u32 @export {
+    let mut diff : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < len {
+        let av : u32 = a[i] as u32
+        let bv : u32 = b[i] as u32
+        diff = diff | (av ^ bv)
+        i = i + 1u64
+    }
+    if diff == 0u32 { return 1u32 }
+    return 0u32
+}

@@ -1,0 +1,55 @@
+/* Keccak-f[1600] chi-path bit-identity: scalar == AVX-512.
+ *
+ * RITCHIE §3.5 kernel 5/10.  Runs keccak_f1600 on an identical filled
+ * state twice -- once forcing the scalar chi (keccak_chi_force_path(1))
+ * and once forcing the AVX-512 vpternlogq chi (force_path(2)) -- and
+ * asserts the two 200-byte states are byte-for-byte identical.  This is
+ * the chi bit-identity proof (the SIMD nonlinear step equals the scalar
+ * boolean exactly).  The "not-both-wrong" anchor is the existing SHA-3
+ * KATs (162/169), which auto-dispatch to the AVX-512 chi on this host
+ * and check against published FIPS 202 vectors.
+ *
+ * Exit = 88 on full identity; 200 on any mismatch.
+ */
+module corpus_181
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+
+fn fill_pattern(p: *u8) -> i32 {
+    /* 200-byte state = 25 LE u64 lanes; a varied pattern exercises chi. */
+    let mut i : u64 = 0u64
+    while i < 200u64 {
+        p[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let sa : *u8 = malloc(256u64)
+    let sb : *u8 = malloc(256u64)
+    fill_pattern(sa)
+    fill_pattern(sb)
+
+    keccak_chi_force_path(1u32)        /* scalar  */
+    keccak_f1600(sa as u64)
+    keccak_chi_force_path(2u32)        /* avx512  */
+    keccak_f1600(sb as u64)
+    keccak_chi_force_path(0u32)
+
+    let mut j : u64 = 0u64
+    while j < 200u64 {
+        if sa[j] != sb[j] {
+            free(sa)
+            free(sb)
+            return 200u64
+        }
+        j = j + 1u64
+    }
+    free(sa)
+    free(sb)
+    return 88u64
+}

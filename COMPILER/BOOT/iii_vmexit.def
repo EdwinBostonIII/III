@@ -1,0 +1,36 @@
+# COMPILER/BOOT/iii_vmexit.def
+#
+# SINGLE SOURCE OF TRUTH for the KATABASIS minimal deterministic VMEXIT set
+# (DOCS/III-KATABASIS.md plan 4.8).  The III Floor (R-1) intercepts the SMALLEST
+# set of guest exits, each handled by a TOTAL deterministic witnessed cycle;
+# every other (unmodelled) exit is FAIL-CLOSED.  This table fixes, per exit, its
+# handling discipline and its SID inverse kind.
+#
+# Regenerate the AUTO-GENERATED taxonomy functions in
+# STDLIB/iii/katabasis/vmexit.iii via:
+#     bash COMPILER/BOOT/gen_vmexit.sh
+# The build's drift gate (gen_vmexit.sh --check) fails if vmexit.iii's generated
+# block diverges (plan 6.9 / FR-9).
+#
+# Each row maps to the hand-written enum constants in vmexit.iii:
+#   exit const     = KVX_<kind>          (e.g. KVX_CPUID)
+#   handling const = KVX_H_<handling>    (e.g. KVX_H_SYNTHETIC)
+#   inverse const  = KVX_INV_<inverse>   (e.g. KVX_INV_IDENTITY)
+# gen_vmexit.sh asserts every referenced constant exists.  The fail-closed
+# CATCH-ALL tails (intercepted->0, handling->KVX_H_FAIL_CLOSED,
+# inverse->KVX_INV_HOST_STATE) are the module's safety contract and are emitted
+# by the generator for ANY unmodelled exit -- never table rows.
+#
+# Fields (whitespace-delimited):  kind  handling  inverse
+#   kind      str -- exit name; forms KVX_<kind>.
+#   handling  str -- handling discipline; forms KVX_H_<handling>.
+#   inverse   str -- SID inverse kind; forms KVX_INV_<inverse>.
+# Lines starting with '#' are comments. Blank lines ignored.
+# ---------------------------------------------------------------------------
+# kind     handling        inverse
+CPUID      SYNTHETIC       IDENTITY
+MSR        WHITELIST       RECORDED
+NPF        COW             COW
+VMMCALL    WITNESSED_CALL  GUEST_REGS
+SMI        OBSERVE         IDENTITY
+INVALID    FAIL_CLOSED     HOST_STATE

@@ -1,0 +1,39 @@
+/* checked_crystal: success returns the option-encoded value, failure
+ * returns 0 and mints a provenance crystal accessible via _last_error. */
+module corpus_145
+
+extern @abi(c-msvc-x64) fn checked_u32_add_with_crystal(a: u32, b: u32) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u32_div_with_crystal(a: u32, b: u32) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_u64_mul_with_crystal(a: u64, b: u64) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_crystal_last_error() -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+
+fn main() -> u64 {
+    /* Success path: 1 + 2 = 3 (option-encoded as (3 << 1) | 1 = 7). */
+    let r : u64 = checked_u32_add_with_crystal(1u32, 2u32)
+    if r != 7u64 { return 1u64 }
+
+    /* Overflow path: 0xFFFFFFFF + 1 = wraps -> mints crystal, returns 0. */
+    let bad : u64 = checked_u32_add_with_crystal(0xFFFFFFFFu32, 1u32)
+    if bad != 0u64 { return 2u64 }
+    let cryst : u64 = checked_crystal_last_error()
+    if cryst == 0u64 { return 3u64 }
+    /* Error code = 0xC101 (overflow). */
+    if crystal_code(cryst) != 0xC101u32 { return 4u64 + (crystal_code(cryst) as u64) }
+    crystal_drop(cryst)
+
+    /* Div-by-zero path. */
+    let div0 : u64 = checked_u32_div_with_crystal(42u32, 0u32)
+    if div0 != 0u64 { return 5u64 }
+    let div_cryst : u64 = checked_crystal_last_error()
+    if div_cryst == 0u64 { return 6u64 }
+    if crystal_code(div_cryst) != 0xC103u32 { return 7u64 }
+    crystal_drop(div_cryst)
+
+    /* u64 success path: 100 * 200 = 20000, returns option_u64 handle. */
+    let ok : u64 = checked_u64_mul_with_crystal(100u64, 200u64)
+    if ok == 0u64 { return 8u64 }
+
+    return 99u64
+}

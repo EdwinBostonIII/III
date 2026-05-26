@@ -1,0 +1,139 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\204_prespec_hw_offload.iii
+ *
+ * III conformance corpus 204 -- Phase C.1+C.2: pre-specialization
+ * registry + hardware-offload registry (the partial evaluator's
+ * static-dispatch + hardware-inlining inputs).
+ *
+ * Asserts:
+ *   1. prespec_register / lookup / accessor roundtrip.
+ *   2. Idempotent re-register updates in place.
+ *   3. prespec_drop reclaims the slot.
+ *   4. prespec_capacity = 256.
+ *   5. hw_offload_register copies the asm blob into the arena.
+ *   6. hw_offload_lookup returns the blob's absolute address when
+ *      feature_mask == 0 (always satisfied).
+ *   7. hw_offload_lookup with unsatisfiable feature_mask returns 0.
+ *   8. hw_offload_blob_len returns the registered length.
+ *
+ * Exit code: 99 on full pass; 1..N for specific failures.
+ */
+
+module corpus_204
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn prespec_reset() -> i32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_register(composition_hash: u64, packed_meta: u64, dispatch_fp: u64, fallback_pid: u32) -> i32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_pack_meta(intent_primitive: u8, hexad_bag: u8, k_value: u32) -> u64 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_lookup(composition_hash: u64) -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_dispatch_fp(slot: u32) -> u64 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_primitive(slot: u32) -> u8 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_k_value(slot: u32) -> u64 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_hexad_bag(slot: u32) -> u8 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_used() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_capacity() -> u32 from "prespec.iii"
+extern @abi(c-msvc-x64) fn prespec_drop(slot: u32) -> i32 from "prespec.iii"
+
+extern @abi(c-msvc-x64) fn hw_offload_reset() -> i32 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_register(packed_meta: u64, asm_blob_ptr: u64, fallback_pid: u32) -> i32 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_pack_meta(primitive_id: u8, feature_mask: u32, blob_len: u16) -> u64 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_lookup(primitive_id: u8) -> u64 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_blob_len(primitive_id: u8) -> u16 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_fallback_pid(primitive_id: u8) -> u32 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_used() -> u32 from "hw_offload.iii"
+extern @abi(c-msvc-x64) fn hw_offload_capacity() -> u32 from "hw_offload.iii"
+
+fn main() -> u64 {
+    /* ---- prespec ---- */
+    prespec_reset()
+    if prespec_used() != 0u32 { return 1u64 }
+    if prespec_capacity() != 256u32 { return 2u64 }
+
+    /* Register a sample composition: hash=0xABCD, primitive=COMPOSE(=6),
+     * hexad_bag=0x40 (HEXAD_COMPOSE bit), K=0.95e9, fp=0xCAFE0001. */
+    let meta1 : u64 = prespec_pack_meta(6u8, 0x40u8, 950000000u32)
+    let r1 : i32 = prespec_register(0xABCDu64, meta1, 0xCAFE0001u64, 0u32)
+    if r1 != 0i32 { return 3u64 }
+    if prespec_used() != 1u32 { return 4u64 }
+
+    let s1 : u32 = prespec_lookup(0xABCDu64)
+    if s1 == 0xFFFFFFFFu32 { return 5u64 }
+    if prespec_dispatch_fp(s1) != 0xCAFE0001u64 { return 6u64 }
+    if prespec_primitive(s1) != 6u8 { return 7u64 }
+    if prespec_k_value(s1) != 950000000u64 { return 8u64 }
+    if prespec_hexad_bag(s1) != 0x40u8 { return 9u64 }
+
+    /* Idempotent re-register updates in place. */
+    let meta2 : u64 = prespec_pack_meta(6u8, 0x40u8, 980000000u32)
+    let r2 : i32 = prespec_register(0xABCDu64, meta2, 0xCAFE0002u64, 0u32)
+    if r2 != 0i32 { return 10u64 }
+    if prespec_used() != 1u32 { return 11u64 }
+    if prespec_dispatch_fp(s1) != 0xCAFE0002u64 { return 12u64 }
+    if prespec_k_value(s1) != 980000000u64 { return 13u64 }
+
+    /* Lookup miss returns NOT_FOUND. */
+    if prespec_lookup(0xDEADu64) != 0xFFFFFFFFu32 { return 14u64 }
+
+    /* Drop reclaims slot. */
+    if prespec_drop(s1) != 0i32 { return 15u64 }
+    if prespec_used() != 0u32 { return 16u64 }
+    if prespec_lookup(0xABCDu64) != 0xFFFFFFFFu32 { return 17u64 }
+
+    /* ---- hw_offload ---- */
+    hw_offload_reset()
+    if hw_offload_used() != 0u32 { return 20u64 }
+    if hw_offload_capacity() != 512u32 { return 21u64 }
+
+    /* Allocate a sample asm template (4 bytes, all NOPs). */
+    let blob : *u8 = malloc(8u64)
+    if blob as u64 == 0u64 { return 22u64 }
+    blob[0] = 0x90u8   /* nop */
+    blob[1] = 0x90u8
+    blob[2] = 0x90u8
+    blob[3] = 0xC3u8   /* ret */
+    blob[4] = 0xCCu8   /* int3 (poison) */
+    blob[5] = 0x00u8
+    blob[6] = 0x00u8
+    blob[7] = 0x00u8
+
+    /* Register: primitive PRIMITIVE_FORM(=1), feature_mask=0 (always
+     * satisfied), 4-byte blob, fallback_pid=0. */
+    let hw_meta1 : u64 = hw_offload_pack_meta(1u8, 0u32, 4u16)
+    let r_hw : i32 = hw_offload_register(hw_meta1, blob as u64, 0u32)
+    if r_hw != 0i32 { free(blob); return 23u64 }
+    if hw_offload_used() != 1u32 { free(blob); return 24u64 }
+
+    /* Lookup with feature_mask=0 always succeeds. */
+    let addr : u64 = hw_offload_lookup(1u8)
+    if addr == 0u64 { free(blob); return 25u64 }
+
+    /* Verify the bytes match what we registered. */
+    let p0 : *u8 = (addr) as *u8
+    let p1 : *u8 = (addr + 1u64) as *u8
+    let p2 : *u8 = (addr + 2u64) as *u8
+    let p3 : *u8 = (addr + 3u64) as *u8
+    if p0[0u64] != 0x90u8 { free(blob); return 26u64 }
+    if p1[0u64] != 0x90u8 { free(blob); return 27u64 }
+    if p2[0u64] != 0x90u8 { free(blob); return 28u64 }
+    if p3[0u64] != 0xC3u8 { free(blob); return 29u64 }
+
+    if hw_offload_blob_len(1u8) != 4u16 { free(blob); return 30u64 }
+
+    /* Lookup for a primitive with no registration returns 0. */
+    if hw_offload_lookup(2u8) != 0u64 { free(blob); return 31u64 }
+
+    /* Register a second entry with an UNSATISFIABLE feature mask
+     * (high bits set; cpufeat_summary never returns those for
+     * unsupported features). */
+    let hw_meta2 : u64 = hw_offload_pack_meta(2u8, 0xFF000000u32, 4u16)
+    let r_hw2 : i32 = hw_offload_register(hw_meta2, blob as u64, 7u32)
+    if r_hw2 != 0i32 { free(blob); return 32u64 }
+    /* Lookup should miss because feature_mask is unsatisfied. */
+    if hw_offload_lookup(2u8) != 0u64 { free(blob); return 33u64 }
+    /* Fallback pid retrievable. */
+    if hw_offload_fallback_pid(2u8) != 7u32 { free(blob); return 34u64 }
+
+    free(blob)
+    return 99u64
+}

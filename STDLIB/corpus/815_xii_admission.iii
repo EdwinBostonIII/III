@@ -1,0 +1,17 @@
+/* 815 -- mig4 Step 6: the rule-set admission gate.  Drives xad_selftest: the live rule set is
+ * ADMITTED -- root-confluent (Step 4) AND terminating (Step 5) (1-3); THE TREATMENT -- XII is NOT
+ * globally confluent (the Step-4 subterm non-joins are real + counted) yet is admitted as a
+ * DETERMINISTIC NORMALISER: root confluence + termination + one fixed canonicalisation strategy
+ * give every term one normal form, the H4 "one engine" property (4-5); the admission predicate has
+ * TEETH -- it REJECTS if EITHER confluence or termination fails (6-9); reproducible (10).  Exit 99
+ * = all hold.  This is the gate every domain lowered through XII (Steps 7-10) must pass before its
+ * rules join the engine.  Gated by run_corpus.sh. */
+module corpus_815
+
+extern @abi(c-msvc-x64) fn xad_selftest() -> u64 from "xii_admission.iii"
+
+fn main() -> u64 {
+    let r : u64 = xad_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

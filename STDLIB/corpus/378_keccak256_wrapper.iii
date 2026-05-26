@@ -1,0 +1,5 @@
+/* 378 — canonical Keccak-256 wrapper: Keccak256("")=c5d24601…85a470 and
+ * Keccak256("abc")=4e03657a…12d6c45 (rate 136, domain 0x01, 32-byte output). */
+module corpus_378
+extern @abi(c-msvc-x64) fn keccak256_kat() -> u64 from "keccak256.iii"
+fn main() -> u64 { return keccak256_kat() }

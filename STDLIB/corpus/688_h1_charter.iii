@@ -1,0 +1,3 @@
+module corpus_688
+extern @abi(c-msvc-x64) fn h1_selftest() -> u64 from "h1_charter.iii"
+fn main() -> u64 { return h1_selftest() }

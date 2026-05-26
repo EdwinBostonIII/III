@@ -1,0 +1,114 @@
+/* omnia::sid — sid_visualize emits a utf-8 description of a crystal
+ * and its direct edges. */
+module corpus_97
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn vec_u8_at(id: u64, i: u64) -> u32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u8_len(id: u64) -> u64 from "vec.iii"
+
+extern @abi(c-msvc-x64) fn sid_visualize(arena_id: u64, id: u64) -> u64 from "crystal_deps.iii"
+
+fn fill_site(p: *u8, base: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = base + (i as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* Verify that `expected_str` (length expected_len) appears at byte offset
+ * `start` in vec_u8 v.  Returns 1 if match, 0 otherwise. */
+fn vec_starts_with(v: u64, start: u64, expected: *u8, expected_len: u64) -> u8 {
+    let mut i : u64 = 0u64
+    let mut diff : u8 = 0u8
+    while i < expected_len {
+        let av : u32 = vec_u8_at(v, start + i)
+        let bv : u32 = expected[i] as u32
+        if av != bv { diff = 1u8 }
+        i = i + 1u64
+    }
+    if diff == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn main() -> u64 {
+    let site : *u8 = malloc(32u64)
+    fill_site(site, 0u8)
+
+    let ar : u64 = arena_new(1u64 << 14u64)
+    if ar == 0u64 { return 1u64 }
+
+    let a : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let b : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    if a == 0u64 { return 2u64 }
+    if b == 0u64 { return 3u64 }
+
+    crystal_edges_init(a, ar)
+    crystal_edges_add(a, b)
+
+    let s : u64 = sid_visualize(ar, a)
+    if s == 0u64 { return 4u64 }
+
+    /* Output begins with "crystal_". */
+    let header : *u8 = malloc(8u64)
+    header[0u64] =  99u8     /* c */
+    header[1u64] = 114u8     /* r */
+    header[2u64] = 121u8     /* y */
+    header[3u64] = 115u8     /* s */
+    header[4u64] = 116u8     /* t */
+    header[5u64] =  97u8     /* a */
+    header[6u64] = 108u8     /* l */
+    header[7u64] =  95u8     /* _ */
+    if vec_starts_with(s, 0u64, header, 8u64) != 1u8 { return 5u64 }
+
+    /* Find first '\n' — the closing newline of the header line. */
+    let n : u64 = vec_u8_len(s)
+    let mut nl_off : u64 = n
+    let mut going : u8 = 1u8
+    let mut i : u64 = 0u64
+    while going == 1u8 {
+        if i >= n { going = 0u8 }
+        if going == 1u8 {
+            if vec_u8_at(s, i) == 10u32 { nl_off = i; going = 0u8 }
+            if going == 1u8 { i = i + 1u64 }
+        }
+    }
+    if nl_off >= n { return 6u64 }
+
+    /* After the newline, the next bytes must be "  -> crystal_". */
+    let arrow : *u8 = malloc(13u64)
+    arrow[0u64]  =  32u8       /* space */
+    arrow[1u64]  =  32u8
+    arrow[2u64]  =  45u8       /* - */
+    arrow[3u64]  =  62u8       /* > */
+    arrow[4u64]  =  32u8
+    arrow[5u64]  =  99u8       /* c */
+    arrow[6u64]  = 114u8
+    arrow[7u64]  = 121u8
+    arrow[8u64]  = 115u8
+    arrow[9u64]  = 116u8
+    arrow[10u64] =  97u8
+    arrow[11u64] = 108u8
+    arrow[12u64] =  95u8
+    if vec_starts_with(s, nl_off + 1u64, arrow, 13u64) != 1u8 { return 7u64 }
+
+    /* Last byte must be a newline (every edge line is terminated). */
+    if vec_u8_at(s, n - 1u64) != 10u32 { return 8u64 }
+
+    free(header); free(arrow); free(site)
+    crystal_drop(a); crystal_drop(b)
+    arena_drop(ar)
+    return 99u64
+}

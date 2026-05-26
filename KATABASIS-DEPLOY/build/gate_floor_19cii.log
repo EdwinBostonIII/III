@@ -1,0 +1,15 @@
+[1] cg_r0 -> .o : floor driver
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:42: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:80: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:124: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:162: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:220: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:278: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:336: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:1456: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:1507: Warning: Ignoring changed section attributes for .text
+[2] assemble kernel witness leaf + floor ntoskrnl shims (Io + WRMSR + pin/unpin)
+[3] link gate_floor.sys (PE32+ native, entry=DriverEntry, ntoskrnl imports, deterministic)
+42fe1ec62fcc2e48dd7d7cde500185d8760d1f5e123a4e570c923a6a794d377d *KATABASIS-DEPLOY/build/gate_floor.sys
+OK -> KATABASIS-DEPLOY/build/gate_floor.sys

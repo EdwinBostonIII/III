@@ -1,0 +1,96 @@
+/* Phase 14l verification: sandbox lifecycle + quota + exec dispatch.
+ *
+ * Drives: sandbox_new → exec_begin → quota_record → exec_finish →
+ * exec_completed.  Verifies quota refusal at cap, double-drop refusal,
+ * cancel state, and over-quota allocation rejection.
+ */
+module corpus_166
+
+extern @abi(c-msvc-x64) fn sandbox_clear_all() -> i32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_clear_all() -> i32 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_clear_all() -> i32 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_new(cap_set: u64, mem_cap_bytes: u64, cpu_cap_micros: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_drop(sb_id: u64) -> i32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_state(sb_id: u64) -> u32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_cap_set(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_mem_cap(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_cpu_cap(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_count() -> u32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_record_alloc(sb_id: u64, n_bytes: u64) -> u8 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_record_cpu(sb_id: u64, micros: u64) -> u8 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_mem_used(sb_id: u64) -> u64 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_cpu_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_begin(sb_id: u64, kind: u32, ctx: u64) -> i32 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_kind(sb_id: u64) -> u32 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_ctx(sb_id: u64) -> u64 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_finish(sb_id: u64, result: u64) -> i32 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_cancel(sb_id: u64) -> i32 from "sandbox_exec.iii"
+extern @abi(c-msvc-x64) fn sandbox_exec_completed(sb_id: u64) -> u8 from "sandbox_exec.iii"
+
+fn main() -> u64 {
+    sandbox_clear_all()
+    sandbox_quota_clear_all()
+    sandbox_exec_clear_all()
+
+    /* Create three sandboxes with distinct caps. */
+    let sb1 : u64 = sandbox_new(0x1111u64, 4096u64, 1000000u64)   /* 4KB, 1s */
+    let sb2 : u64 = sandbox_new(0x2222u64, 8192u64,  500000u64)   /* 8KB, 0.5s */
+    let sb3 : u64 = sandbox_new(0x3333u64,   64u64,    1000u64)   /* tiny */
+
+    if sb1 == 0u64 { return 1u64 }
+    if sb2 == 0u64 { return 2u64 }
+    if sb3 == 0u64 { return 3u64 }
+    if sandbox_count() != 3u32 { return 4u64 }
+
+    if sandbox_state(sb1) != 0u32 { return 5u64 }   /* CREATED */
+    if sandbox_cap_set(sb2) != 0x2222u64 { return 6u64 }
+    if sandbox_mem_cap(sb3) != 64u64 { return 7u64 }
+    if sandbox_cpu_cap(sb1) != 1000000u64 { return 8u64 }
+
+    /* Begin exec on sb1. */
+    if sandbox_exec_begin(sb1, 7u32, 0xCAFEu64) != 0i32 { return 9u64 }
+    if sandbox_state(sb1) != 1u32 { return 10u64 }   /* RUNNING */
+    if sandbox_exec_kind(sb1) != 7u32 { return 11u64 }
+    if sandbox_exec_ctx(sb1) != 0xCAFEu64 { return 12u64 }
+
+    /* Cannot begin exec twice on same sandbox. */
+    if sandbox_exec_begin(sb1, 8u32, 0u64) != -2i32 { return 13u64 }   /* E_BADSTATE */
+
+    /* Quota: record 100 bytes — within 4KB cap. */
+    if sandbox_quota_record_alloc(sb1, 100u64) != 1u8 { return 14u64 }
+    if sandbox_quota_mem_used(sb1) != 100u64 { return 15u64 }
+
+    /* Quota: record 5000 bytes on sb1 — exceeds remaining (4096-100=3996). */
+    if sandbox_quota_record_alloc(sb1, 5000u64) != 0u8 { return 16u64 }
+    if sandbox_quota_mem_used(sb1) != 100u64 { return 17u64 }   /* unchanged */
+
+    /* CPU quota recording. */
+    if sandbox_quota_record_cpu(sb1, 200000u64) != 1u8 { return 18u64 }
+    if sandbox_quota_cpu_remaining(sb1) != 800000u64 { return 19u64 }
+
+    /* Finish exec on sb1. */
+    if sandbox_exec_finish(sb1, 0x2A2Au64) != 0i32 { return 20u64 }
+    if sandbox_state(sb1) != 2u32 { return 21u64 }   /* COMPLETED */
+    if sandbox_exec_completed(sb1) != 1u8 { return 22u64 }
+
+    /* Cancel sb2 (still in CREATED, transitions to CANCELLED). */
+    if sandbox_exec_cancel(sb2) != 0i32 { return 23u64 }
+    if sandbox_state(sb2) != 3u32 { return 24u64 }   /* CANCELLED */
+
+    /* Cannot cancel a completed sandbox. */
+    if sandbox_exec_cancel(sb1) != -2i32 { return 25u64 }
+
+    /* sb3 has tiny mem cap (64); a 32-byte alloc succeeds, a 64-byte fails. */
+    if sandbox_quota_record_alloc(sb3, 32u64) != 1u8 { return 26u64 }
+    if sandbox_quota_record_alloc(sb3, 64u64) != 0u8 { return 27u64 }   /* would overflow cap */
+
+    /* Drop sb1 — succeeds; second drop refuses. */
+    if sandbox_drop(sb1) != 0i32 { return 28u64 }
+    if sandbox_drop(sb1) != -1i32 { return 29u64 }   /* E_BADID */
+
+    /* Null sandbox_id rejected. */
+    if sandbox_state(0u64) != 0xFFFFFFFFu32 { return 30u64 }
+    if sandbox_drop(0u64) != -1i32 { return 31u64 }
+
+    return 99u64
+}

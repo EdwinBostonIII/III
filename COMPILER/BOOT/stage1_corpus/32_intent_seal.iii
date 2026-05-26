@@ -1,0 +1,18 @@
+module corpus_32
+
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_id(p: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_table_reset() -> i32 from "intent.iii"
+
+fn main() -> u64 {
+    intent_table_reset()
+    let p1 : u64 = intent_new(1u8)
+    let p2 : u64 = intent_new(1u8)
+    if p1 == 0u64 { return 0u64 }
+    if p2 == 0u64 { return 0u64 }
+    if p1 == p2 { return 0u64 }
+    let id1 : u64 = intent_id(p1)
+    let id2 : u64 = intent_id(p2)
+    if id1 == id2 { return 0u64 }
+    return 1u64
+}

@@ -1,0 +1,7 @@
+module corpus_19
+
+fn main() -> u64 {
+    let big: u64 = 0x1FF
+    let small: u64 = big as u8
+    return small
+}

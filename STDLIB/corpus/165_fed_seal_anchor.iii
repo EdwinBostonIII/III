@@ -1,0 +1,83 @@
+/* Step 0193 verification: aether/fed_seal cross-tier anchor chain. */
+module corpus_165
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fed_seal_clear() -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_lookup_anchor(child_tier: u32, child_root_ptr: u64) -> u32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_count() -> u32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_compute_chain_root(out_32_ptr: u64) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_byte(slot: u32, child_or_parent: u32, idx: u32) -> u32 from "fed_seal.iii"
+
+fn fill_root(p: *u8, base: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = base + (i as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    fed_seal_clear()
+
+    let host_root      : *u8 = malloc(32u64)
+    let cluster_root   : *u8 = malloc(32u64)
+    let region_root    : *u8 = malloc(32u64)
+    let sovereign_root : *u8 = malloc(32u64)
+    let planet_root    : *u8 = malloc(32u64)
+    fill_root(host_root,      0x10u8)
+    fill_root(cluster_root,   0x40u8)
+    fill_root(region_root,    0x70u8)
+    fill_root(sovereign_root, 0xA0u8)
+    fill_root(planet_root,    0xD0u8)
+
+    /* Anchor HOST → CLUSTER. */
+    if fed_seal_anchor(1u32, host_root as u64, 2u32, cluster_root as u64) != 0i32 { return 1u64 }
+    /* CLUSTER → REGION. */
+    if fed_seal_anchor(2u32, cluster_root as u64, 3u32, region_root as u64) != 0i32 { return 2u64 }
+    /* REGION → SOVEREIGN. */
+    if fed_seal_anchor(3u32, region_root as u64, 4u32, sovereign_root as u64) != 0i32 { return 3u64 }
+    /* SOVEREIGN → PLANETARY. */
+    if fed_seal_anchor(4u32, sovereign_root as u64, 5u32, planet_root as u64) != 0i32 { return 4u64 }
+
+    if fed_seal_anchor_count() != 4u32 { return 5u64 }
+
+    /* Lookup. */
+    if fed_seal_lookup_anchor(1u32, host_root as u64) != 0u32 { return 6u64 }
+    if fed_seal_lookup_anchor(4u32, sovereign_root as u64) != 3u32 { return 7u64 }
+    /* Wrong tier → not found. */
+    if fed_seal_lookup_anchor(5u32, host_root as u64) != 0xFFFFFFFFu32 { return 8u64 }
+
+    /* Append-only refusal: re-anchor same (child_tier, child_root) → E_ALREADY = -4. */
+    if fed_seal_anchor(1u32, host_root as u64, 2u32, cluster_root as u64) != -4i32 { return 9u64 }
+
+    /* Bad-tier refusal: parent <= child. */
+    if fed_seal_anchor(3u32, region_root as u64, 2u32, cluster_root as u64) != -2i32 { return 10u64 }
+
+    /* Out-of-range tier → BAD_TIER. */
+    if fed_seal_anchor(0u32, host_root as u64, 2u32, cluster_root as u64) != -2i32 { return 11u64 }
+    if fed_seal_anchor(6u32, host_root as u64, 2u32, cluster_root as u64) != -2i32 { return 12u64 }
+
+    /* Anchor byte readback. */
+    if fed_seal_anchor_byte(0u32, 0u32, 0u32) != 0x10u32 { return 13u64 }
+    if fed_seal_anchor_byte(0u32, 1u32, 0u32) != 0x40u32 { return 14u64 }
+    if fed_seal_anchor_byte(3u32, 0u32, 31u32) != 0xbfu32 { return 15u64 }   /* 0xA0+31 = 0xBF */
+    if fed_seal_anchor_byte(99u32, 0u32, 0u32) != 0x100u32 { return 16u64 } /* unset slot */
+
+    /* Compute chain root — non-zero, deterministic. */
+    let cr : *u8 = malloc(32u64)
+    fed_seal_compute_chain_root(cr as u64)
+    let mut all_zero : u8 = 1u8
+    let mut z : u64 = 0u64
+    while z < 32u64 {
+        if cr[z] != 0u8 { all_zero = 0u8 }
+        z = z + 1u64
+    }
+    if all_zero != 0u8 { return 17u64 }
+
+    free(host_root); free(cluster_root); free(region_root); free(sovereign_root); free(planet_root)
+    free(cr)
+    return 99u64
+}

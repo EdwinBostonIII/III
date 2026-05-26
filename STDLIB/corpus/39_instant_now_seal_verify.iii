@@ -1,0 +1,32 @@
+/* instant: now_sealed produces a verifiable instant; tampering with
+ * the cap field invalidates the seal */
+module corpus_c39
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn instant_now_sealed(cap: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_tick(id: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_seal_byte(id: u64, i: u32) -> u32 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_verify(id: u64) -> u8 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let time_cap : u64 = cap_attenuate(env, 0x100u64, 0u64)
+    let inst : u64 = instant_now_sealed(time_cap)
+    if inst == 0u64 { return 1u64 }
+    let tick : u64 = instant_tick(inst)
+    if tick == 0u64 { return 2u64 }
+    /* Seal must verify. */
+    if instant_verify(inst) != 1u8 { return 3u64 }
+    /* Seal byte 0 must be readable. */
+    let b0 : u32 = instant_seal_byte(inst, 0u32)
+    if b0 == 0x100u32 { return 4u64 }
+    /* A second instant must verify too. */
+    let inst2 : u64 = instant_now_sealed(time_cap)
+    if inst2 == 0u64 { return 5u64 }
+    if instant_verify(inst2) != 1u8 { return 6u64 }
+    instant_drop(inst)
+    instant_drop(inst2)
+    return 99u64
+}

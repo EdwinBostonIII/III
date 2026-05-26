@@ -1,0 +1,170 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\string.iii
+ *
+ * III STDLIB - verba::string
+ *
+ * Immutable UTF-8 string operations over (base, byte_len) pairs.
+ *
+ * Phase A scope:
+ *   - byte length / rune count
+ *   - UTF-8 validation
+ *   - byte equality / comparison
+ *   - prefix / suffix / contains tests
+ *
+ * Normalisation (NFC/NFD), full Unicode case folding, and
+ * locale-aware collation deferred to Phase C with UCD ingestion.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 0.99.
+ */
+
+module verba_string
+
+extern @abi(c-msvc-x64) fn rune_utf8_decode(in_ptr: u64, avail: u64, out_cp: u64) -> u32 from "rune.iii"
+
+const STR_VALID_UTF8 : u8 = 1u8
+const STR_INVALID    : u8 = 0u8
+
+fn str_byte_len(base: u64, len: u64) -> u64 @export {
+    return len
+}
+
+/* Return rune count or U64_MAX if string is invalid UTF-8. */
+fn str_rune_count(base: u64, len: u64) -> u64 @export {
+    if base == 0u64 {
+        if len == 0u64 { return 0u64 }
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    let mut off : u64 = 0u64
+    let mut runes : u64 = 0u64
+    while off < len {
+        let avail : u64 = len - off
+        let used : u32 = rune_utf8_decode(base + off, avail, 0u64)
+        if used == 0u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+        off = off + (used as u64)
+        runes = runes + 1u64
+    }
+    return runes
+}
+
+fn str_is_valid_utf8(base: u64, len: u64) -> u8 @export {
+    if base == 0u64 {
+        if len == 0u64 { return STR_VALID_UTF8 }
+        return STR_INVALID
+    }
+    let mut off : u64 = 0u64
+    while off < len {
+        let avail : u64 = len - off
+        let used : u32 = rune_utf8_decode(base + off, avail, 0u64)
+        if used == 0u32 { return STR_INVALID }
+        off = off + (used as u64)
+    }
+    return STR_VALID_UTF8
+}
+
+fn str_byte_eq(a: u64, a_len: u64, b: u64, b_len: u64) -> u8 @export {
+    if a_len != b_len { return 0u8 }
+    if a_len == 0u64 { return 1u8 }
+    if a == 0u64 { return 0u8 }
+    if b == 0u64 { return 0u8 }
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < a_len {
+        if ap[i] != bp[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Lexicographic byte comparison.  Returns -1 / 0 / +1. */
+fn str_byte_cmp(a: u64, a_len: u64, b: u64, b_len: u64) -> i32 @export {
+    if a == 0u64 {
+        if b == 0u64 { return 0i32 }
+        return -1i32
+    }
+    if b == 0u64 { return 1i32 }
+    let ap : *u8 = a as *u8
+    let bp : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    let mut min_len : u64 = a_len
+    if b_len < min_len { min_len = b_len }
+    while i < min_len {
+        let av : u8 = ap[i]
+        let bv : u8 = bp[i]
+        if av < bv { return -1i32 }
+        if av > bv { return 1i32 }
+        i = i + 1u64
+    }
+    if a_len < b_len { return -1i32 }
+    if a_len > b_len { return 1i32 }
+    return 0i32
+}
+
+fn str_starts_with(a: u64, a_len: u64, prefix: u64, p_len: u64) -> u8 @export {
+    if p_len > a_len { return 0u8 }
+    if p_len == 0u64 { return 1u8 }
+    let ap : *u8 = a as *u8
+    let pp : *u8 = prefix as *u8
+    let mut i : u64 = 0u64
+    while i < p_len {
+        if ap[i] != pp[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn str_ends_with(a: u64, a_len: u64, suffix: u64, s_len: u64) -> u8 @export {
+    if s_len > a_len { return 0u8 }
+    if s_len == 0u64 { return 1u8 }
+    let ap : *u8 = a as *u8
+    let sp : *u8 = suffix as *u8
+    let off : u64 = a_len - s_len
+    let mut i : u64 = 0u64
+    while i < s_len {
+        if ap[off + i] != sp[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Find first occurrence of needle in haystack via naive O(n*m) search.
+ * Returns offset within haystack, or haystack_len if not found. */
+fn str_find(haystack: u64, h_len: u64, needle: u64, n_len: u64) -> u64 @export {
+    if n_len == 0u64 { return 0u64 }
+    if n_len > h_len { return h_len }
+    let hp : *u8 = haystack as *u8
+    let np : *u8 = needle as *u8
+    let last_start : u64 = h_len - n_len
+    let mut i : u64 = 0u64
+    while i <= last_start {
+        let mut j : u64 = 0u64
+        let mut matched : u8 = 1u8
+        while j < n_len {
+            if hp[i + j] != np[j] { matched = 0u8; j = n_len }
+            if matched != 0u8 { j = j + 1u64 }
+        }
+        if matched == 1u8 { return i }
+        i = i + 1u64
+    }
+    return h_len
+}
+
+fn str_contains(haystack: u64, h_len: u64, needle: u64, n_len: u64) -> u8 @export {
+    let pos : u64 = str_find(haystack, h_len, needle, n_len)
+    if pos < h_len { return 1u8 }
+    if n_len == 0u64 { return 1u8 }
+    return 0u8
+}
+
+/* Hash a byte string via FNV-1a 64-bit. */
+fn str_hash_fnv1a(base: u64, len: u64) -> u64 @export {
+    if base == 0u64 { return 0u64 }
+    let p : *u8 = base as *u8
+    let mut h : u64 = 0xCBF29CE484222325u64
+    let mut i : u64 = 0u64
+    while i < len {
+        h = h ^ (p[i] as u64)
+        h = h * 0x100000001B3u64
+        i = i + 1u64
+    }
+    return h
+}

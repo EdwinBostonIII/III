@@ -1,0 +1,8 @@
+/* 658 -- distress_witness: signed distress producer.  M8 cap gate (FAILS on
+ * partial rights + unregistered id, passes on root), produce->outbox round-trip
+ * with monotone fragment index, M6 antecedent chaining read back from the
+ * witness hook (first frag cites 0, second cites the first's id), payload-bound
+ * + uninit + bad-kind negatives. */
+module corpus_658
+extern @abi(c-msvc-x64) fn dw_selftest() -> u64 from "distress_witness.iii"
+fn main() -> u64 { return dw_selftest() }

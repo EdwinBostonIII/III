@@ -1,0 +1,112 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_raw_hex.iii
+ *
+ * Transform pattern: FORM_RAW_BIN → FORM_HEX_DUMP
+ * FROZEN SPEC §7B.6 slot 37; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Emits canonical hex dump format (16 bytes per line, ASCII gutter).
+ */
+
+module omnia_tp_raw_hex
+
+extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u32, align: u8) -> u64 from "arena.iii"
+
+var TP_RAW_HEX_CHARS : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+
+fn tp_raw_hex_emit_byte(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_raw_hex_emit_u8_hex(dst: u64, off: u64, b: u8) -> u32 {
+    let hi : u8 = (b >> 4u8) & 0xFu8
+    let lo : u8 = b & 0xFu8
+    tp_raw_hex_emit_byte(dst, off, TP_RAW_HEX_CHARS[hi as u32])
+    tp_raw_hex_emit_byte(dst, off + 1u64, TP_RAW_HEX_CHARS[lo as u32])
+    return 2u32
+}
+
+fn tp_raw_hex_emit_offset(dst: u64, off: u64, addr: u32) -> u32 {
+    let mut shift : u8 = 28u8
+    let mut n : u32 = 0u32
+    while shift != 255u8 {
+        let nib : u8 = ((addr >> (shift as u32)) & 0xFu32) as u8
+        tp_raw_hex_emit_byte(dst, off + (n as u64), TP_RAW_HEX_CHARS[nib as u32])
+        n = n + 1u32
+        if shift == 0u8 { shift = 255u8 }
+        if shift != 255u8 { shift = shift - 4u8 }
+    }
+    return 8u32
+}
+
+/* Convert raw bytes to canonical hex dump.
+ * src: pointer to raw bytes; src_len: byte count.
+ * dst_buf: output buffer; dst_cap: capacity.
+ * Returns bytes written, or 0 on overflow. */
+fn tp_raw_hex(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if src_len > 0xFFFFFFFFu64 { return 0u64 }
+    let mut src_off : u32 = 0u32
+    let mut dst_off : u64 = 0u64
+    let total : u32 = (src_len & 0xFFFFFFFFu64) as u32
+    while src_off < total {
+        if dst_off + 80u64 > dst_cap { return 0u64 }
+        /* Offset (8 hex chars + 2 spaces) */
+        dst_off = dst_off + (tp_raw_hex_emit_offset(dst_buf, dst_off, src_off) as u64)
+        tp_raw_hex_emit_byte(dst_buf, dst_off, 32u8)
+        tp_raw_hex_emit_byte(dst_buf, dst_off + 1u64, 32u8)
+        dst_off = dst_off + 2u64
+        /* 16 hex bytes separated by spaces */
+        let mut col : u32 = 0u32
+        while col < 16u32 {
+            let pos : u32 = src_off + col
+            if pos < total {
+                let bp : *u8 = (src + ((pos as u64) & 0xFFFFFFFFu64)) as *u8
+                let b : u8 = bp[0u64]
+                dst_off = dst_off + (tp_raw_hex_emit_u8_hex(dst_buf, dst_off, b) as u64)
+            }
+            if pos >= total {
+                tp_raw_hex_emit_byte(dst_buf, dst_off, 32u8)
+                tp_raw_hex_emit_byte(dst_buf, dst_off + 1u64, 32u8)
+                dst_off = dst_off + 2u64
+            }
+            tp_raw_hex_emit_byte(dst_buf, dst_off, 32u8)
+            dst_off = dst_off + 1u64
+            col = col + 1u32
+        }
+        /* ASCII gutter */
+        tp_raw_hex_emit_byte(dst_buf, dst_off, 124u8)   /* | */
+        dst_off = dst_off + 1u64
+        col = 0u32
+        while col < 16u32 {
+            let pos : u32 = src_off + col
+            if pos < total {
+                let bp : *u8 = (src + ((pos as u64) & 0xFFFFFFFFu64)) as *u8
+                let b : u8 = bp[0u64]
+                if b >= 32u8 {
+                    if b < 127u8 {
+                        tp_raw_hex_emit_byte(dst_buf, dst_off, b)
+                    }
+                    if b >= 127u8 {
+                        tp_raw_hex_emit_byte(dst_buf, dst_off, 46u8)   /* . */
+                    }
+                }
+                if b < 32u8 {
+                    tp_raw_hex_emit_byte(dst_buf, dst_off, 46u8)
+                }
+                dst_off = dst_off + 1u64
+            }
+            if pos >= total {
+                tp_raw_hex_emit_byte(dst_buf, dst_off, 32u8)
+                dst_off = dst_off + 1u64
+            }
+            col = col + 1u32
+        }
+        tp_raw_hex_emit_byte(dst_buf, dst_off, 124u8)   /* | */
+        tp_raw_hex_emit_byte(dst_buf, dst_off + 1u64, 10u8)   /* \n */
+        dst_off = dst_off + 2u64
+        src_off = src_off + 16u32
+    }
+    return dst_off
+}

@@ -1,0 +1,11 @@
+/* 662 -- memo_compactor_coordination: the deterministic bridge between witness
+ * compaction and the memo lattice (M17).  On chain retirement, scan all slots
+ * and mark stale every memo entry on that chain (via the new M58 read-only
+ * accessors + ml_mark_stale), emitting one 0x18 coordination witness.  Drives
+ * the full cons_ratify("cp_memo_admit")+ws_register+ml_admit vertical, then:
+ * retire-with-2-dependents (count 2, others untouched), retire-unreferenced
+ * (count 0 witnessed no-op), idempotent re-retire, + the M8 cap-fails-closed /
+ * null / uninit negatives. */
+module corpus_662
+extern @abi(c-msvc-x64) fn mcc_selftest() -> u64 from "memo_compactor_coordination.iii"
+fn main() -> u64 { return mcc_selftest() }

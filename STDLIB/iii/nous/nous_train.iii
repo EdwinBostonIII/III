@@ -1,0 +1,133 @@
+/* STDLIB/iii/nous/nous_train.iii -- the in-tree training harness (nous Phase 6).
+ *
+ * ADR-N8: the TRAINER IS OUT-OF-TREE.  A float/expert-iteration trainer is outside
+ * libc+BOOT and is NOT part of the III artifact.  The artifact depends only on the
+ * SEALED INTEGER WEIGHTS as a data input; no III guarantee depends on the trainer's
+ * correctness (the closure makes ANY weights safe -- a weak policy only raises the gap
+ * rate, never produces a wrong artifact).  Weights cross the boundary by an explicit
+ * file dump (scripts/nous_export_spines.sh + scripts/nous_import_weights.sh).
+ *
+ * This module is the in-tree harness only:
+ *   load        -- accept weights ONLY if sealed + content-addressed (refuse an unsealed
+ *                  or empty/zero-addressed artifact at the door).
+ *   admit       -- the FEDERATION POISON WALL (installed now though federation is M19):
+ *                  consume a commons entry ONLY if it carries a valid kernel-checked
+ *                  certificate; an uncertified entry is refused.
+ *   record      -- trains-signal accounting over certified outcomes: SATURATED, GAP, and
+ *                  REFUTED are all counted (the policy learns the ILLEGAL as well as the
+ *                  legal -- refutations are signal, not noise).
+ *   gap_rate    -- the deployment dial: GAP fraction (permille).  Falls as the policy
+ *                  strengthens; by the closure correctness is INVARIANT across it (C-16:
+ *                  gap-rate alone suffices only while all clients are canonical, M13-M14;
+ *                  the M15 provisional-quality metric is nous_synth's concern).
+ *
+ * Hexad: kind_quiescence.  Ring: R0.  K: 1.00.  NIH: cad.iii only.  Determinism:
+ * integer-only; the one division has a provably bit-63-unreachable dividend (trap #18);
+ * single-line fns.  (Outcome bytes 0/1/2 are literals -- the tags are link-global.)
+ */
+module nous_train
+
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const NOUS_TRN_OK       : i32 = 0i32
+const NOUS_TRN_EREFUSE  : i32 = -1i32
+const NOUS_TRN_SATURATED : u8 = 0u8
+const NOUS_TRN_GAP       : u8 = 1u8
+const NOUS_TRN_REFUTED   : u8 = 2u8
+
+var NOUS_TRN_SAT    : u32 = 0u32
+var NOUS_TRN_GAP_N  : u32 = 0u32
+var NOUS_TRN_REF    : u32 = 0u32
+var NOUS_TRN_LOADED : u8  = 0u8
+var NOUS_TRN_NZ     : [u8; 32]   /* selftest scratch: a non-zero (sealed) weights address */
+var NOUS_TRN_ZERO   : [u8; 32]   /* selftest scratch: a zero (unsealed) address (BSS-zero) */
+
+fn nous_train_init() -> i32 @export {
+    NOUS_TRN_SAT = 0u32
+    NOUS_TRN_GAP_N = 0u32
+    NOUS_TRN_REF = 0u32
+    NOUS_TRN_LOADED = 0u8
+    return NOUS_TRN_OK
+}
+
+/* Accept the weights ONLY if sealed (sealed==1) AND content-addressed (a non-zero cad
+ * address).  An unsealed or zero-addressed artifact is refused at the door. */
+fn nous_train_load(weights_addr32: *u8, sealed: u8) -> i32 @export {
+    if (weights_addr32 as u64) == 0u64 { return NOUS_TRN_EREFUSE }
+    if sealed != 1u8 { return NOUS_TRN_EREFUSE }
+    if cad_is_zero(weights_addr32) != 0u8 { return NOUS_TRN_EREFUSE }   /* zero address = unsealed */
+    NOUS_TRN_LOADED = 1u8
+    return NOUS_TRN_OK
+}
+
+fn nous_train_loaded() -> u8 @export {
+    return NOUS_TRN_LOADED
+}
+
+/* The poison wall: admit a commons entry into training ONLY if it carries a valid
+ * certificate.  1 = admitted; 0 = refused (uncertified). */
+fn nous_train_admit(has_cert: u8) -> u8 @export {
+    if has_cert == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* Record one certified outcome into the training signal (successes AND refutations). */
+fn nous_train_record(outcome: u8) -> i32 @export {
+    if outcome == NOUS_TRN_SATURATED { NOUS_TRN_SAT = NOUS_TRN_SAT + 1u32  return NOUS_TRN_OK }
+    if outcome == NOUS_TRN_GAP { NOUS_TRN_GAP_N = NOUS_TRN_GAP_N + 1u32  return NOUS_TRN_OK }
+    if outcome == NOUS_TRN_REFUTED { NOUS_TRN_REF = NOUS_TRN_REF + 1u32  return NOUS_TRN_OK }
+    return NOUS_TRN_EREFUSE
+}
+
+/* The deployment dial: GAP fraction in permille.  The dividend (gap*1000) is bounded by
+ * (2^32)*1000 < 2^42, so bit 63 is unreachable and the u64 divide is correct (trap #18). */
+fn nous_gap_rate() -> u32 @export {
+    let total : u32 = NOUS_TRN_SAT + NOUS_TRN_GAP_N + NOUS_TRN_REF
+    if total == 0u32 { return 0u32 }
+    let num : u64 = (NOUS_TRN_GAP_N as u64) * 1000u64
+    let den : u64 = total as u64
+    return (num / den) as u32
+}
+
+fn nous_train_count() -> u32 @export {
+    return NOUS_TRN_SAT + NOUS_TRN_GAP_N + NOUS_TRN_REF
+}
+
+fn nous_train_selftest() -> u64 @export {
+    nous_train_init()
+    NOUS_TRN_NZ[0u64] = 1u8           /* make the "sealed address" non-zero */
+
+    /* load: refuse unsealed; refuse null; accept sealed + addressed */
+    let buf : *u8 = (&NOUS_TRN_NZ as u64) as *u8
+    if nous_train_load(buf, 0u8) != NOUS_TRN_EREFUSE { return 1u64 }      /* unsealed refused */
+    let zb : u64 = 0u64
+    let nullp : *u8 = zb as *u8
+    if nous_train_load(nullp, 1u8) != NOUS_TRN_EREFUSE { return 2u64 }    /* null refused */
+    if nous_train_load(buf, 1u8) != NOUS_TRN_OK { return 3u64 }           /* sealed + addressed: accepted */
+    if nous_train_loaded() != 1u8 { return 4u64 }
+
+    /* the zero-address (unsealed) artifact is refused even with sealed=1 */
+    if nous_train_load((&NOUS_TRN_ZERO as u64) as *u8, 1u8) != NOUS_TRN_EREFUSE { return 5u64 }
+
+    /* the poison wall: uncertified refused, certified admitted */
+    if nous_train_admit(0u8) != 0u8 { return 6u64 }
+    if nous_train_admit(1u8) != 1u8 { return 7u64 }
+
+    /* accounting: 3 SAT, 1 GAP, 1 REF -> gap rate 200 permille */
+    nous_train_init()
+    nous_train_record(0u8)  nous_train_record(0u8)  nous_train_record(0u8)
+    nous_train_record(1u8)
+    nous_train_record(2u8)
+    if nous_train_count() != 5u32 { return 8u64 }
+    if nous_gap_rate() != 200u32 { return 9u64 }
+    /* an illegal outcome byte is refused (not silently counted) */
+    if nous_train_record(7u8) != NOUS_TRN_EREFUSE { return 10u64 }
+
+    /* the dial falls as the policy strengthens (more SATURATED, gap rate drops) */
+    let r_before : u32 = nous_gap_rate()
+    nous_train_record(0u8)  nous_train_record(0u8)   /* +2 SAT -> 5 SAT,1 GAP,1 REF */
+    let r_after : u32 = nous_gap_rate()
+    if r_after >= r_before { return 11u64 }          /* 142 < 200: the dial fell */
+
+    return 99u64
+}

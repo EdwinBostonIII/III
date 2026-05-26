@@ -1,0 +1,54 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\quality_q7.iii
+ *
+ * III STDLIB - sanctus::quality_q7
+ *
+ * Q7: Resolution Determinism gate.
+ * FROZEN SPEC §1.2.7, §Z.D.1; ADR-RES-011.
+ *
+ * Verifies:
+ *   (a) resolver source contains no forbidden behaviour (build-time lint).
+ *   (b) witness chain replays byte-equal.
+ *   (c) registry sealed.
+ *   (d) coefficient-table mhash matches sealed value.
+ *
+ * Returns 1 (green) iff all four checks pass.
+ *
+ * Hexad: kind_origin (Crown). Ring: R0. K: 1.00.
+ */
+
+module sanctus_quality_q7
+
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_verify() -> u8 from "seal_resolver.iii"
+/* Q7-c specifically requires the per-entry byte-equal mhash check from
+ * sanctus/resolver_replay.iii (FROZEN SPEC §V.G0005), not the broader
+ * registry-sealed audit gate from omnia/resolver_replay.iii. */
+extern @abi(c-msvc-x64) fn sanctus_resolver_replay_check_chain() -> u8 from "resolver_replay.iii"
+
+const Q7_BIT : u32 = 0x40u32
+
+var g_resolver_lint_passed : u8 = 0u8
+
+fn quality_set_resolver_lint_passed() -> i32 @export {
+    g_resolver_lint_passed = 1u8
+    return 0i32
+}
+
+fn quality_resolver_lint_passed() -> u8 @export {
+    return g_resolver_lint_passed
+}
+
+fn quality_check_q7_resolution() -> u8 @export {
+    if g_resolver_lint_passed == 0u8 { return 0u8 }
+    if sanctus_resolver_replay_check_chain() == 0u8 { return 0u8 }
+    if pattern_registry_is_sealed() == 0u8 { return 0u8 }
+    if seal_resolver_verify() == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* Inject corruption hook for negative tests (corpus 47).
+ * Production builds elide this via the build system's release-strip pass. */
+fn witness_inject_corruption_for_test() -> i32 @export {
+    g_resolver_lint_passed = 0u8
+    return 0i32
+}

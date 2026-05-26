@@ -1,0 +1,120 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\attest.iii
+ *
+ * III STDLIB - sanctus::attest
+ *
+ * Self-attestation: produce a 32-byte attestation that binds:
+ *   - the current witness chain root
+ *   - the closure-root mhash of the stdlib (configurable; user passes
+ *     the 32 bytes of the build-time SEAL.mhash root)
+ *   - the env_cap id (always 1 in this build)
+ *   - a caller-supplied 64-bit nonce (challenge / freshness token)
+ *
+ * Phase D promotes this to true Sanctum slot 1 (DRTM_RELAUNCH) for
+ * hardware-attested freshness.
+ *
+ * Hexad: kind_origin (Crown).  Ring: R-1.  K: 1.00.
+ */
+
+module sanctus_attest
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn witness_root_byte(i: u32) -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+/* From capability.iii: bit 11 = attest right */
+const ATTEST_RIGHT_ATTEST : u64 = 0x0800u64
+
+const ATTEST_OK         : i32 = 0i32
+const ATTEST_E_DENIED   : i32 = -1i32
+
+var ATTEST_OUT : [u8; 32]    /* most-recent attestation                    */
+
+/* Build the attestation digest into the running sha256 state.  The
+ * caller passes a 32-byte closure-root pointer (e.g., the bytes of
+ * the SEAL.mhash root from the build) plus a nonce. */
+
+fn attest_self(attest_cap: u64, closure_root_ptr: u64, nonce: u64) -> i32 @export {
+    if cap_verify_rights(attest_cap, ATTEST_RIGHT_ATTEST) == 0u8 { return ATTEST_E_DENIED }
+    sha256_init()
+    /* Domain prefix */
+    sha256_update_byte(73u32)   /* 'I' */
+    sha256_update_byte(73u32)   /* 'I' */
+    sha256_update_byte(73u32)   /* 'I' */
+    sha256_update_byte(95u32)   /* '_' */
+    sha256_update_byte(65u32)   /* 'A' */
+    sha256_update_byte(84u32)   /* 'T' */
+    sha256_update_byte(84u32)   /* 'T' */
+    sha256_update_byte(0u32)    /* separator */
+    /* Witness root (32 bytes) */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        sha256_update_byte(witness_root_byte(i))
+        i = i + 1u32
+    }
+    /* Witness count (4 bytes LE) */
+    let n : u32 = witness_count()
+    sha256_update_byte(n & 0xFFu32)
+    sha256_update_byte((n >> 8u32) & 0xFFu32)
+    sha256_update_byte((n >> 16u32) & 0xFFu32)
+    sha256_update_byte((n >> 24u32) & 0xFFu32)
+    /* Closure root (32 bytes from caller, may be 0 if caller passes NULL) */
+    if closure_root_ptr != 0u64 {
+        let cp : *u8 = closure_root_ptr as *u8
+        let mut j : u32 = 0u32
+        while j < 32u32 {
+            sha256_update_byte(cp[j as u64] as u32)
+            j = j + 1u32
+        }
+    }
+    /* Cap (env cap id = 1, fed as 8 bytes LE for stability) */
+    sha256_update_byte(1u32)
+    sha256_update_byte(0u32)
+    sha256_update_byte(0u32)
+    sha256_update_byte(0u32)
+    sha256_update_byte(0u32)
+    sha256_update_byte(0u32)
+    sha256_update_byte(0u32)
+    sha256_update_byte(0u32)
+    /* Nonce (8 bytes LE) */
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let shift : u64 = (k as u64) * 8u64
+        sha256_update_byte(((nonce >> shift) & 0xFFu64) as u32)
+        k = k + 1u32
+    }
+    sha256_finalize_internal()
+    let mut p : u32 = 0u32
+    while p < 32u32 {
+        ATTEST_OUT[p] = (sha256_digest_byte(p) & 0xFFu32) as u8
+        p = p + 1u32
+    }
+    return ATTEST_OK
+}
+
+fn attest_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    return ATTEST_OUT[i] as u32
+}
+
+/* Compare two 32-byte attestation buffers via constant-time equality.
+ * Returns 1 if equal, 0 otherwise. */
+fn attest_eq(addr_a: u64, addr_b: u64) -> u8 @export {
+    if addr_a == 0u64 { return 0u8 }
+    if addr_b == 0u64 { return 0u8 }
+    let pa : *u8 = addr_a as *u8
+    let pb : *u8 = addr_b as *u8
+    let mut diff : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let av : u32 = pa[i] as u32
+        let bv : u32 = pb[i] as u32
+        diff = diff | (av ^ bv)
+        i = i + 1u64
+    }
+    if diff == 0u32 { return 1u8 }
+    return 0u8
+}

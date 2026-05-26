@@ -1,0 +1,24 @@
+/* corpus/350_xii_term_term_loop.iii  -- Termination: nested LOOPs */
+
+module corpus_350_xii_term_term_loop
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_is_canonical(t: u32) -> u8 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* F.LOOP(F.LOOP(F.LOOP(body, 3), 5), 7) -- R014 fires twice -> single LOOP with count 105 */
+    let body : u32 = xii_term_make_basis(4u8, 0x100u32)
+    let l1 : u32 = xii_term_make_loop(body, 3u64)
+    let l2 : u32 = xii_term_make_loop(l1, 5u64)
+    let l3 : u32 = xii_term_make_loop(l2, 7u64)
+    let canon : u32 = xii_canonicalise(l3)
+    if xii_is_canonical(canon) != 1u8 { return 1u64 }
+    /* Final aux should be 105 = 3*5*7. */
+    if xii_term_get_aux(canon) != 105u64 { return 2u64 }
+    return 0u64
+}

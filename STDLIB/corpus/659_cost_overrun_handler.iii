@@ -1,0 +1,9 @@
+/* 659 -- cost_overrun_handler: immune cost-overrun enforcer (M19/W37).  The W37
+ * product-order admit gate (observed<=declared over 6 dims), exact-integer
+ * severity bands (MINOR/MAJOR/CRITICAL via saturating-double + compile-time
+ * critical mask), band-triggered (NOT count-triggered) quarantine + escalation,
+ * M8 privilege separation (escalation/release need CAP_RIGHT_AMEND), every event
+ * witnessed.  Positive on_overrun decode + uninit/null/right-value-pin negatives. */
+module corpus_659
+extern @abi(c-msvc-x64) fn corh_selftest() -> u64 from "cost_overrun_handler.iii"
+fn main() -> u64 { return corh_selftest() }

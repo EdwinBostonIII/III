@@ -1,0 +1,4 @@
+/* 621 — sheaf: opens/sections/restriction maps/gluing (refuses unregistered-intersection glue). */
+module corpus_621
+extern @abi(c-msvc-x64) fn sh_selftest() -> u64 from "sheaf.iii"
+fn main() -> u64 { return sh_selftest() }

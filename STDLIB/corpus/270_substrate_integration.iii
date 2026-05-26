@@ -1,0 +1,82 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\270_substrate_integration.iii
+ *
+ * III conformance corpus 270 -- substrate integration test combining
+ * iiis-1 and iiis-2 features in a realistic pattern.
+ *
+ * Exercises:
+ *   - type aliases (iiis-2 #4): IntentForm, IntentCompose, CapHigh
+ *   - parameter-level @hexad_kind via alias (iiis-1 #3 + iiis-2 #4)
+ *   - return-type @returns_hexad via alias (iiis-1 + iiis-2)
+ *   - @cap_required cap-flow static check (iiis-1)
+ *   - @k_max K-floor static check (iiis-1)
+ *   - loop/break/continue control flow (iiis-2 #1)
+ *
+ * Runtime: builds a properly-formed ctx, invokes the leaf op inside a
+ * loop, breaks when accumulator crosses a threshold.
+ *
+ * All static checks pass at codegen; all runtime gates pass with the
+ * ctx we provide; loop terminates correctly via break.
+ */
+module corpus_270
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+
+/* Type aliases — first-class intent types and capability types. */
+type IntentForm = u64 @hexad_kind(1u64)
+type IntentCompose = u64 @hexad_kind(6u64)
+
+/* Leaf op: requires cap 0x100, K-floor 200M, hexad COMPOSE; parameter
+ * carries kind COMPOSE; returns kind COMPOSE. */
+fn _accumulate(ctx: u64, item: IntentCompose) -> u64 @cap_required(0x100u64) @k_max(200000000u64) @hexad_kind(6u64) @returns_hexad(6u64) {
+    return item * 2u64
+}
+
+/* Caller: declares superset cap (0x300), higher K-floor (800M), hexad
+ * COMPOSE.  Calls _accumulate inside a loop.  All static checks pass. */
+fn _drive_loop(ctx: u64) -> u64 @cap_required(0x300u64) @k_max(800000000u64) @hexad_kind(6u64) @returns_hexad(6u64) {
+    let mut total : u64 = 0u64
+    let mut i : u64 = 0u64
+    loop {
+        i = i + 1u64
+        if i > 5u64 { break }
+        let item : IntentCompose = i * 0x10u64
+        /* Alias chase: _accumulate's param `item: IntentCompose`
+         * resolves to @hexad_kind(6); item's binding `IntentCompose`
+         * also resolves to @hexad_kind(6).  Match → codegen accepts.
+         * The return value's kind (6 via @returns_hexad) is consumed
+         * directly without binding -- which means the cross-rule
+         * check at the call-site fires (param-kind sees the inner
+         * call's return-kind 6, matches the outer expectation). */
+        let r : u64 @hexad_kind(6u64) = _accumulate(ctx, item)
+        if r == 0u64 { continue }    /* skip zero-valued items */
+        total = total + r
+    }
+    return total
+}
+
+fn main() -> u64 {
+    /* Build a high-cap, high-K, hexad-COMPOSE ctx. */
+    let env : u64 = cap_env_init()
+    if env == 0u64 { return 1u64 }
+    let cap : u64 = cap_attenuate(env, 0x300u64, 0u64)
+    if cap == 0u64 { return 2u64 }
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return 3u64 }
+    call_context_init_set(cap, kch as u8, 2u8, 6u8)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 4u64 }
+
+    /* Run the loop driver.  Expected:
+     * i = 1..5; items = 0x10, 0x20, 0x30, 0x40, 0x50
+     * accumulate doubles each: 0x20, 0x40, 0x60, 0x80, 0xA0
+     * total = 0x20 + 0x40 + 0x60 + 0x80 + 0xA0 = 0x1E0
+     */
+    let result : u64 = _drive_loop(ctx)
+    if result != 0x1E0u64 { return 5u64 }
+
+    return 99u64
+}

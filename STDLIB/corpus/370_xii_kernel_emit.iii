@@ -1,0 +1,49 @@
+/* corpus/370_xii_kernel_emit.iii — per-kernel × per-target fragment dispatch */
+
+module corpus_370_xii_kernel_emit
+
+extern @abi(c-msvc-x64) fn xii_kernel_emit_fragment(kind: u8, target: u8, out: *u8) -> u32 from "xii_kernel_emit.iii"
+extern @abi(c-msvc-x64) fn xii_kernel_emit_fragment_count() -> u32 from "xii_kernel_emit.iii"
+
+var BUF370 : [u8; 32]
+
+fn main() -> u64 {
+    /* Total fragment count = 168 (24 kernels × 7 targets). */
+    if xii_kernel_emit_fragment_count() != 168u32 { return 1u64 }
+
+    /* K06 COMPOSE on x86_avx2 (target 1) = 48 09 c8 (or rax, rcx). */
+    let n1 : u32 = xii_kernel_emit_fragment(5u8, 1u8, &BUF370 as *u8)
+    if n1 != 3u32 { return 2u64 }
+    if BUF370[0] != 0x48u8 { return 3u64 }
+    if BUF370[1] != 0x09u8 { return 4u64 }
+    if BUF370[2] != 0xC8u8 { return 5u64 }
+
+    /* K17 LIFT on x86 = cd 22 (int 0x22). */
+    let n2 : u32 = xii_kernel_emit_fragment(16u8, 1u8, &BUF370 as *u8)
+    if n2 != 2u32 { return 6u64 }
+    if BUF370[0] != 0xCDu8 { return 7u64 }
+    if BUF370[1] != 0x22u8 { return 8u64 }
+
+    /* K06 COMPOSE on arm64 = 00 00 0c 8a (and x0, x0, x12). */
+    let n3 : u32 = xii_kernel_emit_fragment(5u8, 3u8, &BUF370 as *u8)
+    if n3 != 4u32 { return 9u64 }
+    if BUF370[0] != 0x00u8 { return 10u64 }
+    if BUF370[3] != 0x8Au8 { return 11u64 }
+
+    /* K12 THEN on cortex-m = 00 BF (nop). */
+    let n4 : u32 = xii_kernel_emit_fragment(11u8, 6u8, &BUF370 as *u8)
+    if n4 != 2u32 { return 12u64 }
+    if BUF370[0] != 0x00u8 { return 13u64 }
+    if BUF370[1] != 0xBFu8 { return 14u64 }
+
+    /* F.COMPOSE on riscv64 = 13 00 00 00 (nop). */
+    let n5 : u32 = xii_kernel_emit_fragment(18u8, 5u8, &BUF370 as *u8)
+    if n5 != 4u32 { return 15u64 }
+    if BUF370[0] != 0x13u8 { return 16u64 }
+
+    /* Unknown kind returns 0. */
+    let n6 : u32 = xii_kernel_emit_fragment(99u8, 1u8, &BUF370 as *u8)
+    if n6 != 0u32 { return 17u64 }
+
+    return 0u64
+}

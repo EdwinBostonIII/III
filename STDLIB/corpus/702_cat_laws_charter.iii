@@ -1,0 +1,6 @@
+/* 702_cat_laws_charter.iii -- Migration 7 CORE: the category's morphism-LAW falsifier
+ * (Harmony Invariant H11 runtime core), driven as a run_charter clause fold inside
+ * category.iii itself.  rc 99 = pass; a distinct code per failed check. */
+module corpus_702
+extern @abi(c-msvc-x64) fn cat_laws_charter_selftest() -> u64 from "category.iii"
+fn main() -> u64 { return cat_laws_charter_selftest() }

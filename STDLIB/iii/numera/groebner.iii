@@ -1,0 +1,1325 @@
+// C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\groebner.iii
+//
+// III STDLIB - numera::groebner
+//
+// Multivariate Groebner basis over GF(p) via Buchberger + Criterion 1,
+// producing the canonical REDUCED (monic, inter-reduced) basis, with a
+// content-address digest for witnessing.
+//
+// Polynomial = descending graded-lex sequence of terms; a term is a
+// GF(p) coefficient (bigint id) + an NVARS-wide u32 exponent vector.
+// Slot tables + bump buffers live at module scope (Trap 7).
+//
+// Field session (arena, p) is set once by gb_begin (W2: <=4 params/fn).
+//
+// Hexad: kind_essence.  Ring: R0.  K: 0.99.
+
+module numera_groebner
+
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_to_u64_lo(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn gfp_add(arena: u64, a: u64, b: u64, p: u64) -> u64 from "galois.iii"
+extern @abi(c-msvc-x64) fn gfp_sub(arena: u64, a: u64, b: u64, p: u64) -> u64 from "galois.iii"
+extern @abi(c-msvc-x64) fn gfp_mul(arena: u64, a: u64, b: u64, p: u64) -> u64 from "galois.iii"
+extern @abi(c-msvc-x64) fn gfp_inv(arena: u64, a: u64, p: u64) -> u64 from "galois.iii"
+
+// Arena allocator (selftest only; the public API receives the arena via
+// gb_begin -- it never creates one itself).
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+
+const GROEBNER_OK         : i32 =  0i32
+const GROEBNER_E_FULL     : i32 = -1i32
+const GROEBNER_E_BAD      : i32 = -2i32
+const GROEBNER_E_NOSESS   : i32 = -3i32
+const GROEBNER_E_INV      : i32 = -4i32
+const GROEBNER_SENT       : u32 = 0xFFFFFFFFu32
+
+const GROEBNER_MAX_POLY   : u32 = 4096u32
+const GROEBNER_MAX_TERMS  : u32 = 65536u32
+const GROEBNER_MAX_VARS   : u32 = 16u32
+const GROEBNER_EXP_AREA   : u64 = 1048576u64
+const GROEBNER_MAX_BASIS  : u32 = 1024u32
+const GROEBNER_MAX_PAIRS  : u32 = 65536u32
+
+const GROEBNER_U32MASK    : u64 = 0xFFFFFFFFu64
+
+// FNV-1a 64-bit constants (four independently-seeded lanes -> 32 bytes).
+const GROEBNER_FNV_PRIME  : u64 = 1099511628211u64
+const GROEBNER_FNV_OFF0   : u64 = 14695981039346656037u64
+const GROEBNER_FNV_OFF1   : u64 = 1099511628211u64
+const GROEBNER_FNV_OFF2   : u64 = 14695981039346656037u64
+const GROEBNER_FNV_OFF3   : u64 = 1099511628211u64
+
+var GROEBNER_NVARS        : u32 = 0u32
+var GROEBNER_ARENA        : u64 = 0u64
+var GROEBNER_MOD_P        : u64 = 0u64
+var GROEBNER_SESS         : u8  = 0u8
+
+var GROEBNER_PL_LIVE      : [u8;  4096]
+var GROEBNER_PL_START     : [u32; 4096]
+var GROEBNER_PL_END       : [u32; 4096]
+
+var GROEBNER_TERM_COEFF   : [u64; 65536]
+var GROEBNER_TERM_EXP_OFF : [u32; 65536]
+var GROEBNER_TERM_USED    : u32 = 0u32
+
+var GROEBNER_EXP_BUF      : [u32; 1048576]
+var GROEBNER_EXP_USED     : u64 = 0u64
+
+var GROEBNER_BASIS        : [u32; 1024]
+var GROEBNER_PQ_I         : [u32; 65536]
+var GROEBNER_PQ_J         : [u32; 65536]
+var GROEBNER_AR_OUT       : [u32; 1024]
+
+var GROEBNER_MT_EXPS      : [u32; 16]
+var GROEBNER_RD_LT        : [u32; 16]
+var GROEBNER_RD_LE        : [u32; 16]
+var GROEBNER_RD_D         : [u32; 16]
+var GROEBNER_SP_FE        : [u32; 16]
+var GROEBNER_SP_GE        : [u32; 16]
+var GROEBNER_SP_LL        : [u32; 16]
+var GROEBNER_SP_DF        : [u32; 16]
+var GROEBNER_SP_DG        : [u32; 16]
+var GROEBNER_DS_FE        : [u32; 16]
+var GROEBNER_DS_GE        : [u32; 16]
+var GROEBNER_AR_LE        : [u32; 16]
+var GROEBNER_AR_LT        : [u32; 16]
+var GROEBNER_DG_BUF       : [u8; 256]
+
+// KAT scratch (module scope; selftest is single-threaded, runs last).
+var GROEBNER_KAT_EXPS     : [u32; 16]
+var GROEBNER_KAT_OUT      : [u32; 16]
+var GROEBNER_KAT_BASIS    : [u32; 8]
+var GROEBNER_KAT_OUTB     : [u32; 8]
+var GROEBNER_KAT_OUTN     : [u32; 4]
+var GROEBNER_KAT_DIG      : [u8; 32]
+var GROEBNER_KAT_DIG2     : [u8; 32]
+
+// ============================================================
+// session + lifecycle
+// ============================================================
+
+// Clear every poly slot's live flag; zero the bump cursors; drop the
+// session.  Bounded by GROEBNER_MAX_POLY (M19).  nvars must fit the cap.
+fn gb_init(nvars: u32) -> i32 @export {
+    if nvars > GROEBNER_MAX_VARS { return GROEBNER_E_BAD }
+    GROEBNER_NVARS = nvars
+    let mut i : u32 = 0u32
+    while i < GROEBNER_MAX_POLY {
+        GROEBNER_PL_LIVE[i] = 0u8
+        GROEBNER_PL_START[i] = 0u32
+        GROEBNER_PL_END[i] = 0u32
+        i = i + 1u32
+    }
+    GROEBNER_TERM_USED = 0u32
+    GROEBNER_EXP_USED = 0u64
+    GROEBNER_SESS = 0u8
+    return GROEBNER_OK
+}
+
+// Record the field session (arena handle + modulus bigint id).  W2 fix:
+// removes arena,p from every per-op signature.  Reversible via gb_init.
+fn gb_begin(arena: u64, p: u64) -> i32 @export {
+    GROEBNER_ARENA = arena
+    GROEBNER_MOD_P = p
+    GROEBNER_SESS = 1u8
+    return GROEBNER_OK
+}
+
+// Linear-scan for a free poly slot (<= GROEBNER_MAX_POLY, M19); mark live
+// with an empty term range at the current bump cursor.  Sentinel on full.
+fn gb_new_poly() -> u32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_SENT }
+    let mut i : u32 = 0u32
+    let mut found : u32 = GROEBNER_SENT
+    let mut scanning : u8 = 1u8
+    while scanning == 1u8 {
+        if i >= GROEBNER_MAX_POLY { scanning = 0u8 }
+        if scanning == 1u8 {
+            if GROEBNER_PL_LIVE[i] == 0u8 {
+                found = i
+                scanning = 0u8
+            } else {
+                i = i + 1u32
+            }
+        }
+    }
+    if found == GROEBNER_SENT { return GROEBNER_SENT }
+    GROEBNER_PL_LIVE[found] = 1u8
+    GROEBNER_PL_START[found] = GROEBNER_TERM_USED
+    GROEBNER_PL_END[found] = GROEBNER_TERM_USED
+    return found
+}
+
+// Drop a poly slot: free each term's coeff bigint (no leak); LIFO-reclaim
+// term/exp bump space only when this slot is the most-recent bump.
+fn gb_drop_poly(slot: u32) -> i32 @export {
+    if slot >= GROEBNER_MAX_POLY { return GROEBNER_E_BAD }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return GROEBNER_E_BAD }
+    let st : u32 = GROEBNER_PL_START[slot]
+    let en : u32 = GROEBNER_PL_END[slot]
+    let mut t : u32 = st
+    while t < en {
+        let cid : u64 = GROEBNER_TERM_COEFF[t]
+        if cid != 0u64 { bigint_drop(cid) }
+        GROEBNER_TERM_COEFF[t] = 0u64
+        t = t + 1u32
+    }
+    if en == GROEBNER_TERM_USED {
+        GROEBNER_TERM_USED = st
+        let nv : u64 = (GROEBNER_NVARS as u64) & GROEBNER_U32MASK
+        let cnt : u64 = (en as u64) - (st as u64)
+        let back : u64 = cnt * nv
+        if GROEBNER_EXP_USED >= back { GROEBNER_EXP_USED = GROEBNER_EXP_USED - back }
+    }
+    GROEBNER_PL_LIVE[slot] = 0u8
+    GROEBNER_PL_START[slot] = 0u32
+    GROEBNER_PL_END[slot] = 0u32
+    return GROEBNER_OK
+}
+
+// ============================================================
+// internal exponent helpers
+// ============================================================
+
+// Byte address of term t's exponent vector inside GROEBNER_EXP_BUF.
+fn gb_term_exp_ptr(t: u32) -> *u32 {
+    let off : u64 = (GROEBNER_TERM_EXP_OFF[t] as u64) & GROEBNER_U32MASK
+    let base : u64 = &GROEBNER_EXP_BUF as u64
+    return (base + off * 4u64) as *u32
+}
+
+// graded-lex compare: total degree first (u32 ordering, legal), then a
+// lex tie-break from variable 0 upward.  Returns -1/0/1 (i32, compared
+// only by ==/!= downstream -- Trap 3).  Flag-driven, no break (W14).
+fn gb_exp_cmp(a: *u32, b: *u32) -> i32 {
+    let nv : u32 = GROEBNER_NVARS
+    let mut sa : u32 = 0u32
+    let mut sb : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < nv {
+        let ix : u64 = (i as u64) & GROEBNER_U32MASK
+        sa = sa + a[ix]
+        sb = sb + b[ix]
+        i = i + 1u32
+    }
+    if sa < sb { return -1i32 }
+    if sa > sb { return 1i32 }
+    let mut k : u32 = 0u32
+    let mut res : i32 = 0i32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if k >= nv { going = 0u8 }
+        if going == 1u8 {
+            let kx : u64 = (k as u64) & GROEBNER_U32MASK
+            let av : u32 = a[kx]
+            let bv : u32 = b[kx]
+            if av > bv {
+                res = 1i32
+                going = 0u8
+            } else {
+                if av < bv {
+                    res = -1i32
+                    going = 0u8
+                } else {
+                    k = k + 1u32
+                }
+            }
+        }
+    }
+    return res
+}
+
+// Exponent-vector equality (flag-guarded; u32 compares only).
+fn gb_exp_eq(a: *u32, b: *u32) -> u8 {
+    let nv : u32 = GROEBNER_NVARS
+    let mut i : u32 = 0u32
+    let mut eq : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= nv { going = 0u8 }
+        if going == 1u8 {
+            let ix : u64 = (i as u64) & GROEBNER_U32MASK
+            if a[ix] != b[ix] {
+                eq = 0u8
+                going = 0u8
+            } else {
+                i = i + 1u32
+            }
+        }
+    }
+    return eq
+}
+
+// out[k] = max(a[k], b[k]) -- least common multiple of two monomials.
+fn gb_lcm(a: *u32, b: *u32, out: *u32) -> i32 {
+    let nv : u32 = GROEBNER_NVARS
+    let mut i : u32 = 0u32
+    while i < nv {
+        let ix : u64 = (i as u64) & GROEBNER_U32MASK
+        let av : u32 = a[ix]
+        let bv : u32 = b[ix]
+        if av > bv { out[ix] = av } else { out[ix] = bv }
+        i = i + 1u32
+    }
+    return GROEBNER_OK
+}
+
+// "a divides b" iff a[k] <= b[k] for every variable k (monomial divides).
+fn gb_div_exp(a: *u32, b: *u32) -> u8 {
+    let nv : u32 = GROEBNER_NVARS
+    let mut i : u32 = 0u32
+    let mut divides : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= nv { going = 0u8 }
+        if going == 1u8 {
+            let ix : u64 = (i as u64) & GROEBNER_U32MASK
+            if a[ix] > b[ix] {
+                divides = 0u8
+                going = 0u8
+            } else {
+                i = i + 1u32
+            }
+        }
+    }
+    return divides
+}
+
+// Buchberger Criterion 1: leading terms of f and g are coprime (disjoint
+// support) iff min(LT(f)[k], LT(g)[k]) == 0 for all k.  S-poly then
+// reduces to zero -> the pair is skippable.  Uses GROEBNER_DS_*.
+fn gb_disjoint_supports(f: u32, g: u32) -> u8 {
+    if GROEBNER_PL_END[f] == GROEBNER_PL_START[f] { return 0u8 }
+    if GROEBNER_PL_END[g] == GROEBNER_PL_START[g] { return 0u8 }
+    let ft : u32 = GROEBNER_PL_START[f]
+    let gt : u32 = GROEBNER_PL_START[g]
+    let fp : *u32 = gb_term_exp_ptr(ft)
+    let gp : *u32 = gb_term_exp_ptr(gt)
+    let nv : u32 = GROEBNER_NVARS
+    let dfe : *u32 = &GROEBNER_DS_FE[0u32]
+    let dge : *u32 = &GROEBNER_DS_GE[0u32]
+    let mut i : u32 = 0u32
+    while i < nv {
+        let ix : u64 = (i as u64) & GROEBNER_U32MASK
+        dfe[ix] = fp[ix]
+        dge[ix] = gp[ix]
+        i = i + 1u32
+    }
+    let mut k : u32 = 0u32
+    let mut coprime : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if k >= nv { going = 0u8 }
+        if going == 1u8 {
+            let kx : u64 = (k as u64) & GROEBNER_U32MASK
+            let fv : u32 = dfe[kx]
+            let gv : u32 = dge[kx]
+            let mut mn : u32 = fv
+            if gv < mn { mn = gv }
+            if mn != 0u32 {
+                coprime = 0u8
+                going = 0u8
+            } else {
+                k = k + 1u32
+            }
+        }
+    }
+    return coprime
+}
+
+// ============================================================
+// term build / queries
+// ============================================================
+
+// Append one term (coeff bigint id + exponent vector) to a poly slot's
+// term range.  Bounds-checked against GROEBNER_MAX_TERMS / EXP_AREA
+// (M4 -> E_FULL).  Trap 4: mask GROEBNER_EXP_USED before u32 indexing.
+fn gb_append_term(slot: u32, coeff_bid: u64, exps: *u32) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if slot >= GROEBNER_MAX_POLY { return GROEBNER_E_BAD }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return GROEBNER_E_BAD }
+    if GROEBNER_TERM_USED >= GROEBNER_MAX_TERMS { return GROEBNER_E_FULL }
+    let nv : u64 = (GROEBNER_NVARS as u64) & GROEBNER_U32MASK
+    if GROEBNER_EXP_USED + nv > GROEBNER_EXP_AREA { return GROEBNER_E_FULL }
+    let t : u32 = GROEBNER_TERM_USED
+    let base32 : u32 = (GROEBNER_EXP_USED & GROEBNER_U32MASK) as u32
+    GROEBNER_TERM_COEFF[t] = coeff_bid
+    GROEBNER_TERM_EXP_OFF[t] = base32
+    let mut k : u32 = 0u32
+    let nvw : u32 = GROEBNER_NVARS
+    while k < nvw {
+        let kx : u64 = (k as u64) & GROEBNER_U32MASK
+        let dst : u32 = base32 + k
+        let dx : u64 = (dst as u64) & GROEBNER_U32MASK
+        GROEBNER_EXP_BUF[dx] = exps[kx]
+        k = k + 1u32
+    }
+    GROEBNER_TERM_USED = t + 1u32
+    GROEBNER_EXP_USED = GROEBNER_EXP_USED + nv
+    GROEBNER_PL_END[slot] = t + 1u32
+    return GROEBNER_OK
+}
+
+// Swap two terms' (coeff, exp-offset) records.  Used by the sort pass.
+fn gb_swap_terms(x: u32, y: u32) -> i32 {
+    let c : u64 = GROEBNER_TERM_COEFF[x]
+    let e : u32 = GROEBNER_TERM_EXP_OFF[x]
+    GROEBNER_TERM_COEFF[x] = GROEBNER_TERM_COEFF[y]
+    GROEBNER_TERM_EXP_OFF[x] = GROEBNER_TERM_EXP_OFF[y]
+    GROEBNER_TERM_COEFF[y] = c
+    GROEBNER_TERM_EXP_OFF[y] = e
+    return GROEBNER_OK
+}
+
+// Pass 1 of normalize: stable insertion sort, DESCENDING graded-lex.
+// W14/iiis-1 fix: the `moving` flag (not the index q) drives termination,
+// and gb_exp_cmp is evaluated ONCE per step into a local.
+fn gb_norm_sort(st: u32, en: u32) -> i32 {
+    let mut p1 : u32 = st + 1u32
+    while p1 < en {
+        let mut q : u32 = p1
+        let mut moving : u8 = 1u8
+        while moving == 1u8 {
+            if q == st { moving = 0u8 } else {
+                let pa : *u32 = gb_term_exp_ptr(q - 1u32)
+                let pb : *u32 = gb_term_exp_ptr(q)
+                let cmp : i32 = gb_exp_cmp(pa, pb)
+                if cmp == -1i32 {
+                    gb_swap_terms(q - 1u32, q)
+                    q = q - 1u32
+                } else {
+                    moving = 0u8
+                }
+            }
+        }
+        p1 = p1 + 1u32
+    }
+    return GROEBNER_OK
+}
+
+// Pass 2 of normalize: combine adjacent equal-exponent terms.  Seed the
+// write head ONCE before the loop (the gospel double-count/double-free
+// fix); seed and merge branches are mutually exclusive via one-line else.
+fn gb_norm_merge(st: u32, en: u32) -> u32 {
+    if en == st { return st }
+    let arena : u64 = GROEBNER_ARENA
+    let p : u64 = GROEBNER_MOD_P
+    let mut w : u32 = st + 1u32
+    let mut r : u32 = st + 1u32
+    while r < en {
+        let pw : *u32 = gb_term_exp_ptr(w - 1u32)
+        let pr : *u32 = gb_term_exp_ptr(r)
+        let eq : u8 = gb_exp_eq(pw, pr)
+        if eq == 1u8 {
+            let ca : u64 = GROEBNER_TERM_COEFF[w - 1u32]
+            let cb : u64 = GROEBNER_TERM_COEFF[r]
+            let sum : u64 = gfp_add(arena, ca, cb, p)
+            bigint_drop(ca)
+            bigint_drop(cb)
+            GROEBNER_TERM_COEFF[w - 1u32] = sum
+        } else {
+            GROEBNER_TERM_COEFF[w] = GROEBNER_TERM_COEFF[r]
+            GROEBNER_TERM_EXP_OFF[w] = GROEBNER_TERM_EXP_OFF[r]
+            w = w + 1u32
+        }
+        r = r + 1u32
+    }
+    return w
+}
+
+// Pass 3 of normalize: drop zero-coefficient terms, compacting [st..w).
+// Returns the final write head.  bigint_drop the discarded zeros.
+fn gb_norm_compact(st: u32, w: u32) -> u32 {
+    let mut rd : u32 = st
+    let mut wr : u32 = st
+    while rd < w {
+        let cid : u64 = GROEBNER_TERM_COEFF[rd]
+        if bigint_is_zero(cid) == 1u8 {
+            if cid != 0u64 { bigint_drop(cid) }
+        } else {
+            GROEBNER_TERM_COEFF[wr] = GROEBNER_TERM_COEFF[rd]
+            GROEBNER_TERM_EXP_OFF[wr] = GROEBNER_TERM_EXP_OFF[rd]
+            wr = wr + 1u32
+        }
+        rd = rd + 1u32
+    }
+    return wr
+}
+
+// Normalize a poly into canonical form: sort desc, combine like terms,
+// drop zeros.  Total monomial order + total field add => unique canonical
+// term list (M15).  Sets GROEBNER_PL_END to the final write head.
+fn gb_normalize(slot: u32) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if slot >= GROEBNER_MAX_POLY { return GROEBNER_E_BAD }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return GROEBNER_E_BAD }
+    let st : u32 = GROEBNER_PL_START[slot]
+    let en : u32 = GROEBNER_PL_END[slot]
+    gb_norm_sort(st, en)
+    let w : u32 = gb_norm_merge(st, en)
+    let fin : u32 = gb_norm_compact(st, w)
+    GROEBNER_PL_END[slot] = fin
+    return GROEBNER_OK
+}
+
+// Copy the leading exponent vector of a poly into out_exps.  Empty -> BAD.
+fn gb_lead_exp(slot: u32, out_exps: *u32) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if slot >= GROEBNER_MAX_POLY { return GROEBNER_E_BAD }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return GROEBNER_E_BAD }
+    let st : u32 = GROEBNER_PL_START[slot]
+    let en : u32 = GROEBNER_PL_END[slot]
+    if en == st { return GROEBNER_E_BAD }
+    let lp : *u32 = gb_term_exp_ptr(st)
+    let nv : u32 = GROEBNER_NVARS
+    let mut i : u32 = 0u32
+    while i < nv {
+        let ix : u64 = (i as u64) & GROEBNER_U32MASK
+        out_exps[ix] = lp[ix]
+        i = i + 1u32
+    }
+    return GROEBNER_OK
+}
+
+// Leading coefficient bigint id; 0u64 on empty/error (bigint convention).
+fn gb_lead_coeff(slot: u32) -> u64 @export {
+    if GROEBNER_SESS != 1u8 { return 0u64 }
+    if slot >= GROEBNER_MAX_POLY { return 0u64 }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return 0u64 }
+    let st : u32 = GROEBNER_PL_START[slot]
+    let en : u32 = GROEBNER_PL_END[slot]
+    if en == st { return 0u64 }
+    return GROEBNER_TERM_COEFF[st]
+}
+
+// Is the poly the zero polynomial (no terms)?  Internal.
+fn gb_is_zero(slot: u32) -> u8 {
+    if slot >= GROEBNER_MAX_POLY { return 1u8 }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return 1u8 }
+    if GROEBNER_PL_END[slot] == GROEBNER_PL_START[slot] { return 1u8 }
+    return 0u8
+}
+
+// ============================================================
+// polynomial arithmetic
+// ============================================================
+
+// out := c * x^d * src  (scale every term by field constant c and shift
+// every exponent by d).  New poly; caller owns.  Uses GROEBNER_MT_EXPS
+// (disjoint from spoly/reduce scratch -- see reentrancy proof).
+fn gb_mul_term(src: u32, c: u64, d: *u32) -> u32 {
+    let out : u32 = gb_new_poly()
+    if out == GROEBNER_SENT { return GROEBNER_SENT }
+    let arena : u64 = GROEBNER_ARENA
+    let p : u64 = GROEBNER_MOD_P
+    let st : u32 = GROEBNER_PL_START[src]
+    let en : u32 = GROEBNER_PL_END[src]
+    let nv : u32 = GROEBNER_NVARS
+    let me : *u32 = &GROEBNER_MT_EXPS[0u32]
+    let mut t : u32 = st
+    let mut failed : u8 = 0u8
+    while t < en {
+        if failed == 0u8 {
+            let new_c : u64 = gfp_mul(arena, GROEBNER_TERM_COEFF[t], c, p)
+            let sp : *u32 = gb_term_exp_ptr(t)
+            let mut k : u32 = 0u32
+            while k < nv {
+                let kx : u64 = (k as u64) & GROEBNER_U32MASK
+                me[kx] = sp[kx] + d[kx]
+                k = k + 1u32
+            }
+            let rc : i32 = gb_append_term(out, new_c, me)
+            if rc != GROEBNER_OK { failed = 1u8 }
+        }
+        t = t + 1u32
+    }
+    if failed == 1u8 {
+        gb_drop_poly(out)
+        return GROEBNER_SENT
+    }
+    return out
+}
+
+// Deep-copy every term of `src` (fresh coeff bigint per term) into `dst`.
+// `dst` must be the most-recent bump (top) so the appends stay contiguous.
+// Returns GROEBNER_OK or a propagated E_FULL.
+fn gb_copy_into(dst: u32, src: u32) -> i32 {
+    let arena : u64 = GROEBNER_ARENA
+    let st : u32 = GROEBNER_PL_START[src]
+    let en : u32 = GROEBNER_PL_END[src]
+    let mut t : u32 = st
+    let mut rc : i32 = GROEBNER_OK
+    while t < en {
+        if rc == GROEBNER_OK {
+            let cc : u64 = bigint_copy(arena, GROEBNER_TERM_COEFF[t])
+            let ep : *u32 = gb_term_exp_ptr(t)
+            rc = gb_append_term(dst, cc, ep)
+        }
+        t = t + 1u32
+    }
+    return rc
+}
+
+// Build a FRESH poly = a - b and normalize it.  A bump allocator can only
+// append to the top slot, so an in-place "a -= b" would interleave b's
+// storage; instead we allocate `out` last and fill it with a's terms then
+// negated b's terms.  Returns the new slot (caller owns), or SENT.  Field
+// subtraction is total (M15).
+fn gb_sub_new(a: u32, b: u32) -> u32 {
+    let arena : u64 = GROEBNER_ARENA
+    let p : u64 = GROEBNER_MOD_P
+    let out : u32 = gb_new_poly()
+    if out == GROEBNER_SENT { return GROEBNER_SENT }
+    let rca : i32 = gb_copy_into(out, a)
+    if rca != GROEBNER_OK { gb_drop_poly(out) ; return GROEBNER_SENT }
+    let zero : u64 = bigint_from_u64(arena, 0u64)
+    let st : u32 = GROEBNER_PL_START[b]
+    let en : u32 = GROEBNER_PL_END[b]
+    let mut t : u32 = st
+    let mut rc : i32 = GROEBNER_OK
+    while t < en {
+        if rc == GROEBNER_OK {
+            let neg : u64 = gfp_sub(arena, zero, GROEBNER_TERM_COEFF[t], p)
+            let ep : *u32 = gb_term_exp_ptr(t)
+            rc = gb_append_term(out, neg, ep)
+        }
+        t = t + 1u32
+    }
+    bigint_drop(zero)
+    if rc != GROEBNER_OK { gb_drop_poly(out) ; return GROEBNER_SENT }
+    gb_normalize(out)
+    return out
+}
+
+// Scale a poly so its leading coefficient becomes 1 (monic).  Makes the
+// canonical scale unique -> required for reduced-basis uniqueness (M2/M12).
+// GROEBNER_E_INV if the leading coeff is not invertible (composite p).
+fn gb_make_monic(slot: u32) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if slot >= GROEBNER_MAX_POLY { return GROEBNER_E_BAD }
+    if GROEBNER_PL_LIVE[slot] == 0u8 { return GROEBNER_E_BAD }
+    let st : u32 = GROEBNER_PL_START[slot]
+    let en : u32 = GROEBNER_PL_END[slot]
+    if en == st { return GROEBNER_OK }
+    let arena : u64 = GROEBNER_ARENA
+    let p : u64 = GROEBNER_MOD_P
+    let lc : u64 = GROEBNER_TERM_COEFF[st]
+    let inv : u64 = gfp_inv(arena, lc, p)
+    if inv == 0u64 { return GROEBNER_E_INV }
+    let mut t : u32 = st
+    while t < en {
+        let old : u64 = GROEBNER_TERM_COEFF[t]
+        let scaled : u64 = gfp_mul(arena, old, inv, p)
+        bigint_drop(old)
+        GROEBNER_TERM_COEFF[t] = scaled
+        t = t + 1u32
+    }
+    bigint_drop(inv)
+    return GROEBNER_OK
+}
+
+// ============================================================
+// reduction / S-poly
+// ============================================================
+
+// Scan the basis for the FIRST element whose leading monomial divides the
+// work poly's leading monomial (GROEBNER_RD_LT already loaded).  Fixed
+// rule (M2/M4) -- no heuristic.  Returns basis index or GROEBNER_SENT.
+fn gb_reduce_find(basis: *u32, basis_n: u32) -> u32 {
+    let lt : *u32 = &GROEBNER_RD_LT[0u32]
+    let le : *u32 = &GROEBNER_RD_LE[0u32]
+    let mut i : u32 = 0u32
+    let mut hit : u32 = GROEBNER_SENT
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= basis_n { going = 0u8 }
+        if going == 1u8 {
+            let ix : u64 = (i as u64) & GROEBNER_U32MASK
+            let g : u32 = basis[ix]
+            if gb_is_zero(g) == 0u8 {
+                let gst : u32 = GROEBNER_PL_START[g]
+                let gp : *u32 = gb_term_exp_ptr(gst)
+                let nv : u32 = GROEBNER_NVARS
+                let mut k : u32 = 0u32
+                while k < nv {
+                    let kx : u64 = (k as u64) & GROEBNER_U32MASK
+                    le[kx] = gp[kx]
+                    k = k + 1u32
+                }
+                if gb_div_exp(le, lt) == 1u8 {
+                    hit = i
+                    going = 0u8
+                } else {
+                    i = i + 1u32
+                }
+            } else {
+                i = i + 1u32
+            }
+        }
+    }
+    return hit
+}
+
+// Status of the last gb_reduce_step (the slot-returning convention can't
+// also carry the OK/INV/FULL distinction, so it travels here).
+var GROEBNER_RS_STATUS : i32 = 0i32
+
+// One reduction step against basis element g: returns a FRESH poly equal to
+// work - factor*x^d*g where factor = lc(work) * inv(lc(g)) and d = LT(work)
+// - LT(g) (GROEBNER_RD_LT/LE already loaded).  The caller drops the old
+// work and adopts the returned slot.  GROEBNER_RS_STATUS records OK / E_INV
+// (lc(g) not invertible) / E_FULL (storage).  Returns SENT on any failure.
+fn gb_reduce_step(work: u32, g: u32) -> u32 {
+    let arena : u64 = GROEBNER_ARENA
+    let p : u64 = GROEBNER_MOD_P
+    let lt : *u32 = &GROEBNER_RD_LT[0u32]
+    let le : *u32 = &GROEBNER_RD_LE[0u32]
+    let dd : *u32 = &GROEBNER_RD_D[0u32]
+    let nv : u32 = GROEBNER_NVARS
+    let mut k : u32 = 0u32
+    while k < nv {
+        let kx : u64 = (k as u64) & GROEBNER_U32MASK
+        dd[kx] = lt[kx] - le[kx]
+        k = k + 1u32
+    }
+    let lcw : u64 = GROEBNER_TERM_COEFF[GROEBNER_PL_START[work]]
+    let glc : u64 = GROEBNER_TERM_COEFF[GROEBNER_PL_START[g]]
+    let ginv : u64 = gfp_inv(arena, glc, p)
+    if ginv == 0u64 { GROEBNER_RS_STATUS = GROEBNER_E_INV ; return GROEBNER_SENT }
+    let factor : u64 = gfp_mul(arena, lcw, ginv, p)
+    bigint_drop(ginv)
+    let scaled : u32 = gb_mul_term(g, factor, dd)
+    bigint_drop(factor)
+    if scaled == GROEBNER_SENT { GROEBNER_RS_STATUS = GROEBNER_E_FULL ; return GROEBNER_SENT }
+    let nxt : u32 = gb_sub_new(work, scaled)
+    gb_drop_poly(scaled)
+    if nxt == GROEBNER_SENT { GROEBNER_RS_STATUS = GROEBNER_E_FULL ; return GROEBNER_SENT }
+    GROEBNER_RS_STATUS = GROEBNER_OK
+    return nxt
+}
+
+// Multivariate division: reduce `target` modulo the basis to its normal
+// form.  Explicit progressed-flag loop (W15, no recursion); each step
+// strictly lowers the leading monomial under graded-lex (well-order =>
+// finite, M19).  Returns a fresh remainder slot (caller owns), or SENT.
+fn gb_reduce(target: u32, basis: *u32, basis_n: u32) -> u32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_SENT }
+    let mut work : u32 = gb_new_poly()
+    if work == GROEBNER_SENT { return GROEBNER_SENT }
+    let buildrc : i32 = gb_copy_into(work, target)
+    if buildrc != GROEBNER_OK {
+        gb_drop_poly(work)
+        return GROEBNER_SENT
+    }
+    gb_normalize(work)
+    let lt : *u32 = &GROEBNER_RD_LT[0u32]
+    let nv : u32 = GROEBNER_NVARS
+    let mut progressed : u8 = 1u8
+    let mut failed : u8 = 0u8
+    while progressed == 1u8 {
+        progressed = 0u8
+        if gb_is_zero(work) == 0u8 {
+            let wst : u32 = GROEBNER_PL_START[work]
+            let wp : *u32 = gb_term_exp_ptr(wst)
+            let mut k : u32 = 0u32
+            while k < nv {
+                let kx : u64 = (k as u64) & GROEBNER_U32MASK
+                lt[kx] = wp[kx]
+                k = k + 1u32
+            }
+            let gi : u32 = gb_reduce_find(basis, basis_n)
+            if gi != GROEBNER_SENT {
+                let gx : u64 = (gi as u64) & GROEBNER_U32MASK
+                let g : u32 = basis[gx]
+                let nxt : u32 = gb_reduce_step(work, g)
+                if nxt == GROEBNER_SENT { failed = 1u8 } else {
+                    gb_drop_poly(work)
+                    work = nxt
+                    progressed = 1u8
+                }
+            }
+        }
+    }
+    if failed == 1u8 {
+        gb_drop_poly(work)
+        return GROEBNER_SENT
+    }
+    return work
+}
+
+// S-polynomial of f and g: S = (L/LT(f))*f - (L/LT(g))*g with L = lcm of
+// the two leading monomials, each part scaled monic.  Cancels the leading
+// terms.  Fresh result slot (caller owns), or SENT.  Uses GROEBNER_SP_*.
+fn gb_spoly(f: u32, g: u32) -> u32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_SENT }
+    if gb_is_zero(f) == 1u8 { return GROEBNER_SENT }
+    if gb_is_zero(g) == 1u8 { return GROEBNER_SENT }
+    let arena : u64 = GROEBNER_ARENA
+    let p : u64 = GROEBNER_MOD_P
+    let nv : u32 = GROEBNER_NVARS
+    let fst : u32 = GROEBNER_PL_START[f]
+    let gst : u32 = GROEBNER_PL_START[g]
+    let fpe : *u32 = gb_term_exp_ptr(fst)
+    let gpe : *u32 = gb_term_exp_ptr(gst)
+    let fe : *u32 = &GROEBNER_SP_FE[0u32]
+    let ge : *u32 = &GROEBNER_SP_GE[0u32]
+    let ll : *u32 = &GROEBNER_SP_LL[0u32]
+    let df : *u32 = &GROEBNER_SP_DF[0u32]
+    let dg : *u32 = &GROEBNER_SP_DG[0u32]
+    let mut i : u32 = 0u32
+    while i < nv {
+        let ix : u64 = (i as u64) & GROEBNER_U32MASK
+        fe[ix] = fpe[ix]
+        ge[ix] = gpe[ix]
+        i = i + 1u32
+    }
+    gb_lcm(fe, ge, ll)
+    let mut k : u32 = 0u32
+    while k < nv {
+        let kx : u64 = (k as u64) & GROEBNER_U32MASK
+        df[kx] = ll[kx] - fe[kx]
+        dg[kx] = ll[kx] - ge[kx]
+        k = k + 1u32
+    }
+    let fc : u64 = GROEBNER_TERM_COEFF[fst]
+    let gc : u64 = GROEBNER_TERM_COEFF[gst]
+    let finv : u64 = gfp_inv(arena, fc, p)
+    if finv == 0u64 { return GROEBNER_SENT }
+    let ginv : u64 = gfp_inv(arena, gc, p)
+    if ginv == 0u64 { bigint_drop(finv) ; return GROEBNER_SENT }
+    let part_f : u32 = gb_mul_term(f, finv, df)
+    bigint_drop(finv)
+    if part_f == GROEBNER_SENT { bigint_drop(ginv) ; return GROEBNER_SENT }
+    let part_g : u32 = gb_mul_term(g, ginv, dg)
+    bigint_drop(ginv)
+    if part_g == GROEBNER_SENT { gb_drop_poly(part_f) ; return GROEBNER_SENT }
+    let out : u32 = gb_sub_new(part_f, part_g)
+    gb_drop_poly(part_g)
+    gb_drop_poly(part_f)
+    if out == GROEBNER_SENT { return GROEBNER_SENT }
+    return out
+}
+
+// ============================================================
+// closure + canonicalization + witness
+// ============================================================
+
+// Is basis[bi] kept under minimalization?  Dropped iff some OTHER basis
+// element's leading monomial divides basis[bi]'s leading monomial.  Fixed
+// scan order (deterministic).  Uses GROEBNER_AR_LE/AR_LT.
+fn gb_ar_keep(basis: *u32, basis_n: u32, bi: u32) -> u8 {
+    let g : u32 = basis[(bi as u64) & GROEBNER_U32MASK]
+    if gb_is_zero(g) == 1u8 { return 0u8 }
+    let gst : u32 = GROEBNER_PL_START[g]
+    let gp : *u32 = gb_term_exp_ptr(gst)
+    let lt : *u32 = &GROEBNER_AR_LT[0u32]
+    let le : *u32 = &GROEBNER_AR_LE[0u32]
+    let nv : u32 = GROEBNER_NVARS
+    let mut i : u32 = 0u32
+    while i < nv {
+        let ix : u64 = (i as u64) & GROEBNER_U32MASK
+        lt[ix] = gp[ix]
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    let mut keep : u8 = 1u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= basis_n { going = 0u8 }
+        if going == 1u8 {
+            if j != bi {
+                let o : u32 = basis[(j as u64) & GROEBNER_U32MASK]
+                if gb_is_zero(o) == 0u8 {
+                    let ost : u32 = GROEBNER_PL_START[o]
+                    let op : *u32 = gb_term_exp_ptr(ost)
+                    let mut k : u32 = 0u32
+                    while k < nv {
+                        let kx : u64 = (k as u64) & GROEBNER_U32MASK
+                        le[kx] = op[kx]
+                        k = k + 1u32
+                    }
+                    if gb_div_exp(le, lt) == 1u8 {
+                        keep = 0u8
+                        going = 0u8
+                    } else {
+                        j = j + 1u32
+                    }
+                } else {
+                    j = j + 1u32
+                }
+            } else {
+                j = j + 1u32
+            }
+        }
+    }
+    return keep
+}
+
+// Insertion-sort GROEBNER_AR_OUT[0..n) ASCENDING by leading monomial under
+// gb_exp_cmp (a fixed total order).  W14 flag form, cmp evaluated once.
+fn gb_ar_sort(n: u32) -> i32 {
+    let mut p1 : u32 = 1u32
+    while p1 < n {
+        let mut q : u32 = p1
+        let mut moving : u8 = 1u8
+        while moving == 1u8 {
+            if q == 0u32 { moving = 0u8 } else {
+                let a : u32 = GROEBNER_AR_OUT[q - 1u32]
+                let b : u32 = GROEBNER_AR_OUT[q]
+                let pa : *u32 = gb_term_exp_ptr(GROEBNER_PL_START[a])
+                let pb : *u32 = gb_term_exp_ptr(GROEBNER_PL_START[b])
+                let cmp : i32 = gb_exp_cmp(pa, pb)
+                if cmp == 1i32 {
+                    let tmp : u32 = GROEBNER_AR_OUT[q - 1u32]
+                    GROEBNER_AR_OUT[q - 1u32] = GROEBNER_AR_OUT[q]
+                    GROEBNER_AR_OUT[q] = tmp
+                    q = q - 1u32
+                } else {
+                    moving = 0u8
+                }
+            }
+        }
+        p1 = p1 + 1u32
+    }
+    return GROEBNER_OK
+}
+
+// Turn a Groebner basis into the unique REDUCED Groebner basis: (1)
+// minimalize, (2) inter-reduce each survivor against the others, (3) make
+// monic, then emit in ascending-LT order.  Bit-identical for a given
+// ideal + order regardless of input order (W5/M2/M12).  No recursion.
+fn gb_autoreduce(basis: *u32, basis_n: u32, out_basis: *u32, out_n: *u32) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if (out_basis as u64) == 0u64 { return GROEBNER_E_BAD }
+    if (out_n as u64) == 0u64 { return GROEBNER_E_BAD }
+    if basis_n > GROEBNER_MAX_BASIS { return GROEBNER_E_FULL }
+    // Stage 1: minimalize into GROEBNER_AR_OUT.
+    let mut i : u32 = 0u32
+    let mut m : u32 = 0u32
+    while i < basis_n {
+        if gb_ar_keep(basis, basis_n, i) == 1u8 {
+            GROEBNER_AR_OUT[m] = basis[(i as u64) & GROEBNER_U32MASK]
+            m = m + 1u32
+        }
+        i = i + 1u32
+    }
+    // Stage 2: inter-reduce each survivor against the other survivors.
+    let aop : *u32 = &GROEBNER_AR_OUT[0u32]
+    let mut a : u32 = 0u32
+    let mut rc : i32 = GROEBNER_OK
+    while a < m {
+        if rc == GROEBNER_OK {
+            let tmp : u32 = GROEBNER_AR_OUT[a]
+            GROEBNER_AR_OUT[a] = GROEBNER_SENT
+            let red : u32 = gb_reduce(tmp, aop, m)
+            gb_drop_poly(tmp)
+            if red == GROEBNER_SENT { rc = GROEBNER_E_FULL } else {
+                let mrc : i32 = gb_make_monic(red)
+                GROEBNER_AR_OUT[a] = red
+                if mrc != GROEBNER_OK { rc = mrc }
+            }
+        }
+        a = a + 1u32
+    }
+    if rc != GROEBNER_OK { return rc }
+    // Stage 3: sort ascending by LT, write survivors out.
+    gb_ar_sort(m)
+    let mut e : u32 = 0u32
+    while e < m {
+        out_basis[(e as u64) & GROEBNER_U32MASK] = GROEBNER_AR_OUT[e]
+        e = e + 1u32
+    }
+    out_n[0u64] = m
+    return GROEBNER_OK
+}
+
+// Push a normalized nonzero generator onto GROEBNER_BASIS.  Returns the
+// new basis length, or GROEBNER_SENT on overflow (M4 -> caller E_FULL).
+fn gb_buch_push(bn: u32, slot: u32) -> u32 {
+    if bn >= GROEBNER_MAX_BASIS { return GROEBNER_SENT }
+    GROEBNER_BASIS[bn] = slot
+    return bn + 1u32
+}
+
+// Enqueue all pairs (k, j) for k in [0,j) into GROEBNER_PQ_I/J starting at
+// pql.  Returns new queue length, or GROEBNER_SENT on overflow.
+fn gb_buch_enqueue(pql: u32, j: u32) -> u32 {
+    let mut k : u32 = 0u32
+    let mut q : u32 = pql
+    let mut ok : u8 = 1u8
+    while k < j {
+        if ok == 1u8 {
+            if q >= GROEBNER_MAX_PAIRS { ok = 0u8 } else {
+                GROEBNER_PQ_I[q] = k
+                GROEBNER_PQ_J[q] = j
+                q = q + 1u32
+            }
+        }
+        k = k + 1u32
+    }
+    if ok == 0u8 { return GROEBNER_SENT }
+    return q
+}
+
+// Buchberger closure: normalize generators, build the i<j pair queue, then
+// process it FIFO (the fixed deterministic S-pair selection rule, M4),
+// skipping Criterion-1 pairs and adding nonzero remainders.  Every cap
+// breach returns GROEBNER_E_FULL (never a silent drop -> non-Groebner).
+// Finalizes via gb_autoreduce -> the canonical reduced basis.  W2: 4 params.
+fn gb_buchberger(generators: *u32, gen_n: u32, out_basis: *u32, out_n: *u32) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if (out_basis as u64) == 0u64 { return GROEBNER_E_BAD }
+    if (out_n as u64) == 0u64 { return GROEBNER_E_BAD }
+    let bptr : *u32 = &GROEBNER_BASIS[0u32]
+    let mut bn : u32 = 0u32
+    let mut gi : u32 = 0u32
+    let mut rc : i32 = GROEBNER_OK
+    while gi < gen_n {
+        if rc == GROEBNER_OK {
+            let gslot : u32 = generators[(gi as u64) & GROEBNER_U32MASK]
+            gb_normalize(gslot)
+            if gb_is_zero(gslot) == 0u8 {
+                let nb : u32 = gb_buch_push(bn, gslot)
+                if nb == GROEBNER_SENT { rc = GROEBNER_E_FULL } else { bn = nb }
+            }
+        }
+        gi = gi + 1u32
+    }
+    if rc != GROEBNER_OK { return rc }
+    let mut pql : u32 = 0u32
+    let mut j : u32 = 1u32
+    while j < bn {
+        if rc == GROEBNER_OK {
+            let nq : u32 = gb_buch_enqueue(pql, j)
+            if nq == GROEBNER_SENT { rc = GROEBNER_E_FULL } else { pql = nq }
+        }
+        j = j + 1u32
+    }
+    if rc != GROEBNER_OK { return rc }
+    let mut head : u32 = 0u32
+    let mut running : u8 = 1u8
+    while running == 1u8 {
+        if head >= pql { running = 0u8 }
+        if rc != GROEBNER_OK { running = 0u8 }
+        if running == 1u8 {
+            let ix : u32 = GROEBNER_PQ_I[head]
+            let jx : u32 = GROEBNER_PQ_J[head]
+            head = head + 1u32
+            GROEBNER_BN = bn
+            GROEBNER_PQL = pql
+            let res : i32 = gb_buch_step(bptr, ix, jx)
+            if res == GROEBNER_OK { bn = GROEBNER_BN_OUT } else {
+                if res == GROEBNER_E_FULL { rc = GROEBNER_E_FULL }
+                if res == GROEBNER_E_INV { rc = GROEBNER_E_INV }
+            }
+            pql = GROEBNER_PQL_OUT
+        }
+    }
+    if rc != GROEBNER_OK { return rc }
+    return gb_autoreduce(bptr, bn, out_basis, out_n)
+}
+
+// Per-pair processing for gb_buchberger (kept flat to respect the parser
+// nesting limit, Trap 13).  Reads bn/pql from the module context vars and
+// writes the updated values back into GROEBNER_BN_OUT/GROEBNER_PQL_OUT.
+var GROEBNER_BN_OUT  : u32 = 0u32
+var GROEBNER_PQL_OUT : u32 = 0u32
+
+fn gb_buch_step(bptr: *u32, ix: u32, jx: u32) -> i32 {
+    let bn : u32 = GROEBNER_BN
+    let pql : u32 = GROEBNER_PQL
+    GROEBNER_BN_OUT = bn
+    GROEBNER_PQL_OUT = pql
+    let fpoly : u32 = bptr[(ix as u64) & GROEBNER_U32MASK]
+    let gpoly : u32 = bptr[(jx as u64) & GROEBNER_U32MASK]
+    if gb_disjoint_supports(fpoly, gpoly) == 1u8 { return GROEBNER_OK }
+    let s : u32 = gb_spoly(fpoly, gpoly)
+    if s == GROEBNER_SENT { return GROEBNER_E_INV }
+    let r : u32 = gb_reduce(s, bptr, bn)
+    gb_drop_poly(s)
+    if r == GROEBNER_SENT { return GROEBNER_E_FULL }
+    if gb_is_zero(r) == 1u8 {
+        gb_drop_poly(r)
+        return GROEBNER_OK
+    }
+    let nb : u32 = gb_buch_push(bn, r)
+    if nb == GROEBNER_SENT { return GROEBNER_E_FULL }
+    GROEBNER_BN_OUT = nb
+    let nq : u32 = gb_buch_enqueue(pql, nb - 1u32)
+    if nq == GROEBNER_SENT { return GROEBNER_E_FULL }
+    GROEBNER_PQL_OUT = nq
+    return GROEBNER_OK
+}
+
+var GROEBNER_BN  : u32 = 0u32
+var GROEBNER_PQL : u32 = 0u32
+
+// FNV-1a fold of the byte at GROEBNER_DG_BUF[idx] into a running hash.
+fn gb_fnv_step(h: u64, b: u64) -> u64 {
+    let x : u64 = h ^ b
+    return x * GROEBNER_FNV_PRIME
+}
+
+// Deterministically serialize the reduced basis into GROEBNER_DG_BUF and
+// fold it with four FNV-1a lanes -> 32 content-address bytes in out32
+// (Trap 5: byte-store through *u8).  M6/M10/M12: a recomputable invariant.
+fn gb_basis_digest(basis: *u32, basis_n: u32, out32: *u8) -> i32 @export {
+    if GROEBNER_SESS != 1u8 { return GROEBNER_E_NOSESS }
+    if (out32 as u64) == 0u64 { return GROEBNER_E_BAD }
+    let nv : u32 = GROEBNER_NVARS
+    let mut h0 : u64 = GROEBNER_FNV_OFF0
+    let mut h1 : u64 = GROEBNER_FNV_OFF1 ^ 0x1111111111111111u64
+    let mut h2 : u64 = GROEBNER_FNV_OFF2 ^ 0x2222222222222222u64
+    let mut h3 : u64 = GROEBNER_FNV_OFF3 ^ 0x3333333333333333u64
+    // Lane separation: each lane folds the same stream but starts distinct,
+    // and we rotate which lane absorbs each byte so all 32 bytes depend on
+    // the full content (avoids a trivially-correlated 4x32-bit copy).
+    h0 = gb_fnv_step(h0, (basis_n as u64) & 0xFFu64)
+    h1 = gb_fnv_step(h1, ((basis_n as u64) >> 8u64) & 0xFFu64)
+    h2 = gb_fnv_step(h2, (nv as u64) & 0xFFu64)
+    h3 = gb_fnv_step(h3, ((nv as u64) >> 8u64) & 0xFFu64)
+    let mut bi : u32 = 0u32
+    while bi < basis_n {
+        let slot : u32 = basis[(bi as u64) & GROEBNER_U32MASK]
+        let st : u32 = GROEBNER_PL_START[slot]
+        let en : u32 = GROEBNER_PL_END[slot]
+        let tc : u64 = (en as u64) - (st as u64)
+        h0 = gb_fnv_step(h0, tc & 0xFFu64)
+        h1 = gb_fnv_step(h1, (tc >> 8u64) & 0xFFu64)
+        let mut t : u32 = st
+        while t < en {
+            let ep : *u32 = gb_term_exp_ptr(t)
+            let mut k : u32 = 0u32
+            while k < nv {
+                let kx : u64 = (k as u64) & GROEBNER_U32MASK
+                let ev : u64 = (ep[kx] as u64) & GROEBNER_U32MASK
+                h0 = gb_fnv_step(h0, ev & 0xFFu64)
+                h1 = gb_fnv_step(h1, (ev >> 8u64) & 0xFFu64)
+                h2 = gb_fnv_step(h2, (ev >> 16u64) & 0xFFu64)
+                h3 = gb_fnv_step(h3, (ev >> 24u64) & 0xFFu64)
+                k = k + 1u32
+            }
+            let lo : u64 = bigint_to_u64_lo(GROEBNER_TERM_COEFF[t])
+            h0 = gb_fnv_step(h0, lo & 0xFFu64)
+            h1 = gb_fnv_step(h1, (lo >> 8u64) & 0xFFu64)
+            h2 = gb_fnv_step(h2, (lo >> 16u64) & 0xFFu64)
+            h3 = gb_fnv_step(h3, (lo >> 24u64) & 0xFFu64)
+            h0 = gb_fnv_step(h0, (lo >> 32u64) & 0xFFu64)
+            h1 = gb_fnv_step(h1, (lo >> 40u64) & 0xFFu64)
+            h2 = gb_fnv_step(h2, (lo >> 48u64) & 0xFFu64)
+            h3 = gb_fnv_step(h3, (lo >> 56u64) & 0xFFu64)
+            t = t + 1u32
+        }
+        bi = bi + 1u32
+    }
+    // Emit 32 bytes little-endian: lane 0 -> [0..8), 1 -> [8..16), etc.
+    gb_digest_emit(out32, 0u64, h0)
+    gb_digest_emit(out32, 8u64, h1)
+    gb_digest_emit(out32, 16u64, h2)
+    gb_digest_emit(out32, 24u64, h3)
+    return GROEBNER_OK
+}
+
+// Store the 8 bytes of v little-endian at out32[base..base+8) (Trap 5).
+fn gb_digest_emit(out32: *u8, base: u64, v: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let sh : u64 = i * 8u64
+        out32[base + i] = ((v >> sh) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return GROEBNER_OK
+}
+
+// ============================================================
+// embedded self-test (KAT) -- returns 99u64 on full pass
+// ============================================================
+
+// Build a degree-1/2 monomial exponent vector into GROEBNER_KAT_EXPS for
+// the given (e0, e1) over nvars=2 (or nvars=1 using e0 only).
+fn gb_kat_set2(e0: u32, e1: u32) -> i32 {
+    let me : *u32 = &GROEBNER_KAT_EXPS[0u32]
+    me[0u64] = e0
+    me[1u64] = e1
+    return GROEBNER_OK
+}
+
+fn gb_selftest() -> u64 @export {
+    // Field GF(7): p = bigint 7.  Create a real arena (the same idiom as
+    // galois_selftest); the public API takes the arena via gb_begin.
+    let arena : u64 = arena_new(1u64 << 20u64)
+    if arena == 0u64 { return 1u64 }
+    let p : u64 = bigint_from_u64(arena, 7u64)
+    if p == 0u64 { return 16u64 }
+
+    // ---- KAT 1: normalize / combine / monic (nvars=1) ----
+    if gb_init(1u32) != GROEBNER_OK { return 2u64 }
+    if gb_begin(arena, p) != GROEBNER_OK { return 3u64 }
+    let t1 : u32 = gb_new_poly()
+    if t1 == GROEBNER_SENT { return 4u64 }
+    // append out of order: 6*x^0, 3*x^2, 5*x^2
+    gb_kat_set2(0u32, 0u32)
+    if gb_append_term(t1, bigint_from_u64(arena, 6u64), &GROEBNER_KAT_EXPS[0u32]) != GROEBNER_OK { return 5u64 }
+    gb_kat_set2(2u32, 0u32)
+    if gb_append_term(t1, bigint_from_u64(arena, 3u64), &GROEBNER_KAT_EXPS[0u32]) != GROEBNER_OK { return 6u64 }
+    gb_kat_set2(2u32, 0u32)
+    if gb_append_term(t1, bigint_from_u64(arena, 5u64), &GROEBNER_KAT_EXPS[0u32]) != GROEBNER_OK { return 7u64 }
+    if gb_normalize(t1) != GROEBNER_OK { return 8u64 }
+    // expect 2 terms: 1*x^2 (3+5=8=1 mod 7, NOT 2 -> proves no double-count) + 6*x^0
+    let st1 : u32 = GROEBNER_PL_START[t1]
+    let en1 : u32 = GROEBNER_PL_END[t1]
+    if (en1 - st1) != 2u32 { return 9u64 }
+    if gb_lead_exp(t1, &GROEBNER_KAT_OUT[0u32]) != GROEBNER_OK { return 10u64 }
+    if GROEBNER_KAT_OUT[0u64] != 2u32 { return 11u64 }
+    if bigint_to_u64_lo(gb_lead_coeff(t1)) != 1u64 { return 12u64 }
+    // trailing term must be 6 (constant)
+    if bigint_to_u64_lo(GROEBNER_TERM_COEFF[st1 + 1u32]) != 6u64 { return 13u64 }
+    if gb_make_monic(t1) != GROEBNER_OK { return 14u64 }
+    if bigint_to_u64_lo(gb_lead_coeff(t1)) != 1u64 { return 15u64 }
+
+    // ---- KAT 2: S-polynomial cancels leading terms (nvars=2) ----
+    if gb_init(2u32) != GROEBNER_OK { return 20u64 }
+    if gb_begin(arena, p) != GROEBNER_OK { return 21u64 }
+    // f = x^2 + 1
+    let f2 : u32 = gb_new_poly()
+    if f2 == GROEBNER_SENT { return 22u64 }
+    gb_kat_set2(2u32, 0u32)
+    gb_append_term(f2, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_kat_set2(0u32, 0u32)
+    gb_append_term(f2, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    if gb_normalize(f2) != GROEBNER_OK { return 23u64 }
+    // g = x*y + 2
+    let g2 : u32 = gb_new_poly()
+    if g2 == GROEBNER_SENT { return 24u64 }
+    gb_kat_set2(1u32, 1u32)
+    gb_append_term(g2, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_kat_set2(0u32, 0u32)
+    gb_append_term(g2, bigint_from_u64(arena, 2u64), &GROEBNER_KAT_EXPS[0u32])
+    if gb_normalize(g2) != GROEBNER_OK { return 25u64 }
+    // S(f,g) = y*f - x*g = y - 2x = 5x + y (mod 7); monic lead coeff 5, lead exp [1,0]
+    let s2 : u32 = gb_spoly(f2, g2)
+    if s2 == GROEBNER_SENT { return 26u64 }
+    let ss : u32 = GROEBNER_PL_START[s2]
+    let se : u32 = GROEBNER_PL_END[s2]
+    if (se - ss) != 2u32 { return 27u64 }
+    if gb_lead_exp(s2, &GROEBNER_KAT_OUT[0u32]) != GROEBNER_OK { return 28u64 }
+    if GROEBNER_KAT_OUT[0u64] != 1u32 { return 29u64 }
+    if GROEBNER_KAT_OUT[1u64] != 0u32 { return 30u64 }
+    if bigint_to_u64_lo(gb_lead_coeff(s2)) != 5u64 { return 31u64 }
+    // second term: 1*y -> exp [0,1], coeff 1
+    let pe2 : *u32 = gb_term_exp_ptr(ss + 1u32)
+    if pe2[0u64] != 0u32 { return 32u64 }
+    if pe2[1u64] != 1u32 { return 33u64 }
+    if bigint_to_u64_lo(GROEBNER_TERM_COEFF[ss + 1u32]) != 1u64 { return 34u64 }
+
+    // ---- KAT 3: Buchberger reduced basis, coprime linear ideal (nvars=2) ----
+    if gb_init(2u32) != GROEBNER_OK { return 40u64 }
+    if gb_begin(arena, p) != GROEBNER_OK { return 41u64 }
+    // g1 = x + 6
+    let a3 : u32 = gb_new_poly()
+    gb_kat_set2(1u32, 0u32)
+    gb_append_term(a3, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_kat_set2(0u32, 0u32)
+    gb_append_term(a3, bigint_from_u64(arena, 6u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_normalize(a3)
+    // g2 = y + 5
+    let b3 : u32 = gb_new_poly()
+    gb_kat_set2(0u32, 1u32)
+    gb_append_term(b3, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_kat_set2(0u32, 0u32)
+    gb_append_term(b3, bigint_from_u64(arena, 5u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_normalize(b3)
+    GROEBNER_KAT_BASIS[0u64] = a3
+    GROEBNER_KAT_BASIS[1u64] = b3
+    if gb_buchberger(&GROEBNER_KAT_BASIS[0u32], 2u32, &GROEBNER_KAT_OUTB[0u32], &GROEBNER_KAT_OUTN[0u32]) != GROEBNER_OK { return 42u64 }
+    if GROEBNER_KAT_OUTN[0u64] != 2u32 { return 43u64 }
+    // each output poly monic with 2 terms (x + 6 sorts before y + 5 ascending)
+    let o0 : u32 = GROEBNER_KAT_OUTB[0u64]
+    let o1 : u32 = GROEBNER_KAT_OUTB[1u64]
+    if (GROEBNER_PL_END[o0] - GROEBNER_PL_START[o0]) != 2u32 { return 44u64 }
+    if (GROEBNER_PL_END[o1] - GROEBNER_PL_START[o1]) != 2u32 { return 45u64 }
+    if bigint_to_u64_lo(gb_lead_coeff(o0)) != 1u64 { return 46u64 }
+    if bigint_to_u64_lo(gb_lead_coeff(o1)) != 1u64 { return 47u64 }
+    // ascending LT under gb_exp_cmp (spec): x ([1,0]) and y ([0,1]) have equal
+    // total degree, so the lex tie-break makes var-0 (x) the GREATER; ascending
+    // therefore puts y+5 (smaller LT) first.  o0 = y+5 (lead [0,1]); o1 = x+6
+    // (lead [1,0]).  Assert BOTH exponents of each leading monomial.
+    if gb_lead_exp(o0, &GROEBNER_KAT_OUT[0u32]) != GROEBNER_OK { return 48u64 }
+    if GROEBNER_KAT_OUT[0u64] != 0u32 { return 49u64 }
+    if GROEBNER_KAT_OUT[1u64] != 1u32 { return 491u64 }
+    if gb_lead_exp(o1, &GROEBNER_KAT_OUT[0u32]) != GROEBNER_OK { return 50u64 }
+    if GROEBNER_KAT_OUT[0u64] != 1u32 { return 51u64 }
+    if GROEBNER_KAT_OUT[1u64] != 0u32 { return 511u64 }
+
+    // ---- KAT 4: full closure + autoreduce + digest determinism (nvars=2) ----
+    if gb_init(2u32) != GROEBNER_OK { return 60u64 }
+    if gb_begin(arena, p) != GROEBNER_OK { return 61u64 }
+    // f1 = x^2 + 1 ; f2 = x*y + 2
+    let c4 : u32 = gb_new_poly()
+    gb_kat_set2(2u32, 0u32)
+    gb_append_term(c4, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_kat_set2(0u32, 0u32)
+    gb_append_term(c4, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_normalize(c4)
+    let d4 : u32 = gb_new_poly()
+    gb_kat_set2(1u32, 1u32)
+    gb_append_term(d4, bigint_from_u64(arena, 1u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_kat_set2(0u32, 0u32)
+    gb_append_term(d4, bigint_from_u64(arena, 2u64), &GROEBNER_KAT_EXPS[0u32])
+    gb_normalize(d4)
+    GROEBNER_KAT_BASIS[0u64] = c4
+    GROEBNER_KAT_BASIS[1u64] = d4
+    let onp : *u32 = &GROEBNER_KAT_OUT[0u32]
+    if gb_buchberger(&GROEBNER_KAT_BASIS[0u32], 2u32, &GROEBNER_KAT_OUTB[0u32], onp) != GROEBNER_OK { return 62u64 }
+    let m4 : u32 = onp[0u64]
+    // a proper Groebner basis of <x^2+1, xy+2> over GF(7) has > 1 element
+    if m4 == 0u32 { return 63u64 }
+    // every output poly is monic (reduced-basis invariant)
+    let mut vi : u32 = 0u32
+    let mut monic_ok : u8 = 1u8
+    while vi < m4 {
+        let ov : u32 = GROEBNER_KAT_OUTB[(vi as u64) & GROEBNER_U32MASK]
+        if bigint_to_u64_lo(gb_lead_coeff(ov)) != 1u64 { monic_ok = 0u8 }
+        vi = vi + 1u32
+    }
+    if monic_ok == 0u8 { return 64u64 }
+    // digest is deterministic: recompute twice, must be byte-identical (M10).
+    if gb_basis_digest(&GROEBNER_KAT_OUTB[0u32], m4, &GROEBNER_KAT_DIG[0u32]) != GROEBNER_OK { return 65u64 }
+    if gb_basis_digest(&GROEBNER_KAT_OUTB[0u32], m4, &GROEBNER_KAT_DIG2[0u32]) != GROEBNER_OK { return 66u64 }
+    let mut di : u32 = 0u32
+    let mut dig_ok : u8 = 1u8
+    while di < 32u32 {
+        if GROEBNER_KAT_DIG[(di as u64) & GROEBNER_U32MASK] != GROEBNER_KAT_DIG2[(di as u64) & GROEBNER_U32MASK] { dig_ok = 0u8 }
+        di = di + 1u32
+    }
+    if dig_ok == 0u8 { return 67u64 }
+    // digest must not be all-zero (proves the fold actually ran over content)
+    let mut dz : u32 = 0u32
+    let mut nonzero : u8 = 0u8
+    while dz < 32u32 {
+        if GROEBNER_KAT_DIG[(dz as u64) & GROEBNER_U32MASK] != 0u8 { nonzero = 1u8 }
+        dz = dz + 1u32
+    }
+    if nonzero == 0u8 { return 68u64 }
+
+    // ---- Negative case: ops before gb_begin must REFUSE (prove the gate) ----
+    // The session guard is checked FIRST in every public op, so with no
+    // session every entry point returns its no-session sentinel/code -- NOT
+    // a happy-path value.  This proves the gate fails closed (M5).
+    gb_init(1u32)
+    // GROEBNER_SESS is now 0 (gb_init clears it).
+    if gb_new_poly() != GROEBNER_SENT { return 70u64 }
+    gb_kat_set2(0u32, 0u32)
+    if gb_append_term(0u32, p, &GROEBNER_KAT_EXPS[0u32]) != GROEBNER_E_NOSESS { return 71u64 }
+    let onp2 : *u32 = &GROEBNER_KAT_OUT[0u32]
+    if gb_buchberger(&GROEBNER_KAT_BASIS[0u32], 1u32, &GROEBNER_KAT_OUTB[0u32], onp2) != GROEBNER_E_NOSESS { return 72u64 }
+    // gb_reduce / gb_spoly use the SENT failure convention with no session.
+    if gb_reduce(0u32, &GROEBNER_KAT_BASIS[0u32], 0u32) != GROEBNER_SENT { return 73u64 }
+    if gb_spoly(0u32, 0u32) != GROEBNER_SENT { return 74u64 }
+
+    return 99u64
+}

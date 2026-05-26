@@ -1,0 +1,4 @@
+/* 629 — triple_check: triple-redundant native fn-ptr dispatch; disagreement fatal (W27). */
+module corpus_629
+extern @abi(c-msvc-x64) fn tc_selftest() -> u64 from "triple_check.iii"
+fn main() -> u64 { return tc_selftest() }

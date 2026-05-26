@@ -1,0 +1,299 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\ini.iii
+ *
+ * III STDLIB - verba::ini
+ *
+ * Compact INI / properties parser.  Handles:
+ *   [section] headers
+ *   key=value pairs (= or : separator)
+ *   ; and # line comments
+ *   leading/trailing whitespace trimmed from keys and values
+ *   blank lines ignored
+ *
+ * Public API:
+ *   ini_parse(arena:u64, raw_base:u64, raw_len:u64) -> u64
+ *   ini_count(id:u64) -> u64
+ *   ini_section_base(id:u64, i:u64) -> u64
+ *   ini_section_len(id:u64, i:u64) -> u64
+ *   ini_key_base(id:u64, i:u64) -> u64
+ *   ini_key_len(id:u64, i:u64) -> u64
+ *   ini_value_base(id:u64, i:u64) -> u64
+ *   ini_value_len(id:u64, i:u64) -> u64
+ *   ini_drop(id:u64) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module verba_ini
+
+const INI_OK : i32 = 0i32
+
+const INI_TABLE_MAX : u32 = 8u32
+const INI_ENTRY_MAX : u64 = 512u64
+const INI_TOTAL : u64 = 4096u64    /* 8 * 512 */
+
+var INI_LIVE : [u8;  8]
+var INI_COUNT : [u64; 8]
+
+var INI_SECTION_BASE : [u64; 4096]
+var INI_SECTION_LEN  : [u64; 4096]
+var INI_KEY_BASE     : [u64; 4096]
+var INI_KEY_LEN      : [u64; 4096]
+var INI_VALUE_BASE   : [u64; 4096]
+var INI_VALUE_LEN    : [u64; 4096]
+
+var INI_PARSE_SEC_BASE : u64 = 0u64
+var INI_PARSE_SEC_LEN : u64 = 0u64
+var INI_PARSE_TABLE : u32 = 0u32
+
+fn ini_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < INI_TABLE_MAX {
+        if INI_LIVE[i] == 0u8 {
+            INI_LIVE[i] = 1u8
+            INI_COUNT[i] = 0u64
+            return i
+        }
+        i = i + 1u32
+    }
+    return INI_TABLE_MAX
+}
+
+fn ini_resolve(id: u64) -> u32 {
+    if id == 0u64 { return INI_TABLE_MAX }
+    let idx_u64 : u64 = id - 1u64
+    if idx_u64 >= (INI_TABLE_MAX as u64) { return INI_TABLE_MAX }
+    let idx : u32 = idx_u64 as u32
+    if INI_LIVE[idx] == 0u8 { return INI_TABLE_MAX }
+    return idx
+}
+
+fn ini_index(table_idx: u32, entry: u64) -> u64 {
+    return (table_idx as u64) * INI_ENTRY_MAX + entry
+}
+
+fn ini_is_ws(b: u32) -> u8 {
+    if b == 32u32 { return 1u8 }
+    if b == 9u32 { return 1u8 }
+    return 0u8
+}
+
+fn ini_is_eol(b: u32) -> u8 {
+    if b == 13u32 { return 1u8 }
+    if b == 10u32 { return 1u8 }
+    return 0u8
+}
+
+fn ini_skip_ws(p: *u8, len: u64, pos: u64) -> u64 {
+    let mut i : u64 = pos
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= len { going = 0u8 }
+        if going == 1u8 {
+            let b : u32 = p[i] as u32
+            if ini_is_ws(b) == 1u8 {
+                i = i + 1u64
+            } else {
+                going = 0u8
+            }
+        }
+    }
+    return i
+}
+
+fn ini_skip_to_eol(p: *u8, len: u64, pos: u64) -> u64 {
+    let mut i : u64 = pos
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= len { going = 0u8 }
+        if going == 1u8 {
+            let b : u32 = p[i] as u32
+            if ini_is_eol(b) == 1u8 {
+                going = 0u8
+            } else {
+                i = i + 1u64
+            }
+        }
+    }
+    return i
+}
+
+fn ini_trim_right(p: *u8, start: u64, end: u64) -> u64 {
+    let mut e : u64 = end
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if e <= start { going = 0u8 }
+        if going == 1u8 {
+            let b : u32 = p[e - 1u64] as u32
+            if ini_is_ws(b) == 1u8 {
+                e = e - 1u64
+            } else {
+                going = 0u8
+            }
+        }
+    }
+    return e
+}
+
+/* Parse a section header `[name]`, updating cur_section_base/len.
+ * Returns position after the header (and after newline). */
+fn ini_parse_section(p: *u8, raw_base: u64, raw_len: u64, start_pos: u64) -> u64 {
+    let mut pos : u64 = start_pos + 1u64
+    let sec_start : u64 = pos
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if pos >= raw_len { going = 0u8 }
+        if going == 1u8 {
+            let c : u32 = p[pos] as u32
+            if c == 93u32 { going = 0u8 }
+            if ini_is_eol(c) == 1u8 { going = 0u8 }
+            if going == 1u8 { pos = pos + 1u64 }
+        }
+    }
+    INI_PARSE_SEC_BASE = raw_base + sec_start
+    INI_PARSE_SEC_LEN = pos - sec_start
+    return ini_skip_to_eol(p, raw_len, pos)
+}
+
+/* Parse a key=value or key:value pair, storing into table. */
+fn ini_parse_kv(p: *u8, raw_base: u64, raw_len: u64, start_pos: u64) -> u64 {
+    let table : u32 = INI_PARSE_TABLE
+    let key_start : u64 = start_pos
+    let mut pos : u64 = start_pos
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if pos >= raw_len { going = 0u8 }
+        if going == 1u8 {
+            let c : u32 = p[pos] as u32
+            if c == 61u32 { going = 0u8 }
+            if c == 58u32 { going = 0u8 }
+            if ini_is_eol(c) == 1u8 { going = 0u8 }
+            if going == 1u8 { pos = pos + 1u64 }
+        }
+    }
+    let key_end : u64 = ini_trim_right(p, key_start, pos)
+    if pos < raw_len {
+        let sep : u32 = p[pos] as u32
+        if sep == 61u32 { pos = pos + 1u64 }
+        if sep == 58u32 { pos = pos + 1u64 }
+    }
+    pos = ini_skip_ws(p, raw_len, pos)
+    let val_start : u64 = pos
+    pos = ini_skip_to_eol(p, raw_len, pos)
+    let val_end : u64 = ini_trim_right(p, val_start, pos)
+    let idx : u64 = INI_COUNT[table]
+    if idx < INI_ENTRY_MAX {
+        let ei : u64 = ini_index(table, idx)
+        INI_SECTION_BASE[ei] = INI_PARSE_SEC_BASE
+        INI_SECTION_LEN[ei]  = INI_PARSE_SEC_LEN
+        INI_KEY_BASE[ei]     = raw_base + key_start
+        INI_KEY_LEN[ei]      = key_end - key_start
+        INI_VALUE_BASE[ei]   = raw_base + val_start
+        INI_VALUE_LEN[ei]    = val_end - val_start
+        INI_COUNT[table] = idx + 1u64
+    }
+    return pos
+}
+
+fn ini_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
+    let table : u32 = ini_alloc_slot()
+    if table >= INI_TABLE_MAX { return 0u64 }
+    INI_PARSE_TABLE = table
+    let p : *u8 = raw_base as *u8
+    let mut pos : u64 = 0u64
+    INI_PARSE_SEC_BASE = 0u64
+    INI_PARSE_SEC_LEN = 0u64
+    while pos < raw_len {
+        pos = ini_skip_ws(p, raw_len, pos)
+        let mut handled : u8 = 0u8
+        if pos >= raw_len { handled = 1u8 }
+        if handled == 0u8 {
+            let b : u32 = p[pos] as u32
+            if b == 59u32 {
+                pos = ini_skip_to_eol(p, raw_len, pos)
+                handled = 1u8
+            }
+            if handled == 0u8 {
+                if b == 35u32 {
+                    pos = ini_skip_to_eol(p, raw_len, pos)
+                    handled = 1u8
+                }
+            }
+            if handled == 0u8 {
+                if b == 91u32 {
+                    pos = ini_parse_section(p, raw_base, raw_len, pos)
+                    handled = 1u8
+                }
+            }
+            if handled == 0u8 {
+                if ini_is_eol(b) == 1u8 {
+                    handled = 1u8
+                }
+            }
+            if handled == 0u8 {
+                pos = ini_parse_kv(p, raw_base, raw_len, pos)
+            }
+        }
+        let mut going_eol : u8 = 1u8
+        while going_eol == 1u8 {
+            if pos >= raw_len { going_eol = 0u8 }
+            if going_eol == 1u8 {
+                let c : u32 = p[pos] as u32
+                if ini_is_eol(c) == 1u8 {
+                    pos = pos + 1u64
+                } else {
+                    going_eol = 0u8
+                }
+            }
+        }
+    }
+    return (table as u64) + 1u64
+}
+
+fn ini_count(id: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_COUNT[idx]
+}
+
+fn ini_section_base(id: u64, i: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_SECTION_BASE[ini_index(idx, i)]
+}
+
+fn ini_section_len(id: u64, i: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_SECTION_LEN[ini_index(idx, i)]
+}
+
+fn ini_key_base(id: u64, i: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_KEY_BASE[ini_index(idx, i)]
+}
+
+fn ini_key_len(id: u64, i: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_KEY_LEN[ini_index(idx, i)]
+}
+
+fn ini_value_base(id: u64, i: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_VALUE_BASE[ini_index(idx, i)]
+}
+
+fn ini_value_len(id: u64, i: u64) -> u64 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return 0u64 }
+    return INI_VALUE_LEN[ini_index(idx, i)]
+}
+
+fn ini_drop(id: u64) -> i32 @export {
+    let idx : u32 = ini_resolve(id)
+    if idx == INI_TABLE_MAX { return -1i32 }
+    INI_LIVE[idx] = 0u8
+    return INI_OK
+}

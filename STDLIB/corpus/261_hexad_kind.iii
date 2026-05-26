@@ -1,0 +1,68 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\261_hexad_kind.iii
+ *
+ * III conformance corpus 261 -- @hexad_kind iiis-1 annotation with
+ * runtime prologue enforcement.
+ *
+ * Phase 3 Step 3 third feature: a fn annotated @hexad_kind(K) and
+ * accepting a `ctx: u64` parameter checks ctx.hexad_kind == K at
+ * prologue.  Mismatch → return 0xFFFFFFFFFFFFFFFF (same sentinel as
+ * @cap_required and @k_max denials — denial-mode indistinguishability
+ * preserved across all three gates).
+ *
+ * K is the numeric hexad kind 1..7 per sanctus/calculus_v1.iii
+ * conventions: 1=FORM, 2=BIND, 3=CONVEY, 4=MEAN, 5=ACT, 6=COMPOSE,
+ * 7=SEAL.
+ */
+module corpus_261
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+
+const C261_FAIL_SENTINEL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Fn requires hexad kind = FORM (1). */
+fn _form_op(ctx: u64) -> u64 @hexad_kind(1u64) {
+    let _unused : u64 = ctx
+    return 0x1111u64
+}
+
+/* Fn requires hexad kind = COMPOSE (6). */
+fn _compose_op(ctx: u64) -> u64 @hexad_kind(6u64) {
+    let _unused : u64 = ctx
+    return 0x6666u64
+}
+
+fn main() -> u64 {
+    /* Build a ctx whose hexad_kind = FORM (1). */
+    let kch_form : u64 = kchain_new(0u64)
+    if kch_form == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }
+    call_context_init_set(0u64, kch_form as u8, 2u8, 1u8)
+    let ctx_form : u64 = call_context_new()
+    if ctx_form == 0u64 { return 2u64 }
+
+    /* Build a ctx whose hexad_kind = COMPOSE (6). */
+    let kch_comp : u64 = kchain_new(0u64)
+    if kch_comp == 0xFFFFFFFFFFFFFFFFu64 { return 3u64 }
+    call_context_init_set(0u64, kch_comp as u8, 2u8, 6u8)
+    let ctx_comp : u64 = call_context_new()
+    if ctx_comp == 0u64 { return 4u64 }
+
+    /* Assertion 1: form-ctx -> form-fn = normal. */
+    let r_form_form : u64 = _form_op(ctx_form)
+    if r_form_form != 0x1111u64 { return 5u64 }
+
+    /* Assertion 2: form-ctx -> compose-fn = sentinel. */
+    let r_form_comp : u64 = _compose_op(ctx_form)
+    if r_form_comp != C261_FAIL_SENTINEL { return 6u64 }
+
+    /* Assertion 3: compose-ctx -> compose-fn = normal. */
+    let r_comp_comp : u64 = _compose_op(ctx_comp)
+    if r_comp_comp != 0x6666u64 { return 7u64 }
+
+    /* Assertion 4: compose-ctx -> form-fn = sentinel. */
+    let r_comp_form : u64 = _form_op(ctx_comp)
+    if r_comp_form != C261_FAIL_SENTINEL { return 8u64 }
+
+    return 99u64
+}

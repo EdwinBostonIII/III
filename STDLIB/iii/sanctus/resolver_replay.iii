@@ -1,0 +1,45 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\resolver_replay.iii
+ *
+ * III STDLIB - sanctus::resolver_replay -- Q7-c witness chain replay.
+ *
+ * FROZEN SPEC §V.G0005 -- replay reproduces byte-equal mhashes.
+ * This module composes the existing witness_verify_chain() (which performs
+ * byte-equal root-advance recomputation across the entire witness chain)
+ * with a per-entry mhash non-zero check. Returns 1 iff every entry has a
+ * non-zero mhash AND the chain root is byte-stable under recomputation.
+ *
+ * Exported as `sanctus_resolver_replay_check_chain` to avoid colliding
+ * with omnia/resolver_replay.iii::resolver_replay_check_chain (which
+ * performs the broader registry-sealed + witness-chain check).  Both
+ * checks are distinct: the sanctus per-entry mhash non-zero check is
+ * a Q7-c-specific gate; the omnia version is the audit-time replay
+ * gate per ADR-RES-011.  Both are needed; both must be addressable.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 0.95.
+ */
+
+module sanctus_resolver_replay
+
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_verify_chain() -> u8 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_entry_mhash_byte(idx: u32, i: u32) -> u32 from "witness.iii"
+
+fn sanctus_resolver_replay_check_chain() -> u8 @export {
+    /* Step 1: chain root must recompute byte-equal. */
+    if witness_verify_chain() == 0u8 { return 0u8 }
+    /* Step 2: every entry's mhash must be non-zero (zero indicates an
+     * uninitialised slot indexed past the high-water mark -- defense in depth). */
+    let n : u32 = witness_count()
+    let mut idx : u32 = 0u32
+    while idx < n {
+        let mut nonzero : u8 = 0u8
+        let mut k : u32 = 0u32
+        while k < 32u32 {
+            if witness_entry_mhash_byte(idx, k) != 0u32 { nonzero = 1u8 }
+            k = k + 1u32
+        }
+        if nonzero == 0u8 { return 0u8 }
+        idx = idx + 1u32
+    }
+    return 1u8
+}

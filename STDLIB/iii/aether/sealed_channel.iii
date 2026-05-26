@@ -1,0 +1,278 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\sealed_channel.iii
+ *
+ * III STDLIB - aether::sealed_channel
+ *
+ * x25519 ECDH + ChaCha20-Poly1305 AEAD sealed channel (Phase D.3 of
+ * the Intent Calculus v1.0 wire stack). Replaces TLS for III-to-III
+ * peer communication.
+ *
+ * Handshake (caller-orchestrated):
+ *   1. local generates ephemeral x25519 secret + public key
+ *   2. local sends public key to peer (via babel_wire)
+ *   3. peer does the same
+ *   4. each side computes shared secret = x25519(my_secret, peer_public)
+ *   5. derive symmetric key + nonce from shared_secret via SHA-256
+ *   6. each subsequent message is sc_send/sc_recv (encrypted + MAC'd)
+ *
+ * Storage: 64 channel slots; per-slot 32-byte shared secret + 32-byte
+ * derived key + tx/rx nonces.
+ *
+ * Determinism: handshake is deterministic given the input keypairs.
+ * Encryption is deterministic given (key, nonce). Replay is rejected
+ * via monotonic nonce.
+ *
+ * Hexad: kind_passage (cross-boundary). Ring: R0. K: 0.95.
+ */
+
+module aether_sealed_channel
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_init(key: *u8, nonce: *u8) -> i32 from "chacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_aad(aad: *u8, aad_len: u64) -> i32 from "chacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 from "chacha20_poly1305.iii"
+extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 from "chacha20_poly1305.iii"
+
+const SC_CAP             : u32 = 64u32
+
+const SC_OK              : i32 =  0i32
+const SC_E_NULL          : i32 = -1i32
+const SC_E_FULL          : i32 = -2i32
+const SC_E_BAD_CHANNEL   : i32 = -3i32
+const SC_E_BAD_TAG       : i32 = -4i32
+const SC_E_NONCE_OVERFLOW: i32 = -5i32
+
+/* Per-channel state. */
+var SC_DERIVED_KEY  : [u8; 2048]   /* 64 * 32 */
+var SC_SESSION_ID   : [u8; 512]    /* 64 * 8 -- 8-byte session_id per channel */
+var SC_NONCE_TX     : [u64; 64]
+var SC_NONCE_RX     : [u64; 64]
+var SC_LIVE         : [u8; 64]
+var SC_USED         : u32 = 0u32
+
+/* Scratch buffers for nonce derivation. */
+var SC_NONCE_BUF    : [u8; 12]
+/* Scratch for the 32-byte SHA-256 of the derived key (session_id derivation). */
+var SC_SID_SCRATCH  : [u8; 32]
+
+fn _sc_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < SC_CAP {
+        if SC_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn _sc_slot_of(channel_id: u64) -> u32 {
+    let l_id : u64 = channel_id
+    if l_id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = l_id - 1u64
+    if s >= (SC_CAP as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if SC_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Encode a u64 nonce counter as 12-byte little-endian for ChaCha20-Poly1305.
+ * Layout: 4 bytes constant 0x00 || 8 bytes counter LE.
+ * Per RFC 8439 the IV is 96 bits; we use counter | 0-prefix. */
+fn _sc_make_nonce(counter: u64) -> i32 {
+    let l_c : u64 = counter
+    SC_NONCE_BUF[0] = 0u8
+    SC_NONCE_BUF[1] = 0u8
+    SC_NONCE_BUF[2] = 0u8
+    SC_NONCE_BUF[3] = 0u8
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        SC_NONCE_BUF[4u32 + i] = ((l_c >> ((i & 0x7u32) * 8u32)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    return SC_OK
+}
+
+/* sc_handshake_init: derive symmetric key from x25519 ECDH +
+ * peer-public + my-secret. peer_pubkey_ptr and my_secret_ptr both
+ * point to 32-byte scalars. Returns channel_id (1-based) or 0. */
+fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 @export {
+    let pk_l  : u64 = peer_pubkey_ptr
+    let sk_l  : u64 = my_secret_ptr
+    if pk_l == 0u64 { return 0u64 }
+    if sk_l == 0u64 { return 0u64 }
+    let s : u32 = _sc_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+
+    /* Compute shared secret = x25519(my_secret, peer_public). */
+    let off : u32 = s * 32u32
+    let key_dst : *u8 = ((&SC_DERIVED_KEY) as u64 + (off as u64)) as *u8
+    /* Reuse the slot's space for the shared secret (32B) -- it will be
+     * overwritten in place by the SHA-256 derivation step. */
+    x25519(key_dst, sk_l as *u8, pk_l as *u8)
+
+    /* Derive symmetric key = SHA-256(shared_secret). */
+    sha256_oneshot(key_dst, 32u64, key_dst)
+
+    /* Derive session_id = SHA-256(derived_key) truncated to 8 bytes.
+     * Both sides start from identical shared_secret so derived_key is
+     * identical, hence session_id is identical -- usable as AAD. */
+    let sid_scratch : *u8 = (&SC_SID_SCRATCH) as *u8
+    sha256_oneshot(key_dst, 32u64, sid_scratch)
+    let sid_off : u32 = s * 8u32
+    let sid_dst : *u8 = ((&SC_SESSION_ID) as u64 + (sid_off as u64)) as *u8
+    let mut bi : u64 = 0u64
+    while bi < 8u64 {
+        sid_dst[bi] = sid_scratch[bi]
+        bi = bi + 1u64
+    }
+
+    SC_NONCE_TX[s] = 0u64
+    SC_NONCE_RX[s] = 0u64
+    SC_LIVE[s]     = 1u8
+    if SC_USED < SC_CAP { SC_USED = SC_USED + 1u32 }
+    return (s as u64) + 1u64
+}
+
+/* Diagnostic: read 1 byte of the per-channel session_id. */
+fn sc_session_id_byte(channel_id: u64, i: u32) -> u32 @export {
+    let l_id : u64 = channel_id
+    let l_i  : u32 = i
+    let s : u32 = _sc_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0x100u32 }
+    if l_i >= 8u32 { return 0x100u32 }
+    let off : u32 = s * 8u32
+    return SC_SESSION_ID[off + l_i] as u32
+}
+
+/* sc_send: encrypt plaintext_ptr[0..len] in place via the channel's
+ * key + tx_nonce. The plaintext buffer is overwritten with ciphertext;
+ * tag (16 bytes) is written to tag_out_ptr. */
+fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i32 @export {
+    let l_id  : u64 = channel_id
+    let l_pt  : u64 = plaintext_ptr
+    let l_len : u32 = len
+    let l_tag : u64 = tag_out_ptr
+    if l_pt == 0u64 { return SC_E_NULL }
+    if l_tag == 0u64 { return SC_E_NULL }
+    let s : u32 = _sc_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return SC_E_BAD_CHANNEL }
+
+    /* Bump nonce; reject overflow. */
+    let n : u64 = SC_NONCE_TX[s]
+    if n == 0xFFFFFFFFFFFFFFFFu64 { return SC_E_NONCE_OVERFLOW }
+    SC_NONCE_TX[s] = n + 1u64
+
+    _sc_make_nonce(n)
+    let off : u32 = s * 32u32
+    let key_p : *u8 = ((&SC_DERIVED_KEY) as u64 + (off as u64)) as *u8
+    aead_chacha20_poly1305_init(key_p, (&SC_NONCE_BUF) as *u8)
+    /* AAD = 8-byte session_id. Both peers derive identical session_id
+     * from the shared secret, so AAD matches across nodes. */
+    let sid_off : u32 = s * 8u32
+    let sid_p : *u8 = ((&SC_SESSION_ID) as u64 + (sid_off as u64)) as *u8
+    aead_chacha20_poly1305_aad(sid_p, 8u64)
+    aead_chacha20_poly1305_seal(l_pt as *u8, (l_len as u64) & 0xFFFFFFFFu64,
+                                  l_pt as *u8, l_tag as *u8)
+    return SC_OK
+}
+
+/* sc_recv: verify-and-decrypt ciphertext_ptr[0..len] in place via the
+ * channel's key + rx_nonce. tag_in_ptr is the 16-byte authentication
+ * tag from the sender. Returns SC_OK on auth success; SC_E_BAD_TAG on
+ * mismatch (plaintext NOT exposed). */
+fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 @export {
+    let l_id  : u64 = channel_id
+    let l_ct  : u64 = ciphertext_ptr
+    let l_len : u32 = len
+    let l_tag : u64 = tag_in_ptr
+    if l_ct == 0u64 { return SC_E_NULL }
+    if l_tag == 0u64 { return SC_E_NULL }
+    let s : u32 = _sc_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return SC_E_BAD_CHANNEL }
+
+    let n : u64 = SC_NONCE_RX[s]
+    if n == 0xFFFFFFFFFFFFFFFFu64 { return SC_E_NONCE_OVERFLOW }
+    SC_NONCE_RX[s] = n + 1u64
+
+    _sc_make_nonce(n)
+    let off : u32 = s * 32u32
+    let key_p : *u8 = ((&SC_DERIVED_KEY) as u64 + (off as u64)) as *u8
+    aead_chacha20_poly1305_init(key_p, (&SC_NONCE_BUF) as *u8)
+    /* AAD = session_id (matches sc_send). */
+    let sid_off : u32 = s * 8u32
+    let sid_p : *u8 = ((&SC_SESSION_ID) as u64 + (sid_off as u64)) as *u8
+    aead_chacha20_poly1305_aad(sid_p, 8u64)
+    let ok : u8 = aead_chacha20_poly1305_open(l_ct as *u8, (l_len as u64) & 0xFFFFFFFFu64,
+                                                l_ct as *u8, l_tag as *u8)
+    if ok != 1u8 { return SC_E_BAD_TAG }
+    return SC_OK
+}
+
+/* sc_close: zero the channel's derived key + session_id + state. */
+fn sc_close(channel_id: u64) -> i32 @export {
+    let l_id : u64 = channel_id
+    let s : u32 = _sc_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return SC_E_BAD_CHANNEL }
+    let off : u32 = s * 32u32
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        SC_DERIVED_KEY[off + i] = 0u8
+        i = i + 1u32
+    }
+    let sid_off : u32 = s * 8u32
+    let mut sj : u32 = 0u32
+    while sj < 8u32 {
+        SC_SESSION_ID[sid_off + sj] = 0u8
+        sj = sj + 1u32
+    }
+    SC_NONCE_TX[s] = 0u64
+    SC_NONCE_RX[s] = 0u64
+    SC_LIVE[s]     = 0u8
+    if SC_USED > 0u32 { SC_USED = SC_USED - 1u32 }
+    return SC_OK
+}
+
+fn sc_count() -> u32 @export {
+    return SC_USED
+}
+
+fn sc_capacity() -> u32 @export {
+    return SC_CAP
+}
+
+fn sc_reset_all() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < SC_CAP {
+        SC_NONCE_TX[i] = 0u64
+        SC_NONCE_RX[i] = 0u64
+        SC_LIVE[i]     = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    let total : u32 = SC_CAP * 32u32
+    while j < total {
+        SC_DERIVED_KEY[j] = 0u8
+        j = j + 1u32
+    }
+    let mut k : u32 = 0u32
+    let sid_total : u32 = SC_CAP * 8u32
+    while k < sid_total {
+        SC_SESSION_ID[k] = 0u8
+        k = k + 1u32
+    }
+    SC_USED = 0u32
+    return SC_OK
+}
+
+/* Read 1 byte of derived key (diagnostic; deliberate accessor for
+ * test-time verification of key derivation determinism). */
+fn sc_derived_key_byte(channel_id: u64, i: u32) -> u32 @export {
+    let l_id : u64 = channel_id
+    let l_i  : u32 = i
+    let s : u32 = _sc_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0x100u32 }
+    if l_i >= 32u32 { return 0x100u32 }
+    let off : u32 = s * 32u32
+    return SC_DERIVED_KEY[off + l_i] as u32
+}
+

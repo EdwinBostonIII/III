@@ -1,0 +1,44 @@
+/* fold over [10, 20, 30, 40, 50]: sum=150, max=50, xor=10^20^30^40^50 */
+module corpus_b25
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iter_u8_new(base: u64, len: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_drop(id: u64) -> u8 from "iter.iii"
+extern @abi(c-msvc-x64) fn fold_u8_u32_sum(id: u64) -> u32 from "fold.iii"
+extern @abi(c-msvc-x64) fn fold_u8_u32_xor(id: u64) -> u32 from "fold.iii"
+extern @abi(c-msvc-x64) fn fold_u8_u32_max(id: u64) -> u32 from "fold.iii"
+extern @abi(c-msvc-x64) fn fold_u8_u32_count(id: u64) -> u64 from "fold.iii"
+
+fn main() -> u64 {
+    let p : *u8 = malloc(5u64)
+    p[0] = 10u8
+    p[1] = 20u8
+    p[2] = 30u8
+    p[3] = 40u8
+    p[4] = 50u8
+
+    let it1 : u64 = iter_u8_new(p as u64, 5u64)
+    let s : u32 = fold_u8_u32_sum(it1)
+    iter_u8_drop(it1)
+    if s != 150u32 { return 1u64 }
+
+    let it2 : u64 = iter_u8_new(p as u64, 5u64)
+    let m : u32 = fold_u8_u32_max(it2)
+    iter_u8_drop(it2)
+    if m != 50u32 { return 2u64 }
+
+    let it3 : u64 = iter_u8_new(p as u64, 5u64)
+    let n : u64 = fold_u8_u32_count(it3)
+    iter_u8_drop(it3)
+    if n != 5u64 { return 3u64 }
+
+    let it4 : u64 = iter_u8_new(p as u64, 5u64)
+    let x : u32 = fold_u8_u32_xor(it4)
+    iter_u8_drop(it4)
+    /* 10^20 = 30, ^30 = 0, ^40 = 40, ^50 = 26 */
+    if x != 26u32 { return 4u64 }
+
+    free(p)
+    return 99u64
+}

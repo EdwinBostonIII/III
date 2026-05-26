@@ -1,0 +1,11 @@
+module corpus_14
+
+cycle compute() -> u64 @ring(R3) @hexad(POS, POS, POS, ZERO, ZERO, ZERO) {
+    forward {
+        return 42
+    }
+}
+
+fn main() -> u64 {
+    return compute()
+}

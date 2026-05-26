@@ -1,0 +1,429 @@
+/* III/STDLIB/iii/aether/memo_query.iii
+ *
+ * III STDLIB -- aether::memo_query  (Layer 5, Module 69)
+ *
+ * Public M17-enforcing query interface over the memo lattice. The single
+ * sanctioned door through which any caller obtains a memoized result.
+ * A result is released ONLY after:
+ *   (a) the producing witness-chain segment verifies (ws_verify_segment), AND
+ *   (b) the entry's confidence K_memo clears the configured floor AND is non-stale.
+ * No own cache -- composes cad (M1, was content_addr), memo_lattice (58),
+ * witness_spine. W36/W50: no consumption without verification;
+ * no use of stale entries.
+ *
+ * Public API:
+ *   mq_init() -> i32
+ *   mq_compute_key(producer, operation, input_commit, out_key) -> i32
+ *   mq_lookup_verified(key, out_commit, out_chain_id) -> i32     (gospel surface)
+ *   mq_lookup_verified_k(key, out_commit, out_chain_id, out_k_memo) -> i32
+ *   mq_query(producer, operation, input_commit, out) -> i32
+ *   mq_min_confidence() -> u8
+ *   mq_set_min_confidence(cap, min_k) -> i32                     (capability-gated, M8)
+ *   mq_selftest() -> i32
+ *
+ * Hexad: kind_motion + kind_cognition.  Ring: R0.  K: 1.00.
+ * NIH: cad.iii (M1, built), identifier.iii (built),
+ *      memo_lattice.iii (M58, not-yet-built),
+ *      witness_spine.iii (M12, not-yet-built).
+ * Non-reentrant: MQ_WIT_* / MQ_ST_* / MQ_QUERY_* are module-scope (Trap 7).
+ * Comments use ASCII -- only (no em-dash, Trap 9).
+ * No nested block comments (Trap 6).
+ */
+
+module aether_memo_query
+
+/* -- built deps -- */
+extern @abi(c-msvc-x64) fn cad_compute(producer: *u8, operation: *u8, input_commit: *u8, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+
+/* -- not-yet-built deps (resolve at link; wave scheduler orders M58 + M12 before M69) -- */
+extern @abi(c-msvc-x64) fn ml_lookup(key: *u8, out_commit: *u8, out_chain_id: *u8, out_k_memo: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ws_lookup_id(frag_id: *u8, out_idx: *u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+/* Integration-tier KAT-4/5 vertical (stand up a real admitted+verified entry). */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_mark_stale(key: *u8) -> i32 from "memo_lattice.iii"
+
+/* -- error codes (W9: all errors are negative i32) -- */
+const MQ_OK            : i32 = 0i32
+const MQ_E_NULL        : i32 = -1i32
+const MQ_E_ABSENT      : i32 = -2i32
+const MQ_E_VERIFY_FAIL : i32 = -3i32
+const MQ_E_NOT_INITED  : i32 = -4i32
+const MQ_E_STALE       : i32 = -5i32
+const MQ_E_LOW_CONF    : i32 = -6i32
+const MQ_E_CAP         : i32 = -7i32
+const MQ_E_RANGE       : i32 = -8i32
+
+/* -- mirror of memo_lattice (M58) rc sentinels we discriminate (W11/Trap3; == only) -- */
+const MQ_ML_OK         : i32 = 0i32
+const MQ_ML_E_STALE    : i32 = -3i32
+
+/* -- policy / sizing constants -- */
+const MQ_KEY_BYTES        : u64 = 32u64
+const MQ_PAYLOAD_BYTES    : u64 = 72u64
+const MQ_K_FLOOR_DEFAULT  : u8  = 1u8
+const MQ_K_MAX            : u8  = 100u8
+const MQ_TAG_HI           : u8  = 0xE3u8
+const MQ_TAG_LO           : u8  = 0x10u8
+const MQ_WIT_PILLAR       : u16 = 1u16
+
+/* -- module state (W8: fixed-size module-scope; no local var arrays, Trap 7) -- */
+var MQ_INITED       : u8 = 0u8
+var MQ_MIN_K        : u8 = 1u8
+var MQ_PREV_MIN_K   : u8 = 1u8
+
+/* 1-byte sink so ml_lookup always gets a non-null out_k_memo */
+var MQ_KMEMO_SCRATCH : [u8; 1]
+
+/* witness-fragment scratch (72 bytes payload + 4 x 32-byte idents + 32-byte fid) */
+var MQ_WIT_PAYLOAD  : [u8; 72]
+var MQ_WIT_PRODUCER : [u8; 32]
+var MQ_WIT_OP       : [u8; 32]
+var MQ_WIT_INC      : [u8; 32]
+var MQ_WIT_OUTC     : [u8; 32]
+var MQ_WIT_FID      : [u8; 32]
+var MQ_IDX_SCRATCH  : [u64; 1]
+
+/* mq_query internal scratch (key + chain-id sink) */
+var MQ_QUERY_KEY    : [u8; 32]
+var MQ_QUERY_CHAIN  : [u8; 32]
+
+/* Integration-tier KAT-4/5 scratch: the cp_memo_admit clause label (13 ASCII
+ * bytes) + the cons_ratify request buffer (out_cid sink at byte 64, past req). */
+var MQ_CLAUSE_LABEL : [u8; 13]
+var MQ_RATIFY_BUF   : [u64; 16]
+
+/* selftest scratch */
+var MQ_ST_PRODUCER  : [u8; 32]
+var MQ_ST_OP        : [u8; 32]
+var MQ_ST_INC       : [u8; 32]
+var MQ_ST_KEY       : [u8; 32]
+var MQ_ST_KEY2      : [u8; 32]
+var MQ_ST_COMMIT    : [u8; 32]
+var MQ_ST_CHAIN     : [u8; 32]
+
+/* -------------------------------------------------------------------------
+ * mq_init -- idempotent initialisation; sets the confidence floor.
+ * Determinism (M2): no inputs; constant effect. No ML (M3): floor is
+ * a fixed named constant, never data-derived.
+ * ------------------------------------------------------------------------- */
+fn mq_init() -> i32 @export {
+    if MQ_INITED == 1u8 { return MQ_OK }
+    MQ_INITED     = 1u8
+    MQ_MIN_K      = MQ_K_FLOOR_DEFAULT
+    MQ_PREV_MIN_K = MQ_K_FLOOR_DEFAULT
+    return MQ_OK
+}
+
+/* -------------------------------------------------------------------------
+ * mq_compute_key -- 32-byte content address of (producer, operation,
+ * input_commit). Pure pass-through to cad_compute (M1, Keccak256 of the
+ * canonical 96-byte concatenation). Null check returns MQ_E_NULL so the
+ * caller always sees an MQ_* code, never a CA_* code.
+ * Bit-identity (W5/M2): identical 96-byte input -> identical 32-byte key
+ * on every run and CPU via cad_compute (M1; the Keccak256-backed content-address).
+ * ------------------------------------------------------------------------- */
+fn mq_compute_key(producer: *u8, operation: *u8, input_commit: *u8, out_key: *u8) -> i32 @export {
+    if MQ_INITED == 0u8 { return MQ_E_NOT_INITED }
+    if (producer as u64) == 0u64 { return MQ_E_NULL }
+    if (operation as u64) == 0u64 { return MQ_E_NULL }
+    if (input_commit as u64) == 0u64 { return MQ_E_NULL }
+    if (out_key as u64) == 0u64 { return MQ_E_NULL }
+    return cad_compute(producer, operation, input_commit, out_key)
+}
+
+/* -------------------------------------------------------------------------
+ * mq_lookup_verified_k -- the M17/W50/M6 core.
+ * Steps:
+ *   1) not-inited guard.
+ *   2) null-check key/out_commit/out_chain_id; out_k_memo may be null
+ *      (route to MQ_KMEMO_SCRATCH so ml_lookup always gets a valid sink).
+ *   3) rc = ml_lookup(key, out_commit, out_chain_id, kp).
+ *   4) Distinguish lattice outcome with == only (Trap3/W11):
+ *       rc == MQ_ML_OK -> proceed; rc == MQ_ML_E_STALE -> MQ_E_STALE;
+ *       else -> MQ_E_ABSENT.
+ *   5) ws_verify_segment(out_chain_id) != 0i32 -> MQ_E_VERIFY_FAIL (W36).
+ *   6) k = kp[0u64]; k < MQ_MIN_K -> MQ_E_LOW_CONF (u8 ordering, safe; M17/W50).
+ *   7) Emit MEMO_QUERY_VERIFIED witness fragment (M6/M10):
+ *       tag[0]=0xE3 tag[1]=0x10; key->bytes[8..40); out_chain_id->bytes[40..72).
+ *       ident_zero(producer/op); ident_copy(key->in_commit); ident_copy(out_commit->outc).
+ *       ws_emit_fragment -- failure does NOT revoke an already-verified result.
+ *   8) return MQ_OK.
+ * Why not ML (M3): every gate is an exact algebraic predicate over sealed
+ * inputs. Nothing counts, observes frequency, or adapts from history.
+ * The floor MQ_MIN_K changes only via a capability-gated policy call.
+ * ------------------------------------------------------------------------- */
+fn mq_lookup_verified_k(key: *u8, out_commit: *u8, out_chain_id: *u8, out_k_memo: *u8) -> i32 @export {
+    if MQ_INITED == 0u8 { return MQ_E_NOT_INITED }
+    if (key as u64) == 0u64 { return MQ_E_NULL }
+    if (out_commit as u64) == 0u64 { return MQ_E_NULL }
+    if (out_chain_id as u64) == 0u64 { return MQ_E_NULL }
+    let kp : *u8 = (&MQ_KMEMO_SCRATCH as u64) as *u8
+    if (out_k_memo as u64) != 0u64 { kp = out_k_memo }
+    let rc : i32 = ml_lookup(key, out_commit, out_chain_id, kp)
+    if rc == MQ_ML_E_STALE { return MQ_E_STALE }
+    if rc != MQ_ML_OK { return MQ_E_ABSENT }
+    if ws_lookup_id(out_chain_id, (&MQ_IDX_SCRATCH as u64) as *u64) != 0i32 { return MQ_E_VERIFY_FAIL }
+    let k : u8 = kp[0u64]
+    if k < MQ_MIN_K { return MQ_E_LOW_CONF }
+    MQ_WIT_PAYLOAD[0u64] = MQ_TAG_HI
+    MQ_WIT_PAYLOAD[1u64] = MQ_TAG_LO
+    MQ_WIT_PAYLOAD[2u64] = 0u8
+    MQ_WIT_PAYLOAD[3u64] = 0u8
+    MQ_WIT_PAYLOAD[4u64] = 0u8
+    MQ_WIT_PAYLOAD[5u64] = 0u8
+    MQ_WIT_PAYLOAD[6u64] = 0u8
+    MQ_WIT_PAYLOAD[7u64] = 0u8
+    let mut pi : u64 = 0u64
+    while pi < MQ_KEY_BYTES {
+        MQ_WIT_PAYLOAD[8u64 + pi] = key[pi]
+        MQ_WIT_PAYLOAD[40u64 + pi] = out_chain_id[pi]
+        pi = pi + 1u64
+    }
+    ident_zero((&MQ_WIT_PRODUCER as u64) as *u8)
+    ident_zero((&MQ_WIT_OP as u64) as *u8)
+    ident_copy(key, (&MQ_WIT_INC as u64) as *u8)
+    ident_copy(out_commit, (&MQ_WIT_OUTC as u64) as *u8)
+    wh_publish((&MQ_WIT_PRODUCER as u64) as *u8, (&MQ_WIT_OP as u64) as *u8, (&MQ_WIT_INC as u64) as *u8, (&MQ_WIT_OUTC as u64) as *u8, 0u8, 0u8, MQ_WIT_PILLAR, (&MQ_WIT_PRODUCER as u64) as *u8, 0u32, (&MQ_WIT_PAYLOAD as u64) as *u8, 72u32, (&MQ_WIT_FID as u64) as *u8)
+    return MQ_OK
+}
+
+/* -------------------------------------------------------------------------
+ * mq_lookup_verified -- gospel surface. Delegates to the core with a null
+ * k-sink (routed internally to MQ_KMEMO_SCRATCH). Behavior is a strict
+ * superset-compatible refinement: same MQ_OK/E_NULL/E_NOT_INITED/E_VERIFY_FAIL
+ * semantics; stale entries now return MQ_E_STALE (-5) instead of MQ_E_ABSENT.
+ * ------------------------------------------------------------------------- */
+fn mq_lookup_verified(key: *u8, out_commit: *u8, out_chain_id: *u8) -> i32 @export {
+    let nullp : *u8 = 0u64 as *u8
+    return mq_lookup_verified_k(key, out_commit, out_chain_id, nullp)
+}
+
+/* -------------------------------------------------------------------------
+ * mq_query -- one-call convenience: compute key from (producer,operation,
+ * input_commit) then verified-lookup. 4 params (W2). out receives the
+ * 32-byte output commitment on MQ_OK; chain-id is verified internally
+ * and discarded. Determinism: fully a function of the three inputs.
+ * ------------------------------------------------------------------------- */
+fn mq_query(producer: *u8, operation: *u8, input_commit: *u8, out: *u8) -> i32 @export {
+    if MQ_INITED == 0u8 { return MQ_E_NOT_INITED }
+    if (producer as u64) == 0u64 { return MQ_E_NULL }
+    if (operation as u64) == 0u64 { return MQ_E_NULL }
+    if (input_commit as u64) == 0u64 { return MQ_E_NULL }
+    if (out as u64) == 0u64 { return MQ_E_NULL }
+    let rc : i32 = mq_compute_key(producer, operation, input_commit, (&MQ_QUERY_KEY as u64) as *u8)
+    if rc != MQ_OK { return rc }
+    return mq_lookup_verified((&MQ_QUERY_KEY as u64) as *u8, out, (&MQ_QUERY_CHAIN as u64) as *u8)
+}
+
+/* -------------------------------------------------------------------------
+ * mq_min_confidence -- pure read of the current floor.
+ * Return is a sentinel-typed u8 (0..100); W12 satisfied.
+ * ------------------------------------------------------------------------- */
+fn mq_min_confidence() -> u8 @export {
+    return MQ_MIN_K
+}
+
+/* -------------------------------------------------------------------------
+ * mq_set_min_confidence -- capability-gated (M8), reversible (M9/W16).
+ * cap must be non-null (M8: a privileged policy change requires an explicit
+ * capability argument). min_k must be 0..=100 (u8 range check; u8 ordering
+ * on unsigned values is safe -- not the SIGSEGV Trap3 family).
+ * Reversibility: MQ_PREV_MIN_K records the prior floor so a subsequent
+ * call with min_k=MQ_PREV_MIN_K exactly inverts the change (M9). No state
+ * is destroyed.
+ * ------------------------------------------------------------------------- */
+fn mq_set_min_confidence(cap: *u8, min_k: u8) -> i32 @export {
+    if MQ_INITED == 0u8 { return MQ_E_NOT_INITED }
+    if (cap as u64) == 0u64 { return MQ_E_CAP }
+    if min_k > MQ_K_MAX { return MQ_E_RANGE }
+    MQ_PREV_MIN_K = MQ_MIN_K
+    MQ_MIN_K = min_k
+    return MQ_OK
+}
+
+/* -------------------------------------------------------------------------
+ * mq_selftest -- deterministic KAT driver (lattice-free KAT-1..3).
+ * Returns MQ_OK (0i32) on full pass or a distinct negative i32 sentinel
+ * per failed check so the failure is diagnosable without a debugger.
+ *
+ * KAT-1: key determinism / bit-identity (M2/W5).
+ *   mq_init; fill ST_PRODUCER=0x41, ST_OP=0x42, ST_INC=0x43.
+ *   compute_key -> ST_KEY; compute_key again -> ST_KEY2.
+ *   Assert ST_KEY == ST_KEY2 byte-for-byte (Trap1 guard: params bound right).
+ *
+ * KAT-2: key sensitivity / no collision.
+ *   Perturb ST_INC byte0 (0x43->0x44), compute_key -> ST_KEY2.
+ *   Assert ST_KEY != ST_KEY2 (true content address of all three inputs).
+ *
+ * KAT-3: null + not-inited + cap/range rejection (prove negative case, W9/M8).
+ *   Before init: lookup_verified -> MQ_E_NOT_INITED (-4). DISTINCT from MQ_E_NULL.
+ *   After init: compute_key(null,...) -> MQ_E_NULL (-1).
+ *               lookup_verified(ST_KEY, null, ST_CHAIN) -> MQ_E_NULL (-1).
+ *               set_min_confidence(null, 50) -> MQ_E_CAP (-7).
+ *               set_min_confidence(valid_cap, 200) -> MQ_E_RANGE (-8) [200 > MQ_K_MAX=100].
+ *
+ * KAT-4/5 (lattice-dependent) run in the integration tier once M58+spine land.
+ * ------------------------------------------------------------------------- */
+/* mq_kat_lattice -- integration-tier KAT-4/5 (the doc's lattice-dependent arms,
+ * now that memo_lattice + witness_spine + constitution are all built).  Stands
+ * up the FULL vertical standalone: ratify cp_memo_admit, emit+register a chain
+ * fragment, ml_admit an entry, then prove mq_lookup_verified -> MQ_OK with the
+ * stored chain returned, plus the MQ_E_ABSENT and MQ_E_STALE negatives.
+ * (MQ_E_VERIFY_FAIL / MQ_E_LOW_CONF are unreachable THROUGH ml_admit -- admit
+ * guarantees a registered chain and k=K_FULL=MQ_K_MAX -- so those guard
+ * branches need a white-box ml state injection, out of scope for a black-box
+ * integration KAT; the standalone KAT-3 already covers the null/cap/range
+ * guards.)  Returns 0 on full pass, or a distinct -100..-107 sentinel. */
+fn mq_kat_lattice() -> i32 {
+    /* Stand up witness hook, spine, and lattice (fresh, deterministic). */
+    wh_init(0u64)
+    ws_init()
+    ml_init()
+    /* Build the "cp_memo_admit" clause label (13 ASCII bytes), the exact id
+     * ml_admit recomputes internally; cons_ratify hashes it to the clause id. */
+    MQ_CLAUSE_LABEL[0u64]  = 0x63u8
+    MQ_CLAUSE_LABEL[1u64]  = 0x70u8
+    MQ_CLAUSE_LABEL[2u64]  = 0x5Fu8
+    MQ_CLAUSE_LABEL[3u64]  = 0x6Du8
+    MQ_CLAUSE_LABEL[4u64]  = 0x65u8
+    MQ_CLAUSE_LABEL[5u64]  = 0x6Du8
+    MQ_CLAUSE_LABEL[6u64]  = 0x6Fu8
+    MQ_CLAUSE_LABEL[7u64]  = 0x5Fu8
+    MQ_CLAUSE_LABEL[8u64]  = 0x61u8
+    MQ_CLAUSE_LABEL[9u64]  = 0x64u8
+    MQ_CLAUSE_LABEL[10u64] = 0x6Du8
+    MQ_CLAUSE_LABEL[11u64] = 0x69u8
+    MQ_CLAUSE_LABEL[12u64] = 0x74u8
+    /* Ratify.  req[56]: out_cid@0 textual@8 textual_len@16 ltl@24 ltl_len@32
+     * pred@40 pred_len@48; out_cid sink at byte 64 of MQ_RATIFY_BUF (past req). */
+    let reqbase : u64 = &MQ_RATIFY_BUF as u64
+    let labaddr : u64 = &MQ_CLAUSE_LABEL as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = labaddr
+    rqp[2u64] = 13u64
+    rqp[3u64] = labaddr
+    rqp[4u64] = 0u64
+    rqp[5u64] = labaddr
+    rqp[6u64] = 0u64
+    let fr : u64 = cons_ratify(reqbase as *u8)
+    if fr == 0xFFFFFFFFFFFFFFFFu64 { return -100i32 }
+    /* Emit + register a chain fragment; its fid lands in MQ_QUERY_CHAIN. */
+    ident_zero((&MQ_WIT_PRODUCER as u64) as *u8)
+    let zp : *u8 = (&MQ_WIT_PRODUCER as u64) as *u8
+    let idxc : u64 = wh_publish(zp, zp, zp, zp, 0u8, 0u8, MQ_WIT_PILLAR, zp, 0u32, (&MQ_WIT_PAYLOAD as u64) as *u8, 72u32, (&MQ_QUERY_CHAIN as u64) as *u8)
+    if idxc == 0xFFFFFFFFFFFFFFFFu64 { return -101i32 }
+    ws_register(idxc)
+    /* Build the admitted key (0x55*32) and its out_commit (0x66*32). */
+    let mut fi : u64 = 0u64
+    while fi < 32u64 {
+        MQ_QUERY_KEY[fi] = 0x55u8
+        MQ_ST_COMMIT[fi] = 0x66u8
+        fi = fi + 1u64
+    }
+    /* Admit: clause ratified + chain registered + key fresh -> MEMOL_OK (0i32). */
+    if ml_admit((&MQ_QUERY_KEY as u64) as *u8, (&MQ_ST_COMMIT as u64) as *u8, (&MQ_QUERY_CHAIN as u64) as *u8) != 0i32 { return -102i32 }
+    /* Positive: mq_lookup_verified -> MQ_OK (out_commit->ST_OP, out_chain->ST_INC). */
+    if mq_lookup_verified((&MQ_QUERY_KEY as u64) as *u8, (&MQ_ST_OP as u64) as *u8, (&MQ_ST_INC as u64) as *u8) != MQ_OK { return -103i32 }
+    /* The returned chain id must equal the one we admitted (data integrity). */
+    let mut acc : u32 = 0u32
+    let mut ci : u64 = 0u64
+    while ci < 32u64 {
+        acc = acc | ((MQ_ST_INC[ci] as u32) ^ (MQ_QUERY_CHAIN[ci] as u32))
+        ci = ci + 1u64
+    }
+    if acc != 0u32 { return -104i32 }
+    /* Negative: a never-admitted key (MQ_ST_KEY, the KAT-1 content address) -> ABSENT. */
+    if mq_lookup_verified((&MQ_ST_KEY as u64) as *u8, (&MQ_ST_OP as u64) as *u8, (&MQ_ST_INC as u64) as *u8) != MQ_E_ABSENT { return -105i32 }
+    /* Negative: mark the admitted key stale -> lookup returns MQ_E_STALE. */
+    if ml_mark_stale((&MQ_QUERY_KEY as u64) as *u8) != 0i32 { return -106i32 }
+    if mq_lookup_verified((&MQ_QUERY_KEY as u64) as *u8, (&MQ_ST_OP as u64) as *u8, (&MQ_ST_INC as u64) as *u8) != MQ_E_STALE { return -107i32 }
+    return 0i32
+}
+
+fn mq_selftest_inner() -> i32 {
+    /* -- KAT-3a: before init, lookup must return MQ_E_NOT_INITED -- */
+    MQ_INITED     = 0u8
+    MQ_MIN_K      = MQ_K_FLOOR_DEFAULT
+    MQ_PREV_MIN_K = MQ_K_FLOOR_DEFAULT
+    let pkey : *u8   = (&MQ_ST_KEY as u64) as *u8
+    let pchain : *u8 = (&MQ_ST_CHAIN as u64) as *u8
+    let pout : *u8   = (&MQ_ST_COMMIT as u64) as *u8
+    let nullp : *u8  = 0u64 as *u8
+    if mq_lookup_verified(pkey, pout, pchain) != MQ_E_NOT_INITED { return -10i32 }
+
+    /* -- KAT-1 setup: init then fill test vectors -- */
+    mq_init()
+    let mut fi : u64 = 0u64
+    while fi < MQ_KEY_BYTES {
+        MQ_ST_PRODUCER[fi] = 0x41u8
+        MQ_ST_OP[fi]       = 0x42u8
+        MQ_ST_INC[fi]      = 0x43u8
+        fi = fi + 1u64
+    }
+
+    /* -- KAT-1: compute key twice, assert byte-equal (M2 determinism / Trap1 guard) -- */
+    let pprod : *u8 = (&MQ_ST_PRODUCER as u64) as *u8
+    let pop : *u8   = (&MQ_ST_OP as u64) as *u8
+    let pinc : *u8  = (&MQ_ST_INC as u64) as *u8
+    let pkey2 : *u8 = (&MQ_ST_KEY2 as u64) as *u8
+    if mq_compute_key(pprod, pop, pinc, pkey) != MQ_OK { return -20i32 }
+    if mq_compute_key(pprod, pop, pinc, pkey2) != MQ_OK { return -21i32 }
+    let mut acc : u32 = 0u32
+    let mut ci : u64 = 0u64
+    while ci < MQ_KEY_BYTES {
+        acc = acc | ((MQ_ST_KEY[ci] as u32) ^ (MQ_ST_KEY2[ci] as u32))
+        ci = ci + 1u64
+    }
+    if acc != 0u32 { return -30i32 }
+
+    /* -- KAT-2: perturb input byte 0 -> keys must differ (input-sensitivity) -- */
+    MQ_ST_INC[0u64] = 0x44u8
+    if mq_compute_key(pprod, pop, pinc, pkey2) != MQ_OK { return -40i32 }
+    acc = 0u32
+    ci = 0u64
+    while ci < MQ_KEY_BYTES {
+        acc = acc | ((MQ_ST_KEY[ci] as u32) ^ (MQ_ST_KEY2[ci] as u32))
+        ci = ci + 1u64
+    }
+    if acc == 0u32 { return -50i32 }
+
+    /* -- KAT-3b: null producer -> MQ_E_NULL (prove negative case) -- */
+    if mq_compute_key(nullp, pop, pinc, pkey) != MQ_E_NULL { return -60i32 }
+
+    /* -- KAT-3c: lookup with null out_commit -> MQ_E_NULL -- */
+    if mq_lookup_verified(pkey, nullp, pchain) != MQ_E_NULL { return -70i32 }
+
+    /* -- KAT-3d: set_min_confidence with null cap -> MQ_E_CAP -- */
+    if mq_set_min_confidence(nullp, 50u8) != MQ_E_CAP { return -80i32 }
+
+    /* -- KAT-3e: 200u8 > MQ_K_MAX (100) -> MQ_E_RANGE -- */
+    /* MQ_WIT_FID is a valid non-null module-scope address, used as a stub cap pointer. */
+    let vcap : *u8 = (&MQ_WIT_FID as u64) as *u8
+    if mq_set_min_confidence(vcap, 200u8) != MQ_E_RANGE { return -90i32 }
+
+    /* -- KAT-4/5 (integration tier): the full lattice vertical -- */
+    let rlat : i32 = mq_kat_lattice()
+    if rlat != 0i32 { return rlat }
+
+    /* -- All KATs passed -- */
+    return MQ_OK
+}
+
+/* u64/99 corpus-convention wrapper (consistent with every other module's
+ * selftest): 99u64 on full pass, else the i32 fail-code's magnitude so the
+ * failing check stays diagnosable from the exit code. */
+fn mq_selftest() -> u64 @export {
+    let r : i32 = mq_selftest_inner()
+    if r == 0i32 { return 99u64 }
+    let neg : i32 = 0i32 - r
+    return neg as u64
+}

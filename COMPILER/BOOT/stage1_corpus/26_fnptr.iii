@@ -1,0 +1,10 @@
+module corpus_26
+
+fn double_it(x: u64) -> u64 {
+    return x + x
+}
+
+fn main() -> u64 {
+    let f: u64 = double_it
+    return f(21)
+}

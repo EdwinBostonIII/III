@@ -1,0 +1,13 @@
+/* Even more isolated: arena + lru_new, return id-as-u8. */
+module corpus_134
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn lru_new(arena: u64, capacity: u64) -> u64 from "lru.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+    let c : u64 = lru_new(a, 3u64)
+    if c == 0u64 { return 2u64 }
+    return 99u64
+}

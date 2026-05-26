@@ -1,0 +1,36 @@
+/* 398 — V1 Stage 7.2: vec @specialize (class-B, alloc-based).
+ * Pushes 20 u32 elements (forces the inline grow: init cap 8 -> realloc via
+ * `sizeof T` byte-math + byte-copy), reads them back (stride = idx*sizeof(T)),
+ * and checks i16 sign.  Exercises sizeof(T) + *T store/load + grow.  99 = pass. */
+module corpus_398_vec_specialize
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn vec_u32_new(arena: u64, max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u32_push(id: u64, value: u32) -> i32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u32_at(id: u64, idx: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u32_len(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_i16_new(arena: u64, max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_i16_push(id: u64, value: i16) -> i32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_i16_at(id: u64, idx: u64) -> u64 from "vec.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 1u64 }
+    let v : u64 = vec_u32_new(a, 100u64)
+    if v == 0u64 { return 2u64 }
+    let mut i : u32 = 0u32
+    while i < 20u32 {
+        vec_u32_push(v, i * 0x01010101u32)
+        i = i + 1u32
+    }
+    if vec_u32_len(v) != 20u64 { return 3u64 }
+    if vec_u32_at(v, 0u64) != 0u64 { return 4u64 }
+    if vec_u32_at(v, 10u64) != (10u32 * 0x01010101u32) as u64 { return 5u64 }
+    if vec_u32_at(v, 19u64) != (19u32 * 0x01010101u32) as u64 { return 6u64 }
+    let w : u64 = vec_i16_new(a, 10u64)
+    if w == 0u64 { return 7u64 }
+    vec_i16_push(w, -1000i16)
+    let r : i16 = (vec_i16_at(w, 0u64)) as i16
+    if r != -1000i16 { return 8u64 }
+    return 99u64
+}

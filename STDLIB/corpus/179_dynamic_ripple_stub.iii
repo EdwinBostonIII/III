@@ -1,0 +1,58 @@
+/* Tier 1 verification: cg_r3 @dynamic ripple stub (lattice plan Step 0022).
+ *
+ * A function tagged @dynamic(ripple=auto) gets a 3-instruction prologue
+ * stub injected by cg_r3 that calls ripple_execute_native(decl_node, mode_byte).
+ * Without the stub, ripple_execute_native_dispatch_count() stays at 0.
+ * With the stub, calling the @dynamic function increments it.
+ *
+ * The mode byte values match SEMA_DYNAMIC_RIPPLE_*:
+ *   1 = OFF, 2 = MANUAL, 3 = AUTO.
+ *
+ * Decl-node IDs are AST-pool indices (deterministic per source file). */
+module corpus_179
+
+extern @abi(c-msvc-x64) fn ripple_execute_native_clear() -> i32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_dispatch_count() -> u32 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute_native_at_mode(idx: u32) -> u32 from "ripple.iii"
+
+fn answer_plain() -> u64 {
+    return 42u64
+}
+
+fn answer_dynamic_auto() -> u64 @dynamic(ripple=auto) {
+    return 43u64
+}
+
+fn answer_dynamic_manual() -> u64 @dynamic(ripple=manual) {
+    return 44u64
+}
+
+fn answer_dynamic_off() -> u64 @dynamic(ripple=off) {
+    return 45u64
+}
+
+fn main() -> u64 {
+    ripple_execute_native_clear()
+    if ripple_execute_native_dispatch_count() != 0u32 { return 1u64 }
+
+    /* Plain fn: no ripple stub. */
+    if answer_plain() != 42u64 { return 2u64 }
+    if ripple_execute_native_dispatch_count() != 0u32 { return 3u64 }
+
+    /* @dynamic(ripple=auto): stub fires, count = 1. */
+    if answer_dynamic_auto() != 43u64 { return 4u64 }
+    if ripple_execute_native_dispatch_count() != 1u32 { return 5u64 }
+    /* Mode byte recorded was AUTO=3. */
+    if ripple_execute_native_at_mode(0u32) != 3u32 { return 6u64 }
+
+    /* @dynamic(ripple=manual): count = 2, mode = MANUAL=2. */
+    if answer_dynamic_manual() != 44u64 { return 7u64 }
+    if ripple_execute_native_dispatch_count() != 2u32 { return 8u64 }
+    if ripple_execute_native_at_mode(1u32) != 2u32 { return 9u64 }
+
+    /* @dynamic(ripple=off): no stub fires (off mode is suppressed). */
+    if answer_dynamic_off() != 45u64 { return 10u64 }
+    if ripple_execute_native_dispatch_count() != 2u32 { return 11u64 }
+
+    return 99u64
+}

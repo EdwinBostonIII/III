@@ -1,0 +1,245 @@
+/* numera/zk_prune.iii — NIH witness-chain pruning + rollup (gospel §4.14).
+ *
+ * Ports ZK-PRUNING/src/prune.c: the closure-pinned preservation list, chain
+ * consistency, rollup sidecar build, rollup-witness construction, and the
+ * decompression-side rollup verify (rejects an incomplete preservation list).
+ *
+ * 128-byte XiiWitness layout (spec §1.2):
+ *   [0..31]  predecessor_mhash   [32..39] timestamp_sequence_class (u64)
+ *   [40..55] cycle_kind (kind in bytes 54,55, big-endian)
+ *   [56..87] payload_mhash       [88..95] flags (u64, little-endian)
+ *   [96..127] mac
+ * Flag bits: ANCHOR_AWARE=32 (byte 92.0), ROLLUP_WITNESS=40 (byte 93.0),
+ *            FIRST_OF_EPOCH=48 (byte 94.0).
+ */
+module numera_zk_prune
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
+
+var ZKP_W      : [u8; 4096]    /* up to 32 witnesses * 128 bytes */
+var ZKP_GEN    : [u8; 32]      /* genesis predecessor */
+var ZKP_MH     : [u8; 32]      /* scratch mhash */
+var ZKP_SAVE   : [u8; 32]      /* KAT determinism-check save buffer */
+var ZKP_HDR    : [u8; 10]      /* sidecar_root header scratch */
+var ZKP_ROLLUP : [u8; 128]     /* rollup witness */
+var ZKP_MACKEY : [u8; 32]
+/* sidecar */
+var ZKP_SC_START : [u8; 32]
+var ZKP_SC_END   : [u8; 32]
+var ZKP_SC_PRED  : [u8; 32]
+var ZKP_SC_WC    : [u32; 1]
+var ZKP_SC_PC    : [u32; 1]
+var ZKP_SC_PMH   : [u8; 1024]   /* up to 32 preserved mhashes * 32 */
+var ZKP_SC_RATIO : [u32; 1]
+var ZKP_SC_PROOF : [u8; 1]
+var ZKP_SC_BODY  : [u8; 32]
+
+fn zkp_w_addr(wi: u64) -> u64 { return (&ZKP_W as u64) + 128u64*wi }
+fn zkp_mhash(wi: u64, outAddr: u64) -> i32 {
+    sha256_oneshot(zkp_w_addr(wi) as *u8, 128u64, outAddr as *u8)
+    return 0i32
+}
+fn zkp_kind(wi: u64) -> u32 {
+    let b : u64 = 128u64*wi
+    return ((ZKP_W[b + 54u64] as u32) << 8u32) | (ZKP_W[b + 55u64] as u32)
+}
+fn zkp_preserved(wi: u64) -> u64 {
+    let b : u64 = 128u64*wi
+    if (ZKP_W[b + 92u64] & 0x01u8) != 0u8 { return 1u64 }    /* ANCHOR_AWARE */
+    if (ZKP_W[b + 93u64] & 0x01u8) != 0u8 { return 1u64 }    /* ROLLUP_WITNESS */
+    if (ZKP_W[b + 94u64] & 0x01u8) != 0u8 { return 1u64 }    /* FIRST_OF_EPOCH */
+    let k : u32 = zkp_kind(wi)
+    if k == 0x0140u32 { return 1u64 }   /* SUITE_SWAP */
+    if k == 0x0150u32 { return 1u64 }   /* DRTM_RELAUNCH */
+    if k == 0x0180u32 { return 1u64 }   /* AMENDMENT_T1 */
+    if k == 0x0181u32 { return 1u64 }   /* AMENDMENT_T2 */
+    if k == 0x0182u32 { return 1u64 }   /* AMENDMENT_T3 */
+    if k == 0x0190u32 { return 1u64 }   /* COMPROMISE_LOW */
+    if k == 0x0191u32 { return 1u64 }   /* COMPROMISE_MEDIUM */
+    if k == 0x0192u32 { return 1u64 }   /* COMPROMISE_HIGH */
+    if k == 0x01A0u32 { return 1u64 }   /* CATALYST_PROMOTE */
+    if k == 0x01B0u32 { return 1u64 }   /* EPOCH_BOUNDARY */
+    if k == 0x01C0u32 { return 1u64 }   /* FED_CONSTITUTIONAL */
+    return 0u64
+}
+fn zkp_bytes_eq(aAddr: u64, bAddr: u64, len: u64) -> u64 {
+    let a : *u8 = aAddr as *u8
+    let b : *u8 = bAddr as *u8
+    let mut i : u64 = 0u64
+    while i < len { if a[i] != b[i] { return 0u64 } i = i + 1u64 }
+    return 1u64
+}
+fn zkp_bytes_copy(dstAddr: u64, srcAddr: u64, len: u64) -> i32 {
+    let d : *u8 = dstAddr as *u8
+    let s : *u8 = srcAddr as *u8
+    let mut i : u64 = 0u64
+    while i < len { d[i] = s[i] ; i = i + 1u64 }
+    return 0i32
+}
+/* chain: w[0].pred == predAddr ; w[i].pred == mhash(w[i-1]). */
+fn zkp_chain_consistent(n: u64, predAddr: u64) -> u64 {
+    if n == 0u64 { return 0u64 }
+    if zkp_bytes_eq(zkp_w_addr(0u64), predAddr, 32u64) == 0u64 { return 0u64 }
+    let mut i : u64 = 1u64
+    while i < n {
+        zkp_mhash(i - 1u64, &ZKP_MH as u64)
+        if zkp_bytes_eq(zkp_w_addr(i), &ZKP_MH as u64, 32u64) == 0u64 { return 0u64 }
+        i = i + 1u64
+    }
+    return 1u64
+}
+/* SHA-256 over the canonical sidecar body -> outAddr. */
+fn zkp_sidecar_root(outAddr: u64) -> i32 {
+    let pc : u32 = ZKP_SC_PC[0]
+    ZKP_HDR[0] = ((ZKP_SC_WC[0] >> 24u32) & 0xFFu32) as u8
+    ZKP_HDR[1] = ((ZKP_SC_WC[0] >> 16u32) & 0xFFu32) as u8
+    ZKP_HDR[2] = ((ZKP_SC_WC[0] >> 8u32) & 0xFFu32) as u8
+    ZKP_HDR[3] = (ZKP_SC_WC[0] & 0xFFu32) as u8
+    ZKP_HDR[4] = ((pc >> 24u32) & 0xFFu32) as u8
+    ZKP_HDR[5] = ((pc >> 16u32) & 0xFFu32) as u8
+    ZKP_HDR[6] = ((pc >> 8u32) & 0xFFu32) as u8
+    ZKP_HDR[7] = (pc & 0xFFu32) as u8
+    ZKP_HDR[8] = ((ZKP_SC_RATIO[0] >> 8u32) & 0xFFu32) as u8
+    ZKP_HDR[9] = (ZKP_SC_RATIO[0] & 0xFFu32) as u8
+    sha256_init()
+    sha256_update(&ZKP_SC_START as *u8, 32u64)
+    sha256_update(&ZKP_SC_END as *u8, 32u64)
+    sha256_update(&ZKP_SC_PRED as *u8, 32u64)
+    sha256_update(&ZKP_HDR as *u8, 10u64)
+    sha256_update(&ZKP_SC_PROOF as *u8, 1u64)
+    let mut i : u64 = 0u64
+    while i < (pc as u64) {
+        sha256_update((&ZKP_SC_PMH as u64 + i*32u64) as *u8, 32u64)
+        i = i + 1u64
+    }
+    sha256_final(outAddr as *u8)
+    return 0i32
+}
+/* Build the rollup sidecar from witnesses [0..n-1]; predecessor at predAddr.
+ * Returns 0 on success, -1 on chain break, -2 on empty. */
+fn zkp_sidecar_build(n: u64, predAddr: u64) -> i32 {
+    if n == 0u64 { return 0i32 - 2i32 }
+    if zkp_chain_consistent(n, predAddr) == 0u64 { return 0i32 - 1i32 }
+    zkp_bytes_copy(&ZKP_SC_PRED as u64, predAddr, 32u64)
+    zkp_mhash(0u64, &ZKP_SC_START as u64)
+    zkp_mhash(n - 1u64, &ZKP_SC_END as u64)
+    ZKP_SC_WC[0] = n as u32
+    let mut pc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < n {
+        if zkp_preserved(i) == 1u64 {
+            zkp_mhash(i, (&ZKP_SC_PMH as u64) + (pc as u64)*32u64)
+            pc = pc + 1u32
+        }
+        i = i + 1u64
+    }
+    ZKP_SC_PC[0] = pc
+    /* compaction ratio Q14 = (n - pc) << 14 / n */
+    let elided : u64 = n - (pc as u64)
+    let mut ratio : u64 = (elided << 14u64) / n
+    if ratio > 0xFFFFu64 { ratio = 0xFFFFu64 }
+    ZKP_SC_RATIO[0] = ratio as u32
+    ZKP_SC_PROOF[0] = 0u8
+    zkp_sidecar_root(&ZKP_SC_BODY as u64)
+    return 0i32
+}
+/* Build the rollup witness into ZKP_ROLLUP (cycle_kind=ZK_ROLLUP, payload=body,
+ * ROLLUP flag, MAC=SHA-256(key || body-without-mac)). */
+fn zkp_rollup_build(timestamp: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 128u64 { ZKP_ROLLUP[i] = 0u8 ; i = i + 1u64 }
+    zkp_bytes_copy(&ZKP_ROLLUP as u64, &ZKP_SC_PRED as u64, 32u64)         /* predecessor */
+    i = 0u64
+    while i < 8u64 { ZKP_ROLLUP[32u64 + i] = ((timestamp >> (i*8u64)) & 0xFFu64) as u8 ; i = i + 1u64 }
+    ZKP_ROLLUP[54] = 0x02u8  ZKP_ROLLUP[55] = 0x40u8                       /* cycle_kind = ZK_ROLLUP */
+    zkp_bytes_copy((&ZKP_ROLLUP as u64) + 56u64, &ZKP_SC_BODY as u64, 32u64)   /* payload = body */
+    ZKP_ROLLUP[93] = 0x01u8                                                /* ROLLUP_WITNESS flag (bit 40) */
+    /* MAC = SHA-256(key || rollup[0..95]) */
+    sha256_init()
+    sha256_update(&ZKP_MACKEY as *u8, 32u64)
+    sha256_update(&ZKP_ROLLUP as *u8, 96u64)
+    sha256_final((&ZKP_ROLLUP as u64 + 96u64) as *u8)
+    return 0i32
+}
+/* Verify the rollup against the original window.  0 = accept. */
+fn zkp_rollup_verify(n: u64) -> i32 {
+    if zkp_bytes_eq((&ZKP_ROLLUP as u64) + 56u64, &ZKP_SC_BODY as u64, 32u64) == 0u64 { return 0i32 - 2i32 }
+    if (((ZKP_ROLLUP[54] as u32) << 8u32) | (ZKP_ROLLUP[55] as u32)) != 0x0240u32 { return 0i32 - 3i32 }
+    if (ZKP_ROLLUP[93] & 0x01u8) == 0u8 { return 0i32 - 4i32 }
+    if ZKP_SC_WC[0] != (n as u32) { return 0i32 - 5i32 }
+    if zkp_bytes_eq(&ZKP_ROLLUP as u64, &ZKP_SC_PRED as u64, 32u64) == 0u64 { return 0i32 - 6i32 }
+    zkp_sidecar_root(&ZKP_MH as u64)
+    if zkp_bytes_eq(&ZKP_MH as u64, &ZKP_SC_BODY as u64, 32u64) == 0u64 { return 0i32 - 7i32 }
+    /* re-extract preservation list from the original window; check identity + completeness */
+    let mut k : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        if zkp_preserved(i) == 1u64 {
+            if k >= (ZKP_SC_PC[0] as u64) { return 0i32 - 8i32 }
+            zkp_mhash(i, &ZKP_MH as u64)
+            if zkp_bytes_eq(&ZKP_MH as u64, (&ZKP_SC_PMH as u64) + k*32u64, 32u64) == 0u64 { return 0i32 - 9i32 }
+            k = k + 1u64
+        }
+        i = i + 1u64
+    }
+    if k != (ZKP_SC_PC[0] as u64) { return 0i32 - 10i32 }
+    return 0i32
+}
+
+/* helper: set witness wi -> zero, set kind, set a distinct payload byte. */
+fn zkp_mk(wi: u64, kindHi: u8, kindLo: u8, tag: u8) -> i32 {
+    let b : u64 = 128u64*wi
+    let mut i : u64 = 0u64
+    while i < 128u64 { ZKP_W[b + i] = 0u8 ; i = i + 1u64 }
+    ZKP_W[b + 54u64] = kindHi  ZKP_W[b + 55u64] = kindLo
+    ZKP_W[b + 56u64] = tag                              /* distinct payload -> distinct mhash */
+    return 0i32
+}
+
+/* Pruning KAT (mirrors the toy zk-prune suite).  99 = pass. */
+fn zk_prune_kat() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { ZKP_GEN[i] = (i + 1u64) as u8 ; ZKP_MACKEY[i] = (i * 3u64 + 7u64) as u8 ; i = i + 1u64 }
+    /* window of 5: NORMAL, AMENDMENT_T2, NORMAL+ANCHOR, SUITE_SWAP, NORMAL */
+    zkp_mk(0u64, 0x00u8, 0x00u8, 0x11u8)
+    zkp_mk(1u64, 0x01u8, 0x81u8, 0x22u8)                /* AMENDMENT_T2 */
+    zkp_mk(2u64, 0x00u8, 0x00u8, 0x33u8) ZKP_W[128u64*2u64 + 92u64] = 0x01u8   /* ANCHOR_AWARE */
+    zkp_mk(3u64, 0x01u8, 0x40u8, 0x44u8)                /* SUITE_SWAP */
+    zkp_mk(4u64, 0x00u8, 0x00u8, 0x55u8)
+    /* link the chain: w[0].pred = GEN ; w[i].pred = mhash(w[i-1]) */
+    zkp_bytes_copy(zkp_w_addr(0u64), &ZKP_GEN as u64, 32u64)
+    i = 1u64
+    while i < 5u64 { zkp_mhash(i - 1u64, zkp_w_addr(i)) ; i = i + 1u64 }
+    /* (1) preservation rules */
+    if zkp_preserved(0u64) == 1u64 { return 1u64 }      /* NORMAL not preserved */
+    if zkp_preserved(1u64) == 0u64 { return 2u64 }      /* AMENDMENT_T2 preserved */
+    if zkp_preserved(2u64) == 0u64 { return 3u64 }      /* ANCHOR_AWARE preserved */
+    if zkp_preserved(3u64) == 0u64 { return 4u64 }      /* SUITE_SWAP preserved */
+    if zkp_preserved(4u64) == 1u64 { return 5u64 }      /* NORMAL not preserved */
+    /* (2) chain consistency */
+    if zkp_chain_consistent(5u64, &ZKP_GEN as u64) == 0u64 { return 6u64 }
+    let saved : u8 = ZKP_W[128u64*2u64 + 0u64]
+    ZKP_W[128u64*2u64 + 0u64] = saved ^ 0xFFu8          /* break w[2].pred */
+    if zkp_chain_consistent(5u64, &ZKP_GEN as u64) == 1u64 { return 7u64 }
+    ZKP_W[128u64*2u64 + 0u64] = saved                   /* restore */
+    /* (3) sidecar build: preserved_count == 3, body deterministic */
+    if zkp_sidecar_build(5u64, &ZKP_GEN as u64) != 0i32 { return 8u64 }
+    if ZKP_SC_PC[0] != 3u32 { return 9u64 }
+    zkp_bytes_copy(&ZKP_SAVE as u64, &ZKP_SC_BODY as u64, 32u64)   /* save body (ZKP_MH is reused internally) */
+    if zkp_sidecar_build(5u64, &ZKP_GEN as u64) != 0i32 { return 10u64 }
+    if zkp_bytes_eq(&ZKP_SAVE as u64, &ZKP_SC_BODY as u64, 32u64) == 0u64 { return 11u64 }   /* deterministic */
+    /* (4) rollup build + verify */
+    zkp_rollup_build(0x1122334455667788u64)
+    if zkp_rollup_verify(5u64) != 0i32 { return 12u64 }          /* accepts */
+    let savp : u8 = ZKP_ROLLUP[0]
+    ZKP_ROLLUP[0] = savp ^ 0xFFu8                                /* tamper predecessor */
+    if zkp_rollup_verify(5u64) == 0i32 { return 13u64 }          /* must reject */
+    ZKP_ROLLUP[0] = savp
+    if zkp_rollup_verify(5u64) != 0i32 { return 14u64 }          /* accepts again */
+    return 99u64
+}
+
+fn zk_prune_kat_x() -> u64 @export { return zk_prune_kat() }

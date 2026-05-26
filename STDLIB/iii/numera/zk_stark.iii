@@ -1,0 +1,570 @@
+/* numera/zk_stark.iii — NIH FRI-based STARK over q = 998244353 (gospel §4.13).
+ *
+ * Ports ZK-PRUNING/src/stark.c to .iii AND fixes the §4.13 soundness gap: the
+ * toy verifier (stark.c:434-445) explicitly SKIPS the boundary checks, so a
+ * malicious prover could claim any x0/xN.  This port adds explicit boundary
+ * openings: the prover Merkle-opens LDE positions 0 and (N-1)*blowup (which
+ * equal trace[0]=x0 and trace[N-1]=xN), and the verifier checks both the
+ * Merkle path AND value == the public boundary.
+ *
+ * AIR (single column): x_{i+1} = x_i^2 + c ; boundary x_0 = x0, x_{N-1} = xN.
+ * Field sf = GF(998244353), single u32 (q is 30-bit, products fit u64; no
+ * Montgomery needed).  g = 3 is a primitive root (2-adicity 23).
+ *
+ * Layer 1 (this file, validated first): sf field + radix-2 NTT/INTT.
+ */
+module numera_zk_stark
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* sf working arrays (NTT buffers / LDE / cp / FRI layers). */
+var ZKST     : [u32; 8192]
+var ZKST_BUF : [u8; 80]        /* hash-input scratch (leaf=5B, node=65B) */
+var ZKST_MT  : [u8; 524288]    /* Merkle node pool (16384 nodes * 32B; trace+cp+FRI trees) */
+var ZKST_CUR : [u8; 32]        /* verify running hash */
+var ZKST_PATH: [u8; 512]       /* path scratch (16 levels * 32B) */
+/* AIR public parameters (x_{i+1}=x_i^2+c; boundary x0,xN; trace length N). */
+var ZKST_AIR_N  : [u32; 1]
+var ZKST_AIR_X0 : [u32; 1]
+var ZKST_AIR_C  : [u32; 1]
+var ZKST_AIR_XN : [u32; 1]
+/* ---- STARK proof (module-resident; prover fills, verifier reads) ---- */
+var ZKST_TRACE_ROOT : [u8; 32]
+var ZKST_CP_ROOT    : [u8; 32]
+var ZKST_FRI_ROOTS  : [u8; 384]    /* 12 * 32 */
+var ZKST_FRI_NL     : [u32; 1]     /* committed FRI layer count */
+var ZKST_FRI_FINAL  : [u32; 1]
+var ZKST_QUERIES    : [u32; 16]
+var ZKST_TQ         : [u32; 16]    /* trace_q */
+var ZKST_TQN        : [u32; 16]    /* trace_q_next */
+var ZKST_CQ         : [u32; 16]    /* cp_q */
+var ZKST_TPATH      : [u8; 5120]   /* 16 * 10 depth * 32 */
+var ZKST_TNPATH     : [u8; 5120]
+var ZKST_CPATH      : [u8; 5120]
+var ZKST_FQ         : [u32; 192]   /* 16 * 12 */
+var ZKST_FSIB       : [u32; 192]
+var ZKST_FPATH      : [u8; 61440]  /* 16 * 12 * 10 * 32 */
+var ZKST_FSIZE      : [u32; 12]
+var ZKST_FOMEGA     : [u32; 12]
+var ZKST_FLOFF      : [u32; 12]    /* FRI layer data offset (sf index) into ZKST */
+var ZKST_FTOFF      : [u32; 12]    /* FRI layer tree byte offset into ZKST_MT (rel) */
+var ZKST_BX0        : [u32; 1]     /* boundary opening: LDE[0] (= x0) */
+var ZKST_BXN        : [u32; 1]     /* boundary opening: LDE[(N-1)*blowup] (= xN) */
+var ZKST_BX0P       : [u8; 320]    /* 10 * 32 */
+var ZKST_BXNP       : [u8; 320]
+var ZKST_TRANS      : [u8; 1152]   /* Fiat-Shamir transcript */
+var ZKST_FSBUF      : [u8; 1152]   /* FS hash input scratch */
+var ZKST_HASH       : [u8; 32]
+var ZKST_QD_TLEN    : [u64; 1]     /* derive_queries: transcript len (module-resident, call-safe) */
+var ZKST_QD_MOD     : [u64; 1]     /* derive_queries: query modulus (domain size) */
+var ZKST_FS_M       : [u64; 1]     /* st_fs_index modulus (survives the hash call) */
+var ZKST_FS_IDX     : [u64; 1]     /* FS idx (call-clobber-safe) */
+var ZKST_FS_TLEN    : [u64; 1]     /* FS transcript len (call-clobber-safe) */
+var ZKST_FS_H       : [u64; 1]     /* FS hash result (materialized before modulo) */
+var ZKST_FS_QMOD    : [u64; 1]     /* st_fs_index_compute modulus source (read AFTER the hash call) */
+
+fn sf_add(x: u32, y: u32) -> u32 {
+    let s : u64 = (x as u64) + (y as u64)
+    if s >= 998244353u64 { return (s - 998244353u64) as u32 }
+    return s as u32
+}
+fn sf_sub(x: u32, y: u32) -> u32 {
+    if x >= y { return x - y }
+    return ((x as u64) + 998244353u64 - (y as u64)) as u32
+}
+fn sf_neg(x: u32) -> u32 { if x == 0u32 { return 0u32 } return 998244353u32 - x }
+fn sf_mul(x: u32, y: u32) -> u32 { return (((x as u64) * (y as u64)) % 998244353u64) as u32 }
+fn sf_pow(x: u32, e: u64) -> u32 {
+    let mut r : u64 = 1u64
+    let mut b : u64 = (x as u64) % 998244353u64
+    let mut ee : u64 = e
+    while ee > 0u64 {
+        if (ee & 1u64) == 1u64 { r = (r * b) % 998244353u64 }
+        b = (b * b) % 998244353u64
+        ee = ee >> 1u64
+    }
+    return r as u32
+}
+fn sf_inv(x: u32) -> u32 { return sf_pow(x, 998244351u64) }            /* x^(q-2) */
+fn sf_rou(n: u32) -> u32 { return sf_pow(3u32, 998244352u64 / (n as u64)) }   /* g^((q-1)/n) */
+
+/* in-place bit-reversal permutation of ZKST[base..base+n-1]. */
+fn st_bitrev(base: u64, n: u64) -> i32 {
+    let mut j : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < n {
+        let mut bit : u64 = n >> 1u64
+        while (j & bit) != 0u64 { j = j ^ bit ; bit = bit >> 1u64 }
+        j = j ^ bit
+        if i < j {
+            let t : u32 = ZKST[base + i]
+            ZKST[base + i] = ZKST[base + j]
+            ZKST[base + j] = t
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* in-place radix-2 NTT of ZKST[base..base+n-1] with n-th root omega. */
+fn st_ntt(base: u64, n: u64, omega: u32) -> i32 {
+    st_bitrev(base, n)
+    let mut len : u64 = 2u64
+    while len <= n {
+        let wn : u32 = sf_pow(omega, n / len)
+        let half : u64 = len / 2u64
+        let mut i : u64 = 0u64
+        while i < n {
+            let mut w : u32 = 1u32
+            let mut k : u64 = 0u64
+            while k < half {
+                let uu : u32 = ZKST[base + i + k]
+                let vv : u32 = sf_mul(ZKST[base + i + k + half], w)
+                ZKST[base + i + k] = sf_add(uu, vv)
+                ZKST[base + i + k + half] = sf_sub(uu, vv)
+                w = sf_mul(w, wn)
+                k = k + 1u64
+            }
+            i = i + len
+        }
+        len = len << 1u64
+    }
+    return 0i32
+}
+fn st_intt(base: u64, n: u64, omega: u32) -> i32 {
+    st_ntt(base, n, sf_inv(omega))
+    let ninv : u32 = sf_inv(n as u32)
+    let mut i : u64 = 0u64
+    while i < n { ZKST[base + i] = sf_mul(ZKST[base + i], ninv) ; i = i + 1u64 }
+    return 0i32
+}
+
+/* Layer-1 self-test: sf Fermat/inverse + NTT/INTT round-trip.  99 = pass. */
+fn zk_stark_ntt_selftest() -> u64 @export {
+    if sf_pow(3u32, 998244352u64) != 1u32 { return 1u64 }            /* g^(q-1) == 1 */
+    let a : u32 = 123456789u32
+    if sf_mul(a, sf_inv(a)) != 1u32 { return 2u64 }                  /* a * a^-1 == 1 */
+    if sf_add(998244352u32, 5u32) != 4u32 { return 3u64 }            /* wraparound */
+    /* NTT/INTT round-trip on n=8 */
+    let n : u64 = 8u64
+    let om : u32 = sf_rou(8u32)
+    let mut i : u64 = 0u64
+    while i < n {
+        ZKST[i] = ((i + 1u64) * 7u64 + 3u64) as u32
+        ZKST[16u64 + i] = ((i + 1u64) * 7u64 + 3u64) as u32
+        i = i + 1u64
+    }
+    st_ntt(0u64, n, om)
+    st_intt(0u64, n, om)
+    i = 0u64
+    while i < n { if ZKST[i] != ZKST[16u64 + i] { return 4u64 } i = i + 1u64 }
+    /* round-trip on a larger n=64 */
+    let n2 : u64 = 64u64
+    let om2 : u32 = sf_rou(64u32)
+    i = 0u64
+    while i < n2 {
+        ZKST[100u64 + i] = ((i * i + 11u64) % 998244353u64) as u32
+        ZKST[200u64 + i] = ((i * i + 11u64) % 998244353u64) as u32
+        i = i + 1u64
+    }
+    st_ntt(100u64, n2, om2)
+    st_intt(100u64, n2, om2)
+    i = 0u64
+    while i < n2 { if ZKST[100u64 + i] != ZKST[200u64 + i] { return 5u64 } i = i + 1u64 }
+    return 99u64
+}
+
+/* ================= Layer 2: SHA-256 Merkle (toy-compatible, byte-identical) =================
+ * Hashers take destination ADDRESSES so they write into the tree pool (build)
+ * or a scratch slot (verify).  leaf = sha256(0x00 ‖ v_be32); node = sha256(0x01 ‖ L ‖ R). */
+fn st_leaf_hash(v: u32, dstAddr: u64) -> i32 {
+    ZKST_BUF[0] = 0u8
+    ZKST_BUF[1] = ((v >> 24u32) & 0xFFu32) as u8
+    ZKST_BUF[2] = ((v >> 16u32) & 0xFFu32) as u8
+    ZKST_BUF[3] = ((v >> 8u32) & 0xFFu32) as u8
+    ZKST_BUF[4] = (v & 0xFFu32) as u8
+    let bp : *u8 = (&ZKST_BUF as u64) as *u8
+    let dp : *u8 = dstAddr as *u8
+    sha256_oneshot(bp, 5u64, dp)
+    return 0i32
+}
+fn st_node_hash(lAddr: u64, rAddr: u64, dstAddr: u64) -> i32 {
+    ZKST_BUF[0] = 1u8
+    let lp : *u8 = lAddr as *u8
+    let rp : *u8 = rAddr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { ZKST_BUF[1u64 + i] = lp[i] ; ZKST_BUF[33u64 + i] = rp[i] ; i = i + 1u64 }
+    let bp : *u8 = (&ZKST_BUF as u64) as *u8
+    let dp : *u8 = dstAddr as *u8
+    sha256_oneshot(bp, 65u64, dp)
+    return 0i32
+}
+/* build Merkle tree (n leaves, power of two) at byte base tb in ZKST_MT from
+ * sf leaves ZKST[leafBase..leafBase+n-1]; node i (1-indexed) at tb + i*32. */
+fn st_merkle_build(tb: u64, leafBase: u64, n: u64) -> i32 {
+    let mtb : u64 = &ZKST_MT as u64
+    let mut i : u64 = 0u64
+    while i < n { st_leaf_hash(ZKST[leafBase + i], mtb + tb + (n + i)*32u64) ; i = i + 1u64 }
+    let mut ni : u64 = n
+    while ni > 1u64 {
+        ni = ni - 1u64
+        st_node_hash(mtb + tb + (2u64*ni)*32u64, mtb + tb + (2u64*ni + 1u64)*32u64, mtb + tb + ni*32u64)
+    }
+    return 0i32
+}
+fn st_root_addr(tb: u64) -> u64 { return (&ZKST_MT as u64) + tb + 32u64 }       /* node[1] */
+/* copy the authentication path for leaf idx into pathBase; return depth. */
+fn st_merkle_open(tb: u64, n: u64, idx: u64, pathBase: u64) -> u64 {
+    let mtb : u64 = &ZKST_MT as u64
+    let mut i : u64 = n + idx
+    let mut d : u64 = 0u64
+    while i > 1u64 {
+        let sib : u64 = i ^ 1u64
+        let srcp : *u8 = (mtb + tb + sib*32u64) as *u8
+        let dstp : *u8 = (pathBase + d*32u64) as *u8
+        let mut b : u64 = 0u64
+        while b < 32u64 { dstp[b] = srcp[b] ; b = b + 1u64 }
+        i = i >> 1u64
+        d = d + 1u64
+    }
+    return d
+}
+fn st_merkle_verify(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 {
+    let curAddr : u64 = &ZKST_CUR as u64
+    st_leaf_hash(leafVal, curAddr)
+    let mut i : u64 = n + idx
+    let mut d : u64 = 0u64
+    while d < plen {
+        let pAddr : u64 = pathBase + d*32u64
+        if (i & 1u64) == 1u64 { st_node_hash(pAddr, curAddr, curAddr) } else { st_node_hash(curAddr, pAddr, curAddr) }
+        i = i >> 1u64
+        d = d + 1u64
+    }
+    let cp : *u8 = curAddr as *u8
+    let rp : *u8 = rootAddr as *u8
+    let mut b : u64 = 0u64
+    while b < 32u64 { if cp[b] != rp[b] { return 0u64 } b = b + 1u64 }
+    return 1u64
+}
+
+/* Layer-2 self-test: build / open / verify, reject bad leaf, boundary idx 0.  99 = pass. */
+fn zk_stark_merkle_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 8u64 { ZKST[300u64 + i] = ((i*131u64 + 7u64) % 998244353u64) as u32 ; i = i + 1u64 }
+    st_merkle_build(0u64, 300u64, 8u64)
+    let rootAddr : u64 = st_root_addr(0u64)
+    let plen : u64 = st_merkle_open(0u64, 8u64, 5u64, &ZKST_PATH as u64)
+    if st_merkle_verify(rootAddr, 8u64, 5u64, ZKST[305u64], &ZKST_PATH as u64, plen) == 0u64 { return 1u64 }
+    if st_merkle_verify(rootAddr, 8u64, 5u64, ZKST[305u64] ^ 1u32, &ZKST_PATH as u64, plen) == 1u64 { return 2u64 }
+    let plen0 : u64 = st_merkle_open(0u64, 8u64, 0u64, &ZKST_PATH as u64)
+    if st_merkle_verify(rootAddr, 8u64, 0u64, ZKST[300u64], &ZKST_PATH as u64, plen0) == 0u64 { return 3u64 }
+    return 99u64
+}
+
+/* ================= Layer 3a: trace -> interpolate -> LDE -> composition =================
+ * trace @400, Tcoef @500, LDE @1000, cp @2000 (ZKST sf arrays).  Returns 0 on
+ * success, 2 if the built trace's last element != air.xN. */
+fn st_build_lde_cp() -> i32 {
+    let N : u64 = ZKST_AIR_N[0] as u64
+    let D : u64 = N * 4u64
+    ZKST[400u64] = ZKST_AIR_X0[0]
+    let mut i : u64 = 0u64
+    while i + 1u64 < N {
+        ZKST[400u64 + i + 1u64] = sf_add(sf_mul(ZKST[400u64 + i], ZKST[400u64 + i]), ZKST_AIR_C[0])
+        i = i + 1u64
+    }
+    if ZKST[400u64 + N - 1u64] != ZKST_AIR_XN[0] { return 2i32 }
+    i = 0u64
+    while i < N { ZKST[500u64 + i] = ZKST[400u64 + i] ; i = i + 1u64 }
+    let omegaN : u32 = sf_rou(N as u32)
+    st_intt(500u64, N, omegaN)                          /* Tcoef = INTT(trace) over H_N */
+    i = 0u64
+    while i < N { ZKST[1000u64 + i] = ZKST[500u64 + i] ; i = i + 1u64 }
+    i = N
+    while i < D { ZKST[1000u64 + i] = 0u32 ; i = i + 1u64 }
+    let omegaD : u32 = sf_rou(D as u32)
+    st_ntt(1000u64, D, omegaD)                          /* LDE = NTT(Tcoef pad) over H_D */
+    let mut j : u64 = 0u64
+    while j < D {
+        if j % 4u64 == 0u64 { ZKST[2000u64 + j] = 0u32 }
+        else {
+            let x : u32 = sf_pow(omegaD, j)
+            let xNv : u32 = sf_pow(x, N)
+            let den : u32 = sf_sub(xNv, 1u32)
+            let nxt : u32 = ZKST[1000u64 + (j + 4u64) % D]
+            let cur : u32 = ZKST[1000u64 + j]
+            let num : u32 = sf_sub(sf_sub(nxt, sf_mul(cur, cur)), ZKST_AIR_C[0])
+            ZKST[2000u64 + j] = sf_mul(num, sf_inv(den))
+        }
+        j = j + 1u64
+    }
+    return 0i32
+}
+
+/* Layer-3a self-test: LDE/composition invariants.  99 = pass. */
+fn zk_stark_lde_selftest() -> u64 @export {
+    ZKST_AIR_N[0] = 8u32  ZKST_AIR_X0[0] = 2u32  ZKST_AIR_C[0] = 3u32
+    let mut t : u32 = 2u32
+    let mut i : u64 = 0u64
+    while i < 7u64 { t = sf_add(sf_mul(t, t), 3u32) ; i = i + 1u64 }   /* xN = AIR^7(x0) */
+    ZKST_AIR_XN[0] = t
+    if st_build_lde_cp() != 0i32 { return 1u64 }
+    /* (a) LDE[i*blowup] == trace[i] */
+    i = 0u64
+    while i < 8u64 { if ZKST[1000u64 + i*4u64] != ZKST[400u64 + i] { return 2u64 } i = i + 1u64 }
+    /* (b) composition consistency at j=1: cp[1]*(x^N-1) == lde[5] - lde[1]^2 - c */
+    let omegaD : u32 = sf_rou(32u32)
+    let x : u32 = sf_pow(omegaD, 1u64)
+    let den : u32 = sf_sub(sf_pow(x, 8u64), 1u32)
+    let lhs : u32 = sf_mul(ZKST[2000u64 + 1u64], den)
+    let rhs : u32 = sf_sub(sf_sub(ZKST[1000u64 + 5u64], sf_mul(ZKST[1000u64 + 1u64], ZKST[1000u64 + 1u64])), 3u32)
+    if lhs != rhs { return 3u64 }
+    return 99u64
+}
+
+/* ================= Layer 3b/c: Fiat-Shamir + FRI prover + boundary openings ============= */
+fn st_copy32(dstAddr: u64, srcAddr: u64) -> i32 {
+    let d : *u8 = dstAddr as *u8
+    let s : *u8 = srcAddr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { d[i] = s[i] ; i = i + 1u64 }
+    return 0i32
+}
+/* sha256( [tag] ‖ idx_be4 ‖ transcript[0..tlen) ); first 8 bytes big-endian. */
+fn st_fs_hash8(tagByte: u32, useTag: u64, idx: u32, tlen: u64) -> u64 {
+    let tg : u32 = tagByte                              /* spill single-use params (iiis param-spill trap) */
+    let ut : u64 = useTag
+    let mut off : u64 = 0u64
+    if ut == 1u64 { ZKST_FSBUF[0] = (tg & 0xFFu32) as u8 ; off = 1u64 }
+    ZKST_FSBUF[off] = ((idx >> 24u32) & 0xFFu32) as u8
+    ZKST_FSBUF[off + 1u64] = ((idx >> 16u32) & 0xFFu32) as u8
+    ZKST_FSBUF[off + 2u64] = ((idx >> 8u32) & 0xFFu32) as u8
+    ZKST_FSBUF[off + 3u64] = (idx & 0xFFu32) as u8
+    off = off + 4u64
+    let tp : *u8 = (&ZKST_TRANS as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < tlen { ZKST_FSBUF[off + i] = tp[i] ; i = i + 1u64 }
+    let bp : *u8 = (&ZKST_FSBUF as u64) as *u8
+    let hp : *u8 = (&ZKST_HASH as u64) as *u8
+    sha256_oneshot(bp, off + tlen, hp)
+    let mut v : u64 = 0u64
+    i = 0u64
+    while i < 8u64 { v = (v << 8u64) | (ZKST_HASH[i] as u64) ; i = i + 1u64 }
+    return v
+}
+/* Fiat-Shamir field element = (8-byte big-endian hash) mod q.  Caller sets
+ * ZKST_FS_TLEN/IDX.  The direct u64 %% q mis-compiles after the sha256 call
+ * (iiis returns the quotient under register pressure), so we read the hash
+ * bytes from memory and reduce via the validated sf field ops (whose internal
+ * %% q is correct), materializing the products to avoid nested-call clobbering. */
+fn st_fs_field_compute() -> u32 {
+    let dummy : u64 = st_fs_hash8(0u32, 0u64, ZKST_FS_IDX[0] as u32, ZKST_FS_TLEN[0])
+    let hi : u32 = ((ZKST_HASH[0] as u32) << 24u32) | ((ZKST_HASH[1] as u32) << 16u32) | ((ZKST_HASH[2] as u32) << 8u32) | (ZKST_HASH[3] as u32)
+    let lo : u32 = ((ZKST_HASH[4] as u32) << 24u32) | ((ZKST_HASH[5] as u32) << 16u32) | ((ZKST_HASH[6] as u32) << 8u32) | (ZKST_HASH[7] as u32)
+    ZKST_FS_M[0] = sf_mul(hi, 301989884u32) as u64       /* hi*(2^32 mod q) mod q */
+    ZKST_FS_QMOD[0] = sf_mul(lo, 1u32) as u64            /* lo mod q */
+    return sf_add(ZKST_FS_M[0] as u32, ZKST_FS_QMOD[0] as u32)
+}
+fn st_derive_queries(tlen: u64, D: u64) -> i32 {
+    ZKST_QD_TLEN[0] = tlen                              /* stash in module memory (call-clobber-safe) */
+    ZKST_QD_MOD[0] = D
+    let mut produced : u64 = 0u64
+    let mut attempt : u32 = 0u32
+    while produced < 16u64 {
+        ZKST_FS_TLEN[0] = ZKST_QD_TLEN[0]               /* set FS inputs (memory-only, no param regs) */
+        ZKST_FS_IDX[0] = attempt as u64
+        let dummy : u64 = st_fs_hash8(73u32, 1u64, ZKST_FS_IDX[0] as u32, ZKST_FS_TLEN[0])
+        let hv : u64 = ((ZKST_HASH[6] as u64) << 8u64) | (ZKST_HASH[7] as u64)   /* low 16 bits, big-endian (== toy v %% D) */
+        let q : u32 = (hv & (ZKST_QD_MOD[0] - 1u64)) as u32   /* mask: D is a power of two */
+        attempt = attempt + 1u32
+        let mut ok : u64 = 1u64
+        if (q % 4u32) == 0u32 { ok = 0u64 }
+        if ok == 1u64 {
+            let mut dup : u64 = 0u64
+            let mut j : u64 = 0u64
+            while j < produced { if ZKST_QUERIES[j] == q { dup = 1u64 } j = j + 1u64 }
+            if dup == 0u64 { ZKST_QUERIES[produced] = q ; produced = produced + 1u64 }
+        }
+    }
+    return 0i32
+}
+/* Full STARK prover.  Returns 0 on success, 2 if trace boundary mismatches. */
+fn st_prove() -> i32 {
+    let rc : i32 = st_build_lde_cp()
+    if rc != 0i32 { return rc }
+    let N : u64 = ZKST_AIR_N[0] as u64
+    let D : u64 = N * 4u64
+    let omegaD : u32 = sf_rou(D as u32)
+    st_merkle_build(0u64, 1000u64, D)                    /* trace (LDE) tree @0 */
+    st_merkle_build(131072u64, 2000u64, D)               /* cp tree @131072 */
+    st_copy32(&ZKST_TRACE_ROOT as u64, st_root_addr(0u64))
+    st_copy32(&ZKST_CP_ROOT as u64, st_root_addr(131072u64))
+    st_copy32(&ZKST_TRANS as u64, &ZKST_TRACE_ROOT as u64)
+    st_copy32((&ZKST_TRANS as u64) + 32u64, &ZKST_CP_ROOT as u64)
+    let mut tlen : u64 = 64u64
+    let mut i : u64 = 0u64
+    while i < D { ZKST[3000u64 + i] = ZKST[2000u64 + i] ; i = i + 1u64 }   /* FRI layer 0 = cp */
+    ZKST_FSIZE[0] = D as u32  ZKST_FOMEGA[0] = omegaD  ZKST_FLOFF[0] = 0u32  ZKST_FTOFF[0] = 0u32
+    let mut L : u64 = 0u64
+    let mut lsize : u64 = D
+    while lsize > 1u64 {
+        if L + 1u64 >= 12u64 { lsize = 1u64 } else {
+            let floffL : u64 = ZKST_FLOFF[L] as u64
+            let ftoffL : u64 = ZKST_FTOFF[L] as u64
+            let szL : u64 = ZKST_FSIZE[L] as u64
+            st_merkle_build(262144u64 + ftoffL, 3000u64 + floffL, szL)
+            st_copy32((&ZKST_FRI_ROOTS as u64) + L*32u64, st_root_addr(262144u64 + ftoffL))
+            st_copy32((&ZKST_TRANS as u64) + tlen, (&ZKST_FRI_ROOTS as u64) + L*32u64)
+            tlen = tlen + 32u64
+            ZKST_FS_TLEN[0] = tlen
+            ZKST_FS_IDX[0] = (0xA1F00000u32 + (L as u32)) as u64
+            let alpha : u32 = st_fs_field_compute()
+            let ns : u64 = szL / 2u64
+            let inv2 : u32 = sf_inv(2u32)
+            let omegaL : u32 = ZKST_FOMEGA[L]
+            let nextOff : u64 = floffL + szL
+            let mut j : u64 = 0u64
+            while j < ns {
+                let lo : u32 = ZKST[3000u64 + floffL + j]
+                let hi : u32 = ZKST[3000u64 + floffL + j + ns]
+                let pe : u32 = sf_mul(sf_add(lo, hi), inv2)
+                let po : u32 = sf_mul(sf_sub(lo, hi), sf_mul(inv2, sf_inv(sf_pow(omegaL, j))))
+                ZKST[3000u64 + nextOff + j] = sf_add(pe, sf_mul(alpha, po))
+                j = j + 1u64
+            }
+            ZKST_FSIZE[L + 1u64] = ns as u32
+            ZKST_FOMEGA[L + 1u64] = sf_mul(omegaL, omegaL)
+            ZKST_FLOFF[L + 1u64] = nextOff as u32
+            ZKST_FTOFF[L + 1u64] = (ftoffL + 2u64*szL*32u64) as u32
+            lsize = ns
+            L = L + 1u64
+        }
+    }
+    ZKST_FRI_NL[0] = L as u32
+    ZKST_FRI_FINAL[0] = ZKST[3000u64 + (ZKST_FLOFF[L] as u64)]
+    st_derive_queries(tlen, D)
+    let mut qi2 : u64 = 0u64
+    while qi2 < 16u64 {
+        let jq : u64 = ZKST_QUERIES[qi2] as u64
+        ZKST_TQ[qi2] = ZKST[1000u64 + jq]
+        ZKST_TQN[qi2] = ZKST[1000u64 + (jq + 4u64) % D]
+        ZKST_CQ[qi2] = ZKST[2000u64 + jq]
+        st_merkle_open(0u64, D, jq, (&ZKST_TPATH as u64) + qi2*320u64)
+        st_merkle_open(0u64, D, (jq + 4u64) % D, (&ZKST_TNPATH as u64) + qi2*320u64)
+        st_merkle_open(131072u64, D, jq, (&ZKST_CPATH as u64) + qi2*320u64)
+        let mut qcur : u64 = jq
+        let mut l : u64 = 0u64
+        while l < L {
+            let szl : u64 = ZKST_FSIZE[l] as u64
+            let half : u64 = szl / 2u64
+            let floffl : u64 = ZKST_FLOFF[l] as u64
+            let ftoffl : u64 = ZKST_FTOFF[l] as u64
+            ZKST_FQ[qi2*12u64 + l] = ZKST[3000u64 + floffl + qcur]
+            ZKST_FSIB[qi2*12u64 + l] = ZKST[3000u64 + floffl + (qcur + half) % szl]
+            st_merkle_open(262144u64 + ftoffl, szl, (qcur + half) % szl, (&ZKST_FPATH as u64) + (qi2*12u64 + l)*320u64)
+            qcur = qcur % half
+            l = l + 1u64
+        }
+        qi2 = qi2 + 1u64
+    }
+    /* §4.13 FIX: explicit boundary openings (positions 0 and (N-1)*blowup, on the
+     * trace subgroup, excluded from FRI queries -> must be opened separately). */
+    ZKST_BX0[0] = ZKST[1000u64]
+    st_merkle_open(0u64, D, 0u64, &ZKST_BX0P as u64)
+    ZKST_BXN[0] = ZKST[1000u64 + (N - 1u64)*4u64]
+    st_merkle_open(0u64, D, (N - 1u64)*4u64, &ZKST_BXNP as u64)
+    return 0i32
+}
+
+/* ================= Layer 3d: verifier (with §4.13 boundary checks) =================
+ * Returns 0 = ACCEPT; positive = the failing check (for KAT localisation). */
+fn st_verify() -> u64 {
+    let N : u64 = ZKST_AIR_N[0] as u64
+    let D : u64 = N * 4u64
+    let omegaD : u32 = sf_rou(D as u32)
+    /* rebuild transcript from the committed roots */
+    st_copy32(&ZKST_TRANS as u64, &ZKST_TRACE_ROOT as u64)
+    st_copy32((&ZKST_TRANS as u64) + 32u64, &ZKST_CP_ROOT as u64)
+    let mut tlen : u64 = 64u64
+    let NL : u64 = ZKST_FRI_NL[0] as u64
+    let mut l : u64 = 0u64
+    while l < NL { st_copy32((&ZKST_TRANS as u64) + tlen, (&ZKST_FRI_ROOTS as u64) + l*32u64) ; tlen = tlen + 32u64 ; l = l + 1u64 }
+    st_derive_queries(tlen, D)                          /* re-derive (verifier's own) queries */
+    let mut plenD : u64 = 0u64
+    let mut td : u64 = D
+    while td > 1u64 { plenD = plenD + 1u64 ; td = td >> 1u64 }
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        let jq : u64 = ZKST_QUERIES[i] as u64
+        if st_merkle_verify(&ZKST_TRACE_ROOT as u64, D, jq, ZKST_TQ[i], (&ZKST_TPATH as u64) + i*320u64, plenD) == 0u64 { return 1u64 }
+        if st_merkle_verify(&ZKST_TRACE_ROOT as u64, D, (jq + 4u64) % D, ZKST_TQN[i], (&ZKST_TNPATH as u64) + i*320u64, plenD) == 0u64 { return 2u64 }
+        if st_merkle_verify(&ZKST_CP_ROOT as u64, D, jq, ZKST_CQ[i], (&ZKST_CPATH as u64) + i*320u64, plenD) == 0u64 { return 3u64 }
+        /* AIR transition: cp*(x^N-1) == trace_next - trace^2 - c */
+        let x : u32 = sf_pow(omegaD, jq)
+        let den : u32 = sf_sub(sf_pow(x, N), 1u32)
+        let lhs : u32 = sf_mul(ZKST_CQ[i], den)
+        let rhs : u32 = sf_sub(sf_sub(ZKST_TQN[i], sf_mul(ZKST_TQ[i], ZKST_TQ[i])), ZKST_AIR_C[0])
+        if lhs != rhs { return 4u64 }
+        /* FRI consistency */
+        let mut qcur : u64 = jq
+        let mut cur : u32 = ZKST_CQ[i]
+        let mut omegaL : u32 = omegaD
+        let mut sizeL : u64 = D
+        let mut l2 : u64 = 0u64
+        while l2 < NL {
+            let half : u64 = sizeL / 2u64
+            let inv2 : u32 = sf_inv(2u32)
+            let cutlen : u64 = 64u64 + 32u64*(l2 + 1u64)
+            ZKST_FS_TLEN[0] = cutlen
+            ZKST_FS_IDX[0] = (0xA1F00000u32 + (l2 as u32)) as u64
+            let alpha : u32 = st_fs_field_compute()
+            if cur != ZKST_FQ[i*12u64 + l2] { return 5u64 }
+            let mut aa : u32 = 0u32
+            let mut bb : u32 = 0u32
+            if qcur < half { aa = cur  bb = ZKST_FSIB[i*12u64 + l2] } else { aa = ZKST_FSIB[i*12u64 + l2]  bb = cur }
+            let mut plen2 : u64 = 0u64
+            let mut t2 : u64 = sizeL
+            while t2 > 1u64 { plen2 = plen2 + 1u64 ; t2 = t2 >> 1u64 }
+            if st_merkle_verify((&ZKST_FRI_ROOTS as u64) + l2*32u64, sizeL, (qcur + half) % sizeL, ZKST_FSIB[i*12u64 + l2], (&ZKST_FPATH as u64) + (i*12u64 + l2)*320u64, plen2) == 0u64 { return 6u64 }
+            let pe : u32 = sf_mul(sf_add(aa, bb), inv2)
+            let po : u32 = sf_mul(sf_sub(aa, bb), sf_mul(inv2, sf_inv(sf_pow(omegaL, qcur % half))))
+            cur = sf_add(pe, sf_mul(alpha, po))
+            qcur = qcur % half
+            sizeL = half
+            omegaL = sf_mul(omegaL, omegaL)
+            l2 = l2 + 1u64
+        }
+        if cur != ZKST_FRI_FINAL[0] { return 7u64 }
+        i = i + 1u64
+    }
+    /* §4.13 boundary checks: bind LDE[0]==x0 and LDE[(N-1)*blowup]==xN to the trace commitment. */
+    if st_merkle_verify(&ZKST_TRACE_ROOT as u64, D, 0u64, ZKST_BX0[0], &ZKST_BX0P as u64, plenD) == 0u64 { return 8u64 }
+    if ZKST_BX0[0] != ZKST_AIR_X0[0] { return 9u64 }
+    if st_merkle_verify(&ZKST_TRACE_ROOT as u64, D, (N - 1u64)*4u64, ZKST_BXN[0], &ZKST_BXNP as u64, plenD) == 0u64 { return 10u64 }
+    if ZKST_BXN[0] != ZKST_AIR_XN[0] { return 11u64 }
+    return 0u64
+}
+
+/* STARK KAT: prove + verify accepts; reject tampered cp; reject tampered boundary
+ * (the last only passes because of the §4.13 fix).  99 = pass. */
+fn zk_stark_kat() -> u64 @export {
+    ZKST_AIR_N[0] = 8u32  ZKST_AIR_X0[0] = 2u32  ZKST_AIR_C[0] = 3u32
+    let mut t : u32 = 2u32
+    let mut i : u64 = 0u64
+    while i < 7u64 { t = sf_add(sf_mul(t, t), 3u32) ; i = i + 1u64 }
+    ZKST_AIR_XN[0] = t
+    if st_prove() != 0i32 { return 1u64 }
+    let v1 : u64 = st_verify()
+    if v1 != 0u64 { return 100u64 + v1 }                /* must accept (localise failing check) */
+    /* tamper a composition opening -> must reject */
+    ZKST_CQ[0] = ZKST_CQ[0] ^ 1u32
+    if st_verify() == 0u64 { return 2u64 }
+    ZKST_CQ[0] = ZKST_CQ[0] ^ 1u32
+    if st_verify() != 0u64 { return 3u64 }              /* restored -> accept again */
+    /* tamper the public boundary claim x0 -> must reject (ONLY the §4.13 fix catches this) */
+    let savedx0 : u32 = ZKST_AIR_X0[0]
+    ZKST_AIR_X0[0] = savedx0 ^ 1u32
+    if st_verify() == 0u64 { return 4u64 }
+    ZKST_AIR_X0[0] = savedx0
+    if st_verify() != 0u64 { return 5u64 }
+    return 99u64
+}

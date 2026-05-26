@@ -1,0 +1,25 @@
+/* corpus/316_xii_R023.iii  -- R023 [F1] Grant-pair fusion */
+
+module corpus_316_xii_R023
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* GRANT subform: high 16 = parent+atten (0x00010000), low 16 = child_set
+     * a child_set = 0x0001, b child_set = 0x0002 (disjoint) */
+    let a : u32 = xii_term_make_basis(9u8, 0x00010001u32)
+    let b : u32 = xii_term_make_basis(9u8, 0x00010002u32)
+    let t : u32 = xii_term_make_fusion2(18u8, a, b)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 23u32 { return 1u64 }
+    if xii_term_get_kind(r) != 9u8 { return 2u64 }
+    if xii_term_get_subform(r) != 0x00010003u32 { return 3u64 }
+    return 0u64
+}

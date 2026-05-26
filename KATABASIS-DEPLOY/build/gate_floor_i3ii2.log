@@ -1,0 +1,202 @@
+[1] cg_r0 -> .o : floor driver + kernel cpufeat shim + 19 gate-closure modules
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:74: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:112: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:156: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:194: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:252: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:310: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:368: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:2528: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_floor.o.s:2579: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cpufeat_kernel.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/cpufeat_kernel.o.s:4: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:23: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:142: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:236: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:274: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:312: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:469: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:617: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:722: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:761: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:808: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:924: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:1072: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:1177: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:1238: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:1478: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:1656: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:1834: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:2012: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_algebra.o.s:2143: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_pfs.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/hexad_pfs.o.s:30: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_pfs.o.s:617: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_pfs.o.s:689: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_pfs.o.s:720: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_pfs.o.s:836: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:30: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:116: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:208: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:274: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:548: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:618: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:671: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:756: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/hexad_reach.o.s:865: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:100: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:177: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:208: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:239: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:380: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:506: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:767: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1013: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1195: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1277: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1349: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1437: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1515: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1629: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1707: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1794: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1871: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:1958: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2035: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2122: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2199: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2312: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2389: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2476: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2553: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2666: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2743: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2832: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:2933: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:3045: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:3145: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:3214: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:3283: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:3343: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/xii_term.o.s:3413: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/sha256.o.s:41: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:840: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:897: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:1090: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:1122: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:1247: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:1283: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:2182: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:2326: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:2572: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:3018: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:3073: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:3194: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/sha256.o.s:3475: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak256.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/keccak256.o.s:47: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak256.o.s:183: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak256.o.s:268: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak256.o.s:427: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak256.o.s:597: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/keccak.o.s:56: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:407: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:770: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1025: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1132: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1261: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1389: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1499: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1766: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1798: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1923: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:1959: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:2801: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:3234: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/keccak.o.s:3299: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/content_addr.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/content_addr.o.s:33: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/content_addr.o.s:304: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/content_addr.o.s:516: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/content_addr.o.s:728: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/content_addr.o.s:907: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/content_addr.o.s:1045: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/capability.o.s:79: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:174: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:310: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:433: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:732: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1023: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1154: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1450: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1525: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1600: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1675: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/capability.o.s:1750: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/svm_layout.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/svm_layout.o.s:28: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/svm_layout.o.s:288: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/svm_layout.o.s:548: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/svm_layout.o.s:602: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/svm_layout.o.s:660: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/bar_layout.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/bar_layout.o.s:30: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/bar_layout.o.s:234: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/bar_layout.o.s:303: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/bar_layout.o.s:357: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_family.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/cycle_family.o.s:51: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_family.o.s:339: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_family.o.s:627: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_family.o.s:915: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_family.o.s:1035: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_admit.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/cycle_admit.o.s:34: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:30: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:166: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:258: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:335: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:401: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:467: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:527: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:577: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/cycle_term.o.s:663: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/seal.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/seal.o.s:26: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/seal.o.s:200: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/caps.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/caps.o.s:22: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/caps.o.s:310: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_verdict.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/gate_verdict.o.s:31: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_verdict.o.s:235: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_verdict.o.s:439: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate_verdict.o.s:645: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/gate.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/gate.o.s:28: Warning: Ignoring changed section attributes for .text
+KATABASIS-DEPLOY/build/obj/admit.o.s: Assembler messages:
+KATABASIS-DEPLOY/build/obj/admit.o.s:15: Warning: Ignoring changed section attributes for .text
+[2] assemble kernel witness leaf + floor ntoskrnl shims (Io + WRMSR + pin/unpin + Mm + VMCB/VMRUN)
+[3] link gate_floor.sys (PE32+ native, entry=DriverEntry, ntoskrnl imports, deterministic)
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x18cd): undefined reference to `L_p_g4_root'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1930): undefined reference to `L_p_g4_a'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1938): undefined reference to `L_p_g4_cap'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1951): undefined reference to `L_p_g4_c'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x19ea): undefined reference to `L_p_g4_a2'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x19f2): undefined reference to `L_p_g4_cap'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1a0b): undefined reference to `L_p_g4_c2'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1a39): undefined reference to `L_p_g4_seal'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1a40): undefined reference to `L_p_g4_c'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1a48): undefined reference to `L_p_g4_seal'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1a61): undefined reference to `L_p_g4_verdict'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1a85): undefined reference to `L_p_g4_verdict'
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: KATABASIS-DEPLOY/build/obj/gate_floor.o:fake:(.text+0x1b84): undefined reference to `L_p_g4_e'
+collect2.exe: error: ld returned 1 exit status

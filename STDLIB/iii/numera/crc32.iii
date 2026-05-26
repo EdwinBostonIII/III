@@ -1,0 +1,78 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\crc32.iii
+ *
+ * III STDLIB - numera::crc32
+ *
+ * IEEE 802.3 CRC-32 (polynomial 0x04C11DB7, reversed 0xEDB88320).
+ * Reflected input/output, init 0xFFFFFFFF, XOR-out 0xFFFFFFFF.
+ * Matches zlib/PNG/Ethernet CRC.
+ *
+ * Public API (singleton, stream-style):
+ *   crc32_init() -> u32                         starts a fresh CRC
+ *   crc32_update(data:*u8, len:u64) -> i32
+ *   crc32_final() -> u32                        returns the final CRC
+ *
+ * Convenience:
+ *   crc32_oneshot(data:*u8, len:u64) -> u32
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_crc32
+
+const CRC32_POLY_REV : u32 = 0xEDB88320u32
+
+var CRC32_TABLE : [u32; 256]
+var CRC32_TABLE_INIT : u8 = 0u8
+var CRC32_STATE : u32 = 0xFFFFFFFFu32
+
+fn crc32_init_table() -> i32 {
+    if CRC32_TABLE_INIT == 1u8 { return 0i32 }
+    let mut i : u32 = 0u32
+    while i < 256u32 {
+        let mut c : u32 = i
+        let mut k : u32 = 0u32
+        while k < 8u32 {
+            if (c & 1u32) != 0u32 {
+                c = (c >> 1u32) ^ CRC32_POLY_REV
+            } else {
+                c = c >> 1u32
+            }
+            k = k + 1u32
+        }
+        CRC32_TABLE[i] = c
+        i = i + 1u32
+    }
+    CRC32_TABLE_INIT = 1u8
+    return 0i32
+}
+
+fn crc32_init() -> u32 @export {
+    crc32_init_table()
+    CRC32_STATE = 0xFFFFFFFFu32
+    return CRC32_STATE
+}
+
+fn crc32_update(data: *u8, len: u64) -> i32 @export {
+    crc32_init_table()
+    let mut crc : u32 = CRC32_STATE
+    let mut i : u64 = 0u64
+    while i < len {
+        let b : u32 = data[i] as u32
+        let idx : u32 = (crc ^ b) & 0xFFu32
+        crc = (crc >> 8u32) ^ CRC32_TABLE[idx]
+        i = i + 1u64
+    }
+    CRC32_STATE = crc
+    return 0i32
+}
+
+fn crc32_final() -> u32 @export {
+    let result : u32 = CRC32_STATE ^ 0xFFFFFFFFu32
+    return result
+}
+
+fn crc32_oneshot(data: *u8, len: u64) -> u32 @export {
+    crc32_init()
+    crc32_update(data, len)
+    return crc32_final()
+}

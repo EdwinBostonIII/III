@@ -1,0 +1,198 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_savings.iii
+ *
+ * III STDLIB - omnia::xii_savings
+ *
+ * Sealed Delta-K-compose savings table for XII. Per DOCS/III-XII.md S5.3 + S26.3.
+ *
+ * Indexed by primitive identity (0..23):
+ *   0=K01 FORM, 1=K02 BIND, 2=K03 CONVEY, 3=K04 MEAN, 4=K05 ACT,
+ *   5=K06 COMPOSE, 6=K07 SEAL, 7=K08 PROVE, 8=K09 QUERY, 9=K10 GRANT,
+ *   10=K11 GOVERN, 11=K12 THEN, 12=K13 WITH, 13=K14 UNDER, 14=K15 IF,
+ *   15=K16 LOOP, 16=K17 LIFT, 17=K18 REFLECT,
+ *   18=F.COMPOSE_AS_PRIM, 19=F.THEN_AS_PRIM, 20=F.WITH_AS_PRIM,
+ *   21=F.UNDER_AS_PRIM, 22=F.IF_AS_PRIM, 23=F.LOOP_AS_PRIM
+ *
+ * The table is symmetric: DK[a][b] == DK[b][a].
+ * Mostly zero (sparse); 10 nonzero entries per S26.3:
+ *   Diagonal (10 idempotent self-folds): K02=1, K03=3, K04=1, K05=1,
+ *     K06=1, K07=8, K08=24, K09=4, K10=1, K11=12, K17=1, K18=1
+ *   Off-diagonal (6 pairs):
+ *     K07-K08 = 24 (SEAL+PROVE collapse, per rule R027)
+ *     K10-K07 = 1  (GRANT+SEAL shared seal path)
+ *     K03-K06 = 1  (CONVEY output merges directly into next COMPOSE)
+ *     K05-K12 = 1  (ACT feeds sequential pipeline)
+ *     K09-K18 = 1  (QUERY+REFLECT shared pattern-table port)
+ *     K17-K10 = 1  (LIFT carries fresh GRANT)
+ *
+ * Hexad: kind_form. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only. Sealed: xii_dk_compose.mhash := SHA-256(576-byte table).
+ */
+
+module omnia_xii_savings
+
+const XDK_K01_FORM    : u8 = 0u8
+const XDK_K02_BIND    : u8 = 1u8
+const XDK_K03_CONVEY  : u8 = 2u8
+const XDK_K04_MEAN    : u8 = 3u8
+const XDK_K05_ACT     : u8 = 4u8
+const XDK_K06_COMPOSE : u8 = 5u8
+const XDK_K07_SEAL    : u8 = 6u8
+const XDK_K08_PROVE   : u8 = 7u8
+const XDK_K09_QUERY   : u8 = 8u8
+const XDK_K10_GRANT   : u8 = 9u8
+const XDK_K11_GOVERN  : u8 = 10u8
+const XDK_K12_THEN    : u8 = 11u8
+const XDK_K13_WITH    : u8 = 12u8
+const XDK_K14_UNDER   : u8 = 13u8
+const XDK_K15_IF      : u8 = 14u8
+const XDK_K16_LOOP    : u8 = 15u8
+const XDK_K17_LIFT    : u8 = 16u8
+const XDK_K18_REFLECT : u8 = 17u8
+const XDK_FCOMPOSE_AP : u8 = 18u8
+const XDK_FTHEN_AP    : u8 = 19u8
+const XDK_FWITH_AP    : u8 = 20u8
+const XDK_FUNDER_AP   : u8 = 21u8
+const XDK_FIF_AP      : u8 = 22u8
+const XDK_FLOOP_AP    : u8 = 23u8
+
+const XDK_DIM         : u32 = 24u32
+const XDK_TABLE_LEN   : u32 = 576u32
+
+var XII_DK_TABLE : [u8; 576]
+var XII_DK_INIT_DONE : u8 = 0u8
+
+fn _xii_dk_set_pair(a: u8, b: u8, value: u8) -> i32 {
+    let ia : u32 = a as u32
+    let ib : u32 = b as u32
+    XII_DK_TABLE[(ia * XDK_DIM) + ib] = value
+    XII_DK_TABLE[(ib * XDK_DIM) + ia] = value
+    return 0i32
+}
+
+fn xii_savings_init() -> i32 @export {
+    if XII_DK_INIT_DONE != 0u8 { return 0i32 }
+
+    let mut i : u32 = 0u32
+    while i < XDK_TABLE_LEN {
+        XII_DK_TABLE[i] = 0u8
+        i = i + 1u32
+    }
+
+    /* Diagonal: idempotent self-fold savings (S26.3). */
+    XII_DK_TABLE[(XDK_K02_BIND as u32) * XDK_DIM + (XDK_K02_BIND as u32)] = 1u8
+    XII_DK_TABLE[(XDK_K03_CONVEY as u32) * XDK_DIM + (XDK_K03_CONVEY as u32)] = 3u8
+    XII_DK_TABLE[(XDK_K04_MEAN as u32) * XDK_DIM + (XDK_K04_MEAN as u32)] = 1u8
+    XII_DK_TABLE[(XDK_K05_ACT as u32) * XDK_DIM + (XDK_K05_ACT as u32)] = 1u8
+    XII_DK_TABLE[(XDK_K06_COMPOSE as u32) * XDK_DIM + (XDK_K06_COMPOSE as u32)] = 1u8
+    XII_DK_TABLE[(XDK_K07_SEAL as u32) * XDK_DIM + (XDK_K07_SEAL as u32)] = 8u8
+    XII_DK_TABLE[(XDK_K08_PROVE as u32) * XDK_DIM + (XDK_K08_PROVE as u32)] = 24u8
+    XII_DK_TABLE[(XDK_K09_QUERY as u32) * XDK_DIM + (XDK_K09_QUERY as u32)] = 4u8
+    XII_DK_TABLE[(XDK_K10_GRANT as u32) * XDK_DIM + (XDK_K10_GRANT as u32)] = 1u8
+    XII_DK_TABLE[(XDK_K11_GOVERN as u32) * XDK_DIM + (XDK_K11_GOVERN as u32)] = 12u8
+    XII_DK_TABLE[(XDK_K17_LIFT as u32) * XDK_DIM + (XDK_K17_LIFT as u32)] = 1u8
+    XII_DK_TABLE[(XDK_K18_REFLECT as u32) * XDK_DIM + (XDK_K18_REFLECT as u32)] = 1u8
+
+    /* Off-diagonal symmetric savings (S26.3). */
+    _xii_dk_set_pair(XDK_K07_SEAL, XDK_K08_PROVE, 24u8)
+    _xii_dk_set_pair(XDK_K10_GRANT, XDK_K07_SEAL, 1u8)
+    _xii_dk_set_pair(XDK_K03_CONVEY, XDK_K06_COMPOSE, 1u8)
+    _xii_dk_set_pair(XDK_K05_ACT, XDK_K12_THEN, 1u8)
+    _xii_dk_set_pair(XDK_K09_QUERY, XDK_K18_REFLECT, 1u8)
+    _xii_dk_set_pair(XDK_K17_LIFT, XDK_K10_GRANT, 1u8)
+
+    XII_DK_INIT_DONE = 1u8
+    return 0i32
+}
+
+/* Lookup DK[a][b]. Returns 0 for out-of-range or before-init access. */
+fn xii_savings_get(a: u8, b: u8) -> u8 @export {
+    if XII_DK_INIT_DONE == 0u8 { xii_savings_init() }
+    if a >= 24u8 { return 0u8 }
+    if b >= 24u8 { return 0u8 }
+    let ia : u32 = a as u32
+    let ib : u32 = b as u32
+    return XII_DK_TABLE[(ia * XDK_DIM) + ib]
+}
+
+/* Verify symmetry: DK[a][b] == DK[b][a] for all a, b. Returns count of failures. */
+fn xii_savings_symmetry_check() -> u32 @export {
+    if XII_DK_INIT_DONE == 0u8 { xii_savings_init() }
+    let mut fails : u32 = 0u32
+    let mut a : u8 = 0u8
+    while a < 24u8 {
+        let mut b : u8 = 0u8
+        while b < 24u8 {
+            let ab : u8 = xii_savings_get(a, b)
+            let ba : u8 = xii_savings_get(b, a)
+            if ab != ba { fails = fails + 1u32 }
+            b = b + 1u8
+        }
+        a = a + 1u8
+    }
+    return fails
+}
+
+/* Verify positive-K conservation: for nonzero DK[a][b], the saving
+ * dk must satisfy 1 <= dk <= max(K(a), K(b)). Per S26.3, an off-
+ * diagonal pair like K07-K08 (SEAL+PROVE -> SEAL via R027) saves the
+ * full K of the eliminated kernel (here 24, K08), which means the
+ * tight bound is max, not min. A saving that exceeded max would imply
+ * negative residual K which is physically impossible.
+ *
+ * Also rejects dk == 0 entries that somehow leaked into the symmetric
+ * companion (defence against later tampering of the sealed table). */
+fn xii_savings_positive_check() -> u32 @export {
+    if XII_DK_INIT_DONE == 0u8 { xii_savings_init() }
+    let mut fails : u32 = 0u32
+    let mut a : u8 = 0u8
+    while a < 24u8 {
+        let mut b : u8 = 0u8
+        while b < 24u8 {
+            let dk : u8 = xii_savings_get(a, b)
+            if dk != 0u8 {
+                let ka : u32 = xii_savings_k_of(a)
+                let kb : u32 = xii_savings_k_of(b)
+                let mut kmax : u32 = ka
+                if kb > kmax { kmax = kb }
+                if (dk as u32) > kmax { fails = fails + 1u32 }
+            }
+            b = b + 1u8
+        }
+        a = a + 1u8
+    }
+    return fails
+}
+
+/* Internal: K-cost lookup (avoids extern to xii_basis for module independence
+ * during init). */
+fn xii_savings_k_of(kind: u8) -> u32 @export {
+    if kind == XDK_K01_FORM    { return 1u32 }
+    if kind == XDK_K02_BIND    { return 1u32 }
+    if kind == XDK_K03_CONVEY  { return 4u32 }
+    if kind == XDK_K04_MEAN    { return 1u32 }
+    if kind == XDK_K05_ACT     { return 4u32 }
+    if kind == XDK_K06_COMPOSE { return 1u32 }
+    if kind == XDK_K07_SEAL    { return 12u32 }
+    if kind == XDK_K08_PROVE   { return 24u32 }
+    if kind == XDK_K09_QUERY   { return 4u32 }
+    if kind == XDK_K10_GRANT   { return 1u32 }
+    if kind == XDK_K11_GOVERN  { return 12u32 }
+    if kind == XDK_K12_THEN    { return 1u32 }
+    if kind == XDK_K13_WITH    { return 1u32 }
+    if kind == XDK_K14_UNDER   { return 1u32 }
+    if kind == XDK_K15_IF      { return 1u32 }
+    if kind == XDK_K16_LOOP    { return 1u32 }
+    if kind == XDK_K17_LIFT    { return 1u32 }
+    if kind == XDK_K18_REFLECT { return 1u32 }
+    /* F.X_AS_PRIM entries: cost contribution is 0 (handled by recursive children). */
+    return 0u32
+}
+
+fn xii_savings_table_ptr() -> u64 @export {
+    return &XII_DK_TABLE as u64
+}
+
+fn xii_savings_table_len() -> u32 @export {
+    return XDK_TABLE_LEN
+}

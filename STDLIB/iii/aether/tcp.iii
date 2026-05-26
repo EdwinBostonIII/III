@@ -1,0 +1,139 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\tcp.iii
+ *
+ * III STDLIB - aether::tcp
+ *
+ * Lattice plan Step 0053 -- `@linear` socket wrapper over aether/net.iii.
+ *
+ * Design: each TCP socket handle is conceptually a single-use linear
+ * resource -- once consumed by `tcp_close` (or transferred via
+ * `tcp_handle_take`) the handle id is invalid and any further use
+ * returns TCP_E_CLOSED.  The lattice plan's downstream Phase 8 code
+ * relies on this discipline so ripple-execute can prove that no
+ * in-flight reader holds a stale socket reference when a connection
+ * is hot-swapped.
+ *
+ * Storage: a per-instance liveness flag bitmap mirrors the underlying
+ * net.iii handle, so multiple `tcp_*` calls against the same handle
+ * id produce coherent error reporting.  The wrapper does not duplicate
+ * net.iii's underlying winsock state.
+ *
+ * Public surface:
+ *
+ *   tcp_connect_ipv4(cap, sockaddr_ptr, sockaddr_len) -> u64 @linear @crystal
+ *   tcp_send(handle, buf, n) -> i32
+ *   tcp_recv(handle, buf, n) -> i32
+ *   tcp_close(handle) -> i32              (consumes the linear handle)
+ *   tcp_is_live(handle) -> u8
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 0.95 (network may fail).
+ */
+
+module aether_tcp
+
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle: u64, buf: u64 @sovereign_value, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_close(handle: u64) -> i32 from "net.iii"
+
+const TCP_OK              : i32 =  0i32
+const TCP_E_BADID         : i32 = -1i32
+const TCP_E_CLOSED        : i32 = -2i32
+
+const TCP_MAX_HANDLES : u32 = 64u32
+
+var TCP_LIVE : [u8; 64]
+/* slot -> underlying net.iii handle id.  Required because net handle ids
+ * come from handle.iii's allocator (arbitrary), NOT the tcp slot space;
+ * tcp_send/recv/close must forward the REAL net handle, not slot+1. */
+var TCP_NET  : [u64; 64]
+
+fn tcp_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = (id - 1u64) & 0xFFFFFFFFu64
+    if s >= (TCP_MAX_HANDLES as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if TCP_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+fn tcp_alloc_slot(net_handle: u64) -> u64 {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < TCP_MAX_HANDLES {
+        if TCP_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 {
+        net_close(net_handle)
+        return 0u64
+    }
+    TCP_LIVE[slot] = 1u8
+    /* Store the underlying net.iii handle id for this slot.  The tcp
+     * handle id returned to callers is slot+1; tcp_send/recv/close
+     * resolve it back to the real net handle via TCP_NET[] before
+     * calling net.iii (net handle ids come from handle.iii's allocator,
+     * NOT the slot space, so the raw slot+1 must never be forwarded). */
+    TCP_NET[slot] = net_handle
+    return (slot as u64) + 1u64
+}
+
+fn tcp_connect_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 @linear @crystal @export {
+    let net_h : u64 = net_tcp_connect_ipv4(cap, sockaddr_ptr, sockaddr_len)
+    if net_h == 0u64 { return 0u64 }
+    return tcp_alloc_slot(net_h)
+}
+
+fn tcp_listen_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 @linear @crystal @export {
+    let net_h : u64 = net_tcp_listen_ipv4(cap, sockaddr_ptr, sockaddr_len)
+    if net_h == 0u64 { return 0u64 }
+    return tcp_alloc_slot(net_h)
+}
+
+fn tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 @linear @crystal @export {
+    let s : u32 = tcp_slot_of(listen_handle)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let net_listen : u64 = TCP_NET[s]
+    let net_conn : u64 = net_tcp_accept(net_listen, dial_cap)
+    if net_conn == 0u64 { return 0u64 }
+    return tcp_alloc_slot(net_conn)
+}
+
+/* mig3 boundary SINK (forwarder): buf may carry sovereign data outward, so it is
+ * @sovereign_value; the forward to net_tcp_send stays sovereign->sovereign (Part 2). */
+fn tcp_send(handle: u64, buf: u64 @sovereign_value, n: u64) -> i32 @export {
+    let s : u32 = tcp_slot_of(handle)
+    if s == 0xFFFFFFFFu32 { return TCP_E_CLOSED }
+    let nh : u64 = TCP_NET[s]
+    return net_tcp_send(nh, buf, n)
+}
+
+/* mig3 boundary SOURCE (forwarder): buf carries the recv out-buffer taint --
+ * @sovereign_value @sovereign_out -- so tcp_recv's callers must pass a SovVal
+ * buffer, and the forward to net_tcp_recv stays sovereign->sovereign (Part 2). */
+fn tcp_recv(handle: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 @export {
+    let s : u32 = tcp_slot_of(handle)
+    if s == 0xFFFFFFFFu32 { return TCP_E_CLOSED }
+    let nh : u64 = TCP_NET[s]
+    return net_tcp_recv(nh, buf, n)
+}
+
+fn tcp_close(handle: u64) -> i32 @linear @export {
+    let s : u32 = tcp_slot_of(handle)
+    if s == 0xFFFFFFFFu32 { return TCP_E_BADID }
+    /* Linear consumption: resolve the real net handle, clear liveness +
+     * the slot->net map, then propagate close to net.iii. */
+    let nh : u64 = TCP_NET[s]
+    TCP_LIVE[s] = 0u8
+    TCP_NET[s] = 0u64
+    return net_close(nh)
+}
+
+fn tcp_is_live(handle: u64) -> u8 @export {
+    let s : u32 = tcp_slot_of(handle)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return 1u8
+}

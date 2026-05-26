@@ -1,0 +1,23 @@
+/* corpus/352_xii_lattice_replay_avx2.iii — Lattice replay (x86_avx2 target=1) */
+
+module corpus_352_xii_lattice_replay_avx2
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+
+var BUF_A : [u8; 256]
+var BUF_B : [u8; 256]
+
+fn main() -> u64 {
+    xii_horizon_init()
+    /* Generate H001 ed25519_sign on target 1 twice; bytes must match. */
+    let n1 : u32 = xii_emit_gen_produce(0u32, 1u32, 256u32, &BUF_A as *u8)
+    let n2 : u32 = xii_emit_gen_produce(0u32, 1u32, 256u32, &BUF_B as *u8)
+    if n1 != n2 { return 1u64 }
+    let mut i : u32 = 0u32
+    while i < n1 {
+        if BUF_A[i] != BUF_B[i] { return 2u64 }
+        i = i + 1u32
+    }
+    return 0u64
+}

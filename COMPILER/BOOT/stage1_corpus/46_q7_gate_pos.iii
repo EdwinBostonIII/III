@@ -1,0 +1,10 @@
+module corpus_46
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn quality_check_q7_resolution() -> u8 from "quality_q7.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    let r : u8 = quality_check_q7_resolution()
+    return r as u64
+}

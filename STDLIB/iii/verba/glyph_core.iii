@@ -1,0 +1,175 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_core.iii
+ *
+ * III STDLIB - verba::glyph_core -- shared helpers for the 192-byte
+ * canonical Glyph V3 encoding (Phase 14h).
+ *
+ * Layout (sealed):
+ *   [  0.. 3] form_id      (u32 LE)
+ *   [  4.. 7] payload_len  (u32 LE)
+ *   [  8..159] payload     (152 bytes)
+ *   [160..191] sha256(form_id || payload_len || payload[0..152])
+ *
+ * The mhash field is a sealed integrity check; gv3_compute_mhash
+ * recomputes it from the rest, gv3_validate checks the recorded value
+ * matches.  Together they make every glyph verifiable in isolation --
+ * a corrupt or forged glyph fails validate even without external
+ * witness lookup.
+ *
+ * Form IDs (caller-side opaque sealed enum):
+ *   0x10 u8   0x11 u32   0x12 u64   0x13 i64   0x14 f64
+ *   0x20 str  0x21 bytes
+ *   0x30 vec  0x31 map   0x32 set
+ *   0x33 enum 0x34 record
+ *   0x40 crystal  0x41 witness  0x42 proof
+ *   0x50 glyph_recursive
+ *
+ * Public surface:
+ *   gv3_total_bytes()                 -> u32   (always 192)
+ *   gv3_payload_cap()                 -> u32   (always 152)
+ *   gv3_zero(p_192)                   -> i32
+ *   gv3_write_u8(p, v)                -> i32
+ *   gv3_read_u8(p)                    -> u32
+ *   gv3_write_u32_le(p, v)            -> i32
+ *   gv3_read_u32_le(p)                -> u32
+ *   gv3_write_u64_le(p, v)            -> i32
+ *   gv3_read_u64_le(p)                -> u64
+ *   gv3_compute_mhash(p_192)          -> i32
+ *   gv3_validate(p_192)               -> u8
+ *   gv3_form_id(p_192)                -> u32
+ *   gv3_payload_len(p_192)            -> u32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_core
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const GV3_TOTAL          : u32 = 192u32
+const GV3_OFF_FORM_ID    : u32 = 0u32
+const GV3_OFF_LEN        : u32 = 4u32
+const GV3_OFF_PAYLOAD    : u32 = 8u32
+const GV3_PAYLOAD_CAP    : u32 = 152u32
+const GV3_OFF_MHASH      : u32 = 160u32
+const GV3_MHASH_LEN      : u32 = 32u32
+
+fn gv3_total_bytes() -> u32 @export { return GV3_TOTAL }
+fn gv3_payload_cap() -> u32 @export { return GV3_PAYLOAD_CAP }
+
+fn gv3_write_u8(p: u64, v: u8) -> i32 @export {
+    let p_l : u64 = p
+    let v_l : u8  = v
+    if p_l == 0u64 { return -1i32 }
+    let bp : *u8 = p_l as *u8
+    bp[0u64] = v_l
+    return 0i32
+}
+
+fn gv3_read_u8(p: u64) -> u32 @export {
+    let p_l : u64 = p
+    if p_l == 0u64 { return 0u32 }
+    let bp : *u8 = p_l as *u8
+    return bp[0u64] as u32
+}
+
+fn gv3_write_u32_le(p: u64, v: u32) -> i32 @export {
+    let p_l : u64 = p
+    let v_l : u32 = v
+    if p_l == 0u64 { return -1i32 }
+    let p0 : *u8 = (p_l) as *u8
+    let p1 : *u8 = (p_l + 1u64) as *u8
+    let p2 : *u8 = (p_l + 2u64) as *u8
+    let p3 : *u8 = (p_l + 3u64) as *u8
+    p0[0u64] = (v_l & 0xFFu32) as u8
+    p1[0u64] = ((v_l >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v_l >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v_l >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn gv3_read_u32_le(p: u64) -> u32 @export {
+    let p_l : u64 = p
+    if p_l == 0u64 { return 0u32 }
+    let p0 : *u8 = (p_l) as *u8
+    let p1 : *u8 = (p_l + 1u64) as *u8
+    let p2 : *u8 = (p_l + 2u64) as *u8
+    let p3 : *u8 = (p_l + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn gv3_write_u64_le(p: u64, v: u64) -> i32 @export {
+    let p_l : u64 = p
+    let v_l : u64 = v
+    if p_l == 0u64 { return -1i32 }
+    gv3_write_u32_le(p_l,         (v_l & 0xFFFFFFFFu64) as u32)
+    gv3_write_u32_le(p_l + 4u64, ((v_l >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+fn gv3_read_u64_le(p: u64) -> u64 @export {
+    let p_l : u64 = p
+    if p_l == 0u64 { return 0u64 }
+    let lo : u64 = (gv3_read_u32_le(p_l)         as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (gv3_read_u32_le(p_l + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+fn gv3_zero(p_192: u64) -> i32 @export {
+    let p_l : u64 = p_192
+    if p_l == 0u64 { return -1i32 }
+    let bp : *u8 = p_l as *u8
+    let mut i : u64 = 0u64
+    while i < 192u64 {
+        bp[i] = 0u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn gv3_compute_mhash(p_192: u64) -> i32 @export {
+    let p_l : u64 = p_192
+    if p_l == 0u64 { return -1i32 }
+    /* Hash bytes [0..160) → write to bytes [160..192). */
+    let in_p  : *u8 = p_l as *u8
+    let out_p : *u8 = (p_l + 160u64) as *u8
+    sha256_oneshot(in_p, 160u64, out_p)
+    return 0i32
+}
+
+fn gv3_validate(p_192: u64) -> u8 @export {
+    let p_l : u64 = p_192
+    if p_l == 0u64 { return 0u8 }
+    /* Hash bytes [0..160) and compare to recorded [160..192). */
+    let in_p : *u8 = p_l as *u8
+    let recorded : *u8 = (p_l + 160u64) as *u8
+    /* Single thread → use module-level scratch buf. */
+    sha256_oneshot(in_p, 160u64, &GV3_MHASH_SCRATCH as *u8)
+    let mut i : u64 = 0u64
+    let mut diff : u8 = 0u8
+    while i < 32u64 {
+        let av : u8 = recorded[i]
+        let bv : u8 = GV3_MHASH_SCRATCH[i]
+        if av != bv { diff = 1u8 }
+        i = i + 1u64
+    }
+    if diff == 0u8 { return 1u8 }
+    return 0u8
+}
+
+var GV3_MHASH_SCRATCH : [u8; 32]
+
+fn gv3_form_id(p_192: u64) -> u32 @export {
+    let p_l : u64 = p_192
+    if p_l == 0u64 { return 0u32 }
+    return gv3_read_u32_le(p_l)
+}
+
+fn gv3_payload_len(p_192: u64) -> u32 @export {
+    let p_l : u64 = p_192
+    if p_l == 0u64 { return 0u32 }
+    return gv3_read_u32_le(p_l + 4u64)
+}

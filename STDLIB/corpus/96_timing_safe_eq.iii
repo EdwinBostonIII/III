@@ -1,0 +1,21 @@
+/* Timing-safe byte compare. */
+module corpus_96
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn timing_safe_eq(a: *u8, b: *u8, len: u64) -> u32 from "timing_safe.iii"
+
+fn main() -> u64 {
+    let a : *u8 = malloc(8u64)
+    let b : *u8 = malloc(8u64)
+    let mut i : u64 = 0u64
+    while i < 8u64 { a[i] = i as u8; b[i] = i as u8; i = i + 1u64 }
+    if timing_safe_eq(a, b, 8u64) != 1u32 { return 1u64 }
+    /* Differ at byte 3 */
+    b[3] = 99u8
+    if timing_safe_eq(a, b, 8u64) != 0u32 { return 2u64 }
+    /* Empty range always equal */
+    if timing_safe_eq(a, b, 0u64) != 1u32 { return 3u64 }
+    free(a); free(b)
+    return 99u64
+}

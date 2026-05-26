@@ -1,0 +1,21 @@
+/* 604 -- KATABASIS increment 10: the extended bricking theorem (plan 4.7 / App A).
+ * Exhaustively (over all 729 action hexads): (T1) a write to a structural-NEG
+ * SVM target is non-reachable for EVERY action -> 0; (T2) a positive target
+ * preserves the action's admissibility -> 0 mismatches; and the admitted count
+ * to a safe target == 144 (the reach bitmap), proving the sweep is non-vacuous.
+ * Exit 99 = all hold; 1..3 = the failing clause. */
+module corpus_604_katabasis_bricking
+
+extern @abi(c-msvc-x64) fn katabasis_bricking_count_reachable_to_brick() -> u64 from "bricking.iii"
+extern @abi(c-msvc-x64) fn katabasis_bricking_count_safe_mismatch() -> u64 from "bricking.iii"
+extern @abi(c-msvc-x64) fn katabasis_bricking_count_reachable_to_safe() -> u64 from "bricking.iii"
+
+fn main() -> u64 {
+    /* (T1) no action launders a brick target -- exhaustively zero */
+    if katabasis_bricking_count_reachable_to_brick() != 0u64 { return 1u64 }
+    /* (T2) a positive target preserves the action's admissibility -- zero mismatch */
+    if katabasis_bricking_count_safe_mismatch() != 0u64 { return 2u64 }
+    /* the sweep is non-vacuous + consistent with the reach bitmap (144 admitted) */
+    if katabasis_bricking_count_reachable_to_safe() != 144u64 { return 3u64 }
+    return 99u64
+}

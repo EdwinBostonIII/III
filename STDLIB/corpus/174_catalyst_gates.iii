@@ -1,0 +1,59 @@
+/* Phase 14j Step 0187 verification: 8-gate catalyst hypothesis registry. */
+module corpus_174
+
+extern @abi(c-msvc-x64) fn catalyst_clear_all() -> i32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_register(hyp_id: u64) -> i32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_set_gate(hyp_id: u64, gate_bit: u32, fired: u8) -> i32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_gate_fired(hyp_id: u64, gate_bit: u32) -> u8 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_collapsed_state(hyp_id: u64) -> u32 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_promotable(hyp_id: u64) -> u8 from "catalyst.iii"
+extern @abi(c-msvc-x64) fn catalyst_count() -> u32 from "catalyst.iii"
+
+fn main() -> u64 {
+    catalyst_clear_all()
+    if catalyst_count() != 0u32 { return 1u64 }
+
+    /* Register hypothesis 100. */
+    if catalyst_register(100u64) != 0i32 { return 2u64 }
+    if catalyst_count() != 1u32 { return 3u64 }
+    /* Reject duplicate. */
+    if catalyst_register(100u64) != -1i32 { return 4u64 }
+    /* Reject zero. */
+    if catalyst_register(0u64) != -1i32 { return 5u64 }
+
+    /* Initially no gates fired → not promotable. */
+    if catalyst_collapsed_state(100u64) != 0u32 { return 6u64 }
+    if catalyst_promotable(100u64) != 0u8 { return 7u64 }
+
+    /* Fire gates one by one. */
+    catalyst_set_gate(100u64, 0x01u32, 1u8)   /* STATIC */
+    if catalyst_gate_fired(100u64, 0x01u32) != 1u8 { return 8u64 }
+    if catalyst_collapsed_state(100u64) != 0x01u32 { return 9u64 }
+    if catalyst_promotable(100u64) != 0u8 { return 10u64 }
+
+    catalyst_set_gate(100u64, 0x02u32, 1u8)   /* DYNAMIC */
+    catalyst_set_gate(100u64, 0x04u32, 1u8)   /* KCHAIN */
+    catalyst_set_gate(100u64, 0x08u32, 1u8)   /* WITNESS */
+    catalyst_set_gate(100u64, 0x10u32, 1u8)   /* RIPPLE */
+    catalyst_set_gate(100u64, 0x20u32, 1u8)   /* DUAL_USE */
+    catalyst_set_gate(100u64, 0x40u32, 1u8)   /* CONSERVATIVE */
+    if catalyst_promotable(100u64) != 0u8 { return 11u64 }   /* still missing UNIQUE */
+
+    catalyst_set_gate(100u64, 0x80u32, 1u8)   /* UNIQUE */
+    if catalyst_collapsed_state(100u64) != 0xFFu32 { return 12u64 }
+    if catalyst_promotable(100u64) != 1u8 { return 13u64 }
+
+    /* Un-fire one → no longer promotable. */
+    catalyst_set_gate(100u64, 0x10u32, 0u8)
+    if catalyst_promotable(100u64) != 0u8 { return 14u64 }
+    if catalyst_collapsed_state(100u64) != 0xEFu32 { return 15u64 }
+
+    /* Reject invalid gate bit. */
+    if catalyst_set_gate(100u64, 0x100u32, 1u8) != -3i32 { return 16u64 }
+    if catalyst_set_gate(100u64, 0u32, 1u8) != -3i32 { return 17u64 }
+
+    /* Set gate on unregistered hyp → E_NOT_REG. */
+    if catalyst_set_gate(999u64, 0x01u32, 1u8) != -4i32 { return 18u64 }
+
+    return 99u64
+}

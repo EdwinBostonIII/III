@@ -1,0 +1,101 @@
+/* STDLIB/iii/omnia/hexad_dynamic.iii
+ *
+ * III HEXAD — §5 Dynamic Hexads (Catalyst-promoted runtime extension).
+ * Native .iii port of HEXAD/src/hexad_dynamic.c.
+ *
+ * Strict monotonicity: a hexad's reachability bit may only flip 0->1, only
+ * when ALL structural pillars 1..4 are POS, only when coherence >= 0.92 and
+ * every Catalyst gate (trinity, ceiling, codegen) has admitted; once promoted
+ * the bit is never cleared.  (In the standard config every structurally-POS
+ * hexad is already admitted, so promote returns -4; the success path is the
+ * defensive mechanism for a partially-cleared bitmap, exactly as in the C.)
+ *
+ * Candidate buffer (3 x u32): [0] hexad, [1] coherence_ppm (C `double` -> ppm),
+ * [2] flags  (bit0 trinity_admit, bit1 ceiling_admit, bit2 codegen_safe,
+ *             bit3 promoted, bit4 escalates).
+ *
+ * Hexad: kind_essence + kind_governance.  Ring: R0.  K: 0.96.
+ */
+module omnia_hexad_dynamic
+
+extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_internal_get_bit(h: u16) -> i32 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_internal_set_bit(h: u16) -> i32 from "hexad_reach.iii"
+
+const HXD_FLOOR : u32 = 920000u32        /* MOBIUS_FLOOR_DEFAULT = 0.92 */
+const HXD_MAX   : u32 = 729u32
+
+var HXD_TRITS      : [i32; 6]
+var HXD_PROMOTIONS : u64 = 0u64
+
+fn iii_hexad_dynamic_create(buf_addr: u64, h: u16, coherence_ppm: u32) -> i32 @export {
+    let p : *u32 = buf_addr as *u32
+    p[0u64] = h as u32
+    p[1u64] = coherence_ppm
+    p[2u64] = 0u32
+    return 0i32
+}
+
+fn iii_hexad_dynamic_set_gates(buf_addr: u64, trinity: u8, ceiling: u8, codegen: u8) -> i32 @export {
+    let p : *u32 = buf_addr as *u32
+    let mut f : u32 = p[2u64] & 0xFFFFFFF8u32
+    if trinity == 1u8 { f = f | 1u32 }
+    if ceiling == 1u8 { f = f | 2u32 }
+    if codegen == 1u8 { f = f | 4u32 }
+    p[2u64] = f
+    return 0i32
+}
+
+/* structural admissible: all of pillars 1..4 (idx 0..3) are POS. */
+fn _hxd_structural_ok(h: u16) -> u8 {
+    if iii_hexad_unpack6(h, &HXD_TRITS as u64) == 0u8 { return 0u8 }
+    let mut k : u64 = 0u64
+    let mut ok : u8 = 1u8
+    while k < 4u64 {
+        if HXD_TRITS[k] != 1i32 { ok = 0u8 }
+        k = k + 1u64
+    }
+    return ok
+}
+
+/* informational escalation: pillar 5 or 6 (idx 4 or 5) is NEG. */
+fn _hxd_escalates(h: u16) -> u8 {
+    if iii_hexad_unpack6(h, &HXD_TRITS as u64) == 0u8 { return 0u8 }
+    if HXD_TRITS[4u64] == -1i32 { return 1u8 }
+    if HXD_TRITS[5u64] == -1i32 { return 1u8 }
+    return 0u8
+}
+
+fn iii_hexad_dynamic_promote(buf_addr: u64) -> i32 @export {
+    let p : *u32 = buf_addr as *u32
+    let h : u16 = p[0u64] as u16
+    if (h as u32) >= HXD_MAX { return -2i32 }
+    let existing : i32 = iii_hexad_internal_get_bit(h)
+    if existing == -1i32 { return -3i32 }       /* equality, not <0 (i32 trap) */
+    if existing == 1i32 { return -4i32 }        /* already admitted; reject */
+    if _hxd_structural_ok(h) == 0u8 { return -5i32 }
+    if p[1u64] < HXD_FLOOR { return -6i32 }     /* coherence below floor */
+    let f : u32 = p[2u64]
+    if (f & 1u32) == 0u32 { return -7i32 }      /* trinity gate */
+    if (f & 2u32) == 0u32 { return -8i32 }      /* ceiling gate */
+    if (f & 4u32) == 0u32 { return -9i32 }      /* codegen gate */
+    if iii_hexad_internal_set_bit(h) != 1i32 { return -10i32 }
+    let mut nf : u32 = f | 8u32                 /* promoted */
+    if _hxd_escalates(h) == 1u8 { nf = nf | 16u32 }
+    p[2u64] = nf
+    HXD_PROMOTIONS = HXD_PROMOTIONS + 1u64
+    return 0i32
+}
+
+fn iii_hexad_dynamic_count() -> u64 @export { return HXD_PROMOTIONS }
+
+fn iii_hexad_dynamic_promoted(buf_addr: u64) -> u8 @export {
+    let p : *u32 = buf_addr as *u32
+    if (p[2u64] & 8u32) != 0u32 { return 1u8 }
+    return 0u8
+}
+fn iii_hexad_dynamic_escalates(buf_addr: u64) -> u8 @export {
+    let p : *u32 = buf_addr as *u32
+    if (p[2u64] & 16u32) != 0u32 { return 1u8 }
+    return 0u8
+}

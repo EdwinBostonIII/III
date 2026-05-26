@@ -1,0 +1,133 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\207_babel_wire_roundtrip.iii
+ *
+ * III conformance corpus 207 -- Phase D.1: babel_wire envelope.
+ *
+ * Asserts:
+ *   1. babel_wire_init zeroes the 68-byte header.
+ *   2. Setters write fields at correct offsets; getters read them back.
+ *   3. Payload copy + length recorded.
+ *   4. babel_wire_finalize computes CRC32 over [0..63].
+ *   5. babel_wire_verify_crc returns 1 on intact wire; 0 if any header
+ *      byte is mutated post-finalize.
+ *   6. babel_wire_verify_seal matches the configured seal_id.
+ *
+ * Exit code: 99 on full pass; 1..N for specific failures.
+ */
+
+module corpus_207
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn babel_wire_init(out_buf: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_seal_id(out_buf: u64, seal_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_cap_ref(out_buf: u64, cap_ref: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_intent_id(out_buf: u64, intent_id: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u64) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_set_payload(out_buf: u64, payload_ptr: u64, payload_len: u32) -> i32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_seal_id(in_buf: u64) -> u64 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_cap_ref(in_buf: u64) -> u64 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_intent_id(in_buf: u64) -> u64 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_ctx_digest_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_facet(in_buf: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_len(in_buf: u64) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_unpack_payload_byte(in_buf: u64, i: u32) -> u32 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_crc(in_buf: u64, in_len: u32) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_verify_seal(in_buf: u64, expected_seal: u64) -> u8 from "babel_wire.iii"
+extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
+
+fn main() -> u64 {
+    /* Allocate buf: 68 header + 16 payload = 84 bytes. */
+    let buf : *u8 = malloc(128u64)
+    if buf as u64 == 0u64 { return 1u64 }
+    let bptr : u64 = buf as u64
+
+    /* ---- 1. init zeroes header. ---- */
+    if babel_wire_init(bptr) != 0i32 { free(buf); return 2u64 }
+    if babel_wire_unpack_seal_id(bptr) != 0u64 { free(buf); return 3u64 }
+    if babel_wire_unpack_payload_len(bptr) != 0u32 { free(buf); return 4u64 }
+
+    /* Allocate digest + payload buffers. */
+    let dig : *u8 = malloc(32u64)
+    let pay : *u8 = malloc(16u64)
+    if dig as u64 == 0u64 { free(buf); return 5u64 }
+    if pay as u64 == 0u64 { free(buf); free(dig); return 6u64 }
+
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dig[i] = (0xC0u64 + i) as u8
+        i = i + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < 16u64 {
+        pay[j] = (0x40u64 + j) as u8
+        j = j + 1u64
+    }
+
+    /* ---- 2-3. Setters + payload. ---- */
+    babel_wire_set_seal_id(bptr, 0xDEADBEEFCAFE0001u64)
+    babel_wire_set_cap_ref(bptr, 0xABCDEF0123456789u64)
+    babel_wire_set_intent_id(bptr, 0x1111222233334444u64)
+    babel_wire_set_ctx_digest(bptr, dig as u64)
+    babel_wire_set_facet(bptr, 0x42u8)
+    babel_wire_set_payload(bptr, pay as u64, 16u32)
+
+    /* ---- 4. Finalize. ---- */
+    let total : u32 = babel_wire_finalize(bptr)
+    if total != (babel_wire_header_bytes() + 16u32) {
+        free(buf); free(dig); free(pay); return 10u64
+    }
+
+    /* ---- Roundtrip readback. ---- */
+    if babel_wire_unpack_seal_id(bptr) != 0xDEADBEEFCAFE0001u64 { free(buf); free(dig); free(pay); return 11u64 }
+    if babel_wire_unpack_cap_ref(bptr) != 0xABCDEF0123456789u64 { free(buf); free(dig); free(pay); return 12u64 }
+    if babel_wire_unpack_intent_id(bptr) != 0x1111222233334444u64 { free(buf); free(dig); free(pay); return 13u64 }
+    if babel_wire_unpack_facet(bptr) != 0x42u8 { free(buf); free(dig); free(pay); return 14u64 }
+    if babel_wire_unpack_payload_len(bptr) != 16u32 { free(buf); free(dig); free(pay); return 15u64 }
+
+    /* ctx_digest bytes match. */
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        let expected : u32 = (0xC0u32 + k) & 0xFFu32
+        if babel_wire_unpack_ctx_digest_byte(bptr, k) != expected {
+            free(buf); free(dig); free(pay); return 20u64
+        }
+        k = k + 1u32
+    }
+
+    /* payload bytes match. */
+    let mut m : u32 = 0u32
+    while m < 16u32 {
+        let expected2 : u32 = (0x40u32 + m) & 0xFFu32
+        if babel_wire_unpack_payload_byte(bptr, m) != expected2 {
+            free(buf); free(dig); free(pay); return 21u64
+        }
+        m = m + 1u32
+    }
+
+    /* ---- 5. CRC verify -- intact. ---- */
+    if babel_wire_verify_crc(bptr, total) != 1u8 { free(buf); free(dig); free(pay); return 30u64 }
+
+    /* Mutate one header byte and verify CRC fails. */
+    let tamper : *u8 = (bptr + 32u64) as *u8
+    let saved : u8 = tamper[0u64]
+    tamper[0u64] = saved ^ 0xFFu8
+    if babel_wire_verify_crc(bptr, total) != 0u8 { free(buf); free(dig); free(pay); return 31u64 }
+    tamper[0u64] = saved
+    if babel_wire_verify_crc(bptr, total) != 1u8 { free(buf); free(dig); free(pay); return 32u64 }
+
+    /* ---- 6. Seal verify. ---- */
+    if babel_wire_verify_seal(bptr, 0xDEADBEEFCAFE0001u64) != 1u8 {
+        free(buf); free(dig); free(pay); return 40u64
+    }
+    if babel_wire_verify_seal(bptr, 0u64) != 0u8 {
+        free(buf); free(dig); free(pay); return 41u64
+    }
+
+    free(buf)
+    free(dig)
+    free(pay)
+    return 99u64
+}

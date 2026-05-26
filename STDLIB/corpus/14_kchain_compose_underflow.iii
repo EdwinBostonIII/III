@@ -1,0 +1,21 @@
+/* kchain: compose 0.9 then 0.9 then 0.9 -> 0.729 below 0.85 floor */
+module corpus_a14
+
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_is_underflow(id: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_drop(id: u64) -> u8 from "kchain.iii"
+
+fn main() -> u64 {
+    let k : u64 = kchain_new(0u64)
+    if k == 0u64 { return 1u64 }
+    /* 0.9 == 900_000_000 fixed-point */
+    if kchain_compose(k, 900000000u64) != 1u8 { return 2u64 }
+    if kchain_is_underflow(k) != 0u8 { return 3u64 }   /* 0.9 still above floor */
+    if kchain_compose(k, 900000000u64) != 1u8 { return 4u64 }
+    /* current = 0.81; floor = 0.85 -> underflow */
+    if kchain_is_underflow(k) != 1u8 { return 5u64 }
+    kchain_drop(k)
+    return 99u64
+}

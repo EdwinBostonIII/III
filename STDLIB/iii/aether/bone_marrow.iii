@@ -1,0 +1,824 @@
+/* III/STDLIB/iii/aether/bone_marrow.iii
+ *
+ * III STDLIB - aether::bone_marrow
+ *
+ * Replicated seed archive. Reed-Solomon erasure coding over GF(2^8),
+ * k=8 data + r=4 parity per stripe, crowned by the W30 bone-marrow
+ * seal: a Keccak256 corpus root verified at every boot before any
+ * other module loads. The substrate's deepest persistent identity.
+ *
+ * Block size: MARROW_BLOCK_SZ (4 KiB). Stripe width: MARROW_K + MARROW_R.
+ * Recovers any r simultaneous block losses by Gauss-Jordan inversion of
+ * the surviving k x k submatrix over GF(2^8).
+ *
+ * Hexad: kind_witness + kind_repair.  Ring: R-2.  K: 1.00.
+ * Discipline: W2 (<=4 params), W8 (static tables), W9/W10 (neg-i32 / u8),
+ *   W14 (sentinel loops, no break), W15 (no recursion). Trap 4 (masked
+ *   offsets), Trap 7 (no local var arrays -- bm_recover non-reentrant).
+ *
+ * Externs use the REAL provider signatures (spec defect fixes):
+ *   gf8_mul/gf8_pow/gf8_inv take/return u32 (NOT gf256_*(u8)); call sites
+ *   narrow u8 to u32 and back. Offsets mask every u32 index with
+ *   0xFFFFFFFF before the u64 multiply (Trap 4). Witness via wh_publish
+ *   (NOT ws_emit_fragment). Capability via cap_verify_rights (NOT cap_verify).
+ */
+module aether_bone_marrow
+
+extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_pow(base: u32, exp: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+
+const MARROW_OK         : i32 =  0i32
+const MARROW_E_BAD      : i32 = -1i32
+const MARROW_E_TOO_BAD  : i32 = -2i32
+const MARROW_E_SINGULAR : i32 = -3i32
+const MARROW_E_DENIED   : i32 = -4i32
+const MARROW_E_NOSEAL   : i32 = -5i32
+
+const MARROW_BLOCK_SZ   : u32 = 4096u32
+const MARROW_K          : u32 = 8u32
+const MARROW_R          : u32 = 4u32
+const MARROW_N          : u32 = 12u32
+const MARROW_MAX_STRIPE : u32 = 256u32
+const MARROW_ALPHA      : u32 = 2u32
+const MARROW_HASH_SZ    : u64 = 32u64
+
+// Right-bit literal mirrored from capability.iii (CAP_RIGHT_PERSIST_WRITE = 0x0400).
+const MARROW_RIGHT_WRITE : u64 = 0x0400u64
+
+var MARROW_BLOCK     : [u8; 12582912]   // 256 * 12 * 4096
+var MARROW_LIVE      : [u8; 3072]       // 256 * 12
+var MARROW_HASH      : [u8; 98304]      // 256 * 12 * 32
+var MARROW_SEAL_ROOT : [u8; 32]
+var MARROW_SEAL_CUR  : [u8; 32]
+var MARROW_HASH_CUR  : [u8; 32]
+var MARROW_SURV      : [u32; 8]
+var MARROW_LOST      : [u32; 4]
+var MARROW_A         : [u8; 64]
+var MARROW_AI        : [u8; 64]
+var MARROW_V         : [u8; 8]
+var MARROW_D         : [u8; 8]
+var MARROW_SEAL_LEN  : [u8; 8]
+var MARROW_OPID      : [u8; 32]
+var MARROW_ZERO_ID   : [u8; 32]
+var MARROW_CAP       : u64 = 1u64
+var MARROW_SEAL_SET  : u8  = 0u8
+
+// recover per-call context (W15: no recursion -- shared via module scope; the
+// Gauss-Jordan + reconstruction are flat helpers under the 7-deep nesting cap).
+var MARROW_RC_STRIPE : u32 = 0u32
+var MARROW_RC_NSURV  : u32 = 0u32
+var MARROW_RC_PIVOT  : u32 = 0u32
+
+// ============ internal helpers (non-export) ============
+
+/* Masked offset to block (stripe,idx). Trap 4: widen each u32 index with
+ * & 0xFFFFFFFF BEFORE the u64 multiply. W1/W3: element-address-of-static taken
+ * only inside this file. */
+fn bm_block_ptr(stripe: u32, idx: u32) -> *u8 {
+    let s64 : u64 = (stripe as u64) & 0xFFFFFFFFu64
+    let i64 : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let off : u64 = s64 * (MARROW_N as u64) * (MARROW_BLOCK_SZ as u64) + i64 * (MARROW_BLOCK_SZ as u64)
+    return ((&MARROW_BLOCK as u64) + off) as *u8
+}
+
+/* Masked offset to the recorded 32-byte hash of block (stripe,idx). */
+fn bm_hash_ptr(stripe: u32, idx: u32) -> *u8 {
+    let s64 : u64 = (stripe as u64) & 0xFFFFFFFFu64
+    let i64 : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let off : u64 = s64 * (MARROW_N as u64) * MARROW_HASH_SZ + i64 * MARROW_HASH_SZ
+    return ((&MARROW_HASH as u64) + off) as *u8
+}
+
+/* Liveness flat index (W4: result masked to u32; no pointer math). */
+fn bm_live_idx(stripe: u32, idx: u32) -> u32 {
+    let s64 : u64 = (stripe as u64) & 0xFFFFFFFFu64
+    let i64 : u64 = (idx as u64) & 0xFFFFFFFFu64
+    let v : u64 = (s64 * (MARROW_N as u64) + i64) & 0xFFFFFFFFu64
+    return v as u32
+}
+
+/* Capability gate (M8): the module's authority must carry persist_write.
+ * Exact algebraic test (cap_verify_rights folds a bitmask AND); no heuristic. */
+fn bm_cap_ok() -> u8 {
+    return cap_verify_rights(MARROW_CAP, MARROW_RIGHT_WRITE)
+}
+
+/* Record Keccak256 of the 4 KiB block (stripe,idx). Deterministic content
+ * hash (M6, W5 bit-identity). */
+fn bm_record_hash(stripe: u32, idx: u32) -> i32 {
+    ident_from_bytes(bm_block_ptr(stripe, idx), MARROW_BLOCK_SZ as u64, bm_hash_ptr(stripe, idx))
+    return MARROW_OK
+}
+
+/* Copy 4096 bytes src -> dst via a single u8 counter loop (W14 sentinel; no
+ * break; byte stores through *u8, Trap 5 safe). */
+fn bm_copy_block(src: *u8, dst: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < (MARROW_BLOCK_SZ as u64) {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    return MARROW_OK
+}
+
+/* Build the k-wide encoding-matrix row for block index `row` into out[0..k).
+ * Data rows (row<k) are the standard basis e_row; parity rows (row>=k) are the
+ * Vandermonde row alpha^((row-k)*j) over j in [0,k). D1 narrowing: gf8_pow is
+ * u32->u32, the exponent stays a masked u32, the coefficient narrows to u8. */
+fn bm_build_row(row: u32, out: *u8) -> i32 {
+    let mut j : u32 = 0u32
+    while j < MARROW_K {
+        out[j as u64] = 0u8
+        j = j + 1u32
+    }
+    if row < MARROW_K {
+        out[row as u64] = 1u8
+        return MARROW_OK
+    }
+    let pi : u32 = row - MARROW_K
+    let mut c : u32 = 0u32
+    while c < MARROW_K {
+        let e : u32 = (pi * c) & 0xFFFFFFFFu32
+        let coef : u32 = gf8_pow(MARROW_ALPHA, e)
+        out[c as u64] = (coef & 0xFFu32) as u8
+        c = c + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Find a nonzero pivot in column `col` of MARROW_A at or below row `col`.
+ * Returns the pivot row, or MARROW_K if the column is all-zero (singular).
+ * W14 sentinel: the search flag drives the loop condition; no break. */
+fn bm_find_pivot(col: u32) -> u32 {
+    let mut r : u32 = col
+    let mut found : u32 = MARROW_K
+    while r < MARROW_K {
+        let av : u8 = MARROW_A[(r * MARROW_K + col) as u64]
+        if av != 0u8 {
+            if found == MARROW_K { found = r }
+        }
+        r = r + 1u32
+    }
+    return found
+}
+
+/* Swap rows ra and rb in BOTH MARROW_A and MARROW_AI (k columns each). */
+fn bm_swap_rows(ra: u32, rb: u32) -> i32 {
+    let mut c : u32 = 0u32
+    while c < MARROW_K {
+        let ia : u64 = (ra * MARROW_K + c) as u64
+        let ib : u64 = (rb * MARROW_K + c) as u64
+        let ta : u8 = MARROW_A[ia]
+        MARROW_A[ia] = MARROW_A[ib]
+        MARROW_A[ib] = ta
+        let tia : u8 = MARROW_AI[ia]
+        MARROW_AI[ia] = MARROW_AI[ib]
+        MARROW_AI[ib] = tia
+        c = c + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Scale row `row` of A and Ai by GF(2^8) scalar `s` (s != 0). */
+fn bm_scale_row(row: u32, s: u32) -> i32 {
+    let mut c : u32 = 0u32
+    while c < MARROW_K {
+        let ix : u64 = (row * MARROW_K + c) as u64
+        let pa : u32 = gf8_mul(MARROW_A[ix] as u32, s)
+        MARROW_A[ix] = (pa & 0xFFu32) as u8
+        let pi : u32 = gf8_mul(MARROW_AI[ix] as u32, s)
+        MARROW_AI[ix] = (pi & 0xFFu32) as u8
+        c = c + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Eliminate column `col` from row `target` using pivot row `piv`:
+ * row_target ^= factor * row_piv, where factor = A[target,col]. Applied to
+ * both A and Ai. GF(2^8): multiply is gf8_mul, add is XOR. */
+fn bm_eliminate(target: u32, piv: u32, col: u32) -> i32 {
+    let factor : u32 = MARROW_A[(target * MARROW_K + col) as u64] as u32
+    if factor == 0u32 {
+        return MARROW_OK
+    }
+    let mut c : u32 = 0u32
+    while c < MARROW_K {
+        let it : u64 = (target * MARROW_K + c) as u64
+        let ip : u64 = (piv * MARROW_K + c) as u64
+        let pa : u32 = gf8_mul(factor, MARROW_A[ip] as u32)
+        MARROW_A[it] = ((MARROW_A[it] as u32) ^ (pa & 0xFFu32)) as u8
+        let pia : u32 = gf8_mul(factor, MARROW_AI[ip] as u32)
+        MARROW_AI[it] = ((MARROW_AI[it] as u32) ^ (pia & 0xFFu32)) as u8
+        c = c + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Eliminate column `col` from EVERY row except `piv` (full Gauss-Jordan).
+ * W14 sentinel counter loop; the per-row work is delegated to bm_eliminate so
+ * this stays shallow. */
+fn bm_eliminate_others(piv: u32, col: u32) -> i32 {
+    let mut r : u32 = 0u32
+    while r < MARROW_K {
+        if r != piv {
+            bm_eliminate(r, piv, col)
+        }
+        r = r + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Invert the k x k matrix in MARROW_A into MARROW_AI by Gauss-Jordan over
+ * GF(2^8). Ai starts as identity. For each column: find a pivot (singular ->
+ * MARROW_E_SINGULAR), swap it up, normalize by gf8_inv(pivot), eliminate the
+ * column from all other rows. The singular flag drives the loop (W14, no
+ * break). Returns MARROW_OK or MARROW_E_SINGULAR. Depth stays under the cap:
+ * fn -> while -> if(ok) -> if(singular-set). */
+fn bm_invert() -> i32 {
+    let mut r : u32 = 0u32
+    while r < MARROW_K {
+        let mut c : u32 = 0u32
+        while c < MARROW_K {
+            let ix : u64 = (r * MARROW_K + c) as u64
+            if r == c { MARROW_AI[ix] = 1u8 } else { MARROW_AI[ix] = 0u8 }
+            c = c + 1u32
+        }
+        r = r + 1u32
+    }
+    let mut col : u32 = 0u32
+    let mut singular : u32 = 0u32
+    while col < MARROW_K {
+        if singular == 0u32 {
+            let piv : u32 = bm_find_pivot(col)
+            if piv == MARROW_K {
+                singular = 1u32
+            }
+            if piv != MARROW_K {
+                if piv != col { bm_swap_rows(piv, col) }
+                let pval : u32 = MARROW_A[(col * MARROW_K + col) as u64] as u32
+                let inv : u32 = gf8_inv(pval)
+                bm_scale_row(col, inv)
+                bm_eliminate_others(col, col)
+            }
+        }
+        col = col + 1u32
+    }
+    if singular == 1u32 {
+        return MARROW_E_SINGULAR
+    }
+    return MARROW_OK
+}
+
+/* Vandermonde parity encode of one parity index `pi` (0-based within r) for the
+ * current MARROW_RC_STRIPE, per byte independently. p_pi = XOR_j d_j *
+ * alpha^(pi*j). Writes into parity block (k+pi). D1 narrowing throughout.
+ * Three flat counter loops (init, then per data-block accumulate over bytes);
+ * kept shallow by splitting the byte accumulate into bm_parity_acc. */
+fn bm_parity_zero(pidx: u32) -> i32 {
+    let stripe : u32 = MARROW_RC_STRIPE
+    let par : *u8 = bm_block_ptr(stripe, MARROW_K + pidx)
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        par[b] = 0u8
+        b = b + 1u64
+    }
+    return MARROW_OK
+}
+
+/* Accumulate data block j into parity block (k+pidx) with coefficient
+ * alpha^(pidx*j), per byte. par[b] ^= gf8_mul(coef, dat[b]). */
+fn bm_parity_acc(pidx: u32, j: u32) -> i32 {
+    let stripe : u32 = MARROW_RC_STRIPE
+    let e : u32 = (pidx * j) & 0xFFFFFFFFu32
+    let coef : u32 = gf8_pow(MARROW_ALPHA, e)
+    let dat : *u8 = bm_block_ptr(stripe, j)
+    let par : *u8 = bm_block_ptr(stripe, MARROW_K + pidx)
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        let prod : u32 = gf8_mul(coef, dat[b] as u32)
+        par[b] = ((par[b] as u32) ^ (prod & 0xFFu32)) as u8
+        b = b + 1u64
+    }
+    return MARROW_OK
+}
+
+/* Encode parity block pidx fully: zero it then fold every data block in. */
+fn bm_encode_parity(pidx: u32) -> i32 {
+    bm_parity_zero(pidx)
+    let mut j : u32 = 0u32
+    while j < MARROW_K {
+        bm_parity_acc(pidx, j)
+        j = j + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Reconstruct lost DATA bytes for byte position `b` of the current stripe using
+ * the inverted survivor matrix: gather survivor column v from the nsurv
+ * survivor blocks, compute d = Ai * v, write d[lidx] back to each lost data
+ * position. Parity positions are recomputed afterward (bm_encode_parity).
+ * Flat: fn -> while(gather) , fn -> while(rows) -> while(cols) split out. */
+fn bm_recon_gather(b: u64) -> i32 {
+    let stripe : u32 = MARROW_RC_STRIPE
+    let mut q : u32 = 0u32
+    while q < MARROW_K {
+        let si : u32 = MARROW_SURV[q as u64]
+        let sp : *u8 = bm_block_ptr(stripe, si)
+        MARROW_V[q as u64] = sp[b]
+        q = q + 1u32
+    }
+    return MARROW_OK
+}
+
+/* One reconstructed data element ii: d_ii = XOR_jj Ai[ii,jj] * v[jj]. */
+fn bm_recon_elem(ii: u32) -> u8 {
+    let mut acc : u32 = 0u32
+    let mut jj : u32 = 0u32
+    while jj < MARROW_K {
+        let aij : u32 = MARROW_AI[(ii * MARROW_K + jj) as u64] as u32
+        let prod : u32 = gf8_mul(aij, MARROW_V[jj as u64] as u32)
+        acc = acc ^ (prod & 0xFFu32)
+        jj = jj + 1u32
+    }
+    return (acc & 0xFFu32) as u8
+}
+
+/* Reconstruct byte position b across all k data positions into MARROW_D, then
+ * write each recovered DATA position (the survivor row q maps to original data
+ * column q since survivor matrix rows are the encoding rows of survivors).
+ * d[q] is the recovered byte of the data block that occupies stripe data slot
+ * given by the q-th solution component. We write d back to lost DATA blocks. */
+fn bm_recon_byte(b: u64) -> i32 {
+    bm_recon_gather(b)
+    let mut ii : u32 = 0u32
+    while ii < MARROW_K {
+        MARROW_D[ii as u64] = bm_recon_elem(ii)
+        ii = ii + 1u32
+    }
+    let stripe : u32 = MARROW_RC_STRIPE
+    let mut li : u32 = 0u32
+    while li < MARROW_R {
+        let lidx : u32 = MARROW_LOST[li as u64]
+        if lidx < MARROW_K {
+            let dp : *u8 = bm_block_ptr(stripe, lidx)
+            dp[b] = MARROW_D[lidx as u64]
+        }
+        li = li + 1u32
+    }
+    return MARROW_OK
+}
+
+// ============ public archive API (signatures PRESERVED) ============
+
+/* Hand-rolled init. Zero liveness across the whole grid, zero the seal root and
+ * canonical zero id, reset cap to CAP_ENV_ROOT (keeps boot + consumers passing),
+ * clear the seal-set flag. Pure memory writes (M2 deterministic). No checkpoint
+ * flag (Trap 10): plain counter loops only. */
+fn bm_init() -> i32 @export {
+    let mut i : u64 = 0u64
+    let total : u64 = (MARROW_MAX_STRIPE as u64) * (MARROW_N as u64)
+    while i < total {
+        MARROW_LIVE[i] = 0u8
+        i = i + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        MARROW_SEAL_ROOT[j] = 0u8
+        MARROW_ZERO_ID[j] = 0u8
+        MARROW_OPID[j] = 0u8
+        j = j + 1u64
+    }
+    MARROW_CAP = 1u64
+    MARROW_SEAL_SET = 0u8
+    return MARROW_OK
+}
+
+/* Records the module's authority capability (M8). A hardened deployment calls
+ * this after bm_init to attenuate from CAP_ENV_ROOT to a persist-write cap.
+ * Threads the cap through module state, NOT the load-bearing mutator
+ * signatures. Pure store (deterministic). */
+fn bm_init_cap(cap_id: u64) -> i32 @export {
+    MARROW_CAP = cap_id
+    return MARROW_OK
+}
+
+/* Write a 4 KiB data block (data positions only). Capability-gated (M8). On a
+ * successful write the block is marked live, rehashed, and a reversible witness
+ * fragment is published (M6/W16). Signature PRESERVED. */
+fn bm_write_data(stripe_id: u32, idx: u32, data: *u8) -> i32 @export {
+    if bm_cap_ok() == 0u8 { return MARROW_E_DENIED }
+    if stripe_id >= MARROW_MAX_STRIPE { return MARROW_E_BAD }
+    if idx >= MARROW_K { return MARROW_E_BAD }
+    bm_copy_block(data, bm_block_ptr(stripe_id, idx))
+    MARROW_LIVE[bm_live_idx(stripe_id, idx) as u64] = 1u8
+    bm_record_hash(stripe_id, idx)
+    let zp : *u8 = (&MARROW_ZERO_ID as u64) as *u8
+    let op : *u8 = (&MARROW_OPID as u64) as *u8
+    let hp : *u8 = bm_hash_ptr(stripe_id, idx)
+    wh_publish(zp, op, zp, hp, 1u8, 0u8, (stripe_id & 0xFFFFu32) as u16, zp, 0u32, zp, 0u32, zp)
+    return MARROW_OK
+}
+
+/* Read a 4 KiB block out (data OR parity). Bounds: idx < N (parity readable).
+ * Refuses dead blocks. Unprivileged (read of own corpus, non-mutating, M9); no
+ * witness. Signature PRESERVED. */
+fn bm_read_data(stripe_id: u32, idx: u32, out: *u8) -> i32 @export {
+    if stripe_id >= MARROW_MAX_STRIPE { return MARROW_E_BAD }
+    if idx >= MARROW_N { return MARROW_E_BAD }
+    if MARROW_LIVE[bm_live_idx(stripe_id, idx) as u64] == 0u8 { return MARROW_E_BAD }
+    bm_copy_block(bm_block_ptr(stripe_id, idx), out)
+    return MARROW_OK
+}
+
+/* Systematic Vandermonde parity encode of a stripe (M15 algebraic
+ * determinism). Requires all k data blocks live. Each of the r parity blocks is
+ * encoded per byte over GF(2^8); marked live + rehashed. No recursion (W15) --
+ * delegated to bm_encode_parity. No `%` (Trap 11). Signature PRESERVED. */
+fn bm_encode_stripe(stripe_id: u32) -> i32 @export {
+    if stripe_id >= MARROW_MAX_STRIPE { return MARROW_E_BAD }
+    let mut j : u32 = 0u32
+    let mut alllive : u32 = 1u32
+    while j < MARROW_K {
+        if MARROW_LIVE[bm_live_idx(stripe_id, j) as u64] == 0u8 { alllive = 0u32 }
+        j = j + 1u32
+    }
+    if alllive == 0u32 { return MARROW_E_BAD }
+    MARROW_RC_STRIPE = stripe_id
+    let mut pidx : u32 = 0u32
+    while pidx < MARROW_R {
+        bm_encode_parity(pidx)
+        MARROW_LIVE[bm_live_idx(stripe_id, MARROW_K + pidx) as u64] = 1u8
+        bm_record_hash(stripe_id, MARROW_K + pidx)
+        pidx = pidx + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Verify one block's recorded hash against a fresh recompute (D2: scratch is
+ * module-scope MARROW_HASH_CUR, was function-local). Returns 1 ok / 0 mismatch
+ * or dead/out-of-bounds (W10 boolean). Externed by tissue_regen. Signature
+ * PRESERVED. */
+fn bm_verify_block(stripe_id: u32, idx: u32) -> u8 @export {
+    if stripe_id >= MARROW_MAX_STRIPE { return 0u8 }
+    if idx >= MARROW_N { return 0u8 }
+    if MARROW_LIVE[bm_live_idx(stripe_id, idx) as u64] == 0u8 { return 0u8 }
+    let cur : *u8 = (&MARROW_HASH_CUR as u64) as *u8
+    ident_from_bytes(bm_block_ptr(stripe_id, idx), MARROW_BLOCK_SZ as u64, cur)
+    return ident_eq(cur, bm_hash_ptr(stripe_id, idx))
+}
+
+/* Count live blocks whose recorded hash no longer matches their content
+ * (silent bit-rot). Diagnostic read: no mutation, no capability gate, no
+ * witness. W14 sentinel loop. Signature PRESERVED. */
+fn bm_scrub(stripe_id: u32) -> u32 @export {
+    if stripe_id >= MARROW_MAX_STRIPE { return 0u32 }
+    let mut i : u32 = 0u32
+    let mut bad : u32 = 0u32
+    while i < MARROW_N {
+        if MARROW_LIVE[bm_live_idx(stripe_id, i) as u64] == 1u8 {
+            if bm_verify_block(stripe_id, i) == 0u8 { bad = bad + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return bad
+}
+
+/* Collect surviving (not-lost, live) block indices into MARROW_SURV (first k)
+ * and lost indices into MARROW_LOST (first r) for `stripe`. Sets
+ * MARROW_RC_NSURV. lost_mask bit i set => block i is lost. */
+fn bm_collect(stripe: u32, lost_mask: u64) -> i32 {
+    let mut i : u32 = 0u32
+    let mut nsurv : u32 = 0u32
+    let mut nlost : u32 = 0u32
+    while i < MARROW_N {
+        let bit : u64 = (lost_mask >> (i as u64)) & 1u64
+        if bit == 0u64 {
+            if MARROW_LIVE[bm_live_idx(stripe, i) as u64] == 1u8 {
+                if nsurv < MARROW_K {
+                    MARROW_SURV[nsurv as u64] = i
+                    nsurv = nsurv + 1u32
+                }
+            }
+        }
+        if bit == 1u64 {
+            if nlost < MARROW_R {
+                MARROW_LOST[nlost as u64] = i
+                nlost = nlost + 1u32
+            }
+        }
+        i = i + 1u32
+    }
+    MARROW_RC_NSURV = nsurv
+    return MARROW_OK
+}
+
+/* Build the k x k survivor matrix MARROW_A: row q is the encoding-matrix row of
+ * survivor block MARROW_SURV[q]. */
+fn bm_build_survivor_matrix() -> i32 {
+    let mut q : u32 = 0u32
+    while q < MARROW_K {
+        let si : u32 = MARROW_SURV[q as u64]
+        let rowp : *u8 = ((&MARROW_A as u64) + (q as u64) * (MARROW_K as u64)) as *u8
+        bm_build_row(si, rowp)
+        q = q + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Mark each recovered DATA block live and rehash it. */
+fn bm_finalize_data() -> i32 {
+    let stripe : u32 = MARROW_RC_STRIPE
+    let mut li : u32 = 0u32
+    while li < MARROW_R {
+        let lidx : u32 = MARROW_LOST[li as u64]
+        if lidx < MARROW_K {
+            MARROW_LIVE[bm_live_idx(stripe, lidx) as u64] = 1u8
+            bm_record_hash(stripe, lidx)
+        }
+        li = li + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Recompute any lost PARITY block from the now-complete data, mark live,
+ * rehash. lidx >= k selects parity index lidx-k. */
+fn bm_finalize_parity() -> i32 {
+    let stripe : u32 = MARROW_RC_STRIPE
+    let mut li : u32 = 0u32
+    while li < MARROW_R {
+        let lidx : u32 = MARROW_LOST[li as u64]
+        if lidx >= MARROW_K {
+            let pidx : u32 = lidx - MARROW_K
+            bm_encode_parity(pidx)
+            MARROW_LIVE[bm_live_idx(stripe, lidx) as u64] = 1u8
+            bm_record_hash(stripe, lidx)
+        }
+        li = li + 1u32
+    }
+    return MARROW_OK
+}
+
+/* Reconstruct every lost data byte across the 4 KiB block. */
+fn bm_recon_all() -> i32 {
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        bm_recon_byte(b)
+        b = b + 1u64
+    }
+    return MARROW_OK
+}
+
+/* Recover up to r simultaneously lost blocks of a stripe by Gauss-Jordan
+ * inversion of the surviving k x k submatrix over GF(2^8), per-byte
+ * reconstruction d = A^{-1} v, then recompute any lost parity. Capability-gated
+ * (M8 -- rewrites the deepest store). Emits a reversible witness fragment
+ * (M6/W16). No recursion (W15): all work is in flat module-scope helpers; the
+ * MARROW_SURV/LOST/A/AI/V/D buffers are module scope (D2/Trap 7) -- bm_recover
+ * is non-reentrant by design (serialized boot/regen path). Signature
+ * PRESERVED -- externed by tissue_regen. */
+fn bm_recover(stripe_id: u32, lost_mask: u64) -> i32 @export {
+    if bm_cap_ok() == 0u8 { return MARROW_E_DENIED }
+    if stripe_id >= MARROW_MAX_STRIPE { return MARROW_E_BAD }
+    MARROW_RC_STRIPE = stripe_id
+    bm_collect(stripe_id, lost_mask)
+    if MARROW_RC_NSURV < MARROW_K { return MARROW_E_TOO_BAD }
+    bm_build_survivor_matrix()
+    let inv_rc : i32 = bm_invert()
+    if inv_rc != MARROW_OK { return inv_rc }
+    bm_recon_all()
+    bm_finalize_data()
+    bm_finalize_parity()
+    let zp : *u8 = (&MARROW_ZERO_ID as u64) as *u8
+    let op : *u8 = (&MARROW_OPID as u64) as *u8
+    let rp : *u8 = (&MARROW_SEAL_ROOT as u64) as *u8
+    wh_publish(zp, op, zp, rp, 1u8, 0u8, (stripe_id & 0xFFFFu32) as u16, zp, 0u32, zp, 0u32, zp)
+    return MARROW_OK
+}
+
+// ============ W30 seal (NEW -- the maximal core) ============
+
+/* Compute the corpus root: a single deterministic streaming-Keccak256 fold over
+ * the ENTIRE recorded block-hash grid in canonical order. For every grid slot
+ * (stripe,idx) we fold the liveness byte then (recorded hash if live, else the
+ * canonical zero id). This makes the seal a TOTAL function of the whole archive
+ * (M15): identical live-set + identical block contents => identical 32-byte
+ * root; any single-byte change flips it (M2/W5). Not merkle (corpus has
+ * 256*12 = 3072 hashes > MK_MAX_LEAVES=1024); a fold is the unbounded NIH
+ * primitive. No recursion (W15): two nested counter loops. Pure read into the
+ * caller's buffer (no capability needed). */
+fn bm_seal_compute(out_root: *u8) -> i32 @export {
+    cad_begin(1u32)
+    let lp : *u8 = (&MARROW_SEAL_LEN as u64) as *u8
+    let zp : *u8 = (&MARROW_ZERO_ID as u64) as *u8
+    let mut stripe : u32 = 0u32
+    while stripe < MARROW_MAX_STRIPE {
+        let mut idx : u32 = 0u32
+        while idx < MARROW_N {
+            let lv : u8 = MARROW_LIVE[bm_live_idx(stripe, idx) as u64]
+            lp[0u64] = lv
+            cad_payload(lp as u64, 1u64)
+            if lv == 1u8 { cad_payload(bm_hash_ptr(stripe, idx) as u64, 32u64) } else { cad_payload(zp as u64, 32u64) }
+            idx = idx + 1u32
+        }
+        stripe = stripe + 1u32
+    }
+    cad_final(out_root as u64)
+    return MARROW_OK
+}
+
+/* Record the W30 seal -- the single most privileged act in the substrate, so it
+ * requires the CALLER'S OWN cap to carry persist_write (M8), not the module
+ * default. Computes the root into MARROW_SEAL_ROOT, sets the seal-set flag, and
+ * publishes an IRREVERSIBLE witness fragment (revtag=0: the seal defines
+ * identity; M9 explicit non-reversibility). */
+fn bm_seal_set(cap_id: u64) -> i32 @export {
+    if cap_verify_rights(cap_id, MARROW_RIGHT_WRITE) == 0u8 { return MARROW_E_DENIED }
+    let rp : *u8 = (&MARROW_SEAL_ROOT as u64) as *u8
+    bm_seal_compute(rp)
+    MARROW_SEAL_SET = 1u8
+    let zp : *u8 = (&MARROW_ZERO_ID as u64) as *u8
+    let op : *u8 = (&MARROW_OPID as u64) as *u8
+    wh_publish(zp, op, zp, rp, 0u8, 0u8, 0u16, zp, 0u32, zp, 0u32, zp)
+    return MARROW_OK
+}
+
+/* W30 boot check (the law's enforcement point): the boot fold calls this before
+ * any other module loads. Fail-closed: no seal recorded => 0. Recomputes the
+ * root and compares against the recorded one (W10 u8). 0 => halt boot. The
+ * distress fragment on failure is emitted by the boot fold caller, keeping this
+ * a PURE predicate. M5 no-bricking: failure refuses (halts), never mutates. */
+fn bm_verify_seal() -> u8 @export {
+    if MARROW_SEAL_SET == 0u8 { return 0u8 }
+    let cur : *u8 = (&MARROW_SEAL_CUR as u64) as *u8
+    bm_seal_compute(cur)
+    let rp : *u8 = (&MARROW_SEAL_ROOT as u64) as *u8
+    return ident_eq(cur, rp)
+}
+
+/* Getter for the recorded corpus root. MARROW_E_NOSEAL if none recorded. Pure
+ * read. */
+fn bm_seal_root(out_root: *u8) -> i32 @export {
+    if MARROW_SEAL_SET == 0u8 { return MARROW_E_NOSEAL }
+    let rp : *u8 = (&MARROW_SEAL_ROOT as u64) as *u8
+    ident_copy(rp, out_root)
+    return MARROW_OK
+}
+
+// ============ embedded self-test (99 = pass) ============
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+const MARROW_CAP_ENV_ROOT : u64 = 1u64
+const MARROW_CAP_PREAD     : u64 = 0x0200u64   // persist_read, mirrors capability.iii
+
+var MARROW_T_SNAP : [u8; 4096]   // snapshot of a block for round-trip checks
+var MARROW_T_OUT  : [u8; 4096]   // read-back scratch
+var MARROW_T_R0   : [u8; 32]     // seal root capture
+var MARROW_T_R1   : [u8; 32]     // seal recompute
+
+/* Fill data block (stripe,j) with the deterministic KAT pattern
+ * (j*37 + bytepos) & 0xFF directly in MARROW_BLOCK, mark live, hash. */
+fn bm_t_fill(stripe: u32, j: u32) -> i32 {
+    let bp : *u8 = bm_block_ptr(stripe, j)
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        let v : u64 = (((j as u64) * 37u64) + b) & 0xFFu64
+        bp[b] = v as u8
+        b = b + 1u64
+    }
+    MARROW_LIVE[bm_live_idx(stripe, j) as u64] = 1u8
+    bm_record_hash(stripe, j)
+    return MARROW_OK
+}
+
+/* Write all k data blocks of stripe 0 with the KAT pattern, then encode. */
+fn bm_t_setup_stripe() -> i32 {
+    let mut j : u32 = 0u32
+    while j < MARROW_K {
+        bm_t_fill(0u32, j)
+        j = j + 1u32
+    }
+    return bm_encode_stripe(0u32)
+}
+
+/* Copy block (0,idx) bytes into MARROW_T_SNAP. */
+fn bm_t_snapshot(idx: u32) -> i32 {
+    let bp : *u8 = bm_block_ptr(0u32, idx)
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        MARROW_T_SNAP[b] = bp[b]
+        b = b + 1u64
+    }
+    return MARROW_OK
+}
+
+/* Wipe block (0,idx): clear liveness and zero its 4096 bytes (simulate loss). */
+fn bm_t_wipe(idx: u32) -> i32 {
+    MARROW_LIVE[bm_live_idx(0u32, idx) as u64] = 0u8
+    let bp : *u8 = bm_block_ptr(0u32, idx)
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        bp[b] = 0u8
+        b = b + 1u64
+    }
+    return MARROW_OK
+}
+
+/* Compare MARROW_T_OUT[0..4096) against MARROW_T_SNAP. 1 = equal. */
+fn bm_t_match_snap() -> u8 {
+    let mut acc : u32 = 0u32
+    let mut b : u64 = 0u64
+    while b < (MARROW_BLOCK_SZ as u64) {
+        acc = acc | ((MARROW_T_OUT[b] as u32) ^ (MARROW_T_SNAP[b] as u32))
+        b = b + 1u64
+    }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* Runs every spec KAT. Returns 99u64 on full pass; a distinct small code at the
+ * first failed check (so a failure is diagnosable). Includes negative cases:
+ * over-r loss rejects (E_TOO_BAD), an under-privileged cap is refused
+ * (E_DENIED), seal tamper is detected, and the galois zero-inverse anchor. */
+fn bm_selftest() -> u64 @export {
+    // env cap must exist so the default MARROW_CAP=1 passes the write gate, and
+    // so the attenuated negative-case cap has a live parent.
+    cap_env_init()
+
+    // ---- KAT 5: galois identity anchor (D1 correctness, poly 0x11B). ----
+    if gf8_mul(2u32, 0u32) != 0u32 { return 1u64 }
+    if gf8_mul(1u32, 0x53u32) != 0x53u32 { return 2u64 }
+    if gf8_pow(2u32, 0u32) != 1u32 { return 3u64 }
+    if gf8_inv(gf8_inv(0x53u32)) != 0x53u32 { return 4u64 }
+
+    // ---- KAT 1: RS round-trip / single-block recovery. ----
+    bm_init()
+    bm_t_setup_stripe()
+    bm_t_snapshot(0u32)
+    bm_t_wipe(0u32)
+    if bm_recover(0u32, 1u64) != MARROW_OK { return 10u64 }
+    if bm_read_data(0u32, 0u32, (&MARROW_T_OUT as u64) as *u8) != MARROW_OK { return 11u64 }
+    if bm_t_match_snap() != 1u8 { return 12u64 }
+    if bm_verify_block(0u32, 0u32) != 1u8 { return 13u64 }
+    if bm_scrub(0u32) != 0u32 { return 14u64 }
+
+    // ---- KAT 2: max-loss boundary (r=4) then over-r refusal. ----
+    // 0x4C4 = blocks {2,6,7 data} + {10 parity}: exactly r=4 erasures, 8 live
+    // survivors {0,1,3,4,5 data, 8,9,11 parity} -> recoverable.
+    if bm_recover(0u32, 0x4C4u64) != MARROW_OK { return 20u64 }
+    // bm_scrub over ALL 12 blocks proves every recovered block is byte-exact
+    // (the comprehensive consistency gate; covers data 2,6,7).
+    if bm_scrub(0u32) != 0u32 { return 21u64 }
+    if bm_verify_block(0u32, 2u32) != 1u8 { return 22u64 }
+    if bm_verify_block(0u32, 6u32) != 1u8 { return 23u64 }
+    if bm_verify_block(0u32, 7u32) != 1u8 { return 24u64 }
+    // negative: 0x50E = {1,2,3 data}+{8,10 parity} = 5 losses (> r) -> only 7
+    // survivors < k=8 -> E_TOO_BAD (proves the nsurv < k refusal).
+    if bm_recover(0u32, 0x50Eu64) != MARROW_E_TOO_BAD { return 25u64 }
+
+    // ---- KAT 3: W30 seal determinism + tamper detection. ----
+    // rebuild a clean stripe (KAT 2's over-r attempt did not mutate, but block
+    // liveness for idx 1,3 was never cleared; reset cleanly).
+    bm_init()
+    bm_t_setup_stripe()
+    if bm_seal_set(MARROW_CAP_ENV_ROOT) != MARROW_OK { return 30u64 }
+    if bm_seal_root((&MARROW_T_R0 as u64) as *u8) != MARROW_OK { return 31u64 }
+    bm_seal_compute((&MARROW_T_R1 as u64) as *u8)
+    if ident_eq((&MARROW_T_R0 as u64) as *u8, (&MARROW_T_R1 as u64) as *u8) != 1u8 { return 32u64 }
+    if bm_verify_seal() != 1u8 { return 33u64 }
+    // tamper: flip one byte of a live data block and rehash it -> seal diverges.
+    let tp : *u8 = bm_block_ptr(0u32, 3u32)
+    tp[0u64] = tp[0u64] ^ 0xFFu8
+    bm_record_hash(0u32, 3u32)
+    if bm_verify_seal() != 0u8 { return 34u64 }
+    // restoring the byte + rehash reproduces the original root (cross-run
+    // bit-identity, M2/M10).
+    tp[0u64] = tp[0u64] ^ 0xFFu8
+    bm_record_hash(0u32, 3u32)
+    bm_seal_compute((&MARROW_T_R1 as u64) as *u8)
+    if ident_eq((&MARROW_T_R0 as u64) as *u8, (&MARROW_T_R1 as u64) as *u8) != 1u8 { return 35u64 }
+    // negative: seal_set with an under-privileged cap is refused.
+    let pread : u64 = cap_attenuate(MARROW_CAP_ENV_ROOT, MARROW_CAP_PREAD, 0u64)
+    if pread == 0u64 { return 36u64 }
+    if bm_seal_set(pread) != MARROW_E_DENIED { return 37u64 }
+
+    // ---- KAT 4: capability refusal on the write/recover gates. ----
+    bm_init()
+    bm_init_cap(pread)
+    if bm_write_data(0u32, 0u32, (&MARROW_T_SNAP as u64) as *u8) != MARROW_E_DENIED { return 40u64 }
+    if bm_recover(0u32, 1u64) != MARROW_E_DENIED { return 41u64 }
+    // restore the module cap so later integration/boot is unaffected.
+    bm_init_cap(MARROW_CAP_ENV_ROOT)
+
+    return 99u64
+}

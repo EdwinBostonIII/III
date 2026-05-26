@@ -1,0 +1,15 @@
+/* 821 -- mig4 Step 8c: lower the SEQUENCING domain (FTHEN) through XII.  Drives xlt_selftest: the
+ * sequencing-monoid axioms hold by canonicalisation -- associativity (1), NF is the right-nested
+ * word (2), left/right identity via the K12 THEN-null (3-4), interior identity stripped (5); the
+ * prove-the-negative TEETH -- non-commutative (6), distinct sequences distinct (7), free/non-
+ * idempotent (8); determinism (9); ADMITTED by Step 6 (10).  Exit 99 = all hold -- sequencing is
+ * XII canonicalisation, the second composition monoid.  Gated by run_corpus.sh. */
+module corpus_821
+
+extern @abi(c-msvc-x64) fn xlt_selftest() -> u64 from "xii_lower_then.iii"
+
+fn main() -> u64 {
+    let r : u64 = xlt_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

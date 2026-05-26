@@ -1,0 +1,4 @@
+/* 650 — branch_anchor: branch lifecycle + bisimulation-gated merge anchors over computation_graph. */
+module corpus_650
+extern @abi(c-msvc-x64) fn ba_selftest() -> u64 from "branch_anchor.iii"
+fn main() -> u64 { return ba_selftest() }

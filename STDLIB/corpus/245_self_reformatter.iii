@@ -1,0 +1,119 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\245_self_reformatter.iii
+ *
+ * III conformance corpus 245 -- continuous Self-Reformatter (Phase 6
+ * of v1.0 pivot).
+ *
+ * Asserts:
+ *   1. self_reformatter_call_count() starts at 0 after reset.
+ *   2. self_reformatter_is_due() returns 0 before SR_TRIGGER_INTERVAL ticks.
+ *   3. After SR_TRIGGER_INTERVAL ticks via self_reformatter_tick(),
+ *      is_due() returns 1.
+ *   4. self_reformatter_scan() returns 0 promotions when the pattern
+ *      set is already sealed and contains only the v1.0 boot patterns
+ *      (no further compositional opportunities given the K-threshold
+ *      and structural gates currently encoded).
+ *   5. After scan(), is_due() returns 0 again (last_scan_count
+ *      updated).
+ *   6. total_proposed + total_rejected >= total_promoted (counter
+ *      consistency).
+ *   7. self_reformatter_trigger_interval() returns the sealed constant.
+ *   8. self_reformatter_reset() restores all counters to 0 (does NOT
+ *      undo any sealed promotions in the pattern set; that requires
+ *      explicit governance reversal).
+ *
+ * Mandate 7 (structurally enforced by the implementation):
+ *   - All gates in _sr_try_compose read STATIC pattern fields
+ *     (hexad_kind, k_value, dispatch_fp).  No frequency counts, no
+ *     timing, no behavioral observation enters the proposal decision.
+ *   - The trigger is a call counter, not an observation of behavior.
+ *
+ * Exit code: 99 on full pass; 1..N on specific failure.
+ */
+
+module corpus_245
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+
+extern @abi(c-msvc-x64) fn self_reformatter_tick() -> i32 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_call_count() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_is_due() -> u8 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_scan() -> u32 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_reset() -> i32 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_trigger_interval() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_total_proposed() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_total_promoted() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_total_rejected() -> u64 from "self_reformatter.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    self_reformatter_reset()
+
+    /* Assertion 1: call count starts at 0. */
+    if self_reformatter_call_count() != 0u64 { return 1u64 }
+
+    /* Assertion 2: not due before trigger interval. */
+    if self_reformatter_is_due() != 0u8 { return 2u64 }
+
+    /* Assertion 7: trigger interval is the sealed 100_000 constant. */
+    let interval : u64 = self_reformatter_trigger_interval()
+    if interval != 100000u64 { return 3u64 }
+
+    /* Tick up to interval - 1; should still not be due. */
+    let target : u64 = interval - 1u64
+    let mut i : u64 = 0u64
+    while i < target {
+        self_reformatter_tick()
+        i = i + 1u64
+    }
+    if self_reformatter_call_count() != target { return 4u64 }
+    if self_reformatter_is_due() != 0u8 { return 5u64 }
+
+    /* One more tick — now is_due returns 1. */
+    self_reformatter_tick()
+    if self_reformatter_call_count() != interval { return 6u64 }
+    if self_reformatter_is_due() != 1u8 { return 7u64 }
+
+    /* Assertion 4: scan() over the v1.0 boot pattern set produces 0
+     * promotions in this corpus run.  This is intentional and structural:
+     * the boot patterns are already irreducible (Calculus v1.0 +
+     * irreducibility proof matrix); any compositional opportunity would
+     * fail the K-sum cap or fail the structural prove gate.  Future
+     * compositional patterns added via governance would exercise the
+     * promotion path; that surface is tested by the governance corpus,
+     * not here. */
+    let promoted : u32 = self_reformatter_scan()
+    if promoted != 0u32 { return 8u64 }
+
+    /* Assertion 5: after scan, is_due returns 0 (last_scan_count was
+     * advanced to call_count). */
+    if self_reformatter_is_due() != 0u8 { return 9u64 }
+
+    /* Assertion 6: counter consistency.  Even if no promotions, the
+     * total_proposed counter must equal (total_promoted + total_rejected)
+     * since every proposal either gets promoted or rejected. */
+    let tp : u64 = self_reformatter_total_proposed()
+    let tr : u64 = self_reformatter_total_rejected()
+    let tg : u64 = self_reformatter_total_promoted()
+    if tp != (tg + tr) { return 10u64 }
+
+    /* Assertion 8: reset clears counters. */
+    self_reformatter_reset()
+    if self_reformatter_call_count() != 0u64 { return 11u64 }
+    if self_reformatter_total_proposed() != 0u64 { return 12u64 }
+    if self_reformatter_total_promoted() != 0u64 { return 13u64 }
+    if self_reformatter_total_rejected() != 0u64 { return 14u64 }
+    if self_reformatter_is_due() != 0u8 { return 15u64 }
+
+    /* Determinism: re-run the tick + scan sequence and observe identical
+     * counter trajectory.  This is the Mandate 7 structural property:
+     * same inputs (sealed pattern set + N ticks) -> same outputs. */
+    let mut k : u64 = 0u64
+    while k < interval {
+        self_reformatter_tick()
+        k = k + 1u64
+    }
+    let promoted_2 : u32 = self_reformatter_scan()
+    if promoted_2 != promoted { return 16u64 }
+
+    return 99u64
+}

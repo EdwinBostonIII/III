@@ -1,0 +1,159 @@
+/* STDLIB/iii/numera/h6_charter.iii -- the H6 falsifier as a run_charter constitutional clause.
+ *
+ * H6 ("one kernel"): every value is a CIC term (M9); bricking (M3) and over-budget
+ * (M13) are TYPE ERRORS, not runtime rejects; gaps (M4) are open terms.  The single
+ * trusted kernel is the safety algebra realized as CIC inductive typing
+ * (numera/safety_type.iii): a Hexad term is well-typed iff it is reachable (M3 reach
+ * IS the constructor's well-formedness rule), so a non-reachable Hexad is BOTTOM -- a
+ * type error -- rather than a mere reach-bitmap miss.  This module makes H6 a
+ * *constitutional clause* with a paired verify-AND-falsify predicate (the
+ * falsifier-per-clause discipline) folded by a terminal-gate run_charter: the charter
+ * is GREEN iff every clause both HOLDS on its good witness AND CATCHES its bad witness.
+ * It mirrors h1_charter.iii / h2_charter.iii (the sibling clauses) exactly: const/var
+ * prefixed h6_; a kind-tag clause registry (never a fn pointer); h6_init; verify/falsify
+ * arms; a deliberately-false canary; clause_eval; register; the terminal-gate
+ * run_charter; and a selftest whose negative arm registers the canary then asserts the
+ * gate goes RED.  H6 is the one-kernel "everything-is-a-typed-term" property the
+ * constitution VM cannot express, so h6_charter is H6's OWN falsifier, ready to be
+ * unioned into the constitution's run_charter (the union-of-all-module-falsifiers).
+ *
+ * The H6 clause's two runtime-checkable facets, evaluated through the one kernel judgment
+ * safety_hexad_judge(h) -> verdict:
+ *   verify  -- the kernel ADMITS the constructible value: a REACHABLE hexad term (728,
+ *              all-POS) is WELL-TYPED -- safety_hexad_judge(728) == SAFETY_TYPE0 (0).
+ *              So routing every value through the one kernel loses NOTHING; what is
+ *              constructible types.
+ *   falsify -- the kernel makes bricking a TYPE ERROR (not a runtime reject): a
+ *              non-reachable (bricking) hexad term (0, pillar0=NEG -> M3 unreachable) is
+ *              BOTTOM -- safety_hexad_judge(0) == SAFETY_BOT_UNREACHABLE (-1).  It does
+ *              not type-check.  If bricking were admitted-then-rejected at runtime this
+ *              would be SAFETY_TYPE0; the clause CATCHES that.  The arm is 1 iff the
+ *              reachable term types AND the bricking term is bottom.  HOLDS = verify & falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing-clause index)
+ * unless all hold.  The negative arm in h6_selftest registers a deliberately-false canary
+ * clause (a bricking hexad type-checks -- safety_hexad_judge(0) == SAFETY_TYPE0, which is
+ * FALSE since the bricking term is bottom) and proves the gate goes RED -- the gate is a
+ * real falsifier, not vacuously green.
+ *
+ * The STRUCTURAL half of H6 ("no value escapes the one kernel; every artifact is
+ * proof-carrying") is anchored by the trusted TYPES/src/cic.c kernel + the H13 in-language
+ * numera/kernel.iii port -- a property a runtime clause cannot see.  Together (runtime
+ * admit/bottom clause + structural one-kernel gate) they are the complete H6 falsifier.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: safety_type.iii (+ its M2/M3 hexad_reach / hexad_algebra organs) only.  No ML,
+ * no float, no u64 division.
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; masked idx.
+ */
+module numera_h6_charter
+
+extern @abi(c-msvc-x64) fn safety_hexad_judge(h: u16) -> i32 from "safety_type.iii"
+
+const H6_OK                : i32 =  0i32
+const H6_TYPE0             : i32 =  0i32    /* SAFETY_TYPE0: well-typed (the constructible value) */
+const H6_BOT_UNREACHABLE   : i32 = -1i32    /* SAFETY_BOT_UNREACHABLE: bricking is a type error */
+const H6_HEXAD_GOOD        : u16 = 728u16   /* reachable hexad (all-POS) -- the well-typed witness */
+const H6_HEXAD_BAD         : u16 = 0u16     /* non-reachable hexad (pillar0=NEG) -- the bottom witness */
+const H6_MAX_CLAUSES       : u32 = 64u32
+const H6_KIND_ONEKERNEL    : u8  = 0u8      /* the H6 clause: kernel admits reachable AND bottoms bricking */
+const H6_KIND_CANARY       : u8  = 1u8      /* a deliberately-false clause (negative arm only) */
+const H6_VERDICT_GREEN     : u64 = 99u64    /* > H6_MAX_CLAUSES, so never a RED index */
+const H6_U32MASK           : u64 = 0xFFFFFFFFu64
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var H6_CLAUSE_KIND  : [u8;  64]
+var H6_CLAUSE_COUNT : u32 = 0u32
+
+/* Reset the registry.  (The one kernel is stateless; no witnesses to preload.) */
+fn h6_init() -> i32 @export {
+    H6_CLAUSE_COUNT = 0u32
+    return H6_OK
+}
+
+/* The H6 clause VERIFY arm: the one kernel ADMITS the constructible value -- a REACHABLE
+ * hexad term (728) is WELL-TYPED.  safety_hexad_judge(728) == SAFETY_TYPE0.  1 iff well-typed. */
+fn h6_verify() -> u8 @export {
+    if safety_hexad_judge(H6_HEXAD_GOOD) != H6_TYPE0 { return 0u8 }
+    return 1u8
+}
+
+/* The H6 clause FALSIFY arm: the one kernel makes bricking a TYPE ERROR -- a non-reachable
+ * (bricking) hexad term (0) is BOTTOM.  safety_hexad_judge(0) == SAFETY_BOT_UNREACHABLE.
+ * 1 iff the reachable term types AND the bricking term is bottom (a closed inhabitant of
+ * bottom is therefore impossible). */
+fn h6_falsify() -> u8 @export {
+    if safety_hexad_judge(H6_HEXAD_GOOD) != H6_TYPE0 { return 0u8 }
+    if safety_hexad_judge(H6_HEXAD_BAD) != H6_BOT_UNREACHABLE { return 0u8 }
+    return 1u8
+}
+
+/* The canary's holds: a bricking hexad type-checks -- i.e. claims safety_hexad_judge(0)
+ * == SAFETY_TYPE0.  This is FALSE (the bricking term is bottom), so this returns 0.
+ * A genuinely-false clause used ONLY to prove run_charter goes RED on a failure. */
+fn h6_canary_holds() -> u8 {
+    if safety_hexad_judge(H6_HEXAD_BAD) == H6_TYPE0 { return 1u8 }
+    return 0u8
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn h6_clause_eval(idx: u32) -> u8 {
+    let k : u8 = H6_CLAUSE_KIND[(idx as u64) & H6_U32MASK]
+    if k == H6_KIND_ONEKERNEL {
+        if h6_verify() != 1u8 { return 0u8 }
+        if h6_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == H6_KIND_CANARY { return h6_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k.  Returns the 0-based slot, or -1 if the registry is full. */
+fn h6_register(k: u8) -> i32 {
+    let n : u32 = H6_CLAUSE_COUNT
+    if n >= H6_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & H6_U32MASK
+    H6_CLAUSE_KIND[slot] = k
+    H6_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED). */
+fn h6_run_charter() -> u64 @export {
+    let n : u32 = H6_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if h6_clause_eval(i) != 1u8 { return ((i as u64) & H6_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return H6_VERDICT_GREEN
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves: the one kernel admits the reachable (constructible) value as well-typed (1);
+ * the kernel makes bricking a type error -- reachable types AND bricking is bottom (2);
+ * the canary is genuinely false (3); run_charter GREEN with the H6 clause registered
+ * (4,5); reproducible (6); and -- the prove-the-negative arm -- run_charter goes RED,
+ * returning the failing canary's 1-based index (=2), proving the gate is a real
+ * falsifier, not vacuously green (7,8). */
+fn h6_selftest() -> u64 @export {
+    h6_init()
+    if h6_verify() != 1u8 { return 1u64 }
+    if h6_falsify() != 1u8 { return 2u64 }
+    if h6_canary_holds() != 0u8 { return 3u64 }
+    if h6_register(H6_KIND_ONEKERNEL) != 0i32 { return 4u64 }
+    if h6_run_charter() != H6_VERDICT_GREEN { return 5u64 }
+    if h6_run_charter() != H6_VERDICT_GREEN { return 6u64 }
+    if h6_register(H6_KIND_CANARY) != 1i32 { return 7u64 }
+    if h6_run_charter() != 2u64 { return 8u64 }
+    return 99u64
+}
+
+/* h6_charter EMBODIES the H6 invariant as a self-falsifying constitutional clause:
+ * the one kernel (the safety algebra as CIC inductive typing, M9) types every value --
+ * what is constructible (a reachable hexad) is well-typed, and what bricks (a
+ * non-reachable hexad) is BOTTOM, a TYPE ERROR rather than a runtime reject, so a closed
+ * inhabitant of bottom is impossible -- and the terminal gate proves itself RED on a
+ * failing clause.  The structural companion (the trusted cic.c kernel + the H13
+ * kernel.iii port) forbids any value escaping the one kernel. */

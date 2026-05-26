@@ -1,0 +1,4 @@
+/* 616 — microarch_model: deterministic analytic microarch cost/latency model (no sampling). */
+module corpus_616
+extern @abi(c-msvc-x64) fn ma_selftest() -> u64 from "microarch_model.iii"
+fn main() -> u64 { return ma_selftest() }

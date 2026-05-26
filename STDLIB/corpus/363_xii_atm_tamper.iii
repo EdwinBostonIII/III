@@ -1,0 +1,32 @@
+/* corpus/363_xii_atm_tamper.iii — ATM tamper detection */
+
+module corpus_363_xii_atm_tamper
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn xii_atm_verify_cell(cell_ptr: *u8, cell_size: u32, expected_mhash: *u8) -> u32 from "xii_atm.iii"
+extern @abi(c-msvc-x64) fn xii_atm_last_error() -> u32 from "xii_atm.iii"
+
+var CELL_363 : [u8; 128]
+var EXPECTED_MHASH_363 : [u8; 32]
+
+fn main() -> u64 {
+    /* Build synthetic cell. */
+    let mut i : u32 = 0u32
+    while i < 128u32 {
+        CELL_363[i] = ((i * 31u32) & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    sha256_oneshot(&CELL_363 as *u8, 128u64, &EXPECTED_MHASH_363 as *u8)
+
+    /* ATM should ACCEPT matching cell. */
+    let rc1 : u32 = xii_atm_verify_cell(&CELL_363 as *u8, 128u32, &EXPECTED_MHASH_363 as *u8)
+    if rc1 != 0u32 { return 1u64 }
+
+    /* Flip a byte in cell; ATM should REJECT. */
+    CELL_363[40] = CELL_363[40] ^ 0xFFu8
+    let rc2 : u32 = xii_atm_verify_cell(&CELL_363 as *u8, 128u32, &EXPECTED_MHASH_363 as *u8)
+    if rc2 == 0u32 { return 2u64 }
+    if xii_atm_last_error() != 2u32 { return 3u64 }   /* XAT_E_CELL_TAMPER_RUNTIME */
+
+    return 0u64
+}

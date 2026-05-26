@@ -1,0 +1,116 @@
+/* STDLIB/iii/omnia/xii_lower_decide.iii -- mig4 Step 8a: lower the DECISION domain through XII.
+ * Step 7 lowered COMPOSITION (sequence) onto FCOMPOSE; this lowers SELECTION (the conditional) onto
+ * FIF, the second of the three structured-programming primitives.  Like Step 7 it is ADDITIVE (a
+ * consumer of canonicalise; the engine cascade is untouched) and the engine's OWN rules ARE the
+ * decision algebra's laws (verified by reading xii_rewrite.iii):
+ *   - decision        if(p, t, e)       = FIF(p, t, e)
+ *   - predicate p     = a K01_FORM leaf (CAP_NONE -> a pure predicate, satisfying R030's cap guard)
+ *   - outcomes        = inert K12 leaves (CAP_NONE + referenced by NO FCOMPOSE rule, so outcomes
+ *                       composed for the branch-lift laws never merge/sort and are cap-disjoint)
+ * The laws:
+ *   - EQUAL-BRANCH    R030  FIF(p, x, x) -> x   (apply_R030 = child_b; guard struct_eq(t,e) AND
+ *                           cap_set(p)==0) -- a decision whose outcomes agree is irrelevant.
+ *   - SUFFIX lift     R008  FIF(p, k(x,s), k(y,s)) -> k(FIF(p,x,y), s)   (common suffix factored out)
+ *   - PREFIX lift     R007  FIF(p, k(s,x), k(s,y)) -> k(s, FIF(p,x,y))   (common prefix factored out;
+ *                           guard cap_disjoint(s,p), trivially true for a CAP_NONE predicate)
+ * So xii_canonicalise of an encoded conditional IS the decision normal form -- collapsing a
+ * vacuous decision and hoisting the parts that do not depend on the predicate.  Gated by xad_admit.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_admission only.  Determinism: integer-only; ==/!= compares; single-line fns; no arrays /
+ * pointer math / u64 div-mod; eval results bound to locals before struct_eq (param-spill-safe).
+ */
+module omnia_xii_lower_decide
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLD_FCOMPOSE : u8 = 18u8    /* the inner-kind for branch-lift (R007/R008) */
+const XLD_PRED     : u8 = 0u8     /* K01_FORM: CAP_NONE -> a pure predicate (R030's cap_set==0 guard) */
+const XLD_ATOM     : u8 = 11u8    /* K12: CAP_NONE + inert under every FCOMPOSE rule -> free outcomes */
+const XLD_NULL_REF : u32 = 0xFFFFFFFFu32
+
+/* a pure predicate leaf indexed by subform sf (CAP_NONE so the equal-branch law may fire). */
+fn xld_pred(sf: u32) -> u32 @export { return xii_term_make_basis(XLD_PRED, sf) }
+
+/* a free outcome leaf indexed by subform sf (distinct sf = distinct outcome). */
+fn xld_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLD_ATOM, sf) }
+
+/* the decision  if(p, then, else)  = FIF(p, then, else). */
+fn xld_if(p: u32, t: u32, e: u32) -> u32 @export { return xii_term_make_if(p, t, e) }
+
+/* compose two outcomes (for the branch-lift laws)  a . b = FCOMPOSE(a, b). */
+fn xld_compose(a: u32, b: u32) -> u32 @export { return xii_term_make_fusion2(XLD_FCOMPOSE, a, b) }
+
+/* evaluate (reduce) a decision term: this IS the engine's canonicalisation. */
+fn xld_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.
+ * Proves the decision-algebra LAWS hold by canonicalisation -- equal-branch collapse (1); the
+ * prove-the-negative TEETH that a GENUINE decision is preserved, not spuriously collapsed (2-3);
+ * suffix + prefix branch-lift (4-5); distinct decisions stay distinct (6); determinism (7); and the
+ * rules realising it are ADMITTED by Step 6 (8). */
+fn xld_selftest() -> u64 @export {
+    /* (1) EQUAL-BRANCH (R030): if(p, x, x) -> x. */
+    xii_term_arena_reset()
+    let dec : u32 = xld_if(xld_pred(1u32), xld_atom(1u32), xld_atom(1u32))
+    let xx : u32 = xld_atom(1u32)
+    let nf1 : u32 = xld_eval(dec)
+    if xii_rewrite_struct_eq(nf1, xx) != 1u8 { return 1u64 }
+
+    /* (2-3) GENUINE DECISION preserved (teeth): if(p, x, y) with x!=y does NOT collapse. */
+    xii_term_arena_reset()
+    let dec2 : u32 = xld_if(xld_pred(1u32), xld_atom(1u32), xld_atom(2u32))
+    let same : u32 = xld_if(xld_pred(1u32), xld_atom(1u32), xld_atom(2u32))
+    let nf2 : u32 = xld_eval(dec2)
+    if xii_rewrite_struct_eq(nf2, same) != 1u8 { return 2u64 }   /* unchanged -- still the FIF */
+    let just_x : u32 = xld_atom(1u32)
+    if xii_rewrite_struct_eq(nf2, just_x) != 0u8 { return 3u64 } /* did NOT collapse to a branch */
+
+    /* (4) SUFFIX branch-lift (R008): if(p, x.s, y.s) -> (if p x y).s. */
+    xii_term_arena_reset()
+    let l8 : u32 = xld_if(xld_pred(1u32), xld_compose(xld_atom(1u32), xld_atom(9u32)), xld_compose(xld_atom(2u32), xld_atom(9u32)))
+    let e8 : u32 = xld_compose(xld_if(xld_pred(1u32), xld_atom(1u32), xld_atom(2u32)), xld_atom(9u32))
+    let nf8 : u32 = xld_eval(l8)
+    if xii_rewrite_struct_eq(nf8, e8) != 1u8 { return 4u64 }
+
+    /* (5) PREFIX branch-lift (R007): if(p, s.x, s.y) -> s.(if p x y). */
+    xii_term_arena_reset()
+    let l7 : u32 = xld_if(xld_pred(1u32), xld_compose(xld_atom(9u32), xld_atom(1u32)), xld_compose(xld_atom(9u32), xld_atom(2u32)))
+    let e7 : u32 = xld_compose(xld_atom(9u32), xld_if(xld_pred(1u32), xld_atom(1u32), xld_atom(2u32)))
+    let nf7 : u32 = xld_eval(l7)
+    if xii_rewrite_struct_eq(nf7, e7) != 1u8 { return 5u64 }
+
+    /* (6) DISTINCT decisions distinct (teeth): if(p,x,y) != if(p,y,x) -- branch order matters. */
+    xii_term_arena_reset()
+    let dxy : u32 = xld_if(xld_pred(1u32), xld_atom(1u32), xld_atom(2u32))
+    let dyx : u32 = xld_if(xld_pred(1u32), xld_atom(2u32), xld_atom(1u32))
+    let nxy : u32 = xld_eval(dxy)
+    let nyx : u32 = xld_eval(dyx)
+    if xii_rewrite_struct_eq(nxy, nyx) != 0u8 { return 6u64 }
+
+    /* (7) DETERMINISM. */
+    xii_term_arena_reset()
+    let z1 : u32 = xld_if(xld_pred(1u32), xld_compose(xld_atom(1u32), xld_atom(9u32)), xld_compose(xld_atom(2u32), xld_atom(9u32)))
+    let z2 : u32 = xld_if(xld_pred(1u32), xld_compose(xld_atom(1u32), xld_atom(9u32)), xld_compose(xld_atom(2u32), xld_atom(9u32)))
+    let nz1 : u32 = xld_eval(z1)
+    let nz2 : u32 = xld_eval(z2)
+    if xii_rewrite_struct_eq(nz1, nz2) != 1u8 { return 7u64 }
+
+    /* (8) the rules realising the decision domain are ADMITTED (Step 6). */
+    if xad_admit() != 1u32 { return 8u64 }
+
+    return 99u64
+}
+
+/* xii_lower_decide EMBODIES SELECTION lowered onto XII: a conditional is FIF, a pure predicate is a
+ * CAP_NONE leaf, outcomes are inert K12 leaves, and the engine's own R030 (equal-branch collapse) +
+ * R007/R008 (branch-lift) rules ARE the decision algebra -- so canonicalising a conditional collapses
+ * a vacuous decision and hoists predicate-independent structure.  The second of the structured-
+ * programming trinity (sequence/Step 7, selection/here, iteration/xii_lower_iterate), additive and
+ * Step-6-admitted. */

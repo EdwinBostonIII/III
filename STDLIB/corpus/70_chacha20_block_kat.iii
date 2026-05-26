@@ -1,0 +1,71 @@
+/* ChaCha20 block KAT: RFC 8439 §2.3.2.
+ *   key   = 00 01 ... 1F  (32 bytes ascending)
+ *   nonce = 00 00 00 09 00 00 00 4A 00 00 00 00
+ *   counter = 1
+ *
+ * Expected output (64 bytes):
+ *   10 f1 e7 e4 d1 3b 59 15 50 0f dd 1f a3 20 71 c4
+ *   c7 d1 f4 c7 33 c0 68 03 04 22 aa 9a c3 d4 6c 4e
+ *   d2 82 64 46 07 9f aa 09 14 c2 d7 05 d9 8b 02 a2
+ *   b5 12 9c d1 de 16 4e b9 cb d0 83 e8 a2 50 3c 4e
+ *
+ * Exit = first byte of output = 0x10 = 16.
+ */
+module corpus_70
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn chacha20_set_state(key: *u8, nonce: *u8, counter: u32) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn chacha20_keystream(out: *u8) -> i32 from "chacha20.iii"
+
+fn fill_key(k: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        k[i] = i as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn fill_nonce(n: *u8) -> i32 {
+    n[0] = 0x00u8; n[1]  = 0x00u8; n[2]  = 0x00u8; n[3]  = 0x09u8
+    n[4] = 0x00u8; n[5]  = 0x00u8; n[6]  = 0x00u8; n[7]  = 0x4Au8
+    n[8] = 0x00u8; n[9]  = 0x00u8; n[10] = 0x00u8; n[11] = 0x00u8
+    return 0i32
+}
+
+fn check_output(o: *u8) -> u64 {
+    /* Verify expected byte sequence. */
+    if o[0]  != 0x10u8 { return 1u64 }
+    if o[1]  != 0xF1u8 { return 2u64 }
+    if o[2]  != 0xE7u8 { return 3u64 }
+    if o[3]  != 0xE4u8 { return 4u64 }
+    if o[4]  != 0xD1u8 { return 5u64 }
+    if o[5]  != 0x3Bu8 { return 6u64 }
+    if o[6]  != 0x59u8 { return 7u64 }
+    if o[7]  != 0x15u8 { return 8u64 }
+    if o[8]  != 0x50u8 { return 9u64 }
+    if o[15] != 0xC4u8 { return 10u64 }
+    if o[16] != 0xC7u8 { return 11u64 }
+    if o[31] != 0x4Eu8 { return 12u64 }
+    if o[32] != 0xD2u8 { return 13u64 }
+    if o[47] != 0xA2u8 { return 14u64 }
+    if o[48] != 0xB5u8 { return 15u64 }
+    if o[63] != 0x4Eu8 { return 16u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let key   : *u8 = malloc(32u64)
+    let nonce : *u8 = malloc(12u64)
+    let out   : *u8 = malloc(64u64)
+    fill_key(key)
+    fill_nonce(nonce)
+    chacha20_set_state(key, nonce, 1u32)
+    chacha20_keystream(out)
+    let err : u64 = check_output(out)
+    if err != 0u64 { return err }
+    let result : u64 = out[0] as u64
+    free(key); free(nonce); free(out)
+    return result
+}

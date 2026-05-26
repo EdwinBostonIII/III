@@ -1,0 +1,290 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\fp256.iii
+ *
+ * III STDLIB - numera::fp256 -- constant-time prime field GF(p256) for
+ * NIST P-256 ECDSA (RITCHIE Stage 4.11).  p256 = 2^256 - 2^224 + 2^192
+ * + 2^96 - 1.  Elements are 8 x u32 little-endian limbs in a slot pool
+ * (FP[slot*8 .. +8]); arithmetic is in the MONTGOMERY domain (R = 2^256).
+ *
+ * Constant-time: fixed loop bounds, no data-dependent branches; the only
+ * conditional (final subtract of p, conditional select) is a mask, not a
+ * branch.  CIOS Montgomery multiply with n'[0] = 1 (since p[0] = 2^32-1,
+ * so -p[0]^-1 = 1 mod 2^32).  R^2 mod p is computed once at init (512
+ * constant-time mod-p doublings) -- no hardcoded constant.
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00.
+ */
+
+module numera_fp256
+
+/* p256 limbs (LE): w0..w7.  p = FFFFFFFF 00000001 0 0 0 FFFFFFFF FFFFFFFF FFFFFFFF (BE). */
+var FP_P    : [u32; 8]
+var FP_R2   : [u32; 8]      /* R^2 mod p (Montgomery conversion) */
+var FP_ONE  : [u32; 8]      /* Montgomery 1 = R mod p */
+var FP      : [u32; 512]    /* 64 field-element slots * 8 limbs */
+var FP_T    : [u64; 10]     /* CIOS scratch */
+var FP_INIT : [u32; 1]
+
+fn fp256_init() -> i32 {
+    if FP_INIT[0] == 1u32 { return 0i32 }
+    FP_P[0] = 0xFFFFFFFFu32
+    FP_P[1] = 0xFFFFFFFFu32
+    FP_P[2] = 0xFFFFFFFFu32
+    FP_P[3] = 0x00000000u32
+    FP_P[4] = 0x00000000u32
+    FP_P[5] = 0x00000000u32
+    FP_P[6] = 0x00000001u32
+    FP_P[7] = 0xFFFFFFFFu32
+    /* R mod p = 2^256 mod p.  R = 2^256; R mod p = R - p (since p < R < 2p).
+     * R - p, limbwise (2^256 is 1 followed by 8 zero limbs): compute 0 - p
+     * mod 2^256 = (2^256 - p). */
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0u64 + 0x100000000u64 - (FP_P[i] as u64) - borrow
+        FP_ONE[i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    /* R^2 mod p = (R mod p)^2 * R^-1 ... easier: R2 = 2^512 mod p via 512
+     * doublings of 1 starting from FP_ONE (= R mod p), i.e. double 256 more
+     * times.  Start acc = R mod p (= 2^256 mod p); double 256x -> 2^512 mod p. */
+    let mut k : u64 = 0u64
+    while k < 8u64 { FP_R2[k] = FP_ONE[k] ; k = k + 1u64 }
+    let mut d : u64 = 0u64
+    while d < 256u64 {
+        fp_dbl_raw(&FP_R2 as u64)
+        d = d + 1u64
+    }
+    FP_INIT[0] = 1u32
+    return 0i32
+}
+
+/* in-place double mod p of a raw 8-limb buffer at addr (constant-time). */
+fn fp_dbl_raw(addr: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = ((a[i] as u64) << 1u64) | carry
+        a[i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    /* conditional subtract p if (carry || a >= p) */
+    fp_csub_p(addr, carry)
+    return 0i32
+}
+
+/* conditional subtract p from raw buffer if (extra_high != 0) OR (buf >= p). */
+fn fp_csub_p(addr: u64, extra_high: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let pp : *u32 = &FP_P as *u32
+    /* compute buf - p into FP_T (10), track borrow */
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
+        FP_T[i] = v & 0xFFFFFFFFu64
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    /* select subtracted result iff (extra_high != 0) OR (no final borrow, i.e.
+     * buf >= p).  ge = extra_high | (1 - borrow). */
+    let mut ge : u64 = 0u64
+    if extra_high != 0u64 { ge = 1u64 }
+    if borrow == 0u64 { ge = 1u64 }
+    let mask : u64 = 0u64 - ge          /* 0xFFFF.. if ge else 0 */
+    i = 0u64
+    while i < 8u64 {
+        let sel : u64 = ((FP_T[i] & mask) | ((a[i] as u64) & (mask ^ 0xFFFFFFFFFFFFFFFFu64))) & 0xFFFFFFFFu64
+        a[i] = sel as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn fp_copy(dst: u64, src: u64) -> i32 {
+    let db : u64 = dst * 8u64
+    let sb : u64 = src * 8u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { FP[db + i] = FP[sb + i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* r = a + b mod p (slots) */
+fn fp_add(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 8u64
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = (FP[ab + i] as u64) + (FP[bb + i] as u64) + carry
+        FP[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    fp_csub_p((&FP as u64) + rb * 4u64, carry)
+    return 0i32
+}
+
+/* r = a - b mod p (slots) */
+fn fp_sub(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 8u64
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 + (FP[ab + i] as u64) - (FP[bb + i] as u64) - borrow
+        FP[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    /* if borrow, add p back (constant-time via mask) */
+    let mask : u64 = 0u64 - borrow
+    let pp : *u32 = &FP_P as *u32
+    let mut c2 : u64 = 0u64
+    i = 0u64
+    while i < 8u64 {
+        let v : u64 = (FP[rb + i] as u64) + ((pp[i] as u64) & mask) + c2
+        FP[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        c2 = v >> 32u64
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* r = a * b mod p (Montgomery, CIOS, n'[0]=1) — slots */
+fn fp_mul(r: u64, a: u64, b: u64) -> i32 {
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let pp : *u32 = &FP_P as *u32
+    let mut k : u64 = 0u64
+    while k < 10u64 { FP_T[k] = 0u64 ; k = k + 1u64 }
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bi : u64 = FP[bb + i] as u64
+        /* multiply step: t += a * b[i] */
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let uv : u64 = FP_T[j] + (FP[ab + j] as u64) * bi + c
+            FP_T[j] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uv8 : u64 = FP_T[8] + c
+        FP_T[8] = uv8 & 0xFFFFFFFFu64
+        FP_T[9] = uv8 >> 32u64
+        /* reduction step: m = t[0] (n'[0]=1); t += m*p; shift down */
+        let m : u64 = FP_T[0]
+        let uv0 : u64 = FP_T[0] + m * (pp[0] as u64)
+        c = uv0 >> 32u64
+        j = 1u64
+        while j < 8u64 {
+            let uv : u64 = FP_T[j] + m * (pp[j] as u64) + c
+            FP_T[j - 1u64] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvs : u64 = FP_T[8] + c
+        FP_T[7] = uvs & 0xFFFFFFFFu64
+        FP_T[8] = FP_T[9] + (uvs >> 32u64)
+        i = i + 1u64
+    }
+    /* result = T[0..7]; final conditional subtract p if (T[8]!=0 || T>=p) */
+    let rb : u64 = r * 8u64
+    let mut q : u64 = 0u64
+    while q < 8u64 { FP[rb + q] = FP_T[q] as u32 ; q = q + 1u64 }
+    fp_csub_p((&FP as u64) + rb * 4u64, FP_T[8])
+    return 0i32
+}
+
+fn fp_sqr(r: u64, a: u64) -> i32 { return fp_mul(r, a, a) }
+
+/* to/from Montgomery form */
+fn fp_to_mont(r: u64, a: u64) -> i32 {
+    /* r = a * R^2 * R^-1 = a*R = mont_mul(a, R2).  Load R2 into a temp slot 63. */
+    let mut i : u64 = 0u64
+    while i < 8u64 { FP[63u64*8u64 + i] = FP_R2[i] ; i = i + 1u64 }
+    return fp_mul(r, a, 63u64)
+}
+fn fp_from_mont(r: u64, a: u64) -> i32 {
+    /* r = mont_mul(a, 1): set slot 63 = integer 1 (limb0=1) */
+    let mut i : u64 = 0u64
+    while i < 8u64 { FP[63u64*8u64 + i] = 0u32 ; i = i + 1u64 }
+    FP[63u64*8u64] = 1u32
+    return fp_mul(r, a, 63u64)
+}
+
+var FP_PM2 : [u32; 8]      /* p - 2 (inversion exponent, public constant) */
+
+/* r = a^-1 in Montgomery form via Fermat: mont_pow(a, p-2).  Exponent is the
+ * public constant p-2 (fixed square-and-multiply schedule; constant-time in
+ * the secret base since fp_mul/fp_sqr are constant-time). slots 61=base,62=acc. */
+fn fp_inv(r: u64, a: u64) -> i32 {
+    fp256_init()
+    let mut i : u64 = 0u64
+    while i < 8u64 { FP_PM2[i] = FP_P[i] ; i = i + 1u64 }
+    FP_PM2[0] = (FP_P[0] as u64 - 2u64) as u32      /* 0xFFFFFFFF-2, no borrow */
+    fp_copy(61u64, a)
+    i = 0u64
+    while i < 8u64 { FP[62u64*8u64 + i] = FP_ONE[i] ; i = i + 1u64 }
+    let mut idx : u64 = 256u64
+    while idx > 0u64 {
+        idx = idx - 1u64
+        fp_sqr(62u64, 62u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((FP_PM2[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { fp_mul(62u64, 62u64, 61u64) }
+    }
+    fp_copy(r, 62u64)
+    return 0i32
+}
+fn fp_inv_x(r: u64, a: u64) -> i32 @export { return fp_inv(r, a) }
+
+/* helpers: set slot = small integer v (canonical, not Montgomery); read limb. */
+fn fp_set_u32(slot: u64, v: u32) -> i32 @export {
+    let b : u64 = slot * 8u64
+    FP[b] = v
+    let mut i : u64 = 1u64
+    while i < 8u64 { FP[b + i] = 0u32 ; i = i + 1u64 }
+    return 0i32
+}
+fn fp_get_limb(slot: u64, idx: u64) -> u32 @export { return FP[slot * 8u64 + idx] }
+fn fp_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { FP[slot * 8u64 + idx] = v ; return 0i32 }
+fn fp_is_zero(slot: u64) -> u8 @export {
+    let b : u64 = slot * 8u64
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 8u64 { acc = acc | FP[b + i] ; i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+/* r = cond ? a : b  (constant-time, cond in {0,1}) — slots */
+fn fp_csel(r: u64, a: u64, b: u64, cond: u64) -> i32 {
+    let rb : u64 = r * 8u64
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let mask : u64 = 0u64 - cond
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        FP[rb + i] = ((((FP[ab + i] as u64) & mask) | ((FP[bb + i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn fp_csel_x(r: u64, a: u64, b: u64, cond: u64) -> i32 @export { return fp_csel(r, a, b, cond) }
+fn fp_is_zero_x(slot: u64) -> u8 @export { return fp_is_zero(slot) }
+fn fp256_boot() -> i32 @export { return fp256_init() }
+/* @export the slot ops so ec256/ecdsa (separate modules) can drive the field. */
+fn fp_add_x(r: u64, a: u64, b: u64) -> i32 @export { return fp_add(r, a, b) }
+fn fp_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return fp_sub(r, a, b) }
+fn fp_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return fp_mul(r, a, b) }
+fn fp_sqr_x(r: u64, a: u64) -> i32 @export { return fp_sqr(r, a) }
+fn fp_copy_x(dst: u64, src: u64) -> i32 @export { return fp_copy(dst, src) }
+fn fp_to_mont_x(r: u64, a: u64) -> i32 @export { return fp_to_mont(r, a) }
+fn fp_from_mont_x(r: u64, a: u64) -> i32 @export { return fp_from_mont(r, a) }

@@ -1,0 +1,98 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_c99.iii
+ *
+ * Transform pattern: FORM_III → FORM_C99
+ * FROZEN SPEC §7B.6 slot 26; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Emits a C99-compatible byte-array representation of the III source.
+ * The full III-to-C99 transpiler is per-construct authoring work; this
+ * baseline emits a `static const char* iii_source = "...";` declaration
+ * with the source bytes escaped for C99 string literal context.
+ */
+
+module omnia_tp_iii_to_c99
+
+var TP_C99_HEADER : [u8; 33] = [115u8, 116u8, 97u8, 116u8, 105u8, 99u8, 32u8, 99u8, 111u8, 110u8, 115u8, 116u8, 32u8, 99u8, 104u8, 97u8, 114u8, 42u8, 32u8, 105u8, 105u8, 105u8, 95u8, 115u8, 111u8, 117u8, 114u8, 99u8, 101u8, 32u8, 61u8, 32u8, 34u8]
+var TP_C99_FOOTER : [u8; 4] = [34u8, 59u8, 10u8, 0u8]
+var TP_C99_HEX_CHARS : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+
+fn tp_c99_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_c99_emit_escape(dst: u64, off: u64, b: u8) -> u32 {
+    /* Common C escapes */
+    if b == 34u8 {   /* " */
+        tp_c99_emit(dst, off, 92u8)
+        tp_c99_emit(dst, off + 1u64, 34u8)
+        return 2u32
+    }
+    if b == 92u8 {   /* \ */
+        tp_c99_emit(dst, off, 92u8)
+        tp_c99_emit(dst, off + 1u64, 92u8)
+        return 2u32
+    }
+    if b == 10u8 {   /* \n */
+        tp_c99_emit(dst, off, 92u8)
+        tp_c99_emit(dst, off + 1u64, 110u8)
+        return 2u32
+    }
+    if b == 13u8 {   /* \r */
+        tp_c99_emit(dst, off, 92u8)
+        tp_c99_emit(dst, off + 1u64, 114u8)
+        return 2u32
+    }
+    if b == 9u8 {    /* \t */
+        tp_c99_emit(dst, off, 92u8)
+        tp_c99_emit(dst, off + 1u64, 116u8)
+        return 2u32
+    }
+    /* Printable ASCII */
+    if b >= 32u8 {
+        if b < 127u8 {
+            tp_c99_emit(dst, off, b)
+            return 1u32
+        }
+    }
+    /* Hex escape \xXX */
+    tp_c99_emit(dst, off, 92u8)
+    tp_c99_emit(dst, off + 1u64, 120u8)
+    let hi : u8 = (b >> 4u8) & 0xFu8
+    let lo : u8 = b & 0xFu8
+    tp_c99_emit(dst, off + 2u64, TP_C99_HEX_CHARS[hi as u32])
+    tp_c99_emit(dst, off + 3u64, TP_C99_HEX_CHARS[lo as u32])
+    return 4u32
+}
+
+fn tp_iii_to_c99(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut dst_off : u64 = 0u64
+    /* Header */
+    let mut h : u32 = 0u32
+    while h < 33u32 {
+        if dst_off >= dst_cap { return 0u64 }
+        tp_c99_emit(dst_buf, dst_off, TP_C99_HEADER[h])
+        dst_off = dst_off + 1u64
+        h = h + 1u32
+    }
+    /* Body with escapes */
+    let mut j : u64 = 0u64
+    while j < src_len {
+        if dst_off + 4u64 > dst_cap { return 0u64 }
+        let bp : *u8 = (src + j) as *u8
+        let written : u32 = tp_c99_emit_escape(dst_buf, dst_off, bp[0u64])
+        dst_off = dst_off + ((written as u64) & 0xFu64)
+        j = j + 1u64
+    }
+    /* Footer */
+    let mut f : u32 = 0u32
+    while f < 3u32 {
+        if dst_off >= dst_cap { return 0u64 }
+        tp_c99_emit(dst_buf, dst_off, TP_C99_FOOTER[f])
+        dst_off = dst_off + 1u64
+        f = f + 1u32
+    }
+    return dst_off
+}

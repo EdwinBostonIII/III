@@ -1,0 +1,39 @@
+module corpus_42
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_required_guarantees(p: u64, m: u32) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap: u64, kid: u8, ring: u8, hex: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+
+/* Historical note: this test was named "resolve_nomatch" because the
+ * intent (goal_kind=1, required_guarantees=0xFFFFFFFF) was originally
+ * expected to fall off the end of the resolver to a soft-fail path,
+ * with the guarantee penalty insufficient to drop the default-pattern
+ * fallback below the 1e8 threshold.  After Phase A.1 of the Intent
+ * Calculus v1.0 (R2-GENESIS/CORE-CALCULUS-V1.0.iii §A.1), a meta-
+ * pattern for PRIMITIVE_FORM (goal_kind=1) is registered at slot 0
+ * with HEXAD_FORM alignment.  That pattern wins; Step 6 then attempts
+ * K-composition into the ctx's kchain (kid=0 == no kchain), which
+ * returns E_RESOLVE_K_UNDERFLOW (0xE102) as the explicit canonical
+ * error for "resolver engaged, no valid kchain to record into".
+ * Exit code = 0xE102 & 0xFF = 0x02.
+ *
+ * This is the correct post-calculus-v1.0 behaviour: the test verifies
+ * that the K-discipline gate is engaged on every successful match;
+ * absence of a kchain is a structural failure, not a soft penalty. */
+fn main() -> u64 {
+    resolution_init()
+    let intent : u64 = intent_new(1u8)
+    intent_set_required_guarantees(intent, 0xFFFFFFFFu32)
+    call_context_init_set(1u64, 0u8, 2u8, 1u8)
+    call_context_init_set_extras(0u64, 0u16)
+    let ctx : u64 = call_context_new()
+    let r : u64 = resolve(pattern_set_global(), intent, ctx)
+    if (r & 1u64) == 0u64 { return 1u64 }
+    let payload : u64 = (r >> 1u64) & 0xFFFFFFFFu64
+    return payload & 0xFFu64
+}

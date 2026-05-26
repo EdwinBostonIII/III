@@ -1,0 +1,542 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\acc.iii
+ *
+ * III Stage-0 ACC implementation — .iii port of acc.c.
+ *
+ * Mirrors acc.h ABI exactly so this object file is link-compatible
+ * with the C iiis-0 build (replaces acc.o).  All public symbols are
+ * @export'd (unmangled).  SHA-256 is hand-rolled inline.
+ *
+ * Per CONSTITUTIONAL/include/acc.h.  Strict NIH (ADR-021); libc free.
+ * Deterministic / reproducible (ADR-027).
+ *
+ * Limitations of iii Stage-0 codegen at port time forced a few
+ * structural simplifications versus acc.c:
+ *
+ *   - No struct-pointer field access.  iii_acc_state_t is treated as
+ *     a *u32 (its first and only field is comp[6]; the struct pointer
+ *     equals &comp[0] in memory).  Callers from C see the same ABI.
+ *
+ *   - No function pointer types in iiis-0 parser.  The audit hook is
+ *     stored as a u64 raw bit pattern but iii_acc_emit_audit() never
+ *     dispatches through it (the boot toolchain never installs an
+ *     audit sink).  ABI-compatible stub for set_audit_sink/cycle_kind
+ *     is preserved so future TUs / runtime can install one once iii
+ *     gains fn-ptr support.
+ *
+ *   - SHA-256 working state lives in module-scope globals; the SHA is
+ *     single-shot inside iii_acc_bitmap_sha256, so non-reentrancy is
+ *     acceptable.  Identical pattern to ceiling.iii.
+ *
+ *   - sha_K[64] is initialised by a one-shot function rather than a
+ *     const array literal, because const-array layout in iiis-0's
+ *     cg_r3 emits .quad slots (8 bytes) which would corrupt a u32
+ *     stride.  Same workaround as ceiling.iii.
+ */
+module acc
+
+/* ─── Public ABI: status codes (must match acc.h) ───────────────── */
+const III_ACC_OK                : i32 =  0i32
+const III_ACC_E_INVALID_TRIT    : i32 = -1i32
+const III_ACC_E_OUT_OF_RANGE    : i32 = -2i32
+const III_ACC_E_NULL            : i32 = -3i32
+const III_ACC_E_BITMAP_LOCKED   : i32 = -4i32
+const III_ACC_E_NOT_SEALED      : i32 = -5i32
+const III_ACC_E_SELF_CHECK_FAIL : i32 = -6i32
+
+const III_ACC_COMP_COUNT      : u32 = 6u32
+const III_ACC_STATE_CARD      : u32 = 729u32
+const III_ACC_Z3_BITMAP_WORDS : u32 = 12u32
+const III_ACC_BITMAP_CANON_BYTES : u32 = 92u32
+
+/* ─── Bitmap and seal state ─────────────────────────────────────── */
+var g_iii_acc_admitted_z3 : [u64; 12]
+var g_iii_acc_sealed       : i32
+var g_iii_acc_sealed_sha256: [u8; 32]
+
+/* ─── Audit hook (stub: pointer stored, never invoked) ──────────── */
+var g_iii_acc_audit_fn   : u64
+var g_iii_acc_audit_ctx  : u64
+var g_iii_acc_audit_kind : u32   /* really u16, padded to u32 */
+
+/* ─── Z3 add LUT (exported as in acc.h) ─────────────────────────── */
+var g_iii_acc_z3_add_lut : [u8; 9] = [
+    0u8, 1u8, 2u8,
+    1u8, 2u8, 0u8,
+    2u8, 0u8, 1u8
+]
+
+/* ─── SHA-256 internal state and round constants ────────────────── */
+var ACC_SHA_K_INIT : u32
+var ACC_SHA_K      : [u32; 64]
+var ACC_SHA_W      : [u32; 64]
+var ACC_SHA_H      : [u32; 8]
+var ACC_SHA_BUF    : [u8; 64]
+var ACC_SHA_BUFLEN : u32
+var ACC_SHA_BITS   : u64
+
+/* ─── Bit helpers ───────────────────────────────────────────────── */
+
+fn high_word_mask() -> u64 {
+    /* 1 << (729 - 64*11) - 1 = (1<<25) - 1 = 0x01FFFFFF */
+    return 0x01FFFFFFu64
+}
+
+fn get_bit(idx: u32) -> u8 {
+    let w: u32 = idx >> 6u32
+    let b: u32 = idx & 63u32
+    let v: u64 = (g_iii_acc_admitted_z3[w] >> b) & 1u64
+    return v as u8
+}
+
+fn set_bit_v(idx: u32, v: u8) -> u8 {
+    let w: u32 = idx >> 6u32
+    let b: u32 = idx & 63u32
+    let mask: u64 = 1u64 << b
+    let word: u64 = g_iii_acc_admitted_z3[w]
+    let prior_u64: u64 = (word >> b) & 1u64
+    let prior: u8 = prior_u64 as u8
+    if v == 0u8 { g_iii_acc_admitted_z3[w] = word & (~mask) } else { g_iii_acc_admitted_z3[w] = word | mask }
+    return prior
+}
+
+fn popcount64(x_in: u64) -> u32 {
+    let mut x: u64 = x_in
+    let m1: u64 = 0x5555555555555555u64
+    let m2: u64 = 0x3333333333333333u64
+    let m4: u64 = 0x0F0F0F0F0F0F0F0Fu64
+    let h01: u64 = 0x0101010101010101u64
+    x = x - ((x >> 1u64) & m1)
+    x = (x & m2) + ((x >> 2u64) & m2)
+    x = (x + (x >> 4u64)) & m4
+    let r: u64 = (x * h01) >> 56u64
+    return r as u32
+}
+
+/* Memset zero a region addressed by *u8 array, len bytes. */
+fn zero_u8_region(p: *u8, len: u32) {
+    let mut i: u32 = 0u32
+    while i < len {
+        p[i] = 0u8
+        i = i + 1u32
+    }
+}
+
+/* ─── init / mutation ───────────────────────────────────────────── */
+
+fn iii_acc_init_permissive() @export {
+    let mut i: u32 = 0u32
+    while i < 11u32 {
+        g_iii_acc_admitted_z3[i] = 0xFFFFFFFFFFFFFFFFu64
+        i = i + 1u32
+    }
+    g_iii_acc_admitted_z3[11u32] = high_word_mask()
+    g_iii_acc_sealed = 0i32
+    let mut j: u32 = 0u32
+    while j < 32u32 {
+        g_iii_acc_sealed_sha256[j] = 0u8
+        j = j + 1u32
+    }
+}
+
+/* Audit dispatch — boot stub: no-op (never called from C harness). */
+fn emit_audit(idx: u32, prior: u8, new_bit: u8) {
+    /* iii_acc_set_audit_sink stores g_iii_acc_audit_fn; we cannot call
+     * through it without function-pointer types in iiis-0.  No C TU in
+     * the bootstrap installs an audit sink, so leaving this as a no-op
+     * preserves observable behaviour. */
+    let _r1: u32 = idx
+    let _r2: u8 = prior
+    let _r3: u8 = new_bit
+}
+
+fn iii_acc_admit_index(idx: u32) -> i32 @export {
+    if idx >= III_ACC_STATE_CARD { return III_ACC_E_OUT_OF_RANGE }
+    if g_iii_acc_sealed != 0i32  { return III_ACC_E_BITMAP_LOCKED }
+    let prior: u8 = set_bit_v(idx, 1u8)
+    emit_audit(idx, prior, 1u8)
+    return III_ACC_OK
+}
+
+fn iii_acc_deny_index(idx: u32) -> i32 @export {
+    if idx >= III_ACC_STATE_CARD { return III_ACC_E_OUT_OF_RANGE }
+    if g_iii_acc_sealed != 0i32  { return III_ACC_E_BITMAP_LOCKED }
+    let prior: u8 = set_bit_v(idx, 0u8)
+    emit_audit(idx, prior, 0u8)
+    return III_ACC_OK
+}
+
+fn iii_acc_is_admitted_index(idx: u32) -> i32 @export {
+    if idx >= III_ACC_STATE_CARD { return 0i32 }
+    let b: u8 = get_bit(idx)
+    return b as i32
+}
+
+/* ─── Index ↔ state ─────────────────────────────────────────────── */
+
+/* state pointer = &comp[0]; comp[i] is u32 at offset 4*i */
+fn iii_acc_index_to_state(idx_u16: u32, out: *u32) -> i32 @export {
+    if out as u64 == 0u64 { return III_ACC_E_NULL }
+    if idx_u16 >= III_ACC_STATE_CARD { return III_ACC_E_OUT_OF_RANGE }
+    let mut v: u32 = idx_u16
+    let mut i: i32 = 5i32
+    while i >= 0i32 {
+        out[i as u32] = v % 3u32
+        v = v / 3u32
+        i = i - 1i32
+    }
+    return III_ACC_OK
+}
+
+fn state_to_z3_index(s: *u32) -> u32 {
+    let mut idx: u32 = 0u32
+    let mut i: u32 = 0u32
+    while i < 6u32 {
+        idx = idx * 3u32 + (s[i] % 3u32)
+        i = i + 1u32
+    }
+    return idx
+}
+
+/* ─── Admission queries ─────────────────────────────────────────── */
+
+fn iii_acc_admit_state(s: *u32) -> i32 @export {
+    if s as u64 == 0u64 { return 0i32 }
+    let idx: u32 = state_to_z3_index(s)
+    return iii_acc_is_admitted_index(idx)
+}
+
+fn iii_acc_admit_vector(comp: *u32) -> i32 @export {
+    if comp as u64 == 0u64 { return 0i32 }
+    /* comp is laid out identically to iii_acc_state_t.comp[]. */
+    return iii_acc_admit_state(comp)
+}
+
+fn iii_acc_admitted(s: *u32) -> i32 @export {
+    return iii_acc_admit_state(s)
+}
+
+/* Inline compose mirrors acc.h's static inline; we expose it as a
+ * module helper for compose_admitted only (no @export needed because
+ * acc.h's iii_acc_compose is `static inline`, callers expand it). */
+fn z3_compose(a: *u32, b: *u32, c: *u32) {
+    let mut i: u32 = 0u32
+    while i < 6u32 {
+        let ai: u32 = a[i]
+        let bi: u32 = b[i]
+        let ok: u32 = ((ai < 3u32) as u32) & ((bi < 3u32) as u32)
+        if ok == 1u32 {
+            c[i] = g_iii_acc_z3_add_lut[ai * 3u32 + bi] as u32
+        } else {
+            let s: u32 = (ai % 3u32) + (bi % 3u32)
+            let q: u32 = s % 3u32
+            c[i] = q
+        }
+        i = i + 1u32
+    }
+}
+
+fn iii_acc_compose_admitted(a: *u32, b: *u32) -> i32 @export {
+    let zero: u64 = 0u64
+    if (a as u64) == zero { return 0i32 }
+    if (b as u64) == zero { return 0i32 }
+    /* Stack scratch: 6 u32 in a global to avoid local-array codegen. */
+    z3_compose(a, b, COMPOSE_TMP)
+    return iii_acc_admit_state(COMPOSE_TMP)
+}
+
+var COMPOSE_TMP : [u32; 6]
+
+/* ─── Diagnostics ───────────────────────────────────────────────── */
+
+fn iii_acc_count_admitted() -> u32 @export {
+    let mut n: u32 = 0u32
+    let mut w: u32 = 0u32
+    while w < 11u32 {
+        n = n + popcount64(g_iii_acc_admitted_z3[w])
+        w = w + 1u32
+    }
+    let masked: u64 = g_iii_acc_admitted_z3[11u32] & high_word_mask()
+    n = n + popcount64(masked)
+    return n
+}
+
+fn iii_acc_canonical_bytes(out: *u8) -> i32 @export {
+    if out as u64 == 0u64 { return III_ACC_E_NULL }
+    /* Emit little-endian bytes from 12 u64 words, then truncate to 92
+     * bytes (the loop only writes the first 92 bytes since w<11 fills
+     * 0..87 and w==11 fills only the first 4 bytes [88..91]). */
+    let mut w: u32 = 0u32
+    while w < 11u32 {
+        let v: u64 = g_iii_acc_admitted_z3[w]
+        let base: u32 = w * 8u32
+        out[base + 0u32] = (v        & 0xFFu64) as u8
+        out[base + 1u32] = ((v >> 8u64)  & 0xFFu64) as u8
+        out[base + 2u32] = ((v >> 16u64) & 0xFFu64) as u8
+        out[base + 3u32] = ((v >> 24u64) & 0xFFu64) as u8
+        out[base + 4u32] = ((v >> 32u64) & 0xFFu64) as u8
+        out[base + 5u32] = ((v >> 40u64) & 0xFFu64) as u8
+        out[base + 6u32] = ((v >> 48u64) & 0xFFu64) as u8
+        out[base + 7u32] = ((v >> 56u64) & 0xFFu64) as u8
+        w = w + 1u32
+    }
+    /* w == 11: write only bytes 88..91 (4 bytes covers bits 704..735;
+     * we need bits up to 728 i.e. through byte 91 inclusive). */
+    let v: u64 = g_iii_acc_admitted_z3[11u32]
+    out[88u32] = (v        & 0xFFu64) as u8
+    out[89u32] = ((v >> 8u64)  & 0xFFu64) as u8
+    out[90u32] = ((v >> 16u64) & 0xFFu64) as u8
+    out[91u32] = ((v >> 24u64) & 0xFFu64) as u8
+    /* 729 mod 8 = 1; meaningful bit count in byte 91 is 1. */
+    out[91u32] = out[91u32] & 0x01u8
+    return III_ACC_OK
+}
+
+var FNV_BUF : [u8; 92]
+
+fn iii_acc_bitmap_fingerprint() -> u64 @export {
+    let _r4: i32 = iii_acc_canonical_bytes(FNV_BUF as *u8)
+    let mut h: u64 = 0xcbf29ce484222325u64
+    let prime: u64 = 0x100000001b3u64
+    let mut i: u32 = 0u32
+    while i < 92u32 {
+        h = h ^ (FNV_BUF[i] as u64)
+        h = h * prime
+        i = i + 1u32
+    }
+    return h
+}
+
+/* ─── SHA-256 ───────────────────────────────────────────────────── */
+
+fn rotr32(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+fn sha_init_k_once() {
+    if ACC_SHA_K_INIT == 1u32 { return }
+    ACC_SHA_K[0u32]  = 0x428a2f98u32; ACC_SHA_K[1u32]  = 0x71374491u32
+    ACC_SHA_K[2u32]  = 0xb5c0fbcfu32; ACC_SHA_K[3u32]  = 0xe9b5dba5u32
+    ACC_SHA_K[4u32]  = 0x3956c25bu32; ACC_SHA_K[5u32]  = 0x59f111f1u32
+    ACC_SHA_K[6u32]  = 0x923f82a4u32; ACC_SHA_K[7u32]  = 0xab1c5ed5u32
+    ACC_SHA_K[8u32]  = 0xd807aa98u32; ACC_SHA_K[9u32]  = 0x12835b01u32
+    ACC_SHA_K[10u32] = 0x243185beu32; ACC_SHA_K[11u32] = 0x550c7dc3u32
+    ACC_SHA_K[12u32] = 0x72be5d74u32; ACC_SHA_K[13u32] = 0x80deb1feu32
+    ACC_SHA_K[14u32] = 0x9bdc06a7u32; ACC_SHA_K[15u32] = 0xc19bf174u32
+    ACC_SHA_K[16u32] = 0xe49b69c1u32; ACC_SHA_K[17u32] = 0xefbe4786u32
+    ACC_SHA_K[18u32] = 0x0fc19dc6u32; ACC_SHA_K[19u32] = 0x240ca1ccu32
+    ACC_SHA_K[20u32] = 0x2de92c6fu32; ACC_SHA_K[21u32] = 0x4a7484aau32
+    ACC_SHA_K[22u32] = 0x5cb0a9dcu32; ACC_SHA_K[23u32] = 0x76f988dau32
+    ACC_SHA_K[24u32] = 0x983e5152u32; ACC_SHA_K[25u32] = 0xa831c66du32
+    ACC_SHA_K[26u32] = 0xb00327c8u32; ACC_SHA_K[27u32] = 0xbf597fc7u32
+    ACC_SHA_K[28u32] = 0xc6e00bf3u32; ACC_SHA_K[29u32] = 0xd5a79147u32
+    ACC_SHA_K[30u32] = 0x06ca6351u32; ACC_SHA_K[31u32] = 0x14292967u32
+    ACC_SHA_K[32u32] = 0x27b70a85u32; ACC_SHA_K[33u32] = 0x2e1b2138u32
+    ACC_SHA_K[34u32] = 0x4d2c6dfcu32; ACC_SHA_K[35u32] = 0x53380d13u32
+    ACC_SHA_K[36u32] = 0x650a7354u32; ACC_SHA_K[37u32] = 0x766a0abbu32
+    ACC_SHA_K[38u32] = 0x81c2c92eu32; ACC_SHA_K[39u32] = 0x92722c85u32
+    ACC_SHA_K[40u32] = 0xa2bfe8a1u32; ACC_SHA_K[41u32] = 0xa81a664bu32
+    ACC_SHA_K[42u32] = 0xc24b8b70u32; ACC_SHA_K[43u32] = 0xc76c51a3u32
+    ACC_SHA_K[44u32] = 0xd192e819u32; ACC_SHA_K[45u32] = 0xd6990624u32
+    ACC_SHA_K[46u32] = 0xf40e3585u32; ACC_SHA_K[47u32] = 0x106aa070u32
+    ACC_SHA_K[48u32] = 0x19a4c116u32; ACC_SHA_K[49u32] = 0x1e376c08u32
+    ACC_SHA_K[50u32] = 0x2748774cu32; ACC_SHA_K[51u32] = 0x34b0bcb5u32
+    ACC_SHA_K[52u32] = 0x391c0cb3u32; ACC_SHA_K[53u32] = 0x4ed8aa4au32
+    ACC_SHA_K[54u32] = 0x5b9cca4fu32; ACC_SHA_K[55u32] = 0x682e6ff3u32
+    ACC_SHA_K[56u32] = 0x748f82eeu32; ACC_SHA_K[57u32] = 0x78a5636fu32
+    ACC_SHA_K[58u32] = 0x84c87814u32; ACC_SHA_K[59u32] = 0x8cc70208u32
+    ACC_SHA_K[60u32] = 0x90befffau32; ACC_SHA_K[61u32] = 0xa4506cebu32
+    ACC_SHA_K[62u32] = 0xbef9a3f7u32; ACC_SHA_K[63u32] = 0xc67178f2u32
+    ACC_SHA_K_INIT = 1u32
+}
+
+fn sha_init() {
+    sha_init_k_once()
+    ACC_SHA_H[0u32] = 0x6a09e667u32; ACC_SHA_H[1u32] = 0xbb67ae85u32
+    ACC_SHA_H[2u32] = 0x3c6ef372u32; ACC_SHA_H[3u32] = 0xa54ff53au32
+    ACC_SHA_H[4u32] = 0x510e527fu32; ACC_SHA_H[5u32] = 0x9b05688cu32
+    ACC_SHA_H[6u32] = 0x1f83d9abu32; ACC_SHA_H[7u32] = 0x5be0cd19u32
+    ACC_SHA_BUFLEN = 0u32
+    ACC_SHA_BITS = 0u64
+}
+
+fn sha_compress() {
+    /* Build w[0..15] from ACC_SHA_BUF (big-endian). */
+    let mut i: u32 = 0u32
+    while i < 16u32 {
+        let b0: u32 = ACC_SHA_BUF[i*4u32 + 0u32] as u32
+        let b1: u32 = ACC_SHA_BUF[i*4u32 + 1u32] as u32
+        let b2: u32 = ACC_SHA_BUF[i*4u32 + 2u32] as u32
+        let b3: u32 = ACC_SHA_BUF[i*4u32 + 3u32] as u32
+        ACC_SHA_W[i] = (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3
+        i = i + 1u32
+    }
+    let mut j: u32 = 16u32
+    while j < 64u32 {
+        let w15: u32 = ACC_SHA_W[j - 15u32]
+        let w2:  u32 = ACC_SHA_W[j - 2u32]
+        let s0: u32 = rotr32(w15, 7u32) ^ rotr32(w15, 18u32) ^ (w15 >> 3u32)
+        let s1: u32 = rotr32(w2, 17u32) ^ rotr32(w2, 19u32) ^ (w2 >> 10u32)
+        ACC_SHA_W[j] = ACC_SHA_W[j - 16u32] + s0 + ACC_SHA_W[j - 7u32] + s1
+        j = j + 1u32
+    }
+    let mut a: u32 = ACC_SHA_H[0u32]
+    let mut b: u32 = ACC_SHA_H[1u32]
+    let mut c: u32 = ACC_SHA_H[2u32]
+    let mut d: u32 = ACC_SHA_H[3u32]
+    let mut e: u32 = ACC_SHA_H[4u32]
+    let mut f: u32 = ACC_SHA_H[5u32]
+    let mut g: u32 = ACC_SHA_H[6u32]
+    let mut h: u32 = ACC_SHA_H[7u32]
+    let mut k: u32 = 0u32
+    while k < 64u32 {
+        let big1: u32 = rotr32(e, 6u32) ^ rotr32(e, 11u32) ^ rotr32(e, 25u32)
+        let ch:   u32 = (e & f) ^ ((~e) & g)
+        let t1:   u32 = h + big1 + ch + ACC_SHA_K[k] + ACC_SHA_W[k]
+        let big0: u32 = rotr32(a, 2u32) ^ rotr32(a, 13u32) ^ rotr32(a, 22u32)
+        let mj:   u32 = (a & b) ^ (a & c) ^ (b & c)
+        let t2:   u32 = big0 + mj
+        h = g; g = f; f = e; e = d + t1
+        d = c; c = b; b = a; a = t1 + t2
+        k = k + 1u32
+    }
+    ACC_SHA_H[0u32] = ACC_SHA_H[0u32] + a
+    ACC_SHA_H[1u32] = ACC_SHA_H[1u32] + b
+    ACC_SHA_H[2u32] = ACC_SHA_H[2u32] + c
+    ACC_SHA_H[3u32] = ACC_SHA_H[3u32] + d
+    ACC_SHA_H[4u32] = ACC_SHA_H[4u32] + e
+    ACC_SHA_H[5u32] = ACC_SHA_H[5u32] + f
+    ACC_SHA_H[6u32] = ACC_SHA_H[6u32] + g
+    ACC_SHA_H[7u32] = ACC_SHA_H[7u32] + h
+}
+
+fn sha_update_byte(b: u8) {
+    ACC_SHA_BUF[ACC_SHA_BUFLEN] = b
+    ACC_SHA_BUFLEN = ACC_SHA_BUFLEN + 1u32
+    ACC_SHA_BITS = ACC_SHA_BITS + 8u64
+    if ACC_SHA_BUFLEN == 64u32 {
+        sha_compress(); ACC_SHA_BUFLEN = 0u32
+    }
+}
+
+fn sha_update(p: *u8, len: u32) {
+    let mut i: u32 = 0u32
+    while i < len {
+        sha_update_byte(p[i])
+        i = i + 1u32
+    }
+}
+
+fn sha_final(out: *u8) {
+    let total_bits: u64 = ACC_SHA_BITS
+    sha_update_byte(0x80u8)
+    while ACC_SHA_BUFLEN != 56u32 {
+        if ACC_SHA_BUFLEN == 64u32 {
+            sha_compress(); ACC_SHA_BUFLEN = 0u32
+        } else {
+            ACC_SHA_BUF[ACC_SHA_BUFLEN] = 0u8
+            ACC_SHA_BUFLEN = ACC_SHA_BUFLEN + 1u32
+        }
+    }
+    ACC_SHA_BUF[56u32] = ((total_bits >> 56u64) & 0xFFu64) as u8
+    ACC_SHA_BUF[57u32] = ((total_bits >> 48u64) & 0xFFu64) as u8
+    ACC_SHA_BUF[58u32] = ((total_bits >> 40u64) & 0xFFu64) as u8
+    ACC_SHA_BUF[59u32] = ((total_bits >> 32u64) & 0xFFu64) as u8
+    ACC_SHA_BUF[60u32] = ((total_bits >> 24u64) & 0xFFu64) as u8
+    ACC_SHA_BUF[61u32] = ((total_bits >> 16u64) & 0xFFu64) as u8
+    ACC_SHA_BUF[62u32] = ((total_bits >> 8u64)  & 0xFFu64) as u8
+    ACC_SHA_BUF[63u32] = (total_bits             & 0xFFu64) as u8
+    sha_compress()
+    let mut i: u32 = 0u32
+    while i < 8u32 {
+        let h: u32 = ACC_SHA_H[i]
+        out[i*4u32 + 0u32] = ((h >> 24u32) & 0xFFu32) as u8
+        out[i*4u32 + 1u32] = ((h >> 16u32) & 0xFFu32) as u8
+        out[i*4u32 + 2u32] = ((h >> 8u32)  & 0xFFu32) as u8
+        out[i*4u32 + 3u32] = (h            & 0xFFu32) as u8
+        i = i + 1u32
+    }
+}
+
+var ACC_SHA_CANON : [u8; 92]
+
+fn iii_acc_bitmap_sha256(out: *u8) -> i32 @export {
+    if out as u64 == 0u64 { return III_ACC_E_NULL }
+    let _r5: i32 = iii_acc_canonical_bytes(ACC_SHA_CANON as *u8)
+    sha_init()
+    sha_update(ACC_SHA_CANON as *u8, 92u32)
+    sha_final(out)
+    return III_ACC_OK
+}
+
+/* ─── Audit hook stubs ──────────────────────────────────────────── */
+
+fn iii_acc_set_audit_cycle_kind(cycle_kind: u32) @export {
+    g_iii_acc_audit_kind = cycle_kind & 0xFFFFu32
+}
+
+fn iii_acc_set_audit_sink(fn_ptr: u64, ctx: u64) @export {
+    g_iii_acc_audit_fn  = fn_ptr
+    g_iii_acc_audit_ctx = ctx
+}
+
+/* ─── Seal / self-check ─────────────────────────────────────────── */
+
+var SEAL_CUR : [u8; 32]
+
+fn bytes_eq32(a: *u8, b: *u8) -> i32 {
+    let mut i: u32 = 0u32
+    while i < 32u32 {
+        if a[i] != b[i] { return 0i32 }
+        i = i + 1u32
+    }
+    return 1i32
+}
+
+fn iii_acc_seal() -> i32 @export {
+    if g_iii_acc_sealed != 0i32 {
+        let _r6: i32 = iii_acc_bitmap_sha256(SEAL_CUR as *u8)
+        let eq: i32 = bytes_eq32(SEAL_CUR as *u8, g_iii_acc_sealed_sha256 as *u8)
+        if eq == 0i32 { return III_ACC_E_BITMAP_LOCKED }
+        return III_ACC_OK
+    }
+    let _r7: i32 = iii_acc_bitmap_sha256(g_iii_acc_sealed_sha256 as *u8)
+    g_iii_acc_sealed = 1i32
+    return III_ACC_OK
+}
+
+fn iii_acc_is_sealed() -> i32 @export {
+    return g_iii_acc_sealed
+}
+
+fn iii_acc_self_check() -> i32 @export {
+    if g_iii_acc_sealed == 0i32 { return III_ACC_E_NOT_SEALED }
+    let _r8: i32 = iii_acc_bitmap_sha256(SEAL_CUR as *u8)
+    let eq: i32 = bytes_eq32(SEAL_CUR as *u8, g_iii_acc_sealed_sha256 as *u8)
+    if eq == 1i32 { return III_ACC_OK }
+    return III_ACC_E_SELF_CHECK_FAIL
+}
+
+/* ─── Hexad decode ──────────────────────────────────────────────── */
+
+fn iii_acc_state_from_hexad(hexad: u32, out: *u32) @export {
+    if out as u64 == 0u64 { return }
+    let mut i: u32 = 0u32
+    while i < 6u32 {
+        let shift: u32 = i * 2u32
+        let code: u32 = (hexad >> shift) & 3u32
+        if code == 0u32 {
+            out[i] = 2u32
+        } else {
+            if code == 1u32 {
+                out[i] = 0u32
+            } else {
+                if code == 2u32 {
+                    out[i] = 1u32
+                } else {
+                    out[i] = 0u32
+                }
+            }
+        }
+        i = i + 1u32
+    }
+}

@@ -1,0 +1,39 @@
+/* UUID v4 generate + format.  Verify version+variant bits, format
+ * structure (36 chars: 8-4-4-4-12 with hyphens). */
+module corpus_87
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn xoshiro_seed(s0: u64, s1: u64, s2: u64, s3: u64) -> i32 from "xoshiro.iii"
+extern @abi(c-msvc-x64) fn uuid_v4_generate(out_16: *u8) -> i32 from "uuid.iii"
+extern @abi(c-msvc-x64) fn uuid_v4_format(uuid_16: *u8, out_36: *u8) -> i32 from "uuid.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(16u64)
+    let str : *u8 = malloc(36u64)
+    xoshiro_seed(0x12345678u64, 0x9ABCDEF0u64, 0xDEADBEEFu64, 0xCAFEBABEu64)
+    uuid_v4_generate(buf)
+    /* Verify version field: byte 6 high nibble = 4 */
+    if ((buf[6] as u32) >> 4u32) != 4u32 { return 1u64 }
+    /* Verify variant field: byte 8 top 2 bits = 10b */
+    if ((buf[8] as u32) >> 6u32) != 2u32 { return 2u64 }
+    /* Format to ASCII */
+    uuid_v4_format(buf, str)
+    /* Hyphens at positions 8, 13, 18, 23 */
+    if str[8]  != 45u8 { return 3u64 }
+    if str[13] != 45u8 { return 4u64 }
+    if str[18] != 45u8 { return 5u64 }
+    if str[23] != 45u8 { return 6u64 }
+    /* Position 14 should be '4' (version) */
+    if str[14] != 52u8 { return 7u64 }
+    /* Position 19 should be one of 8, 9, a, b */
+    let v : u8 = str[19]
+    let mut ok : u8 = 0u8
+    if v == 56u8 { ok = 1u8 }
+    if v == 57u8 { ok = 1u8 }
+    if v == 97u8 { ok = 1u8 }
+    if v == 98u8 { ok = 1u8 }
+    if ok != 1u8 { return 8u64 }
+    free(buf); free(str)
+    return 99u64
+}

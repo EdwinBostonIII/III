@@ -1,0 +1,15 @@
+module corpus_44
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    let mut count : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        if pattern_table_get(i) != 0u64 { count = count + 1u64 }
+        i = i + 1u32
+    }
+    return count
+}

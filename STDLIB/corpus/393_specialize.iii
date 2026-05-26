@@ -1,0 +1,18 @@
+/* 393 — V1 Stage 7.1: @specialize end-to-end.
+ * Externs the monomorphised symbols generated from omnia/spec_probe.iii's
+ * generic `spec_probe__id<T>(v: T) @specialize(u8, i8, u32)` and asserts
+ * width/sign-correct behaviour.  The SAME 0xFF byte zero-extends under u8
+ * (-> 0xFF) but sign-extends under i8 (-> 0xFFFF_FFFF_FFFF_FFFF) -- a result
+ * that can only hold if the per-type width/sign-aware specialization is real.
+ * Exit 99 = pass. */
+module corpus_393_specialize
+extern @abi(c-msvc-x64) fn spec_probe_u8_id(v: u8) -> u64 from "spec_probe.iii"
+extern @abi(c-msvc-x64) fn spec_probe_i8_id(v: i8) -> u64 from "spec_probe.iii"
+extern @abi(c-msvc-x64) fn spec_probe_u32_id(v: u32) -> u64 from "spec_probe.iii"
+
+fn main() -> u64 {
+    if spec_probe_u8_id(255u8) != 255u64 { return 1u64 }
+    if spec_probe_i8_id(-1i8) != 0xFFFFFFFFFFFFFFFFu64 { return 2u64 }
+    if spec_probe_u32_id(305419896u32) != 305419896u64 { return 3u64 }
+    return 99u64
+}

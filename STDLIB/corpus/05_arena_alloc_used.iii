@@ -1,0 +1,20 @@
+/* Arena: new(256) -> alloc8(40) -> alloc8(20) -> used == 64 (40+24 align)? */
+module corpus_a05
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_used(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(256u64)
+    if a == 0u64 { return 1u64 }
+    let p1 : u64 = arena_alloc8(a, 40u64)
+    if p1 == 0u64 { return 2u64 }
+    let p2 : u64 = arena_alloc8(a, 20u64)
+    if p2 == 0u64 { return 3u64 }
+    let u : u64 = arena_used(a)
+    if u < 60u64 { return 4u64 }
+    arena_drop(a)
+    return 99u64
+}

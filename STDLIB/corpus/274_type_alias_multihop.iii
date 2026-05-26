@@ -1,0 +1,30 @@
+/* III conformance corpus 274 -- Stage 3.6: multi-hop type-alias resolution.
+ *
+ * A 3-hop alias chain carries @hexad_kind through every level:
+ *     type AKind = u64 @hexad_kind(1u64)
+ *     type BKind = AKind
+ *     type CKind = BKind
+ * A param/binding declared `: CKind` must resolve the kind by walking
+ * CKind -> BKind -> AKind (3 hops).  iiis-2's single-hop resolution
+ * stopped at the immediate rhs and missed the kind; Stage 3.6 walks the
+ * chain to a fixpoint.  Here param and arg are both CKind -> both kind 1
+ * -> the intent-kind static check matches -> compiles + runs.
+ *
+ * Exit = 99 on success.  Mandate 7 clean: structural name-lookup.
+ */
+module corpus_274
+
+type AKind = u64 @hexad_kind(1u64)
+type BKind = AKind
+type CKind = BKind
+
+fn _consume(x: CKind) -> u64 {
+    return x + 0x1000u64
+}
+
+fn main() -> u64 {
+    let v : CKind = 0x100u64
+    let r : u64 = _consume(v)
+    if r != 0x1100u64 { return 1u64 }
+    return 99u64
+}

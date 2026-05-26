@@ -1,0 +1,509 @@
+/* aether/hotstuff.iii — V1 Stage 5 (gospel L24059): deterministic HotStuff BFT.
+ *
+ * Three-phase pacemaker (PREPARE, PRE-COMMIT, COMMIT) with optimistic linearity.
+ * Safety via the locked-block discipline; liveness via view change on timeout.
+ * Leader rotation is the closed form leader = view mod n (no randomness — the
+ * determinism mandate forbids random leader selection).  Quorum = 2f+1.
+ *
+ * Public API: hs_init, hs_set_keypair, hs_propose, hs_handle_propose,
+ *   hs_handle_vote, hs_handle_new_view, hs_tick, hs_committed_head,
+ *   hs_compose_qc, hs_verify_qc, hs_dispatch_by_tier.
+ *
+ * Hexad: kind_motion + kind_federation.  Ring: R0.  K: 0.99 (the network
+ * synchrony assumption is the only non-determinism; protocol logic is total).
+ *
+ * Reconciliations (no down-scaling): gospel function-local var arrays -> module
+ * scope (iiis local var arrays are module-scope only); ed25519_sign is the real
+ * 5-arg (seed,pk,msg,len,sig) and the node keypair is supplied via hs_set_keypair
+ * (the gospel punts signing as a "sealed call, not shown" — implemented here for
+ * real, no placeholder); hs_handle_vote / hs_handle_new_view (gospel stubs) are
+ * implemented with real vote-bitmap aggregation and f+1 new-view collection.
+ *
+ * Block layout (424 bytes): [0..256)=parent_qc [256..264)=view(LE)
+ *   [264..296)=payload_mhash [296..328)=block_hash [328..360)=proposer_pubkey
+ *   [360..424)=proposer_sig.
+ * Vote layout (108 bytes):  [0..32)=block_mhash [32..40)=view(LE)
+ *   [40..44)=voter_id(LE) [44..108)=voter_sig over (block_mhash||view).
+ * NewView layout (76 bytes): [0..8)=new_view(LE) [8..12)=sender_id(LE)
+ *   [12..76)=timeout_sig over (new_view-bytes).
+ * QC layout: [0..32)=block_mhash [32..40)=view [40..44)=n_sigs [44..)=64B sigs.
+ */
+module aether_hotstuff
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out: *u8) -> i32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+
+const HS_OK                  : i32 =  0i32
+const HS_E_NULL              : i32 = -1i32
+const HS_E_BAD_QC            : i32 = -2i32
+const HS_E_BAD_PROPOSER      : i32 = -3i32
+const HS_E_UNSAFE_VOTE       : i32 = -4i32
+const HS_E_DUPLICATE_VOTE    : i32 = -5i32
+const HS_E_TIMEOUT           : i32 = -6i32
+const HS_E_NOT_INITED        : i32 = -7i32
+
+const HS_PHASE_PREPARE       : u8 = 0u8
+const HS_PHASE_PRECOMMIT     : u8 = 1u8
+const HS_PHASE_COMMIT        : u8 = 2u8
+
+const HS_MAX_PEERS           : u32 = 64u32
+const HS_VIEW_TIMEOUT_MS     : u32 = 5000u32
+
+const HS_TIER_BEDROCK        : u8 = 0u8
+const HS_TIER_FIELD          : u8 = 1u8
+const HS_TIER_SPECULATIVE    : u8 = 2u8
+
+var HS_INITED                : u8 = 0u8
+var HS_NODE_ID               : u32 = 0u32
+var HS_PEER_COUNT            : u32 = 0u32
+var HS_PEER_KEYS             : [u8; 2048]   /* 64 * 32 */
+var HS_QUORUM                : u32 = 0u32   /* 2f+1 */
+var HS_FAULT                 : u32 = 0u32   /* f */
+var HS_VIEW                  : u64 = 0u64
+var HS_PHASE                 : u8 = 0u8
+var HS_LOCKED_QC             : [u8; 256]
+var HS_LOCKED_VIEW           : u64 = 0u64
+var HS_HIGH_QC               : [u8; 256]
+var HS_HIGH_VIEW             : u64 = 0u64
+var HS_COMMITTED_HEAD        : [u8; 32]
+var HS_VOTE_BLOCK            : [u8; 32]     /* mhash of the block votes must match (Byzantine-safety) */
+var HS_VIEW_TIMER_MS         : u32 = 0u32
+var HS_VOTE_BITMAP           : [u8; 8]      /* 64 bits, per-peer voted-or-not */
+var HS_VOTE_COUNT            : u32 = 0u32
+var HS_NV_BITMAP             : [u8; 8]      /* new-view timeout senders */
+var HS_NV_COUNT              : u32 = 0u32
+var HS_NODE_KEYS             : [u8; 64]     /* this node's seed(32) || pk(32) */
+
+/* Moved-from-local scratch (iiis local var arrays unsupported) */
+var HS_BUF                   : [u8; 296]    /* block-hash preimage */
+var HS_BLOCK_HASH            : [u8; 32]
+var HS_SIG_INPUT             : [u8; 40]     /* block_mhash || view */
+var HS_PROPOSER_PK           : [u8; 32]
+var HS_SIG                   : [u8; 64]
+
+fn hs_init(node_id: u32, peers: *u8, n_peers: u32) -> i32 @export {
+    if (peers as u64) == 0u64 { return HS_E_NULL }
+    if n_peers > HS_MAX_PEERS { return HS_E_NULL }
+    HS_NODE_ID = node_id
+    HS_PEER_COUNT = n_peers
+    let mut i : u64 = 0u64
+    while i < (n_peers as u64) * 32u64 {
+        HS_PEER_KEYS[i] = peers[i]
+        i = i + 1u64
+    }
+    /* f = (n-1)/3 ; quorum = 2f+1 */
+    let f : u32 = (n_peers - 1u32) / 3u32
+    HS_FAULT = f
+    HS_QUORUM = 2u32 * f + 1u32
+    HS_VIEW = 0u64
+    HS_PHASE = HS_PHASE_PREPARE
+    ident_zero((&HS_COMMITTED_HEAD as u64) as *u8)
+    let mut k : u64 = 0u64
+    while k < 256u64 {
+        HS_LOCKED_QC[k] = 0u8
+        HS_HIGH_QC[k] = 0u8
+        k = k + 1u64
+    }
+    HS_LOCKED_VIEW = 0u64
+    HS_HIGH_VIEW = 0u64
+    HS_VIEW_TIMER_MS = 0u32
+    HS_VOTE_COUNT = 0u32
+    HS_NV_COUNT = 0u32
+    let mut m : u64 = 0u64
+    while m < 8u64 {
+        HS_VOTE_BITMAP[m] = 0u8
+        HS_NV_BITMAP[m] = 0u8
+        m = m + 1u64
+    }
+    HS_INITED = 1u8
+    return HS_OK
+}
+
+/* Supply this node's Ed25519 keypair (seed||pk, 64 bytes) for proposer/vote
+ * signing.  The pk must equal HS_PEER_KEYS[node_id]. */
+fn hs_set_keypair(kp: *u8) -> i32 @export {
+    if (kp as u64) == 0u64 { return HS_E_NULL }
+    let mut i : u64 = 0u64
+    while i < 64u64 { HS_NODE_KEYS[i] = kp[i] ; i = i + 1u64 }
+    return HS_OK
+}
+
+fn hs_leader_for_view(view: u64) -> u32 {
+    if HS_PEER_COUNT == 0u32 { return 0u32 }
+    return (view as u32) % HS_PEER_COUNT
+}
+fn hs_is_leader() -> u8 {
+    if hs_leader_for_view(HS_VIEW) == HS_NODE_ID { return 1u8 }
+    return 0u8
+}
+
+fn hs_block_hash(parent_qc: *u8, view: u64, payload_mhash: *u8, out_hash: *u8) -> i32 {
+    if (parent_qc as u64) == 0u64 { return HS_E_NULL }
+    if (payload_mhash as u64) == 0u64 { return HS_E_NULL }
+    if (out_hash as u64) == 0u64 { return HS_E_NULL }
+    let bp : *u8 = (&HS_BUF as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 256u64 { bp[k] = parent_qc[k] ; k = k + 1u64 }
+    bp[256u64] = (view & 0xFFu64) as u8
+    bp[257u64] = ((view >> 8u64)  & 0xFFu64) as u8
+    bp[258u64] = ((view >> 16u64) & 0xFFu64) as u8
+    bp[259u64] = ((view >> 24u64) & 0xFFu64) as u8
+    bp[260u64] = ((view >> 32u64) & 0xFFu64) as u8
+    bp[261u64] = ((view >> 40u64) & 0xFFu64) as u8
+    bp[262u64] = ((view >> 48u64) & 0xFFu64) as u8
+    bp[263u64] = ((view >> 56u64) & 0xFFu64) as u8
+    let mut m : u64 = 0u64
+    while m < 32u64 { bp[264u64 + m] = payload_mhash[m] ; m = m + 1u64 }
+    sha256_oneshot(bp, 296u64, out_hash)
+    return HS_OK
+}
+
+/* Build sig_input = block_mhash(32) || view(8) into HS_SIG_INPUT. */
+fn hs_build_sig_input(block_mhash: *u8, view: u64) -> i32 {
+    let sp : *u8 = (&HS_SIG_INPUT as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { sp[k] = block_mhash[k] ; k = k + 1u64 }
+    sp[32u64] = (view & 0xFFu64) as u8
+    sp[33u64] = ((view >> 8u64)  & 0xFFu64) as u8
+    sp[34u64] = ((view >> 16u64) & 0xFFu64) as u8
+    sp[35u64] = ((view >> 24u64) & 0xFFu64) as u8
+    sp[36u64] = ((view >> 32u64) & 0xFFu64) as u8
+    sp[37u64] = ((view >> 40u64) & 0xFFu64) as u8
+    sp[38u64] = ((view >> 48u64) & 0xFFu64) as u8
+    sp[39u64] = ((view >> 56u64) & 0xFFu64) as u8
+    return HS_OK
+}
+
+fn hs_propose(payload_mhash: *u8, out_block: *u8) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (payload_mhash as u64) == 0u64 { return HS_E_NULL }
+    if (out_block as u64) == 0u64 { return HS_E_NULL }
+    if hs_is_leader() == 0u8 { return HS_E_BAD_PROPOSER }
+    let mut k : u64 = 0u64
+    while k < 256u64 { out_block[k] = HS_HIGH_QC[k] ; k = k + 1u64 }
+    out_block[256u64] = (HS_VIEW & 0xFFu64) as u8
+    out_block[257u64] = ((HS_VIEW >> 8u64)  & 0xFFu64) as u8
+    out_block[258u64] = ((HS_VIEW >> 16u64) & 0xFFu64) as u8
+    out_block[259u64] = ((HS_VIEW >> 24u64) & 0xFFu64) as u8
+    out_block[260u64] = ((HS_VIEW >> 32u64) & 0xFFu64) as u8
+    out_block[261u64] = ((HS_VIEW >> 40u64) & 0xFFu64) as u8
+    out_block[262u64] = ((HS_VIEW >> 48u64) & 0xFFu64) as u8
+    out_block[263u64] = ((HS_VIEW >> 56u64) & 0xFFu64) as u8
+    let mut m : u64 = 0u64
+    while m < 32u64 { out_block[264u64 + m] = payload_mhash[m] ; m = m + 1u64 }
+    hs_block_hash((&HS_HIGH_QC as u64) as *u8, HS_VIEW, payload_mhash, (&HS_BLOCK_HASH as u64) as *u8)
+    let mut n : u64 = 0u64
+    while n < 32u64 { out_block[296u64 + n] = HS_BLOCK_HASH[n] ; n = n + 1u64 }
+    let mut p : u64 = 0u64
+    while p < 32u64 { out_block[328u64 + p] = HS_PEER_KEYS[(HS_NODE_ID as u64) * 32u64 + p] ; p = p + 1u64 }
+    /* REAL proposer signature over (block_hash || view) with this node's key. */
+    hs_build_sig_input((&HS_BLOCK_HASH as u64) as *u8, HS_VIEW)
+    ed25519_sign((&HS_NODE_KEYS as u64) as *u8, ((&HS_NODE_KEYS as u64) + 32u64) as *u8,
+                 (&HS_SIG_INPUT as u64) as *u8, 40u64, ((out_block as u64) + 360u64) as *u8)
+    return HS_OK
+}
+
+/* Read a u64 (LE) from msg[off..off+8). */
+fn hs_read_u64(msg: *u8, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut q : u64 = 0u64
+    while q < 8u64 {
+        v = v | ((msg[off + q] as u64) << (q * 8u64))
+        q = q + 1u64
+    }
+    return v
+}
+fn hs_read_u32(msg: *u8, off: u64) -> u32 {
+    return (msg[off] as u32) | ((msg[off + 1u64] as u32) << 8u32) | ((msg[off + 2u64] as u32) << 16u32) | ((msg[off + 3u64] as u32) << 24u32)
+}
+
+fn hs_handle_propose(msg: *u8, msg_len: u32) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (msg as u64) == 0u64 { return HS_E_NULL }
+    if msg_len < 424u32 { return HS_E_NULL }
+    /* sig_input = block_hash(msg[296..328]) || view(msg[256..264]) */
+    let sp : *u8 = (&HS_SIG_INPUT as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { sp[k] = msg[296u64 + k] ; k = k + 1u64 }
+    let mut m : u64 = 0u64
+    while m < 8u64 { sp[32u64 + m] = msg[256u64 + m] ; m = m + 1u64 }
+    let pkp : *u8 = (&HS_PROPOSER_PK as u64) as *u8
+    let mut n : u64 = 0u64
+    while n < 32u64 { pkp[n] = msg[328u64 + n] ; n = n + 1u64 }
+    let sgp : *u8 = (&HS_SIG as u64) as *u8
+    let mut p : u64 = 0u64
+    while p < 64u64 { sgp[p] = msg[360u64 + p] ; p = p + 1u64 }
+    if ed25519_verify(pkp, sp, 40u64, sgp) == 0u8 { return HS_E_BAD_PROPOSER }
+    let block_view : u64 = hs_read_u64(msg, 256u64)
+    let expected_leader : u32 = hs_leader_for_view(block_view)
+    if ident_eq(pkp, ((&HS_PEER_KEYS as u64) + (expected_leader as u64) * 32u64) as *u8) == 0u8 { return HS_E_BAD_PROPOSER }
+    /* Safe-vote check: block must advance past the locked view. */
+    if block_view <= HS_LOCKED_VIEW { return HS_E_UNSAFE_VOTE }
+    HS_HIGH_VIEW = block_view
+    /* Bind subsequent votes to THIS block's mhash: a Byzantine peer voting for
+     * a conflicting block (different mhash) is then rejected by hs_handle_vote
+     * and cannot contribute to this block's quorum -> safety preserved. */
+    let bvp : *u8 = (&HS_VOTE_BLOCK as u64) as *u8
+    let mut bk : u64 = 0u64
+    while bk < 32u64 { bvp[bk] = msg[296u64 + bk]  bk = bk + 1u64 }
+    return HS_OK
+}
+
+/* Real vote aggregation: verify the voter's signature over (block_mhash||view),
+ * set the voter's bitmap bit once, count, and advance the phase / commit at
+ * quorum. */
+fn hs_handle_vote(msg: *u8, msg_len: u32) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (msg as u64) == 0u64 { return HS_E_NULL }
+    if msg_len < 108u32 { return HS_E_NULL }
+    let view : u64 = hs_read_u64(msg, 32u64)
+    let voter : u32 = hs_read_u32(msg, 40u64)
+    if voter >= HS_PEER_COUNT { return HS_E_NULL }
+    hs_build_sig_input(msg, view)                       /* block_mhash = msg[0..32] */
+    let pk : *u8 = ((&HS_PEER_KEYS as u64) + (voter as u64) * 32u64) as *u8
+    let sg : *u8 = ((msg as u64) + 44u64) as *u8
+    if ed25519_verify(pk, (&HS_SIG_INPUT as u64) as *u8, 40u64, sg) == 0u8 { return HS_E_BAD_QC }
+    /* Byzantine-safety: the vote's block_mhash (msg[0..32]) must match the
+     * block bound by hs_handle_propose; a conflicting vote is rejected here
+     * (not counted), so it cannot complete a quorum for a different block. */
+    if ident_eq(msg, (&HS_VOTE_BLOCK as u64) as *u8) == 0u8 { return HS_E_BAD_QC }
+    let byteidx : u64 = (voter as u64) / 8u64
+    let sh : u32 = (voter as u32) & 7u32
+    let one : u32 = 1u32
+    let bit : u8 = (one << sh) as u8
+    if (HS_VOTE_BITMAP[byteidx] & bit) != 0u8 { return HS_E_DUPLICATE_VOTE }
+    HS_VOTE_BITMAP[byteidx] = HS_VOTE_BITMAP[byteidx] | bit
+    HS_VOTE_COUNT = HS_VOTE_COUNT + 1u32
+    if HS_VOTE_COUNT >= HS_QUORUM {
+        /* Quorum reached: advance the three-phase pacemaker. */
+        if HS_PHASE == HS_PHASE_PREPARE { HS_PHASE = HS_PHASE_PRECOMMIT } else { if HS_PHASE == HS_PHASE_PRECOMMIT { HS_PHASE = HS_PHASE_COMMIT } else {
+            /* COMMIT quorum: lock + commit this block. */
+            ident_copy(msg, (&HS_COMMITTED_HEAD as u64) as *u8)
+            HS_LOCKED_VIEW = view
+        } }
+        /* reset the vote tally for the next phase */
+        HS_VOTE_COUNT = 0u32
+        let mut z : u64 = 0u64
+        while z < 8u64 { HS_VOTE_BITMAP[z] = 0u8 ; z = z + 1u64 }
+    }
+    return HS_OK
+}
+
+/* Real new-view collection: verify each sender's timeout signature over the
+ * new_view bytes, count distinct senders, advance to new_view at f+1. */
+fn hs_handle_new_view(msg: *u8, msg_len: u32) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (msg as u64) == 0u64 { return HS_E_NULL }
+    if msg_len < 76u32 { return HS_E_NULL }
+    let new_view : u64 = hs_read_u64(msg, 0u64)
+    let sender : u32 = hs_read_u32(msg, 8u64)
+    if sender >= HS_PEER_COUNT { return HS_E_NULL }
+    let pk : *u8 = ((&HS_PEER_KEYS as u64) + (sender as u64) * 32u64) as *u8
+    let sg : *u8 = ((msg as u64) + 12u64) as *u8
+    if ed25519_verify(pk, msg, 8u64, sg) == 0u8 { return HS_E_BAD_QC }
+    let byteidx : u64 = (sender as u64) / 8u64
+    let sh : u32 = (sender as u32) & 7u32
+    let one : u32 = 1u32
+    let bit : u8 = (one << sh) as u8
+    if (HS_NV_BITMAP[byteidx] & bit) != 0u8 { return HS_E_DUPLICATE_VOTE }
+    HS_NV_BITMAP[byteidx] = HS_NV_BITMAP[byteidx] | bit
+    HS_NV_COUNT = HS_NV_COUNT + 1u32
+    if HS_NV_COUNT >= (HS_FAULT + 1u32) {
+        HS_VIEW = new_view
+        HS_PHASE = HS_PHASE_PREPARE
+        HS_VIEW_TIMER_MS = 0u32
+        HS_NV_COUNT = 0u32
+        HS_VOTE_COUNT = 0u32
+        let mut z : u64 = 0u64
+        while z < 8u64 { HS_NV_BITMAP[z] = 0u8  HS_VOTE_BITMAP[z] = 0u8 ; z = z + 1u64 }
+    }
+    return HS_OK
+}
+
+fn hs_tick(elapsed_ms: u32) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    HS_VIEW_TIMER_MS = HS_VIEW_TIMER_MS + elapsed_ms
+    if HS_VIEW_TIMER_MS >= HS_VIEW_TIMEOUT_MS {
+        HS_VIEW = HS_VIEW + 1u64
+        HS_VIEW_TIMER_MS = 0u32
+        HS_PHASE = HS_PHASE_PREPARE
+        HS_VOTE_COUNT = 0u32
+        let mut m : u64 = 0u64
+        while m < 8u64 { HS_VOTE_BITMAP[m] = 0u8 ; m = m + 1u64 }
+        return HS_E_TIMEOUT
+    }
+    return HS_OK
+}
+
+fn hs_committed_head(out_mhash: *u8) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (out_mhash as u64) == 0u64 { return HS_E_NULL }
+    ident_copy((&HS_COMMITTED_HEAD as u64) as *u8, out_mhash)
+    return HS_OK
+}
+
+fn hs_compose_qc(block_mhash: *u8, view: u64, sigs: *u8, n_sigs: u32, out_qc: *u8) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (block_mhash as u64) == 0u64 { return HS_E_NULL }
+    if (sigs as u64) == 0u64 { return HS_E_NULL }
+    if (out_qc as u64) == 0u64 { return HS_E_NULL }
+    if n_sigs < HS_QUORUM { return HS_E_BAD_QC }
+    let mut k : u64 = 0u64
+    while k < 32u64 { out_qc[k] = block_mhash[k] ; k = k + 1u64 }
+    out_qc[32u64] = (view & 0xFFu64) as u8
+    out_qc[33u64] = ((view >> 8u64)  & 0xFFu64) as u8
+    out_qc[34u64] = ((view >> 16u64) & 0xFFu64) as u8
+    out_qc[35u64] = ((view >> 24u64) & 0xFFu64) as u8
+    out_qc[36u64] = ((view >> 32u64) & 0xFFu64) as u8
+    out_qc[37u64] = ((view >> 40u64) & 0xFFu64) as u8
+    out_qc[38u64] = ((view >> 48u64) & 0xFFu64) as u8
+    out_qc[39u64] = ((view >> 56u64) & 0xFFu64) as u8
+    out_qc[40u64] = (n_sigs & 0xFFu32) as u8
+    out_qc[41u64] = ((n_sigs >> 8u32)  & 0xFFu32) as u8
+    out_qc[42u64] = ((n_sigs >> 16u32) & 0xFFu32) as u8
+    out_qc[43u64] = ((n_sigs >> 24u32) & 0xFFu32) as u8
+    let mut m : u64 = 0u64
+    while m < (n_sigs as u64) * 64u64 { out_qc[44u64 + m] = sigs[m] ; m = m + 1u64 }
+    return HS_OK
+}
+
+fn hs_verify_qc(qc: *u8, qc_len: u32) -> u8 @export {
+    if HS_INITED == 0u8 { return 0u8 }
+    if (qc as u64) == 0u64 { return 0u8 }
+    if qc_len < 44u32 { return 0u8 }
+    let n_sigs : u32 = hs_read_u32(qc, 40u64)
+    if n_sigs < HS_QUORUM { return 0u8 }
+    if qc_len < 44u32 + n_sigs * 64u32 { return 0u8 }
+    let sp : *u8 = (&HS_SIG_INPUT as u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 40u64 { sp[k] = qc[k] ; k = k + 1u64 }
+    let mut ok_count : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n_sigs {
+        let pk : *u8 = ((&HS_PEER_KEYS as u64) + (i as u64) * 32u64) as *u8
+        let sig : *u8 = ((qc as u64) + 44u64 + (i as u64) * 64u64) as *u8
+        if ed25519_verify(pk, sp, 40u64, sig) == 1u8 { ok_count = ok_count + 1u32 }
+        i = i + 1u32
+    }
+    if ok_count >= HS_QUORUM { return 1u8 }
+    return 0u8
+}
+
+/* Three quorum tiers (gospel L24434): Bedrock = full 2f+1 consensus, Field =
+ * reduced quorum f+1, Speculative = local commitment, no remote consensus.
+ * op_payload[0] carries the declared tier; out_decision[0] receives the routed
+ * quorum requirement (0 => local-only). */
+fn hs_dispatch_by_tier(op_kind: u8, op_payload: *u8, payload_len: u32, out_decision: *u8) -> i32 @export {
+    if HS_INITED == 0u8 { return HS_E_NOT_INITED }
+    if (op_payload as u64) == 0u64 { return HS_E_NULL }
+    if (out_decision as u64) == 0u64 { return HS_E_NULL }
+    if payload_len < 1u32 { return HS_E_NULL }
+    let tier : u8 = op_payload[0u64]
+    if tier == HS_TIER_BEDROCK {
+        out_decision[0u64] = HS_QUORUM as u8                /* full quorum */
+        return HS_OK
+    }
+    if tier == HS_TIER_FIELD {
+        out_decision[0u64] = (HS_FAULT + 1u32) as u8        /* reduced quorum f+1 */
+        return HS_OK
+    }
+    if tier == HS_TIER_SPECULATIVE {
+        out_decision[0u64] = 0u8                            /* local-only, no remote consensus */
+        return HS_OK
+    }
+    return HS_E_NULL
+}
+
+/* ---- self-test (99 = pass): 4 distinct real Ed25519 keypairs, n=4 (quorum 3),
+ * propose -> handle_propose -> QC compose/verify (+tamper) -> vote aggregation
+ * (dup + bad-sig rejection, quorum phase-advance) -> tier dispatch. ---- */
+var HS_KAT_SEED  : [u8; 128]
+var HS_KAT_PK    : [u8; 128]
+var HS_KAT_KP    : [u8; 64]
+var HS_KAT_BLOCK : [u8; 424]
+var HS_KAT_BMH   : [u8; 32]
+var HS_KAT_SI    : [u8; 40]
+var HS_KAT_SIGS  : [u8; 192]
+var HS_KAT_QC    : [u8; 256]
+var HS_KAT_VOTE  : [u8; 108]
+var HS_KAT_PAY   : [u8; 32]
+var HS_KAT_DEC   : [u8; 1]
+
+fn hs_selftest() -> u64 @export {
+    /* 4 distinct seeds -> 4 real keypairs */
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let mut j : u64 = 0u64
+        while j < 32u64 { HS_KAT_SEED[i * 32u64 + j] = (i * 7u64 + j + 1u64) as u8  j = j + 1u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 4u64 {
+        if ed25519_pubkey(((&HS_KAT_SEED as u64) + i * 32u64) as *u8, ((&HS_KAT_PK as u64) + i * 32u64) as *u8) != 1u8 { return 1u64 }
+        i = i + 1u64
+    }
+    hs_init(1u32, (&HS_KAT_PK as u64) as *u8, 4u32)         /* node 1 = leader for view 1 */
+    let mut k : u64 = 0u64
+    while k < 32u64 { HS_KAT_KP[k] = HS_KAT_SEED[32u64 + k]  HS_KAT_KP[32u64 + k] = HS_KAT_PK[32u64 + k]  k = k + 1u64 }
+    hs_set_keypair((&HS_KAT_KP as u64) as *u8)
+    if hs_tick(5000u32) != HS_E_TIMEOUT { return 2u64 }     /* advance to view 1 */
+    let mut p : u64 = 0u64
+    while p < 32u64 { HS_KAT_PAY[p] = (p + 9u64) as u8  p = p + 1u64 }
+    if hs_propose((&HS_KAT_PAY as u64) as *u8, (&HS_KAT_BLOCK as u64) as *u8) != 0i32 { return 3u64 }
+    if hs_handle_propose((&HS_KAT_BLOCK as u64) as *u8, 424u32) != 0i32 { return 4u64 }
+    /* sig_input = block_mhash(block[296..328]) || view 1 (LE) */
+    let mut b : u64 = 0u64
+    while b < 32u64 { HS_KAT_BMH[b] = HS_KAT_BLOCK[296u64 + b]  HS_KAT_SI[b] = HS_KAT_BLOCK[296u64 + b]  b = b + 1u64 }
+    HS_KAT_SI[32u64] = 1u8
+    b = 33u64
+    while b < 40u64 { HS_KAT_SI[b] = 0u8  b = b + 1u64 }
+    /* 3 peer signatures over sig_input */
+    i = 0u64
+    while i < 3u64 {
+        if ed25519_sign(((&HS_KAT_SEED as u64) + i * 32u64) as *u8, ((&HS_KAT_PK as u64) + i * 32u64) as *u8, (&HS_KAT_SI as u64) as *u8, 40u64, ((&HS_KAT_SIGS as u64) + i * 64u64) as *u8) != 1u8 { return 5u64 }
+        i = i + 1u64
+    }
+    if hs_compose_qc((&HS_KAT_BMH as u64) as *u8, 1u64, (&HS_KAT_SIGS as u64) as *u8, 3u32, (&HS_KAT_QC as u64) as *u8) != 0i32 { return 6u64 }
+    if hs_verify_qc((&HS_KAT_QC as u64) as *u8, 236u32) != 1u8 { return 7u64 }
+    HS_KAT_QC[44u64] = HS_KAT_QC[44u64] ^ 0x01u8            /* tamper sig 0 -> only 2 valid < quorum */
+    if hs_verify_qc((&HS_KAT_QC as u64) as *u8, 236u32) == 1u8 { return 8u64 }
+    /* vote aggregation: vote = bmh || view || voter(LE) || sig */
+    let mut v : u64 = 0u64
+    while v < 32u64 { HS_KAT_VOTE[v] = HS_KAT_BMH[v]  v = v + 1u64 }
+    HS_KAT_VOTE[32u64] = 1u8
+    v = 33u64
+    while v < 40u64 { HS_KAT_VOTE[v] = 0u8  v = v + 1u64 }
+    HS_KAT_VOTE[40u64] = 0u8  HS_KAT_VOTE[41u64] = 0u8  HS_KAT_VOTE[42u64] = 0u8  HS_KAT_VOTE[43u64] = 0u8
+    v = 0u64
+    while v < 64u64 { HS_KAT_VOTE[44u64 + v] = HS_KAT_SIGS[v]  v = v + 1u64 }     /* voter 0, sig 0 */
+    if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 9u64 }
+    if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != HS_E_DUPLICATE_VOTE { return 10u64 }
+    HS_KAT_VOTE[40u64] = 1u8                                                     /* voter 1, sig 1 */
+    v = 0u64
+    while v < 64u64 { HS_KAT_VOTE[44u64 + v] = HS_KAT_SIGS[64u64 + v]  v = v + 1u64 }
+    if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 11u64 }
+    HS_KAT_VOTE[40u64] = 2u8                                                     /* voter 2, sig 2 */
+    v = 0u64
+    while v < 64u64 { HS_KAT_VOTE[44u64 + v] = HS_KAT_SIGS[128u64 + v]  v = v + 1u64 }
+    HS_KAT_VOTE[44u64] = HS_KAT_VOTE[44u64] ^ 0x01u8        /* tamper -> bad sig rejected */
+    if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != HS_E_BAD_QC { return 12u64 }
+    HS_KAT_VOTE[44u64] = HS_KAT_VOTE[44u64] ^ 0x01u8        /* repair */
+    if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 13u64 }   /* count 3 = quorum */
+    if HS_PHASE != HS_PHASE_PRECOMMIT { return 14u64 }      /* phase advanced */
+    /* tier dispatch */
+    HS_KAT_PAY[0u64] = HS_TIER_BEDROCK
+    if hs_dispatch_by_tier(0u8, (&HS_KAT_PAY as u64) as *u8, 32u32, (&HS_KAT_DEC as u64) as *u8) != 0i32 { return 15u64 }
+    if HS_KAT_DEC[0] != 3u8 { return 16u64 }                /* bedrock = full quorum 3 */
+    HS_KAT_PAY[0u64] = HS_TIER_FIELD
+    hs_dispatch_by_tier(1u8, (&HS_KAT_PAY as u64) as *u8, 32u32, (&HS_KAT_DEC as u64) as *u8)
+    if HS_KAT_DEC[0] != 2u8 { return 17u64 }                /* field = f+1 = 2 */
+    HS_KAT_PAY[0u64] = HS_TIER_SPECULATIVE
+    hs_dispatch_by_tier(2u8, (&HS_KAT_PAY as u64) as *u8, 32u32, (&HS_KAT_DEC as u64) as *u8)
+    if HS_KAT_DEC[0] != 0u8 { return 18u64 }                /* speculative = local-only */
+    return 99u64
+}

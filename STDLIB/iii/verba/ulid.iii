@@ -1,0 +1,149 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\ulid.iii
+ *
+ * III STDLIB - verba::ulid
+ *
+ * ULID (Universally Unique Lexicographically Sortable Identifier).
+ * 128-bit identifier:
+ *   48 bits = unix timestamp in milliseconds (BE)
+ *   80 bits = randomness
+ * Encoded as 26-character Crockford Base32.
+ *
+ * Public API:
+ *   ulid_generate(timestamp_ms:u64, out_16:*u8) -> i32
+ *   ulid_format(ulid_16:*u8, out_26:*u8) -> i32
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module verba_ulid
+
+extern @abi(c-msvc-x64) fn xoshiro_next_u64() -> u64 from "xoshiro.iii"
+
+fn ulid_generate(timestamp_ms: u64, out_16: *u8) -> i32 @export {
+    /* Bytes 0..5: 48-bit BE timestamp */
+    out_16[0] = ((timestamp_ms >> 40u64) & 0xFFu64) as u8
+    out_16[1] = ((timestamp_ms >> 32u64) & 0xFFu64) as u8
+    out_16[2] = ((timestamp_ms >> 24u64) & 0xFFu64) as u8
+    out_16[3] = ((timestamp_ms >> 16u64) & 0xFFu64) as u8
+    out_16[4] = ((timestamp_ms >> 8u64)  & 0xFFu64) as u8
+    out_16[5] = (timestamp_ms & 0xFFu64) as u8
+    /* Bytes 6..15: 80 bits of randomness */
+    let r0 : u64 = xoshiro_next_u64()
+    let r1 : u64 = xoshiro_next_u64()
+    out_16[6]  = ((r0 >> 56u64) & 0xFFu64) as u8
+    out_16[7]  = ((r0 >> 48u64) & 0xFFu64) as u8
+    out_16[8]  = ((r0 >> 40u64) & 0xFFu64) as u8
+    out_16[9]  = ((r0 >> 32u64) & 0xFFu64) as u8
+    out_16[10] = ((r0 >> 24u64) & 0xFFu64) as u8
+    out_16[11] = ((r0 >> 16u64) & 0xFFu64) as u8
+    out_16[12] = ((r0 >> 8u64)  & 0xFFu64) as u8
+    out_16[13] = (r0 & 0xFFu64) as u8
+    out_16[14] = ((r1 >> 56u64) & 0xFFu64) as u8
+    out_16[15] = ((r1 >> 48u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* Crockford Base32 alphabet: 0-9 A-Z excluding I, L, O, U */
+fn ulid_5bit(v: u32) -> u32 {
+    let m : u32 = v & 0x1Fu32
+    /* 0..9: '0'-'9'; 10..17: A,B,C,D,E,F,G,H; 18..21: J,K,M,N (skipping I,L);
+     * 22..27: P,Q,R,S,T,V (skipping O, including U->no, U excluded);
+     * 28..31: W,X,Y,Z */
+    if m < 10u32 { return 48u32 + m }
+    let mut c : u32 = 65u32 + (m - 10u32)
+    /* Skip I (=8 -> 'I'=73), L (=11 -> 'L'=76), O (=14 -> 'O'=79), U (=20 -> 'U'=85). */
+    if c >= 73u32 { c = c + 1u32 }                 /* skip 'I' */
+    if c >= 76u32 { c = c + 1u32 }                 /* skip 'L' */
+    if c >= 79u32 { c = c + 1u32 }                 /* skip 'O' */
+    if c >= 85u32 { c = c + 1u32 }                 /* skip 'U' */
+    return c
+}
+
+fn ulid_format(ulid_16: *u8, out_26: *u8) -> i32 @export {
+    /* 128 bits / 5 = 25.6 → 26 chars; the leading char represents only
+     * the top 2 bits (rest = 0).  Top 5-bit group: bits 125..127 padded
+     * with 2 leading zeros. */
+    /* Pack the 16 bytes into two u64s (high then low) */
+    let u0 : u64 = ulid_16[0] as u64
+    let u1 : u64 = ulid_16[1] as u64
+    let u2 : u64 = ulid_16[2] as u64
+    let u3 : u64 = ulid_16[3] as u64
+    let u4 : u64 = ulid_16[4] as u64
+    let u5 : u64 = ulid_16[5] as u64
+    let u6 : u64 = ulid_16[6] as u64
+    let u7 : u64 = ulid_16[7] as u64
+    let h : u64 = (u0 << 56u64) | (u1 << 48u64) | (u2 << 40u64) | (u3 << 32u64) | (u4 << 24u64) | (u5 << 16u64) | (u6 << 8u64) | u7
+    let u8a : u64 = ulid_16[8] as u64
+    let u9a : u64 = ulid_16[9] as u64
+    let u10 : u64 = ulid_16[10] as u64
+    let u11 : u64 = ulid_16[11] as u64
+    let u12 : u64 = ulid_16[12] as u64
+    let u13 : u64 = ulid_16[13] as u64
+    let u14 : u64 = ulid_16[14] as u64
+    let u15 : u64 = ulid_16[15] as u64
+    let l : u64 = (u8a << 56u64) | (u9a << 48u64) | (u10 << 40u64) | (u11 << 32u64) | (u12 << 24u64) | (u13 << 16u64) | (u14 << 8u64) | u15
+    /* Char 0: top 3 bits of h (bits 61-63) -- wait, ULID puts 2-bit pad
+     * at top, so char 0 = bits 122..127 of the 130-bit padded value.
+     * For 128-bit input, that means top 3 bits of h shifted right.
+     * Simpler: build 13 chars from h (top 64 bits give ~12.8 chars, so
+     * char 0 has 2-bit pad), then 13 chars from l. */
+    /* Char 0: top 3 bits of h, padded with 2 zeros at MSB */
+    let c0_v : u64 = (h >> 61u64) & 0x1Fu64
+    out_26[0] = ulid_5bit(c0_v as u32) as u8
+    /* Chars 1..12: 5-bit groups from h at bit positions 56, 51, 46, 41, 36, 31, 26, 21, 16, 11, 6, 1 */
+    let s1 : u64 = (h >> 56u64) & 0x1Fu64
+    let s2 : u64 = (h >> 51u64) & 0x1Fu64
+    let s3 : u64 = (h >> 46u64) & 0x1Fu64
+    let s4 : u64 = (h >> 41u64) & 0x1Fu64
+    let s5 : u64 = (h >> 36u64) & 0x1Fu64
+    let s6 : u64 = (h >> 31u64) & 0x1Fu64
+    let s7 : u64 = (h >> 26u64) & 0x1Fu64
+    let s8 : u64 = (h >> 21u64) & 0x1Fu64
+    let s9 : u64 = (h >> 16u64) & 0x1Fu64
+    let s10 : u64 = (h >> 11u64) & 0x1Fu64
+    let s11 : u64 = (h >> 6u64) & 0x1Fu64
+    let s12 : u64 = (h >> 1u64) & 0x1Fu64
+    out_26[1]  = ulid_5bit(s1 as u32) as u8
+    out_26[2]  = ulid_5bit(s2 as u32) as u8
+    out_26[3]  = ulid_5bit(s3 as u32) as u8
+    out_26[4]  = ulid_5bit(s4 as u32) as u8
+    out_26[5]  = ulid_5bit(s5 as u32) as u8
+    out_26[6]  = ulid_5bit(s6 as u32) as u8
+    out_26[7]  = ulid_5bit(s7 as u32) as u8
+    out_26[8]  = ulid_5bit(s8 as u32) as u8
+    out_26[9]  = ulid_5bit(s9 as u32) as u8
+    out_26[10] = ulid_5bit(s10 as u32) as u8
+    out_26[11] = ulid_5bit(s11 as u32) as u8
+    out_26[12] = ulid_5bit(s12 as u32) as u8
+    /* Char 13: bit 0 of h combined with top 4 bits of l */
+    let h_bit0 : u64 = h & 1u64
+    let l_top4 : u64 = (l >> 60u64) & 0xFu64
+    let c13 : u64 = (h_bit0 << 4u64) | l_top4
+    out_26[13] = ulid_5bit(c13 as u32) as u8
+    /* Chars 14..25: 5-bit groups from l at bits 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0 */
+    let l1 : u64 = (l >> 55u64) & 0x1Fu64
+    let l2 : u64 = (l >> 50u64) & 0x1Fu64
+    let l3 : u64 = (l >> 45u64) & 0x1Fu64
+    let l4 : u64 = (l >> 40u64) & 0x1Fu64
+    let l5 : u64 = (l >> 35u64) & 0x1Fu64
+    let l6 : u64 = (l >> 30u64) & 0x1Fu64
+    let l7 : u64 = (l >> 25u64) & 0x1Fu64
+    let l8 : u64 = (l >> 20u64) & 0x1Fu64
+    let l9 : u64 = (l >> 15u64) & 0x1Fu64
+    let l10 : u64 = (l >> 10u64) & 0x1Fu64
+    let l11 : u64 = (l >> 5u64) & 0x1Fu64
+    let l12 : u64 = l & 0x1Fu64
+    out_26[14] = ulid_5bit(l1 as u32) as u8
+    out_26[15] = ulid_5bit(l2 as u32) as u8
+    out_26[16] = ulid_5bit(l3 as u32) as u8
+    out_26[17] = ulid_5bit(l4 as u32) as u8
+    out_26[18] = ulid_5bit(l5 as u32) as u8
+    out_26[19] = ulid_5bit(l6 as u32) as u8
+    out_26[20] = ulid_5bit(l7 as u32) as u8
+    out_26[21] = ulid_5bit(l8 as u32) as u8
+    out_26[22] = ulid_5bit(l9 as u32) as u8
+    out_26[23] = ulid_5bit(l10 as u32) as u8
+    out_26[24] = ulid_5bit(l11 as u32) as u8
+    out_26[25] = ulid_5bit(l12 as u32) as u8
+    return 0i32
+}

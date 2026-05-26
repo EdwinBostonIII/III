@@ -1,0 +1,115 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\field.iii
+ *
+ * III STDLIB - numera::field
+ *
+ * Finite field arithmetic Fp using bigint as the underlying
+ * representation.  The modulus p is supplied per-operation; the field
+ * type is implicitly the residue ring Z/pZ.  For PRIME p, all non-zero
+ * elements have multiplicative inverses (computed via extended
+ * Euclidean / Fermat's-little-theorem variants).  For composite p,
+ * fp_inv may fail.
+ *
+ * Phase D scope:
+ *   - fp_add / fp_sub / fp_mul                (any modulus)
+ *   - fp_pow                                  (square-and-multiply)
+ *   - fp_inv_fermat                           (assumes p prime)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+
+module numera_field
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, m: u64) -> u64 from "bigint_div.iii"
+
+const FIELD_INVALID : u64 = 0u64
+
+/* a + b mod m */
+fn fp_add(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
+    let s : u64 = bigint_add(arena, a, b)
+    if s == 0u64 { return FIELD_INVALID }
+    let r : u64 = bigint_mod(arena, s, m)
+    bigint_drop(s)
+    return r
+}
+
+/* a - b mod m (returns m - (b - a) when a < b) */
+fn fp_sub(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
+    /* First compute (a + m - b) mod m to avoid going negative. */
+    let am : u64 = bigint_mod(arena, a, m)
+    let bm : u64 = bigint_mod(arena, b, m)
+    let cmp : i32 = bigint_cmp(am, bm)
+    let mut ge : u8 = 0u8
+    if cmp == 0i32 { ge = 1u8 }
+    if cmp == 1i32 { ge = 1u8 }
+    if ge == 1u8 {
+        let diff : u64 = bigint_sub(arena, am, bm)
+        bigint_drop(am)
+        bigint_drop(bm)
+        return diff
+    }
+    /* am < bm: result = (am + m) - bm */
+    let am_plus_m : u64 = bigint_add(arena, am, m)
+    let diff : u64 = bigint_sub(arena, am_plus_m, bm)
+    bigint_drop(am)
+    bigint_drop(bm)
+    bigint_drop(am_plus_m)
+    return diff
+}
+
+/* a * b mod m */
+fn fp_mul(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
+    let p : u64 = bigint_mul(arena, a, b)
+    if p == 0u64 { return FIELD_INVALID }
+    let r : u64 = bigint_mod(arena, p, m)
+    bigint_drop(p)
+    return r
+}
+
+/* base^exp mod m */
+fn fp_pow(arena: u64, base: u64, exp: u64, m: u64) -> u64 @export {
+    return bigint_modpow(arena, base, exp, m)
+}
+
+/* Fermat's little theorem inversion: a^(p-2) mod p, valid when p is prime
+ * and a != 0 mod p.  Returns FIELD_INVALID if a == 0 mod p or p < 2. */
+fn fp_inv_fermat(arena: u64, a: u64, p: u64) -> u64 @export {
+    /* a_mod = a mod p; must be non-zero */
+    let am : u64 = bigint_mod(arena, a, p)
+    if bigint_is_zero(am) == 1u8 {
+        bigint_drop(am)
+        return FIELD_INVALID
+    }
+    /* exp = p - 2 (assumes p >= 2; we don't verify primality) */
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    if bigint_cmp(p, two) == -1i32 {
+        bigint_drop(am)
+        bigint_drop(two)
+        return FIELD_INVALID
+    }
+    let exp : u64 = bigint_sub(arena, p, two)
+    let inv : u64 = bigint_modpow(arena, am, exp, p)
+    bigint_drop(am)
+    bigint_drop(two)
+    bigint_drop(exp)
+    return inv
+}
+
+/* a / b mod p (assumes p prime).  Returns FIELD_INVALID if b ≡ 0 mod p. */
+fn fp_div(arena: u64, a: u64, b: u64, p: u64) -> u64 @export {
+    let inv_b : u64 = fp_inv_fermat(arena, b, p)
+    if inv_b == FIELD_INVALID { return FIELD_INVALID }
+    let r : u64 = fp_mul(arena, a, inv_b, p)
+    bigint_drop(inv_b)
+    return r
+}

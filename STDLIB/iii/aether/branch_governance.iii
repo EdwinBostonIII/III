@@ -1,0 +1,420 @@
+/* III/STDLIB/iii/aether/branch_governance.iii
+ *
+ * III STDLIB -- aether::branch_governance
+ *
+ * Operator-ceremony mediation for branch lifecycle transitions:
+ * retire, merge-propose, merge-commit. IS the constitutional gate
+ * between an operator capability and the numera/branch_anchor.iii
+ * primitives. Before any branch state change it verifies:
+ *   (a) caller holds a branch-ops capability (CAP_RIGHT_AMEND),
+ *   (b) the governing constitutional clause is ratified and present,
+ *   (c) for merges: delegates to branch_anchor whose bisimulation
+ *       IS the W42 proof-of-compatibility.
+ * Every successful ceremony emits a governance witness fragment (M6/W16).
+ *
+ * Public API:
+ *   bg_init() -> i32
+ *   bg_retire_branch(branch_id: *u8, operator_cap: u64) -> i32
+ *   bg_merge_branch(req: *u8) -> i32        -- req -> BGOV_MergeReq (32 B)
+ *   bg_commit_merge(proposal_fid: *u8, operator_cap: u64) -> i32
+ *
+ * Hexad: kind_motion + kind_witness.  Ring: R0.  K: 1.00.
+ *
+ * NIH: identifier.iii (built), capability.iii (built),
+ *      constitution.iii (not yet built), branch_anchor.iii (not yet built),
+ *      witness_hook.iii (built -- direct wh_publish for M6 governance fragment).
+ *
+ * Discipline Nine: M16 (branch ratifiability), W42 (no merge without proof
+ * of compatibility, enforced by branch_anchor), M6/W16 (governance witness
+ * over every transition). Serialized single ceremony -- module-scope scratch
+ * is non-reentrant by design (Trap 7).
+ *
+ * BGOV_MergeReq aggregate layout (32 bytes, little-endian, caller-allocated):
+ *   off  0  8  branch_id pointer (u64)
+ *   off  8  8  canonical_target_fid pointer (u64)
+ *   off 16  8  operator_cap (u64 capability id)
+ *   off 24  8  out_proposal_fid pointer (u64)
+ *
+ * Trap notes:
+ *   Trap 1: all fn signatures are single-line.
+ *   Trap 2: every module-level const/var prefixed BGOV_.
+ *   Trap 3: all i32 status comparisons via == / != only.
+ *   Trap 4: no u32 widened for pointer math; aggregate fields are native u64.
+ *   Trap 7: no function-local var arrays; all scratch is module-scope.
+ *   Trap 9: ASCII -- in all comments; no em-dash.
+ *   Traps 6,8: no nested block comments; no } newline else {.
+ *   Trap 16: no leading ( on literal expressions.
+ *   Trap 18: no u64 division or modulo.
+ */
+
+module aether_branch_governance
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ba_retire(branch_id: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ba_merge_propose(branch_id: *u8, canonical_target_fid: *u8, out_proposal_fid: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn ba_merge_commit(proposal_fid: *u8) -> i32 from "branch_anchor.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+
+/* ---- Constants (PREFIX = BGOV_; Trap 2: every name prefixed, linker-global) ---- */
+
+const BGOV_OK                   : i32 =  0i32
+const BGOV_E_NULL               : i32 = -1i32
+const BGOV_E_CLAUSE_ABSENT      : i32 = -2i32
+const BGOV_E_CAP_DENIED         : i32 = -3i32
+const BGOV_E_NOT_INITED         : i32 = -4i32
+const BGOV_E_WITNESS            : i32 = -5i32
+
+/* CAP_RIGHT_AMEND (bit 14 = 0x4000) from capability.iii -- branch lifecycle
+ * is an amend-class state change. */
+const BGOV_CAP_RIGHT_BRANCH_OPS : u64 = 0x4000u64
+
+/* cons_find absence sentinel (== CONS_SENT in constitution.iii). */
+const BGOV_CONS_SENT            : u32 = 0xFFFFFFFFu32
+
+/* Byte lengths of the ASCII clause labels. */
+const BGOV_CLAUSE_RETIRE_LEN    : u64 = 16u64
+const BGOV_CLAUSE_MERGE_LEN     : u64 = 15u64
+
+/* Governance witness fragment payload size:
+ *   2-byte tag (0xE3 0x12) + 6-byte pad + 32-byte governed id + 8-byte discriminant
+ *   = 48 bytes. */
+const BGOV_W_PAYLOAD_LEN        : u64 = 48u64
+
+/* ---- Module-scope state and scratch (Trap 7: no function-local var arrays) ---- */
+
+/* Init flag. */
+var BGOV_INITED        : u8 = 0u8
+
+/* Clause label scratch -- holds the ASCII label bytes for ident_from_bytes.
+ * Longest label "cp_branch_retire" is 16 bytes. */
+var BGOV_CLAUSE_LABEL  : [u8; 16]
+
+/* 256-bit clause identifier (Keccak256 of the label bytes). */
+var BGOV_CLAUSE_ID     : [u8; 32]
+
+/* Witness fragment frame -- constant fields (zeroed at init). */
+var BGOV_W_PRODUCER    : [u8; 32]
+var BGOV_W_OP          : [u8; 32]
+var BGOV_W_INCOMMIT    : [u8; 32]
+var BGOV_W_OUTCOMMIT   : [u8; 32]
+
+/* 48-byte governance payload buffer.
+ * Layout: [0..1] = tag 0xE3 0x12, [2..7] = pad 0x00, [8..39] = governed id (32 B),
+ * [40..47] = discriminant byte at [40], rest 0x00. */
+var BGOV_W_PAYLOAD     : [u8; 48]
+
+/* Sink for wh_publish out_frag_id. */
+var BGOV_W_FID         : [u8; 32]
+
+/* ---- Internal: fill clause label bytes ---- */
+/* Writes "cp_branch_retire" (which==0) or "cp_branch_merge" (which==1)
+ * into BGOV_CLAUSE_LABEL byte by byte. Returns BGOV_OK.
+ * ASCII byte-by-byte assignment avoids local array literal (Trap 7). */
+fn _bgov_fill_label(which: u8) -> i32 {
+    let lb : *u8 = (&BGOV_CLAUSE_LABEL as u64) as *u8
+    /* "cp_branch_retire" = 0x63 0x70 0x5F 0x62 0x72 0x61 0x6E 0x63
+     *                      0x68 0x5F 0x72 0x65 0x74 0x69 0x72 0x65  (16 bytes) */
+    lb[0u64]  = 0x63u8
+    lb[1u64]  = 0x70u8
+    lb[2u64]  = 0x5Fu8
+    lb[3u64]  = 0x62u8
+    lb[4u64]  = 0x72u8
+    lb[5u64]  = 0x61u8
+    lb[6u64]  = 0x6Eu8
+    lb[7u64]  = 0x63u8
+    lb[8u64]  = 0x68u8
+    lb[9u64]  = 0x5Fu8
+    /* bytes [10..15] differ: retire = 0x72 0x65 0x74 0x69 0x72 0x65
+     *                        merge  = 0x6D 0x65 0x72 0x67 0x65 (only 5 bytes, len=15) */
+    if which == 0u8 {
+        lb[10u64] = 0x72u8
+        lb[11u64] = 0x65u8
+        lb[12u64] = 0x74u8
+        lb[13u64] = 0x69u8
+        lb[14u64] = 0x72u8
+        lb[15u64] = 0x65u8
+    }
+    if which != 0u8 {
+        lb[10u64] = 0x6Du8
+        lb[11u64] = 0x65u8
+        lb[12u64] = 0x72u8
+        lb[13u64] = 0x67u8
+        lb[14u64] = 0x65u8
+        lb[15u64] = 0x00u8
+    }
+    return BGOV_OK
+}
+
+/* ---- Internal: hash the label and check constitution presence ---- */
+/* Precondition: caller has filled BGOV_CLAUSE_LABEL with label_len bytes.
+ * Hashes via ident_from_bytes (Keccak256) into BGOV_CLAUSE_ID, then calls
+ * cons_find. Returns BGOV_E_CLAUSE_ABSENT iff slot == BGOV_CONS_SENT (0xFFFFFFFF).
+ * Slot 0 is a valid present clause (the gospel bug -- corrected here).
+ * Comparison is u32 == / != only (Trap 3 not triggered; u32 is unsigned). */
+fn _bgov_check_clause(label_len: u64) -> i32 {
+    let lbp : *u8 = (&BGOV_CLAUSE_LABEL as u64) as *u8
+    let cidp : *u8 = (&BGOV_CLAUSE_ID as u64) as *u8
+    ident_from_bytes(lbp, label_len, cidp)
+    let slot : u32 = cons_find(cidp)
+    if slot == BGOV_CONS_SENT { return BGOV_E_CLAUSE_ABSENT }
+    return BGOV_OK
+}
+
+/* ---- Internal: emit governance witness fragment ---- */
+/* Copies governed_id into BGOV_W_INCOMMIT, fills BGOV_W_PAYLOAD with the
+ * governance tag + pad + governed id + discriminant, then calls wh_publish.
+ * wh_publish returns the fragment index (u64); any value == 0xFFFFFFFFFFFFFFFFu64
+ * means failure (hook not inited / full / etc.) -- mapped to BGOV_E_WITNESS.
+ * Payload layout (48 bytes, all via *u8 byte writes -- Trap 5 safe):
+ *   [0]  = 0xE3  [1] = 0x12                   -- governance tag
+ *   [2..7] = 0x00                              -- pad
+ *   [8..39] = governed_id (32 bytes)           -- subject id
+ *   [40]  = discriminant byte                  -- 0x01=retire, 0x02=merge-propose, 0x03=merge-commit
+ *   [41..47] = 0x00                            -- pad
+ * Params: governed_id (*u8, 32-byte id), discriminant (u8 ceremony tag).
+ * W2: 2 params -- within limit. */
+fn _bgov_emit_governance(governed_id: *u8, discriminant: u8) -> i32 {
+    let pp : *u8 = (&BGOV_W_PRODUCER as u64) as *u8
+    let op : *u8 = (&BGOV_W_OP as u64) as *u8
+    let icp : *u8 = (&BGOV_W_INCOMMIT as u64) as *u8
+    let ocp : *u8 = (&BGOV_W_OUTCOMMIT as u64) as *u8
+    let pl : *u8 = (&BGOV_W_PAYLOAD as u64) as *u8
+    let fp : *u8 = (&BGOV_W_FID as u64) as *u8
+    ident_copy(governed_id, icp)
+    /* Fill payload header. */
+    pl[0u64]  = 0xE3u8
+    pl[1u64]  = 0x12u8
+    pl[2u64]  = 0x00u8
+    pl[3u64]  = 0x00u8
+    pl[4u64]  = 0x00u8
+    pl[5u64]  = 0x00u8
+    pl[6u64]  = 0x00u8
+    pl[7u64]  = 0x00u8
+    /* Copy governed_id into payload bytes [8..39]. */
+    let mut idx : u64 = 0u64
+    while idx < 32u64 {
+        pl[8u64 + idx] = governed_id[idx]
+        idx = idx + 1u64
+    }
+    /* Discriminant at [40]; pad [41..47]. */
+    pl[40u64] = discriminant
+    pl[41u64] = 0x00u8
+    pl[42u64] = 0x00u8
+    pl[43u64] = 0x00u8
+    pl[44u64] = 0x00u8
+    pl[45u64] = 0x00u8
+    pl[46u64] = 0x00u8
+    pl[47u64] = 0x00u8
+    /* Emit fragment: governance pillar = 0, no antecedents, revtag=0, phase=0. */
+    let fid : u64 = wh_publish(pp, op, icp, ocp, 0u8, 0u8, 0u16, pp, 0u32, pl, 48u32, fp)
+    let sentinel : u64 = 0xFFFFFFFFFFFFFFFFu64
+    if fid == sentinel { return BGOV_E_WITNESS }
+    return BGOV_OK
+}
+
+/* ---- Public API ---- */
+
+/* bg_init: initialize the governance module. Idempotent (early-return on
+ * BGOV_INITED == 1, not a mutated checkpoint flag -- Trap 10 avoided).
+ * Zeroes the constant witness-frame fields (producer, op, out-commit).
+ * Returns BGOV_OK. */
+fn bg_init() -> i32 @export {
+    if BGOV_INITED == 1u8 { return BGOV_OK }
+    let pp : *u8 = (&BGOV_W_PRODUCER as u64) as *u8
+    let op : *u8 = (&BGOV_W_OP as u64) as *u8
+    let ocp : *u8 = (&BGOV_W_OUTCOMMIT as u64) as *u8
+    ident_zero(pp)
+    ident_zero(op)
+    ident_zero(ocp)
+    BGOV_INITED = 1u8
+    return BGOV_OK
+}
+
+/* bg_retire_branch: capability-gated, clause-ratified branch retirement.
+ * Steps: inited guard -> null guard -> capability gate (M8) ->
+ *        clause "cp_branch_retire" present -> ba_retire -> governance witness (M6).
+ * Returns BGOV_OK on success, negative i32 on failure (W9/W12).
+ * All i32 status compares via == / != (Trap 3; W11). */
+fn bg_retire_branch(branch_id: *u8, operator_cap: u64) -> i32 @export {
+    if BGOV_INITED == 0u8 { return BGOV_E_NOT_INITED }
+    let bid_u64 : u64 = branch_id as u64
+    if bid_u64 == 0u64 { return BGOV_E_NULL }
+    /* Capability gate (M8): operator must hold CAP_RIGHT_AMEND. */
+    if cap_verify_rights(operator_cap, BGOV_CAP_RIGHT_BRANCH_OPS) != 1u8 { return BGOV_E_CAP_DENIED }
+    /* Constitutional clause gate (M16). */
+    _bgov_fill_label(0u8)
+    let cc : i32 = _bgov_check_clause(BGOV_CLAUSE_RETIRE_LEN)
+    if cc != BGOV_OK { return cc }
+    /* Delegate to branch_anchor (W42: lower primitive enforces compatibility). */
+    let rr : i32 = ba_retire(branch_id)
+    if rr != BGOV_OK { return rr }
+    /* Governance witness (M6/W16): discriminant 0x01 = retire. */
+    let ww : i32 = _bgov_emit_governance(branch_id, 0x01u8)
+    return ww
+}
+
+/* bg_merge_branch: capability-gated, clause-ratified merge proposal.
+ * Takes a BGOV_MergeReq aggregate by pointer (W2: keeps param count to 1
+ * while carrying 4 logical fields).
+ * Aggregate layout (32 bytes, all fields are native u64):
+ *   off 0: branch_id pointer
+ *   off 8: canonical_target_fid pointer
+ *   off 16: operator_cap (u64 capability id)
+ *   off 24: out_proposal_fid pointer
+ * Steps: inited guard -> req null guard -> load fields -> per-field null guards
+ *        -> capability gate -> clause "cp_branch_merge" present -> ba_merge_propose
+ *        -> governance witness.
+ * Fields are u64 in the aggregate -- no u32-in-u64 hazard (Trap 4 not triggered). */
+fn bg_merge_branch(req: *u8) -> i32 @export {
+    if BGOV_INITED == 0u8 { return BGOV_E_NOT_INITED }
+    let req_u64 : u64 = req as u64
+    if req_u64 == 0u64 { return BGOV_E_NULL }
+    /* Load all four fields from the aggregate.  Each is a native 8-byte slot. */
+    let rp : *u64 = req_u64 as *u64
+    let bid_u64 : u64 = rp[0u64]
+    let cft_u64 : u64 = rp[1u64]
+    let cap_u64 : u64 = rp[2u64]
+    let opr_u64 : u64 = rp[3u64]
+    /* Null guards on each pointer field. */
+    if bid_u64 == 0u64 { return BGOV_E_NULL }
+    if cft_u64 == 0u64 { return BGOV_E_NULL }
+    if opr_u64 == 0u64 { return BGOV_E_NULL }
+    /* Capability gate (M8). */
+    if cap_verify_rights(cap_u64, BGOV_CAP_RIGHT_BRANCH_OPS) != 1u8 { return BGOV_E_CAP_DENIED }
+    /* Constitutional clause gate (M16). */
+    _bgov_fill_label(1u8)
+    let cc : i32 = _bgov_check_clause(BGOV_CLAUSE_MERGE_LEN)
+    if cc != BGOV_OK { return cc }
+    /* Cast to pointers for ba_merge_propose (full u64 addresses -- no Trap 4 hazard). */
+    let bid : *u8 = bid_u64 as *u8
+    let cft : *u8 = cft_u64 as *u8
+    let opr : *u8 = opr_u64 as *u8
+    /* Delegate (W42 proof-of-compatibility enforced inside ba_merge_propose). */
+    let rr : i32 = ba_merge_propose(bid, cft, opr)
+    if rr != BGOV_OK { return rr }
+    /* Governance witness (M6/W16): discriminant 0x02 = merge-propose. */
+    let ww : i32 = _bgov_emit_governance(bid, 0x02u8)
+    return ww
+}
+
+/* bg_commit_merge: capability-gated merge commit, re-verifies the bisimulation.
+ * Steps: inited guard -> null guard -> capability gate -> ba_merge_commit
+ *        (re-checks bisimulation internally per W42) -> governance witness.
+ * Returns BGOV_OK on success, negative i32 on failure (W9/W12). */
+fn bg_commit_merge(proposal_fid: *u8, operator_cap: u64) -> i32 @export {
+    if BGOV_INITED == 0u8 { return BGOV_E_NOT_INITED }
+    let pfid_u64 : u64 = proposal_fid as u64
+    if pfid_u64 == 0u64 { return BGOV_E_NULL }
+    /* Capability gate (M8). */
+    if cap_verify_rights(operator_cap, BGOV_CAP_RIGHT_BRANCH_OPS) != 1u8 { return BGOV_E_CAP_DENIED }
+    /* Delegate (W42: ba_merge_commit internally re-verifies bisimulation). */
+    let rr : i32 = ba_merge_commit(proposal_fid)
+    if rr != BGOV_OK { return rr }
+    /* Governance witness (M6/W16): discriminant 0x03 = merge-commit. */
+    let ww : i32 = _bgov_emit_governance(proposal_fid, 0x03u8)
+    return ww
+}
+
+/* ---- Self-test ---- */
+/* KAT-only externs (used solely by bg_selftest to stand up capability tree
+ * before exercising the gates; resolve at link). */
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+
+/* KAT scratch (module-scope; Trap 7 -- no local var arrays). */
+var BGOV_T_BID  : [u8; 32]   /* mock branch_id bytes for selftest use */
+var BGOV_T_REQ  : [u8; 32]   /* BGOV_MergeReq aggregate for KAT 2 */
+
+/* bg_selftest: runs KAT vectors 1-3 (dep-free + built capability.iii).
+ * Returns 99u64 on full pass; distinct small non-99 codes per failed check.
+ * KATs 4-5 (full path with constitution/branch_anchor) run under integration.
+ *
+ * KAT 1: Not-inited refusal -- verify BGOV_E_NOT_INITED before bg_init(),
+ *         then verify bg_init() succeeds and BGOV_INITED is set.
+ *         Negative-case: call bg_retire_branch before init -> must reject.
+ *
+ * KAT 2: Null-pointer refusal -- after bg_init(), both bg_retire_branch with
+ *         null branch_id and bg_merge_branch with null req must return BGOV_E_NULL.
+ *         Negative-case: proves the W-null guards fire.
+ *
+ * KAT 3: Capability-denied refusal -- a child cap lacking AMEND (0x4000) is
+ *         rejected; a child cap carrying AMEND passes the cap gate (proceeds
+ *         to the clause check, returning BGOV_E_CLAUSE_ABSENT since constitution
+ *         is not live, not BGOV_E_CAP_DENIED).
+ *         Negative-case: proves cap gate FAILS on insufficient cap.
+ *         Positive-case: proves cap gate PASSES on sufficient cap. */
+fn bg_selftest() -> u64 @export {
+    /* Stand up witness hook for wh_publish calls inside _bgov_emit_governance. */
+    wh_init(0u64)
+    /* Populate mock branch_id bytes (non-null, arbitrary). */
+    let tp : *u8 = (&BGOV_T_BID as u64) as *u8
+    let mut fi : u64 = 0u64
+    while fi < 32u64 {
+        tp[fi] = 0x42u8
+        fi = fi + 1u64
+    }
+    /* ---- KAT 1: not-inited refusal ---- */
+    /* Reset init flag for the test. */
+    BGOV_INITED = 0u8
+    let r1 : i32 = bg_retire_branch(tp, 1u64)
+    if r1 != BGOV_E_NOT_INITED { return 1u64 }
+    /* bg_merge_branch with non-null req should also reject (not inited). */
+    let rqp : *u8 = (&BGOV_T_REQ as u64) as *u8
+    let r1b : i32 = bg_merge_branch(rqp)
+    if r1b != BGOV_E_NOT_INITED { return 2u64 }
+    /* bg_commit_merge should also reject. */
+    let r1c : i32 = bg_commit_merge(tp, 1u64)
+    if r1c != BGOV_E_NOT_INITED { return 3u64 }
+    /* Now initialize. */
+    let ri : i32 = bg_init()
+    if ri != BGOV_OK { return 4u64 }
+    if BGOV_INITED != 1u8 { return 5u64 }
+    /* Idempotent: second init must also return BGOV_OK. */
+    let ri2 : i32 = bg_init()
+    if ri2 != BGOV_OK { return 6u64 }
+    /* ---- KAT 2: null-pointer refusal ---- */
+    let nullp : *u8 = 0u64 as *u8
+    let r2a : i32 = bg_retire_branch(nullp, 1u64)
+    if r2a != BGOV_E_NULL { return 10u64 }
+    let r2b : i32 = bg_merge_branch(nullp)
+    if r2b != BGOV_E_NULL { return 11u64 }
+    let r2c : i32 = bg_commit_merge(nullp, 1u64)
+    if r2c != BGOV_E_NULL { return 12u64 }
+    /* ---- KAT 3: capability gate ---- */
+    /* Stand up env cap. */
+    let root : u64 = cap_env_init()
+    /* Weak cap: only FS_READ (bit 1 = 0x0002), NOT AMEND (0x4000). */
+    let weak : u64 = cap_attenuate(root, 0x0002u64, 0u64)
+    let r3a : i32 = bg_retire_branch(tp, weak)
+    if r3a != BGOV_E_CAP_DENIED { return 20u64 }
+    /* Also test with cap id 0 (CAP_INVALID) -- must deny. */
+    let r3b : i32 = bg_retire_branch(tp, 0u64)
+    if r3b != BGOV_E_CAP_DENIED { return 21u64 }
+    /* Strong cap: carries AMEND (0x4000). */
+    let strong : u64 = cap_attenuate(root, 0x4000u64, 0u64)
+    /* With a valid cap, the call proceeds past the cap gate to the clause check.
+     * Since constitution is not live (not-yet-built dep), cons_find will link-
+     * resolve to a stub or return the sentinel, so we expect BGOV_E_CLAUSE_ABSENT
+     * (not BGOV_E_CAP_DENIED). This proves the capability gate passed. */
+    let r3c : i32 = bg_retire_branch(tp, strong)
+    /* Must NOT be BGOV_E_CAP_DENIED (the cap gate passed). */
+    if r3c == BGOV_E_CAP_DENIED { return 22u64 }
+    /* Must NOT be BGOV_E_NOT_INITED (the init gate passed). */
+    if r3c == BGOV_E_NOT_INITED { return 23u64 }
+    /* Must NOT be BGOV_E_NULL (the null gate passed). */
+    if r3c == BGOV_E_NULL { return 24u64 }
+    return 99u64
+}
+
+/* Ontological footer: aether::branch_governance IS the constitutional gate
+ * that EMBODIES operator-ceremony mediation for branch lifecycle. It is not
+ * a wrapper: it IS the verify-then-delegate-then-witness ceremony -- the
+ * living ratification surface between operator intent and branch substrate.
+ * Every aspect (capability sovereignty, constitutional clause presence,
+ * W42 bisimulation, governance witness emission) is an innate part of what
+ * this cell IS, not a feature it HAS. */

@@ -1,0 +1,345 @@
+/* III/STDLIB/iii/aether/firmware_quarantine.iii -- Layer 4, Module 26 (gospel).
+ *
+ * III STDLIB - aether::firmware_quarantine
+ *
+ * Forbidden-region sheaf.  Anti-bricking enforcement (M5).  Every host
+ * physical-address window holding firmware/EFI-var/ME/TPM/fuse/locked-MMIO
+ * state carries section value FORBIDDEN; any write intersecting any forbidden
+ * region is refused, and no quarantine commit may apply it.  The sheaf
+ * condition "any covering open set forbidden => the region is forbidden" makes
+ * a write touching ANY byte of ANY forbidden region a refusal.
+ *
+ * Region kinds: FIRMWARE_ROM, EFI_VAR, ME_FIRMWARE, TPM, FUSES, MMIO_LOCKED.
+ *
+ * Hexad: kind_witness + kind_repair.  Ring: R-1 (constitutional).  K: 1.00.
+ * Discipline: W2, W8, W13, W14, W15.  PREFIX FQUAR_ (FQ_/fq_ collide with
+ *   numera/fp384.iii -- mandatory rename per spec G1).
+ *
+ * SPEC NOTES (intent preserved):
+ *   - G7 (highest-priority correctness fix): fquar_intersects is u64-overflow
+ *     SAFE.  The default firmware-ROM window 0xFFFFFFFFFF000000 + 0x1000000
+ *     wraps to 0; a naive (b_base+b_len) <= a_base test then reads "0 <= addr"
+ *     = true and would mark high writes NON-intersecting -- leaving the ROM's
+ *     top end unprotected (a latent anti-bricking hole in the gospel).  Fixed
+ *     by detecting wrap (end < base => region reaches top-of-memory) and
+ *     skipping that side's no-overlap early-out.
+ *   - producer/opid ids built BYTE-BY-BYTE (no string-literal reliance, the
+ *     proven witness_compactor/distress_witness idiom); one FQUAR_OPID_STR[36]
+ *     buffer serves both (producer = first 27, opid = all 36).
+ *   - all buffer access via *u8 byte pointers; bare FQUAR_BASE[i] element
+ *     indexing only (never &ARR[expr] -- spec G4).  u64 loop indices.
+ */
+
+module aether_firmware_quarantine
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+
+// --- KAT-harness externs ---
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+const FQUAR_OK     : i32 =  0i32
+const FQUAR_E_FULL : i32 = -1i32
+const FQUAR_E_BAD  : i32 = -2i32
+const FQUAR_E_CAP  : i32 = -3i32
+const FQUAR_SENT   : u32 = 0xFFFFFFFFu32
+
+const FQUAR_KIND_FIRMWARE_ROM : u8 = 0u8
+const FQUAR_KIND_EFI_VAR      : u8 = 1u8
+const FQUAR_KIND_ME_FIRMWARE  : u8 = 2u8
+const FQUAR_KIND_TPM          : u8 = 3u8
+const FQUAR_KIND_FUSES        : u8 = 4u8
+const FQUAR_KIND_MMIO_LOCKED  : u8 = 5u8
+const FQUAR_KIND_NONE         : u8 = 0xFFu8
+
+const FQUAR_MAX_REGIONS : u64 = 256u64        // W8 bound (u64 for clean loop indexing)
+const FQUAR_RIGHT_AMEND : u64 = 0x4000u64     // == capability.iii CAP_RIGHT_AMEND (bit 14)
+const FQUAR_ENV_CAP     : u64 = 1u64          // == capability.iii CAP_ENV_ROOT
+const FQUAR_U64_SENT    : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var FQUAR_LIVE         : [u8;  256]
+var FQUAR_BASE         : [u64; 256]
+var FQUAR_LEN          : [u64; 256]
+var FQUAR_KIND         : [u8;  256]
+var FQUAR_PRODUCER     : [u8; 32]
+var FQUAR_OPID_ATTEMPT : [u8; 32]
+var FQUAR_OPID_STR     : [u8; 36]      // "aether::firmware_quarantine::attempt" (producer = first 27)
+var FQUAR_PAYLOAD      : [u8; 32]      // 25-byte attempt payload (module-scope; Trap 7)
+var FQUAR_IN_C         : [u8; 32]
+var FQUAR_OUT_C        : [u8; 32]
+var FQUAR_FID          : [u8; 32]
+var FQUAR_REQ          : [u8; 24]      // register request: base[0..8] | len[8..16] | kind[16]
+var FQUAR_INITED       : u8 = 0u8
+
+var FQUAR_T_PROD       : [u8; 32]      // self-test producer
+
+// =========================== internal helpers ===========================
+
+fn fquar_build_optag() -> i32 {
+    let sp : *u8 = (&FQUAR_OPID_STR as u64) as *u8
+    sp[0u64]  = 0x61u8  sp[1u64]  = 0x65u8  sp[2u64]  = 0x74u8  sp[3u64]  = 0x68u8  sp[4u64]  = 0x65u8  sp[5u64]  = 0x72u8
+    sp[6u64]  = 0x3Au8  sp[7u64]  = 0x3Au8
+    sp[8u64]  = 0x66u8  sp[9u64]  = 0x69u8  sp[10u64] = 0x72u8  sp[11u64] = 0x6Du8  sp[12u64] = 0x77u8  sp[13u64] = 0x61u8  sp[14u64] = 0x72u8  sp[15u64] = 0x65u8
+    sp[16u64] = 0x5Fu8
+    sp[17u64] = 0x71u8  sp[18u64] = 0x75u8  sp[19u64] = 0x61u8  sp[20u64] = 0x72u8  sp[21u64] = 0x61u8  sp[22u64] = 0x6Eu8  sp[23u64] = 0x74u8  sp[24u64] = 0x69u8  sp[25u64] = 0x6Eu8  sp[26u64] = 0x65u8
+    sp[27u64] = 0x3Au8  sp[28u64] = 0x3Au8
+    sp[29u64] = 0x61u8  sp[30u64] = 0x74u8  sp[31u64] = 0x74u8  sp[32u64] = 0x65u8  sp[33u64] = 0x6Du8  sp[34u64] = 0x70u8  sp[35u64] = 0x74u8
+    return FQUAR_OK
+}
+
+// Add a region WITHOUT a cap check (callers gate first).  Slot index or FQUAR_SENT.
+fn fquar_add(base: u64, len: u64, kind: u8) -> u32 {
+    let mut chosen : u32 = FQUAR_SENT
+    let mut i : u64 = 0u64
+    while i < FQUAR_MAX_REGIONS {
+        if chosen == FQUAR_SENT {
+            if FQUAR_LIVE[i] == 0u8 { chosen = i as u32 }
+        }
+        i = i + 1u64
+    }
+    if chosen == FQUAR_SENT { return FQUAR_SENT }
+    let cj : u64 = (chosen as u64) & 0xFFFFFFFFu64
+    FQUAR_BASE[cj] = base
+    FQUAR_LEN[cj] = len
+    FQUAR_KIND[cj] = kind
+    FQUAR_LIVE[cj] = 1u8
+    return chosen
+}
+
+// Half-open interval overlap, u64-overflow SAFE (G7).  A wrapped interval
+// (end < base) reaches top-of-memory, so its no-overlap early-out is skipped.
+fn fquar_intersects(a_base: u64, a_len: u64, b_base: u64, b_len: u64) -> u8 {
+    let a_end : u64 = a_base + a_len
+    let b_end : u64 = b_base + b_len
+    let mut a_wrap : u8 = 0u8
+    if a_end < a_base { a_wrap = 1u8 }
+    let mut b_wrap : u8 = 0u8
+    if b_end < b_base { b_wrap = 1u8 }
+    if b_wrap == 0u8 {
+        if b_end <= a_base { return 0u8 }
+    }
+    if a_wrap == 0u8 {
+        if a_end <= b_base { return 0u8 }
+    }
+    return 1u8
+}
+
+// =========================== public surface ===========================
+
+fn fquar_init(cap_id: u64) -> i32 @export {
+    let cc : u64 = cap_id
+    if cap_verify_rights(cc, FQUAR_RIGHT_AMEND) != 1u8 { return FQUAR_E_CAP }
+    if FQUAR_INITED == 1u8 { return FQUAR_OK }
+    let mut i : u64 = 0u64
+    while i < FQUAR_MAX_REGIONS { FQUAR_LIVE[i] = 0u8  i = i + 1u64 }
+    fquar_build_optag()
+    ident_from_bytes((&FQUAR_OPID_STR as u64) as *u8, 27u64, (&FQUAR_PRODUCER as u64) as *u8)
+    ident_from_bytes((&FQUAR_OPID_STR as u64) as *u8, 36u64, (&FQUAR_OPID_ATTEMPT as u64) as *u8)
+    if fquar_add(0xFFFFFFFFFF000000u64, 0x0000000001000000u64, FQUAR_KIND_FIRMWARE_ROM) == FQUAR_SENT { return FQUAR_E_FULL }
+    FQUAR_INITED = 1u8
+    return FQUAR_OK
+}
+
+fn fquar_register(req: *u8, cap_id: u64) -> u32 @export {
+    let rp : u64 = req as u64
+    let cc : u64 = cap_id
+    if rp == 0u64 { return FQUAR_SENT }
+    if cap_verify_rights(cc, FQUAR_RIGHT_AMEND) != 1u8 { return FQUAR_SENT }
+    let pp : *u8 = rp as *u8
+    let mut base : u64 = 0u64
+    let mut z : u64 = 0u64
+    while z < 8u64 { base = base | ((pp[z] as u64) << (z * 8u64))  z = z + 1u64 }
+    let mut len : u64 = 0u64
+    let mut y : u64 = 0u64
+    while y < 8u64 { len = len | ((pp[8u64 + y] as u64) << (y * 8u64))  y = y + 1u64 }
+    let kind : u8 = pp[16u64]
+    return fquar_add(base, len, kind)
+}
+
+fn fquar_check_write(addr: u64, len: u64) -> u8 @export {
+    if FQUAR_INITED == 0u8 { fquar_init(FQUAR_ENV_CAP) }
+    let mut safe : u8 = 1u8
+    let mut i : u64 = 0u64
+    while i < FQUAR_MAX_REGIONS {
+        if safe == 1u8 {
+            if FQUAR_LIVE[i] == 1u8 {
+                if fquar_intersects(addr, len, FQUAR_BASE[i], FQUAR_LEN[i]) == 1u8 { safe = 0u8 }
+            }
+        }
+        i = i + 1u64
+    }
+    return safe
+}
+
+fn fquar_forbidden_at(addr: u64) -> u8 @export {
+    let w : u8 = fquar_check_write(addr, 1u64)
+    return 1u8 - w
+}
+
+fn fquar_region_kind_at(addr: u64) -> u8 @export {
+    if FQUAR_INITED == 0u8 { fquar_init(FQUAR_ENV_CAP) }
+    let mut found : u8 = 0u8
+    let mut k : u8 = FQUAR_KIND_NONE
+    let mut i : u64 = 0u64
+    while i < FQUAR_MAX_REGIONS {
+        if found == 0u8 {
+            if FQUAR_LIVE[i] == 1u8 {
+                if fquar_intersects(addr, 1u64, FQUAR_BASE[i], FQUAR_LEN[i]) == 1u8 {
+                    k = FQUAR_KIND[i]
+                    found = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return k
+}
+
+fn fquar_region_count() -> u32 @export {
+    let mut n : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < FQUAR_MAX_REGIONS {
+        if FQUAR_LIVE[i] == 1u8 { n = n + 1u32 }
+        i = i + 1u64
+    }
+    return n
+}
+
+fn fquar_attempt_publish(addr: u64, len: u64, producer: *u8) -> u64 @export {
+    let prod : *u8 = producer
+    let mut found_kind : u8 = FQUAR_KIND_NONE
+    let mut found_base : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < FQUAR_MAX_REGIONS {
+        if found_kind == FQUAR_KIND_NONE {
+            if FQUAR_LIVE[i] == 1u8 {
+                if fquar_intersects(addr, len, FQUAR_BASE[i], FQUAR_LEN[i]) == 1u8 {
+                    found_kind = FQUAR_KIND[i]
+                    found_base = FQUAR_BASE[i]
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    if found_kind == FQUAR_KIND_NONE { return FQUAR_U64_SENT }
+    let pp : *u8 = (&FQUAR_PAYLOAD as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 8u64 { pp[z] = ((addr >> (z * 8u64)) & 0xFFu64) as u8  z = z + 1u64 }
+    let mut y : u64 = 0u64
+    while y < 8u64 { pp[8u64 + y] = ((len >> (y * 8u64)) & 0xFFu64) as u8  y = y + 1u64 }
+    let mut x : u64 = 0u64
+    while x < 8u64 { pp[16u64 + x] = ((found_base >> (x * 8u64)) & 0xFFu64) as u8  x = x + 1u64 }
+    pp[24u64] = found_kind
+    wh_chain_root((&FQUAR_IN_C as u64) as *u8)
+    ident_from_bytes(pp, 25u64, (&FQUAR_OUT_C as u64) as *u8)
+    return wh_publish(prod, (&FQUAR_OPID_ATTEMPT as u64) as *u8, (&FQUAR_IN_C as u64) as *u8, (&FQUAR_OUT_C as u64) as *u8, 1u8, 0u8, 1u16, prod, 0u32, pp, 25u32, (&FQUAR_FID as u64) as *u8)
+}
+
+// =========================== self-test ===========================
+
+fn fquar_st_build_req(base: u64, len: u64, kind: u8) -> i32 {
+    let pp : *u8 = (&FQUAR_REQ as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 8u64 { pp[z] = ((base >> (z * 8u64)) & 0xFFu64) as u8  z = z + 1u64 }
+    let mut y : u64 = 0u64
+    while y < 8u64 { pp[8u64 + y] = ((len >> (y * 8u64)) & 0xFFu64) as u8  y = y + 1u64 }
+    pp[16u64] = kind
+    return FQUAR_OK
+}
+
+fn fquar_st_fill_producer() -> i32 {
+    let pp : *u8 = (&FQUAR_T_PROD as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { pp[i] = (i + 1u64) as u8  i = i + 1u64 }
+    return FQUAR_OK
+}
+
+// KAT-1: default firmware-ROM window forbidden (incl. top byte -- G7).
+fn fquar_st_k1() -> u64 {
+    if fquar_forbidden_at(0xFFFFFFFFFF000000u64) != 1u8 { return 1u64 }
+    if fquar_forbidden_at(0xFFFFFFFFFFFFFFFFu64) != 1u8 { return 2u64 }
+    if fquar_check_write(0xFFFFFFFFFF000000u64, 1u64) != 0u8 { return 3u64 }
+    if fquar_region_kind_at(0xFFFFFFFFFF800000u64) != FQUAR_KIND_FIRMWARE_ROM { return 4u64 }
+    return 0u64
+}
+
+// KAT-2: ordinary RAM write allowed.
+fn fquar_st_k2() -> u64 {
+    if fquar_check_write(0x0000000000100000u64, 0x1000u64) != 1u8 { return 10u64 }
+    if fquar_forbidden_at(0x0000000000100000u64) != 0u8 { return 11u64 }
+    if fquar_region_kind_at(0x0000000000100000u64) != FQUAR_KIND_NONE { return 12u64 }
+    return 0u64
+}
+
+// KAT-3: register TPM + half-open boundary semantics.
+fn fquar_st_k3() -> u64 {
+    fquar_st_build_req(0x1000u64, 0x1000u64, FQUAR_KIND_TPM)
+    let slot : u32 = fquar_register((&FQUAR_REQ as u64) as *u8, 1u64)
+    if slot != 1u32 { return 20u64 }
+    if fquar_check_write(0x0FFFu64, 1u64) != 1u8 { return 21u64 }
+    if fquar_check_write(0x1000u64, 1u64) != 0u8 { return 22u64 }
+    if fquar_check_write(0x1FFFu64, 1u64) != 0u8 { return 23u64 }
+    if fquar_check_write(0x2000u64, 1u64) != 1u8 { return 24u64 }
+    if fquar_region_count() != 2u32 { return 25u64 }
+    return 0u64
+}
+
+// KAT-4: attempt-publish witnesses the violation + payload bytes + reproducible index.
+fn fquar_st_k4() -> u64 {
+    fquar_st_fill_producer()
+    let pr : u64 = &FQUAR_T_PROD as u64
+    let f0 : u64 = fquar_attempt_publish(0x1000u64, 0x10u64, pr as *u8)
+    if f0 == FQUAR_U64_SENT { return 30u64 }
+    let pp : *u8 = (&FQUAR_PAYLOAD as u64) as *u8
+    if pp[24u64] != FQUAR_KIND_TPM { return 31u64 }
+    if pp[0u64] != 0x00u8 { return 32u64 }
+    if pp[16u64] != 0x00u8 { return 33u64 }
+    if pp[17u64] != 0x10u8 { return 34u64 }
+    let f1 : u64 = fquar_attempt_publish(0x1000u64, 0x10u64, pr as *u8)
+    if f1 != (f0 + 1u64) { return 35u64 }
+    if pp[24u64] != FQUAR_KIND_TPM { return 36u64 }
+    return 0u64
+}
+
+// KAT-5: non-violating attempt-publish returns the no-violation sentinel.
+fn fquar_st_k5() -> u64 {
+    let pr : u64 = &FQUAR_T_PROD as u64
+    if fquar_attempt_publish(0x0000000000100000u64, 0x10u64, pr as *u8) != FQUAR_U64_SENT { return 40u64 }
+    return 0u64
+}
+
+// KAT-6: capability gate FAILS closed (cap 0 + a no-amend cap; count unchanged).
+fn fquar_st_k6() -> u64 {
+    fquar_st_build_req(0x5000u64, 0x1000u64, FQUAR_KIND_FUSES)
+    let before : u32 = fquar_region_count()
+    if fquar_register((&FQUAR_REQ as u64) as *u8, 0u64) != FQUAR_SENT { return 50u64 }
+    let noamend : u64 = cap_attenuate(1u64, 0x0800u64, 0u64)
+    if noamend == 0u64 { return 51u64 }
+    if fquar_register((&FQUAR_REQ as u64) as *u8, noamend) != FQUAR_SENT { return 52u64 }
+    if fquar_region_count() != before { return 53u64 }
+    return 0u64
+}
+
+fn fquar_selftest() -> u64 @export {
+    wh_init(0u64)
+    cap_env_init()
+    if fquar_init(1u64) != FQUAR_OK { return 60u64 }
+    let r1 : u64 = fquar_st_k1()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = fquar_st_k2()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = fquar_st_k3()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = fquar_st_k4()
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = fquar_st_k5()
+    if r5 != 0u64 { return r5 }
+    let r6 : u64 = fquar_st_k6()
+    if r6 != 0u64 { return r6 }
+    return 99u64
+}

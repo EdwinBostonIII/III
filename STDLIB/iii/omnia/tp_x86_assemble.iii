@@ -1,0 +1,68 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_x86_assemble.iii
+ *
+ * Transform pattern: FORM_X86_ASM → FORM_X86_BYTES
+ * FROZEN SPEC §7B.6 slot 36; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Round-trip companion to tp_x86_disasm. Parses `.byte 0xNN, 0xNN, ...`
+ * lines (the canonical disasm output) and emits the bytes back to bin.
+ */
+
+module omnia_tp_x86_assemble
+
+fn tp_assem_hex_digit(c: u8) -> u32 {
+    if c >= 48u8 {
+        if c <= 57u8 { return (c - 48u8) as u32 }
+    }
+    if c >= 97u8 {
+        if c <= 102u8 { return (c - 87u8) as u32 }
+    }
+    if c >= 65u8 {
+        if c <= 70u8 { return (c - 55u8) as u32 }
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn tp_assem_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+/* Scan src for "0x" sequences followed by 2 hex digits. Each becomes one
+ * output byte. Whitespace and other chars are skipped. */
+fn tp_x86_assemble(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let mut src_off : u64 = 0u64
+    let mut dst_off : u64 = 0u64
+    while src_off + 1u64 < src_len {
+        let bp1 : *u8 = (src + src_off) as *u8
+        let bp2 : *u8 = (src + src_off + 1u64) as *u8
+        if bp1[0u64] == 48u8 {
+            if bp2[0u64] == 120u8 {
+                /* Found "0x" -- read next two hex digits. */
+                if src_off + 3u64 < src_len {
+                    let bp3 : *u8 = (src + src_off + 2u64) as *u8
+                    let bp4 : *u8 = (src + src_off + 3u64) as *u8
+                    let hi : u32 = tp_assem_hex_digit(bp3[0u64])
+                    let lo : u32 = tp_assem_hex_digit(bp4[0u64])
+                    if hi != 0xFFFFFFFFu32 {
+                        if lo != 0xFFFFFFFFu32 {
+                            if dst_off >= dst_cap { return 0u64 }
+                            let byte_val : u8 = ((hi << 4u32) | lo) as u8
+                            tp_assem_emit(dst_buf, dst_off, byte_val)
+                            dst_off = dst_off + 1u64
+                            src_off = src_off + 4u64
+                        }
+                        if lo == 0xFFFFFFFFu32 { src_off = src_off + 2u64 }
+                    }
+                    if hi == 0xFFFFFFFFu32 { src_off = src_off + 2u64 }
+                }
+                if src_off + 3u64 >= src_len { src_off = src_off + 2u64 }
+            }
+            if bp2[0u64] != 120u8 { src_off = src_off + 1u64 }
+        }
+        if bp1[0u64] != 48u8 { src_off = src_off + 1u64 }
+    }
+    return dst_off
+}

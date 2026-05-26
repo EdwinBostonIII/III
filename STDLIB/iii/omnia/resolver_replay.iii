@@ -1,0 +1,49 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\resolver_replay.iii
+ *
+ * III STDLIB - omnia::resolver_replay
+ *
+ * Audit-time witness replay & determinism check.
+ * FROZEN SPEC §8.3, §Z.C.8; ADR-RES-011.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * CONTRACT (this file):
+ *   - Read-only. Never mutates registry, witness chain, or coefficient table.
+ *   - resolver_replay_check_chain() returns 1 iff the witness chain
+ *     verifies against existing witness_verify_chain().
+ *
+ * The deeper "recompute every OK witness mhash from recorded inputs"
+ * verification requires a side-table populated by witness_append_resolution
+ * and accessed at audit time. That side-table is the "replay buffer" of
+ * §3.2 -- present in this baseline as a counter-only structure that
+ * tracks resolver-self-call counts for corpus 53.
+ */
+
+module omnia_resolver_replay
+
+extern @abi(c-msvc-x64) fn witness_verify_chain() -> u8 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+
+var g_resolver_self_call_count : u32 = 0u32
+
+fn resolver_self_call_increment() -> i32 @export {
+    g_resolver_self_call_count = g_resolver_self_call_count + 1u32
+    return 0i32
+}
+
+fn resolver_self_call_count() -> u32 @export {
+    return g_resolver_self_call_count
+}
+
+fn resolver_replay_check_chain() -> u8 @export {
+    /* Layer 1: existing witness chain monotonic verification. */
+    if witness_verify_chain() == 0u8 { return 0u8 }
+    /* Layer 2: registry sealed (no late admissions). */
+    if pattern_registry_is_sealed() == 0u8 { return 0u8 }
+    /* Layer 3: count is non-negative (always true; defense against
+     * future signedness changes). */
+    let c : u32 = witness_count()
+    if c < 0u32 { return 0u8 }
+    return 1u8
+}

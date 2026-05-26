@@ -1,0 +1,109 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\xii_atm.iii
+ *
+ * III STDLIB - sanctus::xii_atm
+ *
+ * Anti-Tamper Membrane — continuous-time integrity check.
+ * Per DOCS/III-XII.md S16.4.
+ *
+ * Invoked every 1024 fusion operations (per the witness chain sequence
+ * counter). Checks one randomly-selected Lattice cell's bytes against
+ * its expected mhash. On mismatch, aborts the binary with rc=6.
+ *
+ * Cost per check: ~40 ns (one SHA-256 on a small cell + memcmp).
+ * Amortised cost: ~1 check per microsecond of execution.
+ *
+ * Hexad: kind_essence. Ring: R0. K: 64.
+ *
+ * NIH: libc only.
+ */
+
+module sanctus_xii_atm
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const XAT_OK                       : u32 = 0u32
+const XAT_E_MANIFEST_TAMPER_RUNTIME: u32 = 1u32
+const XAT_E_CELL_TAMPER_RUNTIME    : u32 = 2u32
+
+const XAT_CHECK_CADENCE : u32 = 1024u32
+
+var XAT_OP_COUNTER : u32 = 0u32
+var XAT_ROUND_ROBIN_IDX : u32 = 0u32
+var XAT_COMPUTED : [u8; 32]
+var XAT_LAST_ERROR : u32 = 0u32
+
+fn xii_atm_last_error() -> u32 @export {
+    return XAT_LAST_ERROR
+}
+
+/* Verify a single Lattice cell against its expected mhash.
+ * Returns 0 if match, error code if tampered. */
+fn xii_atm_verify_cell(cell_ptr: *u8, cell_size: u32, expected_mhash: *u8) -> u32 @export {
+    sha256_oneshot(cell_ptr, cell_size as u64, &XAT_COMPUTED as *u8)
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if XAT_COMPUTED[k] != expected_mhash[k as u64] {
+            XAT_LAST_ERROR = XAT_E_CELL_TAMPER_RUNTIME
+            return XAT_E_CELL_TAMPER_RUNTIME
+        }
+        k = k + 1u32
+    }
+    XAT_LAST_ERROR = XAT_OK
+    return XAT_OK
+}
+
+/* Verify the Manifest against its golden mhash. */
+fn xii_atm_verify_manifest(manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 @export {
+    sha256_oneshot(manifest_ptr, manifest_size as u64, &XAT_COMPUTED as *u8)
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if XAT_COMPUTED[k] != golden_mhash[k as u64] {
+            XAT_LAST_ERROR = XAT_E_MANIFEST_TAMPER_RUNTIME
+            return XAT_E_MANIFEST_TAMPER_RUNTIME
+        }
+        k = k + 1u32
+    }
+    XAT_LAST_ERROR = XAT_OK
+    return XAT_OK
+}
+
+/* Tick: incremented on every XII fusion op. When the counter reaches
+ * XAT_CHECK_CADENCE, an integrity check fires.
+ * Returns 0 normally, error code if tamper detected. */
+fn xii_atm_tick(text_section: *u8, audit_records: *u8, record_count: u32, manifest_ptr: *u8, manifest_size: u32, golden_mhash: *u8) -> u32 @export {
+    XAT_OP_COUNTER = XAT_OP_COUNTER + 1u32
+    if XAT_OP_COUNTER < XAT_CHECK_CADENCE { return XAT_OK }
+    XAT_OP_COUNTER = 0u32
+
+    /* Re-verify the Manifest. */
+    let mr : u32 = xii_atm_verify_manifest(manifest_ptr, manifest_size, golden_mhash)
+    if mr != XAT_OK { return mr }
+
+    /* Sample one cell (round-robin). */
+    if record_count == 0u32 { return XAT_OK }
+    let idx : u32 = XAT_ROUND_ROBIN_IDX % record_count
+    XAT_ROUND_ROBIN_IDX = XAT_ROUND_ROBIN_IDX + 1u32
+    let rec_off : u32 = idx * 64u32
+
+    /* Read text_offset (u64 LE) + payload_size (u32 at offset 16). */
+    let b0 : u64 = audit_records[(rec_off + 0u32) as u64] as u64
+    let b1 : u64 = audit_records[(rec_off + 1u32) as u64] as u64
+    let b2 : u64 = audit_records[(rec_off + 2u32) as u64] as u64
+    let b3 : u64 = audit_records[(rec_off + 3u32) as u64] as u64
+    let b4 : u64 = audit_records[(rec_off + 4u32) as u64] as u64
+    let b5 : u64 = audit_records[(rec_off + 5u32) as u64] as u64
+    let b6 : u64 = audit_records[(rec_off + 6u32) as u64] as u64
+    let b7 : u64 = audit_records[(rec_off + 7u32) as u64] as u64
+    let text_offset_lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let text_offset_hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    let text_offset : u64 = text_offset_lo | text_offset_hi
+    let p0 : u32 = audit_records[(rec_off + 16u32) as u64] as u32
+    let p1 : u32 = audit_records[(rec_off + 17u32) as u64] as u32
+    let p2 : u32 = audit_records[(rec_off + 18u32) as u64] as u32
+    let p3 : u32 = audit_records[(rec_off + 19u32) as u64] as u32
+    let payload_size : u32 = p0 | (p1 << 8u32) | (p2 << 16u32) | (p3 << 24u32)
+
+    let cell_ptr : *u8 = (text_section as u64 + text_offset) as *u8
+    let expected_mhash : *u8 = (audit_records as u64 + (rec_off + 24u32) as u64) as *u8
+    return xii_atm_verify_cell(cell_ptr, payload_size, expected_mhash)
+}

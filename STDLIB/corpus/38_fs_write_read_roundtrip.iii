@@ -1,0 +1,81 @@
+/* fs: open WRITE, write "hello", close, open READ, read back, verify */
+module corpus_c38
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn fs_open(cap: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(h: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(h: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_delete(cap: u64, path: u64) -> i32 from "fs.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    /* fs_read = 0x02 ; fs_write = 0x04 ; fs_create = 0x08 */
+    let fs : u64 = cap_attenuate(env, 0x0Eu64, 0u64)
+    /* Path: ./iii_fs_test.tmp */
+    let path : *u8 = malloc(20u64)
+    path[0] = 46u8                              /* '.' */
+    path[1] = 47u8                              /* '/' */
+    path[2] = 105u8                             /* 'i' */
+    path[3] = 105u8                             /* 'i' */
+    path[4] = 105u8                             /* 'i' */
+    path[5] = 95u8                              /* '_' */
+    path[6] = 102u8                             /* 'f' */
+    path[7] = 115u8                             /* 's' */
+    path[8] = 95u8                              /* '_' */
+    path[9] = 116u8                             /* 't' */
+    path[10] = 101u8                            /* 'e' */
+    path[11] = 115u8                            /* 's' */
+    path[12] = 116u8                            /* 't' */
+    path[13] = 46u8                             /* '.' */
+    path[14] = 116u8                            /* 't' */
+    path[15] = 109u8                            /* 'm' */
+    path[16] = 112u8                            /* 'p' */
+    path[17] = 0u8
+
+    let payload : *u8 = malloc(5u64)
+    payload[0] = 104u8                          /* 'h' */
+    payload[1] = 101u8                          /* 'e' */
+    payload[2] = 108u8                          /* 'l' */
+    payload[3] = 108u8                          /* 'l' */
+    payload[4] = 111u8                          /* 'o' */
+
+    /* Open WRITE, write 5 bytes, close. */
+    let hw : u64 = fs_open(fs, path as u64, 2u32)
+    if hw == 0u64 { return 1u64 }
+    let written : u64 = fs_write(hw, payload as u64, 5u64)
+    if written != 5u64 { return 2u64 }
+    fs_close(hw)
+
+    /* Open READ, read back. */
+    let buf : *u8 = malloc(5u64)
+    let hr : u64 = fs_open(fs, path as u64, 1u32)
+    if hr == 0u64 { return 3u64 }
+    let read_n : u64 = fs_read(hr, buf as u64, 5u64)
+    if read_n != 5u64 { return 4u64 }
+    fs_close(hr)
+
+    if buf[0] != 104u8 { return 5u64 }
+    if buf[1] != 101u8 { return 6u64 }
+    if buf[2] != 108u8 { return 7u64 }
+    if buf[3] != 108u8 { return 8u64 }
+    if buf[4] != 111u8 { return 9u64 }
+
+    /* Clean up: delete the scratch file. This (a) exercises fs_delete and
+     * (b) leaves NO residue at the test's CWD — superseding the prior need
+     * to relocate the path (a file that is deleted in the same run cannot
+     * persist anywhere). RITCHIE Stage 1.X-corpus-cleanup. */
+    let del_rc : i32 = fs_delete(fs, path as u64)
+    if del_rc != 0i32 { return 10u64 }
+    /* Verify deletion: re-opening READ must now fail (handle 0). */
+    let h_gone : u64 = fs_open(fs, path as u64, 1u32)
+    if h_gone != 0u64 { return 11u64 }
+
+    free(path)
+    free(payload)
+    free(buf)
+    return 99u64
+}

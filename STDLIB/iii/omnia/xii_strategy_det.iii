@@ -1,0 +1,98 @@
+/* STDLIB/iii/omnia/xii_strategy_det.iii -- Confluence-Cert Tier 1: the strategy-determinism
+ * proof object (DOCS/III-XII-CONFLUENCE-CERTIFICATE-ARCH.md Tier 1; IMPL-PLAN Step A.1).
+ *
+ * The UNCONDITIONAL floor under H12: xii_canonicalise is a single fixed strategy (leftmost-
+ * innermost / bottom-up, root ties broken by the sealed cascade priority), so it is a
+ * DETERMINISTIC TOTAL FUNCTION -- same term in, same normal form out -- owing nothing to global
+ * confluence.  This module does not ASSERT that; it OBSERVES it functionally: it runs the engine
+ * and reads the result.  `xsd_strategy_is_deterministic` canonicalises a witness twice and returns
+ * whether the two normal forms are structurally identical -- a behaviour, not a self-claim.
+ *
+ * Three verified facts combine to make the floor robust (ARCH Tier 1 / IMPL A.1):
+ *   (1) determinism: canonicalise(x) == canonicalise(x) for independently-built copies of x;
+ *   (2) root overlaps all join (xjn_gate_root==1) -> the cascade priority that breaks root ties is
+ *       never load-bearing for correctness;
+ *   (3) bottom-up: a term whose only redex is a SUBTERM has that subterm reduced (inner-first),
+ *       which is why the 35 subterm non-joins are unreachable by the strategy.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: xii_term + xii_rewrite + xii_canonicalise +
+ * xii_joinability only.  Determinism: integer-only; ==/!= ; single-line fns; no recursion.
+ */
+module omnia_xii_strategy_det
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xjn_gate_root() -> u32 from "xii_joinability.iii"
+
+const XSD_K01      : u8 = 0u8       /* K01_FORM, an inert generator leaf */
+const XSD_K06      : u8 = 5u8       /* K06_COMPOSE basis (null-form lives here) */
+const XSD_FCOMPOSE : u8 = 18u8
+const XSD_NULL_REF : u32 = 0xFFFFFFFFu32
+const XSD_NULLGROUND : u32 = 0xFFFFFFFFu32   /* K06 null-form subform sentinel (R037-matching, per xii_rule_patterns) */
+
+/* a fresh 2-level compose witness: FCOMPOSE(FORM(sa), FCOMPOSE(FORM(sb), FORM(sc))).
+ * Built fresh each call, so two calls produce independent structurally-equal copies. */
+fn _xsd_witness(sa: u32, sb: u32, sc: u32) -> u32 {
+    let la : u32 = xii_term_make_basis(XSD_K01, sa)
+    let lb : u32 = xii_term_make_basis(XSD_K01, sb)
+    let lc : u32 = xii_term_make_basis(XSD_K01, sc)
+    let inner : u32 = xii_term_make_fusion2(XSD_FCOMPOSE, lb, lc)
+    return xii_term_make_fusion2(XSD_FCOMPOSE, la, inner)
+}
+
+/* THE H12-consumable predicate (functional, not a claim): canonicalise two independent copies of
+ * the same witness and report whether the engine produced the same normal form. 1 = deterministic. */
+fn xsd_strategy_is_deterministic() -> u8 @export {
+    xii_term_arena_reset()
+    let w1 : u32 = _xsd_witness(2u32, 5u32, 9u32)
+    let w2 : u32 = _xsd_witness(2u32, 5u32, 9u32)
+    let n1 : u32 = xii_canonicalise(w1)
+    let n2 : u32 = xii_canonicalise(w2)
+    return xii_rewrite_struct_eq(n1, n2)
+}
+
+fn xsd_selftest() -> u64 @export {
+    /* (1) determinism over a small battery: each witness canonicalises identically from two
+     * independent builds. Distinct subforms exercise different sort/merge behaviour. */
+    if xsd_strategy_is_deterministic() != 1u8 { return 1u64 }
+    xii_term_arena_reset()
+    let p1 : u32 = xii_canonicalise(_xsd_witness(9u32, 4u32, 1u32))
+    let p2 : u32 = xii_canonicalise(_xsd_witness(9u32, 4u32, 1u32))
+    if xii_rewrite_struct_eq(p1, p2) != 1u8 { return 2u64 }
+
+    /* (2) idempotence: the normal form is fixed -- canonicalise(nf) == nf. */
+    xii_term_arena_reset()
+    let nf : u32 = xii_canonicalise(_xsd_witness(3u32, 8u32, 6u32))
+    let nf2 : u32 = xii_canonicalise(nf)
+    if xii_rewrite_struct_eq(nf, nf2) != 1u8 { return 3u64 }
+
+    /* (3) root overlaps all join -> cascade priority is never correctness-load-bearing. */
+    if xjn_gate_root() != 1u32 { return 4u64 }
+
+    /* (4) bottom-up: the inner FCOMPOSE(null, FORM) reduces (R037) before the parent, so the
+     * canonical child_b is a FORM leaf, not the un-reduced inner compose. */
+    xii_term_arena_reset()
+    let la : u32 = xii_term_make_basis(XSD_K01, 1u32)
+    let lb : u32 = xii_term_make_basis(XSD_K01, 2u32)
+    let inner_null : u32 = xii_term_make_fusion2(XSD_FCOMPOSE, xii_term_make_basis(XSD_K06, XSD_NULLGROUND), lb)
+    let outer : u32 = xii_term_make_fusion2(XSD_FCOMPOSE, la, inner_null)
+    let canon : u32 = xii_canonicalise(outer)
+    let cb : u32 = xii_term_get_child_b(canon)
+    if cb == XSD_NULL_REF { return 5u64 }
+    if xii_term_get_kind(cb) == XSD_FCOMPOSE { return 6u64 }   /* inner was NOT left un-reduced */
+
+    /* (5) PROVE-THE-NEGATIVE: the determinism check has teeth -- two genuinely distinct terms do
+     * NOT produce equal normal forms (so check (1) is not a vacuous all-equal tautology). */
+    xii_term_arena_reset()
+    let d1 : u32 = xii_canonicalise(xii_term_make_basis(XSD_K01, 11u32))
+    let d2 : u32 = xii_canonicalise(xii_term_make_basis(XSD_K01, 22u32))
+    if xii_rewrite_struct_eq(d1, d2) != 0u8 { return 7u64 }
+
+    return 99u64
+}

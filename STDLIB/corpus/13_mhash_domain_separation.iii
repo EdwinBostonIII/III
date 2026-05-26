@@ -1,0 +1,36 @@
+/* mhash with same payload but different domains -> different hashes */
+module corpus_a13
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(domain: u64, dlen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+fn main() -> u64 {
+    let dom_a : *u8 = malloc(1u64)
+    dom_a[0] = 65u8
+    let dom_b : *u8 = malloc(1u64)
+    dom_b[0] = 66u8
+    let oa : *u8 = malloc(32u64)
+    let ob : *u8 = malloc(32u64)
+    mhash_begin()
+    mhash_domain(dom_a as u64, 1u64)
+    mhash_final(oa as u64)
+    mhash_begin()
+    mhash_domain(dom_b as u64, 1u64)
+    mhash_final(ob as u64)
+    let mut differ : u8 = 0u8
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        if oa[i] != ob[i] { differ = 1u8 }
+        i = i + 1u32
+    }
+    free(dom_a)
+    free(dom_b)
+    free(oa)
+    free(ob)
+    if differ != 1u8 { return 3u64 }
+    return 99u64
+}

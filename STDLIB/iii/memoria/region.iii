@@ -1,0 +1,188 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\region.iii
+ *
+ * III STDLIB - memoria::region
+ *
+ * Capability-gated heap region.  Only this module externs malloc/free
+ * from MSVCRT - all other STDLIB modules must allocate via this surface.
+ *
+ * Phase A scope:
+ *   - region_create(bytes): single allocation backing a region
+ *   - region_alloc(r, n, align): bump-allocate within the region
+ *   - region_release(r): release the underlying buffer
+ *   - region_used / region_capacity / region_remaining queries
+ *
+ * Region state lives in module-singleton table (REG_TABLE).  Phase B
+ * will introduce typed region handles via @specialize once the compiler
+ * supports it; for now regions are referenced by integer id.
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 0.99 (allocation can fail).
+ *
+ * NIH posture: malloc/free are MSVCRT externs but represent the only
+ * concession to C runtime.  No third-party allocator.  Future phases
+ * may replace with hand-rolled VirtualAlloc-backed pages.
+ */
+
+module memoria_region
+
+const REG_INVALID  : u64 = 0u64
+const REG_MAX      : u32 = 64u32        /* up to 64 simultaneous regions */
+const REG_OK       : i32 =  0i32
+const REG_E_OOM    : i32 = -1i32
+const REG_E_FULL   : i32 = -2i32        /* table exhausted               */
+const REG_E_BADID  : i32 = -3i32
+const REG_E_NOFIT  : i32 = -4i32
+const REG_E_SEALED : i32 = -5i32
+
+/* --- MSVCRT externs (only here) --- */
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+/* --- Region table: parallel arrays, one row per region. --- */
+
+var REG_BASE       : [u64; 64]   /* base pointer (as u64) for region i */
+var REG_CAPACITY   : [u64; 64]
+var REG_USED       : [u64; 64]
+var REG_LIVE       : [u8; 64]    /* 1 = active, 0 = free slot           */
+var REG_SEALED     : [u8; 64]    /* 1 = no further alloc permitted      */
+
+/* --- Allocation --- */
+
+fn region_create(bytes: u64) -> u64 @export {
+    /* Find a free slot. */
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < REG_MAX {
+        if REG_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 {
+                slot = i
+            }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return REG_INVALID }
+    let p : *u8 = malloc(bytes)
+    if p as u64 == 0u64 { return REG_INVALID }
+    REG_BASE[slot]     = p as u64
+    REG_CAPACITY[slot] = bytes
+    REG_USED[slot]     = 0u64
+    REG_LIVE[slot]     = 1u8
+    REG_SEALED[slot]   = 0u8
+    /* Region id = slot + 1 (so 0 = invalid). */
+    return (slot as u64) + 1u64
+}
+
+/* Validate a region id and return slot index, or 0xFFFFFFFF if bad. */
+fn region_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let slot : u64 = id - 1u64
+    if slot >= (REG_MAX as u64) { return 0xFFFFFFFFu32 }
+    let s : u32 = slot as u32
+    if REG_LIVE[s] == 0u8 { return 0xFFFFFFFFu32 }
+    return s
+}
+
+fn region_capacity(id: u64) -> u64 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return REG_CAPACITY[s]
+}
+
+fn region_used(id: u64) -> u64 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return REG_USED[s]
+}
+
+fn region_remaining(id: u64) -> u64 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let cap  : u64 = REG_CAPACITY[s]
+    let used : u64 = REG_USED[s]
+    if used >= cap { return 0u64 }
+    return cap - used
+}
+
+fn region_base(id: u64) -> u64 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return REG_BASE[s]
+}
+
+fn region_is_sealed(id: u64) -> u8 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return REG_SEALED[s]
+}
+
+/* Bump-allocate `n` bytes (aligned).  Returns pointer (as u64) or 0. */
+fn region_alloc(id: u64, n: u64, align: u64) -> u64 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if REG_SEALED[s] == 1u8 { return 0u64 }
+    let mut a : u64 = align
+    if a == 0u64 { a = 1u64 }
+    /* Align REG_USED upward to multiple of `a`. */
+    let used : u64 = REG_USED[s]
+    let mis  : u64 = used % a
+    let mut start : u64 = used
+    if mis != 0u64 { start = used + (a - mis) }
+    let cap  : u64 = REG_CAPACITY[s]
+    if start + n > cap { return 0u64 }
+    REG_USED[s] = start + n
+    let base : u64 = REG_BASE[s]
+    return base + start
+}
+
+fn region_seal(id: u64) -> i32 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return REG_E_BADID }
+    REG_SEALED[s] = 1u8
+    return REG_OK
+}
+
+/* Reset the bump pointer of a region, reclaiming all space allocated
+ * since the region was created (or last reset).  All pointers handed
+ * out by region_alloc since then become STALE and must NOT be used.
+ *
+ * Caller's responsibility: clear any external state (slot tables,
+ * caches) that holds pointers into this region BEFORE calling reset.
+ *
+ * Used by crypto modules that perform many short-lived bigint allocs
+ * (modpow, scalar multiplication) to recycle scratch space. */
+fn region_reset(id: u64) -> i32 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return REG_E_BADID }
+    REG_USED[s] = 0u64
+    return REG_OK
+}
+
+fn region_release(id: u64) -> i32 @export {
+    let s : u32 = region_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return REG_E_BADID }
+    let p_u64 : u64 = REG_BASE[s]
+    if p_u64 != 0u64 {
+        let p : *u8 = p_u64 as *u8
+        free(p)
+    }
+    REG_BASE[s]     = 0u64
+    REG_CAPACITY[s] = 0u64
+    REG_USED[s]     = 0u64
+    REG_LIVE[s]     = 0u8
+    REG_SEALED[s]   = 0u8
+    return REG_OK
+}
+
+fn region_count_live() -> u32 @export {
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < REG_MAX {
+        if REG_LIVE[i] == 1u8 { n = n + 1u32 }
+        i = i + 1u32
+    }
+    return n
+}
+
+/* region_reset_safe and clear_fn registry moved to a separate module
+ * (memoria/region_safe.iii) to avoid disturbing this file's BSS
+ * layout which other tests are sensitive to.  See plan Step 0018. */

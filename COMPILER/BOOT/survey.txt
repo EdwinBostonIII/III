@@ -1,0 +1,70 @@
+40: typedef struct {
+68: static void iii_sha256_compress(iii_sha256_t *s, const uint8_t block[64])
+98: static void iii_sha256_init(iii_sha256_t *s)
+106: static void iii_sha256_update(iii_sha256_t *s, const uint8_t *data, size_t n)
+132: static void iii_sha256_final(iii_sha256_t *s, uint8_t out[32])
+158: static void iii_sha256_update_u16(iii_sha256_t *s, uint16_t v) {
+162: static void iii_sha256_update_u32(iii_sha256_t *s, uint32_t v) {
+169: static void iii_sha256_update_u64(iii_sha256_t *s, uint64_t v) {
+177: #define III_CHUNK_BYTES (64u * 1024u)
+179: typedef struct iii_chunk {
+186: typedef struct {
+221: static void iii_arena_destroy(iii_arena_t *a)
+239: typedef struct {
+246: typedef struct {
+256: static uint64_t iii_fnv1a_64_bytes(const uint8_t *bytes, size_t len)
+266: static int iii_intern_init(iii_intern_t *t)
+275: static void iii_intern_destroy(iii_intern_t *t)
+283: static int iii_intern_grow(iii_intern_t *t, const uint8_t *src)
+308: static uint32_t iii_intern_get(iii_intern_t *t, const uint8_t *src,
+335: typedef struct {
+391: #define III_KEYWORD_COUNT (sizeof(III_KEYWORDS) / sizeof(III_KEYWORDS[0]))
+413: #define III_MOD_KEYWORD_COUNT (sizeof(III_MOD_KEYWORDS) / sizeof(III_MOD_KEYWORDS[0]))
+417: typedef struct {
+423: #define III_RUNTIME_KW_CAP_INIT 32u
+424: #define III_RUNTIME_KW_CAP_MAX  4096u
+551: struct iii_lex_state {
+622: static uint8_t iii_peek_byte(const iii_lex_state_t *st)
+628: static uint8_t iii_peek_byte_at(const iii_lex_state_t *st, size_t off)
+635: static void iii_record_line_start_at(iii_lex_state_t *st, size_t byte)
+648: static void iii_advance(iii_lex_state_t *st)
+663: static int iii_record_error(iii_lex_state_t *st, int code, const char *msg)
+701: static uint8_t iii_hex_value(uint8_t b)
+719: static bool iii_skip_trivia(iii_lex_state_t *st)
+770: static int iii_scan_doc_comment(iii_lex_state_t *st, iii_token_t *out)
+819: static iii_token_kind_t iii_lookup_runtime_kw(const iii_lex_state_t *st,
+831: static iii_token_kind_t iii_lookup_keyword(const uint8_t *bytes, size_t len)
+842: static iii_token_kind_t iii_lookup_modifier_kw(const uint8_t *bytes, size_t len)
+853: static int iii_scan_ident_or_keyword(iii_lex_state_t *st, iii_token_t *out)
+932: static int iii_scan_int_suffix(iii_lex_state_t *st, iii_int_suffix_t *out_suffix)
+975: static int iii_scan_number(iii_lex_state_t *st, iii_token_t *out)
+1075: static int iii_scan_string_inner(iii_lex_state_t *st, iii_token_t *out,
+1243: static int iii_scan_string(iii_lex_state_t *st, iii_token_t *out)
+1249: static int iii_scan_prefixed_string(iii_lex_state_t *st, iii_token_t *out,
+1265: static int iii_handle_invalid_byte(iii_lex_state_t *st, iii_token_t *out)
+1276: static int iii_emit_single(iii_lex_state_t *st, iii_token_t *out,
+1296: static int iii_emit_double(iii_lex_state_t *st, iii_token_t *out,
+1369: void iii_lex_destroy(iii_lex_state_t *st)
+1385: static void iii_history_append(iii_lex_state_t *st, const iii_token_t *tok)
+1400: static void iii_token_canonical_update(iii_sha256_t *h, const iii_token_t *t)
+1427: void iii_token_mhash(const iii_lex_state_t *st, const iii_token_t *tok,
+1441: void iii_lex_stream_mhash(const iii_lex_state_t *st, uint8_t out_mhash[32])
+1454: static int iii_next_internal(iii_lex_state_t *st, iii_token_t *out)
+1586: static int iii_next_with_metadata(iii_lex_state_t *st, iii_token_t *out)
+1639: int iii_lex_next(iii_lex_state_t *st, iii_token_t *out_token)
+1653: int iii_lex_peek(iii_lex_state_t *st, iii_token_t *out_token)
+1669: size_t iii_lex_error_count(const iii_lex_state_t *st)
+1674: int iii_lex_error_at(const iii_lex_state_t *st, size_t i,
+1683: void iii_lex_error_info(const iii_lex_state_t *st, iii_lex_error_t *out_err)
+1705: bool iii_token_raw_eq(const iii_lex_state_t *st, const iii_token_t *tok,
+1715: uint64_t iii_token_fnv1a_64(const iii_lex_state_t *st, const iii_token_t *tok)
+1724: int iii_lex_locate(const iii_lex_state_t *st, uint32_t byte,
+1742: void iii_token_span_union(const iii_token_t *a, const iii_token_t *b,
+1753: int iii_lex_token_at_byte(const iii_lex_state_t *st, uint32_t byte,
+1773: int iii_lex_token_history_at(const iii_lex_state_t *st, size_t i,
+1782: size_t iii_lex_token_count(const iii_lex_state_t *st)
+1787: void iii_lex_set_logical_position(iii_lex_state_t *st,
+1800: int iii_lex_register_keyword(iii_lex_state_t *st,
+1842: size_t iii_lex_arena_bytes(const iii_lex_state_t *st)
+1848: void iii_lex_arena_mhash(const iii_lex_state_t *st, uint8_t out_mhash[32])
+1866: size_t iii_lex_seal(iii_lex_state_t *st, void **out_owned_block)

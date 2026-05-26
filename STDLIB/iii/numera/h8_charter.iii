@@ -1,0 +1,213 @@
+/* STDLIB/iii/numera/h8_charter.iii -- the H8 falsifier as a run_charter constitutional clause.
+ *
+ * H8 ("one record"): every operation emits a witness fragment (M6); the chain is
+ * append-only AND provably forgettable (M20); algebraic_time (M21) is its clock.
+ * This module makes H8 a *constitutional clause* with a paired verify-AND-falsify
+ * predicate (the mig6 falsifier-per-clause discipline) folded by a terminal-gate
+ * run_charter: the charter is GREEN iff every clause both HOLDS on its good witness
+ * AND CATCHES its bad witness.  This mirrors the GENERIC mechanism in h2_charter.iii
+ * (verify(good) AND falsify(bad)), specialised to the witness_hook (aether M07) spine.
+ *
+ * The H8 clause's two runtime-checkable facets, exercised on the witness_hook itself:
+ *   verify  -- the operation IS witnessed AND its redaction is a verifiable hole.
+ *              Publish a fragment: its wh_get_frag_id is non-zero (the op left a
+ *              record).  Then wh_redact it: wh_is_redacted == 1, the stored frag_id
+ *              is UNCHANGED (continuity preserved -- the prev-links/chain-root still
+ *              resolve), and wh_redaction_commit equals keccak256(original payload)
+ *              (the content is gone, but a verifiable commitment proves what was
+ *              there).  This is *why* forgetting does not break the append-only chain:
+ *              the clause proves the premise on a live fragment.
+ *   falsify -- redaction PRESERVES the frag_id (no dropped/changed link).  Capture the
+ *              frag_id before AND after wh_redact; the clause CATCHES any redaction
+ *              that mutated the id (which would sever chain continuity) by requiring
+ *              the two ids be byte-equal.  HOLDS = verify & falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing-clause index)
+ * unless all hold.  The negative arm in h8_selftest registers a deliberately-false
+ * canary clause (it claims a redacted fragment's frag_id CHANGED -- which it does NOT,
+ * since wh_redact leaves the id intact) and proves the gate goes RED -- the gate is a
+ * real falsifier, not vacuously green.
+ *
+ * Each verify/falsify arm re-inits the witness chain (wh_init) and publishes its OWN
+ * fresh fragment, so every fold is deterministic and re-runnable: the fragment is
+ * always idx 0 at algebraic_time 1, identical preimage, identical frag_id.
+ *
+ * Hexad: kind_witness + kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: witness_hook.iii + keccak256.iii only.  No ML, no float, no u64 division.
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores; masked idx.
+ */
+module numera_h8_charter
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_redact(idx: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_is_redacted(idx: u64) -> u8 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_redaction_commit(idx: u64, out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+
+const H8_OK              : i32 =  0i32
+const H8_MAX_CLAUSES     : u32 = 64u32
+const H8_KIND_RECORD     : u8  = 0u8    /* the H8 clause: witnessed AND redaction is a verifiable hole */
+const H8_KIND_CANARY     : u8  = 1u8    /* a deliberately-false clause (negative arm only) */
+const H8_VERDICT_GREEN   : u64 = 99u64  /* > H8_MAX_CLAUSES, so never a RED index */
+const H8_U32MASK         : u64 = 0xFFFFFFFFu64
+const H8_PAY_LEN         : u32 = 32u32  /* canonical test-payload length */
+const H8_BAD_IDX         : u64 = 0xFFFFFFFFFFFFFFFFu64  /* wh_publish failure sentinel */
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var H8_CLAUSE_KIND  : [u8; 64]
+var H8_CLAUSE_COUNT : u32 = 0u32
+
+/* --- test buffers + scratch (module-scope, Trap 7; serialized R-1 use) --- */
+var H8_PROD     : [u8; 32]   /* canonical producer id */
+var H8_OP       : [u8; 32]   /* canonical op id */
+var H8_ZERO     : [u8; 32]   /* canonical zero id (in/out commit, antecedents) */
+var H8_PAY      : [u8; 32]   /* the original payload (committed-to, then forgotten) */
+var H8_ID_PRE   : [u8; 32]   /* frag_id captured BEFORE redaction */
+var H8_ID_POST  : [u8; 32]   /* frag_id captured AFTER redaction */
+var H8_COMMIT   : [u8; 32]   /* wh_redaction_commit result */
+var H8_REF      : [u8; 32]   /* keccak256(original payload) reference */
+var H8_OUTID    : [u8; 32]   /* wh_publish out_frag_id sink -- SEPARATE from H8_ZERO so the zero in/out-commit buffer is never clobbered (deterministic preimage every fold) */
+
+/* Reset the registry, init the witness chain, and load canonical fixtures. */
+fn h8_init() -> i32 @export {
+    H8_CLAUSE_COUNT = 0u32
+    wh_init(0u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        H8_PROD[i] = (i + 1u64) as u8
+        H8_OP[i]   = (i + 50u64) as u8
+        H8_ZERO[i] = 0u8
+        H8_PAY[i]  = (i + 7u64) as u8
+        i = i + 1u64
+    }
+    return H8_OK
+}
+
+/* Publish one canonical fragment into a fresh chain at idx 0; -> the fragment index
+ * (0 on success, H8_BAD_IDX on failure).  Re-inits the chain so the publish is
+ * deterministic (time 1, fixed preimage, fixed frag_id) on every fold. */
+fn h8_publish_one() -> u64 {
+    wh_init(0u64)
+    let prod : *u8 = (&H8_PROD as u64) as *u8
+    let op   : *u8 = (&H8_OP   as u64) as *u8
+    let z    : *u8 = (&H8_ZERO as u64) as *u8
+    let pay  : *u8 = (&H8_PAY  as u64) as *u8
+    let oid  : *u8 = (&H8_OUTID as u64) as *u8
+    return wh_publish(prod, op, z, z, 0u8, 0u8, 9u16, z, 0u32, pay, H8_PAY_LEN, oid)
+}
+
+/* The H8 clause VERIFY arm: the op IS witnessed (frag_id non-zero), redaction sets the
+ * flag, leaves the frag_id intact (continuity), and commits to keccak256(original).
+ * Returns 1 iff all hold. */
+fn h8_verify() -> u8 @export {
+    if h8_publish_one() != 0u64 { return 0u8 }
+    /* reference commitment = keccak256(original payload), taken BEFORE redaction */
+    keccak256_oneshot((&H8_PAY as u64), H8_PAY_LEN as u64, (&H8_REF as u64))
+    /* the op left a record: frag_id is non-zero */
+    wh_get_frag_id(0u64, (&H8_ID_PRE as u64) as *u8)
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 { acc = acc | (H8_ID_PRE[i] as u32)  i = i + 1u64 }
+    if acc == 0u32 { return 0u8 }
+    /* redact: flag set, id unchanged, commitment == keccak256(original) */
+    if wh_redact(0u64) != H8_OK { return 0u8 }
+    if wh_is_redacted(0u64) != 1u8 { return 0u8 }
+    wh_get_frag_id(0u64, (&H8_ID_POST as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if H8_ID_POST[i] != H8_ID_PRE[i] { return 0u8 }  i = i + 1u64 }
+    wh_redaction_commit(0u64, (&H8_COMMIT as u64) as *u8)
+    i = 0u64
+    while i < 32u64 { if H8_COMMIT[i] != H8_REF[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+/* The H8 clause FALSIFY arm: redaction PRESERVES the frag_id.  Capture the id before
+ * and after wh_redact; return 1 iff they are byte-equal (a redaction that dropped or
+ * changed the id -- severing chain continuity -- would make them differ, and the clause
+ * CATCHES it). */
+fn h8_falsify() -> u8 @export {
+    if h8_publish_one() != 0u64 { return 0u8 }
+    wh_get_frag_id(0u64, (&H8_ID_PRE as u64) as *u8)
+    if wh_redact(0u64) != H8_OK { return 0u8 }
+    wh_get_frag_id(0u64, (&H8_ID_POST as u64) as *u8)
+    let mut i : u64 = 0u64
+    while i < 32u64 { if H8_ID_PRE[i] != H8_ID_POST[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+/* The canary's holds: a redacted fragment's frag_id CHANGED.  It does NOT (wh_redact
+ * leaves the id intact), so this is 1 iff pre != post -- always 0.  Used ONLY to prove
+ * run_charter goes RED on a genuinely-false clause. */
+fn h8_canary_holds() -> u8 {
+    if h8_publish_one() != 0u64 { return 0u8 }
+    wh_get_frag_id(0u64, (&H8_ID_PRE as u64) as *u8)
+    if wh_redact(0u64) != H8_OK { return 0u8 }
+    wh_get_frag_id(0u64, (&H8_ID_POST as u64) as *u8)
+    let mut differ : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if H8_ID_PRE[i] != H8_ID_POST[i] { differ = 1u8 }  i = i + 1u64 }
+    return differ
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn h8_clause_eval(idx: u32) -> u8 {
+    let k : u8 = H8_CLAUSE_KIND[(idx as u64) & H8_U32MASK]
+    if k == H8_KIND_RECORD {
+        if h8_verify() != 1u8 { return 0u8 }
+        if h8_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == H8_KIND_CANARY { return h8_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k.  Returns the 0-based slot, or -1 if the registry is full. */
+fn h8_register(k: u8) -> i32 {
+    let n : u32 = H8_CLAUSE_COUNT
+    if n >= H8_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & H8_U32MASK
+    H8_CLAUSE_KIND[slot] = k
+    H8_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED). */
+fn h8_run_charter() -> u64 @export {
+    let n : u32 = H8_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if h8_clause_eval(i) != 1u8 { return ((i as u64) & H8_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return H8_VERDICT_GREEN
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves: the op is witnessed and its redaction is a verifiable hole (1); redaction
+ * preserves the frag_id (2); the canary is genuinely false (3); run_charter GREEN with
+ * the H8 clause (4,5); GREEN is reproducible across re-folds (6,7); and -- the
+ * prove-the-negative arm -- run_charter goes RED, returning the failing canary's
+ * 1-based index (=2), proving the gate is a real falsifier, not vacuously green (8,9). */
+fn h8_selftest() -> u64 @export {
+    h8_init()
+    if h8_verify() != 1u8 { return 1u64 }
+    if h8_falsify() != 1u8 { return 2u64 }
+    if h8_canary_holds() != 0u8 { return 3u64 }
+    if h8_register(H8_KIND_RECORD) != 0i32 { return 4u64 }
+    if h8_run_charter() != H8_VERDICT_GREEN { return 5u64 }
+    if h8_run_charter() != H8_VERDICT_GREEN { return 6u64 }
+    if h8_run_charter() != H8_VERDICT_GREEN { return 7u64 }
+    if h8_register(H8_KIND_CANARY) != 1i32 { return 8u64 }
+    if h8_run_charter() != 2u64 { return 9u64 }
+    return 99u64
+}
+
+/* h8_charter EMBODIES the H8 invariant as a self-falsifying constitutional clause:
+ * every operation leaves one record (a witness fragment with a non-zero id), and that
+ * record is provably forgettable WITHOUT breaking the append-only chain -- redaction
+ * zeroes the content, commits to keccak256(original) as a verifiable hole, and leaves
+ * the frag_id (the chain link) byte-unchanged.  The terminal gate proves itself RED on
+ * a clause that falsely claims redaction mutated the id. */

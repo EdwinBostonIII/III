@@ -1,0 +1,42 @@
+/* 606 -- KATABASIS increment 12: the gate decision over a cycle term (plan 4.2).
+ * Builds cycle terms (Inc 11) and runs the full gate decision: seal/cap gating,
+ * then the hexad admission + SID-derivability read straight off the term.
+ * Verdicts: OK=0 REJECT_SEAL=1 REJECT_CAP=2 REJECT_HEXAD=3.
+ * Exit 99 = all hold; 1..7 = the index of the failing assertion. */
+module corpus_606_katabasis_gate
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_decide_term(cycle_idx: u32, seal_ok: u8, cap_ok: u8) -> u32 from "gate.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+
+    /* a safe WriteMetal(F2) cycle to SHARED (0x20000), all-POS action, cap 42 */
+    let s_act : u32 = katabasis_cycle_act(2u32, 1u32, 0x20000u64, 728u32)
+    let safe  : u32 = katabasis_cycle_under_cap(s_act, 42u32)
+    if katabasis_gate_decide_term(safe, 1u8, 1u8) != 0u32 { return 1u64 }   /* OK */
+    if katabasis_gate_decide_term(safe, 0u8, 1u8) != 1u32 { return 2u64 }   /* REJECT_SEAL */
+    if katabasis_gate_decide_term(safe, 1u8, 0u8) != 2u32 { return 3u64 }   /* REJECT_CAP */
+
+    /* a brick WriteMetal(F2) cycle to HSAVE (0x1000): REJECT_HEXAD even seal+cap ok */
+    let b_act : u32 = katabasis_cycle_act(2u32, 1u32, 0x1000u64, 728u32)
+    let brick : u32 = katabasis_cycle_under_cap(b_act, 42u32)
+    if katabasis_gate_decide_term(brick, 1u8, 1u8) != 3u32 { return 4u64 }  /* REJECT_HEXAD */
+
+    /* a CoprocDispatch(F9) to BAR0 -> OK; to the LAPIC -> REJECT_HEXAD */
+    let g_act : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+    let gpu   : u32 = katabasis_cycle_under_cap(g_act, 7u32)
+    if katabasis_gate_decide_term(gpu, 1u8, 1u8) != 0u32 { return 5u64 }    /* OK (BAR0) */
+    let l_act : u32 = katabasis_cycle_act(9u32, 2u32, 0xFEE00000u64, 728u32)
+    let lapic : u32 = katabasis_cycle_under_cap(l_act, 7u32)
+    if katabasis_gate_decide_term(lapic, 1u8, 1u8) != 3u32 { return 6u64 }  /* REJECT_HEXAD (LAPIC) */
+
+    /* a ReadMetal(F1) cycle (target-kind NONE) -> OK by class */
+    let r_act : u32 = katabasis_cycle_act(1u32, 0u32, 0u64, 728u32)
+    let rd    : u32 = katabasis_cycle_under_cap(r_act, 7u32)
+    if katabasis_gate_decide_term(rd, 1u8, 1u8) != 0u32 { return 7u64 }     /* OK */
+
+    return 99u64
+}

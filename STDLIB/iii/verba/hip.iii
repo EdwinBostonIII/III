@@ -1,0 +1,486 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\hip.iii
+ *
+ * III STDLIB - verba::hip (Phase E.3 of Intent Calculus v1.0)
+ *
+ * HIP NL surface pipeline: text -> tokens -> fragments -> intent.
+ *
+ *   stage 0 (init)        : seal lexicon
+ *   stage 1 (lex)         : nl_lex_tokenize
+ *   stage 2 (parse)       : nl_parse_recognize -> fragments + kind
+ *   stage 3 (project)     : fragments -> partial intent (verb chooses
+ *                           primitive; roles fill partial_args)
+ *   stage 4 (complete)    : enumerate candidate intents when the verb
+ *                           lemma has multiple primitive mappings
+ *   stage 5 (resonance)   : score candidates by role coverage
+ *   stage 6 (disambiguate): unique (1 high-resonance) /
+ *                           ambiguous (>=2 within 2x ratio) /
+ *                           no-match (no candidate)
+ *
+ * Output classes:
+ *   HIP_CLASS_UNIQUE      = 0  (single confident intent)
+ *   HIP_CLASS_AMBIGUOUS   = 1  (multiple candidates; user disambiguates)
+ *   HIP_CLASS_NO_MATCH    = 2  (cannot project)
+ *
+ * Determinism: same (text) -> same (class, candidate_list_in_order).
+ *
+ * Hexad: kind_compose. Ring: R3. K: 0.95.
+ */
+
+module verba_hip
+
+extern @abi(c-msvc-x64) fn nl_lex_init_all() -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_tokenize(src_ptr: u64, packed_lens: u64, out_tokens_ptr: u64, out_count_ptr: u64) -> i32 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_lex_pack_lens(src_len: u32, max_tokens: u32) -> u64 from "nl_lex.iii"
+
+extern @abi(c-msvc-x64) fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_meta_ptr: u64) -> i32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+extern @abi(c-msvc-x64) fn nl_parse_frag_quantifier(frags_ptr: u64, idx: u32) -> u32 from "nl_parse.iii"
+
+extern @abi(c-msvc-x64) fn nl_token_type(tok: u64) -> u8 from "nl_lex.iii"
+extern @abi(c-msvc-x64) fn nl_token_word_id(tok: u64) -> u32 from "nl_lex.iii"
+
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_convey(src_handle: u64, dst_cap: u64, byte_count: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_query(kind: u64, id: u64) -> u64 from "intent.iii"
+
+const HIP_CLASS_UNIQUE     : u32 = 0u32
+const HIP_CLASS_AMBIGUOUS  : u32 = 1u32
+const HIP_CLASS_NO_MATCH   : u32 = 2u32
+
+const HIP_OK         : i32 =  0i32
+const HIP_E_NULL     : i32 = -1i32
+const HIP_E_TOKENS   : i32 = -2i32
+const HIP_E_PARSE    : i32 = -3i32
+
+const HIP_MAX_TOKENS : u32 = 256u32
+const HIP_MAX_CANDIDATES : u32 = 8u32
+
+/* nl_parse role IDs. */
+const HIPN_ROLE_VERB        : u32 =  1u32
+const HIPN_ROLE_AGENT       : u32 =  2u32
+const HIPN_ROLE_PATIENT     : u32 =  3u32
+const HIPN_ROLE_SOURCE      : u32 =  4u32
+const HIPN_ROLE_DESTINATION : u32 =  5u32
+const HIPN_ROLE_INSTRUMENT  : u32 =  6u32
+const HIPN_ROLE_LOCATION    : u32 =  7u32
+const HIPN_ROLE_BENEFICIARY : u32 =  8u32
+const HIPN_ROLE_OF          : u32 =  9u32
+const HIPN_ROLE_TOPIC       : u32 = 10u32
+
+const HIPN_KIND_UNKNOWN       : u32 = 0u32
+const HIPN_KIND_IMPERATIVE    : u32 = 1u32
+const HIPN_KIND_DECLARATIVE   : u32 = 2u32
+const HIPN_KIND_INTERROGATIVE : u32 = 3u32
+const HIPN_ROLE_TOPIC_C       : u32 = 10u32   /* mirrors NLP_ROLE_TOPIC */
+
+/* Verb word_ids (from nl_lex sealed lexicon). */
+const VW_SEND     : u32 =  1u32
+const VW_GET      : u32 =  2u32
+const VW_PUT      : u32 =  3u32
+const VW_READ     : u32 =  4u32
+const VW_WRITE    : u32 =  5u32
+const VW_STORE    : u32 =  6u32
+const VW_LOAD     : u32 =  7u32
+const VW_ENCRYPT  : u32 =  8u32
+const VW_DECRYPT  : u32 =  9u32
+const VW_HASH     : u32 = 10u32
+const VW_SIGN     : u32 = 11u32
+const VW_VERIFY   : u32 = 12u32
+const VW_ALLOCATE : u32 = 13u32
+const VW_OPEN     : u32 = 14u32
+const VW_CLOSE    : u32 = 15u32
+const VW_CONNECT  : u32 = 16u32
+const VW_LISTEN   : u32 = 18u32
+const VW_PARSE    : u32 = 20u32
+const VW_COPY     : u32 = 23u32
+const VW_MOVE     : u32 = 24u32
+const VW_CREATE   : u32 = 26u32
+const VW_DESTROY  : u32 = 27u32
+const VW_SEAL_V   : u32 = 28u32
+const VW_PROVE    : u32 = 32u32
+const VW_QUERY    : u32 = 33u32
+const VW_COMPOSE  : u32 = 35u32
+const VW_FREE     : u32 = 41u32
+const VW_LOCK     : u32 = 127u32
+const VW_UNLOCK   : u32 = 128u32
+const VW_FORK     : u32 = 129u32
+const VW_SPAWN    : u32 = 130u32
+const VW_WAIT     : u32 = 131u32
+const VW_SIGNAL_V : u32 = 132u32
+const VW_BLOCK    : u32 = 133u32
+const VW_RELEASE  : u32 = 134u32
+const VW_CANCEL   : u32 = 135u32
+const VW_FLUSH    : u32 = 136u32
+const VW_SCHEDULE : u32 = 137u32
+const VW_DISPATCH : u32 = 138u32
+
+/* Module-scope buffers for the resolve flow.
+ * All callers serialise on hip_resolve. */
+var HIP_TOK_BUF : [u8; 2048]    /* HIP_MAX_TOKENS * 8 = 2048 */
+var HIP_FRAG_BUF : [u8; 1024]   /* 64 frags * 16 bytes = 1024 */
+/* iiis-0 bug: &u32_global emits load-value, not load-address. Use
+ * byte arrays for anything we need to take the address of. */
+var HIP_TOKEN_COUNT_BUF : [u8; 4]
+var HIP_PARSE_META : [u8; 8]    /* count(u32) + kind(u32) for nl_parse */
+var HIP_INITED_BUF : [u8; 1]    /* lazy init flag */
+var HIP_INITED : u8 = 0u8       /* legacy: still used for direct compares */
+/* Byte-wise reader/writer to dodge the iiis-0 u32-Pointer Store Width
+ * trap. Stores via *u8 to ensure the low 4 bytes are written
+ * exactly, without spilling into adjacent slots. */
+fn _hip_read_u32(addr: u64) -> u32 {
+    let p0 : *u8 = addr as *u8
+    let p1 : *u8 = (addr + 1u64) as *u8
+    let p2 : *u8 = (addr + 2u64) as *u8
+    let p3 : *u8 = (addr + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = ((p1[0u64] as u32) & 0xFFu32) << 8u32
+    let b2 : u32 = ((p2[0u64] as u32) & 0xFFu32) << 16u32
+    let b3 : u32 = ((p3[0u64] as u32) & 0xFFu32) << 24u32
+    return b0 | b1 | b2 | b3
+}
+fn _hip_write_u32(addr: u64, v: u32) -> i32 {
+    let p0 : *u8 = addr as *u8
+    let p1 : *u8 = (addr + 1u64) as *u8
+    let p2 : *u8 = (addr + 2u64) as *u8
+    let p3 : *u8 = (addr + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn _hip_role_of(frags_buf: u64, count: u32, role: u32) -> u32 {
+    let f_l : u64 = frags_buf
+    let n_l : u32 = count
+    let r_l : u32 = role
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while i < n_l {
+        if found == 0xFFFFFFFFu32 {
+            if nl_parse_frag_role(f_l, i) == r_l { found = i }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+fn _hip_verb_word_id(frags_buf: u64, tok_buf: u64, count: u32) -> u32 {
+    let f_l : u64 = frags_buf
+    let t_l : u64 = tok_buf
+    let n_l : u32 = count
+    let v_idx : u32 = _hip_role_of(f_l, n_l, HIPN_ROLE_VERB)
+    if v_idx == 0xFFFFFFFFu32 { return 0u32 }
+    let v_tok_idx : u32 = nl_parse_frag_head(f_l, v_idx)
+    let pp : *u64 = (t_l + ((v_tok_idx as u64) * 8u64)) as *u64
+    let tok : u64 = pp[0u64]
+    return nl_token_word_id(tok)
+}
+
+fn _hip_role_quantifier(frags_buf: u64, count: u32, role: u32) -> u32 {
+    let i : u32 = _hip_role_of(frags_buf, count, role)
+    if i == 0xFFFFFFFFu32 { return 0u32 }
+    return nl_parse_frag_quantifier(frags_buf, i)
+}
+
+/* head_word_id: extract the head NOUN's word_id for a given role. */
+fn _hip_role_head_word_id(frags_buf: u64, tok_buf: u64, count: u32, role: u32) -> u32 {
+    let f_l : u64 = frags_buf
+    let t_l : u64 = tok_buf
+    let n_l : u32 = count
+    let r_l : u32 = role
+    let i   : u32 = _hip_role_of(f_l, n_l, r_l)
+    if i == 0xFFFFFFFFu32 { return 0u32 }
+    let head_tok_idx : u32 = nl_parse_frag_head(f_l, i)
+    if head_tok_idx == 0xFFFFFFFFu32 { return 0u32 }
+    let pp : *u64 = (t_l + ((head_tok_idx as u64) * 8u64)) as *u64
+    return nl_token_word_id(pp[0u64])
+}
+
+fn _hip_emit_intent(out_cands_ptr: u64, idx: u32, max_cands: u32, intent_id: u64) -> u32 {
+    let o_l : u64 = out_cands_ptr
+    let i_l : u32 = idx
+    let m_l : u32 = max_cands
+    if i_l >= m_l { return 0xFFFFFFFFu32 }
+    let pp : *u64 = (o_l + ((i_l as u64) * 8u64)) as *u64
+    pp[0u64] = intent_id
+    return i_l + 1u32
+}
+
+/* Pack project_verb's metadata into a single u64:
+ *   bits 0..15  : verb_word
+ *   bits 16..31 : frag_count
+ *   bits 32..47 : start_idx
+ *   bits 48..63 : max_cands */
+fn _hip_pack_pv_meta(verb_word: u32, frag_count: u32, start_idx: u32, max_cands: u32) -> u64 {
+    let v_l : u64 = (verb_word as u64) & 0xFFFFu64
+    let f_l : u64 = ((frag_count as u64) & 0xFFFFu64) << 16u64
+    let i_l : u64 = ((start_idx as u64) & 0xFFFFu64) << 32u64
+    let m_l : u64 = ((max_cands as u64) & 0xFFFFu64) << 48u64
+    return v_l | f_l | i_l | m_l
+}
+
+/* Map a verb word_id to a sequence of (intent_constructor) calls,
+ * each producing a candidate intent_id.  Returns the new candidate
+ * count (or 0xFFFFFFFFu32 on overflow). */
+fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_ptr: u64) -> u32 {
+    let pm  : u64 = packed_meta
+    let v   : u32 = (pm & 0xFFFFu64) as u32
+    let fc  : u32 = ((pm >> 16u64) & 0xFFFFu64) as u32
+    let m_l : u32 = ((pm >> 48u64) & 0xFFFFu64) as u32
+    let f_l : u64 = frags_buf
+    let t_l : u64 = tok_buf
+    let o_l : u64 = out_cands_ptr
+    let mut k : u32 = ((pm >> 32u64) & 0xFFFFu64) as u32
+
+    /* Gather role values once. */
+    let src_w : u32 = _hip_role_head_word_id(f_l, t_l, fc, HIPN_ROLE_SOURCE)
+    let dst_w : u32 = _hip_role_head_word_id(f_l, t_l, fc, HIPN_ROLE_DESTINATION)
+    let pat_w : u32 = _hip_role_head_word_id(f_l, t_l, fc, HIPN_ROLE_PATIENT)
+    let inst_w: u32 = _hip_role_head_word_id(f_l, t_l, fc, HIPN_ROLE_INSTRUMENT)
+    let qty   : u32 = _hip_role_quantifier(f_l, fc, HIPN_ROLE_PATIENT)
+    let dst_q : u32 = _hip_role_quantifier(f_l, fc, HIPN_ROLE_DESTINATION)
+
+    let pat_h : u64 = (pat_w as u64) & 0xFFFFFFFFu64
+    let src_h : u64 = (src_w as u64) & 0xFFFFFFFFu64
+    let dst_h : u64 = (dst_w as u64) & 0xFFFFFFFFu64
+    let inst_h: u64 = (inst_w as u64) & 0xFFFFFFFFu64
+
+    /* CONVEY group: send / put / store / write / load / get / read /
+     * copy / move. Slots: (src_handle, dst_cap, byte_count). */
+    if v == VW_SEND {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_PUT {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_STORE {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_WRITE {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_LOAD {
+        /* "load X from Y" -> CONVEY(Y, X, qty). source/dest swap. */
+        let id : u64 = intent_convey(src_h, pat_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_GET {
+        let id : u64 = intent_convey(src_h, pat_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_READ {
+        let id : u64 = intent_convey(src_h, pat_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_COPY {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_MOVE {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_OPEN {
+        /* "open file" -> FORM(file_form) AND ACT(open_transition). */
+        let id1 : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id1)
+        if k != 0xFFFFFFFFu32 {
+            let id2 : u64 = intent_act(pat_h, 14u64)   /* 14 = "open" verb id */
+            k = _hip_emit_intent(o_l, k, m_l, id2)
+        }
+    } else if v == VW_CLOSE {
+        let id : u64 = intent_act(pat_h, 15u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_FREE {
+        let id : u64 = intent_act(pat_h, 41u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_CREATE {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_ALLOCATE {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_DESTROY {
+        let id : u64 = intent_act(pat_h, 27u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_ENCRYPT {
+        /* "encrypt X with K" admits two readings:
+         *  1) BIND-style: bind X to a sealed form via key K
+         *  2) CONVEY-style: convey X through cipher with K
+         * Emit both candidates -> AMBIGUOUS. */
+        let id1 : u64 = intent_convey(pat_h, inst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id1)
+        if k != 0xFFFFFFFFu32 {
+            let id2 : u64 = intent_form(pat_h)   /* form-of-encrypted-X */
+            k = _hip_emit_intent(o_l, k, m_l, id2)
+        }
+    } else if v == VW_DECRYPT {
+        let id1 : u64 = intent_convey(pat_h, inst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id1)
+        if k != 0xFFFFFFFFu32 {
+            let id2 : u64 = intent_form(pat_h)
+            k = _hip_emit_intent(o_l, k, m_l, id2)
+        }
+    } else if v == VW_HASH {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_SIGN {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_VERIFY {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_PROVE {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_QUERY {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_PARSE {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_CONNECT {
+        let id : u64 = intent_act(dst_h, 16u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_LISTEN {
+        let id : u64 = intent_act(pat_h, 18u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_SEAL_V {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_COMPOSE {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_LOCK {
+        let id : u64 = intent_act(pat_h, 127u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_UNLOCK {
+        let id : u64 = intent_act(pat_h, 128u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_FORK {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_SPAWN {
+        let id : u64 = intent_form(pat_h)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_WAIT {
+        let id : u64 = intent_act(pat_h, 131u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_SIGNAL_V {
+        let id : u64 = intent_act(pat_h, 132u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_BLOCK {
+        let id : u64 = intent_act(pat_h, 133u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_RELEASE {
+        let id : u64 = intent_act(pat_h, 134u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_CANCEL {
+        let id : u64 = intent_act(pat_h, 135u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_FLUSH {
+        let id : u64 = intent_act(pat_h, 136u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_SCHEDULE {
+        let id : u64 = intent_act(pat_h, 137u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else if v == VW_DISPATCH {
+        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        k = _hip_emit_intent(o_l, k, m_l, id)
+    } else {
+        /* unknown verb -> no candidate */
+    }
+    return k
+}
+
+fn _hip_classify(cand_count: u32) -> u32 {
+    if cand_count == 0u32 { return HIP_CLASS_NO_MATCH }
+    if cand_count == 1u32 { return HIP_CLASS_UNIQUE }
+    return HIP_CLASS_AMBIGUOUS
+}
+
+/* hip_resolve: top-level. text -> tokens -> fragments -> candidate
+ * intents -> class.
+ * 4-arg signature (iiis-0 5+arg trap):
+ *   out_meta_ptr -> [u32 count, u32 class] (8 bytes total)
+ */
+fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 @export {
+    let s_l : u64 = text_ptr
+    let n_l : u32 = text_len
+    let oc  : u64 = out_cands_ptr
+    let om  : u64 = out_meta_ptr
+    if s_l == 0u64 { return HIP_E_NULL }
+    if oc  == 0u64 { return HIP_E_NULL }
+    if om  == 0u64 { return HIP_E_NULL }
+
+    if HIP_INITED == 0u8 {
+        nl_lex_init_all()
+        HIP_INITED = 1u8
+    }
+
+    /* Module-scoped meta scratch (use byte-array addresses; iiis-0
+     * &u32_global is broken). */
+    let parse_meta_addr : u64 = (&HIP_PARSE_META) as u64
+    let tok_count_addr  : u64 = (&HIP_TOKEN_COUNT_BUF) as u64
+    let tok_buf : u64 = (&HIP_TOK_BUF) as u64
+    let frag_buf : u64 = (&HIP_FRAG_BUF) as u64
+
+    _hip_write_u32(tok_count_addr, 0u32)
+    _hip_write_u32(parse_meta_addr, 0u32)
+    _hip_write_u32(parse_meta_addr + 4u64, 0u32)
+
+    let lens_packed : u64 = nl_lex_pack_lens(n_l, HIP_MAX_TOKENS)
+    let lex_rc : i32 = nl_lex_tokenize(s_l, lens_packed, tok_buf, tok_count_addr)
+    if lex_rc != 0i32 { return HIP_E_TOKENS }
+
+    let token_count : u32 = _hip_read_u32(tok_count_addr)
+
+    /* Parse. */
+    let par_rc : i32 = nl_parse_recognize(tok_buf, token_count, frag_buf, parse_meta_addr)
+    let frag_count : u32 = _hip_read_u32(parse_meta_addr)
+    let kind : u32 = _hip_read_u32(parse_meta_addr + 4u64)
+
+    if par_rc != 0i32 {
+        _hip_write_u32(om, 0u32)
+        _hip_write_u32(om + 4u64, HIP_CLASS_NO_MATCH)
+        return HIP_OK
+    }
+
+    /* Project. */
+    let mut k : u32 = 0u32
+    if kind == HIPN_KIND_INTERROGATIVE {
+        /* INTERROGATIVE: subject (AGENT) + predicate (TOPIC) -> query. */
+        let agent_w : u32 = _hip_role_head_word_id(frag_buf, tok_buf, frag_count, HIPN_ROLE_AGENT)
+        let topic_w : u32 = _hip_role_head_word_id(frag_buf, tok_buf, frag_count, HIPN_ROLE_TOPIC_C)
+        let id_q : u64 = intent_query((topic_w as u64) & 0xFFFFFFFFu64, (agent_w as u64) & 0xFFFFFFFFu64)
+        k = _hip_emit_intent(oc, k, HIP_MAX_CANDIDATES, id_q)
+        if k == 0xFFFFFFFFu32 { k = HIP_MAX_CANDIDATES }
+    } else {
+        let v_word : u32 = _hip_verb_word_id(frag_buf, tok_buf, frag_count)
+        if v_word != 0u32 {
+            let pv_meta : u64 = _hip_pack_pv_meta(v_word, frag_count, k, HIP_MAX_CANDIDATES)
+            k = _hip_project_verb(pv_meta, frag_buf, tok_buf, oc)
+            if k == 0xFFFFFFFFu32 { k = HIP_MAX_CANDIDATES }
+        }
+    }
+
+    _hip_write_u32(om, k)
+    _hip_write_u32(om + 4u64, _hip_classify(k))
+    return HIP_OK
+}
+
+/* Direct accessors for the projected fragments + state (diagnostic).
+ * Read from the meta byte-buffers because iiis-0's &u32_global is
+ * broken (emits load-value instead of load-address). */
+
+fn hip_last_token_count() -> u32 @export {
+    return _hip_read_u32((&HIP_TOKEN_COUNT_BUF) as u64)
+}
+fn hip_last_frag_count() -> u32 @export {
+    return _hip_read_u32((&HIP_PARSE_META) as u64)
+}
+fn hip_last_kind() -> u32 @export {
+    return _hip_read_u32(((&HIP_PARSE_META) as u64) + 4u64)
+}
+
+fn hip_class_unique() -> u32 @export    { return HIP_CLASS_UNIQUE }
+fn hip_class_ambiguous() -> u32 @export { return HIP_CLASS_AMBIGUOUS }
+fn hip_class_no_match() -> u32 @export  { return HIP_CLASS_NO_MATCH }

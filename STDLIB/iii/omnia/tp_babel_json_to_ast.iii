@@ -1,0 +1,20 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_babel_json_to_ast.iii
+ *
+ * Transform pattern: FORM_BABEL_JSON → FORM_AST_BINARY
+ * FROZEN SPEC §7B.6 slot 39; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Inverse of tp_ast_to_babel_json. Decodes the JSON envelope's
+ * payload_bytes (base64) and writes the bytes verbatim. Reuses the
+ * decoder logic of tp_babel_json_to_iii.
+ */
+
+module omnia_tp_babel_json_to_ast
+
+extern @abi(c-msvc-x64) fn tp_babel_json_to_iii(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_json_to_iii.iii"
+
+fn tp_babel_json_to_ast(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    /* The base64 decoder is the same regardless of the original payload form. */
+    return tp_babel_json_to_iii(src, src_len, dst_buf, dst_cap)
+}

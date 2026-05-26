@@ -1,0 +1,59 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_f64.iii
+ *
+ * III STDLIB - verba::glyph_f64 -- Glyph V3 form for f64 (IEEE 754
+ * 64-bit double, stored as the u64 bit-pattern).  payload_len = 8.
+ *
+ * Lattice plan Phase 14h Step 0169.  III's stdlib does not yet have
+ * native f64 arithmetic; this glyph form preserves the IEEE 754
+ * bit-pattern verbatim, allowing transports to round-trip f64 values
+ * even though III code can't compute on them directly.
+ *
+ * Public surface:
+ *   glyph_f64_form_id()                  -> u32 (0x14)
+ *   glyph_f64_pack_bits(bits, out_192)   -> i32
+ *   glyph_f64_unpack_bits(in_192)        -> u64
+ *   glyph_f64_validate(in_192)           -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.99.
+ */
+
+module verba_glyph_f64
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u64_le(p: u64, v: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u64_le(p: u64) -> u64 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_F64 : u32 = 0x14u32
+
+fn glyph_f64_form_id() -> u32 @export { return GV3_FORM_F64 }
+
+fn glyph_f64_pack_bits(bits: u64, out_192: u64) -> i32 @export {
+    let b_l : u64 = bits
+    let o_l : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_F64)
+    gv3_write_u32_le(o_l + 4u64, 8u32)
+    gv3_write_u64_le(o_l + 8u64, b_l)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_f64_unpack_bits(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_F64 { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 8u64)
+}
+
+fn glyph_f64_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_F64 { return 0u8 }
+    return gv3_validate(i_l)
+}

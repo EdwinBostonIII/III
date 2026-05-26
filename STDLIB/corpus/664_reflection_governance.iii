@@ -1,0 +1,10 @@
+/* 664 -- reflection_governance: the R-3 W32 gate mediating every reflection.
+ * Forbidden foundations-of-trust set (7 canonical path-string ids), uninited
+ * fail-safe (forbidden->1, invoke->E_NOT_INITED), M8 cap gate fails closed (no
+ * witness/dispatch), constitutional clause gates (cp_reflect_bound +
+ * cp_no_self_soundness; slot-0-present regression vs the u32 absence sentinel),
+ * and a successful governed invoke that dispatches to reflection_constrained
+ * (aggregate API) and enqueues the proof term (queue 0->1). */
+module corpus_664
+extern @abi(c-msvc-x64) fn rg_selftest() -> u64 from "reflection_governance.iii"
+fn main() -> u64 { return rg_selftest() }

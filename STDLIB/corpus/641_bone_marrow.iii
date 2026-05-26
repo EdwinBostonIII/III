@@ -1,0 +1,4 @@
+/* 641 — bone_marrow: Reed-Solomon erasure recovery + content-addressed self-heal. */
+module corpus_641
+extern @abi(c-msvc-x64) fn bm_selftest() -> u64 from "bone_marrow.iii"
+fn main() -> u64 { return bm_selftest() }

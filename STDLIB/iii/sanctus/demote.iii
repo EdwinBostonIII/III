@@ -1,0 +1,122 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\sanctus\demote.iii
+ *
+ * III STDLIB - sanctus::demote -- vocabulary demotion ledger.
+ *
+ * Lattice plan Phase 14n Step 0199.  Inverse of promote: strips a
+ * vocabulary entry from the active set.  Append-only ledger of
+ * demotions; each entry records (vocab_id, reason_hash_32, sequence
+ * number).  The actual active-flag toggle lives in promote.iii via
+ * promote_set_active(vocab_id, 0u8) -- this module records WHY the
+ * demotion happened and provides the audit trail.
+ *
+ * Public surface:
+ *   demote_record(vocab_id, reason_hash_32_ptr)             -> i32
+ *   demote_count()                                          -> u32
+ *   demote_was_demoted(vocab_id)                            -> u8
+ *   demote_at_vocab_id(seq)                                 -> u64
+ *   demote_at_reason_byte(seq, i)                           -> u32
+ *   demote_at_seq_num(seq)                                  -> u64
+ *   demote_clear()                                          -> i32
+ *
+ * Hexad: kind_origin.  Ring: R0.  K: 0.99.
+ */
+
+module sanctus_demote
+
+extern @abi(c-msvc-x64) fn promote_set_active(vocab_id: u64, active: u8) -> i32 from "promote.iii"
+
+const DMT_OK             : i32 =  0i32
+const DMT_E_NULL         : i32 = -1i32
+const DMT_E_FULL         : i32 = -2i32
+
+const DMT_SLOTS          : u32 = 256u32
+
+var DMT_LIVE      : [u8;  256]
+var DMT_VOCAB_ID  : [u64; 256]
+var DMT_REASON    : [u8;  8192]   /* 256 * 32 bytes */
+var DMT_SEQ       : [u64; 256]
+var DMT_NEXT_SEQ  : u64 = 0u64
+var DMT_USED      : u32 = 0u32
+
+fn demote_record(vocab_id: u64, reason_hash_32_ptr: u64) -> i32 @export {
+    let v_l : u64 = vocab_id
+    let r_l : u64 = reason_hash_32_ptr
+    if v_l == 0u64 { return DMT_E_NULL }
+    if r_l == 0u64 { return DMT_E_NULL }
+    if DMT_USED >= DMT_SLOTS { return DMT_E_FULL }
+    let s : u32 = DMT_USED
+    DMT_LIVE[s]     = 1u8
+    DMT_VOCAB_ID[s] = v_l
+    DMT_SEQ[s]      = DMT_NEXT_SEQ
+    DMT_NEXT_SEQ = DMT_NEXT_SEQ + 1u64
+    let dst_off : u64 = (s as u64) * 32u64
+    let dp : *u8 = (&DMT_REASON as u64 + dst_off) as *u8
+    let sp : *u8 = r_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    DMT_USED = DMT_USED + 1u32
+    /* Toggle the promote module's active flag. */
+    promote_set_active(v_l, 0u8)
+    return DMT_OK
+}
+
+fn demote_count() -> u32 @export {
+    return DMT_USED
+}
+
+fn demote_was_demoted(vocab_id: u64) -> u8 @export {
+    let v_l : u64 = vocab_id
+    if v_l == 0u64 { return 0u8 }
+    let mut s : u32 = 0u32
+    while s < DMT_USED {
+        if DMT_LIVE[s] == 1u8 {
+            if DMT_VOCAB_ID[s] == v_l { return 1u8 }
+        }
+        s = s + 1u32
+    }
+    return 0u8
+}
+
+fn demote_at_vocab_id(seq: u32) -> u64 @export {
+    let s_l : u32 = seq
+    if s_l >= DMT_USED { return 0u64 }
+    if DMT_LIVE[s_l] == 0u8 { return 0u64 }
+    return DMT_VOCAB_ID[s_l]
+}
+
+fn demote_at_reason_byte(seq: u32, i: u32) -> u32 @export {
+    let s_l : u32 = seq
+    let i_l : u32 = i
+    if s_l >= DMT_USED { return 0x100u32 }
+    if i_l >= 32u32 { return 0x100u32 }
+    if DMT_LIVE[s_l] == 0u8 { return 0x100u32 }
+    return DMT_REASON[(s_l as u64) * 32u64 + (i_l as u64)] as u32
+}
+
+fn demote_at_seq_num(seq: u32) -> u64 @export {
+    let s_l : u32 = seq
+    if s_l >= DMT_USED { return 0u64 }
+    if DMT_LIVE[s_l] == 0u8 { return 0u64 }
+    return DMT_SEQ[s_l]
+}
+
+fn demote_clear() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < DMT_SLOTS {
+        DMT_LIVE[s]     = 0u8
+        DMT_VOCAB_ID[s] = 0u64
+        DMT_SEQ[s]      = 0u64
+        s = s + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8192u32 {
+        DMT_REASON[i] = 0u8
+        i = i + 1u32
+    }
+    DMT_NEXT_SEQ = 0u64
+    DMT_USED = 0u32
+    return DMT_OK
+}

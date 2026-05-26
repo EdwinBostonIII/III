@@ -1,0 +1,36 @@
+/* STDLIB/iii/katabasis/admit.iii
+ *
+ * KATABASIS increment 15 -- the fully autonomous gate (plan 4.2).  Inc 12 gave
+ * the decision over a cycle term but took seal_ok / cap_ok as inputs; Inc 13
+ * (the content-address seal) and Inc 14 (capability verification) made both
+ * self-computable.  This module closes the loop: given a cycle term and the
+ * claimed seal, the Gate computes EVERYTHING itself --
+ *
+ *   seal_ok = katabasis_cycle_seal_verify(cycle, claimed_seal)   (Inc 13)
+ *   cap_ok  = katabasis_cap_check(family, cap)                    (Inc 14)
+ *   then katabasis_gate_decide_term adds the hexad + SID checks   (Inc 12/5/3)
+ *
+ * and returns the §4.2 verdict.  No external boolean inputs: the verdict is a
+ * total function of the cycle term, the claimed seal, and the capability state.
+ * KAT: corpus 609.  Ring R0.  K 1.00.
+ */
+module katabasis_admit
+
+extern @abi(c-msvc-x64) fn katabasis_cycle_family(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_cap(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_seal_verify(cycle_idx: u32, claimed_addr: u64) -> u8 from "seal.iii"
+extern @abi(c-msvc-x64) fn katabasis_cap_check(family: u32, cap_id: u64) -> u8 from "caps.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_decide_term(cycle_idx: u32, seal_ok: u8, cap_ok: u8) -> u32 from "gate.iii"
+
+/* The fully autonomous gate admission: returns the §4.2 verdict for a sealed
+ * cycle term, computing seal / cap / hexad / SID entirely from the term, the
+ * claimed seal, and the capability system. */
+fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 @export {
+    let ci  : u32 = cycle_idx
+    let cs  : u64 = claimed_seal_addr
+    let so  : u8  = katabasis_cycle_seal_verify(ci, cs)
+    let fam : u32 = katabasis_cycle_family(ci)
+    let cap : u32 = katabasis_cycle_cap(ci)
+    let co  : u8  = katabasis_cap_check(fam, cap as u64)
+    return katabasis_gate_decide_term(ci, so, co)
+}

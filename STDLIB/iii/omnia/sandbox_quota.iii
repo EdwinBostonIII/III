@@ -1,0 +1,122 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\sandbox_quota.iii
+ *
+ * III STDLIB - omnia::sandbox_quota -- memory and CPU quota tracking.
+ *
+ * Lattice plan Phase 14l Step 0196.  Tracks per-sandbox cumulative
+ * memory bytes and CPU microseconds against the caps recorded by
+ * sandbox_ctor.  The "record" calls return 0 if the new total would
+ * exceed the cap (caller must NOT proceed); otherwise return 1 and
+ * commit the increment.
+ *
+ * The quota records are append-only -- there is no "release" call.
+ * Memory accounting is permanent for the sandbox's lifetime; arena
+ * resets do not reduce the recorded usage (the arena was charged when
+ * it allocated).  This conservative accounting prevents
+ * use-after-quota issues where an adversarial sandbox repeatedly
+ * allocates-and-resets to mask sustained memory pressure.
+ *
+ * Public surface:
+ *   sandbox_quota_record_alloc(sb_id, n_bytes)        -> u8
+ *   sandbox_quota_record_cpu(sb_id, micros)           -> u8
+ *   sandbox_quota_mem_used(sb_id)                     -> u64
+ *   sandbox_quota_cpu_used(sb_id)                     -> u64
+ *   sandbox_quota_mem_remaining(sb_id)                -> u64
+ *   sandbox_quota_cpu_remaining(sb_id)                -> u64
+ *   sandbox_quota_clear_all()                         -> i32
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_sandbox_quota
+
+extern @abi(c-msvc-x64) fn sandbox_mem_cap(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_cpu_cap(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+
+const SBQ_OK : i32 = 0i32
+
+const SBQ_SLOTS : u32 = 64u32
+
+var SBQ_MEM_USED : [u64; 64]
+var SBQ_CPU_USED : [u64; 64]
+
+fn _sbq_slot_of(sb_id: u64) -> u32 {
+    let id_l : u64 = sb_id
+    if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = (id_l - 1u64) & 0x3Fu64
+    let s_u32 : u32 = s as u32
+    if s_u32 >= SBQ_SLOTS { return 0xFFFFFFFFu32 }
+    return s_u32
+}
+
+fn sandbox_quota_record_alloc(sb_id: u64, n_bytes: u64) -> u8 @export {
+    let id_l : u64 = sb_id
+    let n_l  : u64 = n_bytes
+    let s : u32 = _sbq_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    let cap : u64 = sandbox_mem_cap(id_l)
+    if cap == 0u64 { return 0u8 }
+    let cur : u64 = SBQ_MEM_USED[s]
+    /* Overflow-safe sum check: if cur + n_l overflows or exceeds cap, reject. */
+    let head : u64 = cap - cur
+    if n_l > head { return 0u8 }
+    SBQ_MEM_USED[s] = cur + n_l
+    return 1u8
+}
+
+fn sandbox_quota_record_cpu(sb_id: u64, micros: u64) -> u8 @export {
+    let id_l : u64 = sb_id
+    let m_l  : u64 = micros
+    let s : u32 = _sbq_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    let cap : u64 = sandbox_cpu_cap(id_l)
+    if cap == 0u64 { return 0u8 }
+    let cur : u64 = SBQ_CPU_USED[s]
+    let head : u64 = cap - cur
+    if m_l > head { return 0u8 }
+    SBQ_CPU_USED[s] = cur + m_l
+    return 1u8
+}
+
+fn sandbox_quota_mem_used(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbq_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBQ_MEM_USED[s]
+}
+
+fn sandbox_quota_cpu_used(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbq_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBQ_CPU_USED[s]
+}
+
+fn sandbox_quota_mem_remaining(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbq_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let cap : u64 = sandbox_mem_cap(id_l)
+    let cur : u64 = SBQ_MEM_USED[s]
+    if cur >= cap { return 0u64 }
+    return cap - cur
+}
+
+fn sandbox_quota_cpu_remaining(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbq_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let cap : u64 = sandbox_cpu_cap(id_l)
+    let cur : u64 = SBQ_CPU_USED[s]
+    if cur >= cap { return 0u64 }
+    return cap - cur
+}
+
+fn sandbox_quota_clear_all() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < SBQ_SLOTS {
+        SBQ_MEM_USED[s] = 0u64
+        SBQ_CPU_USED[s] = 0u64
+        s = s + 1u32
+    }
+    return SBQ_OK
+}

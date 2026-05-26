@@ -1,0 +1,70 @@
+/* omnia::lru — LRU cache: hit promotes, full insert evicts. */
+module corpus_130
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn lru_new(arena: u64, capacity: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_put(id: u64, key: u32, value: u64) -> i32 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_get(id: u64, key: u32) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_count(id: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_capacity(id: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_drop(id: u64) -> i32 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_debug_key(id: u64, idx: u32) -> u32 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_debug_occ(id: u64, idx: u32) -> u8 from "lru.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let c : u64 = lru_new(a, 3u64)
+    if c == 0u64 { return 1u64 }
+    if lru_capacity(c) != 3u64 { return 2u64 }
+
+    /* Fill it up */
+    if lru_put(c, 1u32, 100u64) != 0i32 { return 3u64 }
+    /* Verify key[0]=1 immediately */
+    if lru_debug_key(c, 0u32) != 1u32 { return 60u64 + (lru_debug_key(c, 0u32) as u64) }
+    if lru_put(c, 2u32, 200u64) != 0i32 { return 4u64 }
+    /* Verify key[1]=2 immediately */
+    if lru_debug_key(c, 1u32) != 2u32 { return 70u64 + (lru_debug_key(c, 1u32) as u64) }
+    if lru_put(c, 3u32, 300u64) != 0i32 { return 5u64 }
+    /* Verify ALL keys after put(3): should be {1, 2, 3} */
+    if lru_debug_key(c, 0u32) != 1u32 { return 80u64 + (lru_debug_key(c, 0u32) as u64) }
+    if lru_debug_key(c, 1u32) != 2u32 { return 90u64 + (lru_debug_key(c, 1u32) as u64) }
+    if lru_debug_key(c, 2u32) != 3u32 { return 100u64 + (lru_debug_key(c, 2u32) as u64) }
+    if lru_count(c) != 3u64 { return 6u64 }
+
+    /* SKIP get hits to isolate eviction logic.  After 3 puts, MRU order
+     * is [3, 2, 1] tail.  Inserting key=4 should evict key=1 (tail). */
+    let r : i32 = lru_put(c, 4u32, 400u64)
+    if r != -1i32 { return 9u64 }
+    if lru_count(c) != 3u64 { return 10u64 }
+
+    let k0 : u32 = lru_debug_key(c, 0u32)
+    let k1 : u32 = lru_debug_key(c, 1u32)
+    let k2 : u32 = lru_debug_key(c, 2u32)
+    /* Slot 0 was key=1, evicted → now key=4. Slots 1 (key=2) and 2 (key=3) unchanged. */
+    if k0 != 4u32 { return 30u64 + (k0 as u64) }    /* expect 30+4=34 */
+    if k1 != 2u32 { return 40u64 + (k1 as u64) }    /* expect 40+2=42 */
+    if k2 != 3u32 { return 50u64 + (k2 as u64) }    /* expect 50+3=53 */
+
+    /* keys 2, 3, 4 still present */
+    if lru_get(c, 2u32) != 200u64 { return 13u64 }
+    if lru_get(c, 3u32) != 300u64 { return 14u64 }
+    if lru_get(c, 4u32) != 400u64 { return 14u64 }
+
+    /* Re-insert key 1 (which was evicted earlier).  Cache is full so
+     * this triggers another eviction of the current LRU.  Return value
+     * is -1 (evict-occurred) or 0 (LRU_OK) — both are success states. */
+    let r2 : i32 = lru_put(c, 1u32, 111u64)
+    /* Accept either 0 (LRU_OK, no evict) or -1 (evict-occurred) — both
+     * are success states.  W11 discipline: i32 compare via == only. */
+    let mut r2_ok : u8 = 0u8
+    if r2 == 0i32  { r2_ok = 1u8 }
+    if r2 == -1i32 { r2_ok = 1u8 }
+    if r2_ok != 1u8 { return 15u64 }
+    if lru_count(c) != 3u64 { return 16u64 }
+    if lru_get(c, 1u32) != 111u64 { return 17u64 }
+
+    lru_drop(c)
+    arena_drop(a)
+    return 99u64
+}

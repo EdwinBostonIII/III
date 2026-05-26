@@ -1,0 +1,171 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\obs_trace.iii
+ *
+ * III STDLIB - omnia::obs_trace -- distributed-trace span tree.
+ *
+ * Lattice plan Phase 14c Step 0141.  128-span fixed registry storing
+ * a parent-pointer tree.  Each span records (parent_id, trace_id,
+ * name_hash_32, start_seq, end_seq, kind, duration).  Trace context
+ * uses the W3C-trace-context-style 16-byte trace_id, but truncated
+ * to a u64 here for stage-0 compactness; the upper 8 bytes can be
+ * reconstructed via mhash if the caller needs full 128-bit IDs.
+ *
+ * Sequence numbers (start_seq, end_seq) are monotonically increasing
+ * insertion counters -- deterministic, no clock involved.  Real-time
+ * mapping happens at the OBSERVATORY level via a separate calendar.
+ *
+ * Public surface:
+ *   obs_trace_span_begin(parent_id, trace_id, name_hash_32_ptr) -> u64
+ *   obs_trace_span_end(span_id)                                 -> i32
+ *   obs_trace_span_parent(span_id)                              -> u64
+ *   obs_trace_span_trace_id(span_id)                            -> u64
+ *   obs_trace_span_start_seq(span_id)                           -> u64
+ *   obs_trace_span_end_seq(span_id)                             -> u64
+ *   obs_trace_span_duration(span_id)                            -> u64
+ *   obs_trace_span_name_byte(span_id, i)                        -> u32
+ *   obs_trace_count()                                           -> u32
+ *   obs_trace_clear_all()                                       -> i32
+ *
+ * Hexad: kind_compose.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_obs_trace
+
+const OBST_OK             : i32 =  0i32
+const OBST_E_BADID        : i32 = -1i32
+const OBST_E_NULL         : i32 = -2i32
+const OBST_E_FULL         : i32 = -3i32
+const OBST_E_BADSTATE     : i32 = -4i32
+
+const OBST_SLOTS          : u32 = 128u32
+
+var OBST_LIVE       : [u8;  128]
+var OBST_PARENT     : [u64; 128]
+var OBST_TRACE_ID   : [u64; 128]
+var OBST_NAME_HASH  : [u8;  4096]   /* 128 * 32 bytes */
+var OBST_START_SEQ  : [u64; 128]
+var OBST_END_SEQ    : [u64; 128]
+var OBST_NEXT_SEQ   : u64 = 0u64
+var OBST_USED       : u32 = 0u32
+
+fn obs_trace_span_begin(parent_id: u64, trace_id: u64, name_hash_32_ptr: u64) -> u64 @export {
+    let p_l : u64 = parent_id
+    let t_l : u64 = trace_id
+    let n_l : u64 = name_hash_32_ptr
+    if n_l == 0u64 { return 0u64 }
+    /* Find first free slot. */
+    let mut s : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while s < OBST_SLOTS {
+        if OBST_LIVE[s] == 0u8 {
+            if found == 0xFFFFFFFFu32 { found = s }
+        }
+        s = s + 1u32
+    }
+    if found == 0xFFFFFFFFu32 { return 0u64 }
+    OBST_LIVE[found]      = 1u8
+    OBST_PARENT[found]    = p_l
+    OBST_TRACE_ID[found]  = t_l
+    OBST_START_SEQ[found] = OBST_NEXT_SEQ
+    OBST_END_SEQ[found]   = 0u64
+    OBST_NEXT_SEQ = OBST_NEXT_SEQ + 1u64
+    let dst_base : u64 = (&OBST_NAME_HASH) as u64 + (found as u64) * 32u64
+    let dp : *u8 = dst_base as *u8
+    let sp : *u8 = n_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    OBST_USED = OBST_USED + 1u32
+    return (found as u64) + 1u64
+}
+
+fn _obst_slot_of(span_id: u64) -> u32 {
+    let id_l : u64 = span_id
+    if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = (id_l - 1u64) & 0x7Fu64
+    let s_u32 : u32 = s as u32
+    if s_u32 >= OBST_SLOTS { return 0xFFFFFFFFu32 }
+    if OBST_LIVE[s_u32] == 0u8 { return 0xFFFFFFFFu32 }
+    return s_u32
+}
+
+fn obs_trace_span_end(span_id: u64) -> i32 @export {
+    let id_l : u64 = span_id
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return OBST_E_BADID }
+    if OBST_END_SEQ[s] != 0u64 { return OBST_E_BADSTATE }
+    OBST_END_SEQ[s] = OBST_NEXT_SEQ
+    OBST_NEXT_SEQ = OBST_NEXT_SEQ + 1u64
+    return OBST_OK
+}
+
+fn obs_trace_span_parent(span_id: u64) -> u64 @export {
+    let id_l : u64 = span_id
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return OBST_PARENT[s]
+}
+
+fn obs_trace_span_trace_id(span_id: u64) -> u64 @export {
+    let id_l : u64 = span_id
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return OBST_TRACE_ID[s]
+}
+
+fn obs_trace_span_start_seq(span_id: u64) -> u64 @export {
+    let id_l : u64 = span_id
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return OBST_START_SEQ[s]
+}
+
+fn obs_trace_span_end_seq(span_id: u64) -> u64 @export {
+    let id_l : u64 = span_id
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return OBST_END_SEQ[s]
+}
+
+fn obs_trace_span_duration(span_id: u64) -> u64 @export {
+    let id_l : u64 = span_id
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let es : u64 = OBST_END_SEQ[s]
+    if es == 0u64 { return 0u64 }
+    return es - OBST_START_SEQ[s]
+}
+
+fn obs_trace_span_name_byte(span_id: u64, i: u32) -> u32 @export {
+    let id_l : u64 = span_id
+    let i_l : u32 = i
+    let s : u32 = _obst_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0x100u32 }
+    if i_l >= 32u32 { return 0x100u32 }
+    return OBST_NAME_HASH[(s as u64) * 32u64 + (i_l as u64)] as u32
+}
+
+fn obs_trace_count() -> u32 @export {
+    return OBST_USED
+}
+
+fn obs_trace_clear_all() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < OBST_SLOTS {
+        OBST_LIVE[s]      = 0u8
+        OBST_PARENT[s]    = 0u64
+        OBST_TRACE_ID[s]  = 0u64
+        OBST_START_SEQ[s] = 0u64
+        OBST_END_SEQ[s]   = 0u64
+        s = s + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 4096u32 {
+        OBST_NAME_HASH[i] = 0u8
+        i = i + 1u32
+    }
+    OBST_NEXT_SEQ = 0u64
+    OBST_USED = 0u32
+    return OBST_OK
+}

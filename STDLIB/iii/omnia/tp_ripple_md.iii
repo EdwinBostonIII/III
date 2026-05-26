@@ -1,0 +1,147 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_ripple_md.iii
+ *
+ * Transform pattern: FORM_RIPPLE_PROOF → FORM_MARKDOWN
+ * FROZEN SPEC §7B.6 slot 30; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Renders a ripple proof crystal as a Markdown audit report.
+ */
+
+module omnia_tp_ripple_md
+
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal_edges.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_at(id: u64, idx: u32) -> u64 from "crystal_edges.iii"
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_k(id: u64) -> u64 from "crystal.iii"
+
+var TP_RM_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+/* "# Ripple Proof Audit\n\n## Crystal " 33 bytes */
+var TP_RM_TITLE : [u8; 33] = [
+    35u8, 32u8, 82u8, 105u8, 112u8, 112u8, 108u8, 101u8, 32u8, 80u8, 114u8, 111u8, 111u8, 102u8, 32u8, 65u8,
+    117u8, 100u8, 105u8, 116u8, 10u8, 10u8, 35u8, 35u8, 32u8, 67u8, 114u8, 121u8, 115u8, 116u8, 97u8, 108u8, 32u8
+]
+/* "\n\nError code: 0x" 16 bytes */
+var TP_RM_ECODE : [u8; 16] = [10u8, 10u8, 69u8, 114u8, 114u8, 111u8, 114u8, 32u8, 99u8, 111u8, 100u8, 101u8, 58u8, 32u8, 48u8, 120u8]
+/* "\nK-value: " 10 bytes */
+var TP_RM_KVAL : [u8; 10] = [10u8, 75u8, 45u8, 118u8, 97u8, 108u8, 117u8, 101u8, 58u8, 32u8]
+/* "\n\n## Edges\n\n" 12 bytes */
+var TP_RM_EDGES : [u8; 12] = [10u8, 10u8, 35u8, 35u8, 32u8, 69u8, 100u8, 103u8, 101u8, 115u8, 10u8, 10u8]
+
+fn tp_rm_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_rm_hex16(dst: u64, off: u64, v: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let nib : u32 = ((v >> ((15u64 - ((i as u64) & 0xFu64)) * 4u64)) & 0xFu64) as u32
+        tp_rm_emit(dst, off + ((i as u64) & 0xFu64), TP_RM_HEX[nib])
+        i = i + 1u32
+    }
+    return 16u32
+}
+
+fn tp_rm_hex8(dst: u64, off: u64, v: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let nib : u32 = (v >> ((7u32 - (i & 0x7u32)) * 4u32)) & 0xFu32
+        tp_rm_emit(dst, off + ((i as u64) & 0x7u64), TP_RM_HEX[nib])
+        i = i + 1u32
+    }
+    return 8u32
+}
+
+fn tp_rm_decimal(dst: u64, off: u64, v: u64, max_digits: u32) -> u32 {
+    if v == 0u64 {
+        tp_rm_emit(dst, off, 48u8)
+        return 1u32
+    }
+    /* Compute digits in reverse into a fixed buffer; emit forward. */
+    let mut x : u64 = v
+    let mut digits_count : u32 = 0u32
+    let mut written : u32 = 0u32
+    while x != 0u64 {
+        if digits_count >= max_digits { x = 0u64 }
+        if digits_count < max_digits {
+            digits_count = digits_count + 1u32
+            x = x / 10u64
+        }
+    }
+    x = v
+    let mut place : u32 = digits_count
+    while place != 0u32 {
+        place = place - 1u32
+        let mut divisor : u64 = 1u64
+        let mut p : u32 = 0u32
+        while p < place {
+            divisor = divisor * 10u64
+            p = p + 1u32
+        }
+        let d : u8 = ((x / divisor) % 10u64 & 0xFFu64) as u8
+        tp_rm_emit(dst, off + (written as u64), 48u8 + d)
+        written = written + 1u32
+    }
+    return written
+}
+
+fn tp_ripple_md(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if src_len < 8u64 { return 0u64 }
+    let mut crystal_id : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let bp : *u8 = (src + ((k as u64) & 0x7u64)) as *u8
+        crystal_id = crystal_id | (((bp[0u64] as u64) & 0xFFu64) << (((k as u64) & 0x7u64) * 8u64))
+        k = k + 1u32
+    }
+    let mut off : u64 = 0u64
+    if dst_cap < 256u64 { return 0u64 }
+    /* Title + crystal id */
+    let mut t : u32 = 0u32
+    while t < 33u32 {
+        tp_rm_emit(dst_buf, off, TP_RM_TITLE[t])
+        off = off + 1u64
+        t = t + 1u32
+    }
+    off = off + (tp_rm_hex16(dst_buf, off, crystal_id) as u64)
+    /* Error code */
+    let mut e : u32 = 0u32
+    while e < 16u32 {
+        tp_rm_emit(dst_buf, off, TP_RM_ECODE[e])
+        off = off + 1u64
+        e = e + 1u32
+    }
+    off = off + (tp_rm_hex8(dst_buf, off, crystal_code(crystal_id)) as u64)
+    /* K value */
+    let mut kv : u32 = 0u32
+    while kv < 10u32 {
+        tp_rm_emit(dst_buf, off, TP_RM_KVAL[kv])
+        off = off + 1u64
+        kv = kv + 1u32
+    }
+    off = off + (tp_rm_decimal(dst_buf, off, crystal_k(crystal_id), 20u32) as u64)
+    /* Edges header */
+    let mut eh : u32 = 0u32
+    while eh < 12u32 {
+        tp_rm_emit(dst_buf, off, TP_RM_EDGES[eh])
+        off = off + 1u64
+        eh = eh + 1u32
+    }
+    /* Edge list */
+    let edge_count : u32 = crystal_edges_count(crystal_id)
+    let mut idx : u32 = 0u32
+    while idx < edge_count {
+        if off + 32u64 > dst_cap { return 0u64 }
+        let to : u64 = crystal_edges_at(crystal_id, idx)
+        tp_rm_emit(dst_buf, off, 45u8)            /* '-' */
+        tp_rm_emit(dst_buf, off + 1u64, 32u8)
+        off = off + 2u64
+        off = off + (tp_rm_hex16(dst_buf, off, to) as u64)
+        tp_rm_emit(dst_buf, off, 10u8)
+        off = off + 1u64
+        idx = idx + 1u32
+    }
+    return off
+}

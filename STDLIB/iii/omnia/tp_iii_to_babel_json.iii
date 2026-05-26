@@ -1,0 +1,99 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_babel_json.iii
+ *
+ * Transform pattern: FORM_III → FORM_BABEL_JSON
+ * FROZEN SPEC §7B.6 slot 17; ADR-RES-006, ADR-RES-007.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Wraps III source as a Babel JSON envelope:
+ *   {
+ *     "babel_version": 1,
+ *     "domain": "iii.source.literal",
+ *     "payload_form": 1,
+ *     "payload_bytes": "<base64 of src>",
+ *     ...
+ *   }
+ */
+
+module omnia_tp_iii_to_babel_json
+
+var TP_BJ_HEX : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]
+var TP_BJ_B64 : [u8; 64] = [
+    65u8, 66u8, 67u8, 68u8, 69u8, 70u8, 71u8, 72u8, 73u8, 74u8, 75u8, 76u8, 77u8, 78u8, 79u8, 80u8,
+    81u8, 82u8, 83u8, 84u8, 85u8, 86u8, 87u8, 88u8, 89u8, 90u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8,
+    103u8, 104u8, 105u8, 106u8, 107u8, 108u8, 109u8, 110u8, 111u8, 112u8, 113u8, 114u8, 115u8, 116u8, 117u8, 118u8,
+    119u8, 120u8, 121u8, 122u8, 48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 43u8, 47u8
+]
+
+/* "{\"babel_version\":1,\"domain\":\"iii.source.literal\",\"payload_form\":1,\"payload_bytes\":\"" */
+var TP_BJ_PRE : [u8; 86] = [
+    123u8, 34u8, 98u8, 97u8, 98u8, 101u8, 108u8, 95u8, 118u8, 101u8, 114u8, 115u8, 105u8, 111u8, 110u8, 34u8,
+    58u8, 49u8, 44u8, 34u8, 100u8, 111u8, 109u8, 97u8, 105u8, 110u8, 34u8, 58u8, 34u8, 105u8, 105u8, 105u8,
+    46u8, 115u8, 111u8, 117u8, 114u8, 99u8, 101u8, 46u8, 108u8, 105u8, 116u8, 101u8, 114u8, 97u8, 108u8, 34u8,
+    44u8, 34u8, 112u8, 97u8, 121u8, 108u8, 111u8, 97u8, 100u8, 95u8, 102u8, 111u8, 114u8, 109u8, 34u8, 58u8,
+    49u8, 44u8, 34u8, 112u8, 97u8, 121u8, 108u8, 111u8, 97u8, 100u8, 95u8, 98u8, 121u8, 116u8, 101u8, 115u8,
+    34u8, 58u8, 34u8, 0u8, 0u8, 0u8
+]
+/* "\"}" 2 bytes */
+var TP_BJ_POST : [u8; 2] = [34u8, 125u8]
+
+fn tp_bj_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+/* base64 encode 3 bytes → 4 chars. */
+fn tp_bj_b64_triplet(dst: u64, off: u64, b0: u8, b1: u8, b2: u8) -> u32 {
+    let v : u32 = ((b0 as u32) << 16u32) | ((b1 as u32) << 8u32) | (b2 as u32)
+    tp_bj_emit(dst, off, TP_BJ_B64[(v >> 18u32) & 0x3Fu32])
+    tp_bj_emit(dst, off + 1u64, TP_BJ_B64[(v >> 12u32) & 0x3Fu32])
+    tp_bj_emit(dst, off + 2u64, TP_BJ_B64[(v >> 6u32) & 0x3Fu32])
+    tp_bj_emit(dst, off + 3u64, TP_BJ_B64[v & 0x3Fu32])
+    return 4u32
+}
+
+fn tp_iii_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    /* Conservative size estimate: prefix(83) + 4*ceil(src_len/3) + suffix(2) */
+    let est : u64 = 83u64 + 4u64 * ((src_len + 2u64) / 3u64) + 4u64
+    if est > dst_cap { return 0u64 }
+    let mut off : u64 = 0u64
+    /* Prefix (83 bytes used) */
+    let mut p : u32 = 0u32
+    while p < 83u32 {
+        tp_bj_emit(dst_buf, off, TP_BJ_PRE[p])
+        off = off + 1u64
+        p = p + 1u32
+    }
+    /* Base64 body */
+    let mut j : u64 = 0u64
+    while j + 3u64 <= src_len {
+        let b0 : *u8 = (src + j) as *u8
+        let b1 : *u8 = (src + j + 1u64) as *u8
+        let b2 : *u8 = (src + j + 2u64) as *u8
+        tp_bj_b64_triplet(dst_buf, off, b0[0u64], b1[0u64], b2[0u64])
+        off = off + 4u64
+        j = j + 3u64
+    }
+    /* Tail (1 or 2 leftover bytes with padding) */
+    let rem : u64 = src_len - j
+    if rem == 1u64 {
+        let b0 : *u8 = (src + j) as *u8
+        tp_bj_b64_triplet(dst_buf, off, b0[0u64], 0u8, 0u8)
+        tp_bj_emit(dst_buf, off + 2u64, 61u8)   /* '=' */
+        tp_bj_emit(dst_buf, off + 3u64, 61u8)
+        off = off + 4u64
+    }
+    if rem == 2u64 {
+        let b0 : *u8 = (src + j) as *u8
+        let b1 : *u8 = (src + j + 1u64) as *u8
+        tp_bj_b64_triplet(dst_buf, off, b0[0u64], b1[0u64], 0u8)
+        tp_bj_emit(dst_buf, off + 3u64, 61u8)
+        off = off + 4u64
+    }
+    /* Suffix */
+    tp_bj_emit(dst_buf, off, TP_BJ_POST[0])
+    tp_bj_emit(dst_buf, off + 1u64, TP_BJ_POST[1])
+    off = off + 2u64
+    return off
+}

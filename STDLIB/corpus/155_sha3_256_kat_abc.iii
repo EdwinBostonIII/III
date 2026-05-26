@@ -1,0 +1,33 @@
+/* SHA3-256("abc") = 3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532
+ * Verifies first 8 bytes against the FIPS 202 known-answer test.
+ * Returns the first byte (0x3a = 58) on success.
+ */
+module corpus_155
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(3u64)
+    buf[0] = 97u8
+    buf[1] = 98u8
+    buf[2] = 99u8
+
+    let out : *u8 = malloc(32u64)
+    sha3_256_oneshot(buf as u64, 3u64, out as u64)
+
+    /* Expected first 8 bytes: 3a 98 5d a7 4f e2 25 b2 */
+    if out[0] != 0x3au8 { return 1u64 }
+    if out[1] != 0x98u8 { return 2u64 }
+    if out[2] != 0x5du8 { return 3u64 }
+    if out[3] != 0xa7u8 { return 4u64 }
+    if out[4] != 0x4fu8 { return 5u64 }
+    if out[5] != 0xe2u8 { return 6u64 }
+    if out[6] != 0x25u8 { return 7u64 }
+    if out[7] != 0xb2u8 { return 8u64 }
+
+    free(buf)
+    free(out)
+    return 99u64
+}

@@ -1,0 +1,10 @@
+/* corpus/345_xii_conf_hj_assoc.iii  -- Confluence dep: HJ associativity 343/343 */
+
+module corpus_345_xii_conf_hj_assoc
+
+extern @abi(c-msvc-x64) fn xii_hj_assoc_full_check() -> u32 from "xii_hj.iii"
+
+fn main() -> u64 {
+    let fails : u32 = xii_hj_assoc_full_check()
+    return fails as u64
+}

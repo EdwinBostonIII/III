@@ -1,0 +1,144 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\obs_log.iii
+ *
+ * III STDLIB - omnia::obs_log -- structured event log.
+ *
+ * Lattice plan Phase 14c Step 0139.  Append-only ring buffer of
+ * structured events; each event records (kind, level, crystal_id,
+ * msg_hash_32).  Hardcoded-dynamism discipline: \`kind\` is an opaque
+ * u32 tag interpreted by caller's \`when\` cascade, not a fn pointer.
+ *
+ * Ring overwrites oldest entry when full (256-slot capacity, ~16 KB).
+ * Caller pre-computes msg_hash via mhash if it wants content-
+ * addressable retrieval; otherwise passes 32 zero bytes.
+ *
+ * Public surface:
+ *   obs_log_record(kind, level, crystal_id, msg_hash_32_ptr) -> i32
+ *   obs_log_count()                                          -> u32
+ *   obs_log_at_kind(seq)                                     -> u32
+ *   obs_log_at_level(seq)                                    -> u32
+ *   obs_log_at_crystal(seq)                                  -> u64
+ *   obs_log_at_msg_hash_byte(seq, i)                         -> u32
+ *   obs_log_at_seq(seq)                                      -> u64
+ *   obs_log_clear()                                          -> i32
+ *
+ * Levels (suggested; opaque to module): 1=trace, 2=debug, 3=info,
+ *   4=warn, 5=error, 6=fatal.  Module does not enforce.
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_obs_log
+
+const OBSL_OK         : i32 =  0i32
+const OBSL_E_NULL     : i32 = -1i32
+
+const OBSL_SLOTS      : u32 = 256u32
+
+var OBSL_KIND       : [u32; 256]
+var OBSL_LEVEL      : [u32; 256]
+var OBSL_CRYSTAL    : [u64; 256]
+var OBSL_MSG_HASH   : [u8;  8192]   /* 256 * 32 bytes */
+var OBSL_SEQ_NUM    : [u64; 256]    /* monotonic insertion sequence */
+var OBSL_NEXT_SEQ   : u64 = 0u64
+var OBSL_HEAD       : u32 = 0u32
+var OBSL_FULL       : u8  = 0u8
+
+fn obs_log_record(kind: u32, level: u32, crystal_id: u64, msg_hash_32_ptr: u64) -> i32 @export {
+    let k_l : u32 = kind
+    let lv_l : u32 = level
+    let c_l : u64 = crystal_id
+    let mh_l : u64 = msg_hash_32_ptr
+    if mh_l == 0u64 { return OBSL_E_NULL }
+    let slot : u32 = OBSL_HEAD
+    OBSL_KIND[slot]    = k_l
+    OBSL_LEVEL[slot]   = lv_l
+    OBSL_CRYSTAL[slot] = c_l
+    OBSL_SEQ_NUM[slot] = OBSL_NEXT_SEQ
+    let dst_off : u64 = (slot as u64) * 32u64
+    let dp : *u8 = (&OBSL_MSG_HASH as u64 + dst_off) as *u8
+    let sp : *u8 = mh_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    OBSL_NEXT_SEQ = OBSL_NEXT_SEQ + 1u64
+    let mut nx : u32 = slot + 1u32
+    if nx >= OBSL_SLOTS { nx = 0u32; OBSL_FULL = 1u8 }
+    OBSL_HEAD = nx
+    return OBSL_OK
+}
+
+fn obs_log_count() -> u32 @export {
+    if OBSL_FULL == 1u8 { return OBSL_SLOTS }
+    return OBSL_HEAD
+}
+
+fn _obsl_resolve_slot(seq: u32) -> u32 {
+    let s_l : u32 = seq
+    let cnt : u32 = obs_log_count()
+    if s_l >= cnt { return 0xFFFFFFFFu32 }
+    if OBSL_FULL == 0u8 {
+        return s_l
+    }
+    /* Ring is full: oldest slot is OBSL_HEAD; seq=0 maps to HEAD. */
+    let mut idx : u32 = OBSL_HEAD + s_l
+    if idx >= OBSL_SLOTS { idx = idx - OBSL_SLOTS }
+    return idx
+}
+
+fn obs_log_at_kind(seq: u32) -> u32 @export {
+    let s : u32 = _obsl_resolve_slot(seq)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return OBSL_KIND[s]
+}
+
+fn obs_log_at_level(seq: u32) -> u32 @export {
+    let s : u32 = _obsl_resolve_slot(seq)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return OBSL_LEVEL[s]
+}
+
+fn obs_log_at_crystal(seq: u32) -> u64 @export {
+    let s : u32 = _obsl_resolve_slot(seq)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return OBSL_CRYSTAL[s]
+}
+
+fn obs_log_at_msg_hash_byte(seq: u32, i: u32) -> u32 @export {
+    let s : u32 = _obsl_resolve_slot(seq)
+    let i_l : u32 = i
+    if s == 0xFFFFFFFFu32 { return 0x100u32 }
+    if i_l >= 32u32 { return 0x100u32 }
+    return OBSL_MSG_HASH[(s as u64) * 32u64 + (i_l as u64)] as u32
+}
+
+fn obs_log_at_seq(seq: u32) -> u64 @export {
+    let s : u32 = _obsl_resolve_slot(seq)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return OBSL_SEQ_NUM[s]
+}
+
+fn obs_log_total_emitted() -> u64 @export {
+    return OBSL_NEXT_SEQ
+}
+
+fn obs_log_clear() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < OBSL_SLOTS {
+        OBSL_KIND[s]    = 0u32
+        OBSL_LEVEL[s]   = 0u32
+        OBSL_CRYSTAL[s] = 0u64
+        OBSL_SEQ_NUM[s] = 0u64
+        s = s + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8192u32 {
+        OBSL_MSG_HASH[i] = 0u8
+        i = i + 1u32
+    }
+    OBSL_NEXT_SEQ = 0u64
+    OBSL_HEAD     = 0u32
+    OBSL_FULL     = 0u8
+    return OBSL_OK
+}

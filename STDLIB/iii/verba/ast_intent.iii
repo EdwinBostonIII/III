@@ -1,0 +1,164 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\ast_intent.iii
+ *
+ * III STDLIB - verba::ast_intent
+ *
+ * Runtime intent template buffer with field accessors.
+ * FROZEN SPEC §Z.B.3 (intent_form lowering surface).
+ *
+ * Hexad: kind_form. Ring: R0. K: 0.95.
+ *
+ * Provides a 256-byte intent-template buffer keyed by template_id (0..15).
+ * Each template stores up to 16 (tag, type, value) tuples. Used by
+ * intent_form_lower() to construct intent_t values at runtime without
+ * requiring a parse-time K_EXPR_INTENT_LITERAL AST node.
+ *
+ * Buffer layout per template (256 bytes):
+ *   off  field
+ *    0   field_count : u32
+ *    4   _pad
+ *    8   fields : (tag:u32, type:u32, value:u64)[16] = 256 bytes - 8 = 248 ... + 8 hdr
+ *
+ * Total table: 16 templates × 256 bytes = 4096 bytes.
+ */
+
+module verba_ast_intent
+
+const AST_INTENT_TEMPLATE_BYTES : u32 = 256u32
+const AST_INTENT_TEMPLATE_CAP   : u32 = 16u32
+const AST_INTENT_FIELD_BYTES    : u32 = 16u32
+const AST_INTENT_FIELD_CAP      : u32 = 16u32
+
+var g_ast_intent_table : [u8; 4096]   /* 16 × 256 */
+
+fn ast_intent_template_ptr(node: u64) -> u64 {
+    let idx : u64 = node & 0xFu64
+    let base : u64 = (&g_ast_intent_table) as u64
+    return base + idx * (AST_INTENT_TEMPLATE_BYTES as u64)
+}
+
+fn ast_intent_field_offset(field_idx: u32) -> u64 {
+    return 8u64 + ((field_idx as u64) & 0xFu64) * (AST_INTENT_FIELD_BYTES as u64)
+}
+
+fn ast_intent_emit_byte(p: u64, b: u8) -> i32 {
+    let pp : *u8 = (p) as *u8
+    pp[0u64] = b
+    return 0i32
+}
+
+fn ast_intent_write_u32(p: u64, v: u32) -> i32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn ast_intent_read_u32(p: u64) -> u32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn ast_intent_write_u64(p: u64, v: u64) -> i32 {
+    ast_intent_write_u32(p, (v & 0xFFFFFFFFu64) as u32)
+    ast_intent_write_u32(p + 4u64, ((v >> 32u64) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+fn ast_intent_read_u64(p: u64) -> u64 {
+    let lo : u64 = (ast_intent_read_u32(p) as u64) & 0xFFFFFFFFu64
+    let hi : u64 = (ast_intent_read_u32(p + 4u64) as u64) & 0xFFFFFFFFu64
+    return lo | (hi << 32u64)
+}
+
+/* --- Template builder API --- */
+
+fn ast_intent_template_zero(node: u64) -> i32 @export {
+    let p : u64 = ast_intent_template_ptr(node)
+    let mut i : u32 = 0u32
+    while i < AST_INTENT_TEMPLATE_BYTES {
+        ast_intent_emit_byte(p + ((i as u64) & 0xFFu64), 0u8)
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn ast_intent_template_add_field(node: u64, tag: u32, ftype: u32, value: u64) -> i32 @export {
+    let p : u64 = ast_intent_template_ptr(node)
+    let count : u32 = ast_intent_read_u32(p)
+    if count >= AST_INTENT_FIELD_CAP { return -1i32 }
+    let foff : u64 = ast_intent_field_offset(count)
+    ast_intent_write_u32(p + foff, tag)
+    ast_intent_write_u32(p + foff + 4u64, ftype)
+    ast_intent_write_u64(p + foff + 8u64, value)
+    ast_intent_write_u32(p, count + 1u32)
+    return 0i32
+}
+
+/* --- Accessors (used by intent_form.iii) --- */
+
+fn ast_intent_field_count(ast: u64, node: u64) -> u32 @export {
+    let _ast : u64 = ast
+    let p : u64 = ast_intent_template_ptr(node)
+    return ast_intent_read_u32(p)
+}
+
+fn ast_intent_field_tag(ast: u64, node: u64, idx: u32) -> u32 @export {
+    let _ast : u64 = ast
+    let p : u64 = ast_intent_template_ptr(node)
+    let foff : u64 = ast_intent_field_offset(idx)
+    return ast_intent_read_u32(p + foff)
+}
+
+fn ast_intent_field_value_u8(ast: u64, node: u64, idx: u32) -> u8 @export {
+    let _ast : u64 = ast
+    let p : u64 = ast_intent_template_ptr(node)
+    let foff : u64 = ast_intent_field_offset(idx)
+    let v : u64 = ast_intent_read_u64(p + foff + 8u64)
+    return (v & 0xFFu64) as u8
+}
+
+fn ast_intent_field_value_u32(ast: u64, node: u64, idx: u32) -> u32 @export {
+    let _ast : u64 = ast
+    let p : u64 = ast_intent_template_ptr(node)
+    let foff : u64 = ast_intent_field_offset(idx)
+    let v : u64 = ast_intent_read_u64(p + foff + 8u64)
+    return (v & 0xFFFFFFFFu64) as u32
+}
+
+fn ast_intent_field_value_u64(ast: u64, node: u64, idx: u32) -> u64 @export {
+    let _ast : u64 = ast
+    let p : u64 = ast_intent_template_ptr(node)
+    let foff : u64 = ast_intent_field_offset(idx)
+    return ast_intent_read_u64(p + foff + 8u64)
+}
+
+/* Array accessors return values stored as a continuation of the field;
+ * an array field uses subsequent field slots holding (FIELD_ARRAY_ELEM, _, value). */
+fn ast_intent_field_array_count(ast: u64, node: u64, idx: u32) -> u32 @export {
+    let _ast : u64 = ast
+    let p : u64 = ast_intent_template_ptr(node)
+    let foff : u64 = ast_intent_field_offset(idx)
+    return ast_intent_read_u32(p + foff + 4u64)
+}
+
+fn ast_intent_field_array_value(ast: u64, node: u64, idx: u32, slot: u32) -> u64 @export {
+    let _ast : u64 = ast
+    if slot >= 16u32 { return 0u64 }
+    let p : u64 = ast_intent_template_ptr(node)
+    let target_idx : u32 = idx + 1u32 + slot
+    if target_idx >= AST_INTENT_FIELD_CAP { return 0u64 }
+    let foff : u64 = ast_intent_field_offset(target_idx)
+    return ast_intent_read_u64(p + foff + 8u64)
+}

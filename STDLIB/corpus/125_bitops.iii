@@ -1,0 +1,70 @@
+/* numera::bitops — popcount, clz/ctz, rot, log2, next_pow2, reverse. */
+module corpus_121
+
+extern @abi(c-msvc-x64) fn bitops_popcount32(v: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_popcount64(v: u64) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_clz32(v: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_clz64(v: u64) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_ctz32(v: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_ctz64(v: u64) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotl32(v: u32, n: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotr32(v: u32, n: u32) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotl64(v: u64, n: u32) -> u64 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_rotr64(v: u64, n: u32) -> u64 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_log2_floor64(v: u64) -> u32 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_next_pow2_64(v: u64) -> u64 from "bitops.iii"
+extern @abi(c-msvc-x64) fn bitops_reverse32(v: u32) -> u32 from "bitops.iii"
+
+fn main() -> u64 {
+    /* popcount */
+    if bitops_popcount32(0u32)         != 0u32  { return 1u64 }
+    if bitops_popcount32(0xFFFFFFFFu32) != 32u32 { return 2u64 }
+    if bitops_popcount32(0x55555555u32) != 16u32 { return 3u64 }
+    if bitops_popcount32(0xCAFEBABEu32) != 22u32 { return 4u64 }
+    if bitops_popcount64(0u64)                       != 0u64  as u32 { return 5u64 }
+    if bitops_popcount64(0xFFFFFFFFFFFFFFFFu64)      != 64u32 { return 6u64 }
+    if bitops_popcount64(0xCAFEBABEFEEDFACEu64)      != 46u32 { return 7u64 }
+
+    /* clz */
+    if bitops_clz32(0u32)         != 32u32 { return 8u64 }
+    if bitops_clz32(1u32)         != 31u32 { return 9u64 }
+    if bitops_clz32(0x80000000u32) != 0u32 { return 10u64 }
+    if bitops_clz32(0x00010000u32) != 15u32 { return 11u64 }
+    if bitops_clz64(0u64)         != 64u32 { return 12u64 }
+    if bitops_clz64(1u64)         != 63u32 { return 13u64 }
+    if bitops_clz64(0x8000000000000000u64) != 0u32 { return 14u64 }
+
+    /* ctz */
+    if bitops_ctz32(0u32)         != 32u32 { return 15u64 }
+    if bitops_ctz32(1u32)         != 0u32  { return 16u64 }
+    if bitops_ctz32(0x80000000u32) != 31u32 { return 17u64 }
+    if bitops_ctz32(0x00010000u32) != 16u32 { return 18u64 }
+    if bitops_ctz64(0u64)         != 64u32 { return 19u64 }
+    if bitops_ctz64(1u64)         != 0u32  { return 20u64 }
+
+    /* rotation */
+    if bitops_rotl32(0x12345678u32, 4u32) != 0x23456781u32 { return 21u64 }
+    if bitops_rotr32(0x12345678u32, 4u32) != 0x81234567u32 { return 22u64 }
+    if bitops_rotl32(0xDEADBEEFu32, 0u32) != 0xDEADBEEFu32 { return 23u64 }
+    if bitops_rotl64(0x0123456789ABCDEFu64, 8u32) != 0x23456789ABCDEF01u64 { return 24u64 }
+
+    /* log2_floor */
+    if bitops_log2_floor64(1u64)  != 0u32  { return 25u64 }
+    if bitops_log2_floor64(2u64)  != 1u32  { return 26u64 }
+    if bitops_log2_floor64(7u64)  != 2u32  { return 27u64 }
+    if bitops_log2_floor64(8u64)  != 3u32  { return 28u64 }
+    if bitops_log2_floor64(0xFFFFu64) != 15u32 { return 29u64 }
+
+    /* next_pow2 */
+    if bitops_next_pow2_64(1u64)  != 1u64  { return 30u64 }
+    if bitops_next_pow2_64(2u64)  != 2u64  { return 31u64 }
+    if bitops_next_pow2_64(3u64)  != 4u64  { return 32u64 }
+    if bitops_next_pow2_64(7u64)  != 8u64  { return 33u64 }
+    if bitops_next_pow2_64(513u64) != 1024u64 { return 34u64 }
+
+    /* reverse */
+    if bitops_reverse32(0x80000000u32) != 0x00000001u32 { return 35u64 }
+    if bitops_reverse32(0x12345678u32) != 0x1E6A2C48u32 { return 36u64 }
+
+    return 99u64
+}

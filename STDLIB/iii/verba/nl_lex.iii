@@ -1,0 +1,1016 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\nl_lex.iii
+ *
+ * III STDLIB - verba::nl_lex (Phase E.1 of Intent Calculus v1.0)
+ *
+ * Deterministic lexer for the HIP NL surface. Maps a sealed lexicon
+ * (~120 seed words; expandable to ~3000) to typed tokens. No
+ * statistics. No fallbacks. A token is exactly one of:
+ *
+ *   NL_TOK_VERB / NOUN / ADJ / ADV / PREP / DET / ROLE
+ *   NL_TOK_NUMBER       (integer literal in source)
+ *   NL_TOK_STRING_LIT   ("..." or '...')
+ *   NL_TOK_IDENT        (anything in word position not in lexicon)
+ *   NL_TOK_PUNCT        (. , ; : ! ? ( ) [ ] { } -)
+ *   NL_TOK_EOL          (end of utterance: '\n' or end of input)
+ *
+ * Token packing (u64):
+ *   bits  0..7   : type
+ *   bits  8..31  : word_id  (24 bits = 16M)
+ *   bits 32..47  : span_start (u16, byte offset into source)
+ *   bits 48..63  : span_end_exclusive (u16)
+ *
+ * Lookup: open-addressed hash table (4096 slots, FNV-1a 64-bit key).
+ *
+ * Hexad: kind_form (data artifact). Ring: R3. K: 1.00.
+ */
+
+module verba_nl_lex
+
+const NL_TOK_VOID       : u8 =  0u8
+const NL_TOK_VERB       : u8 =  1u8
+const NL_TOK_NOUN       : u8 =  2u8
+const NL_TOK_ADJ        : u8 =  3u8
+const NL_TOK_ADV        : u8 =  4u8
+const NL_TOK_PREP       : u8 =  5u8
+const NL_TOK_DET        : u8 =  6u8
+const NL_TOK_NUMBER     : u8 =  7u8
+const NL_TOK_STRING_LIT : u8 =  8u8
+const NL_TOK_IDENT      : u8 =  9u8
+const NL_TOK_ROLE       : u8 = 10u8
+const NL_TOK_PUNCT      : u8 = 11u8
+const NL_TOK_EOL        : u8 = 12u8
+
+const NL_LEXICON_CAP    : u32 = 4096u32
+const NL_LEXICON_MASK   : u64 = 0xFFFu64    /* (CAP - 1) for index */
+const NL_FNV_OFFSET     : u64 = 0xcbf29ce484222325u64
+const NL_FNV_PRIME      : u64 = 0x100000001b3u64
+
+const NL_LEX_OK         : i32 =  0i32
+const NL_LEX_E_NULL     : i32 = -1i32
+const NL_LEX_E_FULL     : i32 = -2i32
+const NL_LEX_E_OVERFLOW : i32 = -3i32
+
+/* Open-addressed hash table:
+ *   NL_LEX_HASH[i]    : 0 = empty, otherwise FNV-1a key
+ *   NL_LEX_TYPE[i]    : token type byte
+ *   NL_LEX_WORD_ID[i] : monotonic word id
+ */
+var NL_LEX_HASH    : [u64; 4096]
+var NL_LEX_TYPE    : [u8;  4096]
+var NL_LEX_WORD_ID : [u32; 4096]
+var NL_LEX_USED    : u32 = 0u32
+var NL_LEX_INITED  : u8  = 0u8
+
+/* ---------------- helpers ---------------- */
+
+fn _nl_to_lower(b: u8) -> u8 {
+    let l_b : u8 = b
+    if l_b >= 65u8 {
+        if l_b <= 90u8 { return l_b + 32u8 }
+    }
+    return l_b
+}
+
+fn _nl_is_digit(b: u8) -> u8 {
+    let l_b : u8 = b
+    if l_b >= 48u8 {
+        if l_b <= 57u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn _nl_is_alpha(b: u8) -> u8 {
+    let l_b : u8 = b
+    if l_b >= 65u8 {
+        if l_b <= 90u8 { return 1u8 }
+    }
+    if l_b >= 97u8 {
+        if l_b <= 122u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+fn _nl_is_word_char(b: u8) -> u8 {
+    let l_b : u8 = b
+    if _nl_is_alpha(l_b) == 1u8 { return 1u8 }
+    if l_b == 95u8 { return 1u8 }    /* '_' as word-internal */
+    return 0u8
+}
+
+fn _nl_is_space(b: u8) -> u8 {
+    let l_b : u8 = b
+    if l_b == 32u8 { return 1u8 }
+    if l_b == 9u8  { return 1u8 }
+    if l_b == 13u8 { return 1u8 }
+    return 0u8
+}
+
+fn _nl_is_punct(b: u8) -> u8 {
+    let l_b : u8 = b
+    if l_b == 46u8 { return 1u8 }   /* . */
+    if l_b == 44u8 { return 1u8 }   /* , */
+    if l_b == 59u8 { return 1u8 }   /* ; */
+    if l_b == 58u8 { return 1u8 }   /* : */
+    if l_b == 33u8 { return 1u8 }   /* ! */
+    if l_b == 63u8 { return 1u8 }   /* ? */
+    if l_b == 40u8 { return 1u8 }   /* ( */
+    if l_b == 41u8 { return 1u8 }   /* ) */
+    if l_b == 91u8 { return 1u8 }   /* [ */
+    if l_b == 93u8 { return 1u8 }   /* ] */
+    if l_b == 123u8 { return 1u8 }  /* { */
+    if l_b == 125u8 { return 1u8 }  /* } */
+    if l_b == 45u8 { return 1u8 }   /* - */
+    return 0u8
+}
+
+/* FNV-1a over (lower-cased) bytes [start, end). */
+fn _nl_fnv_lower(src: u64, start: u32, end: u32) -> u64 {
+    let s_l : u64 = src
+    let mut h : u64 = NL_FNV_OFFSET
+    let mut i : u32 = start
+    while i < end {
+        let bp : *u8 = (s_l + (i as u64)) as *u8
+        let bv : u8  = _nl_to_lower(bp[0u64])
+        h = h ^ ((bv as u64) & 0xFFu64)
+        h = h * NL_FNV_PRIME
+        i = i + 1u32
+    }
+    return h
+}
+
+/* ---------------- registration ---------------- */
+
+fn nl_lex_register_hash(hash: u64, type_id: u8, word_id: u32) -> i32 @export {
+    let h_l : u64 = hash
+    let t_l : u8  = type_id
+    let w_l : u32 = word_id
+    if h_l == 0u64 { return NL_LEX_E_NULL }
+    if NL_LEX_USED >= NL_LEXICON_CAP { return NL_LEX_E_FULL }
+    let mut idx : u32 = (h_l & NL_LEXICON_MASK) as u32
+    let mut probes : u32 = 0u32
+    while probes < NL_LEXICON_CAP {
+        if NL_LEX_HASH[idx] == 0u64 {
+            NL_LEX_HASH[idx]    = h_l
+            NL_LEX_TYPE[idx]    = t_l
+            NL_LEX_WORD_ID[idx] = w_l
+            NL_LEX_USED = NL_LEX_USED + 1u32
+            return NL_LEX_OK
+        }
+        if NL_LEX_HASH[idx] == h_l {
+            /* Update in place. */
+            NL_LEX_TYPE[idx]    = t_l
+            NL_LEX_WORD_ID[idx] = w_l
+            return NL_LEX_OK
+        }
+        idx = (idx + 1u32) & 0xFFFu32
+        probes = probes + 1u32
+    }
+    return NL_LEX_E_FULL
+}
+
+fn nl_lex_lookup_hash(hash: u64) -> u64 @export {
+    let h_l : u64 = hash
+    if h_l == 0u64 { return 0u64 }
+    let mut idx : u32 = (h_l & NL_LEXICON_MASK) as u32
+    let mut probes : u32 = 0u32
+    while probes < NL_LEXICON_CAP {
+        let cur : u64 = NL_LEX_HASH[idx]
+        if cur == 0u64 { return 0u64 }
+        if cur == h_l {
+            /* Pack (type << 24) | word_id. */
+            let t_l : u64 = (NL_LEX_TYPE[idx] as u64) & 0xFFu64
+            let w_l : u64 = (NL_LEX_WORD_ID[idx] as u64) & 0xFFFFFFu64
+            return (t_l << 24u64) | w_l
+        }
+        idx = (idx + 1u32) & 0xFFFu32
+        probes = probes + 1u32
+    }
+    return 0u64
+}
+
+fn nl_lex_used() -> u32 @export {
+    return NL_LEX_USED
+}
+
+fn nl_lex_capacity() -> u32 @export {
+    return NL_LEXICON_CAP
+}
+
+fn nl_lex_reset() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < NL_LEXICON_CAP {
+        NL_LEX_HASH[i] = 0u64
+        NL_LEX_TYPE[i] = 0u8
+        NL_LEX_WORD_ID[i] = 0u32
+        i = i + 1u32
+    }
+    NL_LEX_USED = 0u32
+    NL_LEX_INITED = 0u8
+    return NL_LEX_OK
+}
+
+/* ---------------- token packing ---------------- */
+
+fn nl_token_pack(type_id: u8, word_id: u32, span_start: u32, span_end: u32) -> u64 @export {
+    let t_l : u64 = (type_id as u64) & 0xFFu64
+    let w_l : u64 = ((word_id as u64) & 0xFFFFFFu64) << 8u64
+    let s_l : u64 = ((span_start as u64) & 0xFFFFu64) << 32u64
+    let e_l : u64 = ((span_end as u64) & 0xFFFFu64) << 48u64
+    return t_l | w_l | s_l | e_l
+}
+
+fn nl_token_type(tok: u64) -> u8 @export {
+    return (tok & 0xFFu64) as u8
+}
+
+fn nl_token_word_id(tok: u64) -> u32 @export {
+    return ((tok >> 8u64) & 0xFFFFFFu64) as u32
+}
+
+fn nl_token_span_start(tok: u64) -> u32 @export {
+    return ((tok >> 32u64) & 0xFFFFu64) as u32
+}
+
+fn nl_token_span_end(tok: u64) -> u32 @export {
+    return ((tok >> 48u64) & 0xFFFFu64) as u32
+}
+
+/* ---------------- tokenize ---------------- */
+
+/* Token-emit helper: writes one token at out_tokens[idx]. Returns the
+ * new token count (idx + 1), or 0xFFFFFFFFu32 on overflow. */
+fn _nl_emit(out_tokens_ptr: u64, idx: u32, max_tokens: u32, tok: u64) -> u32 {
+    let o_l : u64 = out_tokens_ptr
+    let i_l : u32 = idx
+    let m_l : u32 = max_tokens
+    if i_l >= m_l { return 0xFFFFFFFFu32 }
+    let pp : *u64 = (o_l + ((i_l as u64) * 8u64)) as *u64
+    pp[0u64] = tok
+    return i_l + 1u32
+}
+
+/* Consume a "..."-delimited string literal starting at byte i (which
+ * must point to the opening quote). Returns the new byte position. */
+fn _nl_scan_string(src_ptr: u64, i: u32, src_len: u32) -> u32 {
+    let s_l : u64 = src_ptr
+    let n_l : u32 = src_len
+    let mut j : u32 = i + 1u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= n_l {
+            going = 0u8
+        } else {
+            let bx : *u8 = (s_l + (j as u64)) as *u8
+            if bx[0u64] == 34u8 {
+                going = 0u8
+            } else {
+                j = j + 1u32
+            }
+        }
+    }
+    if j < n_l { j = j + 1u32 }   /* consume closing quote */
+    return j
+}
+
+/* Consume a digit run starting at i. Returns packed (new_i << 32) | value. */
+fn _nl_scan_number(src_ptr: u64, i: u32, src_len: u32) -> u64 {
+    let s_l : u64 = src_ptr
+    let n_l : u32 = src_len
+    let mut j : u32 = i
+    let mut v : u32 = 0u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= n_l {
+            going = 0u8
+        } else {
+            let bd : *u8 = (s_l + (j as u64)) as *u8
+            let dv : u8  = bd[0u64]
+            if _nl_is_digit(dv) == 0u8 {
+                going = 0u8
+            } else {
+                v = (v * 10u32) + ((dv - 48u8) as u32)
+                j = j + 1u32
+            }
+        }
+    }
+    let new_i : u64 = (j as u64) & 0xFFFFFFFFu64
+    let val_l : u64 = ((v as u64) & 0xFFFFFFu64) << 32u64
+    return new_i | val_l
+}
+
+/* Consume a word run starting at i. Returns the new byte position. */
+fn _nl_scan_word(src_ptr: u64, i: u32, src_len: u32) -> u32 {
+    let s_l : u64 = src_ptr
+    let n_l : u32 = src_len
+    let mut j : u32 = i
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= n_l {
+            going = 0u8
+        } else {
+            let bw : *u8 = (s_l + (j as u64)) as *u8
+            if _nl_is_word_char(bw[0u64]) == 0u8 {
+                going = 0u8
+            } else {
+                j = j + 1u32
+            }
+        }
+    }
+    return j
+}
+
+/* nl_lex_tokenize: scans source [0..src_len); emits tokens into
+ * out_tokens_ptr (must hold at least max_tokens u64 slots). Writes
+ * the actual token count via out_count_ptr (u32 *).
+ *
+ * 4-arg signature (iiis-0 5+arg trap):
+ *   packed_lens = (max_tokens << 32) | src_len
+ *
+ * Returns NL_LEX_OK on success; NL_LEX_E_OVERFLOW if max_tokens
+ * exhausted. */
+fn nl_lex_tokenize(src_ptr: u64, packed_lens: u64, out_tokens_ptr: u64, out_count_ptr: u64) -> i32 @export {
+    let s_l : u64 = src_ptr
+    let pl  : u64 = packed_lens
+    let n_l : u32 = (pl & 0xFFFFFFFFu64) as u32
+    let mt  : u32 = ((pl >> 32u64) & 0xFFFFFFFFu64) as u32
+    let o_l : u64 = out_tokens_ptr
+    let oc  : u64 = out_count_ptr
+    if s_l == 0u64 { return NL_LEX_E_NULL }
+    if o_l == 0u64 { return NL_LEX_E_NULL }
+    if oc  == 0u64 { return NL_LEX_E_NULL }
+
+    let mut i : u32 = 0u32
+    let mut tcount : u32 = 0u32
+    while i < n_l {
+        let bp : *u8 = (s_l + (i as u64)) as *u8
+        let b  : u8  = bp[0u64]
+
+        if b == 10u8 {
+            let tok : u64 = nl_token_pack(NL_TOK_EOL, 0u32, i, i + 1u32)
+            tcount = _nl_emit(o_l, tcount, mt, tok)
+            if tcount == 0xFFFFFFFFu32 { return NL_LEX_E_OVERFLOW }
+            i = i + 1u32
+        } else if _nl_is_space(b) == 1u8 {
+            i = i + 1u32
+        } else if b == 34u8 {
+            let start_idx : u32 = i
+            let end_idx : u32 = _nl_scan_string(s_l, i, n_l)
+            let tok : u64 = nl_token_pack(NL_TOK_STRING_LIT, 0u32, start_idx, end_idx)
+            tcount = _nl_emit(o_l, tcount, mt, tok)
+            if tcount == 0xFFFFFFFFu32 { return NL_LEX_E_OVERFLOW }
+            i = end_idx
+        } else if _nl_is_punct(b) == 1u8 {
+            let tok : u64 = nl_token_pack(NL_TOK_PUNCT, b as u32, i, i + 1u32)
+            tcount = _nl_emit(o_l, tcount, mt, tok)
+            if tcount == 0xFFFFFFFFu32 { return NL_LEX_E_OVERFLOW }
+            i = i + 1u32
+        } else if _nl_is_digit(b) == 1u8 {
+            let nstart : u32 = i
+            let packed : u64 = _nl_scan_number(s_l, i, n_l)
+            let new_i : u32 = (packed & 0xFFFFFFFFu64) as u32
+            let val   : u32 = ((packed >> 32u64) & 0xFFFFFFu64) as u32
+            let tok : u64 = nl_token_pack(NL_TOK_NUMBER, val, nstart, new_i)
+            tcount = _nl_emit(o_l, tcount, mt, tok)
+            if tcount == 0xFFFFFFFFu32 { return NL_LEX_E_OVERFLOW }
+            i = new_i
+        } else if _nl_is_word_char(b) == 1u8 {
+            let wstart : u32 = i
+            let wend : u32 = _nl_scan_word(s_l, i, n_l)
+            let h : u64 = _nl_fnv_lower(s_l, wstart, wend)
+            let lookup : u64 = nl_lex_lookup_hash(h)
+            let mut t_id : u8 = NL_TOK_IDENT
+            let mut w_id : u32 = 0u32
+            if lookup != 0u64 {
+                t_id = ((lookup >> 24u64) & 0xFFu64) as u8
+                w_id = (lookup & 0xFFFFFFu64) as u32
+            }
+            let tok : u64 = nl_token_pack(t_id, w_id, wstart, wend)
+            tcount = _nl_emit(o_l, tcount, mt, tok)
+            if tcount == 0xFFFFFFFFu32 { return NL_LEX_E_OVERFLOW }
+            i = wend
+        } else {
+            i = i + 1u32
+        }
+    }
+
+    /* Trailing EOL marker. */
+    let tok_end : u64 = nl_token_pack(NL_TOK_EOL, 0u32, n_l, n_l)
+    let after : u32 = _nl_emit(o_l, tcount, mt, tok_end)
+    if after != 0xFFFFFFFFu32 { tcount = after }
+
+    let cnt_p : *u32 = oc as *u32
+    cnt_p[0u64] = tcount
+    return NL_LEX_OK
+}
+
+/* ---------------- sealed lexicon init ---------------- */
+
+/* Convenience packer for nl_lex_tokenize callers. */
+fn nl_lex_pack_lens(src_len: u32, max_tokens: u32) -> u64 @export {
+    let s_l : u64 = (src_len as u64) & 0xFFFFFFFFu64
+    let m_l : u64 = ((max_tokens as u64) & 0xFFFFFFFFu64) << 32u64
+    return s_l | m_l
+}
+
+fn nl_lex_init_all() -> i32 @export {
+    if NL_LEX_INITED == 1u8 { return NL_LEX_OK }
+    /* === VERB === */
+    nl_lex_register_hash(0x2d1ff318d40c162fu64, 1u8, 1u32)   /* send */
+    nl_lex_register_hash(0xd4e26318faaa79f7u64, 1u8, 2u32)   /* get */
+    nl_lex_register_hash(0x77f370195699cdeeu64, 1u8, 3u32)   /* put */
+    nl_lex_register_hash(0x4ce6531fbfddd605u64, 1u8, 4u32)   /* read */
+    nl_lex_register_hash(0xb93a12b0d06caefcu64, 1u8, 5u32)   /* write */
+    nl_lex_register_hash(0x44ee54ad76b0bd8eu64, 1u8, 6u32)   /* store */
+    nl_lex_register_hash(0xce0eecad70f271e9u64, 1u8, 7u32)   /* load */
+    nl_lex_register_hash(0x740cb4d2322f6882u64, 1u8, 8u32)   /* encrypt */
+    nl_lex_register_hash(0x4c5f6d0e704b8ddau64, 1u8, 9u32)   /* decrypt */
+    nl_lex_register_hash(0x2e3d9ecc741a7811u64, 1u8, 10u32)  /* hash */
+    nl_lex_register_hash(0x4e0f7f18e637a364u64, 1u8, 11u32)  /* sign */
+    nl_lex_register_hash(0x2d582147c78edbe4u64, 1u8, 12u32)  /* verify */
+    nl_lex_register_hash(0xeb0e9ed12f553762u64, 1u8, 13u32)  /* allocate */
+    nl_lex_register_hash(0xf84f97b4633670e9u64, 1u8, 14u32)  /* open */
+    nl_lex_register_hash(0x9ec2699513c0f9c3u64, 1u8, 15u32)  /* close */
+    nl_lex_register_hash(0x54cb3aded715c1b9u64, 1u8, 16u32)  /* connect */
+    nl_lex_register_hash(0x5926cb82738c446bu64, 1u8, 17u32)  /* disconnect */
+    nl_lex_register_hash(0xdc8acb313473c026u64, 1u8, 18u32)  /* listen */
+    nl_lex_register_hash(0x7e5f7abe09509b09u64, 1u8, 19u32)  /* accept */
+    nl_lex_register_hash(0x0c4e87a7a1f6fd8cu64, 1u8, 20u32)  /* parse */
+    nl_lex_register_hash(0x64db608eefff5c72u64, 1u8, 21u32)  /* format */
+    nl_lex_register_hash(0x56d12ea086274034u64, 1u8, 22u32)  /* compare */
+    nl_lex_register_hash(0x0bf903911984eee4u64, 1u8, 23u32)  /* copy */
+    nl_lex_register_hash(0x0d0f17a2c3f687b4u64, 1u8, 24u32)  /* move */
+    nl_lex_register_hash(0xf3fe6b5fdb85d50au64, 1u8, 25u32)  /* delete */
+    nl_lex_register_hash(0xf74e5feadea773fdu64, 1u8, 26u32)  /* create */
+    nl_lex_register_hash(0x2fce30cb8e3c8185u64, 1u8, 27u32)  /* destroy */
+    nl_lex_register_hash(0x2d08d918d3f90b20u64, 1u8, 28u32)  /* seal */
+    nl_lex_register_hash(0x3cba013d62284d47u64, 1u8, 29u32)  /* unseal */
+    nl_lex_register_hash(0x32bc902977d5212du64, 1u8, 30u32)  /* grant */
+    nl_lex_register_hash(0x20ca489515cc42f3u64, 1u8, 31u32)  /* revoke */
+    nl_lex_register_hash(0xf94d91246d8f61ddu64, 1u8, 32u32)  /* prove */
+    nl_lex_register_hash(0xb1068f146c4596c3u64, 1u8, 33u32)  /* query */
+    nl_lex_register_hash(0x62836442b3557916u64, 1u8, 34u32)  /* govern */
+    nl_lex_register_hash(0x247a08a06a19f5f3u64, 1u8, 35u32)  /* compose */
+    nl_lex_register_hash(0x95d7d72cdaba594au64, 1u8, 36u32)  /* reflect */
+    nl_lex_register_hash(0xdec34c9bd0b6d2eeu64, 1u8, 37u32)  /* bind */
+    nl_lex_register_hash(0x042612761674dd4du64, 1u8, 38u32)  /* convey */
+    nl_lex_register_hash(0x42f406a2e307ef94u64, 1u8, 39u32)  /* mean */
+    nl_lex_register_hash(0xe723b5190545606bu64, 1u8, 40u32)  /* act */
+    nl_lex_register_hash(0x7f625478d788e11bu64, 1u8, 41u32)  /* free */
+    /* === NOUN === */
+    nl_lex_register_hash(0x6828a99c1e3216ffu64, 2u8, 42u32)  /* byte */
+    nl_lex_register_hash(0x2f2ec0474f1c4fe4u64, 2u8, 43u32)  /* bytes */
+    nl_lex_register_hash(0xd86c0af0b398153bu64, 2u8, 44u32)  /* buffer */
+    nl_lex_register_hash(0xb45b6cbd15f67d33u64, 2u8, 45u32)  /* handle */
+    nl_lex_register_hash(0xaad01178f02a6a23u64, 2u8, 46u32)  /* file */
+    nl_lex_register_hash(0x546401b5d2a8d2a4u64, 2u8, 47u32)  /* message */
+    nl_lex_register_hash(0x3dc94a19365b10ecu64, 2u8, 48u32)  /* key */
+    nl_lex_register_hash(0x484cd7c41eb765cdu64, 2u8, 49u32)  /* signature */
+    nl_lex_register_hash(0x7c0ea75a95a79411u64, 2u8, 50u32)  /* packet */
+    nl_lex_register_hash(0x4f6a36d8e8907985u64, 2u8, 51u32)  /* stream */
+    nl_lex_register_hash(0xa5013e9ad5caeda4u64, 2u8, 52u32)  /* channel */
+    nl_lex_register_hash(0x10f2dcb841372d0cu64, 2u8, 53u32)  /* socket */
+    nl_lex_register_hash(0xc7f597ea639b1b59u64, 2u8, 54u32)  /* connection */
+    nl_lex_register_hash(0x86c8946e5047dea7u64, 2u8, 55u32)  /* capability */
+    nl_lex_register_hash(0xd053586f9c8e048bu64, 2u8, 56u32)  /* intent */
+    nl_lex_register_hash(0x0b7a1e4bea695f89u64, 2u8, 57u32)  /* pattern */
+    nl_lex_register_hash(0x226447d5a36b55e5u64, 2u8, 58u32)  /* glyph */
+    nl_lex_register_hash(0x76f15bd2d85da389u64, 2u8, 59u32)  /* crystal */
+    nl_lex_register_hash(0xac4a61ac2e59cbccu64, 2u8, 60u32)  /* witness */
+    nl_lex_register_hash(0x15d8d7b6a4c553c8u64, 2u8, 61u32)  /* arena */
+    nl_lex_register_hash(0x8b7dc019093cd0e1u64, 2u8, 62u32)  /* span */
+    nl_lex_register_hash(0xc755a623f50a24ddu64, 2u8, 63u32)  /* region */
+    nl_lex_register_hash(0x01dabe85903dc59au64, 2u8, 64u32)  /* process */
+    nl_lex_register_hash(0x59561bcb7e9336b1u64, 2u8, 65u32)  /* thread */
+    /* === ADJ === */
+    nl_lex_register_hash(0x62852288e56b3e53u64, 3u8, 66u32)  /* encrypted */
+    nl_lex_register_hash(0x5055c58f7a753b55u64, 3u8, 67u32)  /* signed */
+    nl_lex_register_hash(0x1d6a0ae1de6b2ca1u64, 3u8, 68u32)  /* sealed */
+    nl_lex_register_hash(0x89f6c11960ff5191u64, 3u8, 69u32)  /* raw */
+    nl_lex_register_hash(0xca52bf90e851d814u64, 3u8, 70u32)  /* compressed */
+    nl_lex_register_hash(0x00541119134fd259u64, 3u8, 71u32)  /* big */
+    nl_lex_register_hash(0x7d6ce172e098998cu64, 3u8, 72u32)  /* small */
+    nl_lex_register_hash(0xef5a4a7916c5f26fu64, 3u8, 73u32)  /* fast */
+    nl_lex_register_hash(0x6a771318f6fe2cb8u64, 3u8, 74u32)  /* slow */
+    nl_lex_register_hash(0xe5660aeee07403d0u64, 3u8, 75u32)  /* secure */
+    nl_lex_register_hash(0x9829d5caf45f3d03u64, 3u8, 76u32)  /* insecure */
+    nl_lex_register_hash(0x7d0cfe94310960b1u64, 3u8, 77u32)  /* valid */
+    nl_lex_register_hash(0x2be5705c42a81bd0u64, 3u8, 78u32)  /* invalid */
+    nl_lex_register_hash(0x852d008f993513d3u64, 3u8, 79u32)  /* sovereign */
+    /* === ADV === */
+    nl_lex_register_hash(0x742b119a079a292bu64, 4u8, 80u32)  /* quickly */
+    nl_lex_register_hash(0x958ba0ff4a1d393fu64, 4u8, 81u32)  /* slowly */
+    nl_lex_register_hash(0x9397d330d95b9e17u64, 4u8, 82u32)  /* securely */
+    nl_lex_register_hash(0x1c343869047769a1u64, 4u8, 83u32)  /* immediately */
+    nl_lex_register_hash(0x2d210bd352ea42dcu64, 4u8, 84u32)  /* eventually */
+    nl_lex_register_hash(0xf7c4a6dffaf7e544u64, 4u8, 85u32)  /* always */
+    nl_lex_register_hash(0xcbd8031e3d026dc9u64, 4u8, 86u32)  /* never */
+    nl_lex_register_hash(0xa7826ad9e25cf5a1u64, 4u8, 87u32)  /* sometimes */
+    /* === PREP === */
+    nl_lex_register_hash(0x7f845078d7a5c0b5u64, 5u8, 88u32)  /* from */
+    nl_lex_register_hash(0x08c83907b56ac0a4u64, 5u8, 89u32)  /* to */
+    nl_lex_register_hash(0xa66b06f655a0c2e9u64, 5u8, 90u32)  /* with */
+    nl_lex_register_hash(0x08b06007b5567108u64, 5u8, 91u32)  /* of */
+    nl_lex_register_hash(0x08b73807b55c4bbeu64, 5u8, 92u32)  /* in */
+    nl_lex_register_hash(0xf5a6c8c57a9061a3u64, 5u8, 93u32)  /* into */
+    nl_lex_register_hash(0x08b05807b5566370u64, 5u8, 94u32)  /* on */
+    nl_lex_register_hash(0x089c4e07b545a968u64, 5u8, 95u32)  /* at */
+    nl_lex_register_hash(0x08a64b07b54df8d4u64, 5u8, 96u32)  /* by */
+    nl_lex_register_hash(0xdcb27818fed9da90u64, 5u8, 97u32)  /* for */
+    nl_lex_register_hash(0x3ef0bdadda0c0a00u64, 5u8, 98u32)  /* against */
+    nl_lex_register_hash(0x79fa8d97ac77625au64, 5u8, 99u32)  /* through */
+    nl_lex_register_hash(0x13f5793e33ebda4fu64, 5u8, 100u32) /* between */
+    nl_lex_register_hash(0x19f79b1921bbcfffu64, 5u8, 101u32) /* out */
+    nl_lex_register_hash(0xf13ca4a2c837616au64, 5u8, 102u32) /* within */
+    /* === DET === */
+    nl_lex_register_hash(0x56f5c9194461d57cu64, 6u8, 103u32) /* the */
+    nl_lex_register_hash(0xaf63dc4c8601ec8cu64, 6u8, 104u32) /* a */
+    nl_lex_register_hash(0x089c3807b5458406u64, 6u8, 105u32) /* an */
+    nl_lex_register_hash(0x2587bcef32493841u64, 6u8, 106u32) /* this */
+    nl_lex_register_hash(0x256cadef3232570cu64, 6u8, 107u32) /* that */
+    nl_lex_register_hash(0xeaf1ba725db4c0c8u64, 6u8, 108u32) /* these */
+    nl_lex_register_hash(0x418338728eb9a12au64, 6u8, 109u32) /* those */
+    nl_lex_register_hash(0x08a94307b5502113u64, 6u8, 110u32) /* my */
+    nl_lex_register_hash(0xd3470d49a88be12au64, 6u8, 111u32) /* your */
+    nl_lex_register_hash(0x337323193006782bu64, 6u8, 112u32) /* his */
+    nl_lex_register_hash(0x334a1a192fe363ccu64, 6u8, 113u32) /* her */
+    nl_lex_register_hash(0x19f7991921bbcc99u64, 6u8, 114u32) /* our */
+    nl_lex_register_hash(0xeb06b1725dc70d87u64, 6u8, 115u32) /* their */
+    nl_lex_register_hash(0x6035dc18f0bbd4d1u64, 6u8, 116u32) /* some */
+    nl_lex_register_hash(0xe6f7b419052023cdu64, 6u8, 117u32) /* any */
+    nl_lex_register_hash(0xe6f09b190519daa4u64, 6u8, 118u32) /* all */
+    /* === ROLE === */
+    nl_lex_register_hash(0xd02d8a15c0f8e1e6u64, 10u8, 119u32) /* agent */
+    nl_lex_register_hash(0x1a5072758fdfbf3eu64, 10u8, 120u32) /* patient */
+    nl_lex_register_hash(0x76dbdc228f782db8u64, 10u8, 121u32) /* source */
+    nl_lex_register_hash(0xde3699178fd9f0bfu64, 10u8, 122u32) /* destination */
+    nl_lex_register_hash(0x16f3e46051eee3e8u64, 10u8, 123u32) /* target */
+    nl_lex_register_hash(0x13cd72b1567d0710u64, 10u8, 124u32) /* instrument */
+    nl_lex_register_hash(0x6a351a3ecc6275f6u64, 10u8, 125u32) /* beneficiary */
+    nl_lex_register_hash(0x41c171b52673603cu64, 10u8, 126u32) /* context */
+
+    /* === Concurrency VERB extensions (v1.0.1) === */
+    nl_lex_register_hash(0xce14f5ad70f6ece2u64, 1u8, 127u32) /* lock */
+    nl_lex_register_hash(0x782e6ca8b0d19235u64, 1u8, 128u32) /* unlock */
+    nl_lex_register_hash(0xdd1d0d790c2f1881u64, 1u8, 129u32) /* fork */
+    nl_lex_register_hash(0x4328f78ab20e1f98u64, 1u8, 130u32) /* spawn */
+    nl_lex_register_hash(0x5e81a4f62c27eaa0u64, 1u8, 131u32) /* wait */
+    nl_lex_register_hash(0x5062cd8f7a7fd349u64, 1u8, 132u32) /* signal */
+    nl_lex_register_hash(0x14e5faab9ce0e362u64, 1u8, 133u32) /* block */
+    nl_lex_register_hash(0xa63d4c9b882b10feu64, 1u8, 134u32) /* release */
+    nl_lex_register_hash(0x47e83eaa4b387e3bu64, 1u8, 135u32) /* cancel */
+    nl_lex_register_hash(0x809788a9c1b27c3du64, 1u8, 136u32) /* flush */
+    nl_lex_register_hash(0xefc7af8dac33976cu64, 1u8, 137u32) /* schedule */
+    nl_lex_register_hash(0x4592850c14d1d82bu64, 1u8, 138u32) /* dispatch */
+
+    /* === IO/sync NOUN extensions (v1.0.1) === */
+    nl_lex_register_hash(0x8c2cdb0da8933fa6u64, 2u8, 139u32) /* port */
+    nl_lex_register_hash(0x1737f69e334c12b3u64, 2u8, 140u32) /* address */
+    nl_lex_register_hash(0xfb9b5fb7a890a1fcu64, 2u8, 141u32) /* endpoint */
+    nl_lex_register_hash(0xb11e8b146c5a21d8u64, 2u8, 142u32) /* queue */
+    nl_lex_register_hash(0xd60f473f93ff64a4u64, 2u8, 144u32) /* mutex */
+    nl_lex_register_hash(0x7cbbbe9dc702277du64, 2u8, 145u32) /* semaphore */
+    nl_lex_register_hash(0x9ffabb14f1b96c80u64, 2u8, 146u32) /* barrier */
+    nl_lex_register_hash(0x29338b6c39286b02u64, 2u8, 147u32) /* timer */
+    nl_lex_register_hash(0x112b8c0079b0649fu64, 2u8, 148u32) /* event */
+    nl_lex_register_hash(0xbed8c20dc4e85ed9u64, 2u8, 149u32) /* pipe */
+    nl_lex_register_hash(0x39e433069cce324bu64, 2u8, 150u32) /* mailbox */
+
+    /* === Interrogative-auxiliary VERBs (Phase E.4) ===
+     * Sentence-initial occurrence flags INTERROGATIVE in nl_parse;
+     * internal occurrence is permitted and treated as a regular
+     * VERB by the imperative/declarative paths. */
+    nl_lex_register_hash(0x08b74507b55c61d5u64, 1u8, 151u32) /* is */
+    nl_lex_register_hash(0xe756c8190570da4du64, 1u8, 152u32) /* are */
+    nl_lex_register_hash(0xf5e2f1190ce47dc5u64, 1u8, 153u32) /* can */
+    nl_lex_register_hash(0xdc33f56761e466d0u64, 1u8, 154u32) /* does */
+    nl_lex_register_hash(0x08915907b53bb494u64, 1u8, 155u32) /* do */
+    nl_lex_register_hash(0xa6190af6555abf8du64, 1u8, 156u32) /* will */
+    nl_lex_register_hash(0xa5f5dafcaa01716au64, 1u8, 157u32) /* should */
+    nl_lex_register_hash(0xb1ecd68e447facbeu64, 1u8, 158u32) /* could */
+    nl_lex_register_hash(0x7aa8ee5e8b93b862u64, 1u8, 159u32) /* would */
+    nl_lex_register_hash(0x354140628d05e768u64, 1u8, 160u32) /* might */
+    nl_lex_register_hash(0x080f5019176d1e46u64, 1u8, 161u32) /* may */
+    nl_lex_register_hash(0x335813192fef9543u64, 1u8, 162u32) /* has */
+    nl_lex_register_hash(0x2e47c5cc74230edbu64, 1u8, 163u32) /* have */
+    nl_lex_register_hash(0x5eade819487cb532u64, 1u8, 164u32) /* was */
+    nl_lex_register_hash(0x3db3f1f61a19018cu64, 1u8, 165u32) /* were */
+
+    /* === Subordinator PREPs (Phase E.5) ===
+     * Registered with TYPE=NL_TOK_PREP (=5); nl_parse discriminates
+     * subordinators from true prepositions by word_id range [175..177]
+     * via _np_is_subordinator and recurses into _np_handle_subordinate
+     * to absorb a full mini-clause (NP + VERB + (NP|ADJ)?). */
+    nl_lex_register_hash(0x83e1ead99b5801bbu64, 5u8, 175u32) /* because */
+    nl_lex_register_hash(0xce87a3885811296eu64, 5u8, 176u32) /* while */
+    nl_lex_register_hash(0x08b73007b55c3e26u64, 5u8, 177u32) /* if */
+
+    /* === Coordinating CONJUNCTIONs (Phase E.5) ===
+     * Registered with TYPE=NL_TOK_PREP (=5) because no CONJ token type
+     * exists; nl_parse discriminates conjunctions from true prepositions
+     * by word_id range [178..181] via _np_is_conjunction. Sentence-final
+     * use triggers conjunction-recursion in the imperative/declarative
+     * handlers up to a depth cap of 3 clauses. */
+    nl_lex_register_hash(0xe6f79719051ff286u64, 5u8, 178u32) /* and */
+    nl_lex_register_hash(0x08b05407b5565ca4u64, 5u8, 179u32) /* or */
+    nl_lex_register_hash(0x00611e19135a72ccu64, 5u8, 180u32) /* but */
+    nl_lex_register_hash(0x2579c7ef323d0d96u64, 5u8, 181u32) /* then */
+
+    /* ==========================================================
+     * v1.0.2 expansion (Phase E.1.1): system-administration vocabulary
+     * 320 new entries, word_id range 200..621 (contiguous with skips
+     * for collisions with the seed lexicon -- see comment block in
+     * each category for the words intentionally omitted to preserve
+     * the prior registration's word_id binding).
+     *
+     * Strictly DETERMINISTIC: all entries hard-coded. NO frequency
+     * learning, NO dynamic addition. FNV-1a 64 of lower-cased ASCII.
+     *
+     * Sealed lexicon contract: total entries after init = 492
+     * (172 seed/extensions + 320 expansion). Capacity 4096; load
+     * factor 12.0%.
+     * ========================================================== */
+
+    /* === Networking VERB (v1.0.2) === */
+    nl_lex_register_hash(0xca29c5e7d9e4dee2u64, 1u8, 202u32) /* bind_socket */
+    nl_lex_register_hash(0x9b129e5d747a2a36u64, 1u8, 203u32) /* listen_on */
+    nl_lex_register_hash(0xc8d2072e7dc27646u64, 1u8, 204u32) /* accept_call */
+    nl_lex_register_hash(0x56769bf5181a61e9u64, 1u8, 205u32) /* transmit */
+    nl_lex_register_hash(0xf8deac21c8238342u64, 1u8, 206u32) /* receive */
+    nl_lex_register_hash(0xbf30e00dc53307a9u64, 1u8, 207u32) /* ping */
+    nl_lex_register_hash(0x3f82ce2f7bf75687u64, 1u8, 208u32) /* traceroute */
+    nl_lex_register_hash(0x3127fb469f19ebdeu64, 1u8, 209u32) /* route */
+    nl_lex_register_hash(0x1e65942e132f4f7au64, 1u8, 210u32) /* forward */
+    nl_lex_register_hash(0xf1a2a766dcd55bacu64, 1u8, 211u32) /* drop */
+    nl_lex_register_hash(0x0f7f50b364fa74fdu64, 1u8, 212u32) /* throttle */
+    nl_lex_register_hash(0xc5a8f9e7c9642c1bu64, 1u8, 213u32) /* rate_limit */
+    nl_lex_register_hash(0xaf951f534e9cc321u64, 1u8, 214u32) /* multicast */
+    nl_lex_register_hash(0xc22cc76c12e7e854u64, 1u8, 215u32) /* broadcast */
+    nl_lex_register_hash(0x6f7bfbe4cb63b0eau64, 1u8, 216u32) /* unicast */
+    nl_lex_register_hash(0xdff7710dd73b9849u64, 1u8, 217u32) /* peer */
+    nl_lex_register_hash(0xca14be67576694a3u64, 1u8, 218u32) /* dial */
+    nl_lex_register_hash(0xce02fabd24666a7cu64, 1u8, 219u32) /* hangup */
+    nl_lex_register_hash(0x31ab1e1fcc28efe6u64, 1u8, 220u32) /* reconnect */
+    nl_lex_register_hash(0x7176e8904d2d565du64, 1u8, 221u32) /* reroute */
+    nl_lex_register_hash(0xd140ac90e5927857u64, 1u8, 222u32) /* tunnel */
+    nl_lex_register_hash(0xc9162d52fe5b14c6u64, 1u8, 223u32) /* encapsulate */
+    nl_lex_register_hash(0xad995c323f2f38deu64, 1u8, 224u32) /* decapsulate */
+    nl_lex_register_hash(0x6ae3c01ef4feb47du64, 1u8, 225u32) /* fragment */
+    nl_lex_register_hash(0x983ad12fc0272970u64, 1u8, 226u32) /* reassemble */
+    nl_lex_register_hash(0x0c88bce25446069du64, 1u8, 227u32) /* enqueue */
+    nl_lex_register_hash(0x85aac62a460aa5e5u64, 1u8, 228u32) /* dequeue */
+    nl_lex_register_hash(0x163ca1f2c427ff19u64, 1u8, 229u32) /* retry */
+    nl_lex_register_hash(0x8ed8bca89377d4f7u64, 1u8, 230u32) /* filter */
+    nl_lex_register_hash(0x5b2e048b0099bd71u64, 1u8, 231u32) /* firewall */
+    nl_lex_register_hash(0x212bc21925670c8cu64, 1u8, 232u32) /* nat */
+    nl_lex_register_hash(0xf91e91246d67f11bu64, 1u8, 233u32) /* proxy */
+    nl_lex_register_hash(0xe79981f33b2890e2u64, 1u8, 234u32) /* relay */
+    nl_lex_register_hash(0x35f71de13238ab42u64, 1u8, 235u32) /* mirror */
+    nl_lex_register_hash(0xf3f9755a0eea145fu64, 1u8, 236u32) /* sniff */
+    nl_lex_register_hash(0xdaa890758bf3eca3u64, 1u8, 237u32) /* resolve */
+    nl_lex_register_hash(0x9e62eed8ae1350acu64, 1u8, 238u32) /* renegotiate */
+    nl_lex_register_hash(0x5db5d08f1efa5086u64, 1u8, 239u32) /* handshake */
+    nl_lex_register_hash(0xb1da6b214500bf17u64, 1u8, 240u32) /* reset_conn */
+    nl_lex_register_hash(0x38fa8bcdfda6f3a9u64, 1u8, 241u32) /* keepalive */
+    nl_lex_register_hash(0x8c18cf0da8828238u64, 1u8, 242u32) /* poll */
+    nl_lex_register_hash(0xfc6abdd11949714du64, 1u8, 243u32) /* epoll */
+    nl_lex_register_hash(0xac89001b7d96b89cu64, 1u8, 244u32) /* select_fd */
+
+    /* === Database VERB (v1.0.2) ===
+     * Skipped: 'query' (already at word_id 33), reserves 250 unused. */
+    nl_lex_register_hash(0x1aaab1563505f90bu64, 1u8, 251u32) /* insert_row */
+    nl_lex_register_hash(0x24eb88339bb9218fu64, 1u8, 252u32) /* update_row */
+    nl_lex_register_hash(0x995f3c87c56779fdu64, 1u8, 253u32) /* delete_row */
+    nl_lex_register_hash(0xbd76100bd58c9c0du64, 1u8, 254u32) /* select */
+    nl_lex_register_hash(0xac167f3e17fae47eu64, 1u8, 255u32) /* project */
+    nl_lex_register_hash(0x41def2de29651139u64, 1u8, 256u32) /* join */
+    nl_lex_register_hash(0xdc57e42946f6e08cu64, 1u8, 257u32) /* group */
+    nl_lex_register_hash(0x5629fa3b509e87c8u64, 1u8, 258u32) /* aggregate */
+    nl_lex_register_hash(0x83cf8e8f9081468bu64, 1u8, 259u32) /* index */
+    nl_lex_register_hash(0xc906da0a2f3e31d2u64, 1u8, 260u32) /* vacuum */
+    nl_lex_register_hash(0xe6f720d6bec59784u64, 1u8, 261u32) /* replicate */
+    nl_lex_register_hash(0x6e308f493acb8a0bu64, 1u8, 262u32) /* shard */
+    nl_lex_register_hash(0x09468996aba3e709u64, 1u8, 263u32) /* partition */
+    nl_lex_register_hash(0xcbd94d6698379dadu64, 1u8, 264u32) /* snapshot */
+    nl_lex_register_hash(0x9a848d5e6672b3deu64, 1u8, 265u32) /* begin */
+    nl_lex_register_hash(0x7da7727ca39ddcdcu64, 1u8, 266u32) /* commit */
+    nl_lex_register_hash(0x3f7f062d618bda39u64, 1u8, 267u32) /* abort */
+    nl_lex_register_hash(0xebe90009bda2153cu64, 1u8, 268u32) /* prepare */
+    nl_lex_register_hash(0x9f79221341cfcb18u64, 1u8, 269u32) /* execute */
+    nl_lex_register_hash(0x565a3fdfd862a0a3u64, 1u8, 270u32) /* fetch */
+    nl_lex_register_hash(0xf927453fbe6252efu64, 1u8, 271u32) /* cursor */
+    nl_lex_register_hash(0xb8e2e36bdf267bf0u64, 1u8, 272u32) /* rebuild */
+    nl_lex_register_hash(0xc175dd4a02cce6d3u64, 1u8, 273u32) /* analyze */
+    nl_lex_register_hash(0x5b41d51752ea63ecu64, 1u8, 274u32) /* reindex */
+    nl_lex_register_hash(0x570411a086526886u64, 1u8, 275u32) /* compact */
+    nl_lex_register_hash(0x6495b2dd1624a597u64, 1u8, 276u32) /* truncate */
+    nl_lex_register_hash(0x0fa4a7ae3f75aae2u64, 1u8, 277u32) /* upsert */
+    nl_lex_register_hash(0xd9b482ebf58b2bfeu64, 1u8, 278u32) /* grant_role */
+    nl_lex_register_hash(0x3ea2330771aa8bccu64, 1u8, 279u32) /* revoke_role */
+    nl_lex_register_hash(0xf6f03821316e44c4u64, 1u8, 280u32) /* migrate_schema */
+
+    /* === File VERB (v1.0.2) ===
+     * Skipped: 'open' (14), 'read' (4), 'write' (5), 'flush' (136). */
+    nl_lex_register_hash(0x3e7fe942f71f1e61u64, 1u8, 293u32) /* append */
+    nl_lex_register_hash(0x2cfad818d3eccc11u64, 1u8, 294u32) /* seek */
+    nl_lex_register_hash(0xfa48fcef19cf1ae2u64, 1u8, 295u32) /* tell */
+    nl_lex_register_hash(0xda793c193643e93au64, 1u8, 297u32) /* sync */
+    nl_lex_register_hash(0x1f573f5f6e8fdd53u64, 1u8, 298u32) /* rename */
+    nl_lex_register_hash(0xbf4b9bad694f4809u64, 1u8, 299u32) /* link */
+    nl_lex_register_hash(0xa8548c33c7356014u64, 1u8, 300u32) /* symlink */
+    nl_lex_register_hash(0x3e8c7e7610927412u64, 1u8, 301u32) /* chmod */
+    nl_lex_register_hash(0x2c37327605e6eec6u64, 1u8, 302u32) /* chown */
+    nl_lex_register_hash(0x0d558292ed4fdc7au64, 1u8, 303u32) /* mount */
+    nl_lex_register_hash(0x85ac46db6dbb602bu64, 1u8, 304u32) /* unmount */
+    nl_lex_register_hash(0x663afaa8a67896b2u64, 1u8, 305u32) /* unlink */
+    nl_lex_register_hash(0xaefd5a191d95e3f7u64, 1u8, 306u32) /* stat */
+    nl_lex_register_hash(0x88adb2193921fcb4u64, 1u8, 307u32) /* readdir */
+    nl_lex_register_hash(0xb8eaa574819a7ff8u64, 1u8, 308u32) /* mkdir */
+    nl_lex_register_hash(0x77dfa1348bae30dfu64, 1u8, 309u32) /* rmdir */
+    nl_lex_register_hash(0x7e6283be0952e02bu64, 1u8, 310u32) /* access */
+    nl_lex_register_hash(0x2b2751cd06cf643eu64, 1u8, 311u32) /* realpath */
+    nl_lex_register_hash(0x7d8fa30fca4c2181u64, 1u8, 312u32) /* sendfile */
+
+    /* === Security VERB (v1.0.2) ===
+     * Skipped: 'sign' (11), 'verify' (12), 'encrypt' (8), 'decrypt' (9),
+     * 'hash' (10), 'revoke' (31). */
+    nl_lex_register_hash(0x4b2d077a4b387c2cu64, 1u8, 325u32) /* authenticate */
+    nl_lex_register_hash(0xfe2abcf82cc72030u64, 1u8, 326u32) /* authorize */
+    nl_lex_register_hash(0x907bd39a08f34aacu64, 1u8, 327u32) /* attest */
+    nl_lex_register_hash(0x81e60b71d65a9676u64, 1u8, 333u32) /* derive */
+    nl_lex_register_hash(0x075cb2f53173bd8au64, 1u8, 334u32) /* rotate */
+    nl_lex_register_hash(0xed4df38cf0d47908u64, 1u8, 336u32) /* audit */
+    nl_lex_register_hash(0x880d59a733d283f9u64, 1u8, 337u32) /* escalate */
+    nl_lex_register_hash(0x9e7483c41fd1e772u64, 1u8, 338u32) /* attenuate */
+    nl_lex_register_hash(0xea87658f8458aad2u64, 1u8, 339u32) /* isolate */
+    nl_lex_register_hash(0x2e3c6336da5a2a44u64, 1u8, 340u32) /* sandbox */
+    nl_lex_register_hash(0x7ecc5a61e15573d1u64, 1u8, 341u32) /* quarantine */
+    nl_lex_register_hash(0x2eb897ddc36753e5u64, 1u8, 342u32) /* enroll */
+    nl_lex_register_hash(0x9b2faff1a19bd4e0u64, 1u8, 343u32) /* provision */
+    nl_lex_register_hash(0xd42389c26929ffe5u64, 1u8, 344u32) /* deprovision */
+    nl_lex_register_hash(0xf0895dff89f6182cu64, 1u8, 345u32) /* tokenize */
+    nl_lex_register_hash(0xb45e88d8d2f386ffu64, 1u8, 346u32) /* detokenize */
+    nl_lex_register_hash(0xdcd0020c0e22f4a8u64, 1u8, 347u32) /* redact */
+    nl_lex_register_hash(0x25b61c2b8fce2245u64, 1u8, 348u32) /* anonymize */
+    nl_lex_register_hash(0x96d557afab859ce9u64, 1u8, 349u32) /* encipher */
+    nl_lex_register_hash(0x34f3857fa0d173e1u64, 1u8, 350u32) /* decipher */
+    nl_lex_register_hash(0xbb8ba3f5d04f72c5u64, 1u8, 351u32) /* wrap */
+    nl_lex_register_hash(0x5c4e7260c8aacb9eu64, 1u8, 352u32) /* unwrap */
+    nl_lex_register_hash(0x5aae932e27c1ae23u64, 1u8, 353u32) /* salt_value */
+    nl_lex_register_hash(0x0fbfed12d43216d8u64, 1u8, 354u32) /* sec_nonce_emit */
+
+    /* === State VERB (v1.0.2) ===
+     * Skipped: 'commit' (266 above), 'snapshot' (264 above),
+     * 'fork' (129). */
+    nl_lex_register_hash(0x164cacbef85eb87du64, 1u8, 361u32) /* rollback */
+    nl_lex_register_hash(0xc8f31246af8d829fu64, 1u8, 363u32) /* checkpoint */
+    nl_lex_register_hash(0xb0577b29135f0bb1u64, 1u8, 364u32) /* restore */
+    nl_lex_register_hash(0xab39ffb7f3064afeu64, 1u8, 365u32) /* migrate */
+    nl_lex_register_hash(0x4e4baec80fe39a67u64, 1u8, 367u32) /* merge */
+    nl_lex_register_hash(0x732d1afa284ec2b5u64, 1u8, 368u32) /* rebase */
+    nl_lex_register_hash(0x78821e9b0c3452b4u64, 1u8, 369u32) /* squash */
+    nl_lex_register_hash(0xc96fab8b04583b78u64, 1u8, 370u32) /* cherry_pick */
+    nl_lex_register_hash(0xf74a76a458bf1fbbu64, 1u8, 371u32) /* apply */
+    nl_lex_register_hash(0xeadd6394f6b31a63u64, 1u8, 372u32) /* revert */
+    nl_lex_register_hash(0x93e4cd644f65cef2u64, 1u8, 373u32) /* replay */
+    nl_lex_register_hash(0xee59b5ad45a96f42u64, 1u8, 374u32) /* stash */
+    nl_lex_register_hash(0x13b30adcb67b5b87u64, 1u8, 375u32) /* unstash */
+    nl_lex_register_hash(0x880412efcf955079u64, 1u8, 376u32) /* tag_state */
+    nl_lex_register_hash(0x919ec0f651278ba5u64, 1u8, 377u32) /* branch */
+    nl_lex_register_hash(0x501527249ec1fa77u64, 1u8, 378u32) /* prune */
+    nl_lex_register_hash(0xf3b9ad9fcd1d72ceu64, 1u8, 379u32) /* rewind */
+    nl_lex_register_hash(0xfbfc79022fdbe01cu64, 1u8, 380u32) /* fastforward */
+    nl_lex_register_hash(0x4cf0781fbfe66969u64, 1u8, 381u32) /* redo */
+    nl_lex_register_hash(0x64bde8e4857adf2fu64, 1u8, 382u32) /* undo */
+    nl_lex_register_hash(0x13baf414d0d45ae6u64, 1u8, 383u32) /* save_state */
+    nl_lex_register_hash(0xf88358cffa436c67u64, 1u8, 384u32) /* load_state */
+
+    /* === Networking NOUN (v1.0.2) ===
+     * Skipped: 'packet' (50), 'route' (209 above as VERB),
+     * 'port' (139), 'address' (140). */
+    nl_lex_register_hash(0xd8d4335628b35226u64, 2u8, 391u32) /* frame */
+    nl_lex_register_hash(0x6b0b6207e62dfb7eu64, 2u8, 392u32) /* datagram */
+    nl_lex_register_hash(0x862234eda24ea906u64, 2u8, 393u32) /* segment */
+    nl_lex_register_hash(0x3a506cb501761960u64, 2u8, 394u32) /* header */
+    nl_lex_register_hash(0xcfb8a9d063b5e9e5u64, 2u8, 395u32) /* payload */
+    nl_lex_register_hash(0x335f20192ff5ca08u64, 2u8, 397u32) /* hop */
+    nl_lex_register_hash(0x9d2717bfe2cfa019u64, 2u8, 398u32) /* gateway */
+    nl_lex_register_hash(0xa0bc8eb4d76a3890u64, 2u8, 400u32) /* interface */
+    nl_lex_register_hash(0x2a5bc800dfe8609cu64, 2u8, 401u32) /* vlan */
+    nl_lex_register_hash(0xe4b1a989d16d1fa8u64, 2u8, 402u32) /* subnet */
+    nl_lex_register_hash(0x1f375fa2ce7b1849u64, 2u8, 403u32) /* mask */
+    nl_lex_register_hash(0xbfa17c01c2fa7ab0u64, 2u8, 405u32) /* octet */
+    nl_lex_register_hash(0xba8821b572531e29u64, 2u8, 406u32) /* prefix */
+    nl_lex_register_hash(0xbb0ecd6aede4a10cu64, 2u8, 407u32) /* suffix */
+    nl_lex_register_hash(0xa0dba500590b7544u64, 2u8, 408u32) /* router */
+    nl_lex_register_hash(0x4590274951cb0811u64, 2u8, 409u32) /* switch_dev */
+    nl_lex_register_hash(0x9cdc3637e7ce0390u64, 2u8, 410u32) /* bridge */
+    nl_lex_register_hash(0x33140a192fb5b92cu64, 2u8, 411u32) /* hub */
+    nl_lex_register_hash(0x7361ffdf75a113bcu64, 2u8, 412u32) /* firewall_rule */
+    nl_lex_register_hash(0xaa93248c32e711e8u64, 2u8, 413u32) /* dns_record */
+
+    /* === Storage NOUN (v1.0.2) ===
+     * Skipped: 'index' (259 as VERB above), 'partition' (263 as VERB above),
+     * 'shard' (262 as VERB above), 'snapshot' (264 as VERB above). */
+    nl_lex_register_hash(0x8a0bc1196111ad9bu64, 2u8, 420u32) /* row */
+    nl_lex_register_hash(0x5f531287628bf287u64, 2u8, 421u32) /* column */
+    nl_lex_register_hash(0x77203729b376a83fu64, 2u8, 422u32) /* table */
+    nl_lex_register_hash(0x758d17ff764667b6u64, 2u8, 424u32) /* schema */
+    nl_lex_register_hash(0xf9928605e9a2ddd8u64, 2u8, 425u32) /* catalog */
+    nl_lex_register_hash(0x853bb343610d9a4bu64, 2u8, 426u32) /* tablespace */
+    nl_lex_register_hash(0xf854f07310c52127u64, 2u8, 429u32) /* replica */
+    nl_lex_register_hash(0x125073191daf5431u64, 2u8, 431u32) /* log */
+    nl_lex_register_hash(0x380681e886cb2118u64, 2u8, 432u32) /* journal */
+    nl_lex_register_hash(0xbea01422b5f77185u64, 2u8, 433u32) /* archive */
+    nl_lex_register_hash(0x8f75c61dfd19093fu64, 2u8, 434u32) /* backup */
+    nl_lex_register_hash(0x1010a9eeee1ee669u64, 2u8, 435u32) /* rowset */
+    nl_lex_register_hash(0xd6808830af3ece2cu64, 2u8, 436u32) /* collation */
+    nl_lex_register_hash(0xaa38aca481f528a8u64, 2u8, 437u32) /* sequence */
+    nl_lex_register_hash(0xfe46f400c6b86658u64, 2u8, 438u32) /* view */
+    nl_lex_register_hash(0x1166d9472f12eb82u64, 2u8, 439u32) /* materialized */
+    nl_lex_register_hash(0x9123e5d0c6b648d1u64, 2u8, 440u32) /* tuple */
+    nl_lex_register_hash(0x275e9f272c4022f9u64, 2u8, 441u32) /* primary_key */
+    nl_lex_register_hash(0x7b4c91363aa63b83u64, 2u8, 442u32) /* foreign_key */
+    nl_lex_register_hash(0x5eadfb19487cd57bu64, 2u8, 443u32) /* wal */
+    nl_lex_register_hash(0x1f334da471217a08u64, 2u8, 444u32) /* redo_log */
+    nl_lex_register_hash(0x51a9737555bd5532u64, 2u8, 445u32) /* undo_log */
+    nl_lex_register_hash(0x06b3ad3149ad2458u64, 2u8, 446u32) /* database */
+    nl_lex_register_hash(0x7bf7df9dac60acedu64, 2u8, 447u32) /* tablerow */
+
+    /* === Security NOUN (v1.0.2) ===
+     * Skipped: 'capability' (55), 'signature' (49), 'key' (48),
+     * 'audit' (336 as VERB above). */
+    nl_lex_register_hash(0x30e8a03a749583f8u64, 2u8, 450u32) /* credential */
+    nl_lex_register_hash(0x26c4b17d50b3c152u64, 2u8, 451u32) /* token */
+    nl_lex_register_hash(0x432d22cedbc70e19u64, 2u8, 453u32) /* attestation */
+    nl_lex_register_hash(0x55c474c8ec8f35d0u64, 2u8, 455u32) /* certificate */
+    nl_lex_register_hash(0xab23f0eec020c951u64, 2u8, 457u32) /* secret */
+    nl_lex_register_hash(0x097f5318bf97c581u64, 2u8, 458u32) /* salt */
+    nl_lex_register_hash(0x73a94c71d60dc0d8u64, 2u8, 459u32) /* nonce */
+    nl_lex_register_hash(0x080f6619176d43a8u64, 2u8, 460u32) /* mac */
+    nl_lex_register_hash(0x56d7ab194448a4f3u64, 2u8, 461u32) /* tag */
+    nl_lex_register_hash(0xbfe9e4a0d3aa473fu64, 2u8, 463u32) /* policy */
+    nl_lex_register_hash(0x6292d59034c493c6u64, 2u8, 464u32) /* keyring */
+    nl_lex_register_hash(0x2d7831feca432f9du64, 2u8, 465u32) /* keystore */
+    nl_lex_register_hash(0x3fb6db940e18f80fu64, 2u8, 466u32) /* vault */
+    nl_lex_register_hash(0x01bc813c95f74d71u64, 2u8, 467u32) /* enclave */
+    nl_lex_register_hash(0xbbeb99cff9688969u64, 2u8, 468u32) /* principal */
+    nl_lex_register_hash(0x8950c6f3060a50d0u64, 2u8, 469u32) /* realm */
+    nl_lex_register_hash(0x464d92ea3b21da22u64, 2u8, 470u32) /* permission */
+    nl_lex_register_hash(0xa2a05aaa108d6f4cu64, 2u8, 471u32) /* privilege */
+
+    /* === File NOUN (v1.0.2) ===
+     * Skipped: 'mount' (303 as VERB above), 'partition' (263 as VERB above),
+     * 'block' (133), 'fragment' (225 as VERB above), 'link' (299 as VERB above),
+     * 'symlink' (300 as VERB above). */
+    nl_lex_register_hash(0x37a5088f65df2240u64, 2u8, 480u32) /* inode */
+    nl_lex_register_hash(0xc73aaa4e183cea6du64, 2u8, 481u32) /* dentry */
+    nl_lex_register_hash(0x08986007b541df27u64, 2u8, 482u32) /* fd */
+    nl_lex_register_hash(0x09cc9eb61b98c200u64, 2u8, 483u32) /* descriptor */
+    nl_lex_register_hash(0x21cde1e8e13cf0cfu64, 2u8, 485u32) /* volume */
+    nl_lex_register_hash(0xabb697f29ac547aau64, 2u8, 486u32) /* filesystem */
+    nl_lex_register_hash(0xde57d8eedce983cfu64, 2u8, 488u32) /* sector */
+    nl_lex_register_hash(0x72bd87d332d5304du64, 2u8, 490u32) /* cluster */
+    nl_lex_register_hash(0x05be5db62e943799u64, 2u8, 494u32) /* extent */
+    nl_lex_register_hash(0xc4b1f4eb0734a1a8u64, 2u8, 495u32) /* directory */
+    nl_lex_register_hash(0xaf33177cdfa85f9du64, 2u8, 496u32) /* folder */
+    nl_lex_register_hash(0x96f6a06438719795u64, 2u8, 497u32) /* pathname */
+    nl_lex_register_hash(0x79b6a9af7a07f29bu64, 2u8, 498u32) /* basename */
+    nl_lex_register_hash(0xad90b24c904b7f0fu64, 2u8, 499u32) /* dirname */
+    nl_lex_register_hash(0x0b0a35479d12bca8u64, 2u8, 500u32) /* umask */
+    nl_lex_register_hash(0x0268b0f8129435cau64, 2u8, 501u32) /* offset */
+    nl_lex_register_hash(0x4cc15c81538ca2e3u64, 2u8, 502u32) /* permission_bits */
+    nl_lex_register_hash(0xa692f75ab08b8cf4u64, 2u8, 503u32) /* owner */
+    nl_lex_register_hash(0x0d3deba2c41dadb2u64, 2u8, 504u32) /* mode */
+    nl_lex_register_hash(0x5eea961f9a171dedu64, 2u8, 505u32) /* superblock */
+
+    /* === Concurrency NOUN (v1.0.2) ===
+     * Skipped: 'mutex' (144), 'semaphore' (145), 'barrier' (146),
+     * 'queue' (142), 'channel' (52), 'pipe' (149), 'mailbox' (150),
+     * 'thread' (65). */
+    nl_lex_register_hash(0x9eed1eec38392a7du64, 2u8, 508u32) /* latch */
+    nl_lex_register_hash(0xd88061d4eab33056u64, 2u8, 514u32) /* future */
+    nl_lex_register_hash(0x2d724c55c2f97f22u64, 2u8, 515u32) /* promise */
+    nl_lex_register_hash(0xd9603bef07a9524cu64, 2u8, 516u32) /* task */
+    nl_lex_register_hash(0x1359777fe7032881u64, 2u8, 517u32) /* fiber */
+    nl_lex_register_hash(0x754a0a8c81da6c6bu64, 2u8, 519u32) /* runtime */
+    nl_lex_register_hash(0x60c0968b60f5f3b1u64, 2u8, 520u32) /* rwlock */
+    nl_lex_register_hash(0xc6bb91769dfb1856u64, 2u8, 521u32) /* spinlock */
+    nl_lex_register_hash(0x23fa7a31f566ce26u64, 2u8, 522u32) /* condvar */
+    nl_lex_register_hash(0xc7c79f98d1016379u64, 2u8, 523u32) /* monitor */
+    nl_lex_register_hash(0xa51a677d5b590177u64, 2u8, 524u32) /* worker */
+    nl_lex_register_hash(0xa3e66bbb9ba9c7fau64, 2u8, 525u32) /* scheduler */
+    nl_lex_register_hash(0xca8b48b8d4043b7cu64, 2u8, 526u32) /* executor */
+
+    /* === Time NOUN (v1.0.2) === */
+    nl_lex_register_hash(0x3c1856807823c952u64, 2u8, 527u32) /* instant */
+    nl_lex_register_hash(0x8af203ac9dd3208du64, 2u8, 528u32) /* duration */
+    nl_lex_register_hash(0x4abbaca40bb6fe75u64, 2u8, 529u32) /* deadline */
+    nl_lex_register_hash(0x60827e549de65488u64, 2u8, 530u32) /* timeout */
+    nl_lex_register_hash(0xaebb18f16a62e878u64, 2u8, 531u32) /* interval */
+    nl_lex_register_hash(0xfc9697d1196e6ba6u64, 2u8, 532u32) /* epoch */
+    nl_lex_register_hash(0x1e7683ef2ebc7684u64, 2u8, 533u32) /* tick */
+    nl_lex_register_hash(0x46e670f93e615b51u64, 2u8, 534u32) /* cycle */
+    nl_lex_register_hash(0x75e7429b95100805u64, 2u8, 535u32) /* beat */
+    nl_lex_register_hash(0x0528080b48ef9464u64, 2u8, 536u32) /* period */
+    nl_lex_register_hash(0xff4d966bc22ed3b8u64, 2u8, 537u32) /* phase */
+    nl_lex_register_hash(0x5ddc92338ef53403u64, 2u8, 538u32) /* timestamp */
+    nl_lex_register_hash(0x5c83d5694e9ab882u64, 2u8, 539u32) /* timezone */
+    nl_lex_register_hash(0x0a7cf666efcba93fu64, 2u8, 540u32) /* calendar */
+    nl_lex_register_hash(0xff29a08298a13117u64, 2u8, 541u32) /* heartbeat */
+    nl_lex_register_hash(0x9e8c579513934bbdu64, 2u8, 542u32) /* clock */
+    nl_lex_register_hash(0xe4b480e7ff6ed680u64, 2u8, 543u32) /* schedule_time */
+    nl_lex_register_hash(0xb78ce49735cd209eu64, 2u8, 544u32) /* expiry */
+
+    /* === Adjectives (v1.0.2) ===
+     * Skipped: 'sync' (297 as VERB above), 'sealed' (68). */
+    nl_lex_register_hash(0x2584e9e765c2f420u64, 3u8, 545u32) /* atomic */
+    nl_lex_register_hash(0xa26817d891ff02e8u64, 3u8, 546u32) /* durable */
+    nl_lex_register_hash(0x030bce31147310a1u64, 3u8, 547u32) /* consistent */
+    nl_lex_register_hash(0x74770d66bf7310b8u64, 3u8, 548u32) /* available */
+    nl_lex_register_hash(0x1ff35e9ba24d70a0u64, 3u8, 549u32) /* partitioned */
+    nl_lex_register_hash(0x4d3a96aa6195bdfeu64, 3u8, 550u32) /* idempotent */
+    nl_lex_register_hash(0x39ffe6865f96a237u64, 3u8, 551u32) /* monotonic */
+    nl_lex_register_hash(0xe0e2c14637b2f9c6u64, 3u8, 552u32) /* reentrant */
+    nl_lex_register_hash(0x09d937c1ee8185a7u64, 3u8, 553u32) /* thread_safe */
+    nl_lex_register_hash(0x87a0f9b00a91be1fu64, 3u8, 554u32) /* signal_safe */
+    nl_lex_register_hash(0x7268f9bc90cbb82fu64, 3u8, 555u32) /* async */
+    nl_lex_register_hash(0x4b9802c1f6edbb7eu64, 3u8, 557u32) /* blocking */
+    nl_lex_register_hash(0xdaa0cdc174d05c22u64, 3u8, 558u32) /* non_blocking */
+    nl_lex_register_hash(0x0437d9ad903da32fu64, 3u8, 559u32) /* lazy */
+    nl_lex_register_hash(0x25476753c8fed56bu64, 3u8, 560u32) /* eager */
+    nl_lex_register_hash(0xe6a89add94696e23u64, 3u8, 562u32) /* frozen */
+    nl_lex_register_hash(0xd3ac3c45566efde9u64, 3u8, 563u32) /* mutable */
+    nl_lex_register_hash(0x294cf801edb925dfu64, 3u8, 564u32) /* immutable */
+    nl_lex_register_hash(0x9575f08fb5a48f0du64, 3u8, 565u32) /* volatile */
+    nl_lex_register_hash(0x18f456fc28bceb20u64, 3u8, 566u32) /* persistent */
+    nl_lex_register_hash(0x0e7d26541441cb9du64, 3u8, 567u32) /* transient */
+    nl_lex_register_hash(0x11ab14eb0a16bbecu64, 3u8, 568u32) /* ephemeral */
+    nl_lex_register_hash(0x4f56ded6f9e56456u64, 3u8, 569u32) /* synchronous */
+    nl_lex_register_hash(0xaa7b14b81abbff91u64, 3u8, 570u32) /* asynchronous */
+    nl_lex_register_hash(0x72e73f9193bbcc4eu64, 3u8, 571u32) /* distributed */
+    nl_lex_register_hash(0xa4cb121f9ce4c4c0u64, 3u8, 572u32) /* centralized */
+    nl_lex_register_hash(0x3b84ace629c111a0u64, 3u8, 573u32) /* replicated */
+    nl_lex_register_hash(0xdcbc48dde2aa1342u64, 3u8, 574u32) /* isolated */
+    nl_lex_register_hash(0xdcc7d1d73cc94cfbu64, 3u8, 575u32) /* exclusive */
+    nl_lex_register_hash(0x080a026ee7d87df4u64, 3u8, 576u32) /* shared */
+
+    /* === Adverbs (v1.0.2) ===
+     * Skipped: 'eventually' (84), 'immediately' (83). */
+    nl_lex_register_hash(0x0ccdc8cf36112db5u64, 4u8, 580u32) /* synchronously */
+    nl_lex_register_hash(0x827b4ba8fc12da7au64, 4u8, 581u32) /* asynchronously */
+    nl_lex_register_hash(0x3e7a7b3c9a5a917eu64, 4u8, 582u32) /* atomically */
+    nl_lex_register_hash(0xdb064bce756460dfu64, 4u8, 585u32) /* deterministically */
+    nl_lex_register_hash(0x0ee5e58eecb4ba24u64, 4u8, 586u32) /* repeatedly */
+    nl_lex_register_hash(0xd0de8495c39a2713u64, 4u8, 587u32) /* exactly */
+    nl_lex_register_hash(0x85098434b100ad3au64, 4u8, 588u32) /* approximately */
+    nl_lex_register_hash(0x9fa57a2c45387d1du64, 4u8, 589u32) /* transactionally */
+    nl_lex_register_hash(0x9c3438e46fed322au64, 4u8, 590u32) /* consistently */
+    nl_lex_register_hash(0x813e465a434a0b57u64, 4u8, 591u32) /* reliably */
+    nl_lex_register_hash(0xa26803d891fee0ecu64, 4u8, 592u32) /* durably */
+    nl_lex_register_hash(0xf528f3c03c7de903u64, 4u8, 593u32) /* concurrently */
+    nl_lex_register_hash(0x74ebd93576ff140du64, 4u8, 594u32) /* sequentially */
+    nl_lex_register_hash(0xfeb779a7606d6d9au64, 4u8, 595u32) /* periodically */
+    nl_lex_register_hash(0x618e7dfce338699du64, 4u8, 596u32) /* idempotently */
+    nl_lex_register_hash(0x1e62b527024928e1u64, 4u8, 597u32) /* partially */
+    nl_lex_register_hash(0x26af9bbf6456e062u64, 4u8, 598u32) /* wholly */
+    nl_lex_register_hash(0xb804ec8277b10f43u64, 4u8, 599u32) /* strictly */
+
+    /* === Roles (v1.0.2) ===
+     * Skipped: 'replica' (429 as NOUN above). */
+    nl_lex_register_hash(0xeee30ba769e2c027u64, 10u8, 600u32) /* producer */
+    nl_lex_register_hash(0x7a84fcbd27678ac9u64, 10u8, 601u32) /* consumer */
+    nl_lex_register_hash(0x889e2518da4747a4u64, 10u8, 602u32) /* sender */
+    nl_lex_register_hash(0x05e1ad671457ea90u64, 10u8, 603u32) /* receiver */
+    nl_lex_register_hash(0x9d24b27ac6ddeae4u64, 10u8, 604u32) /* leader */
+    nl_lex_register_hash(0x93276c3e4e6f3f27u64, 10u8, 605u32) /* follower */
+    nl_lex_register_hash(0xbf31137ff783e939u64, 10u8, 606u32) /* primary */
+    nl_lex_register_hash(0xd7fbc18fbdaa00d1u64, 10u8, 607u32) /* secondary */
+    nl_lex_register_hash(0xef86a020455be6f3u64, 10u8, 608u32) /* master */
+    nl_lex_register_hash(0x6a15b4158aa383d7u64, 10u8, 610u32) /* observer */
+    nl_lex_register_hash(0xd683b0e24e05d843u64, 10u8, 611u32) /* subscriber */
+    nl_lex_register_hash(0x1ae6a30eed204c9fu64, 10u8, 612u32) /* publisher */
+    nl_lex_register_hash(0xc47ea73e7986f3deu64, 10u8, 613u32) /* client */
+    nl_lex_register_hash(0x7294d77db181ded2u64, 10u8, 614u32) /* server */
+    nl_lex_register_hash(0x4077f8cc7eaf4d6fu64, 10u8, 615u32) /* host */
+    nl_lex_register_hash(0xceadb82265a0b7f3u64, 10u8, 616u32) /* guest */
+    nl_lex_register_hash(0xe7b67755395b0a6au64, 10u8, 617u32) /* administrator */
+    nl_lex_register_hash(0x554667f2165fec5du64, 10u8, 618u32) /* operator */
+    nl_lex_register_hash(0x1c2058c7ec7c8835u64, 10u8, 619u32) /* auditor */
+    nl_lex_register_hash(0xd8d69c51bf35f745u64, 10u8, 620u32) /* requester */
+    nl_lex_register_hash(0xc12c4d89efa76351u64, 10u8, 621u32) /* responder */
+
+    /* v1.0 pivot: IDSG / governance / capability vocabulary for the
+     * AI surface.  All are type=1 (VERB) since they describe operations
+     * on the substrate; consumers may re-classify via grammar context. */
+    nl_lex_register_hash(0xc8beca9cc149b9f3u64, 1u8, 622u32) /* abstract */
+    nl_lex_register_hash(0x7f1b75eac4f51095u64, 1u8, 623u32) /* propose */
+    nl_lex_register_hash(0x2e3c6336da5a2a44u64, 1u8, 624u32) /* sandbox */
+    nl_lex_register_hash(0xfad06255a6acaf5bu64, 1u8, 625u32) /* promote */
+    nl_lex_register_hash(0xaa3f4d29d02d54ddu64, 1u8, 626u32) /* tally */
+    nl_lex_register_hash(0x3f546529170319f5u64, 1u8, 627u32) /* federate */
+    nl_lex_register_hash(0x86c8946e5047dea7u64, 1u8, 628u32) /* capability */
+    nl_lex_register_hash(0xeb246e5cabc40ca8u64, 1u8, 629u32) /* mhash */
+
+    NL_LEX_INITED = 1u8
+    return NL_LEX_OK
+}

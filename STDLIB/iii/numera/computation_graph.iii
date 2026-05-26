@@ -1,0 +1,744 @@
+/* III/STDLIB/iii/numera/computation_graph.iii -- Layer 3, Module 56.
+ * Chain-as-DAG: canonical line (branch_id 0, append-only, linearly ordered)
+ * plus append-only side branches rooted at declared anchors.  Provides the
+ * bisimulation primitive (W41/W42): no equivalence claim without a witness;
+ * no merge to canonical without bisimulation verification.
+ * Hexad: kind_essence + kind_witness.  Ring: R0.  K: 1.00.
+ * NIH: identifier.iii (built) + witness_spine.iii (Mod 54, pending) +
+ *      constitution.iii (built, cons_find returns u32 sentinel 0xFFFFFFFF).
+ * Idioms: element-address via ((&ARR as u64)+off) as *u8 (W3 parser-bug
+ *   workaround); all working buffers module-scope (no local var arrays);
+ *   ASCII -- in comments only; equality-only signed compares (W11). */
+module numera_computation_graph
+
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_is_zero(a: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ws_lookup_id(frag_id: *u8, out_idx: *u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+
+/* Error codes (W9: negative i32). */
+const CG_OK                : i32 =  0i32
+const CG_E_NULL            : i32 = -1i32
+const CG_E_BRANCH_ABSENT   : i32 = -2i32
+const CG_E_FRAGMENT_ABSENT : i32 = -3i32
+const CG_E_CLAUSE_ABSENT   : i32 = -4i32
+const CG_E_ALREADY_ANCHOR  : i32 = -5i32
+const CG_E_NOT_ANCHOR      : i32 = -6i32
+const CG_E_NOT_BISIMILAR   : i32 = -7i32
+const CG_E_INDEX_FULL      : i32 = -8i32
+const CG_E_NOT_INITED      : i32 = -9i32
+const CG_E_WITNESS         : i32 = -10i32
+
+/* Table bounds. */
+const CG_BRANCH_SLOTS      : u64 = 1024u64
+const CG_ANCHOR_SLOTS      : u64 = 4096u64
+const CG_IDENT_BYTES       : u64 = 32u64
+
+/* Fragment serialization. */
+const CG_FRAG_CAP          : u64 = 4096u64
+
+/* Fragment field offsets (byte layout contract with witness_spine Mod 54). */
+const CG_OFF_OP_ID         : u64 = 64u64
+const CG_OFF_IN_COMMIT     : u64 = 96u64
+const CG_OFF_OUT_COMMIT    : u64 = 128u64
+const CG_OFF_AT_TIME       : u64 = 160u64
+const CG_OFF_BRANCH_ID     : u64 = 168u64
+
+/* Bisimulation compare window: [CG_BISIM_LO, CG_BISIM_HI) covers
+ * op_id (64..96) + in_commit (96..128) + out_commit (128..160). */
+const CG_BISIM_LO          : u64 = 64u64
+const CG_BISIM_HI          : u64 = 160u64
+
+/* Bisimulation witness payload. */
+const CG_PAYLOAD_TAG       : u8  = 0xE3u8
+const CG_PAYLOAD_KIND      : u8  = 0x10u8
+const CG_PAYLOAD_LEN       : u64 = 80u64
+const CG_WIT_PILLAR        : u16 = 1u16
+
+/* cons_find absence sentinel (u32). */
+const CG_CONS_ABSENT       : u32 = 0xFFFFFFFFu32
+
+/* --- Boot flag and canonical chain state. --- */
+var CG_INITED         : u8  = 0u8
+var CG_CANONICAL_HEAD : [u8; 32]
+var CG_CANONICAL_LEN  : u64 = 0u64
+var CG_LOOKUP_IDX     : [u64; 1]
+
+/* --- KAT-7 (integration-tier bisimulation) scratch.  CG_KAT_PL is the
+ * shared 192-byte source payload (frugal [u64;24], Trap 19); CG_KAT_OC is the
+ * reused 32-byte out-commit; CG_KAT_Z is the zeroed producer/op/in/antecedents
+ * id.  The three fid sinks reuse CG_ST_A/B/C; the witness sink reuses CG_ST_O. */
+var CG_KAT_PL         : [u64; 24]
+var CG_KAT_OC         : [u8; 32]
+var CG_KAT_Z          : [u8; 32]
+
+/* --- Branch table (CG_BRANCH_SLOTS=1024 entries, 32-byte ids). ---
+ * Arrays declared [u64; N] so iiis reserves exactly N*8 bytes;
+ * byte access via ((&ARR as u64)+off) as *u8  (Trap 19 avoidance).
+ * CG_BRANCH_IDS/HEADS: 1024*32=32768 bytes each -> [u64;4096].
+ * CG_BRANCH_LENS/LIVE: 1024 entries -> [u64;1024] / [u8;1024]. */
+var CG_BRANCH_IDS     : [u64; 4096]
+var CG_BRANCH_HEADS   : [u64; 4096]
+var CG_BRANCH_LENS    : [u64; 1024]
+var CG_BRANCH_LIVE    : [u8;  1024]
+var CG_BRANCH_COUNT   : u64 = 0u64
+
+/* --- Anchor table (CG_ANCHOR_SLOTS=4096 entries, 32-byte ids). ---
+ * CG_ANCHOR_FIDS/CLAUSES: 4096*32=131072 bytes each -> [u64;16384]. */
+var CG_ANCHOR_FIDS    : [u64; 16384]
+var CG_ANCHOR_CLAUSES : [u64; 16384]
+var CG_ANCHOR_LIVE    : [u8;  4096]
+var CG_ANCHOR_COUNT   : u64 = 0u64
+
+/* --- Fragment serialization scratch (4096-byte, frugal [u64;512]). --- */
+var CG_FRAG_L         : [u64; 512]
+var CG_FRAG_R         : [u64; 512]
+var CG_FRAG_L_LEN     : u64 = 0u64
+var CG_FRAG_R_LEN     : u64 = 0u64
+
+/* --- Bisimulation payload scratch (80 bytes). --- */
+var CG_PAYLOAD        : [u8; 80]
+
+/* --- Emit scratch ids (32 bytes each; non-reentrant). --- */
+var CG_SC_PRODUCER    : [u8; 32]
+var CG_SC_OP          : [u8; 32]
+var CG_SC_IN          : [u8; 32]
+var CG_SC_OUT         : [u8; 32]
+
+/* --- Param-spill safety scratch for incoming *u8 ids. --- */
+var CG_SC_LFID        : [u8; 32]
+var CG_SC_RFID        : [u8; 32]
+var CG_SC_BID         : [u8; 32]
+var CG_SC_CLAUSE      : [u8; 32]
+
+/* --- Canonical producer/opid derived in cg_init. --- */
+var CG_SELF_PRODUCER  : [u8; 32]
+var CG_BISIM_OPID     : [u8; 32]
+
+/* Literal for ident_from_bytes: "cg.bisimulation.witness" (23 bytes). */
+var CG_OPTAG          : [u8; 24]
+
+/* --- Walk-segment context (Trap 13: decompose cg_walk_segment into shallow helpers). --- */
+var CG_WALK_FROM      : u64 = 0u64
+var CG_WALK_TO        : u64 = 0u64
+var CG_WALK_CNT       : u64 = 0u64
+
+/* --- Self-test scratch. --- */
+var CG_ST_A           : [u8; 32]
+var CG_ST_B           : [u8; 32]
+var CG_ST_C           : [u8; 32]
+var CG_ST_O           : [u8; 32]
+
+/* =====================================================================
+ * cg_init -- idempotent boot.
+ * Algorithm: if CG_INITED==1 return immediately.  Zero canonical head
+ * via ident_zero.  Sentinel-loop over CG_BRANCH_SLOTS clearing live/lens.
+ * Sentinel-loop over CG_ANCHOR_SLOTS clearing live.  Zero counts.
+ * Derive CG_SELF_PRODUCER = ident_from_bytes("numera::computation_graph",24)
+ * and CG_BISIM_OPID = ident_from_bytes("cg.bisimulation.witness",23).
+ * Set CG_INITED=1. Return CG_OK.
+ * ===================================================================== */
+fn cg_init() -> i32 @export {
+    if CG_INITED == 1u8 { return CG_OK }
+    ident_zero((&CG_CANONICAL_HEAD as u64) as *u8)
+    CG_CANONICAL_LEN = 0u64
+    let mut i : u64 = 0u64
+    while i < CG_BRANCH_SLOTS {
+        CG_BRANCH_LIVE[i] = 0u8
+        CG_BRANCH_LENS[i] = 0u64
+        i = i + 1u64
+    }
+    CG_BRANCH_COUNT = 0u64
+    let mut j : u64 = 0u64
+    while j < CG_ANCHOR_SLOTS {
+        CG_ANCHOR_LIVE[j] = 0u8
+        j = j + 1u64
+    }
+    CG_ANCHOR_COUNT = 0u64
+    /* Derive canonical producer id from "numera::computation_graph" (28 bytes).
+     * Build the literal byte-by-byte into CG_OPTAG scratch (reused as temp). */
+    let tp : *u8 = (&CG_OPTAG as u64) as *u8
+    /* "numera::computation_graph" = 28 bytes, packed 2 per assignment line. */
+    tp[0u64]  = 0x6Eu8  tp[1u64]  = 0x75u8  tp[2u64]  = 0x6Du8  tp[3u64]  = 0x65u8
+    tp[4u64]  = 0x72u8  tp[5u64]  = 0x61u8  tp[6u64]  = 0x3Au8  tp[7u64]  = 0x3Au8
+    tp[8u64]  = 0x63u8  tp[9u64]  = 0x6Fu8  tp[10u64] = 0x6Du8  tp[11u64] = 0x70u8
+    tp[12u64] = 0x75u8  tp[13u64] = 0x74u8  tp[14u64] = 0x61u8  tp[15u64] = 0x74u8
+    tp[16u64] = 0x69u8  tp[17u64] = 0x6Fu8  tp[18u64] = 0x6Eu8  tp[19u64] = 0x5Fu8
+    tp[20u64] = 0x67u8  tp[21u64] = 0x72u8  tp[22u64] = 0x61u8  tp[23u64] = 0x70u8
+    ident_from_bytes(tp, 24u64, (&CG_SELF_PRODUCER as u64) as *u8)
+    /* Derive bisim opid from "cg.bisimulation.witness" (23 bytes). */
+    tp[0u64]  = 0x63u8  tp[1u64]  = 0x67u8  tp[2u64]  = 0x2Eu8  tp[3u64]  = 0x62u8
+    tp[4u64]  = 0x69u8  tp[5u64]  = 0x73u8  tp[6u64]  = 0x69u8  tp[7u64]  = 0x6Du8
+    tp[8u64]  = 0x75u8  tp[9u64]  = 0x6Cu8  tp[10u64] = 0x61u8  tp[11u64] = 0x74u8
+    tp[12u64] = 0x69u8  tp[13u64] = 0x6Fu8  tp[14u64] = 0x6Eu8  tp[15u64] = 0x2Eu8
+    tp[16u64] = 0x77u8  tp[17u64] = 0x69u8  tp[18u64] = 0x74u8  tp[19u64] = 0x6Eu8
+    tp[20u64] = 0x65u8  tp[21u64] = 0x73u8  tp[22u64] = 0x73u8
+    ident_from_bytes(tp, 23u64, (&CG_BISIM_OPID as u64) as *u8)
+    CG_INITED = 1u8
+    return CG_OK
+}
+
+/* =====================================================================
+ * cg_canonical_head -- pure read of the canonical chain head.
+ * Returns CG_OK and writes 32 bytes into out_fid.
+ * ===================================================================== */
+fn cg_canonical_head(out_fid: *u8) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (out_fid as u64) == 0u64 { return CG_E_NULL }
+    ident_copy((&CG_CANONICAL_HEAD as u64) as *u8, out_fid)
+    return CG_OK
+}
+
+/* =====================================================================
+ * cg_branch_slot_find -- internal linear scan for a branch_id.
+ * Copies branch_id to CG_SC_BID first (param-spill safety, Trap 11).
+ * Sentinel-loop with found_flag; loop counter bounds the while (W14).
+ * Returns slot index >= 0 as i64, or -1i64 on miss.
+ * ===================================================================== */
+fn cg_branch_slot_find(branch_id: *u8) -> i64 {
+    ident_copy(branch_id, (&CG_SC_BID as u64) as *u8)
+    let mut i : u64 = 0u64
+    let mut found : i64 = -1i64
+    let mut found_flag : u8 = 0u8
+    while i < CG_BRANCH_SLOTS {
+        if found_flag == 0u8 {
+            if CG_BRANCH_LIVE[i] == 1u8 {
+                let slot_base : u64 = (&CG_BRANCH_IDS as u64) + i * CG_IDENT_BYTES
+                let slot_ptr : *u8 = slot_base as *u8
+                if ident_eq(slot_ptr, (&CG_SC_BID as u64) as *u8) == 1u8 {
+                    found = i as i64
+                    found_flag = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* =====================================================================
+ * cg_anchor_slot_find -- internal linear scan for a fid in anchor table.
+ * Copies fid to CG_SC_LFID first (param-spill safety).
+ * Returns slot index >= 0 as i64, or -1i64 on miss.
+ * ===================================================================== */
+fn cg_anchor_slot_find(fid: *u8) -> i64 {
+    ident_copy(fid, (&CG_SC_LFID as u64) as *u8)
+    let mut i : u64 = 0u64
+    let mut found : i64 = -1i64
+    let mut found_flag : u8 = 0u8
+    while i < CG_ANCHOR_SLOTS {
+        if found_flag == 0u8 {
+            if CG_ANCHOR_LIVE[i] == 1u8 {
+                let slot_base : u64 = (&CG_ANCHOR_FIDS as u64) + i * CG_IDENT_BYTES
+                let slot_ptr : *u8 = slot_base as *u8
+                if ident_eq(slot_ptr, (&CG_SC_LFID as u64) as *u8) == 1u8 {
+                    found = i as i64
+                    found_flag = 1u8
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return found
+}
+
+/* =====================================================================
+ * cg_branch_head -- read the head fragment id of a named branch.
+ * ===================================================================== */
+fn cg_branch_head(branch_id: *u8, out_fid: *u8) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (branch_id as u64) == 0u64 { return CG_E_NULL }
+    if (out_fid as u64) == 0u64 { return CG_E_NULL }
+    let slot : i64 = cg_branch_slot_find(branch_id)
+    if slot == -1i64 { return CG_E_BRANCH_ABSENT }
+    let slot64 : u64 = (slot as u64) & 0xFFFFFFFFFFFFFFFFu64
+    let head_base : u64 = (&CG_BRANCH_HEADS as u64) + slot64 * CG_IDENT_BYTES
+    ident_copy(head_base as *u8, out_fid)
+    return CG_OK
+}
+
+/* cg_lookup_fragment -- retrieve a witness fragment's payload by fid.  The
+ * built witness system exposes no fragment-by-fid lookup, so compose
+ * ws_lookup_id (fid -> spine index) + wh_get_payload (index -> payload bytes).
+ * Returns 0 on success; the nonzero lookup/payload rc on absence. */
+fn cg_lookup_fragment(fid: *u8, out_fragment: *u8, out_len: *u64) -> i32 {
+    let lk : i32 = ws_lookup_id(fid, (&CG_LOOKUP_IDX as u64) as *u64)
+    if lk != 0i32 { return lk }
+    let idx : u64 = CG_LOOKUP_IDX[0u64]
+    return wh_get_payload(idx, out_fragment, CG_FRAG_CAP, out_len)
+}
+
+/* =====================================================================
+ * cg_resolve_fragment -- look up a fragment and extract branch_id + position.
+ * Uses ws_lookup_fragment to retrieve the serialized fragment into CG_FRAG_L.
+ * Extracts branch_id from byte offset CG_OFF_BRANCH_ID (32 bytes).
+ * Extracts position from offset CG_OFF_AT_TIME (8 bytes, little-endian).
+ * ===================================================================== */
+fn cg_resolve_fragment(fid: *u8, out_branch_id: *u8, out_position: *u64) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (fid as u64) == 0u64 { return CG_E_NULL }
+    if (out_branch_id as u64) == 0u64 { return CG_E_NULL }
+    if (out_position as u64) == 0u64 { return CG_E_NULL }
+    let frag_ptr : *u8 = (&CG_FRAG_L as u64) as *u8
+    let len_ptr : *u64 = (&CG_FRAG_L_LEN as u64) as *u64
+    let lookup : i32 = cg_lookup_fragment(fid, frag_ptr, len_ptr)
+    if lookup != 0i32 { return CG_E_FRAGMENT_ABSENT }
+    /* Copy 32-byte branch_id from fragment at offset CG_OFF_BRANCH_ID. */
+    let bid_base : u64 = (&CG_FRAG_L as u64) + CG_OFF_BRANCH_ID
+    let bid_src : *u8 = bid_base as *u8
+    let mut k : u64 = 0u64
+    while k < CG_IDENT_BYTES {
+        out_branch_id[k] = bid_src[k]
+        k = k + 1u64
+    }
+    /* Assemble little-endian u64 position from 8 bytes at CG_OFF_AT_TIME. */
+    let at_base : u64 = (&CG_FRAG_L as u64) + CG_OFF_AT_TIME
+    let at_ptr : *u8 = at_base as *u8
+    let b0 : u64 = at_ptr[0u64] as u64
+    let b1 : u64 = at_ptr[1u64] as u64
+    let b2 : u64 = at_ptr[2u64] as u64
+    let b3 : u64 = at_ptr[3u64] as u64
+    let b4 : u64 = at_ptr[4u64] as u64
+    let b5 : u64 = at_ptr[5u64] as u64
+    let b6 : u64 = at_ptr[6u64] as u64
+    let b7 : u64 = at_ptr[7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    out_position[0u64] = lo | hi
+    return CG_OK
+}
+
+/* =====================================================================
+ * cg_walk_segment -- walk a range of positions on a branch.
+ * seg points to a CG_SEGMENT_REQ aggregate:
+ *   offset 0  : branch_id (32 bytes, all-zero = canonical)
+ *   offset 32 : from_pos  (u64 LE)
+ *   offset 40 : to_pos    (u64 LE)
+ *   offset 48 : out_count (u64 LE, written)
+ * Validates branch existence.  Sentinel-loops from from_pos while pos != to_pos+1
+ * (equality-bounded per W11/W14).  Calls ws_lookup_fragment by position once
+ * witness_spine exposes positional lookup; counts visited fragments.
+ * Writes count to seg+48.  Returns CG_OK or an error code.
+ * ===================================================================== */
+
+/* cg_load_u64_le -- read an 8-byte little-endian u64 from byte address base+off.
+ * Flat helper to keep cg_walk_segment well under W13 locals limit. */
+fn cg_load_u64_le(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+/* cg_store_u64_le -- write a u64 little-endian to byte address at base+off. */
+fn cg_store_u64_le(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    p[0u64] = (v & 0xFFu64) as u8
+    p[1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* cg_walk_inner -- the position-counting inner loop for cg_walk_segment.
+ * Reads CG_WALK_FROM and CG_WALK_TO; writes CG_WALK_CNT.
+ * Uses CG_SC_IN as a 32-byte position-as-id scratch.
+ * Flat helper: shallow nesting, <= 20 locals (W13/Trap 13). */
+fn cg_walk_inner() -> i32 {
+    let pidp : *u8 = (&CG_SC_IN as u64) as *u8
+    let fp : *u8 = (&CG_FRAG_L as u64) as *u8
+    let lp : *u64 = (&CG_FRAG_L_LEN as u64) as *u64
+    let mut pos : u64 = CG_WALK_FROM
+    let mut count : u64 = 0u64
+    let mut done_flag : u8 = 0u8
+    while done_flag == 0u8 {
+        /* Encode position as 32-byte id (LE u64 in bytes 0..8, rest zero). */
+        let mut zi : u64 = 0u64
+        while zi < 32u64 { pidp[zi] = 0u8  zi = zi + 1u64 }
+        pidp[0u64] = (pos & 0xFFu64) as u8
+        pidp[1u64] = ((pos >> 8u64)  & 0xFFu64) as u8
+        pidp[2u64] = ((pos >> 16u64) & 0xFFu64) as u8
+        pidp[3u64] = ((pos >> 24u64) & 0xFFu64) as u8
+        pidp[4u64] = ((pos >> 32u64) & 0xFFu64) as u8
+        pidp[5u64] = ((pos >> 40u64) & 0xFFu64) as u8
+        pidp[6u64] = ((pos >> 48u64) & 0xFFu64) as u8
+        pidp[7u64] = ((pos >> 56u64) & 0xFFu64) as u8
+        let r : i32 = cg_lookup_fragment(pidp, fp, lp)
+        if r == 0i32 { count = count + 1u64 }
+        if pos == CG_WALK_TO {
+            done_flag = 1u8
+        } else {
+            pos = pos + 1u64
+        }
+    }
+    CG_WALK_CNT = count
+    return 0i32
+}
+
+fn cg_walk_segment(seg: *u8) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (seg as u64) == 0u64 { return CG_E_NULL }
+    let seg64 : u64 = seg as u64
+    let bid_ptr : *u8 = seg64 as *u8
+    /* Read from_pos and to_pos from the aggregate (offsets 32 and 40). */
+    CG_WALK_FROM = cg_load_u64_le(seg64, 32u64)
+    CG_WALK_TO   = cg_load_u64_le(seg64, 40u64)
+    /* Validate branch: all-zero = canonical; else must exist. */
+    if ident_is_zero(bid_ptr) == 0u8 {
+        let bslot : i64 = cg_branch_slot_find(bid_ptr)
+        if bslot == -1i64 { return CG_E_BRANCH_ABSENT }
+    }
+    /* Walk the position range, counting visited fragments. */
+    cg_walk_inner()
+    /* Write count into the aggregate at offset 48 (little-endian u64). */
+    cg_store_u64_le(seg64, 48u64, CG_WALK_CNT)
+    return CG_OK
+}
+
+/* =====================================================================
+ * cg_bisimulate -- W41/W42 bisimulation primitive.
+ * Copies left_fid->CG_SC_LFID, right_fid->CG_SC_RFID (param-spill, Trap 11).
+ * Retrieves both fragments via ws_lookup_fragment into CG_FRAG_L/R.
+ * Shallow bisimulation: byte-XOR of field window [CG_BISIM_LO, CG_BISIM_HI).
+ * On match: builds CG_PAYLOAD (left_fid||right_fid||tag||kind||zeros),
+ * zeroes the four emit-scratch ids, emits via ws_emit_fragment with the
+ * canonical CG_SELF_PRODUCER and CG_BISIM_OPID.
+ * Returns CG_OK + writes out_witness_fid, or an error code.
+ * M11/M18: the emitted fragment IS the proof term -- the equivalence claim.
+ * M6/M10: witness chains by hash and is recomputable from the two input fids.
+ * ===================================================================== */
+fn cg_bisimulate(left_fid: *u8, right_fid: *u8, out_witness_fid: *u8) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (left_fid as u64) == 0u64 { return CG_E_NULL }
+    if (right_fid as u64) == 0u64 { return CG_E_NULL }
+    if (out_witness_fid as u64) == 0u64 { return CG_E_NULL }
+    /* Param-spill safety: copy incoming pointers to module scratch before any extern. */
+    ident_copy(left_fid,  (&CG_SC_LFID as u64) as *u8)
+    ident_copy(right_fid, (&CG_SC_RFID as u64) as *u8)
+    /* Look up left fragment. */
+    let lp : *u8 = (&CG_FRAG_L as u64) as *u8
+    let llp : *u64 = (&CG_FRAG_L_LEN as u64) as *u64
+    let lr : i32 = cg_lookup_fragment((&CG_SC_LFID as u64) as *u8, lp, llp)
+    if lr != 0i32 { return CG_E_FRAGMENT_ABSENT }
+    /* Look up right fragment. */
+    let rp : *u8 = (&CG_FRAG_R as u64) as *u8
+    let rlp : *u64 = (&CG_FRAG_R_LEN as u64) as *u64
+    let rr : i32 = cg_lookup_fragment((&CG_SC_RFID as u64) as *u8, rp, rlp)
+    if rr != 0i32 { return CG_E_FRAGMENT_ABSENT }
+    /* Shallow bisimulation: XOR the compare window [CG_BISIM_LO, CG_BISIM_HI).
+     * Accumulate byte differences; acc==0 means bisimilar.
+     * Each byte masked & 0xFFu32 (W4 on u32 accumulator).
+     * Named locals for the per-byte pointers avoid leading-paren-cast index (Trap 16). */
+    let lbase : u64 = &CG_FRAG_L as u64
+    let rbase : u64 = &CG_FRAG_R as u64
+    let mut acc : u32 = 0u32
+    let mut win_i : u64 = CG_BISIM_LO
+    while win_i < CG_BISIM_HI {
+        let lbp : *u8 = (lbase + win_i) as *u8
+        let rbp : *u8 = (rbase + win_i) as *u8
+        let lv : u32 = lbp[0u64] as u32
+        let rv : u32 = rbp[0u64] as u32
+        acc = acc | ((lv & 0xFFu32) ^ (rv & 0xFFu32))
+        win_i = win_i + 1u64
+    }
+    if acc != 0u32 { return CG_E_NOT_BISIMILAR }
+    /* Build bisimulation witness payload (80 bytes):
+     * [0..32)  = left_fid
+     * [32..64) = right_fid
+     * [64]     = CG_PAYLOAD_TAG (0xE3)
+     * [65]     = CG_PAYLOAD_KIND (0x10)
+     * [66..80) = zero */
+    let plp : *u8 = (&CG_PAYLOAD as u64) as *u8
+    let lfp : *u8 = (&CG_SC_LFID as u64) as *u8
+    let rfp : *u8 = (&CG_SC_RFID as u64) as *u8
+    let mut pi : u64 = 0u64
+    while pi < 32u64 {
+        plp[pi]         = lfp[pi]
+        plp[32u64 + pi] = rfp[pi]
+        pi = pi + 1u64
+    }
+    plp[64u64] = CG_PAYLOAD_TAG
+    plp[65u64] = CG_PAYLOAD_KIND
+    let mut pz : u64 = 66u64
+    while pz < 80u64 { plp[pz] = 0u8  pz = pz + 1u64 }
+    /* Zero the four emit-scratch ids. */
+    ident_zero((&CG_SC_PRODUCER as u64) as *u8)
+    ident_zero((&CG_SC_OP as u64) as *u8)
+    ident_zero((&CG_SC_IN as u64) as *u8)
+    ident_zero((&CG_SC_OUT as u64) as *u8)
+    /* Copy canonical producer and bisim opid into emit scratch. */
+    ident_copy((&CG_SELF_PRODUCER as u64) as *u8, (&CG_SC_PRODUCER as u64) as *u8)
+    ident_copy((&CG_BISIM_OPID as u64) as *u8, (&CG_SC_OP as u64) as *u8)
+    /* Emit an audit fragment via wh_publish (witness_hook) for the append-only
+     * hook history; its (at_time-stamped) fid lands in CG_SC_LFID, which is free
+     * now -- left_fid was already copied into CG_PAYLOAD[0..32) above.
+     * M10 FIX (bug #6): out_witness_fid must be the witness's CONTENT ADDRESS,
+     * recomputable byte-identically from the two recorded fids (this footer's
+     * own claim).  The wh_publish fid carries at_time (witness_hook:92,159-160)
+     * and so changes on every call -- which made ba_verify_bisimulation's M10
+     * byte-match re-derivation (branch_anchor:472) impossible (it could never
+     * succeed for a real proposal).  Derive the witness id deterministically as
+     * the content address of the 80-byte proof payload (left||right||tag||kind). */
+    let emit_idx : u64 = wh_publish((&CG_SC_PRODUCER as u64) as *u8, (&CG_SC_OP as u64) as *u8, (&CG_SC_IN as u64) as *u8, (&CG_SC_OUT as u64) as *u8, 0u8, 0u8, CG_WIT_PILLAR, (&CG_SC_IN as u64) as *u8, 0u32, plp, 80u32, (&CG_SC_LFID as u64) as *u8)
+    if emit_idx == 0xFFFFFFFFFFFFFFFFu64 { return CG_E_WITNESS }
+    ident_from_bytes(plp, 80u64, out_witness_fid)
+    return CG_OK
+}
+
+/* =====================================================================
+ * cg_anchor_declare -- declare a fragment as a branch anchor.
+ * Governance gate (M8): cons_find(clause_id) must return a valid slot
+ * (not the absence sentinel CG_CONS_ABSENT=0xFFFFFFFF) -- the clause IS
+ * the capability authorizing a branch anchor.
+ * Idempotent refusal: CG_E_ALREADY_ANCHOR if already declared.
+ * Append-only (M5/M9): no un-anchor operation exists.
+ * ===================================================================== */
+fn cg_anchor_declare(fid: *u8, clause_id: *u8) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (fid as u64) == 0u64 { return CG_E_NULL }
+    if (clause_id as u64) == 0u64 { return CG_E_NULL }
+    /* Copy clause_id to scratch before passing to cons_find (param-spill, Trap 11). */
+    ident_copy(clause_id, (&CG_SC_CLAUSE as u64) as *u8)
+    /* Governance gate: clause must be present in the constitution (M8). */
+    let cslot : u32 = cons_find((&CG_SC_CLAUSE as u64) as *u8)
+    if cslot == CG_CONS_ABSENT { return CG_E_CLAUSE_ABSENT }
+    /* Already-anchor check. */
+    let existing : i64 = cg_anchor_slot_find(fid)
+    if existing != -1i64 { return CG_E_ALREADY_ANCHOR }
+    /* Find a free slot via sentinel-loop with active flag (W14). */
+    let mut s : u64 = 0u64
+    let mut free_slot : i64 = -1i64
+    let mut free_flag : u8 = 0u8
+    while s < CG_ANCHOR_SLOTS {
+        if free_flag == 0u8 {
+            if CG_ANCHOR_LIVE[s] == 0u8 {
+                free_slot = s as i64
+                free_flag = 1u8
+            }
+        }
+        s = s + 1u64
+    }
+    if free_slot == -1i64 { return CG_E_INDEX_FULL }
+    let fs64 : u64 = (free_slot as u64) & 0xFFFFFFFFFFFFFFFFu64
+    let fid_dst : u64 = (&CG_ANCHOR_FIDS as u64) + fs64 * CG_IDENT_BYTES
+    let clause_dst : u64 = (&CG_ANCHOR_CLAUSES as u64) + fs64 * CG_IDENT_BYTES
+    ident_copy(fid, fid_dst as *u8)
+    ident_copy((&CG_SC_CLAUSE as u64) as *u8, clause_dst as *u8)
+    CG_ANCHOR_LIVE[fs64] = 1u8
+    CG_ANCHOR_COUNT = CG_ANCHOR_COUNT + 1u64
+    return CG_OK
+}
+
+/* =====================================================================
+ * cg_anchor_query -- retrieve the governing clause id for an anchor.
+ * Returns CG_E_NOT_ANCHOR if fid was never declared as an anchor.
+ * ===================================================================== */
+fn cg_anchor_query(fid: *u8, out_clause_id: *u8) -> i32 @export {
+    if CG_INITED == 0u8 { return CG_E_NOT_INITED }
+    if (fid as u64) == 0u64 { return CG_E_NULL }
+    if (out_clause_id as u64) == 0u64 { return CG_E_NULL }
+    let slot : i64 = cg_anchor_slot_find(fid)
+    if slot == -1i64 { return CG_E_NOT_ANCHOR }
+    let slot64 : u64 = (slot as u64) & 0xFFFFFFFFFFFFFFFFu64
+    let clause_src : u64 = (&CG_ANCHOR_CLAUSES as u64) + slot64 * CG_IDENT_BYTES
+    ident_copy(clause_src as *u8, out_clause_id)
+    return CG_OK
+}
+
+/* KAT-7 helper: publish one witness fragment carrying CG_KAT_PL as payload,
+ * with zeroed producer/op/in_commit/antecedents and the caller's out_commit
+ * (the out_commit differentiates fragments; the payload window stays equal).
+ * Returns the wh_publish index, or the 0xFFFF..FF sentinel on failure. */
+fn cg_kat_emit(out_commit: *u8, plen: u32, out_fid: *u8) -> u64 {
+    let zp : *u8 = (&CG_KAT_Z as u64) as *u8
+    let plp : *u8 = (&CG_KAT_PL as u64) as *u8
+    return wh_publish(zp, zp, zp, out_commit, 0u8, 0u8, CG_WIT_PILLAR, zp, 0u32, plp, plen, out_fid)
+}
+
+/* KAT-7 body (held outside cg_selftest to respect the W13 local budget).
+ * Stands up the witness systems, emits three fragments -- L and R with an
+ * identical compare window [CG_BISIM_LO,CG_BISIM_HI) but distinct out-commits
+ * (hence distinct fids), and C with one window byte flipped -- then proves
+ * the positive arm bisim(L,R)=CG_OK and the negative bisim(L,C)=NOT_BISIMILAR.
+ * Returns 0 on full pass, or a distinct code 40..44 on the failing arm. */
+fn cg_kat_bisim() -> u64 {
+    wh_init(0u64)
+    ws_init()
+    ident_zero((&CG_KAT_Z as u64) as *u8)
+    let plp : *u8 = (&CG_KAT_PL as u64) as *u8
+    let ocp : *u8 = (&CG_KAT_OC as u64) as *u8
+    let flp : *u8 = (&CG_ST_A as u64) as *u8
+    let frp : *u8 = (&CG_ST_B as u64) as *u8
+    let fcp : *u8 = (&CG_ST_C as u64) as *u8
+    let fwp : *u8 = (&CG_ST_O as u64) as *u8
+    /* Zero the 192-byte source payload, then set window [64,160) to 0xAA. */
+    let mut i : u64 = 0u64
+    while i < 192u64 { plp[i] = 0u8  i = i + 1u64 }
+    let mut w : u64 = 64u64
+    while w < 160u64 { plp[w] = 0xAAu8  w = w + 1u64 }
+    /* Emit L (out_commit byte0 = 0xA0). */
+    ident_zero(ocp)
+    ocp[0u64] = 0xA0u8
+    let idxL : u64 = cg_kat_emit(ocp, 160u32, flp)
+    if idxL == 0xFFFFFFFFFFFFFFFFu64 { return 40u64 }
+    ws_register(idxL)
+    /* Emit R (out_commit byte0 = 0xB0), identical payload window. */
+    ident_zero(ocp)
+    ocp[0u64] = 0xB0u8
+    let idxR : u64 = cg_kat_emit(ocp, 160u32, frp)
+    if idxR == 0xFFFFFFFFFFFFFFFFu64 { return 41u64 }
+    ws_register(idxR)
+    /* Flip one window byte -> distinct window; emit C (out_commit byte0 = 0xC0). */
+    plp[100u64] = 0x55u8
+    ident_zero(ocp)
+    ocp[0u64] = 0xC0u8
+    let idxC : u64 = cg_kat_emit(ocp, 160u32, fcp)
+    if idxC == 0xFFFFFFFFFFFFFFFFu64 { return 42u64 }
+    ws_register(idxC)
+    /* Positive arm: identical window -> bisimilar. */
+    if cg_bisimulate(flp, frp, fwp) != CG_OK { return 43u64 }
+    /* M10 determinism (bug #6 regression guard): a second bisim of the SAME pair
+     * must yield a byte-identical witness id -- ba_verify_bisimulation's re-
+     * derivation depends on it.  fwp2 reuses CG_KAT_OC (free after the emits).
+     * This arm FAILS on the old at_time-stamped-fid code and passes on the fix. */
+    let fwp2 : *u8 = (&CG_KAT_OC as u64) as *u8
+    if cg_bisimulate(flp, frp, fwp2) != CG_OK { return 45u64 }
+    let mut wacc : u32 = 0u32
+    let mut wi : u64 = 0u64
+    while wi < 32u64 { wacc = wacc | ((fwp[wi] as u32) ^ (fwp2[wi] as u32))  wi = wi + 1u64 }
+    if wacc != 0u32 { return 46u64 }
+    /* Negative arm: window differs at byte 100 -> not bisimilar. */
+    if cg_bisimulate(flp, fcp, fwp) != CG_E_NOT_BISIMILAR { return 44u64 }
+    return 0u64
+}
+
+/* =====================================================================
+ * cg_selftest -- embedded KAT.  Returns 99u64 on full pass.
+ * Each failed check returns a distinct small non-99 code.
+ *
+ * KAT 1: init + canonical head is zero.
+ *   After cg_init(), cg_canonical_head returns CG_OK and the head is all-zero.
+ * KAT 2: not-inited guard (prove the negative -- all fns fail closed).
+ *   Reset CG_INITED=0, call each public fn, verify CG_E_NOT_INITED.
+ * KAT 3: anchor round-trip + already-anchor + clause-absent refusal.
+ *   cons_find is live (constitution.iii built), so we use a synthetic clause.
+ *   We use a slot that was ratified by the selftest caller; since constitution
+ *   selftest may not run first, we bypass with a direct CG_CONS_ABSENT probe:
+ *   fabricate a 32-byte "fid" and a 32-byte "clause_id".
+ *   For the round-trip test we rely on cons_find returning CG_CONS_ABSENT for
+ *   any random clause -- which is the negative case (KAT 3b: clause-absent
+ *   refusal).  The positive anchor round-trip (KAT 3a) is gated on constitution
+ *   having a ratified clause (Phase-2-blocked).
+ * KAT 4: branch_head negative (absent branch returns CG_E_BRANCH_ABSENT).
+ * KAT 5: null-pointer guards (prove every public fn rejects null args).
+ * ===================================================================== */
+fn cg_selftest() -> u64 @export {
+    /* --- KAT 1: init + canonical head is zero. --- */
+    CG_INITED = 0u8
+    let rc_init : i32 = cg_init()
+    if rc_init != CG_OK { return 1u64 }
+    let headp : *u8 = (&CG_ST_O as u64) as *u8
+    let rc_head : i32 = cg_canonical_head(headp)
+    if rc_head != CG_OK { return 2u64 }
+    if ident_is_zero(headp) != 1u8 { return 3u64 }
+
+    /* --- KAT 2: not-inited guard (prove the negative -- fails closed). --- */
+    CG_INITED = 0u8
+    let mut k2 : i32 = cg_canonical_head(headp)
+    if k2 != CG_E_NOT_INITED { return 4u64 }
+    k2 = cg_branch_head(headp, headp)
+    if k2 != CG_E_NOT_INITED { return 5u64 }
+    let mut pos_sink : u64 = 0u64
+    k2 = cg_resolve_fragment(headp, headp, (&pos_sink as u64) as *u64)
+    if k2 != CG_E_NOT_INITED { return 6u64 }
+    k2 = cg_anchor_declare(headp, headp)
+    if k2 != CG_E_NOT_INITED { return 7u64 }
+    k2 = cg_anchor_query(headp, headp)
+    if k2 != CG_E_NOT_INITED { return 8u64 }
+    /* Restore init. */
+    CG_INITED = 1u8
+
+    /* --- KAT 3: null-pointer guards (prove each public fn rejects null). --- */
+    let nullp : *u8 = 0u64 as *u8
+    if cg_canonical_head(nullp) != CG_E_NULL { return 10u64 }
+    if cg_branch_head(nullp, headp) != CG_E_NULL { return 11u64 }
+    if cg_branch_head(headp, nullp) != CG_E_NULL { return 12u64 }
+    let mut pos2 : u64 = 0u64
+    if cg_resolve_fragment(nullp, headp, (&pos2 as u64) as *u64) != CG_E_NULL { return 13u64 }
+    if cg_resolve_fragment(headp, nullp, (&pos2 as u64) as *u64) != CG_E_NULL { return 14u64 }
+    if cg_resolve_fragment(headp, headp, nullp as *u64) != CG_E_NULL { return 15u64 }
+    if cg_walk_segment(nullp) != CG_E_NULL { return 16u64 }
+    if cg_bisimulate(nullp, headp, headp) != CG_E_NULL { return 17u64 }
+    if cg_bisimulate(headp, nullp, headp) != CG_E_NULL { return 18u64 }
+    if cg_bisimulate(headp, headp, nullp) != CG_E_NULL { return 19u64 }
+    if cg_anchor_declare(nullp, headp) != CG_E_NULL { return 20u64 }
+    if cg_anchor_declare(headp, nullp) != CG_E_NULL { return 21u64 }
+    if cg_anchor_query(nullp, headp) != CG_E_NULL { return 22u64 }
+    if cg_anchor_query(headp, nullp) != CG_E_NULL { return 23u64 }
+
+    /* --- KAT 4: clause-absent refusal (prove governance gate fails closed). ---
+     * Fabricate a random 32-byte fid (CG_ST_A) and a random 32-byte clause_id
+     * (CG_ST_B).  cons_find(CG_ST_B) will return CG_CONS_ABSENT (0xFFFFFFFF)
+     * because CG_ST_B has not been ratified.  cg_anchor_declare MUST return
+     * CG_E_CLAUSE_ABSENT.  This is the critical negative-case gate (M8). */
+    let fap : *u8 = (&CG_ST_A as u64) as *u8
+    let fbp : *u8 = (&CG_ST_B as u64) as *u8
+    let mut ai : u64 = 0u64
+    while ai < 32u64 {
+        fap[ai] = (ai + 1u64) as u8
+        fbp[ai] = (ai + 0x80u64) as u8
+        ai = ai + 1u64
+    }
+    let rc_absent : i32 = cg_anchor_declare(fap, fbp)
+    if rc_absent != CG_E_CLAUSE_ABSENT { return 30u64 }
+
+    /* --- KAT 5: absent branch refusal. --- */
+    let fcp : *u8 = (&CG_ST_C as u64) as *u8
+    let mut ci2 : u64 = 0u64
+    while ci2 < 32u64 { fcp[ci2] = (ci2 + 0x40u64) as u8  ci2 = ci2 + 1u64 }
+    if cg_branch_head(fcp, headp) != CG_E_BRANCH_ABSENT { return 31u64 }
+
+    /* --- KAT 6: anchor_query on un-declared fid returns CG_E_NOT_ANCHOR. --- */
+    if cg_anchor_query(fap, headp) != CG_E_NOT_ANCHOR { return 32u64 }
+
+    /* --- KAT 7 (integration-tier): positive bisimulation over real witness
+     * fragments emitted via wh_publish + ws_register.  Proves the happy path
+     * bisim(L,R)=CG_OK and (already covered above as a guard) the negative
+     * bisim(L,C)=CG_E_NOT_BISIMILAR.  ws_lookup_fragment/ws_emit_fragment of
+     * the original stub were fictional; the real composition is
+     * cg_lookup_fragment (ws_lookup_id+wh_get_payload) and wh_publish. --- */
+    let kb : u64 = cg_kat_bisim()
+    if kb != 0u64 { return kb }
+
+    return 99u64
+}
+
+/* Ontological footer: computation_graph IS the substrate's chain-as-DAG --
+ * it embodies the canonical line (branch_id 0, strictly append-only) plus
+ * append-only side branches rooted at constitution-governed anchors.
+ * It IS the bisimulation primitive (W41/W42): no equivalence claim exists
+ * without a witness fragment; no branch merges to canonical without
+ * bisimulation verification.  It embodies exact algebraic identity (M4),
+ * cryptographic chaining (M6), append-only reversibility (M5/M9), and
+ * Curry-Howard operationality (M11/M18): the bisimulation witness fragment
+ * IS the proof term, recomputable byte-identically from the two recorded fids. */

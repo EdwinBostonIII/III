@@ -1,0 +1,406 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sha256.iii
+ *
+ * III STDLIB - numera::sha256
+ *
+ * Hand-rolled FIPS 180-4 SHA-256 over arbitrary byte buffers.
+ *
+ * Phase A scope:
+ *   - sha256_oneshot(in_ptr, in_len, out_32) one-call hash
+ *   - sha256_init / sha256_update / sha256_final streaming API
+ *
+ * State is module-singleton.  III has no threads so non-reentrancy is
+ * safe; for multiple concurrent hashes Phase B will introduce per-arena
+ * state via @specialize.
+ *
+ * Hexad: kind_essence (numbers as essences).  Ring: R0.  K: 1.00.
+ *
+ * NIH: zero externs.  No msvcrt, no OS hash.
+ *
+ * u32 codegen status: the iiis u32 mod-2^32 truncation defects (64-bit
+ * shlq AND addq/subq/imulq with no 32-bit truncation) are ALL FIXED in
+ * cg_r3 (expr_is_u32-gated `movl %eax,%eax` after shlq AND after
+ * addq/subq/imulq; byte-mirrored cg_r3.c/cg_r3.iii; RITCHIE Stage 3.2 /
+ * ADR-§3.2-1; sealed; triple-bit-identity preserved).  As a result this
+ * module is now FULLY UNMASKED: every `& SHA_U32_MASK` (and the const)
+ * is removed — `sha_rotr`, the W-schedule `w16+s0+w7+s1`, T1
+ * `h+big_s1+ch+kk+ww`, and the H-update `SHA_H[i]+x` are all truncated
+ * by the codegen, not source masks.  FIPS-proven WITHOUT masks: corpus
+ * 02=186, 15=227, 151=99 (+ blake2s 83=80), full corpus 254/0; 145/145
+ * numera+omnia iiis-0≡iiis-1 byte-identical.  See CONVERGENCE-AUDIT.md §3.2.
+ *
+ * Conformance: matches NIST FIPS 180-4 test vectors (corpus 02, 15).
+ */
+
+module numera_sha256
+
+
+/* --- Constants: FIPS 180-4 K[0..63] --- */
+
+var SHA_K : [u32; 64]
+
+/* --- Working state --- */
+
+var SHA_H      : [u32; 8]
+var SHA_W      : [u32; 64]
+var SHA_BUF    : [u8; 64]
+var SHA_BUFLEN : u32 = 0u32
+var SHA_BITS   : u64 = 0u64
+var SHA_INIT   : u8  = 0u8
+
+/* --- §3.5 AVX-512 message-schedule sigma0 (4-wide, prior-word part) --- */
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+var SHA_PART    : [u32; 4]      /* partial[j] = W[t+j-16] + sigma0(W[t+j-15]) + W[t+j-7] */
+var SHA_SCHED_T : u32 = 0u32    /* current 4-group start index t */
+var SHA_FORCE   : u32 = 0u32    /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
+
+/* --- K table init (ROM constants) --- */
+
+fn sha_init_k() -> u32 {
+    SHA_K[0]  = 0x428a2f98u32
+    SHA_K[1]  = 0x71374491u32
+    SHA_K[2]  = 0xb5c0fbcfu32
+    SHA_K[3]  = 0xe9b5dba5u32
+    SHA_K[4]  = 0x3956c25bu32
+    SHA_K[5]  = 0x59f111f1u32
+    SHA_K[6]  = 0x923f82a4u32
+    SHA_K[7]  = 0xab1c5ed5u32
+    SHA_K[8]  = 0xd807aa98u32
+    SHA_K[9]  = 0x12835b01u32
+    SHA_K[10] = 0x243185beu32
+    SHA_K[11] = 0x550c7dc3u32
+    SHA_K[12] = 0x72be5d74u32
+    SHA_K[13] = 0x80deb1feu32
+    SHA_K[14] = 0x9bdc06a7u32
+    SHA_K[15] = 0xc19bf174u32
+    SHA_K[16] = 0xe49b69c1u32
+    SHA_K[17] = 0xefbe4786u32
+    SHA_K[18] = 0x0fc19dc6u32
+    SHA_K[19] = 0x240ca1ccu32
+    SHA_K[20] = 0x2de92c6fu32
+    SHA_K[21] = 0x4a7484aau32
+    SHA_K[22] = 0x5cb0a9dcu32
+    SHA_K[23] = 0x76f988dau32
+    SHA_K[24] = 0x983e5152u32
+    SHA_K[25] = 0xa831c66du32
+    SHA_K[26] = 0xb00327c8u32
+    SHA_K[27] = 0xbf597fc7u32
+    SHA_K[28] = 0xc6e00bf3u32
+    SHA_K[29] = 0xd5a79147u32
+    SHA_K[30] = 0x06ca6351u32
+    SHA_K[31] = 0x14292967u32
+    SHA_K[32] = 0x27b70a85u32
+    SHA_K[33] = 0x2e1b2138u32
+    SHA_K[34] = 0x4d2c6dfcu32
+    SHA_K[35] = 0x53380d13u32
+    SHA_K[36] = 0x650a7354u32
+    SHA_K[37] = 0x766a0abbu32
+    SHA_K[38] = 0x81c2c92eu32
+    SHA_K[39] = 0x92722c85u32
+    SHA_K[40] = 0xa2bfe8a1u32
+    SHA_K[41] = 0xa81a664bu32
+    SHA_K[42] = 0xc24b8b70u32
+    SHA_K[43] = 0xc76c51a3u32
+    SHA_K[44] = 0xd192e819u32
+    SHA_K[45] = 0xd6990624u32
+    SHA_K[46] = 0xf40e3585u32
+    SHA_K[47] = 0x106aa070u32
+    SHA_K[48] = 0x19a4c116u32
+    SHA_K[49] = 0x1e376c08u32
+    SHA_K[50] = 0x2748774cu32
+    SHA_K[51] = 0x34b0bcb5u32
+    SHA_K[52] = 0x391c0cb3u32
+    SHA_K[53] = 0x4ed8aa4au32
+    SHA_K[54] = 0x5b9cca4fu32
+    SHA_K[55] = 0x682e6ff3u32
+    SHA_K[56] = 0x748f82eeu32
+    SHA_K[57] = 0x78a5636fu32
+    SHA_K[58] = 0x84c87814u32
+    SHA_K[59] = 0x8cc70208u32
+    SHA_K[60] = 0x90befffau32
+    SHA_K[61] = 0xa4506cebu32
+    SHA_K[62] = 0xbef9a3f7u32
+    SHA_K[63] = 0xc67178f2u32
+    return 0u32
+}
+
+/* --- ROTR helper.  UNMASKED: the iiis `u32 << k` codegen fix makes
+ * `(x >> n) | (x << (32 - n))` wrap correctly at 32 bits. --- */
+
+fn sha_rotr(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+
+/* --- §3.5 message-schedule sigma0 part (4-wide): the prior-word terms ---
+ * partial[j] = W[t+j-16] + sigma0(W[t+j-15]) + W[t+j-7], j=0..3.  All
+ * inputs are W[< t] (dependency-free across the group); the sequential
+ * sigma1(W[t+j-2]) term is added by the scalar driver.  sigma0 here is
+ * the vectorizable bulk; sigma1 stays scalar to avoid an in-group dep. */
+fn _sha_sched4_scalar() -> u32 {
+    let t : u32 = SHA_SCHED_T
+    let mut j : u32 = 0u32
+    while j < 4u32 {
+        let w15 : u32 = SHA_W[t + j - 15u32]
+        let s0  : u32 = (sha_rotr(w15, 7u32) ^ sha_rotr(w15, 18u32) ^ (w15 >> 3u32))
+        let w16 : u32 = SHA_W[t + j - 16u32]
+        let w7  : u32 = SHA_W[t + j - 7u32]
+        SHA_PART[j] = (w16 + s0 + w7)
+        j = j + 1u32
+    }
+    return 0u32
+}
+
+/* AVX-512 (EVEX.128): 4 partials at once.  W[t] addr = SHA_W + t*4; loads
+ * W[t-16..t-13], W[t-15..t-12], W[t-7..t-4]; sigma0 via vprold (rotr n =
+ * rotl 32-n) + vpsrld + vpxord; + the two W vectors.  Bit-identical to
+ * _sha_sched4_scalar.  xmm0..4 + rax/rcx/rdx all Win64 caller-saved. */
+fn _sha_sched4_avx512() -> u32 {
+    metal {
+    leaq L_SHA_W(%rip), %rax
+    leaq L_SHA_SCHED_T(%rip), %rcx
+    movl (%rcx), %ecx
+    movl %ecx, %edx
+    shll $2, %edx
+    addq %rdx, %rax
+    vmovdqu -64(%rax), %xmm0
+    vmovdqu -60(%rax), %xmm1
+    vmovdqu -28(%rax), %xmm2
+    vprold $25, %xmm1, %xmm3
+    vprold $14, %xmm1, %xmm4
+    vpxord %xmm4, %xmm3, %xmm3
+    vpsrld $3, %xmm1, %xmm4
+    vpxord %xmm4, %xmm3, %xmm3
+    vpaddd %xmm0, %xmm3, %xmm3
+    vpaddd %xmm2, %xmm3, %xmm3
+    leaq L_SHA_PART(%rip), %rdx
+    vmovdqu %xmm3, (%rdx)
+    vzeroupper
+    }
+    return 0u32
+}
+
+fn _sha_sched4() -> u32 {
+    if SHA_FORCE == 1u32 { return _sha_sched4_scalar() }
+    if SHA_FORCE == 2u32 { return _sha_sched4_avx512() }
+    if cpufeat_has_avx512f() == 1u8 { return _sha_sched4_avx512() }
+    return _sha_sched4_scalar()
+}
+
+fn sha256_sched_force(p: u32) -> u32 @export { SHA_FORCE = p ; return 0u32 }
+
+/* --- Inner block compression --- */
+
+fn sha_block() -> u32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let p0 : u32 = SHA_BUF[i*4u32 + 0u32] as u32
+        let p1 : u32 = SHA_BUF[i*4u32 + 1u32] as u32
+        let p2 : u32 = SHA_BUF[i*4u32 + 2u32] as u32
+        let p3 : u32 = SHA_BUF[i*4u32 + 3u32] as u32
+        SHA_W[i] = ((p0 << 24u32) | (p1 << 16u32) | (p2 << 8u32) | p3)
+        i = i + 1u32
+    }
+    /* §3.5: SIMD-fill the sigma0 prior-word partials 4-wide, then a scalar
+     * sigma1 pass (sequential within the group).  Bit-identical to the
+     * per-word w16+s0+w7+s1 (integer add is associative). */
+    let mut ii : u32 = 16u32
+    while ii < 64u32 {
+        SHA_SCHED_T = ii
+        _sha_sched4()
+        let mut j : u32 = 0u32
+        while j < 4u32 {
+            let w2 : u32 = SHA_W[ii + j - 2u32]
+            let s1 : u32 = (sha_rotr(w2, 17u32) ^ sha_rotr(w2, 19u32) ^ (w2 >> 10u32))
+            SHA_W[ii + j] = (SHA_PART[j] + s1)
+            j = j + 1u32
+        }
+        ii = ii + 4u32
+    }
+    let mut a : u32 = SHA_H[0]
+    let mut b : u32 = SHA_H[1]
+    let mut c : u32 = SHA_H[2]
+    let mut d : u32 = SHA_H[3]
+    let mut e : u32 = SHA_H[4]
+    let mut f : u32 = SHA_H[5]
+    let mut g : u32 = SHA_H[6]
+    let mut h : u32 = SHA_H[7]
+    let mut k : u32 = 0u32
+    while k < 64u32 {
+        let big_s1 : u32 = (sha_rotr(e, 6u32) ^ sha_rotr(e, 11u32) ^ sha_rotr(e, 25u32))
+        let ch     : u32 = ((e & f) ^ ((~e) & g))
+        let kk     : u32 = SHA_K[k]
+        let ww     : u32 = SHA_W[k]
+        let t1     : u32 = (h + big_s1 + ch + kk + ww)
+        let big_s0 : u32 = (sha_rotr(a, 2u32) ^ sha_rotr(a, 13u32) ^ sha_rotr(a, 22u32))
+        let mj     : u32 = ((a & b) ^ (a & c) ^ (b & c))
+        let t2     : u32 = (big_s0 + mj)
+        h = g
+        g = f
+        f = e
+        e = (d + t1)
+        d = c
+        c = b
+        b = a
+        a = (t1 + t2)
+        k = k + 1u32
+    }
+    SHA_H[0] = (SHA_H[0] + a)
+    SHA_H[1] = (SHA_H[1] + b)
+    SHA_H[2] = (SHA_H[2] + c)
+    SHA_H[3] = (SHA_H[3] + d)
+    SHA_H[4] = (SHA_H[4] + e)
+    SHA_H[5] = (SHA_H[5] + f)
+    SHA_H[6] = (SHA_H[6] + g)
+    SHA_H[7] = (SHA_H[7] + h)
+    return 0u32
+}
+
+/* --- Public streaming API --- */
+
+fn sha256_init() -> u32 @constant_time @export {
+    sha_init_k()
+    SHA_H[0] = 0x6a09e667u32
+    SHA_H[1] = 0xbb67ae85u32
+    SHA_H[2] = 0x3c6ef372u32
+    SHA_H[3] = 0xa54ff53au32
+    SHA_H[4] = 0x510e527fu32
+    SHA_H[5] = 0x9b05688cu32
+    SHA_H[6] = 0x1f83d9abu32
+    SHA_H[7] = 0x5be0cd19u32
+    SHA_BITS    = 0u64
+    SHA_BUFLEN  = 0u32
+    SHA_INIT    = 1u8
+    return 0u32
+}
+
+fn sha256_update(input: *u8, len: u64) -> u32 @constant_time @export {
+    if SHA_INIT == 0u8 { return 1u32 }
+    SHA_BITS = SHA_BITS + (len * 8u64)
+    let mut rem : u64 = len
+    let mut off : u64 = 0u64
+    while rem > 0u64 {
+        let mut take : u64 = 64u64 - (SHA_BUFLEN as u64)
+        if take > rem { take = rem }
+        let mut k : u64 = 0u64
+        while k < take {
+            let idx : u64 = (SHA_BUFLEN as u64) + k
+            SHA_BUF[idx] = input[off + k]
+            k = k + 1u64
+        }
+        SHA_BUFLEN = SHA_BUFLEN + (take as u32)
+        off = off + take
+        rem = rem - take
+        if SHA_BUFLEN == 64u32 {
+            sha_block()
+            SHA_BUFLEN = 0u32
+        }
+    }
+    return 0u32
+}
+
+fn sha256_final(out_32: *u8) -> u32 @constant_time @export {
+    if SHA_INIT == 0u8 { return 1u32 }
+    let bits : u64 = SHA_BITS
+    SHA_BUF[SHA_BUFLEN] = 0x80u8
+    SHA_BUFLEN = SHA_BUFLEN + 1u32
+    if SHA_BUFLEN > 56u32 {
+        while SHA_BUFLEN < 64u32 {
+            SHA_BUF[SHA_BUFLEN] = 0u8
+            SHA_BUFLEN = SHA_BUFLEN + 1u32
+        }
+        sha_block()
+        SHA_BUFLEN = 0u32
+    }
+    while SHA_BUFLEN < 56u32 {
+        SHA_BUF[SHA_BUFLEN] = 0u8
+        SHA_BUFLEN = SHA_BUFLEN + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u32 = 56u32 - i*8u32
+        let byte  : u8 = ((bits >> (shift as u64)) & 0xFFu64) as u8
+        SHA_BUF[SHA_BUFLEN] = byte
+        SHA_BUFLEN = SHA_BUFLEN + 1u32
+        i = i + 1u32
+    }
+    sha_block()
+    SHA_BUFLEN = 0u32
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let h_val : u32 = SHA_H[j]
+        let base : u32 = j * 4u32
+        out_32[base + 0u32] = ((h_val >> 24u32) & 0xFFu32) as u8
+        out_32[base + 1u32] = ((h_val >> 16u32) & 0xFFu32) as u8
+        out_32[base + 2u32] = ((h_val >> 8u32)  & 0xFFu32) as u8
+        out_32[base + 3u32] = (h_val & 0xFFu32) as u8
+        j = j + 1u32
+    }
+    SHA_INIT = 0u8
+    return 0u32
+}
+
+fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 @constant_time @export {
+    sha256_init()
+    sha256_update(input, len)
+    return sha256_final(out_32)
+}
+
+/* Feed a single byte into the running hash.  Avoids the iiis-2
+ * limitation that `&GLOBAL[0] as u64` does not yield a real address;
+ * callers without a pointer source for the byte can use this. */
+fn sha256_update_byte(b: u32) -> u32 @export {
+    if SHA_INIT == 0u8 { return 1u32 }
+    SHA_BITS = SHA_BITS + 8u64
+    SHA_BUF[SHA_BUFLEN] = (b & 0xFFu32) as u8
+    SHA_BUFLEN = SHA_BUFLEN + 1u32
+    if SHA_BUFLEN == 64u32 {
+        sha_block()
+        SHA_BUFLEN = 0u32
+    }
+    return 0u32
+}
+
+/* Finalize the running hash without writing to a caller-provided
+ * buffer.  Digest bytes are then readable via sha256_digest_byte.
+ * Used by callers that cannot legally pass a pointer-to-global to
+ * sha256_final due to the iiis-2 address-of-global quirk (W3). */
+fn sha256_finalize_internal() -> u32 @export {
+    if SHA_INIT == 0u8 { return 1u32 }
+    let bits : u64 = SHA_BITS
+    SHA_BUF[SHA_BUFLEN] = 0x80u8
+    SHA_BUFLEN = SHA_BUFLEN + 1u32
+    if SHA_BUFLEN > 56u32 {
+        while SHA_BUFLEN < 64u32 {
+            SHA_BUF[SHA_BUFLEN] = 0u8
+            SHA_BUFLEN = SHA_BUFLEN + 1u32
+        }
+        sha_block()
+        SHA_BUFLEN = 0u32
+    }
+    while SHA_BUFLEN < 56u32 {
+        SHA_BUF[SHA_BUFLEN] = 0u8
+        SHA_BUFLEN = SHA_BUFLEN + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u32 = 56u32 - i*8u32
+        let byte  : u8 = ((bits >> (shift as u64)) & 0xFFu64) as u8
+        SHA_BUF[SHA_BUFLEN] = byte
+        SHA_BUFLEN = SHA_BUFLEN + 1u32
+        i = i + 1u32
+    }
+    sha_block()
+    SHA_BUFLEN = 0u32
+    SHA_INIT = 0u8
+    return 0u32
+}
+
+/* Return byte i of the most-recent digest (from SHA_H state).  Valid
+ * only after sha256_final or sha256_finalize_internal.  i in 0..31. */
+fn sha256_digest_byte(i: u32) -> u32 @export {
+    if i >= 32u32 { return 0x100u32 }
+    let word : u32 = i / 4u32
+    let bytepos : u32 = i & 3u32
+    let h_val : u32 = SHA_H[word]
+    let shift : u32 = (3u32 - bytepos) * 8u32
+    return (h_val >> shift) & 0xFFu32
+}

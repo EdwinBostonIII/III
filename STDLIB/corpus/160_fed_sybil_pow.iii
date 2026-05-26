@@ -1,0 +1,69 @@
+/* Step 0189 verification: aether/fed_sybil PoW gate.
+ *
+ * Strategy: brute-force a small-difficulty nonce, then exercise the
+ * PoW verifier at low bits (must accept), high bits (must reject), and
+ * boundary bits (must accept the exact achieved difficulty).
+ *
+ * Does NOT exercise the admission/signature flow — that requires an
+ * ed25519 keypair which crypt_ed25519.iii does not yet expose a signer
+ * for.  The signature path is verified by fed_sybil_admit's wiring;
+ * isolated PoW verification suffices to seal Step 0189's substantive
+ * NIH content (SHA3-256 puzzle + leading-zero-bit counter).
+ */
+module corpus_160
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fed_sybil_pow_verify(peer_id_ptr: u64, nonce: u64, bits: u32) -> u8 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_sybil_pow_min_difficulty_bits() -> u32 from "fed_sybil.iii"
+
+fn main() -> u64 {
+    /* Reject zero difficulty. */
+    if fed_sybil_pow_verify(0u64, 0u64, 0u32) != 0u8 { return 1u64 }
+
+    /* Reject null peer_id. */
+    if fed_sybil_pow_verify(0u64, 0u64, 4u32) != 0u8 { return 2u64 }
+
+    /* Build deterministic peer_id (all 0x42). */
+    let peer : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        peer[i] = 0x42u8
+        i = i + 1u64
+    }
+
+    /* Brute-force a nonce that satisfies 4-bit difficulty.
+     * Probability per trial = 1/16; expect success in ~16 attempts. */
+    let mut nonce : u64 = 0u64
+    let mut found : u8 = 0u8
+    let mut tries : u64 = 0u64
+    while tries < 1024u64 {
+        if found == 0u8 {
+            if fed_sybil_pow_verify(peer as u64, nonce, 4u32) == 1u8 {
+                found = 1u8
+            }
+            if found == 0u8 { nonce = nonce + 1u64 }
+        }
+        tries = tries + 1u64
+    }
+    if found != 1u8 { return 3u64 }
+
+    /* The found nonce must also satisfy bits=1, 2, 3, and exactly the
+     * difficulty achieved.  At minimum it satisfies bits=4 (just confirmed). */
+    if fed_sybil_pow_verify(peer as u64, nonce, 1u32) != 1u8 { return 4u64 }
+    if fed_sybil_pow_verify(peer as u64, nonce, 2u32) != 1u8 { return 5u64 }
+    if fed_sybil_pow_verify(peer as u64, nonce, 3u32) != 1u8 { return 6u64 }
+    if fed_sybil_pow_verify(peer as u64, nonce, 4u32) != 1u8 { return 7u64 }
+
+    /* A nearly-impossible difficulty must reject. */
+    if fed_sybil_pow_verify(peer as u64, nonce, 200u32) != 0u8 { return 8u64 }
+
+    /* The minimum difficulty constant is the documented floor. */
+    if fed_sybil_pow_min_difficulty_bits() != 16u32 { return 9u64 }
+
+    /* Out-of-range bits parameter rejects. */
+    if fed_sybil_pow_verify(peer as u64, nonce, 257u32) != 0u8 { return 10u64 }
+
+    free(peer)
+    return 99u64
+}

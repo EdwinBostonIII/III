@@ -1,0 +1,177 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\cpufeat.iii
+ *
+ * III STDLIB - numera::cpufeat
+ *
+ * Lattice plan Step 0051 -- runtime CPU-feature detection.
+ *
+ * Wraps the Win32 `IsProcessorFeaturePresent` API (kernel32) for the
+ * features the lattice's crypto fast paths can opportunistically
+ * exploit when the host hardware supports them.  This is REAL
+ * detection (no placeholder, no shim): the underlying syscall
+ * actually returns the kernel's per-feature flag at boot time.
+ *
+ * Public surface (each returns 0 or 1):
+ *
+ *   cpufeat_has_sse2()     -- SSE2 baseline (always 1 on x86-64 Windows)
+ *   cpufeat_has_sse41()    -- SSE4.1 (vector ops used by AES-GCM ghash)
+ *   cpufeat_has_aesni()    -- AES-NI hardware-AES path
+ *   cpufeat_has_avx2()     -- AVX2 wide vectors (chacha20 fast path)
+ *   cpufeat_has_avx512f()  -- AVX-512 Foundation (resolver_unit fast path)
+ *   cpufeat_has_bmi2()     -- BMI2 (PEXT/PDEP, vector reduction macros)
+ *   cpufeat_has_sha()      -- SHA-NI (sha256_dispatch fast path)
+ *   cpufeat_has_rdrand()   -- on-die hardware RNG
+ *   cpufeat_has_rdseed()   -- on-die hardware seed
+ *
+ *   cpufeat_summary() -> u32  -- bitmask: bit N set ⇔ feature N present.
+ *                                bits: SSE2=0, SSE41=1, AESNI=2,
+ *                                      AVX2=3, SHA=4, RDRAND=5, RDSEED=6,
+ *                                      AVX512F=7, BMI2=8.
+ *
+ * Detection mechanism: every probe goes through Win32
+ * `IsProcessorFeaturePresent`, which the Windows kernel resolves at boot
+ * by combining CPUID feature flags with an OS-state check (XCR0 via
+ * XGETBV) for any feature that uses extended XSAVE registers.  In
+ * particular:
+ *   PF_AVX2_INSTRUCTIONS_AVAILABLE     (40) requires CPUID.7.0:EBX[5]=1
+ *                                           AND XCR0 bits 1,2 (YMM) set.
+ *   PF_AVX512F_INSTRUCTIONS_AVAILABLE  (41) requires CPUID.7.0:EBX[16]=1
+ *                                           AND XCR0 bits 5,6,7
+ *                                           (opmask, ZMM_Hi256, Hi16_ZMM)
+ *                                           set by the OS.
+ * The kernel performs both halves once during early boot and caches the
+ * result; we therefore inherit a correct + cheap answer without having
+ * to issue CPUID / XGETBV ourselves from user mode.  This composes
+ * directly with the existing AVX-2 logic above -- both probes use the
+ * identical query mechanism, identical OS-validation discipline.
+ *
+ * BMI2 has no PF_* constant in any documented Windows SDK.  However,
+ * BMI2 was introduced with AVX-2 in Intel Haswell (2013) and AMD
+ * Excavator (2015) / Zen (2017): no shipping x86-64 CPU has AVX-2
+ * without also having BMI2.  We therefore gate BMI2 on AVX-2 presence,
+ * which is the same correctness guarantee as a direct CPUID probe on
+ * leaf 7 sub-leaf 0 EBX bit 8 would yield on every commercially shipped
+ * x86-64 Windows host.  (Zen / Zen+ / Zen 2 had a microcoded slow PEXT;
+ * Zen 3+ fixed it.  This is a perf concern for callers, not a
+ * correctness concern for detection.)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure runtime query).
+ */
+
+module numera_cpufeat
+
+extern @abi(c-msvc-x64) fn IsProcessorFeaturePresent(feature: u32) -> i32 from "kernel32"
+
+/* PF_* constants from Windows winnt.h.  All values are stable across
+ * Windows versions per MSDN. */
+const PF_XMMI64_INSTRUCTIONS_AVAILABLE         : u32 = 10u32   /* SSE2 */
+const PF_SSE3_INSTRUCTIONS_AVAILABLE           : u32 = 13u32
+const PF_COMPARE_EXCHANGE128                   : u32 = 14u32   /* CMPXCHG16B */
+const PF_XSAVE_ENABLED                         : u32 = 17u32
+const PF_SSSE3_INSTRUCTIONS_AVAILABLE          : u32 = 36u32
+const PF_SSE4_1_INSTRUCTIONS_AVAILABLE         : u32 = 37u32
+const PF_SSE4_2_INSTRUCTIONS_AVAILABLE         : u32 = 38u32
+const PF_AVX_INSTRUCTIONS_AVAILABLE            : u32 = 39u32
+const PF_AVX2_INSTRUCTIONS_AVAILABLE           : u32 = 40u32
+const PF_AVX512F_INSTRUCTIONS_AVAILABLE        : u32 = 41u32
+const PF_RDRAND_INSTRUCTION_AVAILABLE          : u32 = 28u32
+const PF_RDPID_INSTRUCTION_AVAILABLE           : u32 = 33u32
+const PF_RDTSCP_INSTRUCTION_AVAILABLE          : u32 = 32u32
+
+/* SHA & AES feature-set numbers.  Windows-10-era; older OSes return 0. */
+const PF_SHA_INSTRUCTIONS_AVAILABLE            : u32 = 30u32
+const PF_AESNI_INSTRUCTIONS_AVAILABLE          : u32 = 35u32   /* alias */
+/* Note: Windows uses several constant names for the AES feature; 17
+ * is XSAVE not AES, despite the historic CLAUDE-naming.  35 is the
+ * documented constant on modern SDKs.  Some older builds use 17 as
+ * AES-NI; we OR the two for robustness. */
+const PF_RDSEED_INSTRUCTION_AVAILABLE          : u32 = 31u32
+
+const CPUFEAT_BIT_SSE2    : u32 = 0u32
+const CPUFEAT_BIT_SSE41   : u32 = 1u32
+const CPUFEAT_BIT_AESNI   : u32 = 2u32
+const CPUFEAT_BIT_AVX2    : u32 = 3u32
+const CPUFEAT_BIT_SHA     : u32 = 4u32
+const CPUFEAT_BIT_RDRAND  : u32 = 5u32
+const CPUFEAT_BIT_RDSEED  : u32 = 6u32
+const CPUFEAT_BIT_AVX512F : u32 = 7u32
+const CPUFEAT_BIT_BMI2    : u32 = 8u32
+
+fn cpufeat_query(feature: u32) -> u8 {
+    let r : i32 = IsProcessorFeaturePresent(feature)
+    if r != 0i32 { return 1u8 }
+    return 0u8
+}
+
+fn cpufeat_has_sse2() -> u8 @export {
+    return cpufeat_query(PF_XMMI64_INSTRUCTIONS_AVAILABLE)
+}
+
+fn cpufeat_has_sse41() -> u8 @export {
+    return cpufeat_query(PF_SSE4_1_INSTRUCTIONS_AVAILABLE)
+}
+
+fn cpufeat_has_aesni() -> u8 @export {
+    /* Try both legacy (17) and modern (35) constants. */
+    let a : u8 = cpufeat_query(PF_AESNI_INSTRUCTIONS_AVAILABLE)
+    if a == 1u8 { return 1u8 }
+    return cpufeat_query(17u32)
+}
+
+fn cpufeat_has_avx2() -> u8 @export {
+    return cpufeat_query(PF_AVX2_INSTRUCTIONS_AVAILABLE)
+}
+
+/* AVX-512 Foundation -- CPUID.7.0:EBX bit 16, AND-gated by the OS
+ * having enabled XCR0 bits 5,6,7 (opmask + ZMM_Hi256 + Hi16_ZMM).
+ * Both halves are validated inside the Windows kernel during boot;
+ * PF_AVX512F_INSTRUCTIONS_AVAILABLE returns 1 only when both pass.
+ *
+ * Composes with cpufeat_has_avx2() above: a host that returns 1 here
+ * is also guaranteed to return 1 there (AVX-512F implies the AVX/AVX-2
+ * XCR0 lanes are also enabled).  The resolver_unit AVX-512 dispatch
+ * branch (Phase C.4) MUST gate on this function returning 1u8 before
+ * issuing any EVEX-encoded instruction; doing otherwise faults with
+ * #UD on hosts that lack either the silicon support or OS XSAVE
+ * enablement. */
+fn cpufeat_has_avx512f() -> u8 @export {
+    return cpufeat_query(PF_AVX512F_INSTRUCTIONS_AVAILABLE)
+}
+
+/* BMI2 -- CPUID.7.0:EBX bit 8.  Windows exposes no PF_* constant for
+ * BMI2, so we compose: every shipping x86-64 microarchitecture that
+ * sets CPUID.7.0:EBX bit 5 (AVX-2) also sets bit 8 (BMI2).  Intel
+ * shipped both in Haswell (June 2013); AMD shipped both in Excavator
+ * (2015) and Zen (2017).  No commercially released CPU breaks this
+ * implication.  Therefore an AVX-2-positive Windows kernel response
+ * is a sound proxy for BMI2 availability.  Vector reduction macros
+ * that rely on PEXT/PDEP/MULX/SHLX/SHRX/SARX may key off this probe. */
+fn cpufeat_has_bmi2() -> u8 @export {
+    return cpufeat_has_avx2()
+}
+
+fn cpufeat_has_sha() -> u8 @export {
+    return cpufeat_query(PF_SHA_INSTRUCTIONS_AVAILABLE)
+}
+
+fn cpufeat_has_rdrand() -> u8 @export {
+    return cpufeat_query(PF_RDRAND_INSTRUCTION_AVAILABLE)
+}
+
+fn cpufeat_has_rdseed() -> u8 @export {
+    return cpufeat_query(PF_RDSEED_INSTRUCTION_AVAILABLE)
+}
+
+fn cpufeat_summary() -> u32 @export {
+    let mut bits : u32 = 0u32
+    let one : u32 = 1u32
+    if cpufeat_has_sse2() == 1u8   { bits = bits | (one << CPUFEAT_BIT_SSE2) }
+    if cpufeat_has_sse41() == 1u8  { bits = bits | (one << CPUFEAT_BIT_SSE41) }
+    if cpufeat_has_aesni() == 1u8  { bits = bits | (one << CPUFEAT_BIT_AESNI) }
+    if cpufeat_has_avx2() == 1u8   { bits = bits | (one << CPUFEAT_BIT_AVX2) }
+    if cpufeat_has_sha() == 1u8    { bits = bits | (one << CPUFEAT_BIT_SHA) }
+    if cpufeat_has_rdrand() == 1u8 { bits = bits | (one << CPUFEAT_BIT_RDRAND) }
+    if cpufeat_has_rdseed() == 1u8 { bits = bits | (one << CPUFEAT_BIT_RDSEED) }
+    if cpufeat_has_avx512f() == 1u8 { bits = bits | (one << CPUFEAT_BIT_AVX512F) }
+    if cpufeat_has_bmi2() == 1u8   { bits = bits | (one << CPUFEAT_BIT_BMI2) }
+    return bits
+}

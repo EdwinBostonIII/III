@@ -1,0 +1,33 @@
+/* SHA3-512("abc") = b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e
+ *                   10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0
+ * Verifies first 8 bytes against the FIPS 202 KAT.
+ */
+module corpus_156
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha3_512_oneshot(input_ptr: u64, input_len: u64, out_64: u64) -> u32 from "sha3_512.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(3u64)
+    buf[0] = 97u8
+    buf[1] = 98u8
+    buf[2] = 99u8
+
+    let out : *u8 = malloc(64u64)
+    sha3_512_oneshot(buf as u64, 3u64, out as u64)
+
+    /* Expected first 8 bytes: b7 51 85 0b 1a 57 16 8a */
+    if out[0] != 0xb7u8 { return 1u64 }
+    if out[1] != 0x51u8 { return 2u64 }
+    if out[2] != 0x85u8 { return 3u64 }
+    if out[3] != 0x0bu8 { return 4u64 }
+    if out[4] != 0x1au8 { return 5u64 }
+    if out[5] != 0x57u8 { return 6u64 }
+    if out[6] != 0x16u8 { return 7u64 }
+    if out[7] != 0x8au8 { return 8u64 }
+
+    free(buf)
+    free(out)
+    return 99u64
+}

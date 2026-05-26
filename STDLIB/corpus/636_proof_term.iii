@@ -1,0 +1,4 @@
+/* 636 — proof_term: first-class checkable proof terms; per-rule conclusion replay (M11/M18). */
+module corpus_636
+extern @abi(c-msvc-x64) fn pt_kat() -> u64 from "proof_term.iii"
+fn main() -> u64 { return pt_kat() }

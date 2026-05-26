@@ -1,0 +1,161 @@
+/* STDLIB/iii/nous/nous_synth.iii -- the synthesis Tetrachotomy (nous Phase 7).
+ *
+ * Synthesis (M15) is the ONE non-canonical client: nous_generate proposes PROGRAMS (not
+ * just rewrite orders), and a synthesized program can be certified-CORRECT without being
+ * proven cost-OPTIMAL.  So the Search Trichotomy splits along the correctness-vs-
+ * canonicality axis into a TETRACHOTOMY:
+ *   CANONICAL   (0) -- certified-correct AND cost-optimal (bounded+exhausted, or a cost
+ *                      lower-bound proof).  Oracle-independent; federatable.
+ *   GAP         (1) -- budget spent before certification.
+ *   REFUTED     (2) -- proof no inhabitant of the goal type exists.
+ *   PROVISIONAL (3) -- certified-correct, canonicality DEFERRED.  Sound to RUN, honestly
+ *                      typed as one-valid-not-the-unique; ships with an oracle-pin in
+ *                      provenance; promotable to CANONICAL via a resumable optimality search.
+ *
+ * THE SOUNDNESS FLOOR (the non-negotiable, M13-identical by de Bruijn): correctness is
+ * valid ONLY if the kernel CHECKED the proof.  nous_synth_classify REFUSES to certify
+ * (returns GAP) a "correct" claim with no kernel-checked proof -- a synthesized program
+ * without a kernel-checked correctness proof is never CANONICAL or PROVISIONAL.
+ *
+ * THE FEDERATION WALL (installed now, design-ahead, preempting the M19 poisoning of
+ * consensus-free agreement): only CANONICAL artifacts cross the federation boundary as
+ * agreed values.  A PROVISIONAL presented for consensus-free agreement WITHOUT its
+ * oracle-pin is RED.  And C-12 DEFAULT-DENY: any consumer in a canonical context that
+ * does not explicitly handle PROVISIONAL must treat it as non-canonical and refuse it.
+ *
+ * STATUS: the DECISION LOGIC (tetrachotomy + walls) is real + tested; nous_generate now does REAL
+ * bounded synthesis over the HEXAD type universe (the realisable fragment) -- inhabitance decided by
+ * the kernel-checked M9 safety judge (the proof-carrying floor), classified by the tetrachotomy
+ * (reachable -> CANONICAL, bottom -> REFUTED, malformed/no-budget -> GAP).  Constrained decoding of
+ * arbitrary CIC dependent-type terms + generated proofs is the full-kernel future (H13 /
+ * numera/kernel.iii).  The sovval SV_STATUS_PROVISIONAL=2 + sv_is_provisional + oracle-pin
+ * accessor is the COORDINATED M5 touch -- NOT applied here (M5 is the user's churning
+ * module); nous_synth carries its own status tags until that coordination lands.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: self-contained.  Determinism:
+ * integer-only; ==/!= ; single-line fns.  (Tags distinct from nous_search's -- trap #2.)
+ */
+module nous_synth
+
+/* The M9 safety kernel's typing judgment -- the proof-carrying floor for synthesis over the hexad
+ * type universe (safety_hexad_judge realises the CIC-inductive Hexad typing anchored by the trusted
+ * cic.c).  i32 verdicts, ==/!= only (the ordering trap). */
+extern @abi(c-msvc-x64) fn safety_hexad_judge(h: u16) -> i32 from "safety_type.iii"
+const NOUS_SYN_TYPE0       : i32 =  0i32   /* well-typed: the hexad is inhabited */
+const NOUS_SYN_BOT_UNREACH : i32 = -1i32   /* bottom: a non-reachable hexad, provably uninhabited */
+
+const NOUS_SYN_CANONICAL   : u8 = 0u8
+const NOUS_SYN_GAP         : u8 = 1u8
+const NOUS_SYN_REFUTED     : u8 = 2u8
+const NOUS_SYN_PROVISIONAL : u8 = 3u8
+
+/* The tetrachotomy decision.  proof_checked = the kernel verified the correctness proof
+ * (the soundness floor); certified_correct = that proof established correctness;
+ * cost_optimal = optimality was proven (bounded-exhausted or a lower-bound proof);
+ * has_candidate / saturated as in the search trichotomy. */
+fn nous_synth_classify(proof_checked: u8, certified_correct: u8, cost_optimal: u8, has_candidate: u8, saturated: u8) -> u8 @export {
+    if certified_correct == 1u8 {
+        if proof_checked == 0u8 { return NOUS_SYN_GAP }        /* soundness floor: no kernel-checked proof -> NOT certified */
+        if cost_optimal == 1u8 { return NOUS_SYN_CANONICAL }
+        return NOUS_SYN_PROVISIONAL
+    }
+    if has_candidate == 0u8 {
+        if saturated == 1u8 { return NOUS_SYN_REFUTED }
+    }
+    return NOUS_SYN_GAP
+}
+
+/* The federation wall: only CANONICAL crosses as an agreed (consensus-free) value. */
+fn nous_synth_federatable(status: u8) -> u8 @export {
+    if status == NOUS_SYN_CANONICAL { return 1u8 }
+    return 0u8
+}
+
+/* C-12 default-deny: a consumer in a CANONICAL context accepts only CANONICAL; every
+ * other status (incl. PROVISIONAL) is refused.  Fail safe. */
+fn nous_synth_canonical_ok(status: u8) -> u8 @export {
+    if status == NOUS_SYN_CANONICAL { return 1u8 }
+    return 0u8
+}
+
+/* A non-canonical (gap-accepting) context MAY use a PROVISIONAL result, but ONLY with
+ * its oracle-pin; without the pin it is RED (1 = usable, 0 = refused). */
+fn nous_synth_provisional_usable(status: u8, has_oracle_pin: u8) -> u8 @export {
+    if status == NOUS_SYN_CANONICAL { return 1u8 }
+    if status == NOUS_SYN_PROVISIONAL {
+        if has_oracle_pin == 1u8 { return 1u8 }
+    }
+    return 0u8
+}
+
+/* SYNTHESIS over the hexad type universe (the realisable fragment now): decode the goal type's low
+ * 16 bits as a packed hexad and synthesise its inhabitant.  The safety kernel (safety_hexad_judge,
+ * the M9 CIC-inductive typing anchored by cic.c) IS the proof-carrying floor -- so this never
+ * certifies without a kernel-checked proof:
+ *   - reachable hexad (TYPE0): inhabited by its canonical value AND kernel-checked well-typed; the
+ *     canonical witness is the unique (hence cost-optimal) inhabitant -> CANONICAL.
+ *   - non-reachable hexad (BOT_UNREACHABLE): the kernel PROVED no inhabitant exists -> REFUTED.
+ *   - malformed goal type (>=729) or zero budget: outside the decidable universe / not attempted
+ *     -> GAP (honest).
+ * Richer CIC dependent types (constrained decoding of arbitrary terms + generated proofs) are the
+ * full-kernel future (numera/kernel.iii / H13), per safety_type's HONEST SCOPE.  Routed through
+ * nous_synth_classify so the tetrachotomy + soundness floor govern the verdict. */
+fn nous_generate(spec: u32, goal_type: u32, budget: u32) -> u8 @export {
+    if budget == 0u32 { return NOUS_SYN_GAP }
+    let h : u16 = (goal_type & 0xFFFFu32) as u16
+    let judged : i32 = safety_hexad_judge(h)
+    if judged == NOUS_SYN_TYPE0 { return nous_synth_classify(1u8, 1u8, 1u8, 1u8, 1u8) }
+    if judged == NOUS_SYN_BOT_UNREACH { return nous_synth_classify(1u8, 0u8, 0u8, 0u8, 1u8) }
+    return NOUS_SYN_GAP
+}
+
+fn nous_synth_selftest() -> u64 @export {
+    /* the tetrachotomy, exhaustively over the meaningful inputs */
+    if nous_synth_classify(1u8, 1u8, 1u8, 1u8, 1u8) != NOUS_SYN_CANONICAL { return 1u64 }   /* correct + optimal */
+    if nous_synth_classify(1u8, 1u8, 0u8, 1u8, 1u8) != NOUS_SYN_PROVISIONAL { return 2u64 } /* correct, optimality deferred */
+    if nous_synth_classify(1u8, 0u8, 0u8, 0u8, 1u8) != NOUS_SYN_REFUTED { return 3u64 }     /* no inhabitant, saturated */
+    if nous_synth_classify(1u8, 0u8, 0u8, 0u8, 0u8) != NOUS_SYN_GAP { return 4u64 }         /* budget spent */
+    if nous_synth_classify(1u8, 0u8, 0u8, 1u8, 0u8) != NOUS_SYN_GAP { return 5u64 }         /* candidate but not certified */
+
+    /* the soundness floor (the negative arm): "correct" WITHOUT a kernel-checked proof is
+     * NEVER certified -- it falls to GAP, never CANONICAL or PROVISIONAL */
+    if nous_synth_classify(0u8, 1u8, 1u8, 1u8, 1u8) != NOUS_SYN_GAP { return 6u64 }
+    if nous_synth_classify(0u8, 1u8, 0u8, 1u8, 1u8) != NOUS_SYN_GAP { return 7u64 }
+
+    /* the federation wall: only CANONICAL federates */
+    if nous_synth_federatable(NOUS_SYN_CANONICAL) != 1u8 { return 8u64 }
+    if nous_synth_federatable(NOUS_SYN_PROVISIONAL) != 0u8 { return 9u64 }   /* provisional NOT federatable */
+    if nous_synth_federatable(NOUS_SYN_GAP) != 0u8 { return 10u64 }
+    if nous_synth_federatable(NOUS_SYN_REFUTED) != 0u8 { return 11u64 }
+
+    /* default-deny in a canonical context */
+    if nous_synth_canonical_ok(NOUS_SYN_CANONICAL) != 1u8 { return 12u64 }
+    if nous_synth_canonical_ok(NOUS_SYN_PROVISIONAL) != 0u8 { return 13u64 }  /* provisional refused (fail safe) */
+
+    /* provisional usable in a gap context ONLY with its oracle-pin */
+    if nous_synth_provisional_usable(NOUS_SYN_PROVISIONAL, 1u8) != 1u8 { return 14u64 }
+    if nous_synth_provisional_usable(NOUS_SYN_PROVISIONAL, 0u8) != 0u8 { return 15u64 }  /* no pin -> RED */
+    if nous_synth_provisional_usable(NOUS_SYN_GAP, 1u8) != 0u8 { return 16u64 }
+
+    /* REAL SYNTHESIS over the hexad type universe (no longer a stub): a reachable hexad is inhabited
+     * by its canonical value, kernel-checked -> CANONICAL; a non-reachable hexad is kernel-proved
+     * bottom -> REFUTED; no budget or a malformed (>=729) goal type -> GAP.  Find one of each via
+     * the same kernel judge the synthesiser uses, then assert nous_generate's verdict. */
+    let mut reach_h : u64 = 0xFFFFu64
+    let mut unreach_h : u64 = 0xFFFFu64
+    let mut hh : u64 = 0u64
+    while hh < 729u64 {
+        let jh : i32 = safety_hexad_judge(hh as u16)
+        if jh == NOUS_SYN_TYPE0 { if reach_h == 0xFFFFu64 { reach_h = hh } }
+        if jh == NOUS_SYN_BOT_UNREACH { if unreach_h == 0xFFFFu64 { unreach_h = hh } }
+        hh = hh + 1u64
+    }
+    if reach_h == 0xFFFFu64 { return 17u64 }                                          /* 144 reachable exist */
+    if unreach_h == 0xFFFFu64 { return 18u64 }                                        /* the rest are bottom */
+    if nous_generate(0u32, reach_h as u32, 100u32) != NOUS_SYN_CANONICAL { return 19u64 }
+    if nous_generate(0u32, unreach_h as u32, 100u32) != NOUS_SYN_REFUTED { return 20u64 }
+    if nous_generate(0u32, reach_h as u32, 0u32) != NOUS_SYN_GAP { return 21u64 }     /* no budget -> GAP */
+    if nous_generate(0u32, 1000u32, 100u32) != NOUS_SYN_GAP { return 22u64 }          /* malformed (>=729) -> GAP */
+
+    return 99u64
+}

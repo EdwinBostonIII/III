@@ -1,0 +1,39 @@
+/* RFC 3339 datetime format/parse round-trip. */
+module corpus_95
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn rfc3339_format(unix_seconds: u64, out_20: *u8) -> i32 from "rfc3339.iii"
+extern @abi(c-msvc-x64) fn rfc3339_parse(src: *u8, src_len: u64) -> u64 from "rfc3339.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(20u64)
+    /* 2026-05-08 12:34:56 UTC = 1778243696 */
+    rfc3339_format(1778243696u64, buf)
+    /* "2026-05-08T12:34:56Z" */
+    if buf[0]  != 50u8  { return 1u64 }   /* 2 */
+    if buf[1]  != 48u8  { return 2u64 }   /* 0 */
+    if buf[2]  != 50u8  { return 3u64 }   /* 2 */
+    if buf[3]  != 54u8  { return 4u64 }   /* 6 */
+    if buf[4]  != 45u8  { return 5u64 }   /* - */
+    if buf[5]  != 48u8  { return 6u64 }   /* 0 */
+    if buf[6]  != 53u8  { return 7u64 }   /* 5 */
+    if buf[7]  != 45u8  { return 8u64 }   /* - */
+    if buf[8]  != 48u8  { return 9u64 }   /* 0 */
+    if buf[9]  != 56u8  { return 10u64 }  /* 8 */
+    if buf[10] != 84u8  { return 11u64 }  /* T */
+    if buf[11] != 49u8  { return 12u64 }  /* 1 */
+    if buf[12] != 50u8  { return 13u64 }  /* 2 */
+    if buf[13] != 58u8  { return 14u64 }  /* : */
+    if buf[14] != 51u8  { return 15u64 }  /* 3 */
+    if buf[15] != 52u8  { return 16u64 }  /* 4 */
+    if buf[16] != 58u8  { return 17u64 }  /* : */
+    if buf[17] != 53u8  { return 18u64 }  /* 5 */
+    if buf[18] != 54u8  { return 19u64 }  /* 6 */
+    if buf[19] != 90u8  { return 20u64 }  /* Z */
+    /* Round-trip parse */
+    let ts2 : u64 = rfc3339_parse(buf, 20u64)
+    if ts2 != 1778243696u64 { return 21u64 }
+    free(buf)
+    return 99u64
+}

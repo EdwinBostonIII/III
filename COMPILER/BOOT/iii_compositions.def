@@ -1,0 +1,336 @@
+# C:\Users\Edwin Boston\OneDrive\Desktop\III\COMPILER\BOOT\iii_compositions.def
+#
+# III Composition table — single source of truth for the prespec
+# registry (runtime in STDLIB/iii/omnia/prespec.iii) and the cg_r3
+# Partial Evaluator narrow table (compile time in cg_r3.c via the
+# generated iii_compositions.h).
+#
+# DO NOT EDIT prespec.iii's auto-generated block or cg_r3.c's
+# III_COMPOSITION_TABLE directly. Edit this file, then regenerate via:
+#
+#     bash COMPILER/BOOT/gen_compositions.sh
+#
+# The build script verifies that the generated artifacts match this
+# .def on every iiis-0 build; manual edits to the generated sections
+# are silently overwritten on the next build.
+#
+# Format:  SEQ_IDX PRIMITIVE_ID HEXAD_BAG K_VALUE LITERAL FN_NAME
+#   SEQ_IDX     u32  — synthetic-hash sequence index (must be unique
+#                       across this file). Encoded into the synth
+#                       composition_hash via:
+#                         (0x494E5450u64 << 32) |
+#                         ((HEXAD & 0xFF) << 24) |
+#                         ((PRIMITIVE & 0xFF) << 16) |
+#                         (SEQ_IDX & 0xFFFF)
+#   PRIMITIVE   u8   — calculus primitive id (1=FORM, 2=BIND, 3=CONVEY,
+#                       4=MEAN, 5=ACT, 6=COMPOSE, 7=SEAL, 8=PROVE,
+#                       9=QUERY, 10=GRANT, 11=GOVERN; see
+#                       sanctus/calculus_v1.iii).
+#   HEXAD_BAG   u8   — packed hexad bits (bit 1=FORM, bit 2=SUBSTANCE,
+#                       bit 3=PASSAGE, bit 4=ESSENCE, bit 5=MOTION,
+#                       bit 6=COMPOSE, bit 7=ORIGIN). Hex literal.
+#   K_VALUE     u32  — k-cost in fixed-point ×1e9 (0..1e9).
+#   LITERAL     u64  — first-arg literal that triggers PE narrowing
+#                       at compile time (matched against the integer
+#                       literal in intent_form/intent_act/intent_convey).
+#   FN_NAME     str  — exported stdlib function symbol that
+#                       implements the composition. Must be a real
+#                       @export-tagged function in STDLIB/iii/.
+#
+# Lines starting with '#' are comments. Blank lines ignored.
+# ─────────────────────────────────────────────────────────────────────
+
+# ═══════════════ NUMERA — hashing & one-shot derivations ═══════════
+# Block 100..119: hash + KDF compositions (FORM)
+100  1  0x01  950000000  100  sha256_oneshot
+101  1  0x01  940000000  101  sha512_oneshot
+102  1  0x01  950000000  102  blake2s_oneshot
+103  1  0x01  945000000  103  sha3_256_oneshot
+104  1  0x01  940000000  104  sha3_512_oneshot
+105  1  0x01  940000000  105  shake128_oneshot
+106  1  0x01  935000000  106  shake256_oneshot
+107  1  0x01  950000000  107  crc32_oneshot
+108  1  0x01  955000000  108  murmur3_32
+109  1  0x01  920000000  109  hkdf_sha256_extract
+110  1  0x01  920000000  110  hkdf_sha256_expand
+111  1  0x01  900000000  111  pbkdf2_sha256_derive
+112  1  0x01  945000000  112  hmac_sha256
+113  1  0x01  940000000  113  hmac_sha512
+114  1  0x01  950000000  114  sha256_dispatch_oneshot
+
+# Block 120..139: cipher / KEX (CONVEY)
+120  3  0x04  860000000  120  x25519
+121  3  0x04  870000000  121  chacha20_set_state
+122  3  0x04  880000000  122  chacha20_keystream
+123  3  0x04  870000000  123  chacha20_xor
+124  3  0x04  900000000  124  poly1305_set_key
+125  3  0x04  900000000  125  poly1305_update
+126  3  0x04  900000000  126  poly1305_finalize
+127  3  0x04  860000000  127  aead_chacha20_poly1305_seal
+128  3  0x04  860000000  128  aead_chacha20_poly1305_open
+129  3  0x04  870000000  129  aes128_set_key
+130  3  0x04  870000000  130  aes256_set_key
+131  3  0x04  880000000  131  aes_encrypt_block
+132  3  0x04  880000000  132  aes_decrypt_block
+133  3  0x04  860000000  133  aes_gcm_seal
+134  3  0x04  860000000  134  aes_gcm_open
+
+# Block 140..149: signature (PROVE)
+140  8  0x08  850000000  140  ed25519_verify
+141  8  0x08  850000000  141  ed25519_sign_c4
+# Post-quantum (FIPS 203/204/205) suite-dispatched compositions; 4-arg
+# wrappers over numera/pq_dispatch.iii (ops >4 args read overflow via ext ptr).
+142  1  0x01  850000000  142  pq_keygen_c4
+143  8  0x08  850000000  143  pq_sign_c4
+144  8  0x08  850000000  144  pq_verify_c4
+145  3  0x04  860000000  145  pq_encaps_c4
+146  3  0x04  860000000  146  pq_decaps_c4
+
+# Block 150..169: bigint compositions (FORM)
+150  1  0x01  920000000  150  bigint_add
+151  1  0x01  920000000  151  bigint_sub
+152  1  0x01  900000000  152  bigint_mul_u64
+153  1  0x01  870000000  153  bigint_mul
+154  1  0x01  870000000  154  bigint_mul_karatsuba
+155  1  0x01  870000000  155  bigint_div_qr
+156  1  0x01  900000000  156  bigint_div_u64
+157  1  0x01  900000000  157  bigint_mod
+158  1  0x01  860000000  158  bigint_modpow
+159  1  0x01  950000000  159  bigint_cmp
+
+# Block 170..179: field arithmetic (FORM)
+170  1  0x01  950000000  170  fp_add
+171  1  0x01  950000000  171  fp_sub
+172  1  0x01  920000000  172  fp_mul
+173  1  0x01  900000000  173  fp_pow
+174  1  0x01  870000000  174  fp_inv_fermat
+175  1  0x01  900000000  175  fp_div
+176  1  0x01  870000000  176  fp_inv_with_crystal
+
+# Block 180..189: modular & fixed-point (FORM)
+180  1  0x01  950000000  180  mod_u32_pow
+181  1  0x01  950000000  181  mod_u64_pow
+182  1  0x01  920000000  182  mont_mul_u32
+183  1  0x01  900000000  183  mont_pow_u32
+184  1  0x01  955000000  184  q128_add
+185  1  0x01  955000000  185  q128_sub
+186  1  0x01  955000000  186  q128_mul
+187  1  0x01  950000000  187  q128_shl
+188  1  0x01  950000000  188  q128_shr
+189  1  0x01  950000000  189  fix_mul
+
+# Block 190..199: encoding & RNG (FORM/CONVEY)
+190  1  0x01  955000000  190  hex_encode
+191  1  0x01  950000000  191  hex_decode
+192  3  0x04  950000000  192  endian_load_u64_le
+193  3  0x04  950000000  193  endian_store_u64_le
+194  1  0x01  920000000  194  xoshiro_next_u64
+
+# ═══════════════ MEMORIA — arena / region / span ════════════════════
+# Block 200..219: memory compositions
+200  1  0x02  980000000  200  arena_new
+201  5  0x10  950000000  201  arena_drop
+202  5  0x10  950000000  202  arena_reset
+203  1  0x02  980000000  203  arena_alloc
+204  1  0x02  980000000  204  arena_alloc8
+205  1  0x02  980000000  205  arena_alloc1
+206  1  0x02  980000000  206  region_create
+207  1  0x02  980000000  207  region_alloc
+208  5  0x10  950000000  208  region_seal
+209  5  0x10  950000000  209  region_reset
+210  5  0x10  950000000  210  region_release
+211  3  0x04  950000000  211  span_u8_store
+212  3  0x04  950000000  212  span_u8_fill
+213  3  0x04  950000000  213  span_u8_copy
+214  9  0x08  1000000000  214  span_u8_find
+215  5  0x10  950000000  215  arena_reset_safe
+216  5  0x10  950000000  216  region_reset_safe
+
+# ═══════════════ AETHER — capability / wire / federation ════════════
+# Block 300..309: capability
+300  10  0x40  970000000  300  cap_env_init
+301  10  0x40  950000000  301  cap_attenuate
+302  8   0x08  980000000  302  cap_verify_rights
+303  8   0x08  980000000  303  cap_verify_at
+304  5   0x10  950000000  304  cap_revoke
+305  10  0x40  950000000  305  cap_offer_pattern_set
+306  10  0x40  950000000  306  cap_accept_offer
+307  10  0x40  950000000  307  cap_negotiate_session
+308  8   0x08  980000000  308  cap_session_verify
+309  5   0x10  950000000  309  cap_session_drop
+
+# Block 310..329: babel_wire + idoc + sealed_channel
+310  3  0x04  950000000  310  babel_wire_set_seal_id
+311  3  0x04  950000000  311  babel_wire_set_intent_id
+312  3  0x04  950000000  312  babel_wire_set_ctx_digest
+313  3  0x04  950000000  313  babel_wire_set_facet
+314  3  0x04  950000000  314  babel_wire_set_payload
+315  7  0x40  970000000  315  babel_wire_finalize
+316  8  0x08  980000000  316  babel_wire_verify_crc
+317  8  0x08  980000000  317  babel_wire_verify_seal
+318  3  0x04  950000000  318  idoc_pack_payload
+319  7  0x40  970000000  319  idoc_finalize
+320  9  0x08  980000000  320  idoc_resolve_facet
+321  8  0x08  980000000  321  idoc_validate
+322  7  0x40  970000000  322  sc_handshake_init
+323  3  0x04  950000000  323  sc_send
+324  3  0x04  950000000  324  sc_recv
+325  5  0x10  950000000  325  sc_close
+
+# Block 330..349: federation
+330  11  0x40  920000000  330  fed_genesis_set
+331  8   0x08  980000000  331  fed_genesis_verify_descent
+332  11  0x40  920000000  332  fed_admit_to_planetary
+333  9   0x08  980000000  333  fed_admit_eligible
+334  11  0x40  920000000  334  fed_sybil_admit
+335  8   0x08  980000000  335  fed_sybil_pow_verify
+336  9   0x08  980000000  336  fed_sybil_score
+337  7   0x40  970000000  337  fed_seal_anchor
+338  9   0x08  980000000  338  fed_seal_lookup_anchor
+339  7   0x40  970000000  339  fed_seal_compute_chain_root
+340  11  0x40  920000000  340  fed_eclipse_compute_my_fingerprint
+341  11  0x40  920000000  341  fed_eclipse_alarm
+342  11  0x40  920000000  342  fed_tier_register
+
+# Block 350..369: handle + fs + tcp
+350  10  0x40  950000000  350  handle_alloc
+351  9   0x08  980000000  351  handle_kind
+352  8   0x08  980000000  352  handle_verify
+353  5   0x10  950000000  353  handle_close
+354  10  0x40  950000000  354  fs_open
+355  3   0x04  950000000  355  fs_read
+356  3   0x04  950000000  356  fs_write
+357  5   0x10  950000000  357  fs_seek
+358  10  0x40  950000000  358  net_tcp_connect_ipv4
+359  3   0x04  950000000  359  net_tcp_send
+360  3   0x04  950000000  360  net_tcp_recv
+361  5   0x10  950000000  361  net_close
+362  3   0x04  950000000  362  net_pack_sockaddr_ipv4
+
+# Block 370..389: HTTP + URI
+370  1  0x01  950000000  370  http_parse_request
+371  1  0x01  950000000  371  http_parse_response
+372  3  0x04  950000000  372  http_send_status
+373  3  0x04  950000000  373  http_send_body
+374  3  0x04  950000000  374  http_format_crystal_header
+375  1  0x01  950000000  375  inet_parse_ipv4
+376  3  0x04  950000000  376  inet_format_ipv4
+
+# ═══════════════ SANCTUS — closure / calculus / mandate / kchain ═══
+400  7  0x40  1000000000  400  closure_set
+401  8  0x08  980000000   401  closure_verify_against
+402  7  0x40  970000000   402  closure_compute_with_resolver
+403  7  0x40  1000000000  403  calculus_init
+404  9  0x08  1000000000  404  calculus_primitive_hexad
+405  9  0x08  1000000000  405  calculus_primitive_k_cost
+406  9  0x08  1000000000  406  calculus_primitive_param_schema
+407  9  0x08  1000000000  407  calculus_primitive_ring_min
+408  9  0x08  1000000000  408  calculus_primitive_count
+409  7  0x40  1000000000  409  calculus_root_mhash
+410  8  0x08  980000000   410  calculus_verify_completeness
+411  7  0x40  1000000000  411  attest_self
+412  8  0x08  980000000   412  attest_eq
+413  8  0x08  980000000   413  mandate_check_m1
+414  8  0x08  980000000   414  mandate_check_m5
+415  8  0x08  980000000   415  mandate_check_m9
+416  8  0x08  980000000   416  mandate_check_m10
+417  8  0x08  980000000   417  mandate_check_m14_via_match
+418  8  0x08  980000000   418  mandate_check_m15
+419  8  0x08  980000000   419  mandate_audit
+420  7  0x40  1000000000  420  kchain_new
+421  6  0x20  970000000   421  kchain_compose
+422  9  0x08  1000000000  422  kchain_current
+423  8  0x08  980000000   423  kchain_is_underflow
+424  7  0x40  1000000000  424  kchain_readmit
+425  7  0x40  1000000000  425  catalyst_register
+426  8  0x08  980000000   426  catalyst_promotable
+427  7  0x40  1000000000  427  demote_record
+428  8  0x08  980000000   428  demote_was_demoted
+
+# ═══════════════ VERBA — intent constructors + glyph + NL ══════════
+500  1  0x01  950000000   500  intent_form
+501  2  0x02  950000000   501  intent_bind
+502  3  0x04  900000000   502  intent_convey
+503  4  0x08  1000000000  503  intent_mean
+504  5  0x10  900000000   504  intent_act
+505  6  0x20  980000000   505  intent_compose
+506  7  0x40  1000000000  506  intent_seal
+507  8  0x08  1000000000  507  intent_prove
+508  9  0x08  1000000000  508  intent_query
+509  10  0x40  950000000  509  intent_grant
+510  11  0x40  950000000  510  intent_govern
+511  6  0x20  1000000000  511  intent_then
+512  6  0x20  1000000000  512  intent_with
+513  6  0x20  1000000000  513  intent_under
+514  6  0x20  1000000000  514  intent_if
+515  6  0x20  950000000   515  intent_loop
+516  5  0x10  900000000   516  intent_lift
+517  9  0x08  1000000000  517  intent_reflect
+532  6  0x20  1000000000  532  intent_abstract
+518  1  0x01  950000000   518  glyph_u32_pack
+519  1  0x01  950000000   519  glyph_u64_pack
+520  1  0x01  950000000   520  glyph_bytes_pack
+521  1  0x01  950000000   521  glyph_str_pack
+522  1  0x01  950000000   522  glyph_set_pack
+523  1  0x01  950000000   523  glyph_map_pack
+524  1  0x01  950000000   524  glyph_proof_pack
+525  1  0x01  950000000   525  glyph_crystal_pack
+526  1  0x01  950000000   526  glyph_recursive_pack
+527  1  0x01  950000000   527  glyph_witness_pack
+528  1  0x01  950000000   528  nl_lex_register_hash
+529  1  0x01  950000000   529  nl_lex_tokenize
+530  6  0x20  980000000   530  nl_parse_recognize
+531  6  0x20  980000000   531  hip_resolve
+
+# ═══════════════ OMNIA — resolver / pattern / governance ═══════════
+600  6  0x20  950000000   600  resolve
+601  6  0x20  920000000   601  resolver_score
+602  1  0x01  920000000   602  pattern_register
+603  1  0x01  920000000   603  pattern_table_get
+604  1  0x01  925000000   604  pattern_set_new
+605  2  0x02  910000000   605  pattern_set_add
+606  2  0x02  910000000   606  pattern_set_has
+607  8  0x08  980000000   607  pattern_set_verify
+608  9  0x08  910000000   608  memo_lookup
+609  9  0x08  910000000   609  memo_dispatch_fp
+610  5  0x10  940000000   610  memo_insert
+611  5  0x10  900000000   611  memo_reset
+612  6  0x20  960000000   612  jit_fuse_observe
+613  6  0x20  970000000   613  jit_fuse_emit
+614  6  0x20  950000000   614  jit_fuse_lookup
+615  1  0x01  930000000   615  hw_offload_register
+616  1  0x01  920000000   616  hw_offload_lookup
+617  11  0x40  990000000  617  governance_propose
+618  5  0x10  960000000   618  governance_sandbox
+619  5  0x10  970000000   619  governance_promote
+620  5  0x10  990000000   620  governance_seal
+621  9  0x08  920000000   621  governance_vote
+622  9  0x08  920000000   622  governance_tally
+623  9  0x08  930000000   623  governance_threshold_met
+624  9  0x08  940000000   624  governance_observe_and_propose
+625  8  0x08  980000000   625  proof_ripple_equivalence_pattern
+626  8  0x08  990000000   626  proof_ripple_corpus_equiv
+627  6  0x20  980000000   627  transform
+628  5  0x10  950000000   628  sandbox_new
+629  5  0x10  950000000   629  ripple_execute_native
+630  7  0x40  985000000   630  mini_crystal_mint
+631  5  0x10  960000000   631  mini_crystal_promote_to_full
+632  1  0x01  930000000   632  call_context_new
+
+# ═══════════════ TEMPORA — calendar / duration / deadline / instant
+700  6  0x20  990000000   700  cal_civil_to_unix
+701  6  0x20  990000000   701  cal_unix_to_civil
+702  6  0x20  990000000   702  duration_from_seconds
+703  6  0x20  990000000   703  duration_add
+704  6  0x20  990000000   704  duration_sub
+705  6  0x20  990000000   705  duration_mul_u32
+706  8  0x08  980000000   706  duration_eq
+707  8  0x08  980000000   707  duration_lt
+708  6  0x20  990000000   708  rfc3339_format
+709  6  0x20  990000000   709  rfc3339_parse
+710  7  0x40  990000000   710  deadline_at
+711  7  0x40  990000000   711  deadline_in
+712  8  0x08  980000000   712  deadline_check
+713  7  0x40  990000000   713  instant_now_sealed
+714  8  0x08  980000000   714  instant_verify
+715  6  0x20  990000000   715  instant_diff_ticks

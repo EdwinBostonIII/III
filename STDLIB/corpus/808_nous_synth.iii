@@ -1,0 +1,17 @@
+/* 808 -- nous Phase 7 (design-ahead): the synthesis Tetrachotomy decision logic.  Drives
+ * nous_synth_selftest: CANONICAL (correct+optimal) / PROVISIONAL (correct, optimality
+ * deferred) / GAP / REFUTED; the SOUNDNESS FLOOR (a "correct" claim with no kernel-checked
+ * proof is never certified -- falls to GAP); the FEDERATION WALL (only CANONICAL crosses);
+ * C-12 default-deny (PROVISIONAL refused in a canonical context); provisional usable in a
+ * gap context only WITH its oracle-pin.  The synthesis GENERATION (nous_generate) is the
+ * M15 stub (returns GAP); this verifies the decision logic that gates it now.
+ * Exit 99 = all hold; 1..17 = the failing check. */
+module corpus_808
+
+extern @abi(c-msvc-x64) fn nous_synth_selftest() -> u64 from "nous_synth.iii"
+
+fn main() -> u64 {
+    let r : u64 = nous_synth_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

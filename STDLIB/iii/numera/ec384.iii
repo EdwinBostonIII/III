@@ -1,0 +1,200 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ec384.iii
+ *
+ * III STDLIB - numera::ec384 -- NIST P-384 elliptic curve over GF(p384).
+ * RITCHIE Stage 4.11.  Short Weierstrass y^2 = x^3 - 3x + b, PROJECTIVE
+ * coords, Renes-Costello-Batina COMPLETE add (a=-3, Alg.4) — exception-free,
+ * so constant-time double-and-add-always scalar multiply needs no special
+ * cases.  Field elements in fp384's 12-limb Montgomery slot pool; a point =
+ * 3 consecutive field slots.  Structurally identical to ec256 (proven vs
+ * NIST), retargeted to fq_* and 384-bit scalars.
+ *
+ * Slot map (fp384 pool, 0..44 usable; fp384 reserves 45/46/47): point regs
+ * R=0..2, T=3..5, P=6..8; RCB temps 10..17; constants b=40, Gx=41, Gy=42,
+ * MONT_ONE=43; affine scratch 20..22.
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00.
+ */
+
+module numera_ec384
+
+extern @abi(c-msvc-x64) fn fp384_boot() -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_set_u32(slot: u64, v: u32) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_set_limb(slot: u64, idx: u64, v: u32) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_get_limb(slot: u64, idx: u64) -> u32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_copy_x(dst: u64, src: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_add_x(r: u64, a: u64, b: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_sub_x(r: u64, a: u64, b: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_mul_x(r: u64, a: u64, b: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_inv_x(r: u64, a: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_to_mont_x(r: u64, a: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_from_mont_x(r: u64, a: u64) -> i32 from "fp384.iii"
+extern @abi(c-msvc-x64) fn fq_csel_x(r: u64, a: u64, b: u64, cond: u64) -> i32 from "fp384.iii"
+
+var EQ_INIT : [u32; 1]
+
+fn ec384_init() -> i32 {
+    if EQ_INIT[0] == 1u32 { return 0i32 }
+    fp384_boot()
+    /* b384 LE limbs */
+    fq_set_limb(40u64,0u64,0xd3ec2aefu32) fq_set_limb(40u64,1u64,0x2a85c8edu32) fq_set_limb(40u64,2u64,0x8a2ed19du32) fq_set_limb(40u64,3u64,0xc656398du32)
+    fq_set_limb(40u64,4u64,0x5013875au32) fq_set_limb(40u64,5u64,0x0314088fu32) fq_set_limb(40u64,6u64,0xfe814112u32) fq_set_limb(40u64,7u64,0x181d9c6eu32)
+    fq_set_limb(40u64,8u64,0xe3f82d19u32) fq_set_limb(40u64,9u64,0x988e056bu32) fq_set_limb(40u64,10u64,0xe23ee7e4u32) fq_set_limb(40u64,11u64,0xb3312fa7u32)
+    fq_to_mont_x(40u64, 40u64)
+    /* Gx384 LE limbs */
+    fq_set_limb(41u64,0u64,0x72760ab7u32) fq_set_limb(41u64,1u64,0x3a545e38u32) fq_set_limb(41u64,2u64,0xbf55296cu32) fq_set_limb(41u64,3u64,0x5502f25du32)
+    fq_set_limb(41u64,4u64,0x82542a38u32) fq_set_limb(41u64,5u64,0x59f741e0u32) fq_set_limb(41u64,6u64,0x8ba79b98u32) fq_set_limb(41u64,7u64,0x6e1d3b62u32)
+    fq_set_limb(41u64,8u64,0xf320ad74u32) fq_set_limb(41u64,9u64,0x8eb1c71eu32) fq_set_limb(41u64,10u64,0xbe8b0537u32) fq_set_limb(41u64,11u64,0xaa87ca22u32)
+    fq_to_mont_x(41u64, 41u64)
+    /* Gy384 LE limbs */
+    fq_set_limb(42u64,0u64,0x90ea0e5fu32) fq_set_limb(42u64,1u64,0x7a431d7cu32) fq_set_limb(42u64,2u64,0x1d7e819du32) fq_set_limb(42u64,3u64,0x0a60b1ceu32)
+    fq_set_limb(42u64,4u64,0xb5f0b8c0u32) fq_set_limb(42u64,5u64,0xe9da3113u32) fq_set_limb(42u64,6u64,0x289a147cu32) fq_set_limb(42u64,7u64,0xf8f41dbdu32)
+    fq_set_limb(42u64,8u64,0x9292dc29u32) fq_set_limb(42u64,9u64,0x5d9e98bfu32) fq_set_limb(42u64,10u64,0x96262c6fu32) fq_set_limb(42u64,11u64,0x3617de4au32)
+    fq_to_mont_x(42u64, 42u64)
+    /* MONT_ONE */
+    fq_set_u32(43u64, 1u32)
+    fq_to_mont_x(43u64, 43u64)
+    EQ_INIT[0] = 1u32
+    return 0i32
+}
+
+/* out = a + b_pt (RCB complete add, a=-3); curve b at slot 40; temps 10..17. */
+fn ec384_add(out: u64, a: u64, bp: u64) -> i32 {
+    let x1 : u64 = a        let y1 : u64 = a + 1u64    let z1 : u64 = a + 2u64
+    let x2 : u64 = bp       let y2 : u64 = bp + 1u64   let z2 : u64 = bp + 2u64
+    fq_mul_x(10u64, x1, x2)
+    fq_mul_x(11u64, y1, y2)
+    fq_mul_x(12u64, z1, z2)
+    fq_add_x(13u64, x1, y1)
+    fq_add_x(14u64, x2, y2)
+    fq_mul_x(13u64, 13u64, 14u64)
+    fq_add_x(14u64, 10u64, 11u64)
+    fq_sub_x(13u64, 13u64, 14u64)
+    fq_add_x(14u64, y1, z1)
+    fq_add_x(15u64, y2, z2)
+    fq_mul_x(14u64, 14u64, 15u64)
+    fq_add_x(15u64, 11u64, 12u64)
+    fq_sub_x(14u64, 14u64, 15u64)
+    fq_add_x(15u64, x1, z1)
+    fq_add_x(16u64, x2, z2)
+    fq_mul_x(15u64, 15u64, 16u64)
+    fq_add_x(16u64, 10u64, 12u64)
+    fq_sub_x(16u64, 15u64, 16u64)
+    fq_mul_x(17u64, 40u64, 12u64)
+    fq_sub_x(15u64, 16u64, 17u64)
+    fq_add_x(17u64, 15u64, 15u64)
+    fq_add_x(15u64, 15u64, 17u64)
+    fq_sub_x(17u64, 11u64, 15u64)
+    fq_add_x(15u64, 11u64, 15u64)
+    fq_mul_x(16u64, 40u64, 16u64)
+    fq_add_x(11u64, 12u64, 12u64)
+    fq_add_x(12u64, 11u64, 12u64)
+    fq_sub_x(16u64, 16u64, 12u64)
+    fq_sub_x(16u64, 16u64, 10u64)
+    fq_add_x(11u64, 16u64, 16u64)
+    fq_add_x(16u64, 11u64, 16u64)
+    fq_add_x(11u64, 10u64, 10u64)
+    fq_add_x(10u64, 11u64, 10u64)
+    fq_sub_x(10u64, 10u64, 12u64)
+    fq_mul_x(11u64, 14u64, 16u64)
+    fq_mul_x(12u64, 10u64, 16u64)
+    fq_mul_x(16u64, 15u64, 17u64)
+    fq_add_x(16u64, 16u64, 12u64)
+    fq_mul_x(15u64, 13u64, 15u64)
+    fq_sub_x(15u64, 15u64, 11u64)
+    fq_mul_x(17u64, 14u64, 17u64)
+    fq_mul_x(11u64, 13u64, 10u64)
+    fq_add_x(17u64, 17u64, 11u64)
+    fq_copy_x(out, 15u64)
+    fq_copy_x(out + 1u64, 16u64)
+    fq_copy_x(out + 2u64, 17u64)
+    return 0i32
+}
+
+fn ec384_set_identity(p: u64) -> i32 {
+    fq_set_u32(p, 0u32)
+    fq_copy_x(p + 1u64, 43u64)
+    fq_set_u32(p + 2u64, 0u32)
+    return 0i32
+}
+
+/* out = k * P, constant-time double-and-add-always.  k = 48 big-endian bytes. */
+fn ec384_scalar_mul(out: u64, k_bytes: u64, bp: u64) -> i32 {
+    ec384_init()
+    ec384_set_identity(0u64)
+    let kb : *u8 = k_bytes as *u8
+    let mut j : u64 = 384u64
+    while j > 0u64 {
+        j = j - 1u64
+        ec384_add(0u64, 0u64, 0u64)
+        ec384_add(3u64, 0u64, bp)
+        let byte : u64 = 47u64 - (j / 8u64)
+        let bit : u64 = ((kb[byte] as u64) >> (j % 8u64)) & 1u64
+        fq_csel_x(0u64, 3u64, 0u64, bit)
+        fq_csel_x(1u64, 4u64, 1u64, bit)
+        fq_csel_x(2u64, 5u64, 2u64, bit)
+    }
+    fq_copy_x(out, 0u64)
+    fq_copy_x(out + 1u64, 1u64)
+    fq_copy_x(out + 2u64, 2u64)
+    return 0i32
+}
+
+fn ec384_scalar_mul_base(out: u64, k_bytes: u64) -> i32 @export {
+    ec384_init()
+    fq_copy_x(6u64, 41u64)
+    fq_copy_x(7u64, 42u64)
+    fq_copy_x(8u64, 43u64)
+    return ec384_scalar_mul(out, k_bytes, 6u64)
+}
+fn ec384_scalar_mul_pt(out: u64, k_bytes: u64, bp: u64) -> i32 @export { return ec384_scalar_mul(out, k_bytes, bp) }
+fn ec384_add_x(out: u64, a: u64, bp: u64) -> i32 @export { ec384_init() return ec384_add(out, a, bp) }
+
+fn ec384_load_be_mont(slot: u64, src: u64) -> i32 {
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let o : u64 = (11u64 - i) * 4u64
+        let w : u32 = (((s[o] as u64) << 24u64) | ((s[o + 1u64] as u64) << 16u64) | ((s[o + 2u64] as u64) << 8u64) | (s[o + 3u64] as u64)) as u32
+        fq_set_limb(slot, i, w)
+        i = i + 1u64
+    }
+    fq_to_mont_x(slot, slot)
+    return 0i32
+}
+fn ec384_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 @export {
+    ec384_init()
+    ec384_load_be_mont(p, x_bytes)
+    ec384_load_be_mont(p + 1u64, y_bytes)
+    fq_copy_x(p + 2u64, 43u64)
+    return 0i32
+}
+fn ec384_emit_be(out: u64, slot: u64) -> i32 {
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let w : u32 = fq_get_limb(slot, 11u64 - i)
+        o[i*4u64 + 0u64] = ((w >> 24u32) & 0xFFu32) as u8
+        o[i*4u64 + 1u64] = ((w >> 16u32) & 0xFFu32) as u8
+        o[i*4u64 + 2u64] = ((w >> 8u32)  & 0xFFu32) as u8
+        o[i*4u64 + 3u64] = (w & 0xFFu32) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn ec384_affine_x(out_x: u64, p: u64) -> i32 @export {
+    fq_inv_x(20u64, p + 2u64)
+    fq_mul_x(21u64, p, 20u64)
+    fq_from_mont_x(22u64, 21u64)
+    ec384_emit_be(out_x, 22u64)
+    return 0i32
+}
+fn ec384_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 @export {
+    fq_inv_x(20u64, p + 2u64)
+    fq_mul_x(21u64, p, 20u64)
+    fq_from_mont_x(22u64, 21u64)
+    ec384_emit_be(out_x, 22u64)
+    fq_mul_x(21u64, p + 1u64, 20u64)
+    fq_from_mont_x(22u64, 21u64)
+    ec384_emit_be(out_y, 22u64)
+    return 0i32
+}

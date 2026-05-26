@@ -1,0 +1,26 @@
+/* fix: 3.0 + 4.0 = 7.0; (5.0 * 6.0).to_u32 = 30; (10.0 / 4.0).to_u32 = 2 (truncate) */
+module corpus_b30
+
+extern @abi(c-msvc-x64) fn fix_from_u32(v: u32) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_to_u32_truncate(q: u64) -> u32 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_add(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_sub(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_mul(a: u64, b: u64) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_div(a: u64, b: u64) -> u64 from "fixed.iii"
+
+fn main() -> u64 {
+    let three : u64 = fix_from_u32(3u32)
+    let four : u64 = fix_from_u32(4u32)
+    let seven : u64 = fix_add(three, four)
+    if fix_to_u32_truncate(seven) != 7u32 { return 1u64 }
+    let five : u64 = fix_from_u32(5u32)
+    let six : u64 = fix_from_u32(6u32)
+    let prod : u64 = fix_mul(five, six)
+    if fix_to_u32_truncate(prod) != 30u32 { return 2u64 }
+    let ten : u64 = fix_from_u32(10u32)
+    let q : u64 = fix_div(ten, four)
+    if fix_to_u32_truncate(q) != 2u32 { return 3u64 }
+    let diff : u64 = fix_sub(ten, three)
+    if fix_to_u32_truncate(diff) != 7u32 { return 4u64 }
+    return 99u64
+}

@@ -1,0 +1,106 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\checked.iii
+ *
+ * III STDLIB - numera::checked
+ *
+ * Overflow-checked arithmetic.  Returns option_u32 / option_u64
+ * encoding (low bit = some/none, payload shifted up).  Built atop
+ * scalar's did_overflow predicates so the wrapping arithmetic is
+ * shared - this module is purely a thin discriminated wrapper.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module numera_checked
+
+extern @abi(c-msvc-x64) fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_add_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_sub_did_underflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_mul_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
+
+/* --- u32 checked: returns option_u32 encoding --- */
+
+fn checked_u32_add(a: u32, b: u32) -> u64 @provenance_linked_error @export {
+    if scalar_u32_add_did_overflow(a, b) == 1u8 { return 0u64 }
+    let r : u32 = (a + b) & 0xFFFFFFFFu32
+    return ((r as u64) << 1u64) | 1u64
+}
+
+fn checked_u32_sub(a: u32, b: u32) -> u64 @provenance_linked_error @export {
+    if scalar_u32_sub_did_underflow(a, b) == 1u8 { return 0u64 }
+    let r : u32 = (a - b) & 0xFFFFFFFFu32
+    return ((r as u64) << 1u64) | 1u64
+}
+
+fn checked_u32_mul(a: u32, b: u32) -> u64 @provenance_linked_error @export {
+    if scalar_u32_mul_did_overflow(a, b) == 1u8 { return 0u64 }
+    let r : u32 = (a * b) & 0xFFFFFFFFu32
+    return ((r as u64) << 1u64) | 1u64
+}
+
+fn checked_u32_div(a: u32, b: u32) -> u64 @provenance_linked_error @export {
+    if b == 0u32 { return 0u64 }
+    let r : u32 = a / b
+    return ((r as u64) << 1u64) | 1u64
+}
+
+/* --- u64 checked: returns option_u64 via side-table slot indirection.
+ * Reuses the option_u64 surface: returns a u64 id where 0 = none.    --- */
+
+const CHK_U64_SLOTS : u32 = 64u32
+
+var CHK_U64_VAL  : [u64; 64]
+var CHK_U64_LIVE : [u8;  64]
+
+fn chk_alloc_u64(v: u64) -> u64 {
+    let mut i : u32 = 0u32
+    while i < CHK_U64_SLOTS {
+        if CHK_U64_LIVE[i] == 0u8 {
+            CHK_U64_VAL[i]  = v
+            CHK_U64_LIVE[i] = 1u8
+            return (i as u64) + 1u64
+        }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+fn checked_u64_add(a: u64, b: u64) -> u64 @provenance_linked_error @export {
+    if scalar_u64_add_did_overflow(a, b) == 1u8 { return 0u64 }
+    return chk_alloc_u64(a + b)
+}
+
+fn checked_u64_sub(a: u64, b: u64) -> u64 @provenance_linked_error @export {
+    if scalar_u64_sub_did_underflow(a, b) == 1u8 { return 0u64 }
+    return chk_alloc_u64(a - b)
+}
+
+fn checked_u64_mul(a: u64, b: u64) -> u64 @provenance_linked_error @export {
+    if scalar_u64_mul_did_overflow(a, b) == 1u8 { return 0u64 }
+    return chk_alloc_u64(a * b)
+}
+
+fn checked_u64_div(a: u64, b: u64) -> u64 @provenance_linked_error @export {
+    if b == 0u64 { return 0u64 }
+    return chk_alloc_u64(a / b)
+}
+
+fn checked_u64_unwrap_or(handle: u64, default: u64) -> u64 @export {
+    if handle == 0u64 { return default }
+    let s : u64 = handle - 1u64
+    if s >= (CHK_U64_SLOTS as u64) { return default }
+    let si : u32 = s as u32
+    if CHK_U64_LIVE[si] == 0u8 { return default }
+    return CHK_U64_VAL[si]
+}
+
+fn checked_u64_drop(handle: u64) -> u8 @export {
+    if handle == 0u64 { return 0u8 }
+    let s : u64 = handle - 1u64
+    if s >= (CHK_U64_SLOTS as u64) { return 0u8 }
+    let si : u32 = s as u32
+    CHK_U64_LIVE[si] = 0u8
+    CHK_U64_VAL[si]  = 0u64
+    return 1u8
+}

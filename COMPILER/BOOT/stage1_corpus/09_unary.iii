@@ -1,0 +1,10 @@
+module corpus_09
+
+/* Unary bitwise-NOT smoke test.  The stage-1 corpus uses the process exit
+ * code as its [0,255] value channel, so the result must fit a byte: ~(all
+ * ones) = 0 is the canonical `~` check (was ~0xFF, whose 0xFFFFFFFF00 exit
+ * msys-bash maps to 127 rather than the low byte 0 the harness expects). */
+fn main() -> u64 {
+    let x: u64 = 0xFFFFFFFFFFFFFFFF
+    return ~x
+}

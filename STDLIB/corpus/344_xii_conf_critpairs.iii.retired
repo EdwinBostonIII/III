@@ -1,0 +1,10 @@
+/* corpus/344_xii_conf_critpairs.iii  -- Confluence: 117 critical pairs converge */
+
+module corpus_344_xii_conf_critpairs
+
+extern @abi(c-msvc-x64) fn xii_critpairs_verify_all() -> u32 from "xii_critpairs.iii"
+
+fn main() -> u64 {
+    let fails : u32 = xii_critpairs_verify_all()
+    return fails as u64
+}

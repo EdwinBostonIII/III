@@ -1,0 +1,84 @@
+/* aether::inet — IPv4 parse + format roundtrip. */
+module corpus_122
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn inet_parse_ipv4(src: *u8, src_len: u64) -> u32 from "inet.iii"
+extern @abi(c-msvc-x64) fn inet_last_error() -> u32 from "inet.iii"
+extern @abi(c-msvc-x64) fn inet_format_ipv4(builder_id: u64, ip: u32) -> i32 from "inet.iii"
+
+fn make_str(buf: *u8, s: *u8, len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < len {
+        buf[i] = s[i]
+        i = i + 1u64
+    }
+    return len
+}
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(64u64)
+    let a : u64 = arena_new(4096u64)
+
+    /* Parse 192.0.2.1 → 0xC0000201 */
+    let n1 : u64 = make_str(buf, "192.0.2.1", 9u64)
+    let ip1 : u32 = inet_parse_ipv4(buf, n1)
+    if inet_last_error() != 0u32 { return 1u64 }
+    if ip1 != 0xC0000201u32 { return 2u64 }
+
+    /* Parse 255.255.255.255 */
+    let n2 : u64 = make_str(buf, "255.255.255.255", 15u64)
+    let ip2 : u32 = inet_parse_ipv4(buf, n2)
+    if inet_last_error() != 0u32 { return 3u64 }
+    if ip2 != 0xFFFFFFFFu32 { return 4u64 }
+
+    /* Parse 0.0.0.0 */
+    let n3 : u64 = make_str(buf, "0.0.0.0", 7u64)
+    let ip3 : u32 = inet_parse_ipv4(buf, n3)
+    if inet_last_error() != 0u32 { return 5u64 }
+    if ip3 != 0u32 { return 6u64 }
+
+    /* Reject invalid: 256.1.1.1 */
+    let n4 : u64 = make_str(buf, "256.1.1.1", 9u64)
+    inet_parse_ipv4(buf, n4)
+    if inet_last_error() != 1u32 { return 7u64 }
+
+    /* Reject trailing garbage */
+    let n5 : u64 = make_str(buf, "1.2.3.4x", 8u64)
+    inet_parse_ipv4(buf, n5)
+    if inet_last_error() != 1u32 { return 8u64 }
+
+    /* Reject too many octets */
+    let n6 : u64 = make_str(buf, "1.2.3.4.5", 9u64)
+    inet_parse_ipv4(buf, n6)
+    if inet_last_error() != 1u32 { return 9u64 }
+
+    /* Format roundtrip */
+    let bid : u64 = builder_new(a, 32u64)
+    inet_format_ipv4(bid, 0xC0A80101u32)   /* 192.168.1.1 */
+    let flen : u64 = builder_len(bid)
+    if flen != 11u64 { return 10u64 }
+    let out : *u8 = builder_seal(bid) as *u8
+    if out[0] != 49u8  { return 11u64 }   /* '1' */
+    if out[1] != 57u8  { return 12u64 }   /* '9' */
+    if out[2] != 50u8  { return 13u64 }   /* '2' */
+    if out[3] != 46u8  { return 14u64 }   /* '.' */
+    if out[4] != 49u8  { return 15u64 }   /* '1' */
+    if out[5] != 54u8  { return 16u64 }   /* '6' */
+    if out[6] != 56u8  { return 17u64 }   /* '8' */
+    if out[7] != 46u8  { return 18u64 }   /* '.' */
+    if out[8] != 49u8  { return 19u64 }   /* '1' */
+    if out[9] != 46u8  { return 20u64 }   /* '.' */
+    if out[10] != 49u8 { return 21u64 }   /* '1' */
+    builder_drop(bid)
+
+    arena_drop(a)
+    free(buf)
+    return 99u64
+}

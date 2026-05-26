@@ -1,0 +1,40 @@
+/* corpus/361_xii_curated_crypto.iii — curated crypto payload emission */
+
+module corpus_361_xii_curated_crypto
+
+extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+
+var BUF361 : [u8; 256]
+
+fn main() -> u64 {
+    xii_register_all()
+
+    /* H012 sha256_oneshot on target 1 (x86_avx2) -- curated override registered.
+     * H012 is at index 11 in the 0-based array. */
+    let n11 : u32 = xii_emit_gen_produce(11u32, 1u32, 256u32, &BUF361 as *u8)
+    if n11 == 0u32 { return 1u64 }
+
+    /* Bytes should start with prologue (mov [rsp+8], rbx => 48 89 5C 24 08). */
+    if BUF361[0] != 0x48u8 { return 2u64 }
+    if BUF361[1] != 0x89u8 { return 3u64 }
+    if BUF361[2] != 0x5Cu8 { return 4u64 }
+
+    /* After 11-byte prologue, body starts with the SHA-256 NI curated bytes
+     * (first byte 0xC5 = vmovq prefix). */
+    if BUF361[11] != 0xC5u8 { return 5u64 }
+
+    /* H003 chacha20_block on target 1: curated. H003 = index 2. */
+    let n3 : u32 = xii_emit_gen_produce(2u32, 1u32, 256u32, &BUF361 as *u8)
+    if n3 == 0u32 { return 6u64 }
+    if BUF361[11] != 0xC5u8 { return 7u64 }
+
+    /* H051 swap_bytes_u64 on target 1 (BSWAP rax = 48 0f c8). H051 = index 50. */
+    let n50 : u32 = xii_emit_gen_produce(50u32, 1u32, 64u32, &BUF361 as *u8)
+    if n50 == 0u32 { return 8u64 }
+    /* Body offset 11..13 should be the BSWAP sequence. */
+    if BUF361[11] != 0x48u8 { return 9u64 }
+    if BUF361[12] != 0x0Fu8 { return 10u64 }
+    if BUF361[13] != 0xC8u8 { return 11u64 }
+    return 0u64
+}

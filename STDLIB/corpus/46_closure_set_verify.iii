@@ -1,0 +1,40 @@
+/* closure: set, byte-readback, verify against same / different buffer */
+module corpus_d46
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn closure_set(ptr: u64) -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_byte(i: u32) -> u32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_is_set() -> u8 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_verify_against(addr: u64) -> u8 from "closure.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        buf[i] = (i * 3u64 + 7u64) as u8
+        i = i + 1u64
+    }
+    if closure_set(buf as u64) != 0i32 { return 1u64 }
+    if closure_is_set() != 1u8 { return 2u64 }
+    /* readback */
+    let mut j : u32 = 0u32
+    while j < 32u32 {
+        let exp : u8 = ((j as u64) * 3u64 + 7u64) as u8
+        if closure_byte(j) != (exp as u32) { return 3u64 }
+        j = j + 1u32
+    }
+    /* verify against the same buffer */
+    if closure_verify_against(buf as u64) != 1u8 { return 4u64 }
+    /* verify against a different buffer */
+    let other : *u8 = malloc(32u64)
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        other[k] = 0xFFu8
+        k = k + 1u64
+    }
+    if closure_verify_against(other as u64) != 0u8 { return 5u64 }
+    free(buf)
+    free(other)
+    return 99u64
+}

@@ -1,0 +1,23 @@
+/* str_starts_with("hello, world", "hello") = 1 */
+module corpus_a17
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn str_starts_with(a: u64, a_len: u64, p: u64, p_len: u64) -> u8 from "string.iii"
+extern @abi(c-msvc-x64) fn str_ends_with(a: u64, a_len: u64, s: u64, s_len: u64) -> u8 from "string.iii"
+
+fn main() -> u64 {
+    let s : *u8 = malloc(12u64)
+    s[0]=104u8; s[1]=101u8; s[2]=108u8; s[3]=108u8; s[4]=111u8
+    s[5]=44u8;  s[6]=32u8;  s[7]=119u8; s[8]=111u8; s[9]=114u8
+    s[10]=108u8; s[11]=100u8
+    let pre : *u8 = malloc(5u64)
+    pre[0]=104u8; pre[1]=101u8; pre[2]=108u8; pre[3]=108u8; pre[4]=111u8
+    let suf : *u8 = malloc(5u64)
+    suf[0]=119u8; suf[1]=111u8; suf[2]=114u8; suf[3]=108u8; suf[4]=100u8
+    if str_starts_with(s as u64, 12u64, pre as u64, 5u64) != 1u8 { return 1u64 }
+    if str_ends_with(s as u64, 12u64, suf as u64, 5u64) != 1u8 { return 2u64 }
+    if str_starts_with(s as u64, 12u64, suf as u64, 5u64) != 0u8 { return 3u64 }
+    free(s); free(pre); free(suf)
+    return 99u64
+}

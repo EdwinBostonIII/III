@@ -1,0 +1,439 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\keccak.iii
+ *
+ * III STDLIB - numera::keccak -- Keccak-f[1600] permutation + sponge.
+ *
+ * Lattice plan Phase 14a Step 0128.  Foundation for SHA3-{224,256,384,512}
+ * and SHAKE{128,256}.  Pure NIH bit operations; no third-party dependency.
+ *
+ * State: 25 lanes of 64 bits (1600 bits total).  Lane index i = x + 5y
+ * with x, y in 0..4.  Caller supplies a 200-byte (25 * 8) state buffer.
+ *
+ * Public surface:
+ *   keccak_state_zero(state_ptr)                                 -> i32
+ *   keccak_f1600(state_ptr)                                      -> i32
+ *   keccak_absorb(state_ptr, msg_ptr, msg_len, rate, dom_sep)    -> i32
+ *   keccak_squeeze(state_ptr, out_ptr, out_len, rate)            -> i32
+ *
+ * Constants per FIPS 202.  Not reentrant -- uses module-level scratch.
+ *
+ * Hexad: kind_form (cryptographic primitive).  Ring: R3.  K: 1.00.
+ */
+
+module numera_keccak
+
+const KK_OK         : i32 =  0i32
+const KK_E_NULL     : i32 = -1i32
+const KK_E_BADRATE  : i32 = -2i32
+
+/* 24 round constants (FIPS 202 Table 1). */
+var KK_RND_CONST : [u64; 24]
+var KK_RND_INIT  : u8 = 0u8
+
+/* Rotation offsets (FIPS 202 Table 2), indexed by lane i = x + 5y. */
+var KK_RHO_OFF : [u32; 25]
+var KK_RHO_INIT : u8 = 0u8
+
+/* Module-level scratch lanes for keccak_f1600.  Not reentrant.
+ * A/B padded to 32 (+7) so the AVX-512 chi can do 8-wide loads/stores
+ * (a row's 5 lanes + 3 over-read into the next row's start). */
+var KK_LANE_A : [u64; 32]
+var KK_LANE_B : [u64; 32]
+var KK_PAR_C  : [u64; 5]
+var KK_PAR_D  : [u64; 5]
+
+/* §3.5 AVX-512 chi (vpternlogq $0xD2 = B ^ (~B[x+1] & B[x+2]), per row). */
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+var KK_CHI_IDX1  : [u64; 8]    /* vpermq idx (x+1)%5 within row: [1,2,3,4,0,5,6,7] */
+var KK_CHI_IDX2  : [u64; 8]    /* vpermq idx (x+2)%5 within row: [2,3,4,0,1,5,6,7] */
+var KK_CHI_FORCE : u32 = 0u32  /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
+var KK_CHI_INIT  : u8  = 0u8
+
+fn _kk_init_rc() -> u32 {
+    if KK_RND_INIT == 1u8 { return 0u32 }
+    KK_RND_CONST[0u64]  = 0x0000000000000001u64
+    KK_RND_CONST[1u64]  = 0x0000000000008082u64
+    KK_RND_CONST[2u64]  = 0x800000000000808Au64
+    KK_RND_CONST[3u64]  = 0x8000000080008000u64
+    KK_RND_CONST[4u64]  = 0x000000000000808Bu64
+    KK_RND_CONST[5u64]  = 0x0000000080000001u64
+    KK_RND_CONST[6u64]  = 0x8000000080008081u64
+    KK_RND_CONST[7u64]  = 0x8000000000008009u64
+    KK_RND_CONST[8u64]  = 0x000000000000008Au64
+    KK_RND_CONST[9u64]  = 0x0000000000000088u64
+    KK_RND_CONST[10u64] = 0x0000000080008009u64
+    KK_RND_CONST[11u64] = 0x000000008000000Au64
+    KK_RND_CONST[12u64] = 0x000000008000808Bu64
+    KK_RND_CONST[13u64] = 0x800000000000008Bu64
+    KK_RND_CONST[14u64] = 0x8000000000008089u64
+    KK_RND_CONST[15u64] = 0x8000000000008003u64
+    KK_RND_CONST[16u64] = 0x8000000000008002u64
+    KK_RND_CONST[17u64] = 0x8000000000000080u64
+    KK_RND_CONST[18u64] = 0x000000000000800Au64
+    KK_RND_CONST[19u64] = 0x800000008000000Au64
+    KK_RND_CONST[20u64] = 0x8000000080008081u64
+    KK_RND_CONST[21u64] = 0x8000000000008080u64
+    KK_RND_CONST[22u64] = 0x0000000080000001u64
+    KK_RND_CONST[23u64] = 0x8000000080008008u64
+    KK_RND_INIT = 1u8
+    return 0u32
+}
+
+fn _kk_init_rho() -> u32 {
+    if KK_RHO_INIT == 1u8 { return 0u32 }
+    KK_RHO_OFF[0u64]  =  0u32
+    KK_RHO_OFF[1u64]  =  1u32
+    KK_RHO_OFF[2u64]  = 62u32
+    KK_RHO_OFF[3u64]  = 28u32
+    KK_RHO_OFF[4u64]  = 27u32
+    KK_RHO_OFF[5u64]  = 36u32
+    KK_RHO_OFF[6u64]  = 44u32
+    KK_RHO_OFF[7u64]  =  6u32
+    KK_RHO_OFF[8u64]  = 55u32
+    KK_RHO_OFF[9u64]  = 20u32
+    KK_RHO_OFF[10u64] =  3u32
+    KK_RHO_OFF[11u64] = 10u32
+    KK_RHO_OFF[12u64] = 43u32
+    KK_RHO_OFF[13u64] = 25u32
+    KK_RHO_OFF[14u64] = 39u32
+    KK_RHO_OFF[15u64] = 41u32
+    KK_RHO_OFF[16u64] = 45u32
+    KK_RHO_OFF[17u64] = 15u32
+    KK_RHO_OFF[18u64] = 21u32
+    KK_RHO_OFF[19u64] =  8u32
+    KK_RHO_OFF[20u64] = 18u32
+    KK_RHO_OFF[21u64] =  2u32
+    KK_RHO_OFF[22u64] = 61u32
+    KK_RHO_OFF[23u64] = 56u32
+    KK_RHO_OFF[24u64] = 14u32
+    KK_RHO_INIT = 1u8
+    return 0u32
+}
+
+/* §3.5: vpermq index vectors for the chi within-row rotations.
+ * Outputs 0..4 of vpermq depend only on inputs 0..4; lanes 5..7 are
+ * identity (harmless -- their results are overwritten by the next row's
+ * in-order store). */
+fn _kk_init_chi_idx() -> u32 {
+    if KK_CHI_INIT == 1u8 { return 0u32 }
+    KK_CHI_IDX1[0u64] = 1u64
+    KK_CHI_IDX1[1u64] = 2u64
+    KK_CHI_IDX1[2u64] = 3u64
+    KK_CHI_IDX1[3u64] = 4u64
+    KK_CHI_IDX1[4u64] = 0u64
+    KK_CHI_IDX1[5u64] = 5u64
+    KK_CHI_IDX1[6u64] = 6u64
+    KK_CHI_IDX1[7u64] = 7u64
+    KK_CHI_IDX2[0u64] = 2u64
+    KK_CHI_IDX2[1u64] = 3u64
+    KK_CHI_IDX2[2u64] = 4u64
+    KK_CHI_IDX2[3u64] = 0u64
+    KK_CHI_IDX2[4u64] = 1u64
+    KK_CHI_IDX2[5u64] = 5u64
+    KK_CHI_IDX2[6u64] = 6u64
+    KK_CHI_IDX2[7u64] = 7u64
+    KK_CHI_INIT = 1u8
+    return 0u32
+}
+
+fn keccak_rotl64(x: u64, n: u32) -> u64 {
+    let x_l : u64 = x
+    let n_l : u64 = (n as u64) & 63u64
+    if n_l == 0u64 { return x_l }
+    let l : u64 = x_l << n_l
+    let r : u64 = x_l >> (64u64 - n_l)
+    return l | r
+}
+
+fn _kk_load_lane(state_ptr: u64, idx: u32) -> u64 {
+    let p_l : u64 = state_ptr
+    let i_l : u64 = (idx as u64) & 0xFFu64
+    let p : *u8 = (p_l + i_l * 8u64) as *u8
+    let mut acc : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let bb : u64 = p[k] as u64
+        acc = acc | (bb << (k * 8u64))
+        k = k + 1u64
+    }
+    return acc
+}
+
+fn _kk_store_lane(state_ptr: u64, idx: u32, v: u64) -> u32 {
+    let p_l : u64 = state_ptr
+    let i_l : u64 = (idx as u64) & 0xFFu64
+    let v_l : u64 = v
+    let p : *u8 = (p_l + i_l * 8u64) as *u8
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        p[k] = ((v_l >> (k * 8u64)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u32
+}
+
+fn keccak_state_zero(state_ptr: u64) -> i32 @export {
+    let p_l : u64 = state_ptr
+    if p_l == 0u64 { return KK_E_NULL }
+    let p : *u8 = p_l as *u8
+    let mut k : u64 = 0u64
+    while k < 200u64 {
+        p[k] = 0u8
+        k = k + 1u64
+    }
+    return KK_OK
+}
+
+/* ---- Chi step (B -> A), dispatched scalar / AVX-512 (§3.5) ---- */
+
+/* Scalar reference (bit-identity baseline): A[x,y] = B[x,y] ^ ((~B[x+1,y]) & B[x+2,y]). */
+fn _kk_chi_scalar() -> i32 {
+    let mut yc : u32 = 0u32
+    while yc < 5u32 {
+        let mut xc : u32 = 0u32
+        while xc < 5u32 {
+            let mut x1c : u32 = xc + 1u32
+            if x1c >= 5u32 { x1c = x1c - 5u32 }
+            let mut x2c : u32 = xc + 2u32
+            if x2c >= 5u32 { x2c = x2c - 5u32 }
+            let lane  : u32 = xc + 5u32 * yc
+            let n1    : u32 = x1c + 5u32 * yc
+            let n2    : u32 = x2c + 5u32 * yc
+            let bv    : u64 = KK_LANE_B[lane]
+            let bv1   : u64 = KK_LANE_B[n1]
+            let bv2   : u64 = KK_LANE_B[n2]
+            KK_LANE_A[lane] = bv ^ ((bv1 ^ 0xFFFFFFFFFFFFFFFFu64) & bv2)
+            xc = xc + 1u32
+        }
+        yc = yc + 1u32
+    }
+    return 0i32
+}
+
+/* AVX-512: per row y, load B[5y..5y+4] (+3 over-read), rotate within-row
+ * by (x+1)%5 and (x+2)%5 (vpermq, constant index vectors), then
+ * vpternlogq $0xD2 = B ^ (~Brot1 & Brot2).  Outputs 0..4 depend only on
+ * inputs 0..4; rows stored 0->4 in order so each row's correct 5 lanes
+ * overwrite the previous row's 3-lane over-write tail (no k-mask needed).
+ * Bit-identical to _kk_chi_scalar (same boolean per 64-bit lane).
+ * zmm0..4 + rax/rcx/rdx all Win64 caller-saved. */
+fn _kk_chi_avx512() -> i32 {
+    metal {
+    leaq L_KK_CHI_IDX1(%rip), %rcx
+    vmovdqu64 (%rcx), %zmm3
+    leaq L_KK_CHI_IDX2(%rip), %rcx
+    vmovdqu64 (%rcx), %zmm4
+    leaq L_KK_LANE_B(%rip), %rax
+    leaq L_KK_LANE_A(%rip), %rdx
+    vmovdqu64 0(%rax), %zmm0
+    vpermq %zmm0, %zmm3, %zmm1
+    vpermq %zmm0, %zmm4, %zmm2
+    vpternlogq $0xD2, %zmm2, %zmm1, %zmm0
+    vmovdqu64 %zmm0, 0(%rdx)
+    vmovdqu64 40(%rax), %zmm0
+    vpermq %zmm0, %zmm3, %zmm1
+    vpermq %zmm0, %zmm4, %zmm2
+    vpternlogq $0xD2, %zmm2, %zmm1, %zmm0
+    vmovdqu64 %zmm0, 40(%rdx)
+    vmovdqu64 80(%rax), %zmm0
+    vpermq %zmm0, %zmm3, %zmm1
+    vpermq %zmm0, %zmm4, %zmm2
+    vpternlogq $0xD2, %zmm2, %zmm1, %zmm0
+    vmovdqu64 %zmm0, 80(%rdx)
+    vmovdqu64 120(%rax), %zmm0
+    vpermq %zmm0, %zmm3, %zmm1
+    vpermq %zmm0, %zmm4, %zmm2
+    vpternlogq $0xD2, %zmm2, %zmm1, %zmm0
+    vmovdqu64 %zmm0, 120(%rdx)
+    vmovdqu64 160(%rax), %zmm0
+    vpermq %zmm0, %zmm3, %zmm1
+    vpermq %zmm0, %zmm4, %zmm2
+    vpternlogq $0xD2, %zmm2, %zmm1, %zmm0
+    vmovdqu64 %zmm0, 160(%rdx)
+    vzeroupper
+    }
+    return 0i32
+}
+
+/* Dispatch: AVX-512 on capable hosts, else scalar; KK_CHI_FORCE overrides
+ * for KAT bit-identity testing.  Mandate 7: structural CPUID dispatch.
+ * Chi is the one cleanly-vectorizable Keccak step (within-row, no
+ * cross-plane permute); theta/rho/pi keep the scalar's index-free form. */
+fn _kk_chi() -> i32 {
+    if KK_CHI_FORCE == 1u32 { return _kk_chi_scalar() }
+    if KK_CHI_FORCE == 2u32 { return _kk_chi_avx512() }
+    if cpufeat_has_avx512f() == 1u8 { return _kk_chi_avx512() }
+    return _kk_chi_scalar()
+}
+
+fn keccak_chi_force_path(p: u32) -> i32 @export { KK_CHI_FORCE = p ; return 0i32 }
+
+fn keccak_f1600(state_ptr: u64) -> i32 @export {
+    let p_l : u64 = state_ptr
+    if p_l == 0u64 { return KK_E_NULL }
+    _kk_init_rc()
+    _kk_init_rho()
+    _kk_init_chi_idx()
+
+    let mut i : u32 = 0u32
+    while i < 25u32 {
+        KK_LANE_A[i] = _kk_load_lane(p_l, i)
+        i = i + 1u32
+    }
+
+    let mut round : u32 = 0u32
+    while round < 24u32 {
+        /* Theta. */
+        let mut x1 : u32 = 0u32
+        while x1 < 5u32 {
+            let v0 : u64 = KK_LANE_A[x1]
+            let v1 : u64 = KK_LANE_A[x1 + 5u32]
+            let v2 : u64 = KK_LANE_A[x1 + 10u32]
+            let v3 : u64 = KK_LANE_A[x1 + 15u32]
+            let v4 : u64 = KK_LANE_A[x1 + 20u32]
+            KK_PAR_C[x1] = v0 ^ v1 ^ v2 ^ v3 ^ v4
+            x1 = x1 + 1u32
+        }
+        let mut x2 : u32 = 0u32
+        while x2 < 5u32 {
+            let mut xm : u32 = x2 + 4u32
+            if xm >= 5u32 { xm = xm - 5u32 }
+            let mut xp : u32 = x2 + 1u32
+            if xp >= 5u32 { xp = xp - 5u32 }
+            KK_PAR_D[x2] = KK_PAR_C[xm] ^ keccak_rotl64(KK_PAR_C[xp], 1u32)
+            x2 = x2 + 1u32
+        }
+        let mut yy : u32 = 0u32
+        while yy < 5u32 {
+            let mut xx : u32 = 0u32
+            while xx < 5u32 {
+                let lane : u32 = xx + 5u32 * yy
+                KK_LANE_A[lane] = KK_LANE_A[lane] ^ KK_PAR_D[xx]
+                xx = xx + 1u32
+            }
+            yy = yy + 1u32
+        }
+
+        /* Rho + Pi (destination-view, FIPS 202 §3.2.3 direct):
+         *   A'[x][y] = A[(x + 3y) mod 5][x]  with rho rotation applied to source.
+         * For each output (x, y):
+         *   input_x = (x + 3y) mod 5
+         *   input_y = x
+         *   B[x + 5y] = ROTL(A[input_x + 5*input_y], rho[input_x + 5*input_y]) */
+        let mut yp : u32 = 0u32
+        while yp < 5u32 {
+            let mut xp2 : u32 = 0u32
+            while xp2 < 5u32 {
+                let dst : u32 = xp2 + 5u32 * yp
+                let mut input_x : u32 = xp2 + 3u32 * yp
+                if input_x >= 5u32 { input_x = input_x - 5u32 }
+                if input_x >= 5u32 { input_x = input_x - 5u32 }
+                if input_x >= 5u32 { input_x = input_x - 5u32 }
+                let input_y : u32 = xp2
+                let src : u32 = input_x + 5u32 * input_y
+                KK_LANE_B[dst] = keccak_rotl64(KK_LANE_A[src], KK_RHO_OFF[src])
+                xp2 = xp2 + 1u32
+            }
+            yp = yp + 1u32
+        }
+
+        /* Chi (dispatched scalar / AVX-512 vpternlogq, §3.5). */
+        _kk_chi()
+
+        /* Iota. */
+        KK_LANE_A[0u32] = KK_LANE_A[0u32] ^ KK_RND_CONST[round]
+
+        round = round + 1u32
+    }
+
+    let mut k : u32 = 0u32
+    while k < 25u32 {
+        _kk_store_lane(p_l, k, KK_LANE_A[k])
+        k = k + 1u32
+    }
+    return KK_OK
+}
+
+/* keccak_absorb: 4-arg signature. rate_dom packs the rate + domain args:
+ *   bits  0..31 = rate_bytes (u32)
+ *   bits 32..39 = dom_sep    (u8)
+ * Use keccak_pack_rate_dom(rate, dom) to construct safely.  (Originally
+ * packed to dodge the iiis-0 5+-arg stack-corruption trap; that bug is
+ * fixed -- Stage 3.9, corpus 277 -- but the 4-arg form is retained as-is:
+ * it is working KAT-passing code with a stable @export API, and reverting
+ * it for stylistic gain alone would churn working code, Mandate 20.) */
+fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 @export {
+    let sp_l : u64 = state_ptr
+    let mp_l : u64 = msg_ptr
+    let ml_l : u64 = msg_len
+    let rd_l : u64 = rate_dom
+    let r_l  : u32 = (rd_l & 0xFFFFFFFFu64) as u32
+    let d_l  : u8  = ((rd_l >> 32u64) & 0xFFu64) as u8
+    if sp_l == 0u64 { return KK_E_NULL }
+    if r_l == 0u32 { return KK_E_BADRATE }
+    if r_l > 200u32 { return KK_E_BADRATE }
+
+    let s : *u8 = sp_l as *u8
+    let m : *u8 = mp_l as *u8
+    let r_u64 : u64 = (r_l as u64) & 0xFFu64
+
+    let mut off : u64 = 0u64
+    while (off + r_u64) <= ml_l {
+        let mut i : u64 = 0u64
+        while i < r_u64 {
+            s[i] = s[i] ^ m[off + i]
+            i = i + 1u64
+        }
+        keccak_f1600(sp_l)
+        off = off + r_u64
+    }
+
+    let tail : u64 = ml_l - off
+    let mut j : u64 = 0u64
+    while j < tail {
+        s[j] = s[j] ^ m[off + j]
+        j = j + 1u64
+    }
+    s[tail] = s[tail] ^ d_l
+    s[r_u64 - 1u64] = s[r_u64 - 1u64] ^ 0x80u8
+    keccak_f1600(sp_l)
+    return KK_OK
+}
+
+/* Helper to pack (rate_bytes, dom_sep) into the 4th-arg u64 for
+ * keccak_absorb. Inline-able by callers; provided as a fn so the API
+ * remains coherent across modules. */
+fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) -> u64 @export {
+    let l_r : u64 = (rate_bytes as u64) & 0xFFFFFFFFu64
+    let l_d : u64 = ((dom_sep as u64) & 0xFFu64) << 32u64
+    return l_r | l_d
+}
+
+fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 @export {
+    let sp_l : u64 = state_ptr
+    let op_l : u64 = out_ptr
+    let ol_l : u64 = out_len
+    let r_l  : u32 = rate_bytes
+    if sp_l == 0u64 { return KK_E_NULL }
+    if op_l == 0u64 { return KK_E_NULL }
+    if r_l == 0u32 { return KK_E_BADRATE }
+    if r_l > 200u32 { return KK_E_BADRATE }
+
+    let s : *u8 = sp_l as *u8
+    let o : *u8 = op_l as *u8
+    let r_u64 : u64 = (r_l as u64) & 0xFFu64
+
+    let mut produced : u64 = 0u64
+    while produced < ol_l {
+        let chunk : u64 = ol_l - produced
+        let mut take : u64 = chunk
+        if chunk >= r_u64 { take = r_u64 }
+        let mut i : u64 = 0u64
+        while i < take {
+            o[produced + i] = s[i]
+            i = i + 1u64
+        }
+        produced = produced + take
+        if produced < ol_l { keccak_f1600(sp_l) }
+    }
+    return KK_OK
+}

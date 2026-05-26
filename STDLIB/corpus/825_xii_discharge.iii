@@ -1,0 +1,7 @@
+/* 825 -- Confluence-Core Certificate, Tier 2a (discharge grader). xii_discharge reads the LIVE
+ * joinability non-join table and grades the 35 pairs by the route lattice: 15 structural-
+ * elimination-eligible (assoc-involved) + 20 residual lift-family; partition complete + non-trivial
+ * + prove-the-negative (no residual carries an associativity rule). 99 = GREEN. */
+module corpus_825
+extern @abi(c-msvc-x64) fn xdc_selftest() -> u64 from "xii_discharge.iii"
+fn main() -> u64 { return xdc_selftest() }

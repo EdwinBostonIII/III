@@ -1,0 +1,67 @@
+/* json: parse [1,-2,"x"] -> emit -> parse again -> values equal */
+module corpus_f54
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, base: u64, len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_emit(builder_id: u64, value_id: u64) -> i32 from "json.iii"
+extern @abi(c-msvc-x64) fn json_kind(id: u64) -> u8 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_at(id: u64, i: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_base(id: u64) -> u64 from "json.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* Input: [1,-2,"x"] - 10 bytes */
+    let inp : *u8 = malloc(10u64)
+    inp[0]=91u8        /* [ */
+    inp[1]=49u8        /* 1 */
+    inp[2]=44u8        /* , */
+    inp[3]=45u8        /* - */
+    inp[4]=50u8        /* 2 */
+    inp[5]=44u8        /* , */
+    inp[6]=34u8        /* " */
+    inp[7]=120u8       /* x */
+    inp[8]=34u8        /* " */
+    inp[9]=93u8        /* ] */
+    let root1 : u64 = json_parse(a, inp as u64, 10u64)
+    if root1 == 0u64 { return 1u64 }
+    /* Emit into builder */
+    let b : u64 = builder_new(a, 64u64)
+    if b == 0u64 { return 2u64 }
+    if json_emit(b, root1) != 0i32 { return 3u64 }
+    let emitted_base : u64 = builder_seal(b)
+    let emitted_len  : u64 = builder_len(b)
+    /* Re-parse the emitted bytes */
+    let root2 : u64 = json_parse(a, emitted_base, emitted_len)
+    if root2 == 0u64 { return 4u64 }
+    /* Both must be 3-element arrays */
+    if json_kind(root1) != 6u8 { return 5u64 }
+    if json_kind(root2) != 6u8 { return 6u64 }
+    if json_array_len(root1) != 3u64 { return 7u64 }
+    if json_array_len(root2) != 3u64 { return 8u64 }
+    /* Element 0: int 1 */
+    let a0 : u64 = json_array_at(root2, 0u64)
+    if json_int(a0) != 1i64 { return 9u64 }
+    /* Element 1: int -2 */
+    let a1 : u64 = json_array_at(root2, 1u64)
+    if json_int(a1) != -2i64 { return 10u64 }
+    /* Element 2: string "x" */
+    let a2 : u64 = json_array_at(root2, 2u64)
+    if json_kind(a2) != 5u8 { return 11u64 }
+    if json_string_len(a2) != 1u64 { return 12u64 }
+    let sp : *u8 = json_string_base(a2) as *u8
+    if sp[0] != 120u8 { return 13u64 }
+    builder_drop(b)
+    free(inp)
+    arena_drop(a)
+    return 99u64
+}

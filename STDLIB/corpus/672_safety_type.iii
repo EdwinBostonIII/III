@@ -1,0 +1,14 @@
+/* 672_safety_type.iii -- M9 keystone: the safety algebra as CIC inductive typing.
+ *
+ * Realizes apotheosis M9 Pass-1 ("make safety a type"): the Trit (M2) and Hexad (M3) inductives'
+ * typing judgments, with M3 reachability as the Hexad constructor's well-formedness rule -- so a
+ * non-reachable Hexad term is BOTTOM (a type error), never accepted. Exhaustive over all 729
+ * hexads, with the packed and constructor-term views cross-checked, the typed-count bound to
+ * M3's own reachable-count, and the named negative (a malformed-Trit term rejected before reach).
+ *
+ * Main-corpus convention: rc 99 on pass; 1..13 = which check failed. */
+module corpus_672
+
+extern @abi(c-msvc-x64) fn safety_type_selftest() -> u64 from "safety_type.iii"
+
+fn main() -> u64 { return safety_type_selftest() }

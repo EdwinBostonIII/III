@@ -1,0 +1,39 @@
+/* q128: from_u64(MAX) + 1 -> hi=1 lo=0; (1 << 64).hi = 1, .lo = 0;
+ *       from_u64(7) ^ from_u64(13) = ? hi=0 lo=10 */
+module corpus_b31
+
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_from_pair(hi: u64, lo: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_add(a: u64, b: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_shl(a: u64, n: u32) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_xor(a: u64, b: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_lo(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_hi(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_eq(a: u64, b: u64) -> u8 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_drop(id: u64) -> u8 from "q128.iii"
+
+fn main() -> u64 {
+    /* MAX + 1 -> hi=1, lo=0 */
+    let max : u64 = q128_from_u64(0xFFFFFFFFFFFFFFFFu64)
+    let one : u64 = q128_from_u64(1u64)
+    let sum : u64 = q128_add(max, one)
+    if q128_hi(sum) != 1u64 { return 1u64 }
+    if q128_lo(sum) != 0u64 { return 2u64 }
+    /* 1 << 64 -> hi=1, lo=0 */
+    let unit : u64 = q128_from_u64(1u64)
+    let shifted : u64 = q128_shl(unit, 64u32)
+    if q128_hi(shifted) != 1u64 { return 3u64 }
+    if q128_lo(shifted) != 0u64 { return 4u64 }
+    /* xor */
+    let a : u64 = q128_from_u64(7u64)
+    let b : u64 = q128_from_u64(13u64)
+    let x : u64 = q128_xor(a, b)
+    if q128_hi(x) != 0u64 { return 5u64 }
+    if q128_lo(x) != 10u64 { return 6u64 }
+    /* eq */
+    let c : u64 = q128_from_u64(7u64)
+    let d : u64 = q128_from_u64(7u64)
+    if q128_eq(c, d) != 1u8 { return 7u64 }
+    if q128_eq(c, b) != 0u8 { return 8u64 }
+    return 99u64
+}

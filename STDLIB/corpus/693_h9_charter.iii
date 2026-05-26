@@ -1,0 +1,4 @@
+/* 693 — h9_charter: the H9 ("one reversibility") falsifier as a run_charter constitutional clause. */
+module corpus_693
+extern @abi(c-msvc-x64) fn h9_selftest() -> u64 from "h9_charter.iii"
+fn main() -> u64 { return h9_selftest() }

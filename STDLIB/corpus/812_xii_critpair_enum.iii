@@ -1,0 +1,18 @@
+/* 812 -- mig4 Step 3: dynamic critical-pair enumeration.  Drives cpe_selftest: the
+ * enumeration over the live 49-rule set records every candidate critical pair, and its
+ * count EQUALS Step 2's independent xro_count_overlaps (complete + consistent -- neither
+ * over- nor under-records), is deterministic across calls, and does not overflow the table;
+ * the documented joining pre-emptions (R038/R037, R040/R030, R041/R013) are recorded as ROOT
+ * overlaps, the VACUOUS R041/R014 ordering (disjoint loop bodies) is excluded, a SUBTERM
+ * overlap (R037 rewriting R001's FCOMPOSE child) is recorded and a genuine non-overlap (R002
+ * over R001) excluded.  Exit 99 = all hold; 1..4 count/consistency; 10..13 root; 20..21
+ * subterm; 30 accessor.  Gated by run_corpus.sh (consumes Steps 1+2). */
+module corpus_812
+
+extern @abi(c-msvc-x64) fn cpe_selftest() -> u64 from "xii_critpair_enum.iii"
+
+fn main() -> u64 {
+    let r : u64 = cpe_selftest()
+    if r != 99u64 { return r }
+    return 99u64
+}

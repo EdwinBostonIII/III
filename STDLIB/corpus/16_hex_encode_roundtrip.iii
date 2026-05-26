@@ -1,0 +1,28 @@
+/* Encode 3 bytes -> 6 hex chars; decode back -> bytes equal */
+module corpus_a16
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn hex_encode(src: u64, n: u64, out: u64) -> i32 from "hex.iii"
+extern @abi(c-msvc-x64) fn hex_decode(src: u64, src_len: u64, out: u64, cap: u64) -> i32 from "hex.iii"
+
+fn main() -> u64 {
+    let src : *u8 = malloc(3u64)
+    src[0] = 0xA5u8; src[1] = 0x12u8; src[2] = 0xFFu8
+    let enc : *u8 = malloc(6u64)
+    if hex_encode(src as u64, 3u64, enc as u64) != 0i32 { return 1u64 }
+    /* expected hex "a512ff" */
+    if enc[0] != 97u8 { return 2u64 }    /* 'a' */
+    if enc[1] != 53u8 { return 3u64 }    /* '5' */
+    if enc[2] != 49u8 { return 4u64 }    /* '1' */
+    if enc[3] != 50u8 { return 5u64 }    /* '2' */
+    if enc[4] != 102u8 { return 6u64 }   /* 'f' */
+    if enc[5] != 102u8 { return 7u64 }   /* 'f' */
+    let dec : *u8 = malloc(3u64)
+    if hex_decode(enc as u64, 6u64, dec as u64, 3u64) != 0i32 { return 8u64 }
+    if dec[0] != 0xA5u8 { return 9u64 }
+    if dec[1] != 0x12u8 { return 10u64 }
+    if dec[2] != 0xFFu8 { return 11u64 }
+    free(src); free(enc); free(dec)
+    return 99u64
+}

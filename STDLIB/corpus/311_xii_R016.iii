@@ -1,0 +1,24 @@
+/* corpus/311_xii_R016.iii  -- R016 [D1] With null-left */
+
+module corpus_311_xii_R016
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let null_form : u32 = xii_rewrite_null_form()
+    let null_t : u32 = xii_term_make_basis(5u8, null_form)
+    let a : u32 = xii_term_make_basis(2u8, 0x200u32)
+    let t : u32 = xii_term_make_fusion2(20u8, null_t, a)
+    let r : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 16u32 { return 1u64 }
+    if xii_term_get_kind(r) != 2u8 { return 2u64 }
+    if r != a { return 3u64 }
+    return 0u64
+}

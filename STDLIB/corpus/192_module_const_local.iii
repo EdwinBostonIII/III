@@ -1,0 +1,37 @@
+/* III conformance corpus 192 -- Stage 3.18: module-scope const is local.
+ *
+ * The CLAUDE.md trap registry documented "module-level const is global-scope":
+ * every `const NAME : T = V` at module scope emitted a global linker symbol
+ * `L_NAME` even without @export, so two modules could not both declare
+ * `HTTP_OK` / `BUF_LEN` / etc. without an L_<name> link collision.
+ *
+ * Stage 3.18 fix: const symbols are emitted as module-LOCAL labels (no
+ * `.global`).  iii_const_decl_payload_t has no modifiers field (a const
+ * cannot be @export) and consts are never cross-referenced, so making them
+ * local is safe -- intra-module RIP-relative refs still resolve, and two
+ * modules may now share a const name (verified by the two-module no-collision
+ * link test, scripts/test_module_const_scope.sh).
+ *
+ * This pins the intra-module aspect: a local const must still resolve to its
+ * value within the defining module.  Exit = 99 on success.
+ */
+module corpus_192
+
+const C_U32 : u32 = 0xDEADu32
+const C_U64 : u64 = 0x1234567890ABCDEFu64
+const C_SMALL : u32 = 7u32
+
+fn use_const() -> u64 {
+    let a : u32 = C_U32
+    if a != 0xDEADu32 { return 1u64 }
+    if C_U64 != 0x1234567890ABCDEFu64 { return 2u64 }
+    return C_SMALL as u64
+}
+
+fn main() -> u64 {
+    let r : u64 = use_const()
+    if r != 7u64 { return r }
+    /* second reference site (the local const must resolve at both) */
+    if C_U32 != 0xDEADu32 { return 3u64 }
+    return 99u64
+}

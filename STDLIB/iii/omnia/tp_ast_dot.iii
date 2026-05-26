@@ -1,0 +1,89 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_ast_dot.iii
+ *
+ * Transform pattern: FORM_AST_BINARY → FORM_DOT_GRAPH
+ * FROZEN SPEC §7B.6 slot 31; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Renders binary AST (per tp_iii_to_ast_bin format) as a dot graph.
+ * The baseline emits a single "node:source" with the source bytes as label.
+ */
+
+module omnia_tp_ast_dot
+
+var TP_AD_HEAD : [u8; 26] = [
+    100u8, 105u8, 103u8, 114u8, 97u8, 112u8, 104u8, 32u8, 65u8, 83u8, 84u8, 32u8, 123u8, 10u8, 32u8, 32u8,
+    115u8, 114u8, 99u8, 32u8, 91u8, 108u8, 97u8, 98u8, 101u8, 108u8
+]
+/* "=\""  */
+var TP_AD_LBL_OPEN : [u8; 2] = [61u8, 34u8]
+/* "\"];\n}\n"  */
+var TP_AD_TAIL : [u8; 6] = [34u8, 93u8, 59u8, 10u8, 125u8, 10u8]
+
+fn tp_ad_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_ast_dot(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    if src_len < 16u64 { return 0u64 }
+    let mut off : u64 = 0u64
+    /* Head */
+    let mut h : u32 = 0u32
+    while h < 26u32 {
+        if off >= dst_cap { return 0u64 }
+        tp_ad_emit(dst_buf, off, TP_AD_HEAD[h])
+        off = off + 1u64
+        h = h + 1u32
+    }
+    /* Label opener */
+    if off + 2u64 > dst_cap { return 0u64 }
+    tp_ad_emit(dst_buf, off, TP_AD_LBL_OPEN[0])
+    tp_ad_emit(dst_buf, off + 1u64, TP_AD_LBL_OPEN[1])
+    off = off + 2u64
+    /* Body: copy AST bytes from offset 16 (skip magic+len header). */
+    let mut j : u64 = 16u64
+    while j < src_len {
+        if off + 4u64 > dst_cap { return 0u64 }
+        let bp : *u8 = (src + j) as *u8
+        let b : u8 = bp[0u64]
+        if b == 34u8 {
+            tp_ad_emit(dst_buf, off, 92u8)
+            tp_ad_emit(dst_buf, off + 1u64, 34u8)
+            off = off + 2u64
+        }
+        if b == 92u8 {
+            tp_ad_emit(dst_buf, off, 92u8)
+            tp_ad_emit(dst_buf, off + 1u64, 92u8)
+            off = off + 2u64
+        }
+        if b == 10u8 {
+            tp_ad_emit(dst_buf, off, 92u8)
+            tp_ad_emit(dst_buf, off + 1u64, 110u8)
+            off = off + 2u64
+        }
+        if b != 34u8 {
+            if b != 92u8 {
+                if b != 10u8 {
+                    if b >= 32u8 {
+                        if b < 127u8 {
+                            tp_ad_emit(dst_buf, off, b)
+                            off = off + 1u64
+                        }
+                    }
+                }
+            }
+        }
+        j = j + 1u64
+    }
+    /* Tail */
+    let mut t : u32 = 0u32
+    while t < 6u32 {
+        if off >= dst_cap { return 0u64 }
+        tp_ad_emit(dst_buf, off, TP_AD_TAIL[t])
+        off = off + 1u64
+        t = t + 1u32
+    }
+    return off
+}

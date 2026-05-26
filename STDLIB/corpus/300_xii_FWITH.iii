@@ -1,0 +1,25 @@
+/* corpus/300_xii_FWITH.iii
+ * XII Phase β conformance: F.WITH fusion operator (kind=20).
+ */
+
+module corpus_300_xii_FWITH
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_is_fusion(idx: u32) -> u8 from "xii_term.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    let a : u32 = xii_term_make_basis(0u8, 0x111u32)
+    let b : u32 = xii_term_make_basis(0u8, 0x222u32)
+    let t : u32 = xii_term_make_fusion2(20u8, a, b)
+    if xii_term_get_kind(t) != 20u8 { return 1u64 }
+    if xii_term_get_child_a(t) != a { return 2u64 }
+    if xii_term_get_child_b(t) != b { return 3u64 }
+    if xii_term_is_fusion(t) != 1u8 { return 4u64 }
+    return 0u64
+}

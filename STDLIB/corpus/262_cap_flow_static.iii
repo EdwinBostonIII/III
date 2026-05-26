@@ -1,0 +1,75 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\262_cap_flow_static.iii
+ *
+ * III conformance corpus 262 -- @cap_required static propagation check.
+ *
+ * Phase 3 Step 3 iiis-1 STATIC type-system check.
+ *
+ * When a caller fn declares `@cap_required(Y)` and calls a callee
+ * fn declared `@cap_required(X)`, the compiler asserts `Y ⊇ X` at
+ * codegen time.  This is a STRUCTURAL integer-mask containment check
+ * with zero runtime cost -- it rejects cap-flow violations BEFORE
+ * sealing, complementing the runtime gate at the callee's prologue.
+ *
+ * This file demonstrates the POSITIVE case: the caller declares a
+ * superset of the callee's required caps, the static check passes,
+ * codegen emits the runtime prologue checks, and both runtime checks
+ * pass against a properly-formed ctx.
+ *
+ * The negative case (caller mask insufficient -> compile-error) is
+ * tested out-of-band in scripts/test_cap_flow_static_negative.sh.
+ *
+ * Mandate 7: the check is structural (integer mask operation over
+ * declared metadata).  No observation, no learning.
+ */
+module corpus_262
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+
+const C262_FAIL_SENTINEL : u64 = 0xFFFFFFFFFFFFFFFFu64
+const C262_CAP_LOW       : u64 = 0x100u64
+const C262_CAP_HIGH      : u64 = 0x300u64
+
+/* Low-cap leaf: requires only the 0x100 bit. */
+fn _leaf_op(ctx: u64) -> u64 @cap_required(0x100u64) {
+    let _unused : u64 = ctx
+    return 0xAAAAu64
+}
+
+/* High-cap caller: declares 0x300 (covers 0x100 and 0x200).
+ * Calls _leaf_op which requires 0x100.  Static check verifies
+ * (0x300 & 0x100) == 0x100 -> pass.  Codegen proceeds. */
+fn _outer_op(ctx: u64) -> u64 @cap_required(0x300u64) {
+    let _unused : u64 = ctx
+    let r : u64 = _leaf_op(ctx)
+    return r
+}
+
+fn main() -> u64 {
+    /* Grant a cap holding the high (0x300) bitmask via attenuation
+     * from the root env.  Static check has already been verified at
+     * codegen time; runtime gate then asserts the same containment. */
+    let env : u64 = cap_env_init()
+    if env == 0u64 { return 1u64 }
+    let cap : u64 = cap_attenuate(env, 0x300u64, 0u64)
+    if cap == 0u64 { return 11u64 }
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return 12u64 }
+    call_context_init_set(cap, kch as u8, 2u8, 0u8)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 2u64 }
+
+    /* Path A: direct call to leaf with high-cap ctx -> normal. */
+    let r_leaf : u64 = _leaf_op(ctx)
+    if r_leaf != 0xAAAAu64 { return 3u64 }
+
+    /* Path B: outer (declaring superset) -> leaf (subset).
+     * Static check passed at compile time; runtime gates also pass. */
+    let r_outer : u64 = _outer_op(ctx)
+    if r_outer != 0xAAAAu64 { return 4u64 }
+
+    return 99u64
+}

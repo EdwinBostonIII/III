@@ -1,0 +1,124 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_proof.iii
+ *
+ * III STDLIB - verba::glyph_proof -- Glyph V3 form for proof certificate.
+ *
+ * Lattice plan Phase 14h Step 0179.  Encodes a reference to a proof
+ * certificate (e.g., proof_ripple_equivalence cert):
+ *   payload[ 0.. 7]  cert_id            (u64 LE)
+ *   payload[ 8..11]  equiv_kind         (u32 LE)
+ *   payload[12..19]  target_crystal_id  (u64 LE)
+ *   payload[20..27]  source_crystal_id  (u64 LE)
+ *   payload[28..151] reserved (124 bytes, zero-padded)
+ *
+ * payload_len = 28.
+ *
+ * Public surface:
+ *   glyph_proof_form_id()                                                       -> u32 (0x42)
+ *   glyph_proof_pack(cert_id, equiv_kind, target, source, out_192)              -> i32
+ *   glyph_proof_unpack_cert_id(in_192)                                          -> u64
+ *   glyph_proof_unpack_equiv_kind(in_192)                                       -> u32
+ *   glyph_proof_unpack_target(in_192)                                           -> u64
+ *   glyph_proof_unpack_source(in_192)                                           -> u64
+ *   glyph_proof_validate(in_192)                                                -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_proof
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u64_le(p: u64, v: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u32_le(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u64_le(p: u64) -> u64 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_PROOF : u32 = 0x42u32
+
+fn glyph_proof_form_id() -> u32 @export { return GV3_FORM_PROOF }
+
+/* Helper: write (cert_id, target_crystal_id, source_crystal_id) into
+ * a 24-byte caller-allocated args buffer (LE u64 each). */
+fn glyph_proof_set_args(args_ptr: u64, cert_id: u64, target_crystal_id: u64, source_crystal_id: u64) -> i32 @export {
+    let ap_l : u64 = args_ptr
+    let c_l  : u64 = cert_id
+    let t_l  : u64 = target_crystal_id
+    let s_l  : u64 = source_crystal_id
+    if ap_l == 0u64 { return -1i32 }
+    let ap : *u64 = ap_l as *u64
+    ap[0u64] = c_l
+    ap[1u64] = t_l
+    ap[2u64] = s_l
+    return 0i32
+}
+
+/* 3-arg signature = composition-dispatch ABI: glyph_proof_pack is
+ * registered in iii_compositions.def and invoked via the prespec
+ * fn(a,b,c,d:u64) trampoline, so it must take <=4 u64 args -- do NOT widen.
+ * The 3 u64 crystal-id fields live in a 24-byte caller-allocated args buffer:
+ *   args_ptr[ 0.. 7] = cert_id
+ *   args_ptr[ 8..15] = target_crystal_id
+ *   args_ptr[16..23] = source_crystal_id
+ * (The iiis-0 5+-arg trap this also dodged is fixed -- Stage 3.9, corpus
+ * 277 -- but the packing remains the composition ABI.) */
+fn glyph_proof_pack(args_ptr: u64, equiv_kind: u32, out_192: u64) -> i32 @export {
+    let ap_l : u64 = args_ptr
+    let ek_l : u32 = equiv_kind
+    let o_l  : u64 = out_192
+    if ap_l == 0u64 { return -1i32 }
+    let ap : *u64 = ap_l as *u64
+    let c_l : u64 = ap[0u64]
+    let t_l : u64 = ap[1u64]
+    let s_l : u64 = ap[2u64]
+    if o_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64,  GV3_FORM_PROOF)
+    gv3_write_u32_le(o_l + 4u64,  28u32)
+    gv3_write_u64_le(o_l + 8u64,  c_l)
+    gv3_write_u32_le(o_l + 16u64, ek_l)
+    gv3_write_u64_le(o_l + 20u64, t_l)
+    gv3_write_u64_le(o_l + 28u64, s_l)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_proof_unpack_cert_id(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_PROOF { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 8u64)
+}
+
+fn glyph_proof_unpack_equiv_kind(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u32 }
+    if gv3_form_id(i_l) != GV3_FORM_PROOF { return 0u32 }
+    if gv3_validate(i_l) != 1u8 { return 0u32 }
+    return gv3_read_u32_le(i_l + 16u64)
+}
+
+fn glyph_proof_unpack_target(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_PROOF { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 20u64)
+}
+
+fn glyph_proof_unpack_source(in_192: u64) -> u64 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u64 }
+    if gv3_form_id(i_l) != GV3_FORM_PROOF { return 0u64 }
+    if gv3_validate(i_l) != 1u8 { return 0u64 }
+    return gv3_read_u64_le(i_l + 28u64)
+}
+
+fn glyph_proof_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_PROOF { return 0u8 }
+    return gv3_validate(i_l)
+}

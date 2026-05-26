@@ -1,0 +1,85 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\hex.iii
+ *
+ * III STDLIB - numera::hex
+ *
+ * Hex encoding / decoding for byte buffers.  Lower-case canonical
+ * output; case-insensitive input decode.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module numera_hex
+
+const HEX_OK         : i32 = 0i32
+const HEX_E_NULL     : i32 = -1i32
+const HEX_E_BAD_CHAR : i32 = -2i32
+const HEX_E_BAD_LEN  : i32 = -3i32
+
+/* Encode `n` source bytes into 2*n lower-case hex chars. */
+fn hex_encode(src: u64, n: u64, out: u64) -> i32 @export {
+    if src == 0u64 {
+        if n == 0u64 { return HEX_OK }
+        return HEX_E_NULL
+    }
+    if out == 0u64 { return HEX_E_NULL }
+    let sp : *u8 = src as *u8
+    let dp : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < n {
+        let b : u32 = sp[i] as u32
+        let hi : u32 = (b >> 4u32) & 0xFu32
+        let lo : u32 = b & 0xFu32
+        let hi_c : u8 = hex_nibble_to_char(hi)
+        let lo_c : u8 = hex_nibble_to_char(lo)
+        dp[i*2u64 + 0u64] = hi_c
+        dp[i*2u64 + 1u64] = lo_c
+        i = i + 1u64
+    }
+    return HEX_OK
+}
+
+fn hex_nibble_to_char(n: u32) -> u8 {
+    if n < 10u32 { return (48u32 + n) as u8 }    /* '0' + n */
+    return (97u32 + (n - 10u32)) as u8           /* 'a' + n - 10 */
+}
+
+fn hex_char_to_nibble(c: u32) -> u32 @export {
+    if c >= 48u32 {
+        if c <= 57u32 { return c - 48u32 }       /* '0'..'9' */
+    }
+    if c >= 97u32 {
+        if c <= 102u32 { return c - 97u32 + 10u32 }  /* 'a'..'f' */
+    }
+    if c >= 65u32 {
+        if c <= 70u32 { return c - 65u32 + 10u32 }   /* 'A'..'F' */
+    }
+    return 0xFFu32
+}
+
+/* Decode 2n hex chars from src into n bytes at out.  Returns HEX_OK
+ * or HEX_E_BAD_*. */
+fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 @export {
+    if src == 0u64 {
+        if src_len == 0u64 { return HEX_OK }
+        return HEX_E_NULL
+    }
+    if (src_len & 1u64) != 0u64 { return HEX_E_BAD_LEN }
+    let need : u64 = src_len / 2u64
+    if need > out_cap { return HEX_E_BAD_LEN }
+    if out == 0u64 {
+        if need > 0u64 { return HEX_E_NULL }
+        return HEX_OK
+    }
+    let sp : *u8 = src as *u8
+    let dp : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < need {
+        let hi : u32 = hex_char_to_nibble(sp[i*2u64] as u32)
+        let lo : u32 = hex_char_to_nibble(sp[i*2u64 + 1u64] as u32)
+        if hi == 0xFFu32 { return HEX_E_BAD_CHAR }
+        if lo == 0xFFu32 { return HEX_E_BAD_CHAR }
+        dp[i] = ((hi << 4u32) | lo) as u8
+        i = i + 1u64
+    }
+    return HEX_OK
+}

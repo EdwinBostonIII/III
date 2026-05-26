@@ -1,0 +1,113 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fed_tier.iii
+ *
+ * III STDLIB - aether::fed_tier -- federation tier hierarchy.
+ *
+ * Lattice plan Phase 14k Step 0188.  Five-tier hierarchy used for
+ * cross-substrate federation:
+ *
+ *   FED_TIER_HOST       (1)  single-process / single-machine boundary
+ *   FED_TIER_CLUSTER    (2)  trusted LAN / data-center boundary
+ *   FED_TIER_REGION     (3)  cross-DC same-operator boundary
+ *   FED_TIER_SOVEREIGN  (4)  cross-organization, sealed-trust boundary
+ *   FED_TIER_PLANETARY  (5)  open-admission, sybil-resistant boundary
+ *
+ * Each tier escalates the trust requirements: HOST relies on local
+ * isolation, CLUSTER on cap-mediated network, REGION adds witness
+ * chain replay, SOVEREIGN adds quorum certificates, PLANETARY adds
+ * Sybil resistance + eclipse-attack detection.
+ *
+ * Public surface:
+ *   fed_tier_register(slot, tier_id, peer_root_ptr) -> i32
+ *   fed_tier_get(slot)                              -> u32
+ *   fed_tier_peer_root_byte(slot, i)                -> u32
+ *   fed_tier_count()                                -> u32
+ *   fed_tier_clear(slot)                            -> i32
+ *
+ * 64 registration slots; each slot holds tier id + 32-byte peer
+ * closure root (the peer's R1 specification root).
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module aether_fed_tier
+
+const FED_TIER_OK             : i32 =  0i32
+const FED_TIER_E_BADID        : i32 = -1i32
+const FED_TIER_E_BADTIER      : i32 = -2i32
+
+const FED_TIER_HOST           : u32 = 1u32
+const FED_TIER_CLUSTER        : u32 = 2u32
+const FED_TIER_REGION         : u32 = 3u32
+const FED_TIER_SOVEREIGN      : u32 = 4u32
+const FED_TIER_PLANETARY      : u32 = 5u32
+
+const FED_TIER_SLOTS          : u32 = 64u32
+
+var FED_TIER_LIVE       : [u8;  64]
+var FED_TIER_TIER_ID    : [u32; 64]
+var FED_TIER_PEER_ROOT  : [u8;  2048]   /* 64 slots * 32 bytes */
+
+fn _fed_tier_valid_id(tier_id: u32) -> u8 {
+    let t : u32 = tier_id
+    if t < 1u32 { return 0u8 }
+    if t > 5u32 { return 0u8 }
+    return 1u8
+}
+
+fn fed_tier_register(slot: u32, tier_id: u32, peer_root_ptr: u64) -> i32 @export {
+    let s_l : u32 = slot
+    let t_l : u32 = tier_id
+    let p_l : u64 = peer_root_ptr
+    if s_l >= FED_TIER_SLOTS { return FED_TIER_E_BADID }
+    if _fed_tier_valid_id(t_l) == 0u8 { return FED_TIER_E_BADTIER }
+    FED_TIER_LIVE[s_l]    = 1u8
+    FED_TIER_TIER_ID[s_l] = t_l
+    if p_l != 0u64 {
+        let p : *u8 = p_l as *u8
+        let mut i : u64 = 0u64
+        while i < 32u64 {
+            FED_TIER_PEER_ROOT[(s_l as u64) * 32u64 + i] = p[i]
+            i = i + 1u64
+        }
+    }
+    return FED_TIER_OK
+}
+
+fn fed_tier_get(slot: u32) -> u32 @export {
+    let s_l : u32 = slot
+    if s_l >= FED_TIER_SLOTS { return 0u32 }
+    if FED_TIER_LIVE[s_l] == 0u8 { return 0u32 }
+    return FED_TIER_TIER_ID[s_l]
+}
+
+fn fed_tier_peer_root_byte(slot: u32, i: u32) -> u32 @export {
+    let s_l : u32 = slot
+    let i_l : u32 = i
+    if s_l >= FED_TIER_SLOTS { return 0x100u32 }
+    if i_l >= 32u32 { return 0x100u32 }
+    if FED_TIER_LIVE[s_l] == 0u8 { return 0x100u32 }
+    return FED_TIER_PEER_ROOT[(s_l as u64) * 32u64 + (i_l as u64)] as u32
+}
+
+fn fed_tier_count() -> u32 @export {
+    let mut count : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < FED_TIER_SLOTS {
+        if FED_TIER_LIVE[s] == 1u8 { count = count + 1u32 }
+        s = s + 1u32
+    }
+    return count
+}
+
+fn fed_tier_clear(slot: u32) -> i32 @export {
+    let s_l : u32 = slot
+    if s_l >= FED_TIER_SLOTS { return FED_TIER_E_BADID }
+    FED_TIER_LIVE[s_l]    = 0u8
+    FED_TIER_TIER_ID[s_l] = 0u32
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        FED_TIER_PEER_ROOT[(s_l as u64) * 32u64 + i] = 0u8
+        i = i + 1u64
+    }
+    return FED_TIER_OK
+}

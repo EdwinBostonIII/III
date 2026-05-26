@@ -1,0 +1,3 @@
+module mcs_b
+const SHARED_K : u32 = 222u32
+fn mcs_b_get() -> u32 @export { return SHARED_K }

@@ -1,0 +1,4 @@
+/* 703 -- reversible H9 runtime core: 3-way Compromise classification + verify-AND-falsify charter (M5). */
+module corpus_703
+extern @abi(c-msvc-x64) fn rev_compromise_charter_selftest() -> u64 from "reversible.iii"
+fn main() -> u64 { return rev_compromise_charter_selftest() }

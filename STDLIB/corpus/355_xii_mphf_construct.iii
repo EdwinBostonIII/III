@@ -1,0 +1,25 @@
+/* corpus/355_xii_mphf_construct.iii — CHD construction succeeds on 144 hashes */
+
+module corpus_355_xii_mphf_construct
+
+extern @abi(c-msvc-x64) fn xii_chd_set_hash(idx: u32, hash_lo: u32, hash_hi: u32) -> i32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_construct() -> u8 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_verify_collision_free() -> u32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_built() -> u8 from "xii_chd.iii"
+
+fn main() -> u64 {
+    /* Populate 144 hashes with synthetic distinct values. */
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        let lo : u32 = (i * 2654435761u32) ^ 0xDEADBEEFu32
+        let hi : u32 = (i * 40503u32) ^ 0xCAFEBABEu32
+        xii_chd_set_hash(i, lo, hi)
+        i = i + 1u32
+    }
+    let ok : u8 = xii_chd_construct()
+    if ok != 1u8 { return 1u64 }
+    if xii_chd_built() != 1u8 { return 2u64 }
+    let fails : u32 = xii_chd_verify_collision_free()
+    if fails != 0u32 { return 3u64 }
+    return 0u64
+}

@@ -1,0 +1,143 @@
+/* numera/trit.iii — Module 2 (apotheosis): the one ternary (Kleene) algebra.
+ *
+ * A balanced trit: NEG = -1, ZERO = 0, POS = +1 (compared by EQUALITY ONLY,
+ * never by ordering -- the i32-ordering SIGSEGV trap).  Five total ops, the
+ * shared logic of BOTH hexad safety (M3) and Sovereign-Value uncertainty (M4:
+ * the gap is the ZERO-inhabited reading of this algebra).
+ *
+ *   NOT : NEG<->POS, ZERO->ZERO            (= -a)            [Kleene negation]
+ *   AND : NEG dominates; POS iff both POS  (= min)           [strong-Kleene AND]
+ *   OR  : POS dominates; NEG iff both NEG  (= max)           [strong-Kleene OR]
+ *   SUM : NEG-biased add, clamped          (= clamp(a+b,-1,+1))
+ *   MUL : NEG*NEG=POS, ZERO annihilator    (= a*b)
+ *   weight: asymmetric (NEG=-2, POS=+1, ZERO=0) so catastrophe outweighs recovery.
+ *
+ * Extracted from omnia/hexad_algebra.iii (the ops are byte-identical) so the one
+ * algebra is a single-responsibility module that M3 (hexad) and M4 (gap) share.
+ *
+ * SCOPED HOOKS (other modules' work, not this one):
+ *   - the five ops become confluent XII rewrite rules => migration #4 (M7 engine),
+ *     gated by the Confluence-Core Certificate (xii_conf_cert, route-S; the static xii_critpairs is
+ *     retired -- the apotheosis M2-Final "expressed as confluent XII rules").
+ *   - ZERO unified with the typed gap => M4 (numera/uncertainty.iii, net-new).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: libc + III only (zero externs).
+ */
+module numera_trit
+
+/* Independent expected tables for the 3x3 sweep (idx = (a+1)*3 + (b+1)).
+ * Hardcoded from the spec -- NOT the ops' own formulas -- so the KAT is
+ * non-tautological: an op disagreeing with its table turns red. */
+var TRIT_AND_EXP : [i32; 9] = [-1i32,-1i32,-1i32, -1i32,0i32,0i32, -1i32,0i32,1i32]
+var TRIT_OR_EXP  : [i32; 9] = [-1i32,0i32,1i32,   0i32,0i32,1i32,   1i32,1i32,1i32]
+var TRIT_SUM_EXP : [i32; 9] = [-1i32,-1i32,0i32,  -1i32,0i32,1i32,  0i32,1i32,1i32]
+var TRIT_MUL_EXP : [i32; 9] = [1i32,0i32,-1i32,   0i32,0i32,0i32,   -1i32,0i32,1i32]
+
+/* ----------------------------- the five ops + helpers --------------------- */
+
+fn iii_trit_valid(v: i32) -> u8 @export {
+    if v == -1i32 { return 1u8 }
+    if v == 0i32 { return 1u8 }
+    if v == 1i32 { return 1u8 }
+    return 0u8
+}
+
+fn iii_trit_weight(t: i32) -> i32 @export {
+    if t == -1i32 { return -2i32 }
+    if t == 1i32 { return 1i32 }
+    return 0i32
+}
+
+fn iii_trit_not(a: i32) -> i32 @export {
+    return 0i32 - a
+}
+
+fn iii_trit_neg6(a: i32) -> i32 @export {
+    return 0i32 - a
+}
+
+/* AND: NEG dominates; POS iff both POS; else ZERO. */
+fn iii_trit_and(a: i32, b: i32) -> i32 @export {
+    if a == -1i32 { return -1i32 }
+    if b == -1i32 { return -1i32 }
+    if a == 0i32 { return 0i32 }
+    if b == 0i32 { return 0i32 }
+    return 1i32
+}
+
+/* OR: POS dominates; NEG iff both NEG; else ZERO. */
+fn iii_trit_or(a: i32, b: i32) -> i32 @export {
+    if a == 1i32 { return 1i32 }
+    if b == 1i32 { return 1i32 }
+    if a == 0i32 { return 0i32 }
+    if b == 0i32 { return 0i32 }
+    return -1i32
+}
+
+/* SUM: NEG-biased add, clamped to [-1,+1] (trits are -1/0/1 so a+b in -2..2). */
+fn iii_trit_sum(a: i32, b: i32) -> i32 @export {
+    let s : i32 = a + b
+    if s == 2i32 { return 1i32 }
+    if s == -2i32 { return -1i32 }
+    return s
+}
+
+/* MUL: NEG*NEG=POS, ZERO annihilator, POS*POS=POS, NEG*POS=NEG (= a*b). */
+fn iii_trit_mul(a: i32, b: i32) -> i32 @export {
+    return a * b
+}
+
+fn iii_trit_sub(a: i32, b: i32) -> i32 @export {
+    return iii_trit_sum(a, 0i32 - b)
+}
+
+/* ----------------------------- the exhaustive KAT ------------------------- */
+/* Proves the algebra against independent tables + the Kleene laws + the
+ * asymmetric weight + valid negatives. 99 = pass; any other code = which check. */
+fn trit_selftest() -> u64 @export {
+    /* unary: not / neg6 / weight against the spec */
+    if iii_trit_not(-1i32) != 1i32 { return 1u64 }
+    if iii_trit_not(0i32) != 0i32 { return 2u64 }
+    if iii_trit_not(1i32) != -1i32 { return 3u64 }
+    if iii_trit_neg6(-1i32) != 1i32 { return 4u64 }
+    if iii_trit_neg6(1i32) != -1i32 { return 5u64 }
+    if iii_trit_weight(-1i32) != -2i32 { return 6u64 }
+    if iii_trit_weight(0i32) != 0i32 { return 7u64 }
+    if iii_trit_weight(1i32) != 1i32 { return 8u64 }
+    /* valid + negatives (prove it rejects non-trits) */
+    if iii_trit_valid(-1i32) != 1u8 { return 9u64 }
+    if iii_trit_valid(0i32) != 1u8 { return 10u64 }
+    if iii_trit_valid(1i32) != 1u8 { return 11u64 }
+    if iii_trit_valid(2i32) != 0u8 { return 12u64 }
+    if iii_trit_valid(-2i32) != 0u8 { return 13u64 }
+    if iii_trit_valid(99i32) != 0u8 { return 14u64 }
+    /* binary 3x3 sweep vs independent tables + Kleene laws */
+    let mut ai : u64 = 0u64
+    while ai < 3u64 {
+        let a : i32 = (ai as i32) - 1i32
+        let mut bi : u64 = 0u64
+        while bi < 3u64 {
+            let b : i32 = (bi as i32) - 1i32
+            let k : u64 = ai * 3u64 + bi
+            if iii_trit_and(a, b) != TRIT_AND_EXP[k] { return 20u64 }
+            if iii_trit_or(a, b) != TRIT_OR_EXP[k] { return 21u64 }
+            if iii_trit_sum(a, b) != TRIT_SUM_EXP[k] { return 22u64 }
+            if iii_trit_mul(a, b) != TRIT_MUL_EXP[k] { return 23u64 }
+            /* De Morgan: not(and) == or(not,not) */
+            if iii_trit_not(iii_trit_and(a, b)) != iii_trit_or(iii_trit_not(a), iii_trit_not(b)) { return 30u64 }
+            /* commutativity of and/or */
+            if iii_trit_and(a, b) != iii_trit_and(b, a) { return 31u64 }
+            if iii_trit_or(a, b) != iii_trit_or(b, a) { return 32u64 }
+            /* sub == sum(a, -b) */
+            if iii_trit_sub(a, b) != iii_trit_sum(a, 0i32 - b) { return 33u64 }
+            bi = bi + 1u64
+        }
+        /* double-negation involution + ZERO annihilator (per a) */
+        if iii_trit_not(iii_trit_not(a)) != a { return 34u64 }
+        if iii_trit_mul(0i32, a) != 0i32 { return 35u64 }
+        ai = ai + 1u64
+    }
+    /* asymmetry witness: weight(NEG) + weight(POS) == -1 (catastrophe outweighs recovery) */
+    if iii_trit_weight(-1i32) + iii_trit_weight(1i32) != -1i32 { return 40u64 }
+    return 99u64
+}

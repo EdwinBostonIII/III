@@ -1,0 +1,52 @@
+/* Lattice plan Step 0027 — fp_inv_with_crystal returns a normal
+ * bigint_id on success, a crystal_id on failure (a ≡ 0 mod p). */
+module corpus_131
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+
+extern @abi(c-msvc-x64) fn fp_inv_with_crystal(arena: u64, a: u64, p: u64) -> u64 from "field_crystal.iii"
+extern @abi(c-msvc-x64) fn fp_inv_unwrap_or_invalid(maybe: u64) -> u64 from "field_crystal.iii"
+extern @abi(c-msvc-x64) fn fp_inv_failure_crystal_for(maybe: u64) -> u64 from "field_crystal.iii"
+
+extern @abi(c-msvc-x64) fn crystal_code(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 14u64)
+    if a == 0u64 { return 1u64 }
+
+    /* Failure path: a = 0 mod p with p = 7 → expect a crystal. */
+    let zero_val : u64 = bigint_from_u64(a, 0u64)
+    let p7       : u64 = bigint_from_u64(a, 7u64)
+    let fail     : u64 = fp_inv_with_crystal(a, zero_val, p7)
+    if fail == 0u64 { return 2u64 }
+    let cryst    : u64 = fp_inv_failure_crystal_for(fail)
+    if cryst != fail { return 3u64 }
+    let code     : u32 = crystal_code(cryst)
+    if code != 0xFC01u32 { return 4u64 }      /* FAIL_ZERO */
+    if fp_inv_unwrap_or_invalid(fail) != 0u64 { return 5u64 }
+    crystal_drop(cryst)
+
+    /* Success path: a = 3 with p = 7 → a normal bigint_id, NOT a crystal. */
+    let three : u64 = bigint_from_u64(a, 3u64)
+    let inv3  : u64 = fp_inv_with_crystal(a, three, p7)
+    if inv3 == 0u64 { return 6u64 }
+    if fp_inv_failure_crystal_for(inv3) != 0u64 { return 7u64 }
+    if fp_inv_unwrap_or_invalid(inv3) != inv3 { return 8u64 }
+    /* The result should be 5 (since 3*5 = 15 ≡ 1 mod 7). */
+    let five : u64 = bigint_from_u64(a, 5u64)
+    if bigint_is_zero(inv3) == 1u8 { return 9u64 }
+    bigint_drop(inv3)
+    bigint_drop(five)
+    bigint_drop(three)
+    bigint_drop(zero_val)
+    bigint_drop(p7)
+
+    arena_drop(a)
+    return 99u64
+}

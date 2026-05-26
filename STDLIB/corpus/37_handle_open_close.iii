@@ -1,0 +1,28 @@
+/* handle: alloc + close lifecycle */
+module corpus_c37
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_kind(id: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_fd(id: u64) -> u64 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_is_open(id: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_close(id: u64) -> i32 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_verify(id: u64, req: u64) -> u8 from "handle.iii"
+extern @abi(c-msvc-x64) fn handle_drop(id: u64) -> i32 from "handle.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let fs : u64 = cap_attenuate(env, 0x06u64, 0u64)
+    let h : u64 = handle_alloc(1u8, 0xDEADBEEFu64, fs)
+    if h == 0u64 { return 1u64 }
+    if handle_kind(h) != 1u8 { return 2u64 }
+    if handle_fd(h) != 0xDEADBEEFu64 { return 3u64 }
+    if handle_is_open(h) != 1u8 { return 4u64 }
+    if handle_verify(h, 0x02u64) != 1u8 { return 5u64 }
+    handle_close(h)
+    if handle_is_open(h) != 0u8 { return 6u64 }
+    if handle_verify(h, 0x02u64) != 0u8 { return 7u64 }
+    handle_drop(h)
+    return 99u64
+}

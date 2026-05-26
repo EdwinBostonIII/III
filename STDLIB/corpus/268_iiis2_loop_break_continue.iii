@@ -1,0 +1,79 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\268_iiis2_loop_break_continue.iii
+ *
+ * III conformance corpus 268 -- iiis-2 control flow: `loop`, `break`,
+ * `continue` keywords.
+ *
+ * Phase 3 Step K feature 1: unconditional loops with explicit exit
+ * and skip primitives.  Compiled to label pairs (continue → top,
+ * break → end).  Loop nesting up to 16 deep supported.
+ *
+ * This file exercises:
+ *   1. Basic `loop { ... break }` — terminates at break
+ *   2. `continue` skipping a body statement
+ *   3. Nested `loop`s with inner break exiting only the inner loop
+ *   4. break and continue inside while (unified label scheme)
+ *
+ * Mandate 7: structural control flow.  No observation, no runtime
+ * state branching on history.
+ */
+module corpus_268
+
+fn main() -> u64 {
+    /* Test 1: basic loop+break.  Counter increments to 5, then breaks. */
+    let mut i : u64 = 0u64
+    loop {
+        if i == 5u64 { break }
+        i = i + 1u64
+    }
+    if i != 5u64 { return 1u64 }
+
+    /* Test 2: loop with `continue` skipping the increment in even iterations.
+     * j = 1, 3 (j=2 hits continue before increment-to-3, but we already
+     * incremented... let's reformulate to make continue's effect clear): */
+    let mut sum : u64 = 0u64
+    let mut k : u64 = 0u64
+    loop {
+        k = k + 1u64
+        if k > 5u64 { break }
+        if (k & 1u64) == 0u64 { continue }    /* skip even k */
+        sum = sum + k    /* only odd k: 1 + 3 + 5 = 9 */
+    }
+    if sum != 9u64 { return 2u64 }
+
+    /* Test 3: nested loops.  Outer counts to 3; inner counts to each
+     * outer's iteration count.  Total iterations: 1+2+3 = 6 inner
+     * increments. */
+    let mut outer : u64 = 0u64
+    let mut total : u64 = 0u64
+    loop {
+        outer = outer + 1u64
+        if outer > 3u64 { break }
+        let mut inner : u64 = 0u64
+        loop {
+            inner = inner + 1u64
+            if inner > outer { break }
+            total = total + 1u64
+        }
+    }
+    if total != 6u64 { return 3u64 }
+
+    /* Test 4: while with break inside.  Equivalent to a loop+break. */
+    let mut w : u64 = 0u64
+    while w < 100u64 {
+        if w == 7u64 { break }
+        w = w + 1u64
+    }
+    if w != 7u64 { return 4u64 }
+
+    /* Test 5: while with continue.  Sum odd numbers from 1..10. */
+    let mut wsum : u64 = 0u64
+    let mut wi : u64 = 0u64
+    while wi < 10u64 {
+        wi = wi + 1u64
+        if (wi & 1u64) == 0u64 { continue }
+        wsum = wsum + wi    /* 1+3+5+7+9 = 25 */
+    }
+    if wsum != 25u64 { return 5u64 }
+
+    return 99u64
+}

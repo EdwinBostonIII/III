@@ -1,0 +1,112 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\safety_type.iii
+ *
+ * III STDLIB - numera::safety_type  --  M9 Pass-1: the safety algebra as CIC inductive typing.
+ *
+ * TYPES/src/cic.c (the trusted CIC kernel) already declares Trit (ctors NEG/ZERO/POS = M2) and
+ * Hexad (one arity-6 ctor over six Trits = M3). This module realizes the apotheosis M9 "what
+ * remains": bind the runtime hexad reachability (M3) to the Hexad inductive's TYPING, so a
+ * non-reachable Hexad term is BOTTOM (a type error) rather than a mere reach-bitmap miss --
+ * "make safety a type." A Trit term is well-typed iff it is one of {-1,0,+1}; a Hexad term
+ * hexad(t1..t6) is well-typed iff every ti is a Trit AND the composed hexad is reachable.
+ *
+ * HONEST SCOPE: this is the inductive safety-typing FRAGMENT. The full CIC kernel
+ * (beta/zeta/delta/iota/eta reduction, the seven-level universe, dependent Pi, the SovVal
+ * dependent record whose K-floor/reach are Pi-typed refinements, gaps-as-open-terms, and
+ * all-artifacts-proof-carrying) stays anchored by the trusted cic.c and is completed by the
+ * H13 in-language numera/kernel.iii port -- NOT claimed here.
+ *
+ * Verdicts (equality-compared only -- the i32 ordering trap forbids < and >):
+ *   SAFETY_TYPE0           =  0   well-typed (the type Type0)
+ *   SAFETY_BOT_UNREACHABLE = -1   bottom: a non-reachable Hexad (the safety violation)
+ *   SAFETY_BOT_MALFORMED   = -2   bottom: an ill-formed Trit, or a packed Hexad >= 729
+ *
+ * Hexad: kind_cognition.  Ring: R0.  K: 1.00.  NIH: libc + III (hexad_reach / hexad_algebra).
+ * Discipline: W2 (<=1 param), W8 (bounded 729 / 6, [i32;6]), W14 (sentinel loop), W15 (no recursion).
+ */
+module numera_safety_type
+
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable_count() -> u64 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_pack6(pillars_addr: u64) -> u16 from "hexad_algebra.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
+
+const SAFETY_TYPE0           : i32 =  0i32
+const SAFETY_BOT_UNREACHABLE : i32 = -1i32
+const SAFETY_BOT_MALFORMED   : i32 = -2i32
+const SAFETY_HEXAD_MAX       : u16 = 729u16
+
+var SAFETY_KAT_TRITS : [i32; 6]
+
+/* Trit inductive well-formedness (= M2): a Trit is exactly {NEG, ZERO, POS} = {-1, 0, +1}. */
+fn safety_trit_judge(v: i32) -> i32 @export {
+    if v == -1i32 { return SAFETY_TYPE0 }
+    if v == 0i32  { return SAFETY_TYPE0 }
+    if v == 1i32  { return SAFETY_TYPE0 }
+    return SAFETY_BOT_MALFORMED
+}
+
+/* Packed-Hexad typing: an out-of-range packing is ill-formed; M3 reach is the typing rule --
+ * a non-reachable Hexad is BOTTOM, not a bitmap miss. */
+fn safety_hexad_judge(h: u16) -> i32 @export {
+    if h >= SAFETY_HEXAD_MAX { return SAFETY_BOT_MALFORMED }
+    if iii_hexad_reachable(h) == 0u8 { return SAFETY_BOT_UNREACHABLE }
+    return SAFETY_TYPE0
+}
+
+/* Constructor-term typing of hexad(t1..t6): each constituent a well-typed Trit (M2), THEN the
+ * composed Hexad reachable (M3) -- the "iota-reduction rather than a bitmap". 1 param (W2). */
+fn safety_hexad_term_judge(trits_addr: u64) -> i32 @export {
+    let p : *i32 = trits_addr as *i32
+    let mut bad : u8 = 0u8
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        if safety_trit_judge(p[i]) != SAFETY_TYPE0 { bad = 1u8 }
+        i = i + 1u64
+    }
+    if bad == 1u8 { return SAFETY_BOT_MALFORMED }
+    let h : u16 = iii_hexad_pack6(trits_addr)
+    if iii_hexad_reachable(h) == 0u8 { return SAFETY_BOT_UNREACHABLE }
+    return SAFETY_TYPE0
+}
+
+/* Exhaustive falsifier: the Trit + Hexad inductives' typing, with M3 reach as the Hexad rule,
+ * verified over EVERY one of the 729 packed hexads + the Trit domain + the named negatives.
+ * 99 = pass; 1..13 = which check failed. */
+fn safety_type_selftest() -> u64 @export {
+    /* Trit inductive: {-1,0,1} : Type0; anything else : bottom-malformed. */
+    if safety_trit_judge(-1i32)  != SAFETY_TYPE0 { return 1u64 }
+    if safety_trit_judge(0i32)   != SAFETY_TYPE0 { return 2u64 }
+    if safety_trit_judge(1i32)   != SAFETY_TYPE0 { return 3u64 }
+    if safety_trit_judge(2i32)   != SAFETY_BOT_MALFORMED { return 4u64 }
+    if safety_trit_judge(-2i32)  != SAFETY_BOT_MALFORMED { return 5u64 }
+    if safety_trit_judge(127i32) != SAFETY_BOT_MALFORMED { return 6u64 }
+    /* Hexad inductive typing bound to M3 reach -- EXHAUSTIVE over all 729; the packed and the
+     * constructor-term views agree; the typed-count equals M3's own reachable-count. */
+    let mut h : u64 = 0u64
+    let mut typed : u64 = 0u64
+    while h < 729u64 {
+        let hv : u16 = h as u16
+        let j : i32 = safety_hexad_judge(hv)
+        let r : u8 = iii_hexad_reachable(hv)
+        if r == 1u8 {
+            if j != SAFETY_TYPE0 { return 7u64 }
+            typed = typed + 1u64
+        }
+        if r == 0u8 {
+            if j != SAFETY_BOT_UNREACHABLE { return 8u64 }
+        }
+        iii_hexad_unpack6(hv, &SAFETY_KAT_TRITS as u64)
+        if safety_hexad_term_judge(&SAFETY_KAT_TRITS as u64) != j { return 9u64 }
+        h = h + 1u64
+    }
+    if typed != iii_hexad_reachable_count() { return 10u64 }
+    /* an out-of-range Hexad packing is ill-formed (bottom), not silently reach-checked. */
+    if safety_hexad_judge(729u16)  != SAFETY_BOT_MALFORMED { return 11u64 }
+    if safety_hexad_judge(1000u16) != SAFETY_BOT_MALFORMED { return 12u64 }
+    /* the named falsifier: a constructor term with a malformed Trit is bottom-malformed -- the
+     * M2 gate fires BEFORE the M3 reach check, so it is never accepted. */
+    iii_hexad_unpack6(0u16, &SAFETY_KAT_TRITS as u64)
+    SAFETY_KAT_TRITS[0u64] = 2i32
+    if safety_hexad_term_judge(&SAFETY_KAT_TRITS as u64) != SAFETY_BOT_MALFORMED { return 13u64 }
+    return 99u64
+}

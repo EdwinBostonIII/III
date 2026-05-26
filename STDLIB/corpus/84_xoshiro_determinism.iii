@@ -1,0 +1,33 @@
+/* xoshiro256**: verify determinism — same seed produces same sequence,
+ * different seeds produce different sequences.  First output for
+ * seed (1, 2, 3, 4) computes as:
+ *   rotl(2 * 5, 7) * 9  =  rotl(10, 7) * 9  =  1280 * 9  =  11520
+ *                        =  0x0000_0000_0000_2D00
+ */
+module corpus_84
+
+extern @abi(c-msvc-x64) fn xoshiro_seed(s0: u64, s1: u64, s2: u64, s3: u64) -> i32 from "xoshiro.iii"
+extern @abi(c-msvc-x64) fn xoshiro_next_u64() -> u64 from "xoshiro.iii"
+
+fn main() -> u64 {
+    /* First call with seed (1,2,3,4) */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    let v1_a : u64 = xoshiro_next_u64()
+    let v1_b : u64 = xoshiro_next_u64()
+    let v1_c : u64 = xoshiro_next_u64()
+    /* Re-seed and verify same sequence */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    let v2_a : u64 = xoshiro_next_u64()
+    let v2_b : u64 = xoshiro_next_u64()
+    let v2_c : u64 = xoshiro_next_u64()
+    if v1_a != v2_a { return 1u64 }
+    if v1_b != v2_b { return 2u64 }
+    if v1_c != v2_c { return 3u64 }
+    /* Different seed produces different value */
+    xoshiro_seed(5u64, 6u64, 7u64, 8u64)
+    let v3 : u64 = xoshiro_next_u64()
+    if v3 == v1_a { return 4u64 }
+    /* Verify the computed reference first-output value */
+    if v1_a != 0x2D00u64 { return 5u64 }
+    return 99u64
+}

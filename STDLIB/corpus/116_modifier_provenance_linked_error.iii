@@ -1,0 +1,11 @@
+/* Lattice plan Step 0013: @provenance_linked_error.
+ * Tag for fns that may emit error crystals carrying operand provenance. */
+module corpus_116
+
+fn checked_op() -> u64 @provenance_linked_error {
+    return 42u64
+}
+
+fn main() -> u64 {
+    return checked_op()
+}

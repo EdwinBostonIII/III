@@ -1,0 +1,30 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\resolution_meta_dispatch.iii
+ *
+ * III STDLIB - omnia::resolution_meta_dispatch
+ *
+ * Real dispatch functions for the 16 meta-patterns. Separated from
+ * resolution_init.iii so address-of-fn produces a proper extern symbol
+ * reference (iiis-0 emits L_-prefixed local labels for same-file
+ * fn-address operations, which break linking).
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ */
+
+module omnia_resolution_meta_dispatch
+
+fn meta_dispatch_unreachable(a: u64, b: u64, c: u64, ctx: u64) -> u64 @export {
+    let _a : u64 = a
+    let _b : u64 = b
+    let _c : u64 = c
+    let _ctx : u64 = ctx
+    /* E_RESOLVE_NOMATCH (0xE100) wrapped as result_err. */
+    return ((0xE100u64 & 0xFFFFFFFFu64) << 1u64) | 1u64
+}
+
+fn mp_default_or_fail_dispatch(a: u64, b: u64, c: u64, ctx: u64) -> u64 @export {
+    let _a : u64 = a
+    let _b : u64 = b
+    let _c : u64 = c
+    let _ctx : u64 = ctx
+    return ((0xE100u64 & 0xFFFFFFFFu64) << 1u64) | 1u64
+}

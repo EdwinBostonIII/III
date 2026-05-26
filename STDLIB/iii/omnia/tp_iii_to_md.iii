@@ -1,0 +1,47 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_iii_to_md.iii
+ *
+ * Transform pattern: FORM_III → FORM_MARKDOWN
+ * FROZEN SPEC §7B.6 slot 35; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Wraps III source in a fenced code block with `iii` language tag.
+ */
+
+module omnia_tp_iii_to_md
+
+var TP_MD_HEADER : [u8; 7] = [96u8, 96u8, 96u8, 105u8, 105u8, 105u8, 10u8]
+var TP_MD_FOOTER : [u8; 5] = [10u8, 96u8, 96u8, 96u8, 10u8]
+
+fn tp_iii_to_md_emit_byte(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_iii_to_md(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let header_len : u64 = 7u64
+    let footer_len : u64 = 5u64
+    let total : u64 = header_len + src_len + footer_len
+    if total > dst_cap { return 0u64 }
+    /* Write header */
+    let mut i : u32 = 0u32
+    while i < 7u32 {
+        tp_iii_to_md_emit_byte(dst_buf, (i as u64) & 0xFFu64, TP_MD_HEADER[i])
+        i = i + 1u32
+    }
+    /* Copy source */
+    let mut j : u64 = 0u64
+    while j < src_len {
+        let bp : *u8 = (src + j) as *u8
+        tp_iii_to_md_emit_byte(dst_buf, header_len + j, bp[0u64])
+        j = j + 1u64
+    }
+    /* Write footer */
+    let mut k : u32 = 0u32
+    while k < 5u32 {
+        tp_iii_to_md_emit_byte(dst_buf, header_len + src_len + ((k as u64) & 0xFFu64), TP_MD_FOOTER[k])
+        k = k + 1u32
+    }
+    return total
+}

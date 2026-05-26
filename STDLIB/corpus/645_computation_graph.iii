@@ -1,0 +1,4 @@
+/* 645 — computation_graph: chain-as-DAG + bisimulation primitive (W41/W42). */
+module corpus_645
+extern @abi(c-msvc-x64) fn cg_selftest() -> u64 from "computation_graph.iii"
+fn main() -> u64 { return cg_selftest() }

@@ -1,0 +1,175 @@
+/* STDLIB/iii/aether/reach_store.iii -- The Reach, Phase 1: the L1 content-addressed
+ * byte store (durable time-transport -- the network to III's future self).
+ *
+ * A single append-log file of records [32-byte content-address][8-byte LE length]
+ * [length bytes value], over the capability-gated fs surface (aether/fs.iii).  This is
+ * a DUMB byte backend: it stores and returns bytes BY address; INTEGRITY (does the value
+ * re-hash to its address?) is verified by the caller (reach_core), so a corrupt entry is
+ * never blessed here.  Content-addressed => idempotent: putting an address already present
+ * is a no-op.  Offline-native: this is local disk, at full capacity with no network.
+ *
+ * Hexad: kind_passage.  Ring: R-1.  NIH: aether/fs + numera/cad only.  Determinism:
+ * integer-only; ==/!= and UNSIGNED < compares; single-line fns; byte-by-byte LE; params
+ * bound to locals before use (param-spill safe); module-scope scratch (no local arrays). */
+module aether_reach_store
+
+extern @abi(c-msvc-x64) fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_close(handle_id: u64) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(handle_id: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(handle_id: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_seek(handle_id: u64, off: u64, whence: u32) -> i32 from "fs.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const RSTORE_OK        : i32 = 0i32
+const RSTORE_NOTFOUND  : i32 = 1i32
+const RSTORE_E_DENIED  : i32 = -1i32
+const RSTORE_E_TOOBIG  : i32 = -2i32
+const RSTORE_E_IO      : i32 = -3i32
+
+const RSTORE_MODE_READ   : u32 = 1u32
+const RSTORE_MODE_WRITE  : u32 = 2u32
+const RSTORE_MODE_APPEND : u32 = 3u32
+const RSTORE_SEEK_CUR    : u32 = 1u32
+const RSTORE_ADDR_BYTES  : u64 = 32u64
+
+var RSTORE_PATH      : [u8; 24]
+var RSTORE_ADDR      : [u8; 32]
+var RSTORE_LEN8      : [u8; 8]
+var RSTORE_FOUND_LEN : u64 = 0u64
+
+/* fill the store filename "iii_reach_store.bin\0" into RSTORE_PATH; return its address.
+ * Idempotent + cheap (20 byte writes); avoids a checkpoint-flag (the iiis let-mut trap). */
+fn _rstore_fill_path() -> u64 {
+    RSTORE_PATH[0] = 105u8
+    RSTORE_PATH[1] = 105u8
+    RSTORE_PATH[2] = 105u8
+    RSTORE_PATH[3] = 95u8
+    RSTORE_PATH[4] = 114u8
+    RSTORE_PATH[5] = 101u8
+    RSTORE_PATH[6] = 97u8
+    RSTORE_PATH[7] = 99u8
+    RSTORE_PATH[8] = 104u8
+    RSTORE_PATH[9] = 95u8
+    RSTORE_PATH[10] = 115u8
+    RSTORE_PATH[11] = 116u8
+    RSTORE_PATH[12] = 111u8
+    RSTORE_PATH[13] = 114u8
+    RSTORE_PATH[14] = 101u8
+    RSTORE_PATH[15] = 46u8
+    RSTORE_PATH[16] = 98u8
+    RSTORE_PATH[17] = 105u8
+    RSTORE_PATH[18] = 110u8
+    RSTORE_PATH[19] = 0u8
+    return &RSTORE_PATH as u64
+}
+
+/* read 8 little-endian bytes at buf into a u64. */
+fn _rstore_le8_to_u64(buf: u64) -> u64 {
+    let p : *u8 = buf as *u8
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        acc = acc | ((p[i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return acc
+}
+
+/* write u64 v as 8 little-endian bytes into buf (byte-by-byte; no wide store). */
+fn _rstore_u64_to_le8(v: u64, buf: u64) -> u64 {
+    let p : *u8 = buf as *u8
+    let vv : u64 = v
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[i] = ((vv >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* scan the store for `addr`.  On hit: leave the (open) handle positioned at the value bytes,
+ * set RSTORE_FOUND_LEN, return the handle (caller closes).  On miss/absent: close + return 0.
+ * The `go` flag DRIVES the while condition (the safe iiis loop-flag pattern). */
+fn _rstore_locate(addr: u64, cap: u64) -> u64 {
+    let a : u64 = addr
+    let c : u64 = cap
+    let path : u64 = _rstore_fill_path()
+    let h : u64 = fs_open(c, path, RSTORE_MODE_READ)
+    if h == 0u64 { return 0u64 }
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        let nr : u64 = fs_read(h, &RSTORE_ADDR as u64, RSTORE_ADDR_BYTES)
+        if nr != RSTORE_ADDR_BYTES { go = 0u8 }
+        if go == 1u8 {
+            let nl : u64 = fs_read(h, &RSTORE_LEN8 as u64, 8u64)
+            if nl != 8u64 { go = 0u8 }
+            if go == 1u8 {
+                let vlen : u64 = _rstore_le8_to_u64(&RSTORE_LEN8 as u64)
+                if cad_eq((&RSTORE_ADDR as u64) as *u8, a as *u8) == 1u8 {
+                    RSTORE_FOUND_LEN = vlen
+                    return h
+                }
+                fs_seek(h, vlen, RSTORE_SEEK_CUR)
+            }
+        }
+    }
+    fs_close(h)
+    return 0u64
+}
+
+/* has(addr): 1 if the store holds a record for `addr`, else 0. */
+fn reach_store_has(addr: u64, cap: u64) -> u8 @export {
+    let h : u64 = _rstore_locate(addr, cap)
+    if h == 0u64 { return 0u8 }
+    fs_close(h)
+    return 1u8
+}
+
+/* get(addr): copy the stored value into out (up to max), set *out_len, return RSTORE_OK.
+ * RSTORE_NOTFOUND if absent; RSTORE_E_TOOBIG if the value exceeds max. */
+fn reach_store_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 @export {
+    let o : u64 = out
+    let mx : u64 = max
+    let ol : u64 = out_len
+    let h : u64 = _rstore_locate(addr, cap)
+    if h == 0u64 { return RSTORE_NOTFOUND }
+    let vlen : u64 = RSTORE_FOUND_LEN
+    if vlen > mx {
+        fs_close(h)
+        return RSTORE_E_TOOBIG
+    }
+    let nr : u64 = fs_read(h, o, vlen)
+    fs_close(h)
+    if nr != vlen { return RSTORE_E_IO }
+    let olp : *u64 = ol as *u64
+    olp[0] = vlen
+    return RSTORE_OK
+}
+
+/* put(addr, buf, len): append the record if `addr` is not already present (idempotent).
+ * Creates the store file on first write (fs APPEND lacks O_CREAT, so create-then-append). */
+fn reach_store_put(addr: u64, buf: u64, len: u64, cap: u64) -> i32 @export {
+    let a : u64 = addr
+    let b : u64 = buf
+    let n : u64 = len
+    let c : u64 = cap
+    if reach_store_has(a, c) == 1u8 { return RSTORE_OK }
+    let path : u64 = _rstore_fill_path()
+    let mut h : u64 = fs_open(c, path, RSTORE_MODE_APPEND)
+    if h == 0u64 {
+        let hc : u64 = fs_open(c, path, RSTORE_MODE_WRITE)
+        if hc == 0u64 { return RSTORE_E_DENIED }
+        fs_close(hc)
+        h = fs_open(c, path, RSTORE_MODE_APPEND)
+        if h == 0u64 { return RSTORE_E_IO }
+    }
+    let w1 : u64 = fs_write(h, a, RSTORE_ADDR_BYTES)
+    _rstore_u64_to_le8(n, &RSTORE_LEN8 as u64)
+    let w2 : u64 = fs_write(h, &RSTORE_LEN8 as u64, 8u64)
+    let w3 : u64 = fs_write(h, b, n)
+    fs_close(h)
+    if w1 != RSTORE_ADDR_BYTES { return RSTORE_E_IO }
+    if w2 != 8u64 { return RSTORE_E_IO }
+    if w3 != n { return RSTORE_E_IO }
+    return RSTORE_OK
+}

@@ -1,0 +1,437 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\cost_lattice.iii
+ *
+ * III STDLIB - numera::cost_lattice
+ *
+ * Bounded partial-order lattice over six-dim microarch cost vectors:
+ *   c[0] latency  c[1] throughput  c[2] register pressure
+ *   c[3] icache footprint  c[4] dcache footprint  c[5] energy
+ *
+ * Two layers:
+ *   (1) scalarizing orders: a u64 weight vector w induces the total
+ *       preorder c <=_w c' iff w.c <= w.c'  (dot, saturating).
+ *   (2) the intrinsic product lattice: meet = per-dim min (glb),
+ *       join = per-dim max (lub), bottom = 0-vector, top = MAX-vector.
+ *
+ * Standard orders seeded at init (slots 0..3):
+ *   0 server    (1,4,1,1,1,0)
+ *   1 realtime  (8,1,1,2,2,0)
+ *   2 lowpower  (2,1,1,1,1,8)
+ *   3 balanced  (2,2,1,1,1,1)
+ *
+ * Orders are immutable once registered. Pure: no externs, no alloc,
+ * no FP, no recursion. M19 boundedness foundation.
+ *
+ * Ordering compares (<, >) are all on u64 cost words / dot results --
+ * unsigned, hence safe (Trap 3 is about signed i64/i32 ordering only).
+ * The only i32 values are the status/trichotomy constants, compared by
+ * equality only (W11). Null checks compare the full (addr as u64) to
+ * 0u64 (64-bit test, not the 16-bit-null hazard).
+ *
+ * The saturating dot detects multiply overflow with a divide-free 32x32
+ * partial-product expansion (cl_mul_ovf), NOT u64 division: iiis-2
+ * miscompiles u64 `/` as a signed `idivq`, so MAX/MAX-class quotients are
+ * wrong -- the only correct overflow test is the divide-free one.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_cost_lattice
+
+const CL_OK        : i32 =  0i32
+const CL_E_FULL    : i32 = -1i32
+const CL_E_BAD     : i32 = -2i32
+
+const CL_LT        : i32 = -1i32
+const CL_EQ        : i32 =  0i32
+const CL_GT        : i32 =  1i32
+
+const CL_DIM        : u32 = 6u32
+const CL_MAX_ORDERS : u32 = 64u32
+
+const CL_COST_MAX  : u64 = 0xFFFFFFFFFFFFFFFFu64
+const CL_DOT_SAT   : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var CL_LIVE  : [u8;  64]      // live flag per order slot
+var CL_W     : [u64; 384]     // 64 * 6 weights, row-major w[slot*6 + k]
+var CL_SEED  : [u64; 6]       // module-scope staging row for init (Trap 7 fix)
+
+/* --- order registry --- */
+
+fn cl_register_order(weights: *u64, out_slot: *u32) -> i32 @export {
+    if (weights as u64) == 0u64 { return CL_E_BAD }
+    if (out_slot as u64) == 0u64 { return CL_E_BAD }
+    let mut i : u32 = 0u32
+    let mut found : u8 = 0u8
+    while found == 0u8 {
+        if i >= CL_MAX_ORDERS {
+            found = 2u8
+        } else {
+            if CL_LIVE[i] == 0u8 { found = 1u8 }
+            if found == 0u8 { i = i + 1u32 }
+        }
+    }
+    if found == 2u8 { return CL_E_FULL }
+    let base : u32 = i * CL_DIM
+    let mut k : u32 = 0u32
+    while k < CL_DIM {
+        CL_W[base + k] = weights[k]
+        k = k + 1u32
+    }
+    CL_LIVE[i] = 1u8
+    out_slot[0u32] = i
+    return CL_OK
+}
+
+fn cl_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CL_MAX_ORDERS {
+        CL_LIVE[i] = 0u8
+        i = i + 1u32
+    }
+    let mut acc : i32 = CL_OK
+    let mut slot : u32 = 0u32
+    // server (1,4,1,1,1,0)
+    CL_SEED[0u32] = 1u64  CL_SEED[1u32] = 4u64  CL_SEED[2u32] = 1u64
+    CL_SEED[3u32] = 1u64  CL_SEED[4u32] = 1u64  CL_SEED[5u32] = 0u64
+    if cl_register_order(&CL_SEED[0u32], &slot) != CL_OK { acc = CL_E_FULL }
+    // realtime (8,1,1,2,2,0)
+    CL_SEED[0u32] = 8u64  CL_SEED[1u32] = 1u64  CL_SEED[2u32] = 1u64
+    CL_SEED[3u32] = 2u64  CL_SEED[4u32] = 2u64  CL_SEED[5u32] = 0u64
+    if cl_register_order(&CL_SEED[0u32], &slot) != CL_OK { acc = CL_E_FULL }
+    // lowpower (2,1,1,1,1,8)
+    CL_SEED[0u32] = 2u64  CL_SEED[1u32] = 1u64  CL_SEED[2u32] = 1u64
+    CL_SEED[3u32] = 1u64  CL_SEED[4u32] = 1u64  CL_SEED[5u32] = 8u64
+    if cl_register_order(&CL_SEED[0u32], &slot) != CL_OK { acc = CL_E_FULL }
+    // balanced (2,2,1,1,1,1)
+    CL_SEED[0u32] = 2u64  CL_SEED[1u32] = 2u64  CL_SEED[2u32] = 1u64
+    CL_SEED[3u32] = 1u64  CL_SEED[4u32] = 1u64  CL_SEED[5u32] = 1u64
+    if cl_register_order(&CL_SEED[0u32], &slot) != CL_OK { acc = CL_E_FULL }
+    return acc
+}
+
+fn cl_order_live(slot: u32) -> u8 @export {
+    if slot >= CL_MAX_ORDERS { return 0u8 }
+    return CL_LIVE[slot]
+}
+
+/* --- scalar dot order --- */
+
+/* Divide-free u64*u64 overflow detector (private helper).  Writes the low
+ * 64 bits of the (wrapping) product to *out_prod and returns 1u8 iff the
+ * true 128-bit product exceeds u64, else 0u8.  NIH: hand-rolled 32x32
+ * partial-product expansion -- a = ahi*2^32 + alo, b = bhi*2^32 + blo,
+ * a*b = hh*2^64 + (lh+hl)*2^32 + ll ; overflow iff the high 64 bits are
+ * nonzero.  This REPLACES the former `(prod / wk) != ck` check: iiis-2
+ * miscompiles u64 `/` as a SIGNED `idivq` (emits `cqto; idivq`), so
+ * 0xFFFF..FE / 0xFFFF..FF returns 2 (signed (-2)/(-1)) instead of 0,
+ * silently MISSING the MAX*2 overflow.  No division anywhere here; every
+ * compare is `==`/`!=` or an UNSIGNED `<` wrap-test (Trap 3 safe, the
+ * ca_add_clamp idiom).  W13: 13 locals (<=20).  Nesting <=2 (Trap 13). */
+fn cl_mul_ovf(a: u64, b: u64, out_prod: *u64) -> u8 {
+    let alo : u64 = a & 0xFFFFFFFFu64
+    let ahi : u64 = a >> 32u64
+    let blo : u64 = b & 0xFFFFFFFFu64
+    let bhi : u64 = b >> 32u64
+    let ll  : u64 = alo * blo
+    let lh  : u64 = alo * bhi
+    let hl  : u64 = ahi * blo
+    let hh  : u64 = ahi * bhi
+    let mid : u64 = lh + hl
+    let mut hicarry : u64 = 0u64
+    if mid < lh { hicarry = 1u64 }
+    let low : u64 = ll + (mid << 32u64)
+    let mut lowcarry : u64 = 0u64
+    if low < ll { lowcarry = 1u64 }
+    out_prod[0u64] = low
+    let high : u64 = hh + (mid >> 32u64) + (hicarry << 32u64) + lowcarry
+    if high != 0u64 { return 1u8 }
+    return 0u8
+}
+
+fn cl_dot(weights: *u64, c: *u64) -> u64 @export {
+    if (weights as u64) == 0u64 { return CL_DOT_SAT }
+    if (c as u64) == 0u64 { return CL_DOT_SAT }
+    let mut acc : u64 = 0u64
+    let mut k : u32 = 0u32
+    let mut sat : u8 = 0u8
+    while sat == 0u8 {
+        if k >= CL_DIM {
+            sat = 2u8
+        } else {
+            let wk : u64 = weights[k]
+            let ck : u64 = c[k]
+            let mut prod : u64 = 0u64
+            let ov : u8 = cl_mul_ovf(wk, ck, &prod)
+            if ov == 1u8 { sat = 1u8 }
+            if sat == 0u8 {
+                let sum : u64 = acc + prod
+                if sum < acc { sat = 1u8 }
+                if sat == 0u8 {
+                    acc = sum
+                    k = k + 1u32
+                }
+            }
+        }
+    }
+    if sat == 1u8 { return CL_DOT_SAT }
+    return acc
+}
+
+fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 @export {
+    if cl_order_live(slot) == 0u8 { return CL_E_BAD }
+    if (c as u64) == 0u64 { return CL_E_BAD }
+    if (out_dot as u64) == 0u64 { return CL_E_BAD }
+    let base : u32 = slot * CL_DIM
+    let w : *u64 = &CL_W[base]
+    out_dot[0u64] = cl_dot(w, c)
+    return CL_OK
+}
+
+fn cl_compare(slot: u32, c: *u64, cp: *u64) -> i32 @export {
+    if slot >= CL_MAX_ORDERS { return CL_EQ }
+    if CL_LIVE[slot] == 0u8 { return CL_EQ }
+    if (c as u64) == 0u64 { return CL_EQ }
+    if (cp as u64) == 0u64 { return CL_EQ }
+    let base : u32 = slot * CL_DIM
+    let w : *u64 = &CL_W[base]
+    let d1 : u64 = cl_dot(w, c)
+    let d2 : u64 = cl_dot(w, cp)
+    if d1 < d2 { return CL_LT }
+    if d1 > d2 { return CL_GT }
+    return CL_EQ
+}
+
+fn cl_compare_checked(slot: u32, c: *u64, cp: *u64, out_ord: *i32) -> i32 @export {
+    if (out_ord as u64) == 0u64 { return CL_E_BAD }
+    if (c as u64) == 0u64 { return CL_E_BAD }
+    if (cp as u64) == 0u64 { return CL_E_BAD }
+    if cl_order_live(slot) == 0u8 { return CL_E_BAD }
+    let base : u32 = slot * CL_DIM
+    let w : *u64 = &CL_W[base]
+    let d1 : u64 = cl_dot(w, c)
+    let d2 : u64 = cl_dot(w, cp)
+    let mut ord : i32 = CL_EQ
+    if d1 < d2 { ord = CL_LT }
+    if d1 > d2 { ord = CL_GT }
+    out_ord[0u64] = ord
+    return CL_OK
+}
+
+/* --- intrinsic product lattice --- */
+
+fn cl_join(c: *u64, cp: *u64, out: *u64) -> i32 @export {
+    if (c as u64) == 0u64 { return CL_E_BAD }
+    if (cp as u64) == 0u64 { return CL_E_BAD }
+    if (out as u64) == 0u64 { return CL_E_BAD }
+    let mut k : u32 = 0u32
+    while k < CL_DIM {
+        let vc : u64 = c[k]
+        let vd : u64 = cp[k]
+        let mut m : u64 = vc
+        if vd > vc { m = vd }
+        out[k] = m
+        k = k + 1u32
+    }
+    return CL_OK
+}
+
+fn cl_meet(c: *u64, cp: *u64, out: *u64) -> i32 @export {
+    if (c as u64) == 0u64 { return CL_E_BAD }
+    if (cp as u64) == 0u64 { return CL_E_BAD }
+    if (out as u64) == 0u64 { return CL_E_BAD }
+    let mut k : u32 = 0u32
+    while k < CL_DIM {
+        let vc : u64 = c[k]
+        let vd : u64 = cp[k]
+        let mut m : u64 = vc
+        if vd < vc { m = vd }
+        out[k] = m
+        k = k + 1u32
+    }
+    return CL_OK
+}
+
+fn cl_le_product(c: *u64, cp: *u64) -> u8 @export {
+    if (c as u64) == 0u64 { return 0u8 }
+    if (cp as u64) == 0u64 { return 0u8 }
+    let mut k : u32 = 0u32
+    let mut not_le : u8 = 0u8
+    while k < CL_DIM {
+        if c[k] > cp[k] { not_le = 1u8 }
+        k = k + 1u32
+    }
+    if not_le == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn cl_eq(c: *u64, cp: *u64) -> u8 @export {
+    if (c as u64) == 0u64 { return 0u8 }
+    if (cp as u64) == 0u64 { return 0u8 }
+    let mut k : u32 = 0u32
+    let mut neq : u8 = 0u8
+    while k < CL_DIM {
+        if c[k] != cp[k] { neq = 1u8 }
+        k = k + 1u32
+    }
+    if neq == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn cl_bottom(out: *u64) -> i32 @export {
+    if (out as u64) == 0u64 { return CL_E_BAD }
+    let mut k : u32 = 0u32
+    while k < CL_DIM {
+        out[k] = 0u64
+        k = k + 1u32
+    }
+    return CL_OK
+}
+
+fn cl_top(out: *u64) -> i32 @export {
+    if (out as u64) == 0u64 { return CL_E_BAD }
+    let mut k : u32 = 0u32
+    while k < CL_DIM {
+        out[k] = CL_COST_MAX
+        k = k + 1u32
+    }
+    return CL_OK
+}
+
+/* --- embedded self-test (KAT vectors from the spec) ---
+ * Returns 99u64 on full pass; a distinct small non-99 code at each
+ * failed check so a failure is diagnosable. Includes negative-case
+ * assertions (invalid slot REJECTED by the checked forms). */
+
+var CL_TA  : [u64; 6]    // KAT operand a
+var CL_TB  : [u64; 6]    // KAT operand b
+var CL_TC  : [u64; 6]    // KAT operand c (small two-dim)
+var CL_TCP : [u64; 6]    // KAT operand cp (small two-dim)
+var CL_TO  : [u64; 6]    // KAT output buffer
+var CL_TO2 : [u64; 6]    // KAT output buffer 2
+
+fn cl_selftest() -> u64 @export {
+    let rc : i32 = cl_init()
+    if rc != CL_OK { return 1u64 }
+
+    // KAT 4 (validity separation) -- order liveness after init.
+    if cl_order_live(0u32) != 1u8 { return 2u64 }
+    if cl_order_live(3u32) != 1u8 { return 3u64 }
+    if cl_order_live(63u32) != 0u8 { return 4u64 }
+    if cl_order_live(64u32) != 0u8 { return 5u64 }
+
+    // KAT 1 -- standard-order scalar compare (server slot 0).
+    // c=(10,2,0,0,0,0) cp=(2,3,0,0,0,0)
+    CL_TC[0u32] = 10u64  CL_TC[1u32] = 2u64  CL_TC[2u32] = 0u64
+    CL_TC[3u32] = 0u64   CL_TC[4u32] = 0u64  CL_TC[5u32] = 0u64
+    CL_TCP[0u32] = 2u64  CL_TCP[1u32] = 3u64  CL_TCP[2u32] = 0u64
+    CL_TCP[3u32] = 0u64  CL_TCP[4u32] = 0u64  CL_TCP[5u32] = 0u64
+    // server dot: c -> 10*1+2*4 = 18 ; cp -> 2*1+3*4 = 14
+    let ws : *u64 = &CL_W[0u32]
+    if cl_dot(ws, &CL_TC[0u32]) != 18u64 { return 6u64 }
+    if cl_dot(ws, &CL_TCP[0u32]) != 14u64 { return 7u64 }
+    if cl_compare(0u32, &CL_TC[0u32], &CL_TCP[0u32]) != CL_GT { return 8u64 }
+    if cl_compare(0u32, &CL_TCP[0u32], &CL_TC[0u32]) != CL_LT { return 9u64 }
+    if cl_compare(0u32, &CL_TC[0u32], &CL_TC[0u32]) != CL_EQ { return 10u64 }
+    // realtime slot 1 dot: c -> 10*8+2*1 = 82
+    let wr : *u64 = &CL_W[6u32]
+    if cl_dot(wr, &CL_TC[0u32]) != 82u64 { return 11u64 }
+
+    // KAT 2 -- join / meet / product order (the lattice core).
+    // a=(5,10,2,3,4,1) b=(7,6,2,1,9,0)
+    CL_TA[0u32] = 5u64   CL_TA[1u32] = 10u64  CL_TA[2u32] = 2u64
+    CL_TA[3u32] = 3u64   CL_TA[4u32] = 4u64   CL_TA[5u32] = 1u64
+    CL_TB[0u32] = 7u64   CL_TB[1u32] = 6u64   CL_TB[2u32] = 2u64
+    CL_TB[3u32] = 1u64   CL_TB[4u32] = 9u64   CL_TB[5u32] = 0u64
+    // join -> (7,10,2,3,9,1)
+    if cl_join(&CL_TA[0u32], &CL_TB[0u32], &CL_TO[0u32]) != CL_OK { return 12u64 }
+    if CL_TO[0u32] != 7u64 { return 13u64 }
+    if CL_TO[1u32] != 10u64 { return 14u64 }
+    if CL_TO[2u32] != 2u64 { return 15u64 }
+    if CL_TO[3u32] != 3u64 { return 16u64 }
+    if CL_TO[4u32] != 9u64 { return 17u64 }
+    if CL_TO[5u32] != 1u64 { return 18u64 }
+    // meet -> (5,6,2,1,4,0)
+    if cl_meet(&CL_TA[0u32], &CL_TB[0u32], &CL_TO2[0u32]) != CL_OK { return 19u64 }
+    if CL_TO2[0u32] != 5u64 { return 20u64 }
+    if CL_TO2[1u32] != 6u64 { return 21u64 }
+    if CL_TO2[2u32] != 2u64 { return 22u64 }
+    if CL_TO2[3u32] != 1u64 { return 23u64 }
+    if CL_TO2[4u32] != 4u64 { return 24u64 }
+    if CL_TO2[5u32] != 0u64 { return 25u64 }
+    // product order: a not<= b (a[1]=10 > b[1]=6)
+    if cl_le_product(&CL_TA[0u32], &CL_TB[0u32]) != 0u8 { return 26u64 }
+    // glb <= a : meet(a,b) is in CL_TO2
+    if cl_le_product(&CL_TO2[0u32], &CL_TA[0u32]) != 1u8 { return 27u64 }
+    // a <= lub : join(a,b) is in CL_TO
+    if cl_le_product(&CL_TA[0u32], &CL_TO[0u32]) != 1u8 { return 28u64 }
+    // join(a,b) != b
+    if cl_eq(&CL_TO[0u32], &CL_TB[0u32]) != 0u8 { return 29u64 }
+    // idempotence: join(a,a)=a ; meet(a,a)=a
+    if cl_join(&CL_TA[0u32], &CL_TA[0u32], &CL_TO[0u32]) != CL_OK { return 30u64 }
+    if cl_eq(&CL_TO[0u32], &CL_TA[0u32]) != 1u8 { return 31u64 }
+    if cl_meet(&CL_TA[0u32], &CL_TA[0u32], &CL_TO[0u32]) != CL_OK { return 32u64 }
+    if cl_eq(&CL_TO[0u32], &CL_TA[0u32]) != 1u8 { return 33u64 }
+
+    // KAT 3 -- bottom/top identities + dot saturation (boundedness).
+    // bottom z=(0,0,0,0,0,0)
+    if cl_bottom(&CL_TO2[0u32]) != CL_OK { return 34u64 }
+    if CL_TO2[0u32] != 0u64 { return 35u64 }
+    if CL_TO2[5u32] != 0u64 { return 36u64 }
+    // join(a,z)=a
+    if cl_join(&CL_TA[0u32], &CL_TO2[0u32], &CL_TO[0u32]) != CL_OK { return 37u64 }
+    if cl_eq(&CL_TO[0u32], &CL_TA[0u32]) != 1u8 { return 38u64 }
+    // meet(a,z)=z
+    if cl_meet(&CL_TA[0u32], &CL_TO2[0u32], &CL_TO[0u32]) != CL_OK { return 39u64 }
+    if cl_eq(&CL_TO[0u32], &CL_TO2[0u32]) != 1u8 { return 40u64 }
+    // top t=(MAX,...,MAX)
+    if cl_top(&CL_TO2[0u32]) != CL_OK { return 41u64 }
+    if CL_TO2[0u32] != CL_COST_MAX { return 42u64 }
+    if CL_TO2[5u32] != CL_COST_MAX { return 43u64 }
+    // meet(a,t)=a
+    if cl_meet(&CL_TA[0u32], &CL_TO2[0u32], &CL_TO[0u32]) != CL_OK { return 44u64 }
+    if cl_eq(&CL_TO[0u32], &CL_TA[0u32]) != 1u8 { return 45u64 }
+    // join(a,t)=t
+    if cl_join(&CL_TA[0u32], &CL_TO2[0u32], &CL_TO[0u32]) != CL_OK { return 46u64 }
+    if cl_eq(&CL_TO[0u32], &CL_TO2[0u32]) != 1u8 { return 47u64 }
+
+    // Saturation: register w=(MAX,1,1,1,1,1) ; c=(2,0,0,0,0,0) -> MAX*2 ovf.
+    CL_TB[0u32] = CL_COST_MAX  CL_TB[1u32] = 1u64  CL_TB[2u32] = 1u64
+    CL_TB[3u32] = 1u64  CL_TB[4u32] = 1u64  CL_TB[5u32] = 1u64
+    let mut satslot : u32 = 0u32
+    if cl_register_order(&CL_TB[0u32], &satslot) != CL_OK { return 48u64 }
+    CL_TC[0u32] = 2u64  CL_TC[1u32] = 0u64  CL_TC[2u32] = 0u64
+    CL_TC[3u32] = 0u64  CL_TC[4u32] = 0u64  CL_TC[5u32] = 0u64
+    let wsat : *u64 = &CL_W[satslot * CL_DIM]
+    if cl_dot(wsat, &CL_TC[0u32]) != CL_DOT_SAT { return 49u64 }
+    let mut dout : u64 = 0u64
+    if cl_dot_slot(satslot, &CL_TC[0u32], &dout) != CL_OK { return 50u64 }
+    if dout != CL_DOT_SAT { return 51u64 }
+    // invalid slot 99 distinguished from a true saturated value.
+    if cl_dot_slot(99u32, &CL_TC[0u32], &dout) != CL_E_BAD { return 52u64 }
+
+    // KAT 4 -- validity separation (soundness vs the conflation form).
+    // cl_compare(99,...) -> CL_EQ (gospel-shape conflation, documented).
+    if cl_compare(99u32, &CL_TA[0u32], &CL_TB[0u32]) != CL_EQ { return 53u64 }
+    // cl_compare_checked(99,...) -> CL_E_BAD (the sound rejection).
+    let mut ordout : i32 = 7i32
+    if cl_compare_checked(99u32, &CL_TA[0u32], &CL_TB[0u32], &ordout) != CL_E_BAD { return 54u64 }
+    // ord left untouched (still the sentinel 7 we wrote).
+    if ordout != 7i32 { return 55u64 }
+    // cl_compare_checked(0,a,a,...) -> CL_OK with ord=CL_EQ.
+    if cl_compare_checked(0u32, &CL_TA[0u32], &CL_TA[0u32], &ordout) != CL_OK { return 56u64 }
+    if ordout != CL_EQ { return 57u64 }
+
+    // Negative-case null guards (prove the gates REJECT bad input).
+    let znull : *u64 = 0u64 as *u64
+    if cl_join(znull, &CL_TA[0u32], &CL_TO[0u32]) != CL_E_BAD { return 58u64 }
+    if cl_meet(&CL_TA[0u32], znull, &CL_TO[0u32]) != CL_E_BAD { return 59u64 }
+    if cl_bottom(znull) != CL_E_BAD { return 60u64 }
+    if cl_top(znull) != CL_E_BAD { return 61u64 }
+    if cl_le_product(znull, &CL_TA[0u32]) != 0u8 { return 62u64 }
+    if cl_eq(znull, &CL_TA[0u32]) != 0u8 { return 63u64 }
+    let znull32 : *u32 = 0u32 as *u32
+    if cl_register_order(&CL_SEED[0u32], znull32) != CL_E_BAD { return 64u64 }
+    if cl_register_order(znull, &satslot) != CL_E_BAD { return 65u64 }
+
+    return 99u64
+}

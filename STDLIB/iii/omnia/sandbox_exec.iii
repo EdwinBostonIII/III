@@ -1,0 +1,132 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\sandbox_exec.iii
+ *
+ * III STDLIB - omnia::sandbox_exec -- sandboxed execution dispatch.
+ *
+ * Lattice plan Phase 14l Step 0195.  Sandbox-aware kind dispatcher that
+ * validates pre-conditions (sandbox in CREATED state, quota headroom
+ * present) before transitioning to RUNNING and recording the dispatch.
+ * Caller drives the actual work and must call sandbox_exec_finish to
+ * record the result and transition to COMPLETED, or
+ * sandbox_exec_cancel to mark CANCELLED.
+ *
+ * iiis-0 cannot dispatch through u64 fn-pointers, so kind is an opaque
+ * tag the caller's main loop interprets via a `when` cascade.  This
+ * keeps the runtime a primitive scheduler rather than a callback host.
+ *
+ * Public surface:
+ *   sandbox_exec_begin(sb_id, kind, ctx)               -> i32
+ *   sandbox_exec_kind(sb_id)                           -> u32
+ *   sandbox_exec_ctx(sb_id)                            -> u64
+ *   sandbox_exec_finish(sb_id, result)                 -> i32
+ *   sandbox_exec_cancel(sb_id)                         -> i32
+ *   sandbox_exec_completed(sb_id)                      -> u8
+ *
+ * Hexad: kind_compose.  Ring: R3.  K: 0.95.
+ */
+
+module omnia_sandbox_exec
+
+extern @abi(c-msvc-x64) fn sandbox_state(sb_id: u64) -> u32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_set_state(sb_id: u64, state: u32) -> i32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_set_result(sb_id: u64, result: u64) -> i32 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_mem_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
+extern @abi(c-msvc-x64) fn sandbox_quota_cpu_remaining(sb_id: u64) -> u64 from "sandbox_quota.iii"
+
+const SBE_OK          : i32 =  0i32
+const SBE_E_BADID     : i32 = -1i32
+const SBE_E_BADSTATE  : i32 = -2i32
+const SBE_E_NO_QUOTA  : i32 = -3i32
+
+const SBE_SLOTS         : u32 = 64u32
+
+/* Mirror sandbox_ctor's state values (kept consistent by design,
+ * but locally prefixed to avoid linker collisions). */
+const SBE_STATE_CREATED   : u32 = 0u32
+const SBE_STATE_RUNNING   : u32 = 1u32
+const SBE_STATE_COMPLETED : u32 = 2u32
+const SBE_STATE_CANCELLED : u32 = 3u32
+
+var SBE_KIND : [u32; 64]
+var SBE_CTX  : [u64; 64]
+
+fn _sbe_slot_of(sb_id: u64) -> u32 {
+    let id_l : u64 = sb_id
+    if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = (id_l - 1u64) & 0x3Fu64
+    let s_u32 : u32 = s as u32
+    if s_u32 >= SBE_SLOTS { return 0xFFFFFFFFu32 }
+    return s_u32
+}
+
+fn sandbox_exec_begin(sb_id: u64, kind: u32, ctx: u64) -> i32 @export {
+    let id_l : u64 = sb_id
+    let k_l  : u32 = kind
+    let c_l  : u64 = ctx
+    let s : u32 = _sbe_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return SBE_E_BADID }
+    let st : u32 = sandbox_state(id_l)
+    if st != SBE_STATE_CREATED { return SBE_E_BADSTATE }
+    /* Refuse to begin if no quota headroom remains. */
+    if sandbox_quota_mem_remaining(id_l) == 0u64 { return SBE_E_NO_QUOTA }
+    if sandbox_quota_cpu_remaining(id_l) == 0u64 { return SBE_E_NO_QUOTA }
+    SBE_KIND[s] = k_l
+    SBE_CTX[s]  = c_l
+    sandbox_set_state(id_l, SBE_STATE_RUNNING)
+    return SBE_OK
+}
+
+fn sandbox_exec_kind(sb_id: u64) -> u32 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbe_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return SBE_KIND[s]
+}
+
+fn sandbox_exec_ctx(sb_id: u64) -> u64 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbe_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SBE_CTX[s]
+}
+
+fn sandbox_exec_finish(sb_id: u64, result: u64) -> i32 @export {
+    let id_l : u64 = sb_id
+    let r_l  : u64 = result
+    let s : u32 = _sbe_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return SBE_E_BADID }
+    let st : u32 = sandbox_state(id_l)
+    if st != SBE_STATE_RUNNING { return SBE_E_BADSTATE }
+    sandbox_set_result(id_l, r_l)
+    sandbox_set_state(id_l, SBE_STATE_COMPLETED)
+    return SBE_OK
+}
+
+fn sandbox_exec_cancel(sb_id: u64) -> i32 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbe_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return SBE_E_BADID }
+    let st : u32 = sandbox_state(id_l)
+    if st == SBE_STATE_COMPLETED { return SBE_E_BADSTATE }
+    if st == SBE_STATE_CANCELLED { return SBE_E_BADSTATE }
+    sandbox_set_state(id_l, SBE_STATE_CANCELLED)
+    return SBE_OK
+}
+
+fn sandbox_exec_completed(sb_id: u64) -> u8 @export {
+    let id_l : u64 = sb_id
+    let s : u32 = _sbe_slot_of(id_l)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    let st : u32 = sandbox_state(id_l)
+    if st == SBE_STATE_COMPLETED { return 1u8 }
+    return 0u8
+}
+
+fn sandbox_exec_clear_all() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < SBE_SLOTS {
+        SBE_KIND[s] = 0u32
+        SBE_CTX[s]  = 0u64
+        s = s + 1u32
+    }
+    return SBE_OK
+}

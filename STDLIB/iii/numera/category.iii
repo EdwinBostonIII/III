@@ -1,0 +1,1034 @@
+/* III/STDLIB/iii/numera/category.iii
+ *
+ * III STDLIB - numera::category
+ *
+ * Finite categories: objects + morphisms in fixed slot tables, with
+ * composition, identities, pullbacks, pushouts, coequalizers, and the
+ * associativity law.  Objects = 32-byte ids; morphism id = Keccak256(
+ * src_id ++ dst_id ++ op); composite op = Keccak256(f_id ++ g_id);
+ * identity op = Keccak256(obj_id ++ "id").  Composite uniqueness holds
+ * because the id is a deterministic function of inputs (tie-break vacuous).
+ *
+ * Reconciliation (matches identifier.iii / content_addr.iii): the gospel
+ * streamed keccak256_init/update/final over live param pointers; iiis
+ * clobbers param registers across the calls (param-spill), so all parts
+ * are concatenated into module scratch and hashed with keccak256_oneshot.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99 (slot exhaustion).
+ * Discipline: W2 (<=4 params; universal ctors use a [u32;5] aggregate),
+ * W8 (static slot tables), W13 (<=20 locals; pb-probe helper), W14
+ * (sentinel loops, no break), W15 (no recursion; explicit slot scans).
+ * Not reentrant (serialized hash scratch).
+ *
+ * Public API (all single-line, Trap 1):
+ *   cat_init() -> i32
+ *   cat_add_object(obj_id: *u8) -> u32
+ *   cat_find_object(obj_id: *u8) -> u32
+ *   cat_object_id(slot: u32, out_id: *u8) -> i32
+ *   cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32
+ *   cat_add_morphism_xii(src: u32, dst: u32, op_term: u32, out_id: *u8) -> u32  (dedup-by-behavior)
+ *   cat_find_morphism(mor_id: *u8) -> u32
+ *   cat_morphism_src(slot: u32) -> u32
+ *   cat_morphism_dst(slot: u32) -> u32
+ *   cat_morphism_id(slot: u32, out_id: *u8) -> i32
+ *   cat_identity(obj_slot: u32, out_id: *u8) -> u32
+ *   cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32
+ *   cat_morph_eq(f_slot: u32, g_slot: u32) -> u8
+ *   cat_morph_eq_u64(f_slot: u32, g_slot: u32) -> u64
+ *   cat_check_assoc(f_slot: u32, g_slot: u32, h_slot: u32) -> u8
+ *   cat_pullback(out: *u32) -> i32
+ *   cat_pushout(out: *u32) -> i32
+ *   cat_coequalizer(out: *u32) -> i32
+ *
+ * Self-test: cat_kat() -> u64 returns 99 on full KAT pass.
+ */
+
+module numera_category
+
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn nous_bkey(t: u32, out32: *u8) -> i32 from "nous_behavioral_key.iii"
+
+const CATEGORY_OK         : i32 =  0i32
+const CATEGORY_E_FULL     : i32 = -1i32
+const CATEGORY_E_BAD_SLOT : i32 = -2i32
+const CATEGORY_E_MISMATCH : i32 = -3i32
+const CATEGORY_E_NOT_FOUND: i32 = -4i32
+const CATEGORY_E_NULL     : i32 = -5i32
+
+const CATEGORY_MAX_OBJ : u32 = 1024u32
+const CATEGORY_MAX_MOR : u32 = 16384u32
+const CATEGORY_SENT    : u32 = 0xFFFFFFFFu32
+const CATEGORY_IDBYTES : u64 = 32u64
+const CATEGORY_U32MASK : u64 = 0xFFFFFFFFu64
+
+/* Associativity (M11) requires id((h.g).f) == id(h.(g.f)).  A morphism is a
+ * PATH in the free category over the underlying graph: its identity is fixed
+ * by (src, dst, ordered op-word) where the op-word is the flat sequence of
+ * primitive ops.  Composition CONCATENATES op-words; concatenation is
+ * associative, so morphism-id equality is associative -- a hash-of-the-pair
+ * composite op (Keccak256(f_id||g_id)) is a binary tree and is NOT (it encodes
+ * the bracketing).  WORDCAP bounds a path length (slot-exhaustion failure mode,
+ * K=0.99: a composite whose word would exceed WORDCAP is refused -> SENT). */
+const CATEGORY_WORDCAP : u64 = 16u64     /* max primitive ops per morphism path */
+const CATEGORY_WORDBYT : u64 = 512u64    /* WORDCAP * 32 (stride per morphism) */
+
+/* Objects */
+var CATEGORY_OBJ_LIVE  : [u8;  1024]
+var CATEGORY_OBJ_ID    : [u8;  32768]    /* 1024 * 32 */
+
+/* Morphisms */
+var CATEGORY_MOR_LIVE  : [u8;  16384]
+var CATEGORY_MOR_SRC   : [u32; 16384]
+var CATEGORY_MOR_DST   : [u32; 16384]
+var CATEGORY_MOR_OP    : [u8;  524288]   /* 16384 * 32  (first primitive op, label only) */
+var CATEGORY_MOR_ID    : [u8;  524288]   /* 16384 * 32 */
+var CATEGORY_MOR_WLEN  : [u32; 16384]    /* path length in primitive ops (1 for a primitive) */
+var CATEGORY_MOR_WORD  : [u8;  8388608]  /* 16384 * 512 : flat op-word per morphism */
+
+/* Hash + probe scratch (module scope, Trap 7; serialized, not reentrant). */
+var CATEGORY_HBUF   : [u8; 96]           /* obj||"id" (34) for cat_identity */
+var CATEGORY_MIDBUF : [u8; 32]           /* computed morphism id */
+var CATEGORY_OPBUF  : [u8; 32]           /* identity op id */
+var CATEGORY_TIDBUF : [u8; 32]           /* universal-construction probe throwaway (left) */
+var CATEGORY_TIDBF2 : [u8; 32]           /* universal-construction probe throwaway (right) */
+var CATEGORY_BKEY   : [u8; 32]           /* behavioral op-word: content-address of an XII normal form */
+
+/* Word-build + id-preimage scratch (serialized, not reentrant).
+ * CATEGORY_WBUF holds the op-word being inserted (filled by the public fn or by
+ * cat_compose); CATEGORY_WBUF_LEN is its length in ops.  CATEGORY_IDPRE holds
+ * src_id||dst_id||word for the single keccak256_oneshot that fixes the id. */
+var CATEGORY_WBUF     : [u8; 512]        /* WORDCAP * 32 */
+var CATEGORY_WBUF_LEN : u64 = 0u64       /* ops currently in CATEGORY_WBUF */
+var CATEGORY_IDPRE    : [u8; 576]        /* 64 + WORDCAP*32 : src||dst||word preimage */
+
+/* Universal-construction context (set by the public fn, read by helpers --
+ * keeps the probe helper at <=4 params and shares the fixed legs f/g). */
+var CATEGORY_UF     : u32 = 0u32         /* leg f morphism slot */
+var CATEGORY_UG     : u32 = 0u32         /* leg g morphism slot */
+
+/* KAT scratch */
+var CATEGORY_KAT_A  : [u8; 32]
+var CATEGORY_KAT_B  : [u8; 32]
+var CATEGORY_KAT_C  : [u8; 32]
+var CATEGORY_KAT_D  : [u8; 32]
+var CATEGORY_KAT_E  : [u8; 32]
+var CATEGORY_KAT_ID : [u8; 32]
+var CATEGORY_KAT_REF: [u8; 32]
+var CATEGORY_KAT_OUT: [u32; 5]
+var CATEGORY_KAT_LIT: [u8; 8]
+
+/* --- address-of helpers (base+offset idiom; offset masked, Trap 4/G8) --- */
+fn cat_obj_id_ptr(slot: u32) -> *u8 { let off : u64 = ((slot as u64) & CATEGORY_U32MASK) * 32u64  return ((&CATEGORY_OBJ_ID as u64) + off) as *u8 }
+fn cat_mor_op_ptr(slot: u32) -> *u8 { let off : u64 = ((slot as u64) & CATEGORY_U32MASK) * 32u64  return ((&CATEGORY_MOR_OP as u64) + off) as *u8 }
+fn cat_mor_id_ptr(slot: u32) -> *u8 { let off : u64 = ((slot as u64) & CATEGORY_U32MASK) * 32u64  return ((&CATEGORY_MOR_ID as u64) + off) as *u8 }
+fn cat_mor_word_ptr(slot: u32) -> *u8 { let off : u64 = ((slot as u64) & CATEGORY_U32MASK) * CATEGORY_WORDBYT  return ((&CATEGORY_MOR_WORD as u64) + off) as *u8 }
+
+/* --- validity predicates (range + live), 1u8 = ok --- */
+fn cat_obj_ok(slot: u32) -> u8 {
+    if slot >= CATEGORY_MAX_OBJ { return 0u8 }
+    if CATEGORY_OBJ_LIVE[slot] == 0u8 { return 0u8 }
+    return 1u8
+}
+fn cat_mor_ok(slot: u32) -> u8 {
+    if slot >= CATEGORY_MAX_MOR { return 0u8 }
+    if CATEGORY_MOR_LIVE[slot] == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* --- private hashing helper (oneshot over the path preimage; G3/G6) ---
+ *
+ * Morphism id = Keccak256( src_obj_id || dst_obj_id || op_word ), where the
+ * op_word is the flat sequence in CATEGORY_WBUF[0 .. CATEGORY_WBUF_LEN*32).
+ * For a primitive (WBUF_LEN==1, the single op) this is exactly the gospel's
+ * Keccak256(idA||idB||op) -- KAT vector 4 holds bit-for-bit.  For a composite
+ * the word is the concatenation of the constituents' words (built by
+ * cat_compose), so bracketing drops out and composition is associative. */
+fn cat_compute_word_id(src: u32, dst: u32, out: *u8) -> i32 {
+    if cat_obj_ok(src) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if cat_obj_ok(dst) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if (out as u64) == 0u64 { return CATEGORY_E_NULL }
+    if CATEGORY_WBUF_LEN == 0u64 { return CATEGORY_E_MISMATCH }
+    if CATEGORY_WBUF_LEN > CATEGORY_WORDCAP { return CATEGORY_E_FULL }
+    let sp : *u8 = cat_obj_id_ptr(src)
+    let dp : *u8 = cat_obj_id_ptr(dst)
+    let mut i : u64 = 0u64
+    while i < CATEGORY_IDBYTES {
+        CATEGORY_IDPRE[i] = sp[i]
+        CATEGORY_IDPRE[32u64 + i] = dp[i]
+        i = i + 1u64
+    }
+    let wbytes : u64 = CATEGORY_WBUF_LEN * 32u64
+    let mut k : u64 = 0u64
+    while k < wbytes {
+        CATEGORY_IDPRE[64u64 + k] = CATEGORY_WBUF[k]
+        k = k + 1u64
+    }
+    cad_oneshot(1u32, (&CATEGORY_IDPRE as u64) as *u8, 64u64 + wbytes, out)   /* H2: morphism-id via cad (suite 1 = KECCAK256; byte-identical) */
+    return CATEGORY_OK
+}
+
+/* --- core (objects) --- */
+fn cat_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < CATEGORY_MAX_OBJ {
+        CATEGORY_OBJ_LIVE[i] = 0u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < CATEGORY_MAX_MOR {
+        CATEGORY_MOR_LIVE[j] = 0u8
+        j = j + 1u32
+    }
+    return CATEGORY_OK
+}
+fn cat_find_object(obj_id: *u8) -> u32 @export {
+    if (obj_id as u64) == 0u64 { return CATEGORY_SENT }
+    let mut i : u32 = 0u32
+    let mut found : u32 = CATEGORY_SENT
+    while i < CATEGORY_MAX_OBJ {
+        if found == CATEGORY_SENT {
+            if CATEGORY_OBJ_LIVE[i] == 1u8 {
+                if ident_eq(cat_obj_id_ptr(i), obj_id) == 1u8 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+fn cat_add_object(obj_id: *u8) -> u32 @export {
+    if (obj_id as u64) == 0u64 { return CATEGORY_SENT }
+    let existing : u32 = cat_find_object(obj_id)
+    if existing != CATEGORY_SENT { return existing }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = CATEGORY_SENT
+    while i < CATEGORY_MAX_OBJ {
+        if slot == CATEGORY_SENT {
+            if CATEGORY_OBJ_LIVE[i] == 0u8 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == CATEGORY_SENT { return CATEGORY_SENT }
+    ident_copy(obj_id, cat_obj_id_ptr(slot))
+    CATEGORY_OBJ_LIVE[slot] = 1u8
+    return slot
+}
+fn cat_object_id(slot: u32, out_id: *u8) -> i32 @export {
+    if (out_id as u64) == 0u64 { return CATEGORY_E_NULL }
+    if cat_obj_ok(slot) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    ident_copy(cat_obj_id_ptr(slot), out_id)
+    return CATEGORY_OK
+}
+
+/* --- core (morphisms) --- */
+fn cat_find_morphism(mor_id: *u8) -> u32 @export {
+    if (mor_id as u64) == 0u64 { return CATEGORY_SENT }
+    let mut i : u32 = 0u32
+    let mut found : u32 = CATEGORY_SENT
+    while i < CATEGORY_MAX_MOR {
+        if found == CATEGORY_SENT {
+            if CATEGORY_MOR_LIVE[i] == 1u8 {
+                if ident_eq(cat_mor_id_ptr(i), mor_id) == 1u8 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+/* Core insert over a prebuilt op-word (in CATEGORY_WBUF[0..WBUF_LEN*32]).
+ * Computes the path id, dedups (composite uniqueness: identical (src,dst,word)
+ * collide deterministically -> one slot), else allocates and stores the full
+ * word + length so later compositions can concatenate it.  CATEGORY_MOR_OP
+ * holds the first op as a label only (never read for equality). */
+fn cat_add_morphism_word(src: u32, dst: u32, out_id: *u8) -> u32 {
+    if (out_id as u64) == 0u64 { return CATEGORY_SENT }
+    if cat_obj_ok(src) == 0u8 { return CATEGORY_SENT }
+    if cat_obj_ok(dst) == 0u8 { return CATEGORY_SENT }
+    if CATEGORY_WBUF_LEN == 0u64 { return CATEGORY_SENT }
+    if CATEGORY_WBUF_LEN > CATEGORY_WORDCAP { return CATEGORY_SENT }
+    let midp : *u8 = (&CATEGORY_MIDBUF as u64) as *u8
+    if cat_compute_word_id(src, dst, midp) != CATEGORY_OK { return CATEGORY_SENT }
+    let existing : u32 = cat_find_morphism(midp)
+    if existing != CATEGORY_SENT {
+        ident_copy(midp, out_id)
+        return existing
+    }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = CATEGORY_SENT
+    while i < CATEGORY_MAX_MOR {
+        if slot == CATEGORY_SENT {
+            if CATEGORY_MOR_LIVE[i] == 0u8 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == CATEGORY_SENT { return CATEGORY_SENT }
+    CATEGORY_MOR_SRC[slot] = src
+    CATEGORY_MOR_DST[slot] = dst
+    CATEGORY_MOR_WLEN[slot] = (CATEGORY_WBUF_LEN & CATEGORY_U32MASK) as u32
+    let wp : *u8 = cat_mor_word_ptr(slot)
+    let wbytes : u64 = CATEGORY_WBUF_LEN * 32u64
+    let mut k : u64 = 0u64
+    while k < wbytes {
+        wp[k] = CATEGORY_WBUF[k]
+        k = k + 1u64
+    }
+    let opp : *u8 = cat_mor_op_ptr(slot)
+    let mut j : u64 = 0u64
+    while j < CATEGORY_IDBYTES {
+        opp[j] = CATEGORY_WBUF[j]
+        j = j + 1u64
+    }
+    ident_copy(midp, cat_mor_id_ptr(slot))
+    CATEGORY_MOR_LIVE[slot] = 1u8
+    ident_copy(midp, out_id)
+    return slot
+}
+fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 @export {
+    if (op as u64) == 0u64 { return CATEGORY_SENT }
+    if (out_id as u64) == 0u64 { return CATEGORY_SENT }
+    if cat_obj_ok(src) == 0u8 { return CATEGORY_SENT }
+    if cat_obj_ok(dst) == 0u8 { return CATEGORY_SENT }
+    let mut i : u64 = 0u64
+    while i < CATEGORY_IDBYTES {
+        CATEGORY_WBUF[i] = op[i]
+        i = i + 1u64
+    }
+    CATEGORY_WBUF_LEN = 1u64
+    return cat_add_morphism_word(src, dst, out_id)
+}
+/* Behavioral admission (dedup-by-behavior): the op is an XII TERM, and the morphism is
+ * keyed on the content-address of that term's XII NORMAL FORM (nous_bkey).  Two ops that
+ * compute the same function -- e.g. AND(a,b) and AND(b,a) -- normalise to the same form,
+ * yield the same behavioral op-word, hence the SAME morphism id, and DEDUP to one slot;
+ * the syntactic cat_add_morphism (opaque op-word) would admit both.  Behaviorally distinct
+ * ops keep distinct ids.  This is the realizable slice of "key on the XII normal form"
+ * (lifting every op to an XII body is mig4); it adds the capability without faking it --
+ * it applies precisely when the op IS an XII term. */
+fn cat_add_morphism_xii(src: u32, dst: u32, op_term: u32, out_id: *u8) -> u32 @export {
+    if (out_id as u64) == 0u64 { return CATEGORY_SENT }
+    if cat_obj_ok(src) == 0u8 { return CATEGORY_SENT }
+    if cat_obj_ok(dst) == 0u8 { return CATEGORY_SENT }
+    let bk : *u8 = (&CATEGORY_BKEY as u64) as *u8
+    if nous_bkey(op_term, bk) != 0i32 { return CATEGORY_SENT }
+    return cat_add_morphism(src, dst, bk, out_id)
+}
+fn cat_morphism_src(slot: u32) -> u32 @export {
+    if cat_mor_ok(slot) == 0u8 { return CATEGORY_SENT }
+    return CATEGORY_MOR_SRC[slot]
+}
+fn cat_morphism_dst(slot: u32) -> u32 @export {
+    if cat_mor_ok(slot) == 0u8 { return CATEGORY_SENT }
+    return CATEGORY_MOR_DST[slot]
+}
+fn cat_morphism_id(slot: u32, out_id: *u8) -> i32 @export {
+    if (out_id as u64) == 0u64 { return CATEGORY_E_NULL }
+    if cat_mor_ok(slot) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    ident_copy(cat_mor_id_ptr(slot), out_id)
+    return CATEGORY_OK
+}
+
+/* --- identities, composition, equality, associativity --- */
+fn cat_identity(obj_slot: u32, out_id: *u8) -> u32 @export {
+    if (out_id as u64) == 0u64 { return CATEGORY_SENT }
+    if cat_obj_ok(obj_slot) == 0u8 { return CATEGORY_SENT }
+    let op : *u8 = cat_obj_id_ptr(obj_slot)
+    let mut i : u64 = 0u64
+    while i < CATEGORY_IDBYTES {
+        CATEGORY_HBUF[i] = op[i]
+        i = i + 1u64
+    }
+    CATEGORY_HBUF[32u64] = 0x69u8                 /* 'i' */
+    CATEGORY_HBUF[33u64] = 0x64u8                 /* 'd' */
+    let opbuf : *u8 = (&CATEGORY_OPBUF as u64) as *u8
+    cad_oneshot(1u32, (&CATEGORY_HBUF as u64) as *u8, 34u64, opbuf)   /* H2: identity-op id via cad (suite 1 = KECCAK256; byte-identical) */
+    return cat_add_morphism(obj_slot, obj_slot, opbuf, out_id)
+}
+/* g . f : require DST[f]==SRC[g]; the composite's op-word is the CONCATENATION
+ * word(f)||word(g) (flat primitive sequence), so id((h.g).f)==id(h.(g.f)) and
+ * composition is associative.  A word longer than WORDCAP is refused (SENT). */
+fn cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32 @export {
+    if (out_id as u64) == 0u64 { return CATEGORY_SENT }
+    if cat_mor_ok(f_slot) == 0u8 { return CATEGORY_SENT }
+    if cat_mor_ok(g_slot) == 0u8 { return CATEGORY_SENT }
+    if CATEGORY_MOR_DST[f_slot] != CATEGORY_MOR_SRC[g_slot] { return CATEGORY_SENT }
+    let wlf : u64 = (CATEGORY_MOR_WLEN[f_slot] as u64) & CATEGORY_U32MASK
+    let wlg : u64 = (CATEGORY_MOR_WLEN[g_slot] as u64) & CATEGORY_U32MASK
+    let total : u64 = wlf + wlg
+    if total > CATEGORY_WORDCAP { return CATEGORY_SENT }
+    let fwp : *u8 = cat_mor_word_ptr(f_slot)
+    let gwp : *u8 = cat_mor_word_ptr(g_slot)
+    let fbytes : u64 = wlf * 32u64
+    let mut i : u64 = 0u64
+    while i < fbytes {
+        CATEGORY_WBUF[i] = fwp[i]
+        i = i + 1u64
+    }
+    let gbytes : u64 = wlg * 32u64
+    let mut j : u64 = 0u64
+    while j < gbytes {
+        CATEGORY_WBUF[fbytes + j] = gwp[j]
+        j = j + 1u64
+    }
+    CATEGORY_WBUF_LEN = total
+    let s : u32 = CATEGORY_MOR_SRC[f_slot]
+    let d : u32 = CATEGORY_MOR_DST[g_slot]
+    return cat_add_morphism_word(s, d, out_id)
+}
+fn cat_morph_eq(f_slot: u32, g_slot: u32) -> u8 @export {
+    if cat_mor_ok(f_slot) == 0u8 { return 0u8 }
+    if cat_mor_ok(g_slot) == 0u8 { return 0u8 }
+    return ident_eq(cat_mor_id_ptr(f_slot), cat_mor_id_ptr(g_slot))
+}
+fn cat_morph_eq_u64(f_slot: u32, g_slot: u32) -> u64 @export {
+    if cat_morph_eq(f_slot, g_slot) == 1u8 { return 1u64 }
+    return 0u64
+}
+fn cat_check_assoc(f_slot: u32, g_slot: u32, h_slot: u32) -> u8 @export {
+    let tid : *u8 = (&CATEGORY_TIDBUF as u64) as *u8
+    let gf : u32 = cat_compose(f_slot, g_slot, tid)
+    if gf == CATEGORY_SENT { return 0u8 }
+    let h_gf : u32 = cat_compose(gf, h_slot, tid)
+    if h_gf == CATEGORY_SENT { return 0u8 }
+    let hg : u32 = cat_compose(g_slot, h_slot, tid)
+    if hg == CATEGORY_SENT { return 0u8 }
+    let hg_f : u32 = cat_compose(f_slot, hg, tid)
+    if hg_f == CATEGORY_SENT { return 0u8 }
+    return cat_morph_eq(h_gf, hg_f)
+}
+
+/* --- universal constructions (aggregate [u32;5]; G2/G5) ---
+ *
+ * The fixed legs f,g live in CATEGORY_UF / CATEGORY_UG (set by the public
+ * fn) so the probe helper stays <=4 params (W2).  mode 0 = pullback
+ * (left = compose(m1,f), right = compose(m2,g)); mode 1 = pushout
+ * (left = compose(f,m1), right = compose(g,m2)).  1u8 = the candidate
+ * legs (m1,m2) equalize through f,g.  Two probe scratch buffers keep the
+ * left / right composites distinct across the cat_morph_eq read. */
+fn category_pb_probe(m1: u32, m2: u32, mode: u32) -> u8 {
+    let lp : *u8 = (&CATEGORY_TIDBUF as u64) as *u8
+    let rp : *u8 = (&CATEGORY_TIDBF2 as u64) as *u8
+    let mut lft : u32 = CATEGORY_SENT
+    let mut rgt : u32 = CATEGORY_SENT
+    if mode == 0u32 {
+        lft = cat_compose(m1, CATEGORY_UF, lp)
+        rgt = cat_compose(m2, CATEGORY_UG, rp)
+    }
+    if mode == 1u32 {
+        lft = cat_compose(CATEGORY_UF, m1, lp)
+        rgt = cat_compose(CATEGORY_UG, m2, rp)
+    }
+    if lft == CATEGORY_SENT { return 0u8 }
+    if rgt == CATEGORY_SENT { return 0u8 }
+    return cat_morph_eq(lft, rgt)
+}
+
+/* Find a single morphism src_obj -> dst_obj; CATEGORY_SENT if none.
+ * (First match suffices: composite op-id is a deterministic function of
+ * the ordered pair, so a parallel duplicate would be the same morphism.) */
+fn cat_find_arrow(src_obj: u32, dst_obj: u32) -> u32 {
+    let mut i : u32 = 0u32
+    let mut found : u32 = CATEGORY_SENT
+    while i < CATEGORY_MAX_MOR {
+        if found == CATEGORY_SENT {
+            if CATEGORY_MOR_LIVE[i] == 1u8 {
+                if CATEGORY_MOR_SRC[i] == src_obj {
+                    if CATEGORY_MOR_DST[i] == dst_obj { found = i }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+/* Lex-min accumulator: keep cand iff best is unset OR obj(cand) < obj(best)
+ * under ident_cmp (deterministic tie-break, M2).  Returns 1u8 if cand wins. */
+fn cat_lexmin_wins(cand: u32, best: u32) -> u8 {
+    if best == CATEGORY_SENT { return 1u8 }
+    if ident_cmp(cat_obj_id_ptr(cand), cat_obj_id_ptr(best)) == -1i32 { return 1u8 }
+    return 0u8
+}
+
+/* Pullback / pushout inner scan over candidate apex objects.  mode selects
+ * the leg directions (see category_pb_probe).  Reads CATEGORY_UF/UG and the
+ * span endpoints leg_a (m1 endpoint) / leg_b (m2 endpoint).  On success
+ * writes out[0]=apex, out[1]=m1, out[2]=m2; returns OK / E_NOT_FOUND. */
+fn cat_span_search(out: *u32, leg_a: u32, leg_b: u32, mode: u32) -> i32 {
+    let mut best : u32 = CATEGORY_SENT
+    let mut best1 : u32 = CATEGORY_SENT
+    let mut best2 : u32 = CATEGORY_SENT
+    let mut cand : u32 = 0u32
+    while cand < CATEGORY_MAX_OBJ {
+        if CATEGORY_OBJ_LIVE[cand] == 1u8 {
+            let m1 : u32 = cat_find_arrow(cand, leg_a)
+            let m2 : u32 = cat_find_arrow(cand, leg_b)
+            if m1 != CATEGORY_SENT {
+                if m2 != CATEGORY_SENT {
+                    if category_pb_probe(m1, m2, mode) == 1u8 {
+                        if cat_lexmin_wins(cand, best) == 1u8 {
+                            best = cand
+                            best1 = m1
+                            best2 = m2
+                        }
+                    }
+                }
+            }
+        }
+        cand = cand + 1u32
+    }
+    if best == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    out[0u64] = best
+    out[1u64] = best1
+    out[2u64] = best2
+    return CATEGORY_OK
+}
+
+fn cat_pullback(out: *u32) -> i32 @export {
+    if (out as u64) == 0u64 { return CATEGORY_E_NULL }
+    let f : u32 = out[0u64]
+    let g : u32 = out[1u64]
+    if cat_mor_ok(f) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if cat_mor_ok(g) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if CATEGORY_MOR_DST[f] != CATEGORY_MOR_DST[g] { return CATEGORY_E_MISMATCH }
+    CATEGORY_UF = f
+    CATEGORY_UG = g
+    let a : u32 = CATEGORY_MOR_SRC[f]
+    let b : u32 = CATEGORY_MOR_SRC[g]
+    return cat_span_search(out, a, b, 0u32)
+}
+fn cat_pushout(out: *u32) -> i32 @export {
+    if (out as u64) == 0u64 { return CATEGORY_E_NULL }
+    let f : u32 = out[0u64]
+    let g : u32 = out[1u64]
+    if cat_mor_ok(f) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if cat_mor_ok(g) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if CATEGORY_MOR_SRC[f] != CATEGORY_MOR_SRC[g] { return CATEGORY_E_MISMATCH }
+    CATEGORY_UF = f
+    CATEGORY_UG = g
+    let b : u32 = CATEGORY_MOR_DST[f]
+    let c : u32 = CATEGORY_MOR_DST[g]
+    return cat_span_search(out, b, c, 1u32)
+}
+
+/* Coequalizer inner scan: a single arrow c : B -> cand with
+ * compose(f,c) == compose(g,c).  On success out[0]=q_vertex, out[1]=c. */
+fn cat_coeq_search(out: *u32, b: u32) -> i32 {
+    let mut best : u32 = CATEGORY_SENT
+    let mut bestc : u32 = CATEGORY_SENT
+    let mut cand : u32 = 0u32
+    while cand < CATEGORY_MAX_OBJ {
+        if CATEGORY_OBJ_LIVE[cand] == 1u8 {
+            let c : u32 = cat_find_arrow(b, cand)
+            if c != CATEGORY_SENT {
+                if category_pb_probe(c, c, 1u32) == 1u8 {
+                    if cat_lexmin_wins(cand, best) == 1u8 {
+                        best = cand
+                        bestc = c
+                    }
+                }
+            }
+        }
+        cand = cand + 1u32
+    }
+    if best == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    out[0u64] = best
+    out[1u64] = bestc
+    return CATEGORY_OK
+}
+fn cat_coequalizer(out: *u32) -> i32 @export {
+    if (out as u64) == 0u64 { return CATEGORY_E_NULL }
+    let f : u32 = out[0u64]
+    let g : u32 = out[1u64]
+    if cat_mor_ok(f) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if cat_mor_ok(g) == 0u8 { return CATEGORY_E_BAD_SLOT }
+    if CATEGORY_MOR_SRC[f] != CATEGORY_MOR_SRC[g] { return CATEGORY_E_MISMATCH }
+    if CATEGORY_MOR_DST[f] != CATEGORY_MOR_DST[g] { return CATEGORY_E_MISMATCH }
+    CATEGORY_UF = f
+    CATEGORY_UG = g
+    let b : u32 = CATEGORY_MOR_DST[f]
+    return cat_coeq_search(out, b)
+}
+
+/* --- self-test helpers --- */
+/* Hash a 1-byte literal into a 32-byte KAT object-id scratch. */
+fn cat_kat_mkid(byte: u8, dst: *u8) -> i32 {
+    CATEGORY_KAT_LIT[0] = byte
+    keccak256_oneshot(&CATEGORY_KAT_LIT as u64, 1u64, dst as u64)
+    return CATEGORY_OK
+}
+
+/* --- embedded KAT self-test: 99 on full pass; small code at each failure.
+ * Each vector carries a proven NEGATIVE arm (prove the guard fails on bad
+ * input, not only passes on good).  G10 / M3 memory rule. --- */
+fn cat_kat() -> u64 @export {
+    cat_init()
+    let pa : *u8 = (&CATEGORY_KAT_A as u64) as *u8
+    let pb : *u8 = (&CATEGORY_KAT_B as u64) as *u8
+    let pc : *u8 = (&CATEGORY_KAT_C as u64) as *u8
+    let pd : *u8 = (&CATEGORY_KAT_D as u64) as *u8
+    let pe : *u8 = (&CATEGORY_KAT_E as u64) as *u8
+    let pid : *u8 = (&CATEGORY_KAT_ID as u64) as *u8
+    let pref : *u8 = (&CATEGORY_KAT_REF as u64) as *u8
+    let pout : *u32 = (&CATEGORY_KAT_OUT as u64) as *u32
+
+    cat_kat_mkid(0x41u8, pa)                       /* id(A) = Keccak256("A") */
+    cat_kat_mkid(0x42u8, pb)                       /* id(B) */
+    cat_kat_mkid(0x43u8, pc)                       /* id(C) */
+    cat_kat_mkid(0x44u8, pd)                       /* id(D) */
+    cat_kat_mkid(0x45u8, pe)                       /* id(E) */
+
+    let sa : u32 = cat_add_object(pa)
+    let sb : u32 = cat_add_object(pb)
+    let sc : u32 = cat_add_object(pc)
+    let sd : u32 = cat_add_object(pd)
+    let se : u32 = cat_add_object(pe)
+    if sa == CATEGORY_SENT { return 1u64 }
+    if sb == CATEGORY_SENT { return 2u64 }
+    if sc == CATEGORY_SENT { return 3u64 }
+    if sd == CATEGORY_SENT { return 4u64 }
+    if se == CATEGORY_SENT { return 5u64 }
+    /* idempotent add: re-adding A returns the same slot. */
+    if cat_add_object(pa) != sa { return 6u64 }
+    /* find round-trips; object id read-back equals the input. */
+    if cat_find_object(pb) != sb { return 7u64 }
+    cat_object_id(sa, pid)
+    if ident_eq(pid, pa) != 1u8 { return 8u64 }
+
+    /* Vector 1: identity + composition closure.  f:A->B, g:B->C. */
+    cat_kat_mkid(0x66u8, pid)                      /* op "f" */
+    let f : u32 = cat_add_morphism(sa, sb, pid, pref)
+    if f == CATEGORY_SENT { return 10u64 }
+    cat_kat_mkid(0x67u8, pid)                      /* op "g" */
+    let g : u32 = cat_add_morphism(sb, sc, pid, pref)
+    if g == CATEGORY_SENT { return 11u64 }
+    let gf : u32 = cat_compose(f, g, pref)
+    if gf == CATEGORY_SENT { return 12u64 }
+    if cat_morphism_src(gf) != sa { return 13u64 }
+    if cat_morphism_dst(gf) != sc { return 14u64 }
+    /* dedup / composite-uniqueness: recompose returns the same slot. */
+    let gf2 : u32 = cat_compose(f, g, pref)
+    if gf2 != gf { return 15u64 }
+    /* NEGATIVE: endpoint-mismatch compose (B != C-src) refused. */
+    cat_kat_mkid(0x68u8, pid)                      /* op "h2" on C->D */
+    let cd : u32 = cat_add_morphism(sc, sd, pid, pref)
+    if cd == CATEGORY_SENT { return 16u64 }
+    if cat_compose(f, cd, pref) != CATEGORY_SENT { return 17u64 }
+
+    /* Vector 2: associativity law.  h:C->D.  (h.g).f == h.(g.f). */
+    if cat_check_assoc(f, g, cd) != 1u8 { return 20u64 }
+    /* NEGATIVE: non-composable triple (arrow E->D in place of h) -> 0. */
+    cat_kat_mkid(0x6Au8, pid)                      /* op on E->D */
+    let ed : u32 = cat_add_morphism(se, sd, pid, pref)
+    if ed == CATEGORY_SENT { return 21u64 }
+    if cat_check_assoc(f, g, ed) != 0u8 { return 22u64 }
+
+    /* Vector 3: coequalizer of parallel arrows p,q : A->B.
+     * Give p,q the SAME op so they are the same morphism (parallel pair
+     * that trivially coequalizes); add c:B->C; expect a vertex + c slot.
+     * Run on a FRESH category so cc is the UNIQUE arrow out of B -- otherwise
+     * the B->C arrow g from Vector 1 is still live and cat_find_arrow (first
+     * live match, lex-min apex) returns it instead, making "the constructed c"
+     * ill-posed (when p==q every B-arrow coequalizes; only the apex object is
+     * canonical, the coequalizing arrow is not unique unless B has one). */
+    cat_init()
+    let sa3 : u32 = cat_add_object(pa)
+    let sb3 : u32 = cat_add_object(pb)
+    let sc3 : u32 = cat_add_object(pc)
+    if sa3 == CATEGORY_SENT { return 30u64 }
+    if sb3 == CATEGORY_SENT { return 31u64 }
+    if sc3 == CATEGORY_SENT { return 32u64 }
+    cat_kat_mkid(0x70u8, pid)                      /* op "p" (== q) */
+    let p : u32 = cat_add_morphism(sa3, sb3, pid, pref)
+    if p == CATEGORY_SENT { return 33u64 }
+    let q : u32 = cat_add_morphism(sa3, sb3, pid, pref)
+    if q != p { return 34u64 }                     /* same op => same morphism */
+    cat_kat_mkid(0x63u8, pid)                      /* op "c" on B->C */
+    let cc : u32 = cat_add_morphism(sb3, sc3, pid, pref)
+    if cc == CATEGORY_SENT { return 342u64 }
+    CATEGORY_KAT_OUT[0] = p
+    CATEGORY_KAT_OUT[1] = q
+    if cat_coequalizer(pout) != CATEGORY_OK { return 343u64 }
+    if pout[1u64] != cc { return 344u64 }          /* c_slot is the unique B->C arrow */
+    if pout[0u64] != sc3 { return 345u64 }         /* apex vertex is C */
+    /* NEGATIVE: a non-parallel pair is refused (E_MISMATCH).
+     * p:A->B and cc:B->C are not parallel (SRC A != B, DST B != C). */
+    CATEGORY_KAT_OUT[0] = p
+    CATEGORY_KAT_OUT[1] = cc
+    if cat_coequalizer(pout) != CATEGORY_E_MISMATCH { return 35u64 }
+    /* NEGATIVE: a genuine parallel pair (r,s:A->B distinct ops) with NO
+     * equalizing arrow out of B yields E_NOT_FOUND.  Build a fresh empty
+     * category so no B-> arrow exists. */
+    cat_init()
+    let qa : u32 = cat_add_object(pa)
+    let qb : u32 = cat_add_object(pb)
+    if qa == CATEGORY_SENT { return 36u64 }
+    if qb == CATEGORY_SENT { return 37u64 }
+    cat_kat_mkid(0x72u8, pid)                      /* op "r" */
+    let r : u32 = cat_add_morphism(qa, qb, pid, pref)
+    cat_kat_mkid(0x73u8, pid)                      /* op "s" (distinct) */
+    let s : u32 = cat_add_morphism(qa, qb, pid, pref)
+    if r == CATEGORY_SENT { return 38u64 }
+    if s == CATEGORY_SENT { return 39u64 }
+    if r == s { return 40u64 }                     /* distinct ops => distinct */
+    CATEGORY_KAT_OUT[0] = r
+    CATEGORY_KAT_OUT[1] = s
+    if cat_coequalizer(pout) != CATEGORY_E_NOT_FOUND { return 41u64 }
+
+    /* Vector 4: morphism-id determinism (bit-identity, W5/M2).
+     * cat_add_morphism(A,B,op) twice with identical op returns the same
+     * slot and writes the same 32-byte id; id == Keccak256(idA||idB||op).
+     * Reuse A,B (qa,qb above) and op "r".  The out buffer MUST be a full
+     * 32-byte id scratch (pe) -- writing the id into CATEGORY_KAT_OUT, a
+     * [u32;5]=20-byte aggregate, would overflow it by 12 bytes and corrupt
+     * the read-back (the morphism id is 32 bytes, not 5 u32 slots). */
+    cat_kat_mkid(0x72u8, pid)                      /* op "r" again */
+    let m1 : u32 = cat_add_morphism(qa, qb, pid, pe)
+    if m1 == CATEGORY_SENT { return 50u64 }
+    /* capture the written id into pref for a second-write comparison. */
+    ident_copy(pe, pref)
+    let m2 : u32 = cat_add_morphism(qa, qb, pid, pa)   /* re-add; pa now holds id */
+    if m2 != m1 { return 51u64 }
+    if ident_eq(pref, pa) != 1u8 { return 52u64 }
+    /* reference: compute Keccak256(idB-was-overwritten? no -- recompute idA,idB). */
+    cat_kat_mkid(0x41u8, pb)                       /* idA into pb scratch */
+    cat_kat_mkid(0x42u8, pc)                       /* idB into pc scratch */
+    cat_kat_mkid(0x72u8, pid)                      /* op "r" into pid */
+    let mut ci : u64 = 0u64
+    while ci < CATEGORY_IDBYTES {
+        CATEGORY_HBUF[ci] = pb[ci]
+        CATEGORY_HBUF[32u64 + ci] = pc[ci]
+        CATEGORY_HBUF[64u64 + ci] = pid[ci]
+        ci = ci + 1u64
+    }
+    keccak256_oneshot(&CATEGORY_HBUF as u64, 96u64, pd as u64)
+    if ident_eq(pref, pd) != 1u8 { return 53u64 }
+
+    /* NEGATIVE: bad-slot guards.  out-of-range morphism reads sentinel; a
+     * null out pointer to cat_object_id returns E_NULL. */
+    if cat_morphism_src(CATEGORY_MAX_MOR) != CATEGORY_SENT { return 60u64 }
+    if cat_morph_eq(CATEGORY_MAX_MOR, CATEGORY_MAX_MOR) != 0u8 { return 61u64 }
+    let nullp : *u8 = 0u64 as *u8
+    if cat_object_id(qa, nullp) != CATEGORY_E_NULL { return 62u64 }
+    if cat_add_object(nullp) != CATEGORY_SENT { return 63u64 }
+
+    /* Vector 5: pullback of a cospan f:A->C, g:B->C with apex A->...
+     * Build A,B,C; f:A->C, g:B->C; an apex P with p1:P->A, p2:P->B such
+     * that f.p1 == g.p2.  Construct it so the composites collide by making
+     * the legs and f,g align; verify a vertex is found. */
+    cat_init()
+    cat_kat_mkid(0x41u8, pa)
+    cat_kat_mkid(0x42u8, pb)
+    cat_kat_mkid(0x43u8, pc)
+    cat_kat_mkid(0x50u8, pd)                       /* id(P) = Keccak256("P") */
+    let oa : u32 = cat_add_object(pa)
+    let ob : u32 = cat_add_object(pb)
+    let oc : u32 = cat_add_object(pc)
+    let op : u32 = cat_add_object(pd)
+    if oa == CATEGORY_SENT { return 70u64 }
+    if ob == CATEGORY_SENT { return 71u64 }
+    if oc == CATEGORY_SENT { return 72u64 }
+    if op == CATEGORY_SENT { return 73u64 }
+    cat_kat_mkid(0x78u8, pid)                      /* op "x": f:A->C */
+    let pf : u32 = cat_add_morphism(oa, oc, pid, pref)
+    cat_kat_mkid(0x79u8, pid)                      /* op "y": g:B->C */
+    let pg : u32 = cat_add_morphism(ob, oc, pid, pref)
+    if pf == CATEGORY_SENT { return 74u64 }
+    if pg == CATEGORY_SENT { return 75u64 }
+    /* legs p1:P->A, p2:P->B; choose ops so f.p1 and g.p2 share an id.
+     * compose ids are Keccak256(p1_id||f_id) and Keccak256(p2_id||g_id);
+     * they coincide only if (p1_id,f_id)==(p2_id,g_id) as a pair, which is
+     * impossible here (f != g), so this cospan has NO pullback vertex --
+     * a valid negative used to prove E_NOT_FOUND. */
+    cat_kat_mkid(0x6Bu8, pid)                      /* op "k": p1:P->A */
+    let p1 : u32 = cat_add_morphism(op, oa, pid, pref)
+    cat_kat_mkid(0x6Cu8, pid)                      /* op "l": p2:P->B */
+    let p2 : u32 = cat_add_morphism(op, ob, pid, pref)
+    if p1 == CATEGORY_SENT { return 76u64 }
+    if p2 == CATEGORY_SENT { return 77u64 }
+    CATEGORY_KAT_OUT[0] = pf
+    CATEGORY_KAT_OUT[1] = pg
+    if cat_pullback(pout) != CATEGORY_E_NOT_FOUND { return 78u64 }
+    /* NEGATIVE: pullback of arrows without a shared target -> E_MISMATCH. */
+    cat_kat_mkid(0x7Au8, pid)                      /* op "z": A->B (target B) */
+    let ab : u32 = cat_add_morphism(oa, ob, pid, pref)
+    if ab == CATEGORY_SENT { return 79u64 }
+    CATEGORY_KAT_OUT[0] = pf                        /* target C */
+    CATEGORY_KAT_OUT[1] = ab                        /* target B */
+    if cat_pullback(pout) != CATEGORY_E_MISMATCH { return 80u64 }
+    /* NEGATIVE: pushout of arrows without a shared source -> E_MISMATCH. */
+    CATEGORY_KAT_OUT[0] = pf                        /* src A */
+    CATEGORY_KAT_OUT[1] = pg                        /* src B */
+    if cat_pushout(pout) != CATEGORY_E_MISMATCH { return 81u64 }
+    /* POSITIVE pullback: identity legs over a shared cospan.  With
+     * f:A->C and the SAME f as g, apex A with p1=p2=id(A) gives
+     * f.id == f.id.  Build id(A); the pullback of (f,f) has a vertex. */
+    cat_identity(oa, pref)
+    CATEGORY_KAT_OUT[0] = pf
+    CATEGORY_KAT_OUT[1] = pf                        /* cospan (f,f), shared target C */
+    if cat_pullback(pout) != CATEGORY_OK { return 82u64 }
+
+    return 99u64
+}
+
+/* ============================================================================
+ * Migration 7 CORE -- "one category" (Harmony Invariant H11): every transform
+ * is a MORPHISM and composition is ASSOCIATIVE.  This is the ADDITIVE morphism-
+ * LAW falsifier: a run_charter-style constitutional clause registry proving
+ * H11's runtime core OVER THE cat_* API ITSELF (not from an external charter
+ * module).  It is the in-module embodiment of the law category.iii realizes.
+ *
+ * Distinct from cat_kat (vector-style API exercise) and from the sibling KATs
+ * 620/676/694(h11_charter): those prove the laws as flat checks or via the
+ * external category extern; THIS proves them as a CLAUSE FOLD with a paired
+ * verify-AND-falsify per clause plus a canary that drives the fold RED -- the
+ * mig6 falsifier-per-clause discipline applied to the category's OWN core.
+ *
+ * The three substantive clauses, each HOLDS = verify & falsify:
+ *   ASSOC   -- register >=3 composable morphisms f:A->B, g:B->C, h:C->D and
+ *              prove cat_check_assoc(f,g,h) == 1 (composition is associative).
+ *   CLOSURE -- composition is CLOSED/TOTAL over the registered set: gf=compose(
+ *              f,g) is itself a VALID REGISTERED morphism (cat_morphism_src(gf)
+ *              != SENT) with src(gf)==A, dst(gf)==C, and gf can be composed
+ *              FURTHER (compose(gf,h) is again a valid registered morphism
+ *              A->D).  This proves the composite is a first-class arrow, so the
+ *              category is closed under composition -- not a partial gadget.
+ *   REJECT  -- the prove-the-negative: a NON-composable pair (dst(f)=B !=
+ *              src(h)=C) is REFUSED -- cat_compose(f,h) returns EXACTLY the
+ *              CATEGORY_SENT sentinel AND cat_check_assoc(f,h,g) returns EXACTLY
+ *              0u8.  This proves the category is the REAL free category, not a
+ *              degenerate one where everything composes.
+ *
+ * The CANARY clause CLAIMS the non-composable pair (f,h) DOES compose (false:
+ * cat_compose returns the sentinel); registering it drives the fold RED at its
+ * 1-based index -- so the fold is a genuine falsifier, not vacuously green.
+ *
+ * cat_laws_charter_selftest() -> u64 == 99 on full pass; a distinct code at each
+ * failed check (diagnosable).  Reuses the existing cat_* API verbatim -- it does
+ * NOT reimplement composition or the morphism-id scheme.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony over R0 category).
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores;
+ * masked idx; no local var arrays (CATL_ module scope); serialized (reuses the
+ * R0 category state via cat_init, so not reentrant w.r.t. concurrent cat use).
+ * ============================================================================ */
+
+const CATL_MAX_CLAUSES   : u32 = 64u32
+const CATL_KIND_ASSOC    : u8  = 0u8     /* verify: cat_check_assoc(f,g,h)==1 */
+const CATL_KIND_CLOSURE  : u8  = 1u8     /* verify: composite is a valid registered morphism, recomposable */
+const CATL_KIND_REJECT   : u8  = 2u8     /* falsify: non-composable pair -> SENT and assoc==0 */
+const CATL_KIND_CANARY   : u8  = 3u8     /* deliberately-false: claims (f,h) composes */
+const CATL_VERDICT_GREEN : u64 = 99u64   /* > CATL_MAX_CLAUSES, so never a RED index */
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var CATL_CLAUSE_KIND  : [u8;  64]
+var CATL_CLAUSE_COUNT : u32 = 0u32
+
+/* --- object-id + op-word scratch (module scope, Trap 7; serialized; the
+ * 676_cat_laws cat_fill32 idiom -- a distinct 32-byte id per constant byte). --- */
+var CATL_OBJA : [u8; 32]
+var CATL_OBJB : [u8; 32]
+var CATL_OBJC : [u8; 32]
+var CATL_OBJD : [u8; 32]
+var CATL_OPF  : [u8; 32]
+var CATL_OPG  : [u8; 32]
+var CATL_OPH  : [u8; 32]
+var CATL_SINK : [u8; 32]      /* throwaway out_id for cat_add_morphism / cat_compose */
+
+/* --- the built scene's morphism slots (stashed by catl_build_scene). --- */
+var CATL_SF : u32 = 0u32      /* f : A -> B */
+var CATL_SG : u32 = 0u32      /* g : B -> C */
+var CATL_SH : u32 = 0u32      /* h : C -> D */
+
+/* Fill the 32-byte id at addr with the constant byte b (the 676_cat_laws idiom). */
+fn catl_fill32(addr: u64, b: u8) -> i32 {
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = b  i = i + 1u64 }
+    return CATEGORY_OK
+}
+
+/* Build the canonical scene on a FRESH category: objects A,B,C,D and the
+ * composable chain f:A->B, g:B->C, h:C->D (>=3 composable morphisms).  Stashes
+ * the slots in CATL_SF/SG/SH.  Idempotent (cat_add_object/cat_add_morphism dedup
+ * by id).  Returns CATEGORY_OK, or CATEGORY_E_NOT_FOUND if any construction fails. */
+fn catl_build_scene() -> i32 {
+    cat_init()
+    catl_fill32(&CATL_OBJA as u64, 0x41u8)
+    catl_fill32(&CATL_OBJB as u64, 0x42u8)
+    catl_fill32(&CATL_OBJC as u64, 0x43u8)
+    catl_fill32(&CATL_OBJD as u64, 0x44u8)
+    catl_fill32(&CATL_OPF as u64, 0x66u8)
+    catl_fill32(&CATL_OPG as u64, 0x67u8)
+    catl_fill32(&CATL_OPH as u64, 0x68u8)
+    let sk : *u8 = (&CATL_SINK as u64) as *u8
+    let sa : u32 = cat_add_object((&CATL_OBJA as u64) as *u8)
+    let sb : u32 = cat_add_object((&CATL_OBJB as u64) as *u8)
+    let sc : u32 = cat_add_object((&CATL_OBJC as u64) as *u8)
+    let sd : u32 = cat_add_object((&CATL_OBJD as u64) as *u8)
+    if sa == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    if sb == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    if sc == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    if sd == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    let f : u32 = cat_add_morphism(sa, sb, (&CATL_OPF as u64) as *u8, sk)
+    let g : u32 = cat_add_morphism(sb, sc, (&CATL_OPG as u64) as *u8, sk)
+    let h : u32 = cat_add_morphism(sc, sd, (&CATL_OPH as u64) as *u8, sk)
+    if f == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    if g == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    if h == CATEGORY_SENT { return CATEGORY_E_NOT_FOUND }
+    CATL_SF = f
+    CATL_SG = g
+    CATL_SH = h
+    return CATEGORY_OK
+}
+
+/* ASSOC verify: composition is ASSOCIATIVE over the composable chain f,g,h.
+ * (g.f then h, vs g.(h after) -- cat_check_assoc internally proves the two
+ * bracketings are the SAME morphism via cat_morph_eq).  1 iff it holds. */
+fn catl_verify_assoc() -> u8 {
+    if catl_build_scene() != CATEGORY_OK { return 0u8 }
+    if cat_check_assoc(CATL_SF, CATL_SG, CATL_SH) != 1u8 { return 0u8 }
+    return 1u8
+}
+
+/* CLOSURE verify: composition is CLOSED/TOTAL over the registered set.  The
+ * composite gf=compose(f,g) is itself a VALID REGISTERED morphism (its src is
+ * not the sentinel) with src==A and dst==C; and gf can be composed FURTHER --
+ * compose(gf,h) is again a valid registered morphism with src==A, dst==D.  This
+ * is the closure half of "one category": every composite is a first-class arrow. */
+fn catl_verify_closure() -> u8 {
+    if catl_build_scene() != CATEGORY_OK { return 0u8 }
+    let f : u32 = CATL_SF
+    let g : u32 = CATL_SG
+    let h : u32 = CATL_SH
+    let sa : u32 = cat_morphism_src(f)
+    let sc : u32 = cat_morphism_dst(g)
+    let sd : u32 = cat_morphism_dst(h)
+    let sk : *u8 = (&CATL_SINK as u64) as *u8
+    let gf : u32 = cat_compose(f, g, sk)
+    if gf == CATEGORY_SENT { return 0u8 }
+    if cat_morphism_src(gf) == CATEGORY_SENT { return 0u8 }   /* gf is a valid registered morphism */
+    if cat_morphism_src(gf) != sa { return 0u8 }              /* src(g.f) == src(f) == A */
+    if cat_morphism_dst(gf) != sc { return 0u8 }              /* dst(g.f) == dst(g) == C */
+    let hgf : u32 = cat_compose(gf, h, sk)                    /* the composite recomposes -- closed */
+    if hgf == CATEGORY_SENT { return 0u8 }
+    if cat_morphism_src(hgf) == CATEGORY_SENT { return 0u8 }  /* h.(g.f) is itself registered */
+    if cat_morphism_src(hgf) != sa { return 0u8 }             /* src == A */
+    if cat_morphism_dst(hgf) != sd { return 0u8 }             /* dst == D */
+    return 1u8
+}
+
+/* REJECT falsify (prove-the-negative): a NON-composable pair is REFUSED.
+ * compose(f,h) with dst(f)=B != src(h)=C returns EXACTLY the CATEGORY_SENT
+ * sentinel; cat_check_assoc(f,h,g) (a non-composable arrangement) returns
+ * EXACTLY 0u8; and composing against an invalid morphism slot (CATEGORY_SENT)
+ * is also refused to the sentinel.  1 iff ALL THREE rejections fire exactly. */
+fn catl_falsify_reject() -> u8 {
+    if catl_build_scene() != CATEGORY_OK { return 0u8 }
+    let f : u32 = CATL_SF
+    let g : u32 = CATL_SG
+    let h : u32 = CATL_SH
+    let sk : *u8 = (&CATL_SINK as u64) as *u8
+    if cat_compose(f, h, sk) != CATEGORY_SENT { return 0u8 }       /* dst(f)=B != src(h)=C -> SENT */
+    if cat_check_assoc(f, h, g) != 0u8 { return 0u8 }              /* non-composable arrangement -> 0 */
+    if cat_compose(f, CATEGORY_SENT, sk) != CATEGORY_SENT { return 0u8 }  /* invalid slot -> SENT */
+    return 1u8
+}
+
+/* The canary's holds: it CLAIMS the non-composable pair (f,h) composes into a
+ * LAWFUL morphism -- FALSE (cat_compose(f,h) returns the sentinel, dst(f)=B !=
+ * src(h)=C).  A genuinely-false clause used ONLY to drive the fold RED. */
+fn catl_canary_holds() -> u8 {
+    if catl_build_scene() != CATEGORY_OK { return 0u8 }
+    let f : u32 = CATL_SF
+    let h : u32 = CATL_SH
+    let sk : *u8 = (&CATL_SINK as u64) as *u8
+    if cat_compose(f, h, sk) != CATEGORY_SENT { return 1u8 }
+    return 0u8
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never
+ * a fn ptr).  The substantive clauses carry verify AND falsify; the canary is a
+ * negative-only false clause. */
+fn catl_clause_eval(idx: u32) -> u8 {
+    let kd : u8 = CATL_CLAUSE_KIND[(idx as u64) & CATEGORY_U32MASK]
+    if kd == CATL_KIND_ASSOC {
+        if catl_verify_assoc() != 1u8 { return 0u8 }
+        if catl_falsify_reject() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if kd == CATL_KIND_CLOSURE {
+        if catl_verify_closure() != 1u8 { return 0u8 }
+        if catl_falsify_reject() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if kd == CATL_KIND_REJECT {
+        if catl_falsify_reject() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if kd == CATL_KIND_CANARY { return catl_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind kd.  Returns the 0-based slot, or -1 if full. */
+fn catl_register(kd: u8) -> i32 {
+    let n : u32 = CATL_CLAUSE_COUNT
+    if n >= CATL_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & CATEGORY_U32MASK
+    CATL_CLAUSE_KIND[slot] = kd
+    CATL_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* THE MORPHISM-LAW GATE.  Fold every registered clause: GREEN (99) iff all hold;
+ * else the 1-based index of the first failing clause (RED). */
+fn catl_run_charter() -> u64 {
+    let n : u32 = CATL_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if catl_clause_eval(i) != 1u8 { return ((i as u64) & CATEGORY_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return CATL_VERDICT_GREEN
+}
+
+/* Reset the clause registry. */
+fn catl_init() -> i32 {
+    CATL_CLAUSE_COUNT = 0u32
+    return CATEGORY_OK
+}
+
+/* THE MORPHISM-LAW FALSIFIER (Migration 7 CORE, H11 runtime core).
+ * 99 = full pass; a distinct code at each failed check (diagnosable).
+ * Proves, in order:
+ *   1  the scene builds (>=3 composable morphisms f,g,h);
+ *   2  ASSOC verify holds -- cat_check_assoc(f,g,h)==1 (composition associative);
+ *   3  CLOSURE verify holds -- the composite is a valid registered morphism with
+ *      correct endpoints AND recomposes (composition is closed/total);
+ *   4  REJECT falsify FIRES -- a non-composable pair is refused to the sentinel
+ *      AND cat_check_assoc on a non-composable arrangement returns 0;
+ *   5  the canary is genuinely false -- (f,h) does NOT compose (returns 0);
+ *   6  registering ASSOC,CLOSURE,REJECT yields slots 0,1,2 (7,8);
+ *   9  the gate is GREEN over the three substantive clauses;
+ *   10 GREEN is reproducible across a re-run;
+ *   -- the prove-the-negative arm --
+ *   11 registering the false canary at slot 3 (12) drives the gate RED, returning
+ *      the canary's 1-based index (=4), proving the fold is a real falsifier. */
+fn cat_laws_charter_selftest() -> u64 @export {
+    if catl_init() != CATEGORY_OK { return 1u64 }
+    if catl_build_scene() != CATEGORY_OK { return 2u64 }
+    if catl_verify_assoc() != 1u8 { return 3u64 }
+    if catl_verify_closure() != 1u8 { return 4u64 }
+    if catl_falsify_reject() != 1u8 { return 5u64 }
+    if catl_canary_holds() != 0u8 { return 6u64 }
+    if catl_register(CATL_KIND_ASSOC) != 0i32 { return 7u64 }
+    if catl_register(CATL_KIND_CLOSURE) != 1i32 { return 8u64 }
+    if catl_register(CATL_KIND_REJECT) != 2i32 { return 9u64 }
+    if catl_run_charter() != CATL_VERDICT_GREEN { return 10u64 }
+    if catl_run_charter() != CATL_VERDICT_GREEN { return 11u64 }
+    if catl_register(CATL_KIND_CANARY) != 3i32 { return 12u64 }
+    if catl_run_charter() != 4u64 { return 13u64 }
+    return 99u64
+}

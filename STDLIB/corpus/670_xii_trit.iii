@@ -1,0 +1,70 @@
+/* 670_xii_trit.iii -- M7 keystone: XII evaluates the M2 ternary algebra.
+ *
+ * For each of the five trit ops over its full domain, building the XII op-term and
+ * canonicalising it == the proven M2 iii_trit_* (the TRIT_NOT/AND/OR/SUM/MUL rewrite
+ * rules). Plus a nested term reduces to a SINGLE TRIT_VAL -- the trit fragment is
+ * terminating + confluent (one normal form), the M7-Final falsifier made executable.
+ * The five trit rules are kind-disjoint from K01-K18, so they add ZERO critical pairs
+ * (the 117-pair confluence proof, re-verified GREEN by run_xii_corpus, stays complete).
+ *
+ * Main-corpus convention: rc 99 on pass; 1..7 = which check failed.
+ * TRIT kinds: VAL=24 NOT=25 AND=26 OR=27 SUM=28 MUL=29. subform: NEG=0 ZERO=1 POS=2. */
+module corpus_670
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn iii_trit_not(a: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_or(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_sum(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_mul(a: i32, b: i32) -> i32 from "trit.iii"
+
+fn mkval(v: i32) -> u32 { return xii_term_make_basis(24u8, (v + 1i32) as u32) }
+fn getval(idx: u32) -> i32 { return (xii_term_get_subform(idx) as i32) - 1i32 }
+fn eval_bin(opkind: u8, a: i32, b: i32) -> i32 {
+    let top : u32 = xii_term_make_fusion2(opkind, mkval(a), mkval(b))
+    return getval(xii_canonicalise(top))
+}
+
+fn main() -> u64 {
+    /* NOT over {-1,0,1} */
+    let mut ia : u64 = 0u64
+    while ia < 3u64 {
+        xii_term_arena_reset()
+        let a : i32 = (ia as i32) - 1i32
+        let top : u32 = xii_term_make_fusion2(25u8, mkval(a), 0xFFFFFFFFu32)
+        if getval(xii_canonicalise(top)) != iii_trit_not(a) { return 1u64 }
+        ia = ia + 1u64
+    }
+    /* AND/OR/SUM/MUL over the full 3x3 domain */
+    ia = 0u64
+    while ia < 3u64 {
+        let a : i32 = (ia as i32) - 1i32
+        let mut ib : u64 = 0u64
+        while ib < 3u64 {
+            let b : i32 = (ib as i32) - 1i32
+            xii_term_arena_reset()
+            if eval_bin(26u8, a, b) != iii_trit_and(a, b) { return 2u64 }
+            xii_term_arena_reset()
+            if eval_bin(27u8, a, b) != iii_trit_or(a, b) { return 3u64 }
+            xii_term_arena_reset()
+            if eval_bin(28u8, a, b) != iii_trit_sum(a, b) { return 4u64 }
+            xii_term_arena_reset()
+            if eval_bin(29u8, a, b) != iii_trit_mul(a, b) { return 5u64 }
+            ib = ib + 1u64
+        }
+        ia = ia + 1u64
+    }
+    /* nested term reduces to ONE TRIT_VAL (termination + confluence): AND(AND(-1,1),0) */
+    xii_term_arena_reset()
+    let n1 : u32 = xii_term_make_fusion2(26u8, mkval(-1i32), mkval(1i32))
+    let n2 : u32 = xii_term_make_fusion2(26u8, n1, mkval(0i32))
+    let nf : u32 = xii_canonicalise(n2)
+    if xii_term_get_kind(nf) != 24u8 { return 6u64 }
+    if getval(nf) != iii_trit_and(iii_trit_and(-1i32, 1i32), 0i32) { return 7u64 }
+    return 99u64
+}

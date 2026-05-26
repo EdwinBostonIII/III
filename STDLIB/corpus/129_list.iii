@@ -1,0 +1,51 @@
+/* omnia::list — singly-linked list. */
+module corpus_129
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn list_new(arena: u64, hard_max: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_push_front(id: u64, v: u64) -> i32 from "list.iii"
+extern @abi(c-msvc-x64) fn list_push_back(id: u64, v: u64) -> i32 from "list.iii"
+extern @abi(c-msvc-x64) fn list_pop_front(id: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_front(id: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_count(id: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_at(id: u64, i: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_drop(id: u64) -> i32 from "list.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(8192u64)
+    let l : u64 = list_new(a, 32u64)
+    if l == 0u64 { return 1u64 }
+
+    /* Push front 1, 2, 3 → list = [3, 2, 1] */
+    list_push_front(l, 1u64)
+    list_push_front(l, 2u64)
+    list_push_front(l, 3u64)
+    if list_count(l) != 3u64 { return 2u64 }
+    if list_front(l) != 3u64 { return 3u64 }
+    if list_at(l, 0u64) != 3u64 { return 4u64 }
+    if list_at(l, 1u64) != 2u64 { return 5u64 }
+    if list_at(l, 2u64) != 1u64 { return 6u64 }
+
+    /* Push back 4, 5 → list = [3, 2, 1, 4, 5] */
+    list_push_back(l, 4u64)
+    list_push_back(l, 5u64)
+    if list_count(l) != 5u64 { return 7u64 }
+    if list_at(l, 4u64) != 5u64 { return 8u64 }
+
+    /* Pop front three times → list = [4, 5] */
+    if list_pop_front(l) != 3u64 { return 9u64 }
+    if list_pop_front(l) != 2u64 { return 10u64 }
+    if list_pop_front(l) != 1u64 { return 11u64 }
+    if list_count(l) != 2u64 { return 12u64 }
+    if list_front(l) != 4u64 { return 13u64 }
+
+    /* Drain rest */
+    if list_pop_front(l) != 4u64 { return 14u64 }
+    if list_pop_front(l) != 5u64 { return 15u64 }
+    if list_count(l) != 0u64 { return 16u64 }
+
+    list_drop(l)
+    arena_drop(a)
+    return 99u64
+}

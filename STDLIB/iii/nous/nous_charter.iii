@@ -1,0 +1,177 @@
+/* STDLIB/iii/nous/nous_charter.iii -- the constitutional amendment as a self-falsifying
+ * clause (nous Phase 2).  Mirrors numera/h2_charter.iii (the mig6 falsifier-per-clause
+ * + terminal-gate run_charter pattern); ready to be unioned into the constitution's
+ * run_charter (the union-of-all-module-falsifiers).
+ *
+ * THE AMENDMENT (a Prime Directive, redrawn).  III forbids statistical learning.  The
+ * line is redrawn where the architects meant it: NOT learning-vs-no-learning but
+ * DECIDING-vs-PROPOSING.  Refined prohibition, installed here as a falsifiable clause:
+ *
+ *   "Statistical learning is forbidden on any path that DECIDES or ASSERTS, and
+ *    permitted ONLY on a path that PROPOSES and is CHECKED."
+ *
+ * nous lives entirely on the propose-and-checked side: it ranks candidates; the
+ * deterministic engine checks every one (kernel / constitution / cost lattice /
+ * confluence).  This clause's two runtime-checkable facets:
+ *   verify  -- the closure types every search into the trichotomy and certifies only
+ *              what is EARNED: a genuinely-saturated search is SATURATED; a saturated
+ *              search with no representable term is REFUTED.  (The propose-checked path
+ *              yields the right certified verdict when, and only when, proven.)
+ *   falsify -- the gate CATCHES every escape: a budget-hit (un-saturated) search is
+ *              NEVER certified (neither SATURATED nor REFUTED) -- it is an honest GAP;
+ *              and a wall-clock (non-deterministic) budget is REFUSED at construction.
+ *              If nous could assert an oracle-dependent value as determined, or admit a
+ *              non-deterministic budget, these arms turn 0.  HOLDS = verify AND falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing index) unless all
+ * hold.  The negative arm registers a deliberately-false canary ("a budget-hit IS
+ * SATURATED", which classify makes false) and proves the gate goes RED -- a real
+ * falsifier, not vacuously green.  On GREEN the charter cad-seals its own verdict.
+ *
+ * The OPERATIONAL proof of the keystone (reordering proposals changes no answer) is the
+ * BUILD-TIME differential gate scripts/verify_nous_differential.sh (corpus at
+ * nous_active=0 vs =1 -> byte-identical canonical outputs); "removing the proposer
+ * changes an output" is a counterfactual no runtime predicate can express, so it is that
+ * two-run comparison.  The conservative syntactic companion is verify_nous_propose_only.sh.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: nous_search.iii + cad.iii only.  No ML, no float, no u64 division.
+ * Discipline: W2/W8; single-line fns; ==/!= compares; byte-stores; masked idx.  The
+ * trichotomy tag values (0/1/2), the wall-clock kind (255), and EWALL (-2) are written
+ * as literals here -- their named consts are link-global in nous_search (trap #2).
+ */
+module nous_charter
+
+extern @abi(c-msvc-x64) fn nous_classify(saturated: u8, has_answer: u8) -> u8 from "nous_search.iii"
+extern @abi(c-msvc-x64) fn nous_budget_make(steps: u32, cost_cap: u64, kind: u8, out: *u64) -> i32 from "nous_search.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const NOUS_CH_OK            : i32 = 0i32
+const NOUS_CH_CAD_KECCAK    : u32 = 1u32
+const NOUS_CH_MAX_CLAUSES   : u32 = 64u32
+const NOUS_CH_KIND_AMEND    : u8  = 0u8     /* the amendment clause: verify AND falsify */
+const NOUS_CH_KIND_CANARY   : u8  = 1u8     /* a deliberately-false clause (negative arm) */
+const NOUS_CH_VERDICT_GREEN : u64 = 99u64   /* > MAX_CLAUSES, so never a RED index */
+const NOUS_CH_U32MASK       : u64 = 0xFFFFFFFFu64
+/* mirrored values (named consts live in nous_search; literals here to avoid trap-2):
+ *   SATURATED=0  GAP=1  REFUTED=2   BUDGET_WALLCLOCK=255   SR_EWALL=-2 */
+
+var NOUS_CH_CLAUSE_KIND  : [u8;  64]
+var NOUS_CH_CLAUSE_ID    : [u8;  2048]   /* 64 * 32-byte clause content-addresses */
+var NOUS_CH_CLAUSE_COUNT : u32 = 0u32
+var NOUS_CH_KINDBUF      : [u8;  1]
+var NOUS_CH_VERDICT      : [u8;  32]
+var NOUS_CH_SAVED        : [u8;  32]
+var NOUS_CH_SEAL_BUF     : [u8;  2080]
+var NOUS_CH_BUD          : [u64; 4]
+
+fn nous_ch_init() -> i32 @export {
+    NOUS_CH_CLAUSE_COUNT = 0u32
+    return NOUS_CH_OK
+}
+
+/* VERIFY: the closure certifies only what is earned. */
+fn nous_ch_verify() -> u8 @export {
+    if nous_classify(1u8, 1u8) != 0u8 { return 0u8 }   /* saturated + answer -> SATURATED(0) */
+    if nous_classify(1u8, 0u8) != 2u8 { return 0u8 }   /* saturated, no term -> REFUTED(2) */
+    return 1u8
+}
+
+/* FALSIFY: the gate catches every escape (1 = all bad cases correctly refused). */
+fn nous_ch_falsify() -> u8 @export {
+    if nous_classify(0u8, 1u8) == 0u8 { return 0u8 }   /* budget-hit must NOT be SATURATED */
+    if nous_classify(0u8, 0u8) == 0u8 { return 0u8 }   /* budget-hit must NOT be SATURATED */
+    if nous_classify(0u8, 0u8) == 2u8 { return 0u8 }   /* budget-hit must NOT be REFUTED */
+    let bp : *u64 = (&NOUS_CH_BUD as u64) as *u64
+    if nous_budget_make(10u32, 0u64, 255u8, bp) != -2i32 { return 0u8 }   /* wall-clock refused (EWALL) */
+    return 1u8
+}
+
+/* The canary's (false) claim: a budget-hit-with-answer is SATURATED.  classify returns
+ * GAP(1), so this is 0 -- genuinely false, used only to drive run_charter RED. */
+fn nous_ch_canary_holds() -> u8 {
+    if nous_classify(0u8, 1u8) == 0u8 { return 1u8 }
+    return 0u8
+}
+
+fn nous_ch_clause_eval(idx: u32) -> u8 {
+    let k : u8 = NOUS_CH_CLAUSE_KIND[(idx as u64) & NOUS_CH_U32MASK]
+    if k == NOUS_CH_KIND_AMEND {
+        if nous_ch_verify() != 1u8 { return 0u8 }
+        if nous_ch_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == NOUS_CH_KIND_CANARY { return nous_ch_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause; clause_id = cad(KECCAK256, kind-byte), content-addressed. */
+fn nous_ch_register(k: u8) -> i32 {
+    let n : u32 = NOUS_CH_CLAUSE_COUNT
+    if n >= NOUS_CH_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & NOUS_CH_U32MASK
+    NOUS_CH_CLAUSE_KIND[slot] = k
+    NOUS_CH_KINDBUF[0u64] = k
+    cad_oneshot(NOUS_CH_CAD_KECCAK, (&NOUS_CH_KINDBUF as u64) as *u8, 1u64, ((&NOUS_CH_CLAUSE_ID as u64) + slot * 32u64) as *u8)
+    NOUS_CH_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* Seal: VERDICT = cad(KECCAK256, count(LE4) || clause_ids[0..n*32]). */
+fn nous_ch_seal_verdict(n: u32) -> i32 {
+    let n64 : u64 = (n as u64) & NOUS_CH_U32MASK
+    NOUS_CH_SEAL_BUF[0u64] = (n & 0xFFu32) as u8
+    NOUS_CH_SEAL_BUF[1u64] = ((n >> 8u32)  & 0xFFu32) as u8
+    NOUS_CH_SEAL_BUF[2u64] = ((n >> 16u32) & 0xFFu32) as u8
+    NOUS_CH_SEAL_BUF[3u64] = ((n >> 24u32) & 0xFFu32) as u8
+    let total : u64 = n64 * 32u64
+    let mut b : u64 = 0u64
+    while b < total {
+        NOUS_CH_SEAL_BUF[4u64 + b] = NOUS_CH_CLAUSE_ID[b]
+        b = b + 1u64
+    }
+    cad_oneshot(NOUS_CH_CAD_KECCAK, (&NOUS_CH_SEAL_BUF as u64) as *u8, 4u64 + total, (&NOUS_CH_VERDICT as u64) as *u8)
+    return NOUS_CH_OK
+}
+
+/* The terminal gate: GREEN (99) iff every clause holds; else the 1-based failing index. */
+fn nous_ch_run_charter() -> u64 @export {
+    let n : u32 = NOUS_CH_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if nous_ch_clause_eval(i) != 1u8 { return ((i as u64) & NOUS_CH_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    nous_ch_seal_verdict(n)
+    return NOUS_CH_VERDICT_GREEN
+}
+
+fn nous_ch_verdict(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return -1i32 }
+    let mut z : u64 = 0u64
+    while z < 32u64 { out[z] = NOUS_CH_VERDICT[z]  z = z + 1u64 }
+    return NOUS_CH_OK
+}
+
+/* KAT: 99 = all pass.  Proves the amendment holds (verify=1, falsify=1), the canary is
+ * genuinely false (3), run_charter GREEN with the amendment clause (5), the verdict is
+ * non-zero (6) and reproducible (8), and -- the prove-the-negative arm -- run_charter
+ * goes RED at the canary's 1-based index (10), so the gate is a real falsifier. */
+fn nous_charter_selftest() -> u64 @export {
+    nous_ch_init()
+    if nous_ch_verify() != 1u8 { return 1u64 }
+    if nous_ch_falsify() != 1u8 { return 2u64 }
+    if nous_ch_canary_holds() != 0u8 { return 3u64 }
+    if nous_ch_register(NOUS_CH_KIND_AMEND) != 0i32 { return 4u64 }
+    if nous_ch_run_charter() != NOUS_CH_VERDICT_GREEN { return 5u64 }
+    if cad_is_zero((&NOUS_CH_VERDICT as u64) as *u8) != 0u8 { return 6u64 }
+    let mut s : u64 = 0u64
+    while s < 32u64 { NOUS_CH_SAVED[s] = NOUS_CH_VERDICT[s]  s = s + 1u64 }
+    if nous_ch_run_charter() != NOUS_CH_VERDICT_GREEN { return 7u64 }
+    if cad_eq((&NOUS_CH_VERDICT as u64) as *u8, (&NOUS_CH_SAVED as u64) as *u8) != 1u8 { return 8u64 }
+    if nous_ch_register(NOUS_CH_KIND_CANARY) != 1i32 { return 9u64 }
+    if nous_ch_run_charter() != 2u64 { return 10u64 }
+    return 99u64
+}

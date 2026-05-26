@@ -1,0 +1,61 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\zip.iii
+ *
+ * III STDLIB - omnia::zip
+ *
+ * Pair two iter_u8s and step them in lockstep.  The zipped iteration
+ * ends when EITHER underlying iter exhausts.  Both iters are
+ * bounded, so the zip is bounded by min(both bounds) - total.
+ *
+ * Phase B: zip_u8_u8 only.  zip with arbitrary types awaits @specialize.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.
+ */
+
+module omnia_zip
+
+extern @abi(c-msvc-x64) fn iter_u8_next(id: u64) -> u32 from "iter.iii"
+
+const ZIP_END_MASK : u64 = 0x10000u64    /* signals one of the iters exhausted */
+
+/* Returns a packed result:
+ *   bit 16 (ZIP_END_MASK) = 1 if either iter exhausted on this step
+ *   bits 0..7  = byte from iter A (0 if ended)
+ *   bits 8..15 = byte from iter B (0 if ended)
+ * On end-of-iteration the byte values are 0 and the caller should
+ * stop calling.
+ */
+
+fn zip_u8_u8_next(iter_a: u64, iter_b: u64) -> u64 @export {
+    let va : u32 = iter_u8_next(iter_a)
+    let vb : u32 = iter_u8_next(iter_b)
+    if va == 0x100u32 { return ZIP_END_MASK }
+    if vb == 0x100u32 { return ZIP_END_MASK }
+    let lo : u64 = (va & 0xFFu32) as u64
+    let hi : u64 = ((vb & 0xFFu32) as u64) << 8u64
+    return lo | hi
+}
+
+fn zip_u8_u8_is_end(packed: u64) -> u8 @export {
+    if (packed & ZIP_END_MASK) != 0u64 { return 1u8 }
+    return 0u8
+}
+
+fn zip_u8_u8_a(packed: u64) -> u32 @export {
+    return (packed & 0xFFu64) as u32
+}
+
+fn zip_u8_u8_b(packed: u64) -> u32 @export {
+    return ((packed >> 8u64) & 0xFFu64) as u32
+}
+
+/* Convenience: count zipped pairs until exhaustion. */
+fn zip_u8_u8_count(iter_a: u64, iter_b: u64) -> u64 @export {
+    let mut n : u64 = 0u64
+    let mut done : u8 = 0u8
+    while done == 0u8 {
+        let r : u64 = zip_u8_u8_next(iter_a, iter_b)
+        if (r & ZIP_END_MASK) != 0u64 { done = 1u8 }
+        if done == 0u8 { n = n + 1u64 }
+    }
+    return n
+}

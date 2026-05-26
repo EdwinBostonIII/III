@@ -1,0 +1,19 @@
+/* 674_h2_charter.iii -- mig6 / H2: the H2 falsifier as a run_charter constitutional clause.
+ *
+ * Companion to 673_constitution_holds (the GENERIC verify-AND-falsify mechanism over the
+ * COP witness-VM): the H2 invariant ("one content-address: cad") is a hash-byte-identity
+ * property the COP VM cannot express, so it is its own module falsifier here.  Drives
+ * h2_selftest (numera/h2_charter.iii): cad is FAITHFUL to its backends (cad(KECCAK)==keccak256
+ * AND cad(SHA)==sha256 -- the one-name premise the keccak->cad triage repoints rely on), cad
+ * HONORS its suite tag (no conflation), and run_charter is a REAL terminal gate -- GREEN on the
+ * H2 clause, RED (the failing clause index) on an injected deliberately-false canary
+ * (prove-the-negative: not vacuously green).  h2_holds is the H2 module's contribution to the
+ * constitution's union-of-all-module-falsifiers (cons_clause_holds discipline).
+ * Main-corpus convention: rc 99 = pass; 1..10 = which h2_selftest assertion failed. */
+module corpus_674
+
+extern @abi(c-msvc-x64) fn h2_selftest() -> u64 from "h2_charter.iii"
+
+fn main() -> u64 {
+    return h2_selftest()
+}

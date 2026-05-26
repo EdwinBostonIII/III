@@ -1,0 +1,34 @@
+module corpus_38
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_required_guarantees(p: u64, m: u32) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_expected_hexad(p: u64, h: u8) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_set_arena(p: u64, a: u64) -> i32 from "intent.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set(cap: u64, kid: u8, ring: u8, hex: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_init_set_extras(arena: u64, depth: u16) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn resolver_score(p: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+
+fn main() -> u64 {
+    resolution_init()
+    let p_form : u64 = pattern_table_get(0u32)
+    if p_form == 0u64 { return 10u64 }
+    let intent : u64 = intent_new(1u8)
+    if intent == 0u64 { return 20u64 }
+    /* No required_guarantees: the meta-pattern templates don't carry
+     * guarantees_provided, so requiring any would trigger a -0.5 penalty. */
+    intent_set_expected_hexad(intent, 1u8)
+    intent_set_arena(intent, 0xABCDu64)
+    call_context_init_set(1u64, 0u8, 2u8, 1u8)
+    call_context_init_set_extras(0xABCDu64, 2u16)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 30u64 }
+    let s : u64 = resolver_score(p_form, intent, ctx)
+    /* Form pattern: base 1e9 + hexad_exact +0.1 + ring_exact +0.1 + arena +0.03
+     * = ~1.23e9. Accept any score above the default-or-fail base (0.5e9). */
+    if s < 500000000u64 { return 40u64 }
+    if s > 3000000000u64 { return 50u64 }
+    return 1u64
+}

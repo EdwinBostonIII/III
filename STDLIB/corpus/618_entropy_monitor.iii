@@ -1,0 +1,4 @@
+/* 618 — entropy_monitor: analytic NTT entropy/anomaly accountant (exact integer, no learning). */
+module corpus_618
+extern @abi(c-msvc-x64) fn entropy_selftest() -> u64 from "entropy_monitor.iii"
+fn main() -> u64 { return entropy_selftest() }

@@ -1,0 +1,4 @@
+/* 647 — theorem_carrier: proof-carrying theorem records over proof_term, witnessed. */
+module corpus_647
+extern @abi(c-msvc-x64) fn tc_kat() -> u64 from "theorem_carrier.iii"
+fn main() -> u64 { return tc_kat() }

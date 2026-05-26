@@ -1,0 +1,179 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\format.iii
+ *
+ * III STDLIB - verba::format
+ *
+ * Sealed-against-injection formatting helpers.  No runtime format
+ * string parsing exists - the design philosophy is that format
+ * directives are explicit function calls.  Callers push a literal
+ * byte/string then a typed value, then a literal, etc.  This makes
+ * the entire %n class of format-string vulnerabilities structurally
+ * impossible: there is no path from input data to format directive.
+ *
+ * Built atop verba::builder; every push appends to a builder
+ * identified by the caller.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00 (pure).
+ */
+
+module verba_format
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+
+const FMT_OK : i32 = 0i32
+
+/* Module-scope scratch buffers.  Phase B is single-threaded so a
+ * shared scratch is safe across calls to a single builder.  Phase C
+ * @specialize will give per-arena scratch. */
+var FMT_DEC_BUF : [u8; 24]   /* enough for u64 decimal (max 20 chars) */
+
+/* --- Decimal u32 --- */
+
+fn format_decimal_u32(builder_id: u64, v: u32) -> i32 @export {
+    if v == 0u32 {
+        builder_push_byte(builder_id, 48u32)
+        return FMT_OK
+    }
+    let mut tmp : u32 = v
+    let mut n : u32 = 0u32
+    while tmp > 0u32 {
+        let d : u32 = tmp % 10u32
+        FMT_DEC_BUF[n] = (48u32 + d) as u8
+        tmp = tmp / 10u32
+        n = n + 1u32
+    }
+    let mut i : u32 = n
+    while i > 0u32 {
+        i = i - 1u32
+        let c : u32 = FMT_DEC_BUF[i] as u32
+        builder_push_byte(builder_id, c)
+    }
+    return FMT_OK
+}
+
+/* --- Decimal u64 --- */
+
+fn format_decimal_u64(builder_id: u64, v: u64) -> i32 @export {
+    if v == 0u64 {
+        builder_push_byte(builder_id, 48u32)
+        return FMT_OK
+    }
+    let mut tmp : u64 = v
+    let mut n : u32 = 0u32
+    while tmp > 0u64 {
+        let d : u64 = tmp % 10u64
+        FMT_DEC_BUF[n] = (48u64 + d) as u8
+        tmp = tmp / 10u64
+        n = n + 1u32
+    }
+    let mut i : u32 = n
+    while i > 0u32 {
+        i = i - 1u32
+        let c : u32 = FMT_DEC_BUF[i] as u32
+        builder_push_byte(builder_id, c)
+    }
+    return FMT_OK
+}
+
+/* --- Hex u32 (lower case) --- */
+
+fn format_hex_u32(builder_id: u64, v: u32) -> i32 @export {
+    /* Always emit 8 chars zero-padded for u32. */
+    let mut i : u32 = 8u32
+    while i > 0u32 {
+        i = i - 1u32
+        let shift : u32 = i * 4u32
+        let nib : u32 = (v >> shift) & 0xFu32
+        let mut c : u32 = 0u32
+        if nib < 10u32 { c = 48u32 + nib }            /* '0'..'9' */
+        if nib >= 10u32 { c = 97u32 + (nib - 10u32) } /* 'a'..'f' */
+        builder_push_byte(builder_id, c)
+    }
+    return FMT_OK
+}
+
+fn format_hex_u32_upper(builder_id: u64, v: u32) -> i32 @export {
+    let mut i : u32 = 8u32
+    while i > 0u32 {
+        i = i - 1u32
+        let shift : u32 = i * 4u32
+        let nib : u32 = (v >> shift) & 0xFu32
+        let mut c : u32 = 0u32
+        if nib < 10u32 { c = 48u32 + nib }
+        if nib >= 10u32 { c = 65u32 + (nib - 10u32) } /* 'A'..'F' */
+        builder_push_byte(builder_id, c)
+    }
+    return FMT_OK
+}
+
+/* --- Hex u64 (lower case) --- */
+
+fn format_hex_u64(builder_id: u64, v: u64) -> i32 @export {
+    let mut i : u32 = 16u32
+    while i > 0u32 {
+        i = i - 1u32
+        let shift : u64 = (i as u64) * 4u64
+        let nib : u64 = (v >> shift) & 0xFu64
+        let mut c : u32 = 0u32
+        let n32 : u32 = nib as u32
+        if n32 < 10u32 { c = 48u32 + n32 }
+        if n32 >= 10u32 { c = 97u32 + (n32 - 10u32) }
+        builder_push_byte(builder_id, c)
+    }
+    return FMT_OK
+}
+
+/* --- ASCII char emission --- */
+
+fn format_char_ascii(builder_id: u64, c: u32) -> i32 @export {
+    builder_push_byte(builder_id, c & 0xFFu32)
+    return FMT_OK
+}
+
+/* --- Literal byte sequence --- */
+
+fn format_literal(builder_id: u64, base: u64, len: u64) -> i32 @export {
+    if base == 0u64 {
+        if len == 0u64 { return FMT_OK }
+        return -1i32
+    }
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : u32 = p[i] as u32
+        builder_push_byte(builder_id, c)
+        i = i + 1u64
+    }
+    return FMT_OK
+}
+
+/* --- Padded decimal --- */
+
+fn format_decimal_u32_padded(builder_id: u64, v: u32, width: u32, pad_char: u32) -> i32 @export {
+    /* Render to FMT_DEC_BUF, count digits, push pad chars to fill to width, then push digits. */
+    let mut tmp : u32 = v
+    let mut n : u32 = 0u32
+    if tmp == 0u32 {
+        FMT_DEC_BUF[0] = 48u8
+        n = 1u32
+    }
+    while tmp > 0u32 {
+        let d : u32 = tmp % 10u32
+        FMT_DEC_BUF[n] = (48u32 + d) as u8
+        tmp = tmp / 10u32
+        n = n + 1u32
+    }
+    let mut pad : u32 = 0u32
+    if width > n { pad = width - n }
+    let mut p : u32 = 0u32
+    while p < pad {
+        builder_push_byte(builder_id, pad_char & 0xFFu32)
+        p = p + 1u32
+    }
+    let mut i : u32 = n
+    while i > 0u32 {
+        i = i - 1u32
+        let c : u32 = FMT_DEC_BUF[i] as u32
+        builder_push_byte(builder_id, c)
+    }
+    return FMT_OK
+}

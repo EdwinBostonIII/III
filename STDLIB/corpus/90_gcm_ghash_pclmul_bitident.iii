@@ -1,0 +1,102 @@
+/* AES-128-GCM GHASH path bit-identity: scalar == PCLMULQDQ.
+ *
+ * RITCHIE §3.5 kernel 3/10.  Seals NIST SP 800-38D Test Case 2
+ * (K=IV=P=0) twice -- once forcing the scalar bit-serial GHASH
+ * (gcm_force_path(1)) and once forcing the PCLMULQDQ GHASH
+ * (gcm_force_path(2)) -- and asserts:
+ *   (1) the two tags are byte-for-byte identical  (the GF(2^128)
+ *       bit-identity proof: the SIMD field multiply equals the
+ *       reference exactly, not merely "passes a KAT"),
+ *   (2) the two ciphertexts are identical (full-seal sanity),
+ *   (3) the tag equals the published NIST TC2 value, so an
+ *       identical-but-wrong result cannot pass.
+ *
+ * Exit = 88 on full success.
+ */
+module corpus_90
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn aes_gcm_init(key: *u8, nonce: *u8, nonce_len: u64) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn gcm_force_path(p: u32) -> i32 from "aes_gcm.iii"
+
+fn zero_buf(p: *u8, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = 0u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn check_tag_nist(tag: *u8) -> u64 {
+    /* Expected: ab 6e 47 d4 2c ec 13 bd f5 3a 67 b2 12 57 bd df */
+    if tag[0]  != 0xABu8 { return 1u64 }
+    if tag[1]  != 0x6Eu8 { return 2u64 }
+    if tag[2]  != 0x47u8 { return 3u64 }
+    if tag[3]  != 0xD4u8 { return 4u64 }
+    if tag[4]  != 0x2Cu8 { return 5u64 }
+    if tag[5]  != 0xECu8 { return 6u64 }
+    if tag[6]  != 0x13u8 { return 7u64 }
+    if tag[7]  != 0xBDu8 { return 8u64 }
+    if tag[8]  != 0xF5u8 { return 9u64 }
+    if tag[9]  != 0x3Au8 { return 10u64 }
+    if tag[10] != 0x67u8 { return 11u64 }
+    if tag[11] != 0xB2u8 { return 12u64 }
+    if tag[12] != 0x12u8 { return 13u64 }
+    if tag[13] != 0x57u8 { return 14u64 }
+    if tag[14] != 0xBDu8 { return 15u64 }
+    if tag[15] != 0xDFu8 { return 16u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let key   : *u8 = malloc(16u64)
+    let nonce : *u8 = malloc(12u64)
+    let pt    : *u8 = malloc(16u64)
+    let ct_a  : *u8 = malloc(16u64)
+    let tag_a : *u8 = malloc(16u64)
+    let ct_b  : *u8 = malloc(16u64)
+    let tag_b : *u8 = malloc(16u64)
+    zero_buf(key, 16u64)
+    zero_buf(nonce, 12u64)
+    zero_buf(pt, 16u64)
+
+    /* Scalar bit-serial GHASH. */
+    gcm_force_path(1u32)
+    aes_gcm_init(key, nonce, 12u64)
+    aes_gcm_seal(pt, 16u64, ct_a, tag_a)
+
+    /* PCLMULQDQ GHASH. */
+    gcm_force_path(2u32)
+    aes_gcm_init(key, nonce, 12u64)
+    aes_gcm_seal(pt, 16u64, ct_b, tag_b)
+
+    gcm_force_path(0u32)
+
+    /* (1) GHASH bit-identity: scalar tag == pclmul tag, byte-for-byte. */
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        if tag_a[i] != tag_b[i] { return 1u64 + i }
+        i = i + 1u64
+    }
+    /* (2) Full-seal sanity: ciphertext identical across paths. */
+    let mut j : u64 = 0u64
+    while j < 16u64 {
+        if ct_a[j] != ct_b[j] { return 20u64 + j }
+        j = j + 1u64
+    }
+    /* (3) Anchor to NIST TC2: identical-but-wrong cannot pass. */
+    let nist_err : u64 = check_tag_nist(tag_a)
+    if nist_err != 0u64 { return 40u64 + nist_err }
+
+    free(key)
+    free(nonce)
+    free(pt)
+    free(ct_a)
+    free(tag_a)
+    free(ct_b)
+    free(tag_b)
+    return 88u64
+}

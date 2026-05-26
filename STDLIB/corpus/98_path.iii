@@ -1,0 +1,73 @@
+/* Path manipulation - basename, dirname, extension, normalize. */
+module corpus_98
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn path_basename(p: *u8, p_len: u64) -> u64 from "path.iii"
+extern @abi(c-msvc-x64) fn path_dirname(p: *u8, p_len: u64) -> u64 from "path.iii"
+extern @abi(c-msvc-x64) fn path_extension(p: *u8, p_len: u64) -> u64 from "path.iii"
+extern @abi(c-msvc-x64) fn path_last_offset() -> u64 from "path.iii"
+extern @abi(c-msvc-x64) fn path_normalize(builder_id: u64, src: *u8, src_len: u64) -> i32 from "path.iii"
+
+fn make_str(buf: *u8, s: *u8, len: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < len {
+        buf[i] = s[i]
+        i = i + 1u64
+    }
+    return len
+}
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(256u64)
+    let a : u64 = arena_new(4096u64)
+
+    /* "/usr/local/bin/foo.txt" */
+    let n1 : u64 = make_str(buf, "/usr/local/bin/foo.txt", 22u64)
+    let bn : u64 = path_basename(buf, n1)
+    if bn != 7u64 { return 1u64 }
+    let bn_off : u64 = path_last_offset()
+    if buf[bn_off] != 102u8 { return 2u64 }
+    if buf[bn_off + 6u64] != 116u8 { return 3u64 }
+
+    let dn : u64 = path_dirname(buf, n1)
+    if dn != 14u64 { return 4u64 }
+
+    let ext : u64 = path_extension(buf, n1)
+    if ext != 4u64 { return 5u64 }
+    let ext_off : u64 = path_last_offset()
+    if buf[ext_off] != 46u8 { return 6u64 }
+
+    /* No-extension case */
+    let n2 : u64 = make_str(buf, "README", 6u64)
+    let ext2 : u64 = path_extension(buf, n2)
+    if ext2 != 0u64 { return 7u64 }
+
+    /* Hidden file (no ext) */
+    let n3 : u64 = make_str(buf, ".bashrc", 7u64)
+    let ext3 : u64 = path_extension(buf, n3)
+    if ext3 != 0u64 { return 8u64 }
+
+    /* Normalize "//foo//./bar//baz" -> "/foo/bar/baz" */
+    let n4 : u64 = make_str(buf, "//foo//./bar//baz", 17u64)
+    let bid : u64 = builder_new(a, 64u64)
+    path_normalize(bid, buf, n4)
+    let nlen : u64 = builder_len(bid)
+    if nlen != 12u64 { return 9u64 }
+    let out : *u8 = builder_seal(bid) as *u8
+    if out[0] != 47u8 { return 10u64 }
+    if out[1] != 102u8 { return 11u64 }
+    if out[4] != 47u8 { return 12u64 }
+    if out[5] != 98u8 { return 13u64 }
+    builder_drop(bid)
+
+    arena_drop(a)
+    free(buf)
+    return 99u64
+}

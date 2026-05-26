@@ -1,0 +1,217 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ec256.iii
+ *
+ * III STDLIB - numera::ec256 -- NIST P-256 elliptic curve over GF(p256).
+ * RITCHIE Stage 4.11.  Short Weierstrass y^2 = x^3 - 3x + b, PROJECTIVE
+ * coordinates (X:Y:Z)=(X/Z,Y/Z), Renes-Costello-Batina COMPLETE addition
+ * (a=-3, Alg.4) — exception-free, so constant-time double-and-add-always
+ * scalar multiply needs NO special-case handling.  All field elements live
+ * in fp256's Montgomery slot pool; a point = 3 consecutive field slots.
+ *
+ * Slot map (fp256 pool, 0..60 usable): point regs R=0..2, T=3..5, P=6..8;
+ * RCB temps t0..t4=10..14, X3/Y3/Z3=15..17; constants b=50, Gx=51, Gy=52,
+ * MONT_ONE=53.  (fp256 reserves 61/62/63.)
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00.
+ */
+
+module numera_ec256
+
+extern @abi(c-msvc-x64) fn fp256_boot() -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_set_u32(slot: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_set_limb(slot: u64, idx: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_get_limb(slot: u64, idx: u64) -> u32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_copy_x(dst: u64, src: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_add_x(r: u64, a: u64, b: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_sub_x(r: u64, a: u64, b: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_mul_x(r: u64, a: u64, b: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_inv_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_to_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_from_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_csel_x(r: u64, a: u64, b: u64, cond: u64) -> i32 from "fp256.iii"
+
+var EC_INIT : [u32; 1]
+
+/* set field slot from 8 big-endian-hex limbs (w7..w0 args via the array) then
+ * convert to Montgomery form. */
+var EC_BX : [u32; 24]    /* scratch: b, Gx, Gy LE limbs (8 each) */
+
+fn ec256_init() -> i32 {
+    if EC_INIT[0] == 1u32 { return 0i32 }
+    fp256_boot()
+    /* b (LE limbs) = 27d2604b 3bce3c3e cc53b0f6 651d06b0 769886bc b3ebbd55 aa3a93e7 5ac635d8  reversed:
+       b limb0..7 = 0x27d2604b,0x3bce3c3e,0xcc53b0f6,0x651d06b0,0x769886bc,0xb3ebbd55,0xaa3a93e7,0x5ac635d8 */
+    fp_set_limb(50u64,0u64,0x27d2604bu32) fp_set_limb(50u64,1u64,0x3bce3c3eu32) fp_set_limb(50u64,2u64,0xcc53b0f6u32) fp_set_limb(50u64,3u64,0x651d06b0u32)
+    fp_set_limb(50u64,4u64,0x769886bcu32) fp_set_limb(50u64,5u64,0xb3ebbd55u32) fp_set_limb(50u64,6u64,0xaa3a93e7u32) fp_set_limb(50u64,7u64,0x5ac635d8u32)
+    fp_to_mont_x(50u64, 50u64)
+    /* Gx limb0..7 = 0xd898c296,0xf4a13945,0x2deb33a0,0x77037d81,0x63a440f2,0xf8bce6e5,0xe12c4247,0x6b17d1f2 */
+    fp_set_limb(51u64,0u64,0xd898c296u32) fp_set_limb(51u64,1u64,0xf4a13945u32) fp_set_limb(51u64,2u64,0x2deb33a0u32) fp_set_limb(51u64,3u64,0x77037d81u32)
+    fp_set_limb(51u64,4u64,0x63a440f2u32) fp_set_limb(51u64,5u64,0xf8bce6e5u32) fp_set_limb(51u64,6u64,0xe12c4247u32) fp_set_limb(51u64,7u64,0x6b17d1f2u32)
+    fp_to_mont_x(51u64, 51u64)
+    /* Gy limb0..7 = 0x37bf51f5,0xcbb64068,0x6b315ece,0x2bce3357,0x7c0f9e16,0x8ee7eb4a,0xfe1a7f9b,0x4fe342e2 */
+    fp_set_limb(52u64,0u64,0x37bf51f5u32) fp_set_limb(52u64,1u64,0xcbb64068u32) fp_set_limb(52u64,2u64,0x6b315eceu32) fp_set_limb(52u64,3u64,0x2bce3357u32)
+    fp_set_limb(52u64,4u64,0x7c0f9e16u32) fp_set_limb(52u64,5u64,0x8ee7eb4au32) fp_set_limb(52u64,6u64,0xfe1a7f9bu32) fp_set_limb(52u64,7u64,0x4fe342e2u32)
+    fp_to_mont_x(52u64, 52u64)
+    /* MONT_ONE = to_mont(1) */
+    fp_set_u32(53u64, 1u32)
+    fp_to_mont_x(53u64, 53u64)
+    EC_INIT[0] = 1u32
+    return 0i32
+}
+
+/* out(3 slots) = a + b_pt  (RCB complete add, a=-3).  Aliasing-safe (computes
+ * into temps 15/16/17 then copies to out). curve b at slot 50. */
+fn ec256_add(out: u64, a: u64, bp: u64) -> i32 {
+    let x1 : u64 = a        let y1 : u64 = a + 1u64    let z1 : u64 = a + 2u64
+    let x2 : u64 = bp       let y2 : u64 = bp + 1u64   let z2 : u64 = bp + 2u64
+    fp_mul_x(10u64, x1, x2)
+    fp_mul_x(11u64, y1, y2)
+    fp_mul_x(12u64, z1, z2)
+    fp_add_x(13u64, x1, y1)
+    fp_add_x(14u64, x2, y2)
+    fp_mul_x(13u64, 13u64, 14u64)
+    fp_add_x(14u64, 10u64, 11u64)
+    fp_sub_x(13u64, 13u64, 14u64)
+    fp_add_x(14u64, y1, z1)
+    fp_add_x(15u64, y2, z2)
+    fp_mul_x(14u64, 14u64, 15u64)
+    fp_add_x(15u64, 11u64, 12u64)
+    fp_sub_x(14u64, 14u64, 15u64)
+    fp_add_x(15u64, x1, z1)
+    fp_add_x(16u64, x2, z2)
+    fp_mul_x(15u64, 15u64, 16u64)
+    fp_add_x(16u64, 10u64, 12u64)
+    fp_sub_x(16u64, 15u64, 16u64)
+    fp_mul_x(17u64, 50u64, 12u64)
+    fp_sub_x(15u64, 16u64, 17u64)
+    fp_add_x(17u64, 15u64, 15u64)
+    fp_add_x(15u64, 15u64, 17u64)
+    fp_sub_x(17u64, 11u64, 15u64)
+    fp_add_x(15u64, 11u64, 15u64)
+    fp_mul_x(16u64, 50u64, 16u64)
+    fp_add_x(11u64, 12u64, 12u64)
+    fp_add_x(12u64, 11u64, 12u64)
+    fp_sub_x(16u64, 16u64, 12u64)
+    fp_sub_x(16u64, 16u64, 10u64)
+    fp_add_x(11u64, 16u64, 16u64)
+    fp_add_x(16u64, 11u64, 16u64)
+    fp_add_x(11u64, 10u64, 10u64)
+    fp_add_x(10u64, 11u64, 10u64)
+    fp_sub_x(10u64, 10u64, 12u64)
+    fp_mul_x(11u64, 14u64, 16u64)
+    fp_mul_x(12u64, 10u64, 16u64)
+    fp_mul_x(16u64, 15u64, 17u64)
+    fp_add_x(16u64, 16u64, 12u64)
+    fp_mul_x(15u64, 13u64, 15u64)
+    fp_sub_x(15u64, 15u64, 11u64)
+    fp_mul_x(17u64, 14u64, 17u64)
+    fp_mul_x(11u64, 13u64, 10u64)
+    fp_add_x(17u64, 17u64, 11u64)
+    fp_copy_x(out, 15u64)
+    fp_copy_x(out + 1u64, 16u64)
+    fp_copy_x(out + 2u64, 17u64)
+    return 0i32
+}
+
+fn ec256_set_identity(p: u64) -> i32 {
+    /* (0 : 1 : 0) in Montgomery: X=0, Y=MONT_ONE, Z=0 */
+    fp_set_u32(p, 0u32)
+    fp_copy_x(p + 1u64, 53u64)
+    fp_set_u32(p + 2u64, 0u32)
+    return 0i32
+}
+
+/* out = k * P, constant-time double-and-add-always.  k = 32 big-endian bytes.
+ * R = 0(=R slot 0..2), T = 3..5.  P is at slot base bp (must be 6..8 region,
+ * NOT overlapping 0..5/10..17/50..53). */
+fn ec256_scalar_mul(out: u64, k_bytes: u64, bp: u64) -> i32 {
+    ec256_init()
+    ec256_set_identity(0u64)
+    let kb : *u8 = k_bytes as *u8
+    let mut j : u64 = 256u64
+    while j > 0u64 {
+        j = j - 1u64
+        ec256_add(0u64, 0u64, 0u64)            /* R = 2R */
+        ec256_add(3u64, 0u64, bp)              /* T = R + P */
+        let byte : u64 = 31u64 - (j / 8u64)
+        let bit : u64 = ((kb[byte] as u64) >> (j % 8u64)) & 1u64
+        fp_csel_x(0u64, 3u64, 0u64, bit)
+        fp_csel_x(1u64, 4u64, 1u64, bit)
+        fp_csel_x(2u64, 5u64, 2u64, bit)
+    }
+    fp_copy_x(out, 0u64)
+    fp_copy_x(out + 1u64, 1u64)
+    fp_copy_x(out + 2u64, 2u64)
+    return 0i32
+}
+
+/* out = k * G.  Loads G into slots 6..8 then ec256_scalar_mul. */
+fn ec256_scalar_mul_base(out: u64, k_bytes: u64) -> i32 @export {
+    ec256_init()
+    fp_copy_x(6u64, 51u64)        /* Gx (mont) */
+    fp_copy_x(7u64, 52u64)        /* Gy (mont) */
+    fp_copy_x(8u64, 53u64)        /* Gz = mont 1 */
+    return ec256_scalar_mul(out, k_bytes, 6u64)
+}
+
+fn ec256_scalar_mul_pt(out: u64, k_bytes: u64, bp: u64) -> i32 @export { return ec256_scalar_mul(out, k_bytes, bp) }
+fn ec256_add_x(out: u64, a: u64, bp: u64) -> i32 @export { ec256_init() return ec256_add(out, a, bp) }
+
+/* load 32 big-endian bytes into fp256 slot (canonical, then to Montgomery). */
+fn ec256_load_be_mont(slot: u64, src: u64) -> i32 {
+    let s : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let o : u64 = (7u64 - i) * 4u64
+        let w : u32 = (((s[o] as u64) << 24u64) | ((s[o + 1u64] as u64) << 16u64) | ((s[o + 2u64] as u64) << 8u64) | (s[o + 3u64] as u64)) as u32
+        fp_set_limb(slot, i, w)
+        i = i + 1u64
+    }
+    fp_to_mont_x(slot, slot)
+    return 0i32
+}
+
+/* set projective point at p = (x:y:1) from affine x_bytes, y_bytes (32 BE each). */
+fn ec256_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 @export {
+    ec256_init()
+    ec256_load_be_mont(p, x_bytes)
+    ec256_load_be_mont(p + 1u64, y_bytes)
+    fp_copy_x(p + 2u64, 53u64)        /* Z = mont(1) */
+    return 0i32
+}
+
+/* affine x of projective point at slot p, written canonical (non-Montgomery)
+ * big-endian to out_x[32].  x = X/Z = X * Z^-1. */
+fn ec256_affine_x(out_x: u64, p: u64) -> i32 @export {
+    fp_inv_x(20u64, p + 2u64)         /* zinv = Z^-1 (mont) */
+    fp_mul_x(21u64, p, 20u64)         /* x_mont = X * zinv */
+    fp_from_mont_x(22u64, 21u64)      /* canonical x */
+    ec256_emit_be(out_x, 22u64)
+    return 0i32
+}
+
+/* affine x AND y to out_x[32], out_y[32] (canonical BE). */
+fn ec256_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 @export {
+    fp_inv_x(20u64, p + 2u64)             /* zinv */
+    fp_mul_x(21u64, p, 20u64)             /* x_mont */
+    fp_from_mont_x(22u64, 21u64)
+    ec256_emit_be(out_x, 22u64)
+    fp_mul_x(21u64, p + 1u64, 20u64)      /* y_mont */
+    fp_from_mont_x(22u64, 21u64)
+    ec256_emit_be(out_y, 22u64)
+    return 0i32
+}
+
+/* write canonical fp256 slot as 32 big-endian bytes. */
+fn ec256_emit_be(out: u64, slot: u64) -> i32 {
+    let o : *u8 = out as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let w : u32 = fp_get_limb(slot, 7u64 - i)
+        o[i*4u64 + 0u64] = ((w >> 24u32) & 0xFFu32) as u8
+        o[i*4u64 + 1u64] = ((w >> 16u32) & 0xFFu32) as u8
+        o[i*4u64 + 2u64] = ((w >> 8u32)  & 0xFFu32) as u8
+        o[i*4u64 + 3u64] = (w & 0xFFu32) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}

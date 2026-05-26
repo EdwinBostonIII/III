@@ -1,0 +1,21 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\269_neg_type_alias.iii
+ *
+ * NEGATIVE-COMPILE test for iiis-2 type-alias resolution.
+ *
+ * Violation: caller passes IntentCompose into a fn expecting IntentForm.
+ * The static check now FIRES because alias resolution exposes the
+ * @hexad_kind annotations on both ends.  Without alias chase, the
+ * check would silently bypass (false-positive accept).
+ */
+module corpus_269_neg
+
+type IntentForm = u64 @hexad_kind(1u64)
+type IntentCompose = u64 @hexad_kind(6u64)
+
+fn _wants_form(x: IntentForm) -> u64 { return x }
+
+fn main() -> u64 {
+    let bad : IntentCompose = 0u64
+    let r : u64 = _wants_form(bad)
+    return r
+}

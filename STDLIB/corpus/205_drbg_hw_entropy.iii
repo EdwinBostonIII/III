@@ -1,0 +1,46 @@
+/* III conformance corpus 205 -- Stage 4.7: RDRAND/RDSEED hardware entropy
+ * wired into HMAC-DRBG-SHA-512.  When RDRAND/RDSEED is present, gather 48
+ * bytes of hardware entropy, seed the DRBG, and verify it generates output.
+ * Robust on hosts lacking the instructions (the gather correctly reports -1
+ * and a deterministic fallback seed is used).  Exit 99.
+ */
+module corpus_205
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cpufeat_has_rdrand() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_rdseed() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_hw_entropy(out: u64, n: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+
+fn main() -> u64 {
+    let ent : *u8 = malloc(64u64)
+    let non : *u8 = malloc(16u64)
+    let out : *u8 = malloc(64u64)
+    let mut i : u64 = 0u64
+    while i < 48u64 { ent[i] = 0u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 16u64 { non[i] = ((0x5au64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    let mut has : u8 = 0u8
+    if cpufeat_has_rdrand() == 1u8 { has = 1u8 }
+    if cpufeat_has_rdseed() == 1u8 { has = 1u8 }
+    let rc : i32 = iii_drbg_hw_entropy(ent as u64, 48u64)
+    if has == 1u8 {
+        if rc != 0i32 { return 1u64 }
+        let mut nz : u64 = 0u64
+        i = 0u64
+        while i < 48u64 { if ent[i] != 0u8 { nz = 1u64 } i = i + 1u64 }
+        if nz == 0u64 { return 2u64 }
+    } else {
+        if rc == 0i32 { return 3u64 }
+        i = 0u64
+        while i < 48u64 { ent[i] = ((i * 13u64 + 7u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    }
+    iii_drbg_instantiate(ent as u64, 48u64, non as u64, 16u64, 0u64, 0u64)
+    iii_drbg_generate(out as u64, 32u64, 0u64, 0u64)
+    let mut onz : u64 = 0u64
+    i = 0u64
+    while i < 32u64 { if out[i] != 0u8 { onz = 1u64 } i = i + 1u64 }
+    if onz == 0u64 { return 4u64 }
+    return 99u64
+}

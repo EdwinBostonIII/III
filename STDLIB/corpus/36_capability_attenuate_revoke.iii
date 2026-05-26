@@ -1,0 +1,65 @@
+/* capability: env_init, attenuate, verify, revoke, deny + fail-closed hardening (prove-the-negative
+ * on the core security arms: non-widening clamp, expiry rejection, child-can't-outlive-parent,
+ * non-dominating-revoke denial, attenuate-of-revoked-parent). */
+module corpus_c36
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, req: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_verify_at(id: u64, req: u64, now_unix: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_revoke(authority: u64, target: u64) -> i32 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_expires_at(id: u64) -> u64 from "capability.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    if env != 1u64 { return 1u64 }
+    /* fs_read = 0x02 ; fs_write = 0x04 */
+    let fs : u64 = cap_attenuate(env, 0x06u64, 0u64)
+    if fs == 0u64 { return 2u64 }
+    if cap_verify_rights(fs, 0x02u64) != 1u8 { return 3u64 }
+    if cap_verify_rights(fs, 0x04u64) != 1u8 { return 4u64 }
+    /* fs cap should NOT have net_dial (bit 5) */
+    if cap_verify_rights(fs, 0x20u64) != 0u8 { return 5u64 }
+    /* read-only sub-cap from fs */
+    let ro : u64 = cap_attenuate(fs, 0x02u64, 0u64)
+    if cap_verify_rights(ro, 0x02u64) != 1u8 { return 6u64 }
+    if cap_verify_rights(ro, 0x04u64) != 0u8 { return 7u64 }
+    /* Revoke fs - ro becomes invalid because ancestor is revoked */
+    if cap_revoke(env, fs) != 0i32 { return 8u64 }
+    if cap_verify_rights(fs, 0x02u64) != 0u8 { return 9u64 }
+    if cap_verify_rights(ro, 0x02u64) != 0u8 { return 10u64 }
+
+    /* ---- fail-closed hardening (prove-the-negative on the core security arms) ---- */
+
+    /* (11-13) NON-WIDENING CLAMP: a child can NEVER regain a right its parent lacks, even with a
+     * broad mask.  a2 has only 0x02; attenuate(a2, 0x06) intersects to 0x02 -- 0x04 stays denied. */
+    let a2 : u64 = cap_attenuate(env, 0x02u64, 0u64)
+    if a2 == 0u64 { return 11u64 }
+    let gc : u64 = cap_attenuate(a2, 0x06u64, 0u64)
+    if cap_verify_rights(gc, 0x02u64) != 1u8 { return 12u64 }   /* the one inherited right */
+    if cap_verify_rights(gc, 0x04u64) != 0u8 { return 13u64 }   /* the broad mask did NOT widen it */
+
+    /* (14-16) EXPIRY is fail-closed: cap_verify_at rejects AT and AFTER expiry, accepts before. */
+    let te : u64 = cap_attenuate(env, 0x02u64, 100u64)
+    if cap_verify_at(te, 0x02u64, 50u64)  != 1u8 { return 14u64 }   /* before expiry: ok */
+    if cap_verify_at(te, 0x02u64, 100u64) != 0u8 { return 15u64 }   /* at expiry: rejected */
+    if cap_verify_at(te, 0x02u64, 150u64) != 0u8 { return 16u64 }   /* after expiry: rejected */
+
+    /* (17) CHILD CANNOT OUTLIVE PARENT: a child asking for a later expiry is clamped to the parent's. */
+    let tc : u64 = cap_attenuate(te, 0x02u64, 500u64)
+    if cap_expires_at(tc) != 100u64 { return 17u64 }
+
+    /* (18-19) NON-DOMINATING REVOKE DENIED: a2 and sib are siblings; a2 does not dominate sib, so it
+     * cannot revoke it (no lateral revocation = no privilege escalation). */
+    let sib : u64 = cap_attenuate(env, 0x02u64, 0u64)
+    if cap_revoke(a2, sib) == 0i32 { return 18u64 }             /* the revoke must NOT succeed */
+    if cap_verify_rights(sib, 0x02u64) != 1u8 { return 19u64 }  /* sib survives the denied revoke */
+
+    /* (20-21) ATTENUATE OF A REVOKED PARENT FAILS: env dominates a2, revokes it; a child of the now-
+     * revoked a2 cannot be minted (returns CAP_INVALID = 0). */
+    if cap_revoke(env, a2) != 0i32 { return 20u64 }
+    let dead : u64 = cap_attenuate(a2, 0x02u64, 0u64)
+    if dead != 0u64 { return 21u64 }
+
+    return 99u64
+}

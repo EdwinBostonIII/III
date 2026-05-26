@@ -1,0 +1,65 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\leb128.iii
+ *
+ * III STDLIB - verba::leb128
+ *
+ * LEB128 (Little-Endian Base 128) variable-length integer encoding,
+ * used by DWARF, WebAssembly, Protobuf varints (similar), etc.
+ * Both unsigned (ULEB128) and signed (SLEB128) variants.
+ *
+ * Public API:
+ *   leb128_encode_u64(value:u64, out:*u8) -> u64
+ *      Returns number of bytes written (1..10).  out must have >= 10 bytes.
+ *   leb128_decode_u64(src:*u8, src_len:u64, value_out:*u64) -> u64
+ *      Returns number of bytes consumed.  0 on overflow/invalid.
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_leb128
+
+var LEB_LAST_VALUE : u64 = 0u64
+
+fn leb128_encode_u64(value: u64, out: *u8) -> u64 @export {
+    let mut v : u64 = value
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let byte : u64 = v & 0x7Fu64
+        v = v >> 7u64
+        if v == 0u64 {
+            out[i] = byte as u8
+            i = i + 1u64
+            going = 0u8
+        }
+        if going == 1u8 {
+            out[i] = (byte | 0x80u64) as u8
+            i = i + 1u64
+        }
+    }
+    return i
+}
+
+fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 @export {
+    let mut value : u64 = 0u64
+    let mut shift : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= src_len { LEB_LAST_VALUE = 0u64; return 0u64 }
+        let b : u64 = src[i] as u64
+        let payload : u64 = b & 0x7Fu64
+        value = value | (payload << shift)
+        i = i + 1u64
+        if (b & 0x80u64) == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            shift = shift + 7u64
+            if shift >= 64u64 { LEB_LAST_VALUE = 0u64; return 0u64 }
+        }
+    }
+    LEB_LAST_VALUE = value
+    return i
+}
+
+fn leb128_last_value() -> u64 @export {
+    return LEB_LAST_VALUE
+}

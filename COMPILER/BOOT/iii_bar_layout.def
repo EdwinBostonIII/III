@@ -1,0 +1,38 @@
+# COMPILER/BOOT/iii_bar_layout.def
+#
+# SINGLE SOURCE OF TRUTH for the AD103 GPU BAR address map (the F9/CoprocDispatch
+# write-target typing; DOCS/III-KATABASIS.md FR-7 / plan 5.4 / the 0.6 BSOD
+# post-mortem allowlist).  The ONLY physical write targets proven contained
+# within the GPU (harmless to the host kernel) are these three BAR windows,
+# read off live AD103 silicon 2026-04-11 (plan 0.2).  A write to any other
+# physical address gets the structural-NEG brick hexad (324) and is
+# UNREPRESENTABLE -- "writes confined to BAR0/1/3 by hexad, not a userspace
+# allowlist alone" (FR-7).
+#
+# Regenerate the AUTO-GENERATED bound constants + region classifier in
+# STDLIB/iii/katabasis/bar_layout.iii via:
+#     bash COMPILER/BOOT/gen_bar_layout.sh
+# The build's drift gate (gen_bar_layout.sh --check) fails if bar_layout.iii's
+# generated block diverges from this file (plan 6.9 / FR-9), so the verified BAR
+# bounds and their write typing can never drift from the silicon.
+#
+# Each row generates the pair of bound constants KBAR_<region>_LO / _HI and a
+# two-line classifier step (the inter-BAR gap below the window returns NONE,
+# the window itself returns KBAR_REGION_<region>).  The region-id enum
+# (KBAR_REGION_*) and the uniform BAR hexad (BAR -> 728 reachable, non-BAR ->
+# 324 brick) stay hand-written -- the hexad is structural, not per-row.
+# gen_bar_layout.sh asserts each KBAR_REGION_<region> constant exists.
+#
+# Rows MUST be in ascending lo order and non-overlapping (the classifier is an
+# ascending unsigned `<` cascade; signed compares are a known iiis-0 trap).
+#
+# Fields (whitespace-delimited):  region  lo  hi
+#   region  str        -- BAR name; forms KBAR_<region>_LO/_HI and KBAR_REGION_<region>.
+#   lo      u64 literal -- inclusive low bound (III u64 literal, e.g. 0x..u64).
+#   hi      u64 literal -- exclusive high bound.
+# Lines starting with '#' are comments. Blank lines ignored.
+# ---------------------------------------------------------------------------
+# region  lo               hi
+BAR0      0xFB000000u64    0xFC000000u64
+BAR1      0xF800000000u64  0xF900000000u64
+BAR3      0xFC00000000u64  0xFC02000000u64

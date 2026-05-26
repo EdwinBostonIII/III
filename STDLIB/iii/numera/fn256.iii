@@ -1,0 +1,296 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\fn256.iii
+ *
+ * III STDLIB - numera::fn256 -- constant-time scalar field GF(n) for NIST
+ * P-256 ECDSA, where n = the curve order (a 256-bit prime, distinct from
+ * p256).  RITCHIE Stage 4.11.  Same 8x u32-limb Montgomery design as fp256,
+ * but n'[0] is COMPUTED (n[0]=0xfc632551, so -n[0]^-1 mod 2^32 != 1).
+ *
+ * Used for the ECDSA scalar arithmetic: r = (k.G).x mod n, s = k^-1*(z+r*d)
+ * mod n, and the verify-side u1/u2.  Separate slot pool (FN) from fp256.
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00.
+ */
+
+module numera_fn256
+
+var FN_N      : [u32; 8]
+var FN_R2     : [u32; 8]
+var FN_ONE    : [u32; 8]
+var FN_NPRIME : [u32; 1]
+var FN        : [u32; 512]
+var FN_T      : [u64; 10]
+var FN_INIT   : [u32; 1]
+
+fn fn256_init() -> i32 {
+    if FN_INIT[0] == 1u32 { return 0i32 }
+    /* n LE limbs */
+    FN_N[0] = 0xFC632551u32
+    FN_N[1] = 0xF3B9CAC2u32
+    FN_N[2] = 0xA7179E84u32
+    FN_N[3] = 0xBCE6FAADu32
+    FN_N[4] = 0xFFFFFFFFu32
+    FN_N[5] = 0xFFFFFFFFu32
+    FN_N[6] = 0x00000000u32
+    FN_N[7] = 0xFFFFFFFFu32
+    /* n'[0] = -n[0]^-1 mod 2^32 via Newton (x = x*(2 - n0*x)) */
+    let n0 : u64 = FN_N[0] as u64
+    let mut x : u64 = n0
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        let prod : u64 = (n0 * x) & 0xFFFFFFFFu64
+        let tm : u64 = (2u64 + 0x100000000u64 - prod) & 0xFFFFFFFFu64
+        x = (x * tm) & 0xFFFFFFFFu64
+        k = k + 1u64
+    }
+    FN_NPRIME[0] = ((0x100000000u64 - x) & 0xFFFFFFFFu64) as u32
+    /* R mod n = 2^256 - n */
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 - (FN_N[i] as u64) - borrow
+        FN_ONE[i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    /* R^2 mod n = 2^512 mod n: start at 2^256 mod n, double 256x */
+    i = 0u64
+    while i < 8u64 { FN_R2[i] = FN_ONE[i] ; i = i + 1u64 }
+    let mut d : u64 = 0u64
+    while d < 256u64 { fn_dbl_raw(&FN_R2 as u64) ; d = d + 1u64 }
+    FN_INIT[0] = 1u32
+    return 0i32
+}
+
+fn fn_dbl_raw(addr: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = ((a[i] as u64) << 1u64) | carry
+        a[i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    fn_csub_n(addr, carry)
+    return 0i32
+}
+
+fn fn_csub_n(addr: u64, extra_high: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let pp : *u32 = &FN_N as *u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
+        FN_T[i] = v & 0xFFFFFFFFu64
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mut ge : u64 = 0u64
+    if extra_high != 0u64 { ge = 1u64 }
+    if borrow == 0u64 { ge = 1u64 }
+    let mask : u64 = 0u64 - ge
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    i = 0u64
+    while i < 8u64 {
+        a[i] = (((FN_T[i] & mask) | ((a[i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn fn_copy(dst: u64, src: u64) -> i32 {
+    let db : u64 = dst * 8u64
+    let sb : u64 = src * 8u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { FN[db + i] = FN[sb + i] ; i = i + 1u64 }
+    return 0i32
+}
+fn fn_add(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 8u64
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = (FN[ab + i] as u64) + (FN[bb + i] as u64) + carry
+        FN[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    fn_csub_n((&FN as u64) + rb * 4u64, carry)
+    return 0i32
+}
+fn fn_sub(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 8u64
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let v : u64 = 0x100000000u64 + (FN[ab + i] as u64) - (FN[bb + i] as u64) - borrow
+        FN[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mask : u64 = 0u64 - borrow
+    let pp : *u32 = &FN_N as *u32
+    let mut c2 : u64 = 0u64
+    i = 0u64
+    while i < 8u64 {
+        let v : u64 = (FN[rb + i] as u64) + ((pp[i] as u64) & mask) + c2
+        FN[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        c2 = v >> 32u64
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn fn_mul(r: u64, a: u64, b: u64) -> i32 {
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let pp : *u32 = &FN_N as *u32
+    let np : u64 = FN_NPRIME[0] as u64
+    let mut k : u64 = 0u64
+    while k < 10u64 { FN_T[k] = 0u64 ; k = k + 1u64 }
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let bi : u64 = FN[bb + i] as u64
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let uv : u64 = FN_T[j] + (FN[ab + j] as u64) * bi + c
+            FN_T[j] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uv8 : u64 = FN_T[8] + c
+        FN_T[8] = uv8 & 0xFFFFFFFFu64
+        FN_T[9] = uv8 >> 32u64
+        let m : u64 = (FN_T[0] * np) & 0xFFFFFFFFu64
+        let uv0 : u64 = FN_T[0] + m * (pp[0] as u64)
+        c = uv0 >> 32u64
+        j = 1u64
+        while j < 8u64 {
+            let uv : u64 = FN_T[j] + m * (pp[j] as u64) + c
+            FN_T[j - 1u64] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvs : u64 = FN_T[8] + c
+        FN_T[7] = uvs & 0xFFFFFFFFu64
+        FN_T[8] = FN_T[9] + (uvs >> 32u64)
+        i = i + 1u64
+    }
+    let rb : u64 = r * 8u64
+    let mut q : u64 = 0u64
+    while q < 8u64 { FN[rb + q] = FN_T[q] as u32 ; q = q + 1u64 }
+    fn_csub_n((&FN as u64) + rb * 4u64, FN_T[8])
+    return 0i32
+}
+fn fn_sqr(r: u64, a: u64) -> i32 { return fn_mul(r, a, a) }
+
+fn fn_to_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { FN[63u64*8u64 + i] = FN_R2[i] ; i = i + 1u64 }
+    return fn_mul(r, a, 63u64)
+}
+fn fn_from_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { FN[63u64*8u64 + i] = 0u32 ; i = i + 1u64 }
+    FN[63u64*8u64] = 1u32
+    return fn_mul(r, a, 63u64)
+}
+
+var FN_NM2 : [u32; 8]
+fn fn_inv(r: u64, a: u64) -> i32 {
+    fn256_init()
+    let mut i : u64 = 0u64
+    while i < 8u64 { FN_NM2[i] = FN_N[i] ; i = i + 1u64 }
+    FN_NM2[0] = (FN_N[0] as u64 - 2u64) as u32        /* n[0]=0x..51, -2 no borrow */
+    fn_copy(61u64, a)
+    i = 0u64
+    while i < 8u64 { FN[62u64*8u64 + i] = FN_ONE[i] ; i = i + 1u64 }
+    let mut idx : u64 = 256u64
+    while idx > 0u64 {
+        idx = idx - 1u64
+        fn_sqr(62u64, 62u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((FN_NM2[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { fn_mul(62u64, 62u64, 61u64) }
+    }
+    fn_copy(r, 62u64)
+    return 0i32
+}
+
+/* canonical (non-Montgomery) byte I/O, 32 bytes big-endian */
+fn fn_set_bytes(slot: u64, src: u64) -> i32 {
+    let s : *u8 = src as *u8
+    let b : u64 = slot * 8u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let o : u64 = (7u64 - i) * 4u64
+        FN[b + i] = (((s[o] as u64) << 24u64) | ((s[o + 1u64] as u64) << 16u64) | ((s[o + 2u64] as u64) << 8u64) | (s[o + 3u64] as u64)) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn fn_get_bytes(dst: u64, slot: u64) -> i32 {
+    let d : *u8 = dst as *u8
+    let b : u64 = slot * 8u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        let w : u64 = FN[b + (7u64 - i)] as u64
+        d[i*4u64 + 0u64] = ((w >> 24u64) & 0xFFu64) as u8
+        d[i*4u64 + 1u64] = ((w >> 16u64) & 0xFFu64) as u8
+        d[i*4u64 + 2u64] = ((w >> 8u64) & 0xFFu64) as u8
+        d[i*4u64 + 3u64] = (w & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* reduce slot in place: x mod n via ONE constant-time conditional subtract
+ * (valid when x < 2n, e.g. the curve x-coord which is < p256 < 2n). */
+fn fn_reduce(slot: u64) -> i32 {
+    fn_csub_n((&FN as u64) + slot * 8u64 * 4u64, 0u64)
+    return 0i32
+}
+fn fn_is_zero(slot: u64) -> u8 {
+    let b : u64 = slot * 8u64
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 8u64 { acc = acc | FN[b + i] ; i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+fn fn_eq(a: u64, b: u64) -> u8 {
+    let ab : u64 = a * 8u64
+    let bb : u64 = b * 8u64
+    let mut diff : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 8u64 { diff = diff | (FN[ab + i] ^ FN[bb + i]) ; i = i + 1u64 }
+    if diff == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* @export surface */
+fn fn256_boot() -> i32 @export { return fn256_init() }
+fn fn_set_bytes_x(slot: u64, src: u64) -> i32 @export { return fn_set_bytes(slot, src) }
+fn fn_get_bytes_x(dst: u64, slot: u64) -> i32 @export { return fn_get_bytes(dst, slot) }
+fn fn_reduce_x(slot: u64) -> i32 @export { return fn_reduce(slot) }
+fn fn_to_mont_x(r: u64, a: u64) -> i32 @export { return fn_to_mont(r, a) }
+fn fn_from_mont_x(r: u64, a: u64) -> i32 @export { return fn_from_mont(r, a) }
+fn fn_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return fn_mul(r, a, b) }
+fn fn_add_x(r: u64, a: u64, b: u64) -> i32 @export { return fn_add(r, a, b) }
+fn fn_inv_x(r: u64, a: u64) -> i32 @export { return fn_inv(r, a) }
+fn fn_copy_x(dst: u64, src: u64) -> i32 @export { return fn_copy(dst, src) }
+fn fn_is_zero_x(slot: u64) -> u8 @export { return fn_is_zero(slot) }
+fn fn_eq_x(a: u64, b: u64) -> u8 @export { return fn_eq(a, b) }
+fn fn_get_limb_x(slot: u64, idx: u64) -> u32 @export { return FN[slot * 8u64 + idx] }
+fn fn_set_u32_x(slot: u64, v: u32) -> i32 @export {
+    let b : u64 = slot * 8u64
+    FN[b] = v
+    let mut i : u64 = 1u64
+    while i < 8u64 { FN[b + i] = 0u32 ; i = i + 1u64 }
+    return 0i32
+}

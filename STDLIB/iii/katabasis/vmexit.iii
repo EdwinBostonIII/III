@@ -1,0 +1,90 @@
+/* STDLIB/iii/katabasis/vmexit.iii
+ *
+ * KATABASIS increment 6 -- the minimal deterministic VMEXIT set (plan 4.8).
+ * The III Floor (R-1) intercepts the SMALLEST set of guest exits, each handled
+ * by a TOTAL, deterministic, witnessed cycle; every other (unmodelled) exit is
+ * FAIL-CLOSED (revert to host via the SID host-state pre-image) -- there is no
+ * best-effort handler, because best-effort is non-deterministic and III forbids
+ * it.  Fewer interceptions = fewer total functions to prove = a smaller, fully
+ * verified Floor.  This module is the faithful taxonomy of that set.
+ *
+ * Pure total functions over small ids -- no metal, no I/O.  KAT: corpus 600.
+ * Ring R-1.  K 1.00.
+ */
+module katabasis_vmexit
+
+/* The intercepted exits (plan 4.8).  0 = any unmodelled / other exit. */
+const KVX_OTHER   : u32 = 0u32   /* unmodelled -> fail-closed */
+const KVX_CPUID   : u32 = 1u32
+const KVX_MSR     : u32 = 2u32
+const KVX_NPF     : u32 = 3u32   /* nested page fault */
+const KVX_VMMCALL : u32 = 4u32
+const KVX_SMI     : u32 = 5u32
+const KVX_INVALID : u32 = 6u32   /* explicit invalid-guest-state exit */
+
+/* Handling disciplines (plan 4.8). */
+const KVX_H_NONE           : u32 = 0u32
+const KVX_H_SYNTHETIC      : u32 = 1u32   /* CPUID: deterministic synthetic leaves */
+const KVX_H_WHITELIST      : u32 = 2u32   /* MSR: r/w only census-approved MSRs */
+const KVX_H_COW            : u32 = 3u32   /* NPF: the CoW resolve (reversible memory) */
+const KVX_H_WITNESSED_CALL : u32 = 4u32   /* VMMCALL: the guest->host witnessed call */
+const KVX_H_OBSERVE        : u32 = 5u32   /* SMI: observe-only, auto-disarm */
+const KVX_H_FAIL_CLOSED    : u32 = 6u32   /* INVALID / OTHER: revert to host, never proceed */
+
+/* SID inverse kinds (plan 4.8 "Inverse" column). */
+const KVX_INV_NONE       : u32 = 0u32
+const KVX_INV_IDENTITY   : u32 = 1u32   /* CPUID / SMI: a read / observation */
+const KVX_INV_RECORDED   : u32 = 2u32   /* MSR: the recorded prior value */
+const KVX_INV_COW        : u32 = 3u32   /* NPF: the CoW restore */
+const KVX_INV_GUEST_REGS : u32 = 4u32   /* VMMCALL: the captured guest register file */
+const KVX_INV_HOST_STATE : u32 = 5u32   /* INVALID / OTHER: revert via the SID host-state pre-image */
+
+/* === BEGIN AUTO-GENERATED FROM iii_vmexit.def === */
+/* GENERATED FROM iii_vmexit.def by gen_vmexit.sh -- DO NOT EDIT BY HAND. */
+/* Is this exit in the minimal intercepted set?  The six modelled exits are
+ * intercepted; every other exit is not (it is handled by fail-close). */
+fn katabasis_vmexit_intercepted(kind: u32) -> u8 @export {
+    let k : u32 = kind
+    if k == KVX_CPUID   { return 1u8 }
+    if k == KVX_MSR     { return 1u8 }
+    if k == KVX_NPF     { return 1u8 }
+    if k == KVX_VMMCALL { return 1u8 }
+    if k == KVX_SMI     { return 1u8 }
+    if k == KVX_INVALID { return 1u8 }
+    return 0u8
+}
+
+/* The handling discipline for an exit (plan 4.8).  Any unmodelled exit falls to
+ * the total fail-closed catch-all. */
+fn katabasis_vmexit_handling(kind: u32) -> u32 @export {
+    let k : u32 = kind
+    if k == KVX_CPUID   { return KVX_H_SYNTHETIC }
+    if k == KVX_MSR     { return KVX_H_WHITELIST }
+    if k == KVX_NPF     { return KVX_H_COW }
+    if k == KVX_VMMCALL { return KVX_H_WITNESSED_CALL }
+    if k == KVX_SMI     { return KVX_H_OBSERVE }
+    if k == KVX_INVALID { return KVX_H_FAIL_CLOSED }
+    return KVX_H_FAIL_CLOSED
+}
+
+/* The SID inverse kind for an exit (plan 4.8). */
+fn katabasis_vmexit_inverse(kind: u32) -> u32 @export {
+    let k : u32 = kind
+    if k == KVX_CPUID   { return KVX_INV_IDENTITY }
+    if k == KVX_MSR     { return KVX_INV_RECORDED }
+    if k == KVX_NPF     { return KVX_INV_COW }
+    if k == KVX_VMMCALL { return KVX_INV_GUEST_REGS }
+    if k == KVX_SMI     { return KVX_INV_IDENTITY }
+    if k == KVX_INVALID { return KVX_INV_HOST_STATE }
+    return KVX_INV_HOST_STATE
+}
+/* === END AUTO-GENERATED FROM iii_vmexit.def === */
+
+/* An unmodelled (or explicit-INVALID) exit must NEVER proceed heuristically: it
+ * is fail-closed (revert to host via the SID pre-image).  Returns 1 iff `kind`
+ * is handled by fail-close. */
+fn katabasis_vmexit_fail_closed(kind: u32) -> u8 @export {
+    let k : u32 = kind
+    if katabasis_vmexit_handling(k) == KVX_H_FAIL_CLOSED { return 1u8 }
+    return 0u8
+}

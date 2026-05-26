@@ -1,0 +1,37 @@
+/* Queue FIFO: push 1,2,3,4,5; pop must return 1,2,3,4,5 */
+module corpus_b23
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn queue_u32_new(arena: u64, hard: u64) -> u64 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u32_push(id: u64, v: u32) -> i32 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u32_pop(id: u64) -> u64 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u32_len(id: u64) -> u64 from "queue.iii"
+extern @abi(c-msvc-x64) fn queue_u32_drop(id: u64) -> i32 from "queue.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    let q : u64 = queue_u32_new(a, 8u64)
+    if q == 0u64 { return 1u64 }
+    let mut i : u32 = 1u32
+    while i <= 5u32 {
+        if queue_u32_push(q, i) != 0i32 { return 2u64 }
+        i = i + 1u32
+    }
+    if queue_u32_len(q) != 5u64 { return 3u64 }
+    let mut expect : u32 = 1u32
+    while expect <= 5u32 {
+        let r : u64 = queue_u32_pop(q)
+        if (r & 1u64) != 1u64 { return 4u64 }
+        let v : u32 = ((r >> 1u64) & 0xFFFFFFFFu64) as u32
+        if v != expect { return 5u64 }
+        expect = expect + 1u32
+    }
+    if queue_u32_len(q) != 0u64 { return 6u64 }
+    /* pop on empty returns 0 (none) */
+    let empty : u64 = queue_u32_pop(q)
+    if (empty & 1u64) != 0u64 { return 7u64 }
+    queue_u32_drop(q)
+    arena_drop(a)
+    return 99u64
+}

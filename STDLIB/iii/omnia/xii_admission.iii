@@ -1,0 +1,116 @@
+/* STDLIB/iii/omnia/xii_admission.iii -- mig4 Step 6: the rule-set admission gate.
+ * Composes the Step-4 confluence gate (xii_joinability) and the Step-5 termination gate
+ * (xii_termination) into the single decision the migration needs before lowering any domain
+ * through XII (Steps 7-10): a rule set is ADMITTED iff it is confluent-as-used AND terminating.
+ *
+ * THE NON-CONFLUENCE TREATMENT (the Step-6 decision, made explicit + falsifiable here).
+ * Step 4 established that XII is NOT globally confluent: the subterm-overlap family (R001
+ * associativity x R008 FIF-suffix-lift, ~35 pairs) does not join -- two different rewrite
+ * STRATEGIES can reach two different normal forms.  Newman's lemma (local confluence +
+ * termination => global confluence) therefore does NOT apply, because local confluence fails on
+ * those subterm overlaps.  The treatment -- consistent with what numera/h4_charter already gates
+ * as the H4 "one engine" invariant -- is to admit XII as a DETERMINISTIC NORMALISER, not as a
+ * globally-confluent term-rewriting system:
+ *   - ROOT-overlap local confluence holds (Step 4: xjn_gate_root GREEN -- every root critical
+ *     pair joins) -- the reorderable set is locally confluent at the root.
+ *   - TERMINATION holds (Step 5: xtm_gate GREEN -- every firing rule strictly decreases the
+ *     lexicographic triple (canon_weight, node_count, assoc_penalty)).
+ *   - The SOLE evaluator is xii_canonicalise, a SINGLE FIXED bottom-up strategy.  A deterministic
+ *     terminating function returns exactly one output per input, so every term has exactly ONE
+ *     normal form UNDER THAT STRATEGY -- the property the system actually relies on (h4_charter's
+ *     determinism / one-NF clause), independent of global confluence.
+ * So admission certifies DETERMINISTIC NORMALISATION (root-confluent + terminating + one fixed
+ * strategy => one normal form per term), and openly records that global confluence is NOT claimed.
+ * This is the honest closure of the Step-4 finding, not a paper over it: a caller that needed
+ * strategy-INDEPENDENT confluence would have to complete the subterm critical pairs first; the
+ * migration does not need that, because it routes ALL computation through the one canonicaliser.
+ *
+ * Per-family use (Steps 7-10): to admit a NEW rule family, add its rules to the live set and
+ * re-run xad_admit -- it re-runs both gates over the whole set, so a family that breaks root
+ * confluence or termination is REJECTED.  Admission is thus the gate every domain-lowering step
+ * must pass before its rules join the engine.
+ *
+ * Hexad: kind_sensitivity.  Ring: R0.  K: 1.00.  NIH: Steps 4+5 only (which rest on Steps 1-3 +
+ * the canonicaliser).  Determinism: integer-only; ==/!= compares only (no ordering); single-line
+ * fns; no arrays / pointer math / u64 div-mod; no recursion (delegates to the two sub-gates).
+ */
+module omnia_xii_admission
+
+extern @abi(c-msvc-x64) fn xjn_gate_root() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_nonjoin_count() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xtm_gate() -> u32 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn xtm_anomaly_count() -> u64 from "xii_termination.iii"
+
+const XAD_ADMIT  : u32 = 1u32
+const XAD_REJECT : u32 = 0u32
+
+/* The pure admission decision: ADMIT iff confluent-on-the-reorderable-set AND terminating.
+ * Kept as a separate total function so the prove-the-negative arm can exercise it directly. */
+fn xad_decide(root_confluent: u32, terminating: u32) -> u32 {
+    if root_confluent != 1u32 { return XAD_REJECT }
+    if terminating != 1u32 { return XAD_REJECT }
+    return XAD_ADMIT
+}
+
+/* the operative confluence property: root-overlap local confluence (the reorderable set). */
+fn xad_root_confluent() -> u32 @export { return xjn_gate_root() }
+
+/* termination: every firing rule strictly decreases the lexicographic triple (Step 5). */
+fn xad_terminating() -> u32 @export { return xtm_gate() }
+
+/* ADMIT(1) iff the live rule set is root-confluent AND terminating; REJECT(0) otherwise. */
+fn xad_admit() -> u32 @export {
+    let conf : u32 = xjn_gate_root()
+    let term : u32 = xtm_gate()
+    return xad_decide(conf, term)
+}
+
+/* global confluence: 1 iff EVERY critical pair (root AND subterm) joins.  Expected 0 -- the
+ * 20 residual lift-family subterm pairs do not join (route-S retired the assoc pairs R001-R004 by
+ * construction, leaving only these).  Admission does NOT require global confluence. */
+fn xad_globally_confluent() -> u8 @export {
+    if xjn_gate() == 1u32 { return 1u8 }
+    return 0u8
+}
+
+/* the count of non-joining critical pairs (runs the full gate to populate the tally). */
+fn xad_subterm_nonjoin_count() -> u64 @export {
+    xjn_gate()
+    return xjn_nonjoin_count()
+}
+
+/* KAT: 99 = all pass; a distinct code per failed check.
+ * Proves: the live rule set is ADMITTED -- root-confluent AND terminating (1-3); THE TREATMENT --
+ * XII is NOT globally confluent (the Step-4 subterm non-joins are real and counted) yet IS admitted
+ * as a deterministic normaliser (4-5); the admission predicate has TEETH -- it REJECTS if EITHER
+ * confluence or termination fails (6-9); reproducible (10). */
+fn xad_selftest() -> u64 @export {
+    /* (1-3) the live rule set is ADMITTED: root-confluent AND terminating. */
+    if xad_root_confluent() != 1u32 { return 1u64 }
+    if xad_terminating() != 1u32 { return 2u64 }
+    if xad_admit() != XAD_ADMIT { return 3u64 }
+
+    /* (4-5) THE TREATMENT: NOT globally confluent (the subterm family does not join) yet admitted. */
+    if xad_globally_confluent() != 0u8 { return 4u64 }
+    if xad_subterm_nonjoin_count() == 0u64 { return 5u64 }
+
+    /* (6-9) the admission predicate has TEETH (prove-the-negative): reject if EITHER half fails. */
+    if xad_decide(1u32, 1u32) != XAD_ADMIT { return 6u64 }
+    if xad_decide(0u32, 1u32) != XAD_REJECT { return 7u64 }    /* non-confluent -> reject */
+    if xad_decide(1u32, 0u32) != XAD_REJECT { return 8u64 }    /* non-terminating -> reject */
+    if xad_decide(0u32, 0u32) != XAD_REJECT { return 9u64 }
+
+    /* (10) reproducible. */
+    if xad_admit() != XAD_ADMIT { return 10u64 }
+    if xad_terminating() != 1u32 { return 10u64 }
+
+    return 99u64
+}
+
+/* xii_admission EMBODIES the migration's gating decision: a rule set is admitted into the one
+ * engine iff it is root-confluent (Step 4) AND terminating (Step 5).  It openly records the
+ * Step-4 finding -- XII is not globally confluent -- and admits it nonetheless as a DETERMINISTIC
+ * NORMALISER: root confluence + termination + a single fixed canonicalisation strategy give every
+ * term exactly one normal form, the H4 "one engine" property.  Every domain lowered through XII in
+ * Steps 7-10 must pass this gate before its rules join the engine. */

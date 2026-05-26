@@ -1,0 +1,41 @@
+# COMPILER/BOOT/iii_cycle_family.def
+#
+# SINGLE SOURCE OF TRUTH for the nine KATABASIS descent cycle families
+# (DOCS/III-KATABASIS.md plan 3.0).  CHARIOT's ~90 IOCTLs collapse into nine
+# hexad-distinguished families; this table is their taxonomy -- each family's
+# safety class and SID inverse kind, and whether it is one of the "dangerous
+# trio" (F2/F5/F9) that share the one safe-write law (plan 3.9).
+#
+# Regenerate the AUTO-GENERATED taxonomy functions in
+# STDLIB/iii/katabasis/cycle_family.iii via:
+#     bash COMPILER/BOOT/gen_cycle_family.sh
+# The build's drift gate (gen_cycle_family.sh --check) fails if cycle_family.iii's
+# generated block diverges from this file (plan 6.9 / FR-9), so the cycle
+# taxonomy the Gate dispatch reads can never drift from the plan-3.0 table.
+#
+# Each row maps to the hand-written enum constants in cycle_family.iii:
+#   family const = KCF_F<id>_<name>      (e.g. KCF_F1_READ_METAL)
+#   class  const = KCF_CLASS_<class>     (e.g. KCF_CLASS_READ_ONLY)
+#   inv    const = KCF_INV_<inverse>     (e.g. KCF_INV_IDENTITY)
+# gen_cycle_family.sh asserts every referenced constant exists; a row naming a
+# constant cycle_family.iii does not define is a build-stopping error (never a
+# silent undefined-symbol downstream).
+#
+# Fields (whitespace-delimited):  id  name  class  inverse  dangerous
+#   id         u32  -- family id 1..N, ascending and contiguous.
+#   name       str  -- family name; forms KCF_F<id>_<name>.
+#   class      str  -- safety class; forms KCF_CLASS_<class>.
+#   inverse    str  -- SID inverse kind; forms KCF_INV_<inverse>.
+#   dangerous  0|1  -- 1 iff the family is in the safe-write-law trio (plan 3.9).
+# Lines starting with '#' are comments. Blank lines ignored.
+# ---------------------------------------------------------------------------
+# id  name         class         inverse      dangerous
+1     READ_METAL   READ_ONLY     IDENTITY     0
+2     WRITE_METAL  WRITE_NEG     RECORDED     1
+3     CENSUS       READ_ONLY     IDENTITY     0
+4     SNAPSHOT     POSITIVE      COW          0
+5     DESCEND      DESCEND_NEG   VMEXIT       1
+6     OBSERVE      OBSERVE       IDENTITY     0
+7     SELF_VERIFY  READ_ONLY     IDENTITY     0
+8     CAP_OP       GOVERNANCE    CAP          0
+9     COPROC       WRITE_NEG     GPU          1

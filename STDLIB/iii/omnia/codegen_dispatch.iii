@@ -1,0 +1,21 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\codegen_dispatch.iii
+ *
+ * III STDLIB - omnia::codegen_dispatch
+ *
+ * Default dispatch function for codegen patterns. Separated from
+ * codegen_patterns.iii so address-of-fn produces a proper extern symbol
+ * reference (iiis-0 quirk).
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ */
+
+module omnia_codegen_dispatch
+
+fn cg_dispatch_default(a: u64, b: u64, c: u64, ctx: u64) -> u64 @export {
+    let _a : u64 = a
+    let _b : u64 = b
+    let _c : u64 = c
+    let _ctx : u64 = ctx
+    /* Successful selection signal (tag bit 0 == 0). */
+    return 1u64
+}

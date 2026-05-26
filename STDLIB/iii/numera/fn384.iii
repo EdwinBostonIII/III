@@ -1,0 +1,246 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\fn384.iii
+ *
+ * III STDLIB - numera::fn384 -- constant-time scalar field GF(n384) for NIST
+ * P-384 ECDSA, n384 = the P-384 curve order.  12 x u32 limbs, Montgomery;
+ * n'[0] COMPUTED via Newton (n384[0]=0xccc52973).  RITCHIE Stage 4.11.
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00.
+ */
+
+module numera_fn384
+
+var GN_N      : [u32; 12]
+var GN_R2     : [u32; 12]
+var GN_ONE    : [u32; 12]
+var GN_NPRIME : [u32; 1]
+var GN        : [u32; 576]
+var GN_T      : [u64; 14]
+var GN_INIT   : [u32; 1]
+var GN_NM2    : [u32; 12]
+
+fn fn384_init() -> i32 {
+    if GN_INIT[0] == 1u32 { return 0i32 }
+    GN_N[0]=0xCCC52973u32 GN_N[1]=0xECEC196Au32 GN_N[2]=0x48B0A77Au32 GN_N[3]=0x581A0DB2u32
+    GN_N[4]=0xF4372DDFu32 GN_N[5]=0xC7634D81u32 GN_N[6]=0xFFFFFFFFu32 GN_N[7]=0xFFFFFFFFu32
+    GN_N[8]=0xFFFFFFFFu32 GN_N[9]=0xFFFFFFFFu32 GN_N[10]=0xFFFFFFFFu32 GN_N[11]=0xFFFFFFFFu32
+    let n0 : u64 = GN_N[0] as u64
+    let mut x : u64 = n0
+    let mut kk : u64 = 0u64
+    while kk < 6u64 {
+        let prod : u64 = (n0 * x) & 0xFFFFFFFFu64
+        let tm : u64 = (2u64 + 0x100000000u64 - prod) & 0xFFFFFFFFu64
+        x = (x * tm) & 0xFFFFFFFFu64
+        kk = kk + 1u64
+    }
+    GN_NPRIME[0] = ((0x100000000u64 - x) & 0xFFFFFFFFu64) as u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = 0x100000000u64 - (GN_N[i] as u64) - borrow
+        GN_ONE[i] = (v & 0xFFFFFFFFu64) as u32
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    i = 0u64
+    while i < 12u64 { GN_R2[i] = GN_ONE[i] ; i = i + 1u64 }
+    let mut d : u64 = 0u64
+    while d < 384u64 { gn_dbl_raw(&GN_R2 as u64) ; d = d + 1u64 }
+    GN_INIT[0] = 1u32
+    return 0i32
+}
+fn gn_dbl_raw(addr: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = ((a[i] as u64) << 1u64) | carry
+        a[i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    gn_csub_n(addr, carry)
+    return 0i32
+}
+fn gn_csub_n(addr: u64, extra_high: u64) -> i32 {
+    let a : *u32 = addr as *u32
+    let pp : *u32 = &GN_N as *u32
+    let mut borrow : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
+        GN_T[i] = v & 0xFFFFFFFFu64
+        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        i = i + 1u64
+    }
+    let mut ge : u64 = 0u64
+    if extra_high != 0u64 { ge = 1u64 }
+    if borrow == 0u64 { ge = 1u64 }
+    let mask : u64 = 0u64 - ge
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    i = 0u64
+    while i < 12u64 {
+        a[i] = (((GN_T[i] & mask) | ((a[i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn gn_copy(dst: u64, src: u64) -> i32 {
+    let db : u64 = dst * 12u64
+    let sb : u64 = src * 12u64
+    let mut i : u64 = 0u64
+    while i < 12u64 { GN[db + i] = GN[sb + i] ; i = i + 1u64 }
+    return 0i32
+}
+fn gn_add(r: u64, a: u64, b: u64) -> i32 {
+    let rb : u64 = r * 12u64
+    let ab : u64 = a * 12u64
+    let bb : u64 = b * 12u64
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let v : u64 = (GN[ab + i] as u64) + (GN[bb + i] as u64) + carry
+        GN[rb + i] = (v & 0xFFFFFFFFu64) as u32
+        carry = v >> 32u64
+        i = i + 1u64
+    }
+    gn_csub_n((&GN as u64) + rb * 4u64, carry)
+    return 0i32
+}
+fn gn_mul(r: u64, a: u64, b: u64) -> i32 {
+    let ab : u64 = a * 12u64
+    let bb : u64 = b * 12u64
+    let pp : *u32 = &GN_N as *u32
+    let np : u64 = GN_NPRIME[0] as u64
+    let mut k : u64 = 0u64
+    while k < 14u64 { GN_T[k] = 0u64 ; k = k + 1u64 }
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let bi : u64 = GN[bb + i] as u64
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 12u64 {
+            let uv : u64 = GN_T[j] + (GN[ab + j] as u64) * bi + c
+            GN_T[j] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uv12 : u64 = GN_T[12] + c
+        GN_T[12] = uv12 & 0xFFFFFFFFu64
+        GN_T[13] = uv12 >> 32u64
+        let m : u64 = (GN_T[0] * np) & 0xFFFFFFFFu64
+        let uv0 : u64 = GN_T[0] + m * (pp[0] as u64)
+        c = uv0 >> 32u64
+        j = 1u64
+        while j < 12u64 {
+            let uv : u64 = GN_T[j] + m * (pp[j] as u64) + c
+            GN_T[j - 1u64] = uv & 0xFFFFFFFFu64
+            c = uv >> 32u64
+            j = j + 1u64
+        }
+        let uvs : u64 = GN_T[12] + c
+        GN_T[11] = uvs & 0xFFFFFFFFu64
+        GN_T[12] = GN_T[13] + (uvs >> 32u64)
+        i = i + 1u64
+    }
+    let rb : u64 = r * 12u64
+    let mut q : u64 = 0u64
+    while q < 12u64 { GN[rb + q] = GN_T[q] as u32 ; q = q + 1u64 }
+    gn_csub_n((&GN as u64) + rb * 4u64, GN_T[12])
+    return 0i32
+}
+fn gn_sqr(r: u64, a: u64) -> i32 { return gn_mul(r, a, a) }
+fn gn_to_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 12u64 { GN[47u64*12u64 + i] = GN_R2[i] ; i = i + 1u64 }
+    return gn_mul(r, a, 47u64)
+}
+fn gn_from_mont(r: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 12u64 { GN[47u64*12u64 + i] = 0u32 ; i = i + 1u64 }
+    GN[47u64*12u64] = 1u32
+    return gn_mul(r, a, 47u64)
+}
+fn gn_inv(r: u64, a: u64) -> i32 {
+    fn384_init()
+    let mut i : u64 = 0u64
+    while i < 12u64 { GN_NM2[i] = GN_N[i] ; i = i + 1u64 }
+    GN_NM2[0] = (GN_N[0] as u64 - 2u64) as u32
+    gn_copy(45u64, a)
+    i = 0u64
+    while i < 12u64 { GN[46u64*12u64 + i] = GN_ONE[i] ; i = i + 1u64 }
+    let mut idx : u64 = 384u64
+    while idx > 0u64 {
+        idx = idx - 1u64
+        gn_sqr(46u64, 46u64)
+        let limb : u64 = idx / 32u64
+        let off : u64 = idx % 32u64
+        let bit : u64 = ((GN_NM2[limb] as u64) >> off) & 1u64
+        if bit == 1u64 { gn_mul(46u64, 46u64, 45u64) }
+    }
+    gn_copy(r, 46u64)
+    return 0i32
+}
+fn gn_set_bytes(slot: u64, src: u64) -> i32 {
+    let s : *u8 = src as *u8
+    let b : u64 = slot * 12u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let o : u64 = (11u64 - i) * 4u64
+        GN[b + i] = (((s[o] as u64) << 24u64) | ((s[o + 1u64] as u64) << 16u64) | ((s[o + 2u64] as u64) << 8u64) | (s[o + 3u64] as u64)) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn gn_get_bytes(dst: u64, slot: u64) -> i32 {
+    let d : *u8 = dst as *u8
+    let b : u64 = slot * 12u64
+    let mut i : u64 = 0u64
+    while i < 12u64 {
+        let w : u64 = GN[b + (11u64 - i)] as u64
+        d[i*4u64 + 0u64] = ((w >> 24u64) & 0xFFu64) as u8
+        d[i*4u64 + 1u64] = ((w >> 16u64) & 0xFFu64) as u8
+        d[i*4u64 + 2u64] = ((w >> 8u64) & 0xFFu64) as u8
+        d[i*4u64 + 3u64] = (w & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn gn_reduce(slot: u64) -> i32 { gn_csub_n((&GN as u64) + slot * 12u64 * 4u64, 0u64) return 0i32 }
+fn gn_is_zero(slot: u64) -> u8 {
+    let b : u64 = slot * 12u64
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 12u64 { acc = acc | GN[b + i] ; i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+fn gn_eq(a: u64, b: u64) -> u8 {
+    let ab : u64 = a * 12u64
+    let bb : u64 = b * 12u64
+    let mut diff : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < 12u64 { diff = diff | (GN[ab + i] ^ GN[bb + i]) ; i = i + 1u64 }
+    if diff == 0u32 { return 1u8 }
+    return 0u8
+}
+
+fn fn384_boot() -> i32 @export { return fn384_init() }
+fn gn_set_bytes_x(slot: u64, src: u64) -> i32 @export { return gn_set_bytes(slot, src) }
+fn gn_get_bytes_x(dst: u64, slot: u64) -> i32 @export { return gn_get_bytes(dst, slot) }
+fn gn_reduce_x(slot: u64) -> i32 @export { return gn_reduce(slot) }
+fn gn_to_mont_x(r: u64, a: u64) -> i32 @export { return gn_to_mont(r, a) }
+fn gn_from_mont_x(r: u64, a: u64) -> i32 @export { return gn_from_mont(r, a) }
+fn gn_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return gn_mul(r, a, b) }
+fn gn_add_x(r: u64, a: u64, b: u64) -> i32 @export { return gn_add(r, a, b) }
+fn gn_inv_x(r: u64, a: u64) -> i32 @export { return gn_inv(r, a) }
+fn gn_copy_x(dst: u64, src: u64) -> i32 @export { return gn_copy(dst, src) }
+fn gn_is_zero_x(slot: u64) -> u8 @export { return gn_is_zero(slot) }
+fn gn_eq_x(a: u64, b: u64) -> u8 @export { return gn_eq(a, b) }
+fn gn_get_limb_x(slot: u64, idx: u64) -> u32 @export { return GN[slot * 12u64 + idx] }
+fn gn_set_u32_x(slot: u64, v: u32) -> i32 @export {
+    let b : u64 = slot * 12u64
+    GN[b] = v
+    let mut i : u64 = 1u64
+    while i < 12u64 { GN[b + i] = 0u32 ; i = i + 1u64 }
+    return 0i32
+}

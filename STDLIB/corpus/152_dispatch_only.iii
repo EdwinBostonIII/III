@@ -1,0 +1,19 @@
+/* sha256_dispatch_oneshot alone — no sha256_oneshot for comparison. */
+module corpus_152
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn sha256_dispatch_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_dispatch.iii"
+
+fn main() -> u64 {
+    let buf : *u8 = malloc(3u64)
+    buf[0] = 97u8
+    buf[1] = 98u8
+    buf[2] = 99u8
+    let out : *u8 = malloc(32u64)
+    sha256_dispatch_oneshot(buf, 3u64, out)
+    /* SHA-256("abc") starts with 0xBA in the first byte. */
+    if out[0] != 0xBAu8 { return 1u64 }
+    free(buf); free(out)
+    return 99u64
+}

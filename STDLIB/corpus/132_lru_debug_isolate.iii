@@ -1,0 +1,57 @@
+/* Bisect test 130_lru's segfault.
+ *
+ * Returns a unique exit code at each checkpoint.  Whatever exit code
+ * we DO NOT see is where the segfault is. */
+module corpus_132
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn lru_new(arena: u64, capacity: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_put(id: u64, key: u32, value: u64) -> i32 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_count(id: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_capacity(id: u64) -> u64 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_drop(id: u64) -> i32 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_debug_key(id: u64, idx: u32) -> u32 from "lru.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 10u64 }
+
+    let c : u64 = lru_new(a, 3u64)
+    if c == 0u64 { return 20u64 }
+
+    if lru_capacity(c) != 3u64 { return 30u64 }
+
+    let r1 : i32 = lru_put(c, 1u32, 100u64)
+    if r1 != 0i32 { return 40u64 }
+
+    let k0a : u32 = lru_debug_key(c, 0u32)
+    if k0a != 1u32 { return 50u64 }
+
+    let r2 : i32 = lru_put(c, 2u32, 200u64)
+    if r2 != 0i32 { return 60u64 }
+
+    let k1a : u32 = lru_debug_key(c, 1u32)
+    if k1a != 2u32 { return 70u64 }
+
+    let r3 : i32 = lru_put(c, 3u32, 300u64)
+    if r3 != 0i32 { return 80u64 }
+
+    let k2a : u32 = lru_debug_key(c, 2u32)
+    if k2a != 3u32 { return 90u64 }
+
+    /* Up to here was fine in earlier runs.  The eviction step is suspect. */
+    let r4 : i32 = lru_put(c, 4u32, 400u64)
+    if r4 != -1i32 { return 100u64 + (r4 as u64) + 0x10u64 }
+
+    let k0b : u32 = lru_debug_key(c, 0u32)
+    if k0b != 4u32 { return 200u64 }
+    let k1b : u32 = lru_debug_key(c, 1u32)
+    if k1b != 2u32 { return 220u64 + (k1b as u64) }
+    let k2b : u32 = lru_debug_key(c, 2u32)
+    if k2b != 3u32 { return 250u64 }
+
+    lru_drop(c)
+    arena_drop(a)
+    return 99u64
+}

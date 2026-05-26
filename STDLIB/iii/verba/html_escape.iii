@@ -1,0 +1,166 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\html_escape.iii
+ *
+ * III STDLIB - verba::html_escape
+ *
+ * HTML/XML escape and unescape for the common 5 entities:
+ *   &  ->  &amp;     /  &amp;   ->  &
+ *   <  ->  &lt;      /  &lt;    ->  <
+ *   >  ->  &gt;      /  &gt;    ->  >
+ *   "  ->  &quot;    /  &quot;  ->  "
+ *   '  ->  &#39;     /  &#39;   ->  '   (also handles &apos;)
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_html_escape
+
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+
+const HTML_OK : i32 = 0i32
+
+fn html_escape(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let b : u32 = src[i] as u32
+        if b == 38u32 {        /* & */
+            builder_push_byte(builder_id, 38u32)   /* & */
+            builder_push_byte(builder_id, 97u32)   /* a */
+            builder_push_byte(builder_id, 109u32)  /* m */
+            builder_push_byte(builder_id, 112u32)  /* p */
+            builder_push_byte(builder_id, 59u32)   /* ; */
+        }
+        if b == 60u32 {        /* < */
+            builder_push_byte(builder_id, 38u32)
+            builder_push_byte(builder_id, 108u32)  /* l */
+            builder_push_byte(builder_id, 116u32)  /* t */
+            builder_push_byte(builder_id, 59u32)
+        }
+        if b == 62u32 {        /* > */
+            builder_push_byte(builder_id, 38u32)
+            builder_push_byte(builder_id, 103u32)  /* g */
+            builder_push_byte(builder_id, 116u32)  /* t */
+            builder_push_byte(builder_id, 59u32)
+        }
+        if b == 34u32 {        /* " */
+            builder_push_byte(builder_id, 38u32)
+            builder_push_byte(builder_id, 113u32)  /* q */
+            builder_push_byte(builder_id, 117u32)  /* u */
+            builder_push_byte(builder_id, 111u32)  /* o */
+            builder_push_byte(builder_id, 116u32)  /* t */
+            builder_push_byte(builder_id, 59u32)
+        }
+        if b == 39u32 {        /* ' */
+            builder_push_byte(builder_id, 38u32)
+            builder_push_byte(builder_id, 35u32)   /* # */
+            builder_push_byte(builder_id, 51u32)   /* 3 */
+            builder_push_byte(builder_id, 57u32)   /* 9 */
+            builder_push_byte(builder_id, 59u32)
+        }
+        let mut handled : u8 = 0u8
+        if b == 38u32 { handled = 1u8 }
+        if b == 60u32 { handled = 1u8 }
+        if b == 62u32 { handled = 1u8 }
+        if b == 34u32 { handled = 1u8 }
+        if b == 39u32 { handled = 1u8 }
+        if handled == 0u8 {
+            builder_push_byte(builder_id, b)
+        }
+        i = i + 1u64
+    }
+    return HTML_OK
+}
+
+/* Try to match an entity at position i.  Returns the consumed length
+ * (and writes the decoded byte to HTML_LAST_DECODED) on match, or 0
+ * if no entity matches.  Inlines all literal matches to avoid W2
+ * (max 4 fn params) on the helper. */
+var HTML_LAST_DECODED : u32 = 0u32
+
+fn html_try_entity(src: *u8, src_len: u64, i: u64) -> u64 {
+    /* &amp;  -- check src[i+1..i+5] = a,m,p,; */
+    if i + 5u64 <= src_len {
+        if src[i + 1u64] == 97u8 {
+            if src[i + 2u64] == 109u8 {
+                if src[i + 3u64] == 112u8 {
+                    if src[i + 4u64] == 59u8 {
+                        HTML_LAST_DECODED = 38u32
+                        return 5u64
+                    }
+                }
+            }
+        }
+    }
+    /* &lt;  -- check src[i+1..i+4] = l,t,; */
+    if i + 4u64 <= src_len {
+        if src[i + 1u64] == 108u8 {
+            if src[i + 2u64] == 116u8 {
+                if src[i + 3u64] == 59u8 {
+                    HTML_LAST_DECODED = 60u32
+                    return 4u64
+                }
+            }
+        }
+    }
+    /* &gt;  -- check src[i+1..i+4] = g,t,; */
+    if i + 4u64 <= src_len {
+        if src[i + 1u64] == 103u8 {
+            if src[i + 2u64] == 116u8 {
+                if src[i + 3u64] == 59u8 {
+                    HTML_LAST_DECODED = 62u32
+                    return 4u64
+                }
+            }
+        }
+    }
+    /* &quot;  -- check src[i+1..i+6] = q,u,o,t,; */
+    if i + 6u64 <= src_len {
+        if src[i + 1u64] == 113u8 {
+            if src[i + 2u64] == 117u8 {
+                if src[i + 3u64] == 111u8 {
+                    if src[i + 4u64] == 116u8 {
+                        if src[i + 5u64] == 59u8 {
+                            HTML_LAST_DECODED = 34u32
+                            return 6u64
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* &#39;  -- check src[i+1..i+5] = #,3,9,; */
+    if i + 5u64 <= src_len {
+        if src[i + 1u64] == 35u8 {
+            if src[i + 2u64] == 51u8 {
+                if src[i + 3u64] == 57u8 {
+                    if src[i + 4u64] == 59u8 {
+                        HTML_LAST_DECODED = 39u32
+                        return 5u64
+                    }
+                }
+            }
+        }
+    }
+    return 0u64
+}
+
+fn html_unescape(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < src_len {
+        let b : u32 = src[i] as u32
+        if b == 38u32 {
+            let consumed : u64 = html_try_entity(src, src_len, i)
+            if consumed > 0u64 {
+                builder_push_byte(builder_id, HTML_LAST_DECODED)
+                i = i + consumed
+            } else {
+                builder_push_byte(builder_id, 38u32)
+                i = i + 1u64
+            }
+        } else {
+            builder_push_byte(builder_id, b)
+            i = i + 1u64
+        }
+    }
+    return HTML_OK
+}

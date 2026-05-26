@@ -1,0 +1,7 @@
+module corpus_25
+
+var primes: [u64; 4] = [2, 3, 5, 7]
+
+fn main() -> u64 {
+    return primes[2]
+}

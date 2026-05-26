@@ -1,0 +1,4 @@
+/* 643 — basal_probe: exact integer Bayesian probe (posterior + entropy), divide-free normalization. */
+module corpus_643
+extern @abi(c-msvc-x64) fn bprobe_selftest() -> u64 from "basal_probe.iii"
+fn main() -> u64 { return bprobe_selftest() }

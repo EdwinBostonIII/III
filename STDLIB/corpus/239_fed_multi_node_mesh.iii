@@ -1,0 +1,293 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\239_fed_multi_node_mesh.iii
+ *
+ * III conformance corpus 239 -- federation 3-node mesh sealed_channel.
+ *
+ * Simulates a federation triangle (nodes A, B, C) where each pair of
+ * nodes establishes its own sealed channel for authenticated, encrypted
+ * traffic.  Module-scope x25519 keypair buffers stand in for the
+ * ephemeral keypairs each node would derive at admission time.
+ *
+ * Verification phases:
+ *   1. x25519(basepoint) for A, B, C public keys.
+ *   2. Three pairwise sc_handshake_init calls -> 3 distinct channels.
+ *      - channel_AB = A handshakes with B
+ *      - channel_BC = B handshakes with C
+ *      - channel_AC = A handshakes with C
+ *   3. Each channel's session_id has at least one non-zero byte in
+ *      positions 0..7 (entropy gate).
+ *   4. Pairwise inequality of session_ids:
+ *      session_id_AB != session_id_BC,
+ *      session_id_AB != session_id_AC,
+ *      session_id_BC != session_id_AC.
+ *      (Inequality = at least one byte differs across positions 0..7.)
+ *   5. A sends 16-byte payload via channel_AB; B's peer-channel for AB
+ *      opens it; recovered plaintext matches original.
+ *   6. C sends a different 16-byte payload via channel_AC; A's
+ *      peer-channel for AC opens it; recovered plaintext matches.
+ *   7. Tampering ciphertext_AB (flip byte 0) makes B's open return
+ *      SC_E_BAD_TAG (-4).
+ *   8. sc_close(channel_AB); subsequent sc_send on channel_AB returns
+ *      SC_E_BAD_CHANNEL (-3).
+ *
+ * Note on "peer channels":  sealed_channel.iii allocates one slot per
+ * sc_handshake_init call.  To round-trip a message between two nodes
+ * each side needs its own slot (the tx-nonce of the sender must match
+ * the rx-nonce of the receiver).  We allocate six slots total:
+ *   ch_AB_a (A's view of AB),   ch_AB_b (B's view of AB)
+ *   ch_BC_b (B's view of BC),   ch_BC_c (C's view of BC)
+ *   ch_AC_a (A's view of AC),   ch_AC_c (C's view of AC)
+ * The "session_id" of channel_AB is the sid of either side -- both
+ * sides derive the identical sid from the shared secret, so we use
+ * ch_AB_a (A's view) as canonical for the inequality checks.
+ *
+ * Exit code: 99 on full pass; 1..32 on specific failure point.
+ */
+
+module corpus_239
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_close(channel_id: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_session_id_byte(channel_id: u64, i: u32) -> u32 from "sealed_channel.iii"
+
+/* Module-scope ephemeral keypair buffers for the three nodes.
+ * 32 bytes per scalar; basepoint is also 32 bytes. */
+var NODE_A_SK : [u8; 32]
+var NODE_B_SK : [u8; 32]
+var NODE_C_SK : [u8; 32]
+var NODE_A_PK : [u8; 32]
+var NODE_B_PK : [u8; 32]
+var NODE_C_PK : [u8; 32]
+var BASEPOINT : [u8; 32]
+
+/* Compare two byte regions of length n.  Returns 1 if equal, 0 if any
+ * byte differs.  Wrapped here because iiis-0 disallows >4-param fns
+ * cleanly when called repeatedly; this keeps signatures small. */
+fn _bytes_eq(a: *u8, b: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n {
+        if a[i] != b[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Compare two channel session_ids (positions 0..7).  Returns 1 if all
+ * 8 bytes match, 0 if any byte differs. */
+fn _sid_eq(ch_a: u64, ch_b: u64) -> u8 {
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let av : u32 = sc_session_id_byte(ch_a, k)
+        let bv : u32 = sc_session_id_byte(ch_b, k)
+        if av != bv { return 0u8 }
+        k = k + 1u32
+    }
+    return 1u8
+}
+
+/* Sum of session_id bytes (entropy probe).  Returns 0 only if every
+ * byte in positions 0..7 is zero -- i.e. degenerate / failed handshake. */
+fn _sid_byte_sum(ch: u64) -> u32 {
+    let mut sum : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let v : u32 = sc_session_id_byte(ch, k)
+        if v == 0x100u32 { return 0u32 }
+        sum = sum + (v & 0xFFu32)
+        k = k + 1u32
+    }
+    return sum
+}
+
+/* Derive a 32-byte secret-key buffer for a node.  Each node gets a
+ * distinct deterministic byte pattern -- in production these would be
+ * RNG-sourced; here they are compile-time constants so the test is
+ * fully deterministic. */
+fn _fill_sk(buf: *u8, base: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        buf[i] = ((base + i) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* Reset channel pool to a clean slate. */
+    sc_reset_all()
+
+    /* === Phase 0: build the basepoint and the three node secrets. === */
+    let bp : *u8 = (&BASEPOINT) as *u8
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 {
+        bp[z] = 0u8
+        z = z + 1u64
+    }
+
+    let a_sk : *u8 = (&NODE_A_SK) as *u8
+    let b_sk : *u8 = (&NODE_B_SK) as *u8
+    let c_sk : *u8 = (&NODE_C_SK) as *u8
+    /* Distinct deterministic seed bases per node. */
+    _fill_sk(a_sk, 0x11u64)
+    _fill_sk(b_sk, 0x40u64)
+    _fill_sk(c_sk, 0x80u64)
+
+    /* === Phase 1: derive public keys via x25519(basepoint). === */
+    let a_pk : *u8 = (&NODE_A_PK) as *u8
+    let b_pk : *u8 = (&NODE_B_PK) as *u8
+    let c_pk : *u8 = (&NODE_C_PK) as *u8
+    if x25519(a_pk, a_sk, bp) != 0i32 { return 1u64 }
+    if x25519(b_pk, b_sk, bp) != 0i32 { return 2u64 }
+    if x25519(c_pk, c_sk, bp) != 0i32 { return 3u64 }
+
+    /* === Phase 2: three pairwise handshakes -> six slots (each side
+     * gets its own slot so tx/rx nonces stay decoupled). === */
+    let ch_ab_a : u64 = sc_handshake_init(b_pk as u64, a_sk as u64)   /* A's view of AB */
+    if ch_ab_a == 0u64 { return 4u64 }
+    let ch_ab_b : u64 = sc_handshake_init(a_pk as u64, b_sk as u64)   /* B's view of AB */
+    if ch_ab_b == 0u64 { return 5u64 }
+
+    let ch_bc_b : u64 = sc_handshake_init(c_pk as u64, b_sk as u64)   /* B's view of BC */
+    if ch_bc_b == 0u64 { return 6u64 }
+    let ch_bc_c : u64 = sc_handshake_init(b_pk as u64, c_sk as u64)   /* C's view of BC */
+    if ch_bc_c == 0u64 { return 7u64 }
+
+    let ch_ac_a : u64 = sc_handshake_init(c_pk as u64, a_sk as u64)   /* A's view of AC */
+    if ch_ac_a == 0u64 { return 8u64 }
+    let ch_ac_c : u64 = sc_handshake_init(a_pk as u64, c_sk as u64)   /* C's view of AC */
+    if ch_ac_c == 0u64 { return 9u64 }
+
+    /* === Phase 3: each channel's session_id has non-zero entropy in
+     * positions 0..7.  Use the A-side / B-side / A-side as canonical
+     * (the peer slot derives the same sid by construction; corpus 215
+     * already covers AB-vs-BA equality). === */
+    if _sid_byte_sum(ch_ab_a) == 0u32 { return 10u64 }
+    if _sid_byte_sum(ch_bc_b) == 0u32 { return 11u64 }
+    if _sid_byte_sum(ch_ac_a) == 0u32 { return 12u64 }
+
+    /* === Phase 4: pairwise inequality of the three session_ids.
+     * _sid_eq returns 1 iff all 8 bytes match; we want 0 (differs). === */
+    if _sid_eq(ch_ab_a, ch_bc_b) == 1u8 { return 13u64 }
+    if _sid_eq(ch_ab_a, ch_ac_a) == 1u8 { return 14u64 }
+    if _sid_eq(ch_bc_b, ch_ac_a) == 1u8 { return 15u64 }
+
+    /* === Phase 5: A -> B over channel_AB.  16-byte plaintext "AB-FED-MSG-001!!". === */
+    let pt_ab : *u8 = malloc(16u64)
+    if pt_ab as u64 == 0u64 { return 16u64 }
+    pt_ab[0u64]  = 65u8    /* A */
+    pt_ab[1u64]  = 66u8    /* B */
+    pt_ab[2u64]  = 45u8    /* - */
+    pt_ab[3u64]  = 70u8    /* F */
+    pt_ab[4u64]  = 69u8    /* E */
+    pt_ab[5u64]  = 68u8    /* D */
+    pt_ab[6u64]  = 45u8    /* - */
+    pt_ab[7u64]  = 77u8    /* M */
+    pt_ab[8u64]  = 83u8    /* S */
+    pt_ab[9u64]  = 71u8    /* G */
+    pt_ab[10u64] = 45u8    /* - */
+    pt_ab[11u64] = 48u8    /* 0 */
+    pt_ab[12u64] = 48u8    /* 0 */
+    pt_ab[13u64] = 49u8    /* 1 */
+    pt_ab[14u64] = 33u8    /* ! */
+    pt_ab[15u64] = 33u8    /* ! */
+
+    let pt_ab_orig : *u8 = malloc(16u64)
+    if pt_ab_orig as u64 == 0u64 { return 17u64 }
+    let mut so : u64 = 0u64
+    while so < 16u64 {
+        pt_ab_orig[so] = pt_ab[so]
+        so = so + 1u64
+    }
+
+    let tag_ab : *u8 = malloc(16u64)
+    if tag_ab as u64 == 0u64 { return 18u64 }
+    if sc_send(ch_ab_a, pt_ab as u64, 16u32, tag_ab as u64) != 0i32 { return 19u64 }
+
+    /* Sanity: pt_ab buffer is now ciphertext (must differ from original). */
+    if _bytes_eq(pt_ab, pt_ab_orig, 16u64) == 1u8 { return 20u64 }
+
+    /* B opens via its own slot (ch_ab_b).  Decrypt is in-place. */
+    if sc_recv(ch_ab_b, pt_ab as u64, 16u32, tag_ab as u64) != 0i32 { return 21u64 }
+    if _bytes_eq(pt_ab, pt_ab_orig, 16u64) == 0u8 { return 22u64 }
+
+    /* === Phase 6: C -> A over channel_AC.  Different 16-byte payload. === */
+    let pt_ca : *u8 = malloc(16u64)
+    if pt_ca as u64 == 0u64 { return 23u64 }
+    pt_ca[0u64]  = 67u8    /* C */
+    pt_ca[1u64]  = 65u8    /* A */
+    pt_ca[2u64]  = 45u8    /* - */
+    pt_ca[3u64]  = 80u8    /* P */
+    pt_ca[4u64]  = 73u8    /* I */
+    pt_ca[5u64]  = 78u8    /* N */
+    pt_ca[6u64]  = 71u8    /* G */
+    pt_ca[7u64]  = 45u8    /* - */
+    pt_ca[8u64]  = 88u8    /* X */
+    pt_ca[9u64]  = 89u8    /* Y */
+    pt_ca[10u64] = 90u8    /* Z */
+    pt_ca[11u64] = 45u8    /* - */
+    pt_ca[12u64] = 57u8    /* 9 */
+    pt_ca[13u64] = 57u8    /* 9 */
+    pt_ca[14u64] = 57u8    /* 9 */
+    pt_ca[15u64] = 35u8    /* # */
+
+    let pt_ca_orig : *u8 = malloc(16u64)
+    if pt_ca_orig as u64 == 0u64 { return 24u64 }
+    let mut co : u64 = 0u64
+    while co < 16u64 {
+        pt_ca_orig[co] = pt_ca[co]
+        co = co + 1u64
+    }
+
+    let tag_ca : *u8 = malloc(16u64)
+    if tag_ca as u64 == 0u64 { return 25u64 }
+    /* C sends from its AC slot. */
+    if sc_send(ch_ac_c, pt_ca as u64, 16u32, tag_ca as u64) != 0i32 { return 26u64 }
+    /* A opens on its AC slot. */
+    if sc_recv(ch_ac_a, pt_ca as u64, 16u32, tag_ca as u64) != 0i32 { return 27u64 }
+    if _bytes_eq(pt_ca, pt_ca_orig, 16u64) == 0u8 { return 28u64 }
+
+    /* === Phase 7: tamper ciphertext_AB; B's open must FAIL with
+     * SC_E_BAD_TAG (-4).  Re-seal a fresh message first (alice_ch's
+     * tx_nonce is now 1; bob's rx_nonce will also be 1, so they line
+     * up).  Then flip byte 0 of the ciphertext before bob opens. === */
+    let mut rs : u64 = 0u64
+    while rs < 16u64 {
+        pt_ab[rs] = pt_ab_orig[rs]
+        rs = rs + 1u64
+    }
+    if sc_send(ch_ab_a, pt_ab as u64, 16u32, tag_ab as u64) != 0i32 { return 29u64 }
+    /* Flip byte 0 of the ciphertext (NOT the tag -- tampering the body
+     * is what the AEAD MAC must catch). */
+    pt_ab[0u64] = pt_ab[0u64] ^ 0xFFu8
+    let tamper_rc : i32 = sc_recv(ch_ab_b, pt_ab as u64, 16u32, tag_ab as u64)
+    if tamper_rc != -4i32 { return 30u64 }
+
+    /* === Phase 8: close channel_AB (A's view); subsequent sc_send on
+     * the same channel_id returns SC_E_BAD_CHANNEL (-3) because the
+     * slot is no longer live. === */
+    if sc_close(ch_ab_a) != 0i32 { return 31u64 }
+    /* Reuse pt_ab buffer; sc_send must reject. */
+    let mut rb : u64 = 0u64
+    while rb < 16u64 {
+        pt_ab[rb] = pt_ab_orig[rb]
+        rb = rb + 1u64
+    }
+    let dead_rc : i32 = sc_send(ch_ab_a, pt_ab as u64, 16u32, tag_ab as u64)
+    if dead_rc != -3i32 { return 32u64 }
+
+    free(pt_ab)
+    free(pt_ab_orig)
+    free(tag_ab)
+    free(pt_ca)
+    free(pt_ca_orig)
+    free(tag_ca)
+    return 99u64
+}

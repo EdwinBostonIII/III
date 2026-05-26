@@ -1,0 +1,109 @@
+/* numera/keccak256.iii — canonical Keccak-256 wrapper (gospel Stage 4 closure).
+ *
+ * The single source of Keccak-256 for the substrate (M6 content hash): every
+ * content address, identifier, witness frag-id, and synthesis dedup key flows
+ * through here.  Rate 136 (1088 bits), capacity 512, domain separator 0x01
+ * (original Keccak, distinct from SHA3's 0x06), 32-byte output.
+ *
+ *   keccak256_oneshot(msg, len, out)         — one-shot over the proven sponge.
+ *   keccak256_init/update/final              — TRUE incremental streaming: each
+ *     byte is XORed into the rate region of a persistent state and the state is
+ *     permuted (keccak_f1600) every 136 bytes; final pads (domain 0x01 + 10*1)
+ *     and squeezes 32 bytes.  Handles arbitrary-length input (e.g. the 64 MiB
+ *     witness payloads) with no message buffer.
+ */
+module numera_keccak256
+
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+
+var KK256_STATE : [u64; 25]    /* one-shot sponge state */
+var KK256_MP    : [u64; 1]     /* msg ptr (call-clobber-safe) */
+var KK256_ML    : [u64; 1]     /* msg len */
+var KK256_OP    : [u64; 1]     /* out ptr */
+var KK256_SST   : [u8; 200]    /* incremental sponge state (byte view of 25 lanes) */
+var KK256_POS   : [u64; 1]     /* current byte position within the 136-byte rate block */
+var KK256_FOUT  : [u64; 1]     /* final() out ptr (call-clobber-safe) */
+var KK256_MSG   : [u8; 8]      /* KAT message scratch */
+var KK256_OUT   : [u8; 32]     /* KAT output scratch */
+var KK256_REF   : [u8; 32]     /* KAT reference output */
+var KK256_BIG   : [u8; 300]    /* KAT multi-block scratch */
+
+/* Keccak-256 one-shot: out_ptr[0..31] = Keccak256(msg_ptr[0..msg_len-1]). */
+fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 @export {
+    KK256_MP[0] = msg_ptr
+    KK256_ML[0] = msg_len
+    KK256_OP[0] = out_ptr
+    keccak_state_zero(&KK256_STATE as u64)
+    keccak_absorb(&KK256_STATE as u64, KK256_MP[0], KK256_ML[0], 0x0000000100000088u64)
+    keccak_squeeze(&KK256_STATE as u64, KK256_OP[0], 32u64, 136u32)
+    return 0i32
+}
+
+/* Streaming Keccak-256 (gospel identifier/witness API): init -> update* -> final. */
+fn keccak256_init() -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < 200u64 { KK256_SST[i] = 0u8 ; i = i + 1u64 }
+    KK256_POS[0] = 0u64
+    return 0i32
+}
+fn keccak256_update(input: *u8, len: u64) -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < len {
+        let p : u64 = KK256_POS[0]
+        KK256_SST[p] = KK256_SST[p] ^ input[i]
+        if p == 135u64 { keccak_f1600(&KK256_SST as u64)  KK256_POS[0] = 0u64 } else { KK256_POS[0] = p + 1u64 }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn keccak256_final(out: *u8) -> i32 @export {
+    KK256_FOUT[0] = out as u64
+    let p : u64 = KK256_POS[0]
+    KK256_SST[p] = KK256_SST[p] ^ 0x01u8                /* Keccak domain separator */
+    KK256_SST[135u64] = KK256_SST[135u64] ^ 0x80u8      /* 10*1 padding terminator */
+    keccak_f1600(&KK256_SST as u64)
+    let o : *u8 = KK256_FOUT[0] as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { o[i] = KK256_SST[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* KAT: Keccak256("")  = c5d24601...85a470 ; Keccak256("abc") = 4e03657a...12d6c45 ;
+ * streaming "abc" (split) == one-shot ; multi-block streaming (150+50, crosses the
+ * 136-byte rate boundary) == one-shot.  99 = pass. */
+fn keccak256_kat() -> u64 @export {
+    keccak256_oneshot(&KK256_MSG as u64, 0u64, &KK256_OUT as u64)
+    if KK256_OUT[0] != 0xc5u8 { return 1u64 }
+    if KK256_OUT[1] != 0xd2u8 { return 2u64 }
+    if KK256_OUT[2] != 0x46u8 { return 3u64 }
+    if KK256_OUT[31] != 0x70u8 { return 4u64 }
+    KK256_MSG[0] = 0x61u8  KK256_MSG[1] = 0x62u8  KK256_MSG[2] = 0x63u8
+    keccak256_oneshot(&KK256_MSG as u64, 3u64, &KK256_OUT as u64)
+    if KK256_OUT[0] != 0x4eu8 { return 5u64 }
+    if KK256_OUT[1] != 0x03u8 { return 6u64 }
+    if KK256_OUT[2] != 0x65u8 { return 7u64 }
+    if KK256_OUT[31] != 0x45u8 { return 8u64 }
+    /* streaming "abc" split as "a"+"bc" */
+    keccak256_init()
+    KK256_MSG[0] = 0x61u8
+    keccak256_update((&KK256_MSG as u64) as *u8, 1u64)
+    KK256_MSG[0] = 0x62u8  KK256_MSG[1] = 0x63u8
+    keccak256_update((&KK256_MSG as u64) as *u8, 2u64)
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    if KK256_OUT[0] != 0x4eu8 { return 9u64 }
+    if KK256_OUT[31] != 0x45u8 { return 10u64 }
+    /* multi-block: 200 bytes via streaming (150+50) == one-shot(200) */
+    let mut i : u64 = 0u64
+    while i < 200u64 { KK256_BIG[i] = (i * 7u64 + 3u64) as u8  i = i + 1u64 }
+    keccak256_oneshot(&KK256_BIG as u64, 200u64, &KK256_REF as u64)
+    keccak256_init()
+    keccak256_update((&KK256_BIG as u64) as *u8, 150u64)
+    keccak256_update(((&KK256_BIG as u64) + 150u64) as *u8, 50u64)
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    let mut j : u64 = 0u64
+    while j < 32u64 { if KK256_OUT[j] != KK256_REF[j] { return 11u64 }  j = j + 1u64 }
+    return 99u64
+}

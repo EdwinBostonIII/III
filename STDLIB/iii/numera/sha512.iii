@@ -1,0 +1,412 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sha512.iii
+ *
+ * III STDLIB - numera::sha512
+ *
+ * Hand-rolled FIPS 180-4 SHA-512.  Same module-singleton pattern as
+ * sha256.iii: one inline state machine, sha512_init/update/final, plus
+ * the W3-bypassing finalize_internal + digest_byte readback for
+ * cross-file consumers that cannot pass a pointer-to-global.
+ *
+ * Differences from SHA-256:
+ *   - 64-bit words (vs 32-bit)
+ *   - 80 rounds (vs 64)
+ *   - 80 K-constants (vs 64)
+ *   - 128-byte block (vs 64)
+ *   - 128-bit length field (vs 64) -- we model it via two u64 counters
+ *   - 64-byte digest (vs 32)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ *
+ * Used by: Ed25519 verify (next session) and any future SHA-512-based
+ * crypto primitive.
+ *
+ * NIH: zero externs.  Hand-rolled FIPS 180-4 inner loop.
+ */
+
+module numera_sha512
+
+const SHA512_BLOCK_BYTES : u32 = 128u32
+
+var SHA512_K       : [u64; 80]
+var SHA512_K_INIT  : u8 = 0u8
+var SHA512_H       : [u64; 8]
+var SHA512_W       : [u64; 80]
+var SHA512_BUF     : [u8; 128]
+var SHA512_BUFLEN  : u32 = 0u32
+var SHA512_BITS_LO : u64 = 0u64
+var SHA512_BITS_HI : u64 = 0u64       /* high 64 bits of the 128-bit count */
+var SHA512_INIT    : u8  = 0u8
+
+/* --- §3.5 AVX-512 message-schedule sigma0 (4-wide, prior-word part) --- */
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+var SHA512_PART    : [u64; 4]      /* partial[j] = W[t+j-16] + sigma0(W[t+j-15]) + W[t+j-7] */
+var SHA512_SCHED_T : u32 = 0u32    /* current 4-group start index t */
+var SHA512_FORCE   : u32 = 0u32    /* 0=auto, 1=scalar, 2=avx512 (bit-identity override) */
+
+/* --- ROTR for 64-bit words --- */
+
+fn sha512_rotr(x: u64, n: u64) -> u64 {
+    return (x >> n) | (x << (64u64 - n))
+}
+
+/* --- K-table init (FIPS 180-4 §4.2.3) --- */
+
+fn sha512_init_k() -> u32 {
+    if SHA512_K_INIT == 1u8 { return 0u32 }
+    SHA512_K[0]  = 0x428a2f98d728ae22u64
+    SHA512_K[1]  = 0x7137449123ef65cdu64
+    SHA512_K[2]  = 0xb5c0fbcfec4d3b2fu64
+    SHA512_K[3]  = 0xe9b5dba58189dbbcu64
+    SHA512_K[4]  = 0x3956c25bf348b538u64
+    SHA512_K[5]  = 0x59f111f1b605d019u64
+    SHA512_K[6]  = 0x923f82a4af194f9bu64
+    SHA512_K[7]  = 0xab1c5ed5da6d8118u64
+    SHA512_K[8]  = 0xd807aa98a3030242u64
+    SHA512_K[9]  = 0x12835b0145706fbeu64
+    SHA512_K[10] = 0x243185be4ee4b28cu64
+    SHA512_K[11] = 0x550c7dc3d5ffb4e2u64
+    SHA512_K[12] = 0x72be5d74f27b896fu64
+    SHA512_K[13] = 0x80deb1fe3b1696b1u64
+    SHA512_K[14] = 0x9bdc06a725c71235u64
+    SHA512_K[15] = 0xc19bf174cf692694u64
+    SHA512_K[16] = 0xe49b69c19ef14ad2u64
+    SHA512_K[17] = 0xefbe4786384f25e3u64
+    SHA512_K[18] = 0x0fc19dc68b8cd5b5u64
+    SHA512_K[19] = 0x240ca1cc77ac9c65u64
+    SHA512_K[20] = 0x2de92c6f592b0275u64
+    SHA512_K[21] = 0x4a7484aa6ea6e483u64
+    SHA512_K[22] = 0x5cb0a9dcbd41fbd4u64
+    SHA512_K[23] = 0x76f988da831153b5u64
+    SHA512_K[24] = 0x983e5152ee66dfabu64
+    SHA512_K[25] = 0xa831c66d2db43210u64
+    SHA512_K[26] = 0xb00327c898fb213fu64
+    SHA512_K[27] = 0xbf597fc7beef0ee4u64
+    SHA512_K[28] = 0xc6e00bf33da88fc2u64
+    SHA512_K[29] = 0xd5a79147930aa725u64
+    SHA512_K[30] = 0x06ca6351e003826fu64
+    SHA512_K[31] = 0x142929670a0e6e70u64
+    SHA512_K[32] = 0x27b70a8546d22ffcu64
+    SHA512_K[33] = 0x2e1b21385c26c926u64
+    SHA512_K[34] = 0x4d2c6dfc5ac42aedu64
+    SHA512_K[35] = 0x53380d139d95b3dfu64
+    SHA512_K[36] = 0x650a73548baf63deu64
+    SHA512_K[37] = 0x766a0abb3c77b2a8u64
+    SHA512_K[38] = 0x81c2c92e47edaee6u64
+    SHA512_K[39] = 0x92722c851482353bu64
+    SHA512_K[40] = 0xa2bfe8a14cf10364u64
+    SHA512_K[41] = 0xa81a664bbc423001u64
+    SHA512_K[42] = 0xc24b8b70d0f89791u64
+    SHA512_K[43] = 0xc76c51a30654be30u64
+    SHA512_K[44] = 0xd192e819d6ef5218u64
+    SHA512_K[45] = 0xd69906245565a910u64
+    SHA512_K[46] = 0xf40e35855771202au64
+    SHA512_K[47] = 0x106aa07032bbd1b8u64
+    SHA512_K[48] = 0x19a4c116b8d2d0c8u64
+    SHA512_K[49] = 0x1e376c085141ab53u64
+    SHA512_K[50] = 0x2748774cdf8eeb99u64
+    SHA512_K[51] = 0x34b0bcb5e19b48a8u64
+    SHA512_K[52] = 0x391c0cb3c5c95a63u64
+    SHA512_K[53] = 0x4ed8aa4ae3418acbu64
+    SHA512_K[54] = 0x5b9cca4f7763e373u64
+    SHA512_K[55] = 0x682e6ff3d6b2b8a3u64
+    SHA512_K[56] = 0x748f82ee5defb2fcu64
+    SHA512_K[57] = 0x78a5636f43172f60u64
+    SHA512_K[58] = 0x84c87814a1f0ab72u64
+    SHA512_K[59] = 0x8cc702081a6439ecu64
+    SHA512_K[60] = 0x90befffa23631e28u64
+    SHA512_K[61] = 0xa4506cebde82bde9u64
+    SHA512_K[62] = 0xbef9a3f7b2c67915u64
+    SHA512_K[63] = 0xc67178f2e372532bu64
+    SHA512_K[64] = 0xca273eceea26619cu64
+    SHA512_K[65] = 0xd186b8c721c0c207u64
+    SHA512_K[66] = 0xeada7dd6cde0eb1eu64
+    SHA512_K[67] = 0xf57d4f7fee6ed178u64
+    SHA512_K[68] = 0x06f067aa72176fbau64
+    SHA512_K[69] = 0x0a637dc5a2c898a6u64
+    SHA512_K[70] = 0x113f9804bef90daeu64
+    SHA512_K[71] = 0x1b710b35131c471bu64
+    SHA512_K[72] = 0x28db77f523047d84u64
+    SHA512_K[73] = 0x32caab7b40c72493u64
+    SHA512_K[74] = 0x3c9ebe0a15c9bebcu64
+    SHA512_K[75] = 0x431d67c49c100d4cu64
+    SHA512_K[76] = 0x4cc5d4becb3e42b6u64
+    SHA512_K[77] = 0x597f299cfc657e2au64
+    SHA512_K[78] = 0x5fcb6fab3ad6faecu64
+    SHA512_K[79] = 0x6c44198c4a475817u64
+    SHA512_K_INIT = 1u8
+    return 0u32
+}
+
+/* --- Inner block compression ---
+ *
+ * Locals folded aggressively: iiis-2 W13 = per-function named-locals
+ * symbol table cap (~25).  Multi-stage XOR/sum chains expressed inline
+ * via `^` and `+` so the compiler does not allocate L_<name> globals
+ * for every intermediate. */
+
+/* --- §3.5 message-schedule sigma0 part (4-wide, 64-bit): prior-word terms.
+ * partial[j] = W[t+j-16] + sigma0(W[t+j-15]) + W[t+j-7], j=0..3.  sigma0 =
+ * rotr(x,1)^rotr(x,8)^(x>>7).  Dependency-free across the group; the
+ * sequential sigma1(W[t+j-2]) is added by the scalar driver. */
+fn _sha512_sched4_scalar() -> u32 {
+    let t : u32 = SHA512_SCHED_T
+    let mut j : u32 = 0u32
+    while j < 4u32 {
+        let w15 : u64 = SHA512_W[t + j - 15u32]
+        let s0  : u64 = sha512_rotr(w15, 1u64) ^ sha512_rotr(w15, 8u64) ^ (w15 >> 7u64)
+        let w16 : u64 = SHA512_W[t + j - 16u32]
+        let w7  : u64 = SHA512_W[t + j - 7u32]
+        SHA512_PART[j] = w16 + s0 + w7
+        j = j + 1u32
+    }
+    return 0u32
+}
+
+/* AVX-512 (EVEX.256, ymm = 4x u64): W[t] addr = SHA512_W + t*8; loads
+ * W[t-16..t-13], W[t-15..t-12], W[t-7..t-4]; sigma0 via vprolq (rotr n =
+ * rotl 64-n) + vpsrlq + vpxorq; + the two W vectors.  Bit-identical to
+ * _sha512_sched4_scalar.  ymm0..4 + rax/rcx/rdx all Win64 caller-saved. */
+fn _sha512_sched4_avx512() -> u32 {
+    metal {
+    leaq L_SHA512_W(%rip), %rax
+    leaq L_SHA512_SCHED_T(%rip), %rcx
+    movl (%rcx), %ecx
+    movl %ecx, %edx
+    shll $3, %edx
+    addq %rdx, %rax
+    vmovdqu -128(%rax), %ymm0
+    vmovdqu -120(%rax), %ymm1
+    vmovdqu -56(%rax), %ymm2
+    vprolq $63, %ymm1, %ymm3
+    vprolq $56, %ymm1, %ymm4
+    vpxorq %ymm4, %ymm3, %ymm3
+    vpsrlq $7, %ymm1, %ymm4
+    vpxorq %ymm4, %ymm3, %ymm3
+    vpaddq %ymm0, %ymm3, %ymm3
+    vpaddq %ymm2, %ymm3, %ymm3
+    leaq L_SHA512_PART(%rip), %rdx
+    vmovdqu %ymm3, (%rdx)
+    vzeroupper
+    }
+    return 0u32
+}
+
+fn _sha512_sched4() -> u32 {
+    if SHA512_FORCE == 1u32 { return _sha512_sched4_scalar() }
+    if SHA512_FORCE == 2u32 { return _sha512_sched4_avx512() }
+    if cpufeat_has_avx512f() == 1u8 { return _sha512_sched4_avx512() }
+    return _sha512_sched4_scalar()
+}
+
+fn sha512_sched_force(p: u32) -> u32 @export { SHA512_FORCE = p ; return 0u32 }
+
+fn sha512_block() -> u32 {
+    /* 16 big-endian u64 message words from the 128-byte input block. */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let off : u32 = i * 8u32
+        let p0 : u64 = SHA512_BUF[off + 0u32] as u64
+        let p1 : u64 = SHA512_BUF[off + 1u32] as u64
+        let p2 : u64 = SHA512_BUF[off + 2u32] as u64
+        let p3 : u64 = SHA512_BUF[off + 3u32] as u64
+        let p4 : u64 = SHA512_BUF[off + 4u32] as u64
+        let p5 : u64 = SHA512_BUF[off + 5u32] as u64
+        let p6 : u64 = SHA512_BUF[off + 6u32] as u64
+        let p7 : u64 = SHA512_BUF[off + 7u32] as u64
+        SHA512_W[i] = (p0 << 56u64) | (p1 << 48u64) | (p2 << 40u64) | (p3 << 32u64) | (p4 << 24u64) | (p5 << 16u64) | (p6 << 8u64) | p7
+        i = i + 1u32
+    }
+    /* §3.5: SIMD-fill the sigma0 prior-word partials 4-wide, then a scalar
+     * sigma1 pass (sequential within the group).  Bit-identical to the
+     * per-word w16+s0+w7+s1 (integer add is associative). */
+    let mut ii : u32 = 16u32
+    while ii < 80u32 {
+        SHA512_SCHED_T = ii
+        _sha512_sched4()
+        let mut j : u32 = 0u32
+        while j < 4u32 {
+            let w2 : u64 = SHA512_W[ii + j - 2u32]
+            let s1 : u64 = sha512_rotr(w2, 19u64) ^ sha512_rotr(w2, 61u64) ^ (w2 >> 6u64)
+            SHA512_W[ii + j] = SHA512_PART[j] + s1
+            j = j + 1u32
+        }
+        ii = ii + 4u32
+    }
+    let mut a : u64 = SHA512_H[0]
+    let mut b : u64 = SHA512_H[1]
+    let mut c : u64 = SHA512_H[2]
+    let mut d : u64 = SHA512_H[3]
+    let mut e : u64 = SHA512_H[4]
+    let mut f : u64 = SHA512_H[5]
+    let mut g : u64 = SHA512_H[6]
+    let mut h : u64 = SHA512_H[7]
+    let mut k : u32 = 0u32
+    while k < 80u32 {
+        let big_s1 : u64 = sha512_rotr(e, 14u64) ^ sha512_rotr(e, 18u64) ^ sha512_rotr(e, 41u64)
+        let ch     : u64 = (e & f) ^ ((~e) & g)
+        let t1     : u64 = h + big_s1 + ch + SHA512_K[k] + SHA512_W[k]
+        let big_s0 : u64 = sha512_rotr(a, 28u64) ^ sha512_rotr(a, 34u64) ^ sha512_rotr(a, 39u64)
+        let mj     : u64 = (a & b) ^ (a & c) ^ (b & c)
+        let t2     : u64 = big_s0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+        k = k + 1u32
+    }
+    SHA512_H[0] = SHA512_H[0] + a
+    SHA512_H[1] = SHA512_H[1] + b
+    SHA512_H[2] = SHA512_H[2] + c
+    SHA512_H[3] = SHA512_H[3] + d
+    SHA512_H[4] = SHA512_H[4] + e
+    SHA512_H[5] = SHA512_H[5] + f
+    SHA512_H[6] = SHA512_H[6] + g
+    SHA512_H[7] = SHA512_H[7] + h
+    return 0u32
+}
+
+/* --- Public API --- */
+
+fn sha512_init() -> u32 @constant_time @export {
+    sha512_init_k()
+    /* FIPS 180-4 §5.3.5 SHA-512 IV */
+    SHA512_H[0] = 0x6a09e667f3bcc908u64
+    SHA512_H[1] = 0xbb67ae8584caa73bu64
+    SHA512_H[2] = 0x3c6ef372fe94f82bu64
+    SHA512_H[3] = 0xa54ff53a5f1d36f1u64
+    SHA512_H[4] = 0x510e527fade682d1u64
+    SHA512_H[5] = 0x9b05688c2b3e6c1fu64
+    SHA512_H[6] = 0x1f83d9abfb41bd6bu64
+    SHA512_H[7] = 0x5be0cd19137e2179u64
+    SHA512_BITS_LO = 0u64
+    SHA512_BITS_HI = 0u64
+    SHA512_BUFLEN  = 0u32
+    SHA512_INIT    = 1u8
+    return 0u32
+}
+
+/* Add `bits` to the 128-bit counter, with carry into the high half. */
+fn sha512_bits_add(bits: u64) -> u32 {
+    let new_lo : u64 = SHA512_BITS_LO + bits
+    if new_lo < SHA512_BITS_LO {
+        SHA512_BITS_HI = SHA512_BITS_HI + 1u64
+    }
+    SHA512_BITS_LO = new_lo
+    return 0u32
+}
+
+fn sha512_update(input: *u8, len: u64) -> u32 @constant_time @export {
+    if SHA512_INIT == 0u8 { return 1u32 }
+    sha512_bits_add(len * 8u64)
+    let mut rem : u64 = len
+    let mut off : u64 = 0u64
+    while rem > 0u64 {
+        let mut take : u64 = 128u64 - (SHA512_BUFLEN as u64)
+        if take > rem { take = rem }
+        let mut k : u64 = 0u64
+        while k < take {
+            let idx : u64 = (SHA512_BUFLEN as u64) + k
+            SHA512_BUF[idx] = input[off + k]
+            k = k + 1u64
+        }
+        SHA512_BUFLEN = SHA512_BUFLEN + (take as u32)
+        off = off + take
+        rem = rem - take
+        if SHA512_BUFLEN == 128u32 {
+            sha512_block()
+            SHA512_BUFLEN = 0u32
+        }
+    }
+    return 0u32
+}
+
+fn sha512_update_byte(b: u32) -> u32 @export {
+    if SHA512_INIT == 0u8 { return 1u32 }
+    sha512_bits_add(8u64)
+    SHA512_BUF[SHA512_BUFLEN] = (b & 0xFFu32) as u8
+    SHA512_BUFLEN = SHA512_BUFLEN + 1u32
+    if SHA512_BUFLEN == 128u32 {
+        sha512_block()
+        SHA512_BUFLEN = 0u32
+    }
+    return 0u32
+}
+
+/* Pad and emit the final 16-byte length field, then run the last block(s). */
+fn sha512_finalize_internal() -> u32 @export {
+    if SHA512_INIT == 0u8 { return 1u32 }
+    let bits_lo : u64 = SHA512_BITS_LO
+    let bits_hi : u64 = SHA512_BITS_HI
+    SHA512_BUF[SHA512_BUFLEN] = 0x80u8
+    SHA512_BUFLEN = SHA512_BUFLEN + 1u32
+    /* Padding target: BUFLEN must be 112 (= 128 - 16) before length. */
+    if SHA512_BUFLEN > 112u32 {
+        while SHA512_BUFLEN < 128u32 {
+            SHA512_BUF[SHA512_BUFLEN] = 0u8
+            SHA512_BUFLEN = SHA512_BUFLEN + 1u32
+        }
+        sha512_block()
+        SHA512_BUFLEN = 0u32
+    }
+    while SHA512_BUFLEN < 112u32 {
+        SHA512_BUF[SHA512_BUFLEN] = 0u8
+        SHA512_BUFLEN = SHA512_BUFLEN + 1u32
+    }
+    /* Append 128-bit big-endian length: high u64 first, then low u64. */
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u32 = 56u32 - i*8u32
+        SHA512_BUF[SHA512_BUFLEN] = ((bits_hi >> (shift as u64)) & 0xFFu64) as u8
+        SHA512_BUFLEN = SHA512_BUFLEN + 1u32
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let shift : u32 = 56u32 - j*8u32
+        SHA512_BUF[SHA512_BUFLEN] = ((bits_lo >> (shift as u64)) & 0xFFu64) as u8
+        SHA512_BUFLEN = SHA512_BUFLEN + 1u32
+        j = j + 1u32
+    }
+    sha512_block()
+    SHA512_BUFLEN = 0u32
+    SHA512_INIT = 0u8
+    return 0u32
+}
+
+fn sha512_final(out_64: *u8) -> u32 @constant_time @export {
+    sha512_finalize_internal()
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let h_val : u64 = SHA512_H[j]
+        let base : u32 = j * 8u32
+        let mut k : u32 = 0u32
+        while k < 8u32 {
+            let shift : u64 = (56u32 - k*8u32) as u64
+            out_64[(base + k) as u64] = ((h_val >> shift) & 0xFFu64) as u8
+            k = k + 1u32
+        }
+        j = j + 1u32
+    }
+    return 0u32
+}
+
+fn sha512_oneshot(input: *u8, len: u64, out_64: *u8) -> u32 @constant_time @export {
+    sha512_init()
+    sha512_update(input, len)
+    return sha512_final(out_64)
+}
+
+/* Read byte i of the most-recent digest (0..63).  Valid after a
+ * sha512_finalize_internal or sha512_final call. */
+fn sha512_digest_byte(i: u32) -> u32 @export {
+    if i >= 64u32 { return 0x100u32 }
+    let word : u32 = i / 8u32
+    let bytepos : u32 = i & 7u32
+    let h_val : u64 = SHA512_H[word]
+    let shift : u64 = ((7u32 - bytepos) * 8u32) as u64
+    return ((h_val >> shift) & 0xFFu64) as u32
+}

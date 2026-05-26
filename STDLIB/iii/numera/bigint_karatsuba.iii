@@ -1,0 +1,172 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\bigint_karatsuba.iii
+ *
+ * III STDLIB - numera::bigint_karatsuba
+ *
+ * Lattice plan Step 0029 -- Karatsuba multiplication for bigints.
+ *
+ * Karatsuba reduces multiplication from O(n^2) (schoolbook) to
+ * O(n^1.585) by splitting each operand into hi/lo halves and using
+ * three (not four) sub-multiplications:
+ *
+ *     x = x1 * B^k + x0
+ *     y = y1 * B^k + y0
+ *     z2 = x1 * y1
+ *     z0 = x0 * y0
+ *     z1 = (x1 + x0) * (y1 + y0) - z2 - z0
+ *     x*y = z2 * B^(2k) + z1 * B^k + z0
+ *
+ * Recursion bottom-out: when both operands fit in `KARA_THRESHOLD`
+ * limbs or fewer, fall through to the existing schoolbook
+ * `bigint_mul`.  For very large bigints (post-Catalyst NTT path)
+ * a future module `bigint_ntt.iii` will take over above another
+ * threshold.
+ *
+ * Public surface:
+ *   bigint_mul_karatsuba(arena, a, b) -> u64
+ *
+ * Discipline:
+ *   - W2 (≤4 params), W11/W12 (no signed i32/i64 ordering compares),
+ *     W14 (sentinel-loop pattern).  iiis-0 trap defenses applied.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 0.97 (multiply may OOM).
+ */
+
+module numera_bigint_karatsuba
+
+extern @abi(c-msvc-x64) fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena_id: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena_id: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena_id: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena_id: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+
+const KARA_INVALID    : u64 = 0u64
+const KARA_THRESHOLD  : u64 = 32u64       /* fall through to schoolbook below this */
+
+/* Build a fresh bigint holding the limbs of `src` from index `lo`
+ * (inclusive) to `hi` (exclusive).  Returns 0 on OOM.
+ * Note: `from` and `to` are reserved keywords in iiis-0; using `lo`/`hi`. */
+fn kara_slice(arena: u64, src: u64, lo: u64, hi: u64) -> u64 {
+    let lo_l  : u64 = lo
+    let hi_l  : u64 = hi
+    let src_l : u64 = src
+    if hi_l == lo_l { return bigint_from_u64(arena, 0u64) }
+    let n : u64 = hi_l - lo_l
+    let dst : u64 = bigint_new(arena, n)
+    if dst == 0u64 { return KARA_INVALID }
+    let mut i : u64 = 0u64
+    while i < n {
+        let v : u64 = bigint_get_limb(src_l, lo_l + i)
+        bigint_set_limb(dst, i, v)
+        i = i + 1u64
+    }
+    bigint_set_len(dst, n)
+    bigint_normalize(dst)
+    return dst
+}
+
+/* Build a fresh bigint = (src << (k*64)) -- i.e. shift left by k limbs. */
+fn kara_shl_limbs(arena: u64, src: u64, k: u64) -> u64 {
+    let k_l   : u64 = k
+    let src_l : u64 = src
+    let src_len : u64 = bigint_len_limbs(src_l)
+    if src_len == 0u64 { return bigint_from_u64(arena, 0u64) }
+    let total : u64 = src_len + k_l
+    let dst : u64 = bigint_new(arena, total)
+    if dst == 0u64 { return KARA_INVALID }
+    let mut i : u64 = 0u64
+    while i < k_l {
+        bigint_set_limb(dst, i, 0u64)
+        i = i + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < src_len {
+        let v : u64 = bigint_get_limb(src_l, j)
+        bigint_set_limb(dst, k_l + j, v)
+        j = j + 1u64
+    }
+    bigint_set_len(dst, total)
+    bigint_normalize(dst)
+    return dst
+}
+
+/* Karatsuba multiply.  Returns BIGINT_INVALID on OOM. */
+fn bigint_mul_karatsuba(arena: u64, a: u64, b: u64) -> u64 @export {
+    let a_l : u64 = a
+    let b_l : u64 = b
+    let arena_l : u64 = arena
+    let na : u64 = bigint_len_limbs(a_l)
+    let nb : u64 = bigint_len_limbs(b_l)
+    /* Base case: small operands → schoolbook. */
+    let mut max_n : u64 = na
+    if nb > max_n { max_n = nb }
+    if max_n == 0u64 { return bigint_from_u64(arena_l, 0u64) }
+    if max_n <= KARA_THRESHOLD {
+        return bigint_mul(arena_l, a_l, b_l)
+    }
+
+    /* Split point: mid = ceil(max_n / 2). */
+    let mid : u64 = (max_n + 1u64) / 2u64
+
+    /* Slices.  If an operand is shorter than `mid`, its high half is 0. */
+    let mut a0 : u64 = 0u64
+    let mut a1 : u64 = 0u64
+    if na > mid {
+        a0 = kara_slice(arena_l, a_l, 0u64, mid)
+        a1 = kara_slice(arena_l, a_l, mid, na)
+    }
+    if na == mid {
+        a0 = kara_slice(arena_l, a_l, 0u64, mid)
+        a1 = bigint_from_u64(arena_l, 0u64)
+    }
+    if na < mid {
+        a0 = kara_slice(arena_l, a_l, 0u64, na)
+        a1 = bigint_from_u64(arena_l, 0u64)
+    }
+    let mut b0 : u64 = 0u64
+    let mut b1 : u64 = 0u64
+    if nb > mid {
+        b0 = kara_slice(arena_l, b_l, 0u64, mid)
+        b1 = kara_slice(arena_l, b_l, mid, nb)
+    }
+    if nb == mid {
+        b0 = kara_slice(arena_l, b_l, 0u64, mid)
+        b1 = bigint_from_u64(arena_l, 0u64)
+    }
+    if nb < mid {
+        b0 = kara_slice(arena_l, b_l, 0u64, nb)
+        b1 = bigint_from_u64(arena_l, 0u64)
+    }
+
+    /* Three sub-multiplications, recursive. */
+    let z0 : u64 = bigint_mul_karatsuba(arena_l, a0, b0)
+    let z2 : u64 = bigint_mul_karatsuba(arena_l, a1, b1)
+    let s_a : u64 = bigint_add(arena_l, a0, a1)
+    let s_b : u64 = bigint_add(arena_l, b0, b1)
+    let prod : u64 = bigint_mul_karatsuba(arena_l, s_a, s_b)
+    let prod_minus_z2 : u64 = bigint_sub(arena_l, prod, z2)
+    let z1 : u64 = bigint_sub(arena_l, prod_minus_z2, z0)
+
+    /* Recombine: (z2 << 2*mid) + (z1 << mid) + z0. */
+    let z2_shifted : u64 = kara_shl_limbs(arena_l, z2, mid * 2u64)
+    let z1_shifted : u64 = kara_shl_limbs(arena_l, z1, mid)
+    let lo : u64 = bigint_add(arena_l, z0, z1_shifted)
+    let result : u64 = bigint_add(arena_l, lo, z2_shifted)
+
+    /* Drop intermediates the arena no longer needs.  Caller's arena
+     * lives long enough -- bigint_drop just marks them dead in slot
+     * tables; arena bytes are still occupied (caller may arena_reset). */
+    bigint_drop(a0); bigint_drop(a1)
+    bigint_drop(b0); bigint_drop(b1)
+    bigint_drop(z0); bigint_drop(z2)
+    bigint_drop(s_a); bigint_drop(s_b)
+    bigint_drop(prod); bigint_drop(prod_minus_z2); bigint_drop(z1)
+    bigint_drop(z2_shifted); bigint_drop(z1_shifted); bigint_drop(lo)
+    bigint_normalize(result)
+    return result
+}

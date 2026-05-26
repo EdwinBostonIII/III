@@ -1,0 +1,474 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\aes.iii
+ *
+ * III STDLIB - numera::aes
+ *
+ * FIPS 197 AES-128 block cipher: key expansion, encrypt block, decrypt
+ * block.  16-byte block, 16-byte key, 10 rounds, 11 round keys (176
+ * bytes expanded).
+ *
+ * Public API:
+ *   aes128_set_key  (key: *u8)                   -> i32   one-shot
+ *   aes_encrypt_block (in: *u8, out: *u8)        -> i32
+ *   aes_decrypt_block (in: *u8, out: *u8)        -> i32
+ *
+ * Module is a singleton: aes128_set_key writes into AES_RKEYS, and
+ * subsequent encrypt/decrypt operate against that key schedule.  This
+ * matches the slot-table-of-one pattern used by sha256/sha512.
+ *
+ * Algorithm:
+ *   - SubBytes  : byte-wise substitution via 256-byte S-box
+ *   - ShiftRows : row r rotated left by r positions
+ *   - MixColumns: each column multiplied by polynomial 03x^3+x^2+x+02
+ *                 in GF(2^8) with reduction x^8+x^4+x^3+x+1 (= 0x11b).
+ *   - AddRoundKey: XOR with round key
+ *   Encrypt: AddRoundKey, then 9 full rounds, then 1 final round (no MixColumns).
+ *   Decrypt: inverse of each, in reverse.
+ *
+ * State convention: 16 bytes column-major.  state[c*4 + r] = byte at
+ * column c, row r.
+ *
+ * NIH: zero externs.  Hand-rolled S-box init, key schedule, round
+ * functions, GF(2^8) multiplication.
+ *
+ * W1-W14 discipline:
+ *   - W2  every fn <=4 params
+ *   - W13 <=20 named locals per function
+ *   - W14 sentinel-loop pattern; no `break`
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_aes
+
+const AES_BLOCK_BYTES : u32 = 16u32
+const AES128_ROUNDS   : u32 = 10u32
+const AES128_KEY_BYTES : u32 = 16u32
+
+/* ---- Module-scope tables and state ---- */
+
+var AES_SBOX        : [u8; 256]
+var AES_INV_SBOX    : [u8; 256]
+var AES_RCON        : [u8; 16]
+var AES_TABLES_INIT : u8 = 0u8
+
+/* Expanded round keys (AES-128 uses 11*16=176 bytes; reserve 240 so the
+ * same buffer can host AES-256 in future. */
+var AES_RKEYS       : [u8; 240]
+var AES_NR          : u32 = 0u32
+var AES_KEY_SET     : u8 = 0u8
+
+/* Working state for encrypt/decrypt (avoids local arrays per W9). */
+var AES_STATE       : [u8; 16]
+
+/* ---- GF(2^8) helpers ---- */
+
+fn aes_xtime(b: u32) -> u32 {
+    let high : u32 = b & 0x80u32
+    let shifted : u32 = (b << 1u32) & 0xFFu32
+    if high != 0u32 { return shifted ^ 0x1Bu32 }
+    return shifted
+}
+
+fn aes_gmul(a: u32, b: u32) -> u32 {
+    let mut p : u32 = 0u32
+    let mut a_cur : u32 = a & 0xFFu32
+    let mut b_cur : u32 = b & 0xFFu32
+    let mut counter : u32 = 0u32
+    while counter < 8u32 {
+        if (b_cur & 1u32) != 0u32 {
+            p = p ^ a_cur
+        }
+        a_cur = aes_xtime(a_cur)
+        b_cur = b_cur >> 1u32
+        counter = counter + 1u32
+    }
+    return p & 0xFFu32
+}
+
+/* ---- S-box, inverse S-box, Rcon initialisation ----
+ * Rather than storing 768 hardcoded constants, compute the S-box from
+ * its mathematical definition: S-box(b) = affine_transform(mulinv(b)).
+ * mulinv in GF(2^8) computed via Fermat: b^254 = b^(-1) when b != 0. */
+
+fn aes_mulinv(b: u32) -> u32 {
+    if b == 0u32 { return 0u32 }
+    /* Compute b^254 = b^128 * b^64 * b^32 * b^16 * b^8 * b^4 * b^2
+     * via 7 squarings and 6 multiplications. */
+    let b1 : u32 = b
+    let b2 : u32 = aes_gmul(b1, b1)            /* b^2 */
+    let b4 : u32 = aes_gmul(b2, b2)            /* b^4 */
+    let b8 : u32 = aes_gmul(b4, b4)            /* b^8 */
+    let b16 : u32 = aes_gmul(b8, b8)           /* b^16 */
+    let b32 : u32 = aes_gmul(b16, b16)         /* b^32 */
+    let b64 : u32 = aes_gmul(b32, b32)         /* b^64 */
+    let b128 : u32 = aes_gmul(b64, b64)        /* b^128 */
+    /* Multiply: b^(2+4+8+16+32+64+128) = b^254 = b^(-1) */
+    let m1 : u32 = aes_gmul(b2, b4)
+    let m2 : u32 = aes_gmul(m1, b8)
+    let m3 : u32 = aes_gmul(m2, b16)
+    let m4 : u32 = aes_gmul(m3, b32)
+    let m5 : u32 = aes_gmul(m4, b64)
+    let m6 : u32 = aes_gmul(m5, b128)
+    return m6 & 0xFFu32
+}
+
+/* Affine transform for forward S-box:
+ * y_i = b_i XOR b_((i+4)%8) XOR b_((i+5)%8) XOR b_((i+6)%8) XOR b_((i+7)%8) XOR c_i
+ * with c = 0x63. */
+fn aes_affine_fwd(b: u32) -> u32 {
+    let r0 : u32 = b & 0xFFu32
+    /* Compute "b cyclically rotated left by k" within 8 bits:
+     * rot_k(b) = ((b << k) | (b >> (8-k))) & 0xFF */
+    let r1 : u32 = ((r0 << 1u32) | (r0 >> 7u32)) & 0xFFu32
+    let r2 : u32 = ((r0 << 2u32) | (r0 >> 6u32)) & 0xFFu32
+    let r3 : u32 = ((r0 << 3u32) | (r0 >> 5u32)) & 0xFFu32
+    let r4 : u32 = ((r0 << 4u32) | (r0 >> 4u32)) & 0xFFu32
+    let xor_all : u32 = r0 ^ r1 ^ r2 ^ r3 ^ r4 ^ 0x63u32
+    return xor_all & 0xFFu32
+}
+
+/* Inverse affine transform (for inverse S-box):
+ * y_i = b_((i+2)%8) XOR b_((i+5)%8) XOR b_((i+7)%8) XOR d_i
+ * with d = 0x05. */
+fn aes_affine_inv(b: u32) -> u32 {
+    let r0 : u32 = b & 0xFFu32
+    let r1 : u32 = ((r0 << 1u32) | (r0 >> 7u32)) & 0xFFu32
+    let r3 : u32 = ((r0 << 3u32) | (r0 >> 5u32)) & 0xFFu32
+    let r6 : u32 = ((r0 << 6u32) | (r0 >> 2u32)) & 0xFFu32
+    /* y_i = bit_i_rotated_left_by_(8-2) XOR rotated_left_by_(8-5) XOR rotated_left_by_(8-7) XOR d_i
+     * = rotated_by_6 XOR rotated_by_3 XOR rotated_by_1 XOR 0x05 */
+    let xor_all : u32 = r1 ^ r3 ^ r6 ^ 0x05u32
+    return xor_all & 0xFFu32
+}
+
+fn aes_init_tables() -> i32 {
+    if AES_TABLES_INIT == 1u8 { return 0i32 }
+    let mut i : u32 = 0u32
+    while i < 256u32 {
+        let inv : u32 = aes_mulinv(i)
+        AES_SBOX[i] = aes_affine_fwd(inv) as u8
+        i = i + 1u32
+    }
+    /* Build inverse S-box from forward S-box: inv[S-box[i]] = i. */
+    let mut j : u32 = 0u32
+    while j < 256u32 {
+        let s : u32 = AES_SBOX[j] as u32
+        AES_INV_SBOX[s] = j as u8
+        j = j + 1u32
+    }
+    /* Rcon: index k holds 2^(k-1) in GF(2^8). */
+    AES_RCON[0] = 0x00u8   /* unused */
+    AES_RCON[1] = 0x01u8
+    AES_RCON[2] = 0x02u8
+    AES_RCON[3] = 0x04u8
+    AES_RCON[4] = 0x08u8
+    AES_RCON[5] = 0x10u8
+    AES_RCON[6] = 0x20u8
+    AES_RCON[7] = 0x40u8
+    AES_RCON[8] = 0x80u8
+    AES_RCON[9] = 0x1Bu8
+    AES_RCON[10] = 0x36u8
+    AES_TABLES_INIT = 1u8
+    return 0i32
+}
+
+/* ---- Key expansion (parametric over nk_bytes for AES-128 and AES-256) ----
+ *
+ * AES-128: nk_bytes=16, total_bytes=176, Nr=10, transform every word with
+ *          mod_pos==0 (RotWord+SubWord+Rcon).
+ * AES-256: nk_bytes=32, total_bytes=240, Nr=14, transform with
+ *          mod_pos==0 (RotWord+SubWord+Rcon) and mod_pos==16 (SubWord only).
+ *
+ * For AES-128 mod_pos cycles {0,4,8,12} so the mod_pos==16 branch is
+ * never taken; this lets us share the loop body. */
+
+const AES256_ROUNDS    : u32 = 14u32
+const AES256_KEY_BYTES : u32 = 32u32
+const AES192_ROUNDS    : u32 = 12u32
+const AES192_KEY_BYTES : u32 = 24u32
+
+fn aes_expand_key_into(key: *u8, nk_bytes: u32, total_bytes: u32) -> i32 {
+    /* Copy key. */
+    let mut i : u32 = 0u32
+    while i < nk_bytes {
+        AES_RKEYS[i] = key[i]
+        i = i + 1u32
+    }
+    let mut byte : u32 = nk_bytes
+    while byte < total_bytes {
+        let mut t0 : u32 = AES_RKEYS[byte - 4u32] as u32
+        let mut t1 : u32 = AES_RKEYS[byte - 3u32] as u32
+        let mut t2 : u32 = AES_RKEYS[byte - 2u32] as u32
+        let mut t3 : u32 = AES_RKEYS[byte - 1u32] as u32
+        let mod_pos : u32 = byte % nk_bytes
+        if mod_pos == 0u32 {
+            /* RotWord: (t0,t1,t2,t3) -> (t1,t2,t3,t0) */
+            let r_t0 : u32 = t1
+            let r_t1 : u32 = t2
+            let r_t2 : u32 = t3
+            let r_t3 : u32 = t0
+            t0 = AES_SBOX[r_t0] as u32
+            t1 = AES_SBOX[r_t1] as u32
+            t2 = AES_SBOX[r_t2] as u32
+            t3 = AES_SBOX[r_t3] as u32
+            let rcon_idx : u32 = byte / nk_bytes
+            t0 = t0 ^ (AES_RCON[rcon_idx] as u32)
+        }
+        /* AES-256 only (Nk=8): at the mid-key word (mod_pos==16) apply
+         * SubWord (no rotation, no Rcon).  Guarded to nk_bytes==32 so
+         * AES-192 (Nk=6) does NOT wrongly apply it -- for nk_bytes==24,
+         * byte%24==16 lands at bytes 40/88/136/184, which must be plain
+         * w[i-Nk]^temp with no SubWord. */
+        if nk_bytes == 32u32 {
+            if mod_pos == 16u32 {
+                t0 = AES_SBOX[t0] as u32
+                t1 = AES_SBOX[t1] as u32
+                t2 = AES_SBOX[t2] as u32
+                t3 = AES_SBOX[t3] as u32
+            }
+        }
+        /* w[i] = w[i-Nk] XOR temp */
+        let p0 : u32 = AES_RKEYS[byte - nk_bytes + 0u32] as u32
+        let p1 : u32 = AES_RKEYS[byte - nk_bytes + 1u32] as u32
+        let p2 : u32 = AES_RKEYS[byte - nk_bytes + 2u32] as u32
+        let p3 : u32 = AES_RKEYS[byte - nk_bytes + 3u32] as u32
+        AES_RKEYS[byte + 0u32] = (p0 ^ t0) as u8
+        AES_RKEYS[byte + 1u32] = (p1 ^ t1) as u8
+        AES_RKEYS[byte + 2u32] = (p2 ^ t2) as u8
+        AES_RKEYS[byte + 3u32] = (p3 ^ t3) as u8
+        byte = byte + 4u32
+    }
+    return 0i32
+}
+
+fn aes128_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+    aes_init_tables()
+    aes_expand_key_into(key, 16u32, 176u32)
+    AES_NR = AES128_ROUNDS
+    AES_KEY_SET = 1u8
+    return 0i32
+}
+
+fn aes256_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+    aes_init_tables()
+    aes_expand_key_into(key, 32u32, 240u32)
+    AES_NR = AES256_ROUNDS
+    AES_KEY_SET = 1u8
+    return 0i32
+}
+
+/* AES-192: Nk=6 (24-byte key), Nr=12, 13 round keys = 208 bytes. */
+fn aes192_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+    aes_init_tables()
+    aes_expand_key_into(key, 24u32, 208u32)
+    AES_NR = AES192_ROUNDS
+    AES_KEY_SET = 1u8
+    return 0i32
+}
+
+/* ---- Round transformations (operate on AES_STATE) ---- */
+
+fn aes_add_round_key(round: u32) -> i32 {
+    let base : u32 = round * 16u32
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        AES_STATE[i] = (AES_STATE[i] as u32 ^ AES_RKEYS[base + i] as u32) as u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn aes_sub_bytes() -> i32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let s : u32 = AES_STATE[i] as u32
+        AES_STATE[i] = AES_SBOX[s]
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn aes_inv_sub_bytes() -> i32 {
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        let s : u32 = AES_STATE[i] as u32
+        AES_STATE[i] = AES_INV_SBOX[s]
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* ShiftRows: row r rotated left by r.  state[col*4+row] convention.
+ * After:  new[c,r] = old[(c+r)%4, r]
+ * For r=0: no change.
+ * For r=1,2,3: rotate the row. */
+fn aes_shift_rows() -> i32 {
+    /* Row 1: positions 1, 5, 9, 13 */
+    let r1_0 : u8 = AES_STATE[1]
+    AES_STATE[1] = AES_STATE[5]
+    AES_STATE[5] = AES_STATE[9]
+    AES_STATE[9] = AES_STATE[13]
+    AES_STATE[13] = r1_0
+    /* Row 2: positions 2, 6, 10, 14 -- rotate by 2 (swap pairs) */
+    let r2_0 : u8 = AES_STATE[2]
+    let r2_1 : u8 = AES_STATE[6]
+    AES_STATE[2] = AES_STATE[10]
+    AES_STATE[6] = AES_STATE[14]
+    AES_STATE[10] = r2_0
+    AES_STATE[14] = r2_1
+    /* Row 3: positions 3, 7, 11, 15 -- rotate by 3 (= rotate right by 1) */
+    let r3_3 : u8 = AES_STATE[15]
+    AES_STATE[15] = AES_STATE[11]
+    AES_STATE[11] = AES_STATE[7]
+    AES_STATE[7] = AES_STATE[3]
+    AES_STATE[3] = r3_3
+    return 0i32
+}
+
+fn aes_inv_shift_rows() -> i32 {
+    /* Row 1: rotate right by 1 */
+    let r1_3 : u8 = AES_STATE[13]
+    AES_STATE[13] = AES_STATE[9]
+    AES_STATE[9] = AES_STATE[5]
+    AES_STATE[5] = AES_STATE[1]
+    AES_STATE[1] = r1_3
+    /* Row 2: rotate by 2 (swap pairs) */
+    let r2_0 : u8 = AES_STATE[2]
+    let r2_1 : u8 = AES_STATE[6]
+    AES_STATE[2] = AES_STATE[10]
+    AES_STATE[6] = AES_STATE[14]
+    AES_STATE[10] = r2_0
+    AES_STATE[14] = r2_1
+    /* Row 3: rotate right by 3 = rotate left by 1 */
+    let r3_0 : u8 = AES_STATE[3]
+    AES_STATE[3] = AES_STATE[7]
+    AES_STATE[7] = AES_STATE[11]
+    AES_STATE[11] = AES_STATE[15]
+    AES_STATE[15] = r3_0
+    return 0i32
+}
+
+/* MixColumns: each column c (4 bytes at offset c*4) replaced by
+ *   d_0 = 02*s_0 ^ 03*s_1 ^ s_2 ^ s_3
+ *   d_1 = s_0 ^ 02*s_1 ^ 03*s_2 ^ s_3
+ *   d_2 = s_0 ^ s_1 ^ 02*s_2 ^ 03*s_3
+ *   d_3 = 03*s_0 ^ s_1 ^ s_2 ^ 02*s_3
+ */
+fn aes_mix_one_column(col: u32) -> i32 {
+    let off : u32 = col * 4u32
+    let s0 : u32 = AES_STATE[off + 0u32] as u32
+    let s1 : u32 = AES_STATE[off + 1u32] as u32
+    let s2 : u32 = AES_STATE[off + 2u32] as u32
+    let s3 : u32 = AES_STATE[off + 3u32] as u32
+    let s0x2 : u32 = aes_xtime(s0)
+    let s1x2 : u32 = aes_xtime(s1)
+    let s2x2 : u32 = aes_xtime(s2)
+    let s3x2 : u32 = aes_xtime(s3)
+    AES_STATE[off + 0u32] = (s0x2 ^ s1x2 ^ s1 ^ s2 ^ s3) as u8
+    AES_STATE[off + 1u32] = (s0 ^ s1x2 ^ s2x2 ^ s2 ^ s3) as u8
+    AES_STATE[off + 2u32] = (s0 ^ s1 ^ s2x2 ^ s3x2 ^ s3) as u8
+    AES_STATE[off + 3u32] = (s0x2 ^ s0 ^ s1 ^ s2 ^ s3x2) as u8
+    return 0i32
+}
+
+fn aes_mix_columns() -> i32 {
+    aes_mix_one_column(0u32)
+    aes_mix_one_column(1u32)
+    aes_mix_one_column(2u32)
+    aes_mix_one_column(3u32)
+    return 0i32
+}
+
+/* InvMixColumns:
+ *   d_0 = 0e*s_0 ^ 0b*s_1 ^ 0d*s_2 ^ 09*s_3
+ *   d_1 = 09*s_0 ^ 0e*s_1 ^ 0b*s_2 ^ 0d*s_3
+ *   d_2 = 0d*s_0 ^ 09*s_1 ^ 0e*s_2 ^ 0b*s_3
+ *   d_3 = 0b*s_0 ^ 0d*s_1 ^ 09*s_2 ^ 0e*s_3
+ * Computed via aes_gmul.
+ */
+fn aes_inv_mix_one_column(col: u32) -> i32 {
+    let off : u32 = col * 4u32
+    let s0 : u32 = AES_STATE[off + 0u32] as u32
+    let s1 : u32 = AES_STATE[off + 1u32] as u32
+    let s2 : u32 = AES_STATE[off + 2u32] as u32
+    let s3 : u32 = AES_STATE[off + 3u32] as u32
+    let r0 : u32 = aes_gmul(0x0Eu32, s0) ^ aes_gmul(0x0Bu32, s1) ^ aes_gmul(0x0Du32, s2) ^ aes_gmul(0x09u32, s3)
+    let r1 : u32 = aes_gmul(0x09u32, s0) ^ aes_gmul(0x0Eu32, s1) ^ aes_gmul(0x0Bu32, s2) ^ aes_gmul(0x0Du32, s3)
+    let r2 : u32 = aes_gmul(0x0Du32, s0) ^ aes_gmul(0x09u32, s1) ^ aes_gmul(0x0Eu32, s2) ^ aes_gmul(0x0Bu32, s3)
+    let r3 : u32 = aes_gmul(0x0Bu32, s0) ^ aes_gmul(0x0Du32, s1) ^ aes_gmul(0x09u32, s2) ^ aes_gmul(0x0Eu32, s3)
+    AES_STATE[off + 0u32] = r0 as u8
+    AES_STATE[off + 1u32] = r1 as u8
+    AES_STATE[off + 2u32] = r2 as u8
+    AES_STATE[off + 3u32] = r3 as u8
+    return 0i32
+}
+
+fn aes_inv_mix_columns() -> i32 {
+    aes_inv_mix_one_column(0u32)
+    aes_inv_mix_one_column(1u32)
+    aes_inv_mix_one_column(2u32)
+    aes_inv_mix_one_column(3u32)
+    return 0i32
+}
+
+/* ---- Encrypt block ---- */
+
+fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+    if AES_KEY_SET == 0u8 { return -1i32 }
+    /* Load input into state. */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        AES_STATE[i] = in_block[i]
+        i = i + 1u32
+    }
+    aes_add_round_key(0u32)
+    let mut round : u32 = 1u32
+    while round < AES_NR {
+        aes_sub_bytes()
+        aes_shift_rows()
+        aes_mix_columns()
+        aes_add_round_key(round)
+        round = round + 1u32
+    }
+    aes_sub_bytes()
+    aes_shift_rows()
+    aes_add_round_key(AES_NR)
+    /* Store state to output. */
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        out_block[k] = AES_STATE[k]
+        k = k + 1u32
+    }
+    return 0i32
+}
+
+/* ---- Decrypt block ---- */
+
+fn aes_decrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+    if AES_KEY_SET == 0u8 { return -1i32 }
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        AES_STATE[i] = in_block[i]
+        i = i + 1u32
+    }
+    aes_add_round_key(AES_NR)
+    let mut round : u32 = AES_NR - 1u32
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        aes_inv_shift_rows()
+        aes_inv_sub_bytes()
+        aes_add_round_key(round)
+        aes_inv_mix_columns()
+        if round == 1u32 { going = 0u8 }
+        if going == 1u8 { round = round - 1u32 }
+    }
+    aes_inv_shift_rows()
+    aes_inv_sub_bytes()
+    aes_add_round_key(0u32)
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        out_block[k] = AES_STATE[k]
+        k = k + 1u32
+    }
+    return 0i32
+}

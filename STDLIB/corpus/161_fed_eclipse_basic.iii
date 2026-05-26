@@ -1,0 +1,78 @@
+/* Step 0190 verification: aether/fed_eclipse fingerprint divergence.
+ *
+ * Tests the eclipse-detection primitives against a freshly cleared
+ * sybil state (no admitted peers).  The empty-set fingerprint is
+ * 32 zero bytes; we drive the divergence comparator against several
+ * synthetic reference fingerprints to verify the byte-counting and
+ * threshold-alarm logic.
+ *
+ * Does NOT exercise admit-then-fingerprint flow (that would require an
+ * ed25519 signer to satisfy fed_sybil_admit).  The fingerprint accumulator
+ * itself is verified by other corpus paths (sha256 KAT) and by the
+ * order-independence property of XOR.
+ */
+module corpus_161
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fed_sybil_clear_all() -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_clear() -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_compute_my_fingerprint(out_32: u64) -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_set_reference_fingerprint(in_32: u64) -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_byte_divergence() -> u32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_alarm() -> u8 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_set_threshold(t: u32) -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_threshold() -> u32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_default_threshold() -> u32 from "fed_eclipse.iii"
+
+fn main() -> u64 {
+    fed_sybil_clear_all()
+    fed_eclipse_clear()
+
+    /* Default threshold is 4. */
+    if fed_eclipse_default_threshold() != 4u32 { return 1u64 }
+    if fed_eclipse_threshold() != 4u32 { return 2u64 }
+
+    /* Compute fingerprint with empty admitted set → all zeros. */
+    let fp : *u8 = malloc(32u64)
+    fed_eclipse_compute_my_fingerprint(fp as u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if fp[i] != 0u8 { return 3u64 }
+        i = i + 1u64
+    }
+
+    /* No reference set → divergence sentinel 0xFFFFFFFFu32, alarm = 0. */
+    if fed_eclipse_byte_divergence() != 0xFFFFFFFFu32 { return 4u64 }
+    if fed_eclipse_alarm() != 0u8 { return 5u64 }
+
+    /* Set reference to all zeros → divergence 0, alarm 0. */
+    let zeros : *u8 = malloc(32u64)
+    let mut z : u64 = 0u64
+    while z < 32u64 { zeros[z] = 0u8; z = z + 1u64 }
+    fed_eclipse_set_reference_fingerprint(zeros as u64)
+    if fed_eclipse_byte_divergence() != 0u32 { return 6u64 }
+    if fed_eclipse_alarm() != 0u8 { return 7u64 }
+
+    /* Set reference to all 0x42 → divergence 32, alarm 1. */
+    let allf : *u8 = malloc(32u64)
+    let mut k : u64 = 0u64
+    while k < 32u64 { allf[k] = 0x42u8; k = k + 1u64 }
+    fed_eclipse_set_reference_fingerprint(allf as u64)
+    if fed_eclipse_byte_divergence() != 32u32 { return 8u64 }
+    if fed_eclipse_alarm() != 1u8 { return 9u64 }
+
+    /* Raise threshold to 32 (max) → alarm clears even at full divergence
+     * (32 bytes is the cap; alarm fires only on > threshold). */
+    fed_eclipse_set_threshold(32u32)
+    if fed_eclipse_threshold() != 32u32 { return 10u64 }
+    if fed_eclipse_alarm() != 0u8 { return 11u64 }
+
+    /* Reject out-of-range threshold (>32). */
+    if fed_eclipse_set_threshold(33u32) == 0i32 { return 12u64 }
+
+    free(fp)
+    free(zeros)
+    free(allf)
+    return 99u64
+}

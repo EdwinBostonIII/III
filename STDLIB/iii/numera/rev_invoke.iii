@@ -1,0 +1,92 @@
+/* III/STDLIB/iii/numera/rev_invoke.iii
+ *
+ * III STDLIB - numera::rev_invoke
+ *
+ * The substrate's single sanctioned indirect-call trampoline.
+ * Given a callee address (as u64) and four u64 arguments, it calls
+ * the callee with the C-msvc-x64 ABI fn(a,b,c,d:u64)->i32 and returns
+ * the callee's i32 result. numera/reversible.iii uses this to replay
+ * recorded undo functions by address while staying pure .iii (no asm).
+ *
+ * Decision: NATIVE u64 fn-ptr call (no metal block). The compiler's
+ * registered indirect-call lowering (codegen patterns slots 42/43)
+ * emits call *reg and manages the 32-byte shadow space + callee-saved
+ * registers; the proven native idiom is fold.iii:97-108 and
+ * resolver.iii:733-748 (a 4-arg native indirect call). A hand-asm
+ * Win64 trampoline would only re-implement that, with added risk.
+ *
+ * This module is stateless in production; the only module-scope buffer
+ * (REVINV_KAT_BUF) exists for the self-test and is non-reentrant.
+ *
+ * Hexad: kind_motion.  Ring: R-1.  K: 1.00 (total -- null target -> sentinel).
+ * Discipline: W2 (callee = 4 params; trampoline = 5, the one sanctioned
+ * exception), W9 (negative i32 errors), W12 (status return), W13 (<=20
+ * locals), W14 (no break -- straight line), W15 (no recursion).
+ * CRASH-PROTOCOL: every parameter is bound to a local before the
+ * indirect call so the Win64 single-use-param spill bug cannot misfeed
+ * rcx/rdx/r8/r9.
+ */
+
+module numera_rev_invoke
+
+const REVINV_OK             : i32 =  0i32
+const REVINV_NULL_TARGET    : i32 = -1i32
+const REVINV_KAT_EXPECT_A   : u64 = 0xCAFEu64
+const REVINV_KAT_EXPECT_RET : i32 = 7i32
+
+/* Self-test sink (module-scope; Trap 7). [u64;1] so the indexed
+ * address is well-defined under iiis-0's byte/array-address rule. */
+var REVINV_KAT_BUF : [u64; 1]
+
+/* rev_invoke_undo -- the indirect-call trampoline.
+ * Binds all 5 params to locals first (Win64 single-use-param spill
+ * guard), null-guards the target (M5: call 0 would fault), then makes
+ * the native 4-arg C-msvc-x64 indirect call and returns its i32. */
+fn rev_invoke_undo(undo_fn: u64, a: u64, b: u64, c: u64, d: u64) -> i32 @export {
+    let target : u64 = undo_fn
+    let pa : u64 = a
+    let pb : u64 = b
+    let pc : u64 = c
+    let pd : u64 = d
+    if target == 0u64 { return REVINV_NULL_TARGET }
+    let f : u64 = target
+    return f(pa, pb, pc, pd)
+}
+
+/* revinv_kat_target -- module-scope KAT callee (the canonical 4-arg
+ * conforming undo body). Stores arg a into the sink and returns b as
+ * i32; c and d are unused (named to honor the 4-arg callee shape). */
+fn revinv_kat_target(a: u64, b: u64, c: u64, d: u64) -> i32 @export {
+    REVINV_KAT_BUF[0u64] = a
+    return (b as i32)
+}
+
+/* revinv_selftest -- runs the spec's KAT vectors against rev_invoke_undo.
+ * Returns 99u64 on full pass (house convention, cf. at_selftest); a
+ * distinct small non-99 code at the first failed check otherwise. */
+fn revinv_selftest() -> u64 @export {
+    let addr : u64 = revinv_kat_target as u64
+
+    /* KAT 1: arg-a delivery + return propagation (the core proof). */
+    REVINV_KAT_BUF[0u64] = 0u64
+    let r1 : i32 = rev_invoke_undo(addr, REVINV_KAT_EXPECT_A, 7u64, 0u64, 0u64)
+    if REVINV_KAT_BUF[0u64] != REVINV_KAT_EXPECT_A { return 1u64 }
+    if r1 != REVINV_KAT_EXPECT_RET { return 2u64 }
+
+    /* KAT 2: distinct full-width invocation (high 32 bits survive;
+     * extra args c/d are harmless and do not corrupt the result). */
+    REVINV_KAT_BUF[0u64] = 0u64
+    let r2 : i32 = rev_invoke_undo(addr, 0x123456789ABCDEF0u64, 42u64, 0xFFu64, 0xEEu64)
+    if REVINV_KAT_BUF[0u64] != 0x123456789ABCDEF0u64 { return 3u64 }
+    if r2 != 42i32 { return 4u64 }
+
+    /* KAT 3: null target -> sentinel, no wild call (M5 negative case).
+     * Pre-seed the sink with a known marker; a passing guard must leave
+     * it unchanged (proves the callee never ran). */
+    REVINV_KAT_BUF[0u64] = 0xA5A5A5A5A5A5A5A5u64
+    let r3 : i32 = rev_invoke_undo(0u64, 0xDEADu64, 0xBEEFu64, 0u64, 0u64)
+    if r3 != REVINV_NULL_TARGET { return 5u64 }
+    if REVINV_KAT_BUF[0u64] != 0xA5A5A5A5A5A5A5A5u64 { return 6u64 }
+
+    return 99u64
+}

@@ -1,0 +1,10 @@
+module corpus_08
+
+fn main() -> u64 {
+    let x: u64 = 2
+    return match x {
+        1 => 10,
+        2 => 42,
+        _ => 99,
+    }
+}

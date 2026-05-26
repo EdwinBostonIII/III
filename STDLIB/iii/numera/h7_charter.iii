@@ -1,0 +1,269 @@
+/* STDLIB/iii/numera/h7_charter.iii -- the H7 falsifier as a run_charter constitutional clause.
+ *
+ * H7 ("one conscience"): every GUARANTEE in the substrate is a constitutional clause (M10)
+ * carrying a PAIRED falsifier -- a verify predicate AND a matching falsify predicate -- and the
+ * charter seal is the build's terminal gate.  A guarantee that is merely asserted (no clause), or
+ * a clause that only admits a good witness (no falsifier that catches a constructed bad witness),
+ * is NOT a guarantee under H7; it is an unfalsifiable claim.  The falsifier is exactly that: a
+ * guarantee with no clause, or a clause with no working falsifier.
+ *
+ * Unlike the sibling H-charters (h2/h3/h9 .iii), whose invariants are byte-identity / self-
+ * verification / reversibility properties the COP witness-VM cannot express -- so each is its OWN
+ * module falsifier -- H7's invariant IS the constitution's paired-falsifier mechanism itself.  So
+ * H7's clause is checked DIRECTLY over that mechanism: it ratifies real constitutional clauses via
+ * the PUBLIC cons_ratify path (the legitimate way a guarantee enters the substrate), then folds
+ * them through cons_clause_holds -- the GENERIC verify(good) AND falsify(bad) gate exercised by
+ * 673_constitution_holds.  H7 is thus the constitution's conscience clause, ready to be unioned
+ * into the constitution's own run_charter (the union-of-all-module-falsifiers, mig6 gap b).
+ *
+ * The H7 clause's two runtime-checkable facets, modeled byte-for-byte on 673 / cons_holds_selftest:
+ *   verify  -- a guarantee WITH a paired falsifier HOLDS.  Ratify a VERIFY clause whose predicate
+ *              is [PHASE_GE 5] (accepts a good op-view, phase 7) and a FALSIFY clause whose
+ *              predicate is [PHASE_GE 5][NOT] (fires on a bad op-view, phase 3).  cons_clause_holds
+ *              over those two slots returns 1: verify ACCEPTS the good witness AND falsify CATCHES
+ *              the bad witness.  This is what it MEANS for a guarantee to be a falsifiable clause.
+ *   falsify -- a clause WITHOUT a working paired falsifier is CAUGHT.  Pair the VERIFY clause with
+ *              a BROKEN falsifier ([FALSE], never fires) -> cons_clause_holds == 0 (the falsify
+ *              cannot catch the bad witness, so the "guarantee" does not hold).  AND pair a BROKEN
+ *              verify ([FALSE], rejects the good witness) with the real falsify -> cons_clause_holds
+ *              == 0.  Both mis-pairings are rejected: an unfalsifiable claim is NOT admitted.  1 iff
+ *              both mis-paired clauses return 0 (these are exactly the (10,12) and (12,11) cases of
+ *              673 -- a mis-paired clause is CAUGHT).  HOLDS = verify & falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing-clause index) unless all
+ * hold.  The negative arm in h7_selftest registers a deliberately-false canary clause -- it CLAIMS
+ * a clause with no working falsifier still HOLDS (cons_clause_holds == 1 on the verify+BROKEN mis-
+ * pairing) -- which is FALSE (it returns 0), and proves the gate goes RED: the gate is a real
+ * falsifier, not vacuously green.
+ *
+ * The STRUCTURAL half of H7 ("no guarantee asserted outside a ratified clause; the charter seal is
+ * the build's terminal gate") is a source/build invariant a runtime clause cannot see.  Together
+ * (the runtime paired-falsifier clause + the structural build-gate) they are the complete H7 falsifier.
+ *
+ * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
+ * NIH: constitution.iii + algebraic_time.iii + witness_hook.iii only.  No ML, no float, no u64 division.
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores; masked idx.
+ */
+module numera_h7_charter
+
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_clause_holds(verify_slot: u32, falsify_slot: u32, good_opv: *u8, bad_opv: *u8) -> u8 from "constitution.iii"
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+
+const H7_OK              : i32 =  0i32
+const H7_COP_FALSE       : u8  = 0x02u8     /* COP_FALSE: never fires (a BROKEN verify/falsify) */
+const H7_COP_NOT         : u8  = 0x05u8     /* COP_NOT: logical negate the stack top */
+const H7_COP_PHASE_GE    : u8  = 0x13u8     /* COP_PHASE_GE v: push (op_phase >= v) */
+const H7_PHASE_THRESH    : u8  = 5u8        /* the clause threshold: accept phase >= 5 */
+const H7_GOOD_PHASE      : u8  = 7u8        /* good op-view phase (>= 5: verify accepts) */
+const H7_BAD_PHASE       : u8  = 3u8        /* bad  op-view phase (<  5: falsify must fire) */
+const H7_TXT_VERIFY      : u8  = 0x56u8     /* 'V': verify clause textual (distinct clause id) */
+const H7_TXT_FALSIFY     : u8  = 0x46u8     /* 'F': falsify clause textual */
+const H7_TXT_BROKEN      : u8  = 0x58u8     /* 'X': broken clause textual */
+const H7_CONS_SENT       : u32 = 0xFFFFFFFFu32  /* cons_find / cons_ratify sentinel */
+const H7_CONS_U64_SENT   : u64 = 0xFFFFFFFFFFFFFFFFu64
+const H7_MAX_CLAUSES     : u32 = 64u32
+const H7_KIND_CONSCIENCE : u8  = 0u8        /* the H7 clause: paired guarantee HOLDS AND mis-pair CAUGHT */
+const H7_KIND_CANARY     : u8  = 1u8        /* a deliberately-false clause (negative arm only) */
+const H7_VERDICT_GREEN   : u64 = 99u64      /* > H7_MAX_CLAUSES, so never a RED index */
+const H7_U32MASK         : u64 = 0xFFFFFFFFu64
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var H7_CLAUSE_KIND  : [u8; 64]
+var H7_CLAUSE_COUNT : u32 = 0u32
+
+/* --- the ratified guarantee slots (resolved by h7_setup; the H7 witness) --- */
+var H7_SLOT_VERIFY  : u32 = 0xFFFFFFFFu32
+var H7_SLOT_FALSIFY : u32 = 0xFFFFFFFFu32
+var H7_SLOT_BROKEN  : u32 = 0xFFFFFFFFu32
+
+/* --- ratify scratch + op-views (module-scope, Trap 7: no local var arrays; serialized R-1 use) --- */
+var H7_REQ  : [u8; 64]    /* cons_ratify_req aggregate (56 used) */
+var H7_OUT  : [u8; 32]    /* out_clause_id sink */
+var H7_TXT  : [u8; 4]     /* a 1-byte clause textual (distinct per clause) */
+var H7_PRED : [u8; 8]     /* predicate bytecode under installation */
+var H7_GOOD : [u8; 68]    /* good op-view: phase 7 */
+var H7_BAD  : [u8; 68]    /* bad  op-view: phase 3 */
+
+/* Store a u64 little-endian into H7_REQ at byte offset (Trap 5-safe: byte stores). */
+fn h7_req_u64(off: u64, v: u64) -> i32 {
+    let p : *u8 = &H7_REQ as u64 as *u8
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* Ratify ONE constitutional clause whose textual is the single byte tc and whose admissibility
+ * predicate is the first pred_len bytes of H7_PRED.  This is the PUBLIC path by which a guarantee
+ * enters the substrate (it installs the predicate + marks the clause live).  Returns the clause's
+ * slot via cons_find, or H7_CONS_SENT on refusal (W2: 2 params). */
+fn h7_ratify_clause(tc: u8, pred_len: u64) -> u32 {
+    let tp : *u8 = &H7_TXT as u64 as *u8
+    tp[0u64] = tc
+    h7_req_u64(0u64,  &H7_OUT as u64)    /* out_clause_id_ptr */
+    h7_req_u64(8u64,  &H7_TXT as u64)    /* textual_ptr       */
+    h7_req_u64(16u64, 1u64)              /* textual_len       */
+    h7_req_u64(24u64, 0u64)              /* ltl_ptr           */
+    h7_req_u64(32u64, 0u64)              /* ltl_len           */
+    h7_req_u64(40u64, &H7_PRED as u64)   /* pred_ptr          */
+    h7_req_u64(48u64, pred_len)          /* pred_len          */
+    let reqp : *u8 = &H7_REQ as u64 as *u8
+    let f : u64 = cons_ratify(reqp)
+    if f == H7_CONS_U64_SENT { return H7_CONS_SENT }
+    let outp : *u8 = &H7_OUT as u64 as *u8
+    return cons_find(outp)
+}
+
+/* Stand up the substrate fresh and ratify the three witness guarantees, recording their slots,
+ * then build the good (phase 7) and bad (phase 3) op-views.  Re-init clears the slot table so a
+ * re-run re-ratifies cleanly (the dup-check would otherwise refuse the same textual).  1 = ready.
+ *   VERIFY  clause: [cc=0][PHASE_GE 5]        -- accepts phase >= 5.
+ *   FALSIFY clause: [cc=0][PHASE_GE 5][NOT]   -- fires iff phase < 5 (catches the bad witness).
+ *   BROKEN  clause: [cc=0][FALSE]             -- never fires (a broken verify/falsify). */
+fn h7_setup() -> u8 {
+    at_init(0u64)
+    wh_init(0u64)
+    cons_init()
+    H7_SLOT_VERIFY  = H7_CONS_SENT
+    H7_SLOT_FALSIFY = H7_CONS_SENT
+    H7_SLOT_BROKEN  = H7_CONS_SENT
+    let predp : *u8 = &H7_PRED as u64 as *u8
+    /* verify */
+    predp[0u64] = 0u8  predp[1u64] = H7_COP_PHASE_GE  predp[2u64] = H7_PHASE_THRESH
+    let vs : u32 = h7_ratify_clause(H7_TXT_VERIFY, 3u64)
+    if vs == H7_CONS_SENT { return 0u8 }
+    /* falsify */
+    predp[0u64] = 0u8  predp[1u64] = H7_COP_PHASE_GE  predp[2u64] = H7_PHASE_THRESH  predp[3u64] = H7_COP_NOT
+    let fs : u32 = h7_ratify_clause(H7_TXT_FALSIFY, 4u64)
+    if fs == H7_CONS_SENT { return 0u8 }
+    /* broken */
+    predp[0u64] = 0u8  predp[1u64] = H7_COP_FALSE
+    let xs : u32 = h7_ratify_clause(H7_TXT_BROKEN, 2u64)
+    if xs == H7_CONS_SENT { return 0u8 }
+    H7_SLOT_VERIFY  = vs
+    H7_SLOT_FALSIFY = fs
+    H7_SLOT_BROKEN  = xs
+    /* op-views: zero 68 bytes, set phase@64 (revtag@65, pillar@66 left 0). */
+    let gp : *u8 = &H7_GOOD as u64 as *u8
+    let bp : *u8 = &H7_BAD as u64 as *u8
+    let mut z : u64 = 0u64
+    while z < 68u64 { gp[z] = 0u8  bp[z] = 0u8  z = z + 1u64 }
+    gp[64u64] = H7_GOOD_PHASE
+    bp[64u64] = H7_BAD_PHASE
+    return 1u8
+}
+
+/* Reset the clause registry (the SETUP of the substrate guarantees is deferred to h7_setup, which
+ * each arm calls so it is self-contained and re-runnable). */
+fn h7_init() -> i32 @export {
+    H7_CLAUSE_COUNT = 0u32
+    return H7_OK
+}
+
+/* The H7 clause VERIFY arm: a guarantee WITH a paired falsifier HOLDS.  cons_clause_holds over the
+ * VERIFY + FALSIFY slots returns 1 -- verify ACCEPTS the good witness (phase 7 >= 5) AND falsify
+ * CATCHES the bad witness (phase 3 < 5 -> the NOT fires).  1 iff the paired guarantee holds. */
+fn h7_verify() -> u8 @export {
+    if h7_setup() != 1u8 { return 0u8 }
+    let gp : *u8 = &H7_GOOD as u64 as *u8
+    let bp : *u8 = &H7_BAD as u64 as *u8
+    return cons_clause_holds(H7_SLOT_VERIFY, H7_SLOT_FALSIFY, gp, bp)
+}
+
+/* The H7 clause FALSIFY arm: a clause WITHOUT a working paired falsifier is CAUGHT.  Two mis-
+ * pairings, exactly the (10,12) and (12,11) cases of 673:
+ *   VERIFY + BROKEN  -> the falsify ([FALSE]) cannot catch the bad witness -> cons_clause_holds == 0.
+ *   BROKEN + FALSIFY -> the verify ([FALSE]) rejects the good witness      -> cons_clause_holds == 0.
+ * 1 iff BOTH mis-paired clauses are rejected (== 0) -- an unfalsifiable claim is NOT admitted. */
+fn h7_falsify() -> u8 @export {
+    if h7_setup() != 1u8 { return 0u8 }
+    let gp : *u8 = &H7_GOOD as u64 as *u8
+    let bp : *u8 = &H7_BAD as u64 as *u8
+    if cons_clause_holds(H7_SLOT_VERIFY, H7_SLOT_BROKEN, gp, bp) != 0u8 { return 0u8 }
+    if cons_clause_holds(H7_SLOT_BROKEN, H7_SLOT_FALSIFY, gp, bp) != 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* The canary's holds: it CLAIMS a clause with no working falsifier still HOLDS -- i.e. that
+ * cons_clause_holds(VERIFY, BROKEN, good, bad) == 1 (a guarantee whose falsifier [FALSE] cannot
+ * catch its bad witness).  It is FALSE: cons_clause_holds returns 0 on that mis-pairing.  A
+ * genuinely-false clause used ONLY to prove run_charter goes RED on a failure.  Returns the actual
+ * cons_clause_holds value (0), so the canary clause does NOT hold. */
+fn h7_canary_holds() -> u8 {
+    if h7_setup() != 1u8 { return 0u8 }
+    let gp : *u8 = &H7_GOOD as u64 as *u8
+    let bp : *u8 = &H7_BAD as u64 as *u8
+    return cons_clause_holds(H7_SLOT_VERIFY, H7_SLOT_BROKEN, gp, bp)
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn h7_clause_eval(idx: u32) -> u8 {
+    let k : u8 = H7_CLAUSE_KIND[(idx as u64) & H7_U32MASK]
+    if k == H7_KIND_CONSCIENCE {
+        if h7_verify() != 1u8 { return 0u8 }
+        if h7_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == H7_KIND_CANARY { return h7_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k.  Returns the 0-based slot, or -1 if the registry is full. */
+fn h7_register(k: u8) -> i32 {
+    let n : u32 = H7_CLAUSE_COUNT
+    if n >= H7_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & H7_U32MASK
+    H7_CLAUSE_KIND[slot] = k
+    H7_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED). */
+fn h7_run_charter() -> u64 @export {
+    let n : u32 = H7_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if h7_clause_eval(i) != 1u8 { return ((i as u64) & H7_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return H7_VERDICT_GREEN
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves: a guarantee WITH a paired falsifier HOLDS -- verify accepts good AND falsify catches bad
+ * (1); a clause WITHOUT a working falsifier is CAUGHT -- both the broken-falsify and broken-verify
+ * mis-pairings are rejected (2); the canary is genuinely false -- a clause with no working falsifier
+ * does NOT hold (3); run_charter GREEN with the H7 conscience clause registered (4,5); GREEN is
+ * reproducible across a re-run (6); and -- the prove-the-negative arm -- registering the false canary
+ * (which claims a clause with no working falsifier still holds) drives run_charter RED, returning the
+ * canary's 1-based index (=2), proving the gate is a real falsifier, not vacuously green (7,8). */
+fn h7_selftest() -> u64 @export {
+    h7_init()
+    if h7_verify() != 1u8 { return 1u64 }
+    if h7_falsify() != 1u8 { return 2u64 }
+    if h7_canary_holds() != 0u8 { return 3u64 }
+    if h7_register(H7_KIND_CONSCIENCE) != 0i32 { return 4u64 }
+    if h7_run_charter() != H7_VERDICT_GREEN { return 5u64 }
+    if h7_run_charter() != H7_VERDICT_GREEN { return 6u64 }
+    if h7_register(H7_KIND_CANARY) != 1i32 { return 7u64 }
+    if h7_run_charter() != 2u64 { return 8u64 }
+    return 99u64
+}
+
+/* h7_charter EMBODIES the H7 invariant as a self-falsifying constitutional clause: every guarantee
+ * is a constitutional clause (M10) carrying a PAIRED falsifier -- a verify predicate that admits the
+ * good witness AND a falsify predicate that catches a constructed bad witness -- folded through the
+ * generic cons_clause_holds gate; an unfalsifiable claim (a clause with no working falsifier) is NOT
+ * admitted, and the terminal gate proves itself RED on a canary that pretends such a claim still
+ * holds.  The structural companion (no guarantee asserted outside a ratified clause; the charter
+ * seal is the build's terminal gate) completes the H7 falsifier. */

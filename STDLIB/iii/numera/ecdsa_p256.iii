@@ -1,0 +1,152 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ecdsa_p256.iii
+ *
+ * III STDLIB - numera::ecdsa_p256 -- ECDSA over NIST P-256 (RITCHIE §4.11).
+ * Composes the NIST-verified constant-time layers: fp256 (curve field),
+ * ec256 (curve, RCB complete add + double-and-add-always scalar mul),
+ * fn256 (scalar field mod curve-order n).
+ *
+ *   keygen(d): Q = d.G                                  (pub = Qx||Qy, 64 B)
+ *   sign(d, z, k): r = (k.G).x mod n;
+ *                  s = k^-1 (z + r.d) mod n             (sig = r||s, 64 B)
+ *   verify(Q, z, sig): u1 = z.s^-1, u2 = r.s^-1 mod n;
+ *                      R = u1.G + u2.Q; accept iff R.x mod n == r
+ *
+ * z is the message hash (32 B), reduced mod n.  k is the per-signature
+ * nonce (32 B, in [1,n-1]); scalar mul is constant-time so k does not leak.
+ *
+ * Hexad: kind_prove.  Ring: R3.  K: 1.00.
+ */
+
+module numera_ecdsa_p256
+
+extern @abi(c-msvc-x64) fn ec256_scalar_mul_base(out: u64, k_bytes: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn ec256_scalar_mul_pt(out: u64, k_bytes: u64, bp: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn ec256_add_x(out: u64, a: u64, bp: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn ec256_affine_x(out_x: u64, p: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn ec256_affine_xy(out_x: u64, out_y: u64, p: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn ec256_set_affine(p: u64, x_bytes: u64, y_bytes: u64) -> i32 from "ec256.iii"
+extern @abi(c-msvc-x64) fn fn256_boot() -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_set_bytes_x(slot: u64, src: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_get_bytes_x(dst: u64, slot: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_reduce_x(slot: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_to_mont_x(r: u64, a: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_from_mont_x(r: u64, a: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_mul_x(r: u64, a: u64, b: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_add_x(r: u64, a: u64, b: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_inv_x(r: u64, a: u64) -> i32 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_is_zero_x(slot: u64) -> u8 from "fn256.iii"
+extern @abi(c-msvc-x64) fn fn_eq_x(a: u64, b: u64) -> u8 from "fn256.iii"
+
+var ECDSA_RX : [u8; 32]
+var ECDSA_U1 : [u8; 32]
+var ECDSA_U2 : [u8; 32]
+
+fn iii_ecdsa_p256_keygen(d_bytes: u64, pub_out: u64) -> i32 @export {
+    ec256_scalar_mul_base(30u64, d_bytes)
+    ec256_affine_xy(pub_out, pub_out + 32u64, 30u64)
+    return 0i32
+}
+
+/* sign with caller-supplied nonce k (must be uniform in [1,n-1]). sig_out=64B. */
+fn iii_ecdsa_p256_sign(d_bytes: u64, z_bytes: u64, k_bytes: u64, sig_out: u64) -> i32 @export {
+    fn256_boot()
+    /* r = (k.G).x mod n */
+    ec256_scalar_mul_base(30u64, k_bytes)
+    ec256_affine_x(&ECDSA_RX as u64, 30u64)
+    fn_set_bytes_x(0u64, &ECDSA_RX as u64)
+    fn_reduce_x(0u64)                     /* fn slot 0 = r */
+    fn_get_bytes_x(sig_out, 0u64)
+    /* s = k^-1 (z + r.d) mod n */
+    fn_set_bytes_x(1u64, z_bytes) fn_reduce_x(1u64)
+    fn_set_bytes_x(2u64, d_bytes)
+    fn_set_bytes_x(3u64, k_bytes)
+    fn_to_mont_x(4u64, 0u64)              /* r_m */
+    fn_to_mont_x(5u64, 1u64)              /* z_m */
+    fn_to_mont_x(6u64, 2u64)              /* d_m */
+    fn_to_mont_x(7u64, 3u64)              /* k_m */
+    fn_mul_x(8u64, 4u64, 6u64)            /* r*d */
+    fn_add_x(9u64, 5u64, 8u64)            /* z + r*d */
+    fn_inv_x(10u64, 7u64)                 /* k^-1 */
+    fn_mul_x(11u64, 10u64, 9u64)          /* s_m */
+    fn_from_mont_x(12u64, 11u64)
+    fn_get_bytes_x(sig_out + 32u64, 12u64)
+    return 0i32
+}
+
+fn iii_ecdsa_p256_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: u64) -> u8 {
+    fn256_boot()
+    fn_set_bytes_x(0u64, sig_bytes)               /* r */
+    fn_set_bytes_x(1u64, sig_bytes + 32u64)       /* s */
+    if fn_is_zero_x(0u64) == 1u8 { return 0u8 }
+    if fn_is_zero_x(1u64) == 1u8 { return 0u8 }
+    fn_set_bytes_x(2u64, z_bytes) fn_reduce_x(2u64)
+    fn_to_mont_x(3u64, 1u64)              /* s_m */
+    fn_inv_x(4u64, 3u64)                  /* w = s^-1 */
+    fn_to_mont_x(5u64, 2u64)              /* z_m */
+    fn_to_mont_x(6u64, 0u64)              /* r_m */
+    fn_mul_x(7u64, 5u64, 4u64)            /* u1_m = z*w */
+    fn_from_mont_x(8u64, 7u64)
+    fn_get_bytes_x(&ECDSA_U1 as u64, 8u64)
+    fn_mul_x(7u64, 6u64, 4u64)            /* u2_m = r*w */
+    fn_from_mont_x(9u64, 7u64)
+    fn_get_bytes_x(&ECDSA_U2 as u64, 9u64)
+    /* R = u1.G + u2.Q */
+    ec256_scalar_mul_base(30u64, &ECDSA_U1 as u64)
+    ec256_set_affine(33u64, qx_bytes, qy_bytes)
+    ec256_scalar_mul_pt(36u64, &ECDSA_U2 as u64, 33u64)
+    ec256_add_x(39u64, 30u64, 36u64)
+    ec256_affine_x(&ECDSA_RX as u64, 39u64)
+    fn_set_bytes_x(10u64, &ECDSA_RX as u64) fn_reduce_x(10u64)
+    if fn_eq_x(10u64, 0u64) == 1u8 { return 1u8 }
+    return 0u8
+}
+fn iii_ecdsa_p256_verify_x(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: u64) -> u8 @export {
+    return iii_ecdsa_p256_verify(qx_bytes, qy_bytes, z_bytes, sig_bytes)
+}
+
+/* ---- Crypto-agility entry points (seed-keygen + deterministic sign) ---- */
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+
+var ECDSA_D    : [u8; 32]
+var ECDSA_KBUF : [u8; 32]
+
+/* keygen from a 32-byte seed: d = (seed mod n) forced into [1,n-1];
+ * pub = d.G (Qx||Qy, 64 B); d written to d_out (32 B) as the caller's sk. */
+fn iii_ecdsa_p256_keygen_seed(seed: u64, d_out: u64, pub_out: u64) -> i32 @export {
+    fn256_boot()
+    fn_set_bytes_x(0u64, seed)
+    fn_reduce_x(0u64)
+    let db : *u8 = &ECDSA_D as *u8
+    if fn_is_zero_x(0u64) == 1u8 {
+        let mut i : u64 = 0u64
+        while i < 32u64 { db[i] = 0u8 ; i = i + 1u64 }
+        db[31] = 1u8
+    } else {
+        fn_get_bytes_x(&ECDSA_D as u64, 0u64)
+    }
+    let dd : *u8 = d_out as *u8
+    let mut j : u64 = 0u64
+    while j < 32u64 { dd[j] = db[j] ; j = j + 1u64 }
+    return iii_ecdsa_p256_keygen(&ECDSA_D as u64, pub_out)
+}
+
+/* deterministic sign: nonce k via SP 800-90A HMAC-DRBG seeded from (d,z),
+ * reduced into [1,n-1].  Secure (k depends on secret d and message hash z)
+ * and reproducible.  sig_out = r||s (64 B). */
+fn iii_ecdsa_p256_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @export {
+    fn256_boot()
+    iii_drbg_instantiate(d_bytes, 32u64, z_bytes, 32u64, 0u64, 0u64)
+    let mut done : u8 = 0u8
+    let mut guard : u64 = 0u64
+    while done == 0u8 {
+        iii_drbg_generate(&ECDSA_KBUF as u64, 32u64, 0u64, 0u64)
+        fn_set_bytes_x(0u64, &ECDSA_KBUF as u64)
+        fn_reduce_x(0u64)
+        if fn_is_zero_x(0u64) == 0u8 { done = 1u8 }
+        guard = guard + 1u64
+        if guard > 64u64 { done = 1u8 }
+    }
+    fn_get_bytes_x(&ECDSA_KBUF as u64, 0u64)
+    return iii_ecdsa_p256_sign(d_bytes, z_bytes, &ECDSA_KBUF as u64, sig_out)
+}

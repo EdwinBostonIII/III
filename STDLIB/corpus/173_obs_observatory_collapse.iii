@@ -1,0 +1,60 @@
+/* Phase 14c Step 0142 verification: 12-family observatory threshold rollup. */
+module corpus_173
+
+extern @abi(c-msvc-x64) fn obs_observatory_clear() -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_set_threshold(family: u32, t: u64) -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_threshold(family: u32) -> u64 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_update(family: u32, v: u64) -> i32 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_value(family: u32) -> u64 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_family_alarm(family: u32) -> u8 from "obs_observatory.iii"
+extern @abi(c-msvc-x64) fn obs_observatory_collapsed_state() -> u32 from "obs_observatory.iii"
+
+fn main() -> u64 {
+    obs_observatory_clear()
+    if obs_observatory_collapsed_state() != 0u32 { return 1u64 }
+
+    /* Set thresholds for 12 families: 100, 200, 300, ..., 1200. */
+    let mut f : u32 = 0u32
+    while f < 12u32 {
+        let t : u64 = ((f + 1u32) as u64) * 100u64
+        obs_observatory_set_threshold(f, t)
+        f = f + 1u32
+    }
+
+    if obs_observatory_threshold(0u32) != 100u64 { return 2u64 }
+    if obs_observatory_threshold(11u32) != 1200u64 { return 3u64 }
+    if obs_observatory_threshold(99u32) != 0u64 { return 4u64 }   /* OOB */
+
+    /* No updates yet → no families fire. */
+    if obs_observatory_collapsed_state() != 0u32 { return 5u64 }
+
+    /* Fire family 0: value 101 > threshold 100. */
+    obs_observatory_update(0u32, 101u64)
+    if obs_observatory_family_alarm(0u32) != 1u8 { return 6u64 }
+    if obs_observatory_collapsed_state() != 0x01u32 { return 7u64 }
+
+    /* Fire family 5: value 600 > threshold 600? NO (strict >). */
+    obs_observatory_update(5u32, 600u64)
+    if obs_observatory_family_alarm(5u32) != 0u8 { return 8u64 }
+    if obs_observatory_collapsed_state() != 0x01u32 { return 9u64 }
+
+    /* Fire family 5 with 601. */
+    obs_observatory_update(5u32, 601u64)
+    if obs_observatory_family_alarm(5u32) != 1u8 { return 10u64 }
+    if obs_observatory_collapsed_state() != 0x21u32 { return 11u64 }   /* bits 0 and 5 = 0x01 | 0x20 */
+
+    /* Fire family 11. */
+    obs_observatory_update(11u32, 99999u64)
+    if obs_observatory_collapsed_state() != 0x821u32 { return 12u64 }   /* bits 0, 5, 11 */
+
+    /* Lower family 0 below threshold → un-fire. */
+    obs_observatory_update(0u32, 50u64)
+    if obs_observatory_family_alarm(0u32) != 0u8 { return 13u64 }
+    if obs_observatory_collapsed_state() != 0x820u32 { return 14u64 }   /* bits 5, 11 */
+
+    /* OOB family rejected. */
+    if obs_observatory_set_threshold(99u32, 1u64) != -1i32 { return 15u64 }
+    if obs_observatory_update(99u32, 1u64) != -1i32 { return 16u64 }
+
+    return 99u64
+}

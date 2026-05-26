@@ -1,0 +1,337 @@
+/* III/STDLIB/iii/aether/witness_compactor.iii
+ *
+ * III STDLIB - aether::witness_compactor -- selective-retention chain compaction.
+ *
+ * Maintains a per-fragment retention bitmap, expands caller marks over the
+ * transitive antecedent closure, groups maximal runs of consecutive
+ * non-retained fragments, and publishes one COMPACTION fragment per run
+ * (out_commit = Keccak256 fold of the run's fragment ids; in_commit =
+ * Keccak256(run_start || run_end); payload = LE(run_start) || LE(run_end)).
+ * The original fragments are never removed -- the chain is append-only; the
+ * COMPACTION fragment is the canonical skip handle for chain-root verification.
+ *
+ * Hexad: kind_witness + kind_repair.  Ring: R-1.  K: 1.00.
+ * Discipline: W8 (bounded bitmap), W14 (sentinel-flag loops, no break),
+ *   W15 (no recursion -- closure via iterated fixed-point sweep), W9/W10/W12
+ *   status returns.  Non-reentrant (module-scope scratch; single compactor).
+ *
+ * Spec gap-fixes applied: keccak256_* from "keccak256.iii" (gospel said
+ *   keccak.iii -- WRONG); all 7 local var arrays hoisted to module scope
+ *   (Trap 7); WC_ prefix -> WCOMP_ (Trap 2); run-scan is a clean flag-driven
+ *   while (no &&, no break, no one-past-end read); wh_publish failure sentinel
+ *   checked before counting; selftest added.  Producer/opid tags built
+ *   byte-by-byte (no string-literal reliance).
+ */
+
+module aether_witness_compactor
+
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_ante_count(idx: u64) -> u32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_ante(idx: u64, ante_idx: u32, out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ws_lookup_id(frag_id: *u8, out_idx: *u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+
+/* KAT-setup externs. */
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+
+const WCOMP_OK             : i32 =  0i32
+const WCOMP_E_BAD          : i32 = -1i32
+const WCOMP_MAX_FRAGS      : u64 = 4194304u64
+const WCOMP_MAX_ANTE       : u64 = 32u64
+const WCOMP_ID_BYTES       : u64 = 32u64
+const WCOMP_COMPACT_PHASE  : u8  = 9u8
+const WCOMP_COMPACT_PILLAR : u16 = 5u16
+const WCOMP_PRODUCER_LEN   : u64 = 25u64
+const WCOMP_OPID_LEN       : u64 = 34u64
+const WCOMP_U64_SENT       : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var WCOMP_RETAIN       : [u8; 4194304]   /* 1 byte/fragment, !=0 = retained (W8 bound = WCOMP_MAX_FRAGS) */
+var WCOMP_PRODUCER     : [u8; 32]
+var WCOMP_OPID_COMPACT : [u8; 32]
+var WCOMP_INITED       : u8 = 0u8
+var WCOMP_TAGBUF       : [u8; 34]        /* "aether::witness_compactor::compact" (producer = first 25) */
+var WCOMP_AI           : [u64; 1]        /* ws_lookup_id out_idx sink */
+
+/* hoisted-from-local scratch (Trap 7) -- non-reentrant */
+var WCOMP_ANTE_TMP     : [u8; 32]
+var WCOMP_RUN_SUM      : [u8; 32]
+var WCOMP_FID_TMP      : [u8; 32]
+var WCOMP_IN_COMMIT    : [u8; 32]
+var WCOMP_INBUF        : [u8; 16]
+var WCOMP_ANTES        : [u8; 1024]
+var WCOMP_OUT_FID      : [u8; 32]
+
+/* self-test scratch */
+var WCOMP_T_ZERO       : [u8; 32]
+var WCOMP_T_FID        : [u8; 32]
+var WCOMP_T_ANTE       : [u8; 32]
+var WCOMP_T_RDBK       : [u8; 16]
+var WCOMP_T_LEN        : [u64; 1]
+
+/* ============================ internal helpers ============================ */
+
+/* Expand one retained fragment's antecedents into the bitmap; returns 1 if any
+ * new bit was set.  Flattened out of the fixed-point sweep to keep nesting
+ * shallow (Trap 5 parser depth). */
+fn wc_expand_one(i: u64) -> u8 {
+    let cnt : u32 = wh_get_ante_count(i)
+    let mut k : u32 = 0u32
+    let mut flipped : u8 = 0u8
+    while k < cnt {
+        wh_get_ante(i, k, (&WCOMP_ANTE_TMP as u64) as *u8)
+        let lk : i32 = ws_lookup_id((&WCOMP_ANTE_TMP as u64) as *u8, (&WCOMP_AI as u64) as *u64)
+        if lk == 0i32 {
+            let ai : u64 = WCOMP_AI[0u64]
+            if ai < WCOMP_MAX_FRAGS {
+                if WCOMP_RETAIN[ai] == 0u8 { WCOMP_RETAIN[ai] = 1u8  flipped = 1u8 }
+            }
+        }
+        k = k + 1u32
+    }
+    return flipped
+}
+
+/* Scan forward from `start` over consecutive non-retained fragments; return the
+ * first index that is retained or == n (half-open run end).  Flag-driven (W14):
+ * no `&&`, no break, and WCOMP_RETAIN[n] is never read (the i>=n guard fires
+ * first and the RETAIN test is gated on go==1u8). */
+fn wc_scan_run(start: u64, n: u64) -> u64 {
+    let mut i : u64 = start
+    let mut go : u8 = 1u8
+    while go == 1u8 {
+        if i >= n { go = 0u8 }
+        if go == 1u8 { if WCOMP_RETAIN[i] == 1u8 { go = 0u8 } }
+        if go == 1u8 { i = i + 1u64 }
+    }
+    return i
+}
+
+/* Emit one COMPACTION fragment for the run [run_start, run_end).
+ * out_commit = Keccak fold of the run fids; in_commit = K256(LE(start)||LE(end));
+ * payload = LE(start)||LE(end) (16 B); antecedents = first <=32 run fids.
+ * Returns WCOMP_OK or WCOMP_E_BAD on publish failure. */
+fn wc_emit_run(run_start: u64, run_end: u64) -> i32 {
+    cad_begin(1u32)
+    let mut j : u64 = run_start
+    while j < run_end {
+        wh_get_frag_id(j, (&WCOMP_FID_TMP as u64) as *u8)
+        cad_payload((&WCOMP_FID_TMP as u64), WCOMP_ID_BYTES)
+        j = j + 1u64
+    }
+    cad_final((&WCOMP_RUN_SUM as u64))
+    let ibp : *u8 = (&WCOMP_INBUF as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 8u64 {
+        ibp[z]         = ((run_start >> (z * 8u64)) & 0xFFu64) as u8
+        ibp[8u64 + z]  = ((run_end >> (z * 8u64)) & 0xFFu64) as u8
+        z = z + 1u64
+    }
+    ident_from_bytes(ibp, 16u64, (&WCOMP_IN_COMMIT as u64) as *u8)
+    let run_len : u64 = run_end - run_start
+    let mut nante : u64 = run_len
+    if nante > WCOMP_MAX_ANTE { nante = WCOMP_MAX_ANTE }
+    let mut q : u64 = 0u64
+    while q < nante {
+        let dst : u64 = (&WCOMP_ANTES as u64) + q * 32u64
+        wh_get_frag_id(run_start + q, dst as *u8)
+        q = q + 1u64
+    }
+    let r : u64 = wh_publish((&WCOMP_PRODUCER as u64) as *u8, (&WCOMP_OPID_COMPACT as u64) as *u8, (&WCOMP_IN_COMMIT as u64) as *u8, (&WCOMP_RUN_SUM as u64) as *u8, 0u8, WCOMP_COMPACT_PHASE, WCOMP_COMPACT_PILLAR, (&WCOMP_ANTES as u64) as *u8, nante as u32, ibp, 16u32, (&WCOMP_OUT_FID as u64) as *u8)
+    if r == WCOMP_U64_SENT { return WCOMP_E_BAD }
+    return WCOMP_OK
+}
+
+/* ================================ public API ============================== */
+
+fn wc_init() -> i32 @export {
+    let mut i : u64 = 0u64
+    while i < WCOMP_MAX_FRAGS { WCOMP_RETAIN[i] = 0u8  i = i + 1u64 }
+    /* "aether::witness_compactor::compact" (34 ASCII bytes); producer = [0..25). */
+    let tp : *u8 = (&WCOMP_TAGBUF as u64) as *u8
+    tp[0u64]  = 97u8   tp[1u64]  = 101u8  tp[2u64]  = 116u8  tp[3u64]  = 104u8
+    tp[4u64]  = 101u8  tp[5u64]  = 114u8  tp[6u64]  = 58u8   tp[7u64]  = 58u8
+    tp[8u64]  = 119u8  tp[9u64]  = 105u8  tp[10u64] = 116u8  tp[11u64] = 110u8
+    tp[12u64] = 101u8  tp[13u64] = 115u8  tp[14u64] = 115u8  tp[15u64] = 95u8
+    tp[16u64] = 99u8   tp[17u64] = 111u8  tp[18u64] = 109u8  tp[19u64] = 112u8
+    tp[20u64] = 97u8   tp[21u64] = 99u8   tp[22u64] = 116u8  tp[23u64] = 111u8
+    tp[24u64] = 114u8  tp[25u64] = 58u8   tp[26u64] = 58u8   tp[27u64] = 99u8
+    tp[28u64] = 111u8  tp[29u64] = 109u8  tp[30u64] = 112u8  tp[31u64] = 97u8
+    tp[32u64] = 99u8   tp[33u64] = 116u8
+    ident_from_bytes(tp, WCOMP_PRODUCER_LEN, (&WCOMP_PRODUCER as u64) as *u8)
+    ident_from_bytes(tp, WCOMP_OPID_LEN, (&WCOMP_OPID_COMPACT as u64) as *u8)
+    WCOMP_INITED = 1u8
+    return WCOMP_OK
+}
+
+fn wc_clear_marks() -> i32 @export {
+    let n : u64 = wh_next_idx()
+    let mut i : u64 = 0u64
+    while i < n { WCOMP_RETAIN[i] = 0u8  i = i + 1u64 }
+    return WCOMP_OK
+}
+
+fn wc_mark_retain(frag_idx: u64) -> i32 @export {
+    if WCOMP_INITED == 0u8 { wc_init() }
+    if frag_idx >= WCOMP_MAX_FRAGS { return WCOMP_E_BAD }
+    WCOMP_RETAIN[frag_idx] = 1u8
+    let n : u64 = wh_next_idx()
+    let mut changed : u8 = 1u8
+    while changed == 1u8 {
+        changed = 0u8
+        let mut i : u64 = 0u64
+        while i < n {
+            if WCOMP_RETAIN[i] == 1u8 {
+                if wc_expand_one(i) == 1u8 { changed = 1u8 }
+            }
+            i = i + 1u64
+        }
+    }
+    return WCOMP_OK
+}
+
+fn wc_is_retained(frag_idx: u64) -> u8 @export {
+    if frag_idx >= WCOMP_MAX_FRAGS { return 0u8 }
+    return WCOMP_RETAIN[frag_idx]
+}
+
+fn wc_run_compaction() -> u32 @export {
+    if WCOMP_INITED == 0u8 { wc_init() }
+    let n : u64 = wh_next_idx()
+    let mut emitted : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < n {
+        if WCOMP_RETAIN[i] == 1u8 {
+            i = i + 1u64
+        } else {
+            let run_end : u64 = wc_scan_run(i, n)
+            if wc_emit_run(i, run_end) == WCOMP_OK { emitted = emitted + 1u32 }
+            i = run_end
+        }
+    }
+    return emitted
+}
+
+/* ================================= selftest =============================== */
+
+/* Publish one test fragment (empty payload; n_ante antecedents from ante_ptr),
+ * register it in the spine, write its fid to out_fid.  Distinct fids come from
+ * wh_publish's monotone at_time.  Returns the fragment index (or the sentinel). */
+fn wc_t_emit(n_ante: u32, ante_ptr: *u8, out_fid: *u8) -> u64 {
+    let zp : *u8 = (&WCOMP_T_ZERO as u64) as *u8
+    let idx : u64 = wh_publish(zp, zp, zp, zp, 0u8, 0u8, 0u16, ante_ptr, n_ante, zp, 0u32, out_fid)
+    if idx != WCOMP_U64_SENT { ws_register(idx) }
+    return idx
+}
+
+/* KAT-1: all-retained chain -> zero compaction (prove the negative: no spurious
+ * COMPACTION when nothing is collectable). */
+fn wc_selftest_k1() -> u64 {
+    wh_init(0u64)
+    ws_init()
+    wc_init()
+    let zp : *u8 = (&WCOMP_T_ZERO as u64) as *u8
+    let mut z : u64 = 0u64
+    while z < 32u64 { WCOMP_T_ZERO[z] = 0u8  z = z + 1u64 }
+    let fp : *u8 = (&WCOMP_T_FID as u64) as *u8
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_mark_retain(0u64)
+    wc_mark_retain(1u64)
+    wc_mark_retain(2u64)
+    if wc_run_compaction() != 0u32 { return 1u64 }
+    if wc_is_retained(0u64) != 1u8 { return 2u64 }
+    if wc_is_retained(2u64) != 1u8 { return 3u64 }
+    return 0u64
+}
+
+/* KAT-2: a single non-retained run -> exactly one COMPACTION; payload = run bounds. */
+fn wc_selftest_k2() -> u64 {
+    wh_init(0u64)
+    let zp : *u8 = (&WCOMP_T_ZERO as u64) as *u8
+    let fp : *u8 = (&WCOMP_T_FID as u64) as *u8
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_clear_marks()
+    let n0 : u64 = wh_next_idx()
+    if n0 != 4u64 { return 10u64 }
+    if wc_run_compaction() != 1u32 { return 11u64 }
+    if wh_next_idx() != (n0 + 1u64) { return 12u64 }
+    let rdp : *u8 = (&WCOMP_T_RDBK as u64) as *u8
+    let lenp : *u64 = (&WCOMP_T_LEN as u64) as *u64
+    if wh_get_payload(n0, rdp, 16u64, lenp) != 0i32 { return 13u64 }
+    if rdp[0u64] != 0u8 { return 14u64 }
+    if rdp[8u64] != 4u8 { return 15u64 }
+    if rdp[9u64] != 0u8 { return 16u64 }
+    return 0u64
+}
+
+/* KAT-3: a retained island splits the chain into two runs -> two COMPACTIONs;
+ * payloads decode to (0,2) and (3,5). */
+fn wc_selftest_k3() -> u64 {
+    wh_init(0u64)
+    let zp : *u8 = (&WCOMP_T_ZERO as u64) as *u8
+    let fp : *u8 = (&WCOMP_T_FID as u64) as *u8
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_t_emit(0u32, zp, fp)
+    wc_clear_marks()
+    wc_mark_retain(2u64)
+    let n0 : u64 = wh_next_idx()
+    if wc_run_compaction() != 2u32 { return 20u64 }
+    let rdp : *u8 = (&WCOMP_T_RDBK as u64) as *u8
+    let lenp : *u64 = (&WCOMP_T_LEN as u64) as *u64
+    /* first COMPACTION at idx n0 -> (0,2). */
+    if wh_get_payload(n0, rdp, 16u64, lenp) != 0i32 { return 21u64 }
+    if rdp[0u64] != 0u8 { return 22u64 }
+    if rdp[8u64] != 2u8 { return 23u64 }
+    /* second COMPACTION at idx n0+1 -> (3,5). */
+    if wh_get_payload(n0 + 1u64, rdp, 16u64, lenp) != 0i32 { return 24u64 }
+    if rdp[0u64] != 3u8 { return 25u64 }
+    if rdp[8u64] != 5u8 { return 26u64 }
+    return 0u64
+}
+
+/* KAT-4: transitive closure -- marking B (whose antecedent is A) must pull A in
+ * via ws_lookup_id (prove the closure resolves the reverse index; a wrong index
+ * would leave A unretained and FAIL here). */
+fn wc_selftest_k4() -> u64 {
+    wh_init(0u64)
+    ws_init()
+    let zp : *u8 = (&WCOMP_T_ZERO as u64) as *u8
+    let ap : *u8 = (&WCOMP_T_ANTE as u64) as *u8
+    let bp : *u8 = (&WCOMP_T_FID as u64) as *u8
+    /* publish A (no antecedents) -> idx 0; A's fid -> WCOMP_T_ANTE. */
+    if wc_t_emit(0u32, zp, ap) == WCOMP_U64_SENT { return 30u64 }
+    /* publish B with A's fid as its single antecedent -> idx 1. */
+    if wc_t_emit(1u32, ap, bp) == WCOMP_U64_SENT { return 31u64 }
+    wc_clear_marks()
+    wc_mark_retain(1u64)
+    if wc_is_retained(1u64) != 1u8 { return 32u64 }
+    if wc_is_retained(0u64) != 1u8 { return 33u64 }
+    return 0u64
+}
+
+fn wc_selftest() -> u64 @export {
+    let r1 : u64 = wc_selftest_k1()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = wc_selftest_k2()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = wc_selftest_k3()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = wc_selftest_k4()
+    if r4 != 0u64 { return r4 }
+    return 99u64
+}

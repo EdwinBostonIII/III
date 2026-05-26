@@ -1,0 +1,312 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_chd.iii
+ *
+ * III STDLIB - omnia::xii_chd
+ *
+ * CHD Minimal Perfect Hash construction for the 144 Horizon canonical-form
+ * hashes. Per DOCS/III-XII.md S26.10.
+ *
+ * Algorithm (Belazzougui-Botelho-Dietzfelbinger 2009):
+ *   1. Bucket each input hash by (hash mod 144).
+ *   2. Sort buckets descending by size.
+ *   3. Greedy: for each bucket, find a displacement [0..255] such that all
+ *      its elements map (via (h ^ disp) mod 144) to vacant secondary slots.
+ *   4. Record the displacement in primary[bucket_idx] and the source index
+ *      in secondary[secondary_idx].
+ *
+ * Output: 144 + 144 = 288 bytes sealed.
+ *
+ * Hexad: kind_essence. Ring: R0. K: 1.0.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_chd
+
+const XCHD_DIM : u32 = 144u32
+const XCHD_BUCKET_MAX : u32 = 16u32
+
+/* Module-scope working storage. */
+var XCHD_PRIMARY    : [u8; 144]
+var XCHD_SECONDARY  : [u8; 144]
+var XCHD_OCCUPIED   : [u8; 144]
+var XCHD_BUCKETS    : [u8; 2304]   /* 144 buckets * 16 max indices */
+var XCHD_BUCKET_SIZES : [u8; 144]
+var XCHD_ORDER      : [u8; 144]    /* bucket indices sorted by size desc */
+var XCHD_BUILT      : u8 = 0u8
+
+/* Input hashes (low 32 bits of SHA-256 hashes; populated by curation). */
+var XCHD_HASHES_LO : [u8; 576]   /* 144 * 4 */
+var XCHD_HASHES_HI : [u8; 576]   /* 144 * 4 */
+
+fn xii_chd_set_hash(idx: u32, hash_lo: u32, hash_hi: u32) -> i32 @export {
+    if idx >= XCHD_DIM { return -1i32 }
+    let off : u32 = idx * 4u32
+    XCHD_HASHES_LO[off]        = (hash_lo & 0xFFu32) as u8
+    XCHD_HASHES_LO[off + 1u32] = ((hash_lo >> 8u32) & 0xFFu32) as u8
+    XCHD_HASHES_LO[off + 2u32] = ((hash_lo >> 16u32) & 0xFFu32) as u8
+    XCHD_HASHES_LO[off + 3u32] = ((hash_lo >> 24u32) & 0xFFu32) as u8
+    XCHD_HASHES_HI[off]        = (hash_hi & 0xFFu32) as u8
+    XCHD_HASHES_HI[off + 1u32] = ((hash_hi >> 8u32) & 0xFFu32) as u8
+    XCHD_HASHES_HI[off + 2u32] = ((hash_hi >> 16u32) & 0xFFu32) as u8
+    XCHD_HASHES_HI[off + 3u32] = ((hash_hi >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn _read_hash_lo(idx: u32) -> u32 {
+    let off : u32 = idx * 4u32
+    let b0 : u32 = XCHD_HASHES_LO[off] as u32
+    let b1 : u32 = XCHD_HASHES_LO[off + 1u32] as u32
+    let b2 : u32 = XCHD_HASHES_LO[off + 2u32] as u32
+    let b3 : u32 = XCHD_HASHES_LO[off + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn _read_hash_hi(idx: u32) -> u32 {
+    let off : u32 = idx * 4u32
+    let b0 : u32 = XCHD_HASHES_HI[off] as u32
+    let b1 : u32 = XCHD_HASHES_HI[off + 1u32] as u32
+    let b2 : u32 = XCHD_HASHES_HI[off + 2u32] as u32
+    let b3 : u32 = XCHD_HASHES_HI[off + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn _bucket_for_hash(hash_lo: u32) -> u32 {
+    return hash_lo % XCHD_DIM
+}
+
+fn _bucket_push(bucket_idx: u32, value: u8) -> i32 {
+    let cur_size : u8 = XCHD_BUCKET_SIZES[bucket_idx]
+    if (cur_size as u32) >= XCHD_BUCKET_MAX { return -1i32 }
+    let off : u32 = (bucket_idx * XCHD_BUCKET_MAX) + (cur_size as u32)
+    XCHD_BUCKETS[off] = value
+    XCHD_BUCKET_SIZES[bucket_idx] = cur_size + 1u8
+    return 0i32
+}
+
+fn _bucket_at(bucket_idx: u32, slot: u32) -> u8 {
+    let off : u32 = (bucket_idx * XCHD_BUCKET_MAX) + slot
+    return XCHD_BUCKETS[off]
+}
+
+/* Sort buckets by size descending; populates XCHD_ORDER. Insertion sort
+ * over 144 elements is fine (~10k comparisons). iiis-1 flat-scope: all
+ * locals declared once at function top with explicit re-assignment. */
+fn _sort_buckets_desc() -> i32 {
+    let mut i : u32 = 0u32
+    let mut a : u32 = 1u32
+    let mut b : u32 = 0u32
+    let mut cur_id : u8 = 0u8
+    let mut cur_size : u8 = 0u8
+    let mut prev_id : u8 = 0u8
+    let mut prev_size : u8 = 0u8
+    let mut active : u8 = 0u8
+
+    i = 0u32
+    while i < XCHD_DIM {
+        XCHD_ORDER[i] = i as u8
+        i = i + 1u32
+    }
+    a = 1u32
+    while a < XCHD_DIM {
+        cur_id = XCHD_ORDER[a]
+        cur_size = XCHD_BUCKET_SIZES[cur_id as u32]
+        b = a
+        active = 1u8
+        /* Drive the loop by `active`, not by `b > 0u32`.  When the
+         * insertion point is found, set active=0 and DO NOT touch b —
+         * its current value IS the destination index.  The original
+         * `while b > 0u32` with an active-gated body re-ran the body
+         * after active=0 and the `else { b = 0u32 }` branch overwrote
+         * b, corrupting ORDER. */
+        while active == 1u8 {
+            if b == 0u32 {
+                active = 0u8
+            } else {
+                prev_id = XCHD_ORDER[b - 1u32]
+                prev_size = XCHD_BUCKET_SIZES[prev_id as u32]
+                if prev_size >= cur_size {
+                    active = 0u8
+                } else {
+                    XCHD_ORDER[b] = XCHD_ORDER[b - 1u32]
+                    b = b - 1u32
+                }
+            }
+        }
+        XCHD_ORDER[b] = cur_id
+        a = a + 1u32
+    }
+    return 0i32
+}
+
+/* Compute secondary index for (hash, displacement). */
+fn _secondary_idx(hash_hi: u32, disp: u32) -> u32 {
+    return (hash_hi ^ disp) % XCHD_DIM
+}
+
+/* Construct the MPHF. Returns 1 if success, 0 on failure.
+ *
+ * iiis-1 flat-scope discipline: ALL locals declared once at function-top.
+ * `let mut` inside loop bodies has unreliable re-initialisation
+ * semantics in iiis-1 (the variable becomes function-scope but the
+ * initializer may not re-fire each iteration).  Use explicit assignment
+ * for resets. */
+fn xii_chd_construct() -> u8 @export {
+    let mut i : u32 = 0u32
+    let mut k : u32 = 0u32
+    let mut h_lo : u32 = 0u32
+    let mut b : u32 = 0u32
+    let mut rc : i32 = 0i32
+    let mut pos : u32 = 0u32
+    let mut bucket_idx : u32 = 0u32
+    let mut bsize : u8 = 0u8
+    let mut disp : u32 = 0u32
+    let mut placed : u8 = 0u8
+    let mut all_ok : u8 = 0u8
+    let mut j : u32 = 0u32
+    let mut h_idx : u8 = 0u8
+    let mut h_hi : u32 = 0u32
+    let mut s_idx : u32 = 0u32
+    let mut k2 : u32 = 0u32
+    let mut h_idx2 : u8 = 0u8
+    let mut h_hi2 : u32 = 0u32
+    let mut s_idx2 : u32 = 0u32
+    let mut jj : u32 = 0u32
+    let mut commit_idx : u8 = 0u8
+    let mut commit_hi : u32 = 0u32
+    let mut commit_s : u32 = 0u32
+
+    /* Reset working tables. */
+    i = 0u32
+    while i < XCHD_DIM {
+        XCHD_PRIMARY[i] = 0u8
+        XCHD_SECONDARY[i] = 0xFFu8
+        XCHD_OCCUPIED[i] = 0u8
+        XCHD_BUCKET_SIZES[i] = 0u8
+        i = i + 1u32
+    }
+
+    /* Bucket each hash. */
+    k = 0u32
+    while k < XCHD_DIM {
+        h_lo = _read_hash_lo(k)
+        b = _bucket_for_hash(h_lo)
+        rc = _bucket_push(b, k as u8)
+        if rc != 0i32 { return 0u8 }
+        k = k + 1u32
+    }
+
+    /* Sort buckets by size descending. */
+    _sort_buckets_desc()
+
+    /* Greedy displacement search per bucket. */
+    pos = 0u32
+    while pos < XCHD_DIM {
+        bucket_idx = XCHD_ORDER[pos] as u32
+        bsize = XCHD_BUCKET_SIZES[bucket_idx]
+
+        /* iiis-1 sema does not yet recognise `continue` inside a
+         * `while` body (only `loop {}`).  Rewrite as a skip-rest-of-body
+         * conditional. */
+        if bsize == 0u8 {
+            pos = pos + 1u32
+        } else {
+
+        disp = 0u32
+        placed = 0u8
+        while disp < 256u32 {
+            /* Try this disp for the bucket's elements. */
+            all_ok = 1u8
+            j = 0u32
+            while j < (bsize as u32) {
+                h_idx = _bucket_at(bucket_idx, j)
+                h_hi = _read_hash_hi(h_idx as u32)
+                s_idx = _secondary_idx(h_hi, disp)
+                if XCHD_OCCUPIED[s_idx] != 0u8 { all_ok = 0u8 }
+                /* Check no collision within this bucket's tentative placements. */
+                k2 = 0u32
+                while k2 < j {
+                    h_idx2 = _bucket_at(bucket_idx, k2)
+                    h_hi2 = _read_hash_hi(h_idx2 as u32)
+                    s_idx2 = _secondary_idx(h_hi2, disp)
+                    if s_idx2 == s_idx { all_ok = 0u8 }
+                    k2 = k2 + 1u32
+                }
+                j = j + 1u32
+            }
+            if all_ok == 1u8 {
+                /* Commit using disjoint variable names. */
+                XCHD_PRIMARY[bucket_idx] = disp as u8
+                jj = 0u32
+                while jj < (bsize as u32) {
+                    commit_idx = _bucket_at(bucket_idx, jj)
+                    commit_hi = _read_hash_hi(commit_idx as u32)
+                    commit_s = _secondary_idx(commit_hi, disp)
+                    XCHD_SECONDARY[commit_s] = commit_idx
+                    XCHD_OCCUPIED[commit_s] = 1u8
+                    jj = jj + 1u32
+                }
+                placed = 1u8
+                disp = 256u32
+            }
+            if placed == 0u8 { disp = disp + 1u32 }
+        }
+        if placed == 0u8 { return 0u8 }
+        pos = pos + 1u32
+        }  /* close else-branch from "continue → skip-rest" rewrite */
+    }
+
+    XCHD_BUILT = 1u8
+    return 1u8
+}
+
+/* Lookup: given a hash, return the horizon_id (0..143) or 0xFF if not in set. */
+fn xii_chd_lookup_split(hash_lo: u32, hash_hi: u32) -> u8 @export {
+    if XCHD_BUILT == 0u8 { return 0xFFu8 }
+    let bucket : u32 = hash_lo % XCHD_DIM
+    let disp : u8 = XCHD_PRIMARY[bucket]
+    let s_idx : u32 = _secondary_idx(hash_hi, disp as u32)
+    return XCHD_SECONDARY[s_idx]
+}
+
+fn xii_chd_primary_ptr() -> u64 @export {
+    return &XCHD_PRIMARY as u64
+}
+
+fn xii_chd_secondary_ptr() -> u64 @export {
+    return &XCHD_SECONDARY as u64
+}
+
+fn xii_chd_bucket_sizes_ptr() -> u64 @export {
+    return &XCHD_BUCKET_SIZES as u64
+}
+
+fn xii_chd_bucket_at(bucket_idx: u32, slot: u32) -> u8 @export {
+    return _bucket_at(bucket_idx, slot)
+}
+
+fn xii_chd_occupied_ptr() -> u64 @export {
+    return &XCHD_OCCUPIED as u64
+}
+
+fn xii_chd_order_ptr() -> u64 @export {
+    return &XCHD_ORDER as u64
+}
+
+fn xii_chd_built() -> u8 @export {
+    return XCHD_BUILT
+}
+
+/* Verify the constructed MPHF is collision-free over the 144 hashes. */
+fn xii_chd_verify_collision_free() -> u32 @export {
+    if XCHD_BUILT == 0u8 { return 0xFFFFFFFFu32 }
+    let mut fails : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < XCHD_DIM {
+        let h_lo : u32 = _read_hash_lo(i)
+        let h_hi : u32 = _read_hash_hi(i)
+        let r : u8 = xii_chd_lookup_split(h_lo, h_hi)
+        if (r as u32) != i { fails = fails + 1u32 }
+        i = i + 1u32
+    }
+    return fails
+}

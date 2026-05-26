@@ -1,0 +1,178 @@
+/* STDLIB/iii/numera/h3_charter.iii -- the H3 falsifier as a run_charter constitutional clause.
+ *
+ * H3 ("one serialization"): every SovVal serializes to a self-verifying 192-byte Glyph
+ * (M25); storage, wire and federation carry Glyphs that re-check in ISOLATION.  This module
+ * makes H3 a *constitutional clause* with a paired verify-AND-falsify predicate (the mig6
+ * falsifier-per-clause discipline) folded by a terminal-gate run_charter: the charter is
+ * GREEN iff every clause both HOLDS on its good witness AND CATCHES its bad witness.  It
+ * mirrors the GENERIC mechanism in constitution.iii (cons_clause_holds / cons_holds_selftest,
+ * 673_constitution_holds) and the sibling h2_charter, but H3 is a self-verification property
+ * (a glyph re-checks with NO external trust) that the COP witness-VM cannot express, so
+ * h3_canary_holds is the H3 module's OWN falsifier, ready to be unioned into the
+ * constitution's run_charter (the union-of-all-module-falsifiers, mig6 gap b).
+ *
+ * The H3 clause's two runtime-checkable, byte-exact facets:
+ *   verify  -- a SovVal (here a u64) PACKS to a canonical 192-byte Glyph that re-checks in
+ *              isolation: gv3_total_bytes() == 192 (the one width), glyph_u64_pack succeeds,
+ *              gv3_validate ACCEPTS the fresh glyph, and glyph_u64_unpack ROUND-TRIPS to the
+ *              exact original value.  So persisting/transmitting the glyph carries everything
+ *              needed to trust it -- the serialization is the proof, no witness lookup.
+ *   falsify -- the glyph is SELF-verifying: TAMPER one payload byte (offset 8) -> gv3_validate
+ *              REJECTS (== 0) with NO external lookup; restore -> ACCEPTS again; TAMPER one
+ *              mhash byte (offset 160) -> gv3_validate REJECTS (== 0).  A persisted value that
+ *              needed external trust to verify would survive both tampers; the clause CATCHES
+ *              that.  HOLDS = verify & falsify.
+ *
+ * run_charter folds every registered clause; RED (the 1-based failing-clause index) unless
+ * all hold.  The negative arm in h3_selftest registers a deliberately-false canary clause
+ * (it claims a tampered glyph still validates -- it does not) and proves the gate goes RED:
+ * the gate is a real falsifier, not vacuously green.
+ *
+ * The STRUCTURAL half of H3 ("no value persisted/transmitted in a non-glyph, externally-
+ * trusted form") is a source/build invariant a runtime clause cannot see.  Together (the
+ * runtime self-verification clause + the structural build-gate) they are the complete H3
+ * falsifier.
+ *
+ * Hexad: kind_form.  Ring: R-1 (a constitutional ceremony over R3 glyphs).  K: 1.00.
+ * NIH: glyph_core.iii + glyph_u64.iii only.  No ML, no float, no u64 division.
+ * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores; masked idx.
+ */
+module numera_h3_charter
+
+extern @abi(c-msvc-x64) fn gv3_total_bytes() -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_payload_len(p_192: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_pack(v: u64, out_192: u64) -> i32 from "glyph_u64.iii"
+extern @abi(c-msvc-x64) fn glyph_u64_unpack(in_192: u64) -> u64 from "glyph_u64.iii"
+
+const H3_OK              : i32 =  0i32
+const H3_GV3_TOTAL       : u32 = 192u32   /* the one serialization width */
+const H3_FORM_U64        : u32 = 0x12u32  /* glyph_u64 form id */
+const H3_OFF_PAYLOAD     : u64 = 8u64     /* first payload byte (the u64 LE value) */
+const H3_OFF_MHASH       : u64 = 160u64   /* first sealed-mhash byte */
+const H3_TEST_VAL        : u64 = 0xDEADBEEF12345678u64  /* the witness SovVal */
+const H3_MAX_CLAUSES     : u32 = 64u32
+const H3_KIND_SELFVERIFY : u8  = 0u8    /* the H3 clause: pack/validate/unpack + tamper-catch */
+const H3_KIND_CANARY     : u8  = 1u8    /* a deliberately-false clause (negative arm only) */
+const H3_VERDICT_GREEN   : u64 = 99u64  /* > H3_MAX_CLAUSES, so never a RED index */
+const H3_U32MASK         : u64 = 0xFFFFFFFFu64
+
+/* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
+var H3_CLAUSE_KIND  : [u8;  64]
+var H3_CLAUSE_COUNT : u32 = 0u32
+
+/* --- the 192-byte glyph buffer + scratch (module-scope, Trap 7; serialized R-1 use) --- */
+var H3_GLYPH : [u8; 192]
+
+/* Reset the registry. */
+fn h3_init() -> i32 @export {
+    H3_CLAUSE_COUNT = 0u32
+    return H3_OK
+}
+
+/* The H3 clause VERIFY arm: a u64 SovVal packs to a self-checking 192-byte glyph that
+ * round-trips in isolation.  1 = the serialization carries its own proof. */
+fn h3_verify() -> u8 @export {
+    if gv3_total_bytes() != H3_GV3_TOTAL { return 0u8 }
+    let g : u64 = (&H3_GLYPH as u64)
+    if glyph_u64_pack(H3_TEST_VAL, g) != H3_OK { return 0u8 }
+    if gv3_form_id(g) != H3_FORM_U64 { return 0u8 }
+    if gv3_payload_len(g) != 8u32 { return 0u8 }
+    if gv3_validate(g) != 1u8 { return 0u8 }
+    if glyph_u64_unpack(g) != H3_TEST_VAL { return 0u8 }
+    return 1u8
+}
+
+/* The H3 clause FALSIFY arm: the glyph SELF-verifies.  Re-pack a clean glyph (validate
+ * accepts); flip one payload byte -> validate REJECTS with no external lookup; restore ->
+ * accepts; flip one mhash byte -> validate REJECTS.  1 iff both tampers are caught and the
+ * untampered glyph still validates. */
+fn h3_falsify() -> u8 @export {
+    let g : u64 = (&H3_GLYPH as u64)
+    if glyph_u64_pack(H3_TEST_VAL, g) != H3_OK { return 0u8 }
+    if gv3_validate(g) != 1u8 { return 0u8 }
+    let pp : *u8 = (g + H3_OFF_PAYLOAD) as *u8
+    pp[0u64] = pp[0u64] ^ 0xFFu8
+    if gv3_validate(g) != 0u8 { return 0u8 }
+    pp[0u64] = pp[0u64] ^ 0xFFu8
+    if gv3_validate(g) != 1u8 { return 0u8 }
+    let mp : *u8 = (g + H3_OFF_MHASH) as *u8
+    mp[0u64] = mp[0u64] ^ 0xFFu8
+    if gv3_validate(g) != 0u8 { return 0u8 }
+    mp[0u64] = mp[0u64] ^ 0xFFu8
+    return 1u8
+}
+
+/* The canary's holds: it CLAIMS a tampered glyph still validates -- FALSE (the glyph self-
+ * verifies, so a flipped mhash byte fails validate).  A genuinely-false clause used ONLY to
+ * prove run_charter goes RED on a failure.  Returns 1 iff the (false) claim were true. */
+fn h3_canary_holds() -> u8 {
+    let g : u64 = (&H3_GLYPH as u64)
+    glyph_u64_pack(H3_TEST_VAL, g)
+    let mp : *u8 = (g + H3_OFF_MHASH) as *u8
+    mp[0u64] = mp[0u64] ^ 0xFFu8
+    let v : u8 = gv3_validate(g)
+    mp[0u64] = mp[0u64] ^ 0xFFu8
+    return v
+}
+
+/* Evaluate one registered clause -> 1 holds / 0 fails.  Kind-tag dispatch (never a fn ptr). */
+fn h3_clause_eval(idx: u32) -> u8 {
+    let k : u8 = H3_CLAUSE_KIND[(idx as u64) & H3_U32MASK]
+    if k == H3_KIND_SELFVERIFY {
+        if h3_verify() != 1u8 { return 0u8 }
+        if h3_falsify() != 1u8 { return 0u8 }
+        return 1u8
+    }
+    if k == H3_KIND_CANARY { return h3_canary_holds() }
+    return 0u8
+}
+
+/* Register a clause of kind k.  Returns the 0-based slot, or -1 if the registry is full. */
+fn h3_register(k: u8) -> i32 {
+    let n : u32 = H3_CLAUSE_COUNT
+    if n >= H3_MAX_CLAUSES { return -1i32 }
+    let slot : u64 = (n as u64) & H3_U32MASK
+    H3_CLAUSE_KIND[slot] = k
+    H3_CLAUSE_COUNT = n + 1u32
+    return slot as i32
+}
+
+/* The terminal gate.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED). */
+fn h3_run_charter() -> u64 @export {
+    let n : u32 = H3_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if h3_clause_eval(i) != 1u8 { return ((i as u64) & H3_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    return H3_VERDICT_GREEN
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves: a SovVal serializes to a self-checking glyph that round-trips (1); the glyph self-
+ * verifies -- both a payload tamper and an mhash tamper are caught in isolation (2); the
+ * canary is genuinely false -- a tampered glyph does NOT validate (3); run_charter GREEN with
+ * the H3 clause registered (4,5); GREEN is reproducible across a re-run (6); and -- the prove-
+ * the-negative arm -- registering the false canary drives run_charter RED, returning the
+ * canary's 1-based index (=2), proving the gate is a real falsifier, not vacuously green (7,8). */
+fn h3_selftest() -> u64 @export {
+    h3_init()
+    if h3_verify() != 1u8 { return 1u64 }
+    if h3_falsify() != 1u8 { return 2u64 }
+    if h3_canary_holds() != 0u8 { return 3u64 }
+    if h3_register(H3_KIND_SELFVERIFY) != 0i32 { return 4u64 }
+    if h3_run_charter() != H3_VERDICT_GREEN { return 5u64 }
+    if h3_run_charter() != H3_VERDICT_GREEN { return 6u64 }
+    if h3_register(H3_KIND_CANARY) != 1i32 { return 7u64 }
+    if h3_run_charter() != 2u64 { return 8u64 }
+    return 99u64
+}
+
+/* h3_charter EMBODIES the H3 invariant as a self-falsifying constitutional clause: every
+ * SovVal serializes to the ONE 192-byte self-verifying Glyph, which re-checks in isolation
+ * (storage/wire/federation need no external trust), and the terminal gate proves itself RED
+ * on a clause that pretends a tampered glyph still validates.  The structural companion
+ * (no value persisted/transmitted outside a glyph) completes the H3 falsifier. */

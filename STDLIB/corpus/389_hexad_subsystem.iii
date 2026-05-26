@@ -1,0 +1,7 @@
+/* 389 — V1 Stage 7: native hexad stdlib subsystem self-test.
+ * Exercises all six ported pillars (algebra, pfs, reach, epistemic, mobius,
+ * dynamic) end-to-end via omnia/hexad.iii::iii_hexad_selftest.
+ * Exit 99 = full agreement with the C reference behaviour. */
+module corpus_389_hexad_subsystem
+extern @abi(c-msvc-x64) fn iii_hexad_selftest() -> u64 from "hexad.iii"
+fn main() -> u64 { return iii_hexad_selftest() }

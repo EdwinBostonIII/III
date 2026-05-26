@@ -1,0 +1,41 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sha3_256.iii
+ *
+ * III STDLIB - numera::sha3_256 -- FIPS 202 SHA3-256.
+ *
+ * Lattice plan Phase 14a Step 0129a.  Thin sponge wrapper over
+ * keccak-f[1600]; rate = 136 bytes, capacity = 64 bytes, dom-sep = 0x06.
+ *
+ * Public surface:
+ *   sha3_256_oneshot(input_ptr, input_len, out_32) -> u32
+ *
+ * Output is 32 bytes written into out_32.  Returns 0 on success.
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module numera_sha3_256
+
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) -> u64 from "keccak.iii"
+
+const SHA3_256_RATE : u32 = 136u32
+const SHA3_256_DOM  : u8  = 0x06u8
+
+/* Module-level state buffer (200 bytes).  Not reentrant. */
+var SHA3_256_STATE : [u8; 200]
+
+fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 @export {
+    let in_l : u64 = input_ptr
+    let il_l : u64 = input_len
+    let on_l : u64 = out_32
+    if on_l == 0u64 { return 1u32 }
+
+    let sp : u64 = &SHA3_256_STATE as u64
+    let rd : u64 = keccak_pack_rate_dom(SHA3_256_RATE, SHA3_256_DOM)
+    keccak_state_zero(sp)
+    keccak_absorb(sp, in_l, il_l, rd)
+    keccak_squeeze(sp, on_l, 32u64, SHA3_256_RATE)
+    return 0u32
+}

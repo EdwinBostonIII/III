@@ -1,0 +1,4 @@
+/* 648 — synthesis_spec: content-addressed synthesis specifications (signature/constraints/cost). */
+module corpus_648
+extern @abi(c-msvc-x64) fn ss_selftest() -> u64 from "synthesis_spec.iii"
+fn main() -> u64 { return ss_selftest() }

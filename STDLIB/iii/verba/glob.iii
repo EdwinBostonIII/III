@@ -1,0 +1,138 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glob.iii
+ *
+ * III STDLIB - verba::glob
+ *
+ * Shell-style pattern matching, restricted subset:
+ *   *      matches any run of characters
+ *   ?      matches exactly one character
+ *   [...]  character class (no negation, no ranges -- explicit chars only)
+ *   any other byte matches literally
+ *
+ * Iterative; flat dispatch via helper functions to avoid hitting the
+ * III parser's nesting recursion limit.  Standard two-pointer with
+ * backtrack to last star_p/star_t on mismatch.
+ *
+ *   glob_match(pat:*u8, pat_len:u64, txt:*u8, txt_len:u64) -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 0.95.
+ */
+
+module verba_glob
+
+const GLOB_NIL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Iteration state -- module-scope to dodge W2 (max 4 fn params).
+ * Module-scope vars are R0-pinned (single-threaded use only). */
+var GLOB_P     : u64 = 0u64
+var GLOB_T     : u64 = 0u64
+var GLOB_STARP : u64 = 0u64
+var GLOB_START : u64 = 0u64
+var GLOB_GOING : u8  = 1u8
+var GLOB_RESULT: u8  = 0u8
+
+/* Match a character class starting at p_off (after the '[').
+ * Returns offset just past ']' on match, 0 on no-match, GLOB_NIL on
+ * malformed (no ']'). */
+fn glob_class_match(pat: *u8, pat_len: u64, p_off: u64, c: u8) -> u64 {
+    let mut i : u64 = p_off
+    let mut matched : u8 = 0u8
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= pat_len { return GLOB_NIL }
+        let pb : u8 = pat[i]
+        if pb == 93u8 { going = 0u8 }
+        if going == 1u8 {
+            if pb == c { matched = 1u8 }
+        }
+        i = i + 1u64
+    }
+    if matched == 1u8 { return i }
+    return 0u64
+}
+
+/* Try to backtrack to the last star.  Sets GLOB_GOING=0 if no star
+ * is available or text exhausted. */
+fn glob_backtrack(txt_len: u64) -> i32 {
+    if GLOB_STARP == GLOB_NIL { GLOB_GOING = 0u8; return 0i32 }
+    GLOB_START = GLOB_START + 1u64
+    if GLOB_START > txt_len { GLOB_GOING = 0u8; return 0i32 }
+    GLOB_P = GLOB_STARP
+    GLOB_T = GLOB_START
+    return 0i32
+}
+
+/* Take one step assuming both pat and txt have characters available.
+ * Returns 1 if consumed/matched, 0 if mismatch. */
+fn glob_step_one(pat: *u8, pat_len: u64, pc: u8, tc: u8) -> u8 {
+    if pc == 42u8 {
+        GLOB_STARP = GLOB_P + 1u64
+        GLOB_START = GLOB_T
+        GLOB_P = GLOB_P + 1u64
+        return 1u8
+    }
+    if pc == 63u8 {
+        GLOB_P = GLOB_P + 1u64
+        GLOB_T = GLOB_T + 1u64
+        return 1u8
+    }
+    if pc == 91u8 {
+        let np : u64 = glob_class_match(pat, pat_len, GLOB_P + 1u64, tc)
+        if np == GLOB_NIL { GLOB_GOING = 0u8; return 0u8 }
+        if np == 0u64 { return 0u8 }
+        GLOB_P = np
+        GLOB_T = GLOB_T + 1u64
+        return 1u8
+    }
+    if pc == tc {
+        GLOB_P = GLOB_P + 1u64
+        GLOB_T = GLOB_T + 1u64
+        return 1u8
+    }
+    return 0u8
+}
+
+fn glob_match(pat: *u8, pat_len: u64, txt: *u8, txt_len: u64) -> u8 @export {
+    GLOB_P = 0u64
+    GLOB_T = 0u64
+    GLOB_STARP = GLOB_NIL
+    GLOB_START = 0u64
+    GLOB_GOING = 1u8
+    GLOB_RESULT = 0u8
+
+    while GLOB_GOING == 1u8 {
+        let p_done : u8 = if_done(GLOB_P, pat_len)
+        let t_done : u8 = if_done(GLOB_T, txt_len)
+
+        if p_done == 1u8 {
+            if t_done == 1u8 { GLOB_RESULT = 1u8; GLOB_GOING = 0u8 }
+            if GLOB_GOING == 1u8 { glob_backtrack(txt_len) }
+        }
+
+        if GLOB_GOING == 1u8 {
+            if p_done == 0u8 {
+                let pc : u8 = pat[GLOB_P]
+                if pc == 42u8 {
+                    glob_step_one(pat, pat_len, pc, 0u8)
+                }
+                if pc != 42u8 {
+                    if t_done == 1u8 {
+                        glob_backtrack(txt_len)
+                    }
+                    if t_done == 0u8 {
+                        let tc : u8 = txt[GLOB_T]
+                        let consumed : u8 = glob_step_one(pat, pat_len, pc, tc)
+                        if consumed == 0u8 {
+                            if GLOB_GOING == 1u8 { glob_backtrack(txt_len) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return GLOB_RESULT
+}
+
+fn if_done(off: u64, len: u64) -> u8 {
+    if off >= len { return 1u8 }
+    return 0u8
+}

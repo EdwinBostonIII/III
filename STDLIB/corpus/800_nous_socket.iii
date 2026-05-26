@@ -1,0 +1,89 @@
+/* 800 -- nous Phase 0: the proposer socket, inert.  Proves the keystone -- the engine
+ * reaches the SAME normal form whether it uses its fixed cascade (nous_active=0) or
+ * the nous-ranked order (nous_active=1).  Two ranked orders are tested:
+ *   mode 0 (cascade)   -- reproduces apply_one's exact firing sequence => BYTE-IDENTICAL.
+ *   mode 1 (ascending) -- a different legal order => SAME normal form by confluence.
+ * Also the A-1 cap-gap: a too-small step budget yields a typed GAP, never a truncated
+ * term treated as canonical.  Exit 99 = all hold; 1..9 = the failing check.
+ *
+ * (nous corpus block = 800+, clear of the apotheosis integration blocks 700-759 and
+ * the live M-keystone sequence.)  The exhaustive whole-corpus reorder proof is
+ * scripts/verify_nous_differential.sh; this is the focused socket-plumbing unit test. */
+module corpus_800
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise_capped(t: u32, cap: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise_gapped() -> u8 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn nous_set_active(flag: u8) -> i32 from "nous_socket.iii"
+extern @abi(c-msvc-x64) fn nous_set_order_mode(mode: u8) -> i32 from "nous_socket.iii"
+extern @abi(c-msvc-x64) fn nous_socket_selftest() -> u64 from "nous_socket.iii"
+
+const C800_TRIT_VAL : u8 = 24u8
+const C800_TRIT_AND : u8 = 26u8
+const C800_TRIT_OR  : u8 = 27u8
+const C800_TRIT_SUM : u8 = 28u8
+
+fn c800_mkval(v: i32) -> u32 { return xii_term_make_basis(C800_TRIT_VAL, (v + 1i32) as u32) }
+
+/* Build op(a,b) twice in ONE arena (both refs stay valid), canonicalise one under the
+ * fixed cascade (active=0) and one under the nous-ranked order (active=1) at the given
+ * order mode, and structurally compare the two normal forms.  Returns 1 iff equal. */
+fn c800_keystone(opk: u8, a: i32, b: i32, mode: u8) -> u8 {
+    nous_set_order_mode(mode)
+    xii_term_arena_reset()
+    let t0 : u32 = xii_term_make_fusion2(opk, c800_mkval(a), c800_mkval(b))
+    let t1 : u32 = xii_term_make_fusion2(opk, c800_mkval(a), c800_mkval(b))
+    nous_set_active(0u8)
+    let r0 : u32 = xii_canonicalise(t0)
+    nous_set_active(1u8)
+    let r1 : u32 = xii_canonicalise(t1)
+    nous_set_active(0u8)
+    nous_set_order_mode(0u8)
+    return xii_rewrite_struct_eq(r0, r1)
+}
+
+fn main() -> u64 {
+    /* the socket's own contract (cascade + ascending orders, cost-gate, kill switch,
+     * cap-respect, null-refuse) */
+    if nous_socket_selftest() != 99u64 { return 1u64 }
+
+    /* keystone over the full 3x3 trit domain, BOTH ranked orders.  Each evaluation
+     * iterates apply_specific over R001-R044 (all no-match at a trit-kind root) then
+     * fires the trit rule -- exercising the whole ranked loop incl. the 101-105
+     * dispatch.  mode 0 must be byte-identical; mode 1 must reach the same NF. */
+    let mut ia : u64 = 0u64
+    while ia < 3u64 {
+        let a : i32 = (ia as i32) - 1i32
+        let mut ib : u64 = 0u64
+        while ib < 3u64 {
+            let b : i32 = (ib as i32) - 1i32
+            if c800_keystone(C800_TRIT_AND, a, b, 0u8) != 1u8 { return 2u64 }
+            if c800_keystone(C800_TRIT_AND, a, b, 1u8) != 1u8 { return 3u64 }
+            if c800_keystone(C800_TRIT_OR,  a, b, 0u8) != 1u8 { return 4u64 }
+            if c800_keystone(C800_TRIT_OR,  a, b, 1u8) != 1u8 { return 5u64 }
+            if c800_keystone(C800_TRIT_SUM, a, b, 0u8) != 1u8 { return 6u64 }
+            if c800_keystone(C800_TRIT_SUM, a, b, 1u8) != 1u8 { return 7u64 }
+            ib = ib + 1u64
+        }
+        ia = ia + 1u64
+    }
+
+    /* A-1 cap-gap: AND(-1,1) needs one rule firing.  Cap=1 is reached right after that
+     * fire -> conservatively GAPPED (never returns a truncated-as-canonical term).
+     * Cap=8 confirms no further rule fires -> canonical, not gapped. */
+    nous_set_active(0u8)
+    xii_term_arena_reset()
+    let g0 : u32 = xii_term_make_fusion2(C800_TRIT_AND, c800_mkval(-1i32), c800_mkval(1i32))
+    xii_canonicalise_capped(g0, 1u32)
+    if xii_canonicalise_gapped() != 1u8 { return 8u64 }
+    xii_term_arena_reset()
+    let g1 : u32 = xii_term_make_fusion2(C800_TRIT_AND, c800_mkval(-1i32), c800_mkval(1i32))
+    xii_canonicalise_capped(g1, 8u32)
+    if xii_canonicalise_gapped() != 0u8 { return 9u64 }
+
+    return 99u64
+}

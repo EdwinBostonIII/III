@@ -1,0 +1,11 @@
+/* 712 — mig3 (H1 @sovereign) boundary law, POSITIVE arm.
+ * `handle` is marked @sovereign and takes a SovVal param, where
+ * `type SovVal = *u8 @sovereign_value`.  r3_chk_sovereign resolves the
+ * param's type-alias, finds @sovereign_value on the TYPE_DECL, and accepts
+ * it — NO violation, the program compiles and runs.  Proves the law does not
+ * false-reject correct sovereign boundaries (companion to the 711 negative).
+ * main returns 99 = GREEN. */
+module corpus_712
+type SovVal = *u8 @sovereign_value
+fn handle(p: SovVal) -> u64 @sovereign { return 0u64 }
+fn main() -> u64 { return 99u64 }

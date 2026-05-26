@@ -1,0 +1,10 @@
+/* 711 — mig3 (H1 @sovereign) boundary law, NEGATIVE arm.
+ * THIS FILE MUST FAIL TO COMPILE.
+ * `handle` is marked @sovereign but takes a plain *u8 param (NOT the
+ * @sovereign_value-typed SovVal boundary type), so cg_r3's r3_chk_sovereign
+ * MUST emit III_SOVEREIGN_VIOLATION and reject the program (compile rc != 0).
+ * Validated by the run_corpus *_neg contract: non-zero compile rc = PASS
+ * (the static check fired); rc == 0 = FAIL (the law did not enforce). */
+module corpus_711
+fn handle(p: *u8) -> u64 @sovereign { return 0u64 }
+fn main() -> u64 { return 0u64 }

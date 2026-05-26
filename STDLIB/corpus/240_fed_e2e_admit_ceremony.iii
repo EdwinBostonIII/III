@@ -1,0 +1,182 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\240_fed_e2e_admit_ceremony.iii
+ *
+ * III conformance corpus 240 -- end-to-end planetary-tier admission ceremony.
+ *
+ * Lattice plan Phase 14k coverage gate.  Exercises the three hardened
+ * admission primitives added in A7 / A8 / A9 against a single synthetic
+ * planetary applicant.  Every primitive is driven through its REJECTION
+ * path with fully-deterministic inputs -- no RNG, no private keys, no
+ * statistical adaptation, no observational state.
+ *
+ *   A7  fed_admit_with_pow_proof          -- PoW gate (sealed difficulty)
+ *   A8  fed_genesis_descent_with_anchor   -- ed25519 anchor signature gate
+ *   A9  fed_eclipse_anomaly_check         -- Hamming-distance anomaly probe
+ *
+ * Phase map:
+ *   0. Bootstrap   : calculus_init(), proof_init(), fed_genesis_set().
+ *   1. PARENT GEN  : 32 bytes 0xAA -> parent_root.
+ *   2. CHILD GEN   : 32 bytes 0xBB -> child_root.
+ *   3. ANCHOR SIG  : 64 bytes 0x00 (deterministic placeholder; see notes
+ *                    below).  ed25519_verify rejects an all-zero (R, s)
+ *                    over a non-trivial message under any pubkey, so this
+ *                    drives fed_genesis_descent_with_anchor's reject path.
+ *   4. DESCENT     : Expect fed_genesis_descent_with_anchor == 0 (reject).
+ *   5. POW GATE    : node_id = 0xC0FFEE, pow_nonce = 0, tier = planetary.
+ *                    Requires 32 leading zero bits of SHA-256(peer_id || nonce).
+ *                    nonce=0 against this fixed peer_id yields an essentially
+ *                    random 32-bit prefix -- chance of accidental success is
+ *                    1 / 2^32.  Expect FED_ADMIT_E_POW (-4i32).
+ *   6. ECLIPSE +   : local = 0xAA*32, peer = 0x55*32.  XOR = 0xFF*32 -> 256
+ *                    set bits.  threshold = 200.  Expect anomaly = 1.
+ *   7. ECLIPSE -   : local = 0xAA*32, peer = 0xAA*32.  XOR = 0x00*32 -> 0
+ *                    set bits.  threshold = 200.  Expect anomaly = 0.
+ *
+ * Exit codes (mapped to TASK spec):
+ *   99  full pass
+ *    1  bootstrap failure (calculus_init or proof_init)
+ *    2  fed_genesis_set rejected (initial state -- expect OK or ALREADY_SET)
+ *    3  parent_root malloc failed
+ *    4  child_root malloc failed
+ *    5  fed_genesis_descent_with_anchor accepted a zero signature (it must reject)
+ *    6  fed_admit_with_pow_proof accepted nonce=0 (it must return E_POW)
+ *    7  eclipse anomaly check missed a 256-bit divergence (must return 1)
+ *    8  eclipse anomaly check fired on identical fingerprints (must return 0)
+ *
+ * Notes on the deterministic-signature scheme:
+ *   The FOUNDERS-ANCHOR pubkey is derived inside fed_genesis_descent_with_anchor
+ *   from SHA-256("III_FOUNDERS_ANCHOR_v1") -- there is no held private key
+ *   in the binary.  Producing a valid signature therefore requires either
+ *   (a) recovering the discrete log of the derived pubkey (cryptographically
+ *   infeasible) or (b) extending the API to accept a caller-supplied
+ *   keypair-derived signature.  This corpus chooses path (c): drive only
+ *   the rejection path with the all-zero canonical-fail signature.  When
+ *   a real keypair flow ships (e.g. via fed_genesis_set_anchor_pubkey +
+ *   external signer), this corpus expands phase 3 to (i) sign parent||child
+ *   under the known secret, (ii) re-run descent and assert == 1.
+ */
+
+module corpus_240
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn calculus_init() -> i32 from "calculus_v1.iii"
+extern @abi(c-msvc-x64) fn proof_init() -> i32 from "irreducibility_proof.iii"
+
+extern @abi(c-msvc-x64) fn fed_sybil_clear_all() -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_clear() -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_clear() -> i32 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_set(root_32_ptr: u64) -> i32 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_genesis_descent_with_anchor(parent_root_ptr: u64, child_root_ptr: u64, anchor_sig_ptr: u64) -> u8 from "fed_genesis.iii"
+extern @abi(c-msvc-x64) fn fed_admit_with_qc_proof(node_id: u64, pow_nonce: u64, packed_meta: u64, qc_ptr: *u8) -> i32 from "fed_admit.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_anomaly_check(local_fingerprint_ptr: u64, peer_fingerprint_ptr: u64, expected_overlap_bits: u32) -> u8 from "fed_eclipse.iii"
+
+/* PoW tier id for planetary admission (matches FED_ADMIT_POW_TIER_PLANETARY
+ * in fed_admit.iii; redeclared here as a corpus-side constant rather than
+ * imported because iiis-0 modules cannot share const symbols across .iii
+ * boundaries).  Threshold subfield (low 32 bits) is 0u64 -- we are not
+ * exercising the score gate; the PoW gate fires first for nonce=0. */
+const TIER_PLANETARY : u64 = 0u64
+const PACKED_META_PLANETARY : u64 = 0u64   /* (TIER_PLANETARY << 32) | 0u64 */
+
+/* Fill n bytes at p with byte b.  Local helper to keep main() linear. */
+fn _fill(p: *u8, n: u64, b: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = b
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* === Phase 0: bootstrap.  All three are idempotent; ignore non-zero
+     * returns from fed_*_clear (they're just resets to a known state). === */
+    if calculus_init() != 0i32 { return 1u64 }
+    if proof_init() != 0i32 { return 1u64 }
+    fed_sybil_clear_all()
+    fed_eclipse_clear()
+    fed_genesis_clear()
+
+    /* Genesis must be set before descent verification engages the
+     * FOUNDERS-ANCHOR initialisation path inside fed_genesis_descent_with_anchor.
+     * Use a deterministic 32-byte root of 0xEE so it is distinct from
+     * parent/child/peer fingerprints that follow. */
+    let gen_root : *u8 = malloc(32u64)
+    if gen_root as u64 == 0u64 { return 2u64 }
+    _fill(gen_root, 32u64, 0xEEu8)
+    let gset_rc : i32 = fed_genesis_set(gen_root as u64)
+    /* Accept OK (0) or ALREADY_SET (-2) -- corpus run order may have left
+     * a previous test's genesis in place; descent verification doesn't
+     * actually read FED_GENESIS_ROOT, only that the anchor init succeeds. */
+    if gset_rc != 0i32 {
+        if gset_rc != -2i32 { return 2u64 }
+    }
+
+    /* === Phase 1: PARENT GENESIS root = 32 bytes 0xAA. === */
+    let parent_root : *u8 = malloc(32u64)
+    if parent_root as u64 == 0u64 { return 3u64 }
+    _fill(parent_root, 32u64, 0xAAu8)
+
+    /* === Phase 2: CHILD GENESIS root = 32 bytes 0xBB. === */
+    let child_root : *u8 = malloc(32u64)
+    if child_root as u64 == 0u64 { return 4u64 }
+    _fill(child_root, 32u64, 0xBBu8)
+
+    /* === Phase 3: ANCHOR SIGNATURE = 64 bytes 0x00.
+     * Deterministic placeholder -- see header for rationale.  ed25519_verify
+     * over (R=0, s=0) against any non-trivial commitment will fail because
+     * decoding the all-zero R yields the identity and the verification
+     * equation [s]B = R + [k]A reduces to 0 = [k]A which holds only when
+     * k = 0 mod L.  k is derived from SHA-512(R || A || M) and M is
+     * SHA-256(parent || child) with parent = 0xAA*32, child = 0xBB*32 --
+     * vanishingly unlikely to land at zero mod L. === */
+    let anchor_sig : *u8 = malloc(64u64)
+    if anchor_sig as u64 == 0u64 { return 4u64 }
+    _fill(anchor_sig, 64u64, 0u8)
+
+    /* === Phase 4: descent must REJECT the zero signature. === */
+    let descent_rc : u8 = fed_genesis_descent_with_anchor(parent_root as u64, child_root as u64, anchor_sig as u64)
+    if descent_rc != 0u8 { return 5u64 }
+
+    /* === Phase 5: PoW GATE.  node_id = 0xC0FFEE, nonce = 0, tier = planetary
+     * (32 leading-zero-bit requirement).  Probability of accidental success
+     * is 1/2^32 -- negligible; reject path is the contracted outcome. === */
+    let pow_rc : i32 = fed_admit_with_qc_proof(0xC0FFEEu64, 0u64, PACKED_META_PLANETARY, gen_root)
+    /* FED_ADMIT_E_POW = -4i32.  Anything else -- including OK (0) -- means
+     * the PoW gate failed to reject a trivially-invalid nonce. */
+    if pow_rc == 0i32 { return 6u64 }
+    if pow_rc != -4i32 { return 6u64 }
+
+    /* === Phase 6: ECLIPSE anomaly with maximally-divergent fingerprints.
+     * 0xAA = 0b10101010, 0x55 = 0b01010101, XOR = 0xFF = 8 set bits/byte.
+     * 32 bytes -> 256 set bits.  Threshold 200 -> anomaly fires (256 > 200). === */
+    let local_fp : *u8 = malloc(32u64)
+    if local_fp as u64 == 0u64 { return 7u64 }
+    _fill(local_fp, 32u64, 0xAAu8)
+
+    let peer_fp_diverge : *u8 = malloc(32u64)
+    if peer_fp_diverge as u64 == 0u64 { return 7u64 }
+    _fill(peer_fp_diverge, 32u64, 0x55u8)
+
+    let anomaly_hi : u8 = fed_eclipse_anomaly_check(local_fp as u64, peer_fp_diverge as u64, 200u32)
+    if anomaly_hi != 1u8 { return 7u64 }
+
+    /* === Phase 7: ECLIPSE anomaly with identical fingerprints.
+     * 0xAA XOR 0xAA = 0x00 -> 0 set bits.  Threshold 200 -> 0 > 200 false -> 0. === */
+    let peer_fp_match : *u8 = malloc(32u64)
+    if peer_fp_match as u64 == 0u64 { return 8u64 }
+    _fill(peer_fp_match, 32u64, 0xAAu8)
+
+    let anomaly_lo : u8 = fed_eclipse_anomaly_check(local_fp as u64, peer_fp_match as u64, 200u32)
+    if anomaly_lo != 0u8 { return 8u64 }
+
+    free(gen_root)
+    free(parent_root)
+    free(child_root)
+    free(anchor_sig)
+    free(local_fp)
+    free(peer_fp_diverge)
+    free(peer_fp_match)
+    return 99u64
+}

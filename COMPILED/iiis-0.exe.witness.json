@@ -1,0 +1,12 @@
+{
+  "tool": "build_iiis0.sh",
+  "commit": "unknown",
+  "source_date_epoch": 0,
+  "mode": "release",
+  "gcc_version": "gcc.exe (x86_64-posix-seh-rev0, Built by MinGW-Builds project) 15.2.0",
+  "ld_version": "GNU ld (GNU Binutils) 2.45",
+  "source_files": ["acc.c","ast.c","ast_accessors.c","ceiling.c","cg_r0.c","cg_r0_accessors.c","cg_r3.c","cg_r3_accessors.c","cg_rm1.c","cg_rm1_accessors.c","cg_rm2.c","cg_rm2_accessors.c","emit.c","emit_accessors.c","hexad_check.c","iii_cg_pe_iiis1.c","jit_emit.c","jit_emit_accessors.c","lex.c","lex_runtime.c","link.c","main.c","parse.c","proof.c","sema.c","sema_accessors.c","sid.c","witness_alloc.c"],
+  "output": "iiis-0.exe",
+  "output_mhash": "515c0b2082be53b891ccb1d79b712a650e35c63a6d3fa4d3916826004831f672",
+  "env_mhash": "81e1ed96c3e607e02219ac2d252e85eb714e4d39b17bd68991f59615a6bc040b"
+}

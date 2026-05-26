@@ -1,0 +1,180 @@
+/* STDLIB/iii/nous/nous_socket.iii -- the universal proposer socket (nous Phase 0).
+ *
+ * The one act every organ of III performs is CHOOSING THE NEXT TERM.  In the engine
+ * that choice is "which rewrite rule to fire next at this node" -- today a fixed
+ * numeric-order cascade inside xii_rewrite_apply_one.  This module is the socket the
+ * proposer faculty plugs into: it supplies the ORDER in which the engine tries rules,
+ * and the engine fires the first that matches (via xii_rewrite_apply_specific).
+ *
+ * Phase 0 is INERT: nous_active()=0 by default -> the guard in apply_one is skipped
+ * and the original fixed cascade runs (the corpus is byte-identical, trivially).  The
+ * KILL SWITCH (C-15): set_active(0) reverts to proven behavior with no rebuild.
+ *
+ * When active, the inert ranker (NOUS_ORDER_MODE=0) emits apply_one's EXACT firing
+ * sequence -- so the ranked path reproduces the cascade BYTE-IDENTICALLY, never merely
+ * relying on confluence.  Mode 1 (ascending) is the permuted-keystone probe: a
+ * different legal order that, by confluence over the certified set, reaches the SAME
+ * normal form (corpus/800 asserts this; the whole-corpus proof is the P2 differential
+ * gate).
+ *
+ * A-2 precondition (the legality of reordering): the reorderable set is R005-R044 + trit 101-105
+ * (route-S retired R001-R004), whose confluence is certified by the Confluence-Core Certificate
+ * (xii_conf_cert; the static xii_critpairs is retired) plus trit kind-disjointness (trit
+ * kinds 25-29 share no LHS with R001-R044, so zero critical pairs).  The socket only
+ * ever permutes THIS set; no uncertified rule is moved (ADR-N11).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: nous_policy (mode 2 only).  Modes
+ * 0/1 are self-contained (the cascade/ascending tables); mode 2 delegates to the real
+ * policy.  The chain nous_socket -> nous_policy -> nous_features -> xii_term is ACYCLIC
+ * (features is xii_term-only), so there is no cycle through xii_rewrite (which externs
+ * nous_rank).  Determinism: integer-only; u64 array indices; no u64 div/mod; single-line fns.
+ */
+module nous_socket
+
+const NOUS_OK          : i32 = 0i32
+const NOUS_RANK_N      : u32 = 50u32     /* cascade order length (R040 twice + trit) */
+const NOUS_ASCEND_N    : u32 = 49u32     /* 1..44 + 101..105 */
+const NOUS_ENGAGE_KMAX : u32 = 17u32     /* basis kernels <=17: cascade handles them */
+const NOUS_TRIT_VAL    : u32 = 24u32     /* a bare TRIT_VAL leaf: no rule fires */
+
+/* Mode 2 delegates to the real Phase-3 policy.  nous_policy returns a full permutation
+ * of the certified set (confluence-safe), so this only changes the order, never the NF. */
+extern @abi(c-msvc-x64) fn nous_policy_rank(ctx_term: u32, kind: u32, out: *u64, cap: u32) -> u32 from "nous_policy.iii"
+
+var NOUS_ACTIVE     : u8 = 0u8           /* 0 = inert (kill switch / default) */
+var NOUS_ORDER_MODE : u8 = 0u8           /* 0 = cascade (byte-identical); 1 = ascending probe; 2 = policy */
+var NOUS_CASCADE    : [u64; 64]          /* lazily filled (sentinel [0]==0 means empty) */
+var NOUS_ASCEND     : [u64; 64]
+var NOUS_ST_BUF     : [u64; 64]          /* selftest scratch (Trap 7) */
+
+fn nous_active() -> u8 @export {
+    return NOUS_ACTIVE
+}
+
+/* The kill switch (C-15): a runtime/link-time toggle, no rebuild. */
+fn nous_set_active(flag: u8) -> i32 @export {
+    NOUS_ACTIVE = flag
+    return NOUS_OK
+}
+
+fn nous_set_order_mode(mode: u8) -> i32 @export {
+    NOUS_ORDER_MODE = mode
+    return NOUS_OK
+}
+
+/* Cost-gated engagement (B-6): keep the proposer off the per-eval-step hot path.
+ * Return 0 (let the fixed cascade run) for basis kernels and bare trit leaves where
+ * the choice is trivial; 1 (consult the ranker) only at genuine branch kinds. */
+fn nous_should_engage(kind: u32) -> u8 @export {
+    if kind <= NOUS_ENGAGE_KMAX { return 0u8 }
+    if kind == NOUS_TRIT_VAL { return 0u8 }
+    return 1u8
+}
+
+/* Fill the two order tables once.  The cascade table mirrors xii_rewrite_apply_one's
+ * firing sequence EXACTLY (verified against omnia/xii_rewrite.iii:1138-1191): R038,
+ * R040 first (null-cascade specializations), then R001-R012, R041, R013-R023, R043,
+ * R044, R024-R032, R042, R033-R037, R039, R040 (again, as in the cascade), trit
+ * 101-105.  A transcription error here is caught by the P2 differential gate (a
+ * multi-match term would fire a different rule than the cascade). */
+fn _nous_fill_orders() {
+    NOUS_CASCADE[0u64] = 38u64
+    NOUS_CASCADE[1u64] = 40u64
+    let mut i : u64 = 0u64
+    while i < 12u64 { NOUS_CASCADE[2u64 + i] = 1u64 + i  i = i + 1u64 }    /* R001-R012 -> idx 2..13 */
+    NOUS_CASCADE[14u64] = 41u64
+    i = 0u64
+    while i < 11u64 { NOUS_CASCADE[15u64 + i] = 13u64 + i  i = i + 1u64 }  /* R013-R023 -> idx 15..25 */
+    NOUS_CASCADE[26u64] = 43u64
+    NOUS_CASCADE[27u64] = 44u64
+    i = 0u64
+    while i < 9u64 { NOUS_CASCADE[28u64 + i] = 24u64 + i  i = i + 1u64 }   /* R024-R032 -> idx 28..36 */
+    NOUS_CASCADE[37u64] = 42u64
+    i = 0u64
+    while i < 5u64 { NOUS_CASCADE[38u64 + i] = 33u64 + i  i = i + 1u64 }   /* R033-R037 -> idx 38..42 */
+    NOUS_CASCADE[43u64] = 39u64
+    NOUS_CASCADE[44u64] = 40u64
+    i = 0u64
+    while i < 5u64 { NOUS_CASCADE[45u64 + i] = 101u64 + i  i = i + 1u64 }  /* trit -> idx 45..49 */
+    /* ascending: 1..44, 101..105 (the permuted-keystone probe order) */
+    i = 0u64
+    while i < 44u64 { NOUS_ASCEND[i] = 1u64 + i  i = i + 1u64 }
+    i = 0u64
+    while i < 5u64 { NOUS_ASCEND[44u64 + i] = 101u64 + i  i = i + 1u64 }
+}
+
+/* Emit the ranked rule-id order into out_order (caller buffer, cap entries).  Inert
+ * occupant: mode 0 = the exact cascade order; mode 1 = ascending.  Returns the count
+ * written.  ctx_term/kind are accepted for the real policy (Phase 3) but unused by the
+ * inert ranker (the order is term-independent here). */
+fn nous_rank(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 @export {
+    if NOUS_ORDER_MODE == 2u8 { return nous_policy_rank(ctx_term, kind, out_order, cap) }
+    if NOUS_CASCADE[0u64] == 0u64 { _nous_fill_orders() }
+    if (out_order as u64) == 0u64 { return 0u32 }
+    let mut n : u32 = NOUS_RANK_N
+    if NOUS_ORDER_MODE == 1u8 { n = NOUS_ASCEND_N }
+    let nn : u64 = n as u64
+    let capn : u64 = cap as u64
+    let mut i : u64 = 0u64
+    while i < nn {
+        if i >= capn { return i as u32 }
+        if NOUS_ORDER_MODE == 1u8 { out_order[i] = NOUS_ASCEND[i] }
+        if NOUS_ORDER_MODE == 0u8 { out_order[i] = NOUS_CASCADE[i] }
+        i = i + 1u64
+    }
+    return n
+}
+
+fn nous_socket_selftest() -> u64 @export {
+    /* cost-gated engagement */
+    if nous_should_engage(5u32)  != 0u8 { return 1u64 }    /* basis kernel -> cascade */
+    if nous_should_engage(17u32) != 0u8 { return 2u64 }
+    if nous_should_engage(24u32) != 0u8 { return 3u64 }    /* TRIT_VAL leaf -> no engage */
+    if nous_should_engage(26u32) != 1u8 { return 4u64 }    /* TRIT_AND -> engage */
+    if nous_should_engage(18u32) != 1u8 { return 5u64 }    /* FCOMPOSE -> engage */
+
+    /* kill switch */
+    nous_set_active(1u8)
+    if nous_active() != 1u8 { return 6u64 }
+    nous_set_active(0u8)
+    if nous_active() != 0u8 { return 7u64 }
+
+    let p : *u64 = (&NOUS_ST_BUF as u64) as *u64
+
+    /* inert (cascade) order reproduces apply_one's firing sequence exactly */
+    nous_set_order_mode(0u8)
+    let n0 : u32 = nous_rank(0u32, 26u32, p, 64u32)
+    if n0 != NOUS_RANK_N { return 8u64 }
+    if NOUS_ST_BUF[0u64]  != 38u64  { return 9u64 }
+    if NOUS_ST_BUF[1u64]  != 40u64  { return 10u64 }
+    if NOUS_ST_BUF[2u64]  != 1u64   { return 11u64 }
+    if NOUS_ST_BUF[13u64] != 12u64  { return 12u64 }
+    if NOUS_ST_BUF[14u64] != 41u64  { return 13u64 }
+    if NOUS_ST_BUF[27u64] != 44u64  { return 14u64 }
+    if NOUS_ST_BUF[37u64] != 42u64  { return 15u64 }
+    if NOUS_ST_BUF[44u64] != 40u64  { return 16u64 }
+    if NOUS_ST_BUF[45u64] != 101u64 { return 17u64 }
+    if NOUS_ST_BUF[49u64] != 105u64 { return 18u64 }
+
+    /* permuted (ascending) order */
+    nous_set_order_mode(1u8)
+    let n1 : u32 = nous_rank(0u32, 26u32, p, 64u32)
+    if n1 != NOUS_ASCEND_N { return 19u64 }
+    if NOUS_ST_BUF[0u64]  != 1u64   { return 20u64 }
+    if NOUS_ST_BUF[43u64] != 44u64  { return 21u64 }
+    if NOUS_ST_BUF[44u64] != 101u64 { return 22u64 }
+    nous_set_order_mode(0u8)
+
+    /* caller cap respected (never writes past cap) */
+    let n2 : u32 = nous_rank(0u32, 26u32, p, 5u32)
+    if n2 != 5u32 { return 23u64 }
+
+    /* null buffer refused (Trap 7: bind the null to a typed local; a bare
+     * parenthesised literal (0u64) trips the hexad-literal parser, so route 0
+     * through a u64 local before the pointer cast). */
+    let znull : u64 = 0u64
+    let nullp : *u64 = znull as *u64
+    if nous_rank(0u32, 26u32, nullp, 64u32) != 0u32 { return 24u64 }
+
+    return 99u64
+}

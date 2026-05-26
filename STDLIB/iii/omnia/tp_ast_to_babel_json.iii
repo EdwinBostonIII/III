@@ -1,0 +1,84 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\tp_ast_to_babel_json.iii
+ *
+ * Transform pattern: FORM_AST_BINARY → FORM_BABEL_JSON
+ * FROZEN SPEC §7B.6 slot 38; ADR-RES-006.
+ *
+ * Hexad: kind_compose. Ring: R0. K: 0.95.
+ *
+ * Wraps an AST_BINARY blob as a Babel JSON envelope with payload_form=7
+ * (FORM_AST_BINARY). Reuses tp_iii_to_babel_json's b64 logic via direct
+ * call after substituting the payload_form.
+ */
+
+module omnia_tp_ast_to_babel_json
+
+var TP_ATBJ_B64 : [u8; 64] = [
+    65u8, 66u8, 67u8, 68u8, 69u8, 70u8, 71u8, 72u8, 73u8, 74u8, 75u8, 76u8, 77u8, 78u8, 79u8, 80u8,
+    81u8, 82u8, 83u8, 84u8, 85u8, 86u8, 87u8, 88u8, 89u8, 90u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8,
+    103u8, 104u8, 105u8, 106u8, 107u8, 108u8, 109u8, 110u8, 111u8, 112u8, 113u8, 114u8, 115u8, 116u8, 117u8, 118u8,
+    119u8, 120u8, 121u8, 122u8, 48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 43u8, 47u8
+]
+/* "{\"babel_version\":1,\"domain\":\"iii.ast.binary\",\"payload_form\":7,\"payload_bytes\":\"" 80 bytes */
+var TP_ATBJ_PRE : [u8; 80] = [
+    123u8, 34u8, 98u8, 97u8, 98u8, 101u8, 108u8, 95u8, 118u8, 101u8, 114u8, 115u8, 105u8, 111u8, 110u8, 34u8,
+    58u8, 49u8, 44u8, 34u8, 100u8, 111u8, 109u8, 97u8, 105u8, 110u8, 34u8, 58u8, 34u8, 105u8, 105u8, 105u8,
+    46u8, 97u8, 115u8, 116u8, 46u8, 98u8, 105u8, 110u8, 97u8, 114u8, 121u8, 34u8, 44u8, 34u8, 112u8, 97u8,
+    121u8, 108u8, 111u8, 97u8, 100u8, 95u8, 102u8, 111u8, 114u8, 109u8, 34u8, 58u8, 55u8, 44u8, 34u8, 112u8,
+    97u8, 121u8, 108u8, 111u8, 97u8, 100u8, 95u8, 98u8, 121u8, 116u8, 101u8, 115u8, 34u8, 58u8, 34u8, 0u8
+]
+var TP_ATBJ_POST : [u8; 2] = [34u8, 125u8]
+
+fn tp_atbj_emit(dst: u64, off: u64, b: u8) -> i32 {
+    let p : *u8 = (dst + off) as *u8
+    p[0u64] = b
+    return 0i32
+}
+
+fn tp_atbj_b64_triplet(dst: u64, off: u64, b0: u8, b1: u8, b2: u8) -> u32 {
+    let v : u32 = ((b0 as u32) << 16u32) | ((b1 as u32) << 8u32) | (b2 as u32)
+    tp_atbj_emit(dst, off, TP_ATBJ_B64[(v >> 18u32) & 0x3Fu32])
+    tp_atbj_emit(dst, off + 1u64, TP_ATBJ_B64[(v >> 12u32) & 0x3Fu32])
+    tp_atbj_emit(dst, off + 2u64, TP_ATBJ_B64[(v >> 6u32) & 0x3Fu32])
+    tp_atbj_emit(dst, off + 3u64, TP_ATBJ_B64[v & 0x3Fu32])
+    return 4u32
+}
+
+fn tp_ast_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    let est : u64 = 79u64 + 4u64 * ((src_len + 2u64) / 3u64) + 4u64
+    if est > dst_cap { return 0u64 }
+    let mut off : u64 = 0u64
+    let mut p : u32 = 0u32
+    while p < 79u32 {
+        tp_atbj_emit(dst_buf, off, TP_ATBJ_PRE[p])
+        off = off + 1u64
+        p = p + 1u32
+    }
+    let mut j : u64 = 0u64
+    while j + 3u64 <= src_len {
+        let b0 : *u8 = (src + j) as *u8
+        let b1 : *u8 = (src + j + 1u64) as *u8
+        let b2 : *u8 = (src + j + 2u64) as *u8
+        tp_atbj_b64_triplet(dst_buf, off, b0[0u64], b1[0u64], b2[0u64])
+        off = off + 4u64
+        j = j + 3u64
+    }
+    let rem : u64 = src_len - j
+    if rem == 1u64 {
+        let b0 : *u8 = (src + j) as *u8
+        tp_atbj_b64_triplet(dst_buf, off, b0[0u64], 0u8, 0u8)
+        tp_atbj_emit(dst_buf, off + 2u64, 61u8)
+        tp_atbj_emit(dst_buf, off + 3u64, 61u8)
+        off = off + 4u64
+    }
+    if rem == 2u64 {
+        let b0 : *u8 = (src + j) as *u8
+        let b1 : *u8 = (src + j + 1u64) as *u8
+        tp_atbj_b64_triplet(dst_buf, off, b0[0u64], b1[0u64], 0u8)
+        tp_atbj_emit(dst_buf, off + 3u64, 61u8)
+        off = off + 4u64
+    }
+    tp_atbj_emit(dst_buf, off, TP_ATBJ_POST[0])
+    tp_atbj_emit(dst_buf, off + 1u64, TP_ATBJ_POST[1])
+    off = off + 2u64
+    return off
+}

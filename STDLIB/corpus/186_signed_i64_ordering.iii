@@ -1,0 +1,56 @@
+/* III conformance corpus 186 -- Stage 3.12: signed-integer ordering compare.
+ *
+ * The CLAUDE.md trap registry documented an "iiis-0 signed-i64
+ * ordering-compare SIGSEGV": `if x >= 0i64` (and `<`/`<=`/`>`) on i64
+ * values crashed in iiis-0-compiled code; the http_client/http_server
+ * modules switched to `!= -1i64` against a sentinel to avoid it.
+ *
+ * Stage 3.12 verified (probe + iiis-0 disassembly) that the bug is GONE:
+ * `ge_zero_i64` emits `cmp` + `setge` (SIGNED >=), not an unsigned
+ * compare, and runs correctly with no crash.  This pins all four signed
+ * ordering ops on i64 and i32, with positive / negative / zero / equal
+ * operands (signedness must be respected: -5 < 3, -9 < -2).
+ *
+ * (Numbered in the conformance range; 280+ is the XII corpus.)
+ *
+ * Exit = 99 on success; 1..11 = the specific case that regressed.
+ */
+module corpus_186
+
+fn cmp_i64(a: i64, b: i64) -> u32 {
+    let mut r : u32 = 0u32
+    if a >= b { r = r + 1u32 }
+    if a < b  { r = r + 2u32 }
+    if a <= b { r = r + 4u32 }
+    if a > b  { r = r + 8u32 }
+    return r
+}
+
+fn ge_zero_i64(x: i64) -> u32 {
+    if x >= 0i64 { return 1u32 }
+    return 0u32
+}
+
+fn cmp_i32(a: i32, b: i32) -> u32 {
+    let mut r : u32 = 0u32
+    if a >= b { r = r + 1u32 }
+    if a < b  { r = r + 2u32 }
+    if a <= b { r = r + 4u32 }
+    if a > b  { r = r + 8u32 }
+    return r
+}
+
+fn main() -> u64 {
+    if cmp_i64(5i64, 3i64)   != 9u32 { return 1u64 }
+    if cmp_i64(3i64, 5i64)   != 6u32 { return 2u64 }
+    if cmp_i64(4i64, 4i64)   != 5u32 { return 3u64 }
+    if cmp_i64(-5i64, 3i64)  != 6u32 { return 4u64 }
+    if cmp_i64(3i64, -5i64)  != 9u32 { return 5u64 }
+    if cmp_i64(-9i64, -2i64) != 6u32 { return 6u64 }
+    if ge_zero_i64(5i64)  != 1u32 { return 7u64 }
+    if ge_zero_i64(0i64)  != 1u32 { return 8u64 }
+    if ge_zero_i64(-5i64) != 0u32 { return 9u64 }
+    if cmp_i32(-5i32, 3i32) != 6u32 { return 10u64 }
+    if cmp_i32(7i32, 2i32)  != 9u32 { return 11u64 }
+    return 99u64
+}

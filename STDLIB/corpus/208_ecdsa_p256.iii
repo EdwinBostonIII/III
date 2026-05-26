@@ -1,0 +1,39 @@
+/* III conformance corpus 208 -- Stage 4.11: native .iii ECDSA-P256.
+ * Constant-time fp256 (curve field) + ec256 (RCB complete add, double-and-add-
+ * always scalar mul; field+curve NIST-vector-verified) + fn256 (scalar field
+ * mod n) + ecdsa_p256.  Round-trip: keygen(d)->Q; sign(d,z,k)->sig;
+ * verify(Q,z,sig)==accept; signature tamper -> reject; message tamper ->
+ * reject.  Exit 99.
+ */
+module corpus_208
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_keygen(d: u64, pub_out: u64) -> i32 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_sign(d: u64, z: u64, k: u64, sig_out: u64) -> i32 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p256.iii"
+
+var D : [u8; 32]
+var Z : [u8; 32]
+var K : [u8; 32]
+var PUB : [u8; 64]
+var SIG : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { D[i] = ((i + 1u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { K[i] = ((i + 0x21u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { Z[i] = ((i + 0x41u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    iii_ecdsa_p256_keygen(&D as u64, &PUB as u64)
+    iii_ecdsa_p256_sign(&D as u64, &Z as u64, &K as u64, &SIG as u64)
+    let v : u8 = iii_ecdsa_p256_verify_x(&PUB as u64, (&PUB as u64) + 32u64, &Z as u64, &SIG as u64)
+    if v != 1u8 { return 1u64 }
+    SIG[0] = SIG[0] ^ 0x01u8
+    let v2 : u8 = iii_ecdsa_p256_verify_x(&PUB as u64, (&PUB as u64) + 32u64, &Z as u64, &SIG as u64)
+    if v2 != 0u8 { return 2u64 }
+    SIG[0] = SIG[0] ^ 0x01u8
+    Z[0] = Z[0] ^ 0x01u8
+    let v3 : u8 = iii_ecdsa_p256_verify_x(&PUB as u64, (&PUB as u64) + 32u64, &Z as u64, &SIG as u64)
+    if v3 != 0u8 { return 3u64 }
+    return 99u64
+}

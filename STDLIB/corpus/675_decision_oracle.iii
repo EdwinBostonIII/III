@@ -1,0 +1,56 @@
+/* 675_decision_oracle.iii -- M11 keystone: the Decision Layer's oracle discipline.
+ *
+ * Realizes apotheosis M11 falsifier clauses #1 (re-check) + #2 (determinism): a solver is an
+ * UNTRUSTED oracle whose certificate is SOUND only because it is re-checked, never trusted, and
+ * whose solve is DETERMINISTIC (fixed static order, no randomness) so a result proven on one node
+ * is re-checked, not re-solved (M19). SMT is the flagship procedure (the one with
+ * smt_check_model). Proves: a satisfiable goal solves SAT and its model re-checks; the same goal
+ * solved twice yields the IDENTICAL model; and -- prove the negative -- an infeasible goal is
+ * soundly UNSAT, never a fabricated SAT certificate. (egraph-as-XII / clause #3 lands with the
+ * M12/M13 batch, per its dependency on M13's cost lattice as the min-cost extraction target.)
+ *
+ * Main-corpus convention: rc 99 = pass; 1..6 = which check failed.
+ * SMT verdict codes (== smt.iii): SMT_SAT = 1, SMT_UNSAT = 2. */
+module corpus_675
+
+extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_new_var(width: u32) -> u32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_add_eq(a: u32, b: u32) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_add_neq(a: u32, b: u32) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_solve() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_bv_value(vr: u32) -> u64 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_check_model() -> u8 from "smt.iii"
+
+const SMT_SAT   : i32 = 1i32
+const SMT_UNSAT : i32 = 2i32
+
+fn main() -> u64 {
+    /* re-check: a satisfiable goal (x == y over 4-bit BV) solves SAT, and the model RE-CHECKS
+     * (smt_check_model) -- the oracle's sound certificate (untrusted solve, re-verified). */
+    smt_init()
+    let x1 : u32 = smt_bv_new_var(4u32)
+    let y1 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(x1, y1)
+    if smt_solve() != SMT_SAT { return 1u64 }
+    if smt_check_model() != 1u8 { return 2u64 }
+    let va : u64 = smt_bv_value(x1)
+    /* determinism: the SAME goal solved again yields the IDENTICAL model (fixed static order,
+     * no randomness -- the M19 re-check-not-re-solve guarantee). */
+    smt_init()
+    let x2 : u32 = smt_bv_new_var(4u32)
+    let y2 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(x2, y2)
+    if smt_solve() != SMT_SAT { return 3u64 }
+    if smt_check_model() != 1u8 { return 4u64 }
+    let vb : u64 = smt_bv_value(x2)
+    if va != vb { return 5u64 }
+    /* prove the negative (sound UNSAT): an infeasible goal (x == y AND x != y) is UNSAT, never a
+     * fabricated SAT certificate -- the solver does not lie about a goal it cannot satisfy. */
+    smt_init()
+    let x3 : u32 = smt_bv_new_var(4u32)
+    let y3 : u32 = smt_bv_new_var(4u32)
+    smt_bv_add_eq(x3, y3)
+    smt_bv_add_neq(x3, y3)
+    if smt_solve() != SMT_UNSAT { return 6u64 }
+    return 99u64
+}

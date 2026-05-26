@@ -1,0 +1,127 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\ai_resolve.iii
+ *
+ * III STDLIB - omnia::ai_resolve
+ *
+ * Phase 2 Step H of v1.0 pivot: the III-AI top-level entry point.
+ *
+ * ai_resolve binds the substrate's three foundational surfaces:
+ *   - HIP-2 NL parser  (verba/hip.iii)         text -> intent
+ *   - call_context     (omnia/call_context.iii) cap_id-bound context
+ *   - resolve          (omnia/resolver.iii)     intent -> binding + witness
+ *
+ * Result: a single function that accepts natural-language prose, the
+ * caller's capability handle, and returns the witnessed binding (or a
+ * privacy-preserving NOMATCH on parse/resolve failure).
+ *
+ * Mandate 7 (architectural alignment):
+ *   - Capabilities are sealed inputs (the caller's cap_id), not observed.
+ *   - The resolver's pattern set bounds what an AI on this substrate
+ *     can dispatch.  Capabilities outside the granted set yield CAP_DENIED
+ *     (privacy-folded into NOMATCH externally).
+ *   - No statistical learning enters the parse->intent->resolve pipeline.
+ *
+ * Hexad: kind_passage (text crossing the substrate boundary).  Ring: R0.
+ * K: 1.00.
+ */
+
+module omnia_ai_resolve
+
+extern @abi(c-msvc-x64) fn hip_resolve(text_ptr: u64, text_len: u32, out_cands_ptr: u64, out_meta_ptr: u64) -> i32 from "hip.iii"
+extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
+
+extern @abi(c-msvc-x64) fn call_context_init_set(cap_id: u64, kchain_id: u8, ring: u8, hexad_kind: u8) -> i32 from "call_context.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+
+const AI_OK             : i32 =  0i32
+const AI_E_NULL         : i32 = -1i32
+const AI_E_PARSE        : i32 = -2i32
+const AI_E_AMBIGUOUS    : i32 = -3i32
+const AI_E_NO_MATCH     : i32 = -4i32
+const AI_E_NO_CHAIN     : i32 = -5i32
+
+const AI_MAX_CANDIDATES : u32 = 8u32
+const AI_RESULT_FAIL    : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* Scratch buffers for the HIP output (intent candidates + meta). */
+var AI_CANDIDATES   : [u64; 8]
+var AI_META         : [u8; 16]
+
+/* Last-call outputs for callers that want richer diagnostics. */
+var AI_LAST_CLASS   : u32 = 0u32
+var AI_LAST_INTENT  : u64 = 0u64
+var AI_LAST_RESULT  : u64 = 0u64
+
+/* ai_resolve: parse text -> intent -> resolve against the global
+ * pattern set with the caller's capability binding.
+ *
+ * Returns the resolver's raw u64 result on success (low bit = error tag
+ * per resolver convention), or AI_RESULT_FAIL on parse/ambiguity/no-match
+ * failure.
+ *
+ * cap_id may be 0 to indicate "system-level call, no capability gate";
+ * non-zero values invoke the resolver's Step 6a capability gate (see
+ * omnia/resolver.iii). */
+fn ai_resolve(text_ptr: u64, text_len: u32, cap_id: u64) -> u64 @export {
+    if text_ptr == 0u64 { return AI_RESULT_FAIL }
+    if text_len == 0u32 { return AI_RESULT_FAIL }
+
+    AI_LAST_INTENT = 0u64
+    AI_LAST_RESULT = 0u64
+    AI_LAST_CLASS  = 0u32
+
+    /* Step 1: parse prose -> intent candidates. */
+    let cands_ptr : u64 = (&AI_CANDIDATES) as u64
+    let meta_ptr  : u64 = (&AI_META) as u64
+    let hip_rc : i32 = hip_resolve(text_ptr, text_len, cands_ptr, meta_ptr)
+    if hip_rc != 0i32 { return AI_RESULT_FAIL }
+
+    /* Read class from meta (bytes 4..8 hold the class word; HIP writes
+     * the cand_count at offset 0 and class at offset 4 per its contract). */
+    let cls_b0 : u64 = AI_META[4u64] as u64
+    let cls_b1 : u64 = AI_META[5u64] as u64
+    let cls_b2 : u64 = AI_META[6u64] as u64
+    let cls_b3 : u64 = AI_META[7u64] as u64
+    let cls : u32 = (cls_b0 | (cls_b1 << 8u64) | (cls_b2 << 16u64) | (cls_b3 << 24u64)) as u32
+    AI_LAST_CLASS = cls
+
+    /* Step 2: require UNIQUE classification.  AMBIGUOUS / NO_MATCH fold
+     * to AI_RESULT_FAIL so an AI consumer cannot probe pattern existence
+     * via repeated NL queries.  Privacy + safety property. */
+    let unique_class : u32 = hip_class_unique()
+    if cls != unique_class { return AI_RESULT_FAIL }
+
+    /* Step 3: extract the unique intent (cand[0]). */
+    let intent : u64 = AI_CANDIDATES[0u64]
+    if intent == 0u64 { return AI_RESULT_FAIL }
+    AI_LAST_INTENT = intent
+
+    /* Step 4: build a capability-bound ctx.  Allocate a kchain for K
+     * accounting (kchain_new returns slot+1 in [1..32], or INVALID).
+     * call_context_init_set seeds defaults for the next call_context_new(). */
+    let kch : u64 = kchain_new(0u64)
+    if kch == 0xFFFFFFFFFFFFFFFFu64 { return AI_RESULT_FAIL }
+    /* Ring R0 (= 2), hexad FORM (= 1) by default for AI dispatch.
+     * The actual ring/hexad gates are enforced by the pattern's
+     * declared fields; this is just the context's announced ring. */
+    call_context_init_set(cap_id, kch as u8, 2u8, 1u8)
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return AI_RESULT_FAIL }
+
+    /* Step 5: resolve. */
+    let set : u64 = pattern_set_global()
+    if set == 0u64 { return AI_RESULT_FAIL }
+
+    let result : u64 = resolve(set, intent, ctx)
+    AI_LAST_RESULT = result
+    return result
+}
+
+/* Diagnostic accessors. */
+fn ai_resolve_last_class() -> u32 @export    { return AI_LAST_CLASS }
+fn ai_resolve_last_intent() -> u64 @export   { return AI_LAST_INTENT }
+fn ai_resolve_last_result() -> u64 @export   { return AI_LAST_RESULT }

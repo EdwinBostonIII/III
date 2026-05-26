@@ -1,0 +1,89 @@
+/* corpus/371_xii_critpairs_real.iii
+ *
+ * Verifies the two-path critical-pair convergence checks in
+ * STDLIB/iii/omnia/xii_critpairs.iii are real (each pair runs two
+ * distinct rule applications via xii_rewrite_apply_specific and the
+ * canonical forms agree).
+ *
+ * Also exercises xii_rewrite_apply_specific directly on a known
+ * matching/non-matching pair to prove the dispatcher routes correctly.
+ *
+ * Hexad: kind_essence. Ring: R0.
+ *
+ * NIH: libc only.
+ */
+
+module corpus_371_xii_critpairs_real
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+extern @abi(c-msvc-x64) fn xii_critpairs_verify_all() -> u32 from "xii_critpairs.iii"
+extern @abi(c-msvc-x64) fn xii_critpairs_actual_count() -> u32 from "xii_critpairs.iii"
+
+const C371_K06_COMPOSE : u8 = 5u8
+const C371_K02_BIND    : u8 = 1u8
+const C371_FCOMPOSE    : u8 = 18u8
+const C371_NULL_REF    : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* 1. Confirm actual count reflects the real (non-tautological) tests. */
+    if xii_critpairs_actual_count() != 122u32 { return 1u64 }
+
+    /* 2. Run every real two-path CP test; must return zero failures. */
+    if xii_critpairs_verify_all() != 0u32 { return 2u64 }
+
+    /* 3. Dispatcher must route a matching term: R017 on
+     *    F.COMPOSE($a, NULL) -> $a. */
+    xii_term_arena_reset()
+    let bind1 : u32 = xii_term_make_basis(C371_K02_BIND, 0x100u32)
+    let null1 : u32 = xii_term_make_basis(C371_K06_COMPOSE, xii_rewrite_null_form())
+    let comp1 : u32 = xii_term_make_fusion2(C371_FCOMPOSE, bind1, null1)
+    let r017 : u32 = xii_rewrite_apply_specific(17u32, comp1)
+    if r017 == C371_NULL_REF { return 3u64 }
+    if xii_term_get_kind(r017) != C371_K02_BIND { return 4u64 }
+    if xii_term_get_subform(r017) != 0x100u32 { return 5u64 }
+
+    /* 4. Dispatcher must reject a non-matching term: R017 on
+     *    F.COMPOSE(NULL, $a) has child_b non-null, so R017 fails. */
+    let bind2 : u32 = xii_term_make_basis(C371_K02_BIND, 0x200u32)
+    let null2 : u32 = xii_term_make_basis(C371_K06_COMPOSE, xii_rewrite_null_form())
+    let comp2 : u32 = xii_term_make_fusion2(C371_FCOMPOSE, null2, bind2)
+    let r017b : u32 = xii_rewrite_apply_specific(17u32, comp2)
+    if r017b != C371_NULL_REF { return 6u64 }
+
+    /* 5. Dispatcher must route R037 on F.COMPOSE(NULL, $a) -> $a. */
+    let r037 : u32 = xii_rewrite_apply_specific(37u32, comp2)
+    if r037 == C371_NULL_REF { return 7u64 }
+    if xii_term_get_kind(r037) != C371_K02_BIND { return 8u64 }
+    if xii_term_get_subform(r037) != 0x200u32 { return 9u64 }
+
+    /* 6. Rule id out of range returns null ref. */
+    let r99 : u32 = xii_rewrite_apply_specific(99u32, comp1)
+    if r99 != C371_NULL_REF { return 10u64 }
+    let r0 : u32 = xii_rewrite_apply_specific(0u32, comp1)
+    if r0 != C371_NULL_REF { return 11u64 }
+
+    /* 7. last_rule_fired protocol: on a match it should equal rule_id;
+     *    on a mismatch it should be 0. */
+    let bind3 : u32 = xii_term_make_basis(C371_K02_BIND, 0x300u32)
+    let null3 : u32 = xii_term_make_basis(C371_K06_COMPOSE, xii_rewrite_null_form())
+    let comp3 : u32 = xii_term_make_fusion2(C371_FCOMPOSE, bind3, null3)
+    let _r17 : u32 = xii_rewrite_apply_specific(17u32, comp3)
+    if xii_rewrite_last_rule_fired() != 17u32 { return 12u64 }
+
+    let bind4 : u32 = xii_term_make_basis(C371_K02_BIND, 0x400u32)
+    let null4 : u32 = xii_term_make_basis(C371_K06_COMPOSE, xii_rewrite_null_form())
+    let bad   : u32 = xii_term_make_fusion2(C371_FCOMPOSE, null4, bind4)
+    let _r17b : u32 = xii_rewrite_apply_specific(17u32, bad)
+    if xii_rewrite_last_rule_fired() != 0u32 { return 13u64 }
+
+    return 0u64
+}

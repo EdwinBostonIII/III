@@ -1,0 +1,57 @@
+/* STDLIB/iii/omnia/hexad_epistemic.iii
+ *
+ * III HEXAD — §6 Epistemic Hexads.  Native .iii port of HEXAD/src/hexad_epistemic.c.
+ *
+ * iii has no structs and no native f64, so an epistemic hexad is a 16-byte
+ * buffer of four u32 fields, and the C `double confidence` in [0,1] is carried
+ * as a u32 in parts-per-million (0.0 -> 0, 1.0 -> 1000000):
+ *   [0] hexad (u16 in u32)   [1] confidence_ppm   [2] open_questions   [3] domain_tag
+ *
+ * Escalates when confidence < 0.85 (III_EPISTEMIC_FLOOR_Q -> 850000 ppm).
+ *
+ * Hexad: kind_proof.  Ring: R0.  K: 0.97.
+ */
+module omnia_hexad_epistemic
+
+extern @abi(c-msvc-x64) fn iii_hexad_compose6(a: u16, b: u16) -> u16 from "hexad_algebra.iii"
+
+const HXE_FLOOR_Q : u32 = 850000u32      /* III_EPISTEMIC_FLOOR_Q = 0.85 */
+const HXE_PPM_ONE : u32 = 1000000u32
+
+/* Initialise an epistemic buffer.  qd packs open_questions (high 32) and
+ * domain_tag (low 32) into one u64 to stay within the <=4-param mandate. */
+fn iii_hexad_epistemic_make(buf_addr: u64, h: u16, conf_ppm: u32, qd: u64) -> i32 @export {
+    let p : *u32 = buf_addr as *u32
+    let mut c : u32 = conf_ppm
+    if c > HXE_PPM_ONE { c = HXE_PPM_ONE }
+    p[0u64] = h as u32
+    p[1u64] = c
+    p[2u64] = (qd >> 32u64) as u32
+    p[3u64] = qd as u32
+    return 0i32
+}
+
+/* Combine: hexad composes; confidences multiply (ppm); questions add; domains OR. */
+fn iii_hexad_epistemic_combine(a_addr: u64, b_addr: u64, out_addr: u64) -> i32 @export {
+    let a : *u32 = a_addr as *u32
+    let b : *u32 = b_addr as *u32
+    let o : *u32 = out_addr as *u32
+    o[0u64] = iii_hexad_compose6(a[0u64] as u16, b[0u64] as u16) as u32
+    let prod : u64 = (a[1u64] as u64) * (b[1u64] as u64) / 1000000u64
+    o[1u64] = prod as u32
+    o[2u64] = a[2u64] + b[2u64]
+    o[3u64] = a[3u64] | b[3u64]
+    return 0i32
+}
+
+fn iii_hexad_epistemic_escalates(buf_addr: u64) -> u8 @export {
+    let p : *u32 = buf_addr as *u32
+    if p[1u64] < HXE_FLOOR_Q { return 1u8 }
+    return 0u8
+}
+
+/* Field accessors (no struct return in iii). */
+fn iii_hexad_epistemic_hexad(buf_addr: u64) -> u16 @export      { let p : *u32 = buf_addr as *u32  return p[0u64] as u16 }
+fn iii_hexad_epistemic_confidence(buf_addr: u64) -> u32 @export { let p : *u32 = buf_addr as *u32  return p[1u64] }
+fn iii_hexad_epistemic_questions(buf_addr: u64) -> u32 @export  { let p : *u32 = buf_addr as *u32  return p[2u64] }
+fn iii_hexad_epistemic_domain(buf_addr: u64) -> u32 @export     { let p : *u32 = buf_addr as *u32  return p[3u64] }

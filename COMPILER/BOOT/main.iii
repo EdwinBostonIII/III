@@ -1,0 +1,1270 @@
+/* main.iii — RITCHIE Stage 2.4 .iii port of main.c (iiis-0 CLI orchestrator).
+ *
+ * Pipeline: read source -> SHA-256 source mhash -> lex -> parse -> ast -> sema
+ *           -> sid -> walloc -> cg_<ring> -> link verify -> emit -> output mhash
+ *           -> seal -> optional build-witness JSON.
+ *
+ * Strict NIH (ADR-021): only libc on the build host, via lex_runtime.c
+ * wrappers.  Private FIPS-180-4 SHA-256 (byte-identical to main.c) for
+ * argv/source/output mhash.  Determinism per ADR-027.
+ *
+ * Foundation sub-batch 2.4b: externs + consts + SHA-256 + mhash + strutils
+ * + read_file.  (2.4c emitters; 2.4d ring/subsystem; 2.4e pipeline; 2.4f main.)
+ */
+
+module main
+
+/* ── lex_runtime.c helpers (libc-only boundary, Contract C2) ─────────── */
+extern @abi(c-msvc-x64) fn iii_lex_malloc_c(n: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_free_c(addr: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u8_at_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u32_c(addr: u64, off: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u32_c(addr: u64, off: u64, v: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_read_u64_c(addr: u64, off: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_write_u64_c(addr: u64, off: u64, v: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memcpy_c(dst: u64, src: u64, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_memset_c(dst: u64, v: u32, n: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fopen_c(path: u64, mode: u32) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fseek_c(file: u64, off: i64, whence: u32) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_ftell_c(file: u64) -> i64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fread_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fwrite_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputs_c(str: u64, file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fclose_c(file: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_stderr_c() -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_stdout_c() -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_getenv_sde_c() -> i64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_clock_ms_c() -> u64 from "lex_runtime.c"
+
+/* ── stable exit codes (CONTRACT — main.c §"structured exit codes") ──── */
+const III_EXIT_OK: u32 = 0u32
+const III_EXIT_USAGE: u32 = 2u32
+const III_EXIT_LEX_FAIL: u32 = 10u32
+const III_EXIT_PARSE_FAIL: u32 = 11u32
+const III_EXIT_SEMA_FAIL: u32 = 12u32
+const III_EXIT_WALLOC_FAIL: u32 = 13u32
+const III_EXIT_CG_FAIL: u32 = 14u32
+const III_EXIT_LINK_FAIL: u32 = 15u32
+const III_EXIT_EMIT_FAIL: u32 = 16u32
+const III_EXIT_REPRO_MISMATCH: u32 = 17u32
+const III_EXIT_INTERNAL: u32 = 50u32
+const III_EXIT_OOM: u32 = 99u32
+
+/* ── ring choices + emit formats ─────────────────────────────────────── */
+const RING_CHOICE_R3: u32 = 1u32
+const RING_CHOICE_R0: u32 = 2u32
+const RING_CHOICE_RM1: u32 = 3u32
+const RING_CHOICE_RM2: u32 = 4u32
+const FMT_PE_EXE: u32 = 0u32
+const FMT_PE_DLL: u32 = 1u32
+const FMT_PE_SYS: u32 = 2u32
+const FMT_ELF_EXE: u32 = 3u32
+const FMT_RAW_BIN: u32 = 4u32
+const FMT_SANCTUM_OBJECT: u32 = 5u32
+
+/* fopen mode codes (lex_runtime maps to "rb"/"wb"/"w"). */
+const FOPEN_RB: u32 = 0u32
+const FOPEN_WB: u32 = 1u32
+const FOPEN_W: u32 = 2u32
+/* fseek whence codes. */
+const FSEEK_SET: u32 = 0u32
+const FSEEK_END: u32 = 2u32
+
+/* ── private FIPS-180-4 SHA-256 (byte-identical to main.c) ────────────
+ * ctx layout (MSHA_CTX, 112B): h[0..7]@0 (32B) | bits@32 (u64) |
+ * buflen@40 (u64) | buf@48 (64B).  K table + w schedule in scratch. */
+var MSHA_CTX : [u8; 112]
+var MSHA_W : [u8; 256]
+var MSHA_K : [u8; 256]
+var MSHA_K_READY : [u8; 8]
+var MSHA_TMP8 : [u8; 8]
+
+fn msha_rotr(x: u32, n: u32) -> u32 {
+    return (x >> n) | (x << (32u32 - n))
+}
+fn msha_k_set(i: u64, v: u32) -> u32 {
+    iii_lex_write_u32_c(&MSHA_K as u64, i * 4u64, v)
+    return 0u32
+}
+/* lazily fill the 64 round constants (cube-root-of-primes; main.c hardcodes
+ * them, so we hardcode too for byte-equivalence — not derived per C2). */
+fn msha_k_init() -> u32 {
+    if iii_lex_read_u32_c(&MSHA_K_READY as u64, 0u64) == 1u32 { return 0u32 }
+    msha_k_set(0u64, 1116352408u32)  msha_k_set(1u64, 1899447441u32)  msha_k_set(2u64, 3049323471u32)  msha_k_set(3u64, 3921009573u32)
+    msha_k_set(4u64, 961987163u32)   msha_k_set(5u64, 1508970993u32)  msha_k_set(6u64, 2453635748u32)  msha_k_set(7u64, 2870763221u32)
+    msha_k_set(8u64, 3624381080u32)  msha_k_set(9u64, 310598401u32)   msha_k_set(10u64, 607225278u32)  msha_k_set(11u64, 1426881987u32)
+    msha_k_set(12u64, 1925078388u32) msha_k_set(13u64, 2162078206u32) msha_k_set(14u64, 2614888103u32) msha_k_set(15u64, 3248222580u32)
+    msha_k_set(16u64, 3835390401u32) msha_k_set(17u64, 4022224774u32) msha_k_set(18u64, 264347078u32)  msha_k_set(19u64, 604807628u32)
+    msha_k_set(20u64, 770255983u32)  msha_k_set(21u64, 1249150122u32) msha_k_set(22u64, 1555081692u32) msha_k_set(23u64, 1996064986u32)
+    msha_k_set(24u64, 2554220882u32) msha_k_set(25u64, 2821834349u32) msha_k_set(26u64, 2952996808u32) msha_k_set(27u64, 3210313671u32)
+    msha_k_set(28u64, 3336571891u32) msha_k_set(29u64, 3584528711u32) msha_k_set(30u64, 113926993u32)  msha_k_set(31u64, 338241895u32)
+    msha_k_set(32u64, 666307205u32)  msha_k_set(33u64, 773529912u32)  msha_k_set(34u64, 1294757372u32) msha_k_set(35u64, 1396182291u32)
+    msha_k_set(36u64, 1695183700u32) msha_k_set(37u64, 1986661051u32) msha_k_set(38u64, 2177026350u32) msha_k_set(39u64, 2456956037u32)
+    msha_k_set(40u64, 2730485921u32) msha_k_set(41u64, 2820302411u32) msha_k_set(42u64, 3259730800u32) msha_k_set(43u64, 3345764771u32)
+    msha_k_set(44u64, 3516065817u32) msha_k_set(45u64, 3600352804u32) msha_k_set(46u64, 4094571909u32) msha_k_set(47u64, 275423344u32)
+    msha_k_set(48u64, 430227734u32)  msha_k_set(49u64, 506948616u32)  msha_k_set(50u64, 659060556u32)  msha_k_set(51u64, 883997877u32)
+    msha_k_set(52u64, 958139571u32)  msha_k_set(53u64, 1322822218u32) msha_k_set(54u64, 1537002063u32) msha_k_set(55u64, 1747873779u32)
+    msha_k_set(56u64, 1955562222u32) msha_k_set(57u64, 2024104815u32) msha_k_set(58u64, 2227730452u32) msha_k_set(59u64, 2361852424u32)
+    msha_k_set(60u64, 2428436474u32) msha_k_set(61u64, 2756734187u32) msha_k_set(62u64, 3204031479u32) msha_k_set(63u64, 3329325298u32)
+    iii_lex_write_u32_c(&MSHA_K_READY as u64, 0u64, 1u32)
+    return 0u32
+}
+fn msha256_init() -> u32 {
+    msha_k_init()
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 0u64, 1779033703u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 4u64, 3144134277u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 8u64, 1013904242u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 12u64, 2773480762u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 16u64, 1359893119u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 20u64, 2600822924u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 24u64, 528734635u32)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 28u64, 1541459225u32)
+    iii_lex_write_u64_c(&MSHA_CTX as u64, 32u64, 0u64)
+    iii_lex_write_u64_c(&MSHA_CTX as u64, 40u64, 0u64)
+    return 0u32
+}
+/* process one 64-byte block at blk (an address). */
+fn msha256_block(blk: u64) -> u32 {
+    let mut i: u64 = 0u64
+    while i < 16u64 {
+        let b0: u32 = iii_lex_read_u8_at_c(blk, i * 4u64)
+        let b1: u32 = iii_lex_read_u8_at_c(blk, i * 4u64 + 1u64)
+        let b2: u32 = iii_lex_read_u8_at_c(blk, i * 4u64 + 2u64)
+        let b3: u32 = iii_lex_read_u8_at_c(blk, i * 4u64 + 3u64)
+        iii_lex_write_u32_c(&MSHA_W as u64, i * 4u64, (b0 << 24u32) | (b1 << 16u32) | (b2 << 8u32) | b3)
+        i = i + 1u64
+    }
+    i = 16u64
+    while i < 64u64 {
+        let w15: u32 = iii_lex_read_u32_c(&MSHA_W as u64, (i - 15u64) * 4u64)
+        let w2: u32 = iii_lex_read_u32_c(&MSHA_W as u64, (i - 2u64) * 4u64)
+        let s0: u32 = msha_rotr(w15, 7u32) ^ msha_rotr(w15, 18u32) ^ (w15 >> 3u32)
+        let s1: u32 = msha_rotr(w2, 17u32) ^ msha_rotr(w2, 19u32) ^ (w2 >> 10u32)
+        let wv: u32 = iii_lex_read_u32_c(&MSHA_W as u64, (i - 16u64) * 4u64) + s0 + iii_lex_read_u32_c(&MSHA_W as u64, (i - 7u64) * 4u64) + s1
+        iii_lex_write_u32_c(&MSHA_W as u64, i * 4u64, wv)
+        i = i + 1u64
+    }
+    let mut a: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 0u64)
+    let mut b: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 4u64)
+    let mut cc: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 8u64)
+    let mut d: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 12u64)
+    let mut e: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 16u64)
+    let mut f: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 20u64)
+    let mut g: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 24u64)
+    let mut h: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, 28u64)
+    i = 0u64
+    while i < 64u64 {
+        let ss1: u32 = msha_rotr(e, 6u32) ^ msha_rotr(e, 11u32) ^ msha_rotr(e, 25u32)
+        let ch: u32 = (e & f) ^ ((e ^ 4294967295u32) & g)
+        let t1: u32 = h + ss1 + ch + iii_lex_read_u32_c(&MSHA_K as u64, i * 4u64) + iii_lex_read_u32_c(&MSHA_W as u64, i * 4u64)
+        let ss0: u32 = msha_rotr(a, 2u32) ^ msha_rotr(a, 13u32) ^ msha_rotr(a, 22u32)
+        let mj: u32 = (a & b) ^ (a & cc) ^ (b & cc)
+        let t2: u32 = ss0 + mj
+        h = g
+        g = f
+        f = e
+        e = d + t1
+        d = cc
+        cc = b
+        b = a
+        a = t1 + t2
+        i = i + 1u64
+    }
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 0u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 0u64) + a)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 4u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 4u64) + b)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 8u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 8u64) + cc)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 12u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 12u64) + d)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 16u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 16u64) + e)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 20u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 20u64) + f)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 24u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 24u64) + g)
+    iii_lex_write_u32_c(&MSHA_CTX as u64, 28u64, iii_lex_read_u32_c(&MSHA_CTX as u64, 28u64) + h)
+    return 0u32
+}
+/* update with len bytes at data (an address). */
+fn msha256_update(data: u64, len: u64) -> u32 {
+    iii_lex_write_u64_c(&MSHA_CTX as u64, 32u64, iii_lex_read_u64_c(&MSHA_CTX as u64, 32u64) + len * 8u64)
+    let mut p: u64 = data
+    let mut rem: u64 = len
+    while rem != 0u64 {
+        let buflen: u64 = iii_lex_read_u64_c(&MSHA_CTX as u64, 40u64)
+        let mut take: u64 = 64u64 - buflen
+        if take > rem { take = rem }
+        iii_lex_memcpy_c(&MSHA_CTX as u64 + 48u64 + buflen, p, take)
+        let nb: u64 = buflen + take
+        iii_lex_write_u64_c(&MSHA_CTX as u64, 40u64, nb)
+        p = p + take
+        rem = rem - take
+        if nb == 64u64 {
+            msha256_block(&MSHA_CTX as u64 + 48u64)
+            iii_lex_write_u64_c(&MSHA_CTX as u64, 40u64, 0u64)
+        }
+    }
+    return 0u32
+}
+fn msha256_final(out: u64) -> u32 {
+    let bits: u64 = iii_lex_read_u64_c(&MSHA_CTX as u64, 32u64)
+    iii_lex_write_u8_at_c(&MSHA_TMP8 as u64, 0u64, 128u32)
+    msha256_update(&MSHA_TMP8 as u64, 1u64)
+    iii_lex_write_u8_at_c(&MSHA_TMP8 as u64, 0u64, 0u32)
+    while iii_lex_read_u64_c(&MSHA_CTX as u64, 40u64) != 56u64 { msha256_update(&MSHA_TMP8 as u64, 1u64) }
+    let mut i: u64 = 0u64
+    while i < 8u64 {
+        iii_lex_write_u8_at_c(&MSHA_TMP8 as u64, i, ((bits >> (56u64 - 8u64 * i)) & 255u64) as u32)
+        i = i + 1u64
+    }
+    msha256_update(&MSHA_TMP8 as u64, 8u64)
+    i = 0u64
+    while i < 8u64 {
+        let hv: u32 = iii_lex_read_u32_c(&MSHA_CTX as u64, i * 4u64)
+        iii_lex_write_u8_at_c(out, i * 4u64, (hv >> 24u32) & 255u32)
+        iii_lex_write_u8_at_c(out, i * 4u64 + 1u64, (hv >> 16u32) & 255u32)
+        iii_lex_write_u8_at_c(out, i * 4u64 + 2u64, (hv >> 8u32) & 255u32)
+        iii_lex_write_u8_at_c(out, i * 4u64 + 3u64, hv & 255u32)
+        i = i + 1u64
+    }
+    return 0u32
+}
+fn iii_mhash_buf(data: u64, len: u64, out: u64) -> u32 {
+    msha256_init()
+    msha256_update(data, len)
+    msha256_final(out)
+    return 0u32
+}
+
+/* ── string utils (NUL-terminated C strings from argv) ───────────────── */
+fn iiim_strlen(s: u64) -> u64 {
+    let mut n: u64 = 0u64
+    while iii_lex_read_u8_at_c(s, n) != 0u32 { n = n + 1u64 }
+    return n
+}
+/* compare NUL-term `a` to literal `lit` of exactly `litlen` bytes. */
+fn iiim_streq(a: u64, lit: u64, litlen: u64) -> u32 {
+    let mut i: u64 = 0u64
+    let mut ok: u32 = 1u32
+    while i < litlen {
+        if iii_lex_read_u8_at_c(a, i) != iii_lex_read_u8_at_c(lit, i) { ok = 0u32 ; i = litlen }
+        if ok == 1u32 { i = i + 1u64 }
+    }
+    if ok == 1u32 { if iii_lex_read_u8_at_c(a, litlen) != 0u32 { ok = 0u32 } }
+    return ok
+}
+/* prefix compare: NUL-term `a` begins with literal `lit` of `litlen` bytes. */
+fn iiim_strprefix(a: u64, lit: u64, litlen: u64) -> u32 {
+    let mut i: u64 = 0u64
+    let mut ok: u32 = 1u32
+    while i < litlen {
+        if iii_lex_read_u8_at_c(a, i) != iii_lex_read_u8_at_c(lit, i) { ok = 0u32 ; i = litlen }
+        if ok == 1u32 { i = i + 1u64 }
+    }
+    return ok
+}
+
+/* ── mhash hex (32 bytes -> 64 lowercase hex + NUL) ──────────────────── */
+var MW_HEXDIG : [u8; 16]
+var MW_DEC_BUF : [u8; 24]
+fn mw_hexdig_init() -> u32 {
+    let mut i: u32 = 0u32
+    while i < 10u32 { iii_lex_write_u8_at_c(&MW_HEXDIG as u64, i as u64, 48u32 + i) ; i = i + 1u32 }
+    while i < 16u32 { iii_lex_write_u8_at_c(&MW_HEXDIG as u64, i as u64, 97u32 + (i - 10u32)) ; i = i + 1u32 }
+    return 0u32
+}
+fn iii_mhash_to_hex(inp: u64, out: u64) -> u32 {
+    mw_hexdig_init()
+    let mut i: u64 = 0u64
+    while i < 32u64 {
+        let b: u32 = iii_lex_read_u8_at_c(inp, i)
+        iii_lex_write_u8_at_c(out, i * 2u64, iii_lex_read_u8_at_c(&MW_HEXDIG as u64, ((b >> 4u32) & 15u32) as u64))
+        iii_lex_write_u8_at_c(out, i * 2u64 + 1u64, iii_lex_read_u8_at_c(&MW_HEXDIG as u64, (b & 15u32) as u64))
+        i = i + 1u64
+    }
+    iii_lex_write_u8_at_c(out, 64u64, 0u32)
+    return 0u32
+}
+
+/* ── file-write primitives (no printf in .iii) ───────────────────────── */
+/* write `len` literal bytes at `lit` to `file` (length-explicit since .iii
+ * string literals are NOT NUL-terminated). */
+fn mw_lit(file: u64, lit: u64, len: u64) -> u32 {
+    iii_lex_fwrite_c(lit, len, file)
+    return 0u32
+}
+/* write a NUL-terminated string to `file`. */
+fn mw_cstr(file: u64, s: u64) -> u32 {
+    iii_lex_fwrite_c(s, iiim_strlen(s), file)
+    return 0u32
+}
+/* write a u64 as decimal. */
+fn mw_dec(file: u64, n: u64) -> u32 {
+    if n == 0u64 { iii_lex_fputc_c(48u32, file) ; return 0u32 }
+    let mut v: u64 = n
+    let mut i: u64 = 0u64
+    while v != 0u64 {
+        iii_lex_write_u8_at_c(&MW_DEC_BUF as u64, i, 48u32 + ((v % 10u64) as u32))
+        v = v / 10u64
+        i = i + 1u64
+    }
+    while i != 0u64 {
+        i = i - 1u64
+        iii_lex_fputc_c(iii_lex_read_u8_at_c(&MW_DEC_BUF as u64, i), file)
+    }
+    return 0u32
+}
+/* write 32 bytes as 64 lowercase hex (no quotes). */
+fn mw_hex32(file: u64, inp: u64) -> u32 {
+    mw_hexdig_init()
+    let mut i: u64 = 0u64
+    while i < 32u64 {
+        let b: u32 = iii_lex_read_u8_at_c(inp, i)
+        iii_lex_fputc_c(iii_lex_read_u8_at_c(&MW_HEXDIG as u64, ((b >> 4u32) & 15u32) as u64), file)
+        iii_lex_fputc_c(iii_lex_read_u8_at_c(&MW_HEXDIG as u64, (b & 15u32) as u64), file)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* ── basename + argv canon mhash (D2) ────────────────────────────────── */
+fn iii_basename(p: u64) -> u64 {
+    let mut b: u64 = p
+    let mut q: u64 = p
+    while iii_lex_read_u8_at_c(q, 0u64) != 0u32 {
+        let ch: u32 = iii_lex_read_u8_at_c(q, 0u64)
+        if ch == 47u32 { b = q + 1u64 }
+        if ch == 92u32 { b = q + 1u64 }
+        q = q + 1u64
+    }
+    return b
+}
+var MW_SEP : [u8; 8]
+fn iii_argv_canon_mhash(argc: u32, argv: u64, out: u64) -> u32 {
+    msha256_init()
+    let mut prog: u64 = 0u64
+    if argc > 0u32 { prog = iii_basename(iii_lex_read_u64_c(argv, 0u64)) }
+    if argc == 0u32 { prog = "iiis-0" as u64 }
+    let mut prog_len: u64 = 6u64
+    if argc > 0u32 { prog_len = iiim_strlen(prog) }
+    msha256_update(prog, prog_len)
+    iii_lex_write_u8_at_c(&MW_SEP as u64, 0u64, 31u32)
+    let mut i: u32 = 1u32
+    while i < argc {
+        msha256_update(&MW_SEP as u64, 1u64)
+        let ai: u64 = iii_lex_read_u64_c(argv, (i as u64) * 8u64)
+        msha256_update(ai, iiim_strlen(ai))
+        i = i + 1u32
+    }
+    msha256_final(out)
+    return 0u32
+}
+
+/* ── read whole file: writes malloc'd ptr->*out_bytes, size->*out_len ──
+ * returns 0 ok, 1 on I/O failure (mirrors main.c::iii_read_file). */
+fn iii_read_file(path: u64, out_bytes: u64, out_len: u64) -> u32 {
+    let file: u64 = iii_lex_fopen_c(path, FOPEN_RB)
+    if file == 0u64 { return 1u32 }
+    if iii_lex_fseek_c(file, 0i64, FSEEK_END) != 0u32 { iii_lex_fclose_c(file) ; return 1u32 }
+    let size: i64 = iii_lex_ftell_c(file)
+    if (size as u64) >= 9223372036854775808u64 { iii_lex_fclose_c(file) ; return 1u32 }
+    if iii_lex_fseek_c(file, 0i64, FSEEK_SET) != 0u32 { iii_lex_fclose_c(file) ; return 1u32 }
+    let sz: u64 = size as u64
+    let buf: u64 = iii_lex_malloc_c(sz + 1u64)
+    if buf == 0u64 { iii_lex_fclose_c(file) ; return 1u32 }
+    let got: u64 = iii_lex_fread_c(buf, sz, file)
+    iii_lex_fclose_c(file)
+    if got != sz { iii_lex_free_c(buf) ; return 1u32 }
+    iii_lex_write_u8_at_c(buf, sz, 0u32)
+    iii_lex_write_u64_c(out_bytes, 0u64, buf)
+    iii_lex_write_u64_c(out_len, 0u64, sz)
+    return 0u32
+}
+
+/* ── subsystem externs (diag + ast scan) ─────────────────────────────── */
+extern @abi(c-msvc-x64) fn iii_ast_node_count(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_get(ast: u64, idx: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_lex_error_info(lex: u64, out: u64) -> u32 from "lex.iii"
+extern @abi(c-msvc-x64) fn iii_parse_error_count(st: u64) -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_parse_error_at(st: u64, i: u32, out: u64) -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_parse_error_name(code: u32) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_sema_error_count(s: u64) -> u32 from "sema.iii"
+extern @abi(c-msvc-x64) fn iii_sema_error_at(s: u64, i: u32, out: u64) -> u32 from "sema.iii"
+extern @abi(c-msvc-x64) fn iii_sema_error_name(code: u32) -> u64 from "sema.iii"
+extern @abi(c-msvc-x64) fn iii_sid_error_count(s: u64) -> u32 from "sid.iii"
+extern @abi(c-msvc-x64) fn iii_sid_error_at(s: u64, i: u32, out: u64) -> u32 from "sid.iii"
+extern @abi(c-msvc-x64) fn iii_sid_error_name(code: u32) -> u64 from "sid.iii"
+
+const AST_NODE_KIND_OFF: u64 = 0u64
+const PA_AST_RING_SET: u32 = 55u32
+const PA_AST_CYCLE_DECL_M: u32 = 3u32
+const RING_R3: u32 = 1u32
+const MRING_R0: u32 = 2u32
+const RING_RM1: u32 = 4u32
+const RING_RM2: u32 = 8u32
+const LEX_OK: u32 = 0u32
+const LINK_E_CLOSURE_MISMATCH: u32 = 2u32
+
+/* diagnostic mode: 0=text 1=json (set from --diag=json). */
+var DIAG_MODE : [u8; 4]
+/* error-record scratches (sizes from probe: lex24/parse48/sema32/sid16/link56). */
+var ERR_LEX : [u8; 24]
+var ERR_PARSE : [u8; 48]
+var ERR_SEMA : [u8; 32]
+var ERR_SID : [u8; 16]
+var ERR_LINK : [u8; 56]
+
+/* ── JSON canonical string escaper (main.c::iii_json_emit_string) ─────── */
+fn iii_json_emit_string(file: u64, s: u64) -> u32 {
+    iii_lex_fputc_c(34u32, file)
+    let mut i: u64 = 0u64
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        let ch: u32 = iii_lex_read_u8_at_c(s, i)
+        if ch == 0u32 { go = 0u32 }
+        if go == 1u32 {
+            let mut handled: u32 = 0u32
+            if ch == 34u32 { mw_lit(file, "\\\"" as u64, 2u64) ; handled = 1u32 }
+            if ch == 92u32 { mw_lit(file, "\\\\" as u64, 2u64) ; handled = 1u32 }
+            if ch == 8u32 { mw_lit(file, "\\b" as u64, 2u64) ; handled = 1u32 }
+            if ch == 12u32 { mw_lit(file, "\\f" as u64, 2u64) ; handled = 1u32 }
+            if ch == 10u32 { mw_lit(file, "\\n" as u64, 2u64) ; handled = 1u32 }
+            if ch == 13u32 { mw_lit(file, "\\r" as u64, 2u64) ; handled = 1u32 }
+            if ch == 9u32 { mw_lit(file, "\\t" as u64, 2u64) ; handled = 1u32 }
+            if handled == 0u32 {
+                if ch < 32u32 {
+                    mw_lit(file, "\\u00" as u64, 4u64)
+                    iii_lex_fputc_c(iii_lex_read_u8_at_c(&MW_HEXDIG as u64, ((ch >> 4u32) & 15u32) as u64), file)
+                    iii_lex_fputc_c(iii_lex_read_u8_at_c(&MW_HEXDIG as u64, (ch & 15u32) as u64), file)
+                } else {
+                    iii_lex_fputc_c(ch, file)
+                }
+            }
+            i = i + 1u64
+        }
+    }
+    iii_lex_fputc_c(34u32, file)
+    return 0u32
+}
+/* write a possibly-null C string (null -> empty). */
+fn mw_cstr_or_empty(file: u64, s: u64) -> u32 {
+    if s != 0u64 { iii_lex_fwrite_c(s, iiim_strlen(s), file) }
+    return 0u32
+}
+
+/* ── diagnostic emitters (stderr; text|json) ─────────────────────────── */
+fn iii_diag_lex(lex: u64) -> u32 {
+    iii_lex_error_info(lex, &ERR_LEX as u64)
+    let code: u32 = iii_lex_read_u32_c(&ERR_LEX as u64, 0u64)
+    if code == LEX_OK { return 0u32 }
+    let err: u64 = iii_lex_stderr_c()
+    let line: u32 = iii_lex_read_u32_c(&ERR_LEX as u64, 8u64)
+    let col: u32 = iii_lex_read_u32_c(&ERR_LEX as u64, 12u64)
+    let msg: u64 = iii_lex_read_u64_c(&ERR_LEX as u64, 16u64)
+    if iii_lex_read_u32_c(&DIAG_MODE as u64, 0u64) == 1u32 {
+        mw_lit(err, "{\"phase\":\"lex\",\"code\":" as u64, 21u64)
+        mw_dec(err, code as u64)
+        mw_lit(err, ",\"line\":" as u64, 8u64)
+        mw_dec(err, line as u64)
+        mw_lit(err, ",\"col\":" as u64, 7u64)
+        mw_dec(err, col as u64)
+        mw_lit(err, ",\"message\":" as u64, 11u64)
+        if msg != 0u64 { iii_json_emit_string(err, msg) }
+        if msg == 0u64 { mw_lit(err, "\"\"" as u64, 2u64) }
+        mw_lit(err, "}\n" as u64, 2u64)
+    } else {
+        mw_lit(err, "lex error " as u64, 10u64)
+        mw_dec(err, code as u64)
+        mw_lit(err, " at " as u64, 4u64)
+        mw_dec(err, line as u64)
+        iii_lex_fputc_c(58u32, err)
+        mw_dec(err, col as u64)
+        mw_lit(err, ": " as u64, 2u64)
+        mw_cstr_or_empty(err, msg)
+        iii_lex_fputc_c(10u32, err)
+    }
+    return 0u32
+}
+fn iii_diag_parse(p: u64) -> u32 {
+    let n: u32 = iii_parse_error_count(p)
+    let err: u64 = iii_lex_stderr_c()
+    let isjson: u32 = iii_lex_read_u32_c(&DIAG_MODE as u64, 0u64)
+    let mut i: u32 = 0u32
+    while i < n {
+        iii_parse_error_at(p, i, &ERR_PARSE as u64)
+        let code: u32 = iii_lex_read_u32_c(&ERR_PARSE as u64, 0u64)
+        let line: u32 = iii_lex_read_u32_c(&ERR_PARSE as u64, 8u64)
+        let col: u32 = iii_lex_read_u32_c(&ERR_PARSE as u64, 12u64)
+        let msg: u64 = iii_lex_read_u64_c(&ERR_PARSE as u64, 16u64)
+        if isjson == 1u32 {
+            mw_lit(err, "{\"phase\":\"parse\",\"code\":\"" as u64, 24u64)
+            mw_cstr(err, iii_parse_error_name(code))
+            mw_lit(err, "\",\"line\":" as u64, 9u64)
+            mw_dec(err, line as u64)
+            mw_lit(err, ",\"col\":" as u64, 7u64)
+            mw_dec(err, col as u64)
+            mw_lit(err, ",\"message\":" as u64, 11u64)
+            if msg != 0u64 { iii_json_emit_string(err, msg) }
+            if msg == 0u64 { mw_lit(err, "\"\"" as u64, 2u64) }
+            mw_lit(err, "}\n" as u64, 2u64)
+        }
+        if isjson != 1u32 {
+            mw_lit(err, "parse error " as u64, 12u64)
+            mw_cstr(err, iii_parse_error_name(code))
+            mw_lit(err, " at " as u64, 4u64)
+            mw_dec(err, line as u64)
+            iii_lex_fputc_c(58u32, err)
+            mw_dec(err, col as u64)
+            mw_lit(err, ": " as u64, 2u64)
+            mw_cstr_or_empty(err, msg)
+            iii_lex_fputc_c(10u32, err)
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+fn iii_diag_sema(s: u64) -> u32 {
+    let n: u32 = iii_sema_error_count(s)
+    let err: u64 = iii_lex_stderr_c()
+    let isjson: u32 = iii_lex_read_u32_c(&DIAG_MODE as u64, 0u64)
+    let mut i: u32 = 0u32
+    while i < n {
+        iii_sema_error_at(s, i, &ERR_SEMA as u64)
+        let code: u32 = iii_lex_read_u32_c(&ERR_SEMA as u64, 0u64)
+        let line: u32 = iii_lex_read_u32_c(&ERR_SEMA as u64, 4u64)
+        let col: u32 = iii_lex_read_u32_c(&ERR_SEMA as u64, 8u64)
+        let hexad: u32 = iii_lex_read_u32_c(&ERR_SEMA as u64, 12u64)
+        let msg: u64 = iii_lex_read_u64_c(&ERR_SEMA as u64, 24u64)
+        if isjson == 1u32 {
+            mw_lit(err, "{\"phase\":\"sema\",\"code\":\"" as u64, 23u64)
+            mw_cstr(err, iii_sema_error_name(code))
+            mw_lit(err, "\",\"line\":" as u64, 9u64)
+            mw_dec(err, line as u64)
+            mw_lit(err, ",\"col\":" as u64, 7u64)
+            mw_dec(err, col as u64)
+            mw_lit(err, ",\"hexad\":" as u64, 9u64)
+            mw_dec(err, hexad as u64)
+            mw_lit(err, ",\"message\":" as u64, 11u64)
+            if msg != 0u64 { iii_json_emit_string(err, msg) }
+            if msg == 0u64 { mw_lit(err, "\"\"" as u64, 2u64) }
+            mw_lit(err, "}\n" as u64, 2u64)
+        }
+        if isjson != 1u32 {
+            mw_lit(err, "sema error " as u64, 11u64)
+            mw_cstr(err, iii_sema_error_name(code))
+            mw_lit(err, " at " as u64, 4u64)
+            mw_dec(err, line as u64)
+            iii_lex_fputc_c(58u32, err)
+            mw_dec(err, col as u64)
+            mw_lit(err, " (hexad=" as u64, 8u64)
+            mw_dec(err, hexad as u64)
+            mw_lit(err, "): " as u64, 3u64)
+            mw_cstr_or_empty(err, msg)
+            iii_lex_fputc_c(10u32, err)
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+fn iii_diag_sid(s: u64) -> u32 {
+    let n: u32 = iii_sid_error_count(s)
+    let err: u64 = iii_lex_stderr_c()
+    let isjson: u32 = iii_lex_read_u32_c(&DIAG_MODE as u64, 0u64)
+    let mut i: u32 = 0u32
+    while i < n {
+        iii_sid_error_at(s, i, &ERR_SID as u64)
+        let code: u32 = iii_lex_read_u32_c(&ERR_SID as u64, 0u64)
+        let cdn: u32 = iii_lex_read_u32_c(&ERR_SID as u64, 4u64)
+        let msg: u64 = iii_lex_read_u64_c(&ERR_SID as u64, 8u64)
+        if isjson == 1u32 {
+            mw_lit(err, "{\"phase\":\"sid\",\"code\":\"" as u64, 22u64)
+            mw_cstr(err, iii_sid_error_name(code))
+            mw_lit(err, "\",\"cycle_decl_node\":" as u64, 20u64)
+            mw_dec(err, cdn as u64)
+            mw_lit(err, ",\"message\":" as u64, 11u64)
+            if msg != 0u64 { iii_json_emit_string(err, msg) }
+            if msg == 0u64 { mw_lit(err, "\"\"" as u64, 2u64) }
+            mw_lit(err, "}\n" as u64, 2u64)
+        }
+        if isjson != 1u32 {
+            mw_lit(err, "sid error " as u64, 10u64)
+            mw_cstr(err, iii_sid_error_name(code))
+            mw_lit(err, " on cycle node " as u64, 15u64)
+            mw_dec(err, cdn as u64)
+            mw_lit(err, ": " as u64, 2u64)
+            mw_cstr_or_empty(err, msg)
+            iii_lex_fputc_c(10u32, err)
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* ── ring auto-detect (D7) — scan AST for RING_SET, reconcile vs --ring ─
+ * io_ring is the ADDRESS of the ring-choice var; returns 0 ok / USAGE on
+ * conflict.  ring_explicit nonzero means --ring was given. */
+fn iii_ring_choice_to_bit(r: u32) -> u32 {
+    if r == RING_CHOICE_R3 { return RING_R3 }
+    if r == RING_CHOICE_R0 { return MRING_R0 }
+    if r == RING_CHOICE_RM1 { return RING_RM1 }
+    if r == RING_CHOICE_RM2 { return RING_RM2 }
+    return 0u32
+}
+fn iii_ring_choice_from_bit(bit: u32) -> u32 {
+    if (bit & RING_RM2) != 0u32 { return RING_CHOICE_RM2 }
+    if (bit & RING_RM1) != 0u32 { return RING_CHOICE_RM1 }
+    if (bit & MRING_R0) != 0u32 { return RING_CHOICE_R0 }
+    return RING_CHOICE_R3
+}
+fn iii_ring_autodetect(ast: u64, ring_explicit: u32, io_ring: u64) -> u32 {
+    let n: u64 = iii_ast_node_count(ast)
+    let mut explicit_bit: u32 = 0u32
+    if ring_explicit != 0u32 { explicit_bit = iii_ring_choice_to_bit(iii_lex_read_u32_c(io_ring, 0u64)) }
+    let mut any_seen: u32 = 0u32
+    let mut inferred: u32 = 0u32
+    let mut rc: u32 = 0u32
+    let mut idx: u64 = 0u64
+    while idx < n {
+        let node: u64 = iii_ast_get(ast, idx as u32)
+        if node != 0u64 {
+            if iii_lex_read_u32_c(node, AST_NODE_KIND_OFF) == PA_AST_RING_SET {
+                let mask: u32 = iii_lex_read_u32_c(node, 8u64)
+                any_seen = 1u32
+                if ring_explicit != 0u32 {
+                    if (mask & explicit_bit) == 0u32 { rc = III_EXIT_USAGE }
+                }
+                if ring_explicit == 0u32 {
+                    if inferred == 0u32 { inferred = mask }
+                    if inferred != 0u32 {
+                        if (inferred & mask) == 0u32 { rc = III_EXIT_USAGE }
+                        if (inferred & mask) != 0u32 { inferred = inferred & mask }
+                    }
+                }
+            }
+        }
+        idx = idx + 1u64
+    }
+    if rc == 0u32 { if ring_explicit == 0u32 { if any_seen == 1u32 { if inferred != 0u32 {
+        iii_lex_write_u32_c(io_ring, 0u64, iii_ring_choice_from_bit(inferred))
+    } } } }
+    return rc
+}
+
+/* ── pipeline subsystem externs ──────────────────────────────────────── */
+extern @abi(c-msvc-x64) fn iii_lex_create(bytes: u64, len: u64, src: u64) -> u64 from "lex.iii"
+extern @abi(c-msvc-x64) fn iii_lex_destroy(lex: u64) -> u32 from "lex.iii"
+extern @abi(c-msvc-x64) fn iii_ast_create(bytes: u64, len: u64, src: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_destroy(ast: u64) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_parse_create(lex: u64, ast: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_parse_destroy(p: u64) -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_parse_module(p: u64) -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_check_init() -> u32 from "hexad_check.iii"
+extern @abi(c-msvc-x64) fn iii_acc_init_permissive() -> u32 from "acc.iii"
+extern @abi(c-msvc-x64) fn iii_ceil_init_denied() -> u32 from "ceiling.iii"
+extern @abi(c-msvc-x64) fn iii_ceil_admit_kind(cycle_kind: u32) -> u32 from "ceiling.iii"
+extern @abi(c-msvc-x64) fn iii_sema_create(ast: u64) -> u64 from "sema.iii"
+extern @abi(c-msvc-x64) fn iii_sema_run(s: u64) -> u32 from "sema.iii"
+extern @abi(c-msvc-x64) fn iii_sema_destroy(s: u64) -> u32 from "sema.iii"
+extern @abi(c-msvc-x64) fn iii_sid_create(ast: u64, sema: u64) -> u64 from "sid.iii"
+extern @abi(c-msvc-x64) fn iii_sid_run(s: u64) -> u32 from "sid.iii"
+extern @abi(c-msvc-x64) fn iii_sid_destroy(s: u64) -> u32 from "sid.iii"
+extern @abi(c-msvc-x64) fn iii_walloc_create() -> u64 from "witness_alloc.iii"
+extern @abi(c-msvc-x64) fn iii_walloc_run(st: u64, ast: u64) -> u32 from "witness_alloc.iii"
+extern @abi(c-msvc-x64) fn iii_walloc_destroy(st: u64) -> u32 from "witness_alloc.iii"
+extern @abi(c-msvc-x64) fn iii_walloc_seal(st: u64) -> u32 from "witness_alloc.iii"
+extern @abi(c-msvc-x64) fn iii_walloc_record_count(st: u64) -> u32 from "witness_alloc.iii"
+extern @abi(c-msvc-x64) fn iii_walloc_record_at(st: u64, i: u32) -> u64 from "witness_alloc.iii"
+extern @abi(c-msvc-x64) fn iii_link_create() -> u64 from "link.iii"
+extern @abi(c-msvc-x64) fn iii_link_verify_imports(l: u64, ast: u64) -> u32 from "link.iii"
+extern @abi(c-msvc-x64) fn iii_link_seal(l: u64) -> u32 from "link.iii"
+extern @abi(c-msvc-x64) fn iii_link_destroy(l: u64) -> u32 from "link.iii"
+extern @abi(c-msvc-x64) fn iii_link_error_count(l: u64) -> u32 from "link.iii"
+extern @abi(c-msvc-x64) fn iii_link_error_at(l: u64, i: u32, out: u64) -> u32 from "link.iii"
+extern @abi(c-msvc-x64) fn iii_cg_r3_create(ast: u64, sema: u64, sid: u64, wa: u64) -> u64 from "cg_r3.iii"
+extern @abi(c-msvc-x64) fn iii_cg_r3_emit_module(cg: u64, out: u64) -> u32 from "cg_r3.iii"
+extern @abi(c-msvc-x64) fn iii_cg_r3_destroy(cg: u64) -> u32 from "cg_r3.iii"
+extern @abi(c-msvc-x64) fn iii_cg_r0_create(ast: u64, sema: u64, sid: u64, wa: u64) -> u64 from "cg_r0.iii"
+extern @abi(c-msvc-x64) fn iii_cg_r0_emit_module(cg: u64, out: u64) -> u32 from "cg_r0.iii"
+extern @abi(c-msvc-x64) fn iii_cg_r0_destroy(cg: u64) -> u32 from "cg_r0.iii"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_create(ast: u64, sema: u64, sid: u64, wa: u64) -> u64 from "cg_rm1.iii"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_emit_module(cg: u64, out: u64) -> u32 from "cg_rm1.iii"
+extern @abi(c-msvc-x64) fn iii_cg_rm1_destroy(cg: u64) -> u32 from "cg_rm1.iii"
+extern @abi(c-msvc-x64) fn iii_cg_rm2_create(ast: u64, sema: u64, sid: u64, wa: u64) -> u64 from "cg_rm2.iii"
+extern @abi(c-msvc-x64) fn iii_cg_rm2_emit_module(cg: u64, out: u64) -> u32 from "cg_rm2.iii"
+extern @abi(c-msvc-x64) fn iii_cg_rm2_destroy(cg: u64) -> u32 from "cg_rm2.iii"
+extern @abi(c-msvc-x64) fn iii_emit_assemble(asm_path: u64, out_obj: u64) -> u32 from "emit.iii"
+extern @abi(c-msvc-x64) fn iii_emit_link(fmt: u32, objs: u64, n: u64, out: u64, lscript: u64) -> u32 from "emit.iii"
+
+/* ── orchestrator state (subset of main.c g_orch) ────────────────────── */
+/* ORCH: ring@0 | ring_explicit@4 | emit_asm_only@8 | compile_only@12 |
+ * source_mhash@16 (32B) | source_mhash_valid@48 | run_out_mhash@52 (32B) |
+ * run_out_mhash_valid@84 | diag@88 | verbose@92. */
+var ORCH : [u8; 256]
+const O_RING: u64 = 0u64
+const O_RING_EXPL: u64 = 4u64
+const O_ASM_ONLY: u64 = 8u64
+const O_COMPILE_ONLY: u64 = 12u64
+const O_SRC_MHASH: u64 = 16u64
+const O_SRC_MHASH_VALID: u64 = 48u64
+const O_RUN_MHASH: u64 = 52u64
+const O_RUN_MHASH_VALID: u64 = 84u64
+const O_DIAG: u64 = 88u64
+const O_VERBOSE: u64 = 92u64
+const O_ARGV_MHASH: u64 = 96u64
+const O_OUT_MHASH: u64 = 128u64
+const O_OUT_MHASH_VALID: u64 = 160u64
+const O_LINK_MODE: u64 = 164u64
+const O_REPRO: u64 = 168u64
+const O_EMIT_WITNESS: u64 = 172u64
+const O_PRINT_MHASH: u64 = 176u64
+const O_SEALED: u64 = 180u64
+const O_SDE: u64 = 184u64
+const O_OUT_PATH: u64 = 192u64
+const O_SRC_PATH: u64 = 200u64
+
+/* PIPE_STATE handles: lex@0|ast@8|p@16|sema@24|sid@32|wa@40|lnk@48|bytes@56. */
+var PIPE_STATE : [u8; 64]
+var MHF_BUF : [u8; 8192]
+var ASM_PATH : [u8; 1024]
+var OBJ_PATH : [u8; 1024]
+var OBJ_ARR : [u8; 8]
+var RF_BYTES : [u8; 8]
+var RF_LEN : [u8; 8]
+
+/* SHA-256 a file by path (8KB chunks).  Returns 0 ok / 1 fail. */
+fn iii_mhash_file(path: u64, out: u64) -> u32 {
+    let file: u64 = iii_lex_fopen_c(path, FOPEN_RB)
+    if file == 0u64 { return 1u32 }
+    msha256_init()
+    let mut go: u32 = 1u32
+    while go == 1u32 {
+        let n: u64 = iii_lex_fread_c(&MHF_BUF as u64, 8192u64, file)
+        if n != 0u64 { msha256_update(&MHF_BUF as u64, n) }
+        if n < 8192u64 { go = 0u32 }
+    }
+    iii_lex_fclose_c(file)
+    msha256_final(out)
+    return 0u32
+}
+/* dst <- base (NUL-term) ++ suffix(litlen) ++ NUL. */
+fn iiim_path_suffix(dst: u64, base: u64, suffix: u64, slen: u64) -> u32 {
+    let bl: u64 = iiim_strlen(base)
+    iii_lex_memcpy_c(dst, base, bl)
+    iii_lex_memcpy_c(dst + bl, suffix, slen)
+    iii_lex_write_u8_at_c(dst, bl + slen, 0u32)
+    return 0u32
+}
+fn ps_get(off: u64) -> u64 { return iii_lex_read_u64_c(&PIPE_STATE as u64, off) }
+fn ps_set(off: u64, v: u64) -> u32 { iii_lex_write_u64_c(&PIPE_STATE as u64, off, v) ; return 0u32 }
+/* destroy every non-zero pipeline state + free the source buffer. */
+fn iii_pipeline_cleanup() -> u32 {
+    if ps_get(48u64) != 0u64 { iii_link_destroy(ps_get(48u64)) }
+    if ps_get(40u64) != 0u64 { iii_walloc_destroy(ps_get(40u64)) }
+    if ps_get(32u64) != 0u64 { iii_sid_destroy(ps_get(32u64)) }
+    if ps_get(24u64) != 0u64 { iii_sema_destroy(ps_get(24u64)) }
+    if ps_get(16u64) != 0u64 { iii_parse_destroy(ps_get(16u64)) }
+    if ps_get(8u64) != 0u64 { iii_ast_destroy(ps_get(8u64)) }
+    if ps_get(0u64) != 0u64 { iii_lex_destroy(ps_get(0u64)) }
+    if ps_get(56u64) != 0u64 { iii_lex_free_c(ps_get(56u64)) }
+    return 0u32
+}
+/* cg dispatch by ring -> emit .s to asm_out; returns cg rc (0 ok). */
+fn iii_cg_dispatch(ring: u32, ast: u64, sema: u64, sid: u64, wa: u64, asm_out: u64) -> u32 {
+    if ring == RING_CHOICE_R3 {
+        let cg: u64 = iii_cg_r3_create(ast, sema, sid, wa)
+        let rc: u32 = iii_cg_r3_emit_module(cg, asm_out)
+        iii_cg_r3_destroy(cg)
+        return rc
+    }
+    if ring == RING_CHOICE_R0 {
+        let cg: u64 = iii_cg_r0_create(ast, sema, sid, wa)
+        let rc: u32 = iii_cg_r0_emit_module(cg, asm_out)
+        iii_cg_r0_destroy(cg)
+        return rc
+    }
+    if ring == RING_CHOICE_RM1 {
+        let cg: u64 = iii_cg_rm1_create(ast, sema, sid, wa)
+        let rc: u32 = iii_cg_rm1_emit_module(cg, asm_out)
+        iii_cg_rm1_destroy(cg)
+        return rc
+    }
+    let cg: u64 = iii_cg_rm2_create(ast, sema, sid, wa)
+    let rc: u32 = iii_cg_rm2_emit_module(cg, asm_out)
+    iii_cg_rm2_destroy(cg)
+    return rc
+}
+fn iii_ring_to_fmt(ring: u32) -> u32 {
+    if ring == RING_CHOICE_R0 { return FMT_PE_SYS }
+    if ring == RING_CHOICE_RM1 { return FMT_RAW_BIN }
+    if ring == RING_CHOICE_RM2 { return FMT_SANCTUM_OBJECT }
+    return FMT_PE_EXE
+}
+/* admit each walloc record's cycle_kind into the ceiling bitmap. */
+fn iii_walloc_admit_all(wa: u64) -> u32 {
+    let n: u32 = iii_walloc_record_count(wa)
+    let mut i: u32 = 0u32
+    while i < n {
+        let r: u64 = iii_walloc_record_at(wa, i)
+        iii_ceil_admit_kind(iii_lex_read_u32_c(r, 12u64) & 65535u32)
+        i = i + 1u32
+    }
+    return 0u32
+}
+/* hard-fail if link verification produced a CLOSURE_MISMATCH. */
+fn iii_link_hard_fail(lnk: u64) -> u32 {
+    let ne: u32 = iii_link_error_count(lnk)
+    let err: u64 = iii_lex_stderr_c()
+    let mut hard: u32 = 0u32
+    let mut i: u32 = 0u32
+    while i < ne {
+        iii_link_error_at(lnk, i, &ERR_LINK as u64)
+        if iii_lex_read_u32_c(&ERR_LINK as u64, 0u64) == LINK_E_CLOSURE_MISMATCH {
+            let msg: u64 = iii_lex_read_u64_c(&ERR_LINK as u64, 8u64)
+            mw_lit(err, "link error: " as u64, 12u64)
+            mw_cstr_or_empty(err, msg)
+            iii_lex_fputc_c(10u32, err)
+            hard = 1u32
+        }
+        i = i + 1u32
+    }
+    return hard
+}
+
+/* ── the compile pipeline (reads flags from ORCH; output mhash -> ORCH) ─
+ * returns an exit code (III_EXIT_*). */
+fn iii_run_pipeline(src_path: u64, out_path: u64) -> u32 {
+    iii_lex_write_u32_c(&ORCH as u64, O_RUN_MHASH_VALID, 0u32)
+    iii_lex_memset_c(&PIPE_STATE as u64, 0u32, 64u64)
+    /* read + mhash source.  Out-params via module scratches (NOT &local --
+     * iiis-0 may register-allocate locals, making &local a bogus address). */
+    if iii_read_file(src_path, &RF_BYTES as u64, &RF_LEN as u64) != 0u32 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: cannot read " as u64, 20u64)
+        mw_cstr(iii_lex_stderr_c(), src_path)
+        iii_lex_fputc_c(10u32, iii_lex_stderr_c())
+        return III_EXIT_USAGE
+    }
+    let bytes: u64 = iii_lex_read_u64_c(&RF_BYTES as u64, 0u64)
+    let len: u64 = iii_lex_read_u64_c(&RF_LEN as u64, 0u64)
+    ps_set(56u64, bytes)
+    iii_mhash_buf(bytes, len, &ORCH as u64 + O_SRC_MHASH)
+    iii_lex_write_u32_c(&ORCH as u64, O_SRC_MHASH_VALID, 1u32)
+    /* lex + parse. */
+    let lex: u64 = iii_lex_create(bytes, len, src_path)
+    if lex == 0u64 { iii_pipeline_cleanup() ; return III_EXIT_LEX_FAIL }
+    ps_set(0u64, lex)
+    let ast: u64 = iii_ast_create(bytes, len, src_path)
+    if ast == 0u64 { iii_pipeline_cleanup() ; return III_EXIT_INTERNAL }
+    ps_set(8u64, ast)
+    let p: u64 = iii_parse_create(lex, ast)
+    if p == 0u64 { iii_pipeline_cleanup() ; return III_EXIT_INTERNAL }
+    ps_set(16u64, p)
+    let parse_ok: u32 = iii_parse_module(p)
+    iii_diag_lex(lex)
+    iii_diag_parse(p)
+    if parse_ok == 0u32 { iii_pipeline_cleanup() ; return III_EXIT_PARSE_FAIL }
+    /* ring auto-detect / verify. */
+    let rc_ring: u32 = iii_ring_autodetect(ast, iii_lex_read_u32_c(&ORCH as u64, O_RING_EXPL), &ORCH as u64 + O_RING)
+    if rc_ring != 0u32 { iii_pipeline_cleanup() ; return rc_ring }
+    let ring: u32 = iii_lex_read_u32_c(&ORCH as u64, O_RING)
+    /* sema + sid. */
+    iii_hexad_check_init()
+    iii_acc_init_permissive()
+    iii_ceil_init_denied()
+    let sema: u64 = iii_sema_create(ast)
+    ps_set(24u64, sema)
+    let sema_ok: u32 = iii_sema_run(sema)
+    iii_diag_sema(sema)
+    if sema_ok == 0u32 { iii_pipeline_cleanup() ; return III_EXIT_SEMA_FAIL }
+    let sid: u64 = iii_sid_create(ast, sema)
+    ps_set(32u64, sid)
+    let sid_ok: u32 = iii_sid_run(sid)
+    iii_diag_sid(sid)
+    if sid_ok == 0u32 { iii_pipeline_cleanup() ; return III_EXIT_SEMA_FAIL }
+    /* witness allocation. */
+    let wa: u64 = iii_walloc_create()
+    if wa == 0u64 { iii_pipeline_cleanup() ; return III_EXIT_OOM }
+    ps_set(40u64, wa)
+    if iii_walloc_run(wa, ast) != 0u32 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: witness allocation failed\n" as u64, 34u64)
+        iii_pipeline_cleanup() ; return III_EXIT_WALLOC_FAIL
+    }
+    iii_walloc_admit_all(wa)
+    /* link verification. */
+    let lnk: u64 = iii_link_create()
+    if lnk == 0u64 { iii_pipeline_cleanup() ; return III_EXIT_OOM }
+    ps_set(48u64, lnk)
+    iii_link_verify_imports(lnk, ast)
+    if iii_link_hard_fail(lnk) == 1u32 { iii_pipeline_cleanup() ; return III_EXIT_LINK_FAIL }
+    /* codegen -> .s */
+    iiim_path_suffix(&ASM_PATH as u64, out_path, ".s" as u64, 2u64)
+    let asm_out: u64 = iii_lex_fopen_c(&ASM_PATH as u64, FOPEN_W)
+    if asm_out == 0u64 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: cannot open .s for write\n" as u64, 33u64)
+        iii_pipeline_cleanup() ; return III_EXIT_EMIT_FAIL
+    }
+    let cg_rc: u32 = iii_cg_dispatch(ring, ast, sema, sid, wa, asm_out)
+    iii_lex_fclose_c(asm_out)
+    if cg_rc != 0u32 { iii_pipeline_cleanup() ; return III_EXIT_CG_FAIL }
+    /* emit. */
+    let fmt: u32 = iii_ring_to_fmt(ring)
+    let mut emit_rc: u32 = III_EXIT_OK
+    if iii_lex_read_u32_c(&ORCH as u64, O_ASM_ONLY) == 1u32 {
+        if iii_mhash_file(&ASM_PATH as u64, &ORCH as u64 + O_RUN_MHASH) == 0u32 { iii_lex_write_u32_c(&ORCH as u64, O_RUN_MHASH_VALID, 1u32) }
+    }
+    if iii_lex_read_u32_c(&ORCH as u64, O_ASM_ONLY) == 0u32 {
+        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 1u32 {
+            if iii_emit_assemble(&ASM_PATH as u64, out_path) != 0u32 {
+                mw_lit(iii_lex_stderr_c(), "iiis-0: assemble failed\n" as u64, 24u64)
+                emit_rc = III_EXIT_EMIT_FAIL
+            }
+            if emit_rc == III_EXIT_OK {
+                if iii_mhash_file(out_path, &ORCH as u64 + O_RUN_MHASH) == 0u32 { iii_lex_write_u32_c(&ORCH as u64, O_RUN_MHASH_VALID, 1u32) }
+                if iii_lex_read_u32_c(&ORCH as u64, O_RUN_MHASH_VALID) == 0u32 { emit_rc = III_EXIT_EMIT_FAIL }
+            }
+        }
+        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 0u32 {
+            iiim_path_suffix(&OBJ_PATH as u64, out_path, ".o" as u64, 2u64)
+            if iii_emit_assemble(&ASM_PATH as u64, &OBJ_PATH as u64) != 0u32 {
+                mw_lit(iii_lex_stderr_c(), "iiis-0: assemble failed\n" as u64, 24u64)
+                emit_rc = III_EXIT_EMIT_FAIL
+            } else {
+                iii_lex_write_u64_c(&OBJ_ARR as u64, 0u64, &OBJ_PATH as u64)
+                if iii_emit_link(fmt, &OBJ_ARR as u64, 1u64, out_path, 0u64) != 0u32 {
+                    mw_lit(iii_lex_stderr_c(), "iiis-0: link failed\n" as u64, 20u64)
+                    emit_rc = III_EXIT_LINK_FAIL
+                }
+            }
+            if emit_rc == III_EXIT_OK {
+                if iii_mhash_file(out_path, &ORCH as u64 + O_RUN_MHASH) == 0u32 { iii_lex_write_u32_c(&ORCH as u64, O_RUN_MHASH_VALID, 1u32) }
+            }
+        }
+    }
+    iii_walloc_seal(wa)
+    iii_link_seal(lnk)
+    iii_pipeline_cleanup()
+    return emit_rc
+}
+/* link-only: positional .o array -> exe. */
+fn iii_run_link_only(objs: u64, n_objs: u32, fmt: u32, out_path: u64) -> u32 {
+    iii_lex_write_u32_c(&ORCH as u64, O_RUN_MHASH_VALID, 0u32)
+    if n_objs == 0u32 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: --link requires at least one .o input\n" as u64, 46u64)
+        return III_EXIT_USAGE
+    }
+    if iii_emit_link(fmt, objs, n_objs as u64, out_path, 0u64) != 0u32 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: link failed\n" as u64, 20u64)
+        return III_EXIT_LINK_FAIL
+    }
+    if iii_mhash_file(out_path, &ORCH as u64 + O_RUN_MHASH) == 0u32 { iii_lex_write_u32_c(&ORCH as u64, O_RUN_MHASH_VALID, 1u32) }
+    if iii_lex_read_u32_c(&ORCH as u64, O_RUN_MHASH_VALID) == 0u32 { return III_EXIT_EMIT_FAIL }
+    return III_EXIT_OK
+}
+
+/* ── 2.4f: witness + version/help + argv + signals + main ────────────── */
+extern @abi(c-msvc-x64) fn iii_lex_signal_c(sig: u32, handler: u64) -> u32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_exit_c(code: u32) -> u32 from "lex_runtime.c"
+
+var WP_BUF : [u8; 2048]
+var REPRO_OUT : [u8; 2048]
+var DEFAULT_OUT : [u8; 1024]
+var SAVE_MH1 : [u8; 32]
+var HEX_OUT : [u8; 65]
+
+/* emit "format" as a quoted JSON string (no escaping needed — fixed names). */
+fn iii_emit_format_name_json(w: u64, fmt: u32) -> u32 {
+    iii_lex_fputc_c(34u32, w)
+    if fmt == FMT_PE_EXE { mw_lit(w, "pe_exe" as u64, 6u64) }
+    if fmt == FMT_PE_DLL { mw_lit(w, "pe_dll" as u64, 6u64) }
+    if fmt == FMT_PE_SYS { mw_lit(w, "pe_sys" as u64, 6u64) }
+    if fmt == FMT_ELF_EXE { mw_lit(w, "elf_exe" as u64, 7u64) }
+    if fmt == FMT_RAW_BIN { mw_lit(w, "raw_bin" as u64, 7u64) }
+    if fmt == FMT_SANCTUM_OBJECT { mw_lit(w, "sanctum_object" as u64, 14u64) }
+    iii_lex_fputc_c(34u32, w)
+    return 0u32
+}
+fn iii_ring_name_json(w: u64, ring: u32) -> u32 {
+    iii_lex_fputc_c(34u32, w)
+    if ring == RING_CHOICE_R3 { mw_lit(w, "R3" as u64, 2u64) }
+    if ring == RING_CHOICE_R0 { mw_lit(w, "R0" as u64, 2u64) }
+    if ring == RING_CHOICE_RM1 { mw_lit(w, "R-1" as u64, 3u64) }
+    if ring == RING_CHOICE_RM2 { mw_lit(w, "R-2" as u64, 3u64) }
+    iii_lex_fputc_c(34u32, w)
+    return 0u32
+}
+/* sorted-key canonical build-witness JSON (main.c::iii_witness_write). */
+fn iii_witness_write(wpath: u64, fmt: u32) -> u32 {
+    if iii_lex_read_u32_c(&ORCH as u64, O_SEALED) == 1u32 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: witness write refused (orchestrator sealed)\n" as u64, 51u64)
+        return III_EXIT_INTERNAL
+    }
+    let w: u64 = iii_lex_fopen_c(wpath, FOPEN_WB)
+    if w == 0u64 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: cannot open witness sink\n" as u64, 33u64)
+        return III_EXIT_EMIT_FAIL
+    }
+    iii_lex_fputc_c(123u32, w)
+    mw_lit(w, "\"argv_mhash\":" as u64, 13u64)
+    iii_lex_fputc_c(34u32, w) ; mw_hex32(w, &ORCH as u64 + O_ARGV_MHASH) ; iii_lex_fputc_c(34u32, w)
+    mw_lit(w, ",\"format\":" as u64, 10u64)
+    iii_emit_format_name_json(w, fmt)
+    mw_lit(w, ",\"gcc_version_mhash\":null" as u64, 25u64)
+    mw_lit(w, ",\"ld_version_mhash\":null" as u64, 24u64)
+    mw_lit(w, ",\"output_mhash\":" as u64, 16u64)
+    if iii_lex_read_u32_c(&ORCH as u64, O_OUT_MHASH_VALID) == 1u32 {
+        iii_lex_fputc_c(34u32, w) ; mw_hex32(w, &ORCH as u64 + O_OUT_MHASH) ; iii_lex_fputc_c(34u32, w)
+    } else { mw_lit(w, "null" as u64, 4u64) }
+    mw_lit(w, ",\"output_path\":" as u64, 15u64)
+    let op: u64 = iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH)
+    if op != 0u64 { iii_json_emit_string(w, op) } else { mw_lit(w, "\"\"" as u64, 2u64) }
+    mw_lit(w, ",\"ring\":" as u64, 8u64)
+    iii_ring_name_json(w, iii_lex_read_u32_c(&ORCH as u64, O_RING))
+    mw_lit(w, ",\"source_date_epoch\":" as u64, 21u64)
+    mw_dec(w, iii_lex_read_u64_c(&ORCH as u64, O_SDE))
+    mw_lit(w, ",\"source_files\":[{\"mhash\":" as u64, 26u64)
+    if iii_lex_read_u32_c(&ORCH as u64, O_SRC_MHASH_VALID) == 1u32 {
+        iii_lex_fputc_c(34u32, w) ; mw_hex32(w, &ORCH as u64 + O_SRC_MHASH) ; iii_lex_fputc_c(34u32, w)
+    } else { mw_lit(w, "null" as u64, 4u64) }
+    mw_lit(w, ",\"path\":" as u64, 8u64)
+    let sp: u64 = iii_lex_read_u64_c(&ORCH as u64, O_SRC_PATH)
+    if sp != 0u64 { iii_json_emit_string(w, sp) } else { mw_lit(w, "\"\"" as u64, 2u64) }
+    mw_lit(w, "}]" as u64, 2u64)
+    mw_lit(w, ",\"tool\":\"iiis-0\"" as u64, 16u64)
+    mw_lit(w, ",\"version\":\"0.1.0\"" as u64, 18u64)
+    iii_lex_fputc_c(125u32, w)
+    iii_lex_fclose_c(w)
+    return III_EXIT_OK
+}
+
+fn iii_print_version() -> u32 {
+    mw_lit(iii_lex_stdout_c(), "iiis-0 v0.1.0 (commit unknown)\n" as u64, 30u64)
+    return 0u32
+}
+fn iii_print_help() -> u32 {
+    let o: u64 = iii_lex_stdout_c()
+    mw_lit(o, "iiis-0 - III Stage-0 compiler (CLI orchestrator)\n" as u64, 48u64)
+    mw_lit(o, "Usage: iiis-0 <source.iii> [options]\n" as u64, 37u64)
+    mw_lit(o, "  --ring R3|R0|R-1|R-2   target ring (auto-detected if omitted)\n" as u64, 62u64)
+    mw_lit(o, "  --out <path>           output path\n" as u64, 36u64)
+    mw_lit(o, "  --emit-asm-only        stop after codegen\n" as u64, 43u64)
+    mw_lit(o, "  --compile-only         stop after assemble; emit .o\n" as u64, 53u64)
+    mw_lit(o, "  --link                 link mode: positional args are .o\n" as u64, 58u64)
+    mw_lit(o, "  --emit-witness         write build-witness JSON sidecar\n" as u64, 56u64)
+    mw_lit(o, "  --reproducibility-check  run pipeline twice; assert identical\n" as u64, 63u64)
+    mw_lit(o, "  --print-mhash          print output mhash to stdout\n" as u64, 53u64)
+    mw_lit(o, "  --diag=json            JSONL diagnostics on stderr\n" as u64, 52u64)
+    mw_lit(o, "  -v -vv -vvv            verbose phase timing\n" as u64, 44u64)
+    mw_lit(o, "  --version --help\n" as u64, 17u64)
+    return 0u32
+}
+/* "R3"/"3"/"R0"/"0"/"R-1"/"-1"/"R-2"/"-2" -> ring choice at out_addr; 0 ok / 1 bad. */
+fn iii_parse_ring_arg(r: u64, out_addr: u64) -> u32 {
+    if iiim_streq(r, "R3" as u64, 2u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_R3) ; return 0u32 }
+    if iiim_streq(r, "3" as u64, 1u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_R3) ; return 0u32 }
+    if iiim_streq(r, "R0" as u64, 2u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_R0) ; return 0u32 }
+    if iiim_streq(r, "0" as u64, 1u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_R0) ; return 0u32 }
+    if iiim_streq(r, "R-1" as u64, 3u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_RM1) ; return 0u32 }
+    if iiim_streq(r, "-1" as u64, 2u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_RM1) ; return 0u32 }
+    if iiim_streq(r, "R-2" as u64, 3u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_RM2) ; return 0u32 }
+    if iiim_streq(r, "-2" as u64, 2u64) == 1u32 { iii_lex_write_u32_c(out_addr, 0u64, RING_CHOICE_RM2) ; return 0u32 }
+    return 1u32
+}
+
+/* signal handler (D12): flush a partial witness, then terminate. */
+fn iiip_sig_handler(sig: u32) -> u32 @export {
+    mw_lit(iii_lex_stderr_c(), "iiis-0: caught signal, flushing partial witness\n" as u64, 48u64)
+    let op: u64 = iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH)
+    if op != 0u64 {
+        iiim_path_suffix(&WP_BUF as u64, op, ".partial.witness.json" as u64, 21u64)
+        iii_witness_write(&WP_BUF as u64, FMT_PE_EXE)
+    }
+    iii_lex_exit_c(III_EXIT_INTERNAL)
+    return 0u32
+}
+fn iii_install_signals() -> u32 {
+    iii_lex_signal_c(2u32, &iiip_sig_handler as u64)
+    iii_lex_signal_c(15u32, &iiip_sig_handler as u64)
+    return 0u32
+}
+
+/* ── entry point ─────────────────────────────────────────────────────── */
+fn main(argc: u32, argv: u64) -> u32 @export {
+    iii_lex_memset_c(&ORCH as u64, 0u32, 256u64)
+    iii_lex_write_u32_c(&ORCH as u64, O_RING, RING_CHOICE_R3)
+    iii_lex_write_u64_c(&ORCH as u64, O_SDE, iii_lex_getenv_sde_c() as u64)
+    iii_install_signals()
+    iii_argv_canon_mhash(argc, argv, &ORCH as u64 + O_ARGV_MHASH)
+    /* prescan --version/--help. */
+    let mut i: u32 = 1u32
+    while i < argc {
+        let a: u64 = iii_lex_read_u64_c(argv, (i as u64) * 8u64)
+        if iiim_streq(a, "--version" as u64, 9u64) == 1u32 { iii_print_version() ; return III_EXIT_OK }
+        if iiim_streq(a, "--help" as u64, 6u64) == 1u32 { iii_print_help() ; return III_EXIT_OK }
+        if iiim_streq(a, "-h" as u64, 2u64) == 1u32 { iii_print_help() ; return III_EXIT_OK }
+        i = i + 1u32
+    }
+    if argc < 2u32 { iii_print_help() ; return III_EXIT_USAGE }
+    /* positional + flag parse. */
+    let positionals: u64 = iii_lex_malloc_c((argc as u64) * 8u64)
+    if positionals == 0u64 { return III_EXIT_OOM }
+    let mut npos: u32 = 0u32
+    let mut bad: u32 = 0u32
+    i = 1u32
+    while i < argc {
+        let a: u64 = iii_lex_read_u64_c(argv, (i as u64) * 8u64)
+        if iii_lex_read_u8_at_c(a, 0u64) != 45u32 {
+            iii_lex_write_u64_c(positionals, (npos as u64) * 8u64, a)
+            npos = npos + 1u32
+        } else {
+            let mut m: u32 = 0u32
+            if iiim_streq(a, "--ring" as u64, 6u64) == 1u32 { if (i + 1u32) < argc {
+                i = i + 1u32
+                if iii_parse_ring_arg(iii_lex_read_u64_c(argv, (i as u64) * 8u64), &ORCH as u64 + O_RING) != 0u32 { bad = 1u32 }
+                iii_lex_write_u32_c(&ORCH as u64, O_RING_EXPL, 1u32)
+                m = 1u32
+            } }
+            if m == 0u32 { if iiim_strprefix(a, "--ring=" as u64, 7u64) == 1u32 {
+                if iii_parse_ring_arg(a + 7u64, &ORCH as u64 + O_RING) != 0u32 { bad = 1u32 }
+                iii_lex_write_u32_c(&ORCH as u64, O_RING_EXPL, 1u32)
+                m = 1u32
+            } }
+            if m == 0u32 { if iiim_streq(a, "--out" as u64, 5u64) == 1u32 { if (i + 1u32) < argc {
+                i = i + 1u32
+                iii_lex_write_u64_c(&ORCH as u64, O_OUT_PATH, iii_lex_read_u64_c(argv, (i as u64) * 8u64))
+                m = 1u32
+            } } }
+            if m == 0u32 { if iiim_streq(a, "--reproducibility-check" as u64, 23u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_REPRO, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--emit-asm-only" as u64, 15u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_ASM_ONLY, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--compile-only" as u64, 14u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_COMPILE_ONLY, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--link" as u64, 6u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_LINK_MODE, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--emit-witness" as u64, 14u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_EMIT_WITNESS, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--print-mhash" as u64, 13u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_PRINT_MHASH, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--diag=json" as u64, 11u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_DIAG, 1u32) ; iii_lex_write_u32_c(&DIAG_MODE as u64, 0u64, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "-v" as u64, 2u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_VERBOSE, 1u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "-vv" as u64, 3u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_VERBOSE, 2u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "-vvv" as u64, 4u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_VERBOSE, 3u32) ; m = 1u32 } }
+            if m == 0u32 {
+                mw_lit(iii_lex_stderr_c(), "iiis-0: unknown argument '" as u64, 26u64)
+                mw_cstr(iii_lex_stderr_c(), a)
+                mw_lit(iii_lex_stderr_c(), "'\n" as u64, 2u64)
+                iii_lex_free_c(positionals)
+                return III_EXIT_USAGE
+            }
+        }
+        i = i + 1u32
+    }
+    if bad == 1u32 { iii_lex_free_c(positionals) ; return III_EXIT_USAGE }
+    if npos == 0u32 {
+        mw_lit(iii_lex_stderr_c(), "iiis-0: missing input file(s)\n" as u64, 30u64)
+        iii_lex_free_c(positionals)
+        return III_EXIT_USAGE
+    }
+    /* mutual-exclusive: --link vs compile/asm/repro. */
+    if iii_lex_read_u32_c(&ORCH as u64, O_LINK_MODE) == 1u32 {
+        let bad2: u32 = iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) + iii_lex_read_u32_c(&ORCH as u64, O_ASM_ONLY) + iii_lex_read_u32_c(&ORCH as u64, O_REPRO)
+        if bad2 != 0u32 { iii_lex_free_c(positionals) ; return III_EXIT_USAGE }
+    }
+    /* ── link mode ──────────────────────────────────────────────────── */
+    if iii_lex_read_u32_c(&ORCH as u64, O_LINK_MODE) == 1u32 {
+        if iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH) == 0u64 { iii_lex_free_c(positionals) ; return III_EXIT_USAGE }
+        let fmt: u32 = iii_ring_to_fmt(iii_lex_read_u32_c(&ORCH as u64, O_RING))
+        let rc: u32 = iii_run_link_only(positionals, npos, fmt, iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH))
+        if rc != III_EXIT_OK { iii_lex_free_c(positionals) ; return rc }
+        if iii_lex_read_u32_c(&ORCH as u64, O_RUN_MHASH_VALID) == 1u32 {
+            iii_lex_memcpy_c(&ORCH as u64 + O_OUT_MHASH, &ORCH as u64 + O_RUN_MHASH, 32u64)
+            iii_lex_write_u32_c(&ORCH as u64, O_OUT_MHASH_VALID, 1u32)
+        }
+        if iii_lex_read_u32_c(&ORCH as u64, O_PRINT_MHASH) == 1u32 { if iii_lex_read_u32_c(&ORCH as u64, O_OUT_MHASH_VALID) == 1u32 {
+            iii_mhash_to_hex(&ORCH as u64 + O_OUT_MHASH, &HEX_OUT as u64)
+            mw_cstr(iii_lex_stdout_c(), &HEX_OUT as u64)
+            iii_lex_fputc_c(10u32, iii_lex_stdout_c())
+        } }
+        iii_lex_write_u32_c(&ORCH as u64, O_SEALED, 1u32)
+        iii_lex_free_c(positionals)
+        return III_EXIT_OK
+    }
+    /* ── multi-source compile-only ──────────────────────────────────── */
+    if npos > 1u32 {
+        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 0u32 { iii_lex_free_c(positionals) ; return III_EXIT_USAGE }
+        if iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH) != 0u64 { iii_lex_free_c(positionals) ; return III_EXIT_USAGE }
+        let mut multi_rc: u32 = III_EXIT_OK
+        let mut j: u32 = 0u32
+        let mut stop: u32 = 0u32
+        while j < npos {
+            if stop == 0u32 {
+                let src: u64 = iii_lex_read_u64_c(positionals, (j as u64) * 8u64)
+                iii_lex_write_u64_c(&ORCH as u64, O_SRC_PATH, src)
+                iiim_path_suffix(&DEFAULT_OUT as u64, src, ".o" as u64, 2u64)
+                let rc: u32 = iii_run_pipeline(src, &DEFAULT_OUT as u64)
+                if rc != III_EXIT_OK { multi_rc = rc ; stop = 1u32 }
+            }
+            j = j + 1u32
+        }
+        iii_lex_free_c(positionals)
+        iii_lex_write_u32_c(&ORCH as u64, O_SEALED, 1u32)
+        return multi_rc
+    }
+    /* ── single-source ──────────────────────────────────────────────── */
+    let src_path: u64 = iii_lex_read_u64_c(positionals, 0u64)
+    iii_lex_free_c(positionals)
+    iii_lex_write_u64_c(&ORCH as u64, O_SRC_PATH, src_path)
+    if iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH) == 0u64 {
+        let ring: u32 = iii_lex_read_u32_c(&ORCH as u64, O_RING)
+        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 1u32 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".o" as u64, 2u64) }
+        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 0u32 {
+            if ring == RING_CHOICE_R3 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".exe" as u64, 4u64) }
+            if ring == RING_CHOICE_R0 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".sys" as u64, 4u64) }
+            if ring == RING_CHOICE_RM1 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".bin" as u64, 4u64) }
+            if ring == RING_CHOICE_RM2 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".sanctum.o" as u64, 10u64) }
+        }
+        iii_lex_write_u64_c(&ORCH as u64, O_OUT_PATH, &DEFAULT_OUT as u64)
+    }
+    let out_path: u64 = iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH)
+    let rc: u32 = iii_run_pipeline(src_path, out_path)
+    if rc != III_EXIT_OK { return rc }
+    if iii_lex_read_u32_c(&ORCH as u64, O_RUN_MHASH_VALID) == 1u32 {
+        iii_lex_memcpy_c(&ORCH as u64 + O_OUT_MHASH, &ORCH as u64 + O_RUN_MHASH, 32u64)
+        iii_lex_write_u32_c(&ORCH as u64, O_OUT_MHASH_VALID, 1u32)
+        iii_lex_memcpy_c(&SAVE_MH1 as u64, &ORCH as u64 + O_RUN_MHASH, 32u64)
+    }
+    /* reproducibility check. */
+    if iii_lex_read_u32_c(&ORCH as u64, O_REPRO) == 1u32 {
+        iiim_path_suffix(&REPRO_OUT as u64, out_path, ".repro" as u64, 6u64)
+        let rc2: u32 = iii_run_pipeline(src_path, &REPRO_OUT as u64)
+        if rc2 != III_EXIT_OK { return rc2 }
+        let mut same: u32 = 1u32
+        if iii_lex_read_u32_c(&ORCH as u64, O_RUN_MHASH_VALID) == 0u32 { same = 0u32 }
+        let mut k: u64 = 0u64
+        while k < 32u64 {
+            if iii_lex_read_u8_at_c(&SAVE_MH1 as u64, k) != iii_lex_read_u8_at_c(&ORCH as u64 + O_RUN_MHASH, k) { same = 0u32 ; k = 32u64 }
+            if same == 1u32 { k = k + 1u64 }
+        }
+        if same == 0u32 {
+            mw_lit(iii_lex_stderr_c(), "iiis-0: REPRODUCIBILITY CHECK FAILED - mhash differs\n" as u64, 53u64)
+            return III_EXIT_REPRO_MISMATCH
+        }
+        mw_lit(iii_lex_stderr_c(), "iiis-0: reproducibility check PASSED\n" as u64, 37u64)
+    }
+    /* build-witness sidecar. */
+    if iii_lex_read_u32_c(&ORCH as u64, O_EMIT_WITNESS) == 1u32 {
+        let fmt: u32 = iii_ring_to_fmt(iii_lex_read_u32_c(&ORCH as u64, O_RING))
+        iiim_path_suffix(&WP_BUF as u64, out_path, ".witness.json" as u64, 13u64)
+        let wrc: u32 = iii_witness_write(&WP_BUF as u64, fmt)
+        if wrc != III_EXIT_OK { return wrc }
+    }
+    /* --print-mhash. */
+    if iii_lex_read_u32_c(&ORCH as u64, O_PRINT_MHASH) == 1u32 {
+        if iii_lex_read_u32_c(&ORCH as u64, O_OUT_MHASH_VALID) == 0u32 {
+            mw_lit(iii_lex_stderr_c(), "iiis-0: output mhash unavailable\n" as u64, 33u64)
+            return III_EXIT_INTERNAL
+        }
+        iii_mhash_to_hex(&ORCH as u64 + O_OUT_MHASH, &HEX_OUT as u64)
+        mw_cstr(iii_lex_stdout_c(), &HEX_OUT as u64)
+        iii_lex_fputc_c(10u32, iii_lex_stdout_c())
+    }
+    iii_lex_write_u32_c(&ORCH as u64, O_SEALED, 1u32)
+    return III_EXIT_OK
+}
+
+const III_MAIN_VERSION: u32 = 1u32
+
+/* CP-MAIN-001 Stage 2.4 COMPLETE: full main.c port (SHA-256 + helpers +
+ * diag/ring + pipeline + witness + main/argv/dispatch/signals).  Next §2.5:
+ * drop main_impl.c from build_iiis1.sh + iiis-0≡iiis-1 corpus 57/0 + reseal.
+ */

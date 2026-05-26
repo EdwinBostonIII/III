@@ -1,0 +1,276 @@
+/* numera/cad.iii — Module 1 (apotheosis): the one Content-Address.
+ *
+ * One suite-tagged content-address discipline over the proven NIH backends
+ * (numera/sha256.iii + numera/keccak256.iii).  Folds the two prior address
+ * paths into one primitive: the Keccak triple-address (content_addr heritage)
+ * and the SHA-256 domain-separated streaming Crown (sanctus/mhash heritage).
+ *
+ * Suite is a SIDE-TAG, never embedded: a digest stays 32 bytes, byte-identical
+ * to the legacy primitives, so the collapse is behavior-preserving (no consumer
+ * breakage, no determinism-seal drift).  suite 0 = SHA-256 (Crown default),
+ * suite 1 = Keccak-256 (triple-address default).
+ *
+ * Param-spill discipline: triple-address concatenates inputs into module-scope
+ * scratch (CAD_BUF) and hashes via *_oneshot -- never streaming init/update/final
+ * across param registers (the documented iiis param-spill reconciliation).
+ *
+ * Dispatch is monomorphic if-equality cascades on the suite tag (kind-tag, never
+ * fn-pointer).  Streaming Crown is non-reentrant: one active suite at a time,
+ * recorded in CAD_ACTIVE by cad_begin.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: sha256.iii + keccak256.iii.
+ */
+module numera_cad
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_init() -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_update(input: *u8, len: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_final(out: *u8) -> i32 from "keccak256.iii"
+
+const CAD_OK             : i32 = 0i32
+const CAD_E_NULL         : i32 = -1i32
+const CAD_E_BAD_SUITE    : i32 = -2i32
+const CAD_BYTES          : u64 = 32u64
+const CAD_SUITE_SHA256    : u32 = 0u32
+const CAD_SUITE_KECCAK256 : u32 = 1u32
+
+var CAD_BUF    : [u8; 96]
+var CAD_ACTIVE : u32 = 0u32
+var CAD_A  : [u8; 32]
+var CAD_B  : [u8; 32]
+var CAD_C  : [u8; 32]
+var CAD_O  : [u8; 32]
+var CAD_O2 : [u8; 32]
+var CAD_REF : [u8; 96]
+var CAD_ZERO : [u8; 1] = [0u8]
+
+/* Generic oneshot: hash (msg,len) under `suite` into out (32 bytes). */
+fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 @export {
+    if (msg as u64) == 0u64 { return CAD_E_NULL }
+    if (out as u64) == 0u64 { return CAD_E_NULL }
+    let s : u32 = suite
+    let m : *u8 = msg
+    let n : u64 = len
+    let o : *u8 = out
+    if s == CAD_SUITE_SHA256 {
+        sha256_oneshot(m, n, o)
+        return CAD_OK
+    }
+    if s == CAD_SUITE_KECCAK256 {
+        keccak256_oneshot(m as u64, n, o as u64)
+        return CAD_OK
+    }
+    return CAD_E_BAD_SUITE
+}
+
+/* content address = Keccak256(producer || operation || input_commit). */
+fn cad_compute(producer: *u8, operation: *u8, input_commit: *u8, out: *u8) -> i32 @export {
+    if (producer as u64) == 0u64 { return CAD_E_NULL }
+    if (operation as u64) == 0u64 { return CAD_E_NULL }
+    if (input_commit as u64) == 0u64 { return CAD_E_NULL }
+    if (out as u64) == 0u64 { return CAD_E_NULL }
+    let mut i : u64 = 0u64
+    while i < CAD_BYTES {
+        CAD_BUF[i] = producer[i]
+        CAD_BUF[CAD_BYTES + i] = operation[i]
+        CAD_BUF[2u64*CAD_BYTES + i] = input_commit[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot(&CAD_BUF as u64, 3u64*CAD_BYTES, out as u64)
+    return CAD_OK
+}
+
+/* composed address = Keccak256(left || right). */
+fn cad_compose(left: *u8, right: *u8, out: *u8) -> i32 @export {
+    if (left as u64) == 0u64 { return CAD_E_NULL }
+    if (right as u64) == 0u64 { return CAD_E_NULL }
+    if (out as u64) == 0u64 { return CAD_E_NULL }
+    let mut i : u64 = 0u64
+    while i < CAD_BYTES {
+        CAD_BUF[i] = left[i]
+        CAD_BUF[CAD_BYTES + i] = right[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot(&CAD_BUF as u64, 2u64*CAD_BYTES, out as u64)
+    return CAD_OK
+}
+
+/* branch-local address = Keccak256(canonical || branch_id). */
+fn cad_branch_key(canonical: *u8, branch_id: *u8, out: *u8) -> i32 @export {
+    if (canonical as u64) == 0u64 { return CAD_E_NULL }
+    if (branch_id as u64) == 0u64 { return CAD_E_NULL }
+    if (out as u64) == 0u64 { return CAD_E_NULL }
+    let mut i : u64 = 0u64
+    while i < CAD_BYTES {
+        CAD_BUF[i] = canonical[i]
+        CAD_BUF[CAD_BYTES + i] = branch_id[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot(&CAD_BUF as u64, 2u64*CAD_BYTES, out as u64)
+    return CAD_OK
+}
+
+/* Crown (streaming, domain-separated): begin -> domain* -> payload* -> final.
+ * Non-reentrant: one active suite at a time (CAD_ACTIVE). */
+fn cad_begin(suite: u32) -> i32 @export {
+    let s : u32 = suite
+    if s == CAD_SUITE_SHA256 {
+        CAD_ACTIVE = s
+        sha256_init()
+        return CAD_OK
+    }
+    if s == CAD_SUITE_KECCAK256 {
+        CAD_ACTIVE = s
+        keccak256_init()
+        return CAD_OK
+    }
+    return CAD_E_BAD_SUITE
+}
+
+fn cad_domain(domain: u64, domain_len: u64) -> i32 @export {
+    if domain_len == 0u64 { return CAD_OK }
+    if domain == 0u64 { return CAD_E_NULL }
+    let dp : *u8 = domain as *u8
+    let dl : u64 = domain_len
+    if CAD_ACTIVE == CAD_SUITE_SHA256 {
+        sha256_update(dp, dl)
+        sha256_update_byte(0u32)
+        return CAD_OK
+    }
+    if CAD_ACTIVE == CAD_SUITE_KECCAK256 {
+        keccak256_update(dp, dl)
+        keccak256_update((&CAD_ZERO as u64) as *u8, 1u64)
+        return CAD_OK
+    }
+    return CAD_E_BAD_SUITE
+}
+
+fn cad_payload(payload: u64, payload_len: u64) -> i32 @export {
+    if payload_len == 0u64 { return CAD_OK }
+    if payload == 0u64 { return CAD_E_NULL }
+    let pp : *u8 = payload as *u8
+    let pl : u64 = payload_len
+    if CAD_ACTIVE == CAD_SUITE_SHA256 {
+        sha256_update(pp, pl)
+        return CAD_OK
+    }
+    if CAD_ACTIVE == CAD_SUITE_KECCAK256 {
+        keccak256_update(pp, pl)
+        return CAD_OK
+    }
+    return CAD_E_BAD_SUITE
+}
+
+fn cad_final(out_32: u64) -> i32 @export {
+    if out_32 == 0u64 { return CAD_E_NULL }
+    let op : *u8 = out_32 as *u8
+    if CAD_ACTIVE == CAD_SUITE_SHA256 {
+        sha256_final(op)
+        return CAD_OK
+    }
+    if CAD_ACTIVE == CAD_SUITE_KECCAK256 {
+        keccak256_final(op)
+        return CAD_OK
+    }
+    return CAD_E_BAD_SUITE
+}
+
+/* 32-byte constant-shape equality (XOR-accumulate). */
+fn cad_eq(a: *u8, b: *u8) -> u8 @export {
+    if (a as u64) == 0u64 { return 0u8 }
+    if (b as u64) == 0u64 { return 0u8 }
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < CAD_BYTES { acc = acc | ((a[i] as u32) ^ (b[i] as u32)) ; i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+
+fn cad_is_zero(a: *u8) -> u8 @export {
+    if (a as u64) == 0u64 { return 0u8 }
+    let mut acc : u32 = 0u32
+    let mut i : u64 = 0u64
+    while i < CAD_BYTES { acc = acc | (a[i] as u32) ; i = i + 1u64 }
+    if acc == 0u32 { return 1u8 }
+    return 0u8
+}
+
+/* Byte-equivalence + negative-arm KAT.  Proves cad is byte-identical to the
+ * backends it dispatches to (the M1/M24 byte-equivalence falsifier), plus the
+ * bad-suite / null negatives must fail.  99 = pass; any other code = which check. */
+fn cad_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        CAD_A[i] = i as u8
+        CAD_B[i] = (i + 100u64) as u8
+        CAD_C[i] = (i + 200u64) as u8
+        i = i + 1u64
+    }
+    /* 1. SHA oneshot determinism */
+    cad_oneshot(CAD_SUITE_SHA256, (&CAD_A as u64) as *u8, 32u64, (&CAD_O as u64) as *u8)
+    cad_oneshot(CAD_SUITE_SHA256, (&CAD_A as u64) as *u8, 32u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 1u64 }
+    /* 2. equivalence-SHA: cad_oneshot(SHA) == sha256_oneshot */
+    sha256_oneshot((&CAD_A as u64) as *u8, 32u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 2u64 }
+    /* 3. equivalence-Keccak: cad_oneshot(KECCAK) == keccak256_oneshot */
+    cad_oneshot(CAD_SUITE_KECCAK256, (&CAD_A as u64) as *u8, 32u64, (&CAD_O as u64) as *u8)
+    keccak256_oneshot(&CAD_A as u64, 32u64, &CAD_O2 as u64)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 3u64 }
+    /* 4. cad_compute BYTE-equivalence == keccak256_oneshot(producer||operation||input_commit) */
+    cad_compute((&CAD_A as u64) as *u8, (&CAD_B as u64) as *u8, (&CAD_C as u64) as *u8, (&CAD_O as u64) as *u8)
+    i = 0u64
+    while i < 32u64 {
+        CAD_REF[i] = CAD_A[i]
+        CAD_REF[32u64 + i] = CAD_B[i]
+        CAD_REF[64u64 + i] = CAD_C[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot(&CAD_REF as u64, 96u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 4u64 }
+    /* 5. cad_compute input-sensitive (flip one byte, then restore) */
+    CAD_C[0] = CAD_C[0] ^ 0x01u8
+    cad_compute((&CAD_A as u64) as *u8, (&CAD_B as u64) as *u8, (&CAD_C as u64) as *u8, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) == 1u8 { return 5u64 }
+    CAD_C[0] = CAD_C[0] ^ 0x01u8
+    /* 6. cad_compose BYTE-equivalence == keccak256_oneshot(left||right) */
+    cad_compose((&CAD_A as u64) as *u8, (&CAD_B as u64) as *u8, (&CAD_O as u64) as *u8)
+    i = 0u64
+    while i < 32u64 {
+        CAD_REF[i] = CAD_A[i]
+        CAD_REF[32u64 + i] = CAD_B[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot(&CAD_REF as u64, 64u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 6u64 }
+    /* 7. equivalence-Crown: begin(SHA)+payload(A,32)+final == sha256_oneshot(A,32) */
+    cad_begin(CAD_SUITE_SHA256)
+    cad_payload((&CAD_A as u64), 32u64)
+    cad_final((&CAD_O as u64))
+    sha256_oneshot((&CAD_A as u64) as *u8, 32u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 7u64 }
+    /* 8-12. negatives — must fail */
+    if cad_oneshot(99u32, (&CAD_A as u64) as *u8, 32u64, (&CAD_O as u64) as *u8) != CAD_E_BAD_SUITE { return 8u64 }
+    if cad_oneshot(CAD_SUITE_SHA256, 0u64 as *u8, 32u64, (&CAD_O as u64) as *u8) != CAD_E_NULL { return 9u64 }
+    if cad_oneshot(CAD_SUITE_SHA256, (&CAD_A as u64) as *u8, 32u64, 0u64 as *u8) != CAD_E_NULL { return 10u64 }
+    if cad_begin(99u32) != CAD_E_BAD_SUITE { return 11u64 }
+    if cad_compute(0u64 as *u8, (&CAD_B as u64) as *u8, (&CAD_C as u64) as *u8, (&CAD_O as u64) as *u8) != CAD_E_NULL { return 12u64 }
+    /* 13. Crown WITH domain: begin(SHA)+domain(A,4)+payload(B,8)+final == sha256(A[0:4]||0x00||B[0:8]) */
+    cad_begin(CAD_SUITE_SHA256)
+    cad_domain((&CAD_A as u64), 4u64)
+    cad_payload((&CAD_B as u64), 8u64)
+    cad_final((&CAD_O as u64))
+    i = 0u64
+    while i < 4u64 { CAD_REF[i] = CAD_A[i] ; i = i + 1u64 }
+    CAD_REF[4] = 0u8
+    i = 0u64
+    while i < 8u64 { CAD_REF[5u64 + i] = CAD_B[i] ; i = i + 1u64 }
+    sha256_oneshot((&CAD_REF as u64) as *u8, 13u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 13u64 }
+    return 99u64
+}

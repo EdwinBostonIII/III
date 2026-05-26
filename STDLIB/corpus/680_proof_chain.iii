@@ -1,0 +1,98 @@
+/* 680_proof_chain.iii -- M16 keystone: the proof -> theorem trust chain.
+ *
+ * M16 generalizes "the kernel is proof-carrying" to "proven facts are theorem_carrier artifacts."
+ * theorem_carrier's tc_alloc admits a theorem ONLY if its cited proof-term verifies (pt_verify==0)
+ * AND every declared dependency is resident (W35/M18). 647_theorem_carrier's tc_kat is STANDALONE
+ * -- it tests only the negative (a made-up zero proof-term id fails pt_verify). This KAT closes the
+ * POSITIVE: a REAL proof-term, built + verified through the public proof_term API, is admitted as a
+ * theorem -- the integration proof_term -> theorem_carrier -- plus the two prove-the-negative arms
+ * (an unverified proof-term -> THMC_E_VERIFY_FAIL; a verified term with an absent dependency ->
+ * THMC_E_DEP_ABSENT). tc_alloc's success path needs only pt + algebraic_time (it content-addresses
+ * via cad and timestamps via at_advance; it does NOT publish a witness), so the bootstrap is
+ * pt_init + at_init + tc_init.
+ *
+ * Main-corpus convention: rc 99 = pass; 1..7 = which check failed. */
+module corpus_680
+
+extern @abi(c-msvc-x64) fn pt_init() -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_finalize(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn pt_verify(term_id: *u8) -> i32 from "proof_term.iii"
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn tc_init() -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_pack_alloc_req(req_out: *u8, statement: *u8, statement_len: u32, ptids_and_deps: *u8) -> i32 from "theorem_carrier.iii"
+extern @abi(c-msvc-x64) fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 from "theorem_carrier.iii"
+
+const PT_RULE_AXIOM      : u8  = 0x01u8
+const PT_OK              : i32 =  0i32
+const THMC_OK            : i32 =  0i32
+const THMC_E_VERIFY_FAIL : i32 = -4i32
+const THMC_E_DEP_ABSENT  : i32 = -5i32
+
+var PC_ARG     : [u8; 600]
+var PC_TID1    : [u8; 32]
+var PC_STMT    : [u8; 8]
+var PC_PADS    : [u8; 24]
+var PC_REQ     : [u8; 64]
+var PC_CARRIER : [u8; 32]
+var PC_BADID   : [u8; 32]
+var PC_DEP     : [u8; 32]
+
+/* pack a u64 little-endian into 8 bytes at addr. */
+fn pc_pk8(addr: u64, val: u64) -> i32 {
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { p[i] = ((val >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0i32
+}
+
+/* build a 1-step AXIOM proof-term in PC_TID1 (pcount=0, conclusion "A"); return pt_add_inference rc. */
+fn pc_build_axiom() -> i32 {
+    let a : *u8 = (&PC_ARG as u64) as *u8
+    let tp : *u8 = (&PC_TID1 as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { a[i] = tp[i]  i = i + 1u64 }
+    a[32u64] = PT_RULE_AXIOM
+    a[33u64] = 0u8  a[34u64] = 0u8  a[35u64] = 0u8
+    a[36u64] = 0u8  a[37u64] = 0u8  a[38u64] = 0u8  a[39u64] = 0u8
+    a[40u64] = 1u8  a[41u64] = 0u8  a[42u64] = 0u8  a[43u64] = 0u8
+    a[44u64] = 0x41u8
+    return pt_add_inference(a)
+}
+
+/* set PC_PADS: ptid ptr @[0..8], dep ptr @[8..16], dep_count @[16..24]. */
+fn pc_set_pads(ptid_addr: u64, dep_addr: u64, dep_count: u64) -> i32 {
+    pc_pk8(&PC_PADS as u64, ptid_addr)
+    pc_pk8((&PC_PADS as u64) + 8u64, dep_addr)
+    pc_pk8((&PC_PADS as u64) + 16u64, dep_count)
+    return 0i32
+}
+
+fn main() -> u64 {
+    pt_init()
+    at_init(0u64)
+    tc_init()
+    /* build + verify a REAL proof-term T1 through the public proof_term API. */
+    if pt_alloc((&PC_TID1 as u64) as *u8) != PT_OK { return 1u64 }
+    if pc_build_axiom() != PT_OK { return 2u64 }
+    if pt_finalize((&PC_TID1 as u64) as *u8) != PT_OK { return 3u64 }
+    if pt_verify((&PC_TID1 as u64) as *u8) != PT_OK { return 4u64 }
+    /* the trust chain: a verified proof-term is ADMITTED as a theorem (no dependencies). */
+    pc_set_pads(&PC_TID1 as u64, &PC_DEP as u64, 0u64)
+    tc_pack_alloc_req((&PC_REQ as u64) as *u8, (&PC_STMT as u64) as *u8, 3u32, (&PC_PADS as u64) as *u8)
+    if tc_alloc((&PC_REQ as u64) as *u8, (&PC_CARRIER as u64) as *u8) != THMC_OK { return 5u64 }
+    /* prove the negative #1: an UNVERIFIED proof-term (all-zero id, never built) is REFUSED. */
+    let mut zi : u64 = 0u64
+    while zi < 32u64 { PC_BADID[zi] = 0u8  zi = zi + 1u64 }
+    pc_set_pads(&PC_BADID as u64, &PC_DEP as u64, 0u64)
+    tc_pack_alloc_req((&PC_REQ as u64) as *u8, (&PC_STMT as u64) as *u8, 3u32, (&PC_PADS as u64) as *u8)
+    if tc_alloc((&PC_REQ as u64) as *u8, (&PC_CARRIER as u64) as *u8) != THMC_E_VERIFY_FAIL { return 6u64 }
+    /* prove the negative #2: a verified proof-term but an ABSENT dependency is REFUSED. */
+    let mut di : u64 = 0u64
+    while di < 32u64 { PC_DEP[di] = 0xABu8  di = di + 1u64 }
+    pc_set_pads(&PC_TID1 as u64, &PC_DEP as u64, 1u64)
+    tc_pack_alloc_req((&PC_REQ as u64) as *u8, (&PC_STMT as u64) as *u8, 3u32, (&PC_PADS as u64) as *u8)
+    if tc_alloc((&PC_REQ as u64) as *u8, (&PC_CARRIER as u64) as *u8) != THMC_E_DEP_ABSENT { return 7u64 }
+    return 99u64
+}

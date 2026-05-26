@@ -1,0 +1,452 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_term.iii
+ *
+ * III STDLIB - omnia::xii_term
+ *
+ * XII algebra term representation. Per DOCS/III-XII.md S3 / S26.
+ *
+ * Closed algebra: 18 basis kernels K01..K18 (one per Intent Calculus primitive)
+ * + 6 fusion operators (F.COMPOSE, F.THEN, F.WITH, F.UNDER, F.IF, F.LOOP).
+ *
+ * Hexad: kind_compose. Ring: R0. K: per-kernel.
+ *
+ * Term node = 32 bytes:
+ *   0  : kind u8 (0..23)
+ *   1  : flags u8 (bit 0: has_child_c, bit 1: is_canonical, bit 2: weight_cached)
+ *   2  : hexad u8 (cached HEXAD value; 0 if not yet computed)
+ *   3  : reserved u8
+ *   4..7  : subform u32 (transition_id, form_id, snapshot_id, etc.)
+ *   8..11 : child_a u32 (XII_NULL_REF = 0xFFFFFFFF)
+ *   12..15: child_b u32
+ *   16..19: child_c u32 (F.IF predicate-or-third-branch; else null)
+ *   20..27: aux u64 (F.LOOP bound; K07 snapshot_id; per-kernel extension data)
+ *   28..31: weight_mpo u32 (cached, see DOCS/III-XII.md S9.3)
+ *
+ * NIH: libc + Win32 only. No third-party deps.
+ *
+ * CONTRACT: every u32/u64 store is byte-by-byte to avoid the iiis-0
+ * "u32-pointer store width bug" documented in CLAUDE.md.
+ */
+
+module omnia_xii_term
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* ------------------------------------------------------------------ */
+/* Kind enum (0..23)                                                   */
+/* ------------------------------------------------------------------ */
+
+const XII_KIND_K01_FORM     : u8 = 0u8
+const XII_KIND_K02_BIND     : u8 = 1u8
+const XII_KIND_K03_CONVEY   : u8 = 2u8
+const XII_KIND_K04_MEAN     : u8 = 3u8
+const XII_KIND_K05_ACT      : u8 = 4u8
+const XII_KIND_K06_COMPOSE  : u8 = 5u8
+const XII_KIND_K07_SEAL     : u8 = 6u8
+const XII_KIND_K08_PROVE    : u8 = 7u8
+const XII_KIND_K09_QUERY    : u8 = 8u8
+const XII_KIND_K10_GRANT    : u8 = 9u8
+const XII_KIND_K11_GOVERN   : u8 = 10u8
+const XII_KIND_K12_THEN     : u8 = 11u8
+const XII_KIND_K13_WITH     : u8 = 12u8
+const XII_KIND_K14_UNDER    : u8 = 13u8
+const XII_KIND_K15_IF       : u8 = 14u8
+const XII_KIND_K16_LOOP     : u8 = 15u8
+const XII_KIND_K17_LIFT     : u8 = 16u8
+const XII_KIND_K18_REFLECT  : u8 = 17u8
+
+const XII_KIND_FCOMPOSE     : u8 = 18u8
+const XII_KIND_FTHEN        : u8 = 19u8
+const XII_KIND_FWITH        : u8 = 20u8
+const XII_KIND_FUNDER       : u8 = 21u8
+const XII_KIND_FIF          : u8 = 22u8
+const XII_KIND_FLOOP        : u8 = 23u8
+
+/* M7 keystone: the trit value sub-domain -- the M2 ternary algebra evaluated BY XII
+ * (the debt M2-Final opened, paid here). Kinds 24+ are fusion-classified (>= FCOMPOSE),
+ * so xii_canon_weight uses the `w_self + max(child) + 1` form: a trit-op term always
+ * outweighs its trit-value reduct -> every trit rule strictly decreases MPO (termination
+ * automatic). A TRIT_VAL leaf carries the trit in `subform` (NEG=0, ZERO=1, POS=2); its
+ * children are NULL_REF (alloc default). The trit-op kinds are DISJOINT from K01-K18 +
+ * the F-fusions, so the 5 trit rules overlap neither each other nor the existing 40 rules
+ * -> they add ZERO critical pairs (the 117-pair confluence proof stays complete). */
+const XII_KIND_TRIT_VAL     : u8 = 24u8
+const XII_KIND_TRIT_NOT     : u8 = 25u8
+const XII_KIND_TRIT_AND     : u8 = 26u8
+const XII_KIND_TRIT_OR      : u8 = 27u8
+const XII_KIND_TRIT_SUM     : u8 = 28u8
+const XII_KIND_TRIT_MUL     : u8 = 29u8
+
+const XII_KIND_MAX          : u8 = 29u8
+const XII_BASIS_KIND_LAST   : u8 = 17u8
+
+const XII_NULL_REF          : u32 = 0xFFFFFFFFu32
+
+/* Term hexad values (mirror omnia/resolver.iii RV_HEXAD_*) */
+const XII_HEXAD_NONE        : u8 = 0u8
+const XII_HEXAD_FORM        : u8 = 1u8
+const XII_HEXAD_SUBSTANCE   : u8 = 2u8
+const XII_HEXAD_PASSAGE     : u8 = 3u8
+const XII_HEXAD_ESSENCE     : u8 = 4u8
+const XII_HEXAD_MOTION      : u8 = 5u8
+const XII_HEXAD_COMPOSE     : u8 = 6u8
+const XII_HEXAD_ORIGIN      : u8 = 7u8
+
+/* Flag bits */
+const XII_FLAG_HAS_CHILD_C  : u8 = 1u8
+const XII_FLAG_IS_CANONICAL : u8 = 2u8
+const XII_FLAG_WEIGHT_CACHED: u8 = 4u8
+const XII_FLAG_HEXAD_CACHED : u8 = 8u8
+
+/* Arena geometry */
+const XII_TERM_BYTES        : u32 = 32u32
+const XII_TERM_ARENA_BYTES  : u32 = 32768u32
+const XII_TERM_ARENA_CAP    : u32 = 1024u32
+
+var XII_TERM_ARENA : [u8; 32768]
+var XII_TERM_NEXT  : u32 = 0u32
+
+/* ------------------------------------------------------------------ */
+/* Arena lifecycle                                                     */
+/* ------------------------------------------------------------------ */
+
+fn xii_term_arena_reset() -> i32 @export {
+    XII_TERM_NEXT = 0u32
+    let mut i : u32 = 0u32
+    while i < XII_TERM_ARENA_BYTES {
+        XII_TERM_ARENA[i] = 0u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn xii_term_arena_used() -> u32 @export {
+    return XII_TERM_NEXT
+}
+
+fn xii_term_arena_capacity() -> u32 @export {
+    return XII_TERM_ARENA_CAP
+}
+
+/* ------------------------------------------------------------------ */
+/* Byte-level codecs (avoid u32-pointer store width bug)              */
+/* ------------------------------------------------------------------ */
+
+fn _xii_term_write_u32(off: u32, val: u32) -> i32 {
+    XII_TERM_ARENA[off]        = (val & 0xFFu32) as u8
+    XII_TERM_ARENA[off + 1u32] = ((val >> 8u32) & 0xFFu32) as u8
+    XII_TERM_ARENA[off + 2u32] = ((val >> 16u32) & 0xFFu32) as u8
+    XII_TERM_ARENA[off + 3u32] = ((val >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn _xii_term_read_u32(off: u32) -> u32 {
+    let b0 : u32 = XII_TERM_ARENA[off] as u32
+    let b1 : u32 = XII_TERM_ARENA[off + 1u32] as u32
+    let b2 : u32 = XII_TERM_ARENA[off + 2u32] as u32
+    let b3 : u32 = XII_TERM_ARENA[off + 3u32] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn _xii_term_write_u64(off: u32, val: u64) -> i32 {
+    XII_TERM_ARENA[off]        = (val & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 1u32] = ((val >> 8u64) & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 2u32] = ((val >> 16u64) & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 3u32] = ((val >> 24u64) & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 4u32] = ((val >> 32u64) & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 5u32] = ((val >> 40u64) & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 6u32] = ((val >> 48u64) & 0xFFu64) as u8
+    XII_TERM_ARENA[off + 7u32] = ((val >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+fn _xii_term_read_u64(off: u32) -> u64 {
+    let b0 : u64 = XII_TERM_ARENA[off] as u64
+    let b1 : u64 = XII_TERM_ARENA[off + 1u32] as u64
+    let b2 : u64 = XII_TERM_ARENA[off + 2u32] as u64
+    let b3 : u64 = XII_TERM_ARENA[off + 3u32] as u64
+    let b4 : u64 = XII_TERM_ARENA[off + 4u32] as u64
+    let b5 : u64 = XII_TERM_ARENA[off + 5u32] as u64
+    let b6 : u64 = XII_TERM_ARENA[off + 6u32] as u64
+    let b7 : u64 = XII_TERM_ARENA[off + 7u32] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+/* ------------------------------------------------------------------ */
+/* Allocation                                                          */
+/* ------------------------------------------------------------------ */
+
+fn xii_term_alloc() -> u32 @export {
+    let idx : u32 = XII_TERM_NEXT
+    if idx >= XII_TERM_ARENA_CAP { return XII_NULL_REF }
+    XII_TERM_NEXT = idx + 1u32
+    let off : u32 = idx * XII_TERM_BYTES
+    let mut k : u32 = 0u32
+    while k < XII_TERM_BYTES {
+        XII_TERM_ARENA[off + k] = 0u8
+        k = k + 1u32
+    }
+    /* Default child refs are NULL (0xFFFFFFFF). Use byte-by-byte writes. */
+    _xii_term_write_u32(off + 8u32, XII_NULL_REF)
+    _xii_term_write_u32(off + 12u32, XII_NULL_REF)
+    _xii_term_write_u32(off + 16u32, XII_NULL_REF)
+    return idx
+}
+
+/* ------------------------------------------------------------------ */
+/* Field accessors                                                     */
+/* ------------------------------------------------------------------ */
+
+fn xii_term_set_kind(idx: u32, kind: u8) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    XII_TERM_ARENA[idx * XII_TERM_BYTES] = kind
+    return 0i32
+}
+
+fn xii_term_get_kind(idx: u32) -> u8 @export {
+    if idx >= XII_TERM_ARENA_CAP { return 0u8 }
+    return XII_TERM_ARENA[idx * XII_TERM_BYTES]
+}
+
+fn xii_term_set_flags(idx: u32, flags: u8) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    XII_TERM_ARENA[(idx * XII_TERM_BYTES) + 1u32] = flags
+    return 0i32
+}
+
+fn xii_term_get_flags(idx: u32) -> u8 @export {
+    if idx >= XII_TERM_ARENA_CAP { return 0u8 }
+    return XII_TERM_ARENA[(idx * XII_TERM_BYTES) + 1u32]
+}
+
+fn xii_term_set_hexad(idx: u32, hexad: u8) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    XII_TERM_ARENA[(idx * XII_TERM_BYTES) + 2u32] = hexad
+    let f : u8 = xii_term_get_flags(idx)
+    xii_term_set_flags(idx, f | XII_FLAG_HEXAD_CACHED)
+    return 0i32
+}
+
+fn xii_term_get_hexad(idx: u32) -> u8 @export {
+    if idx >= XII_TERM_ARENA_CAP { return 0u8 }
+    return XII_TERM_ARENA[(idx * XII_TERM_BYTES) + 2u32]
+}
+
+fn xii_term_set_subform(idx: u32, sub: u32) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    _xii_term_write_u32((idx * XII_TERM_BYTES) + 4u32, sub)
+    return 0i32
+}
+
+fn xii_term_get_subform(idx: u32) -> u32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return 0u32 }
+    return _xii_term_read_u32((idx * XII_TERM_BYTES) + 4u32)
+}
+
+fn xii_term_set_child_a(idx: u32, ref: u32) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    _xii_term_write_u32((idx * XII_TERM_BYTES) + 8u32, ref)
+    return 0i32
+}
+
+fn xii_term_get_child_a(idx: u32) -> u32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return XII_NULL_REF }
+    return _xii_term_read_u32((idx * XII_TERM_BYTES) + 8u32)
+}
+
+fn xii_term_set_child_b(idx: u32, ref: u32) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    _xii_term_write_u32((idx * XII_TERM_BYTES) + 12u32, ref)
+    return 0i32
+}
+
+fn xii_term_get_child_b(idx: u32) -> u32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return XII_NULL_REF }
+    return _xii_term_read_u32((idx * XII_TERM_BYTES) + 12u32)
+}
+
+fn xii_term_set_child_c(idx: u32, ref: u32) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    _xii_term_write_u32((idx * XII_TERM_BYTES) + 16u32, ref)
+    /* set has_child_c flag */
+    let f : u8 = xii_term_get_flags(idx)
+    xii_term_set_flags(idx, f | XII_FLAG_HAS_CHILD_C)
+    return 0i32
+}
+
+fn xii_term_get_child_c(idx: u32) -> u32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return XII_NULL_REF }
+    return _xii_term_read_u32((idx * XII_TERM_BYTES) + 16u32)
+}
+
+fn xii_term_set_aux(idx: u32, aux: u64) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    _xii_term_write_u64((idx * XII_TERM_BYTES) + 20u32, aux)
+    return 0i32
+}
+
+fn xii_term_get_aux(idx: u32) -> u64 @export {
+    if idx >= XII_TERM_ARENA_CAP { return 0u64 }
+    return _xii_term_read_u64((idx * XII_TERM_BYTES) + 20u32)
+}
+
+fn xii_term_set_weight_mpo(idx: u32, w: u32) -> i32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    _xii_term_write_u32((idx * XII_TERM_BYTES) + 28u32, w)
+    let f : u8 = xii_term_get_flags(idx)
+    xii_term_set_flags(idx, f | XII_FLAG_WEIGHT_CACHED)
+    return 0i32
+}
+
+fn xii_term_get_weight_mpo(idx: u32) -> u32 @export {
+    if idx >= XII_TERM_ARENA_CAP { return 0u32 }
+    return _xii_term_read_u32((idx * XII_TERM_BYTES) + 28u32)
+}
+
+/* ------------------------------------------------------------------ */
+/* Convenience constructors                                            */
+/* ------------------------------------------------------------------ */
+
+fn xii_term_make_basis(kind: u8, subform: u32) -> u32 @export {
+    let idx : u32 = xii_term_alloc()
+    if idx == XII_NULL_REF { return XII_NULL_REF }
+    xii_term_set_kind(idx, kind)
+    xii_term_set_subform(idx, subform)
+    return idx
+}
+
+/* route-S associativity spine-collection scratch. Bounded by the 1024-term arena cap, so it
+ * cannot overflow a valid arena (a chain longer than the arena is structurally impossible). */
+var XII_SPINE : [u32; 1024]
+
+/* raw fusion node build (the pre-route-S body): alloc + set kind + two children, no canonicalising. */
+fn _xii_make_fusion2_raw(kind: u8, child_a: u32, child_b: u32) -> u32 {
+    let idx : u32 = xii_term_alloc()
+    if idx == XII_NULL_REF { return XII_NULL_REF }
+    xii_term_set_kind(idx, kind)
+    xii_term_set_child_a(idx, child_a)
+    xii_term_set_child_b(idx, child_b)
+    return idx
+}
+
+/* route-S: right-canonical build for FCOMPOSE/FTHEN/FWITH. Forbids a same-kind child_a, so a
+ * left-nested chain is UNREPRESENTABLE (R001-R003 lose their redex). a/b are canonical by the
+ * constructor invariant; pure iteration (no recursion). */
+fn _xii_make_right(kind: u8, a: u32, b: u32) -> u32 {
+    if xii_term_get_kind(a) != kind { return _xii_make_fusion2_raw(kind, a, b) }
+    let mut cnt : u32 = 0u32
+    let mut cur : u32 = a
+    while xii_term_get_kind(cur) == kind {
+        if cnt >= 1024u32 { return _xii_make_fusion2_raw(kind, a, b) }
+        XII_SPINE[cnt] = xii_term_get_child_a(cur)
+        cnt = cnt + 1u32
+        cur = xii_term_get_child_b(cur)
+    }
+    let mut acc : u32 = _xii_make_fusion2_raw(kind, cur, b)
+    while cnt > 0u32 {
+        cnt = cnt - 1u32
+        acc = _xii_make_fusion2_raw(kind, XII_SPINE[cnt], acc)
+    }
+    return acc
+}
+
+/* route-S: left-canonical build for FUNDER. Forbids a same-kind child_b, so a right-nested FUNDER
+ * chain is UNREPRESENTABLE (R004 loses its redex). Pure iteration. */
+fn _xii_make_left(kind: u8, a: u32, b: u32) -> u32 {
+    if xii_term_get_kind(b) != kind { return _xii_make_fusion2_raw(kind, a, b) }
+    let mut cnt : u32 = 0u32
+    let mut cur : u32 = b
+    while xii_term_get_kind(cur) == kind {
+        if cnt >= 1024u32 { return _xii_make_fusion2_raw(kind, a, b) }
+        XII_SPINE[cnt] = xii_term_get_child_b(cur)
+        cnt = cnt + 1u32
+        cur = xii_term_get_child_a(cur)
+    }
+    let mut acc : u32 = _xii_make_fusion2_raw(kind, a, cur)
+    while cnt > 0u32 {
+        cnt = cnt - 1u32
+        acc = _xii_make_fusion2_raw(kind, acc, XII_SPINE[cnt])
+    }
+    return acc
+}
+
+/* route-S canonical fusion constructor: associativity is STRUCTURAL (born canonical), not a
+ * rewrite rule. FCOMPOSE/FTHEN/FWITH right-lean; FUNDER left-leans; all other kinds build raw.
+ * This renders the assoc-involved critical pairs unrepresentable (the 15 of 35); see
+ * DOCS/III-XII-CONFLUENCE-CERT-IMPL-PLAN.md Step B.1. */
+fn xii_term_make_fusion2(kind: u8, child_a: u32, child_b: u32) -> u32 @export {
+    if kind == XII_KIND_FCOMPOSE { return _xii_make_right(kind, child_a, child_b) }
+    if kind == XII_KIND_FTHEN { return _xii_make_right(kind, child_a, child_b) }
+    if kind == XII_KIND_FWITH { return _xii_make_right(kind, child_a, child_b) }
+    if kind == XII_KIND_FUNDER { return _xii_make_left(kind, child_a, child_b) }
+    return _xii_make_fusion2_raw(kind, child_a, child_b)
+}
+
+fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 @export {
+    let idx : u32 = xii_term_alloc()
+    if idx == XII_NULL_REF { return XII_NULL_REF }
+    xii_term_set_kind(idx, XII_KIND_FIF)
+    xii_term_set_child_a(idx, pred)
+    xii_term_set_child_b(idx, then_b)
+    xii_term_set_child_c(idx, else_b)
+    return idx
+}
+
+fn xii_term_make_loop(body: u32, count: u64) -> u32 @export {
+    let idx : u32 = xii_term_alloc()
+    if idx == XII_NULL_REF { return XII_NULL_REF }
+    xii_term_set_kind(idx, XII_KIND_FLOOP)
+    xii_term_set_child_a(idx, body)
+    xii_term_set_aux(idx, count)
+    return idx
+}
+
+/* ------------------------------------------------------------------ */
+/* Predicates                                                          */
+/* ------------------------------------------------------------------ */
+
+fn xii_term_is_basis(idx: u32) -> u8 @export {
+    let kind : u8 = xii_term_get_kind(idx)
+    if kind <= XII_BASIS_KIND_LAST { return 1u8 }
+    return 0u8
+}
+
+fn xii_term_is_fusion(idx: u32) -> u8 @export {
+    let kind : u8 = xii_term_get_kind(idx)
+    if kind >= XII_KIND_FCOMPOSE { return 1u8 }
+    return 0u8
+}
+
+fn xii_term_is_null(ref: u32) -> u8 @export {
+    if ref == XII_NULL_REF { return 1u8 }
+    return 0u8
+}
+
+fn xii_term_is_kind(idx: u32, kind: u8) -> u8 @export {
+    let k : u8 = xii_term_get_kind(idx)
+    if k == kind { return 1u8 }
+    return 0u8
+}
+
+/* ------------------------------------------------------------------ */
+/* Mhash: SHA-256 of the term's node bytes (single node only).        */
+/* For full tree hash, callers should walk children and chain hashes. */
+/* ------------------------------------------------------------------ */
+
+fn xii_term_mhash(idx: u32, out_32: *u8) -> i32 @export {
+    if idx == XII_NULL_REF {
+        let mut z : u32 = 0u32
+        while z < 32u32 {
+            out_32[z as u64] = 0u8
+            z = z + 1u32
+        }
+        return 0i32
+    }
+    if idx >= XII_TERM_ARENA_CAP { return -1i32 }
+    let off : u32 = idx * XII_TERM_BYTES
+    let p : *u8 = &XII_TERM_ARENA as *u8
+    let base : u64 = off as u64
+    sha256_oneshot((p + base) as *u8, 32u64, out_32)
+    return 0i32
+}

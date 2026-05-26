@@ -1,0 +1,4 @@
+/* 622 — manifest: provenance manifests as witness fragments; verify reproduces from payload. */
+module corpus_622
+extern @abi(c-msvc-x64) fn mf_selftest() -> u64 from "manifest.iii"
+fn main() -> u64 { return mf_selftest() }

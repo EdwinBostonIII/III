@@ -1,0 +1,337 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fed_sybil.iii
+ *
+ * III STDLIB - aether::fed_sybil -- Sybil resistance for the planetary
+ * federation tier.
+ *
+ * Lattice plan Phase 14k Step 0189.  Hybrid PoW + sovereign-endorsement
+ * gate: a peer is admitted only when it presents BOTH (a) a SHA3-256
+ * proof-of-work over its ed25519 peer-id (>= MIN difficulty bits) and
+ * (b) a valid ed25519 signature by a sovereign-tier issuer over the
+ * peer-id.
+ *
+ * Strictly stronger than either single defense: cloud-compute alone
+ * cannot satisfy the signature gate, and a compromised sovereign key
+ * cannot bypass the PoW cost wall.
+ *
+ * Public surface:
+ *   fed_sybil_pow_min_difficulty_bits()                                 -> u32
+ *   fed_sybil_pow_verify(peer_id_ptr, nonce, bits)                       -> u8
+ *   fed_sybil_admit(peer_id_ptr, nonce, sov_pub_ptr, sov_sig_ptr)        -> i32
+ *   fed_sybil_admitted(peer_id_ptr)                                      -> u8
+ *   fed_sybil_revoke_by_sovereign(peer_id_ptr, sov_pub_ptr, sov_sig_ptr) -> i32
+ *   fed_sybil_count()                                                    -> u32
+ *   fed_sybil_score(peer_id_ptr)                                         -> u64
+ *   fed_sybil_admission_difficulty(peer_id_ptr)                          -> u32
+ *   fed_sybil_clear_all()                                                -> i32
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 0.95.
+ */
+
+module aether_fed_sybil
+
+extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+
+const FSYB_OK              : i32 =  0i32
+const FSYB_E_BADPOW        : i32 = -1i32
+const FSYB_E_BADSIG        : i32 = -2i32
+const FSYB_E_FULL          : i32 = -3i32
+const FSYB_E_NULL          : i32 = -4i32
+const FSYB_E_NOT_FOUND     : i32 = -5i32
+
+const FSYB_SLOTS               : u32 = 256u32
+const FSYB_POW_MIN_BITS        : u32 = 16u32
+
+/* Per-slot SoA storage. */
+var FSYB_LIVE        : [u8;  256]
+var FSYB_PEER_ID     : [u8;  8192]    /* 256 * 32 bytes */
+var FSYB_SOV_PUB     : [u8;  8192]
+var FSYB_NONCE       : [u64; 256]
+var FSYB_DIFFICULTY  : [u32; 256]
+var FSYB_TENURE      : [u64; 256]
+var FSYB_NEXT_TENURE : u64 = 0u64
+
+/* Scratch buffers for PoW hashing (40 bytes input + 32 bytes output). */
+var FSYB_HASH_BUF    : [u8;  40]
+var FSYB_HASH_OUT    : [u8;  32]
+
+fn fed_sybil_pow_min_difficulty_bits() -> u32 @export {
+    return FSYB_POW_MIN_BITS
+}
+
+/* Compare 32-byte buffers for equality.  Returns 1 if equal, 0 otherwise. */
+fn _fsyb_eq32(a_ptr: u64, b_ptr: u64) -> u8 {
+    let a_l : u64 = a_ptr
+    let b_l : u64 = b_ptr
+    let pa : *u8 = a_l as *u8
+    let pb : *u8 = b_l as *u8
+    let mut i : u64 = 0u64
+    let mut diff : u8 = 0u8
+    while i < 32u64 {
+        let av : u8 = pa[i]
+        let bv : u8 = pb[i]
+        if av != bv { diff = 1u8 }
+        i = i + 1u64
+    }
+    if diff == 0u8 { return 1u8 }
+    return 0u8
+}
+
+/* Linear-scan lookup of a peer-id; returns slot index (0..255) or 0xFFFFFFFFu32. */
+fn _fsyb_lookup(peer_id_ptr: u64) -> u32 {
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return 0xFFFFFFFFu32 }
+    let mut s : u32 = 0u32
+    while s < FSYB_SLOTS {
+        if FSYB_LIVE[s] == 1u8 {
+            let slot_base : u64 = (&FSYB_PEER_ID) as u64 + (s as u64) * 32u64
+            if _fsyb_eq32(slot_base, p_l) == 1u8 { return s }
+        }
+        s = s + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn _fsyb_first_free() -> u32 {
+    let mut s : u32 = 0u32
+    while s < FSYB_SLOTS {
+        if FSYB_LIVE[s] == 0u8 { return s }
+        s = s + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* Build the 40-byte PoW input: peer_id_32 || nonce_le_8. */
+fn _fsyb_build_pow_input(peer_id_ptr: u64, nonce: u64) -> u32 {
+    let p_l : u64 = peer_id_ptr
+    let n_l : u64 = nonce
+    let pp : *u8 = p_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        FSYB_HASH_BUF[i] = pp[i]
+        i = i + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        FSYB_HASH_BUF[32u64 + k] = ((n_l >> (k * 8u64)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u32
+}
+
+/* Count leading zero bits of FSYB_HASH_OUT (32 bytes). */
+fn _fsyb_leading_zero_bits() -> u32 {
+    let mut bits : u32 = 0u32
+    let mut i : u32 = 0u32
+    let mut done : u8 = 0u8
+    while i < 32u32 {
+        if done == 0u8 {
+            let b : u8 = FSYB_HASH_OUT[i]
+            if b == 0u8 {
+                bits = bits + 8u32
+            }
+            if b != 0u8 {
+                /* Count leading zeros in this byte (top-bit-first). */
+                let mut mask : u8 = 0x80u8
+                let mut sub  : u32 = 0u32
+                let mut stop : u8  = 0u8
+                while stop == 0u8 {
+                    if mask == 0u8 { stop = 1u8 }
+                    if stop == 0u8 {
+                        if (b & mask) != 0u8 { stop = 1u8 }
+                        if stop == 0u8 {
+                            sub = sub + 1u32
+                            mask = mask >> 1u8
+                        }
+                    }
+                }
+                bits = bits + sub
+                done = 1u8
+            }
+        }
+        i = i + 1u32
+    }
+    return bits
+}
+
+fn fed_sybil_pow_verify(peer_id_ptr: u64, nonce: u64, bits: u32) -> u8 @export {
+    let p_l : u64 = peer_id_ptr
+    let n_l : u64 = nonce
+    let b_l : u32 = bits
+    if p_l == 0u64 { return 0u8 }
+    if b_l == 0u32 { return 0u8 }
+    if b_l > 256u32 { return 0u8 }
+    _fsyb_build_pow_input(p_l, n_l)
+    sha3_256_oneshot(&FSYB_HASH_BUF as u64, 40u64, &FSYB_HASH_OUT as u64)
+    let lz : u32 = _fsyb_leading_zero_bits()
+    if lz >= b_l { return 1u8 }
+    return 0u8
+}
+
+fn fed_sybil_admit(peer_id_ptr: u64, nonce: u64, sov_pub_ptr: u64, sov_sig_ptr: u64) -> i32 @export {
+    let p_l   : u64 = peer_id_ptr
+    let n_l   : u64 = nonce
+    let pub_l : u64 = sov_pub_ptr
+    let sig_l : u64 = sov_sig_ptr
+    if p_l == 0u64 { return FSYB_E_NULL }
+    if pub_l == 0u64 { return FSYB_E_NULL }
+    if sig_l == 0u64 { return FSYB_E_NULL }
+
+    /* Step 1: PoW gate. */
+    if fed_sybil_pow_verify(p_l, n_l, FSYB_POW_MIN_BITS) != 1u8 {
+        return FSYB_E_BADPOW
+    }
+
+    /* Step 2: sovereign endorsement gate.  ed25519 sig over peer_id. */
+    let pub_p : *u8 = pub_l as *u8
+    let msg_p : *u8 = p_l   as *u8
+    let sig_p : *u8 = sig_l as *u8
+    let ok : u8 = ed25519_verify(pub_p, msg_p, 32u64, sig_p)
+    if ok != 1u8 { return FSYB_E_BADSIG }
+
+    /* Step 3: find existing slot (re-admission) or first free. */
+    let mut slot : u32 = _fsyb_lookup(p_l)
+    if slot == 0xFFFFFFFFu32 {
+        slot = _fsyb_first_free()
+        if slot == 0xFFFFFFFFu32 { return FSYB_E_FULL }
+    }
+
+    /* Step 4: store metadata. */
+    let dst_id  : u64 = (&FSYB_PEER_ID) as u64 + (slot as u64) * 32u64
+    let dst_pub : u64 = (&FSYB_SOV_PUB) as u64 + (slot as u64) * 32u64
+    let dpi : *u8 = dst_id  as *u8
+    let dpp : *u8 = dst_pub as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dpi[i] = msg_p[i]
+        dpp[i] = pub_p[i]
+        i = i + 1u64
+    }
+    FSYB_LIVE[slot]       = 1u8
+    FSYB_NONCE[slot]      = n_l
+    FSYB_DIFFICULTY[slot] = _fsyb_leading_zero_bits()
+    FSYB_TENURE[slot]     = FSYB_NEXT_TENURE
+    FSYB_NEXT_TENURE = FSYB_NEXT_TENURE + 1u64
+    return FSYB_OK
+}
+
+fn fed_sybil_admitted(peer_id_ptr: u64) -> u8 @export {
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return 0u8 }
+    let s : u32 = _fsyb_lookup(p_l)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return 1u8
+}
+
+fn fed_sybil_revoke_by_sovereign(peer_id_ptr: u64, sov_pub_ptr: u64, sov_sig_ptr: u64) -> i32 @export {
+    let p_l   : u64 = peer_id_ptr
+    let pub_l : u64 = sov_pub_ptr
+    let sig_l : u64 = sov_sig_ptr
+    if p_l == 0u64 { return FSYB_E_NULL }
+    if pub_l == 0u64 { return FSYB_E_NULL }
+    if sig_l == 0u64 { return FSYB_E_NULL }
+    let s : u32 = _fsyb_lookup(p_l)
+    if s == 0xFFFFFFFFu32 { return FSYB_E_NOT_FOUND }
+
+    /* The endorsing sovereign's pub must match the slot's record. */
+    let slot_pub_base : u64 = (&FSYB_SOV_PUB) as u64 + (s as u64) * 32u64
+    if _fsyb_eq32(slot_pub_base, pub_l) != 1u8 { return FSYB_E_BADSIG }
+
+    /* Verify revocation sig over peer_id. */
+    let pub_p : *u8 = pub_l as *u8
+    let msg_p : *u8 = p_l   as *u8
+    let sig_p : *u8 = sig_l as *u8
+    if ed25519_verify(pub_p, msg_p, 32u64, sig_p) != 1u8 { return FSYB_E_BADSIG }
+
+    /* Clear slot. */
+    FSYB_LIVE[s]       = 0u8
+    FSYB_NONCE[s]      = 0u64
+    FSYB_DIFFICULTY[s] = 0u32
+    FSYB_TENURE[s]     = 0u64
+    let dst_id  : u64 = (&FSYB_PEER_ID) as u64 + (s as u64) * 32u64
+    let dst_pub : u64 = (&FSYB_SOV_PUB) as u64 + (s as u64) * 32u64
+    let dpi : *u8 = dst_id  as *u8
+    let dpp : *u8 = dst_pub as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dpi[i] = 0u8
+        dpp[i] = 0u8
+        i = i + 1u64
+    }
+    return FSYB_OK
+}
+
+fn fed_sybil_count() -> u32 @export {
+    let mut count : u32 = 0u32
+    let mut s : u32 = 0u32
+    while s < FSYB_SLOTS {
+        if FSYB_LIVE[s] == 1u8 { count = count + 1u32 }
+        s = s + 1u32
+    }
+    return count
+}
+
+/* Score = (difficulty_bits as u64) * 1e6 + tenure.  Higher is better. */
+fn fed_sybil_score(peer_id_ptr: u64) -> u64 @export {
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return 0u64 }
+    let s : u32 = _fsyb_lookup(p_l)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    let d : u64 = (FSYB_DIFFICULTY[s] as u64) & 0xFFFFFFFFu64
+    let t : u64 = FSYB_TENURE[s]
+    return d * 1000000u64 + t
+}
+
+fn fed_sybil_admission_difficulty(peer_id_ptr: u64) -> u32 @export {
+    let p_l : u64 = peer_id_ptr
+    if p_l == 0u64 { return 0u32 }
+    let s : u32 = _fsyb_lookup(p_l)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return FSYB_DIFFICULTY[s]
+}
+
+fn fed_sybil_slot_live(slot: u32) -> u8 @export {
+    let s_l : u32 = slot
+    if s_l >= FSYB_SLOTS { return 0u8 }
+    return FSYB_LIVE[s_l]
+}
+
+fn fed_sybil_peer_id_copy(slot: u32, out_32: u64) -> u8 @export {
+    let s_l : u32 = slot
+    let o_l : u64 = out_32
+    if s_l >= FSYB_SLOTS { return 0u8 }
+    if o_l == 0u64 { return 0u8 }
+    if FSYB_LIVE[s_l] == 0u8 { return 0u8 }
+    let src_base : u64 = (&FSYB_PEER_ID) as u64 + (s_l as u64) * 32u64
+    let sp : *u8 = src_base as *u8
+    let dp : *u8 = o_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dp[i] = sp[i]
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+fn fed_sybil_slots_max() -> u32 @export {
+    return FSYB_SLOTS
+}
+
+fn fed_sybil_clear_all() -> i32 @export {
+    let mut s : u32 = 0u32
+    while s < FSYB_SLOTS {
+        FSYB_LIVE[s]       = 0u8
+        FSYB_NONCE[s]      = 0u64
+        FSYB_DIFFICULTY[s] = 0u32
+        FSYB_TENURE[s]     = 0u64
+        s = s + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8192u32 {
+        FSYB_PEER_ID[i] = 0u8
+        FSYB_SOV_PUB[i] = 0u8
+        i = i + 1u32
+    }
+    FSYB_NEXT_TENURE = 0u64
+    return FSYB_OK
+}

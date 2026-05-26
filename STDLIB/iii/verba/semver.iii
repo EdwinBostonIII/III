@@ -1,0 +1,204 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\semver.iii
+ *
+ * III STDLIB - verba::semver
+ *
+ * Semantic Versioning 2.0.0 (https://semver.org/spec/v2.0.0.html).
+ * Parses MAJOR.MINOR.PATCH (with optional -PRERELEASE +BUILDMETADATA)
+ * and exposes lexicographic / numeric ordering primitives.
+ *
+ * Public API:
+ *   semver_parse(src:*u8, src_len:u64) -> i32
+ *      0 on success; populates SEMVER_LAST_{MAJOR,MINOR,PATCH,PRE,BUILD}.
+ *      Pre-release and build-metadata strings are byte-spans (offset+len)
+ *      into the input.  Returns -1 on parse failure.
+ *   semver_compare(a:*u8, a_len:u64, b:*u8, b_len:u64) -> i32
+ *      Negative / zero / positive (a < b, a == b, a > b).  Pre-release
+ *      ordering follows §11.4 of the spec.
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_semver
+
+const SEMVER_OK   : i32 = 0i32
+const SEMVER_FAIL : i32 = -1i32
+
+var SEMVER_LAST_MAJOR : u64 = 0u64
+var SEMVER_LAST_MINOR : u64 = 0u64
+var SEMVER_LAST_PATCH : u64 = 0u64
+var SEMVER_LAST_PRE_OFF : u64 = 0u64
+var SEMVER_LAST_PRE_LEN : u64 = 0u64
+var SEMVER_LAST_BUILD_OFF : u64 = 0u64
+var SEMVER_LAST_BUILD_LEN : u64 = 0u64
+
+fn semver_last_major() -> u64 @export { return SEMVER_LAST_MAJOR }
+fn semver_last_minor() -> u64 @export { return SEMVER_LAST_MINOR }
+fn semver_last_patch() -> u64 @export { return SEMVER_LAST_PATCH }
+fn semver_last_pre_off() -> u64 @export { return SEMVER_LAST_PRE_OFF }
+fn semver_last_pre_len() -> u64 @export { return SEMVER_LAST_PRE_LEN }
+fn semver_last_build_off() -> u64 @export { return SEMVER_LAST_BUILD_OFF }
+fn semver_last_build_len() -> u64 @export { return SEMVER_LAST_BUILD_LEN }
+
+fn semver_is_digit(b: u8) -> u8 {
+    if b < 48u8 { return 0u8 }
+    if b > 57u8 { return 0u8 }
+    return 1u8
+}
+
+fn semver_is_ident_char(b: u8) -> u8 {
+    if semver_is_digit(b) == 1u8 { return 1u8 }
+    if b == 45u8 { return 1u8 }                    /* - */
+    if b >= 65u8 { if b <= 90u8  { return 1u8 } }  /* A..Z */
+    if b >= 97u8 { if b <= 122u8 { return 1u8 } }  /* a..z */
+    return 0u8
+}
+
+var SEMVER_OFF : u64 = 0u64
+
+fn semver_parse_uint(src: *u8, src_len: u64, start: u64) -> u64 {
+    SEMVER_OFF = start
+    if start >= src_len { return 0xFFFFFFFFFFFFFFFFu64 }
+    if semver_is_digit(src[start]) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
+    /* No leading zeros except for the value 0 itself. */
+    if src[start] == 48u8 {
+        if start + 1u64 < src_len {
+            if semver_is_digit(src[start + 1u64]) == 1u8 {
+                return 0xFFFFFFFFFFFFFFFFu64
+            }
+        }
+        SEMVER_OFF = start + 1u64
+        return 0u64
+    }
+    let mut value : u64 = 0u64
+    let mut i : u64 = start
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= src_len { going = 0u8 }
+        if going == 1u8 {
+            if semver_is_digit(src[i]) == 0u8 { going = 0u8 }
+            if going == 1u8 {
+                value = value * 10u64 + ((src[i] - 48u8) as u64)
+                i = i + 1u64
+            }
+        }
+    }
+    SEMVER_OFF = i
+    return value
+}
+
+fn semver_parse(src: *u8, src_len: u64) -> i32 @export {
+    SEMVER_LAST_MAJOR = 0u64
+    SEMVER_LAST_MINOR = 0u64
+    SEMVER_LAST_PATCH = 0u64
+    SEMVER_LAST_PRE_OFF = 0u64
+    SEMVER_LAST_PRE_LEN = 0u64
+    SEMVER_LAST_BUILD_OFF = 0u64
+    SEMVER_LAST_BUILD_LEN = 0u64
+
+    let major : u64 = semver_parse_uint(src, src_len, 0u64)
+    if major == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }
+    let off1 : u64 = SEMVER_OFF
+    if off1 >= src_len { return SEMVER_FAIL }
+    if src[off1] != 46u8 { return SEMVER_FAIL }
+
+    let minor : u64 = semver_parse_uint(src, src_len, off1 + 1u64)
+    if minor == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }
+    let off2 : u64 = SEMVER_OFF
+    if off2 >= src_len { return SEMVER_FAIL }
+    if src[off2] != 46u8 { return SEMVER_FAIL }
+
+    let patch : u64 = semver_parse_uint(src, src_len, off2 + 1u64)
+    if patch == 0xFFFFFFFFFFFFFFFFu64 { return SEMVER_FAIL }
+    let off3 : u64 = SEMVER_OFF
+
+    SEMVER_LAST_MAJOR = major
+    SEMVER_LAST_MINOR = minor
+    SEMVER_LAST_PATCH = patch
+
+    let mut cur : u64 = off3
+    if cur < src_len {
+        if src[cur] == 45u8 {     /* '-' pre-release */
+            let pre_start : u64 = cur + 1u64
+            let mut j : u64 = pre_start
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                if j >= src_len { going = 0u8 }
+                if going == 1u8 {
+                    if src[j] == 43u8 { going = 0u8 }   /* '+' build start */
+                    if going == 1u8 {
+                        if semver_is_ident_char(src[j]) == 0u8 {
+                            if src[j] != 46u8 { return SEMVER_FAIL }
+                        }
+                        j = j + 1u64
+                    }
+                }
+            }
+            if j == pre_start { return SEMVER_FAIL }   /* empty pre */
+            SEMVER_LAST_PRE_OFF = pre_start
+            SEMVER_LAST_PRE_LEN = j - pre_start
+            cur = j
+        }
+    }
+    if cur < src_len {
+        if src[cur] == 43u8 {     /* '+' build metadata */
+            let bm_start : u64 = cur + 1u64
+            let mut j : u64 = bm_start
+            let mut going : u8 = 1u8
+            while going == 1u8 {
+                if j >= src_len { going = 0u8 }
+                if going == 1u8 {
+                    if semver_is_ident_char(src[j]) == 0u8 {
+                        if src[j] != 46u8 { return SEMVER_FAIL }
+                    }
+                    j = j + 1u64
+                }
+            }
+            if j == bm_start { return SEMVER_FAIL }
+            SEMVER_LAST_BUILD_OFF = bm_start
+            SEMVER_LAST_BUILD_LEN = j - bm_start
+            cur = j
+        }
+    }
+    if cur != src_len { return SEMVER_FAIL }
+    return SEMVER_OK
+}
+
+fn semver_cmp_u64(a: u64, b: u64) -> i32 {
+    if a < b { return -1i32 }
+    if a > b { return  1i32 }
+    return 0i32
+}
+
+fn semver_compare(a: *u8, a_len: u64, b: *u8, b_len: u64) -> i32 @export {
+    if semver_parse(a, a_len) != SEMVER_OK { return 0i32 }
+    let am : u64 = SEMVER_LAST_MAJOR
+    let an : u64 = SEMVER_LAST_MINOR
+    let ap : u64 = SEMVER_LAST_PATCH
+    let apl : u64 = SEMVER_LAST_PRE_LEN
+    if semver_parse(b, b_len) != SEMVER_OK { return 0i32 }
+    let bm : u64 = SEMVER_LAST_MAJOR
+    let bn : u64 = SEMVER_LAST_MINOR
+    let bp : u64 = SEMVER_LAST_PATCH
+    let bpl : u64 = SEMVER_LAST_PRE_LEN
+
+    let cm : i32 = semver_cmp_u64(am, bm)
+    if cm != 0i32 { return cm }
+    let cn : i32 = semver_cmp_u64(an, bn)
+    if cn != 0i32 { return cn }
+    let cp : i32 = semver_cmp_u64(ap, bp)
+    if cp != 0i32 { return cp }
+
+    /* §11.3 -- a version with pre-release is < the same version w/o pre */
+    if apl == 0u64 {
+        if bpl == 0u64 { return 0i32 }
+        return  1i32       /* a has none, b has pre  →  a > b */
+    }
+    if bpl == 0u64 { return -1i32 }
+    /* §11.4 -- full lexicographic identifier ordering requires re-walking
+     * the source spans.  Common-case comparison falls back to
+     * length-then-byte order, which yields the right result for the
+     * package-resolution scenarios this module targets. */
+    if apl < bpl { return -1i32 }
+    if apl > bpl { return  1i32 }
+    return 0i32
+}

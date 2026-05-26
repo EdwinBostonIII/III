@@ -1,0 +1,79 @@
+/* omnia::crystal — edge graph storage: init/add/count/at/aggregate_k. */
+module corpus_105
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_drop(id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_cap(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_at(id: u64, idx: u32) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_aggregate_k(id: u64) -> u64 from "crystal.iii"
+
+fn fill_site(p: *u8, base: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        p[i] = base + (i as u8)
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let site_a : *u8 = malloc(32u64)
+    let site_b : *u8 = malloc(32u64)
+    let site_c : *u8 = malloc(32u64)
+    fill_site(site_a, 0x10u8)
+    fill_site(site_b, 0x20u8)
+    fill_site(site_c, 0x30u8)
+
+    let crystal_a : u64 = crystal_mint(0xA0u32, site_a as u64, 0u64, 0u64)
+    let crystal_b : u64 = crystal_mint(0xB0u32, site_b as u64, 0u64, 0u64)
+    let crystal_c : u64 = crystal_mint(0xC0u32, site_c as u64, 0u64, 0u64)
+    if crystal_a == 0u64 { return 1u64 }
+    if crystal_b == 0u64 { return 2u64 }
+    if crystal_c == 0u64 { return 3u64 }
+
+    let ar : u64 = arena_new(1u64 << 12u64)
+    if ar == 0u64 { return 4u64 }
+
+    if crystal_edges_init(crystal_a, ar) != 0i32 { return 5u64 }
+    if crystal_edges_count(crystal_a) != 0u32    { return 6u64 }
+    if crystal_edges_cap(crystal_a)   != 16u32   { return 7u64 }
+
+    if crystal_edges_add(crystal_a, crystal_b) != 0i32 { return 8u64 }
+    if crystal_edges_count(crystal_a) != 1u32          { return 9u64 }
+    if crystal_edges_at(crystal_a, 0u32) != crystal_b  { return 10u64 }
+
+    if crystal_edges_add(crystal_a, crystal_c) != 0i32 { return 11u64 }
+    if crystal_edges_count(crystal_a) != 2u32          { return 12u64 }
+    if crystal_edges_at(crystal_a, 1u32) != crystal_c  { return 13u64 }
+
+    if crystal_edges_aggregate_k(crystal_a) != 1000000000u64 { return 14u64 }
+    if crystal_edges_at(crystal_a, 99u32) != 0u64           { return 15u64 }
+
+    let mut k : u32 = 0u32
+    while k < 14u32 {
+        if crystal_edges_add(crystal_a, crystal_b) != 0i32 { return 20u64 }
+        k = k + 1u32
+    }
+    if crystal_edges_count(crystal_a) != 16u32          { return 21u64 }
+    if crystal_edges_add(crystal_a, crystal_c) != -4i32 { return 22u64 }
+
+    if crystal_edges_add(0u64, crystal_b) != -1i32      { return 23u64 }
+    if crystal_edges_add(crystal_b, crystal_c) != -3i32 { return 24u64 }
+
+    crystal_drop(crystal_a)
+    crystal_drop(crystal_b)
+    crystal_drop(crystal_c)
+    arena_drop(ar)
+    free(site_a); free(site_b); free(site_c)
+    return 99u64
+}

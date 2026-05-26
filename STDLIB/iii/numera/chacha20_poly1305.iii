@@ -1,0 +1,168 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\chacha20_poly1305.iii
+ *
+ * III STDLIB - numera::chacha20_poly1305
+ *
+ * RFC 8439 ChaCha20-Poly1305 AEAD.  Combines ChaCha20 (with counter
+ * starting at 0 to derive the Poly1305 one-time key, then counter=1
+ * onward for plaintext) with Poly1305 (over AAD || pad || CT || pad ||
+ * len(AAD)_LE64 || len(CT)_LE64).
+ *
+ * Public API (singleton):
+ *   aead_chacha20_poly1305_init  (key:*u8, nonce:*u8) -> i32
+ *      -- key=32, nonce=12
+ *   aead_chacha20_poly1305_aad   (aad:*u8, aad_len:u64) -> i32
+ *      -- optional, called between init and seal/open
+ *   aead_chacha20_poly1305_seal  (pt:*u8, pt_len:u64, ct_out:*u8, tag_out:*u8) -> i32
+ *   aead_chacha20_poly1305_open  (ct:*u8, ct_len:u64, pt_out:*u8, tag_in:*u8) -> u8
+ *      -- returns 1 if tag valid, 0 otherwise
+ *
+ * Working buffers (module-scope arena, allocated on first init):
+ *   OTK_BUF  : 64 bytes (Poly1305 key block from ChaCha20 counter=0)
+ *   PAD_BUF  : 16 bytes (zeros, used for Poly1305 16-byte alignment)
+ *   LEN_BUF  : 16 bytes (length block: aad_len_LE64 || ct_len_LE64)
+ *   TAG_BUF  : 16 bytes (computed tag for open verification)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_chacha20_poly1305
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn chacha20_set_state(key: *u8, nonce: *u8, counter: u32) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn chacha20_keystream(out: *u8) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn chacha20_xor(in_buf: *u8, in_len: u64, out_buf: *u8) -> i32 from "chacha20.iii"
+extern @abi(c-msvc-x64) fn poly1305_set_key(key: *u8) -> i32 from "poly1305.iii"
+extern @abi(c-msvc-x64) fn poly1305_update(data: *u8, data_len: u64) -> i32 from "poly1305.iii"
+extern @abi(c-msvc-x64) fn poly1305_finalize(tag_out: *u8) -> i32 from "poly1305.iii"
+
+const AEAD_OK : i32 =  0i32
+const AEAD_E_INIT : i32 = -1i32
+
+var AEAD_ARENA       : u64 = 0u64
+var AEAD_OTK_BUF     : u64 = 0u64
+var AEAD_LEN_BUF     : u64 = 0u64
+var AEAD_TAG_BUF     : u64 = 0u64
+var AEAD_PARTIAL_BUF : u64 = 0u64
+var AEAD_AAD_LEN     : u64 = 0u64
+var AEAD_PT_LEN      : u64 = 0u64
+var AEAD_INITED      : u8  = 0u8
+
+fn aead_alloc_buffers() -> i32 {
+    if AEAD_ARENA != 0u64 { return AEAD_OK }
+    AEAD_ARENA = arena_new(4096u64)
+    if AEAD_ARENA == 0u64 { return AEAD_E_INIT }
+    AEAD_OTK_BUF     = arena_alloc1(AEAD_ARENA, 64u64)
+    AEAD_LEN_BUF     = arena_alloc1(AEAD_ARENA, 16u64)
+    AEAD_TAG_BUF     = arena_alloc1(AEAD_ARENA, 16u64)
+    AEAD_PARTIAL_BUF = arena_alloc1(AEAD_ARENA, 16u64)
+    return AEAD_OK
+}
+
+/* Submit data into Poly1305 in 16-byte blocks; the last partial block
+ * (if any) is zero-padded to 16 and submitted as one full block.  This
+ * matches RFC 8439's "data || zero_pad_to_16" framing exactly. */
+fn aead_poly_submit_padded(data: *u8, data_len: u64) -> i32 {
+    let full_end : u64 = (data_len / 16u64) * 16u64
+    if full_end > 0u64 {
+        poly1305_update(data, full_end)
+    }
+    let rem : u64 = data_len - full_end
+    if rem > 0u64 {
+        let pp : *u8 = AEAD_PARTIAL_BUF as *u8
+        let mut i : u64 = 0u64
+        while i < rem {
+            pp[i] = data[full_end + i]
+            i = i + 1u64
+        }
+        let mut j : u64 = rem
+        while j < 16u64 {
+            pp[j] = 0u8
+            j = j + 1u64
+        }
+        poly1305_update(AEAD_PARTIAL_BUF as *u8, 16u64)
+    }
+    return 0i32
+}
+
+fn aead_chacha20_poly1305_init(key: *u8, nonce: *u8) -> i32 @export {
+    if aead_alloc_buffers() != AEAD_OK { return AEAD_E_INIT }
+    /* Derive Poly1305 one-time key from ChaCha20 keystream block at counter=0. */
+    chacha20_set_state(key, nonce, 0u32)
+    chacha20_keystream(AEAD_OTK_BUF as *u8)   /* counter advances to 1 */
+    poly1305_set_key(AEAD_OTK_BUF as *u8)
+    AEAD_AAD_LEN = 0u64
+    AEAD_PT_LEN  = 0u64
+    AEAD_INITED  = 1u8
+    return AEAD_OK
+}
+
+fn aead_chacha20_poly1305_aad(aad: *u8, aad_len: u64) -> i32 @export {
+    if AEAD_INITED == 0u8 { return AEAD_E_INIT }
+    aead_poly_submit_padded(aad, aad_len)
+    AEAD_AAD_LEN = AEAD_AAD_LEN + aad_len
+    return AEAD_OK
+}
+
+/* Build LEN_BUF: aad_len LE64 || ct_len LE64. */
+fn aead_build_lengths(ct_len: u64) -> i32 {
+    let lp : *u8 = AEAD_LEN_BUF as *u8
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift_a : u64 = (i * 8u32) as u64
+        lp[i] = ((AEAD_AAD_LEN >> shift_a) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let shift_c : u64 = (j * 8u32) as u64
+        lp[8u32 + j] = ((ct_len >> shift_c) & 0xFFu64) as u8
+        j = j + 1u32
+    }
+    return 0i32
+}
+
+fn aead_chacha20_poly1305_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 @export {
+    if AEAD_INITED == 0u8 { return AEAD_E_INIT }
+    chacha20_xor(pt, pt_len, ct_out)
+    aead_poly_submit_padded(ct_out, pt_len)
+    AEAD_PT_LEN = pt_len
+    aead_build_lengths(pt_len)
+    poly1305_update(AEAD_LEN_BUF as *u8, 16u64)
+    poly1305_finalize(tag_out)
+    AEAD_INITED = 0u8
+    return AEAD_OK
+}
+
+fn aead_chacha20_poly1305_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 @export {
+    if AEAD_INITED == 0u8 { return 0u8 }
+    aead_poly_submit_padded(ct, ct_len)
+    AEAD_PT_LEN = ct_len
+    aead_build_lengths(ct_len)
+    poly1305_update(AEAD_LEN_BUF as *u8, 16u64)
+    poly1305_finalize(AEAD_TAG_BUF as *u8)
+    AEAD_INITED = 0u8
+    /* Constant-time tag compare. */
+    let cp : *u8 = AEAD_TAG_BUF as *u8
+    let mut diff : u32 = 0u32
+    let mut k : u32 = 0u32
+    while k < 16u32 {
+        let cv : u32 = cp[k] as u32
+        let tv : u32 = tag_in[k] as u32
+        diff = diff | (cv ^ tv)
+        k = k + 1u32
+    }
+    if diff != 0u32 { return 0u8 }
+    /* Tag valid: decrypt (CTR is symmetric).  But ChaCha20 state's
+     * counter has been advanced past where we need it.  Re-set to
+     * counter=1 with the ORIGINAL key/nonce... but we don't have them.
+     *
+     * Instead: the caller already called init() before open, which set
+     * counter=0 then advanced to 1 via the OTK keystream call.  But
+     * then the seal-style flow assumed ChaCha20 wasn't touched
+     * between init and decrypt.  In open, we DON'T touch ChaCha20
+     * between init and here.  So state is still at counter=1 right
+     * after the OTK derivation.  Decrypt with chacha20_xor. */
+    chacha20_xor(ct, ct_len, pt_out)
+    return 1u8
+}

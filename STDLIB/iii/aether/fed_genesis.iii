@@ -1,0 +1,309 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\aether\fed_genesis.iii
+ *
+ * III STDLIB - aether::fed_genesis -- genesis-vector binding.
+ *
+ * Lattice plan Phase 14k Step 0192.  The genesis-vector is the
+ * closure_root of the first build that this federation tier accepts as
+ * authoritative.  All subsequent closure_roots in the federation must
+ * trace back to it via the layered seal chain
+ * (mhash_domain("seal_step_NNNN") composition recorded in
+ * `STDLIB/iii/SEAL.mhash`).
+ *
+ * Public surface:
+ *   fed_genesis_set(root_32_ptr)                              -> i32
+ *   fed_genesis_root_byte(i)                                  -> u32
+ *   fed_genesis_is_set()                                      -> u8
+ *   fed_genesis_verify_descent(closure_root_ptr,
+ *                              chain_ptr, chain_steps)        -> u8
+ *
+ * The chain is a sequence of (32-byte) hashes -- h[0], h[1], ..., h[N-1]
+ * -- where h[0] = genesis_root and h[N-1] = closure_root.  Each step is
+ * verified as  h[i+1] == SHA-256(DOMAIN || LE64(i) || h[i])  where DOMAIN
+ * is the source-visible literal "III_FED_GENESIS_DESCENT_v1" (26 bytes,
+ * auditable -- no opaque sealed table, same discipline as the
+ * FOUNDERS-ANCHOR domain below) and LE64(i) is the 8-byte little-endian
+ * step index.  Full per-step cryptographic chain replay is performed
+ * (not endpoint-only).  See DOCS/FED-GENESIS-DESCENT.md.
+ *
+ * Hexad: kind_origin (Crown).  Ring: R3.  K: 1.00.
+ */
+
+module aether_fed_genesis
+
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const FED_GEN_OK             : i32 =  0i32
+const FED_GEN_E_NULL         : i32 = -1i32
+const FED_GEN_E_ALREADY_SET  : i32 = -2i32
+
+var FED_GENESIS_ROOT : [u8; 32]
+var FED_GENESIS_INIT : u8 = 0u8
+
+/* FOUNDERS-ANCHOR descent verification state.
+ * The anchor pubkey is derived deterministically at first call from
+ * SHA-256("III_FOUNDERS_ANCHOR_v1") so the binary carries no opaque
+ * key material -- the derivation is auditable and reproducible from
+ * the domain string alone. */
+var FOUNDERS_ANCHOR_DOMAIN : [u8; 22]
+var FOUNDERS_ANCHOR_PUBKEY : [u8; 32]
+var FOUNDERS_ANCHOR_INIT   : u8 = 0u8
+var GENESIS_DESCENT_SCRATCH : [u8; 64]
+var GENESIS_DESCENT_HASH    : [u8; 32]
+
+/* Genesis-descent chain-replay state (DOCS/FED-GENESIS-DESCENT.md S2).
+ * DOMAIN = source-visible literal "III_FED_GENESIS_DESCENT_v1" (26 bytes);
+ * per-step SHA-256 input = DOMAIN || LE64(step_idx) || h[i] = 66 bytes.
+ * Auditable -- no opaque sealed table (same discipline as _anchor_init). */
+var FED_DESC_DOMAIN : [u8; 26]
+var FED_DESC_BUF    : [u8; 66]
+var FED_DESC_HASH   : [u8; 32]
+var FED_DESC_INIT   : u8 = 0u8
+
+fn fed_genesis_set(root_32_ptr: u64) -> i32 @export {
+    let r_l : u64 = root_32_ptr
+    if r_l == 0u64 { return FED_GEN_E_NULL }
+    if FED_GENESIS_INIT == 1u8 { return FED_GEN_E_ALREADY_SET }
+    let p : *u8 = r_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        FED_GENESIS_ROOT[i] = p[i]
+        i = i + 1u64
+    }
+    FED_GENESIS_INIT = 1u8
+    return FED_GEN_OK
+}
+
+fn fed_genesis_root_byte(i: u32) -> u32 @export {
+    let i_l : u32 = i
+    if i_l >= 32u32 { return 0x100u32 }
+    if FED_GENESIS_INIT == 0u8 { return 0x100u32 }
+    return FED_GENESIS_ROOT[i_l] as u32
+}
+
+fn fed_genesis_is_set() -> u8 @export {
+    return FED_GENESIS_INIT
+}
+
+fn fed_genesis_clear() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        FED_GENESIS_ROOT[i] = 0u8
+        i = i + 1u32
+    }
+    FED_GENESIS_INIT = 0u8
+    return FED_GEN_OK
+}
+
+/* One-shot fill of the 26-byte source-visible descent domain literal
+ * "III_FED_GENESIS_DESCENT_v1" (auditable; mirrors _anchor_init). */
+fn _fed_desc_domain_init() -> u8 {
+    if FED_DESC_INIT == 1u8 { return 0u8 }
+    FED_DESC_DOMAIN[0]  = 73u8   /* I */
+    FED_DESC_DOMAIN[1]  = 73u8   /* I */
+    FED_DESC_DOMAIN[2]  = 73u8   /* I */
+    FED_DESC_DOMAIN[3]  = 95u8   /* _ */
+    FED_DESC_DOMAIN[4]  = 70u8   /* F */
+    FED_DESC_DOMAIN[5]  = 69u8   /* E */
+    FED_DESC_DOMAIN[6]  = 68u8   /* D */
+    FED_DESC_DOMAIN[7]  = 95u8   /* _ */
+    FED_DESC_DOMAIN[8]  = 71u8   /* G */
+    FED_DESC_DOMAIN[9]  = 69u8   /* E */
+    FED_DESC_DOMAIN[10] = 78u8   /* N */
+    FED_DESC_DOMAIN[11] = 69u8   /* E */
+    FED_DESC_DOMAIN[12] = 83u8   /* S */
+    FED_DESC_DOMAIN[13] = 73u8   /* I */
+    FED_DESC_DOMAIN[14] = 83u8   /* S */
+    FED_DESC_DOMAIN[15] = 95u8   /* _ */
+    FED_DESC_DOMAIN[16] = 68u8   /* D */
+    FED_DESC_DOMAIN[17] = 69u8   /* E */
+    FED_DESC_DOMAIN[18] = 83u8   /* S */
+    FED_DESC_DOMAIN[19] = 67u8   /* C */
+    FED_DESC_DOMAIN[20] = 69u8   /* E */
+    FED_DESC_DOMAIN[21] = 78u8   /* N */
+    FED_DESC_DOMAIN[22] = 84u8   /* T */
+    FED_DESC_DOMAIN[23] = 95u8   /* _ */
+    FED_DESC_DOMAIN[24] = 118u8  /* v */
+    FED_DESC_DOMAIN[25] = 49u8   /* 1 */
+    FED_DESC_INIT = 1u8
+    return 0u8
+}
+
+/* Full per-step cryptographic chain replay (DOCS/FED-GENESIS-DESCENT.md
+ * S2): require h[0] == genesis_root, h[N-1] == closure_root, and for
+ * every step i in 0..N-2  h[i+1] == SHA-256(DOMAIN || LE64(i) || h[i]).
+ * Returns 0 on any null pointer, zero-length chain, genesis unset,
+ * endpoint mismatch, hash failure, or interior step mismatch; 1 iff the
+ * entire chain replays.  N==1 is endpoint-only (no interior step).
+ * Compares accumulate over all 32 bytes (no early-out). */
+fn fed_genesis_verify_descent(closure_root_ptr: u64, chain_ptr: u64, chain_steps: u32) -> u8 @export {
+    let c_l : u64 = closure_root_ptr
+    let p_l : u64 = chain_ptr
+    let n_l : u32 = chain_steps
+    if c_l == 0u64 { return 0u8 }
+    if p_l == 0u64 { return 0u8 }
+    if n_l == 0u32 { return 0u8 }
+    if FED_GENESIS_INIT == 0u8 { return 0u8 }
+    let di : u8 = _fed_desc_domain_init()
+    if di != 0u8 { return 0u8 }
+
+    /* h[0] must equal genesis_root. */
+    let first : *u8 = p_l as *u8
+    let mut i : u64 = 0u64
+    let mut diff : u8 = 0u8
+    while i < 32u64 {
+        let av : u8 = first[i]
+        let bv : u8 = FED_GENESIS_ROOT[i]
+        if av != bv { diff = 1u8 }
+        i = i + 1u64
+    }
+    if diff != 0u8 { return 0u8 }
+
+    /* h[N-1] must equal closure_root. */
+    let last_idx : u32 = n_l - 1u32
+    let last_off : u64 = (last_idx as u64) * 32u64
+    let last : *u8 = (p_l + last_off) as *u8
+    let cr   : *u8 = c_l as *u8
+    let mut j : u64 = 0u64
+    let mut d2 : u8 = 0u8
+    while j < 32u64 {
+        let av : u8 = last[j]
+        let bv : u8 = cr[j]
+        if av != bv { d2 = 1u8 }
+        j = j + 1u64
+    }
+    if d2 != 0u8 { return 0u8 }
+
+    /* Interior: h[s+1] == SHA-256(DOMAIN || LE64(s) || h[s]).  u64 counter
+     * + u64 bound (the proven-safe loop idiom used above -- avoids the
+     * iiis u32-counter / variable-bound while-loop codegen trap that made
+     * an earlier u32 version run 0 iterations). */
+    let n64 : u64 = n_l as u64
+    let steps_to_check : u64 = n64 - 1u64
+    let mut s : u64 = 0u64
+    while s < steps_to_check {
+        let mut a : u64 = 0u64
+        while a < 26u64 {
+            FED_DESC_BUF[a] = FED_DESC_DOMAIN[a]
+            a = a + 1u64
+        }
+        let mut b : u64 = 0u64
+        while b < 8u64 {
+            let shamt : u64 = b * 8u64
+            let byte_v : u64 = (s >> shamt) & 0xFFu64
+            FED_DESC_BUF[26u64 + b] = byte_v as u8
+            b = b + 1u64
+        }
+        let cur_off : u64 = s * 32u64
+        let cur : *u8 = (p_l + cur_off) as *u8
+        let mut e : u64 = 0u64
+        while e < 32u64 {
+            FED_DESC_BUF[34u64 + e] = cur[e]
+            e = e + 1u64
+        }
+        let hrc : u32 = sha256_oneshot(&FED_DESC_BUF as *u8, 66u64, &FED_DESC_HASH as *u8)
+        if hrc != 0u32 { return 0u8 }
+        let nxt_off : u64 = (s + 1u64) * 32u64
+        let nxt : *u8 = (p_l + nxt_off) as *u8
+        let mut f : u64 = 0u64
+        let mut d3 : u8 = 0u8
+        while f < 32u64 {
+            let xv : u8 = FED_DESC_HASH[f]
+            let yv : u8 = nxt[f]
+            if xv != yv { d3 = 1u8 }
+            f = f + 1u64
+        }
+        if d3 != 0u8 { return 0u8 }
+        s = s + 1u64
+    }
+    return 1u8
+}
+
+/* ----------------------------------------------------------------------
+ * FOUNDERS-ANCHOR descent verification.
+ *
+ * The anchor pubkey is NOT stored as opaque bytes -- it is derived once
+ * from SHA-256("III_FOUNDERS_ANCHOR_v1") so the binary's trust root is
+ * fully auditable from the source-visible domain string alone.  The
+ * derived 32-byte digest is interpreted as a compressed ed25519 public
+ * key.  (For genesis bootstrap this is appropriate: the anchor is a
+ * deterministic well-known constant, not a held private key.)
+ *
+ * One-shot initialisation is gated by FOUNDERS_ANCHOR_INIT so repeated
+ * descent verifications pay the SHA-256 cost only on the first call.
+ * --------------------------------------------------------------------*/
+fn _anchor_init() -> u8 {
+    if FOUNDERS_ANCHOR_INIT == 1u8 { return 0u8 }
+    /* Populate the 22-byte domain literal "III_FOUNDERS_ANCHOR_v1". */
+    FOUNDERS_ANCHOR_DOMAIN[0]  = 73u8   /* I */
+    FOUNDERS_ANCHOR_DOMAIN[1]  = 73u8   /* I */
+    FOUNDERS_ANCHOR_DOMAIN[2]  = 73u8   /* I */
+    FOUNDERS_ANCHOR_DOMAIN[3]  = 95u8   /* _ */
+    FOUNDERS_ANCHOR_DOMAIN[4]  = 70u8   /* F */
+    FOUNDERS_ANCHOR_DOMAIN[5]  = 79u8   /* O */
+    FOUNDERS_ANCHOR_DOMAIN[6]  = 85u8   /* U */
+    FOUNDERS_ANCHOR_DOMAIN[7]  = 78u8   /* N */
+    FOUNDERS_ANCHOR_DOMAIN[8]  = 68u8   /* D */
+    FOUNDERS_ANCHOR_DOMAIN[9]  = 69u8   /* E */
+    FOUNDERS_ANCHOR_DOMAIN[10] = 82u8   /* R */
+    FOUNDERS_ANCHOR_DOMAIN[11] = 83u8   /* S */
+    FOUNDERS_ANCHOR_DOMAIN[12] = 95u8   /* _ */
+    FOUNDERS_ANCHOR_DOMAIN[13] = 65u8   /* A */
+    FOUNDERS_ANCHOR_DOMAIN[14] = 78u8   /* N */
+    FOUNDERS_ANCHOR_DOMAIN[15] = 67u8   /* C */
+    FOUNDERS_ANCHOR_DOMAIN[16] = 72u8   /* H */
+    FOUNDERS_ANCHOR_DOMAIN[17] = 79u8   /* O */
+    FOUNDERS_ANCHOR_DOMAIN[18] = 82u8   /* R */
+    FOUNDERS_ANCHOR_DOMAIN[19] = 95u8   /* _ */
+    FOUNDERS_ANCHOR_DOMAIN[20] = 118u8  /* v */
+    FOUNDERS_ANCHOR_DOMAIN[21] = 49u8   /* 1 */
+    let rc : u32 = sha256_oneshot(&FOUNDERS_ANCHOR_DOMAIN as *u8, 22u64, &FOUNDERS_ANCHOR_PUBKEY as *u8)
+    if rc != 0u32 { return 1u8 }
+    FOUNDERS_ANCHOR_INIT = 1u8
+    return 0u8
+}
+
+/* Verify a FOUNDERS-ANCHOR-signed parent->child descent step.
+ *
+ * The signed message is the concatenation parent_root || child_root
+ * (64 bytes), hashed under SHA-256 to produce a 32-byte commitment.
+ * The 64-byte ed25519 signature at anchor_sig_ptr must verify against
+ * the FOUNDERS-ANCHOR pubkey over that 32-byte commitment.
+ *
+ * Returns 1 iff the signature verifies; 0 on any null pointer, init
+ * failure, hash failure, or signature rejection. */
+fn fed_genesis_descent_with_anchor(parent_root_ptr: u64, child_root_ptr: u64, anchor_sig_ptr: u64) -> u8 @export {
+    let p_l : u64 = parent_root_ptr
+    let c_l : u64 = child_root_ptr
+    let s_l : u64 = anchor_sig_ptr
+    if p_l == 0u64 { return 0u8 }
+    if c_l == 0u64 { return 0u8 }
+    if s_l == 0u64 { return 0u8 }
+    let init_rc : u8 = _anchor_init()
+    if init_rc != 0u8 { return 0u8 }
+
+    /* Concatenate parent_root[0..32] || child_root[0..32] into scratch. */
+    let pp : *u8 = p_l as *u8
+    let cp : *u8 = c_l as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        GENESIS_DESCENT_SCRATCH[i] = pp[i]
+        i = i + 1u64
+    }
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        GENESIS_DESCENT_SCRATCH[32u64 + k] = cp[k]
+        k = k + 1u64
+    }
+
+    /* Commit to the descent step under SHA-256. */
+    let h_rc : u32 = sha256_oneshot(&GENESIS_DESCENT_SCRATCH as *u8, 64u64, &GENESIS_DESCENT_HASH as *u8)
+    if h_rc != 0u32 { return 0u8 }
+
+    /* Verify ed25519 signature over the 32-byte commitment.
+     * ed25519_verify returns 1 on valid signature, 0 otherwise. */
+    let sig_p : *u8 = s_l as *u8
+    let v_rc : u8 = ed25519_verify(&FOUNDERS_ANCHOR_PUBKEY as *u8, &GENESIS_DESCENT_HASH as *u8, 32u64, sig_p)
+    if v_rc != 1u8 { return 0u8 }
+    return 1u8
+}

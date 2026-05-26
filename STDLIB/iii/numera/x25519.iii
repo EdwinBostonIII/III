@@ -1,0 +1,267 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\x25519.iii
+ *
+ * III STDLIB - numera::x25519
+ *
+ * RFC 7748 X25519 ECDH (Curve25519 scalar multiplication).
+ *
+ * Public API:
+ *   x25519(out:*u8, scalar:*u8, u:*u8) -> i32 @export
+ *      out, scalar, u are each 32 bytes little-endian.
+ *      Returns 0 on success.
+ *
+ * Algorithm (RFC 7748 §5):
+ *   Decode scalar with clamping:
+ *     scalar[0]  &= 248   (clear bottom 3 bits)
+ *     scalar[31] &= 127   (clear top bit)
+ *     scalar[31] |= 64    (set bit 254)
+ *   Decode u, mask top bit (u < 2^255).
+ *   Montgomery ladder, 255 iterations from bit 254 down to 0:
+ *     k_t = bit t of clamped scalar
+ *     swap ^= k_t
+ *     cswap(swap, x_2/z_2, x_3/z_3)
+ *     swap = k_t
+ *     -- ladder step (a24 = 121665):
+ *     A = x_2 + z_2 ; AA = A^2
+ *     B = x_2 - z_2 ; BB = B^2
+ *     E = AA - BB
+ *     C = x_3 + z_3 ; D = x_3 - z_3
+ *     DA = D * A ; CB = C * B
+ *     x_3 = (DA + CB)^2
+ *     z_3 = x_1 * (DA - CB)^2
+ *     x_2 = AA * BB
+ *     z_2 = E * (AA + a24 * E)
+ *   Final: cswap(swap, ...); result = x_2 / z_2 mod p; encode as 32 LE bytes.
+ *
+ * NIH: builds atop bigint, bigint_div, field.  Module owns 256 MB arena
+ * for a single x25519 call (each call is self-contained; arena released
+ * at function exit).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module numera_x25519
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn fp_add(arena: u64, a: u64, b: u64, m: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn fp_sub(arena: u64, a: u64, b: u64, m: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn fp_mul(arena: u64, a: u64, b: u64, m: u64) -> u64 from "field.iii"
+extern @abi(c-msvc-x64) fn fp_inv_fermat(arena: u64, a: u64, p: u64) -> u64 from "field.iii"
+
+const X25519_OK : i32 =  0i32
+
+var X_ARENA : u64 = 0u64
+var X_P     : u64 = 0u64    /* 2^255 - 19 */
+var X_A24   : u64 = 0u64    /* 121665 */
+
+/* Module-scope buffers for the 4 ladder bigints to keep cswap simple. */
+var X_X1 : u64 = 0u64
+var X_X2 : u64 = 0u64
+var X_Z2 : u64 = 0u64
+var X_X3 : u64 = 0u64
+var X_Z3 : u64 = 0u64
+
+/* Clamped 32-byte scalar (RFC 7748 section 5).  A dedicated
+ * module-scope buffer: the prior code used the caller's `out` as
+ * scratch for the clamped scalar throughout the 255-round ladder
+ * (a "W9: no local arrays" workaround) -- conflating the secret
+ * scalar with the result buffer.  Wiped before return, like
+ * X_X1..X_Z3 (side-channel hygiene). */
+var X_SCALAR : [u8; 32] = [0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]
+
+fn x_build_p() -> u64 {
+    let p : u64 = bigint_new(X_ARENA, 4u64)
+    bigint_set_limb(p, 0u64, 0xFFFFFFFFFFFFFFEDu64)
+    bigint_set_limb(p, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(p, 2u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(p, 3u64, 0x7FFFFFFFFFFFFFFFu64)
+    bigint_set_len(p, 4u64)
+    return p
+}
+
+/* Decode 32 LE bytes into a 4-limb bigint, masking top bit (RFC 7748 §5). */
+fn x_decode_u(src: *u8) -> u64 {
+    let id : u64 = bigint_new(X_ARENA, 4u64)
+    let mut limb : u32 = 0u32
+    while limb < 4u32 {
+        let off : u32 = limb * 8u32
+        let b0 : u64 = src[off + 0u32] as u64
+        let b1 : u64 = src[off + 1u32] as u64
+        let b2 : u64 = src[off + 2u32] as u64
+        let b3 : u64 = src[off + 3u32] as u64
+        let b4 : u64 = src[off + 4u32] as u64
+        let b5 : u64 = src[off + 5u32] as u64
+        let b6 : u64 = src[off + 6u32] as u64
+        let b7 : u64 = src[off + 7u32] as u64
+        let v : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+        bigint_set_limb(id, limb as u64, v)
+        limb = limb + 1u32
+    }
+    /* Mask top bit of limb[3] (to ensure u < 2^255). */
+    let l3 : u64 = bigint_get_limb(id, 3u64)
+    bigint_set_limb(id, 3u64, l3 & 0x7FFFFFFFFFFFFFFFu64)
+    bigint_set_len(id, 4u64)
+    return id
+}
+
+/* Encode a bigint as 32 LE bytes. */
+fn x_encode_u(id: u64, dst: *u8) -> i32 {
+    let mut limb : u32 = 0u32
+    while limb < 4u32 {
+        let v : u64 = bigint_get_limb(id, limb as u64)
+        let off : u32 = limb * 8u32
+        let mut k : u32 = 0u32
+        while k < 8u32 {
+            let shift : u64 = (k * 8u32) as u64
+            dst[off + k] = ((v >> shift) & 0xFFu64) as u8
+            k = k + 1u32
+        }
+        limb = limb + 1u32
+    }
+    return 0i32
+}
+
+/* Test bit `idx` of the clamped scalar held in module-scope X_SCALAR
+ * (same module-scope discipline as x_cswap's ladder state -- no
+ * caller-supplied scratch buffer). */
+fn x_scalar_bit(idx: u32) -> u32 {
+    let byte_idx : u32 = idx >> 3u32
+    let bit_in_byte : u32 = idx & 7u32
+    let b : u32 = X_SCALAR[byte_idx] as u32
+    return (b >> bit_in_byte) & 1u32
+}
+
+/* Conditional swap:  if cond==1, swap X_X2<->X_X3 and X_Z2<->X_Z3. */
+fn x_cswap(cond: u32) -> i32 {
+    if cond == 1u32 {
+        let t1 : u64 = X_X2
+        X_X2 = X_X3
+        X_X3 = t1
+        let t2 : u64 = X_Z2
+        X_Z2 = X_Z3
+        X_Z3 = t2
+    }
+    return 0i32
+}
+
+/* One ladder step.  Reads/updates module-scope X_X1,X_X2,X_Z2,X_X3,X_Z3.
+ * Drops the old ids and replaces with new ones. */
+fn x_ladder_step() -> i32 {
+    /* A = x_2 + z_2 */
+    let a : u64 = fp_add(X_ARENA, X_X2, X_Z2, X_P)
+    /* AA = A^2 */
+    let aa : u64 = fp_mul(X_ARENA, a, a, X_P)
+    /* B = x_2 - z_2 */
+    let b : u64 = fp_sub(X_ARENA, X_X2, X_Z2, X_P)
+    /* BB = B^2 */
+    let bb : u64 = fp_mul(X_ARENA, b, b, X_P)
+    /* E = AA - BB */
+    let e : u64 = fp_sub(X_ARENA, aa, bb, X_P)
+    /* C = x_3 + z_3 */
+    let c : u64 = fp_add(X_ARENA, X_X3, X_Z3, X_P)
+    /* D = x_3 - z_3 */
+    let d : u64 = fp_sub(X_ARENA, X_X3, X_Z3, X_P)
+    /* DA = D*A,  CB = C*B */
+    let da : u64 = fp_mul(X_ARENA, d, a, X_P)
+    let cb : u64 = fp_mul(X_ARENA, c, b, X_P)
+    /* x_3' = (DA+CB)^2 */
+    let da_plus_cb : u64 = fp_add(X_ARENA, da, cb, X_P)
+    let new_x3 : u64 = fp_mul(X_ARENA, da_plus_cb, da_plus_cb, X_P)
+    /* z_3' = x_1 * (DA-CB)^2 */
+    let da_minus_cb : u64 = fp_sub(X_ARENA, da, cb, X_P)
+    let dmc_sq : u64 = fp_mul(X_ARENA, da_minus_cb, da_minus_cb, X_P)
+    let new_z3 : u64 = fp_mul(X_ARENA, X_X1, dmc_sq, X_P)
+    /* x_2' = AA*BB */
+    let new_x2 : u64 = fp_mul(X_ARENA, aa, bb, X_P)
+    /* z_2' = E * (AA + a24*E) */
+    let a24_e : u64 = fp_mul(X_ARENA, X_A24, e, X_P)
+    let aa_plus_a24e : u64 = fp_add(X_ARENA, aa, a24_e, X_P)
+    let new_z2 : u64 = fp_mul(X_ARENA, e, aa_plus_a24e, X_P)
+    /* Drop intermediates and old ladder values. */
+    bigint_drop(a); bigint_drop(aa); bigint_drop(b); bigint_drop(bb); bigint_drop(e)
+    bigint_drop(c); bigint_drop(d); bigint_drop(da); bigint_drop(cb)
+    bigint_drop(da_plus_cb); bigint_drop(da_minus_cb); bigint_drop(dmc_sq)
+    bigint_drop(a24_e); bigint_drop(aa_plus_a24e)
+    bigint_drop(X_X2); bigint_drop(X_Z2); bigint_drop(X_X3); bigint_drop(X_Z3)
+    X_X2 = new_x2
+    X_Z2 = new_z2
+    X_X3 = new_x3
+    X_Z3 = new_z3
+    return 0i32
+}
+
+fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+    /* Allocate per-call arena (256 MB; released at end). */
+    X_ARENA = arena_new(1u64 << 28u64)
+    if X_ARENA == 0u64 { return -1i32 }
+    X_P   = x_build_p()
+    X_A24 = bigint_from_u64(X_ARENA, 121665u64)
+    /* Clamp the scalar into the dedicated module-scope buffer X_SCALAR
+     * (RFC 7748 section 5: clear bottom 3 bits of byte 0, clear top
+     * bit and set bit 254 of byte 31).  `out` is NEVER scratch -- it
+     * is written exactly once, at the end, by x_encode_u. */
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        X_SCALAR[i] = scalar[i]
+        i = i + 1u32
+    }
+    X_SCALAR[0]  = (X_SCALAR[0] as u32 & 248u32) as u8
+    X_SCALAR[31] = (X_SCALAR[31] as u32 & 127u32) as u8
+    X_SCALAR[31] = (X_SCALAR[31] as u32 | 64u32) as u8
+    /* Decode u into x_1. */
+    X_X1 = x_decode_u(u_in)
+    /* Initialise ladder: x_2 = 1, z_2 = 0, x_3 = u, z_3 = 1. */
+    X_X2 = bigint_from_u64(X_ARENA, 1u64)
+    X_Z2 = bigint_from_u64(X_ARENA, 0u64)
+    X_X3 = x_decode_u(u_in)
+    X_Z3 = bigint_from_u64(X_ARENA, 1u64)
+    /* Run ladder bits 254..0 */
+    let mut swap : u32 = 0u32
+    let mut t : u32 = 255u32
+    while t > 0u32 {
+        t = t - 1u32
+        let k_t : u32 = x_scalar_bit(t)
+        swap = swap ^ k_t
+        x_cswap(swap)
+        swap = k_t
+        x_ladder_step()
+    }
+    x_cswap(swap)
+    /* Compute x_2 / z_2 = x_2 * z_2^(p-2). */
+    let z_inv : u64 = fp_inv_fermat(X_ARENA, X_Z2, X_P)
+    let result : u64 = fp_mul(X_ARENA, X_X2, z_inv, X_P)
+    x_encode_u(result, out)
+    /* Drop arena (frees underlying region memory) AND every bigint slot
+     * whose backing arena was X_ARENA.  Without the bigint sweep the
+     * 64-slot bigint table fills after a handful of x25519 calls and
+     * subsequent bigint_from_u64 returns BIGINT_INVALID -- the ladder
+     * then silently uses stale state, producing identical outputs for
+     * distinct inputs (manifested as corpus 239's SID collision). */
+    bigint_drop_arena(X_ARENA)
+    arena_drop(X_ARENA)
+    X_ARENA = 0u64
+    X_P = 0u64
+    X_A24 = 0u64
+    X_X1 = 0u64
+    X_X2 = 0u64
+    X_Z2 = 0u64
+    X_X3 = 0u64
+    X_Z3 = 0u64
+    /* Wipe the secret clamped scalar.  The prior code left it only
+     * transiently in `out` before overwriting with the result; a
+     * dedicated buffer must be explicitly cleared to match -- and
+     * improve -- the @side_channel_resistant posture. */
+    let mut wz : u32 = 0u32
+    while wz < 32u32 {
+        X_SCALAR[wz] = 0u8
+        wz = wz + 1u32
+    }
+    return X25519_OK
+}

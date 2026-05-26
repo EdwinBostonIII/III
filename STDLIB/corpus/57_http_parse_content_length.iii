@@ -1,0 +1,83 @@
+/* http_client: parse Content-Length response.
+ *
+ * Wire input: "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello"
+ *
+ * Verify: status=200, header_count=1, body="Hello".
+ */
+module corpus_57
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_status(id: u64) -> u32 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_count(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_base(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_len(id: u64) -> u64 from "http_client.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let buf : *u8 = malloc(43u64)
+    /* "HTTP/1.1 200 OK\r\n" (17 bytes) */
+    buf[0]  = 72u8   /* H */
+    buf[1]  = 84u8   /* T */
+    buf[2]  = 84u8   /* T */
+    buf[3]  = 80u8   /* P */
+    buf[4]  = 47u8   /* / */
+    buf[5]  = 49u8   /* 1 */
+    buf[6]  = 46u8   /* . */
+    buf[7]  = 49u8   /* 1 */
+    buf[8]  = 32u8   /*   */
+    buf[9]  = 50u8   /* 2 */
+    buf[10] = 48u8   /* 0 */
+    buf[11] = 48u8   /* 0 */
+    buf[12] = 32u8   /*   */
+    buf[13] = 79u8   /* O */
+    buf[14] = 75u8   /* K */
+    buf[15] = 13u8   /* \r */
+    buf[16] = 10u8   /* \n */
+    /* "Content-Length: 5\r\n" (19 bytes) */
+    buf[17] = 67u8   /* C */
+    buf[18] = 111u8  /* o */
+    buf[19] = 110u8  /* n */
+    buf[20] = 116u8  /* t */
+    buf[21] = 101u8  /* e */
+    buf[22] = 110u8  /* n */
+    buf[23] = 116u8  /* t */
+    buf[24] = 45u8   /* - */
+    buf[25] = 76u8   /* L */
+    buf[26] = 101u8  /* e */
+    buf[27] = 110u8  /* n */
+    buf[28] = 103u8  /* g */
+    buf[29] = 116u8  /* t */
+    buf[30] = 104u8  /* h */
+    buf[31] = 58u8   /* : */
+    buf[32] = 32u8   /*   */
+    buf[33] = 53u8   /* 5 */
+    buf[34] = 13u8   /* \r */
+    buf[35] = 10u8   /* \n */
+    /* "\r\n" (2 bytes) */
+    buf[36] = 13u8
+    buf[37] = 10u8
+    /* "Hello" (5 bytes) */
+    buf[38] = 72u8   /* H */
+    buf[39] = 101u8  /* e */
+    buf[40] = 108u8  /* l */
+    buf[41] = 108u8  /* l */
+    buf[42] = 111u8  /* o */
+    let resp : u64 = http_parse_response(a, buf as u64, 43u64)
+    if resp == 0u64 { return 1u64 }
+    if http_response_status(resp) != 200u32 { return 2u64 }
+    if http_response_header_count(resp) != 1u64 { return 3u64 }
+    if http_response_body_len(resp) != 5u64 { return 4u64 }
+    let body : *u8 = http_response_body_base(resp) as *u8
+    if body[0] != 72u8 { return 5u64 }   /* H */
+    if body[1] != 101u8 { return 6u64 }  /* e */
+    if body[2] != 108u8 { return 7u64 }  /* l */
+    if body[3] != 108u8 { return 8u64 }  /* l */
+    if body[4] != 111u8 { return 9u64 }  /* o */
+    free(buf)
+    arena_drop(a)
+    return 99u64
+}

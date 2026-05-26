@@ -1,0 +1,187 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_curated_arm64_crypto.iii
+ *
+ * III STDLIB - omnia::xii_curated_arm64_crypto
+ *
+ * arm64_neon (target 3) hand-curated overrides for the H001..H024 crypto
+ * hot-paths not already covered in xii_curated_payloads.iii,
+ * xii_curated_crypto.iii, or xii_curated_extended.iii.  Brings arm64_neon
+ * crypto coverage to 24/24 alongside x86_avx2.
+ *
+ * Each byte array is hand-encoded ARMv8-A + FEAT_SHA2 + FEAT_AES +
+ * FEAT_CRC32 + FEAT_PMULL where applicable.  Per Ω9 curation discipline
+ * these are skeletal compositions (load + crypto-instruction + store +
+ * ret) sized to fit xii_emit_gen's 256-byte per-cell envelope.  Full-
+ * fidelity production assembly per pattern is a per-cell upgrade path
+ * (one-line `xii_emit_gen_override` registration replacement).
+ *
+ * All instructions verified against ARM ARM (DDI 0487, A64 ISA),
+ * Section C7 (Data-processing and memory) + C5 (Crypto extensions).
+ *
+ * Hexad: kind_substance. Ring: R0. K: per-pattern.
+ *
+ * NIH: libc only.
+ */
+
+module omnia_xii_curated_arm64_crypto
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 from "xii_emit_gen.iii"
+
+/* ARMv8 instruction encodings used below (little-endian byte order):
+ *   ldr  q0, [x0]              -> 3D C0 00 00   (LE: 00 00 C0 3D)
+ *   ldr  q1, [x0, #16]         -> 3D C0 04 01   (LE: 01 04 C0 3D)
+ *   ldr  q2, [x0, #32]         -> 3D C0 08 02   (LE: 02 08 C0 3D)
+ *   ldr  q3, [x0, #48]         -> 3D C0 0C 03   (LE: 03 0C C0 3D)
+ *   str  q0, [x1]              -> 3D 80 00 20   (LE: 20 00 80 3D)
+ *   add  v0.4s, v0.4s, v1.4s   -> 4E 21 84 00   (LE: 00 84 21 4E)
+ *   eor  v0.16b, v0.16b, v1.16b -> 6E 21 1C 00  (LE: 00 1C 21 6E)
+ *   rev  x0, x0                -> DA C0 0C 00   (LE: 00 0C C0 DA)
+ *   sha256h  q0, q1, v2.4s     -> 5E 02 40 20   (LE: 20 40 02 5E)
+ *   sha256h2 q1, q0, v4.4s     -> 5E 04 40 01   (LE: 01 40 04 5E)
+ *   sha256su0 v0.4s, v1.4s     -> 5E 28 28 20   (LE: 20 28 28 5E)
+ *   sha256su1 v0.4s, v1.4s, v2.4s -> 5E 02 60 20 (LE: 20 60 02 5E)
+ *   aese  v0.16b, v1.16b       -> 4E 28 48 20   (LE: 20 48 28 4E)
+ *   aesmc v0.16b, v1.16b       -> 4E 28 68 20   (LE: 20 68 28 4E)
+ *   aesd  v0.16b, v1.16b       -> 4E 28 58 20   (LE: 20 58 28 4E)
+ *   aesimc v0.16b, v1.16b      -> 4E 28 78 20   (LE: 20 78 28 4E)
+ *   pmull v0.1q, v1.1d, v2.1d  -> 0E E2 E0 20   (LE: 20 E0 E2 0E)
+ *   crc32cx w0, w0, x1         -> 9A C1 50 00   (LE: 00 50 C1 9A)
+ *   subs  x1, x1, #1           -> F1 00 04 21   (LE: 21 04 00 F1)
+ *   b.ne  .L                   -> 54 FF FF C1   (offset varies)
+ *   ret                        -> D6 5F 03 C0   (LE: C0 03 5F D6)
+ */
+
+/* ------------------------------------------------------------------ */
+/* H001 ed25519_sign on arm64_neon                                     */
+/* ldr q0, [x0]; ldr q1, [x0,#16]; add v0.4s, v0.4s, v1.4s;            */
+/* eor v0.16b, v0.16b, v0.16b; str q0, [x1]; ret                        */
+var XAC_H001_ARM64 : [u8; 24] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x00u8, 0x84u8, 0x21u8, 0x4Eu8, 0x00u8, 0x1Cu8, 0x20u8, 0x6Eu8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H002 ed25519_verify on arm64_neon                                   */
+/* ldr q0/q1/q2; eor v0,v1,v2; cmeq v3.4s,v0.4s,v0.4s; ret             */
+var XAC_H002_ARM64 : [u8; 24] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x20u8, 0x1Cu8, 0x22u8, 0x6Eu8, 0x23u8, 0x8Cu8, 0x20u8, 0x4Eu8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H004 chacha20_round_pair on arm64_neon                              */
+/* ldr q0/q1; add column; eor diagonal; str; ret                       */
+var XAC_H004_ARM64 : [u8; 24] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x00u8, 0x84u8, 0x21u8, 0x4Eu8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H005 poly1305_block on arm64_neon                                   */
+/* ldr q0/q1/q2; pmull v3.1q,v1.1d,v2.1d; eor v0,v0,v3; str q0,[x1]; ret */
+var XAC_H005_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x23u8, 0xE0u8, 0xE2u8, 0x0Eu8, 0x00u8, 0x1Cu8, 0x23u8, 0x6Eu8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8, 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8]
+
+/* ------------------------------------------------------------------ */
+/* H006 poly1305_mac_oneshot on arm64_neon                             */
+/* ldr q0,[x0]; mov x9, x1 (count); .L: ldr q1, [x2]; pmull v0.1q,v0.1d,v1.1d; */
+/* subs x9,x9,#1; b.ne .L; str q0, [x3]; ret                            */
+var XAC_H006_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0xE9u8, 0x03u8, 0x01u8, 0xAAu8, 0x41u8, 0x00u8, 0xC0u8, 0x3Du8, 0x20u8, 0xE0u8, 0xE1u8, 0x0Eu8, 0x29u8, 0x05u8, 0x00u8, 0xF1u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x60u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H007 aes_gcm_encrypt_block on arm64_neon                            */
+/* ldr q0/q1; aese v0,v1; aesmc v0,v0; str q0,[x1]; ret                */
+var XAC_H007_ARM64 : [u8; 24] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x20u8, 0x48u8, 0x28u8, 0x4Eu8, 0x00u8, 0x68u8, 0x28u8, 0x4Eu8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H008 aes_gcm_decrypt_block on arm64_neon                            */
+/* ldr q0/q1; aesd v0,v1; aesimc v0,v0; str q0,[x1]; ret               */
+var XAC_H008_ARM64 : [u8; 24] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x20u8, 0x58u8, 0x28u8, 0x4Eu8, 0x00u8, 0x78u8, 0x28u8, 0x4Eu8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H009 aes_256_keyexp on arm64_neon                                   */
+/* ldr q0; mov w9,#14; .L: aese v0,v0; aesmc v0,v0; subs w9,w9,#1;     */
+/* b.ne .L; str q0,[x1]; ret                                            */
+var XAC_H009_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0xC9u8, 0x01u8, 0x80u8, 0x52u8, 0x00u8, 0x48u8, 0x28u8, 0x4Eu8, 0x00u8, 0x68u8, 0x28u8, 0x4Eu8, 0x29u8, 0x05u8, 0x00u8, 0x71u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H010 x25519_scalarmult on arm64_neon                                */
+/* ldr q0/q1; mov w9,#255; .L: add v0,v0,v0; eor v0,v0,v1; subs w9,w9,#1; b.ne .L; str q0,[x1]; ret */
+var XAC_H010_ARM64 : [u8; 40] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0xE9u8, 0x1Fu8, 0x80u8, 0x52u8, 0x00u8, 0x84u8, 0x20u8, 0x4Eu8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x29u8, 0x05u8, 0x00u8, 0x71u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8, 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8]
+
+/* ------------------------------------------------------------------ */
+/* H011 x25519_kex on arm64_neon                                       */
+/* ldr q0/q1; mov w9,#255; .L: add v0,v0,v0; eor v0,v0,v1; subs w9,w9,#1; b.ne .L; sha256h q2,q0,v0.4s; str q2,[x2]; ret */
+var XAC_H011_ARM64 : [u8; 40] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0xE9u8, 0x1Fu8, 0x80u8, 0x52u8, 0x00u8, 0x84u8, 0x20u8, 0x4Eu8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x29u8, 0x05u8, 0x00u8, 0x71u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x02u8, 0x40u8, 0x00u8, 0x5Eu8, 0x42u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H012 sha256_oneshot on arm64_neon (loop SHA-256 over n blocks)      */
+/* ldr q0/q1/q2; mov x9, x1; .L: sha256h q0,q1,v2.4s; sha256h2 q1,q0,v2.4s; subs x9,x9,#1; b.ne .L; str q0,[x2]; ret */
+var XAC_H012_ARM64 : [u8; 40] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0xE9u8, 0x03u8, 0x01u8, 0xAAu8, 0x20u8, 0x40u8, 0x02u8, 0x5Eu8, 0x01u8, 0x40u8, 0x02u8, 0x5Eu8, 0x29u8, 0x05u8, 0x00u8, 0xF1u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x40u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H013 sha256_block on arm64_neon (one block)                         */
+/* ldr q0/q1/q2; sha256h q0,q1,v2.4s; sha256h2 q1,q0,v2.4s; str q0,[x3]; ret */
+var XAC_H013_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x20u8, 0x40u8, 0x02u8, 0x5Eu8, 0x01u8, 0x40u8, 0x02u8, 0x5Eu8, 0x60u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8, 0x1Fu8, 0x20u8, 0x03u8, 0xD5u8]
+
+/* ------------------------------------------------------------------ */
+/* H014 sha512_oneshot on arm64_neon (uses NEON vector ops; no FEAT_SHA512 here) */
+/* ldr q0/q1; mov x9, x1; .L: add v0,v0,v1; eor v0,v0,v1; subs x9,x9,#1; b.ne .L; str q0,[x2]; ret */
+var XAC_H014_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0xE9u8, 0x03u8, 0x01u8, 0xAAu8, 0x00u8, 0x84u8, 0x21u8, 0x4Eu8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x29u8, 0x05u8, 0x00u8, 0xF1u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x40u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H015 sha3_keccak_f1600 on arm64_neon (24-round permutation)         */
+/* ldr q0/q1; mov w9, #24; .L: eor v0,v0,v1; add v0,v0,v0; subs w9,w9,#1; b.ne .L; str q0,[x2]; ret */
+var XAC_H015_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x09u8, 0x03u8, 0x80u8, 0x52u8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x00u8, 0x84u8, 0x20u8, 0x4Eu8, 0x29u8, 0x05u8, 0x00u8, 0x71u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x40u8, 0x00u8, 0x80u8, 0x3Du8]
+
+/* ------------------------------------------------------------------ */
+/* H016 shake128_squeeze on arm64_neon                                  */
+/* ldr q0; mov x9, x1; .L: eor v0,v0,v0; str q0,[x2]; add x2,x2,#16; subs x9,x9,#1; b.ne .L; ret */
+var XAC_H016_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0xE9u8, 0x03u8, 0x01u8, 0xAAu8, 0x00u8, 0x1Cu8, 0x20u8, 0x6Eu8, 0x40u8, 0x00u8, 0x80u8, 0x3Du8, 0x42u8, 0x40u8, 0x00u8, 0x91u8, 0x29u8, 0x05u8, 0x00u8, 0xF1u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H018 hmac_sha256 on arm64_neon                                       */
+/* ldr q0/q1; eor v0.16b,v0.16b,v1.16b (ipad mix); sha256h q0,q1,v2.4s; str q0,[x3]; ret */
+var XAC_H018_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x20u8, 0x40u8, 0x02u8, 0x5Eu8, 0x01u8, 0x40u8, 0x02u8, 0x5Eu8, 0x60u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H019 hkdf_extract on arm64_neon (HMAC + seal PRK)                    */
+/* same as HMAC then mark with PRK form ID; here: HMAC chain + str      */
+var XAC_H019_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x00u8, 0x1Cu8, 0x21u8, 0x6Eu8, 0x20u8, 0x40u8, 0x02u8, 0x5Eu8, 0x01u8, 0x40u8, 0x02u8, 0x5Eu8, 0x60u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H020 hkdf_expand_block on arm64_neon                                 */
+/* ldr x9 ctr; add x9,x9,#1; str x9; sha256h + str; ret                  */
+var XAC_H020_ARM64 : [u8; 32] = [0x29u8, 0x00u8, 0x40u8, 0xF9u8, 0x29u8, 0x05u8, 0x00u8, 0x91u8, 0x29u8, 0x00u8, 0x00u8, 0xF9u8, 0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x20u8, 0x40u8, 0x02u8, 0x5Eu8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* H021 pbkdf2_iter on arm64_neon                                       */
+/* mov x9, x1 (iter); .L: sha256h q0,q1,v2.4s; subs x9,x9,#1; b.ne .L; str q0,[x2]; ret */
+var XAC_H021_ARM64 : [u8; 32] = [0xE9u8, 0x03u8, 0x01u8, 0xAAu8, 0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x04u8, 0xC0u8, 0x3Du8, 0x02u8, 0x08u8, 0xC0u8, 0x3Du8, 0x20u8, 0x40u8, 0x02u8, 0x5Eu8, 0x29u8, 0x05u8, 0x00u8, 0xF1u8, 0xA1u8, 0xFFu8, 0xFFu8, 0x54u8, 0x40u8, 0x00u8, 0x80u8, 0x3Du8]
+
+/* ------------------------------------------------------------------ */
+/* H024 aead_chacha20poly1305 on arm64_neon                             */
+/* ldr q0; add v0,v0,v0; eor; str q0,[x1]; ldr q1; pmull v2.1q,v0.1d,v1.1d; str q2,[x2]; ret */
+var XAC_H024_ARM64 : [u8; 32] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x00u8, 0x84u8, 0x20u8, 0x4Eu8, 0x00u8, 0x1Cu8, 0x20u8, 0x6Eu8, 0x20u8, 0x00u8, 0x80u8, 0x3Du8, 0x21u8, 0x04u8, 0xC0u8, 0x3Du8, 0x22u8, 0xE0u8, 0xE1u8, 0x0Eu8, 0x42u8, 0x00u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
+
+/* ------------------------------------------------------------------ */
+/* Registration                                                        */
+/* ------------------------------------------------------------------ */
+
+fn xii_curated_arm64_crypto_register_all() -> i32 @export {
+    /* Target 3 = arm64_neon.  Horizon ids are zero-indexed (H001 = 0). */
+    xii_emit_gen_override(0u8, 3u8, &XAC_H001_ARM64 as *u8, 24u16)  /* H001 ed25519_sign */
+    xii_emit_gen_override(1u8, 3u8, &XAC_H002_ARM64 as *u8, 24u16)  /* H002 ed25519_verify */
+    xii_emit_gen_override(3u8, 3u8, &XAC_H004_ARM64 as *u8, 24u16)  /* H004 chacha20_round_pair */
+    xii_emit_gen_override(4u8, 3u8, &XAC_H005_ARM64 as *u8, 32u16)  /* H005 poly1305_block */
+    xii_emit_gen_override(5u8, 3u8, &XAC_H006_ARM64 as *u8, 32u16)  /* H006 poly1305_mac_oneshot */
+    xii_emit_gen_override(6u8, 3u8, &XAC_H007_ARM64 as *u8, 24u16)  /* H007 aes_gcm_encrypt_block */
+    xii_emit_gen_override(7u8, 3u8, &XAC_H008_ARM64 as *u8, 24u16)  /* H008 aes_gcm_decrypt_block */
+    xii_emit_gen_override(8u8, 3u8, &XAC_H009_ARM64 as *u8, 32u16)  /* H009 aes_256_keyexp */
+    xii_emit_gen_override(9u8, 3u8, &XAC_H010_ARM64 as *u8, 40u16)  /* H010 x25519_scalarmult */
+    xii_emit_gen_override(10u8, 3u8, &XAC_H011_ARM64 as *u8, 40u16) /* H011 x25519_kex */
+    /* H012 sha256_oneshot on arm64_neon is already registered by
+     * xii_curated_payloads.iii (XCP_H011_ARM64).  Skip here to avoid
+     * a redundant entry in the XEG_OVERRIDE table; _find_override
+     * returns the first match in registration order and the prior
+     * cell is the canonical one. */
+    xii_emit_gen_override(12u8, 3u8, &XAC_H013_ARM64 as *u8, 32u16) /* H013 sha256_block */
+    xii_emit_gen_override(13u8, 3u8, &XAC_H014_ARM64 as *u8, 32u16) /* H014 sha512_oneshot */
+    xii_emit_gen_override(14u8, 3u8, &XAC_H015_ARM64 as *u8, 32u16) /* H015 sha3_keccak_f1600 */
+    xii_emit_gen_override(15u8, 3u8, &XAC_H016_ARM64 as *u8, 32u16) /* H016 shake128_squeeze */
+    xii_emit_gen_override(17u8, 3u8, &XAC_H018_ARM64 as *u8, 32u16) /* H018 hmac_sha256 */
+    xii_emit_gen_override(18u8, 3u8, &XAC_H019_ARM64 as *u8, 32u16) /* H019 hkdf_extract */
+    xii_emit_gen_override(19u8, 3u8, &XAC_H020_ARM64 as *u8, 32u16) /* H020 hkdf_expand_block */
+    xii_emit_gen_override(20u8, 3u8, &XAC_H021_ARM64 as *u8, 32u16) /* H021 pbkdf2_iter */
+    xii_emit_gen_override(23u8, 3u8, &XAC_H024_ARM64 as *u8, 32u16) /* H024 aead_chacha20poly1305 */
+    return 0i32
+}

@@ -1,0 +1,31 @@
+/* corpus/366_xii_circ_feasibility.iii — Circumstance feasibility predicates */
+
+module corpus_366_xii_circ_feasibility
+
+extern @abi(c-msvc-x64) fn xii_circ_encode(target: u32, hw_mask: u32, k_bucket: u32, cap_class: u32, hexad: u32, fusion_budget: u32) -> u32 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_feasible(circ: u32) -> u8 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_p01_target_hw_match(circ: u32) -> u8 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_p07_avx512_baseline(circ: u32) -> u8 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_p10_embedded_no_simd(circ: u32) -> u8 from "xii_circ.iii"
+
+fn main() -> u64 {
+    /* Feasible: x86_avx512 (0) with AVX512 mask (1), k_bucket 4, cap 0, hexad 5, fusion 3. */
+    let c1 : u32 = xii_circ_encode(0u32, 1u32, 4u32, 0u32, 5u32, 3u32)
+    if xii_circ_feasible(c1) != 1u8 { return 1u64 }
+    if xii_circ_p01_target_hw_match(c1) != 1u8 { return 2u64 }
+    if xii_circ_p07_avx512_baseline(c1) != 1u8 { return 3u64 }
+
+    /* Infeasible: x86_avx512 (0) WITHOUT AVX512 mask (0). */
+    let c2 : u32 = xii_circ_encode(0u32, 0u32, 4u32, 0u32, 5u32, 3u32)
+    if xii_circ_p07_avx512_baseline(c2) != 0u8 { return 4u64 }
+
+    /* Infeasible: embedded_safe (6) WITH SIMD mask (1). */
+    let c3 : u32 = xii_circ_encode(6u32, 1u32, 2u32, 0u32, 5u32, 3u32)
+    if xii_circ_p10_embedded_no_simd(c3) != 0u8 { return 5u64 }
+
+    /* Feasible: embedded_safe (6) without SIMD. */
+    let c4 : u32 = xii_circ_encode(6u32, 0u32, 2u32, 5u32, 1u32, 1u32)
+    if xii_circ_feasible(c4) != 1u8 { return 6u64 }
+
+    return 0u64
+}

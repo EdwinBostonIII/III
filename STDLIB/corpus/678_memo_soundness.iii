@@ -1,0 +1,66 @@
+/* 678_memo_soundness.iii -- M14 keystone: the memo lattice is a GOVERNED, nothing-trusted cache.
+ *
+ * memo_lattice.iii's load-bearing discipline (M17/W36/W50): admission verifies the producing
+ * chain AND is capability-gated by a ratified cp_memo_admit clause (M8); a lookup is "present,
+ * not trusted." 646_memo_lattice (ml_selftest) tests the happy path via an internal slot-bypass.
+ * This KAT proves the PUBLIC-API admission gate REFUSES from the outside (prove the negative):
+ * null args are rejected, an UNGOVERNED admission (clean constitution, no cp_memo_admit clause)
+ * is refused (E_CLAUSE_ABSENT) so nothing enters the lattice, and an unknown key yields ABSENT
+ * (no phantom hit). This is the "memoization is a ratifiable capability, authoritative only
+ * through governance + the witness chain" boundary, externally falsified.
+ *
+ * Main-corpus convention: rc 99 = pass; 1..7 = which check failed. */
+module corpus_678
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_lookup(key: *u8, out_commit: *u8, out_chain_id: *u8, out_k_memo: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_size() -> u64 from "memo_lattice.iii"
+
+const MEMOL_OK              : i32 =  0i32
+const MEMOL_E_NULL          : i32 = -1i32
+const MEMOL_E_ABSENT        : i32 = -2i32
+const MEMOL_E_CLAUSE_ABSENT : i32 = -6i32
+
+var MS_KEY    : [u8; 32]
+var MS_COMMIT : [u8; 32]
+var MS_CHAIN  : [u8; 32]
+var MS_OC     : [u8; 32]
+var MS_OCH    : [u8; 32]
+var MS_KM     : [u8; 32]
+
+fn main() -> u64 {
+    /* bootstrap the witness/constitution/lattice subsystems (clean constitution = ungoverned). */
+    wh_init(0u64)
+    ws_init()
+    cons_init()
+    ml_init()
+    let pk : *u8 = (&MS_KEY as u64) as *u8
+    let pc : *u8 = (&MS_COMMIT as u64) as *u8
+    let pch : *u8 = (&MS_CHAIN as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        pk[i]  = (i + 1u64) as u8
+        pc[i]  = (i + 100u64) as u8
+        pch[i] = (i + 200u64) as u8
+        i = i + 1u64
+    }
+    let nullp : *u8 = 0u64 as *u8
+    /* null-arg guards (each position) -> E_NULL. */
+    if ml_admit(nullp, pc, pch) != MEMOL_E_NULL { return 1u64 }
+    if ml_admit(pk, nullp, pch) != MEMOL_E_NULL { return 2u64 }
+    if ml_admit(pk, pc, nullp) != MEMOL_E_NULL { return 3u64 }
+    /* governance gate (prove the negative): a clean constitution has no cp_memo_admit clause, so
+     * admission is REFUSED -- memoization is a ratifiable capability, not an open cache. */
+    if ml_admit(pk, pc, pch) != MEMOL_E_CLAUSE_ABSENT { return 4u64 }
+    /* the refused admission entered NOTHING into the lattice. */
+    if ml_size() != 0u64 { return 5u64 }
+    /* an unknown key yields ABSENT -- no phantom hit (nothing-trusted). */
+    if ml_lookup(pk, (&MS_OC as u64) as *u8, (&MS_OCH as u64) as *u8, (&MS_KM as u64) as *u8) != MEMOL_E_ABSENT { return 6u64 }
+    /* null lookup guard -> E_NULL. */
+    if ml_lookup(nullp, (&MS_OC as u64) as *u8, (&MS_OCH as u64) as *u8, (&MS_KM as u64) as *u8) != MEMOL_E_NULL { return 7u64 }
+    return 99u64
+}

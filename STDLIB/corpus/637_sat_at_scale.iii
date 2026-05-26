@@ -1,0 +1,4 @@
+/* 637 — sat_at_scale: untrusted CDCL oracle + independent clause-checking verifier + cert. */
+module corpus_637
+extern @abi(c-msvc-x64) fn sats_selftest() -> u64 from "sat_at_scale.iii"
+fn main() -> u64 { return sats_selftest() }

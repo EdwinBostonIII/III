@@ -1,0 +1,268 @@
+/* III/STDLIB/iii/aether/memo_compactor_coordination.iii -- Layer 9, Module 79.
+ *
+ * III STDLIB - aether::memo_compactor_coordination
+ *
+ * The deterministic bridge between witness compaction and the memoization
+ * lattice (M17).  When the compactor retires a chain segment, every memo entry
+ * whose producing chain was that segment becomes un-revalidatable from live
+ * witness data and MUST be marked stale (gospel L401, W50).  This module
+ * enumerates the lattice once per retirement, marks each dependent entry stale
+ * via the lattice's reversible ml_mark_stale, and emits one chained witness
+ * fragment (0x18 MEMO_COMPACTION_COORD) recording the pass.  It owns the
+ * coordination decision; the lattice owns the storage.
+ *
+ * Hexad: kind_repair + kind_motion.  Ring: R0.  K: 1.00.
+ *
+ * M8: mcc_on_compaction is capability-gated (CAP_RIGHT_AMEND).
+ * M6/M17: every pass emits a coordination-summary witness fragment.
+ * M2/W5: the scan is a fixed 0..MCC_SLOTS counter loop; identical lattice state
+ *        + retired_chain_id -> identical marks, bytes, fragment id.
+ * M3/M4: the match is exact 32-byte chain identity (ml_slot_chain_eq), never a
+ *        count/threshold/score.  No learning.
+ * M5/M9: marking is idempotent + reversible (ml_revalidate); never deletes.
+ *
+ * Depends on memo_lattice.iii (M58: ml_mark_stale + the 4 read-only accessors
+ * ml_slot_count/is_live/chain_eq/key added Phase-2), capability.iii
+ * (cap_verify_rights), witness_hook.iii (wh_publish) -- all BUILT.
+ * Non-reentrant: MCC_SCR_* scratch is module-scope (Trap 7); serial R0 use.
+ */
+
+module aether_memo_compactor_coordination
+
+extern @abi(c-msvc-x64) fn ml_mark_stale(key: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_count() -> u64 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_is_live(slot: u64) -> u8 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_chain_eq(slot: u64, chain_id: *u8) -> u8 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_slot_key(slot: u64, out_key: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+
+// --- KAT-harness externs (drive the lattice admit vertical) ---
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ml_init() -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_admit(key: *u8, out_commit: *u8, chain_id: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn ml_lookup(key: *u8, out_commit: *u8, out_chain_id: *u8, out_k_memo: *u8) -> i32 from "memo_lattice.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+
+const MCC_OK            : i32 =  0i32
+const MCC_E_NULL        : i32 = -1i32
+const MCC_E_NOT_INITED  : i32 = -2i32
+const MCC_E_DENIED      : i32 = -3i32
+const MCC_E_LATTICE     : i32 = -4i32
+const MCC_E_WITNESS     : i32 = -5i32
+
+const MCC_SLOTS         : u64 = 65536u64       // mirror of MEMOL_SLOTS
+const MCC_KEY_BYTES     : u64 = 32u64
+const MCC_CAP_AMEND     : u64 = 0x4000u64       // mirror of CAP_RIGHT_AMEND
+const MCC_PAYLOAD_TAG   : u8  = 0xE3u8          // tree-wide witness outer tag
+const MCC_EVT_COORD     : u8  = 0x18u8          // MEMO_COMPACTION_COORD (V3 sub-tag)
+const MCC_U64_SENT      : u64 = 0xFFFFFFFFFFFFFFFFu64
+const MCC_ML_OK         : i32 =  0i32           // MEMOL_OK
+const MCC_ML_STALE      : i32 = -3i32           // MEMOL_E_STALE
+
+var MCC_INITED          : u8  = 0u8
+var MCC_LAST_COUNT      : u64 = 0u64
+
+var MCC_SCR_KEY         : [u8; 32]
+var MCC_SCR_PAYLOAD     : [u8; 48]
+var MCC_SCR_PRODUCER    : [u8; 32]
+var MCC_SCR_OPID        : [u8; 32]
+var MCC_SCR_INC         : [u8; 32]
+var MCC_SCR_OUTC        : [u8; 32]
+var MCC_SCR_FRAGID      : [u8; 32]
+
+// --- self-test scratch ---
+var MCC_CLAUSE_LABEL    : [u8; 13]
+var MCC_RATIFY_BUF      : [u64; 16]
+var MCC_WIT_PAYLOAD     : [u8; 72]
+var MCC_CH0             : [u8; 32]
+var MCC_CH1             : [u8; 32]
+var MCC_CH2             : [u8; 32]
+var MCC_CH9             : [u8; 32]
+var MCC_KA              : [u8; 32]
+var MCC_KB              : [u8; 32]
+var MCC_KC              : [u8; 32]
+var MCC_KD              : [u8; 32]
+var MCC_CA              : [u8; 32]
+var MCC_LK_OC           : [u8; 32]
+var MCC_LK_CH           : [u8; 32]
+var MCC_LK_KM           : [u8; 32]
+
+// =========================== internal ===========================
+
+// Per-slot: 0 = no match, 1 = marked stale, MCC_E_LATTICE = downstream failure.
+fn mcc_process_slot(slot: u64, rc: u64) -> i32 {
+    if ml_slot_is_live(slot) != 1u8 { return 0i32 }
+    if ml_slot_chain_eq(slot, rc as *u8) != 1u8 { return 0i32 }
+    if ml_slot_key(slot, (&MCC_SCR_KEY as u64) as *u8) != MCC_OK { return MCC_E_LATTICE }
+    if ml_mark_stale((&MCC_SCR_KEY as u64) as *u8) != MCC_OK { return MCC_E_LATTICE }
+    return 1i32
+}
+
+// Build + publish the 0x18 coordination-summary fragment (M6/M17).
+fn mcc_emit_pass(retired_chain_id: *u8, n_marked: u64) -> i32 {
+    let rc : *u8 = retired_chain_id
+    let pp : *u8 = (&MCC_SCR_PAYLOAD as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 48u64 { pp[i] = 0u8  i = i + 1u64 }
+    pp[0u64] = MCC_PAYLOAD_TAG
+    pp[1u64] = MCC_EVT_COORD
+    let mut j : u64 = 0u64
+    while j < 32u64 { pp[8u64 + j] = rc[j]  j = j + 1u64 }
+    let mut b : u64 = 0u64
+    while b < 8u64 { pp[40u64 + b] = ((n_marked >> (b * 8u64)) & 0xFFu64) as u8  b = b + 1u64 }
+    ident_zero((&MCC_SCR_PRODUCER as u64) as *u8)
+    ident_zero((&MCC_SCR_OPID as u64) as *u8)
+    ident_zero((&MCC_SCR_OUTC as u64) as *u8)
+    ident_copy(rc, (&MCC_SCR_INC as u64) as *u8)
+    let zp : *u8 = (&MCC_SCR_PRODUCER as u64) as *u8
+    let r : u64 = wh_publish(zp, (&MCC_SCR_OPID as u64) as *u8, (&MCC_SCR_INC as u64) as *u8, (&MCC_SCR_OUTC as u64) as *u8, 0u8, 0u8, 0u16, zp, 0u32, pp, 48u32, (&MCC_SCR_FRAGID as u64) as *u8)
+    if r == MCC_U64_SENT { return MCC_E_WITNESS }
+    return MCC_OK
+}
+
+// =========================== public surface ===========================
+
+fn mcc_init() -> i32 @export {
+    if MCC_INITED == 1u8 { return MCC_OK }
+    MCC_LAST_COUNT = 0u64
+    MCC_INITED = 1u8
+    return MCC_OK
+}
+
+fn mcc_on_compaction(retired_chain_id: *u8, cap: u64) -> i32 @export {
+    let rc : u64 = retired_chain_id as u64
+    let vcap : u64 = cap
+    if MCC_INITED == 0u8 { return MCC_E_NOT_INITED }
+    if rc == 0u64 { return MCC_E_NULL }
+    if cap_verify_rights(vcap, MCC_CAP_AMEND) != 1u8 { return MCC_E_DENIED }
+    let n_slots : u64 = ml_slot_count()
+    let mut s : u64 = 0u64
+    let mut marked : u64 = 0u64
+    let mut err : i32 = MCC_OK
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if s >= n_slots { going = 0u8 }
+        if s >= MCC_SLOTS { going = 0u8 }
+        if going == 1u8 {
+            let pr : i32 = mcc_process_slot(s, rc)
+            if pr == 1i32 { marked = marked + 1u64 }
+            if pr == MCC_E_LATTICE { err = MCC_E_LATTICE  going = 0u8 }
+            s = s + 1u64
+        }
+    }
+    if err != MCC_OK { return err }
+    MCC_LAST_COUNT = marked
+    if mcc_emit_pass(rc as *u8, marked) != MCC_OK { return MCC_E_WITNESS }
+    return MCC_OK
+}
+
+fn mcc_last_marked_count() -> u64 @export { return MCC_LAST_COUNT }
+
+// =========================== self-test ===========================
+
+fn mcc_st_fill(p: u64, b: u8) -> i32 {
+    let pp : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { pp[i] = b  i = i + 1u64 }
+    return MCC_OK
+}
+
+// Ratify the "cp_memo_admit" clause so ml_admit's cons_find passes.
+fn mcc_st_ratify() -> i32 {
+    let lp : *u8 = (&MCC_CLAUSE_LABEL as u64) as *u8
+    lp[0u64]  = 0x63u8  lp[1u64]  = 0x70u8  lp[2u64]  = 0x5Fu8  lp[3u64]  = 0x6Du8  lp[4u64]  = 0x65u8
+    lp[5u64]  = 0x6Du8  lp[6u64]  = 0x6Fu8  lp[7u64]  = 0x5Fu8  lp[8u64]  = 0x61u8  lp[9u64]  = 0x64u8
+    lp[10u64] = 0x6Du8  lp[11u64] = 0x69u8  lp[12u64] = 0x74u8
+    let reqbase : u64 = &MCC_RATIFY_BUF as u64
+    let labaddr : u64 = &MCC_CLAUSE_LABEL as u64
+    let rqp : *u64 = reqbase as *u64
+    rqp[0u64] = reqbase + 64u64
+    rqp[1u64] = labaddr
+    rqp[2u64] = 13u64
+    rqp[3u64] = labaddr
+    rqp[4u64] = 0u64
+    rqp[5u64] = labaddr
+    rqp[6u64] = 0u64
+    let fr : u64 = cons_ratify(reqbase as *u8)
+    if fr == MCC_U64_SENT { return MCC_E_LATTICE }
+    return MCC_OK
+}
+
+// Publish + register a chain fragment; its fid (the chain id) lands in out_chain.
+fn mcc_st_make_chain(out_chain: u64, tag: u8) -> i32 {
+    mcc_st_fill(&MCC_WIT_PAYLOAD as u64, tag)
+    let zp : *u8 = (&MCC_SCR_PRODUCER as u64) as *u8
+    ident_zero(zp)
+    let idx : u64 = wh_publish(zp, zp, zp, zp, 0u8, 0u8, 1u16, zp, 0u32, (&MCC_WIT_PAYLOAD as u64) as *u8, 72u32, out_chain as *u8)
+    if idx == MCC_U64_SENT { return MCC_E_LATTICE }
+    ws_register(idx)
+    return MCC_OK
+}
+
+// Stand up the substrate + admit KA/KB on CH0, KC on CH1, KD on CH2.  MCC_INITED stays 0.
+fn mcc_st_setup() -> i32 {
+    wh_init(0u64)
+    ws_init()
+    ml_init()
+    cap_env_init()
+    if mcc_st_ratify() != MCC_OK { return 1i32 }
+    if mcc_st_make_chain(&MCC_CH0 as u64, 0xC0u8) != MCC_OK { return 2i32 }
+    if mcc_st_make_chain(&MCC_CH1 as u64, 0xC1u8) != MCC_OK { return 3i32 }
+    if mcc_st_make_chain(&MCC_CH2 as u64, 0xC2u8) != MCC_OK { return 4i32 }
+    mcc_st_fill(&MCC_CH9 as u64, 0x99u8)
+    mcc_st_fill(&MCC_KA as u64, 0xA1u8)
+    mcc_st_fill(&MCC_KB as u64, 0xB1u8)
+    mcc_st_fill(&MCC_KC as u64, 0xC3u8)
+    mcc_st_fill(&MCC_KD as u64, 0xD1u8)
+    mcc_st_fill(&MCC_CA as u64, 0x66u8)
+    if ml_admit((&MCC_KA as u64) as *u8, (&MCC_CA as u64) as *u8, (&MCC_CH0 as u64) as *u8) != MCC_ML_OK { return 5i32 }
+    if ml_admit((&MCC_KB as u64) as *u8, (&MCC_CA as u64) as *u8, (&MCC_CH0 as u64) as *u8) != MCC_ML_OK { return 6i32 }
+    if ml_admit((&MCC_KC as u64) as *u8, (&MCC_CA as u64) as *u8, (&MCC_CH1 as u64) as *u8) != MCC_ML_OK { return 7i32 }
+    if ml_admit((&MCC_KD as u64) as *u8, (&MCC_CA as u64) as *u8, (&MCC_CH2 as u64) as *u8) != MCC_ML_OK { return 8i32 }
+    return MCC_OK
+}
+
+fn mcc_st_lookup(key: u64) -> i32 {
+    return ml_lookup(key as *u8, (&MCC_LK_OC as u64) as *u8, (&MCC_LK_CH as u64) as *u8, (&MCC_LK_KM as u64) as *u8)
+}
+
+fn mcc_selftest() -> u64 @export {
+    MCC_INITED = 0u8
+    let su : i32 = mcc_st_setup()
+    if su != MCC_OK { return su as u64 }   // setup failure 1..8 (distinct from KAT codes 9..24, 99)
+    let amend : u64 = 1u64                                      // cap_env root has all rights
+    let noamend : u64 = cap_attenuate(1u64, 0x0800u64, 0u64)
+    if noamend == 0u64 { return 9u64 }
+    // KAT-5 (uninit, before mcc_init): refused.
+    if mcc_on_compaction((&MCC_CH0 as u64) as *u8, amend) != MCC_E_NOT_INITED { return 10u64 }
+    mcc_init()
+    // KAT-4 (null retired chain): refused.
+    let nullp : *u8 = 0u64 as *u8
+    if mcc_on_compaction(nullp, amend) != MCC_E_NULL { return 11u64 }
+    // KAT-3 (negative gate): no-amend cap refused, KD NOT marked, count unchanged (still 0).
+    if mcc_on_compaction((&MCC_CH2 as u64) as *u8, noamend) != MCC_E_DENIED { return 12u64 }
+    if mcc_last_marked_count() != 0u64 { return 13u64 }
+    if mcc_st_lookup(&MCC_KD as u64) != MCC_ML_OK { return 14u64 }
+    // KAT-1: retire CH0 -> KA + KB marked (count 2), KC (CH1) untouched.
+    if mcc_on_compaction((&MCC_CH0 as u64) as *u8, amend) != MCC_OK { return 15u64 }
+    if mcc_last_marked_count() != 2u64 { return 16u64 }
+    if mcc_st_lookup(&MCC_KA as u64) != MCC_ML_STALE { return 17u64 }
+    if mcc_st_lookup(&MCC_KB as u64) != MCC_ML_STALE { return 18u64 }
+    if mcc_st_lookup(&MCC_KC as u64) != MCC_ML_OK { return 19u64 }
+    // KAT-2: retire an unreferenced chain -> count 0, still OK (witnessed no-op).
+    if mcc_on_compaction((&MCC_CH9 as u64) as *u8, amend) != MCC_OK { return 20u64 }
+    if mcc_last_marked_count() != 0u64 { return 21u64 }
+    // KAT-6 (idempotence): retire CH0 again -> OK, re-marks the 2 already-stale (count 2).
+    if mcc_on_compaction((&MCC_CH0 as u64) as *u8, amend) != MCC_OK { return 22u64 }
+    if mcc_last_marked_count() != 2u64 { return 23u64 }
+    if mcc_st_lookup(&MCC_KA as u64) != MCC_ML_STALE { return 24u64 }
+    return 99u64
+}

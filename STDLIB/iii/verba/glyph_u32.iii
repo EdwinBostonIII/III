@@ -1,0 +1,55 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\glyph_u32.iii
+ *
+ * III STDLIB - verba::glyph_u32 -- Glyph V3 form for u32.
+ *
+ * Lattice plan Phase 14h Step 0166.  payload_len = 4,
+ * payload[0..3] = u32 LE.
+ *
+ * Public surface:
+ *   glyph_u32_form_id()             -> u32 (0x11)
+ *   glyph_u32_pack(v, out_192)      -> i32
+ *   glyph_u32_unpack(in_192)        -> u32  (or 0xFFFFFFFFu32 on bad form)
+ *   glyph_u32_validate(in_192)      -> u8
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module verba_glyph_u32
+
+extern @abi(c-msvc-x64) fn gv3_zero(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_write_u32_le(p: u64, v: u32) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_read_u32_le(p: u64) -> u32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_compute_mhash(p_192: u64) -> i32 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_validate(p_192: u64) -> u8 from "glyph_core.iii"
+extern @abi(c-msvc-x64) fn gv3_form_id(p_192: u64) -> u32 from "glyph_core.iii"
+
+const GV3_FORM_U32 : u32 = 0x11u32
+
+fn glyph_u32_form_id() -> u32 @export { return GV3_FORM_U32 }
+
+fn glyph_u32_pack(v: u32, out_192: u64) -> i32 @export {
+    let v_l : u32 = v
+    let o_l : u64 = out_192
+    if o_l == 0u64 { return -1i32 }
+    gv3_zero(o_l)
+    gv3_write_u32_le(o_l + 0u64, GV3_FORM_U32)
+    gv3_write_u32_le(o_l + 4u64, 4u32)
+    gv3_write_u32_le(o_l + 8u64, v_l)
+    gv3_compute_mhash(o_l)
+    return 0i32
+}
+
+fn glyph_u32_unpack(in_192: u64) -> u32 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0xFFFFFFFFu32 }
+    if gv3_form_id(i_l) != GV3_FORM_U32 { return 0xFFFFFFFFu32 }
+    if gv3_validate(i_l) != 1u8 { return 0xFFFFFFFFu32 }
+    return gv3_read_u32_le(i_l + 8u64)
+}
+
+fn glyph_u32_validate(in_192: u64) -> u8 @export {
+    let i_l : u64 = in_192
+    if i_l == 0u64 { return 0u8 }
+    if gv3_form_id(i_l) != GV3_FORM_U32 { return 0u8 }
+    return gv3_validate(i_l)
+}

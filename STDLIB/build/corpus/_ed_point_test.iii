@@ -1,0 +1,440 @@
+/* TDD probe: ed25519 point ops on the proven fe25519 field.
+ * Extended twisted Edwards (a=-1) complete add (also used for doubling),
+ * double-and-add scalar mul, compress.  End-to-end KAT: RFC8032 test1
+ * pubkey(seed 9d61..7f60) must equal d75a98..511a.  exit 99 = pass. */
+module ed_point_test
+
+extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
+extern @abi(c-msvc-x64) fn sha512_final(out: *u8) -> u32 from "sha512.iii"
+
+var FE_T   : [u64; 16]
+var FE_S   : [u64; 9]
+var FE_P   : [u64; 8]
+var FE_2P  : [u64; 8]
+var FE_PM2 : [u8; 32]
+var FE_ACC : [u64; 8]
+var FE_TMP : [u64; 8]
+var FE_2D  : [u64; 8]
+var FE_TWO : [u64; 8]
+/* point-add temporaries */
+var PA : [u64;8]  var PB : [u64;8]  var PC : [u64;8]  var PD : [u64;8]
+var PE : [u64;8]  var PF : [u64;8]  var PG : [u64;8]  var PH : [u64;8]
+var PT1 : [u64;8] var PT2 : [u64;8]
+/* points (X@0 Y@64 Z@128 T@192 bytes; 32 u64 each) */
+var PT_R   : [u64; 32]
+var PT_ACC : [u64; 32]
+var PT_B   : [u64; 32]
+/* compress temps */
+var ZINV : [u64;8]  var AX : [u64;8]  var AY : [u64;8]
+/* decompress constants + temps */
+var FE_D      : [u64;8]  var FE_SQRTM1 : [u64;8]  var FE_ONE : [u64;8]  var FE_ZERO : [u64;8]
+var FE_PP3D8  : [u8;32]
+var FE_EQ1    : [u64;8]  var FE_EQ2 : [u64;8]
+var DCMP      : [u8;32]
+var DY : [u64;8]  var DYY : [u64;8]  var DU : [u64;8]  var DV : [u64;8]  var DVINV : [u64;8]
+var DW : [u64;8]  var DX : [u64;8]   var DXX : [u64;8] var DX2 : [u64;8]
+/* io */
+var CB     : [u8; 32]
+var SEED   : [u8; 32]
+var HASH   : [u8; 64]
+var SCALAR : [u8; 32]
+var PKOUT  : [u8; 32]
+var PKE    : [u8; 32]
+
+fn fe_copy(src: u64, dst: u64) -> i32 {
+    let sp : *u64 = src as *u64
+    let dp : *u64 = dst as *u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { dp[k] = sp[k]  k = k + 1u64 }
+    return 0i32
+}
+fn fe_decode(src: u64, dst: u64) -> i32 {
+    let sp : *u8 = src as *u8
+    let dp : *u64 = dst as *u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let b0 : u64 = sp[k * 4u64] as u64
+        let b1 : u64 = sp[k * 4u64 + 1u64] as u64
+        let b2 : u64 = sp[k * 4u64 + 2u64] as u64
+        let b3 : u64 = sp[k * 4u64 + 3u64] as u64
+        dp[k] = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fe_encode(src: u64, dst: u64) -> i32 {
+    let sp : *u64 = src as *u64
+    let dp : *u8 = dst as *u8
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let v : u64 = sp[k]
+        dp[k * 4u64]        = (v & 0xFFu64) as u8
+        dp[k * 4u64 + 1u64] = ((v >> 8u64) & 0xFFu64) as u8
+        dp[k * 4u64 + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+        dp[k * 4u64 + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fe_consts() -> i32 {
+    FE_P[0u64] = 0xFFFFFFEDu64   FE_2P[0u64] = 0xFFFFFFDAu64
+    let mut k : u64 = 1u64
+    while k < 7u64 { FE_P[k] = 0xFFFFFFFFu64  FE_2P[k] = 0xFFFFFFFFu64  k = k + 1u64 }
+    FE_P[7u64] = 0x7FFFFFFFu64   FE_2P[7u64] = 0xFFFFFFFFu64
+    k = 0u64  while k < 8u64 { FE_TWO[k] = 0u64  k = k + 1u64 }
+    FE_TWO[0u64] = 2u64
+    return 0i32
+}
+fn fe_mul(a: u64, b: u64, r: u64) -> i32 {
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let rp : *u64 = r as *u64
+    let mut k : u64 = 0u64
+    while k < 16u64 { FE_T[k] = 0u64  k = k + 1u64 }
+    k = 0u64
+    let mut clo : u64 = 0u64
+    while k < 15u64 {
+        let mut acc_lo : u64 = clo
+        let mut acc_hi : u64 = 0u64
+        let mut i : u64 = 0u64
+        if k > 7u64 { i = k - 7u64 }
+        let mut iend : u64 = k
+        if iend > 7u64 { iend = 7u64 }
+        while i <= iend {
+            let prod : u64 = ap[i] * bp[k - i]
+            let tmp : u64 = acc_lo + prod
+            if tmp < acc_lo { acc_hi = acc_hi + 1u64 }
+            acc_lo = tmp
+            i = i + 1u64
+        }
+        FE_T[k] = acc_lo & 0xFFFFFFFFu64
+        clo = (acc_lo >> 32u64) | (acc_hi << 32u64)
+        k = k + 1u64
+    }
+    FE_T[15u64] = clo
+    let mut carry : u64 = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = FE_T[k] + 38u64 * FE_T[k + 8u64] + carry
+        rp[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    let mut extra : u64 = 38u64 * carry
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    extra = 38u64 * extra
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fe_sq(a: u64, r: u64) -> i32 { return fe_mul(a, a, r) }
+fn fe_add(a: u64, b: u64, r: u64) -> i32 {
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let rp : *u64 = r as *u64
+    let mut carry : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let acc : u64 = ap[k] + bp[k] + carry
+        rp[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    let mut extra : u64 = 38u64 * carry
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + extra
+        rp[k] = acc & 0xFFFFFFFFu64
+        extra = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fe_sub(a: u64, b: u64, r: u64) -> i32 {
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let rp : *u64 = r as *u64
+    let mut carry : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let acc : u64 = ap[k] + FE_2P[k] + carry
+        FE_S[k] = acc & 0xFFFFFFFFu64
+        carry = acc >> 32u64
+        k = k + 1u64
+    }
+    FE_S[8u64] = carry
+    let mut borrow : u64 = 0u64
+    k = 0u64
+    while k < 8u64 {
+        let sub : u64 = bp[k] + borrow
+        if FE_S[k] >= sub { FE_S[k] = FE_S[k] - sub  borrow = 0u64 }
+        else { FE_S[k] = (FE_S[k] + 0x100000000u64) - sub  borrow = 1u64 }
+        k = k + 1u64
+    }
+    FE_S[8u64] = FE_S[8u64] - borrow
+    let mut c2 : u64 = 38u64 * FE_S[8u64]
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = FE_S[k] + c2
+        rp[k] = acc & 0xFFFFFFFFu64
+        c2 = acc >> 32u64
+        k = k + 1u64
+    }
+    c2 = 38u64 * c2
+    k = 0u64
+    while k < 8u64 {
+        let acc : u64 = rp[k] + c2
+        rp[k] = acc & 0xFFFFFFFFu64
+        c2 = acc >> 32u64
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fe_ge(r: u64, m: u64) -> u8 {
+    let rp : *u64 = r as *u64
+    let mp : *u64 = m as *u64
+    let mut k : u64 = 8u64
+    while k > 0u64 {
+        let idx : u64 = k - 1u64
+        if rp[idx] > mp[idx] { return 1u8 }
+        if rp[idx] < mp[idx] { return 0u8 }
+        k = k - 1u64
+    }
+    return 1u8
+}
+fn fe_subm(r: u64, m: u64) -> i32 {
+    let rp : *u64 = r as *u64
+    let mp : *u64 = m as *u64
+    let mut borrow : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let sub : u64 = mp[k] + borrow
+        if rp[k] >= sub { rp[k] = rp[k] - sub  borrow = 0u64 }
+        else { rp[k] = (rp[k] + 0x100000000u64) - sub  borrow = 1u64 }
+        k = k + 1u64
+    }
+    return 0i32
+}
+fn fe_freeze(r: u64) -> i32 {
+    if fe_ge(r, &FE_P as u64) == 1u8 { fe_subm(r, &FE_P as u64) }
+    if fe_ge(r, &FE_P as u64) == 1u8 { fe_subm(r, &FE_P as u64) }
+    return 0i32
+}
+/* r = a^exp mod p; exp = 32 LE bytes, MSB-first square-and-multiply (256 bits) */
+fn fe_pow(a: u64, exp: u64, r: u64) -> i32 {
+    let ep : *u8 = exp as *u8
+    FE_ACC[0u64] = 1u64
+    let mut k : u64 = 1u64
+    while k < 8u64 { FE_ACC[k] = 0u64  k = k + 1u64 }
+    let mut j : u64 = 0u64
+    while j < 256u64 {
+        let bit_idx : u64 = 255u64 - j
+        fe_sq(&FE_ACC as u64, &FE_TMP as u64)
+        fe_copy(&FE_TMP as u64, &FE_ACC as u64)
+        let byte : u64 = ep[bit_idx >> 3u64] as u64
+        let bit : u64 = (byte >> (bit_idx & 7u64)) & 1u64
+        if bit == 1u64 {
+            fe_mul(&FE_ACC as u64, a, &FE_TMP as u64)
+            fe_copy(&FE_TMP as u64, &FE_ACC as u64)
+        }
+        j = j + 1u64
+    }
+    fe_copy(&FE_ACC as u64, r)
+    return 0i32
+}
+fn fe_invert(a: u64, r: u64) -> i32 { return fe_pow(a, &FE_PM2 as u64, r) }
+fn fe_eq(a: u64, b: u64) -> u8 {
+    fe_copy(a, &FE_EQ1 as u64)  fe_copy(b, &FE_EQ2 as u64)
+    fe_freeze(&FE_EQ1 as u64)   fe_freeze(&FE_EQ2 as u64)
+    let mut k : u64 = 0u64
+    while k < 8u64 { if FE_EQ1[k] != FE_EQ2[k] { return 0u8 }  k = k + 1u64 }
+    return 1u8
+}
+
+/* ---- point ops (extended twisted Edwards a=-1) ---- */
+fn ed_pt_add(p: u64, q: u64, r: u64) -> i32 {
+    let px : u64 = p          let py : u64 = p + 64u64   let pz : u64 = p + 128u64  let pt : u64 = p + 192u64
+    let qx : u64 = q          let qy : u64 = q + 64u64   let qz : u64 = q + 128u64  let qt : u64 = q + 192u64
+    let rx : u64 = r          let ry : u64 = r + 64u64   let rz : u64 = r + 128u64  let rt : u64 = r + 192u64
+    fe_sub(py, px, &PT1 as u64)  fe_sub(qy, qx, &PT2 as u64)  fe_mul(&PT1 as u64, &PT2 as u64, &PA as u64)   /* A=(Y1-X1)(Y2-X2) */
+    fe_add(py, px, &PT1 as u64)  fe_add(qy, qx, &PT2 as u64)  fe_mul(&PT1 as u64, &PT2 as u64, &PB as u64)   /* B=(Y1+X1)(Y2+X2) */
+    fe_mul(pt, qt, &PT1 as u64)  fe_mul(&PT1 as u64, &FE_2D as u64, &PC as u64)                              /* C=2d*T1*T2 */
+    fe_mul(pz, qz, &PT1 as u64)  fe_mul(&PT1 as u64, &FE_TWO as u64, &PD as u64)                             /* D=2*Z1*Z2 */
+    fe_sub(&PB as u64, &PA as u64, &PE as u64)  fe_sub(&PD as u64, &PC as u64, &PF as u64)
+    fe_add(&PD as u64, &PC as u64, &PG as u64)  fe_add(&PB as u64, &PA as u64, &PH as u64)
+    fe_mul(&PE as u64, &PF as u64, rx)  fe_mul(&PG as u64, &PH as u64, ry)
+    fe_mul(&PE as u64, &PH as u64, rt)  fe_mul(&PF as u64, &PG as u64, rz)
+    return 0i32
+}
+fn ed_pt_copy(src: u64, dst: u64) -> i32 {
+    let sp : *u64 = src as *u64
+    let dp : *u64 = dst as *u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { dp[k] = sp[k]  k = k + 1u64 }
+    return 0i32
+}
+fn ed_set_identity(p: u64) -> i32 {
+    let pp : *u64 = p as *u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { pp[k] = 0u64  k = k + 1u64 }
+    pp[8u64] = 1u64    /* Y[0] = 1  (Y at u64 offset 8) */
+    pp[16u64] = 1u64   /* Z[0] = 1  (Z at u64 offset 16) */
+    return 0i32
+}
+/* R = scalar * B  (double-and-add, MSB first, 256 bits) */
+fn ed_scalar_mul(scalar: u64, r: u64) -> i32 {
+    let sp : *u8 = scalar as *u8
+    ed_set_identity(r)
+    let mut j : u64 = 0u64
+    while j < 256u64 {
+        let bit_idx : u64 = 255u64 - j
+        ed_pt_add(r, r, &PT_ACC as u64)
+        ed_pt_copy(&PT_ACC as u64, r)
+        let byte : u64 = sp[bit_idx >> 3u64] as u64
+        let bit : u64 = (byte >> (bit_idx & 7u64)) & 1u64
+        if bit == 1u64 {
+            ed_pt_add(r, &PT_B as u64, &PT_ACC as u64)
+            ed_pt_copy(&PT_ACC as u64, r)
+        }
+        j = j + 1u64
+    }
+    return 0i32
+}
+/* compress P -> 32 bytes (y LE, bit255 = x&1) */
+fn ed_compress(p: u64, out: u64) -> i32 {
+    fe_invert(p + 128u64, &ZINV as u64)
+    fe_mul(p, &ZINV as u64, &AX as u64)
+    fe_mul(p + 64u64, &ZINV as u64, &AY as u64)
+    fe_freeze(&AX as u64)
+    fe_freeze(&AY as u64)
+    fe_encode(&AY as u64, out)
+    let op : *u8 = out as *u8
+    let xb : u64 = AX[0u64] & 1u64
+    op[31u64] = op[31u64] | ((xb << 7u64) as u8)
+    return 0i32
+}
+/* decompress 32-byte point -> extended coords at pout */
+fn ed_decompress(comp: u64, pout: u64) -> i32 {
+    let cp : *u8 = comp as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { DCMP[k] = cp[k]  k = k + 1u64 }
+    DCMP[31u64] = DCMP[31u64] & 0x7Fu8
+    fe_decode(&DCMP as u64, &DY as u64)
+    let xsign : u64 = (cp[31u64] >> 7u64) as u64 & 1u64
+    fe_sq(&DY as u64, &DYY as u64)                                   /* y^2 */
+    fe_sub(&DYY as u64, &FE_ONE as u64, &DU as u64)                  /* u = y^2-1 */
+    fe_mul(&DYY as u64, &FE_D as u64, &DV as u64)
+    fe_add(&DV as u64, &FE_ONE as u64, &DV as u64)                   /* v = d y^2+1 */
+    fe_invert(&DV as u64, &DVINV as u64)
+    fe_mul(&DU as u64, &DVINV as u64, &DW as u64)                    /* w = u/v */
+    fe_pow(&DW as u64, &FE_PP3D8 as u64, &DX as u64)                 /* x = w^((p+3)/8) */
+    fe_sq(&DX as u64, &DXX as u64)
+    if fe_eq(&DXX as u64, &DW as u64) == 0u8 {
+        fe_mul(&DX as u64, &FE_SQRTM1 as u64, &DX2 as u64)
+        fe_copy(&DX2 as u64, &DX as u64)
+    }
+    fe_freeze(&DX as u64)
+    let xb : u64 = DX[0u64] & 1u64
+    if xb != xsign {
+        fe_sub(&FE_ZERO as u64, &DX as u64, &DX2 as u64)            /* x = -x */
+        fe_copy(&DX2 as u64, &DX as u64)
+    }
+    fe_copy(&DX as u64, pout)
+    fe_copy(&DY as u64, pout + 64u64)
+    let zp : *u64 = (pout + 128u64) as *u64
+    zp[0u64] = 1u64
+    k = 1u64
+    while k < 8u64 { zp[k] = 0u64  k = k + 1u64 }
+    fe_mul(&DX as u64, &DY as u64, pout + 192u64)                    /* T = x*y */
+    return 0i32
+}
+
+fn main() -> u64 {
+    fe_consts()
+    /* p-2 LE = eb ff..ff 7f */
+    let mut k : u64 = 0u64
+    while k < 32u64 { FE_PM2[k] = 0xFFu8  k = k + 1u64 }
+    FE_PM2[0u64] = 0xEBu8   FE_PM2[31u64] = 0x7Fu8
+    /* (p+3)/8 LE = fe ff..ff 0f */
+    k = 0u64  while k < 32u64 { FE_PP3D8[k] = 0xFFu8  k = k + 1u64 }
+    FE_PP3D8[0u64] = 0xFEu8   FE_PP3D8[31u64] = 0x0Fu8
+    k = 0u64  while k < 8u64 { FE_ONE[k] = 0u64  FE_ZERO[k] = 0u64  k = k + 1u64 }
+    FE_ONE[0u64] = 1u64
+    /* FE_D = a37859...6c0352 */
+    CB[0u64]=0xa3u8 CB[1u64]=0x78u8 CB[2u64]=0x59u8 CB[3u64]=0x13u8 CB[4u64]=0xcau8 CB[5u64]=0x4du8 CB[6u64]=0xebu8 CB[7u64]=0x75u8
+    CB[8u64]=0xabu8 CB[9u64]=0xd8u8 CB[10u64]=0x41u8 CB[11u64]=0x41u8 CB[12u64]=0x4du8 CB[13u64]=0x0au8 CB[14u64]=0x70u8 CB[15u64]=0x00u8
+    CB[16u64]=0x98u8 CB[17u64]=0xe8u8 CB[18u64]=0x79u8 CB[19u64]=0x77u8 CB[20u64]=0x79u8 CB[21u64]=0x40u8 CB[22u64]=0xc7u8 CB[23u64]=0x8cu8
+    CB[24u64]=0x73u8 CB[25u64]=0xfeu8 CB[26u64]=0x6fu8 CB[27u64]=0x2bu8 CB[28u64]=0xeeu8 CB[29u64]=0x6cu8 CB[30u64]=0x03u8 CB[31u64]=0x52u8
+    fe_decode(&CB as u64, &FE_D as u64)
+    /* FE_SQRTM1 = b0a00e...24832b */
+    CB[0u64]=0xb0u8 CB[1u64]=0xa0u8 CB[2u64]=0x0eu8 CB[3u64]=0x4au8 CB[4u64]=0x27u8 CB[5u64]=0x1bu8 CB[6u64]=0xeeu8 CB[7u64]=0xc4u8
+    CB[8u64]=0x78u8 CB[9u64]=0xe4u8 CB[10u64]=0x2fu8 CB[11u64]=0xadu8 CB[12u64]=0x06u8 CB[13u64]=0x18u8 CB[14u64]=0x43u8 CB[15u64]=0x2fu8
+    CB[16u64]=0xa7u8 CB[17u64]=0xd7u8 CB[18u64]=0xfbu8 CB[19u64]=0x3du8 CB[20u64]=0x99u8 CB[21u64]=0x00u8 CB[22u64]=0x4du8 CB[23u64]=0x2bu8
+    CB[24u64]=0x0bu8 CB[25u64]=0xdfu8 CB[26u64]=0xc1u8 CB[27u64]=0x4fu8 CB[28u64]=0x80u8 CB[29u64]=0x24u8 CB[30u64]=0x83u8 CB[31u64]=0x2bu8
+    fe_decode(&CB as u64, &FE_SQRTM1 as u64)
+    /* FE_2D from TWO_D */
+    CB[0u64]=0x59u8 CB[1u64]=0xf1u8 CB[2u64]=0xb2u8 CB[3u64]=0x26u8 CB[4u64]=0x94u8 CB[5u64]=0x9bu8 CB[6u64]=0xd6u8 CB[7u64]=0xebu8
+    CB[8u64]=0x56u8 CB[9u64]=0xb1u8 CB[10u64]=0x83u8 CB[11u64]=0x82u8 CB[12u64]=0x9au8 CB[13u64]=0x14u8 CB[14u64]=0xe0u8 CB[15u64]=0x00u8
+    CB[16u64]=0x30u8 CB[17u64]=0xd1u8 CB[18u64]=0xf3u8 CB[19u64]=0xeeu8 CB[20u64]=0xf2u8 CB[21u64]=0x80u8 CB[22u64]=0x8eu8 CB[23u64]=0x19u8
+    CB[24u64]=0xe7u8 CB[25u64]=0xfcu8 CB[26u64]=0xdfu8 CB[27u64]=0x56u8 CB[28u64]=0xdcu8 CB[29u64]=0xd9u8 CB[30u64]=0x06u8 CB[31u64]=0x24u8
+    fe_decode(&CB as u64, &FE_2D as u64)
+    /* base point B: X<-BX, Y<-BY, Z<-1, T<-BT */
+    CB[0u64]=0x1au8 CB[1u64]=0xd5u8 CB[2u64]=0x25u8 CB[3u64]=0x8fu8 CB[4u64]=0x60u8 CB[5u64]=0x2du8 CB[6u64]=0x56u8 CB[7u64]=0xc9u8
+    CB[8u64]=0xb2u8 CB[9u64]=0xa7u8 CB[10u64]=0x25u8 CB[11u64]=0x95u8 CB[12u64]=0x60u8 CB[13u64]=0xc7u8 CB[14u64]=0x2cu8 CB[15u64]=0x69u8
+    CB[16u64]=0x5cu8 CB[17u64]=0xdcu8 CB[18u64]=0xd6u8 CB[19u64]=0xfdu8 CB[20u64]=0x31u8 CB[21u64]=0xe2u8 CB[22u64]=0xa4u8 CB[23u64]=0xc0u8
+    CB[24u64]=0xfeu8 CB[25u64]=0x53u8 CB[26u64]=0x6eu8 CB[27u64]=0xcdu8 CB[28u64]=0xd3u8 CB[29u64]=0x36u8 CB[30u64]=0x69u8 CB[31u64]=0x21u8
+    fe_decode(&CB as u64, &PT_B as u64)
+    CB[0u64]=0x58u8 CB[1u64]=0x66u8 CB[2u64]=0x66u8 CB[3u64]=0x66u8 CB[4u64]=0x66u8 CB[5u64]=0x66u8 CB[6u64]=0x66u8 CB[7u64]=0x66u8
+    CB[8u64]=0x66u8 CB[9u64]=0x66u8 CB[10u64]=0x66u8 CB[11u64]=0x66u8 CB[12u64]=0x66u8 CB[13u64]=0x66u8 CB[14u64]=0x66u8 CB[15u64]=0x66u8
+    CB[16u64]=0x66u8 CB[17u64]=0x66u8 CB[18u64]=0x66u8 CB[19u64]=0x66u8 CB[20u64]=0x66u8 CB[21u64]=0x66u8 CB[22u64]=0x66u8 CB[23u64]=0x66u8
+    CB[24u64]=0x66u8 CB[25u64]=0x66u8 CB[26u64]=0x66u8 CB[27u64]=0x66u8 CB[28u64]=0x66u8 CB[29u64]=0x66u8 CB[30u64]=0x66u8 CB[31u64]=0x66u8
+    fe_decode(&CB as u64, (&PT_B as u64) + 64u64)
+    let bz : *u64 = ((&PT_B as u64) + 128u64) as *u64
+    bz[0u64] = 1u64
+    CB[0u64]=0xa3u8 CB[1u64]=0xddu8 CB[2u64]=0xb7u8 CB[3u64]=0xa5u8 CB[4u64]=0xb3u8 CB[5u64]=0x8au8 CB[6u64]=0xdeu8 CB[7u64]=0x6du8
+    CB[8u64]=0xf5u8 CB[9u64]=0x52u8 CB[10u64]=0x51u8 CB[11u64]=0x77u8 CB[12u64]=0x80u8 CB[13u64]=0x9fu8 CB[14u64]=0xf0u8 CB[15u64]=0x20u8
+    CB[16u64]=0x7du8 CB[17u64]=0xe3u8 CB[18u64]=0xabu8 CB[19u64]=0x64u8 CB[20u64]=0x8eu8 CB[21u64]=0x4eu8 CB[22u64]=0xeau8 CB[23u64]=0x66u8
+    CB[24u64]=0x65u8 CB[25u64]=0x76u8 CB[26u64]=0x8bu8 CB[27u64]=0xd7u8 CB[28u64]=0x0fu8 CB[29u64]=0x5fu8 CB[30u64]=0x87u8 CB[31u64]=0x67u8
+    fe_decode(&CB as u64, (&PT_B as u64) + 192u64)
+    /* seed + expected pk */
+    SEED[0u64]=0x9du8 SEED[1u64]=0x61u8 SEED[2u64]=0xb1u8 SEED[3u64]=0x9du8 SEED[4u64]=0xefu8 SEED[5u64]=0xfdu8 SEED[6u64]=0x5au8 SEED[7u64]=0x60u8
+    SEED[8u64]=0xbau8 SEED[9u64]=0x84u8 SEED[10u64]=0x4au8 SEED[11u64]=0xf4u8 SEED[12u64]=0x92u8 SEED[13u64]=0xecu8 SEED[14u64]=0x2cu8 SEED[15u64]=0xc4u8
+    SEED[16u64]=0x44u8 SEED[17u64]=0x49u8 SEED[18u64]=0xc5u8 SEED[19u64]=0x69u8 SEED[20u64]=0x7bu8 SEED[21u64]=0x32u8 SEED[22u64]=0x69u8 SEED[23u64]=0x19u8
+    SEED[24u64]=0x70u8 SEED[25u64]=0x3bu8 SEED[26u64]=0xacu8 SEED[27u64]=0x03u8 SEED[28u64]=0x1cu8 SEED[29u64]=0xaeu8 SEED[30u64]=0x7fu8 SEED[31u64]=0x60u8
+    PKE[0u64]=0xd7u8 PKE[1u64]=0x5au8 PKE[2u64]=0x98u8 PKE[3u64]=0x01u8 PKE[4u64]=0x82u8 PKE[5u64]=0xb1u8 PKE[6u64]=0x0au8 PKE[7u64]=0xb7u8
+    PKE[8u64]=0xd5u8 PKE[9u64]=0x4bu8 PKE[10u64]=0xfeu8 PKE[11u64]=0xd3u8 PKE[12u64]=0xc9u8 PKE[13u64]=0x64u8 PKE[14u64]=0x07u8 PKE[15u64]=0x3au8
+    PKE[16u64]=0x0eu8 PKE[17u64]=0xe1u8 PKE[18u64]=0x72u8 PKE[19u64]=0xf3u8 PKE[20u64]=0xdau8 PKE[21u64]=0xa6u8 PKE[22u64]=0x23u8 PKE[23u64]=0x25u8
+    PKE[24u64]=0xafu8 PKE[25u64]=0x02u8 PKE[26u64]=0x1au8 PKE[27u64]=0x68u8 PKE[28u64]=0xf7u8 PKE[29u64]=0x07u8 PKE[30u64]=0x51u8 PKE[31u64]=0x1au8
+    /* h = SHA512(seed); scalar = clamp(h[0:32]) */
+    sha512_init()
+    sha512_update(&SEED as u64 as *u8, 32u64)
+    sha512_final(&HASH as u64 as *u8)
+    k = 0u64
+    while k < 32u64 { SCALAR[k] = HASH[k]  k = k + 1u64 }
+    SCALAR[0u64] = SCALAR[0u64] & 0xF8u8
+    SCALAR[31u64] = SCALAR[31u64] & 0x7Fu8
+    SCALAR[31u64] = SCALAR[31u64] | 0x40u8
+    /* R = scalar * B; pk = compress(R) */
+    ed_scalar_mul(&SCALAR as u64, &PT_R as u64)
+    ed_compress(&PT_R as u64, &PKOUT as u64)
+    k = 0u64
+    while k < 32u64 { if PKOUT[k] != PKE[k] { return (k + 1u64) } k = k + 1u64 }
+    /* decompress round-trip: decompress(PKE) -> recompress -> must equal PKE */
+    ed_decompress(&PKE as u64, &PT_R as u64)
+    ed_compress(&PT_R as u64, &PKOUT as u64)
+    k = 0u64
+    while k < 32u64 { if PKOUT[k] != PKE[k] { return (100u64 + k) } k = k + 1u64 }
+    return 99u64
+}

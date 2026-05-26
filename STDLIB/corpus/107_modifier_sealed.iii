@@ -1,0 +1,10 @@
+/* Lattice plan Step 0004: @sealed(slot=4, provenance=true). */
+module corpus_107
+
+fn shielded() -> u64 @sealed(slot=4, provenance=true) {
+    return 7u64
+}
+
+fn main() -> u64 {
+    return shielded()
+}

@@ -1,0 +1,70 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\bench.iii
+ *
+ * III STDLIB - omnia::bench
+ *
+ * Thin .iii facade over the hand-written cycle-counting helpers in
+ * COMPILER/BOOT/bench_helpers.s. Exposes a stable Win64-ABI interface
+ * for the benchmark harness so other modules never reference the raw
+ * bench_rdtsc / bench_rdtscp / bench_cpuid_serialize / bench_pause_loop
+ * symbols directly. The wrapper layer makes it possible to swap the
+ * underlying implementation (e.g. RDPMC, perf_event_open) without
+ * touching downstream callers.
+ *
+ * Public surface:
+ *
+ *   bench_now()      -> u64    -- cycle-accurate timestamp via
+ *                                 lfence; rdtsc; lfence (serializing).
+ *   bench_now_p()    -> u64    -- cycle-accurate timestamp via rdtscp
+ *                                 (one-shot partial serialisation).
+ *   bench_warmup()   -> i32    -- one full CPUID serialisation followed
+ *                                 by three bench_pause_loop bursts. Used
+ *                                 to drain pipelines and pre-warm the
+ *                                 instruction cache before a measurement
+ *                                 sequence. Returns 0 unconditionally.
+ *
+ * NIH discipline: this module references only externs that resolve to
+ * symbols emitted by COMPILER/BOOT/bench_helpers.s. No libc, no
+ * third-party code, no clock syscall.
+ *
+ * Determinism: bench_now / bench_now_p read the free-running TSC and
+ * are intentionally non-deterministic. They MUST NOT appear in any
+ * mhash / kchain / witness / determinism-sealed code path. The
+ * benchmark harness is the sole legitimate caller.
+ *
+ * Hexad: kind_motion. Ring: R0. K: 0.95.
+ */
+
+module omnia_bench
+
+/* Externs from COMPILER/BOOT/bench_helpers.s.
+ * Single-line signatures (iiis-0 trap: multi-line fn declarations
+ * silently miscompile parameter binding). */
+extern @abi(c-msvc-x64) fn bench_rdtsc() -> u64 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_rdtscp() -> u64 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_cpuid_serialize() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_pause_loop() -> i32 from "bench_helpers"
+
+/* Cycle-accurate timestamp via lfence-bracketed RDTSC.
+ * Returns the full 64-bit TSC value packed from EDX:EAX. */
+fn bench_now() -> u64 @export {
+    return bench_rdtsc()
+}
+
+/* Cycle-accurate timestamp via RDTSCP. Slightly cheaper than bench_now
+ * because RDTSCP itself partially serialises instruction retirement,
+ * eliminating the need for an explicit leading lfence. */
+fn bench_now_p() -> u64 @export {
+    return bench_rdtscp()
+}
+
+/* Pre-measurement warmup. Issues a full CPUID serialisation barrier
+ * (drains the instruction pipeline) followed by three rounds of 16
+ * PAUSE hints (encourages cache pre-warm without polluting branch
+ * predictors). Always returns 0. Callers may ignore the return value. */
+fn bench_warmup() -> i32 @export {
+    bench_cpuid_serialize()
+    bench_pause_loop()
+    bench_pause_loop()
+    bench_pause_loop()
+    return 0i32
+}

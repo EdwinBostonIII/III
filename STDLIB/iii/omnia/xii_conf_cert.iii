@@ -1,0 +1,237 @@
+/* STDLIB/iii/omnia/xii_conf_cert.iii -- Confluence-Core Certificate Tier 2 (the SEALED object).
+ * (DOCS/III-XII-CONFLUENCE-CERTIFICATE-ARCH.md S5; IMPL-PLAN Step C.2.)
+ *
+ * The certificate binds the XII canonicaliser's confluence proof into a content-addressed, witnessed,
+ * re-checkable object.  It has two access paths (ARCH S5):
+ *   (A) BOOT FAST-PATH -- xcc_verify: hash the LIVE rule SEMANTICS and compare to the sealed golden.
+ *       A guard/RHS/rule-set change reddens it loudly (ADR-C4: the hash binds BEHAVIOUR, not the
+ *       structural pattern table -- it serialises each rule's (witness -> reduct) one-step image, so a
+ *       changed guard fires differently and a changed RHS produces differently => different digest).
+ *   (B) DEEP RE-PROVER -- xcc_reprove: re-run the joinability + termination + discharge gates and assert
+ *       the graded partition still holds (20 subterm non-joins, ALL route-R-discharged, 0 boundary;
+ *       root-confluent; terminating; admitted).  The Key-Move re-check; must agree with the seal.
+ *
+ * The certificate ALSO exports the confluence reorderability relation (xcc_reorderable) that nous (C.3)
+ * consumes: two rules are safely reorderable iff they have NO non-joining overlap (no overlap at all,
+ * or every overlap between them joins).  The LHS-disjoint trit block is reorderable with everything
+ * (it shares no redex with R005-R044); a collapse/sort rule and a lift rule joined by a non-joining
+ * subterm overlap are NOT reorderable (different confluence classes) -- the constraint that keeps a
+ * future within-class reorderer sound.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: cad + the Step-1/2/4/5/6 gates only.  Determinism:
+ * integer-only; ==/!= and UNSIGNED < ; single-line fns; masked byte stores; recursion only in the
+ * term-serialisation walk (mirrors xii_mig4_seal._xms_walk).
+ */
+module omnia_xii_conf_cert
+
+extern @abi(c-msvc-x64) fn xrp_rule_count() -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xrp_rid_at(slot: u32) -> u32 from "xii_rule_patterns.iii"
+extern @abi(c-msvc-x64) fn xjn_gate() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_nonjoin_count() -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_i(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_njtab_j(k: u32) -> u64 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_gate_root() -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xjn_build_rule_witness(slot: u32) -> u32 from "xii_joinability.iii"
+extern @abi(c-msvc-x64) fn xtm_gate() -> u32 from "xii_termination.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xdc_count_route(r: u8) -> u64 from "xii_discharge.iii"
+extern @abi(c-msvc-x64) fn xsd_strategy_is_deterministic() -> u8 from "xii_strategy_det.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_aux(idx: u32) -> u64 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_c(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const XCC_SUITE    : u32 = 0u32          /* cad suite 0 = SHA-256 (same Crown as mig4_seal/katabasis) */
+const XCC_NULL_REF : u32 = 0xFFFFFFFFu32
+const XCC_TVAL     : u8  = 24u8
+const XCC_FIF      : u8  = 22u8
+const XCC_FLOOP    : u8  = 23u8
+const XCC_NODEMARK : u8  = 0xFFu8        /* null-child marker in the serialisation */
+const XCC_R_ROUTE  : u8  = 2u8           /* XDC_R -- the reachability route */
+const XCC_BND_ROUTE : u8 = 4u8           /* XDC_BOUNDARY */
+
+var XCC_NODE   : [u8; 16]    /* one node serialised: kind(1) subform(4 LE) aux(8 LE) = 13 bytes */
+var XCC_RIDB   : [u8; 4]     /* a rule-id serialised: 4 LE bytes */
+var XCC_GOLDEN : [u8; 32]    /* the SEALED rule-semantics mhash (baked; filled by _xcc_load_golden) */
+var XCC_LIVE   : [u8; 32]    /* scratch: a freshly-computed live mhash */
+var XCC_LIVE2  : [u8; 32]    /* scratch: a second live mhash (determinism check) */
+
+/* stream one node's (kind, subform, aux) -- 13 bytes LE, byte-by-byte (no wide store). */
+fn _xcc_feed_node(t: u32) -> i32 {
+    let sf : u32 = xii_term_get_subform(t)
+    let ax : u64 = xii_term_get_aux(t)
+    XCC_NODE[0u64] = xii_term_get_kind(t)
+    XCC_NODE[1u64] = (sf & 0xFFu32) as u8
+    XCC_NODE[2u64] = ((sf >> 8u32) & 0xFFu32) as u8
+    XCC_NODE[3u64] = ((sf >> 16u32) & 0xFFu32) as u8
+    XCC_NODE[4u64] = ((sf >> 24u32) & 0xFFu32) as u8
+    XCC_NODE[5u64] = (ax & 0xFFu64) as u8
+    XCC_NODE[6u64] = ((ax >> 8u64) & 0xFFu64) as u8
+    XCC_NODE[7u64] = ((ax >> 16u64) & 0xFFu64) as u8
+    XCC_NODE[8u64] = ((ax >> 24u64) & 0xFFu64) as u8
+    XCC_NODE[9u64] = ((ax >> 32u64) & 0xFFu64) as u8
+    XCC_NODE[10u64] = ((ax >> 40u64) & 0xFFu64) as u8
+    XCC_NODE[11u64] = ((ax >> 48u64) & 0xFFu64) as u8
+    XCC_NODE[12u64] = ((ax >> 56u64) & 0xFFu64) as u8
+    cad_payload((&XCC_NODE as u64), 13u64)
+    return 0i32
+}
+
+/* walk a term, streaming every node into the open digest.  Kind-aware arity (FLOOP = body only;
+ * FIF = 3; basis K00-K17 + TRIT_VAL = leaf; else 2).  Mirrors xii_mig4_seal._xms_walk exactly. */
+fn _xcc_walk(t: u32) -> i32 {
+    if t == XCC_NULL_REF {
+        XCC_NODE[0u64] = XCC_NODEMARK
+        cad_payload((&XCC_NODE as u64), 1u64)
+        return 0i32
+    }
+    _xcc_feed_node(t)
+    let kind : u8 = xii_term_get_kind(t)
+    if kind <= 17u8 { return 0i32 }
+    if kind == XCC_TVAL { return 0i32 }
+    if kind == XCC_FLOOP { _xcc_walk(xii_term_get_child_a(t))  return 0i32 }
+    _xcc_walk(xii_term_get_child_a(t))
+    _xcc_walk(xii_term_get_child_b(t))
+    if kind == XCC_FIF { _xcc_walk(xii_term_get_child_c(t)) }
+    return 0i32
+}
+
+/* feed a rule-id as 4 LE bytes (binds the rule SET + ordering into the digest). */
+fn _xcc_feed_rid(rid: u32) -> i32 {
+    XCC_RIDB[0u64] = (rid & 0xFFu32) as u8
+    XCC_RIDB[1u64] = ((rid >> 8u32) & 0xFFu32) as u8
+    XCC_RIDB[2u64] = ((rid >> 16u32) & 0xFFu32) as u8
+    XCC_RIDB[3u64] = ((rid >> 24u32) & 0xFFu32) as u8
+    cad_payload((&XCC_RIDB as u64), 4u64)
+    return 0i32
+}
+
+/* THE RULE-SEMANTICS mhash (ADR-C4): for every live rule, feed (rid, witness redex, one-step reduct).
+ * The reduct is apply_specific(rid, witness) -- a guard change fires differently (different reduct or
+ * a NULL where it used to fire), an RHS change produces a different reduct => a different 32-byte
+ * digest.  A rule added/removed changes the SET => different digest.  Behavioural, not structural. */
+fn xcc_rule_mhash(out_32: u64) -> i32 @export {
+    cad_begin(XCC_SUITE)
+    let n : u64 = xrp_rule_count() as u64
+    let mut s : u64 = 0u64
+    while s < n {
+        let rid : u32 = xrp_rid_at(s as u32)
+        _xcc_feed_rid(rid)
+        xii_term_arena_reset()
+        let w : u32 = xjn_build_rule_witness(s as u32)
+        _xcc_walk(w)
+        let r : u32 = xii_rewrite_apply_specific(rid, w)
+        _xcc_walk(r)
+        s = s + 1u64
+    }
+    cad_final(out_32)
+    return 0i32
+}
+
+/* The SEALED golden rule-semantics mhash (content-address of the 45-rule behaviour, route-S era).
+ * Baked from a one-time computation of xcc_rule_mhash on the live engine (Step C.2 seal ceremony):
+ *   sha256 = 50222762a5cfa79c9e4674ac01dbd485022dbf48c6b8a1a9fb6e45fac083a132
+ * A guard/RHS/rule-set change makes the live mhash diverge from this constant => xcc_verify == 0. */
+fn _xcc_load_golden() -> i32 {
+    XCC_GOLDEN[0u64] = 0x50u8   XCC_GOLDEN[1u64] = 0x22u8   XCC_GOLDEN[2u64] = 0x27u8   XCC_GOLDEN[3u64] = 0x62u8
+    XCC_GOLDEN[4u64] = 0xa5u8   XCC_GOLDEN[5u64] = 0xcfu8   XCC_GOLDEN[6u64] = 0xa7u8   XCC_GOLDEN[7u64] = 0x9cu8
+    XCC_GOLDEN[8u64] = 0x9eu8   XCC_GOLDEN[9u64] = 0x46u8   XCC_GOLDEN[10u64] = 0x74u8  XCC_GOLDEN[11u64] = 0xacu8
+    XCC_GOLDEN[12u64] = 0x01u8  XCC_GOLDEN[13u64] = 0xdbu8  XCC_GOLDEN[14u64] = 0xd4u8  XCC_GOLDEN[15u64] = 0x85u8
+    XCC_GOLDEN[16u64] = 0x02u8  XCC_GOLDEN[17u64] = 0x2du8  XCC_GOLDEN[18u64] = 0xbfu8  XCC_GOLDEN[19u64] = 0x48u8
+    XCC_GOLDEN[20u64] = 0xc6u8  XCC_GOLDEN[21u64] = 0xb8u8  XCC_GOLDEN[22u64] = 0xa1u8  XCC_GOLDEN[23u64] = 0xa9u8
+    XCC_GOLDEN[24u64] = 0xfbu8  XCC_GOLDEN[25u64] = 0x6eu8  XCC_GOLDEN[26u64] = 0x45u8  XCC_GOLDEN[27u64] = 0xfau8
+    XCC_GOLDEN[28u64] = 0xc0u8  XCC_GOLDEN[29u64] = 0x83u8  XCC_GOLDEN[30u64] = 0xa1u8  XCC_GOLDEN[31u64] = 0x32u8
+    return 0i32
+}
+
+/* BOOT FAST-PATH: 1 iff the live rule-semantics mhash equals the sealed golden.  Writes the live
+ * mhash to out_live (32 bytes) as a side output for the caller / charter (C.4). */
+fn xcc_verify(out_live: u64) -> u8 @export {
+    xcc_rule_mhash(out_live)
+    _xcc_load_golden()
+    return cad_eq(out_live as *u8, (&XCC_GOLDEN as u64) as *u8)
+}
+
+/* DEEP RE-PROVER: re-derive the graded confluence partition and assert it still holds.  99 = agrees
+ * with the seal; a distinct code per failed invariant.  This is the standing proof obligation. */
+fn xcc_reprove() -> u64 @export {
+    xjn_gate()
+    if xjn_nonjoin_count() != 20u64 { return 1u64 }        /* exactly 20 residual subterm non-joins */
+    if xjn_gate_root() != 1u32 { return 2u64 }             /* root-overlap confluent */
+    if xtm_gate() != 1u32 { return 3u64 }                  /* terminating (lex-triple decrease) */
+    if xsd_strategy_is_deterministic() != 1u8 { return 4u64 } /* deterministic bottom-up strategy */
+    if xdc_count_route(XCC_R_ROUTE) != 20u64 { return 5u64 }  /* ALL 20 discharge by route R */
+    if xdc_count_route(XCC_BND_ROUTE) != 0u64 { return 6u64 } /* ZERO boundary -- empty, proven */
+    if xad_admit() != 1u32 { return 7u64 }                 /* admitted: root-confluent + terminating */
+    return 99u64
+}
+
+/* The confluence REORDERABILITY relation consumed by nous (C.3): 1 iff rules a and b have NO
+ * non-joining overlap -- safe to reorder (no overlap, or every overlap joins).  Scans the live
+ * non-join table for a pair on {a,b} in either direction; any hit => NOT reorderable (0). */
+fn xcc_reorderable(rid_a: u32, rid_b: u32) -> u8 @export {
+    let a : u64 = rid_a as u64
+    let b : u64 = rid_b as u64
+    xjn_gate()
+    let nj : u64 = xjn_nonjoin_count()
+    let mut k : u64 = 0u64
+    while k < nj {
+        if k >= 128u64 { return 1u8 }
+        let i : u64 = xjn_njtab_i(k as u32)
+        let j : u64 = xjn_njtab_j(k as u32)
+        if i == a { if j == b { return 0u8 } }
+        if i == b { if j == a { return 0u8 } }
+        k = k + 1u64
+    }
+    return 1u8
+}
+
+/* KAT: 99 = all pass; a distinct code per failed check.  Proves: the sealed cert VERIFIES against the
+ * live rules (1); the rule mhash is DETERMINISTIC + non-trivial (2-3); the deep re-prover AGREES with
+ * the seal (4); prove-the-negative -- a fabricated rule-mhash (one byte flipped) does NOT verify (5),
+ * and a deliberately reorder-UNSAFE pair (a non-joining collapse x lift) is reported non-reorderable
+ * while the disjoint trit block IS reorderable (6-8). */
+fn xcc_selftest() -> u64 @export {
+    /* (1) the certificate VERIFIES: the live rule-semantics mhash equals the sealed golden. */
+    if xcc_verify((&XCC_LIVE as u64)) != 1u8 { return 1u64 }
+
+    /* (2) the mhash is DETERMINISTIC: re-computing it yields the identical digest. */
+    xcc_rule_mhash((&XCC_LIVE2 as u64))
+    if cad_eq((&XCC_LIVE as u64) as *u8, (&XCC_LIVE2 as u64) as *u8) != 1u8 { return 2u64 }
+
+    /* (3) the mhash is NON-TRIVIAL: it actually hashed the rule battery, not an empty/zero digest. */
+    if cad_is_zero((&XCC_LIVE as u64) as *u8) != 0u8 { return 3u64 }
+
+    /* (4) the DEEP RE-PROVER agrees with the seal: the graded partition still holds. */
+    if xcc_reprove() != 99u64 { return 4u64 }
+
+    /* (5) PROVE-THE-NEGATIVE: a fabricated mhash (flip the low byte of the live digest) does NOT equal
+     * the golden -- the verify has teeth, it is not vacuously 1. */
+    XCC_LIVE2[0u64] = XCC_LIVE2[0u64] + 1u8
+    if cad_eq((&XCC_LIVE2 as u64) as *u8, (&XCC_GOLDEN as u64) as *u8) != 0u8 { return 5u64 }
+
+    /* (6) a reorder-UNSAFE pair: the first tabled non-join's (rule_i, rule_j) is NOT reorderable
+     * (they have a non-joining overlap -- a collapse/sort rewriting a lift's branch). */
+    xjn_gate()
+    let ni : u32 = xjn_njtab_i(0u32) as u32
+    let nj0 : u32 = xjn_njtab_j(0u32) as u32
+    if xcc_reorderable(ni, nj0) != 0u8 { return 6u64 }
+
+    /* (7) the same pair is non-reorderable in the OPPOSITE order too (symmetry of the relation). */
+    if xcc_reorderable(nj0, ni) != 0u8 { return 7u64 }
+
+    /* (8) the LHS-disjoint trit block is FREELY reorderable: a trit rule (R101) shares no redex with a
+     * lift rule (R005), so they have no overlap -> reorderable (the trit block moves freely, ADR-N11). */
+    if xcc_reorderable(101u32, 5u32) != 1u8 { return 8u64 }
+
+    return 99u64
+}

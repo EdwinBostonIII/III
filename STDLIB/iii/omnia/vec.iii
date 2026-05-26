@@ -1,0 +1,445 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\vec.iii
+ *
+ * III STDLIB - omnia::vec
+ *
+ * Bounded growable u8 array with hard upper bound (@max equivalent).
+ * Backed by an arena - growth re-allocates a larger buffer in the
+ * same arena and copies forward.  Hard cap declared at construction;
+ * push beyond the cap is a typed failure (returns VEC_E_FULL).
+ *
+ * Phase A: vec_u8 only.  vec_u32, vec_u64 await @specialize.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 0.99.
+ */
+
+module omnia_vec
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+const VEC_INVALID : u64 = 0u64
+const VEC_OK      : i32 = 0i32
+const VEC_E_OOM   : i32 = -1i32
+const VEC_E_FULL  : i32 = -2i32
+const VEC_E_BADID : i32 = -3i32
+const VEC_E_OOB   : i32 = -4i32
+const VEC_MAX     : u32 = 32u32
+
+var VEC_ARENA : [u64; 32]
+var VEC_BASE  : [u64; 32]
+var VEC_CAP   : [u64; 32]
+var VEC_LEN   : [u64; 32]
+var VEC_HARD  : [u64; 32]    /* user-declared maximum length */
+var VEC_LIVE  : [u8;  32]
+
+fn vec_u8_new(arena_id: u64, hard_max: u64) -> u64 @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < VEC_MAX {
+        if VEC_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return VEC_INVALID }
+    let mut init_cap : u64 = 8u64
+    if init_cap > hard_max { init_cap = hard_max }
+    let p : u64 = arena_alloc1(arena_id, init_cap)
+    if p == 0u64 { return VEC_INVALID }
+    VEC_ARENA[slot] = arena_id
+    VEC_BASE[slot]  = p
+    VEC_CAP[slot]   = init_cap
+    VEC_LEN[slot]   = 0u64
+    VEC_HARD[slot]  = hard_max
+    VEC_LIVE[slot]  = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn vec_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (VEC_MAX as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if VEC_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+fn vec_u8_grow(slot: u32, add: u64) -> i32 {
+    let cur_cap : u64 = VEC_CAP[slot]
+    let cur_len : u64 = VEC_LEN[slot]
+    let need : u64 = cur_len + add
+    if need > VEC_HARD[slot] { return VEC_E_FULL }
+    if need <= cur_cap { return VEC_OK }
+    let mut new_cap : u64 = cur_cap * 2u64
+    if new_cap < 8u64 { new_cap = 8u64 }
+    while new_cap < need { new_cap = new_cap * 2u64 }
+    if new_cap > VEC_HARD[slot] { new_cap = VEC_HARD[slot] }
+    let arena_id : u64 = VEC_ARENA[slot]
+    let new_base : u64 = arena_alloc1(arena_id, new_cap)
+    if new_base == 0u64 { return VEC_E_OOM }
+    let old_base : u64 = VEC_BASE[slot]
+    if cur_len > 0u64 {
+        let src : *u8 = old_base as *u8
+        let dst : *u8 = new_base as *u8
+        let mut i : u64 = 0u64
+        while i < cur_len {
+            dst[i] = src[i]
+            i = i + 1u64
+        }
+    }
+    VEC_BASE[slot] = new_base
+    VEC_CAP[slot] = new_cap
+    return VEC_OK
+}
+
+fn vec_u8_push(id: u64, b: u32) -> i32 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    let rc : i32 = vec_u8_grow(s, 1u64)
+    if rc != VEC_OK { return rc }
+    let base : u64 = VEC_BASE[s]
+    let len : u64 = VEC_LEN[s]
+    let p : *u8 = base as *u8
+    p[len] = (b & 0xFFu32) as u8
+    VEC_LEN[s] = len + 1u64
+    return VEC_OK
+}
+
+fn vec_u8_at(id: u64, i: u64) -> u32 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0x100u32 }
+    if i >= VEC_LEN[s] { return 0x100u32 }
+    let base : u64 = VEC_BASE[s]
+    let p : *u8 = base as *u8
+    return p[i] as u32
+}
+
+fn vec_u8_set(id: u64, i: u64, v: u32) -> i32 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    if i >= VEC_LEN[s] { return VEC_E_OOB }
+    let base : u64 = VEC_BASE[s]
+    let p : *u8 = base as *u8
+    p[i] = (v & 0xFFu32) as u8
+    return VEC_OK
+}
+
+fn vec_u8_len(id: u64) -> u64 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VEC_LEN[s]
+}
+
+fn vec_u8_capacity(id: u64) -> u64 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VEC_CAP[s]
+}
+
+fn vec_u8_max(id: u64) -> u64 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VEC_HARD[s]
+}
+
+fn vec_u8_base(id: u64) -> u64 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VEC_BASE[s]
+}
+
+fn vec_u8_clear(id: u64) -> i32 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    VEC_LEN[s] = 0u64
+    return VEC_OK
+}
+
+fn vec_u8_drop(id: u64) -> i32 @export {
+    let s : u32 = vec_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    VEC_LIVE[s] = 0u8
+    VEC_ARENA[s] = 0u64
+    VEC_BASE[s] = 0u64
+    VEC_CAP[s] = 0u64
+    VEC_LEN[s] = 0u64
+    VEC_HARD[s] = 0u64
+    return VEC_OK
+}
+
+/* ─── vec_u64 instantiation (lattice plan Step 0001) ────────────────
+ *
+ * Parallel slot table (16 instances) using arena_alloc8 (8-byte
+ * alignment) for u64 storage.  VEC64_LEN and VEC64_CAP track ELEMENT
+ * counts; bytes = elements × 8.  Mirrors the vec_u8 grow strategy.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 0.99.
+ */
+
+const VEC_U64_MAX : u32 = 16u32
+
+var VEC64_ARENA : [u64; 16]
+var VEC64_BASE  : [u64; 16]
+var VEC64_CAP   : [u64; 16]
+var VEC64_LEN   : [u64; 16]
+var VEC64_HARD  : [u64; 16]
+var VEC64_LIVE  : [u8;  16]
+
+extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+
+fn vec_u64_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (VEC_U64_MAX as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if VEC64_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < VEC_U64_MAX {
+        if VEC64_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return VEC_INVALID }
+    let mut init_cap : u64 = 8u64
+    if init_cap > hard_max { init_cap = hard_max }
+    let p : u64 = arena_alloc8(arena_id, init_cap * 8u64)
+    if p == 0u64 { return VEC_INVALID }
+    VEC64_ARENA[slot] = arena_id
+    VEC64_BASE[slot]  = p
+    VEC64_CAP[slot]   = init_cap
+    VEC64_LEN[slot]   = 0u64
+    VEC64_HARD[slot]  = hard_max
+    VEC64_LIVE[slot]  = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn vec_u64_grow(slot: u32, add: u64) -> i32 {
+    let cur_cap : u64 = VEC64_CAP[slot]
+    let cur_len : u64 = VEC64_LEN[slot]
+    let need : u64 = cur_len + add
+    if need > VEC64_HARD[slot] { return VEC_E_FULL }
+    if need <= cur_cap { return VEC_OK }
+    let mut new_cap : u64 = cur_cap * 2u64
+    if new_cap < 8u64 { new_cap = 8u64 }
+    while new_cap < need { new_cap = new_cap * 2u64 }
+    if new_cap > VEC64_HARD[slot] { new_cap = VEC64_HARD[slot] }
+    let arena_id : u64 = VEC64_ARENA[slot]
+    let new_base : u64 = arena_alloc8(arena_id, new_cap * 8u64)
+    if new_base == 0u64 { return VEC_E_OOM }
+    let old_base : u64 = VEC64_BASE[slot]
+    if cur_len > 0u64 {
+        let src : *u8 = old_base as *u8
+        let dst : *u8 = new_base as *u8
+        let mut i : u64 = 0u64
+        let bytes : u64 = cur_len * 8u64
+        while i < bytes {
+            dst[i] = src[i]
+            i = i + 1u64
+        }
+    }
+    VEC64_BASE[slot] = new_base
+    VEC64_CAP[slot]  = new_cap
+    return VEC_OK
+}
+
+fn vec_u64_push(id: u64, v: u64) -> i32 @export {
+    let s : u32 = vec_u64_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    let rc : i32 = vec_u64_grow(s, 1u64)
+    if rc != VEC_OK { return rc }
+    let base : u64 = VEC64_BASE[s]
+    let len : u64 = VEC64_LEN[s]
+    let off : u64 = len * 8u64
+    let p : *u8 = base as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        p[off + i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    VEC64_LEN[s] = len + 1u64
+    return VEC_OK
+}
+
+fn vec_u64_at(id: u64, i: u64) -> u64 @export {
+    let s : u32 = vec_u64_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if i >= VEC64_LEN[s] { return 0u64 }
+    let base : u64 = VEC64_BASE[s]
+    let off : u64 = i * 8u64
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+fn vec_u64_count(id: u64) -> u64 @export {
+    let s : u32 = vec_u64_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VEC64_LEN[s]
+}
+
+fn vec_u64_clear(id: u64) -> i32 @export {
+    let s : u32 = vec_u64_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    VEC64_LEN[s] = 0u64
+    return VEC_OK
+}
+
+fn vec_u64_drop(id: u64) -> i32 @export {
+    let s : u32 = vec_u64_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    VEC64_LIVE[s] = 0u8
+    VEC64_ARENA[s] = 0u64
+    VEC64_BASE[s] = 0u64
+    VEC64_CAP[s] = 0u64
+    VEC64_LEN[s] = 0u64
+    VEC64_HARD[s] = 0u64
+    return VEC_OK
+}
+
+/* ─── generic element vectors (V1 Stage 7.2) ────────────────────────────
+ * @specialize over the non-u8/u64 widths.  Own slot table; cap/len in
+ * ELEMENTS; arena byte-math via `sizeof T`; *T indexing for push/at/set.
+ * push inlines its grow (a generic fn cannot call a generic helper -- the
+ * internal call would not specialise).  u8/u64 keep their hand-written
+ * tables above. */
+
+const VECG_MAX : u32 = 32u32
+
+var VECG_ARENA : [u64; 32]
+var VECG_BASE  : [u64; 32]
+var VECG_CAP   : [u64; 32]    /* element capacity */
+var VECG_LEN   : [u64; 32]    /* element count */
+var VECG_HARD  : [u64; 32]
+var VECG_LIVE  : [u8;  32]
+
+fn vecg_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (VECG_MAX as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if VECG_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+fn vec__new<T>(arena_id: u64, hard_max: u64) -> u64 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < VECG_MAX {
+        if VECG_LIVE[i] == 0u8 { if slot == 0xFFFFFFFFu32 { slot = i } }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return VEC_INVALID }
+    let mut init_cap : u64 = 8u64
+    if init_cap > hard_max { init_cap = hard_max }
+    let esz : u64 = sizeof T
+    let p : u64 = arena_alloc1(arena_id, init_cap * esz)
+    if p == 0u64 { return VEC_INVALID }
+    VECG_ARENA[slot] = arena_id
+    VECG_BASE[slot]  = p
+    VECG_CAP[slot]   = init_cap
+    VECG_LEN[slot]   = 0u64
+    VECG_HARD[slot]  = hard_max
+    VECG_LIVE[slot]  = 1u8
+    return (slot as u64) + 1u64
+}
+
+fn vec__push<T>(id: u64, value: T) -> i32 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    let esz : u64 = sizeof T
+    let cur_len : u64 = VECG_LEN[s]
+    let cur_cap : u64 = VECG_CAP[s]
+    let need : u64 = cur_len + 1u64
+    if need > VECG_HARD[s] { return VEC_E_FULL }
+    if need > cur_cap {
+        let mut new_cap : u64 = cur_cap * 2u64
+        if new_cap < 8u64 { new_cap = 8u64 }
+        while new_cap < need { new_cap = new_cap * 2u64 }
+        if new_cap > VECG_HARD[s] { new_cap = VECG_HARD[s] }
+        let new_base : u64 = arena_alloc1(VECG_ARENA[s], new_cap * esz)
+        if new_base == 0u64 { return VEC_E_OOM }
+        let old_base : u64 = VECG_BASE[s]
+        if cur_len > 0u64 {
+            let src : *u8 = old_base as *u8
+            let dst : *u8 = new_base as *u8
+            let bytes : u64 = cur_len * esz
+            let mut j : u64 = 0u64
+            while j < bytes {
+                dst[j] = src[j]
+                j = j + 1u64
+            }
+        }
+        VECG_BASE[s] = new_base
+        VECG_CAP[s] = new_cap
+    }
+    let base : u64 = VECG_BASE[s]
+    let p : *T = base as *T
+    p[cur_len] = value
+    VECG_LEN[s] = cur_len + 1u64
+    return VEC_OK
+}
+
+fn vec__at<T>(id: u64, idx: u64) -> u64 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if idx >= VECG_LEN[s] { return 0u64 }
+    let base : u64 = VECG_BASE[s]
+    let p : *T = base as *T
+    let v : T = p[idx]
+    return v as u64
+}
+
+fn vec__set<T>(id: u64, idx: u64, value: T) -> i32 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    if idx >= VECG_LEN[s] { return VEC_E_OOB }
+    let base : u64 = VECG_BASE[s]
+    let p : *T = base as *T
+    p[idx] = value
+    return VEC_OK
+}
+
+fn vec__len<T>(id: u64) -> u64 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VECG_LEN[s]
+}
+
+fn vec__capacity<T>(id: u64) -> u64 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return VECG_CAP[s]
+}
+
+fn vec__clear<T>(id: u64) -> i32 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    VECG_LEN[s] = 0u64
+    return VEC_OK
+}
+
+fn vec__drop<T>(id: u64) -> i32 @specialize(u16, u32, i8, i16, i32, i64) @export {
+    let s : u32 = vecg_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return VEC_E_BADID }
+    VECG_LIVE[s] = 0u8
+    VECG_ARENA[s] = 0u64
+    VECG_BASE[s] = 0u64
+    VECG_CAP[s] = 0u64
+    VECG_LEN[s] = 0u64
+    VECG_HARD[s] = 0u64
+    return VEC_OK
+}

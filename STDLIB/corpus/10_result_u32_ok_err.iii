@@ -1,0 +1,19 @@
+/* result_u32: ok(7).unwrap_or = 7; err(3).unwrap_or(99) = 99 */
+module corpus_a10
+
+extern @abi(c-msvc-x64) fn result_u32_ok(v: u32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u32_err(c: u32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u32_is_ok(r: u64) -> u8 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u32_unwrap_or(r: u64, d: u32) -> u64 from "result.iii"
+extern @abi(c-msvc-x64) fn result_u32_err_code(r: u64) -> u32 from "result.iii"
+
+fn main() -> u64 {
+    let ok : u64 = result_u32_ok(7u32)
+    if result_u32_is_ok(ok) != 1u8 { return 1u64 }
+    if result_u32_unwrap_or(ok, 0u32) != 7u64 { return 2u64 }
+    let err : u64 = result_u32_err(3u32)
+    if result_u32_is_ok(err) != 0u8 { return 3u64 }
+    if result_u32_unwrap_or(err, 99u32) != 99u64 { return 4u64 }
+    if result_u32_err_code(err) != 3u32 { return 5u64 }
+    return 99u64
+}

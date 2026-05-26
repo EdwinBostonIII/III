@@ -1,0 +1,49 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\251_newline_else.iii
+ *
+ * III conformance corpus 251 -- `}\n else {` formatting.
+ *
+ * Regression test for the Phase-3-Step-1 iiis-0.1 parser fix that
+ * permits newlines between the close-brace of an if-then block and the
+ * `else` keyword.  Before the fix, this canonical formatting:
+ *
+ *     if cond {
+ *         ...
+ *     }
+ *     else {
+ *         ...
+ *     }
+ *
+ * triggered a parse error.  Single-line `} else {` had to be used.
+ * Now both formats are valid.
+ */
+module corpus_251
+
+fn _classify(x: u64) -> u64 {
+    if x == 5u64 {
+        return 10u64
+    }
+    else {
+        return 20u64
+    }
+}
+
+fn _chained(x: u64) -> u64 {
+    if x == 1u64 {
+        return 100u64
+    }
+    else if x == 2u64 {
+        return 200u64
+    }
+    else {
+        return 999u64
+    }
+}
+
+fn main() -> u64 {
+    if _classify(5u64) != 10u64 { return 1u64 }
+    if _classify(6u64) != 20u64 { return 2u64 }
+    if _chained(1u64) != 100u64 { return 3u64 }
+    if _chained(2u64) != 200u64 { return 4u64 }
+    if _chained(7u64) != 999u64 { return 5u64 }
+    return 99u64
+}

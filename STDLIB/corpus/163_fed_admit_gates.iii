@@ -1,0 +1,51 @@
+/* Step 0191 verification: aether/fed_admit planetary gate composition.
+ *
+ * Without sybil-admission (no real ed25519 sign available in stdlib),
+ * the sybil bit cannot fire — verifies the failure path returns
+ * non-eligible status, and the bitmask reports each gate
+ * independently.  The eclipse-OK bit fires by default (no reference
+ * set means alarm is OFF).
+ */
+module corpus_163
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fed_sybil_clear_all() -> i32 from "fed_sybil.iii"
+extern @abi(c-msvc-x64) fn fed_eclipse_clear() -> i32 from "fed_eclipse.iii"
+extern @abi(c-msvc-x64) fn fed_admit_planetary_min_score() -> u64 from "fed_admit.iii"
+extern @abi(c-msvc-x64) fn fed_admit_planetary_gate_status(peer_id_ptr: u64) -> u32 from "fed_admit.iii"
+extern @abi(c-msvc-x64) fn fed_admit_eligible(peer_id_ptr: u64) -> u8 from "fed_admit.iii"
+extern @abi(c-msvc-x64) fn fed_admit_to_planetary(slot: u32, peer_id_ptr: u64) -> i32 from "fed_admit.iii"
+
+fn main() -> u64 {
+    fed_sybil_clear_all()
+    fed_eclipse_clear()
+
+    let peer : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        peer[i] = 0x77u8
+        i = i + 1u64
+    }
+
+    /* Min score is 16e6 (16 difficulty bits * 1e6). */
+    if fed_admit_planetary_min_score() != 16000000u64 { return 1u64 }
+
+    /* Null peer → status 0, not eligible. */
+    if fed_admit_planetary_gate_status(0u64) != 0u32 { return 2u64 }
+    if fed_admit_eligible(0u64) != 0u8 { return 3u64 }
+
+    /* Unsybiled peer with default eclipse state: only ECLIPSE_OK bit fires. */
+    let bits : u32 = fed_admit_planetary_gate_status(peer as u64)
+    if bits != 0x02u32 { return 4u64 }
+    if fed_admit_eligible(peer as u64) != 0u8 { return 5u64 }
+
+    /* admit_to_planetary refuses ineligible peer with E_GATE = -2. */
+    if fed_admit_to_planetary(0u32, peer as u64) != -2i32 { return 6u64 }
+
+    /* admit_to_planetary refuses null peer with E_NULL = -1. */
+    if fed_admit_to_planetary(0u32, 0u64) != -1i32 { return 7u64 }
+
+    free(peer)
+    return 99u64
+}

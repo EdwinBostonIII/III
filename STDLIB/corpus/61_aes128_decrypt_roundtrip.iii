@@ -1,0 +1,66 @@
+/* AES-128 decrypt round-trip: encrypt FIPS 197 plaintext, decrypt the
+ * result, verify it matches the original plaintext byte-for-byte.
+ *
+ * Exit = 99 on success.
+ */
+module corpus_61
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn aes128_set_key(key: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
+extern @abi(c-msvc-x64) fn aes_decrypt_block(in_block: *u8, out_block: *u8) -> i32 from "aes.iii"
+
+fn fill_key(k: *u8) -> i32 {
+    k[0]  = 0x2Bu8
+    k[1]  = 0x7Eu8
+    k[2]  = 0x15u8
+    k[3]  = 0x16u8
+    k[4]  = 0x28u8
+    k[5]  = 0xAEu8
+    k[6]  = 0xD2u8
+    k[7]  = 0xA6u8
+    k[8]  = 0xABu8
+    k[9]  = 0xF7u8
+    k[10] = 0x15u8
+    k[11] = 0x88u8
+    k[12] = 0x09u8
+    k[13] = 0xCFu8
+    k[14] = 0x4Fu8
+    k[15] = 0x3Cu8
+    return 0i32
+}
+
+fn fill_pt(p: *u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        p[i] = (i + 17u64) as u8
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let key : *u8 = malloc(16u64)
+    let pt  : *u8 = malloc(16u64)
+    let ct  : *u8 = malloc(16u64)
+    let dec : *u8 = malloc(16u64)
+    fill_key(key)
+    fill_pt(pt)
+    aes128_set_key(key)
+    aes_encrypt_block(pt, ct)
+    aes_decrypt_block(ct, dec)
+    /* dec must equal pt byte-for-byte. */
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        if dec[i] != pt[i] {
+            return i + 1u64
+        }
+        i = i + 1u64
+    }
+    free(key)
+    free(pt)
+    free(ct)
+    free(dec)
+    return 99u64
+}

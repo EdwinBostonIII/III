@@ -1,0 +1,75 @@
+/* json: parse {"a":[1,2,3],"b":"world"} and verify structure */
+module corpus_f53
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn json_parse(arena: u64, base: u64, len: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_kind(id: u64) -> u8 from "json.iii"
+extern @abi(c-msvc-x64) fn json_int(id: u64) -> i64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_base(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_string_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_array_at(id: u64, i: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_len(id: u64) -> u64 from "json.iii"
+extern @abi(c-msvc-x64) fn json_object_get(id: u64, key: u64, klen: u64) -> u64 from "json.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* Build input: {"a":[1,2,3],"b":"world"}  (24 bytes) */
+    let inp : *u8 = malloc(25u64)
+    inp[0]=123u8     /* { */
+    inp[1]=34u8      /* " */
+    inp[2]=97u8      /* a */
+    inp[3]=34u8      /* " */
+    inp[4]=58u8      /* : */
+    inp[5]=91u8      /* [ */
+    inp[6]=49u8      /* 1 */
+    inp[7]=44u8      /* , */
+    inp[8]=50u8      /* 2 */
+    inp[9]=44u8      /* , */
+    inp[10]=51u8     /* 3 */
+    inp[11]=93u8     /* ] */
+    inp[12]=44u8     /* , */
+    inp[13]=34u8     /* " */
+    inp[14]=98u8     /* b */
+    inp[15]=34u8     /* " */
+    inp[16]=58u8     /* : */
+    inp[17]=34u8     /* " */
+    inp[18]=119u8    /* w */
+    inp[19]=111u8    /* o */
+    inp[20]=114u8    /* r */
+    inp[21]=108u8    /* l */
+    inp[22]=100u8    /* d */
+    inp[23]=34u8     /* " */
+    inp[24]=125u8    /* } */
+    let root : u64 = json_parse(a, inp as u64, 25u64)
+    if root == 0u64 { return 1u64 }
+    if json_kind(root) != 7u8 { return 2u64 }   /* JSON_KIND_OBJ */
+    if json_object_len(root) != 2u64 { return 3u64 }
+    /* lookup "a" */
+    let key_a : *u8 = malloc(1u64); key_a[0] = 97u8
+    let val_a : u64 = json_object_get(root, key_a as u64, 1u64)
+    if val_a == 0u64 { return 4u64 }
+    if json_kind(val_a) != 6u8 { return 5u64 }   /* JSON_KIND_ARR */
+    if json_array_len(val_a) != 3u64 { return 6u64 }
+    let e0 : u64 = json_array_at(val_a, 0u64)
+    let e1 : u64 = json_array_at(val_a, 1u64)
+    let e2 : u64 = json_array_at(val_a, 2u64)
+    if json_int(e0) != 1i64 { return 7u64 }
+    if json_int(e1) != 2i64 { return 8u64 }
+    if json_int(e2) != 3i64 { return 9u64 }
+    /* lookup "b" */
+    let key_b : *u8 = malloc(1u64); key_b[0] = 98u8
+    let val_b : u64 = json_object_get(root, key_b as u64, 1u64)
+    if val_b == 0u64 { return 10u64 }
+    if json_kind(val_b) != 5u8 { return 11u64 }   /* JSON_KIND_STR */
+    if json_string_len(val_b) != 5u64 { return 12u64 }
+    let sp : *u8 = json_string_base(val_b) as *u8
+    if sp[0] != 119u8 { return 13u64 }
+    if sp[4] != 100u8 { return 14u64 }
+    free(inp); free(key_a); free(key_b)
+    arena_drop(a)
+    return 99u64
+}

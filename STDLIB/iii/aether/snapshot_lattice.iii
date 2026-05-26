@@ -1,0 +1,374 @@
+/* III/STDLIB/iii/aether/snapshot_lattice.iii
+ *
+ * III STDLIB - aether::snapshot_lattice -- per-call snapshots + retroactive queries.
+ *
+ * The reversibility substrate consulted before any destructive operation (W26; M9).
+ * Every operation that intends to be reversible publishes a snapshot before it runs.
+ *
+ * Snapshot slot:
+ *   snap_id (32 B)        = Keccak256(antecedent_id || op_id || at_time)
+ *   antecedent_snap (u32) = single parent slot id, or SNAPL_SENT (forest of in-trees)
+ *   root_commit (32 B)    = committed prior state, for rollback
+ *   frag_idx (u64)        = witness-chain index of the SNAPSHOT_TAKE fragment
+ *
+ * Partial order: a <= b iff the single-parent antecedent chain from b reaches a.
+ * Because each slot has exactly one antecedent, ancestor sets are chains and the
+ * structure is a forest of in-trees, so the meet (greatest common antecedent) is
+ * well-defined and unique.  sl_meet returns it.
+ *
+ * Three lattice queries:
+ *   sl_le      -- non-strict ancestry test (a is an ancestor of b?)
+ *   sl_meet    -- greatest (most recent) common antecedent of a and b
+ *   sl_at_frag -- latest live snapshot strictly preceding a witness-chain fragment
+ * plus sl_root (root-commit read-back for rollback).
+ *
+ * NOT reentrant: SNAPL_BUF/SNAPL_SEEN/SNAPL_INC/SNAPL_FID are module-scope scratch
+ * (iiis-0 has no function-local var arrays -- Trap 7).  Called serially under the
+ * destructive-op lock (same posture as witness_hook.iii and merkle.iii).
+ *
+ * Hexad: kind_witness + kind_repair.  Ring: R-1.  K: 0.99.
+ */
+module aether_snapshot_lattice
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
+
+const SNAPL_OK     : i32 =  0i32
+const SNAPL_E_BAD  : i32 = -1i32
+const SNAPL_SENT   : u32 = 0xFFFFFFFFu32
+const SNAPL_MAX    : u32 = 8192u32
+const SNAPL_PILLAR : u16 = 4u16
+const SNAPL_REVTAG : u8  = 1u8
+
+var SNAPL_LIVE     : [u8;  8192]
+var SNAPL_ID       : [u8;  262144]      /* 8192 * 32 */
+var SNAPL_ANTE     : [u32; 8192]
+var SNAPL_ROOT     : [u8;  262144]      /* 8192 * 32 */
+var SNAPL_FRAG     : [u64; 8192]
+var SNAPL_USED     : u32 = 0u32
+
+var SNAPL_PRODUCER : [u8; 32]
+var SNAPL_OPID_TAKE: [u8; 32]
+var SNAPL_INITED   : u8 = 0u8
+
+var SNAPL_BUF      : [u8; 72]           /* snap_id preimage (Trap-7 hoist) */
+var SNAPL_SEEN     : [u8; 8192]         /* sl_meet ancestor bitmap (Trap-7 hoist) */
+var SNAPL_INC      : [u8; 32]           /* in_commit scratch (Trap-7 hoist) */
+var SNAPL_FID      : [u8; 32]           /* out_frag_id sink (Trap-7 hoist) */
+
+/* producer/op id source strings (ASCII), hashed by sl_init to 32-byte ids */
+var SNAPL_PRODSTR  : [u8; 24]           /* "aether::snapshot_lattice" (24 bytes) */
+var SNAPL_OPSTR    : [u8; 30]           /* "aether::snapshot_lattice::take" (30 bytes) */
+
+/* Byte-offset address into the 32-byte-per-slot backing arrays.
+ * Mask the u32 slot to 32 bits before the *32 multiply (Trap 4: a u32 in an
+ * 8-byte slot may carry garbage high bits).  ((&ARR as u64)+off) form (Trap 2
+ * idiom -- the witness_hook reconciliation), NOT &ARR[idx]. */
+fn sl_id_ptr(slot: u32) -> *u8 { return ((&SNAPL_ID as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+fn sl_root_ptr(slot: u32) -> *u8 { return ((&SNAPL_ROOT as u64) + ((slot as u64) & 0xFFFFFFFFu64) * 32u64) as *u8 }
+
+/* Fill SNAPL_PRODSTR with "aether::snapshot_lattice" (24 bytes). */
+fn sl_load_prodstr() -> i32 {
+    SNAPL_PRODSTR[0u64]  = 0x61u8   /* a */
+    SNAPL_PRODSTR[1u64]  = 0x65u8   /* e */
+    SNAPL_PRODSTR[2u64]  = 0x74u8   /* t */
+    SNAPL_PRODSTR[3u64]  = 0x68u8   /* h */
+    SNAPL_PRODSTR[4u64]  = 0x65u8   /* e */
+    SNAPL_PRODSTR[5u64]  = 0x72u8   /* r */
+    SNAPL_PRODSTR[6u64]  = 0x3au8   /* : */
+    SNAPL_PRODSTR[7u64]  = 0x3au8   /* : */
+    SNAPL_PRODSTR[8u64]  = 0x73u8   /* s */
+    SNAPL_PRODSTR[9u64]  = 0x6eu8   /* n */
+    SNAPL_PRODSTR[10u64] = 0x61u8   /* a */
+    SNAPL_PRODSTR[11u64] = 0x70u8   /* p */
+    SNAPL_PRODSTR[12u64] = 0x73u8   /* s */
+    SNAPL_PRODSTR[13u64] = 0x68u8   /* h */
+    SNAPL_PRODSTR[14u64] = 0x6fu8   /* o */
+    SNAPL_PRODSTR[15u64] = 0x74u8   /* t */
+    SNAPL_PRODSTR[16u64] = 0x5fu8   /* _ */
+    SNAPL_PRODSTR[17u64] = 0x6cu8   /* l */
+    SNAPL_PRODSTR[18u64] = 0x61u8   /* a */
+    SNAPL_PRODSTR[19u64] = 0x74u8   /* t */
+    SNAPL_PRODSTR[20u64] = 0x74u8   /* t */
+    SNAPL_PRODSTR[21u64] = 0x69u8   /* i */
+    SNAPL_PRODSTR[22u64] = 0x63u8   /* c */
+    SNAPL_PRODSTR[23u64] = 0x65u8   /* e */
+    return SNAPL_OK
+}
+
+/* Fill SNAPL_OPSTR with "aether::snapshot_lattice::take" (30 bytes). */
+fn sl_load_opstr() -> i32 {
+    SNAPL_OPSTR[0u64]  = 0x61u8   /* a */
+    SNAPL_OPSTR[1u64]  = 0x65u8   /* e */
+    SNAPL_OPSTR[2u64]  = 0x74u8   /* t */
+    SNAPL_OPSTR[3u64]  = 0x68u8   /* h */
+    SNAPL_OPSTR[4u64]  = 0x65u8   /* e */
+    SNAPL_OPSTR[5u64]  = 0x72u8   /* r */
+    SNAPL_OPSTR[6u64]  = 0x3au8   /* : */
+    SNAPL_OPSTR[7u64]  = 0x3au8   /* : */
+    SNAPL_OPSTR[8u64]  = 0x73u8   /* s */
+    SNAPL_OPSTR[9u64]  = 0x6eu8   /* n */
+    SNAPL_OPSTR[10u64] = 0x61u8   /* a */
+    SNAPL_OPSTR[11u64] = 0x70u8   /* p */
+    SNAPL_OPSTR[12u64] = 0x73u8   /* s */
+    SNAPL_OPSTR[13u64] = 0x68u8   /* h */
+    SNAPL_OPSTR[14u64] = 0x6fu8   /* o */
+    SNAPL_OPSTR[15u64] = 0x74u8   /* t */
+    SNAPL_OPSTR[16u64] = 0x5fu8   /* _ */
+    SNAPL_OPSTR[17u64] = 0x6cu8   /* l */
+    SNAPL_OPSTR[18u64] = 0x61u8   /* a */
+    SNAPL_OPSTR[19u64] = 0x74u8   /* t */
+    SNAPL_OPSTR[20u64] = 0x74u8   /* t */
+    SNAPL_OPSTR[21u64] = 0x69u8   /* i */
+    SNAPL_OPSTR[22u64] = 0x63u8   /* c */
+    SNAPL_OPSTR[23u64] = 0x65u8   /* e */
+    SNAPL_OPSTR[24u64] = 0x3au8   /* : */
+    SNAPL_OPSTR[25u64] = 0x3au8   /* : */
+    SNAPL_OPSTR[26u64] = 0x74u8   /* t */
+    SNAPL_OPSTR[27u64] = 0x61u8   /* a */
+    SNAPL_OPSTR[28u64] = 0x6bu8   /* k */
+    SNAPL_OPSTR[29u64] = 0x65u8   /* e */
+    return SNAPL_OK
+}
+
+/* sl_init: clear liveness, reset allocator, derive deterministic producer/op ids,
+ * set the lazy-init guard.  Pure (M2): array clear + two fixed-string hashes; no
+ * time, no input. */
+fn sl_init() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < SNAPL_MAX {
+        SNAPL_LIVE[i] = 0u8
+        i = i + 1u32
+    }
+    SNAPL_USED = 0u32
+    sl_load_prodstr()
+    sl_load_opstr()
+    ident_from_bytes((&SNAPL_PRODSTR as u64) as *u8, 24u64, (&SNAPL_PRODUCER as u64) as *u8)
+    ident_from_bytes((&SNAPL_OPSTR as u64) as *u8, 30u64, (&SNAPL_OPID_TAKE as u64) as *u8)
+    SNAPL_INITED = 1u8
+    return SNAPL_OK
+}
+
+/* sl_snapshot: allocate a slot, record antecedent + root, derive the snap_id, and
+ * publish the SNAPSHOT_TAKE witness fragment.  Returns the new slot id, or
+ * SNAPL_SENT if the table is full.  snap_id = Keccak256(ante_id || op_id || time),
+ * a pure function of (antecedent id, op id, algebraic time); algebraic time is
+ * monotonic so successive snapshots are totally ordered by frag_idx (M2/W5). */
+fn sl_snapshot(op_id: *u8, ante_snap: u32, root: *u8) -> u32 @export {
+    if SNAPL_INITED == 0u8 { sl_init() }
+    if SNAPL_USED >= SNAPL_MAX { return SNAPL_SENT }
+    let slot : u32 = SNAPL_USED
+    SNAPL_USED = SNAPL_USED + 1u32
+    SNAPL_LIVE[slot] = 1u8
+    SNAPL_ANTE[slot] = ante_snap
+    ident_copy(root, sl_root_ptr(slot))
+    /* Build the 72-byte snap_id preimage: ante_id(32) || op_id(32) || time(8 LE). */
+    let mut b : u64 = 0u64
+    while b < 32u64 { SNAPL_BUF[b] = 0u8  b = b + 1u64 }
+    let live_ante : u8 = sl_ante_live(ante_snap)
+    if live_ante == 1u8 {
+        let ap : *u8 = sl_id_ptr(ante_snap)
+        let mut c : u64 = 0u64
+        while c < 32u64 { SNAPL_BUF[c] = ap[c]  c = c + 1u64 }
+    }
+    let op_in : *u8 = op_id
+    let mut d : u64 = 0u64
+    while d < 32u64 { SNAPL_BUF[32u64 + d] = op_in[d]  d = d + 1u64 }
+    let t : u64 = at_current()
+    SNAPL_BUF[64u64] = (t & 0xFFu64) as u8
+    SNAPL_BUF[65u64] = ((t >> 8u64)  & 0xFFu64) as u8
+    SNAPL_BUF[66u64] = ((t >> 16u64) & 0xFFu64) as u8
+    SNAPL_BUF[67u64] = ((t >> 24u64) & 0xFFu64) as u8
+    SNAPL_BUF[68u64] = ((t >> 32u64) & 0xFFu64) as u8
+    SNAPL_BUF[69u64] = ((t >> 40u64) & 0xFFu64) as u8
+    SNAPL_BUF[70u64] = ((t >> 48u64) & 0xFFu64) as u8
+    SNAPL_BUF[71u64] = ((t >> 56u64) & 0xFFu64) as u8
+    ident_from_bytes((&SNAPL_BUF as u64) as *u8, 72u64, sl_id_ptr(slot))
+    /* Publish the SNAPSHOT_TAKE fragment: in=current chain root, out=root commit,
+     * reversible tag (M9/W16), the snapshot pillar; payload = the snap_id preimage. */
+    wh_chain_root((&SNAPL_INC as u64) as *u8)
+    let frag : u64 = wh_publish((&SNAPL_PRODUCER as u64) as *u8, (&SNAPL_OPID_TAKE as u64) as *u8,
+                                (&SNAPL_INC as u64) as *u8, sl_root_ptr(slot),
+                                SNAPL_REVTAG, 0u8, SNAPL_PILLAR,
+                                (&SNAPL_BUF as u64) as *u8, 0u32,
+                                (&SNAPL_BUF as u64) as *u8, 72u32, (&SNAPL_FID as u64) as *u8)
+    SNAPL_FRAG[slot] = frag
+    return slot
+}
+
+/* True (1) iff ante_snap names a live slot -- the genesis sentinel and out-of-range
+ * antecedents are NOT live (the snap_id then binds 32 zero bytes for the parent). */
+fn sl_ante_live(ante_snap: u32) -> u8 {
+    if ante_snap >= SNAPL_MAX { return 0u8 }
+    if SNAPL_LIVE[ante_snap] == 1u8 { return 1u8 }
+    return 0u8
+}
+
+/* sl_le: non-strict ancestry test.  1 iff a is a (non-strict) ancestor of b.
+ * Single-parent walk up b's antecedent chain, bounded by SNAPL_MAX iterations
+ * (forest depth <= slot count).  No recursion (W15); no break -- the ans flag
+ * gates the body and the guard counter drives the loop (W14).  All compares are
+ * == / != on u32 (W11; the sentinel compare is equality, never ordering). */
+fn sl_le(a: u32, b: u32) -> u8 @export {
+    if a == b { return 1u8 }
+    if b >= SNAPL_MAX { return 0u8 }
+    if SNAPL_LIVE[b] == 0u8 { return 0u8 }
+    let mut cur : u32 = SNAPL_ANTE[b]
+    let mut ans : u8 = 0u8
+    let mut guard : u32 = 0u32
+    while guard < SNAPL_MAX {
+        if ans == 0u8 {
+            if cur == SNAPL_SENT { guard = SNAPL_MAX } else {
+                if cur == a { ans = 1u8 } else { cur = SNAPL_ANTE[cur] }
+            }
+        }
+        guard = guard + 1u32
+    }
+    return ans
+}
+
+/* sl_meet: greatest (most recent) common antecedent of a and b, or SNAPL_SENT if
+ * none.  Mark every ancestor of a (including a) in SNAPL_SEEN, then return the
+ * first marked node on b's chain (including b) -- the deepest node common to both
+ * single-parent chains, i.e. the meet.  Two bounded while loops; no recursion, no
+ * break (W14/W15); equality-only sentinel compares (W11). */
+fn sl_meet(a: u32, b: u32) -> u32 @export {
+    let mut z : u32 = 0u32
+    while z < SNAPL_MAX {
+        SNAPL_SEEN[z] = 0u8
+        z = z + 1u32
+    }
+    let mut p : u32 = a
+    let mut g1 : u32 = 0u32
+    while g1 < SNAPL_MAX {
+        if p == SNAPL_SENT { g1 = SNAPL_MAX } else {
+            SNAPL_SEEN[p] = 1u8
+            p = SNAPL_ANTE[p]
+        }
+        g1 = g1 + 1u32
+    }
+    let mut q : u32 = b
+    let mut result : u32 = SNAPL_SENT
+    let mut g2 : u32 = 0u32
+    while g2 < SNAPL_MAX {
+        if result == SNAPL_SENT {
+            if q == SNAPL_SENT { g2 = SNAPL_MAX } else {
+                if SNAPL_SEEN[q] == 1u8 { result = q } else { q = SNAPL_ANTE[q] }
+            }
+        }
+        g2 = g2 + 1u32
+    }
+    return result
+}
+
+/* sl_at_frag: latest live snapshot whose frag_idx is strictly less than frag_idx,
+ * or SNAPL_SENT.  Linear scan, max-by-frag selection.  Trap-3 note: the f < frag_idx
+ * and f > best_frag ordering compares are on u64 (unsigned ordering compiles
+ * correctly; Trap 3 forbids only signed i32/i64 ordering).  Ties are impossible --
+ * each snapshot gets a distinct monotonic frag_idx from at_advance inside wh_publish.
+ * No recursion (W15); single bounded while (W14). */
+fn sl_at_frag(frag_idx: u64) -> u32 @export {
+    let mut best : u32 = SNAPL_SENT
+    let mut best_frag : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < SNAPL_USED {
+        if SNAPL_LIVE[i] == 1u8 {
+            let f : u64 = SNAPL_FRAG[i]
+            if f < frag_idx {
+                if best == SNAPL_SENT { best = i  best_frag = f } else {
+                    if f > best_frag { best = i  best_frag = f }
+                }
+            }
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+/* sl_root: copy the slot's root commit to out, for rollback.  SNAPL_E_BAD if the
+ * slot is out of range or not live (compared by == only -- W9/W11). */
+fn sl_root(slot: u32, out: *u8) -> i32 @export {
+    if slot >= SNAPL_MAX { return SNAPL_E_BAD }
+    if SNAPL_LIVE[slot] == 0u8 { return SNAPL_E_BAD }
+    ident_copy(sl_root_ptr(slot), out)
+    return SNAPL_OK
+}
+
+/* ---- self-test (99 = pass) ---- */
+var SNAPL_T_OPA  : [u8; 32]
+var SNAPL_T_RA   : [u8; 32]
+var SNAPL_T_RB   : [u8; 32]
+var SNAPL_T_RC   : [u8; 32]
+var SNAPL_T_RD   : [u8; 32]
+var SNAPL_T_GET  : [u8; 32]
+
+fn sl_selftest() -> u64 @export {
+    wh_init(0u64)        /* witness hook must be live before sl_snapshot publishes (frag idx 0,1,2,...) */
+    sl_init()
+    /* distinct op id + four distinct root commits */
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        SNAPL_T_OPA[i] = (i + 1u64) as u8
+        SNAPL_T_RA[i]  = (i + 10u64) as u8
+        SNAPL_T_RB[i]  = (i + 70u64) as u8
+        SNAPL_T_RC[i]  = (i + 130u64) as u8
+        SNAPL_T_RD[i]  = (i + 190u64) as u8
+        i = i + 1u64
+    }
+    let opap : *u8 = (&SNAPL_T_OPA as u64) as *u8
+
+    /* KAT 1: linear chain s0 <- s1 <- s2, ancestry + meet. */
+    let s0 : u32 = sl_snapshot(opap, SNAPL_SENT, (&SNAPL_T_RA as u64) as *u8)
+    if s0 != 0u32 { return 1u64 }
+    let s1 : u32 = sl_snapshot(opap, s0, (&SNAPL_T_RB as u64) as *u8)
+    if s1 != 1u32 { return 2u64 }
+    let s2 : u32 = sl_snapshot(opap, s1, (&SNAPL_T_RC as u64) as *u8)
+    if s2 != 2u32 { return 3u64 }
+    if sl_le(s0, s2) != 1u8 { return 4u64 }            /* s0 is an ancestor of s2 */
+    if sl_le(s2, s0) != 0u8 { return 5u64 }            /* not the reverse */
+    if sl_le(s1, s1) != 1u8 { return 6u64 }            /* reflexive */
+    if sl_meet(s2, s1) != s1 { return 7u64 }           /* s1 is on s2's chain */
+    if sl_meet(s0, s2) != s0 { return 8u64 }           /* s0 is the shared root */
+
+    /* KAT 2: fork -- s3 is a second child of s0 (sibling of s1/s2). */
+    let s3 : u32 = sl_snapshot(opap, s0, (&SNAPL_T_RD as u64) as *u8)
+    if s3 != 3u32 { return 9u64 }
+    if sl_le(s2, s3) != 0u8 { return 10u64 }           /* siblings incomparable */
+    if sl_le(s3, s2) != 0u8 { return 11u64 }
+    if sl_meet(s2, s3) != s0 { return 12u64 }          /* greatest common antecedent */
+    if sl_meet(s3, s3) != s3 { return 13u64 }          /* reflexive meet */
+
+    /* KAT 3: retroactive query + root round-trip + negative case.
+     * Frags are strictly increasing (F0<F1<F2<F3, at_advance monotonic). */
+    let f0 : u64 = SNAPL_FRAG[s0]
+    let f2 : u64 = SNAPL_FRAG[s2]
+    let f3 : u64 = SNAPL_FRAG[s3]
+    if sl_at_frag(f2) != s1 { return 14u64 }           /* latest strictly before F2 is s1 */
+    if sl_at_frag(f0) != SNAPL_SENT { return 15u64 }   /* nothing strictly precedes F0 */
+    if sl_at_frag(f3 + 1u64) != s3 { return 16u64 }    /* s3 is the most recent */
+    if sl_root(s2, (&SNAPL_T_GET as u64) as *u8) != SNAPL_OK { return 17u64 }
+    if ident_eq((&SNAPL_T_GET as u64) as *u8, (&SNAPL_T_RC as u64) as *u8) != 1u8 { return 18u64 }
+    if sl_root(9000u32, (&SNAPL_T_GET as u64) as *u8) != SNAPL_E_BAD { return 19u64 }  /* negative */
+
+    /* KAT 4: snap_id binds the antecedent -- s0 (genesis) and s1 (parent s0)
+     * have distinct, non-zero snap_ids. */
+    let s0idp : *u8 = sl_id_ptr(s0)
+    let s1idp : *u8 = sl_id_ptr(s1)
+    let mut acc : u32 = 0u32
+    let mut same : u32 = 1u32
+    i = 0u64
+    while i < 32u64 {
+        acc = acc | (s0idp[i] as u32)
+        if s0idp[i] != s1idp[i] { same = 0u32 }
+        i = i + 1u64
+    }
+    if acc == 0u32 { return 20u64 }                    /* s0 snap_id not all-zero */
+    if same == 1u32 { return 21u64 }                   /* distinct antecedent -> distinct id */
+
+    return 99u64
+}

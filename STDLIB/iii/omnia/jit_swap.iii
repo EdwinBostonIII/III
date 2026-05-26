@@ -1,0 +1,118 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\jit_swap.iii
+ *
+ * III STDLIB - omnia::jit_swap
+ *
+ * Lattice plan Step 0023 (user-mode counterpart to jit_emit
+ * `jit_swap_crystal`).  Tracks the @linear-ownership reference count
+ * for a crystal so that live in-flight callers are not invalidated
+ * during a hot swap.  Real machine-code patching is deferred to the
+ * Catalyst-promoted JIT path; this module provides the bookkeeping
+ * that the ripple engine consults before committing a swap.
+ *
+ *   jit_swap_acquire(crystal_id)   -- bumps refcount; caller-side guard
+ *   jit_swap_release(crystal_id)   -- decrements refcount
+ *   jit_swap_owned_count(crystal_id) -> u32   -- current outstanding refs
+ *   jit_swap_register(crystal_id, new_machine_code_addr, new_size) -> i32
+ *      Records the requested swap.  Refuses if owned_count > 0.
+ *      Returns SWAP_OK on success, SWAP_E_LIVE if linear refs outstanding.
+ *
+ * Capacity: 128 records.  Each record is (crystal_id, code_addr, size,
+ * refcount).  Linear search.
+ *
+ * Hexad: kind_substance (machine-level mutation).  Ring: R0.  K: 0.99.
+ */
+
+module omnia_jit_swap
+
+const SWAP_OK         : i32 =  0i32
+const SWAP_E_BADID    : i32 = -1i32
+const SWAP_E_FULL     : i32 = -2i32
+const SWAP_E_LIVE     : i32 = -3i32
+const SWAP_E_NOT_FOUND: i32 = -4i32
+
+const SWAP_MAX : u32 = 128u32
+
+var SWAP_ID    : [u64; 128]
+var SWAP_CODE  : [u64; 128]
+var SWAP_SIZE  : [u32; 128]
+var SWAP_REFS  : [u32; 128]
+var SWAP_LIVE  : [u8;  128]
+
+fn swap_find(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let mut i : u32 = 0u32
+    let mut found : u32 = 0xFFFFFFFFu32
+    while i < SWAP_MAX {
+        if SWAP_LIVE[i] == 1u8 {
+            if SWAP_ID[i] == id {
+                if found == 0xFFFFFFFFu32 { found = i }
+            }
+        }
+        i = i + 1u32
+    }
+    return found
+}
+
+fn swap_alloc_or_find(id: u64) -> u32 {
+    let existing : u32 = swap_find(id)
+    if existing != 0xFFFFFFFFu32 { return existing }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < SWAP_MAX {
+        if SWAP_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    SWAP_ID[slot]   = id
+    SWAP_CODE[slot] = 0u64
+    SWAP_SIZE[slot] = 0u32
+    SWAP_REFS[slot] = 0u32
+    SWAP_LIVE[slot] = 1u8
+    return slot
+}
+
+fn jit_swap_acquire(id: u64) -> i32 @export {
+    if id == 0u64 { return SWAP_E_BADID }
+    let s : u32 = swap_alloc_or_find(id)
+    if s == 0xFFFFFFFFu32 { return SWAP_E_FULL }
+    SWAP_REFS[s] = SWAP_REFS[s] + 1u32
+    return SWAP_OK
+}
+
+fn jit_swap_release(id: u64) -> i32 @export {
+    let s : u32 = swap_find(id)
+    if s == 0xFFFFFFFFu32 { return SWAP_E_NOT_FOUND }
+    if SWAP_REFS[s] == 0u32 { return SWAP_E_LIVE }
+    SWAP_REFS[s] = SWAP_REFS[s] - 1u32
+    return SWAP_OK
+}
+
+fn jit_swap_owned_count(id: u64) -> u32 @export {
+    let s : u32 = swap_find(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return SWAP_REFS[s]
+}
+
+fn jit_swap_register(id: u64, code_addr: u64, code_size: u32) -> i32 @export {
+    if id == 0u64 { return SWAP_E_BADID }
+    let s : u32 = swap_alloc_or_find(id)
+    if s == 0xFFFFFFFFu32 { return SWAP_E_FULL }
+    if SWAP_REFS[s] != 0u32 { return SWAP_E_LIVE }
+    SWAP_CODE[s] = code_addr
+    SWAP_SIZE[s] = code_size
+    return SWAP_OK
+}
+
+fn jit_swap_query_code_addr(id: u64) -> u64 @export {
+    let s : u32 = swap_find(id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return SWAP_CODE[s]
+}
+
+fn jit_swap_query_size(id: u64) -> u32 @export {
+    let s : u32 = swap_find(id)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return SWAP_SIZE[s]
+}

@@ -1,0 +1,9 @@
+/* 696 -- h5_charter: the H5 "one logic" constitutional clause. The ONE ternary Kleene
+ * algebra (M2) is verified to obey its laws (De Morgan, double-negation, commutativity,
+ * ZERO annihilator) over the whole 3x3 domain, falsified against non-Kleene relations
+ * (AND(POS,POS)!=NEG, NOT(ZERO)!=POS, OR(NEG,NEG)!=POS), and the run_charter gate is
+ * proven RED on a deliberately-false canary clause (at index 2). Safety (M3), uncertainty
+ * (M4) and sealed-crystal errors (M27) are readings of this one logic. */
+module corpus_696
+extern @abi(c-msvc-x64) fn h5_selftest() -> u64 from "h5_charter.iii"
+fn main() -> u64 { return h5_selftest() }

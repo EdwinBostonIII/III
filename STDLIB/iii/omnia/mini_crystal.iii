@@ -1,0 +1,196 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\mini_crystal.iii
+ *
+ * III STDLIB - omnia::mini_crystal
+ *
+ * L1 (8-byte) mini-crystal storage for the Intent Calculus v1.0
+ * three-level lazy-crystal architecture
+ * (sanctus/calculus_v1.iii sec provenance levels).
+ *
+ * Three-level architecture:
+ *   L0 implicit  -- 0 bytes; provenance lives in call_context_t fields
+ *                   (omnia/call_context.iii's caller_pattern_id +
+ *                   kchain_id + depth + provenance_root_bytes).
+ *   L1 mini      -- 8 bytes; 64-bit hash stored in MINI_CRYSTAL_HASH;
+ *                   reconstructable via reflect (omnia/resolver.iii).
+ *   L2 full      -- existing 256-slot table in omnia/crystal.iii.
+ *
+ * 64-bit hash gives birthday-collision threshold sqrt(2^64) ~= 4
+ * billion values -- safe for the system's expected lifetime.
+ *
+ * Allocated in a separate module (parallel to omnia/crystal_edges.iii)
+ * to keep omnia/crystal.iii's BSS layout undisturbed. Adding 512 KiB
+ * of BSS to crystal.iii would shift subsequent module BSS addresses
+ * and risks triggering iiis-0 codegen sensitivities in downstream
+ * modules (per the documented warning in crystal.iii's footer).
+ *
+ * Hexad: kind_form. Ring: R-1. K: 1.00.
+ */
+
+module omnia_mini_crystal
+
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+
+const MINI_CRYSTAL_CAP   : u32 = 65536u32
+
+const MINI_CRYSTAL_OK         : i32 =  0i32
+const MINI_CRYSTAL_INVALID    : u64 = 0u64
+const MINI_CRYSTAL_E_BADID    : i32 = -1i32
+const MINI_CRYSTAL_E_FULL     : i32 = -2i32
+const MINI_CRYSTAL_E_DEAD     : i32 = -3i32
+
+/* Storage. 65,536 slots * 8 bytes hash = 512 KiB.
+ * Plus 65,536 bytes for the live-bitmap = 64 KiB.
+ * Total ~ 576 KiB of BSS isolated to this module. */
+var MINI_CRYSTAL_HASH : [u64; 65536]
+var MINI_CRYSTAL_LIVE : [u8;  65536]
+var MINI_CRYSTAL_USED : u32 = 0u32
+
+/* Allocate the next free slot; returns slot index or 0xFFFFFFFFu32 when full. */
+fn _mini_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < MINI_CRYSTAL_CAP {
+        if MINI_CRYSTAL_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* Slot id encoding:
+ *   slot 0 reserved as INVALID.
+ *   external id = slot_index + 1 (1-based).
+ *   _mini_slot_of(id) returns 0..MINI_CRYSTAL_CAP-1 or 0xFFFFFFFFu32. */
+fn _mini_slot_of(id: u64) -> u32 {
+    let l_id : u64 = id
+    if l_id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = l_id - 1u64
+    if s >= (MINI_CRYSTAL_CAP as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if MINI_CRYSTAL_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Compute 64-bit hash via SHA-256 truncated to 8 bytes. The inputs are
+ * SHA-256("III_L1_MINI" || value_addr_le8 || parent_pattern_id_le8 ||
+ *         kchain_state_le8) -> first 8 bytes (LE). */
+fn _mini_compute_hash(value_addr: u64, parent_pattern_id: u64, kchain_state: u64) -> u64 {
+    let l_va : u64 = value_addr
+    let l_pp : u64 = parent_pattern_id
+    let l_ks : u64 = kchain_state
+
+    sha256_init()
+    /* Domain "III_L1_MINI" (11 bytes) */
+    sha256_update_byte(73u32)   /* I */
+    sha256_update_byte(73u32)   /* I */
+    sha256_update_byte(73u32)   /* I */
+    sha256_update_byte(95u32)   /* _ */
+    sha256_update_byte(76u32)   /* L */
+    sha256_update_byte(49u32)   /* 1 */
+    sha256_update_byte(95u32)   /* _ */
+    sha256_update_byte(77u32)   /* M */
+    sha256_update_byte(73u32)   /* I */
+    sha256_update_byte(78u32)   /* N */
+    sha256_update_byte(73u32)   /* I */
+
+    /* value_addr LE 8 bytes */
+    let mut a : u32 = 0u32
+    while a < 8u32 {
+        sha256_update_byte(((l_va >> ((a & 0x7u32) * 8u32)) & 0xFFu64) as u32)
+        a = a + 1u32
+    }
+    /* parent_pattern_id LE 8 bytes */
+    let mut b : u32 = 0u32
+    while b < 8u32 {
+        sha256_update_byte(((l_pp >> ((b & 0x7u32) * 8u32)) & 0xFFu64) as u32)
+        b = b + 1u32
+    }
+    /* kchain_state LE 8 bytes */
+    let mut c : u32 = 0u32
+    while c < 8u32 {
+        sha256_update_byte(((l_ks >> ((c & 0x7u32) * 8u32)) & 0xFFu64) as u32)
+        c = c + 1u32
+    }
+
+    sha256_finalize_internal()
+
+    /* Read first 8 bytes of digest, assemble as little-endian u64. */
+    let mut h : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let bv : u64 = (sha256_digest_byte(i) & 0xFFu32) as u64
+        h = h | (bv << ((i & 0x7u32) * 8u32))
+        i = i + 1u32
+    }
+    return h
+}
+
+/* Mint an L1 mini-crystal. Returns the 1-based slot id, or
+ * MINI_CRYSTAL_INVALID (0) on full / unrecoverable error. */
+fn mini_crystal_mint(value_addr: u64, parent_pattern_id: u64, kchain_state: u64) -> u64 @export {
+    let l_va : u64 = value_addr
+    let l_pp : u64 = parent_pattern_id
+    let l_ks : u64 = kchain_state
+    let s : u32 = _mini_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return MINI_CRYSTAL_INVALID }
+    let h : u64 = _mini_compute_hash(l_va, l_pp, l_ks)
+    MINI_CRYSTAL_HASH[s] = h
+    MINI_CRYSTAL_LIVE[s] = 1u8
+    if MINI_CRYSTAL_USED < MINI_CRYSTAL_CAP {
+        MINI_CRYSTAL_USED = MINI_CRYSTAL_USED + 1u32
+    }
+    return (s as u64) + 1u64
+}
+
+fn mini_crystal_hash(id: u64) -> u64 @export {
+    let l_id : u64 = id
+    let s : u32 = _mini_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return MINI_CRYSTAL_HASH[s]
+}
+
+fn mini_crystal_drop(id: u64) -> i32 @export {
+    let l_id : u64 = id
+    let s : u32 = _mini_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return MINI_CRYSTAL_E_BADID }
+    MINI_CRYSTAL_HASH[s] = 0u64
+    MINI_CRYSTAL_LIVE[s] = 0u8
+    if MINI_CRYSTAL_USED > 0u32 {
+        MINI_CRYSTAL_USED = MINI_CRYSTAL_USED - 1u32
+    }
+    return MINI_CRYSTAL_OK
+}
+
+/* Promote an L1 mini-crystal to a full L2 crystal_t. Mints via
+ * crystal_mint with the L1 hash encoded in cause_seq, then drops
+ * the L1 slot. Returns the new L2 crystal_id, or 0 on failure. */
+fn mini_crystal_promote_to_full(id: u64, error_code: u32, site_hash_ptr: u64, cap_id: u64) -> u64 @export {
+    let l_id   : u64 = id
+    let l_code : u32 = error_code
+    let l_site : u64 = site_hash_ptr
+    let l_cap  : u64 = cap_id
+    let s : u32 = _mini_slot_of(l_id)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    if l_site == 0u64 { return 0u64 }
+    let h : u64 = MINI_CRYSTAL_HASH[s]
+    let l2 : u64 = crystal_mint(l_code, l_site, l_cap, h)
+    if l2 == 0u64 { return 0u64 }
+    /* Drop the L1 slot; promotion succeeded. */
+    MINI_CRYSTAL_HASH[s] = 0u64
+    MINI_CRYSTAL_LIVE[s] = 0u8
+    if MINI_CRYSTAL_USED > 0u32 {
+        MINI_CRYSTAL_USED = MINI_CRYSTAL_USED - 1u32
+    }
+    return l2
+}
+
+fn mini_crystal_used() -> u32 @export {
+    return MINI_CRYSTAL_USED
+}
+
+fn mini_crystal_capacity() -> u32 @export {
+    return MINI_CRYSTAL_CAP
+}

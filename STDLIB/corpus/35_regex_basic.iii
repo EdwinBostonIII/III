@@ -1,0 +1,66 @@
+/* regex: literal, star, alt, dot all behave correctly */
+module corpus_b35
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn regex_compile(pat: u64, len: u64) -> u32 from "regex.iii"
+extern @abi(c-msvc-x64) fn regex_match(root: u32, input: u64, len: u64) -> u8 from "regex.iii"
+
+fn main() -> u64 {
+    /* Pattern "abc" matches "abc" only. */
+    let pa : *u8 = malloc(3u64)
+    pa[0] = 97u8; pa[1] = 98u8; pa[2] = 99u8
+    let r1 : u32 = regex_compile(pa as u64, 3u64)
+    if r1 == 0xFFFFFFFFu32 { return 1u64 }
+    let in1 : *u8 = malloc(3u64)
+    in1[0] = 97u8; in1[1] = 98u8; in1[2] = 99u8
+    if regex_match(r1, in1 as u64, 3u64) != 1u8 { return 2u64 }
+    let in2 : *u8 = malloc(3u64)
+    in2[0] = 97u8; in2[1] = 98u8; in2[2] = 100u8       /* "abd" */
+    if regex_match(r1, in2 as u64, 3u64) != 0u8 { return 3u64 }
+
+    /* Pattern "a*" matches "", "a", "aaaa". */
+    let pa2 : *u8 = malloc(2u64)
+    pa2[0] = 97u8; pa2[1] = 42u8       /* "a*" */
+    let r2 : u32 = regex_compile(pa2 as u64, 2u64)
+    if r2 == 0xFFFFFFFFu32 { return 4u64 }
+    if regex_match(r2, pa as u64, 0u64) != 1u8 { return 5u64 }   /* empty */
+    let in3 : *u8 = malloc(4u64)
+    in3[0] = 97u8; in3[1] = 97u8; in3[2] = 97u8; in3[3] = 97u8
+    if regex_match(r2, in3 as u64, 4u64) != 1u8 { return 6u64 }
+    let in4 : *u8 = malloc(2u64)
+    in4[0] = 97u8; in4[1] = 98u8       /* "ab" - has trailing b */
+    if regex_match(r2, in4 as u64, 2u64) != 0u8 { return 7u64 }
+
+    /* Pattern "ac|bc" matches "ac" or "bc". */
+    let pa3 : *u8 = malloc(5u64)
+    pa3[0] = 97u8     /* 'a' */
+    pa3[1] = 99u8     /* 'c' */
+    pa3[2] = 124u8    /* '|' */
+    pa3[3] = 98u8     /* 'b' */
+    pa3[4] = 99u8     /* 'c' */
+    let r3 : u32 = regex_compile(pa3 as u64, 5u64)
+    if r3 == 0xFFFFFFFFu32 { return 8u64 }
+    let in5 : *u8 = malloc(2u64)
+    in5[0] = 97u8; in5[1] = 99u8       /* "ac" */
+    if regex_match(r3, in5 as u64, 2u64) != 1u8 { return 9u64 }
+    let in6 : *u8 = malloc(2u64)
+    in6[0] = 98u8; in6[1] = 99u8       /* "bc" */
+    if regex_match(r3, in6 as u64, 2u64) != 1u8 { return 10u64 }
+    let in7 : *u8 = malloc(2u64)
+    in7[0] = 99u8; in7[1] = 99u8       /* "cc" */
+    if regex_match(r3, in7 as u64, 2u64) != 0u8 { return 11u64 }
+
+    /* Pattern ".*" matches anything. */
+    let pa4 : *u8 = malloc(2u64)
+    pa4[0] = 46u8; pa4[1] = 42u8       /* ".*" */
+    let r4 : u32 = regex_compile(pa4 as u64, 2u64)
+    if r4 == 0xFFFFFFFFu32 { return 12u64 }
+    if regex_match(r4, in1 as u64, 3u64) != 1u8 { return 13u64 }
+    if regex_match(r4, in7 as u64, 2u64) != 1u8 { return 14u64 }
+
+    free(pa); free(pa2); free(pa3); free(pa4)
+    free(in1); free(in2); free(in3); free(in4)
+    free(in5); free(in6); free(in7)
+    return 99u64
+}

@@ -1,0 +1,377 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\ripple.iii
+ *
+ * III STDLIB - omnia::ripple -- change-propagation engine for the
+ * Living Sealed Lattice.
+ *
+ * Lattice plan Step 0016.  Builds on:
+ *   omnia/crystal_deps.iii        sid_transitive_closure
+ *   omnia/crystal.iii    crystal_mint, crystal_edges_*, crystal_verify
+ *   sanctus/witness.iii  witness_append (full witness chain growth)
+ *   sanctus/kchain.iii   kchain_compose (K-chain composition)
+ *   sanctus/closure.iii  closure_byte (read prior tree_root) + closure_set (commit)
+ *   sanctus/mhash.iii    mhash_begin/domain/payload/final
+ *
+ * Pipeline (each stage produces a crystal_id with edges to predecessors):
+ *
+ *   ripple_change_new   -- describes a single source-of-truth change
+ *   ripple_analyze       -- plan: closure of dependents (sid_transitive_closure)
+ *   ripple_execute       -- strict|fast: re-seal each dependent, append witness
+ *   ripple_verify        -- every appended witness verifies, K-chain healthy
+ *   ripple_commit        -- atomically updates closure tree_root, returns delta crystal
+ *
+ * Hexad: kind_mobius (Mobius coherence -- change propagating through topology).
+ * Ring: R0.  K: 0.95 (analyse may fail; execute may abort on overflow).
+ */
+
+module omnia_ripple
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
+                                         cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_set_k(id: u64, k_fixed: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_at(id: u64, idx: u32) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_aggregate_k(id: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_cause(id: u64) -> u64 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_push(id: u64, v: u64) -> i32 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+
+extern @abi(c-msvc-x64) fn sid_transitive_closure(arena_id: u64, seeds_vec: u64) -> u64 from "crystal_deps.iii"
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+extern @abi(c-msvc-x64) fn witness_init() -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_append(mhash_ptr: u64, cap_id: u64, epoch: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_is_underflow(id: u64) -> u8 from "kchain.iii"
+
+extern @abi(c-msvc-x64) fn closure_byte(i: u32) -> u32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_set(ptr: u64) -> i32 from "closure.iii"
+extern @abi(c-msvc-x64) fn closure_is_set() -> u8 from "closure.iii"
+
+const RIPPLE_INVALID         : u64 = 0u64
+const RIPPLE_OK              : i32 =  0i32
+const RIPPLE_E_BADID         : i32 = -1i32
+const RIPPLE_E_OOM           : i32 = -2i32
+const RIPPLE_E_BAD_MODE      : i32 = -3i32
+const RIPPLE_E_K_UNDERFLOW   : i32 = -4i32
+
+const RIPPLE_MODE_STRICT     : u32 = 1u32
+const RIPPLE_MODE_FAST       : u32 = 2u32
+
+const RIPPLE_CAP_RESERVED    : u64 = 0xFFFFFF00u64    /* witness cap_id space */
+const RIPPLE_KIND_CHANGE     : u32 = 1u32
+const RIPPLE_KIND_PLAN       : u32 = 2u32
+const RIPPLE_KIND_RESULT     : u32 = 3u32
+const RIPPLE_KIND_COMMIT     : u32 = 4u32
+
+const RIPPLE_MAX_CLOSURE     : u64 = 4096u64
+
+/* ─── Domain strings for mhash bindings ─────────────────────────── */
+
+var RIPPLE_DOM_CHANGE   : [u8; 13]    /* "ripple_change" */
+var RIPPLE_DOM_PLAN     : [u8; 11]    /* "ripple_plan" */
+var RIPPLE_DOM_RESULT   : [u8; 13]    /* "ripple_result" */
+var RIPPLE_DOM_COMMIT   : [u8; 13]    /* "ripple_commit" */
+var RIPPLE_DOM_INIT     : u8 = 0u8
+
+fn ripple_init_domains() -> u32 {
+    if RIPPLE_DOM_INIT == 1u8 { return 0u32 }
+    /* "ripple_change" */
+    RIPPLE_DOM_CHANGE[0u64]  = 114u8     /* r */
+    RIPPLE_DOM_CHANGE[1u64]  = 105u8     /* i */
+    RIPPLE_DOM_CHANGE[2u64]  = 112u8     /* p */
+    RIPPLE_DOM_CHANGE[3u64]  = 112u8     /* p */
+    RIPPLE_DOM_CHANGE[4u64]  = 108u8     /* l */
+    RIPPLE_DOM_CHANGE[5u64]  = 101u8     /* e */
+    RIPPLE_DOM_CHANGE[6u64]  =  95u8     /* _ */
+    RIPPLE_DOM_CHANGE[7u64]  =  99u8     /* c */
+    RIPPLE_DOM_CHANGE[8u64]  = 104u8     /* h */
+    RIPPLE_DOM_CHANGE[9u64]  =  97u8     /* a */
+    RIPPLE_DOM_CHANGE[10u64] = 110u8     /* n */
+    RIPPLE_DOM_CHANGE[11u64] = 103u8     /* g */
+    RIPPLE_DOM_CHANGE[12u64] = 101u8     /* e */
+    /* "ripple_plan" */
+    RIPPLE_DOM_PLAN[0u64]  = 114u8 ; RIPPLE_DOM_PLAN[1u64]  = 105u8
+    RIPPLE_DOM_PLAN[2u64]  = 112u8 ; RIPPLE_DOM_PLAN[3u64]  = 112u8
+    RIPPLE_DOM_PLAN[4u64]  = 108u8 ; RIPPLE_DOM_PLAN[5u64]  = 101u8
+    RIPPLE_DOM_PLAN[6u64]  =  95u8 ; RIPPLE_DOM_PLAN[7u64]  = 112u8     /* p */
+    RIPPLE_DOM_PLAN[8u64]  = 108u8 ; RIPPLE_DOM_PLAN[9u64]  =  97u8
+    RIPPLE_DOM_PLAN[10u64] = 110u8
+    /* "ripple_result" */
+    RIPPLE_DOM_RESULT[0u64]  = 114u8 ; RIPPLE_DOM_RESULT[1u64]  = 105u8
+    RIPPLE_DOM_RESULT[2u64]  = 112u8 ; RIPPLE_DOM_RESULT[3u64]  = 112u8
+    RIPPLE_DOM_RESULT[4u64]  = 108u8 ; RIPPLE_DOM_RESULT[5u64]  = 101u8
+    RIPPLE_DOM_RESULT[6u64]  =  95u8 ; RIPPLE_DOM_RESULT[7u64]  = 114u8
+    RIPPLE_DOM_RESULT[8u64]  = 101u8 ; RIPPLE_DOM_RESULT[9u64]  = 115u8
+    RIPPLE_DOM_RESULT[10u64] = 117u8 ; RIPPLE_DOM_RESULT[11u64] = 108u8
+    RIPPLE_DOM_RESULT[12u64] = 116u8
+    /* "ripple_commit" */
+    RIPPLE_DOM_COMMIT[0u64]  = 114u8 ; RIPPLE_DOM_COMMIT[1u64]  = 105u8
+    RIPPLE_DOM_COMMIT[2u64]  = 112u8 ; RIPPLE_DOM_COMMIT[3u64]  = 112u8
+    RIPPLE_DOM_COMMIT[4u64]  = 108u8 ; RIPPLE_DOM_COMMIT[5u64]  = 101u8
+    RIPPLE_DOM_COMMIT[6u64]  =  95u8 ; RIPPLE_DOM_COMMIT[7u64]  =  99u8
+    RIPPLE_DOM_COMMIT[8u64]  = 111u8 ; RIPPLE_DOM_COMMIT[9u64]  = 109u8
+    RIPPLE_DOM_COMMIT[10u64] = 109u8 ; RIPPLE_DOM_COMMIT[11u64] = 105u8
+    RIPPLE_DOM_COMMIT[12u64] = 116u8
+    RIPPLE_DOM_INIT = 1u8
+    return 0u32
+}
+
+/* Module-scope scratch for site hashes (W4: no function-local arrays). */
+var RIPPLE_SCRATCH_HASH : [u8; 32]
+var RIPPLE_KIND_BUF     : [u8; 4]
+var RIPPLE_TARGET_BUF   : [u8; 8]
+
+/* Helper: write u32 LE into RIPPLE_KIND_BUF. */
+fn ripple_pack_u32(v: u32) -> u32 {
+    RIPPLE_KIND_BUF[0u64] = (v & 0xFFu32) as u8
+    RIPPLE_KIND_BUF[1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    RIPPLE_KIND_BUF[2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    RIPPLE_KIND_BUF[3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+/* Helper: write u64 LE into RIPPLE_TARGET_BUF. */
+fn ripple_pack_u64(v: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        RIPPLE_TARGET_BUF[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u32
+}
+
+/* ─── ripple_change_new ─────────────────────────────────────────── */
+
+fn ripple_change_new(arena_id: u64, kind: u32, target: u64, old_mhash_ptr: u64, new_mhash_ptr: u64) -> u64 @export {
+    if arena_id == 0u64       { return RIPPLE_INVALID }
+    if old_mhash_ptr == 0u64  { return RIPPLE_INVALID }
+    if new_mhash_ptr == 0u64  { return RIPPLE_INVALID }
+    ripple_init_domains()
+    ripple_pack_u32(kind)
+    ripple_pack_u64(target)
+    mhash_begin()
+    mhash_domain(&RIPPLE_DOM_CHANGE as u64, 13u64)
+    mhash_payload(&RIPPLE_KIND_BUF as u64, 4u64)
+    mhash_payload(&RIPPLE_TARGET_BUF as u64, 8u64)
+    mhash_payload(old_mhash_ptr, 32u64)
+    mhash_payload(new_mhash_ptr, 32u64)
+    mhash_final(&RIPPLE_SCRATCH_HASH as u64)
+    let cid : u64 = crystal_mint((kind << 16u32) | RIPPLE_KIND_CHANGE,
+                                  &RIPPLE_SCRATCH_HASH as u64,
+                                  0u64, target)
+    return cid
+}
+
+/* ─── ripple_analyze ────────────────────────────────────────────── */
+
+fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 @export {
+    if arena_id == 0u64  { return RIPPLE_INVALID }
+    if change_id == 0u64 { return RIPPLE_INVALID }
+    ripple_init_domains()
+    let target : u64 = crystal_cause(change_id)
+    /* Build seed vec from target. */
+    let seeds : u64 = vec_u64_new(arena_id, 4u64)
+    if seeds == 0u64 { return RIPPLE_INVALID }
+    vec_u64_push(seeds, target)
+    let closure_v : u64 = sid_transitive_closure(arena_id, seeds)
+    if closure_v == 0u64 { return RIPPLE_INVALID }
+    /* Plan crystal: site_hash = mhash("ripple_plan" || change_id_8) */
+    ripple_pack_u64(change_id)
+    mhash_begin()
+    mhash_domain(&RIPPLE_DOM_PLAN as u64, 11u64)
+    mhash_payload(&RIPPLE_TARGET_BUF as u64, 8u64)
+    mhash_final(&RIPPLE_SCRATCH_HASH as u64)
+    let plan : u64 = crystal_mint(RIPPLE_KIND_PLAN, &RIPPLE_SCRATCH_HASH as u64,
+                                   0u64, change_id)
+    if plan == 0u64 { return RIPPLE_INVALID }
+    crystal_edges_init(plan, arena_id)
+    /* Add each affected crystal as an edge of the plan. */
+    let n : u64 = vec_u64_count(closure_v)
+    let mut i : u64 = 0u64
+    while i < n {
+        let aff : u64 = vec_u64_at(closure_v, i)
+        crystal_edges_add(plan, aff)
+        i = i + 1u64
+    }
+    return plan
+}
+
+/* ─── ripple_execute_native ───────────────────────────────────────
+ *
+ * cg_r3 emits a 3-instruction stub at every @dynamic function's
+ * prologue calling this entry point with (crystal_id, mode).  Step
+ * 0022 of the lattice plan.  Stage-0 records the dispatch into a
+ * 1024-entry side table for later analysis (and to demonstrate the
+ * callsite reaches the runtime); Stage-1 promotes it to a real
+ * ripple_analyze + ripple_execute pipeline against the calling
+ * function's transitive closure.
+ *
+ * Discipline: this fn must NEVER crash on invalid input -- it's
+ * called from EVERY @dynamic function's prologue, so a fault here
+ * is fatal across the whole lattice.  Returns 0 on success, -1 on
+ * out-of-cap (silently dropped).
+ */
+
+const RIPPLE_NATIVE_DISPATCH_CAP : u32 = 1024u32
+
+var RIPPLE_NATIVE_CRYSTAL_ID : [u64; 1024]
+var RIPPLE_NATIVE_MODE       : [u32; 1024]
+var RIPPLE_NATIVE_USED       : u32 = 0u32
+
+fn ripple_execute_native(crystal_id: u64, mode: u32) -> i32 @export {
+    let c_l : u64 = crystal_id
+    let m_l : u32 = mode
+    let used : u32 = RIPPLE_NATIVE_USED
+    if used >= RIPPLE_NATIVE_DISPATCH_CAP { return -1i32 }
+    RIPPLE_NATIVE_CRYSTAL_ID[used] = c_l
+    RIPPLE_NATIVE_MODE[used]       = m_l
+    RIPPLE_NATIVE_USED = used + 1u32
+    return 0i32
+}
+
+fn ripple_execute_native_dispatch_count() -> u32 @export {
+    return RIPPLE_NATIVE_USED
+}
+
+fn ripple_execute_native_at_crystal_id(idx: u32) -> u64 @export {
+    let i_l : u32 = idx
+    if i_l >= RIPPLE_NATIVE_USED { return 0u64 }
+    return RIPPLE_NATIVE_CRYSTAL_ID[i_l]
+}
+
+fn ripple_execute_native_at_mode(idx: u32) -> u32 @export {
+    let i_l : u32 = idx
+    if i_l >= RIPPLE_NATIVE_USED { return 0u32 }
+    return RIPPLE_NATIVE_MODE[i_l]
+}
+
+fn ripple_execute_native_clear() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < RIPPLE_NATIVE_DISPATCH_CAP {
+        RIPPLE_NATIVE_CRYSTAL_ID[i] = 0u64
+        RIPPLE_NATIVE_MODE[i]       = 0u32
+        i = i + 1u32
+    }
+    RIPPLE_NATIVE_USED = 0u32
+    return 0i32
+}
+
+/* ─── ripple_execute ────────────────────────────────────────────── */
+
+fn ripple_execute(arena_id: u64, plan_id: u64, mode: u32) -> u64 @export {
+    if arena_id == 0u64 { return RIPPLE_INVALID }
+    if plan_id == 0u64  { return RIPPLE_INVALID }
+    if mode != RIPPLE_MODE_STRICT {
+        if mode != RIPPLE_MODE_FAST { return RIPPLE_INVALID }
+    }
+    ripple_init_domains()
+    /* Result crystal. */
+    ripple_pack_u32(mode)
+    ripple_pack_u64(plan_id)
+    mhash_begin()
+    mhash_domain(&RIPPLE_DOM_RESULT as u64, 13u64)
+    mhash_payload(&RIPPLE_KIND_BUF as u64, 4u64)
+    mhash_payload(&RIPPLE_TARGET_BUF as u64, 8u64)
+    mhash_final(&RIPPLE_SCRATCH_HASH as u64)
+    let result : u64 = crystal_mint(RIPPLE_KIND_RESULT, &RIPPLE_SCRATCH_HASH as u64,
+                                     0u64, plan_id)
+    if result == 0u64 { return RIPPLE_INVALID }
+    crystal_edges_init(result, arena_id)
+    /* For each edge of plan: emit a witness record (strict mode only). */
+    let n : u32 = crystal_edges_count(plan_id)
+    let mut i : u32 = 0u32
+    while i < n {
+        let aff : u64 = crystal_edges_at(plan_id, i)
+        crystal_edges_add(result, aff)
+        if mode == RIPPLE_MODE_STRICT {
+            /* witness_append: mhash_ptr is per-affected site_hash; cap_id = reserved. */
+            ripple_pack_u64(aff)
+            mhash_begin()
+            mhash_domain(&RIPPLE_DOM_RESULT as u64, 13u64)
+            mhash_payload(&RIPPLE_TARGET_BUF as u64, 8u64)
+            mhash_final(&RIPPLE_SCRATCH_HASH as u64)
+            witness_append(&RIPPLE_SCRATCH_HASH as u64,
+                           RIPPLE_CAP_RESERVED + (i as u64), 0u64)
+        }
+        i = i + 1u32
+    }
+    return result
+}
+
+/* ─── ripple_verify ─────────────────────────────────────────────── */
+
+fn ripple_verify(result_id: u64) -> u8 @export {
+    if result_id == 0u64 { return 0u8 }
+    if crystal_verify(result_id) != 1u8 { return 0u8 }
+    /* Each edge must verify and aggregate K must be > 0 (no underflow). */
+    let n : u32 = crystal_edges_count(result_id)
+    let mut i : u32 = 0u32
+    let mut bad : u8 = 0u8
+    while i < n {
+        if bad == 0u8 {
+            let aff : u64 = crystal_edges_at(result_id, i)
+            if crystal_verify(aff) != 1u8 { bad = 1u8 }
+        }
+        i = i + 1u32
+    }
+    if bad == 1u8 { return 0u8 }
+    if crystal_edges_aggregate_k(result_id) == 0u64 { return 0u8 }
+    return 1u8
+}
+
+/* ─── ripple_commit ─────────────────────────────────────────────── */
+
+/* Module-scope buffer for the new tree_root computed by ripple_commit. */
+var RIPPLE_NEW_ROOT : [u8; 32]
+var RIPPLE_PRIOR_ROOT : [u8; 32]
+
+fn ripple_load_prior_root() -> u8 {
+    if closure_is_set() != 1u8 {
+        let mut z : u64 = 0u64
+        while z < 32u64 {
+            RIPPLE_PRIOR_ROOT[z] = 0u8
+            z = z + 1u64
+        }
+        return 0u8        /* unset; treat as zero */
+    }
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        RIPPLE_PRIOR_ROOT[i as u64] = (closure_byte(i) & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+fn ripple_commit(result_id: u64) -> u64 @export {
+    if result_id == 0u64 { return RIPPLE_INVALID }
+    ripple_init_domains()
+    ripple_load_prior_root()
+    /* new_root = mhash("ripple_commit" || result_id_8 || prior_root_32) */
+    ripple_pack_u64(result_id)
+    mhash_begin()
+    mhash_domain(&RIPPLE_DOM_COMMIT as u64, 13u64)
+    mhash_payload(&RIPPLE_TARGET_BUF as u64, 8u64)
+    mhash_payload(&RIPPLE_PRIOR_ROOT as u64, 32u64)
+    mhash_final(&RIPPLE_NEW_ROOT as u64)
+    /* Atomically install the new closure root. */
+    closure_set(&RIPPLE_NEW_ROOT as u64)
+    /* Mint a "commit" crystal carrying the delta. */
+    let cid : u64 = crystal_mint(RIPPLE_KIND_COMMIT, &RIPPLE_NEW_ROOT as u64,
+                                  0u64, result_id)
+    return cid
+}

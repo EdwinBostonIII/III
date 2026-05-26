@@ -1,0 +1,60 @@
+/* STDLIB/iii/katabasis/seal.iii
+ *
+ * KATABASIS increment 13 -- the cycle-term content-address seal (plan 4.2 step
+ * 1, the "content-address" of a sealed cycle term).  The Gate verifies that a
+ * cross-ring cycle is sealed; the seal IS the cycle's content-address (the hash
+ * is its identity, plan 3.0/3.4).  We hash the cycle's CANONICAL CONTENT --
+ * family, target-kind, action hexad, target, capability, read from the term --
+ * NOT the arena node bytes (those carry positional child indices, which are not
+ * content).  So the seal is position-independent: structurally-equal cycles seal
+ * identically, and changing any field changes the seal (tamper-evidence).
+ *
+ * Domain-separated SHA-256 (via cad.iii, suite 0 = SHA-256) over a 48-byte canonical record.
+ * verify() makes the gate's seal_ok self-computable.  KAT: corpus 607.  Ring R0.
+ *
+ * (The Anchor *signature* over this content-address -- plan 4.2 step 1's other
+ * half -- is the Forge's ed25519 ceremony, a distinct later increment; this is
+ * the content-address it signs, complete in itself.)
+ */
+module katabasis_seal
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_family(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_target_kind(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_action_hexad(cycle_idx: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_target(cycle_idx: u32) -> u64 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_cap(cycle_idx: u32) -> u32 from "cycle_term.iii"
+
+/* Canonical record (6 x u64 = 48 bytes): domain tag + the 5 content fields. */
+var KCS_BUF : [u64; 6]
+var KCS_TMP : [u8; 32]   /* scratch for seal_verify's recompute */
+
+/* The cycle's 32-byte content-address (the seal).  Writes to out_addr. */
+fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 @export {
+    let c   : u32 = cycle_idx
+    let o   : u64 = out_addr
+    let fam : u64 = katabasis_cycle_family(c) as u64
+    let tk  : u64 = katabasis_cycle_target_kind(c) as u64
+    let ah  : u64 = katabasis_cycle_action_hexad(c) as u64
+    let tgt : u64 = katabasis_cycle_target(c)
+    let cap : u64 = katabasis_cycle_cap(c) as u64
+    KCS_BUF[0u64] = 0x4B41544142534C31u64   /* domain tag (domain separation) */
+    KCS_BUF[1u64] = fam
+    KCS_BUF[2u64] = tk
+    KCS_BUF[3u64] = ah
+    KCS_BUF[4u64] = tgt
+    KCS_BUF[5u64] = cap
+    cad_oneshot(0u32, &KCS_BUF as *u8, 48u64, o as *u8)   /* H2: cycle seal via cad (suite 0 = SHA-256; byte-identical) */
+    return 0i32
+}
+
+/* Verify a cycle term against a claimed 32-byte seal: recompute the cycle's
+ * content-address and compare.  1 = intact (the seal matches the term's
+ * content); 0 = mismatch (the term was tampered/swapped vs what was sealed). */
+fn katabasis_cycle_seal_verify(cycle_idx: u32, claimed_addr: u64) -> u8 @export {
+    let c  : u32 = cycle_idx
+    let cl : u64 = claimed_addr
+    katabasis_cycle_seal(c, &KCS_TMP as u64)
+    return cad_eq(&KCS_TMP as *u8, cl as *u8)
+}

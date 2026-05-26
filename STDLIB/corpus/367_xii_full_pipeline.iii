@@ -1,0 +1,77 @@
+/* corpus/367_xii_full_pipeline.iii — End-to-end XII pipeline integration test
+ *
+ * Exercises every major subsystem in sequence:
+ *   1. xii_register_all() initialises all sealed tables
+ *   2. Build XII term: F.LOOP(F.COMPOSE(K05_ACT(s,COL), K05_ACT(s,DIAG)), 10)
+ *      [the canonical structure of ChaCha20-block]
+ *   3. xii_canonicalise() applies rules (R015 distributes LOOP over COMPOSE)
+ *   4. xii_emit_gen_produce() produces the byte slice for x86_avx2 target
+ *   5. xii_emit_gen_cell_mhash() computes the cell mhash
+ *   6. xii_lattice_alloc_cell() stores it
+ *   7. xii_atm_verify_cell() validates integrity
+ */
+
+module corpus_367_xii_full_pipeline
+
+extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_loop(body: u32, count: u64) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_is_canonical(t: u32) -> u8 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_cell_mhash(horizon_id: u32, target: u32, size: u32, payload_ptr: *u8, out_32: *u8) -> i32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_reset() -> i32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_alloc_cell(payload_ptr: *u8, payload_size: u32, ct_kind: u8, prov_xform_id: u8, flags: u8, mhash_ptr: *u8) -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_cell_payload_size(cell_idx: u32) -> u32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_atm_verify_cell(cell_ptr: *u8, cell_size: u32, expected_mhash: *u8) -> u32 from "xii_atm.iii"
+
+var BUF367 : [u8; 256]
+var MHASH367 : [u8; 32]
+
+fn main() -> u64 {
+    /* Step 1: register everything. */
+    xii_register_all()
+    xii_lattice_reset()
+    xii_term_arena_reset()
+
+    /* Step 2: build the XII term for ChaCha20 block. */
+    let col_act : u32 = xii_term_make_basis(4u8, (0x10u32 << 9u32) | 5u32)
+    let diag_act : u32 = xii_term_make_basis(4u8, (0x20u32 << 9u32) | 5u32)
+    let round_compose : u32 = xii_term_make_fusion2(18u8, col_act, diag_act)
+    let chacha_block : u32 = xii_term_make_loop(round_compose, 10u64)
+    if xii_term_get_kind(chacha_block) != 23u8 { return 1u64 }
+
+    /* Step 3: canonicalise. */
+    let canon : u32 = xii_canonicalise(chacha_block)
+    if xii_is_canonical(canon) != 1u8 { return 2u64 }
+
+    /* Step 4: produce byte slice for H003 (chacha20_block) on x86_avx2 (target 1).
+     * Curated override registered by xii_register_all -> xii_curated_crypto_register_all. */
+    let size : u32 = xii_emit_gen_produce(2u32, 1u32, 256u32, &BUF367 as *u8)
+    if size == 0u32 { return 3u64 }
+
+    /* Step 5: compute cell mhash.
+     * Use payload-only sha256 so the mhash matches what xii_atm_verify_cell
+     * recomputes for tamper detection (it has no access to horizon_id/target,
+     * so it cannot reconstruct the content-addressed cell mhash from prefix).
+     * The content-addressed cell_mhash (with horizon_id/target/size prefix)
+     * is for lattice lookup, not for tamper detection. */
+    sha256_oneshot(&BUF367 as *u8, size as u64, &MHASH367 as *u8)
+
+    /* Step 6: allocate Lattice cell. */
+    let cell_idx : u32 = xii_lattice_alloc_cell(&BUF367 as *u8, size, 1u8, 15u8, 0x03u8, &MHASH367 as *u8)
+    if cell_idx == 0xFFFFFFFFu32 { return 5u64 }
+
+    /* Verify recorded size matches. */
+    if xii_lattice_cell_payload_size(cell_idx) != size { return 6u64 }
+
+    /* Step 7: ATM verifies cell integrity. */
+    let atm_rc : u32 = xii_atm_verify_cell(&BUF367 as *u8, size, &MHASH367 as *u8)
+    if atm_rc != 0u32 { return 7u64 }
+
+    return 0u64
+}

@@ -1,0 +1,40 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\shake128.iii
+ *
+ * III STDLIB - numera::shake128 -- FIPS 202 SHAKE128 XOF.
+ *
+ * Lattice plan Phase 14a Step 0130a.  Sponge wrapper over keccak-f[1600];
+ * rate = 168 bytes, capacity = 32 bytes, dom-sep = 0x1F (XOF separator).
+ *
+ * Public surface:
+ *   shake128_oneshot(input_ptr, input_len, out_ptr, out_len) -> u32
+ *
+ * Output is `out_len` bytes written into `out_ptr` (variable-length XOF).
+ *
+ * Hexad: kind_form.  Ring: R3.  K: 1.00.
+ */
+
+module numera_shake128
+
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) -> u64 from "keccak.iii"
+
+const SHAKE128_RATE : u32 = 168u32
+const SHAKE128_DOM  : u8  = 0x1Fu8
+
+var SHAKE128_STATE : [u8; 200]
+
+fn shake128_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 @export {
+    let in_l  : u64 = input_ptr
+    let il_l  : u64 = input_len
+    let op_l  : u64 = out_ptr
+    let ol_l  : u64 = out_len
+    if op_l == 0u64 { return 1u32 }
+    let sp : u64 = &SHAKE128_STATE as u64
+    let rd : u64 = keccak_pack_rate_dom(SHAKE128_RATE, SHAKE128_DOM)
+    keccak_state_zero(sp)
+    keccak_absorb(sp, in_l, il_l, rd)
+    keccak_squeeze(sp, op_l, ol_l, SHAKE128_RATE)
+    return 0u32
+}

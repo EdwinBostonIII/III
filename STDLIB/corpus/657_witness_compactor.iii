@@ -1,0 +1,7 @@
+/* 657 — witness_compactor: selective-retention chain compaction. Marks +
+ * transitive antecedent closure (ws_lookup_id), maximal non-retained run
+ * grouping, one COMPACTION fragment per run (Keccak fold out_commit,
+ * K256(start||end) in_commit, LE(start)||LE(end) payload). */
+module corpus_657
+extern @abi(c-msvc-x64) fn wc_selftest() -> u64 from "witness_compactor.iii"
+fn main() -> u64 { return wc_selftest() }

@@ -1,0 +1,601 @@
+/* III/STDLIB/iii/numera/proof_carrying.iii
+ *
+ * III STDLIB - numera::proof_carrying
+ *
+ * Vector commitments, polynomial commitments, opening proofs. All
+ * commitments are Merkle (Keccak256) based; all proofs verify in
+ * deterministic time bounded by log of the committed vector length.
+ * Hashing via identifier.iii (ident_from_bytes = Keccak256(input);
+ * ident_encode_pair = Keccak256(a || b)). Pair-hashing is commutative
+ * (smaller-first by ident_cmp) so a root is the single canonical value
+ * for a multiset-ordered leaf vector and verification needs no direction
+ * bit. Field arithmetic over GF(p) via galois.iii (gfp_mul / gfp_add),
+ * which reduce internally so this module performs no % operator.
+ * Not reentrant -- uses module-level scratch (serialized hashing, the
+ * same discipline keccak256.iii and identifier.iii rely on).
+ *
+ * Embodies M11 Curry-Howard (a proof term -- path + binding -- is a
+ * checkable program) and M12 Synthesis Verifiability (every committed
+ * artifact carries a byte-recomputable certificate).
+ *
+ * Hexad: kind_witness.  Ring: R0.  K: 0.99.
+ * Discipline: W2 (<=4 params / aggregate), W8 bounds, W13 <=20 locals,
+ * W14 sentinel loops (no break), W15 no recursion (in-place layer
+ * collapse over module-scope scratch, not the call stack).
+ */
+
+module numera_proof_carrying
+
+extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_cmp(a: *u8, b: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn ident_encode_pair(a: *u8, b: *u8, out: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn wh_chain_root(out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_copy(arena: u64, src: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn gfp_mul(arena: u64, a: u64, b: u64, p: u64) -> u64 from "galois.iii"
+extern @abi(c-msvc-x64) fn gfp_add(arena: u64, a: u64, b: u64, p: u64) -> u64 from "galois.iii"
+
+const PROOFC_OK         : i32 =  0i32
+const PROOFC_E_BAD_LEN  : i32 = -1i32
+const PROOFC_E_BAD_IDX  : i32 = -2i32
+const PROOFC_E_OOM      : i32 = -3i32
+const PROOFC_E_NULL     : i32 = -4i32
+const PROOFC_E_TOO_BIG  : i32 = -5i32
+const PROOFC_INVALID    : u64 = 0u64
+const PROOFC_LEAF_BYTES : u64 = 32u64
+const PROOFC_MAX_LEAVES : u64 = 1024u64
+const PROOFC_MAX_LIMBS  : u64 = 128u64
+const PROOFC_CERT_BYTES  : u64 = 96u64
+const PROOFC_REQ_BYTES   : u64 = 64u64
+
+/* Module-scope scratch (Trap 7: no local var arrays). Not reentrant. */
+var PROOFC_LAYER       : [u8; 32768]   /* current Merkle layer, 1024 * 32 */
+var PROOFC_LEAVES      : [u8; 32768]   /* coefficient leaves for poly commit */
+var PROOFC_LIMB        : [u8; 1024]    /* one coeff's LE limbs, 128 * 8 */
+var PROOFC_CUR         : [u8; 32]      /* verify: running node */
+var PROOFC_NXT         : [u8; 32]      /* verify: next node */
+var PROOFC_HBUF        : [u8; 32]      /* verify_proof: payload hash */
+var PROOFC_REQ_SCRATCH : [u8; 64]      /* OpenReq mirror / selftest builder */
+
+/* ===================================================================
+ * Internal helpers (flat, shallow nesting -- Trap 13). Per-call state
+ * shared through module-scope PCX_* context scalars (serialized use).
+ * =================================================================== */
+
+var PCX_LAYER_BASE : u64 = 0u64    /* byte addr of the layer being collapsed */
+var PCX_COUNT      : u64 = 0u64    /* live node count in current layer */
+
+/* Read a u64 little-endian from a byte buffer at byte-offset off. */
+fn pc_load_u64_le(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    let lo : u64 = b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+    let hi : u64 = (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+    return lo | hi
+}
+
+/* Copy a 32-byte node from src_base[+ src_off] to dst_base[+ dst_off]. */
+fn pc_copy32(dst_base: u64, dst_off: u64, src_base: u64, src_off: u64) -> i32 {
+    let d : *u8 = (dst_base + dst_off) as *u8
+    let s : *u8 = (src_base + src_off) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        d[i] = s[i]
+        i = i + 1u64
+    }
+    return PROOFC_OK
+}
+
+/* Commutative pair-hash: out_base[+out_off] = Keccak256(min||max) where the
+ * order is fixed by ident_cmp over the two 32-byte nodes l and r. Removes
+ * any left/right ambiguity so the root is independent of incidental swaps. */
+fn pc_pair_commute(out_base: u64, out_off: u64, l_base: u64, l_off: u64, r_off: u64) -> i32 {
+    let lp : *u8 = (l_base + l_off) as *u8
+    let rp : *u8 = (l_base + r_off) as *u8
+    let op : *u8 = (out_base + out_off) as *u8
+    let c : i32 = ident_cmp(lp, rp)
+    if c == 1i32 { ident_encode_pair(rp, lp, op) }
+    if c != 1i32 { ident_encode_pair(lp, rp, op) }
+    return PROOFC_OK
+}
+
+/* Collapse PCX_LAYER_BASE by exactly one Merkle level, in place. Reads the
+ * current PCX_COUNT nodes, writes ceil(count/2) parent nodes back to the
+ * front of the same buffer, and updates PCX_COUNT. Odd tail duplicates the
+ * last node (encode_pair(l,l)). Depth: fn(1)->while(2)->if(3). */
+fn pc_collapse_one() -> i32 {
+    let base : u64 = PCX_LAYER_BASE
+    let count : u64 = PCX_COUNT
+    let count1 : u64 = count + 1u64
+    let half : u64 = count1 >> 1u64
+    let mut j : u64 = 0u64
+    while j < half {
+        let l : u64 = j * 2u64
+        let r : u64 = l + 1u64
+        let l_off : u64 = l * 32u64
+        let r_off : u64 = r * 32u64
+        let out_off : u64 = j * 32u64
+        if r < count { pc_pair_commute(base, out_off, base, l_off, r_off) }
+        if r >= count { pc_pair_commute(base, out_off, base, l_off, l_off) }
+        j = j + 1u64
+    }
+    PCX_COUNT = half
+    return PROOFC_OK
+}
+
+/* Build layer 0 in PROOFC_LAYER: leaf[i] = Keccak256(items[i*32 .. +32]).
+ * Sets PCX_LAYER_BASE / PCX_COUNT for the subsequent collapse loop. */
+fn pc_build_layer0(items: u64, n: u64) -> i32 {
+    let src : u64 = items
+    let dst : u64 = &PROOFC_LAYER as u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let in_p : *u8 = (src + i * 32u64) as *u8
+        let out_p : *u8 = (dst + i * 32u64) as *u8
+        ident_from_bytes(in_p, 32u64, out_p)
+        i = i + 1u64
+    }
+    PCX_LAYER_BASE = dst
+    PCX_COUNT = n
+    return PROOFC_OK
+}
+
+/* Serialize one coefficient bigint's limbs little-endian into PROOFC_LIMB
+ * (byte-by-byte through *u8 -- Trap 5) and hash to out_leaf. */
+fn pc_coeff_leaf(arena: u64, bid: u64, out_leaf: *u8) -> i32 @export {
+    let l_arena : u64 = arena
+    let l_bid : u64 = bid
+    if (out_leaf as u64) == 0u64 { return PROOFC_E_NULL }
+    let limbs : u64 = bigint_len_limbs(l_bid)
+    if limbs > PROOFC_MAX_LIMBS { return PROOFC_E_TOO_BIG }
+    let lim_base : u64 = &PROOFC_LIMB as u64
+    let bp : *u8 = lim_base as *u8
+    let mut k : u64 = 0u64
+    while k < limbs {
+        let lv : u64 = bigint_get_limb(l_bid, k)
+        let off : u64 = k * 8u64
+        bp[off + 0u64] = (lv & 0xFFu64) as u8
+        bp[off + 1u64] = ((lv >> 8u64)  & 0xFFu64) as u8
+        bp[off + 2u64] = ((lv >> 16u64) & 0xFFu64) as u8
+        bp[off + 3u64] = ((lv >> 24u64) & 0xFFu64) as u8
+        bp[off + 4u64] = ((lv >> 32u64) & 0xFFu64) as u8
+        bp[off + 5u64] = ((lv >> 40u64) & 0xFFu64) as u8
+        bp[off + 6u64] = ((lv >> 48u64) & 0xFFu64) as u8
+        bp[off + 7u64] = ((lv >> 56u64) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    ident_from_bytes(bp, limbs * 8u64, out_leaf)
+    return PROOFC_OK
+}
+
+/* ===================================================================
+ * Vector commitments
+ * =================================================================== */
+
+/* Merkle root over n 32-byte leaves. Empty vector -> 0^32 canonical root. */
+fn pc_commit_vec(items: *u8, n: u64, out_root: *u8) -> i32 @export {
+    let l_n : u64 = n
+    if (items as u64) == 0u64 { if l_n != 0u64 { return PROOFC_E_NULL } }
+    if (out_root as u64) == 0u64 { return PROOFC_E_NULL }
+    if l_n > PROOFC_MAX_LEAVES { return PROOFC_E_TOO_BIG }
+    if l_n == 0u64 {
+        let mut z : u64 = 0u64
+        while z < 32u64 { out_root[z] = 0u8 ; z = z + 1u64 }
+        return PROOFC_OK
+    }
+    pc_build_layer0(items as u64, l_n)
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if PCX_COUNT > 1u64 { pc_collapse_one() }
+        if PCX_COUNT <= 1u64 { going = 0u8 }
+    }
+    ident_copy((&PROOFC_LAYER as u64) as *u8, out_root)
+    return PROOFC_OK
+}
+
+/* Inclusion proof for leaf idx: writes ceil(log2 n) sibling nodes to
+ * out_path and the count to out_path_len. Sibling = cur_idx XOR 1 (pure
+ * bit algebra); odd-tail leaf is its own sibling (the duplicated node). */
+fn pc_open_vec(items: *u8, n: u64, idx: u64, out_path: *u8, out_path_len: *u64) -> i32 @export {
+    let l_n : u64 = n
+    let l_idx : u64 = idx
+    if (items as u64) == 0u64 { return PROOFC_E_NULL }
+    if (out_path as u64) == 0u64 { return PROOFC_E_NULL }
+    if (out_path_len as u64) == 0u64 { return PROOFC_E_NULL }
+    if l_n > PROOFC_MAX_LEAVES { return PROOFC_E_TOO_BIG }
+    if l_idx >= l_n { return PROOFC_E_BAD_IDX }
+    pc_build_layer0(items as u64, l_n)
+    let layer : u64 = &PROOFC_LAYER as u64
+    let path_base : u64 = out_path as u64
+    let mut cur_idx : u64 = l_idx
+    let mut path_len : u64 = 0u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if PCX_COUNT <= 1u64 { going = 0u8 }
+        if going == 1u8 {
+            let sib : u64 = cur_idx ^ 1u64
+            let dst_off : u64 = path_len * 32u64
+            if sib < PCX_COUNT { pc_copy32(path_base, dst_off, layer, sib * 32u64) }
+            if sib >= PCX_COUNT { pc_copy32(path_base, dst_off, layer, cur_idx * 32u64) }
+            path_len = path_len + 1u64
+            pc_collapse_one()
+            cur_idx = cur_idx >> 1u64
+        }
+    }
+    out_path_len[0u64] = path_len
+    return PROOFC_OK
+}
+
+/* Verify an inclusion path. Folds leaf up through path commutatively (same
+ * smaller-first ident_cmp rule as commit) and compares to root. idx/n only
+ * bound-check -- the commutative order makes direction irrelevant. */
+fn pc_verify_vec(root: *u8, leaf: *u8, idx: u64, n: u64, path: *u8, path_len: u64) -> u8 @export {
+    let l_idx : u64 = idx
+    let l_n : u64 = n
+    let l_plen : u64 = path_len
+    if (root as u64) == 0u64 { return 0u8 }
+    if (leaf as u64) == 0u64 { return 0u8 }
+    if (path as u64) == 0u64 { if l_plen != 0u64 { return 0u8 } }
+    if l_idx >= l_n { return 0u8 }
+    ident_from_bytes(leaf, 32u64, (&PROOFC_CUR as u64) as *u8)
+    let path_base : u64 = path as u64
+    let cur_base : u64 = &PROOFC_CUR as u64
+    let nxt_base : u64 = &PROOFC_NXT as u64
+    let mut i : u64 = 0u64
+    while i < l_plen {
+        let sib : *u8 = (path_base + i * 32u64) as *u8
+        let cp : *u8 = cur_base as *u8
+        let np : *u8 = nxt_base as *u8
+        let c : i32 = ident_cmp(cp, sib)
+        if c == 1i32 { ident_encode_pair(sib, cp, np) }
+        if c != 1i32 { ident_encode_pair(cp, sib, np) }
+        ident_copy(np, cp)
+        i = i + 1u64
+    }
+    return ident_eq((&PROOFC_CUR as u64) as *u8, root)
+}
+
+/* ===================================================================
+ * Polynomial commitments
+ * =================================================================== */
+
+/* Commit a polynomial: Merkle root of its coefficient leaves. coeffs is a
+ * u64 base pointing at an array of bigint ids. p accepted for API symmetry
+ * (coefficients assumed already reduced mod p). */
+fn pc_commit_poly(coeffs: u64, n_coeffs: u64, p: u64, out_root: *u8) -> i32 @export {
+    let l_coeffs : u64 = coeffs
+    let l_nc : u64 = n_coeffs
+    if l_coeffs == 0u64 { if l_nc != 0u64 { return PROOFC_E_NULL } }
+    if (out_root as u64) == 0u64 { return PROOFC_E_NULL }
+    if l_nc > PROOFC_MAX_LEAVES { return PROOFC_E_TOO_BIG }
+    let leaves_base : u64 = &PROOFC_LEAVES as u64
+    let mut i : u64 = 0u64
+    let mut rc : i32 = PROOFC_OK
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= l_nc { going = 0u8 }
+        if going == 1u8 {
+            let bid : u64 = pc_load_u64_le(l_coeffs, i * 8u64)
+            let out_p : *u8 = (leaves_base + i * 32u64) as *u8
+            let r : i32 = pc_coeff_leaf(0u64, bid, out_p)
+            if r != PROOFC_OK { rc = r  going = 0u8 }
+            i = i + 1u64
+        }
+    }
+    if rc != PROOFC_OK { return rc }
+    return pc_commit_vec((&PROOFC_LEAVES as u64) as *u8, l_nc, out_root)
+}
+
+/* Horner evaluation over GF(p): returns a bigint id (sentinel 0 = invalid;
+ * caller drops on success). All reduction is inside gfp_mul/gfp_add -- this
+ * fn uses no % operator (Trap 11) and no signed ordering compare (Trap 3):
+ * the descending counter tests i > 0u64 (unsigned, W14 sentinel form). */
+fn pc_eval_poly(arena: u64, coeffs: u64, n_coeffs: u64, z: u64, p: u64) -> u64 @export {
+    let l_arena : u64 = arena
+    let l_coeffs : u64 = coeffs
+    let l_nc : u64 = n_coeffs
+    let l_z : u64 = z
+    let l_p : u64 = p
+    if l_nc == 0u64 { return bigint_from_u64(l_arena, 0u64) }
+    /* z and p arrive as RAW u64 values; gfp_mul/gfp_add need bigint IDs in the
+     * arena, so materialize them once (was: l_z/l_p passed raw and deref'd as
+     * bigint handles -> gfp returned 0 -> KAT check 11). */
+    let z_big : u64 = bigint_from_u64(l_arena, l_z)
+    let p_big : u64 = bigint_from_u64(l_arena, l_p)
+    if z_big == 0u64 { return PROOFC_INVALID }
+    if p_big == 0u64 { return PROOFC_INVALID }
+    let top : u64 = pc_load_u64_le(l_coeffs, (l_nc - 1u64) * 8u64)
+    let mut acc : u64 = bigint_copy(l_arena, top)
+    if acc == 0u64 { return PROOFC_INVALID }
+    let mut i : u64 = l_nc - 1u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            i = i - 1u64
+            let ci : u64 = pc_load_u64_le(l_coeffs, i * 8u64)
+            let mul_res : u64 = gfp_mul(l_arena, acc, z_big, p_big)
+            bigint_drop(acc)
+            if mul_res == 0u64 { acc = PROOFC_INVALID  going = 0u8 }
+            if mul_res != 0u64 {
+                let add_res : u64 = gfp_add(l_arena, mul_res, ci, p_big)
+                bigint_drop(mul_res)
+                acc = add_res
+                if add_res == 0u64 { going = 0u8 }
+            }
+        }
+    }
+    bigint_drop(z_big)
+    bigint_drop(p_big)
+    return acc
+}
+
+/* Open a committed polynomial at z. req -> PROOFC_OpenReq byte layout (LE):
+ *   [0..8] coeffs  [8..16] n_coeffs  [16..24] z  [24..32] p
+ *   [32..40] out_eval  [40..48] out_path  [48..56] out_path_len
+ *   [56..64] reserved (must be 0)
+ * Recomputes f(z) deterministically, writes the committed evaluation leaf,
+ * rebuilds the coefficient-leaf vector, and emits the inclusion path for the
+ * leaf at index z (the coefficient-vector commitment scheme). W2: a single
+ * aggregate carries the 8 logical args. */
+fn pc_open_poly(arena: u64, req: *u8) -> i32 @export {
+    let l_arena : u64 = arena
+    if (req as u64) == 0u64 { return PROOFC_E_NULL }
+    let rb : u64 = req as u64
+    let coeffs : u64 = pc_load_u64_le(rb, 0u64)
+    let n_coeffs : u64 = pc_load_u64_le(rb, 8u64)
+    let z : u64 = pc_load_u64_le(rb, 16u64)
+    let p : u64 = pc_load_u64_le(rb, 24u64)
+    let out_eval : u64 = pc_load_u64_le(rb, 32u64)
+    let out_path : u64 = pc_load_u64_le(rb, 40u64)
+    let out_path_len : u64 = pc_load_u64_le(rb, 48u64)
+    let reserved : u64 = pc_load_u64_le(rb, 56u64)
+    if reserved != 0u64 { return PROOFC_E_BAD_LEN }
+    if out_eval == 0u64 { return PROOFC_E_NULL }
+    if out_path == 0u64 { return PROOFC_E_NULL }
+    if out_path_len == 0u64 { return PROOFC_E_NULL }
+    if n_coeffs == 0u64 { return PROOFC_E_BAD_LEN }
+    if n_coeffs > PROOFC_MAX_LEAVES { return PROOFC_E_TOO_BIG }
+    if z >= n_coeffs { return PROOFC_E_BAD_IDX }
+    let ev_id : u64 = pc_eval_poly(l_arena, coeffs, n_coeffs, z, p)
+    if ev_id == PROOFC_INVALID { return PROOFC_E_OOM }
+    let r1 : i32 = pc_coeff_leaf(l_arena, ev_id, out_eval as *u8)
+    bigint_drop(ev_id)
+    if r1 != PROOFC_OK { return r1 }
+    let r2 : i32 = pc_open_vec_poly(coeffs, n_coeffs, z, out_path, out_path_len)
+    return r2
+}
+
+/* Helper for pc_open_poly: rebuild coefficient leaves into PROOFC_LEAVES,
+ * then emit the inclusion path of leaf idx. Split out to keep pc_open_poly's
+ * local count (W13) and nesting (Trap 13) shallow. */
+fn pc_open_vec_poly(coeffs: u64, n_coeffs: u64, idx: u64, out_path: u64, out_path_len: u64) -> i32 {
+    let l_coeffs : u64 = coeffs
+    let l_nc : u64 = n_coeffs
+    let leaves_base : u64 = &PROOFC_LEAVES as u64
+    let mut i : u64 = 0u64
+    let mut rc : i32 = PROOFC_OK
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if i >= l_nc { going = 0u8 }
+        if going == 1u8 {
+            let bid : u64 = pc_load_u64_le(l_coeffs, i * 8u64)
+            let out_p : *u8 = (leaves_base + i * 32u64) as *u8
+            let r : i32 = pc_coeff_leaf(0u64, bid, out_p)
+            if r != PROOFC_OK { rc = r  going = 0u8 }
+            i = i + 1u64
+        }
+    }
+    if rc != PROOFC_OK { return rc }
+    return pc_open_vec((&PROOFC_LEAVES as u64) as *u8, l_nc, idx, out_path as *u8, out_path_len as *u64)
+}
+
+/* Verify a polynomial opening: identical to pc_verify_vec where z_leaf is the
+ * committed evaluation leaf the prover sent (verifier checks inclusion). */
+fn pc_verify_poly(root: *u8, z_leaf: *u8, idx: u64, n_coeffs: u64, path: *u8, path_len: u64) -> u8 @export {
+    return pc_verify_vec(root, z_leaf, idx, n_coeffs, path, path_len)
+}
+
+/* ===================================================================
+ * Proof certificates -- 96 bytes: payload_hash || producer || chain_root
+ * =================================================================== */
+
+/* Compose a certificate binding payload, producer identity, and the live
+ * witness chain root (M6 continuity / M8 identity binding). */
+fn pc_attach_proof(payload: *u8, payload_len: u64, producer: *u8, out_certificate: *u8) -> i32 @export {
+    let l_len : u64 = payload_len
+    if (payload as u64) == 0u64 { if l_len != 0u64 { return PROOFC_E_NULL } }
+    if (producer as u64) == 0u64 { return PROOFC_E_NULL }
+    if (out_certificate as u64) == 0u64 { return PROOFC_E_NULL }
+    let cert_base : u64 = out_certificate as u64
+    ident_from_bytes(payload, l_len, cert_base as *u8)
+    ident_copy(producer, (cert_base + 32u64) as *u8)
+    wh_chain_root((cert_base + 64u64) as *u8)
+    return PROOFC_OK
+}
+
+/* Recompute the payload hash and compare to certificate[0..32]. M10: the
+ * verdict is recomputable from (payload, certificate) alone. */
+fn pc_verify_proof(payload: *u8, payload_len: u64, certificate: *u8) -> u8 @export {
+    let l_len : u64 = payload_len
+    if (payload as u64) == 0u64 { if l_len != 0u64 { return 0u8 } }
+    if (certificate as u64) == 0u64 { return 0u8 }
+    ident_from_bytes(payload, l_len, (&PROOFC_HBUF as u64) as *u8)
+    return ident_eq((&PROOFC_HBUF as u64) as *u8, certificate)
+}
+
+/* Copy certificate[32..64] (producer) out. */
+fn pc_cert_producer(certificate: *u8, out_producer: *u8) -> i32 @export {
+    if (certificate as u64) == 0u64 { return PROOFC_E_NULL }
+    if (out_producer as u64) == 0u64 { return PROOFC_E_NULL }
+    let cb : u64 = certificate as u64
+    return ident_copy((cb + 32u64) as *u8, out_producer)
+}
+
+/* Copy certificate[64..96] (chain root) out. */
+fn pc_cert_chain_root(certificate: *u8, out_root: *u8) -> i32 @export {
+    if (certificate as u64) == 0u64 { return PROOFC_E_NULL }
+    if (out_root as u64) == 0u64 { return PROOFC_E_NULL }
+    let cb : u64 = certificate as u64
+    return ident_copy((cb + 64u64) as *u8, out_root)
+}
+
+/* ===================================================================
+ * Self-test (Phase-2 acceptance gate). Returns 0 on full pass; a
+ * distinct non-zero bit per failing KAT for diagnosability. Negative
+ * cases prove the verifier REJECTS bad input (not merely that the happy
+ * path passes). The arena id is supplied by the caller (the integration
+ * harness threads a live arena); KATs needing field math use it.
+ * =================================================================== */
+
+var PCST_A     : [u8; 32]     /* leaf A */
+var PCST_B     : [u8; 32]     /* leaf B */
+var PCST_C     : [u8; 32]     /* leaf C */
+var PCST_ITEMS : [u8; 96]     /* [A,B,C] contiguous */
+var PCST_ROOT  : [u8; 32]     /* commit output */
+var PCST_PATH  : [u8; 256]    /* opening path */
+var PCST_PLEN  : [u64; 1]     /* opening path length */
+var PCST_EXP   : [u8; 32]     /* expected pair-hash */
+var PCST_CERT  : [u8; 96]     /* certificate */
+var PCST_PROD  : [u8; 32]     /* producer id */
+var PCST_POUT  : [u8; 32]     /* producer readback */
+var PCST_MSG   : [u8; 8]      /* payload scratch */
+var PCST_COEF  : [u64; 8]     /* coefficient bigint-id array */
+
+/* Fill PCST_A/B/C with three distinct 32-byte leaves and PCST_ITEMS. */
+fn pcst_make_items() -> i32 {
+    PCST_MSG[0] = 0x61u8
+    ident_from_bytes((&PCST_MSG as u64) as *u8, 1u64, (&PCST_A as u64) as *u8)
+    PCST_MSG[0] = 0x62u8
+    ident_from_bytes((&PCST_MSG as u64) as *u8, 1u64, (&PCST_B as u64) as *u8)
+    PCST_MSG[0] = 0x63u8
+    ident_from_bytes((&PCST_MSG as u64) as *u8, 1u64, (&PCST_C as u64) as *u8)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        PCST_ITEMS[i] = PCST_A[i]
+        PCST_ITEMS[32u64 + i] = PCST_B[i]
+        PCST_ITEMS[64u64 + i] = PCST_C[i]
+        i = i + 1u64
+    }
+    return PROOFC_OK
+}
+
+fn pc_selftest_arena(arena: u64) -> u64 {
+    let l_arena : u64 = arena
+
+    /* -- KAT 1: single-leaf commit == Keccak256(leaf). leaf = 0^32. -- */
+    let mut z : u64 = 0u64
+    while z < 32u64 { PCST_A[z] = 0u8 ; z = z + 1u64 }
+    ident_from_bytes((&PCST_A as u64) as *u8, 32u64, (&PCST_EXP as u64) as *u8)
+    pc_commit_vec((&PCST_A as u64) as *u8, 1u64, (&PCST_ROOT as u64) as *u8)
+    if ident_eq((&PCST_ROOT as u64) as *u8, (&PCST_EXP as u64) as *u8) != 1u8 { return 1u64 }
+
+    /* -- KAT 2: empty vector -> 0^32. -- */
+    pc_commit_vec((&PCST_A as u64) as *u8, 0u64, (&PCST_ROOT as u64) as *u8)
+    let mut acc2 : u32 = 0u32
+    let mut i2 : u64 = 0u64
+    while i2 < 32u64 { acc2 = acc2 | (PCST_ROOT[i2] as u32) ; i2 = i2 + 1u64 }
+    if acc2 != 0u32 { return 2u64 }
+
+    /* -- KAT 3: two-leaf commit + open + verify round-trip (+ negative). -- */
+    pcst_make_items()
+    pc_commit_vec((&PCST_ITEMS as u64) as *u8, 2u64, (&PCST_ROOT as u64) as *u8)
+    /* root == commutative pair-hash of H(A),H(B) -- recompute independently.
+     * PROOFC_CUR := H(A), PROOFC_NXT := H(B); pair them commutatively. */
+    ident_from_bytes((&PCST_A as u64) as *u8, 32u64, (&PROOFC_CUR as u64) as *u8)
+    ident_from_bytes((&PCST_B as u64) as *u8, 32u64, (&PROOFC_NXT as u64) as *u8)
+    pc_pair_two(&PCST_EXP as u64, &PROOFC_CUR as u64, &PROOFC_NXT as u64)
+    if ident_eq((&PCST_ROOT as u64) as *u8, (&PCST_EXP as u64) as *u8) != 1u8 { return 3u64 }
+    pc_open_vec((&PCST_ITEMS as u64) as *u8, 2u64, 0u64, (&PCST_PATH as u64) as *u8, (&PCST_PLEN as u64) as *u64)
+    if PCST_PLEN[0] != 1u64 { return 4u64 }
+    /* path[0] must equal H(B) (the sibling of leaf 0) */
+    if ident_eq((&PCST_PATH as u64) as *u8, (&PROOFC_NXT as u64) as *u8) != 1u8 { return 5u64 }
+    if pc_verify_vec((&PCST_ROOT as u64) as *u8, (&PCST_A as u64) as *u8, 0u64, 2u64, (&PCST_PATH as u64) as *u8, 1u64) != 1u8 { return 6u64 }
+    /* negative: flip one path byte -> must reject */
+    PCST_PATH[0] = PCST_PATH[0] ^ 0x01u8
+    if pc_verify_vec((&PCST_ROOT as u64) as *u8, (&PCST_A as u64) as *u8, 0u64, 2u64, (&PCST_PATH as u64) as *u8, 1u64) == 1u8 { return 7u64 }
+    PCST_PATH[0] = PCST_PATH[0] ^ 0x01u8
+
+    /* -- KAT 4: odd-leaf (3) commit + open + verify (+ out-of-range negative). -- */
+    pc_commit_vec((&PCST_ITEMS as u64) as *u8, 3u64, (&PCST_ROOT as u64) as *u8)
+    pc_open_vec((&PCST_ITEMS as u64) as *u8, 3u64, 2u64, (&PCST_PATH as u64) as *u8, (&PCST_PLEN as u64) as *u64)
+    if pc_verify_vec((&PCST_ROOT as u64) as *u8, (&PCST_C as u64) as *u8, 2u64, 3u64, (&PCST_PATH as u64) as *u8, PCST_PLEN[0]) != 1u8 { return 8u64 }
+    /* negative: idx out of range (3 >= 3) -> reject */
+    if pc_verify_vec((&PCST_ROOT as u64) as *u8, (&PCST_C as u64) as *u8, 3u64, 3u64, (&PCST_PATH as u64) as *u8, PCST_PLEN[0]) == 1u8 { return 9u64 }
+
+    /* -- KAT 5: Horner eval over GF(97): 2z^2+3z+5 at z=4 == 49; at z=10 == 41. -- */
+    if l_arena != 0u64 {
+        let c0 : u64 = bigint_from_u64(l_arena, 5u64)
+        let c1 : u64 = bigint_from_u64(l_arena, 3u64)
+        let c2 : u64 = bigint_from_u64(l_arena, 2u64)
+        if c0 == 0u64 { return 10u64 }
+        if c1 == 0u64 { return 10u64 }
+        if c2 == 0u64 { return 10u64 }
+        PCST_COEF[0] = c0
+        PCST_COEF[1] = c1
+        PCST_COEF[2] = c2
+        let ev4 : u64 = pc_eval_poly(l_arena, &PCST_COEF as u64, 3u64, 4u64, 97u64)
+        if ev4 == 0u64 { return 11u64 }
+        if bigint_get_limb(ev4, 0u64) != 49u64 { return 12u64 }
+        bigint_drop(ev4)
+        let ev10 : u64 = pc_eval_poly(l_arena, &PCST_COEF as u64, 3u64, 10u64, 97u64)
+        if ev10 == 0u64 { return 13u64 }
+        if bigint_get_limb(ev10, 0u64) != 41u64 { return 14u64 }
+        bigint_drop(ev10)
+        bigint_drop(c0)
+        bigint_drop(c1)
+        bigint_drop(c2)
+    }
+
+    /* -- KAT 6: certificate attach + verify (+ wrong-payload negative) + accessor. -- */
+    let mut pi : u64 = 0u64
+    while pi < 32u64 { PCST_PROD[pi] = 0x11u8 ; pi = pi + 1u64 }
+    PCST_MSG[0] = 0x49u8  PCST_MSG[1] = 0x49u8  PCST_MSG[2] = 0x49u8   /* "III" */
+    pc_attach_proof((&PCST_MSG as u64) as *u8, 3u64, (&PCST_PROD as u64) as *u8, (&PCST_CERT as u64) as *u8)
+    /* cert[0..32] == Keccak256("III") */
+    ident_from_bytes((&PCST_MSG as u64) as *u8, 3u64, (&PCST_EXP as u64) as *u8)
+    if ident_eq((&PCST_CERT as u64) as *u8, (&PCST_EXP as u64) as *u8) != 1u8 { return 15u64 }
+    if pc_verify_proof((&PCST_MSG as u64) as *u8, 3u64, (&PCST_CERT as u64) as *u8) != 1u8 { return 16u64 }
+    /* negative: wrong payload "II" (2 bytes) -> reject */
+    if pc_verify_proof((&PCST_MSG as u64) as *u8, 2u64, (&PCST_CERT as u64) as *u8) == 1u8 { return 17u64 }
+    /* accessor: producer readback == producer */
+    pc_cert_producer((&PCST_CERT as u64) as *u8, (&PCST_POUT as u64) as *u8)
+    if ident_eq((&PCST_POUT as u64) as *u8, (&PCST_PROD as u64) as *u8) != 1u8 { return 18u64 }
+
+    return 99u64
+}
+
+/* Pair-hash two distinct 32-byte buffers commutatively into out. Used by the
+ * KAT to recompute the two-leaf root independently of the production path. */
+fn pc_pair_two(out: u64, a_base: u64, b_base: u64) -> i32 {
+    let ap : *u8 = a_base as *u8
+    let bp : *u8 = b_base as *u8
+    let op : *u8 = out as *u8
+    let c : i32 = ident_cmp(ap, bp)
+    if c == 1i32 { ident_encode_pair(bp, ap, op) }
+    if c != 1i32 { ident_encode_pair(ap, bp, op) }
+    return PROOFC_OK
+}
+
+/* Public selftest entry. Creates a live 1 MiB arena so KAT 5 (the polynomial
+ * commit/eval over GF(p)) is actually exercised -- never skipped -- then runs
+ * the full suite. Returns 99u64 on full pass (corpus convention), 100 on arena
+ * failure, else pc_selftest_arena's distinct per-check code. */
+fn pc_selftest() -> u64 @export {
+    let arena : u64 = arena_new(1u64 << 20u64)
+    if arena == 0u64 { return 100u64 }
+    return pc_selftest_arena(arena)
+}

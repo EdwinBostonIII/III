@@ -1,0 +1,118 @@
+=== III Grammar Test Suite ===
+[group] module
+  [TEST] module_empty                                               ok
+  [TEST] module_qualified_name_dotted                               ok
+  [TEST] module_with_closure_attr                                   ok
+  [TEST] module_with_ring_attr                                      ok
+  [TEST] module_with_imports                                        ok
+  [TEST] module_import_with_attrs                                   ok
+  [TEST] module_doc_attached                                        ok
+  [TEST] module_multiple_items                                      ok
+[group] decl
+  [TEST] cycle_decl_forward_only                                    ok
+  [TEST] cycle_decl_forward_inverse                                 ok
+  [TEST] cycle_decl_with_modifiers                                  ok
+  [TEST] function_decl_simple                                       ok
+  [TEST] function_decl_with_generics                                ok
+  [TEST] type_decl_alias                                            ok
+  [TEST] mobius_candidate_decl                                      ok
+  [TEST] schema_decl                                                FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_decl.c:119: ASSERT_TRUE failed: iiit_count_kind(s, III_AST_SCHEMA_FIELD) >= 1u
+  [TEST] narrative_decl                                             ok
+  [TEST] const_decl                                                 ok
+  [TEST] extern_decl_multi_items                                    ok
+[group] type
+  [TEST] type_primitive_u32                                         ok
+  [TEST] type_function                                              ok
+  [TEST] type_tuple                                                 ok
+  [TEST] type_array                                                 ok
+  [TEST] type_generic_args                                          ok
+  [TEST] type_cap_perm_range                                        ok
+  [TEST] type_hexad                                                 ok
+  [TEST] type_phase                                                 ok
+  [TEST] type_hole                                                  ok
+  [TEST] type_with_ring_modifier                                    ok
+[group] stmt
+  [TEST] let_stmt                                                   ok
+  [TEST] let_mut_stmt                                               ok
+  [TEST] if_else_stmt                                               ok
+  [TEST] match_stmt_with_arms_and_guard                             FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_stmt.c:47: ASSERT_TRUE failed: iiit_count_kind(f.root, III_AST_MATCH_ARM) >= 2u
+  [TEST] for_stmt                                                   ok
+  [TEST] while_stmt                                                 ok
+  [TEST] wavefront_stmt                                             ok
+  [TEST] sanctum_enter_stmt                                         ok
+  [TEST] metal_block_stmt                                           ok
+  [TEST] return_stmt                                                ok
+  [TEST] promote_stmt                                               ok
+  [TEST] explain_stmt                                               ok
+  [TEST] propose_negotiate_commit_reflect                           ok
+[group] expr
+  [TEST] expr_int_literal                                           ok
+  [TEST] expr_call                                                  ok
+  [TEST] expr_index                                                 ok
+  [TEST] expr_field_access                                          FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_expr.c:41: ASSERT_TRUE failed: iiit_count_kind(f.root, III_AST_FIELD_ACCESS) + iiit_count_kind(f.root, III_AST_PATH) >= 1u
+  [TEST] expr_path                                                  ok
+  [TEST] expr_tuple_literal                                         ok
+  [TEST] expr_record_literal                                        ok
+  [TEST] expr_array_literal                                         ok
+  [TEST] expr_inverse_op_unary                                      FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_expr.c:86: ASSERT_TRUE failed: iiit_count_kind(f.root, III_AST_INVERSE) + iiit_count_kind(f.root, III_AST_PREFIX_OP) + iiit_count_kind(f.root, III_AST_EXPR_LVL_2) + iiit_count_kind(f.root, III_AST_EXPR_LVL_3) >= 1u
+  [TEST] expr_full_inverse_replay_doubled                           FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_expr.c:97: ASSERT_TRUE failed: iiit_count_kind(f.root, III_AST_FULL_INVERSE_REPLAY) + iiit_count_kind(f.root, III_AST_PREFIX_OP) + iiit_count_kind(f.root, III_AST_INVERSE) >= 1u
+  [TEST] expr_phase_cross_doubled                                   ok
+  [TEST] expr_witness_emit_doubled                                  ok
+  [TEST] expr_trinity_gate_doubled                                  ok
+  [TEST] expr_precedence_arithmetic                                 ok
+  [TEST] expr_cycle_invoke                                          ok
+[group] pat
+  [TEST] pat_literal                                                ok
+  [TEST] pat_ident                                                  FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_pat.c:30: ASSERT_TRUE failed: iiit_count_kind(f.root, III_AST_IDENT_PATTERN) + iiit_count_kind(f.root, III_AST_PATH_PATTERN) + iiit_count_kind(f.root, III_AST_LITERAL_PATTERN) >= 1u
+  [TEST] pat_wildcard                                               ok
+  [TEST] pat_tuple                                                  ok
+  [TEST] pat_record                                                 ok
+  [TEST] pat_hexad                                                  ok
+  [TEST] pat_trit                                                   ok
+  [TEST] pat_range                                                  ok
+  [TEST] pat_path                                                   ok
+  [TEST] pat_or                                                     ok
+  [TEST] pat_guard                                                  ok
+[group] modifier
+  [TEST] mod_ring                                                   ok
+  [TEST] mod_hexad                                                  ok
+  [TEST] mod_safety_alias_of_hexad                                  FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_modifier.c:39: ASSERT_MEM_EQ failed (32 bytes)
+  [TEST] mod_pure_irreversible                                      ok
+  [TEST] mod_tier_epoch                                             ok
+  [TEST] mod_cap                                                    ok
+  [TEST] mod_sanctum_only_witness_elide_hot_path                    ok
+  [TEST] mod_chronos_bypass_epoch_bridge                            ok
+  [TEST] mod_cycle_only_modifiers                                   ok
+  [TEST] mod_canonical_sort_invariance                              ok
+  [TEST] mod_canonical_sort_changes_with_content                    ok
+[group] canonical
+  [TEST] canonical_idempotent                                       ok
+  [TEST] canonical_differs_with_content                             ok
+  [TEST] canonical_independent_of_whitespace                        ok
+  [TEST] canonical_buffer_returned                                  ok
+  [TEST] canonical_module_name_changes_hash                         FAIL
+    C:/Users/Edwin Boston/OneDrive/Desktop/III/GRAMMAR/tests/test_canonical.c:73: ASSERT_MEM_NE failed (32 bytes)
+  [TEST] canonical_hash_has_nonzero_bytes                           ok
+[group] errors
+  [TEST] err_missing_module_keyword                                 ok
+  [TEST] err_missing_module_name                                    ok
+  [TEST] err_unterminated_block                                     ok
+  [TEST] err_recovery_continues                                     ok
+  [TEST] err_specific_code_surface                                  ok
+  [TEST] err_counts_match_loop                                      ok
+  [TEST] err_clean_source_zero_errors                               ok
+[group] self
+  [TEST] self_realistic_source_parses                               ok
+  [TEST] self_realistic_round_trip_hash                             ok
+  [TEST] self_dump_does_not_crash                                   ok
+  [TEST] self_lexicon_pipeline_alive                                ok
+  [TEST] self_canonical_buffer_nonempty                             ok
+
+=== 89 passed, 8 failed ===

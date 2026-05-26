@@ -1,0 +1,1051 @@
+III VALUE INVENTORY  —  the uniquely-valuable components, grouped by FUNCTION
+================================================================================================
+
+WHAT THIS FILE IS  (rev 2 — the CHARIOT entries have been RE-FORGED)
+  A companion to Assets.txt. Assets.txt lists EVERY file (STANDOUT or N/A), grouped by the system it came
+  from. This file is the value-only cross-cut, re-sorted by what components DO. In this revision every
+  component that originated in CHARIOT has been OVERHAULED — replaced by its III-native evolution: the same
+  purpose re-founded on III's fully-deterministic, pure-mathematical substrate, so that what CHARIOT achieved
+  by engineering, III achieves by mathematical necessity. The live III [III] and non-current III [R1] entries
+  are unchanged — they are the company the evolutions now keep, and the proof of enmeshment is that each
+  evolution is spoken in their primitives.
+
+THE RE-FORGE  (why every CHARIOT idea becomes something larger)
+  CHARIOT's components were born in a system that tolerated heuristics and nondeterminism — they HAVE their
+  virtues (rollback, attestation, a currency, an immune system) by mechanism. III is the opposite gamble:
+  every tiniest component curated to perfection — bit-identical, witnessed, proven — never ML, never a fuzzy
+  guess that is right half the time and lying the rest. Re-forged on that substrate, each CHARIOT idea is
+  transformed by four moves:
+    (1) ONTOLOGICAL ELEVATION — it stops HAVING a property and BECOMES it (a deploy does not have rollback;
+        it IS a SID-reversible cycle read backwards).
+    (2) DETERMINISTIC GROUNDING — every input→output is a total function over the pure-math substrate (the
+        19-primitive Intent Calculus, the hexad algebra, Z₃ trits, K-values, content-addresses), so it is
+        replayable and CANNOT guess.
+    (3) ENMESHMENT — it is spoken in III's existing primitives (the canonical XII term, the witness chain +
+        algebraic time, the hexad, capabilities, crystals, the resolver, the Forge), so it COMPOSES instead
+        of being a federated island.
+    (4) ENLARGEMENT — because the property is now necessary and composable, the component generalises past
+        itself, absorbing siblings into one mathematical fact.
+  In skilled hands the result is uniform: the CHARIOT original stands revealed as the special, engineered,
+  nondeterministic SHADOW of the general, necessary, deterministic form — its current form as nothing beside it.
+
+ORIGIN TAGS
+  [III]    the live / convergence-era III (the self-hosting iiis compiler + STDLIB/iii) — exists today
+  [R1]     the non-current III (the R1-SUBSYSTEMS C reference implementations, pre-21st) — exists
+  [III✦]   a DESIGNED III-native evolution of a CHARIOT idea — not yet built; a proof-by-construction that
+           perfectly-curated determinism + pure mathematics transcends the original. The "← CHARIOT …"
+           breadcrumb names every source it re-forges (the as-is CHARIOT salvage is preserved in Assets.txt,
+           Part II). Several CHARIOT files often collapse into ONE evolution — that collapse is the enlargement.
+
+HOW ENTRIES READ
+  • <functional title>   [origin]   (← CHARIOT <source files>, for evolutions)
+        <what it is / why it is irreplaceable — and for an evolution, the specific III primitives it is
+         re-founded on, and the specific way it becomes larger than the CHARIOT original it eclipses>
+
+================================================================================================
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §1  SELF-HOSTING COMPILERS, INSTRUCTION ENCODERS & EMISSION PIPELINES                   ║
+║      (building runnable code — from source to bytes — owing nothing to a foreign toolchain) ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • COMPILER\BOOT\main.c   [III]
+        The orchestrator that makes a compile a reproducible, self-hashing, witnessed event: hashes the
+        source, runs the whole pipeline, hashes the output, and --reproducibility-check runs it twice and
+        asserts byte-identical output. A compiler that PROVES its build is deterministic.
+  • COMPILER\BOOT\cg_r3.c · cg_r0.c · cg_rm1.c · cg_rm2.c   [III]
+        FOUR ring-specific codegen backends from one AST — User (MS x64 / PE), Kernel (DriverEntry + IRQL +
+        audit-bus, no CRT in the .sys), Hypervisor (SysV, identity-mapped, no host libc), and Sanctum-sealed
+        (.xii_sanctum.text, witness-cycle per fn, streamed SHA-256 → TPM PCR). Each hand-emits gas mnemonics
+        with no LLVM/asmjit and streams every byte through a witness hash.
+  • COMPILER\BOOT\jit_emit.c   [III]
+        Hand-rolled x86-64 binary encoder (REX/ModR-M/SIB per Intel SDM + AMD APM) — the in-process backend
+        that emits native instructions with zero assembler dependency.
+  • COMPILER\BOOT\emit.c   [III]
+        The determinism-enforcement point: drives gcc/ld in a normalized env with every nondeterminism
+        source pinned, SHA-256s the output, gates CI on golden bytes.
+  • COMPILER\BOOT\link.c   [III]
+        Linker that verifies every import against its pinned closure hash and emits a deterministic linkage
+        manifest — dependency drift is a link-time failure, not a silent mismatch.
+  • COMPILER\BOOT\iii_cg_pe_iiis1.c   [III]
+        The self-hosting partial evaluator — rewrites resolve(set, intent_form(LIT), ctx) sites to a direct
+        dispatch-address load, producing output BIT-IDENTICAL to the C codegen; iiis-2 lifts it across
+        function boundaries. The linchpin that lets the III-written compiler reproduce the C one exactly.
+  • The Witnessed Forge — emission as a reversible, self-proving cycle   [III✦]   (← CHARIOT sma_pe_emit_platform.c/.h · sma_x64_encode.h)
+        CHARIOT's forge WROTE the bytes of one signed driver and held the map of its ~80 commands; the encoder
+        was a separate hand-built tool. Re-founded in III, emission is not a writer but a CYCLE in the calculus:
+        every emitted byte is the deterministic projection of a canonical XII term, so the image IS its own proof
+        — its closure-root, its per-function hexad, and its witness step-kinds are not metadata stapled on but the
+        very term the bytes were projected from, re-derivable by anyone from that term alone. The hand encoder
+        dissolves into the XII kernel-emit fragments (§2); the command map becomes a content-addressed,
+        hexad-admitted, anchor-signed capability surface. CHARIOT forged ONE privileged program; III emits ANY
+        ring-targeted program as a closure-pinned, reversible, witnessed cycle, bit-identical on every machine.
+  • The Decoder That IS the Encoder's Proof   [III✦]   (← CHARIOT sma_disasm.c)
+        A from-scratch x86 disassembler was CHARIOT's separate pair of "eyes." In III it is not a second tool but
+        the INVERSE half of a proven bijection: the SID discipline (§5) requires every emit to carry a derived
+        inverse, so decode∘emit = identity becomes a confluence OBLIGATION the Forge discharges at seal time — the
+        round-trip is a theorem in the XII critical-pair style, not a test that might pass. One verified decoder is
+        then shared, by necessity, between the machine-code verifier (§15) and the foreign-binary ingestor (§15):
+        reading bytes back to a canonical term is a single mathematical operation, not three reimplementations.
+  • The Image That Cannot Self-Overlap   [III✦]   (← CHARIOT map_gen.c · emit-stream self_heal/cross_verify/canonicalize/cap_fixup)
+        CHARIOT generated an address map that refused overlaps, and a pipeline that built the image twice and
+        repaired divergence mid-flight. In III these four engineered safeguards collapse into one fact: a layout is
+        a hexad-typed term whose non-overlap is ADMISSIBILITY (an overlapping layout is structurally
+        unrepresentable, exactly as a bricking hexad is); the "second independent build" is the iiis-0≡iiis-1≡iiis-2
+        bit-identity the determinism gate already proves; "canonicalise" is just the XII normal form; and
+        "self-heal" becomes ripple re-seal (§20) — a diverged cell is recomputed from its content-address, never
+        patched. Cap-token stitching becomes the capability surface of the Witnessed Forge above. Four guards → one
+        theorem: the image has a unique normal form, and any other arrangement does not typecheck.
+  • The Sovereign Language That IS III   [III✦]   (← CHARIOT gestalt_compiler.sov · sov_packet_to_pe.sov · gestalt-k/boot/self_host.c)
+        Gestalt's milestone was a compiler written in itself that turned a packet into a Windows .exe. III's iiis
+        chain already IS a self-host (α), so the evolution is absorption-with-enlargement: "package → runnable
+        image" becomes a witnessed RESOLUTION (intent → sealed term → ring-target projection); the separate .sov
+        dialect dissolves into the one 19-primitive Intent Calculus every target shares; and "self-hosting" is
+        promoted from a milestone to a PROVEN FIXED POINT (iiis-2 ≡ iiis-3, bit-identical) — not "the language can
+        build itself" but "the language's self-image is a theorem." A sovereign language stops being an achievement
+        and becomes a mathematical property of the substrate.
+  • ABI\src\abi_lower.c   [R1]
+        The x86-64 (MSVC) calling-convention classifier — the exact rulebook for whether a value crosses in an
+        integer register, an SSE register, or by hidden pointer; the seam where an abstract III value becomes
+        register-and-stack bytes, hand-audited because one misclassification silently corrupts every call.
+  • MODULES\src\modules.c   [R1]
+        The closure-pinned cross-module linker — each module's closure-root is SHA-256(its canonical source),
+        every import records the root it expects, and a byte of drift raises a hard MOD-RES-001 mismatch; it also
+        routes a proposed change to the privilege ring that must vet it. Verifies its inputs rather than trusting them.
+  • PHASES\src\phase_poly.c   [R1]
+        Phase-polymorphic codegen — one operation declared @ring(R-2,R-1,R0,R3) gets a separate correct lowering
+        per ring, the unwritten rings DERIVED by composing the legal cross-ring constructors (magic-MSR / IOCTL /
+        VMRUN / sysret). One author intent, many provably-correct machine realizations.
+  • Platform Tables Derived, Not Hand-Built   [III✦]   (← CHARIOT gestalt-k/emit-x64/ntoskrnl_imports.c · pdata_xdata.c)
+        CHARIOT hand-built the Windows kernel import table and the .pdata/.xdata exception-unwind tables per
+        driver. In III neither is authored: an emitted Ring-0 term that names a kernel symbol carries a hexad-typed
+        emission OBLIGATION ("this import is declared and capability-gated") the cg_r0 backend discharges by
+        construction, and the unwind tables are a deterministic PROJECTION of the function's SID-inverse frame —
+        because you already derived the inverse of every frame (§5), its exact layout is known, so unwind info is
+        the shadow of reversibility, not separate metadata. The fiddly per-driver PE work becomes a total function
+        any Ring-0 emission gets for free, correct and minimal by the type.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §2  TERM-REWRITING, SUPEROPTIMIZATION & PARTIAL EVALUATION                              ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\omnia\xii_rewrite.iii   [III]
+        The 44 sealed reduction rules (R001–R044) in ten families; each strictly decreases a path-ordering
+        weight (terminates) and the set was Knuth-Bendix-completed (confluent) — gives every program ONE
+        canonical meaning.
+  • STDLIB\iii\omnia\xii_canonicalise.iii   [III]
+        Drives the rules to a fixpoint bottom-up — the operational "reduce to normal form."
+  • STDLIB\iii\omnia\xii_critpairs.iii   [III]
+        The machine proof of confluence — constructs all 117 critical-pair overlaps, reduces each both ways,
+        asserts byte-equal normal forms (Newman's lemma + termination ⇒ global confluence). Proof, not assertion.
+  • STDLIB\iii\omnia\xii_savings.iii   [III]
+        The sealed ΔK-compose savings table — how much cost each fusion removes; makes the rewriting a MEASURED
+        optimisation, not just a tidy-up.
+  • STDLIB\iii\omnia\xii_horizon.iii   [III]
+        The 144 sealed Horizon patterns (126 productive) across nine categories — the catalogue of "shapes the
+        system knows how to emit optimally."
+  • STDLIB\iii\omnia\xii_chd.iii   [III]
+        CHD minimal-perfect hash over the 144 pattern hashes — 288 sealed bytes mapping any pattern to its slot
+        in O(1) with ZERO collisions; dispatch is constant-time and table-exact.
+  • STDLIB\iii\omnia\xii_circ.iii   [III]
+        The 24-bit "circumstance" key — packs target ISA + hardware features + K-budget + cap-class + hexad +
+        fusion-budget into one integer, so per-chip/per-budget specialisation is addressable across ~16,000
+        feasible cells.
+  • STDLIB\iii\omnia\xii_kernel_emit.iii   [III]
+        168 sealed machine-code fragments (24 kernels/fusion ops × 7 ISA targets) — the per-ISA building blocks
+        the inliner composes into pattern bodies.
+  • STDLIB\iii\omnia\xii_curated_crypto*.iii · xii_curated_arm64_crypto · _riscv · _payloads · _extended · _embedded   [III]
+        The hand-curated heart of the superoptimiser — real, sealed, per-ISA optimal machine-code sequences for
+        the crypto/arithmetic hot paths (ChaCha20 AVX2, Poly1305 PCLMULQDQ, AES-GCM AES-NI, Blake2s, SHA-256,
+        CRC32C, arm64/RISC-V), constant-time-safe where required. "The best instruction sequence for this hot
+        path on this exact chip" lives here.
+  • STDLIB\iii\omnia\xii_emit_gen.iii   [III]
+        The per-(pattern, target) body generator — for all 1008 combinations deterministically composes kernel
+        fragments into a body and content-addresses each cell; auto-superoptimisation as the floor, curation as
+        the ceiling.
+  • COMPILER\BOOT\xii_ldil.c   [III]
+        Link-Time Lattice Inliner — walks the binary's .iii_xii_calls descriptors, looks up + SHA-256-verifies
+        the cell, and OVERWRITES the placeholder NOPs with the verified optimal bytes. Turns the Lattice into
+        inlined fast code.
+  • COMPILER\BOOT\sema_xii.c · cg_r3_xii.c · xii_lattice_loader.c   [III]
+        The compiler integration: recognises @lattice / @fusion_budget / @deployment_target and bounds the
+        optimisation (sema_xii); auto-selects the target ISA from the live CPU and emits the pattern (cg_r3_xii);
+        loads xii_lattice.bin and SHA-256-verifies EVERY cell before installing it — a tampered Lattice is a
+        hard refusal to compile (lattice_loader).
+  • STDLIB\iii\omnia\prespec.iii   [III]
+        The pre-specialisation registry that makes resolution free at runtime — maps a content-addressed
+        composition hash to a sealed direct-dispatch pointer so the compiler emits a single direct call and
+        erases the resolver path. The bridge between the resolver (§18) and the partial evaluator (§1).
+  • STDLIB\iii\omnia\hw_offload.iii   [III]
+        The hardware-lowering registry — for each (primitive, CPU-feature-mask) holds an accelerated asm
+        template the partial evaluator inlines when the host has the features, erasing dispatch AND the
+        function body (with a feature-absent fallback). The CPU-gated sibling of prespec.
+  • Improvement as Theorem, Specialisation as Content-Address   [III✦]   (← CHARIOT sma_meta_compiler.c · sma_gen_improve.c · gestalt-k/lower/partial_eval.c)
+        CHARIOT had three separate optimisation tools — a compiler that wrote compilers, a generate-then-improve
+        loop, and a partial evaluator. In III they are not three tools but three faces of ONE confluent discipline.
+        "Improve" stops being a heuristic loop that hopes the rewrite is better: it is XII normalisation to the
+        unique normal form, where every step strictly lowers the path-ordering weight and the gain is MEASURED by
+        the ΔK-savings table and PROVEN equivalence-preserving by a proof_ripple certificate (§8) — an improvement
+        that is a theorem, not a bet. "Specialise" is content-addressed prespec + hw_offload (§2 above): a
+        composition's hash maps to a sealed direct-dispatch body, so the residual is not "smaller, we think" but
+        "the canonical witnessed term for these exact inputs." And "a compiler that writes compilers" is just the
+        Forge resolving compilation-intents into sealed iiis stages. Three engineered cleverness-es → one proven
+        algebra in which optimisation cannot change a result, only its cost.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §3  TYPE THEORY, PROOF-CARRYING CODE & PROOFS-AS-PROGRAMS                               ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • TYPES\src\cic.c   [R1]
+        A Calculus-of-Inductive-Constructions kernel — under Curry-Howard, "is this program well-typed?" and
+        "is this proof valid?" become the SAME operation. The engine that makes "everything is proven" mean
+        something; essentially no NIH-compatible substitute.
+  • TYPES\src\bidir.c   [R1]
+        Bidirectional type checking — the two-direction "infer / check-against" dance that keeps a DEPENDENT
+        checker decidable and usable without annotating every line. Turns the kernel from theory into something
+        you can run.
+  • STDLIB\iii\sanctus\calculus_v1.iii   [III]
+        Declares THE Intent Calculus v1.0 — exactly 19 irreducible primitives (7 hexad verbs, 4 meta, 4 compose,
+        3 special, + "abstract"), each proven necessary and mutually irreducible. The axiomatic floor the rest
+        of XII (and arguably the system) stands on.
+  • STDLIB\iii\sanctus\irreducibility_proof.iii   [III]
+        The machine proof that each of the 19 primitives genuinely cannot be expressed in terms of the other 18
+        — what earns the word "irreducible."
+  • The Program IS the Certificate — one judgment, no separate proof to ship   [III✦]   (← CHARIOT gestalt-k/typecheck/kernel.c · obligation.c · capabilities.c · aegis_rules.c · pcc/certificate.c · sma_curry_howard.c)
+        CHARIOT ran four separate compile-time checkers (well-formedness, obligation-discharge, capability-holding,
+        machine-code invariants) and then EMITTED a fifth thing — a PCC certificate — to ship beside the driver.
+        III collapses all five into a single act. Through the CIC kernel (§3, cic.c) under Curry-Howard, "is this
+        well-typed?", "is each obligation discharged?", "is the capability provably held?", and "does the emitted
+        code satisfy its invariants?" are not four checks but ONE judgment: type-checking. And because the type IS
+        the proof, there is no separate certificate to emit, lose, or forge — the sealed term, content-addressed
+        and anchor-signed, is its own re-checkable evidence; the Aegis machine-code invariants (§15) become type
+        obligations discharged BEFORE emission, so an ill-typed driver is not rejected late, it is unrepresentable.
+        Five engineered artifacts → one mathematical correspondence in which a program and its proof are the same
+        object.
+  • GHOST-CODE\src\ghost_code.c   [R1]
+        Lets reasoning live INSIDE the program as code erased before runtime, each block tied to one of twelve
+        NAMED proof obligations (type-correctness, termination, reversibility, constant-time, closure-root, …) —
+        write a block whose only job is to prove "this is constant-time," have the compiler check it, pay nothing
+        at runtime.
+  • COMPILER\BOOT\proof.c   [III]
+        Emits, per top-level declaration, a 32-byte certificate hashing its identity AND safety attributes (kind,
+        name, modifiers, hexad, ring, tier, epoch, body hash) — every definition carries a tamper-evident proof of
+        what it is and what privilege it may claim.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §4  OPERATION-SAFETY ALGEBRA & BRICKING-IMPOSSIBILITY  (the hexad)                      ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • HEXAD\src\hexad_algebra.c   [R1]
+        The math: six asymmetric "trits" per operation, composed so NEG (weight −2) is STICKY — a dangerous
+        operation can never be averaged or composed back into a safe one. Nothing else classifies operations
+        this way.
+  • HEXAD\src\hexad_pfs.c   [R1]
+        The named, concrete list of the six operations that can physically brick a machine (capsule update,
+        microcode load, boot-order set, real-NVRAM write, …) — what the whole algebra protects against.
+  • HEXAD\src\hexad_reach.c   [R1]
+        The 144-byte bitmap of which of the 729 hexads are even ALLOWED to exist, plus the theorem-check that
+        enforces it — the single admissibility gate.
+  • HEXAD\src\hexad_dynamic.c   [R1]
+        Lets the allowed-set GROW but never silently shrink — a one-way ratchet; safety that only ever tightens.
+  • HEXAD\tests\hexad_bricking_proof.c   [R1]
+        The exhaustive machine proof — checks all 531,441 pairs of admitted operations and shows NONE compose
+        into a bricking operation. Upgrades "we won't brick your machine" to "by this proof, we can't."
+  • COMPILER\BOOT\hexad_check.c   [III]
+        The compile-time admission bitmap, kept byte-for-byte identical to the type-library's copy so the two
+        INDEPENDENTLY hash the same — the bricking-impossibility guarantee holding in compiler and type system
+        at once.
+  • COMPILER\BOOT\sema.c   [III]
+        Where the language's safety rules become compile-time REJECTIONS — privileged writes must go through the
+        canonical 17-write/3-read IRPD method surface, and the six firmware-bricking operations are rejected by
+        name. Unsafe code does not compile, instead of failing on the metal.
+  • COMPILER\BOOT\ceiling.c   [III]
+        A 65,536-entry, deny-by-DEFAULT ledger of which cycle-kinds a build permits, SEALable once set — the
+        permitted operation set is explicit, closed-unless-proven, and lockable; the opposite of an
+        allow-by-default system.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §5  REVERSIBILITY: INVERSE DERIVATION, EFFECT TYPING & THE CYCLE CALCULUS               ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • COMPILER\BOOT\sid.c   [III]    ·    CYCLES\src\sid.c   [R1]
+        Side-effect Inverse Derivation: for every privileged write it classifies the kind and works out the
+        INVERSE that undoes it. The live compiler derives each cycle's inverse plan at compile time and carries
+        it in the binary; the R1 reference is the original calculus. Reversibility computed, not improvised.
+  • EFFECTS\src\effects.c   [R1]
+        Binds every one of 17 side-effect kinds to THREE things at once: which rings may perform it, its exact
+        inverse, and how to PRE-MATERIALIZE that inverse before the op runs. Far more than a purity checker.
+  • CYCLES\src\witness.c   [R1]
+        Emits the 128-byte record for every operation via a fixed 8-step protocol — the replayable, re-verifiable
+        unit of tamper-evident memory.
+  • CYCLES\src\bcwl.c   [R1]
+        The Bounded-Cost Witness Ledger — witnesses everything but with a hard ceiling on witnessing cost, so the
+        bookkeeping can't balloon as history grows.
+  • CYCLES\src\wavefront.c   [R1]
+        Runs independent operations in parallel "wavefronts" while preserving witness order — real parallelism
+        WITHOUT losing the ability to prove what happened, and in what causal order.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §6  WITNESS CHAINS, ATTESTATION & TAMPER-EVIDENT AUDIT                                  ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\sanctus\witness.iii   [III]
+        The append-only witness chain — each entry (mhash, cap-id, epoch, K-value) folded into a running root
+        (root_n = SHA-256(root_{n-1} || entry_n)); the single 32-byte root attests the ENTIRE history.
+  • STDLIB\iii\aether\witness_hook.iii   [III]
+        The universal witness-fragment chokepoint — every provenance-producing op flows through wh_publish,
+        which Keccak256s its fields, ADVANCES the system clock (sole writer), and appends to the append-only log;
+        full ~1,048,576-fragment / 64-MiB capacity.
+  • STDLIB\iii\sanctus\attest.iii   [III]
+        On-demand 32-byte self-attestation binding the witness-root (all it has done), the closure-root (exactly
+        which build it is), the env cap, and a caller nonce — a challengeable proof of identity-plus-history.
+  • CYCLES\tests\… INTEGRATION\tests\test_e2e_witness.c   [R1]
+        The one test that drives five subsystems together and proves they compose into ONE valid witness chain
+        end-to-end — it verifies the seams every per-subsystem test misses.
+  • The One Chain — tamper-evidence as replay-failure, secrecy as capability, membership as proof   [III✦]   (← CHARIOT sma_witness_merkle.c · sma_witness_encrypt.c · chariot_audit_chain.c · sma_witness_chain.c)
+        CHARIOT kept several tamper-evident logs — a Merkle tree over a 128-slot field to catch a more-privileged
+        rootkit, an AES-CTR vault for secrecy, two append-only audit chains. III already has ONE running-root
+        witness chain (witness.iii + the sole-writer witness_hook), so these become its enlargements, not rivals.
+        MERKLE: the chain becomes an accumulator so any fragment proves its own membership in O(log n) without
+        revealing the rest. "Catch meddling by more-privileged code" stops being a watchdog and becomes structural
+        — because algebraic_time advances ONLY through the hook, a rootkit that edits the field cannot also forge
+        the forward replay, so tampering surfaces as REPLAY-FAILURE, not as a separate check the rootkit could
+        equally disable. SECRECY: a fragment is a crystal sealed to a capability, so "who may read it" is the cap
+        algebra (§7); and because fragments are content-addressed you can PROVE one exists by hash without
+        decrypting it (a ZK membership proof, §8) — confidential AND verifiable at once, where the cipher gave only
+        the first. Several federated logs collapse into the system's single, replay-anchored memory.
+  • COMPILER\BOOT\witness_alloc.c   [III]
+        Assigns each cycle its witness step-kind id as a pure function of source order + module name (same source
+        → same ids on every build), and partitions the id space so III's ids never collide with CHARIOT's reserved
+        cycle-kind bands. Determinism + a collision-free partition by construction.
+  • PHASES\src\ghost_phase.c   [R1]
+        The "observed, not performed" primitive — a cycle run in ghost mode emits a real hash-chained witness that
+        it was SEEN at a ring while doing none of the privileged work; unlocks a witnessed pre-flight dry-run,
+        federated audit replay, and an operator "what would this do?" that still leaves a cryptographic record.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §7  CAPABILITY SECURITY: TOKENS, ALGEBRA, LIFECYCLE & SANDBOXING                        ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\aether\capability.iii   [III]
+        The object-capability backbone the whole runtime checks: every IO surface verifies a cap; a child cap
+        can only hold a SUBSET of its parent's rights (attenuate, never amplify); revoking a cap kills all its
+        descendants. Authority that can only ever shrink.
+  • STDLIB\iii\aether\cap_handshake.iii   [III]
+        The OAuth/JWT replacement — two peers authenticate by proving they run the SAME sealed pattern-set
+        closure; the session cap is SHA-256("III_CAP_SESS" || my_digest || peer_digest). Trust by provable
+        sameness, not a third-party IdP.
+  • Capability as Hypostasis — authority you ARE, not a token you HAVE   [III✦]   (← CHARIOT sma_cap_kernel.c · sma_cap_coinage.c · sma_cap_subdivide_reflect.c · _dispatch_gen.c · _capability_table.c · sma_cap_ioctl_perm.c · sma_perfect_hash.c · sma_ring_taxonomy.c)
+        CHARIOT's gatekeeper re-checked a token's signature against an embedded master key, minted children from
+        that master via a hash tree, and bound a per-command permission table behind a perfect-hash dispatch. III
+        keeps NO secret to embed: a capability is a content-addressed canonical term (a hypostasis), so "verify" is
+        re-deriving its closure-root — there is nothing extractable to forge against. Minting a child is a total
+        deterministic function child = H(parent ‖ attenuation); the "master" is a hash PREIMAGE no one ever holds,
+        and a child's rights are a hexad-admitted SUBSET by the same lattice that makes safety stick — delegation
+        that mathematically cannot exceed its parent (subdivide/reflect become one law, not a file). Which cap a
+        command needs is a resolution against a sealed pattern set; the perfect-hash dispatch is III's CHD (§2) and
+        the ring taxonomy is ring_lattice (§13). Fourteen mechanisms shed their secrets and scattered tables and
+        become one algebra: authority is a term, and to hold it is to be able to re-derive it.
+  • Denial as Sticky NEG; Consensus as Conjunction   [III✦]   (← CHARIOT sma_cap_anti.c · sma_cap_quorum.c)
+        CHARIOT made an "anti-token" that blocks another, and an M-of-N quorum permission. In III neither is a
+        special token type. A denial is a structural-NEG trit in the hexad: composing it makes the joint authority
+        UNADMISSIBLE, and because NEG is sticky (AND(NEG,·)=NEG), once denial enters a composition no later grant
+        can wash it out — veto by algebra, unforgeable and irreversible by construction. A quorum is a Trinity-style
+        conjunction: the cap's admissibility is the AND of M independent verdicts, so "no single holder acts alone"
+        is the same four-verdict ceiling that already guards the Sanctum (§13), not a bespoke counter.
+  • Freshness as the Witness Clock — replay impossible by construction   [III✦]   (← CHARIOT sma_cap_time_lock.c · sma_cap_rolling_ticket.c · cap_carousel_client.c · sma_key_rotation)
+        CHARIOT had three time/rotation defenses: a token armed after a cycle-count deadline, a ticket that changes
+        every use, and a "carousel" of keys that expire on a schedule. III has no clock to tamper with and no keys
+        to rotate — it has algebraic_time (§16), the strictly-monotone count of WITNESSED fragments. A time-lock is
+        a cap whose admissibility predicate names a future witness-epoch, so it cannot be armed early without
+        forging the witness chain. A rolling ticket is a cap whose value is H(its previous use's witness), so each
+        use is cryptographically bound to the witnessed prior one — a captured copy is dead the instant the real
+        holder acts, because the next valid value depends on a witness only the chain can produce. "Expiry" is an
+        epoch boundary in that same chain. Three engineered freshness tricks become one fact: authority is bound to
+        time, and time is the witness ledger, so replay is not defended against — it is unrepresentable.
+  • Membership Without Disclosure · Revocation as Ripple · Sovereignty as Lineage   [III✦]   (← CHARIOT sma_cap_nizk.c + cap_nizk_prove/verify.gk · sma_cap_merkle.c · sma_cap_descent.c · sma_silicon_fingerprint.c)
+        CHARIOT proved cap-holding in zero knowledge, summarized all tokens under one 2-million-leaf Merkle root,
+        tracked issuance descent for cascading revoke, and welded caps to a CPU fingerprint. III makes each a
+        consequence of primitives it already owns. The cap-set is a Merkle ACCUMULATOR, so "prove I hold a valid
+        cap without showing it" is a Groth16/STARK membership proof (§8) over that root — the NIZK is not a bespoke
+        protocol but an instance of the ZK substrate. Caps are crystals (§20); revocation is a RIPPLE over the
+        crystal-lineage DAG that re-seals every descendant atomically and witnesses the cascade — descent-revoke is
+        the change-propagation engine, not a separate tracker. And "welded to this machine" is upgraded from a
+        spoofable CPU serial to a binding to the NODE'S genesis closure-root (genesis.iii) — sovereignty tied to a
+        cryptographic lineage that survives re-attestation and cannot be cloned, rather than to a fingerprint that
+        a sufficiently privileged attacker can read and replay.
+  • STDLIB\iii\omnia\sandbox_exec.iii · sandbox_quota.iii   [III]
+        Run untrusted/derived code under a checked, witnessed lifecycle (CREATED→RUNNING→COMPLETED/CANCELLED,
+        refusing to start without quota headroom); and an ANTI-EVASION quota that is append-only and
+        non-decrementable, defeating allocate-and-reset tricks. Once charged, always charged.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §8  ZERO-KNOWLEDGE, SUCCINCT PROOFS & THE PROOF ECONOMY                                 ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\numera\zk_field.iii   [III]
+        The real BLS12-381 field tower from scratch — 381-bit prime in 12×u32 Montgomery limbs (CIOS, masked
+        constant-time), Fp2/Fp6/Fp12, G1/G2, optimal-Ate pairing. The genuine pairing-friendly substrate.
+  • STDLIB\iii\numera\zk_snark.iii   [III]   ·   ZK-PRUNING\src\snark.c   [R1]
+        Hand-rolled Groth16 — R1CS → QAP (Lagrange) → constant-size proof checked by one pairing equation. Live
+        version over real BLS12-381; the R1 reference over a toy field. Confirm a computation ran correctly
+        without seeing inputs or re-running, proof tiny regardless of size.
+  • STDLIB\iii\numera\zk_stark.iii   [III]   ·   ZK-PRUNING\src\stark.c   [R1]
+        Transparent (no-trusted-setup) FRI-based STARK — own NTT, Merkle commitments, Fiat-Shamir. The live
+        version FIXES a soundness gap in the reference: it Merkle-opens the boundary positions so a malicious
+        prover can't claim arbitrary endpoints.
+  • STDLIB\iii\numera\zk_prune.iii   [III]   ·   ZK-PRUNING\src\prune.c   [R1]
+        The SAFE half of "prove then forget" — a closure-pinned list of which witnesses are constitutionally
+        load-bearing (suite swaps, DRTM relaunches, amendments, compromises, epoch boundaries, …) plus a
+        re-verified hash-chain. Forget only what is provably safe to forget.
+  • STDLIB\iii\omnia\proof_ripple_resolution.iii   [III]   ·   STDLIB\iii\omnia\proof_ripple.iii   [III]
+        Forge-resistant equivalence certificates binding (old/parent, new/child, corpus-witness): proof_ripple_
+        resolution lets the resolver pick a specialised pattern only once PROVEN equal to the general one;
+        proof_ripple does the same for a propagated change.
+  • Proof Strength as a Total Function, Not a Policy   [III✦]   (← CHARIOT III/runtime/proof_economy.h)
+        CHARIOT's six-tier proof economy was a sound but POLICY-driven answer to "proving everything is
+        unaffordable" — choose a cheaper proof when the trust gap is small. III makes the choice a total function
+        instead of a knob. The strength owed for an operation is computed deterministically from its hexad, the
+        ring-delta it crosses, and the K-floor it must hold: inside one closure (same closure-root) nothing is
+        re-proven because the seal IS the proof; a same-tier neighbour gets the running witness-root; only a
+        crossing to a less-trusted peer triggers a ZK membership proof (§8). The tier is therefore witnessed and
+        replayable, identical on every machine — "how hard to prove" stops being something an operator can mis-set
+        and becomes a derivation the substrate can itself audit.
+  • Theorems as Content-Addressed Crystals; the Proof Graph IS the Ripple Lineage   [III✦]   (← CHARIOT sma_theorem.c · sma_proof_graph.c · sma_proof_space.c · sma_proof_pool_global.c)
+        CHARIOT stored theorems as artifacts, kept a dependency graph of what rests on what, and pooled proofs so a
+        result computed once could be reused. In III a theorem is a CRYSTAL (§20) — content-addressed by its
+        statement — so "has this been proven?" is not a search through a proof-space but an O(1) hash lookup, and
+        "reuse a proof" is echo computation (§21): global by hash, automatic, even tradeable. The dependency graph
+        is not a separate structure but the crystal-lineage DAG itself, so retracting a shaken foundation is a
+        RIPPLE (§20) that re-seals every dependent proof and witnesses the cascade — proof reuse, proof dependency,
+        and change propagation are revealed to be ONE engine. The shared "pool" is simply the content-addressed
+        substrate: a proof is found, never filed.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §9  CRYPTOGRAPHY: POST-QUANTUM, SUITE-AGILITY & NICHE PROTOCOLS                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\numera\mlkem.iii · mldsa.iii · slhdsa.iii   [III]   ·   CRYPTO-AGILITY\src\mlkem.c · mldsa.c · slhdsa.c   [R1]
+        Complete hand-written post-quantum schemes: ML-KEM (FIPS 203, lattice key-exchange), ML-DSA (FIPS 204,
+        lattice signature), SLH-DSA (FIPS 205, hash-based signature whose security rests ONLY on the hash — the
+        belt-and-suspenders fallback). Lattice math/NTT/sampling from scratch; cross-KAT byte-identical to the C
+        reference. Almost no project hand-rolls these correctly.
+  • CRYPTO-AGILITY\src\crypto.c   [R1]
+        One suite-ID selects the system's ENTIRE crypto backbone — classical, post-quantum, and hybrid catalogue
+        suites — and every change is written to a swap LEDGER, so migration (even to post-quantum) is an
+        auditable event, not a silent edit. The genuine "agility."
+  • The Sovereign Channel — trust by provable sameness, multiplexing by witness order   [III✦]   (← CHARIOT sma_tls13.c · sma_quic.c)
+        CHARIOT hand-built TLS 1.3 and QUIC to speak the standard secure, multiplexed transports. III's native
+        channel is sealed_channel (§12): x25519 → ChaCha20-Poly1305, deterministic given the keypairs, replay
+        killed by a monotone nonce. The enlargement is in WHAT authenticates it — not a CA chain but cap_handshake's
+        proof that both ends run the SAME sealed pattern-set closure (§7), so trust is provable sameness of
+        substrate, not a third party's say-so. QUIC's multiplexing becomes witnessed wavefronts (§5): concurrent
+        streams are parallel cycles whose interleaving is fixed by witness order, so a multiplexed session is
+        deterministic and replayable, not timing-dependent. Speaking legacy TLS/QUIC to the outside world demotes
+        to a Translation-Manifold projection (§19) at the boundary — native III traffic needs none of it.
+  • Self-Attestation Is the Binary, Not an Embedded Hasher   [III✦]   (← CHARIOT sma_sha256_emit.c · sma_sha256_native.c)
+        CHARIOT's cleverest crypto wrote a SHA-256 into the driver's own machine code so the driver could hash
+        itself, and used the CPU's SHA instructions for the hot attestation path. In III self-measurement is not a
+        function a binary carries — it is what a binary IS: xii_sml verifies the manifest hash, the Founders-Anchor
+        signature, and every inlined cell BEFORE the program runs, and xii_atm re-checks a cell every 1024 ops AS
+        it runs (§17). The hardware SHA path is a CPU-feature-gated XII curated fragment (§2), result-identical to
+        the software path by determinism. So "a driver that can hash itself" generalises to "every III binary
+        continuously proves its own integrity, by construction" — and the hash is a node in the witnessed closure,
+        not embedded code that an attacker could excise.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §10  DESCEND-BENEATH-THE-OS: HARDWARE TAKEOVER & BARE-METAL RUNTIME                     ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • Descent as a Reversible, Hexad-Gated, Witnessed Cycle — bricking unrepresentable   [III✦]   (← CHARIOT sma_drtm_slb.c · sma_smm_install.c/handler.c · sma_tpm_takeover.c · sma_hv_nested_l1.c/guest_table.c · sma_ring_minus_four.c/plus_four.c · windows_slice.c)
+        CHARIOT took the machine by ENGINEERING each descent — relaunch the root of trust, install an SMM handler,
+        claim the TPM, slide a nested hypervisor underneath, slice the host away with a freeze-detector to roll
+        back a hang. Every one was a bespoke, risky, machine-specific maneuver. III re-founds descent as a CYCLE in
+        the calculus: each privileged hardware step is hexad-typed (so a bricking descent — capsule/microcode/
+        boot-order — is structurally UNREPRESENTABLE, not merely guarded), carries a SID-derived inverse that is
+        PRE-MATERIALISED before the step runs (§5), and emits a witness, so "slice the host and roll back on hang"
+        is no longer a detector racing a clock — the rollback EXISTS before the slice, and "a brick is never"
+        becomes a theorem rather than a safety net. Ring -2/-3 and the new Ring -4 (silicon-witness) / Ring +4
+        (federation) are not special cases but the formal extension of the ring_lattice (§13), so descending or
+        ascending a ring is one lawful, witnessed transition. CHARIOT could take the machine; III can take it AND
+        always give it back, provably.
+  • Reversible Memory by Mathematics, Not by Hypervisor Bit   [III✦]   (← CHARIOT sma_npt.c · sma_page_isolate.c)
+        CHARIOT got reversible memory by flipping AMD nested-page-table bits read-only and trapping the first write
+        to clone the page, and isolated pages with a hardware fence. In III reversibility is not a hardware trick
+        bolted under the OS — it is the SID inverse (§5) made physical: a memory write is a cycle whose inverse
+        (restore the prior page) is derived and witnessed, so a "snapshot" is just the witnessed point you can
+        replay back to, available on any backing (NPT where present, software CoW where not), bit-identical.
+        Page isolation becomes a capability + hexad on the address-term (§11): an isolated page is one whose
+        read/write cap no holder possesses, enforced by the same algebra that gates everything else — not an NPT
+        permission bit a more-privileged actor could clear.
+  • The Immune System Is Replay-Divergence, Not a Learned Score   [III✦]   (← CHARIOT sma_hyper_immune.c · sma_intrusion_detect.c · sma_hv_silicon_census.c)
+        CHARIOT's "immune system" watched for anomalies from beneath the OS — exactly the kind of fuzzy,
+        threshold-or-heuristic detection III refuses. Re-founded, an intrusion is not an anomaly SCORE but a
+        deterministic fact: a state the witness chain can no longer replay, or a state the hexad declares
+        inadmissible. Detection is therefore exact and explainable (here is the fragment that fails to replay),
+        and the response is a deterministic ring-gated cycle, never a guess. The silicon census becomes the
+        deterministic enumeration that feeds the verified address-map (§11) — measured once, witnessed, and bound
+        into the closure. An immune system with zero false positives because it detects BREACH OF MATHEMATICS, not
+        deviation from a learned normal.
+  • Hardware Paths Resolved, Not Improvised   [III✦]   (← CHARIOT sma_gpu_driver_synth.c · sma_sevsnp_enrollment.c · sma_bios_channel.c)
+        CHARIOT synthesised a GPU driver at runtime, enrolled the machine into SEV-SNP, and opened a raw channel to
+        BIOS — each an ad-hoc path improvised against a specific platform. In III these become witnessed
+        RESOLUTIONS (§18): "drive this GPU" / "enrol this enclave" / "speak to this firmware" is an intent resolved
+        against a sealed pattern set into a hexad-admitted, capability-gated, reversible cycle, so the synthesised
+        path is reproducible, proven, and replayable — the same intent yields the same bytes on the same silicon,
+        every time. A synthesised driver is not generated-and-hoped; it is the deterministic projection of a sealed
+        term, and if the silicon differs the resolver says so rather than guessing.
+  • PORTABILITY\src\hal_intel_vmx.c · hal_riscv_h.c   [R1]
+        The virtualization-capable HAL backends (Intel-VMX, RISC-V hypervisor extension) — of all per-chip
+        backends, the ones that buy "run beneath a running OS," and on open hardware too.
+  • Writing to the Metal as a Hexad-Admitted, Reversible Cycle   [III✦]   (← CHARIOT sma_accel/safe_phys_write.c)
+        CHARIOT's guarded physical-write "failed cleanly" instead of blue-screening on a protected target — a
+        runtime safety check around the single most dangerous operation on a machine. III moves the safety from
+        runtime to TYPE: a physical write is a cycle whose hexad classifies the target region (a write to a
+        bricking region is unrepresentable, §4), whose capability must name the exact address-term it touches
+        (§11), and whose SID inverse is pre-materialised so the poke is reversible. "Fails cleanly" stops being a
+        guard that might be reached and becomes "an unsafe write never typechecks; a safe one carries its own undo"
+        — you do not bet the machine on each write because the bet was already settled at compile time.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §11  ADDRESS SPACE, SOFTWARE MMU & ENERGY (LANDAUER) ACCOUNTING                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • The Address Map as a Witnessed Census, the MMU as a Resolver   [III✦]   (← CHARIOT sma_address_map.h · sma_address_map.c)
+        CHARIOT's map hand-recorded the real addresses that responded on one machine and walked its own 4-level
+        page tables with copy-on-write. In III the map is not a maintained header that can drift from reality but a
+        sealed CENSUS crystal: the live silicon enumeration (§10) content-addressed and bound into the node's
+        genesis lineage, so "what address answered on THIS machine" is a WITNESSED fact, re-verified by replay, not
+        a value someone keeps in sync. The MMU stops being a separate walker and becomes the address-term resolver
+        — virtual→physical is a total function over the address algebra, no-overlap is the layout-term's
+        admissibility (§1), and copy-on-write is the SID inverse of a write (§5). Memory management dissolves into
+        the same resolution + reversibility the rest of the system already is.
+  • VOID and Energy Were Always Native   [III✦]   (← CHARIOT sma_platform.h)
+        CHARIOT's platform header was a WALL to the host OS that quietly smuggled in three-valued logic
+        (true/false/VOID) and an energy-aware number system. In III none of that is contraband: three-valued logic
+        IS the Z₃ trit at the heart of the hexad algebra (§4), the energy-aware numerics ARE the K-value and
+        Landauer accounting below, and the "wall to the OS" is just the capability boundary — the host is one more
+        ring reached through sealed_channel (§12), not a special frontier. What CHARIOT had to smuggle, III
+        declares as first-class axioms; the wall becomes a door governed by the same algebra as every other.
+  • Energy as the Cost-Face of the Hypostasis — reversibility makes the Landauer floor real   [III✦]   (← CHARIOT sma_landauer.c · .h)
+        CHARIOT billed computation in joules from Landauer's principle (erasing a bit has a minimum thermodynamic
+        cost) — a true and beautiful idea, but a LEDGER bolted alongside the work. In III energy is one of the six
+        faces of every atom: a cycle's cost is a witnessed, content-addressed quantity carried by the hypostasis
+        (§21) and is the denomination of computational specie (§21). And because III computation is REVERSIBLE by
+        construction (every cycle has a SID inverse, §5), the Landauer floor stops being a slogan: reversible
+        operations erase no bits and so approach the thermodynamic minimum BY CONSTRUCTION, and the ledger measures
+        exactly the irreducible erasure that remains. Energy accounting, reversibility, and currency are revealed
+        to be one quantity seen three ways.
+  • The Store Addressed by Meaning IS Content-Addressing   [III✦]   (← CHARIOT sma_binding.c · sma_access_control.c · sma_code_binding.c)
+        CHARIOT built a store whose coordinates were MEANING not pointers, gated every access, and let executable
+        code materialise at a coordinate and run. In III this is not a special store — it is the substrate's
+        nature: a value lives at its content-address (§20), so "addressed by meaning" is just "addressed by what it
+        is"; access is the capability algebra (§7); and "code that materialises at a coordinate and runs" is the
+        hypostasis itself (§21), where program, data, and proof are one content-addressed term that the JIT lifts
+        on demand. The binding store collapses into three things III already is — content-addressing, capabilities,
+        and the unifying atom — which is why a "crystal" can be both an address and a runnable program with no
+        glue between them.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §12  CONSENSUS, FEDERATION & SEALED TRANSPORT                                           ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\aether\hotstuff.iii   [III]
+        Complete from-scratch HotStuff BFT — three-phase pacemaker, 2f+1 quorum, leader = view mod n (NO random
+        selection), real ed25519-signed votes/QCs. Many nodes converge on one history despite liars, reproducibly.
+  • STDLIB\iii\aether\hotstuff_predict.iii   [III]
+        A redundant quorum (2f+1+k) so one failure doesn't collapse the critical path — and a textbook case of
+        the anti-ML rule: instead of "rank peers by past reliability" (observe-and-adapt, forbidden), it's a
+        CLOSED FORM of (view, n, f). Same resilience, zero statistics.
+  • STDLIB\iii\aether\hotstuff_heal.iii   [III]
+        Partition recovery that RECORDS divergence for operator review rather than silently auto-merging —
+        degrade to "a human must look," never fork the truth in secret.
+  • SOVEREIGN-WEB\src\sovereign_web.c   [R1]
+        A hand-built BFT agreement + serving stack owing nothing to TCP/TLS — HotStuff core PLUS a wire format
+        where every packet carries a witness hash (IP option) + per-suite HMAC auth header, classified
+        valid/invalid-AH/replay/non-III, and network access is capability-gated.
+  • STDLIB\iii\aether\fed_sybil.iii   [III]
+        Sybil resistance as a TWO-LOCK gate stronger than either lock — admit only with BOTH a SHA3-256
+        proof-of-work over the peer-id AND a sovereign-tier signature. Needs massive compute AND a stolen
+        sovereign key at once.
+  • STDLIB\iii\aether\fed_eclipse.iii   [III]
+        Eclipse detection by reducing the admitted-peer set to one order-independent fingerprint (XOR of
+        SHA-256(peer-id)); diverge from trusted peers and the alarm fires. One cheap number answering "do we see
+        the same network?"
+  • STDLIB\iii\aether\pattern_set_federation.iii   [III]
+        Federated distribution of CODE — publish a sealed pattern bundle by mhash, discover it, fetch over the
+        sealed channel, verify bytes match the seal AND ancestry traces to a known Founders-Anchor. A sovereign
+        package registry.
+  • STDLIB\iii\aether\sealed_channel.iii   [III]
+        The TLS replacement for III-to-III traffic — x25519 ECDH → ChaCha20-Poly1305, deterministic given the
+        keypairs, replay rejected by monotonic nonce. Authenticated/encrypted, owing nothing to the TLS stack.
+  • The Consensus Wire IS Witnessed Cycles on the Sealed Channel   [III✦]   (← CHARIOT sma_bft_wire.c)
+        CHARIOT defined a separate wire format for its BFT nodes to exchange agreement messages. In III there is no
+        separate format: a consensus message is a witnessed cycle (a HotStuff block/vote/QC term, §12) projected
+        onto the sealed channel (§9), content-addressed and folded into the witness chain. So the "wire" is the
+        Translation-Manifold projection of the consensus terms, and the consensus LOG is the witness chain itself —
+        replaying the wire reproduces the agreement bit-identically, and a Byzantine message is not merely dropped
+        but recorded as a witnessed divergence the heal path (§12) can adjudicate. The protocol stops being a
+        bespoke encoding and becomes "consensus terms, witnessed and sealed like everything else."
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §13  TRUST ROOT, SOVEREIGN ANCHOR & THE SEALED CORE                                     ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • SANCTUM\src\sanctum.c   [R1]
+        The Ring-2 sealed box that executes the operations too dangerous for any lower ring (DRTM relaunch,
+        founder-key export, compromise declaration, epoch advance, Phoenix snapshot, compile-under-seal) via one
+        8-step protocol the Trinity gate must admit. Both the never-rewritten store AND the only executor.
+  • FOUNDERS-ANCHOR\src\founders_anchor.c   [R1]
+        Not merely "the root key" but the root Ed25519 key with specific sovereign powers — tier-3 veto, DRTM
+        reset, PFS-deny, suite-swap co-sign, witness inject, catalyst halt, promotion revoke; amending the
+        constitution needs its veto + quorum. The irreplaceable origin and last word in any dispute.
+  • STDLIB\iii\sanctus\anchor_xii.iii   [III]
+        The Founders-Anchor's own Ring-3 seven-point predicate over the finished XII system — the root-of-trust
+        sign-off on the optimiser.
+  • STDLIB\iii\sanctus\genesis.iii   [III]
+        Pins this node's immutable first-build closure-root (its lineage origin, distinct from the federation
+        genesis) and counts sealed transitions since as a deterministic "distance from genesis." The fixed
+        origin the witness history is replayed from and measured against.
+  • TRINITY\src\trinity.c   [R1]
+        A three-layer admission ceiling whose innermost Trinity demands FOUR independent verdicts (intent,
+        capability, causality, Sanctum) — no single compromised check waves a dangerous op through; heavy layer
+        engaged only as a fixed-point risk value rises.
+  • PHASES\src\ring_lattice.c   [R1]
+        Models privilege ITSELF as a four-level lattice (Sanctum R-2 ≼ Hypervisor R-1 ≼ Driver R0 ≼ User R3),
+        encoded so "is at least as privileged as" is integer comparison and a ring-set is a 4-bit bitmap, plus the
+        closed list of the only legal ring-crossing doors (magic-MSR/IOCTL/Sanctum-gate/VMRUN/sysret). The
+        authoritative, machine-checkable "what may run where" everything else obeys.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §14  REVERSIBLE DEPLOYMENT & LIVE KERNEL SURGERY                                        ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • Deployment IS a Reversible Cycle — a worse state is unrepresentable   [III✦]   (← CHARIOT atomic_deploy.c · hot_swap_orchestrator.c · hv_quiesce.c · hv_hot_swap.c)
+        This is the theorem in its purest form. CHARIOT made deployment SAFE by mechanism — photograph the old
+        driver, deploy, re-hash, auto-restore on mismatch; rehearse in user space first; freeze every core with an
+        NMI latch; swap the live .text in one uninterruptible step. Five careful engineering moves around a
+        dangerous act. In III a deploy does not HAVE rollback — it IS a SID-reversible cycle (§5) read backwards:
+        the "photograph" is the witnessed prior closure-root, the "auto-restore" is the inverse PRE-MATERIALISED
+        before the swap, so a deploy that ends in a worse state is not caught — it is unrepresentable. The
+        user-space rehearsal becomes a ghost_phase run (§6): the entire deploy executed as an effect-free witnessed
+        cycle, its witness chain verified, BEFORE the real one. Stop-the-world becomes a witnessed wavefront
+        barrier (§5), and "atomic swap" is a single ripple commit of a new closure root (§20). Safe live kernel
+        surgery stops being a feat performed carefully and becomes a transaction that can only commit or cleanly
+        revert, by construction.
+  • Signing and Boot-Sealing Are the Anchor Over the Closure-Root   [III✦]   (← CHARIOT sovereign_sign.c · chariot_pcr_seal.c · chariot_mini_loader.c)
+        CHARIOT signed the driver with a TPM-resident key over a stable hash, locked the boot fingerprint into TPM
+        PCRs, and re-checked it across restarts with a mini-loader — three silicon-rooted safety nets. In III there
+        is one fact behind all three: the Founders-Anchor (§13) sealing the closure-root. Signing is not a
+        hand-built envelope but the Anchor's signature over the canonical sealed term, so "what was signed" and
+        "what runs" are the same content-addressed object. The boot fingerprint is the node's genesis closure-root
+        (genesis.iii), and "the seal opens only if booted as expected" is the measured launch (xii_sml, §17)
+        re-deriving that root every run — TPM PCRs become one possible backing for a guarantee that is really about
+        lineage, not a chip. Three nets collapse into one: the running system is the term the Anchor sealed, or it
+        does not run.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §15  MACHINE-CODE VERIFICATION & CRASH FORENSICS                                        ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • Aegis Moves BEFORE the Bytes Exist — an ill-formed binary is unrepresentable   [III✦]   (← CHARIOT sma_aegis.c · .h)
+        Aegis was CHARIOT's triumph: ~40 named checks that read the FINISHED machine code and PROVED properties of
+        it (stack balance, paired interrupt flags, no double-pop, clean decode, IOCTL bijection), each welded to
+        the mutator that makes it true. But it verified AFTER emission. In III those invariants become Curry-Howard
+        emission OBLIGATIONS (§3): a term that would emit unbalanced stack or an unpaired flag does not type-check,
+        so the ill-formed binary is never produced — there is nothing to verify after the fact because there is
+        nothing wrong to find. The "attested anchor" (the fingerprints that define trustworthy) becomes the
+        witnessed closure-root plus the hexad admission set, re-derivable by anyone. Where post-hoc proof is still
+        wanted — checking a binary the system did NOT emit — it runs the one verified decoder (§1). Aegis stops
+        being a verifier of one driver and becomes the precondition of emission for every target.
+  • Forensics as Replay, Not Autopsy   [III✦]   (← CHARIOT pe_introspect.c · adapter_minidump.c · symbol_resolver.c)
+        CHARIOT's forensic trio reconstructed what happened from a corpse — walk an untrusted PE defensively,
+        parse a Windows minidump, map a bare address back to a function. In III a native binary cannot fail without
+        a witness: the chain plus the measured launch (§17) record every fragment, so a "post-mortem" is not an
+        autopsy of a dump but a REPLAY of the witness chain to the exact divergent fragment — the failing step is
+        named, not inferred, and its inputs are reproducible bit-for-bit. The defensive worst-case binary walker
+        survives only where it must (ingesting FOREIGN binaries), and there it reduces to the single verified
+        decoder + the format unifier (normalize, this section) rather than a bespoke parser. "Why did it crash?"
+        changes from a reconstruction to a deterministic lookup.
+  • LEGACY-INGESTION\src\normalize.c   [R1]
+        Folds the four foreign executable formats (ELF / PE / Mach-O / COFF) into ONE internal representation, so
+        the rest of the system reasons about "a binary" without caring which OS made it. Writing another ELF
+        parser is easy; the unifier that erases their differences is the hard, niche part that makes "ingest any
+        binary" tractable.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §16  DETERMINISM & REPRODUCIBLE, SELF-HASHING BUILDS                                    ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • LEXICON\src\nfc.c   [R1]
+        Folds Unicode to one canonical form (NFC) before anything looks at it — two source files that look
+        identical but use different bytes can't tokenize two ways. The bedrock of bit-for-bit identical builds.
+  • LEXICON\src\canonical.c   [R1]
+        Pins the TOKEN form (each keyword/operator/literal to one byte encoding) so the token STREAM has a single
+        legal representation — the unit the build's seal and the self-host's bit-equivalence are computed over.
+  • GRAMMAR\src\ast_canonical.c   [R1]
+        Serializes any tree to ONE byte sequence by THROWING AWAY everything incidental (line/col, comments,
+        whitespace, modifier order) — legislating exactly what "the same program" means; the basis of every seal
+        and drift-check.
+  • PERFORMANCE\src\performance.c   [R1]
+        Routes hot ops to the fastest path the silicon proves it supports, but with an OVERRIDE that pins a
+        feature set by hand — so the same program is bit-identical on a fast and a slow machine. Speed that's
+        also reproducible.
+  • Deterministic Transcendentals Enable Distributed Numeric Agreement   [III✦]   (← CHARIOT sma_q16_math.c)
+        CHARIOT computed sqrt/exp/log in integer-only fixed point (Newton, Padé, range-reduction) so the answer was
+        bit-identical where an FPU's last bit drifts between chips. In III this is not a special library but a
+        consequence of the no-float mandate — it joins numera's deterministic-math substrate, and its results are
+        WITNESSED and content-addressed, so a transcendental computed once is an echo-deed (§21) reused everywhere
+        by hash. The enlargement is what bit-identity unlocks: two federated nodes computing the same exp(x) get
+        the SAME bytes, so consensus (§12) can be reached on REAL-VALUED results — impossible when every machine's
+        floating-point disagrees in the last place. Determinism in transcendental math is the precondition for a
+        distributed system that can agree on more than integers.
+  • STDLIB\iii\numera\algebraic_time.iii   [III]
+        The system's only clock — a strictly monotonic counter advanced by exactly one per published witness
+        fragment, writable ONLY by the witness hook. "Time" is the count of witnessed events: deterministic,
+        replayable, impossible to advance without leaving a witness.
+  (See also §1 main.c / emit.c / link.c and §2 — the compiler's reproducibility machinery.)
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §17  SELF-GOVERNANCE, SEALED EVOLUTION & RUNTIME SELF-AUDIT                             ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\omnia\governance.iii   [III]
+        The only sanctioned way the system's surface may change: PENDING → SANDBOXED → PROVEN (machine-checked
+        equivalence proof) → ACCEPTED (2/3 quorum AND proven) → SEALED (witness + tree-root bump). Evolution by
+        proof, vote, and seal — never ad-hoc edit.
+  • STDLIB\iii\sanctus\catalyst.iii   [III]
+        The gate-keeper of "hardcoded dynamism": a proposed vocabulary change must clear all EIGHT hand-engineered
+        gates (axiom-compatible, preserves invariants, K-chain safe, replayable, no ripple contradictions,
+        consumer+audit, reversible, no name collision) before it's sealed. The disciplined opposite of observe-
+        and-adapt.
+  • STDLIB\iii\sanctus\demote.iii   [III]
+        Removal as a first-class REASONED append-only record — every demotion logs vocab-id, a 32-byte reason-
+        hash, and a sequence number, so "what was taken out, why, and when?" is always answerable.
+  • STDLIB\iii\sanctus\xii_curate.iii   [III]
+        The twelve Trinity-gated curation ceremonies Ω1..Ω12 (basis, fusion, the tables, rule curation,
+        confluence + termination proofs, horizon selection, target mapping, perfect-hash, circ feasibility, final
+        seal) — each emits a sealed cert; no part of XII may be used until its ceremony admits it.
+  • STDLIB\iii\sanctus\xii_antidrift.iii   [III]
+        An eight-check self-verification (manifest hash, lattice re-derivation, reach bitmap, empirical
+        confluence over 10,000 terms, 117-pair convergence, MPHF collision-free, hexad invariant, Anchor
+        signature) — the standing guarantee the optimiser is byte-for-byte the one that was sealed.
+  • STDLIB\iii\sanctus\xii_sml.iii   [III]
+        Software Measured Launch — a sealed prologue in EVERY XII binary that, before running, verifies its own
+        manifest hash + Founders-Anchor signature + every inlined Lattice cell. Measured-boot the binary performs
+        on itself.
+  • STDLIB\iii\sanctus\xii_atm.iii   [III]
+        The Anti-Tamper Membrane — re-hashes a Lattice cell every 1024 fusion ops and aborts on mismatch; where
+        xii_sml verifies once at launch, this keeps verifying AS THE PROGRAM RUNS.
+  • STDLIB\iii\sanctus\mandate.iii · quality.iii   [III]
+        Runtime self-audit: a 22-bit mask of the project's own governing mandates currently satisfied; and the
+        six "Living Sealed Lattice" quality gates (corpus never regresses, two builds hash equal, golden match,
+        witness append-only, K above floor, layered seal). A program that states its own constitutional compliance.
+  • STDLIB\iii\sanctus\kchain.iii   [III]
+        A per-chain "K-value" integrity meter (fixed-point ×1e9) composed multiplicatively with a hard 0.85 floor
+        — drop below and it flags underflow + routes to Trinity re-admission. A deterministic "how much integrity
+        remains," not a learned score.
+  • STDLIB\iii\omnia\obs_observatory.iii   [III]
+        Collapses the system's whole health picture into one u32 — twelve named indicator families, each with a
+        sealed threshold; a family crossing its threshold fires a bit, and the "collapsed state" reports every
+        firing family at once. Family meanings are fixed at build, not registered at runtime: it reports boundary
+        crossings, it does not adapt to them.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §18  DETERMINISTIC INTELLIGENCE WITHOUT LEARNING  (resolution · NL · symbolic inference)║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\omnia\resolver.iii   [III]
+        The resolution primitive — scores candidate patterns against an intent by a FROZEN coefficient table
+        (per-pattern base + guarantee matches + hexad match + specialisation bump) over 11 fixed steps. Contract:
+        no FP, no clock, no randomness, NO telemetry feedback — same intent always resolves the same. The
+        deliberate OPPOSITE of a statistical recommender.
+  • STDLIB\iii\omnia\unify.iii   [III]
+        Bounded Robinson first-order unification with occurs-check and a termination proof — the pattern-matching
+        core that always halts.
+  • STDLIB\iii\verba\intent.iii   [III]
+        The first-class intent TYPE — a 192-byte immutable value carrying the requested primitive, partial args,
+        required-guarantee mask, expected hexad, capability, and parent. "What you want" is itself a value.
+  • STDLIB\iii\omnia\ai_resolve.iii   [III]
+        The III-"AI" entry — natural language in (via the NL parser), a witnessed capability-bounded
+        implementation out (via the resolver), or a privacy-preserving NOMATCH. Capabilities are SEALED inputs
+        (not observed); NO statistical learning in the pipeline. An "AI" that is deterministic resolution under
+        capability, not a model.
+  • STDLIB\iii\verba\hip.iii   [III]
+        The prose→intent pipeline (lex → parse → project → complete → resonance → disambiguate) returning
+        UNIQUE / AMBIGUOUS / NO-MATCH — fully deterministic (same text → same candidates, in order).
+  • STDLIB\iii\verba\nl_parse.iii   [III]
+        The deterministic thematic-role tagger — classifies a sentence and extracts roles (agent, patient,
+        source, destination, instrument, …) with NO statistics and NO heuristics. Understanding a request
+        without machine learning.
+  • STDLIB\iii\omnia\self_reformatter.iii   [III]
+        The system's own R&D arm — triggered by a sealed counter (not behaviour), scans only STATIC pattern
+        fields, proposes compositional abstractions, and runs each through governance (sandbox → equivalence
+        PROOF → quorum → seal). Improves itself by proof, never by observing its own performance.
+  • Inference IS Rewriting — proofs are terms, equality is normal form, causality is the witness DAG   [III✦]   (← CHARIOT sma_cut_elim.c · sma_do_calculus.c · sma_equational.c · sma_axiom_kernel.c · sma_ring1_verifier.c)
+        CHARIOT hand-built five separate inference engines. III reveals them as faces of machinery it already runs.
+        A proof is an XII term, so CUT-ELIMINATION (detour-removal) is just reduction to the confluent normal form
+        (§2) — a cut-free proof is a normal-form proof, and the property holds by the same termination + confluence
+        theorems. EQUATIONAL reasoning is "do these reduce to the SAME normal form?" plus a proof_ripple
+        equivalence cert (§8) — equality-saturation is XII canonicalisation. The trusted AXIOM KERNEL is not a new
+        small core but the existing one: the 19 irreducible Intent-Calculus primitives (§3) checked by cic.c, kept
+        minimal because it is the system's floor. INDEPENDENT re-verification (ring1_verifier) becomes deterministic
+        REPLAY — re-deriving the term and checking bit-identity, not a second hand-written checker that could
+        itself be wrong. And do-CALCULUS — the effect of FORCING X versus observing it — becomes exact rather than
+        model-fitted: "force X" is a ghost_phase intervention (§6) whose causal cone is computed deterministically
+        over the WITNESSED causal DAG (each fragment's predecessor links ARE the causal graph), so principled
+        cause-and-effect needs no learned causal model — it reads the causality the witness chain already records.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §19  UNIVERSAL VALUES, FORMAT TRANSLATION & THE MANIFOLD                                ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\verba\glyph_proof.iii · glyph_witness.iii · glyph_crystal.iii   [III]
+        Proof certificates, witness-chain entries (carrying cap-id + K-value), and sealed "crystals" (carrying
+        parent-lineage + edge count) each packed into the universal 192-byte glyph carrier — so a proof, a
+        witness, or derived structure can be passed/stored/validated/composed like any ordinary value.
+  • STDLIB\iii\omnia\babel.iii   [III]
+        The canonical interchange envelope — byte-stable sorted-JSON with an mhash over the content; the hub the
+        Translation Manifold pivots on (get into Babel, reach any format deterministically).
+  • STDLIB\iii\omnia\transform.iii   [III]   + the tp_*.iii projection set
+        The manifold's single X→Y front door, routing through the resolver against the transform-pattern set; the
+        tp_* family is the closed any-to-any projection set (III source ↔ AST-binary, → C99/asm/PE/LaTeX/Markdown
+        /hex/CBOR/dot, …) — add a format by adding edges to the hub, not N² converters.
+  • A Format Is a Hypostasis; Projection Is Witnessed Resolution   [III✦]   (← CHARIOT III/runtime/translation_manifold.h · format_hypostasis.h · registry/formats/*)
+        CHARIOT's manifold let any value project itself into other formats via content-addressed lookup, made a
+        FORMAT a 32-byte atom, and kept a Format Knowledge Graph to resolve against. III already lives this through
+        babel + transform + the tp_* projections (§19 above), and the evolution sharpens it: because a format is a
+        hypostasis (a content-addressed term), "project value V into format F" is literally resolving the term
+        (V, F) — there is no separate format registry, the format graph IS the substrate. And projection inherits
+        the substrate's guarantees the original could only hope for: it is a total deterministic function (same
+        V,F → same bytes), it leaves a witness (a conversion is replayable), and where two formats are isomorphic
+        it is REVERSIBLE by the SID inverse (§5), so round-tripping is a proven identity, not a best effort. "Any
+        value can become any format" stops being a clever lookup table and becomes a theorem about the term algebra.
+  • Parallel Lifting That CANNOT Change the Answer   [III✦]   (← CHARIOT III/runtime/manifold_compilation.h)
+        CHARIOT's boldest compile idea reshaped sequential programs (regex, CFG parsing, model-checking, SAT) into
+        massively-parallel GPU work, accepting worse complexity for thousands of cores and "falling back honestly"
+        when it wouldn't pay. III keeps the ambition and removes the leap of faith: the sequential→parallel lift is
+        a witnessed transformation that ships with a proof_ripple equivalence certificate (§8), so the GPU result
+        is PROVEN identical to the sequential one — offload can never silently change an answer. The "is it worth
+        it?" decision is not a heuristic but a deterministic cost computation in K-value/Landauer units (§11), and
+        the parallel schedule is a witnessed wavefront (§5), so even the massively-parallel run is replayable
+        bit-for-bit. Manifold compilation becomes safe to trust because its speedup carries its own proof of
+        sameness.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §20  CONTENT-ADDRESSING, LINEAGE & PROVENANCE                                           ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • STDLIB\iii\numera\content_addr.iii   [III]
+        The single source of content addressing — a computation's address = Keccak256(producer || operation ||
+        input-commitment), so two computations with the same address ARE the same. The foundation of
+        memoization-as-sovereignty (echo computation).
+  • STDLIB\iii\omnia\crystal.iii   [III]
+        A "crystal" is a forge-resistant value — its provenance (source site, cap, causal predecessor, K-value,
+        message hash) bound by a MAC over a sealed sub-key; fabricate a fake and crystal_verify fails. Errors
+        that cannot be forged and always know where, why, and under what authority they arose.
+  • STDLIB\iii\omnia\ripple.iii   [III]
+        The change-propagation engine — one source-of-truth change computes the transitive closure of dependents,
+        re-seals each, witnesses every step, verifies the K-chain, and ATOMICALLY commits a new closure root. A
+        change is a witnessed, all-or-nothing transaction across the dependency graph.
+  • STDLIB\iii\numera\scalar_provenance.iii · checked_crystal.iii · field_crystal.iii   [III]
+        Arithmetic that turns a numeric fault (overflow/underflow/div-by-zero/fp-inv-failure) into evidence —
+        minting a crystal that binds (op-kind, operands), chainable through the ripple engine. Not a trap or a
+        wrapped value: a traceable, composable record of where a computation went wrong.
+  • Identity Lineage IS the Crystal Lineage   [III✦]   (← CHARIOT sma_lineage.c)
+        CHARIOT tracked an identity's cryptographic ancestry in a dedicated tracker so trust could follow the
+        family tree, not just the current key. In III an identity is not special — it is a crystal (§20), and its
+        ancestry is its content-addressed derivation chain back to a genesis anchor (genesis.iii), recorded in the
+        SAME lineage DAG that the ripple engine propagates change through and that capability revocation cascades
+        over (§7). So "who descended from whom" needs no separate structure: trust follows the cryptographic
+        lineage by REPLAY (re-derive the chain to the anchor), revoking an ancestor ripples to every descendant
+        automatically, and an identity's history is as forge-resistant as any other crystal. One lineage graph for
+        identities, proofs, errors, and caps alike — provenance is universal, not per-subsystem.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §21  THE UNIFYING ATOM & THE COMPUTATIONAL ECONOMY                                      ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • The Hypostasis Is Not a Struct — It Is the Canonical Term   [III✦]   (← CHARIOT III/runtime/hypostasis.h)
+        CHARIOT's single most distinctive idea was a 32-byte atom that PACKED six facets — program, capability,
+        type, proof, energy cost, and self-witness — with a "three persons" encoding. It fused by struct layout
+        what other systems keep apart. III proves the fusion instead of packing it: every value is a canonical XII
+        term (§2), and from that ONE normal form all six facets are TOTAL FUNCTIONS — its content-address IS its
+        identity-as-program (§20), its hexad IS its capability/safety class (§4,§7), its Curry-Howard type IS its
+        proof (§3), its Landauer cost IS its energy face (§11), its witness fragment IS its provenance (§6). The
+        atom does not HOLD six things in 32 bytes; it IS them, because in a pure-mathematical substrate a value's
+        program, proof, capability, type, cost and witness are NECESSARILY the same object seen through six
+        derivations. The "three persons" become the resolver's three-level provenance and the ring projection. The
+        most distinctive engineered idea in CHARIOT becomes a corollary of the Intent Calculus — and being a
+        theorem rather than a layout, it can never fall out of sync, because there is nothing to keep in sync.
+  • Currency Backed by Replayable, Irreducible Work   [III✦]   (← CHARIOT III/runtime/computational_specie.h)
+        CHARIOT's currency was attested joules of Ring-1 work — uncounterfeitable "without breaking SHA-256."
+        III's is stronger by determinism: a unit of specie is a crystal whose value is the K-weighted Landauer
+        cost of a WITNESSED, REPLAYABLE computation, so its backing is not merely attested but RE-DERIVABLE — to
+        forge a coin you would have to actually do the work, because anyone can replay the exact computation and
+        recompute the exact joules bit-for-bit. And because reversible computation approaches the thermodynamic
+        floor (§11), the coin is denominated in IRREDUCIBLE erasure — the one cost physics forbids you to avoid.
+        Money becomes proof of unique, verifiable-yet-unrepeatable, thermodynamically-irreducible work: the deepest
+        backing a currency can have, possible only because every computation here is deterministic and witnessed.
+  • Echo as Default Sovereignty — nothing is computed twice, and you own the deed   [III✦]   (← CHARIOT III/runtime/echo_computation.h)
+        CHARIOT made "I already computed this" a tradeable deed recognised by content fingerprint and reused
+        100–3000× faster. In III echo is not a memoization LAYER — it is the default consequence of the substrate:
+        because every computation is content-addressed (§20) and witnessed (§6), its result is automatically
+        reusable, globally, by hash, with no cache to consult. The "deed" is a crystal binding that content-address
+        to its witnessed K-weighted cost, denominated and tradeable as specie. So across a whole federation nothing
+        is ever genuinely computed twice — a second request resolves to the existing witnessed result — and the
+        savings is not a hope but an owned, proven, sellable quantity. Memoization is elevated past an economy into
+        a SOVEREIGNTY: to have done a computation first is to hold an unforgeable title to it.
+  • The Economy Is Witnessed, Reversible Accounting — runaway and ruin are unrepresentable   [III✦]   (← CHARIOT III/runtime/bounded_inference.h · COST sma_insurance.c · sma_speculation.c · sma_bankruptcy.c)
+        CHARIOT modelled compute as a budgeted economy: a hard inference ceiling, insurance against costly
+        failure, speculative spend, and graceful bankruptcy. III makes each a deterministic, witnessed, REVERSIBLE
+        operation rather than a financial analogy. The inference bound is not a separate ceiling but the
+        intersection of the K-floor (integrity must stay ≥ 0.85, §17) and the Landauer/specie budget — a run
+        proceeds only while it can both PAY and HOLD INTEGRITY, so runaway is structurally impossible (every step
+        debits a witnessed budget and multiplies K toward its floor; termination is a law of the economy, not a
+        watchdog timer). Insurance is a witnessed pre-payment that PRE-MATERIALISES the recovery, exactly as SID
+        pre-materialises an inverse (§5). Speculation is a ghost_phase pre-computation (§6) whose cost is debited
+        and whose result is kept only if the witnessed branch is taken. Bankruptcy is the budget-zero boundary
+        handled by a clean reversible unwind — the SID inverse of everything spent — so "going broke" is a
+        witnessed rollback to solvency, never a crash. The risk instruments stop being metaphors and become cycles
+        with derived inverses: an economy in which ruin is something you reverse, not something you suffer.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §22  CUSTOM ISA & SILICON CO-DESIGN  (toward III/CHARIOT in real hardware)              ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • DOCS\HARDWARE\I-INSTR-V1.0-spec.md   [III]
+        The frozen design of III's own ISA — a 32-bit word (6-bit opcode / 4-bit Ring / 22-bit operand) whose
+        opcode CLASSES include capability (forge/revoke/transit), witness (publish/verify/admit), Ring-transit,
+        and reflection alongside arithmetic/memory/control. Sovereignty primitives built into the silicon
+        contract, not bolted on.
+  • COMPILER\BOOT\resolver_unit.s · resolver_unit_avx512.s   [III]
+        The hand-written assembly resolver units — the core resolver as concrete x86-64 / AVX-512 sequences, the
+        software counterpart the future ISA path must match byte-for-byte.
+  • R2-GENESIS\silicon\resolver_unit.v   [R1]
+        The only ACTUAL hardware design in the repo — synthesizable Verilog (RTL) of the core resolver unit; a
+        chip foundry could turn it into a real circuit. The bridge from "our ISA on paper" to "our ISA in silicon."
+  • The ISA Is the Calculus Cast in Silicon   [III✦]   (← CHARIOT sma_isa_codesign.c · sma_chariot_isa.c · sma_asic_spec.c · sma_binding_proc_spec.h)
+        CHARIOT co-designed a custom instruction set with the code meant to run on it, and specified a chip shaped
+        to fit the substrate. In III the co-design has a fixed point that removes the guesswork: III's own ISA
+        (I-INSTR, §22) already makes the Intent-Calculus primitives into opcode CLASSES — capability forge/revoke/
+        transit, witness publish/verify/admit, ring-transit, reflection — so "evolve the hardware with the
+        software" becomes "the ISA IS the 19 primitives," and a custom chip (the ASIC spec, generalising the
+        resolver_unit.v RTL) is not silicon shaped to fit code but the calculus's NORMAL FORM rendered in gates.
+        Evolving the ISA is therefore governance (§17) over a sealed spec, not an open-ended loop, and hardware and
+        software are provably the SAME machine because both must produce bit-identical witnessed results from the
+        same sealed terms.
+  • Soft-ISA, JIT, and Future Chip — One Verified Machine   [III✦]   (← CHARIOT EMULATOR/sma_core.c · NATIVE/sma_jit_lift.c · sma_jit_trace.c)
+        CHARIOT ran its ISA on a software emulator today and a tracing JIT lifted hot paths to native x86-64. III
+        keeps all three execution surfaces — interpreter, JIT-native, and (eventually) the real chip — but binds
+        them by a single law: they MUST agree bit-for-bit on every witnessed result, exactly as iiis-0≡iiis-1≡
+        iiis-2 already do. JIT lifting is not opportunistic hot-path guessing but content-addressed prespec +
+        hw_offload (§2), and because the lifted path ships a proof_ripple equivalence cert (§8) it can never change
+        an answer — only its speed. "Tracing" is witnessed-wavefront replay (§5), deterministic, not timing-driven.
+        So the soft ISA is not a stopgap until silicon exists; it is one member of a family of execution surfaces
+        whose mutual bit-identity IS the co-design verification — when the chip arrives it must merely join an
+        equivalence already proven.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §23  THE SOVEREIGN FORGE, SINGLE-SOURCE LEDGERS & WHOLE-SYSTEM GATES                    ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • COMPILER\BOOT\iii_compositions.def   [III]
+        The canonical .def SOURCE for the composition method-table — generates iii_compositions.h, and a --check
+        gate fails the build if any consumer drifts. One source, many generated consumers, drift impossible.
+  • COMPILER\BOOT\gen_xii_lattice.c   [III]
+        The multi-backend generator — for 126 productive patterns × 7 targets it produces each sealed Lattice
+        cell (mhash + payload) and writes the xii_lattice.bin the inliner consumes; every cell hashed.
+  • COMPILER\BOOT\sign_xii_manifest.c   [III]
+        Signs the XII manifest with the Founders-Anchor key — binds a generated artifact to the root of trust
+        (the same signing path the Forge ledger reuses).
+  • STDLIB\scripts\subsystem_test_gate.sh   [III]
+        The one gate that exits zero ONLY if the deterministic build is BIT-IDENTICAL, the corpus FAIL = 0, and
+        every subsystem test passes its recorded threshold — a regression fails it while progress raises the bar.
+        The named-on-failure proof the whole substrate is green.
+  • DOCS\MHASH-LEDGER.md   [III]
+        The ledger of every artifact's closure hash — the tripwire that turns any unintended change to a sealed
+        artifact into a detectable drift.
+  • DOCS\CONVERGENCE-AUDIT.md   [III]
+        The append-only per-step contract log under which no edit may proceed without first writing its own audit
+        entry — the entire build's history made reconstructable and non-repudiable.
+  • The Command Surface Is a Forge Citizen   [III✦]   (← CHARIOT ioctl_codegen.c · ioctl_manifest.gk)
+        CHARIOT proved its master command list and code header were a perfect bijection (edit one side, the build
+        stops) and fingerprinted the set. In III this is not a bespoke ioctl tool but an instance of the universal
+        Sovereign Forge (§23): the command surface is a sealed pattern set with one .def-style source, generated
+        consumers, and a --check drift gate exactly like iii_compositions.def — so the bijection is the Forge's
+        standing guarantee, not a special codegen. And because a III command IS a resolution (§18), the "manifest"
+        is the pattern set itself, and the per-command permission is capability resolution (§7), content-addressed
+        and anchor-signed. One human-authored command list, mechanically projected and drift-pinned by the same
+        machinery that pins every other single-source artifact.
+  • CONFORMANCE\src\conformance.c   [R1]
+        The enumerated constitution of what it MEANS to be III — ~30 sealed named criteria (closure-root
+        determinism, SID inverse round-trip, hexad unrepresentability, witness continuity, self-hosting
+        sealed-call, …) each bound to its own test. Makes "is this still the system we froze?" a gradeable
+        checklist.
+  • CONSTANTS\src\constants_table.c · ERRORS\src\errors_catalog.c   [R1]
+        The two single-source ledgers: an append-only, slot-stable constant table that pins each constant's
+        identity (kills magic-number drift by construction); and the generated-from-one-source catalog of the
+        entire failure surface where every error carries a stable code + structured name + a concrete remediation.
+
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║  §24  RESILIENCE & ERROR-CORRECTION                                                      ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  • Recovery That PROVES It Restored the Original   [III✦]   (← CHARIOT FOUNDATION/sma_rs.c)
+        CHARIOT's Reed-Solomon codes reconstructed data after part was lost — the math behind self-healing
+        storage. In III erasure-recovery is not just performed but PROVEN: a reconstructed fragment is re-witnessed
+        and its content-address (§20) recomputed, so "is this the original?" is answered by the hash matching, not
+        assumed; and because the witness chain is a Merkle accumulator (§6), recovery composes with a membership
+        proof — you recover the data AND prove it is the very data that was stored, in one step. RS stops being a
+        hopeful repair and becomes a content-addressed restoration whose correctness is checkable by anyone.
+  • GPU Code Emitted Under Proof   [III✦]   (← CHARIOT GPU/sma_spv_validate.c · sma_spv_asm.c)
+        CHARIOT generated SPIR-V from scratch and then independently validated it — rare and good, but generation
+        and validation were two steps. In III the GPU is just another emission target of the XII/manifold pipeline
+        (§2,§19): SPIR-V is produced from a hexad-typed term under emission obligations (§3,§15), so invalid
+        bytecode is unrepresentable rather than caught afterward, and the manifold-compilation equivalence cert
+        (§19) proves the GPU kernel computes exactly what its sequential source does. The "independent validator"
+        survives as the one verified decoder applied to a foreign target, but native GPU code needs none of it —
+        it is emitted under proof, like every other target the system speaks.
+
+
+================================================================================================
+SUMMARY
+  Two layers now sit in these 24 functional groups. FIRST, the components that exist today — the live III
+  [III] and the non-current III [R1] — re-sorted by what they do. SECOND, 45 [III✦] evolutions: every
+  CHARIOT idea (~70 source files) re-forged into its III-native successor, each made larger than the original
+  by the same four moves — ontological elevation · deterministic grounding · enmeshment · enlargement.
+  Read together they are one claim, instantiated 45 times: in a fully-deterministic, pure-mathematical,
+  perfectly-curated substrate, a capability that CHARIOT achieved by ENGINEERING becomes one III achieves by
+  mathematical NECESSITY — and the engineered original stands revealed as its special, nondeterministic
+  shadow. The recurring collapses are the proof of enmeshment: dozens of CHARIOT mechanisms reduce to a
+  handful of III facts (the canonical XII term = the hypostasis, the witness chain + algebraic time, the
+  hexad, capabilities, crystals, the resolver, SID inverses, content-addressing, the Forge), so these are not
+  45 isolated upgrades but one tightening weave — each evolution composing with the live [III]/[R1] components
+  it sits beside. The as-is CHARIOT salvage (origins and long-form, formerly [CHA]/[CHA/III]) is preserved
+  intact in Assets.txt, Part II; N/A files are absent here by design.
+================================================================================================

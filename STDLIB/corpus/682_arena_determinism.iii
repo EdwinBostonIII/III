@@ -1,0 +1,85 @@
+/* 682_arena_determinism.iii -- M22 keystone: the bump arena/region hands out DETERMINISTIC,
+ * reproducible addresses (apotheosis M22 Key Move: "the illegal move returns a
+ * non-deterministic address"; Falsifier clause 1: "a non-deterministic allocation address
+ * -> red").  03_region / 122_reset / 121_reset_safe gate the lifecycle, reset-hygiene and
+ * reset-safety, but NONE assert bump-allocation is a DETERMINISTIC FUNCTION of the alloc
+ * sequence (Pi5: reproducible addresses, or the seal breaks).  This KAT closes that gap:
+ *   1. EXACT bump arithmetic: region_alloc aligns REG_USED up to align then advances by n,
+ *      so addr = base + align_up(used, align): p1=base, p2=base+112, p3=base+162.
+ *   2. REPRODUCIBILITY across reset: the same sequence after region_reset yields IDENTICAL
+ *      addresses (base unchanged, used back to 0) -- the determinism keystone.
+ *   3. the bound (clause 2): alloc past capacity is REFUSED (returns 0, not a wild pointer)
+ *      and does NOT advance used; a sealed region refuses too.
+ *   4. arena wrapper: arena_alloc8 deltas are exact (64) and reset returns to base.
+ * Exit 99 = all hold; 1..23 = the failing check.  CORPUS-ONLY (region/arena are complete). */
+module corpus_682
+
+extern @abi(c-msvc-x64) fn region_create(bytes: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_alloc(id: u64, n: u64, align: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_used(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_reset(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_base(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_seal(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+fn main() -> u64 {
+    /* === region: exact deterministic bump arithmetic === */
+    let r : u64 = region_create(4096u64)
+    if r == 0u64 { return 1u64 }
+    let base : u64 = region_base(r)
+    if base == 0u64 { return 2u64 }
+    /* first alloc: used=0 -> start=0 -> addr=base */
+    let p1 : u64 = region_alloc(r, 100u64, 8u64)
+    if p1 != base { return 3u64 }
+    /* used=100; align 16 -> start=align_up(100,16)=112 -> addr=base+112 */
+    let p2 : u64 = region_alloc(r, 50u64, 16u64)
+    if p2 != base + 112u64 { return 4u64 }
+    /* used=162; align 1 -> start=162 -> addr=base+162 */
+    let p3 : u64 = region_alloc(r, 30u64, 1u64)
+    if p3 != base + 162u64 { return 5u64 }
+    if region_used(r) != 192u64 { return 6u64 }
+
+    /* === reproducibility across reset (the determinism keystone) === */
+    if region_reset(r) != 0i32 { return 7u64 }
+    if region_used(r) != 0u64 { return 8u64 }
+    let q1 : u64 = region_alloc(r, 100u64, 8u64)
+    if q1 != p1 { return 9u64 }
+    let q2 : u64 = region_alloc(r, 50u64, 16u64)
+    if q2 != p2 { return 10u64 }
+    let q3 : u64 = region_alloc(r, 30u64, 1u64)
+    if q3 != p3 { return 11u64 }
+
+    /* === the bound (clause 2): over-capacity alloc REFUSED, used unchanged === */
+    if region_alloc(r, 5000u64, 1u64) != 0u64 { return 12u64 }
+    if region_used(r) != 192u64 { return 13u64 }
+
+    /* === a sealed region refuses further alloc === */
+    if region_seal(r) != 0i32 { return 14u64 }
+    if region_alloc(r, 1u64, 1u64) != 0u64 { return 15u64 }
+    if region_release(r) != 0i32 { return 16u64 }
+
+    /* === a too-small region refuses an over-capacity alloc (0, not a wild ptr) === */
+    let r2 : u64 = region_create(64u64)
+    if r2 == 0u64 { return 17u64 }
+    if region_alloc(r2, 100u64, 1u64) != 0u64 { return 18u64 }
+    region_release(r2)
+
+    /* === arena wrapper: exact deltas + reproducible reset-to-base === */
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 19u64 }
+    let ap1 : u64 = arena_alloc8(a, 64u64)
+    if ap1 == 0u64 { return 20u64 }
+    let ap2 : u64 = arena_alloc8(a, 64u64)
+    if ap2 == 0u64 { return 21u64 }
+    if ap2 - ap1 != 64u64 { return 22u64 }
+    arena_reset(a)
+    let ap3 : u64 = arena_alloc8(a, 64u64)
+    if ap3 != ap1 { return 23u64 }
+    arena_drop(a)
+
+    return 99u64
+}

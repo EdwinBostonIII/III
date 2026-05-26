@@ -1,0 +1,135 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sat_arith.iii
+ *
+ * III STDLIB - numera::sat_arith
+ *
+ * Saturating fixed-width integer arithmetic.
+ * On overflow, clamp to the maximum representable value.
+ * On underflow, clamp to zero.
+ *
+ * Used by the resolver activation-score arithmetic (FROZEN SPEC §5.1).
+ * All results are deterministic; no FP; no panic; no allocation.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure).
+ *
+ * Trap discipline (FROZEN SPEC §0.7, ADR-RES-016):
+ *   - No signed-i64 ordering compares.
+ *   - All u32->u64 widening masked.
+ *   - All ordering compares on u64 are SAFE (the trap is signed-only).
+ */
+
+module numera_sat_arith
+
+extern @abi(c-msvc-x64) fn scalar_u64_add_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_sub_did_underflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_mul_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+
+/* --- u64 saturating --- */
+
+fn sat_add_u64(a: u64, b: u64) -> u64 @export {
+    if scalar_u64_add_did_overflow(a, b) == 1u8 {
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    return a + b
+}
+
+fn sat_sub_u64(a: u64, b: u64) -> u64 @export {
+    if scalar_u64_sub_did_underflow(a, b) == 1u8 {
+        return 0u64
+    }
+    return a - b
+}
+
+fn sat_mul_u64(a: u64, b: u64) -> u64 @export {
+    if scalar_u64_mul_did_overflow(a, b) == 1u8 {
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    return a * b
+}
+
+fn sat_div_u64(a: u64, b: u64) -> u64 @export {
+    if b == 0u64 {
+        return 0xFFFFFFFFFFFFFFFFu64
+    }
+    return a / b
+}
+
+/* --- u32 saturating --- */
+
+fn sat_add_u32(a: u32, b: u32) -> u32 @export {
+    if scalar_u32_add_did_overflow(a, b) == 1u8 {
+        return 0xFFFFFFFFu32
+    }
+    return (a + b) & 0xFFFFFFFFu32
+}
+
+fn sat_sub_u32(a: u32, b: u32) -> u32 @export {
+    if scalar_u32_sub_did_underflow(a, b) == 1u8 {
+        return 0u32
+    }
+    return (a - b) & 0xFFFFFFFFu32
+}
+
+fn sat_mul_u32(a: u32, b: u32) -> u32 @export {
+    if scalar_u32_mul_did_overflow(a, b) == 1u8 {
+        return 0xFFFFFFFFu32
+    }
+    return (a * b) & 0xFFFFFFFFu32
+}
+
+fn sat_div_u32(a: u32, b: u32) -> u32 @export {
+    if b == 0u32 {
+        return 0xFFFFFFFFu32
+    }
+    return a / b
+}
+
+/* --- popcount helper (used by resolver_score §5.1 partial-args bonus) --- */
+
+fn popcount_u32(x: u32) -> u32 @export {
+    let mut v : u32 = x
+    let mut c : u32 = 0u32
+    while v != 0u32 {
+        c = c + (v & 1u32)
+        v = (v >> 1u32) & 0x7FFFFFFFu32
+    }
+    return c
+}
+
+fn popcount_u64(x: u64) -> u32 @export {
+    let mut v : u64 = x
+    let mut c : u32 = 0u32
+    while v != 0u64 {
+        c = c + ((v & 1u64) as u32)
+        v = v >> 1u64
+    }
+    return c
+}
+
+/* --- min/max helpers (u64-safe per ADR-RES-016) --- */
+
+fn min_u64(a: u64, b: u64) -> u64 @export {
+    if a == b { return a }
+    if a < b { return a }
+    return b
+}
+
+fn max_u64(a: u64, b: u64) -> u64 @export {
+    if a == b { return a }
+    if a < b { return b }
+    return a
+}
+
+fn min_u32(a: u32, b: u32) -> u32 @export {
+    if a == b { return a }
+    if a < b { return a }
+    return b
+}
+
+fn max_u32(a: u32, b: u32) -> u32 @export {
+    if a == b { return a }
+    if a < b { return b }
+    return a
+}

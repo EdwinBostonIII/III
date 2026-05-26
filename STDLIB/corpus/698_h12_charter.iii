@@ -1,0 +1,18 @@
+/* 698 -- h12_charter: the H12 ("one determinism") falsifier as a run_charter constitutional clause.
+ *
+ * H12: the substrate is DETERMINISTIC -- no float; equality-only compares; deterministic allocation
+ * (M22) and scheduling; wall-clock/IO enter only as quarantined sealed inputs; the build is bit-
+ * identical across iiis-0/1/2.  The RUNTIME-checkable CORE is REPRODUCIBILITY: a deterministic
+ * computation yields byte-identical results across independent runs.  Like the sibling H-charters,
+ * H12 is a constitutional clause carrying a PAIRED falsifier (verify AND falsify) folded through a
+ * terminal-gate run_charter: GREEN iff the clause both HOLDS on its good witness (the SHA-256 digest
+ * and the M22 alloc-address sequence both reproduce) AND CATCHES its bad witness (distinct inputs
+ * give distinct outputs, so "reproducible" is non-vacuous), and run_charter is a REAL terminal gate
+ * -- GREEN on the H12 clause, RED at index 2 on an injected canary that pretends a deterministic op
+ * is non-reproducible.  Main-corpus convention: rc 99 = pass; 1..8 = which h12_selftest assertion
+ * failed. */
+module corpus_698
+
+extern @abi(c-msvc-x64) fn h12_selftest() -> u64 from "h12_charter.iii"
+
+fn main() -> u64 { return h12_selftest() }

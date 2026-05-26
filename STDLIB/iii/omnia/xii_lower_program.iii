@@ -1,0 +1,148 @@
+/* STDLIB/iii/omnia/xii_lower_program.iii -- mig4 Step 9: caller migration (the additive form).
+ * Steps 7-8 lowered the three structured-programming primitives onto XII in isolation: COMPOSITION
+ * (xlc_compose / FCOMPOSE), SELECTION (xld_if / FIF), ITERATION (xli_loop / FLOOP).  Step 9 migrates
+ * a CALLER: a structured "program" built ENTIRELY from those lowered operators, computed by the one
+ * engine (xii_canonicalise).  It proves the three domains INTEROPERATE -- arbitrary NESTING of
+ * sequence/selection/iteration canonicalises correctly, with rules from different domains firing in
+ * concert -- which the per-domain Steps 7-8 do not show (they each exercise one fusion kind).  This
+ * is the additive demonstration of the mig4 end-state: a caller's computation IS canonicalisation.
+ * (The heavier literal migration -- a cg_r3 partial-eval canonicalisation pre-pass, III-XII.md U-4 --
+ * is a compiler-level follow-on; this module migrates a caller at the value level, additively, with
+ * the engine cascade untouched and gated by xad_admit.)
+ *
+ * The proofs nest the primitives every way:
+ *   - DECISION in SEQUENCE   compose(if(p,a,a), b)            -> compose(a, b)            (R030 then .)
+ *   - DECISION in ITERATION  loop(if(p,x,x), 3)               -> loop(x, 3)               (R030 inside)
+ *   - ITERATION in DECISION  if(p, loop(a,2), loop(a,2))      -> loop(a, 2)               (R030 on loops)
+ *   - THE GRAND MIX          loop(if(p, a.b, a.b), 2)         -> loop(a,2) . loop(b,2)    (R007+R030, R015)
+ * The grand mix is the keystone: a loop over a decision over a composition reduces through the
+ * branch-lift + equal-branch rules (collapsing the decision) AND the loop-distribute rule -- three
+ * rules from two different lowered domains -- to the fully distributed normal form, in one canon.
+ *
+ * Hexad: kind_compose.  Ring: R0.  K: 1.00.  NIH: the Step 7-8 lowered APIs + xii_term +
+ * xii_canonicalise + xii_rewrite + xii_admission only.  Determinism: integer-only; ==/!= compares;
+ * single-line fns; no arrays / pointer math / u64 div-mod; eval results bound to locals before
+ * struct_eq (param-spill-safe).
+ */
+module omnia_xii_lower_program
+
+extern @abi(c-msvc-x64) fn xlc_compose(a: u32, b: u32) -> u32 from "xii_lower_compose.iii"
+extern @abi(c-msvc-x64) fn xld_if(p: u32, t: u32, e: u32) -> u32 from "xii_lower_decide.iii"
+extern @abi(c-msvc-x64) fn xli_loop(body: u32, n: u64) -> u32 from "xii_lower_iterate.iii"
+extern @abi(c-msvc-x64) fn xlt_then(a: u32, b: u32) -> u32 from "xii_lower_then.iii"
+extern @abi(c-msvc-x64) fn xlw_with(a: u32, b: u32) -> u32 from "xii_lower_with.iii"
+extern @abi(c-msvc-x64) fn xlu_under(a: u32, b: u32) -> u32 from "xii_lower_under.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_struct_eq(a: u32, b: u32) -> u8 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+
+const XLP_ATOM     : u8  = 11u8   /* K12: CAP_NONE + inert under FCOMPOSE (shared with Step 8) */
+const XLP_PRED     : u8  = 0u8    /* K01_FORM: CAP_NONE pure predicate (for R030) */
+const XLP_NULL_REF : u32 = 0xFFFFFFFFu32
+
+/* a free atom (an operation/value the program manipulates). */
+fn xlp_atom(sf: u32) -> u32 @export { return xii_term_make_basis(XLP_ATOM, sf) }
+
+/* a pure predicate. */
+fn xlp_pred(sf: u32) -> u32 @export { return xii_term_make_basis(XLP_PRED, sf) }
+
+/* a K13 atom: inert under EVERY composition operator (FCOMPOSE/FTHEN/FWITH/FUNDER) -- K13 is no
+ * operator's identity (unlike the K12 XLP_ATOM, which is FTHEN's null), so it is the safe atom for
+ * the six-operator interop below. */
+fn xlp_a13(sf: u32) -> u32 @export { return xii_term_make_basis(12u8, sf) }
+
+/* run the program: this IS the engine's canonicalisation. */
+fn xlp_eval(t: u32) -> u32 @export { return xii_canonicalise(t) }
+
+/* KAT: 99 = all pass; a distinct code per failed check.
+ * Proves the three lowered domains INTEROPERATE under one canonicalisation -- decision in sequence
+ * (1), decision in iteration (2), iteration in decision (3), the grand mix loop/decision/compose
+ * firing R030 then R015 (4); the prove-the-negative TEETH that a genuine mixed program is preserved
+ * (5); determinism (6); and the whole rule set is ADMITTED by Step 6 (7). */
+fn xlp_selftest() -> u64 @export {
+    /* (1) DECISION in SEQUENCE: compose(if(p,a,a), b) -> compose(a, b). */
+    xii_term_arena_reset()
+    let prog1 : u32 = xlc_compose(xld_if(xlp_pred(1u32), xlp_atom(1u32), xlp_atom(1u32)), xlp_atom(2u32))
+    let exp1 : u32 = xlc_compose(xlp_atom(1u32), xlp_atom(2u32))
+    let nf1 : u32 = xlp_eval(prog1)
+    if xii_rewrite_struct_eq(nf1, exp1) != 1u8 { return 1u64 }
+
+    /* (2) DECISION in ITERATION: loop(if(p,x,x), 3) -> loop(x, 3). */
+    xii_term_arena_reset()
+    let prog2 : u32 = xli_loop(xld_if(xlp_pred(1u32), xlp_atom(1u32), xlp_atom(1u32)), 3u64)
+    let exp2 : u32 = xli_loop(xlp_atom(1u32), 3u64)
+    let nf2 : u32 = xlp_eval(prog2)
+    if xii_rewrite_struct_eq(nf2, exp2) != 1u8 { return 2u64 }
+
+    /* (3) ITERATION in DECISION: if(p, loop(a,2), loop(a,2)) -> loop(a, 2). */
+    xii_term_arena_reset()
+    let prog3 : u32 = xld_if(xlp_pred(1u32), xli_loop(xlp_atom(1u32), 2u64), xli_loop(xlp_atom(1u32), 2u64))
+    let exp3 : u32 = xli_loop(xlp_atom(1u32), 2u64)
+    let nf3 : u32 = xlp_eval(prog3)
+    if xii_rewrite_struct_eq(nf3, exp3) != 1u8 { return 3u64 }
+
+    /* (4) THE GRAND MIX: loop(if(p, a.b, a.b), 2) -> loop(a,2) . loop(b,2).  The decision over two
+     * identical compositions collapses (branch-lift R007 hoists the shared head, equal-branch R030
+     * folds the residual), THEN the loop distributes over the composition (R015) -- three rules
+     * across the decision + iteration domains, all in one canonicalisation. */
+    xii_term_arena_reset()
+    let inner : u32 = xld_if(xlp_pred(1u32), xlc_compose(xlp_atom(1u32), xlp_atom(2u32)), xlc_compose(xlp_atom(1u32), xlp_atom(2u32)))
+    let prog4 : u32 = xli_loop(inner, 2u64)
+    let exp4 : u32 = xlc_compose(xli_loop(xlp_atom(1u32), 2u64), xli_loop(xlp_atom(2u32), 2u64))
+    let nf4 : u32 = xlp_eval(prog4)
+    if xii_rewrite_struct_eq(nf4, exp4) != 1u8 { return 4u64 }
+
+    /* (5) GENUINE MIXED PROGRAM preserved (teeth): loop(if(p, a, b), 2) with a!=b does NOT reduce
+     * (the decision is real, the loop body is a FIF not a composition, the count is not 1). */
+    xii_term_arena_reset()
+    let prog5 : u32 = xli_loop(xld_if(xlp_pred(1u32), xlp_atom(1u32), xlp_atom(2u32)), 2u64)
+    let same5 : u32 = xli_loop(xld_if(xlp_pred(1u32), xlp_atom(1u32), xlp_atom(2u32)), 2u64)
+    let nf5 : u32 = xlp_eval(prog5)
+    if xii_rewrite_struct_eq(nf5, same5) != 1u8 { return 5u64 }
+
+    /* (6) DETERMINISM: the grand mix reduces identically twice. */
+    xii_term_arena_reset()
+    let in6a : u32 = xld_if(xlp_pred(1u32), xlc_compose(xlp_atom(1u32), xlp_atom(2u32)), xlc_compose(xlp_atom(1u32), xlp_atom(2u32)))
+    let z1 : u32 = xli_loop(in6a, 2u64)
+    let in6b : u32 = xld_if(xlp_pred(1u32), xlc_compose(xlp_atom(1u32), xlp_atom(2u32)), xlc_compose(xlp_atom(1u32), xlp_atom(2u32)))
+    let z2 : u32 = xli_loop(in6b, 2u64)
+    let nz1 : u32 = xlp_eval(z1)
+    let nz2 : u32 = xlp_eval(z2)
+    if xii_rewrite_struct_eq(nz1, nz2) != 1u8 { return 6u64 }
+
+    /* (7) the whole rule set the migrated caller rides on is ADMITTED (Step 6). */
+    if xad_admit() != 1u32 { return 7u64 }
+
+    /* (8-10) the THREE further composition operators interoperate with the decision domain exactly as
+     * FCOMPOSE does: a vacuous decision collapses (R030) inside a sequencing (then), a context (with),
+     * and a scoping (under) -- so ALL SIX lowered operators compose under one canonicalisation.  K13
+     * atoms (inert under every operator) keep these clean. */
+    xii_term_arena_reset()
+    let s8 : u32 = xlt_then(xld_if(xlp_pred(1u32), xlp_a13(1u32), xlp_a13(1u32)), xlp_a13(2u32))
+    let e8 : u32 = xlt_then(xlp_a13(1u32), xlp_a13(2u32))
+    let n8 : u32 = xlp_eval(s8)
+    if xii_rewrite_struct_eq(n8, e8) != 1u8 { return 8u64 }
+
+    xii_term_arena_reset()
+    let s9 : u32 = xlw_with(xld_if(xlp_pred(1u32), xlp_a13(1u32), xlp_a13(1u32)), xlp_a13(2u32))
+    let e9 : u32 = xlw_with(xlp_a13(1u32), xlp_a13(2u32))
+    let n9 : u32 = xlp_eval(s9)
+    if xii_rewrite_struct_eq(n9, e9) != 1u8 { return 9u64 }
+
+    xii_term_arena_reset()
+    let s10 : u32 = xlu_under(xld_if(xlp_pred(1u32), xlp_a13(1u32), xlp_a13(1u32)), xlp_a13(2u32))
+    let e10 : u32 = xlu_under(xlp_a13(1u32), xlp_a13(2u32))
+    let n10 : u32 = xlp_eval(s10)
+    if xii_rewrite_struct_eq(n10, e10) != 1u8 { return 10u64 }
+
+    return 99u64
+}
+
+/* xii_lower_program EMBODIES caller migration: a structured program built from the lowered operators
+ * (compose/if/loop) computes by canonicalisation alone, and the three domains INTEROPERATE -- the
+ * grand mix collapses a decision (R030) then distributes a loop (R015) in a single reduction.  With
+ * Steps 7-8 this closes the additive demonstration that arbitrary structured computation routes
+ * through the one engine; the literal compiler-level migration (cg_r3 canonicalisation pre-pass) is
+ * the remaining heavier follow-on. */

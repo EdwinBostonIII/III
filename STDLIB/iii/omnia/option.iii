@@ -1,0 +1,83 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\option.iii
+ *
+ * III STDLIB - omnia::option   (V1 Stage 7.2: @specialize-monomorphised)
+ *
+ * Null-safe optional types.  Two encodings by payload width:
+ *
+ *   <=32-bit + bool  -- inline tag-in-low-bit.  none -> 0; some(v) ->
+ *     ((v as u64) << 1) | 1.  Lossless (the tag steals bit 0; <=32-bit
+ *     payloads occupy <=32 of the 63 available bits).  These ops are the
+ *     single generic `option__<op><T>` specialised over the integer alphabet
+ *     via @specialize, emitting `option_<type>_<op>` (the gospel
+ *     <module>_<type>_<op> mangling; the `__` marker is the type slot).
+ *     unwrap_or returns the raw u64 payload (caller casts to the element).
+ *
+ *   u64  -- side-table (u63 < u64, so the tag-in-low-bit form is lossy).  A
+ *     fixed 256-slot table keyed by index; 0 = none, i+1 = some(slot i).  Kept
+ *     as hand-written specials since the encoding genuinely differs per width.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 0.99.
+ */
+
+module omnia_option
+
+const OPT_INVALID  : u64 = 0u64
+const OPT_TAG_NONE : u8 = 0u8
+const OPT_TAG_SOME : u8 = 1u8
+
+/* ─── inline tag-in-low-bit, @specialize over the integer alphabet ───── */
+
+fn option__none<T>() -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { return 0u64 }
+fn option__some<T>(v: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { return ((v as u64) << 1u64) | 1u64 }
+fn option__is_some<T>(o: u64) -> u8 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (o & 1u64) == 1u64 { return 1u8 } return 0u8 }
+fn option__is_none<T>(o: u64) -> u8 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (o & 1u64) == 0u64 { return 1u8 } return 0u8 }
+fn option__unwrap_or<T>(o: u64, default: T) -> u64 @specialize(u8, u16, u32, i8, i16, i32, bool) @export { if (o & 1u64) == 0u64 { return default as u64 } return o >> 1u64 }
+
+/* ─── u64 payloads: side-table (u63 < u64) ──────────────────────────── */
+
+const OPTU64_SLOTS : u32 = 256u32
+var OPT_U64_VAL    : [u64; 256]
+var OPT_U64_LIVE   : [u8;  256]
+
+fn option_u64_none() -> u64 @export { return 0u64 }
+
+fn option_u64_some(v: u64) -> u64 @export {
+    let mut i : u32 = 0u32
+    while i < OPTU64_SLOTS {
+        if OPT_U64_LIVE[i] == 0u8 {
+            OPT_U64_VAL[i] = v
+            OPT_U64_LIVE[i] = 1u8
+            return (i as u64) + 1u64
+        }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+fn option_u64_is_some(o: u64) -> u8 @export {
+    if o == 0u64 { return 0u8 }
+    let s : u64 = o - 1u64
+    if s >= (OPTU64_SLOTS as u64) { return 0u8 }
+    let si : u32 = s as u32
+    if OPT_U64_LIVE[si] == 1u8 { return 1u8 }
+    return 0u8
+}
+
+fn option_u64_unwrap_or(o: u64, default: u64) -> u64 @export {
+    if o == 0u64 { return default }
+    let s : u64 = o - 1u64
+    if s >= (OPTU64_SLOTS as u64) { return default }
+    let si : u32 = s as u32
+    if OPT_U64_LIVE[si] == 0u8 { return default }
+    return OPT_U64_VAL[si]
+}
+
+fn option_u64_drop(o: u64) -> u8 @export {
+    if o == 0u64 { return 0u8 }
+    let s : u64 = o - 1u64
+    if s >= (OPTU64_SLOTS as u64) { return 0u8 }
+    let si : u32 = s as u32
+    OPT_U64_LIVE[si] = 0u8
+    OPT_U64_VAL[si] = 0u64
+    return 1u8
+}

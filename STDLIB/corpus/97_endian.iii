@@ -1,0 +1,35 @@
+/* Endian load/store/bswap. */
+module corpus_97
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn endian_load_u32_le(p: *u8, off: u64) -> u32 from "endian.iii"
+extern @abi(c-msvc-x64) fn endian_load_u32_be(p: *u8, off: u64) -> u32 from "endian.iii"
+extern @abi(c-msvc-x64) fn endian_store_u32_le(p: *u8, off: u64, v: u32) -> i32 from "endian.iii"
+extern @abi(c-msvc-x64) fn endian_store_u32_be(p: *u8, off: u64, v: u32) -> i32 from "endian.iii"
+extern @abi(c-msvc-x64) fn endian_bswap32(v: u32) -> u32 from "endian.iii"
+extern @abi(c-msvc-x64) fn endian_bswap64(v: u64) -> u64 from "endian.iii"
+
+fn main() -> u64 {
+    let p : *u8 = malloc(8u64)
+    /* Store 0x12345678 little-endian, verify bytes */
+    endian_store_u32_le(p, 0u64, 0x12345678u32)
+    if p[0] != 0x78u8 { return 1u64 }
+    if p[1] != 0x56u8 { return 2u64 }
+    if p[2] != 0x34u8 { return 3u64 }
+    if p[3] != 0x12u8 { return 4u64 }
+    /* Load it back as LE */
+    if endian_load_u32_le(p, 0u64) != 0x12345678u32 { return 5u64 }
+    /* Load it as BE - should be byte-swapped */
+    if endian_load_u32_be(p, 0u64) != 0x78563412u32 { return 6u64 }
+    /* Store 0x12345678 big-endian, verify bytes */
+    endian_store_u32_be(p, 0u64, 0x12345678u32)
+    if p[0] != 0x12u8 { return 7u64 }
+    if p[3] != 0x78u8 { return 8u64 }
+    /* bswap32 */
+    if endian_bswap32(0x12345678u32) != 0x78563412u32 { return 9u64 }
+    /* bswap64 */
+    if endian_bswap64(0x0123456789ABCDEFu64) != 0xEFCDAB8967452301u64 { return 10u64 }
+    free(p)
+    return 99u64
+}

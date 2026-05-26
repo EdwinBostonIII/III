@@ -1,0 +1,400 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\verba\markup.iii
+ *
+ * III STDLIB - verba::markup -- a pure, bounded, deterministic HTML tokenizer.
+ *
+ * The ingestion FRONT of "the web as knowledge" (the ghost-browser idea, reforged
+ * for III): bytes -> a TOKEN STREAM.  It is deliberately decoupled from tree-build
+ * (verba/dom) and from hashing (numera/cad): markup_tokenize is a pure function of
+ * its input bytes, so identical input always yields an identical token stream and
+ * the whole thing is KAT-able with no IO.
+ *
+ * A token is 3 little-endian u32 (12 bytes) in a caller-provided buffer:
+ *     [0] kind   (MK_*)            [4] off  (byte offset INTO the source)
+ *     [8] len    (byte length of the slice; 0 for MK_TAG_END unless self-closing)
+ * Names/text/values are SLICES into the source (off,len) -- never copied -- so a
+ * '<' inside <script> or a bogus '<' folds back into the surrounding text run for
+ * free.  MK_TAG_END.len == 1 marks a self-closing start tag ("<br/>").
+ *
+ * Faithful to the HTML element/attribute/rawtext subset AND stricter than the
+ * CHARIOT original: real comment handling (`<!-- a > b -->`), quoted/unquoted/
+ * value-less attributes, and a rawtext end-tag NAME match (so `</div>` inside
+ * <script> stays text, only `</script>` closes).  Character-reference decoding
+ * (&amp; ...) is a separate, clean deepening -- verba/html_escape already owns the
+ * inverse -- and is intentionally NOT done here (it does not affect structure or
+ * link extraction).
+ *
+ * The state machine is dispatched FLAT (a per-state cascade with early return)
+ * over module-scope state -- never a deep if/else nest (which would exceed the
+ * parser's block-recursion limit).  Bounded (W8): at most max_toks tokens; on
+ * overflow markup_tokenize returns MK_OVERFLOW and writes no further tokens.
+ * Non-reentrant: the write cursor + parse state live at module scope (serialized;
+ * flagged), the proven idiom used by aether/triple_check.
+ *
+ * Hexad: kind_form.  Ring: R0.  K: 1.00 (pure).  NIH: none (pure byte logic).
+ * Determinism: integer-only; byte-wise LE; ==/!= compares; <=4-param fns; no local
+ * var arrays; flat dispatch.
+ */
+module verba_markup
+
+/* ── token kinds ── */
+const MK_TEXT       : u32 = 0u32
+const MK_OPEN       : u32 = 1u32    /* start-tag NAME slice */
+const MK_CLOSE      : u32 = 2u32    /* end-tag NAME slice   */
+const MK_ATTR_NAME  : u32 = 3u32
+const MK_ATTR_VALUE : u32 = 4u32
+const MK_TAG_END    : u32 = 5u32    /* '>' of a start tag; len==1 iff self-closing */
+const MK_OVERFLOW   : u32 = 0xFFFFFFFFu32
+
+/* ── tokenizer states ── */
+const ST_TEXT          : u32 =  0u32
+const ST_TAG_OPEN      : u32 =  1u32   /* saw '<' */
+const ST_END_OPEN      : u32 =  2u32   /* saw '</' */
+const ST_TAG_NAME      : u32 =  3u32
+const ST_END_NAME      : u32 =  4u32
+const ST_BEFORE_ATTR   : u32 =  5u32
+const ST_ATTR_NAME     : u32 =  6u32
+const ST_AFTER_ATTR    : u32 =  7u32
+const ST_BEFORE_VALUE  : u32 =  8u32
+const ST_VALUE_DQ      : u32 =  9u32
+const ST_VALUE_SQ      : u32 = 10u32
+const ST_VALUE_UQ      : u32 = 11u32
+const ST_SELF_CLOSE    : u32 = 12u32
+const ST_BANG          : u32 = 13u32   /* saw '<!' */
+const ST_BANG_DASH     : u32 = 14u32   /* saw '<!-' */
+const ST_COMMENT       : u32 = 15u32
+const ST_COMMENT_DASH  : u32 = 16u32   /* saw '-' in comment */
+const ST_COMMENT_DASH2 : u32 = 17u32   /* saw '--' in comment */
+const ST_BOGUS         : u32 = 18u32   /* doctype / PI / junk: skip to '>' */
+const ST_RAW           : u32 = 19u32   /* rawtext content (script/style) */
+const ST_RAW_LT        : u32 = 20u32   /* in rawtext, saw '<' */
+const ST_RAW_END_OPEN  : u32 = 21u32   /* in rawtext, saw '</' */
+const ST_RAW_END_NAME  : u32 = 22u32
+
+/* ── byte literals ── */
+const B_LT    : u8 = 0x3Cu8   /* < */
+const B_GT    : u8 = 0x3Eu8   /* > */
+const B_SLASH : u8 = 0x2Fu8   /* / */
+const B_BANG  : u8 = 0x21u8   /* ! */
+const B_QUES  : u8 = 0x3Fu8   /* ? */
+const B_EQ    : u8 = 0x3Du8   /* = */
+const B_DQ    : u8 = 0x22u8   /* " */
+const B_SQ    : u8 = 0x27u8   /* ' */
+const B_DASH  : u8 = 0x2Du8   /* - */
+
+/* ── module-scope cursor, source base, and parse state (non-reentrant; serialized) ── */
+var MK_SRC       : u64 = 0u64
+var MK_TOKS_BASE : u64 = 0u64
+var MK_TOKS_MAX  : u32 = 0u32
+var MK_TOKS_N    : u32 = 0u32
+var MK_OVF       : u8  = 0u8
+
+var MK_STATE     : u32 = 0u32
+var MK_TEXT_OFF  : u64 = 0u64    /* start of the pending text run */
+var MK_NAME_OFF  : u64 = 0u64    /* start of current tag/attr name */
+var MK_VAL_OFF   : u64 = 0u64    /* start of current attr value */
+var MK_CAND_OFF  : u64 = 0u64    /* start of rawtext end-tag candidate name */
+var MK_LT_POS    : u64 = 0u64    /* position of the most recent '<' */
+var MK_RAW_WHICH : u32 = 0u32    /* 1=script,2=style while inside rawtext / its start tag */
+
+var MK_LIT_SCRIPT : [u8; 6] = [115u8, 99u8, 114u8, 105u8, 112u8, 116u8]   /* "script" */
+var MK_LIT_STYLE  : [u8; 5] = [115u8, 116u8, 121u8, 108u8, 101u8]         /* "style"  */
+
+/* ── byte-discipline helpers ── */
+fn _mk_w32(p: u64, v: u32) -> i32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    p0[0u64] = (v & 0xFFu32) as u8
+    p1[0u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p2[0u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p3[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+
+fn _mk_r32(p: u64) -> u32 {
+    let p0 : *u8 = (p) as *u8
+    let p1 : *u8 = (p + 1u64) as *u8
+    let p2 : *u8 = (p + 2u64) as *u8
+    let p3 : *u8 = (p + 3u64) as *u8
+    let b0 : u32 = (p0[0u64] as u32) & 0xFFu32
+    let b1 : u32 = (p1[0u64] as u32) & 0xFFu32
+    let b2 : u32 = (p2[0u64] as u32) & 0xFFu32
+    let b3 : u32 = (p3[0u64] as u32) & 0xFFu32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn _mk_is_ws(c: u8) -> u8 {
+    if c == 0x20u8 { return 1u8 }
+    if c == 0x09u8 { return 1u8 }
+    if c == 0x0Au8 { return 1u8 }
+    if c == 0x0Cu8 { return 1u8 }
+    if c == 0x0Du8 { return 1u8 }
+    return 0u8
+}
+
+fn _mk_is_alpha(c: u8) -> u8 {
+    if c >= 0x41u8 { if c <= 0x5Au8 { return 1u8 } }
+    if c >= 0x61u8 { if c <= 0x7Au8 { return 1u8 } }
+    return 0u8
+}
+
+fn _mk_lower(c: u8) -> u8 {
+    if c >= 0x41u8 { if c <= 0x5Au8 { return c + 32u8 } }
+    return c
+}
+
+/* Emit one token (kind, off, len) into the caller buffer; sets MK_OVF on overflow. */
+fn _mk_emit(kind: u32, off: u32, ln: u32) -> i32 {
+    if MK_OVF == 1u8 { return 0i32 }
+    if MK_TOKS_N >= MK_TOKS_MAX { MK_OVF = 1u8  return 0i32 }
+    let base : u64 = MK_TOKS_BASE + ((MK_TOKS_N as u64) & 0xFFFFFFFFu64) * 12u64
+    _mk_w32(base, kind)
+    _mk_w32(base + 4u64, off)
+    _mk_w32(base + 8u64, ln)
+    MK_TOKS_N = MK_TOKS_N + 1u32
+    return 0i32
+}
+
+/* Case-insensitive compare of source[off .. off+litlen) against lit[0..litlen). */
+fn _mk_name_eq_ci(off: u64, lit: u64, litlen: u32) -> u8 {
+    let sp : *u8 = MK_SRC as *u8
+    let lp : *u8 = lit as *u8
+    let mut k : u32 = 0u32
+    while k < litlen {
+        let a : u8 = _mk_lower(sp[off + ((k as u64) & 0xFFFFFFFFu64)])
+        let b : u8 = lp[(k as u64) & 0xFFFFFFFFu64]
+        if a != b { return 0u8 }
+        k = k + 1u32
+    }
+    return 1u8
+}
+
+/* Rawtext kind of a tag-name slice: 1=script, 2=style, 0=neither. */
+fn _mk_raw_kind(off: u64, ln: u32) -> u32 {
+    if ln == 6u32 { if _mk_name_eq_ci(off, (&MK_LIT_SCRIPT as u64), 6u32) == 1u8 { return 1u32 } }
+    if ln == 5u32 { if _mk_name_eq_ci(off, (&MK_LIT_STYLE  as u64), 5u32) == 1u8 { return 2u32 } }
+    return 0u32
+}
+
+/* ── shared transition helpers (each <=1 param; operate on module-scope state) ── */
+
+/* start-tag NAME completes: emit MK_OPEN + classify rawtext element. */
+fn _mk_finish_name(i: u64) -> i32 {
+    let ln : u32 = ((i - MK_NAME_OFF) & 0xFFFFFFFFu64) as u32
+    _mk_emit(MK_OPEN, (MK_NAME_OFF & 0xFFFFFFFFu64) as u32, ln)
+    MK_RAW_WHICH = _mk_raw_kind(MK_NAME_OFF, ln)
+    return 0i32
+}
+
+/* start tag fully closes at '>': emit MK_TAG_END, enter rawtext or text. */
+fn _mk_finish_open(i: u64) -> i32 {
+    _mk_emit(MK_TAG_END, 0u32, 0u32)
+    if MK_RAW_WHICH != 0u32 { MK_STATE = ST_RAW } else { MK_STATE = ST_TEXT }
+    MK_TEXT_OFF = i + 1u64
+    return 0i32
+}
+
+fn _mk_emit_close_name(i: u64) -> i32 {
+    _mk_emit(MK_CLOSE, (MK_NAME_OFF & 0xFFFFFFFFu64) as u32, ((i - MK_NAME_OFF) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+fn _mk_emit_attr_name(i: u64) -> i32 {
+    _mk_emit(MK_ATTR_NAME, (MK_NAME_OFF & 0xFFFFFFFFu64) as u32, ((i - MK_NAME_OFF) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+fn _mk_emit_attr_value(i: u64) -> i32 {
+    _mk_emit(MK_ATTR_VALUE, (MK_VAL_OFF & 0xFFFFFFFFu64) as u32, ((i - MK_VAL_OFF) & 0xFFFFFFFFu64) as u32)
+    return 0i32
+}
+
+/* ── flat per-state dispatch: handle the current byte `c` at index `i`, advance MK_STATE ── */
+fn _mk_step(c: u8, i: u64) -> i32 {
+    if MK_STATE == ST_TEXT {
+        if c == B_LT {
+            if i > MK_TEXT_OFF { _mk_emit(MK_TEXT, (MK_TEXT_OFF & 0xFFFFFFFFu64) as u32, ((i - MK_TEXT_OFF) & 0xFFFFFFFFu64) as u32) }
+            MK_LT_POS = i
+            MK_STATE = ST_TAG_OPEN
+        }
+        return 0i32
+    }
+    if MK_STATE == ST_TAG_OPEN {
+        if c == B_SLASH { MK_STATE = ST_END_OPEN  return 0i32 }
+        if c == B_BANG  { MK_STATE = ST_BANG      return 0i32 }
+        if c == B_QUES  { MK_STATE = ST_BOGUS     return 0i32 }
+        if _mk_is_alpha(c) == 1u8 { MK_NAME_OFF = i  MK_STATE = ST_TAG_NAME  return 0i32 }
+        MK_TEXT_OFF = MK_LT_POS  MK_STATE = ST_TEXT
+        return 0i32
+    }
+    if MK_STATE == ST_END_OPEN {
+        if _mk_is_alpha(c) == 1u8 { MK_NAME_OFF = i  MK_STATE = ST_END_NAME  return 0i32 }
+        if c == B_GT { MK_TEXT_OFF = i + 1u64  MK_STATE = ST_TEXT  return 0i32 }
+        MK_STATE = ST_BOGUS
+        return 0i32
+    }
+    if MK_STATE == ST_TAG_NAME {
+        if _mk_is_ws(c) == 1u8 { _mk_finish_name(i)  MK_STATE = ST_BEFORE_ATTR  return 0i32 }
+        if c == B_SLASH { _mk_finish_name(i)  MK_STATE = ST_SELF_CLOSE  return 0i32 }
+        if c == B_GT { _mk_finish_name(i)  _mk_finish_open(i)  return 0i32 }
+        return 0i32
+    }
+    if MK_STATE == ST_END_NAME {
+        if _mk_is_ws(c) == 1u8 { _mk_emit_close_name(i)  MK_STATE = ST_BOGUS  return 0i32 }
+        if c == B_GT { _mk_emit_close_name(i)  MK_TEXT_OFF = i + 1u64  MK_STATE = ST_TEXT  return 0i32 }
+        if c == B_SLASH { _mk_emit_close_name(i)  MK_STATE = ST_BOGUS  return 0i32 }
+        return 0i32
+    }
+    if MK_STATE == ST_BEFORE_ATTR {
+        if _mk_is_ws(c) == 1u8 { return 0i32 }
+        if c == B_GT { _mk_finish_open(i)  return 0i32 }
+        if c == B_SLASH { MK_STATE = ST_SELF_CLOSE  return 0i32 }
+        MK_NAME_OFF = i  MK_STATE = ST_ATTR_NAME
+        return 0i32
+    }
+    if MK_STATE == ST_ATTR_NAME {
+        if _mk_is_ws(c) == 1u8 { _mk_emit_attr_name(i)  MK_STATE = ST_AFTER_ATTR  return 0i32 }
+        if c == B_EQ { _mk_emit_attr_name(i)  MK_STATE = ST_BEFORE_VALUE  return 0i32 }
+        if c == B_GT { _mk_emit_attr_name(i)  _mk_finish_open(i)  return 0i32 }
+        if c == B_SLASH { _mk_emit_attr_name(i)  MK_STATE = ST_SELF_CLOSE  return 0i32 }
+        return 0i32
+    }
+    if MK_STATE == ST_AFTER_ATTR {
+        if _mk_is_ws(c) == 1u8 { return 0i32 }
+        if c == B_EQ { MK_STATE = ST_BEFORE_VALUE  return 0i32 }
+        if c == B_GT { _mk_finish_open(i)  return 0i32 }
+        if c == B_SLASH { MK_STATE = ST_SELF_CLOSE  return 0i32 }
+        MK_NAME_OFF = i  MK_STATE = ST_ATTR_NAME
+        return 0i32
+    }
+    if MK_STATE == ST_BEFORE_VALUE {
+        if _mk_is_ws(c) == 1u8 { return 0i32 }
+        if c == B_DQ { MK_VAL_OFF = i + 1u64  MK_STATE = ST_VALUE_DQ  return 0i32 }
+        if c == B_SQ { MK_VAL_OFF = i + 1u64  MK_STATE = ST_VALUE_SQ  return 0i32 }
+        if c == B_GT { _mk_finish_open(i)  return 0i32 }
+        MK_VAL_OFF = i  MK_STATE = ST_VALUE_UQ
+        return 0i32
+    }
+    if MK_STATE == ST_VALUE_DQ {
+        if c == B_DQ { _mk_emit_attr_value(i)  MK_STATE = ST_BEFORE_ATTR }
+        return 0i32
+    }
+    if MK_STATE == ST_VALUE_SQ {
+        if c == B_SQ { _mk_emit_attr_value(i)  MK_STATE = ST_BEFORE_ATTR }
+        return 0i32
+    }
+    if MK_STATE == ST_VALUE_UQ {
+        if _mk_is_ws(c) == 1u8 { _mk_emit_attr_value(i)  MK_STATE = ST_BEFORE_ATTR  return 0i32 }
+        if c == B_GT { _mk_emit_attr_value(i)  _mk_finish_open(i)  return 0i32 }
+        return 0i32
+    }
+    if MK_STATE == ST_SELF_CLOSE {
+        if c == B_GT { _mk_emit(MK_TAG_END, 0u32, 1u32)  MK_RAW_WHICH = 0u32  MK_TEXT_OFF = i + 1u64  MK_STATE = ST_TEXT  return 0i32 }
+        MK_STATE = ST_BEFORE_ATTR
+        return 0i32
+    }
+    if MK_STATE == ST_BANG {
+        if c == B_DASH { MK_STATE = ST_BANG_DASH } else { MK_STATE = ST_BOGUS }
+        return 0i32
+    }
+    if MK_STATE == ST_BANG_DASH {
+        if c == B_DASH { MK_STATE = ST_COMMENT } else { MK_STATE = ST_BOGUS }
+        return 0i32
+    }
+    if MK_STATE == ST_COMMENT {
+        if c == B_DASH { MK_STATE = ST_COMMENT_DASH }
+        return 0i32
+    }
+    if MK_STATE == ST_COMMENT_DASH {
+        if c == B_DASH { MK_STATE = ST_COMMENT_DASH2 } else { MK_STATE = ST_COMMENT }
+        return 0i32
+    }
+    if MK_STATE == ST_COMMENT_DASH2 {
+        if c == B_GT { MK_TEXT_OFF = i + 1u64  MK_STATE = ST_TEXT  return 0i32 }
+        if c == B_DASH { return 0i32 }
+        MK_STATE = ST_COMMENT
+        return 0i32
+    }
+    if MK_STATE == ST_BOGUS {
+        if c == B_GT { MK_TEXT_OFF = i + 1u64  MK_STATE = ST_TEXT }
+        return 0i32
+    }
+    if MK_STATE == ST_RAW {
+        if c == B_LT { MK_LT_POS = i  MK_STATE = ST_RAW_LT }
+        return 0i32
+    }
+    if MK_STATE == ST_RAW_LT {
+        if c == B_SLASH { MK_STATE = ST_RAW_END_OPEN } else { MK_STATE = ST_RAW }
+        return 0i32
+    }
+    if MK_STATE == ST_RAW_END_OPEN {
+        if _mk_is_alpha(c) == 1u8 { MK_CAND_OFF = i  MK_STATE = ST_RAW_END_NAME } else { MK_STATE = ST_RAW }
+        return 0i32
+    }
+    if MK_STATE == ST_RAW_END_NAME {
+        let mut term : u8 = 0u8
+        if _mk_is_ws(c) == 1u8 { term = 1u8 }
+        if c == B_GT { term = 1u8 }
+        if c == B_SLASH { term = 1u8 }
+        if term == 1u8 {
+            let cl : u32 = ((i - MK_CAND_OFF) & 0xFFFFFFFFu64) as u32
+            if _mk_raw_kind(MK_CAND_OFF, cl) == MK_RAW_WHICH {
+                if MK_LT_POS > MK_TEXT_OFF { _mk_emit(MK_TEXT, (MK_TEXT_OFF & 0xFFFFFFFFu64) as u32, ((MK_LT_POS - MK_TEXT_OFF) & 0xFFFFFFFFu64) as u32) }
+                _mk_emit(MK_CLOSE, (MK_CAND_OFF & 0xFFFFFFFFu64) as u32, cl)
+                MK_RAW_WHICH = 0u32
+                if c == B_GT { MK_TEXT_OFF = i + 1u64  MK_STATE = ST_TEXT } else { MK_STATE = ST_BOGUS }
+                return 0i32
+            }
+            MK_STATE = ST_RAW
+            return 0i32
+        }
+        if _mk_is_alpha(c) == 1u8 { return 0i32 }
+        MK_STATE = ST_RAW
+        return 0i32
+    }
+    return 0i32
+}
+
+/* Tokenize src[0..len) into the caller's token buffer (3*u32 per token, capacity
+ * max_toks).  Returns the token count, or MK_OVERFLOW if the buffer was too small. */
+fn markup_tokenize(src: u64, len: u64, toks: u64, max_toks: u32) -> u32 @export {
+    MK_SRC       = src
+    MK_TOKS_BASE = toks
+    MK_TOKS_MAX  = max_toks
+    MK_TOKS_N    = 0u32
+    MK_OVF       = 0u8
+    MK_STATE     = ST_TEXT
+    MK_TEXT_OFF  = 0u64
+    MK_NAME_OFF  = 0u64
+    MK_VAL_OFF   = 0u64
+    MK_CAND_OFF  = 0u64
+    MK_LT_POS    = 0u64
+    MK_RAW_WHICH = 0u32
+
+    let sp : *u8 = src as *u8
+    let mut i : u64 = 0u64
+    while i < len {
+        let c : u8 = sp[i]
+        _mk_step(c, i)
+        i = i + 1u64
+    }
+
+    /* flush trailing text (only TEXT / RAW carry an open text run at EOF) */
+    if MK_STATE == ST_TEXT { if len > MK_TEXT_OFF { _mk_emit(MK_TEXT, (MK_TEXT_OFF & 0xFFFFFFFFu64) as u32, ((len - MK_TEXT_OFF) & 0xFFFFFFFFu64) as u32) } }
+    if MK_STATE == ST_RAW  { if len > MK_TEXT_OFF { _mk_emit(MK_TEXT, (MK_TEXT_OFF & 0xFFFFFFFFu64) as u32, ((len - MK_TEXT_OFF) & 0xFFFFFFFFu64) as u32) } }
+
+    if MK_OVF == 1u8 { return MK_OVERFLOW }
+    return MK_TOKS_N
+}
+
+/* ── token accessors (read the 3*u32 LE record) ── */
+fn markup_tok_kind(toks: u64, idx: u32) -> u32 @export {
+    return _mk_r32(toks + ((idx as u64) & 0xFFFFFFFFu64) * 12u64)
+}
+fn markup_tok_off(toks: u64, idx: u32) -> u32 @export {
+    return _mk_r32(toks + ((idx as u64) & 0xFFFFFFFFu64) * 12u64 + 4u64)
+}
+fn markup_tok_len(toks: u64, idx: u32) -> u32 @export {
+    return _mk_r32(toks + ((idx as u64) & 0xFFFFFFFFu64) * 12u64 + 8u64)
+}

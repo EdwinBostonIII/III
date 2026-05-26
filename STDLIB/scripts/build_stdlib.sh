@@ -259,6 +259,7 @@ MODULES=(
     "numera/fixed"
     "numera/q128"
     "verba/parse"
+    "verba/markup"
     "numera/bigint"
     "verba/format"
     "verba/regex"

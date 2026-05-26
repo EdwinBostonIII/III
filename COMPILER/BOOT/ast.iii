@@ -4317,3 +4317,141 @@ fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 @export { return ast_ki
 fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_VAR_DECL, 12u64) }
 fn iii_ast_struct_decl_name_off(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STRUCT_DECL, 8u64) }
 fn iii_ast_struct_decl_name_len(ast: u64, node: u32) -> u32 @export { return ast_kind_child(ast, node, III_AST_STRUCT_DECL, 12u64) }
+
+/* ============================================================================
+ * Task #16: emit_accessors.c byte/format helpers -> native .iii (pure byte ops,
+ * zero libc).  Hosted here (native-deref machinery); emit_accessors.c keeps ONLY
+ * the genuine libc/OS reach (putenv/system/popen/fopen/malloc/free).  Consumers
+ * (emit/cg_r0/r3/rm1/rm2) resolve by name.  Byte-for-byte equivalent to the C.
+ * ============================================================================ */
+
+var EMIT16_HEX_TMP : [u8; 24]
+
+fn emit16_hex_digit(nib: u64) -> u8 {
+    if nib < 10u64 { return (48u64 + nib) as u8 }
+    return (87u64 + nib) as u8
+}
+
+fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 @export {
+    let p: *u8 = (addr + off) as *u8
+    return p[0] as u32
+}
+fn iii_emit_write_u8_c(addr: u64, val: u32) -> u32 @export {
+    let p: *u8 = addr as *u8
+    p[0] = (val & 255u32) as u8
+    return 0u32
+}
+fn iii_emit_write_u32_be_c(addr: u64, val: u32) -> u32 @export {
+    let p0: *u8 = addr as *u8
+    p0[0] = ((val >> 24u32) & 255u32) as u8
+    let p1: *u8 = (addr + 1u64) as *u8
+    p1[0] = ((val >> 16u32) & 255u32) as u8
+    let p2: *u8 = (addr + 2u64) as *u8
+    p2[0] = ((val >> 8u32) & 255u32) as u8
+    let p3: *u8 = (addr + 3u64) as *u8
+    p3[0] = (val & 255u32) as u8
+    return 0u32
+}
+fn iii_emit_pack8_c(b0: u32, b1: u32, b2: u32, b3: u32, b4: u32, b5: u32, b6: u32, b7: u32) -> u64 @export {
+    let r0: u64 = (b0 & 255u32) as u64
+    let r1: u64 = ((b1 & 255u32) as u64) << 8u64
+    let r2: u64 = ((b2 & 255u32) as u64) << 16u64
+    let r3: u64 = ((b3 & 255u32) as u64) << 24u64
+    let r4: u64 = ((b4 & 255u32) as u64) << 32u64
+    let r5: u64 = ((b5 & 255u32) as u64) << 40u64
+    let r6: u64 = ((b6 & 255u32) as u64) << 48u64
+    let r7: u64 = ((b7 & 255u32) as u64) << 56u64
+    return r0 | r1 | r2 | r3 | r4 | r5 | r6 | r7
+}
+fn iii_emit_hexchar_c(nibble: u32) -> u32 @export {
+    let nib: u64 = (nibble & 15u32) as u64
+    return emit16_hex_digit(nib) as u32
+}
+fn iii_emit_strlen_c(s: u64) -> u64 @export {
+    if s == 0u64 { return 0u64 }
+    let mut i: u64 = 0u64
+    let mut b: u32 = iii_emit_buf_read_u8_c(s, 0u64)
+    while b != 0u32 {
+        i = i + 1u64
+        b = iii_emit_buf_read_u8_c(s, i)
+    }
+    return i
+}
+fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 @export {
+    let mut i: u64 = 0u64
+    while i < n {
+        let ca: u32 = iii_emit_buf_read_u8_c(a, i)
+        let cb: u32 = iii_emit_buf_read_u8_c(b, i)
+        if ca != cb { return (ca as i32) - (cb as i32) }
+        i = i + 1u64
+    }
+    return 0i32
+}
+fn iii_emit_memcpy_c(dst: u64, src: u64, n: u64) -> u32 @export {
+    let mut i: u64 = 0u64
+    while i < n {
+        iii_emit_write_u8_c(dst + i, iii_emit_buf_read_u8_c(src, i))
+        i = i + 1u64
+    }
+    return 0u32
+}
+fn iii_emit_strcmp_c(a: u64, b: u64) -> i32 @export {
+    let mut i: u64 = 0u64
+    let mut ca: u32 = iii_emit_buf_read_u8_c(a, 0u64)
+    let mut cb: u32 = iii_emit_buf_read_u8_c(b, 0u64)
+    while ca == cb {
+        if ca == 0u32 { return 0i32 }
+        i = i + 1u64
+        ca = iii_emit_buf_read_u8_c(a, i)
+        cb = iii_emit_buf_read_u8_c(b, i)
+    }
+    return (ca as i32) - (cb as i32)
+}
+fn iii_emit_appstr_c(dst: u64, off: u64, cap: u64, src: u64) -> i64 @export {
+    if dst == 0u64 { return -1i64 }
+    if src == 0u64 { return -1i64 }
+    let o: u64 = off
+    let c: u64 = cap
+    let n: u64 = iii_emit_strlen_c(src)
+    if o + n + 1u64 > c { return -1i64 }
+    let mut i: u64 = 0u64
+    while i < n {
+        iii_emit_write_u8_c(dst + o + i, iii_emit_buf_read_u8_c(src, i))
+        i = i + 1u64
+    }
+    iii_emit_write_u8_c(dst + o + n, 0u32)
+    return (o + n) as i64
+}
+fn iii_emit_appch_c(dst: u64, off: u64, cap: u64, ch: u32) -> i64 @export {
+    if dst == 0u64 { return -1i64 }
+    if off + 2u64 > cap { return -1i64 }
+    iii_emit_write_u8_c(dst + off, ch & 255u32)
+    iii_emit_write_u8_c(dst + off + 1u64, 0u32)
+    return (off + 1u64) as i64
+}
+fn iii_emit_apphex_c(dst: u64, off: u64, cap: u64, v: u64) -> i64 @export {
+    if dst == 0u64 { return -1i64 }
+    let o: u64 = off
+    let c: u64 = cap
+    let mut vv: u64 = v
+    let mut n: u64 = 0u64
+    if vv == 0u64 {
+        EMIT16_HEX_TMP[0u32] = 48u8
+        n = 1u64
+    } else {
+        while vv != 0u64 {
+            EMIT16_HEX_TMP[n as u32] = emit16_hex_digit(vv & 15u64)
+            vv = vv >> 4u64
+            n = n + 1u64
+        }
+    }
+    if o + n + 1u64 > c { return -1i64 }
+    let mut i: u64 = 0u64
+    while i < n {
+        let bidx: u64 = n - 1u64 - i
+        iii_emit_write_u8_c(dst + o + i, EMIT16_HEX_TMP[bidx as u32] as u32)
+        i = i + 1u64
+    }
+    iii_emit_write_u8_c(dst + o + n, 0u32)
+    return (o + n) as i64
+}

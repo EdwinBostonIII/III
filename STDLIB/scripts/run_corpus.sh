@@ -501,6 +501,7 @@ declare -A EXPECTED=(
     [830_reach_oracle]=99
     [831_reach_ipc]=99
     [832_reach_loopback]=99
+    [833_markup]=99
 )
 
 PASS=0

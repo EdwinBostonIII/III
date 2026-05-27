@@ -145,6 +145,7 @@ ALL_C="$( cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' \
             ! -name 'gen_*.c' \
             ! -name 'sign_*.c' \
             ! -name 'verify_*.c' \
+            ! -name 'iiis1_link_stubs.c' \
             | sed 's|^\./||' | LC_ALL=C sort -V )"
 
 OBJS=()

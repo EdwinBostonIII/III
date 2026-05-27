@@ -4,6 +4,6 @@
   "mode": "release",
   "iiis0_used": "iiis-1.exe",
   "output": "iiis-2.exe",
-  "source_files": ["iiis1_link_stubs.c"],
-  "output_mhash": "bfcc55c53fd230433682630127d6e747e0d9e716679caf3ef9998f471f51f5f9"
+  "source_files": [""],
+  "output_mhash": "95da6f9813a934e3d34367671fe50f4223c6620d16b326a6b297c52823f805cb"
 }

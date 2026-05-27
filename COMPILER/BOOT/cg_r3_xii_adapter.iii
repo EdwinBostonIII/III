@@ -1,0 +1,261 @@
+module cg_r3_xii_adapter
+
+/* cg_r3_xii_adapter.iii -- native port of cg_r3_xii_adapter.c's referenced
+ * surface: ast_get_field, cpufeat_*, emit_section_bytes,
+ * emit_current_text_offset, and the recursive AST->XII-term mapper
+ * r3_ast_to_xii_term. Omits ast_walk_find_kind (dead: only xii_enabled_for,
+ * itself dead, used it). Reaches the ambient sema-state via
+ * xii_get_current_sema_state() (not the old g_xii_current_ast global).
+ *
+ * The mapper feeds r3_pe_canonicalise, which is dead-branch (the corpus
+ * never carries @lattice so the cg_r3.iii gate never invokes it); ported
+ * faithfully for the sealed-Lattice future. Hexad: passage . Ring: R3 . K: 1.00.
+ */
+
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_forward_block(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_off(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_let_name_len(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_callee(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_scrutinee(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_match_expr_arm_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_match_arm_body(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_hex_value_lo(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_sema_ast(s: u64) -> u64 from "sema.iii"
+extern @abi(c-msvc-x64) fn xii_get_current_sema_state() -> u64 from "sema_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn r3_emit_xii_section_bytes(name_ptr: u64, name_len: u64, bytes: u64, bytes_len: u64) -> i32 from "cg_r3.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_if(pred: u32, then_b: u32, else_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_null_form() -> u32 from "xii_rewrite.iii"
+
+const XK_FN_DECL : u32 = 4u32
+const XK_CYCLE_DECL : u32 = 3u32
+const XK_STMT_LET : u32 = 20u32
+const XK_STMT_RETURN : u32 = 26u32
+const XK_STMT_ASSIGN : u32 = 27u32
+const XK_STMT_EXPR : u32 = 28u32
+const XK_EXPR_BLOCK : u32 = 51u32
+const XK_EXPR_BINARY : u32 = 49u32
+const XK_EXPR_CALL : u32 = 46u32
+const XK_EXPR_MATCH : u32 = 52u32
+const XK_EXPR_INT : u32 = 37u32
+const XK_EXPR_HEX : u32 = 38u32
+const XK_EXPR_IDENT : u32 = 45u32
+const XK_ARG : u32 = 57u32
+const XAT_NULL_REF : u32 = 4294967295u32
+
+var G_XII_CALL_SITE_COUNTER : u64 = 0u64
+
+/* ---- cpufeat / emit shims ---- */
+fn cpufeat_feature_mask() -> u32 @export { return 0xFu32 }
+fn cpufeat_auto_target() -> u32 @export { return 1u32 }
+
+fn emit_current_text_offset() -> u64 @export {
+    let v : u64 = G_XII_CALL_SITE_COUNTER
+    G_XII_CALL_SITE_COUNTER = G_XII_CALL_SITE_COUNTER + 1u64
+    return v
+}
+
+/* section_name is a NUL-terminated byte string; scan its length, then
+ * route to cg_r3.iii's @exported section-bytes emitter. */
+fn cgx_strlen(p: u64) -> u64 {
+    let mut n : u64 = 0u64
+    let mut q : *u8 = (p + n) as *u8
+    while q[0] != 0u8 {
+        n = n + 1u64
+        q = (p + n) as *u8
+    }
+    return n
+}
+
+fn emit_section_bytes(section_name: u64, bytes: u64, len: u32) -> i32 @export {
+    if section_name == 0u64 { return -1i32 }
+    if bytes == 0u64 { return -1i32 }
+    let nl : u64 = cgx_strlen(section_name)
+    let rc : i32 = r3_emit_xii_section_bytes(section_name, nl, bytes, len as u64)
+    if rc == 0i32 { return 0i32 }
+    return -1i32
+}
+
+/* ast_get_field: structural field accessor over the ambient sema-state.
+ * Only XII_FIELD_FN_BODY (1) is needed. */
+fn ast_get_field(ast_handle: u64, node: u64, field_id: i32) -> u64 @export {
+    let ast : u64 = iii_sema_ast(xii_get_current_sema_state())
+    if ast == 0u64 { return 0u64 }
+    let n : u32 = node as u32
+    let k : u32 = iii_ast_node_kind(ast, n)
+    if field_id == 1i32 {
+        if k == XK_FN_DECL { return iii_ast_fn_body(ast, n) as u64 }
+        if k == XK_CYCLE_DECL { return iii_ast_cycle_forward_block(ast, n) as u64 }
+    }
+    return 0u64
+}
+
+/* ---- AST -> XII-term mapper (recursive) ---- */
+
+fn cgx_rd_u8(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    return p[0] as u32
+}
+
+/* FNV-1a over a source-text slice, masked to 18 bits (K01_FORM subform). */
+fn hash_src_text(ast: u64, off: u32, len: u32) -> u32 {
+    if len == 0u32 { return 0u32 }
+    let src : u64 = iii_ast_source_buf(ast)
+    if src == 0u64 { return 0u32 }
+    let mut h : u32 = 0x811C9DC5u32
+    let mut i : u32 = 0u32
+    while i < len {
+        let b : u32 = cgx_rd_u8(src, (off as u64) + (i as u64))
+        h = h ^ b
+        h = h * 0x01000193u32
+        i = i + 1u32
+    }
+    return h & 0x3FFFFu32
+}
+
+fn make_null_term() -> u32 {
+    return xii_term_make_basis(5u8, xii_rewrite_null_form())
+}
+
+/* F.THEN-fold of an EXPR_BLOCK's statements. */
+fn fold_block_then(ast: u64, block_node: u32) -> u32 {
+    let cnt : u32 = iii_ast_block_stmt_count(ast, block_node)
+    if cnt == 0u32 { return make_null_term() }
+    let mut acc : u32 = r3_ast_node_to_xii(ast, iii_ast_block_stmt_at(ast, block_node, 0u32))
+    let mut i : u32 = 1u32
+    while i < cnt {
+        let s : u32 = r3_ast_node_to_xii(ast, iii_ast_block_stmt_at(ast, block_node, i))
+        let next : u32 = xii_term_make_fusion2(19u8, acc, s)
+        if next == XAT_NULL_REF { return acc }
+        acc = next
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* F.COMPOSE-fold callee with each (ARG-unwrapped) argument. */
+fn fold_compose_args(ast: u64, callee_term: u32, call_node: u32) -> u32 {
+    let mut acc : u32 = callee_term
+    let argc : u32 = iii_ast_call_arg_count(ast, call_node)
+    let mut i : u32 = 0u32
+    while i < argc {
+        let arg_node : u32 = iii_ast_call_arg_at(ast, call_node, i)
+        let mut expr_node : u32 = arg_node
+        if arg_node != 0u32 {
+            if iii_ast_node_kind(ast, arg_node) == XK_ARG { expr_node = iii_ast_arg_value(ast, arg_node) }
+            let arg_term : u32 = r3_ast_node_to_xii(ast, expr_node)
+            let next : u32 = xii_term_make_fusion2(18u8, acc, arg_term)
+            if next == XAT_NULL_REF { return acc }
+            acc = next
+        }
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* Fold EXPR_MATCH arms right-to-left into F.IF chain (i32-trap-safe: the C
+ * `for(i32 i=count-1; i>=0; --i)` would compile UNSIGNED in iiis; use a
+ * u32 count-down with `while j > 0`). */
+fn fold_match(ast: u64, node: u32) -> u32 {
+    let scrut : u32 = r3_ast_node_to_xii(ast, iii_ast_match_expr_scrutinee(ast, node))
+    let count : u32 = iii_ast_match_expr_arm_count(ast, node)
+    if count == 0u32 { return scrut }
+    let mut else_acc : u32 = make_null_term()
+    let mut j : u32 = count
+    while j > 0u32 {
+        j = j - 1u32
+        let arm_idx : u32 = iii_ast_match_expr_arm_at(ast, node, j)
+        let body_term : u32 = r3_ast_node_to_xii(ast, iii_ast_match_arm_body(ast, arm_idx))
+        if j == (count - 1u32) {
+            else_acc = body_term
+        } else {
+            let nx : u32 = xii_term_make_if(scrut, body_term, else_acc)
+            if nx == XAT_NULL_REF { return body_term }
+            else_acc = nx
+        }
+    }
+    return else_acc
+}
+
+fn r3_ast_node_to_xii(ast: u64, node: u32) -> u32 {
+    if node == 0u32 { return make_null_term() }
+    let k : u32 = iii_ast_node_kind(ast, node)
+
+    if k == XK_EXPR_BLOCK { return fold_block_then(ast, node) }
+
+    if k == XK_STMT_LET {
+        let vexpr : u32 = iii_ast_let_value(ast, node)
+        let mut val : u32 = make_null_term()
+        if vexpr != 0u32 { val = r3_ast_node_to_xii(ast, vexpr) }
+        let bind : u32 = xii_term_make_basis(1u8, hash_src_text(ast, iii_ast_let_name_off(ast, node), iii_ast_let_name_len(ast, node)))
+        return xii_term_make_fusion2(18u8, bind, val)
+    }
+
+    if k == XK_STMT_RETURN {
+        let vexpr : u32 = iii_ast_return_value(ast, node)
+        let mut val : u32 = make_null_term()
+        if vexpr != 0u32 { val = r3_ast_node_to_xii(ast, vexpr) }
+        let convey : u32 = xii_term_make_basis(2u8, 0u32)
+        return xii_term_make_fusion2(18u8, convey, val)
+    }
+
+    if k == XK_STMT_EXPR { return r3_ast_node_to_xii(ast, iii_ast_expr_stmt_expr(ast, node)) }
+
+    if k == XK_STMT_ASSIGN {
+        let val : u32 = r3_ast_node_to_xii(ast, iii_ast_assign_value(ast, node))
+        let lv : u32 = iii_ast_assign_lvalue(ast, node)
+        let mut lhash : u32 = 0u32
+        if lv != 0u32 {
+            if iii_ast_node_kind(ast, lv) == XK_EXPR_IDENT { lhash = hash_src_text(ast, iii_ast_ident_name_offset(ast, lv), iii_ast_ident_name_length(ast, lv)) }
+        }
+        let bind : u32 = xii_term_make_basis(1u8, lhash)
+        return xii_term_make_fusion2(18u8, bind, val)
+    }
+
+    if k == XK_EXPR_BINARY {
+        let lhs : u32 = r3_ast_node_to_xii(ast, iii_ast_binary_lhs(ast, node))
+        let rhs : u32 = r3_ast_node_to_xii(ast, iii_ast_binary_rhs(ast, node))
+        return xii_term_make_fusion2(20u8, lhs, rhs)
+    }
+
+    if k == XK_EXPR_CALL {
+        let callee : u32 = r3_ast_node_to_xii(ast, iii_ast_call_callee(ast, node))
+        return fold_compose_args(ast, callee, node)
+    }
+
+    if k == XK_EXPR_MATCH { return fold_match(ast, node) }
+
+    if k == XK_EXPR_INT { return xii_term_make_basis(0u8, (iii_ast_expr_int_u64(ast, node) as u32) & 0x3FFFFu32) }
+
+    if k == XK_EXPR_HEX { return xii_term_make_basis(0u8, iii_ast_hex_value_lo(ast, node) & 0x3FFFFu32) }
+
+    if k == XK_EXPR_IDENT { return xii_term_make_basis(1u8, hash_src_text(ast, iii_ast_ident_name_offset(ast, node), iii_ast_ident_name_length(ast, node))) }
+
+    return make_null_term()
+}
+
+fn r3_ast_to_xii_term(ast: u64, body_node: u64) -> u32 @export {
+    let iast : u64 = iii_sema_ast(ast)
+    if iast == 0u64 { return make_null_term() }
+    return r3_ast_node_to_xii(iast, body_node as u32)
+}

@@ -1,0 +1,146 @@
+module sema_xii_adapter
+
+/* sema_xii_adapter.iii -- native port of sema_xii_adapter.c's LIVE surface.
+ *
+ * Provides the XII annotation accessors the iiis-2 compiler references:
+ *   - sema_xii_anno_has_in_ast  (LIVE: cg_r3.iii's @lattice gate predicate)
+ *   - sema_xii_anno_get_u32_in_ast
+ *   - sema_get_anno_u32         (ambient: cg_r3_xii.iii's r3_compute_circ)
+ *   - xii_set_current_sema_state / xii_get_current_sema_state  (the ambient)
+ *
+ * Omitted (dead in the .iii build -> sema_xii.c deleted, sema.iii never
+ * calls the sema XII check): sema_has_annotation, sema_emit_error (variadic),
+ * ast_get_kind/child/count, sema_xii_check_function_wrapped. g_xii_current_ast
+ * is module-local here, reached cross-module via the get/set accessors.
+ *
+ * Hexad: passage_essence . Ring: R3 . K: 1.00 . NIH: ast.iii + sema.iii only.
+ */
+
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_modifier_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_fn_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_cycle_modifier_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_offset(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_name_length(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_arg_count(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_modifier_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_ast_hex_value_lo(ast: u64, node: u32) -> u32 from "ast.iii"
+extern @abi(c-msvc-x64) fn iii_sema_ast(s: u64) -> u64 from "sema.iii"
+
+const SX_K_FN_DECL : u32 = 4u32
+const SX_K_CYCLE_DECL : u32 = 3u32
+const SX_K_EXPR_INT : u32 = 37u32
+const SX_K_EXPR_HEX : u32 = 38u32
+
+/* Annotation names (length-explicit byte arrays; mirror anno_kind_name). */
+var ANNO_NM_FUSION : [u8; 13] = [102u8, 117u8, 115u8, 105u8, 111u8, 110u8, 95u8, 98u8, 117u8, 100u8, 103u8, 101u8, 116u8]
+var ANNO_NM_DEPLOY : [u8; 17] = [100u8, 101u8, 112u8, 108u8, 111u8, 121u8, 109u8, 101u8, 110u8, 116u8, 95u8, 116u8, 97u8, 114u8, 103u8, 101u8, 116u8]
+var ANNO_NM_LATTICE : [u8; 7] = [108u8, 97u8, 116u8, 116u8, 105u8, 99u8, 101u8]
+var ANNO_NM_KMAX : [u8; 5] = [107u8, 95u8, 109u8, 97u8, 120u8]
+var ANNO_NM_CAP : [u8; 12] = [99u8, 97u8, 112u8, 95u8, 114u8, 101u8, 113u8, 117u8, 105u8, 114u8, 101u8, 100u8]
+var ANNO_NM_HEXAD : [u8; 10] = [104u8, 101u8, 120u8, 97u8, 100u8, 95u8, 107u8, 105u8, 110u8, 100u8]
+var ANNO_NM_RETURNS : [u8; 7] = [114u8, 101u8, 116u8, 117u8, 114u8, 110u8, 115u8]
+
+var G_XII_CURRENT_AST : u64 = 0u64
+
+fn sx_rd_u8(base: u64, off: u64) -> u32 {
+    let p : *u8 = (base + off) as *u8
+    return p[0] as u32
+}
+
+/* Compare the modifier name (src+off, len) to a literal (lit_addr, lit_len). */
+fn sx_name_is(src: u64, off: u32, len: u32, lit_addr: u64, lit_len: u32) -> u32 {
+    if len != lit_len { return 0u32 }
+    let mut i : u32 = 0u32
+    while i < len {
+        if sx_rd_u8(src, (off as u64) + (i as u64)) != sx_rd_u8(lit_addr, i as u64) { return 0u32 }
+        i = i + 1u32
+    }
+    return 1u32
+}
+
+/* Does the modifier name (src+off, len) match the name for `anno_kind`? */
+fn sx_matches_anno(src: u64, off: u32, len: u32, anno_kind: i32) -> u32 {
+    if anno_kind == 0x12i32 { return sx_name_is(src, off, len, &ANNO_NM_LATTICE as u64, 7u32) }
+    if anno_kind == 0x10i32 { return sx_name_is(src, off, len, &ANNO_NM_FUSION as u64, 13u32) }
+    if anno_kind == 0x11i32 { return sx_name_is(src, off, len, &ANNO_NM_DEPLOY as u64, 17u32) }
+    if anno_kind == 0x05i32 { return sx_name_is(src, off, len, &ANNO_NM_KMAX as u64, 5u32) }
+    if anno_kind == 0x06i32 { return sx_name_is(src, off, len, &ANNO_NM_CAP as u64, 12u32) }
+    if anno_kind == 0x07i32 { return sx_name_is(src, off, len, &ANNO_NM_HEXAD as u64, 10u32) }
+    if anno_kind == 0x08i32 { return sx_name_is(src, off, len, &ANNO_NM_RETURNS as u64, 7u32) }
+    return 0u32
+}
+
+/* Find the first @<anno> modifier on fn_node (FN_DECL or CYCLE_DECL);
+ * returns its modifier node index, or 0. Mirrors find_modifier_by_name_in_ast. */
+fn sx_find_modifier(ast: u64, fn_node: u32, anno_kind: i32) -> u32 {
+    if ast == 0u64 { return 0u32 }
+    if fn_node == 0u32 { return 0u32 }
+    let src : u64 = iii_ast_source_buf(ast)
+    if src == 0u64 { return 0u32 }
+    let k : u32 = iii_ast_node_kind(ast, fn_node)
+    let mut count : u32 = 0u32
+    if k == SX_K_FN_DECL { count = iii_ast_fn_modifier_count(ast, fn_node) }
+    if k == SX_K_CYCLE_DECL { count = iii_ast_cycle_modifier_count(ast, fn_node) }
+    let mut i : u32 = 0u32
+    while i < count {
+        let mut m : u32 = 0u32
+        if k == SX_K_FN_DECL { m = iii_ast_fn_modifier_at(ast, fn_node, i) }
+        if k == SX_K_CYCLE_DECL { m = iii_ast_cycle_modifier_at(ast, fn_node, i) }
+        if m != 0u32 {
+            let mo : u32 = iii_ast_modifier_name_offset(ast, m)
+            let ml : u32 = iii_ast_modifier_name_length(ast, m)
+            if sx_matches_anno(src, mo, ml, anno_kind) == 1u32 { return m }
+        }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+/* Extract a u32 from an int/hex literal expr (mirror expr_to_u32). */
+fn sx_expr_to_u32(ast: u64, expr_node: u32, default_val: u32) -> u32 {
+    if expr_node == 0u32 { return default_val }
+    let k : u32 = iii_ast_node_kind(ast, expr_node)
+    if k == SX_K_EXPR_INT { return iii_ast_expr_int_u64(ast, expr_node) as u32 }
+    if k == SX_K_EXPR_HEX { return iii_ast_hex_value_lo(ast, expr_node) }
+    return default_val
+}
+
+fn sx_get_anno_u32(ast: u64, fn_node: u32, anno_kind: i32, default_val: u32) -> u32 {
+    let m : u32 = sx_find_modifier(ast, fn_node, anno_kind)
+    if m == 0u32 { return default_val }
+    if iii_ast_modifier_arg_count(ast, m) == 0u32 { return default_val }
+    let arg0 : u32 = iii_ast_modifier_arg_at(ast, m, 0u32)
+    return sx_expr_to_u32(ast, arg0, default_val)
+}
+
+/* ---- exported surface ---- */
+
+fn sema_xii_anno_has_in_ast(ast_raw: u64, fn_node: u32, anno_kind: i32) -> u8 @export {
+    if sx_find_modifier(ast_raw, fn_node, anno_kind) != 0u32 { return 1u8 }
+    return 0u8
+}
+
+fn sema_xii_anno_get_u32_in_ast(ast_raw: u64, fn_node: u32, anno_kind: i32, default_val: u32) -> u32 @export {
+    return sx_get_anno_u32(ast_raw, fn_node, anno_kind, default_val)
+}
+
+/* Ambient variant (handle is a sema-state*; recover ast via iii_sema_ast).
+ * Used by cg_r3_xii's r3_compute_circ after cg_r3.iii sets the ambient. */
+fn sema_get_anno_u32(fn_node_handle: u64, anno_kind: i32, default_val: u32) -> u32 @export {
+    let ast : u64 = iii_sema_ast(G_XII_CURRENT_AST)
+    if ast == 0u64 { return default_val }
+    return sx_get_anno_u32(ast, fn_node_handle as u32, anno_kind, default_val)
+}
+
+fn xii_set_current_sema_state(s: u64) -> u32 @export {
+    G_XII_CURRENT_AST = s
+    return 0u32
+}
+
+fn xii_get_current_sema_state() -> u64 @export {
+    return G_XII_CURRENT_AST
+}

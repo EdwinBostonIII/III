@@ -1,0 +1,166 @@
+module cg_r3_xii
+
+/* cg_r3_xii.iii -- native port of cg_r3_xii.c's referenced surface:
+ *   - r3_compute_circ      (24-bit circumstance bit-packing; reached via the
+ *                           cg_r3.iii @lattice gate -- dead-branch today)
+ *   - r3_pe_canonicalise   (AST->XII-term -> canonicalise; dead-branch)
+ *   - r3_pe_lattice_emit   (horizon select + NOP placeholder + call-site
+ *                           descriptor; dead-branch; r3_emit_xii_call_site
+ *                           inlined to fit the <=4-param law)
+ * Omits xii_enabled_for (dead: cg_r3.iii's gate uses sema_xii_anno_has_in_ast).
+ *
+ * These three are link-referenced by cg_r3.iii but only invoked when
+ * sema_xii_anno_has_in_ast == 1 (no corpus @lattice => never), so the
+ * differential gate cannot exercise them -- faithful translation for the
+ * sealed-Lattice future. Hexad: passage_motion . Ring: R3 . K: 1.00.
+ */
+
+extern @abi(c-msvc-x64) fn sema_get_anno_u32(fn_node: u64, anno_kind: i32, default_val: u32) -> u32 from "sema_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn cpufeat_auto_target() -> u32 from "cg_r3_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn cpufeat_feature_mask() -> u32 from "cg_r3_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn ast_get_field(ast: u64, node: u64, field_id: i32) -> u64 from "cg_r3_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn r3_ast_to_xii_term(ast: u64, body_node: u64) -> u32 from "cg_r3_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn emit_section_bytes(section_name: u64, bytes: u64, len: u32) -> i32 from "cg_r3_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn emit_current_text_offset() -> u64 from "cg_r3_xii_adapter.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(term: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(horizon_id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_ct_kind(horizon_id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_k_cost(horizon_id: u32) -> u32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_rt.iii"
+extern @abi(c-msvc-x64) fn xii_ldil_fill_nops(out: u64, count: u32, deployment_target: u32) -> u32 from "xii_ldil.iii"
+
+const XII_AUTO_TARGET : u32 = 4294967295u32
+const XII_R3_OK : i32 = 0i32
+const XII_R3_FAIL : i32 = 1i32
+const XR_NULL_REF : u32 = 4294967295u32
+
+/* descriptor (24) + NOP placeholder (512), module-scope (local-array-index
+ * trap + W3 whole-array address-of safety). */
+var R3_DESC_BUF : [u8; 24]
+var R3_NOP_BUF : [u8; 512]
+/* ".iii_xii_calls" + ".text", NUL-terminated (cg_r3_xii_adapter scans len). */
+var SEC_XII_CALLS : [u8; 15] = [46u8, 105u8, 105u8, 105u8, 95u8, 120u8, 105u8, 105u8, 95u8, 99u8, 97u8, 108u8, 108u8, 115u8, 0u8]
+var SEC_TEXT : [u8; 6] = [46u8, 116u8, 101u8, 120u8, 116u8, 0u8]
+
+fn k_bucket_from_k_max(k_max: u32) -> u32 {
+    let k : u32 = k_max
+    if k <= 1u32 { return 0u32 }
+    if k <= 3u32 { return 1u32 }
+    if k <= 7u32 { return 2u32 }
+    if k <= 15u32 { return 3u32 }
+    if k <= 31u32 { return 4u32 }
+    if k <= 63u32 { return 5u32 }
+    if k <= 127u32 { return 6u32 }
+    return 7u32
+}
+
+fn cap_classify(cap_set: u32) -> u32 {
+    let c : u32 = cap_set
+    return ((c & 0xFFFFu32) ^ ((c >> 16u32) & 0xFFFFu32)) & 0xFu32
+}
+
+fn r3_compute_circ(ast: u64, fn_node: u64) -> u32 @export {
+    let fnn : u64 = fn_node
+    let mut target : u32 = sema_get_anno_u32(fnn, 0x11i32, XII_AUTO_TARGET)
+    if target == XII_AUTO_TARGET { target = cpufeat_auto_target() }
+    if target > 6u32 { target = 1u32 }
+    let hw_mask : u32 = cpufeat_feature_mask() & 0xFu32
+    let k_max : u32 = sema_get_anno_u32(fnn, 0x05i32, 16u32)
+    let k_bucket : u32 = k_bucket_from_k_max(k_max)
+    let cap_set : u32 = sema_get_anno_u32(fnn, 0x06i32, 0u32)
+    let cap_class : u32 = cap_classify(cap_set)
+    let hexad : u32 = sema_get_anno_u32(fnn, 0x07i32, 1u32)
+    let fusion_b : u32 = sema_get_anno_u32(fnn, 0x10i32, 3u32)
+    let mut r : u32 = target & 0x7u32
+    r = r | ((hw_mask & 0xFu32) << 3u32)
+    r = r | ((k_bucket & 0x7u32) << 7u32)
+    r = r | ((cap_class & 0xFu32) << 10u32)
+    r = r | ((hexad & 0x7u32) << 14u32)
+    r = r | ((fusion_b & 0x7u32) << 17u32)
+    return r
+}
+
+fn r3_pe_canonicalise(ast: u64, fn_node: u64) -> i32 @export {
+    let a : u64 = ast
+    let body : u64 = ast_get_field(a, fn_node, 1i32)
+    if body == 0u64 { return XII_R3_OK }
+    xii_term_arena_reset()
+    let term : u32 = r3_ast_to_xii_term(a, body)
+    if term == XR_NULL_REF { return XII_R3_FAIL }
+    xii_canonicalise(term)
+    return XII_R3_OK
+}
+
+/* Deterministic (hexad,k) horizon selection. (base+i) is in [0, 287] so a
+ * single conditional subtract replaces `% 144` (avoids the modulo-after-call
+ * trap; 144 is not a power of two). */
+fn r3_select_horizon_for_term(ast: u64, fn_node: u64) -> u32 {
+    let fnn : u64 = fn_node
+    let hexad : u32 = sema_get_anno_u32(fnn, 0x07i32, 6u32)
+    let k : u32 = sema_get_anno_u32(fnn, 0x05i32, 1u32)
+    let base : u32 = (hexad - 1u32) * 18u32 + (k & 0xFu32)
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        let mut id : u32 = base + i
+        if id >= 144u32 { id = id - 144u32 }
+        if xii_horizon_is_productive(id) == 1u8 { return id }
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn wr_u32_le(buf: u64, off: u32, v: u32) -> u32 {
+    iii_lex_write_u8_at_c(buf, off as u64, v & 0xFFu32)
+    iii_lex_write_u8_at_c(buf, (off + 1u32) as u64, (v >> 8u32) & 0xFFu32)
+    iii_lex_write_u8_at_c(buf, (off + 2u32) as u64, (v >> 16u32) & 0xFFu32)
+    iii_lex_write_u8_at_c(buf, (off + 3u32) as u64, (v >> 24u32) & 0xFFu32)
+    return 0u32
+}
+
+fn wr_u64_le(buf: u64, off: u32, v: u64) -> u32 {
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let sh : u64 = (i as u64) * 8u64
+        iii_lex_write_u8_at_c(buf, (off + i) as u64, ((v >> sh) & 0xFFu64) as u32)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn r3_pe_lattice_emit(ast: u64, fn_node: u64, circ_encoding: u32) -> i32 @export {
+    let circ : u32 = circ_encoding
+    let horizon_id : u32 = r3_select_horizon_for_term(ast, fn_node)
+    if xii_horizon_is_productive(horizon_id) != 1u8 { return XII_R3_FAIL }
+
+    let target : u32 = circ & 0x7u32
+    let ct_kind : u32 = xii_horizon_ct_kind(horizon_id) as u32
+    let k_cost : u32 = xii_horizon_k_cost(horizon_id)
+    let mut expected_size : u32 = 256u32
+    if k_cost > 100u32 { expected_size = 512u32 }
+
+    let cs_off : u64 = emit_current_text_offset()
+    let nb : u64 = &R3_NOP_BUF as u64
+    let filled : u32 = xii_ldil_fill_nops(nb, expected_size, target)
+    if filled == 0u32 { return XII_R3_FAIL }
+    if emit_section_bytes(&SEC_TEXT as u64, nb, filled) != 0i32 { return XII_R3_FAIL }
+
+    let prov_xform_id : u32 = ct_kind
+
+    /* Inline r3_emit_xii_call_site: build the 24-byte descriptor. */
+    let d : u64 = &R3_DESC_BUF as u64
+    wr_u64_le(d, 0u32, cs_off)
+    iii_lex_write_u8_at_c(d, 8u64, horizon_id & 0xFFu32)
+    iii_lex_write_u8_at_c(d, 9u64, 1u32)
+    iii_lex_write_u8_at_c(d, 10u64, 0u32)
+    iii_lex_write_u8_at_c(d, 11u64, 0u32)
+    wr_u32_le(d, 12u32, circ)
+    iii_lex_write_u8_at_c(d, 16u64, filled & 0xFFu32)
+    iii_lex_write_u8_at_c(d, 17u64, (filled >> 8u32) & 0xFFu32)
+    iii_lex_write_u8_at_c(d, 18u64, ct_kind & 0xFFu32)
+    iii_lex_write_u8_at_c(d, 19u64, prov_xform_id & 0xFFu32)
+    wr_u32_le(d, 20u32, target)
+    if emit_section_bytes(&SEC_XII_CALLS as u64, d, 24u32) != 0i32 { return XII_R3_FAIL }
+
+    return XII_R3_OK
+}

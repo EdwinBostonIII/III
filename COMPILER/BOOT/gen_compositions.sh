@@ -228,5 +228,86 @@ else
     fi
 fi
 
+# ─── Generate the PE composition table (.iii, for iii_cg_pe_iiis1.iii) ──
+# Mirrors III_COMPOSITION_TABLE: parallel PE_PRIM[u8]/PE_LIT[u64]/PE_NOFF[u32]
+# arrays + a NUL-terminated PE_NAMES blob. The .iii PE returns
+# &PE_NAMES + PE_NOFF[i] as the dispatch-name pointer (byte-identical names
+# to the C table → byte-identical cg_r3 codegen).
+PE_III="$SCRIPT_DIR/iii_cg_pe_iiis1.iii"
+BEGIN_PE_MARK='/* === BEGIN AUTO-GENERATED PE TABLE FROM iii_compositions.def === */'
+END_PE_MARK='/* === END AUTO-GENERATED PE TABLE FROM iii_compositions.def === */'
+
+if [[ -f "$PE_III" ]]; then
+    for mark in "$BEGIN_PE_MARK" "$END_PE_MARK"; do
+        if ! grep -qF "$mark" "$PE_III"; then
+            echo "$0: $PE_III is missing sentinel: $mark" >&2
+            rm -f "$GEN_BLOCK" "$GEN_EXTERNS" "$NEW_PRESPEC"
+            exit 2
+        fi
+    done
+
+    GEN_PE="$(mktemp)"
+    {
+        prim_vals=""; lit_vals=""; noff_vals=""; names_bytes=""
+        sep_p=""; sep_l=""; sep_o=""; sep_n=""
+        off=0
+        for ((i=0; i<N; i++)); do
+            prim_vals+="${sep_p}${PRIMS[i]}u8";  sep_p=", "
+            lit_vals+="${sep_l}${LITS[i]}u64";   sep_l=", "
+            noff_vals+="${sep_o}${off}u32";      sep_o=", "
+            fn="${FNS[i]}"
+            len=${#fn}
+            for ((c=0; c<len; c++)); do
+                ch="${fn:c:1}"
+                printf -v code '%d' "'$ch"
+                names_bytes+="${sep_n}${code}u8"; sep_n=", "
+                off=$((off+1))
+            done
+            names_bytes+="${sep_n}0u8"; sep_n=", "
+            off=$((off+1))
+        done
+        total=$off
+        printf '/* === BEGIN AUTO-GENERATED PE TABLE FROM iii_compositions.def === */\n'
+        printf 'const PE_N : u64 = %su64\n' "$N"
+        printf 'var PE_PRIM : [u8; %s] = [%s]\n' "$N" "$prim_vals"
+        printf 'var PE_LIT : [u64; %s] = [%s]\n' "$N" "$lit_vals"
+        printf 'var PE_NOFF : [u32; %s] = [%s]\n' "$N" "$noff_vals"
+        printf 'var PE_NAMES : [u8; %s] = [%s]\n' "$total" "$names_bytes"
+        printf '/* === END AUTO-GENERATED PE TABLE FROM iii_compositions.def === */\n'
+    } > "$GEN_PE"
+
+    NEW_PE="$(mktemp)"
+    awk -v bpe="$BEGIN_PE_MARK" -v epe="$END_PE_MARK" -v pe_block="$GEN_PE" '
+        BEGIN { in_pe = 0 }
+        {
+            if (index($0, bpe) > 0) {
+                while ((getline line < pe_block) > 0) print line
+                close(pe_block)
+                in_pe = 1
+                next
+            }
+            if (index($0, epe) > 0) { in_pe = 0; next }
+            if (!in_pe) print
+        }
+    ' "$PE_III" > "$NEW_PE"
+
+    if [[ "$CHECK_ONLY" -eq 1 ]]; then
+        if ! cmp -s "$PE_III" "$NEW_PE"; then
+            echo "[gen_compositions] DRIFT: $PE_III diverged from iii_compositions.def (hand-edit in the auto-generated PE table?)" >&2
+            rm -f "$GEN_BLOCK" "$GEN_EXTERNS" "$NEW_PRESPEC" "$GEN_PE" "$NEW_PE"
+            exit 3
+        fi
+        echo "[gen_compositions] check: $PE_III current"
+    else
+        if ! cmp -s "$PE_III" "$NEW_PE"; then
+            cp "$NEW_PE" "$PE_III"
+            echo "[gen_compositions] rewrote $PE_III"
+        else
+            echo "[gen_compositions] $PE_III already current"
+        fi
+    fi
+    rm -f "$GEN_PE" "$NEW_PE"
+fi
+
 rm -f "$GEN_BLOCK" "$GEN_EXTERNS" "$NEW_PRESPEC"
 echo "[gen_compositions] OK ($N entries)"

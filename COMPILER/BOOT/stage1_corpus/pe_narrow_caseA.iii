@@ -1,0 +1,15 @@
+module pe_narrow_caseA
+
+/* PE narrowing — Case A (primitive constructor literal). Exercises the
+ * cg_r3 PE path: resolve(set, intent_form(LIT), ctx) -> direct
+ * leaq sha256_oneshot(%rip). De-vacuums the differential gate for the
+ * AST-walk -> table-lookup -> emit path (no NN_ prefix => run_corpus.sh
+ * skips it; build_iiis2.sh --check-corpus *.iii compiles it under both
+ * iiis-1 (C PE, golden) and iiis-2 (.iii PE) and asserts byte-identical .o). */
+
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent_form.iii"
+
+fn main() -> u64 {
+    return resolve(0u64, intent_form(100u64), 0u64)
+}

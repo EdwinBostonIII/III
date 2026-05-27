@@ -1,0 +1,18 @@
+module pe_narrow_caseB
+
+/* PE narrowing — Case B (cross-function). resolve(set, my_intent(), ctx)
+ * where my_intent() provably returns a static intent_form(LIT). The PE
+ * recurses through the user FN_DECL's return -> Case A -> sha256_oneshot.
+ * No NN_ prefix => run_corpus.sh skips; differential gate compiles under
+ * both compilers and asserts byte-identical .o (de-vacuums Case B). */
+
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent_form.iii"
+
+fn my_intent() -> u64 {
+    return intent_form(100u64)
+}
+
+fn main() -> u64 {
+    return resolve(0u64, my_intent(), 0u64)
+}

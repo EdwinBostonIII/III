@@ -107,3 +107,81 @@ fn iii_sha256_update_u64(s: u64, v: u64) -> u32 @export {
     return cgsha_update(s, &LEX_SHA_TMP as u64, 8u64)
 }
 fn iii_sha256_final(s: u64, out32: u64) -> u32 @export { return cgsha_snapshot(s, out32) }
+
+/* ---- file / env / time / signal / exit OS membrane -> msvcrt directly ----
+ * Fragile-symbol names verified by fragsym_kat (stderr/stdout = __acrt_iob_func,
+ * exit = _Exit, + clock/signal/getenv).  NUL-terminated mode strings; fputs uses
+ * an i64 cast for its >=0 check (the i32-signed-ordering codegen quirk). */
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn tmpfile() -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn ftell(stream: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn rewind(stream: u64) -> u32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fputs(str: u64, stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fputc(ch: i32, stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fseek(stream: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn __acrt_iob_func(idx: u32) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn getenv(name: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn clock() -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn signal(sig: i32, handler: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn _Exit(code: i32) from "msvcrt"
+
+var LEX_M_RB : [u8; 3] = [114u8, 98u8, 0u8]
+var LEX_M_WB : [u8; 3] = [119u8, 98u8, 0u8]
+var LEX_M_W  : [u8; 2] = [119u8, 0u8]
+var LEX_SDE  : [u8; 18] = [83u8,79u8,85u8,82u8,67u8,69u8,95u8,68u8,65u8,84u8,69u8,95u8,69u8,80u8,79u8,67u8,72u8,0u8]
+
+fn iii_lex_fwrite_c(ptr: u64, n: u64, file: u64) -> u64 @export { return fwrite(ptr, 1u64, n, file) }
+fn iii_lex_fread_c(ptr: u64, n: u64, file: u64) -> u64 @export { return fread(ptr, 1u64, n, file) }
+fn iii_lex_tmpfile_c() -> u64 @export { return tmpfile() }
+fn iii_lex_ftell_c(file: u64) -> i64 @export { return ftell(file) }
+fn iii_lex_rewind_c(file: u64) -> u32 @export { rewind(file); return 0u32 }
+fn iii_lex_fclose_c(file: u64) -> u32 @export { return fclose(file) as u32 }
+fn iii_lex_fputs_c(str: u64, file: u64) -> u32 @export {
+    let r: i64 = (fputs(str, file)) as i64
+    if r >= 0i64 { return 0u32 }
+    return 1u32
+}
+fn iii_lex_fputc_c(ch: u32, file: u64) -> u32 @export {
+    let b: i32 = (ch & 0xffu32) as i32
+    if fputc(b, file) == b { return 0u32 }
+    return 1u32
+}
+fn iii_lex_fopen_c(path: u64, mode: u32) -> u64 @export {
+    if mode == 0u32 { return fopen(path, &LEX_M_RB as u64) }
+    if mode == 1u32 { return fopen(path, &LEX_M_WB as u64) }
+    return fopen(path, &LEX_M_W as u64)
+}
+fn iii_lex_fseek_c(file: u64, off: i64, whence: u32) -> u32 @export {
+    if whence == 2u32 {
+        if fseek(file, off, 2i32) == 0i32 { return 0u32 }
+        return 1u32
+    }
+    if fseek(file, off, 0i32) == 0i32 { return 0u32 }
+    return 1u32
+}
+fn iii_lex_stderr_c() -> u64 @export { return __acrt_iob_func(2u32) }
+fn iii_lex_stdout_c() -> u64 @export { return __acrt_iob_func(1u32) }
+fn iii_lex_getenv_sde_c() -> i64 @export {
+    let s: u64 = getenv(&LEX_SDE as u64)
+    if s == 0u64 { return 0i64 }
+    let p0: *u8 = s as *u8
+    if p0[0] == 0u8 { return 0i64 }
+    let mut v: i64 = 0i64
+    let mut i: u64 = 0u64
+    let mut ch: u32 = p0[0] as u32
+    while ch != 0u32 {
+        if ch < 48u32 { return 0i64 }
+        if ch > 57u32 { return 0i64 }
+        v = v * 10i64 + ((ch - 48u32) as i64)
+        i = i + 1u64
+        let pn: *u8 = (s + i) as *u8
+        ch = pn[0] as u32
+    }
+    return v
+}
+fn iii_lex_clock_ms_c() -> u64 @export { return clock() as u64 }
+fn iii_lex_signal_c(sig: u32, handler: u64) -> u32 @export { signal(sig as i32, handler); return 0u32 }
+fn iii_lex_exit_c(code: u32) -> u32 @export { _Exit(code as i32); return 0u32 }

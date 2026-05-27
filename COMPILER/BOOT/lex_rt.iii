@@ -42,3 +42,17 @@ fn iii_lex_write_u64_c(addr: u64, off: u64, v: u64) -> u32 @export {
     p[0] = v
     return 0u32
 }
+
+/* allocation -- now bound directly to msvcrt (calloc zero-inits, matching the
+ * old C iii_lex_malloc_c).  The runtime libc dependency is unchanged; the C
+ * wrapper is gone. */
+extern @abi(c-msvc-x64) fn calloc(num: u64, size: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: u64) -> u64 from "msvcrt"
+fn iii_lex_malloc_c(n: u64) -> u64 @export {
+    if n == 0u64 { return calloc(1u64, 1u64) }
+    return calloc(1u64, n)
+}
+fn iii_lex_free_c(addr: u64) -> u32 @export {
+    if addr != 0u64 { free(addr) }
+    return 0u32
+}

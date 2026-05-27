@@ -22,25 +22,6 @@
 #include <time.h>
 #include <signal.h>
 
-/* ─── allocation ──────────────────────────────────────────────────── */
-
-/* malloc + zero-init.  Returns 0 on failure.  Caller must free via
- * iii_lex_free_c.  Determinism: the *content* of the returned buffer
- * is fully determined (zero); the address is not — but the .iii must
- * never let an address leak into hash inputs (D12). */
-uint64_t iii_lex_malloc_c(uint64_t n)
-{
-    if (n == 0) n = 1;  /* avoid implementation-defined malloc(0) */
-    void *p = calloc(1, (size_t)n);
-    return (uint64_t)(uintptr_t)p;
-}
-
-uint32_t iii_lex_free_c(uint64_t addr)
-{
-    if (addr) free((void *)(uintptr_t)addr);
-    return 0u;
-}
-
 /* memcpy / memset / memcmp passthroughs (for use inside lex.iii where
  * we don't want to depend on the iii_emit_* aliases — keeps the lex
  * runtime self-contained). */

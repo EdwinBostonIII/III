@@ -65,3 +65,45 @@ extern @abi(c-msvc-x64) fn memcmp(a: u64, b: u64, n: u64) -> i32 from "msvcrt"
 fn iii_lex_memcpy_c(dst: u64, src: u64, n: u64) -> u32 @export { memcpy(dst, src, n); return 0u32 }
 fn iii_lex_memset_c(dst: u64, v: u32, n: u64) -> u32 @export { memset(dst, (v & 0xffu32) as i32, n); return 0u32 }
 fn iii_lex_memcmp_c(a: u64, b: u64, n: u64) -> i32 @export { return memcmp(a, b, n) }
+
+/* SHA-256 -- UNIFIED with cg_sha.iii (no second impl).  lex.iii treats the ctx as
+ * an opaque 112-byte buffer (init/update/update_uN/final), so these are thin
+ * wrappers over cg_sha's ctx-based FIPS-180-4 SHA-256.  final == snapshot: lex
+ * always frees the ctx immediately after final (verified at every call site), so
+ * non-destructive snapshot is identical in effect.  Digests are byte-identical
+ * (both are FIPS SHA-256 over the same byte stream).  update_uN feed little-endian
+ * bytes via a module-scope scratch (sequential, non-reentrant). */
+extern @abi(c-msvc-x64) fn cgsha_init(ctx: u64) -> u32 from "cg_sha.iii"
+extern @abi(c-msvc-x64) fn cgsha_update(ctx: u64, addr: u64, n: u64) -> u32 from "cg_sha.iii"
+extern @abi(c-msvc-x64) fn cgsha_snapshot(ctx: u64, out: u64) -> u32 from "cg_sha.iii"
+var LEX_SHA_TMP : [u8; 8]
+fn iii_sha256_init(s: u64) -> u32 @export { return cgsha_init(s) }
+fn iii_sha256_update(s: u64, data: u64, n: u64) -> u32 @export { return cgsha_update(s, data, n) }
+fn iii_sha256_update_u8(s: u64, v: u32) -> u32 @export {
+    LEX_SHA_TMP[0] = (v & 0xffu32) as u8
+    return cgsha_update(s, &LEX_SHA_TMP as u64, 1u64)
+}
+fn iii_sha256_update_u16(s: u64, v: u32) -> u32 @export {
+    LEX_SHA_TMP[0] = (v & 0xffu32) as u8
+    LEX_SHA_TMP[1] = ((v >> 8u32) & 0xffu32) as u8
+    return cgsha_update(s, &LEX_SHA_TMP as u64, 2u64)
+}
+fn iii_sha256_update_u32(s: u64, v: u32) -> u32 @export {
+    LEX_SHA_TMP[0] = (v & 0xffu32) as u8
+    LEX_SHA_TMP[1] = ((v >> 8u32) & 0xffu32) as u8
+    LEX_SHA_TMP[2] = ((v >> 16u32) & 0xffu32) as u8
+    LEX_SHA_TMP[3] = ((v >> 24u32) & 0xffu32) as u8
+    return cgsha_update(s, &LEX_SHA_TMP as u64, 4u64)
+}
+fn iii_sha256_update_u64(s: u64, v: u64) -> u32 @export {
+    LEX_SHA_TMP[0] = (v & 0xffu64) as u8
+    LEX_SHA_TMP[1] = ((v >> 8u64) & 0xffu64) as u8
+    LEX_SHA_TMP[2] = ((v >> 16u64) & 0xffu64) as u8
+    LEX_SHA_TMP[3] = ((v >> 24u64) & 0xffu64) as u8
+    LEX_SHA_TMP[4] = ((v >> 32u64) & 0xffu64) as u8
+    LEX_SHA_TMP[5] = ((v >> 40u64) & 0xffu64) as u8
+    LEX_SHA_TMP[6] = ((v >> 48u64) & 0xffu64) as u8
+    LEX_SHA_TMP[7] = ((v >> 56u64) & 0xffu64) as u8
+    return cgsha_update(s, &LEX_SHA_TMP as u64, 8u64)
+}
+fn iii_sha256_final(s: u64, out32: u64) -> u32 @export { return cgsha_snapshot(s, out32) }

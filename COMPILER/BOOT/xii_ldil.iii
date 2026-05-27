@@ -1,0 +1,113 @@
+module xii_ldil
+
+/* xii_ldil.iii -- Link-Time Lattice Inliner, native .iii port.
+ *
+ * Faithful port of xii_ldil.c's LIVE surface: xii_ldil_fill_nops (the
+ * per-target NOP filler) + its 5 ISA fillers. Referenced by cg_r3_xii's
+ * r3_pe_lattice_emit.
+ *
+ * The struct-based inliner (xii_ldil_inline_all / inline_one / verify_one)
+ * is omitted: it is dead (no caller in the .iii compiler -- main.iii does
+ * not invoke the post-link pass), AND its 10-param signature cannot be
+ * expressed under the .iii <=4-param law; the sealed-Lattice ceremony will
+ * re-realise it natively (context-struct form) when the back-end lands.
+ *
+ * NIH: lex_rt native byte-store only.  Hexad: passage . Ring: R3 . K: 1.00.
+ */
+
+extern @abi(c-msvc-x64) fn iii_lex_write_u8_at_c(addr: u64, off: u64, v: u32) -> u32 from "lex_rt.iii"
+
+fn ldil_w(out: u64, off: u32, v: u32) -> u32 {
+    return iii_lex_write_u8_at_c(out, off as u64, v)
+}
+
+/* x86 multi-byte NOPs: 8-byte (0F 1F 84 00 00 00 00 00), 4-byte
+ * (0F 1F 40 00), 2-byte (66 90), 1-byte (90). */
+fn fill_x86(out: u64, count: u32) -> u32 {
+    let o : u64 = out
+    let mut remaining : u32 = count
+    let mut off : u32 = 0u32
+    while remaining >= 8u32 {
+        ldil_w(o, off + 0u32, 0x0Fu32); ldil_w(o, off + 1u32, 0x1Fu32)
+        ldil_w(o, off + 2u32, 0x84u32); ldil_w(o, off + 3u32, 0x00u32)
+        ldil_w(o, off + 4u32, 0x00u32); ldil_w(o, off + 5u32, 0x00u32)
+        ldil_w(o, off + 6u32, 0x00u32); ldil_w(o, off + 7u32, 0x00u32)
+        off = off + 8u32; remaining = remaining - 8u32
+    }
+    while remaining >= 4u32 {
+        ldil_w(o, off + 0u32, 0x0Fu32); ldil_w(o, off + 1u32, 0x1Fu32)
+        ldil_w(o, off + 2u32, 0x40u32); ldil_w(o, off + 3u32, 0x00u32)
+        off = off + 4u32; remaining = remaining - 4u32
+    }
+    while remaining >= 2u32 {
+        ldil_w(o, off + 0u32, 0x66u32); ldil_w(o, off + 1u32, 0x90u32)
+        off = off + 2u32; remaining = remaining - 2u32
+    }
+    if remaining == 1u32 {
+        ldil_w(o, off, 0x90u32)
+        off = off + 1u32
+    }
+    return off
+}
+
+fn fill_x86_scalar(out: u64, count: u32) -> u32 {
+    let o : u64 = out
+    let c : u32 = count
+    let mut i : u32 = 0u32
+    while i < c {
+        ldil_w(o, i, 0x90u32)
+        i = i + 1u32
+    }
+    return c
+}
+
+fn fill_arm64(out: u64, count: u32) -> u32 {
+    let o : u64 = out
+    let aligned : u32 = count & 0xFFFFFFFCu32
+    let mut i : u32 = 0u32
+    while i < aligned {
+        ldil_w(o, i + 0u32, 0x1Fu32); ldil_w(o, i + 1u32, 0x20u32)
+        ldil_w(o, i + 2u32, 0x03u32); ldil_w(o, i + 3u32, 0xD5u32)
+        i = i + 4u32
+    }
+    return aligned
+}
+
+fn fill_riscv(out: u64, count: u32) -> u32 {
+    let o : u64 = out
+    let aligned : u32 = count & 0xFFFFFFFCu32
+    let mut i : u32 = 0u32
+    while i < aligned {
+        ldil_w(o, i + 0u32, 0x13u32); ldil_w(o, i + 1u32, 0x00u32)
+        ldil_w(o, i + 2u32, 0x00u32); ldil_w(o, i + 3u32, 0x00u32)
+        i = i + 4u32
+    }
+    return aligned
+}
+
+fn fill_cortex_m(out: u64, count: u32) -> u32 {
+    let o : u64 = out
+    let aligned : u32 = count & 0xFFFFFFFEu32
+    let mut i : u32 = 0u32
+    while i < aligned {
+        ldil_w(o, i + 0u32, 0x00u32); ldil_w(o, i + 1u32, 0xBFu32)
+        i = i + 2u32
+    }
+    return aligned
+}
+
+/* Per-target dispatch (mirrors the C switch: 0/1 x86, 2 scalar,
+ * 3/4 arm64, 5 riscv, 6 cortex_m, default 0). */
+fn xii_ldil_fill_nops(out: u64, count: u32, deployment_target: u32) -> u32 @export {
+    let t : u32 = deployment_target
+    let o : u64 = out
+    let c : u32 = count
+    if t == 0u32 { return fill_x86(o, c) }
+    if t == 1u32 { return fill_x86(o, c) }
+    if t == 2u32 { return fill_x86_scalar(o, c) }
+    if t == 3u32 { return fill_arm64(o, c) }
+    if t == 4u32 { return fill_arm64(o, c) }
+    if t == 5u32 { return fill_riscv(o, c) }
+    if t == 6u32 { return fill_cortex_m(o, c) }
+    return 0u32
+}

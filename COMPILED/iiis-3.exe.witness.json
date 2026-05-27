@@ -4,6 +4,6 @@
   "mode": "release",
   "iiis0_used": "iiis-2.exe",
   "output": "iiis-3.exe",
-  "source_files": ["cg_r3_xii.c","cg_r3_xii_adapter.c","emit_accessors.c","iiis1_link_stubs.c","iii_cg_pe_iiis1.c","lex_runtime.c","sema_xii.c","sema_xii_adapter.c","xii_lattice_loader.c","xii_ldil.c"],
-  "output_mhash": "48dc4c7b901aeed5d07ba36b5776eda059a4b0678a6d90fc1809251e1e6165b7"
+  "source_files": ["cg_r3_xii.c","cg_r3_xii_adapter.c","iiis1_link_stubs.c","iii_cg_pe_iiis1.c","lex_runtime.c","sema_xii.c","sema_xii_adapter.c","xii_lattice_loader.c","xii_ldil.c"],
+  "output_mhash": "57d57c98b7060e7059168f5dcabfc420901053804236fd344c0149479f0fe8be"
 }

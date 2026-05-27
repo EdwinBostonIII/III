@@ -47,13 +47,103 @@ const III_EMIT_PHASE_VERSION  : u32 = 4u32
 const III_EMIT_PHASE_WITNESS  : u32 = 5u32
 
 /* ??? C accessors (libc / subprocess / I/O surface) ?????????????????? */
-extern @abi(c-msvc-x64) fn iii_emit_putenv_c(kv: u64) -> i32 from "emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_emit_system_c(cmd: u64) -> i32 from "emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_emit_popen_first_line_c(cmd: u64, out: u64, cap: u64) -> i64 from "emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_emit_popen_grep_c(cmd: u64, needle: u64) -> i32 from "emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_emit_write_file_c(path: u64, data: u64, len: u64) -> i32 from "emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_emit_read_file_c(path: u64, out_buf_addr: u64, out_len: u64) -> i32 from "emit_accessors.c"
-extern @abi(c-msvc-x64) fn iii_emit_free_c(addr: u64) -> u32 from "emit_accessors.c"
+/* The 7 libc/subprocess/IO wrappers below are now NATIVE .iii binding msvcrt
+ * directly (no C accessor file).  .iii string literals are NOT NUL-terminated,
+ * so fopen/popen mode strings are explicit NUL-terminated arrays; emit.iii's
+ * callers already pass NUL-terminated path/cmd buffers (as the C required). */
+extern @abi(c-msvc-x64) fn putenv(kv: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn system(cmd: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn popen(cmd: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn pclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fgets(buf: u64, n: i32, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn strstr(hay: u64, needle: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn strlen(s: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn fseek(stream: u64, off: i64, whence: i32) -> i32 from "msvcrt"
+extern @abi(c-msvc-x64) fn ftell(stream: u64) -> i64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(buf: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: u64) -> u64 from "msvcrt"
+
+var EMIT_M_WB  : [u8; 3] = [119u8, 98u8, 0u8]
+var EMIT_M_RB  : [u8; 3] = [114u8, 98u8, 0u8]
+var EMIT_M_R   : [u8; 2] = [114u8, 0u8]
+var EMIT_DRAIN : [u8; 512]
+
+fn iii_emit_putenv_c(kv: u64) -> i32 @export { if kv == 0u64 { return -1i32 }; return putenv(kv) }
+fn iii_emit_system_c(cmd: u64) -> i32 @export { if cmd == 0u64 { return -1i32 }; return system(cmd) }
+fn iii_emit_popen_first_line_c(cmd: u64, out: u64, cap: u64) -> i64 @export {
+    if cmd == 0u64 { return -1i64 }
+    if out == 0u64 { return -1i64 }
+    if cap < 2u64 { return -1i64 }
+    let p: u64 = popen(cmd, &EMIT_M_R as u64)
+    if p == 0u64 { return -1i64 }
+    let g: u64 = fgets(out, cap as i32, p)
+    if g == 0u64 {
+        pclose(p)
+        let z: *u8 = out as *u8
+        z[0] = 0u8
+        return -2i64
+    }
+    let dbase: u64 = &EMIT_DRAIN as u64
+    let mut d: u64 = fgets(dbase, 512i32, p)
+    while d != 0u64 { d = fgets(dbase, 512i32, p) }
+    pclose(p)
+    return strlen(out) as i64
+}
+fn iii_emit_popen_grep_c(cmd: u64, needle: u64) -> i32 @export {
+    if cmd == 0u64 { return -1i32 }
+    if needle == 0u64 { return -1i32 }
+    let p: u64 = popen(cmd, &EMIT_M_R as u64)
+    if p == 0u64 { return -1i32 }
+    let lbase: u64 = &EMIT_DRAIN as u64
+    let mut found: i32 = 0i32
+    let mut g: u64 = fgets(lbase, 512i32, p)
+    while g != 0u64 {
+        if found == 0i32 { if strstr(lbase, needle) != 0u64 { found = 1i32 } }
+        g = fgets(lbase, 512i32, p)
+    }
+    pclose(p)
+    return found
+}
+fn iii_emit_write_file_c(path: u64, data: u64, len: u64) -> i32 @export {
+    if path == 0u64 { return 1i32 }
+    if data == 0u64 { if len != 0u64 { return 1i32 } }
+    let f: u64 = fopen(path, &EMIT_M_WB as u64)
+    if f == 0u64 { return 2i32 }
+    let w: u64 = fwrite(data, 1u64, len, f)
+    if fclose(f) != 0i32 { return 3i32 }
+    if w == len { return 0i32 }
+    return 4i32
+}
+fn iii_emit_read_file_c(path: u64, out_buf_addr: u64, out_len: u64) -> i32 @export {
+    if path == 0u64 { return 1i32 }
+    if out_buf_addr == 0u64 { return 1i32 }
+    if out_len == 0u64 { return 1i32 }
+    let pa: *u64 = out_buf_addr as *u64
+    pa[0] = 0u64
+    let pl: *u64 = out_len as *u64
+    pl[0] = 0u64
+    let f: u64 = fopen(path, &EMIT_M_RB as u64)
+    if f == 0u64 { return 2i32 }
+    if fseek(f, 0i64, 2i32) != 0i32 { fclose(f); return 3i32 }
+    let sz: i64 = ftell(f)
+    if sz < 0i64 { fclose(f); return 4i32 }
+    if fseek(f, 0i64, 0i32) != 0i32 { fclose(f); return 5i32 }
+    let buf: u64 = malloc((sz as u64) + 1u64)
+    if buf == 0u64 { fclose(f); return 6i32 }
+    let r: u64 = fread(buf, 1u64, sz as u64, f)
+    fclose(f)
+    if r != (sz as u64) { free(buf); return 7i32 }
+    let zb: *u8 = (buf + (sz as u64)) as *u8
+    zb[0] = 0u8
+    pa[0] = buf
+    pl[0] = sz as u64
+    return 0i32
+}
+fn iii_emit_free_c(addr: u64) -> u32 @export { if addr != 0u64 { free(addr) }; return 0u32 }
 extern @abi(c-msvc-x64) fn iii_emit_buf_read_u8_c(addr: u64, off: u64) -> u32 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_appstr_c(dst: u64, off: u64, cap: u64, src: u64) -> i64 from "emit_accessors.c"
 extern @abi(c-msvc-x64) fn iii_emit_appch_c(dst: u64, off: u64, cap: u64, ch: u32) -> i64 from "emit_accessors.c"

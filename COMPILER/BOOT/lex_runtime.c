@@ -22,28 +22,6 @@
 #include <time.h>
 #include <signal.h>
 
-/* memcpy / memset / memcmp passthroughs (for use inside lex.iii where
- * we don't want to depend on the iii_emit_* aliases — keeps the lex
- * runtime self-contained). */
-uint32_t iii_lex_memcpy_c(uint64_t dst, uint64_t src, uint64_t n)
-{
-    memcpy((void *)(uintptr_t)dst, (const void *)(uintptr_t)src, (size_t)n);
-    return 0u;
-}
-
-uint32_t iii_lex_memset_c(uint64_t dst, uint32_t v, uint64_t n)
-{
-    memset((void *)(uintptr_t)dst, (int)(v & 0xffu), (size_t)n);
-    return 0u;
-}
-
-int32_t iii_lex_memcmp_c(uint64_t a, uint64_t b, uint64_t n)
-{
-    return (int32_t)memcmp((const void *)(uintptr_t)a,
-                           (const void *)(uintptr_t)b,
-                           (size_t)n);
-}
-
 /* ??? SHA-256 (FIPS 180-4) hand-rolled, NIH ?????????????????????????
  * Multi-instance: caller allocates the 112-byte state struct (laid
  * out so its fields remain accessible from the .iii via the offsets

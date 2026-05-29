@@ -46,6 +46,7 @@ var HG_INPUT : [i32; 64]
 var HG_N     : [u32; 1]
 var HG_DEPTH : [u32; 4096]    /* HW2: critical-path depth scratch */
 var HG_STATE : [i32; 4096]    /* SX1: DFlipFlop held state (sequential) */
+var HG_LIVE  : [u32; 4096]    /* SX3: optimizer reachability scratch */
 
 fn hdl_reset() -> u64 @export { HG_N[0u32] = 0u32 ; return 0u64 }
 
@@ -311,4 +312,54 @@ fn pc_fanout_cap() -> u32 @export {
         g = g + 1u32
     }
     return cap
+}
+
+/* ===== SX3: the certified netlist OPTIMIZER -- proven cost-reducing rewrites (the E-graph
+ * "select the fewest gates"; a LOCAL min under the rewrite set -- exact min-gate synthesis is
+ * the NP-hard Minimum Circuit Size Problem, never claimed) ===== */
+
+/* count LIVE logic gates -- those reachable from `out`. A bypassed (dead) gate is not counted, so a
+ * proven rewrite that routes around redundancy shows up as a strictly lower live count. Reachability
+ * propagates DOWN (inputs precede consumers -> process high to low; one pass). */
+fn pc_live_gate_count(out: u32) -> u32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut g : u32 = 0u32
+    while g < n { HG_LIVE[g] = 0u32 ; g = g + 1u32 }
+    HG_LIVE[out] = 1u32
+    let mut i : u32 = n
+    while i > 0u32 {
+        i = i - 1u32
+        if HG_LIVE[i] == 1u32 {
+            let k : u32 = HG_KIND[i]
+            if k != HG_IN { if k != HG_C0 { if k != HG_C1 {
+                HG_LIVE[HG_A[i]] = 1u32
+                if pc_is_binary(k) == 1u32 { HG_LIVE[HG_B[i]] = 1u32 }
+            } } }
+        }
+    }
+    let mut c : u32 = 0u32
+    let mut j : u32 = 0u32
+    while j < n {
+        if HG_LIVE[j] == 1u32 {
+            let kj : u32 = HG_KIND[j]
+            if kj != HG_IN { if kj != HG_C0 { if kj != HG_C1 { c = c + 1u32 } } }
+        }
+        j = j + 1u32
+    }
+    return c
+}
+/* proven rewrite -- double-negation elimination: if g = NOT(NOT x), return x; else g unchanged. */
+fn hdl_opt_dn(g: u32) -> u32 @export {
+    if HG_KIND[g] == HG_NOT {
+        let inner : u32 = HG_A[g]
+        if HG_KIND[inner] == HG_NOT { return HG_A[inner] }
+    }
+    return g
+}
+/* proven rewrite -- idempotent: if g = AND(x,x) or OR(x,x), return x; else g unchanged. */
+fn hdl_opt_idem(g: u32) -> u32 @export {
+    let k : u32 = HG_KIND[g]
+    if k == HG_AND { if HG_A[g] == HG_B[g] { return HG_A[g] } }
+    if k == HG_OR  { if HG_A[g] == HG_B[g] { return HG_A[g] } }
+    return g
 }

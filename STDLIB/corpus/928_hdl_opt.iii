@@ -1,0 +1,52 @@
+/* 928_hdl_opt.iii -- III -> Silicon (SX3): the certified netlist OPTIMIZER -- the E-graph "select
+ * the fewest gates" mechanic, via PROVEN-equivalent cost-reducing rewrites. Each rewrite is
+ * truth-table-certified (hdl_equiv2) and the live-gate count (gates reachable from the output)
+ * reflects the reduction:
+ *   - double-negation elimination: NOT(NOT a) === a   (2 live gates -> 0)
+ *   - idempotent: AND(b,b) === b                       (1 live gate  -> 0)
+ *   - FALSIFIER: a single NOT / a non-idempotent AND is NOT spuriously reduced.
+ * Honest scope: a LOCAL min under these proven rewrites -- exact minimum-gate synthesis is NP-hard.
+ * Gate-kind codes: NOT=4, AND=5. 99 = all arms; 10..31 localize the first failing arm. */
+module corpus_928
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add_in(input_idx: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_opt_dn(g: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_opt_idem(g: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn pc_live_gate_count(out: u32) -> u32 from "hdl.iii"
+
+fn main() -> u64 {
+    /* ===== double-negation elimination: NOT(NOT a) === a ===== */
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let n1 : u32 = hdl_add(4u32, a, a)          /* NOT a */
+    let n2 : u32 = hdl_add(4u32, n1, n1)        /* NOT(NOT a) */
+    let opt : u32 = hdl_opt_dn(n2)              /* the proven rewrite -> a */
+    if opt != a { return 10u64 }                              /* rewrite found the simpler net */
+    if hdl_equiv2(n2, opt, 1u32) != 1u32 { return 11u64 }     /* CERTIFIED: NOT(NOT a) === a */
+    if pc_live_gate_count(n2) != 2u32 { return 12u64 }        /* before: 2 live gates */
+    if pc_live_gate_count(opt) != 0u32 { return 13u64 }       /* after: 0 (just a wire) */
+
+    /* ===== idempotent: AND(b,b) === b ===== */
+    hdl_reset()
+    let b  : u32 = hdl_add_in(0u32)
+    let aa : u32 = hdl_add(5u32, b, b)          /* AND(b,b) */
+    let opt2 : u32 = hdl_opt_idem(aa)           /* -> b */
+    if opt2 != b { return 20u64 }
+    if hdl_equiv2(aa, opt2, 1u32) != 1u32 { return 21u64 }    /* CERTIFIED: AND(b,b) === b */
+    if pc_live_gate_count(aa) != 1u32 { return 22u64 }        /* before: 1 */
+    if pc_live_gate_count(opt2) != 0u32 { return 23u64 }      /* after: 0 */
+
+    /* ===== FALSIFIER: non-reducible nets are NOT spuriously rewritten ===== */
+    hdl_reset()
+    let c : u32 = hdl_add_in(0u32)
+    let single : u32 = hdl_add(4u32, c, c)      /* single NOT c (not a double) */
+    if hdl_opt_dn(single) != single { return 30u64 }          /* unchanged */
+    let d : u32 = hdl_add_in(1u32)
+    let axy : u32 = hdl_add(5u32, c, d)         /* AND(c,d), c != d -> not idempotent */
+    if hdl_opt_idem(axy) != axy { return 31u64 }              /* unchanged */
+
+    return 99u64
+}

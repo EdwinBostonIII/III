@@ -1186,3 +1186,25 @@ count; a net driving 3 gates has 9× the fan-out capacitance of one driving 1.
 corpus **559/0**; `927_phys_real`=99.
 
 **§8.16 sealed at:** 2026-05-29.
+
+### §8.17 — III → Silicon SX3: the certified netlist optimizer (the E-graph "select fewest gates") (2026-05-29)
+
+`numera/hdl.iii` extended (`pc_live_gate_count` + `hdl_opt_dn` + `hdl_opt_idem`): the frontier now
+OPTIMIZES, not just measures. Proven cost-reducing rewrites -- double-negation elimination
+`NOT(NOT x) ⇒ x`, idempotent `AND/OR(x,x) ⇒ x` -- each truth-table-certified ===, with
+`pc_live_gate_count` (gates reachable from the output) reflecting the reduction. **Honest scope: a
+LOCAL min under the proven rewrite set; exact minimum-gate synthesis is the NP-hard Minimum Circuit
+Size Problem, never claimed.** Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 928: `NOT(NOT a)` optimizes to `a` (live gates 2 → 0), certified ===; `AND(b,b) → b` (1 → 0);
+a single NOT / a non-idempotent AND is NOT spuriously reduced (the falsifier).
+
+| Artifact (golden) | Before (§8.16) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `355462ce…c06fd4b6` | `64acaa37ff641d3f9e528419629c9c4d6a054f79045df9a8bb465fe56fe2c5ca` |
+
+**Verified:** build_stdlib **428/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **560/0**; `928_hdl_opt`=99.
+
+**§8.17 sealed at:** 2026-05-29.

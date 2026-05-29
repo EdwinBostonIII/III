@@ -1,0 +1,121 @@
+/* STDLIB/iii/forcefield/ripple_extract.iii -- the Generative Frontier, PHASE B1:
+ * TOPOLOGICAL EXTRACTION -- the decider that permits writing a NEW .iii file, but ONLY to lift
+ * out shared truth that ALREADY exists in G (never generative synthesis).  The four conditions
+ * (DOCS/III-GENERATIVE-FRONTIER.md), each DECIDABLE and proven by an organ III already has:
+ *
+ *   C1 CAPABILITY CONSERVATION -- the new file's exports are a strict subset of Cap(G): each
+ *      export's content-address already exists in the congruence ring (interning it creates NO
+ *      new class).  A hallucinated export has a fresh address -> a new class -> REJECT.
+ *   C2 MDL BOUNDARY PENALTY    -- the dedup dividend must strictly outweigh the new-file overhead
+ *      (header + imports + indirection): saved_lines > new_file_lines + import_overhead.
+ *   C3 ACYCLIC INSERTION       -- the new file must be a pure provider strictly lower on the
+ *      dependency ladder: it must not (transitively) reach any of its callers, else caller->F
+ *      closes a cycle (Tarjan-style reachability over the proposed graph).
+ *   C4 H10 ORIGIN CERTIFICATE  -- anti-thrashing: an extracted file carries a distinct intent-class
+ *      (the H10 witness stamp), so the unification loop ABSTAINS from merging it back into its
+ *      parent (rm_unifiable returns 0).  Without the stamp the loop would oscillate extract<->merge.
+ *
+ * rx_certify_extract permits the write IFF all four hold AND commit_gate admits.  DECIDER only
+ * (the applier writes the file -- Phase B2 -- behind the same GATE0-3 + revert).  Compiler-
+ * UNREFERENCED -> LIBNATIVE.  Hexad: kind_essence (the act of giving truth its own boundary).
+ * Ring: R0.  K: 1.00.  NIH: composes congruence + ripple_metric + commit_gate only. */
+module forcefield_ripple_extract
+
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn rm_unifiable(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+
+/* ===== C1: CAPABILITY CONSERVATION ===== */
+/* an F-export is in G iff interning its content-address creates NO new congruence class (it is
+ * byte-identical reused logic).  A fresh address -> a new class -> a hallucinated capability. */
+fn rx_export_in_g(addr: *u8) -> u32 @export {
+    let before : u32 = cgr_num_classes()
+    cgr_intern(addr, 1u64)
+    let after : u32 = cgr_num_classes()
+    if after > before { return 0u32 }   /* new class -> NOT in G -> hallucinated */
+    return 1u32
+}
+
+/* ===== C2: MDL BOUNDARY PENALTY ===== */
+/* permit only when the deduplication dividend STRICTLY outweighs the new-file structural overhead. */
+fn rx_delta_j_positive(saved_lines: u64, new_file_lines: u64, import_overhead: u64) -> u32 @export {
+    let cost : u64 = new_file_lines + import_overhead
+    if saved_lines > cost { return 1u32 }   /* strict delta-J > 0 */
+    return 0u32
+}
+
+/* ===== C3: ACYCLIC INSERTION ===== (its own proposed-graph adjacency + iterative reachability) */
+const RX_MAXN : u32 = 1024u32
+const RX_MAXE : u32 = 4096u32
+var RX_EFROM : [u32; 4096]
+var RX_ETO   : [u32; 4096]
+var RX_EN    : [u32; 1]
+var RX_VIS   : [u32; 1024]
+var RX_STK   : [u32; 1024]
+
+fn rx_dep_reset() -> i32 @export { RX_EN[0u32] = 0u32 ; return 0i32 }
+fn rx_add_dep(a: u32, b: u32) -> i32 @export {
+    let e : u32 = RX_EN[0u32]
+    if e >= RX_MAXE { return 0i32 }
+    RX_EFROM[e] = a
+    RX_ETO[e] = b
+    RX_EN[0u32] = e + 1u32
+    return 0i32
+}
+/* reachability: can `src` reach `dst` via the proposed edges? (iterative DFS, visited-guarded so
+ * each node is pushed at most once -> terminates).  n = node count. */
+fn rx_reaches(src: u32, dst: u32, n: u32) -> u32 @export {
+    let mut k : u32 = 0u32
+    while k < n { RX_VIS[k] = 0u32 ; k = k + 1u32 }
+    let mut sp : u32 = 0u32
+    RX_STK[sp] = src
+    sp = sp + 1u32
+    RX_VIS[src] = 1u32
+    while sp > 0u32 {
+        sp = sp - 1u32
+        let cur : u32 = RX_STK[sp]
+        if cur == dst { return 1u32 }
+        let mut e : u32 = 0u32
+        let m : u32 = RX_EN[0u32]
+        while e < m {
+            if RX_EFROM[e] == cur {
+                let t : u32 = RX_ETO[e]
+                if RX_VIS[t] == 0u32 {
+                    RX_VIS[t] = 1u32
+                    RX_STK[sp] = t
+                    sp = sp + 1u32
+                }
+            }
+            e = e + 1u32
+        }
+    }
+    return 0u32
+}
+/* inserting caller->F is acyclic IFF F does not already reach caller (else caller->F closes a loop). */
+fn rx_acyclic_insert(f: u32, caller: u32, n: u32) -> u32 @export {
+    if rx_reaches(f, caller, n) == 1u32 { return 0u32 }   /* F reaches caller -> cycle -> reject */
+    return 1u32
+}
+
+/* ===== C4: H10 ORIGIN CERTIFICATE (anti-thrashing) ===== */
+/* an H10-extracted file carries a distinct intent-class; the loop must ABSTAIN from merging it
+ * back into its parent.  1 = the abstain holds (rm_unifiable == 0): the H10 stamp prevents
+ * thrashing.  0 = the pair would re-merge (no H10 distinction). */
+fn rx_h10_blocks_remerge(extracted_node: u32, parent_node: u32) -> u32 @export {
+    if rm_unifiable(extracted_node, parent_node) == 0u32 { return 1u32 }
+    return 0u32
+}
+
+/* ===== the composed EXTRACTION DECIDER ===== */
+/* permit the new-file write IFF commit_gate admits AND all four conditions hold.  c1..c4 are the
+ * per-condition verdicts (c1 = AND of rx_export_in_g over the file's exports; c2 = rx_delta_j_positive;
+ * c3 = rx_acyclic_insert; c4 = rx_h10_blocks_remerge); kernel_ok = the commit_gate KERNEL dimension. */
+fn rx_certify_extract(c1: u32, c2: u32, c3: u32, c4: u32, kernel_ok: u32) -> u32 @export {
+    if cg_decide(1u32, 1u32, 1u32, 1u32, kernel_ok) != 99u32 { return 0u32 }   /* base admission gate */
+    if c1 != 1u32 { return 0u32 }   /* C1 capability conservation */
+    if c2 != 1u32 { return 0u32 }   /* C2 MDL boundary penalty */
+    if c3 != 1u32 { return 0u32 }   /* C3 acyclic insertion */
+    if c4 != 1u32 { return 0u32 }   /* C4 H10 anti-thrashing */
+    return 1u32
+}

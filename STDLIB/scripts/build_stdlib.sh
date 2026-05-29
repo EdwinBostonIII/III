@@ -772,6 +772,10 @@ MODULES=(
     # Inc 4: the second certified refactoring -- NOISE CUT (the "minimize noise" half). Composes
     # ripple_metric + commit_gate. Decider/sweep (no file edits). Compiler-unreferenced -> LIBNATIVE.
     "forcefield/ripple_cut"
+    # Phase B1: Topological Extraction decider -- the 4 conditions (capability conservation,
+    # MDL boundary penalty, acyclic insertion, H10 anti-thrashing) permitting a new-file write.
+    # Composes congruence + ripple_metric + commit_gate. Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/ripple_extract"
 )
 
 PASS=0

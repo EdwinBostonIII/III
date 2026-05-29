@@ -957,3 +957,31 @@ and safely applies the result to its own files (edit/merge). This is the baselin
 designs -- Topological Extraction (new-file creation) and Proof-Carrying Code.
 
 **§8.7 sealed at:** 2026-05-29.
+
+### §8.8 — Generative Frontier B1: Topological Extraction decider (the 4 conditions) (2026-05-29)
+
+`forcefield/ripple_extract.iii` (`rx_*` `@export`): the decider that permits writing a NEW `.iii`
+file ONLY to lift out shared truth already in G (never generative synthesis). The four conditions
+(`DOCS/III-GENERATIVE-FRONTIER.md`), each DECIDABLE + proven by an existing organ:
+- **C1 Capability Conservation** (`rx_export_in_g`): an export is in G iff interning its `cad`
+  creates no new congruence class (a hallucinated export = fresh address = new class -> reject).
+- **C2 MDL Boundary Penalty** (`rx_delta_j_positive`): `saved_lines > new_file_lines + overhead`.
+- **C3 Acyclic Insertion** (`rx_reaches` iterative DFS + `rx_acyclic_insert`): F must not reach a
+  caller (else `caller->F` closes a cycle).
+- **C4 H10 Origin Certificate** (`rx_h10_blocks_remerge`): an H10-stamped file's distinct
+  intent-class makes the loop abstain from re-merging it (anti-thrashing).
+`rx_certify_extract` composes all four + `commit_gate`. DECIDER only. Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 921: one prove-the-negative falsifier per condition + the composed decider's full teeth
+(each condition false -> reject; kernel down -> reject). (A `from`-keyword param clash -- the
+`extern…from` keyword -- was caught at standalone-compile and fixed in module + KAT before sealing.)
+
+| Artifact (golden) | Before (§8.7) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `11defd25…2a03600b8` | `3b4a85a7d244d8781e2d6c02b0d28d5e1fc6b31d52e461bc6d9de3ba6c196bbc` |
+
+**Verified:** build_stdlib **425/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **553/0**; `921_ripple_extract`=99.
+
+**§8.8 sealed at:** 2026-05-29.

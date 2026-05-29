@@ -588,6 +588,7 @@ declare -A EXPECTED=(
     [918_ripple_unify]=99
     [919_ripple_loop]=99
     [920_ripple_cut]=99
+    [921_ripple_extract]=99
 )
 
 PASS=0

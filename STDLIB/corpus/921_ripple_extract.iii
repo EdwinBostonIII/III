@@ -1,0 +1,76 @@
+/* 921_ripple_extract.iii -- the Generative Frontier (Phase B1): Topological Extraction's four
+ * conditions end-to-end, each with a prove-the-negative falsifier:
+ *   C1 capability conservation: an extracted (existing) export is in G; a hallucinated (fresh)
+ *      export is NOT (-> reject).
+ *   C2 MDL boundary penalty: a fat dedup dividend passes; an overhead-dominated extraction fails.
+ *   C3 acyclic insertion: a leaf provider is acyclic; a provider that reaches a caller is a cycle.
+ *   C4 H10 anti-thrashing: an H10-stamped file (distinct intent-class) blocks re-merge; a non-H10
+ *      twin would re-merge.
+ *   composed decider: all four + kernel-live -> permit; any one false (or kernel down) -> reject.
+ * 99 = all arms pass; 10..55 localize the first failing arm. */
+module corpus_921
+
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rx_export_in_g(addr: *u8) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_delta_j_positive(saved_lines: u64, new_file_lines: u64, import_overhead: u64) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_dep_reset() -> i32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_add_dep(a: u32, b: u32) -> i32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_acyclic_insert(f: u32, caller: u32, n: u32) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_h10_blocks_remerge(extracted_node: u32, parent_node: u32) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn rx_certify_extract(c1: u32, c2: u32, c3: u32, c4: u32, kernel_ok: u32) -> u32 from "ripple_extract.iii"
+
+var GA : [u8; 32]
+var GB : [u8; 32]
+var FH : [u8; 32]
+
+fn fill32(p: *u8, b: u8) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 32u64 { p[k] = b ; k = k + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ===== C1: capability conservation ===== */
+    cgr_init()
+    let pga : *u8 = (&GA) as u64 as *u8
+    let pgb : *u8 = (&GB) as u64 as *u8
+    let pfh : *u8 = (&FH) as u64 as *u8
+    fill32(pga, 0x11u8) ; cgr_intern(pga, 5u64)   /* G already has GA */
+    fill32(pgb, 0x22u8) ; cgr_intern(pgb, 5u64)   /* G already has GB */
+    fill32(pfh, 0x99u8)                           /* a fresh / hallucinated address */
+    if rx_export_in_g(pga) != 1u32 { return 10u64 }   /* extracted existing export -> in G */
+    if rx_export_in_g(pfh) != 0u32 { return 11u64 }   /* hallucinated export -> NOT in G (falsifier) */
+
+    /* ===== C2: MDL boundary penalty ===== */
+    if rx_delta_j_positive(50u64, 10u64, 5u64) != 1u32 { return 20u64 }   /* dividend 50 > overhead 15 */
+    if rx_delta_j_positive(3u64, 10u64, 5u64) != 0u32 { return 21u64 }    /* 3 <= 15 -> reject (falsifier) */
+
+    /* ===== C3: acyclic insertion ===== (nodes 0=A,1=B callers; 2=F new; 3=lower dep) */
+    rx_dep_reset()
+    rx_add_dep(2u32, 3u32)                                  /* F depends only on a lower module */
+    if rx_acyclic_insert(2u32, 0u32, 4u32) != 1u32 { return 30u64 }   /* F is a leaf provider wrt caller A */
+    if rx_acyclic_insert(2u32, 1u32, 4u32) != 1u32 { return 31u64 }   /* ... and caller B */
+    rx_add_dep(2u32, 0u32)                                  /* now F depends on caller A */
+    if rx_acyclic_insert(2u32, 0u32, 4u32) != 0u32 { return 32u64 }   /* F reaches A -> cycle (falsifier) */
+
+    /* ===== C4: H10 anti-thrashing ===== */
+    rm_reset()
+    let parent    : u32 = rm_add_node(0xCAFEu64, 1u32)     /* parent module (intent-class 1) */
+    let extracted : u32 = rm_add_node(0xCAFEu64, 100u32)   /* extracted file: same cap, H10 intent-class */
+    let dup       : u32 = rm_add_node(0xCAFEu64, 1u32)     /* a non-H10 twin of parent */
+    if rx_h10_blocks_remerge(extracted, parent) != 1u32 { return 40u64 }   /* H10 stamp -> abstains (no re-merge) */
+    if rx_h10_blocks_remerge(dup, parent) != 0u32 { return 41u64 }         /* no H10 distinction -> would merge */
+
+    /* ===== composed extraction decider ===== */
+    if rx_certify_extract(1u32, 1u32, 1u32, 1u32, 1u32) != 1u32 { return 50u64 }   /* all hold -> permit */
+    if rx_certify_extract(0u32, 1u32, 1u32, 1u32, 1u32) != 0u32 { return 51u64 }   /* C1 fail */
+    if rx_certify_extract(1u32, 0u32, 1u32, 1u32, 1u32) != 0u32 { return 52u64 }   /* C2 fail */
+    if rx_certify_extract(1u32, 1u32, 0u32, 1u32, 1u32) != 0u32 { return 53u64 }   /* C3 fail */
+    if rx_certify_extract(1u32, 1u32, 1u32, 0u32, 1u32) != 0u32 { return 54u64 }   /* C4 fail */
+    if rx_certify_extract(1u32, 1u32, 1u32, 1u32, 0u32) != 0u32 { return 55u64 }   /* kernel down */
+
+    return 99u64
+}

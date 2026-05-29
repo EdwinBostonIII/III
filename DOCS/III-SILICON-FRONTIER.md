@@ -126,3 +126,48 @@ axiom-guarded in hardware — handed to the place-&-route toolchain for the sili
 
 Each: write → adversarial KAT (prove-the-negative) → `build_stdlib` 4xx/0 → cartographer GATE PASS →
 compiler `4e138415` unchanged (LIBNATIVE) → full corpus green → seal MHASH-LEDGER → commit.
+
+---
+
+## Bolsters (Silicon Frontier v2) — refinements that strengthen the three mechanics
+
+Designed 2026-05-29 (`/architect` + `/math-olympiad`). Each bolsters a mechanic; each sealed piece
+by piece like HW1–HW3, every claim honestly scoped.
+
+**SX1 — Sequential circuits (the DFlipFlop made real)** [bolsters HW1, corpus 926]. Today `hdl` is
+combinational (DFlipFlop ≈ a wire). SX1 adds clocked state: a per-gate `HG_STATE`, `hdl_step` (a
+combinational pass where each DFF outputs its HELD state, then a latch pass: next-state = the DFF's
+input), `hdl_seq_init`, `hdl_set_a` (close a feedback loop), `hdl_dff_state`. III now lowers STATEFUL
+hardware — registers, counters, finite-state machines — not just combinational logic. **Decidable:**
+a synchronous circuit's behaviour over N clock cycles is a bounded evaluation, not the halting
+problem. KAT 926: a toggle flip-flop (DFF fed by `NOT` of its own output) yields the trace 1,0,1,0; a
+self-held DFF stays constant (the contrast/falsifier). The DFlipFlop the spec names becomes genuine.
+
+**SX2 — Realistic physical cost: gate delay + wire capacitance** [bolsters HW2, corpus 927]. Today
+depth is uniform (1/gate) and "wire" is in-edge count. SX2 adds the literal mechanic: per-gate-TYPE
+delay (`pc_gate_delay`: NAND/AND/OR = 1, XOR = 2, trit gates = 2 — the real relative delays) →
+`pc_crit_delay` (the *weighted* critical path), and fan-out capacitance (`pc_fanout_cap`: per net,
+the number of consumers it drives = its capacitive load — a sharper proxy than in-edge count). Still
+NOT NP-hard placed routing (ADR-S2 stands — the topological proxy, refined, not a fab model). KAT
+927: an XOR-deep path costs more weighted delay than a NAND-deep path of equal gate-count; a
+high-fan-out net costs more capacitance.
+
+**SX3 — The certified netlist optimizer (the E-graph "select fewest gates")** [bolsters HW1+HW2,
+corpus 928]. Today the frontier LOWERS + CERTIFIES + COSTS but does not OPTIMIZE. SX3
+(`numera/hdl_opt.iii`) adds the selection: PROVEN-equivalent cost-reducing rewrites
+(double-negation elimination `NOT(NOT x) ⇒ x`; idempotent `AND(x,x)/OR(x,x) ⇒ x`), each
+truth-table-certified, with `pc_live_gate_count` (gates reachable from the output) reflecting the
+reduction. The optimizer returns a certified-equivalent, physically-cheaper realization. **Honest
+scope (pattern #4): exact minimum-gate synthesis is NP-hard (the Minimum Circuit Size Problem); the
+optimizer finds the LOCAL min under the proven rewrite set — never the global min** — exactly the
+ripple optimizer's "local-optimal under sound moves" discipline. KAT 928: `NOT(NOT a)` optimizes to
+`a` (live-gates 2 → 0), certified ===; `AND(x,x) → x`; an already-minimal netlist is unchanged (the
+falsifier).
+
+**SX4 — The scalable, multi-axiom AEU** [bolsters HW3, corpus 929]. Today the AEU is a fixed 2-lane
+verifier. SX4 adds an n-lane verdict (`aeu_check_n` over a lane-bit array) + a general AND-tree
+netlist certified === the n-way conjunction, plus a third real axiom lane. The AEU scales to III's
+full axiom set — every datum verified against all axioms in one parallel pass. KAT 929: a 3-lane
+verify; a violation in ANY lane caught; the n-lane AND-tree certified === the conjunction.
+
+Order: SX1 → SX2 → SX3 (uses SX2's cost) → SX4, each LIBNATIVE + corpus-green + sealed.

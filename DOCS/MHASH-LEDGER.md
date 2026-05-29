@@ -1138,3 +1138,30 @@ thermodynamic floor, and enforces its axioms in parallel hardware -- pure algebr
 every step truth-table or kernel certified, the NP-hard place-&-route honestly left to the toolchain.
 
 **§8.14 sealed at:** 2026-05-29.
+
+### §8.15 — III → Silicon SX1: sequential circuits (the DFlipFlop made real) (2026-05-29)
+
+`numera/hdl.iii` extended (`hdl_step`/`hdl_seq_init`/`hdl_set_a`/`hdl_dff_state`; `HG_DFF` now outputs
+its held state): clocked sequential logic. III lowers STATEFUL hardware -- registers, counters, FSMs
+-- not just combinational. A clock step = combinational eval (each DFF outputs `HG_STATE`) then latch
+(next state = input). Bounded (N cycles), NOT the halting problem. Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 926: a toggle flip-flop (DFF fed by `NOT` of its own output) traces 1,0,1,0; a self-held DFF
+holds at 0 (the contrast/falsifier).
+
+| Artifact (golden) | Before (§8.14) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `93cbaf7b…1905905e` | `dcba7871f51fc63d8babc4bd1117e51a2b046f0a3659a93b084224c2a71f89f6` |
+
+**Verified:** build_stdlib **428/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **558/0**; `926_hdl_seq`=99.
+
+**NOTE (incident, root-caused not hand-waved):** the first gate run aborted on a TRANSIENT cartographer
+collision -- a stale CONCURRENT build task (pre-summary `w1a2` running `build_stdlib`+`run_corpus`)
+raced this gate and momentarily left an `i32probe.iii` (`fn main @export`) in `COMPILER/BOOT`,
+colliding with `main.iii`. Diagnosed via process inspection (`Get-CimInstance`), the stale task +
+orphans killed, scratch removed; the clean re-run sealed. SX1 code was never at fault -- its
+`.o`-linked corpus passed 558/0 even during the aborted run.
+
+**§8.15 sealed at:** 2026-05-29.

@@ -45,6 +45,7 @@ var HG_VAL   : [i32; 4096]
 var HG_INPUT : [i32; 64]
 var HG_N     : [u32; 1]
 var HG_DEPTH : [u32; 4096]    /* HW2: critical-path depth scratch */
+var HG_STATE : [i32; 4096]    /* SX1: DFlipFlop held state (sequential) */
 
 fn hdl_reset() -> u64 @export { HG_N[0u32] = 0u32 ; return 0u64 }
 
@@ -82,7 +83,7 @@ fn hdl_eval(out: u32) -> i32 @export {
         if k == HG_OR   { HG_VAL[g] = HG_VAL[HG_A[g]] | HG_VAL[HG_B[g]] }
         if k == HG_XOR  { HG_VAL[g] = HG_VAL[HG_A[g]] ^ HG_VAL[HG_B[g]] }
         if k == HG_NAND { HG_VAL[g] = 1i32 - (HG_VAL[HG_A[g]] & HG_VAL[HG_B[g]]) }
-        if k == HG_DFF  { HG_VAL[g] = HG_VAL[HG_A[g]] }
+        if k == HG_DFF  { HG_VAL[g] = HG_STATE[g] }
         if k == HG_TNOT { HG_VAL[g] = iii_trit_not(HG_VAL[HG_A[g]]) }
         if k == HG_TAND { HG_VAL[g] = iii_trit_and(HG_VAL[HG_A[g]], HG_VAL[HG_B[g]]) }
         if k == HG_TOR  { HG_VAL[g] = iii_trit_or(HG_VAL[HG_A[g]], HG_VAL[HG_B[g]]) }
@@ -210,4 +211,31 @@ fn pc_better(ga: u32, da: u32, gb: u32, db: u32) -> u32 @export {
     if ga > gb { return 0u32 }
     if da < db { return 1u32 }
     return 0u32
+}
+
+/* ===== SX1: SEQUENTIAL circuits -- the DFlipFlop made real (clocked state) ===== */
+
+/* zero all DFF held states (power-on reset). */
+fn hdl_seq_init() -> u64 @export {
+    let n : u32 = HG_N[0u32]
+    let mut g : u32 = 0u32
+    while g < n { HG_STATE[g] = 0i32 ; g = g + 1u32 }
+    return 0u64
+}
+/* set gate g's input-A to gate a -- used to close a feedback loop after both gates exist. */
+fn hdl_set_a(g: u32, a: u32) -> u64 @export { HG_A[g] = a ; return 0u64 }
+/* read a DFF's current held state. */
+fn hdl_dff_state(g: u32) -> i32 @export { return HG_STATE[g] }
+/* one clock cycle: combinational eval (each DFF outputs its HELD state), then latch (each DFF's
+ * next state = its input's value). A synchronous-circuit step -- a bounded evaluation, NOT the
+ * halting problem (no unbounded fixpoint search). */
+fn hdl_step() -> u64 @export {
+    hdl_eval(0u32)                              /* combinational pass: computes all HG_VAL */
+    let n : u32 = HG_N[0u32]
+    let mut g : u32 = 0u32
+    while g < n {
+        if HG_KIND[g] == HG_DFF { HG_STATE[g] = HG_VAL[HG_A[g]] }   /* latch the input -> next state */
+        g = g + 1u32
+    }
+    return 0u64
 }

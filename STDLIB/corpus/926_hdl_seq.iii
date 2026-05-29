@@ -1,0 +1,36 @@
+/* 926_hdl_seq.iii -- III -> Silicon (SX1): SEQUENTIAL circuits, the DFlipFlop made real. A toggle
+ * flip-flop (a DFF whose input is NOT of its own output) must produce the clocked trace 1,0,1,0;
+ * a DFF fed by ITSELF must HOLD (never toggle) -- the contrast/falsifier. Gate-kind codes: NOT=4,
+ * DFF=13. 99 = both arms hold; 10..21 localize the first failing arm. */
+module corpus_926
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_set_a(g: u32, a: u32) -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_seq_init() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_step() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_dff_state(g: u32) -> i32 from "hdl.iii"
+
+fn main() -> u64 {
+    /* ===== toggle flip-flop: DFF <- NOT(DFF) ===== */
+    hdl_reset()
+    let dff : u32 = hdl_add(13u32, 0u32, 0u32)    /* DFF; input set below */
+    let ng  : u32 = hdl_add(4u32, dff, 0u32)      /* NOT(dff) */
+    hdl_set_a(dff, ng)                             /* close the feedback: dff's input = NOT(dff) */
+    hdl_seq_init()
+    if hdl_dff_state(dff) != 0i32 { return 10u64 }                 /* power-on 0 */
+    hdl_step() ; if hdl_dff_state(dff) != 1i32 { return 11u64 }    /* -> 1 */
+    hdl_step() ; if hdl_dff_state(dff) != 0i32 { return 12u64 }    /* -> 0 */
+    hdl_step() ; if hdl_dff_state(dff) != 1i32 { return 13u64 }    /* -> 1 */
+    hdl_step() ; if hdl_dff_state(dff) != 0i32 { return 14u64 }    /* -> 0 */
+
+    /* ===== contrast/falsifier: a DFF fed by ITSELF holds its value forever ===== */
+    hdl_reset()
+    let h : u32 = hdl_add(13u32, 0u32, 0u32)
+    hdl_set_a(h, h)                                /* input = itself (hold) */
+    hdl_seq_init()
+    hdl_step() ; if hdl_dff_state(h) != 0i32 { return 20u64 }      /* stays 0 */
+    hdl_step() ; if hdl_dff_state(h) != 0i32 { return 21u64 }      /* stays 0 (does NOT toggle) */
+
+    return 99u64
+}

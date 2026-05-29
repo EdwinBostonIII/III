@@ -839,3 +839,27 @@ FULL STDLIB corpus **548/0** — `864`=99 (5-dim gate + located kernel-reject 25
 + `916`=99, zero regressions.
 
 **§8.2 sealed at:** 2026-05-29.
+
+### §8.3 — Sovereign Ripple Calculus, Inc 1: the objective made computable (2026-05-29)
+
+`forcefield/ripple_metric.iii` (`rm_*` `@export`): the ripple objective J's four targets as
+PROVABLE graph predicates -- noise (dead edges), good-complexity (load-bearing), separation
+(unifiable duplicates), unification -- plus per-candidate cut/merge validity+improvement and the
+aggregate `rm_j` (a graph-level MDL proxy; the decidable fragment, per
+`DOCS/III-RIPPLE-OPTIMIZER-ARCHITECTURE.md`). MEASURE-ONLY (no self-editing). Standalone,
+compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+Corpus 917 proves it end-to-end with prove-the-negative FALSIFIERS encoding III's hard lessons:
+a load-bearing edge is never noise + never cuttable (good complexity protected); a witnessed
+dead edge is never cut (intent respected); a capability-equal but intent-class-DIFFERENT pair
+(cpufeat userspace vs Ring-0) is never unified.
+
+| Artifact (golden) | Before (§8.2) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `501db741…0fc55cf0` | `9853413483a956785a3120ad9c249dcf78d33bff723b86f857487aca5d669c85` |
+
+**Verified:** build_stdlib **421/0**; cartographer GATE PASS (no new cycle/dup-export); compiler
+`4e138415` unchanged; FULL corpus **549/0**; `917_ripple_metric`=99.
+
+**§8.3 sealed at:** 2026-05-29.

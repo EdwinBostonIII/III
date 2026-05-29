@@ -756,6 +756,11 @@ MODULES=(
     # + typecheck + egraph + cost_lattice (built above); compiler-unreferenced -> LIBNATIVE
     # only. Appended last (BSS-neutral).
     "numera/sov_pipeline"
+    # The Sovereign Ripple Calculus (Inc 1): the objective made computable -- measures
+    # noise / good-complexity / separation / unification over the module graph (a graph-level
+    # MDL proxy; the decidable fragment). Standalone (no externs), compiler-unreferenced
+    # -> LIBNATIVE. Appended last (BSS-neutral).
+    "forcefield/ripple_metric"
 )
 
 PASS=0

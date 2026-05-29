@@ -1,0 +1,158 @@
+/* STDLIB/iii/forcefield/ripple_metric.iii -- the Sovereign Ripple Calculus,
+ * INCREMENT 1: the objective made computable.  MEASURE-ONLY (no self-editing).
+ *
+ * Models III's functional connections as a graph: nodes = modules (each with a
+ * capability-hash and an intent-class), edges = ripples (each load-bearing or dead,
+ * each plain or witnessed).  Computes the four targets of the design, PROVABLY at the
+ * graph level (the decidable fragment -- this is a sound graph-level PROXY for the MDL
+ * objective "minimal structure preserving the whole proven capability set", NOT a
+ * capability-level semantic analysis, which is undecidable; see
+ * DOCS/III-RIPPLE-OPTIMIZER-ARCHITECTURE.md):
+ *
+ *   NOISE          = edges carrying no capability (unused) and not witnessed-keep.
+ *                    Provably removable -> minimize.
+ *   GOOD COMPLEXITY= load-bearing edges (the symbol is actually used); removing one
+ *                    LOSES a capability -> it is irreducible -> preserve/grow.
+ *   SEPARATION     = capability-equal node pairs kept in DISTINCT modules (duplication);
+ *                    unification would collapse them -> minimize.
+ *   UNIFICATION    = the dual: collapsing capability-equal duplicates (raises J).
+ *
+ * Two lessons from III's own tree are encoded as HARD predicates (the decider relies on
+ * them; the KAT proves the negative): (1) a load-bearing edge is NEVER noise and cutting
+ * it is NEVER capability-preserving -- good complexity is protected; (2) capability-equal
+ * but intent-class-DIFFERENT nodes (e.g. cpufeat userspace vs Ring-0) are NOT unifiable --
+ * an intended variation point is never merged.  Intent is not kernel-provable, so it is
+ * carried as a witnessed marker and the metric ABSTAINS from merging across it.
+ *
+ * Pure, deterministic, no allocator (module-global BSS arrays; integer ==/!= and counts).
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_sensitivity (self-measurement).
+ * Ring: R0.  K: 1.00.  NIH: standalone (no externs). */
+module forcefield_ripple_metric
+
+const RM_MAXN : u32 = 4096u32     /* module-graph headroom (III ~420 modules) */
+const RM_MAXE : u32 = 16384u32    /* edge headroom (III ~835 ripples) */
+const RM_BAD  : u32 = 0xFFFFFFFFu32
+
+var RM_N : [u32; 1]               /* node count */
+var RM_E : [u32; 1]               /* edge count */
+var RM_CAP : [u64; 4096]          /* per-node capability content-address */
+var RM_ICLASS : [u32; 4096]       /* per-node intent-class (variation-point id) */
+var RM_ESRC : [u32; 16384]
+var RM_EDST : [u32; 16384]
+var RM_EUSED : [u32; 16384]       /* 1 = load-bearing (symbol referenced); 0 = dead */
+var RM_EINTENT : [u32; 16384]     /* 1 = witnessed-keep even if unused; 0 = plain */
+
+/* ---- graph construction ---- */
+fn rm_reset() -> u64 @export {
+    RM_N[0u32] = 0u32
+    RM_E[0u32] = 0u32
+    return 0u64
+}
+
+fn rm_add_node(cap: u64, iclass: u32) -> u32 @export {
+    let i : u32 = RM_N[0u32]
+    if i >= RM_MAXN { return RM_BAD }
+    RM_CAP[i] = cap
+    RM_ICLASS[i] = iclass
+    RM_N[0u32] = i + 1u32
+    return i
+}
+
+fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 @export {
+    let e : u32 = RM_E[0u32]
+    if e >= RM_MAXE { return RM_BAD }
+    RM_ESRC[e] = src
+    RM_EDST[e] = dst
+    RM_EUSED[e] = used
+    RM_EINTENT[e] = intent
+    RM_E[0u32] = e + 1u32
+    return e
+}
+
+/* ---- per-edge predicates ---- */
+/* NOISE: unused (carries no capability) AND not witnessed-keep. */
+fn rm_is_noise(e: u32) -> u32 @export {
+    if e >= RM_E[0u32] { return 0u32 }
+    if RM_EUSED[e] == 0u32 { if RM_EINTENT[e] == 0u32 { return 1u32 } }
+    return 0u32
+}
+/* CUT VALID (capability-preserving): only an unused edge may be cut.  Cutting a
+ * load-bearing edge LOSES a capability -> invalid (the hard constraint the decider checks). */
+fn rm_cut_valid(e: u32) -> u32 @export {
+    if e >= RM_E[0u32] { return 0u32 }
+    if RM_EUSED[e] == 0u32 { return 1u32 }
+    return 0u32
+}
+/* CUT IMPROVES J: valid AND removes genuine noise (not a witnessed edge). */
+fn rm_cut_improves(e: u32) -> u32 @export {
+    return rm_is_noise(e)
+}
+
+/* ---- per-pair predicates (unification) ---- */
+/* UNIFIABLE: distinct nodes, capability-equal, AND same intent-class.  Capability-equal
+ * but intent-class-different = intended parallel (cpufeat userspace vs Ring-0) -> NOT
+ * unifiable: an intended variation point is preserved. */
+fn rm_unifiable(i: u32, j: u32) -> u32 @export {
+    if i == j { return 0u32 }
+    if i >= RM_N[0u32] { return 0u32 }
+    if j >= RM_N[0u32] { return 0u32 }
+    if RM_CAP[i] == RM_CAP[j] { if RM_ICLASS[i] == RM_ICLASS[j] { return 1u32 } }
+    return 0u32
+}
+fn rm_merge_valid(i: u32, j: u32) -> u32 @export {
+    return rm_unifiable(i, j)
+}
+/* merging capability-equal duplicates reduces separation + description length -> J up. */
+fn rm_merge_improves(i: u32, j: u32) -> u32 @export {
+    return rm_unifiable(i, j)
+}
+
+/* ---- aggregate metrics ---- */
+fn rm_noise() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut e : u32 = 0u32
+    let n : u32 = RM_E[0u32]
+    while e < n {
+        if rm_is_noise(e) == 1u32 { c = c + 1u32 }
+        e = e + 1u32
+    }
+    return c
+}
+fn rm_good() -> u32 @export {
+    let mut c : u32 = 0u32
+    let mut e : u32 = 0u32
+    let n : u32 = RM_E[0u32]
+    while e < n {
+        if RM_EUSED[e] == 1u32 { c = c + 1u32 }
+        e = e + 1u32
+    }
+    return c
+}
+/* SEPARATION: count of unifiable node pairs (capability-equal, intent-equal) currently
+ * in distinct nodes -- the duplication unification would collapse. */
+fn rm_sep() -> u32 @export {
+    let mut c : u32 = 0u32
+    let n : u32 = RM_N[0u32]
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32
+        while j < n {
+            if rm_unifiable(i, j) == 1u32 { c = c + 1u32 }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return c
+}
+
+/* The objective J, offset to stay non-negative (counts are small vs the offset):
+ * J = OFFSET + good - noise - separation.  Higher J = more load-bearing structure,
+ * less dead noise, less duplication.  The per-candidate ΔJ the decider uses is given
+ * by rm_cut_improves / rm_merge_improves (each strictly raises J when 1). */
+const RM_J_OFFSET : u64 = 1000000u64
+fn rm_j() -> u64 @export {
+    let g  : u64 = rm_good() as u64
+    let nz : u64 = rm_noise() as u64
+    let sp : u64 = rm_sep() as u64
+    return RM_J_OFFSET + g - nz - sp
+}

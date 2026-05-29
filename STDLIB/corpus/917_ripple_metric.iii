@@ -1,0 +1,65 @@
+/* 917_ripple_metric.iii -- the Sovereign Ripple Calculus (Inc 1) end-to-end on a graph
+ * that MODELS III's real structure; every verdict is the metric's, every hard lesson a
+ * prove-the-negative falsifier:
+ *   POSITIVE: a DEAD edge is noise + cuttable + improving; an accidental capability-equal
+ *             pair is unifiable + improving.
+ *   FALSIFIERS: a LOAD-BEARING edge is never noise + never cuttable (good complexity is
+ *             protected); a witnessed dead edge is never cut (intent respected); a
+ *             capability-equal but intent-class-different pair (cpufeat userspace vs Ring-0)
+ *             is never unified.
+ * 99 = all arms pass; 10..33 localize the first failing arm. */
+module corpus_917
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_is_noise(e: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_cut_valid(e: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_cut_improves(e: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_unifiable(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_merge_valid(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_merge_improves(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_noise() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_good() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_sep() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_j() -> u64 from "ripple_metric.iii"
+
+fn main() -> u64 {
+    rm_reset()
+    let n0 : u32 = rm_add_node(0xAAAAu64, 1u32)   /* cap A, iclass 1 */
+    let n1 : u32 = rm_add_node(0xAAAAu64, 1u32)   /* cap A, iclass 1 -> accidental dup of n0 */
+    let n2 : u32 = rm_add_node(0xBBBBu64, 7u32)   /* cap B, iclass 7 (userspace) */
+    let n3 : u32 = rm_add_node(0xBBBBu64, 9u32)   /* cap B, iclass 9 (Ring-0) -> intentional */
+    let n4 : u32 = rm_add_node(0xCCCCu64, 2u32)   /* unique */
+
+    let e_load1 : u32 = rm_add_edge(n4, n0, 1u32, 0u32)  /* load-bearing */
+    let e_load2 : u32 = rm_add_edge(n0, n4, 1u32, 0u32)  /* load-bearing (cycle shape) */
+    let e_dead  : u32 = rm_add_edge(n4, n2, 0u32, 0u32)  /* dead -> noise */
+    let e_keep  : u32 = rm_add_edge(n2, n4, 0u32, 1u32)  /* dead but witnessed -> keep */
+
+    /* ===== POSITIVE ===== */
+    if rm_is_noise(e_dead) != 1u32 { return 10u64 }
+    if rm_cut_valid(e_dead) != 1u32 { return 11u64 }
+    if rm_cut_improves(e_dead) != 1u32 { return 12u64 }
+    if rm_unifiable(n0, n1) != 1u32 { return 13u64 }
+    if rm_merge_improves(n0, n1) != 1u32 { return 14u64 }
+
+    /* ===== FALSIFIERS (prove the negative) ===== */
+    if rm_is_noise(e_load1) != 0u32 { return 20u64 }       /* good complexity is not noise */
+    if rm_cut_valid(e_load1) != 0u32 { return 21u64 }      /* cannot cut a load-bearing edge */
+    if rm_cut_improves(e_load1) != 0u32 { return 22u64 }
+    if rm_is_noise(e_keep) != 0u32 { return 23u64 }        /* witnessed edge is not noise */
+    if rm_cut_improves(e_keep) != 0u32 { return 24u64 }    /* and is never cut */
+    if rm_unifiable(n2, n3) != 0u32 { return 25u64 }       /* intentional variation not unified */
+    if rm_merge_valid(n2, n3) != 0u32 { return 26u64 }
+    if rm_merge_improves(n2, n3) != 0u32 { return 27u64 }
+
+    /* ===== AGGREGATES ===== */
+    if rm_noise() != 1u32 { return 30u64 }   /* one dead non-witnessed edge */
+    if rm_good() != 2u32 { return 31u64 }    /* two load-bearing edges */
+    if rm_sep() != 1u32 { return 32u64 }     /* one unifiable pair (n0,n1); (n2,n3) excluded */
+    let jexp : u64 = 1000000u64              /* OFFSET + good(2) - noise(1) - sep(1) */
+    if rm_j() != jexp { return 33u64 }
+
+    return 99u64
+}

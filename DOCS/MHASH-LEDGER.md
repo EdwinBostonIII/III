@@ -985,3 +985,26 @@ Corpus 921: one prove-the-negative falsifier per condition + the composed decide
 corpus **553/0**; `921_ripple_extract`=99.
 
 **§8.8 sealed at:** 2026-05-29.
+
+### §8.9 — Generative Frontier B2: the Topological Extraction EXECUTOR (2026-05-29)
+
+`STDLIB/scripts/ripple_extract.sh` -- writes a NEW `.iii` file (H10 Origin Certificate header +
+the B1-certified payload, content-addressed via `cad`), registers it in MODULES, and proves the
+post-state green through GATE0 standalone-compile + GATE1 build_stdlib + GATE2 compiler-unchanged
++ GATE3 corpus; KEEPS iff green, else atomic REVERT (rm file + unregister + rebuild). Inc 5's
+inductive safety invariant extended from EDIT to CREATION: III is never left broken.
+
+Demonstrated:
+- **D1** (creation-revert, syntax): a broken new file -> REJECT @GATE0 -> removed, MODULES untouched.
+- **D2** (creation-revert, registration+build): a dup-export new file -> registered -> REJECT @GATE1
+  (the cartographer caught the colliding `@export`) -> reverted, build_stdlib + lib (`3b4a85a7`)
+  restored byte-exactly.
+
+The KEEP path is the standard gate (proven by Inc 1-B1). D2 also shows an extraction cannot sneak
+in a colliding capability -- the cartographer's no-dup-export invariant complements B1's C1.
+
+A TOOL (no `.iii`/seal change): golden `4e138415`, lib `3b4a85a7` unchanged. **With B1 (decider) +
+B2 (executor), III can write new files for Topological Extraction -- safely, only to relocate
+proven shared truth, never to invent.**
+
+**§8.9 sealed at:** 2026-05-29.

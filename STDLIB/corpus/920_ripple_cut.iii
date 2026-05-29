@@ -1,0 +1,39 @@
+/* 920_ripple_cut.iii -- the Sovereign Ripple Calculus (Inc 4): the NOISE-CUT certified
+ * refactoring end-to-end.  A 3-node graph with 5 edges: e0,e1 load-bearing; e2,e3 dead
+ * (cuttable noise); e4 dead-but-witnessed (keep).
+ *   POSITIVE: the 2 dead non-witnessed edges are certified-cuttable; the sweep counts exactly 2.
+ *   FALSIFIERS: a load-bearing edge is never cut (good complexity protected); a witnessed dead
+ *   edge is never cut (intent respected); with the kernel down (commit_gate dim 5 = 0) the sweep
+ *   cuts NOTHING.
+ * 99 = all arms pass; 10..22 localize the first failing arm. */
+module corpus_920
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rc_certify_cut(e: u32, kernel_ok: u32) -> u32 from "ripple_cut.iii"
+extern @abi(c-msvc-x64) fn rc_sweep_cuts(e_count: u32, kernel_ok: u32) -> u32 from "ripple_cut.iii"
+
+fn main() -> u64 {
+    rm_reset()
+    let n0 : u32 = rm_add_node(0x100u64, 1u32)
+    let n1 : u32 = rm_add_node(0x200u64, 1u32)
+    let n2 : u32 = rm_add_node(0x300u64, 1u32)
+    let e0 : u32 = rm_add_edge(n0, n1, 1u32, 0u32)   /* load-bearing */
+    let e1 : u32 = rm_add_edge(n1, n0, 1u32, 0u32)   /* load-bearing */
+    let e2 : u32 = rm_add_edge(n0, n2, 0u32, 0u32)   /* dead -> cuttable */
+    let e3 : u32 = rm_add_edge(n2, n1, 0u32, 0u32)   /* dead -> cuttable */
+    let e4 : u32 = rm_add_edge(n2, n0, 0u32, 1u32)   /* dead but witnessed -> keep */
+
+    /* ===== POSITIVE ===== */
+    if rc_certify_cut(e2, 1u32) != 1u32 { return 10u64 }
+    if rc_certify_cut(e3, 1u32) != 1u32 { return 11u64 }
+    if rc_sweep_cuts(5u32, 1u32) != 2u32 { return 12u64 }   /* exactly the 2 dead non-witnessed */
+
+    /* ===== FALSIFIERS ===== */
+    if rc_certify_cut(e0, 1u32) != 0u32 { return 20u64 }    /* load-bearing -> never cut (good complexity) */
+    if rc_certify_cut(e4, 1u32) != 0u32 { return 21u64 }    /* witnessed dead -> never cut (intent) */
+    if rc_sweep_cuts(5u32, 0u32) != 0u32 { return 22u64 }   /* kernel down -> commit_gate rejects all */
+
+    return 99u64
+}

@@ -1,0 +1,41 @@
+/* STDLIB/iii/forcefield/ripple_cut.iii -- the Sovereign Ripple Calculus, INCREMENT 4:
+ * the SECOND certified refactoring -- NOISE CUT.  Inc 2/3 handled "maximize unification /
+ * minimize separation"; this handles "minimize noise" -- together the loop now acts on ALL
+ * four of the objective's targets.  Composes ripple_metric (the cut-validity + noise
+ * predicates) + commit_gate (admission).  DECIDER/SWEEP only (no file edits -- the applier,
+ * behind commit_gate + the full reseal/corpus gate, is the separately-gated final step).
+ *
+ * A cut is certified IFF commit_gate ADMITS it AND ripple_metric proves it BOTH
+ * capability-preserving (rm_cut_valid -- a load-bearing edge is NEVER cut: good complexity is
+ * protected) AND improving (rm_cut_improves -- e is genuine noise: dead AND not witnessed).
+ * Behavioral safety (capability-preservation) is the hard constraint; witnessed intent is
+ * respected; and -- as in every organ -- a down kernel (commit_gate dim 5 = 0) halts all cuts.
+ *
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_quiescence (the pruning act).  Ring: R0.
+ * K: 1.00.  NIH: composes ripple_metric + commit_gate only. */
+module forcefield_ripple_cut
+
+extern @abi(c-msvc-x64) fn rm_cut_valid(e: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_cut_improves(e: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+
+/* certify cutting edge e: 1 IFF commit_gate-admissible AND the cut is capability-preserving
+ * (never a load-bearing edge) AND improving (e is genuine noise -- dead and not witnessed). */
+fn rc_certify_cut(e: u32, kernel_ok: u32) -> u32 @export {
+    if cg_decide(1u32, 1u32, 1u32, 1u32, kernel_ok) != 99u32 { return 0u32 }   /* commit_gate */
+    if rm_cut_valid(e) != 1u32 { return 0u32 }       /* capability-preserving only (good complexity protected) */
+    if rm_cut_improves(e) != 1u32 { return 0u32 }    /* genuine noise (dead AND not witnessed) */
+    return 1u32
+}
+
+/* sweep all edges [0, e_count): count the certified + admitted noise cuts (the de-noising plan).
+ * ripple_metric is measure-only, so this reports the plan without mutating the graph. */
+fn rc_sweep_cuts(e_count: u32, kernel_ok: u32) -> u32 @export {
+    let mut cuts : u32 = 0u32
+    let mut e : u32 = 0u32
+    while e < e_count {
+        if rc_certify_cut(e, kernel_ok) == 1u32 { cuts = cuts + 1u32 }
+        e = e + 1u32
+    }
+    return cuts
+}

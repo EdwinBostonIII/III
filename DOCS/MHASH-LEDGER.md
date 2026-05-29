@@ -910,3 +910,27 @@ refuses to refactor itself while its own prover is broken.
 corpus **551/0**; `919_ripple_loop`=99 (+ `918`=99).
 
 **§8.5 sealed at:** 2026-05-29.
+
+### §8.6 — Sovereign Ripple Calculus, Inc 4: the noise-cut refactoring (decision engine complete) (2026-05-29)
+
+`forcefield/ripple_cut.iii` (`rc_certify_cut`, `rc_sweep_cuts` `@export`): the SECOND certified
+refactoring -- noise removal. Composes `ripple_metric` + `commit_gate`. A cut is certified IFF
+commit_gate-admissible AND capability-preserving (`rm_cut_valid` -- never a load-bearing edge) AND
+improving (`rm_cut_improves` -- genuine noise: dead and not witnessed). DECIDER/SWEEP only.
+Compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+**With Inc 1-4 the DECISION ENGINE is complete:** III can MEASURE its ripple structure
+(`ripple_metric`) and certify the sound, intent-respecting, kernel-gated refactorings on all four
+objective targets -- unification (`ripple_unify`, -separation), the closed loop (`ripple_loop`),
+and noise-cut (`ripple_cut`, -noise). Corpus 920 falsifiers: a load-bearing edge is never cut (good
+complexity protected); a witnessed dead edge is never cut (intent); kernel down -> no cuts.
+
+| Artifact (golden) | Before (§8.5) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `37049ecb…e9162fea` | `11defd253d636c130b40b0dec044b55357f4acc473cbe0af29ab6902a03600b8` |
+
+**Verified:** build_stdlib **424/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **552/0**; `920_ripple_cut`=99 (+ `919`=99).
+
+**§8.6 sealed at:** 2026-05-29.

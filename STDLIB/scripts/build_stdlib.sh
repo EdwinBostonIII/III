@@ -769,6 +769,9 @@ MODULES=(
     # -> loop until dry. Composes ripple_metric + ripple_unify + congruence + commit_gate.
     # Decider/planner (no file edits). Compiler-unreferenced -> LIBNATIVE.
     "forcefield/ripple_loop"
+    # Inc 4: the second certified refactoring -- NOISE CUT (the "minimize noise" half). Composes
+    # ripple_metric + commit_gate. Decider/sweep (no file edits). Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/ripple_cut"
 )
 
 PASS=0

@@ -44,6 +44,7 @@ var HG_B     : [u32; 4096]
 var HG_VAL   : [i32; 4096]
 var HG_INPUT : [i32; 64]
 var HG_N     : [u32; 1]
+var HG_DEPTH : [u32; 4096]    /* HW2: critical-path depth scratch */
 
 fn hdl_reset() -> u64 @export { HG_N[0u32] = 0u32 ; return 0u64 }
 
@@ -117,4 +118,96 @@ fn hdl_equiv3_2(a: u32, b: u32) -> u32 @export {
         i0 = i0 + 1u32
     }
     return 1u32
+}
+
+/* ===== HW2: the PHYSICAL cost lattice -- the cost stops being x86/ARM cycles and becomes silicon:
+ * gate count, gate-delay (critical-path depth), wire (a topological proxy -- NOT NP-hard placed
+ * routing), and the Landauer thermodynamic floor. The e-graph selects the min-physical-cost member
+ * of an equivalence class (every member proven === by HW1's hdl_equiv). ===== */
+
+/* physical gate count: the logic gates (primary inputs + constants are free). */
+fn pc_gate_count() -> u32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut c : u32 = 0u32
+    let mut g : u32 = 0u32
+    while g < n {
+        let k : u32 = HG_KIND[g]
+        if k != HG_IN { if k != HG_C0 { if k != HG_C1 { c = c + 1u32 } } }
+        g = g + 1u32
+    }
+    return c
+}
+
+/* the critical path: the longest gate-chain from inputs to `out` (the gate-delay bounding the
+ * clock period). One topological pass: depth = 0 for inputs/consts, else 1 + max(depth of inputs). */
+fn pc_logic_depth(out: u32) -> u32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut g : u32 = 0u32
+    while g < n {
+        let k : u32 = HG_KIND[g]
+        if k == HG_IN { HG_DEPTH[g] = 0u32 }
+        if k == HG_C0 { HG_DEPTH[g] = 0u32 }
+        if k == HG_C1 { HG_DEPTH[g] = 0u32 }
+        if k != HG_IN { if k != HG_C0 { if k != HG_C1 {
+            let da : u32 = HG_DEPTH[HG_A[g]]
+            let db : u32 = HG_DEPTH[HG_B[g]]
+            let mut m : u32 = da
+            if db > m { m = db }
+            HG_DEPTH[g] = m + 1u32
+        } } }
+        g = g + 1u32
+    }
+    return HG_DEPTH[out]
+}
+
+/* total wire count = sum of gate in-edges -- a topological proxy for wire load (NOT placed wire
+ * capacitance, which is NP-hard place-&-route, the toolchain's job; see III-SILICON-FRONTIER.md). */
+fn pc_wire_count() -> u32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut w : u32 = 0u32
+    let mut g : u32 = 0u32
+    while g < n {
+        let k : u32 = HG_KIND[g]
+        if k == HG_NOT  { w = w + 1u32 }
+        if k == HG_BUF  { w = w + 1u32 }
+        if k == HG_TNOT { w = w + 1u32 }
+        if k == HG_DFF  { w = w + 1u32 }
+        if k == HG_AND  { w = w + 2u32 }
+        if k == HG_OR   { w = w + 2u32 }
+        if k == HG_XOR  { w = w + 2u32 }
+        if k == HG_NAND { w = w + 2u32 }
+        if k == HG_TAND { w = w + 2u32 }
+        if k == HG_TOR  { w = w + 2u32 }
+        g = g + 1u32
+    }
+    return w
+}
+
+/* the thermodynamic floor: each irreversible 2-input gate erases ~1 bit; E >= bits * kT*ln2.
+ * kT*ln2 at 300 K = 2.871e-21 J = 2871 yoctojoules. Returned in yJ -- the universe's irreducible
+ * LOWER BOUND for the algorithm, NOT the (higher, process-dependent) silicon draw. */
+const PC_LANDAUER_YJ : u64 = 2871u64
+fn pc_landauer_yj() -> u64 @export {
+    let n : u32 = HG_N[0u32]
+    let mut bits : u64 = 0u64
+    let mut g : u32 = 0u32
+    while g < n {
+        let k : u32 = HG_KIND[g]
+        if k == HG_AND  { bits = bits + 1u64 }
+        if k == HG_OR   { bits = bits + 1u64 }
+        if k == HG_XOR  { bits = bits + 1u64 }
+        if k == HG_NAND { bits = bits + 1u64 }
+        if k == HG_TAND { bits = bits + 1u64 }
+        if k == HG_TOR  { bits = bits + 1u64 }
+        g = g + 1u32
+    }
+    return bits * PC_LANDAUER_YJ
+}
+
+/* the cost-lattice order: fewer gates, then shallower depth. 1 iff (ga,da) strictly precedes (gb,db). */
+fn pc_better(ga: u32, da: u32, gb: u32, db: u32) -> u32 @export {
+    if ga < gb { return 1u32 }
+    if ga > gb { return 0u32 }
+    if da < db { return 1u32 }
+    return 0u32
 }

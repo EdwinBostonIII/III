@@ -1084,3 +1084,27 @@ toolchain consumes).
 corpus **555/0**; `923_hdl`=99.
 
 **§8.12 sealed at:** 2026-05-29.
+
+### §8.13 — III → Silicon HW2: the physical cost lattice (2026-05-29)
+
+`numera/hdl.iii` extended (`pc_*` `@export`): the cost lattice stops costing x86/ARM cycles and
+costs SILICON -- `pc_gate_count`, `pc_logic_depth` (critical-path gate-delay = longest path in the
+netlist DAG), `pc_wire_count` (in-edge wire proxy), `pc_landauer_yj` (irreversible 2-input gates ×
+2871 yJ = kT·ln2 at 300 K -- the thermodynamic LOWER BOUND, the universe's floor, NOT the silicon
+draw), `pc_better` (fewer gates, then shallower). The e-graph selects the min-physical-cost member
+of an equivalence class (every member PROVEN === by HW1). Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 924: two PROVEN-equivalent XOR realizations -- 1 gate (depth 1, 2 wires, 2871 yJ) vs 4 NANDs
+(depth 3, 8 wires, 11484 yJ); `pc_better` selects the 1-gate design; falsifier (the 4-NAND is not
+preferred). Honest scope: gate/depth/wire/Landauer decidable; NP-hard optimal placement/routing
+EXCLUDED (the toolchain's, not III's).
+
+| Artifact (golden) | Before (§8.12) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `d7a4a4d2…a8bbba40` | `65952b7c4061f9856dc743d68aaf528e5a2a25970335084d8df0ae1a76ce8565` |
+
+**Verified:** build_stdlib **427/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **556/0**; `924_phys_cost`=99 (+ `923`=99).
+
+**§8.13 sealed at:** 2026-05-29.

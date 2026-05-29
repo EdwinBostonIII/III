@@ -1,0 +1,56 @@
+/* 924_phys_cost.iii -- III -> Silicon (HW2): the physical cost lattice. Two PROVEN-equivalent
+ * realizations of XOR (HW1 certified XOR === 4-NAND): the lattice evaluates each by silicon cost
+ * (gate count, critical-path depth, wire count, Landauer energy floor) and selects the cheaper.
+ *   1-gate XOR : gates=1 depth=1 wires=2 energy=2871 yJ
+ *   4-NAND XOR : gates=4 depth=3 wires=8 energy=11484 yJ
+ *   pc_better picks the 1-gate XOR; the falsifier confirms the 4-NAND is NOT preferred.
+ * 99 = all arms pass; 10..31 localize the first failing arm. */
+module corpus_924
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add_in(input_idx: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn pc_gate_count() -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn pc_logic_depth(out: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn pc_wire_count() -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn pc_landauer_yj() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn pc_better(ga: u32, da: u32, gb: u32, db: u32) -> u32 from "hdl.iii"
+
+fn main() -> u64 {
+    /* ===== the cheap realization: XOR as one gate ===== */
+    hdl_reset()
+    let i0 : u32 = hdl_add_in(0u32)
+    let i1 : u32 = hdl_add_in(1u32)
+    let xg : u32 = hdl_add(7u32, i0, i1)              /* XOR */
+    let g1 : u32 = pc_gate_count()
+    let d1 : u32 = pc_logic_depth(xg)
+    let w1 : u32 = pc_wire_count()
+    let e1 : u64 = pc_landauer_yj()
+    if g1 != 1u32 { return 10u64 }
+    if d1 != 1u32 { return 11u64 }
+    if w1 != 2u32 { return 12u64 }
+    if e1 != 2871u64 { return 13u64 }
+
+    /* ===== the costly equivalent: XOR as 4 NANDs (PROVEN === by HW1) ===== */
+    hdl_reset()
+    let j0 : u32 = hdl_add_in(0u32)
+    let j1 : u32 = hdl_add_in(1u32)
+    let t  : u32 = hdl_add(8u32, j0, j1)
+    let l  : u32 = hdl_add(8u32, j0, t)
+    let r  : u32 = hdl_add(8u32, j1, t)
+    let xn : u32 = hdl_add(8u32, l, r)
+    let g2 : u32 = pc_gate_count()
+    let d2 : u32 = pc_logic_depth(xn)
+    let w2 : u32 = pc_wire_count()
+    let e2 : u64 = pc_landauer_yj()
+    if g2 != 4u32 { return 20u64 }
+    if d2 != 3u32 { return 21u64 }
+    if w2 != 8u32 { return 22u64 }
+    if e2 != 11484u64 { return 23u64 }
+
+    /* ===== the lattice selects the physically-cheaper of two PROVEN-equivalent designs ===== */
+    if pc_better(g1, d1, g2, d2) != 1u32 { return 30u64 }   /* 1-gate XOR is cheaper */
+    if pc_better(g2, d2, g1, d1) != 0u32 { return 31u64 }   /* falsifier: 4-NAND is not preferred */
+
+    return 99u64
+}

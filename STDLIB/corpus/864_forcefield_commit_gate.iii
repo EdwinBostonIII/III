@@ -6,19 +6,24 @@
  *   - RULE soundness via the live XII rule set (cg_rule_ok = xad_admit);
  *   - DETERMINISM via real cad content-addressing (re-hash matches golden -> sealed;
  *     drifted artifact -> reject; witnessed drift -> admit);
- *   - the composed cg_decide verdict: positive ADMIT + the four located rejects;
+ *   - KERNEL soundness via the Sovereign Pipeline (cg_kernel_ok = sov_pipeline_run==99:
+ *     every kernel faculty -- conversion, induction, superposition, proof-carrying
+ *     optimization, kernel-governed admission -- live + kernel-disposed), and
+ *     cg_decide's located kernel reject;
+ *   - the composed cg_decide verdict: positive ADMIT + the five located rejects;
  *   - cg_decide's full teeth matrix.
  * A gate that only ever admits is a stub; every negative arm here forces a reject.
- * 99 = all arms pass; 10..34 localize the first failing arm. */
+ * 99 = all arms pass; 10..35 localize the first failing arm. */
 module corpus_c864
 
 extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 
-extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
 extern @abi(c-msvc-x64) fn cg_rule_ok() -> u32 from "commit_gate.iii"
 extern @abi(c-msvc-x64) fn cg_module_ok(obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8, edge_perm: *u8, deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u32 from "commit_gate.iii"
 extern @abi(c-msvc-x64) fn cg_seal_ok(content: *u8, len: u64, golden: *u8, witnessed: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_kernel_ok() -> u32 from "commit_gate.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 
 fn kst_u32(p: *u8, elem: u64, v: u32) -> u64 {
@@ -114,20 +119,26 @@ fn main() -> u64 {
     let seal_witnessed : u32 = cg_seal_ok(artB, 32u64, golden, 1u32) /* drift but witnessed */
     if seal_witnessed != 1u32 { return 15u64 }
 
-    /* ==== the composed verdict: ADMIT a conservative change ==== */
-    if cg_decide(rule_ok, mod_ok, seal_match, 1u32) != 99u32 { return 20u64 }
+    /* ---- KERNEL dimension: the Sovereign Pipeline -- every faculty live + kernel-disposed (1) ---- */
+    let kern_ok : u32 = cg_kernel_ok()
+    if kern_ok != 1u32 { return 16u64 }
+
+    /* ==== the composed verdict: ADMIT a conservative change (kernel live) ==== */
+    if cg_decide(rule_ok, mod_ok, seal_match, 1u32, kern_ok) != 99u32 { return 20u64 }
     /* ==== REJECT, located, each non-conservative change ==== */
-    if cg_decide(rule_ok, mod_bad,  seal_match, 1u32) != 2u32 { return 21u64 }   /* incoherent module */
-    if cg_decide(rule_ok, mod_ok,   seal_drift, 1u32) != 3u32 { return 22u64 }   /* unwitnessed drift */
-    if cg_decide(0u32,    mod_ok,   seal_match, 1u32) != 1u32 { return 23u64 }   /* unsound rule */
-    if cg_decide(rule_ok, mod_ok,   seal_match, 0u32) != 4u32 { return 24u64 }   /* unmarked strength */
+    if cg_decide(rule_ok, mod_bad, seal_match, 1u32, kern_ok) != 2u32 { return 21u64 }   /* incoherent module */
+    if cg_decide(rule_ok, mod_ok, seal_drift, 1u32, kern_ok) != 3u32 { return 22u64 }   /* unwitnessed drift */
+    if cg_decide(0u32, mod_ok, seal_match, 1u32, kern_ok) != 1u32 { return 23u64 }   /* unsound rule */
+    if cg_decide(rule_ok, mod_ok, seal_match, 0u32, kern_ok) != 4u32 { return 24u64 }   /* unmarked strength */
+    if cg_decide(rule_ok, mod_ok, seal_match, 1u32, 0u32) != 5u32 { return 25u64 }   /* kernel/faculty broken */
 
     /* ==== cg_decide full teeth matrix (pure) ==== */
-    if cg_decide(1u32, 1u32, 1u32, 1u32) != 99u32 { return 30u64 }
-    if cg_decide(0u32, 1u32, 1u32, 1u32) != 1u32  { return 31u64 }
-    if cg_decide(1u32, 0u32, 1u32, 1u32) != 2u32  { return 32u64 }
-    if cg_decide(1u32, 1u32, 0u32, 1u32) != 3u32  { return 33u64 }
-    if cg_decide(1u32, 1u32, 1u32, 0u32) != 4u32  { return 34u64 }
+    if cg_decide(1u32, 1u32, 1u32, 1u32, 1u32) != 99u32 { return 30u64 }
+    if cg_decide(0u32, 1u32, 1u32, 1u32, 1u32) != 1u32  { return 31u64 }
+    if cg_decide(1u32, 0u32, 1u32, 1u32, 1u32) != 2u32  { return 32u64 }
+    if cg_decide(1u32, 1u32, 0u32, 1u32, 1u32) != 3u32  { return 33u64 }
+    if cg_decide(1u32, 1u32, 1u32, 0u32, 1u32) != 4u32  { return 34u64 }
+    if cg_decide(1u32, 1u32, 1u32, 1u32, 0u32) != 5u32  { return 35u64 }
 
     free(s4)
     free(d4)

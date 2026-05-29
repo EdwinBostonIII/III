@@ -814,3 +814,28 @@ faculty logic — composition only → additive, **compiler-UNREFERENCED** (LIBN
 (all five faculties live + kernel-disposed; every falsifier held — direct compile+link+run also EXIT 99).
 
 **§8.1 sealed at:** 2026-05-29.
+
+### §8.2 — Sovereign Pipeline wired into commit_gate: the kernel faculties gate III's evolution (2026-05-29)
+
+**"Use them on III"** — the `/architect` ADR-2 production activation. `forcefield/commit_gate.iii`
+(III's sound-evolution gate — the single admission decision every change to III must pass) gains a
+**5th KERNEL dimension**: `cg_kernel_ok()` = `(sov_pipeline_run()==99)`, composed into `cg_decide`
+as `CG_REJECT_KERNEL=5`. A change to III is now admitted only if — in addition to rule-confluence
+(`xad_admit`), module-coherence (`pleroma` H^1=0), determinism-seal (`cad`), and conservativity —
+III's ENTIRE proof kernel and all its faculties (conversion, induction, superposition,
+proof-carrying optimization, kernel-governed admission) remain live + sound. The kernel faculties
+are thus **actively used through the same means (`tc_check`) ON III's own self-governance**.
+`cg_decide` stays a pure, total, located predicate; corpus 864 forces the new reject
+(`kernel_sound=0 -> 5`) and the full 5-arg teeth matrix. Compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+| Artifact (golden) | Before (§8.1) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` (fixed point) | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** — LIBNATIVE; the compiler never references `commit_gate`) |
+| `STDLIB/build/iii/libiii_native.a` | `913a7ffc…ec6ae205` | `501db74152065bf58b45dbf26d476a3555b250d3f4153bd98e15773d0fc55cf0` |
+
+**Verified:** build_stdlib **420/0**; cartographer GATE **PASS** (the new `commit_gate -> sov_pipeline`
+edge adds no dependency cycle — Tarjan-SCC); compiler `4e138415` unchanged (sha256, two ways);
+FULL STDLIB corpus **548/0** — `864`=99 (5-dim gate + located kernel-reject 25 + teeth matrix 35)
++ `916`=99, zero regressions.
+
+**§8.2 sealed at:** 2026-05-29.

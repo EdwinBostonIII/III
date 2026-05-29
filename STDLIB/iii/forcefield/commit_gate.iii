@@ -22,12 +22,21 @@
  *      an UNMARKED strength increase.  This is the honest Loebian ceiling, recorded
  *      not papered over.
  *
- * Promotes the plan's §0 acceptance test to LAW: no change merges unless all four
+ *   5. KERNEL soundness -- III's proof kernel and ALL its faculties (conversion,
+ *      induction, superposition, proof-carrying optimization, kernel-governed
+ *      admission) stay live + sound, routed through the ONE disposer (tc_check) via
+ *      the Sovereign Pipeline (numera/sov_pipeline: sov_pipeline_run==99, a
+ *      falsifier per stage).  A change that breaks III's ability to REASON -- the
+ *      prover underwriting every other verdict -- is REJECTED.  This makes
+ *      "everything from the kernel, actively used through the same means" the gate
+ *      on III's own evolution.
+ *
+ * Promotes the plan's §0 acceptance test to LAW: no change merges unless all FIVE
  * hold.  Prove-the-negative: cg_decide is a pure total predicate with teeth,
  * exercised on every rejecting input by the KAT (corpus 864).
  *
  * Hexad: kind_sensitivity (admission).  Ring: R0.  K: 1.00.  NIH: composes
- * xii_admission + pleroma + cad only.  Determinism: integer ==/!= compares; a BSS
+ * xii_admission + pleroma + cad + sov_pipeline only.  Determinism: integer ==/!= compares; a BSS
  * digest scratch (no allocator); a single fixed decision order. */
 module forcefield_commit_gate
 
@@ -37,12 +46,15 @@ extern @abi(c-msvc-x64) fn pleroma_cohere(
     deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u64 from "pleroma.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+/* the Sovereign Pipeline: every kernel faculty through the ONE disposer (tc_check). */
+extern @abi(c-msvc-x64) fn sov_pipeline_run() -> u64 from "sov_pipeline.iii"
 
-const CG_ADMIT           : u32 = 99u32   /* all four dimensions hold */
+const CG_ADMIT           : u32 = 99u32   /* all five dimensions hold */
 const CG_REJECT_RULE     : u32 = 1u32    /* XII rule set not root-confluent / not terminating */
 const CG_REJECT_MODULE   : u32 = 2u32    /* module cover incoherent (H^1 != 0) or malformed */
 const CG_REJECT_SEAL     : u32 = 3u32    /* unwitnessed determinism drift */
 const CG_REJECT_STRENGTH : u32 = 4u32    /* unmarked proof-theoretic strength increase */
+const CG_REJECT_KERNEL   : u32 = 5u32    /* III's proof kernel / a faculty not live + sound */
 
 const CG_SUITE_SHA256    : u32 = 0u32    /* cad suite 0 (mirrors CAD_SUITE_SHA256) */
 
@@ -50,14 +62,15 @@ var CG_DIGEST : [u8; 32]
 
 /* The pure composed verdict -- LOCATED (names the failing dimension).  A total
  * parameterised predicate so the prove-the-negative arm exercises every reject
- * directly (mirrors xad_decide).  ADMIT iff ALL four dimensions hold; the decision
- * order is fixed (rule, module, seal, conservativity) so a multi-failure reports
+ * directly (mirrors xad_decide).  ADMIT iff ALL five dimensions hold; the decision
+ * order is fixed (rule, module, seal, conservativity, kernel) so a multi-failure reports
  * the highest-priority cause deterministically. */
-fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32) -> u32 @export {
+fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 @export {
     if rule_sound != 1u32         { return CG_REJECT_RULE }
     if module_coherent != 1u32    { return CG_REJECT_MODULE }
     if determinism_sealed != 1u32 { return CG_REJECT_SEAL }
     if conservative != 1u32       { return CG_REJECT_STRENGTH }
+    if kernel_sound != 1u32       { return CG_REJECT_KERNEL }
     return CG_ADMIT
 }
 
@@ -84,9 +97,23 @@ fn cg_seal_ok(content: *u8, len: u64, golden: *u8, witnessed: u32) -> u32 @expor
     return 0u32
 }
 
+/* KERNEL dimension: III's proof kernel and ALL its faculties remain live + sound --
+ * the Sovereign Pipeline routes conversion, induction, superposition, proof-carrying
+ * optimization, and kernel-governed admission through the ONE disposer (tc_check),
+ * each stage carrying a falsifier.  1 = every faculty live + kernel-disposed; 0 = a
+ * faculty or the kernel itself is broken (sov_pipeline_run names the first bad stage).
+ * This is the dimension that protects the prover underwriting every other verdict's
+ * trust in III's reasoning -- a change that breaks III's ability to reason is REJECTED. */
+fn cg_kernel_ok() -> u32 @export {
+    if sov_pipeline_run() == 99u64 { return 1u32 }
+    return 0u32
+}
+
 /* commit_gate EMBODIES the plan's sound-evolution law: a change is admitted into
  * III iff its rule changes are confluent+terminating (xii_admission), its module
  * bridges glue (pleroma H^1=0), its artifact is content-address-sealed (cad), and
- * it is conservative or a marked+warranted strength increase.  The verdict is
- * located; the gate is shown to REJECT each violation (864) -- it is the §0
+ * it is conservative or a marked+warranted strength increase, AND III's proof
+ * kernel with all its faculties stays live + sound (sov_pipeline -- every faculty
+ * actively used through the same means).  The verdict is located; the gate is
+ * shown to REJECT each violation (864) -- it is the §0
  * acceptance test made law, not a stub that only ever admits. */

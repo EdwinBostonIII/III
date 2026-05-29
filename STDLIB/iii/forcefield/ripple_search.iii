@@ -1,0 +1,53 @@
+/* STDLIB/iii/forcefield/ripple_search.iii -- Sovereign Enhancement G3 (III-SOVEREIGN-ENHANCEMENT-
+ * COORDINATION): the real M-search. The improver must select the VALUE-MAXIMAL admissible candidate
+ * (the argmax s★), not greedily stamp the first one; and it must return NONE -- the certified `s₀∈M`
+ * abstention -- when NO candidate strictly beats the incumbent.
+ *
+ * Candidate values are the G2 value 𝒱 (rm_value) of each admissible move in the egraph/congruence
+ * frontier (supplied by the producer); this module is the certified SELECTION over them.
+ *
+ * HONEST SCOPE: M is the supplied FRONTIER (the egraph-reachable equivalents under proven rewrites),
+ * not all edits (global argmax is unbounded); `s★` is frontier-local and the NONE result certifies
+ * `s₀∈M` only over that frontier. Ties break by least index (a deterministic ⊑). Compiler-
+ * UNREFERENCED -> LIBNATIVE. */
+module forcefield_ripple_search
+
+const RS_MAX  : u32 = 4096u32
+const RS_NONE : u32 = 0xFFFFFFFFu32
+
+var RS_V   : [u64; 4096]    /* candidate post-move values 𝒱 */
+var RS_N   : [u32; 1]       /* candidate count */
+var RS_INC : [u64; 1]       /* incumbent value 𝒱(s₀) */
+
+fn rs_reset() -> u64 @export { RS_N[0u32] = 0u32 ; RS_INC[0u32] = 0u64 ; return 0u64 }
+fn rs_set_incumbent(v: u64) -> u64 @export { RS_INC[0u32] = v ; return 0u64 }
+fn rs_add(v: u64) -> u32 @export {
+    let i : u32 = RS_N[0u32]
+    if i >= RS_MAX { return RS_NONE }
+    RS_V[i] = v
+    RS_N[0u32] = i + 1u32
+    return i
+}
+
+/* argmax over the frontier: the candidate of greatest 𝒱; ties -> least index (deterministic). */
+fn rs_argmax() -> u32 @export {
+    let n : u32 = RS_N[0u32]
+    if n == 0u32 { return RS_NONE }
+    let mut best : u32 = 0u32
+    let mut bv   : u64 = RS_V[0u32]
+    let mut i    : u32 = 1u32
+    while i < n {
+        if RS_V[i] > bv { bv = RS_V[i] ; best = i }   /* strict > => equal values keep the lower index */
+        i = i + 1u32
+    }
+    return best
+}
+
+/* the emergent s★: the argmax IF it strictly dominates the incumbent (s★⊳s₀), else NONE -- the
+ * certified abstention `s₀∈M` (no admissible move in the frontier strictly improves 𝒱). */
+fn rs_strict_best() -> u32 @export {
+    let b : u32 = rs_argmax()
+    if b == RS_NONE { return RS_NONE }
+    if RS_V[b] > RS_INC[0u32] { return b }
+    return RS_NONE
+}

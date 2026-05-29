@@ -1279,3 +1279,24 @@ bad commit dimension OR a bad datum.
 corpus **563/0**; `931_phi_ledger`=99.
 
 **§8.20 sealed at:** 2026-05-29.
+
+### §8.21 — Sovereign Enhancement G3: the real argmax M-search (2026-05-29)
+
+`forcefield/ripple_search.iii` (`rs_argmax`, `rs_strict_best`): the improver selects the
+VALUE-MAXIMAL admissible candidate (the emergent `s★`), not greedily the first; and returns NONE --
+the certified `s₀∈M` abstention -- when no candidate strictly beats the incumbent. Ties break by least
+index (deterministic ⊑). HONEST: M is the supplied egraph FRONTIER (`s★` is frontier-local, not a
+global optimum). Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 932: argmax over {3,7,5} = id1 (not the first); `strict_best` abstains when all candidates <
+incumbent (`s₀∈M`); tie -> least index; the BETTER of two admissibles is chosen (not greedy).
+
+| Artifact (golden) | Before (§8.20) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `dd7963ba…e2e2597c5` | `d1db1bae89365c6ba919c7e7087d6f8398e552137d7d18412eae02cfe2d79b15` |
+
+**Verified:** build_stdlib **430/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **564/0**; `932_ripple_search`=99.
+
+**§8.21 sealed at:** 2026-05-29.

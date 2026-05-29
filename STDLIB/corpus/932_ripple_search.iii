@@ -1,0 +1,42 @@
+/* 932_ripple_search.iii -- Sovereign Enhancement G3: the M-search must find the value-MAXIMAL
+ * admissible candidate (the argmax s★), not greedily stamp the first; and must ABSTAIN (the s₀∈M
+ * certificate) when no candidate strictly beats the incumbent.
+ *   - argmax over {3,7,5} = id1 (7), not id0; ties -> least index (deterministic);
+ *   - strict_best = the argmax IF it beats the incumbent, else NONE (s₀∈M);
+ *   - FALSIFIER: with two admissibles {5,6}, the BETTER (id1=6) is chosen, not the first (id0=5).
+ * 99 = all arms; 10..15 localize the first failing arm. */
+module corpus_932
+
+extern @abi(c-msvc-x64) fn rs_reset() -> u64 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_set_incumbent(v: u64) -> u64 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_add(v: u64) -> u32 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_argmax() -> u32 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_strict_best() -> u32 from "ripple_search.iii"
+
+const RS_NONE : u32 = 0xFFFFFFFFu32
+
+fn main() -> u64 {
+    /* argmax picks the MAX, not the first; a strict improvement is taken */
+    rs_reset() ; rs_set_incumbent(4u64)
+    rs_add(3u64) ; rs_add(7u64) ; rs_add(5u64)         /* ids 0,1,2; max = id1 */
+    if rs_argmax() != 1u32 { return 10u64 }
+    if rs_strict_best() != 1u32 { return 11u64 }       /* 7 > 4 -> commit s★ */
+
+    /* ABSTAIN: every candidate is below the incumbent -> s₀∈M */
+    rs_reset() ; rs_set_incumbent(10u64)
+    rs_add(3u64) ; rs_add(8u64) ; rs_add(5u64)         /* all < 10 */
+    if rs_argmax() != 1u32 { return 12u64 }            /* argmax still the best candidate (id1=8) */
+    if rs_strict_best() != RS_NONE { return 13u64 }    /* but 8 < 10 -> NO strict gain -> abstain */
+
+    /* tie -> least index (deterministic ⊑) */
+    rs_reset() ; rs_set_incumbent(0u64)
+    rs_add(7u64) ; rs_add(7u64)
+    if rs_argmax() != 0u32 { return 14u64 }
+
+    /* FALSIFIER: the BETTER of two admissibles is chosen, not the first (not greedy) */
+    rs_reset() ; rs_set_incumbent(4u64)
+    rs_add(5u64) ; rs_add(6u64)
+    if rs_strict_best() != 1u32 { return 15u64 }       /* id1=6 chosen, not id0=5 */
+
+    return 99u64
+}

@@ -791,6 +791,8 @@ MODULES=(
     # Sovereign Enhancement G1: unified integrity phi + non-vacuity falsifier ledger.
     # Composes commit_gate + aeu + hexad_reach. Compiler-unreferenced -> LIBNATIVE.
     "forcefield/integrity"
+    # Sovereign Enhancement G3: the real argmax M-search (value-maximal selection + s0-in-M abstention).
+    "forcefield/ripple_search"
 )
 
 PASS=0

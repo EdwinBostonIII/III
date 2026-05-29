@@ -934,3 +934,26 @@ complexity protected); a witnessed dead edge is never cut (intent); kernel down 
 corpus **552/0**; `920_ripple_cut`=99 (+ `919`=99).
 
 **§8.6 sealed at:** 2026-05-29.
+
+### §8.7 — Sovereign Ripple Calculus, Inc 5: the gated file-editing APPLIER (the working optimizer) (2026-05-29)
+
+`STDLIB/scripts/ripple_apply.sh` -- the execution arm. The `.iii` decision engine certifies WHAT to
+refactor; the applier EXECUTES the certified edit on a real `.iii` file and proves the post-state
+green through a 4-gate cascade -- GATE0 standalone-compile, GATE1 `build_stdlib` FAIL=0, GATE2
+compiler-unchanged (LIBNATIVE), GATE3 full corpus -- KEEPING iff all green, else atomic REVERT
+(+ rebuild lib from the good source). **Inductive safety invariant:** the tree is verified-green
+BEFORE and AFTER every step, so III is never left broken; safety depends on the GATE being honest,
+not on the edit being right. Two independent proofs guard each change: the `.iii` certification
+(behavior-preservation, before) + this gate (the backstop).
+
+Demonstrated **D1 (revert-safety):** a breaking edit to `ripple_cut.iii` -> REJECT @GATE0 -> reverted
+BYTE-EXACTLY (`git status` clean), library untouched. The keep-path is the standard build+corpus gate
+(proven green by Inc 1-4). A TOOL (no `.iii`/seal change): golden + lib UNCHANGED (`4e138415` /
+`11defd25`).
+
+**With Inc 1-5 the WORKING RIPPLE OPTIMIZER is complete:** III measures its ripple structure,
+certifies sound refactorings on all four objective targets, runs the closed `commit_gate`-gated loop,
+and safely applies the result to its own files (edit/merge). This is the baseline for the next two
+designs -- Topological Extraction (new-file creation) and Proof-Carrying Code.
+
+**§8.7 sealed at:** 2026-05-29.

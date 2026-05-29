@@ -1,0 +1,51 @@
+/* 929_aeu_scale.iii -- III -> Silicon (SX4): the AEU scales to N axioms. The verdict generalizes
+ * from 2 fixed lanes to an n-lane conjunction, and the hardware verifier generalizes to a certified
+ * n-input AND-tree:
+ *   - aeu_check_n: conjunction over n lane bits; a violation in ANY lane is caught;
+ *   - aeu_and_tree_certified(n): an n-input NAND-built AND-tree, hdl_equiv2-certified === the n-way
+ *     conjunction over all 2^n inputs (n = 2, 3, 4);
+ *   - consistency: feeding the 2 REAL axiom bits into aeu_check_n(2) reproduces the existing
+ *     aeu_check verdict on III's hexad axiom space.
+ * 99 = all arms; 10..32 localize the first failing arm. */
+module corpus_929
+
+extern @abi(c-msvc-x64) fn aeu_set_lane(i: u32, bit: u32) -> u64 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_check_n(n: u32) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_and_tree_certified(n: u32) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_lane_wellformed(h: u16) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_lane_reachable(h: u16) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_check(h: u16) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+fn main() -> u64 {
+    /* ===== n-lane conjunction (3 lanes) ===== */
+    aeu_set_lane(0u32, 1u32) ; aeu_set_lane(1u32, 1u32) ; aeu_set_lane(2u32, 1u32)
+    if aeu_check_n(3u32) != 1u32 { return 10u64 }      /* all 3 axioms pass */
+    aeu_set_lane(1u32, 0u32)
+    if aeu_check_n(3u32) != 0u32 { return 11u64 }      /* lane 1 violated -> CAUGHT */
+    /* ===== 4 lanes ===== */
+    aeu_set_lane(0u32, 1u32) ; aeu_set_lane(1u32, 1u32) ; aeu_set_lane(2u32, 1u32) ; aeu_set_lane(3u32, 1u32)
+    if aeu_check_n(4u32) != 1u32 { return 12u64 }
+    aeu_set_lane(3u32, 0u32)
+    if aeu_check_n(4u32) != 0u32 { return 13u64 }      /* 4th lane violated -> CAUGHT */
+
+    /* ===== the scalable hardware verifier is CERTIFIED for n = 2, 3, 4 ===== */
+    if aeu_and_tree_certified(2u32) != 1u32 { return 20u64 }
+    if aeu_and_tree_certified(3u32) != 1u32 { return 21u64 }
+    if aeu_and_tree_certified(4u32) != 1u32 { return 22u64 }
+
+    /* ===== consistency: the n-lane machinery reproduces the existing 2-lane real-axiom AEU ===== */
+    let mut i  : u32 = 0u32
+    let mut hr : u32 = 729u32
+    while i < 729u32 {
+        if iii_hexad_reachable(i as u16) == 1u8 { if hr == 729u32 { hr = i } }
+        i = i + 1u32
+    }
+    if hr == 729u32 { return 30u64 }
+    aeu_set_lane(0u32, aeu_lane_wellformed(hr as u16))
+    aeu_set_lane(1u32, aeu_lane_reachable(hr as u16))
+    if aeu_check_n(2u32) != aeu_check(hr as u16) { return 31u64 }   /* n-lane generalizes the 2-lane AEU */
+    if aeu_check_n(2u32) != 1u32 { return 32u64 }                   /* and admits the reachable hexad */
+
+    return 99u64
+}

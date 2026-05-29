@@ -26,6 +26,9 @@ extern @abi(c-msvc-x64) fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 from "hdl.i
 
 const AEU_HEXAD_MAX : u32 = 729u32
 
+var AEU_LANES : [u32; 64]    /* SX4: per-axiom lane bits (the datum's verdict on each axiom) */
+var AEU_IN    : [u32; 16]    /* SX4: AND-tree input gate ids (module-global -- local-array trap) */
+
 /* axiom lane 1: WELL-FORMED -- a valid packed hexad. */
 fn aeu_lane_wellformed(h: u16) -> u32 @export {
     if (h as u32) < AEU_HEXAD_MAX { return 1u32 }
@@ -57,4 +60,48 @@ fn aeu_netlist_certified() -> u32 @export {
     let andn : u32 = hdl_add(8u32, n1, n1)     /* NAND(n1, n1) = AND(la, lb)    */
     let refa : u32 = hdl_add(5u32, la, lb)     /* reference AND                 */
     return hdl_equiv2(andn, refa, 2u32)        /* NAND-built verifier === conjunction? */
+}
+
+/* ===== SX4: the SCALABLE multi-axiom AEU -- N lanes, not a fixed 2 ===== */
+
+/* set axiom lane i to bit (1 = the i-th axiom holds for the datum). */
+fn aeu_set_lane(i: u32, bit: u32) -> u64 @export { AEU_LANES[i] = bit ; return 0u64 }
+
+/* the N-lane verdict: conjunction over n axiom lanes (ALL evaluated -- parallel). 1 iff all hold;
+ * 0 iff ANY lane is violated (caught in the same pass). */
+fn aeu_check_n(n: u32) -> u32 @export {
+    let mut acc : u32 = 1u32
+    let mut i : u32 = 0u32
+    while i < n {
+        if AEU_LANES[i] != 1u32 { acc = 0u32 }
+        i = i + 1u32
+    }
+    return acc
+}
+
+/* the SCALABLE hardware verifier: an n-input AND-tree built from universal NAND gates, CERTIFIED
+ * (hdl_equiv2 over all 2^n inputs) to equal a native n-way AND -- the silicon verifier is provably
+ * correct for n axioms. 1 = certified. (n in 2..16.) */
+fn aeu_and_tree_certified(n: u32) -> u32 @export {
+    if n < 2u32 { return 0u32 }
+    if n > 16u32 { return 0u32 }
+    hdl_reset()
+    let mut i : u32 = 0u32
+    while i < n { AEU_IN[i] = hdl_add_in(i) ; i = i + 1u32 }
+    /* NAND-built AND-tree (left fold): AND(a,b) = NAND(NAND(a,b), NAND(a,b)) */
+    let mut acc : u32 = AEU_IN[0u32]
+    let mut k : u32 = 1u32
+    while k < n {
+        let nd : u32 = hdl_add(8u32, acc, AEU_IN[k])     /* NAND(acc, in_k) */
+        acc = hdl_add(8u32, nd, nd)                      /* NAND(nd, nd) = AND(acc, in_k) */
+        k = k + 1u32
+    }
+    /* native-AND reference (left fold) */
+    let mut racc : u32 = AEU_IN[0u32]
+    let mut m : u32 = 1u32
+    while m < n {
+        racc = hdl_add(5u32, racc, AEU_IN[m])
+        m = m + 1u32
+    }
+    return hdl_equiv2(acc, racc, n)                       /* NAND-tree === native n-way AND? */
 }

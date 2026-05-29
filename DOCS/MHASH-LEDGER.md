@@ -1208,3 +1208,31 @@ a single NOT / a non-idempotent AND is NOT spuriously reduced (the falsifier).
 corpus **560/0**; `928_hdl_opt`=99.
 
 **§8.17 sealed at:** 2026-05-29.
+
+### §8.18 — III → Silicon SX4: the scalable multi-axiom AEU (the bolsters complete) (2026-05-29)
+
+`numera/aeu.iii` extended (`aeu_set_lane`/`aeu_check_n`/`aeu_and_tree_certified`): the AEU scales from
+2 fixed lanes to N axioms. `aeu_check_n` = conjunction over n lane bits (any violated lane caught).
+`aeu_and_tree_certified(n)` = an n-input AND-tree built from universal NANDs, `hdl_equiv2`-certified
+=== a native n-way AND over all 2^n inputs -- the scalable hardware verifier, proven correct for n
+axioms. Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 929: 3- and 4-lane conjunction (a violation in ANY lane caught); the AND-tree certified for
+n = 2, 3, 4; the n-lane machinery reproduces the existing 2-lane real-axiom verdict (consistency).
+
+| Artifact (golden) | Before (§8.17) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `64acaa37…6fe2c5ca` | `4aa5919bd2f7adc48d660074b9a7afd9beed222d26ee7101baa59cb4fe61ca3b` |
+
+**Verified:** build_stdlib **428/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **561/0**; `929_aeu_scale`=99.
+
+**THE SILICON-FRONTIER BOLSTERS ARE COMPLETE:** SX1 (sequential / DFlipFlop) + SX2 (realistic
+gate-delay + fan-out capacitance) + SX3 (the certified netlist optimizer) + SX4 (the scalable
+n-axiom AEU). The III→Silicon frontier now lowers STATEFUL logic, costs it with realistic
+timing/capacitance, OPTIMIZES it via proven rewrites, and enforces an arbitrary axiom set in
+certified parallel hardware -- every step truth-table or kernel certified, every NP-hard boundary
+(optimal placement, minimum-gate synthesis) named and left to the toolchain.
+
+**§8.18 sealed at:** 2026-05-29.

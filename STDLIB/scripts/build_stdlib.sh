@@ -784,6 +784,10 @@ MODULES=(
     # TernaryGate/DFlipFlop) with truth-table equivalence as the proof. Composes trit only.
     # Compiler-unreferenced -> LIBNATIVE.
     "numera/hdl"
+    # III -> Silicon HW3: the hardware Axiom Enforcement Unit -- III's hexad axioms as a parallel
+    # combinational verifier (certified === the conjunction via hdl). Composes hdl + hexad_reach.
+    # Compiler-unreferenced -> LIBNATIVE.
+    "numera/aeu"
 )
 
 PASS=0

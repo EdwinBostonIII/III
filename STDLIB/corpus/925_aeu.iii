@@ -1,0 +1,43 @@
+/* 925_aeu.iii -- III -> Silicon (HW3): the hardware Axiom Enforcement Unit end-to-end on III's
+ * REAL hexad axioms.  Finds a genuinely reachable + a genuinely unreachable hexad, then:
+ *   - a valid datum (reachable, well-formed) passes ALL axiom lanes (aeu_check = 1);
+ *   - an UNREACHABLE datum is CAUGHT (aeu_check = 0) -- the prove-the-negative;
+ *   - a MALFORMED datum (h >= 729) is CAUGHT;
+ *   - the AEU verdict AGREES with the kernel's own judgment (safety_hexad_judge);
+ *   - the hardware verifier netlist is CERTIFIED === the conjunction (aeu_netlist_certified).
+ * 99 = all arms pass; 5..20 localize the first failing arm. */
+module corpus_925
+
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn safety_hexad_judge(h: u16) -> i32 from "safety_type.iii"
+extern @abi(c-msvc-x64) fn aeu_check(h: u16) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn aeu_netlist_certified() -> u32 from "aeu.iii"
+
+fn main() -> u64 {
+    /* find the first reachable + the first unreachable hexad (144 reachable / 585 not, of 729) */
+    let mut i  : u32 = 0u32
+    let mut hr : u32 = 729u32   /* sentinel = none */
+    let mut hu : u32 = 729u32
+    while i < 729u32 {
+        let rch : u8 = iii_hexad_reachable(i as u16)
+        if rch == 1u8 { if hr == 729u32 { hr = i } }
+        if rch == 0u8 { if hu == 729u32 { hu = i } }
+        i = i + 1u32
+    }
+    if hr == 729u32 { return 5u64 }    /* a reachable hexad must exist */
+    if hu == 729u32 { return 6u64 }    /* an unreachable hexad must exist */
+
+    /* ===== the AEU enforces the axioms ===== */
+    if aeu_check(hr as u16) != 1u32 { return 10u64 }    /* valid datum -> all axioms pass */
+    if aeu_check(hu as u16) != 0u32 { return 11u64 }    /* UNREACHABLE -> caught (prove-the-negative) */
+    if aeu_check(729u16) != 0u32 { return 12u64 }       /* MALFORMED (h >= 729) -> caught */
+
+    /* ===== the AEU agrees with the kernel's own axiom judgment ===== */
+    if safety_hexad_judge(hr as u16) != 0i32 { return 13u64 }   /* kernel: reachable => TYPE0 */
+    if safety_hexad_judge(hu as u16) == 0i32 { return 14u64 }   /* kernel: unreachable => NOT TYPE0 */
+
+    /* ===== the hardware verifier === the conjunction (certified) ===== */
+    if aeu_netlist_certified() != 1u32 { return 20u64 }
+
+    return 99u64
+}

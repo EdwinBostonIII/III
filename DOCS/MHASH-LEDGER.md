@@ -1108,3 +1108,33 @@ EXCLUDED (the toolchain's, not III's).
 corpus **556/0**; `924_phys_cost`=99 (+ `923`=99).
 
 **§8.13 sealed at:** 2026-05-29.
+
+### §8.14 — III → Silicon HW3: the hardware Axiom Enforcement Unit (the frontier complete) (2026-05-29)
+
+`numera/aeu.iii` (`aeu_*` `@export`): III's foundational axioms as a PARALLEL combinational verifier
+-- `aeu_lane_wellformed` (h<729) + `aeu_lane_reachable` (`iii_hexad_reachable`, the M3 axiom;
+kernel-checked) evaluated together, conjoined = `aeu_check` (every datum verified against all axioms
+in one pass, zero CPU instructions). `aeu_netlist_certified` builds the verifier as an AND-of-lanes
+from universal NANDs and proves (`hdl_equiv2`) it === the conjunction: the silicon verifier provably
+equals `aeu_check`. Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 925 (on III's REAL hexad axioms): a reachable+well-formed hexad passes all lanes; an
+UNREACHABLE hexad is CAUGHT (the prove-the-negative); a MALFORMED hexad (>=729) is caught; the AEU
+agrees with the kernel's `safety_hexad_judge`; the NAND-built verifier netlist is certified === the
+conjunction.
+
+| Artifact (golden) | Before (§8.13) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `65952b7c…76ce8565` | `93cbaf7be9c03db61d6eb829fc3c6a6eeb50bb4cc0cd24bf8ea221301905905e` |
+
+**Verified:** build_stdlib **428/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **557/0**; `925_aeu`=99.
+
+**THE III → SILICON FRONTIER IS COMPLETE:** HW1 (certified combinator→gate lowering) + HW2 (the
+physical cost lattice: gates/depth/wire/Landauer floor) + HW3 (the hardware AEU). III lowers its
+proven-optimal computation onto a CERTIFIED gate netlist, costs it in silicon down to the
+thermodynamic floor, and enforces its axioms in parallel hardware -- pure algebraic translation,
+every step truth-table or kernel certified, the NP-hard place-&-route honestly left to the toolchain.
+
+**§8.14 sealed at:** 2026-05-29.

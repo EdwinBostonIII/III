@@ -1,9 +1,0 @@
-{
-  "tool": "build_iiis1.sh",
-  "ported_tus": "acc,ast,ceiling,cg_r0,cg_r3,cg_r3_xii,cg_r3_xii_adapter,cg_rm1,cg_rm2,cg_sha,emit,hexad_check,iii_cg_pe_iiis1,jit_emit,lex,lex_rt,link,main,parse,proof,sema,sema_xii_adapter,sid,witness_alloc,xii_ldil",
-  "mode": "release",
-  "iiis0_used": "iiis-2.exe",
-  "output": "iiis-4.exe",
-  "source_files": [""],
-  "output_mhash": "bdff14acee097eaa6b133d45e67de5d98663fc04d62d8c6acbf96d17704247ec"
-}

@@ -600,6 +600,7 @@ declare -A EXPECTED=(
     [930_ripple_value]=99
     [931_phi_ledger]=99
     [932_ripple_search]=99
+    [933_induct]=99
 )
 
 PASS=0

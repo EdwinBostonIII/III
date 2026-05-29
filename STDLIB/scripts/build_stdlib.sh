@@ -793,6 +793,8 @@ MODULES=(
     "forcefield/integrity"
     # Sovereign Enhancement G3: the real argmax M-search (value-maximal selection + s0-in-M abstention).
     "forcefield/ripple_search"
+    # Sovereign Enhancement G5: the inductive bridge (sample -> forall via tc_natrec; false universal rejected).
+    "numera/induct"
 )
 
 PASS=0

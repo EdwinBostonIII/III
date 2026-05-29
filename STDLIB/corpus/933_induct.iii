@@ -1,0 +1,37 @@
+/* 933_induct.iii -- Sovereign Enhancement G5: the inductive bridge (sample -> ∀). ind_forall must
+ * CERTIFY a true universal and REFUSE a false one (the sample->theorem leap that separates a
+ * meaningful improver from a rubber stamp):
+ *   - motive P = λ_:Nat.Bool, base true:P(0), step λk.λih:Bool.ih : Πk.Bool→Bool  -> ind_forall = 1
+ *     (∀n P(n) proven by Nat induction, kernel-checked);
+ *   - the SAME motive with a wrong-typed step λk.λih:Bool.k (returns Nat, not Bool=P(succ k))
+ *     -> ind_forall = 0 (no well-typed step => the false universal is REJECTED).
+ * de Bruijn: inside λk.λih, var 0 = ih:Bool, var 1 = k:Nat. 99 = both arms; 10/11 localize. */
+module corpus_933
+
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn ind_forall(p: u32, z: u32, s: u32, n: u32) -> u8 from "induct.iii"
+
+fn main() -> u64 {
+    tc_reset()
+    let nat : u32 = tc_nat()
+    let bt  : u32 = tc_bool()
+    let p   : u32 = tc_lam(nat, bt)                          /* P = λ_:Nat. Bool */
+    let zb  : u32 = tc_true()                                /* base : P(0) = Bool */
+    let n   : u32 = tc_zero()
+
+    /* TRUE universal: step returns the IH (ih:Bool = P(k)) -> : Πk. Bool→Bool = Πk.P(k)→P(succ k) */
+    let s_ok : u32 = tc_lam(nat, tc_lam(bt, tc_var(0u32)))
+    if ind_forall(p, zb, s_ok, n) != 1u8 { return 10u64 }    /* ∀n P(n) certified */
+
+    /* FALSE universal: step returns k:Nat (var 1), wrong type for P(succ k)=Bool -> rejected */
+    let s_bad : u32 = tc_lam(nat, tc_lam(bt, tc_var(1u32)))
+    if ind_forall(p, zb, s_bad, n) != 0u8 { return 11u64 }   /* ill-typed step -> false ∀ REFUSED */
+
+    return 99u64
+}

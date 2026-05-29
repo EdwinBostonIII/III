@@ -1,0 +1,25 @@
+/* STDLIB/iii/numera/induct.iii -- Sovereign Enhancement G5 (III-SOVEREIGN-ENHANCEMENT-COORDINATION):
+ * the INDUCTIVE BRIDGE -- sample -> universal.
+ *
+ * The corpus checks a preservation property on FINITELY many inputs (a sample). The improver must
+ * not commit on a sample ("561 tests pass" is a rubber stamp). `ind_forall` lifts the property to a
+ * UNIVERSAL theorem via the kernel's Nat eliminator: given a motive P, a base z:P(0), and a step
+ * s:Πk.P(k)->P(succ k), `natrec(P,z,s,n):P(n)` for the symbolic n -- i.e. ∀n. P(n) -- and tc_check
+ * verifies base+step are well-typed. A FALSE universal has no well-typed step, so tc_check returns 0:
+ * the bridge certifies a true ∀ and REFUSES a false one. This is the propose/dispose split for
+ * universals -- the kernel disposes; no sample decides.
+ *
+ * HONEST SCOPE: covers inductively-characterised properties (Nat/W/Id-structured via natrec/wrec/J);
+ * properties not inductively expressible remain sampled (named in the φ map, not certified here).
+ * Compiler-UNREFERENCED -> LIBNATIVE. Composes typecheck (the CIC kernel) only. */
+module numera_induct
+
+extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+/* certify ∀n. P(n) by Nat induction: 1 iff natrec(P,z,s,n) : P(n) type-checks (base z:P(0) and
+ * step s:Πk.P(k)->P(succ k) both well-typed). 0 iff the induction is ill-typed -- a false universal. */
+fn ind_forall(p: u32, z: u32, s: u32, n: u32) -> u8 @export {
+    return tc_check(tc_natrec(p, z, s, n), tc_app(p, n))
+}

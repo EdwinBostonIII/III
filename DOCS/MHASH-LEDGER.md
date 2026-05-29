@@ -1300,3 +1300,25 @@ incumbent (`s₀∈M`); tie -> least index; the BETTER of two admissibles is cho
 corpus **564/0**; `932_ripple_search`=99.
 
 **§8.21 sealed at:** 2026-05-29.
+
+### §8.22 — Sovereign Enhancement G5: the inductive bridge (sample → ∀) (2026-05-29)
+
+`numera/induct.iii` (`ind_forall`): lifts a sampled property to a UNIVERSAL theorem via the kernel's
+Nat eliminator -- `ind_forall(P,z,s,n) = tc_check(natrec(P,z,s,n), P n)` is 1 iff base `z:P(0)` and
+step `s:Πk.P(k)→P(succ k)` type-check, i.e. `∀n. P(n)`; a false universal has no well-typed step -> 0.
+The sample→theorem bridge -- the kernel disposes, no sample decides. HONEST: covers
+inductively-characterised properties (Nat/W/Id via natrec/wrec/J); residual sampled invariants are
+named in the φ map. Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 933: const-`Bool` motive + identity step -> `∀n` certified (1); a wrong-typed step (returns
+`Nat`, not `Bool=P(succ k)`) -> false universal REJECTED (0).
+
+| Artifact (golden) | Before (§8.21) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `d1db1bae…2d79b15` | `681691e9e36c759e6cc1287056cffb9c4ee37ad1b7b95e9c71ed949f1daacb75` |
+
+**Verified:** build_stdlib **431/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **565/0**; `933_induct`=99.
+
+**§8.22 sealed at:** 2026-05-29.

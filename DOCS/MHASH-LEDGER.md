@@ -1032,3 +1032,30 @@ flawed -> destroy; kernel down -> reject).
 corpus **554/0**; `922_pcc_gate`=99.
 
 **§8.10 sealed at:** 2026-05-29.
+
+### §8.11 — Generative Frontier C2: the Proof-Carrying Code EXECUTOR (the frontier complete) (2026-05-29)
+
+`STDLIB/scripts/pcc_synthesize.sh` -- the generative-synthesis applier. Submits the (code, proof,
+spec) to the kernel (a harness calling `pcc_admit` -> `typecheck.iii` `tc_check`); commits the
+generated code through the gated write (GATE0-3 + revert) ONLY if the kernel CERTIFIES, else
+DESTROYS it (nothing written). The kernel checks the proof, never runs the code. **Defence-in-depth:**
+the kernel proof certifies the MATH (the code satisfies the spec under all states); the gated write
+certifies the INTEGRATION (build + LIBNATIVE + corpus) -- both must pass.
+
+Demonstrated:
+- **D1** (flawed proof `refl 0 : 0=1`): KERNEL REJECTED -> code DESTROYED, nothing written.
+- **D2** (certified proof `0=0`, non-integrating dup-export payload): KERNEL CERTIFIED -> gated
+  write -> REJECT @GATE1 (the cartographer caught the dup) -> reverted byte-exactly, lib `fbfb64e8`
+  restored.
+
+The full commit (certified + integrating) -> KEEP is the standard gate (proven Inc 1-C1). A TOOL
+(no `.iii`/seal change): golden `4e138415`, lib `fbfb64e8` unchanged.
+
+**THE GENERATIVE FRONTIER IS COMPLETE.** With C1 (kernel decider) + C2 (executor), III admits
+genuine novelty -- but only when the Proposer submits a flawless constructive proof to the kernel.
+Combined with the working ripple optimizer (Inc 1-5, edit/merge) and Topological Extraction (B1-B2,
+new files from proven shared truth), III can now reshape its own substance in every direction --
+inward (merge/cut), outward (extract), and forward (proven synthesis) -- without ever loosening the
+kernel's law.
+
+**§8.11 sealed at:** 2026-05-29.

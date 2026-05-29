@@ -1,0 +1,100 @@
+/* 915_sov_self_improve.iii -- III improving itself, AUTHENTICALLY, on a FRESH input no
+ * KAT uses, with III's own CIC kernel as the un-riggable arbiter.  Drives the live
+ * numera/sov_isa faculties (no new logic; only @export entry points):
+ *
+ *   A. OPTIMIZE (egraph proposes): a novel 9-node term ((x+0)*1)+(x*0) descends to the
+ *      single leaf x via the kernel-certified rules (B x+0->x, C x*1->x, D x*0->0).
+ *      A-FALSIFIER: the SAME term with NO rules registered does NOT collapse (head stays
+ *      add) -- the optimizer never fabricates an equality.
+ *   B. KERNEL DISPOSES (translation validation): sov_pcc_verify CERTIFIES a true Nat
+ *      equality (2==2) and REJECTS a false one (1==3).  The verdict is the CIC kernel's,
+ *      not asserted -- a fabricated equality cannot pass.
+ *   C. KERNEL-GOVERNED SELF-EXTENSION: sov_admit_rule ADMITS a sound rule (kernel proves
+ *      the two sides equal) and REJECTS a meaning-changing one (1 -> 3) even though it is
+ *      operationally confluent+terminating -- III's rule-set growth is subject to III's
+ *      kernel.
+ *
+ * 99 = every arm passed: a genuine optimization + the kernel certifying/rejecting on
+ * fresh inputs + the two falsifiers.  No rigging: every acceptance is the kernel's. */
+module corpus_915
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn si_leaf(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_node2(tag: u8, a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_slot(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_rules() -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_pcc_verify(in_model: u32, out_model: u32) -> u8 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_admit_rule(lhs: u32, rhs: u32, root_confluent: u32, terminating: u32) -> u8 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+
+const C_X   : u8 = 12u8
+const C_C0  : u8 = 20u8
+const C_C1  : u8 = 21u8
+const C_C2  : u8 = 22u8
+const C_ADD : u8 = 30u8
+const C_MUL : u8 = 31u8
+const C_SHL : u8 = 32u8
+const SENT  : u32 = 0xFFFFFFFFu32
+
+var OUT  : [u32; 256]
+var OUTN : [u32; 1]
+
+fn main() -> u64 {
+    let otp : *u32 = (&OUT) as u64 as *u32
+    let onp : *u32 = (&OUTN) as u64 as *u32
+
+    /* ===== A. OPTIMIZE a FRESH term: ((x+0)*1) + (x*0) -> x ===== */
+    eg_init()
+    cl_init()
+    let ax  : u32 = si_leaf(C_X)
+    let ac0 : u32 = si_leaf(C_C0)
+    let ac1 : u32 = si_leaf(C_C1)
+    let ac2 : u32 = si_leaf(C_C2)                 /* seed c2 slot for the rule set */
+    let ai  : u32 = si_node2(C_ADD, ax, ac0)      /* x + 0 */
+    let ao  : u32 = si_node2(C_MUL, ai, ac1)      /* (x+0) * 1 */
+    let am0 : u32 = si_node2(C_MUL, ax, ac0)      /* x * 0 */
+    let atop: u32 = si_node2(C_ADD, ao, am0)      /* ((x+0)*1) + (x*0) */
+    let ash : u32 = si_node2(C_SHL, ax, ac1)      /* seed shl slot */
+    if ash == SENT { return 1u64 }
+    if sov_isa_rules() != 0u32 { return 2u64 }
+    if sov_isa_descend(atop, otp, onp) != 0i32 { return 3u64 }
+    if OUTN[0u32] != 1u32 { return 4u64 }          /* collapsed to a SINGLE node */
+    if OUT[0u32] != si_slot(C_X) { return 5u64 }   /* and the node is x */
+
+    /* A-FALSIFIER: the same term, NO rules -> NO collapse (no fabricated equality) */
+    eg_init()
+    cl_init()
+    let fx  : u32 = si_leaf(C_X)
+    let fc0 : u32 = si_leaf(C_C0)
+    let fc1 : u32 = si_leaf(C_C1)
+    let fc2 : u32 = si_leaf(C_C2)
+    let fi  : u32 = si_node2(C_ADD, fx, fc0)
+    let fo  : u32 = si_node2(C_MUL, fi, fc1)
+    let fm0 : u32 = si_node2(C_MUL, fx, fc0)
+    let ftop: u32 = si_node2(C_ADD, fo, fm0)
+    let fsh : u32 = si_node2(C_SHL, fx, fc1)
+    if fsh == SENT { return 6u64 }
+    if sov_isa_descend(ftop, otp, onp) != 0i32 { return 7u64 }
+    if OUT[0u32] != si_slot(C_ADD) { return 8u64 } /* head still add: nothing fabricated */
+
+    /* ===== B. KERNEL CERTIFIES a true equality, REJECTS a false one (fresh Nat terms) ===== */
+    tc_reset()
+    let two_a : u32 = tc_succ(tc_succ(tc_zero()))
+    let two_b : u32 = tc_succ(tc_succ(tc_zero()))
+    if sov_pcc_verify(two_a, two_b) != 1u8 { return 9u64 }   /* 2 == 2 -> CERTIFIED */
+    let one   : u32 = tc_succ(tc_zero())
+    let three : u32 = tc_succ(tc_succ(tc_succ(tc_zero())))
+    if sov_pcc_verify(one, three) != 0u8 { return 10u64 }    /* 1 == 3 -> REJECTED (un-riggable) */
+
+    /* ===== C. KERNEL-GOVERNED SELF-EXTENSION (rule admission) ===== */
+    let two_c : u32 = tc_succ(tc_succ(tc_zero()))
+    if sov_admit_rule(two_a, two_c, 1u32, 1u32) != 1u8 { return 11u64 }  /* sound + admissible -> ADMIT */
+    if sov_admit_rule(one, three, 1u32, 1u32) != 0u8 { return 12u64 }    /* meaning-changing -> REJECT (kernel) */
+
+    return 99u64
+}

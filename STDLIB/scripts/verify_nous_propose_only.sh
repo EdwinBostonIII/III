@@ -20,7 +20,10 @@ echo "== (1) trust-root isolation: no nous in TYPES/src (kernel) or COMPILER/BOO
 ISO_HITS=""
 for d in "$ROOT/TYPES/src" "$ROOT/COMPILER/BOOT"; do
     [ -d "$d" ] || continue
-    h="$(grep -rIl -e 'nous_' -e 'nous ' "$d" 2>/dev/null || true)"
+    # Word-boundary match: a real nous symbol is `nous_*` or the bare word `nous`.
+    # The old `-e 'nous '` matched the substring inside words like "synchronous"/"erroneous"
+    # (a false positive in cg_sha.iii's "synchronous leaf" comment); `\bnous\b` does not.
+    h="$(grep -rIlE -e 'nous_' -e '\bnous\b' "$d" 2>/dev/null || true)"
     [ -n "$h" ] && ISO_HITS="$ISO_HITS$h
 "
 done

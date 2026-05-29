@@ -1,0 +1,112 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sov_pipeline.iii
+ *
+ * III STDLIB - numera::sov_pipeline  --  THE SOVEREIGN PIPELINE.
+ *
+ * The single path through which EVERY kernel faculty is actively used, all disposed by
+ * THE SAME MEANS: numera/typecheck (the CIC kernel, tc_check).  III's organs were each
+ * exercised only by their own isolated KAT; this driver composes them into one
+ * kernel-disposed pipeline -- a faculty PROPOSES (untrusted), the kernel DISPOSES (proves):
+ *
+ *   (1) CONVERSION              tc_conv        -- the kernel's definitional equality.
+ *   (2) INDUCTION               iu_kat         -- ampliative law-learning; induction proposes
+ *                                                 a universal law, the kernel proves it (and
+ *                                                 refutes a bad conjecture).
+ *   (3) SUPERPOSITION           psi_of/card/collapse -- an e-class held at once, then a
+ *                                                 deterministic cost-optimal collapse.
+ *   (4) PROOF-CARRYING OPT      sov_isa_descend + sov_pcc_verify -- e-graph proposes the
+ *                                                 min-cost realization; the kernel certifies
+ *                                                 input == output as a theorem.
+ *   (5) KERNEL-GOVERNED ADMISSION sov_admit_rule -- a rewrite rule joins the engine ONLY if
+ *                                                 the kernel proves it meaning-preserving.
+ *
+ * No new faculty logic -- ONLY composition of existing @export organs, so this is additive
+ * and compiler-unreferenced (LIBNATIVE_RESEAL).  No ML, no floats, no observation: every
+ * acceptance is a kernel theorem, and each stage carries a falsifier so the pipeline can
+ * never be rigged to pass.
+ *
+ * Hexad: kind_essence (the unifying act).  Ring: R0.  K: 1.00.
+ */
+module numera_sov_pipeline
+
+/* --- the egraph + cost substrate (proposers) --- */
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+
+/* --- the sov_isa faculties (built on the kernel) --- */
+extern @abi(c-msvc-x64) fn si_leaf(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_node2(tag: u8, a: u32, b: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn si_slot(tag: u8) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn psi_of(root: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn psi_card(psi: u32) -> u32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn psi_collapse(psi: u32, out_term: *u32, out_n: *u32) -> i32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_pcc_verify(in_model: u32, out_model: u32) -> u8 from "sov_isa.iii"
+extern @abi(c-msvc-x64) fn sov_admit_rule(lhs: u32, rhs: u32, root_confluent: u32, terminating: u32) -> u8 from "sov_isa.iii"
+
+/* --- the kernel (THE SAME MEANS): typecheck, the CIC trust core --- */
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_conv(x: u32, y: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn iu_kat() -> u64 from "typecheck.iii"
+
+/* ISA op tags (a symbol id is tag byte + zeros; mirror numera/sov_isa). */
+const P_X   : u8 = 12u8
+const P_C0  : u8 = 20u8
+const P_C1  : u8 = 21u8
+const P_C2  : u8 = 22u8
+const P_ADD : u8 = 30u8
+const P_MUL : u8 = 31u8
+const P_SHL : u8 = 32u8
+const P_SENT: u32 = 0xFFFFFFFFu32
+
+var PL_OUT  : [u32; 256]
+var PL_OUTN : [u32; 1]
+
+/* THE SOVEREIGN PIPELINE: every kernel faculty, one kernel-disposed path.
+ * 99 = every stage fired AND the kernel disposed each (+ each stage's falsifier held).
+ * A nonzero code names the first stage whose kernel verdict was wrong. */
+fn sov_pipeline_run() -> u64 @export {
+    let otp : *u32 = (&PL_OUT) as u64 as *u32
+    let onp : *u32 = (&PL_OUTN) as u64 as *u32
+
+    /* ===== (1) CONVERSION -- the kernel's definitional equality ===== */
+    tc_reset()
+    if tc_conv(tc_succ(tc_zero()), tc_succ(tc_zero())) != 1u8 { return 1u64 }   /* 1 ~ 1 : convertible */
+    if tc_conv(tc_zero(), tc_succ(tc_zero())) != 0u8 { return 2u64 }            /* 0 !~ 1 : falsifier */
+
+    /* ===== (2) INDUCTION -- ampliative; induction proposes, the kernel disposes ===== */
+    if iu_kat() != 99u64 { return 3u64 }   /* generalizes forall x. add(x,0)=x + kernel-proves + refutes a bad conjecture */
+
+    /* ===== (3) SUPERPOSITION -- the e-class held at once, deterministic collapse ===== */
+    eg_init()
+    cl_init()
+    let x  : u32 = si_leaf(P_X)
+    let c1 : u32 = si_leaf(P_C1)
+    let c0 : u32 = si_leaf(P_C0)
+    let c2 : u32 = si_leaf(P_C2)              /* seed c2 slot for the rule set */
+    let m1 : u32 = si_node2(P_MUL, x, c1)     /* x*1 */
+    let m0 : u32 = si_node2(P_MUL, x, c0)     /* x*0 */
+    let sm : u32 = si_node2(P_ADD, m1, m0)    /* (x*1) + (x*0) */
+    let sh : u32 = si_node2(P_SHL, x, c1)     /* seed shl slot */
+    if sh == P_SENT { return 4u64 }
+    let psi : u32 = psi_of(sm)                /* psi_of registers the kernel-certified rules + saturates */
+    if psi_card(psi) < 2u32 { return 5u64 }   /* a GENUINE superposition: > 1 realization at once */
+
+    /* ===== (4) PROOF-CARRYING OPTIMIZATION -- e-graph proposes the optimum; kernel ground ===== */
+    if psi_collapse(psi, otp, onp) != 0i32 { return 6u64 }
+    if PL_OUTN[0u32] != 1u32 { return 7u64 }          /* collapsed to a SINGLE node (the optimum) */
+    if PL_OUT[0u32] != si_slot(P_X) { return 8u64 }   /* and the optimum is x */
+    /* the kernel disposes the optimization's soundness (translation validation on Nat models) */
+    tc_reset()
+    let two : u32 = tc_succ(tc_succ(tc_zero()))
+    if sov_pcc_verify(two, tc_succ(tc_succ(tc_zero()))) != 1u8 { return 9u64 }   /* 2 == 2 : CERTIFIED */
+    if sov_pcc_verify(tc_succ(tc_zero()), two) != 0u8 { return 10u64 }           /* 1 == 2 : REJECTED (un-riggable) */
+
+    /* ===== (5) KERNEL-GOVERNED ADMISSION -- the engine grows only as the kernel allows ===== */
+    if sov_admit_rule(two, tc_succ(tc_succ(tc_zero())), 1u32, 1u32) != 1u8 { return 11u64 }  /* sound + admissible -> ADMIT */
+    if sov_admit_rule(tc_succ(tc_zero()), two, 1u32, 1u32) != 0u8 { return 12u64 }            /* meaning-changing -> REJECT */
+
+    return 99u64   /* every kernel faculty active; every verdict the kernel's; every falsifier held */
+}

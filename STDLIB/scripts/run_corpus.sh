@@ -583,6 +583,7 @@ declare -A EXPECTED=(
     [913_ecdsa_p256_det_sign]=99
     [914_xii_anchor_negative]=99
     [915_sov_self_improve]=99
+    [916_sov_pipeline]=99
 )
 
 PASS=0

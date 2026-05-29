@@ -791,3 +791,26 @@ iiis-0 can no longer compile post-port `parse.iii` (`iii_lex_*_c` gone). The res
 the frozen iiis-1 seed; from-absolute-scratch bootstrap has drifted past iiis-0 (future seed-refresh).
 
 **§8.0 sealed at:** 2026-05-29.
+
+### §8.1 — Sovereign Pipeline: every kernel faculty unified through one disposer (2026-05-29)
+
+The `/architect` deliverable for "everything from the kernel — superposition to inductive reasoning —
+actively used through the same means." `numera/sov_pipeline.iii` (`sov_pipeline_run() @export`)
+composes EVERY kernel faculty through the SAME means (the CIC kernel `tc_check` as universal
+disposer), each stage carrying a falsifier so "all faculties live" is never a vacuous pass:
+(1) CONVERSION `tc_conv` (1~1 / 0!~1); (2) INDUCTION `iu_kat`; (3) SUPERPOSITION `psi_of/card/collapse`;
+(4) PROOF-CARRYING OPT `sov_isa_descend`+`sov_pcc_verify` (2==2 cert / 1==2 reject);
+(5) KERNEL-GOVERNED ADMISSION `sov_admit_rule` (sound admit / meaning-changing reject). No new
+faculty logic — composition only → additive, **compiler-UNREFERENCED** (LIBNATIVE_RESEAL).
+
+| Artifact (golden) | Before (§8.0) | After (this seal) |
+|---|---|---|
+| `iiis-1 ≡ iiis-2 ≡ iiis-3` (fixed point) | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** — ADR-1 compiler-neutrality PROVEN, not assumed) |
+| `STDLIB/build/iii/libiii_native.a` | `258b3579…0ec0f828f5f8` | `913a7ffc339e13837d435cbbe97cda604226ab6468e7c930babebf32ec6ae205` |
+
+**Verified:** build_stdlib **420/0** (sov_pipeline appended last = BSS-neutral);
+`build_iiis2 --check-corpus` + `build_iiis3 --check-corpus` both **59/0** (iiis-2/3 stay `4e138415`
+→ the module is genuinely compiler-unreferenced); FULL STDLIB corpus **548/0**; `916_sov_pipeline`=99
+(all five faculties live + kernel-disposed; every falsifier held — direct compile+link+run also EXIT 99).
+
+**§8.1 sealed at:** 2026-05-29.

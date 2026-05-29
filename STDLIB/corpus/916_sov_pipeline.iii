@@ -1,0 +1,13 @@
+/* 916_sov_pipeline.iii -- THE SOVEREIGN PIPELINE end-to-end: every kernel faculty
+ * (conversion, induction, superposition, proof-carrying optimization, kernel-governed
+ * admission) actively used through ONE kernel-disposed path (numera/sov_pipeline), every
+ * verdict the CIC kernel's, every stage carrying a falsifier.  99 = all five faculties
+ * live + kernel-disposed (the unification of "everything from the kernel, through the
+ * same means"). */
+module corpus_916
+
+extern @abi(c-msvc-x64) fn sov_pipeline_run() -> u64 from "sov_pipeline.iii"
+
+fn main() -> u64 {
+    return sov_pipeline_run()
+}

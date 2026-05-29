@@ -750,6 +750,12 @@ MODULES=(
     # Second strike: the semantic-soundness gate extended to XII's LIVE fusion identity-null
     # rewrites (R016/R017/R021/R022), verified against the independent monoid-identity authority.
     "omnia/xii_fusion_verify"
+    # The Sovereign Pipeline: every kernel faculty (conversion, induction, superposition,
+    # proof-carrying optimization, kernel-governed admission) actively used through ONE
+    # kernel-disposed path (the kernel tc_check is the universal disposer). Externs sov_isa
+    # + typecheck + egraph + cost_lattice (built above); compiler-unreferenced -> LIBNATIVE
+    # only. Appended last (BSS-neutral).
+    "numera/sov_pipeline"
 )
 
 PASS=0

@@ -239,3 +239,76 @@ fn hdl_step() -> u64 @export {
     }
     return 0u64
 }
+
+/* ===== SX2: REALISTIC physical cost -- gate delay + wire capacitance (the literal mechanic) ===== */
+
+/* per-gate-TYPE propagation delay (relative units): a simple 2-input boolean gate = 1; XOR = 2 (a
+ * 2-level structure); trit AND/OR = 2 (3-valued min/max is deeper); NOT/BUF = 1; register/source
+ * gates (DFF/IN/const) = 0 (a path endpoint -- no combinational delay through it). */
+fn pc_gate_delay(kind: u32) -> u32 @export {
+    if kind == HG_NOT  { return 1u32 }
+    if kind == HG_BUF  { return 1u32 }
+    if kind == HG_AND  { return 1u32 }
+    if kind == HG_OR   { return 1u32 }
+    if kind == HG_NAND { return 1u32 }
+    if kind == HG_XOR  { return 2u32 }
+    if kind == HG_TNOT { return 1u32 }
+    if kind == HG_TAND { return 2u32 }
+    if kind == HG_TOR  { return 2u32 }
+    return 0u32
+}
+/* the WEIGHTED critical path to `out`: the gate-delay-weighted longest path (the timing bounding the
+ * clock period -- finer than pc_logic_depth's uniform 1/gate). DFFs/inputs start fresh (delay 0). */
+fn pc_crit_delay(out: u32) -> u32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut g : u32 = 0u32
+    while g < n {
+        let k : u32 = HG_KIND[g]
+        if k == HG_IN  { HG_DEPTH[g] = 0u32 }
+        if k == HG_C0  { HG_DEPTH[g] = 0u32 }
+        if k == HG_C1  { HG_DEPTH[g] = 0u32 }
+        if k == HG_DFF { HG_DEPTH[g] = 0u32 }
+        if k != HG_IN { if k != HG_C0 { if k != HG_C1 { if k != HG_DFF {
+            let da : u32 = HG_DEPTH[HG_A[g]]
+            let db : u32 = HG_DEPTH[HG_B[g]]
+            let mut m : u32 = da
+            if db > m { m = db }
+            HG_DEPTH[g] = m + pc_gate_delay(k)
+        } } } }
+        g = g + 1u32
+    }
+    return HG_DEPTH[out]
+}
+/* binary-arity test (real B input). */
+fn pc_is_binary(kind: u32) -> u32 {
+    if kind == HG_AND  { return 1u32 }
+    if kind == HG_OR   { return 1u32 }
+    if kind == HG_XOR  { return 1u32 }
+    if kind == HG_NAND { return 1u32 }
+    if kind == HG_TAND { return 1u32 }
+    if kind == HG_TOR  { return 1u32 }
+    return 0u32
+}
+/* fan-out capacitance: per net, the number of gate-input pins it drives, SQUARED (capacitive load
+ * grows super-linearly with fan-out -- a heavily-loaded net is disproportionately costly). A
+ * topological load proxy, NOT placed wire capacitance (that is NP-hard P&R, the toolchain's). */
+fn pc_fanout_cap() -> u32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut cap : u32 = 0u32
+    let mut g : u32 = 0u32
+    while g < n {
+        let mut fo : u32 = 0u32
+        let mut h : u32 = 0u32
+        while h < n {
+            let kh : u32 = HG_KIND[h]
+            if kh != HG_IN {                       /* IN's A is an input index, not a gate ref */
+                if HG_A[h] == g { fo = fo + 1u32 }
+                if pc_is_binary(kh) == 1u32 { if HG_B[h] == g { fo = fo + 1u32 } }
+            }
+            h = h + 1u32
+        }
+        cap = cap + fo * fo
+        g = g + 1u32
+    }
+    return cap
+}

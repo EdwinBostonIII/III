@@ -1165,3 +1165,24 @@ orphans killed, scratch removed; the clean re-run sealed. SX1 code was never at 
 `.o`-linked corpus passed 558/0 even during the aborted run.
 
 **§8.15 sealed at:** 2026-05-29.
+
+### §8.16 — III → Silicon SX2: realistic physical cost (gate delay + wire capacitance) (2026-05-29)
+
+`numera/hdl.iii` extended (`pc_gate_delay`/`pc_crit_delay`/`pc_fanout_cap`): the cost model gains the
+literal mechanic. `pc_gate_delay` = per-gate-TYPE delay (simple boolean = 1, XOR = 2, trit AND/OR =
+2, DFF/IN/const = 0). `pc_crit_delay` = the WEIGHTED critical path (finer than uniform
+`pc_logic_depth`). `pc_fanout_cap` = Σ consumers² per net (quadratic capacitive load). Still a
+topological proxy -- NOT NP-hard placed routing (ADR-S2 stands). Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 927: an XOR-deep path (weighted delay 4) is slower than a NAND-deep path (2) at EQUAL gate
+count; a net driving 3 gates has 9× the fan-out capacitance of one driving 1.
+
+| Artifact (golden) | Before (§8.15) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `dcba7871…71f89f6` | `355462ce46509559c521f43e4c33407b515b4fabaa20ac68066e9befc06fd4b6` |
+
+**Verified:** build_stdlib **428/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **559/0**; `927_phys_real`=99.
+
+**§8.16 sealed at:** 2026-05-29.

@@ -594,6 +594,7 @@ declare -A EXPECTED=(
     [924_phys_cost]=99
     [925_aeu]=99
     [926_hdl_seq]=99
+    [927_phys_real]=99
 )
 
 PASS=0

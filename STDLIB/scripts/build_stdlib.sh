@@ -776,6 +776,10 @@ MODULES=(
     # MDL boundary penalty, acyclic insertion, H10 anti-thrashing) permitting a new-file write.
     # Composes congruence + ripple_metric + commit_gate. Compiler-unreferenced -> LIBNATIVE.
     "forcefield/ripple_extract"
+    # Phase C: Proof-Carrying Code -- the one permitted generative synthesis. pcc_verify =
+    # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
+    # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/pcc_gate"
 )
 
 PASS=0

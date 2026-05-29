@@ -1,0 +1,40 @@
+/* STDLIB/iii/forcefield/pcc_gate.iii -- the Generative Frontier, PHASE C: PROOF-CARRYING CODE.
+ *
+ * The ONE mathematically rigorous way to admit GENUINELY-NEW logic (generative synthesis) without
+ * breaking the kernel: you do not TEST the code -- you force the generator to PROVE it.
+ *
+ *   1. The human writes a strict formal SPEC as a dependent type S (built with the CIC kernel's
+ *      tc_pi / tc_sig / tc_id / tc_nat / ... -- the type IS the intent).
+ *   2. The untrusted Proposer generates the code AND a constructive PROOF term P that P : S
+ *      (the code is the computational content of P, by propositions-as-types).
+ *   3. The kernel's VERDICT: pcc_verify = tc_check(P, S).  typecheck.iii does NOT run the code --
+ *      it EVALUATES the proof.  If P inhabits S the code is mathematically guaranteed to satisfy
+ *      the human's intent under ALL states -> commit.  If the proof fails by even one axiom,
+ *      tc_check returns 0 -> the code is destroyed.
+ *
+ * This is the absolute, unyielding law: the Proposer may be wildly creative in staging, but not one
+ * line of new logic reaches disk until it submits a flawless proof to III's kernel.  Soundness is
+ * tc_check (decidable, total), never execution; the Proposer's proof SEARCH may fail (honest abstain)
+ * but the kernel's proof CHECK always terminates with a correct verdict.
+ *
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_essence (proven novelty).  Ring: R0.  K: 1.00.
+ * NIH: composes typecheck (the CIC trust root) + commit_gate only. */
+module forcefield_pcc_gate
+
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+
+/* THE PCC verdict: the kernel evaluates the constructive proof against the dependent-type spec.
+ * 1 IFF the proof-term inhabits the spec-type (tc_check) -- the code is guaranteed to satisfy the
+ * spec under all states.  The kernel CHECKS the proof; it never runs the code. */
+fn pcc_verify(proof_term: u32, spec_type: u32) -> u8 @export {
+    return tc_check(proof_term, spec_type)
+}
+
+/* the composed PCC commit decision: admit generative synthesis IFF commit_gate admits AND the
+ * kernel certifies the proof against the spec.  A flawed proof -> 0 -> the code is destroyed. */
+fn pcc_admit(proof_term: u32, spec_type: u32, kernel_ok: u32) -> u32 @export {
+    if cg_decide(1u32, 1u32, 1u32, 1u32, kernel_ok) != 99u32 { return 0u32 }   /* base admission gate */
+    if pcc_verify(proof_term, spec_type) != 1u8 { return 0u32 }                /* the kernel's verdict */
+    return 1u32
+}

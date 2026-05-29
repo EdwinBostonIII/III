@@ -1008,3 +1008,27 @@ B2 (executor), III can write new files for Topological Extraction -- safely, onl
 proven shared truth, never to invent.**
 
 **§8.9 sealed at:** 2026-05-29.
+
+### §8.10 — Generative Frontier C1: Proof-Carrying Code decider (kernel-checked) (2026-05-29)
+
+`forcefield/pcc_gate.iii` (`pcc_verify`, `pcc_admit` `@export`): the ONE permitted generative
+synthesis. `pcc_verify(proof, spec)` = `typecheck.iii` `tc_check(proof, spec)` -- III's CIC kernel
+EVALUATES the constructive proof against the human dependent-type spec; **the kernel checks the
+proof, it never runs the code**. `pcc_admit` composes `commit_gate` + the kernel verdict.
+Compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+Corpus 922 drives the REAL kernel on genuine dependent types -- spec Nat (`0` admits, `true`
+rejects), spec Nat->Nat (`λx.x` admits, `λx.true` rejects), spec Id (`refl 0 : 0=0` admits;
+`refl 0 : 0=1` **REJECTED** -- THE HEART: the kernel will not prove a falsehood, so generative code
+carrying a false proof is destroyed) + the composed `pcc_admit` (proven + kernel-live -> commit;
+flawed -> destroy; kernel down -> reject).
+
+| Artifact (golden) | Before (§8.9) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `3b4a85a7…6c196bbc` | `fbfb64e8744b07a2c28293e67a7265d480d93894b5f3078f6689ea5557d2d942` |
+
+**Verified:** build_stdlib **426/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **554/0**; `922_pcc_gate`=99.
+
+**§8.10 sealed at:** 2026-05-29.

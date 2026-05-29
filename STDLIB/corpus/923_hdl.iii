@@ -1,0 +1,49 @@
+/* 923_hdl.iii -- III -> Silicon (HW1): the certified gate lowering end-to-end.  Every verdict is a
+ * TRUTH-TABLE proof (hdl_equiv*), not a heuristic:
+ *   BINARY: XOR built directly === XOR built from 4 NANDs (certified over all 4 inputs) -- the
+ *           combinator->gate lowering is PROVEN correct; AND != XOR (a wrong lowering is caught).
+ *   TERNARY: Kleene De Morgan  NOT(a AND b) === (NOT a) OR (NOT b)  certified over all 9 trit pairs;
+ *           NOT(a AND b) != (a AND b) (falsifier).
+ * Gate-kind codes are literal (hdl.iii's consts are module-local): NOT=4 AND=5 XOR=7 NAND=8
+ * TNOT=10 TAND=11 TOR=12.  99 = all arms pass; 10..21 localize the first failing arm. */
+module corpus_923
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add_in(input_idx: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_set_input(idx: u32, val: i32) -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_eval(out: u32) -> i32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_equiv3_2(a: u32, b: u32) -> u32 from "hdl.iii"
+
+fn main() -> u64 {
+    /* ===== BINARY: XOR  ===  XOR-from-4-NANDs ===== */
+    hdl_reset()
+    let bi0 : u32 = hdl_add_in(0u32)
+    let bi1 : u32 = hdl_add_in(1u32)
+    let xorg : u32 = hdl_add(7u32, bi0, bi1)          /* direct XOR gate */
+    let t  : u32 = hdl_add(8u32, bi0, bi1)            /* NAND(a,b)        */
+    let l  : u32 = hdl_add(8u32, bi0, t)              /* NAND(a, t)       */
+    let r  : u32 = hdl_add(8u32, bi1, t)              /* NAND(b, t)       */
+    let xorn : u32 = hdl_add(8u32, l, r)              /* NAND(l, r) = XOR */
+    let andg : u32 = hdl_add(5u32, bi0, bi1)          /* AND gate (the wrong lowering) */
+    if hdl_equiv2(xorg, xorn, 2u32) != 1u32 { return 10u64 }   /* CERTIFIED: NAND-XOR === XOR */
+    if hdl_equiv2(xorg, andg, 2u32) != 0u32 { return 11u64 }   /* falsifier: AND != XOR */
+    hdl_set_input(0u32, 0i32) ; hdl_set_input(1u32, 0i32) ; if hdl_eval(xorg) != 0i32 { return 12u64 }
+    hdl_set_input(0u32, 0i32) ; hdl_set_input(1u32, 1i32) ; if hdl_eval(xorg) != 1i32 { return 13u64 }
+    hdl_set_input(0u32, 1i32) ; hdl_set_input(1u32, 1i32) ; if hdl_eval(xorg) != 0i32 { return 14u64 }
+
+    /* ===== TERNARY: Kleene De Morgan over all 9 trit pairs ===== */
+    hdl_reset()
+    let ti0 : u32 = hdl_add_in(0u32)
+    let ti1 : u32 = hdl_add_in(1u32)
+    let tand  : u32 = hdl_add(11u32, ti0, ti1)        /* a TAND b */
+    let ntand : u32 = hdl_add(10u32, tand, tand)      /* TNOT(a TAND b) */
+    let nt0   : u32 = hdl_add(10u32, ti0, ti0)        /* TNOT a */
+    let nt1   : u32 = hdl_add(10u32, ti1, ti1)        /* TNOT b */
+    let dmr   : u32 = hdl_add(12u32, nt0, nt1)        /* (TNOT a) TOR (TNOT b) */
+    if hdl_equiv3_2(ntand, dmr) != 1u32 { return 20u64 }   /* CERTIFIED De Morgan */
+    if hdl_equiv3_2(ntand, tand) != 0u32 { return 21u64 }  /* falsifier */
+
+    return 99u64
+}

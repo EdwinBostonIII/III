@@ -1059,3 +1059,28 @@ inward (merge/cut), outward (extract), and forward (proven synthesis) -- without
 kernel's law.
 
 **§8.11 sealed at:** 2026-05-29.
+
+### §8.12 — III → Silicon HW1: certified combinator → gate-netlist lowering (2026-05-29)
+
+`numera/hdl.iii` (`hdl_*` `@export`): the certified lowering of a combinator/boolean term onto
+hardware gates -- BinaryGate (`NOT/AND/OR/XOR/NAND/BUF/CONST`), TernaryGate (`TNOT/TAND/TOR` via
+`trit.iii`), DFlipFlop. THE CERTIFICATION: `hdl_equiv2`/`hdl_equiv3_2` is the exhaustive TRUTH TABLE
+-- a netlist is accepted only when *proven* to compute the identical function as its source (pure
+algebraic translation, no heuristics). Unified `i32` gate value; topological one-pass eval.
+Compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+Corpus 923: XOR built directly === XOR from 4 NANDs (certified over all 4 inputs); AND != XOR
+(falsifier); Kleene De Morgan `NOT(a AND b) === (NOT a) OR (NOT b)` certified over all 9 trit pairs
+(+ falsifier). Design `DOCS/III-SILICON-FRONTIER.md` (math-olympiad honest scope: certified lowering
+YES; NP-hard place-&-route + proprietary bitstream EXCLUDED -- III emits the certified netlist the
+toolchain consumes).
+
+| Artifact (golden) | Before (§8.11) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `fbfb64e8…57d2d942` | `d7a4a4d2c704109b3305a813e93a2f078ff664eb3606b571338a11f0a8bbba40` |
+
+**Verified:** build_stdlib **427/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **555/0**; `923_hdl`=99.
+
+**§8.12 sealed at:** 2026-05-29.

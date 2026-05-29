@@ -780,6 +780,10 @@ MODULES=(
     # typecheck.iii tc_check(proof, spec): the kernel evaluates the constructive proof against the
     # dependent-type spec; flawless -> commit, flawed -> destroy. Compiler-unreferenced -> LIBNATIVE.
     "forcefield/pcc_gate"
+    # III -> Silicon HW1: certified combinator/boolean -> gate-netlist lowering (BinaryGate/
+    # TernaryGate/DFlipFlop) with truth-table equivalence as the proof. Composes trit only.
+    # Compiler-unreferenced -> LIBNATIVE.
+    "numera/hdl"
 )
 
 PASS=0

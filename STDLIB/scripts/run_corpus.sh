@@ -590,6 +590,7 @@ declare -A EXPECTED=(
     [920_ripple_cut]=99
     [921_ripple_extract]=99
     [922_pcc_gate]=99
+    [923_hdl]=99
 )
 
 PASS=0

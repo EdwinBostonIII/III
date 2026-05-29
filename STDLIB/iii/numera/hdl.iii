@@ -1,0 +1,120 @@
+/* STDLIB/iii/numera/hdl.iii -- III -> Silicon, HW1: the certified combinator/boolean -> GATE
+ * lowering (DOCS/III-SILICON-FRONTIER.md).  A combinator/boolean term that denotes a finite
+ * function maps 1-to-1 onto hardware gates -- the realizable fragment SKI/CCL shares with silicon.
+ * Each boolean connective -> one BinaryGate; each trit op -> one TernaryGate; state -> DFlipFlop.
+ *
+ * THE CERTIFICATION (the whole point -- "pure algebraic translation, no heuristics"): hdl_equiv*
+ * is the EXHAUSTIVE TRUTH TABLE -- two netlists are equivalent IFF they compute the identical
+ * function over every input assignment (2^n for binary, 3^n for trit).  A lowering is accepted
+ * only when proven equivalent to its source; a mis-lowering is caught.  This is what no HLS
+ * toolchain gives: the netlist is correct BY PROOF, not by hope.
+ *
+ * Unified i32 gate value: binary gates use {0,1}, trit gates use the balanced trit {-1,0,+1}
+ * (iii_trit_*; compared by EQUALITY only -- never ordered).  Gates are added in topological order
+ * (inputs precede consumers), so hdl_eval is ONE linear pass over a value array -- no recursion,
+ * no allocator.  Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_essence (computation given form).
+ * Ring: R0.  K: 1.00.  NIH: composes trit only. */
+module numera_hdl
+
+extern @abi(c-msvc-x64) fn iii_trit_not(a: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+extern @abi(c-msvc-x64) fn iii_trit_or(a: i32, b: i32) -> i32 from "trit.iii"
+
+/* gate kinds */
+const HG_IN   : u32 = 0u32     /* primary input (A = input index) */
+const HG_C0   : u32 = 1u32     /* constant 0  (K) */
+const HG_C1   : u32 = 2u32     /* constant 1  (K) */
+const HG_BUF  : u32 = 3u32     /* wire / identity (I) */
+const HG_NOT  : u32 = 4u32     /* BinaryGate: not */
+const HG_AND  : u32 = 5u32
+const HG_OR   : u32 = 6u32
+const HG_XOR  : u32 = 7u32
+const HG_NAND : u32 = 8u32     /* universal */
+const HG_TNOT : u32 = 10u32    /* TernaryGate: Kleene negation (input A) */
+const HG_TAND : u32 = 11u32    /* TernaryGate: Kleene min */
+const HG_TOR  : u32 = 12u32    /* TernaryGate: Kleene max */
+const HG_DFF  : u32 = 13u32    /* DFlipFlop: state element (combinationally = its input) */
+
+const HG_MAXG : u32 = 4096u32
+const HG_MAXIN: u32 = 64u32
+
+var HG_KIND  : [u32; 4096]
+var HG_A     : [u32; 4096]
+var HG_B     : [u32; 4096]
+var HG_VAL   : [i32; 4096]
+var HG_INPUT : [i32; 64]
+var HG_N     : [u32; 1]
+
+fn hdl_reset() -> u64 @export { HG_N[0u32] = 0u32 ; return 0u64 }
+
+/* add a primary input reading slot `input_idx`; returns the gate id */
+fn hdl_add_in(input_idx: u32) -> u32 @export {
+    let g : u32 = HG_N[0u32]
+    if g >= HG_MAXG { return 0xFFFFFFFFu32 }
+    HG_KIND[g] = HG_IN ; HG_A[g] = input_idx ; HG_B[g] = 0u32
+    HG_N[0u32] = g + 1u32
+    return g
+}
+/* add a gate of `kind` with input gate-ids a, b (b ignored for unary kinds); returns the gate id */
+fn hdl_add(kind: u32, a: u32, b: u32) -> u32 @export {
+    let g : u32 = HG_N[0u32]
+    if g >= HG_MAXG { return 0xFFFFFFFFu32 }
+    HG_KIND[g] = kind ; HG_A[g] = a ; HG_B[g] = b
+    HG_N[0u32] = g + 1u32
+    return g
+}
+fn hdl_set_input(idx: u32, val: i32) -> u64 @export { HG_INPUT[idx] = val ; return 0u64 }
+fn hdl_gate_count() -> u32 @export { return HG_N[0u32] }
+
+/* topological one-pass evaluation -> the value of gate `out` under the current HG_INPUT. */
+fn hdl_eval(out: u32) -> i32 @export {
+    let n : u32 = HG_N[0u32]
+    let mut g : u32 = 0u32
+    while g < n {
+        let k : u32 = HG_KIND[g]
+        if k == HG_IN   { HG_VAL[g] = HG_INPUT[HG_A[g]] }
+        if k == HG_C0   { HG_VAL[g] = 0i32 }
+        if k == HG_C1   { HG_VAL[g] = 1i32 }
+        if k == HG_BUF  { HG_VAL[g] = HG_VAL[HG_A[g]] }
+        if k == HG_NOT  { HG_VAL[g] = 1i32 - HG_VAL[HG_A[g]] }
+        if k == HG_AND  { HG_VAL[g] = HG_VAL[HG_A[g]] & HG_VAL[HG_B[g]] }
+        if k == HG_OR   { HG_VAL[g] = HG_VAL[HG_A[g]] | HG_VAL[HG_B[g]] }
+        if k == HG_XOR  { HG_VAL[g] = HG_VAL[HG_A[g]] ^ HG_VAL[HG_B[g]] }
+        if k == HG_NAND { HG_VAL[g] = 1i32 - (HG_VAL[HG_A[g]] & HG_VAL[HG_B[g]]) }
+        if k == HG_DFF  { HG_VAL[g] = HG_VAL[HG_A[g]] }
+        if k == HG_TNOT { HG_VAL[g] = iii_trit_not(HG_VAL[HG_A[g]]) }
+        if k == HG_TAND { HG_VAL[g] = iii_trit_and(HG_VAL[HG_A[g]], HG_VAL[HG_B[g]]) }
+        if k == HG_TOR  { HG_VAL[g] = iii_trit_or(HG_VAL[HG_A[g]], HG_VAL[HG_B[g]]) }
+        g = g + 1u32
+    }
+    return HG_VAL[out]
+}
+
+/* BINARY certification: identical truth table over all 2^n input assignments (0/1). */
+fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 @export {
+    let total : u32 = 1u32 << n
+    let mut v : u32 = 0u32
+    while v < total {
+        let mut i : u32 = 0u32
+        while i < n { let bit : i32 = ((v >> i) & 1u32) as i32 ; hdl_set_input(i, bit) ; i = i + 1u32 }
+        if hdl_eval(a) != hdl_eval(b) { return 0u32 }
+        v = v + 1u32
+    }
+    return 1u32
+}
+
+/* TERNARY certification (2 inputs): identical over all 3^2 = 9 balanced-trit assignments. */
+fn hdl_equiv3_2(a: u32, b: u32) -> u32 @export {
+    let mut i0 : u32 = 0u32
+    while i0 < 3u32 {
+        let mut i1 : u32 = 0u32
+        while i1 < 3u32 {
+            hdl_set_input(0u32, (i0 as i32) - 1i32)
+            hdl_set_input(1u32, (i1 as i32) - 1i32)
+            if hdl_eval(a) != hdl_eval(b) { return 0u32 }
+            i1 = i1 + 1u32
+        }
+        i0 = i0 + 1u32
+    }
+    return 1u32
+}

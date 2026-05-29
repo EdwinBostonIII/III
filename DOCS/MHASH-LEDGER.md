@@ -863,3 +863,27 @@ dead edge is never cut (intent respected); a capability-equal but intent-class-D
 `4e138415` unchanged; FULL corpus **549/0**; `917_ripple_metric`=99.
 
 **§8.3 sealed at:** 2026-05-29.
+
+### §8.4 — Sovereign Ripple Calculus, Inc 2: the first certified refactoring (unification) (2026-05-29)
+
+`forcefield/ripple_unify.iii` (`ru_certify_unify`, `ru_survivor_cost` `@export`): the first
+CERTIFIED REFACTORING, composing `ripple_metric` (the intent gate) + `congruence` (the
+faithfulness-gated union-find merge) + a kernel proof. `ru_certify_unify` returns 1 IFF the pair
+is a unification CANDIDATE (capability-equal, intent-equal) AND soundly mergeable (auto-congruent
+on an identical content-address, or a discharged kernel proof). DECIDER ONLY (no file edits).
+Compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+Corpus 918 proves it with the DECISIVE falsifier (the cpufeat lesson): an intentional variation
+point (capability-equal but intent-class-DIFFERENT) is REFUSED even with `proof_ok=1` --
+behavioral equality is NECESSARY, NOT SUFFICIENT; intent-preservation is also required. (Plus:
+no proof -> refused, no fabricated equality.)
+
+| Artifact (golden) | Before (§8.3) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `9853413483…5d669c85` | `b430f38ff96a80d6d3d4ddaafe16fd1016bc572cf5e2350453e224809ce116c0` |
+
+**Verified:** build_stdlib **422/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **550/0**; `918_ripple_unify`=99 (+ `917`=99).
+
+**§8.4 sealed at:** 2026-05-29.

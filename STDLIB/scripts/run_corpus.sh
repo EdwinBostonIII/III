@@ -585,6 +585,7 @@ declare -A EXPECTED=(
     [915_sov_self_improve]=99
     [916_sov_pipeline]=99
     [917_ripple_metric]=99
+    [918_ripple_unify]=99
 )
 
 PASS=0

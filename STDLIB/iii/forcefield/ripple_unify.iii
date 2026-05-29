@@ -1,0 +1,58 @@
+/* STDLIB/iii/forcefield/ripple_unify.iii -- the Sovereign Ripple Calculus, INCREMENT 2:
+ * the first CERTIFIED REFACTORING -- unification.  Composes the existing organs into one
+ * sound DECIDER (it certifies WHICH unifications are sound; it does NOT yet edit files --
+ * that is Inc 3's applier, behind commit_gate + the reseal gate):
+ *
+ *   ripple_metric (rm_unifiable): is this pair a unification CANDIDATE? -- capability-equal
+ *                  AND same intent-class.  An intentional variation point (capability-equal
+ *                  but intent-class-different, e.g. cpufeat userspace vs Ring-0) is NOT a
+ *                  candidate.  This is the INTENT GATE.
+ *   congruence    (cgr_intern / cgr_union_certified): the union-find merge engine -- an
+ *                  identical content-address is auto-congruent (proof-free, sound); two
+ *                  DISTINCT addresses merge ONLY with a discharged kernel proof (the
+ *                  faithfulness gate -- no proof => REFUSED, no fabricated equality).
+ *   kernel proof  (proof_ok): the dischargeable output of typecheck / sov_pcc_verify, supplied
+ *                  by the caller.
+ *
+ * ru_certify_unify returns 1 IFF the unification is BOTH a candidate AND soundly mergeable.
+ * THE DECISIVE GUARD (the cpufeat lesson; the KAT proves it as a falsifier): even a TRUE
+ * kernel proof of behavioral equality does NOT override the intent gate -- behavioral equality
+ * is NECESSARY, NOT SUFFICIENT; intent-preservation is also required.  This is why a sound
+ * self-refactorer cannot be "merge every provably-equal pair".
+ *
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_essence (unification).  Ring: R0.  K: 1.00.
+ * NIH: composes ripple_metric + congruence only. */
+module forcefield_ripple_unify
+
+extern @abi(c-msvc-x64) fn rm_unifiable(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cgr_union_certified(a: u32, b: u32, proof_ok: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_rep_cost(item: u32) -> u64 from "congruence.iii"
+
+/* THE certified-unification decider.  node_i/node_j are ripple_metric node ids (carrying the
+ * capability-hash + intent-class); class_i/class_j are their congruence class ids (from
+ * cgr_intern); proof_ok is a discharged kernel equality proof (1) or absent (0).
+ *
+ * Returns 1 IFF:
+ *   (a) the INTENT GATE passes -- rm_unifiable says they are a genuine candidate (capability-
+ *       equal, intent-equal: NOT an intentional variation point); AND
+ *   (b) congruence SOUNDLY unifies them -- already the same class (auto-congruence on an
+ *       identical content-address, proof-free), OR a discharged kernel proof closes the merge.
+ * Otherwise 0, and the classes are left UNTOUCHED (no fabricated unification). */
+fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_ok: u32) -> u32 @export {
+    /* INTENT GATE FIRST: an intentional variation point is never unified -- behavioral equality
+     * (even kernel-proven) does NOT override intent. */
+    if rm_unifiable(node_i, node_j) != 1u32 { return 0u32 }
+    /* already the same class (auto-congruence: identical content-address) -> sound, proof-free */
+    if cgr_find(class_i) == cgr_find(class_j) { return 1u32 }
+    /* distinct classes: merge ONLY with a discharged kernel proof (congruence's faithfulness gate) */
+    if cgr_union_certified(class_i, class_j, proof_ok) != 1u32 { return 0u32 }
+    if cgr_find(class_i) == cgr_find(class_j) { return 1u32 }
+    return 0u32
+}
+
+/* the cost-minimal surviving representative's cost after unification -- the realization all
+ * references resolve to (the cost_lattice's choice), surfaced for the refactoring plan. */
+fn ru_survivor_cost(class_i: u32) -> u64 @export {
+    return cgr_rep_cost(class_i)
+}

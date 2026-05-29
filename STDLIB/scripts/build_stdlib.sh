@@ -761,6 +761,10 @@ MODULES=(
     # MDL proxy; the decidable fragment). Standalone (no externs), compiler-unreferenced
     # -> LIBNATIVE. Appended last (BSS-neutral).
     "forcefield/ripple_metric"
+    # Inc 2: the first certified refactoring -- unification. Composes ripple_metric (the intent
+    # gate) + congruence (the faithfulness-gated merge) + a kernel proof. Decider only (no file
+    # edits). Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/ripple_unify"
 )
 
 PASS=0

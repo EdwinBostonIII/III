@@ -1,0 +1,37 @@
+/* 931_phi_ledger.iii -- Sovereign Enhancement G1: the unified integrity φ must DISCRIMINATE, or it
+ * rubber-stamps destructive moves. Two arms:
+ *   - phi_nv() == 99: EVERY φ-dimension provably rejects a bad input AND admits a good one
+ *     (commit conjunction's 5 reject paths + admit; seal: unwitnessed drift rejected, witnessed
+ *     admitted; axioms: reachable admit, unreachable/malformed reject);
+ *   - phi_check admits an all-good change on a reachable datum, and rejects ANY bad dimension
+ *     (rule / kernel) OR a bad datum (unreachable hexad) -- φ guards both the change and the data.
+ * 99 = all arms; a phi_nv code (10..34) or 5/6/10..13 localize the first failure. */
+module corpus_931
+
+extern @abi(c-msvc-x64) fn phi_check(rule: u32, module_c: u32, seal: u32, cons: u32, kernel: u32, h: u16) -> u32 from "integrity.iii"
+extern @abi(c-msvc-x64) fn phi_nv() -> u32 from "integrity.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+fn main() -> u64 {
+    let nv : u32 = phi_nv()
+    if nv != 99u32 { return nv as u64 }                 /* every φ-dimension non-vacuous */
+
+    let mut i  : u32 = 0u32
+    let mut hr : u32 = 729u32
+    let mut hu : u32 = 729u32
+    while i < 729u32 {
+        let rch : u8 = iii_hexad_reachable(i as u16)
+        if rch == 1u8 { if hr == 729u32 { hr = i } }
+        if rch == 0u8 { if hu == 729u32 { hu = i } }
+        i = i + 1u32
+    }
+    if hr == 729u32 { return 5u64 }
+    if hu == 729u32 { return 6u64 }
+
+    if phi_check(1u32,1u32,1u32,1u32,1u32, hr as u16) != 1u32 { return 10u64 }   /* all-good -> φ holds */
+    if phi_check(0u32,1u32,1u32,1u32,1u32, hr as u16) != 0u32 { return 11u64 }   /* rule violated -> not-φ */
+    if phi_check(1u32,1u32,1u32,1u32,0u32, hr as u16) != 0u32 { return 12u64 }   /* kernel down -> not-φ */
+    if phi_check(1u32,1u32,1u32,1u32,1u32, hu as u16) != 0u32 { return 13u64 }   /* datum axiom-invalid -> not-φ */
+
+    return 99u64
+}

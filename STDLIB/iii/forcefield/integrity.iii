@@ -1,0 +1,66 @@
+/* STDLIB/iii/forcefield/integrity.iii -- Sovereign Enhancement G1 (III-SOVEREIGN-ENHANCEMENT-
+ * COORDINATION): the UNIFIED integrity φ + its non-vacuity ledger.
+ *
+ * φ(change, datum) holds iff the 5-dimension commit gate ADMITs the change AND the datum satisfies
+ * the hardware axioms (aeu). This is the single non-destruction predicate the Enhancement Theorem's
+ * `φ` binds to.
+ *
+ * `phi_nv` is the FALSIFIER LEDGER: φ is non-vacuous iff every dimension provably REJECTS a real bad
+ * input AND ADMITs a real good one (discriminates both ways). A gate that cannot say no is a rubber
+ * stamp; this proves none of φ's dimensions is one.
+ *
+ * HONEST SCOPE: `φ_checked` is a SOUND UNDER-APPROXIMATION of `φ_true` (full semantic integrity =
+ * program equivalence = undecidable). `phi_nv` certifies the checked dimensions discriminate; the
+ * obligation that `φ_checked` DOMINATES `φ_true` on admissible moves is discharged per-organ (the
+ * VACUOUS-GATE map), not closed here. Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_sensitivity
+ * (admission). Composes commit_gate + aeu + hexad_reach. */
+module forcefield_integrity
+
+extern @abi(c-msvc-x64) fn cg_decide(rule: u32, module_c: u32, seal: u32, cons: u32, kernel: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_seal_ok(content: *u8, len: u64, golden: *u8, witnessed: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn aeu_check(h: u16) -> u32 from "aeu.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+
+const PHI_ADMIT : u32 = 99u32   /* mirrors commit_gate CG_ADMIT */
+
+var PHI_CONTENT : [u8; 16]      /* a stand-in artifact (BSS zeros) */
+var PHI_GOLDEN0 : [u8; 32]      /* all-zero golden -> SHA(content) never matches -> a drift */
+
+/* the unified non-destruction predicate φ: the change is admissible (5-dim gate) AND the datum is
+ * axiom-valid (aeu).  1 = integrity preserved. */
+fn phi_check(rule: u32, module_c: u32, seal: u32, cons: u32, kernel: u32, h: u16) -> u32 @export {
+    if cg_decide(rule, module_c, seal, cons, kernel) != PHI_ADMIT { return 0u32 }
+    if aeu_check(h) != 1u32 { return 0u32 }
+    return 1u32
+}
+
+/* the non-vacuity ledger: 99 iff EVERY dimension rejects a real bad input AND admits a real good one.
+ * 10..15 = a commit dimension is vacuous; 20..21 = the seal dimension; 30..34 = the axiom dimension. */
+fn phi_nv() -> u32 @export {
+    /* commit conjunction: each reject path must fire on its bad dimension; all-good must admit */
+    if cg_decide(0u32, 1u32, 1u32, 1u32, 1u32) != 1u32 { return 10u32 }
+    if cg_decide(1u32, 0u32, 1u32, 1u32, 1u32) != 2u32 { return 11u32 }
+    if cg_decide(1u32, 1u32, 0u32, 1u32, 1u32) != 3u32 { return 12u32 }
+    if cg_decide(1u32, 1u32, 1u32, 0u32, 1u32) != 4u32 { return 13u32 }
+    if cg_decide(1u32, 1u32, 1u32, 1u32, 0u32) != 5u32 { return 14u32 }
+    if cg_decide(1u32, 1u32, 1u32, 1u32, 1u32) != PHI_ADMIT { return 15u32 }
+    /* determinism: an UNWITNESSED content drift must be REJECTED; a witnessed one admitted */
+    if cg_seal_ok((&PHI_CONTENT as u64) as *u8, 16u64, (&PHI_GOLDEN0 as u64) as *u8, 0u32) != 0u32 { return 20u32 }
+    if cg_seal_ok((&PHI_CONTENT as u64) as *u8, 16u64, (&PHI_GOLDEN0 as u64) as *u8, 1u32) != 1u32 { return 21u32 }
+    /* axioms: a reachable hexad admits; an unreachable / malformed one is REJECTED */
+    let mut i : u32 = 0u32
+    let mut hr : u32 = 729u32
+    let mut hu : u32 = 729u32
+    while i < 729u32 {
+        let rch : u8 = iii_hexad_reachable(i as u16)
+        if rch == 1u8 { if hr == 729u32 { hr = i } }
+        if rch == 0u8 { if hu == 729u32 { hu = i } }
+        i = i + 1u32
+    }
+    if hr == 729u32 { return 30u32 }
+    if hu == 729u32 { return 31u32 }
+    if aeu_check(hr as u16) != 1u32 { return 32u32 }
+    if aeu_check(hu as u16) != 0u32 { return 33u32 }
+    if aeu_check(729u16)    != 0u32 { return 34u32 }
+    return 99u32
+}

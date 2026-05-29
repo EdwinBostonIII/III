@@ -598,6 +598,7 @@ declare -A EXPECTED=(
     [928_hdl_opt]=99
     [929_aeu_scale]=99
     [930_ripple_value]=99
+    [931_phi_ledger]=99
 )
 
 PASS=0

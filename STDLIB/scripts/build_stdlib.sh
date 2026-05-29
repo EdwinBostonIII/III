@@ -788,6 +788,9 @@ MODULES=(
     # combinational verifier (certified === the conjunction via hdl). Composes hdl + hexad_reach.
     # Compiler-unreferenced -> LIBNATIVE.
     "numera/aeu"
+    # Sovereign Enhancement G1: unified integrity phi + non-vacuity falsifier ledger.
+    # Composes commit_gate + aeu + hexad_reach. Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/integrity"
 )
 
 PASS=0

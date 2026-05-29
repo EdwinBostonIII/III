@@ -1257,3 +1257,25 @@ LOWERS it; `𝒱` is relabel-invariant (same structure, different labels → sam
 corpus **562/0**; `930_ripple_value`=99. Spec: `DOCS/III-SOVEREIGN-ENHANCEMENT-COORDINATION.md`.
 
 **§8.19 sealed at:** 2026-05-29.
+
+### §8.20 — Sovereign Enhancement G1: unified φ + non-vacuity falsifier ledger (2026-05-29)
+
+`forcefield/integrity.iii` (`phi_check`, `phi_nv`): the single non-destruction predicate
+`φ = ` commit-admissible (`cg_decide` 5-dim) `∧` datum-axiom-valid (`aeu`). `phi_nv` is the FALSIFIER
+LEDGER — every dimension provably REJECTS a bad input AND ADMITs a good one (a gate that cannot say no
+is a rubber stamp). HONEST: `φ_checked` is a sound under-approximation of `φ_true` (undecidable);
+domination is a per-organ obligation, not a completeness claim. Compiler-UNREFERENCED -> LIBNATIVE.
+
+Corpus 931: `phi_nv()==99` (commit 5 reject paths + admit; seal: unwitnessed drift rejected, witnessed
+admitted; aeu: unreachable/malformed rejected); `phi_check` admits all-good + reachable, rejects any
+bad commit dimension OR a bad datum.
+
+| Artifact (golden) | Before (§8.19) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `43387216…c9aca874` | `dd7963baed75d78f7a742ab36acf7dadcec6f7e3098453f2669c78e82e2597c5` |
+
+**Verified:** build_stdlib **429/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **563/0**; `931_phi_ledger`=99.
+
+**§8.20 sealed at:** 2026-05-29.

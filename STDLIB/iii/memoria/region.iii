@@ -35,8 +35,8 @@ const REG_E_SEALED : i32 = -5i32
 
 /* --- MSVCRT externs (only here) --- */
 
-extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
-extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn VirtualAlloc(addr: u64, size: u64, alloc_type: u32, protect: u32) -> *u8 from "kernel32"
+extern @abi(c-msvc-x64) fn VirtualFree(addr: *u8, size: u64, free_type: u32) -> i32 from "kernel32"
 
 /* --- Region table: parallel arrays, one row per region. --- */
 
@@ -61,7 +61,7 @@ fn region_create(bytes: u64) -> u64 @export {
         i = i + 1u32
     }
     if slot == 0xFFFFFFFFu32 { return REG_INVALID }
-    let p : *u8 = malloc(bytes)
+    let p : *u8 = VirtualAlloc(0u64, bytes, 0x3000u32, 0x04u32)   /* MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE */
     if p as u64 == 0u64 { return REG_INVALID }
     REG_BASE[slot]     = p as u64
     REG_CAPACITY[slot] = bytes
@@ -163,7 +163,7 @@ fn region_release(id: u64) -> i32 @export {
     let p_u64 : u64 = REG_BASE[s]
     if p_u64 != 0u64 {
         let p : *u8 = p_u64 as *u8
-        free(p)
+        VirtualFree(p, 0u64, 0x8000u32)   /* MEM_RELEASE (size must be 0) */
     }
     REG_BASE[s]     = 0u64
     REG_CAPACITY[s] = 0u64

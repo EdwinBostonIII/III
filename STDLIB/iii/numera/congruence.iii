@@ -1,0 +1,153 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\congruence.iii
+ *
+ * III STDLIB - numera::congruence  --  CROSS-MODULE CONGRUENCE CLOSURE over content-addresses.
+ *
+ * The GLOBAL form of the optimizer's self-application: where cg_r3 folds one expression locally,
+ * this folds the WHOLE codebase.  Every function is identified by its 32-byte content-address
+ * (cad/sha256 of its normalised form -- the caller supplies it; this engine is address-agnostic).
+ * Functions are interned into a union-find; the set of distinct classes is the "RING" -- the
+ * unique, dedup'd implementation kernels every module references.  Two merge paths, both SOUND:
+ *
+ *   1. AUTOMATIC congruence -- identical content-address => same class.  Sound because an
+ *      address collision means byte-identical normalised source, i.e. genuinely the same function
+ *      (collision-resistance is sha256's contract, corpus 02/15).  This is Module-1 cad's
+ *      14x-sha256 cull, generalised to any function in the tree.
+ *
+ *   2. CERTIFIED merge -- two DISTINCT-address classes merge ONLY when handed a kernel-proof of
+ *      equality (proof_ok==1, the dischargeable output of typecheck.iii / sov_admit_rule).  With
+ *      NO proof the merge is REFUSED -- the FAITHFULNESS gate: the closure NEVER fabricates an
+ *      equality (mirrors sov_isa's "NO rules => NO collapse" falsifier).  This is the guard the
+ *      "monolith collapse" proposal omits; it is exactly why the sound version keeps soundness.
+ *
+ * The cost_lattice picks each class's cost-minimal representative (the realization all references
+ * resolve to).  Deterministic, integer-exact, no malloc, no floats, no statistics.
+ *
+ * Hexad: kind_essence.  Ring: R0.
+ */
+
+module numera_congruence
+
+const CGR_MAX  : u32 = 1024u32
+const CGR_FULL : u32 = 0xFFFFFFFFu32
+
+var CGR_ADDR   : [u8;  32768]   /* CGR_MAX * 32 : interned 32-byte content-addresses */
+var CGR_PARENT : [u32; 1024]    /* union-find parent (root <=> parent == self) */
+var CGR_RANK   : [u32; 1024]    /* union-find rank (union by rank) */
+var CGR_COST   : [u64; 1024]    /* class-minimal cost, maintained at the root */
+var CGR_N      : [u32; 1]       /* number of interned items */
+var CGR_KA     : [u8; 32]       /* KAT scratch: content-address A */
+var CGR_KB     : [u8; 32]       /* KAT scratch: content-address B */
+
+fn cgr_init() -> i32 @export { CGR_N[0u64] = 0u32 ; return 0i32 }
+
+/* copy the 32-byte address at p into item i's slot */
+fn cgr_store_addr(i: u32, p: *u8) -> i32 {
+    let base : u64 = (i as u64) * 32u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { CGR_ADDR[base + k] = p[k] ; k = k + 1u64 }
+    return 0i32
+}
+
+/* 1 iff item i's stored address equals the 32 bytes at p */
+fn cgr_addr_eq(i: u32, p: *u8) -> u32 {
+    let base : u64 = (i as u64) * 32u64
+    let mut k : u64 = 0u64
+    while k < 32u64 { if CGR_ADDR[base + k] != p[k] { return 0u32 } ; k = k + 1u64 }
+    return 1u32
+}
+
+/* union-find root with path compression */
+fn cgr_find(i: u32) -> u32 @export {
+    let mut r : u32 = i
+    while CGR_PARENT[r as u64] != r { r = CGR_PARENT[r as u64] }
+    let mut c : u32 = i
+    while c != r { let nx : u32 = CGR_PARENT[c as u64] ; CGR_PARENT[c as u64] = r ; c = nx }
+    return r
+}
+
+/* intern a function by its 32-byte content-address.  An identical address returns the existing
+ * class (AUTOMATIC congruence -- sound dedup); a fresh address creates a new singleton class. */
+fn cgr_intern(p: *u8, cost: u64) -> u32 @export {
+    let n : u32 = CGR_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n { if cgr_addr_eq(i, p) == 1u32 { return cgr_find(i) } ; i = i + 1u32 }
+    if n >= CGR_MAX { return CGR_FULL }
+    cgr_store_addr(n, p)
+    CGR_PARENT[n as u64] = n
+    CGR_RANK[n as u64] = 0u32
+    CGR_COST[n as u64] = cost
+    CGR_N[0u64] = n + 1u32
+    return n
+}
+
+/* CERTIFIED merge: join the classes of a and b ONLY when proof_ok==1 (a discharged kernel proof
+ * of semantic equality).  proof_ok==0 => REFUSED (returns 0, classes untouched) -- the
+ * faithfulness gate.  Returns 1 when merged (or already joined).  Union by rank; the surviving
+ * root carries the cost-minimal realization. */
+fn cgr_union_certified(a: u32, b: u32, proof_ok: u32) -> u32 @export {
+    if proof_ok != 1u32 { return 0u32 }
+    let ra : u32 = cgr_find(a)
+    let rb : u32 = cgr_find(b)
+    if ra == rb { return 1u32 }
+    let mut cm : u64 = CGR_COST[ra as u64]
+    if CGR_COST[rb as u64] < cm { cm = CGR_COST[rb as u64] }
+    let rka : u32 = CGR_RANK[ra as u64]
+    let rkb : u32 = CGR_RANK[rb as u64]
+    if rka < rkb {
+        CGR_PARENT[ra as u64] = rb ; CGR_COST[rb as u64] = cm
+    } else {
+        if rkb < rka {
+            CGR_PARENT[rb as u64] = ra ; CGR_COST[ra as u64] = cm
+        } else {
+            CGR_PARENT[rb as u64] = ra ; CGR_RANK[ra as u64] = rka + 1u32 ; CGR_COST[ra as u64] = cm
+        }
+    }
+    return 1u32
+}
+
+/* the cost-minimal representative cost of item's class */
+fn cgr_rep_cost(item: u32) -> u64 @export { return CGR_COST[cgr_find(item) as u64] }
+
+/* the RING size: number of distinct classes (= unique dedup'd implementation kernels) */
+fn cgr_num_classes() -> u32 @export {
+    let n : u32 = CGR_N[0u64]
+    let mut count : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n { if cgr_find(i) == i { count = count + 1u32 } ; i = i + 1u32 }
+    return count
+}
+
+fn cgr_fill32(p: *u8, b: u8) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 32u64 { p[k] = b ; k = k + 1u64 }
+    return 0i32
+}
+
+/* KAT (99 = pass).  Proves the closure end-to-end AND its faithfulness falsifier:
+ *   - identical content-address  -> AUTOMATIC dedup (same class);
+ *   - distinct address           -> distinct class;
+ *   - union WITHOUT a proof       -> REFUSED (no fabricated equality);
+ *   - union WITH a kernel proof   -> merged to a single ring;
+ *   - the merged class carries the cost-minimal representative. */
+fn cgr_kat() -> u64 @export {
+    cgr_init()
+    let pa : *u8 = (&CGR_KA) as u64 as *u8
+    let pb : *u8 = (&CGR_KB) as u64 as *u8
+    cgr_fill32(pa, 0xAAu8)
+    cgr_fill32(pb, 0xBBu8)
+    let i1 : u32 = cgr_intern(pa, 10u64)
+    let i2 : u32 = cgr_intern(pa, 7u64)
+    if i2 != i1 { return 1u64 }                         /* same address -> auto-congruent */
+    let i3 : u32 = cgr_intern(pb, 5u64)
+    if cgr_find(i3) == cgr_find(i1) { return 2u64 }     /* distinct address -> distinct class */
+    if cgr_num_classes() != 2u32 { return 3u64 }
+    if cgr_union_certified(i1, i3, 0u32) != 0u32 { return 4u64 }   /* no proof -> refused */
+    if cgr_find(i3) == cgr_find(i1) { return 5u64 }     /* still separate */
+    if cgr_num_classes() != 2u32 { return 6u64 }
+    if cgr_union_certified(i1, i3, 1u32) != 1u32 { return 7u64 }   /* certified -> merged */
+    if cgr_find(i3) != cgr_find(i1) { return 8u64 }
+    if cgr_num_classes() != 1u32 { return 9u64 }        /* collapsed to one ring */
+    if cgr_rep_cost(i1) != 5u64 { return 10u64 }        /* cost-min (5 < 10) at the root */
+    if cgr_rep_cost(i3) != 5u64 { return 11u64 }
+    return 99u64
+}

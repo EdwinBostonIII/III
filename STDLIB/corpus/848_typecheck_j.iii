@@ -1,0 +1,14 @@
+/* P5 brick 8: J -- path induction (the DEPENDENT Id eliminator). Motive
+ * C:Pi(y:A).Id(A,a,y)->U, base d:C a (refl a), proof p:Id(A,a,b) => C b p, with
+ * beta J(C,d,refl)->d. p5_kat_j() tests closed beta + typing, the UNDER-BINDER
+ * diagonal exerciser (the only test that catches a base checked against C b p
+ * instead of the diagonal C a (refl a) -- a closed/constant-motive test cannot,
+ * since the diagonal degenerates; design 12.4), and negatives (base wrong type,
+ * proof not an Id). 99 = all pass; 1..6 = first failing case. */
+module corpus_c848
+
+extern @abi(c-msvc-x64) fn p5_kat_j() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_j()
+}

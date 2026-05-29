@@ -4,9 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrt\0"
+    .ascii "kernel32kernel32\0"
 L_str_1:
-    .ascii "msvcrt\0"
+    .ascii "kernel32\0"
     .section .rodata
 L_REG_INVALID:
     .quad 0x0
@@ -159,11 +159,20 @@ L_loop_end_1:
     pushq %rax
     popq %rax
 L_if_end_7:
+    movabsq $0x4, %rax
+    pushq %rax
+    movabsq $0x3000, %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
     popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
     subq $32, %rsp
-    callq malloc
+    callq VirtualAlloc
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -879,8 +888,8 @@ L_if_end_33:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -1222,12 +1231,19 @@ L_if_end_43:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
+    movabsq $0x8000, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
+    popq %rdx
+    popq %r8
     subq $32, %rsp
-    callq free
+    callq VirtualFree
     addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq $0, %rax

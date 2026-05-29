@@ -1973,8 +1973,8 @@ L_if_end_11:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movabsq $0x0, %rax

@@ -38,15 +38,17 @@
  * the structural build-gate) they are the complete H10 falsifier.
  *
  * Hexad: kind_essence.  Ring: R-1 (a constitutional ceremony).  K: 1.00.
- * NIH: crypt_ed25519.iii only (+ msvcrt malloc/free for the certificate buffers).  No ML, no
+ * NIH: crypt_ed25519.iii only (certificate buffers are module-global arrays; no C runtime).  No ML, no
  * float, no u64 division.
  * Discipline: W2/W8/W14/W15; single-line fns; ==/!= compares; byte-stores; masked idx.
  */
 module numera_h10_charter
 
-extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
-extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+/* P4.3: certificate buffers are module-global arrays (below) -- no malloc, no C runtime. */
 extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+/* H10_KIND_EGRAPH_INTEGRITY clause: the optimizer e-graph self-seals, detects
+ * corruption, and Reed-Solomon self-heals it (see numera/egraph.iii). */
+extern @abi(c-msvc-x64) fn eg_integrity_holds() -> u8 from "egraph.iii"
 
 const H10_OK             : i32 =  0i32
 const H10_OFF_R          : u64 = 0u64     /* sig[0]: first byte of the R point (encoded) */
@@ -55,6 +57,7 @@ const H10_FLIP           : u8  = 0x01u8   /* flip the low bit; for S, 0x5F->0x5E
 const H10_MAX_CLAUSES    : u32 = 64u32
 const H10_KIND_RECHECK   : u8  = 0u8    /* the H10 clause: certificate re-checks AND tamper-rejects */
 const H10_KIND_CANARY    : u8  = 1u8    /* a deliberately-false clause (negative arm only) */
+const H10_KIND_EGRAPH_INTEGRITY : u8 = 2u8  /* e-graph seal/detect/RS-self-heal clause */
 const H10_VERDICT_GREEN  : u64 = 99u64  /* > H10_MAX_CLAUSES, so never a RED index */
 const H10_U32MASK        : u64 = 0xFFFFFFFFu64
 
@@ -66,6 +69,11 @@ var H10_CLAUSE_COUNT : u32 = 0u32
 var H10_PUBKEY : u64 = 0u64   /* 32-byte Ed25519 public key */
 var H10_SIG    : u64 = 0u64   /* 64-byte signature (R || S) -- the certificate */
 var H10_MSG    : u64 = 0u64   /* the (empty) signed message */
+
+/* Backing storage for the certificate buffers (module-lifetime; C-separated). */
+var H10_PUBKEY_BUF : [u8; 32]
+var H10_SIG_BUF    : [u8; 64]
+var H10_MSG_BUF    : [u8; 1]
 
 /* Fill the 32-byte RFC 8032 7.1 Test 1 public key (same vector as corpus 194). */
 fn h10_fill_pubkey(p: *u8) -> i32 {
@@ -177,21 +185,9 @@ fn h10_fill_sig(s: *u8) -> i32 {
  * are the producer's result; the consumer re-checks them, never trusts them.  -1 on OOM. */
 fn h10_init() -> i32 @export {
     H10_CLAUSE_COUNT = 0u32
-    if H10_PUBKEY == 0u64 {
-        let pk : *u8 = malloc(32u64)
-        if (pk as u64) == 0u64 { return -1i32 }
-        H10_PUBKEY = pk as u64
-    }
-    if H10_SIG == 0u64 {
-        let sg : *u8 = malloc(64u64)
-        if (sg as u64) == 0u64 { return -1i32 }
-        H10_SIG = sg as u64
-    }
-    if H10_MSG == 0u64 {
-        let mg : *u8 = malloc(1u64)
-        if (mg as u64) == 0u64 { return -1i32 }
-        H10_MSG = mg as u64
-    }
+    if H10_PUBKEY == 0u64 { H10_PUBKEY = (&H10_PUBKEY_BUF) as u64 }
+    if H10_SIG == 0u64 { H10_SIG = (&H10_SIG_BUF) as u64 }
+    if H10_MSG == 0u64 { H10_MSG = (&H10_MSG_BUF) as u64 }
     h10_fill_pubkey(H10_PUBKEY as *u8)
     h10_fill_sig(H10_SIG as *u8)
     return H10_OK
@@ -247,6 +243,7 @@ fn h10_clause_eval(idx: u32) -> u8 {
         return 1u8
     }
     if k == H10_KIND_CANARY { return h10_canary_holds() }
+    if k == H10_KIND_EGRAPH_INTEGRITY { return eg_integrity_holds() }
     return 0u8
 }
 
@@ -275,20 +272,24 @@ fn h10_run_charter() -> u64 @export {
 /* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
  * Proves: the consumer re-checks the honest certificate and accepts it (1); the re-check rejects
  * both an R-tamper and an S-tamper (2); the canary is genuinely false -- a tampered certificate
- * does NOT verify (3); run_charter GREEN with the H10 clause registered (4,5); GREEN is
- * reproducible across a re-run (6); and -- the prove-the-negative arm -- registering the false
- * canary drives run_charter RED, returning the canary's 1-based index (=2), proving the gate is a
- * real falsifier, not vacuously green (7,8). */
+ * does NOT verify (3); the e-graph integrity clause holds standalone -- honest seal verifies, a
+ * single fault is detected AND RS-self-healed, two faults are detected-but-uncorrectable (10,11);
+ * run_charter GREEN with the RECHECK + EGRAPH_INTEGRITY clauses registered (5,6); GREEN is
+ * reproducible across a re-run (7); and -- the prove-the-negative arm -- registering the false
+ * canary (slot 2) drives run_charter RED, returning its 1-based index (=3), proving the gate is a
+ * real falsifier, not vacuously green (8,9). */
 fn h10_selftest() -> u64 @export {
     if h10_init() != H10_OK { return 1u64 }
     if h10_verify() != 1u8 { return 2u64 }
     if h10_falsify() != 1u8 { return 3u64 }
     if h10_canary_holds() != 0u8 { return 4u64 }
+    if eg_integrity_holds() != 1u8 { return 10u64 }
     if h10_register(H10_KIND_RECHECK) != 0i32 { return 5u64 }
+    if h10_register(H10_KIND_EGRAPH_INTEGRITY) != 1i32 { return 11u64 }
     if h10_run_charter() != H10_VERDICT_GREEN { return 6u64 }
     if h10_run_charter() != H10_VERDICT_GREEN { return 7u64 }
-    if h10_register(H10_KIND_CANARY) != 1i32 { return 8u64 }
-    if h10_run_charter() != 2u64 { return 9u64 }
+    if h10_register(H10_KIND_CANARY) != 2i32 { return 8u64 }
+    if h10_run_charter() != 3u64 { return 9u64 }
     return 99u64
 }
 

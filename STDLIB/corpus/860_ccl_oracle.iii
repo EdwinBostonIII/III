@@ -1,0 +1,13 @@
+/* Path C: the INTEGRATION AUDIT. p5_kat_oracle() runs the ENTIRE 841-852 kernel
+ * KAT workload (types, Sigma, Id, all eliminators, cumulativity, eta, open terms
+ * under binders) through the SINGULAR CCL oracle in ONE linked process -- catching
+ * cross-module link / oracle regressions the per-feature corpus binaries can miss.
+ * NbE is deleted; conversion correctness is pinned by 859 (positive+negative arms)
+ * and confluence by 863.  99 = all 12 kernel KATs pass; 1..12 = named KAT regressed. */
+module corpus_c860
+
+extern @abi(c-msvc-x64) fn p5_kat_oracle() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_oracle()
+}

@@ -1,0 +1,163 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\optinvoke_egraph_kat.iii
+ *
+ * P3 end-to-end composition KAT. Drives the REAL term-level engine (egraph:
+ * equality saturation + min-cost extraction) AND the realization-level selector
+ * (forcefield/optinvoke) in one pipeline:
+ *
+ *   requirement  -- egraph -->  optimal TERM        -- optinvoke -->  optimal REALIZATION
+ *   mul(x,2)        saturate     shl  (cheaper)        select          barrel-shift kernel
+ *                   + extract                          (cheaper, valid)
+ *
+ * Level 1 (egraph): rule mul(?0,two)->shl(?0,one); with costs mul=10, shl=1 the
+ *   min-cost extraction picks shl. Asserts the extracted term-root == shl-slot.
+ * Level 2 (optinvoke): two valid realizations of shl, SAME output (IMPL), costs
+ *   5 and 2 -> the selector picks the cost-2 kernel; kind == IMPL.
+ *
+ * Links egraph.iii + optinvoke.iii from libiii_native.a. Exit 99 = pass.
+ */
+
+module corpus_optinvoke_egraph
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_intern_symbol(sym_id: *u8) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
+
+extern @abi(c-msvc-x64) fn oi_select(cands: *u8, n: u64, out_choice: *u8) -> u64 from "optinvoke.iii"
+extern @abi(c-msvc-x64) fn oi_selection_kind(cands: *u8, n: u64) -> u64 from "optinvoke.iii"
+
+fn kset_sym(b: *u8, tag: u8) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { b[i] = 0u8 ; i = i + 1u64 }
+    b[0u64] = tag
+    return 0u64
+}
+
+fn kfill(buf: *u8, off: u64, n: u64, seed: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        buf[off + k] = ((seed + k) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn kst_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn kcand(c: *u8, i: u64, idseed: u64, outseed: u64, cost: u64, valid: u8) -> u64 {
+    let base : u64 = i * 80u64
+    kfill(c, base, 32u64, idseed)
+    kfill(c, base + 32u64, 32u64, outseed)
+    kst_u64(c, base + 64u64, cost)
+    c[base + 72u64] = valid
+    return 0u64
+}
+
+fn enc_sym(slot: u32, arity: u32) -> u32 {
+    return (slot << 1u32) | (arity << 16u32)
+}
+
+fn enc_var(idx: u32) -> u32 {
+    return (idx << 1u32) | 1u32
+}
+
+fn main() -> u64 {
+    let symbuf : *u8 = malloc(32u64)
+    let chraw : *u8 = malloc(64u64)
+    let ch : *u32 = (chraw as u64) as *u32
+    let ruleraw : *u8 = malloc(128u64)
+    let rule : *u32 = (ruleraw as u64) as *u32
+    let reqraw : *u8 = malloc(512u64)
+    let req : *u32 = (reqraw as u64) as *u32
+    let outraw : *u8 = malloc(128u64)
+    let outt : *u32 = (outraw as u64) as *u32
+    let onraw : *u8 = malloc(32u64)
+    let outn : *u32 = (onraw as u64) as *u32
+    let cands : *u8 = malloc(2u64 * 80u64)
+    let choice : *u8 = malloc(32u64)
+
+    eg_init()
+
+    /* build mul(x,two) and a shl(x,one) seed; symbols interned in add-order */
+    kset_sym(symbuf, 12u8)
+    let cx : u32 = eg_add(symbuf, ch, 0u32)
+    kset_sym(symbuf, 13u8)
+    let ctwo : u32 = eg_add(symbuf, ch, 0u32)
+    kset_sym(symbuf, 14u8)
+    let cone : u32 = eg_add(symbuf, ch, 0u32)
+    kset_sym(symbuf, 10u8)
+    ch[0u64] = cx
+    ch[1u64] = ctwo
+    let cmul : u32 = eg_add(symbuf, ch, 2u32)
+    kset_sym(symbuf, 11u8)
+    ch[0u64] = cx
+    ch[1u64] = cone
+    let cshl : u32 = eg_add(symbuf, ch, 2u32)
+
+    /* fetch concrete symbol slots (intern is idempotent) */
+    kset_sym(symbuf, 10u8)
+    let s_mul : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 11u8)
+    let s_shl : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 13u8)
+    let s_two : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 14u8)
+    let s_one : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 12u8)
+    let s_x : u32 = eg_intern_symbol(symbuf)
+
+    /* rule: mul(?0, two) -> shl(?0, one), preorder, 3 entries each side */
+    rule[0u64] = 3u32
+    rule[1u64] = 3u32
+    rule[2u64] = enc_sym(s_mul, 2u32)
+    rule[3u64] = enc_var(0u32)
+    rule[4u64] = enc_sym(s_two, 0u32)
+    rule[5u64] = enc_sym(s_shl, 2u32)
+    rule[6u64] = enc_var(0u32)
+    rule[7u64] = enc_sym(s_one, 0u32)
+    if eg_register_rule(rule) == 0xFFFFFFFFu32 { return 10u64 }
+    eg_saturate(8u32)
+
+    /* extraction request: zero, root=class of mul, sym_count, costs at slot+2 */
+    let mut z : u64 = 0u64
+    while z < 64u64 { req[z] = 0u32 ; z = z + 1u64 }
+    let mut mx : u32 = s_mul
+    if s_shl > mx { mx = s_shl }
+    if s_two > mx { mx = s_two }
+    if s_one > mx { mx = s_one }
+    if s_x > mx { mx = s_x }
+    req[0u64] = eg_find(cmul)
+    req[1u64] = mx + 1u32
+    req[(s_mul as u64) + 2u64] = 10u32
+    req[(s_shl as u64) + 2u64] = 1u32
+    req[(s_x as u64) + 2u64] = 1u32
+    req[(s_two as u64) + 2u64] = 1u32
+    req[(s_one as u64) + 2u64] = 1u32
+
+    outt[0u64] = 0xFFFFFFFFu32
+    let xrc : i32 = eg_extract(req, outt, outn)
+    if xrc != 0i32 { return 11u64 }
+    if outt[0u64] != s_shl { return 12u64 }   /* egraph chose the cheaper TERM */
+
+    /* Level 2: realize shl -- two kernels, same output (IMPL), costs 5 and 2 */
+    kcand(cands, 0u64, 1u64, 77u64, 5u64, 1u8)
+    kcand(cands, 1u64, 2u64, 77u64, 2u64, 1u8)
+    if oi_select(cands, 2u64, choice) != 1u64 { return 13u64 }
+    if oi_selection_kind(cands, 2u64) != 0u64 { return 14u64 }
+
+    return 99u64
+}

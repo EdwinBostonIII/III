@@ -1,0 +1,16 @@
+/* INDUCTIVE REASONING (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §14): III discovers and
+ * PROVES universal laws from instances -- sound, deterministic, AMPLIATIVE induction
+ * with no ML, no observation, no statistics, no floats.  iu_kat() proves: (a)
+ * anti-unification (the deterministic generalizer) is sound -- the generalization
+ * instantiates back to the instances; (b) from instances {add(0,0)=0, add(1,0)=1} III
+ * generalizes to the UNIVERSAL  forall x. add(x,0) = x  and the KERNEL PROVES it
+ * (induction proposes, deduction disposes -- the law is LEARNED + kernel-sound); (c)
+ * FALSIFIER -- a bad instance yields a FALSE conjecture (forall x. add(x,0)=0) that the
+ * kernel REFUTES.  By Curry-Howard the learned law's meaning IS its proof.  99 = all pass. */
+module corpus_c880
+
+extern @abi(c-msvc-x64) fn iu_kat() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return iu_kat()
+}

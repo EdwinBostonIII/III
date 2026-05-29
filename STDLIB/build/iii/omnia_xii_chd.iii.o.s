@@ -654,8 +654,8 @@ L__bucket_for_hash:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -1177,8 +1177,8 @@ L__secondary_idx:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -2034,8 +2034,8 @@ L_if_end_43:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax

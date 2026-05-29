@@ -1,0 +1,146 @@
+/* Ripple-Forcefield plan P6: the sound-evolution COMMIT GATE KAT.  Proves the
+ * single admission gate ADMITS a conservative change AND REJECTS -- with a LOCATED
+ * cause -- a non-conservative change of EACH kind, driving the REAL organs:
+ *   - MODULE coherence via pleroma (coherent square -> admit; parallel disagreeing
+ *     bridges -> reject), through cg_module_ok;
+ *   - RULE soundness via the live XII rule set (cg_rule_ok = xad_admit);
+ *   - DETERMINISM via real cad content-addressing (re-hash matches golden -> sealed;
+ *     drifted artifact -> reject; witnessed drift -> admit);
+ *   - the composed cg_decide verdict: positive ADMIT + the four located rejects;
+ *   - cg_decide's full teeth matrix.
+ * A gate that only ever admits is a stub; every negative arm here forces a reject.
+ * 99 = all arms pass; 10..34 localize the first failing arm. */
+module corpus_c864
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_rule_ok() -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_module_ok(obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8, edge_perm: *u8, deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_seal_ok(content: *u8, len: u64, golden: *u8, witnessed: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+fn kst_u32(p: *u8, elem: u64, v: u32) -> u64 {
+    let o : u64 = elem * 4u64
+    p[o]        = (v & 0xFFu32) as u8
+    p[o + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[o + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[o + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u64
+}
+fn kperm4(buf: *u8, eidx: u64, a: u8, b: u8, c: u8, d: u8) -> u64 {
+    let o : u64 = eidx * 4u64
+    buf[o]        = a
+    buf[o + 1u64] = b
+    buf[o + 2u64] = c
+    buf[o + 3u64] = d
+    return 0u64
+}
+fn kedge(src: *u8, dst: *u8, eidx: u64, s: u32, d: u32) -> u64 {
+    kst_u32(src, eidx, s)
+    kst_u32(dst, eidx, d)
+    return 0u64
+}
+fn kfill_objid(buf: *u8, n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let tot : u64 = n * 32u64
+    while i < tot {
+        buf[i] = (i & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+/* the canonical coherent 4-object square: e3 = g0.g1.g2 closes the loop. */
+fn build_square(src: *u8, dst: *u8, perm: *u8) -> u64 {
+    kedge(src, dst, 0u64, 0u32, 1u32)
+    kedge(src, dst, 1u64, 1u32, 2u32)
+    kedge(src, dst, 2u64, 2u32, 3u32)
+    kedge(src, dst, 3u64, 0u32, 3u32)
+    kperm4(perm, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 */
+    kperm4(perm, 1u64, 0u8, 2u8, 1u8, 3u8)   /* g1 */
+    kperm4(perm, 2u64, 0u8, 1u8, 3u8, 2u8)   /* g2 */
+    kperm4(perm, 3u64, 1u8, 2u8, 3u8, 0u8)   /* g3 = g0.g1.g2 */
+    return 0u64
+}
+
+fn main() -> u64 {
+    let deg : u64 = 4u64
+    let root  : *u8 = malloc(32u64)
+    let obstr : *u8 = malloc(4u64)
+
+    /* ---- MODULE dimension: coherent square -> coherent (1) ---- */
+    let s4   : *u8 = malloc(16u64)
+    let d4   : *u8 = malloc(16u64)
+    let p4   : *u8 = malloc(16u64)
+    let oid4 : *u8 = malloc(128u64)
+    kfill_objid(oid4, 4u64)
+    build_square(s4, d4, p4)
+    let mod_ok : u32 = cg_module_ok(4u64, 4u64, s4, d4, p4, deg, oid4, root, obstr)
+    if mod_ok != 1u32 { return 10u64 }
+
+    /* ---- MODULE dimension: parallel disagreeing bridges -> incoherent (0) ---- */
+    let s2   : *u8 = malloc(8u64)
+    let d2   : *u8 = malloc(8u64)
+    let p2   : *u8 = malloc(8u64)
+    let oid2 : *u8 = malloc(64u64)
+    kfill_objid(oid2, 2u64)
+    kedge(s2, d2, 0u64, 0u32, 1u32)
+    kedge(s2, d2, 1u64, 0u32, 1u32)
+    kperm4(p2, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 */
+    kperm4(p2, 1u64, 0u8, 2u8, 1u8, 3u8)   /* g1 != g0 -> H^1 != 0 */
+    let mod_bad : u32 = cg_module_ok(2u64, 2u64, s2, d2, p2, deg, oid2, root, obstr)
+    if mod_bad != 0u32 { return 11u64 }
+
+    /* ---- RULE dimension: the live XII rule set is admitted (1) ---- */
+    let rule_ok : u32 = cg_rule_ok()
+    if rule_ok != 1u32 { return 12u64 }
+
+    /* ---- DETERMINISM dimension: real cad content-address seal ---- */
+    let artA   : *u8 = malloc(32u64)
+    let artB   : *u8 = malloc(32u64)
+    let golden : *u8 = malloc(32u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        artA[i] = (i & 0xFFu64) as u8
+        artB[i] = ((i & 0xFFu64) ^ 0xFFu64) as u8   /* different content */
+        i = i + 1u64
+    }
+    cad_oneshot(0u32, artA, 32u64, golden)               /* golden = SHA-256(artA) */
+    let seal_match : u32 = cg_seal_ok(artA, 32u64, golden, 0u32)   /* re-hash A == golden */
+    if seal_match != 1u32 { return 13u64 }
+    let seal_drift : u32 = cg_seal_ok(artB, 32u64, golden, 0u32)   /* hash B != golden, unwitnessed */
+    if seal_drift != 0u32 { return 14u64 }
+    let seal_witnessed : u32 = cg_seal_ok(artB, 32u64, golden, 1u32) /* drift but witnessed */
+    if seal_witnessed != 1u32 { return 15u64 }
+
+    /* ==== the composed verdict: ADMIT a conservative change ==== */
+    if cg_decide(rule_ok, mod_ok, seal_match, 1u32) != 99u32 { return 20u64 }
+    /* ==== REJECT, located, each non-conservative change ==== */
+    if cg_decide(rule_ok, mod_bad,  seal_match, 1u32) != 2u32 { return 21u64 }   /* incoherent module */
+    if cg_decide(rule_ok, mod_ok,   seal_drift, 1u32) != 3u32 { return 22u64 }   /* unwitnessed drift */
+    if cg_decide(0u32,    mod_ok,   seal_match, 1u32) != 1u32 { return 23u64 }   /* unsound rule */
+    if cg_decide(rule_ok, mod_ok,   seal_match, 0u32) != 4u32 { return 24u64 }   /* unmarked strength */
+
+    /* ==== cg_decide full teeth matrix (pure) ==== */
+    if cg_decide(1u32, 1u32, 1u32, 1u32) != 99u32 { return 30u64 }
+    if cg_decide(0u32, 1u32, 1u32, 1u32) != 1u32  { return 31u64 }
+    if cg_decide(1u32, 0u32, 1u32, 1u32) != 2u32  { return 32u64 }
+    if cg_decide(1u32, 1u32, 0u32, 1u32) != 3u32  { return 33u64 }
+    if cg_decide(1u32, 1u32, 1u32, 0u32) != 4u32  { return 34u64 }
+
+    free(s4)
+    free(d4)
+    free(p4)
+    free(oid4)
+    free(s2)
+    free(d2)
+    free(p2)
+    free(oid2)
+    free(artA)
+    free(artB)
+    free(golden)
+    free(root)
+    free(obstr)
+    return 99u64
+}

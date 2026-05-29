@@ -1,0 +1,13 @@
+/* 889_nous_features.iii -- gates nous_features's @export selftest (integer term features:
+ * kind/depth/size over the xii_term tree, NULL handling, structure-determinism).  nous BUILDS
+ * nous_features but NO corpus test invoked its selftest -- a dead falsifier (and its old
+ * determinism check was a vacuous f(t)!=f(t); just enhanced to a two-distinct-instance compare).
+ * This integrates it in its place, alongside 800-809.
+ * 99 = pass; 1-11 name the failing nous_features_selftest check. */
+module corpus_889
+
+extern @abi(c-msvc-x64) fn nous_features_selftest() -> u64 from "nous_features.iii"
+
+fn main() -> u64 {
+    return nous_features_selftest()
+}

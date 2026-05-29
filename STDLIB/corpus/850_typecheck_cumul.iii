@@ -1,0 +1,13 @@
+/* P5 brick 10: cumulative universes -- U_i : U_j for i <= j (subsumption in
+ * `check` via a sort-level subtype relation). p5_kat_cumul() tests the new
+ * subsumption (U0:U2, U1:U3, U0:U1) and that it is DIRECTIONAL: U2:U1 / U1:U0
+ * rejected, U0:U0 STILL rejected (Girard preserved -- cumulativity is i<=j, and
+ * infer(U0)=U1 with 1<=0 false), and true:U0 rejected (a non-type, not a
+ * sort-level relation). 99 = all pass; 1..7 = first failing case. */
+module corpus_c850
+
+extern @abi(c-msvc-x64) fn p5_kat_cumul() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_cumul()
+}

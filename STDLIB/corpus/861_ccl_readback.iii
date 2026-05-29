@@ -1,0 +1,14 @@
+/* Path C B18b: the read-back audit. p5_kat_readback() verifies the CCL-native
+ * normaliser (compile -> directed CCL reduce -> reify via ccl_to_tc) produces the
+ * SAME normal form as NbE's tc_nf on no-eta terms (types + data values -- exactly
+ * the forms the kernel's whnf/nf actually produce). Confirms reification is
+ * faithful (the inverse of tc_to_ccl) -- the enabler for replacing tc_whnf/tc_nf
+ * with the directed CCL reducer (B18c). Also proves the typecheck<->ccl mutual
+ * module link resolves. 99 = read-back faithful; 1..8 = first mismatch. */
+module corpus_c861
+
+extern @abi(c-msvc-x64) fn p5_kat_readback() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_readback()
+}

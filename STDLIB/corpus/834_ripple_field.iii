@@ -1,0 +1,124 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\834_ripple_field.iii
+ *
+ * III conformance corpus 834 -- the directional ripple-field
+ * (omnia::ripple_field).
+ *
+ * Proves (non-tautologically), each group in its own helper fn:
+ *   check_ranks      -- rf_rank() derived from the sealed xii_hj order.
+ *   check_edges      -- signed edge field: +climb, -descend, 0 flat, and
+ *                       ANTISYMMETRY field(a,b) == -field(b,a) (the SID
+ *                       forward/backward inverse).
+ *   check_gradient   -- rf_node_potential / rf_steepest pick the high-
+ *                       leverage node; rf_inverse_potential = SID pull.
+ *   check_purity     -- Mandate 7: same graph, different insertion order
+ *                       -> same result (no observational signal leaks).
+ *   check_nonvacuity -- falsifier: flipping a hexad CHANGES the field.
+ *
+ * i64 comparisons go through eq_i64() (corpus-186 idiom): i64 literals
+ * appear only as call arguments, never immediately before a '{'.
+ *
+ * prim ids (xii_savings):  K07_SEAL=6, K08_PROVE=7;
+ *   xii_savings_get(6,7) = 24  (SEAL+PROVE collapse, rule R027).
+ * hexad values (xii_term): FORM1 SUB2 PASS3 ESS4 MOT5 COMPOSE6 ORIGIN7.
+ *
+ * Exit code: 99 on full pass; 1..N on the specific failed assertion.
+ */
+
+module corpus_834
+
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_edge_field(pf: u8, pt: u8, hf: u8, ht: u8) -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_reset() -> i32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_add_node(prim: u8, hexad: u8) -> u32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_add_edge(from_idx: u32, to_idx: u32) -> i32 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_node_potential(idx: u32) -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_inverse_potential(idx: u32) -> i64 from "ripple_field.iii"
+extern @abi(c-msvc-x64) fn rf_steepest() -> u32 from "ripple_field.iii"
+
+/* i64 equality as a u32 result (corpus-186 idiom: keeps i64 literals out
+ * of the if-condition's pre-brace position). */
+fn eq_i64(a: i64, b: i64) -> u32 {
+    if a == b { return 1u32 }
+    return 0u32
+}
+
+/* 1. rank derived from the sealed HJ dominance table. */
+fn check_ranks() -> u64 {
+    if rf_rank(6u8) != 0u32 { return 1u64 }   /* COMPOSE */
+    if rf_rank(1u8) != 1u32 { return 2u64 }   /* FORM */
+    if rf_rank(2u8) != 2u32 { return 3u64 }   /* SUBSTANCE */
+    if rf_rank(3u8) != 3u32 { return 4u64 }   /* PASSAGE */
+    if rf_rank(4u8) != 4u32 { return 5u64 }   /* ESSENCE */
+    if rf_rank(5u8) != 5u32 { return 6u64 }   /* MOTION */
+    if rf_rank(7u8) != 6u32 { return 7u64 }   /* ORIGIN */
+    return 0u64
+}
+
+/* 2-5. signed edge field + antisymmetry + same-rank sign-gate. */
+fn check_edges() -> u64 {
+    /* climb: SEAL(6)->PROVE(7), dK=24, rank SUB2->MOT5 = +24 */
+    if eq_i64(rf_edge_field(6u8, 7u8, 2u8, 5u8), 24i64) != 1u32 { return 8u64 }
+    /* descend: PROVE(7)->SEAL(6), rank MOT5->SUB2 = -24 */
+    if eq_i64(rf_edge_field(7u8, 6u8, 5u8, 2u8), -24i64) != 1u32 { return 9u64 }
+    /* antisymmetry (the SID inverse): field(a,b) == -field(b,a) */
+    let fwd : i64 = rf_edge_field(6u8, 7u8, 2u8, 5u8)
+    let bwd : i64 = rf_edge_field(7u8, 6u8, 5u8, 2u8)
+    let negbwd : i64 = 0i64 - bwd
+    if eq_i64(fwd, negbwd) != 1u32 { return 10u64 }
+    /* same-rank: dK=24>0 but flat (SUB2->SUB2) = 0 directed field */
+    if eq_i64(rf_edge_field(6u8, 7u8, 2u8, 2u8), 0i64) != 1u32 { return 11u64 }
+    return 0u64
+}
+
+/* 6. the gradient + the SID backward pull. */
+fn check_gradient() -> u64 {
+    rf_reset()
+    let n0 : u32 = rf_add_node(6u8, 2u8)   /* SEAL  @ SUBSTANCE */
+    let n1 : u32 = rf_add_node(7u8, 5u8)   /* PROVE @ MOTION */
+    let n2 : u32 = rf_add_node(7u8, 2u8)   /* PROVE @ SUBSTANCE */
+    rf_add_edge(n0, n1)
+    rf_add_edge(n0, n2)
+    if eq_i64(rf_node_potential(n0), 24i64) != 1u32 { return 12u64 }
+    if eq_i64(rf_node_potential(n1), 0i64) != 1u32 { return 13u64 }
+    if rf_steepest() != n0 { return 14u64 }
+    if eq_i64(rf_inverse_potential(n1), 24i64) != 1u32 { return 15u64 }
+    return 0u64
+}
+
+/* 7. Mandate-7 purity: same graph, different insertion order. */
+fn check_purity() -> u64 {
+    rf_reset()
+    let m2 : u32 = rf_add_node(7u8, 2u8)   /* PROVE @ SUBSTANCE */
+    let m1 : u32 = rf_add_node(7u8, 5u8)   /* PROVE @ MOTION */
+    let m0 : u32 = rf_add_node(6u8, 2u8)   /* SEAL  @ SUBSTANCE */
+    rf_add_edge(m0, m1)
+    rf_add_edge(m0, m2)
+    if eq_i64(rf_node_potential(m0), 24i64) != 1u32 { return 16u64 }
+    if rf_steepest() != m0 { return 17u64 }
+    return 0u64
+}
+
+/* 8. non-vacuity falsifier: flip the source hexad -> field changes. */
+fn check_nonvacuity() -> u64 {
+    rf_reset()
+    let p0 : u32 = rf_add_node(6u8, 7u8)   /* SEAL  @ ORIGIN (rank 6) */
+    let p1 : u32 = rf_add_node(7u8, 5u8)   /* PROVE @ MOTION (rank 5) */
+    rf_add_edge(p0, p1)
+    if eq_i64(rf_node_potential(p0), -24i64) != 1u32 { return 18u64 }
+    if rf_steepest() == p0 { return 19u64 }   /* p1 (0) must win over p0 (-24) */
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r1 : u64 = check_ranks()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = check_edges()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = check_gradient()
+    if r3 != 0u64 { return r3 }
+    let r4 : u64 = check_purity()
+    if r4 != 0u64 { return r4 }
+    let r5 : u64 = check_nonvacuity()
+    if r5 != 0u64 { return r5 }
+    return 99u64
+}

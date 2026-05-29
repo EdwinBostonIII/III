@@ -1,0 +1,869 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sov_isa.iii
+ *
+ * III STDLIB - numera::sov_isa  --  THE SOVEREIGN ISA DESCENT.
+ *
+ * The Natively Differentiable Sovereign Calculus's "differential descent over the
+ * cost-field" (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md, brick 3) -- made REAL by
+ * wiring the two organs forcefield/optinvoke's header names as "the next brick":
+ *
+ *   - numera/egraph        : bounded equality saturation -> the proven-equal class,
+ *                            then minimum-cost extraction.
+ *   - numera/cost_lattice  : the 6-dim microarch cost-field (latency, throughput,
+ *                            register pressure, icache, dcache, energy), scalarized
+ *                            by a chosen order (here: balanced) to a single weight.
+ *
+ * sov_isa_descend saturates an arithmetic term under SOUND algebraic rewrite rules
+ * -- each a true integer identity --
+ *       A.  mul(x, 2) == shl(x, 1)        (strength reduction)
+ *       B.  add(x, 0) == x                (additive identity)
+ * and extracts the MIN-COST proven-equal realization.  This is the SOVEREIGN
+ * MORPHISM at the ISA layer:
+ *
+ *   the result is in the input term's e-class  (PROOF PRESERVED: equal modulo the
+ *   sound rules -- the optimizer can only move within a rule-justified class, it
+ *   NEVER fabricates an equality)  AND  it is cost-minimal over that class.
+ *
+ * The "differential" is the exact cost-gradient over the e-class; "descent" is
+ * min-cost extraction.  No floats, no ML, no statistics -- integer cost, a finite
+ * confluent-by-bound rewrite set, deterministic extraction (bit-identical replay).
+ *
+ * Hexad: kind_essence.  Ring: R0.
+ */
+
+module numera_sov_isa
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_intern_symbol(sym_id: *u8) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sym_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_class_size(root: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_union(a: u32, b: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
+
+extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
+
+/* the ripple network (forcefield/ripple): a content-addressed dependency store with
+ * deterministic change-propagation -- the substrate for the CONTINGENT EVOLUTION
+ * DRIVER (files self-optimize -> content-address -> propagate changes coherently). */
+extern @abi(c-msvc-x64) fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cell_addr: *u8, in_off: *u8, in_cnt: *u8, in_list: *u8, scratch: *u8, newaddr: *u8) -> u64 from "ripple.iii"
+
+/* the kernel (numera/typecheck): the TRUSTED proof core that disposes of the
+ * egraph's (untrusted) optimization proposals -- proof-carrying optimization. */
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_iter(z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ity: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_shift_k(t: u32, k: u32) -> u32 from "typecheck.iii"
+/* Integration C: sound conversion pre-filter (WHNF shape signature + Kleene trit). */
+extern @abi(c-msvc-x64) fn tc_shape_sig(t: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn iii_trit_and(a: i32, b: i32) -> i32 from "trit.iii"
+
+/* omnia/xii_admission: the EXISTING operational rule-admission decision (ADMIT iff
+ * root-confluent AND terminating).  Reused -- not reinvented -- and composed below with the
+ * kernel's semantic-soundness gate, because admission alone checks OPERATION, not MEANING. */
+extern @abi(c-msvc-x64) fn xad_decide(root_confluent: u32, terminating: u32) -> u32 from "xii_admission.iii"
+
+/* ISA op tags (a symbol id is 32 bytes: tag byte + zeros). */
+const SI_X    : u8 = 12u8     /* the variable x       (arity 0) */
+const SI_C0   : u8 = 20u8     /* constant 0           (arity 0) */
+const SI_C1   : u8 = 21u8     /* constant 1           (arity 0) */
+const SI_C2   : u8 = 22u8     /* constant 2           (arity 0) */
+const SI_ADD  : u8 = 30u8     /* add(_, _)            (arity 2) */
+const SI_MUL  : u8 = 31u8     /* mul(_, _)            (arity 2) */
+const SI_SHL  : u8 = 32u8     /* shl(_, _)            (arity 2) */
+
+const SI_SENT     : u32 = 0xFFFFFFFFu32
+const CL_BALANCED : u32 = 3u32     /* cost_lattice seeds order 3 = balanced (2,2,1,1,1,1) */
+
+var SI_SYM   : [u8;  32]
+var SI_CHILD : [u32; 8]
+var SI_REQ   : [u32; 256]
+var SI_RULE  : [u32; 64]
+var SI_CVEC  : [u64; 6]
+var SI_DOT   : [u64; 1]
+var SI_OUT   : [u32; 256]
+var SI_OUTN  : [u32; 1]
+var SOV_LP    : [u32; 1]    /* sov_lower preorder cursor over the egraph output */
+var SOV_SUCCF : [u32; 1]    /* the kernel succ-function node (lam n:Nat. succ n) */
+
+/* contingent-evolution-driver buffers (the ripple store + cell-graph; static, no malloc) */
+var EV_META    : [u8; 32]
+var EV_SLOTS   : [u8; 512]    /* 8 slots * 64 bytes */
+var EV_ARENA   : [u8; 2048]
+var EV_CK      : [u8; 4]      /* cell_kind (ncells <= 4) */
+var EV_CA      : [u8; 128]    /* cell_addr (4 * 32) */
+var EV_IOFF    : [u8; 32]     /* in_off (4 * 8) */
+var EV_ICNT    : [u8; 32]     /* in_cnt (4 * 8) */
+var EV_ILIST   : [u8; 32]     /* in_list (4 * 8) */
+var EV_SCR     : [u8; 64]     /* recompute scratch (2 * 32) */
+var EV_NEW     : [u8; 32]     /* recompute newaddr */
+var EV_ADDRX   : [u8; 32]     /* address of expr A's optimum (x) */
+var EV_ADDRSHL : [u8; 32]     /* address of expr D's optimum (x<<1) */
+var EV_C1SNAP  : [u8; 32]     /* cell1's address snapshot */
+var EV_RESOLVE : [u8; 256]    /* resolve output */
+var EV_VBUF    : [u8; 32]     /* resolve tamper-check scratch */
+
+fn si_symset(tag: u8) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SI_SYM[i] = 0u8 ; i = i + 1u64 }
+    SI_SYM[0u64] = tag
+    return 0i32
+}
+fn si_symp() -> *u8  { return (&SI_SYM) as u64 as *u8 }
+fn si_chp()  -> *u32 { return (&SI_CHILD) as u64 as *u32 }
+
+/* build an arity-0 leaf node; returns its eclass id. */
+fn si_leaf(tag: u8) -> u32 @export {
+    si_symset(tag)
+    return eg_add(si_symp(), si_chp(), 0u32)
+}
+/* build an arity-2 node over child eclasses a, b; returns its eclass id. */
+fn si_node2(tag: u8, a: u32, b: u32) -> u32 @export {
+    si_symset(tag)
+    SI_CHILD[0u32] = a
+    SI_CHILD[1u32] = b
+    return eg_add(si_symp(), si_chp(), 2u32)
+}
+/* the (idempotent) symbol slot for a tag. */
+fn si_slot(tag: u8) -> u32 @export {
+    si_symset(tag)
+    return eg_intern_symbol(si_symp())
+}
+
+/* preorder-skeleton encoders (the egraph's rule/extract format). */
+fn si_enc_sym(slot: u32, arity: u32) -> u32 {
+    return (slot << 1u32) | (arity << 16u32)
+}
+fn si_enc_var(idx: u32) -> u32 {
+    return (idx << 1u32) | 1u32
+}
+
+/* THE COST-FIELD: an ISA op's scalar cost = the balanced-order dot of its 6-dim
+ * microarch cost vector (latency, throughput, regs, icache, dcache, energy).  A
+ * multiply is dearer (3x latency, 2x energy) than a shift/add/leaf.  Requires
+ * cl_init() to have seeded the standard orders. */
+fn sov_isa_op_cost(tag: u8) -> u64 @export {
+    SI_CVEC[0u32] = 1u64
+    SI_CVEC[1u32] = 1u64
+    SI_CVEC[2u32] = 1u64
+    SI_CVEC[3u32] = 1u64
+    SI_CVEC[4u32] = 1u64
+    SI_CVEC[5u32] = 1u64
+    if tag == SI_MUL {
+        SI_CVEC[0u32] = 3u64     /* multiply: ~3x the latency */
+        SI_CVEC[5u32] = 2u64     /* ... and more energy */
+    }
+    let cvp : *u64 = (&SI_CVEC) as u64 as *u64
+    let dtp : *u64 = (&SI_DOT) as u64 as *u64
+    cl_dot_slot(CL_BALANCED, cvp, dtp)
+    return SI_DOT[0u32]
+}
+
+/* register the two SOUND algebraic rules into the (already eg_init'd) egraph:
+ *   A. mul(?0, c2) -> shl(?0, c1)   [x*2 = x<<1]
+ *   B. add(?0, c0) -> ?0            [x+0 = x]
+ * returns 0 on success, else a small nonzero code. */
+fn sov_isa_rules() -> u32 @export {
+    let s_mul : u32 = si_slot(SI_MUL)
+    let s_shl : u32 = si_slot(SI_SHL)
+    let s_add : u32 = si_slot(SI_ADD)
+    let s_c0  : u32 = si_slot(SI_C0)
+    let s_c1  : u32 = si_slot(SI_C1)
+    let s_c2  : u32 = si_slot(SI_C2)
+    if s_mul == SI_SENT { return 1u32 }
+    if s_shl == SI_SENT { return 2u32 }
+    if s_add == SI_SENT { return 3u32 }
+
+    /* Rule A: LHS [mul/2, ?0, c2/0]  ->  RHS [shl/2, ?0, c1/0] */
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 3u32
+    SI_RULE[2u32] = si_enc_sym(s_mul, 2u32)
+    SI_RULE[3u32] = si_enc_var(0u32)
+    SI_RULE[4u32] = si_enc_sym(s_c2, 0u32)
+    SI_RULE[5u32] = si_enc_sym(s_shl, 2u32)
+    SI_RULE[6u32] = si_enc_var(0u32)
+    SI_RULE[7u32] = si_enc_sym(s_c1, 0u32)
+    let rulep : *u32 = (&SI_RULE) as u64 as *u32
+    if eg_register_rule(rulep) == SI_SENT { return 4u32 }
+
+    /* Rule B: LHS [add/2, ?0, c0/0]  ->  RHS [?0] */
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 1u32
+    SI_RULE[2u32] = si_enc_sym(s_add, 2u32)
+    SI_RULE[3u32] = si_enc_var(0u32)
+    SI_RULE[4u32] = si_enc_sym(s_c0, 0u32)
+    SI_RULE[5u32] = si_enc_var(0u32)
+    if eg_register_rule(rulep) == SI_SENT { return 5u32 }
+
+    /* Rule C: LHS [mul/2, ?0, c1/0]  ->  RHS [?0]   [x*1 = x] (kernel-certified, 875) */
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 1u32
+    SI_RULE[2u32] = si_enc_sym(s_mul, 2u32)
+    SI_RULE[3u32] = si_enc_var(0u32)
+    SI_RULE[4u32] = si_enc_sym(s_c1, 0u32)
+    SI_RULE[5u32] = si_enc_var(0u32)
+    if eg_register_rule(rulep) == SI_SENT { return 6u32 }
+
+    /* Rule D: LHS [mul/2, ?0, c0/0]  ->  RHS [c0/0]   [x*0 = 0] (kernel-certified, 875) */
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 1u32
+    SI_RULE[2u32] = si_enc_sym(s_mul, 2u32)
+    SI_RULE[3u32] = si_enc_var(0u32)
+    SI_RULE[4u32] = si_enc_sym(s_c0, 0u32)
+    SI_RULE[5u32] = si_enc_sym(s_c0, 0u32)
+    if eg_register_rule(rulep) == SI_SENT { return 7u32 }
+
+    /* Rule F: add(c1, c1) -> c2  [constant fold 1+1=2] (a GROUND rule; kernel-certified) */
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 1u32
+    SI_RULE[2u32] = si_enc_sym(s_add, 2u32)
+    SI_RULE[3u32] = si_enc_sym(s_c1, 0u32)
+    SI_RULE[4u32] = si_enc_sym(s_c1, 0u32)
+    SI_RULE[5u32] = si_enc_sym(s_c2, 0u32)
+    if eg_register_rule(rulep) == SI_SENT { return 8u32 }
+
+    return 0u32
+}
+
+/* set the extraction cost of one op (by tag) into SI_REQ[slot+2]. */
+fn si_setcost(tag: u8) -> i32 {
+    let slot : u32 = si_slot(tag)
+    if slot == SI_SENT { return -1i32 }
+    let sb : u64 = (slot as u64) + 2u64
+    SI_REQ[sb] = sov_isa_op_cost(tag) as u32
+    return 0i32
+}
+
+/* THE SOVEREIGN ISA DESCENT.  Given a built term root (rules already registered),
+ * saturate the proven-equal class, attach the cost-field, and extract the min-cost
+ * realization into (out_term, out_n).  Returns the egraph status (0 = ok). */
+fn sov_isa_descend(root: u32, out_term: *u32, out_n: *u32) -> i32 @export {
+    eg_saturate(16u32)
+    let mut i : u32 = 0u32
+    while i < 256u32 { SI_REQ[i] = 0u32 ; i = i + 1u32 }
+    SI_REQ[0u32] = eg_find(root)
+    SI_REQ[1u32] = eg_sym_count()
+    si_setcost(SI_X)
+    si_setcost(SI_C0)
+    si_setcost(SI_C1)
+    si_setcost(SI_C2)
+    si_setcost(SI_ADD)
+    si_setcost(SI_MUL)
+    si_setcost(SI_SHL)
+    let reqp : *u32 = (&SI_REQ) as u64 as *u32
+    return eg_extract(reqp, out_term, out_n)
+}
+
+/* KAT (99 = all pass).  Proves the descent end-to-end, BOTH arms:
+ *   - a TWO-RULE compose descends add(mul(x,2),0) to the cheapest proven-equal
+ *     realization shl(x,1) (strict cost drop, head = shl);
+ *   - the cost-field ranks mul dearer than shl (cost_lattice);
+ *   - the FAITHFULNESS falsifier: with NO rules registered, the SAME term does NOT
+ *     descend (head stays add) -- the optimizer never fabricates an equality. */
+fn sov_isa_kat() -> u64 @export {
+    /* ---------- positive: add(mul(x, c2), c0) --rules--> shl(x, c1) ---------- */
+    eg_init()
+    cl_init()
+    let cx   : u32 = si_leaf(SI_X)
+    let cc2  : u32 = si_leaf(SI_C2)
+    let cc0  : u32 = si_leaf(SI_C0)
+    let cmul : u32 = si_node2(SI_MUL, cx, cc2)
+    let cadd : u32 = si_node2(SI_ADD, cmul, cc0)
+    if cadd == SI_SENT { return 1u64 }
+    /* seed shl(x, c1) so the shl/c1 slots exist for the rule RHS + cost table */
+    let cc1  : u32 = si_leaf(SI_C1)
+    let cseed : u32 = si_node2(SI_SHL, cx, cc1)
+    if cseed == SI_SENT { return 2u64 }
+    if sov_isa_rules() != 0u32 { return 3u64 }
+
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    let rc : i32 = sov_isa_descend(cadd, otp, onp)
+    if rc != 0i32 { return 4u64 }
+    let s_shl : u32 = si_slot(SI_SHL)
+    if SI_OUTN[0u32] != 3u32 { return 5u64 }       /* shl(x,c1): 3 preorder entries */
+    if SI_OUT[0u32] != s_shl { return 6u64 }       /* head symbol is shl (the cheap form) */
+
+    /* ---------- the cost-field ranks mul dearer than shl ---------- */
+    if sov_isa_op_cost(SI_MUL) <= sov_isa_op_cost(SI_SHL) { return 7u64 }
+
+    /* ---------- FAITHFULNESS falsifier: NO rules => NO descent ---------- */
+    eg_init()
+    cl_init()
+    let dx   : u32 = si_leaf(SI_X)
+    let dc2  : u32 = si_leaf(SI_C2)
+    let dc0  : u32 = si_leaf(SI_C0)
+    let dmul : u32 = si_node2(SI_MUL, dx, dc2)
+    let dadd : u32 = si_node2(SI_ADD, dmul, dc0)
+    let dc1  : u32 = si_leaf(SI_C1)
+    let dseed : u32 = si_node2(SI_SHL, dx, dc1)
+    if dseed == SI_SENT { return 8u64 }
+    /* NO sov_isa_rules() here -- the e-class is the singleton {add(mul(x,c2),c0)}. */
+    let rc2 : i32 = sov_isa_descend(dadd, otp, onp)
+    if rc2 != 0i32 { return 9u64 }
+    let s_add : u32 = si_slot(SI_ADD)
+    if SI_OUT[0u32] != s_add { return 10u64 }      /* head still add: no fabricated equality */
+
+    return 99u64
+}
+
+/* KAT: the enriched optimizer collapses (x*1) + (x*0) to a single leaf x via THREE
+ * composing rules -- C (x*1->x), D (x*0->0), B (x+0->x) -- a 7-node expression to 1
+ * node.  Every rule kernel-certified sound (corpus 875).  + the faithfulness
+ * falsifier: with NO rules the same term does NOT collapse (head stays add).
+ * 99 = the collapse + the falsifier pass. */
+fn sov_isa_kat2() -> u64 @export {
+    eg_init()
+    cl_init()
+    let ex   : u32 = si_leaf(SI_X)
+    let ec1  : u32 = si_leaf(SI_C1)
+    let ec0  : u32 = si_leaf(SI_C0)
+    let em1  : u32 = si_node2(SI_MUL, ex, ec1)     /* x*1 */
+    let em0  : u32 = si_node2(SI_MUL, ex, ec0)     /* x*0 */
+    let esum : u32 = si_node2(SI_ADD, em1, em0)    /* (x*1) + (x*0) */
+    if esum == SI_SENT { return 1u64 }
+    /* seed shl + c2 so every op slot exists for the rule set + cost table */
+    let ec2  : u32 = si_leaf(SI_C2)
+    let eshl : u32 = si_node2(SI_SHL, ex, ec1)
+    if eshl == SI_SENT { return 2u64 }
+    if sov_isa_rules() != 0u32 { return 3u64 }
+
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    let rc : i32 = sov_isa_descend(esum, otp, onp)
+    if rc != 0i32 { return 4u64 }
+    let s_x : u32 = si_slot(SI_X)
+    if SI_OUTN[0u32] != 1u32 { return 5u64 }       /* collapsed to a SINGLE leaf */
+    if SI_OUT[0u32] != s_x { return 6u64 }         /* the leaf is x */
+
+    /* FAITHFULNESS falsifier: NO rules => NO collapse (head stays add). */
+    eg_init()
+    cl_init()
+    let dx   : u32 = si_leaf(SI_X)
+    let dc1  : u32 = si_leaf(SI_C1)
+    let dc0  : u32 = si_leaf(SI_C0)
+    let dm1  : u32 = si_node2(SI_MUL, dx, dc1)
+    let dm0  : u32 = si_node2(SI_MUL, dx, dc0)
+    let dsum : u32 = si_node2(SI_ADD, dm1, dm0)
+    let dc2  : u32 = si_leaf(SI_C2)
+    let dshl : u32 = si_node2(SI_SHL, dx, dc1)
+    if dshl == SI_SENT { return 7u64 }
+    let rc2 : i32 = sov_isa_descend(dsum, otp, onp)
+    if rc2 != 0i32 { return 8u64 }
+    let s_add : u32 = si_slot(SI_ADD)
+    if SI_OUT[0u32] != s_add { return 9u64 }       /* unchanged: head still add */
+
+    /* CONSTANT FOLDING: add(c1,c1) folds to the literal c2 (ground rule F). */
+    eg_init()
+    cl_init()
+    let fx  : u32 = si_leaf(SI_X)
+    let fc1 : u32 = si_leaf(SI_C1)
+    let fc2 : u32 = si_leaf(SI_C2)
+    let fc0 : u32 = si_leaf(SI_C0)
+    let fadd : u32 = si_node2(SI_ADD, fc1, fc1)    /* 1 + 1 */
+    let fm : u32 = si_node2(SI_MUL, fx, fc1)       /* seed mul slot */
+    let fs : u32 = si_node2(SI_SHL, fx, fc1)       /* seed shl slot */
+    if fs == SI_SENT { return 10u64 }
+    if sov_isa_rules() != 0u32 { return 11u64 }
+    let rc3 : i32 = sov_isa_descend(fadd, otp, onp)
+    if rc3 != 0i32 { return 12u64 }
+    let s_c2 : u32 = si_slot(SI_C2)
+    if SI_OUTN[0u32] != 1u32 { return 13u64 }      /* folds to a single literal */
+    if SI_OUT[0u32] != s_c2 { return 14u64 }       /* the literal is c2 (= 2) */
+
+    return 99u64
+}
+
+/* ============================================================
+ *  PROOF-CARRYING OPTIMIZATION (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §11).
+ *  The egraph (untrusted "nous") PROPOSES an optimization; III's kernel (the TRUSTED
+ *  core) DISPOSES -- it independently re-derives input == output as a theorem and
+ *  accepts the optimization only if it can PROVE it.  Translation validation:
+ *  soundness never depends on the egraph being correct.  Nous gets full liberty
+ *  precisely because the kernel leashes it. */
+
+/* the kernel succ-function (lam n:Nat. succ n), closed. */
+fn sov_succf() -> u32 {
+    return tc_lam(tc_nat(), tc_succ(tc_var(0u32)))
+}
+/* Nat model: add(a,b) = iter(a, succ, b). */
+fn sov_m_add(a: u32, b: u32) -> u32 {
+    return tc_iter(a, SOV_SUCCF[0u32], b)
+}
+/* Nat model: mul(a,b) = iter(0, (lam acc. add(a^1, acc)), b); a^1 shifts a past acc. */
+fn sov_m_mul(a: u32, b: u32) -> u32 {
+    let step : u32 = tc_lam(tc_nat(), tc_iter(tc_shift_k(a, 1u32), SOV_SUCCF[0u32], tc_var(0u32)))
+    return tc_iter(tc_zero(), step, b)
+}
+
+/* lower the egraph output preorder (symbol slots) to a kernel Nat-model.  Uses the
+ * module cursor SOV_LP; SOV_SUCCF must be set.  x -> #0, cK -> numeral, add/mul ->
+ * the Nat models, shl1(a) -> add(a,a) (the descent only emits shift-by-1). */
+fn sov_lower(out_term: *u32) -> u32 {
+    let pos : u32 = SOV_LP[0u32]
+    SOV_LP[0u32] = pos + 1u32
+    let pb : u64 = pos as u64
+    let slot : u32 = out_term[pb]
+    if slot == si_slot(SI_X)  { return tc_var(0u32) }
+    if slot == si_slot(SI_C0) { return tc_zero() }
+    if slot == si_slot(SI_C1) { return tc_succ(tc_zero()) }
+    if slot == si_slot(SI_C2) { return tc_succ(tc_succ(tc_zero())) }
+    if slot == si_slot(SI_ADD) {
+        let aa : u32 = sov_lower(out_term)
+        let bb : u32 = sov_lower(out_term)
+        return sov_m_add(aa, bb)
+    }
+    if slot == si_slot(SI_MUL) {
+        let ma : u32 = sov_lower(out_term)
+        let mb : u32 = sov_lower(out_term)
+        return sov_m_mul(ma, mb)
+    }
+    if slot == si_slot(SI_SHL) {
+        let sa : u32 = sov_lower(out_term)
+        let sb : u32 = sov_lower(out_term)
+        return sov_m_add(sa, sa)
+    }
+    return 0u32
+}
+
+/* Integration C trit pre-filter: per-position rigid-head compatibility.
+ * both rigid + equal -> TRUE(+1); both rigid + different -> FALSE(-1);
+ * either DEFER(0) -> UNKNOWN(0). */
+fn shape_pos(x: u32, y: u32) -> i32 {
+    if x == 0u32 { return 0i32 }
+    if y == 0u32 { return 0i32 }
+    if x == y { return 1i32 }
+    return -1i32
+}
+
+/* shape_compatible: Kleene-AND fold (iii_trit_and) of the head + two sub-head
+ * positions of the two terms' shape signatures.  -1 = SOUNDLY incompatible (a
+ * position carries two DIFFERENT rigid heads => the terms cannot be convertible
+ * => safe fast reject); 0 = unknown (defer to the kernel); +1 = shallow-
+ * compatible (STILL defer -- the kernel alone decides convertibility). */
+fn shape_compatible(a_term: u32, b_term: u32) -> i32 {
+    let sa : u32 = tc_shape_sig(a_term)
+    let sb : u32 = tc_shape_sig(b_term)
+    if sa == 0u32 { return 0i32 }
+    if sb == 0u32 { return 0i32 }
+    let mut acc : i32 = shape_pos((sa >> 16u32) & 0xFFu32, (sb >> 16u32) & 0xFFu32)
+    acc = iii_trit_and(acc, shape_pos((sa >> 8u32) & 0xFFu32, (sb >> 8u32) & 0xFFu32))
+    acc = iii_trit_and(acc, shape_pos(sa & 0xFFu32, sb & 0xFFu32))
+    return acc
+}
+
+/* THE KERNEL VERIFIER (translation validation), unfiltered core: an optimization
+ * in_model -> out_model is sound iff the kernel proves in == out, i.e.
+ * (lam x:Nat. refl in) checks against Pi(x:Nat). Id Nat in out.  The kernel is
+ * the SOLE arbiter.  1 = certified sound; 0 = REJECTED. */
+fn sov_pcc_verify_core(in_model: u32, out_model: u32) -> u8 @export {
+    let cert : u32 = tc_lam(tc_nat(), tc_refl(in_model))
+    let goal : u32 = tc_pi(tc_nat(), tc_id(tc_nat(), in_model, out_model))
+    return tc_check(cert, goal)
+}
+
+/* Guarded verifier: a SOUND shape pre-filter short-circuits to REJECT when the
+ * two models have rigidly-incompatible WHNF heads (shape_compatible == FALSE),
+ * sparing the kernel a doomed conversion.  The filter NEVER accepts -- every
+ * acceptance is still the kernel core's verdict, so translation validation is
+ * unchanged; only provably-doomed checks are skipped. */
+fn sov_pcc_verify(in_model: u32, out_model: u32) -> u8 @export {
+    if shape_compatible(in_model, out_model) == -1i32 { return 0u8 }
+    return sov_pcc_verify_core(in_model, out_model)
+}
+
+/* PROOF-CARRYING DESCENT: descend input (egraph), lower the output to a kernel model,
+ * and KERNEL-VERIFY it equals the caller's input model.  1 = accept (output in
+ * out_term/out_n, kernel-certified sound); 0 = reject. */
+fn sov_pcc(input_egraph: u32, input_model: u32, out_term: *u32, out_n: *u32) -> u8 @export {
+    let rc : i32 = sov_isa_descend(input_egraph, out_term, out_n)
+    if rc != 0i32 { return 0u8 }
+    SOV_SUCCF[0u32] = sov_succf()
+    SOV_LP[0u32] = 0u32
+    let out_model : u32 = sov_lower(out_term)
+    if out_model == 0u32 { return 0u8 }
+    return sov_pcc_verify(input_model, out_model)
+}
+
+/* KAT: the proof-carrying descent.  Positive: (x*1)+(x*0) descends to x and the kernel
+ * CERTIFIES the optimization sound.  Falsifier: a tampered "optimization" (x -> x*2)
+ * is REJECTED -- the leash holds even if nous lies.  99 = all pass. */
+fn sov_pcc_kat() -> u64 @export {
+    eg_init()
+    cl_init()
+    tc_reset()
+    let ex  : u32 = si_leaf(SI_X)
+    let ec1 : u32 = si_leaf(SI_C1)
+    let ec0 : u32 = si_leaf(SI_C0)
+    let em1 : u32 = si_node2(SI_MUL, ex, ec1)
+    let em0 : u32 = si_node2(SI_MUL, ex, ec0)
+    let esum : u32 = si_node2(SI_ADD, em1, em0)
+    let ec2 : u32 = si_leaf(SI_C2)
+    let eshl : u32 = si_node2(SI_SHL, ex, ec1)
+    if eshl == SI_SENT { return 1u64 }
+    if sov_isa_rules() != 0u32 { return 2u64 }
+
+    /* the input's kernel Nat-model: add(mul(x,1), mul(x,0)) */
+    SOV_SUCCF[0u32] = sov_succf()
+    let imodel : u32 = sov_m_add(sov_m_mul(tc_var(0u32), tc_succ(tc_zero())), sov_m_mul(tc_var(0u32), tc_zero()))
+
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    /* (1-2) PROOF-CARRYING: descend + kernel-verify -> ACCEPT, and it optimized to x */
+    if sov_pcc(esum, imodel, otp, onp) != 1u8 { return 3u64 }
+    if SI_OUT[0u32] != si_slot(SI_X) { return 4u64 }
+
+    /* (3) FALSIFIER: a tampered output (x -> x*2) is REJECTED (kernel disproves x==2x) */
+    let x2model : u32 = sov_m_mul(tc_var(0u32), tc_succ(tc_succ(tc_zero())))
+    if sov_pcc_verify(imodel, x2model) != 0u8 { return 5u64 }
+
+    /* (4) control: the verifier ACCEPTS a true equality (x == x) */
+    if sov_pcc_verify(tc_var(0u32), tc_var(0u32)) != 1u8 { return 6u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  PSI -- DETERMINISTIC SUPERPOSITION (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §12).
+ *  The no-downsides quantum-like invocation: an e-class is a SUPERPOSITION (all
+ *  proven-equal realizations of a value held at once); saturation explores them
+ *  simultaneously; psi_collapse is DETERMINISTIC measurement (cost-optimal, no
+ *  probability); psi_interfere is a kernel-gated coherent merge; the kernel's proof
+ *  of equivalence is COHERENCE (no decoherence).  No floats, no probability, no ML. */
+
+/* psi_of: the superposition of an arithmetic term's equivalence class -- register the
+ * kernel-certified rules + saturate.  Returns the e-class root (the psi handle). */
+fn psi_of(root: u32) -> u32 @export {
+    sov_isa_rules()
+    eg_saturate(16u32)
+    return eg_find(root)
+}
+
+/* psi_card: the superposition's cardinality -- how many distinct realizations are held
+ * at once.  > 1 == a genuine superposition. */
+fn psi_card(psi: u32) -> u32 @export {
+    return eg_class_size(psi)
+}
+
+/* psi_collapse: DETERMINISTIC measurement -- extract the cost-optimal realization (the
+ * cost-field is the observable).  No probability; reproducible (bit-identical replay). */
+fn psi_collapse(psi: u32, out_term: *u32, out_n: *u32) -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < 256u32 { SI_REQ[i] = 0u32 ; i = i + 1u32 }
+    SI_REQ[0u32] = eg_find(psi)
+    SI_REQ[1u32] = eg_sym_count()
+    si_setcost(SI_X)
+    si_setcost(SI_C0)
+    si_setcost(SI_C1)
+    si_setcost(SI_C2)
+    si_setcost(SI_ADD)
+    si_setcost(SI_MUL)
+    si_setcost(SI_SHL)
+    let reqp : *u32 = (&SI_REQ) as u64 as *u32
+    return eg_extract(reqp, out_term, out_n)
+}
+
+/* psi_interfere: coherent merge of two superpositions -- ONLY if the kernel proves
+ * their values equal (sov_pcc_verify on the Nat-models m1,m2).  Constructive
+ * interference: the e-classes union.  A non-equal merge is REJECTED (no decoherence
+ * into contradiction).  1 = merged; 0 = rejected. */
+fn psi_interfere(r1: u32, r2: u32, m1: u32, m2: u32) -> u8 @export {
+    if sov_pcc_verify(m1, m2) != 1u8 { return 0u8 }
+    eg_union(r1, r2)
+    eg_rebuild()
+    return 1u8
+}
+
+/* KAT: deterministic superposition.  (a) a term's superposition holds MULTIPLE
+ * realizations at once (card>1); (b) it COLLAPSES deterministically to the optimum;
+ * (c) re-collapse is identical (no probability); (d) two equal superpositions
+ * INTERFERE (kernel-gated coherent merge); (e) FALSIFIER: a non-equal merge is
+ * REJECTED.  99 = all pass. */
+fn psi_kat() -> u64 @export {
+    eg_init()
+    cl_init()
+    tc_reset()
+    let ex  : u32 = si_leaf(SI_X)
+    let ec1 : u32 = si_leaf(SI_C1)
+    let ec0 : u32 = si_leaf(SI_C0)
+    let em1 : u32 = si_node2(SI_MUL, ex, ec1)
+    let em0 : u32 = si_node2(SI_MUL, ex, ec0)
+    let esum : u32 = si_node2(SI_ADD, em1, em0)
+    let ec2 : u32 = si_leaf(SI_C2)
+    let eshl : u32 = si_node2(SI_SHL, ex, ec1)
+    if eshl == SI_SENT { return 1u64 }
+
+    let psi : u32 = psi_of(esum)
+    /* (a) SUPERPOSITION: holds > 1 realization at once */
+    if psi_card(psi) < 2u32 { return 2u64 }
+    /* (b) MEASUREMENT: deterministic collapse to the optimum (x) */
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    if psi_collapse(psi, otp, onp) != 0i32 { return 3u64 }
+    if SI_OUT[0u32] != si_slot(SI_X) { return 4u64 }
+    let first : u32 = SI_OUT[0u32]
+    /* (c) DETERMINISM: re-collapse identical (no probability) */
+    if psi_collapse(psi, otp, onp) != 0i32 { return 5u64 }
+    if SI_OUT[0u32] != first { return 6u64 }
+
+    /* (d-e) INTERFERENCE -- fresh nodes (no rules => separate classes); the KERNEL gates the merge. */
+    eg_init()
+    cl_init()
+    tc_reset()
+    let ix  : u32 = si_leaf(SI_X)
+    let ic1 : u32 = si_leaf(SI_C1)
+    let im1 : u32 = si_node2(SI_MUL, ix, ic1)      /* x*1 (its own class) */
+    SOV_SUCCF[0u32] = sov_succf()
+    let mm1 : u32 = sov_m_mul(tc_var(0u32), tc_succ(tc_zero()))   /* model x*1 (== x) */
+    let mx  : u32 = tc_var(0u32)                                  /* model x */
+    /* (d) coherent merge: x*1 == x -> union */
+    if psi_interfere(im1, ix, mm1, mx) != 1u8 { return 7u64 }
+    if eg_find(im1) != eg_find(ix) { return 8u64 }   /* interfered (merged) */
+    /* (e) FALSIFIER: x*1 vs x*2 (not equal) -> REJECTED */
+    let ic2 : u32 = si_leaf(SI_C2)
+    let im2 : u32 = si_node2(SI_MUL, ix, ic2)
+    let mm2 : u32 = sov_m_mul(tc_var(0u32), tc_succ(tc_succ(tc_zero())))  /* model x*2 (== 2x) */
+    if psi_interfere(im1, im2, mm1, mm2) != 0u8 { return 9u64 }   /* non-equal: not merged */
+
+    return 99u64
+}
+
+/* ============================================================
+ *  THE CONTINGENT EVOLUTION DRIVER (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §13).
+ *  Files self-optimize and changes propagate -- DETERMINISTICALLY + COHERENTLY:
+ *    self-optimize : psi_collapse -> the optimized form (deterministic measurement);
+ *    content-address: rn_publish the optimized form -> its address (equal optima
+ *                     CONVERGE to one address; a different optimum -> a new address);
+ *    propagate     : a computed cell = H(input addresses); rn_ripple recomputes to a
+ *                    fixpoint -- a changed source propagates; an unchanged (re-optimized,
+ *                    deterministic) source does NOT (no spurious evolution, no drift).
+ *  Reuses psi (numera/sov_isa) + the ripple network (forcefield/ripple).  No floats,
+ *  no observation, no ML -- the files learn by deterministic re-descent. */
+
+fn ev_eq32(a: *u8, ao: u64, b: *u8, bo: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < 32u64 {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+fn ev_stu64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+fn ev_copy32(dst: *u8, doff: u64, src: *u8, soff: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        dst[doff + k] = src[soff + k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn sov_evolve_kat() -> u64 @export {
+    let metap : *u8 = (&EV_META) as u64 as *u8
+    let slotp : *u8 = (&EV_SLOTS) as u64 as *u8
+    let arenp : *u8 = (&EV_ARENA) as u64 as *u8
+    let outp  : *u32 = (&SI_OUT) as u64 as *u32
+    let onp   : *u32 = (&SI_OUTN) as u64 as *u32
+    let outb  : *u8  = (&SI_OUT) as u64 as *u8
+    let axp   : *u8  = (&EV_ADDRX) as u64 as *u8
+    let shlp  : *u8  = (&EV_ADDRSHL) as u64 as *u8
+    let newp  : *u8  = (&EV_NEW) as u64 as *u8
+    let cap   : *u8  = (&EV_CA) as u64 as *u8
+    let ckp   : *u8  = (&EV_CK) as u64 as *u8
+    let ioffp : *u8  = (&EV_IOFF) as u64 as *u8
+    let icntp : *u8  = (&EV_ICNT) as u64 as *u8
+    let ilstp : *u8  = (&EV_ILIST) as u64 as *u8
+    let scrp  : *u8  = (&EV_SCR) as u64 as *u8
+    let snapp : *u8  = (&EV_C1SNAP) as u64 as *u8
+    let rvp   : *u8  = (&EV_RESOLVE) as u64 as *u8
+    let vbp   : *u8  = (&EV_VBUF) as u64 as *u8
+
+    rn_store_init(metap, slotp, 8u64, 2048u64)
+
+    /* --- optimize expr A = (x*1)+(x*0) -> x; content-address its optimum --- */
+    eg_init()
+    cl_init()
+    let ax  : u32 = si_leaf(SI_X)                  /* x interned FIRST -> deterministic slot */
+    let ac1 : u32 = si_leaf(SI_C1)
+    let ac0 : u32 = si_leaf(SI_C0)
+    let ac2 : u32 = si_leaf(SI_C2)
+    let am1 : u32 = si_node2(SI_MUL, ax, ac1)
+    let am0 : u32 = si_node2(SI_MUL, ax, ac0)
+    let aA  : u32 = si_node2(SI_ADD, am1, am0)
+    let ash : u32 = si_node2(SI_SHL, ax, ac1)
+    if ash == SI_SENT { return 1u64 }
+    let psiA : u32 = psi_of(aA)
+    if psi_collapse(psiA, outp, onp) != 0i32 { return 2u64 }
+    let alen : u64 = (SI_OUTN[0u32] as u64) * 4u64
+    if rn_publish(metap, slotp, arenp, outb, 0u64, alen, axp, 0u64) != 0u64 { return 3u64 }
+
+    /* (1) RESOLUTION: the optimum is retrievable by its address (tamper-checked) */
+    if rn_resolve(metap, slotp, arenp, axp, 0u64, rvp, 0u64, 256u64, vbp) != alen { return 4u64 }
+
+    /* (2) cell-graph: cell0 = source (= A's optimum); cell1 = computed (depends on cell0) */
+    EV_CK[0u32] = 0u8
+    EV_CK[1u32] = 1u8
+    ev_copy32(cap, 0u64, axp, 0u64)                /* cell0.addr = addr(x) */
+    ev_stu64(icntp, 0u64, 0u64)
+    ev_stu64(icntp, 8u64, 1u64)
+    ev_stu64(ioffp, 0u64, 0u64)
+    ev_stu64(ioffp, 8u64, 0u64)
+    ev_stu64(ilstp, 0u64, 0u64)                    /* cell1's input = cell0 */
+    rn_ripple(metap, slotp, arenp, 2u64, ckp, cap, ioffp, icntp, ilstp, scrp, newp)
+    ev_copy32(snapp, 0u64, cap, 32u64)             /* snapshot cell1's address */
+
+    /* (3) DETERMINISM: re-optimize A -> same optimum -> same address -> no spurious ripple */
+    eg_init()
+    cl_init()
+    let bx  : u32 = si_leaf(SI_X)
+    let bc1 : u32 = si_leaf(SI_C1)
+    let bc0 : u32 = si_leaf(SI_C0)
+    let bc2 : u32 = si_leaf(SI_C2)
+    let bm1 : u32 = si_node2(SI_MUL, bx, bc1)
+    let bm0 : u32 = si_node2(SI_MUL, bx, bc0)
+    let aB  : u32 = si_node2(SI_ADD, bm1, bm0)
+    let bsh : u32 = si_node2(SI_SHL, bx, bc1)
+    if bsh == SI_SENT { return 5u64 }
+    let psiB : u32 = psi_of(aB)
+    if psi_collapse(psiB, outp, onp) != 0i32 { return 6u64 }
+    if rn_publish(metap, slotp, arenp, outb, 0u64, (SI_OUTN[0u32] as u64) * 4u64, newp, 0u64) != 0u64 { return 7u64 }
+    if ev_eq32(newp, 0u64, axp, 0u64) == 0u8 { return 8u64 }    /* DETERMINISM: identical address */
+    rn_ripple(metap, slotp, arenp, 2u64, ckp, cap, ioffp, icntp, ilstp, scrp, newp)
+    if ev_eq32(cap, 32u64, snapp, 0u64) == 0u8 { return 9u64 }  /* no spurious change */
+
+    /* (4) PROPAGATION: optimize D = x*2 -> x<<1 (different optimum) -> cell0 -> ripple changes cell1 */
+    eg_init()
+    cl_init()
+    let dx  : u32 = si_leaf(SI_X)
+    let dc1 : u32 = si_leaf(SI_C1)
+    let dc0 : u32 = si_leaf(SI_C0)
+    let dc2 : u32 = si_leaf(SI_C2)
+    let dm  : u32 = si_node2(SI_MUL, dx, dc2)      /* x*2 */
+    let dad : u32 = si_node2(SI_ADD, dx, dc0)      /* seed add slot */
+    let dsh : u32 = si_node2(SI_SHL, dx, dc1)      /* seed shl slot */
+    if dsh == SI_SENT { return 10u64 }
+    let psiD : u32 = psi_of(dm)
+    if psi_collapse(psiD, outp, onp) != 0i32 { return 11u64 }
+    if rn_publish(metap, slotp, arenp, outb, 0u64, (SI_OUTN[0u32] as u64) * 4u64, shlp, 0u64) != 0u64 { return 12u64 }
+    if ev_eq32(shlp, 0u64, axp, 0u64) == 1u8 { return 13u64 }   /* different optimum -> different address */
+    ev_copy32(cap, 0u64, shlp, 0u64)               /* cell0 := D's optimum */
+    rn_ripple(metap, slotp, arenp, 2u64, ckp, cap, ioffp, icntp, ilstp, scrp, newp)
+    if ev_eq32(cap, 32u64, snapp, 0u64) == 1u8 { return 14u64 } /* cell1 CHANGED (propagation) */
+
+    return 99u64
+}
+
+/* ============================================================
+ *  KERNEL-GOVERNED RULE ADMISSION -- the system subject to itself.  A rewrite rule joins
+ *  III's engine only if it passes BOTH gates, composed from EXISTING organs (no reinvention):
+ *    - OPERATIONAL admissibility -- root-confluent AND terminating -- the decision
+ *      omnia/xii_admission::xad_decide (the Knuth-Bendix-style admission gate);
+ *    - SEMANTIC soundness -- the rule's two sides are KERNEL-PROVEN equal -- sov_pcc_verify
+ *      (the §11 mechanism, numera/typecheck the trusted core).
+ *  xii_admission alone admits ANY confluent+terminating rule -- even a MEANING-CHANGING one,
+ *  because it gates OPERATION, not MEANING.  III's own proof kernel supplies precisely the
+ *  missing gate, so III's rule admission is made SUBJECT TO III's kernel: the engine can never
+ *  adopt a rule the kernel cannot prove meaning-preserving.  1 = admit; 0 = reject. */
+fn sov_admit_rule(lhs_model: u32, rhs_model: u32, root_confluent: u32, terminating: u32) -> u8 @export {
+    if sov_pcc_verify(lhs_model, rhs_model) != 1u8 { return 0u8 }       /* KERNEL: not meaning-preserving -> reject */
+    if xad_decide(root_confluent, terminating) != 1u32 { return 0u8 }   /* XII: not operationally admissible -> reject */
+    return 1u8
+}
+
+/* KAT: kernel-governed admission -- BOTH gates load-bearing, the kernel closing the semantic
+ * gap xii_admission alone leaves open.  (1) a sound + admissible rule add(x,0)->x is ADMITTED;
+ * (2) THE GAP -- add(x,0)->succ(x) is MEANING-CHANGING: xii_admission ALONE (xad_decide(1,1))
+ * ADMITS it, the kernel-governed gate REJECTS it (same operational flags, opposite verdict by
+ * MEANING -- the kernel caught what XII cannot see); (3) the operational gate still bites a
+ * kernel-sound rule that is non-confluent / non-terminating.  Each gate rejects what the other
+ * admits -> non-vacuous composition.  No ML, no observation.  99 = all pass. */
+fn sov_admit_kat() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    let x : u32 = tc_var(0u32)
+    let z : u32 = tc_zero()
+    let m_addx0 : u32 = sov_m_add(x, z)        /* add(x,0) -- LHS model (reduces to x) */
+    let m_succx : u32 = tc_succ(x)             /* succ(x) -- a meaning-CHANGING RHS */
+
+    /* (1) sound + operationally admissible -> ADMIT */
+    if sov_admit_rule(m_addx0, x, 1u32, 1u32) != 1u8 { return 1u64 }
+
+    /* (2) THE SEMANTIC GAP, closed: xii_admission alone ADMITS the meaning-changing rule... */
+    if xad_decide(1u32, 1u32) != 1u32 { return 2u64 }                       /* XII operational: ADMIT */
+    if sov_admit_rule(m_addx0, m_succx, 1u32, 1u32) != 0u8 { return 3u64 }   /* ...kernel-governed: REJECT */
+
+    /* (3) the operational gate still bites a kernel-sound rule */
+    if sov_admit_rule(m_addx0, x, 0u32, 1u32) != 0u8 { return 4u64 }   /* non-confluent  -> reject */
+    if sov_admit_rule(m_addx0, x, 1u32, 0u32) != 0u8 { return 5u64 }   /* non-terminating -> reject */
+
+    /* (4) controls: the kernel genuinely distinguishes meaning */
+    if sov_pcc_verify(m_addx0, m_succx) != 0u8 { return 6u64 }         /* add(x,0) != succ(x) */
+    if sov_pcc_verify(m_addx0, x) != 1u8 { return 7u64 }              /* add(x,0) == x */
+
+    return 99u64
+}
+
+/* Integration C KAT: the SOUND conversion shape pre-filter.  Proves:
+ *  (A) the filter FIRES a sound FALSE on rigidly-incompatible heads (zero vs
+ *      succ) AND through the sub-head fold (succ 0 vs succ(succ 0) = 1 vs 2);
+ *  (B) it never spuriously rejects equal / same-shaped terms;
+ *  (C) it DEFERS (Kleene UNKNOWN) on a neutral (non-rigid var) head;
+ *  (D) the SOUNDNESS DIFFERENTIAL -- the guarded verifier returns EXACTLY the
+ *      unfiltered kernel verdict on every pair, so the filter changes no result;
+ *  (E) those verdicts are the correct ones (0==0, 1==1 accepted; 0!=1, 1!=2
+ *      rejected).  The kernel stays the sole arbiter of acceptance.  99 = pass. */
+fn shape_filter_selftest() -> u64 @export {
+    tc_reset()
+    let z  : u32 = tc_zero()
+    let s0 : u32 = tc_succ(z)
+    let s1 : u32 = tc_succ(s0)
+    let v0 : u32 = tc_var(0u32)
+    let v1 : u32 = tc_var(1u32)
+    /* (A) sound FALSE: head mismatch, then sub-head fold */
+    if shape_compatible(z, s0)  != -1i32 { return 1u64 }
+    if shape_compatible(s0, s1) != -1i32 { return 2u64 }
+    /* (B) no spurious reject of equal / same-deferred-shape terms */
+    if shape_compatible(z, z)   == -1i32 { return 3u64 }
+    if shape_compatible(s0, s0) == -1i32 { return 4u64 }
+    /* (C) defer (UNKNOWN = 0) on a neutral head */
+    if shape_compatible(v0, z) != 0i32 { return 5u64 }
+    if shape_compatible(z, v0) != 0i32 { return 6u64 }
+    /* (D) soundness differential: guarded == unfiltered kernel on every pair */
+    if sov_pcc_verify(z, z)   != sov_pcc_verify_core(z, z)   { return 7u64 }
+    if sov_pcc_verify(z, s0)  != sov_pcc_verify_core(z, s0)  { return 8u64 }
+    if sov_pcc_verify(s0, s0) != sov_pcc_verify_core(s0, s0) { return 9u64 }
+    if sov_pcc_verify(s0, s1) != sov_pcc_verify_core(s0, s1) { return 10u64 }
+    if sov_pcc_verify(v0, v0) != sov_pcc_verify_core(v0, v0) { return 11u64 }
+    if sov_pcc_verify(v0, v1) != sov_pcc_verify_core(v0, v1) { return 12u64 }
+    /* (E) the verdicts are the correct ones */
+    if sov_pcc_verify(z, z)   != 1u8 { return 13u64 }
+    if sov_pcc_verify(s0, s0) != 1u8 { return 14u64 }
+    if sov_pcc_verify(z, s0)  != 0u8 { return 15u64 }
+    if sov_pcc_verify(s0, s1) != 0u8 { return 16u64 }
+    return 99u64
+}

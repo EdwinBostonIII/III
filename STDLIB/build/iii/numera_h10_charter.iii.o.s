@@ -4,11 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtcrypt_ed25519.iii\0"
+    .ascii "crypt_ed25519.iiiegraph.iii\0"
 L_str_1:
-    .ascii "msvcrtcrypt_ed25519.iii\0"
-L_str_2:
-    .ascii "crypt_ed25519.iii\0"
+    .ascii "egraph.iii\0"
     .section .rodata
 L_H10_OK:
     .quad 0x0
@@ -24,6 +22,8 @@ L_H10_KIND_RECHECK:
     .quad 0x0
 L_H10_KIND_CANARY:
     .quad 0x1
+L_H10_KIND_EGRAPH_INTEGRITY:
+    .quad 0x2
 L_H10_VERDICT_GREEN:
     .quad 0x63
 L_H10_U32MASK:
@@ -45,6 +45,16 @@ L_H10_SIG:
     .global L_H10_MSG
 L_H10_MSG:
     .quad 0x0
+    .section .bss
+    .global L_H10_PUBKEY_BUF
+L_H10_PUBKEY_BUF:
+    .zero 256
+    .global L_H10_SIG_BUF
+L_H10_SIG_BUF:
+    .zero 512
+    .global L_H10_MSG_BUF
+L_H10_MSG_BUF:
+    .zero 8
     .section .iii.ring3,"n"
     .asciz "h10_fill_pubkey"
     .text
@@ -1089,44 +1099,7 @@ h10_init:
     popq %rax
     testq %rax, %rax
     jz L_if_end_1
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq malloc
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
-    movq -8(%rbp), %rax
+    leaq L_H10_PUBKEY_BUF(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1148,45 +1121,8 @@ L_if_end_1:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
-    movabsq $0x40, %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq malloc
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_7
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_7:
-    movq -8(%rbp), %rax
+    jz L_if_end_3
+    leaq L_H10_SIG_BUF(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1195,7 +1131,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_3:
     movq L_H10_MSG(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1208,45 +1144,8 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq malloc
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_11
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_11:
-    movq -8(%rbp), %rax
+    jz L_if_end_5
+    leaq L_H10_MSG_BUF(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1255,7 +1154,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_5:
     movq L_H10_PUBKEY(%rip), %rax
     pushq %rax
     popq %rax
@@ -1418,7 +1317,7 @@ h10_falsify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_7
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1428,7 +1327,7 @@ h10_falsify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_7:
     movq -24(%rbp), %rax
     pushq %rax
     movq L_H10_OFF_R(%rip), %rax
@@ -1478,7 +1377,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_9
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1488,7 +1387,7 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_9:
     movq -24(%rbp), %rax
     pushq %rax
     movq L_H10_OFF_R(%rip), %rax
@@ -1538,7 +1437,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1548,7 +1447,7 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_11:
     movq -24(%rbp), %rax
     pushq %rax
     movq L_H10_OFF_S(%rip), %rax
@@ -1598,7 +1497,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1608,7 +1507,7 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_13:
     movq -24(%rbp), %rax
     pushq %rax
     movq L_H10_OFF_S(%rip), %rax
@@ -1798,7 +1697,7 @@ L_h10_clause_eval:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_15
     subq $32, %rsp
     callq h10_verify
     addq $32, %rsp
@@ -1814,7 +1713,7 @@ L_h10_clause_eval:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1824,7 +1723,7 @@ L_h10_clause_eval:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_17:
     subq $32, %rsp
     callq h10_falsify
     addq $32, %rsp
@@ -1840,7 +1739,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1850,7 +1749,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_19:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1860,7 +1759,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_15:
     movzbq -16(%rbp), %rax
     pushq %rax
     movzbq L_H10_KIND_CANARY(%rip), %rax
@@ -1873,7 +1772,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_21
     subq $32, %rsp
     callq L_h10_canary_holds
     addq $32, %rsp
@@ -1886,7 +1785,33 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_21:
+    movzbq -16(%rbp), %rax
+    pushq %rax
+    movzbq L_H10_KIND_EGRAPH_INTEGRITY(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    subq $32, %rsp
+    callq eg_integrity_holds
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1930,7 +1855,7 @@ L_h10_register:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_25
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1943,7 +1868,7 @@ L_h10_register:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_25:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2014,7 +1939,7 @@ h10_run_charter:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_30:
+L_loop_top_26:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2027,7 +1952,7 @@ L_loop_top_30:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_31
+    jz L_loop_end_27
     movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -2046,7 +1971,7 @@ L_loop_top_30:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_29
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2070,7 +1995,7 @@ L_loop_top_30:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_29:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2085,8 +2010,8 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_30
-L_loop_end_31:
+    jmp L_loop_top_26
+L_loop_end_27:
     movq L_H10_VERDICT_GREEN(%rip), %rax
     pushq %rax
     popq %rax
@@ -2128,7 +2053,7 @@ h10_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_31
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2138,7 +2063,7 @@ h10_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_31:
     subq $32, %rsp
     callq h10_verify
     addq $32, %rsp
@@ -2154,7 +2079,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_33
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -2164,7 +2089,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_33:
     subq $32, %rsp
     callq h10_falsify
     addq $32, %rsp
@@ -2180,7 +2105,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_35
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -2190,7 +2115,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_35:
     subq $32, %rsp
     callq L_h10_canary_holds
     addq $32, %rsp
@@ -2206,7 +2131,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_37
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -2216,7 +2141,33 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_37:
+    subq $32, %rsp
+    callq eg_integrity_holds
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movabsq $0xa, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
     movzbq L_H10_KIND_RECHECK(%rip), %rax
     pushq %rax
     popq %rcx
@@ -2235,8 +2186,37 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_41
     movabsq $0x5, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    movzbq L_H10_KIND_EGRAPH_INTEGRITY(%rip), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_h10_register
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movabsq $0xb, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -2304,7 +2284,7 @@ L_if_end_47:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
-    movabsq $0x1, %rax
+    movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2329,7 +2309,7 @@ L_if_end_49:
     callq h10_run_charter
     addq $32, %rsp
     pushq %rax
-    movabsq $0x2, %rax
+    movabsq $0x3, %rax
     pushq %rax
     popq %rcx
     popq %rax

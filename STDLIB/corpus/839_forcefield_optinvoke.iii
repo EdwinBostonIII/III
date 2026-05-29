@@ -1,0 +1,114 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\optinvoke_kat.iii
+ *
+ * Conformance KAT for the optimal-invocation selector. Links optinvoke.iii +
+ * libiii_native.a (mhash).
+ *
+ *   A min-cost valid candidate is chosen; its cand_id is returned
+ *   B an invalid candidate is never chosen, however cheap   (validity pruning)
+ *   C equal cost is broken deterministically by smaller cand_id
+ *   D no valid candidate -> OI_NONE                          (negative)
+ *   E all-same-output -> IMPL (free interchange)
+ *   F differing-output -> SUITE (significant choice)
+ *   G the decision seal is deterministic
+ *
+ * Exit 99 = all arms pass. 10..18 localize the first failure.
+ */
+
+module corpus_optinvoke
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn oi_select(cands: *u8, n: u64, out_choice: *u8) -> u64 from "optinvoke.iii"
+extern @abi(c-msvc-x64) fn oi_selection_kind(cands: *u8, n: u64) -> u64 from "optinvoke.iii"
+extern @abi(c-msvc-x64) fn oi_seal(cands: *u8, n: u64, out: *u8) -> u64 from "optinvoke.iii"
+
+const OI_NONE : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn kfill(buf: *u8, off: u64, n: u64, seed: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        buf[off + k] = ((seed + k) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn keqn(a: *u8, ao: u64, b: *u8, bo: u64, n: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < n {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+
+fn kst_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn kcand(c: *u8, i: u64, idseed: u64, outseed: u64, cost: u64, valid: u8) -> u64 {
+    let base : u64 = i * 80u64
+    kfill(c, base, 32u64, idseed)
+    kfill(c, base + 32u64, 32u64, outseed)
+    kst_u64(c, base + 64u64, cost)
+    c[base + 72u64] = valid
+    return 0u64
+}
+
+fn main() -> u64 {
+    let c : *u8 = malloc(4u64 * 80u64)
+    let choice : *u8 = malloc(32u64)
+    let expect : *u8 = malloc(32u64)
+    let seal1 : *u8 = malloc(32u64)
+    let seal2 : *u8 = malloc(32u64)
+
+    /* ---------- A: min-cost valid ---------- */
+    kcand(c, 0u64, 10u64, 100u64, 30u64, 1u8)
+    kcand(c, 1u64, 11u64, 101u64, 10u64, 1u8)
+    kcand(c, 2u64, 12u64, 102u64, 20u64, 1u8)
+    if oi_select(c, 3u64, choice) != 1u64 { return 10u64 }
+    kfill(expect, 0u64, 32u64, 11u64)
+    if keqn(choice, 0u64, expect, 0u64, 32u64) == 0u8 { return 11u64 }
+
+    /* ---------- B: validity pruning (cheapest is invalid) ---------- */
+    c[1u64 * 80u64 + 72u64] = 0u8
+    if oi_select(c, 3u64, choice) != 2u64 { return 12u64 }
+
+    /* ---------- C: deterministic tie-break by smaller cand_id ---------- */
+    kcand(c, 0u64, 20u64, 200u64, 10u64, 1u8)
+    kcand(c, 1u64, 21u64, 201u64, 10u64, 1u8)
+    kcand(c, 2u64, 22u64, 202u64, 99u64, 0u8)
+    if oi_select(c, 3u64, choice) != 0u64 { return 13u64 }
+    if oi_select(c, 3u64, choice) != 0u64 { return 14u64 }
+
+    /* ---------- D: no valid candidate -> OI_NONE ---------- */
+    c[0u64 * 80u64 + 72u64] = 0u8
+    c[1u64 * 80u64 + 72u64] = 0u8
+    if oi_select(c, 3u64, choice) != OI_NONE { return 15u64 }
+
+    /* ---------- E: same output -> IMPL ---------- */
+    kcand(c, 0u64, 30u64, 50u64, 10u64, 1u8)
+    kcand(c, 1u64, 31u64, 50u64, 20u64, 1u8)
+    kcand(c, 2u64, 32u64, 50u64, 30u64, 1u8)
+    if oi_selection_kind(c, 3u64) != 0u64 { return 16u64 }
+
+    /* ---------- F: differing output -> SUITE ---------- */
+    kcand(c, 0u64, 30u64, 50u64, 10u64, 1u8)
+    kcand(c, 1u64, 31u64, 51u64, 20u64, 1u8)
+    kcand(c, 2u64, 32u64, 52u64, 30u64, 1u8)
+    if oi_selection_kind(c, 3u64) != 1u64 { return 17u64 }
+
+    /* ---------- G: decision seal is deterministic ---------- */
+    oi_seal(c, 3u64, seal1)
+    oi_seal(c, 3u64, seal2)
+    if keqn(seal1, 0u64, seal2, 0u64, 32u64) == 0u8 { return 18u64 }
+
+    return 99u64
+}

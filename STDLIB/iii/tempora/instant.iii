@@ -1,26 +1,27 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\tempora\instant.iii
  *
- * III STDLIB - tempora::instant
+ * III STDLIB - tempora::instant  (P4.2: C-SEPARATED, deterministic)
  *
- * Sealed monotonic instant.  Phase C: backed by Win32 GetTickCount64.
- * Each instant carries a u64 tick + per-process epoch + cap_id + a
- * 16-byte sealed tag derived from sha256(tick || epoch || cap).
+ * Sealed monotonic instant backed by a DETERMINISTIC LOGICAL counter -- no OS
+ * clock, no kernel32, no msvcrt.  Each instant carries a u64 logical tick +
+ * per-process epoch + cap_id + a 16-byte seal = sha256(tick || epoch || cap).
  *
- * The sha256 used here goes through the internal-finalize / digest-byte
- * pair (sha256_finalize_internal + sha256_digest_byte) because we
- * cannot legally pass a pointer to our module-scope INSTANT_SEAL
- * buffer due to the iiis-2 address-of-global quirk (W3).  Phase E
- * removes this indirection.
+ * Why logical, not wall-clock: III is fully deterministic, and real wall-clock
+ * time is a nondeterminism source that must not drive deterministic logic.  The
+ * former Win32 GetTickCount64 backing was exactly such a leak.  A monotonic
+ * counter preserves ordering + sealing + tamper-evidence (everything consumers
+ * actually need) while being bit-identical/reproducible.  Genuine wall-clock, if
+ * ever required, is a separate explicitly-typed nondeterministic effect.
  *
- * Phase D promotes the seal to true HMAC under a Sanctum slot-4
- * sealed sub-key for forge-resistance.
+ * The sha256 used here goes through the internal-finalize / digest-byte pair
+ * because we cannot legally pass a pointer to module-scope INSTANT_SEAL under
+ * the iiis-2 address-of-global quirk (W3).
  *
- * Hexad: kind_motion.  Ring: R-1.  K: 0.95.
+ * Hexad: kind_motion.  Ring: R-1.  K: 1.00 (deterministic logical clock).
  */
 
 module tempora_instant
 
-extern @abi(c-msvc-x64) fn GetTickCount64() -> u64 from "kernel32"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
@@ -43,6 +44,15 @@ var INSTANT_LIVE  : [u8;  256]
 var INSTANT_PROCESS_EPOCH : u64 = 0u64
 var INSTANT_EPOCH_INITED  : u8 = 0u8
 
+/* The deterministic logical clock: a strictly-monotonic per-process counter.
+ * Each read advances it by one, so successive instants are strictly ordered. */
+var INSTANT_LOGICAL : u64 = 0u64
+
+fn instant_logical_next() -> u64 {
+    INSTANT_LOGICAL = INSTANT_LOGICAL + 1u64
+    return INSTANT_LOGICAL
+}
+
 fn instant_alloc_slot() -> u32 {
     let mut i : u32 = 0u32
     while i < INSTANT_MAX_INSTANCES {
@@ -63,7 +73,7 @@ fn instant_slot_of(id: u64) -> u32 {
 
 fn instant_init_epoch() -> u32 {
     if INSTANT_EPOCH_INITED == 1u8 { return 0u32 }
-    INSTANT_PROCESS_EPOCH = GetTickCount64()
+    INSTANT_PROCESS_EPOCH = instant_logical_next()
     INSTANT_EPOCH_INITED = 1u8
     return 0u32
 }
@@ -107,7 +117,7 @@ fn instant_now_sealed(time_cap: u64) -> u64 @export {
     instant_init_epoch()
     let s : u32 = instant_alloc_slot()
     if s == 0xFFFFFFFFu32 { return INSTANT_INVALID }
-    let tick : u64 = GetTickCount64()
+    let tick : u64 = instant_logical_next()
     INSTANT_TICK[s]  = tick
     INSTANT_EPOCH[s] = INSTANT_PROCESS_EPOCH
     INSTANT_CAP[s]   = time_cap
@@ -136,13 +146,11 @@ fn instant_seal_byte(id: u64, i: u32) -> u32 @export {
     return INSTANT_SEAL[off + i] as u32
 }
 
-/* Verify the cached seal still matches a recomputation.  Tampering
- * with INSTANT_TICK/EPOCH/CAP for a slot detected here. */
+/* Verify the cached seal still matches a recomputation.  Tampering with
+ * INSTANT_TICK/EPOCH/CAP for a slot is detected here. */
 fn instant_verify(id: u64) -> u8 @export {
     let s : u32 = instant_slot_of(id)
     if s == 0xFFFFFFFFu32 { return 0u8 }
-    /* Recompute fresh seal into a temp position (slot 255 reserved) and
-     * compare to the stored seal at slot s. */
     let tick : u64 = INSTANT_TICK[s]
     let epoch : u64 = INSTANT_EPOCH[s]
     let cap : u64 = INSTANT_CAP[s]

@@ -1,0 +1,16 @@
+/* QTT brick 2 (DOCS/III-QTT-DESIGN.md §4 B2): usage through dependent eliminators.
+ * p5_kat_qtt2() proves the branch JOIN (lub) -- the keystone IF pair lam^1 x.
+ * if(true,x,x) ADMIT (a var used once in EACH branch is still linear) vs
+ * lam^1 x. if(true,x,false) REJECT (asymmetric -> omega); scrutinee+branch -> omega;
+ * the exhaustive-coverage soundness fix (lam^0 x. inl x REJECT -- erased var used
+ * inside a constructor, which brick 1 wrongly admitted); the recursor-omega
+ * (iter/natrec step applied dynamically => omega); and type-position erasure
+ * (a type argument used only in a binder domain is used 0 at runtime).  Layered
+ * over the singular CCL oracle; infer/check untouched.  99 = all 16 arms pass. */
+module corpus_c866
+
+extern @abi(c-msvc-x64) fn p5_kat_qtt2() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_qtt2()
+}

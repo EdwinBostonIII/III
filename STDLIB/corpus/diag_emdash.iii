@@ -1,8 +1,0 @@
-/* Diag: em-dash em U+2014 inside block comment.
- * Tests whether iiis-0 handles non-ASCII UTF-8 bytes in comments. */
-module diag_emdash
-
-/* This comment contains an em-dash em U+2014: — and continues. */
-fn main() -> u64 {
-    return 99u64
-}

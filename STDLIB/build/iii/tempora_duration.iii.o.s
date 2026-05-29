@@ -380,8 +380,8 @@ duration_to_millis:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -414,8 +414,8 @@ duration_to_seconds:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -646,8 +646,8 @@ L_if_end_17:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -733,8 +733,8 @@ L_if_end_23:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rbp, %rsp

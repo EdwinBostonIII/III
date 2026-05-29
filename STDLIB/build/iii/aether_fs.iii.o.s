@@ -4,17 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtmsvcrtmsvcrtmsvcrtmsvcrtcapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "kernel32kernel32kernel32kernel32kernel32kernel32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_1:
-    .ascii "msvcrtmsvcrtmsvcrtmsvcrtmsvcrtcapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "kernel32kernel32kernel32kernel32kernel32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_2:
-    .ascii "msvcrtmsvcrtmsvcrtmsvcrtcapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "kernel32kernel32kernel32kernel32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_3:
-    .ascii "msvcrtmsvcrtmsvcrtcapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "kernel32kernel32kernel32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_4:
-    .ascii "msvcrtmsvcrtcapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "kernel32kernel32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_5:
-    .ascii "msvcrtcapability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
+    .ascii "kernel32capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_6:
     .ascii "capability.iiihandle.iiihandle.iiihandle.iiihandle.iiihandle.iii\0"
 L_str_7:
@@ -44,22 +44,24 @@ L_FS_MODE_WRITE:
     .quad 0x2
 L_FS_MODE_APPEND:
     .quad 0x3
-L_FS_O_RDONLY:
-    .quad 0x0
-L_FS_O_WRONLY:
-    .quad 0x1
-L_FS_O_RDWR:
+L_FS_GENERIC_READ:
+    .quad 0x80000000
+L_FS_GENERIC_WRITE:
+    .quad 0x40000000
+L_FS_APPEND_DATA:
+    .quad 0x4
+L_FS_SHARE_RW:
+    .quad 0x3
+L_FS_CREATE_ALWAYS:
     .quad 0x2
-L_FS_O_APPEND:
-    .quad 0x8
-L_FS_O_CREAT:
-    .quad 0x100
-L_FS_O_TRUNC:
-    .quad 0x200
-L_FS_O_BINARY:
-    .quad 0x8000
-L_FS_S_IREAD_WRITE:
-    .quad 0x180
+L_FS_OPEN_EXISTING:
+    .quad 0x3
+L_FS_OPEN_ALWAYS:
+    .quad 0x4
+L_FS_ATTR_NORMAL:
+    .quad 0x80
+L_FS_INVALID_HANDLE:
+    .quad 0xffffffffffffffff
 L_FS_SEEK_SET:
     .quad 0x0
 L_FS_SEEK_CUR:
@@ -72,6 +74,336 @@ L_FS_RIGHT_WRITE:
     .quad 0x4
 L_FS_RIGHT_CREATE:
     .quad 0x8
+    .section .bss
+    .global L_FS_NXFER
+L_FS_NXFER:
+    .zero 64
+    .global L_FS_NEWPOS
+L_FS_NEWPOS:
+    .zero 64
+    .section .iii.ring3,"n"
+    .asciz "fs_xfer_count"
+    .text
+    .global L_fs_xfer_count
+    .seh_proc L_fs_xfer_count
+L_fs_xfer_count:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    leaq L_FS_NXFER(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    leaq L_FS_NXFER(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    leaq L_FS_NXFER(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    leaq L_FS_NXFER(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x18, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "fs_newpos"
+    .text
+    .global L_fs_newpos
+    .seh_proc L_fs_newpos
+L_fs_newpos:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x6, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x18, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x28, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x30, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x38, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
     .section .iii.ring3,"n"
     .asciz "fs_open"
     .text
@@ -92,10 +424,14 @@ fs_open:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movslq L_FS_O_BINARY(%rip), %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
     movl L_FS_MODE_READ(%rip), %eax
@@ -113,16 +449,14 @@ fs_open:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movslq -40(%rbp), %rax
-    pushq %rax
-    movslq L_FS_O_RDONLY(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
+    movl L_FS_GENERIC_READ(%rip), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movl L_FS_OPEN_EXISTING(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -150,28 +484,14 @@ L_if_end_1:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movslq -40(%rbp), %rax
-    pushq %rax
-    movslq L_FS_O_WRONLY(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    movslq L_FS_O_CREAT(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    movslq L_FS_O_TRUNC(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
+    movl L_FS_GENERIC_WRITE(%rip), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movl L_FS_CREATE_ALWAYS(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -193,22 +513,14 @@ L_if_end_3:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movslq -40(%rbp), %rax
-    pushq %rax
-    movslq L_FS_O_WRONLY(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    movslq L_FS_O_APPEND(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
+    movl L_FS_APPEND_DATA(%rip), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movl L_FS_OPEN_ALWAYS(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -273,29 +585,37 @@ L_if_end_9:
     popq %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
-    movslq L_FS_S_IREAD_WRITE(%rip), %rax
+    movq %rax, -56(%rbp)
+    subq $8, %rsp
+    movabsq $0x0, %rax
     pushq %rax
-    movslq -40(%rbp), %rax
+    movl L_FS_ATTR_NORMAL(%rip), %eax
     pushq %rax
-    movq -48(%rbp), %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movl L_FS_SHARE_RW(%rip), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    movq -56(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _open
+    callq CreateFileA
     addq $32, %rsp
-    movslq %eax, %rax
+    addq $8, %rsp
+    addq $24, %rsp
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
-    movslq -56(%rbp), %rax
+    movq %rax, -64(%rbp)
+    movq -64(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
+    movq L_FS_INVALID_HANDLE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -318,9 +638,7 @@ L_if_end_9:
 L_if_end_11:
     movq -8(%rbp), %rax
     pushq %rax
-    movslq -56(%rbp), %rax
-    pushq %rax
-    popq %rax
+    movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -399,7 +717,7 @@ L_if_end_13:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq _unlink
+    callq DeleteFileA
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -412,7 +730,7 @@ L_if_end_13:
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setne %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -466,21 +784,14 @@ fs_close:
     movq %rax, -16(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movslq -24(%rbp), %rax
-    pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq _close
+    callq CloseHandle
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq %rax, -32(%rbp)
+    movq %rax, -24(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -490,14 +801,14 @@ fs_close:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movslq -32(%rbp), %rax
+    movslq -24(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setne %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -584,19 +895,12 @@ L_if_end_19:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
+    movq %rax, -40(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -609,29 +913,36 @@ L_if_end_19:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
-    movl -56(%rbp), %eax
+    movq %rax, -48(%rbp)
+    subq $8, %rsp
+    movabsq $0x0, %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    leaq L_FS_NXFER(%rip), %rax
     pushq %rax
-    movslq -40(%rbp), %rax
+    popq %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _read
+    callq ReadFile
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
-    movslq -64(%rbp), %rax
+    movq %rax, -56(%rbp)
+    movslq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -652,7 +963,10 @@ L_if_end_19:
     pushq %rax
     popq %rax
 L_if_end_21:
-    movslq -64(%rbp), %rax
+    subq $32, %rsp
+    callq L_fs_xfer_count
+    addq $32, %rsp
+    movl %eax, %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -725,19 +1039,12 @@ L_if_end_23:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
+    movq %rax, -40(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -750,29 +1057,36 @@ L_if_end_23:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
-    movl -56(%rbp), %eax
+    movq %rax, -48(%rbp)
+    subq $8, %rsp
+    movabsq $0x0, %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    leaq L_FS_NXFER(%rip), %rax
     pushq %rax
-    movslq -40(%rbp), %rax
+    popq %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _write
+    callq WriteFile
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
-    movslq -64(%rbp), %rax
+    movq %rax, -56(%rbp)
+    movslq -56(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -793,7 +1107,10 @@ L_if_end_23:
     pushq %rax
     popq %rax
 L_if_end_25:
-    movslq -64(%rbp), %rax
+    subq $32, %rsp
+    callq L_fs_xfer_count
+    addq $32, %rsp
+    movl %eax, %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -865,32 +1182,28 @@ L_if_end_27:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
-    popq %rax
-    movl %eax, %eax
+    movabsq $0x0, %rax
     pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movslq -48(%rbp), %rax
+    movq -40(%rbp), %rax
     pushq %rax
-    movq -16(%rbp), %rax
-    pushq %rax
-    movslq -40(%rbp), %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _lseeki64
+    callq SetFilePointerEx
     addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movslq L_FS_OK(%rip), %rax
@@ -961,24 +1274,28 @@ L_if_end_29:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl L_FS_SEEK_CUR(%rip), %eax
+    pushq %rax
+    leaq L_FS_NEWPOS(%rip), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movslq L_FS_SEEK_CUR(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
-    movslq -24(%rbp), %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _lseeki64
+    callq SetFilePointerEx
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq L_fs_newpos
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -1047,58 +1364,83 @@ L_if_end_31:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
+    movl L_FS_SEEK_CUR(%rip), %eax
+    pushq %rax
+    leaq L_FS_NEWPOS(%rip), %rax
     pushq %rax
     popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movslq L_FS_SEEK_CUR(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
-    movslq -24(%rbp), %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _lseeki64
+    callq SetFilePointerEx
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq L_fs_newpos
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl L_FS_SEEK_END(%rip), %eax
+    pushq %rax
+    leaq L_FS_NEWPOS(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq SetFilePointerEx
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq L_fs_newpos
     addq $32, %rsp
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-    movslq L_FS_SEEK_END(%rip), %rax
+    movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    movslq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq _lseeki64
-    addq $32, %rsp
+    popq %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movslq L_FS_SEEK_SET(%rip), %rax
+    movl L_FS_SEEK_SET(%rip), %eax
     pushq %rax
-    movq -32(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
-    movslq -24(%rbp), %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
+    popq %r9
     subq $32, %rsp
-    callq _lseeki64
+    callq SetFilePointerEx
     addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq -40(%rbp), %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

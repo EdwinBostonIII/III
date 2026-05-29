@@ -124,8 +124,8 @@ L_if_end_3:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, L_HSP_F(%rip)
@@ -348,8 +348,8 @@ L_if_end_13:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -385,8 +385,8 @@ L_loop_top_14:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax

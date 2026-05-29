@@ -1899,8 +1899,8 @@ L_loop_top_16:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -1943,8 +1943,8 @@ L_loop_top_16:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rdx
@@ -1967,8 +1967,8 @@ L_loop_top_16:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rdx
@@ -2168,8 +2168,8 @@ L_loop_top_22:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rdx
@@ -2218,8 +2218,8 @@ L_loop_top_22:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rcx
@@ -2230,8 +2230,8 @@ L_loop_top_22:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rdx
@@ -2323,8 +2323,8 @@ L_loop_top_24:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rdx
@@ -2612,8 +2612,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -2634,8 +2634,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -2650,8 +2650,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rcx
@@ -2662,8 +2662,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -2695,8 +2695,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -2711,8 +2711,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rcx
@@ -2723,8 +2723,8 @@ L_kem_basemul_pair:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -2839,8 +2839,8 @@ L_loop_top_26:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -3006,8 +3006,8 @@ L_loop_top_28:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -3383,8 +3383,8 @@ L_loop_top_34:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -3701,8 +3701,8 @@ L_loop_top_38:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -3835,8 +3835,8 @@ L_loop_top_40:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -3873,8 +3873,8 @@ L_loop_top_40:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -4615,8 +4615,8 @@ L_loop_top_52:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -4639,8 +4639,8 @@ L_loop_top_52:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -4834,8 +4834,8 @@ L_loop_top_56:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -4889,8 +4889,8 @@ L_loop_top_56:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0xf, %rax
     pushq %rax
@@ -5013,8 +5013,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5068,8 +5068,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5123,8 +5123,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5178,8 +5178,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5233,8 +5233,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5288,8 +5288,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5343,8 +5343,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5398,8 +5398,8 @@ L_loop_top_58:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x1f, %rax
     pushq %rax
@@ -5850,8 +5850,8 @@ L_loop_top_62:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -5906,8 +5906,8 @@ L_loop_top_62:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6302,8 +6302,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6352,8 +6352,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6402,8 +6402,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6452,8 +6452,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6502,8 +6502,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6552,8 +6552,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6602,8 +6602,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6652,8 +6652,8 @@ L_loop_top_64:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -6796,8 +6796,8 @@ L_loop_top_68:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x3ff, %rax
     pushq %rax
@@ -6851,8 +6851,8 @@ L_loop_top_68:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x3ff, %rax
     pushq %rax
@@ -6906,8 +6906,8 @@ L_loop_top_68:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x3ff, %rax
     pushq %rax
@@ -6961,8 +6961,8 @@ L_loop_top_68:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x3ff, %rax
     pushq %rax
@@ -7287,8 +7287,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7342,8 +7342,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7397,8 +7397,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7452,8 +7452,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7507,8 +7507,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7562,8 +7562,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7617,8 +7617,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -7672,8 +7672,8 @@ L_loop_top_70:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x7ff, %rax
     pushq %rax
@@ -8626,8 +8626,8 @@ L_loop_top_74:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -8676,8 +8676,8 @@ L_loop_top_74:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -8726,8 +8726,8 @@ L_loop_top_74:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -8776,8 +8776,8 @@ L_loop_top_74:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9466,8 +9466,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9516,8 +9516,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9566,8 +9566,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9616,8 +9616,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9666,8 +9666,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9716,8 +9716,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9766,8 +9766,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -9816,8 +9816,8 @@ L_loop_top_76:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movl %eax, %eax
@@ -12536,8 +12536,8 @@ L_loop_top_136:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax

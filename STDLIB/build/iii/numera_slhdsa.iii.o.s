@@ -3343,8 +3343,8 @@ L_loop_end_59:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rcx
@@ -3355,8 +3355,8 @@ L_loop_end_59:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rax
@@ -3389,8 +3389,8 @@ L_loop_end_59:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -3484,8 +3484,8 @@ L_loop_top_62:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
@@ -3520,8 +3520,8 @@ L_if_end_65:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5109,8 +5109,8 @@ L_loop_top_94:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -5122,8 +5122,8 @@ L_loop_top_94:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     popq %rcx
@@ -8713,8 +8713,8 @@ iii_slhdsa_sign:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -176(%rbp)
@@ -8730,8 +8730,8 @@ iii_slhdsa_sign:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -184(%rbp)
@@ -8747,8 +8747,8 @@ iii_slhdsa_sign:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -192(%rbp)
@@ -9513,8 +9513,8 @@ L_if_end_135:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -160(%rbp)
@@ -9530,8 +9530,8 @@ L_if_end_135:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -168(%rbp)
@@ -9547,8 +9547,8 @@ L_if_end_135:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -176(%rbp)

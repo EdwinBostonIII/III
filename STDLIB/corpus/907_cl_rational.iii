@@ -1,0 +1,18 @@
+/* 907_cl_rational.iii -- Integration B: exact rational microarch cost weights.
+ *
+ * Drives cl_rational_selftest (numera/cost_lattice.iii): the division-free
+ * primitives (cl_udiv binary long-division -- iiis-2 miscompiles `/` as signed
+ * idivq, so it is hand-rolled; cl_gcd subtractive Euclid), the exact common-
+ * denominator scaling of cl_register_order_q (rational weights nums/dens scaled
+ * to an exact-integer row so the existing exact-integer cl_dot stays exact --
+ * never a float), a proof that the rational order STRICTLY distinguishes cost
+ * vectors an integer-floor order would tie, and the negative arms (zero
+ * denominator, scaling overflow, null arg all rejected with CL_E_BAD).
+ * Main-corpus convention: rc 99 = pass; 1..18 = which assertion failed. */
+module corpus_907
+
+extern @abi(c-msvc-x64) fn cl_rational_selftest() -> u64 from "cost_lattice.iii"
+
+fn main() -> u64 {
+    return cl_rational_selftest()
+}

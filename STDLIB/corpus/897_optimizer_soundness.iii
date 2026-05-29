@@ -1,0 +1,56 @@
+/* 897_optimizer_soundness.iii -- PROOF-CARRYING certification of cg_r3's algebraic optimizer.
+ *
+ * For EVERY folded identity, the OPTIMIZED form (a compile-time-constant operand, which the
+ * compiler folds / strength-reduces / elides) must be BIT-IDENTICAL to the SAME operation written
+ * with a RUNTIME operand the compiler CANNOT fold (a function parameter -- cg_r3 has no
+ * interprocedural constant propagation, so `x & z` with param z stays a real `andq`).  The two
+ * sides are therefore genuinely different machine code -- a `movabsq`/elided op on the left, a
+ * real add/sub/mul/and/or/xor/shl/shr on the right -- so their agreement is a NON-TAUTOLOGICAL
+ * equivalence proof (cf. the no-tautological-proofs discipline): the optimizer is certified to
+ * preserve the unoptimized semantics, not merely to agree with itself.
+ *
+ * Probed over a bit-complete set {0, 1, MAX, 0xAAAA.., 0x5555.., a high-bit value, a generic
+ * value}; since the bitwise ops are per-bit independent and the arithmetic ops are exercised at
+ * 0 / 1 / MAX / carry-boundary inputs, every bit position and every carry/borrow edge is covered.
+ * 99 = the optimizer is certified sound (fold == real op) on all identities, all probes. */
+module corpus_897
+
+/* z==0, one==1, allones==0xFFFFFFFFFFFFFFFF, y==x are passed as RUNTIME params so the compiler
+ * cannot const-fold the right-hand ("real operation") side of each equivalence. */
+fn cert(x: u64, y: u64, z: u64, one: u64, allones: u64) -> u64 {
+    if (x + 0u64) != (x + z) { return 1u64 }                              /* x + 0  = x */
+    if (x - 0u64) != (x - z) { return 2u64 }                              /* x - 0  = x */
+    if (x * 1u64) != (x * one) { return 3u64 }                            /* x * 1  = x */
+    if (x * 0u64) != (x * z) { return 4u64 }                              /* x * 0  = 0 */
+    if (x * 2u64) != (x * (one + one)) { return 5u64 }                    /* x * 2  = x<<1 (strength reduce) */
+    if (x | 0u64) != (x | z) { return 6u64 }                             /* x | 0  = x */
+    if (x ^ 0u64) != (x ^ z) { return 7u64 }                             /* x ^ 0  = x */
+    if (x & 0u64) != (x & z) { return 8u64 }                             /* x & 0  = 0 */
+    if (x << 0u64) != (x << z) { return 9u64 }                           /* x << 0 = x */
+    if (x >> 0u64) != (x >> z) { return 10u64 }                          /* x >> 0 = x */
+    if (x & 0xFFFFFFFFFFFFFFFFu64) != (x & allones) { return 11u64 }      /* x & ALLONES = x */
+    if (x | 0xFFFFFFFFFFFFFFFFu64) != (x | allones) { return 12u64 }      /* x | ALLONES = ALLONES */
+    if (x - x) != (x - y) { return 13u64 }                               /* x - x  = 0  (same binder) */
+    if (x ^ x) != (x ^ y) { return 14u64 }                               /* x ^ x  = 0 */
+    if (x & x) != (x & y) { return 15u64 }                               /* x & x  = x */
+    if (x | x) != (x | y) { return 16u64 }                               /* x | x  = x */
+    return 0u64
+}
+
+fn probe(x: u64) -> u64 {
+    let z : u64 = 0u64
+    let one : u64 = 1u64
+    let allones : u64 = 0xFFFFFFFFFFFFFFFFu64
+    return cert(x, x, z, one, allones)
+}
+
+fn main() -> u64 {
+    if probe(0u64) != 0u64 { return 1u64 }
+    if probe(1u64) != 0u64 { return 2u64 }
+    if probe(0xFFFFFFFFFFFFFFFFu64) != 0u64 { return 3u64 }                /* MAX */
+    if probe(0xAAAAAAAAAAAAAAAAu64) != 0u64 { return 4u64 }                /* alternating 1010 */
+    if probe(0x5555555555555555u64) != 0u64 { return 5u64 }                /* alternating 0101 */
+    if probe(0x8000000000000000u64) != 0u64 { return 6u64 }                /* high bit only */
+    if probe(123456789u64) != 0u64 { return 7u64 }                         /* generic */
+    return 99u64
+}

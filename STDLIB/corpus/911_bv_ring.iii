@@ -1,0 +1,18 @@
+/* 911_bv_ring.iii -- B Stage 1: the RIGHT kernel for ring-0 codegen.
+ *
+ * Drives bv_ring_selftest (numera/bv_ring.iii): a u64-SOUND decision layer that
+ * decides expression equality over the machine-word ring Z/2^64 by canonical
+ * multivariate-polynomial normal form.  Proves it CERTIFIES real ring identities
+ * (x+0, x*1, x*0, x*2==x<<1, (x<<2)<<3==x<<5, x-x==0, distributivity,
+ * commutativity) and -- prove the negative -- REJECTS non-identities (x+1!=x,
+ * x*2!=x*3, x!=y, x<<1!=x<<2, xy!=xz), so a proof-carrying optimizer gating on
+ * bv_equal can never bless an unsound rewrite.  This is the kernel whose THEORY
+ * matches the metal (u64/multi-var/large-const), unlike the Peano-Nat kernel.
+ * Main-corpus convention: rc 99 = pass; 1..13 = which assertion failed. */
+module corpus_911
+
+extern @abi(c-msvc-x64) fn bv_ring_selftest() -> u64 from "bv_ring.iii"
+
+fn main() -> u64 {
+    return bv_ring_selftest()
+}

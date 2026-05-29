@@ -1,0 +1,16 @@
+/* The CONTINGENT EVOLUTION DRIVER (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §13): files
+ * self-optimize and changes propagate, DETERMINISTICALLY + COHERENTLY.  sov_evolve_kat()
+ * proves: an expression's psi-optimized form is CONTENT-ADDRESSED (rn_publish) and
+ * retrievable (rn_resolve, tamper-checked); a computed cell = H(input addresses)
+ * (rn_ripple); RE-optimizing a source is DETERMINISTIC (same optimum -> same address ->
+ * NO spurious ripple, no drift); a genuinely different optimum -> a new address that
+ * PROPAGATES to the dependent cell.  Reuses psi + the revived ripple network; the
+ * optimized forms are kernel-certified equal (875/877).  No floats, no observation, no
+ * ML -- the files learn by deterministic re-descent.  99 = all pass. */
+module corpus_c879
+
+extern @abi(c-msvc-x64) fn sov_evolve_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return sov_evolve_kat()
+}

@@ -219,6 +219,26 @@ if [[ -f "$FORGE_CHECK" ]]; then
     fi
 fi
 
+# --- Architectural invariant gate (cartographer --gate) ----------------
+# Beyond the per-.def drift gates above, the cartographer (sibling tree)
+# enforces the STRUCTURAL graph invariants: no un-allowlisted dependency
+# CYCLE and no duplicate @export SYMBOL (a Trap-2 link bomb). A NEW cycle or
+# export-collision fails the build HERE, before any compile -- making the
+# architecture self-governing instead of vigilance-dependent. Intentional
+# exceptions live in III-CARTOGRAPHER/gate_allow.json. SOFT dependency: the
+# tool lives OUTSIDE the sealed tree, so its (or python's) absence skips the
+# gate rather than breaking the bootstrap; it touches no .iii / no MODULES
+# order / no emitted byte (pre-compile, read-only) -> ZERO seal impact.
+CARTO="$STDLIB_DIR/../../III-CARTOGRAPHER/cartographer.py"
+if [[ -f "$CARTO" ]] && command -v python >/dev/null 2>&1; then
+    echo "[build_stdlib] architectural invariant gate: cartographer --gate"
+    if ! python "$CARTO" --gate; then
+        echo "[build_stdlib] FATAL: architectural invariant violation -- a new dependency cycle or duplicate @export symbol." >&2
+        echo "[build_stdlib]        Fix it, or record an intentional exception in III-CARTOGRAPHER/gate_allow.json." >&2
+        exit 2
+    fi
+fi
+
 # Module list in dependency order: each entry is "subsphere/name".
 MODULES=(
     "numera/scalar"
@@ -478,7 +498,6 @@ MODULES=(
     "omnia/tp_c99hdr_to_iii"
     "omnia/tp_ast_to_babel_json"
     "omnia/tp_babel_json_to_ast"
-    "omnia/tp_dispatch_consts"
     # The Intent Calculus v1.0 (supersedes FROZEN SPEC III-RES-FROZEN-001).
     # calculus_v1 + irreducibility_proof are placed at end of MODULES list
     # so adding them never shifts the BSS layout of any pre-existing module
@@ -566,6 +585,8 @@ MODULES=(
     "numera/rev_invoke"
     "numera/tiebreak"
     "numera/galois"
+    "numera/bv_ring"
+    "numera/congruence"
     "numera/sat"
     "numera/egraph"
     "numera/cost_lattice"
@@ -702,6 +723,33 @@ MODULES=(
     "aether/reach_core"
     "aether/reach_oracle"
     "aether/backend_loopback"
+    # The directional ripple-field (omnia::ripple_field): thickens the thin
+    # topology ripple into a signed, content-derived gradient (xii_savings
+    # magnitude x xii_hj dominance sign).  Appended last (BSS-neutral); externs
+    # only the already-sealed xii_savings + xii_hj built above.
+    "omnia/ripple_field"
+    # FORCEFIELD bricks: the coherence gate (pleroma) + the ripple network value
+    # & signed-dynamic layers.  Appended last (BSS-neutral); compiler-unreferenced.
+    "forcefield/pleroma"
+    "forcefield/ripple"
+    "forcefield/ripple_dyn"
+    "forcefield/optinvoke"
+    "numera/typecheck"
+    "numera/combinator"
+    "numera/ccl"
+    # P6: the sound-evolution commit gate (composes xii_admission + pleroma + cad).
+    "forcefield/commit_gate"
+    # The Sovereign ISA Descent: the Sovereign Calculus's differential descent over
+    # the cost-field, wiring egraph (saturate) + cost_lattice (cost) into a proof-
+    # preserving min-cost optimizer.  Externs egraph + cost_lattice (built above).
+    "numera/sov_isa"
+    # The verification missile on III's LIVE rules: drives the real xii_canonicalise
+    # engine over the trit fragment and verifies it against an INDEPENDENT Kleene spec
+    # (non-tautological, unlike corpus 670).  Externs only the live XII engine.
+    "omnia/xii_rule_verify"
+    # Second strike: the semantic-soundness gate extended to XII's LIVE fusion identity-null
+    # rewrites (R016/R017/R021/R022), verified against the independent monoid-identity authority.
+    "omnia/xii_fusion_verify"
 )
 
 PASS=0
@@ -785,6 +833,18 @@ if [[ $FAIL -eq 0 ]]; then
         "$CC" -c -ffile-prefix-map="$PWD=." -o "$BH_OBJ" "$BH_SRC"
         echo "[build_stdlib] OK   bench_helpers.s -> $BH_OBJ"
         OBJS+=("$BH_OBJ")
+    fi
+
+    # COMPILER/BOOT/cpuid_helper.s -> STDLIB/build/iii/cpuid_helper.o
+    # Exposes iii_cpuid, iii_xgetbv. Consumed by numera/cpufeat (P4.1: native
+    # CPU-feature detection, replacing the kernel32 IsProcessorFeaturePresent
+    # umbilical).
+    CPUID_SRC="$STDLIB_DIR/../COMPILER/BOOT/cpuid_helper.s"
+    CPUID_OBJ="$BUILD_DIR/cpuid_helper.o"
+    if [[ -f "$CPUID_SRC" ]]; then
+        "$CC" -c -ffile-prefix-map="$PWD=." -o "$CPUID_OBJ" "$CPUID_SRC"
+        echo "[build_stdlib] OK   cpuid_helper.s -> $CPUID_OBJ"
+        OBJS+=("$CPUID_OBJ")
     fi
 
     # Phase C.5: hand-written hot-path resolver fast path.

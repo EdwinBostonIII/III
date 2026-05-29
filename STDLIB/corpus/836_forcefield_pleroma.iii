@@ -1,0 +1,241 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\forcefield_kat.iii
+ *
+ * Conformance KAT for the pleroma coherence forcefield gate.  STANDALONE - not
+ * wired into the STDLIB corpus.  To build+run it must link against pleroma.iii +
+ * the mhash/cad/sha256 chain in libiii_native.a.
+ *
+ * Proves BOTH arms (a gate that only ever admits is a stub):
+ *   - ADMIT on a genuinely coherent cover (non-trivial holonomy that cancels);
+ *   - REJECT, with a LOCATED obstruction edge, on a non-gluing cover;
+ *   - the 2-cocycle (triangle) case both ways;
+ *   - determinism of the holographic root;
+ *   - ERROR on precondition violations (deg out of range; non-permutation).
+ *
+ * Permutations are over S_4 (deg = 4):
+ *   ID = [0,1,2,3]   g0 = [1,0,2,3]   g1 = [0,2,1,3]
+ *   g2 = [0,1,3,2]   g3 = [1,2,3,0] = g0 . g1 . g2     k = [1,2,0,3] = g0 . g1
+ *
+ * Exit 99 = all arms pass.  10..18 localize the first failing arm.
+ */
+
+module corpus_forcefield
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn pleroma_cohere(
+    obj_count: u64,
+    edge_count: u64,
+    edge_src: *u8,
+    edge_dst: *u8,
+    edge_perm: *u8,
+    deg: u64,
+    obj_id: *u8,
+    root_out: *u8,
+    obstr_out: *u8
+) -> u64 from "pleroma.iii"
+
+fn kst_u32(p: *u8, elem: u64, v: u32) -> u64 {
+    let o : u64 = elem * 4u64
+    p[o]        = (v & 0xFFu32) as u8
+    p[o + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    p[o + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[o + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u64
+}
+
+fn kld_u32(p: *u8, elem: u64) -> u32 {
+    let o : u64 = elem * 4u64
+    let b0 : u32 = p[o] as u32
+    let b1 : u32 = p[o + 1u64] as u32
+    let b2 : u32 = p[o + 2u64] as u32
+    let b3 : u32 = p[o + 3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* write a 4-element permutation at edge index eidx into a deg=4 perm buffer */
+fn kperm4(buf: *u8, eidx: u64, a: u8, b: u8, c: u8, d: u8) -> u64 {
+    let o : u64 = eidx * 4u64
+    buf[o]        = a
+    buf[o + 1u64] = b
+    buf[o + 2u64] = c
+    buf[o + 3u64] = d
+    return 0u64
+}
+
+fn kedge(src: *u8, dst: *u8, eidx: u64, s: u32, d: u32) -> u64 {
+    kst_u32(src, eidx, s)
+    kst_u32(dst, eidx, d)
+    return 0u64
+}
+
+fn kfill_objid(buf: *u8, n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let tot : u64 = n * 32u64
+    while i < tot {
+        buf[i] = (i & 0xFFu64) as u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* Build the canonical coherent 4-object square into caller buffers.
+ *   e0:0->1 g0   e1:1->2 g1   e2:2->3 g2   e3:0->3 g3   (g3 = g0.g1.g2) */
+fn build_square(src: *u8, dst: *u8, perm: *u8) -> u64 {
+    kedge(src, dst, 0u64, 0u32, 1u32)
+    kedge(src, dst, 1u64, 1u32, 2u32)
+    kedge(src, dst, 2u64, 2u32, 3u32)
+    kedge(src, dst, 3u64, 0u32, 3u32)
+    kperm4(perm, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 */
+    kperm4(perm, 1u64, 0u8, 2u8, 1u8, 3u8)   /* g1 */
+    kperm4(perm, 2u64, 0u8, 1u8, 3u8, 2u8)   /* g2 */
+    kperm4(perm, 3u64, 1u8, 2u8, 3u8, 0u8)   /* g3 */
+    return 0u64
+}
+
+fn main() -> u64 {
+    let deg : u64 = 4u64
+
+    /* shared scratch */
+    let root_a  : *u8 = malloc(32u64)
+    let root_b  : *u8 = malloc(32u64)
+    let obstr   : *u8 = malloc(4u64)
+
+    /* ---------- arm 1: coherent square -> ADMIT ---------- */
+    let s4   : *u8 = malloc(4u64 * 4u64)
+    let d4   : *u8 = malloc(4u64 * 4u64)
+    let p4   : *u8 = malloc(4u64 * 4u64)
+    let oid4 : *u8 = malloc(4u64 * 32u64)
+    kfill_objid(oid4, 4u64)
+    build_square(s4, d4, p4)
+
+    let v1 : u64 = pleroma_cohere(4u64, 4u64, s4, d4, p4, deg, oid4, root_a, obstr)
+    if v1 != 1u64 { return 10u64 }
+    if kld_u32(obstr, 0u64) != 0xFFFFFFFFu32 { return 11u64 }
+
+    /* ---------- arm 2: determinism of the root ---------- */
+    let v1b : u64 = pleroma_cohere(4u64, 4u64, s4, d4, p4, deg, oid4, root_b, obstr)
+    if v1b != 1u64 { return 14u64 }
+    let mut i : u64 = 0u64
+    let mut root_differs : u64 = 0u64
+    while i < 32u64 {
+        if root_a[i] != root_b[i] { root_differs = 1u64 }
+        i = i + 1u64
+    }
+    if root_differs != 0u64 { return 14u64 }
+
+    /* ---------- arm 3: malformed degree -> ERROR ---------- */
+    let vbad_deg : u64 = pleroma_cohere(4u64, 4u64, s4, d4, p4, 0u64, oid4, root_a, obstr)
+    if vbad_deg != 2u64 { return 15u64 }
+
+    /* ---------- arm 4: non-permutation transition -> ERROR ---------- */
+    /* corrupt edge 0's first image to 9 (>= deg) */
+    p4[0] = 9u8
+    let vbad_perm : u64 = pleroma_cohere(4u64, 4u64, s4, d4, p4, deg, oid4, root_a, obstr)
+    if vbad_perm != 2u64 { return 16u64 }
+
+    free(s4)
+    free(d4)
+    free(p4)
+    free(oid4)
+
+    /* ---------- arm 5: parallel disagreeing bridges -> REJECT @ edge 1 ----------
+     * 2 objects, two edges 0->1 with different transitions (g0 then g1).
+     * Scan order makes e0 the tree edge, so e1 is the located obstruction. */
+    let s2   : *u8 = malloc(2u64 * 4u64)
+    let d2   : *u8 = malloc(2u64 * 4u64)
+    let p2   : *u8 = malloc(2u64 * 4u64)
+    let oid2 : *u8 = malloc(2u64 * 32u64)
+    kfill_objid(oid2, 2u64)
+    kedge(s2, d2, 0u64, 0u32, 1u32)
+    kedge(s2, d2, 1u64, 0u32, 1u32)
+    kperm4(p2, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 */
+    kperm4(p2, 1u64, 0u8, 2u8, 1u8, 3u8)   /* g1 != g0 */
+
+    let v2 : u64 = pleroma_cohere(2u64, 2u64, s2, d2, p2, deg, oid2, root_a, obstr)
+    if v2 != 0u64 { return 12u64 }
+    if kld_u32(obstr, 0u64) != 1u32 { return 13u64 }
+
+    free(s2)
+    free(d2)
+    free(p2)
+    free(oid2)
+
+    /* ---------- arms 6 & 7: triangle (2-cocycle) both ways ----------
+     * e0:0->1 g0   e1:1->2 g1   e2:0->2 k.   Coheres iff k = g0.g1. */
+    let s3   : *u8 = malloc(3u64 * 4u64)
+    let d3   : *u8 = malloc(3u64 * 4u64)
+    let p3   : *u8 = malloc(3u64 * 4u64)
+    let oid3 : *u8 = malloc(3u64 * 32u64)
+    kfill_objid(oid3, 3u64)
+    kedge(s3, d3, 0u64, 0u32, 1u32)
+    kedge(s3, d3, 1u64, 1u32, 2u32)
+    kedge(s3, d3, 2u64, 0u32, 2u32)
+    kperm4(p3, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 */
+    kperm4(p3, 1u64, 0u8, 2u8, 1u8, 3u8)   /* g1 */
+    kperm4(p3, 2u64, 1u8, 2u8, 0u8, 3u8)   /* k = g0.g1  (coherent) */
+
+    let v3ok : u64 = pleroma_cohere(3u64, 3u64, s3, d3, p3, deg, oid3, root_a, obstr)
+    if v3ok != 1u64 { return 17u64 }
+
+    /* break the 2-cocycle: set the hypotenuse to ID (!= k) */
+    kperm4(p3, 2u64, 0u8, 1u8, 2u8, 3u8)   /* ID != k -> incoherent */
+    let v3bad : u64 = pleroma_cohere(3u64, 3u64, s3, d3, p3, deg, oid3, root_a, obstr)
+    if v3bad != 0u64 { return 18u64 }
+
+    free(s3)
+    free(d3)
+    free(p3)
+    free(oid3)
+
+    /* ---------- arm 8: DISCONNECTED forest (2 components) -> ADMIT ----------
+     * exercises the spanning-FOREST loop: each unvisited vertex starts a new tree
+     * with its own identity gauge.  Components {0,1} and {2,3} are disjoint. */
+    let sf   : *u8 = malloc(16u64)
+    let df   : *u8 = malloc(16u64)
+    let pf   : *u8 = malloc(16u64)
+    let oidf : *u8 = malloc(128u64)
+    kfill_objid(oidf, 4u64)
+    kedge(sf, df, 0u64, 0u32, 1u32)        /* component A: 0 -> 1 */
+    kedge(sf, df, 1u64, 2u32, 3u32)        /* component B: 2 -> 3 (disjoint) */
+    kperm4(pf, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 */
+    kperm4(pf, 1u64, 0u8, 2u8, 1u8, 3u8)   /* g1 */
+    let vf : u64 = pleroma_cohere(4u64, 2u64, sf, df, pf, deg, oidf, root_a, obstr)
+    if vf != 1u64 { return 19u64 }
+
+    /* ---------- arm 9: disconnected, the SECOND component INCOHERENT -> REJECT @ edge 2 ----------
+     * a parallel disagreeing bridge in component B; the forest must still locate it. */
+    kedge(sf, df, 2u64, 2u32, 3u32)        /* a 3rd edge 2 -> 3 ... */
+    kperm4(pf, 2u64, 0u8, 1u8, 2u8, 3u8)   /* ... = ID != g1 (the tree edge) -> non-gluing */
+    let vg : u64 = pleroma_cohere(4u64, 3u64, sf, df, pf, deg, oidf, root_a, obstr)
+    if vg != 0u64 { return 20u64 }
+    if kld_u32(obstr, 0u64) != 2u32 { return 21u64 }   /* located: edge 2 in component B */
+    free(sf)
+    free(df)
+    free(pf)
+    free(oidf)
+
+    /* ---------- arm 10: SELF-LOOP (0 -> 0): coherent iff the transition is identity ---------- */
+    let ss   : *u8 = malloc(4u64)
+    let ds   : *u8 = malloc(4u64)
+    let ps   : *u8 = malloc(4u64)
+    let oids : *u8 = malloc(32u64)
+    kfill_objid(oids, 1u64)
+    kedge(ss, ds, 0u64, 0u32, 0u32)        /* 0 -> 0 */
+    kperm4(ps, 0u64, 0u8, 1u8, 2u8, 3u8)   /* ID -> coherent self-loop */
+    let vsl : u64 = pleroma_cohere(1u64, 1u64, ss, ds, ps, deg, oids, root_a, obstr)
+    if vsl != 1u64 { return 22u64 }
+    kperm4(ps, 0u64, 1u8, 0u8, 2u8, 3u8)   /* g0 != ID -> self-loop with non-trivial holonomy */
+    let vsl2 : u64 = pleroma_cohere(1u64, 1u64, ss, ds, ps, deg, oids, root_a, obstr)
+    if vsl2 != 0u64 { return 23u64 }
+    free(ss)
+    free(ds)
+    free(ps)
+    free(oids)
+
+    free(root_a)
+    free(root_b)
+    free(obstr)
+
+    return 99u64
+}

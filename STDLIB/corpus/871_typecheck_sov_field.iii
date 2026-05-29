@@ -1,0 +1,17 @@
+/* Sovereign Calculus brick 2 (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §7): the
+ * weighted FIELD -- the vision's "Continuous Field draped over the discrete
+ * spine," realized as a deterministic integer weight per AST node (no floats,
+ * no ML).  p5_kat_sov_field() proves sov_cost_q discounts type/proof-irrelevant
+ * positions to 0 (a type, a binder domain, an eliminator motive ride free) while
+ * runtime structure costs 1 -- a LAM with a function-type domain and a natrec
+ * with a motive cost strictly less weighted than flat; a pure type costs 0.
+ * NEGATIVE: pure runtime data (a pair) costs the SAME weighted as flat (the
+ * discount is type-specific, not a blanket reduction).  The field is materialized:
+ * SOV_COST[n] == sov_cost_q(n) after sov_field_fill.  99 = all 9 arms pass. */
+module corpus_c871
+
+extern @abi(c-msvc-x64) fn p5_kat_sov_field() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_sov_field()
+}

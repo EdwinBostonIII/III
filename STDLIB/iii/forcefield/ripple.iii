@@ -1,0 +1,230 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\ripple.iii
+ *
+ * The ripple network - deterministic content-addressed substrate (STANDALONE
+ * artifact, not wired into the STDLIB build).  This is the value layer that
+ * substitutes the Internet's location-addressed, stateful, nondeterministic
+ * primitives:
+ *
+ *   - publish(value) -> addr        addr = H(value)   (content in, name out)
+ *   - resolve(addr)  -> value | GAP self-verifying    (re-hash must equal addr)
+ *
+ * Properties it realizes (each exercised by ripple_kat.iii):
+ *   1. CONTENT-ADDRESSING + DEDUP: identical content has identical address;
+ *      re-publishing is idempotent (the store is a set, not a log).
+ *   2. GAP, not error: an absent address resolves to a typed sentinel.
+ *   3. TAMPER-EVIDENCE: resolve re-hashes the stored bytes; one flipped bit
+ *      yields GAP, never a wrong value (bit-identity preserved by construction).
+ *   4. RIPPLE PROPAGATION: a Merkle-DAG of cells; a computed cell's value is
+ *      H(concatenation of its inputs' addresses).  Changing a source ripples
+ *      deterministically to its dependents and ONLY its dependents (locality).
+ *   5. DETERMINISM / HOLOGRAPHIC ROOT: the whole resolved graph is one root
+ *      hash; same inputs -> same root, every run.
+ *   6. MONOTONE MERGE (CALM / sheaf gluing): merging two partial stores is
+ *      order-independent and idempotent; overlaps agree by construction (the
+ *      H^1 = 0 of the forcefield, free, because a value IS its address).
+ *
+ * The seal runs through the real production mhash -> cad -> sha256 (linked from
+ * libiii_native.a), so the content address is the system's actual hash.
+ *
+ * NIH: libc malloc + III's own mhash.  No sockets, no clock, no nondeterminism.
+ * The physical transport is a backend feeding this same store; delivery latency
+ * is the only nondeterminism and it lives outside this deterministic core.
+ */
+
+module forcefield_ripple
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const RN_GAP      : u64 = 0xFFFFFFFFFFFFFFFFu64
+const RN_NOTFOUND : u64 = 0xFFFFFFFFFFFFFFFFu64
+/* store meta layout (a 32-byte header the caller allocates):
+ *   [0] cap (slots, a power of two)   [8] arena_cap
+ *   [16] arena_used                   [24] count
+ * slot stride = 64 bytes:
+ *   [0..31] addr   [32..39] value-offset   [40..47] value-len   [48] occupied */
+
+/* --- byte (de)serialization, all *u8 + byte offsets (no pointer-int casts) --- */
+
+fn rn_ld_u64(p: *u8, off: u64) -> u64 {
+    let b0 : u64 = p[off] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+fn rn_st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn rn_eq32(a: *u8, ao: u64, b: *u8, bo: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < 32u64 {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+
+fn rn_copy(dst: *u8, doff: u64, src: *u8, soff: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        dst[doff + k] = src[soff + k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* addr = SHA-256(src[soff .. soff+len])  via the real production mhash */
+fn rn_hash(src: *u8, soff: u64, len: u64, out: *u8, oo: u64) -> u64 {
+    mhash_begin()
+    mhash_payload((src as u64) + soff, len)
+    mhash_final((out as u64) + oo)
+    return 0u64
+}
+
+/* open-addressing probe (cap is a power of two so slot = hash & (cap-1), never % ) */
+fn rn_find(meta: *u8, slots: *u8, addr: *u8, ao: u64, want: u64) -> u64 {
+    let cap : u64 = rn_ld_u64(meta, 0u64)
+    let mask : u64 = cap - 1u64
+    let mut i : u64 = rn_ld_u64(addr, ao) & mask
+    let mut probes : u64 = 0u64
+    while probes < cap {
+        let occ : u8 = slots[i * 64u64 + 48u64]
+        if occ == 0u8 {
+            if want == 1u64 { return i }
+            return RN_NOTFOUND
+        }
+        if rn_eq32(slots, i * 64u64, addr, ao) == 1u8 { return i }
+        i = (i + 1u64) & mask
+        probes = probes + 1u64
+    }
+    return RN_NOTFOUND
+}
+
+fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 @export {
+    rn_st_u64(meta, 0u64, cap)
+    rn_st_u64(meta, 8u64, arena_cap)
+    rn_st_u64(meta, 16u64, 0u64)
+    rn_st_u64(meta, 24u64, 0u64)
+    let mut i : u64 = 0u64
+    while i < cap {
+        slots[i * 64u64 + 48u64] = 0u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn rn_count(meta: *u8) -> u64 @export {
+    return rn_ld_u64(meta, 24u64)
+}
+
+/* publish: addr_out := H(value); insert if new (dedup if present). 0 ok / 2 full / 3 oom */
+fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 @export {
+    rn_hash(val, vo, vlen, addr_out, ao)
+    let i : u64 = rn_find(meta, slots, addr_out, ao, 1u64)
+    if i == RN_NOTFOUND { return 2u64 }
+    let occ : u8 = slots[i * 64u64 + 48u64]
+    if occ == 1u8 { return 0u64 }
+    let used : u64 = rn_ld_u64(meta, 16u64)
+    let acap : u64 = rn_ld_u64(meta, 8u64)
+    if used + vlen > acap { return 3u64 }
+    rn_copy(arena, used, val, vo, vlen)
+    rn_copy(slots, i * 64u64, addr_out, ao, 32u64)
+    rn_st_u64(slots, i * 64u64 + 32u64, used)
+    rn_st_u64(slots, i * 64u64 + 40u64, vlen)
+    slots[i * 64u64 + 48u64] = 1u8
+    rn_st_u64(meta, 16u64, used + vlen)
+    rn_st_u64(meta, 24u64, rn_ld_u64(meta, 24u64) + 1u64)
+    return 0u64
+}
+
+/* resolve: returns length, or RN_GAP if absent OR if the stored bytes do not
+ * re-hash to addr (tamper / corruption). vbuf is a 32-byte scratch. */
+fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 @export {
+    let i : u64 = rn_find(meta, slots, addr, ao, 0u64)
+    if i == RN_NOTFOUND { return RN_GAP }
+    let voff : u64 = rn_ld_u64(slots, i * 64u64 + 32u64)
+    let vlen : u64 = rn_ld_u64(slots, i * 64u64 + 40u64)
+    rn_hash(arena, voff, vlen, vbuf, 0u64)
+    if rn_eq32(vbuf, 0u64, addr, ao) == 0u8 { return RN_GAP }
+    let mut n : u64 = vlen
+    if n > out_cap { n = out_cap }
+    rn_copy(out, oo, arena, voff, n)
+    return vlen
+}
+
+/* ripple: recompute every computed cell's value = H(concat of input addrs),
+ * publish it, propagate to a fixpoint. cell_kind 0=source 1=computed. Graph
+ * arrays carry u64 entries. Converges in <= ncells passes for a DAG. */
+fn rn_recompute(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cell_addr: *u8, in_off: *u8, in_cnt: *u8, in_list: *u8, scratch: *u8, newaddr: *u8) -> u64 {
+    let lim : u64 = ncells + 1u64
+    let mut passes : u64 = 0u64
+    let mut anychange : u64 = 1u64
+    while anychange == 1u64 {
+        anychange = 0u64
+        let mut c : u64 = 0u64
+        while c < ncells {
+            if cell_kind[c] == 1u8 {
+                let cnt : u64 = rn_ld_u64(in_cnt, c * 8u64)
+                let off : u64 = rn_ld_u64(in_off, c * 8u64)
+                let mut j : u64 = 0u64
+                while j < cnt {
+                    let child : u64 = rn_ld_u64(in_list, (off + j) * 8u64)
+                    rn_copy(scratch, j * 32u64, cell_addr, child * 32u64, 32u64)
+                    j = j + 1u64
+                }
+                rn_publish(meta, slots, arena, scratch, 0u64, cnt * 32u64, newaddr, 0u64)
+                if rn_eq32(newaddr, 0u64, cell_addr, c * 32u64) == 0u8 {
+                    rn_copy(cell_addr, c * 32u64, newaddr, 0u64, 32u64)
+                    anychange = 1u64
+                }
+            }
+            c = c + 1u64
+        }
+        passes = passes + 1u64
+        if passes >= lim { anychange = 0u64 }
+    }
+    return passes
+}
+
+/* exported wrapper so the cross-module KAT can drive recompute */
+fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cell_addr: *u8, in_off: *u8, in_cnt: *u8, in_list: *u8, scratch: *u8, newaddr: *u8) -> u64 @export {
+    return rn_recompute(meta, slots, arena, ncells, cell_kind, cell_addr, in_off, in_cnt, in_list, scratch, newaddr)
+}
+
+/* holographic root: one hash committing to every cell's current address */
+fn rn_graph_root(ncells: u64, cell_addr: *u8, out: *u8) -> u64 @export {
+    rn_hash(cell_addr, 0u64, ncells * 32u64, out, 0u64)
+    return 0u64
+}
+
+/* monotone merge: fold every value of the source store into the destination
+ * (publish is idempotent, so this is set-union; order-independent). */
+fn rn_merge(dmeta: *u8, dslots: *u8, darena: *u8, smeta: *u8, sslots: *u8, sarena: *u8, tmpaddr: *u8) -> u64 @export {
+    let scap : u64 = rn_ld_u64(smeta, 0u64)
+    let mut i : u64 = 0u64
+    while i < scap {
+        if sslots[i * 64u64 + 48u64] == 1u8 {
+            let voff : u64 = rn_ld_u64(sslots, i * 64u64 + 32u64)
+            let vlen : u64 = rn_ld_u64(sslots, i * 64u64 + 40u64)
+            rn_publish(dmeta, dslots, darena, sarena, voff, vlen, tmpaddr, 0u64)
+        }
+        i = i + 1u64
+    }
+    return 0u64
+}

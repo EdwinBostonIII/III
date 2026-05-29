@@ -1,0 +1,17 @@
+/* 912_congruence.iii -- gate for numera/congruence.iii, the cross-module congruence-closure
+ * engine (union-find over 32-byte content-addresses + certified-merge faithfulness gate).
+ * The module was built but NO corpus invoked its falsifier -- a dead test (audit: ORPHAN +
+ * UNGATED_FALSIFIER, high).  cgr_kat (congruence.iii:132) is a real teeth-bearing KAT:
+ *   - identical content-address  -> AUTOMATIC dedup (same class);
+ *   - distinct address           -> distinct class;
+ *   - union WITHOUT a proof       -> REFUSED (line 144: no fabricated equality);
+ *   - union WITH a kernel proof   -> merged to one ring (line 147);
+ *   - the merged class carries the cost-minimal representative (line 150).
+ * 99 = the closure AND its faithfulness falsifier hold. */
+module corpus_912
+
+extern @abi(c-msvc-x64) fn cgr_kat() -> u64 from "congruence.iii"
+
+fn main() -> u64 {
+    return cgr_kat()
+}

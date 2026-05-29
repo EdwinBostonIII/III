@@ -98,9 +98,15 @@ fn nous_features_selftest() -> u64 @export {
     if nous_feat_depth(t) != 2u32 { return 8u64 }
     if nous_feat_size(t) != 3u32 { return 9u64 }       /* AND + 2 leaves */
 
-    /* determinism */
-    if nous_feat_depth(t) != nous_feat_depth(t) { return 10u64 }
-    if nous_feat_size(t) != nous_feat_size(t) { return 11u64 }
+    /* determinism (non-tautological): a SECOND identical structure built at DIFFERENT arena
+     * indices must yield IDENTICAL features -- features are STRUCTURE-determined, not index-
+     * determined.  (The prior f(t) != f(t) self-compare was vacuous -- always equal; comparing
+     * two distinct instances genuinely catches an index-leak in the feature extractor.) */
+    let v3 : u32 = xii_term_make_basis(24u8, 1u32)
+    let v4 : u32 = xii_term_make_basis(24u8, 2u32)
+    let t2 : u32 = xii_term_make_fusion2(26u8, v3, v4)
+    if nous_feat_depth(t2) != nous_feat_depth(t) { return 10u64 }
+    if nous_feat_size(t2) != nous_feat_size(t) { return 11u64 }
 
     return 99u64
 }

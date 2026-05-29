@@ -228,8 +228,8 @@ iii_hexad_epistemic_combine:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)

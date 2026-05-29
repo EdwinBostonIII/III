@@ -1,0 +1,18 @@
+/* 908_shape_filter.iii -- Integration C: sound conversion shape pre-filter.
+ *
+ * Drives shape_filter_selftest (numera/sov_isa.iii): a conversion-invariant
+ * WHNF shape signature (tc_shape_sig) feeds a Kleene-trit fold (iii_trit_and)
+ * that fast-REJECTS optimization models whose rigid head constructors cannot be
+ * convertible, sparing the kernel a doomed check.  PROVES the filter fires
+ * (head mismatch AND sub-head fold), never spuriously rejects, defers on
+ * neutrals, and -- the soundness differential -- that the guarded verifier
+ * returns EXACTLY the unfiltered kernel verdict on every pair: the kernel
+ * (translation validation) remains the sole arbiter of acceptance.
+ * Main-corpus convention: rc 99 = pass; 1..16 = which assertion failed. */
+module corpus_908
+
+extern @abi(c-msvc-x64) fn shape_filter_selftest() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return shape_filter_selftest()
+}

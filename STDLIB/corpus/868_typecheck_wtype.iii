@@ -1,0 +1,15 @@
+/* W-types stage 1 (DOCS/III-WTYPES-DESIGN.md): general well-founded inductive
+ * types -- the foundational data type (every inductive is a W-type).  p5_kat_w()
+ * proves FORMATION (W(Bool, if(#0,Unit,Empty)) : U0 -- the Nat-as-W encoding;
+ * mirrors SIG, max universe levels) + the sup CONSTRUCTOR (a leaf of W(Unit,Empty)
+ * built with the ex-falso children function checks against W) + negatives (the
+ * label position must be a type; a W value rejects a non-W type).  The recursor
+ * (transfinite induction, the higher-order eliminator) is stage 2.  Compiled to
+ * the singular CCL oracle (W = atom 2068, sup = CCL_SUP).  99 = all pass. */
+module corpus_c868
+
+extern @abi(c-msvc-x64) fn p5_kat_w() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_w()
+}

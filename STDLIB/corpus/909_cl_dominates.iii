@@ -1,0 +1,17 @@
+/* 909_cl_dominates.iii -- Proposal P1 (refined): multi-objective Pareto
+ * dominance primitive + the Pareto-optimality theorem witness.
+ *
+ * Drives cl_dominates_selftest (numera/cost_lattice.iii): the vectorized
+ * dominance check (strict-dominates / dominated / mutually-non-dominated over
+ * the 6-D microarch cost vector), and -- the key result -- that the balanced
+ * positive-weight scalar MINIMUM is Pareto-non-dominated.  That witnesses why
+ * III's existing scalar extraction is already multi-objective-sound and the
+ * full frontier DP (combinatorial child cross-product) is declined as bloat.
+ * Main-corpus convention: rc 99 = pass; 1..13 = which assertion failed. */
+module corpus_909
+
+extern @abi(c-msvc-x64) fn cl_dominates_selftest() -> u64 from "cost_lattice.iii"
+
+fn main() -> u64 {
+    return cl_dominates_selftest()
+}

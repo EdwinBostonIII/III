@@ -1,0 +1,14 @@
+/* Bidirectional refl-checking (CHECK `refl` against an `Id`): completes tc_check's
+ * check-only-constructor set (PAIR|->Sigma, INL/INR|->Sum, SUP|->W, LAM|->Pi, and
+ * now REFL|->Id).  p5_kat_reflcheck() proves `refl <true,false>` checks against
+ * `Id (Bool x Bool) <true,false> <true,false>` -- the proof VALUE is a check-only
+ * PAIR the infer-fallback cannot synthesize (infer(<x,y>)=0).  Negatives: endpoint
+ * mismatch, non-Id target, value mismatch.  Pure tc_check rule (no oracle/confluence
+ * change).  99 = all 5 arms pass. */
+module corpus_c873
+
+extern @abi(c-msvc-x64) fn p5_kat_reflcheck() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_reflcheck()
+}

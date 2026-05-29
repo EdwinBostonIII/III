@@ -1,0 +1,15 @@
+/* Path C brick 15: the DIFFERENTIAL KAT. p5_kat_cbconv() proves the first-order
+ * combinator conversion oracle (compile MLTT -> variable-free combinators -> reduce
+ * -> structural compare; NO substitution, NO NbE) AGREES with the kernel's NbE
+ * conversion (tc_conv) on the whole computational fragment: beta + every eliminator
+ * iota (IF/ITER/NATREC/CASE/J), both branches, nested, beta-under-eliminator, and
+ * negatives. Agreement on every vector is the gate that licenses retiring NbE for
+ * XII as the singular oracle (design 19, toward B16).
+ * 99 = all agree; 1..14 = first oracle DISAGREEMENT (combinator vs NbE differ). */
+module corpus_c855
+
+extern @abi(c-msvc-x64) fn p5_kat_cbconv() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_cbconv()
+}

@@ -922,8 +922,8 @@ L_inet_emit_octet:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -933,8 +933,8 @@ L_inet_emit_octet:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
@@ -1074,8 +1074,8 @@ L_if_end_45:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)

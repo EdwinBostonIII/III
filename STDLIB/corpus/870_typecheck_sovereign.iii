@@ -1,0 +1,16 @@
+/* The Natively Differentiable Sovereign Calculus, first brick (DOCS/III-SOVEREIGN-
+ * CALCULUS-DESIGN.md): the SOVEREIGN MORPHISM.  The "soul" is a deterministic exact
+ * cost-field over the discrete spine; a file optimizes its physical realization
+ * within its PROVEN-EQUIVALENCE class, never changing what it proves.  No ML, no
+ * floats.  p5_kat_sov() proves: a redex term descends to its cheaper normal form
+ * (cost strictly improves) AND is CCL-proven-equal (proof preserved); the descent
+ * is a fixpoint (monotone); and -- the load-bearing falsifier -- a behaviour-
+ * changing realization (true vs false) is REJECTED by sov_admit (tc_conv=0).
+ * The optimizer can only ever move within a CCL-equality class.  99 = all pass. */
+module corpus_c870
+
+extern @abi(c-msvc-x64) fn p5_kat_sov() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_sov()
+}

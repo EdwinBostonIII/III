@@ -1,0 +1,17 @@
+/* SINGULAR ORACLE CONVERSION ROBUSTNESS on open terms under binders -- the soundness
+ * guard for the read-back boundary (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §15).  Found by
+ * dogfooding: `ccl_normalize` of an open term whose free var is processed under an inner
+ * lambda shifts that var's de Bruijn index on READ-BACK.  But conversion (`tc_conv`) reduces
+ * both sides to CCL normal form and compares STRUCTURALLY (ccl_struct_eq) -- it NEVER reads
+ * back -- so it is IMMUNE; the kernel's soundness was never at risk.  ccl_open_conv_kat()
+ * proves it on the exact mangling-shape terms: conv IDENTIFIES x*2 == x+x (both 2x, equal
+ * despite the boundary), DISTINGUISHES x*2 != x*3 and x*3 != x+x.  A load-bearing guard --
+ * it would FAIL if conversion ever routed through the read-back -- that asserts only correct
+ * behaviour and survives a future reducer fix unchanged.  99 = all pass. */
+module corpus_c882
+
+extern @abi(c-msvc-x64) fn ccl_open_conv_kat() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return ccl_open_conv_kat()
+}

@@ -1,0 +1,17 @@
+/* psi -- DETERMINISTIC SUPERPOSITION (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §12): the
+ * no-downsides quantum-like invocation, realized as the e-graph.  An e-class is a
+ * SUPERPOSITION (all proven-equal realizations of a value held at once); psi_collapse is
+ * DETERMINISTIC measurement (cost-optimal extraction, no probability); psi_interfere is a
+ * kernel-gated coherent merge.  psi_kat() proves: a superposition holds >1 realization
+ * (psi_card>1); it collapses deterministically to the optimum x; re-collapse is IDENTICAL
+ * (no probability); two EQUAL superpositions interfere (merge); a NON-equal merge is
+ * REJECTED (no decoherence into contradiction).  The quantum PATTERN -- superpose,
+ * interfere, measure -- fully deterministic + kernel-coherent.  No floats, no ML.
+ * 99 = all pass. */
+module corpus_c878
+
+extern @abi(c-msvc-x64) fn psi_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return psi_kat()
+}

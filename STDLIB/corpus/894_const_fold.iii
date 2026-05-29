@@ -1,0 +1,20 @@
+/* 894_const_fold.iii -- functional gate for CONST-RESOLUTION in cg_r3 (r3_lit_u64_compute now
+ * resolves a named `const` IDENT to its value, so named-const arithmetic folds, not just literals).
+ * Each assert folds `const op const` / `const op literal` to a compile-time constant and checks the
+ * VALUE; a local var is deliberately NOT a const, so `lv + CB` is not folded but must still compute
+ * right (resolution must not mis-treat a local as a const).  99 = every fold is value-correct. */
+module corpus_894
+
+const CSZ : u64 = 1000u64
+const CB  : u64 = 24u64
+
+fn main() -> u64 {
+    if CSZ + 24u64 != 1024u64 { return 1u64 }    /* const + literal -> 1024 */
+    if CSZ + CB != 1024u64 { return 2u64 }       /* const + const -> 1024 */
+    if CSZ * 2u64 != 2000u64 { return 3u64 }     /* const * literal */
+    if CSZ - CB != 976u64 { return 4u64 }        /* const - const */
+    if CB * CB != 576u64 { return 5u64 }         /* const * const = 24*24 */
+    let lv : u64 = 500u64
+    if lv + CB != 524u64 { return 6u64 }         /* LOCAL + const: local not resolved, still correct */
+    return 99u64
+}

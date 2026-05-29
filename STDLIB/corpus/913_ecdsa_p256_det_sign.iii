@@ -1,0 +1,67 @@
+/* 913_ecdsa_p256_det_sign.iii -- gates the security-critical, previously UNTESTED
+ * deterministic-signing path of numera/ecdsa_p256.iii: iii_ecdsa_p256_sign_det
+ * (SP800-90A HMAC-DRBG nonce derived from (d,z), RFC6979-style) + keygen_seed.
+ * Corpus 208 only drove keygen/sign/verify with a CALLER-supplied k, so this
+ * DRBG-nonce path shipped with zero coverage.  Proves, with teeth:
+ *   (1) keygen_seed turns a 32-byte seed into a usable (d, pub);
+ *   (2) REPRODUCIBILITY -- signing the same (d,z) twice -> byte-identical sigs;
+ *   (3) (d,z)-DEPENDENCE -- signing a DIFFERENT message yields a DIFFERENT nonce,
+ *       hence a different r (= (k.G).x, sig bytes 0..31).  Reproducibility ALONE
+ *       does NOT prove this (a constant / z-independent nonce would also pass (2));
+ *       identical r across distinct messages is catastrophic ECDSA nonce-reuse,
+ *       caught here -- this is the arm the prior version overclaimed and omitted;
+ *   (4) the deterministic signature VERIFIES under the seed-derived public key;
+ *   (5) prove-the-negative -- a single-bit message tamper is REJECTED.
+ * All buffers are module-global arrays (runtime-indexed -> hoisted).  99 = pass. */
+module corpus_913
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_keygen_seed(seed: u64, d_out: u64, pub_out: u64) -> i32 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_sign_det(d: u64, z: u64, sig_out: u64) -> i32 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p256.iii"
+
+var SEED : [u8; 32]
+var D    : [u8; 32]
+var PUB  : [u8; 64]
+var Z    : [u8; 32]
+var Z2   : [u8; 32]
+var SIG1 : [u8; 64]
+var SIG2 : [u8; 64]
+var SIG3 : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { Z[i] = ((i + 0x41u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { Z2[i] = ((i * 5u64 + 0x11u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    /* (1) seed-keygen: SEED -> (D, PUB) */
+    iii_ecdsa_p256_keygen_seed(&SEED as u64, &D as u64, &PUB as u64)
+
+    /* (2) REPRODUCIBILITY: same (d,z) twice -> byte-identical */
+    iii_ecdsa_p256_sign_det(&D as u64, &Z as u64, &SIG1 as u64)
+    iii_ecdsa_p256_sign_det(&D as u64, &Z as u64, &SIG2 as u64)
+    let mut j : u64 = 0u64
+    while j < 64u64 { if SIG1[j] != SIG2[j] { return 1u64 } ; j = j + 1u64 }
+
+    /* (3) (d,z)-DEPENDENCE (the real teeth): a DIFFERENT message -> a DIFFERENT
+     * nonce -> a DIFFERENT r (sig bytes 0..31). A constant/z-independent nonce
+     * would reuse r across messages (catastrophic) -> caught as code 2. */
+    iii_ecdsa_p256_sign_det(&D as u64, &Z2 as u64, &SIG3 as u64)
+    let mut same_r : u32 = 1u32
+    let mut rk : u64 = 0u64
+    while rk < 32u64 { if SIG1[rk] != SIG3[rk] { same_r = 0u32 } ; rk = rk + 1u64 }
+    if same_r == 1u32 { return 2u64 }
+
+    /* (4) verify accepts the deterministic signature */
+    let v : u8 = iii_ecdsa_p256_verify_x(&PUB as u64, (&PUB as u64) + 32u64, &Z as u64, &SIG1 as u64)
+    if v != 1u8 { return 3u64 }
+
+    /* (5) prove-the-negative: a 1-bit message tamper is rejected */
+    Z[0] = Z[0] ^ 0x01u8
+    let v2 : u8 = iii_ecdsa_p256_verify_x(&PUB as u64, (&PUB as u64) + 32u64, &Z as u64, &SIG1 as u64)
+    if v2 != 0u8 { return 4u64 }
+
+    return 99u64
+}

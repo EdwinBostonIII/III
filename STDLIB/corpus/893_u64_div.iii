@@ -1,0 +1,37 @@
+/* 893_u64_div.iii -- proves the cg_r3 u64-division fix (op 4/5 now branch on signedness:
+ * unsigned operands -> xorq %rdx,%rdx + divq; signed -> cqto + idivq, unchanged).  On the
+ * BUGGY compiler the high-bit u64 cases FAIL (signed idivq reads 0xFFFFFFFFFFFFFFFE as -2:
+ * -2/2 = -1 = MAX); on the FIXED compiler they pass.  Signed i64 division must stay correct.
+ * Found by 890_sat_arith (scalar_u64_mul_did_overflow's r/b on a wrapped high-bit product).
+ * Comparisons go through intermediate vars (NOT `!= <i64-literal> {`, the i64-literal-before-
+ * brace parse trap).  99 = correct; the code names the failing check. */
+module corpus_893
+
+fn divu(a: u64, b: u64) -> u64 { return a / b }
+fn modu(a: u64, b: u64) -> u64 { return a % b }
+fn divi(a: i64, b: i64) -> i64 { return a / b }
+
+fn main() -> u64 {
+    let half : u64 = 0x7FFFFFFFFFFFFFFFu64
+    /* high-bit u64 dividend divided UNSIGNED must NOT be read as negative */
+    let q1 : u64 = divu(0xFFFFFFFFFFFFFFFEu64, 2u64)
+    if q1 != half { return 1u64 }
+    let q2 : u64 = divu(0xFFFFFFFFFFFFFFFFu64, 2u64)
+    if q2 != half { return 2u64 }
+    let q3 : u64 = divu(100u64, 7u64)
+    if q3 != 14u64 { return 3u64 }
+    /* high-bit u64 modulo */
+    let m1 : u64 = modu(0xFFFFFFFFFFFFFFFFu64, 2u64)
+    if m1 != 1u64 { return 4u64 }
+    let m2 : u64 = modu(100u64, 7u64)
+    if m2 != 2u64 { return 5u64 }
+    /* signed i64 division must remain correct (cqto+idivq path unchanged) */
+    let neg6 : i64 = 0i64 - 6i64
+    let neg3 : i64 = 0i64 - 3i64
+    let s1 : i64 = divi(neg6, 2i64)
+    if s1 != neg3 { return 6u64 }
+    let three : i64 = 3i64
+    let s2 : i64 = divi(6i64, 2i64)
+    if s2 != three { return 7u64 }
+    return 99u64
+}

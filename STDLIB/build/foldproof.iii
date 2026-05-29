@@ -1,0 +1,8 @@
+module foldproof
+
+fn f_xx(x: u64) -> u64 { return x - x }                /* baseline -> 0 */
+fn f_nest(x: u64) -> u64 { return x + x - x - x }      /* nested binary, NO int/paren -> 0 */
+fn f_int(x: u64) -> u64 { return x + 7u64 - 7u64 - x } /* nested + INT literal -> 0 */
+fn f_paren(x: u64) -> u64 { return (x) - x }           /* paren around ident -> 0 */
+
+fn main() -> u64 { return f_xx(1u64) + f_nest(2u64) + f_int(3u64) + f_paren(4u64) }

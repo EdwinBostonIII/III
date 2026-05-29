@@ -1,0 +1,16 @@
+/* Self-application: III's kernel CERTIFIES the Sovereign ISA descent's rewrite
+ * rules sound (numera/sov_isa) -- no asserted premise.  p5_kat_isa_cert() models the
+ * ISA ops as Nat functions (add=iter+succ, shl1=x+x, mul=iter+lambda-step) and proves
+ * each rule by checking `lam x:Nat. refl(lhs)` against `Pi(x:Nat). Id Nat (lhs x)
+ * (rhs x)` -- which type-checks IFF lhs and rhs share a normal form (decided by the
+ * singular CCL oracle), routed through the bidirectional LAM|->Pi + REFL|->Id checking
+ * (corpus 872/873).  Certifies x+0=x, x*1=x, x*0=0, x*2=x<<1; the FALSIFIER (a
+ * non-identity x*2=x*3) is REJECTED by the kernel.  III proving III.  99 = all
+ * certify + the bogus rule fails. */
+module corpus_c875
+
+extern @abi(c-msvc-x64) fn p5_kat_isa_cert() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_isa_cert()
+}

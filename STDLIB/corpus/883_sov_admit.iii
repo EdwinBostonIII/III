@@ -1,0 +1,18 @@
+/* KERNEL-GOVERNED RULE ADMISSION -- III subject to itself, composing EXISTING organs.
+ * A rewrite rule joins III's engine only if it passes BOTH gates: OPERATIONAL admissibility
+ * (root-confluent AND terminating -- omnia/xii_admission::xad_decide, the existing
+ * Knuth-Bendix-style gate) AND SEMANTIC soundness (its two sides KERNEL-PROVEN equal --
+ * sov_pcc_verify, numera/typecheck the trusted core).  xii_admission ALONE admits any
+ * confluent+terminating rule even if MEANING-CHANGING (it gates operation, not meaning);
+ * III's own kernel supplies the missing gate.  sov_admit_kat() proves both gates are
+ * load-bearing: a meaning-changing rule add(x,0)->succ(x) that xii_admission admits is
+ * REJECTED by the kernel-governed gate; a non-confluent/non-terminating rule the kernel
+ * proves sound is REJECTED by the operational gate.  III's rule admission made subject to
+ * III's proof kernel.  No ML, no observation.  99 = all pass. */
+module corpus_c883
+
+extern @abi(c-msvc-x64) fn sov_admit_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return sov_admit_kat()
+}

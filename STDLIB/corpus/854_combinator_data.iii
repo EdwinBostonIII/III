@@ -1,0 +1,13 @@
+/* Path C brick 2 (B14): eliminator iota-rules as PURE first-order combinator
+ * rewrites. cb_data_kat() proves IF/ITER select-and-recurse with NO substitution
+ * (first-order pattern matching only), and that bracket abstraction COMPOSES with
+ * the iota-rules (compiled (lambda b. if b c d) routes correctly). Confirms the
+ * data eliminators work variable-free -- the second Path C foundation.
+ * 99 = all pass; 1..8 = first failing case. */
+module corpus_c854
+
+extern @abi(c-msvc-x64) fn cb_data_kat() -> u64 from "combinator.iii"
+
+fn main() -> u64 {
+    return cb_data_kat()
+}

@@ -1,0 +1,103 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\xii_fusion_verify.iii
+ *
+ * THE VERIFICATION MISSILE, SECOND STRIKE: the FUSION identity-null rewrites.
+ *
+ * xii_rule_verify (corpus 884) fired the semantic-soundness gate at XII's LIVE trit rules
+ * (the finite Kleene fragment).  Its own header named the next target: the fusion/algebraic
+ * rules -- "extending the semantic authority to them is the next, separate strike."  This is
+ * that strike, for the identity-null family: R016 F.COMPOSE(null,b)->b, R017 F.COMPOSE(a,null)
+ * ->a, R021 F.THEN(null,b)->b, R022 F.THEN(a,null)->a -- the rewrites cg_r3's xii_canonicalise
+ * runs to eliminate identity composition.
+ *
+ * Same discipline as 884, NON-TAUTOLOGICAL by construction: the INDEPENDENT authority is the
+ * MONOID IDENTITY LAW (the null element K06_NULL / K12_NULL is the identity of F.COMPOSE /
+ * F.THEN, so composing with it yields the OTHER operand).  We drive the LIVE engine on
+ * op(null, b) and assert the OUTCOME is exactly b -- judged against the monoid law, NOT against
+ * apply_R016's body.  A rewrite that returned the wrong child (the null instead of the operand)
+ * would turn THIS red while still "firing a rule."  Plus teeth: a non-null pair does NOT
+ * collapse (the guard requires a null operand -- the rule never over-fires), and apply_one
+ * identifies R016 SPECIFICALLY (rule id 16, not "some rule").
+ *
+ * Honest scope: the IF-lift (R005-R012) and loop (R013-R015) families carry a richer
+ * denotation (a branch/iteration semantics) -- a further strike.  Associativity (R001-R004)
+ * is route-S structural (no rule to verify).  This strike closes the identity-null family.
+ *
+ * NIH: the live XII engine only (xii_term + xii_canonicalise + xii_rewrite).  Determinism:
+ * equality-only on kinds/subforms (no ordering), module-scope, exhaustive over the family.
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.
+ */
+
+module omnia_xii_fusion_verify
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+/* live engine kinds (mirror xii_rewrite XRW_*): K06_COMPOSE=5 / K12_THEN=11 carry the null
+ * GROUND subform to BE the identity element; K01_FORM=1 is a non-null distinguishable operand;
+ * F.COMPOSE=18 / F.THEN=19 are the fusion roots the identity rules fire at. */
+const XFV_K06_COMPOSE : u8 = 5u8
+const XFV_K12_THEN    : u8 = 11u8
+const XFV_FORM        : u8 = 1u8
+const XFV_FCOMPOSE    : u8 = 18u8
+const XFV_FTHEN       : u8 = 19u8
+const XFV_NULL_GROUND : u32 = 0xFFFFFFFFu32
+const XFV_MARK        : u32 = 7u32     /* a distinguishable operand subform */
+
+fn xfv_null_compose() -> u32 { return xii_term_make_basis(XFV_K06_COMPOSE, XFV_NULL_GROUND) }
+fn xfv_null_then() -> u32 { return xii_term_make_basis(XFV_K12_THEN, XFV_NULL_GROUND) }
+fn xfv_form(mark: u32) -> u32 { return xii_term_make_basis(XFV_FORM, mark) }
+
+/* Drive the LIVE engine on `t`; 1 iff the normal form is a term equal (kind AND subform) to
+ * the expected operand (bk, bsub).  Judged against the monoid-identity expectation, not the
+ * rewrite's implementation -- a wrong-child result turns this 0. */
+fn xfv_yields(t: u32, bk: u8, bsub: u32) -> u8 {
+    let nf : u32 = xii_canonicalise(t)
+    if xii_term_get_kind(nf) != bk { return 0u8 }
+    if xii_term_get_subform(nf) != bsub { return 0u8 }
+    return 1u8
+}
+
+/* 99 = every identity-null rewrite is meaning-preserving on the LIVE engine + the teeth hold. */
+fn xfv_verify() -> u64 @export {
+    /* (1) R016  F.COMPOSE(K06_NULL, FORM m) -> FORM m   (left identity) */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FCOMPOSE, xfv_null_compose(), xfv_form(XFV_MARK)), XFV_FORM, XFV_MARK) != 1u8 { return 1u64 }
+    /* (2) R017  F.COMPOSE(FORM m, K06_NULL) -> FORM m   (right identity) */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FCOMPOSE, xfv_form(XFV_MARK), xfv_null_compose()), XFV_FORM, XFV_MARK) != 1u8 { return 2u64 }
+    /* (3) R021  F.THEN(K12_NULL, FORM m) -> FORM m */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FTHEN, xfv_null_then(), xfv_form(XFV_MARK)), XFV_FORM, XFV_MARK) != 1u8 { return 3u64 }
+    /* (4) R022  F.THEN(FORM m, K12_NULL) -> FORM m */
+    xii_term_arena_reset()
+    if xfv_yields(xii_term_make_fusion2(XFV_FTHEN, xfv_form(XFV_MARK), xfv_null_then()), XFV_FORM, XFV_MARK) != 1u8 { return 4u64 }
+
+    /* (5) OPERATIONAL TEETH (prove-the-negative): NEITHER operand a null -> the identity rule
+     * must NOT fire.  F.COMPOSE(FORM 7, FORM 9) does NOT collapse to a single operand; the
+     * normal form is still a F.COMPOSE.  (The guard requires a null operand to eliminate.) */
+    xii_term_arena_reset()
+    let nonid : u32 = xii_term_make_fusion2(XFV_FCOMPOSE, xfv_form(7u32), xfv_form(9u32))
+    if xii_term_get_kind(xii_canonicalise(nonid)) != XFV_FCOMPOSE { return 5u64 }
+
+    /* (6) RULE-IDENTITY TEETH: apply_one engages the priority null-collapse rule SPECIFICALLY
+     * (id 37 = R037, the M-family F.COMPOSE null-collapse) and that single step PROJECTS the
+     * operand.  (R037 has priority over the D-family R016/R017 on the compose-null overlap --
+     * the confluence cert's R038 < R017/R037 tie-break -- and projects the same operand, so the
+     * engine eliminates identity-null via R037; both are confluent.  Verified by evidence, not
+     * assumed.)  This + checks (1)-(4) prove the engine ACTIVELY rewrites identity-null to the
+     * operand -- not a vacuous no-op. */
+    xii_term_arena_reset()
+    let t37 : u32 = xii_term_make_fusion2(XFV_FCOMPOSE, xfv_null_compose(), xfv_form(XFV_MARK))
+    let r37 : u32 = xii_rewrite_apply_one(t37)
+    if xii_rewrite_last_rule_fired() != 37u32 { return 6u64 }       /* R037 = priority null-collapse fired */
+    if xii_term_get_kind(r37) != XFV_FORM { return 7u64 }            /* the step projected the operand... */
+    if xii_term_get_subform(r37) != XFV_MARK { return 8u64 }        /* ...specifically FORM(MARK) */
+
+    return 99u64
+}

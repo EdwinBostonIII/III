@@ -4,36 +4,38 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_1:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_2:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_3:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_4:
-    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiipattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_5:
-    .ascii "pattern_table.iiipattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiipattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_6:
-    .ascii "pattern_table.iiiresolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "pattern_table.iiiresolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_7:
-    .ascii "resolver.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "resolver.iiiripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_8:
-    .ascii "intent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "ripple_field.iiiintent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_9:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "intent.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_10:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_11:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_12:
-    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_13:
-    .ascii "governance.iiigovernance.iiigovernance.iii\0"
+    .ascii "governance.iiigovernance.iiigovernance.iiigovernance.iii\0"
 L_str_14:
-    .ascii "governance.iiigovernance.iii\0"
+    .ascii "governance.iiigovernance.iiigovernance.iii\0"
 L_str_15:
+    .ascii "governance.iiigovernance.iii\0"
+L_str_16:
     .ascii "governance.iii\0"
     .section .rodata
 L_SR_OK:
@@ -521,8 +523,8 @@ L_loop_top_4:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movabsq $0x30, %rax
@@ -560,8 +562,8 @@ L_if_end_7:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -625,8 +627,8 @@ L_loop_top_8:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     movq %rdx, %rax
     pushq %rax
     movabsq $0x30, %rax
@@ -664,8 +666,8 @@ L_if_end_11:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
@@ -1497,6 +1499,885 @@ self_reformatter_trigger_interval:
     .seh_stackalloc 1024
     .seh_endprologue
     movq L_SR_TRIGGER_INTERVAL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sr_dir_climbs"
+    .text
+    .global sr_dir_climbs
+    .seh_proc sr_dir_climbs
+sr_dir_climbs:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movzbq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq rf_rank
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    subq $8, %rsp
+    movzbq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq rf_rank
+    addq $32, %rsp
+    addq $8, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sr_field_score"
+    .text
+    .global sr_field_score
+    .seh_proc sr_field_score
+sr_field_score:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq rf_rank
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movzbq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq rf_rank
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movl -56(%rbp), %eax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_45
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_45:
+    movl -56(%rbp), %eax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_47
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_47:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sr_pattern_potential"
+    .text
+    .global sr_pattern_potential
+    .seh_proc sr_pattern_potential
+sr_pattern_potential:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_table_get
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_49
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_hexad_kind
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_k_value
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+L_loop_top_50:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl L_SR_PATTERN_CAP(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_51
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_53
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_table_get
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movq -40(%rbp), %rax
+    pushq %rax
+    subq $8, %rsp
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_hexad_kind
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_k_value
+    addq $32, %rsp
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq sr_field_score
+    addq $32, %rsp
+    addq $8, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_53:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_50
+L_loop_end_51:
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "sr_steepest_pattern"
+    .text
+    .global sr_steepest_pattern
+    .seh_proc sr_steepest_pattern
+sr_steepest_pattern:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+L_loop_top_56:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl L_SR_PATTERN_CAP(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_57
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_table_get
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_59
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq sr_pattern_potential
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_61
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_61:
+    movzbq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_63
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setg %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_65
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_65:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_63:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_59:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_56
+L_loop_end_57:
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "self_reformatter_scan_directed"
+    .text
+    .global self_reformatter_scan_directed
+    .seh_proc self_reformatter_scan_directed
+self_reformatter_scan_directed:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    subq $32, %rsp
+    callq self_reformatter_is_due
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_67
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_67:
+    subq $32, %rsp
+    callq pattern_registry_is_sealed
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_69
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_69:
+    movq L_SR_CALL_COUNT(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, L_SR_LAST_SCAN_COUNT(%rip)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+L_loop_top_70:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl L_SR_PATTERN_CAP(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_71
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_table_get
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_hexad_kind
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+L_loop_top_74:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_SR_PATTERN_CAP(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_75
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_table_get
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pattern_hexad_kind
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movzbq -56(%rbp), %rax
+    pushq %rax
+    movzbq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq sr_dir_climbs
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_79
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__sr_try_compose
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_81
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_81:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_79:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_74
+L_loop_end_75:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_70
+L_loop_end_71:
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

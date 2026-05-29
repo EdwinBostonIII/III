@@ -1,3 +1,0 @@
-module ident_probe
-extern @abi(c-msvc-x64) fn ident_selftest() -> u64 from "identifier.iii"
-fn main() -> u64 { return ident_selftest() }

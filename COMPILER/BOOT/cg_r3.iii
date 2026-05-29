@@ -2074,6 +2074,15 @@ var R3_STR_IDIV : [u8; 24] = [32u8, 32u8, 32u8, 32u8, 99u8, 113u8, 116u8, 111u8,
 const R3_STR_IDIV_LEN : u64 = 24u64
 var R3_STR_IDIVMOD : [u8; 44] = [32u8, 32u8, 32u8, 32u8, 99u8, 113u8, 116u8, 111u8, 10u8, 32u8, 32u8, 32u8, 32u8, 105u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const R3_STR_IDIVMOD_LEN : u64 = 44u64
+/* u64-division signedness FIX (corpus 890/893): an UNSIGNED div/mod must zero RDX then use
+ * divq, NOT cqto+idivq (which reads a high-bit u64 dividend as negative, e.g. 0xFFFF..FE/2
+ * would wrongly give MAX).  Branch on the already-computed signed flag (r3_either_is_signed),
+ * exactly as the setcc ordering dispatch does.  R3_STR_DIVU = xorl edx,edx then divq rcx;
+ * R3_STR_DIVUMOD also moves the remainder rdx into rax (mirrors R3_STR_IDIVMOD). */
+var R3_STR_DIVU : [u8; 34] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 108u8, 32u8, 37u8, 101u8, 100u8, 120u8, 44u8, 32u8, 37u8, 101u8, 100u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
+const R3_STR_DIVU_LEN : u64 = 34u64
+var R3_STR_DIVUMOD : [u8; 54] = [32u8, 32u8, 32u8, 32u8, 120u8, 111u8, 114u8, 108u8, 32u8, 37u8, 101u8, 100u8, 120u8, 44u8, 32u8, 37u8, 101u8, 100u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 100u8, 105u8, 118u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8, 32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 37u8, 114u8, 100u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
+const R3_STR_DIVUMOD_LEN : u64 = 54u64
 var R3_STR_ANDQ : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 97u8, 110u8, 100u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const R3_STR_ANDQ_LEN : u64 = 20u64
 var R3_STR_ORQ : [u8; 19] = [32u8, 32u8, 32u8, 32u8, 111u8, 114u8, 113u8, 32u8, 37u8, 114u8, 99u8, 120u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
@@ -2402,8 +2411,8 @@ fn r3_emit_expr(node: u32) -> u32 {
         if op == 1u32 { r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
         if op == 2u32 { r3_emit_arr(&R3_STR_SUBQ as u64, R3_STR_SUBQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
         if op == 3u32 { r3_emit_arr(&R3_STR_IMULQ as u64, R3_STR_IMULQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }
-        if op == 4u32 { r3_emit_arr(&R3_STR_IDIV as u64, R3_STR_IDIV_LEN) }
-        if op == 5u32 { r3_emit_arr(&R3_STR_IDIVMOD as u64, R3_STR_IDIVMOD_LEN) }
+        if op == 4u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_IDIV as u64, R3_STR_IDIV_LEN) } else { r3_emit_arr(&R3_STR_DIVU as u64, R3_STR_DIVU_LEN) } }
+        if op == 5u32 { if signed == 1u32 { r3_emit_arr(&R3_STR_IDIVMOD as u64, R3_STR_IDIVMOD_LEN) } else { r3_emit_arr(&R3_STR_DIVUMOD as u64, R3_STR_DIVUMOD_LEN) } }
         if op == 6u32 { r3_emit_arr(&R3_STR_ANDQ as u64, R3_STR_ANDQ_LEN) }
         if op == 7u32 { r3_emit_arr(&R3_STR_ORQ as u64, R3_STR_ORQ_LEN) }
         if op == 8u32 { r3_emit_arr(&R3_STR_XORQ as u64, R3_STR_XORQ_LEN) }

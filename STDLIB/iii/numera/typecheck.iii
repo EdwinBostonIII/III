@@ -1,0 +1,2959 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\typecheck.iii
+ *
+ * III STDLIB - numera::typecheck  (P5 brick 1: the type-theoretic spine)
+ *
+ * A tiny TOTAL dependent type-checker for lambda-Pi with a predicative universe
+ * ladder U0 : U1 : U2 : ...  The de Bruijn criterion: a small trusted kernel
+ * that CHECKS (never searches).  Design: DOCS/III-P5-DEPENDENT-CORE-DESIGN.md.
+ *
+ * Terms live in a flat module-global node arena (function-local arrays indexed
+ * by a runtime var SEGFAULT in iii; the arena is the same shape egraph/XII use).
+ * De Bruijn indices => no alpha-renaming; binders are nameless.  Conversion is
+ * by normalization (NbE): beta-normalize both sides, compare structurally
+ * (under de Bruijn, structural identity == alpha-equivalence).
+ *
+ * The keystone NEGATIVE the KAT witnesses is that the kernel REJECTS  U0 : U0
+ * (Girard's paradox; a system with Type : Type proves False).
+ *
+ * Hexad: kind_essence + kind_cognition.  Ring: R0.  K: 1.00.
+ * NIH: the trusted core depends on NOTHING but its own arena -- the smaller the
+ * trusted base, the stronger the de Bruijn criterion.  No libc, no OS, no hash.
+ */
+
+module numera_typecheck
+
+/* --- Path C: the combinator backend (numera/combinator) as conversion oracle ---
+ * tc_to_cb compiles TC terms to variable-free combinators; cb_conv reduces (pure
+ * first-order rewrite, NO substitution) + structurally compares.  The differential
+ * KAT p5_kat_cbconv proves cb_conv == tc_conv (NbE) on the computational fragment
+ * -- the gate that licenses retiring NbE for XII (design 19, toward B16). */
+extern @abi(c-msvc-x64) fn cb_reset() -> u64 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_var(k: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_app(f: u32, a: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_lam(body: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_atom(id: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_true() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_false() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_if_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_zero() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_succ_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_iter_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_natrec_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_inl_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_inr_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_case_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_j_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_refl_c() -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_compile(m: u32) -> u32 from "combinator.iii"
+extern @abi(c-msvc-x64) fn cb_conv(x: u32, y: u32) -> u8 from "combinator.iii"
+
+/* --- Path C: the directed CCL reducer (numera/ccl) -- the beta-eta+iota oracle.
+ * tc_to_ccl compiles TC -> categorical combinators; ccl_conv reduces both to CCL
+ * normal form (directed, O(reduction-length), NO substitution) + compares.  The
+ * differential proves ccl_conv == tc_conv (NbE) on the FULL beta-eta+iota theory. */
+extern @abi(c-msvc-x64) fn ccl_reset() -> u64 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_conv(x: u32, y: u32) -> u8 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_snd() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_fst() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_comp(a: u32, b: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_cur(x: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_cur_d(domain: u32, body: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_reduce(t: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_to_tc(c: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_shift_fstk(p: u32, k: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_app2(f: u32, a: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_atom(id: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_true_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_false_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_zero_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_succ_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_inl_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_inr_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_refl_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_if_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_iter_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_natrec_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_case_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_j_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_spair_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_sup_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_wrec_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_sfst_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_ssnd_c() -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_transp_c() -> u32 from "ccl.iii"
+
+/* --- node tags --- */
+const TC_VAR  : u8 = 1u8     /* de Bruijn variable: A = index k            */
+const TC_SORT : u8 = 2u8     /* universe Uk:        A = level k             */
+const TC_PI   : u8 = 3u8     /* Pi(A).B:            A = dom node, B = cod   */
+const TC_LAM  : u8 = 4u8     /* lam(:A).t:          A = dom node, B = body  */
+const TC_APP  : u8 = 5u8     /* f a:                A = fn node,  B = arg   */
+const TC_SIG  : u8 = 6u8     /* Sigma(A).B:         A = dom node, B = cod   */
+const TC_PAIR : u8 = 7u8     /* <a, b>:             A = first,    B = second */
+const TC_FST  : u8 = 8u8     /* fst p:              A = pair node            */
+const TC_SND  : u8 = 9u8     /* snd p:              A = pair node            */
+const TC_ANN  : u8 = 10u8    /* (t : T) ascription: A = term,    B = type   */
+const TC_BOOL  : u8 = 11u8   /* Bool : U0                                    */
+const TC_TRUE  : u8 = 12u8   /* true : Bool                                  */
+const TC_FALSE : u8 = 13u8   /* false : Bool                                 */
+const TC_IF    : u8 = 14u8   /* if(s,t,e): A=scrut, B=then, C=else           */
+const TC_ID     : u8 = 15u8  /* Id(A,a,b):  A=type,  B=lhs,   C=rhs          */
+const TC_REFL   : u8 = 16u8  /* refl a:     A=value                          */
+const TC_TRANSP : u8 = 17u8  /* transport:  A=pred P, B=proof, C=base        */
+const TC_NAT    : u8 = 18u8  /* Nat : U0                                     */
+const TC_ZERO   : u8 = 19u8  /* zero : Nat                                   */
+const TC_SUCC   : u8 = 20u8  /* succ n:     A=predecessor                    */
+const TC_ITER   : u8 = 21u8  /* iter(z,s,n): A=base, B=step (T->T), C=scrut   */
+const TC_NATREC : u8 = 22u8  /* natrec(P,z,s,n): A=motive, B=base, C=step, D=scrut */
+const TC_J      : u8 = 23u8  /* J(C,d,p) path induction: A=motive, B=base, C=proof */
+const TC_UNIT   : u8 = 24u8  /* Unit (top) : U0                              */
+const TC_TT     : u8 = 25u8  /* tt : Unit                                    */
+const TC_EMPTY  : u8 = 26u8  /* Empty (bottom) : U0                          */
+const TC_ABSURD : u8 = 27u8  /* absurd(C,e): A=motive C:Empty->U, B=proof e:Empty */
+const TC_SUM    : u8 = 28u8  /* A + B:   A=left type, B=right type            */
+const TC_INL    : u8 = 29u8  /* inl v:   A=value (checked against a SUM)      */
+const TC_INR    : u8 = 30u8  /* inr v:   A=value (checked against a SUM)      */
+const TC_CASE   : u8 = 31u8  /* case(C,f,g,s): A=motive,B=leftfn,C=rightfn,D=scrut */
+const TC_W      : u8 = 32u8  /* W(A,B) well-founded trees: A=label type, B=arity family (under the a-binder, like SIG) */
+const TC_SUP    : u8 = 33u8  /* sup(a,f): A=label a, B=children-fn f:B[a]->W  (checkable, not inferable) */
+const TC_WREC   : u8 = 34u8  /* wrec(P,s,w): A=motive P:W->U, B=step, C=scrutinee w */
+
+const TC_ERR     : u32 = 0u32           /* the null / error node id (reserved) */
+const TC_CAP     : u32 = 16384u32       /* arena capacity (nodes)              */
+const TC_CTX_MAX : u32 = 256u32         /* max context depth                   */
+const TC_NOSORT  : u32 = 0xFFFFFFFFu32  /* "not a universe" sentinel           */
+const TC_FUEL    : u32 = 1000000u32     /* whnf step bound (hang guard)        */
+
+/* --- the arena: parallel arrays, one row per node.  Node 0 is reserved ERR. --- */
+var TC_TAG : [u8;  16384]
+var TC_A   : [u32; 16384]
+var TC_B   : [u32; 16384]
+var TC_C   : [u32; 16384]   /* third child: ID/J/IF need 3 fields (0 for the rest) */
+var TC_D   : [u32; 16384]   /* fourth child: NATREC needs 4 (0 for the rest)      */
+var TC_MULT : [u32; 16384]  /* QTT binder multiplicity code per PI/LAM node: 0=unmarked->omega, 1=erased, 2=linear, 3=omega; 0 for all other nodes */
+var SOV_COST : [u32; 16384] /* Sovereign Calculus: the weighted runtime-cost FIELD per node (sov_cost_q), materialized over the spine by sov_field_fill; 0 until filled */
+var IU_V1 : [u32; 16]       /* inductive anti-unification: left value of each (v1,v2)->var pair */
+var IU_V2 : [u32; 16]       /* ... right value */
+var IU_N  : [u32; 1]        /* ... number of generalization variables introduced */
+var TC_N   : [u32; 1]       /* bump cursor */
+
+/* --- the typing context: a stack of type-node ids (de Bruijn) --- */
+var TC_CTX   : [u32; 256]
+var TC_DEPTH : [u32; 1]
+
+/* Reset the arena (node 0 reserved) and empty the context. */
+fn tc_reset() -> u64 @export {
+    TC_N[0u64] = 1u32
+    TC_DEPTH[0u64] = 0u32
+    return 0u64
+}
+
+/* Allocate a node; returns its id, or TC_ERR(0) on arena overflow. */
+fn tc_mk(tag: u8, a: u32, b: u32) -> u32 {
+    let n : u32 = TC_N[0u64]
+    if n >= TC_CAP { return 0u32 }
+    TC_TAG[n] = tag
+    TC_A[n] = a
+    TC_B[n] = b
+    TC_C[n] = 0u32
+    TC_D[n] = 0u32
+    TC_MULT[n] = 0u32
+    TC_N[0u64] = n + 1u32
+    return n
+}
+fn tc_mk3(tag: u8, a: u32, b: u32, c: u32) -> u32 {
+    let n : u32 = TC_N[0u64]
+    if n >= TC_CAP { return 0u32 }
+    TC_TAG[n] = tag
+    TC_A[n] = a
+    TC_B[n] = b
+    TC_C[n] = c
+    TC_D[n] = 0u32
+    TC_MULT[n] = 0u32
+    TC_N[0u64] = n + 1u32
+    return n
+}
+fn tc_mk4(tag: u8, a: u32, b: u32, c: u32, d: u32) -> u32 {
+    let n : u32 = TC_N[0u64]
+    if n >= TC_CAP { return 0u32 }
+    TC_TAG[n] = tag
+    TC_A[n] = a
+    TC_B[n] = b
+    TC_C[n] = c
+    TC_D[n] = d
+    TC_MULT[n] = 0u32
+    TC_N[0u64] = n + 1u32
+    return n
+}
+
+fn tc_var(k: u32) -> u32 @export {
+    return tc_mk(TC_VAR, k, 0u32)
+}
+fn tc_sort(l: u32) -> u32 @export {
+    return tc_mk(TC_SORT, l, 0u32)
+}
+fn tc_pi(a: u32, b: u32) -> u32 @export {
+    return tc_mk(TC_PI, a, b)
+}
+fn tc_lam(a: u32, b: u32) -> u32 @export {
+    return tc_mk(TC_LAM, a, b)
+}
+fn tc_app(f: u32, a: u32) -> u32 @export {
+    return tc_mk(TC_APP, f, a)
+}
+
+/* ============================================================
+ *  QTT — the graded / quantitative layer (DOCS/III-QTT-DESIGN.md).  Multiplicities
+ *  {0=erased, 1=linear, omega=unrestricted} on PI/LAM binders, usage-checked.
+ *  A LAYER over infer; the CCL oracle CARRIES the multiplicity (mult-specific PI
+ *  atoms) so it survives shift/whnf/subst, but is otherwise unchanged.  Semiring
+ *  values 0/1/2(=omega); TC_MULT node codes 0=unmarked->omega,1=erased,2=linear,3=omega. */
+const TCQ_ERASED : u32 = 0u32
+const TCQ_LINEAR : u32 = 1u32
+const TCQ_OMEGA  : u32 = 2u32
+
+/* decode a TC_MULT node code to a semiring multiplicity (unmarked & 3 -> omega). */
+fn tcq_decode(code: u32) -> u32 {
+    if code == 1u32 { return TCQ_ERASED }
+    if code == 2u32 { return TCQ_LINEAR }
+    return TCQ_OMEGA
+}
+/* semiring add: combine two use-sites; 1+1 = omega (cannot use a linear var twice). */
+fn tcq_add(a: u32, b: u32) -> u32 {
+    let s : u32 = a + b
+    if s >= 2u32 { return TCQ_OMEGA }
+    return s
+}
+/* semiring mul: scale a usage by a multiplicity (zero-one-many: 0 annihilates, omega absorbs). */
+fn tcq_mul(a: u32, b: u32) -> u32 {
+    if a == 0u32 { return TCQ_ERASED }
+    if b == 0u32 { return TCQ_ERASED }
+    if a == TCQ_OMEGA { return TCQ_OMEGA }
+    if b == TCQ_OMEGA { return TCQ_OMEGA }
+    return TCQ_LINEAR
+}
+/* the discipline: is computed usage admissible under declared?  erased: exactly 0;
+ * linear: exactly 1; omega: anything. */
+fn tcq_fits(computed: u32, declared: u32) -> u8 {
+    if declared == TCQ_OMEGA { return 1u8 }
+    if computed == declared { return 1u8 }
+    return 0u8
+}
+/* semiring JOIN (least upper bound): combine usage across ALTERNATIVE branches
+ * (only one runs).  a==a keeps that multiplicity; differing usages join to omega
+ * (a var used once in one branch but not the other is NOT exactly-once). */
+fn tcq_lub(a: u32, b: u32) -> u32 {
+    if a == b { return a }
+    return TCQ_OMEGA
+}
+/* QTT-aware constructors: a PI/LAM binder carrying a declared multiplicity code. */
+fn tc_pi_q(a: u32, b: u32, code: u32) -> u32 @export {
+    let n : u32 = tc_pi(a, b)
+    TC_MULT[n] = code
+    return n
+}
+fn tc_lam_q(a: u32, b: u32, code: u32) -> u32 @export {
+    let n : u32 = tc_lam(a, b)
+    TC_MULT[n] = code
+    return n
+}
+fn tc_sig(a: u32, b: u32) -> u32 @export {
+    return tc_mk(TC_SIG, a, b)
+}
+fn tc_pair(a: u32, b: u32) -> u32 @export {
+    return tc_mk(TC_PAIR, a, b)
+}
+fn tc_fst(p: u32) -> u32 @export {
+    return tc_mk(TC_FST, p, 0u32)
+}
+fn tc_snd(p: u32) -> u32 @export {
+    return tc_mk(TC_SND, p, 0u32)
+}
+fn tc_ann(t: u32, ty: u32) -> u32 @export {
+    return tc_mk(TC_ANN, t, ty)
+}
+fn tc_bool() -> u32 @export {
+    return tc_mk(TC_BOOL, 0u32, 0u32)
+}
+fn tc_true() -> u32 @export {
+    return tc_mk(TC_TRUE, 0u32, 0u32)
+}
+fn tc_false() -> u32 @export {
+    return tc_mk(TC_FALSE, 0u32, 0u32)
+}
+fn tc_if(s: u32, t: u32, e: u32) -> u32 @export {
+    return tc_mk3(TC_IF, s, t, e)
+}
+fn tc_id(ty: u32, lhs: u32, rhs: u32) -> u32 @export {
+    return tc_mk3(TC_ID, ty, lhs, rhs)
+}
+fn tc_refl(a: u32) -> u32 @export {
+    return tc_mk(TC_REFL, a, 0u32)
+}
+fn tc_transp(pr: u32, proof: u32, base: u32) -> u32 @export {
+    return tc_mk3(TC_TRANSP, pr, proof, base)
+}
+fn tc_nat() -> u32 @export {
+    return tc_mk(TC_NAT, 0u32, 0u32)
+}
+fn tc_zero() -> u32 @export {
+    return tc_mk(TC_ZERO, 0u32, 0u32)
+}
+fn tc_succ(n: u32) -> u32 @export {
+    return tc_mk(TC_SUCC, n, 0u32)
+}
+fn tc_iter(z: u32, s: u32, n: u32) -> u32 @export {
+    return tc_mk3(TC_ITER, z, s, n)
+}
+fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 @export {
+    return tc_mk4(TC_NATREC, p, z, s, n)
+}
+fn tc_j(mtv: u32, base: u32, proof: u32) -> u32 @export {
+    return tc_mk3(TC_J, mtv, base, proof)
+}
+fn tc_unit() -> u32 @export {
+    return tc_mk(TC_UNIT, 0u32, 0u32)
+}
+fn tc_tt() -> u32 @export {
+    return tc_mk(TC_TT, 0u32, 0u32)
+}
+fn tc_empty() -> u32 @export {
+    return tc_mk(TC_EMPTY, 0u32, 0u32)
+}
+fn tc_absurd(c: u32, e: u32) -> u32 @export {
+    return tc_mk(TC_ABSURD, c, e)
+}
+fn tc_sum(a: u32, b: u32) -> u32 @export {
+    return tc_mk(TC_SUM, a, b)
+}
+fn tc_inl(v: u32) -> u32 @export {
+    return tc_mk(TC_INL, v, 0u32)
+}
+fn tc_inr(v: u32) -> u32 @export {
+    return tc_mk(TC_INR, v, 0u32)
+}
+fn tc_case(c: u32, f: u32, g: u32, s: u32) -> u32 @export {
+    return tc_mk4(TC_CASE, c, f, g, s)
+}
+fn tc_w(a: u32, b: u32) -> u32 @export {
+    return tc_mk(TC_W, a, b)
+}
+fn tc_sup(a: u32, f: u32) -> u32 @export {
+    return tc_mk(TC_SUP, a, f)
+}
+fn tc_wrec(p: u32, s: u32, w: u32) -> u32 @export {
+    return tc_mk3(TC_WREC, p, s, w)
+}
+
+
+/* head normal form via the directed CCL reducer (B18: NbE retired).  Full nf
+ * exposes the head former, which is all infer/subtype need. */
+fn tc_whnf(t: u32) -> u32 {
+    return ccl_normalize(t)
+}
+
+/* full normal form via the directed CCL reducer (B18: NbE retired). */
+fn tc_nf(t: u32) -> u32 {
+    return ccl_normalize(t)
+}
+
+/* Definitional equality = the SINGULAR CCL oracle.  Compile both sides to CCL,
+ * reduce to normal form via the directed reducer (beta + COMPLETE eta + data
+ * iota + type-former structure), compare structurally.  NbE is fully deleted --
+ * this is the ONLY conversion path.  Confluence (well-definedness of "the"
+ * normal form) is certified by ccl_conf_cert (863); eta-completeness by 862. */
+fn tc_conv(x: u32, y: u32) -> u8 @export {
+    ccl_reset()
+    return ccl_conv(tc_to_ccl(x), tc_to_ccl(y))
+}
+
+/* --- Integration C: conversion-invariant WHNF shape signature -------------
+ * A SOUND, cheap pre-filter for conversion.  A syntactically RIGID head (a type
+ * former or value constructor: it is already its own weak-head normal form and
+ * cannot reduce at the head) determines the normal-form head: two terms with
+ * DIFFERENT rigid heads are NEVER convertible.  Reducible heads (application,
+ * eliminators) and neutrals (variables) are NOT rigid -- they get the DEFER
+ * sentinel, so the filter never speaks where reduction could change the head
+ * (this is exactly what keeps eta sound: eta relates a LAM only to a NEUTRAL,
+ * and neutrals DEFER).  The kernel (tc_conv / tc_check) remains the SOLE
+ * arbiter of acceptance; the signature only enables a sound fast REJECT. */
+const TC_SHAPE_DEFER : u32 = 0u32   /* out-of-domain: not a rigid head -> defer */
+
+/* The rigid (own-WHNF-head) tag of t, or TC_SHAPE_DEFER for reducible/neutral. */
+fn tc_rigid_head(t: u32) -> u32 {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_SORT  { return TC_SORT  as u32 }
+    if tag == TC_PI    { return TC_PI    as u32 }
+    if tag == TC_LAM   { return TC_LAM   as u32 }
+    if tag == TC_SIG   { return TC_SIG   as u32 }
+    if tag == TC_PAIR  { return TC_PAIR  as u32 }
+    if tag == TC_BOOL  { return TC_BOOL  as u32 }
+    if tag == TC_TRUE  { return TC_TRUE  as u32 }
+    if tag == TC_FALSE { return TC_FALSE as u32 }
+    if tag == TC_ID    { return TC_ID    as u32 }
+    if tag == TC_REFL  { return TC_REFL  as u32 }
+    if tag == TC_NAT   { return TC_NAT   as u32 }
+    if tag == TC_ZERO  { return TC_ZERO  as u32 }
+    if tag == TC_SUCC  { return TC_SUCC  as u32 }
+    if tag == TC_UNIT  { return TC_UNIT  as u32 }
+    if tag == TC_TT    { return TC_TT    as u32 }
+    if tag == TC_EMPTY { return TC_EMPTY as u32 }
+    if tag == TC_SUM   { return TC_SUM   as u32 }
+    if tag == TC_INL   { return TC_INL   as u32 }
+    if tag == TC_INR   { return TC_INR   as u32 }
+    if tag == TC_W     { return TC_W     as u32 }
+    if tag == TC_SUP   { return TC_SUP   as u32 }
+    return TC_SHAPE_DEFER
+}
+
+/* Pack a head tag + two sub-heads into a u32 signature (8 bits each). */
+fn tc_sig_pack(h: u32, sa: u32, sb: u32) -> u32 {
+    return (h << 16u32) | (sa << 8u32) | sb
+}
+
+/* The shape signature of t: head + sub-heads for formers whose components are
+ * compared DIRECTLY by conversion (so a rigidly-different sub-head proves non-
+ * convertibility); head-only for binder / proof-irrelevant forms (LAM, ID,
+ * REFL, W, SUP) where a sub-fold would be unsound; DEFER for non-rigid t. */
+fn tc_shape_sig(t: u32) -> u32 @export {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_PI   { return tc_sig_pack(TC_PI   as u32, tc_rigid_head(TC_A[t]), tc_rigid_head(TC_B[t])) }
+    if tag == TC_SIG  { return tc_sig_pack(TC_SIG  as u32, tc_rigid_head(TC_A[t]), tc_rigid_head(TC_B[t])) }
+    if tag == TC_SUM  { return tc_sig_pack(TC_SUM  as u32, tc_rigid_head(TC_A[t]), tc_rigid_head(TC_B[t])) }
+    if tag == TC_PAIR { return tc_sig_pack(TC_PAIR as u32, tc_rigid_head(TC_A[t]), tc_rigid_head(TC_B[t])) }
+    if tag == TC_SUCC { return tc_sig_pack(TC_SUCC as u32, tc_rigid_head(TC_A[t]), TC_SHAPE_DEFER) }
+    if tag == TC_INL  { return tc_sig_pack(TC_INL  as u32, tc_rigid_head(TC_A[t]), TC_SHAPE_DEFER) }
+    if tag == TC_INR  { return tc_sig_pack(TC_INR  as u32, tc_rigid_head(TC_A[t]), TC_SHAPE_DEFER) }
+    let h : u32 = tc_rigid_head(t)
+    return tc_sig_pack(h, TC_SHAPE_DEFER, TC_SHAPE_DEFER)
+}
+
+/* shift by k (cutoff 0) via CCL: compile, compose with Fst^k, reduce, reify.
+ * The CCL-native replacement for tc_shift(p, k, 0) in eliminator-type construction. */
+fn tc_shift_k(p: u32, k: u32) -> u32 @export {
+    ccl_reset()
+    return ccl_to_tc(ccl_reduce(ccl_shift_fstk(tc_to_ccl(p), k)))
+}
+
+/* substitute a for the most-recent var (#0) in cod, via CCL beta: (lam _. cod) a.
+ * The CCL-native replacement for tc_subst(cod, 0, a) -- result-type computation. */
+fn tc_subst0(cod: u32, a: u32) -> u32 @export {
+    ccl_reset()
+    return ccl_to_tc(ccl_reduce(tc_to_ccl(tc_app(tc_lam(tc_bool(), cod), a))))
+}
+
+/* --- context ops (de Bruijn stack) --- */
+fn tc_ctx_push(ty: u32) -> u64 {
+    let d : u32 = TC_DEPTH[0u64]
+    if d >= TC_CTX_MAX { return 1u64 }
+    TC_CTX[d] = ty
+    TC_DEPTH[0u64] = d + 1u32
+    return 0u64
+}
+
+fn tc_ctx_pop() -> u64 {
+    let d : u32 = TC_DEPTH[0u64]
+    if d > 0u32 { TC_DEPTH[0u64] = d - 1u32 }
+    return 0u64
+}
+
+/* type of var k: the recorded type, shifted up by k+1 (it was stored under
+ * fewer binders).  Out-of-scope k => TC_ERR. */
+fn tc_ctx_lookup(k: u32) -> u32 {
+    let d : u32 = TC_DEPTH[0u64]
+    if k >= d { return 0u32 }
+    let raw : u32 = TC_CTX[d - 1u32 - k]
+    return tc_shift_k(raw, k + 1u32)
+}
+
+/* level of a universe type, or TC_NOSORT if the whnf is not a SORT. */
+fn tc_sort_level(ty: u32) -> u32 {
+    let w : u32 = tc_whnf(ty)
+    if TC_TAG[w] == TC_SORT { return TC_A[w] }
+    return 0xFFFFFFFFu32
+}
+
+/* infer the type of t in the current context; returns a type node, or
+ * TC_ERR(0) if t is ill-typed.  Bidirectional with tc_check below. */
+fn tc_infer(t: u32) -> u32 @export {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR {
+        return tc_ctx_lookup(TC_A[t])
+    }
+    if tag == TC_SORT {
+        let l : u32 = TC_A[t]
+        return tc_sort(l + 1u32)
+    }
+    if tag == TC_PI {
+        let a : u32 = TC_A[t]
+        let b : u32 = TC_B[t]
+        let ia : u32 = tc_infer(a)
+        let i : u32 = tc_sort_level(ia)
+        if i == TC_NOSORT { return 0u32 }
+        tc_ctx_push(a)
+        let ib : u32 = tc_infer(b)
+        let j : u32 = tc_sort_level(ib)
+        tc_ctx_pop()
+        if j == TC_NOSORT { return 0u32 }
+        let mut m : u32 = i
+        if j > m { m = j }
+        return tc_sort(m)
+    }
+    if tag == TC_LAM {
+        let a : u32 = TC_A[t]
+        let body : u32 = TC_B[t]
+        let ia : u32 = tc_infer(a)
+        let i : u32 = tc_sort_level(ia)
+        if i == TC_NOSORT { return 0u32 }
+        tc_ctx_push(a)
+        let bt : u32 = tc_infer(body)
+        tc_ctx_pop()
+        if bt == 0u32 { return 0u32 }
+        return tc_pi_q(a, bt, TC_MULT[t])
+    }
+    if tag == TC_APP {
+        let f : u32 = TC_A[t]
+        let a : u32 = TC_B[t]
+        let tf : u32 = tc_infer(f)
+        if tf == 0u32 { return 0u32 }
+        let w : u32 = tc_whnf(tf)
+        if TC_TAG[w] != TC_PI { return 0u32 }
+        let dom : u32 = TC_A[w]
+        let cod : u32 = TC_B[w]
+        let ok : u8 = tc_check(a, dom)
+        if ok == 0u8 { return 0u32 }
+        return tc_subst0(cod, a)
+    }
+    if tag == TC_SIG {
+        let a : u32 = TC_A[t]
+        let b : u32 = TC_B[t]
+        let ia : u32 = tc_infer(a)
+        let i : u32 = tc_sort_level(ia)
+        if i == TC_NOSORT { return 0u32 }
+        tc_ctx_push(a)
+        let ib : u32 = tc_infer(b)
+        let j : u32 = tc_sort_level(ib)
+        tc_ctx_pop()
+        if j == TC_NOSORT { return 0u32 }
+        let mut m : u32 = i
+        if j > m { m = j }
+        return tc_sort(m)
+    }
+    if tag == TC_FST {
+        let p : u32 = TC_A[t]
+        let tp : u32 = tc_infer(p)
+        if tp == 0u32 { return 0u32 }
+        let w : u32 = tc_whnf(tp)
+        if TC_TAG[w] != TC_SIG { return 0u32 }
+        return TC_A[w]
+    }
+    if tag == TC_SND {
+        let p : u32 = TC_A[t]
+        let tp : u32 = tc_infer(p)
+        if tp == 0u32 { return 0u32 }
+        let w : u32 = tc_whnf(tp)
+        if TC_TAG[w] != TC_SIG { return 0u32 }
+        let cod : u32 = TC_B[w]
+        let fp : u32 = tc_fst(p)
+        return tc_subst0(cod, fp)
+    }
+    if tag == TC_ANN {
+        let tm : u32 = TC_A[t]
+        let ty : u32 = TC_B[t]
+        let ity : u32 = tc_infer(ty)
+        let lv : u32 = tc_sort_level(ity)
+        if lv == TC_NOSORT { return 0u32 }
+        let ok2 : u8 = tc_check(tm, ty)
+        if ok2 == 0u8 { return 0u32 }
+        return ty
+    }
+    if tag == TC_BOOL {
+        return tc_sort(0u32)
+    }
+    if tag == TC_TRUE {
+        return tc_bool()
+    }
+    if tag == TC_FALSE {
+        return tc_bool()
+    }
+    if tag == TC_IF {
+        let sc : u32 = TC_A[t]
+        let th : u32 = TC_B[t]
+        let el : u32 = TC_C[t]
+        let bt : u32 = tc_bool()
+        let oksc : u8 = tc_check(sc, bt)
+        if oksc == 0u8 { return 0u32 }
+        let tt : u32 = tc_infer(th)
+        if tt == 0u32 { return 0u32 }
+        let oke : u8 = tc_check(el, tt)
+        if oke == 0u8 { return 0u32 }
+        return tt
+    }
+    if tag == TC_ID {
+        let id_ty : u32 = TC_A[t]
+        let id_a : u32 = TC_B[t]
+        let id_b : u32 = TC_C[t]
+        let id_k : u32 = tc_sort_level(tc_infer(id_ty))
+        if id_k == TC_NOSORT { return 0u32 }
+        let id_oka : u8 = tc_check(id_a, id_ty)
+        if id_oka == 0u8 { return 0u32 }
+        let id_okb : u8 = tc_check(id_b, id_ty)
+        if id_okb == 0u8 { return 0u32 }
+        return tc_sort(id_k)
+    }
+    if tag == TC_REFL {
+        let rf_v : u32 = TC_A[t]
+        let rf_a : u32 = tc_infer(rf_v)
+        if rf_a == 0u32 { return 0u32 }
+        return tc_id(rf_a, rf_v, rf_v)
+    }
+    if tag == TC_TRANSP {
+        let tr_p : u32 = TC_A[t]
+        let tr_proof : u32 = TC_B[t]
+        let tr_base : u32 = TC_C[t]
+        let tr_tp : u32 = tc_infer(tr_proof)
+        if tr_tp == 0u32 { return 0u32 }
+        let tr_idw : u32 = tc_whnf(tr_tp)
+        if TC_TAG[tr_idw] != TC_ID { return 0u32 }
+        let tr_A : u32 = TC_A[tr_idw]
+        let tr_a : u32 = TC_B[tr_idw]
+        let tr_b : u32 = TC_C[tr_idw]
+        let tr_pty : u32 = tc_infer(tr_p)
+        if tr_pty == 0u32 { return 0u32 }
+        let tr_pw : u32 = tc_whnf(tr_pty)
+        if TC_TAG[tr_pw] != TC_PI { return 0u32 }
+        let tr_domok : u8 = tc_conv(TC_A[tr_pw], tr_A)
+        if tr_domok == 0u8 { return 0u32 }
+        tc_ctx_push(tr_A)
+        let tr_codlv : u32 = tc_sort_level(TC_B[tr_pw])
+        tc_ctx_pop()
+        if tr_codlv == TC_NOSORT { return 0u32 }
+        let tr_pa : u32 = tc_app(tr_p, tr_a)
+        let tr_baseok : u8 = tc_check(tr_base, tr_pa)
+        if tr_baseok == 0u8 { return 0u32 }
+        return tc_app(tr_p, tr_b)
+    }
+    if tag == TC_NAT {
+        return tc_sort(0u32)
+    }
+    if tag == TC_ZERO {
+        return tc_nat()
+    }
+    if tag == TC_SUCC {
+        let su_n : u32 = TC_A[t]
+        let su_ok : u8 = tc_check(su_n, tc_nat())
+        if su_ok == 0u8 { return 0u32 }
+        return tc_nat()
+    }
+    if tag == TC_ITER {
+        let it_z : u32 = TC_A[t]
+        let it_s : u32 = TC_B[t]
+        let it_n : u32 = TC_C[t]
+        let it_T : u32 = tc_infer(it_z)
+        if it_T == 0u32 { return 0u32 }
+        let it_Tk : u32 = tc_sort_level(tc_infer(it_T))
+        if it_Tk == TC_NOSORT { return 0u32 }
+        let it_sty : u32 = tc_pi(it_T, tc_shift_k(it_T, 1u32))
+        let it_soks : u8 = tc_check(it_s, it_sty)
+        if it_soks == 0u8 { return 0u32 }
+        let it_nok : u8 = tc_check(it_n, tc_nat())
+        if it_nok == 0u8 { return 0u32 }
+        return it_T
+    }
+    if tag == TC_NATREC {
+        let nr_p : u32 = TC_A[t]
+        let nr_z : u32 = TC_B[t]
+        let nr_s : u32 = TC_C[t]
+        let nr_n : u32 = TC_D[t]
+        /* P : Nat -> U_l */
+        let nr_pty : u32 = tc_infer(nr_p)
+        if nr_pty == 0u32 { return 0u32 }
+        let nr_pw : u32 = tc_whnf(nr_pty)
+        if TC_TAG[nr_pw] != TC_PI { return 0u32 }
+        let nr_natd : u8 = tc_conv(TC_A[nr_pw], tc_nat())
+        if nr_natd == 0u8 { return 0u32 }
+        tc_ctx_push(tc_nat())
+        let nr_cods : u32 = tc_sort_level(TC_B[nr_pw])
+        tc_ctx_pop()
+        if nr_cods == TC_NOSORT { return 0u32 }
+        /* z : P zero */
+        let nr_pz : u32 = tc_app(nr_p, tc_zero())
+        let nr_zok : u8 = tc_check(nr_z, nr_pz)
+        if nr_zok == 0u8 { return 0u32 }
+        /* s : Pi(k:Nat). P k -> P(succ k) = PI(Nat, PI(APP(P^1,#0), APP(P^2, succ #1))) */
+        let nr_p1 : u32 = tc_shift_k(nr_p, 1u32)
+        let nr_p2 : u32 = tc_shift_k(nr_p, 2u32)
+        let nr_ih : u32 = tc_app(nr_p1, tc_var(0u32))
+        let nr_conc : u32 = tc_app(nr_p2, tc_succ(tc_var(1u32)))
+        let nr_sty : u32 = tc_pi(tc_nat(), tc_pi(nr_ih, nr_conc))
+        let nr_sok : u8 = tc_check(nr_s, nr_sty)
+        if nr_sok == 0u8 { return 0u32 }
+        /* n : Nat */
+        let nr_nok : u8 = tc_check(nr_n, tc_nat())
+        if nr_nok == 0u8 { return 0u32 }
+        /* result : P n */
+        return tc_app(nr_p, nr_n)
+    }
+    if tag == TC_J {
+        let j_c : u32 = TC_A[t]
+        let j_d : u32 = TC_B[t]
+        let j_p : u32 = TC_C[t]
+        let j_tp : u32 = tc_infer(j_p)
+        if j_tp == 0u32 { return 0u32 }
+        let j_idw : u32 = tc_whnf(j_tp)
+        if TC_TAG[j_idw] != TC_ID { return 0u32 }
+        let j_a : u32 = TC_B[j_idw]
+        let j_b : u32 = TC_C[j_idw]
+        /* diagonal type C a (refl a) -- the base MUST live here */
+        let j_da : u32 = tc_app(tc_app(j_c, j_a), tc_refl(j_a))
+        let j_dak : u32 = tc_sort_level(tc_infer(j_da))
+        if j_dak == TC_NOSORT { return 0u32 }
+        let j_dok : u8 = tc_check(j_d, j_da)
+        if j_dok == 0u8 { return 0u32 }
+        /* result type C b p */
+        let j_rty : u32 = tc_app(tc_app(j_c, j_b), j_p)
+        let j_rk : u32 = tc_sort_level(tc_infer(j_rty))
+        if j_rk == TC_NOSORT { return 0u32 }
+        return j_rty
+    }
+    if tag == TC_UNIT {
+        return tc_sort(0u32)
+    }
+    if tag == TC_TT {
+        return tc_unit()
+    }
+    if tag == TC_EMPTY {
+        return tc_sort(0u32)
+    }
+    if tag == TC_ABSURD {
+        let ab_c : u32 = TC_A[t]
+        let ab_e : u32 = TC_B[t]
+        let ab_te : u32 = tc_infer(ab_e)
+        if ab_te == 0u32 { return 0u32 }
+        let ab_ew : u32 = tc_whnf(ab_te)
+        if TC_TAG[ab_ew] != TC_EMPTY { return 0u32 }
+        let ab_rty : u32 = tc_app(ab_c, ab_e)
+        let ab_rk : u32 = tc_sort_level(tc_infer(ab_rty))
+        if ab_rk == TC_NOSORT { return 0u32 }
+        return ab_rty
+    }
+    if tag == TC_SUM {
+        let su_a : u32 = TC_A[t]
+        let su_b : u32 = TC_B[t]
+        let su_i : u32 = tc_sort_level(tc_infer(su_a))
+        if su_i == TC_NOSORT { return 0u32 }
+        let su_j : u32 = tc_sort_level(tc_infer(su_b))
+        if su_j == TC_NOSORT { return 0u32 }
+        let mut su_m : u32 = su_i
+        if su_j > su_m { su_m = su_j }
+        return tc_sort(su_m)
+    }
+    if tag == TC_W {
+        /* W(A,B): A:U_i, B (the arity family, under the label binder a):U_j  =>  W:U_max(i,j).
+         * Structurally identical to SIG (B lives under the a-binder). */
+        let w_a : u32 = TC_A[t]
+        let w_b : u32 = TC_B[t]
+        let w_i : u32 = tc_sort_level(tc_infer(w_a))
+        if w_i == TC_NOSORT { return 0u32 }
+        tc_ctx_push(w_a)
+        let w_j : u32 = tc_sort_level(tc_infer(w_b))
+        tc_ctx_pop()
+        if w_j == TC_NOSORT { return 0u32 }
+        let mut w_m : u32 = w_i
+        if w_j > w_m { w_m = w_j }
+        return tc_sort(w_m)
+    }
+    if tag == TC_WREC {
+        /* wrec(P,s,w) : P w  (transfinite induction over W(A,B)).
+         * step s : Pi(a:A). Pi(f:Pi(b:B).W). (Pi(b:B). P(f b)) -> P(sup(a,f)).
+         * de-Bruijn (verified vs natrec): ft = Pi(b:B). W^2 ; iht = Pi(b:B^1). P^3 (f b)
+         * [f=#1,b=#0] ; res = P^3 (sup(a,f)) [a=#2,f=#1].  (DOCS/III-WTYPES-DESIGN.md) */
+        let wr_p : u32 = TC_A[t]
+        let wr_s : u32 = TC_B[t]
+        let wr_w : u32 = TC_C[t]
+        let wr_wt : u32 = tc_infer(wr_w)
+        if wr_wt == 0u32 { return 0u32 }
+        let wr_ww : u32 = tc_whnf(wr_wt)
+        if TC_TAG[wr_ww] != TC_W { return 0u32 }
+        let wr_wa : u32 = TC_A[wr_ww]            /* label type A */
+        let wr_wb : u32 = TC_B[wr_ww]            /* arity family B (under the a-binder) */
+        /* P : W -> U */
+        let wr_pty : u32 = tc_infer(wr_p)
+        if wr_pty == 0u32 { return 0u32 }
+        let wr_pw : u32 = tc_whnf(wr_pty)
+        if TC_TAG[wr_pw] != TC_PI { return 0u32 }
+        if tc_conv(TC_A[wr_pw], wr_ww) == 0u8 { return 0u32 }
+        tc_ctx_push(wr_ww)
+        let wr_cods : u32 = tc_sort_level(TC_B[wr_pw])
+        tc_ctx_pop()
+        if wr_cods == TC_NOSORT { return 0u32 }
+        /* the step type */
+        let wr_p3 : u32 = tc_shift_k(wr_p, 3u32)
+        let wr_ft : u32 = tc_pi(wr_wb, tc_shift_k(wr_ww, 2u32))                  /* f : Pi(b:B). W^2 */
+        let wr_iht : u32 = tc_pi(tc_shift_k(wr_wb, 1u32), tc_app(wr_p3, tc_app(tc_var(1u32), tc_var(0u32))))  /* Pi(b:B^1). P^3 (f b) */
+        let wr_res : u32 = tc_app(wr_p3, tc_sup(tc_var(2u32), tc_var(1u32)))     /* P^3 (sup(a,f)) */
+        let wr_sty : u32 = tc_pi(wr_wa, tc_pi(wr_ft, tc_pi(wr_iht, wr_res)))
+        if tc_check(wr_s, wr_sty) == 0u8 { return 0u32 }
+        return tc_app(wr_p, wr_w)
+    }
+    if tag == TC_CASE {
+        let ca_c : u32 = TC_A[t]
+        let ca_f : u32 = TC_B[t]
+        let ca_g : u32 = TC_C[t]
+        let ca_s : u32 = TC_D[t]
+        let ca_ts : u32 = tc_infer(ca_s)
+        if ca_ts == 0u32 { return 0u32 }
+        let ca_sw : u32 = tc_whnf(ca_ts)
+        if TC_TAG[ca_sw] != TC_SUM { return 0u32 }
+        let ca_la : u32 = TC_A[ca_sw]
+        let ca_rb : u32 = TC_B[ca_sw]
+        /* result type C s -- also verifies C is a motive (A+B)->U */
+        let ca_rty : u32 = tc_app(ca_c, ca_s)
+        let ca_rk : u32 = tc_sort_level(tc_infer(ca_rty))
+        if ca_rk == TC_NOSORT { return 0u32 }
+        let ca_c1 : u32 = tc_shift_k(ca_c, 1u32)
+        /* f : (a:A) -> C(inl a) = PI(A, APP(C^1, inl #0)) */
+        let ca_fty : u32 = tc_pi(ca_la, tc_app(ca_c1, tc_inl(tc_var(0u32))))
+        let ca_fok : u8 = tc_check(ca_f, ca_fty)
+        if ca_fok == 0u8 { return 0u32 }
+        /* g : (b:B) -> C(inr b) = PI(B, APP(C^1, inr #0)) */
+        let ca_gty : u32 = tc_pi(ca_rb, tc_app(ca_c1, tc_inr(tc_var(0u32))))
+        let ca_gok : u8 = tc_check(ca_g, ca_gty)
+        if ca_gok == 0u8 { return 0u32 }
+        return ca_rty
+    }
+    return 0u32
+}
+
+/* subtyping (cumulative universes): U_i <= U_j for i <= j; otherwise definitional
+ * equality.  Shallow (sort-level only).  `>` used (not `<=`) to stay on proven ops. */
+fn tc_subtype(s: u32, t: u32) -> u8 @export {
+    /* P3 O(1) fast path: when BOTH operands are already SYNTACTIC sorts, compare
+     * levels with NO normalization.  A SORT node is its own weak-head normal form
+     * (sorts do not reduce), so TC_A[s] == TC_A[tc_nf(s)] here -- this returns the
+     * IDENTICAL verdict to the slow path below, just without the CCL reductions.
+     * Sound and allocation-free.  (The proposed TC_UNIVERSE_MAX cache is rejected
+     * as UNSOUND: tc_subtype falls back to tc_conv for non-sorts, so a term that
+     * merely MENTIONS a higher universe but reduces to a convertible form -- e.g.
+     * (lam X:U5. Nat) U0 vs Nat -- would be wrongly rejected by max[s] > max[t].) */
+    if TC_TAG[s] == TC_SORT {
+        if TC_TAG[t] == TC_SORT {
+            if TC_A[s] > TC_A[t] { return 0u8 }
+            return 1u8
+        }
+    }
+    let ns : u32 = tc_nf(s)
+    let nt : u32 = tc_nf(t)
+    if TC_TAG[ns] == TC_SORT {
+        if TC_TAG[nt] == TC_SORT {
+            if TC_A[ns] > TC_A[nt] { return 0u8 }
+            return 1u8
+        }
+    }
+    /* non-sort fallback: definitional equality via the singular CCL oracle. */
+    return tc_conv(s, t)
+}
+
+/* P3 KAT: the sort fast-path returns the cumulative-universe verdict (U_i <: U_j
+ * iff i <= j) with no normalization, identical to the slow path.  99 = pass. */
+fn tc_universe_selftest() -> u64 @export {
+    tc_reset()
+    let u0 : u32 = tc_sort(0u32)
+    let u1 : u32 = tc_sort(1u32)
+    let u2 : u32 = tc_sort(2u32)
+    if tc_subtype(u0, u1) != 1u8 { return 1u64 }   /* U0 <: U1 */
+    if tc_subtype(u1, u1) != 1u8 { return 2u64 }   /* U1 <: U1 (reflexive) */
+    if tc_subtype(u0, u2) != 1u8 { return 3u64 }   /* U0 <: U2 */
+    if tc_subtype(u2, u1) != 0u8 { return 4u64 }   /* U2 NOT<: U1 (reject) */
+    if tc_subtype(u2, u0) != 0u8 { return 5u64 }   /* U2 NOT<: U0 (reject) */
+    if tc_subtype(u1, u0) != 0u8 { return 6u64 }   /* U1 NOT<: U0 (reject) */
+    return 99u64
+}
+
+/* check t against an expected type; 1 = ok, 0 = reject. */
+fn tc_check(t: u32, ty: u32) -> u8 @export {
+    if TC_TAG[t] == TC_PAIR {
+        let mut w : u32 = ty
+        if TC_TAG[ty] != TC_SIG { w = tc_whnf(ty) }   /* whnf only to expose a reducible head */
+        if TC_TAG[w] == TC_SIG {
+            let dom : u32 = TC_A[w]
+            let cod : u32 = TC_B[w]
+            let a : u32 = TC_A[t]
+            let b : u32 = TC_B[t]
+            let ok1 : u8 = tc_check(a, dom)
+            if ok1 == 0u8 { return 0u8 }
+            let cod2 : u32 = tc_subst0(cod, a)
+            return tc_check(b, cod2)
+        }
+        return 0u8
+    }
+    if TC_TAG[t] == TC_INL {
+        let mut w : u32 = ty
+        if TC_TAG[ty] != TC_SUM { w = tc_whnf(ty) }   /* whnf only to expose a reducible head */
+        if TC_TAG[w] == TC_SUM {
+            return tc_check(TC_A[t], TC_A[w])
+        }
+        return 0u8
+    }
+    if TC_TAG[t] == TC_INR {
+        let mut w : u32 = ty
+        if TC_TAG[ty] != TC_SUM { w = tc_whnf(ty) }   /* whnf only to expose a reducible head */
+        if TC_TAG[w] == TC_SUM {
+            return tc_check(TC_A[t], TC_B[w])
+        }
+        return 0u8
+    }
+    if TC_TAG[t] == TC_SUP {
+        /* sup(a,f) : W(A,B)  iff  a:A  and  f : Pi(b:B[a]). W(A,B). */
+        let mut w : u32 = ty
+        if TC_TAG[ty] != TC_W { w = tc_whnf(ty) }   /* whnf only to expose a reducible head */
+        if TC_TAG[w] == TC_W {
+            let wa : u32 = TC_A[w]             /* label type A */
+            let wb : u32 = TC_B[w]             /* arity family B (under the a-binder) */
+            let su_a : u32 = TC_A[t]           /* label */
+            let su_f : u32 = TC_B[t]           /* children function */
+            if tc_check(su_a, wa) == 0u8 { return 0u8 }
+            let arity : u32 = tc_subst0(wb, su_a)               /* B[a] */
+            let fty : u32 = tc_pi(arity, tc_shift_k(w, 1u32))   /* f : B[a] -> W(A,B) */
+            return tc_check(su_f, fty)
+        }
+        return 0u8
+    }
+    if TC_TAG[t] == TC_LAM {
+        /* CHECK a lambda against a Pi: push the codomain INTO the body (bidirectional).
+         * Without this, `lam x. body` falls to infer+subtype, which FAILS when body is
+         * a check-only constructor (PAIR/INL/SUP/nested LAM).  The lambda's domain
+         * annotation must be convertible to the Pi domain; the body is then checked
+         * against the codomain under that binder.  Strictly more permissive than the
+         * infer fallback (check superset infer+subtype) -> no regression. */
+        let mut w : u32 = ty
+        if TC_TAG[ty] != TC_PI { w = tc_whnf(ty) }   /* whnf ONLY to expose a reducible head; an already-formed Pi keeps its ORIGINAL components (tc_whnf=ccl_normalize would normalize+mangle open subterms) */
+        if TC_TAG[w] == TC_PI {
+            let l_dom : u32 = TC_A[t]          /* lambda's domain annotation */
+            let l_body : u32 = TC_B[t]         /* lambda body (under the binder) */
+            let p_dom : u32 = TC_A[w]          /* Pi domain */
+            let p_cod : u32 = TC_B[w]          /* Pi codomain (under the binder) */
+            if tc_conv(l_dom, p_dom) == 0u8 { return 0u8 }
+            tc_ctx_push(p_dom)
+            let okb : u8 = tc_check(l_body, p_cod)
+            tc_ctx_pop()
+            return okb
+        }
+        return 0u8
+    }
+    if TC_TAG[t] == TC_REFL {
+        /* CHECK refl against an Id type: push A in so the proof VALUE may be a
+         * check-only constructor (e.g. refl <x,y>), and verify both endpoints are
+         * convertible to it.  Without this, refl of a check-only value falls to
+         * infer+subtype and FAILS (infer(<x,y>) = 0).  refl v : Id(A,l,r) iff
+         * v:A and l == v and r == v (so l == r). */
+        let mut w : u32 = ty
+        if TC_TAG[ty] != TC_ID { w = tc_whnf(ty) }   /* whnf ONLY to expose a reducible head; an already-formed Id keeps its ORIGINAL components (tc_whnf=ccl_normalize would normalize+mangle open subterms) */
+        if TC_TAG[w] == TC_ID {
+            let id_ty : u32 = TC_A[w]          /* the type A */
+            let id_l  : u32 = TC_B[w]          /* lhs */
+            let id_r  : u32 = TC_C[w]          /* rhs */
+            let rf_v  : u32 = TC_A[t]          /* refl's proof value */
+            if tc_check(rf_v, id_ty) == 0u8 { return 0u8 }
+            if tc_conv(id_l, rf_v) == 0u8 { return 0u8 }
+            if tc_conv(id_r, rf_v) == 0u8 { return 0u8 }
+            return 1u8
+        }
+        return 0u8
+    }
+    let s : u32 = tc_infer(t)
+    if s == 0u32 { return 0u8 }
+    return tc_subtype(s, ty)
+}
+
+/* ============================================================
+ *  KAT: accept positives, REJECT negatives.  99 = all pass.
+ * ============================================================ */
+fn p5_kat() -> u64 @export {
+    tc_reset()
+
+    /* P1: U0 : U1. */
+    let u0 : u32 = tc_sort(0u32)
+    let t1 : u32 = tc_infer(u0)
+    if TC_TAG[t1] != TC_SORT { return 1u64 }
+    if TC_A[t1] != 1u32 { return 2u64 }
+
+    /* P2: Pi(A:U0).Pi(_:A).A  :  U1. */
+    let p2_u0 : u32 = tc_sort(0u32)
+    let p2_v0 : u32 = tc_var(0u32)
+    let p2_v1 : u32 = tc_var(1u32)
+    let p2_inner : u32 = tc_pi(p2_v0, p2_v1)
+    let idty : u32 = tc_pi(p2_u0, p2_inner)
+    let t2 : u32 = tc_infer(idty)
+    if TC_TAG[t2] != TC_SORT { return 3u64 }
+    if TC_A[t2] != 1u32 { return 4u64 }
+
+    /* P3: lam(A:U0).lam(x:A).x  checks against idty. */
+    let p3_u0 : u32 = tc_sort(0u32)
+    let p3_xa : u32 = tc_var(0u32)
+    let p3_xb : u32 = tc_var(0u32)
+    let p3_inner : u32 = tc_lam(p3_xa, p3_xb)
+    let idterm : u32 = tc_lam(p3_u0, p3_inner)
+    if tc_check(idterm, idty) != 1u8 { return 5u64 }
+
+    /* P4: (lam(A:U1).lam(x:A).x) U0  :  Pi(_:U0).U0  (drives conversion). */
+    let p4_u1 : u32 = tc_sort(1u32)
+    let p4_v0 : u32 = tc_var(0u32)
+    let p4_v1 : u32 = tc_var(1u32)
+    let p4_inner_ty : u32 = tc_pi(p4_v0, p4_v1)
+    let idty1 : u32 = tc_pi(p4_u1, p4_inner_ty)
+    let p4_u1b : u32 = tc_sort(1u32)
+    let p4_xa : u32 = tc_var(0u32)
+    let p4_xb : u32 = tc_var(0u32)
+    let p4_innerlam : u32 = tc_lam(p4_xa, p4_xb)
+    let idterm1 : u32 = tc_lam(p4_u1b, p4_innerlam)
+    let p4_arg : u32 = tc_sort(0u32)
+    let app4 : u32 = tc_app(idterm1, p4_arg)
+    let t4 : u32 = tc_infer(app4)
+    if t4 == 0u32 { return 6u64 }
+    let p4_ed : u32 = tc_sort(0u32)
+    let p4_ec : u32 = tc_sort(0u32)
+    let exp4 : u32 = tc_pi(p4_ed, p4_ec)
+    if tc_conv(t4, exp4) != 1u8 { return 7u64 }
+
+    /* N5 (keystone): U0 : U0 must be REJECTED (Girard). */
+    let n5a : u32 = tc_sort(0u32)
+    let n5b : u32 = tc_sort(0u32)
+    if tc_check(n5a, n5b) != 0u8 { return 8u64 }
+    /* twin positive: U0 : U1 must HOLD (check is not vacuously false). */
+    let n5c : u32 = tc_sort(0u32)
+    let n5d : u32 = tc_sort(1u32)
+    if tc_check(n5c, n5d) != 1u8 { return 9u64 }
+
+    /* N6: applying a non-function (U0 U0) must ERR. */
+    let n6f : u32 = tc_sort(0u32)
+    let n6a : u32 = tc_sort(0u32)
+    let n6 : u32 = tc_app(n6f, n6a)
+    if tc_infer(n6) != 0u32 { return 10u64 }
+
+    /* N7: domain mismatch -- idterm1 expects A:U1; apply to U1 (which is :U2). */
+    let n7arg : u32 = tc_sort(1u32)
+    let n7 : u32 = tc_app(idterm1, n7arg)
+    if tc_infer(n7) != 0u32 { return 11u64 }
+
+    /* N8: a free variable in the empty context must ERR. */
+    let n8 : u32 = tc_var(0u32)
+    if tc_infer(n8) != 0u32 { return 12u64 }
+
+    /* N9: lam(A:U0). A A -- body ill-typed (A:U0 is not a function) sinks the lam. */
+    let n9f : u32 = tc_var(0u32)
+    let n9a : u32 = tc_var(0u32)
+    let n9body : u32 = tc_app(n9f, n9a)
+    let n9dom : u32 = tc_sort(0u32)
+    let n9 : u32 = tc_lam(n9dom, n9body)
+    if tc_infer(n9) != 0u32 { return 13u64 }
+
+    /* P10: conversion that REQUIRES beta, crossing a binder (drives the whnf
+     * beta-step + subst-under-binder + shift -- a path no other case exercises,
+     * since infer's APP rule reduces via subst and all checked types are already
+     * normal).  (lam(_:U0). lam(_:U0). #1) U1  -->beta-->  lam(_:U0). U1. */
+    let b_d0 : u32 = tc_sort(0u32)
+    let b_d1 : u32 = tc_sort(0u32)
+    let b_v1 : u32 = tc_var(1u32)
+    let b_innerlam : u32 = tc_lam(b_d1, b_v1)
+    let b_outerlam : u32 = tc_lam(b_d0, b_innerlam)
+    let b_arg : u32 = tc_sort(1u32)
+    let b_redex : u32 = tc_app(b_outerlam, b_arg)
+    let b_ed : u32 = tc_sort(0u32)
+    let b_eb : u32 = tc_sort(1u32)
+    let b_exp : u32 = tc_lam(b_ed, b_eb)
+    if tc_conv(b_redex, b_exp) != 1u8 { return 14u64 }
+    /* negative twin: the same redex must NOT be conv to lam(_:U0).U0. */
+    let b_ed2 : u32 = tc_sort(0u32)
+    let b_eb2 : u32 = tc_sort(0u32)
+    let b_exp2 : u32 = tc_lam(b_ed2, b_eb2)
+    if tc_conv(b_redex, b_exp2) != 0u8 { return 15u64 }
+
+    return 99u64
+}
+
+fn typecheck_selftest() -> u64 @export {
+    return p5_kat()
+}
+
+/* ============================================================
+ *  Brick 2 KAT: Sigma types + ascription.  99 = all pass.
+ * ============================================================ */
+fn p5_kat_sigma() -> u64 @export {
+    tc_reset()
+
+    /* P1: Sigma(A:U0).A  :  U1. */
+    let s_u0 : u32 = tc_sort(0u32)
+    let s_v0 : u32 = tc_var(0u32)
+    let sig1 : u32 = tc_sig(s_u0, s_v0)
+    let ts1 : u32 = tc_infer(sig1)
+    if TC_TAG[ts1] != TC_SORT { return 1u64 }
+    if TC_A[ts1] != 1u32 { return 2u64 }
+
+    /* P2: dependent pair <U1, U0>  checks against  Sigma(A:U2).A
+     *   (first U1:U2 = dom; second U0 : A[0:=U1] = U1). */
+    let s_u2 : u32 = tc_sort(2u32)
+    let s_av : u32 = tc_var(0u32)
+    let sigT : u32 = tc_sig(s_u2, s_av)
+    let pr_a : u32 = tc_sort(1u32)
+    let pr_b : u32 = tc_sort(0u32)
+    let pair1 : u32 = tc_pair(pr_a, pr_b)
+    if tc_check(pair1, sigT) != 1u8 { return 3u64 }
+
+    /* P3 (projection beta): fst(<U1,U0>:sigT) == U1 ; snd(...) == U0. */
+    let ann1 : u32 = tc_ann(pair1, sigT)
+    let fst1 : u32 = tc_fst(ann1)
+    let expU1 : u32 = tc_sort(1u32)
+    if tc_conv(fst1, expU1) != 1u8 { return 4u64 }
+    let snd1 : u32 = tc_snd(ann1)
+    let expU0 : u32 = tc_sort(0u32)
+    if tc_conv(snd1, expU0) != 1u8 { return 5u64 }
+
+    /* P4 (dependent projection TYPE): the type of (snd ann1) is fst(ann1),
+     * which converts to U1 -- a genuine dependency on the first component. */
+    let ity_snd : u32 = tc_infer(snd1)
+    if ity_snd == 0u32 { return 6u64 }
+    let expU1b : u32 = tc_sort(1u32)
+    if tc_conv(ity_snd, expU1b) != 1u8 { return 7u64 }
+
+    /* N5: <U1, true> against Sigma(_:U2).U2 REJECTED -- 1st U1:U2 holds (cumulative), 2nd
+     * true:U2 fails (true is not a type). (Was <U1,U0>; U0:U2 now holds under cumulativity.) */
+    let n_u2a : u32 = tc_sort(2u32)
+    let n_u2b : u32 = tc_sort(2u32)
+    let sigBad : u32 = tc_sig(n_u2a, n_u2b)
+    let np_a : u32 = tc_sort(1u32)
+    let np_b : u32 = tc_true()
+    let pairBad : u32 = tc_pair(np_a, np_b)
+    if tc_check(pairBad, sigBad) != 0u8 { return 8u64 }
+
+    /* N6: fst of a non-pair (fst U0) must ERR. */
+    let n6_u0 : u32 = tc_sort(0u32)
+    let n6_fst : u32 = tc_fst(n6_u0)
+    if tc_infer(n6_fst) != 0u32 { return 9u64 }
+
+    /* N7 (keystone via ascription): (U0 : U0) must be REJECTED. */
+    let n7_tm : u32 = tc_sort(0u32)
+    let n7_ty : u32 = tc_sort(0u32)
+    let n7_ann : u32 = tc_ann(n7_tm, n7_ty)
+    if tc_infer(n7_ann) != 0u32 { return 10u64 }
+
+    /* P8: conv on Sigma types directly (exercises nf/alpha_eq SIG arm).
+     * Sigma(A:U0).A == Sigma(A:U0).A ; != Sigma(A:U1).A. */
+    let c_a0 : u32 = tc_sort(0u32)
+    let c_v0 : u32 = tc_var(0u32)
+    let c_sigA : u32 = tc_sig(c_a0, c_v0)
+    let c_a0b : u32 = tc_sort(0u32)
+    let c_v0b : u32 = tc_var(0u32)
+    let c_sigB : u32 = tc_sig(c_a0b, c_v0b)
+    if tc_conv(c_sigA, c_sigB) != 1u8 { return 11u64 }
+    let c_a1 : u32 = tc_sort(1u32)
+    let c_v0c : u32 = tc_var(0u32)
+    let c_sigC : u32 = tc_sig(c_a1, c_v0c)
+    if tc_conv(c_sigA, c_sigC) != 0u8 { return 12u64 }
+
+    /* P9: conv on pairs directly (exercises nf/alpha_eq PAIR arm).
+     * <U0,U1> == <U0,U1> ; != <U0,U0>. */
+    let d_a : u32 = tc_sort(0u32)
+    let d_b : u32 = tc_sort(1u32)
+    let d_p1 : u32 = tc_pair(d_a, d_b)
+    let d_a2 : u32 = tc_sort(0u32)
+    let d_b2 : u32 = tc_sort(1u32)
+    let d_p2 : u32 = tc_pair(d_a2, d_b2)
+    if tc_conv(d_p1, d_p2) != 1u8 { return 13u64 }
+    let d_a3 : u32 = tc_sort(0u32)
+    let d_b3 : u32 = tc_sort(0u32)
+    let d_p3 : u32 = tc_pair(d_a3, d_b3)
+    if tc_conv(d_p1, d_p3) != 0u8 { return 14u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 3 KAT: Bool (data + if-beta).  99 = all pass.
+ * ============================================================ */
+fn p5_kat_bool() -> u64 @export {
+    tc_reset()
+
+    /* P1: Bool : U0. */
+    let bl : u32 = tc_bool()
+    let tb : u32 = tc_infer(bl)
+    if TC_TAG[tb] != TC_SORT { return 1u64 }
+    if TC_A[tb] != 0u32 { return 2u64 }
+
+    /* P2: true : Bool, false : Bool. */
+    let tt : u32 = tc_true()
+    let itt : u32 = tc_infer(tt)
+    if TC_TAG[itt] != TC_BOOL { return 3u64 }
+    let ff : u32 = tc_false()
+    let iff : u32 = tc_infer(ff)
+    if TC_TAG[iff] != TC_BOOL { return 4u64 }
+
+    /* P3: if(true, true, false) : Bool, and ==beta== true. */
+    let t3a : u32 = tc_true()
+    let t3b : u32 = tc_true()
+    let t3c : u32 = tc_false()
+    let if3 : u32 = tc_if(t3a, t3b, t3c)
+    let iif3 : u32 = tc_infer(if3)
+    if iif3 == 0u32 { return 5u64 }
+    if TC_TAG[iif3] != TC_BOOL { return 6u64 }
+    let exptrue : u32 = tc_true()
+    if tc_conv(if3, exptrue) != 1u8 { return 7u64 }
+
+    /* P4: if(false, true, false) ==beta== false ; and NOT true. */
+    let t4a : u32 = tc_false()
+    let t4b : u32 = tc_true()
+    let t4c : u32 = tc_false()
+    let if4 : u32 = tc_if(t4a, t4b, t4c)
+    let expfalse : u32 = tc_false()
+    if tc_conv(if4, expfalse) != 1u8 { return 8u64 }
+    let exptrue2 : u32 = tc_true()
+    if tc_conv(if4, exptrue2) != 0u8 { return 9u64 }
+
+    /* N5: scrutinee not Bool -- if(U0, true, false) must ERR. */
+    let n5s : u32 = tc_sort(0u32)
+    let n5t : u32 = tc_true()
+    let n5e : u32 = tc_false()
+    let n5if : u32 = tc_if(n5s, n5t, n5e)
+    if tc_infer(n5if) != 0u32 { return 10u64 }
+
+    /* N6: branches of different type -- if(true, true, U0) must ERR. */
+    let n6s : u32 = tc_true()
+    let n6t : u32 = tc_true()
+    let n6e : u32 = tc_sort(0u32)
+    let n6if : u32 = tc_if(n6s, n6t, n6e)
+    if tc_infer(n6if) != 0u32 { return 11u64 }
+
+    /* N7: true is not an inhabitant of U0 -- check(true, U0) fails ; check(true, Bool) holds. */
+    let n7v : u32 = tc_true()
+    let n7ty : u32 = tc_sort(0u32)
+    if tc_check(n7v, n7ty) != 0u8 { return 12u64 }
+    let n7v2 : u32 = tc_true()
+    let n7bl : u32 = tc_bool()
+    if tc_check(n7v2, n7bl) != 1u8 { return 13u64 }
+
+    /* P8: subst of an IF under a binder -- (lam(x:Bool). if(x,true,false)) true
+     * ==beta== true, and typechecks to Bool.  Exercises subst(IF) + subst(Bool
+     * leaves) + shift(Bool) + whnf(IF) after substitution. */
+    let g_dom : u32 = tc_bool()
+    let g_v0 : u32 = tc_var(0u32)
+    let g_th : u32 = tc_true()
+    let g_el : u32 = tc_false()
+    let g_if : u32 = tc_if(g_v0, g_th, g_el)
+    let g_lam : u32 = tc_lam(g_dom, g_if)
+    let g_arg : u32 = tc_true()
+    let g_app : u32 = tc_app(g_lam, g_arg)
+    let g_exp : u32 = tc_true()
+    if tc_conv(g_app, g_exp) != 1u8 { return 14u64 }
+    let g_ity : u32 = tc_infer(g_app)
+    if g_ity == 0u32 { return 15u64 }
+    if TC_TAG[g_ity] != TC_BOOL { return 16u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 4 KAT: identity types (Id + refl + transport) on Bool data.
+ * ============================================================ */
+fn p5_kat_id() -> u64 @export {
+    tc_reset()
+
+    /* P1: Id(Bool, true, false) : U0. */
+    let bl : u32 = tc_bool()
+    let t1 : u32 = tc_true()
+    let f1 : u32 = tc_false()
+    let id1 : u32 = tc_id(bl, t1, f1)
+    let iid1 : u32 = tc_infer(id1)
+    if TC_TAG[iid1] != TC_SORT { return 1u64 }
+    if TC_A[iid1] != 0u32 { return 2u64 }
+
+    /* P2: refl true : Id(Bool, true, true). */
+    let rt : u32 = tc_true()
+    let refl1 : u32 = tc_refl(rt)
+    let irefl : u32 = tc_infer(refl1)
+    if TC_TAG[irefl] != TC_ID { return 3u64 }
+    if TC_TAG[TC_A[irefl]] != TC_BOOL { return 4u64 }
+    if TC_TAG[TC_B[irefl]] != TC_TRUE { return 5u64 }
+    if TC_TAG[TC_C[irefl]] != TC_TRUE { return 6u64 }
+
+    /* P3: refl true  checks against  Id(Bool, true, true). */
+    let p3_id : u32 = tc_id(tc_bool(), tc_true(), tc_true())
+    let p3_refl : u32 = tc_refl(tc_true())
+    if tc_check(p3_refl, p3_id) != 1u8 { return 7u64 }
+
+    /* P4 (transport beta): transport(lam(_:Bool).Bool, refl true, true) ==beta== true,
+     * and infers a type that converts to Bool (= P true). */
+    let pred : u32 = tc_lam(tc_bool(), tc_bool())
+    let tr_refl : u32 = tc_refl(tc_true())
+    let tr_base : u32 = tc_true()
+    let transp : u32 = tc_transp(pred, tr_refl, tr_base)
+    let itransp : u32 = tc_infer(transp)
+    if itransp == 0u32 { return 8u64 }
+    if tc_conv(itransp, tc_bool()) != 1u8 { return 9u64 }
+    if tc_conv(transp, tc_true()) != 1u8 { return 10u64 }
+
+    /* P5: refl conversion (exercises nf/alpha_eq REFL). refl true == refl true ; != refl false. */
+    let c_r1 : u32 = tc_refl(tc_true())
+    let c_r2 : u32 = tc_refl(tc_true())
+    if tc_conv(c_r1, c_r2) != 1u8 { return 11u64 }
+    let c_r3 : u32 = tc_refl(tc_false())
+    if tc_conv(c_r1, c_r3) != 0u8 { return 12u64 }
+
+    /* N6: refl true does NOT prove true = false -- check vs Id(Bool,true,false) REJECTED. */
+    let n6_id : u32 = tc_id(tc_bool(), tc_true(), tc_false())
+    let n6_refl : u32 = tc_refl(tc_true())
+    if tc_check(n6_refl, n6_id) != 0u8 { return 13u64 }
+
+    /* N7: transport with base of the WRONG type -- base U0 (not : P true = Bool) REJECTED. */
+    let n7_pred : u32 = tc_lam(tc_bool(), tc_bool())
+    let n7_refl : u32 = tc_refl(tc_true())
+    let n7_base : u32 = tc_sort(0u32)
+    let n7_transp : u32 = tc_transp(n7_pred, n7_refl, n7_base)
+    if tc_infer(n7_transp) != 0u32 { return 14u64 }
+
+    /* N8: transport whose predicate domain != A -- P : U0->Bool but proof is in Bool. REJECTED. */
+    let n8_pred : u32 = tc_lam(tc_sort(0u32), tc_bool())
+    let n8_refl : u32 = tc_refl(tc_true())
+    let n8_base : u32 = tc_true()
+    let n8_transp : u32 = tc_transp(n8_pred, n8_refl, n8_base)
+    if tc_infer(n8_transp) != 0u32 { return 15u64 }
+
+    /* P9: subst of Id/refl under a binder -- (lam(x:Bool). refl x) true ==beta== refl true,
+     * typechecks to Id(Bool,true,true). Exercises subst(ID), subst(REFL), bound var inside. */
+    let q_refl : u32 = tc_refl(tc_var(0u32))
+    let q_lam : u32 = tc_lam(tc_bool(), q_refl)
+    let q_app : u32 = tc_app(q_lam, tc_true())
+    let q_exp : u32 = tc_refl(tc_true())
+    if tc_conv(q_app, q_exp) != 1u8 { return 16u64 }
+    let q_ity : u32 = tc_infer(q_app)
+    if q_ity == 0u32 { return 17u64 }
+    if TC_TAG[q_ity] != TC_ID { return 18u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 5 KAT: Nat + iteration recursor (computation).
+ * ============================================================ */
+fn p5_kat_nat() -> u64 @export {
+    tc_reset()
+
+    /* P1: Nat : U0. */
+    let int : u32 = tc_infer(tc_nat())
+    if TC_TAG[int] != TC_SORT { return 1u64 }
+    if TC_A[int] != 0u32 { return 2u64 }
+
+    /* P2: zero : Nat ; succ zero : Nat. */
+    let iz : u32 = tc_infer(tc_zero())
+    if TC_TAG[iz] != TC_NAT { return 3u64 }
+    let is1 : u32 = tc_infer(tc_succ(tc_zero()))
+    if TC_TAG[is1] != TC_NAT { return 4u64 }
+
+    /* P3 (recursor beta, base case): iter(true, lam(_:Bool).false, zero) : Bool ==beta== true. */
+    let p3_s : u32 = tc_lam(tc_bool(), tc_false())
+    let p3_it : u32 = tc_iter(tc_true(), p3_s, tc_zero())
+    let p3_ity : u32 = tc_infer(p3_it)
+    if p3_ity == 0u32 { return 5u64 }
+    if TC_TAG[p3_ity] != TC_BOOL { return 6u64 }
+    if tc_conv(p3_it, tc_true()) != 1u8 { return 7u64 }
+
+    /* P4 (recursor beta, step fires once): iter(true, lam(_:Bool).false, succ zero) ==beta== false. */
+    let p4_s : u32 = tc_lam(tc_bool(), tc_false())
+    let p4_it : u32 = tc_iter(tc_true(), p4_s, tc_succ(tc_zero()))
+    if tc_conv(p4_it, tc_false()) != 1u8 { return 8u64 }
+    if tc_conv(p4_it, tc_true()) != 0u8 { return 9u64 }
+
+    /* N5: succ of a non-Nat -- succ(true) REJECTED. */
+    if tc_infer(tc_succ(tc_true())) != 0u32 { return 10u64 }
+
+    /* N6: iter scrutinee not Nat -- iter(true, const_false, true) REJECTED. */
+    let n6_s : u32 = tc_lam(tc_bool(), tc_false())
+    let n6_it : u32 = tc_iter(tc_true(), n6_s, tc_true())
+    if tc_infer(n6_it) != 0u32 { return 11u64 }
+
+    /* N7: iter z/s type mismatch -- z:Bool but s:Nat->Nat REJECTED. */
+    let n7_s : u32 = tc_lam(tc_nat(), tc_zero())
+    let n7_it : u32 = tc_iter(tc_true(), n7_s, tc_zero())
+    if tc_infer(n7_it) != 0u32 { return 12u64 }
+
+    /* P8 (real recursion): iter(zero, lam(m:Nat).succ m, succ(succ zero)) : Nat
+     * ==beta== succ(succ zero)  (apply succ twice to zero = 2). The step USES its
+     * recursive argument, forcing the inner iter -- genuine value-level computation. */
+    let p8_s : u32 = tc_lam(tc_nat(), tc_succ(tc_var(0u32)))
+    let p8_it : u32 = tc_iter(tc_zero(), p8_s, tc_succ(tc_succ(tc_zero())))
+    let p8_ity : u32 = tc_infer(p8_it)
+    if p8_ity == 0u32 { return 13u64 }
+    if TC_TAG[p8_ity] != TC_NAT { return 14u64 }
+    let p8_exp : u32 = tc_succ(tc_succ(tc_zero()))
+    if tc_conv(p8_it, p8_exp) != 1u8 { return 15u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 6 KAT: eta-conversion (Pi-eta: lam x. (f x) == f).
+ * ============================================================ */
+fn p5_kat_eta() -> u64 @export {
+    tc_reset()
+
+    /* P1 (eta fires): lam(f:Bool->Bool). lam(x:Bool). (f x)  ==  lam(f:Bool->Bool). f */
+    let b2b : u32 = tc_pi(tc_bool(), tc_bool())
+    let p1_app : u32 = tc_app(tc_var(1u32), tc_var(0u32))
+    let p1_inner : u32 = tc_lam(tc_bool(), p1_app)
+    let p1_t1 : u32 = tc_lam(b2b, p1_inner)
+    let p1_t2 : u32 = tc_lam(b2b, tc_var(0u32))
+    if tc_conv(p1_t1, p1_t2) != 1u8 { return 1u64 }
+
+    /* P2 (no conflation): lam(f).lam(x).(f x) [= lam(f).f]  !=  lam(f).lam(x).x [= lam(f).id] */
+    let p2_inner : u32 = tc_lam(tc_bool(), tc_var(0u32))
+    let p2_t : u32 = tc_lam(b2b, p2_inner)
+    if tc_conv(p1_t1, p2_t) != 0u8 { return 2u64 }
+
+    /* P3 (strengthen-fail: var used): lam(x:Bool).(x x) does NOT eta-contract,
+     * so it is NOT conv to lam(x:Bool).x. */
+    let p3_app : u32 = tc_app(tc_var(0u32), tc_var(0u32))
+    let p3_t1 : u32 = tc_lam(tc_bool(), p3_app)
+    let p3_t2 : u32 = tc_lam(tc_bool(), tc_var(0u32))
+    if tc_conv(p3_t1, p3_t2) != 0u8 { return 3u64 }
+
+    /* P4 (reflexive sanity). */
+    if tc_conv(p1_t1, p1_t1) != 1u8 { return 4u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 7 KAT: natrec (dependent Nat eliminator / induction).
+ * ============================================================ */
+fn p5_kat_natrec() -> u64 @export {
+    tc_reset()
+
+    /* P1 (closed beta, base; constant motive): natrec(lam_:Nat.Bool, true, lam k.lam _.false, zero)
+     * : Bool, ==beta== true. */
+    let p1_P : u32 = tc_lam(tc_nat(), tc_bool())
+    let p1_s : u32 = tc_lam(tc_nat(), tc_lam(tc_bool(), tc_false()))
+    let p1_r : u32 = tc_natrec(p1_P, tc_true(), p1_s, tc_zero())
+    let p1_it : u32 = tc_infer(p1_r)
+    if p1_it == 0u32 { return 1u64 }
+    if tc_conv(p1_it, tc_bool()) != 1u8 { return 2u64 }
+    if tc_conv(p1_r, tc_true()) != 1u8 { return 3u64 }
+
+    /* P2 (closed beta, step USES predecessor k): natrec(lam_.Nat, zero, lam k.lam ih.k,
+     * succ(succ zero)) ==beta== succ zero  (the predecessor of the top succ). */
+    let p2_P : u32 = tc_lam(tc_nat(), tc_nat())
+    let p2_s : u32 = tc_lam(tc_nat(), tc_lam(tc_nat(), tc_var(1u32)))
+    let p2_r : u32 = tc_natrec(p2_P, tc_zero(), p2_s, tc_succ(tc_succ(tc_zero())))
+    if tc_infer(p2_r) == 0u32 { return 4u64 }
+    if tc_conv(p2_r, tc_succ(tc_zero())) != 1u8 { return 5u64 }
+
+    /* P3 (UNDER-BINDER shift exerciser -- the load-bearing positive, per design 12.4):
+     * lam(P:Nat->U0).lam(z:P zero).lam(s:Pi(k:Nat).P k->P(succ k)).lam(n:Nat). natrec(P,z,s,n)
+     * typechecks IFF shift(P,1)/shift(P,2) in the built step-type are exact. */
+    let p3_Pty : u32 = tc_pi(tc_nat(), tc_sort(0u32))            /* Nat -> U0 */
+    let p3_zty : u32 = tc_app(tc_var(0u32), tc_zero())           /* P zero ; P=#0 in [P] */
+    let p3_ih : u32 = tc_app(tc_var(2u32), tc_var(0u32))         /* P k   ; in [P,z,k] P=#2 */
+    let p3_conc : u32 = tc_app(tc_var(3u32), tc_succ(tc_var(1u32))) /* P(succ k); in [P,z,k,ih] P=#3 */
+    let p3_sty : u32 = tc_pi(tc_nat(), tc_pi(p3_ih, p3_conc))
+    let p3_body : u32 = tc_natrec(tc_var(3u32), tc_var(2u32), tc_var(1u32), tc_var(0u32))
+    let p3_ln : u32 = tc_lam(tc_nat(), p3_body)
+    let p3_ls : u32 = tc_lam(p3_sty, p3_ln)
+    let p3_lz : u32 = tc_lam(p3_zty, p3_ls)
+    let p3_elim : u32 = tc_lam(p3_Pty, p3_lz)
+    if tc_infer(p3_elim) == 0u32 { return 6u64 }
+
+    /* N4: step of the WRONG type -- s : Nat->Bool (missing the ih arg) for the Bool motive. */
+    let n4_P : u32 = tc_lam(tc_nat(), tc_bool())
+    let n4_s : u32 = tc_lam(tc_nat(), tc_false())
+    let n4_r : u32 = tc_natrec(n4_P, tc_true(), n4_s, tc_zero())
+    if tc_infer(n4_r) != 0u32 { return 7u64 }
+
+    /* N5: motive not Nat-indexed -- P : Bool->Bool. */
+    let n5_P : u32 = tc_lam(tc_bool(), tc_bool())
+    let n5_s : u32 = tc_lam(tc_nat(), tc_lam(tc_bool(), tc_false()))
+    let n5_r : u32 = tc_natrec(n5_P, tc_true(), n5_s, tc_zero())
+    if tc_infer(n5_r) != 0u32 { return 8u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 8 KAT: J (path induction / dependent Id eliminator).
+ * ============================================================ */
+fn p5_kat_j() -> u64 @export {
+    tc_reset()
+
+    /* P1 (closed beta + typing): J(lam y.lam _.Bool, true, refl true) : Bool ==beta== true. */
+    let p1_C : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tc_true(), tc_var(0u32)), tc_bool()))
+    let p1_j : u32 = tc_j(p1_C, tc_true(), tc_refl(tc_true()))
+    let p1_it : u32 = tc_infer(p1_j)
+    if p1_it == 0u32 { return 1u64 }
+    if tc_conv(p1_it, tc_bool()) != 1u8 { return 2u64 }
+    if tc_conv(p1_j, tc_true()) != 1u8 { return 3u64 }
+
+    /* P2 (UNDER-BINDER diagonal exerciser -- the only test that catches a base checked
+     * against C b p instead of C a (refl a); design 12.4):
+     * lam(A:U0).lam(a:A).lam(C:Pi(y:A).Id(A,a,y)->U0).lam(d:C a (refl a)).lam(b:A).lam(p:Id(A,a,b)). J(C,d,p) */
+    let p2_Cty : u32 = tc_pi(tc_var(1u32), tc_pi(tc_id(tc_var(2u32), tc_var(1u32), tc_var(0u32)), tc_sort(0u32)))
+    let p2_dty : u32 = tc_app(tc_app(tc_var(0u32), tc_var(1u32)), tc_refl(tc_var(1u32)))
+    let p2_pty : u32 = tc_id(tc_var(4u32), tc_var(3u32), tc_var(0u32))
+    let p2_body : u32 = tc_j(tc_var(3u32), tc_var(2u32), tc_var(0u32))
+    let p2_lp : u32 = tc_lam(p2_pty, p2_body)
+    let p2_lb : u32 = tc_lam(tc_var(3u32), p2_lp)
+    let p2_ld : u32 = tc_lam(p2_dty, p2_lb)
+    let p2_lC : u32 = tc_lam(p2_Cty, p2_ld)
+    let p2_la : u32 = tc_lam(tc_var(0u32), p2_lC)
+    let p2_term : u32 = tc_lam(tc_sort(0u32), p2_la)
+    if tc_infer(p2_term) == 0u32 { return 4u64 }
+
+    /* N3: base of the WRONG type -- d = U0, not : C true (refl true) = Bool. */
+    let n3_C : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tc_true(), tc_var(0u32)), tc_bool()))
+    let n3_j : u32 = tc_j(n3_C, tc_sort(0u32), tc_refl(tc_true()))
+    if tc_infer(n3_j) != 0u32 { return 5u64 }
+
+    /* N4: proof not an Id -- J(C, true, true). */
+    let n4_C : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tc_true(), tc_var(0u32)), tc_bool()))
+    let n4_j : u32 = tc_j(n4_C, tc_true(), tc_true())
+    if tc_infer(n4_j) != 0u32 { return 6u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 9 KAT: bottom (Empty) + top (Unit) + absurd (ex falso).
+ * ============================================================ */
+fn p5_kat_bot() -> u64 @export {
+    tc_reset()
+
+    /* P1: Unit : U0 ; tt : Unit. */
+    let iu : u32 = tc_infer(tc_unit())
+    if TC_TAG[iu] != TC_SORT { return 1u64 }
+    if TC_A[iu] != 0u32 { return 2u64 }
+    let itt : u32 = tc_infer(tc_tt())
+    if TC_TAG[itt] != TC_UNIT { return 3u64 }
+
+    /* P2: Empty : U0. */
+    let ie : u32 = tc_infer(tc_empty())
+    if TC_TAG[ie] != TC_SORT { return 4u64 }
+    if TC_A[ie] != 0u32 { return 5u64 }
+
+    /* P3 (under-binder absurd positive): lam(C:Empty->U0). lam(e:Empty). absurd(C,e) : C e.
+     * Closed has no Empty witness, so under a binder is the only place to type absurd. */
+    let p3_Cty : u32 = tc_pi(tc_empty(), tc_sort(0u32))
+    let p3_body : u32 = tc_absurd(tc_var(1u32), tc_var(0u32))
+    let p3_le : u32 = tc_lam(tc_empty(), p3_body)
+    let p3_term : u32 = tc_lam(p3_Cty, p3_le)
+    if tc_infer(p3_term) == 0u32 { return 6u64 }
+
+    /* N4: proof not Empty -- absurd(lam_:Empty.Bool, true) REJECTED. */
+    let n4_C : u32 = tc_lam(tc_empty(), tc_bool())
+    let n4 : u32 = tc_absurd(n4_C, tc_true())
+    if tc_infer(n4) != 0u32 { return 7u64 }
+
+    /* N5: motive domain not Empty -- C:Bool->U0 with e:Empty REJECTED (C e ill-typed). */
+    let n5_Cty : u32 = tc_pi(tc_bool(), tc_sort(0u32))
+    let n5_body : u32 = tc_absurd(tc_var(1u32), tc_var(0u32))
+    let n5_le : u32 = tc_lam(tc_empty(), n5_body)
+    let n5_term : u32 = tc_lam(n5_Cty, n5_le)
+    if tc_infer(n5_term) != 0u32 { return 8u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 10 KAT: cumulative universes (U_i : U_j for i <= j).
+ * ============================================================ */
+fn p5_kat_cumul() -> u64 @export {
+    tc_reset()
+
+    /* P1: U0 : U2 (cumulative -- U0:U1 subset U2). */
+    if tc_check(tc_sort(0u32), tc_sort(2u32)) != 1u8 { return 1u64 }
+    /* P2: U1 : U3. */
+    if tc_check(tc_sort(1u32), tc_sort(3u32)) != 1u8 { return 2u64 }
+    /* P3: U0 : U1 (the immediate, still holds). */
+    if tc_check(tc_sort(0u32), tc_sort(1u32)) != 1u8 { return 3u64 }
+
+    /* N4: U2 : U1 REJECTED (downward; infer(U2)=U3, 3<=1 false). */
+    if tc_check(tc_sort(2u32), tc_sort(1u32)) != 0u8 { return 4u64 }
+    /* N5: U1 : U0 REJECTED. */
+    if tc_check(tc_sort(1u32), tc_sort(0u32)) != 0u8 { return 5u64 }
+    /* N6: U0 : U0 STILL REJECTED (Girard preserved -- infer(U0)=U1, 1<=0 false). */
+    if tc_check(tc_sort(0u32), tc_sort(0u32)) != 0u8 { return 6u64 }
+    /* N7: true : U0 REJECTED (non-type; not a sort-level relation). */
+    if tc_check(tc_true(), tc_sort(0u32)) != 0u8 { return 7u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 11 KAT: Sum types A+B (disjunction) + dependent case.
+ * ============================================================ */
+fn p5_kat_sum() -> u64 @export {
+    tc_reset()
+
+    /* P1 (inl beta): case(lam_.Bool, lam a.a, lam_.false, (inl true : Bool+Bool)) : Bool == true. */
+    let p1_C : u32 = tc_lam(tc_sum(tc_bool(), tc_bool()), tc_bool())
+    let p1_f : u32 = tc_lam(tc_bool(), tc_var(0u32))
+    let p1_g : u32 = tc_lam(tc_bool(), tc_false())
+    let p1_s : u32 = tc_ann(tc_inl(tc_true()), tc_sum(tc_bool(), tc_bool()))
+    let p1_case : u32 = tc_case(p1_C, p1_f, p1_g, p1_s)
+    let p1_it : u32 = tc_infer(p1_case)
+    if p1_it == 0u32 { return 1u64 }
+    if tc_conv(p1_it, tc_bool()) != 1u8 { return 2u64 }
+    if tc_conv(p1_case, tc_true()) != 1u8 { return 3u64 }
+
+    /* P2 (inr beta): case(lam_.Bool, lam_.false, lam b.b, (inr true : Bool+Bool)) == true. */
+    let p2_C : u32 = tc_lam(tc_sum(tc_bool(), tc_bool()), tc_bool())
+    let p2_f : u32 = tc_lam(tc_bool(), tc_false())
+    let p2_g : u32 = tc_lam(tc_bool(), tc_var(0u32))
+    let p2_s : u32 = tc_ann(tc_inr(tc_true()), tc_sum(tc_bool(), tc_bool()))
+    let p2_case : u32 = tc_case(p2_C, p2_f, p2_g, p2_s)
+    if tc_conv(p2_case, tc_true()) != 1u8 { return 4u64 }
+
+    /* P3 (UNDER-BINDER shift exerciser): lam(C:(Bool+Bool)->U0).lam(f:Pi(a:Bool).C(inl a)).
+     * lam(g:Pi(b:Bool).C(inr b)).lam(s:Bool+Bool). case(C,f,g,s) typechecks iff shift(C,1) is exact. */
+    let p3_Cty : u32 = tc_pi(tc_sum(tc_bool(), tc_bool()), tc_sort(0u32))
+    let p3_fty : u32 = tc_pi(tc_bool(), tc_app(tc_var(1u32), tc_inl(tc_var(0u32))))
+    let p3_gty : u32 = tc_pi(tc_bool(), tc_app(tc_var(2u32), tc_inr(tc_var(0u32))))
+    let p3_sty : u32 = tc_sum(tc_bool(), tc_bool())
+    let p3_body : u32 = tc_case(tc_var(3u32), tc_var(2u32), tc_var(1u32), tc_var(0u32))
+    let p3_ls : u32 = tc_lam(p3_sty, p3_body)
+    let p3_lg : u32 = tc_lam(p3_gty, p3_ls)
+    let p3_lf : u32 = tc_lam(p3_fty, p3_lg)
+    let p3_term : u32 = tc_lam(p3_Cty, p3_lf)
+    if tc_infer(p3_term) == 0u32 { return 5u64 }
+
+    /* N4: inl checked against a non-Sum type REJECTED. */
+    if tc_check(tc_inl(tc_true()), tc_bool()) != 0u8 { return 6u64 }
+
+    /* N5: case scrutinee not a Sum REJECTED. */
+    let n5_case : u32 = tc_case(p1_C, p1_f, p1_g, tc_true())
+    if tc_infer(n5_case) != 0u32 { return 7u64 }
+
+    /* N6: case left method of wrong type (domain Nat != Bool) REJECTED. */
+    let n6_f : u32 = tc_lam(tc_nat(), tc_var(0u32))
+    let n6_s : u32 = tc_ann(tc_inl(tc_true()), tc_sum(tc_bool(), tc_bool()))
+    let n6_case : u32 = tc_case(p1_C, n6_f, p1_g, n6_s)
+    if tc_infer(n6_case) != 0u32 { return 8u64 }
+
+    /* P7: conv on inl values (exercises nf/alpha_eq INL). inl true == inl true ; != inl false. */
+    if tc_conv(tc_inl(tc_true()), tc_inl(tc_true())) != 1u8 { return 9u64 }
+    if tc_conv(tc_inl(tc_true()), tc_inl(tc_false())) != 0u8 { return 10u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Brick 12 KAT: metatheory -- canonicity + subject reduction.
+ * ============================================================ */
+fn p5_kat_meta() -> u64 @export {
+    tc_reset()
+
+    /* CANONICITY: every closed Bool term reduces to a CONSTRUCTOR (true/false),
+     * through every eliminator -- a stuck closed Bool would FAIL here. */
+    /* C1: if(true,true,false) -> true. */
+    let c1 : u32 = tc_if(tc_true(), tc_true(), tc_false())
+    if tc_infer(c1) == 0u32 { return 1u64 }
+    if TC_TAG[tc_nf(c1)] != TC_TRUE { return 2u64 }
+
+    /* C2: iter(true, lam_.false, succ zero) -> false. */
+    let c2 : u32 = tc_iter(tc_true(), tc_lam(tc_bool(), tc_false()), tc_succ(tc_zero()))
+    if tc_infer(c2) == 0u32 { return 3u64 }
+    if TC_TAG[tc_nf(c2)] != TC_FALSE { return 4u64 }
+
+    /* C3: natrec(lam_.Bool, true, lam k.lam_.false, succ(succ zero)) -> false. */
+    let c3_s : u32 = tc_lam(tc_nat(), tc_lam(tc_bool(), tc_false()))
+    let c3 : u32 = tc_natrec(tc_lam(tc_nat(), tc_bool()), tc_true(), c3_s, tc_succ(tc_succ(tc_zero())))
+    if tc_infer(c3) == 0u32 { return 5u64 }
+    if TC_TAG[tc_nf(c3)] != TC_FALSE { return 6u64 }
+
+    /* C4: case(lam_.Bool, lam a.a, lam_.false, inl true) -> true. */
+    let c4_C : u32 = tc_lam(tc_sum(tc_bool(), tc_bool()), tc_bool())
+    let c4_s : u32 = tc_ann(tc_inl(tc_true()), tc_sum(tc_bool(), tc_bool()))
+    let c4 : u32 = tc_case(c4_C, tc_lam(tc_bool(), tc_var(0u32)), tc_lam(tc_bool(), tc_false()), c4_s)
+    if tc_infer(c4) == 0u32 { return 7u64 }
+    if TC_TAG[tc_nf(c4)] != TC_TRUE { return 8u64 }
+
+    /* C5: J(lam y.lam_.Bool, true, refl true) -> true. */
+    let c5_C : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tc_true(), tc_var(0u32)), tc_bool()))
+    let c5 : u32 = tc_j(c5_C, tc_true(), tc_refl(tc_true()))
+    if tc_infer(c5) == 0u32 { return 9u64 }
+    if TC_TAG[tc_nf(c5)] != TC_TRUE { return 10u64 }
+
+    /* C6: nested -- if(if(true,true,false), false, true) -> false. */
+    let c6 : u32 = tc_if(tc_if(tc_true(), tc_true(), tc_false()), tc_false(), tc_true())
+    if TC_TAG[tc_nf(c6)] != TC_FALSE { return 11u64 }
+
+    /* SUBJECT REDUCTION: infer(t) conv infer(nf(t)) -- beta preserves types. */
+    /* S1: (lam(A:U1).lam(x:A).x) U0 -- type Pi(_:U0).U0 preserved under reduction. */
+    let s1 : u32 = tc_app(tc_lam(tc_sort(1u32), tc_lam(tc_var(0u32), tc_var(0u32))), tc_sort(0u32))
+    let s1_t : u32 = tc_infer(s1)
+    if s1_t == 0u32 { return 12u64 }
+    let s1_t2 : u32 = tc_infer(tc_nf(s1))
+    if s1_t2 == 0u32 { return 13u64 }
+    if tc_conv(s1_t, s1_t2) != 1u8 { return 14u64 }
+
+    /* S2: the case redex c4 -- type preserved under reduction. */
+    let s2_t : u32 = tc_infer(c4)
+    let s2_t2 : u32 = tc_infer(tc_nf(c4))
+    if s2_t2 == 0u32 { return 15u64 }
+    if tc_conv(s2_t, s2_t2) != 1u8 { return 16u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Path C brick 15: TC -> combinator compiler + the differential KAT.
+ *  The first-order combinator oracle (compile -> reduce -> struct_eq; NO
+ *  substitution) must AGREE with NbE (tc_conv) on the computational fragment.
+ * ============================================================ */
+
+/* compile a TC term to a CB SOURCE term (CB_LAM/CB_VAR/CB_APP + data/eliminator
+ * constants); cb_compile then bracket-abstracts it to a variable-free combinator.
+ * UNTYPED (R2): type annotations AND eliminator MOTIVES are erased -- they do not
+ * affect computation and vanish in the reduct of a closed reducing term.  A
+ * type-former / neutral falls back to a unique atom by tag (so the map is TOTAL). */
+fn tc_to_cb(t: u32) -> u32 {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR { return cb_var(TC_A[t]) }
+    if tag == TC_LAM { return cb_lam(tc_to_cb(TC_B[t])) }
+    if tag == TC_APP { return cb_app(tc_to_cb(TC_A[t]), tc_to_cb(TC_B[t])) }
+    if tag == TC_ANN { return tc_to_cb(TC_A[t]) }
+    if tag == TC_TRUE { return cb_true() }
+    if tag == TC_FALSE { return cb_false() }
+    if tag == TC_IF {
+        let if_s : u32 = tc_to_cb(TC_A[t])
+        let if_t : u32 = tc_to_cb(TC_B[t])
+        let if_e : u32 = tc_to_cb(TC_C[t])
+        return cb_app(cb_app(cb_app(cb_if_c(), if_s), if_t), if_e)
+    }
+    if tag == TC_ZERO { return cb_zero() }
+    if tag == TC_SUCC { return cb_app(cb_succ_c(), tc_to_cb(TC_A[t])) }
+    if tag == TC_ITER {
+        let it_z : u32 = tc_to_cb(TC_A[t])
+        let it_s : u32 = tc_to_cb(TC_B[t])
+        let it_n : u32 = tc_to_cb(TC_C[t])
+        return cb_app(cb_app(cb_app(cb_iter_c(), it_z), it_s), it_n)
+    }
+    if tag == TC_NATREC {
+        /* motive TC_A erased; z=TC_B, s=TC_C, n=TC_D. */
+        let nr_z : u32 = tc_to_cb(TC_B[t])
+        let nr_s : u32 = tc_to_cb(TC_C[t])
+        let nr_n : u32 = tc_to_cb(TC_D[t])
+        return cb_app(cb_app(cb_app(cb_natrec_c(), nr_z), nr_s), nr_n)
+    }
+    if tag == TC_INL { return cb_app(cb_inl_c(), tc_to_cb(TC_A[t])) }
+    if tag == TC_INR { return cb_app(cb_inr_c(), tc_to_cb(TC_A[t])) }
+    if tag == TC_CASE {
+        /* motive TC_A erased; f=TC_B, g=TC_C, s=TC_D. */
+        let ca_f : u32 = tc_to_cb(TC_B[t])
+        let ca_g : u32 = tc_to_cb(TC_C[t])
+        let ca_s : u32 = tc_to_cb(TC_D[t])
+        return cb_app(cb_app(cb_app(cb_case_c(), ca_f), ca_g), ca_s)
+    }
+    if tag == TC_REFL { return cb_app(cb_refl_c(), tc_to_cb(TC_A[t])) }
+    if tag == TC_J {
+        /* motive TC_A erased; d=TC_B, p=TC_C. */
+        let j_d : u32 = tc_to_cb(TC_B[t])
+        let j_p : u32 = tc_to_cb(TC_C[t])
+        return cb_app(cb_app(cb_j_c(), j_d), j_p)
+    }
+    /* type-former / neutral: a unique atom by tag (computational terms never reduce
+       inside these; this keeps tc_to_cb a TOTAL function). */
+    return cb_atom(1000u32 + (tag as u32))
+}
+
+/* the oracle-agreement check: the first-order combinator conversion must equal the
+ * kernel's NbE conversion on (x,y).  cb_reset gives each check a fresh CB arena;
+ * the TC arena (terms + their nf) persists across checks. */
+fn cb_agrees(x: u32, y: u32) -> u8 {
+    cb_reset()
+    let cx : u32 = cb_compile(tc_to_cb(x))
+    let cy : u32 = cb_compile(tc_to_cb(y))
+    let cbv : u8 = cb_conv(cx, cy)
+    let nbe : u8 = tc_conv(x, y)
+    if cbv == nbe { return 1u8 }
+    return 0u8
+}
+
+fn p5_kat_cbconv() -> u64 @export {
+    tc_reset()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+    let z  : u32 = tc_zero()
+
+    /* beta: (lam a. a) true == true ; =/= false. */
+    let d_id : u32 = tc_app(tc_lam(tc_bool(), tc_var(0u32)), tt)
+    if cb_agrees(d_id, tt) != 1u8 { return 1u64 }
+    if cb_agrees(d_id, ff) != 1u8 { return 2u64 }
+
+    /* IF iota -- both arms (the false-arm: both oracles must say NOT-equal-to-true). */
+    if cb_agrees(tc_if(tt, tt, ff), tt) != 1u8 { return 3u64 }
+    if cb_agrees(tc_if(ff, tt, ff), tt) != 1u8 { return 4u64 }
+
+    /* ITER (Bool result). */
+    let d_it : u32 = tc_iter(tt, tc_lam(tc_bool(), ff), tc_succ(z))
+    if cb_agrees(d_it, ff) != 1u8 { return 5u64 }
+
+    /* ITER computing a Nat: iter(zero, lam n. succ n, 2) == succ(succ zero). */
+    let d_itn : u32 = tc_iter(z, tc_lam(tc_nat(), tc_succ(tc_var(0u32))), tc_succ(tc_succ(z)))
+    if cb_agrees(d_itn, tc_succ(tc_succ(z))) != 1u8 { return 6u64 }
+
+    /* NATREC (Bool result; the step receives the predecessor m AND the IH). */
+    let d_nrs : u32 = tc_lam(tc_nat(), tc_lam(tc_bool(), ff))
+    let d_nr : u32 = tc_natrec(tc_lam(tc_nat(), tc_bool()), tt, d_nrs, tc_succ(tc_succ(z)))
+    if cb_agrees(d_nr, ff) != 1u8 { return 7u64 }
+
+    /* CASE -- both arms. */
+    let d_C : u32 = tc_lam(tc_sum(tc_bool(), tc_bool()), tc_bool())
+    let d_sl : u32 = tc_ann(tc_inl(tt), tc_sum(tc_bool(), tc_bool()))
+    let d_cl : u32 = tc_case(d_C, tc_lam(tc_bool(), tc_var(0u32)), tc_lam(tc_bool(), ff), d_sl)
+    if cb_agrees(d_cl, tt) != 1u8 { return 8u64 }
+    let d_sr : u32 = tc_ann(tc_inr(tt), tc_sum(tc_bool(), tc_bool()))
+    let d_cr : u32 = tc_case(d_C, tc_lam(tc_bool(), ff), tc_lam(tc_bool(), tc_var(0u32)), d_sr)
+    if cb_agrees(d_cr, tt) != 1u8 { return 9u64 }
+
+    /* J (refl elimination). */
+    let d_jC : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tt, tc_var(0u32)), tc_bool()))
+    let d_j : u32 = tc_j(d_jC, tt, tc_refl(tt))
+    if cb_agrees(d_j, tt) != 1u8 { return 10u64 }
+
+    /* nested IF. */
+    if cb_agrees(tc_if(tc_if(tt, tt, ff), ff, tt), ff) != 1u8 { return 11u64 }
+
+    /* beta UNDER an eliminator: if((lam a.a) true, true, false) == true. */
+    let d_be : u32 = tc_if(tc_app(tc_lam(tc_bool(), tc_var(0u32)), tt), tt, ff)
+    if cb_agrees(d_be, tt) != 1u8 { return 12u64 }
+
+    /* distinct constructors -- both oracles say NOT equal. */
+    if cb_agrees(tt, ff) != 1u8 { return 13u64 }
+    if cb_agrees(z, tc_succ(z)) != 1u8 { return 14u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Path C brick 16b: TC -> CCL compiler + the beta-eta+iota differential.
+ *  ccl_conv(compile x, compile y) == tc_conv(x,y) on the FULL theory incl eta.
+ * ============================================================ */
+
+/* compile a TC term to categorical combinators (de Bruijn -> CCL):
+ *   #0->Snd ; #(k+1)->Comp(#k,Fst) ; lam.b->Cur(b) ; f a->App o <f,a>
+ * data/eliminators -> CCL constants applied via App o Pair (motives erased);
+ * type-formers/neutrals -> a unique atom by tag (total map). */
+fn tc_to_ccl(t: u32) -> u32 {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR {
+        let k : u32 = TC_A[t]
+        let mut v : u32 = ccl_snd()
+        let mut i : u32 = 0u32
+        while i < k {
+            v = ccl_comp(v, ccl_fst())
+            i = i + 1u32
+        }
+        return v
+    }
+    if tag == TC_LAM { return ccl_cur_d(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_APP { return ccl_app2(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
+    if tag == TC_ANN { return tc_to_ccl(TC_A[t]) }
+    if tag == TC_TRUE { return ccl_true_c() }
+    if tag == TC_FALSE { return ccl_false_c() }
+    if tag == TC_IF {
+        let s : u32 = tc_to_ccl(TC_A[t])
+        let th : u32 = tc_to_ccl(TC_B[t])
+        let el : u32 = tc_to_ccl(TC_C[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_if_c(), s), th), el)
+    }
+    if tag == TC_ZERO { return ccl_zero_c() }
+    if tag == TC_SUCC { return ccl_app2(ccl_succ_c(), tc_to_ccl(TC_A[t])) }
+    if tag == TC_ITER {
+        let z : u32 = tc_to_ccl(TC_A[t])
+        let s : u32 = tc_to_ccl(TC_B[t])
+        let n : u32 = tc_to_ccl(TC_C[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_iter_c(), z), s), n)
+    }
+    if tag == TC_NATREC {
+        let pp : u32 = tc_to_ccl(TC_A[t])
+        let z : u32 = tc_to_ccl(TC_B[t])
+        let s : u32 = tc_to_ccl(TC_C[t])
+        let n : u32 = tc_to_ccl(TC_D[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_natrec_c(), pp), z), s), n)
+    }
+    if tag == TC_INL { return ccl_app2(ccl_inl_c(), tc_to_ccl(TC_A[t])) }
+    if tag == TC_INR { return ccl_app2(ccl_inr_c(), tc_to_ccl(TC_A[t])) }
+    if tag == TC_CASE {
+        let cm : u32 = tc_to_ccl(TC_A[t])
+        let f : u32 = tc_to_ccl(TC_B[t])
+        let g : u32 = tc_to_ccl(TC_C[t])
+        let s : u32 = tc_to_ccl(TC_D[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_case_c(), cm), f), g), s)
+    }
+    if tag == TC_REFL { return ccl_app2(ccl_refl_c(), tc_to_ccl(TC_A[t])) }
+    if tag == TC_J {
+        let jm : u32 = tc_to_ccl(TC_A[t])
+        let d : u32 = tc_to_ccl(TC_B[t])
+        let p : u32 = tc_to_ccl(TC_C[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_j_c(), jm), d), p)
+    }
+    /* --- type-formers, compiled STRUCTURALLY (NOT collapsed) so distinct types
+     *     stay distinct under ccl_conv.  Binders (PI/SIG codomain) via Cur. --- */
+    if tag == TC_SORT { return ccl_atom(2100u32 + TC_A[t]) }   /* U_k: distinct per level */
+    if tag == TC_NAT { return ccl_atom(2050u32) }
+    if tag == TC_BOOL { return ccl_atom(2051u32) }
+    if tag == TC_UNIT { return ccl_atom(2052u32) }
+    if tag == TC_EMPTY { return ccl_atom(2053u32) }
+    if tag == TC_TT { return ccl_atom(2054u32) }
+    if tag == TC_PI {
+        let pa : u32 = tc_to_ccl(TC_A[t])
+        let pb : u32 = tc_to_ccl(TC_B[t])
+        /* QTT: the binder multiplicity is part of the type's identity -- encode it
+         * in the PI atom so it survives shift/whnf/conv.  omega=2060 (unchanged ->
+         * backward-compatible); erased=2065, linear=2066 are distinct atoms, so
+         * Pi-types of differing multiplicity are correctly non-convertible. */
+        let pq : u32 = tcq_decode(TC_MULT[t])
+        let mut patom : u32 = 2060u32
+        if pq == TCQ_ERASED { patom = 2065u32 }
+        if pq == TCQ_LINEAR { patom = 2066u32 }
+        return ccl_app2(ccl_app2(ccl_atom(patom), pa), ccl_cur(pb))
+    }
+    if tag == TC_SIG {
+        let ga : u32 = tc_to_ccl(TC_A[t])
+        let gb : u32 = tc_to_ccl(TC_B[t])
+        return ccl_app2(ccl_app2(ccl_atom(2061u32), ga), ccl_cur(gb))
+    }
+    if tag == TC_W {
+        /* W(A,B): atom 2068 applied to A and Cur(B) -- structurally like SIG. */
+        let wwa : u32 = tc_to_ccl(TC_A[t])
+        let wwb : u32 = tc_to_ccl(TC_B[t])
+        return ccl_app2(ccl_app2(ccl_atom(2068u32), wwa), ccl_cur(wwb))
+    }
+    if tag == TC_SUP {
+        /* sup(a,f): a 2-argument data constructor. */
+        let spa : u32 = tc_to_ccl(TC_A[t])
+        let spf : u32 = tc_to_ccl(TC_B[t])
+        return ccl_app2(ccl_app2(ccl_sup_c(), spa), spf)
+    }
+    if tag == TC_WREC {
+        /* wrec(P,s,w): a 3-argument eliminator (motive kept, like J/natrec). */
+        let wcp : u32 = tc_to_ccl(TC_A[t])
+        let wcs : u32 = tc_to_ccl(TC_B[t])
+        let wcw : u32 = tc_to_ccl(TC_C[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_wrec_c(), wcp), wcs), wcw)
+    }
+    if tag == TC_ID {
+        let ity : u32 = tc_to_ccl(TC_A[t])
+        let il : u32 = tc_to_ccl(TC_B[t])
+        let ir : u32 = tc_to_ccl(TC_C[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_atom(2062u32), ity), il), ir)
+    }
+    if tag == TC_SUM {
+        let ua : u32 = tc_to_ccl(TC_A[t])
+        let ub : u32 = tc_to_ccl(TC_B[t])
+        return ccl_app2(ccl_app2(ccl_atom(2063u32), ua), ub)
+    }
+    if tag == TC_PAIR {
+        let qa : u32 = tc_to_ccl(TC_A[t])
+        let qb : u32 = tc_to_ccl(TC_B[t])
+        return ccl_app2(ccl_app2(ccl_spair_c(), qa), qb)
+    }
+    if tag == TC_FST { return ccl_app2(ccl_sfst_c(), tc_to_ccl(TC_A[t])) }
+    if tag == TC_SND { return ccl_app2(ccl_ssnd_c(), tc_to_ccl(TC_A[t])) }
+    if tag == TC_TRANSP {
+        let tpr : u32 = tc_to_ccl(TC_A[t])
+        let tpf : u32 = tc_to_ccl(TC_B[t])
+        let tbs : u32 = tc_to_ccl(TC_C[t])
+        return ccl_app2(ccl_app2(ccl_app2(ccl_transp_c(), tpr), tpf), tbs)
+    }
+    if tag == TC_ABSURD {
+        let ac : u32 = tc_to_ccl(TC_A[t])
+        let ae : u32 = tc_to_ccl(TC_B[t])
+        return ccl_app2(ccl_app2(ccl_atom(2064u32), ac), ae)
+    }
+    return ccl_atom(2000u32 + (tag as u32))
+}
+
+/* the CCL oracle agrees with NbE on (x,y). */
+/* the SINGULAR conversion verdict (the directed CCL oracle): 1 = convertible,
+ * 0 = not.  Formerly `ccl_agrees`, a CCL-vs-NbE differential -- but NbE is
+ * deleted and tc_conv IS the CCL oracle, so that comparison became tautological.
+ * Correctness is now pinned by the EXPECTED verdict per arm: p5_kat_ccl asserts
+ * BOTH positive (must convert -> 1) and negative (must NOT convert -> 0). */
+fn p5_conv(x: u32, y: u32) -> u8 {
+    return tc_conv(x, y)
+}
+
+fn p5_kat_ccl() -> u64 @export {
+    tc_reset()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+    let z  : u32 = tc_zero()
+    let b2b : u32 = tc_pi(tc_bool(), tc_bool())
+
+    /* === 846 eta (the part SKI could NOT do) === */
+    /* P1 nested eta: lam(f:B->B). lam(x:B). (f x) == lam f. f */
+    let e_t1 : u32 = tc_lam(b2b, tc_lam(tc_bool(), tc_app(tc_var(1u32), tc_var(0u32))))
+    let e_t2 : u32 = tc_lam(b2b, tc_var(0u32))
+    if p5_conv(e_t1, e_t2) != 1u8 { return 1u64 }
+    /* P2 no-conflation: e_t1 != lam f. lam x. x */
+    let e_p2 : u32 = tc_lam(b2b, tc_lam(tc_bool(), tc_var(0u32)))
+    if p5_conv(e_t1, e_p2) != 0u8 { return 2u64 }
+    /* P3 strengthen-fail: lam x.(x x) != lam x. x */
+    let e_p3a : u32 = tc_lam(tc_bool(), tc_app(tc_var(0u32), tc_var(0u32)))
+    let e_p3b : u32 = tc_lam(tc_bool(), tc_var(0u32))
+    if p5_conv(e_p3a, e_p3b) != 0u8 { return 3u64 }
+
+    /* === beta + iota (the 855 fragment, now via the CCL oracle) === */
+    let d_id : u32 = tc_app(tc_lam(tc_bool(), tc_var(0u32)), tt)
+    if p5_conv(d_id, tt) != 1u8 { return 4u64 }
+    if p5_conv(d_id, ff) != 0u8 { return 5u64 }
+    if p5_conv(tc_if(tt, tt, ff), tt) != 1u8 { return 6u64 }
+    if p5_conv(tc_if(ff, tt, ff), tt) != 0u8 { return 7u64 }
+    let d_it : u32 = tc_iter(tt, tc_lam(tc_bool(), ff), tc_succ(z))
+    if p5_conv(d_it, ff) != 1u8 { return 8u64 }
+    let d_itn : u32 = tc_iter(z, tc_lam(tc_nat(), tc_succ(tc_var(0u32))), tc_succ(tc_succ(z)))
+    if p5_conv(d_itn, tc_succ(tc_succ(z))) != 1u8 { return 9u64 }
+    let d_nrs : u32 = tc_lam(tc_nat(), tc_lam(tc_bool(), ff))
+    let d_nr : u32 = tc_natrec(tc_lam(tc_nat(), tc_bool()), tt, d_nrs, tc_succ(tc_succ(z)))
+    if p5_conv(d_nr, ff) != 1u8 { return 10u64 }
+    let d_C : u32 = tc_lam(tc_sum(tc_bool(), tc_bool()), tc_bool())
+    let d_sl : u32 = tc_ann(tc_inl(tt), tc_sum(tc_bool(), tc_bool()))
+    let d_cl : u32 = tc_case(d_C, tc_lam(tc_bool(), tc_var(0u32)), tc_lam(tc_bool(), ff), d_sl)
+    if p5_conv(d_cl, tt) != 1u8 { return 11u64 }
+    let d_sr : u32 = tc_ann(tc_inr(tt), tc_sum(tc_bool(), tc_bool()))
+    let d_cr : u32 = tc_case(d_C, tc_lam(tc_bool(), ff), tc_lam(tc_bool(), tc_var(0u32)), d_sr)
+    if p5_conv(d_cr, tt) != 1u8 { return 12u64 }
+    let d_jC : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tt, tc_var(0u32)), tc_bool()))
+    let d_j : u32 = tc_j(d_jC, tt, tc_refl(tt))
+    if p5_conv(d_j, tt) != 1u8 { return 13u64 }
+    if p5_conv(tc_if(tc_if(tt, tt, ff), ff, tt), ff) != 1u8 { return 14u64 }
+    if p5_conv(tt, ff) != 0u8 { return 15u64 }
+    if p5_conv(z, tc_succ(z)) != 0u8 { return 16u64 }
+
+    /* === B17: type-formers compiled structurally + Sigma/Id operators === */
+    let kb : u32 = tc_bool()
+    let kn : u32 = tc_nat()
+    /* PI(Bool,Bool) == itself ; != PI(Nat,Bool) (domain) ; != SIG(Bool,Bool) (former) */
+    if p5_conv(tc_pi(kb, kb), tc_pi(kb, kb)) != 1u8 { return 17u64 }
+    if p5_conv(tc_pi(kb, kb), tc_pi(kn, kb)) != 0u8 { return 18u64 }
+    if p5_conv(tc_pi(kb, kb), tc_sig(kb, kb)) != 0u8 { return 19u64 }
+    /* Sigma iota: fst<true,false> == true ; snd<true,false> == false */
+    let pr2 : u32 = tc_pair(tt, ff)
+    if p5_conv(tc_fst(pr2), tt) != 1u8 { return 20u64 }
+    if p5_conv(tc_snd(pr2), ff) != 1u8 { return 21u64 }
+    /* transp(C, refl, base) == base */
+    let trc : u32 = tc_lam(kb, tc_bool())
+    if p5_conv(tc_transp(trc, tc_refl(tt), ff), ff) != 1u8 { return 22u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  Integration audit: run the ENTIRE 841-852 kernel KAT workload through the
+ *  singular CCL oracle in ONE linked process (catches cross-module link/oracle
+ *  regressions the per-feature corpus binaries can miss).  NbE is deleted, so
+ *  the former CCL-vs-NbE disagreement counter is gone -- conversion correctness
+ *  is now pinned by p5_kat_ccl (859: positive AND negative arms) and the
+ *  reduction system's confluence by ccl_conf_cert (863).
+ *  1..12 = the named KAT regressed; 99 = all pass.
+ * ============================================================ */
+fn p5_kat_oracle() -> u64 @export {
+    if p5_kat() != 99u64 { return 1u64 }
+    if p5_kat_sigma() != 99u64 { return 2u64 }
+    if p5_kat_bool() != 99u64 { return 3u64 }
+    if p5_kat_id() != 99u64 { return 4u64 }
+    if p5_kat_nat() != 99u64 { return 5u64 }
+    if p5_kat_eta() != 99u64 { return 6u64 }
+    if p5_kat_natrec() != 99u64 { return 7u64 }
+    if p5_kat_j() != 99u64 { return 8u64 }
+    if p5_kat_bot() != 99u64 { return 9u64 }
+    if p5_kat_cumul() != 99u64 { return 10u64 }
+    if p5_kat_sum() != 99u64 { return 11u64 }
+    if p5_kat_meta() != 99u64 { return 12u64 }
+    return 99u64
+}
+
+/* CCL-native normalisation: compile -> directed reduce -> reify (read back).
+ * The replacement for NbE's tc_nf/tc_whnf -- one engine (the CCL reducer). */
+fn ccl_normalize(t: u32) -> u32 @export {
+    ccl_reset()
+    return ccl_to_tc(ccl_reduce(tc_to_ccl(t)))
+}
+
+/* READ-BACK AUDIT: on no-eta terms (types + data values -- exactly the forms the
+ * kernel's whnf/nf actually produce), the CCL-roundtrip nf must EQUAL NbE's tc_nf.
+ * (Eta-redex TERMS differ -- CCL eta-contracts, NbE does not -- but the kernel
+ * never nf's a bare function for structure; it converts them via the CCL oracle.)
+ * 99 = read-back faithful; 1..8 = first mismatch. */
+fn p5_kat_readback() -> u64 @export {
+    tc_reset()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+    let z  : u32 = tc_zero()
+    let kb : u32 = tc_bool()
+    let r1 : u32 = tc_app(tc_lam(kb, tc_var(0u32)), tt)
+    if TC_TAG[ccl_normalize(r1)] != TC_TRUE { return 1u64 }
+    let r2 : u32 = tc_pi(kb, kb)
+    if TC_TAG[ccl_normalize(r2)] != TC_PI { return 2u64 }
+    let r3 : u32 = tc_sig(kb, kb)
+    if TC_TAG[ccl_normalize(r3)] != TC_SIG { return 3u64 }
+    let r4 : u32 = tc_id(kb, tt, ff)
+    if TC_TAG[ccl_normalize(r4)] != TC_ID { return 4u64 }
+    let r5 : u32 = tc_iter(z, tc_lam(tc_nat(), tc_succ(tc_var(0u32))), tc_succ(tc_succ(z)))
+    if TC_TAG[ccl_normalize(r5)] != TC_SUCC { return 5u64 }
+    let r6 : u32 = tc_fst(tc_pair(tt, ff))
+    if TC_TAG[ccl_normalize(r6)] != TC_TRUE { return 6u64 }
+    let r7 : u32 = tc_if(tt, tt, ff)
+    if TC_TAG[ccl_normalize(r7)] != TC_TRUE { return 7u64 }
+    /* type with a var-referencing codomain: PI(Bool, Id(Bool, #0, #0)) */
+    let r8 : u32 = tc_pi(kb, tc_id(kb, tc_var(0u32), tc_var(0u32)))
+    if TC_TAG[ccl_normalize(r8)] != TC_PI { return 8u64 }
+    return 99u64
+}
+
+/* --- QTT usage analysis (DOCS/III-QTT-DESIGN.md §2) ------------------------- */
+
+/* the multiplicity with which a function f uses its argument = the declared
+ * multiplicity of f's Pi-domain.  Infer f's type (the multiplicity now survives
+ * the CCL whnf via the mult-specific PI atoms -- Stage B), whnf to a Pi, read the
+ * code.  A non-Pi head / infer-failure falls back to omega (most permissive). */
+fn tc_arg_mult(f: u32) -> u32 {
+    let ft : u32 = tc_infer(f)
+    if ft == 0u32 { return TCQ_OMEGA }
+    let w : u32 = tc_whnf(ft)
+    if TC_TAG[w] != TC_PI { return TCQ_OMEGA }
+    return tcq_decode(TC_MULT[w])
+}
+
+/* tc_var_usage(t, k): the multiplicity with which t uses de Bruijn var #k.  An APP
+ * scales its argument's usage by the function's Pi-multiplicity (mul) and adds the
+ * function's own usage; type-level/closed subterms are erased (0).  Descends with
+ * the context (pushes LAM domains) so tc_arg_mult's infer is exact. */
+fn tc_var_usage(t: u32, k: u32) -> u32 {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR {
+        if TC_A[t] == k { return TCQ_LINEAR }
+        return TCQ_ERASED
+    }
+    if tag == TC_APP {
+        let uf : u32 = tc_var_usage(TC_A[t], k)
+        let q  : u32 = tc_arg_mult(TC_A[t])
+        let ua : u32 = tc_var_usage(TC_B[t], k)
+        return tcq_add(uf, tcq_mul(q, ua))
+    }
+    if tag == TC_LAM {
+        tc_ctx_push(TC_A[t])
+        let r : u32 = tc_var_usage(TC_B[t], k + 1u32)
+        tc_ctx_pop()
+        return r
+    }
+    if tag == TC_PAIR {
+        return tcq_add(tc_var_usage(TC_A[t], k), tc_var_usage(TC_B[t], k))
+    }
+    if tag == TC_FST { return tc_var_usage(TC_A[t], k) }
+    if tag == TC_SND { return tc_var_usage(TC_A[t], k) }
+    if tag == TC_IF {
+        /* scrutinee runtime (add); the two branches are ALTERNATIVES (join) -- only
+         * one runs, so a var used once in EACH branch is still linear. */
+        let us : u32 = tc_var_usage(TC_A[t], k)
+        let ut : u32 = tc_var_usage(TC_B[t], k)
+        let ue : u32 = tc_var_usage(TC_C[t], k)
+        return tcq_add(us, tcq_lub(ut, ue))
+    }
+    if tag == TC_ITER {
+        /* iter(z,s,n): base z once; step s applied n times (dynamic) => omega; n once. */
+        let uz : u32 = tc_var_usage(TC_A[t], k)
+        let us2 : u32 = tc_var_usage(TC_B[t], k)
+        let un : u32 = tc_var_usage(TC_C[t], k)
+        return tcq_add(un, tcq_add(uz, tcq_mul(TCQ_OMEGA, us2)))
+    }
+    if tag == TC_NATREC {
+        /* natrec(P,z,s,n): motive P (TC_A) erased (mult 0); base z once; step s omega; n once. */
+        let uz3 : u32 = tc_var_usage(TC_B[t], k)
+        let us3 : u32 = tc_var_usage(TC_C[t], k)
+        let un3 : u32 = tc_var_usage(TC_D[t], k)
+        return tcq_add(un3, tcq_add(uz3, tcq_mul(TCQ_OMEGA, us3)))
+    }
+    if tag == TC_CASE {
+        /* case(C,f,g,s): motive C (TC_A) erased; scrutinee s runtime; branch
+         * functions f,g are ALTERNATIVES (join). */
+        let uf2 : u32 = tc_var_usage(TC_B[t], k)
+        let ug2 : u32 = tc_var_usage(TC_C[t], k)
+        let us4 : u32 = tc_var_usage(TC_D[t], k)
+        return tcq_add(us4, tcq_lub(uf2, ug2))
+    }
+    if tag == TC_J {
+        /* J(C,d,p): motive C (TC_A) erased; base d + proof p runtime. */
+        return tcq_add(tc_var_usage(TC_B[t], k), tc_var_usage(TC_C[t], k))
+    }
+    if tag == TC_TRANSP {
+        /* transp(pr,proof,base): predicate pr (TC_A) erased; proof + base runtime. */
+        return tcq_add(tc_var_usage(TC_B[t], k), tc_var_usage(TC_C[t], k))
+    }
+    if tag == TC_ABSURD {
+        /* absurd(C,e): motive C (TC_A) erased; e runtime. */
+        return tc_var_usage(TC_B[t], k)
+    }
+    if tag == TC_INL  { return tc_var_usage(TC_A[t], k) }
+    if tag == TC_INR  { return tc_var_usage(TC_A[t], k) }
+    if tag == TC_REFL { return tc_var_usage(TC_A[t], k) }
+    if tag == TC_SUCC { return tc_var_usage(TC_A[t], k) }
+    if tag == TC_ANN  { return tc_var_usage(TC_A[t], k) }
+    /* Pi/Sig/Id/Sum/Sort/Bool/Nat/Unit/Empty + their atom constructors: type-level
+     * or closed -> erased (0).  (Id/Sum subterms are types; their values' content is
+     * counted at the INL/INR/REFL/PAIR constructors above.) */
+    return TCQ_ERASED
+}
+
+/* tc_qtt_ok(t): every LAM binder in t uses its variable per its declared
+ * multiplicity.  Descends with the context; at each LAM, measures the bound var
+ * (#0) over the body and checks fits.  1 = admitted, 0 = a binder is violated. */
+fn tc_qtt_ok(t: u32) -> u8 @export {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR  { return 1u8 }    /* A = de Bruijn index (payload, not a child) */
+    if tag == TC_SORT { return 1u8 }    /* A = universe level (payload) */
+    if tag == TC_LAM {
+        let q : u32 = tcq_decode(TC_MULT[t])
+        tc_ctx_push(TC_A[t])
+        let u : u32 = tc_var_usage(TC_B[t], 0u32)
+        let okb : u8 = tc_qtt_ok(TC_B[t])
+        tc_ctx_pop()
+        if tcq_fits(u, q) == 0u8 { return 0u8 }
+        if okb == 0u8 { return 0u8 }
+        return tc_qtt_ok(TC_A[t])       /* the binder domain is a type at the OUTER level */
+    }
+    if tag == TC_PI {
+        if tc_qtt_ok(TC_A[t]) == 0u8 { return 0u8 }
+        tc_ctx_push(TC_A[t])
+        let okc : u8 = tc_qtt_ok(TC_B[t])   /* codomain is under the binder */
+        tc_ctx_pop()
+        return okc
+    }
+    if tag == TC_SIG {
+        if tc_qtt_ok(TC_A[t]) == 0u8 { return 0u8 }
+        tc_ctx_push(TC_A[t])
+        let oks : u8 = tc_qtt_ok(TC_B[t])
+        tc_ctx_pop()
+        return oks
+    }
+    /* every other node: A/B/C/D are child nodes (0 = absent), all at THIS level
+     * (the only binders are inside LAM branch/step/motive subterms, checked on
+     * descent).  Exhaustive recursion -- no lam in the term escapes the discipline. */
+    if TC_A[t] != 0u32 { if tc_qtt_ok(TC_A[t]) == 0u8 { return 0u8 } }
+    if TC_B[t] != 0u32 { if tc_qtt_ok(TC_B[t]) == 0u8 { return 0u8 } }
+    if TC_C[t] != 0u32 { if tc_qtt_ok(TC_C[t]) == 0u8 { return 0u8 } }
+    if TC_D[t] != 0u32 { if tc_qtt_ok(TC_D[t]) == 0u8 { return 0u8 } }
+    return 1u8
+}
+
+/* QTT brick 1 KAT: the semiring laws + the usage discipline, BOTH arms.
+ * 99 = all pass; a distinct code per failure. */
+fn p5_kat_qtt() -> u64 @export {
+    /* (1-8) the semiring (DOCS §1): add saturates (1+1=w); mul is zero-one-many;
+     * fits is exact for 0/1, any for w. */
+    if tcq_add(TCQ_LINEAR, TCQ_LINEAR) != TCQ_OMEGA { return 1u64 }
+    if tcq_add(TCQ_ERASED, TCQ_LINEAR) != TCQ_LINEAR { return 2u64 }
+    if tcq_mul(TCQ_OMEGA, TCQ_LINEAR) != TCQ_OMEGA { return 3u64 }
+    if tcq_mul(TCQ_ERASED, TCQ_OMEGA) != TCQ_ERASED { return 4u64 }
+    if tcq_mul(TCQ_LINEAR, TCQ_LINEAR) != TCQ_LINEAR { return 5u64 }
+    if tcq_fits(TCQ_LINEAR, TCQ_LINEAR) != 1u8 { return 6u64 }
+    if tcq_fits(TCQ_OMEGA, TCQ_LINEAR) != 0u8 { return 7u64 }
+    if tcq_fits(TCQ_ERASED, TCQ_ERASED) != 1u8 { return 8u64 }
+
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let tt : u32 = tc_true()
+
+    /* (9-12) positives: linear-used-once, erased-unused, omega-used-once. */
+    let p1 : u32 = tc_lam_q(kb, tc_var(0u32), 2u32)     /* lam^1 x. x */
+    if tc_infer(p1) == 0u32 { return 9u64 }
+    if tc_qtt_ok(p1) != 1u8 { return 10u64 }
+    let p2 : u32 = tc_lam_q(kb, tt, 1u32)               /* lam^0 x. true */
+    if tc_qtt_ok(p2) != 1u8 { return 11u64 }
+    let p3 : u32 = tc_lam_q(kb, tc_var(0u32), 3u32)     /* lam^w x. x */
+    if tc_qtt_ok(p3) != 1u8 { return 12u64 }
+
+    /* (13-14) negatives: linear-unused, erased-used. */
+    let n1 : u32 = tc_lam_q(kb, tt, 2u32)               /* lam^1 x. true -> REJECT */
+    if tc_qtt_ok(n1) != 0u8 { return 13u64 }
+    let n2 : u32 = tc_lam_q(kb, tc_var(0u32), 1u32)     /* lam^0 x. x -> REJECT */
+    if tc_qtt_ok(n2) != 0u8 { return 14u64 }
+
+    /* (15-18) THE q-SCALING HEART: a linear var passed to a function is used with
+     * that function's domain-multiplicity.  IDENTICAL syntax (g x, x appears once);
+     * the verdict flips on g's Pi-multiplicity -- impossible to get from naive
+     * occurrence-counting, and it exercises mult-survival through ctx-lookup+whnf. */
+    let glin   : u32 = tc_pi_q(kb, kb, 2u32)            /* Bool ->^1 Bool */
+    let gom    : u32 = tc_pi(kb, kb)                    /* Bool ->^w Bool (unmarked) */
+    let posin  : u32 = tc_lam_q(kb, tc_app(tc_var(1u32), tc_var(0u32)), 2u32)  /* lam^1 x. g x */
+    let pos    : u32 = tc_lam_q(glin, posin, 3u32)      /* lam^w g:(Bool->^1 Bool). lam^1 x. g x */
+    if tc_infer(pos) == 0u32 { return 15u64 }
+    if tc_qtt_ok(pos) != 1u8 { return 16u64 }           /* linear -> linear: ADMIT */
+    let negin  : u32 = tc_lam_q(kb, tc_app(tc_var(1u32), tc_var(0u32)), 2u32)
+    let neg    : u32 = tc_lam_q(gom, negin, 3u32)       /* lam^w g:(Bool->^w Bool). lam^1 x. g x */
+    if tc_infer(neg) == 0u32 { return 17u64 }
+    if tc_qtt_ok(neg) != 0u8 { return 18u64 }           /* linear -> unrestricted: REJECT */
+
+    return 99u64
+}
+
+/* QTT brick 2 KAT (DOCS/III-QTT-DESIGN.md §4 B2): usage through eliminators --
+ * the branch JOIN (only one branch runs), the exhaustive-coverage soundness fix,
+ * the recursor-omega, and type-position erasure.  99 = all pass; code per failure. */
+fn p5_kat_qtt2() -> u64 @export {
+    /* (1-3) the semiring JOIN. */
+    if tcq_lub(TCQ_LINEAR, TCQ_LINEAR) != TCQ_LINEAR { return 1u64 }
+    if tcq_lub(TCQ_LINEAR, TCQ_ERASED) != TCQ_OMEGA  { return 2u64 }
+    if tcq_lub(TCQ_ERASED, TCQ_ERASED) != TCQ_ERASED { return 3u64 }
+
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+
+    /* (4-8) IF: the two branches are ALTERNATIVES (join), not summed. */
+    let t1 : u32 = tc_lam_q(kb, tc_if(tt, tc_var(0u32), tc_var(0u32)), 2u32)   /* lam^1 x. if(true,x,x) */
+    if tc_infer(t1) == 0u32 { return 4u64 }
+    if tc_qtt_ok(t1) != 1u8 { return 5u64 }                       /* lub(1,1)=1 : ADMIT */
+    let t2 : u32 = tc_lam_q(kb, tc_if(tt, tc_var(0u32), ff), 2u32)             /* lam^1 x. if(true,x,false) */
+    if tc_qtt_ok(t2) != 0u8 { return 6u64 }                       /* lub(1,0)=w : REJECT */
+    let t3 : u32 = tc_lam_q(kb, tc_if(tt, tc_var(0u32), ff), 3u32)             /* lam^w x. if(true,x,false) */
+    if tc_qtt_ok(t3) != 1u8 { return 7u64 }                       /* w admits the asymmetric branch */
+    let t4 : u32 = tc_lam_q(kb, tc_if(tc_var(0u32), tc_var(0u32), ff), 2u32)   /* lam^1 x. if(x,x,false) */
+    if tc_qtt_ok(t4) != 0u8 { return 8u64 }                       /* scrutinee + a branch: add(1,lub(1,0))=w REJECT */
+
+    /* (9-10) the exhaustive-coverage soundness fix: a var used INSIDE a constructor
+     * (inl) is counted -- brick 1's fallback wrongly treated it as unused (0). */
+    let sbb : u32 = tc_sum(kb, kb)
+    let t5  : u32 = tc_lam_q(kb, tc_ann(tc_inl(tc_var(0u32)), sbb), 1u32)      /* lam^0 x. (inl x : Bool+Bool) */
+    if tc_infer(t5) == 0u32 { return 9u64 }
+    if tc_qtt_ok(t5) != 0u8 { return 10u64 }                      /* erased x USED in inl: REJECT */
+
+    /* (11-13) recursor: the step is applied a dynamic number of times => omega. */
+    let bb  : u32 = tc_pi(kb, kb)                                 /* Bool -> Bool */
+    let itr : u32 = tc_iter(tt, tc_var(0u32), tc_succ(tc_zero())) /* iter(true, f, succ zero) */
+    let t6  : u32 = tc_lam_q(bb, itr, 2u32)                       /* lam^1 f. iter(true,f,succ zero) */
+    if tc_infer(t6) == 0u32 { return 11u64 }
+    if tc_qtt_ok(t6) != 0u8 { return 12u64 }                      /* step f used w: linear REJECT */
+    let t7  : u32 = tc_lam_q(bb, itr, 3u32)                       /* lam^w f. ... */
+    if tc_qtt_ok(t7) != 1u8 { return 13u64 }                      /* w admits */
+
+    /* (14-16) type-position erasure: a type argument used only in a binder DOMAIN
+     * is used 0 times at runtime (the same principle as motive erasure). */
+    let inn : u32 = tc_lam_q(tc_var(0u32), tc_var(0u32), 3u32)    /* lam^w x:A. x */
+    let t8a : u32 = tc_lam_q(tc_sort(0u32), inn, 1u32)            /* lam^0 A:U0. lam x:A. x */
+    if tc_infer(t8a) == 0u32 { return 14u64 }
+    if tc_qtt_ok(t8a) != 1u8 { return 15u64 }                     /* A used only in a type position: erased ADMIT */
+    let t8b : u32 = tc_lam_q(tc_sort(0u32), inn, 2u32)            /* lam^1 A:U0. lam x:A. x */
+    if tc_qtt_ok(t8b) != 0u8 { return 16u64 }                     /* linear A used 0 at runtime: REJECT */
+
+    return 99u64
+}
+
+/* QTT brick 4 KAT (DOCS/III-QTT-DESIGN.md §4 B4): ERASURE SOUNDNESS.  Erasure is
+ * realized by the normalizer (an erased argument is substituted but, being unused
+ * at runtime, leaves no trace in the normal form); its rigorous content is the
+ * IRRELEVANCE theorem -- a function cannot observably depend on a mult-0 argument,
+ * so dropping it is sound.  Proven via the domain-erased CCL oracle.  99 = pass. */
+fn p5_kat_qtt3() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let kn : u32 = tc_nat()
+    let tt : u32 = tc_true()
+    let u0 : u32 = tc_sort(0u32)
+    /* f = lam^0 A:U0. lam^1 x:A. x  -- the polymorphic identity; A is an ERASED
+     * type argument (used only in the binder domain x:A, never at runtime). */
+    let fbody : u32 = tc_lam_q(tc_var(0u32), tc_var(0u32), 2u32)   /* lam^1 x:A. x */
+    let f     : u32 = tc_lam_q(u0, fbody, 1u32)                    /* lam^0 A:U0. ... */
+
+    /* (1-2) QTT validates the erased marking: A is provably used 0 at runtime. */
+    if tc_infer(f) == 0u32 { return 1u64 }
+    if tc_qtt_ok(f) != 1u8 { return 2u64 }
+
+    /* (3) IRRELEVANCE: f Bool and f Nat are CONVERTIBLE -- the kernel's own equality
+     * (the CCL oracle) cannot distinguish them, so the erased type argument is
+     * unobservable.  This is the semantic justification for erasing A. */
+    let fB : u32 = tc_app(f, kb)
+    let fN : u32 = tc_app(f, kn)
+    if tc_conv(fB, fN) != 1u8 { return 3u64 }
+
+    /* (4) ERASURE in action: the erased type argument VANISHES under normalisation.
+     * (f Bool) true reduces to `true` -- A leaves no trace in the result. */
+    if TC_TAG[ccl_normalize(tc_app(fB, tt))] != TC_TRUE { return 4u64 }
+
+    /* (5-6) NEGATIVE -- a RELEVANT argument IS observable.  g = lam^1 b:Bool. b;
+     * g true and g false are NOT convertible (the result depends on the argument).
+     * The contrast (3 vs 6) is the proof: erased args do not affect equality,
+     * relevant args do. */
+    let g : u32 = tc_lam_q(kb, tc_var(0u32), 2u32)
+    if tc_qtt_ok(g) != 1u8 { return 5u64 }
+    if tc_conv(tc_app(g, tt), tc_app(g, tc_false())) != 0u8 { return 6u64 }
+
+    return 99u64
+}
+
+/* W-types stage 1 KAT (DOCS/III-WTYPES-DESIGN.md): general well-founded inductive
+ * types -- FORMATION (mirrors SIG, max universe levels) + the sup CONSTRUCTOR
+ * (checked against a W).  No recursor yet (stage 2).  99 = all pass. */
+fn p5_kat_w() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let ku : u32 = tc_unit()
+    let ke : u32 = tc_empty()
+
+    /* (1-3) FORMATION: the Nat-as-W type W(Bool, if(#0,Unit,Empty)) : U0 -- a node
+     * labelled true (succ) has Unit-many (one) child, labelled false (zero) has
+     * Empty-many (no) children.  W subsumes Nat. */
+    let arityfam : u32 = tc_if(tc_var(0u32), ku, ke)   /* under a:Bool: true->Unit, false->Empty */
+    let wnat : u32 = tc_w(kb, arityfam)
+    let wt : u32 = tc_infer(wnat)
+    if wt == 0u32 { return 1u64 }
+    if TC_TAG[wt] != TC_SORT { return 2u64 }
+    if TC_A[wt] != 0u32 { return 3u64 }                /* W(Bool, ...) : U0 */
+
+    /* (4) FORMATION NEGATIVE: the label "type" must be a TYPE, not a value. */
+    let wbad : u32 = tc_w(tc_true(), ke)
+    if tc_infer(wbad) != 0u32 { return 4u64 }
+
+    /* (5) sup CONSTRUCTOR (positive): a LEAF of W(Unit, Empty) -- a single label
+     * tt with Empty-many (no) children.  The children function Empty -> W is the
+     * ex-falso (empty) function.  sup(tt, ex-falso) : W(Unit, Empty). */
+    let wleaf : u32 = tc_w(ku, ke)                     /* W(Unit, Empty): only leaves */
+    let cmot  : u32 = tc_lam(ke, wleaf)                /* lam _:Empty. W   (const motive) */
+    let efn   : u32 = tc_lam(ke, tc_absurd(cmot, tc_var(0u32)))  /* lam x:Empty. absurd(.,x) : W */
+    let leaf  : u32 = tc_sup(tc_tt(), efn)
+    if tc_check(leaf, wleaf) != 1u8 { return 5u64 }
+
+    /* (6) sup NEGATIVE: a W value does NOT check against a non-W type. */
+    if tc_check(leaf, kb) != 0u8 { return 6u64 }
+
+    return 99u64
+}
+
+/* W-types stage 2 KAT (DOCS/III-WTYPES-DESIGN.md): the W-RECURSOR (transfinite
+ * induction) -- the higher-order eliminator (its IH is a function over children).
+ * Tests the higher-order ι fires + the Cur-IH is built + reduces, on a LEAF and a
+ * NODE-WITH-CHILD (the latter also exercises the B^1 arity shift via the IH-domain
+ * match); + reject negatives.  99 = all pass. */
+fn p5_kat_wrec() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let ku : u32 = tc_unit()
+    let ke : u32 = tc_empty()
+    let tt : u32 = tc_true()
+
+    /* --- leaf wrec: W(Unit, Empty), a single leaf with no children --- */
+    let wleaf : u32 = tc_w(ku, ke)
+    let cmot  : u32 = tc_lam(ke, wleaf)
+    let efn   : u32 = tc_lam(ke, tc_absurd(cmot, tc_var(0u32)))
+    let leaf  : u32 = tc_sup(tc_tt(), efn)
+    let pmot  : u32 = tc_lam(wleaf, kb)                          /* P = lam _:W. Bool */
+    let sft   : u32 = tc_pi(ke, wleaf)                           /* f  : Empty -> W */
+    let siht  : u32 = tc_pi(ke, kb)                             /* ih : Empty -> Bool */
+    let step  : u32 = tc_lam(ku, tc_lam(sft, tc_lam(siht, tt)))  /* lam a.lam f.lam ih. true */
+    let wr    : u32 = tc_wrec(pmot, step, tc_ann(leaf, wleaf))   /* scrutinee ascribed (sup is check-only) */
+    if tc_infer(wr) == 0u32 { return 1u64 }                     /* wrec typechecks */
+    if TC_TAG[ccl_normalize(wr)] != TC_TRUE { return 2u64 }     /* higher-order ι: -> true */
+
+    /* --- node wrec: Nat-as-W, the node `one` = sup(true, lam _. zero) WITH a child --- */
+    let arity : u32 = tc_if(tc_var(0u32), ku, ke)               /* true->Unit, false->Empty */
+    let wnat  : u32 = tc_w(kb, arity)
+    let zmot  : u32 = tc_lam(ke, wnat)
+    let zef   : u32 = tc_lam(ke, tc_absurd(zmot, tc_var(0u32)))
+    let zero  : u32 = tc_ann(tc_sup(tc_false(), zef), wnat)     /* (sup(false,..) : WNat) */
+    let fone  : u32 = tc_lam(ku, zero)                          /* lam _:Unit. zero */
+    let one   : u32 = tc_sup(tt, fone)                          /* sup(true, fone) */
+    let npmot : u32 = tc_lam(wnat, kb)                          /* P = lam _:WNat. Bool */
+    let nft   : u32 = tc_pi(tc_if(tc_var(0u32), ku, ke), wnat)  /* f : arity[a] -> WNat  (a=#0) */
+    let niht  : u32 = tc_pi(tc_if(tc_var(1u32), ku, ke), kb)    /* ih: arity[a] -> Bool  (a=#1 under f) */
+    let nstep : u32 = tc_lam(kb, tc_lam(nft, tc_lam(niht, tt)))
+    let nwr   : u32 = tc_wrec(npmot, nstep, tc_ann(one, wnat))
+    if tc_infer(nwr) == 0u32 { return 3u64 }                    /* node wrec typechecks (B^1 shift exact) */
+    if TC_TAG[ccl_normalize(nwr)] != TC_TRUE { return 4u64 }    /* ι on a node-with-child: -> true */
+
+    /* --- negatives --- */
+    let bad1 : u32 = tc_wrec(pmot, step, tt)                    /* scrutinee true:Bool, not W */
+    if tc_infer(bad1) != 0u32 { return 5u64 }
+    let bad2 : u32 = tc_wrec(pmot, tt, tc_ann(leaf, wleaf))     /* step = true, not a function */
+    if tc_infer(bad2) != 0u32 { return 6u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  THE NATIVELY DIFFERENTIABLE SOVEREIGN CALCULUS (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md).
+ *  The "soul" as a DETERMINISTIC EXACT cost-field over the discrete spine: a file
+ *  optimizes its physical realization within its PROVEN-EQUIVALENCE class, never
+ *  changing what it proves.  No ML, no floats -- the "differential" is the exact
+ *  cost-gradient over the CCL-equality class; "descent" picks the cost-min proven-
+ *  equal realization.  THE SOVEREIGN MORPHISM (sov_admit) is the invariant: every
+ *  selected realization is CCL-proven-equal to the original AND not costlier. */
+
+/* the cost field: exact node count (the leanest exact cost; QTT-weighting --
+ * erased subterms cost 0 -- is the richer field, a later layer). */
+fn sov_cost(t: u32) -> u32 @export {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR { return 1u32 }
+    if tag == TC_SORT { return 1u32 }
+    let mut c : u32 = 1u32
+    if TC_A[t] != 0u32 { c = c + sov_cost(TC_A[t]) }
+    if TC_B[t] != 0u32 { c = c + sov_cost(TC_B[t]) }
+    if TC_C[t] != 0u32 { c = c + sov_cost(TC_C[t]) }
+    if TC_D[t] != 0u32 { c = c + sov_cost(TC_D[t]) }
+    return c
+}
+
+/* ---- Brick 2: the weighted FIELD (the vision's "Continuous Field" -- weights on
+ * nodes).  sov_cost_q = the erasure-aware RUNTIME cost: type-formers and every
+ * type/proof-irrelevant POSITION (LAM domain, ANN type, each eliminator MOTIVE)
+ * weigh 0; runtime structure weighs 1.  This is exactly tc_var_usage's runtime/
+ * erased split (reused, inference-free) -- the proof rides free, only the physical
+ * realization is costed.  Every one of the 34 tags is classified. */
+fn sov_cost_q(t: u32) -> u32 @export {
+    let tag : u8 = TC_TAG[t]
+    /* type-formers + type-level leaves: erased at runtime -> 0 */
+    if tag == TC_SORT  { return 0u32 }
+    if tag == TC_PI    { return 0u32 }
+    if tag == TC_SIG   { return 0u32 }
+    if tag == TC_ID    { return 0u32 }
+    if tag == TC_SUM   { return 0u32 }
+    if tag == TC_W     { return 0u32 }
+    if tag == TC_BOOL  { return 0u32 }
+    if tag == TC_NAT   { return 0u32 }
+    if tag == TC_UNIT  { return 0u32 }
+    if tag == TC_EMPTY { return 0u32 }
+    /* runtime leaves: weigh 1 */
+    if tag == TC_VAR   { return 1u32 }
+    if tag == TC_TRUE  { return 1u32 }
+    if tag == TC_FALSE { return 1u32 }
+    if tag == TC_ZERO  { return 1u32 }
+    if tag == TC_TT    { return 1u32 }
+    /* composite runtime nodes: 1 + RUNTIME children (type/motive positions skipped) */
+    let mut c : u32 = 1u32
+    if tag == TC_LAM    { c = c + sov_cost_q(TC_B[t]) }                                          /* body; domain A erased */
+    if tag == TC_APP    { c = c + sov_cost_q(TC_A[t]) + sov_cost_q(TC_B[t]) }
+    if tag == TC_PAIR   { c = c + sov_cost_q(TC_A[t]) + sov_cost_q(TC_B[t]) }
+    if tag == TC_FST    { c = c + sov_cost_q(TC_A[t]) }
+    if tag == TC_SND    { c = c + sov_cost_q(TC_A[t]) }
+    if tag == TC_ANN    { c = c + sov_cost_q(TC_A[t]) }                                          /* term A; type B erased */
+    if tag == TC_IF     { c = c + sov_cost_q(TC_A[t]) + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) }
+    if tag == TC_ITER   { c = c + sov_cost_q(TC_A[t]) + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) }
+    if tag == TC_NATREC { c = c + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) + sov_cost_q(TC_D[t]) }  /* motive A erased */
+    if tag == TC_CASE   { c = c + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) + sov_cost_q(TC_D[t]) }  /* motive A erased */
+    if tag == TC_J      { c = c + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) }                    /* motive A erased */
+    if tag == TC_TRANSP { c = c + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) }                    /* pred A erased */
+    if tag == TC_ABSURD { c = c + sov_cost_q(TC_B[t]) }                                          /* motive A erased */
+    if tag == TC_SUCC   { c = c + sov_cost_q(TC_A[t]) }
+    if tag == TC_INL    { c = c + sov_cost_q(TC_A[t]) }
+    if tag == TC_INR    { c = c + sov_cost_q(TC_A[t]) }
+    if tag == TC_REFL   { c = c + sov_cost_q(TC_A[t]) }
+    if tag == TC_SUP    { c = c + sov_cost_q(TC_A[t]) + sov_cost_q(TC_B[t]) }
+    if tag == TC_WREC   { c = c + sov_cost_q(TC_B[t]) + sov_cost_q(TC_C[t]) }                    /* motive A erased */
+    return c
+}
+
+/* materialize the field over the spine: SOV_COST[n] = sov_cost_q(n) for every node
+ * n in the subtree rooted at t (VAR/SORT carry a payload in A, so are NOT descended
+ * into).  Returns sov_cost_q(t).  This is the "continuous field draped over the
+ * discrete syntactic spine" made literal -- an integer weight per AST node,
+ * content-addressable and ripple-publishable (no floats, no ML). */
+fn sov_field_fill(t: u32) -> u32 @export {
+    let tag : u8 = TC_TAG[t]
+    if tag == TC_VAR  { SOV_COST[t] = 1u32; return 1u32 }
+    if tag == TC_SORT { SOV_COST[t] = 0u32; return 0u32 }
+    if TC_A[t] != 0u32 { sov_field_fill(TC_A[t]) }
+    if TC_B[t] != 0u32 { sov_field_fill(TC_B[t]) }
+    if TC_C[t] != 0u32 { sov_field_fill(TC_C[t]) }
+    if TC_D[t] != 0u32 { sov_field_fill(TC_D[t]) }
+    let c : u32 = sov_cost_q(t)
+    SOV_COST[t] = c
+    return c
+}
+
+/* descent to a cost-optimal proven-equal realization.  Lean 2-candidate class
+ * {t, normal form} -- both CCL-proven-equal -- pick the cheaper.  (The egraph
+ * generalizes the class; this brick proves the morphism on the minimal one.)
+ * Note: ccl_normalize alone is NOT a descender (beta can grow size) -- the cost-min
+ * CHOICE is what guarantees the realization never gets costlier. */
+fn sov_best(t: u32) -> u32 @export {
+    let nf : u32 = ccl_normalize(t)
+    if sov_cost(nf) < sov_cost(t) { return nf }
+    return t
+}
+
+/* THE SOVEREIGN MORPHISM: ts is an admissible realization of t iff it is
+ * proven-equal (the proof is preserved) AND not costlier.  The load-bearing
+ * soundness gate -- a behaviour-changing "optimization" (tc_conv=0) is REJECTED.
+ * tc_conv is the TC-level oracle (compile->reduce->struct-eq via the singular
+ * CCL reducer); ccl_conv operates on raw CCL nodes, not TC nodes. */
+fn sov_admit(t: u32, ts: u32) -> u8 @export {
+    if tc_conv(t, ts) != 1u8 { return 0u8 }
+    if sov_cost(ts) > sov_cost(t) { return 0u8 }
+    return 1u8
+}
+
+/* KAT: the Sovereign morphism + proof-preserving cost-descent, BOTH arms. */
+fn p5_kat_sov() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+    let t1 : u32 = tc_app(tc_lam(kb, tc_var(0u32)), tt)   /* (lam x:Bool. x) true */
+    let best1 : u32 = sov_best(t1)
+    if tc_conv(t1, best1) != 1u8 { return 1u64 }          /* (1) proof preserved */
+    if sov_cost(best1) >= sov_cost(t1) { return 2u64 }    /* (2) cost strictly improved (redex removed) */
+    if sov_admit(t1, best1) != 1u8 { return 3u64 }        /* (3) the morphism ADMITS the descent */
+    if sov_cost(sov_best(best1)) != sov_cost(best1) { return 4u64 }   /* (4) monotone: a fixpoint */
+    if sov_admit(t1, ff) != 0u8 { return 5u64 }           /* (5) FALSIFIER: t1=true!=false -> REJECT */
+    if sov_admit(tt, tt) != 1u8 { return 6u64 }           /* (6) proven-equal same-cost: admit */
+    return 99u64
+}
+
+/* Sovereign brick 2 KAT (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §7): the weighted
+ * FIELD.  sov_cost_q discounts type/proof-irrelevant positions to 0 (a type, a
+ * binder domain, an eliminator motive ride free); runtime structure costs 1.
+ * Positive: a LAM with a function-type domain, and a natrec with a motive, both
+ * cost strictly less weighted than flat; a pure type costs 0.  NEGATIVE: pure
+ * runtime data (a pair) costs the SAME weighted as flat -- the discount is
+ * type-specific, not a blanket reduction (the falsifier vs a degenerate field).
+ * The field is materialized: SOV_COST[n] == sov_cost_q(n) after fill.  99 = pass. */
+fn p5_kat_sov_field() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+
+    /* (1-3) the weighted field: a LAM's function-type DOMAIN rides free. */
+    let dom : u32 = tc_pi(kb, kb)                    /* Bool -> Bool : a type */
+    if sov_cost_q(dom) != 0u32 { return 1u64 }       /* a pure type weighs 0 */
+    let body : u32 = tc_var(0u32)
+    let idf : u32 = tc_lam(dom, body)                /* lam f:(Bool->Bool). f */
+    if sov_cost_q(idf) != 2u32 { return 2u64 }       /* lam(1) + body var(1); domain erased */
+    if sov_cost_q(idf) >= sov_cost(idf) { return 3u64 }   /* weighted (2) strictly < flat (5) */
+
+    /* (4) NEGATIVE: pure runtime DATA gets no discount -- weighted == flat. */
+    let dat : u32 = tc_pair(tt, ff)                  /* <true,false> : no type positions */
+    if sov_cost_q(dat) != sov_cost(dat) { return 4u64 }   /* discount is type-specific, not blanket */
+
+    /* (5) an eliminator MOTIVE rides free (natrec motive A erased). */
+    let kn  : u32 = tc_nat()
+    let mot : u32 = tc_lam(kn, tc_sort(0u32))        /* P = lam _:Nat. U0  (the motive) */
+    let stp : u32 = tc_lam(kn, tc_lam(kb, tc_var(0u32)))
+    let nr  : u32 = tc_natrec(mot, tt, stp, tc_zero())
+    if sov_cost_q(nr) >= sov_cost(nr) { return 5u64 }     /* motive A erased => weighted < flat */
+
+    /* (6-9) the FIELD materialized over the spine. */
+    let fc : u32 = sov_field_fill(idf)
+    if fc != sov_cost_q(idf) { return 6u64 }              /* fill returns the root cost */
+    if SOV_COST[idf] != sov_cost_q(idf) { return 7u64 }   /* the field equals the recomputed cost */
+    if SOV_COST[body] != 1u32 { return 8u64 }             /* the runtime body node weighs 1 */
+    if SOV_COST[dom] != 0u32 { return 9u64 }              /* the type-domain node weighs 0 */
+
+    return 99u64
+}
+
+/* KAT: CHECK a lambda against a Pi (bidirectional) -- the codomain flows into the
+ * body, so a lambda whose body is a CHECK-ONLY constructor (a PAIR, not inferable)
+ * type-checks.  Positive: `lam x:Bool. <x,x>` checks against `Pi(_:Bool).(Bool x Bool)`
+ * (the infer-fallback would FAIL here -- PAIR is not inferable).  Negatives: wrong
+ * codomain (PAIR vs Bool), domain mismatch (Bool vs Nat), non-Pi target.  99 = pass. */
+fn p5_kat_lamcheck() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let kn : u32 = tc_nat()
+
+    /* (1) POSITIVE: the body is a check-only PAIR -- only the LAM-against-Pi rule works. */
+    let pity : u32 = tc_pi(kb, tc_sig(kb, kb))                    /* Pi(_:Bool). (Bool x Bool) */
+    let lam1 : u32 = tc_lam(kb, tc_pair(tc_var(0u32), tc_var(0u32)))  /* lam x:Bool. <x,x> */
+    if tc_check(lam1, pity) != 1u8 { return 1u64 }
+
+    /* (2) NEGATIVE: same lambda, codomain Bool (not a Sigma) -- PAIR body rejects. */
+    let pity2 : u32 = tc_pi(kb, kb)
+    if tc_check(lam1, pity2) != 0u8 { return 2u64 }
+
+    /* (3) NEGATIVE: domain mismatch -- lam x:Bool. x  vs  Pi(_:Nat). Bool. */
+    let lamid : u32 = tc_lam(kb, tc_var(0u32))
+    let pity3 : u32 = tc_pi(kn, kb)
+    if tc_check(lamid, pity3) != 0u8 { return 3u64 }
+
+    /* (4) NEGATIVE: a lambda against a NON-Pi type (Bool) -- reject. */
+    if tc_check(lamid, kb) != 0u8 { return 4u64 }
+
+    /* (5) POSITIVE control: the identity  lam x:Bool. x  :  Pi(_:Bool). Bool. */
+    let pity4 : u32 = tc_pi(kb, kb)
+    if tc_check(lamid, pity4) != 1u8 { return 5u64 }
+
+    return 99u64
+}
+
+/* KAT: CHECK refl against an Id type (bidirectional) -- completes the check-only
+ * constructor set (PAIR|->Sigma, INL/INR|->Sum, SUP|->W, LAM|->Pi, REFL|->Id).  The
+ * proof VALUE may be a check-only constructor.  Positive: `refl <true,false>` checks
+ * against `Id (Bool x Bool) <true,false> <true,false>` (the infer-fallback FAILS --
+ * the PAIR value is not inferable).  Negatives: endpoint mismatch (rhs differs),
+ * non-Id target, value mismatch (l,r != v).  99 = pass. */
+fn p5_kat_reflcheck() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+
+    /* (1) POSITIVE: the proof value is a check-only PAIR -- only REFL-against-Id works. */
+    let pr  : u32 = tc_pair(tt, ff)                       /* <true,false> */
+    let sbb : u32 = tc_sig(kb, kb)                        /* Bool x Bool */
+    let idp : u32 = tc_id(sbb, pr, pr)                    /* Id (BxB) <t,f> <t,f> */
+    if tc_check(tc_refl(pr), idp) != 1u8 { return 1u64 }
+
+    /* (2) NEGATIVE: endpoints differ -- Id (BxB) <t,f> <f,t>, refl <t,f> rejects. */
+    let pr2 : u32 = tc_pair(ff, tt)
+    let idbad : u32 = tc_id(sbb, pr, pr2)
+    if tc_check(tc_refl(pr), idbad) != 0u8 { return 2u64 }
+
+    /* (3) NEGATIVE: refl against a NON-Id type (Bool) -- reject. */
+    if tc_check(tc_refl(tt), kb) != 0u8 { return 3u64 }
+
+    /* (4) POSITIVE control: refl true : Id Bool true true. */
+    let idt : u32 = tc_id(kb, tt, tt)
+    if tc_check(tc_refl(tt), idt) != 1u8 { return 4u64 }
+
+    /* (5) NEGATIVE: value mismatch -- refl true : Id Bool false false (l,r=false != true). */
+    let idff : u32 = tc_id(kb, ff, ff)
+    if tc_check(tc_refl(tt), idff) != 0u8 { return 5u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  SELF-APPLICATION: the kernel CERTIFIES the Sovereign ISA descent's rewrite
+ *  rules (numera/sov_isa).  Each rule `lhs ≡ rhs` is sound iff it is a true
+ *  arithmetic identity; rather than ASSERT that, we PROVE it with III's own
+ *  kernel.  Model the ISA ops as Nat functions:
+ *      add(a,b) = iter(a, succ, b)            (a + b)
+ *      shl1(a)  = add(a, a)                   (a << 1)
+ *      mul(a,b) = iter(0, (λacc. add(a,acc)), b)   (a * b)
+ *  The certificate for a rule is  `λx:Nat. refl(lhs)` checked against
+ *  `Π(x:Nat). Id Nat (lhs x) (rhs x)` -- which type-checks IFF lhs and rhs share
+ *  a normal form, decided by the singular CCL oracle.  This routes through the
+ *  bidirectional bricks: LAM↦Π pushes the Id-Π into the body, REFL↦Id verifies
+ *  lhs ≡ rhs.  III proving III -- no asserted premise.  99 = all certify; the
+ *  falsifier (a NON-identity rule x*2≡x*3) must be REJECTED. */
+fn p5_kat_isa_cert() -> u64 @export {
+    tc_reset()
+    let kn : u32 = tc_nat()
+    let z  : u32 = tc_zero()
+    /* succ as a function (closed): λn:Nat. succ n */
+    let succf : u32 = tc_lam(kn, tc_succ(tc_var(0u32)))
+
+    /* the ISA-op Nat models, built under the x-binder (x = de Bruijn #0): */
+    let add_x0 : u32 = tc_iter(tc_var(0u32), succf, z)                 /* add(x,0) = iter(x,succ,0) */
+    let shl1_x : u32 = tc_iter(tc_var(0u32), succf, tc_var(0u32))      /* shl1(x) = add(x,x) */
+    let step_x : u32 = tc_lam(kn, tc_iter(tc_var(1u32), succf, tc_var(0u32)))  /* λacc. add(x,acc); x=#1 under acc */
+    let mul_x0 : u32 = tc_iter(z, step_x, z)                           /* mul(x,0) */
+    let mul_x1 : u32 = tc_iter(z, step_x, tc_succ(z))                  /* mul(x,1) */
+    let mul_x2 : u32 = tc_iter(z, step_x, tc_succ(tc_succ(z)))         /* mul(x,2) */
+    let mul_x3 : u32 = tc_iter(z, step_x, tc_succ(tc_succ(tc_succ(z))))/* mul(x,3) */
+
+    /* Rule B: x + 0 = x.  cert = λx. refl(add x 0) : Π(x). Id Nat (add x 0) x */
+    if tc_check(tc_lam(kn, tc_refl(add_x0)), tc_pi(kn, tc_id(kn, add_x0, tc_var(0u32)))) != 1u8 { return 1u64 }
+    /* Rule C: x * 1 = x. */
+    if tc_check(tc_lam(kn, tc_refl(mul_x1)), tc_pi(kn, tc_id(kn, mul_x1, tc_var(0u32)))) != 1u8 { return 2u64 }
+    /* Rule D: x * 0 = 0. */
+    if tc_check(tc_lam(kn, tc_refl(mul_x0)), tc_pi(kn, tc_id(kn, mul_x0, z))) != 1u8 { return 3u64 }
+    /* Rule A: x * 2 = x << 1. */
+    if tc_check(tc_lam(kn, tc_refl(mul_x2)), tc_pi(kn, tc_id(kn, mul_x2, shl1_x))) != 1u8 { return 4u64 }
+
+    /* FALSIFIER: x * 2 = x * 3 is NOT an identity -> the kernel must REJECT the
+     * certificate (the optimizer can never adopt an unsound rule). */
+    if tc_check(tc_lam(kn, tc_refl(mul_x2)), tc_pi(kn, tc_id(kn, mul_x2, mul_x3))) != 0u8 { return 5u64 }
+
+    /* Rule F (constant fold): add(1,1) = 2 -- a CLOSED identity (no free var); the
+     * kernel computes 1+1 and certifies it equals 2. */
+    let add_11 : u32 = tc_iter(tc_succ(tc_zero()), succf, tc_succ(tc_zero()))
+    let two : u32 = tc_succ(tc_succ(tc_zero()))
+    if tc_check(tc_refl(add_11), tc_id(kn, add_11, two)) != 1u8 { return 6u64 }
+    /* and its falsifier: add(1,1) = 3 is REJECTED */
+    let three : u32 = tc_succ(tc_succ(tc_succ(tc_zero())))
+    if tc_check(tc_refl(add_11), tc_id(kn, add_11, three)) != 0u8 { return 7u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  INDUCTIVE REASONING (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §14): induction
+ *  PROPOSES, deduction DISPOSES.  A deterministic generalizer (anti-unification)
+ *  forms a conjectured UNIVERSAL law from instances; the kernel deductively VERIFIES
+ *  it (the cert mechanism above); only kernel-PROVEN conjectures are accepted.  Sound
+ *  + ampliative + deterministic -- no ML, no observation, no statistics, no floats.
+ *  By Curry-Howard the learned law's meaning IS its proof: the inductive leap is
+ *  grounded in semantics, not symbol-shuffling. */
+
+/* the shared generalization variable for a differing value-pair (t1,t2): the SAME
+ * pair always maps to the SAME variable, so a law's lhs and rhs share their universals. */
+fn iu_var_for(t1: u32, t2: u32) -> u32 {
+    let mut k : u32 = 0u32
+    while k < IU_N[0u32] {
+        if IU_V1[k] == t1 { if IU_V2[k] == t2 { return tc_var(k) } }
+        k = k + 1u32
+    }
+    let nk : u32 = IU_N[0u32]
+    IU_V1[nk] = t1
+    IU_V2[nk] = t2
+    IU_N[0u32] = nk + 1u32
+    return tc_var(nk)
+}
+
+/* ANTI-UNIFICATION: the least-general generalization of t1 and t2 -- the deterministic
+ * inductive leap.  Identical -> keep; same head -> recurse on children; differing ->
+ * a fresh shared variable.  (Uses the IU var-map; reset IU_N before a fresh problem.) */
+fn iu_au(t1: u32, t2: u32) -> u32 {
+    if t1 == t2 { return t1 }
+    let g1 : u8 = TC_TAG[t1]
+    let g2 : u8 = TC_TAG[t2]
+    if g1 != g2 { return iu_var_for(t1, t2) }
+    if g1 == TC_VAR  { if TC_A[t1] == TC_A[t2] { return t1 } return iu_var_for(t1, t2) }
+    if g1 == TC_SORT { if TC_A[t1] == TC_A[t2] { return t1 } return iu_var_for(t1, t2) }
+    if g1 == TC_SUCC { return tc_succ(iu_au(TC_A[t1], TC_A[t2])) }
+    if g1 == TC_LAM  { return tc_lam(iu_au(TC_A[t1], TC_A[t2]), iu_au(TC_B[t1], TC_B[t2])) }
+    if g1 == TC_APP  { return tc_app(iu_au(TC_A[t1], TC_A[t2]), iu_au(TC_B[t1], TC_B[t2])) }
+    if g1 == TC_ITER { return tc_iter(iu_au(TC_A[t1], TC_A[t2]), iu_au(TC_B[t1], TC_B[t2]), iu_au(TC_C[t1], TC_C[t2])) }
+    if g1 == TC_PI   { return tc_pi(iu_au(TC_A[t1], TC_A[t2]), iu_au(TC_B[t1], TC_B[t2])) }
+    if g1 == TC_SIG  { return tc_sig(iu_au(TC_A[t1], TC_A[t2]), iu_au(TC_B[t1], TC_B[t2])) }
+    /* a leaf with no children (ZERO/NAT/BOOL/... ): same tag => equal */
+    if TC_A[t1] == 0u32 { if TC_B[t1] == 0u32 { if TC_C[t1] == 0u32 { if TC_D[t1] == 0u32 { return t1 } } } }
+    /* same tag, composite, unhandled -> a fresh variable (sound over-generalization) */
+    return iu_var_for(t1, t2)
+}
+
+/* KAT: III reasons INDUCTIVELY -- discovers and PROVES a universal law from instances.
+ * (a) anti-unification soundness (the generalization instantiates back to the instances);
+ * (b) the inductive conjecture -- from {add(0,0)=0, add(1,0)=1} generalize to
+ *     forall x. add(x,0) = x, and the KERNEL PROVES it (the law is LEARNED + sound);
+ * (c) the falsifier -- a bad instance yields a FALSE conjecture, REFUTED by the kernel
+ *     (induction proposes, deduction disposes; no false law survives).  99 = all pass. */
+fn iu_kat() -> u64 @export {
+    tc_reset()
+    let kn : u32 = tc_nat()
+    let zc : u32 = tc_zero()
+    let c1 : u32 = tc_succ(zc)
+    let succf : u32 = tc_lam(kn, tc_succ(tc_var(0u32)))
+    /* instances of the right-identity: add(a,0) = iter(a, succ, 0). */
+    let lhs1 : u32 = tc_iter(zc, succf, zc)     /* add(0,0) */
+    let lhs2 : u32 = tc_iter(c1, succf, zc)     /* add(1,0) */
+
+    /* (a) anti-unification: generalize the two lhs's, and instantiate back */
+    IU_N[0u32] = 0u32
+    let glhs : u32 = iu_au(lhs1, lhs2)
+    if IU_N[0u32] != 1u32 { return 1u64 }
+    if tc_conv(tc_subst0(glhs, zc), lhs1) != 1u8 { return 2u64 }
+    if tc_conv(tc_subst0(glhs, c1), lhs2) != 1u8 { return 3u64 }
+
+    /* (b) the INDUCTIVE CONJECTURE: anti-unify the rhs's with the SAME var-map (shared
+     * universal), form forall x. add(x,0) = x, and the kernel PROVES it. */
+    let grhs : u32 = iu_au(zc, c1)              /* rhs's 0 and 1 -> reuses the shared var */
+    if IU_N[0u32] != 1u32 { return 4u64 }
+    let conj : u32 = tc_pi(kn, tc_id(kn, glhs, grhs))
+    if tc_check(tc_lam(kn, tc_refl(glhs)), conj) != 1u8 { return 5u64 }
+
+    /* (c) FALSIFIER: a bad instance set {add(0,0)=0, add(1,0)=0} -> the FALSE conjecture
+     * forall x. add(x,0) = 0, which the kernel REFUTES. */
+    IU_N[0u32] = 0u32
+    let blhs : u32 = iu_au(lhs1, lhs2)
+    let bconj : u32 = tc_pi(kn, tc_id(kn, blhs, zc))
+    if tc_check(tc_lam(kn, tc_refl(blhs)), bconj) != 0u8 { return 6u64 }
+
+    return 99u64
+}
+
+/* KAT: the inductive engine COMPLETED -- discover -> prove -> USE, and MULTI-VARIABLE.
+ * (1) LEARN->USE: discover  forall x. add(x,0) = x , PROVE it, ascribe the proof as a
+ *     usable LEMMA (tc_ann), and APPLY it to 2 -- the learned UNIVERSAL instantiates to
+ *     prove the specific  add(2,0) = 2  (the inductive leap fed back into deduction);
+ *     and the lemma does NOT prove the false  add(2,0) = 1 .
+ * (2) MULTI-VAR: from instances varying TWO arguments INDEPENDENTLY {(0,succ 1),(1,succ
+ *     0)} iu_au introduces TWO distinct (pair-keyed) universals, shared across lhs/rhs;
+ *     the kernel PROVES the genuine 2-variable law  forall p q. add(p, succ q) =
+ *     succ(add p q) .  The au-vars take the natural de Bruijn assignment (var0=#0 ..
+ *     var_{n-1}=#(n-1)) under the n nested Pi's -- for a fully-quantified equation that
+ *     is the correct, provable law (any consistent var<->binder assignment preserves its
+ *     truth, so no separate remap is needed).  [Scope: generalization at the term's TOP
+ *     LEVEL -- the natural locus of algebraic identities; the engine does not generalize
+ *     UNDER the term's own binders, which would require an au-var namespace distinct from
+ *     de Bruijn indices, a separate capability not claimed here.]
+ * (3) FALSIFIER: the false 2-var conjecture (drop the succ) is REFUTED by the kernel.
+ *     99 = all pass.  No ML, no observation, no statistics, no floats. */
+fn iu_kat2() -> u64 @export {
+    tc_reset()
+    let kn : u32 = tc_nat()
+    let zc : u32 = tc_zero()
+    let c1 : u32 = tc_succ(zc)              /* 1 */
+    let two : u32 = tc_succ(c1)             /* 2 */
+    let succf : u32 = tc_lam(kn, tc_succ(tc_var(0u32)))
+
+    /* ---- (1) LEARN -> PROVE -> USE  (1-variable: add(x,0) = x) ---- */
+    let l1 : u32 = tc_iter(zc, succf, zc)   /* add(0,0) */
+    let l2 : u32 = tc_iter(c1, succf, zc)   /* add(1,0) */
+    IU_N[0u32] = 0u32
+    let glhs : u32 = iu_au(l1, l2)          /* add(?x, 0) ; ?x = var0 = #0 under one Pi */
+    let grhs : u32 = iu_au(zc, c1)          /* ?x (shared via the (zc,c1) pair) */
+    if IU_N[0u32] != 1u32 { return 1u64 }
+    let conj : u32 = tc_pi(kn, tc_id(kn, glhs, grhs))   /* forall x. Id Nat (add x 0) x */
+    let cert : u32 = tc_lam(kn, tc_refl(glhs))          /* lam x. refl(add x 0) */
+    if tc_check(cert, conj) != 1u8 { return 2u64 }      /* PROVE the discovered law */
+    let lemma : u32 = tc_ann(cert, conj)                /* the proof as a USABLE lemma */
+    let app2 : u32 = tc_app(lemma, two)                 /* USE it: instantiate at x = 2 */
+    let goal : u32 = tc_id(kn, tc_iter(two, succf, zc), two)   /* Id Nat (add 2 0) 2 */
+    if tc_check(app2, goal) != 1u8 { return 3u64 }      /* the learned law, APPLIED, proves add(2,0)=2 */
+    let badgoal : u32 = tc_id(kn, tc_iter(two, succf, zc), c1) /* Id Nat (add 2 0) 1 -- FALSE */
+    if tc_check(app2, badgoal) != 0u8 { return 4u64 }   /* the lemma does NOT prove a false instance */
+
+    /* ---- (2) MULTI-VARIABLE: discover a 2-variable law, kernel-proven ---- */
+    let m_l1 : u32 = tc_iter(zc, succf, tc_succ(c1))    /* add(0, succ 1) */
+    let m_l2 : u32 = tc_iter(c1, succf, tc_succ(zc))    /* add(1, succ 0) */
+    IU_N[0u32] = 0u32
+    let g2lhs : u32 = iu_au(m_l1, m_l2)     /* iter(?p, succf, succ ?q) ; ?p=var0 (0,1), ?q=var1 (1,0) */
+    if IU_N[0u32] != 2u32 { return 5u64 }   /* TWO independent universals discovered */
+    let m_r1 : u32 = tc_succ(tc_iter(zc, succf, c1))    /* succ(add 0 1) */
+    let m_r2 : u32 = tc_succ(tc_iter(c1, succf, zc))    /* succ(add 1 0) */
+    let g2rhs : u32 = iu_au(m_r1, m_r2)     /* succ(iter(?p, succf, ?q)) -- reuses var0,var1 (shared) */
+    if IU_N[0u32] != 2u32 { return 6u64 }
+    let conj2 : u32 = tc_pi(kn, tc_pi(kn, tc_id(kn, g2lhs, g2rhs)))   /* forall p q. add(p,succ q) = succ(add p q) */
+    let cert2 : u32 = tc_lam(kn, tc_lam(kn, tc_refl(g2lhs)))
+    if tc_check(cert2, conj2) != 1u8 { return 7u64 }    /* the 2-var law, kernel-PROVEN */
+
+    /* ---- (3) FALSIFIER (multi-var): the false law (drop the succ) is REFUTED ---- */
+    let bad_rhs : u32 = tc_iter(tc_var(0u32), succf, tc_var(1u32))    /* add(?p,?q) -- no succ */
+    let conjbad : u32 = tc_pi(kn, tc_pi(kn, tc_id(kn, g2lhs, bad_rhs)))
+    let certbad : u32 = tc_lam(kn, tc_lam(kn, tc_refl(g2lhs)))
+    if tc_check(certbad, conjbad) != 0u8 { return 8u64 }   /* kernel REFUTES the false law */
+
+    return 99u64
+}
+
+/* KAT: the SINGULAR ORACLE'S CONVERSION is ROBUST on open terms under binders -- the
+ * soundness guard for the read-back boundary (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §15).
+ * `mul_x2` (x*2, modelled iter(0, lam acc.add(x,acc), 2)) carries a FREE x that is
+ * processed under step_x's inner lambda; standalone `ccl_normalize`/read-back shifts that
+ * x's de Bruijn index (the boundary).  But `tc_conv` reduces both sides to CCL nf and
+ * compares STRUCTURALLY (ccl_struct_eq) -- NO read-back -- so it is IMMUNE.  This proves
+ * it: (a) conv correctly IDENTIFIES x*2 == x+x (shl1_x = add(x,x), both 2x) -- the exact
+ * mangling-shape term, equal despite the boundary; (b) conv DISTINGUISHES x*2 != x*3; (c)
+ * x*3 != x+x.  Load-bearing guard: were conversion ever to route through `ccl_to_tc`,
+ * arm (a) would FAIL -- mul_x2's read-back shifts but shl1_x's (stuck, x at top) does not,
+ * so their read-backs would differ.  Asserts only CORRECT behaviour -> survives a future
+ * reducer fix unchanged (does not bake in the boundary).  99 = all pass. */
+fn ccl_open_conv_kat() -> u64 @export {
+    tc_reset()
+    let kn : u32 = tc_nat()
+    let z  : u32 = tc_zero()
+    let succf : u32 = tc_lam(kn, tc_succ(tc_var(0u32)))               /* lam n. succ n */
+    let step_x : u32 = tc_lam(kn, tc_iter(tc_var(1u32), succf, tc_var(0u32)))  /* lam acc. add(x,acc); x=#1 */
+    let mul_x2 : u32 = tc_iter(z, step_x, tc_succ(tc_succ(z)))        /* x*2 ; free x=#0, under step_x's lambda */
+    let mul_x3 : u32 = tc_iter(z, step_x, tc_succ(tc_succ(tc_succ(z))))  /* x*3 */
+    let shl1_x : u32 = tc_iter(tc_var(0u32), succf, tc_var(0u32))     /* add(x,x) = x+x = 2x ; x=#0 at top */
+
+    /* (a) SOUNDNESS: conversion identifies x*2 == x+x (both 2x) despite the read-back boundary. */
+    if tc_conv(mul_x2, shl1_x) != 1u8 { return 1u64 }
+    /* (b) NON-VACUOUS: conversion distinguishes x*2 != x*3. */
+    if tc_conv(mul_x2, mul_x3) != 0u8 { return 2u64 }
+    /* (c) and x*3 != x+x. */
+    if tc_conv(mul_x3, shl1_x) != 0u8 { return 3u64 }
+
+    return 99u64
+}

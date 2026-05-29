@@ -1,0 +1,24 @@
+/* 895_dead_branch.iii -- functional gate for DEAD-BRANCH ELIMINATION in cg_r3.  Each constant-
+ * condition IF must statically take the correct arm: a const-true flag, a const-false flag, a
+ * const-vs-const comparison (with and without an else).  Runtime-condition IFs must be UNAFFECTED.
+ * `acc` threads the arm choices so a wrong arm changes the value; rt() proves runtime IFs still
+ * branch at runtime (their condition is a parameter, not a constant -> not eliminated).
+ * 99 = every constant arm chosen correctly AND runtime branching intact. */
+module corpus_895
+
+const ON  : u32 = 1u32
+const OFF : u32 = 0u32
+
+fn rt(x: u64) -> u64 { if x > 0u64 { return 7u64 } return 8u64 }
+
+fn main() -> u64 {
+    let mut acc : u64 = 0u64
+    if ON  { acc = acc + 1u64 } else { acc = acc + 100u64 }          /* const-true  -> +1 */
+    if OFF { acc = acc + 100u64 } else { acc = acc + 2u64 }          /* const-false -> +2 */
+    if 5u64 > 3u64 { acc = acc + 4u64 } else { acc = acc + 100u64 }  /* const-cmp true -> +4 */
+    if 2u64 == 9u64 { acc = acc + 100u64 }                           /* const-cmp false, no else -> +0 */
+    if rt(1u64) != 7u64 { return 1u64 }                              /* runtime IF still branches */
+    if rt(0u64) != 8u64 { return 2u64 }
+    if acc != 7u64 { return 3u64 }                                   /* 1 + 2 + 4 = 7 */
+    return 99u64
+}

@@ -1,0 +1,16 @@
+/* W-types stage 2 (DOCS/III-WTYPES-DESIGN.md): the W-RECURSOR (transfinite
+ * induction) -- the kernel's only HIGHER-ORDER eliminator (its induction
+ * hypothesis is a function over the children, not a single recursive call).
+ * p5_kat_wrec() proves the higher-order ι-rule fires + builds the Cur-IH +
+ * reduces: on a LEAF (W(Unit,Empty)) and on a NODE-WITH-CHILD (`one` in the
+ * Nat-as-W type, which also exercises the arity B^1 de-Bruijn shift via the
+ * IH-domain match), + reject negatives (non-W scrutinee; non-function step).
+ * Compiled to the singular CCL oracle (W=atom 2068, sup=CCL_SUP, wrec=CCL_WREC;
+ * the ι builds Cur(WREC (P∘Fst)(s∘Fst)((f∘Fst)·Snd))).  99 = all pass. */
+module corpus_c869
+
+extern @abi(c-msvc-x64) fn p5_kat_wrec() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_wrec()
+}

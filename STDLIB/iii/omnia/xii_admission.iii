@@ -46,8 +46,10 @@ const XAD_ADMIT  : u32 = 1u32
 const XAD_REJECT : u32 = 0u32
 
 /* The pure admission decision: ADMIT iff confluent-on-the-reorderable-set AND terminating.
- * Kept as a separate total function so the prove-the-negative arm can exercise it directly. */
-fn xad_decide(root_confluent: u32, terminating: u32) -> u32 {
+ * Kept as a separate total function so the prove-the-negative arm can exercise it directly --
+ * and EXPORTED so the operational decision composes with III's KERNEL semantic-soundness gate
+ * (numera/sov_isa sov_admit_rule): admission alone checks operation, not meaning. */
+fn xad_decide(root_confluent: u32, terminating: u32) -> u32 @export {
     if root_confluent != 1u32 { return XAD_REJECT }
     if terminating != 1u32 { return XAD_REJECT }
     return XAD_ADMIT

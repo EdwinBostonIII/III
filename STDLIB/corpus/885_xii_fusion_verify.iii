@@ -1,0 +1,18 @@
+/* 885_xii_fusion_verify.iii -- the verification missile's SECOND strike, on III's REAL rules.
+ *
+ * 884 fired the semantic-soundness gate at XII's live TRIT rules; its header named the next
+ * target: the fusion/identity-null rules.  This drives III's LIVE optimizer (xii_canonicalise
+ * + xii_rewrite's actual R016/R017/R021/R022) over the identity-null family and verifies each
+ * against the INDEPENDENT monoid-identity authority (K06_NULL/K12_NULL is the identity of
+ * F.COMPOSE/F.THEN, so composing with it yields the OTHER operand) -- judged against the law,
+ * NOT against the rule's body, so a wrong-child rewrite turns this red though a rule "fired".
+ * Teeth: a non-null pair does NOT collapse (the guard requires a null), and apply_one
+ * identifies R016 specifically (id 16).  The semantic-soundness gate (Sovereign Calculus S16)
+ * on XII's live fusion rules.  99 = the four identity rewrites are meaning-preserving + teeth. */
+module corpus_885
+
+extern @abi(c-msvc-x64) fn xfv_verify() -> u64 from "xii_fusion_verify.iii"
+
+fn main() -> u64 {
+    return xfv_verify()
+}

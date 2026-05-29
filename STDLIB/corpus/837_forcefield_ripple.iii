@@ -1,0 +1,228 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\ripple_kat.iii
+ *
+ * Conformance KAT for the ripple network core.  STANDALONE - links against
+ * ripple.iii + the mhash/cad/sha256 chain in libiii_native.a.
+ *
+ * Proves every defining property, positive AND negative:
+ *   A  publish/resolve round-trip + content-address dedup
+ *   B  absent address -> GAP
+ *   C  tamper a stored byte -> GAP            (NEGATIVE: content invariant fires)
+ *   D  ripple recompute reaches a fixpoint; root cell value is stored; re-ripple
+ *      is idempotent (determinism)
+ *   E  changing a source ripples to the root AND to its dependents, but NOT to
+ *      an independent branch                  (NEGATIVE: locality / confinement)
+ *   F  monotone merge = set-union, idempotent, order-independent; overlaps agree
+ *      and content-addresses are store-independent
+ *
+ * Exit 99 = all arms pass.  10..29 localize the first failure.
+ */
+
+module corpus_ripple
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_count(meta: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cell_addr: *u8, in_off: *u8, in_cnt: *u8, in_list: *u8, scratch: *u8, newaddr: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_graph_root(ncells: u64, cell_addr: *u8, out: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_merge(dmeta: *u8, dslots: *u8, darena: *u8, smeta: *u8, sslots: *u8, sarena: *u8, tmpaddr: *u8) -> u64 from "ripple.iii"
+
+const RN_GAP : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn kfill(buf: *u8, off: u64, n: u64, seed: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        buf[off + k] = ((seed + k) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn keqn(a: *u8, ao: u64, b: *u8, bo: u64, n: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < n {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+
+fn kst_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn kcopy(d: *u8, doff: u64, s: *u8, soff: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        d[doff + k] = s[soff + k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let cap : u64 = 64u64
+    let acap : u64 = 65536u64
+
+    let meta0 : *u8 = malloc(32u64)
+    let slots0 : *u8 = malloc(cap * 64u64)
+    let arena0 : *u8 = malloc(acap)
+    let meta1 : *u8 = malloc(32u64)
+    let slots1 : *u8 = malloc(cap * 64u64)
+    let arena1 : *u8 = malloc(acap)
+    let meta2 : *u8 = malloc(32u64)
+    let slots2 : *u8 = malloc(cap * 64u64)
+    let arena2 : *u8 = malloc(acap)
+    let metaA : *u8 = malloc(32u64)
+    let slotsA : *u8 = malloc(cap * 64u64)
+    let arenaA : *u8 = malloc(acap)
+    let metaB : *u8 = malloc(32u64)
+    let slotsB : *u8 = malloc(cap * 64u64)
+    let arenaB : *u8 = malloc(acap)
+    let metaC : *u8 = malloc(32u64)
+    let slotsC : *u8 = malloc(cap * 64u64)
+    let arenaC : *u8 = malloc(acap)
+
+    let vb : *u8 = malloc(64u64)
+    let out : *u8 = malloc(256u64)
+    let vbuf : *u8 = malloc(32u64)
+    let addr0 : *u8 = malloc(32u64)
+    let addrX : *u8 = malloc(32u64)
+    let addrT : *u8 = malloc(32u64)
+    let addrV1 : *u8 = malloc(32u64)
+    let tmpaddr : *u8 = malloc(32u64)
+    let rootbuf1 : *u8 = malloc(32u64)
+    let rootbuf2 : *u8 = malloc(32u64)
+    let rootbuf3 : *u8 = malloc(32u64)
+    let save3 : *u8 = malloc(32u64)
+    let save5 : *u8 = malloc(32u64)
+
+    let cell_kind : *u8 = malloc(6u64)
+    let cell_addr : *u8 = malloc(192u64)
+    let in_off : *u8 = malloc(48u64)
+    let in_cnt : *u8 = malloc(48u64)
+    let in_list : *u8 = malloc(40u64)
+    let gscratch : *u8 = malloc(128u64)
+    let newaddr : *u8 = malloc(32u64)
+
+    /* ---------- A: round-trip + dedup ---------- */
+    rn_store_init(meta0, slots0, cap, acap)
+    kfill(vb, 0u64, 40u64, 7u64)
+    rn_publish(meta0, slots0, arena0, vb, 0u64, 40u64, addr0, 0u64)
+    let la : u64 = rn_resolve(meta0, slots0, arena0, addr0, 0u64, out, 0u64, 64u64, vbuf)
+    if la != 40u64 { return 10u64 }
+    if keqn(out, 0u64, vb, 0u64, 40u64) == 0u8 { return 11u64 }
+    if rn_count(meta0) != 1u64 { return 12u64 }
+    kfill(vb, 0u64, 40u64, 7u64)
+    rn_publish(meta0, slots0, arena0, vb, 0u64, 40u64, addr0, 0u64)
+    if rn_count(meta0) != 1u64 { return 13u64 }
+
+    /* ---------- B: absent -> GAP ---------- */
+    kfill(addrX, 0u64, 32u64, 171u64)
+    let g : u64 = rn_resolve(meta0, slots0, arena0, addrX, 0u64, out, 0u64, 64u64, vbuf)
+    if g != RN_GAP { return 14u64 }
+
+    /* ---------- C: tamper -> GAP (negative) ---------- */
+    rn_store_init(meta1, slots1, cap, acap)
+    kfill(vb, 0u64, 40u64, 7u64)
+    rn_publish(meta1, slots1, arena1, vb, 0u64, 40u64, addrT, 0u64)
+    let s0 : u64 = rn_resolve(meta1, slots1, arena1, addrT, 0u64, out, 0u64, 64u64, vbuf)
+    if s0 != 40u64 { return 15u64 }
+    arena1[0] = arena1[0] + 7u8
+    let s1 : u64 = rn_resolve(meta1, slots1, arena1, addrT, 0u64, out, 0u64, 64u64, vbuf)
+    if s1 != RN_GAP { return 16u64 }
+
+    /* ---------- D: ripple fixpoint + determinism ---------- */
+    rn_store_init(meta2, slots2, cap, acap)
+    cell_kind[0] = 0u8
+    cell_kind[1] = 0u8
+    cell_kind[2] = 0u8
+    cell_kind[3] = 1u8
+    cell_kind[4] = 1u8
+    cell_kind[5] = 1u8
+    kst_u64(in_off, 0u64, 0u64)
+    kst_u64(in_off, 8u64, 0u64)
+    kst_u64(in_off, 16u64, 0u64)
+    kst_u64(in_off, 24u64, 0u64)
+    kst_u64(in_off, 32u64, 2u64)
+    kst_u64(in_off, 40u64, 4u64)
+    kst_u64(in_cnt, 0u64, 0u64)
+    kst_u64(in_cnt, 8u64, 0u64)
+    kst_u64(in_cnt, 16u64, 0u64)
+    kst_u64(in_cnt, 24u64, 2u64)
+    kst_u64(in_cnt, 32u64, 2u64)
+    kst_u64(in_cnt, 40u64, 1u64)
+    kst_u64(in_list, 0u64, 0u64)
+    kst_u64(in_list, 8u64, 1u64)
+    kst_u64(in_list, 16u64, 3u64)
+    kst_u64(in_list, 24u64, 2u64)
+    kst_u64(in_list, 32u64, 2u64)
+    kfill(vb, 0u64, 16u64, 11u64)
+    rn_publish(meta2, slots2, arena2, vb, 0u64, 16u64, cell_addr, 0u64)
+    kfill(vb, 0u64, 16u64, 22u64)
+    rn_publish(meta2, slots2, arena2, vb, 0u64, 16u64, cell_addr, 32u64)
+    kfill(vb, 0u64, 16u64, 33u64)
+    rn_publish(meta2, slots2, arena2, vb, 0u64, 16u64, cell_addr, 64u64)
+    rn_ripple(meta2, slots2, arena2, 6u64, cell_kind, cell_addr, in_off, in_cnt, in_list, gscratch, newaddr)
+    let r4 : u64 = rn_resolve(meta2, slots2, arena2, cell_addr, 128u64, out, 0u64, 64u64, vbuf)
+    if r4 == RN_GAP { return 17u64 }
+    rn_graph_root(6u64, cell_addr, rootbuf1)
+    rn_ripple(meta2, slots2, arena2, 6u64, cell_kind, cell_addr, in_off, in_cnt, in_list, gscratch, newaddr)
+    rn_graph_root(6u64, cell_addr, rootbuf2)
+    if keqn(rootbuf1, 0u64, rootbuf2, 0u64, 32u64) == 0u8 { return 18u64 }
+
+    /* ---------- E: propagation + locality (negative) ---------- */
+    kcopy(save3, 0u64, cell_addr, 96u64, 32u64)
+    kcopy(save5, 0u64, cell_addr, 160u64, 32u64)
+    kfill(vb, 0u64, 16u64, 99u64)
+    rn_publish(meta2, slots2, arena2, vb, 0u64, 16u64, cell_addr, 32u64)
+    rn_ripple(meta2, slots2, arena2, 6u64, cell_kind, cell_addr, in_off, in_cnt, in_list, gscratch, newaddr)
+    rn_graph_root(6u64, cell_addr, rootbuf3)
+    if keqn(rootbuf3, 0u64, rootbuf1, 0u64, 32u64) == 1u8 { return 19u64 }
+    if keqn(cell_addr, 96u64, save3, 0u64, 32u64) == 1u8 { return 20u64 }
+    if keqn(cell_addr, 160u64, save5, 0u64, 32u64) == 0u8 { return 21u64 }
+
+    /* ---------- F: monotone merge ---------- */
+    rn_store_init(metaA, slotsA, cap, acap)
+    rn_store_init(metaB, slotsB, cap, acap)
+    kfill(vb, 0u64, 40u64, 7u64)
+    rn_publish(metaA, slotsA, arenaA, vb, 0u64, 40u64, tmpaddr, 0u64)
+    kfill(vb, 0u64, 40u64, 8u64)
+    rn_publish(metaA, slotsA, arenaA, vb, 0u64, 40u64, tmpaddr, 0u64)
+    kfill(vb, 0u64, 40u64, 8u64)
+    rn_publish(metaB, slotsB, arenaB, vb, 0u64, 40u64, addrV1, 0u64)
+    kfill(vb, 0u64, 40u64, 9u64)
+    rn_publish(metaB, slotsB, arenaB, vb, 0u64, 40u64, tmpaddr, 0u64)
+    if rn_count(metaA) != 2u64 { return 22u64 }
+    if rn_count(metaB) != 2u64 { return 23u64 }
+    rn_merge(metaA, slotsA, arenaA, metaB, slotsB, arenaB, tmpaddr)
+    if rn_count(metaA) != 3u64 { return 24u64 }
+    rn_merge(metaA, slotsA, arenaA, metaB, slotsB, arenaB, tmpaddr)
+    if rn_count(metaA) != 3u64 { return 25u64 }
+    let lv : u64 = rn_resolve(metaA, slotsA, arenaA, addrV1, 0u64, out, 0u64, 64u64, vbuf)
+    if lv != 40u64 { return 26u64 }
+    kfill(vb, 0u64, 40u64, 8u64)
+    if keqn(out, 0u64, vb, 0u64, 40u64) == 0u8 { return 27u64 }
+    rn_store_init(metaC, slotsC, cap, acap)
+    kfill(vb, 0u64, 40u64, 9u64)
+    rn_publish(metaC, slotsC, arenaC, vb, 0u64, 40u64, tmpaddr, 0u64)
+    kfill(vb, 0u64, 40u64, 8u64)
+    rn_publish(metaC, slotsC, arenaC, vb, 0u64, 40u64, tmpaddr, 0u64)
+    kfill(vb, 0u64, 40u64, 7u64)
+    rn_publish(metaC, slotsC, arenaC, vb, 0u64, 40u64, tmpaddr, 0u64)
+    if rn_count(metaC) != 3u64 { return 28u64 }
+    let lc : u64 = rn_resolve(metaC, slotsC, arenaC, addrV1, 0u64, out, 0u64, 64u64, vbuf)
+    if lc != 40u64 { return 29u64 }
+
+    return 99u64
+}

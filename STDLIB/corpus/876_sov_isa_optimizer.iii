@@ -1,0 +1,14 @@
+/* The Sovereign ISA Descent, enriched into a real algebraic optimizer whose rules are
+ * KERNEL-CERTIFIED sound (corpus 875 proves x*1=x, x*0=0, x+0=x, x*2=x<<1 via III's own
+ * kernel).  sov_isa_kat2() proves a THREE-rule compose collapsing (x*1)+(x*0) to a
+ * SINGLE leaf x -- rules C (x*1->x), D (x*0->0), B (x+0->x), a 7-node expression to 1
+ * node via egraph saturation + cost_lattice min-cost extraction -- plus the faithfulness
+ * falsifier (no rules => no collapse; the optimizer never fabricates an equality).
+ * Deterministic, integer-exact, no floats/ML.  99 = collapse + falsifier pass. */
+module corpus_c876
+
+extern @abi(c-msvc-x64) fn sov_isa_kat2() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return sov_isa_kat2()
+}

@@ -1,0 +1,158 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\optinvoke.iii
+ *
+ * The optimal-invocation selector (STANDALONE artifact) — the decision core of
+ * "the one superior system picks the optimal realization every time."
+ *
+ * The full engine is: candidate-generation (egraph equality saturation) + cost
+ * assignment (cost_lattice) + SELECTION. This module is the SELECTION — the
+ * actual decision, and the part with the load-bearing guarantees:
+ *
+ *   - min-cost over the proven-equivalent class (the candidate set),
+ *   - VALIDITY as the pruning side-condition (an invalid candidate is never
+ *     chosen, however cheap),
+ *   - DETERMINISTIC tie-break: equal cost is broken by the candidate's
+ *     content-address (lexicographic min) → argmin is single-valued → the
+ *     choice is reproducible, no profiling, no learning,
+ *   - the IMPLEMENTATION-vs-SUITE distinction: candidates that produce the SAME
+ *     output address are freely interchangeable (implementation-selection, a
+ *     pure win); candidates that produce DIFFERENT outputs (suite-selection) are
+ *     a semantically significant choice that must be address-tagged/agreed.
+ *
+ * The egraph (which produces the candidates) and the cost_lattice (which costs
+ * them) feed this; wiring them is the next brick. This is the decision, in full.
+ *
+ * Candidate record stride = 80 bytes:
+ *   [0..31] cand_id (content-address of the realization)
+ *   [32..63] out_addr (content-address of the OUTPUT it produces)
+ *   [64..71] cost (u64 LE)   [72] valid (u8)
+ *
+ * NIH: III's own mhash for the decision seal. No floats, no statistics.
+ */
+
+module forcefield_optinvoke
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const OI_NONE  : u64 = 0xFFFFFFFFFFFFFFFFu64
+const OI_IMPL  : u64 = 0u64
+const OI_SUITE : u64 = 1u64
+
+fn oi_ld_u64(p: *u8, off: u64) -> u64 {
+    let b0 : u64 = p[off] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+fn oi_eq32(a: *u8, ao: u64, b: *u8, bo: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < 32u64 {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+
+/* 1 iff a[ao..ao+32] < b[bo..bo+32] lexicographically (byte 0 most significant) */
+fn oi_addr_lt(a: *u8, ao: u64, b: *u8, bo: u64) -> u8 {
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        let av : u8 = a[ao + k]
+        let bv : u8 = b[bo + k]
+        if av != bv {
+            if av < bv { return 1u8 }
+            return 0u8
+        }
+        k = k + 1u64
+    }
+    return 0u8
+}
+
+fn oi_copy(dst: *u8, doff: u64, src: *u8, soff: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        dst[doff + k] = src[soff + k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn oi_hash(src: *u8, soff: u64, len: u64, out: *u8, oo: u64) -> u64 {
+    mhash_begin()
+    mhash_payload((src as u64) + soff, len)
+    mhash_final((out as u64) + oo)
+    return 0u64
+}
+
+/* the decision: index of the min-cost VALID candidate (ties broken by smaller
+ * cand_id), with its cand_id written to out_choice; OI_NONE if none valid. */
+fn oi_select(cands: *u8, n: u64, out_choice: *u8) -> u64 @export {
+    let mut best : u64 = OI_NONE
+    let mut bcost : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        if cands[i * 80u64 + 72u64] == 1u8 {
+            let ci : u64 = oi_ld_u64(cands, i * 80u64 + 64u64)
+            let mut take : u8 = 0u8
+            if best == OI_NONE {
+                take = 1u8
+            } else {
+                if ci < bcost {
+                    take = 1u8
+                } else {
+                    if ci == bcost {
+                        if oi_addr_lt(cands, i * 80u64, cands, best * 80u64) == 1u8 { take = 1u8 }
+                    }
+                }
+            }
+            if take == 1u8 {
+                best = i
+                bcost = ci
+            }
+        }
+        i = i + 1u64
+    }
+    if best == OI_NONE { return OI_NONE }
+    oi_copy(out_choice, 0u64, cands, best * 80u64, 32u64)
+    return best
+}
+
+/* IMPL (0): all valid candidates produce the same output -> free interchange.
+ * SUITE (1): valid candidates produce different outputs -> significant choice.
+ * OI_NONE: no valid candidate. */
+fn oi_selection_kind(cands: *u8, n: u64) -> u64 @export {
+    let mut firstv : u64 = OI_NONE
+    let mut i : u64 = 0u64
+    while i < n {
+        if cands[i * 80u64 + 72u64] == 1u8 {
+            if firstv == OI_NONE { firstv = i }
+        }
+        i = i + 1u64
+    }
+    if firstv == OI_NONE { return OI_NONE }
+    let mut differ : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < n {
+        if cands[j * 80u64 + 72u64] == 1u8 {
+            if oi_eq32(cands, j * 80u64 + 32u64, cands, firstv * 80u64 + 32u64) == 0u8 { differ = 1u64 }
+        }
+        j = j + 1u64
+    }
+    if differ == 1u64 { return OI_SUITE }
+    return OI_IMPL
+}
+
+/* the decision seal: a content-address of the whole candidate table, so the
+ * choice is reproducible and witnessable. */
+fn oi_seal(cands: *u8, n: u64, out: *u8) -> u64 @export {
+    oi_hash(cands, 0u64, n * 80u64, out, 0u64)
+    return 0u64
+}

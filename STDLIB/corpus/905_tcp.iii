@@ -1,0 +1,32 @@
+/* 905_tcp.iii -- integration gate for aether/tcp.iii (was wired NOWHERE).
+ * tcp is the @linear single-use socket wrapper over net.iii: its UNIQUE value (which the lattice
+ * plan's ripple-execute relies on) is handle-validity discipline -- a stale/invalid handle must be
+ * rejected, never forwarded to net.iii.  This gates exactly that discipline without a live socket:
+ * id 0, an out-of-range id, and a never-allocated in-range slot are all not-live, and send/recv/
+ * accept/close on an invalid handle return the EXACT linear errors (E_CLOSED / E_BADID / 0).
+ * 99 = the validity/linear discipline holds on every invalid-handle path. */
+module corpus_905
+
+extern @abi(c-msvc-x64) fn tcp_send(handle: u64, buf: u64, n: u64) -> i32 from "tcp.iii"
+extern @abi(c-msvc-x64) fn tcp_recv(handle: u64, buf: u64, n: u64) -> i32 from "tcp.iii"
+extern @abi(c-msvc-x64) fn tcp_close(handle: u64) -> i32 from "tcp.iii"
+extern @abi(c-msvc-x64) fn tcp_is_live(handle: u64) -> u8 from "tcp.iii"
+extern @abi(c-msvc-x64) fn tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "tcp.iii"
+
+var TBUF : [u8; 64]
+
+fn main() -> u64 {
+    let buf : u64 = (&TBUF) as u64
+    let e_closed : i32 = 0i32 - 2i32      /* TCP_E_CLOSED */
+    let e_badid  : i32 = 0i32 - 1i32      /* TCP_E_BADID  */
+
+    if tcp_is_live(0u64) != 0u8 { return 1u64 }          /* id 0 is never live */
+    if tcp_is_live(999u64) != 0u8 { return 2u64 }        /* out-of-range id */
+    if tcp_is_live(5u64) != 0u8 { return 3u64 }          /* in-range but never allocated */
+
+    if tcp_send(0u64, buf, 4u64) != e_closed { return 4u64 }   /* invalid handle: not forwarded */
+    if tcp_recv(0u64, buf, 4u64) != e_closed { return 5u64 }
+    if tcp_close(0u64) != e_badid { return 6u64 }
+    if tcp_accept(0u64, 0u64) != 0u64 { return 7u64 }          /* invalid listen handle */
+    return 99u64
+}

@@ -1,3 +1,0 @@
-module hh_probe
-extern @abi(c-msvc-x64) fn hh_selftest() -> u64 from "hotstuff_heal.iii"
-fn main() -> u64 { return hh_selftest() }

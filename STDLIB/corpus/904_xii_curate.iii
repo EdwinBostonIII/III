@@ -1,0 +1,58 @@
+/* 904_xii_curate.iii -- integration gate for sanctus/xii_curate.iii (was wired NOWHERE).
+ * xii_curate runs the 12 Trinity-gated curation ceremonies (Ω1..Ω12), each issuing a sealed
+ * 114-byte admit cert; finalize SHA-256s the 12 concatenated certs.  This proves: reset clears;
+ * a valid issue stores the cert (ceremony_id, spec_version, intent_crystal byte round-trip);
+ * filling to 12 + finalize succeeds; and the guards REFUSE id 0, id >12, a 13th issue, an
+ * out-of-range cert_ptr, and a premature finalize (count<12).  99 = ceremony + all guards. */
+module corpus_904
+
+extern @abi(c-msvc-x64) fn xii_curate_reset() -> i32 from "xii_curate.iii"
+extern @abi(c-msvc-x64) fn xii_curate_issue(ceremony_id: u8, intent_crystal: *u8, cap_witness: *u8, causality: *u8, sanctum_state: *u8, timestamp_utc: u64, sequence_no: u32, signature: *u8) -> i32 from "xii_curate.iii"
+extern @abi(c-msvc-x64) fn xii_curate_finalize(epoch_id: u32) -> i32 from "xii_curate.iii"
+extern @abi(c-msvc-x64) fn xii_curate_cert_count() -> u32 from "xii_curate.iii"
+extern @abi(c-msvc-x64) fn xii_curate_cert_ptr(idx: u32) -> u64 from "xii_curate.iii"
+
+var XC_CRYSTAL : [u8; 16]
+var XC_WITNESS : [u8; 16]
+var XC_CAUSAL  : [u8; 16]
+var XC_SANCTUM : [u8; 16]
+var XC_SIG     : [u8; 32]
+
+fn main() -> u64 {
+    let cr : *u8 = (&XC_CRYSTAL) as u64 as *u8
+    let wi : *u8 = (&XC_WITNESS) as u64 as *u8
+    let ca : *u8 = (&XC_CAUSAL) as u64 as *u8
+    let sa : *u8 = (&XC_SANCTUM) as u64 as *u8
+    let sg : *u8 = (&XC_SIG) as u64 as *u8
+    let marker : u8 = 0x7Au8
+    cr[0u64] = marker
+
+    xii_curate_reset()
+    if xii_curate_cert_count() != 0u32 { return 1u64 }
+    if xii_curate_finalize(99u32) == 0i32 { return 2u64 }                 /* premature finalize refused */
+    if xii_curate_issue(0u8, cr, wi, ca, sa, 100u64, 1u32, sg) == 0i32 { return 3u64 }   /* id 0 refused */
+    if xii_curate_issue(13u8, cr, wi, ca, sa, 100u64, 1u32, sg) == 0i32 { return 4u64 }  /* id>12 refused */
+    if xii_curate_cert_count() != 0u32 { return 5u64 }                    /* refused issues add nothing */
+
+    if xii_curate_issue(1u8, cr, wi, ca, sa, 100u64, 1u32, sg) != 0i32 { return 6u64 }
+    if xii_curate_cert_count() != 1u32 { return 7u64 }
+    let c0 : u64 = xii_curate_cert_ptr(0u32)
+    if c0 == 0u64 { return 8u64 }
+    let pc0  : *u8 = c0 as *u8
+    let pc1  : *u8 = (c0 + 1u64) as *u8
+    let pc4  : *u8 = (c0 + 4u64) as *u8
+    if pc0[0u64] != 1u8 { return 9u64 }                                   /* ceremony_id */
+    if pc1[0u64] != 1u8 { return 10u64 }                                  /* spec_version */
+    if pc4[0u64] != marker { return 11u64 }                              /* intent_crystal[0] stored */
+
+    let mut id : u32 = 2u32
+    while id <= 12u32 {
+        if xii_curate_issue(id as u8, cr, wi, ca, sa, 100u64, 1u32, sg) != 0i32 { return 12u64 }
+        id = id + 1u32
+    }
+    if xii_curate_cert_count() != 12u32 { return 13u64 }
+    if xii_curate_issue(1u8, cr, wi, ca, sa, 100u64, 1u32, sg) == 0i32 { return 14u64 }  /* 13th refused */
+    if xii_curate_finalize(7u32) != 0i32 { return 15u64 }                /* now succeeds (count==12) */
+    if xii_curate_cert_ptr(12u32) != 0u64 { return 16u64 }               /* out-of-range ptr is 0 */
+    return 99u64
+}

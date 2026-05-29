@@ -1,0 +1,92 @@
+/* STDLIB/iii/forcefield/commit_gate.iii -- Ripple-Forcefield plan P6: the
+ * sound-evolution COMMIT GATE.  The single admission decision every future change
+ * to III must pass.  It composes the three already-verified organs into ONE
+ * LOCATED verdict (a distinct reject code names the failing dimension, like
+ * pleroma's obstruction edge -- never a bare 0):
+ *
+ *   1. RULE soundness   -- xad_admit (omnia/xii_admission): the live XII rule set
+ *      is root-confluent AND terminating; a rule change that breaks either is
+ *      REJECTED before its rules can join the one engine.
+ *   2. MODULE coherence -- pleroma_cohere (forcefield/pleroma): the module-bridge
+ *      cover glues (H^1 = 0); a change introducing an incoherent bridge is
+ *      REJECTED with the located obstruction edge.
+ *   3. DETERMINISM seal -- cad (numera/cad): the artifact's content-address matches
+ *      the declared golden, OR the drift is WITNESSED (intended -- e.g. a new
+ *      module); an unwitnessed nondeterministic drift is REJECTED.
+ *   4. CONSERVATIVITY   -- the change proves nothing the old system could not.  By
+ *      Goedel II / Loeb the gate CANNOT self-certify a strength increase (a new
+ *      axiom / universe / reflection principle): such a proof would let the system
+ *      assert its own consistency.  So this dimension is necessarily a MARKED flag
+ *      (set true only when the change is conservative, or a strength increase that
+ *      is externally warranted), not a verified predicate -- and the gate REJECTS
+ *      an UNMARKED strength increase.  This is the honest Loebian ceiling, recorded
+ *      not papered over.
+ *
+ * Promotes the plan's §0 acceptance test to LAW: no change merges unless all four
+ * hold.  Prove-the-negative: cg_decide is a pure total predicate with teeth,
+ * exercised on every rejecting input by the KAT (corpus 864).
+ *
+ * Hexad: kind_sensitivity (admission).  Ring: R0.  K: 1.00.  NIH: composes
+ * xii_admission + pleroma + cad only.  Determinism: integer ==/!= compares; a BSS
+ * digest scratch (no allocator); a single fixed decision order. */
+module forcefield_commit_gate
+
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn pleroma_cohere(
+    obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8, edge_perm: *u8,
+    deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u64 from "pleroma.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const CG_ADMIT           : u32 = 99u32   /* all four dimensions hold */
+const CG_REJECT_RULE     : u32 = 1u32    /* XII rule set not root-confluent / not terminating */
+const CG_REJECT_MODULE   : u32 = 2u32    /* module cover incoherent (H^1 != 0) or malformed */
+const CG_REJECT_SEAL     : u32 = 3u32    /* unwitnessed determinism drift */
+const CG_REJECT_STRENGTH : u32 = 4u32    /* unmarked proof-theoretic strength increase */
+
+const CG_SUITE_SHA256    : u32 = 0u32    /* cad suite 0 (mirrors CAD_SUITE_SHA256) */
+
+var CG_DIGEST : [u8; 32]
+
+/* The pure composed verdict -- LOCATED (names the failing dimension).  A total
+ * parameterised predicate so the prove-the-negative arm exercises every reject
+ * directly (mirrors xad_decide).  ADMIT iff ALL four dimensions hold; the decision
+ * order is fixed (rule, module, seal, conservativity) so a multi-failure reports
+ * the highest-priority cause deterministically. */
+fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32) -> u32 @export {
+    if rule_sound != 1u32         { return CG_REJECT_RULE }
+    if module_coherent != 1u32    { return CG_REJECT_MODULE }
+    if determinism_sealed != 1u32 { return CG_REJECT_SEAL }
+    if conservative != 1u32       { return CG_REJECT_STRENGTH }
+    return CG_ADMIT
+}
+
+/* RULE dimension: the live XII rule set is admitted (root-confluent AND terminating). */
+fn cg_rule_ok() -> u32 @export {
+    return xad_admit()
+}
+
+/* MODULE dimension: the bridge cover glues (pleroma H^1=0).  1 = coherent;
+ * 0 = incoherent (located obstruction) OR malformed cover (both block admission). */
+fn cg_module_ok(obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8,
+                edge_perm: *u8, deg: u64, obj_id: *u8, root_out: *u8, obstr_out: *u8) -> u32 @export {
+    let v : u64 = pleroma_cohere(obj_count, edge_count, edge_src, edge_dst, edge_perm, deg, obj_id, root_out, obstr_out)
+    if v == 1u64 { return 1u32 }
+    return 0u32
+}
+
+/* DETERMINISM dimension: the artifact's content-address (SHA-256) matches the
+ * declared golden, else the drift must be WITNESSED (intended).  1 = sealed. */
+fn cg_seal_ok(content: *u8, len: u64, golden: *u8, witnessed: u32) -> u32 @export {
+    cad_oneshot(CG_SUITE_SHA256, content, len, (&CG_DIGEST as u64) as *u8)
+    if cad_eq((&CG_DIGEST as u64) as *u8, golden) == 1u8 { return 1u32 }
+    if witnessed == 1u32 { return 1u32 }
+    return 0u32
+}
+
+/* commit_gate EMBODIES the plan's sound-evolution law: a change is admitted into
+ * III iff its rule changes are confluent+terminating (xii_admission), its module
+ * bridges glue (pleroma H^1=0), its artifact is content-address-sealed (cad), and
+ * it is conservative or a marked+warranted strength increase.  The verdict is
+ * located; the gate is shown to REJECT each violation (864) -- it is the §0
+ * acceptance test made law, not a stub that only ever admits. */

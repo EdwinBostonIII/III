@@ -455,8 +455,8 @@ tp_ast_to_babel_json:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax

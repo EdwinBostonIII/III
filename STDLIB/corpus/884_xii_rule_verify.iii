@@ -1,0 +1,18 @@
+/* 884_xii_rule_verify.iii -- the verification missile launched on III's REAL rules.
+ *
+ * Drives III's LIVE optimizer (xii_canonicalise + xii_rewrite's actual rule set) over the
+ * trit fragment and verifies every rewrite against an INDEPENDENT Kleene spec (hardcoded
+ * ground truth, NOT the iii_trit_* ops the engine calls).  Where corpus 670 is tautological
+ * (it checks the engine against the very functions it dispatches to, so a broken op stays
+ * green), this is non-tautological: a bug in trit.iii turns THIS red.  Plus teeth -- the
+ * engine computes AND specifically (not any table), the rule's TRIT_VAL guard genuinely
+ * refuses an ill-formed operand, and apply_one confirms the live trit rule (id 102) fired.
+ * The semantic-soundness gate (Sovereign Calculus section 16) on XII's live rules.
+ * 99 = the real engine is sound against the independent authority. */
+module corpus_884
+
+extern @abi(c-msvc-x64) fn xrv_verify() -> u64 from "xii_rule_verify.iii"
+
+fn main() -> u64 {
+    return xrv_verify()
+}

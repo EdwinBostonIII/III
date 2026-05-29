@@ -1,0 +1,14 @@
+/* P5 brick 7: natrec -- the DEPENDENT Nat eliminator (induction). Motive
+ * P:Nat->U, base z:P zero, step s:Pi(k).P k->P(succ k), scrutinee n => P n, with
+ * beta natrec(zero)->z and natrec(succ m)->s m (natrec m). p5_kat_natrec() tests
+ * closed beta (base + step-uses-predecessor), the UNDER-BINDER shift exerciser
+ * (the only test that catches a wrong de-Bruijn shift in the step type -- a closed
+ * test cannot, since the motive is then closed), and negatives (wrong step type,
+ * non-Nat motive). 99 = all pass; 1..8 = first failing case. */
+module corpus_c847
+
+extern @abi(c-msvc-x64) fn p5_kat_natrec() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_natrec()
+}

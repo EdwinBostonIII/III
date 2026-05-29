@@ -1,0 +1,40 @@
+/* 902_babel.iii -- integration gate for omnia/babel.iii (was wired NOWHERE).
+ * babel is the envelope codec (JSON form).  Its buffer writers are module-internal, so the
+ * exposed surface is reset/used/byte_at/version/check_version/envelope_mhash -- this gates all of
+ * it: reset clears, byte_at past end is 0, the version round-trips, check_version REFUSES a wrong
+ * version (negative), and the envelope mhash is deterministic (same empty envelope -> same digest).
+ * 99 = the exposed codec surface behaves and the version guard fires. */
+module corpus_902
+
+extern @abi(c-msvc-x64) fn babel_reset() -> i32 from "babel.iii"
+extern @abi(c-msvc-x64) fn babel_used() -> u32 from "babel.iii"
+extern @abi(c-msvc-x64) fn babel_byte_at(i: u32) -> u8 from "babel.iii"
+extern @abi(c-msvc-x64) fn babel_version() -> u32 from "babel.iii"
+extern @abi(c-msvc-x64) fn babel_check_version(v: u32) -> u8 from "babel.iii"
+extern @abi(c-msvc-x64) fn babel_compute_envelope_mhash(out_32: u64) -> i32 from "babel.iii"
+
+var BH1 : [u8; 32]
+var BH2 : [u8; 32]
+
+fn beq(a: u64, b: u64, n: u64) -> u32 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut k : u64 = 0u64
+    while k < n { if pa[k] != pb[k] { return 0u32 } ; k = k + 1u64 }
+    return 1u32
+}
+
+fn main() -> u64 {
+    babel_reset()
+    if babel_used() != 0u32 { return 1u64 }
+    if babel_byte_at(0u32) != 0u8 { return 2u64 }              /* past-end read is 0 */
+    if babel_version() != 1u32 { return 3u64 }
+    if babel_check_version(1u32) != 1u8 { return 4u64 }        /* positive */
+    if babel_check_version(2u32) != 0u8 { return 5u64 }        /* negative: wrong version refused */
+    if babel_check_version(0u32) != 0u8 { return 6u64 }
+    /* envelope mhash determinism: the same (empty) envelope hashes identically */
+    babel_compute_envelope_mhash((&BH1) as u64)
+    babel_compute_envelope_mhash((&BH2) as u64)
+    if beq((&BH1) as u64, (&BH2) as u64, 32u64) != 1u32 { return 7u64 }
+    return 99u64
+}

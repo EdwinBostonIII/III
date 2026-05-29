@@ -1,0 +1,12 @@
+/* P5 brick 6: eta-conversion (Pi-eta, lam x.(f x) == f) -- definitional function
+ * extensionality, added to the conversion checker. p5_kat_eta() asserts eta fires
+ * (lam(f).lam(x).(f x) == lam(f).f), does not conflate distinct functions
+ * (!= lam(f).lam(x).x), and respects the free-var side-condition (lam(x).(x x)
+ * does NOT contract). 99 = all pass; 1..4 = first failing case. */
+module corpus_c846
+
+extern @abi(c-msvc-x64) fn p5_kat_eta() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_eta()
+}

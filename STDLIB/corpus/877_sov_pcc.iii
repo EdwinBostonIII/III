@@ -1,0 +1,15 @@
+/* Proof-carrying optimization (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §11): the egraph
+ * (untrusted "nous") PROPOSES an optimization; III's kernel (trusted) DISPOSES --
+ * translation validation.  sov_pcc_kat() proves the proof-carrying descent: (x*1)+(x*0)
+ * descends to x AND the kernel independently CERTIFIES the optimization sound (lowering
+ * the egraph output to a Nat-model, then checking input==output via the 875 cert
+ * mechanism); the FALSIFIER -- a tampered output (x -> x*2) -- is REJECTED by the kernel
+ * (it disproves x==2x).  Soundness NEVER depends on the egraph being correct; nous is
+ * leashed by the proof core.  No floats, no ML.  99 = accept-with-proof + reject-the-lie. */
+module corpus_c877
+
+extern @abi(c-msvc-x64) fn sov_pcc_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return sov_pcc_kat()
+}

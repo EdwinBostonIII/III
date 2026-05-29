@@ -1,0 +1,16 @@
+/* QTT brick 4 (DOCS/III-QTT-DESIGN.md §4 B4): ERASURE SOUNDNESS.  Erasure is
+ * realized by the normalizer -- an erased (mult-0) argument is substituted but,
+ * being unused at runtime, vanishes in the normal form (no separate fragile
+ * de-Bruijn transform needed).  p5_kat_qtt3() proves the rigorous content: the
+ * IRRELEVANCE theorem -- for f = lam^0 A:U0. lam^1 x:A. x, f Bool and f Nat are
+ * CONVERTIBLE (the kernel's own equality cannot observe the erased type argument),
+ * so dropping A is sound; plus the nf-witness ((f Bool) true -> true, A gone) and
+ * QTT-validity of the erased marking.  Negative: a RELEVANT argument IS observable
+ * (g true != g false).  Decided by the domain-erased CCL oracle.  99 = all pass. */
+module corpus_c867
+
+extern @abi(c-msvc-x64) fn p5_kat_qtt3() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_qtt3()
+}

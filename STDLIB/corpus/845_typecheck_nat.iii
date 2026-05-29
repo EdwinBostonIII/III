@@ -1,0 +1,13 @@
+/* P5 brick 5: Nat + iteration recursor -- the kernel's first unbounded computation.
+ * Nat:U0, zero/succ:Nat, iter(z,s,n) = s^n(z) with beta iter(z,s,zero)->z and
+ * iter(z,s,succ m)->s(iter z s m). p5_kat_nat() asserts formation, constructors,
+ * recursor beta (base + step), a REAL recursive computation (succ applied twice to
+ * zero = 2), and negatives (succ of non-Nat, non-Nat scrutinee, z/s type mismatch).
+ * 99 = all pass; 1..15 = first failing case. */
+module corpus_c845
+
+extern @abi(c-msvc-x64) fn p5_kat_nat() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_nat()
+}

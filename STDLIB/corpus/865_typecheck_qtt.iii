@@ -1,0 +1,17 @@
+/* QTT brick 1: the graded / quantitative layer (DOCS/III-QTT-DESIGN.md).
+ * p5_kat_qtt() proves the multiplicity semiring {0=erased,1=linear,w=unrestricted}
+ * (add saturates 1+1=w; mul zero-one-many; fits exact-for-0/1, any-for-w) AND the
+ * usage discipline on Pi/Lam binders, BOTH arms: linear-used-once / erased-unused /
+ * omega-used-once ADMIT; linear-unused / erased-used REJECT.  The keystone (15-18)
+ * is the q-SCALING pair: lam^w g:(Bool->^q Bool). lam^1 x. (g x) -- IDENTICAL syntax,
+ * but ADMIT when q=linear and REJECT when q=omega (a linear var passed to an
+ * unrestricted function is used omega times).  Decided over the singular CCL oracle
+ * (multiplicity survives shift/whnf via the mult-specific PI atoms); infer/check/
+ * conv are untouched.  99 = all pass; 1..18 = first failing arm. */
+module corpus_c865
+
+extern @abi(c-msvc-x64) fn p5_kat_qtt() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_qtt()
+}

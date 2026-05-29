@@ -82,6 +82,28 @@ if [[ ! -f "$LIB_ARCHIVE" ]]; then
     exit 2
 fi
 
+# Force-linked side-effect set (registration-only modules + resolver dispatch units),
+# mirroring run_corpus.sh.  The prior blanket --whole-archive "$LIB_ARCHIVE" force-linked
+# EVERY module (incl. gospel-scale ~1GB BSS such as witness_hook) into each bench exe,
+# pushing the image past the 2GB IMAGE_REL_AMD64_REL32 reach (corpus 237/242/243/244 failed
+# link rc=1, relocation truncated).  Whole-archive ONLY the side-effect set; the rest of the
+# archive links selectively (referenced members only), so the huge unrelated BSS is not pulled.
+SIDE_EFFECT_NAMES=(
+    omnia_resolution_init.iii.o omnia_resolution_meta_dispatch.iii.o
+    omnia_proof_ripple_resolution.iii.o omnia_resolver.iii.o
+    omnia_resolver_memo.iii.o omnia_resolver_replay.iii.o
+    omnia_codegen_patterns.iii.o omnia_transform_patterns.iii.o
+    omnia_xii_curated_payloads.iii.o omnia_hw_offload.iii.o
+    aether_pattern_set_federation.iii.o sanctus_calculus_v1.iii.o
+    sanctus_resolver_replay.iii.o sanctus_seal_resolver.iii.o
+    verba_nl_lex.iii.o resolver_hot.o resolver_unit.o
+    resolver_unit_avx512.o bench_helpers.o
+)
+SIDE_EFFECT_OBJS=()
+for _se in "${SIDE_EFFECT_NAMES[@]}"; do
+    [[ -f "$BUILD_DIR/$_se" ]] && SIDE_EFFECT_OBJS+=("$BUILD_DIR/$_se")
+done
+
 # The four benchmarks, in run order.
 BENCHES=(
     237_insel_cycle_bench
@@ -172,7 +194,7 @@ for base in "${BENCHES[@]}"; do
         HARD_FAIL=$((HARD_FAIL+1)); continue
     fi
 
-    gcc "$obj" -Wl,--whole-archive "$LIB_ARCHIVE" -Wl,--no-whole-archive \
+    gcc "$obj" -Wl,--whole-archive "${SIDE_EFFECT_OBJS[@]}" -Wl,--no-whole-archive "$LIB_ARCHIVE" \
         -lws2_32 -lkernel32 -o "$exe" >>"$log" 2>&1
     rc=$?
     if [[ $rc -ne 0 ]]; then

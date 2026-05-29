@@ -39,6 +39,12 @@ extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_tabl
 
 extern @abi(c-msvc-x64) fn hexad_adjacent(a: u8, b: u8) -> u8 from "resolver.iii"
 
+/* The directional ripple-field's dominance-rank primitive (apotheosis
+ * compound-with-priors): hexad-kind -> rank in the sealed xii_hj order.
+ * Lets the R&D arm CONSUME the field to DIRECT its proposals -- see
+ * sr_field_score / self_reformatter_scan_directed below. */
+extern @abi(c-msvc-x64) fn rf_rank(h: u8) -> u32 from "ripple_field.iii"
+
 extern @abi(c-msvc-x64) fn intent_abstract(concrete_intent: u64, abstraction_seed: u64) -> u64 from "intent.iii"
 
 extern @abi(c-msvc-x64) fn governance_propose(proposer_cap: u64, change_intent: u64, rationale_ptr: u64, rationale_len: u32) -> u64 from "governance.iii"
@@ -252,4 +258,133 @@ fn self_reformatter_reset() -> i32 @export {
 /* Trigger interval accessor (sealed constant readable for tests). */
 fn self_reformatter_trigger_interval() -> u64 @export {
     return SR_TRIGGER_INTERVAL
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * DIRECTIONAL RIPPLE-FIELD COMPOUND (apotheosis compound-with-priors)
+ *
+ * Wire the R&D arm to CONSUME omnia/ripple_field.  Instead of scanning
+ * all adjacencies blindly (the measured 0-promotions fixpoint), read the
+ * field's DIRECTION to propose only compositions that CLIMB the sealed
+ * hexad-dominance order (toward ORIGIN / higher abstraction).
+ *
+ * Pure function of sealed content (Mandate 7): direction = rf_rank() on
+ * the patterns' hexad kinds (the field's sealed dominance order); the
+ * pattern-space magnitude = combined k_value (the K a climbing composition
+ * concentrates).  No call counts, no frequencies, no timing.
+ *
+ * ADDITIVE: self_reformatter_scan() + _sr_try_compose + the governance
+ * pipeline are untouched (corpus 245's contract holds); the directed scan
+ * routes the SAME governance path, only narrowed to the field-positive
+ * frontier.
+ * ───────────────────────────────────────────────────────────────── */
+
+/* Field DIRECTION: does composing hexad a -> hexad b CLIMB the dominance
+ * order? (field positive iff rank(b) > rank(a)).  Pure. */
+fn sr_dir_climbs(hex_a: u8, hex_b: u8) -> u8 @export {
+    if rf_rank(hex_b) > rf_rank(hex_a) { return 1u8 }
+    return 0u8
+}
+
+/* The directed field of composing pattern (ka,hex_a) -> (kb,hex_b):
+ * sign(rank(hex_b) - rank(hex_a)) * (ka + kb).  +climb / -descend / 0 flat.
+ * The pattern-space analog of rf_edge_field (direction from rf_rank,
+ * magnitude = the K a composition concentrates).  Pure sealed content. */
+fn sr_field_score(ka: u64, kb: u64, hex_a: u8, hex_b: u8) -> i64 @export {
+    let mag : i64 = (ka + kb) as i64
+    let ra : u32 = rf_rank(hex_a)
+    let rb : u32 = rf_rank(hex_b)
+    if rb > ra { return mag }
+    if rb < ra { return 0i64 - mag }
+    return 0i64
+}
+
+/* Field potential flowing OUT of pattern `slot`: the summed directed field
+ * over every other live pattern.  High potential = a high-leverage node to
+ * propose abstractions FROM.  Returns 0 for an empty slot. */
+fn sr_pattern_potential(slot: u32) -> i64 @export {
+    let pp : u64 = pattern_table_get(slot)
+    if pp == 0u64 { return 0i64 }
+    let hp : u8 = pattern_hexad_kind(pp)
+    let kp : u64 = pattern_k_value(pp)
+    let mut pot : i64 = 0i64
+    let mut q : u32 = 0u32
+    while q < SR_PATTERN_CAP {
+        if q != slot {
+            let pq : u64 = pattern_table_get(q)
+            if pq != 0u64 {
+                pot = pot + sr_field_score(kp, pattern_k_value(pq), hp, pattern_hexad_kind(pq))
+            }
+        }
+        q = (q + 1u32) & 0xFFFFFFFFu32
+    }
+    return pot
+}
+
+/* rf_steepest over the live pattern set: the slot with the maximum field
+ * potential -- "where the substrate wants to grow."  Deterministic; ties
+ * resolve to the lowest slot.  Returns 0 on an empty pattern set. */
+fn sr_steepest_pattern() -> u32 @export {
+    let mut best : u32 = 0u32
+    let mut best_pot : i64 = 0i64
+    let mut found : u8 = 0u8
+    let mut a : u32 = 0u32
+    while a < SR_PATTERN_CAP {
+        let pa : u64 = pattern_table_get(a)
+        if pa != 0u64 {
+            let pot : i64 = sr_pattern_potential(a)
+            if found == 0u8 {
+                best = a
+                best_pot = pot
+                found = 1u8
+            }
+            if found == 1u8 {
+                if pot > best_pot {
+                    best = a
+                    best_pot = pot
+                }
+            }
+        }
+        a = (a + 1u32) & 0xFFFFFFFFu32
+    }
+    return best
+}
+
+/* FIELD-DIRECTED scan: the R&D arm consuming the ripple-field.  Proposes
+ * ONLY compositions that climb the dominance order (field-positive),
+ * through the SAME governance pipeline as self_reformatter_scan().  On the
+ * sealed boot pattern set this still promotes 0 (the patterns are
+ * irreducible -- the governance prove-gate decides; the field only directs
+ * WHICH pairs are worth proposing), preserving scan()'s contract while
+ * turning the blind sweep into directed self-improvement.  Returns the
+ * number of abstractions PROMOTED. */
+fn self_reformatter_scan_directed() -> u32 @export {
+    if self_reformatter_is_due() == 0u8 { return 0u32 }
+    if pattern_registry_is_sealed() == 0u8 { return 0u32 }
+
+    SR_LAST_SCAN_COUNT = SR_CALL_COUNT
+
+    let mut promoted : u32 = 0u32
+    let mut a : u32 = 0u32
+    while a < SR_PATTERN_CAP {
+        let pa : u64 = pattern_table_get(a)
+        if pa != 0u64 {
+            let ha : u8 = pattern_hexad_kind(pa)
+            let mut b : u32 = (a + 1u32) & 0xFFFFFFFFu32
+            while b < SR_PATTERN_CAP {
+                let pb : u64 = pattern_table_get(b)
+                if pb != 0u64 {
+                    let hb : u8 = pattern_hexad_kind(pb)
+                    if sr_dir_climbs(ha, hb) == 1u8 {
+                        if _sr_try_compose(a, b) == 1u8 {
+                            promoted = promoted + 1u32
+                        }
+                    }
+                }
+                b = (b + 1u32) & 0xFFFFFFFFu32
+            }
+        }
+        a = (a + 1u32) & 0xFFFFFFFFu32
+    }
+    return promoted
 }

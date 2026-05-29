@@ -1,0 +1,2 @@
+C:/ProgramData/mingw64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/corpus_run/911_bv_ring.iii.o:fake:(.text+0x10): undefined reference to `bv_ring_selftest'
+collect2.exe: error: ld returned 1 exit status

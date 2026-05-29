@@ -1,0 +1,40 @@
+module bvtest2
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_is_const(s: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const_val(s: u32) -> u64 from "bv_ring.iii"
+
+var RES : [u32; 16]   /* mirrors R3_BVO_RES: module-global operand stack */
+
+/* Replicate r3_bvo_lower's array round-trip for ((x+x)-x)-x (= f_nest -> 0),
+ * with NO AST and NO recursion -- just the bv-slot-through-array pattern. */
+fn main() -> u64 {
+    bv_reset()
+    let mut rp : u32 = 0u32
+    RES[(rp as u64)] = bv_var(0u32) ; rp = rp + 1u32          /* x */
+    RES[(rp as u64)] = bv_var(0u32) ; rp = rp + 1u32          /* x */
+    let rb1 : u32 = RES[((rp - 1u32) as u64)]
+    let la1 : u32 = RES[((rp - 2u32) as u64)]
+    rp = rp - 2u32
+    let c1 : u32 = bv_add(la1, rb1)                            /* {x:2} */
+    RES[(rp as u64)] = c1 ; rp = rp + 1u32
+    RES[(rp as u64)] = bv_var(0u32) ; rp = rp + 1u32          /* x */
+    let rb2 : u32 = RES[((rp - 1u32) as u64)]
+    let la2 : u32 = RES[((rp - 2u32) as u64)]
+    rp = rp - 2u32
+    let c2 : u32 = bv_sub(la2, rb2)                            /* {x:1} */
+    RES[(rp as u64)] = c2 ; rp = rp + 1u32
+    RES[(rp as u64)] = bv_var(0u32) ; rp = rp + 1u32          /* x */
+    let rb3 : u32 = RES[((rp - 1u32) as u64)]
+    let la3 : u32 = RES[((rp - 2u32) as u64)]
+    rp = rp - 2u32
+    let c3 : u32 = bv_sub(la3, rb3)                            /* {x:0} */
+    RES[(rp as u64)] = c3 ; rp = rp + 1u32
+    let fin : u32 = RES[0u64]
+    if bv_is_const(fin) != 1u8 { return 1u64 }
+    if bv_const_val(fin) != 0u64 { return 2u64 }
+    return 99u64
+}

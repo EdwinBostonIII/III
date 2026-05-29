@@ -1,0 +1,10 @@
+/* PROBE: eta-completeness for higher de Bruijn variables.  2 = control #0 broke
+ * (unexpected); 1 = #1 eta-redex did NOT contract (incompleteness confirmed);
+ * 99 = both contract (no gap). */
+module corpus_c862
+
+extern @abi(c-msvc-x64) fn ccl_etahi_kat() -> u64 from "ccl.iii"
+
+fn main() -> u64 {
+    return ccl_etahi_kat()
+}

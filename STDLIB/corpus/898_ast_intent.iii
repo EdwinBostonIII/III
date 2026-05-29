@@ -1,0 +1,49 @@
+/* 898_ast_intent.iii -- integration gate for verba/ast_intent.iii (was wired NOWHERE: compiled,
+ * exported, but no corpus exercised it).  ast_intent is the runtime intent-template buffer
+ * (16 templates x 16 (tag,type,value) fields) used by intent_form lowering.  This proves the
+ * full builder/accessor round-trip + template isolation + the capacity refusal (negative case).
+ * 99 = every field round-trips, templates are independent, and the 17th field is refused. */
+module corpus_898
+
+extern @abi(c-msvc-x64) fn ast_intent_template_zero(node: u64) -> i32 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_template_add_field(node: u64, tag: u32, ftype: u32, value: u64) -> i32 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_count(ast: u64, node: u64) -> u32 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_tag(ast: u64, node: u64, idx: u32) -> u32 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_value_u8(ast: u64, node: u64, idx: u32) -> u8 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_value_u32(ast: u64, node: u64, idx: u32) -> u32 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_value_u64(ast: u64, node: u64, idx: u32) -> u64 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_array_count(ast: u64, node: u64, idx: u32) -> u32 from "ast_intent.iii"
+extern @abi(c-msvc-x64) fn ast_intent_field_array_value(ast: u64, node: u64, idx: u32, slot: u32) -> u64 from "ast_intent.iii"
+
+fn main() -> u64 {
+    let big   : u64 = 0xDEADBEEFCAFEu64
+    let lo32  : u32 = 0xBEEFCAFEu32
+    let lo8   : u8  = 0xFEu8
+
+    ast_intent_template_zero(3u64)
+    if ast_intent_field_count(0u64, 3u64) != 0u32 { return 1u64 }          /* zeroed */
+    ast_intent_template_add_field(3u64, 100u32, 7u32, big)
+    ast_intent_template_add_field(3u64, 200u32, 8u32, 42u64)
+    if ast_intent_field_count(0u64, 3u64) != 2u32 { return 2u64 }
+    if ast_intent_field_tag(0u64, 3u64, 0u32) != 100u32 { return 3u64 }
+    if ast_intent_field_tag(0u64, 3u64, 1u32) != 200u32 { return 4u64 }
+    if ast_intent_field_value_u64(0u64, 3u64, 0u32) != big { return 5u64 }
+    if ast_intent_field_value_u32(0u64, 3u64, 0u32) != lo32 { return 6u64 }
+    if ast_intent_field_value_u8(0u64, 3u64, 0u32) != lo8 { return 7u64 }
+    if ast_intent_field_value_u64(0u64, 3u64, 1u32) != 42u64 { return 8u64 }
+    /* array accessors: field 0's type word read as "array count"; continuation slot = field 1 value */
+    if ast_intent_field_array_count(0u64, 3u64, 0u32) != 7u32 { return 9u64 }
+    if ast_intent_field_array_value(0u64, 3u64, 0u32, 0u32) != 42u64 { return 10u64 }
+    /* isolation: a different template id is independent and does not perturb node 3 */
+    ast_intent_template_zero(5u64)
+    if ast_intent_field_count(0u64, 5u64) != 0u32 { return 11u64 }
+    if ast_intent_field_count(0u64, 3u64) != 2u32 { return 12u64 }
+    /* NEGATIVE: fill node 5 to the 16-field cap, then the 17th add must be REFUSED (non-zero rc) */
+    let mut i : u32 = 0u32
+    while i < 16u32 { ast_intent_template_add_field(5u64, i, 0u32, i as u64) ; i = i + 1u32 }
+    if ast_intent_field_count(0u64, 5u64) != 16u32 { return 13u64 }
+    let rc : i32 = ast_intent_template_add_field(5u64, 99u32, 0u32, 99u64)
+    if rc == 0i32 { return 14u64 }                                        /* over-cap add NOT accepted */
+    if ast_intent_field_count(0u64, 5u64) != 16u32 { return 15u64 }       /* count unchanged (refused) */
+    return 99u64
+}

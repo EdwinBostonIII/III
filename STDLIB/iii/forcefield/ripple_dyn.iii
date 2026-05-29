@@ -1,0 +1,252 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\ripple_dyn.iii
+ *
+ * The ripple network - signed dynamic-name layer (STANDALONE artifact).  Sits
+ * ON TOP of the content value layer (ripple.iii): the content layer names
+ * immutable values; this layer names MUTABLE cells whose current value is a
+ * content-address, moved only by the keyholder.
+ *
+ *   key-address  k = H(pubkey)                          (self-binding name)
+ *   update       (pubkey, value_addr, t, sig)
+ *                where sig = Ed25519-Sign(seed, k || value_addr || t)
+ *
+ * Acceptance (dn_apply) requires BOTH:
+ *   1. H(pubkey) == k                  -- the name belongs to this key
+ *   2. Ed25519-Verify(pubkey, k||value_addr||t, sig) == 1   -- keyholder only
+ * then a last-writer-wins JOIN by (t, value_addr):  accept iff strictly greater.
+ *
+ * That join is a semilattice, so the register is a state-based CRDT: merging two
+ * registries is order-independent, idempotent and monotone -- coordination-free
+ * (CALM), NO consensus.  (A linearizable register would need HotStuff; this is
+ * the free, monotone mutability.)
+ *
+ * Verify runs the real production Ed25519 (linked from libiii_native.a).  The
+ * load-bearing guarantee is the NEGATIVE one: a forged or stale update does not
+ * move the name.
+ *
+ * Registry slot stride = 192 bytes:
+ *   [0..31] key_addr  [32..63] pubkey  [64..95] cur_value_addr
+ *   [96..103] cur_t   [104] occupied   [105] has_value   [106..169] cur_sig
+ * meta header (16 bytes): [0] cap (power of two)   [8] key-count
+ */
+
+module forcefield_ripple_dyn
+
+extern @abi(c-msvc-x64) fn VirtualAlloc(vaddr: u64, vsize: u64, vtype: u32, vprot: u32) -> *u8 from "kernel32"
+extern @abi(c-msvc-x64) fn VirtualFree(vaddr: *u8, vsize: u64, vftype: u32) -> i32 from "kernel32"
+
+/* P4.3: C-free heap via kernel32 pages (no msvcrt).  Module-unique names (dn_*) so the
+ * non-@export helpers do NOT emit a global L_malloc/L_free that collides with pleroma under
+ * gcc --whole-archive (the bench-corpus link path) -- corpus 237/242/243/244. */
+fn dn_malloc(n: u64) -> *u8 {
+    return VirtualAlloc(0u64, n, 0x3000u32, 0x04u32)
+}
+fn dn_free(p: *u8) -> u64 {
+    VirtualFree(p, 0u64, 0x8000u32)
+    return 0u64
+}
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+
+const DN_GAP      : u64 = 0xFFFFFFFFFFFFFFFFu64
+const DN_NOTFOUND : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn dn_ld_u64(p: *u8, off: u64) -> u64 {
+    let b0 : u64 = p[off] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+fn dn_st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn dn_eq32(a: *u8, ao: u64, b: *u8, bo: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < 32u64 {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+
+fn dn_copy(dst: *u8, doff: u64, src: *u8, soff: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        dst[doff + k] = src[soff + k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+/* lexicographic: 1 iff a[ao..ao+32] > b[bo..bo+32] (byte 0 most significant) */
+fn dn_addr_gt(a: *u8, ao: u64, b: *u8, bo: u64) -> u8 {
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        let av : u8 = a[ao + k]
+        let bv : u8 = b[bo + k]
+        if av != bv {
+            if av > bv { return 1u8 }
+            return 0u8
+        }
+        k = k + 1u64
+    }
+    return 0u8
+}
+
+fn dn_key_addr(pubkey: *u8, out: *u8) -> u64 @export {
+    mhash_begin()
+    mhash_payload(pubkey as u64, 32u64)
+    mhash_final(out as u64)
+    return 0u64
+}
+
+/* canonical signed message: key_addr(32) || value_addr(32) || t(8 LE) = 72 bytes */
+fn dn_build_msg(key_addr: *u8, value_addr: *u8, t: u64, out72: *u8) -> u64 @export {
+    dn_copy(out72, 0u64, key_addr, 0u64, 32u64)
+    dn_copy(out72, 32u64, value_addr, 0u64, 32u64)
+    dn_st_u64(out72, 64u64, t)
+    return 0u64
+}
+
+fn dn_find(meta: *u8, slots: *u8, key: *u8, ko: u64, want: u64) -> u64 {
+    let cap : u64 = dn_ld_u64(meta, 0u64)
+    let mask : u64 = cap - 1u64
+    let mut i : u64 = dn_ld_u64(key, ko) & mask
+    let mut probes : u64 = 0u64
+    while probes < cap {
+        let occ : u8 = slots[i * 192u64 + 104u64]
+        if occ == 0u8 {
+            if want == 1u64 { return i }
+            return DN_NOTFOUND
+        }
+        if dn_eq32(slots, i * 192u64, key, ko) == 1u8 { return i }
+        i = (i + 1u64) & mask
+        probes = probes + 1u64
+    }
+    return DN_NOTFOUND
+}
+
+fn dn_init(meta: *u8, slots: *u8, cap: u64) -> u64 @export {
+    dn_st_u64(meta, 0u64, cap)
+    dn_st_u64(meta, 8u64, 0u64)
+    let mut i : u64 = 0u64
+    while i < cap {
+        slots[i * 192u64 + 104u64] = 0u8
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn dn_count(meta: *u8) -> u64 @export {
+    return dn_ld_u64(meta, 8u64)
+}
+
+/* apply a signed update.  0 accepted / 1 stale (ignored) / 3 forgery (bad sig)
+ * / 4 registry full.  A forged or stale update never moves the name. */
+fn dn_apply(meta: *u8, slots: *u8, pubkey: *u8, value_addr: *u8, t: u64, sig: *u8) -> u64 @export {
+    let kbuf : *u8 = dn_malloc(32u64)
+    let mbuf : *u8 = dn_malloc(72u64)
+    dn_key_addr(pubkey, kbuf)
+    dn_build_msg(kbuf, value_addr, t, mbuf)
+    let mut res : u64 = 1u64
+    let v : u8 = ed25519_verify(pubkey, mbuf, 72u64, sig)
+    if v != 1u8 {
+        res = 3u64
+    } else {
+        let i : u64 = dn_find(meta, slots, kbuf, 0u64, 1u64)
+        if i == DN_NOTFOUND {
+            res = 4u64
+        } else {
+            let base : u64 = i * 192u64
+            if slots[base + 104u64] == 0u8 {
+                dn_copy(slots, base, kbuf, 0u64, 32u64)
+                dn_copy(slots, base + 32u64, pubkey, 0u64, 32u64)
+                slots[base + 104u64] = 1u8
+                slots[base + 105u64] = 0u8
+                dn_st_u64(slots, base + 96u64, 0u64)
+                dn_st_u64(meta, 8u64, dn_ld_u64(meta, 8u64) + 1u64)
+            }
+            let mut accept : u64 = 0u64
+            if slots[base + 105u64] == 0u8 {
+                accept = 1u64
+            } else {
+                let curt : u64 = dn_ld_u64(slots, base + 96u64)
+                if t > curt {
+                    accept = 1u64
+                } else {
+                    if t == curt {
+                        if dn_addr_gt(value_addr, 0u64, slots, base + 64u64) == 1u8 { accept = 1u64 }
+                    }
+                }
+            }
+            if accept == 1u64 {
+                dn_copy(slots, base + 64u64, value_addr, 0u64, 32u64)
+                dn_st_u64(slots, base + 96u64, t)
+                slots[base + 105u64] = 1u8
+                dn_copy(slots, base + 106u64, sig, 0u64, 64u64)
+                res = 0u64
+            } else {
+                res = 1u64
+            }
+        }
+    }
+    dn_free(kbuf)
+    dn_free(mbuf)
+    return res
+}
+
+/* current value-address of a name, or GAP if unknown / never set */
+fn dn_resolve(meta: *u8, slots: *u8, key: *u8, ko: u64, out: *u8) -> u64 @export {
+    let i : u64 = dn_find(meta, slots, key, ko, 0u64)
+    if i == DN_NOTFOUND { return DN_GAP }
+    let base : u64 = i * 192u64
+    if slots[base + 105u64] == 0u8 { return DN_GAP }
+    dn_copy(out, 0u64, slots, base + 64u64, 32u64)
+    return 0u64
+}
+
+/* monotone merge: re-apply every source name's current signed update into dst.
+ * Re-verifies each signature (so merging an untrusted store is safe) and joins
+ * by LWW. Order-independent + idempotent because dn_apply is a semilattice join. */
+fn dn_merge(dmeta: *u8, dslots: *u8, smeta: *u8, sslots: *u8) -> u64 @export {
+    let scap : u64 = dn_ld_u64(smeta, 0u64)
+    let pk : *u8 = dn_malloc(32u64)
+    let va : *u8 = dn_malloc(32u64)
+    let sg : *u8 = dn_malloc(64u64)
+    let mut i : u64 = 0u64
+    while i < scap {
+        let base : u64 = i * 192u64
+        if sslots[base + 104u64] == 1u8 {
+            if sslots[base + 105u64] == 1u8 {
+                dn_copy(pk, 0u64, sslots, base + 32u64, 32u64)
+                dn_copy(va, 0u64, sslots, base + 64u64, 32u64)
+                dn_copy(sg, 0u64, sslots, base + 106u64, 64u64)
+                let t : u64 = dn_ld_u64(sslots, base + 96u64)
+                dn_apply(dmeta, dslots, pk, va, t, sg)
+            }
+        }
+        i = i + 1u64
+    }
+    dn_free(pk)
+    dn_free(va)
+    dn_free(sg)
+    return 0u64
+}

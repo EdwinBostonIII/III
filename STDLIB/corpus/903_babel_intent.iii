@@ -1,0 +1,33 @@
+/* 903_babel_intent.iii -- integration gate for omnia/babel_intent.iii (was wired NOWHERE).
+ * babel_intent serialises an intent_t* + crystal_id into a Babel JSON envelope (send) and
+ * validates an envelope (receive).  This proves the send->receive round-trip: a sent envelope is
+ * well-formed ('{' .. '}') and accepted by receive; plus the negative cases -- null intent,
+ * too-short input, and an over-small destination all REFUSE.  99 = round-trip + all guards. */
+module corpus_903
+
+extern @abi(c-msvc-x64) fn babel_intent_send(intent_ptr: u64, crystal_id: u64, dst_buf: u64, dst_cap: u32) -> u32 from "babel_intent.iii"
+extern @abi(c-msvc-x64) fn babel_intent_receive(src: u64, src_len: u32, arena_id: u64) -> u64 from "babel_intent.iii"
+extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
+
+var BIBUF : [u8; 4096]
+
+fn main() -> u64 {
+    let cid : u64 = 0xABCDu64
+    let intent : u64 = intent_new(3u8)
+    if intent == 0u64 { return 1u64 }
+    let buf : u64 = (&BIBUF) as u64
+
+    let len : u32 = babel_intent_send(intent, cid, buf, 4096u32)
+    if len == 0u32 { return 2u64 }
+    let p0 : *u8 = buf as *u8
+    if p0[0u64] != 123u8 { return 3u64 }                              /* '{' */
+    let plast : *u8 = (buf + (len as u64) - 1u64) as *u8
+    if plast[0u64] != 125u8 { return 4u64 }                           /* '}' */
+    if babel_intent_receive(buf, len, 0u64) != buf { return 5u64 }    /* round-trip accepted */
+
+    /* NEGATIVE cases */
+    if babel_intent_send(0u64, cid, buf, 4096u32) != 0u32 { return 6u64 }   /* null intent */
+    if babel_intent_receive(buf, 10u32, 0u64) != 0u64 { return 7u64 }       /* too short (<32) */
+    if babel_intent_send(intent, cid, buf, 4u32) != 0u32 { return 8u64 }    /* dst too small */
+    return 99u64
+}

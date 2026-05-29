@@ -1,0 +1,179 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\ripple_dyn_kat.iii
+ *
+ * Conformance KAT for the signed dynamic-name layer, integrated with the value
+ * layer + the real Ed25519.  Links ripple.iii + ripple_dyn.iii + libiii_native.a.
+ *
+ *   A  publish value -> sign update -> apply -> resolve name -> resolve content
+ *      (full integration: mutable name -> content-address -> verified bytes)
+ *   B  newer update moves the name (LWW advance)
+ *   C  older update is ignored, name does not regress      (monotonicity)
+ *   D  forged signature is rejected, name does not move     (NEGATIVE: security)
+ *   E  applying the same updates in different orders -> same name (CRDT)
+ *   F  merging registries is last-writer-wins and monotone
+ *
+ * Exit 99 = all arms pass.  10..24 localize the first failure.
+ */
+
+module corpus_ripple_dyn
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn ed25519_pubkey(seed: *u8, out_pk: *u8) -> u8 from "crypt_ed25519.iii"
+extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 from "crypt_ed25519.iii"
+
+extern @abi(c-msvc-x64) fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 from "ripple.iii"
+
+extern @abi(c-msvc-x64) fn dn_init(meta: *u8, slots: *u8, cap: u64) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn dn_key_addr(pubkey: *u8, out: *u8) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn dn_build_msg(key_addr: *u8, value_addr: *u8, t: u64, out72: *u8) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn dn_apply(meta: *u8, slots: *u8, pubkey: *u8, value_addr: *u8, t: u64, sig: *u8) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn dn_resolve(meta: *u8, slots: *u8, key: *u8, ko: u64, out: *u8) -> u64 from "ripple_dyn.iii"
+extern @abi(c-msvc-x64) fn dn_merge(dmeta: *u8, dslots: *u8, smeta: *u8, sslots: *u8) -> u64 from "ripple_dyn.iii"
+
+fn kfill(buf: *u8, off: u64, n: u64, seed: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        buf[off + k] = ((seed + k) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn keqn(a: *u8, ao: u64, b: *u8, bo: u64, n: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < n {
+        if a[ao + k] != b[bo + k] { eq = 0u8 }
+        k = k + 1u64
+    }
+    return eq
+}
+
+fn kcopy(d: *u8, doff: u64, s: *u8, soff: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n {
+        d[doff + k] = s[soff + k]
+        k = k + 1u64
+    }
+    return 0u64
+}
+
+fn ksign(seed: *u8, pubkey: *u8, key_addr: *u8, value_addr: *u8, t: u64, msg72: *u8, sig: *u8) -> u64 {
+    dn_build_msg(key_addr, value_addr, t, msg72)
+    ed25519_sign(seed, pubkey, msg72, 72u64, sig)
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* identity */
+    let seed : *u8 = malloc(32u64)
+    let pubkey : *u8 = malloc(32u64)
+    let key_addr : *u8 = malloc(32u64)
+    let msg72 : *u8 = malloc(72u64)
+    kfill(seed, 0u64, 32u64, 5u64)
+    ed25519_pubkey(seed, pubkey)
+    dn_key_addr(pubkey, key_addr)
+
+    /* value layer */
+    let meta_s : *u8 = malloc(32u64)
+    let slots_s : *u8 = malloc(64u64 * 64u64)
+    let arena_s : *u8 = malloc(65536u64)
+    rn_store_init(meta_s, slots_s, 64u64, 65536u64)
+
+    let valbuf : *u8 = malloc(64u64)
+    let addr_a : *u8 = malloc(32u64)
+    let addr_b : *u8 = malloc(32u64)
+    let addr_c : *u8 = malloc(32u64)
+    kfill(valbuf, 0u64, 40u64, 7u64)
+    rn_publish(meta_s, slots_s, arena_s, valbuf, 0u64, 40u64, addr_a, 0u64)
+    kfill(valbuf, 0u64, 40u64, 8u64)
+    rn_publish(meta_s, slots_s, arena_s, valbuf, 0u64, 40u64, addr_b, 0u64)
+    kfill(valbuf, 0u64, 40u64, 9u64)
+    rn_publish(meta_s, slots_s, arena_s, valbuf, 0u64, 40u64, addr_c, 0u64)
+
+    /* three valid signed updates: (addr_a,t1) (addr_b,t2) (addr_c,t3) */
+    let sig1 : *u8 = malloc(64u64)
+    let sig2 : *u8 = malloc(64u64)
+    let sig3 : *u8 = malloc(64u64)
+    let sigf : *u8 = malloc(64u64)
+    ksign(seed, pubkey, key_addr, addr_a, 1u64, msg72, sig1)
+    ksign(seed, pubkey, key_addr, addr_b, 2u64, msg72, sig2)
+    ksign(seed, pubkey, key_addr, addr_c, 3u64, msg72, sig3)
+
+    /* scratch */
+    let out32 : *u8 = malloc(32u64)
+    let x2 : *u8 = malloc(32u64)
+    let x3 : *u8 = malloc(32u64)
+    let xf : *u8 = malloc(32u64)
+    let out : *u8 = malloc(64u64)
+    let vbuf : *u8 = malloc(32u64)
+
+    /* registries */
+    let meta_r : *u8 = malloc(16u64)
+    let slots_r : *u8 = malloc(64u64 * 192u64)
+    let meta_r2 : *u8 = malloc(16u64)
+    let slots_r2 : *u8 = malloc(64u64 * 192u64)
+    let meta_r3 : *u8 = malloc(16u64)
+    let slots_r3 : *u8 = malloc(64u64 * 192u64)
+    let meta_ml : *u8 = malloc(16u64)
+    let slots_ml : *u8 = malloc(64u64 * 192u64)
+    let meta_mh : *u8 = malloc(16u64)
+    let slots_mh : *u8 = malloc(64u64 * 192u64)
+
+    /* ---------- A: round-trip + full integration ---------- */
+    dn_init(meta_r, slots_r, 64u64)
+    if dn_apply(meta_r, slots_r, pubkey, addr_a, 1u64, sig1) != 0u64 { return 10u64 }
+    if dn_resolve(meta_r, slots_r, key_addr, 0u64, out32) != 0u64 { return 11u64 }
+    if keqn(out32, 0u64, addr_a, 0u64, 32u64) == 0u8 { return 12u64 }
+    let la : u64 = rn_resolve(meta_s, slots_s, arena_s, out32, 0u64, out, 0u64, 64u64, vbuf)
+    if la != 40u64 { return 13u64 }
+    kfill(valbuf, 0u64, 40u64, 7u64)
+    if keqn(out, 0u64, valbuf, 0u64, 40u64) == 0u8 { return 14u64 }
+
+    /* ---------- B: LWW advance ---------- */
+    if dn_apply(meta_r, slots_r, pubkey, addr_b, 2u64, sig2) != 0u64 { return 15u64 }
+    dn_resolve(meta_r, slots_r, key_addr, 0u64, out32)
+    if keqn(out32, 0u64, addr_b, 0u64, 32u64) == 0u8 { return 16u64 }
+
+    /* ---------- C: stale ignored, no regression ---------- */
+    if dn_apply(meta_r, slots_r, pubkey, addr_a, 1u64, sig1) != 1u64 { return 17u64 }
+    dn_resolve(meta_r, slots_r, key_addr, 0u64, out32)
+    if keqn(out32, 0u64, addr_b, 0u64, 32u64) == 0u8 { return 18u64 }
+
+    /* ---------- D: forgery rejected (negative) ---------- */
+    kcopy(sigf, 0u64, sig3, 0u64, 64u64)
+    sigf[0] = sigf[0] + 7u8
+    if dn_apply(meta_r, slots_r, pubkey, addr_c, 3u64, sigf) != 3u64 { return 19u64 }
+    dn_resolve(meta_r, slots_r, key_addr, 0u64, out32)
+    if keqn(out32, 0u64, addr_b, 0u64, 32u64) == 0u8 { return 20u64 }
+
+    /* ---------- E: order-independence (CRDT) ---------- */
+    dn_init(meta_r2, slots_r2, 64u64)
+    dn_apply(meta_r2, slots_r2, pubkey, addr_c, 3u64, sig3)
+    dn_apply(meta_r2, slots_r2, pubkey, addr_a, 1u64, sig1)
+    dn_apply(meta_r2, slots_r2, pubkey, addr_b, 2u64, sig2)
+    dn_resolve(meta_r2, slots_r2, key_addr, 0u64, x2)
+    dn_init(meta_r3, slots_r3, 64u64)
+    dn_apply(meta_r3, slots_r3, pubkey, addr_b, 2u64, sig2)
+    dn_apply(meta_r3, slots_r3, pubkey, addr_c, 3u64, sig3)
+    dn_apply(meta_r3, slots_r3, pubkey, addr_a, 1u64, sig1)
+    dn_resolve(meta_r3, slots_r3, key_addr, 0u64, x3)
+    if keqn(x2, 0u64, addr_c, 0u64, 32u64) == 0u8 { return 21u64 }
+    if keqn(x2, 0u64, x3, 0u64, 32u64) == 0u8 { return 22u64 }
+
+    /* ---------- F: merge is LWW + monotone ---------- */
+    dn_init(meta_ml, slots_ml, 64u64)
+    dn_apply(meta_ml, slots_ml, pubkey, addr_a, 1u64, sig1)
+    dn_init(meta_mh, slots_mh, 64u64)
+    dn_apply(meta_mh, slots_mh, pubkey, addr_c, 3u64, sig3)
+    dn_merge(meta_ml, slots_ml, meta_mh, slots_mh)
+    dn_resolve(meta_ml, slots_ml, key_addr, 0u64, xf)
+    if keqn(xf, 0u64, addr_c, 0u64, 32u64) == 0u8 { return 23u64 }
+    dn_merge(meta_mh, slots_mh, meta_ml, slots_ml)
+    dn_resolve(meta_mh, slots_mh, key_addr, 0u64, xf)
+    if keqn(xf, 0u64, addr_c, 0u64, 32u64) == 0u8 { return 24u64 }
+
+    return 99u64
+}

@@ -1,0 +1,46 @@
+/* 896_identities.iii -- functional gate for the algebraic-identity completion batch in cg_r3.
+ * Each identity is exercised with a RUNTIME arg so a wrong fold changes the value.  Constant
+ * operands use LITERALS (so the optimizer's const path actually fires); the all-ones literal
+ * lives only in a let-RHS (never immediately before `{`, dodging the hex/i64-before-brace trap).
+ * 99 = every identity is value-correct across all probes (incl. zero + a high-bit value). */
+module corpus_896
+
+fn check(x: u64) -> u64 {
+    let zero : u64 = 0u64
+    let allones : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let a : u64 = x - 0u64
+    if a != x { return 1u64 }                 /* x - 0 = x */
+    let b : u64 = x | 0u64
+    if b != x { return 2u64 }                 /* x | 0 = x */
+    let c : u64 = x ^ 0u64
+    if c != x { return 3u64 }                 /* x ^ 0 = x */
+    let d : u64 = x << 0u64
+    if d != x { return 4u64 }                 /* x << 0 = x */
+    let e : u64 = x >> 0u64
+    if e != x { return 5u64 }                 /* x >> 0 = x */
+    let f : u64 = x & 0u64
+    if f != zero { return 6u64 }              /* x & 0 = 0 (annihilator) */
+    let g : u64 = x & 0xFFFFFFFFFFFFFFFFu64
+    if g != x { return 7u64 }                 /* x & ALLONES = x */
+    let h : u64 = x | 0xFFFFFFFFFFFFFFFFu64
+    if h != allones { return 8u64 }           /* x | ALLONES = ALLONES */
+    let i : u64 = x - x
+    if i != zero { return 9u64 }              /* x - x = 0 (same binder) */
+    let j : u64 = x ^ x
+    if j != zero { return 10u64 }             /* x ^ x = 0 */
+    let k : u64 = x & x
+    if k != x { return 11u64 }                /* x & x = x */
+    let l : u64 = x | x
+    if l != x { return 12u64 }                /* x | x = x */
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r1 : u64 = check(12345u64)
+    if r1 != 0u64 { return 1u64 }
+    let r2 : u64 = check(0u64)
+    if r2 != 0u64 { return 2u64 }
+    let r3 : u64 = check(9223372036854775808u64)
+    if r3 != 0u64 { return 3u64 }
+    return 99u64
+}

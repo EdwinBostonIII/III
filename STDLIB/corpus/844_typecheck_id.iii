@@ -1,0 +1,13 @@
+/* P5 brick 4: identity types (Id + refl + transport) on Bool data. p5_kat_id()
+ * asserts Id-formation, refl typing, refl-against-Id check, transport-beta
+ * (transport along reflexivity = identity), refl/Id conversion, and Id/refl
+ * substituted under a binder; with negatives (refl proving a=b REJECTED, wrong
+ * transport base type, wrong predicate domain). Identity types are where
+ * equalities become statable and usable. 99 = all pass; 1..18 = first failing case. */
+module corpus_c844
+
+extern @abi(c-msvc-x64) fn p5_kat_id() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_id()
+}

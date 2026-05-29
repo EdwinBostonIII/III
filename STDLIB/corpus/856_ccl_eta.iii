@@ -1,0 +1,15 @@
+/* Path C brick 16a: eta via the e-graph (the FALSIFIER). ccl_eta_kat() builds the
+ * 846 eta vectors as Curien CCL terms, registers the single STRUCTURAL eta axiom
+ * Cur(App o <x o Fst, Snd>) = x, runs e-graph equality saturation, and asserts the
+ * kernel's eta behaviour is reproduced as an EQUIVALENCE: P1 merges (lam f.lam x.f x
+ * == lam f.f) via the axiom + congruence, while P2 (no conflation) and P3
+ * (strengthen-fail) stay distinct. This decides whether the e-graph route to
+ * extensionality works (design 20.0) -- the gate for all of B16-B18.
+ * 99 = e-graph reproduces 846; 1..5 = first failing vector. */
+module corpus_c856
+
+extern @abi(c-msvc-x64) fn ccl_eta_kat() -> u64 from "ccl.iii"
+
+fn main() -> u64 {
+    return ccl_eta_kat()
+}

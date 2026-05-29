@@ -1,0 +1,12 @@
+/* P5 brick 2: Sigma types (dependent pairs) + type ascription. p5_kat_sigma()
+ * asserts the kernel ACCEPTS Sigma-formation, dependent-pair intro, projection
+ * elimination + beta, and the dependent projection TYPE; and REJECTS ill-typed
+ * pairs, projection of a non-pair, and the keystone (U0:U0) via ascription.
+ * 99 = all pass; 1..14 = first failing case. */
+module corpus_c842
+
+extern @abi(c-msvc-x64) fn p5_kat_sigma() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_sigma()
+}

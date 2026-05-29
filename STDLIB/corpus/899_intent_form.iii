@@ -1,0 +1,31 @@
+/* 899_intent_form.iii -- integration gate for verba/intent_form.iii (was wired NOWHERE).
+ * intent_form is the runtime "key=val, ..." text-to-intent parser.  This parses real specs and
+ * reads every field back through intent.iii's getters (round-trip), checks an unset slot is 0,
+ * and proves the null-src / zero-len guards REFUSE (negative cases).  Lengths are explicit
+ * (string literals are not NUL-terminated; intent_form_parse takes an explicit len).
+ * 99 = every parsed field matches and both guards fire. */
+module corpus_899
+
+extern @abi(c-msvc-x64) fn intent_form_parse(src: u64, len: u64) -> u64 from "intent_form.iii"
+extern @abi(c-msvc-x64) fn intent_goal_kind(p: u64) -> u8 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_recursion_depth(p: u64) -> u16 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_partial_arg(p: u64, slot: u32) -> u64 from "intent.iii"
+
+fn main() -> u64 {
+    let s1 : u64 = ("goal_kind=5" as *u8) as u64           /* 11 chars */
+    let p1 : u64 = intent_form_parse(s1, 11u64)
+    if p1 == 0u64 { return 1u64 }
+    if intent_goal_kind(p1) != 5u8 { return 2u64 }
+
+    let s2 : u64 = ("depth=7,arg0=99" as *u8) as u64        /* 15 chars */
+    let p2 : u64 = intent_form_parse(s2, 15u64)
+    if p2 == 0u64 { return 3u64 }
+    if intent_recursion_depth(p2) != 7u16 { return 4u64 }
+    if intent_partial_arg(p2, 0u32) != 99u64 { return 5u64 }
+    if intent_partial_arg(p2, 1u32) != 0u64 { return 6u64 }   /* unset slot defaults to 0 */
+
+    /* NEGATIVE: null src and zero len are both refused */
+    if intent_form_parse(0u64, 5u64) != 0u64 { return 7u64 }
+    if intent_form_parse(s2, 0u64) != 0u64 { return 8u64 }
+    return 99u64
+}

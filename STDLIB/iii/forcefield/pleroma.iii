@@ -1,0 +1,342 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\FORCEFIELD\pleroma.iii
+ *
+ * pleroma - the coherence forcefield gate, WIRED into the STDLIB build
+ * (build_stdlib MODULES "forcefield/pleroma" + corpus 836).  The keystone that
+ * turns a pile of subsystems connected by ad-hoc bridges into ONE sheaf with an
+ * auditable gluing condition.
+ *
+ * THE OBJECT.  A "cover" is the nerve of the system:
+ *   - objects  : the subsystems (each a 32-byte content-address identity).
+ *   - edges    : the bridges/morphisms between subsystems.  Each edge (u -> v)
+ *                carries a TRANSITION g, a permutation in S_deg (by Cayley the
+ *                universal finite group: any finite symmetry a bridge imposes is
+ *                representable; exact, deterministic, genuinely non-abelian).
+ *
+ * THE LAW (one check, not two).  Gauge-fix a spanning forest of the nerve:
+ * a root object gets the identity permutation, and every tree edge (u -> v, g)
+ * sets gauge[v] = gauge[u] . g.  The cover GLUES INTO ONE LOGIC iff EVERY edge
+ * (a -> b, g) satisfies  gauge[a] . g == gauge[b].  Equivalently g = gauge[a]^-1 . gauge[b]
+ * is a Cech coboundary, i.e. [g] = 0 in H^1, i.e. the flat S_deg-connection on
+ * the nerve has trivial holonomy around every fundamental cycle.  Any violating
+ * edge IS a located non-gluing cycle (a length-3 violation is the classic
+ * "three pairwise bridges that do not jointly compose" - the 2-cocycle failure;
+ * it falls out of the same single test).
+ *
+ * THE SEAL (holographic boundary).  A cover that passes is committed to one
+ * 32-byte root via the domain-separated SHA-256 Crown (mhash): the boundary
+ * that reconstructs/verifies the whole interior.  Re-running yields the same
+ * root - drift-evident by construction.
+ *
+ * VERDICTS:  1 = ADMIT (coheres; root written; obstruction = 0xFFFFFFFF)
+ *            0 = REJECT (a non-gluing edge; its index written to obstruction)
+ *            2 = ERROR  (precondition violated: deg out of [1,256], an edge
+ *                        endpoint >= obj_count, or a transition that is not a
+ *                        permutation of 0..deg-1)
+ *
+ * NIH: kernel32 VirtualAlloc/VirtualFree + III's own mhash (-> cad -> sha256).  No ML, no floats,
+ * no statistics - pure finite group theory + a graph traversal.
+ */
+
+module forcefield_pleroma
+
+extern @abi(c-msvc-x64) fn VirtualAlloc(vaddr: u64, vsize: u64, vtype: u32, vprot: u32) -> *u8 from "kernel32"
+extern @abi(c-msvc-x64) fn VirtualFree(vaddr: *u8, vsize: u64, vftype: u32) -> i32 from "kernel32"
+
+/* P4.3: C-free heap via kernel32 pages (no msvcrt).  Module-unique names (pl_*) so the
+ * non-@export helpers do NOT emit a global L_malloc/L_free that collides with ripple_dyn under
+ * gcc --whole-archive (the bench-corpus link path) -- corpus 237/242/243/244. */
+fn pl_malloc(n: u64) -> *u8 {
+    return VirtualAlloc(0u64, n, 0x3000u32, 0x04u32)
+}
+fn pl_free(p: *u8) -> u64 {
+    VirtualFree(p, 0u64, 0x8000u32)
+    return 0u64
+}
+
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(domain: u64, dlen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+const PLEROMA_ADMIT  : u64 = 1u64
+const PLEROMA_REJECT : u64 = 0u64
+const PLEROMA_ERROR  : u64 = 2u64
+
+/* --- little-endian byte (de)serialization over *u8 buffers --- */
+
+fn pl_ld_u32(p: *u8, elem: u64) -> u32 {
+    let o : u64 = elem * 4u64
+    let b0 : u32 = p[o] as u32
+    let b1 : u32 = p[o + 1u64] as u32
+    let b2 : u32 = p[o + 2u64] as u32
+    let b3 : u32 = p[o + 3u64] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn pl_st_u32(p: *u8, elem: u64, v: u32) -> u64 {
+    let o : u64 = elem * 4u64
+    p[o]          = (v & 0xFFu32) as u8
+    p[o + 1u64]   = ((v >> 8u32) & 0xFFu32) as u8
+    p[o + 2u64]   = ((v >> 16u32) & 0xFFu32) as u8
+    p[o + 3u64]   = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u64
+}
+
+fn pl_ld_u64(p: *u8, off: u64) -> u64 {
+    let b0 : u64 = p[off] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    let b4 : u64 = p[off + 4u64] as u64
+    let b5 : u64 = p[off + 5u64] as u64
+    let b6 : u64 = p[off + 6u64] as u64
+    let b7 : u64 = p[off + 7u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
+fn pl_st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* --- permutation group S_deg over byte-arrays (image table form) --- */
+
+fn pl_perm_id(buf: *u8, base: u64, deg: u64) -> u64 {
+    let mut x : u64 = 0u64
+    while x < deg {
+        buf[base + x] = x as u8
+        x = x + 1u64
+    }
+    return 0u64
+}
+
+/* out := f . g     (apply g then f):  out[x] = f[g[x]] */
+fn pl_perm_compose(out: *u8, ooff: u64, f: *u8, foff: u64, g: *u8, goff: u64, deg: u64) -> u64 {
+    let mut x : u64 = 0u64
+    while x < deg {
+        let gv : u64 = g[goff + x] as u64
+        out[ooff + x] = f[foff + gv]
+        x = x + 1u64
+    }
+    return 0u64
+}
+
+/* out := g^-1 :  out[g[x]] = x */
+fn pl_perm_inverse(out: *u8, ooff: u64, g: *u8, goff: u64, deg: u64) -> u64 {
+    let mut x : u64 = 0u64
+    while x < deg {
+        let gv : u64 = g[goff + x] as u64
+        out[ooff + gv] = x as u8
+        x = x + 1u64
+    }
+    return 0u64
+}
+
+fn pl_perm_eq(a: *u8, aoff: u64, b: *u8, boff: u64, deg: u64) -> u8 {
+    let mut x : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while x < deg {
+        if a[aoff + x] != b[boff + x] { eq = 0u8 }
+        x = x + 1u64
+    }
+    return eq
+}
+
+/* ============================================================
+ *  pleroma_cohere - the gate.
+ * ============================================================ */
+fn pleroma_cohere(
+    obj_count: u64,
+    edge_count: u64,
+    edge_src: *u8,
+    edge_dst: *u8,
+    edge_perm: *u8,
+    deg: u64,
+    obj_id: *u8,
+    root_out: *u8,
+    obstr_out: *u8
+) -> u64 @export {
+    /* --- precondition: a usable permutation degree --- */
+    if deg == 0u64   { return PLEROMA_ERROR }
+    if deg > 256u64  { return PLEROMA_ERROR }
+
+    /* --- validate every transition is a genuine permutation of 0..deg-1, and
+     *     every edge endpoint is in range.  A malformed cover is an ERROR, not a
+     *     silently-miscomputed REJECT (and it guards every later table index from
+     *     reading out of bounds). --- */
+    let seen : *u8 = pl_malloc(deg + 1u64)
+    if seen as u64 == 0u64 { return PLEROMA_ERROR }
+    let mut e : u64 = 0u64
+    let mut malformed : u64 = 0u64
+    while e < edge_count {
+        let a : u64 = pl_ld_u32(edge_src, e) as u64
+        let b : u64 = pl_ld_u32(edge_dst, e) as u64
+        if a >= obj_count { malformed = 1u64 }
+        if b >= obj_count { malformed = 1u64 }
+        let mut r : u64 = 0u64
+        while r < deg {
+            seen[r] = 0u8
+            r = r + 1u64
+        }
+        let pbase : u64 = e * deg
+        let mut y : u64 = 0u64
+        while y < deg {
+            let v : u64 = edge_perm[pbase + y] as u64
+            if v >= deg { malformed = 1u64 }
+            else {
+                if seen[v] != 0u8 { malformed = 1u64 }
+                seen[v] = 1u8
+            }
+            y = y + 1u64
+        }
+        e = e + 1u64
+    }
+    pl_free(seen)
+    if malformed != 0u64 { return PLEROMA_ERROR }
+
+    /* --- working buffers (heap, never function-local arrays) --- */
+    let gauge   : *u8 = pl_malloc(obj_count * deg + 1u64)
+    let visited : *u8 = pl_malloc(obj_count + 1u64)
+    let stack   : *u8 = pl_malloc(obj_count * 8u64 + 8u64)
+    let tmp     : *u8 = pl_malloc(deg + 1u64)
+    let tmpinv  : *u8 = pl_malloc(deg + 1u64)
+    /* allocation guard (no shortcuts): a failed page alloc is an ERROR, not a crash. */
+    let mut allocbad : u64 = 0u64
+    if gauge   as u64 == 0u64 { allocbad = 1u64 }
+    if visited as u64 == 0u64 { allocbad = 1u64 }
+    if stack   as u64 == 0u64 { allocbad = 1u64 }
+    if tmp     as u64 == 0u64 { allocbad = 1u64 }
+    if tmpinv  as u64 == 0u64 { allocbad = 1u64 }
+    if allocbad != 0u64 {
+        pl_free(gauge)
+        pl_free(visited)
+        pl_free(stack)
+        pl_free(tmp)
+        pl_free(tmpinv)
+        return PLEROMA_ERROR
+    }
+
+    let mut iv : u64 = 0u64
+    while iv < obj_count {
+        visited[iv] = 0u8
+        iv = iv + 1u64
+    }
+
+    /* --- spanning forest gauge-fix (explicit stack; each vertex pushed once) --- */
+    let mut s : u64 = 0u64
+    while s < obj_count {
+        if visited[s] == 0u8 {
+            visited[s] = 1u8
+            pl_perm_id(gauge, s * deg, deg)
+            let mut sp : u64 = 0u64
+            pl_st_u64(stack, sp * 8u64, s)
+            sp = sp + 1u64
+            while sp > 0u64 {
+                sp = sp - 1u64
+                let u : u64 = pl_ld_u64(stack, sp * 8u64)
+                let mut ee : u64 = 0u64
+                while ee < edge_count {
+                    let a : u64 = pl_ld_u32(edge_src, ee) as u64
+                    let b : u64 = pl_ld_u32(edge_dst, ee) as u64
+                    if a == u {
+                        if visited[b] == 0u8 {
+                            /* gauge[b] = gauge[u] . g_ee */
+                            pl_perm_compose(gauge, b * deg, gauge, u * deg, edge_perm, ee * deg, deg)
+                            visited[b] = 1u8
+                            pl_st_u64(stack, sp * 8u64, b)
+                            sp = sp + 1u64
+                        }
+                    } else {
+                        if b == u {
+                            if visited[a] == 0u8 {
+                                /* gauge[a] = gauge[u] . g_ee^-1 */
+                                pl_perm_inverse(tmpinv, 0u64, edge_perm, ee * deg, deg)
+                                pl_perm_compose(gauge, a * deg, gauge, u * deg, tmpinv, 0u64, deg)
+                                visited[a] = 1u8
+                                pl_st_u64(stack, sp * 8u64, a)
+                                sp = sp + 1u64
+                            }
+                        }
+                    }
+                    ee = ee + 1u64
+                }
+            }
+        }
+        s = s + 1u64
+    }
+
+    /* --- the gluing condition: every edge's holonomy must be trivial --- */
+    let mut bad : u64 = edge_count   /* sentinel: no obstruction */
+    let mut ce : u64 = 0u64
+    while ce < edge_count {
+        let a : u64 = pl_ld_u32(edge_src, ce) as u64
+        let b : u64 = pl_ld_u32(edge_dst, ce) as u64
+        pl_perm_compose(tmp, 0u64, gauge, a * deg, edge_perm, ce * deg, deg)
+        if pl_perm_eq(tmp, 0u64, gauge, b * deg, deg) == 0u8 {
+            bad = ce
+            break
+        }
+        ce = ce + 1u64
+    }
+
+    pl_free(gauge)
+    pl_free(visited)
+    pl_free(stack)
+    pl_free(tmp)
+    pl_free(tmpinv)
+
+    if bad < edge_count {
+        pl_st_u32(obstr_out, 0u64, bad as u32)
+        return PLEROMA_REJECT
+    }
+
+    /* --- coherent: seal the cover into one holographic root --- */
+    let dom : *u8 = pl_malloc(16u64)
+    if dom as u64 == 0u64 { return PLEROMA_ERROR }
+    dom[0]  = 80u8  /* P */
+    dom[1]  = 76u8  /* L */
+    dom[2]  = 69u8  /* E */
+    dom[3]  = 82u8  /* R */
+    dom[4]  = 79u8  /* O */
+    dom[5]  = 77u8  /* M */
+    dom[6]  = 65u8  /* A */
+    dom[7]  = 45u8  /* - */
+    dom[8]  = 67u8  /* C */
+    dom[9]  = 79u8  /* O */
+    dom[10] = 72u8  /* H */
+    dom[11] = 69u8  /* E */
+    dom[12] = 82u8  /* R */
+    dom[13] = 45u8  /* - */
+    dom[14] = 48u8  /* 0 */
+    dom[15] = 49u8  /* 1 */
+
+    let hdr : *u8 = pl_malloc(24u64)
+    if hdr as u64 == 0u64 {
+        pl_free(dom)
+        return PLEROMA_ERROR
+    }
+    pl_st_u64(hdr, 0u64,  obj_count)
+    pl_st_u64(hdr, 8u64,  edge_count)
+    pl_st_u64(hdr, 16u64, deg)
+
+    mhash_begin()
+    mhash_domain(dom as u64, 16u64)
+    mhash_payload(hdr as u64, 24u64)
+    mhash_payload(obj_id as u64, obj_count * 32u64)
+    mhash_payload(edge_src as u64, edge_count * 4u64)
+    mhash_payload(edge_dst as u64, edge_count * 4u64)
+    mhash_payload(edge_perm as u64, edge_count * deg)
+    mhash_final(root_out as u64)
+
+    pl_free(dom)
+    pl_free(hdr)
+
+    pl_st_u32(obstr_out, 0u64, 0xFFFFFFFFu32)
+    return PLEROMA_ADMIT
+}

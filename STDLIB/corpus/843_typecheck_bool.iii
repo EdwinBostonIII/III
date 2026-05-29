@@ -1,0 +1,12 @@
+/* P5 brick 3: Bool (the first base inductive) -- Bool:U0, true/false:Bool, and
+ * non-dependent `if` with beta (if(true,t,e)->t). p5_kat_bool() asserts formation,
+ * the constructors, if-typing + beta computation, subst of `if` under a binder,
+ * and negatives (non-Bool scrutinee, mismatched branches, true:U0). The kernel's
+ * first DATA + value-level computation. 99 = all pass; 1..16 = first failing case. */
+module corpus_c843
+
+extern @abi(c-msvc-x64) fn p5_kat_bool() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_bool()
+}

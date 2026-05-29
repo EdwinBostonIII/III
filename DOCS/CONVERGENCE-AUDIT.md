@@ -3169,3 +3169,33 @@ These are real distributed tests (genuine sockets, real consensus messages, real
 **Fix (Phase 3).** Added `r3_spec_type_elem_kind()` (mirrors the literal name→kind map; u64/i64→0=quad is correct 8B) + `if R3_SPEC_ACTIVE && name==R3_SPEC_TP_BUF return r3_spec_type_elem_kind()` in `r3_index_obj_elem_kind`. Disassembly post-fix: `vec_u32_push` element store = `movl %edx,(%rax,%rcx,4)`, load = `movl (%rax,%rcx,4),%eax`. Runtime byte layout now `A0 A1 A2 A3 A4 A5 A6 A7` (stride 4).
 
 **Re-anchor + verification.** Codegen-neutral for R3_SPEC_ACTIVE=0 → compiler sources compile identically → fixed point iiis-2≡iiis-3 held (`0ef8626a`); twin-build reproduced; iiis-1 resealed (`e0b7cb2c`). build_stdlib FAIL=0 (lib `2a7394d6`). KATs 393–398 exit 99 (direct). Full corpus 330/0 (shared tree). **Lesson recorded:** a `*T` container KAT that only round-trips at one index cannot detect a stride/width error — 396 strengthened with a byte-offset stride assertion. **§7.2 status: option/result/span/iter/vec done + the cg `*T` width/stride path now correct for all specialised element types; remaining: queue/pq (single-T) + map/set/lru/fold/zip (two-type-param @specialize cg extension).**
+
+## §8.0 — u64-division codegen fix + bench-link reseal (2026-05-29, continuous mode)
+
+**Found by the FULL behavioral corpus** (`run_all_corpora.sh` — a prior "green" had confirmed only
+compilation, not behavior): 6 failures. Both root-caused + fixed under CRASH-DEBUGGING discipline
+(read the emission path / link error before editing; back up the irreplaceable binaries before reseal).
+
+**Cause A — u64-division (`cg_r3.iii`, binop op 4/5).** Emitted signed `cqto;idivq` for ALL division
+→ unsigned `u64 ÷/%` of a high-bit dividend read as negative (`890_sat_arith` exit 5, `893_u64_div`
+exit 1). FIX: branch on the already-computed `signed` (`r3_either_is_signed` — the same flag the
+`setcc` dispatch uses) — unsigned → `xorl %edx,%edx; divq` (new `R3_STR_DIVU`/`R3_STR_DIVUMOD`).
+
+**Cause B — bench link.** (1) `forcefield/{pleroma,ripple_dyn}` non-`@export` `fn malloc`/`fn free` →
+global `L_malloc`/`L_free` collision under `--whole-archive` → renamed `pl_*`/`dn_*`. (2)
+`run_bench_corpus.sh` used a *blanket* `--whole-archive "$LIB_ARCHIVE"` (the one runner the prior
+CONVERGENCE selective-fix missed) → force-linked the gospel-scale ~1GB BSS → `IMAGE_REL_AMD64_REL32`
+truncation → switched to the selective `${SIDE_EFFECT_OBJS[@]}` pattern (mirrors `run_corpus.sh`).
+
+**Reseal (frozen iiis-1 seed).** New fixed point **iiis-1≡iiis-2≡iiis-3 = `4e138415…`** (was
+`840a528e…` uncommitted pre-fix); lib `258b3579…`. `build_iiis2 --check-corpus` +
+`build_iiis3 --check-corpus` 59/0 both; build_stdlib 419/0; FULL corpus ALL GREEN (STDLIB **546/0**,
+bench **4/0**, stage-1 **57/0**); `890`/`893` = exit 99 (genuine guarding KATs).
+
+**Bootstrap-state finding (pre-existing, non-blocking):** `build_iiis1` (iiis-0→iiis-1) link-fails —
+iiis-0 can no longer compile post-port `parse.iii` (`iii_lex_{read_u32,write_u32,write_u64,memset}_c`
+undefined; the C `lex_rt` was ported away). Reseal correctly bootstraps from the frozen iiis-1 seed;
+from-absolute-scratch bootstrap has drifted past the iiis-0 C seed (future seed-refresh candidate).
+Full detail: `DOCS/III-DISPOSITION-EXECUTION.md`.
+
+**§8.0 sealed at:** 2026-05-29.

@@ -1,0 +1,13 @@
+/* Path C brick 1: the variable-free combinatory core. cb_kat() proves bracket
+ * abstraction (lambda -> SKI) + purely FIRST-ORDER SKI reduction (no substitution,
+ * no scopes) route lambda-terms correctly: I/K/S behavior + composed routing, via
+ * structural pattern-matching only. The foundation for eradicating bound variables
+ * so XII's first-order engine becomes the singular conversion oracle (design 19).
+ * 99 = all pass; 1..7 = first failing case. */
+module corpus_c853
+
+extern @abi(c-msvc-x64) fn cb_kat() -> u64 from "combinator.iii"
+
+fn main() -> u64 {
+    return cb_kat()
+}

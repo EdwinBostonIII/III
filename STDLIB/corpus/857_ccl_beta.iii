@@ -1,0 +1,13 @@
+/* Path C brick 16b experiment: does the e-graph beta-normalize closed CCL terms?
+ * ccl_beta_kat() builds closed beta-redexes ((lam a.a)c, (lam a.lam b.a)c d,
+ * (lam a.lam b.b)c d) as Curien CCL terms, registers the full CCL-beta-eta axiom
+ * set + constant-weakening, saturates, and asserts each reduces to its value via
+ * e-graph equality. Decides whether the singular-oracle vision (the e-graph does
+ * beta too) is reachable. 99 = all reduce; 1..6 = first failing case. */
+module corpus_c857
+
+extern @abi(c-msvc-x64) fn ccl_beta_kat() -> u64 from "ccl.iii"
+
+fn main() -> u64 {
+    return ccl_beta_kat()
+}

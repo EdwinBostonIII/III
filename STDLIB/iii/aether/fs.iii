@@ -3,12 +3,19 @@
  * III STDLIB - aether::fs
  *
  * File-system IO surface, capability-gated.  Underlying ABI is the
- * MSVCRT POSIX-like layer (_open / _read / _write / _close / _lseeki64)
- * which uses integer flag arguments and a u32 file descriptor -
- * avoiding the W3 address-of-static-string problem that fopen's mode
- * argument would create.
+ * Win32 file API (CreateFileA / ReadFile / WriteFile / CloseHandle /
+ * SetFilePointerEx / DeleteFileA) from kernel32 - NO C runtime.  P4.4
+ * removed the msvcrt POSIX layer (_open/_close/_read/_write/_lseeki64/
+ * _unlink), so the stdlib no longer links the C runtime at all.
  *
- * Phase C scope: open / close / read / write / seek / tell / size.
+ * Win32 HANDLEs are 64-bit and are stored WHOLE in the handle table (no
+ * truncation to a CRT `int` fd).  The byte-count and new-position results
+ * come back through by-pointer out-params, not return values, which is
+ * why the two BSS scratch slots (FS_NXFER / FS_NEWPOS) exist; execution
+ * is single-threaded and deterministic so reusing them per call is safe.
+ * Win32 BOOL returns are nonzero=success (the inverse of the CRT calls).
+ *
+ * Phase C scope: open / close / read / write / seek / tell / size / delete.
  * Phase D adds directory ops, stat, atomic-rename.
  *
  * Hexad: kind_passage.  Ring: R-1.  K: 0.95.
@@ -16,12 +23,14 @@
 
 module aether_fs
 
-extern @abi(c-msvc-x64) fn _open(path: *u8, flags: i32, mode: i32) -> i32 from "msvcrt"
-extern @abi(c-msvc-x64) fn _close(fd: i32) -> i32 from "msvcrt"
-extern @abi(c-msvc-x64) fn _read(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
-extern @abi(c-msvc-x64) fn _write(fd: i32, buf: *u8, n: u32) -> i32 from "msvcrt"
-extern @abi(c-msvc-x64) fn _lseeki64(fd: i32, off: u64, whence: i32) -> u64 from "msvcrt"
-extern @abi(c-msvc-x64) fn _unlink(path: *u8) -> i32 from "msvcrt"
+/* --- Win32 file API (kernel32) - the only OS membrane; no C runtime --- */
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn SetFilePointerEx(h: u64, dist: i64, newptr: u64, method: u32) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn DeleteFileA(name: *u8) -> i32 from "kernel32"
 
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
@@ -40,68 +49,102 @@ const FS_MODE_READ   : u32 = 1u32
 const FS_MODE_WRITE  : u32 = 2u32
 const FS_MODE_APPEND : u32 = 3u32
 
-const FS_O_RDONLY : i32 = 0i32
-const FS_O_WRONLY : i32 = 1i32
-const FS_O_RDWR   : i32 = 2i32
-const FS_O_APPEND : i32 = 0x0008i32
-const FS_O_CREAT  : i32 = 0x0100i32
-const FS_O_TRUNC  : i32 = 0x0200i32
-const FS_O_BINARY : i32 = 0x8000i32
+/* Win32 dwDesiredAccess */
+const FS_GENERIC_READ  : u32 = 0x80000000u32
+const FS_GENERIC_WRITE : u32 = 0x40000000u32
+const FS_APPEND_DATA   : u32 = 0x00000004u32   /* FILE_APPEND_DATA */
+/* Win32 dwShareMode: SHARE_READ | SHARE_WRITE */
+const FS_SHARE_RW      : u32 = 0x00000003u32
+/* Win32 dwCreationDisposition */
+const FS_CREATE_ALWAYS : u32 = 2u32            /* create new / truncate existing */
+const FS_OPEN_EXISTING : u32 = 3u32            /* fail if absent                 */
+const FS_OPEN_ALWAYS   : u32 = 4u32            /* open or create (append)        */
+/* Win32 dwFlagsAndAttributes */
+const FS_ATTR_NORMAL   : u32 = 0x00000080u32
+/* Win32 INVALID_HANDLE_VALUE = (HANDLE)-1 */
+const FS_INVALID_HANDLE : u64 = 0xFFFFFFFFFFFFFFFFu64
 
-const FS_S_IREAD_WRITE : i32 = 0x180i32
-
-const FS_SEEK_SET : i32 = 0i32
-const FS_SEEK_CUR : i32 = 1i32
-const FS_SEEK_END : i32 = 2i32
+/* SetFilePointerEx dwMoveMethod == CRT SEEK_* (0/1/2), so whence passes through */
+const FS_SEEK_SET : u32 = 0u32
+const FS_SEEK_CUR : u32 = 1u32
+const FS_SEEK_END : u32 = 2u32
 
 const FS_RIGHT_READ   : u64 = 0x0002u64
 const FS_RIGHT_WRITE  : u64 = 0x0004u64
 const FS_RIGHT_CREATE : u64 = 0x0008u64
 
+/* --- by-pointer out-param scratch (single-threaded; deterministic reuse) --- */
+
+var FS_NXFER  : [u8; 8]    /* ReadFile/WriteFile lpNumberOfBytesTransferred (DWORD) */
+var FS_NEWPOS : [u8; 8]    /* SetFilePointerEx lpNewFilePointer (LARGE_INTEGER)     */
+
+fn fs_xfer_count() -> u32 {
+    let b0 : u32 = FS_NXFER[0] as u32
+    let b1 : u32 = FS_NXFER[1] as u32
+    let b2 : u32 = FS_NXFER[2] as u32
+    let b3 : u32 = FS_NXFER[3] as u32
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+fn fs_newpos() -> u64 {
+    let b0 : u64 = FS_NEWPOS[0] as u64
+    let b1 : u64 = FS_NEWPOS[1] as u64
+    let b2 : u64 = FS_NEWPOS[2] as u64
+    let b3 : u64 = FS_NEWPOS[3] as u64
+    let b4 : u64 = FS_NEWPOS[4] as u64
+    let b5 : u64 = FS_NEWPOS[5] as u64
+    let b6 : u64 = FS_NEWPOS[6] as u64
+    let b7 : u64 = FS_NEWPOS[7] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64) | (b4 << 32u64) | (b5 << 40u64) | (b6 << 48u64) | (b7 << 56u64)
+}
+
 fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 @export {
     let mut required : u64 = 0u64
-    let mut flags : i32 = FS_O_BINARY
+    let mut access : u32 = 0u32
+    let mut disp : u32 = 0u32
     if mode == FS_MODE_READ {
         required = FS_RIGHT_READ
-        flags = flags | FS_O_RDONLY
+        access = FS_GENERIC_READ
+        disp = FS_OPEN_EXISTING
     }
     if mode == FS_MODE_WRITE {
         required = FS_RIGHT_WRITE | FS_RIGHT_CREATE
-        flags = flags | FS_O_WRONLY | FS_O_CREAT | FS_O_TRUNC
+        access = FS_GENERIC_WRITE
+        disp = FS_CREATE_ALWAYS
     }
     if mode == FS_MODE_APPEND {
         required = FS_RIGHT_WRITE
-        flags = flags | FS_O_WRONLY | FS_O_APPEND
+        access = FS_APPEND_DATA
+        disp = FS_OPEN_ALWAYS
     }
     if required == 0u64 { return 0u64 }
     if cap_verify_rights(cap_id, required) == 0u8 { return 0u64 }
     let p_path : *u8 = path as *u8
-    let fd : i32 = _open(p_path, flags, FS_S_IREAD_WRITE)
-    if fd == -1i32 { return 0u64 }
-    return handle_alloc(1u8, fd as u64, cap_id)
+    let h : u64 = CreateFileA(p_path, access, FS_SHARE_RW, 0u64, disp, FS_ATTR_NORMAL, 0u64)
+    if h == FS_INVALID_HANDLE { return 0u64 }
+    return handle_alloc(1u8, h, cap_id)
 }
 
 /* Delete a file by path. Deletion is a write-class mutation, so it requires
  * the WRITE right on the capability (same right that creates/truncates in
  * fs_open WRITE mode). Path-based (like fs_open), not handle-based — there is
  * no open descriptor to delete. Returns FS_OK on success, FS_E_DENIED if the
- * capability lacks WRITE, FS_E_IO if the underlying unlink fails (e.g. the
+ * capability lacks WRITE, FS_E_IO if the underlying delete fails (e.g. the
  * file does not exist or is locked). RITCHIE Stage 1.X (Phase D ops, brought
  * forward to support deterministic corpus cleanup). */
 fn fs_delete(cap_id: u64, path: u64) -> i32 @export {
     if cap_verify_rights(cap_id, FS_RIGHT_WRITE) == 0u8 { return FS_E_DENIED }
     let p_path : *u8 = path as *u8
-    let rc : i32 = _unlink(p_path)
-    if rc != 0i32 { return FS_E_IO }
+    let rc : i32 = DeleteFileA(p_path)   /* Win32 BOOL: 0 = failure */
+    if rc == 0i32 { return FS_E_IO }
     return FS_OK
 }
 
 fn fs_close(handle_id: u64) -> i32 @export {
-    let fd64 : u64 = handle_fd(handle_id)
-    let fd : i32 = fd64 as i32
-    let rc : i32 = _close(fd)
+    let h : u64 = handle_fd(handle_id)
+    let rc : i32 = CloseHandle(h)        /* Win32 BOOL: 0 = failure */
     handle_close(handle_id)
-    if rc != 0i32 { return FS_E_IO }
+    if rc == 0i32 { return FS_E_IO }
     return FS_OK
 }
 
@@ -109,50 +152,49 @@ fn fs_close(handle_id: u64) -> i32 @export {
  * @sovereign_value @sovereign_out (the same recv/read out-buffer taint law). */
 fn fs_read(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0u64 }
-    let fd64 : u64 = handle_fd(handle_id)
-    let fd : i32 = fd64 as i32
+    let h : u64 = handle_fd(handle_id)
     let bp : *u8 = buf as *u8
     let n32 : u32 = (n & 0xFFFFFFFFu64) as u32
-    let read_n : i32 = _read(fd, bp, n32)
-    if read_n == -1i32 { return 0u64 }
-    return read_n as u64
+    let ok : i32 = ReadFile(h, bp, n32, (&FS_NXFER) as u64, 0u64)
+    if ok == 0i32 { return 0u64 }
+    return fs_xfer_count() as u64
 }
 
 /* mig3 boundary SINK: write emits `buf` OUTWARD to the file, so it may carry
  * sovereign data -- buf is @sovereign_value (read-only sink, not @sovereign_out). */
 fn fs_write(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> u64 @export {
     if handle_verify(handle_id, FS_RIGHT_WRITE) == 0u8 { return 0u64 }
-    let fd64 : u64 = handle_fd(handle_id)
-    let fd : i32 = fd64 as i32
+    let h : u64 = handle_fd(handle_id)
     let bp : *u8 = buf as *u8
     let n32 : u32 = (n & 0xFFFFFFFFu64) as u32
-    let written : i32 = _write(fd, bp, n32)
-    if written == -1i32 { return 0u64 }
-    return written as u64
+    let ok : i32 = WriteFile(h, bp, n32, (&FS_NXFER) as u64, 0u64)
+    if ok == 0i32 { return 0u64 }
+    return fs_xfer_count() as u64
 }
 
 fn fs_seek(handle_id: u64, off: u64, whence: u32) -> i32 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return FS_E_DENIED }
-    let fd64 : u64 = handle_fd(handle_id)
-    let fd : i32 = fd64 as i32
-    let w : i32 = whence as i32
-    _lseeki64(fd, off, w)
+    let h : u64 = handle_fd(handle_id)
+    let d : i64 = off as i64
+    SetFilePointerEx(h, d, 0u64, whence)
     return FS_OK
 }
 
 fn fs_tell(handle_id: u64) -> u64 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
-    let fd64 : u64 = handle_fd(handle_id)
-    let fd : i32 = fd64 as i32
-    return _lseeki64(fd, 0u64, FS_SEEK_CUR)
+    let h : u64 = handle_fd(handle_id)
+    SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_CUR)
+    return fs_newpos()
 }
 
 fn fs_size(handle_id: u64) -> u64 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
-    let fd64 : u64 = handle_fd(handle_id)
-    let fd : i32 = fd64 as i32
-    let saved : u64 = _lseeki64(fd, 0u64, FS_SEEK_CUR)
-    let sz : u64 = _lseeki64(fd, 0u64, FS_SEEK_END)
-    _lseeki64(fd, saved, FS_SEEK_SET)
+    let h : u64 = handle_fd(handle_id)
+    SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_CUR)
+    let saved : u64 = fs_newpos()
+    SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_END)
+    let sz : u64 = fs_newpos()
+    let sd : i64 = saved as i64
+    SetFilePointerEx(h, sd, 0u64, FS_SEEK_SET)
     return sz
 }

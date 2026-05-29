@@ -1,0 +1,46 @@
+/* 914_xii_anchor_negative.iii -- the PROVE-THE-NEGATIVE arm corpus 365 lacks for the
+ * Founders-Anchor PFK invariant (sanctus/anchor_xii.iii). corpus 365 is positive-only
+ * (asserts sub-checks 1/2/3/6 ACCEPT); a teeth-free security gate cannot detect a
+ * regression that makes a check wrongly ACCEPT. anchor_check_r1_root(a,b) compares two
+ * 32-byte R1 roots: returns 0 (ACCEPT) iff byte-identical, else sub-check id 5 (REJECT).
+ * This drives BOTH arms + sticky-state safety + re-affirms the positives:
+ *   (1) identical roots  -> ACCEPT (0);
+ *   (2) THE FALSIFIER: one flipped byte -> REJECT (5) -- proves the gate genuinely
+ *       detects a mismatched/forged R1 root, not vacuously accepts;
+ *   (3) restore -> ACCEPT again (no sticky state);
+ *   (4-6) the positive sub-checks (no-bricking / govern-admit / 8-CT) still ACCEPT.
+ * 99 = every arm holds. */
+module corpus_914
+
+extern @abi(c-msvc-x64) fn xii_horizon_init() -> i32 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn anchor_check_r1_root(manifest_r1: *u8, current_r1: *u8) -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn anchor_check_no_bricking() -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn anchor_check_govern_admit() -> u8 from "anchor_xii.iii"
+extern @abi(c-msvc-x64) fn anchor_check_8_ct_classes() -> u8 from "anchor_xii.iii"
+
+var RA : [u8; 32]
+var RB : [u8; 32]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { let b : u8 = ((i + 0x31u64) & 0xFFu64) as u8 ; RA[i] = b ; RB[i] = b ; i = i + 1u64 }
+    let pa : *u8 = (&RA) as u64 as *u8
+    let pb : *u8 = (&RB) as u64 as *u8
+
+    /* (1) identical R1 roots -> ACCEPT */
+    if anchor_check_r1_root(pa, pb) != 0u8 { return 1u64 }
+    /* (2) THE FALSIFIER: one flipped byte -> REJECT with sub-check id 5 */
+    RB[7u64] = RB[7u64] ^ 0x01u8
+    if anchor_check_r1_root(pa, pb) != 5u8 { return 2u64 }
+    /* (3) restore -> ACCEPT again (no sticky state) */
+    RB[7u64] = RB[7u64] ^ 0x01u8
+    if anchor_check_r1_root(pa, pb) != 0u8 { return 3u64 }
+
+    /* (4-6) the positive sub-checks still ACCEPT (parity with corpus 365) */
+    xii_horizon_init()
+    if anchor_check_no_bricking() != 0u8 { return 4u64 }
+    if anchor_check_govern_admit() != 0u8 { return 5u64 }
+    if anchor_check_8_ct_classes() != 0u8 { return 6u64 }
+
+    return 99u64
+}

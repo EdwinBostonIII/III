@@ -1,0 +1,12 @@
+/* P5 brick 1: dependent type-checker core (lambda-Pi + predicative universe
+ * ladder). p5_kat() builds terms and asserts the kernel ACCEPTS well-typed
+ * terms (polymorphic identity, dependent application) and REJECTS ill-typed
+ * ones -- including the keystone negative: U0 : U0 must fail (Girard). 99 = all
+ * pass; 1..13 = first failing case. */
+module corpus_c841
+
+extern @abi(c-msvc-x64) fn p5_kat() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat()
+}

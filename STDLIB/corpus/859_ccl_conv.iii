@@ -1,0 +1,17 @@
+/* Path C: the FULL beta-eta+iota CONVERSION KAT, decided by the SINGULAR CCL
+ * oracle (compile MLTT -> categorical combinators -> directed reduce to normal
+ * form -> structural compare; NO NbE -- it is deleted).  p5_kat_ccl asserts the
+ * verdict on the WHOLE theory with BOTH arms: POSITIVE (must convert) -- the 846
+ * eta vectors (nested extensionality lam f.lam x.(f x) == lam f.f), beta, and the
+ * iota fragment (IF/ITER/NATREC/CASE/J, both branches, nested) + Sigma/Id/type-
+ * formers; and NEGATIVE (must NOT convert) -- eta non-conflation, true!=false,
+ * z!=succ z, PI!=PI(other domain), PI!=SIG.  The negative arms make the oracle
+ * falsifiable -- a degenerate "always convertible" would FAIL them.
+ * 99 = every arm correct; 1..22 = first WRONG verdict. */
+module corpus_c859
+
+extern @abi(c-msvc-x64) fn p5_kat_ccl() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_ccl()
+}

@@ -21,9 +21,9 @@ L_XAD_REJECT:
     .section .iii.ring3,"n"
     .asciz "xad_decide"
     .text
-    .global L_xad_decide
-    .seh_proc L_xad_decide
-L_xad_decide:
+    .global xad_decide
+    .seh_proc xad_decide
+xad_decide:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -184,7 +184,7 @@ xad_admit:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_xad_decide
+    callq xad_decide
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -434,7 +434,7 @@ L_if_end_15:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_xad_decide
+    callq xad_decide
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -466,7 +466,7 @@ L_if_end_17:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_xad_decide
+    callq xad_decide
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -498,7 +498,7 @@ L_if_end_19:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_xad_decide
+    callq xad_decide
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -530,7 +530,7 @@ L_if_end_21:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_xad_decide
+    callq xad_decide
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax

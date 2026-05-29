@@ -79,8 +79,8 @@ L_if_end_1:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
@@ -168,8 +168,8 @@ L_if_end_3:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -200,8 +200,8 @@ L_if_end_3:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -214,8 +214,8 @@ L_if_end_3:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -350,8 +350,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
@@ -379,8 +379,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -392,8 +392,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -405,8 +405,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -420,8 +420,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
@@ -457,8 +457,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -470,8 +470,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -501,8 +501,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
@@ -526,8 +526,8 @@ L_cal_civil_from_days:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rcx
     popq %rax
@@ -663,8 +663,8 @@ cal_unix_to_civil:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -699,8 +699,8 @@ cal_unix_to_civil:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
@@ -726,8 +726,8 @@ cal_unix_to_civil:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)

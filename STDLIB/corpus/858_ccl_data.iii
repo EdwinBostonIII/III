@@ -1,0 +1,14 @@
+/* Path C brick 16b: data eliminator iota via directed CCL reduction. ccl_data_kat()
+ * builds IF/ITER/NATREC/CASE/J applications (eliminators as CCL constants applied
+ * via App o Pair) with constructor scrutinees, reduces them with the directed CCL
+ * reducer (NO substitution -- methods are closed combinators applied via App), and
+ * asserts each selects/recurses correctly. Completes the reducer to the full
+ * beta+eta+iota theory needed for the conversion oracle.
+ * 99 = all reduce; 1..9 = first failing case. */
+module corpus_c858
+
+extern @abi(c-msvc-x64) fn ccl_data_kat() -> u64 from "ccl.iii"
+
+fn main() -> u64 {
+    return ccl_data_kat()
+}

@@ -759,3 +759,35 @@ Changed files = gen_compositions.sh + build_stdlib.sh (build-discipline only). i
 | `STDLIB/build/iii/libiii_native.a` | `3eb57b3f…` | `2a7394d62086b72678c8562d4be930c4703758265109077f1230abeff4b37ecf` |
 
 **Verified:** iiis-1 `verify: OK` (resealed); iiis-2≡iiis-3 fixed point (`0ef8626a`, twin-build reproduced rc=0); build_stdlib FAIL=0; KATs 393/394/395/396(+stride guard)/397/398_vec all exit 99 (direct compile+link+run); full corpus 330/0 (shared tree, zero regressions, `398_vec_specialize` EXPECTED added). cg_r3.c NOT mirrored (iiis-0 compiles zero generic .iii). The new strengthened 396 asserts byte-4 stride (adjacent u32 elements at stride 4, not 8) so the bug can never silently regress.
+
+### §8.0 — u64-division codegen fix + bench-link reseal → new fixed point (2026-05-29)
+
+**Context.** The last ledgered golden (§7.2, `0ef8626a…`, 2026-05-23) advanced through a large
+UNCOMMITTED C→.iii port + CONVERGENCE-wave body of work to a pre-fix golden `840a528e…`. This
+entry seals that cumulative state plus two corpus-blocking fixes the full *behavioral* corpus
+exposed (the prior "green" had only confirmed compilation).
+
+**Cause A — u64-division (`cg_r3.iii`).** DIV/MOD (binop op 4/5) emitted signed `cqto;idivq` for
+ALL operands → unsigned `u64 ÷/%` of a high-bit value read as negative (`0xFFFF..FE/2`→MAX). FIX:
+branch on the already-computed `signed` (`r3_either_is_signed`) — unsigned → `xorl %edx,%edx; divq`
+(new `R3_STR_DIVU`/`R3_STR_DIVUMOD`); signed path unchanged. `COMPILER_RESEAL`.
+**Cause B — bench link (`run_bench_corpus.sh` + forcefield).** `forcefield/{pleroma,ripple_dyn}`
+non-`@export` `malloc`/`free` → global `L_malloc`/`L_free` collision under `--whole-archive` →
+renamed `pl_*`/`dn_*`; and the bench runner's *blanket* `--whole-archive` (force-linking the
+gospel-scale ~1GB BSS → `IMAGE_REL_AMD64_REL32` overflow) → switched to the selective
+side-effect-set pattern every other runner already uses.
+
+| Artifact (golden) | Before (uncommitted pre-fix) | After (this seal) |
+|---|---|---|
+| `iiis-1.mhash` ≡ `iiis-2.mhash` ≡ `iiis-3.mhash` (fixed point) | `840a528e…f6b3b8` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` |
+| `STDLIB/build/iii/libiii_native.a` | `c45f1d3f…daa2cd` | `258b357980796b9613e498bd36978db1885d67fefe139c1092360ec0f828f5f8` |
+
+**Verified:** `build_iiis2 --check-corpus` + `build_iiis3 --check-corpus` both **59/0**; build_stdlib
+**419/0**; FULL corpus ALL GREEN — STDLIB **546/0**, bench **4/0** (links fixed), stage-1 **57/0**;
+`890_sat_arith`=99 + `893_u64_div`=99 (genuine guarding KATs, not rigged).
+
+**Bootstrap-state finding (pre-existing, non-blocking):** `build_iiis1` (iiis-0→iiis-1) is broken —
+iiis-0 can no longer compile post-port `parse.iii` (`iii_lex_*_c` gone). The reseal correctly uses
+the frozen iiis-1 seed; from-absolute-scratch bootstrap has drifted past iiis-0 (future seed-refresh).
+
+**§8.0 sealed at:** 2026-05-29.

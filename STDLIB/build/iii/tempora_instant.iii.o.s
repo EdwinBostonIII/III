@@ -4,16 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "kernel32capability.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
-L_str_1:
     .ascii "capability.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
-L_str_2:
+L_str_1:
     .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
-L_str_3:
+L_str_2:
     .ascii "sha256.iiisha256.iiisha256.iii\0"
-L_str_4:
+L_str_3:
     .ascii "sha256.iiisha256.iii\0"
-L_str_5:
+L_str_4:
     .ascii "sha256.iii\0"
     .section .rodata
 L_INSTANT_INVALID:
@@ -45,6 +43,45 @@ L_INSTANT_PROCESS_EPOCH:
     .global L_INSTANT_EPOCH_INITED
 L_INSTANT_EPOCH_INITED:
     .quad 0x0
+    .global L_INSTANT_LOGICAL
+L_INSTANT_LOGICAL:
+    .quad 0x0
+    .section .iii.ring3,"n"
+    .asciz "instant_logical_next"
+    .text
+    .global L_instant_logical_next
+    .seh_proc L_instant_logical_next
+L_instant_logical_next:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq L_INSTANT_LOGICAL(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, L_INSTANT_LOGICAL(%rip)
+    movq L_INSTANT_LOGICAL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
     .section .iii.ring3,"n"
     .asciz "instant_alloc_slot"
     .text
@@ -292,7 +329,7 @@ L_instant_init_epoch:
     popq %rax
 L_if_end_11:
     subq $32, %rsp
-    callq GetTickCount64
+    callq L_instant_logical_next
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -753,7 +790,7 @@ L_if_end_21:
     popq %rax
 L_if_end_23:
     subq $32, %rsp
-    callq GetTickCount64
+    callq L_instant_logical_next
     addq $32, %rsp
     pushq %rax
     popq %rax

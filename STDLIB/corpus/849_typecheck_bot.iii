@@ -1,0 +1,13 @@
+/* P5 brick 9: bottom (Empty) + top (Unit) + absurd (ex falso). Empty:U0 (no
+ * constructors), absurd(C,e:Empty) : C e (the eliminator -- ex falso quodlibet,
+ * which gives negation ~A := A->Empty). Unit:U0, tt:Unit. p5_kat_bot() tests
+ * formation + tt, the UNDER-BINDER absurd positive (closed there is no Empty
+ * witness), and negatives (proof not Empty, motive domain != Empty).
+ * 99 = all pass; 1..8 = first failing case. */
+module corpus_c849
+
+extern @abi(c-msvc-x64) fn p5_kat_bot() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_bot()
+}

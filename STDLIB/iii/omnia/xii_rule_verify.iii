@@ -1,0 +1,177 @@
+/* omnia/xii_rule_verify.iii -- the verification missile, launched on III's REAL rules.
+ *
+ * III's actual optimizer is XII: xii_canonicalise + xii_rewrite's LIVE rule set, the
+ * engine cg_r3 runs to reduce emitted terms.  Corpus 670 already drives the trit rules,
+ * but it compares the engine's output to iii_trit_* -- the very functions the engine
+ * CALLS (apply_TRIT_AND literally invokes iii_trit_and).  That is TAUTOLOGICAL: it proves
+ * the wiring (XII dispatches to the trit ops) but NOT their soundness.  Break iii_trit_and
+ * (say, return a+b instead of min) and 670 stays GREEN -- both sides break together.
+ *
+ * This module closes that gap.  It drives the SAME live engine and verifies every trit
+ * rewrite against an INDEPENDENT Kleene spec -- hardcoded ground-truth tables, NOT the
+ * ops' own formulas -- so the same broken iii_trit_and turns THIS red.  It is the
+ * semantic-soundness half of kernel-governed admission (sov_admit_rule; Sovereign
+ * Calculus design section 16) applied to XII's LIVE trit rule set: III's verified
+ * authority governing III's real rewrite engine, end to end, with teeth.
+ *
+ * Honest scope: the trit fragment is the rule family with a finite semantic model.  The
+ * fusion/algebraic rules (associativity, IF-lift, identity/null) are governed by the
+ * confluence certificate (xii_conf_cert) + the K/cap/hexad preservation theorems, not by
+ * this gate; extending the semantic authority to them is the next, separate strike.
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: libc + III only (zero externs beyond the live
+ * XII engine).  Determinism: equality-only on trits/kinds (no i32 ordering), module-scope
+ * tables (no local-array runtime-index trap), exhaustive over the ground domain.
+ */
+module omnia_xii_rule_verify
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_kind(idx: u32) -> u8 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise(t: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+/* The LIVE operational admission gate (omnia/xii_admission) -- the OTHER half of
+ * kernel-governed admission (sov_admit_rule, corpus 883): admission alone checks
+ * OPERATION (root-confluence + termination over the real rule set), not MEANING.
+ * xii_admission's own header names this composition; here it is realized on the
+ * live engine instead of the toy Nat-model rules 883 demonstrated it on. */
+extern @abi(c-msvc-x64) fn xad_admit() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_root_confluent() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_terminating() -> u32 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_globally_confluent() -> u8 from "xii_admission.iii"
+extern @abi(c-msvc-x64) fn xad_decide(root_confluent: u32, terminating: u32) -> u32 from "xii_admission.iii"
+
+/* Live engine TRIT kinds: VAL=24 NOT=25 AND=26 OR=27 SUM=28 MUL=29; subform = trit + 1
+ * (NEG -> 0, ZERO -> 1, POS -> 2).  FORM=1 is a non-TRIT_VAL basis for the guard teeth. */
+const XRV_VAL  : u8 = 24u8
+const XRV_NOT  : u8 = 25u8
+const XRV_AND  : u8 = 26u8
+const XRV_OR   : u8 = 27u8
+const XRV_SUM  : u8 = 28u8
+const XRV_MUL  : u8 = 29u8
+const XRV_FORM : u8 = 1u8
+
+/* INDEPENDENT Kleene spec -- hardcoded ground truth, NOT iii_trit_*'s formulas.
+ * unary idx = a+1; binary idx = (a+1)*3 + (b+1).  Trits NEG=-1 ZERO=0 POS=1. */
+var XRV_NOT_EXP : [i32; 3] = [1i32, 0i32, -1i32]
+var XRV_AND_EXP : [i32; 9] = [-1i32,-1i32,-1i32,  -1i32,0i32,0i32,  -1i32,0i32,1i32]
+var XRV_OR_EXP  : [i32; 9] = [-1i32,0i32,1i32,    0i32,0i32,1i32,   1i32,1i32,1i32]
+var XRV_SUM_EXP : [i32; 9] = [-1i32,-1i32,0i32,   -1i32,0i32,1i32,  0i32,1i32,1i32]
+var XRV_MUL_EXP : [i32; 9] = [1i32,0i32,-1i32,    0i32,0i32,0i32,   -1i32,0i32,1i32]
+
+fn xrv_mkval(v: i32) -> u32 { return xii_term_make_basis(XRV_VAL, (v + 1i32) as u32) }
+fn xrv_getval(idx: u32) -> i32 { return (xii_term_get_subform(idx) as i32) - 1i32 }
+
+/* Drive the LIVE engine on a binary op to its normal form; return the result trit, or
+ * -9i32 (outside {-1,0,1}) if the NF is not a single TRIT_VAL (the rule failed to reduce). */
+fn xrv_eval_bin(opkind: u8, a: i32, b: i32) -> i32 {
+    xii_term_arena_reset()
+    let top : u32 = xii_term_make_fusion2(opkind, xrv_mkval(a), xrv_mkval(b))
+    let nf : u32 = xii_canonicalise(top)
+    if xii_term_get_kind(nf) != XRV_VAL { return -9i32 }
+    return xrv_getval(nf)
+}
+fn xrv_eval_un(opkind: u8, a: i32) -> i32 {
+    xii_term_arena_reset()
+    let top : u32 = xii_term_make_fusion2(opkind, xrv_mkval(a), 0xFFFFFFFFu32)
+    let nf : u32 = xii_canonicalise(top)
+    if xii_term_get_kind(nf) != XRV_VAL { return -9i32 }
+    return xrv_getval(nf)
+}
+
+/* The verification: LIVE engine === INDEPENDENT Kleene spec, exhaustive + teeth.
+ * 99 = sound; any other code names the failing check. */
+fn xrv_verify() -> u64 @export {
+    /* (1) NOT over {-1,0,1}: the live engine === the independent NOT spec. */
+    let mut ia : u64 = 0u64
+    while ia < 3u64 {
+        let a : i32 = (ia as i32) - 1i32
+        if xrv_eval_un(XRV_NOT, a) != XRV_NOT_EXP[ia] { return 1u64 }
+        ia = ia + 1u64
+    }
+    /* (2) AND/OR/SUM/MUL over the full 3x3 ground domain: engine === independent spec.
+     * This is the non-tautological soundness check: the authority (XRV_*_EXP) is
+     * independent of iii_trit_*, so a bug in the ops turns this red where 670 cannot. */
+    ia = 0u64
+    while ia < 3u64 {
+        let a : i32 = (ia as i32) - 1i32
+        let mut ib : u64 = 0u64
+        while ib < 3u64 {
+            let b : i32 = (ib as i32) - 1i32
+            let k : u64 = ia * 3u64 + ib
+            if xrv_eval_bin(XRV_AND, a, b) != XRV_AND_EXP[k] { return 2u64 }
+            if xrv_eval_bin(XRV_OR,  a, b) != XRV_OR_EXP[k]  { return 3u64 }
+            if xrv_eval_bin(XRV_SUM, a, b) != XRV_SUM_EXP[k] { return 4u64 }
+            if xrv_eval_bin(XRV_MUL, a, b) != XRV_MUL_EXP[k] { return 5u64 }
+            ib = ib + 1u64
+        }
+        ia = ia + 1u64
+    }
+    /* (3) SEMANTIC TEETH (the gate distinguishes, not rubber-stamps): at a cell where
+     * AND != OR (a=-1,b=1: AND=-1, OR=1; idx 2), the live AND output must equal the AND
+     * spec AND differ from the OR spec -- the engine computes AND specifically. */
+    let and_m1p1 : i32 = xrv_eval_bin(XRV_AND, -1i32, 1i32)
+    if and_m1p1 != XRV_AND_EXP[2u64] { return 6u64 }
+    if and_m1p1 == XRV_OR_EXP[2u64] { return 7u64 }
+    if XRV_AND_EXP[2u64] == XRV_OR_EXP[2u64] { return 8u64 }
+
+    /* (4) OPERATIONAL TEETH (the rule's GUARD is real): TRIT_AND whose child_b is NOT a
+     * TRIT_VAL (a FORM basis) must NOT reduce to a single TRIT_VAL -- match_TRIT_AND
+     * requires both children be TRIT_VAL, so the rule must refuse to fire. */
+    xii_term_arena_reset()
+    let bad_b : u32 = xii_term_make_basis(XRV_FORM, 0u32)
+    let illf : u32 = xii_term_make_fusion2(XRV_AND, xrv_mkval(1i32), bad_b)
+    let illnf : u32 = xii_canonicalise(illf)
+    if xii_term_get_kind(illnf) == XRV_VAL { return 9u64 }
+
+    /* (5) the LIVE rule is the one that fired: apply_one identifies TRIT_AND as rule 102. */
+    xii_term_arena_reset()
+    let andt : u32 = xii_term_make_fusion2(XRV_AND, xrv_mkval(-1i32), xrv_mkval(1i32))
+    let _r : u32 = xii_rewrite_apply_one(andt)
+    if xii_rewrite_last_rule_fired() != 102u32 { return 10u64 }
+
+    /* ============================================================
+     * KERNEL-GOVERNED ADMISSION on the LIVE rule set -- sov_admit (corpus 883)
+     * brought from the toy Nat models it was demonstrated on to III's REAL engine.
+     * A rule set is admitted iff it is OPERATIONALLY admissible (root-confluent AND
+     * terminating, computed over the actual rules by xii_admission -- xad_admit
+     * re-runs both gates across the WHOLE live set) AND SEMANTICALLY sound (the trit
+     * fragment, arms 1-10, verified vs the independent Kleene spec).  Both holding =
+     * the real sov_admit composition (operation AND meaning) on XII's actual rules --
+     * the half xii_admission's own header names but only composed against toy models. */
+    /* (11-13) the live rule set is OPERATIONALLY admitted: root-confluent AND terminating. */
+    if xad_admit() != 1u32 { return 11u64 }
+    if xad_root_confluent() != 1u32 { return 12u64 }
+    if xad_terminating() != 1u32 { return 13u64 }
+    /* (14) HONEST non-overclaim: the engine does NOT pretend global confluence -- it has
+     * residual subterm non-joins; admission certifies DETERMINISTIC NORMALISATION (root-
+     * confluent + terminating + one fixed strategy), not strategy-independent confluence. */
+    if xad_globally_confluent() != 0u8 { return 14u64 }
+    /* (15-17) OPERATIONAL TEETH: the admission decision genuinely discriminates -- it
+     * REJECTS a non-confluent or non-terminating rule set, and ADMITS only when both hold. */
+    if xad_decide(0u32, 1u32) != 0u32 { return 15u64 }
+    if xad_decide(1u32, 0u32) != 0u32 { return 16u64 }
+    if xad_decide(1u32, 1u32) != 1u32 { return 17u64 }
+
+    /* (18-19) NESTED REDUCTION -- folds in corpus 670's termination/confluence witness, now
+     * NON-tautological.  A 2-level term AND(AND(-1,1),0) must canonicalise to a SINGLE TRIT_VAL
+     * whose value equals the INDEPENDENT spec composed (AND_EXP of AND_EXP), proving the trit
+     * fragment terminates to one normal form -- the property 670 checked against iii_trit_*
+     * (tautological), here checked against the independent authority.  With this arm 884
+     * strictly covers 670, so 670 is retired.  idx = (a+1)*3 + (b+1) per the spec convention. */
+    xii_term_arena_reset()
+    /* spec idx=(a+1)*3+(b+1): inner AND(-1,1)=idx 2 (=-1), so the outer op is AND(-1,0)=idx 1;
+     * the fully-reduced nested term must equal that independent-spec value (XRV_AND_EXP[1]=-1). */
+    let outer_e : i32 = XRV_AND_EXP[1u64]
+    let nn1 : u32 = xii_term_make_fusion2(XRV_AND, xrv_mkval(-1i32), xrv_mkval(1i32))
+    let nn2 : u32 = xii_term_make_fusion2(XRV_AND, nn1, xrv_mkval(0i32))
+    let nnf : u32 = xii_canonicalise(nn2)
+    if xii_term_get_kind(nnf) != XRV_VAL { return 18u64 }
+    if xrv_getval(nnf) != outer_e { return 19u64 }
+
+    return 99u64
+}

@@ -1,0 +1,405 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\combinator.iii
+ *
+ * III STDLIB - numera::combinator  (Path C brick 1: the variable-free core)
+ *
+ * Path C eradicates bound variables so XII's FIRST-ORDER engine is universally
+ * sufficient (no substitution anywhere; H4 "One Engine").  This brick proves the
+ * foundation: bracket abstraction (lambda -> SKI) + purely first-order SKI
+ * reduction (I x -> x ; K x y -> x ; S x y z -> x z (y z)) -- NO substitution,
+ * NO scopes, just structural routing.  Source lambda-terms (with de Bruijn
+ * VARs/LAMs) compile to variable-free combinator terms whose reduction matches
+ * the lambda semantics by pure pattern-matching.
+ *
+ * Refinement R1 (design 19): SKI weak reduction is beta-only; full beta-eta needs
+ * Curien's CCL (or Curry A_beta-eta axioms) -- a LATER brick.  This brick is the
+ * beta core / proof of concept.  R2: the backend is UNTYPED (the MLTT frontend in
+ * numera/typecheck does all dependent typing); combinators only COMPUTE.
+ *
+ * Hexad: kind_essence + kind_cognition.  Ring: R0.  K: 1.00.  NIH: own arena only.
+ */
+
+module numera_combinator
+
+const CB_S    : u8 = 1u8     /* S combinator: S x y z -> x z (y z) */
+const CB_K    : u8 = 2u8     /* K combinator: K x y -> x           */
+const CB_I    : u8 = 3u8     /* I combinator: I x -> x             */
+const CB_APP  : u8 = 4u8     /* application: A=fn, B=arg           */
+const CB_VAR  : u8 = 5u8     /* de Bruijn var (source only): A=idx */
+const CB_LAM  : u8 = 6u8     /* lambda (source only): A=body       */
+const CB_ATOM : u8 = 7u8     /* free constant: A=atom id           */
+const CB_TRUE  : u8 = 8u8    /* Bool constructor true              */
+const CB_FALSE : u8 = 9u8    /* Bool constructor false             */
+const CB_IF    : u8 = 10u8   /* IF combinator: IF s t e (s=TRUE->t, FALSE->e) */
+const CB_ZERO  : u8 = 11u8   /* Nat constructor zero               */
+const CB_SUCC  : u8 = 12u8   /* Nat constructor succ (succ m = APP(SUCC, m)) */
+const CB_ITER  : u8 = 13u8   /* ITER combinator: ITER z s n        */
+const CB_NATREC : u8 = 14u8  /* NATREC z s n (motive erased): ZERO->z, SUCC m-> s m (rec) */
+const CB_INL    : u8 = 15u8  /* Sum constructor inl (inl v = APP(INL, v))  */
+const CB_INR    : u8 = 16u8  /* Sum constructor inr (inr v = APP(INR, v))  */
+const CB_CASE   : u8 = 17u8  /* CASE f g s (motive erased): INL v->f v, INR v->g v */
+const CB_J      : u8 = 18u8  /* J d p (motive erased): J d (REFL a) -> d    */
+const CB_REFL   : u8 = 19u8  /* Id constructor refl (refl a = APP(REFL, a)) */
+
+const CB_CAP  : u32 = 16384u32
+const CB_FUEL : u32 = 1000000u32
+
+var CB_TAG : [u8;  16384]
+var CB_A   : [u32; 16384]
+var CB_B   : [u32; 16384]
+var CB_N   : [u32; 1]
+var CB_FIRED : [u32; 1]      /* set by cb_step when a redex fires (xii-style) */
+
+fn cb_reset() -> u64 @export {
+    CB_N[0u64] = 1u32
+    return 0u64
+}
+
+fn cb_mk(tag: u8, a: u32, b: u32) -> u32 {
+    let n : u32 = CB_N[0u64]
+    if n >= CB_CAP { return 0u32 }
+    CB_TAG[n] = tag
+    CB_A[n] = a
+    CB_B[n] = b
+    CB_N[0u64] = n + 1u32
+    return n
+}
+
+fn cb_s() -> u32 @export { return cb_mk(CB_S, 0u32, 0u32) }
+fn cb_k() -> u32 @export { return cb_mk(CB_K, 0u32, 0u32) }
+fn cb_i() -> u32 @export { return cb_mk(CB_I, 0u32, 0u32) }
+fn cb_app(f: u32, a: u32) -> u32 @export { return cb_mk(CB_APP, f, a) }
+fn cb_var(k: u32) -> u32 @export { return cb_mk(CB_VAR, k, 0u32) }
+fn cb_lam(body: u32) -> u32 @export { return cb_mk(CB_LAM, body, 0u32) }
+fn cb_atom(id: u32) -> u32 @export { return cb_mk(CB_ATOM, id, 0u32) }
+fn cb_true() -> u32 @export { return cb_mk(CB_TRUE, 0u32, 0u32) }
+fn cb_false() -> u32 @export { return cb_mk(CB_FALSE, 0u32, 0u32) }
+fn cb_if_c() -> u32 @export { return cb_mk(CB_IF, 0u32, 0u32) }
+fn cb_zero() -> u32 @export { return cb_mk(CB_ZERO, 0u32, 0u32) }
+fn cb_succ_c() -> u32 @export { return cb_mk(CB_SUCC, 0u32, 0u32) }
+fn cb_iter_c() -> u32 @export { return cb_mk(CB_ITER, 0u32, 0u32) }
+fn cb_natrec_c() -> u32 @export { return cb_mk(CB_NATREC, 0u32, 0u32) }
+fn cb_inl_c() -> u32 @export { return cb_mk(CB_INL, 0u32, 0u32) }
+fn cb_inr_c() -> u32 @export { return cb_mk(CB_INR, 0u32, 0u32) }
+fn cb_case_c() -> u32 @export { return cb_mk(CB_CASE, 0u32, 0u32) }
+fn cb_j_c() -> u32 @export { return cb_mk(CB_J, 0u32, 0u32) }
+fn cb_refl_c() -> u32 @export { return cb_mk(CB_REFL, 0u32, 0u32) }
+
+/* bracket abstraction: abstract de Bruijn #0 out of a COMBINATOR term (no LAMs).
+ *   lambda*#0. #0      = I
+ *   lambda*#0. #k (k>0) = K #(k-1)        (the var is not #0; drop a binder level)
+ *   lambda*#0. (f a)    = S (lambda*#0.f) (lambda*#0.a)
+ *   lambda*#0. c        = K c             (c = atom/S/K/I; #0 not free) */
+fn cb_abstract(m: u32) -> u32 {
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_VAR {
+        let k : u32 = CB_A[m]
+        if k == 0u32 { return cb_i() }
+        return cb_app(cb_k(), cb_var(k - 1u32))
+    }
+    if tag == CB_APP {
+        let f : u32 = cb_abstract(CB_A[m])
+        let a : u32 = cb_abstract(CB_B[m])
+        return cb_app(cb_app(cb_s(), f), a)
+    }
+    return cb_app(cb_k(), m)
+}
+
+/* compile a source lambda-term (VAR/LAM/APP/ATOM/S/K/I) to a variable-free
+ * combinator term: every LAM becomes a bracket abstraction. */
+fn cb_compile(m: u32) -> u32 @export {
+    let tag : u8 = CB_TAG[m]
+    if tag == CB_APP {
+        let f : u32 = cb_compile(CB_A[m])
+        let a : u32 = cb_compile(CB_B[m])
+        return cb_app(f, a)
+    }
+    if tag == CB_LAM {
+        let body : u32 = cb_compile(CB_A[m])
+        return cb_abstract(body)
+    }
+    return m
+}
+
+/* one leftmost-outermost first-order rewrite step; sets CB_FIRED if a redex fired.
+ * Reads the application spine into locals (f, g/x2, hh/x3) with flat guarded reads,
+ * then dispatches every combinator rule FLATLY (max nesting 4). Handles:
+ *   I x1            -> x1
+ *   K x2 x1         -> x2
+ *   S x3 x2 x1      -> x3 x1 (x2 x1)
+ *   IF TRUE  t e    -> t          IF FALSE t e -> e          (Bool iota)
+ *   ITER z s ZERO   -> z          ITER z s (SUCC m) -> s (ITER z s m)   (Nat iota)
+ * The eliminator iota-rules are PURE first-order pattern matching -- no substitution. */
+fn cb_step(m: u32) -> u32 {
+    if CB_TAG[m] != CB_APP { return m }
+    let f : u32 = CB_A[m]
+    let x1 : u32 = CB_B[m]
+    if CB_TAG[f] == CB_I {
+        CB_FIRED[0u64] = 1u32
+        return x1
+    }
+    /* level 2: f = APP(g, x2) ? */
+    let mut g : u32 = 0u32
+    let mut x2 : u32 = 0u32
+    let mut h2 : u32 = 0u32
+    if CB_TAG[f] == CB_APP {
+        g = CB_A[f]
+        x2 = CB_B[f]
+        h2 = 1u32
+    }
+    if h2 == 1u32 {
+        if CB_TAG[g] == CB_K {
+            CB_FIRED[0u64] = 1u32
+            return x2
+        }
+        /* J d (REFL a) -> d : fires once the proof x1 has reduced to a refl. */
+        if CB_TAG[g] == CB_J {
+            let mut hj : u32 = 0u32
+            if CB_TAG[x1] == CB_APP {
+                if CB_TAG[CB_A[x1]] == CB_REFL { hj = 1u32 }
+            }
+            if hj == 1u32 {
+                CB_FIRED[0u64] = 1u32
+                return x2
+            }
+        }
+    }
+    /* level 3: g = APP(hh, x3) ? */
+    let mut hh : u32 = 0u32
+    let mut x3 : u32 = 0u32
+    let mut h3 : u32 = 0u32
+    if h2 == 1u32 {
+        if CB_TAG[g] == CB_APP {
+            hh = CB_A[g]
+            x3 = CB_B[g]
+            h3 = 1u32
+        }
+    }
+    if h3 == 1u32 {
+        let htag : u8 = CB_TAG[hh]
+        if htag == CB_S {
+            CB_FIRED[0u64] = 1u32
+            return cb_app(cb_app(x3, x1), cb_app(x2, x1))
+        }
+        if htag == CB_IF {
+            if CB_TAG[x3] == CB_TRUE {
+                CB_FIRED[0u64] = 1u32
+                return x2
+            }
+            if CB_TAG[x3] == CB_FALSE {
+                CB_FIRED[0u64] = 1u32
+                return x1
+            }
+        }
+        if htag == CB_ITER {
+            if CB_TAG[x1] == CB_ZERO {
+                CB_FIRED[0u64] = 1u32
+                return x3
+            }
+            let mut is_succ : u32 = 0u32
+            if CB_TAG[x1] == CB_APP {
+                if CB_TAG[CB_A[x1]] == CB_SUCC { is_succ = 1u32 }
+            }
+            if is_succ == 1u32 {
+                let mm : u32 = CB_B[x1]
+                let recm : u32 = cb_app(cb_app(cb_app(cb_iter_c(), x3), x2), mm)
+                CB_FIRED[0u64] = 1u32
+                return cb_app(x2, recm)
+            }
+        }
+        if htag == CB_NATREC {
+            /* NATREC z s ZERO -> z ; NATREC z s (SUCC m) -> s m (NATREC z s m).
+               (the step receives BOTH the predecessor m and the recursive result.) */
+            if CB_TAG[x1] == CB_ZERO {
+                CB_FIRED[0u64] = 1u32
+                return x3
+            }
+            let mut nr_succ : u32 = 0u32
+            if CB_TAG[x1] == CB_APP {
+                if CB_TAG[CB_A[x1]] == CB_SUCC { nr_succ = 1u32 }
+            }
+            if nr_succ == 1u32 {
+                let nr_mm : u32 = CB_B[x1]
+                let nr_recm : u32 = cb_app(cb_app(cb_app(cb_natrec_c(), x3), x2), nr_mm)
+                CB_FIRED[0u64] = 1u32
+                return cb_app(cb_app(x2, nr_mm), nr_recm)
+            }
+        }
+        if htag == CB_CASE {
+            /* CASE f g (INL v) -> f v ; CASE f g (INR v) -> g v.  f=x3, g=x2, s=x1. */
+            let mut c_inl : u32 = 0u32
+            let mut c_inr : u32 = 0u32
+            if CB_TAG[x1] == CB_APP {
+                if CB_TAG[CB_A[x1]] == CB_INL { c_inl = 1u32 }
+                if CB_TAG[CB_A[x1]] == CB_INR { c_inr = 1u32 }
+            }
+            if c_inl == 1u32 {
+                CB_FIRED[0u64] = 1u32
+                return cb_app(x3, CB_B[x1])
+            }
+            if c_inr == 1u32 {
+                CB_FIRED[0u64] = 1u32
+                return cb_app(x2, CB_B[x1])
+            }
+        }
+    }
+    /* no head rule: reduce f (the left spine), then x1 (the last arg). */
+    let rf : u32 = cb_step(f)
+    if CB_FIRED[0u64] == 1u32 { return cb_app(rf, x1) }
+    let rx : u32 = cb_step(x1)
+    if CB_FIRED[0u64] == 1u32 { return cb_app(f, rx) }
+    return m
+}
+
+/* reduce to normal form (fixpoint of cb_step), fuel-bounded. */
+fn cb_reduce(m: u32) -> u32 @export {
+    let mut cur : u32 = m
+    let mut go : u32 = 1u32
+    let mut fuel : u32 = CB_FUEL
+    while go == 1u32 {
+        if fuel == 0u32 { return cur }
+        fuel = fuel - 1u32
+        CB_FIRED[0u64] = 0u32
+        let next : u32 = cb_step(cur)
+        if CB_FIRED[0u64] == 0u32 { go = 0u32 }
+        cur = next
+    }
+    return cur
+}
+
+/* structural equality (no binders -> pure structure). */
+fn cb_struct_eq(x: u32, y: u32) -> u8 @export {
+    let tx : u8 = CB_TAG[x]
+    let ty : u8 = CB_TAG[y]
+    if tx != ty { return 0u8 }
+    if tx == CB_S { return 1u8 }
+    if tx == CB_K { return 1u8 }
+    if tx == CB_I { return 1u8 }
+    if tx == CB_ATOM {
+        if CB_A[x] == CB_A[y] { return 1u8 }
+        return 0u8
+    }
+    if tx == CB_VAR {
+        if CB_A[x] == CB_A[y] { return 1u8 }
+        return 0u8
+    }
+    if tx == CB_APP {
+        if cb_struct_eq(CB_A[x], CB_A[y]) == 0u8 { return 0u8 }
+        return cb_struct_eq(CB_B[x], CB_B[y])
+    }
+    if tx == CB_LAM {
+        return cb_struct_eq(CB_A[x], CB_A[y])
+    }
+    /* all remaining tags are NULLARY combinator constants (TRUE FALSE ZERO SUCC IF
+       ITER NATREC INL INR CASE J REFL): equal tag => structurally equal. */
+    return 1u8
+}
+
+/* ============================================================
+ *  KAT: bracket abstraction + first-order SKI reduction route
+ *  lambda-terms with NO substitution.  99 = all pass.
+ * ============================================================ */
+fn cb_kat() -> u64 @export {
+    cb_reset()
+    let c : u32 = cb_atom(1u32)
+    let d : u32 = cb_atom(2u32)
+
+    /* T1: compile(lambda x. x) = I ; I c -> c. */
+    let idf : u32 = cb_compile(cb_lam(cb_var(0u32)))
+    if CB_TAG[idf] != CB_I { return 1u64 }
+    if cb_struct_eq(cb_reduce(cb_app(idf, c)), c) != 1u8 { return 2u64 }
+
+    /* T2: compile(lambda x. lambda y. x) routes (c d) -> c (and NOT d). */
+    let kf : u32 = cb_compile(cb_lam(cb_lam(cb_var(1u32))))
+    let r2 : u32 = cb_reduce(cb_app(cb_app(kf, c), d))
+    if cb_struct_eq(r2, c) != 1u8 { return 3u64 }
+    if cb_struct_eq(r2, d) != 0u8 { return 4u64 }
+
+    /* T3: compile(lambda x. lambda y. y) routes (c d) -> d. */
+    let kif : u32 = cb_compile(cb_lam(cb_lam(cb_var(0u32))))
+    if cb_struct_eq(cb_reduce(cb_app(cb_app(kif, c), d)), d) != 1u8 { return 5u64 }
+
+    /* T4: compile(lambda x.lambda y.lambda z. (x z)(y z)) routes (f g a) -> (f a)(g a). */
+    let fv : u32 = cb_atom(3u32)
+    let gv : u32 = cb_atom(4u32)
+    let av : u32 = cb_atom(5u32)
+    let sbody : u32 = cb_app(cb_app(cb_var(2u32), cb_var(0u32)), cb_app(cb_var(1u32), cb_var(0u32)))
+    let sf : u32 = cb_compile(cb_lam(cb_lam(cb_lam(sbody))))
+    let r4 : u32 = cb_reduce(cb_app(cb_app(cb_app(sf, fv), gv), av))
+    let exp4 : u32 = cb_app(cb_app(fv, av), cb_app(gv, av))
+    if cb_struct_eq(r4, exp4) != 1u8 { return 6u64 }
+
+    /* T5: a composed routing -- (lambda x. lambda y. x) applied to (I c) and d, then reduced. */
+    let r5 : u32 = cb_reduce(cb_app(cb_app(kf, cb_app(cb_i(), c)), d))
+    if cb_struct_eq(r5, c) != 1u8 { return 7u64 }
+
+    return 99u64
+}
+
+/* combinator conversion: reduce both to normal form, compare structurally.
+ * This is the FIRST-ORDER conversion oracle -- NO substitution, NO NbE: just
+ * reduce (first-order rewrite to fixpoint) + structural compare.  It is the
+ * beta+iota fragment; full beta-eta needs CCL (design 19, a later brick). */
+fn cb_conv(x: u32, y: u32) -> u8 @export {
+    let nx : u32 = cb_reduce(x)
+    let ny : u32 = cb_reduce(y)
+    return cb_struct_eq(nx, ny)
+}
+
+/* ============================================================
+ *  KAT: eliminator iota-rules as PURE first-order combinator rewrites.
+ *  IF/ITER select + recurse with no substitution; the compiled
+ *  (lambda b. if b c d) proves bracket-abstraction composes with iota.
+ *  99 = all pass; 1..8 = first failing case.
+ * ============================================================ */
+fn cb_data_kat() -> u64 @export {
+    cb_reset()
+    let c : u32 = cb_atom(1u32)
+    let d : u32 = cb_atom(2u32)
+
+    /* IF TRUE c d -> c ; IF FALSE c d -> d ; and discriminates. */
+    let if_t : u32 = cb_app(cb_app(cb_app(cb_if_c(), cb_true()), c), d)
+    if cb_struct_eq(cb_reduce(if_t), c) != 1u8 { return 1u64 }
+    let if_f : u32 = cb_app(cb_app(cb_app(cb_if_c(), cb_false()), c), d)
+    if cb_struct_eq(cb_reduce(if_f), d) != 1u8 { return 2u64 }
+    if cb_struct_eq(cb_reduce(if_t), d) != 0u8 { return 3u64 }
+
+    /* ITER z s ZERO -> z. (z=c, s=K d) */
+    let kd : u32 = cb_app(cb_k(), d)
+    let it0 : u32 = cb_app(cb_app(cb_app(cb_iter_c(), c), kd), cb_zero())
+    if cb_struct_eq(cb_reduce(it0), c) != 1u8 { return 4u64 }
+    /* ITER c (K d) (SUCC ZERO) -> (K d)(ITER c (K d) ZERO) -> (K d) c -> d. */
+    let one : u32 = cb_app(cb_succ_c(), cb_zero())
+    let it1 : u32 = cb_app(cb_app(cb_app(cb_iter_c(), c), kd), one)
+    if cb_struct_eq(cb_reduce(it1), d) != 1u8 { return 5u64 }
+    /* ITER ZERO SUCC (SUCC(SUCC ZERO)) -> SUCC(SUCC ZERO) = 2  (genuine recursion). */
+    let two : u32 = cb_app(cb_succ_c(), cb_app(cb_succ_c(), cb_zero()))
+    let it2 : u32 = cb_app(cb_app(cb_app(cb_iter_c(), cb_zero()), cb_succ_c()), two)
+    if cb_struct_eq(cb_reduce(it2), two) != 1u8 { return 6u64 }
+
+    /* bracket abstraction COMPOSES with iota: compile(lambda b. IF b c d) routes. */
+    let body : u32 = cb_app(cb_app(cb_app(cb_if_c(), cb_var(0u32)), c), d)
+    let fn_if : u32 = cb_compile(cb_lam(body))
+    if cb_struct_eq(cb_reduce(cb_app(fn_if, cb_true())), c) != 1u8 { return 7u64 }
+    if cb_struct_eq(cb_reduce(cb_app(fn_if, cb_false())), d) != 1u8 { return 8u64 }
+
+    /* NATREC: s = K(K d) discards both args -> NATREC c (K(K d)) (SUCC ZERO) -> d. */
+    let kkd : u32 = cb_app(cb_k(), cb_app(cb_k(), d))
+    let nr1 : u32 = cb_app(cb_app(cb_app(cb_natrec_c(), c), kkd), cb_app(cb_succ_c(), cb_zero()))
+    if cb_struct_eq(cb_reduce(nr1), d) != 1u8 { return 9u64 }
+    /* NATREC ZERO (compile lam k.lam ih. succ ih) 2 -> 2 (genuine recursion through ih). */
+    let nr_s : u32 = cb_compile(cb_lam(cb_lam(cb_app(cb_succ_c(), cb_var(0u32)))))
+    let nr2 : u32 = cb_app(cb_app(cb_app(cb_natrec_c(), cb_zero()), nr_s), two)
+    if cb_struct_eq(cb_reduce(nr2), two) != 1u8 { return 10u64 }
+
+    /* CASE f g (INL v) -> f v ; CASE f g (INR v) -> g v.  f=I, g=K d. */
+    let case_l : u32 = cb_app(cb_app(cb_app(cb_case_c(), cb_i()), cb_app(cb_k(), d)), cb_app(cb_inl_c(), c))
+    if cb_struct_eq(cb_reduce(case_l), c) != 1u8 { return 11u64 }
+    let case_r : u32 = cb_app(cb_app(cb_app(cb_case_c(), cb_i()), cb_app(cb_k(), d)), cb_app(cb_inr_c(), c))
+    if cb_struct_eq(cb_reduce(case_r), d) != 1u8 { return 12u64 }
+
+    /* J d (REFL a) -> d. */
+    let j_t : u32 = cb_app(cb_app(cb_j_c(), c), cb_app(cb_refl_c(), cb_atom(7u32)))
+    if cb_struct_eq(cb_reduce(j_t), c) != 1u8 { return 13u64 }
+
+    return 99u64
+}

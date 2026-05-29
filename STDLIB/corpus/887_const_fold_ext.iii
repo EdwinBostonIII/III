@@ -1,0 +1,39 @@
+/* 887_const_fold_ext.iii -- functional gate for the constant-folding EXTENSION in cg_r3:
+ * shifts (shl op9 / shr op10) + comparisons (== op11 / != op12 / unsigned < <= > >= op13-16).
+ * Compiled by the optimizing iiis-2, so each both-const shift/compare expr below is folded to a
+ * constant at compile time.  Every assert uses a value where a mis-fold gives a DIFFERENT answer
+ * (256>>2 must be 64 not 256; 5<7 must be 1 not 0; 5>=7 must be 0 not 1).  Signed (i64) ordering
+ * is deliberately NOT folded -- it falls through to the runtime cmp+setcc; slt_t/sgt_t prove that
+ * path stays correct + unbroken.  99 = every fold + the signed fall-through compute the right value. */
+module corpus_887
+
+fn shl_c() -> u64 { return 3u64 << 4u64 }
+fn shr_c() -> u64 { return 256u64 >> 2u64 }
+fn shl_u32c() -> u32 { return 3u32 << 4u32 }
+fn eq_t() -> u64 { return 5u64 == 5u64 }
+fn eq_f() -> u64 { return 5u64 == 7u64 }
+fn ne_t() -> u64 { return 5u64 != 7u64 }
+fn lt_t() -> u64 { return 5u64 < 7u64 }
+fn lt_f() -> u64 { return 7u64 < 5u64 }
+fn le_t() -> u64 { return 5u64 <= 5u64 }
+fn gt_t() -> u64 { return 7u64 > 5u64 }
+fn ge_f() -> u64 { return 5u64 >= 7u64 }
+fn slt_t() -> u64 { return 5i64 < 7i64 }
+fn sgt_t() -> u64 { return 7i64 > 5i64 }
+
+fn main() -> u64 {
+    if shl_c() != 48u64 { return 1u64 }
+    if shr_c() != 64u64 { return 2u64 }
+    if shl_u32c() != 48u32 { return 3u64 }
+    if eq_t() != 1u64 { return 4u64 }
+    if eq_f() != 0u64 { return 5u64 }
+    if ne_t() != 1u64 { return 6u64 }
+    if lt_t() != 1u64 { return 7u64 }
+    if lt_f() != 0u64 { return 8u64 }
+    if le_t() != 1u64 { return 9u64 }
+    if gt_t() != 1u64 { return 10u64 }
+    if ge_f() != 0u64 { return 11u64 }
+    if slt_t() != 1u64 { return 12u64 }
+    if sgt_t() != 1u64 { return 13u64 }
+    return 99u64
+}

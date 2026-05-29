@@ -1,0 +1,16 @@
+/* P5 brick 12: the metatheory KAT -- the de-Bruijn-criterion capstone. Composes
+ * infer/nf/conv to CERTIFY the kernel's soundness properties on the fragment:
+ *  - CANONICITY (computational adequacy): every closed Bool term reduces to a
+ *    CONSTRUCTOR (true/false), exercised through every eliminator (if, iter,
+ *    natrec, case, J, nested) -- a stuck/non-reducing eliminator would FAIL.
+ *  - SUBJECT REDUCTION (type safety): infer(t) == infer(nf(t)); beta preserves
+ *    types.
+ * 99 = all pass; 1..16 = first failing case. (Full proofs are external/unbounded;
+ * this witnesses the properties on the corpus fragment -- the honest claim.) */
+module corpus_c852
+
+extern @abi(c-msvc-x64) fn p5_kat_meta() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_meta()
+}

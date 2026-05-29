@@ -1,0 +1,18 @@
+/* 910_universe_subtype.iii -- Proposal P3 (refined): sound O(1) universe
+ * subtyping fast-path.
+ *
+ * Drives tc_universe_selftest (numera/typecheck.iii): tc_subtype on two already-
+ * syntactic sorts now compares universe levels directly, with NO CCL
+ * normalization (a SORT is its own normal form, so the verdict is identical to
+ * the slow path).  Proves cumulativity U_i <: U_j iff i <= j, and the rejections
+ * U_j !<: U_i for j > i.  The proposed TC_UNIVERSE_MAX cache was rejected as
+ * unsound (it would wrongly reject conv-equal terms that merely mention a higher
+ * universe which reduces away); this fast-path is sound and array-free.
+ * Main-corpus convention: rc 99 = pass; 1..6 = which assertion failed. */
+module corpus_910
+
+extern @abi(c-msvc-x64) fn tc_universe_selftest() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return tc_universe_selftest()
+}

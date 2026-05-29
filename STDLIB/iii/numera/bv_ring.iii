@@ -1,0 +1,366 @@
+module bv_ring
+
+/* ===== bv_ring: the RIGHT kernel for ring-0 codegen ========================
+ * A u64-SOUND decision layer.  It decides equality of expressions over the
+ * machine-word ring Z/2^64 for the {variable, u64 constant, +, -, *, <<}
+ * fragment by reducing each side to a canonical multivariate-polynomial normal
+ * form (monomials whose coefficients are taken mod 2^64 -- i.e. native u64
+ * wraparound).
+ *
+ * Soundness: poly-equal => functionally-equal for ALL u64 valuations (a
+ * polynomial identity over Z/2^64 holds pointwise).  It is intentionally
+ * CONSERVATIVE: functionally-equal-but-not-poly-equal pairs (which exist over a
+ * finite ring -- e.g. x^2 == x mod 2 functionally) are NOT certified, so a
+ * proof-carrying optimizer that gates a rewrite on bv_equal NEVER blesses an
+ * unsound rewrite; it may only decline a sound one.  That is exactly the
+ * guarantee a ring-0 optimizer needs.
+ *
+ * Unlike the Peano-Nat type-theory kernel, bv_ring's THEORY is machine-word
+ * arithmetic: multiple variables, large u64 constants, and shifts are modelled
+ * natively -- so it can actually reason about the code cg_r3 emits.  No
+ * external dependencies; fully deterministic; bounded arena (W3/Trap-7 safe:
+ * all scratch is module-scope). */
+
+const BV_MAX_VARS : u32 = 4u32
+const BV_MAX_MONO : u32 = 32u32
+const BV_MAX_POLY : u32 = 96u32
+const BV_FIELD    : u32 = 255u32     /* max per-variable exponent (8-bit field) */
+
+var BV_KEY  : [u32; 3072]   /* BV_MAX_POLY(96) * BV_MAX_MONO(32) packed exponent keys */
+var BV_COEF : [u64; 3072]   /* coefficient mod 2^64 (native wrap) */
+var BV_LEN  : [u32; 96]     /* live monomial count per poly slot */
+var BV_USED : u32 = 0u32
+var BV_ERR  : u8  = 0u8      /* sticky: arena / exponent overflow this session */
+
+/* Reset the arena before each certification (per-decision scope). */
+fn bv_reset() -> i32 @export {
+    BV_USED = 0u32
+    BV_ERR  = 0u8
+    return 0i32
+}
+
+fn bv_alloc() -> u32 {
+    if BV_USED >= BV_MAX_POLY { BV_ERR = 1u8 ; return 0u32 }
+    let s : u32 = BV_USED
+    BV_USED = BV_USED + 1u32
+    BV_LEN[(s as u64)] = 0u32
+    return s
+}
+
+/* Add (key, coeff) into poly slot s, combining equal keys.  Zero coeffs are
+ * never inserted; a combine that lands on zero is left in place and skipped at
+ * compare time. */
+fn bv_push(s: u32, key: u32, coeff: u64) -> i32 {
+    if coeff == 0u64 { return 0i32 }
+    let sb : u64 = s as u64
+    let base : u64 = sb * 32u64
+    let n : u32 = BV_LEN[sb]
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = base + (i as u64)
+        if BV_KEY[idx] == key {
+            BV_COEF[idx] = BV_COEF[idx] + coeff
+            return 0i32
+        }
+        i = i + 1u32
+    }
+    if n >= BV_MAX_MONO { BV_ERR = 1u8 ; return 1i32 }
+    let widx : u64 = base + (n as u64)
+    BV_KEY[widx]  = key
+    BV_COEF[widx] = coeff
+    BV_LEN[sb] = n + 1u32
+    return 0i32
+}
+
+fn bv_const(c: u64) -> u32 @export {
+    let s : u32 = bv_alloc()
+    bv_push(s, 0u32, c)
+    return s
+}
+
+fn bv_var(v: u32) -> u32 @export {
+    let s : u32 = bv_alloc()
+    if v < BV_MAX_VARS {
+        let one : u32 = 1u32
+        let key : u32 = one << (v * 8u32)   /* exponent 1 in field v */
+        bv_push(s, key, 1u64)
+    } else {
+        BV_ERR = 1u8
+    }
+    return s
+}
+
+fn bv_copy_into(dst: u32, src: u32) -> i32 {
+    let sbase : u64 = (src as u64) * 32u64
+    let n : u32 = BV_LEN[(src as u64)]
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = sbase + (i as u64)
+        bv_push(dst, BV_KEY[idx], BV_COEF[idx])
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn bv_add(a: u32, b: u32) -> u32 @export {
+    let s : u32 = bv_alloc()
+    bv_copy_into(s, a)
+    bv_copy_into(s, b)
+    return s
+}
+
+fn bv_neg(a: u32) -> u32 {
+    let s : u32 = bv_alloc()
+    let abase : u64 = (a as u64) * 32u64
+    let n : u32 = BV_LEN[(a as u64)]
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = abase + (i as u64)
+        bv_push(s, BV_KEY[idx], 0u64 - BV_COEF[idx])
+        i = i + 1u32
+    }
+    return s
+}
+
+fn bv_sub(a: u32, b: u32) -> u32 @export {
+    let nb : u32 = bv_neg(b)
+    return bv_add(a, nb)
+}
+
+/* Per-field exponent add; sets BV_ERR + returns 0 on field overflow. */
+fn bv_key_add(ka: u32, kb: u32) -> u32 {
+    let mut r : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < BV_MAX_VARS {
+        let sh : u32 = i * 8u32
+        let ea : u32 = (ka >> sh) & 0xFFu32
+        let eb : u32 = (kb >> sh) & 0xFFu32
+        let es : u32 = ea + eb
+        if es > BV_FIELD { BV_ERR = 1u8 ; return 0u32 }
+        r = r | (es << sh)
+        i = i + 1u32
+    }
+    return r
+}
+
+fn bv_mul(a: u32, b: u32) -> u32 @export {
+    let s : u32 = bv_alloc()
+    let abase : u64 = (a as u64) * 32u64
+    let bbase : u64 = (b as u64) * 32u64
+    let na : u32 = BV_LEN[(a as u64)]
+    let nb : u32 = BV_LEN[(b as u64)]
+    let mut i : u32 = 0u32
+    while i < na {
+        let ai : u64 = abase + (i as u64)
+        let mut j : u32 = 0u32
+        while j < nb {
+            let bj : u64 = bbase + (j as u64)
+            let k : u32 = bv_key_add(BV_KEY[ai], BV_KEY[bj])
+            bv_push(s, k, BV_COEF[ai] * BV_COEF[bj])
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return s
+}
+
+fn bv_shl(a: u32, k: u32) -> u32 @export {
+    if k >= 64u32 { return bv_const(0u64) }
+    let one : u64 = 1u64
+    let factor : u64 = one << k
+    let s : u32 = bv_alloc()
+    let abase : u64 = (a as u64) * 32u64
+    let n : u32 = BV_LEN[(a as u64)]
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = abase + (i as u64)
+        bv_push(s, BV_KEY[idx], BV_COEF[idx] * factor)
+        i = i + 1u32
+    }
+    return s
+}
+
+/* Every NONZERO monomial of a appears with an equal coeff in b. */
+fn bv_subset(a: u32, b: u32) -> u8 {
+    let abase : u64 = (a as u64) * 32u64
+    let bbase : u64 = (b as u64) * 32u64
+    let na : u32 = BV_LEN[(a as u64)]
+    let nb : u32 = BV_LEN[(b as u64)]
+    let mut i : u32 = 0u32
+    while i < na {
+        let ai : u64 = abase + (i as u64)
+        let ca : u64 = BV_COEF[ai]
+        if ca != 0u64 {
+            let ka : u32 = BV_KEY[ai]
+            let mut found : u8 = 0u8
+            let mut j : u32 = 0u32
+            while j < nb {
+                let bj : u64 = bbase + (j as u64)
+                if BV_KEY[bj] == ka { if BV_COEF[bj] == ca { found = 1u8 } }
+                j = j + 1u32
+            }
+            if found == 0u8 { return 0u8 }
+        }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* 1 iff a and b are the SAME canonical polynomial over Z/2^64 (=> equal as u64
+ * functions for all valuations).  Any arena/exponent overflow -> 0 (decline). */
+fn bv_equal(a: u32, b: u32) -> u8 @export {
+    if BV_ERR == 1u8 { return 0u8 }
+    if bv_subset(a, b) == 0u8 { return 0u8 }
+    if bv_subset(b, a) == 0u8 { return 0u8 }
+    return 1u8
+}
+
+/* 1 iff poly a is a pure CONSTANT (no nonzero variable monomial) -- i.e. the
+ * expression equals a fixed u64 for ALL valuations.  Any overflow -> 0.  This
+ * is the predicate a ring-0 optimizer uses to soundly fold an expression (even
+ * one containing variables, e.g. x-x) to a compile-time constant. */
+fn bv_is_const(s: u32) -> u8 @export {
+    if BV_ERR == 1u8 { return 0u8 }
+    let base : u64 = (s as u64) * 32u64
+    let n : u32 = BV_LEN[(s as u64)]
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = base + (i as u64)
+        if BV_KEY[idx] != 0u32 { if BV_COEF[idx] != 0u64 { return 0u8 } }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* The constant value of poly a (its key-0 coefficient, mod 2^64); 0 if absent.
+ * Only meaningful when bv_is_const(a) == 1. */
+fn bv_const_val(s: u32) -> u64 @export {
+    let base : u64 = (s as u64) * 32u64
+    let n : u32 = BV_LEN[(s as u64)]
+    let mut i : u32 = 0u32
+    while i < n {
+        let idx : u64 = base + (i as u64)
+        if BV_KEY[idx] == 0u32 { return BV_COEF[idx] }
+        i = i + 1u32
+    }
+    return 0u64
+}
+
+/* ===== bitwise fragment: bit-parallel exhaustive decider ===================
+ * For a PURE bitwise expression (variables, constants, & | ^ ~) over <=6 vars,
+ * evaluate it on the "truth-table column" magic constants BW_M0..BW_M5 (bit b
+ * of BW_Mi = bit i of the position index b).  Because &|^~ are bit-parallel
+ * (each output bit depends ONLY on the same-position input bits) and <=6 vars
+ * means all 2^n <= 64 combinations appear across the 64 bit positions,
+ * lhs(M) == rhs(M) over all 64 bits  IFF  lhs == rhs for EVERY u64 valuation.
+ * A complete proof with a single u64 evaluation -- no loop.  >6 distinct vars
+ * -> BW_ERR (64 positions cannot realize 2^n > 64 combinations) -> decline. */
+const BW_M0 : u64 = 0xAAAAAAAAAAAAAAAAu64
+const BW_M1 : u64 = 0xCCCCCCCCCCCCCCCCu64
+const BW_M2 : u64 = 0xF0F0F0F0F0F0F0F0u64
+const BW_M3 : u64 = 0xFF00FF00FF00FF00u64
+const BW_M4 : u64 = 0xFFFF0000FFFF0000u64
+const BW_M5 : u64 = 0xFFFFFFFF00000000u64
+const BW_ONES : u64 = 0xFFFFFFFFFFFFFFFFu64
+var BW_ERR : u8 = 0u8
+
+fn bw_reset() -> i32 @export { BW_ERR = 0u8 ; return 0i32 }
+
+/* Evaluate variable i to its truth-table column (i in [0,5]); i>=6 -> BW_ERR. */
+fn bw_var(i: u32) -> u64 @export {
+    if i == 0u32 { return BW_M0 }
+    if i == 1u32 { return BW_M1 }
+    if i == 2u32 { return BW_M2 }
+    if i == 3u32 { return BW_M3 }
+    if i == 4u32 { return BW_M4 }
+    if i == 5u32 { return BW_M5 }
+    BW_ERR = 1u8
+    return 0u64
+}
+fn bw_const(c: u64) -> u64 @export { return c }
+fn bw_and(a: u64, b: u64) -> u64 @export { return a & b }
+fn bw_or(a: u64, b: u64)  -> u64 @export { return a | b }
+fn bw_xor(a: u64, b: u64) -> u64 @export { return a ^ b }
+fn bw_not(a: u64) -> u64 @export { return a ^ BW_ONES }
+
+/* 1 iff the two pure-bitwise expressions are equal for ALL u64 valuations. */
+fn bw_equal(a: u64, b: u64) -> u8 @export {
+    if BW_ERR == 1u8 { return 0u8 }
+    if a == b { return 1u8 }
+    return 0u8
+}
+
+/* KAT: the u64-sound decider.  POSITIVES are real Z/2^64 ring identities it
+ * certifies; NEGATIVES are non-identities it must REJECT (soundness + non-
+ * vacuity).  99 = pass; 1..13 ring, 14..18 const-fold, 19..30 bitwise. */
+fn bv_ring_selftest() -> u64 @export {
+    bv_reset()
+    if bv_equal(bv_add(bv_var(0u32), bv_const(0u64)), bv_var(0u32)) != 1u8 { return 1u64 }   /* x+0 == x */
+    bv_reset()
+    if bv_equal(bv_mul(bv_var(0u32), bv_const(1u64)), bv_var(0u32)) != 1u8 { return 2u64 }   /* x*1 == x */
+    bv_reset()
+    if bv_equal(bv_mul(bv_var(0u32), bv_const(0u64)), bv_const(0u64)) != 1u8 { return 3u64 } /* x*0 == 0 */
+    bv_reset()
+    if bv_equal(bv_mul(bv_var(0u32), bv_const(2u64)), bv_shl(bv_var(0u32), 1u32)) != 1u8 { return 4u64 } /* x*2 == x<<1 */
+    bv_reset()
+    if bv_equal(bv_shl(bv_shl(bv_var(0u32), 2u32), 3u32), bv_shl(bv_var(0u32), 5u32)) != 1u8 { return 5u64 } /* (x<<2)<<3 == x<<5 */
+    bv_reset()
+    if bv_equal(bv_sub(bv_var(0u32), bv_var(0u32)), bv_const(0u64)) != 1u8 { return 6u64 }   /* x-x == 0 */
+    bv_reset()
+    let dl : u32 = bv_mul(bv_var(0u32), bv_add(bv_var(1u32), bv_var(2u32)))
+    let dr : u32 = bv_add(bv_mul(bv_var(0u32), bv_var(1u32)), bv_mul(bv_var(0u32), bv_var(2u32)))
+    if bv_equal(dl, dr) != 1u8 { return 7u64 }                                               /* x*(y+z) == xy+xz */
+    bv_reset()
+    if bv_equal(bv_add(bv_var(0u32), bv_var(1u32)), bv_add(bv_var(1u32), bv_var(0u32))) != 1u8 { return 8u64 } /* x+y == y+x */
+    bv_reset()
+    if bv_equal(bv_add(bv_var(0u32), bv_const(1u64)), bv_var(0u32)) != 0u8 { return 9u64 }   /* x+1 != x */
+    bv_reset()
+    if bv_equal(bv_mul(bv_var(0u32), bv_const(2u64)), bv_mul(bv_var(0u32), bv_const(3u64))) != 0u8 { return 10u64 } /* x*2 != x*3 */
+    bv_reset()
+    if bv_equal(bv_var(0u32), bv_var(1u32)) != 0u8 { return 11u64 }                          /* x != y */
+    bv_reset()
+    if bv_equal(bv_shl(bv_var(0u32), 1u32), bv_shl(bv_var(0u32), 2u32)) != 0u8 { return 12u64 } /* x<<1 != x<<2 */
+    bv_reset()
+    if bv_equal(bv_mul(bv_var(0u32), bv_var(1u32)), bv_mul(bv_var(0u32), bv_var(2u32))) != 0u8 { return 13u64 } /* xy != xz */
+    /* generalized constant detection -- the ring-0 fold predicate */
+    bv_reset()
+    let cz : u32 = bv_sub(bv_var(0u32), bv_var(0u32))                      /* x - x */
+    if bv_is_const(cz) != 1u8 { return 14u64 }
+    if bv_const_val(cz) != 0u64 { return 15u64 }
+    bv_reset()
+    let c5 : u32 = bv_sub(bv_add(bv_const(5u64), bv_var(0u32)), bv_var(0u32))  /* 5 + x - x */
+    if bv_is_const(c5) != 1u8 { return 16u64 }
+    if bv_const_val(c5) != 5u64 { return 17u64 }
+    bv_reset()
+    if bv_is_const(bv_add(bv_var(0u32), bv_const(1u64))) != 0u8 { return 18u64 } /* x + 1 NOT const */
+    /* ----- bitwise fragment (bit-parallel decider) ----- */
+    bw_reset()
+    if bw_equal(bw_and(bw_var(0u32), bw_var(0u32)), bw_var(0u32)) != 1u8 { return 19u64 }  /* x&x == x */
+    bw_reset()
+    if bw_equal(bw_or(bw_var(0u32), bw_var(0u32)), bw_var(0u32)) != 1u8 { return 20u64 }   /* x|x == x */
+    bw_reset()
+    if bw_equal(bw_xor(bw_var(0u32), bw_var(0u32)), bw_const(0u64)) != 1u8 { return 21u64 } /* x^x == 0 */
+    bw_reset()
+    if bw_equal(bw_or(bw_var(0u32), bw_const(0u64)), bw_var(0u32)) != 1u8 { return 22u64 }  /* x|0 == x */
+    bw_reset()
+    if bw_equal(bw_and(bw_var(0u32), bw_const(0u64)), bw_const(0u64)) != 1u8 { return 23u64 } /* x&0 == 0 */
+    bw_reset()
+    if bw_equal(bw_and(bw_var(0u32), bw_not(bw_var(0u32))), bw_const(0u64)) != 1u8 { return 24u64 } /* x & ~x == 0 */
+    bw_reset()
+    if bw_equal(bw_not(bw_not(bw_var(0u32))), bw_var(0u32)) != 1u8 { return 25u64 }         /* ~~x == x */
+    bw_reset()
+    let dm_l : u64 = bw_not(bw_and(bw_var(0u32), bw_var(1u32)))
+    let dm_r : u64 = bw_or(bw_not(bw_var(0u32)), bw_not(bw_var(1u32)))
+    if bw_equal(dm_l, dm_r) != 1u8 { return 26u64 }                                         /* ~(x&y)==~x|~y (De Morgan) */
+    bw_reset()
+    let xr_l : u64 = bw_xor(bw_var(0u32), bw_var(1u32))
+    let xr_r : u64 = bw_and(bw_or(bw_var(0u32), bw_var(1u32)), bw_not(bw_and(bw_var(0u32), bw_var(1u32))))
+    if bw_equal(xr_l, xr_r) != 1u8 { return 27u64 }                                         /* x^y == (x|y)&~(x&y) */
+    bw_reset()
+    if bw_equal(bw_and(bw_var(0u32), bw_var(1u32)), bw_var(0u32)) != 0u8 { return 28u64 }   /* x&y != x */
+    bw_reset()
+    if bw_equal(bw_or(bw_var(0u32), bw_const(1u64)), bw_var(0u32)) != 0u8 { return 29u64 }  /* x|1 != x */
+    bw_reset()
+    if bw_equal(bw_xor(bw_var(0u32), bw_var(1u32)), bw_const(0u64)) != 0u8 { return 30u64 } /* x^y != 0 */
+    return 99u64
+}

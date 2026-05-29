@@ -1,0 +1,114 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\835_self_reformatter_directed.iii
+ *
+ * III conformance corpus 835 -- the directional ripple-field COMPOUND:
+ * self_reformatter consuming omnia/ripple_field (apotheosis compound).
+ *
+ * Proves (non-tautologically), each group in its own helper fn:
+ *   check_pure       -- the pattern-space field is a pure function of
+ *                       sealed content: direction (sr_dir_climbs via
+ *                       rf_rank) + signed score (sr_field_score) with
+ *                       +climb / -descend / 0 flat + antisymmetry.
+ *   check_directed   -- the field-directed scan over the live (boot)
+ *                       pattern set PRESERVES scan()'s contract: 0
+ *                       promotions (boot patterns irreducible), counter
+ *                       consistency, and a deterministic steepest node.
+ *   check_determin   -- the directed scan is deterministic (Mandate 7).
+ *
+ * i64 comparisons go through eq_i64 (corpus-186 idiom; i64 literals only
+ * as call args, never before a '{').
+ *
+ * hexad values: SUBSTANCE=2 (rank 2), MOTION=5 (rank 5), ORIGIN=7 (rank 6).
+ *
+ * Exit code: 99 on full pass; 1..N on the specific failed assertion.
+ */
+
+module corpus_835
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_reset() -> i32 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_tick() -> i32 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_scan_directed() -> u32 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_trigger_interval() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_total_proposed() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_total_promoted() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn self_reformatter_total_rejected() -> u64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn sr_dir_climbs(hex_a: u8, hex_b: u8) -> u8 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn sr_field_score(ka: u64, kb: u64, hex_a: u8, hex_b: u8) -> i64 from "self_reformatter.iii"
+extern @abi(c-msvc-x64) fn sr_steepest_pattern() -> u32 from "self_reformatter.iii"
+
+fn eq_i64(a: i64, b: i64) -> u32 {
+    if a == b { return 1u32 }
+    return 0u32
+}
+
+/* PURE field direction + score over synthetic (k, hexad) inputs. */
+fn check_pure() -> u64 {
+    /* direction: SUB(2)->MOT(5) climbs; MOT->SUB descends; SUB->SUB flat */
+    if sr_dir_climbs(2u8, 5u8) != 1u8 { return 1u64 }
+    if sr_dir_climbs(5u8, 2u8) != 0u8 { return 2u64 }
+    if sr_dir_climbs(2u8, 2u8) != 0u8 { return 3u64 }
+    /* score: climb k=100+200 -> +300 ; descend -> -300 ; flat -> 0 */
+    if eq_i64(sr_field_score(100u64, 200u64, 2u8, 5u8), 300i64) != 1u32 { return 4u64 }
+    if eq_i64(sr_field_score(100u64, 200u64, 5u8, 2u8), -300i64) != 1u32 { return 5u64 }
+    if eq_i64(sr_field_score(100u64, 200u64, 2u8, 2u8), 0i64) != 1u32 { return 6u64 }
+    /* antisymmetry: score(a->b) == -score(b->a) when ranks differ */
+    let f : i64 = sr_field_score(100u64, 200u64, 2u8, 5u8)
+    let g : i64 = sr_field_score(100u64, 200u64, 5u8, 2u8)
+    let neg_g : i64 = 0i64 - g
+    if eq_i64(f, neg_g) != 1u32 { return 7u64 }
+    return 0u64
+}
+
+/* LIVE: field-directed scan over the boot pattern set preserves the
+ * scan() contract (0 promotions; counters consistent; steepest stable). */
+fn check_directed() -> u64 {
+    resolution_init()
+    self_reformatter_reset()
+    let interval : u64 = self_reformatter_trigger_interval()
+    let mut i : u64 = 0u64
+    while i < interval {
+        self_reformatter_tick()
+        i = i + 1u64
+    }
+    let promoted : u32 = self_reformatter_scan_directed()
+    if promoted != 0u32 { return 8u64 }                 /* boot patterns irreducible */
+    let tp : u64 = self_reformatter_total_proposed()
+    let tg : u64 = self_reformatter_total_promoted()
+    let tr : u64 = self_reformatter_total_rejected()
+    if tp != (tg + tr) { return 9u64 }                  /* counter consistency */
+    let s1 : u32 = sr_steepest_pattern()
+    let s2 : u32 = sr_steepest_pattern()
+    if s1 != s2 { return 10u64 }                        /* steepest deterministic (Mandate 7) */
+    return 0u64
+}
+
+/* The directed scan is deterministic: same ticks -> same promotions. */
+fn check_determin() -> u64 {
+    self_reformatter_reset()
+    let interval : u64 = self_reformatter_trigger_interval()
+    let mut i : u64 = 0u64
+    while i < interval {
+        self_reformatter_tick()
+        i = i + 1u64
+    }
+    let p1 : u32 = self_reformatter_scan_directed()
+    self_reformatter_reset()
+    let mut j : u64 = 0u64
+    while j < interval {
+        self_reformatter_tick()
+        j = j + 1u64
+    }
+    let p2 : u32 = self_reformatter_scan_directed()
+    if p1 != p2 { return 11u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let r1 : u64 = check_pure()
+    if r1 != 0u64 { return r1 }
+    let r2 : u64 = check_directed()
+    if r2 != 0u64 { return r2 }
+    let r3 : u64 = check_determin()
+    if r3 != 0u64 { return r3 }
+    return 99u64
+}

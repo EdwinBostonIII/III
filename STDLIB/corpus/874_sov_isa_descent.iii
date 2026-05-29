@@ -1,0 +1,18 @@
+/* The Sovereign ISA Descent (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md, brick 3 -- the
+ * "differential descent over the cost-field", no longer deferred).  Wires two
+ * underutilized organs into a proof-preserving optimizer: numera/egraph (equality
+ * saturation -> the proven-equal class + min-cost extraction) + numera/cost_lattice
+ * (the 6-dim microarch cost-field, scalarized).  sov_isa_kat() proves the SOVEREIGN
+ * MORPHISM at the ISA layer: a TWO-RULE compose descends add(mul(x,2),0) to its
+ * cheapest proven-equal realization shl(x,1) (the result is in the input's e-class
+ * -- equal modulo the SOUND rules x*2=x<<1 and x+0=x -- AND cost-minimal); the
+ * cost-field ranks mul dearer than shl; and -- the FAITHFULNESS falsifier -- with
+ * NO rules the same term does NOT descend (the optimizer never fabricates an
+ * equality).  No floats, no ML; deterministic.  99 = all arms pass. */
+module corpus_c874
+
+extern @abi(c-msvc-x64) fn sov_isa_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    return sov_isa_kat()
+}

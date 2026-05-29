@@ -977,7 +977,49 @@ L_if_end_37:
     pushq %rax
     popq %rax
 L_if_end_39:
-    movl -24(%rbp), %eax
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x18, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq xii_term_make_basis
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movabsq $0x2, %rax
+    pushq %rax
+    movabsq $0x18, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq xii_term_make_basis
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1a, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq xii_term_make_fusion2
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1014,7 +1056,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
 L_if_end_41:
-    movl -24(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp

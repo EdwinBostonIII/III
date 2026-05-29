@@ -1,0 +1,12 @@
+/* 891_xii_subforms.iii -- gates numera/xii_subforms's built-in collision-free falsifier.
+ * xii_subforms computes XII subform IDs (exercised transitively by XII term creation), but its
+ * @export sample_collision_free() falsifier was never invoked by a corpus test -- a dead gate.
+ * This integrates it: ==1 means the sampled subform set is collision-free (distinct IDs). */
+module corpus_891
+
+extern @abi(c-msvc-x64) fn xii_subforms_sample_collision_free() -> u8 from "xii_subforms.iii"
+
+fn main() -> u64 {
+    if xii_subforms_sample_collision_free() != 1u8 { return 1u64 }
+    return 99u64
+}

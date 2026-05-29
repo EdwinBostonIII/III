@@ -1,0 +1,179 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\omnia\ripple_field.iii
+ *
+ * III STDLIB - omnia::ripple_field  --  the directional ripple-field.
+ *
+ * Thickens the thin (topology-only) ripple into a SIGNED, DIRECTIONAL
+ * field over a content-addressed dependency graph.  Each edge (from -> to)
+ * carries a directed magnitude that is a PURE FUNCTION OF SEALED CONTENT:
+ *
+ *     field(from, to) = sign(rank(hex_to) - rank(hex_from)) * dK(prim_from, prim_to)
+ *
+ *   - magnitude  dK = omnia/xii_savings.iii  (the sealed Delta-K-compose
+ *                savings table -- the substrate's own gradient).
+ *   - direction  rank() is DERIVED from omnia/xii_hj.iii's sealed hexad-
+ *                dominance order (COMPOSE < FORM < SUBSTANCE < PASSAGE <
+ *                ESSENCE < MOTION < ORIGIN); a positive field climbs
+ *                toward ORIGIN.
+ *
+ * Mandate 7 (no observational learning): the field reads ONLY the static
+ * structural fields prim-identity (0..23) and hexad-kind (1..7).  No call
+ * counts, no frequencies, no timing.  Identical content + topology yields
+ * an identical field regardless of construction order (proven by corpus
+ * 834).  The field is thus the EXACT, REVERSIBLE, content-derived analog
+ * of a gradient -- not a learned policy.
+ *
+ * Forward field  = leverage flowing OUT of a node (rf_node_potential).
+ * Inverse field  = the antisymmetric backward pull, the SID view
+ *                  (rf_edge_field(b,a) == -rf_edge_field(a,b) when ranks
+ *                  differ); rf_inverse_potential sums field flowing IN.
+ * rf_steepest()  = the highest-potential node: the exact "where the
+ *                  substrate wants to grow" that re-arms self_reformatter
+ *                  once it is compounded in.
+ *
+ * Hexad: kind_mobius (directional coherence over topology, like ripple).
+ * Ring: R0.  K: 1.00 (pure function of two sealed tables).
+ *
+ * NIH: libc only; depends only on the already-sealed xii_savings + xii_hj.
+ */
+
+module omnia_ripple_field
+
+extern @abi(c-msvc-x64) fn xii_savings_get(a: u8, b: u8) -> u8 from "xii_savings.iii"
+extern @abi(c-msvc-x64) fn xii_hj_join(a: u8, b: u8) -> u8 from "xii_hj.iii"
+
+const RF_OK        : i32 =  0i32
+const RF_E_FULL    : i32 = -1i32
+const RF_E_BADIDX  : i32 = -2i32
+const RF_CAP_NODES : u32 = 64u32
+const RF_CAP_EDGES : u32 = 256u32
+
+/* Graph state (module-scope: W4 -- no function-local var arrays). */
+var RF_NODE_PRIM  : [u8; 64]
+var RF_NODE_HEXAD : [u8; 64]
+var RF_NODE_COUNT : u32 = 0u32
+var RF_EDGE_FROM  : [u32; 256]
+var RF_EDGE_TO    : [u32; 256]
+var RF_EDGE_COUNT : u32 = 0u32
+
+/* ─── rf_rank: dominance rank DERIVED from the sealed HJ table ──────
+ * rank(h) = #{ x in 1..7, x != h : HJ(h, x) == h } -- how many hexads h
+ * dominates.  Yields COMPOSE=0 < FORM=1 < SUBSTANCE=2 < PASSAGE=3 <
+ * ESSENCE=4 < MOTION=5 < ORIGIN=6, exactly the S4.2 order, WITHOUT
+ * hardcoding it -- so it can never drift from the sealed table. */
+fn rf_rank(h: u8) -> u32 @export {
+    if h == 0u8 { return 0u32 }
+    if h > 7u8  { return 0u32 }
+    let mut cnt : u32 = 0u32
+    let mut x : u8 = 1u8
+    while x <= 7u8 {
+        if x != h {
+            if xii_hj_join(h, x) == h { cnt = cnt + 1u32 }
+        }
+        x = x + 1u8
+    }
+    return cnt
+}
+
+/* ─── rf_edge_field: the core directed field on one edge ───────────
+ * Pure function of (prim_from, prim_to, hex_from, hex_to).  Returns a
+ * signed i64: +dK if the edge climbs the dominance order, -dK if it
+ * descends, 0 if flat (same rank).  A flat edge carries magnitude but no
+ * DIRECTION, so it contributes no gradient. */
+fn rf_edge_field(prim_from: u8, prim_to: u8, hex_from: u8, hex_to: u8) -> i64 @export {
+    let mag : i64 = xii_savings_get(prim_from, prim_to) as i64
+    let rfrom : u32 = rf_rank(hex_from)
+    let rto   : u32 = rf_rank(hex_to)
+    if rto > rfrom { return mag }
+    if rto < rfrom { return 0i64 - mag }
+    return 0i64
+}
+
+/* ─── graph construction ───────────────────────────────────────────
+ * A small fixed-capacity graph the field is computed over.  rf_add_node
+ * returns the new node index (or RF_CAP_NODES as a full sentinel). */
+fn rf_reset() -> i32 @export {
+    RF_NODE_COUNT = 0u32
+    RF_EDGE_COUNT = 0u32
+    return RF_OK
+}
+
+fn rf_add_node(prim: u8, hexad: u8) -> u32 @export {
+    if RF_NODE_COUNT >= RF_CAP_NODES { return RF_CAP_NODES }
+    let idx : u32 = RF_NODE_COUNT
+    RF_NODE_PRIM[idx]  = prim
+    RF_NODE_HEXAD[idx] = hexad
+    RF_NODE_COUNT = idx + 1u32
+    return idx
+}
+
+fn rf_add_edge(from_idx: u32, to_idx: u32) -> i32 @export {
+    if RF_EDGE_COUNT >= RF_CAP_EDGES { return RF_E_FULL }
+    if from_idx >= RF_NODE_COUNT { return RF_E_BADIDX }
+    if to_idx   >= RF_NODE_COUNT { return RF_E_BADIDX }
+    let e : u32 = RF_EDGE_COUNT
+    RF_EDGE_FROM[e] = from_idx
+    RF_EDGE_TO[e]   = to_idx
+    RF_EDGE_COUNT = e + 1u32
+    return RF_OK
+}
+
+fn rf_node_count() -> u32 @export { return RF_NODE_COUNT }
+fn rf_edge_count() -> u32 @export { return RF_EDGE_COUNT }
+
+/* ─── rf_node_potential: forward field flowing OUT of a node ─────── */
+fn rf_node_potential(idx: u32) -> i64 @export {
+    if idx >= RF_NODE_COUNT { return 0i64 }
+    let pf : u8 = RF_NODE_PRIM[idx]
+    let hf : u8 = RF_NODE_HEXAD[idx]
+    let mut pot : i64 = 0i64
+    let mut e : u32 = 0u32
+    while e < RF_EDGE_COUNT {
+        if RF_EDGE_FROM[e] == idx {
+            let t : u32 = RF_EDGE_TO[e]
+            pot = pot + rf_edge_field(pf, RF_NODE_PRIM[t], hf, RF_NODE_HEXAD[t])
+        }
+        e = e + 1u32
+    }
+    return pot
+}
+
+/* ─── rf_inverse_potential: backward (SID) field pulling INTO a node ─ */
+fn rf_inverse_potential(idx: u32) -> i64 @export {
+    if idx >= RF_NODE_COUNT { return 0i64 }
+    let pt : u8 = RF_NODE_PRIM[idx]
+    let ht : u8 = RF_NODE_HEXAD[idx]
+    let mut pot : i64 = 0i64
+    let mut e : u32 = 0u32
+    while e < RF_EDGE_COUNT {
+        if RF_EDGE_TO[e] == idx {
+            let f : u32 = RF_EDGE_FROM[e]
+            pot = pot + rf_edge_field(RF_NODE_PRIM[f], pt, RF_NODE_HEXAD[f], ht)
+        }
+        e = e + 1u32
+    }
+    return pot
+}
+
+/* ─── rf_steepest: the gradient -- the highest-potential node ───────
+ * "Where the substrate wants to grow."  Deterministic: ties resolve to
+ * the lowest index (strict >).  Returns 0 on an empty graph. */
+fn rf_steepest() -> u32 @export {
+    if RF_NODE_COUNT == 0u32 { return 0u32 }
+    let mut best : u32 = 0u32
+    let mut best_pot : i64 = rf_node_potential(0u32)
+    let mut i : u32 = 1u32
+    while i < RF_NODE_COUNT {
+        let p : i64 = rf_node_potential(i)
+        if p > best_pot {
+            best = i
+            best_pot = p
+        }
+        i = i + 1u32
+    }
+    return best
+}
+
+fn rf_steepest_potential() -> i64 @export {
+    let s : u32 = rf_steepest()
+    return rf_node_potential(s)
+}

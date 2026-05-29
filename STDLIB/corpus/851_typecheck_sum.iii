@@ -1,0 +1,15 @@
+/* P5 brick 11: Sum types A+B (disjunction, the last propositional connective) +
+ * the DEPENDENT case eliminator. inl/inr (check-only against a SUM, ANN-bridge
+ * for inference), case(C,f,g,s):C s with f:(a:A)->C(inl a), g:(b:B)->C(inr b),
+ * beta case(inl v)->f v / case(inr v)->g v. p5_kat_sum() tests closed beta (both
+ * branches), the UNDER-BINDER shift exerciser (the only test that catches a wrong
+ * shift in the method types -- a closed motive makes it a no-op), inl-conv, and
+ * negatives (inl vs non-Sum, scrutinee not Sum, method wrong type).
+ * 99 = all pass; 1..10 = first failing case. */
+module corpus_c851
+
+extern @abi(c-msvc-x64) fn p5_kat_sum() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_sum()
+}

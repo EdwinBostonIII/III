@@ -1,0 +1,30 @@
+/* 886_arith_identity.iii -- functional gate for the sov calc IDENTITY + ANNIHILATOR rules
+ * now in cg_r3 (x+0->x, 0+x->x, x*1->x, 1*x->x, x*0->0), the kernel-certified (corpus 875)
+ * companions to the const-fold + strength-reduction already in the compiler.  These fns are
+ * compiled by the optimizing iiis-2, so they exercise the new R3_K_EXPR_BINARY codegen.
+ *
+ * Each assert uses a value where a MIS-fold yields a DIFFERENT answer: add0 mis-folded to 0,
+ * mul1 mis-folded to 1, or mul0 mis-folded to x would each be WRONG -> the assert turns RED.
+ * mul0e = (x+1)*0 checks the purity-guarded fall-through (x+1 is not a bare IDENT, so x*0->0
+ * must NOT skip it; the normal imul still yields 0).  99 = every identity computes correctly. */
+module corpus_886
+
+fn add0(x: u64) -> u64 { return x + 0u64 }
+fn mul1(x: u64) -> u64 { return x * 1u64 }
+fn mul0(x: u64) -> u64 { return x * 0u64 }
+fn zadd(x: u64) -> u64 { return 0u64 + x }
+fn omul(x: u64) -> u64 { return 1u64 * x }
+fn mul0e(x: u64) -> u64 { return (x + 1u64) * 0u64 }
+
+fn main() -> u64 {
+    if add0(5u64) != 5u64 { return 1u64 }
+    if mul1(7u64) != 7u64 { return 2u64 }
+    if mul0(9u64) != 0u64 { return 3u64 }
+    if zadd(3u64) != 3u64 { return 4u64 }
+    if omul(2u64) != 2u64 { return 5u64 }
+    if mul0e(4u64) != 0u64 { return 6u64 }
+    if add0(123456789u64) != 123456789u64 { return 7u64 }
+    if mul0(123456789u64) != 0u64 { return 8u64 }
+    if zadd(987654321u64) != 987654321u64 { return 9u64 }
+    return 99u64
+}

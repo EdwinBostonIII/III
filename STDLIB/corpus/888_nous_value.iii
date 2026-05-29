@@ -1,0 +1,12 @@
+/* 888_nous_value.iii -- gates nous_value's @export selftest (the nous faculty as a sealed,
+ * content-addressed value: cad-addressed weights, bounded per-call cost, determinism, null-
+ * refusal).  nous BUILDS nous_value (build_stdlib MODULES) but NO corpus test invoked its
+ * selftest -- a dead falsifier.  This integrates it in its place, alongside 800-809.
+ * 99 = pass; 1-7 name the failing nous_value_selftest check. */
+module corpus_888
+
+extern @abi(c-msvc-x64) fn nous_value_selftest() -> u64 from "nous_value.iii"
+
+fn main() -> u64 {
+    return nous_value_selftest()
+}

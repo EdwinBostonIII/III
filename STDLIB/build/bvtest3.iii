@@ -1,0 +1,44 @@
+module bvtest3
+
+extern @abi(c-msvc-x64) fn bv_reset() -> i32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_var(v: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_add(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_sub(a: u32, b: u32) -> u32 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_is_const(s: u32) -> u8 from "bv_ring.iii"
+extern @abi(c-msvc-x64) fn bv_const_val(s: u32) -> u64 from "bv_ring.iii"
+
+var RES : [u32; 16]
+var VOFF : [u32; 4]
+var VLEN : [u32; 4]
+var NV : u32 = 0u32
+
+fn var_for(voff: u32, vlen: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < NV {
+        if VOFF[i] == voff { if VLEN[i] == vlen { return bv_var(i) } }
+        i = i + 1u32
+    }
+    if NV >= 4u32 { return 4294967295u32 }
+    let idx : u32 = NV
+    VOFF[idx] = voff ; VLEN[idx] = vlen ; NV = idx + 1u32
+    return bv_var(idx)
+}
+
+fn main() -> u64 {
+    bv_reset() ; NV = 0u32
+    let mut rp : u32 = 0u32
+    RES[(rp as u64)] = var_for(100u32, 1u32) ; rp = rp + 1u32
+    RES[(rp as u64)] = var_for(100u32, 1u32) ; rp = rp + 1u32
+    let rb1 : u32 = RES[((rp - 1u32) as u64)] ; let la1 : u32 = RES[((rp - 2u32) as u64)] ; rp = rp - 2u32
+    RES[(rp as u64)] = bv_add(la1, rb1) ; rp = rp + 1u32
+    RES[(rp as u64)] = var_for(100u32, 1u32) ; rp = rp + 1u32
+    let rb2 : u32 = RES[((rp - 1u32) as u64)] ; let la2 : u32 = RES[((rp - 2u32) as u64)] ; rp = rp - 2u32
+    RES[(rp as u64)] = bv_sub(la2, rb2) ; rp = rp + 1u32
+    RES[(rp as u64)] = var_for(100u32, 1u32) ; rp = rp + 1u32
+    let rb3 : u32 = RES[((rp - 1u32) as u64)] ; let la3 : u32 = RES[((rp - 2u32) as u64)] ; rp = rp - 2u32
+    RES[(rp as u64)] = bv_sub(la3, rb3) ; rp = rp + 1u32
+    let fin : u32 = RES[0u64]
+    if bv_is_const(fin) != 1u8 { return 1u64 }
+    if bv_const_val(fin) != 0u64 { return 2u64 }
+    return 99u64
+}

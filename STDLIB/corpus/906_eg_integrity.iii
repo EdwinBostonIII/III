@@ -1,0 +1,23 @@
+/* 906_eg_integrity.iii -- Integration A: e-graph constitutional integrity.
+ *
+ * The optimizer e-graph self-seals with a Keccak Merkle digest folded over the
+ * CANONICAL node rows and class partition (children + eclasses resolved through
+ * eg_find, so the seal is invariant under union-find path compression).  This
+ * KAT drives eg_integrity_selftest (numera/egraph.iii) end-to-end and PROVES,
+ * with no rigging:
+ *   (1) the honest seal re-verifies (== 1);
+ *   (2) a single injected byte-fault in the node-symbol stream is DETECTED
+ *       (verify -> 0) -- the seal is a real falsifier, not vacuously green;
+ *   (3) the Reed-Solomon code (GF(2^8), 3 parity symbols/block, d=4) SELF-HEALS
+ *       the single fault and the seal re-verifies (== 1);
+ *   (4) at the detect-2 boundary, TWO faults in one block are DETECTED but
+ *       reported uncorrectable, and the seal still reports corruption -- repair
+ *       never fabricates success.
+ * Main-corpus convention: rc 99 = pass; 1..8 = which integrity arm failed. */
+module corpus_906
+
+extern @abi(c-msvc-x64) fn eg_integrity_selftest() -> u64 from "egraph.iii"
+
+fn main() -> u64 {
+    return eg_integrity_selftest()
+}

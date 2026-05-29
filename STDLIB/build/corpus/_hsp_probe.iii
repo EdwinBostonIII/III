@@ -1,3 +1,0 @@
-module hsp_probe
-extern @abi(c-msvc-x64) fn hsp_selftest() -> u64 from "hotstuff_predict.iii"
-fn main() -> u64 { return hsp_selftest() }

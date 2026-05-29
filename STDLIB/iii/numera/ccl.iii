@@ -1,0 +1,898 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ccl.iii
+ *
+ * III STDLIB - numera::ccl  (Path C brick 16: beta-eta via directed CCL reduction)
+ *
+ * Curien's Categorical Combinatory Logic as a DIRECTED, confluent, terminating
+ * reduction (apply_one to normal form) -- the right tool for normalisation.
+ * (Equality saturation in an e-graph is the WRONG tool: beta DUPLICATES and the
+ * categorical rules EXPAND, so accumulating every equivalent form blows up.  The
+ * B16a e-graph PoC proved CCL-eta is a STRUCTURAL rule -- and here that exact rule
+ * is a directed contraction in an O(reduction-length) reducer.)
+ *
+ * Compilation (de Bruijn -> categorical; context = a product):
+ *   #0     -> Snd ;  #(k+1) -> Comp(<#k>, Fst)
+ *   lam. b -> Cur(<b>) ;  f a -> Comp(App, Pair(<f>, <a>))
+ *   constant c -> c   (context-free; weakening c o y = c)
+ *
+ * The CCL rules, oriented as a terminating reduction (no surjective-pairing SP --
+ * we need exponential eta, not product eta; SP is the Klop-nonconfluence culprit):
+ *   idl   Id o x          -> x
+ *   idr   x o Id          -> x
+ *   ass   (x o y) o z     -> x o (y o z)
+ *   dpair <x,y> o z       -> <x o z, y o z>
+ *   dcur  Cur(x) o y      -> Cur(x o <y o Fst, Snd>)
+ *   fst   Fst o <x,y>     -> x
+ *   snd   Snd o <x,y>     -> y
+ *   beta  App o <Cur(x) o y, z> -> x o <y, z>
+ *   bare  App o <Cur(x), z>     -> x o <Id, z>
+ *   eta   Cur(App o <x o Fst, Snd>) -> x       (the B16a structural eta)
+ *   weak  c o y          -> c   (c a constant: categorical weakening c o ! = c)
+ * Confluence is verified empirically (846 + 855 differential) and is slated for
+ * MACHINE certification at B18d (xii_critpair_enum + xii_conf_cert).
+ *
+ * Hexad: kind_essence + kind_cognition.  Ring: R0.  K: 1.00.  NIH: own arena only.
+ */
+
+module numera_ccl
+
+/* TC constructors (numera/typecheck) -- the read-back ccl_to_tc reifies a CCL
+ * normal form back into a TC node.  Mutual module reference: typecheck externs
+ * ccl_*, ccl externs tc_* -- resolved at archive link. */
+extern @abi(c-msvc-x64) fn tc_var(k: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_lam(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_app(f: u32, a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pi_q(a: u32, b: u32, code: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sig(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_id(ty: u32, l: u32, r: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sum(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_w(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sup(a: u32, f: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_nat() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_bool() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_unit() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_empty() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_tt() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sort(l: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_false() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_zero() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_succ(n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_inl(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_inr(v: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_if(s: u32, t: u32, e: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_iter(z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_natrec(p: u32, z: u32, s: u32, n: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_wrec(p: u32, s: u32, w: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_case(c: u32, f: u32, g: u32, s: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_j(m: u32, b: u32, p: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_pair(a: u32, b: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_fst(p: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_snd(p: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_transp(pr: u32, proof: u32, base: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_absurd(cc: u32, e: u32) -> u32 from "typecheck.iii"
+
+const CCL_ID   : u8 = 1u8     /* Id            (nullary morphism)        */
+const CCL_COMP : u8 = 2u8     /* Comp(f,g) = f o g   (binary)            */
+const CCL_PAIR : u8 = 3u8     /* Pair(f,g) = <f,g>   (binary)            */
+const CCL_FST  : u8 = 4u8     /* Fst           (nullary)                 */
+const CCL_SND  : u8 = 5u8     /* Snd           (nullary)                 */
+const CCL_CUR  : u8 = 6u8     /* Cur(f) = Lambda(f)  (unary)             */
+const CCL_APP  : u8 = 7u8     /* App           (nullary morphism)        */
+const CCL_ATOM : u8 = 8u8     /* free constant: A = atom id              */
+/* data constructors + eliminators -- all CONSTANTS (applied via App o Pair).
+ * Tag >= CCL_ATOM means "a constant" (weakening c o y = c applies). */
+const CCL_TRUE   : u8 = 9u8
+const CCL_FALSE  : u8 = 10u8
+const CCL_ZERO   : u8 = 11u8
+const CCL_SUCC   : u8 = 12u8   /* succ m  = App o <SUCC, m>   */
+const CCL_INL    : u8 = 13u8   /* inl v   = App o <INL, v>    */
+const CCL_INR    : u8 = 14u8   /* inr v   = App o <INR, v>    */
+const CCL_REFL   : u8 = 15u8   /* refl a  = App o <REFL, a>   */
+const CCL_IF     : u8 = 16u8   /* IF s t e   (TRUE->t, FALSE->e)             */
+const CCL_ITER   : u8 = 17u8   /* ITER z s n (ZERO->z, SUCC m-> s (rec))     */
+const CCL_NATREC : u8 = 18u8   /* NATREC z s n (ZERO->z, SUCC m-> s m (rec)) */
+const CCL_CASE   : u8 = 19u8   /* CASE f g x (INL v->f v, INR v->g v)        */
+const CCL_J      : u8 = 20u8   /* J d p (REFL a -> d)                        */
+const CCL_SPAIR  : u8 = 21u8   /* Sigma pair  <a,b>_S = App o <App o <SPAIR,a>,b> */
+const CCL_SFST   : u8 = 22u8   /* Sigma fst:  SFST (SPAIR a b) -> a          */
+const CCL_SSND   : u8 = 23u8   /* Sigma snd:  SSND (SPAIR a b) -> b          */
+const CCL_TRANSP : u8 = 24u8   /* transp pr proof base ; proof=REFL -> base  */
+const CCL_SUP    : u8 = 25u8   /* sup(a,f) : W-type constructor (2 args)      */
+const CCL_WREC   : u8 = 26u8   /* wrec(P,s,w) : W eliminator (3 args, motive)  */
+
+const CCL_SENT : u32 = 0xFFFFFFFFu32
+const CCL_CAP  : u32 = 65536u32
+const CCL_FUEL : u32 = 2000000u32
+
+var CCL_TAG   : [u8;  65536]
+var CCL_A     : [u32; 65536]
+var CCL_B     : [u32; 65536]
+var CCL_N     : [u32; 1]
+var CCL_FIRED : [u32; 1]
+var CCL_EARG  : [u32; 8]      /* eliminator-spine arg scratch (used non-recursively) */
+var CCL_ENARG : [u32; 1]
+
+fn ccl_reset() -> u64 @export {
+    CCL_N[0u64] = 1u32
+    return 0u64
+}
+
+fn ccl_mk(tag: u8, a: u32, b: u32) -> u32 {
+    let n : u32 = CCL_N[0u64]
+    if n >= CCL_CAP { return 0u32 }
+    CCL_TAG[n] = tag
+    CCL_A[n] = a
+    CCL_B[n] = b
+    CCL_N[0u64] = n + 1u32
+    return n
+}
+
+fn ccl_id() -> u32 @export { return ccl_mk(CCL_ID, 0u32, 0u32) }
+fn ccl_fst() -> u32 @export { return ccl_mk(CCL_FST, 0u32, 0u32) }
+fn ccl_snd() -> u32 @export { return ccl_mk(CCL_SND, 0u32, 0u32) }
+fn ccl_app() -> u32 @export { return ccl_mk(CCL_APP, 0u32, 0u32) }
+fn ccl_comp(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_COMP, a, b) }
+fn ccl_pair(a: u32, b: u32) -> u32 @export { return ccl_mk(CCL_PAIR, a, b) }
+fn ccl_cur(x: u32) -> u32 @export { return ccl_mk(CCL_CUR, x, 0u32) }
+/* typed Cur: the binder's DOMAIN is carried in the idle 2nd field (B18 read-back).
+ * Reduction ignores it (reads CCL_A=body); dcur threads it; eta/beta drop it;
+ * struct_eq ignores it (conversion is domain-erased).  0 = no domain (codomains). */
+fn ccl_cur_d(domain: u32, body: u32) -> u32 @export { return ccl_mk(CCL_CUR, body, domain) }
+fn ccl_atom(id: u32) -> u32 @export { return ccl_mk(CCL_ATOM, id, 0u32) }
+fn ccl_true_c() -> u32 @export { return ccl_mk(CCL_TRUE, 0u32, 0u32) }
+fn ccl_false_c() -> u32 @export { return ccl_mk(CCL_FALSE, 0u32, 0u32) }
+fn ccl_zero_c() -> u32 @export { return ccl_mk(CCL_ZERO, 0u32, 0u32) }
+fn ccl_succ_c() -> u32 @export { return ccl_mk(CCL_SUCC, 0u32, 0u32) }
+fn ccl_inl_c() -> u32 @export { return ccl_mk(CCL_INL, 0u32, 0u32) }
+fn ccl_inr_c() -> u32 @export { return ccl_mk(CCL_INR, 0u32, 0u32) }
+fn ccl_refl_c() -> u32 @export { return ccl_mk(CCL_REFL, 0u32, 0u32) }
+fn ccl_if_c() -> u32 @export { return ccl_mk(CCL_IF, 0u32, 0u32) }
+fn ccl_iter_c() -> u32 @export { return ccl_mk(CCL_ITER, 0u32, 0u32) }
+fn ccl_natrec_c() -> u32 @export { return ccl_mk(CCL_NATREC, 0u32, 0u32) }
+fn ccl_case_c() -> u32 @export { return ccl_mk(CCL_CASE, 0u32, 0u32) }
+fn ccl_j_c() -> u32 @export { return ccl_mk(CCL_J, 0u32, 0u32) }
+fn ccl_spair_c() -> u32 @export { return ccl_mk(CCL_SPAIR, 0u32, 0u32) }
+fn ccl_sfst_c() -> u32 @export { return ccl_mk(CCL_SFST, 0u32, 0u32) }
+fn ccl_ssnd_c() -> u32 @export { return ccl_mk(CCL_SSND, 0u32, 0u32) }
+fn ccl_transp_c() -> u32 @export { return ccl_mk(CCL_TRANSP, 0u32, 0u32) }
+fn ccl_sup_c() -> u32 @export { return ccl_mk(CCL_SUP, 0u32, 0u32) }
+fn ccl_wrec_c() -> u32 @export { return ccl_mk(CCL_WREC, 0u32, 0u32) }
+
+/* curried application  f a  =  App o <f, a>. */
+fn ccl_app2(f: u32, a: u32) -> u32 @export {
+    return ccl_comp(ccl_app(), ccl_pair(f, a))
+}
+
+/* shift by k (cutoff 0): p o Fst^k -- weakening past k binders.  The CCL-native
+ * replacement for tc_shift(p, k, 0): a free var #j becomes #(j+k) on reduction. */
+fn ccl_shift_fstk(p: u32, k: u32) -> u32 @export {
+    let mut cur : u32 = p
+    let mut i : u32 = 0u32
+    while i < k {
+        cur = ccl_comp(cur, ccl_fst())
+        i = i + 1u32
+    }
+    return cur
+}
+
+/* STRENGTHEN: invert one  o Fst  weakening on a NORMAL-FORM CCL morphism v.
+ * Returns w with (w o Fst) reducing to v -- i.e. drop one binder level from
+ * every variable in v -- or CCL_SENT if v depends on #0 (Snd) and so is NOT a
+ * weakening.  This is the semantic core of COMPLETE eta: an old syntactic
+ * matcher only saw a BARE trailing Fst, but `ass` right-associates  x o Fst
+ * for a composite x (a higher de Bruijn variable Snd o Fst^k) into
+ * Snd o (Fst o ...), whose right child is no longer a bare Fst -- so eta
+ * silently failed on #1, #2, ... (verified: probe 862).  Strengthening closes
+ * that gap structurally: variables of ANY index, neutral application spines,
+ * pairs, and closed constants (atoms / type-formers / data ctors-as-functions).
+ *   x o Fst        -> x                 (single un-weakening, any x)
+ *   Snd o (Fst o R)-> Snd o R           (#m -> #(m-1), m>=2)
+ *   App o <g,x>    -> App o <str g,str x> (neutral spine, both must strengthen)
+ *   <p,q>          -> <str p, str q>
+ *   closed const c -> c                 (c o Fst reduces to c) */
+fn ccl_strengthen(v: u32) -> u32 {
+    let tag : u8 = CCL_TAG[v]
+    if tag == CCL_SND { return CCL_SENT }        /* #0 -- uses the bound variable */
+    if tag >= CCL_ATOM { return v }              /* closed constant: weakening-invariant */
+    if tag == CCL_COMP {
+        let a : u32 = CCL_A[v]
+        let b : u32 = CCL_B[v]
+        if CCL_TAG[b] == CCL_FST { return a }    /* x o Fst is the weakening of x */
+        if CCL_TAG[a] == CCL_SND {               /* variable Snd o Fst^m, m>=2 */
+            if CCL_TAG[b] == CCL_COMP {
+                if CCL_TAG[CCL_A[b]] == CCL_FST { return ccl_comp(ccl_snd(), CCL_B[b]) }
+            }
+            return CCL_SENT
+        }
+        if CCL_TAG[a] == CCL_APP {               /* neutral application spine App o <g,x> */
+            if CCL_TAG[b] == CCL_PAIR {
+                let sg : u32 = ccl_strengthen(CCL_A[b])
+                if sg == CCL_SENT { return CCL_SENT }
+                let sx : u32 = ccl_strengthen(CCL_B[b])
+                if sx == CCL_SENT { return CCL_SENT }
+                return ccl_comp(ccl_app(), ccl_pair(sg, sx))
+            }
+        }
+        return CCL_SENT
+    }
+    if tag == CCL_PAIR {
+        let sp : u32 = ccl_strengthen(CCL_A[v])
+        if sp == CCL_SENT { return CCL_SENT }
+        let sq : u32 = ccl_strengthen(CCL_B[v])
+        if sq == CCL_SENT { return CCL_SENT }
+        return ccl_pair(sp, sq)
+    }
+    return CCL_SENT                              /* Cur / bare Id,Fst,App head: conservative */
+}
+
+/* COMPLETE eta-contraction: body == App o <V, Snd> with V a weakening (not
+ * using #0)  ->  strengthen(V).  Generalises the bare-Fst matcher to every
+ * weakened V, so eta is complete for higher variables and neutral spines. */
+fn ccl_eta_contract(body: u32) -> u32 {
+    if CCL_TAG[body] != CCL_COMP { return CCL_SENT }
+    if CCL_TAG[CCL_A[body]] != CCL_APP { return CCL_SENT }
+    let bb : u32 = CCL_B[body]
+    if CCL_TAG[bb] != CCL_PAIR { return CCL_SENT }
+    if CCL_TAG[CCL_B[bb]] != CCL_SND { return CCL_SENT }
+    return ccl_strengthen(CCL_A[bb])
+}
+
+/* unwind an App o Pair spine: t = App o <App o <... <head, a0> ...>, a_{k-1}>.
+ * Fills CCL_EARG[0..k-1] (EARG[0] = OUTERMOST/last arg) + CCL_ENARG[0]=k; returns
+ * the head.  Used NON-RECURSIVELY: the caller reads EARG before ccl_step recurses,
+ * so the shared scratch is never clobbered mid-use. */
+fn ccl_unwind(t: u32) -> u32 {
+    let mut cur : u32 = t
+    let mut k : u32 = 0u32
+    let mut go : u32 = 1u32
+    while go == 1u32 {
+        let mut is_app : u32 = 0u32
+        if CCL_TAG[cur] == CCL_COMP {
+            if CCL_TAG[CCL_A[cur]] == CCL_APP {
+                if CCL_TAG[CCL_B[cur]] == CCL_PAIR {
+                    is_app = 1u32
+                }
+            }
+        }
+        if is_app == 0u32 { go = 0u32 }
+        if is_app == 1u32 {
+            let bb : u32 = CCL_B[cur]
+            CCL_EARG[k] = CCL_B[bb]
+            k = k + 1u32
+            cur = CCL_A[bb]
+            if k >= 8u32 { go = 0u32 }
+        }
+    }
+    CCL_ENARG[0u64] = k
+    return cur
+}
+
+/* if x == App o <CTAG-const, arg> return arg, else SENT (single-arg constructor). */
+fn ccl_cons1_arg(x: u32, ctag: u8) -> u32 {
+    if CCL_TAG[x] != CCL_COMP { return CCL_SENT }
+    if CCL_TAG[CCL_A[x]] != CCL_APP { return CCL_SENT }
+    let bb : u32 = CCL_B[x]
+    if CCL_TAG[bb] != CCL_PAIR { return CCL_SENT }
+    if CCL_TAG[CCL_A[bb]] != ctag { return CCL_SENT }
+    return CCL_B[bb]
+}
+
+/* if x == App o <App o <CTAG, a>, b> return a (which=0) or b (which=1), else SENT. */
+fn ccl_cons2_arg(x: u32, ctag: u8, which: u32) -> u32 {
+    if CCL_TAG[x] != CCL_COMP { return CCL_SENT }
+    if CCL_TAG[CCL_A[x]] != CCL_APP { return CCL_SENT }
+    let bb : u32 = CCL_B[x]
+    if CCL_TAG[bb] != CCL_PAIR { return CCL_SENT }
+    let barg : u32 = CCL_B[bb]
+    let inner : u32 = CCL_A[bb]
+    if CCL_TAG[inner] != CCL_COMP { return CCL_SENT }
+    if CCL_TAG[CCL_A[inner]] != CCL_APP { return CCL_SENT }
+    let ib : u32 = CCL_B[inner]
+    if CCL_TAG[ib] != CCL_PAIR { return CCL_SENT }
+    if CCL_TAG[CCL_A[ib]] != ctag { return CCL_SENT }
+    if which == 0u32 { return CCL_B[ib] }
+    return barg
+}
+
+/* data eliminator iota: if t is a fully-applied eliminator with a CONSTRUCTOR
+ * scrutinee, return the contractum (NO substitution -- the methods are closed
+ * combinators applied via App), else CCL_SENT. */
+fn ccl_elim_redex(t: u32) -> u32 {
+    let head : u32 = ccl_unwind(t)
+    let k : u32 = CCL_ENARG[0u64]
+    let htag : u8 = CCL_TAG[head]
+    if htag == CCL_IF {
+        if k == 3u32 {
+            let s : u32 = CCL_EARG[2u32]
+            if CCL_TAG[s] == CCL_TRUE { return CCL_EARG[1u32] }
+            if CCL_TAG[s] == CCL_FALSE { return CCL_EARG[0u32] }
+        }
+    }
+    if htag == CCL_J {
+        /* J C d p : motive C=EARG[2], d=EARG[1], p=EARG[0] ; p=REFL -> d. */
+        if k == 3u32 {
+            if ccl_cons1_arg(CCL_EARG[0u32], CCL_REFL) != CCL_SENT { return CCL_EARG[1u32] }
+        }
+    }
+    if htag == CCL_CASE {
+        /* CASE C f g s : motive C=EARG[3], f=EARG[2], g=EARG[1], s=EARG[0]. */
+        if k == 4u32 {
+            let x : u32 = CCL_EARG[0u32]
+            let lv : u32 = ccl_cons1_arg(x, CCL_INL)
+            if lv != CCL_SENT { return ccl_app2(CCL_EARG[2u32], lv) }
+            let rv : u32 = ccl_cons1_arg(x, CCL_INR)
+            if rv != CCL_SENT { return ccl_app2(CCL_EARG[1u32], rv) }
+        }
+    }
+    if htag == CCL_ITER {
+        if k == 3u32 {
+            let n : u32 = CCL_EARG[0u32]
+            let zz : u32 = CCL_EARG[2u32]
+            let ss : u32 = CCL_EARG[1u32]
+            if CCL_TAG[n] == CCL_ZERO { return zz }
+            let m : u32 = ccl_cons1_arg(n, CCL_SUCC)
+            if m != CCL_SENT {
+                let rec : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_iter_c(), zz), ss), m)
+                return ccl_app2(ss, rec)
+            }
+        }
+    }
+    if htag == CCL_NATREC {
+        /* NATREC C z s n : motive C=EARG[3], z=EARG[2], s=EARG[1], n=EARG[0]. */
+        if k == 4u32 {
+            let cc : u32 = CCL_EARG[3u32]
+            let zz : u32 = CCL_EARG[2u32]
+            let ss : u32 = CCL_EARG[1u32]
+            let n : u32 = CCL_EARG[0u32]
+            if CCL_TAG[n] == CCL_ZERO { return zz }
+            let m : u32 = ccl_cons1_arg(n, CCL_SUCC)
+            if m != CCL_SENT {
+                let rec : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_natrec_c(), cc), zz), ss), m)
+                return ccl_app2(ccl_app2(ss, m), rec)
+            }
+        }
+    }
+    if htag == CCL_WREC {
+        /* WREC P s w : motive P=EARG[2], step s=EARG[1], scrutinee w=EARG[0].
+         * w = sup(a,f)  ->  s a f IH,  where the HIGHER-ORDER induction hypothesis
+         * IH = Cur( WREC (P o Fst) (s o Fst) ((f o Fst) o Snd) ) recurses on each
+         * child f(b) (the o Fst weakens P,s,f past the new binder b=Snd). */
+        if k == 3u32 {
+            let wpp : u32 = CCL_EARG[2u32]
+            let wss : u32 = CCL_EARG[1u32]
+            let wsc : u32 = CCL_EARG[0u32]
+            let wav : u32 = ccl_cons2_arg(wsc, CCL_SUP, 0u32)
+            if wav != CCL_SENT {
+                let wfv : u32 = ccl_cons2_arg(wsc, CCL_SUP, 1u32)
+                let wih_body : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_wrec_c(), ccl_comp(wpp, ccl_fst())), ccl_comp(wss, ccl_fst())), ccl_app2(ccl_comp(wfv, ccl_fst()), ccl_snd()))
+                let wih : u32 = ccl_cur(wih_body)
+                return ccl_app2(ccl_app2(ccl_app2(wss, wav), wfv), wih)
+            }
+        }
+    }
+    /* SFST (SPAIR a b) -> a ; SSND (SPAIR a b) -> b */
+    if htag == CCL_SFST {
+        if k == 1u32 {
+            let av : u32 = ccl_cons2_arg(CCL_EARG[0u32], CCL_SPAIR, 0u32)
+            if av != CCL_SENT { return av }
+        }
+    }
+    if htag == CCL_SSND {
+        if k == 1u32 {
+            let bv : u32 = ccl_cons2_arg(CCL_EARG[0u32], CCL_SPAIR, 1u32)
+            if bv != CCL_SENT { return bv }
+        }
+    }
+    /* transp pr proof base : proof=REFL -> base.  (pr=EARG[2], proof=EARG[1], base=EARG[0]) */
+    if htag == CCL_TRANSP {
+        if k == 3u32 {
+            if ccl_cons1_arg(CCL_EARG[1u32], CCL_REFL) != CCL_SENT { return CCL_EARG[0u32] }
+        }
+    }
+    return CCL_SENT
+}
+
+/* one leftmost-outermost directed CCL reduction step; sets CCL_FIRED on success. */
+fn ccl_step(t: u32) -> u32 {
+    /* data eliminator iota first (constructor scrutinee) -- checked at every node. */
+    let dr : u32 = ccl_elim_redex(t)
+    if dr != CCL_SENT {
+        CCL_FIRED[0u64] = 1u32
+        return dr
+    }
+    let tag : u8 = CCL_TAG[t]
+    if tag == CCL_CUR {
+        let body : u32 = CCL_A[t]
+        let dom : u32 = CCL_B[t]
+        /* reduce the body FIRST, preserving the binder domain (dependent types),
+         * so eta sees the ass-normalised body -- COMPLETE eta requires it (a
+         * higher-variable x o Fst right-associates before eta would match). */
+        let rb : u32 = ccl_step(body)
+        if CCL_FIRED[0u64] == 1u32 { return ccl_cur_d(dom, rb) }
+        /* body is normal: COMPLETE eta-contraction (strengthen-based). */
+        let ex : u32 = ccl_eta_contract(body)
+        if ex != CCL_SENT {
+            CCL_FIRED[0u64] = 1u32
+            return ex
+        }
+        /* the domain is itself a (dependent) type that may carry redexes. */
+        if dom != 0u32 {
+            let rd : u32 = ccl_step(dom)
+            if CCL_FIRED[0u64] == 1u32 { return ccl_cur_d(rd, body) }
+        }
+        return t
+    }
+    if tag == CCL_COMP {
+        let a : u32 = CCL_A[t]
+        let b : u32 = CCL_B[t]
+        let atag : u8 = CCL_TAG[a]
+        let btag : u8 = CCL_TAG[b]
+        if btag == CCL_ID {
+            CCL_FIRED[0u64] = 1u32
+            return a
+        }
+        if atag == CCL_ID {
+            CCL_FIRED[0u64] = 1u32
+            return b
+        }
+        if atag == CCL_COMP {
+            CCL_FIRED[0u64] = 1u32
+            return ccl_comp(CCL_A[a], ccl_comp(CCL_B[a], b))
+        }
+        if atag == CCL_PAIR {
+            CCL_FIRED[0u64] = 1u32
+            return ccl_pair(ccl_comp(CCL_A[a], b), ccl_comp(CCL_B[a], b))
+        }
+        if atag == CCL_CUR {
+            /* dcur: the body gets the EXTENDED environment <y o Fst, Snd>; the
+             * DOMAIN (a type in the OUTER context) gets the environment y itself
+             * -- so a dependent domain referencing outer vars is substituted. */
+            let adom : u32 = CCL_B[a]
+            let mut ndom : u32 = adom
+            if adom != 0u32 { ndom = ccl_comp(adom, b) }
+            CCL_FIRED[0u64] = 1u32
+            return ccl_cur_d(ndom, ccl_comp(CCL_A[a], ccl_pair(ccl_comp(b, ccl_fst()), ccl_snd())))
+        }
+        if atag == CCL_FST {
+            if btag == CCL_PAIR {
+                CCL_FIRED[0u64] = 1u32
+                return CCL_A[b]
+            }
+        }
+        if atag == CCL_SND {
+            if btag == CCL_PAIR {
+                CCL_FIRED[0u64] = 1u32
+                return CCL_B[b]
+            }
+        }
+        if atag == CCL_APP {
+            if btag == CCL_PAIR {
+                let p : u32 = CCL_A[b]
+                let q : u32 = CCL_B[b]
+                let ptag : u8 = CCL_TAG[p]
+                if ptag == CCL_CUR {
+                    CCL_FIRED[0u64] = 1u32
+                    return ccl_comp(CCL_A[p], ccl_pair(ccl_id(), q))
+                }
+                let mut is_beta : u32 = 0u32
+                if ptag == CCL_COMP {
+                    if CCL_TAG[CCL_A[p]] == CCL_CUR { is_beta = 1u32 }
+                }
+                if is_beta == 1u32 {
+                    let cx : u32 = CCL_A[CCL_A[p]]
+                    CCL_FIRED[0u64] = 1u32
+                    return ccl_comp(cx, ccl_pair(CCL_B[p], q))
+                }
+            }
+        }
+        if atag >= CCL_ATOM {
+            CCL_FIRED[0u64] = 1u32
+            return a
+        }
+        let ra : u32 = ccl_step(a)
+        if CCL_FIRED[0u64] == 1u32 { return ccl_comp(ra, b) }
+        let rb : u32 = ccl_step(b)
+        if CCL_FIRED[0u64] == 1u32 { return ccl_comp(a, rb) }
+        return t
+    }
+    if tag == CCL_PAIR {
+        /* no rule fires at a Pair node, but redexes live INSIDE it -- recurse. */
+        let pa : u32 = CCL_A[t]
+        let pb : u32 = CCL_B[t]
+        let rpa : u32 = ccl_step(pa)
+        if CCL_FIRED[0u64] == 1u32 { return ccl_pair(rpa, pb) }
+        let rpb : u32 = ccl_step(pb)
+        if CCL_FIRED[0u64] == 1u32 { return ccl_pair(pa, rpb) }
+        return t
+    }
+    return t
+}
+
+/* reduce to CCL normal form (fixpoint of ccl_step), fuel-bounded. */
+fn ccl_reduce(t: u32) -> u32 @export {
+    let mut cur : u32 = t
+    let mut go : u32 = 1u32
+    let mut fuel : u32 = CCL_FUEL
+    while go == 1u32 {
+        if fuel == 0u32 { return cur }
+        fuel = fuel - 1u32
+        CCL_FIRED[0u64] = 0u32
+        let next : u32 = ccl_step(cur)
+        if CCL_FIRED[0u64] == 0u32 { go = 0u32 }
+        cur = next
+    }
+    return cur
+}
+
+/* structural equality (CCL has no binders -> pure structure). */
+fn ccl_struct_eq(x: u32, y: u32) -> u8 @export {
+    let tx : u8 = CCL_TAG[x]
+    let ty : u8 = CCL_TAG[y]
+    if tx != ty { return 0u8 }
+    if tx == CCL_ATOM {
+        if CCL_A[x] == CCL_A[y] { return 1u8 }
+        return 0u8
+    }
+    if tx == CCL_COMP {
+        if ccl_struct_eq(CCL_A[x], CCL_A[y]) == 0u8 { return 0u8 }
+        return ccl_struct_eq(CCL_B[x], CCL_B[y])
+    }
+    if tx == CCL_PAIR {
+        if ccl_struct_eq(CCL_A[x], CCL_A[y]) == 0u8 { return 0u8 }
+        return ccl_struct_eq(CCL_B[x], CCL_B[y])
+    }
+    if tx == CCL_CUR {
+        return ccl_struct_eq(CCL_A[x], CCL_A[y])
+    }
+    /* nullary morphisms Id/Fst/Snd/App: equal tag => equal. */
+    return 1u8
+}
+
+/* conversion: reduce both to CCL normal form, compare structurally. */
+fn ccl_conv(x: u32, y: u32) -> u8 @export {
+    let nx : u32 = ccl_reduce(x)
+    let ny : u32 = ccl_reduce(y)
+    return ccl_struct_eq(nx, ny)
+}
+
+/* ============================================================
+ *  ETA KAT (846 vectors via directed reduction).
+ *  99 = reproduces 846; 1..5 = first failing vector.
+ * ============================================================ */
+fn ccl_eta_kat() -> u64 @export {
+    ccl_reset()
+    /* T1 = lam f. lam x. (f x) = Cur(Cur(App o <Snd o Fst, Snd>)) */
+    let sndfst : u32 = ccl_comp(ccl_snd(), ccl_fst())
+    let inner  : u32 = ccl_cur(ccl_comp(ccl_app(), ccl_pair(sndfst, ccl_snd())))
+    let t1     : u32 = ccl_cur(inner)
+    /* T2 = lam f. f = Cur(Snd) */
+    let t2     : u32 = ccl_cur(ccl_snd())
+    /* P2 = lam f. lam x. x = Cur(Cur(Snd)) */
+    let p2     : u32 = ccl_cur(ccl_cur(ccl_snd()))
+    /* P3 = lam x. (x x) = Cur(App o <Snd, Snd>) */
+    let p3     : u32 = ccl_cur(ccl_comp(ccl_app(), ccl_pair(ccl_snd(), ccl_snd())))
+
+    /* P1 (eta fires). */
+    if ccl_conv(t1, t2) != 1u8 { return 1u64 }
+    /* P2 (no conflation). */
+    if ccl_conv(t1, p2) != 0u8 { return 2u64 }
+    /* P3 (strengthen-fail: x used twice, no eta). */
+    if ccl_conv(p3, t2) != 0u8 { return 3u64 }
+    /* P4 (reflexive). */
+    if ccl_conv(t1, t1) != 1u8 { return 4u64 }
+    /* eta normal form is exactly Cur(Snd). */
+    if ccl_struct_eq(ccl_reduce(t1), t2) != 1u8 { return 5u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  BETA KAT (closed beta-redexes via directed reduction).
+ *  99 = all reduce correctly; 1..5 = first failing case.
+ * ============================================================ */
+fn ccl_beta_kat() -> u64 @export {
+    ccl_reset()
+    let c : u32 = ccl_atom(20u32)
+    let d : u32 = ccl_atom(21u32)
+
+    /* T1: (lam a. a) c -> c */
+    let t1 : u32 = ccl_comp(ccl_app(), ccl_pair(ccl_cur(ccl_snd()), c))
+    if ccl_struct_eq(ccl_reduce(t1), c) != 1u8 { return 1u64 }
+
+    /* T2: (lam a. lam b. a) c d -> c   (kf = Cur(Cur(Snd o Fst))) */
+    let kf  : u32 = ccl_cur(ccl_cur(ccl_comp(ccl_snd(), ccl_fst())))
+    let t2i : u32 = ccl_comp(ccl_app(), ccl_pair(kf, c))
+    let t2  : u32 = ccl_comp(ccl_app(), ccl_pair(t2i, d))
+    if ccl_struct_eq(ccl_reduce(t2), c) != 1u8 { return 2u64 }
+
+    /* T3: (lam a. lam b. b) c d -> d   (kif = Cur(Cur(Snd))) */
+    let kif : u32 = ccl_cur(ccl_cur(ccl_snd()))
+    let t3i : u32 = ccl_comp(ccl_app(), ccl_pair(kif, c))
+    let t3  : u32 = ccl_comp(ccl_app(), ccl_pair(t3i, d))
+    if ccl_struct_eq(ccl_reduce(t3), d) != 1u8 { return 3u64 }
+
+    /* discrimination. */
+    if ccl_struct_eq(ccl_reduce(t2), d) != 0u8 { return 4u64 }
+    if ccl_struct_eq(ccl_reduce(t3), c) != 0u8 { return 5u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  DATA KAT: eliminator iota via directed CCL reduction (no substitution).
+ *  Methods are lam_. v = Cur(v) (weakening makes the constant body context-free).
+ *  99 = all reduce correctly; 1..9 = first failing case.
+ * ============================================================ */
+fn ccl_data_kat() -> u64 @export {
+    ccl_reset()
+    let c : u32 = ccl_atom(20u32)
+    let d : u32 = ccl_atom(21u32)
+    let one : u32 = ccl_app2(ccl_succ_c(), ccl_zero_c())
+    let kd : u32 = ccl_cur(d)            /* lam _. d */
+    let kc : u32 = ccl_cur(c)            /* lam _. c */
+
+    /* IF: TRUE->t, FALSE->e, discriminates. */
+    let ift : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_if_c(), ccl_true_c()), c), d)
+    if ccl_struct_eq(ccl_reduce(ift), c) != 1u8 { return 1u64 }
+    let iff : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_if_c(), ccl_false_c()), c), d)
+    if ccl_struct_eq(ccl_reduce(iff), d) != 1u8 { return 2u64 }
+    if ccl_struct_eq(ccl_reduce(ift), d) != 0u8 { return 3u64 }
+
+    /* ITER: ZERO->z ; SUCC m -> s (rec).  s = lam_.d discards -> d. */
+    let it0 : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_iter_c(), c), kd), ccl_zero_c())
+    if ccl_struct_eq(ccl_reduce(it0), c) != 1u8 { return 4u64 }
+    let it1 : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_iter_c(), c), kd), one)
+    if ccl_struct_eq(ccl_reduce(it1), d) != 1u8 { return 5u64 }
+
+    /* NATREC: SUCC m -> s m (rec).  s = lam k.lam_.d -> d. */
+    let kkd : u32 = ccl_cur(ccl_cur(d))
+    let mtv : u32 = ccl_atom(99u32)   /* dummy motive (the iota-rules ignore it) */
+    let nr1 : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_natrec_c(), mtv), c), kkd), one)
+    if ccl_struct_eq(ccl_reduce(nr1), d) != 1u8 { return 6u64 }
+
+    /* CASE: INL v -> f v ; INR v -> g v. */
+    let e : u32 = ccl_atom(22u32)
+    let casel : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_case_c(), mtv), kc), kd), ccl_app2(ccl_inl_c(), e))
+    if ccl_struct_eq(ccl_reduce(casel), c) != 1u8 { return 7u64 }
+    let caser : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_case_c(), mtv), kc), kd), ccl_app2(ccl_inr_c(), e))
+    if ccl_struct_eq(ccl_reduce(caser), d) != 1u8 { return 8u64 }
+
+    /* J: REFL a -> d. */
+    let jt : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_j_c(), mtv), c), ccl_app2(ccl_refl_c(), ccl_atom(23u32)))
+    if ccl_struct_eq(ccl_reduce(jt), c) != 1u8 { return 9u64 }
+
+    return 99u64
+}
+
+/* ============================================================
+ *  READ-BACK (reification): ccl_to_tc reifies a CCL NORMAL FORM into a TC node,
+ *  the inverse of typecheck's tc_to_ccl.  This is what lets tc_whnf / tc_nf run
+ *  on the directed CCL reducer (compile -> reduce -> read back) instead of NbE.
+ *  Domains are recovered from CurT (CCL_B); motives from the kept eliminator args.
+ * ============================================================ */
+
+/* number of Fst's in a right-nested fst-chain (Fst, Fst o Fst, ...), or SENT. */
+fn ccl_count_fst(c: u32) -> u32 {
+    if CCL_TAG[c] == CCL_FST { return 1u32 }
+    if CCL_TAG[c] == CCL_COMP {
+        if CCL_TAG[CCL_A[c]] == CCL_FST {
+            let rest : u32 = ccl_count_fst(CCL_B[c])
+            if rest == CCL_SENT { return CCL_SENT }
+            return 1u32 + rest
+        }
+    }
+    return CCL_SENT
+}
+
+/* de Bruijn index of a variable form  Snd o Fst^k , or SENT if not a variable. */
+fn ccl_rb_varidx(c: u32) -> u32 {
+    if CCL_TAG[c] == CCL_SND { return 0u32 }
+    if CCL_TAG[c] == CCL_COMP {
+        if CCL_TAG[CCL_A[c]] == CCL_SND {
+            return ccl_count_fst(CCL_B[c])
+        }
+    }
+    return CCL_SENT
+}
+
+fn ccl_to_tc(c: u32) -> u32 @export {
+    let tag : u8 = CCL_TAG[c]
+    let vi : u32 = ccl_rb_varidx(c)
+    if vi != CCL_SENT { return tc_var(vi) }
+    if tag == CCL_CUR {
+        let body : u32 = ccl_to_tc(CCL_A[c])
+        return tc_lam(ccl_to_tc(CCL_B[c]), body)
+    }
+    if tag == CCL_TRUE { return tc_true() }
+    if tag == CCL_FALSE { return tc_false() }
+    if tag == CCL_ZERO { return tc_zero() }
+    if tag == CCL_ATOM {
+        let aid : u32 = CCL_A[c]
+        if aid == 2050u32 { return tc_nat() }
+        if aid == 2051u32 { return tc_bool() }
+        if aid == 2052u32 { return tc_unit() }
+        if aid == 2053u32 { return tc_empty() }
+        if aid == 2054u32 { return tc_tt() }
+        if aid >= 2100u32 { return tc_sort(aid - 2100u32) }
+        return tc_var(0u32)
+    }
+    if tag == CCL_COMP {
+        let head : u32 = ccl_unwind(c)
+        let k : u32 = CCL_ENARG[0u64]
+        if k == 0u32 { return tc_var(0u32) }       /* stuck non-application comp: unreachable in nf */
+        let htag : u8 = CCL_TAG[head]
+        let mut e0 : u32 = 0u32
+        let mut e1 : u32 = 0u32
+        let mut e2 : u32 = 0u32
+        let mut e3 : u32 = 0u32
+        if k >= 1u32 { e0 = CCL_EARG[0u32] }
+        if k >= 2u32 { e1 = CCL_EARG[1u32] }
+        if k >= 3u32 { e2 = CCL_EARG[2u32] }
+        if k >= 4u32 { e3 = CCL_EARG[3u32] }
+        if htag == CCL_ATOM {
+            let hid : u32 = CCL_A[head]
+            if hid == 2060u32 { return tc_pi(ccl_to_tc(e1), ccl_to_tc(CCL_A[e0])) }
+            if hid == 2065u32 { return tc_pi_q(ccl_to_tc(e1), ccl_to_tc(CCL_A[e0]), 1u32) }   /* QTT erased Pi */
+            if hid == 2066u32 { return tc_pi_q(ccl_to_tc(e1), ccl_to_tc(CCL_A[e0]), 2u32) }   /* QTT linear Pi */
+            if hid == 2061u32 { return tc_sig(ccl_to_tc(e1), ccl_to_tc(CCL_A[e0])) }
+            if hid == 2062u32 { return tc_id(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+            if hid == 2063u32 { return tc_sum(ccl_to_tc(e1), ccl_to_tc(e0)) }
+            if hid == 2064u32 { return tc_absurd(ccl_to_tc(e1), ccl_to_tc(e0)) }
+            if hid == 2068u32 { return tc_w(ccl_to_tc(e1), ccl_to_tc(CCL_A[e0])) }
+        }
+        if htag == CCL_SUCC { return tc_succ(ccl_to_tc(e0)) }
+        if htag == CCL_INL { return tc_inl(ccl_to_tc(e0)) }
+        if htag == CCL_INR { return tc_inr(ccl_to_tc(e0)) }
+        if htag == CCL_REFL { return tc_refl(ccl_to_tc(e0)) }
+        if htag == CCL_IF { return tc_if(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_ITER { return tc_iter(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_NATREC { return tc_natrec(ccl_to_tc(e3), ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_WREC { return tc_wrec(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_CASE { return tc_case(ccl_to_tc(e3), ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_J { return tc_j(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_SPAIR { return tc_pair(ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_SUP { return tc_sup(ccl_to_tc(e1), ccl_to_tc(e0)) }
+        if htag == CCL_SFST { return tc_fst(ccl_to_tc(e0)) }
+        if htag == CCL_SSND { return tc_snd(ccl_to_tc(e0)) }
+        if htag == CCL_TRANSP { return tc_transp(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
+        /* ordinary application: head a0 a1 ... (a0 = outermost = e_{k-1}, last = e0) */
+        let mut acc : u32 = ccl_to_tc(head)
+        if k >= 4u32 { acc = tc_app(acc, ccl_to_tc(e3)) }
+        if k >= 3u32 { acc = tc_app(acc, ccl_to_tc(e2)) }
+        if k >= 2u32 { acc = tc_app(acc, ccl_to_tc(e1)) }
+        acc = tc_app(acc, ccl_to_tc(e0))
+        return acc
+    }
+    return tc_var(0u32)
+}
+
+/* ETA-COMPLETENESS regression: eta-contraction must work for HIGHER de Bruijn
+ * variables, not just #0.  control #0 contracts; #1 exercises the strengthen
+ * path (ass right-associates the weakened var chain).  2 = #0 broke; 1 = #1 did
+ * not contract (the incompleteness this guards); 99 = complete. */
+fn ccl_etahi_kat() -> u64 @export {
+    ccl_reset()
+    /* #1 = Snd o Fst ; #2 = Snd o (Fst o Fst) */
+    let v1 : u32 = ccl_comp(ccl_snd(), ccl_fst())
+    let v2 : u32 = ccl_comp(ccl_snd(), ccl_comp(ccl_fst(), ccl_fst()))
+    /* CONTROL: eta-long of #0 = Cur(App o <#1, Snd>) -> #0 = Snd */
+    let body0 : u32 = ccl_comp(ccl_app(), ccl_pair(v1, ccl_snd()))
+    let nf0 : u32 = ccl_reduce(ccl_cur(body0))
+    if ccl_struct_eq(nf0, ccl_snd()) != 1u8 { return 2u64 }
+    /* TEST: eta-long of #1 = Cur(App o <#2, Snd>) -> #1 = Snd o Fst */
+    let body1 : u32 = ccl_comp(ccl_app(), ccl_pair(v2, ccl_snd()))
+    let nf1 : u32 = ccl_reduce(ccl_cur(body1))
+    if ccl_struct_eq(nf1, v1) != 1u8 { return 1u64 }
+    return 99u64
+}
+
+/* ============================================================
+ *  B18d: CONFLUENCE CERTIFICATE (the bootstrap falsifier).
+ *  Local confluence is decided by checking that EVERY critical pair of the CCL
+ *  rule set joins: an overlap term with two distinct redexes is contracted each
+ *  way to R1,R2, and the two must reduce to a common normal form
+ *  (ccl_reduce R1 == ccl_reduce R2).  By Newman's lemma, local confluence +
+ *  termination => global confluence (Church-Rosser).  TERMINATION: the sigma
+ *  (substitution) fragment + data-iota are structurally decreasing; beta/eta on
+ *  the WELL-TYPED terms the kernel reduces are SN by MLTT strong normalisation
+ *  (the reducer is only ever applied to well-typed terms -- untyped CCLbeta is
+ *  not SN in general, the Mellies obstruction, so termination is necessarily
+ *  conditioned on typing, exactly as for NbE).  This REPLACES the now-deleted
+ *  NbE differential (860): it certifies the directed reducer confluent on its
+ *  OWN, with no second oracle to compare against.  Structured fillers
+ *  (Fst/Snd/App/Id + fresh atom) keep the joined forms structured, so a wrong
+ *  rule yields a DIFFERENT normal form (proven sensitive by the negative test).
+ *  99 = every critical pair joins;  N = critical pair N failed to join. */
+fn ccl_conf_cert() -> u64 @export {
+    ccl_reset()
+    let f  : u32 = ccl_fst()
+    let s  : u32 = ccl_snd()
+    let ap : u32 = ccl_app()
+    let id : u32 = ccl_id()
+
+    /* CP1  ass / idl :  (Id o S) o F   [top ass vs inner idl] */
+    let n1a : u32 = ccl_reduce(ccl_comp(id, ccl_comp(s, f)))      /* ass -> Id o (S o F) */
+    let n1b : u32 = ccl_reduce(ccl_comp(s, f))                    /* idl -> S o F */
+    if ccl_struct_eq(n1a, n1b) != 1u8 { return 1u64 }
+
+    /* CP2  ass / idr :  (F o Id) o S */
+    let n2a : u32 = ccl_reduce(ccl_comp(f, ccl_comp(id, s)))      /* ass -> F o (Id o S) */
+    let n2b : u32 = ccl_reduce(ccl_comp(f, s))                    /* idr -> F o S */
+    if ccl_struct_eq(n2a, n2b) != 1u8 { return 2u64 }
+
+    /* CP3  idr / ass :  (F o S) o Id */
+    let n3a : u32 = ccl_reduce(ccl_comp(f, s))                    /* idr -> F o S */
+    let n3b : u32 = ccl_reduce(ccl_comp(f, ccl_comp(s, id)))      /* ass -> F o (S o Id) */
+    if ccl_struct_eq(n3a, n3b) != 1u8 { return 3u64 }
+
+    /* CP4  ass / ass :  ((F o S) o A) o (S o A) */
+    let w4 : u32 = ccl_comp(s, ap)
+    let n4a : u32 = ccl_reduce(ccl_comp(ccl_comp(f, s), ccl_comp(ap, w4)))   /* top ass */
+    let n4b : u32 = ccl_reduce(ccl_comp(ccl_comp(f, ccl_comp(s, ap)), w4))   /* inner ass */
+    if ccl_struct_eq(n4a, n4b) != 1u8 { return 4u64 }
+
+    /* CP5  ass / dpair :  (<F,S> o A) o S */
+    let n5a : u32 = ccl_reduce(ccl_comp(ccl_pair(f, s), ccl_comp(ap, s)))    /* top ass */
+    let n5b : u32 = ccl_reduce(ccl_comp(ccl_pair(ccl_comp(f, ap), ccl_comp(s, ap)), s)) /* inner dpair */
+    if ccl_struct_eq(n5a, n5b) != 1u8 { return 5u64 }
+
+    /* CP6  ass / fst :  (Fst o <S,A>) o S */
+    let n6a : u32 = ccl_reduce(ccl_comp(f, ccl_comp(ccl_pair(s, ap), s)))    /* top ass */
+    let n6b : u32 = ccl_reduce(ccl_comp(s, s))                              /* inner fst -> S */
+    if ccl_struct_eq(n6a, n6b) != 1u8 { return 6u64 }
+
+    /* CP7  ass / snd :  (Snd o <F,A>) o S */
+    let n7a : u32 = ccl_reduce(ccl_comp(s, ccl_comp(ccl_pair(f, ap), s)))    /* top ass */
+    let n7b : u32 = ccl_reduce(ccl_comp(ap, s))                             /* inner snd -> A */
+    if ccl_struct_eq(n7a, n7b) != 1u8 { return 7u64 }
+
+    /* CP8  ass / beta :  (App o <Cur(S), F>) o S */
+    let n8a : u32 = ccl_reduce(ccl_comp(ap, ccl_comp(ccl_pair(ccl_cur(s), f), s)))      /* top ass */
+    let n8b : u32 = ccl_reduce(ccl_comp(ccl_comp(s, ccl_pair(id, f)), s))               /* inner beta -> (S o <Id,F>) o S */
+    if ccl_struct_eq(n8a, n8b) != 1u8 { return 8u64 }
+
+    /* CP9  beta / eta :  App o <Cur(App o <Snd o Fst, Snd>), F>   (the Cur is an eta-redex) */
+    let eb9 : u32 = ccl_comp(ap, ccl_pair(ccl_comp(s, f), s))    /* App o <Snd o Fst, Snd> */
+    let n9a : u32 = ccl_reduce(ccl_comp(eb9, ccl_pair(id, f)))   /* beta -> ebody o <Id,F> */
+    let n9b : u32 = ccl_reduce(ccl_comp(ap, ccl_pair(s, f)))     /* eta inside Cur -> Snd ; App o <Snd,F> */
+    if ccl_struct_eq(n9a, n9b) != 1u8 { return 9u64 }
+
+    /* CP10  dcur / eta :  Cur(App o <Snd o Fst, Snd>) o F   (Cur is an eta-redex; dcur
+     *  pushes the variable to #2, so joining REQUIRES complete eta strengthen #2 -> #1). */
+    let eb10 : u32 = ccl_comp(ap, ccl_pair(ccl_comp(s, f), s))
+    let n10a : u32 = ccl_reduce(ccl_comp(s, f))                  /* eta -> Snd ; then Snd o F */
+    let n10b : u32 = ccl_reduce(ccl_cur(ccl_comp(eb10, ccl_pair(ccl_comp(f, f), s))))  /* dcur */
+    if ccl_struct_eq(n10a, n10b) != 1u8 { return 10u64 }
+
+    /* CP11  ass / atom :  (at7 o S) o F   (atom is left-absorbing) */
+    let at7 : u32 = ccl_atom(7u32)
+    let n11a : u32 = ccl_reduce(ccl_comp(at7, ccl_comp(s, f)))   /* top ass */
+    let n11b : u32 = ccl_reduce(ccl_comp(at7, f))               /* inner atom -> at7 */
+    if ccl_struct_eq(n11a, n11b) != 1u8 { return 11u64 }
+
+    /* CP12  iota / substitution :  IF(TRUE,F,A) o S  must join  (then=F) o S
+     *  (the substitution distributes through the spine, then iota fires). */
+    let ifsp : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_if_c(), ccl_true_c()), f), ap)
+    let n12a : u32 = ccl_reduce(ccl_comp(ifsp, s))
+    let n12b : u32 = ccl_reduce(ccl_comp(f, s))
+    if ccl_struct_eq(n12a, n12b) != 1u8 { return 12u64 }
+
+    /* CP13  natrec iota / substitution :  NATREC(C,z=F,s=S,ZERO) o A  must join  z o A */
+    let nrsp : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_natrec_c(), ccl_atom(8u32)), f), s), ccl_zero_c())
+    let n13a : u32 = ccl_reduce(ccl_comp(nrsp, ap))
+    let n13b : u32 = ccl_reduce(ccl_comp(f, ap))
+    if ccl_struct_eq(n13a, n13b) != 1u8 { return 13u64 }
+
+    /* CP14  beta2 / dcur :  App o <Cur(Snd) o Fst, Snd>   -- the BARE-BETA SHORTCUT
+     *  (App o <Cur(g) o r, q> -> g o <r,q>, the precomposed-Cur fast path) must
+     *  agree with the long route dcur-then-beta1.  beta2 contracts at the top;
+     *  dcur fires on the Cur(Snd) o Fst subterm; both must join -- this certifies
+     *  the shortcut sound (it is the ONLY rule no earlier critical pair exercised). */
+    let n14a : u32 = ccl_reduce(ccl_comp(s, ccl_pair(f, s)))    /* beta2 -> g o <r,q> = Snd o <Fst,Snd> */
+    let n14b : u32 = ccl_reduce(ccl_comp(ap, ccl_pair(ccl_cur(ccl_comp(s, ccl_pair(ccl_comp(f, f), s))), s))) /* dcur form */
+    if ccl_struct_eq(n14a, n14b) != 1u8 { return 14u64 }
+
+    return 99u64
+}

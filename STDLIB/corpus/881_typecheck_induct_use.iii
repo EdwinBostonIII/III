@@ -1,0 +1,17 @@
+/* INDUCTIVE ENGINE COMPLETED -- discover -> prove -> USE, and MULTI-VARIABLE
+ * (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §14).  iu_kat2() proves: (1) LEARN->USE -- III
+ * discovers  forall x. add(x,0)=x , the kernel PROVES it, the proof becomes a usable
+ * LEMMA (tc_ann), and APPLYING it to 2 instantiates the universal to prove the specific
+ * add(2,0)=2  (the inductive leap fed back into deduction) -- and the lemma does NOT
+ * prove the false add(2,0)=1; (2) MULTI-VAR -- from instances varying two arguments
+ * independently III discovers the 2-variable law  forall a b. add(a,succ b)=succ(add a b)
+ * (iu_au's shared vars + iu_remap's nested-Pi de Bruijn) and the kernel PROVES it; (3)
+ * FALSIFIER -- the false 2-var law add(a,succ b)=add(a,b) is REFUTED.  No ML, no
+ * observation, no statistics, no floats.  99 = all pass. */
+module corpus_c881
+
+extern @abi(c-msvc-x64) fn iu_kat2() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return iu_kat2()
+}

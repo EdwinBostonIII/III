@@ -1,0 +1,15 @@
+/* Bidirectional lambda checking (CHECK a `lam` against a `Pi`): the codomain flows
+ * INTO the body, completing tc_check's check-only-constructor pattern (PAIR|->Sigma,
+ * INL|->Sum, SUP|->W, and now LAM|->Pi).  p5_kat_lamcheck() proves a lambda whose
+ * body is a check-only PAIR (`lam x:Bool. <x,x>`) type-checks against
+ * `Pi(_:Bool).(Bool x Bool)` -- the infer-fallback FAILS there (PAIR is not
+ * inferable).  Negatives: wrong codomain (PAIR vs Bool), domain mismatch (Bool vs
+ * Nat), non-Pi target.  No reduction/oracle change (a pure tc_check rule, the
+ * singular oracle's confluence untouched).  99 = all 5 arms pass. */
+module corpus_c872
+
+extern @abi(c-msvc-x64) fn p5_kat_lamcheck() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_lamcheck()
+}

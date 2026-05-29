@@ -199,8 +199,8 @@ L_aead_poly_submit_padded:
     pushq %rax
     popq %rcx
     popq %rax
-    cqto
-    idivq %rcx
+    xorl %edx, %edx
+    divq %rcx
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax

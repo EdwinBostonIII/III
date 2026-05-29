@@ -765,6 +765,10 @@ MODULES=(
     # gate) + congruence (the faithfulness-gated merge) + a kernel proof. Decider only (no file
     # edits). Compiler-unreferenced -> LIBNATIVE.
     "forcefield/ripple_unify"
+    # Inc 3: the closed loop -- propose -> decide (commit_gate + ripple_unify) -> apply-in-model
+    # -> loop until dry. Composes ripple_metric + ripple_unify + congruence + commit_gate.
+    # Decider/planner (no file edits). Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/ripple_loop"
 )
 
 PASS=0

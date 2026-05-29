@@ -1,0 +1,77 @@
+/* 919_ripple_loop.iii -- the Sovereign Ripple Calculus (Inc 3): the closed LOOP end-to-end.
+ * 6 nodes: n0,n1,n2 = accidental duplicates (capA, intent-class 1, distinct addresses);
+ * n3,n4 = an INTENTIONAL variation (capB, intent-class 7 vs 9); n5 = unique.  Interned in
+ * node order with distinct addresses, so congruence class i == node i.
+ *   POSITIVE (kernel live): the loop converges -- the 3 capA duplicates collapse (2 unions),
+ *            the intentional variation stays distinct, ring 6 -> 4.
+ *   FALSIFIER (kernel down): cg_decide's KERNEL dimension = 0 -> commit_gate rejects EVERY
+ *            move -> the loop self-edits NOTHING (ring stays 6).  III will not refactor itself
+ *            while its prover is broken.
+ * 99 = all arms pass; 5..21 localize the first failing arm. */
+module corpus_919
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 from "ripple_loop.iii"
+extern @abi(c-msvc-x64) fn rl_ring_size() -> u32 from "ripple_loop.iii"
+
+var A1 : [u8; 32]
+var A2 : [u8; 32]
+var A3 : [u8; 32]
+var B1 : [u8; 32]
+var B2 : [u8; 32]
+var C1 : [u8; 32]
+
+fn fill32(p: *u8, b: u8) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 32u64 { p[k] = b ; k = k + 1u64 }
+    return 0i32
+}
+
+/* 6 ripple_metric nodes + 6 distinct congruence interns (class i == node i). */
+fn setup6() -> i32 {
+    rm_reset()
+    cgr_init()
+    rm_add_node(0xAAAAu64, 1u32)   /* n0 capA ic1 */
+    rm_add_node(0xAAAAu64, 1u32)   /* n1 capA ic1 */
+    rm_add_node(0xAAAAu64, 1u32)   /* n2 capA ic1 -- 3 accidental duplicates */
+    rm_add_node(0xBBBBu64, 7u32)   /* n3 capB ic7 (userspace) */
+    rm_add_node(0xBBBBu64, 9u32)   /* n4 capB ic9 (Ring-0) -- intentional variation */
+    rm_add_node(0xCCCCu64, 2u32)   /* n5 unique */
+    let pa1 : *u8 = (&A1) as u64 as *u8
+    let pa2 : *u8 = (&A2) as u64 as *u8
+    let pa3 : *u8 = (&A3) as u64 as *u8
+    let pb1 : *u8 = (&B1) as u64 as *u8
+    let pb2 : *u8 = (&B2) as u64 as *u8
+    let pc1 : *u8 = (&C1) as u64 as *u8
+    fill32(pa1, 0xA1u8) ; cgr_intern(pa1, 10u64)   /* class 0 */
+    fill32(pa2, 0xA2u8) ; cgr_intern(pa2, 8u64)    /* class 1 */
+    fill32(pa3, 0xA3u8) ; cgr_intern(pa3, 6u64)    /* class 2 */
+    fill32(pb1, 0xB1u8) ; cgr_intern(pb1, 10u64)   /* class 3 */
+    fill32(pb2, 0xB2u8) ; cgr_intern(pb2, 9u64)    /* class 4 */
+    fill32(pc1, 0xC1u8) ; cgr_intern(pc1, 5u64)    /* class 5 */
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ===== kernel LIVE: dedup the accidental duplicates, preserve the intentional variation ===== */
+    setup6()
+    if cgr_num_classes() != 6u32 { return 5u64 }          /* 6 distinct interns to start */
+    let m : u32 = rl_run(6u32, 1u32, 1u32)
+    if m != 2u32 { return 10u64 }                         /* 3 capA-dups -> 2 unions */
+    if rl_ring_size() != 4u32 { return 11u64 }            /* {A}, {B:n3}, {B:n4}, {C} */
+    if cgr_find(3u32) == cgr_find(4u32) { return 12u64 }  /* intentional variation NOT merged */
+    if cgr_find(0u32) != cgr_find(2u32) { return 13u64 }  /* accidental dups ARE merged */
+
+    /* ===== FALSIFIER: kernel DOWN (commit_gate dim 5 = 0) -> loop self-edits NOTHING ===== */
+    setup6()
+    let m2 : u32 = rl_run(6u32, 1u32, 0u32)
+    if m2 != 0u32 { return 20u64 }                        /* commit_gate rejects every move */
+    if rl_ring_size() != 6u32 { return 21u64 }            /* nothing merged */
+
+    return 99u64
+}

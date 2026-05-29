@@ -1,0 +1,67 @@
+/* STDLIB/iii/forcefield/ripple_loop.iii -- the Sovereign Ripple Calculus, INCREMENT 3:
+ * the closed LOOP.  propose -> DECIDE -> apply-in-model -> loop until DRY, every move both
+ * commit_gate-ADMISSIBLE and certified-SOUND.  Operates on the MODEL (ripple_metric graph +
+ * congruence union-find); it converges to the sound dedup'd structure and reports the plan.
+ * It does NOT edit .iii files -- that is the applier (Inc 4), behind commit_gate + the full
+ * reseal/corpus gate.
+ *
+ * Each candidate pair is applied IFF:
+ *   1. commit_gate ADMITS the change -- cg_decide(rule, module, seal, conservative, kernel).
+ *      A unification is rule-sound, module-coherent, seal-neutral, and conservative (it
+ *      preserves behavior); the KERNEL dimension is the live kernel-faculty verdict.  So if
+ *      III's own prover is down (kernel_ok=0), the loop self-edits NOTHING -- the §8.2 gate
+ *      protects the prover that underwrites every certification.
+ *   2. ru_certify_unify CERTIFIES it -- the intent gate (an intentional variation point is
+ *      never merged) + congruence's faithfulness-gated merge (proof required).
+ *
+ * Monotone + terminating: every applied merge strictly shrinks the ring (separation down ->
+ * J up), a well-founded measure, so the loop reaches a local optimum ("dry") in <= n passes.
+ *
+ * Contract: node i's congruence class is i (the caller interns in node order, distinct
+ * addresses).  proof_avail is the per-candidate kernel-proof bit handed to ru_certify_unify
+ * (in production the actual sov_pcc_verify result per pair; modeled here as one input).
+ *
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_act (the optimizing act).  Ring: R0.
+ * K: 1.00.  NIH: composes ripple_metric + ripple_unify + congruence + commit_gate only. */
+module forcefield_ripple_loop
+
+extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_ok: u32) -> u32 from "ripple_unify.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+
+/* The closed loop.  Returns the count of certified + admitted merges performed (the size of
+ * the converged refactoring plan).  rl_run leaves the congruence closure at its local optimum
+ * (cgr_num_classes = the sound dedup'd ring size). */
+fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 @export {
+    let mut merges : u32 = 0u32
+    let mut dry : u32 = 0u32
+    while dry == 0u32 {
+        let mut pass : u32 = 0u32
+        let mut i : u32 = 0u32
+        while i < n {
+            let mut j : u32 = i + 1u32
+            while j < n {
+                if cgr_find(i) != cgr_find(j) {
+                    /* DECIDE (1): commit_gate admissibility -- the §8.2 kernel-aware gate. */
+                    if cg_decide(1u32, 1u32, 1u32, 1u32, kernel_ok) == 99u32 {
+                        /* DECIDE (2): certified-sound (intent gate + faithfulness-gated merge). */
+                        if ru_certify_unify(i, j, i, j, proof_avail) == 1u32 {
+                            pass = pass + 1u32
+                        }
+                    }
+                }
+                j = j + 1u32
+            }
+            i = i + 1u32
+        }
+        merges = merges + pass
+        if pass == 0u32 { dry = 1u32 }
+    }
+    return merges
+}
+
+/* the converged ring size (distinct classes) after rl_run -- the dedup'd plan's kernel count. */
+fn rl_ring_size() -> u32 @export {
+    return cgr_num_classes()
+}

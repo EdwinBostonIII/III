@@ -887,3 +887,26 @@ no proof -> refused, no fabricated equality.)
 corpus **550/0**; `918_ripple_unify`=99 (+ `917`=99).
 
 **§8.4 sealed at:** 2026-05-29.
+
+### §8.5 — Sovereign Ripple Calculus, Inc 3: the closed loop, commit_gate-gated (2026-05-29)
+
+`forcefield/ripple_loop.iii` (`rl_run`, `rl_ring_size` `@export`): the closed LOOP -- propose ->
+DECIDE (commit_gate admissibility + `ru_certify_unify` soundness) -> apply-in-model -> loop until
+DRY. Composes `ripple_metric` + `ripple_unify` + `congruence` + the §8.2 `commit_gate`. Converges
+to the sound dedup'd ring (monotone: each merge shrinks separation -> J up; <= n passes).
+DECIDER/PLANNER only (no file edits). Compiler-UNREFERENCED -> LIBNATIVE_RESEAL.
+
+Corpus 919 proves: the loop dedups accidental duplicates (3 capA-dups -> 2 unions), the intentional
+variation stays distinct (the intent gate), ring 6 -> 4; and the DECISIVE falsifier -- with the
+KERNEL dimension down (commit_gate dim 5 = 0) the loop self-edits NOTHING (ring stays 6). III
+refuses to refactor itself while its own prover is broken.
+
+| Artifact (golden) | Before (§8.4) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `b430f38f…09ce116c0` | `37049ecb7257a0042777763bbc33f8cc767e43bda2e2457fad452d63e9162fea` |
+
+**Verified:** build_stdlib **423/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **551/0**; `919_ripple_loop`=99 (+ `918`=99).
+
+**§8.5 sealed at:** 2026-05-29.

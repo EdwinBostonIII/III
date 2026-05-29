@@ -601,6 +601,7 @@ declare -A EXPECTED=(
     [931_phi_ledger]=99
     [932_ripple_search]=99
     [933_induct]=99
+    [934_cert]=99
 )
 
 PASS=0

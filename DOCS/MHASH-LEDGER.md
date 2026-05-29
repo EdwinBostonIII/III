@@ -1322,3 +1322,31 @@ Corpus 933: const-`Bool` motive + identity step -> `∀n` certified (1); a wrong
 corpus **565/0**; `933_induct`=99.
 
 **§8.22 sealed at:** 2026-05-29.
+
+### §8.23 — Sovereign Enhancement G4: the bilateral certificate (coordination COMPLETE) (2026-05-29)
+
+`forcefield/commit_gate.iii` extended (`cg_cert_action`, `cg_cert_abstain`): the commit is a kernel
+theorem, not a bare verdict. An ACTION earns `cg_cert_action` (⊢ `s★⊳s₀`: φ ADMIT ∧ 𝒱 strictly up ∧
+proof checks); an ABSTENTION earns `cg_cert_abstain` (⊢ `s₀∈M`: frontier searched ∧ no candidate beats
+incumbent). Neither earnable vacuously -- the BC clause of `NV ∧ KT ∧ BC`. Compiler-UNREFERENCED ->
+LIBNATIVE.
+
+Corpus 934: action granted only for φ ∧ strict-gain ∧ proof (no-op / regression / φ-violation /
+unproven each REFUSED); abstention granted only for searched ∧ no-better-move (improvable / unsearched
+each REFUSED).
+
+| Artifact (golden) | Before (§8.22) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `681691e9…aacb75` | `9776af672937c00037d10f3c74bd4eaa843ba0c6fa2ec96addeefa859b684124` |
+
+**Verified:** build_stdlib **431/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **566/0**; `934_cert`=99.
+
+**THE SOVEREIGN ENHANCEMENT COORDINATION IS COMPLETE:** G1 (φ unified + non-vacuous) · G2 (𝒱
+certified-monotone) · G3 (real argmax M-search) · G5 (inductive sample→∀ bridge) · G4 (bilateral
+certificate). Every Enhancement-Theorem symbol is bound to an organ that can say no; the improver
+produces meaningful, kernel-certified enhancements -- or kernel-certified abstentions -- on III's real
+source, never a rubber stamp. Spec: `DOCS/III-SOVEREIGN-ENHANCEMENT-COORDINATION.md`.
+
+**§8.23 sealed at:** 2026-05-29.

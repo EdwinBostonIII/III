@@ -91,7 +91,11 @@ fn cg_module_ok(obj_count: u64, edge_count: u64, edge_src: *u8, edge_dst: *u8,
 /* DETERMINISM dimension: the artifact's content-address (SHA-256) matches the
  * declared golden, else the drift must be WITNESSED (intended).  1 = sealed. */
 fn cg_seal_ok(content: *u8, len: u64, golden: *u8, witnessed: u32) -> u32 @export {
-    cad_oneshot(CG_SUITE_SHA256, content, len, (&CG_DIGEST as u64) as *u8)
+    /* On NULL/bad content cad_oneshot returns nonzero and writes NOTHING to
+     * CG_DIGEST, leaving a stale digest that could equal `golden` (false ADMIT
+     * on the very determinism dimension this gate guards).  [audit A-CG-1] */
+    let rc : i32 = cad_oneshot(CG_SUITE_SHA256, content, len, (&CG_DIGEST as u64) as *u8)
+    if rc != 0i32 { return 0u32 }
     if cad_eq((&CG_DIGEST as u64) as *u8, golden) == 1u8 { return 1u32 }
     if witnessed == 1u32 { return 1u32 }
     return 0u32
@@ -117,3 +121,31 @@ fn cg_kernel_ok() -> u32 @export {
  * actively used through the same means).  The verdict is located; the gate is
  * shown to REJECT each violation (864) -- it is the §0
  * acceptance test made law, not a stub that only ever admits. */
+
+/* ===== Sovereign Enhancement G4 (III-SOVEREIGN-ENHANCEMENT-COORDINATION): the BILATERAL
+ * CERTIFICATE. The commit is a kernel theorem, never a bare verdict -- an ACTION earns
+ * cg_cert_action (a checkable s★⊳s₀: φ preserved AND 𝒱 strictly up AND the ∀-preservation proof
+ * checks); an ABSTENTION earns cg_cert_abstain (a checkable s₀∈M: the frontier was searched AND no
+ * candidate strictly beats the incumbent). Neither is earnable vacuously -- this is the BC clause of
+ * NV∧KT∧BC: a "0 edits" that is verified-optimal is now distinct from one that never checked. ===== */
+const CG_CERT            : u32 = 99u32   /* certificate granted */
+const CG_CERT_NOPHI      : u32 = 11u32   /* integrity not preserved (φ rejected) */
+const CG_CERT_NODOM      : u32 = 12u32   /* no strict value gain (s★⊳s₀ fails) */
+const CG_CERT_NOPROOF    : u32 = 13u32   /* the ∀-preservation proof did not check */
+const CG_CERT_UNSEARCHED : u32 = 14u32   /* abstention without a searched frontier */
+const CG_CERT_IMPROVABLE : u32 = 15u32   /* abstention while a strictly-better move exists */
+
+/* ACTION certificate (⊢ s★⊳s₀): granted iff φ ADMITs, 𝒱 strictly rises, and the proof checks. */
+fn cg_cert_action(phi_verdict: u32, v_before: u64, v_after: u64, proof_ok: u32) -> u32 @export {
+    if phi_verdict != CG_ADMIT { return CG_CERT_NOPHI }
+    if v_after <= v_before     { return CG_CERT_NODOM }
+    if proof_ok != 1u32        { return CG_CERT_NOPROOF }
+    return CG_CERT
+}
+/* ABSTENTION certificate (⊢ s₀∈M): granted iff the frontier was searched and nothing strictly beats
+ * the incumbent -- a PROVEN frontier-optimum, distinct from never-having-checked. */
+fn cg_cert_abstain(searched: u32, frontier_best: u64, v_incumbent: u64) -> u32 @export {
+    if searched != 1u32            { return CG_CERT_UNSEARCHED }
+    if frontier_best > v_incumbent { return CG_CERT_IMPROVABLE }
+    return CG_CERT
+}

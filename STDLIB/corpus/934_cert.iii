@@ -1,0 +1,28 @@
+/* 934_cert.iii -- Sovereign Enhancement G4: the BILATERAL CERTIFICATE. The commit is a kernel
+ * theorem, never a bare verdict: an ACTION must earn `cg_cert_action` (⊢ s★⊳s₀) and an ABSTENTION
+ * must earn `cg_cert_abstain` (⊢ s₀∈M). Neither can be earned vacuously:
+ *   action  granted iff  φ ADMIT(99) ∧ v_after>v_before ∧ proof_ok ;
+ *   abstain granted iff  searched    ∧ frontier_best ≤ v_incumbent .
+ * Falsifiers (the anti-rubber-stamp core): a no-op, a regression, a φ-violation, and an unproven
+ * action are each REFUSED a cert; a lazy abstention (a better move existed) and an unsearched
+ * abstention are each REFUSED. 99 = all arms; 10..22 localize the first failure. */
+module corpus_934
+
+extern @abi(c-msvc-x64) fn cg_cert_action(phi_verdict: u32, v_before: u64, v_after: u64, proof_ok: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_cert_abstain(searched: u32, frontier_best: u64, v_incumbent: u64) -> u32 from "commit_gate.iii"
+
+fn main() -> u64 {
+    /* ===== ACTION: granted only for a φ-preserving, strictly-improving, proven move ===== */
+    if cg_cert_action(99u32, 100u64, 105u64, 1u32) != 99u32 { return 10u64 }   /* s★⊳s₀ certified */
+    if cg_cert_action(99u32, 100u64, 100u64, 1u32) == 99u32 { return 11u64 }   /* no-op -> REFUSED */
+    if cg_cert_action(99u32, 100u64,  95u64, 1u32) == 99u32 { return 12u64 }   /* regression -> REFUSED */
+    if cg_cert_action( 1u32, 100u64, 105u64, 1u32) == 99u32 { return 13u64 }   /* φ violated -> REFUSED */
+    if cg_cert_action(99u32, 100u64, 105u64, 0u32) == 99u32 { return 14u64 }   /* unproven -> REFUSED */
+
+    /* ===== ABSTENTION: granted only for a searched frontier with no strictly-better move ===== */
+    if cg_cert_abstain(1u32, 100u64, 100u64) != 99u32 { return 20u64 }         /* s₀∈M certified */
+    if cg_cert_abstain(1u32, 105u64, 100u64) == 99u32 { return 21u64 }         /* improvable -> REFUSED (lazy abstention) */
+    if cg_cert_abstain(0u32, 100u64, 100u64) == 99u32 { return 22u64 }         /* unsearched -> REFUSED (silent abstention) */
+
+    return 99u64
+}

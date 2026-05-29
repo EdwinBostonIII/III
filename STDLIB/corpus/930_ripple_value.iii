@@ -1,0 +1,61 @@
+/* 930_ripple_value.iii -- Sovereign Enhancement G2: 𝒱 = rm_value MUST discriminate, or the improver
+ * rubber-stamps (every move ties / noise sells as progress). Certified non-vacuity:
+ *   - a NOISE edge strictly LOWERS 𝒱            (a degradation can never be sold as improvement)
+ *   - a USED edge strictly RAISES 𝒱             (real load-bearing structure is detected)
+ *   - a unifiable DUPLICATE (separation) LOWERS 𝒱
+ *   - 𝒱 is RELABEL-INVARIANT                     (depends only on good/noise/sep -> non-gameable)
+ * 99 = all arms; 10..13 localize the first failing arm. */
+module corpus_930
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_value() -> u64 from "ripple_metric.iii"
+
+fn main() -> u64 {
+    /* baseline: 2 distinct nodes, 1 load-bearing edge -> good=1, noise=0, sep=0 */
+    rm_reset()
+    let n0 : u32 = rm_add_node(100u64, 1u32)
+    let n1 : u32 = rm_add_node(200u64, 2u32)
+    rm_add_edge(n0, n1, 1u32, 0u32)
+    let j0 : u64 = rm_value()
+
+    /* + a NOISE edge (unused, no intent) -> 𝒱 must strictly DROP */
+    rm_add_edge(n0, n1, 0u32, 0u32)
+    let j1 : u64 = rm_value()
+    if j1 >= j0 { return 10u64 }
+
+    /* fresh + a USED edge -> 𝒱 must strictly RISE */
+    rm_reset()
+    let a : u32 = rm_add_node(100u64, 1u32)
+    let b : u32 = rm_add_node(200u64, 2u32)
+    rm_add_edge(a, b, 1u32, 0u32)
+    let jc : u64 = rm_value()
+    rm_add_edge(a, b, 1u32, 0u32)
+    let j2 : u64 = rm_value()
+    if j2 <= jc { return 11u64 }
+
+    /* a unifiable DUPLICATE (same cap+iclass) -> separation up -> 𝒱 lower than the distinct case */
+    rm_reset()
+    rm_add_node(100u64, 1u32) ; rm_add_node(100u64, 1u32)        /* dup pair: sep=1 */
+    let j3 : u64 = rm_value()
+    rm_reset()
+    rm_add_node(100u64, 1u32) ; rm_add_node(200u64, 2u32)        /* distinct: sep=0 */
+    let j4 : u64 = rm_value()
+    if j3 >= j4 { return 12u64 }
+
+    /* NON-GAMEABLE: same structure, different labels -> identical 𝒱 (no cosmetic gain) */
+    rm_reset()
+    let g0 : u32 = rm_add_node(111u64, 5u32)
+    let g1 : u32 = rm_add_node(222u64, 6u32)
+    rm_add_edge(g0, g1, 1u32, 0u32)
+    let jx : u64 = rm_value()
+    rm_reset()
+    let h0 : u32 = rm_add_node(999u64, 7u32)
+    let h1 : u32 = rm_add_node(888u64, 8u32)
+    rm_add_edge(h0, h1, 1u32, 0u32)
+    let jy : u64 = rm_value()
+    if jx != jy { return 13u64 }
+
+    return 99u64
+}

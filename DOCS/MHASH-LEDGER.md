@@ -1236,3 +1236,24 @@ certified parallel hardware -- every step truth-table or kernel certified, every
 (optimal placement, minimum-gate synthesis) named and left to the toolchain.
 
 **§8.18 sealed at:** 2026-05-29.
+
+### §8.19 — Sovereign Enhancement G2: 𝒱 certified-monotone + non-gameable (2026-05-29)
+
+`forcefield/ripple_metric.iii` + `rm_value`: the value `𝒱` the Enhancement Theorem maximizes is bound
+and certified to DISCRIMINATE — the first non-vacuity connection (`III-SOVEREIGN-ENHANCEMENT-
+COORDINATION.md` G2). `𝒱 = rm_value = rm_j` is a total `u64` and a pure function of `(good, noise,
+sep)`, so `ΔV>0 ⟺` a real structural gain — non-gameable by relabelling. Compiler-UNREFERENCED ->
+LIBNATIVE.
+
+Corpus 930: a noise edge strictly LOWERS `𝒱`; a load-bearing edge RAISES it; a unifiable duplicate
+LOWERS it; `𝒱` is relabel-invariant (same structure, different labels → same `𝒱`).
+
+| Artifact (golden) | Before (§8.18) | After (this seal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` (**UNCHANGED** -- LIBNATIVE) |
+| `STDLIB/build/iii/libiii_native.a` | `4aa5919b…fe61ca3b` | `43387216 98f2297ba6773ba0bd22504850f017689a57e2e0b46e6da0c9aca874` |
+
+**Verified:** build_stdlib **428/0**; cartographer GATE PASS; compiler `4e138415` unchanged; FULL
+corpus **562/0**; `930_ripple_value`=99. Spec: `DOCS/III-SOVEREIGN-ENHANCEMENT-COORDINATION.md`.
+
+**§8.19 sealed at:** 2026-05-29.

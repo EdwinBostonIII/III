@@ -597,6 +597,7 @@ declare -A EXPECTED=(
     [927_phys_real]=99
     [928_hdl_opt]=99
     [929_aeu_scale]=99
+    [930_ripple_value]=99
 )
 
 PASS=0

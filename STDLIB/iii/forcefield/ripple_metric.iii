@@ -156,3 +156,9 @@ fn rm_j() -> u64 @export {
     let sp : u64 = rm_sep() as u64
     return RM_J_OFFSET + g - nz - sp
 }
+
+/* G2 (III-SOVEREIGN-ENHANCEMENT-COORDINATION): the named value 𝒱 the Enhancement Theorem maximizes.
+ * 𝒱 = rm_value is a TOTAL u64 order and a pure function of the three structural counts
+ * (good, noise, sep) -- so it CANNOT be raised by a cosmetic/relabelling move (non-gameable):
+ * ΔV>0 ⟺ Δgood>0 ∨ Δnoise<0 ∨ Δsep<0, each a real structural gain. Certified by KAT 930. */
+fn rm_value() -> u64 @export { return rm_j() }

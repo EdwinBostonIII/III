@@ -657,6 +657,7 @@ declare -A EXPECTED=(
     [955_optinvoke_cost_lattice]=99
     [956_egraph_cost_lattice]=99
     [957_engine_compound]=99
+    [958_ecdsa_p384_zero_rs]=99
     [960_keccak256_block_absorb]=99
     [961_xoshiro_jump]=99
     [962_bv_ring_colstack]=99
@@ -699,6 +700,10 @@ declare -A EXPECTED=(
     [1002_quality_q4_growth]=99
     [1003_merkle_tree_open_many]=99
     [1004_fri_fold_consistency]=99
+    [1005_zk_stark_seal]=99
+    [1006_zk_stark_proof_seal]=99
+    [1007_air_proof_seal]=99
+    [1008_zkp_stark_sidecar]=99
 )
 
 PASS=0

@@ -1,0 +1,48 @@
+/* 958_ecdsa_p384_zero_rs.iii -- the P-384 falsifier the at-scale Ripple scan found MISSING (mirrors
+ * 994 for P-256). A signature with r==0 or s==0 is INVALID per SEC1/FIPS-186 and MUST be REJECTED
+ * (verify -> 0u8); a genuine deterministic signature is ADMITTED (1u8). The scan flagged two gaps,
+ * both fixed in ecdsa_p384.iii: (1) iii_ecdsa_p384_sign lacked the [E-EC-3] degenerate guard P-256
+ * had -- it could EMIT an (r,s) its own verify rejects; (2) iii_ecdsa_p384_sign_det ignored sign's
+ * return code (P-256's retries). 209 drives the happy path but never zeroes r or s, so P-384's range
+ * guard had no falsifier. This is it. 99 = pass; 1..4 localize. */
+module corpus_958
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_keygen_seed(seed: u64, d_out: u64, pub_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_sign_det(d: u64, z: u64, sig_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p384.iii"
+
+var SEED : [u8; 48]
+var D    : [u8; 48]
+var PUB  : [u8; 96]
+var Z    : [u8; 48]
+var SIG  : [u8; 96]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { SEED[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { Z[i] = ((i + 0x41u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    iii_ecdsa_p384_keygen_seed(&SEED as u64, &D as u64, &PUB as u64)
+    iii_ecdsa_p384_sign_det(&D as u64, &Z as u64, &SIG as u64)
+
+    let qx : u64 = &PUB as u64
+    let qy : u64 = (&PUB as u64) + 48u64
+
+    /* ADMIT: the genuine deterministic signature verifies (and, post-fix, was guaranteed non-degenerate) */
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 1u8 { return 1u64 }
+
+    /* REJECT r==0: zero the first 48 bytes (r) of an otherwise-valid signature */
+    i = 0u64
+    while i < 48u64 { SIG[i] = 0u8  i = i + 1u64 }
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 0u8 { return 2u64 }
+
+    /* restore a valid signature, then REJECT s==0: zero bytes 48..95 (s) */
+    iii_ecdsa_p384_sign_det(&D as u64, &Z as u64, &SIG as u64)
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 1u8 { return 3u64 }   /* re-signed sanity */
+    i = 48u64
+    while i < 96u64 { SIG[i] = 0u8  i = i + 1u64 }
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 0u8 { return 4u64 }
+
+    return 99u64
+}

@@ -66,6 +66,12 @@ fn iii_ecdsa_p384_sign(d_bytes: u64, z_bytes: u64, k_bytes: u64, sig_out: u64) -
     gn_mul_x(11u64, 10u64, 9u64)          /* s_m */
     gn_from_mont_x(12u64, 11u64)
     gn_get_bytes_x(sig_out + 48u64, 12u64)
+    /* [E-EC-3] degenerate signature (r==0 or s==0) -> verify would REJECT it; signal the caller to
+     * retry with a fresh nonce rather than emit an unverifiable artifact. Mirrors the proven P-256
+     * guard (ecdsa_p256.iii); III-CAPABILITY-APOTHEOSIS.md flagged P-384's absence. Surfaced by the
+     * at-scale Ripple scan (vacuous-gate: P-384's reject path was missing + untested). */
+    if gn_is_zero_x(0u64) == 1u8 { return 1i32 }    /* r == 0 */
+    if gn_is_zero_x(12u64) == 1u8 { return 1i32 }   /* s == 0 */
     return 0i32
 }
 
@@ -133,14 +139,21 @@ fn iii_ecdsa_p384_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @exp
     iii_drbg_instantiate(d_bytes, 48u64, z_bytes, 48u64, 0u64, 0u64)
     let mut done : u8 = 0u8
     let mut guard : u64 = 0u64
+    /* retry the nonce until it is nonzero AND the produced (r,s) is non-degenerate (r!=0 && s!=0)
+     * -- [E-EC-3] never emit a signature that verify would reject.  Now MATCHES the proven P-256
+     * sign_det (was: it ignored sign's return code, so a degenerate sig could escape -- the
+     * unification gap III-CAPABILITY-APOTHEOSIS.md flagged).  The degenerate case is astronomically
+     * rare, so the common path signs exactly ONCE -> identical output for every non-degenerate nonce. */
     while done == 0u8 {
         iii_drbg_generate(&EC384_KBUF as u64, 48u64, 0u64, 0u64)
         gn_set_bytes_x(0u64, &EC384_KBUF as u64)
         gn_reduce_x(0u64)
-        if gn_is_zero_x(0u64) == 0u8 { done = 1u8 }
+        if gn_is_zero_x(0u64) == 0u8 {
+            gn_get_bytes_x(&EC384_KBUF as u64, 0u64)
+            if iii_ecdsa_p384_sign(d_bytes, z_bytes, &EC384_KBUF as u64, sig_out) == 0i32 { done = 1u8 }
+        }
         guard = guard + 1u64
         if guard > 64u64 { done = 1u8 }
     }
-    gn_get_bytes_x(&EC384_KBUF as u64, 0u64)
-    return iii_ecdsa_p384_sign(d_bytes, z_bytes, &EC384_KBUF as u64, sig_out)
+    return 0i32
 }

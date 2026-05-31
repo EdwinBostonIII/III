@@ -24,6 +24,9 @@ extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn witness_root_byte(i: u32) -> u32 from "witness.iii"
 extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+/* Evolution BATCH 4: ONE constant-time-equality authority -- attest_eq's byte-identical XOR copy
+ * (also in sanctus/closure.iii) now delegates to verba's canonical timing_safe_eq. */
+extern @abi(c-msvc-x64) fn timing_safe_eq(a: *u8, b: *u8, len: u64) -> u32 from "timing_safe.iii"
 
 /* From capability.iii: bit 11 = attest right */
 const ATTEST_RIGHT_ATTEST : u64 = 0x0800u64
@@ -105,16 +108,6 @@ fn attest_byte(i: u32) -> u32 @export {
 fn attest_eq(addr_a: u64, addr_b: u64) -> u8 @export {
     if addr_a == 0u64 { return 0u8 }
     if addr_b == 0u64 { return 0u8 }
-    let pa : *u8 = addr_a as *u8
-    let pb : *u8 = addr_b as *u8
-    let mut diff : u32 = 0u32
-    let mut i : u64 = 0u64
-    while i < 32u64 {
-        let av : u32 = pa[i] as u32
-        let bv : u32 = pb[i] as u32
-        diff = diff | (av ^ bv)
-        i = i + 1u64
-    }
-    if diff == 0u32 { return 1u8 }
+    if timing_safe_eq(addr_a as *u8, addr_b as *u8, 32u64) == 1u32 { return 1u8 }
     return 0u8
 }

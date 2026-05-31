@@ -337,12 +337,14 @@ fn lru_capacity(id: u64) -> u64 @export {
 fn lru_debug_key(id: u64, idx: u32) -> u32 @export {
     let s : u32 = lru_slot_of(id)
     if s == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
+    if (idx as u64) >= LRU_CAP[s] { return 0xFFFFFFFFu32 }   /* BATCH 4: bound idx (was unguarded -> OOB read of LRU_KEYS_BASE) */
     return lru_load_key(LRU_KEYS_BASE[s], idx)
 }
 
 fn lru_debug_occ(id: u64, idx: u32) -> u8 @export {
     let s : u32 = lru_slot_of(id)
     if s == 0xFFFFFFFFu32 { return 0u8 }
+    if (idx as u64) >= LRU_CAP[s] { return 0u8 }             /* BATCH 4: bound idx (was unguarded -> OOB read of LRU_OCCUP_BASE) */
     return lru_load_occ(LRU_OCCUP_BASE[s], idx)
 }
 

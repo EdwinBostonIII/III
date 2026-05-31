@@ -1,0 +1,39 @@
+/* 410_xii_chd_bucket_bounds.iii -- the at-scale accessor-OOB scan found xii_chd_bucket_at (a public
+ * @export getter) indexed XCHD_BUCKETS[2304] on untrusted bucket_idx,slot WITHOUT a bound: a caller
+ * passing bucket_idx=0xFFFFFFFF computes off = bucket_idx*16 (u32-overflow -> 0xFFFFFFF0) -> OOB read,
+ * and the UNFIXED code segfaults on it. The public accessor now rejects bucket_idx>=144 / slot>=16,
+ * returning 0. Prove-the-negative: the OOB indices return 0 (reaching 99 proves no segfault on the
+ * far-OOB input); the max VALID index still passes the guard + reads in-bounds. 99 = pass. */
+module corpus_410
+
+extern @abi(c-msvc-x64) fn xii_chd_set_hash(idx: u32, hash_lo: u32, hash_hi: u32) -> i32 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_construct() -> u8 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_built() -> u8 from "xii_chd.iii"
+extern @abi(c-msvc-x64) fn xii_chd_bucket_at(bucket_idx: u32, slot: u32) -> u8 from "xii_chd.iii"
+
+fn main() -> u64 {
+    /* construct a real CHD over 144 synthetic-hash members (mirrors 355) */
+    let mut i : u32 = 0u32
+    while i < 144u32 {
+        let lo : u32 = (i * 2654435761u32) ^ 0xDEADBEEFu32
+        let hi : u32 = (i * 40503u32) ^ 0xCAFEBABEu32
+        xii_chd_set_hash(i, lo, hi)
+        i = i + 1u32
+    }
+    if xii_chd_construct() != 1u8 { return 1u64 }
+    if xii_chd_built() != 1u8 { return 2u64 }
+
+    /* OOB GUARDS: return 0 before any array access -- the unfixed code computes off = idx*16 (u32
+     * overflow on 0xFFFFFFFF -> 0xFFFFFFF0) and reads XCHD_BUCKETS[0xFFFFFFF0] -> OOB read / segfault.
+     * Reaching the end (99) proves the guard fires. */
+    if xii_chd_bucket_at(144u32, 0u32) != 0u8 { return 10u64 }          /* bucket_idx >= XCHD_DIM(144) */
+    if xii_chd_bucket_at(0xFFFFFFFFu32, 0u32) != 0u8 { return 11u64 }   /* far OOB (the segfault input) */
+    if xii_chd_bucket_at(0u32, 16u32) != 0u8 { return 12u64 }           /* slot >= XCHD_BUCKET_MAX(16) */
+    if xii_chd_bucket_at(0u32, 0xFFFFFFFFu32) != 0u8 { return 13u64 }
+
+    /* VALID in-bounds indices are NOT rejected and read a sane value (a member index 0..143, or 0). */
+    if (xii_chd_bucket_at(0u32, 0u32) as u32) >= 144u32 { return 20u64 }
+    if (xii_chd_bucket_at(143u32, 15u32) as u32) >= 144u32 { return 21u64 }   /* max valid bucket,slot passes the guard */
+
+    return 99u64
+}

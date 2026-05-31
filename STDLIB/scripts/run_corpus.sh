@@ -176,6 +176,7 @@ declare -A EXPECTED=(
     [130_lru]=99
     [131_field_inv_crystal]=99
     [132_lru_debug_isolate]=99
+    [410_xii_chd_bucket_bounds]=99
     [133_arena_only]=99
     [134_lru_new_only]=99
     [135_lru_capacity]=99
@@ -705,6 +706,13 @@ declare -A EXPECTED=(
     [1006_zk_stark_proof_seal]=99
     [1007_air_proof_seal]=99
     [1008_zkp_stark_sidecar]=99
+    [1009_proof_ripple_unified]=99
+    [1010_pareto_frontier]=99
+    [1011_hotstuff_pacemaker]=99
+    [1012_hotstuff_quorum_opt]=99
+    [1013_cost_manifold]=99
+    [1014_hdl_gate_identities]=99
+    [1015_mechanistic_cycle_bound]=99
 )
 
 PASS=0

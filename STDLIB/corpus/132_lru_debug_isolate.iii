@@ -12,6 +12,7 @@ extern @abi(c-msvc-x64) fn lru_count(id: u64) -> u64 from "lru.iii"
 extern @abi(c-msvc-x64) fn lru_capacity(id: u64) -> u64 from "lru.iii"
 extern @abi(c-msvc-x64) fn lru_drop(id: u64) -> i32 from "lru.iii"
 extern @abi(c-msvc-x64) fn lru_debug_key(id: u64, idx: u32) -> u32 from "lru.iii"
+extern @abi(c-msvc-x64) fn lru_debug_occ(id: u64, idx: u32) -> u8 from "lru.iii"
 
 fn main() -> u64 {
     let a : u64 = arena_new(1u64 << 16u64)
@@ -50,6 +51,15 @@ fn main() -> u64 {
     if k1b != 2u32 { return 220u64 + (k1b as u64) }
     let k2b : u32 = lru_debug_key(c, 2u32)
     if k2b != 3u32 { return 250u64 }
+
+    /* BATCH 4 at-scale prove-the-negative: the debug accessors now BOUND idx (were unguarded -> OOB
+     * read of the arena-backed key/occ arrays; the unfixed code segfaults on these). idx >= capacity
+     * returns the safe sentinel; in-range stays valid. (cap = 3.) */
+    if lru_debug_key(c, 3u32) != 0xFFFFFFFFu32 { return 300u64 }      /* idx 3 >= cap 3 -> sentinel */
+    if lru_debug_key(c, 999u32) != 0xFFFFFFFFu32 { return 301u64 }    /* far OOB */
+    if lru_debug_occ(c, 3u32) != 0u8 { return 302u64 }
+    if lru_debug_occ(c, 999u32) != 0u8 { return 303u64 }
+    if lru_debug_occ(c, 0u32) != 1u8 { return 304u64 }                /* in-range slot 0 is occupied (valid path intact) */
 
     lru_drop(c)
     arena_drop(a)

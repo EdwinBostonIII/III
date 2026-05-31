@@ -281,6 +281,10 @@ fn xii_chd_bucket_sizes_ptr() -> u64 @export {
 }
 
 fn xii_chd_bucket_at(bucket_idx: u32, slot: u32) -> u8 @export {
+    /* BATCH 4: bound the public accessor (was unguarded -> off = bucket_idx*16+slot could exceed
+     * XCHD_BUCKETS[2304] -> OOB read). Internal callers pass loop-bounded indices; the public FFI did not. */
+    if bucket_idx >= XCHD_DIM { return 0u8 }
+    if slot >= XCHD_BUCKET_MAX { return 0u8 }
     return _bucket_at(bucket_idx, slot)
 }
 

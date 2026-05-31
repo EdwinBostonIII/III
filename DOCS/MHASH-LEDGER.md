@@ -1435,14 +1435,25 @@ adversarially verified (default-refute). The LOOP (continues until the increment
 | 1 | cross-module duplication | `closure_eq`/`closure_verify_against`/`attest_eq` -> all delegate to the canonical `verba/timing_safe.iii::timing_safe_eq` (3 copies -> 1 authority; ΔJ>0; −19 lines; behavior-preserving) | `015d1ae` |
 | 2 | vacuous gates + unification gaps | `ecdsa_p384` `[E-EC-3]`: sign + sign_det could EMIT a degenerate (r==0/s==0) signature its own verify rejects -- mirror the proven P-256 guard + retry; new falsifier `958` (the missing P-384 prove-the-negative) | `2c71347` |
 | 3 | crypto cross-variant consistency | `ecdsa_p384` `[E-EC-2]` range guard: verify ACCEPTED out-of-range/malleable r,s>=n (P-256 rejects) -- reduction-based check (single source of n = the field), falsifier `959` | `fdaef17` |
+| 4 | unguarded accessors (getter indexes a backing array on an untrusted index) | `verba/csv` `csv_field_base`/`csv_field_len`: row,col unbounded -> OOB read of the 524288-elem field tables (sibling `csv_field_count` DID guard); guard mirrors the sibling, KAT `91` extended | `57482f7` |
+| 5 | unguarded accessors (cont.) | `omnia/lru` `lru_debug_key`/`lru_debug_occ` (idx>=cap -> OOB of arena key/occ arrays) + `omnia/xii_chd` `xii_chd_bucket_at` (bucket_idx*16 unbounded -> exceeds `XCHD_BUCKETS[2304]`, AND 0xFFFFFFFF wraps off->segfault); guards at the public FFI surface, new falsifier `410` + `132` extended | `17a05ad` |
 
 **Scan 3 CONVERGENCE (the loop is finding its frontier).** Across 6 sibling crypto families the scan
 confirmed CONSISTENCY almost everywhere -- the genuine gaps were the two P-384 ECDSA checks (degenerate
 `958`, range `959`); the rest is correctly ABSTAINED: the AEAD family (ChaCha20/XChaCha20-Poly1305,
 AES-GCM, AES-SIV) is uniformly constant-time tag-verify + tamper-tested; the remaining "missing checks"
 are by-design fixed-size contracts (XChaCha20's nonce IS the 24-byte type; SHA-256's output is fixed 32B)
-or opt-in policy (P-384 low-s is BIP-62, not FIPS -- verify is correct without it). 3 scans -> 3 genuine
-self-edits; the engine's value is telling the genuine gap from the intentional design.
+or opt-in policy (P-384 low-s is BIP-62, not FIPS -- verify is correct without it).
+
+**Scans 4-5 (the accessor-bounds sub-wave).** With the crypto frontier reached, the lens turned to a
+distinct coherent class: a PUBLIC `@export` getter that indexes a backing array/buffer on a caller-supplied
+index WITHOUT a bound -- the `csv_field_base` pattern. The scan found it in three sites across two
+subsystems (`verba/csv` row,col; `omnia/lru` idx; `omnia/xii_chd` bucket_idx) and abstained on the rest
+(internal callers pass loop-bounded indices; most accessors are type-bounded or already guard like
+`csv_field_count`). The fix is uniform -- bound the index at the public FFI surface, mirror the guarded
+sibling, return the safe sentinel -- and each carries a prove-the-negative KAT whose far-OOB arm SEGFAULTS
+on the unfixed code (`xii_chd_bucket_at(0xFFFFFFFF,*)` wraps `off` and reads unmapped memory). 5 scans ->
+5 genuine self-edits; the engine's value is telling the genuine gap from the intentional design.
 
 **The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
 improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than
@@ -1452,8 +1463,19 @@ earn itself); katabasis cross-type `*_write_admissible` was deferred (needs a pa
 1 (duplications) found cosmetic redundancy; scan 2 (prove-the-negative lens) found a latent CORRECTNESS
 bug -- the higher-order payoff of turning the engine's "can this gate say NO?" discipline on III itself.
 
-New KATs: **958** (ecdsa_p384 zero-r/s falsifier). All increments QUICK-gated (build_stdlib FAIL=0 +
-targeted KATs = 99); compiler `196b0c5f` unchanged (every edit LIBNATIVE). The ONE full gate (corpus +
-bench + stage1) runs only when the loop concludes.
+New/extended KATs: **958** (ecdsa_p384 zero-r/s falsifier), **959** (ecdsa_p384 range falsifier), **91**
+(csv OOB-reject arms), **410** (xii_chd_bucket_at OOB falsifier -- constructs a real CHD, the far-OOB arm
+segfaults unfixed), **132** (lru debug-accessor OOB-reject arms). All increments QUICK-gated (build_stdlib
+FAIL=0 + targeted KATs = 99); compiler `196b0c5f` unchanged (every edit LIBNATIVE). Lib advanced
+f77cbf85 -> 225094d5 across the accessor sub-wave. The ONE full gate (corpus + bench + stage1) runs only
+when the loop concludes.
+
+**Gate-oracle hardening (scan-5 false-revert post-mortem).** The quick gate compared the `libiii_native.a`
+**`.mhash` sidecar** before/after build to detect a stale lib. Under OneDrive the sidecar can lag the
+artifact (read-after-write staleness) and `build_stdlib`'s `set -euo pipefail` can abort between
+artifact-write and sidecar-write on a transient `ar` read-lock -- so the sidecar read "unchanged" while the
+artifact was in fact correctly rebuilt (449 members, valid index, all edited objects present). The fix:
+the gate now hashes the **artifact directly** (`sha256sum libiii_native.a`) + asserts a valid archive index
+(`ar t`), never the sidecar -- one file, no write-ordering gap, OneDrive-staleness-immune.
 
 **§8.26 sealed at:** 2026-05-31 (ongoing).

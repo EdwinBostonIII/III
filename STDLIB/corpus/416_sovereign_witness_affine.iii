@@ -1,0 +1,127 @@
+/* 416_sovereign_witness_affine.iii -- Sovereign Witness SW-2/3/4. The analyzer's heart: prove
+ * affine-access safety over a frozen captured trace. SOUNDNESS is the whole point, so the arms are
+ * adversarial on the exact edges where an unsound encoding would emit a wrong PROVEN:
+ *   A1 safe -> PROVEN; A2 OOB -> REFUTED_BOUNDS with the EXACT first violating i;
+ *   A3 operands in 2^63..2^64 -> sound verdict (an i64 encoding would misread the sign);
+ *   A4 WRAP-ONLY (base+i*stride wraps u64 to a value < bound) -> REFUTED_WRAP, NOT PROVEN -- the scan-6
+ *      trap, the single arm that exposes an unsound analyzer;
+ *   B1 pipeline over a real ingested+sealed artifact -> PROVEN, sw_admit accepts the true claim and
+ *      REJECTS a forged one (re-derivation is the gate's teeth); B2 OOB record -> REFUTED at the right
+ *      (record,i), forged-PROVEN -> REJECT; B3 OPAQUE -> ABSTAIN (never PROVEN); B4 over-declared -> MALFORMED.
+ * 99 = pass. */
+module corpus_416
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn la_ingest(arena: u64, kind: u32, src: u64, len: u64, cap: u64) -> u64 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_seal(h: u64) -> i32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn sw_prove_affine(base: u64, stride: u64, count: u64, bound: u64, out_ce: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn sw_analyze(h: u64, out_viol_rec: u64, out_viol_i: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn sw_witness(h: u64, out_witness_digest: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn sw_admit(h: u64, claim_verdict: u32, claim_viol_rec: u64, claim_viol_i: u64) -> u32 from "sovereign_witness.iii"
+
+var SW416_BUF : [u8; 512]
+var SW416_CE  : [u64; 1]
+var SW416_VR  : [u64; 1]
+var SW416_VI  : [u64; 1]
+var SW416_WD  : [u8; 32]
+
+fn sw416_w_u64(off: u64, v: u64) -> u32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        SW416_BUF[off + k] = ((v >> (8u64 * k)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u32
+}
+
+fn sw416_w_rec(off: u64, kind: u64, base: u64, stride: u64, count: u64, bound: u64) -> u32 {
+    sw416_w_u64(off, kind)
+    sw416_w_u64(off + 8u64, base)
+    sw416_w_u64(off + 16u64, stride)
+    sw416_w_u64(off + 24u64, count)
+    sw416_w_u64(off + 32u64, bound)
+    return 0u32
+}
+
+fn main() -> u64 {
+    let u64max : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let b63 : u64 = 1u64 << 63u64
+    let cep : u64 = &SW416_CE as u64
+
+    /* ===== Part A: the SOUND PROCEDURE directly ===== */
+    /* A1 safe: max = 9*4 = 36 < 100 -> PROVEN(0). */
+    if sw_prove_affine(0u64, 4u64, 10u64, 100u64, cep) != 0u32 { return 10u64 }
+
+    /* A2 OOB bounds: max = 36 >= 20 -> REFUTED_BOUNDS(1); first i with 4i>=20 is i=5. */
+    if sw_prove_affine(0u64, 4u64, 10u64, 20u64, cep) != 1u32 { return 11u64 }
+    if SW416_CE[0u64] != 5u64 { return 12u64 }
+
+    /* A3 boundary 2^63..2^64: an i64 encoding misreads base=2^63 as negative. Sound: REFUTED at i=5. */
+    if sw_prove_affine(b63, 1u64, 10u64, b63 + 5u64, cep) != 1u32 { return 13u64 }
+    if SW416_CE[0u64] != 5u64 { return 14u64 }
+
+    /* A3b high-end safe: max = 2^63+9 < 2^64-1 -> PROVEN (no false REFUTE at the top of the range). */
+    if sw_prove_affine(b63, 1u64, 10u64, u64max, cep) != 0u32 { return 15u64 }
+
+    /* A4 WRAP-ONLY (THE soundness arm): base=2^64-256, stride=256, count=2. i=1 -> base+256 = 2^64
+     * wraps to 0; 0 < bound, so a naive 'max<bound' check says PROVEN -- but it WRAPPED -> REFUTED_WRAP(2)
+     * at i=1. */
+    let near : u64 = u64max - 255u64
+    if sw_prove_affine(near, 256u64, 2u64, u64max, cep) != 2u32 { return 16u64 }
+    if SW416_CE[0u64] != 1u64 { return 17u64 }
+
+    /* A5 count==0 -> vacuously PROVEN. */
+    if sw_prove_affine(5u64, 7u64, 0u64, 3u64, cep) != 0u32 { return 18u64 }
+
+    /* ===== Part B: the PIPELINE over a real frozen artifact ===== */
+    let ar : u64 = arena_new(1u64 << 16u64)
+    if ar == 0u64 { return 20u64 }
+    let bufp : u64 = &SW416_BUF as u64
+    let vrp : u64 = &SW416_VR as u64
+    let vip : u64 = &SW416_VI as u64
+    let wdp : u64 = &SW416_WD as u64
+
+    /* B1 two-record SAFE trace -> PROVEN; admit accepts the true claim, rejects a forged REFUTED. */
+    sw416_w_u64(0u64, 2u64)
+    sw416_w_rec(8u64,  1u64, 0u64,    4u64, 10u64, 100u64)
+    sw416_w_rec(48u64, 1u64, 1000u64, 8u64, 5u64,  2000u64)
+    let h1 : u64 = la_ingest(ar, 2u32, bufp, 88u64, 256u64)
+    if h1 == 0u64 { return 21u64 }
+    la_seal(h1)
+    if sw_witness(h1, wdp) != 0u32 { return 22u64 }
+    if sw_admit(h1, 0u32, 0u64, 0u64) != 99u32 { return 23u64 }
+    if sw_admit(h1, 1u32, 0u64, 0u64) != 0u32 { return 24u64 }   /* forged REFUTED on a PROVEN trace -> REJECT */
+
+    /* B2 second record OOB -> REFUTED_BOUNDS at record 1, i=5; admit accepts truth, rejects forged PROVEN. */
+    sw416_w_u64(0u64, 2u64)
+    sw416_w_rec(8u64,  1u64, 0u64, 4u64, 10u64, 100u64)
+    sw416_w_rec(48u64, 1u64, 0u64, 4u64, 10u64, 20u64)
+    let h2 : u64 = la_ingest(ar, 2u32, bufp, 88u64, 256u64)
+    if h2 == 0u64 { return 30u64 }
+    la_seal(h2)
+    if sw_analyze(h2, vrp, vip) != 1u32 { return 31u64 }
+    if SW416_VR[0u64] != 1u64 { return 32u64 }
+    if SW416_VI[0u64] != 5u64 { return 33u64 }
+    if sw_admit(h2, 1u32, 1u64, 5u64) != 99u32 { return 34u64 }
+    if sw_admit(h2, 0u32, 0u64, 0u64) != 0u32 { return 35u64 }   /* forged PROVEN on an OOB trace -> REJECT */
+
+    /* B3 OPAQUE record -> ABSTAIN(3), never PROVEN. */
+    sw416_w_u64(0u64, 1u64)
+    sw416_w_rec(8u64, 2u64, 0u64, 0u64, 0u64, 0u64)
+    let h3 : u64 = la_ingest(ar, 2u32, bufp, 48u64, 256u64)
+    if h3 == 0u64 { return 40u64 }
+    la_seal(h3)
+    if sw_analyze(h3, vrp, vip) != 3u32 { return 41u64 }
+
+    /* B4 over-declared record_count -> MALFORMED(4) (refuse, do not over-read). */
+    sw416_w_u64(0u64, 100u64)
+    sw416_w_rec(8u64, 1u64, 0u64, 4u64, 10u64, 100u64)
+    let h4 : u64 = la_ingest(ar, 2u32, bufp, 48u64, 256u64)
+    if h4 == 0u64 { return 50u64 }
+    la_seal(h4)
+    if sw_analyze(h4, vrp, vip) != 4u32 { return 51u64 }
+
+    arena_drop(ar)
+    return 99u64
+}

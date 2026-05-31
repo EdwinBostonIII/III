@@ -343,6 +343,7 @@ MODULES=(
     "sanctus/mandate"
     "sanctus/closure"
     "sanctus/legacy_artifact"
+    "sanctus/sovereign_witness"
     "numera/bigint_div"
     "numera/field"
     "verba/normalise_ascii"

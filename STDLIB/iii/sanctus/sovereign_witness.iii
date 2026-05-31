@@ -1,0 +1,178 @@
+/* sovereign_witness.iii -- Sovereign Witness SW-2/3/4 (DOCS/III-SOVEREIGN-WITNESS-ARCHITECTURE.md).
+ *
+ * The analyzer's heart, property-complete for ONE sound property: AFFINE-ACCESS SAFETY. Over a frozen
+ * legacy_artifact (a captured TRACE of memory-access descriptors), prove for every affine access
+ *   forall i in [0,count):  base + i*stride  is wrap-free AND < bound
+ * -- the EXACT vulnerability class scans 5/6 hardened in III's own body, now PROVED about an external
+ * captured program. Verdicts: PROVEN / REFUTED_BOUNDS(+first violating i) / REFUTED_WRAP(+first wrapping
+ * i) / ABSTAIN (a record kind the analyzer cannot soundly reason about) / MALFORMED.
+ *
+ * SOUNDNESS DISCIPLINE (the architecture's load-bearing rule): the check is a closed form done in u64
+ * with explicit overflow detection -- sound across the FULL u64 range, no i64-fidelity gap. It NEVER
+ * emits PROVEN on a wrapping access (the forbidden unfalsifiable false claim); a u64 wrap is REFUTED_WRAP
+ * even when the wrapped value happens to fall below bound (the scan-6 trap). SMT is deliberately NOT used
+ * here -- constant stride makes the extreme address a closed form (i=count-1); SMT's authority is search
+ * (non-constant stride / disjunctive paths), reserved for the properties that need it.
+ *
+ * The gate's teeth are RE-DERIVATION from the sealed bytes (sw_admit re-reads via la_byte + re-runs the
+ * analysis + compares), not a structural proof check -- a forged verdict cannot survive re-derivation.
+ * Composes the REAL organs legacy_artifact (frozen bytes) + cad (seal the witness) only. */
+module sovereign_witness
+
+extern @abi(c-msvc-x64) fn la_byte(h: u64, i: u64) -> u8 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_len(h: u64) -> u64 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_digest(h: u64, out32: u64) -> i32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+/* verdicts */
+const SW_PROVEN         : u32 = 0u32
+const SW_REFUTED_BOUNDS : u32 = 1u32
+const SW_REFUTED_WRAP   : u32 = 2u32
+const SW_ABSTAIN        : u32 = 3u32
+const SW_MALFORMED      : u32 = 4u32
+
+/* record kinds */
+const SW_KIND_AFFINE : u64 = 1u64
+const SW_KIND_OPAQUE : u64 = 2u64
+
+const SW_U64_MAX  : u64 = 0xFFFFFFFFFFFFFFFFu64
+const SW_REC_U64S : u64 = 5u64          /* {kind, base, stride, count, bound} */
+const SW_REC_BYTES: u64 = 40u64         /* 5 * 8 */
+const SW_HDR_BYTES: u64 = 8u64          /* leading record_count (u64 LE) */
+const SW_CAD_SUITE: u32 = 0u32          /* sha256 */
+const SW_PROP_AFFINE : u8 = 1u8         /* property id: affine-access safety */
+
+/* the witness record we content-address: artifact_digest(32) || prop(1) || verdict(1) || viol_rec(8) || viol_i(8) */
+var SW_WREC : [u8; 64]
+
+/* read a little-endian u64 from the frozen artifact at byte offset off, through the OOB-bounded
+ * la_byte (past-len bytes read as 0; callers bound off+8 <= la_len before trusting the value). */
+fn sw_rd_u64(h: u64, off: u64) -> u64 {
+    let mut v : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        let b : u64 = la_byte(h, off + k) as u64
+        v = v | (b << (8u64 * k))
+        k = k + 1u64
+    }
+    return v
+}
+
+/* THE SOUND PROCEDURE. Decides affine-access safety for one descriptor; writes the counterexample
+ * index to *out_ce on a refutation (0 otherwise). Closed-form, u64-exact, overflow-aware. */
+fn sw_prove_affine(base: u64, stride: u64, count: u64, bound: u64, out_ce: u64) -> u32 @export {
+    let cep : *u64 = out_ce as *u64
+    cep[0u64] = 0u64
+    if count == 0u64 { return SW_PROVEN }          /* no accesses -> vacuously safe */
+    let cm1 : u64 = count - 1u64
+
+    /* Does the extreme access i=cm1 wrap u64? (base + i*stride is monotonic until it wraps.) */
+    let mut wrapped : u8 = 0u8
+    if stride != 0u64 {
+        let lim : u64 = SW_U64_MAX / stride
+        if cm1 > lim { wrapped = 1u8 }             /* cm1*stride itself overflows */
+    }
+    if wrapped == 0u8 {
+        let p : u64 = cm1 * stride                 /* safe: cm1 <= U64_MAX/stride, or stride==0 -> 0 */
+        let avail : u64 = SW_U64_MAX - base
+        if p > avail { wrapped = 1u8 }             /* base + p overflows */
+    }
+    if wrapped == 1u8 {
+        /* first wrapping i = floor((U64_MAX - base)/stride) + 1 (stride != 0 here, and result < count). */
+        let avail2 : u64 = SW_U64_MAX - base
+        let iw : u64 = (avail2 / stride) + 1u64
+        cep[0u64] = iw
+        return SW_REFUTED_WRAP
+    }
+
+    /* No wrap in [0,count): the max address is exact. */
+    let max_addr : u64 = base + (cm1 * stride)
+    if max_addr >= bound {
+        if base >= bound {                         /* the very first access is OOB */
+            cep[0u64] = 0u64
+            return SW_REFUTED_BOUNDS
+        }
+        /* base < bound, max >= bound, stride > 0 (else max==base<bound): first i with base+i*stride >= bound. */
+        let delta : u64 = bound - base
+        let mut iv : u64 = delta / stride
+        let rem : u64 = delta % stride
+        if rem != 0u64 { iv = iv + 1u64 }          /* ceil(delta/stride) */
+        cep[0u64] = iv
+        return SW_REFUTED_BOUNDS
+    }
+    return SW_PROVEN
+}
+
+/* LIFT + ANALYZE: walk the trace records (all reads OOB-bounded), aggregate the verdict.
+ * Dominance: REFUTED > ABSTAIN > PROVEN. Writes the first violation (record idx, i) to the out
+ * pointers. MALFORMED if the header/declared count does not fit the sealed bytes. */
+fn sw_analyze(h: u64, out_viol_rec: u64, out_viol_i: u64) -> u32 @export {
+    let rp : *u64 = out_viol_rec as *u64
+    let ip : *u64 = out_viol_i as *u64
+    rp[0u64] = 0u64
+    ip[0u64] = 0u64
+    let len : u64 = la_len(h)
+    if len < SW_HDR_BYTES { return SW_MALFORMED }
+    let nrec : u64 = sw_rd_u64(h, 0u64)
+    let fits : u64 = (len - SW_HDR_BYTES) / SW_REC_BYTES
+    if nrec > fits { return SW_MALFORMED }         /* declared count exceeds the bytes -> refuse */
+
+    let mut agg : u32 = SW_PROVEN
+    let mut i : u64 = 0u64
+    while i < nrec {
+        let off    : u64 = SW_HDR_BYTES + (i * SW_REC_BYTES)
+        let kind   : u64 = sw_rd_u64(h, off)
+        let base   : u64 = sw_rd_u64(h, off + 8u64)
+        let stride : u64 = sw_rd_u64(h, off + 16u64)
+        let count  : u64 = sw_rd_u64(h, off + 24u64)
+        let bound  : u64 = sw_rd_u64(h, off + 32u64)
+        if kind == SW_KIND_AFFINE {
+            let ce : u64 = 0u64
+            let v : u32 = sw_prove_affine(base, stride, count, bound, &ce as u64)
+            if v != SW_PROVEN {
+                rp[0u64] = i
+                ip[0u64] = ce
+                return v                           /* first refutation dominates */
+            }
+        } else {
+            agg = SW_ABSTAIN                        /* a kind we cannot soundly reason about -> abstain (never PROVEN) */
+        }
+        i = i + 1u64
+    }
+    return agg
+}
+
+/* WITNESS: analyze, then content-address { artifact_digest || prop || verdict || viol_rec || viol_i }
+ * into out_witness_digest (32 bytes). Returns the verdict. The witness is sealed + tamper-evident:
+ * any change to the artifact bytes changes artifact_digest -> a different witness digest. */
+fn sw_witness(h: u64, out_witness_digest: u64) -> u32 @export {
+    let vrec : u64 = 0u64
+    let vi   : u64 = 0u64
+    let verdict : u32 = sw_analyze(h, &vrec as u64, &vi as u64)
+
+    la_digest(h, &SW_WREC as u64)                  /* bytes 0..31 = artifact digest (0 if unsealed) */
+    SW_WREC[32u64] = SW_PROP_AFFINE
+    SW_WREC[33u64] = (verdict & 0xFFu32) as u8
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        SW_WREC[34u64 + k] = ((vrec >> (8u64 * k)) & 0xFFu64) as u8
+        SW_WREC[42u64 + k] = ((vi   >> (8u64 * k)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    cad_oneshot(SW_CAD_SUITE, &SW_WREC as *u8, 50u64, out_witness_digest as *u8)
+    return verdict
+}
+
+/* ADMIT (the gate's teeth): re-derive the verdict + violation from the sealed bytes and confirm they
+ * match the CLAIM. Returns 99 (ADMIT) iff the claim is exactly what re-derivation produces, else 0
+ * (REJECT). A forged witness -- any verdict/violation that re-derivation does not reproduce -- is
+ * rejected. This is the soundness anchor AND the forged-witness prove-the-negative. */
+fn sw_admit(h: u64, claim_verdict: u32, claim_viol_rec: u64, claim_viol_i: u64) -> u32 @export {
+    let vrec : u64 = 0u64
+    let vi   : u64 = 0u64
+    let v : u32 = sw_analyze(h, &vrec as u64, &vi as u64)
+    if v != claim_verdict { return 0u32 }
+    if vrec != claim_viol_rec { return 0u32 }
+    if vi != claim_viol_i { return 0u32 }
+    return 99u32
+}

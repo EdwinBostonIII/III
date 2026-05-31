@@ -23,6 +23,9 @@ extern @abi(c-msvc-x64) fn la_byte(h: u64, i: u64) -> u8 from "legacy_artifact.i
 extern @abi(c-msvc-x64) fn la_len(h: u64) -> u64 from "legacy_artifact.iii"
 extern @abi(c-msvc-x64) fn la_digest(h: u64, out32: u64) -> i32 from "legacy_artifact.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
 
 /* verdicts */
 const SW_PROVEN         : u32 = 0u32
@@ -175,4 +178,77 @@ fn sw_admit(h: u64, claim_verdict: u32, claim_viol_rec: u64, claim_viol_i: u64) 
     if vrec != claim_viol_rec { return 0u32 }
     if vi != claim_viol_i { return 0u32 }
     return 99u32
+}
+
+/* ================= SW-5: bounded, pure, host-effect-free REPLAY (FR-8) =================
+ * The sandbox forward-execution over the FROZEN artifact: no host effect, only arena writes + a cad
+ * seal. Closes the refute->reproduce loop (sw_analyze REFUTES at i; sw_replay reproduces the exact
+ * unsafe address) and content-addresses the bounded forward state. */
+const SW_REPLAY_HORIZON : u64 = 65536u64
+var SW_RADDR : [u64; 1]   /* scratch for the streamed address (module var -> a stable address) */
+
+/* The EXACT address access i lands on: base + i*stride in FULL u64 wrap arithmetic (the address the
+ * hardware would compute, wrapped and all). Writes it to *out_addr; returns 1 if the computation
+ * wrapped u64 (the access escaped [base, 2^64)), else 0. Pure. */
+fn sw_replay_at(base: u64, stride: u64, i: u64, out_addr: u64) -> u32 @export {
+    let ap : *u64 = out_addr as *u64
+    let mut wrapped : u32 = 0u32
+    if stride != 0u64 {
+        let lim : u64 = SW_U64_MAX / stride
+        if i > lim { wrapped = 1u32 }
+    }
+    if wrapped == 0u32 {
+        let prod : u64 = i * stride
+        let avail : u64 = SW_U64_MAX - base
+        if prod > avail { wrapped = 1u32 }
+    }
+    ap[0u64] = base + (i * stride)            /* full u64 wrap arithmetic */
+    return wrapped
+}
+
+/* REPRODUCE: replay access i of record record_idx over the frozen artifact and classify it exactly as
+ * the analyzer would, writing the concrete address to *out_addr. SW_REFUTED_WRAP if it wrapped;
+ * SW_REFUTED_BOUNDS if addr >= bound; SW_PROVEN if safe; SW_MALFORMED on a bad record index. This is
+ * the forensic confirmation that the analyzer's counterexample is real. */
+fn sw_replay_violation(h: u64, record_idx: u64, i: u64, out_addr: u64) -> u32 @export {
+    let len : u64 = la_len(h)
+    if len < SW_HDR_BYTES { return SW_MALFORMED }
+    let nrec : u64 = sw_rd_u64(h, 0u64)
+    if record_idx >= nrec { return SW_MALFORMED }
+    let fits : u64 = (len - SW_HDR_BYTES) / SW_REC_BYTES
+    if nrec > fits { return SW_MALFORMED }
+    let off    : u64 = SW_HDR_BYTES + (record_idx * SW_REC_BYTES)
+    let base   : u64 = sw_rd_u64(h, off + 8u64)
+    let stride : u64 = sw_rd_u64(h, off + 16u64)
+    let bound  : u64 = sw_rd_u64(h, off + 32u64)
+    let wrapped : u32 = sw_replay_at(base, stride, i, out_addr)
+    if wrapped == 1u32 { return SW_REFUTED_WRAP }
+    let ap : *u64 = out_addr as *u64
+    let addr : u64 = ap[0u64]
+    if addr >= bound { return SW_REFUTED_BOUNDS }
+    return SW_PROVEN
+}
+
+/* Content-address the BOUNDED forward state = the sequence of addresses touched by access 0..count-1
+ * of record record_idx, sealed via cad. ABSTAIN if count exceeds the replay horizon (cannot soundly
+ * enumerate). Deterministic: identical record bytes -> identical state digest. */
+fn sw_replay_seq(h: u64, record_idx: u64, out_state_digest: u64) -> u32 @export {
+    let len : u64 = la_len(h)
+    if len < SW_HDR_BYTES { return SW_MALFORMED }
+    let nrec : u64 = sw_rd_u64(h, 0u64)
+    if record_idx >= nrec { return SW_MALFORMED }
+    let off    : u64 = SW_HDR_BYTES + (record_idx * SW_REC_BYTES)
+    let base   : u64 = sw_rd_u64(h, off + 8u64)
+    let stride : u64 = sw_rd_u64(h, off + 16u64)
+    let count  : u64 = sw_rd_u64(h, off + 24u64)
+    if count > SW_REPLAY_HORIZON { return SW_ABSTAIN }
+    cad_begin(SW_CAD_SUITE)
+    let mut i : u64 = 0u64
+    while i < count {
+        sw_replay_at(base, stride, i, &SW_RADDR as u64)
+        cad_payload(&SW_RADDR as u64, 8u64)
+        i = i + 1u64
+    }
+    cad_final(out_state_digest)
+    return SW_PROVEN
 }

@@ -1,0 +1,101 @@
+/* 417_sovereign_witness_replay.iii -- Sovereign Witness SW-5 (FR-8: bounded, pure, host-effect-free
+ * replay). Closes the refute->reproduce loop and content-addresses the forward state.
+ *   A  sw_replay_at: the exact address an access lands on, in full u64 wrap arithmetic (a wrapping
+ *      access lands on its wrapped LOW address, flagged).
+ *   B  refute->reproduce: sw_analyze REFUTES a trace at (record, i); sw_replay_violation replays that
+ *      exact i and reproduces the violation + the concrete address -- the forensic confirmation.
+ *   C  sw_replay_seq: deterministic content-addressed forward state; over-horizon -> ABSTAIN.
+ * 99 = pass. */
+module corpus_417
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn la_ingest(arena: u64, kind: u32, src: u64, len: u64, cap: u64) -> u64 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_seal(h: u64) -> i32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn sw_analyze(h: u64, out_viol_rec: u64, out_viol_i: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn sw_replay_at(base: u64, stride: u64, i: u64, out_addr: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn sw_replay_violation(h: u64, record_idx: u64, i: u64, out_addr: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn sw_replay_seq(h: u64, record_idx: u64, out_state_digest: u64) -> u32 from "sovereign_witness.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var SW417_BUF  : [u8; 512]
+var SW417_ADDR : [u64; 1]
+var SW417_VR   : [u64; 1]
+var SW417_VI   : [u64; 1]
+var SW417_D1   : [u8; 32]
+var SW417_D2   : [u8; 32]
+
+fn sw417_w_u64(off: u64, v: u64) -> u32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 {
+        SW417_BUF[off + k] = ((v >> (8u64 * k)) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    return 0u32
+}
+fn sw417_w_rec(off: u64, kind: u64, base: u64, stride: u64, count: u64, bound: u64) -> u32 {
+    sw417_w_u64(off, kind)
+    sw417_w_u64(off + 8u64, base)
+    sw417_w_u64(off + 16u64, stride)
+    sw417_w_u64(off + 24u64, count)
+    sw417_w_u64(off + 32u64, bound)
+    return 0u32
+}
+
+fn main() -> u64 {
+    let u64max : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let ap : u64 = &SW417_ADDR as u64
+
+    /* ===== A: sw_replay_at ===== */
+    if sw_replay_at(1000u64, 4u64, 5u64, ap) != 0u32 { return 10u64 }   /* 1000 + 5*4 = 1020, no wrap */
+    if SW417_ADDR[0u64] != 1020u64 { return 11u64 }
+    let near : u64 = u64max - 255u64                                    /* 2^64 - 256 */
+    if sw_replay_at(near, 256u64, 1u64, ap) != 1u32 { return 12u64 }    /* +256 -> 2^64 -> wraps */
+    if SW417_ADDR[0u64] != 0u64 { return 13u64 }                       /* lands on wrapped address 0 */
+
+    /* ===== B: refute -> reproduce over a real frozen artifact ===== */
+    let ar : u64 = arena_new(1u64 << 16u64)
+    if ar == 0u64 { return 20u64 }
+    let bufp : u64 = &SW417_BUF as u64
+    let vrp : u64 = &SW417_VR as u64
+    let vip : u64 = &SW417_VI as u64
+
+    sw417_w_u64(0u64, 1u64)
+    sw417_w_rec(8u64, 1u64, 0u64, 4u64, 10u64, 20u64)                   /* OOB: REFUTED at i=5 */
+    let h : u64 = la_ingest(ar, 2u32, bufp, 48u64, 256u64)
+    if h == 0u64 { return 21u64 }
+    la_seal(h)
+    if sw_analyze(h, vrp, vip) != 1u32 { return 22u64 }                 /* REFUTED_BOUNDS */
+    if SW417_VR[0u64] != 0u64 { return 23u64 }
+    if SW417_VI[0u64] != 5u64 { return 24u64 }
+    /* replay the counterexample -> reproduces the violation + the concrete address 20. */
+    if sw_replay_violation(h, 0u64, 5u64, ap) != 1u32 { return 25u64 }  /* REFUTED_BOUNDS reproduced */
+    if SW417_ADDR[0u64] != 20u64 { return 26u64 }
+    /* replay a safe index -> PROVEN + its address. */
+    if sw_replay_violation(h, 0u64, 4u64, ap) != 0u32 { return 27u64 }  /* SW_PROVEN */
+    if SW417_ADDR[0u64] != 16u64 { return 28u64 }
+
+    /* ===== C: sw_replay_seq -- deterministic forward state + bounded horizon ===== */
+    sw417_w_u64(0u64, 1u64)
+    sw417_w_rec(8u64, 1u64, 100u64, 8u64, 4u64, 10000u64)
+    let h2 : u64 = la_ingest(ar, 2u32, bufp, 48u64, 256u64)
+    if h2 == 0u64 { return 30u64 }
+    la_seal(h2)
+    if sw_replay_seq(h2, 0u64, &SW417_D1 as u64) != 0u32 { return 31u64 }
+    let h3 : u64 = la_ingest(ar, 2u32, bufp, 48u64, 256u64)
+    if h3 == 0u64 { return 32u64 }
+    la_seal(h3)
+    if sw_replay_seq(h3, 0u64, &SW417_D2 as u64) != 0u32 { return 33u64 }
+    if cad_eq(&SW417_D1 as *u8, &SW417_D2 as *u8) != 1u8 { return 34u64 }   /* identical record -> identical state digest */
+
+    /* over the replay horizon (count=100000 > 65536) -> ABSTAIN, never a partial state. */
+    sw417_w_u64(0u64, 1u64)
+    sw417_w_rec(8u64, 1u64, 0u64, 1u64, 100000u64, u64max)
+    let h4 : u64 = la_ingest(ar, 2u32, bufp, 48u64, 256u64)
+    if h4 == 0u64 { return 40u64 }
+    la_seal(h4)
+    if sw_replay_seq(h4, 0u64, &SW417_D1 as u64) != 3u32 { return 41u64 }   /* SW_ABSTAIN */
+
+    arena_drop(ar)
+    return 99u64
+}

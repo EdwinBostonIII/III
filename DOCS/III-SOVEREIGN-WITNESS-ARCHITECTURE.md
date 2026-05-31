@@ -339,11 +339,17 @@ SW-5  [LANDED 1464c83] sw_replay (FR-8): bounded pure host-effect-free interpret
 SW-6  [PENDING] POLISH: one full corpus+bench+stage1 gate (reserved for the very end per the standing
       quick-gate directive); ledger; the witness as a corpus citizen.
 --- NEXT, the maximal compounding (the user's meta-goal "compound III's ability to enhance ITSELF") ---
-SW-INWARD  Turn the witness INWARD: the affine-safety prover is EXACTLY what the ripple self-enhancement
-      gate needs to certify a self-edit does not reintroduce the scan-5/6 class. Wire sovereign_witness as
-      an admission lens in commit_gate/integrity so a self-edit's access pattern is PROVED safe (or the edit
-      is refused with a replayable counterexample). The Witness built to judge external programs becomes the
-      organ by which III proves its OWN edits safe -- analyzer and self-enhancer unified.
+SW-INWARD  [LANDED a385aa9, honest form] Turn the witness INWARD. The affine-safety prover is EXACTLY
+      what certifies a self-edit does not reintroduce the scan-5/6 class. Corpus 419 encodes III's OWN
+      access contracts and has the witness CERTIFY the scan-5/6 guards are SUFFICIENT (PROVEN at the guard:
+      xii audit stride-64 @ count<=0x03FFFFFF; xii_chd stride-16 @ bucket_idx<144) and NECESSARY (REFUTED
+      beyond: REFUTED_WRAP at ~2^58, REFUTED_BOUNDS at the first OOB index) -- III formally proving its own
+      self-enhancement safety. A standing self-safety regression gate for the scan-5/6 class.
+      NOTE on the FULLY-AUTOMATIC form (a self-edit's pattern auto-extracted + proved in commit_gate): that
+      needs a source->affine-descriptor EXTRACTOR, which is LIBNATIVE-BLOCKED (III's parser lives in the
+      compiler, not libiii_native.a; calling it would drift the golden hash). The honest landed form uses
+      human-accurate contracts (the prover is real + sound; the descriptors are the documented access
+      contract). The auto-extractor is a future compiler-track increment (a real iii AST pass), not a stub.
 ```
 
 Each SW-n is LIBNATIVE (compiler untouched), arena-bounded (NIH), and carries a constructible negative. The

@@ -1503,12 +1503,23 @@ ingest -> seal -> lift -> analyze -> witness -> admit -> replay pipeline, compos
   counterexample (the exact wrapped/OOB address) + content-addresses the bounded forward state. Falsifier
   `417` (refute->reproduce; replay_at wrap-to-0; replay_seq deterministic + over-horizon ABSTAIN).
 
-All LIBNATIVE (compiler `196b0c5f` unchanged); quick-gated (lib `e30a2029` -> `3b047801` across SW-0..5).
-**NEXT (the maximal compounding, the user's meta-goal): SW-INWARD** -- wire sovereign_witness as an
-admission lens in the ripple gate so III PROVES its OWN self-edits do not reintroduce the scan-5/6 class.
-The analyzer built to judge external programs becomes the organ by which III certifies its own evolution.
-The guiding hand's value -- telling the genuine gap from intentional design -- now spans an external spec,
-III's own body, AND (next) III's own edits.
+- **+ alignment** `a187622` -- the SECOND sound property (`sw_prove_aligned`): completes memory-access
+  safety (bounds + alignment); first-misaligned-access counterexample; ABSTAIN on non-pow2 align.
+- **SW-INWARD** `a385aa9` -- the witness TURNED INWARD (corpus 419): it CERTIFIES III's OWN scan-5/6
+  guards are SUFFICIENT (PROVEN at the guard) and NECESSARY (REFUTED beyond -- REFUTED_WRAP at ~2^58 for
+  the stride-64 audit walk; REFUTED_BOUNDS pinpointing bucket_idx 144 for xii_chd). III formally proving
+  its own self-enhancement safety -- a standing self-safety regression gate for the scan-5/6 class.
+
+All LIBNATIVE (compiler `196b0c5f` unchanged); quick-gated (lib `e30a2029` -> `8f9fd07d` across the
+whole witness). Found a new iii codegen trap en route: a large >2^32 u64 literal used directly as a call
+arg / before a brace COMPILES but CRASHES at runtime (STATUS_STACK_BUFFER_OVERRUN; msys-bash reports exit
+127 -- get the real code via PowerShell); hoist to a local. The guiding hand's value -- telling the genuine
+gap from intentional design -- now spans an external spec, III's own body, AND III's own edits.
+
+**The fully-automatic inward turn** (a self-edit's access pattern auto-extracted + proved in commit_gate)
+needs a source->affine-descriptor EXTRACTOR, which is LIBNATIVE-BLOCKED (III's parser lives in the
+compiler, not the stdlib; calling it would drift the golden hash). It is a future COMPILER-track increment
+(a real iii AST pass + reseal), out of scope for the quick-gate discipline -- named, not stubbed.
 
 **The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
 improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than

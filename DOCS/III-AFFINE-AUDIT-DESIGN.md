@@ -90,7 +90,11 @@ BEFORE an access) can make `i >= N` at the access -> assuming `i in [0,N)` there
 The sound rules (all verified, else ABSTAIN):
 - **i0 = 0**: the loop var's binder must be a `let i = 0` (literal-0 init). (`i` is u-typed so `i >= 0`; with
   i0=0 and the LT condition, `i in [0,N)` at the loop top.) A non-zero / non-literal init -> ABSTAIN.
-- **access-before-mutation**: walk the body statements IN ORDER with an `i_mutated` flag (init 0). An access
+- **access-before-mutation** *(SUPERSEDED — the shipped pass uses the stronger whole-subtree pre-scan:
+  `aa_count_writes` over the ENTIRE body subtree must total exactly 1, and `aa_last_stmt_writes` must place
+  that sole write at the trailing top-level statement; an in-order flag misses a write nested in an `if`,
+  which the subtree scan catches. The `aa_addr_taken` guard above is the 4th rule. Original narration kept
+  for history)*: walk the body statements IN ORDER with an `i_mutated` flag (init 0). An access
   is checked against `[0,N)` ONLY while `i_mutated == 0`; once a statement ASSIGNS the loop var (`i = ...`),
   set `i_mutated = 1` and all SUBSEQUENT accesses ABSTAIN (i's value is no longer condition-bounded). The
   canonical idiom (`{ ...uses i...; i = i+1 }`) -> every access is sound; mid-body mutation -> later accesses
@@ -104,10 +108,12 @@ The sound rules (all verified, else ABSTAIN):
   non-syntactic mutation -- `&i` escaping into a call (`mutate(&i)`) -- is a `STMT_EXPR` scored as 0 writes,
   so the sole-trailing-write rule would wrongly rule the loop sound and PROVE the access (a FALSE PROVEN).
   Closed by `aa_addr_taken(body, i)`: scan the WHOLE body subtree for a unary address-of (op 5) whose
-  operand is the loop var; ABSTAIN the loop if found. `&counter` occurs 0x in this tree (the `&local`-is
-  -bogus discipline), so this changes no PROVEN count -- it closes the hole by CONSTRUCTION, not by that
-  empirical absence. Verified by `s_addr_escape` in `affine_audit_sound.iii` (without the guard: false
-  PROVEN; with it: ABSTAIN).
+  operand is the loop var; ABSTAIN the loop if found. SCOPE (honest prove-the-negative): this closes the
+  IN-BODY escape by construction. A *pre-loop alias* (`let p = &i` OUTSIDE the body, then `mutate(p)` inside)
+  is not in the body subtree and is NOT scanned -- so the guard is sound for in-body escape PLUS the
+  empirically-verified absence of any `&counter` (direct or aliased) in-tree (`&counter` occurs 0x anywhere,
+  and `&local` is bogus so nothing mutates a counter through a pointer). It changes no PROVEN count.
+  Verified by `s_addr_escape` in `affine_audit_sound.iii` (without the guard: false PROVEN; with it: ABSTAIN).
 
 ## 5. `aa_match_affine(idx, loop_ctx)` — sound affine recognition
 

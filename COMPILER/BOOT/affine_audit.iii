@@ -409,8 +409,13 @@ fn aa_last_stmt_writes(body: u32, lvb: u32) -> u32 {
 /* subtree. The counter's address could escape into a call that drives it out of    */
 /* range before an access, breaking the i<N-at-access guarantee -> the sole-trailing */
 /* -write rule alone is NOT sufficient; ABSTAIN the loop if its address is taken.    */
-/* (Empirically `&counter` occurs 0x in this tree -- the `&local`-bogus discipline -- */
-/* but this closes the hole by CONSTRUCTION, not by that empirical absence.)          */
+/* SCOPE: this closes the IN-BODY escape by construction. A pre-loop alias           */
+/* (`let p = &i` OUTSIDE the body, then `mutate(p)` inside) is not in the body        */
+/* subtree, so it is NOT scanned here -- but that path is empirically vacuous in this */
+/* tree (`&counter`, direct or aliased, occurs 0x anywhere; and `&local` is bogus so  */
+/* nothing mutates a counter through a pointer). Sound in-tree by in-body-construction */
+/* + that verified absence; a hostile out-of-tree input could still need the wider    */
+/* check, so prove-the-negative honestly: it is not closed for the pre-loop alias.    */
 fn aa_addr_taken(node: u32, lvb: u32) -> u32 {
     if node == 0u32 { return 0u32 }
     let k: u32 = iii_ast_node_kind(AA_G_AST, node)

@@ -320,21 +320,30 @@ classification is a fit, not a flaw — provided their verdicts are bounded + ga
 ## 9. Implementation Roadmap (compounding order — each a quick-gated, prove-the-negative increment)
 
 ```
-SW-0  legacy_artifact: the bounded type + OOB-reject accessors + the cad seal of raw bytes.
-      KAT: identical bytes -> identical digest; 1-bit flip -> different digest; over-len read -> reject.   [REAL, tiny]
-SW-1  sw_ingest + sw_seal: fs/net ingest into the bounded artifact + freeze.  KAT: round-trip + digest.    [REAL]
-SW-2  sw_lift: parse a SIMPLE artifact kind (a basic-block/branch TRACE) into a computation_graph DAG.
-      KAT: a known trace -> a known DAG shape; malformed -> clean reject.                                   [REAL+model]
-SW-3  sw_analyze (egraph + smt): decide ONE concrete property over the bounded fragment (e.g. an
-      index-in-bounds safety property -- the scan-5/6 class, now PROVED over a lifted fragment).
-      KAT: a safe fragment -> PROVEN + verifying proof_term; an unsafe one -> REFUTED + counterexample;
-      a forged proof -> gate REJECT; beyond-horizon -> ABSTAIN.                                             [REAL, the heart]
-SW-4  sw_witness + sw_admit: seal the verdict + proof; route through commit_gate/integrity.
-      KAT: tampered artifact or forged proof -> REJECT; honest witness -> ADMIT (=99).                      [REAL]
-SW-5  sw_replay (FR-8): bounded pure interpreter over the lifted fragment; content-address the result.
-      KAT: replay a fragment to a known state digest; the REFUTED counterexample from SW-3 replays to the
-      violation; over-step bound -> ABSTAIN.                                                                [REAL]
-SW-6  POLISH: one full corpus+bench+stage1 gate; ledger; the witness becomes a corpus citizen.
+SW-0  [LANDED 02c38d0] legacy_artifact: the bounded type + OOB-reject accessors + the cad seal of raw
+      bytes. Falsifier 415: identical bytes -> identical digest; 1-bit flip -> different; over-cap ingest
+      -> reject; la_byte past len -> 0; digest-before-seal -> rejected.                                     [REAL]
+SW-2/3/4  [LANDED 5ba4244] sovereign_witness: lift the TRACE records (OOB-bounded) -> analyze ONE sound
+      property (AFFINE-ACCESS SAFETY = the scan-5/6 wrap/bounds class, PROVED over a captured program) ->
+      witness (cad-seal the verdict) -> admit. IMPLEMENTATION NOTE vs the original plan: the first property
+      is decided by a DIRECT, sound, u64-exact closed-form check (constant stride -> extreme at i=count-1),
+      NOT SMT -- SMT's authority is search (non-constant stride / disjunctive paths), and smt_lia's i64
+      operands would misread 2^63..2^64; one authority per concern. The gate's TEETH = re-derivation from
+      the sealed bytes (sw_admit), not a structural pt_verify. Falsifier 416 (adversarial on the soundness
+      edges): safe->PROVEN; OOB->REFUTED_BOUNDS+exact i; 2^63..2^64 operands sound; WRAP-ONLY->REFUTED_WRAP
+      (never PROVEN); pipeline ABSTAIN/MALFORMED; sw_admit REJECTS a forged verdict.                        [REAL, the heart]
+SW-5  [LANDED 1464c83] sw_replay (FR-8): bounded pure host-effect-free interpreter; reproduces a refuted
+      counterexample (the exact wrapped/OOB address) + content-addresses the bounded forward state.
+      Falsifier 417: replay_at safe + wrap-to-0; refute->reproduce; replay_seq deterministic + over-horizon
+      -> ABSTAIN.                                                                                           [REAL]
+SW-6  [PENDING] POLISH: one full corpus+bench+stage1 gate (reserved for the very end per the standing
+      quick-gate directive); ledger; the witness as a corpus citizen.
+--- NEXT, the maximal compounding (the user's meta-goal "compound III's ability to enhance ITSELF") ---
+SW-INWARD  Turn the witness INWARD: the affine-safety prover is EXACTLY what the ripple self-enhancement
+      gate needs to certify a self-edit does not reintroduce the scan-5/6 class. Wire sovereign_witness as
+      an admission lens in commit_gate/integrity so a self-edit's access pattern is PROVED safe (or the edit
+      is refused with a replayable counterexample). The Witness built to judge external programs becomes the
+      organ by which III proves its OWN edits safe -- analyzer and self-enhancer unified.
 ```
 
 Each SW-n is LIBNATIVE (compiler untouched), arena-bounded (NIH), and carries a constructible negative. The

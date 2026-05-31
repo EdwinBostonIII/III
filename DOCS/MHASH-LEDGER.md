@@ -1486,11 +1486,29 @@ all-slots hash with keys <= slots never returns -1), correctly abstained. 7 scan
 III as a real OFFLINE legacy-state analyzer. Design committed `b9a2337` (DOCS/III-SOVEREIGN-WITNESS-
 ARCHITECTURE.md), grounded in a source real-vs-symbolic classification (7 REAL / 1 PARTIAL / 13 SYMBOLIC);
 the literal Ring-2 descent / total-prediction / RAM-synthesis clauses NAMED out-of-scope (unwired /
-undecidable / the simulation identity) -- calibrated abstention at architecture scale. **SW-0 shipped**
-`02c38d0`: `sanctus/legacy_artifact` -- the bounded, content-addressed "freeze" (cad seal + OOB-reject +
-fail-closed ingest), falsifier `415` (determinism + tamper-evidence + bounded ingest). The engine's (and the
-guiding hand's) value is telling the genuine gap from the intentional design -- now applied to an external
-spec as much as to III's own body.
+undecidable / the simulation identity) -- calibrated abstention at architecture scale.
+
+**The Sovereign Witness is now FUNCTIONALLY COMPLETE for the affine-access-safety property class** (the full
+ingest -> seal -> lift -> analyze -> witness -> admit -> replay pipeline, composed from REAL organs only):
+- **SW-0** `02c38d0` `sanctus/legacy_artifact` -- the bounded, content-addressed "freeze" (cad seal +
+  OOB-reject + fail-closed ingest). Falsifier `415` (determinism + tamper-evidence + bounded ingest).
+- **SW-2/3/4** `5ba4244` `sanctus/sovereign_witness` -- lift the TRACE records (OOB-bounded) -> prove
+  AFFINE-ACCESS SAFETY (forall i<count: base+i*stride wrap-free AND < bound = the scan-5/6 class, now PROVED
+  about an external captured program) -> cad-seal the verdict -> sw_admit RE-DERIVES from the sealed bytes
+  (a forged verdict cannot survive). SOUND by a direct u64-exact closed form (NOT smt: smt_lia's i64 would
+  misread 2^63..2^64; smt's authority is search). Falsifier `416` is adversarial on the soundness edges:
+  WRAP-ONLY -> REFUTED_WRAP even when the wrapped value < bound (never a false PROVEN -- the one arm that
+  exposes an unsound analyzer); 2^63..2^64 operands sound; exact counterexample i; forged verdict REJECTED.
+- **SW-5** `1464c83` `sw_replay` (FR-8) -- bounded pure host-effect-free interpreter: reproduces a refuted
+  counterexample (the exact wrapped/OOB address) + content-addresses the bounded forward state. Falsifier
+  `417` (refute->reproduce; replay_at wrap-to-0; replay_seq deterministic + over-horizon ABSTAIN).
+
+All LIBNATIVE (compiler `196b0c5f` unchanged); quick-gated (lib `e30a2029` -> `3b047801` across SW-0..5).
+**NEXT (the maximal compounding, the user's meta-goal): SW-INWARD** -- wire sovereign_witness as an
+admission lens in the ripple gate so III PROVES its OWN self-edits do not reintroduce the scan-5/6 class.
+The analyzer built to judge external programs becomes the organ by which III certifies its own evolution.
+The guiding hand's value -- telling the genuine gap from intentional design -- now spans an external spec,
+III's own body, AND (next) III's own edits.
 
 **The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
 improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than

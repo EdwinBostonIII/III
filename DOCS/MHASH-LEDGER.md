@@ -1438,6 +1438,7 @@ adversarially verified (default-refute). The LOOP (continues until the increment
 | 4 | unguarded accessors (getter indexes a backing array on an untrusted index) | `verba/csv` `csv_field_base`/`csv_field_len`: row,col unbounded -> OOB read of the 524288-elem field tables (sibling `csv_field_count` DID guard); guard mirrors the sibling, KAT `91` extended | `57482f7` |
 | 5 | unguarded accessors (cont.) | `omnia/lru` `lru_debug_key`/`lru_debug_occ` (idx>=cap -> OOB of arena key/occ arrays) + `omnia/xii_chd` `xii_chd_bucket_at` (bucket_idx*16 unbounded -> exceeds `XCHD_BUCKETS[2304]`, AND 0xFFFFFFFF wraps off->segfault); guards at the public FFI surface, new falsifier `410` + `132` extended | `17a05ad` |
 | 6 | index/length arithmetic that WRAPS u32 before it bounds an access (the deeper sibling of 4-5) | sanctus XII checkers `xii_atm`/`xii_antidrift`/`xii_sml` `rec_off = i*64u32` (record_count>0x03FFFFFF wraps -> OOB audit-record read; scan found 2, cross-check found the 3rd) -> record_count guard (full verifiers fail-closed, sampler skips); `aether/babel_wire_finalize` `68+payload_len` u32 add -> u64+cap; new falsifiers `411` + `412` | `4ba4ad1` |
+| 7 | IGNORED FAILURE/SENTINEL RETURN (the dual of 5-6: bad input -> here a real failure SIGNAL is dropped) | `rsa_pss_sign`/`verify`/`keygen` used `rsa_os2ip`'s handle UNCHECKED -> on 64-slot bigint-pool exhaustion an ALL-ZERO signature emitted as success (fail-OPEN) -> now FAIL CLOSED; the `json_emit_*` family dropped every `builder_push_byte` OOM -> truncated buffer as `JSON_OK` -> single-authority `BLD_ERR` latch + `builder_error()` surfaced once in the `json_emit` wrapper (fixes the whole family + every future builder consumer); new falsifiers `413` + `414`. ABSTAINED: forcefield `rm_sep`/`rl_run` 'ignored cai_put -1' (false positive -- `cai_put` returns -1 only when full; `RM_N<=RM_SEP_SLOTS` makes that impossible; q_journal_write pattern, 3rd time) | `867aba1` |
 
 **Scan 3 CONVERGENCE (the loop is finding its frontier).** Across 6 sibling crypto families the scan
 confirmed CONSISTENCY almost everywhere -- the genuine gaps were the two P-384 ECDSA checks (degenerate
@@ -1474,8 +1475,22 @@ calibration sharpening further:
   ALREADY u64 in the live self-hosted `cg_r3.iii:2617` (only the frozen, gate-protected iiis-0 C seed has the
   u32 form, reachable solely by absurd source the build never emits).
 
-6 scans -> 7 genuine self-edits across 8 files (lib `225094d5 -> e30a2029`); the engine's (and the guiding
-hand's) value is telling the genuine gap from the intentional design.
+**Scan 7 (ignored failure/sentinel returns -- the dual of 5-6).** Where 5-6 hardened against bad INPUT,
+7 hunts a dropped failure SIGNAL. Of ~10 confirmed, two genuine classes shipped (`867aba1`): the RSA
+fail-OPEN (all-zero signature on pool exhaustion -> fail closed) and the systemic `json_emit_*` dropped-OOM
+(fixed at the source with ONE builder error-latch authority, not 8 per-function patches). The forcefield
+"engine ignores cai_put" finding was a FALSE POSITIVE (the q_journal_write pattern a third time -- a probe-
+all-slots hash with keys <= slots never returns -1), correctly abstained. 7 scans -> 9 genuine self-edits.
+
+**Then: the loop PAUSED at scan-7 to pivot (user direction) to the Sovereign Witness** -- a major new batch:
+III as a real OFFLINE legacy-state analyzer. Design committed `b9a2337` (DOCS/III-SOVEREIGN-WITNESS-
+ARCHITECTURE.md), grounded in a source real-vs-symbolic classification (7 REAL / 1 PARTIAL / 13 SYMBOLIC);
+the literal Ring-2 descent / total-prediction / RAM-synthesis clauses NAMED out-of-scope (unwired /
+undecidable / the simulation identity) -- calibrated abstention at architecture scale. **SW-0 shipped**
+`02c38d0`: `sanctus/legacy_artifact` -- the bounded, content-addressed "freeze" (cad seal + OOB-reject +
+fail-closed ingest), falsifier `415` (determinism + tamper-evidence + bounded ingest). The engine's (and the
+guiding hand's) value is telling the genuine gap from the intentional design -- now applied to an external
+spec as much as to III's own body.
 
 **The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
 improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than

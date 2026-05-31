@@ -1392,3 +1392,33 @@ LIBNATIVE) now holds against the live `iiis-2`, so III can certify + apply + gat
 against a true, current golden.
 
 **§8.24 sealed at:** 2026-05-31.
+
+### §8.25 — The self-enhancement engine SHARPENED: B0.5 gate + B1 𝒱 + B2 cost_lattice + B3 multi-file + B4 capstone (all LIBNATIVE) (2026-05-31)
+
+With the baseline resealed (§8.24, golden `196b0c5f`) and `ripple_apply`'s GATE2 holding again, five
+compounding LIBNATIVE batches sharpened III's own Sovereign Ripple Optimizer -- each ordered so the
+prior makes the next better-judged (the compounding mandate). **The compiler stays byte-identical to
+`196b0c5f` throughout** -- every change is a `STDLIB/.iii` or `.sh` edit the compiler never references,
+so it is LIBNATIVE by construction. The lib is LIBNATIVE-evolved alongside concurrent zk_air work, so
+its mhash floats and is intentionally not pinned here (the corpus, not the lib hash, is the contract).
+
+| Batch | Commit | The compounding move |
+|---|---|---|
+| B0.5 | `e8c1cb3` | Gates hardened (rm-before-relink + retry) vs the OneDrive/Defender lock that made GATE1/GATE3 spuriously fail with `ld returned 1` (zero undefined refs) -> would falsely REVERT a good self-edit. A gate that tolerates a hostile filesystem -- the one thing a self-enhancement loop cannot have lie to it. |
+| B1 | `13d8b12` | **𝒱 (ripple_metric) is the SINGLE value authority** -- `ripple_extract`'s C2 MDL boundary verdict now DEFERS to `rm_extract_improves` (was an independent 2nd model that could diverge). KAT 954: break-even/underwater boundaries rejected; the unification invariant `rx_delta_j_positive == rm_extract_improves` holds on every case. |
+| B2 | `72ac9b9` | **cost_lattice is the SINGLE cost authority across the whole generate->cost->select pipeline** -- `oi_select_costed` costs realizations via `cl_dot`; `oi_egraph_cost` sources egraph's term-extraction cost via `cl_dot`. KATs 955/956: an invalid-cheapest is pruned; the lattice genuinely drives the term choice in BOTH directions (swap the microarch vectors -> the other term wins). |
+| B3 | `64a21ac` | `ripple_apply` **MULTI-FILE atomic** apply/revert -- a coordinated refactoring (new file + re-pointed callers) backs up + reverts ALL targets together on any gate failure (the old single-`$TARGET` revert stranded the rest, breaking the inductive safety invariant). Verified by a controlled fast revert test. |
+| B4 | `087e743` | Capstone KAT 957: the sharpened organs COMPOSE into one certified decision (value-positive ∧ realization-valid ∧ gate-admits), prove-the-negative on each input (a real 𝒱-negative move / no valid realization / gate down -> not admitted). |
+
+New KATs: **954** (ripple MDL), **955** (optinvoke cost-lattice), **956** (egraph cost-lattice), **957**
+(engine compound). **Verified (QUICK gates, per the no-full-until-final directive):** every increment
+`build_stdlib` FAIL=0 + its targeted KATs = 99 + the affected organ family unregressed; compiler
+`196b0c5f` unchanged throughout. A single final full gate (full corpus + bench + stage1) closes the
+Evolution.
+
+**Principle.** B1 gave the engine ONE value lens (`𝒱`); B2 ONE cost lens (`cost_lattice`) -- so every
+future self-optimization is judged by a single, principled, non-gameable standard end-to-end. That
+coherence IS the compounding the batch order was built to produce: a self-improving system can only be
+trusted to improve itself when it judges worth and cost each through one honest, falsifiable lens.
+
+**§8.25 sealed at:** 2026-05-31.

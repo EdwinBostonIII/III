@@ -35,6 +35,10 @@ extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+/* BATCH 2 (Evolution): the cost_lattice is the SINGLE cost authority -- the selector consumes the
+ * rich 6-dim microarch model (latency,throughput,regpressure,icache,dcache,energy) scalarized
+ * through one registered order, never pre-scalarized magic numbers. */
+extern @abi(c-msvc-x64) fn cl_dot(weights: *u64, c: *u64) -> u64 from "cost_lattice.iii"
 
 const OI_NONE  : u64 = 0xFFFFFFFFFFFFFFFFu64
 const OI_IMPL  : u64 = 0u64
@@ -182,4 +186,66 @@ fn oi_seal(cands: *u8, n: u64, out: *u8) -> u64 @export {
     }
     mhash_final((out as u64))
     return 0u64
+}
+
+/* store u64 v little-endian into p[off..off+7] -- the candidate cost-field writer for oi_cost_candidates. */
+fn oi_st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 {
+        p[off + i] = (x & 0xFFu64) as u8
+        x = x >> 8u64
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* ===== BATCH 2 (Evolution): generate->cost->SELECT with the cost_lattice as the single cost authority.
+ * Until now optinvoke's candidate `cost` field was a pre-scalarized magic number (hand-set in the
+ * 840 KAT). The rich cost model lives in cost_lattice (6-dim microarch vectors, scalarized by a
+ * registered order). oi_cost_candidates wires it in: it scalarizes each candidate's 6-u64 vector
+ * through cl_dot(weights, vec) and writes the result into the candidate's cost field, so the selector
+ * runs on the ONE cost model -- never magic numbers, never a second costing path that could disagree
+ * with the lattice. Determinism: cl_dot is a saturating INTEGER dot (no FP); identical inputs ->
+ * identical scalar. `vecs` is a packed array of n 6-u64 cost vectors (48 bytes each), parallel to
+ * cands; `weights` is one 6-u64 order vector. ===== */
+fn oi_cost_candidates(cands: *u8, n: u64, vecs: *u8, weights: *u8) -> u64 @export {
+    let wptr : *u64 = (weights as u64) as *u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let vptr : *u64 = ((vecs as u64) + i * 48u64) as *u64
+        let scalar : u64 = cl_dot(wptr, vptr)
+        oi_st_u64(cands, i * 80u64 + 64u64, scalar)
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* The composed decision: cost every candidate through the cost_lattice, then select the min-cost
+ * VALID realization (oi_select -- validity prunes FIRST so an invalid candidate is never chosen
+ * however cheap; equal cost is broken by the candidate's content-address -> argmin single-valued ->
+ * reproducible, no profiling, no learning). Returns the chosen index (OI_NONE if none valid) and
+ * writes the chosen cand_id to out_choice. "III picks the optimal realization every time", now with
+ * the real microarch cost model wired end-to-end -- not a KAT-level hand-composition. */
+fn oi_select_costed(cands: *u8, n: u64, vecs: *u8, weights: *u8, out_choice: *u8) -> u64 @export {
+    oi_cost_candidates(cands, n, vecs, weights)
+    return oi_select(cands, n, out_choice)
+}
+
+/* ===== BATCH 2 (Evolution): source egraph's TERM-extraction cost from the SAME cost_lattice -- one
+ * cost authority across the WHOLE generate->cost->select pipeline. egraph's eg_extract reads a flat
+ * u32 cost at req[slot+2] (the per-operation cost it sums up the term); this writes it as
+ * cl_dot(weights, vec6) of that operation's 6-dim microarch vector, CAPPED below EGRAPH_INF_COST
+ * (0xFFFFFFFF) so a node is never spuriously marked unreachable and a sum of a few costs stays finite.
+ * Now egraph picks the optimal TERM and optinvoke the optimal REALIZATION through ONE model: the
+ * lattice GENUINELY drives the term choice (swap the microarch vectors and the other term wins -- KAT
+ * 956), it is not a hardcoded preference. Determinism: cl_dot is a saturating integer dot. ===== */
+const OI_EG_COST_CAP : u64 = 0x3FFFFFFFu64   /* << EGRAPH_INF_COST; sums of several stay below INF */
+fn oi_egraph_cost(req: *u32, slot: u32, vec6: *u8, weights: *u8) -> u64 @export {
+    let wptr : *u64 = (weights as u64) as *u64
+    let vptr : *u64 = (vec6 as u64) as *u64
+    let mut scalar : u64 = cl_dot(wptr, vptr)
+    if scalar > OI_EG_COST_CAP { scalar = OI_EG_COST_CAP }
+    req[(slot as u64) + 2u64] = scalar as u32
+    return scalar
 }

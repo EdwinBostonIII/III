@@ -654,6 +654,8 @@ declare -A EXPECTED=(
     [952_microarch_rob_saturation]=99
     [953_mont_dmont5_falsifier]=99
     [954_ripple_extract_mdl]=99
+    [955_optinvoke_cost_lattice]=99
+    [956_egraph_cost_lattice]=99
     [960_keccak256_block_absorb]=99
     [961_xoshiro_jump]=99
     [962_bv_ring_colstack]=99
@@ -694,6 +696,7 @@ declare -A EXPECTED=(
     [1000_checked_div_zero]=99
     [1001_cap_verify_invalid_id]=99
     [1002_quality_q4_growth]=99
+    [1003_merkle_tree_open_many]=99
 )
 
 PASS=0

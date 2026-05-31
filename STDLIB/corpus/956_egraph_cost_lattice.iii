@@ -1,0 +1,120 @@
+/* 956_egraph_cost_lattice.iii -- Evolution BATCH 2 (the completing half): egraph's TERM-extraction
+ * cost is now SOURCED from the same cost_lattice that costs optinvoke's realizations. oi_egraph_cost
+ * writes egraph's per-operation cost (req[slot+2]) as cl_dot(weights, microarch_vector). So ONE cost
+ * authority drives the WHOLE pipeline: egraph picks the optimal TERM and optinvoke the optimal
+ * REALIZATION, both through the lattice.
+ *
+ * Prove it GENUINELY drives the choice (not a hardcoded bias): with mul EXPENSIVE and shl CHEAP the
+ * min-cost extraction picks shl; SWAP the microarch vectors (mul cheap, shl expensive) and re-extract
+ * -> it picks mul. The term that wins tracks the lattice, both directions. 99 = pass.
+ *
+ * Reuses the known-good egraph setup of corpus 840 (mul(x,2) == shl(x,1) via the rule), changing only
+ * the cost source from hand-set magic numbers to oi_egraph_cost. */
+module corpus_956
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_intern_symbol(sym_id: *u8) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_find(a: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn oi_egraph_cost(req: *u32, slot: u32, vec6: *u8, weights: *u8) -> u64 from "optinvoke.iii"
+
+fn kset_sym(b: *u8, tag: u8) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { b[i] = 0u8 ; i = i + 1u64 }
+    b[0u64] = tag
+    return 0u64
+}
+fn st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 { p[off + i] = (x & 0xFFu64) as u8 ; x = x >> 8u64 ; i = i + 1u64 }
+    return 0u64
+}
+fn vec1(v: *u8, d0: u64) -> u64 {   /* a 6-u64 vector with only dim0 set (the rest 0) */
+    let mut k : u64 = 0u64
+    while k < 48u64 { v[k] = 0u8 ; k = k + 1u64 }
+    st_u64(v, 0u64, d0)
+    return 0u64
+}
+fn enc_sym(slot: u32, arity: u32) -> u32 { return (slot << 1u32) | (arity << 16u32) }
+fn enc_var(idx: u32) -> u32 { return (idx << 1u32) | 1u32 }
+
+fn main() -> u64 {
+    let symbuf : *u8 = malloc(32u64)
+    let chraw : *u8 = malloc(64u64)
+    let ch : *u32 = (chraw as u64) as *u32
+    let ruleraw : *u8 = malloc(128u64)
+    let rule : *u32 = (ruleraw as u64) as *u32
+    let reqraw : *u8 = malloc(512u64)
+    let req : *u32 = (reqraw as u64) as *u32
+    let outraw : *u8 = malloc(128u64)
+    let outt : *u32 = (outraw as u64) as *u32
+    let onraw : *u8 = malloc(32u64)
+    let outn : *u32 = (onraw as u64) as *u32
+
+    /* cost_lattice inputs: weights (sum), an EXPENSIVE vector (10) and a CHEAP vector (1) */
+    let wts : *u8 = malloc(48u64)
+    let mut wi : u64 = 0u64
+    while wi < 6u64 { st_u64(wts, wi * 8u64, 1u64) ; wi = wi + 1u64 }
+    let vexp : *u8 = malloc(48u64)  vec1(vexp, 10u64)
+    let vche : *u8 = malloc(48u64)  vec1(vche, 1u64)
+
+    eg_init()
+    kset_sym(symbuf, 12u8)  let cx : u32 = eg_add(symbuf, ch, 0u32)
+    kset_sym(symbuf, 13u8)  let ctwo : u32 = eg_add(symbuf, ch, 0u32)
+    kset_sym(symbuf, 14u8)  let cone : u32 = eg_add(symbuf, ch, 0u32)
+    kset_sym(symbuf, 10u8)  ch[0u64] = cx  ch[1u64] = ctwo  let cmul : u32 = eg_add(symbuf, ch, 2u32)
+    kset_sym(symbuf, 11u8)  ch[0u64] = cx  ch[1u64] = cone  let cshl : u32 = eg_add(symbuf, ch, 2u32)
+
+    kset_sym(symbuf, 10u8)  let s_mul : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 11u8)  let s_shl : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 13u8)  let s_two : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 14u8)  let s_one : u32 = eg_intern_symbol(symbuf)
+    kset_sym(symbuf, 12u8)  let s_x : u32 = eg_intern_symbol(symbuf)
+
+    rule[0u64] = 3u32  rule[1u64] = 3u32
+    rule[2u64] = enc_sym(s_mul, 2u32)  rule[3u64] = enc_var(0u32)  rule[4u64] = enc_sym(s_two, 0u32)
+    rule[5u64] = enc_sym(s_shl, 2u32)  rule[6u64] = enc_var(0u32)  rule[7u64] = enc_sym(s_one, 0u32)
+    if eg_register_rule(rule) == 0xFFFFFFFFu32 { return 10u64 }
+    eg_saturate(8u32)
+
+    let mut z : u64 = 0u64
+    while z < 64u64 { req[z] = 0u32 ; z = z + 1u64 }
+    let mut mx : u32 = s_mul
+    if s_shl > mx { mx = s_shl }
+    if s_two > mx { mx = s_two }
+    if s_one > mx { mx = s_one }
+    if s_x > mx { mx = s_x }
+    req[0u64] = eg_find(cmul)
+    req[1u64] = mx + 1u32
+
+    /* ===== costs SOURCED from the lattice: mul EXPENSIVE, shl/x/two/one CHEAP ===== */
+    oi_egraph_cost(req, s_mul, vexp, wts)
+    oi_egraph_cost(req, s_shl, vche, wts)
+    oi_egraph_cost(req, s_x,   vche, wts)
+    oi_egraph_cost(req, s_two, vche, wts)
+    oi_egraph_cost(req, s_one, vche, wts)
+    /* the written cost must equal the scalarized vector (one cost model) */
+    if req[(s_mul as u64) + 2u64] != 10u32 { return 11u64 }
+    if req[(s_shl as u64) + 2u64] != 1u32 { return 12u64 }
+
+    outt[0u64] = 0xFFFFFFFFu32
+    if eg_extract(req, outt, outn) != 0i32 { return 13u64 }
+    if outt[0u64] != s_shl { return 14u64 }   /* lattice -> egraph picked the CHEAPER term (shl) */
+
+    /* ===== SWAP the microarch vectors: now mul CHEAP, shl EXPENSIVE -> the other term must win ===== */
+    oi_egraph_cost(req, s_mul, vche, wts)
+    oi_egraph_cost(req, s_shl, vexp, wts)
+    if req[(s_mul as u64) + 2u64] != 1u32 { return 20u64 }
+    if req[(s_shl as u64) + 2u64] != 10u32 { return 21u64 }
+
+    outt[0u64] = 0xFFFFFFFFu32
+    if eg_extract(req, outt, outn) != 0i32 { return 22u64 }
+    if outt[0u64] != s_mul { return 23u64 }   /* the term choice TRACKS the lattice, both directions */
+
+    return 99u64
+}

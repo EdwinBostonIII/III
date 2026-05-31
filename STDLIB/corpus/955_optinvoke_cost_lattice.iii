@@ -1,0 +1,93 @@
+/* 955_optinvoke_cost_lattice.iii -- Evolution BATCH 2: the cost_lattice is the SINGLE cost authority
+ * for optinvoke's realization-selection. oi_select_costed scalarizes each candidate's 6-dim microarch
+ * cost vector through cl_dot(weights, vec) (a registered scalarizing order) and selects the min-cost
+ * VALID realization -- "III picks the optimal realization every time", end-to-end on the real cost
+ * model, no hand-set magic numbers.
+ *
+ * Prove-the-negative (the whole point):
+ *   - an INVALID candidate with the CHEAPEST cost vector is NEVER chosen (validity prunes before cost);
+ *   - the written cost fields are EXACTLY cl_dot of the vectors (one cost path -- a second costing
+ *     model that could disagree with the lattice is impossible);
+ *   - a TIE in scalar cost is broken by content-address (single-valued argmin -> reproducible).
+ * 99 = all arms; 10..41 localize the first miss. */
+module corpus_955
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn cl_dot(weights: *u64, c: *u64) -> u64 from "cost_lattice.iii"
+extern @abi(c-msvc-x64) fn oi_cost_candidates(cands: *u8, n: u64, vecs: *u8, weights: *u8) -> u64 from "optinvoke.iii"
+extern @abi(c-msvc-x64) fn oi_select_costed(cands: *u8, n: u64, vecs: *u8, weights: *u8, out: *u8) -> u64 from "optinvoke.iii"
+
+fn st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 { p[off + i] = (x & 0xFFu64) as u8 ; x = x >> 8u64 ; i = i + 1u64 }
+    return 0u64
+}
+fn ld_u64(p: *u8, off: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut v : u64 = 0u64
+    while i < 8u64 { v = v | ((p[off + i] as u64) << (i * 8u64)) ; i = i + 1u64 }
+    return v
+}
+/* candidate i: cand_id byte0 = idseed, out_addr byte0 = outseed, valid flag; cost field left 0. */
+fn cand(c: *u8, i: u64, idseed: u8, outseed: u8, valid: u8) -> u64 {
+    let base : u64 = i * 80u64
+    let mut k : u64 = 0u64
+    while k < 80u64 { c[base + k] = 0u8 ; k = k + 1u64 }
+    c[base + 0u64] = idseed
+    c[base + 32u64] = outseed
+    c[base + 72u64] = valid
+    return 0u64
+}
+/* vector i: a 6-u64 cost vector (48 bytes). */
+fn vec6(v: *u8, i: u64, d0: u64, d1: u64, d2: u64, d3: u64, d4: u64, d5: u64) -> u64 {
+    let base : u64 = i * 48u64
+    st_u64(v, base + 0u64,  d0)
+    st_u64(v, base + 8u64,  d1)
+    st_u64(v, base + 16u64, d2)
+    st_u64(v, base + 24u64, d3)
+    st_u64(v, base + 32u64, d4)
+    st_u64(v, base + 40u64, d5)
+    return 0u64
+}
+
+fn main() -> u64 {
+    let cands : *u8 = malloc(3u64 * 80u64)
+    let vecs : *u8 = malloc(3u64 * 48u64)
+    let wts : *u8 = malloc(48u64)
+    let choice : *u8 = malloc(32u64)
+
+    /* weights = (1,1,1,1,1,1): the scalar of a vector is the sum of its dims */
+    st_u64(wts, 0u64, 1u64)  st_u64(wts, 8u64, 1u64)  st_u64(wts, 16u64, 1u64)
+    st_u64(wts, 24u64, 1u64) st_u64(wts, 32u64, 1u64) st_u64(wts, 40u64, 1u64)
+
+    /* cand 0: VALID, sum 10 ; cand 1: VALID, sum 3 (cheapest valid) ; cand 2: INVALID, sum 1 (cheapest overall) */
+    cand(cands, 0u64, 1u8, 50u8, 1u8)  vec6(vecs, 0u64, 10u64, 0u64, 0u64, 0u64, 0u64, 0u64)
+    cand(cands, 1u64, 2u8, 50u8, 1u8)  vec6(vecs, 1u64, 3u64,  0u64, 0u64, 0u64, 0u64, 0u64)
+    cand(cands, 2u64, 3u8, 50u8, 0u8)  vec6(vecs, 2u64, 1u64,  0u64, 0u64, 0u64, 0u64, 0u64)
+
+    /* ===== composed decision: min-cost VALID = cand 1 (sum 3); the cheaper INVALID cand 2 is pruned ===== */
+    let pick : u64 = oi_select_costed(cands, 3u64, vecs, wts, choice)
+    if pick != 1u64 { return 10u64 }              /* chose the min-cost VALID realization */
+    if choice[0u64] != 2u8 { return 11u64 }       /* out_choice carries cand 1's content-address */
+
+    /* ===== one cost model: the written cost fields are EXACTLY cl_dot of the vectors ===== */
+    if ld_u64(cands, 0u64 * 80u64 + 64u64) != 10u64 { return 20u64 }
+    if ld_u64(cands, 1u64 * 80u64 + 64u64) != 3u64  { return 21u64 }
+    if ld_u64(cands, 2u64 * 80u64 + 64u64) != 1u64  { return 22u64 }
+    let w0 : *u64 = (wts as u64) as *u64
+    let v1 : *u64 = ((vecs as u64) + 1u64 * 48u64) as *u64
+    if cl_dot(w0, v1) != 3u64 { return 23u64 }    /* and equals cl_dot directly -- no second path */
+
+    /* ===== PROVE-THE-NEGATIVE: the cheapest candidate is INVALID, so it must lose ===== */
+    if pick == 2u64 { return 30u64 }
+
+    /* ===== TIE-BREAK by content-address: two valid candidates of EQUAL cost -> smaller cand_id wins ===== */
+    cand(cands, 0u64, 9u8, 50u8, 1u8)  vec6(vecs, 0u64, 5u64, 0u64, 0u64, 0u64, 0u64, 0u64)
+    cand(cands, 1u64, 4u8, 50u8, 1u8)  vec6(vecs, 1u64, 5u64, 0u64, 0u64, 0u64, 0u64, 0u64)
+    let pick2 : u64 = oi_select_costed(cands, 2u64, vecs, wts, choice)
+    if pick2 != 1u64 { return 40u64 }             /* equal cost 5; cand 1's id (4) < cand 0's id (9) */
+    if choice[0u64] != 4u8 { return 41u64 }
+
+    return 99u64
+}

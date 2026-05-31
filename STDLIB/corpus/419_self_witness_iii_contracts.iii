@@ -1,0 +1,51 @@
+/* 419_self_witness_iii_contracts.iii -- the Sovereign Witness turned INWARD (SW-INWARD, honest form).
+ *
+ * The witness was built to prove safety about EXTERNAL captured programs. Here it is turned on III's
+ * OWN access contracts: it CERTIFIES that the safety guards scans 5/6 added are both SUFFICIENT (the
+ * guarded access is PROVEN safe) and NECESSARY (the access beyond the guard is REFUTED -- the witness
+ * catches the exact bug class the guard prevents). This is III formally proving its own self-enhancement
+ * safety: the analyzer that judges external programs now certifies the correctness of III's own fixes.
+ *
+ * Contracts encode the real in-code constants (verified against source 2026-05-31):
+ *   - scan-6: the XII audit-record walkers (xii_atm/antidrift/sml) read audit_records[i*64 + N] for
+ *     i < record_count, guarded by record_count <= XAT/XAD/XSL_AUDIT_MAX_RECORDS = 0x03FFFFFF.
+ *   - scan-5: xii_chd_bucket_at reads XCHD_BUCKETS[2304] at bucket_idx*16 + slot, guarded by
+ *     bucket_idx < XCHD_DIM(144), slot < XCHD_BUCKET_MAX(16).
+ * (huge u64 operands are hoisted to locals -- a direct >2^32 literal as a call arg / before a brace is
+ *  a codegen hazard; mirrors the working 416/417 pattern.) 99 = pass. */
+module corpus_419
+
+extern @abi(c-msvc-x64) fn sw_prove_affine(base: u64, stride: u64, count: u64, bound: u64, out_ce: u64) -> u32 from "sovereign_witness.iii"
+
+var SW419_CE : [u64; 1]
+
+fn main() -> u64 {
+    let cep : u64 = &SW419_CE as u64
+
+    /* hoisted operands */
+    let max_rec    : u64 = 0x03FFFFFFu64          /* XAT_AUDIT_MAX_RECORDS */
+    let max_rec_p1 : u64 = 0x04000000u64          /* MAX + 1 */
+    let buf_bytes  : u64 = 0xFFFFFFC0u64          /* MAX * 64 */
+    let wrap_count : u64 = 0x0400000000000001u64  /* ~2^58 + 1: i*64 wraps u64 */
+    let umax       : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let chd_count  : u64 = 0x100000000u64         /* unguarded bucket_idx up to 2^32 */
+    let chd_bound  : u64 = 2304u64                /* XCHD_BUCKETS */
+
+    /* ===== scan-6 contract: stride-64 audit walk, guard MAX = 0x03FFFFFF ===== */
+    /* SUFFICIENT: at the guard's max, every i*64 access is wrap-free and within MAX*64. */
+    if sw_prove_affine(0u64, 64u64, max_rec, buf_bytes, cep) != 0u32 { return 10u64 }     /* PROVEN */
+    /* NECESSARY (boundary): MAX+1 -> the last access reaches the buffer end -> REFUTED_BOUNDS. */
+    if sw_prove_affine(0u64, 64u64, max_rec_p1, buf_bytes, cep) != 1u32 { return 11u64 }  /* REFUTED_BOUNDS */
+    /* NECESSARY (the wrap the guard prevents): unguarded count ~2^58 -> i*64 WRAPS -> REFUTED_WRAP. */
+    if sw_prove_affine(0u64, 64u64, wrap_count, umax, cep) != 2u32 { return 12u64 }       /* REFUTED_WRAP */
+
+    /* ===== scan-5 contract: xii_chd stride-16 into XCHD_BUCKETS[2304] ===== */
+    /* SUFFICIENT: bucket_idx < 144, worst-case slot 15 -> max = 143*16 + 15 = 2303 < 2304. */
+    if sw_prove_affine(15u64, 16u64, 144u64, chd_bound, cep) != 0u32 { return 20u64 }     /* PROVEN */
+    /* NECESSARY: unguarded bucket_idx up to 2^32 -> off vastly exceeds 2304 -> REFUTED_BOUNDS. */
+    if sw_prove_affine(0u64, 16u64, chd_count, chd_bound, cep) != 1u32 { return 21u64 }   /* REFUTED_BOUNDS */
+    let first_oob : u64 = SW419_CE[0u64]
+    if first_oob != 144u64 { return 22u64 }   /* the witness pinpoints bucket_idx 144 as the first OOB */
+
+    return 99u64
+}

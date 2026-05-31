@@ -48,6 +48,17 @@ fn main() -> u64 {
     if qp[0] != 97u8 { return 12u64 }
     if qp[2] != 34u8 { return 13u64 }
     if qp[5] != 100u8 { return 14u64 }
+
+    /* BATCH 4 at-scale prove-the-negative: csv_field_base/csv_field_len now BOUND row,col on untrusted
+     * input (were unguarded -> csv_field_index could exceed CSV_FIELD_BASE[524288] -> OOB read).  An
+     * out-of-range row or col returns 0 (no such field), never an out-of-bounds access. (t = 2 rows x 3 cols.) */
+    if csv_field_base(t, 999u64, 0u64) != 0u64 { return 15u64 }       /* row >= row_count(2) */
+    if csv_field_len(t, 999u64, 0u64) != 0u64 { return 16u64 }
+    if csv_field_base(t, 0u64, 999u64) != 0u64 { return 17u64 }       /* col >= col_count(3) */
+    if csv_field_len(t, 0u64, 999u64) != 0u64 { return 18u64 }
+    if csv_field_base(t, 100000u64, 0u64) != 0u64 { return 19u64 }    /* far OOB row (formerly indexed past the array) */
+    if csv_field_len(t, 0u64, 100000u64) != 0u64 { return 20u64 }     /* far OOB col */
+
     free(qbuf)
 
     free(buf)

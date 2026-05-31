@@ -190,12 +190,20 @@ fn csv_field_count(id: u64, row: u64) -> u64 @export {
 fn csv_field_base(id: u64, row: u64, col: u64) -> u64 @export {
     let idx : u32 = csv_resolve(id)
     if idx == CSV_TABLE_MAX { return 0u64 }
+    /* BATCH 4 at-scale: bound row,col on untrusted input (was UNGUARDED -> csv_field_index could
+     * exceed CSV_FIELD_BASE[524288] -> OOB read).  Mirrors csv_field_count's guarding so the getter
+     * is consistent with its sibling: 0 for any non-existent field, never an out-of-bounds read. */
+    if row >= CSV_ROW_COUNT[idx] { return 0u64 }
+    if col >= CSV_COL_COUNT[csv_row_col_index(idx, row)] { return 0u64 }
     return CSV_FIELD_BASE[csv_field_index(idx, row, col)]
 }
 
 fn csv_field_len(id: u64, row: u64, col: u64) -> u64 @export {
     let idx : u32 = csv_resolve(id)
     if idx == CSV_TABLE_MAX { return 0u64 }
+    /* BATCH 4 at-scale: same bounds guard as csv_field_base (was UNGUARDED -> OOB read). */
+    if row >= CSV_ROW_COUNT[idx] { return 0u64 }
+    if col >= CSV_COL_COUNT[csv_row_col_index(idx, row)] { return 0u64 }
     return CSV_FIELD_LEN[csv_field_index(idx, row, col)]
 }
 

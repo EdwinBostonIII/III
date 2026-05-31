@@ -1,0 +1,78 @@
+/* affine_audit_sound.iii -- the NO-FALSE-PROVEN probe (the asymmetric risk).
+ * Every fn here is a trap that a naive analyzer would wrongly PROVE.  The sound
+ * pass MUST ABSTAIN on all of them.  Expected tally:  AA P=1 A=5 R=0
+ *   s_control     : a clean scan  -> PROVEN (the one positive control).
+ *   s_nested_if   : sole write to i is NESTED in an if (advisor's hole) -> ABSTAIN.
+ *   s_two_writes  : a nested write + a trailing write (count!=1)        -> ABSTAIN.
+ *   s_signed      : loop var is i32 (signed)                            -> ABSTAIN.
+ *   s_mid_mutate  : i mutated BEFORE the access, increment not last     -> ABSTAIN.
+ *   s_addr_escape : &i passed to a call (op-5 ADDR escape)              -> ABSTAIN.
+ *                   (without aa_addr_taken this would be a FALSE PROVEN.) */
+module aaks
+
+var S_ARR : [u8; 16]
+const S_N : u32 = 16u32
+
+fn s_mutate(p: *u32) -> u32 { return 0u32 }
+
+fn s_control() -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < S_N {
+        s = s + (S_ARR[i] as u32)
+        i = i + 1u32
+    }
+    return s
+}
+
+fn s_nested_if(cond: u32) -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < S_N {
+        if cond == 1u32 { i = i + 1u32 }
+        s = s + (S_ARR[i] as u32)
+    }
+    return s
+}
+
+fn s_two_writes(cond: u32) -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < S_N {
+        if cond == 1u32 { i = i + 1u32 }
+        s = s + (S_ARR[i] as u32)
+        i = i + 1u32
+    }
+    return s
+}
+
+fn s_signed() -> u32 {
+    let mut i : i32 = 0i32
+    let mut s : u32 = 0u32
+    while i < 16i32 {
+        s = s + (S_ARR[i] as u32)
+        i = i + 1i32
+    }
+    return s
+}
+
+fn s_mid_mutate() -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < S_N {
+        i = i + 4u32
+        s = s + (S_ARR[i] as u32)
+    }
+    return s
+}
+
+fn s_addr_escape() -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < S_N {
+        s_mutate(&i)
+        s = s + (S_ARR[i] as u32)
+        i = i + 1u32
+    }
+    return s
+}

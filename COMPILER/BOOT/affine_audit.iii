@@ -35,6 +35,8 @@ extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast_access
 extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_forward_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
@@ -55,11 +57,13 @@ extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "
 extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_op(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_arg_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast_accessors.c"
@@ -94,7 +98,9 @@ const AA_K_EXPR_FIELD: u32 = 47u32
 const AA_K_EXPR_INDEX: u32 = 48u32
 const AA_K_EXPR_BINARY: u32 = 49u32
 const AA_K_EXPR_UNARY: u32 = 50u32
+const AA_K_EXPR_BLOCK: u32 = 51u32      /* a fn/while/if body is an EXPR_BLOCK (uses block_stmt_*) */
 const AA_K_EXPR_PAREN: u32 = 53u32
+const AA_K_ARG: u32 = 57u32             /* a call argument is wrapped in an ARG node (unwrap via arg_value) */
 const AA_K_EXPR_CAST: u32 = 72u32
 const AA_K_STMT_IF: u32 = 69u32
 const AA_K_STMT_WHILE: u32 = 70u32
@@ -106,6 +112,7 @@ const AA_OP_MUL: u32 = 3u32
 const AA_OP_SHL: u32 = 9u32
 const AA_OP_LT: u32 = 13u32
 const AA_OP_LE: u32 = 14u32
+const AA_UNOP_ADDR: u32 = 5u32          /* iii_ast_unary_op code for `&x` (address-of) */
 
 /* ---- verdicts (mirror sovereign_witness SW_*) ---- */
 const AA_PROVEN: u32 = 0u32
@@ -332,6 +339,31 @@ fn aa_check_index(node: u32, lvb: u32, count: u64) -> u32 {
 }
 
 /* ===================================================================== */
+/* block kind dispatch: a fn/while/if body is an EXPR_BLOCK (51, generic   */
+/* block_stmt_* accessors); a `forward { }` is a FORWARD_BLOCK (29). Both  */
+/* hold a statement list -- route through these helpers so every walker     */
+/* handles either kind.                                                     */
+/* ===================================================================== */
+fn aa_is_block(blk: u32) -> u32 {
+    let k: u32 = iii_ast_node_kind(AA_G_AST, blk)
+    if k == AA_K_FORWARD_BLOCK { return 1u32 }
+    if k == AA_K_EXPR_BLOCK { return 1u32 }
+    return 0u32
+}
+fn aa_blk_count(blk: u32) -> u32 {
+    let k: u32 = iii_ast_node_kind(AA_G_AST, blk)
+    if k == AA_K_FORWARD_BLOCK { return iii_ast_forward_block_stmt_count(AA_G_AST, blk) }
+    if k == AA_K_EXPR_BLOCK { return iii_ast_block_stmt_count(AA_G_AST, blk) }
+    return 0u32
+}
+fn aa_blk_at(blk: u32, i: u32) -> u32 {
+    let k: u32 = iii_ast_node_kind(AA_G_AST, blk)
+    if k == AA_K_FORWARD_BLOCK { return iii_ast_forward_block_stmt_at(AA_G_AST, blk, i) }
+    if k == AA_K_EXPR_BLOCK { return iii_ast_block_stmt_at(AA_G_AST, blk, i) }
+    return 0u32
+}
+
+/* ===================================================================== */
 /* loop-soundness: the sole write to the loop var in the WHOLE body       */
 /* subtree must be the trailing top-level statement (DESIGN 4b). count by  */
 /* binder id; any unmodeled construct is POISON (>=2) -> ABSTAIN the loop. */
@@ -339,11 +371,11 @@ fn aa_check_index(node: u32, lvb: u32, count: u64) -> u32 {
 fn aa_count_writes(node: u32, lvb: u32) -> u32 {
     if node == 0u32 { return 0u32 }
     let k: u32 = iii_ast_node_kind(AA_G_AST, node)
-    if k == AA_K_FORWARD_BLOCK {
-        let n: u32 = iii_ast_block_stmt_count(AA_G_AST, node)
+    if aa_is_block(node) == 1u32 {
+        let n: u32 = aa_blk_count(node)
         let mut i: u32 = 0u32
         let mut c: u32 = 0u32
-        while i < n { c = c + aa_count_writes(iii_ast_block_stmt_at(AA_G_AST, node, i), lvb); i = i + 1u32 }
+        while i < n { c = c + aa_count_writes(aa_blk_at(node, i), lvb); i = i + 1u32 }
         return c
     }
     if k == AA_K_STMT_ASSIGN {
@@ -365,12 +397,71 @@ fn aa_count_writes(node: u32, lvb: u32) -> u32 {
 
 /* the LAST top-level statement of `body` is an assignment to the loop var. */
 fn aa_last_stmt_writes(body: u32, lvb: u32) -> u32 {
-    if iii_ast_node_kind(AA_G_AST, body) != AA_K_FORWARD_BLOCK { return 0u32 }
-    let n: u32 = iii_ast_block_stmt_count(AA_G_AST, body)
+    if aa_is_block(body) == 0u32 { return 0u32 }
+    let n: u32 = aa_blk_count(body)
     if n == 0u32 { return 0u32 }
-    let last: u32 = iii_ast_block_stmt_at(AA_G_AST, body, n - 1u32)
+    let last: u32 = aa_blk_at(body, n - 1u32)
     if iii_ast_node_kind(AA_G_AST, last) != AA_K_STMT_ASSIGN { return 0u32 }
     return aa_is_loopvar(iii_ast_assign_lvalue(AA_G_AST, last), lvb)
+}
+
+/* address-escape guard: 1 if `&<loopvar>` (unary op 5) appears ANYWHERE in the body */
+/* subtree. The counter's address could escape into a call that drives it out of    */
+/* range before an access, breaking the i<N-at-access guarantee -> the sole-trailing */
+/* -write rule alone is NOT sufficient; ABSTAIN the loop if its address is taken.    */
+/* (Empirically `&counter` occurs 0x in this tree -- the `&local`-bogus discipline -- */
+/* but this closes the hole by CONSTRUCTION, not by that empirical absence.)          */
+fn aa_addr_taken(node: u32, lvb: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(AA_G_AST, node)
+    if k == AA_K_ARG { return aa_addr_taken(iii_ast_arg_value(AA_G_AST, node), lvb) }
+    if k == AA_K_EXPR_UNARY {
+        if iii_ast_unary_op(AA_G_AST, node) == AA_UNOP_ADDR {
+            if aa_is_loopvar(iii_ast_unary_operand(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        }
+        return aa_addr_taken(iii_ast_unary_operand(AA_G_AST, node), lvb)
+    }
+    if aa_is_block(node) == 1u32 {
+        let n: u32 = aa_blk_count(node)
+        let mut i: u32 = 0u32
+        while i < n { if aa_addr_taken(aa_blk_at(node, i), lvb) == 1u32 { return 1u32 }; i = i + 1u32 }
+        return 0u32
+    }
+    if k == AA_K_STMT_ASSIGN {
+        if aa_addr_taken(iii_ast_assign_lvalue(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        return aa_addr_taken(iii_ast_assign_value(AA_G_AST, node), lvb)
+    }
+    if k == AA_K_STMT_LET { return aa_addr_taken(iii_ast_let_value(AA_G_AST, node), lvb) }
+    if k == AA_K_STMT_RETURN { return aa_addr_taken(iii_ast_return_value(AA_G_AST, node), lvb) }
+    if k == AA_K_STMT_EXPR { return aa_addr_taken(iii_ast_expr_stmt_expr(AA_G_AST, node), lvb) }
+    if k == AA_K_STMT_IF {
+        if aa_addr_taken(iii_ast_if_cond(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        if aa_addr_taken(iii_ast_if_then(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        return aa_addr_taken(iii_ast_if_else(AA_G_AST, node), lvb)
+    }
+    if k == AA_K_STMT_WHILE {
+        if aa_addr_taken(iii_ast_while_cond(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        return aa_addr_taken(iii_ast_while_body(AA_G_AST, node), lvb)
+    }
+    if k == AA_K_STMT_FOR { return aa_addr_taken(iii_ast_for_body(AA_G_AST, node), lvb) }
+    if k == AA_K_EXPR_BINARY {
+        if aa_addr_taken(iii_ast_binary_lhs(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        return aa_addr_taken(iii_ast_binary_rhs(AA_G_AST, node), lvb)
+    }
+    if k == AA_K_EXPR_INDEX {
+        if aa_addr_taken(iii_ast_index_object(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        return aa_addr_taken(iii_ast_index_index(AA_G_AST, node), lvb)
+    }
+    if k == AA_K_EXPR_CALL {
+        let n: u32 = iii_ast_call_arg_count(AA_G_AST, node)
+        let mut i: u32 = 0u32
+        while i < n { if aa_addr_taken(iii_ast_call_arg_at(AA_G_AST, node, i), lvb) == 1u32 { return 1u32 }; i = i + 1u32 }
+        return 0u32
+    }
+    if k == AA_K_EXPR_CAST { return aa_addr_taken(iii_ast_cast_value(AA_G_AST, node), lvb) }
+    if k == AA_K_EXPR_PAREN { return aa_addr_taken(iii_ast_paren_inner(AA_G_AST, node), lvb) }
+    if k == AA_K_EXPR_FIELD { return aa_addr_taken(iii_ast_field_object(AA_G_AST, node), lvb) }
+    return 0u32
 }
 
 /* parse `i < N` / `i <= N`: i an UNSIGNED-typed ident, N a constant. */
@@ -399,6 +490,7 @@ fn aa_parse_loop(cond: u32) -> u32 {
 fn aa_walk_expr(node: u32, lvb: u32, count: u64) -> u32 {
     if node == 0u32 { return 0u32 }
     let k: u32 = iii_ast_node_kind(AA_G_AST, node)
+    if k == AA_K_ARG { aa_walk_expr(iii_ast_arg_value(AA_G_AST, node), lvb, count); return 0u32 }
     if k == AA_K_EXPR_INDEX {
         aa_check_index(node, lvb, count)
         aa_walk_expr(iii_ast_index_object(AA_G_AST, node), lvb, count)
@@ -425,10 +517,10 @@ fn aa_walk_expr(node: u32, lvb: u32, count: u64) -> u32 {
 
 fn aa_walk_block(block: u32, lvb: u32, count: u64) -> u32 {
     if block == 0u32 { return 0u32 }
-    if iii_ast_node_kind(AA_G_AST, block) != AA_K_FORWARD_BLOCK { return 0u32 }
-    let n: u32 = iii_ast_block_stmt_count(AA_G_AST, block)
+    if aa_is_block(block) == 0u32 { return 0u32 }
+    let n: u32 = aa_blk_count(block)
     let mut i: u32 = 0u32
-    while i < n { aa_walk_stmt(iii_ast_block_stmt_at(AA_G_AST, block, i), lvb, count); i = i + 1u32 }
+    while i < n { aa_walk_stmt(aa_blk_at(block, i), lvb, count); i = i + 1u32 }
     return 0u32
 }
 
@@ -444,7 +536,7 @@ fn aa_walk_stmt(stmt: u32, lvb: u32, count: u64) -> u32 {
         if aa_parse_loop(cond) == 1u32 {
             let lb: u32 = AA_LV_BINDER
             let lc: u64 = AA_LV_COUNT
-            if aa_count_writes(body, lb) == 1u32 { if aa_last_stmt_writes(body, lb) == 1u32 { nb = lb; nc = lc } }
+            if aa_count_writes(body, lb) == 1u32 { if aa_last_stmt_writes(body, lb) == 1u32 { if aa_addr_taken(body, lb) == 0u32 { nb = lb; nc = lc } } }
         }
         aa_walk_block(body, nb, nc)
         return 0u32

@@ -100,6 +100,14 @@ The sound rules (all verified, else ABSTAIN):
   i0=0 + access-before-first-mutation.
 - cond must be `IDENT(i) < N` (op LT) or `<= N` (op LE -> count N+1); N a literal or a const-ident resolving
   to a literal (via binder -> CONST_DECL -> const_decl_value). Anything else -> ABSTAIN.
+- **address-escape (4th rule, found in review)**: `aa_count_writes` counts only *syntactic* `i = …`. A
+  non-syntactic mutation -- `&i` escaping into a call (`mutate(&i)`) -- is a `STMT_EXPR` scored as 0 writes,
+  so the sole-trailing-write rule would wrongly rule the loop sound and PROVE the access (a FALSE PROVEN).
+  Closed by `aa_addr_taken(body, i)`: scan the WHOLE body subtree for a unary address-of (op 5) whose
+  operand is the loop var; ABSTAIN the loop if found. `&counter` occurs 0x in this tree (the `&local`-is
+  -bogus discipline), so this changes no PROVEN count -- it closes the hole by CONSTRUCTION, not by that
+  empirical absence. Verified by `s_addr_escape` in `affine_audit_sound.iii` (without the guard: false
+  PROVEN; with it: ABSTAIN).
 
 ## 5. `aa_match_affine(idx, loop_ctx)` — sound affine recognition
 
@@ -165,3 +173,26 @@ AA-8  run the auto-pass over the stdlib -> triage any REFUTED (real bug -> fix; 
 hand-fed certifier (419) into III continuously, automatically proving its own typed-array accesses safe —
 the analyzer and the self-enhancer finally one organ. Every REFUTED it finds is a real scan-5-class bug the
 human scans might miss; every PROVEN is a machine-checked safety certificate that re-verifies each build.
+
+## VALIDATION RESULTS (landed 2026-05-31)
+
+The pass shipped as `COMPILER/BOOT/affine_audit.iii` (in `PORTED_TUS`), wired via `--affine-audit` after
+sema in `main.iii`. Verified end-to-end on a LOCAL non-installed iiis-2, then resealed into the installed
+compiler:
+
+- **KAT** (`affine_audit_kat.iii`): `AA P=1 A=1 R=1` + `AA REFUTED sz=16 i=16` — PROVEN / REFUTED (with the
+  correct first-OOB witness) / ABSTAIN (pointer) all correct on ground truth, through a cast+paren-wrapped
+  access.
+- **Soundness probe** (`affine_audit_sound.iii`): `AA P=1 A=5 R=0` — all five no-false-PROVEN traps ABSTAIN:
+  nested-if write, two-writes, signed loop var, mutation-before-access, AND the `&i` address-escape (the
+  last two found in review; the address-escape would be a false PROVEN without `aa_addr_taken`).
+- **Scale** (539 files, all sema'd standalone): **PROVEN=8299, ABSTAIN=11814, REFUTED=1** — the single
+  REFUTED is the KAT's deliberate OOB; ZERO false positives across the entire real codebase.
+- **Codegen byte-equivalence**: stage1 corpus 59/59 byte-identical (iiis-1 vs the new iiis-2) — the audit is
+  genuinely dormant by default; the reseal is codegen-neutral.
+- **Reseal**: golden BARE hash `196b0c5f…` -> `5eae8780…`; `build_iiis2 --check-corpus` = 59 passed, 0 failed.
+
+Two soundness gaps were found and closed DURING review (not after): (1) `EXPR_BLOCK` vs `FORWARD_BLOCK`
+block-kind dispatch; (2) the `&counter` address-escape (`aa_addr_taken`, op-5 ADDR, ARG-unwrapped). A third
+fix — `ARG(57)` unwrap via `iii_ast_arg_value` — restored the call-argument accesses (`foo(arr[i])`) that
+were silently skipped, raising PROVEN 7978 -> 8299 with still zero genuine REFUTED.

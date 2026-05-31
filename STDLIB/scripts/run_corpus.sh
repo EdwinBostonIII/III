@@ -658,6 +658,7 @@ declare -A EXPECTED=(
     [956_egraph_cost_lattice]=99
     [957_engine_compound]=99
     [958_ecdsa_p384_zero_rs]=99
+    [959_ecdsa_p384_range_rs]=99
     [960_keccak256_block_absorb]=99
     [961_xoshiro_jump]=99
     [962_bv_ring_colstack]=99

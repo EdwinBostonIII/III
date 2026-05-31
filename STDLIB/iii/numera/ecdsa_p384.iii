@@ -39,6 +39,7 @@ extern @abi(c-msvc-x64) fn gn_eq_x(a: u64, b: u64) -> u8 from "fn384.iii"
 var EC384_RX : [u8; 48]
 var EC384_U1 : [u8; 48]
 var EC384_U2 : [u8; 48]
+var EC384_RTMP : [u8; 48]   /* scratch: reduced-component bytes for the [E-EC-2] range check */
 
 fn iii_ecdsa_p384_keygen(d_bytes: u64, pub_out: u64) -> i32 @export {
     ec384_scalar_mul_base(23u64, d_bytes)
@@ -75,12 +76,41 @@ fn iii_ecdsa_p384_sign(d_bytes: u64, z_bytes: u64, k_bytes: u64, sig_out: u64) -
     return 0i32
 }
 
+/* [E-EC-2] 1u8 iff (r,s) is well-formed: 1 <= r,s < n (FIPS-186 §6.4).  Mirrors P-256's range guard
+ * (ecdsa_p256.iii::iii_ecdsa_p256_sig_range_ok) but checks r<n / s<n via the field's OWN reduction --
+ * SINGLE SOURCE OF n = fn384, no duplicated 48-byte order constant to drift: a component is in range
+ * iff reducing it mod n leaves its 48 bytes UNCHANGED.  Rejects r,s==0 and out-of-range/malleable
+ * r,s>=n.  Surfaced by the at-scale Ripple cross-variant scan (P-384 verify enforced only r,s!=0,
+ * ACCEPTING r,s>=n that P-256 rejects).  Leaves slot 0=r, slot 1=s (reduction is a no-op for in-range
+ * components, so verify reuses them unchanged -> identical behaviour for every valid signature). */
+fn iii_ecdsa_p384_sig_range_ok(sig_bytes: u64) -> u8 @export {
+    fn384_boot()
+    let rp : *u8 = sig_bytes as *u8
+    let sp : *u8 = (sig_bytes + 48u64) as *u8
+    let tp : *u8 = (&EC384_RTMP as u64) as *u8
+    /* r in [1, n-1] */
+    gn_set_bytes_x(0u64, sig_bytes)
+    if gn_is_zero_x(0u64) == 1u8 { return 0u8 }                          /* r == 0 */
+    gn_reduce_x(0u64)
+    gn_get_bytes_x(&EC384_RTMP as u64, 0u64)
+    let mut i : u64 = 0u64
+    while i < 48u64 { if rp[i] != tp[i] { return 0u8 }  i = i + 1u64 }   /* r != (r mod n) -> r >= n */
+    /* s in [1, n-1] */
+    gn_set_bytes_x(1u64, sig_bytes + 48u64)
+    if gn_is_zero_x(1u64) == 1u8 { return 0u8 }                          /* s == 0 */
+    gn_reduce_x(1u64)
+    gn_get_bytes_x(&EC384_RTMP as u64, 1u64)
+    i = 0u64
+    while i < 48u64 { if sp[i] != tp[i] { return 0u8 }  i = i + 1u64 }   /* s != (s mod n) -> s >= n */
+    return 1u8
+}
+
 fn iii_ecdsa_p384_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: u64) -> u8 {
     fn384_boot()
-    gn_set_bytes_x(0u64, sig_bytes)               /* r */
-    gn_set_bytes_x(1u64, sig_bytes + 48u64)       /* s */
-    if gn_is_zero_x(0u64) == 1u8 { return 0u8 }
-    if gn_is_zero_x(1u64) == 1u8 { return 0u8 }
+    /* [E-EC-2] r,s in [1,n-1] (FIPS-186 §6.4) -- now ENFORCED.  P-384 verify formerly checked only
+     * r!=0,s!=0, ACCEPTING out-of-range/malleable r,s>=n that P-256 rejects (the cross-variant gap the
+     * at-scale Ripple scan found).  sig_range_ok leaves slot 0=r, slot 1=s (reduction no-op in range). */
+    if iii_ecdsa_p384_sig_range_ok(sig_bytes) == 0u8 { return 0u8 }
     gn_set_bytes_x(2u64, z_bytes) gn_reduce_x(2u64)
     gn_to_mont_x(3u64, 1u64)              /* s_m */
     gn_inv_x(4u64, 3u64)                  /* w = s^-1 */

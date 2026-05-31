@@ -1,0 +1,50 @@
+/* 959_ecdsa_p384_range_rs.iii -- the P-384 [E-EC-2] RANGE falsifier the at-scale cross-variant scan
+ * found MISSING: P-256 enforced 1 <= r,s < n (FIPS-186 §6.4), but P-384 verify checked only r,s != 0
+ * and ACCEPTED out-of-range/malleable r,s >= n. A signature with r >= n or s >= n is malformed and
+ * MUST be REJECTED; a genuine in-range signature is ADMITTED. 209/958 cover the happy path + r,s==0,
+ * never r,s>=n. all-0xFF (= 2^384-1) is > n, so it exercises the upper-range reject without depending
+ * on the exact order constant (the guard derives n from the field itself). 99 = pass; 1..7 localize. */
+module corpus_959
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_keygen_seed(seed: u64, d_out: u64, pub_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_sign_det(d: u64, z: u64, sig_out: u64) -> i32 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p384.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p384_sig_range_ok(sig: u64) -> u8 from "ecdsa_p384.iii"
+
+var SEED : [u8; 48]
+var D    : [u8; 48]
+var PUB  : [u8; 96]
+var Z    : [u8; 48]
+var SIG  : [u8; 96]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { SEED[i] = ((i * 11u64 + 5u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 48u64 { Z[i] = ((i * 3u64 + 0x21u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    iii_ecdsa_p384_keygen_seed(&SEED as u64, &D as u64, &PUB as u64)
+    iii_ecdsa_p384_sign_det(&D as u64, &Z as u64, &SIG as u64)
+    let qx : u64 = &PUB as u64
+    let qy : u64 = (&PUB as u64) + 48u64
+
+    /* ADMIT: a genuine in-range signature verifies, and sig_range_ok accepts it (reduction no-op) */
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 1u8 { return 1u64 }
+    if iii_ecdsa_p384_sig_range_ok(&SIG as u64) != 1u8 { return 2u64 }
+
+    /* REJECT r >= n: set r (bytes 0..47) to all-0xFF (2^384-1 > n) */
+    i = 0u64
+    while i < 48u64 { SIG[i] = 0xFFu8  i = i + 1u64 }
+    if iii_ecdsa_p384_sig_range_ok(&SIG as u64) != 0u8 { return 3u64 }
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 0u8 { return 4u64 }
+
+    /* restore valid, then REJECT s >= n: set s (bytes 48..95) to all-0xFF */
+    iii_ecdsa_p384_sign_det(&D as u64, &Z as u64, &SIG as u64)
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 1u8 { return 5u64 }   /* re-signed sanity */
+    i = 48u64
+    while i < 96u64 { SIG[i] = 0xFFu8  i = i + 1u64 }
+    if iii_ecdsa_p384_sig_range_ok(&SIG as u64) != 0u8 { return 6u64 }
+    if iii_ecdsa_p384_verify_x(qx, qy, &Z as u64, &SIG as u64) != 0u8 { return 7u64 }
+
+    return 99u64
+}

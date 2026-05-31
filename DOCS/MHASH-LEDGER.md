@@ -1437,6 +1437,7 @@ adversarially verified (default-refute). The LOOP (continues until the increment
 | 3 | crypto cross-variant consistency | `ecdsa_p384` `[E-EC-2]` range guard: verify ACCEPTED out-of-range/malleable r,s>=n (P-256 rejects) -- reduction-based check (single source of n = the field), falsifier `959` | `fdaef17` |
 | 4 | unguarded accessors (getter indexes a backing array on an untrusted index) | `verba/csv` `csv_field_base`/`csv_field_len`: row,col unbounded -> OOB read of the 524288-elem field tables (sibling `csv_field_count` DID guard); guard mirrors the sibling, KAT `91` extended | `57482f7` |
 | 5 | unguarded accessors (cont.) | `omnia/lru` `lru_debug_key`/`lru_debug_occ` (idx>=cap -> OOB of arena key/occ arrays) + `omnia/xii_chd` `xii_chd_bucket_at` (bucket_idx*16 unbounded -> exceeds `XCHD_BUCKETS[2304]`, AND 0xFFFFFFFF wraps off->segfault); guards at the public FFI surface, new falsifier `410` + `132` extended | `17a05ad` |
+| 6 | index/length arithmetic that WRAPS u32 before it bounds an access (the deeper sibling of 4-5) | sanctus XII checkers `xii_atm`/`xii_antidrift`/`xii_sml` `rec_off = i*64u32` (record_count>0x03FFFFFF wraps -> OOB audit-record read; scan found 2, cross-check found the 3rd) -> record_count guard (full verifiers fail-closed, sampler skips); `aether/babel_wire_finalize` `68+payload_len` u32 add -> u64+cap; new falsifiers `411` + `412` | `4ba4ad1` |
 
 **Scan 3 CONVERGENCE (the loop is finding its frontier).** Across 6 sibling crypto families the scan
 confirmed CONSISTENCY almost everywhere -- the genuine gaps were the two P-384 ECDSA checks (degenerate
@@ -1452,8 +1453,29 @@ subsystems (`verba/csv` row,col; `omnia/lru` idx; `omnia/xii_chd` bucket_idx) an
 (internal callers pass loop-bounded indices; most accessors are type-bounded or already guard like
 `csv_field_count`). The fix is uniform -- bound the index at the public FFI surface, mirror the guarded
 sibling, return the safe sentinel -- and each carries a prove-the-negative KAT whose far-OOB arm SEGFAULTS
-on the unfixed code (`xii_chd_bucket_at(0xFFFFFFFF,*)` wraps `off` and reads unmapped memory). 5 scans ->
-5 genuine self-edits; the engine's value is telling the genuine gap from the intentional design.
+on the unfixed code (`xii_chd_bucket_at(0xFFFFFFFF,*)` wraps `off` and reads unmapped memory).
+
+**Scan 6 (index/length arithmetic that wraps before it bounds an access).** The deeper sibling of 4-5: a
+`i*stride` / `base+len` that wraps u32 BEFORE the value guards an access, so even an `i<n` bound is defeated
+by the wrapped offset. Of 4 adversarially-confirmed findings, TWO shipped and TWO were ABSTAINED -- the
+calibration sharpening further:
+- **The discriminator is provenance, not magnitude** (per advisor): all four wrap only on ~4GB inputs, but
+  what matters is whether the wrapping value comes from data III DIDN'T produce. All four trace to
+  build-side/trusted callers (the loader supplies `record_count`; `finalize`/`pack` are build-side) ->
+  defense-in-depth, not reachable exploits. The two shipped (`xii_*` record_count guard, `babel_wire` cap)
+  did so because they have a CONSTRUCTIBLE non-tautological prove-the-negative AND restore a genuinely broken
+  invariant; a tautological "helper returns u64" KAT was explicitly rejected as the forbidden anti-pattern.
+- **The manual cross-check caught what the fan-out missed**: the scan flagged the `i*64` wrap in `xii_atm`
+  and `xii_antidrift` but not the identical third instance in `xii_sml_verify_cells` -- found by grepping
+  every `*64u32` in sanctus. Fixing 2 of 3 would have left the inconsistent residual the standard forbids.
+- **Two calibrated abstentions, documented**: `idoc_pack_payload` is a `memcpy`-class function whose line-88
+  contract is "sufficient capacity" (caller-trusted) -- a `total_off` widening is a half-fix, the full
+  capacity-param fix an unwarranted ABI change to sealed wire infra; `cg_r3`'s array-alloc multiply is
+  ALREADY u64 in the live self-hosted `cg_r3.iii:2617` (only the frozen, gate-protected iiis-0 C seed has the
+  u32 form, reachable solely by absurd source the build never emits).
+
+6 scans -> 7 genuine self-edits across 8 files (lib `225094d5 -> e30a2029`); the engine's (and the guiding
+hand's) value is telling the genuine gap from the intentional design.
 
 **The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
 improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than

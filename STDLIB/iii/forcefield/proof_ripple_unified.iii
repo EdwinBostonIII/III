@@ -1,0 +1,161 @@
+/* STDLIB/iii/forcefield/proof_ripple_unified.iii -- APOTHEOSIS C.7: the UNIFIED Ripple-move
+ * decider + move-crystal.  The Sovereign Ripple Calculus has three structural moves, each with its
+ * own certified decider (`ru_certify_unify` merge, `rc_certify_cut` cut, `rx_certify_extract`
+ * extract).  This composes them into ONE decision over a move-IR -- `proof_ripple_decision(move)`
+ * returns a LOCATED verdict (ADMIT iff that move's proofs hold; a distinct reject names the failing
+ * move kind), behind a KERNEL-FIRST gate that blocks EVERY move while the prover is down (the loop
+ * self-edits NOTHING while blind -- the doc's `cg_decide_ripple` discipline made one entry point).
+ * An ADMITTED move earns a CRYSTAL: `pru_move_crystal` = cad over (kind || operands) -- a sealed,
+ * reproducible move identity for the witness spine (the doc's `proof_ripple_decision -> crystal_id`).
+ *
+ * Move-IR (kind + four u32 operands + a discharged kernel-equality proof flag):
+ *   MERGE  : m0=node_i  m1=node_j  m2=class_i  m3=class_j   proof_ok = discharged equality proof
+ *   CUT    : m0=edge e
+ *   EXTRACT: m0..m3 = the four extract conditions (export-in-G, deltaJ>0, acyclic-insert, H10-no-remerge)
+ *
+ * Decoupled: composes the three EXISTING certified deciders + cad -- NO new proof, NO file edit (the
+ * applier is Inc-3, behind commit_gate + the full reseal/corpus gate; sequenced to the final phase).
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_sensitivity (ripple admission).  Ring: R0.  K: 1.00. */
+module forcefield_proof_ripple_unified
+
+extern @abi(c-msvc-x64) fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_ok: u32) -> u32 from "ripple_unify.iii"
+extern @abi(c-msvc-x64) fn rc_certify_cut(e: u32, kernel_ok: u32) -> u32 from "ripple_cut.iii"
+extern @abi(c-msvc-x64) fn rx_certify_extract(c1: u32, c2: u32, c3: u32, c4: u32, kernel_ok: u32) -> u32 from "ripple_extract.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+/* KAT setup organs */
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+
+const PRU_ADMIT          : u32 = 99u32   /* the move's proofs hold -> admitted */
+const PRU_REJECT_KERNEL  : u32 = 5u32    /* prover/kernel down -> NO move (blocks all while blind) */
+const PRU_REJECT_MERGE   : u32 = 1u32    /* merge not a sound certified unification */
+const PRU_REJECT_CUT     : u32 = 2u32    /* cut not capability-preserving + improving */
+const PRU_REJECT_EXTRACT : u32 = 3u32    /* extract fails a conservation/MDL/acyclic/H10 condition */
+const PRU_REJECT_BADKIND : u32 = 4u32    /* not a MERGE/CUT/EXTRACT move */
+
+const PRU_KIND_MERGE   : u32 = 0u32
+const PRU_KIND_CUT     : u32 = 1u32
+const PRU_KIND_EXTRACT : u32 = 2u32
+
+/* THE unified Ripple-move decider.  Kernel-first: a down prover blocks EVERY move (the loop never
+ * self-edits while blind).  Then dispatch to the move kind's certified decider; ADMIT iff it holds. */
+fn proof_ripple_decision(kind: u32, m0: u32, m1: u32, m2: u32, m3: u32, proof_ok: u32, kernel_ok: u32) -> u32 @export {
+    if kernel_ok != 1u32 { return PRU_REJECT_KERNEL }
+    if kind == PRU_KIND_MERGE {
+        if ru_certify_unify(m0, m1, m2, m3, proof_ok) == 1u32 { return PRU_ADMIT }
+        return PRU_REJECT_MERGE
+    }
+    if kind == PRU_KIND_CUT {
+        if rc_certify_cut(m0, kernel_ok) == 1u32 { return PRU_ADMIT }
+        return PRU_REJECT_CUT
+    }
+    if kind == PRU_KIND_EXTRACT {
+        if rx_certify_extract(m0, m1, m2, m3, kernel_ok) == 1u32 { return PRU_ADMIT }
+        return PRU_REJECT_EXTRACT
+    }
+    return PRU_REJECT_BADKIND
+}
+
+/* the move CRYSTAL = cad( kind || m0 || m1 || m2 || m3 ) (LE u32s) -> out32: a reproducible,
+ * distinct-per-move identity an admitted move carries into the witness spine. */
+var PRU_MOVEBUF : [u8; 20]
+fn pru_pack(buf: u64, off: u64, v: u32) -> i32 {
+    let p : *u8 = buf as *u8
+    p[off]        = (v & 0xFFu32) as u8
+    p[off + 1u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    p[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    p[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0i32
+}
+fn pru_move_crystal(kind: u32, m0: u32, m1: u32, m2: u32, m3: u32, out32: u64) -> i32 @export {
+    pru_pack(&PRU_MOVEBUF as u64, 0u64,  kind)
+    pru_pack(&PRU_MOVEBUF as u64, 4u64,  m0)
+    pru_pack(&PRU_MOVEBUF as u64, 8u64,  m1)
+    pru_pack(&PRU_MOVEBUF as u64, 12u64, m2)
+    pru_pack(&PRU_MOVEBUF as u64, 16u64, m3)
+    return cad_oneshot(0u32, (&PRU_MOVEBUF as u64) as *u8, 20u64, out32 as *u8)
+}
+
+/* KAT congruence-address + crystal scratch. */
+var PRU_ADDR0 : [u8; 32]
+var PRU_ADDR1 : [u8; 32]
+var PRU_CR1   : [u8; 32]
+var PRU_CR2   : [u8; 32]
+
+fn pru_addr(buf: u64, seed: u32) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut k : u64 = 0u64
+    while k < 32u64 { p[k] = 0u8  k = k + 1u64 }
+    p[0u64] = (seed & 0xFFu32) as u8
+    return 0i32
+}
+fn pru_cr_eq(a: u64, b: u64) -> u8 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if pa[i] != pb[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+/* Self-test: the unified decider ADMITs each valid move kind, LOCATES each reject, the kernel-down
+ * gate blocks ALL three kinds (the headline negative arm), bad-kind rejects, and the move crystal is
+ * deterministic + distinct-per-move.  99 = pass. */
+fn proof_ripple_selftest() -> u64 @export {
+    rm_reset()
+    cgr_init()
+    let n0 : u32 = rm_add_node(100u64, 1u32)    /* node 0: cap=100 iclass=1 */
+    let n1 : u32 = rm_add_node(100u64, 1u32)    /* node 1: cap=100 iclass=1 -> unifiable with n0 */
+    let n2 : u32 = rm_add_node(100u64, 2u32)    /* node 2: cap=100 iclass=2 -> NOT unifiable (intent differs) */
+    let eNoise : u32 = rm_add_edge(n0, n1, 0u32, 0u32)   /* dead + unwitnessed -> a valid noise cut */
+    let eLoad  : u32 = rm_add_edge(n0, n1, 1u32, 0u32)   /* used (load-bearing) -> invalid cut */
+    pru_addr(&PRU_ADDR0 as u64, 11u32)
+    pru_addr(&PRU_ADDR1 as u64, 22u32)
+    let c0 : u32 = cgr_intern((&PRU_ADDR0 as u64) as *u8, 10u64)
+    let c1 : u32 = cgr_intern((&PRU_ADDR1 as u64) as *u8, 20u64)
+
+    /* CUT: noise edge ADMITs; load-bearing edge LOCATES REJECT_CUT */
+    if proof_ripple_decision(PRU_KIND_CUT, eNoise, 0u32, 0u32, 0u32, 0u32, 1u32) != PRU_ADMIT { return 1u64 }
+    if proof_ripple_decision(PRU_KIND_CUT, eLoad,  0u32, 0u32, 0u32, 0u32, 1u32) != PRU_REJECT_CUT { return 2u64 }
+    /* MERGE: non-unifiable pair (n0,n2) LOCATES REJECT_MERGE even with a proof (intent gate first) */
+    if proof_ripple_decision(PRU_KIND_MERGE, n0, n2, c0, c1, 1u32, 1u32) != PRU_REJECT_MERGE { return 3u64 }
+    /* MERGE: a UNIFIABLE pair (intent gate PASSES) with DISTINCT classes but NO discharged proof
+     * (proof_ok=0) must REJECT -- distinct congruence classes merge ONLY with a kernel proof.  Placed
+     * BEFORE the admit below (which merges c0/c1); afterwards auto-congruence would mask this. */
+    if proof_ripple_decision(PRU_KIND_MERGE, n0, n1, c0, c1, 0u32, 1u32) != PRU_REJECT_MERGE { return 13u64 }
+    /* MERGE: unifiable pair (n0,n1) + discharged proof ADMITs */
+    if proof_ripple_decision(PRU_KIND_MERGE, n0, n1, c0, c1, 1u32, 1u32) != PRU_ADMIT { return 4u64 }
+    /* EXTRACT: all four conditions hold -> ADMIT; one fails -> LOCATE REJECT_EXTRACT */
+    if proof_ripple_decision(PRU_KIND_EXTRACT, 1u32, 1u32, 1u32, 1u32, 0u32, 1u32) != PRU_ADMIT { return 5u64 }
+    if proof_ripple_decision(PRU_KIND_EXTRACT, 1u32, 0u32, 1u32, 1u32, 0u32, 1u32) != PRU_REJECT_EXTRACT { return 6u64 }
+
+    /* KERNEL-FIRST GATE (the headline negative arm): a down prover blocks EVERY move kind. */
+    if proof_ripple_decision(PRU_KIND_CUT,     eNoise, 0u32, 0u32, 0u32, 0u32, 0u32) != PRU_REJECT_KERNEL { return 7u64 }
+    if proof_ripple_decision(PRU_KIND_MERGE,   n0, n1, c0, c1, 1u32, 0u32) != PRU_REJECT_KERNEL { return 8u64 }
+    if proof_ripple_decision(PRU_KIND_EXTRACT, 1u32, 1u32, 1u32, 1u32, 0u32, 0u32) != PRU_REJECT_KERNEL { return 9u64 }
+    /* BAD kind */
+    if proof_ripple_decision(7u32, 0u32, 0u32, 0u32, 0u32, 0u32, 1u32) != PRU_REJECT_BADKIND { return 10u64 }
+
+    /* MOVE CRYSTAL: deterministic, and distinct per move. */
+    pru_move_crystal(PRU_KIND_CUT, eNoise, 0u32, 0u32, 0u32, &PRU_CR1 as u64)
+    pru_move_crystal(PRU_KIND_CUT, eNoise, 0u32, 0u32, 0u32, &PRU_CR2 as u64)
+    if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) != 1u8 { return 11u64 }   /* deterministic */
+    pru_move_crystal(PRU_KIND_MERGE, n0, n1, c0, c1, &PRU_CR2 as u64)
+    if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 12u64 }   /* a different move -> a different crystal */
+
+    /* CRYSTAL operand isolation: changing EACH operand alone must change the crystal.  A pru_pack that
+     * dropped/garbled any one of m0..m3 (the documented param-spill family -- single-use register args
+     * passed straight into pru_pack) would yield an identical crystal and be caught here. */
+    pru_move_crystal(PRU_KIND_CUT, 0u32, 0u32, 0u32, 0u32, &PRU_CR1 as u64)   /* baseline: all operands 0 */
+    pru_move_crystal(PRU_KIND_CUT, 5u32, 0u32, 0u32, 0u32, &PRU_CR2 as u64)
+    if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 15u64 }   /* m0 packed */
+    pru_move_crystal(PRU_KIND_CUT, 0u32, 6u32, 0u32, 0u32, &PRU_CR2 as u64)
+    if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 16u64 }   /* m1 packed */
+    pru_move_crystal(PRU_KIND_CUT, 0u32, 0u32, 7u32, 0u32, &PRU_CR2 as u64)
+    if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 17u64 }   /* m2 packed */
+    pru_move_crystal(PRU_KIND_CUT, 0u32, 0u32, 0u32, 8u32, &PRU_CR2 as u64)
+    if pru_cr_eq(&PRU_CR1 as u64, &PRU_CR2 as u64) == 1u8 { return 18u64 }   /* m3 packed */
+    return 99u64
+}

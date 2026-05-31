@@ -666,6 +666,8 @@ extern @abi(c-msvc-x64) fn iii_sid_create(ast: u64, sema: u64) -> u64 from "sid.
 extern @abi(c-msvc-x64) fn iii_sid_run(s: u64) -> u32 from "sid.iii"
 extern @abi(c-msvc-x64) fn iii_sid_destroy(s: u64) -> u32 from "sid.iii"
 extern @abi(c-msvc-x64) fn iii_walloc_create() -> u64 from "witness_alloc.iii"
+/* SW-INWARD-AUTO: the offline affine-bounds auditor (--affine-audit). */
+extern @abi(c-msvc-x64) fn iii_affine_audit_run(ast: u64) -> u32 from "affine_audit.iii"
 extern @abi(c-msvc-x64) fn iii_walloc_run(st: u64, ast: u64) -> u32 from "witness_alloc.iii"
 extern @abi(c-msvc-x64) fn iii_walloc_destroy(st: u64) -> u32 from "witness_alloc.iii"
 extern @abi(c-msvc-x64) fn iii_walloc_seal(st: u64) -> u32 from "witness_alloc.iii"
@@ -718,6 +720,7 @@ const O_SEALED: u64 = 180u64
 const O_SDE: u64 = 184u64
 const O_OUT_PATH: u64 = 192u64
 const O_SRC_PATH: u64 = 200u64
+const O_AFFINE_AUDIT: u64 = 208u64   /* SW-INWARD-AUTO flag (ORCH is [u8;256]; 208..212 free) */
 
 /* PIPE_STATE handles: lex@0|ast@8|p@16|sema@24|sid@32|wa@40|lnk@48|bytes@56. */
 var PIPE_STATE : [u8; 64]
@@ -872,6 +875,14 @@ fn iii_run_pipeline(src_path: u64, out_path: u64) -> u32 {
     let sema_ok: u32 = iii_sema_run(sema)
     iii_diag_sema(sema)
     if sema_ok == 0u32 { iii_pipeline_cleanup() ; return III_EXIT_SEMA_FAIL }
+    /* SW-INWARD-AUTO: offline affine-bounds audit on the sema-resolved AST, then stop
+     * (no sid / witness / codegen).  Sound: PROVEN/REFUTED/ABSTAIN only -- never a false
+     * PROVEN.  Counts go to stderr; exit OK (the printed "AA ... R=<n>" is the signal). */
+    if iii_lex_read_u32_c(&ORCH as u64, O_AFFINE_AUDIT) == 1u32 {
+        iii_affine_audit_run(ast)
+        iii_pipeline_cleanup()
+        return III_EXIT_OK
+    }
     let sid: u64 = iii_sid_create(ast, sema)
     ps_set(32u64, sid)
     let sid_ok: u32 = iii_sid_run(sid)
@@ -1139,6 +1150,7 @@ fn main(argc: u32, argv: u64) -> u32 @export {
             if m == 0u32 { if iiim_streq(a, "-v" as u64, 2u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_VERBOSE, 1u32) ; m = 1u32 } }
             if m == 0u32 { if iiim_streq(a, "-vv" as u64, 3u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_VERBOSE, 2u32) ; m = 1u32 } }
             if m == 0u32 { if iiim_streq(a, "-vvv" as u64, 4u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_VERBOSE, 3u32) ; m = 1u32 } }
+            if m == 0u32 { if iiim_streq(a, "--affine-audit" as u64, 14u64) == 1u32 { iii_lex_write_u32_c(&ORCH as u64, O_AFFINE_AUDIT, 1u32) ; m = 1u32 } }
             if m == 0u32 {
                 mw_lit(iii_lex_stderr_c(), "iiis-0: unknown argument '" as u64, 26u64)
                 mw_cstr(iii_lex_stderr_c(), a)

@@ -487,6 +487,7 @@ declare -A EXPECTED=(
     [768_keccak_sponge]=99
     [769_pq_sealed_abi]=99
     [770_slhdsa_shake_fips205]=99
+    [771_slhdsa_sha2_fips205]=99
     [721_tiebreak_leaves]=99
     [722_ntt]=99
     [723_ntt_convolve]=99

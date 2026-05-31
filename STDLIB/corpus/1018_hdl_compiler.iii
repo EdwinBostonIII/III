@@ -1,0 +1,11 @@
+/* 1018_hdl_compiler.iii -- falsifier for the combinator->netlist compiler (APOTHEOSIS C.8 item 4,
+ * hdl_compiler.iii). It lowers a postfix combinator program {INPUT,NOT,DUP,AND,OR,XOR} to a real hdl
+ * netlist and proves (1) the compiled netlist computes the intended truth table (vs a hand-built
+ * oracle), and (2) running the certified hdl_optimize fixpoint as the "normalize" step preserves the
+ * function while shrinking the live-gate count. Closes the C.8 edge hdl_compiler -> hdl_optimize.
+ * 99 = pass. */
+module corpus_1018
+
+extern @abi(c-msvc-x64) fn hdl_compiler_selftest() -> u64 from "hdl_compiler.iii"
+
+fn main() -> u64 { return hdl_compiler_selftest() }

@@ -4,18 +4,20 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "hotstuff_unified.iiiidentifier.iiiidentifier.iiiidentifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "identifier.iiiidentifier.iiiidentifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
 L_str_2:
-    .ascii "identifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "identifier.iiiidentifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
 L_str_3:
-    .ascii "sha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "identifier.iiisha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
 L_str_4:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "sha256.iiicrypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
 L_str_5:
-    .ascii "crypt_ed25519.iiicrypt_ed25519.iii\0"
+    .ascii "crypt_ed25519.iiicrypt_ed25519.iiicrypt_ed25519.iii\0"
 L_str_6:
+    .ascii "crypt_ed25519.iiicrypt_ed25519.iii\0"
+L_str_7:
     .ascii "crypt_ed25519.iii\0"
     .section .rodata
 L_HS_OK:
@@ -3837,9 +3839,37 @@ L_if_end_109:
     pushq %rax
     popq %rax
     movl %eax, L_HS_VIEW_TIMER_MS(%rip)
+    movl L_HS_VIEW_TIMEOUT_MS(%rip), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq L_HS_VIEW(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq hsu_timeout_base
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
     movl L_HS_VIEW_TIMER_MS(%rip), %eax
     pushq %rax
-    movl L_HS_VIEW_TIMEOUT_MS(%rip), %eax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3875,9 +3905,9 @@ L_if_end_109:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
-    movq %rax, -16(%rbp)
+    movq %rax, -48(%rbp)
 L_loop_top_112:
-    movq -16(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
     pushq %rax
@@ -3892,7 +3922,7 @@ L_loop_top_112:
     jz L_loop_end_113
     leaq L_HS_VOTE_BITMAP(%rip), %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -3900,7 +3930,7 @@ L_loop_top_112:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    movq -16(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -3909,7 +3939,7 @@ L_loop_top_112:
     addq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -16(%rbp)
+    movq %rax, -48(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -6934,6 +6964,64 @@ L_if_end_225:
     pushq %rax
     popq %rax
 L_if_end_227:
+    movabsq $0x1388, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq hs_tick
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_229
+    movabsq $0x13, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_229:
+    movabsq $0x1388, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq hs_tick
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movslq L_HS_E_TIMEOUT(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_231
+    movabsq $0x14, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_231:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

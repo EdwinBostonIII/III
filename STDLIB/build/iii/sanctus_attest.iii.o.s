@@ -4,19 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iii\0"
+    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iii\0"
+    .ascii "sha256.iiisha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iii\0"
+    .ascii "sha256.iiisha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
 L_str_3:
-    .ascii "sha256.iiiwitness.iiiwitness.iiicapability.iii\0"
+    .ascii "sha256.iiiwitness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
 L_str_4:
-    .ascii "witness.iiiwitness.iiicapability.iii\0"
+    .ascii "witness.iiiwitness.iiicapability.iiitiming_safe.iii\0"
 L_str_5:
-    .ascii "witness.iiicapability.iii\0"
+    .ascii "witness.iiicapability.iiitiming_safe.iii\0"
 L_str_6:
-    .ascii "capability.iii\0"
+    .ascii "capability.iiitiming_safe.iii\0"
+L_str_7:
+    .ascii "timing_safe.iii\0"
     .section .rodata
 L_ATTEST_RIGHT_ATTEST:
     .quad 0x800
@@ -705,100 +707,25 @@ L_if_end_15:
     pushq %rax
     popq %rax
 L_if_end_17:
-    movq -8(%rbp), %rax
+    movabsq $0x20, %rax
     pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movabsq $0x0, %rax
+    movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-L_loop_top_18:
-    movq -48(%rbp), %rax
-    pushq %rax
-    movabsq $0x20, %rax
     pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_19
-    movq -24(%rbp), %rax
-    pushq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq timing_safe_eq
+    addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movl -40(%rbp), %eax
-    pushq %rax
-    movl -56(%rbp), %eax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    xorq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_18
-L_loop_end_19:
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -808,7 +735,7 @@ L_loop_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_19
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -818,7 +745,7 @@ L_loop_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_19:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

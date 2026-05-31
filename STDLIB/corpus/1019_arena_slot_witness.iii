@@ -1,0 +1,10 @@
+/* 1019_arena_slot_witness.iii -- falsifier for the container-honesty proof (APOTHEOSIS C.9 item 3,
+ * arena_slot_witness.iii). Proves HANDLE-TABLE balance on a real container (list, 32-slot table):
+ * balanced new->drop cycling is unbounded (100 >> 32), a leak (new without drop) fills the table and
+ * the overflow new is REFUSED (the negative arm -- the documented slot-exhaustion failure mode is
+ * caught), and after cleanup the table recovers. Consumes list + arena. 99 = pass. */
+module corpus_1019
+
+extern @abi(c-msvc-x64) fn arena_slot_witness_selftest() -> u64 from "arena_slot_witness.iii"
+
+fn main() -> u64 { return arena_slot_witness_selftest() }

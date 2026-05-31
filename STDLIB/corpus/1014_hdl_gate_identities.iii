@@ -1,0 +1,11 @@
+/* 1014_hdl_gate_identities.iii -- falsifier for the certified gate-identity proof DB (APOTHEOSIS
+ * C.8, hdl_gate_db.iii). The netlist optimizer's rewrites are bit-exact BY CONSTRUCTION: each of
+ * 10 classic boolean identities (double-negation, idempotence, both De Morgans, both absorptions,
+ * NAND def, XOR-as-SoP, commutativity) is proven equivalent over its FULL 2^n truth table by
+ * hdl_equiv2; and the negative arm -- a non-equivalent rewrite (AND vs OR) -- is REJECTED by the
+ * same certifier, so an unsound rewrite can never be admitted. 99 = pass. */
+module corpus_1014
+
+extern @abi(c-msvc-x64) fn hdl_gate_db_selftest() -> u64 from "hdl_gate_db.iii"
+
+fn main() -> u64 { return hdl_gate_db_selftest() }

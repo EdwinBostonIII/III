@@ -1,0 +1,14 @@
+/* 999_zk_air_stark.iii -- APOTHEOSIS C.3 CAPSTONE: the general STARK end-to-end.
+ * Proves a genuine 2-column, degree-2, DATA-DRIVEN AIR (col0'=col0*col1 ; col1'=
+ * col1+col0) via the full prover (commit W trace columns + composition, FRI-fold,
+ * Merkle-open queries) and verifier (verify openings, check CP[q]*Z_H(q) ==
+ * air_combine_opened, FRI low-degree). Asserts the valid proof ACCEPTS and three
+ * tampers (a CP opening, a trace opening, the FRI final) REJECT -- the general STARK
+ * is sound on an arbitrary low-degree constraint system, not the x^2+c demo. 99=pass. */
+module corpus_999
+
+extern @abi(c-msvc-x64) fn zk_air_stark_selftest() -> u64 from "zk_air.iii"
+
+fn main() -> u64 {
+    return zk_air_stark_selftest()
+}

@@ -181,7 +181,7 @@ def fors_pkfromsig(sig,md,pks,ad):
                 ad.set_tree_index((ad.get_tree_index()-1)//2); node=Hh(pks,ad,ak+node)
         roots+=node
     fpa=ad.copy(); fpa.set_type_clear(FORS_ROOTS); fpa.set_keypair(ad.get_keypair())
-    return shake256(pks+fpa.b()+roots, N)  # T_k over K*N roots
+    return T_l(pks, fpa, roots)  # T_k over K*N roots (patchable hash layer)
 
 def slh_sign_internal(M,sk,addrnd):
     skseed=sk[0:N]; skprf=sk[N:2*N]; pkseed=sk[2*N:3*N]; pkroot=sk[3*N:4*N]

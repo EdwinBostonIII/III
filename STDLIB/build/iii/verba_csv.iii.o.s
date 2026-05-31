@@ -1553,6 +1553,72 @@ csv_field_base:
     pushq %rax
     popq %rax
 L_if_end_73:
+    movq -16(%rbp), %rax
+    pushq %rax
+    leaq L_CSV_ROW_COUNT(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
+    movq -24(%rbp), %rax
+    pushq %rax
+    leaq L_CSV_COL_COUNT(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_csv_row_col_index
+    addq $32, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
     leaq L_CSV_FIELD_BASE(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -1623,7 +1689,7 @@ csv_field_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_79
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1633,7 +1699,73 @@ csv_field_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_79:
+    movq -16(%rbp), %rax
+    pushq %rax
+    leaq L_CSV_ROW_COUNT(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_81
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_81:
+    movq -24(%rbp), %rax
+    pushq %rax
+    leaq L_CSV_COL_COUNT(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_csv_row_col_index
+    addq $32, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_83
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_83:
     leaq L_CSV_FIELD_LEN(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -1702,7 +1834,7 @@ csv_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_85
     movslq L_CSV_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1712,7 +1844,7 @@ csv_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_85:
     leaq L_CSV_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

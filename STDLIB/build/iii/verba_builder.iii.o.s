@@ -41,6 +41,9 @@ L_BLD_LIVE:
     .global L_BLD_SEALED
 L_BLD_SEALED:
     .zero 256
+    .global L_BLD_ERR
+L_BLD_ERR:
+    .zero 256
     .section .iii.ring3,"n"
     .asciz "builder_new"
     .text
@@ -272,6 +275,16 @@ L_if_end_11:
     popq %rax
     movb %dl, (%rax,%rcx,1)
     leaq L_BLD_SEALED(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_BLD_ERR(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
@@ -586,6 +599,16 @@ L_loop_end_23:
     popq %rax
     testq %rax, %rax
     jz L_if_end_25
+    leaq L_BLD_ERR(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
     movslq L_BLD_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -1519,6 +1542,72 @@ L_if_end_59:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "builder_error"
+    .text
+    .global builder_error
+    .seh_proc builder_error
+builder_error:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_builder_slot_of
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_61
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_61:
+    leaq L_BLD_ERR(%rip), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "builder_seal"
     .text
     .global builder_seal
@@ -1554,7 +1643,7 @@ builder_seal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_63
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1564,7 +1653,7 @@ builder_seal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_63:
     leaq L_BLD_SEALED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1630,7 +1719,7 @@ builder_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_65
     movslq L_BLD_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1640,7 +1729,7 @@ builder_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_65:
     leaq L_BLD_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1701,6 +1790,16 @@ L_if_end_63:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
+    leaq L_BLD_ERR(%rip), %rax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
     movslq L_BLD_OK(%rip), %rax
     pushq %rax
     popq %rax

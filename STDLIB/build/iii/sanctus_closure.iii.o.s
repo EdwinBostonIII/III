@@ -4,14 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "seal_resolver.iiiseal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "timing_safe.iiiseal_resolver.iiiseal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_1:
-    .ascii "seal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "seal_resolver.iiiseal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_2:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "seal_resolver.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_3:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iiimhash.iiimhash.iii\0"
 L_str_4:
+    .ascii "mhash.iiimhash.iii\0"
+L_str_5:
     .ascii "mhash.iii\0"
     .section .rodata
 L_CLOSURE_OK:
@@ -319,100 +321,25 @@ L_if_end_9:
     pushq %rax
     popq %rax
 L_if_end_11:
-    movq -8(%rbp), %rax
+    movabsq $0x20, %rax
     pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movabsq $0x0, %rax
+    movq -8(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-L_loop_top_12:
-    movq -48(%rbp), %rax
-    pushq %rax
-    movabsq $0x20, %rax
     pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_13
-    movq -24(%rbp), %rax
-    pushq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq timing_safe_eq
+    addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    movq -48(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movl -40(%rbp), %eax
-    pushq %rax
-    movl -56(%rbp), %eax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    xorq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -422,7 +349,7 @@ L_loop_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_13
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -432,7 +359,7 @@ L_loop_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_13:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -472,6 +399,29 @@ closure_verify_against:
     pushq %rax
     popq %rax
     testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movq -8(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
     jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
@@ -483,9 +433,27 @@ closure_verify_against:
     pushq %rax
     popq %rax
 L_if_end_17:
+    movabsq $0x20, %rax
+    pushq %rax
+    leaq L_CLOSURE_ROOT(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq timing_safe_eq
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -496,7 +464,7 @@ L_if_end_17:
     popq %rax
     testq %rax, %rax
     jz L_if_end_19
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -506,116 +474,6 @@ L_if_end_17:
     pushq %rax
     popq %rax
 L_if_end_19:
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-L_loop_top_20:
-    movq -32(%rbp), %rax
-    pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_21
-    movq -16(%rbp), %rax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    leaq L_CLOSURE_ROOT(%rip), %rax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movl -24(%rbp), %eax
-    pushq %rax
-    movl -40(%rbp), %eax
-    pushq %rax
-    movl -48(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    xorq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_20
-L_loop_end_21:
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_23
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_23:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -654,7 +512,7 @@ closure_compute_with_resolver:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_21
     movslq L_CLOSURE_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -664,7 +522,7 @@ closure_compute_with_resolver:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_21:
     subq $32, %rsp
     callq seal_resolver_is_computed
     addq $32, %rsp
@@ -680,7 +538,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_23
     movslq L_CLOSURE_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -690,12 +548,12 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_23:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_28:
+L_loop_top_24:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -708,7 +566,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_29
+    jz L_loop_end_25
     leaq L_CLOSURE_RESOLVER_MH(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -739,8 +597,8 @@ L_loop_top_28:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_28
-L_loop_end_29:
+    jmp L_loop_top_24
+L_loop_end_25:
     subq $32, %rsp
     callq mhash_begin
     addq $32, %rsp
@@ -829,7 +687,7 @@ closure_with_resolver_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_27
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -839,7 +697,7 @@ closure_with_resolver_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_27:
     movzbq L_CLOSURE_RWR_COMPUTED(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -852,7 +710,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_29
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -862,7 +720,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_29:
     leaq L_CLOSURE_ROOT_WITH_RESOLVER(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax

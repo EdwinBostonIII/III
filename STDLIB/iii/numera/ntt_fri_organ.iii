@@ -1,0 +1,85 @@
+/* numera/ntt_fri_organ.iii -- APOTHEOSIS C.3 (item 2): the modulus-parameterized FRI
+ * commit + fold organ, shared by numera/zk_stark.iii (the demo) and numera/zk_air.iii
+ * (the general AIR STARK).  The FRI low-degree test's butterfly IS an NTT decimation: it
+ * splits a layer into even/odd halves and random-linear-combines them with a Fiat-Shamir
+ * alpha.  Per ADR-C3 every field MUL routes through the §S.4 NTT's audited
+ * ntt_mult_field_elem (ONE field-mul for PQ + zk), and layer commitments route through the
+ * §S.6 merkle build-once/open-many surface (ONE tree under the spine, the gate, + proofs).
+ *
+ *   fri_eval_and_fold : prover -- fold a whole layer [floff, floff+2*ns) into
+ *       [nextOff, nextOff+ns).  arr[nextOff+j] = pe + alpha*po, with pe=(lo+hi)/2,
+ *       po=(lo-hi)/(2*omega^j), lo=arr[floff+j], hi=arr[floff+j+ns].  inv(omega^j) is
+ *       carried INCREMENTALLY (inv(omega)^j, one mul/step) instead of a fresh Fermat pow
+ *       per j -- byte-identical result, O(ns) vs O(ns log q).
+ *   fri_fold_point    : verifier -- fold ONE point via a DIRECT inv(omega^qmod).  The
+ *       asymmetry vs the prover's incremental fold is deliberate: a prover-side fold bug
+ *       desyncs the roundtrip (caught by the positive arm) instead of hiding symmetrically.
+ *   fri_commit_layer  : commit a layer's sz leaves into a caller pool via §S.6 merkle;
+ *       return the root address.
+ *
+ * Modulus-parameterized: q a prime, inverses via Fermat (x^(q-2)).  add/sub are trivial and
+ * stay inline; the only non-trivial field op (mul) is the shared §S.4 export.
+ * Hexad: kind_form.  Ring: R0.  NIH: nothing.  K: 1.00. */
+module numera_ntt_fri_organ
+
+extern @abi(c-msvc-x64) fn ntt_mult_field_elem(a: u32, b: u32, q: u32) -> u32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_build_u32(arrBase: u64, leafOff: u64, n: u64, poolBase: u64, treeOff: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_root(poolBase: u64, treeOff: u64) -> u64 from "merkle.iii"
+
+fn frm_add(x: u32, y: u32, q: u32) -> u32 {
+    let s : u64 = (x as u64) + (y as u64)
+    if s >= (q as u64) { return (s - (q as u64)) as u32 }
+    return s as u32
+}
+fn frm_sub(x: u32, y: u32, q: u32) -> u32 {
+    if x >= y { return x - y }
+    return (((x as u64) + (q as u64)) - (y as u64)) as u32
+}
+fn frm_pow(x: u32, e: u64, q: u32) -> u32 {
+    let mut r  : u32 = 1u32
+    let mut b  : u32 = x
+    let mut ee : u64 = e
+    while ee > 0u64 {
+        if (ee & 1u64) == 1u64 { r = ntt_mult_field_elem(r, b, q) }
+        b = ntt_mult_field_elem(b, b, q)
+        ee = ee >> 1u64
+    }
+    return r
+}
+fn frm_inv(x: u32, q: u32) -> u32 { return frm_pow(x, (q as u64) - 2u64, q) }
+
+/* Prover: fold the whole layer.  arr is u32 at arrBase; reads [floff, floff+2*ns), writes
+ * [nextOff, nextOff+ns).  inv(omega^j) carried incrementally as inv(omega)^j. */
+fn fri_eval_and_fold(arrBase: u64, floff: u64, ns: u64, omega: u32, alpha: u32, nextOff: u64, q: u32) -> i32 @export {
+    let p : *u32 = arrBase as *u32
+    let inv2 : u32 = frm_inv(2u32, q)
+    let invw : u32 = frm_inv(omega, q)
+    let mut invwj : u32 = 1u32             /* inv(omega^0) = 1 */
+    let mut j : u64 = 0u64
+    while j < ns {
+        let lo : u32 = p[floff + j]
+        let hi : u32 = p[floff + j + ns]
+        let pe : u32 = ntt_mult_field_elem(frm_add(lo, hi, q), inv2, q)
+        let po : u32 = ntt_mult_field_elem(ntt_mult_field_elem(frm_sub(lo, hi, q), inv2, q), invwj, q)
+        p[nextOff + j] = frm_add(pe, ntt_mult_field_elem(alpha, po, q), q)
+        invwj = ntt_mult_field_elem(invwj, invw, q)   /* inv(omega^(j+1)) */
+        j = j + 1u64
+    }
+    return 0i32
+}
+
+/* Verifier: fold ONE point.  aa = value at the lower slot (qmod), bb = at the upper slot
+ * (qmod+half).  returns pe + alpha*po, pe=(aa+bb)/2, po=(aa-bb)/(2*omega^qmod). */
+fn fri_fold_point(aa: u32, bb: u32, omega: u32, qmod: u64, alpha: u32, q: u32) -> u32 @export {
+    let inv2 : u32 = frm_inv(2u32, q)
+    let wj   : u32 = frm_pow(omega, qmod, q)
+    let pe   : u32 = ntt_mult_field_elem(frm_add(aa, bb, q), inv2, q)
+    let po   : u32 = ntt_mult_field_elem(ntt_mult_field_elem(frm_sub(aa, bb, q), inv2, q), frm_inv(wj, q), q)
+    return frm_add(pe, ntt_mult_field_elem(alpha, po, q), q)
+}
+
+/* Commit sz leaves at (arrBase + (floff+i)*4) into the caller pool at treeOff; return root. */
+fn fri_commit_layer(arrBase: u64, floff: u64, sz: u64, poolBase: u64, treeOff: u64) -> u64 @export {
+    merkle_tree_build_u32(arrBase, floff, sz, poolBase, treeOff)
+    return merkle_tree_root(poolBase, treeOff)
+}

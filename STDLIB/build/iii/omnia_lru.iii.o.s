@@ -3071,6 +3071,37 @@ lru_debug_key:
 L_if_end_79:
     movl -16(%rbp), %eax
     pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_LRU_CAP(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_81
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_81:
+    movl -16(%rbp), %eax
+    pushq %rax
     leaq L_LRU_KEYS_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3134,7 +3165,7 @@ lru_debug_occ:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_83
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3144,7 +3175,38 @@ lru_debug_occ:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_83:
+    movl -16(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_LRU_CAP(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_85
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_85:
     movl -16(%rbp), %eax
     pushq %rax
     leaq L_LRU_OCCUP_BASE(%rip), %rax
@@ -3209,7 +3271,7 @@ lru_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_83
+    jz L_if_end_87
     movslq L_LRU_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -3219,7 +3281,7 @@ lru_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_83:
+L_if_end_87:
     leaq L_LRU_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

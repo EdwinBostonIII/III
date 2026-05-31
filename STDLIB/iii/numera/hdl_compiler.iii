@@ -1,0 +1,177 @@
+/* STDLIB/iii/numera/hdl_compiler.iii -- APOTHEOSIS C.8 item 4: the combinator -> NETLIST compiler.
+ *
+ * The doc's "HDL becomes a clean hdl_compiler (combinator parse -> normalize -> netlist)." This is
+ * the FRONT-END that turns a compact, compositional circuit description -- a postfix combinator
+ * program over the boolean basis {INPUT, NOT, DUP, AND, OR, XOR} -- into a real `hdl` netlist, then
+ * NORMALIZES it by running the certified `hdl_optimize` fixpoint (idempotence/absorption/double-neg,
+ * each backed by `hdl_gate_db`'s exhaustively-proven identities). So a circuit written compactly is
+ * lowered to the fewest-gate equivalent, BIT-EXACT: the selftest proves the compiled netlist computes
+ * the intended truth table AND that normalization preserves it while shrinking the gate count.
+ *
+ * This adds the C.8 edge hdl_compiler -> hdl_optimize -> {hdl_gate_db, hdl, pareto}: the whole HDL
+ * stack is one proof-carrying pipeline.  Compiler-UNREFERENCED -> LIBNATIVE.
+ * Hexad: kind_form.  Ring: R0.  NIH: composes hdl + hdl_optimize only.  K: 1.00. */
+module numera_hdl_compiler
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add_in(input_idx: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_opt_truth_table(out: u32, n: u32) -> u64 from "hdl_optimize.iii"
+extern @abi(c-msvc-x64) fn hdl_optimize_all(out: u32) -> u32 from "hdl_optimize.iii"
+extern @abi(c-msvc-x64) fn hdl_opt_live(out: u32) -> u32 from "hdl_optimize.iii"
+
+/* combinator opcodes (the high 16 bits of a token; the low 16 are the INPUT index). */
+const HC_INPUT : u32 = 0u32
+const HC_NOT   : u32 = 1u32
+const HC_DUP   : u32 = 2u32     /* duplicate the stack top (same gate id) -> enables AND(a,a) etc. */
+const HC_AND   : u32 = 3u32
+const HC_OR    : u32 = 4u32
+const HC_XOR   : u32 = 5u32
+
+/* the matching hdl gate kinds */
+const HC_NOT_K : u32 = 4u32
+const HC_AND_K : u32 = 5u32
+const HC_OR_K  : u32 = 6u32
+const HC_XOR_K : u32 = 7u32
+
+const HC_BAD : u32 = 4294967295u32   /* sentinel: stack underflow / empty program */
+
+var HC_STACK : [u32; 256]            /* the gate-id stack (module global: runtime-indexed) */
+
+/* encode one combinator token: (op << 16) | operand. */
+fn hc_tok(op: u32, operand: u32) -> u32 @export {
+    let hi : u32 = op << 16u32
+    return hi | operand
+}
+
+/* compile a postfix combinator program to a netlist (the CALLER resets hdl first).  Returns the
+ * output gate id, or HC_BAD on stack underflow / empty program. */
+fn hc_compile(prog: *u32, n: u32) -> u32 @export {
+    let mut sp : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let tok : u32 = prog[i as u64]
+        let op : u32 = tok >> 16u32
+        let operand : u32 = tok & 65535u32
+        if op == HC_INPUT {
+            if sp >= 256u32 { return HC_BAD }              /* stack overflow -> refuse (no OOB write) */
+            let g : u32 = hdl_add_in(operand)
+            if g == HC_BAD { return HC_BAD }               /* gate-table overflow -> refuse (no poisoned stack) */
+            HC_STACK[sp as u64] = g
+            sp = sp + 1u32
+        }
+        if op == HC_DUP {
+            if sp < 1u32 { return HC_BAD }
+            if sp >= 256u32 { return HC_BAD }              /* stack overflow -> refuse */
+            let dtop : u64 = (sp - 1u32) as u64
+            let dv : u32 = HC_STACK[dtop]
+            HC_STACK[sp as u64] = dv
+            sp = sp + 1u32
+        }
+        if op == HC_NOT {
+            if sp < 1u32 { return HC_BAD }
+            let ntop : u64 = (sp - 1u32) as u64
+            let nx : u32 = HC_STACK[ntop]
+            let ng : u32 = hdl_add(HC_NOT_K, nx, 0u32)
+            if ng == HC_BAD { return HC_BAD }              /* gate-table overflow -> refuse */
+            HC_STACK[ntop] = ng
+        }
+        if op >= HC_AND {
+            if sp < 2u32 { return HC_BAD }
+            let btop : u64 = (sp - 1u32) as u64
+            let atop : u64 = (sp - 2u32) as u64
+            let bv : u32 = HC_STACK[btop]
+            let av : u32 = HC_STACK[atop]
+            let mut kind : u32 = HC_AND_K
+            if op == HC_OR  { kind = HC_OR_K }
+            if op == HC_XOR { kind = HC_XOR_K }
+            let bg : u32 = hdl_add(kind, av, bv)
+            if bg == HC_BAD { return HC_BAD }              /* gate-table overflow -> refuse */
+            HC_STACK[atop] = bg
+            sp = sp - 1u32
+        }
+        i = i + 1u32
+    }
+    if sp < 1u32 { return HC_BAD }
+    let rtop : u64 = (sp - 1u32) as u64
+    return HC_STACK[rtop]
+}
+
+/* compile + NORMALIZE: lower the program, then run the certified optimizer to a fixpoint. */
+fn hc_compile_normalized(prog: *u32, n: u32) -> u32 @export {
+    let out : u32 = hc_compile(prog, n)
+    if out == HC_BAD { return out }
+    hdl_optimize_all(out)
+    return out
+}
+
+var HC_PROG : [u32; 16]
+var HC_BIGPROG : [u32; 300]   /* selftest scratch: > 256 tokens to exercise the stack-overflow guard */
+
+/* Self-test (99 = pass): (1) a compiled postfix program computes the intended truth table; (2) a
+ * redundant program, once normalized, preserves its function while the live-gate count drops. */
+fn hdl_compiler_selftest() -> u64 @export {
+    /* (1) program "x y AND z OR" == OR(AND(x,y), z), inputs 0,1,2 */
+    hdl_reset()
+    HC_PROG[0u64] = hc_tok(HC_INPUT, 0u32)
+    HC_PROG[1u64] = hc_tok(HC_INPUT, 1u32)
+    HC_PROG[2u64] = hc_tok(HC_AND, 0u32)
+    HC_PROG[3u64] = hc_tok(HC_INPUT, 2u32)
+    HC_PROG[4u64] = hc_tok(HC_OR, 0u32)
+    let out : u32 = hc_compile((&HC_PROG as u64) as *u32, 5u32)
+    if out == HC_BAD { return 1u64 }
+    let tt : u64 = hdl_opt_truth_table(out, 3u32)
+    /* hand-built oracle: OR(AND(x,y), z) */
+    hdl_reset()
+    let x : u32 = hdl_add_in(0u32)
+    let y : u32 = hdl_add_in(1u32)
+    let z : u32 = hdl_add_in(2u32)
+    let inner : u32 = hdl_add(HC_AND_K, x, y)
+    let oracle : u32 = hdl_add(HC_OR_K, inner, z)
+    let tref : u64 = hdl_opt_truth_table(oracle, 3u32)
+    if tt != tref { return 2u64 }   /* the compiled netlist computes the intended function */
+
+    /* (2) redundant program "x DUP AND w OR" == OR(AND(x,x), w); AND(x,x) is the SAME gate id (DUP),
+     * so the optimizer's idempotence reduces it. The AND is interior (wrapped in OR with w). */
+    hdl_reset()
+    HC_PROG[0u64] = hc_tok(HC_INPUT, 0u32)
+    HC_PROG[1u64] = hc_tok(HC_DUP, 0u32)
+    HC_PROG[2u64] = hc_tok(HC_AND, 0u32)
+    HC_PROG[3u64] = hc_tok(HC_INPUT, 1u32)
+    HC_PROG[4u64] = hc_tok(HC_OR, 0u32)
+    let out2 : u32 = hc_compile((&HC_PROG as u64) as *u32, 5u32)
+    if out2 == HC_BAD { return 3u64 }
+    let t0 : u64 = hdl_opt_truth_table(out2, 2u32)
+    let l0 : u32 = hdl_opt_live(out2)
+    hdl_optimize_all(out2)
+    let t1 : u64 = hdl_opt_truth_table(out2, 2u32)
+    let l1 : u32 = hdl_opt_live(out2)
+    if t0 != t1 { return 4u64 }   /* normalization PRESERVES the function */
+    if l1 >= l0 { return 5u64 }   /* and SHRINKS the netlist (AND(x,x) -> x) */
+
+    /* (3) NEGATIVE arm: a program with > 256 net pushes overflows the stack -> REFUSED (HC_BAD), not
+     * a memory-corrupting out-of-bounds write. 300 INPUT tokens hit the guard at the 257th push. */
+    hdl_reset()
+    let mut bi : u64 = 0u64
+    while bi < 300u64 { HC_BIGPROG[bi] = hc_tok(HC_INPUT, 0u32)  bi = bi + 1u64 }
+    if hc_compile((&HC_BIGPROG as u64) as *u32, 300u32) != HC_BAD { return 6u64 }
+
+    /* (4) NOT + XOR opcode coverage: "x NOT NOT y XOR" == XOR(x, y) (the NOTs cancel). Exercises the
+     * previously-untested HC_NOT (unary) + HC_XOR (binary) dispatch branches. */
+    hdl_reset()
+    HC_PROG[0u64] = hc_tok(HC_INPUT, 0u32)
+    HC_PROG[1u64] = hc_tok(HC_NOT, 0u32)
+    HC_PROG[2u64] = hc_tok(HC_NOT, 0u32)
+    HC_PROG[3u64] = hc_tok(HC_INPUT, 1u32)
+    HC_PROG[4u64] = hc_tok(HC_XOR, 0u32)
+    let outx : u32 = hc_compile((&HC_PROG as u64) as *u32, 5u32)
+    if outx == HC_BAD { return 7u64 }
+    let ttx : u64 = hdl_opt_truth_table(outx, 2u32)
+    hdl_reset()
+    let xa : u32 = hdl_add_in(0u32)
+    let ya : u32 = hdl_add_in(1u32)
+    let orx : u32 = hdl_add(HC_XOR_K, xa, ya)   /* oracle: XOR(x, y) */
+    let trefx : u64 = hdl_opt_truth_table(orx, 2u32)
+    if ttx != trefx { return 8u64 }             /* NOT-NOT cancels + XOR compiled correctly */
+    return 99u64
+}

@@ -36,6 +36,7 @@ var ZKP_SC_PMH   : [u8; 1024]   /* up to 32 preserved mhashes * 32 */
 var ZKP_SC_RATIO : [u32; 1]
 var ZKP_SC_PROOF : [u8; 1]
 var ZKP_SC_BODY  : [u8; 32]
+var ZKP_SC_STARK_CAD : [u8; 32]   /* APOTHEOSIS C.3 item 6: bound STARK proof identity (when ZKP_SC_PROOF==1) */
 
 fn zkp_w_addr(wi: u64) -> u64 { return (&ZKP_W as u64) + 128u64*wi }
 fn zkp_mhash(wi: u64, outAddr: u64) -> i32 {
@@ -110,6 +111,10 @@ fn zkp_sidecar_root(outAddr: u64) -> i32 {
     sha256_update(&ZKP_SC_PRED as *u8, 32u64)
     sha256_update(&ZKP_HDR as *u8, 10u64)
     sha256_update(&ZKP_SC_PROOF as *u8, 1u64)
+    /* APOTHEOSIS C.3 (item 6): AIR-aware -- when a STARK proof is bound (SC_PROOF==1), its
+     * content-address identity enters the sidecar root, tying the rollup to a verifiable proof
+     * of the elided computation.  The legacy SC_PROOF==0 path is byte-identical (absorb skipped). */
+    if ZKP_SC_PROOF[0] == 1u8 { sha256_update(&ZKP_SC_STARK_CAD as *u8, 32u64) }
     let mut i : u64 = 0u64
     while i < (pc as u64) {
         sha256_update((&ZKP_SC_PMH as u64 + i*32u64) as *u8, 32u64)
@@ -147,6 +152,19 @@ fn zkp_sidecar_build(n: u64, predAddr: u64) -> i32 {
     ZKP_SC_RATIO[0] = ratio as u32
     ZKP_SC_PROOF[0] = 0u8
     zkp_sidecar_root(&ZKP_SC_BODY as u64)
+    return 0i32
+}
+/* APOTHEOSIS C.3 (item 6): AIR-aware sidecar.  Build the base preservation sidecar, then BIND a
+ * STARK proof's content-address identity (e.g. from air_proof_cad over a proof attesting the
+ * elided computation) so the rollup is cryptographically tied to a verifiable proof.  Decoupled:
+ * zk_prune binds an OPAQUE 32-byte identity (no zk_air dependency); the caller supplies the cad.
+ * The bound cad enters the sidecar root; verify re-derives it (ZKP_SC_PROOF/STARK_CAD persist). */
+fn zkp_stark_sidecar_build(n: u64, predAddr: u64, starkCadAddr: u64) -> i32 @export {
+    let rc : i32 = zkp_sidecar_build(n, predAddr)
+    if rc != 0i32 { return rc }
+    zkp_bytes_copy(&ZKP_SC_STARK_CAD as u64, starkCadAddr, 32u64)
+    ZKP_SC_PROOF[0] = 1u8
+    zkp_sidecar_root(&ZKP_SC_BODY as u64)   /* rebind the root with the proof identity */
     return 0i32
 }
 /* Build the rollup witness into ZKP_ROLLUP (cycle_kind=ZK_ROLLUP, payload=body,
@@ -274,3 +292,48 @@ fn zk_prune_kat() -> u64 {
 }
 
 fn zk_prune_kat_x() -> u64 @export { return zk_prune_kat() }
+
+/* AIR-aware sidecar KAT (§C.3 item 6).  The bound proof identity is load-bearing: binding a proof
+ * changes the sidecar root vs the legacy body; re-binding the same cad is deterministic; a
+ * DIFFERENT bound cad yields a different body; the proof-bound rollup verifies; and the legacy
+ * proof-absent path is UNCHANGED by the extension (no regression).  99 = pass. */
+var ZKP_STK_CAD : [u8; 32]
+var ZKP_STK_B0  : [u8; 32]    /* legacy (proof-absent) body */
+var ZKP_STK_B1  : [u8; 32]    /* AIR-aware (proof-bound) body */
+
+fn zkp_stark_sidecar_kat() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 32u64 { ZKP_GEN[i] = (i + 1u64) as u8  ZKP_MACKEY[i] = (i*3u64 + 7u64) as u8  ZKP_STK_CAD[i] = (i*5u64 + 2u64) as u8  i = i + 1u64 }
+    zkp_mk(0u64, 0x00u8, 0x00u8, 0x11u8)
+    zkp_mk(1u64, 0x01u8, 0x81u8, 0x22u8)
+    zkp_mk(2u64, 0x00u8, 0x00u8, 0x33u8) ZKP_W[128u64*2u64 + 92u64] = 0x01u8
+    zkp_mk(3u64, 0x01u8, 0x40u8, 0x44u8)
+    zkp_mk(4u64, 0x00u8, 0x00u8, 0x55u8)
+    zkp_bytes_copy(zkp_w_addr(0u64), &ZKP_GEN as u64, 32u64)
+    i = 1u64
+    while i < 5u64 { zkp_mhash(i - 1u64, zkp_w_addr(i))  i = i + 1u64 }
+    /* legacy (proof-absent) body */
+    if zkp_sidecar_build(5u64, &ZKP_GEN as u64) != 0i32 { return 1u64 }
+    zkp_bytes_copy(&ZKP_STK_B0 as u64, &ZKP_SC_BODY as u64, 32u64)
+    /* AIR-aware (proof-bound) body -- MUST differ from the legacy body */
+    if zkp_stark_sidecar_build(5u64, &ZKP_GEN as u64, &ZKP_STK_CAD as u64) != 0i32 { return 2u64 }
+    if zkp_bytes_eq(&ZKP_STK_B0 as u64, &ZKP_SC_BODY as u64, 32u64) == 1u64 { return 3u64 }   /* binding changes the root */
+    zkp_bytes_copy(&ZKP_STK_B1 as u64, &ZKP_SC_BODY as u64, 32u64)
+    /* deterministic re-build */
+    if zkp_stark_sidecar_build(5u64, &ZKP_GEN as u64, &ZKP_STK_CAD as u64) != 0i32 { return 4u64 }
+    if zkp_bytes_eq(&ZKP_STK_B1 as u64, &ZKP_SC_BODY as u64, 32u64) == 0u64 { return 5u64 }   /* deterministic */
+    /* NEGATIVE: a different bound proof cad -> a different body (identity is load-bearing) */
+    let s0 : u8 = ZKP_STK_CAD[0u64]
+    ZKP_STK_CAD[0u64] = s0 ^ 1u8
+    if zkp_stark_sidecar_build(5u64, &ZKP_GEN as u64, &ZKP_STK_CAD as u64) != 0i32 { return 6u64 }
+    if zkp_bytes_eq(&ZKP_STK_B1 as u64, &ZKP_SC_BODY as u64, 32u64) == 1u64 { return 7u64 }
+    ZKP_STK_CAD[0u64] = s0
+    /* the proof-bound rollup verifies (verify re-derives the body WITH the cad bound) */
+    zkp_stark_sidecar_build(5u64, &ZKP_GEN as u64, &ZKP_STK_CAD as u64)
+    zkp_rollup_build(0x1122334455667788u64)
+    if zkp_rollup_verify(5u64) != 0i32 { return 8u64 }
+    /* legacy path STILL byte-identical (no regression): plain rebuild resets SC_PROOF=0 */
+    if zkp_sidecar_build(5u64, &ZKP_GEN as u64) != 0i32 { return 9u64 }
+    if zkp_bytes_eq(&ZKP_STK_B0 as u64, &ZKP_SC_BODY as u64, 32u64) == 0u64 { return 10u64 }   /* legacy unchanged */
+    return 99u64
+}

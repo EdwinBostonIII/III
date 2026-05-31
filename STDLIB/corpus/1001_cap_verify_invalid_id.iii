@@ -1,0 +1,23 @@
+/* 1001_cap_verify_invalid_id.iii -- falsifier for cap_verify_rights' invalid-id arm
+ * (aether/capability.iii:150; cap_slot_of(0)=0xFFFFFFFF -> reject). 36_capability_attenuate_revoke
+ * drives the revoked-ancestor, missing-rights, expiry, and non-widening arms but never the id=0
+ * invalid-id arm. A valid cap with the right is ADMITTED (1u8); id=0 (a non-existent capability) is
+ * REJECTED (0u8) before any rights logic. 99 = pass. */
+module corpus_1001
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, req: u64) -> u8 from "capability.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let fs  : u64 = cap_attenuate(env, 0x06u64, 0u64)   /* fs_read|fs_write */
+    if fs == 0u64 { return 1u64 }
+    /* admit: a live cap holding the required right */
+    if cap_verify_rights(fs, 0x02u64) != 1u8 { return 2u64 }
+    /* reject (the gap): id=0 is no capability -> invalid-id arm */
+    if cap_verify_rights(0u64, 0x02u64) != 0u8 { return 3u64 }
+    /* reject (non-vacuity, distinct from the id check): a right the cap lacks */
+    if cap_verify_rights(fs, 0x20u64) != 0u8 { return 4u64 }
+    return 99u64
+}

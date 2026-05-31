@@ -2184,6 +2184,52 @@ xii_chd_bucket_at:
     .seh_endprologue
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl L_XCHD_DIM(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_45
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_45:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl L_XCHD_BUCKET_MAX(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_47
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_47:
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2313,7 +2359,7 @@ xii_chd_verify_collision_free:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_49
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -2323,7 +2369,7 @@ xii_chd_verify_collision_free:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_49:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2332,7 +2378,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_46:
+L_loop_top_50:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_XCHD_DIM(%rip), %eax
@@ -2345,7 +2391,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_47
+    jz L_loop_end_51
     movl -16(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -2394,7 +2440,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_53
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2409,7 +2455,7 @@ L_loop_top_46:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_53:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2424,8 +2470,8 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
+    jmp L_loop_top_50
+L_loop_end_51:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax

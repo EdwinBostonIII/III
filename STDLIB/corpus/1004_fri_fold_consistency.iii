@@ -1,0 +1,54 @@
+/* 1004_fri_fold_consistency.iii -- falsifier for numera/ntt_fri_organ.iii (APOTHEOSIS C.3
+ * item 2). The FRI organ's soundness hinge is that the PROVER's whole-layer fold
+ * (fri_eval_and_fold, incremental inv(omega^j)) and the VERIFIER's single-point fold
+ * (fri_fold_point, direct inv(omega^qmod)) compute the SAME value at every position -- if
+ * they disagreed, an honest proof would fail to verify. This KAT folds a layer and asserts
+ * each output equals the point-fold of its (lo,hi) pair. NEGATIVE arm (the advisor's
+ * mandate): tampering a FRI SIBLING must change the fold (a symmetric fold bug that the
+ * prove->verify roundtrip alone would hide). Plus fri_commit_layer's root opens+verifies.
+ * 99 = pass. */
+module corpus_1004
+
+extern @abi(c-msvc-x64) fn fri_eval_and_fold(arrBase: u64, floff: u64, ns: u64, omega: u32, alpha: u32, nextOff: u64, q: u32) -> i32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn fri_fold_point(aa: u32, bb: u32, omega: u32, qmod: u64, alpha: u32, q: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn fri_commit_layer(arrBase: u64, floff: u64, sz: u64, poolBase: u64, treeOff: u64) -> u64 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_open(poolBase: u64, treeOff: u64, n: u64, idx: u64, pathBase: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_verify_u32(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 from "merkle.iii"
+
+const Q : u32 = 998244353u32
+
+var LAYER : [u32; 16]    /* 8 inputs [0..8) + 4 folded outputs [8..12) */
+var POOL  : [u8; 1024]   /* 2*8*32 = 512 bytes for the 8-leaf commit tree */
+var PATH  : [u8; 512]
+
+fn main() -> u64 {
+    let omega : u32 = 3u32       /* the fold identity holds for any nonzero omega */
+    let alpha : u32 = 12345u32
+    let mut i : u64 = 0u64
+    while i < 8u64 { LAYER[i] = (i*111u64 + 7u64) as u32  i = i + 1u64 }
+    /* prover: fold the size-8 layer (ns=4) into [8,12) */
+    fri_eval_and_fold(&LAYER as u64, 0u64, 4u64, omega, alpha, 8u64, Q)
+    /* prover-layer == verifier-point at every output position */
+    let mut j : u64 = 0u64
+    while j < 4u64 {
+        let lo : u32 = LAYER[j]
+        let hi : u32 = LAYER[j + 4u64]
+        let pt : u32 = fri_fold_point(lo, hi, omega, j, alpha, Q)
+        if LAYER[8u64 + j] != pt { return 1u64 + j }
+        j = j + 1u64
+    }
+    /* NEGATIVE: a tampered FRI sibling MUST change the fold */
+    let goodpt : u32 = fri_fold_point(LAYER[0u64], LAYER[4u64],          omega, 0u64, alpha, Q)
+    let badpt  : u32 = fri_fold_point(LAYER[0u64], LAYER[4u64] ^ 1u32,   omega, 0u64, alpha, Q)
+    if goodpt == badpt { return 10u64 }
+    if LAYER[8u64] != goodpt { return 11u64 }
+    /* NEGATIVE: a different alpha MUST change the fold (FS binding) */
+    let altpt : u32 = fri_fold_point(LAYER[0u64], LAYER[4u64], omega, 0u64, alpha + 1u32, Q)
+    if altpt == goodpt { return 12u64 }
+    /* fri_commit_layer: the committed root opens+verifies a leaf, rejects a tamper */
+    let root : u64 = fri_commit_layer(&LAYER as u64, 0u64, 8u64, &POOL as u64, 0u64)
+    let plen : u64 = merkle_tree_open(&POOL as u64, 0u64, 8u64, 3u64, &PATH as u64)
+    if merkle_tree_verify_u32(root, 8u64, 3u64, LAYER[3u64], &PATH as u64, plen) != 1u64 { return 13u64 }
+    if merkle_tree_verify_u32(root, 8u64, 3u64, LAYER[3u64] ^ 1u32, &PATH as u64, plen) != 0u64 { return 14u64 }
+    return 99u64
+}

@@ -1,0 +1,11 @@
+/* 1010_pareto_frontier.iii -- falsifier for the 6-D Pareto frontier (APOTHEOSIS C.8,
+ * pareto_extraction.iii). Physical cost is multi-dimensional; the honest selection is the
+ * antichain of non-dominated designs, NOT a scalar minimum. Proves: dominance basics (strict,
+ * equal-vectors-don't-dominate), a genuine trade-off set keeps all incomparable designs and
+ * drops the dominated one, the frontier is a TRUE antichain (no member dominates another), and a
+ * global optimum collapses the frontier to {it}. 99 = pass. */
+module corpus_1010
+
+extern @abi(c-msvc-x64) fn pareto_selftest() -> u64 from "pareto_extraction.iii"
+
+fn main() -> u64 { return pareto_selftest() }

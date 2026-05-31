@@ -1,0 +1,11 @@
+/* 1005_zk_stark_seal.iii -- falsifier for zk_stark_seal.iii (APOTHEOSIS C.3 item 5), the
+ * content-address PROOF SEAL.  A STARK proof gains a reproducible identity =
+ * cad( "III/zk-stark-proof/v1" || trace_root || cp_root || fri_roots || queries || boundary )
+ * via the §S.6 cad streaming organ.  The selftest proves: determinism (re-seal -> identical),
+ * the seal's NEGATIVE arm (tampering the cp commitment OR a query -> a different identity),
+ * and non-vacuity (the identity is non-zero).  99 = pass. */
+module corpus_1005
+
+extern @abi(c-msvc-x64) fn zk_stark_seal_selftest() -> u64 from "zk_stark_seal.iii"
+
+fn main() -> u64 { return zk_stark_seal_selftest() }

@@ -14,6 +14,8 @@ L_XAT_E_CELL_TAMPER_RUNTIME:
     .quad 0x2
 L_XAT_CHECK_CADENCE:
     .quad 0x400
+L_XAT_AUDIT_MAX_RECORDS:
+    .quad 0x3ffffff
     .section .data
     .global L_XAT_OP_COUNTER
 L_XAT_OP_COUNTER:
@@ -430,6 +432,29 @@ L_if_end_11:
     pushq %rax
     popq %rax
 L_if_end_13:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl L_XAT_AUDIT_MAX_RECORDS(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movl L_XAT_OK(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
     movl L_XAT_ROUND_ROBIN_IDX(%rip), %eax
     pushq %rax
     movl -24(%rbp), %eax

@@ -22,12 +22,26 @@ extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> 
  * same inverse = forward(omega^-1) then *inv(n)); it now delegates to the organ. */
 extern @abi(c-msvc-x64) fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
 extern @abi(c-msvc-x64) fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+/* APOTHEOSIS C.3 (item 4): the Merkle commitment + FRI fold are no longer private to this
+ * module -- they route through the §S.6 merkle build-once/open-many surface and the §C.3
+ * ntt_fri_organ (one tree, one fold for the spine, the gate, zk_stark AND zk_air).  The
+ * st_merkle_* below are now thin delegations over ZKST/ZKST_MT; the inlined sha256 hashers
+ * and the per-j fold loop are deleted. */
+extern @abi(c-msvc-x64) fn merkle_tree_build_u32(arrBase: u64, leafOff: u64, n: u64, poolBase: u64, treeOff: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_root(poolBase: u64, treeOff: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_open(poolBase: u64, treeOff: u64, n: u64, idx: u64, pathBase: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_verify_u32(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn fri_eval_and_fold(arrBase: u64, floff: u64, ns: u64, omega: u32, alpha: u32, nextOff: u64, q: u32) -> i32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn fri_fold_point(aa: u32, bb: u32, omega: u32, qmod: u64, alpha: u32, q: u32) -> u32 from "ntt_fri_organ.iii"
+/* APOTHEOSIS C.3 (item 5): seal THIS proof's commitments into a §S.6 content-address identity. */
+extern @abi(c-msvc-x64) fn zk_proof_seal_begin() -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn zk_proof_seal_absorb(addr: u64, len: u64) -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn zk_proof_seal_final(out32: u64) -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn zk_proof_seal_eq(a: u64, b: u64) -> u8 from "zk_stark_seal.iii"
 
 /* sf working arrays (NTT buffers / LDE / cp / FRI layers). */
 var ZKST     : [u32; 8192]
-var ZKST_BUF : [u8; 80]        /* hash-input scratch (leaf=5B, node=65B) */
-var ZKST_MT  : [u8; 524288]    /* Merkle node pool (16384 nodes * 32B; trace+cp+FRI trees) */
-var ZKST_CUR : [u8; 32]        /* verify running hash */
+var ZKST_MT  : [u8; 524288]    /* Merkle node pool (16384 nodes * 32B; trace+cp+FRI trees) -- filled by the §S.6 merkle build-once surface */
 var ZKST_PATH: [u8; 512]       /* path scratch (16 levels * 32B) */
 /* AIR public parameters (x_{i+1}=x_i^2+c; boundary x0,xN; trace length N). */
 var ZKST_AIR_N  : [u32; 1]
@@ -144,74 +158,19 @@ fn zk_stark_ntt_selftest() -> u64 @export {
 /* ================= Layer 2: SHA-256 Merkle (toy-compatible, byte-identical) =================
  * Hashers take destination ADDRESSES so they write into the tree pool (build)
  * or a scratch slot (verify).  leaf = sha256(0x00 ‖ v_be32); node = sha256(0x01 ‖ L ‖ R). */
-fn st_leaf_hash(v: u32, dstAddr: u64) -> i32 {
-    ZKST_BUF[0] = 0u8
-    ZKST_BUF[1] = ((v >> 24u32) & 0xFFu32) as u8
-    ZKST_BUF[2] = ((v >> 16u32) & 0xFFu32) as u8
-    ZKST_BUF[3] = ((v >> 8u32) & 0xFFu32) as u8
-    ZKST_BUF[4] = (v & 0xFFu32) as u8
-    let bp : *u8 = (&ZKST_BUF as u64) as *u8
-    let dp : *u8 = dstAddr as *u8
-    sha256_oneshot(bp, 5u64, dp)
-    return 0i32
-}
-fn st_node_hash(lAddr: u64, rAddr: u64, dstAddr: u64) -> i32 {
-    ZKST_BUF[0] = 1u8
-    let lp : *u8 = lAddr as *u8
-    let rp : *u8 = rAddr as *u8
-    let mut i : u64 = 0u64
-    while i < 32u64 { ZKST_BUF[1u64 + i] = lp[i] ; ZKST_BUF[33u64 + i] = rp[i] ; i = i + 1u64 }
-    let bp : *u8 = (&ZKST_BUF as u64) as *u8
-    let dp : *u8 = dstAddr as *u8
-    sha256_oneshot(bp, 65u64, dp)
-    return 0i32
-}
-/* build Merkle tree (n leaves, power of two) at byte base tb in ZKST_MT from
- * sf leaves ZKST[leafBase..leafBase+n-1]; node i (1-indexed) at tb + i*32. */
+/* st_leaf_hash/st_node_hash deleted -- the SHA-256 0x00/0x01 leaf/node hashing now lives
+ * ONCE in merkle.iii (reused by the merkle_tree_* surface these delegate to).  The four
+ * st_merkle_* keep their local names (so prove/verify/selftest call sites are unchanged) but
+ * are now one-line forwarders binding ZKST (leaves) + ZKST_MT (tree pool). */
 fn st_merkle_build(tb: u64, leafBase: u64, n: u64) -> i32 {
-    let mtb : u64 = &ZKST_MT as u64
-    let mut i : u64 = 0u64
-    while i < n { st_leaf_hash(ZKST[leafBase + i], mtb + tb + (n + i)*32u64) ; i = i + 1u64 }
-    let mut ni : u64 = n
-    while ni > 1u64 {
-        ni = ni - 1u64
-        st_node_hash(mtb + tb + (2u64*ni)*32u64, mtb + tb + (2u64*ni + 1u64)*32u64, mtb + tb + ni*32u64)
-    }
-    return 0i32
+    return merkle_tree_build_u32(&ZKST as u64, leafBase, n, &ZKST_MT as u64, tb)
 }
-fn st_root_addr(tb: u64) -> u64 { return (&ZKST_MT as u64) + tb + 32u64 }       /* node[1] */
-/* copy the authentication path for leaf idx into pathBase; return depth. */
+fn st_root_addr(tb: u64) -> u64 { return merkle_tree_root(&ZKST_MT as u64, tb) }
 fn st_merkle_open(tb: u64, n: u64, idx: u64, pathBase: u64) -> u64 {
-    let mtb : u64 = &ZKST_MT as u64
-    let mut i : u64 = n + idx
-    let mut d : u64 = 0u64
-    while i > 1u64 {
-        let sib : u64 = i ^ 1u64
-        let srcp : *u8 = (mtb + tb + sib*32u64) as *u8
-        let dstp : *u8 = (pathBase + d*32u64) as *u8
-        let mut b : u64 = 0u64
-        while b < 32u64 { dstp[b] = srcp[b] ; b = b + 1u64 }
-        i = i >> 1u64
-        d = d + 1u64
-    }
-    return d
+    return merkle_tree_open(&ZKST_MT as u64, tb, n, idx, pathBase)
 }
 fn st_merkle_verify(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 {
-    let curAddr : u64 = &ZKST_CUR as u64
-    st_leaf_hash(leafVal, curAddr)
-    let mut i : u64 = n + idx
-    let mut d : u64 = 0u64
-    while d < plen {
-        let pAddr : u64 = pathBase + d*32u64
-        if (i & 1u64) == 1u64 { st_node_hash(pAddr, curAddr, curAddr) } else { st_node_hash(curAddr, pAddr, curAddr) }
-        i = i >> 1u64
-        d = d + 1u64
-    }
-    let cp : *u8 = curAddr as *u8
-    let rp : *u8 = rootAddr as *u8
-    let mut b : u64 = 0u64
-    while b < 32u64 { if cp[b] != rp[b] { return 0u64 } b = b + 1u64 }
-    return 1u64
+    return merkle_tree_verify_u32(rootAddr, n, idx, leafVal, pathBase, plen)
 }
 
 /* Layer-2 self-test: build / open / verify, reject bad leaf, boundary idx 0.  99 = pass. */
@@ -387,18 +346,11 @@ fn st_prove() -> i32 {
             ZKST_FS_IDX[0] = (0xA1F00000u32 + (L as u32)) as u64
             let alpha : u32 = st_fs_field_compute()
             let ns : u64 = szL / 2u64
-            let inv2 : u32 = sf_inv(2u32)
             let omegaL : u32 = ZKST_FOMEGA[L]
             let nextOff : u64 = floffL + szL
-            let mut j : u64 = 0u64
-            while j < ns {
-                let lo : u32 = ZKST[3000u64 + floffL + j]
-                let hi : u32 = ZKST[3000u64 + floffL + j + ns]
-                let pe : u32 = sf_mul(sf_add(lo, hi), inv2)
-                let po : u32 = sf_mul(sf_sub(lo, hi), sf_mul(inv2, sf_inv(sf_pow(omegaL, j))))
-                ZKST[3000u64 + nextOff + j] = sf_add(pe, sf_mul(alpha, po))
-                j = j + 1u64
-            }
+            /* fold the whole layer through the shared §C.3 organ (incremental inv(omega^j),
+             * byte-identical result).  ZKST FRI layers begin at sf index 3000. */
+            fri_eval_and_fold((&ZKST as u64) + 3000u64*4u64, floffL, ns, omegaL, alpha, nextOff, 998244353u32)
             ZKST_FSIZE[L + 1u64] = ns as u32
             ZKST_FOMEGA[L + 1u64] = sf_mul(omegaL, omegaL)
             ZKST_FLOFF[L + 1u64] = nextOff as u32
@@ -480,7 +432,6 @@ fn st_verify() -> u64 {
         let mut l2 : u64 = 0u64
         while l2 < NL {
             let half : u64 = sizeL / 2u64
-            let inv2 : u32 = sf_inv(2u32)
             let cutlen : u64 = 64u64 + 32u64*(l2 + 1u64)
             ZKST_FS_TLEN[0] = cutlen
             ZKST_FS_IDX[0] = (0xA1F00000u32 + (l2 as u32)) as u64
@@ -493,10 +444,9 @@ fn st_verify() -> u64 {
             let mut t2 : u64 = sizeL
             while t2 > 1u64 { plen2 = plen2 + 1u64 ; t2 = t2 >> 1u64 }
             if st_merkle_verify((&ZKST_FRI_ROOTS as u64) + l2*32u64, sizeL, (qcur + half) % sizeL, ZKST_FSIB[i*12u64 + l2], (&ZKST_FPATH as u64) + (i*12u64 + l2)*320u64, plen2) == 0u64 { return 6u64 }
-            let pe : u32 = sf_mul(sf_add(aa, bb), inv2)
-            let po : u32 = sf_mul(sf_sub(aa, bb), sf_mul(inv2, sf_inv(sf_pow(omegaL, qcur % half))))
-            cur = sf_add(pe, sf_mul(alpha, po))
-            qcur = qcur % half
+            let qmod : u64 = qcur % half
+            cur = fri_fold_point(aa, bb, omegaL, qmod, alpha, 998244353u32)
+            qcur = qmod
             sizeL = half
             omegaL = sf_mul(omegaL, omegaL)
             l2 = l2 + 1u64
@@ -534,5 +484,54 @@ fn zk_stark_kat() -> u64 @export {
     if st_verify() == 0u64 { return 4u64 }
     ZKST_AIR_X0[0] = savedx0
     if st_verify() != 0u64 { return 5u64 }
+    return 99u64
+}
+
+/* ===================== Layer 4: content-address PROOF SEAL (§C.3 item 5) =====================
+ * A proof becomes a first-class sealed artifact with an identity in the §S.6 chain.  The seal
+ * absorbs every public commitment (length-framed where counts vary) so it is reproducible AND
+ * any altered commitment changes the identity (the seal's negative arm). */
+var ZKST_SEAL_A : [u8; 32]
+var ZKST_SEAL_B : [u8; 32]
+var ZKST_SEAL_C : [u8; 32]
+
+fn zk_stark_proof_cad(out32: u64) -> i32 @export {
+    let nl : u64 = ZKST_FRI_NL[0] as u64
+    zk_proof_seal_begin()
+    zk_proof_seal_absorb(&ZKST_TRACE_ROOT as u64, 32u64)
+    zk_proof_seal_absorb(&ZKST_CP_ROOT as u64, 32u64)
+    zk_proof_seal_absorb(&ZKST_FRI_NL as u64, 4u64)         /* layer-count framing */
+    zk_proof_seal_absorb(&ZKST_FRI_ROOTS as u64, nl*32u64)
+    zk_proof_seal_absorb(&ZKST_FRI_FINAL as u64, 4u64)
+    zk_proof_seal_absorb(&ZKST_QUERIES as u64, 64u64)
+    zk_proof_seal_absorb(&ZKST_BX0 as u64, 4u64)
+    zk_proof_seal_absorb(&ZKST_BXN as u64, 4u64)
+    return zk_proof_seal_final(out32)
+}
+
+/* KAT: a real proof's seal is deterministic, and tampering ANY commitment (cp root OR a query)
+ * changes the identity -- the §C.3 item-5 negative arm.  99 = pass. */
+fn zk_stark_proof_seal_kat() -> u64 @export {
+    ZKST_AIR_N[0] = 8u32  ZKST_AIR_X0[0] = 2u32  ZKST_AIR_C[0] = 3u32
+    let mut t : u32 = 2u32
+    let mut i : u64 = 0u64
+    while i < 7u64 { t = sf_add(sf_mul(t, t), 3u32)  i = i + 1u64 }
+    ZKST_AIR_XN[0] = t
+    if st_prove() != 0i32 { return 1u64 }
+    zk_stark_proof_cad(&ZKST_SEAL_A as u64)
+    zk_stark_proof_cad(&ZKST_SEAL_B as u64)
+    if zk_proof_seal_eq(&ZKST_SEAL_A as u64, &ZKST_SEAL_B as u64) != 1u8 { return 2u64 }   /* deterministic */
+    let s0 : u8 = ZKST_CP_ROOT[0]
+    ZKST_CP_ROOT[0] = s0 ^ 1u8
+    zk_stark_proof_cad(&ZKST_SEAL_C as u64)
+    if zk_proof_seal_eq(&ZKST_SEAL_A as u64, &ZKST_SEAL_C as u64) != 0u8 { return 3u64 }   /* cp tamper */
+    ZKST_CP_ROOT[0] = s0
+    let q0 : u32 = ZKST_QUERIES[2u64]
+    ZKST_QUERIES[2u64] = q0 ^ 1u32
+    zk_stark_proof_cad(&ZKST_SEAL_C as u64)
+    if zk_proof_seal_eq(&ZKST_SEAL_A as u64, &ZKST_SEAL_C as u64) != 0u8 { return 4u64 }   /* query tamper */
+    ZKST_QUERIES[2u64] = q0
+    zk_stark_proof_cad(&ZKST_SEAL_C as u64)
+    if zk_proof_seal_eq(&ZKST_SEAL_A as u64, &ZKST_SEAL_C as u64) != 1u8 { return 5u64 }   /* restored */
     return 99u64
 }

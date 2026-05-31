@@ -22,8 +22,12 @@ L_XSL_E_LDIL_AUDIT_TAMPER:
     .quad 0x5
 L_XSL_E_CELL_TAMPER:
     .quad 0x6
+L_XSL_E_RECORD_COUNT:
+    .quad 0x7
 L_XSL_MANIFEST_BYTES:
     .quad 0x410
+L_XSL_AUDIT_MAX_RECORDS:
+    .quad 0x3ffffff
     .section .bss
     .global L_XSL_COMPUTED_MHASH
 L_XSL_COMPUTED_MHASH:
@@ -337,11 +341,34 @@ xii_sml_verify_cells:
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl L_XSL_AUDIT_MAX_RECORDS(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movl L_XSL_E_RECORD_COUNT(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_8:
+L_loop_top_10:
     movl -32(%rbp), %eax
     pushq %rax
     movl -24(%rbp), %eax
@@ -354,7 +381,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_9
+    jz L_loop_end_11
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -798,7 +825,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     movq %rax, -184(%rbp)
-L_loop_top_10:
+L_loop_top_12:
     movl -184(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -811,7 +838,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_13
     leaq L_XSL_COMPUTED_MHASH(%rip), %rax
     pushq %rax
     movl -184(%rbp), %eax
@@ -852,7 +879,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movl L_XSL_E_CELL_TAMPER(%rip), %eax
     pushq %rax
     popq %rax
@@ -866,7 +893,7 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movl -184(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -881,8 +908,8 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_12
+L_loop_end_13:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -897,8 +924,8 @@ L_loop_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
+    jmp L_loop_top_10
+L_loop_end_11:
     movl L_XSL_OK(%rip), %eax
     pushq %rax
     popq %rax
@@ -963,7 +990,7 @@ xii_sml_launch:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax
@@ -973,7 +1000,7 @@ xii_sml_launch:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -996,7 +1023,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1006,7 +1033,7 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movl -40(%rbp), %eax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1035,7 +1062,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movl -64(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1045,7 +1072,7 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movl L_XSL_OK(%rip), %eax
     pushq %rax
     popq %rax

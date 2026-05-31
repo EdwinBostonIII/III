@@ -1,0 +1,118 @@
+/* STDLIB/iii/aether/hotstuff_unified.iii -- APOTHEOSIS C.11: the tier-aware CERTIFIED-MONOTONE
+ * HotStuff pacemaker.
+ *
+ * The hardcoded three-phase pacing becomes a scheduler whose per-view timeout is a CONSTITUTIONAL
+ * CONSTANT -- a FIXED base per federation tier (a wider boundary => a longer base, because the
+ * network is genuinely slower), NEVER an observed-and-adapted average (the no-ML invariant: a
+ * consensus layer that LEARNS its timeouts from traffic is an attack surface an adversary trains).
+ * The timeout is MONOTONE within a view-change sequence -- each failed view at least doubles the
+ * wait (bounded exponential backoff) -- which is the liveness lever (eventually the timeout exceeds
+ * the network delay and a correct leader's proposal lands). And each tier's BFT quorum (2f+1) is
+ * exposed EXPLICITLY.
+ *
+ * Byzantine SAFETY is unchanged and lives elsewhere: it stays the `mhash` vote-block match in
+ * hotstuff.iii (two blocks at one height with different mhash cannot both gather a quorum). This
+ * organ governs ONLY pacing + quorum exposure -- never which block commits. hotstuff.iii's `hs_init`
+ * adopts it by a pass-through call (the legacy path retained).
+ *
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_sensitivity (admission pacing).  Ring: R0.
+ * NIH: nothing (integer shifts + compares; no float, no observed state).  K: 1.00. */
+module aether_hotstuff_unified
+
+/* the 5 federation tiers (mirrors aether/fed_tier) and their CONSTITUTIONAL base timeouts (ticks).
+ * Fixed constants -- a 4x step per tier reflects the widening latency envelope, declared not learned. */
+const HSU_TIER_HOST      : u32 = 1u32
+const HSU_TIER_CLUSTER   : u32 = 2u32
+const HSU_TIER_REGION    : u32 = 3u32
+const HSU_TIER_SOVEREIGN : u32 = 4u32
+const HSU_TIER_PLANETARY : u32 = 5u32
+
+const HSU_BASE_HOST      : u64 = 10u64
+const HSU_BASE_CLUSTER   : u64 = 40u64
+const HSU_BASE_REGION    : u64 = 160u64
+const HSU_BASE_SOVEREIGN : u64 = 640u64
+const HSU_BASE_PLANETARY : u64 = 2560u64
+const HSU_BACKOFF_CAP    : u64 = 10u64    /* cap the backoff shift -> the timeout is BOUNDED */
+
+fn hsu_tier_base(tier: u32) -> u64 {
+    if tier == HSU_TIER_HOST      { return HSU_BASE_HOST }
+    if tier == HSU_TIER_CLUSTER   { return HSU_BASE_CLUSTER }
+    if tier == HSU_TIER_REGION    { return HSU_BASE_REGION }
+    if tier == HSU_TIER_SOVEREIGN { return HSU_BASE_SOVEREIGN }
+    return HSU_BASE_PLANETARY   /* tier 5 / out-of-range -> the widest, strictest base */
+}
+
+/* the parameterized monotone backoff: `base << min(v, cap)` for ANY base unit -- so a consumer with
+ * its own base (e.g. hotstuff's 5000ms view-timeout, in ms) gets the certified-monotone, BOUNDED
+ * backoff WITHOUT adopting the abstract tier-base units.  base<<0 == base, so view 0 is exactly the
+ * consumer's legacy value (a true pass-through adoption). */
+fn hsu_timeout_base(base: u64, v: u64) -> u64 @export {
+    let mut sh : u64 = v
+    if sh > HSU_BACKOFF_CAP { sh = HSU_BACKOFF_CAP }
+    return base << sh
+}
+
+/* the pacemaker timeout for the v-th consecutive failed view at `tier`: base(tier) << min(v, cap).
+ * MONOTONE non-decreasing in v, tier-aware, BOUNDED (caps at base<<10), and DETERMINISTIC
+ * (a pure function of (v, tier) -- no observed history, so it can never be adaptively trained). */
+fn hsu_timeout(v: u64, tier: u32) -> u64 @export {
+    let base : u64 = hsu_tier_base(tier)
+    return hsu_timeout_base(base, v)
+}
+
+/* the BFT quorum 2f+1 for n nodes (f = floor((n-1)/3)) -- the tier's explicit commit threshold. */
+fn hsu_quorum(n: u32) -> u32 @export {
+    let nn : u32 = n
+    if nn == 0u32 { return 1u32 }
+    let f : u32 = (nn - 1u32) / 3u32
+    return 2u32 * f + 1u32
+}
+
+/* does a vote count meet the BFT quorum?  A sub-quorum can NEVER commit (the safety floor). */
+fn hsu_quorum_met(n_votes: u32, n: u32) -> u8 @export {
+    if n_votes >= hsu_quorum(n) { return 1u8 }
+    return 0u8
+}
+
+/* Self-test: the certified-monotone + tier-aware + bounded + deterministic pacemaker, and the BFT
+ * quorum floor.  99 = pass.  (The headline no-ML arm = DETERMINISM: same (v,tier) -> same timeout,
+ * always -- a learned pacemaker would vary it with observed traffic; this cannot, it has no state.) */
+fn hsu_selftest() -> u64 @export {
+    /* (1) MONOTONE non-decreasing in v (a failed view never SHORTENS the next timeout). */
+    let mut v : u64 = 0u64
+    let mut prev : u64 = 0u64
+    while v < 14u64 {
+        let t : u64 = hsu_timeout(v, HSU_TIER_REGION)
+        if t < prev { return 1u64 }            /* non-decreasing */
+        prev = t
+        v = v + 1u64
+    }
+    /* strict doubling until the cap: timeout(3) == 2 * timeout(2) at a tier */
+    if hsu_timeout(3u64, HSU_TIER_HOST) != 2u64 * hsu_timeout(2u64, HSU_TIER_HOST) { return 2u64 }
+    /* (2) BOUNDED: at/after the cap the timeout is constant (no unbounded blowup). */
+    if hsu_timeout(10u64, HSU_TIER_HOST) != hsu_timeout(11u64, HSU_TIER_HOST) { return 3u64 }
+    if hsu_timeout(11u64, HSU_TIER_HOST) != hsu_timeout(50u64, HSU_TIER_HOST) { return 4u64 }
+    /* (3) TIER-AWARE: a wider tier waits longer at the same view. */
+    if hsu_timeout(0u64, HSU_TIER_HOST) >= hsu_timeout(0u64, HSU_TIER_PLANETARY) { return 5u64 }
+    if hsu_timeout(2u64, HSU_TIER_CLUSTER) >= hsu_timeout(2u64, HSU_TIER_SOVEREIGN) { return 6u64 }
+    /* (4) the n==0 quorum GUARD is a LIVE falsifier (without it, (0u32-1u32)/3u32 underflows to a huge
+     * value -> a nonsense quorum): hsu_quorum(0) must be 1.  Plus an EXACT tier-base value (tier-awareness
+     * by absolute magnitude, not just the inequalities in (3)).  NOTE on no-ML: determinism here is a
+     * SIGNATURE-LEVEL guarantee -- hsu_timeout has NO state parameter, so it structurally cannot learn
+     * from observed traffic; a runtime `f(x)==f(x)` assertion is vacuous (the documented no-tautological-
+     * proof anti-pattern), so it is replaced by these two real falsifiers. */
+    if hsu_quorum(0u32) != 1u32 { return 7u64 }
+    if hsu_timeout(0u64, HSU_TIER_REGION) != 160u64 { return 16u64 }   /* exact REGION base (=160) */
+    /* (5) BFT QUORUM 2f+1 + the sub-quorum safety floor. */
+    if hsu_quorum(4u32) != 3u32 { return 8u64 }       /* n=4, f=1 -> 3 */
+    if hsu_quorum(7u32) != 5u32 { return 9u64 }       /* n=7, f=2 -> 5 */
+    if hsu_quorum(1u32) != 1u32 { return 10u64 }      /* n=1 -> 1 */
+    if hsu_quorum_met(3u32, 4u32) != 1u8 { return 11u64 }   /* exactly quorum admits */
+    if hsu_quorum_met(2u32, 4u32) != 0u8 { return 12u64 }   /* sub-quorum REFUSED (cannot commit) */
+    /* (6) PARAMETERIZED backoff (what hotstuff adopts): base<<0 == base preserves the consumer's
+     * legacy view-0 timeout EXACTLY, then backs off monotonically (x2 per view) + stays bounded. */
+    if hsu_timeout_base(5000u64, 0u64) != 5000u64 { return 13u64 }         /* view 0 == legacy 5000ms */
+    if hsu_timeout_base(5000u64, 1u64) != 10000u64 { return 14u64 }        /* view 1 backs off x2 */
+    if hsu_timeout_base(5000u64, 10u64) != hsu_timeout_base(5000u64, 11u64) { return 15u64 }   /* bounded */
+    return 99u64
+}

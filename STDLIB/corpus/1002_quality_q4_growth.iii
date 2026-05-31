@@ -1,0 +1,45 @@
+/* 1002_quality_q4_growth.iii -- falsifier for quality_check_q4_witness_growth (sanctus/quality.iii:224),
+ * the append-only witness-chain gate. Q4 must ACCEPT (1) only when: counts grew AND roots differ, OR counts
+ * equal AND roots match; and REJECT (0) when: the chain SHRANK, OR grew-but-roots-identical (no real
+ * append), OR equal-counts-but-roots-differ (a forked history). No existing falsifier for q4. 99 = pass. */
+module corpus_1002
+
+extern @abi(c-msvc-x64) fn quality_set_witness_counts(prev: u32, new: u32) -> i32 from "quality.iii"
+extern @abi(c-msvc-x64) fn quality_set_witness_roots(prev_ptr: u64, new_ptr: u64) -> i32 from "quality.iii"
+extern @abi(c-msvc-x64) fn quality_check_q4_witness_growth() -> u8 from "quality.iii"
+
+var ROOT_A : [u8; 32]
+var ROOT_B : [u8; 32]
+
+fn fill32(buf: u64, b: u8) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = b  i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    fill32(&ROOT_A as u64, 0xAAu8)
+    fill32(&ROOT_B as u64, 0xBBu8)
+    /* (1) ADMIT: grew (5->8) and roots differ */
+    quality_set_witness_counts(5u32, 8u32)
+    quality_set_witness_roots(&ROOT_A as u64, &ROOT_B as u64)
+    if quality_check_q4_witness_growth() != 1u8 { return 1u64 }
+    /* (2) REJECT: chain shrank (8->5) */
+    quality_set_witness_counts(8u32, 5u32)
+    quality_set_witness_roots(&ROOT_A as u64, &ROOT_B as u64)
+    if quality_check_q4_witness_growth() != 0u8 { return 2u64 }
+    /* (3) REJECT: grew but roots identical (no real append) */
+    quality_set_witness_counts(5u32, 8u32)
+    quality_set_witness_roots(&ROOT_A as u64, &ROOT_A as u64)
+    if quality_check_q4_witness_growth() != 0u8 { return 3u64 }
+    /* (4) ADMIT: equal counts and roots match */
+    quality_set_witness_counts(5u32, 5u32)
+    quality_set_witness_roots(&ROOT_A as u64, &ROOT_A as u64)
+    if quality_check_q4_witness_growth() != 1u8 { return 4u64 }
+    /* (5) REJECT: equal counts but roots differ (forked history) */
+    quality_set_witness_counts(5u32, 5u32)
+    quality_set_witness_roots(&ROOT_A as u64, &ROOT_B as u64)
+    if quality_check_q4_witness_growth() != 0u8 { return 5u64 }
+    return 99u64
+}

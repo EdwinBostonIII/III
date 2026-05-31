@@ -1,0 +1,10 @@
+/* 1011_hotstuff_pacemaker.iii -- falsifier for the tier-aware certified-monotone HotStuff
+ * pacemaker (APOTHEOSIS C.11, hotstuff_unified.iii). The pacemaker's timeout is a CONSTITUTIONAL
+ * CONSTANT (no-ML): MONOTONE non-decreasing per failed view (liveness), BOUNDED (caps the backoff),
+ * TIER-AWARE (a wider boundary waits longer), and DETERMINISTIC (same inputs -> same timeout, with
+ * no observed state to train). Plus the BFT quorum 2f+1 and its sub-quorum safety floor. 99=pass. */
+module corpus_1011
+
+extern @abi(c-msvc-x64) fn hsu_selftest() -> u64 from "hotstuff_unified.iii"
+
+fn main() -> u64 { return hsu_selftest() }

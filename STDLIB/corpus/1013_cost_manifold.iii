@@ -1,0 +1,11 @@
+/* 1013_cost_manifold.iii -- falsifier for the closed-form cost manifold (APOTHEOSIS C.8,
+ * unified_cost_manifold.iii). The latency dim is the CRITICAL PATH (longest weighted chain through
+ * the dependency DAG), computed in closed form so cost is queryable DURING e-graph saturation (not
+ * only at extraction): a chain's critical path is the SUM, a parallel split's is the LONGEST BRANCH
+ * (not the sum), the span is a sound lower bound (single-op <= span <= total work), and the 6-D
+ * vector assembly is exact. 99 = pass. */
+module corpus_1013
+
+extern @abi(c-msvc-x64) fn ucm_selftest() -> u64 from "unified_cost_manifold.iii"
+
+fn main() -> u64 { return ucm_selftest() }

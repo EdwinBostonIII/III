@@ -8,6 +8,8 @@ L_str_0:
     .section .rodata
 L_BABEL_WIRE_HEADER_BYTES:
     .quad 0x44
+L_BABEL_WIRE_U32_CEIL:
+    .quad 0x100000000
 L_BABEL_WIRE_OK:
     .quad 0x0
 L_BABEL_WIRE_E_NULL:
@@ -1481,11 +1483,44 @@ L_if_end_35:
     popq %rax
     movl L_BABEL_WIRE_HEADER_BYTES(%rip), %eax
     pushq %rax
+    popq %rax
+    pushq %rax
     movl -24(%rbp), %eax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq L_BABEL_WIRE_U32_CEIL(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rax
     movl %eax, %eax
     pushq %rax
     popq %rax
@@ -1529,7 +1564,7 @@ babel_wire_unpack_seal_id:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1539,7 +1574,7 @@ babel_wire_unpack_seal_id:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     movabsq $0x0, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1591,7 +1626,7 @@ babel_wire_unpack_cap_ref:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_41
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1601,7 +1636,7 @@ babel_wire_unpack_cap_ref:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_41:
     movabsq $0x8, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1653,7 +1688,7 @@ babel_wire_unpack_intent_id:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_43
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1663,7 +1698,7 @@ babel_wire_unpack_intent_id:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_43:
     movabsq $0x10, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1720,7 +1755,7 @@ babel_wire_unpack_ctx_digest_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_45
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1730,7 +1765,7 @@ babel_wire_unpack_ctx_digest_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_45:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1743,7 +1778,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_47
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1753,7 +1788,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_47:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x18, %rax
@@ -1838,7 +1873,7 @@ babel_wire_unpack_facet:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_49
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1848,7 +1883,7 @@ babel_wire_unpack_facet:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_49:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x38, %rax
@@ -1910,7 +1945,7 @@ babel_wire_unpack_payload_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_51
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1920,7 +1955,7 @@ babel_wire_unpack_payload_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_51:
     movabsq $0x39, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1978,7 +2013,7 @@ babel_wire_unpack_payload_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_53
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1988,7 +2023,7 @@ babel_wire_unpack_payload_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_53:
     movabsq $0x39, %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -2014,7 +2049,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_55
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -2024,7 +2059,7 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_55:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x44, %rax
@@ -2114,7 +2149,7 @@ babel_wire_verify_crc:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_57
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2124,7 +2159,7 @@ babel_wire_verify_crc:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_57:
     movl -32(%rbp), %eax
     pushq %rax
     movl L_BABEL_WIRE_HEADER_BYTES(%rip), %eax
@@ -2137,7 +2172,7 @@ L_if_end_55:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_59
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2147,7 +2182,7 @@ L_if_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_59:
     movabsq $0x40, %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -2188,7 +2223,7 @@ L_if_end_57:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_61
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2198,7 +2233,7 @@ L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_61:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2247,7 +2282,7 @@ babel_wire_verify_seal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_63
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2257,7 +2292,7 @@ babel_wire_verify_seal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_63:
     movabsq $0x0, %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -2282,7 +2317,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_65
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2292,7 +2327,7 @@ L_if_end_61:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_65:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

@@ -1,0 +1,41 @@
+/* affine_audit_kat.iii -- ground-truth fixture for `--affine-audit`.
+ * Expected verdict tally:  AA P=1 A=1 R=1   plus  "AA REFUTED sz=16 i=16".
+ *  - aak_proven : scan [0,16) of a [u8;16] (cast+paren wrapped) -> PROVEN.
+ *  - aak_refuted: scan [0,32) of a [u8;16]                      -> REFUTED bounds (first OOB i=16).
+ *  - aak_abstain: index a *u8 pointer (no static size)          -> ABSTAIN.
+ * Not part of the bootstrap (absent from PORTED_TUS); a manual analysis input only. */
+module aakat
+
+var AAK_ARR : [u8; 16]
+const AAK_N : u32 = 16u32
+const AAK_BAD : u32 = 32u32
+
+fn aak_proven() -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < AAK_N {
+        s = s + (AAK_ARR[i] as u32)
+        i = i + 1u32
+    }
+    return s
+}
+
+fn aak_refuted() -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < AAK_BAD {
+        s = s + (AAK_ARR[i] as u32)
+        i = i + 1u32
+    }
+    return s
+}
+
+fn aak_abstain(p : *u8) -> u32 {
+    let mut i : u32 = 0u32
+    let mut s : u32 = 0u32
+    while i < AAK_N {
+        s = s + (p[i] as u32)
+        i = i + 1u32
+    }
+    return s
+}

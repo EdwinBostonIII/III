@@ -1,0 +1,11 @@
+/* 1009_proof_ripple_unified.iii -- falsifier for the UNIFIED Ripple-move decider (APOTHEOSIS C.7,
+ * proof_ripple_unified.iii).  ONE entry point decides any structural move (MERGE/CUT/EXTRACT) via
+ * the three existing certified deciders, with a LOCATED verdict and a KERNEL-FIRST gate. The
+ * headline negative arm: a down prover (kernel_ok=0) blocks EVERY move kind (the loop self-edits
+ * nothing while blind). Plus: each valid move admits, each reject is located, bad-kind rejects, and
+ * an admitted move's crystal is deterministic + distinct-per-move. 99 = pass. */
+module corpus_1009
+
+extern @abi(c-msvc-x64) fn proof_ripple_selftest() -> u64 from "proof_ripple_unified.iii"
+
+fn main() -> u64 { return proof_ripple_selftest() }

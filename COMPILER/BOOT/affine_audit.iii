@@ -1,0 +1,496 @@
+/* ============================================================================
+ * affine_audit.iii  --  the fully-automatic inward turn of the Sovereign Witness
+ * ----------------------------------------------------------------------------
+ * A compiler pass, invoked via `--affine-audit`, that walks the TYPED, SEMA-RESOLVED
+ * AST and, for every resolvable typed-array affine access, emits one of three sound
+ * verdicts:
+ *
+ *   PROVEN   -- the access is bounds-safe for ALL iterations (machine-checked, sound).
+ *   REFUTED  -- the access is out-of-bounds (with the first offending index / a wrap).
+ *   ABSTAIN  -- the access is not in the soundly-analyzable shape (skipped, never PROVEN).
+ *
+ * This is `sw_prove_affine` (STDLIB/iii/sanctus/sovereign_witness.iii, corpus 416)
+ * turned INWARD onto III's own source: instead of an external captured artifact, the
+ * "artifact" is the AST the compiler already holds after sema. ABSTAIN is the HARD
+ * default on ANY uncertainty -- a false PROVEN is forbidden; a false ABSTAIN merely
+ * forgoes a certificate. See DOCS/III-AFFINE-AUDIT-DESIGN.md (esp. 4b: the loop-range
+ * soundness rule -- the `i < N` guard re-establishes `i < N` at each iteration top, so
+ * an access sees `i in [0,N)` ONLY when the sole write to `i` in the whole body subtree
+ * is the trailing statement; binder-id matching, not name matching, defeats shadowing).
+ *
+ * iiis-0-safe by construction: out-params are module-scratch globals (NOT &local --
+ * iiis-0 register-allocates locals); huge sentinels are named consts (not pre-brace /
+ * call-arg literals); the digit buffer is a module global (local runtime-indexed arrays
+ * segfault); `%` after a call is replaced by subtract; literal output is counted fwrite
+ * (iii string literals are not NUL-terminated). Only the entry is @export (the rest are
+ * intra-module, resolved within this TU like every r3_* helper in cg_r3).
+ * ========================================================================== */
+module affineaudit
+
+/* ---- AST accessors: the SAME C seed the compiler's own codegen uses ---- */
+extern @abi(c-msvc-x64) fn iii_ast_node_kind(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_node_binder_id(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_source_buf(ast: u64) -> u64 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_root_module(ast: u64) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_module_decl_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_fn_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_block_stmt_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_while_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_while_body(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_cond(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_then(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_if_else(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_let_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_return_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_lvalue(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_assign_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_stmt_expr(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_for_body(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_index_index(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_lhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_rhs(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_binary_op(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_unary_operand(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cast_value(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_paren_inner(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_field_object(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_call_arg_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_offset(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_ident_name_length(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_int_u64(ast: u64, node: u32) -> u64 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_expr_hex_u64(ast: u64, node: u32) -> u64 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_array_count(ast: u64, node: u32) -> u64 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_param_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_emit_memcmp_c(a: u64, b: u64, n: u64) -> i32 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_stderr_c() -> u64 from "lex_runtime.c"
+extern @abi(c-msvc-x64) fn iii_lex_fwrite_c(ptr: u64, n: u64, file: u64) -> u64 from "lex_runtime.c"
+
+/* ---- R3 node-kind constants (verbatim from cg_r3.iii) ---- */
+const AA_K_FN_DECL: u32 = 4u32
+const AA_K_CONST_DECL: u32 = 6u32
+const AA_K_PARAM: u32 = 12u32
+const AA_K_TYPE_REF: u32 = 15u32
+const AA_K_TYPE_ARR: u32 = 17u32
+const AA_K_STMT_LET: u32 = 20u32
+const AA_K_STMT_FOR: u32 = 24u32
+const AA_K_STMT_RETURN: u32 = 26u32
+const AA_K_STMT_ASSIGN: u32 = 27u32
+const AA_K_STMT_EXPR: u32 = 28u32
+const AA_K_FORWARD_BLOCK: u32 = 29u32
+const AA_K_EXPR_INT: u32 = 37u32
+const AA_K_EXPR_HEX: u32 = 38u32
+const AA_K_EXPR_IDENT: u32 = 45u32
+const AA_K_EXPR_CALL: u32 = 46u32
+const AA_K_EXPR_FIELD: u32 = 47u32
+const AA_K_EXPR_INDEX: u32 = 48u32
+const AA_K_EXPR_BINARY: u32 = 49u32
+const AA_K_EXPR_UNARY: u32 = 50u32
+const AA_K_EXPR_PAREN: u32 = 53u32
+const AA_K_EXPR_CAST: u32 = 72u32
+const AA_K_STMT_IF: u32 = 69u32
+const AA_K_STMT_WHILE: u32 = 70u32
+const AA_K_VAR_DECL: u32 = 74u32
+
+/* ---- binary op codes (from iii_ast_binary_op) ---- */
+const AA_OP_ADD: u32 = 1u32
+const AA_OP_MUL: u32 = 3u32
+const AA_OP_SHL: u32 = 9u32
+const AA_OP_LT: u32 = 13u32
+const AA_OP_LE: u32 = 14u32
+
+/* ---- verdicts (mirror sovereign_witness SW_*) ---- */
+const AA_PROVEN: u32 = 0u32
+const AA_REFUTED_BOUNDS: u32 = 1u32
+const AA_REFUTED_WRAP: u32 = 2u32
+
+/* ---- named huge sentinels (hoisted: a >2^32 literal pre-brace / as a call arg crashes iiis-0) ---- */
+const AA_U64_MAX: u64 = 0xFFFFFFFFFFFFFFFFu64
+const AA_UNRES: u64 = 0xFFFFFFFFFFFFFFFFu64
+
+/* ---- module-scratch state (out-params via globals, never &local under iiis-0) ---- */
+var AA_G_AST: u64 = 0u64
+var AA_CT_PROVEN: u32 = 0u32
+var AA_CT_REFUTED: u32 = 0u32
+var AA_CT_ABSTAIN: u32 = 0u32
+var AA_M_BASE: u64 = 0u64      /* aa_match_affine outputs */
+var AA_M_STRIDE: u64 = 0u64
+var AA_M_COUNT: u64 = 0u64
+var AA_LIT: u64 = 0u64         /* aa_const_u64 output */
+var AA_CE: u64 = 0u64          /* aa_prove_affine counterexample (first OOB i) */
+var AA_LV_BINDER: u32 = 0u32   /* aa_parse_loop outputs */
+var AA_LV_COUNT: u64 = 0u64
+var AA_NUMBUF: [u8; 24]        /* decimal digit buffer (module global: local runtime-indexed arrays segfault) */
+
+/* ===================================================================== */
+/* small output helpers (counted fwrite to stderr; literals are not NUL-  */
+/* terminated so we always pass an explicit, hand-verified byte length).  */
+/* ===================================================================== */
+fn aa_emit(addr: u64, len: u64) -> u32 { let f: u64 = iii_lex_stderr_c(); iii_lex_fwrite_c(addr, len, f); return 0u32 }
+
+fn aa_print_u64(v: u64) -> u32 {
+    let f: u64 = iii_lex_stderr_c()
+    let base: u64 = &AA_NUMBUF as u64
+    if v == 0u64 { AA_NUMBUF[0] = 48u8; iii_lex_fwrite_c(base, 1u64, f); return 0u32 }
+    let mut x: u64 = v
+    let mut nd: u32 = 0u32
+    while x > 0u64 {
+        let q: u64 = x / 10u64
+        let d: u64 = x - (q * 10u64)            /* avoid `%` after a div (param-spill family) */
+        let dch: u64 = 48u64 + d                /* avoid `(48u64 + ...)` paren-then-literal hexad trap */
+        AA_NUMBUF[nd] = dch as u8
+        nd = nd + 1u32
+        x = q
+    }
+    let mut j: u32 = nd                          /* digits are reversed in AA_NUMBUF[0..nd) */
+    while j > 0u32 { j = j - 1u32; iii_lex_fwrite_c(base + (j as u64), 1u64, f) }
+    return 0u32
+}
+
+/* ===================================================================== */
+/* resolution primitives                                                 */
+/* ===================================================================== */
+
+/* a node resolves to a compile-time u64 constant (a literal, or a const-ident whose */
+/* value is itself a literal). writes AA_LIT; returns 1 if constant, else 0 (ABSTAIN). */
+fn aa_const_u64(node: u32) -> u32 {
+    let k: u32 = iii_ast_node_kind(AA_G_AST, node)
+    if k == AA_K_EXPR_INT { AA_LIT = iii_ast_expr_int_u64(AA_G_AST, node); return 1u32 }
+    if k == AA_K_EXPR_HEX { AA_LIT = iii_ast_expr_hex_u64(AA_G_AST, node); return 1u32 }
+    if k == AA_K_EXPR_IDENT {
+        let bid: u32 = iii_ast_node_binder_id(AA_G_AST, node)
+        if bid == 0u32 { return 0u32 }
+        if iii_ast_node_kind(AA_G_AST, bid) != AA_K_CONST_DECL { return 0u32 }
+        let vexpr: u32 = iii_ast_const_decl_value(AA_G_AST, bid)
+        if vexpr == 0u32 { return 0u32 }
+        let vk: u32 = iii_ast_node_kind(AA_G_AST, vexpr)
+        if vk == AA_K_EXPR_INT { AA_LIT = iii_ast_expr_int_u64(AA_G_AST, vexpr); return 1u32 }
+        if vk == AA_K_EXPR_HEX { AA_LIT = iii_ast_expr_hex_u64(AA_G_AST, vexpr); return 1u32 }
+        return 0u32
+    }
+    return 0u32
+}
+
+/* a TYPE_REF node names an UNSIGNED primitive (u8/u16/u32/u64/usize). 1 = unsigned, else 0. */
+fn aa_type_is_unsigned(tnode: u32) -> u32 {
+    if tnode == 0u32 { return 0u32 }
+    if iii_ast_node_kind(AA_G_AST, tnode) != AA_K_TYPE_REF { return 0u32 }
+    let no: u32 = iii_ast_type_ref_name_off(AA_G_AST, tnode)
+    let nl: u32 = iii_ast_type_ref_name_len(AA_G_AST, tnode)
+    let a: u64 = iii_ast_source_buf(AA_G_AST) + (no as u64)
+    if nl == 2u32 { if iii_emit_memcmp_c(a, "u8" as *u8 as u64, 2u64) == 0i32 { return 1u32 }; return 0u32 }
+    if nl == 3u32 {
+        if iii_emit_memcmp_c(a, "u16" as *u8 as u64, 3u64) == 0i32 { return 1u32 }
+        if iii_emit_memcmp_c(a, "u32" as *u8 as u64, 3u64) == 0i32 { return 1u32 }
+        if iii_emit_memcmp_c(a, "u64" as *u8 as u64, 3u64) == 0i32 { return 1u32 }
+        return 0u32
+    }
+    if nl == 5u32 { if iii_emit_memcmp_c(a, "usize" as *u8 as u64, 5u64) == 0i32 { return 1u32 }; return 0u32 }
+    return 0u32
+}
+
+/* the declared type node of a binder (let / param / module-var). 0 if none. */
+fn aa_binder_type(bid: u32) -> u32 {
+    let bk: u32 = iii_ast_node_kind(AA_G_AST, bid)
+    if bk == AA_K_STMT_LET { return iii_ast_let_type(AA_G_AST, bid) }
+    if bk == AA_K_PARAM { return iii_ast_param_type(AA_G_AST, bid) }
+    if bk == AA_K_VAR_DECL { return iii_ast_var_decl_type(AA_G_AST, bid) }
+    return 0u32
+}
+
+/* the static SIZE of an index-object that resolves to a typed array, else AA_UNRES (ABSTAIN). */
+/* a POINTER-typed object (the scan-6 class) is UNRESOLVABLE here -> ABSTAIN, by design. */
+fn aa_array_size(obj: u32) -> u64 {
+    if iii_ast_node_kind(AA_G_AST, obj) != AA_K_EXPR_IDENT { return AA_UNRES }
+    let bid: u32 = iii_ast_node_binder_id(AA_G_AST, obj)
+    if bid == 0u32 { return AA_UNRES }
+    let tnode: u32 = aa_binder_type(bid)
+    if tnode == 0u32 { return AA_UNRES }
+    if iii_ast_node_kind(AA_G_AST, tnode) != AA_K_TYPE_ARR { return AA_UNRES }
+    return iii_ast_type_array_count(AA_G_AST, tnode)
+}
+
+/* `node` is an ident bound to the SAME decl as the loop var (binder-id match -> shadow-safe). */
+fn aa_is_loopvar(node: u32, lvb: u32) -> u32 {
+    if lvb == 0u32 { return 0u32 }
+    if iii_ast_node_kind(AA_G_AST, node) != AA_K_EXPR_IDENT { return 0u32 }
+    if iii_ast_node_binder_id(AA_G_AST, node) == lvb { return 1u32 }
+    return 0u32
+}
+
+/* ===================================================================== */
+/* the sound core: affine recognition + the bounds proof                 */
+/* ===================================================================== */
+
+/* recognise `idx` as base + stride*i over i in [0,count): writes AA_M_BASE/STRIDE/COUNT, */
+/* returns 1. Constant index -> (lit,0,1). Non-affine / non-const base -> 0 (ABSTAIN). */
+fn aa_match_affine(idx: u32, lvb: u32, count: u64) -> u32 {
+    if aa_const_u64(idx) == 1u32 { AA_M_BASE = AA_LIT; AA_M_STRIDE = 0u64; AA_M_COUNT = 1u64; return 1u32 }
+    if count == 0u64 { return 0u32 }
+    if aa_is_loopvar(idx, lvb) == 1u32 { AA_M_BASE = 0u64; AA_M_STRIDE = 1u64; AA_M_COUNT = count; return 1u32 }
+    if iii_ast_node_kind(AA_G_AST, idx) != AA_K_EXPR_BINARY { return 0u32 }
+    let op: u32 = iii_ast_binary_op(AA_G_AST, idx)
+    let lhs: u32 = iii_ast_binary_lhs(AA_G_AST, idx)
+    let rhs: u32 = iii_ast_binary_rhs(AA_G_AST, idx)
+    if op == AA_OP_MUL {
+        if aa_is_loopvar(lhs, lvb) == 1u32 { if aa_const_u64(rhs) == 1u32 { AA_M_BASE = 0u64; AA_M_STRIDE = AA_LIT; AA_M_COUNT = count; return 1u32 }; return 0u32 }
+        if aa_is_loopvar(rhs, lvb) == 1u32 { if aa_const_u64(lhs) == 1u32 { AA_M_BASE = 0u64; AA_M_STRIDE = AA_LIT; AA_M_COUNT = count; return 1u32 }; return 0u32 }
+        return 0u32
+    }
+    if op == AA_OP_SHL {
+        if aa_is_loopvar(lhs, lvb) == 1u32 {
+            if aa_const_u64(rhs) == 1u32 {
+                let sh: u64 = AA_LIT
+                if sh < 64u64 {
+                    let one: u64 = 1u64        /* (1u64 << sh) starts a paren with a literal -> hexad trap; use a var */
+                    let p2: u64 = one << sh
+                    AA_M_BASE = 0u64
+                    AA_M_STRIDE = p2
+                    AA_M_COUNT = count
+                    return 1u32
+                }
+            }
+        }
+        return 0u32
+    }
+    if op == AA_OP_ADD {
+        /* (affine) + const  OR  const + (affine).  base addend MUST be a constant. */
+        if aa_match_affine(lhs, lvb, count) == 1u32 {
+            let sb: u64 = AA_M_BASE; let ss: u64 = AA_M_STRIDE; let sc: u64 = AA_M_COUNT
+            if aa_const_u64(rhs) == 1u32 {
+                let add: u64 = AA_LIT; let sum: u64 = sb + add
+                if sum < sb { return 0u32 }                 /* base addend wrapped -> ABSTAIN */
+                AA_M_BASE = sum; AA_M_STRIDE = ss; AA_M_COUNT = sc; return 1u32
+            }
+            return 0u32
+        }
+        if aa_match_affine(rhs, lvb, count) == 1u32 {
+            let sb2: u64 = AA_M_BASE; let ss2: u64 = AA_M_STRIDE; let sc2: u64 = AA_M_COUNT
+            if aa_const_u64(lhs) == 1u32 {
+                let add2: u64 = AA_LIT; let sum2: u64 = sb2 + add2
+                if sum2 < sb2 { return 0u32 }
+                AA_M_BASE = sum2; AA_M_STRIDE = ss2; AA_M_COUNT = sc2; return 1u32
+            }
+            return 0u32
+        }
+        return 0u32
+    }
+    return 0u32
+}
+
+/* the SOUND direct procedure (identical logic to sw_prove_affine, corpus 416). */
+/* PROVEN iff base + (count-1)*stride is wrap-free AND < size. Sets AA_CE on REFUTED. */
+fn aa_prove_affine(base: u64, stride: u64, count: u64, size: u64) -> u32 {
+    AA_CE = 0u64
+    if count == 0u64 { return AA_PROVEN }
+    let cm1: u64 = count - 1u64
+    let mut wrapped: u32 = 0u32
+    if stride != 0u64 { let lim: u64 = AA_U64_MAX / stride; if cm1 > lim { wrapped = 1u32 } }
+    if wrapped == 0u32 { let p: u64 = cm1 * stride; let avail: u64 = AA_U64_MAX - base; if p > avail { wrapped = 1u32 } }
+    if wrapped == 1u32 { return AA_REFUTED_WRAP }
+    let maxa: u64 = base + (cm1 * stride)
+    if maxa < size { return AA_PROVEN }
+    if base >= size { AA_CE = 0u64; return AA_REFUTED_BOUNDS }   /* i=0 already OOB (stride>0 here) */
+    let delta: u64 = size - base
+    let mut iv: u64 = delta / stride
+    let rem: u64 = delta - (iv * stride)                         /* avoid `%` after a div */
+    if rem != 0u64 { iv = iv + 1u64 }
+    AA_CE = iv
+    return AA_REFUTED_BOUNDS
+}
+
+fn aa_report_refuted(v: u32, size: u64) -> u32 {
+    aa_emit("AA REFUTED sz=" as *u8 as u64, 14u64)
+    aa_print_u64(size)
+    aa_emit(" i=" as *u8 as u64, 3u64)
+    aa_print_u64(AA_CE)
+    aa_emit("\n" as *u8 as u64, 1u64)
+    return 0u32
+}
+
+/* check one index access against its array; tally the verdict. */
+fn aa_check_index(node: u32, lvb: u32, count: u64) -> u32 {
+    let obj: u32 = iii_ast_index_object(AA_G_AST, node)
+    let idx: u32 = iii_ast_index_index(AA_G_AST, node)
+    let size: u64 = aa_array_size(obj)
+    if size == AA_UNRES { AA_CT_ABSTAIN = AA_CT_ABSTAIN + 1u32; return 0u32 }
+    if size == 0u64 { AA_CT_ABSTAIN = AA_CT_ABSTAIN + 1u32; return 0u32 }
+    if aa_match_affine(idx, lvb, count) != 1u32 { AA_CT_ABSTAIN = AA_CT_ABSTAIN + 1u32; return 0u32 }
+    let v: u32 = aa_prove_affine(AA_M_BASE, AA_M_STRIDE, AA_M_COUNT, size)
+    if v == AA_PROVEN { AA_CT_PROVEN = AA_CT_PROVEN + 1u32; return 0u32 }
+    AA_CT_REFUTED = AA_CT_REFUTED + 1u32
+    aa_report_refuted(v, size)
+    return 0u32
+}
+
+/* ===================================================================== */
+/* loop-soundness: the sole write to the loop var in the WHOLE body       */
+/* subtree must be the trailing top-level statement (DESIGN 4b). count by  */
+/* binder id; any unmodeled construct is POISON (>=2) -> ABSTAIN the loop. */
+/* ===================================================================== */
+fn aa_count_writes(node: u32, lvb: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(AA_G_AST, node)
+    if k == AA_K_FORWARD_BLOCK {
+        let n: u32 = iii_ast_block_stmt_count(AA_G_AST, node)
+        let mut i: u32 = 0u32
+        let mut c: u32 = 0u32
+        while i < n { c = c + aa_count_writes(iii_ast_block_stmt_at(AA_G_AST, node, i), lvb); i = i + 1u32 }
+        return c
+    }
+    if k == AA_K_STMT_ASSIGN {
+        if aa_is_loopvar(iii_ast_assign_lvalue(AA_G_AST, node), lvb) == 1u32 { return 1u32 }
+        return 0u32
+    }
+    if k == AA_K_STMT_IF {
+        let a: u32 = aa_count_writes(iii_ast_if_then(AA_G_AST, node), lvb)
+        let b: u32 = aa_count_writes(iii_ast_if_else(AA_G_AST, node), lvb)
+        return a + b
+    }
+    if k == AA_K_STMT_WHILE { return aa_count_writes(iii_ast_while_body(AA_G_AST, node), lvb) }
+    if k == AA_K_STMT_LET { return 0u32 }       /* a let cannot assign an existing binder */
+    if k == AA_K_STMT_RETURN { return 0u32 }    /* no statement-level assign nests in an expr */
+    if k == AA_K_STMT_EXPR { return 0u32 }
+    if k == AA_K_STMT_FOR { return 2u32 }       /* a for may rebind/iterate -> POISON -> ABSTAIN enclosing loop */
+    return 2u32                                  /* unmodeled construct -> POISON (sound: never undercount) */
+}
+
+/* the LAST top-level statement of `body` is an assignment to the loop var. */
+fn aa_last_stmt_writes(body: u32, lvb: u32) -> u32 {
+    if iii_ast_node_kind(AA_G_AST, body) != AA_K_FORWARD_BLOCK { return 0u32 }
+    let n: u32 = iii_ast_block_stmt_count(AA_G_AST, body)
+    if n == 0u32 { return 0u32 }
+    let last: u32 = iii_ast_block_stmt_at(AA_G_AST, body, n - 1u32)
+    if iii_ast_node_kind(AA_G_AST, last) != AA_K_STMT_ASSIGN { return 0u32 }
+    return aa_is_loopvar(iii_ast_assign_lvalue(AA_G_AST, last), lvb)
+}
+
+/* parse `i < N` / `i <= N`: i an UNSIGNED-typed ident, N a constant. */
+/* sets AA_LV_BINDER (the loop var's decl) + AA_LV_COUNT (#iterations). returns 1/0. */
+fn aa_parse_loop(cond: u32) -> u32 {
+    if iii_ast_node_kind(AA_G_AST, cond) != AA_K_EXPR_BINARY { return 0u32 }
+    let op: u32 = iii_ast_binary_op(AA_G_AST, cond)
+    let mut is_le: u32 = 0u32
+    if op == AA_OP_LE { is_le = 1u32 } else { if op != AA_OP_LT { return 0u32 } }
+    let lhs: u32 = iii_ast_binary_lhs(AA_G_AST, cond)
+    let rhs: u32 = iii_ast_binary_rhs(AA_G_AST, cond)
+    if iii_ast_node_kind(AA_G_AST, lhs) != AA_K_EXPR_IDENT { return 0u32 }
+    let bid: u32 = iii_ast_node_binder_id(AA_G_AST, lhs)
+    if bid == 0u32 { return 0u32 }
+    if aa_type_is_unsigned(aa_binder_type(bid)) != 1u32 { return 0u32 }
+    if aa_const_u64(rhs) != 1u32 { return 0u32 }
+    let n: u64 = AA_LIT
+    if is_le == 1u32 { if n == AA_U64_MAX { return 0u32 }; AA_LV_COUNT = n + 1u64 } else { AA_LV_COUNT = n }
+    AA_LV_BINDER = bid
+    return 1u32
+}
+
+/* ===================================================================== */
+/* the recursive walk                                                    */
+/* ===================================================================== */
+fn aa_walk_expr(node: u32, lvb: u32, count: u64) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(AA_G_AST, node)
+    if k == AA_K_EXPR_INDEX {
+        aa_check_index(node, lvb, count)
+        aa_walk_expr(iii_ast_index_object(AA_G_AST, node), lvb, count)
+        aa_walk_expr(iii_ast_index_index(AA_G_AST, node), lvb, count)
+        return 0u32
+    }
+    if k == AA_K_EXPR_BINARY {
+        aa_walk_expr(iii_ast_binary_lhs(AA_G_AST, node), lvb, count)
+        aa_walk_expr(iii_ast_binary_rhs(AA_G_AST, node), lvb, count)
+        return 0u32
+    }
+    if k == AA_K_EXPR_UNARY { aa_walk_expr(iii_ast_unary_operand(AA_G_AST, node), lvb, count); return 0u32 }
+    if k == AA_K_EXPR_CAST { aa_walk_expr(iii_ast_cast_value(AA_G_AST, node), lvb, count); return 0u32 }
+    if k == AA_K_EXPR_PAREN { aa_walk_expr(iii_ast_paren_inner(AA_G_AST, node), lvb, count); return 0u32 }
+    if k == AA_K_EXPR_FIELD { aa_walk_expr(iii_ast_field_object(AA_G_AST, node), lvb, count); return 0u32 }
+    if k == AA_K_EXPR_CALL {
+        let n: u32 = iii_ast_call_arg_count(AA_G_AST, node)
+        let mut i: u32 = 0u32
+        while i < n { aa_walk_expr(iii_ast_call_arg_at(AA_G_AST, node, i), lvb, count); i = i + 1u32 }
+        return 0u32
+    }
+    return 0u32
+}
+
+fn aa_walk_block(block: u32, lvb: u32, count: u64) -> u32 {
+    if block == 0u32 { return 0u32 }
+    if iii_ast_node_kind(AA_G_AST, block) != AA_K_FORWARD_BLOCK { return 0u32 }
+    let n: u32 = iii_ast_block_stmt_count(AA_G_AST, block)
+    let mut i: u32 = 0u32
+    while i < n { aa_walk_stmt(iii_ast_block_stmt_at(AA_G_AST, block, i), lvb, count); i = i + 1u32 }
+    return 0u32
+}
+
+fn aa_walk_stmt(stmt: u32, lvb: u32, count: u64) -> u32 {
+    if stmt == 0u32 { return 0u32 }
+    let k: u32 = iii_ast_node_kind(AA_G_AST, stmt)
+    if k == AA_K_STMT_WHILE {
+        let cond: u32 = iii_ast_while_cond(AA_G_AST, stmt)
+        let body: u32 = iii_ast_while_body(AA_G_AST, stmt)
+        aa_walk_expr(cond, lvb, count)                  /* accesses in the cond use the OUTER context */
+        let mut nb: u32 = 0u32
+        let mut nc: u64 = 0u64
+        if aa_parse_loop(cond) == 1u32 {
+            let lb: u32 = AA_LV_BINDER
+            let lc: u64 = AA_LV_COUNT
+            if aa_count_writes(body, lb) == 1u32 { if aa_last_stmt_writes(body, lb) == 1u32 { nb = lb; nc = lc } }
+        }
+        aa_walk_block(body, nb, nc)
+        return 0u32
+    }
+    if k == AA_K_STMT_IF {
+        aa_walk_expr(iii_ast_if_cond(AA_G_AST, stmt), lvb, count)
+        aa_walk_block(iii_ast_if_then(AA_G_AST, stmt), lvb, count)
+        aa_walk_block(iii_ast_if_else(AA_G_AST, stmt), lvb, count)
+        return 0u32
+    }
+    if k == AA_K_STMT_LET { aa_walk_expr(iii_ast_let_value(AA_G_AST, stmt), lvb, count); return 0u32 }
+    if k == AA_K_STMT_RETURN { aa_walk_expr(iii_ast_return_value(AA_G_AST, stmt), lvb, count); return 0u32 }
+    if k == AA_K_STMT_ASSIGN {
+        aa_walk_expr(iii_ast_assign_lvalue(AA_G_AST, stmt), lvb, count)
+        aa_walk_expr(iii_ast_assign_value(AA_G_AST, stmt), lvb, count)
+        return 0u32
+    }
+    if k == AA_K_STMT_EXPR { aa_walk_expr(iii_ast_expr_stmt_expr(AA_G_AST, stmt), lvb, count); return 0u32 }
+    if k == AA_K_STMT_FOR { aa_walk_block(iii_ast_for_body(AA_G_AST, stmt), 0u32, 0u64); return 0u32 }
+    return 0u32
+}
+
+/* ===================================================================== */
+/* entry: the ONLY cross-module symbol (main.iii calls it post-sema).     */
+/* returns the REFUTED count (0 = clean) for the caller's exit code.       */
+/* ===================================================================== */
+fn iii_affine_audit_run(ast: u64) -> u32 @export {
+    AA_G_AST = ast
+    AA_CT_PROVEN = 0u32
+    AA_CT_REFUTED = 0u32
+    AA_CT_ABSTAIN = 0u32
+    let root: u32 = iii_ast_root_module(ast)
+    if root == 0u32 { return 0u32 }
+    let dc: u32 = iii_ast_module_decl_count(ast, root)
+    let mut j: u32 = 0u32
+    while j < dc {
+        let d: u32 = iii_ast_module_decl_at(ast, root, j)
+        if iii_ast_node_kind(ast, d) == AA_K_FN_DECL { aa_walk_block(iii_ast_fn_body(ast, d), 0u32, 0u64) }
+        j = j + 1u32
+    }
+    aa_emit("AA P=" as *u8 as u64, 5u64)
+    aa_print_u64(AA_CT_PROVEN as u64)
+    aa_emit(" A=" as *u8 as u64, 3u64)
+    aa_print_u64(AA_CT_ABSTAIN as u64)
+    aa_emit(" R=" as *u8 as u64, 3u64)
+    aa_print_u64(AA_CT_REFUTED as u64)
+    aa_emit("\n" as *u8 as u64, 1u64)
+    return AA_CT_REFUTED
+}

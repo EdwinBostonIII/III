@@ -348,3 +348,103 @@ fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) ->
     let l_p : u64 = (proof_steps as u64) & 0xFFFFFu64
     return l_s | l_i | l_p
 }
+
+/* ============================================================================
+ * APOTHEOSIS C.3 -- build-once / open-many Merkle over u32 leaves (ADDITIVE).
+ *
+ * The zk-STARK access pattern: commit a polynomial column ONCE into a caller-
+ * owned tree pool, then open MANY leaves (16+ FRI queries x several layers x
+ * trace/next/CP columns).  merkle_compute_proof rebuilds the whole tree on every
+ * single proof, over byte-array leaves -- O(opens x n) and wrong leaf shape for
+ * this.  These four functions persist the full tree in the caller's pool so the
+ * tree is built once and opened in O(log n) per leaf.
+ *
+ * They reuse _mk_leaf_hash/_mk_node_hash unchanged, so:
+ *     leaf = SHA-256(0x00 || v_be32)        node = SHA-256(0x01 || L || R)
+ * -- byte-for-byte the seal's (§S.6) and the gate's hashing, and exactly what
+ * zk_stark/zk_air committed with their (now-deleted) private Merkle.  This is the
+ * §C.3 H-3 win: the witness spine, the commit-gate, AND every STARK proof Merkle
+ * through ONE implementation.  SHA-256 suite only (zk commitments seal under the
+ * SHA-2 §S.5 organ; the keccak suite stays the §S.6 commitment-hash path).
+ *
+ * Leaves = the u32 at (arrBase + (leafOff+i)*4), big-endian; n a power of two.
+ * Tree node i (1-indexed) at (poolBase + treeOff + i*32); leaf i at node (n+i).
+ * Dedicated scratch (MK_U32LEAF/MK_TREE_CUR) -- the existing non-reentrant
+ * buffers (MK_LEVEL_A/B, MK_HASH_BUF, MK_OUT_BUF) are NOT touched.
+ * ========================================================================== */
+var MK_U32LEAF  : [u8; 4]    /* u32 -> big-endian-4 scratch for leaf hashing */
+var MK_TREE_CUR : [u8; 32]   /* tree-verify running hash (dedicated; never shared) */
+
+fn _mk_u32_leaf_hash(v: u32, out_ptr: u64) -> u32 {
+    MK_U32LEAF[0u64] = ((v >> 24u32) & 0xFFu32) as u8
+    MK_U32LEAF[1u64] = ((v >> 16u32) & 0xFFu32) as u8
+    MK_U32LEAF[2u64] = ((v >> 8u32)  & 0xFFu32) as u8
+    MK_U32LEAF[3u64] = (v & 0xFFu32) as u8
+    MK_ACTIVE_SUITE = MK_SUITE_SHA256
+    return _mk_leaf_hash(&MK_U32LEAF as u64, 4u64, out_ptr)
+}
+
+/* Build the complete binary tree (n a power of two) at byte offset treeOff in the
+ * caller's pool, leaves = u32 at (arrBase + (leafOff+i)*4). */
+fn merkle_tree_build_u32(arrBase: u64, leafOff: u64, n: u64, poolBase: u64, treeOff: u64) -> i32 @export {
+    MK_ACTIVE_SUITE = MK_SUITE_SHA256
+    let ab : u64 = arrBase
+    let lo : u64 = leafOff
+    let pb : u64 = poolBase
+    let to : u64 = treeOff
+    let mut i : u64 = 0u64
+    while i < n {
+        let lp : *u32 = (ab + (lo + i)*4u64) as *u32
+        _mk_u32_leaf_hash(lp[0u64], pb + to + (n + i)*32u64)
+        i = i + 1u64
+    }
+    let mut ni : u64 = n
+    while ni > 1u64 {
+        ni = ni - 1u64
+        _mk_node_hash(pb + to + (2u64*ni)*32u64, pb + to + (2u64*ni + 1u64)*32u64, pb + to + ni*32u64)
+    }
+    return MK_OK
+}
+
+/* Address of the root hash (node 1) in the pool. */
+fn merkle_tree_root(poolBase: u64, treeOff: u64) -> u64 @export { return poolBase + treeOff + 32u64 }
+
+/* Copy the authentication path (sibling hashes leaf->root) into pathBase; return depth. */
+fn merkle_tree_open(poolBase: u64, treeOff: u64, n: u64, idx: u64, pathBase: u64) -> u64 @export {
+    let pb : u64 = poolBase
+    let to : u64 = treeOff
+    let mut i : u64 = n + idx
+    let mut d : u64 = 0u64
+    while i > 1u64 {
+        let sib  : u64 = i ^ 1u64
+        let srcp : *u8 = (pb + to + sib*32u64) as *u8
+        let dstp : *u8 = (pathBase + d*32u64) as *u8
+        let mut b : u64 = 0u64
+        while b < 32u64 { dstp[b] = srcp[b]  b = b + 1u64 }
+        i = i >> 1u64
+        d = d + 1u64
+    }
+    return d
+}
+
+/* Recompute the root from a u32 leaf + its path; 1 = matches rootAddr, 0 = reject.
+ * The leaf's side at each level is fixed by the INDEX bit (not a path byte), so a
+ * leaf presented at the wrong index is rejected. */
+fn merkle_tree_verify_u32(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 @export {
+    MK_ACTIVE_SUITE = MK_SUITE_SHA256
+    let curAddr : u64 = &MK_TREE_CUR as u64
+    _mk_u32_leaf_hash(leafVal, curAddr)
+    let mut i : u64 = n + idx
+    let mut d : u64 = 0u64
+    while d < plen {
+        let pAddr : u64 = pathBase + d*32u64
+        if (i & 1u64) == 1u64 { _mk_node_hash(pAddr, curAddr, curAddr) } else { _mk_node_hash(curAddr, pAddr, curAddr) }
+        i = i >> 1u64
+        d = d + 1u64
+    }
+    let cp : *u8 = curAddr as *u8
+    let rp : *u8 = rootAddr as *u8
+    let mut b : u64 = 0u64
+    while b < 32u64 { if cp[b] != rp[b] { return 0u64 }  b = b + 1u64 }
+    return 1u64
+}

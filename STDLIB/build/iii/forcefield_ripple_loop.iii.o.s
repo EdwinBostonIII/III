@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "congruence.iiicongruence.iiiripple_unify.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "congruence.iiicongruence.iiiproof_ripple_unified.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
 L_str_1:
-    .ascii "congruence.iiiripple_unify.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "congruence.iiiproof_ripple_unified.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
 L_str_2:
-    .ascii "ripple_unify.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
+    .ascii "proof_ripple_unified.iiicommit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
 L_str_3:
     .ascii "commit_gate.iiiripple_metric.iiicaindex.iiicaindex.iiicaindex.iii\0"
 L_str_4:
@@ -247,6 +247,8 @@ L_if_else_4:
     testq %rax, %rax
     jz L_if_end_7
     subq $8, %rsp
+    movl -24(%rbp), %eax
+    pushq %rax
     movl -16(%rbp), %eax
     pushq %rax
     movl -72(%rbp), %eax
@@ -257,18 +259,20 @@ L_if_else_4:
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
     popq %rcx
     popq %rdx
     popq %r8
     popq %r9
     subq $32, %rsp
-    callq ru_certify_unify
+    callq proof_ripple_decision
     addq $32, %rsp
     addq $8, %rsp
-    addq $8, %rsp
+    addq $24, %rsp
     movl %eax, %eax
     pushq %rax
-    movabsq $0x1, %rax
+    movabsq $0x63, %rax
     pushq %rax
     popq %rcx
     popq %rax

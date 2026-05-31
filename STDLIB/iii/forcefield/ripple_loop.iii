@@ -27,7 +27,13 @@ module forcefield_ripple_loop
 
 extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
-extern @abi(c-msvc-x64) fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_ok: u32) -> u32 from "ripple_unify.iii"
+/* APOTHEOSIS C.7 WIRING: rl_run's merge decision routes through the UNIFIED move decider
+ * (proof_ripple_decision over the move-IR), so the self-optimization loop speaks ONE decider for all
+ * move kinds -- ready for CUT/EXTRACT, not merge-only. Behavior-preserving for MERGE:
+ * proof_ripple_decision(MERGE,i,rep,i,rep,proof,kernel) ADMITs (99) EXACTLY when ru_certify_unify
+ * would return 1 (the unified decider dispatches MERGE -> ru_certify_unify; its kernel-first gate is
+ * already hoisted at rl_run's top, so kernel_ok==1 inside the loop). */
+extern @abi(c-msvc-x64) fn proof_ripple_decision(kind: u32, m0: u32, m1: u32, m2: u32, m3: u32, proof_ok: u32, kernel_ok: u32) -> u32 from "proof_ripple_unified.iii"
 extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
 /* W3.1 / COMBINE-3: bucket nodes by their (cap||iclass) group key via the shared
  * caindex; rm_node_key is ripple_metric's single-source key writer. */
@@ -80,7 +86,7 @@ fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 @export {
              * same class (no double count); ru_certify_unify enforces the intent gate +
              * congruence's faithfulness gate (proof_avail) and performs the certified union. */
             if cgr_find(i) != cgr_find(rep) {
-                if ru_certify_unify(i, rep, i, rep, proof_avail) == 1u32 {
+                if proof_ripple_decision(0u32, i, rep, i, rep, proof_avail, kernel_ok) == 99u32 {   /* 0=MERGE kind, 99=ADMIT -- routed through the C.7 unified decider */
                     merges = merges + 1u32
                 }
             }

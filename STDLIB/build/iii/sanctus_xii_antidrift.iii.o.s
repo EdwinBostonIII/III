@@ -56,6 +56,10 @@ L_XAD_E_HEXAD:
     .quad 0x7
 L_XAD_E_ANCHOR_SIG:
     .quad 0x8
+L_XAD_E_RECORD_COUNT:
+    .quad 0x9
+L_XAD_AUDIT_MAX_RECORDS:
+    .quad 0x3ffffff
     .section .bss
     .global L_XAD_COMPUTED
 L_XAD_COMPUTED:
@@ -513,11 +517,34 @@ xii_antidrift_check_lattice:
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl L_XAD_AUDIT_MAX_RECORDS(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movl L_XAD_E_RECORD_COUNT(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_16:
+L_loop_top_18:
     movl -32(%rbp), %eax
     pushq %rax
     movl -24(%rbp), %eax
@@ -530,7 +557,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_19
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -974,7 +1001,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     movq %rax, -184(%rbp)
-L_loop_top_18:
+L_loop_top_20:
     movl -184(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -987,7 +1014,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_19
+    jz L_loop_end_21
     leaq L_XAD_COMPUTED(%rip), %rax
     pushq %rax
     movl -184(%rbp), %eax
@@ -1028,7 +1055,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movl L_XAD_E_LATTICE(%rip), %eax
     pushq %rax
     popq %rax
@@ -1038,7 +1065,7 @@ L_loop_top_18:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     movl -184(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1053,8 +1080,8 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_18
-L_loop_end_19:
+    jmp L_loop_top_20
+L_loop_end_21:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1069,8 +1096,8 @@ L_loop_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_18
+L_loop_end_19:
     movl L_XAD_OK(%rip), %eax
     pushq %rax
     popq %rax
@@ -1194,7 +1221,7 @@ L__ad_build_random_term:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     subq $32, %rsp
     callq L__ad_rng_next
     addq $32, %rsp
@@ -1244,7 +1271,7 @@ L__ad_build_random_term:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     subq $32, %rsp
     callq L__ad_rng_next
     addq $32, %rsp
@@ -1359,7 +1386,7 @@ xii_antidrift_check_confluence_empirical:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movabsq $0xabcdef01, %rax
     pushq %rax
     popq %rax
@@ -1367,12 +1394,12 @@ xii_antidrift_check_confluence_empirical:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_26:
+L_loop_top_28:
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1385,7 +1412,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_27
+    jz L_loop_end_29
     subq $32, %rsp
     callq xii_term_arena_reset
     addq $32, %rsp
@@ -1503,55 +1530,8 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_28
+    jz L_if_else_30
     movl -64(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq xii_canonicalise
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -88(%rbp)
-    movl -88(%rbp), %eax
-    pushq %rax
-    movl -56(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq xii_rewrite_struct_eq
-    addq $32, %rsp
-    movzbq %al, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_31
-    movl L_XAD_E_CONFLUENCE(%rip), %eax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_31:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_29
-L_if_else_28:
-    movl -80(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -1596,7 +1576,54 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+    jmp L_if_end_31
+L_if_else_30:
+    movl -80(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq xii_canonicalise
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    movl -88(%rbp), %eax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq xii_rewrite_struct_eq
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movl L_XAD_E_CONFLUENCE(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1611,8 +1638,8 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_26
-L_loop_end_27:
+    jmp L_loop_top_28
+L_loop_end_29:
     movl L_XAD_OK(%rip), %eax
     pushq %rax
     popq %rax
@@ -1699,7 +1726,7 @@ xii_antidrift_check_anchor_sig:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_37
     movl L_XAD_E_ANCHOR_SIG(%rip), %eax
     pushq %rax
     popq %rax
@@ -1709,7 +1736,7 @@ xii_antidrift_check_anchor_sig:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_37:
     movl L_XAD_OK(%rip), %eax
     pushq %rax
     popq %rax
@@ -1774,7 +1801,7 @@ xii_antidrift_check_all:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     movl -64(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1784,7 +1811,7 @@ xii_antidrift_check_all:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     movl -48(%rbp), %eax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1813,7 +1840,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_41
     movl -72(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1823,7 +1850,7 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_41:
     subq $32, %rsp
     callq xii_antidrift_check_reach6
     addq $32, %rsp
@@ -1843,7 +1870,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_43
     movl -80(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1853,7 +1880,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_43:
     movabsq $0xc0ffee42, %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -1879,7 +1906,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_45
     movl -88(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1889,7 +1916,7 @@ L_if_end_41:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_45:
     subq $32, %rsp
     callq xii_antidrift_check_critpairs
     addq $32, %rsp
@@ -1909,7 +1936,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_47
     movl -96(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1919,7 +1946,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_47:
     subq $32, %rsp
     callq xii_antidrift_check_mphf
     addq $32, %rsp
@@ -1939,7 +1966,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_49
     movl -104(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1949,7 +1976,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_49:
     subq $32, %rsp
     callq xii_antidrift_check_hexad
     addq $32, %rsp
@@ -1969,7 +1996,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_51
     movl -112(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1979,7 +2006,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_51:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2002,7 +2029,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_53
     movl -120(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2012,7 +2039,7 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_53:
     subq $32, %rsp
     callq xii_antidrift_check_dk_symmetry
     addq $32, %rsp
@@ -2032,7 +2059,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_55
     movl -128(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2042,7 +2069,7 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_55:
     movl L_XAD_OK(%rip), %eax
     pushq %rax
     popq %rax

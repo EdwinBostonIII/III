@@ -30,6 +30,7 @@
  */
 module aether_hotstuff
 
+extern @abi(c-msvc-x64) fn hsu_timeout_base(base: u64, v: u64) -> u64 from "hotstuff_unified.iii"   /* C.11 item 3: certified-monotone view-timeout */
 extern @abi(c-msvc-x64) fn ident_zero(out: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
@@ -328,7 +329,14 @@ fn hs_handle_new_view(msg: *u8, msg_len: u32) -> i32 @export {
 fn hs_tick(elapsed_ms: u32) -> i32 @export {
     if HS_INITED == 0u8 { return HS_E_NOT_INITED }
     HS_VIEW_TIMER_MS = HS_VIEW_TIMER_MS + elapsed_ms
-    if HS_VIEW_TIMER_MS >= HS_VIEW_TIMEOUT_MS {
+    /* C.11 item 3: the view-timeout is now the certified-monotone pacemaker (hsu_timeout_base) over the
+     * legacy 5000ms base -- view 0 == 5000ms EXACTLY (pass-through), higher views back off (bounded x2/view,
+     * capped). This adopts hotstuff_unified, replacing the fixed-5000 with the certified liveness backoff. */
+    let base_ms : u64 = HS_VIEW_TIMEOUT_MS as u64
+    let cur_v : u64 = HS_VIEW
+    let to_ms : u64 = hsu_timeout_base(base_ms, cur_v)
+    let timer : u64 = HS_VIEW_TIMER_MS as u64
+    if timer >= to_ms {
         HS_VIEW = HS_VIEW + 1u64
         HS_VIEW_TIMER_MS = 0u32
         HS_PHASE = HS_PHASE_PREPARE
@@ -508,5 +516,12 @@ fn hs_selftest() -> u64 @export {
     HS_KAT_PAY[0u64] = HS_TIER_SPECULATIVE
     hs_dispatch_by_tier(2u8, (&HS_KAT_PAY as u64) as *u8, 32u32, (&HS_KAT_DEC as u64) as *u8)
     if HS_KAT_DEC[0] != 0u8 { return 18u64 }                /* speculative = local-only */
+
+    /* C.11 view>=1 BACKOFF coverage: the pacemaker adoption above was exercised only at view 0
+     * (pass-through 5000).  Here HS_VIEW==1 (the earlier hs_tick advanced it), so the backed-off
+     * threshold is hsu_timeout_base(5000,1)=10000: a single 5000ms tick must NOT fire (5000<10000),
+     * a cumulative 10000 does.  A fixed-5000 / view-ignoring wiring would fire on the FIRST tick. */
+    if hs_tick(5000u32) != 0i32 { return 19u64 }            /* view 1: 5000 < 10000 -> HS_OK, no timeout */
+    if hs_tick(5000u32) != HS_E_TIMEOUT { return 20u64 }    /* cumulative 10000 reaches the backoff -> fire */
     return 99u64
 }

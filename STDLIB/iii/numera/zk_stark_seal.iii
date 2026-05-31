@@ -1,0 +1,107 @@
+/* numera/zk_stark_seal.iii -- APOTHEOSIS C.3 (item 5): the content-address PROOF SEAL.
+ *
+ * A STARK proof was an anonymous byte blob; this gives it a verifiable IDENTITY in the §S.6
+ * content-address chain (the same chain that anchors cad/mhash/the witness spine).  The seal
+ * is cad( "III/zk-stark-proof/v1" || trace_root || cp_root || fri_roots || queries || boundary )
+ * over the §S.6 cad streaming organ -- so a proof's identity is reproducible and ANY altered
+ * commitment changes it (the seal's negative arm).  Both zk_stark (the demo) and zk_air (the
+ * general STARK) seal through this ONE surface; the per-module zk_stark_proof_cad/air_proof_cad
+ * wrappers (which read each module's own proof vars) absorb their commitments in order.
+ *
+ * Streaming convention (the caller frames its own layout; absorb counts first if they vary):
+ *   zk_proof_seal_begin() ; zk_proof_seal_absorb(addr,len)* ; zk_proof_seal_final(out32)
+ * Non-reentrant (cad's single active suite).  SHA-256 suite (the §S.5 SHA-2 organ).
+ * Hexad: kind_witness.  Ring: R0.  K: 1.00. */
+module numera_zk_stark_seal
+
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_domain(domain: u64, domain_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+/* "III/zk-stark-proof/v1" -- the proof-seal domain, NUL-terminated so a length-explicit
+ * absorb of exactly 21 bytes is independent of any trailing storage. */
+var ZK_SEAL_DOM : [u8; 22]
+
+fn zk_seal_dom_init() -> i32 {
+    ZK_SEAL_DOM[0u64]  = 73u8   ZK_SEAL_DOM[1u64]  = 73u8   ZK_SEAL_DOM[2u64]  = 73u8   /* III */
+    ZK_SEAL_DOM[3u64]  = 47u8                                                          /* /   */
+    ZK_SEAL_DOM[4u64]  = 122u8  ZK_SEAL_DOM[5u64]  = 107u8                             /* zk  */
+    ZK_SEAL_DOM[6u64]  = 45u8                                                          /* -   */
+    ZK_SEAL_DOM[7u64]  = 115u8  ZK_SEAL_DOM[8u64]  = 116u8  ZK_SEAL_DOM[9u64]  = 97u8
+    ZK_SEAL_DOM[10u64] = 114u8  ZK_SEAL_DOM[11u64] = 107u8                             /* stark */
+    ZK_SEAL_DOM[12u64] = 45u8                                                          /* -   */
+    ZK_SEAL_DOM[13u64] = 112u8  ZK_SEAL_DOM[14u64] = 114u8  ZK_SEAL_DOM[15u64] = 111u8
+    ZK_SEAL_DOM[16u64] = 111u8  ZK_SEAL_DOM[17u64] = 102u8                             /* proof */
+    ZK_SEAL_DOM[18u64] = 47u8                                                          /* /   */
+    ZK_SEAL_DOM[19u64] = 118u8  ZK_SEAL_DOM[20u64] = 49u8                              /* v1  */
+    ZK_SEAL_DOM[21u64] = 0u8
+    return 0i32
+}
+
+fn zk_proof_seal_begin() -> i32 @export {
+    zk_seal_dom_init()
+    cad_begin(0u32)                                   /* CAD_SUITE_SHA256 */
+    return cad_domain(&ZK_SEAL_DOM as u64, 21u64)
+}
+fn zk_proof_seal_absorb(addr: u64, len: u64) -> i32 @export { return cad_payload(addr, len) }
+fn zk_proof_seal_final(out32: u64) -> i32 @export { return cad_final(out32) }
+fn zk_proof_seal_eq(a: u64, b: u64) -> u8 @export { return cad_eq(a as *u8, b as *u8) }
+
+/* Self-contained selftest: seal a fixed commitment set, prove determinism (re-seal -> equal),
+ * the negative arm (tamper one commitment byte -> different identity), and non-vacuity (the
+ * seal is non-zero).  99 = pass.  No zk_stark/zk_air internal state required. */
+var ZKS_TR : [u8; 32]     /* fake trace root */
+var ZKS_CP : [u8; 32]     /* fake cp root */
+var ZKS_FR : [u8; 128]    /* fake fri roots (4 layers * 32) */
+var ZKS_Q  : [u32; 16]    /* fake queries */
+var ZKS_BD : [u32; 2]     /* fake boundary (x0, xN) */
+var ZKS_S1 : [u8; 32]
+var ZKS_S2 : [u8; 32]
+var ZKS_S3 : [u8; 32]
+
+fn zk_seal_one(out32: u64) -> i32 {
+    zk_proof_seal_begin()
+    zk_proof_seal_absorb(&ZKS_TR as u64, 32u64)
+    zk_proof_seal_absorb(&ZKS_CP as u64, 32u64)
+    zk_proof_seal_absorb(&ZKS_FR as u64, 128u64)
+    zk_proof_seal_absorb(&ZKS_Q as u64, 64u64)
+    zk_proof_seal_absorb(&ZKS_BD as u64, 8u64)
+    return zk_proof_seal_final(out32)
+}
+
+fn zk_stark_seal_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 32u64  { ZKS_TR[i] = ((i*7u64 + 1u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64  { ZKS_CP[i] = ((i*11u64 + 5u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 128u64 { ZKS_FR[i] = ((i*3u64 + 9u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 16u64  { ZKS_Q[i] = (i*131u64 + 7u64) as u32  i = i + 1u64 }
+    ZKS_BD[0u64] = 2u32  ZKS_BD[1u64] = 123456u32
+    /* seal twice -> identical (deterministic identity) */
+    zk_seal_one(&ZKS_S1 as u64)
+    zk_seal_one(&ZKS_S2 as u64)
+    if zk_proof_seal_eq(&ZKS_S1 as u64, &ZKS_S2 as u64) != 1u8 { return 1u64 }
+    /* non-vacuity: a real (non-zero) identity */
+    if cad_is_zero(&ZKS_S1 as *u8) != 0u8 { return 2u64 }
+    /* NEGATIVE: tamper ONE byte of the cp commitment -> different identity */
+    let saved : u8 = ZKS_CP[0u64]
+    ZKS_CP[0u64] = saved ^ 1u8
+    zk_seal_one(&ZKS_S3 as u64)
+    if zk_proof_seal_eq(&ZKS_S1 as u64, &ZKS_S3 as u64) != 0u8 { return 3u64 }
+    ZKS_CP[0u64] = saved
+    /* restored -> identity returns */
+    zk_seal_one(&ZKS_S3 as u64)
+    if zk_proof_seal_eq(&ZKS_S1 as u64, &ZKS_S3 as u64) != 1u8 { return 4u64 }
+    /* NEGATIVE 2: tamper a QUERY -> different identity (queries are part of the proof) */
+    let sq : u32 = ZKS_Q[3u64]
+    ZKS_Q[3u64] = sq ^ 1u32
+    zk_seal_one(&ZKS_S3 as u64)
+    if zk_proof_seal_eq(&ZKS_S1 as u64, &ZKS_S3 as u64) != 0u8 { return 5u64 }
+    ZKS_Q[3u64] = sq
+    return 99u64
+}

@@ -1,0 +1,80 @@
+/* STDLIB/iii/omnia/arena_slot_witness.iii -- APOTHEOSIS C.9 item 3: the CONTAINER-HONESTY proof.
+ *
+ * The doc's "arena_slot_witness -- a container-honesty proof (alloc/free balanced); a leak is caught."
+ * The C.9 plan's other half (arena_slot, "every container allocates through one allocator over S.7")
+ * is ALREADY LIVE: vec/map/set/queue/list/lru all extern arena_alloc1/arena_alloc8 from arena.iii --
+ * one allocator, done-capability (receipts in the ledger). What was MISSING is the honesty PROOF, and
+ * the right property is not arena-byte balance (corpus 121 already proves arena_reset_with_witness
+ * returns used->0) but HANDLE-TABLE balance -- the documented failure mode where `new` without `drop`
+ * leaks a fixed-table SLOT (cf. the bigint 64-slot trap), a value-INDEPENDENT resource-exhaustion bug
+ * that looks like a logic error.
+ *
+ * This proves it on a real container (`list`, a 32-slot handle table): (1) balanced new->drop cycling
+ * is UNBOUNDED (100 >> 32 cycles never exhaust, because drop frees the slot); (2) THE NEGATIVE ARM --
+ * a leak (new without drop) fills the table and the overflow `new` is REFUSED (the leak is caught);
+ * (3) after correct cleanup the table RECOVERS. So container alloc/free honesty is checkable: a leak
+ * is detectable and correct drop discipline is unbounded. Note `list_new` checks the slot table
+ * BEFORE touching the arena, so the overflow refusal is unambiguously slot-exhaustion, not arena OOM.
+ *
+ * Consumes list + arena.  Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_form.  Ring: R3.
+ * NIH: composes omnia/list + memoria/arena only.  K: 1.00. */
+module omnia_arena_slot_witness
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(arena_id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn list_new(arena_id: u64, hard_max: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_drop(id: u64) -> i32 from "list.iii"
+
+const ASW_MAX_SLOTS : u64 = 32u64   /* list's LIST_MAX_INSTANCES handle-table size */
+
+/* PROOF 1 -- balanced lifecycle: `cycles` rounds of (new -> drop). Every round must get a VALID id
+ * (!= 0): because drop frees the slot, the 32-entry table is never exhausted even for cycles >> 32.
+ * Returns 1 iff every round succeeded. */
+fn asw_balanced_cycles(arena_id: u64, cycles: u64) -> u8 @export {
+    let mut i : u64 = 0u64
+    while i < cycles {
+        let id : u64 = list_new(arena_id, 1u64)
+        if id == 0u64 { return 0u8 }      /* a slot leak would exhaust the table here -> FAIL */
+        list_drop(id)
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+var ASW_IDS : [u64; 64]
+
+/* PROOF 2 (the negative arm) -- leak detection: fill EXACTLY the table (ASW_MAX_SLOTS new, no drop),
+ * then attempt one more. The overflow `new` MUST be refused (return 0) -- the leak is caught. Drops
+ * all kept ids afterward so the table recovers. Returns 1 iff the table filled then refused overflow. */
+fn asw_leak_detected(arena_id: u64) -> u8 @export {
+    let mut i : u64 = 0u64
+    while i < ASW_MAX_SLOTS {
+        let id : u64 = list_new(arena_id, 1u64)
+        if id == 0u64 { return 0u8 }      /* must NOT exhaust before the table is full */
+        ASW_IDS[i] = id
+        i = i + 1u64
+    }
+    let overflow : u64 = list_new(arena_id, 1u64)   /* the (33rd) leak: table is full */
+    let mut caught : u8 = 0u8
+    if overflow == 0u64 { caught = 1u8 }            /* refused -> the leak is detected */
+    let mut j : u64 = 0u64
+    while j < ASW_MAX_SLOTS {
+        list_drop(ASW_IDS[j])
+        j = j + 1u64
+    }
+    return caught
+}
+
+/* Self-test (99 = pass): balanced cycling never exhausts the table; an un-dropped overflow IS caught
+ * (the negative arm); and after cleanup the table RECOVERS. Proves container alloc/free honesty. */
+fn arena_slot_witness_selftest() -> u64 @export {
+    let a : u64 = arena_new(1u64 << 18u64)       /* generous: rules out arena OOM, isolates slot honesty */
+    if a == 0u64 { return 1u64 }
+    if asw_balanced_cycles(a, 100u64) != 1u8 { return 2u64 }   /* 100 >> 32: unbounded with drop */
+    if asw_leak_detected(a) != 1u8 { return 3u64 }             /* leak -> overflow refused */
+    let id : u64 = list_new(a, 1u64)             /* recovery: the table was correctly freed */
+    if id == 0u64 { return 4u64 }
+    list_drop(id)
+    arena_drop(a)
+    return 99u64
+}

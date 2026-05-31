@@ -1,0 +1,12 @@
+/* 1016_proof_resolve.iii -- falsifier for proof_resolve.iii (APOTHEOSIS C.9, the doc's CENTRAL
+ * architectural lesson). The Phase-C.5 hand-asm fast path bypasses the 11-step resolution contract;
+ * proof_resolve DISCHARGES that into a per-input equivalence theorem via a cold-vs-fast differential
+ * (force the cold contract, compare to the shortcut). Over a REAL resolution scenario (the 233
+ * pattern set + intents), the shortcut is PROVEN equal to the contract; admit-with-proof returns the
+ * verified result; the proof is deterministic; and the discharge is content-address-SEALED
+ * (reproducible, distinct per input). 99 = pass. */
+module corpus_1016
+
+extern @abi(c-msvc-x64) fn proof_resolve_selftest() -> u64 from "proof_resolve.iii"
+
+fn main() -> u64 { return proof_resolve_selftest() }

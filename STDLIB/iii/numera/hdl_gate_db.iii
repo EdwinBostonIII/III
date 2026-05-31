@@ -1,0 +1,287 @@
+/* STDLIB/iii/numera/hdl_gate_db.iii -- APOTHEOSIS C.8: the certified GATE-IDENTITY PROOF DB.
+ *
+ * The e-graph netlist optimizer rewrites a circuit into a cheaper equivalent. For those rewrites
+ * to be SOUND, every gate identity it uses must be proven equivalent -- not "usually", but on EVERY
+ * input assignment. This DB proves each classic boolean identity ONCE via hdl.iii's exhaustive 2^n
+ * truth-table certifier (`hdl_equiv2`), so the optimizer's rewrites are BIT-EXACT BY CONSTRUCTION:
+ * a wrong netlist is impossible, not merely unlikely (/math-olympiad).
+ *
+ * THE NEGATIVE ARM (the teeth): a NON-equivalent "identity" (AND vs OR) is REJECTED by the same
+ * certifier -- so the DB can never admit an unsound rewrite. Compiler-UNREFERENCED -> LIBNATIVE.
+ * Hexad: kind_form.  Ring: R0.  NIH: composes hdl.iii only.  K: 1.00. */
+module numera_hdl_gate_db
+
+extern @abi(c-msvc-x64) fn hdl_reset() -> u64 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add_in(input_idx: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_add(kind: u32, a: u32, b: u32) -> u32 from "hdl.iii"
+extern @abi(c-msvc-x64) fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 from "hdl.iii"
+
+const HGD_NOT  : u32 = 4u32
+const HGD_AND  : u32 = 5u32
+const HGD_OR   : u32 = 6u32
+const HGD_XOR  : u32 = 7u32
+const HGD_NAND : u32 = 8u32
+
+/* (1) double negation: NOT(NOT a) == a */
+fn hgd_double_neg() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let n1 : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let n2 : u32 = hdl_add(HGD_NOT, n1, 0u32)
+    return hdl_equiv2(n2, a, 1u32)
+}
+/* (2) AND idempotence: AND(a,a) == a */
+fn hgd_and_idem() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let g : u32 = hdl_add(HGD_AND, a, a)
+    return hdl_equiv2(g, a, 1u32)
+}
+/* (3) OR idempotence: OR(a,a) == a */
+fn hgd_or_idem() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let g : u32 = hdl_add(HGD_OR, a, a)
+    return hdl_equiv2(g, a, 1u32)
+}
+/* (4) De Morgan I: NOT(AND(a,b)) == OR(NOT a, NOT b) */
+fn hgd_demorgan_and() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let lhs : u32 = hdl_add(HGD_NOT, hdl_add(HGD_AND, a, b), 0u32)
+    let na : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let nb : u32 = hdl_add(HGD_NOT, b, 0u32)
+    let rhs : u32 = hdl_add(HGD_OR, na, nb)
+    return hdl_equiv2(lhs, rhs, 2u32)
+}
+/* (5) De Morgan II: NOT(OR(a,b)) == AND(NOT a, NOT b) */
+fn hgd_demorgan_or() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let lhs : u32 = hdl_add(HGD_NOT, hdl_add(HGD_OR, a, b), 0u32)
+    let na : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let nb : u32 = hdl_add(HGD_NOT, b, 0u32)
+    let rhs : u32 = hdl_add(HGD_AND, na, nb)
+    return hdl_equiv2(lhs, rhs, 2u32)
+}
+/* (6) absorption I: OR(a, AND(a,b)) == a */
+fn hgd_absorb_or() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let ab : u32 = hdl_add(HGD_AND, a, b)
+    let g  : u32 = hdl_add(HGD_OR, a, ab)
+    return hdl_equiv2(g, a, 2u32)
+}
+/* (7) absorption II: AND(a, OR(a,b)) == a */
+fn hgd_absorb_and() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let ab : u32 = hdl_add(HGD_OR, a, b)
+    let g  : u32 = hdl_add(HGD_AND, a, ab)
+    return hdl_equiv2(g, a, 2u32)
+}
+/* (8) NAND def: NAND(a,b) == NOT(AND(a,b)) */
+fn hgd_nand_def() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let lhs : u32 = hdl_add(HGD_NAND, a, b)
+    let rhs : u32 = hdl_add(HGD_NOT, hdl_add(HGD_AND, a, b), 0u32)
+    return hdl_equiv2(lhs, rhs, 2u32)
+}
+/* (9) XOR as sum-of-products: XOR(a,b) == OR(AND(a, NOT b), AND(NOT a, b)) */
+fn hgd_xor_sop() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let lhs : u32 = hdl_add(HGD_XOR, a, b)
+    let na : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let nb : u32 = hdl_add(HGD_NOT, b, 0u32)
+    let t1 : u32 = hdl_add(HGD_AND, a, nb)
+    let t2 : u32 = hdl_add(HGD_AND, na, b)
+    let rhs : u32 = hdl_add(HGD_OR, t1, t2)
+    return hdl_equiv2(lhs, rhs, 2u32)
+}
+/* (10) AND commutativity: AND(a,b) == AND(b,a) */
+fn hgd_and_comm() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let g1 : u32 = hdl_add(HGD_AND, a, b)
+    let g2 : u32 = hdl_add(HGD_AND, b, a)
+    return hdl_equiv2(g1, g2, 2u32)
+}
+/* (11) OR commutativity: OR(a,b) == OR(b,a) */
+fn hgd_or_comm() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let g1 : u32 = hdl_add(HGD_OR, a, b)
+    let g2 : u32 = hdl_add(HGD_OR, b, a)
+    return hdl_equiv2(g1, g2, 2u32)
+}
+/* (12) XOR commutativity: XOR(a,b) == XOR(b,a) */
+fn hgd_xor_comm() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let g1 : u32 = hdl_add(HGD_XOR, a, b)
+    let g2 : u32 = hdl_add(HGD_XOR, b, a)
+    return hdl_equiv2(g1, g2, 2u32)
+}
+/* (13) complement (AND): AND(a, NOT a) == 0, witnessed by the constant-0 XOR(a,a) */
+fn hgd_complement_and() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let na : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let lhs : u32 = hdl_add(HGD_AND, a, na)
+    let zero : u32 = hdl_add(HGD_XOR, a, a)
+    return hdl_equiv2(lhs, zero, 1u32)
+}
+/* (14) complement (OR): OR(a, NOT a) == 1, witnessed by NOT(constant-0) */
+fn hgd_complement_or() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let na : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let lhs : u32 = hdl_add(HGD_OR, a, na)
+    let zero : u32 = hdl_add(HGD_XOR, a, a)
+    let one : u32 = hdl_add(HGD_NOT, zero, 0u32)
+    return hdl_equiv2(lhs, one, 1u32)
+}
+/* (15) AND associativity: AND(AND(a,b),c) == AND(a,AND(b,c)) */
+fn hgd_assoc_and() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let c : u32 = hdl_add_in(2u32)
+    let lhs : u32 = hdl_add(HGD_AND, hdl_add(HGD_AND, a, b), c)
+    let rhs : u32 = hdl_add(HGD_AND, a, hdl_add(HGD_AND, b, c))
+    return hdl_equiv2(lhs, rhs, 3u32)
+}
+/* (16) OR associativity: OR(OR(a,b),c) == OR(a,OR(b,c)) */
+fn hgd_assoc_or() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let c : u32 = hdl_add_in(2u32)
+    let lhs : u32 = hdl_add(HGD_OR, hdl_add(HGD_OR, a, b), c)
+    let rhs : u32 = hdl_add(HGD_OR, a, hdl_add(HGD_OR, b, c))
+    return hdl_equiv2(lhs, rhs, 3u32)
+}
+/* (17) distributivity AND over OR: AND(a, OR(b,c)) == OR(AND(a,b), AND(a,c)) */
+fn hgd_distrib_and_or() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let c : u32 = hdl_add_in(2u32)
+    let lhs : u32 = hdl_add(HGD_AND, a, hdl_add(HGD_OR, b, c))
+    let t1 : u32 = hdl_add(HGD_AND, a, b)
+    let t2 : u32 = hdl_add(HGD_AND, a, c)
+    let rhs : u32 = hdl_add(HGD_OR, t1, t2)
+    return hdl_equiv2(lhs, rhs, 3u32)
+}
+/* (18) distributivity OR over AND: OR(a, AND(b,c)) == AND(OR(a,b), OR(a,c)) */
+fn hgd_distrib_or_and() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let c : u32 = hdl_add_in(2u32)
+    let lhs : u32 = hdl_add(HGD_OR, a, hdl_add(HGD_AND, b, c))
+    let t1 : u32 = hdl_add(HGD_OR, a, b)
+    let t2 : u32 = hdl_add(HGD_OR, a, c)
+    let rhs : u32 = hdl_add(HGD_AND, t1, t2)
+    return hdl_equiv2(lhs, rhs, 3u32)
+}
+/* (19) XOR associativity: XOR(XOR(a,b),c) == XOR(a,XOR(b,c)) */
+fn hgd_xor_assoc() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let c : u32 = hdl_add_in(2u32)
+    let lhs : u32 = hdl_add(HGD_XOR, hdl_add(HGD_XOR, a, b), c)
+    let rhs : u32 = hdl_add(HGD_XOR, a, hdl_add(HGD_XOR, b, c))
+    return hdl_equiv2(lhs, rhs, 3u32)
+}
+/* (20) NAND via De Morgan: NAND(a,b) == OR(NOT a, NOT b) */
+fn hgd_nand_demorgan() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let lhs : u32 = hdl_add(HGD_NAND, a, b)
+    let na : u32 = hdl_add(HGD_NOT, a, 0u32)
+    let nb : u32 = hdl_add(HGD_NOT, b, 0u32)
+    let rhs : u32 = hdl_add(HGD_OR, na, nb)
+    return hdl_equiv2(lhs, rhs, 2u32)
+}
+/* (21) XOR via NAND/OR: XOR(a,b) == AND(OR(a,b), NAND(a,b)) -- (a|b) & ~(a&b) */
+fn hgd_xor_nand_or() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let lhs : u32 = hdl_add(HGD_XOR, a, b)
+    let orv : u32 = hdl_add(HGD_OR, a, b)
+    let nandv : u32 = hdl_add(HGD_NAND, a, b)
+    let rhs : u32 = hdl_add(HGD_AND, orv, nandv)
+    return hdl_equiv2(lhs, rhs, 2u32)
+}
+
+/* the certified DB: 1 iff EVERY identity is proven equivalent over its full 2^n truth table. */
+fn hgd_verify_all() -> u64 @export {
+    if hgd_double_neg()   != 1u32 { return 0u64 }
+    if hgd_and_idem()     != 1u32 { return 0u64 }
+    if hgd_or_idem()      != 1u32 { return 0u64 }
+    if hgd_demorgan_and() != 1u32 { return 0u64 }
+    if hgd_demorgan_or()  != 1u32 { return 0u64 }
+    if hgd_absorb_or()    != 1u32 { return 0u64 }
+    if hgd_absorb_and()   != 1u32 { return 0u64 }
+    if hgd_nand_def()     != 1u32 { return 0u64 }
+    if hgd_xor_sop()      != 1u32 { return 0u64 }
+    if hgd_and_comm()     != 1u32 { return 0u64 }
+    if hgd_or_comm()        != 1u32 { return 0u64 }
+    if hgd_xor_comm()       != 1u32 { return 0u64 }
+    if hgd_complement_and() != 1u32 { return 0u64 }
+    if hgd_complement_or()  != 1u32 { return 0u64 }
+    if hgd_assoc_and()      != 1u32 { return 0u64 }
+    if hgd_assoc_or()       != 1u32 { return 0u64 }
+    if hgd_distrib_and_or() != 1u32 { return 0u64 }
+    if hgd_distrib_or_and() != 1u32 { return 0u64 }
+    if hgd_xor_assoc()      != 1u32 { return 0u64 }
+    if hgd_nand_demorgan()  != 1u32 { return 0u64 }
+    if hgd_xor_nand_or()    != 1u32 { return 0u64 }
+    return 1u64
+}
+
+/* the negative arm: a non-equivalent "identity" (AND(a,b) vs OR(a,b)) MUST be rejected. */
+fn hgd_false_rejected() -> u32 {
+    hdl_reset()
+    let a  : u32 = hdl_add_in(0u32)
+    let b  : u32 = hdl_add_in(1u32)
+    let g1 : u32 = hdl_add(HGD_AND, a, b)
+    let g2 : u32 = hdl_add(HGD_OR, a, b)
+    return hdl_equiv2(g1, g2, 2u32)   /* 0 expected: they differ on (a=1,b=0) etc. */
+}
+
+/* second negative arm: a plausible-but-WRONG "distribution" -- AND(a, OR(b,c)) vs OR(a, AND(b,c)).
+ * These are NOT equal (distribution is asymmetric); they differ at a=1,b=0,c=0 (0 vs 1). */
+fn hgd_false_distrib() -> u32 {
+    hdl_reset()
+    let a : u32 = hdl_add_in(0u32)
+    let b : u32 = hdl_add_in(1u32)
+    let c : u32 = hdl_add_in(2u32)
+    let g1 : u32 = hdl_add(HGD_AND, a, hdl_add(HGD_OR, b, c))
+    let g2 : u32 = hdl_add(HGD_OR, a, hdl_add(HGD_AND, b, c))
+    return hdl_equiv2(g1, g2, 3u32)   /* 0 expected */
+}
+
+/* Self-test: all 21 DB identities certified by exhaustive truth table, and TWO false identities
+ * rejected by the same certifier (the optimizer can never admit an unsound rewrite).  99 = pass. */
+fn hdl_gate_db_selftest() -> u64 @export {
+    if hgd_verify_all() != 1u64 { return 1u64 }
+    if hgd_false_rejected() != 0u32 { return 2u64 }
+    if hgd_false_distrib() != 0u32 { return 3u64 }
+    return 99u64
+}

@@ -225,6 +225,12 @@ fn hdl_seq_init() -> u64 @export {
 }
 /* set gate g's input-A to gate a -- used to close a feedback loop after both gates exist. */
 fn hdl_set_a(g: u32, a: u32) -> u64 @export { HG_A[g] = a ; return 0u64 }
+/* APOTHEOSIS C.8: read accessors + set-B so an external certified netlist optimizer can SCAN the
+ * graph (detect reducible patterns) + REDIRECT consumers. Additive, behavior-neutral. */
+fn hdl_set_b(g: u32, b: u32) -> u64 @export { HG_B[g] = b ; return 0u64 }
+fn hdl_gate_kind(g: u32) -> u32 @export { return HG_KIND[g] }
+fn hdl_gate_a(g: u32) -> u32 @export { return HG_A[g] }
+fn hdl_gate_b(g: u32) -> u32 @export { return HG_B[g] }
 /* read a DFF's current held state. */
 fn hdl_dff_state(g: u32) -> i32 @export { return HG_STATE[g] }
 /* one clock cycle: combinational eval (each DFF outputs its HELD state), then latch (each DFF's

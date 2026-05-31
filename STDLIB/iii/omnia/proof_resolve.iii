@@ -1,0 +1,135 @@
+/* STDLIB/iii/omnia/proof_resolve.iii -- APOTHEOSIS C.9: the resolver shortcut, DISCHARGED.
+ *
+ * The Phase-C.5 hand-asm hot fast path (`iii_resolve_hot`, resolver.iii:505) bypasses the 11-step
+ * resolution contract -- a real optimization that, un-discharged, is a stated-invariant violation.
+ * The doc's CENTRAL architectural lesson: you fix such a violation NOT by deleting the optimization
+ * (it is measured-fast and correct) but by PROVING the invariant it touches STILL HOLDS.
+ *
+ * proof_resolve does exactly that, per input, by a DIFFERENTIAL: run resolve() once with the fast
+ * path FORCED OFF (the cold 11-step contract, via resolver_set_force_cold) and once with it on (the
+ * shortcut), and prove the two RESULTS AGREE. If they ever disagreed (an asm/contract divergence),
+ * proof_resolve REFUSES the shortcut -- so an unsound optimization can never be admitted. The
+ * shortcut becomes a SEALED, proven-equivalent artifact, not a latent inconsistency.
+ *
+ * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_witness.  Ring: R3.  NIH: composes resolver +
+ * resolution_init + pattern_table + intent + call_context + cad.  K: 1.00. */
+module omnia_proof_resolve
+
+extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
+extern @abi(c-msvc-x64) fn resolver_set_force_cold(v: u8) -> i32 from "resolver.iii"
+extern @abi(c-msvc-x64) fn resolver_set_force_diverge(v: u8) -> i32 from "resolver.iii"   /* test seam: falsifiability */
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_set_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn intent_form(form_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn intent_act(state_id: u64, transition_id: u64) -> u64 from "intent.iii"
+extern @abi(c-msvc-x64) fn call_context_new() -> u64 from "call_context.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+/* the shortcut is NOT admitted (not proven equivalent).  ERR-TAGGED (bit 0 = 1): disjoint from EVERY
+ * OK resolution payload (those have bit 0 = 0 via the resolver's `<<1`), so a genuine resolved value of
+ * 0 is no longer indistinguishable from a refusal.  (Literal, not a computed const -- iiis const trap.) */
+const PR_REFUSE : u64 = 0x1FFFFFFFFu64
+
+/* THE EQUIVALENCE DIFFERENTIAL: 1 iff the hot shortcut and the cold 11-step contract return the SAME
+ * result for (set, intent, ctx) -- i.e. the optimization preserves the contract's behavior here. */
+fn proof_resolve_equiv(set: u64, intent: u64, ctx: u64) -> u8 @export {
+    resolver_set_force_cold(1u8)               /* skip the asm shortcut -> the cold 11-step contract */
+    let cold : u64 = resolve(set, intent, ctx)
+    resolver_set_force_cold(0u8)               /* restore the shortcut path */
+    let fast : u64 = resolve(set, intent, ctx)
+    if cold == fast { return 1u8 }
+    return 0u8
+}
+
+/* ADMIT-WITH-PROOF: return the shortcut's result ONLY when it is PROVEN equal to the contract; else
+ * PR_REFUSE.  The optimization is never trusted un-discharged. */
+fn proof_resolve_result(set: u64, intent: u64, ctx: u64) -> u64 @export {
+    if proof_resolve_equiv(set, intent, ctx) != 1u8 { return PR_REFUSE }
+    resolver_set_force_cold(0u8)
+    return resolve(set, intent, ctx)
+}
+
+/* the proof artifact: cad( "III/proof-resolve/v1" || set || intent || ctx || result ) -- a sealed
+ * identity for the proven-equivalent resolution (written iff equivalent; out32 left untouched + return
+ * -1 on refusal).  Gives the discharge a first-class content-address in the §S.6 chain. */
+var PR_DOM : [u8; 21]
+var PR_BUF : [u8; 53]   /* 21 domain + 4*8 operands */
+fn pr_dom_init() -> i32 {
+    PR_DOM[0u64]=73u8 PR_DOM[1u64]=73u8 PR_DOM[2u64]=73u8 PR_DOM[3u64]=47u8        /* III/ */
+    PR_DOM[4u64]=112u8 PR_DOM[5u64]=114u8 PR_DOM[6u64]=111u8 PR_DOM[7u64]=111u8 PR_DOM[8u64]=102u8 /* proof */
+    PR_DOM[9u64]=45u8 PR_DOM[10u64]=114u8 PR_DOM[11u64]=101u8 PR_DOM[12u64]=115u8 PR_DOM[13u64]=111u8 PR_DOM[14u64]=108u8 PR_DOM[15u64]=118u8 PR_DOM[16u64]=101u8 /* -resolve */
+    PR_DOM[17u64]=47u8 PR_DOM[18u64]=118u8 PR_DOM[19u64]=49u8 PR_DOM[20u64]=0u8     /* /v1 */
+    return 0i32
+}
+fn pr_pack_u64(off: u64, v: u64) -> i32 {
+    let mut k : u64 = 0u64
+    while k < 8u64 { PR_BUF[off + k] = ((v >> (k*8u64)) & 0xFFu64) as u8  k = k + 1u64 }
+    return 0i32
+}
+fn proof_resolve_seal(set: u64, intent: u64, ctx: u64, out32: u64) -> i32 @export {
+    if proof_resolve_equiv(set, intent, ctx) != 1u8 { return 0i32 - 1i32 }   /* refuse: no proof, no seal */
+    resolver_set_force_cold(0u8)
+    let result : u64 = resolve(set, intent, ctx)
+    pr_dom_init()
+    let mut i : u64 = 0u64
+    while i < 21u64 { PR_BUF[i] = PR_DOM[i]  i = i + 1u64 }
+    pr_pack_u64(21u64, set)
+    pr_pack_u64(29u64, intent)
+    pr_pack_u64(37u64, ctx)
+    pr_pack_u64(45u64, result)
+    return cad_oneshot(0u32, (&PR_BUF as u64) as *u8, 53u64, out32 as *u8)
+}
+
+var PR_SEAL1 : [u8; 32]
+var PR_SEAL2 : [u8; 32]
+
+/* Self-test: over a REAL resolution scenario (mirroring corpus 233), prove the hand-asm shortcut is
+ * behaviorally EQUIVALENT to the cold 11-step contract for distinct intents; the admit-with-proof
+ * result equals a direct resolve(); the proof is deterministic; and the seal is reproducible +
+ * distinct per (input,result).  99 = pass. */
+fn proof_resolve_selftest() -> u64 @export {
+    resolution_init()
+    let set : u64 = pattern_set_global()
+    if set == 0u64 { return 1u64 }
+    let ctx : u64 = call_context_new()
+    if ctx == 0u64 { return 2u64 }
+    let intent_a : u64 = intent_form(0u64)
+    let intent_b : u64 = intent_act(0u64, 1u64)
+    if intent_a == 0u64 { return 3u64 }
+    if intent_b == 0u64 { return 4u64 }
+    /* THE DISCHARGE: the shortcut == the 11-step contract for two distinct resolutions. */
+    if proof_resolve_equiv(set, intent_a, ctx) != 1u8 { return 5u64 }
+    if proof_resolve_equiv(set, intent_b, ctx) != 1u8 { return 6u64 }
+    /* admit-with-proof returns the verified result, equal to a direct resolve() (now proven sound). */
+    let proven : u64 = proof_resolve_result(set, intent_a, ctx)
+    resolver_set_force_cold(0u8)
+    let direct : u64 = resolve(set, intent_a, ctx)
+    if proven != direct { return 7u64 }
+    /* the proof verdict is deterministic. */
+    if proof_resolve_equiv(set, intent_a, ctx) != 1u8 { return 8u64 }
+    /* the SEAL: reproducible for the same input, distinct for a different intent. */
+    if proof_resolve_seal(set, intent_a, ctx, &PR_SEAL1 as u64) != 0i32 { return 9u64 }
+    if proof_resolve_seal(set, intent_a, ctx, &PR_SEAL2 as u64) != 0i32 { return 10u64 }
+    let mut j : u64 = 0u64
+    while j < 32u64 { if PR_SEAL1[j] != PR_SEAL2[j] { return 11u64 }  j = j + 1u64 }   /* deterministic */
+    if proof_resolve_seal(set, intent_b, ctx, &PR_SEAL2 as u64) != 0i32 { return 12u64 }
+    let mut same : u8 = 1u8
+    j = 0u64
+    while j < 32u64 { if PR_SEAL1[j] != PR_SEAL2[j] { same = 0u8 }  j = j + 1u64 }
+    if same == 1u8 { return 13u64 }   /* a different intent -> a different proof identity */
+
+    /* NEGATIVE ARM -- the differential is FALSIFIABLE (not a `return 1` stub): force the fast path to
+     * DIVERGE from the cold contract, and the equivalence MUST detect it (0), the result MUST REFUSE
+     * (PR_REFUSE), and the seal MUST refuse (-1).  A short-circuited proof_resolve_equiv would fail all
+     * three.  Then restore + confirm RECOVERY (equivalent again with divergence off). */
+    let prneg1 : i32 = 0i32 - 1i32
+    resolver_set_force_diverge(1u8)
+    if proof_resolve_equiv(set, intent_a, ctx) != 0u8 { return 14u64 }          /* divergence DETECTED */
+    if proof_resolve_result(set, intent_a, ctx) != PR_REFUSE { return 15u64 }   /* unsound shortcut REFUSED */
+    if proof_resolve_seal(set, intent_a, ctx, &PR_SEAL2 as u64) != prneg1 { return 16u64 }  /* no proof -> no seal */
+    resolver_set_force_diverge(0u8)
+    if proof_resolve_equiv(set, intent_a, ctx) != 1u8 { return 17u64 }          /* RECOVERY: equivalent again */
+
+    resolver_set_force_cold(0u8)      /* restore the default so no later consumer is affected */
+    return 99u64
+}

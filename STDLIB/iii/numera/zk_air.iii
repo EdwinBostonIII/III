@@ -36,6 +36,20 @@ module numera_zk_air
 extern @abi(c-msvc-x64) fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
 extern @abi(c-msvc-x64) fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+/* APOTHEOSIS C.3 (item 4): the Merkle commitment + FRI fold route through the §S.6 merkle
+ * build-once/open-many surface and the §C.3 ntt_fri_organ -- the SAME tree + fold zk_stark
+ * uses (one proof surface for the spine, the gate, the demo, AND the general STARK). */
+extern @abi(c-msvc-x64) fn merkle_tree_build_u32(arrBase: u64, leafOff: u64, n: u64, poolBase: u64, treeOff: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_root(poolBase: u64, treeOff: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_open(poolBase: u64, treeOff: u64, n: u64, idx: u64, pathBase: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_tree_verify_u32(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn fri_eval_and_fold(arrBase: u64, floff: u64, ns: u64, omega: u32, alpha: u32, nextOff: u64, q: u32) -> i32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn fri_fold_point(aa: u32, bb: u32, omega: u32, qmod: u64, alpha: u32, q: u32) -> u32 from "ntt_fri_organ.iii"
+/* APOTHEOSIS C.3 (item 5): seal the general STARK's commitments into a §S.6 identity. */
+extern @abi(c-msvc-x64) fn zk_proof_seal_begin() -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn zk_proof_seal_absorb(addr: u64, len: u64) -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn zk_proof_seal_final(out32: u64) -> i32 from "zk_stark_seal.iii"
+extern @abi(c-msvc-x64) fn zk_proof_seal_eq(a: u64, b: u64) -> u8 from "zk_stark_seal.iii"
 
 const AIR_Q : u32 = 998244353u32
 const AIR_B : u64 = 4u64            /* LDE blowup factor (D = B*N) */
@@ -346,5 +360,527 @@ fn zk_air_selftest() -> u64 @export {
     air_set_trace(3u64, 0u64, 123456u32)
     air_build_lde()
     if air_constraints_hold() != 0u8 { return 4u64 }
+    return 99u64
+}
+
+/* ================= General STARK: Merkle commitment over zk_air buffers ===========
+ * Ported byte-identically from zk_stark's proven SHA-256 Merkle (same leaf/node
+ * domain separation), parameterized by a LEAF-ARRAY base address so one builder
+ * commits any of the W trace-column LDEs OR the composition polynomial (AIR_LDE /
+ * AIR_CP).  (Staged duplication: the spec's organ-extraction dedup of zk_stark +
+ * zk_air's Merkle/FRI is a follow-on -- correctness first.)
+ * leaf = sha256(0x00 || v_be32) ; node = sha256(0x01 || L || R). */
+var ZKAIR_MT   : [u8; 262144]   /* tree-node pool (8192 nodes * 32B) */
+var ZKAIR_PATH : [u8; 512]      /* authentication-path scratch (16 levels * 32B); tree pool is ZKAIR_MT, filled by the §S.6 merkle surface */
+
+/* air_leaf_hash/air_node_hash deleted -- SHA-256 0x00/0x01 hashing lives once in merkle.iii.
+ * The air_merkle_* keep their signatures (prove/verify/selftest call sites unchanged) but
+ * delegate to the §S.6 build-once/open-many surface over ZKAIR_MT.  Note air_merkle_build's
+ * (arrBase, tb, leafOff, n) order maps to merkle_tree_build_u32(arrBase, leafOff, n, pool, tb). */
+fn air_merkle_build(arrBase: u64, tb: u64, leafOff: u64, n: u64) -> i32 {
+    return merkle_tree_build_u32(arrBase, leafOff, n, &ZKAIR_MT as u64, tb)
+}
+fn air_merkle_root(tb: u64) -> u64 { return merkle_tree_root(&ZKAIR_MT as u64, tb) }
+fn air_merkle_open(tb: u64, n: u64, idx: u64, pathBase: u64) -> u64 {
+    return merkle_tree_open(&ZKAIR_MT as u64, tb, n, idx, pathBase)
+}
+fn air_merkle_verify(rootAddr: u64, n: u64, idx: u64, leafVal: u32, pathBase: u64, plen: u64) -> u64 {
+    return merkle_tree_verify_u32(rootAddr, n, idx, leafVal, pathBase, plen)
+}
+
+/* Merkle self-test: build a valid 2-col LDE, commit col0 (D=32 leaves), then
+ * open+verify a leaf, reject a tampered leaf.  99 = pass. */
+fn zk_air_merkle_selftest() -> u64 @export {
+    air_reset(2u32, 8u32)
+    let mut c0 : u32 = 2u32
+    let mut c1 : u32 = 3u32
+    let mut t : u64 = 0u64
+    while t < 8u64 {
+        air_set_trace(t, 0u64, c0)
+        air_set_trace(t, 1u64, c1)
+        let n0 : u32 = sf_mul(c0, c1)
+        let n1 : u32 = sf_add(c1, c0)
+        c0 = n0  c1 = n1
+        t = t + 1u64
+    }
+    air_build_lde()
+    air_merkle_build(&AIR_LDE as u64, 0u64, 0u64, 32u64)
+    let root : u64 = air_merkle_root(0u64)
+    let plen : u64 = air_merkle_open(0u64, 32u64, 5u64, &ZKAIR_PATH as u64)
+    if air_merkle_verify(root, 32u64, 5u64, AIR_LDE[5u64], &ZKAIR_PATH as u64, plen) == 0u64 { return 1u64 }
+    let bad : u32 = AIR_LDE[5u64] ^ 1u32
+    if air_merkle_verify(root, 32u64, 5u64, bad, &ZKAIR_PATH as u64, plen) == 1u64 { return 2u64 }
+    return 99u64
+}
+
+/* ================= General STARK: Fiat-Shamir transcript + query derivation ========
+ * Ported from zk_stark's proven FS (sha256 over the running transcript), W-agnostic.
+ * The transcript ZKAIR_TRANS holds the committed roots; FS field elements (FRI fold
+ * coefficients) and query indices are derived from it. */
+var ZKAIR_FSBUF   : [u8; 1280]
+var ZKAIR_TRANS   : [u8; 512]    /* W trace roots + CP root + up to 12 FRI roots */
+var ZKAIR_HASH    : [u8; 32]
+var ZKAIR_FS_TLEN : [u64; 1]
+var ZKAIR_FS_IDX  : [u64; 1]
+var ZKAIR_FS_M    : [u64; 1]
+var ZKAIR_FS_QMOD : [u64; 1]
+var ZKAIR_QD_TLEN : [u64; 1]
+var ZKAIR_QD_MOD  : [u64; 1]
+var ZKAIR_QUERIES : [u32; 16]
+
+fn air_copy32(dstAddr: u64, srcAddr: u64) -> i32 {
+    let d : *u8 = dstAddr as *u8
+    let s : *u8 = srcAddr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { d[i] = s[i]  i = i + 1u64 }
+    return 0i32
+}
+/* sha256( [tag] || idx_be4 || transcript[0..tlen) ) -> ZKAIR_HASH; first 8 bytes BE. */
+fn air_fs_hash8(tagByte: u32, useTag: u64, idx: u32, tlen: u64) -> u64 {
+    let tg : u32 = tagByte
+    let ut : u64 = useTag
+    let mut off : u64 = 0u64
+    if ut == 1u64 { ZKAIR_FSBUF[0] = (tg & 0xFFu32) as u8  off = 1u64 }
+    ZKAIR_FSBUF[off]        = ((idx >> 24u32) & 0xFFu32) as u8
+    ZKAIR_FSBUF[off + 1u64] = ((idx >> 16u32) & 0xFFu32) as u8
+    ZKAIR_FSBUF[off + 2u64] = ((idx >> 8u32)  & 0xFFu32) as u8
+    ZKAIR_FSBUF[off + 3u64] = (idx & 0xFFu32) as u8
+    off = off + 4u64
+    let tp : *u8 = (&ZKAIR_TRANS as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < tlen { ZKAIR_FSBUF[off + i] = tp[i]  i = i + 1u64 }
+    sha256_oneshot((&ZKAIR_FSBUF as u64) as *u8, off + tlen, (&ZKAIR_HASH as u64) as *u8)
+    let mut v : u64 = 0u64
+    i = 0u64
+    while i < 8u64 { v = (v << 8u64) | (ZKAIR_HASH[i] as u64)  i = i + 1u64 }
+    return v
+}
+/* FS field element = (8-byte BE hash) mod q.  Read the bytes from memory + reduce via
+ * sf ops (the direct u64 % q mis-compiles after the sha256 call -- modulo-after-call
+ * trap; same fix as zk_stark).  Caller sets ZKAIR_FS_IDX/TLEN. */
+fn air_fs_field_compute() -> u32 {
+    let dummy : u64 = air_fs_hash8(0u32, 0u64, ZKAIR_FS_IDX[0] as u32, ZKAIR_FS_TLEN[0])
+    let hi : u32 = ((ZKAIR_HASH[0] as u32) << 24u32) | ((ZKAIR_HASH[1] as u32) << 16u32) | ((ZKAIR_HASH[2] as u32) << 8u32) | (ZKAIR_HASH[3] as u32)
+    let lo : u32 = ((ZKAIR_HASH[4] as u32) << 24u32) | ((ZKAIR_HASH[5] as u32) << 16u32) | ((ZKAIR_HASH[6] as u32) << 8u32) | (ZKAIR_HASH[7] as u32)
+    ZKAIR_FS_M[0]    = sf_mul(hi, 301989884u32) as u64    /* hi*(2^32 mod q) mod q */
+    ZKAIR_FS_QMOD[0] = sf_mul(lo, 1u32) as u64
+    return sf_add(ZKAIR_FS_M[0] as u32, ZKAIR_FS_QMOD[0] as u32)
+}
+/* derive 16 distinct query indices in [0,D), each a NON-trace point (q % B != 0). */
+fn air_derive_queries(tlen: u64, d_dom: u64) -> i32 {
+    ZKAIR_QD_TLEN[0] = tlen
+    ZKAIR_QD_MOD[0]  = d_dom
+    let mut produced : u64 = 0u64
+    let mut attempt  : u32 = 0u32
+    while produced < 16u64 {
+        ZKAIR_FS_TLEN[0] = ZKAIR_QD_TLEN[0]
+        ZKAIR_FS_IDX[0]  = attempt as u64
+        let dummy : u64 = air_fs_hash8(73u32, 1u64, ZKAIR_FS_IDX[0] as u32, ZKAIR_FS_TLEN[0])
+        let hv : u64 = ((ZKAIR_HASH[6] as u64) << 8u64) | (ZKAIR_HASH[7] as u64)
+        let q  : u32 = (hv & (ZKAIR_QD_MOD[0] - 1u64)) as u32   /* mask: D is a power of two */
+        attempt = attempt + 1u32
+        let mut ok : u64 = 1u64
+        if (q & ((AIR_B as u32) - 1u32)) == 0u32 { ok = 0u64 }   /* skip trace points */
+        if ok == 1u64 {
+            let mut dup : u64 = 0u64
+            let mut j : u64 = 0u64
+            while j < produced { if ZKAIR_QUERIES[j] == q { dup = 1u64 }  j = j + 1u64 }
+            if dup == 0u64 { ZKAIR_QUERIES[produced] = q  produced = produced + 1u64 }
+        }
+    }
+    return 0i32
+}
+/* FS self-test: a fixed transcript derives 16 valid queries (distinct, in [0,D),
+ * all non-trace) and the derivation is deterministic (re-run -> identical).  99=pass. */
+fn zk_air_fs_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 64u64 { ZKAIR_TRANS[i] = ((i * 37u64 + 11u64) & 0xFFu64) as u8  i = i + 1u64 }
+    air_derive_queries(64u64, 32u64)
+    /* validity: all 16 in [0,32), non-trace, distinct */
+    i = 0u64
+    while i < 16u64 {
+        let q : u32 = ZKAIR_QUERIES[i]
+        if q >= 32u32 { return 1u64 }
+        if (q & 3u32) == 0u32 { return 2u64 }
+        let mut j : u64 = i + 1u64
+        while j < 16u64 { if ZKAIR_QUERIES[j] == q { return 3u64 }  j = j + 1u64 }
+        i = i + 1u64
+    }
+    /* determinism: stash, re-derive, compare */
+    let q0 : u32 = ZKAIR_QUERIES[0]
+    let q7 : u32 = ZKAIR_QUERIES[7]
+    air_derive_queries(64u64, 32u64)
+    if ZKAIR_QUERIES[0] != q0 { return 4u64 }
+    if ZKAIR_QUERIES[7] != q7 { return 5u64 }
+    return 99u64
+}
+
+/* ================= General STARK: prover + verifier (transition + FRI) ==============
+ * Ported from zk_stark's proven prover/verifier, generalized to W trace columns +
+ * the data-driven constraint (air_combine / air_combine_opened).  FRI fold + Merkle +
+ * FS are the demo's tested soundness machinery, reused verbatim on zk_air's W-column
+ * buffers.  Proves the multi-column TRANSITION system is satisfiable via FRI low-degree
+ * (boundary/public-input binding is a follow-on).  Tree layout in ZKAIR_MT: trace col w
+ * @ w*TB, CP @ W*TB, FRI @ (W+1)*TB + ftoff ; TB = 2*D*32 (a D-leaf tree's byte size). */
+var ZKAIR_TRACE_ROOTS : [u8; 128]   /* up to 4 cols * 32 */
+var ZKAIR_CP_ROOT     : [u8; 32]
+var ZKAIR_FRI_ROOTS   : [u8; 384]   /* 12 * 32 */
+var ZKAIR_FRI_NL      : [u32; 1]
+var ZKAIR_FRI_FINAL   : [u32; 1]
+var ZKAIR_FRI         : [u32; 512]  /* FRI layers, D + D/2 + ... < 2D */
+var ZKAIR_FSIZE       : [u32; 12]
+var ZKAIR_FOMEGA      : [u32; 12]
+var ZKAIR_FLOFF       : [u32; 12]
+var ZKAIR_FTOFF       : [u32; 12]
+var ZKAIR_TQ          : [u32; 64]   /* 16 queries * 4 cols */
+var ZKAIR_TQN         : [u32; 64]
+var ZKAIR_CQ          : [u32; 16]
+var ZKAIR_FQ          : [u32; 192]  /* 16 * 12 */
+var ZKAIR_FSIB        : [u32; 192]
+var ZKAIR_TPATH       : [u8; 20480] /* 16*4 * 10 levels * 32 */
+var ZKAIR_TNPATH      : [u8; 20480]
+var ZKAIR_CPATH       : [u8; 5120]  /* 16 * 10 * 32 */
+var ZKAIR_FPATH       : [u8; 61440] /* 16*12 * 10 * 32 */
+/* boundary (public-input) constraints: trace cell (col,row) must equal value. */
+var ZKAIR_BD_COL : [u32; 16]
+var ZKAIR_BD_ROW : [u32; 16]
+var ZKAIR_BD_VAL : [u32; 16]
+var ZKAIR_NB     : [u32; 1]
+var ZKAIR_BQ     : [u32; 16]    /* opened boundary leaf values */
+var ZKAIR_BPATH  : [u8; 5120]   /* 16 * 10 * 32 */
+
+fn air_boundary_reset() -> i32 @export { ZKAIR_NB[0] = 0u32  return 0i32 }
+fn air_add_boundary(col: u32, row: u32, value: u32) -> i32 @export {
+    let b : u64 = ZKAIR_NB[0] as u64
+    if b >= 16u64 { return 0i32 - 1i32 }
+    ZKAIR_BD_COL[b] = col
+    ZKAIR_BD_ROW[b] = row
+    ZKAIR_BD_VAL[b] = value
+    ZKAIR_NB[0] = (b + 1u64) as u32
+    return 0i32
+}
+
+/* FS-derive the composition coefficients α_k from the current transcript (the
+ * committed trace roots).  Binding α_k to the committed trace is what makes the
+ * random-linear-combination of constraints sound: an adaptive prover cannot pick a
+ * cheating trace AFTER seeing the coefficients.  Sets AIR_ALPHA[0..NC). */
+fn air_derive_alphas(tlen: u64) -> i32 {
+    let nc : u64 = AIR_NC[0] as u64
+    let mut k : u64 = 0u64
+    while k < nc {
+        ZKAIR_FS_TLEN[0] = tlen
+        ZKAIR_FS_IDX[0]  = 0xC0FFEE00u64 + k
+        AIR_ALPHA[k] = air_fs_field_compute()
+        k = k + 1u64
+    }
+    return 0i32
+}
+
+fn air_stark_prove() -> i32 {
+    air_build_lde()
+    let wc : u64 = AIR_W[0] as u64
+    let n  : u64 = AIR_N[0] as u64
+    let d  : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let tbsz   : u64 = 2u64 * d * 32u64
+    /* commit W trace columns + build the trace-roots transcript */
+    let mut tlen : u64 = 0u64
+    let mut w : u64 = 0u64
+    while w < wc {
+        air_merkle_build(&AIR_LDE as u64, w*tbsz, w*d, d)
+        air_copy32((&ZKAIR_TRACE_ROOTS as u64) + w*32u64, air_merkle_root(w*tbsz))
+        air_copy32((&ZKAIR_TRANS as u64) + tlen, (&ZKAIR_TRACE_ROOTS as u64) + w*32u64)
+        tlen = tlen + 32u64
+        w = w + 1u64
+    }
+    /* FS-derive the composition coefficients from the trace commitment, THEN build
+     * the composition polynomial with them (sound order: commit before challenge). */
+    air_derive_alphas(tlen)
+    air_build_cp()
+    /* commit CP + extend the transcript */
+    air_merkle_build(&AIR_CP as u64, wc*tbsz, 0u64, d)
+    air_copy32(&ZKAIR_CP_ROOT as u64, air_merkle_root(wc*tbsz))
+    air_copy32((&ZKAIR_TRANS as u64) + tlen, &ZKAIR_CP_ROOT as u64)
+    tlen = tlen + 32u64
+    /* FRI fold the composition polynomial (layer 0 = CP) */
+    let mut i : u64 = 0u64
+    while i < d { ZKAIR_FRI[i] = AIR_CP[i]  i = i + 1u64 }
+    ZKAIR_FSIZE[0] = d as u32  ZKAIR_FOMEGA[0] = omegaD  ZKAIR_FLOFF[0] = 0u32  ZKAIR_FTOFF[0] = 0u32
+    let friBase : u64 = (wc + 1u64) * tbsz
+    let mut L : u64 = 0u64
+    let mut lsize : u64 = d
+    while lsize > 1u64 {
+        if L + 1u64 >= 12u64 { lsize = 1u64 } else {
+            let floffL : u64 = ZKAIR_FLOFF[L] as u64
+            let ftoffL : u64 = ZKAIR_FTOFF[L] as u64
+            let szL    : u64 = ZKAIR_FSIZE[L] as u64
+            air_merkle_build(&ZKAIR_FRI as u64, friBase + ftoffL, floffL, szL)
+            air_copy32((&ZKAIR_FRI_ROOTS as u64) + L*32u64, air_merkle_root(friBase + ftoffL))
+            air_copy32((&ZKAIR_TRANS as u64) + tlen, (&ZKAIR_FRI_ROOTS as u64) + L*32u64)
+            tlen = tlen + 32u64
+            ZKAIR_FS_TLEN[0] = tlen
+            ZKAIR_FS_IDX[0]  = (0xA1F00000u32 + (L as u32)) as u64
+            let alpha : u32 = air_fs_field_compute()
+            let ns    : u64 = szL / 2u64
+            let omegaL : u32 = ZKAIR_FOMEGA[L]
+            let nextOff : u64 = floffL + szL
+            /* fold the whole layer through the shared §C.3 organ (incremental inv(omega^j)). */
+            fri_eval_and_fold(&ZKAIR_FRI as u64, floffL, ns, omegaL, alpha, nextOff, 998244353u32)
+            ZKAIR_FSIZE[L + 1u64] = ns as u32
+            ZKAIR_FOMEGA[L + 1u64] = sf_mul(omegaL, omegaL)
+            ZKAIR_FLOFF[L + 1u64] = nextOff as u32
+            ZKAIR_FTOFF[L + 1u64] = (ftoffL + 2u64*szL*32u64) as u32
+            lsize = ns
+            L = L + 1u64
+        }
+    }
+    ZKAIR_FRI_NL[0] = L as u32
+    ZKAIR_FRI_FINAL[0] = ZKAIR_FRI[ZKAIR_FLOFF[L] as u64]
+    air_derive_queries(tlen, d)
+    /* open every query: W cols' trace[q]+trace_next[q], CP[q], FRI siblings */
+    let mut qi : u64 = 0u64
+    while qi < 16u64 {
+        let jq  : u64 = ZKAIR_QUERIES[qi] as u64
+        let jqn : u64 = (jq + AIR_B) & (d - 1u64)
+        w = 0u64
+        while w < wc {
+            ZKAIR_TQ[qi*4u64 + w]  = AIR_LDE[w*d + jq]
+            ZKAIR_TQN[qi*4u64 + w] = AIR_LDE[w*d + jqn]
+            air_merkle_open(w*tbsz, d, jq,  (&ZKAIR_TPATH as u64)  + (qi*4u64 + w)*320u64)
+            air_merkle_open(w*tbsz, d, jqn, (&ZKAIR_TNPATH as u64) + (qi*4u64 + w)*320u64)
+            w = w + 1u64
+        }
+        ZKAIR_CQ[qi] = AIR_CP[jq]
+        air_merkle_open(wc*tbsz, d, jq, (&ZKAIR_CPATH as u64) + qi*320u64)
+        let mut qcur : u64 = jq
+        let mut l : u64 = 0u64
+        while l < L {
+            let szl    : u64 = ZKAIR_FSIZE[l] as u64
+            let half   : u64 = szl / 2u64
+            let floffl : u64 = ZKAIR_FLOFF[l] as u64
+            let ftoffl : u64 = ZKAIR_FTOFF[l] as u64
+            let sibpos : u64 = (qcur + half) & (szl - 1u64)
+            ZKAIR_FQ[qi*12u64 + l]   = ZKAIR_FRI[floffl + qcur]
+            ZKAIR_FSIB[qi*12u64 + l] = ZKAIR_FRI[floffl + sibpos]
+            air_merkle_open(friBase + ftoffl, szl, sibpos, (&ZKAIR_FPATH as u64) + (qi*12u64 + l)*320u64)
+            qcur = qcur & (half - 1u64)
+            l = l + 1u64
+        }
+        qi = qi + 1u64
+    }
+    /* boundary openings: for each (col,row,value) open LDE_col[row*B] (=trace[row][col]) */
+    let nb : u64 = ZKAIR_NB[0] as u64
+    let mut bi : u64 = 0u64
+    while bi < nb {
+        let bcol : u64 = ZKAIR_BD_COL[bi] as u64
+        let pos  : u64 = (ZKAIR_BD_ROW[bi] as u64) * AIR_B
+        ZKAIR_BQ[bi] = AIR_LDE[bcol*d + pos]
+        air_merkle_open(bcol*tbsz, d, pos, (&ZKAIR_BPATH as u64) + bi*320u64)
+        bi = bi + 1u64
+    }
+    return 0i32
+}
+
+/* Verifier: 0 = ACCEPT ; positive = the failing check.  Re-derives queries from the
+ * committed roots, verifies every Merkle opening, checks the general AIR transition
+ * CP[q]*Z_H(q) == air_combine_opened (the data-driven constraint at the openings), and
+ * the FRI low-degree consistency down to the final constant. */
+fn air_stark_verify() -> u64 {
+    let wc : u64 = AIR_W[0] as u64
+    let n  : u64 = AIR_N[0] as u64
+    let d  : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let mut tlen : u64 = 0u64
+    let mut w : u64 = 0u64
+    while w < wc {
+        air_copy32((&ZKAIR_TRANS as u64) + tlen, (&ZKAIR_TRACE_ROOTS as u64) + w*32u64)
+        tlen = tlen + 32u64  w = w + 1u64
+    }
+    air_derive_alphas(tlen)   /* re-derive the FS composition coefficients (== prover's) */
+    air_copy32((&ZKAIR_TRANS as u64) + tlen, &ZKAIR_CP_ROOT as u64)
+    tlen = tlen + 32u64
+    let NL : u64 = ZKAIR_FRI_NL[0] as u64
+    let mut lc : u64 = 0u64
+    while lc < NL { air_copy32((&ZKAIR_TRANS as u64) + tlen, (&ZKAIR_FRI_ROOTS as u64) + lc*32u64)  tlen = tlen + 32u64  lc = lc + 1u64 }
+    air_derive_queries(tlen, d)
+    let mut plenD : u64 = 0u64
+    let mut td : u64 = d
+    while td > 1u64 { plenD = plenD + 1u64  td = td >> 1u64 }
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        let jq  : u64 = ZKAIR_QUERIES[i] as u64
+        let jqn : u64 = (jq + AIR_B) & (d - 1u64)
+        w = 0u64
+        while w < wc {
+            let troot : u64 = (&ZKAIR_TRACE_ROOTS as u64) + w*32u64
+            if air_merkle_verify(troot, d, jq,  ZKAIR_TQ[i*4u64 + w],  (&ZKAIR_TPATH as u64)  + (i*4u64 + w)*320u64, plenD) == 0u64 { return 1u64 }
+            if air_merkle_verify(troot, d, jqn, ZKAIR_TQN[i*4u64 + w], (&ZKAIR_TNPATH as u64) + (i*4u64 + w)*320u64, plenD) == 0u64 { return 2u64 }
+            air_set_open(w, ZKAIR_TQ[i*4u64 + w], ZKAIR_TQN[i*4u64 + w])
+            w = w + 1u64
+        }
+        if air_merkle_verify(&ZKAIR_CP_ROOT as u64, d, jq, ZKAIR_CQ[i], (&ZKAIR_CPATH as u64) + i*320u64, plenD) == 0u64 { return 3u64 }
+        let x   : u32 = sf_pow(omegaD, jq)
+        let zh  : u32 = sf_sub(sf_pow(x, n), 1u32)
+        let lhs : u32 = sf_mul(ZKAIR_CQ[i], zh)
+        let rhs : u32 = air_combine_opened(wc)
+        if lhs != rhs { return 4u64 }
+        let mut qcur : u64 = jq
+        let mut cur  : u32 = ZKAIR_CQ[i]
+        let mut omegaL : u32 = omegaD
+        let mut sizeL  : u64 = d
+        let mut l2 : u64 = 0u64
+        while l2 < NL {
+            let half : u64 = sizeL / 2u64
+            ZKAIR_FS_TLEN[0] = (wc + 1u64)*32u64 + 32u64*(l2 + 1u64)
+            ZKAIR_FS_IDX[0]  = (0xA1F00000u32 + (l2 as u32)) as u64
+            let alpha : u32 = air_fs_field_compute()
+            if cur != ZKAIR_FQ[i*12u64 + l2] { return 5u64 }
+            let sibpos : u64 = (qcur + half) & (sizeL - 1u64)
+            let mut aa : u32 = 0u32
+            let mut bb : u32 = 0u32
+            if qcur < half { aa = cur  bb = ZKAIR_FSIB[i*12u64 + l2] } else { aa = ZKAIR_FSIB[i*12u64 + l2]  bb = cur }
+            let mut plen2 : u64 = 0u64
+            let mut t2 : u64 = sizeL
+            while t2 > 1u64 { plen2 = plen2 + 1u64  t2 = t2 >> 1u64 }
+            if air_merkle_verify((&ZKAIR_FRI_ROOTS as u64) + l2*32u64, sizeL, sibpos, ZKAIR_FSIB[i*12u64 + l2], (&ZKAIR_FPATH as u64) + (i*12u64 + l2)*320u64, plen2) == 0u64 { return 6u64 }
+            let qmod : u64 = qcur & (half - 1u64)
+            cur = fri_fold_point(aa, bb, omegaL, qmod, alpha, 998244353u32)
+            qcur = qmod
+            sizeL = half
+            omegaL = sf_mul(omegaL, omegaL)
+            l2 = l2 + 1u64
+        }
+        if cur != ZKAIR_FRI_FINAL[0] { return 7u64 }
+        i = i + 1u64
+    }
+    /* boundary checks: verify each LDE_col[row*B] opening vs the trace-col root + value */
+    let nb : u64 = ZKAIR_NB[0] as u64
+    let mut bi : u64 = 0u64
+    while bi < nb {
+        let bcol  : u64 = ZKAIR_BD_COL[bi] as u64
+        let pos   : u64 = (ZKAIR_BD_ROW[bi] as u64) * AIR_B
+        let troot : u64 = (&ZKAIR_TRACE_ROOTS as u64) + bcol*32u64
+        if air_merkle_verify(troot, d, pos, ZKAIR_BQ[bi], (&ZKAIR_BPATH as u64) + bi*320u64, plenD) == 0u64 { return 8u64 }
+        if ZKAIR_BQ[bi] != ZKAIR_BD_VAL[bi] { return 9u64 }
+        bi = bi + 1u64
+    }
+    return 0u64
+}
+
+/* Full general-STARK round-trip KAT: prove the 2-column degree-2 AIR, verify ACCEPT,
+ * and prove three tampers REJECT (a CP opening, a trace opening, the FRI final).
+ * Demonstrates a general data-driven multi-column AIR is provable+verifiable via FRI.
+ * (FS-derived composition coefficients + boundary binding are noted follow-ons.) 99=pass. */
+fn zk_air_stark_selftest() -> u64 @export {
+    air_reset(2u32, 8u32)
+    air_boundary_reset()
+    air_add_boundary(0u32, 0u32, 2u32)   /* public input: col0[0] == 2 */
+    air_add_boundary(1u32, 0u32, 3u32)   /* public input: col1[0] == 3 */
+    air_add_term(0u32, 1u32, 3u32, 0u32)
+    air_add_term(0u32, 998244352u32, 1u32, 2u32)
+    air_add_term(1u32, 1u32, 4u32, 0u32)
+    air_add_term(1u32, 998244352u32, 2u32, 0u32)
+    air_add_term(1u32, 998244352u32, 1u32, 0u32)
+    air_set_alpha(0u64, 7u32)
+    air_set_alpha(1u64, 13u32)
+    let mut c0 : u32 = 2u32
+    let mut c1 : u32 = 3u32
+    let mut t : u64 = 0u64
+    while t < 8u64 {
+        air_set_trace(t, 0u64, c0)
+        air_set_trace(t, 1u64, c1)
+        let n0 : u32 = sf_mul(c0, c1)
+        let n1 : u32 = sf_add(c1, c0)
+        c0 = n0  c1 = n1
+        t = t + 1u64
+    }
+    air_stark_prove()
+    if air_stark_verify() != 0u64 { return 1u64 }
+    let s0 : u32 = ZKAIR_CQ[0]
+    ZKAIR_CQ[0] = s0 ^ 1u32
+    if air_stark_verify() == 0u64 { return 2u64 }
+    ZKAIR_CQ[0] = s0
+    let s1 : u32 = ZKAIR_TQ[0]
+    ZKAIR_TQ[0] = s1 ^ 1u32
+    if air_stark_verify() == 0u64 { return 3u64 }
+    ZKAIR_TQ[0] = s1
+    let s2 : u32 = ZKAIR_FRI_FINAL[0]
+    ZKAIR_FRI_FINAL[0] = s2 ^ 1u32
+    if air_stark_verify() == 0u64 { return 4u64 }
+    ZKAIR_FRI_FINAL[0] = s2
+    /* negative 4: tamper a boundary opening -> verify rejects (public-input binding) */
+    let s3 : u32 = ZKAIR_BQ[0]
+    ZKAIR_BQ[0] = s3 ^ 1u32
+    if air_stark_verify() == 0u64 { return 5u64 }
+    ZKAIR_BQ[0] = s3
+    return 99u64
+}
+
+/* ===================== content-address PROOF SEAL (§C.3 item 5) =====================
+ * The general STARK's proof gets the same §S.6 identity as the demo's -- one seal surface
+ * (zk_stark_seal) for both.  W-column-aware: frames W + seals every trace-column root, the
+ * CP root, the FRI roots/final, the queries, and the boundary openings. */
+var ZKAIR_SEAL_A : [u8; 32]
+var ZKAIR_SEAL_B : [u8; 32]
+var ZKAIR_SEAL_C : [u8; 32]
+
+fn air_proof_cad(out32: u64) -> i32 @export {
+    let wc : u64 = AIR_W[0] as u64
+    let nl : u64 = ZKAIR_FRI_NL[0] as u64
+    let nb : u64 = ZKAIR_NB[0] as u64
+    zk_proof_seal_begin()
+    zk_proof_seal_absorb(&AIR_W as u64, 4u64)                   /* W framing */
+    zk_proof_seal_absorb(&ZKAIR_TRACE_ROOTS as u64, wc*32u64)
+    zk_proof_seal_absorb(&ZKAIR_CP_ROOT as u64, 32u64)
+    zk_proof_seal_absorb(&ZKAIR_FRI_NL as u64, 4u64)
+    zk_proof_seal_absorb(&ZKAIR_FRI_ROOTS as u64, nl*32u64)
+    zk_proof_seal_absorb(&ZKAIR_FRI_FINAL as u64, 4u64)
+    zk_proof_seal_absorb(&ZKAIR_QUERIES as u64, 64u64)
+    zk_proof_seal_absorb(&ZKAIR_NB as u64, 4u64)
+    zk_proof_seal_absorb(&ZKAIR_BQ as u64, nb*4u64)
+    return zk_proof_seal_final(out32)
+}
+
+/* KAT: the general STARK's seal is deterministic; tampering a trace-column root OR a boundary
+ * opening changes the identity (the §C.3 item-5 negative arm).  99 = pass. */
+fn air_proof_seal_kat() -> u64 @export {
+    air_reset(2u32, 8u32)
+    air_boundary_reset()
+    air_add_boundary(0u32, 0u32, 2u32)
+    air_add_boundary(1u32, 0u32, 3u32)
+    air_add_term(0u32, 1u32, 3u32, 0u32)
+    air_add_term(0u32, 998244352u32, 1u32, 2u32)
+    air_add_term(1u32, 1u32, 4u32, 0u32)
+    air_add_term(1u32, 998244352u32, 2u32, 0u32)
+    air_add_term(1u32, 998244352u32, 1u32, 0u32)
+    air_set_alpha(0u64, 7u32)
+    air_set_alpha(1u64, 13u32)
+    let mut c0 : u32 = 2u32
+    let mut c1 : u32 = 3u32
+    let mut t : u64 = 0u64
+    while t < 8u64 {
+        air_set_trace(t, 0u64, c0)
+        air_set_trace(t, 1u64, c1)
+        let n0 : u32 = sf_mul(c0, c1)
+        let n1 : u32 = sf_add(c1, c0)
+        c0 = n0  c1 = n1
+        t = t + 1u64
+    }
+    air_stark_prove()
+    air_proof_cad(&ZKAIR_SEAL_A as u64)
+    air_proof_cad(&ZKAIR_SEAL_B as u64)
+    if zk_proof_seal_eq(&ZKAIR_SEAL_A as u64, &ZKAIR_SEAL_B as u64) != 1u8 { return 1u64 }   /* deterministic */
+    let s0 : u8 = ZKAIR_TRACE_ROOTS[0]
+    ZKAIR_TRACE_ROOTS[0] = s0 ^ 1u8
+    air_proof_cad(&ZKAIR_SEAL_C as u64)
+    if zk_proof_seal_eq(&ZKAIR_SEAL_A as u64, &ZKAIR_SEAL_C as u64) != 0u8 { return 2u64 }   /* trace-root tamper */
+    ZKAIR_TRACE_ROOTS[0] = s0
+    let b0 : u32 = ZKAIR_BQ[0u64]
+    ZKAIR_BQ[0u64] = b0 ^ 1u32
+    air_proof_cad(&ZKAIR_SEAL_C as u64)
+    if zk_proof_seal_eq(&ZKAIR_SEAL_A as u64, &ZKAIR_SEAL_C as u64) != 0u8 { return 3u64 }   /* boundary tamper */
+    ZKAIR_BQ[0u64] = b0
+    air_proof_cad(&ZKAIR_SEAL_C as u64)
+    if zk_proof_seal_eq(&ZKAIR_SEAL_A as u64, &ZKAIR_SEAL_C as u64) != 1u8 { return 4u64 }   /* restored */
     return 99u64
 }

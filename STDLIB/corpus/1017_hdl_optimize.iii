@@ -1,0 +1,11 @@
+/* 1017_hdl_optimize.iii -- falsifier for the certified netlist optimizer (APOTHEOSIS C.8 capstone,
+ * hdl_optimize.iii). It CONSUMES hdl_gate_db's certified identities + hdl: applying AND(a,a)->a,
+ * OR(a,a)->a, NOT(NOT a)->a as rewrites on a real netlist, it PRESERVES the output function (truth
+ * table identical before/after) while the live-gate count DROPS, and a deliberately-WRONG redirect
+ * changes the function and is caught (the negative arm -- an unsound optimization can never pass).
+ * 99 = pass. */
+module corpus_1017
+
+extern @abi(c-msvc-x64) fn hdl_optimize_selftest() -> u64 from "hdl_optimize.iii"
+
+fn main() -> u64 { return hdl_optimize_selftest() }

@@ -1,0 +1,127 @@
+/* STDLIB/iii/numera/pareto_extraction.iii -- APOTHEOSIS C.8: the 6-D PARETO FRONTIER.
+ *
+ * Physical cost is genuinely multi-dimensional (latency · inverse-throughput · area · power ·
+ * register-pressure · gate-count); collapsing it to a SINGLE scalar minimum HIDES the real trade
+ * space (a design with the lowest latency may have the worst area). The honest answer is the
+ * ANTICHAIN of non-dominated designs -- the Pareto frontier: the set of candidates that no other
+ * candidate beats in ALL six dimensions at once. The §C.5 e-graph extraction and the §C.7 ripple
+ * selection consult this instead of a scalar argmin, so the optimizer sees the whole trade space.
+ *
+ * Lower-is-better in every dimension. A DOMINATES B iff  A[k] <= B[k] for all k  AND  A[k] < B[k]
+ * for some k (strict Pareto dominance). The frontier = { c : no other candidate dominates c }.
+ * /math-olympiad: the frontier is a TRUE antichain -- no frontier member dominates another (the
+ * KAT's negative arm checks this directly). Compiler-UNREFERENCED -> LIBNATIVE.
+ * Hexad: kind_form.  Ring: R0.  NIH: nothing (integer compares only).  K: 1.00. */
+module numera_pareto_extraction
+
+const PE_DIMS : u64 = 6u64
+const PE_MAX  : u64 = 256u64    /* max candidates */
+
+var PE_COST : [u64; 1536]   /* PE_MAX * PE_DIMS, row-major: candidate i dim k @ i*6+k */
+var PE_ON   : [u8;  256]    /* 1 = candidate i is on the frontier */
+var PE_N    : [u64; 1]      /* live candidate count */
+
+fn pe_reset() -> i32 @export { PE_N[0u64] = 0u64  return 0i32 }
+
+/* add a 6-D cost vector; returns its index, or -1 if the pool is full. */
+fn pe_add(c0: u64, c1: u64, c2: u64, c3: u64, c4: u64, c5: u64) -> i64 @export {
+    let a0 : u64 = c0  let a1 : u64 = c1  let a2 : u64 = c2   /* spill params (iiis param-spill safety) */
+    let a3 : u64 = c3  let a4 : u64 = c4  let a5 : u64 = c5
+    let i : u64 = PE_N[0u64]
+    if i >= PE_MAX { return 0i64 - 1i64 }
+    let b : u64 = i * PE_DIMS
+    PE_COST[b]        = a0
+    PE_COST[b + 1u64] = a1
+    PE_COST[b + 2u64] = a2
+    PE_COST[b + 3u64] = a3
+    PE_COST[b + 4u64] = a4
+    PE_COST[b + 5u64] = a5
+    PE_N[0u64] = i + 1u64
+    return i as i64
+}
+
+/* does candidate a Pareto-dominate candidate b? (a<=b everywhere AND a<b somewhere) */
+fn pe_dominates(a: u64, b: u64) -> u8 @export {
+    let ab : u64 = a * PE_DIMS
+    let bb : u64 = b * PE_DIMS
+    let mut all_le  : u8 = 1u8
+    let mut some_lt : u8 = 0u8
+    let mut k : u64 = 0u64
+    while k < PE_DIMS {
+        let av : u64 = PE_COST[ab + k]
+        let bv : u64 = PE_COST[bb + k]
+        if av > bv { all_le = 0u8 }
+        if av < bv { some_lt = 1u8 }
+        k = k + 1u64
+    }
+    if all_le == 1u8 { if some_lt == 1u8 { return 1u8 } }
+    return 0u8
+}
+
+/* compute the frontier: mark PE_ON[i]=1 iff no other candidate dominates i; return |frontier|. */
+fn pe_pareto_frontier() -> u64 @export {
+    let n : u64 = PE_N[0u64]
+    let mut count : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let mut dominated : u8 = 0u8
+        let mut j : u64 = 0u64
+        while j < n {
+            if j != i { if pe_dominates(j, i) == 1u8 { dominated = 1u8 } }
+            j = j + 1u64
+        }
+        if dominated == 0u8 { PE_ON[i] = 1u8  count = count + 1u64 } else { PE_ON[i] = 0u8 }
+        i = i + 1u64
+    }
+    return count
+}
+
+fn pe_on_frontier(i: u64) -> u8 @export { if i >= PE_N[0u64] { return 0u8 }  return PE_ON[i] }
+
+/* Self-test: a dominated candidate is excluded; an incomparable set is wholly kept; the frontier
+ * is a TRUE antichain (no member dominates another); a global best dominates all others. 99=pass. */
+fn pareto_selftest() -> u64 @export {
+    /* (1) dominance basics: [1,1,1,1,1,1] dominates [2,2,2,2,2,2]; equal vectors don't dominate. */
+    pe_reset()
+    pe_add(1u64,1u64,1u64,1u64,1u64,1u64)   /* 0 */
+    pe_add(2u64,2u64,2u64,2u64,2u64,2u64)   /* 1: dominated by 0 */
+    pe_add(1u64,1u64,1u64,1u64,1u64,1u64)   /* 2: equal to 0 -> neither dominates */
+    if pe_dominates(0u64, 1u64) != 1u8 { return 1u64 }
+    if pe_dominates(1u64, 0u64) != 0u8 { return 2u64 }
+    if pe_dominates(0u64, 2u64) != 0u8 { return 3u64 }   /* equal -> no strict dominance */
+
+    /* (2) a genuine trade-off set: three incomparable designs (each best in one axis) + one
+     * dominated. The frontier is exactly the three incomparable ones. */
+    pe_reset()
+    pe_add(1u64, 9u64, 9u64, 5u64, 5u64, 5u64)   /* 0: best latency  */
+    pe_add(9u64, 1u64, 9u64, 5u64, 5u64, 5u64)   /* 1: best throughput */
+    pe_add(9u64, 9u64, 1u64, 5u64, 5u64, 5u64)   /* 2: best area     */
+    pe_add(9u64, 9u64, 9u64, 9u64, 9u64, 9u64)   /* 3: dominated by all of 0/1/2 */
+    let fsz : u64 = pe_pareto_frontier()
+    if fsz != 3u64 { return 4u64 }
+    if pe_on_frontier(0u64) != 1u8 { return 5u64 }
+    if pe_on_frontier(1u64) != 1u8 { return 6u64 }
+    if pe_on_frontier(2u64) != 1u8 { return 7u64 }
+    if pe_on_frontier(3u64) != 0u8 { return 8u64 }   /* the dominated design is OFF the frontier */
+
+    /* (3) the frontier is a TRUE antichain: no on-frontier member dominates another (the /math-
+     * olympiad property -- a scalar-min would have illegally collapsed these to one). */
+    let mut a : u64 = 0u64
+    while a < 3u64 {
+        let mut b2 : u64 = 0u64
+        while b2 < 3u64 {
+            if a != b2 { if pe_dominates(a, b2) == 1u8 { return 9u64 } }
+            b2 = b2 + 1u64
+        }
+        a = a + 1u64
+    }
+
+    /* (4) a global optimum: one design dominates all -> the frontier is exactly {it}. */
+    pe_reset()
+    pe_add(1u64,1u64,1u64,1u64,1u64,1u64)   /* 0: dominates everything below */
+    pe_add(2u64,3u64,4u64,5u64,6u64,7u64)   /* 1 */
+    pe_add(9u64,8u64,7u64,6u64,5u64,4u64)   /* 2 */
+    if pe_pareto_frontier() != 1u64 { return 10u64 }
+    if pe_on_frontier(0u64) != 1u8 { return 11u64 }
+    return 99u64
+}

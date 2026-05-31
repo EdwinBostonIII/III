@@ -1,0 +1,11 @@
+/* 1015_mechanistic_cycle_bound.iii -- falsifier for the mechanistic provable cycle bound (APOTHEOSIS
+ * C.14, cost_lattice_unified.iii). A fast path's cycle bound is DERIVED from the §C.8 cost manifold
+ * (critical path = the analytic lower bound), so a regression is PROVABLE: a measurement at/within the
+ * derived bound+margin passes, one ABOVE it FAILS (a real regression), one BELOW the sound lower
+ * bound is rejected (impossible), and the bound TRACKS the graph (a leaner graph regresses a now-too-
+ * slow measurement). 99 = pass. */
+module corpus_1015
+
+extern @abi(c-msvc-x64) fn cost_lattice_unified_selftest() -> u64 from "cost_lattice_unified.iii"
+
+fn main() -> u64 { return cost_lattice_unified_selftest() }

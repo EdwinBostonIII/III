@@ -79,6 +79,12 @@ fn ntt_inv(x: u32, q: u32) -> u32 {
     return ntt_pow(x, e, q)
 }
 
+/* APOTHEOSIS C.3 (item 3): the canonical modulus-parameterized field MUL, exported so the
+ * §C.3 ntt_fri_organ routes every FRI multiply through the SAME audited field arithmetic
+ * the NTT uses -- one field-mul for PQ and zk (the doc's ntt_mult_field_elem; an `omega`
+ * arg would be vestigial for a plain field product, so the surface is (a,b,q)). */
+fn ntt_mult_field_elem(a: u32, b: u32, q: u32) -> u32 @export { return ntt_mul(a, b, q) }
+
 /* Load/read the work buffer (public so consumers stage their coefficients here). */
 fn ntt_set(i: u64, v: u32) -> i32 @export { NTT_W[i] = v ; return 0i32 }
 fn ntt_get(i: u64) -> u32 @export { return NTT_W[i] }

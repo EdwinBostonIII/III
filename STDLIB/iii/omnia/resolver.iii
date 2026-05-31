@@ -208,6 +208,24 @@ fn resolver_fast_path_hits_reset() -> i32 @export {
     return 0i32
 }
 
+/* APOTHEOSIS C.9 (proof_resolve): force the COLD 11-step contract path by skipping the Phase-C.5
+ * hand-asm fast path.  DEFAULT 0 -> the fast path runs exactly as before (BSS-zero, byte-identical;
+ * every existing resolver KAT is unaffected).  proof_resolve sets 1 to obtain the contract result,
+ * then 0 for the shortcut result, and proves the two AGREE -- discharging the documented "the fast
+ * path bypasses the 11-step contract" finding into a per-input equivalence theorem (not deleting the
+ * optimization, PROVING the invariant it touches still holds -- the doc's central architectural lesson). */
+var RESOLVER_FORCE_COLD : [u8; 1]
+fn resolver_set_force_cold(v: u8) -> i32 @export { RESOLVER_FORCE_COLD[0u64] = v  return 0i32 }
+fn resolver_force_cold_state() -> u8 @export { return RESOLVER_FORCE_COLD[0u64] }
+
+/* TEST SEAM (APOTHEOSIS C.9 proof_resolve FALSIFIABILITY): when set (default 0 -> OFF), the FAST path
+ * (force_cold==0) returns a deterministically POISONED result (0x1, err-tagged bit0=1 -> can never equal
+ * a cold OK payload, which has bit0=0 via <<1).  This makes proof_resolve's cold-vs-fast equivalence
+ * differential FALSIFIABLE -- a `return 1` stub for the differential would no longer pass the gate.
+ * Default-off (BSS-zero) -> the normal resolve path is behaviorally byte-identical. */
+var RESOLVER_FORCE_DIVERGE : [u8; 1]
+fn resolver_set_force_diverge(v: u8) -> i32 @export { RESOLVER_FORCE_DIVERGE[0u64] = v  return 0i32 }
+
 fn _res_ctx_digest_cached(ctx: u64, out_32: u64) -> i32 {
     let l_ctx : u64 = ctx
     let l_out : u64 = out_32
@@ -501,11 +519,16 @@ fn resolve_fail(error_code: u32, set: u64, intent: u64, ctx: u64) -> u64 @export
 
 fn resolve(set: u64, intent: u64, ctx: u64) -> u64 @export {
 
-    /* Phase C.5: hand-asm hot fast path. */
-    let hot : u64 = iii_resolve_hot(set, intent, ctx)
-    if hot != 0u64 {
-        let payload : u64 = hot & 0x7FFFFFFFFFFFFFFFu64
-        return payload
+    /* Phase C.5: hand-asm hot fast path -- gated by RESOLVER_FORCE_COLD (APOTHEOSIS C.9 proof_resolve).
+     * Default 0 -> runs as before (byte-identical); set 1 -> SKIPPED, so resolve() takes the COLD
+     * 11-step contract path that proof_resolve compares against the shortcut for the equivalence proof. */
+    if RESOLVER_FORCE_COLD[0u64] == 0u8 {
+        if RESOLVER_FORCE_DIVERGE[0u64] == 1u8 { return 0x1u64 }   /* test seam (default off): poison fast path -> proof_resolve differential is falsifiable */
+        let hot : u64 = iii_resolve_hot(set, intent, ctx)
+        if hot != 0u64 {
+            let payload : u64 = hot & 0x7FFFFFFFFFFFFFFFu64
+            return payload
+        }
     }
 
     /* Step 1: validate */

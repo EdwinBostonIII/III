@@ -4,20 +4,22 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
+    .ascii "arena.iiiarena.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
 L_str_1:
-    .ascii "arena.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
+    .ascii "arena.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
 L_str_2:
-    .ascii "lru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
+    .ascii "lru.iiilru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
 L_str_3:
-    .ascii "lru.iiilru.iiilru.iiilru.iiilru.iii\0"
+    .ascii "lru.iiilru.iiilru.iiilru.iiilru.iiilru.iii\0"
 L_str_4:
-    .ascii "lru.iiilru.iiilru.iiilru.iii\0"
+    .ascii "lru.iiilru.iiilru.iiilru.iiilru.iii\0"
 L_str_5:
-    .ascii "lru.iiilru.iiilru.iii\0"
+    .ascii "lru.iiilru.iiilru.iiilru.iii\0"
 L_str_6:
-    .ascii "lru.iiilru.iii\0"
+    .ascii "lru.iiilru.iiilru.iii\0"
 L_str_7:
+    .ascii "lru.iiilru.iii\0"
+L_str_8:
     .ascii "lru.iii\0"
     .section .iii.ring3,"n"
     .asciz "main"
@@ -530,6 +532,166 @@ L_if_end_23:
     pushq %rax
     popq %rax
 L_if_end_25:
+    movabsq $0x3, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq lru_debug_key
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_27
+    movabsq $0x12c, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_27:
+    movabsq $0x3e7, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq lru_debug_key
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movabsq $0x12d, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
+    movabsq $0x3, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq lru_debug_occ
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_31
+    movabsq $0x12e, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
+    movabsq $0x3e7, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq lru_debug_occ
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movabsq $0x12f, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq lru_debug_occ
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x130, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx

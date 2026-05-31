@@ -10,6 +10,13 @@
  * globals (one slot per active builder, max 32).  Future @specialize
  * + @linear support will move state to a struct passed by value.
  *
+ * LIFECYCLE BOUNDARY (scan-8 / arena_reset's contract): a builder caches its arena base (BLD_BASE),
+ * and builder_grow reallocs it. The caller MUST drop every live builder BEFORE arena_reset on its
+ * backing arena -- a reset rewinds the bump pointer and invalidates BLD_BASE. The arena WITNESS
+ * (memoria/arena.iii arena_witness_lo/hi) detects ABA release+realloc (base/capacity change), NOT a
+ * plain reset (base/capacity unchanged), so it does NOT guard this; the documented contract does.
+ * Use a dedicated never-reset arena for long-lived builders, or drop-before-reset.
+ *
  * Hexad: kind_form.  Ring: R0.  K: 0.99.
  */
 

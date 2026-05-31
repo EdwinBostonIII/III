@@ -7,6 +7,12 @@
  * is promoted to MRU.  Implementation: doubly-linked list (head=MRU,
  * tail=LRU) over a slot table, parallel-array storage.
  *
+ * LIFECYCLE BOUNDARY (scan-8 / arena_reset's contract): lru caches its arena base pointers
+ * (LRU_*_BASE) at lru_new. The caller MUST drop every live lru BEFORE arena_reset on its backing
+ * arena -- a reset invalidates those pointers. The arena WITNESS (memoria/arena.iii) detects ABA
+ * release+realloc, NOT a plain reset, so it does NOT guard this; the documented contract does. Use
+ * a dedicated never-reset arena for long-lived caches, or drop-before-reset.
+ *
  *   lru_new(arena_id:u64, capacity:u64) -> u64
  *   lru_put(id:u64, key:u32, value:u64) -> i32     0=ok, -1=evict-occurred (still ok)
  *   lru_get(id:u64, key:u32) -> u64                value or LRU_INVALID

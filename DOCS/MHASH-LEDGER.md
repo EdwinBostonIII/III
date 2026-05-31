@@ -1521,6 +1521,23 @@ needs a source->affine-descriptor EXTRACTOR, which is LIBNATIVE-BLOCKED (III's p
 compiler, not the stdlib; calling it would drift the golden hash). It is a future COMPILER-track increment
 (a real iii AST pass + reseal), out of scope for the quick-gate discipline -- named, not stubbed.
 
+**Scan 8 (resource-lifecycle / temporal safety -- the temporal dual of 5/6/7). CONVERGENCE: honest
+abstention.** The scan returned exactly ONE class (3 findings, same shape): `builder`/`lru` cache an arena
+base pointer (`BLD_BASE`, `LRU_*_BASE`) at `_new` and do not re-validate it against `arena_reset`. ABSTAINED
+(documented caller contract -- the idoc situation): `arena_reset`'s docstring EXPLICITLY requires "caller must
+clear external state BEFORE calling", the corpus honors it, and III ships the opt-in provable variant
+(`arena_reset_with_witness`). Critically, the obvious "fix" (capture the witness at `_new`, re-validate at
+use) is UNSOUND THEATER (advisor-caught): the witness is the hash of base+capacity and detects ABA
+release+realloc, NOT a plain reset (`region_reset` rewinds only the bump pointer -> base+capacity unchanged
+-> witness GREEN after a reset -> deref the rewound pointer anyway). Closure = a LIFECYCLE BOUNDARY doc note
+at each consuming site (builder/lru headers), citing the contract + the witness-is-for-ABA-not-reset fact.
+A documented design boundary every caller honors is not a residual problem.
+
+**The at-scale bug-finding loop has reached the honest-abstention endpoint it was defined to seek** (8 scans
+-> 9 genuine self-edits + the complete Sovereign Witness subsystem; scan-8 = calibrated abstention). The
+next move is the "completion -> polish polish polish" inflection: either the final full corpus+bench+stage1
+gate (reserved for the end) or further ENHANCEMENT batches (unification/capability), at the user's steer.
+
 **The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
 improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than
 it shipped: the GF(998244353) `sf_*` duplication is in the user's LIVE zk_air work (respect, don't

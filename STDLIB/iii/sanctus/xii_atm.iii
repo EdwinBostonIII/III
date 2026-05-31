@@ -26,6 +26,11 @@ const XAT_E_MANIFEST_TAMPER_RUNTIME: u32 = 1u32
 const XAT_E_CELL_TAMPER_RUNTIME    : u32 = 2u32
 
 const XAT_CHECK_CADENCE : u32 = 1024u32
+/* Wrap-safety bound: rec_off = idx*64 (the audit-record byte offset) must fit u32, i.e.
+ * record_count <= 0xFFFFFFFF/64 = 0x03FFFFFF. A real .iii_xii_ldil_audit section has at most
+ * thousands of 64-byte records, never 67M; an oversized record_count is implausible metadata.
+ * Without this bound idx*64 wraps u32 and audit_records[rec_off+..] reads arbitrary memory. (scan-6) */
+const XAT_AUDIT_MAX_RECORDS : u32 = 0x03FFFFFFu32
 
 var XAT_OP_COUNTER : u32 = 0u32
 var XAT_ROUND_ROBIN_IDX : u32 = 0u32
@@ -81,6 +86,10 @@ fn xii_atm_tick(text_section: *u8, audit_records: *u8, record_count: u32, manife
 
     /* Sample one cell (round-robin). */
     if record_count == 0u32 { return XAT_OK }
+    /* scan-6: an oversized record_count would make rec_off = idx*64 wrap u32 -> OOB sample.
+     * The sampler is opportunistic, so skip (no tamper claim) rather than fail, mirroring the
+     * record_count==0 skip just above; the full verifiers (antidrift/sml) fail-closed instead. */
+    if record_count > XAT_AUDIT_MAX_RECORDS { return XAT_OK }
     let idx : u32 = XAT_ROUND_ROBIN_IDX % record_count
     XAT_ROUND_ROBIN_IDX = XAT_ROUND_ROBIN_IDX + 1u32
     let rec_off : u32 = idx * 64u32

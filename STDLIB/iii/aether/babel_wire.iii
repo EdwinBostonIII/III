@@ -33,6 +33,8 @@ module aether_babel_wire
 extern @abi(c-msvc-x64) fn crc32_oneshot(data: *u8, len: u64) -> u32 from "crc32.iii"
 
 const BABEL_WIRE_HEADER_BYTES : u32 = 68u32
+/* 2^32: a wire length (header+payload) at or above this overflows the u32 length field (scan-6). */
+const BABEL_WIRE_U32_CEIL : u64 = 0x100000000u64
 
 const BABEL_WIRE_OK             : i32 =  0i32
 const BABEL_WIRE_E_NULL         : i32 = -1i32
@@ -198,7 +200,13 @@ fn babel_wire_finalize(out_buf: u64) -> u32 @export {
     /* CRC32 over [0..63] (64 bytes). */
     let crc : u32 = crc32_oneshot(l_buf as *u8, 64u64)
     _bw_write_u32_le(l_buf, 64u64, crc)
-    return BABEL_WIRE_HEADER_BYTES + payload_len
+    /* scan-6: header+payload must fit the u32 wire-length field. payload_len is read from the
+     * (build-side) wire buffer; compute the total in u64 and cap. If it would overflow u32 the
+     * length is unrepresentable, so return the 0 error sentinel (consistent with the null-buffer
+     * guard above) rather than a wrapped small length a downstream length check could be fooled by. */
+    let total_len : u64 = (BABEL_WIRE_HEADER_BYTES as u64) + (payload_len as u64)
+    if total_len >= BABEL_WIRE_U32_CEIL { return 0u32 }
+    return total_len as u32
 }
 
 /* ---------------- unpack accessors ---------------- */

@@ -1,0 +1,41 @@
+/* 412_babel_wire_len_overflow.iii -- scan-6 (index-overflow-before-bounds-check). babel_wire_finalize
+ * returns the total wire length = BABEL_WIRE_HEADER_BYTES(68) + payload_len, where payload_len is read
+ * from the wire buffer at offset 57. The UNFIXED u32 add wraps: payload_len=0xFFFFFFFF -> 68+0xFFFFFFFF
+ * = 0x100000043 truncates to 0x43 = 67, a small "valid-looking" length a downstream length check could
+ * be fooled by. The fix computes the total in u64 and CAPS: if header+payload would exceed the u32
+ * length field, return the 0 error sentinel (consistent with the null-buffer guard). Prove-the-negative:
+ * arm 11 returns 67 unfixed vs 0 fixed. Normal + exact-u32-max arms prove no over-trigger. 99 = pass. */
+module corpus_412
+
+extern @abi(c-msvc-x64) fn babel_wire_finalize(out_buf: u64) -> u32 from "babel_wire.iii"
+
+var KAT412_WIRE : [u8; 96]   /* >= 68 header + crc at [64..67] */
+
+/* write a little-endian u32 into the wire buffer at byte offset off (module-global array: runtime
+ * index is safe). */
+fn kat412_w_u32_le(off: u64, v: u32) -> u32 {
+    KAT412_WIRE[off + 0u64] = (v & 0xFFu32) as u8
+    KAT412_WIRE[off + 1u64] = ((v >> 8u32) & 0xFFu32) as u8
+    KAT412_WIRE[off + 2u64] = ((v >> 16u32) & 0xFFu32) as u8
+    KAT412_WIRE[off + 3u64] = ((v >> 24u32) & 0xFFu32) as u8
+    return 0u32
+}
+
+fn main() -> u64 {
+    let buf : u64 = (&KAT412_WIRE) as u64
+
+    /* NORMAL payload_len=100 -> 68+100 = 168 (behavior unchanged from the unfixed code). */
+    kat412_w_u32_le(57u64, 100u32)
+    if babel_wire_finalize(buf) != 168u32 { return 10u64 }
+
+    /* OVERFLOW payload_len=0xFFFFFFFF -> unfixed wraps to 67; the cap returns 0 (unrepresentable). */
+    kat412_w_u32_le(57u64, 0xFFFFFFFFu32)
+    if babel_wire_finalize(buf) != 0u32 { return 11u64 }
+
+    /* EXACT u32 max: payload_len=0xFFFFFFBB -> 68+0xFFFFFFBB = 0xFFFFFFFF, fits the u32 field exactly,
+     * so the cap must NOT trigger (returns 0xFFFFFFFF). Proves the threshold is exactly 2^32. */
+    kat412_w_u32_le(57u64, 0xFFFFFFBBu32)
+    if babel_wire_finalize(buf) != 0xFFFFFFFFu32 { return 12u64 }
+
+    return 99u64
+}

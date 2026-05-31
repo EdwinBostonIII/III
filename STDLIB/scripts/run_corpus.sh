@@ -177,6 +177,8 @@ declare -A EXPECTED=(
     [131_field_inv_crystal]=99
     [132_lru_debug_isolate]=99
     [410_xii_chd_bucket_bounds]=99
+    [411_xii_audit_record_count_bound]=99
+    [412_babel_wire_len_overflow]=99
     [133_arena_only]=99
     [134_lru_new_only]=99
     [135_lru_capacity]=99
@@ -713,6 +715,7 @@ declare -A EXPECTED=(
     [1013_cost_manifold]=99
     [1014_hdl_gate_identities]=99
     [1015_mechanistic_cycle_bound]=99
+    [1016_proof_resolve]=99
 )
 
 PASS=0

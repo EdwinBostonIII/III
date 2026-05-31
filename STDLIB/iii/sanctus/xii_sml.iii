@@ -32,8 +32,11 @@ const XSL_E_MANIFEST_TAMPER       : u32 = 3u32
 const XSL_E_ANCHOR_SIG            : u32 = 4u32
 const XSL_E_LDIL_AUDIT_TAMPER     : u32 = 5u32
 const XSL_E_CELL_TAMPER           : u32 = 6u32
+const XSL_E_RECORD_COUNT          : u32 = 7u32      /* record_count exceeds the wrap-safe bound (scan-6) */
 
 const XSL_MANIFEST_BYTES : u32 = 1040u32
+/* Wrap-safety bound: rec_off = i*64 must fit u32 (record_count <= 0xFFFFFFFF/64 = 0x03FFFFFF). */
+const XSL_AUDIT_MAX_RECORDS : u32 = 0x03FFFFFFu32
 
 var XSL_COMPUTED_MHASH : [u8; 32]
 var XSL_LAST_ERROR : u32 = 0u32
@@ -82,6 +85,9 @@ fn xii_sml_verify_anchor_signature(manifest_ptr: *u8) -> u32 @export {
  * audit_records is a pointer to .iii_xii_ldil_audit section; record_count is
  * the number of 64-byte records. text_section is the binary's .text. */
 fn xii_sml_verify_cells(text_section: *u8, audit_records: *u8, record_count: u32) -> u32 @export {
+    /* scan-6: bound record_count so rec_off = i*64 cannot wrap u32 and index audit_records OOB.
+     * Fail closed -- an oversized audit section is invalid metadata (mirrors xii_antidrift). */
+    if record_count > XSL_AUDIT_MAX_RECORDS { return XSL_E_RECORD_COUNT }
     let mut i : u32 = 0u32
     while i < record_count {
         let rec_off : u32 = i * 64u32

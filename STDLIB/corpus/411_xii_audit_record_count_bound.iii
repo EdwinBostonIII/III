@@ -1,0 +1,35 @@
+/* 411_xii_audit_record_count_bound.iii -- scan-6 (index-overflow-before-bounds-check). The XII
+ * integrity checkers walk a .iii_xii_ldil_audit section as record_count 64-byte records, computing
+ * rec_off = i*64u32 per record. With record_count > 0xFFFFFFFF/64 = 0x03FFFFFF, i*64 WRAPS u32 and
+ * audit_records[rec_off+..] reads arbitrary memory -- a wrapped offset defeating the only bound (i <
+ * record_count). The full verifiers now FAIL CLOSED on an oversized (implausible) record_count before
+ * touching the buffer: xii_antidrift_check_lattice -> XAD_E_RECORD_COUNT(9), xii_sml_verify_cells ->
+ * XSL_E_RECORD_COUNT(7). Prove-the-negative: the unfixed verifier would walk i*64 OOB of the 64-byte
+ * buffer below (and eventually wrap); the guard returns the fail-closed code without any buffer access.
+ * The record_count==0 arm proves the guard does NOT over-reject in-range counts. 99 = pass. */
+module corpus_411
+
+extern @abi(c-msvc-x64) fn xii_antidrift_check_lattice(text_section: *u8, audit_records: *u8, record_count: u32) -> u32 from "xii_antidrift.iii"
+extern @abi(c-msvc-x64) fn xii_sml_verify_cells(text_section: *u8, audit_records: *u8, record_count: u32) -> u32 from "xii_sml.iii"
+
+/* deliberately SMALL real buffers -- the unfixed code (no guard) would index past these. */
+var KAT411_TEXT : [u8; 64]
+var KAT411_RECS : [u8; 64]
+
+fn main() -> u64 {
+    let t : *u8 = (&KAT411_TEXT as u64) as *u8
+    let r : *u8 = (&KAT411_RECS as u64) as *u8
+
+    /* OVERSIZED record_count: just over the bound (0x04000000) and far over (0xFFFFFFFF) must be
+     * rejected with the fail-closed code BEFORE any audit_records access. */
+    if xii_antidrift_check_lattice(t, r, 0x04000000u32) != 9u32 { return 10u64 }
+    if xii_antidrift_check_lattice(t, r, 0xFFFFFFFFu32) != 9u32 { return 11u64 }
+    if xii_sml_verify_cells(t, r, 0x04000000u32) != 7u32 { return 12u64 }
+    if xii_sml_verify_cells(t, r, 0xFFFFFFFFu32) != 7u32 { return 13u64 }
+
+    /* IN-RANGE record_count==0: the loop doesn't run -> both return OK(0). Guard does not over-reject. */
+    if xii_antidrift_check_lattice(t, r, 0u32) != 0u32 { return 20u64 }
+    if xii_sml_verify_cells(t, r, 0u32) != 0u32 { return 21u64 }
+
+    return 99u64
+}

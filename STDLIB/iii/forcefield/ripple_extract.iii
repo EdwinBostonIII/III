@@ -26,6 +26,7 @@ extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_contains(p: *u8) -> u8 from "congruence.iii"
 extern @abi(c-msvc-x64) fn rm_unifiable(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_extract_improves(saved_lines: u64, new_file_lines: u64, import_overhead: u64) -> u32 from "ripple_metric.iii"
 extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
 
 /* ===== C1: CAPABILITY CONSERVATION ===== */
@@ -42,10 +43,11 @@ fn rx_export_in_g(addr: *u8) -> u32 @export {
 
 /* ===== C2: MDL BOUNDARY PENALTY ===== */
 /* permit only when the deduplication dividend STRICTLY outweighs the new-file structural overhead. */
+/* C2 now DEFERS to ripple_metric's SINGLE value authority (rm_extract_improves): the MDL boundary
+ * verdict is 𝒱's, not a second model that could silently diverge from J. Behaviour is identical
+ * (strict ΔV>0) -- this is a unification, not a policy change. [Evolution BATCH 1] */
 fn rx_delta_j_positive(saved_lines: u64, new_file_lines: u64, import_overhead: u64) -> u32 @export {
-    let cost : u64 = new_file_lines + import_overhead
-    if saved_lines > cost { return 1u32 }   /* strict delta-J > 0 */
-    return 0u32
+    return rm_extract_improves(saved_lines, new_file_lines, import_overhead)
 }
 
 /* ===== C3: ACYCLIC INSERTION ===== (its own proposed-graph adjacency + iterative reachability) */

@@ -224,3 +224,27 @@ fn rm_j() -> u64 @export {
  * (good, noise, sep) -- so it CANNOT be raised by a cosmetic/relabelling move (non-gameable):
  * ΔV>0 ⟺ Δgood>0 ∨ Δnoise<0 ∨ Δsep<0, each a real structural gain. Certified by KAT 930. */
 fn rm_value() -> u64 @export { return rm_j() }
+
+/* ===== BATCH 1 (Evolution): the MDL BOUNDARY face of 𝒱 -- ripple_metric is now the SINGLE
+ * value-function authority. Until now the extraction decider (ripple_extract C2) carried its OWN
+ * inline cost compare (saved > new_file + import); a second, independent value model that could
+ * silently DIVERGE from 𝒱 (someone re-philosophises J but not C2 -> the optimizer admits boundaries
+ * 𝒱 would reject). The two are the SAME judgement seen at two granularities: a unification (merge)
+ * collapses a separation and raises 𝒱; a separation-CREATING move (extract a shared routine into a
+ * new file) is value-positive ONLY when the deduplication dividend it earns strictly outweighs the
+ * new boundary's structural overhead (its header + imports + the pointer indirection at the callers).
+ *
+ * rm_extract_cost is that overhead in lines; rm_extract_improves is the strict ΔV>0 verdict that
+ * ripple_extract's C2 now DEFERS to (one model, one authority). The strict `>` keeps a break-even
+ * boundary (dividend == cost) NON-improving: III never spawns a file that merely pays for itself --
+ * only one whose shared logic genuinely earns its own boundary. Non-gameability EXTENDS to this face:
+ * the verdict is a pure function of the three line counts, so no relabelling can flip it.
+ * Certified by KAT 954 (prove-the-negative: break-even and below are REJECTED; above is ADMITTED). */
+fn rm_extract_cost(new_file_lines: u64, import_overhead: u64) -> u64 @export {
+    return new_file_lines + import_overhead
+}
+fn rm_extract_improves(saved_lines: u64, new_file_lines: u64, import_overhead: u64) -> u32 @export {
+    let cost : u64 = rm_extract_cost(new_file_lines, import_overhead)
+    if saved_lines > cost { return 1u32 }   /* strict ΔV > 0: the dividend earns the boundary */
+    return 0u32
+}

@@ -653,6 +653,7 @@ declare -A EXPECTED=(
     [951_seal_resolver_refreeze]=99
     [952_microarch_rob_saturation]=99
     [953_mont_dmont5_falsifier]=99
+    [954_ripple_extract_mdl]=99
     [960_keccak256_block_absorb]=99
     [961_xoshiro_jump]=99
     [962_bv_ring_colstack]=99
@@ -690,6 +691,9 @@ declare -A EXPECTED=(
     [997_zk_air_general]=99
     [998_zk_air_merkle]=99
     [999_zk_air_stark]=99
+    [1000_checked_div_zero]=99
+    [1001_cap_verify_invalid_id]=99
+    [1002_quality_q4_growth]=99
 )
 
 PASS=0
@@ -745,7 +749,7 @@ for _se in "${SIDE_EFFECT_NAMES[@]}"; do
     [[ -f "$BUILD_DIR/$_se" ]] && SIDE_EFFECT_OBJS+=("$BUILD_DIR/$_se")
 done
 
-for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii; do
+for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9][0-9]_*.iii; do
     [[ -f "$src" ]] || continue
     base="$(basename "$src" .iii)"
     obj="$RUN_DIR/${base}.iii.o"

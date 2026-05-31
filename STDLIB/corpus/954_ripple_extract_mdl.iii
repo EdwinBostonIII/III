@@ -1,0 +1,42 @@
+/* 954_ripple_extract_mdl.iii -- Evolution BATCH 1: the MDL boundary verdict is now 𝒱's SINGLE
+ * authority. ripple_metric.rm_extract_improves is the strict ΔV>0 verdict for creating a file
+ * boundary; ripple_extract's C2 (rx_delta_j_positive) now DEFERS to it -- one model, no divergence.
+ *
+ * Prove-the-negative (the whole point): a boundary whose deduplication dividend merely BREAKS EVEN
+ * with its cost (dividend == cost) is NOT improving, and an UNDERWATER one (dividend < cost) is
+ * rejected; only a boundary whose shared logic STRICTLY earns its cost is admitted. Plus the
+ * UNIFICATION invariant: C2's entry point agrees with the metric on every case (so the extraction
+ * decider can never admit a boundary 𝒱 would reject). 99 = all arms; 10..34 localize the first miss.
+ *
+ * cost = new_file_lines + import_overhead (rm_extract_cost). */
+module corpus_954
+
+extern @abi(c-msvc-x64) fn rm_extract_improves(saved: u64, newf: u64, imp: u64) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_extract_cost(newf: u64, imp: u64) -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rx_delta_j_positive(saved: u64, newf: u64, imp: u64) -> u32 from "ripple_extract.iii"
+
+fn main() -> u64 {
+    /* the cost model is exactly new_file_lines + import_overhead */
+    if rm_extract_cost(20u64, 5u64) != 25u64 { return 10u64 }
+    if rm_extract_cost(0u64, 0u64) != 0u64 { return 11u64 }
+
+    /* ===== POSITIVE: dividend strictly earns the boundary -> ADMIT ===== */
+    if rm_extract_improves(40u64, 20u64, 5u64) != 1u32 { return 12u64 }   /* 40 > 25 */
+    if rm_extract_improves(26u64, 20u64, 5u64) != 1u32 { return 13u64 }   /* 26 > 25 (just clears) */
+
+    /* ===== FALSIFIERS (prove the negative): break-even and underwater -> REJECT ===== */
+    if rm_extract_improves(25u64, 20u64, 5u64) != 0u32 { return 20u64 }   /* 25 == 25: break-even is NOT a win */
+    if rm_extract_improves(24u64, 20u64, 5u64) != 0u32 { return 21u64 }   /* 24 < 25: underwater */
+    if rm_extract_improves(0u64,  20u64, 5u64) != 0u32 { return 22u64 }   /* zero dividend */
+    if rm_extract_improves(5u64,  5u64,  0u64) != 0u32 { return 23u64 }   /* exactly pays for itself -> not a win */
+
+    /* ===== UNIFICATION: C2's entry point agrees with the metric on EVERY case ===== */
+    if rx_delta_j_positive(40u64, 20u64, 5u64) != rm_extract_improves(40u64, 20u64, 5u64) { return 30u64 }
+    if rx_delta_j_positive(25u64, 20u64, 5u64) != rm_extract_improves(25u64, 20u64, 5u64) { return 31u64 }
+    if rx_delta_j_positive(24u64, 20u64, 5u64) != rm_extract_improves(24u64, 20u64, 5u64) { return 32u64 }
+    /* and C2 itself proves the negative (break-even rejected) + the positive, through the unified path */
+    if rx_delta_j_positive(25u64, 20u64, 5u64) != 0u32 { return 33u64 }
+    if rx_delta_j_positive(40u64, 20u64, 5u64) != 1u32 { return 34u64 }
+
+    return 99u64
+}

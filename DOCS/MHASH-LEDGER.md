@@ -1422,3 +1422,38 @@ coherence IS the compounding the batch order was built to produce: a self-improv
 trusted to improve itself when it judges worth and cost each through one honest, falsifiable lens.
 
 **§8.25 sealed at:** 2026-05-31.
+
+### §8.26 — BATCH 4 AT-SCALE: the sharpened engine enhancing III's own body (LIBNATIVE, ongoing) (2026-05-31)
+
+With the engine sharpened (§8.25), it was run AT SCALE over III's own source -- the user's stated method:
+read-only Workflow fan-out (the engine's analysis), guiding-hand selection (MDL + live-edit respect +
+prove-the-negative), in-session edit, QUICK gate, commit. Each scan = ~14 Explore agents, every candidate
+adversarially verified (default-refute). The LOOP (continues until the increments are genuinely exhausted):
+
+| # | Scan angle | Shipped self-edit | Commit |
+|---|---|---|---|
+| 1 | cross-module duplication | `closure_eq`/`closure_verify_against`/`attest_eq` -> all delegate to the canonical `verba/timing_safe.iii::timing_safe_eq` (3 copies -> 1 authority; ΔJ>0; −19 lines; behavior-preserving) | `015d1ae` |
+| 2 | vacuous gates + unification gaps | `ecdsa_p384` `[E-EC-3]`: sign + sign_det could EMIT a degenerate (r==0/s==0) signature its own verify rejects -- mirror the proven P-256 guard + retry; new falsifier `958` (the missing P-384 prove-the-negative) | `2c71347` |
+| 3 | crypto cross-variant consistency | `ecdsa_p384` `[E-EC-2]` range guard: verify ACCEPTED out-of-range/malleable r,s>=n (P-256 rejects) -- reduction-based check (single source of n = the field), falsifier `959` | `fdaef17` |
+
+**Scan 3 CONVERGENCE (the loop is finding its frontier).** Across 6 sibling crypto families the scan
+confirmed CONSISTENCY almost everywhere -- the genuine gaps were the two P-384 ECDSA checks (degenerate
+`958`, range `959`); the rest is correctly ABSTAINED: the AEAD family (ChaCha20/XChaCha20-Poly1305,
+AES-GCM, AES-SIV) is uniformly constant-time tag-verify + tamper-tested; the remaining "missing checks"
+are by-design fixed-size contracts (XChaCha20's nonce IS the 24-byte type; SHA-256's output is fixed 32B)
+or opt-in policy (P-384 low-s is BIP-62, not FIPS -- verify is correct without it). 3 scans -> 3 genuine
+self-edits; the engine's value is telling the genuine gap from the intentional design.
+
+**The honest result is the point.** A heavily-deduped, FIPS/RFC-faithful system yields FEW genuine
+improvements, and the engine's value is telling the difference -- it ABSTAINED (correctly) far more than
+it shipped: the GF(998244353) `sf_*` duplication is in the user's LIVE zk_air work (respect, don't
+clobber); the 3-line `_xdc_in`/`_xjn_in` private helpers are MDL-below-threshold (a new boundary would not
+earn itself); katabasis cross-type `*_write_admissible` was deferred (needs a parameterized generic). Scan
+1 (duplications) found cosmetic redundancy; scan 2 (prove-the-negative lens) found a latent CORRECTNESS
+bug -- the higher-order payoff of turning the engine's "can this gate say NO?" discipline on III itself.
+
+New KATs: **958** (ecdsa_p384 zero-r/s falsifier). All increments QUICK-gated (build_stdlib FAIL=0 +
+targeted KATs = 99); compiler `196b0c5f` unchanged (every edit LIBNATIVE). The ONE full gate (corpus +
+bench + stage1) runs only when the loop concludes.
+
+**§8.26 sealed at:** 2026-05-31 (ongoing).

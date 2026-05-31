@@ -1,0 +1,45 @@
+/* 978_smt_lia_wrap_guard.iii -- X22 falsifier for smt_lia_store / smt_lia_add_ge u32-wrap OOB.
+ *
+ * n (constraint length) is a RAW caller u32 (passed through smt_lia_add_le/eq/ge). The old guard
+ * `SMT_LIA_USED + n > SMT_LIA_PACKED` (both u32) wrapped for huge n, passing the guard, and the
+ * copy loop wrote SMT_LIA_COEFF[(off+i)] for i<n into the 16384-element buffer (OOB; mask 0xFFFFFFFF).
+ *
+ * arm 1: the wrap (USED-small + 0xFFFFFFF0 -> below PACKED=16384 -> old guard fooled). arm 2/3: the
+ * FIXED add_le / add_ge REJECT a huge n (SMT_E_TOO_BIG=-1) WITHOUT copying. arm 4: a valid small
+ * constraint still registers (SMT_OK=0). 99 = pass.
+ * NOTE: must NOT be run against the pre-fix lib -- arms 2/3 would execute the OOB write.
+ */
+module corpus_978
+
+extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_new_var() -> u32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_le(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+extern @abi(c-msvc-x64) fn smt_lia_add_ge(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 from "smt.iii"
+
+var COEF : [i64; 4]
+var VARS : [u32; 4]
+
+fn main() -> u64 {
+    smt_init()
+    let v1 : u32 = smt_lia_new_var()
+    let v2 : u32 = smt_lia_new_var()
+    let cp : *i64 = (&COEF as u64) as *i64
+    let vp : *u32 = (&VARS as u64) as *u32
+
+    /* arm 1: the wrap the old additive guard saw */
+    let s : u32 = 100u32 + 0xFFFFFFF0u32
+    if s >= 16384u32 { return 1u64 }
+
+    /* arm 2: a huge n must be REJECTED on the <= path (SMT_E_TOO_BIG = -1) before any copy */
+    COEF[0u32] = 1i64  VARS[0u32] = v1
+    if smt_lia_add_le(cp, vp, 0xFFFFFFF0u32, 0i64) != -1i32 { return 2u64 }
+
+    /* arm 3: a huge n must be REJECTED on the >= path too (independently-coded guard) */
+    if smt_lia_add_ge(cp, vp, 0xFFFFFFF0u32, 0i64) != -1i32 { return 3u64 }
+
+    /* arm 4: a valid 2-term constraint still registers (SMT_OK = 0) */
+    COEF[0u32] = 3i64  COEF[1u32] = 5i64  VARS[0u32] = v1  VARS[1u32] = v2
+    if smt_lia_add_le(cp, vp, 2u32, 10i64) != 0i32 { return 4u64 }
+
+    return 99u64
+}

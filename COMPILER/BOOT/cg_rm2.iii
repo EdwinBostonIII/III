@@ -191,6 +191,7 @@ var CGRM2_SHA_W   : [u32; 64]
 var RM2_MHASH_CACHE : [u8; 32]
 
 var RM2_NUMBUF: [u8; 32]
+var RM2_CHBUF: [u8; 1]    /* dedicated 1-byte scratch for cg_emit_ch -- must NOT alias RM2_NUMBUF[0]. [audit cg_rm2 DEC-1] */
 var RM2_TMPNAME: [u8; 256]
 var RM2_CREV: [u8; 14] = [105u8,105u8,105u8,95u8,99u8,97u8,112u8,95u8,114u8,101u8,118u8,111u8,107u8,101u8]
 
@@ -493,7 +494,7 @@ fn cgrm2_sha_final(out: u64) -> u32 { cgrm2_sha_buf_set(CGRM2_SHA_LEN,0x80u8); C
 
 fn cg_emit_bytes(addr: u64, n: u64) -> u32 { if RM2_G_SEALED != 0u32 { RM2_G_LAST_ERROR = RM2_E_SEALED; return RM2_E_SEALED }; if n == 0u64 { return RM2_OK }; if RM2_G_OUT != 0u64 { if iii_cg_rm2_fwrite_c(RM2_G_OUT, addr, n) != 0i32 { RM2_G_LAST_ERROR = RM2_E_IO; return RM2_E_IO } }; cgrm2_sha_update(addr,n); return RM2_OK }
 fn cg_emit_arr(addr: u64, n: u64) -> u32 { return cg_emit_bytes(addr,n) }
-fn cg_emit_ch(ch: u32) -> u32 { RM2_NUMBUF[0] = (ch & 0xffu32) as u8; return cg_emit_bytes(&RM2_NUMBUF as u64,1u64) }
+fn cg_emit_ch(ch: u32) -> u32 { RM2_CHBUF[0] = (ch & 0xffu32) as u8; return cg_emit_bytes(&RM2_CHBUF as u64,1u64) }
 fn cg_emit_dec(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { RM2_NUMBUF[0]=48u8; return cg_emit_bytes(&RM2_NUMBUF as u64,1u64) }; while v > 0u64 { RM2_NUMBUF[n] = (48u64 + (v % 10u64)) as u8; n = n + 1u32; v = v / 10u64 }; while n > 0u32 { n = n - 1u32; cg_emit_ch(RM2_NUMBUF[n] as u32) }; return RM2_OK }
 fn cg_emit_hex(v0: u64) -> u32 { let mut v: u64 = v0; let mut n: u32 = 0u32; if v == 0u64 { RM2_NUMBUF[0]=48u8; return cg_emit_bytes(&RM2_NUMBUF as u64,1u64) }; while v > 0u64 { let d: u64 = v & 15u64; if d < 10u64 { RM2_NUMBUF[n] = (48u64+d) as u8 } else { RM2_NUMBUF[n] = (87u64+d) as u8 }; n = n + 1u32; v = v >> 4u64 }; while n > 0u32 { n = n - 1u32; cg_emit_ch(RM2_NUMBUF[n] as u32) }; return RM2_OK }
 fn emit_section_text() -> u32 { if RM2_G_FMT == RM2_FMT_PE { return cg_emit_arr(&RM2_SEC_TEXT_PE as u64, RM2_SEC_TEXT_PE_LEN) }; return cg_emit_arr(&RM2_SEC_TEXT_ELF as u64, RM2_SEC_TEXT_ELF_LEN) }

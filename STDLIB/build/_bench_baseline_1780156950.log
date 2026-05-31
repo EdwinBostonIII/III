@@ -1,0 +1,19 @@
+=== run_bench_corpus (BASELINE 991/992) ===
+[run_bench_corpus] iiis = /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+============================================================
+ STDLIB Performance Benchmark Corpus (237/242/243/244 + 990/991/992)
+============================================================
+  PASS  237_insel_cycle_bench : within budget on this host (exit 99)
+  PASS  242_bench_resolver : within budget on this host (exit 99)
+  PASS  243_bench_sealed_channel : within budget on this host (exit 99)
+  PASS  244_bench_hip_idoc : within budget on this host (exit 99)
+  PASS  990_bench_knuth_div : within budget on this host (exit 99)
+  PASS  991_bench_montgomery_modpow : within budget on this host (exit 99)
+  PASS  992_bench_fe25519_mul : within budget on this host (exit 99)
+------------------------------------------------------------
+  PASS=7  ADVISORY=0  CORRECTNESS-FAIL=0
+  (PASS = within host budget; ADVISORY = host slower than the
+   3.6 GHz reference -- substrate correct, NOT a defect;
+   CORRECTNESS-FAIL = functional regression -- hard error)
+============================================================
+=== DONE ===

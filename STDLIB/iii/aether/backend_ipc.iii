@@ -133,6 +133,10 @@ fn backend_ipc_get(addr: u64, out: u64, max: u64, out_len: u64) -> i32 @export {
     if slot == IPC_NONE { return IPC_NOTFOUND }
     let sb : u64 = _ipc_slot(base, slot)
     let vlen : u64 = _ipc_le8_read(sb + IPC_OFF_LEN)
+    /* vlen comes from cross-process shared memory (torn/racy per the header) -- clamp
+     * to the value-field capacity before the copy, else an oversized vlen over-reads
+     * past the 512-byte field into adjacent slots / the mapping.  [audit backend_ipc-1] */
+    if vlen > IPC_MAXVAL { return IPC_E_TOOBIG }
     if vlen > mx { return IPC_E_TOOBIG }
     let src : *u8 = (sb + IPC_OFF_VAL) as *u8
     let dst : *u8 = o as *u8

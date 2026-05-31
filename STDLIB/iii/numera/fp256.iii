@@ -16,6 +16,15 @@
 
 module numera_fp256
 
+/* APOTHEOSIS S.3: the shared CIOS organ + raw-buffer bridge (numera::bigint_div).
+ * fp_mul delegates its Montgomery multiply to mont_cios_run -- one reduction
+ * proof surface, allocation-free, and (since fp256 is free_reduction, p[0]=2^32-1
+ * => n'[0]=1) the organ's free path takes m=t[0], byte-identical to the old
+ * inline CIOS.  fp_csub_p stays (it serves fp_add/fp_sub, not the multiply). */
+extern @abi(c-msvc-x64) fn mont_load_raw(a_ptr: u64, b_ptr: u64, n_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_cios_run(s: u64, nprime: u64, free: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_store_raw(out_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+
 /* p256 limbs (LE): w0..w7.  p = FFFFFFFF 00000001 0 0 0 FFFFFFFF FFFFFFFF FFFFFFFF (BE). */
 var FP_P    : [u32; 8]
 var FP_R2   : [u32; 8]      /* R^2 mod p (Montgomery conversion) */
@@ -85,14 +94,17 @@ fn fp_csub_p(addr: u64, extra_high: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
         FP_T[i] = v & 0xFFFFFFFFu64
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        let vbit : u64 = v >> 32u64         /* 1 iff no borrow (bit 32 set; v in [0,2^33)) */
+        borrow = vbit ^ 1u64                /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 */
         i = i + 1u64
     }
-    /* select subtracted result iff (extra_high != 0) OR (no final borrow, i.e.
-     * buf >= p).  ge = extra_high | (1 - borrow). */
-    let mut ge : u64 = 0u64
-    if extra_high != 0u64 { ge = 1u64 }
-    if borrow == 0u64 { ge = 1u64 }
+    /* [D-FP-1] branch-free ge = (extra_high != 0) | (borrow == 0): no secret-dependent
+     * branch on the borrow or the reduced value (the select below is already masked). */
+    let neg_eh : u64 = 0u64 - extra_high
+    let eh_or  : u64 = extra_high | neg_eh
+    let eh_nz  : u64 = eh_or >> 63u64       /* 1 iff extra_high != 0 */
+    let b0     : u64 = borrow ^ 1u64        /* 1 iff borrow == 0 */
+    let ge     : u64 = eh_nz | b0
     let mask : u64 = 0u64 - ge          /* 0xFFFF.. if ge else 0 */
     i = 0u64
     while i < 8u64 {
@@ -155,49 +167,17 @@ fn fp_sub(r: u64, a: u64, b: u64) -> i32 {
     return 0i32
 }
 
-/* r = a * b mod p (Montgomery, CIOS, n'[0]=1) — slots */
+/* r = a * b mod p (Montgomery) -- APOTHEOSIS S.3: delegates to the SHARED CIOS
+ * organ (numera::bigint_div) via the raw-buffer bridge.  s=8 (256-bit), n'[0]=1
+ * (free reduction: p256[0]=2^32-1), so the organ's free path takes m=t[0] --
+ * byte-identical to the old inline CIOS (differential-KAT'd: corpus 760 + the
+ * 208/913 ECDSA end-to-end).  Allocation-free; the slot pool FP[r*8..] is the
+ * output buffer (load-before-store, so r may alias a/b -- e.g. in-place fp_sqr). */
 fn fp_mul(r: u64, a: u64, b: u64) -> i32 {
-    let ab : u64 = a * 8u64
-    let bb : u64 = b * 8u64
-    let pp : *u32 = &FP_P as *u32
-    let mut k : u64 = 0u64
-    while k < 10u64 { FP_T[k] = 0u64 ; k = k + 1u64 }
-    let mut i : u64 = 0u64
-    while i < 8u64 {
-        let bi : u64 = FP[bb + i] as u64
-        /* multiply step: t += a * b[i] */
-        let mut c : u64 = 0u64
-        let mut j : u64 = 0u64
-        while j < 8u64 {
-            let uv : u64 = FP_T[j] + (FP[ab + j] as u64) * bi + c
-            FP_T[j] = uv & 0xFFFFFFFFu64
-            c = uv >> 32u64
-            j = j + 1u64
-        }
-        let uv8 : u64 = FP_T[8] + c
-        FP_T[8] = uv8 & 0xFFFFFFFFu64
-        FP_T[9] = uv8 >> 32u64
-        /* reduction step: m = t[0] (n'[0]=1); t += m*p; shift down */
-        let m : u64 = FP_T[0]
-        let uv0 : u64 = FP_T[0] + m * (pp[0] as u64)
-        c = uv0 >> 32u64
-        j = 1u64
-        while j < 8u64 {
-            let uv : u64 = FP_T[j] + m * (pp[j] as u64) + c
-            FP_T[j - 1u64] = uv & 0xFFFFFFFFu64
-            c = uv >> 32u64
-            j = j + 1u64
-        }
-        let uvs : u64 = FP_T[8] + c
-        FP_T[7] = uvs & 0xFFFFFFFFu64
-        FP_T[8] = FP_T[9] + (uvs >> 32u64)
-        i = i + 1u64
-    }
-    /* result = T[0..7]; final conditional subtract p if (T[8]!=0 || T>=p) */
-    let rb : u64 = r * 8u64
-    let mut q : u64 = 0u64
-    while q < 8u64 { FP[rb + q] = FP_T[q] as u32 ; q = q + 1u64 }
-    fp_csub_p((&FP as u64) + rb * 4u64, FP_T[8])
+    let base : u64 = &FP as u64
+    mont_load_raw(base + a * 32u64, base + b * 32u64, &FP_P as u64, 8u64)
+    mont_cios_run(8u64, 1u64, 1u64)
+    mont_store_raw(base + r * 32u64, 8u64)
     return 0i32
 }
 

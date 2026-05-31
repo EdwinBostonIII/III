@@ -1,0 +1,23 @@
+/* Falsifier for COMBINE-7 / RIPPLE-6 / II-FORMAT-1: format_* discarded every builder_push_byte
+ * return, so a format into a SEALED builder reports FMT_OK despite writing nothing.  Fresh builder:
+ * format_decimal_u32 succeeds (sanity).  Sealed builder: format_decimal_u32 MUST report failure.
+ * BROKEN: returns FMT_OK(0).  FIXED: first push -> BLD_E_SEALED -> returns FMT_E_BUILD(-2).
+ * Expected exit: 99. */
+module corpus_711
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32(builder_id: u64, v: u32) -> i32 from "format.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let b : u64 = builder_new(a, 64u64)
+    if b == 0u64 { return 1u64 }
+    if format_decimal_u32(b, 12345u32) != 0i32 { return 2u64 }   /* sanity: fresh builder succeeds */
+    builder_seal(b)
+    if format_decimal_u32(b, 12345u32) == 0i32 { return 3u64 }   /* [II-FORMAT-1] sealed MUST report failure */
+    arena_drop(a)
+    return 99u64
+}

@@ -50,6 +50,9 @@ L_SHA512_SCHED_T:
     .global L_SHA512_FORCE
 L_SHA512_FORCE:
     .quad 0x0
+    .global L_SHA512_AVX512
+L_SHA512_AVX512:
+    .quad 0x0
     .section .iii.ring3,"n"
     .asciz "sha512_rotr"
     .text
@@ -1201,6 +1204,105 @@ L__sha512_sched4_avx512:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "_sha512_avx512_ok"
+    .text
+    .global L__sha512_avx512_ok
+    .seh_proc L__sha512_avx512_ok
+L__sha512_avx512_ok:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movl L_SHA512_AVX512(%rip), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    subq $32, %rsp
+    callq cpufeat_has_avx512f
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_else_6
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_SHA512_AVX512(%rip)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_if_end_7
+L_if_else_6:
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_SHA512_AVX512(%rip)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_7:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
+    movl L_SHA512_AVX512(%rip), %eax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "_sha512_sched4"
     .text
     .global L__sha512_sched4
@@ -1225,7 +1327,7 @@ L__sha512_sched4:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_11
     subq $32, %rsp
     callq L__sha512_sched4_scalar
     addq $32, %rsp
@@ -1238,7 +1340,7 @@ L__sha512_sched4:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_11:
     movl L_SHA512_FORCE(%rip), %eax
     pushq %rax
     movabsq $0x2, %rax
@@ -1251,7 +1353,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_13
     subq $32, %rsp
     callq L__sha512_sched4_avx512
     addq $32, %rsp
@@ -1264,9 +1366,9 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_13:
     subq $32, %rsp
-    callq cpufeat_has_avx512f
+    callq L__sha512_avx512_ok
     addq $32, %rsp
     movzbq %al, %rax
     pushq %rax
@@ -1280,7 +1382,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_15
     subq $32, %rsp
     callq L__sha512_sched4_avx512
     addq $32, %rsp
@@ -1293,7 +1395,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_15:
     subq $32, %rsp
     callq L__sha512_sched4_scalar
     addq $32, %rsp
@@ -1358,7 +1460,7 @@ L_sha512_block:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_10:
+L_loop_top_16:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -1371,7 +1473,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_17
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -1643,13 +1745,13 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_16
+L_loop_end_17:
     movabsq $0x10, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_12:
+L_loop_top_18:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x50, %rax
@@ -1662,7 +1764,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_19
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1677,7 +1779,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_14:
+L_loop_top_20:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
@@ -1690,7 +1792,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_21
     leaq L_SHA512_W(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1798,8 +1900,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_20
+L_loop_end_21:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
@@ -1814,8 +1916,8 @@ L_loop_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_18
+L_loop_end_19:
     leaq L_SHA512_H(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1900,7 +2002,7 @@ L_loop_end_13:
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_16:
+L_loop_top_22:
     movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x50, %rax
@@ -1913,7 +2015,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_23
     movabsq $0xe, %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -2169,8 +2271,8 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_22
+L_loop_end_23:
     leaq L_SHA512_H(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2524,7 +2626,7 @@ L_sha512_bits_add:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_25
     movq L_SHA512_BITS_HI(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -2538,7 +2640,7 @@ L_sha512_bits_add:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_25:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2583,7 +2685,7 @@ sha512_update:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_27
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2593,7 +2695,7 @@ sha512_update:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_27:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2617,7 +2719,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_22:
+L_loop_top_28:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2630,7 +2732,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_23
+    jz L_loop_end_29
     movabsq $0x80, %rax
     pushq %rax
     movl L_SHA512_BUFLEN(%rip), %eax
@@ -2655,7 +2757,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_31
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2663,12 +2765,12 @@ L_loop_top_22:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_31:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_26:
+L_loop_top_32:
     movq -48(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -2681,7 +2783,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_27
+    jz L_loop_end_33
     movl L_SHA512_BUFLEN(%rip), %eax
     pushq %rax
     popq %rax
@@ -2729,8 +2831,8 @@ L_loop_top_26:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_26
-L_loop_end_27:
+    jmp L_loop_top_32
+L_loop_end_33:
     movl L_SHA512_BUFLEN(%rip), %eax
     pushq %rax
     movq -40(%rbp), %rax
@@ -2777,7 +2879,7 @@ L_loop_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_35
     subq $32, %rsp
     callq L_sha512_block
     addq $32, %rsp
@@ -2791,12 +2893,12 @@ L_loop_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_22
-L_loop_end_23:
+    jmp L_loop_top_28
+L_loop_end_29:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2836,7 +2938,7 @@ sha512_update_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_37
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2846,7 +2948,7 @@ sha512_update_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_37:
     movabsq $0x8, %rax
     pushq %rax
     popq %rcx
@@ -2898,7 +3000,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_39
     subq $32, %rsp
     callq L_sha512_block
     addq $32, %rsp
@@ -2912,7 +3014,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_39:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2951,7 +3053,7 @@ sha512_finalize_internal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_41
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2961,7 +3063,7 @@ sha512_finalize_internal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_41:
     movq L_SHA512_BITS_LO(%rip), %rax
     pushq %rax
     popq %rax
@@ -3003,8 +3105,8 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
-L_loop_top_38:
+    jz L_if_end_43
+L_loop_top_44:
     movl L_SHA512_BUFLEN(%rip), %eax
     pushq %rax
     movabsq $0x80, %rax
@@ -3017,7 +3119,7 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
+    jz L_loop_end_45
     leaq L_SHA512_BUF(%rip), %rax
     pushq %rax
     movl L_SHA512_BUFLEN(%rip), %eax
@@ -3042,8 +3144,8 @@ L_loop_top_38:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
+    jmp L_loop_top_44
+L_loop_end_45:
     subq $32, %rsp
     callq L_sha512_block
     addq $32, %rsp
@@ -3057,8 +3159,8 @@ L_loop_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
-L_loop_top_40:
+L_if_end_43:
+L_loop_top_46:
     movl L_SHA512_BUFLEN(%rip), %eax
     pushq %rax
     movabsq $0x70, %rax
@@ -3071,7 +3173,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_47
     leaq L_SHA512_BUF(%rip), %rax
     pushq %rax
     movl L_SHA512_BUFLEN(%rip), %eax
@@ -3096,13 +3198,13 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_46
+L_loop_end_47:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_42:
+L_loop_top_48:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -3115,7 +3217,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_49
     movabsq $0x38, %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3185,13 +3287,13 @@ L_loop_top_42:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_48
+L_loop_end_49:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_44:
+L_loop_top_50:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -3204,7 +3306,7 @@ L_loop_top_44:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_45
+    jz L_loop_end_51
     movabsq $0x38, %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3274,8 +3376,8 @@ L_loop_top_44:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_44
-L_loop_end_45:
+    jmp L_loop_top_50
+L_loop_end_51:
     subq $32, %rsp
     callq L_sha512_block
     addq $32, %rsp
@@ -3327,7 +3429,7 @@ sha512_final:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_46:
+L_loop_top_52:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -3340,7 +3442,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_47
+    jz L_loop_end_53
     leaq L_SHA512_H(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3366,7 +3468,7 @@ L_loop_top_46:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_48:
+L_loop_top_54:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -3379,7 +3481,7 @@ L_loop_top_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_49
+    jz L_loop_end_55
     movabsq $0x38, %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -3447,8 +3549,8 @@ L_loop_top_48:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_48
-L_loop_end_49:
+    jmp L_loop_top_54
+L_loop_end_55:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3463,8 +3565,8 @@ L_loop_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
+    jmp L_loop_top_52
+L_loop_end_53:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3557,7 +3659,7 @@ sha512_digest_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_57
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -3567,7 +3669,7 @@ sha512_digest_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_57:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax

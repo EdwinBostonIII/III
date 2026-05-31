@@ -1,0 +1,60 @@
+/* 981_ed25519_strict_s_malleability.iii -- RFC 8032 §5.1.7 strict-S (non-malleability) falsifier.
+ *
+ * ed25519_verify must REJECT any signature whose scalar S is NOT < L (the group order), before the
+ * curve equation is checked -- otherwise signatures are malleable (S and S+L both verify). The only
+ * existing tamper test (corpus 194) deliberately keeps S < L ("tamper S low bit (stays < L)"), so the
+ * S >= L rejection has NEVER fired. Here S is set to L itself (S == L) -> bigint_cmp(S,L)==0 (not -1)
+ * -> the strict-S gate rejects. Valid sig (S < L) still verifies. 99 = pass.
+ */
+module corpus_981
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn ed25519_verify(pubkey: *u8, msg: *u8, msg_len: u64, sig: *u8) -> u8 from "crypt_ed25519.iii"
+
+fn fill_pubkey(p: *u8) -> i32 {
+    p[0]=0xD7u8 p[1]=0x5Au8 p[2]=0x98u8 p[3]=0x01u8 p[4]=0x82u8 p[5]=0xB1u8 p[6]=0x0Au8 p[7]=0xB7u8
+    p[8]=0xD5u8 p[9]=0x4Bu8 p[10]=0xFEu8 p[11]=0xD3u8 p[12]=0xC9u8 p[13]=0x64u8 p[14]=0x07u8 p[15]=0x3Au8
+    p[16]=0x0Eu8 p[17]=0xE1u8 p[18]=0x72u8 p[19]=0xF3u8 p[20]=0xDAu8 p[21]=0xA6u8 p[22]=0x23u8 p[23]=0x25u8
+    p[24]=0xAFu8 p[25]=0x02u8 p[26]=0x1Au8 p[27]=0x68u8 p[28]=0xF7u8 p[29]=0x07u8 p[30]=0x51u8 p[31]=0x1Au8
+    return 0i32
+}
+
+fn fill_sig(s: *u8) -> i32 {
+    s[0]=0xE5u8 s[1]=0x56u8 s[2]=0x43u8 s[3]=0x00u8 s[4]=0xC3u8 s[5]=0x60u8 s[6]=0xACu8 s[7]=0x72u8
+    s[8]=0x90u8 s[9]=0x86u8 s[10]=0xE2u8 s[11]=0xCCu8 s[12]=0x80u8 s[13]=0x6Eu8 s[14]=0x82u8 s[15]=0x8Au8
+    s[16]=0x84u8 s[17]=0x87u8 s[18]=0x7Fu8 s[19]=0x1Eu8 s[20]=0xB8u8 s[21]=0xE5u8 s[22]=0xD9u8 s[23]=0x74u8
+    s[24]=0xD8u8 s[25]=0x73u8 s[26]=0xE0u8 s[27]=0x65u8 s[28]=0x22u8 s[29]=0x49u8 s[30]=0x01u8 s[31]=0x55u8
+    s[32]=0x5Fu8 s[33]=0xB8u8 s[34]=0x82u8 s[35]=0x15u8 s[36]=0x90u8 s[37]=0xA3u8 s[38]=0x3Bu8 s[39]=0xACu8
+    s[40]=0xC6u8 s[41]=0x1Eu8 s[42]=0x39u8 s[43]=0x70u8 s[44]=0x1Cu8 s[45]=0xF9u8 s[46]=0xB4u8 s[47]=0x6Bu8
+    s[48]=0xD2u8 s[49]=0x5Bu8 s[50]=0xF5u8 s[51]=0xF0u8 s[52]=0x59u8 s[53]=0x5Bu8 s[54]=0xBEu8 s[55]=0x24u8
+    s[56]=0x65u8 s[57]=0x51u8 s[58]=0x41u8 s[59]=0x43u8 s[60]=0x8Eu8 s[61]=0x7Au8 s[62]=0x10u8 s[63]=0x0Bu8
+    return 0i32
+}
+
+/* set S (sig[32..63]) to L, the Ed25519 group order, little-endian */
+fn set_s_to_L(s: *u8) -> i32 {
+    s[32]=0xEDu8 s[33]=0xD3u8 s[34]=0xF5u8 s[35]=0x5Cu8 s[36]=0x1Au8 s[37]=0x63u8 s[38]=0x12u8 s[39]=0x58u8
+    s[40]=0xD6u8 s[41]=0x9Cu8 s[42]=0xF7u8 s[43]=0xA2u8 s[44]=0xDEu8 s[45]=0xF9u8 s[46]=0xDEu8 s[47]=0x14u8
+    s[48]=0x00u8 s[49]=0x00u8 s[50]=0x00u8 s[51]=0x00u8 s[52]=0x00u8 s[53]=0x00u8 s[54]=0x00u8 s[55]=0x00u8
+    s[56]=0x00u8 s[57]=0x00u8 s[58]=0x00u8 s[59]=0x00u8 s[60]=0x00u8 s[61]=0x00u8 s[62]=0x00u8 s[63]=0x10u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let pubkey : *u8 = malloc(32u64)
+    let sig    : *u8 = malloc(64u64)
+    let msg    : *u8 = malloc(1u64)
+    fill_pubkey(pubkey)
+    fill_sig(sig)
+
+    /* the valid signature (S < L) must verify */
+    if ed25519_verify(pubkey, msg, 0u64, sig) != 1u8 { free(pubkey) free(sig) free(msg) return 1u64 }
+
+    /* S := L (not < L) -> strict-S non-malleability gate must REJECT */
+    set_s_to_L(sig)
+    if ed25519_verify(pubkey, msg, 0u64, sig) != 0u8 { free(pubkey) free(sig) free(msg) return 2u64 }
+
+    free(pubkey) free(sig) free(msg)
+    return 99u64
+}

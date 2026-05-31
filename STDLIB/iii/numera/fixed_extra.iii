@@ -30,14 +30,15 @@ module numera_fixed_extra
 /* ─── Q16.16 (u32-packed) ──────────────────────────────────────── */
 
 const FX16_FRAC_BITS : u64 = 16u64
-const FX16_SCALE     : u64 = 0x10000u64       /* 1 << 16 = 65536 */
 const FX16_MASK      : u64 = 0xFFFFFFFFu64
 const FX16_MAX       : u64 = 0xFFFFFFFFu64    /* saturate cap */
 
 fn fx16_from_int(i: u64) -> u64 @export {
-    let v : u64 = i << FX16_FRAC_BITS
-    if v > FX16_MAX { return FX16_MAX }
-    return v & FX16_MASK
+    /* Q16.16 integer part caps at 2^16-1; guard BEFORE the shift because
+     * i<<16 wraps mod 2^64 for i>=2^48 (bypassing the v>FX16_MAX check and
+     * returning a small wrong value).  [audit D-FX-2] */
+    if i > 0xFFFFu64 { return FX16_MAX }
+    return (i << FX16_FRAC_BITS) & FX16_MASK
 }
 
 fn fx16_to_int(x: u64) -> u64 @export {
@@ -81,14 +82,15 @@ fn fx16_div(a: u64, b: u64) -> u64 @export {
 /* ─── Q24.8 (u32-packed) ───────────────────────────────────────── */
 
 const FX24_FRAC_BITS : u64 = 8u64
-const FX24_SCALE     : u64 = 0x100u64
 const FX24_MASK      : u64 = 0xFFFFFFFFu64
 const FX24_MAX       : u64 = 0xFFFFFFFFu64
 
 fn fx24_from_int(i: u64) -> u64 @export {
-    let v : u64 = i << FX24_FRAC_BITS
-    if v > FX24_MAX { return FX24_MAX }
-    return v & FX24_MASK
+    /* Q24.8 integer part caps at 2^24-1; guard BEFORE the shift because
+     * i<<8 wraps mod 2^64 for i>=2^56 (bypassing the v>FX24_MAX check).
+     * [audit D-FX-3] */
+    if i > 0xFFFFFFu64 { return FX24_MAX }
+    return (i << FX24_FRAC_BITS) & FX24_MASK
 }
 
 fn fx24_to_int(x: u64) -> u64 @export {
@@ -132,7 +134,6 @@ fn fx24_div(a: u64, b: u64) -> u64 @export {
 /* ─── Q48.16 (u64) ─────────────────────────────────────────────── */
 
 const FX48_FRAC_BITS : u64 = 16u64
-const FX48_SCALE     : u64 = 0x10000u64
 const FX48_MAX       : u64 = 0xFFFFFFFFFFFFFFFFu64
 
 fn fx48_from_int(i: u64) -> u64 @export {
@@ -158,31 +159,29 @@ fn fx48_sub(a: u64, b: u64) -> u64 @export {
 }
 
 fn fx48_mul(a: u64, b: u64) -> u64 @export {
-    /* For Q48.16 with bounded inputs (a, b ≤ 2^48), a*b ≤ 2^96 -- overflows
-     * u64.  We split into high/low 32-bit halves and saturate. */
+    /* Q48.16 * Q48.16 -> Q48.16 = (a*b) >> 16.  a*b is a genuine 128-bit
+     * product; form it EXACTLY as (hi,lo) via 32-bit schoolbook (mirrors
+     * fix_mul in numera/fixed.iii), then (a*b)>>16 = (lo>>16) | (hi<<48).
+     * Saturate ONLY when hi >= 2^16 -- the unique case where the shifted
+     * result exceeds u64 (hi*2^48 >= 2^64).  The old code formed partial
+     * products and saturated on premature high-half guards, capping ~99.9%
+     * of valid non-overflowing operands.  No intermediate overflows:
+     * hi = floor(a*b / 2^64) < 2^64 for a,b < 2^64, and the partial sums
+     * forming it are monotone.  [audit D-FX-1] */
     let a_hi : u64 = a >> 32u64
     let a_lo : u64 = a & 0xFFFFFFFFu64
     let b_hi : u64 = b >> 32u64
     let b_lo : u64 = b & 0xFFFFFFFFu64
-    /* Cross products */
-    let p_lolo : u64 = a_lo * b_lo
-    let p_lohi : u64 = a_lo * b_hi
-    let p_hilo : u64 = a_hi * b_lo
-    let p_hihi : u64 = a_hi * b_hi
-    /* After scale-shift by 16, the result is approximately
-     * (a/2^16) * (b/2^16) * 2^16 = a*b / 2^16 .  We need only u64-fit
-     * detection: if a_hi or b_hi is non-zero AND product would overflow,
-     * saturate.  Conservative approximation: any combination of high
-     * halves indicates risk of overflow after >> 16. */
-    if p_hihi != 0u64 { return FX48_MAX }
-    let mid : u64 = p_lohi + p_hilo
-    if mid < p_lohi { return FX48_MAX }
-    /* Combine: result = (p_lolo + (mid << 32)) >> 16 */
-    /* Detect overflow on the (mid << 32) shift when mid >= 2^32. */
-    if mid >> 32u64 != 0u64 { return FX48_MAX }
-    let combined : u64 = p_lolo + (mid << 32u64)
-    if combined < p_lolo { return FX48_MAX }
-    return combined >> FX48_FRAC_BITS
+    let ll : u64 = a_lo * b_lo
+    let lh : u64 = a_lo * b_hi
+    let hl : u64 = a_hi * b_lo
+    let hh : u64 = a_hi * b_hi
+    /* cross_lo = (ll>>32) + lh_lo + hl_lo  (< 3*2^32, fits u64). */
+    let cross_lo : u64 = (ll >> 32u64) + (lh & 0xFFFFFFFFu64) + (hl & 0xFFFFFFFFu64)
+    let lo : u64 = (ll & 0xFFFFFFFFu64) | ((cross_lo & 0xFFFFFFFFu64) << 32u64)
+    let hi : u64 = (cross_lo >> 32u64) + (lh >> 32u64) + (hl >> 32u64) + hh
+    if hi >= 0x10000u64 { return FX48_MAX }
+    return (lo >> FX48_FRAC_BITS) | (hi << 48u64)
 }
 
 fn fx48_div(a: u64, b: u64) -> u64 @export {

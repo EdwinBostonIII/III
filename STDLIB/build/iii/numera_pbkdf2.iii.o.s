@@ -4,169 +4,37 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiihmac.iiihmac.iii\0"
-L_str_1:
-    .ascii "arena.iiihmac.iiihmac.iii\0"
-L_str_2:
     .ascii "hmac.iiihmac.iii\0"
-L_str_3:
+L_str_1:
     .ascii "hmac.iii\0"
     .section .rodata
 L_PBKDF2_OK:
     .quad 0x0
 L_PBKDF2_E_INIT:
     .quad 0xffffffffffffffff
+    .section .bss
+    .global L_PBK_WORK_SALT
+L_PBK_WORK_SALT:
+    .zero 2048
+    .global L_PBK_WORK_MSG
+L_PBK_WORK_MSG:
+    .zero 32768
+    .global L_PBK_WORK_T
+L_PBK_WORK_T:
+    .zero 256
+    .global L_PBK_WORK_U
+L_PBK_WORK_U:
+    .zero 256
     .section .data
-    .global L_PBK_ARENA
-L_PBK_ARENA:
-    .quad 0x0
-    .global L_PBK_SALT
-L_PBK_SALT:
-    .quad 0x0
     .global L_PBK_SALT_LEN
 L_PBK_SALT_LEN:
     .quad 0x0
     .global L_PBK_ITER
 L_PBK_ITER:
     .quad 0x1
-    .global L_PBK_MSG
-L_PBK_MSG:
+    .global L_PBK_SALT_SET
+L_PBK_SALT_SET:
     .quad 0x0
-    .global L_PBK_T
-L_PBK_T:
-    .quad 0x0
-    .global L_PBK_U
-L_PBK_U:
-    .quad 0x0
-    .section .iii.ring3,"n"
-    .asciz "pbk_alloc"
-    .text
-    .global L_pbk_alloc
-    .seh_proc L_pbk_alloc
-L_pbk_alloc:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq L_PBK_ARENA(%rip), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_1
-    movslq L_PBKDF2_OK(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_1:
-    movabsq $0x2000, %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq arena_new
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, L_PBK_ARENA(%rip)
-    movq L_PBK_ARENA(%rip), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movslq L_PBKDF2_E_INIT(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
-    movabsq $0x100, %rax
-    pushq %rax
-    movq L_PBK_ARENA(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq arena_alloc1
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, L_PBK_SALT(%rip)
-    movabsq $0x1000, %rax
-    pushq %rax
-    movq L_PBK_ARENA(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq arena_alloc1
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, L_PBK_MSG(%rip)
-    movabsq $0x20, %rax
-    pushq %rax
-    movq L_PBK_ARENA(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq arena_alloc1
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, L_PBK_T(%rip)
-    movabsq $0x20, %rax
-    pushq %rax
-    movq L_PBK_ARENA(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq arena_alloc1
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, L_PBK_U(%rip)
-    movslq L_PBKDF2_OK(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
     .section .iii.ring3,"n"
     .asciz "pbkdf2_sha256_set_salt"
     .text
@@ -182,32 +50,6 @@ pbkdf2_sha256_set_salt:
     .seh_endprologue
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
-    subq $32, %rsp
-    callq L_pbk_alloc
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movslq L_PBKDF2_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_5
-    movslq L_PBKDF2_E_INIT(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_5:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x100, %rax
@@ -220,7 +62,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_1
     movslq L_PBKDF2_E_INIT(%rip), %rax
     pushq %rax
     popq %rax
@@ -230,8 +72,10 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
-    movq L_PBK_SALT(%rip), %rax
+L_if_end_1:
+    leaq L_PBK_WORK_SALT(%rip), %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -241,7 +85,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_8:
+L_loop_top_2:
     movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -254,7 +98,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_9
+    jz L_loop_end_3
     movq -24(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -284,12 +128,16 @@ L_loop_top_8:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
+    jmp L_loop_top_2
+L_loop_end_3:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rax, L_PBK_SALT_LEN(%rip)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_PBK_SALT_SET(%rip)
     movslq L_PBKDF2_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -351,7 +199,7 @@ pbkdf2_sha256_derive:
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
     movq %r9, -32(%rbp)
-    movq L_PBK_ARENA(%rip), %rax
+    movzbq L_PBK_SALT_SET(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -363,7 +211,7 @@ pbkdf2_sha256_derive:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_5
     movslq L_PBKDF2_E_INIT(%rip), %rax
     pushq %rax
     popq %rax
@@ -373,7 +221,7 @@ pbkdf2_sha256_derive:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_5:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -382,31 +230,39 @@ L_if_end_11:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-    movq L_PBK_MSG(%rip), %rax
+    leaq L_PBK_WORK_MSG(%rip), %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movq L_PBK_T(%rip), %rax
+    leaq L_PBK_WORK_T(%rip), %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movq L_PBK_U(%rip), %rax
+    leaq L_PBK_WORK_U(%rip), %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-    movq L_PBK_SALT(%rip), %rax
+    leaq L_PBK_WORK_SALT(%rip), %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_12:
+L_loop_top_6:
     movq -48(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -419,12 +275,12 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_7
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_14:
+L_loop_top_8:
     movq -88(%rbp), %rax
     pushq %rax
     movq L_PBK_SALT_LEN(%rip), %rax
@@ -437,7 +293,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_9
     movq -56(%rbp), %rax
     pushq %rax
     movq -88(%rbp), %rax
@@ -467,8 +323,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_8
+L_loop_end_9:
     movq -56(%rbp), %rax
     pushq %rax
     movq L_PBK_SALT_LEN(%rip), %rax
@@ -595,9 +451,7 @@ L_loop_end_15:
     popq %rax
     addq %rcx, %rax
     pushq %rax
-    movq L_PBK_MSG(%rip), %rax
-    pushq %rax
-    popq %rax
+    movq -56(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -626,7 +480,7 @@ L_loop_end_15:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-L_loop_top_16:
+L_loop_top_10:
     movl -96(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -639,7 +493,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_11
     movq -72(%rbp), %rax
     pushq %rax
     movl -96(%rbp), %eax
@@ -670,13 +524,13 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_10
+L_loop_end_11:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
-L_loop_top_18:
+L_loop_top_12:
     movl -104(%rbp), %eax
     pushq %rax
     movl L_PBK_ITER(%rip), %eax
@@ -689,12 +543,10 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_19
+    jz L_loop_end_13
     movabsq $0x20, %rax
     pushq %rax
-    movq L_PBK_U(%rip), %rax
-    pushq %rax
-    popq %rax
+    movq -72(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -723,7 +575,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
-L_loop_top_20:
+L_loop_top_14:
     movl -112(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -736,7 +588,7 @@ L_loop_top_20:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_21
+    jz L_loop_end_15
     movq -64(%rbp), %rax
     pushq %rax
     movl -112(%rbp), %eax
@@ -796,8 +648,8 @@ L_loop_top_20:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_20
-L_loop_end_21:
+    jmp L_loop_top_14
+L_loop_end_15:
     movl -104(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -812,8 +664,8 @@ L_loop_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_18
-L_loop_end_19:
+    jmp L_loop_top_12
+L_loop_end_13:
     movabsq $0x20, %rax
     pushq %rax
     popq %rax
@@ -836,7 +688,7 @@ L_loop_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_17
     movq -32(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -850,12 +702,12 @@ L_loop_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_17:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -120(%rbp)
-L_loop_top_24:
+L_loop_top_18:
     movq -120(%rbp), %rax
     pushq %rax
     movq -112(%rbp), %rax
@@ -868,7 +720,7 @@ L_loop_top_24:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_25
+    jz L_loop_end_19
     movq -24(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -904,8 +756,8 @@ L_loop_top_24:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_24
-L_loop_end_25:
+    jmp L_loop_top_18
+L_loop_end_19:
     movq -48(%rbp), %rax
     pushq %rax
     movq -112(%rbp), %rax
@@ -930,9 +782,105 @@ L_loop_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_6
+L_loop_end_7:
     movslq L_PBKDF2_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "pbkdf2_sha256_oneshot"
+    .text
+    .global pbkdf2_sha256_oneshot
+    .seh_proc pbkdf2_sha256_oneshot
+pbkdf2_sha256_oneshot:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
+    movq 56(%rbp), %rax
+    movq %rax, -48(%rbp)
+    movq 64(%rbp), %rax
+    movq %rax, -56(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq pbkdf2_sha256_set_salt
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movslq -64(%rbp), %rax
+    pushq %rax
+    movslq L_PBKDF2_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movslq -64(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq pbkdf2_sha256_set_iter
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq pbkdf2_sha256_derive
+    addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

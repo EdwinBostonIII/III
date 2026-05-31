@@ -4,27 +4,19 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_horizon.iiixii_savings.iiixii_rewrite.iiixii_curated_payloads.iiixii_curated_crypto.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
+    .ascii "xii_horizon.iiixii_savings.iiixii_rewrite.iiixii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
 L_str_1:
-    .ascii "xii_savings.iiixii_rewrite.iiixii_curated_payloads.iiixii_curated_crypto.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
+    .ascii "xii_savings.iiixii_rewrite.iiixii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
 L_str_2:
-    .ascii "xii_rewrite.iiixii_curated_payloads.iiixii_curated_crypto.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
+    .ascii "xii_rewrite.iiixii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
 L_str_3:
-    .ascii "xii_curated_payloads.iiixii_curated_crypto.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
+    .ascii "xii_curated_payloads.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
 L_str_4:
-    .ascii "xii_curated_crypto.iiixii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
+    .ascii "xii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iii\0"
 L_str_5:
-    .ascii "xii_curated_riscv.iiixii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
+    .ascii "xii_curated_embedded.iiixii_curated_extended.iii\0"
 L_str_6:
-    .ascii "xii_curated_embedded.iiixii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
-L_str_7:
-    .ascii "xii_curated_extended.iiixii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
-L_str_8:
-    .ascii "xii_curated_crypto_extended.iiixii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
-L_str_9:
-    .ascii "xii_curated_crypto_final.iiixii_curated_arm64_crypto.iii\0"
-L_str_10:
-    .ascii "xii_curated_arm64_crypto.iii\0"
+    .ascii "xii_curated_extended.iii\0"
     .section .data
     .global L_XII_REGISTER_DONE
 L_XII_REGISTER_DONE:
@@ -90,12 +82,6 @@ L_if_end_1:
     pushq %rax
     popq %rax
     subq $32, %rsp
-    callq xii_curated_crypto_register_all
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    subq $32, %rsp
     callq xii_curated_riscv_register_all
     addq $32, %rsp
     movslq %eax, %rax
@@ -109,24 +95,6 @@ L_if_end_1:
     popq %rax
     subq $32, %rsp
     callq xii_curated_extended_register_all
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    subq $32, %rsp
-    callq xii_curated_crypto_extended_register_all
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    subq $32, %rsp
-    callq xii_curated_crypto_final_register_all
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
-    subq $32, %rsp
-    callq xii_curated_arm64_crypto_register_all
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax

@@ -64,6 +64,11 @@ fn katabasis_census_fact_matches(idx: u64, value: u64) -> u8 @export {
     katabasis_census_init()
     let i : u64 = idx
     let v : u64 = value
+    /* W5.1 (RIPPLE-11/KEEP-2): an out-of-range index can NEVER match.  Pre-fix,
+     * fact_matches(16, 0) read census_fact(16)=0 (the OOB masking zero), so 0==0 produced a
+     * spurious MATCH instead of a drift seed -- a measured silicon value of 0 at a phantom
+     * index would have masqueraded as in-spec.  The gate can now say *no* regardless of value. */
+    if i >= katabasis_census_fact_count() { return 0u8 }
     let f : u64 = katabasis_census_fact(i)
     if f == v { return 1u8 }
     return 0u8

@@ -1,0 +1,45 @@
+/* 973 — W3.19 / E-FE-4 falsifier: fe25519 rejects non-canonical field encodings on
+ * decode (RFC 8032). y is canonical iff y < p = 2^255-19 (LE: ED FF..FF 7F). The 19
+ * values in [p, 2^255) must be flagged non-canonical; everything below p is canonical.
+ * 99 = pass. */
+module corpus_973
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn fz_is_canonical(b: u64) -> u8 from "fe25519.iii"
+
+fn setr(base: u64, start: u64, endx: u64, v: u8) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = start
+    while i < endx { p[i] = v ; i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> i32 {
+    let b : *u8 = malloc(32u64)
+    let bp : u64 = b as u64
+
+    /* p itself = ED FF..FF 7F -> NON-canonical (y == p is out of range) */
+    setr(bp, 0u64, 32u64, 0xFFu8)
+    b[0u64] = 0xEDu8
+    b[31u64] = 0x7Fu8
+    if fz_is_canonical(bp) != 0u8 { return 1i32 }
+
+    /* p - 1 = EC FF..FF 7F -> canonical */
+    b[0u64] = 0xECu8
+    if fz_is_canonical(bp) != 1u8 { return 2i32 }
+
+    /* 2^255 - 1 = FF FF..FF 7F -> NON-canonical (largest in [p, 2^255)) */
+    b[0u64] = 0xFFu8
+    if fz_is_canonical(bp) != 0u8 { return 3i32 }
+
+    /* a middle byte < 0xFF -> canonical even with high bytes maxed */
+    b[5u64] = 0xFEu8
+    if fz_is_canonical(bp) != 1u8 { return 4i32 }
+    b[5u64] = 0xFFu8
+
+    /* small value y = 2 (high byte != 0x7F) -> canonical */
+    setr(bp, 0u64, 32u64, 0u8)
+    b[0u64] = 0x02u8
+    if fz_is_canonical(bp) != 1u8 { return 5i32 }
+
+    return 99i32
+}

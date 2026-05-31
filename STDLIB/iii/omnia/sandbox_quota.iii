@@ -31,6 +31,7 @@ module omnia_sandbox_quota
 
 extern @abi(c-msvc-x64) fn sandbox_mem_cap(sb_id: u64) -> u64 from "sandbox_ctor.iii"
 extern @abi(c-msvc-x64) fn sandbox_cpu_cap(sb_id: u64) -> u64 from "sandbox_ctor.iii"
+extern @abi(c-msvc-x64) fn bnd_index(id: u64, slots: u64) -> u32 from "bound.iii"
 
 const SBQ_OK : i32 = 0i32
 
@@ -41,10 +42,8 @@ var SBQ_CPU_USED : [u64; 64]
 
 fn _sbq_slot_of(sb_id: u64) -> u32 {
     let id_l : u64 = sb_id
-    if id_l == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = (id_l - 1u64) & 0x3Fu64
-    let s_u32 : u32 = s as u32
-    if s_u32 >= SBQ_SLOTS { return 0xFFFFFFFFu32 }
+    let s_u32 : u32 = bnd_index(id_l, SBQ_SLOTS as u64)   /* [COMBINE-7/K-SBQ-1/X19] route the range-check-before-index through the one bound organ (behaviour-identical) */
+    if s_u32 == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
     return s_u32
 }
 

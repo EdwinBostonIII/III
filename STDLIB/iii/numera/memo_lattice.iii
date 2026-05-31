@@ -153,7 +153,10 @@ fn ml_slot_find(key: *u8) -> i64 {
                 if ident_eq(kp, key) == 1u8 { result = s as i64  sentinel = 1u8 }
             }
         }
-        probe = probe + 1u64
+        /* early-exit: once resolved (match found or empty slot reached), stop the linear
+         * probe instead of spinning to the full MEMOL_SLOTS (no-break idiom, witness_spine:201).
+         * Result is bit-identical -- only the dead tail iterations are removed. */
+        if sentinel == 1u8 { probe = MEMOL_SLOTS } else { probe = probe + 1u64 }
     }
     return result
 }
@@ -170,7 +173,8 @@ fn ml_slot_alloc(key: *u8) -> i64 {
             let lp : *u8 = ml_status_ptr(&MEMOL_LIVE as u64, s)
             if lp[0u64] == 0u8 { result = s as i64  sentinel = 1u8 }
         }
-        probe = probe + 1u64
+        /* early-exit on the first free slot (bit-identical to scanning the full table). */
+        if sentinel == 1u8 { probe = MEMOL_SLOTS } else { probe = probe + 1u64 }
     }
     return result
 }

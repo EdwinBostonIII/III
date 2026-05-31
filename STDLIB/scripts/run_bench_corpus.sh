@@ -104,12 +104,15 @@ for _se in "${SIDE_EFFECT_NAMES[@]}"; do
     [[ -f "$BUILD_DIR/$_se" ]] && SIDE_EFFECT_OBJS+=("$BUILD_DIR/$_se")
 done
 
-# The four benchmarks, in run order.
+# The seven benchmarks, in run order.
 BENCHES=(
     237_insel_cycle_bench
     242_bench_resolver
     243_bench_sealed_channel
     244_bench_hip_idoc
+    990_bench_knuth_div
+    991_bench_montgomery_modpow
+    992_bench_fe25519_mul
 )
 
 # Per-test TIMING-budget exit codes (space-separated).  Any non-zero exit
@@ -119,11 +122,19 @@ BENCHES=(
 #   242: 30=STATIC 31=COLD 32=HOT   (median over budget)
 #   243: 28=16B 29=64B 30=256B/1024B (median over budget)
 #   244: 15=UNIQUE 16=AMBIGUOUS 17=NO_MATCH 24=IDoc (median over budget)
+#   990: 30=Knuth not strictly faster than bit-serial at some size (host noise)
+#   991: 30=Montgomery (CIOS) not strictly faster than schoolbook+Knuth at some
+#        size (host noise, or a Montgomery perf regression); 3=modexp mismatch
+#        (HARD FAIL -- a path computes the wrong residue)
+#   992: 30=fz_mul not strictly faster than generic bigint field-mul (host noise)
 declare -A TIMING_CODES=(
     [237_insel_cycle_bench]="11 22 32"
     [242_bench_resolver]="30 31 32"
     [243_bench_sealed_channel]="28 29 30"
     [244_bench_hip_idoc]="15 16 17 24"
+    [990_bench_knuth_div]="30"
+    [991_bench_montgomery_modpow]="30"
+    [992_bench_fe25519_mul]="30"
 )
 
 # Human-readable label per timing code (for the advisory line).
@@ -158,6 +169,21 @@ timing_label() {
                 17) echo "HIP NO_MATCH median over budget" ;;
                 24) echo "IDoc round-trip median over budget" ;;
                 *)  echo "timing budget exceeded (code $_code)" ;;
+            esac ;;
+        990_bench_knuth_div)
+            case "$_code" in
+                30) echo "Knuth div not strictly faster than bit-serial at some size (host noise)" ;;
+                *)  echo "timing anomaly (code $_code)" ;;
+            esac ;;
+        991_bench_montgomery_modpow)
+            case "$_code" in
+                30) echo "Montgomery (CIOS) not strictly faster than schoolbook+Knuth at some size (host noise / regression)" ;;
+                *)  echo "timing anomaly (code $_code)" ;;
+            esac ;;
+        992_bench_fe25519_mul)
+            case "$_code" in
+                30) echo "fz_mul not strictly faster than generic bigint field-mul (host noise)" ;;
+                *)  echo "timing anomaly (code $_code)" ;;
             esac ;;
         *) echo "timing budget exceeded (code $_code)" ;;
     esac
@@ -222,7 +248,7 @@ for base in "${BENCHES[@]}"; do
 done
 
 echo "============================================================"
-echo " STDLIB Performance Benchmark Corpus (237/242/243/244)"
+echo " STDLIB Performance Benchmark Corpus (237/242/243/244 + 990/991/992)"
 echo "============================================================"
 for r in "${RESULTS[@]}"; do echo "  $r"; done
 echo "------------------------------------------------------------"

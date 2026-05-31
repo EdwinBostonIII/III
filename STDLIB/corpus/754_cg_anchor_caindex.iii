@@ -1,0 +1,117 @@
+/* 754_cg_anchor_caindex.iii -- positive-arm integration KAT for the W3.1 caindex
+ * migration of computation_graph's anchor table.  The existing 645 KAT exercises
+ * only the NEGATIVE anchor arms (clause-absent, not-anchor) because anchor
+ * declaration is constitution-governed and 645 never ratifies a clause; this
+ * test ratifies a real clause, then declares + queries 200 anchors THROUGH the
+ * caindex -- the positive round-trip the perf migration must preserve.  It also
+ * proves: idempotent re-declare refusal (caindex hit on the insert path),
+ * absent-fid query (caindex miss), and -- critically -- that the governance gate
+ * is NOT bypassed by the caindex (a declare under an UNRATIFIED clause still
+ * fails CLAUSE_ABSENT).  Deterministic.  Exit 99 = all arms hold. */
+module corpus_754
+
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cg_init() -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cg_anchor_declare(fid: *u8, clause_id: *u8) -> i32 from "computation_graph.iii"
+extern @abi(c-msvc-x64) fn cg_anchor_query(fid: *u8, out_clause_id: *u8) -> i32 from "computation_graph.iii"
+
+const CG_OK               : i32 =  0i32
+const CG_E_CLAUSE_ABSENT  : i32 = -4i32
+const CG_E_ALREADY_ANCHOR : i32 = -5i32
+const CG_E_NOT_ANCHOR     : i32 = -6i32
+const CONS_U64_SENT       : u64 = 0xFFFFFFFFFFFFFFFFu64
+const N_ANCHORS           : u64 = 200u64
+
+var REQ     : [u8; 56]    /* cons_ratify_req aggregate */
+var TXT     : [u8; 8]     /* clause textual literal    */
+var CIDOUT  : [u8; 32]    /* ratified clause id (out)  */
+var BADCID  : [u8; 32]    /* an unratified clause id   */
+var FIDBUF  : [u8; 32]    /* reused per-anchor fid     */
+var QOUT    : [u8; 32]    /* cg_anchor_query output    */
+
+/* store a u64 little-endian into REQ at byte offset off. */
+fn req_u64(off: u64, v: u64) -> i32 {
+    let p : *u8 = (&REQ as u64) as *u8
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* write n into FIDBUF[0..4] (LE), zero the rest -> a distinct 32-byte fid per n. */
+fn mkfid(n: u64) -> i32 {
+    let p : *u8 = (&FIDBUF as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = 0u8  i = i + 1u64 }
+    p[0u64] = (n & 0xFFu64) as u8
+    p[1u64] = ((n >> 8u64)  & 0xFFu64) as u8
+    p[2u64] = ((n >> 16u64) & 0xFFu64) as u8
+    p[3u64] = ((n >> 24u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    at_init(0u64)
+    wh_init(0u64)
+    cons_init()
+    cg_init()
+
+    /* Ratify one clause "anchor" (6 bytes) -> CIDOUT holds its Keccak256 id. */
+    let txp : *u8 = (&TXT as u64) as *u8
+    txp[0u64] = 0x61u8  txp[1u64] = 0x6Eu8  txp[2u64] = 0x63u8
+    txp[3u64] = 0x68u8  txp[4u64] = 0x6Fu8  txp[5u64] = 0x72u8   /* "anchor" */
+    req_u64(0u64,  (&CIDOUT as u64))   /* out_clause_id_ptr */
+    req_u64(8u64,  (&TXT as u64))      /* textual_ptr       */
+    req_u64(16u64, 6u64)               /* textual_len       */
+    req_u64(24u64, 0u64)               /* ltl_ptr           */
+    req_u64(32u64, 0u64)               /* ltl_len           */
+    req_u64(40u64, 0u64)               /* pred_ptr          */
+    req_u64(48u64, 0u64)               /* pred_len          */
+    let fr : u64 = cons_ratify((&REQ as u64) as *u8)
+    if fr == CONS_U64_SENT { return 1u64 }
+
+    /* Negative (governance not bypassed): declare under an UNRATIFIED clause id
+     * (BADCID = 0xEE.., which is not Keccak256("anchor")) -> CLAUSE_ABSENT. */
+    let bp : *u8 = (&BADCID as u64) as *u8
+    let mut bi : u64 = 0u64
+    while bi < 32u64 { bp[bi] = 0xEEu8  bi = bi + 1u64 }
+    mkfid(7u64)
+    if cg_anchor_declare((&FIDBUF as u64) as *u8, bp) != CG_E_CLAUSE_ABSENT { return 2u64 }
+
+    /* Positive: declare N anchors, all governed by the one ratified clause. */
+    let cidp : *u8 = (&CIDOUT as u64) as *u8
+    let mut i : u64 = 0u64
+    while i < N_ANCHORS {
+        mkfid(i)
+        if cg_anchor_declare((&FIDBUF as u64) as *u8, cidp) != CG_OK { return 4u64 }
+        i = i + 1u64
+    }
+    /* Positive round-trip: each declared fid -> caindex -> its clause id == CIDOUT. */
+    let qp : *u8 = (&QOUT as u64) as *u8
+    let mut j : u64 = 0u64
+    while j < N_ANCHORS {
+        mkfid(j)
+        if cg_anchor_query((&FIDBUF as u64) as *u8, qp) != CG_OK { return 5u64 }
+        let mut k : u64 = 0u64
+        let mut acc : u32 = 0u32
+        while k < 32u64 { acc = acc | ((qp[k] as u32) ^ (cidp[k] as u32))  k = k + 1u64 }
+        if acc != 0u32 { return 6u64 }
+        j = j + 1u64
+    }
+    /* Negative: re-declare an existing fid -> ALREADY_ANCHOR (caindex insert hit). */
+    mkfid(0u64)
+    if cg_anchor_declare((&FIDBUF as u64) as *u8, cidp) != CG_E_ALREADY_ANCHOR { return 7u64 }
+    /* Negative: query a never-declared fid -> NOT_ANCHOR (caindex miss). */
+    mkfid(999999u64)
+    if cg_anchor_query((&FIDBUF as u64) as *u8, qp) != CG_E_NOT_ANCHOR { return 8u64 }
+
+    return 99u64
+}

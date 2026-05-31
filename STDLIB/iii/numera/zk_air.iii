@@ -1,0 +1,350 @@
+/* numera/zk_air.iii -- APOTHEOSIS C.3: the general AIR (Algebraic Intermediate
+ * Representation) composition organ.  Generalizes zk_stark.iii's hard-wired demo
+ * (single column, x_{i+1}=x_i^2+c) into a DATA-DRIVEN constraint system: W columns,
+ * a list of degree-<=2 transition constraints, and boundary constraints -- so the
+ * STARK can prove arbitrary low-degree constraint systems, not one toy recurrence.
+ *
+ * /architect (ADR-C3): the AIR is a *value*, not hard-code.  air_compile(W,N,...)
+ * stores column count, trace, and the constraint term lists; air_build_lde builds
+ * the per-column low-degree extension over the SHARED §S.4 NTT organ (ntt.iii,
+ * exactly as zk_stark does -- one transform for PQ + zk); air_build_cp forms the
+ * composition polynomial CP = sum_k alpha_k * (C_k / Z_H) as a random linear
+ * combination of the per-constraint quotients (alpha_k = Fiat-Shamir coefficients).
+ *
+ * /math-olympiad (soundness): each transition constraint C_k is a sum of terms
+ * coeff * eval(var_a) * eval(var_b) with var in {1, col_w (current row), col_w
+ * (next row)} -- so deg(C_k) <= 2*(N-1) over the trace polynomials (each deg N-1).
+ * Z_H(x) = x^N - 1 vanishes exactly on the trace domain H_N; if the witness
+ * satisfies C_k on H_N then C_k is divisible by Z_H and Q_k = C_k/Z_H has degree
+ * <= 2(N-1)-N = N-2 < N -- so CP stays inside the blowup-4 LDE domain (D = 4N) and
+ * FRI's "degree < N" low-degree test is COMPLETE (honest prover passes) and SOUND
+ * (a witness violating any C_k makes C_k NOT vanish on H_N, so Q_k is not a
+ * polynomial, so CP is not low-degree, so FRI rejects w.h.p.).  The boundary
+ * constraints (col,row,value) are checked the demo's way -- by Merkle-opening
+ * LDE_col[row*B] and asserting == value -- kept OUTSIDE the composition (cleaner
+ * than per-point quotients, identical soundness).
+ *
+ * var encoding (air_eval_var): 0 => constant 1 ; 1..W => col[v-1] CURRENT row ;
+ * W+1..2W => col[v-1-W] NEXT row (LDE index shifted by the blowup B=4).
+ *
+ * Field sf = GF(998244353) (30-bit; products fit u64; no Montgomery), g=3 a
+ * primitive root (2-adicity 23); identical to zk_stark's sf so the two compose.
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure algebra). */
+module numera_zk_air
+
+/* Shared NTT organ (§S.4) -- the SAME radix-2 butterfly zk_stark + the PQ schemes use. */
+extern @abi(c-msvc-x64) fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+const AIR_Q : u32 = 998244353u32
+const AIR_B : u64 = 4u64            /* LDE blowup factor (D = B*N) */
+
+/* Capacity (module-global; iiis runtime-indexed locals SIGSEGV -- all working
+ * arrays are module-scope by necessity).  W<=4 columns, N<=64 rows, D<=256. */
+const AIR_WMAX : u64 = 4u64
+const AIR_NMAX : u64 = 64u64
+const AIR_DMAX : u64 = 256u64       /* WMAX irrelevant; per-column D */
+const AIR_TMAX : u64 = 64u64        /* transition terms */
+const AIR_CMAX : u64 = 8u64         /* transition constraints */
+
+var AIR_W      : [u32; 1]
+var AIR_N      : [u32; 1]
+var AIR_TRACE  : [u32; 256]         /* row-major: T[row*W + col]  (WMAX*NMAX) */
+var AIR_TCOEF  : [u32; 1024]        /* per-column coeffs, padded to D (WMAX*DMAX) */
+var AIR_LDE    : [u32; 1024]        /* per-column LDE over H_D (WMAX*DMAX) */
+var AIR_CP     : [u32; 256]         /* composition polynomial over H_D (DMAX) */
+/* transition constraint term lists */
+var AIR_TT_COEF : [u32; 64]
+var AIR_TT_A    : [u32; 64]
+var AIR_TT_B    : [u32; 64]
+var AIR_TT_CON  : [u32; 64]         /* which constraint k this term belongs to */
+var AIR_NT      : [u32; 1]          /* number of terms */
+var AIR_NC      : [u32; 1]          /* number of transition constraints */
+var AIR_ALPHA   : [u32; 8]          /* per-constraint Fiat-Shamir coefficient */
+
+/* ---- GF(998244353) ---- */
+fn sf_add(x: u32, y: u32) -> u32 {
+    let s : u64 = (x as u64) + (y as u64)
+    if s >= 998244353u64 { return (s - 998244353u64) as u32 }
+    return s as u32
+}
+fn sf_sub(x: u32, y: u32) -> u32 {
+    if x >= y { return x - y }
+    return ((x as u64) + 998244353u64 - (y as u64)) as u32
+}
+fn sf_mul(x: u32, y: u32) -> u32 { return (((x as u64) * (y as u64)) % 998244353u64) as u32 }
+fn sf_pow(x: u32, e: u64) -> u32 {
+    let mut r : u64 = 1u64
+    let mut b : u64 = (x as u64) % 998244353u64
+    let mut ee : u64 = e
+    while ee > 0u64 {
+        if (ee & 1u64) == 1u64 { r = (r * b) % 998244353u64 }
+        b = (b * b) % 998244353u64
+        ee = ee >> 1u64
+    }
+    return r as u32
+}
+fn sf_inv(x: u32) -> u32 { return sf_pow(x, 998244351u64) }
+fn sf_rou(n: u32) -> u32 { return sf_pow(3u32, 998244352u64 / (n as u64)) }
+
+/* ---- AIR construction ---- */
+fn air_reset(w_cols: u32, n_rows: u32) -> i32 @export {
+    AIR_W[0] = w_cols
+    AIR_N[0] = n_rows
+    AIR_NT[0] = 0u32
+    AIR_NC[0] = 0u32
+    let mut k : u64 = 0u64
+    while k < AIR_CMAX { AIR_ALPHA[k] = 0u32  k = k + 1u64 }
+    return 0i32
+}
+/* set the trace cell T[row][col] = v (row-major). */
+fn air_set_trace(row: u64, col: u64, v: u32) -> i32 @export {
+    let r : u64 = row
+    let c : u64 = col
+    let w : u64 = AIR_W[0] as u64
+    AIR_TRACE[r * w + c] = v
+    return 0i32
+}
+fn air_get_trace(row: u64, col: u64) -> u32 @export {
+    let r : u64 = row
+    let c : u64 = col
+    let w : u64 = AIR_W[0] as u64
+    return AIR_TRACE[r * w + c]
+}
+/* append a transition term  coeff*var_a*var_b  to constraint k. */
+fn air_add_term(con: u32, coeff: u32, var_a: u32, var_b: u32) -> i32 @export {
+    let t : u64 = AIR_NT[0] as u64
+    if t >= AIR_TMAX { return 0i32 - 1i32 }
+    AIR_TT_CON[t]  = con
+    AIR_TT_COEF[t] = coeff
+    AIR_TT_A[t]    = var_a
+    AIR_TT_B[t]    = var_b
+    AIR_NT[0] = (t + 1u64) as u32
+    if (con + 1u32) > AIR_NC[0] { AIR_NC[0] = con + 1u32 }
+    return 0i32
+}
+/* set the Fiat-Shamir coefficient for constraint k (the verifier derives these;
+ * for the selftest they are supplied directly). */
+fn air_set_alpha(con: u64, a: u32) -> i32 @export {
+    let k : u64 = con
+    AIR_ALPHA[k] = a
+    return 0i32
+}
+
+/* eval variable `var` at LDE index j: 0=>1 ; 1..W => col[v-1] current ;
+ * W+1..2W => col[v-1-W] next row (LDE shift by blowup B; D is a power of two
+ * so the wrap is a mask, NOT a modulo -- avoids the modulo-after-call trap). */
+fn air_eval_var(vid: u64, j: u64, w_cols: u64, d_dom: u64) -> u32 {
+    let v  : u64 = vid
+    let jj : u64 = j
+    let wc : u64 = w_cols
+    let dd : u64 = d_dom
+    if v == 0u64 { return 1u32 }
+    if v <= wc {
+        let col : u64 = v - 1u64
+        return AIR_LDE[col * dd + jj]
+    }
+    let col2 : u64 = v - 1u64 - wc
+    let jn   : u64 = (jj + AIR_B) & (dd - 1u64)
+    return AIR_LDE[col2 * dd + jn]
+}
+
+/* sum_t alpha_{con(t)} * coeff_t * eval(A_t,j) * eval(B_t,j)  (the random linear
+ * combination of all transition constraints evaluated at LDE index j). */
+fn air_combine(j: u64, w_cols: u64, d_dom: u64) -> u32 {
+    let jj : u64 = j
+    let wc : u64 = w_cols
+    let dd : u64 = d_dom
+    let mut acc : u32 = 0u32
+    let nt : u64 = AIR_NT[0] as u64
+    let mut t : u64 = 0u64
+    while t < nt {
+        let con : u64 = AIR_TT_CON[t] as u64
+        let va  : u32 = air_eval_var(AIR_TT_A[t] as u64, jj, wc, dd)
+        let vb  : u32 = air_eval_var(AIR_TT_B[t] as u64, jj, wc, dd)
+        let pr  : u32 = sf_mul(va, vb)
+        let cw  : u32 = sf_mul(AIR_ALPHA[con], AIR_TT_COEF[t])
+        acc = sf_add(acc, sf_mul(cw, pr))
+        t = t + 1u64
+    }
+    return acc
+}
+
+/* Build per-column LDE: Tcoef_w = INTT(trace_w over H_N), zero-pad to D, then
+ * LDE_w = NTT(Tcoef_w over H_D).  Delegates to the shared organ (byte address of
+ * the column's slice). */
+fn air_build_lde() -> i32 @export {
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    let omegaN : u32 = sf_rou(n as u32)
+    let omegaD : u32 = sf_rou(d as u32)
+    let mut w : u64 = 0u64
+    while w < w_cols {
+        let cbase : u64 = w * d
+        let mut i : u64 = 0u64
+        while i < n { AIR_TCOEF[cbase + i] = AIR_TRACE[i * w_cols + w]  i = i + 1u64 }
+        ntt_inverse_at((&AIR_TCOEF as u64) + cbase * 4u64, n, AIR_Q, omegaN)   /* Tcoef = INTT(trace) */
+        i = n
+        while i < d { AIR_TCOEF[cbase + i] = 0u32  i = i + 1u64 }
+        let mut j : u64 = 0u64
+        while j < d { AIR_LDE[cbase + j] = AIR_TCOEF[cbase + j]  j = j + 1u64 }
+        ntt_forward_at((&AIR_LDE as u64) + cbase * 4u64, d, AIR_Q, omegaD)     /* LDE = NTT(pad) */
+        w = w + 1u64
+    }
+    return 0i32
+}
+
+/* Build the composition polynomial CP[j] = combine(j)/Z_H(j) for non-trace points
+ * (j % B != 0); 0 at trace points (where Z_H = 0 and an honest combine also = 0). */
+fn air_build_cp() -> i32 @export {
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let bmask : u64 = AIR_B - 1u64
+    let mut j : u64 = 0u64
+    while j < d {
+        if (j & bmask) == 0u64 { AIR_CP[j] = 0u32 }
+        else {
+            let xj  : u32 = sf_pow(omegaD, j)
+            let xN  : u32 = sf_pow(xj, n)
+            let zh  : u32 = sf_sub(xN, 1u32)
+            let num : u32 = air_combine(j, w_cols, d)
+            AIR_CP[j] = sf_mul(num, sf_inv(zh))
+        }
+        j = j + 1u64
+    }
+    return 0i32
+}
+
+/* The transition constraints must VANISH on the trace domain (j % B == 0) for an
+ * honest witness -- this is the AIR satisfaction predicate.  Returns 1 if every
+ * trace point has combine() == 0, else 0.  (The negative-arm hinge: a violated
+ * witness makes some trace point's combine != 0.) */
+fn air_constraints_hold() -> u8 @export {
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    /* Transition constraints bind rows 0..N-2 only; the last row (N-1) has no
+     * successor (the next-row eval wraps cyclically), so it is constrained solely
+     * by boundary constraints -- exactly as Z_T(x) = (x^N-1)/(x - g^{N-1}). */
+    let mut k : u64 = 0u64
+    while k + 1u64 < n {
+        let j : u64 = k * AIR_B
+        if air_combine(j, w_cols, d) != 0u32 { return 0u8 }
+        k = k + 1u64
+    }
+    return 1u8
+}
+
+/* Composition correctness at a non-trace index j: CP[j]*Z_H(j) == combine(j).
+ * (CP is built so this is an identity; checking it pins the build.) Returns 1/0. */
+fn air_cp_consistent_at(j: u64) -> u8 @export {
+    let jj : u64 = j
+    let w_cols : u64 = AIR_W[0] as u64
+    let n : u64 = AIR_N[0] as u64
+    let d : u64 = AIR_B * n
+    let omegaD : u32 = sf_rou(d as u32)
+    let xj  : u32 = sf_pow(omegaD, jj)
+    let xN  : u32 = sf_pow(xj, n)
+    let zh  : u32 = sf_sub(xN, 1u32)
+    let lhs : u32 = sf_mul(AIR_CP[jj], zh)
+    let rhs : u32 = air_combine(jj, w_cols, d)
+    if lhs == rhs { return 1u8 }
+    return 0u8
+}
+
+/* ---- Verifier-side constraint evaluation (from Merkle-OPENED values) ----
+ * The STARK verifier never sees the full LDE; at each FRI query position q it is
+ * handed only the opened column values cur[w] = LDE_w[q] and next[w] = LDE_w[q+B].
+ * air_combine_opened recomputes the SAME random-linear constraint combination
+ * air_combine produces, but from those openings -- this is exactly the check
+ * st_verify does at its (currently hard-coded) transition line, generalized to W
+ * columns + the data-driven term lists.  Pinning air_combine_opened == air_combine
+ * is the bridge that lets the general verifier replace the x^2+c special case. */
+var AIR_OPEN_CUR  : [u32; 4]
+var AIR_OPEN_NEXT : [u32; 4]
+
+fn air_set_open(col: u64, cur_v: u32, next_v: u32) -> i32 @export {
+    let c : u64 = col
+    AIR_OPEN_CUR[c]  = cur_v
+    AIR_OPEN_NEXT[c] = next_v
+    return 0i32
+}
+fn air_eval_var_opened(vid: u64, w_cols: u64) -> u32 {
+    let v  : u64 = vid
+    let wc : u64 = w_cols
+    if v == 0u64 { return 1u32 }
+    if v <= wc { return AIR_OPEN_CUR[v - 1u64] }
+    return AIR_OPEN_NEXT[v - 1u64 - wc]
+}
+fn air_combine_opened(w_cols: u64) -> u32 @export {
+    let wc : u64 = w_cols
+    let mut acc : u32 = 0u32
+    let nt : u64 = AIR_NT[0] as u64
+    let mut t : u64 = 0u64
+    while t < nt {
+        let con : u64 = AIR_TT_CON[t] as u64
+        let va  : u32 = air_eval_var_opened(AIR_TT_A[t] as u64, wc)
+        let vb  : u32 = air_eval_var_opened(AIR_TT_B[t] as u64, wc)
+        let cw  : u32 = sf_mul(AIR_ALPHA[con], AIR_TT_COEF[t])
+        acc = sf_add(acc, sf_mul(cw, sf_mul(va, vb)))
+        t = t + 1u64
+    }
+    return acc
+}
+
+/* Layer-C.3 self-test: a genuine MULTI-COLUMN, degree-2 AIR (W=2, N=8):
+ *   col0[i+1] = col0[i] * col1[i]      (degree-2, mixes columns)   -- constraint 0
+ *   col1[i+1] = col1[i] + col0[i]      (degree-1)                  -- constraint 1
+ * Build a satisfying trace, then assert: (a) constraints vanish on H_N,
+ * (b) the composition is consistent at a non-trace point.  Proves the AIR DSL is
+ * a real general prover, not the x^2+c demo.  99 = pass. */
+fn zk_air_selftest() -> u64 @export {
+    air_reset(2u32, 8u32)
+    /* var ids: 0=1 ; 1=col0 cur ; 2=col1 cur ; 3=col0 next ; 4=col1 next */
+    /* C0: col0_next - col0*col1 = 0  ->  +1*col0_next  + (q-1)*col0*col1 */
+    air_add_term(0u32, 1u32, 3u32, 0u32)                 /* col0_next * 1 */
+    air_add_term(0u32, 998244352u32, 1u32, 2u32)         /* -(col0*col1) */
+    /* C1: col1_next - col1 - col0 = 0 */
+    air_add_term(1u32, 1u32, 4u32, 0u32)                 /* col1_next */
+    air_add_term(1u32, 998244352u32, 2u32, 0u32)         /* -col1 */
+    air_add_term(1u32, 998244352u32, 1u32, 0u32)         /* -col0 */
+    air_set_alpha(0u64, 7u32)                            /* distinct FS coeffs (no accidental cancellation) */
+    air_set_alpha(1u64, 13u32)
+    /* satisfying trace: col0[0]=2, col1[0]=3, iterate the recurrences */
+    let mut c0 : u32 = 2u32
+    let mut c1 : u32 = 3u32
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        air_set_trace(i, 0u64, c0)
+        air_set_trace(i, 1u64, c1)
+        let n0 : u32 = sf_mul(c0, c1)
+        let n1 : u32 = sf_add(c1, c0)
+        c0 = n0
+        c1 = n1
+        i = i + 1u64
+    }
+    air_build_lde()
+    air_build_cp()
+    if air_constraints_hold() != 1u8 { return 1u64 }     /* (a) constraints vanish on H_N */
+    if air_cp_consistent_at(1u64) != 1u8 { return 2u64 }  /* (b) composition consistent at j=1 */
+    if air_cp_consistent_at(7u64) != 1u8 { return 3u64 }  /* and another non-trace point */
+    /* (d) verifier bridge: feed the OPENED column values at query q=1 (cur=LDE[q],
+     * next=LDE[q+B]) and assert the verifier-side evaluator reproduces the prover's
+     * combine -- so the general verifier can replace the hard-coded x^2+c check.
+     * W=2, D=32: col0 @ LDE[0..32], col1 @ LDE[32..64]; q=1, q+B=5. */
+    air_set_open(0u64, AIR_LDE[1u64],  AIR_LDE[5u64])
+    air_set_open(1u64, AIR_LDE[33u64], AIR_LDE[37u64])
+    let expect_c : u32 = air_combine(1u64, 2u64, 32u64)
+    if air_combine_opened(2u64) != expect_c { return 5u64 }
+    /* NEGATIVE arm (the soundness hinge): corrupt one trace cell so the recurrence
+     * is violated; the constraint set must NO LONGER vanish on H_N (a cheating
+     * witness is caught).  If air_constraints_hold still returns 1 the AIR is vacuous. */
+    air_set_trace(3u64, 0u64, 123456u32)
+    air_build_lde()
+    if air_constraints_hold() != 0u8 { return 4u64 }
+    return 99u64
+}

@@ -1,0 +1,27 @@
+/* Falsifier for COMBINE-7 / J-OPT-1: option_u64_some returns 0u64 (== option_u64_none) when the
+ * 256-slot table is full, so "table full" is indistinguishable from "no value" (the X6 sentinel
+ * overload).  Fill all 256 slots, then the 257th some() must return a value DISTINCT from none(),
+ * and is_some() of it must be 0.  BROKEN: the 257th returns 0 == none -> fail.  FIXED: returns
+ * OPTION_U64_FULL (0xFFFF..) != none, which is_some rejects.
+ * Expected exit: 99. */
+module corpus_708
+
+extern @abi(c-msvc-x64) fn option_u64_some(v: u64) -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_none() -> u64 from "option.iii"
+extern @abi(c-msvc-x64) fn option_u64_is_some(o: u64) -> u8 from "option.iii"
+
+fn main() -> u64 {
+    let none : u64 = option_u64_none()
+    let mut i : u32 = 0u32
+    while i < 256u32 {
+        let h : u64 = option_u64_some((i as u64) + 1000u64)
+        if h == none { return 1u64 }                        /* a real some must never equal none */
+        if option_u64_is_some(h) != 1u8 { return 2u64 }
+        i = i + 1u32
+    }
+    /* 257th: the table is now full */
+    let full : u64 = option_u64_some(7u64)
+    if full == none { return 3u64 }                         /* [J-OPT-1] full MUST be distinct from none */
+    if option_u64_is_some(full) != 0u8 { return 4u64 }      /* and full is NOT a some */
+    return 99u64
+}

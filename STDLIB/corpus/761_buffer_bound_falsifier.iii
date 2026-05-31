@@ -1,0 +1,49 @@
+/* 761_buffer_bound_falsifier.iii -- APOTHEOSIS S.5 proof obligation: the
+ * documented fixed-buffer bounds (aes_siv SIV_TBUF[65536]=E2-SIV-1, drbg
+ * DRBG_IN/SEED=D-DRBG-1) are GUARDED and fail CLOSED on oversize input -- not
+ * dead comments.  Each guard checks the LENGTH before touching the buffer, so
+ * feeding an oversize length with a small buffer must return the error code
+ * (never over-read / over-write).  The POSITIVE arms (valid sizes succeed) are
+ * the existing 207_aes_siv / 204_drbg KATs; this is the negative-armed
+ * falsifier (prove-the-negative mandate).  Exit 99 = every guard fired.
+ *   10 = aes_siv_encrypt(pt_len=65537) did NOT reject (-1 expected)
+ *   20 = drbg_instantiate(elen+nlen+plen=769) did NOT reject
+ *   30 = drbg_reseed(elen+alen=769) did NOT reject
+ *   1  = arena alloc failed */
+module corpus_761
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn aes_siv_encrypt(key32: u64, ad: u64, ad_len: u64, pt: u64, pt_len: u64, out: u64) -> i32 from "aes_siv.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 from "drbg.iii"
+extern @abi(c-msvc-x64) fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 from "drbg.iii"
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 16u64)
+    if arena == 0u64 { return 1u64 }
+    /* Small dummy buffers; the guards reject on LENGTH before reading these.
+     * Sized generously (2048) so even a guard-after-read variant cannot over-read
+     * at the oversize length 769 used for the drbg arms. */
+    let key : u64 = arena_alloc1(arena, 32u64)
+    let buf : u64 = arena_alloc1(arena, 2048u64)
+    let out : u64 = arena_alloc1(arena, 2048u64)
+    if key == 0u64 { return 1u64 }
+    if buf == 0u64 { return 1u64 }
+    if out == 0u64 { return 1u64 }
+
+    /* (1) aes_siv_encrypt with pt_len just past the SIV_TBUF[65536] bound. */
+    let r1 : i32 = aes_siv_encrypt(key, buf, 0u64, buf, 65537u64, out)
+    if r1 != 0i32 - 1i32 { return 10u64 }
+
+    /* (2) drbg instantiate with elen+nlen+plen = 769 > 768 (SEED bound). */
+    let r2 : i32 = iii_drbg_instantiate(buf, 769u64, buf, 0u64, buf, 0u64)
+    if r2 != 0i32 - 1i32 { return 20u64 }
+
+    /* (3) drbg reseed with elen+alen = 769 > 768. */
+    let r3 : i32 = iii_drbg_reseed(buf, 769u64, buf, 0u64)
+    if r3 != 0i32 - 1i32 { return 30u64 }
+
+    arena_drop(arena)
+    return 99u64
+}

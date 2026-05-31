@@ -4,13 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "xii_admission.iiipleroma.iiicad.iiicad.iii\0"
+    .ascii "xii_admission.iiipleroma.iiicad.iiicad.iiisov_pipeline.iii\0"
 L_str_1:
-    .ascii "pleroma.iiicad.iiicad.iii\0"
+    .ascii "pleroma.iiicad.iiicad.iiisov_pipeline.iii\0"
 L_str_2:
-    .ascii "cad.iiicad.iii\0"
+    .ascii "cad.iiicad.iiisov_pipeline.iii\0"
 L_str_3:
-    .ascii "cad.iii\0"
+    .ascii "cad.iiisov_pipeline.iii\0"
+L_str_4:
+    .ascii "sov_pipeline.iii\0"
     .section .rodata
 L_CG_ADMIT:
     .quad 0x63
@@ -22,12 +24,27 @@ L_CG_REJECT_SEAL:
     .quad 0x3
 L_CG_REJECT_STRENGTH:
     .quad 0x4
+L_CG_REJECT_KERNEL:
+    .quad 0x5
 L_CG_SUITE_SHA256:
     .quad 0x0
     .section .bss
     .global L_CG_DIGEST
 L_CG_DIGEST:
     .zero 256
+    .section .rodata
+L_CG_CERT:
+    .quad 0x63
+L_CG_CERT_NOPHI:
+    .quad 0xb
+L_CG_CERT_NODOM:
+    .quad 0xc
+L_CG_CERT_NOPROOF:
+    .quad 0xd
+L_CG_CERT_UNSEARCHED:
+    .quad 0xe
+L_CG_CERT_IMPROVABLE:
+    .quad 0xf
     .section .iii.ring3,"n"
     .asciz "cg_decide"
     .text
@@ -45,6 +62,8 @@ cg_decide:
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
     movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -137,6 +156,29 @@ L_if_end_5:
     pushq %rax
     popq %rax
 L_if_end_7:
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movl L_CG_REJECT_KERNEL(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
     movl L_CG_ADMIT(%rip), %eax
     pushq %rax
     popq %rax
@@ -249,7 +291,7 @@ cg_module_ok:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -259,7 +301,7 @@ cg_module_ok:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_11:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -312,6 +354,30 @@ cg_seal_ok:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -40(%rbp)
+    movslq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
     movq -24(%rbp), %rax
     pushq %rax
     leaq L_CG_DIGEST(%rip), %rax
@@ -337,7 +403,7 @@ cg_seal_ok:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_15
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -347,7 +413,7 @@ cg_seal_ok:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_15:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -360,7 +426,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_17
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -370,8 +436,233 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_17:
     movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cg_kernel_ok"
+    .text
+    .global cg_kernel_ok
+    .seh_proc cg_kernel_ok
+cg_kernel_ok:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    subq $32, %rsp
+    callq sov_pipeline_run
+    addq $32, %rsp
+    pushq %rax
+    movabsq $0x63, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cg_cert_action"
+    .text
+    .global cg_cert_action
+    .seh_proc cg_cert_action
+cg_cert_action:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl L_CG_ADMIT(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movl L_CG_CERT_NOPHI(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setbe %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movl L_CG_CERT_NODOM(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movl L_CG_CERT_NOPROOF(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
+    movl L_CG_CERT(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cg_cert_abstain"
+    .text
+    .global cg_cert_abstain
+    .seh_proc cg_cert_abstain
+cg_cert_abstain:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_27
+    movl L_CG_CERT_UNSEARCHED(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_27:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movl L_CG_CERT_IMPROVABLE(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
+    movl L_CG_CERT(%rip), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

@@ -70,7 +70,84 @@ fn iii_ecdsa_p256_sign(d_bytes: u64, z_bytes: u64, k_bytes: u64, sig_out: u64) -
     fn_mul_x(11u64, 10u64, 9u64)          /* s_m */
     fn_from_mont_x(12u64, 11u64)
     fn_get_bytes_x(sig_out + 32u64, 12u64)
+    /* [E-EC-3] degenerate signature (r==0 or s==0) -> verify would REJECT it; signal the
+     * caller to retry with a fresh nonce rather than emit an unverifiable artifact. */
+    if fn_is_zero_x(0u64) == 1u8 { return 1i32 }    /* r == 0 */
+    if fn_is_zero_x(12u64) == 1u8 { return 1i32 }   /* s == 0 */
     return 0i32
+}
+
+/* [E-EC-2] P-256 group order n and half-order n/2 (floor), big-endian, for the
+ * range (1 <= r,s < n) and low-s (s <= n/2, BIP-62 non-malleable) signature checks. */
+var ECDSA_N_BE     : [u8; 32]
+var ECDSA_NHALF_BE : [u8; 32]
+var ECDSA_N_INIT   : u8 = 0u8
+
+fn ecdsa_n_init() -> i32 {
+    if ECDSA_N_INIT == 1u8 { return 0i32 }
+    /* n = FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551 */
+    ECDSA_N_BE[0u64]=0xFFu8   ECDSA_N_BE[1u64]=0xFFu8   ECDSA_N_BE[2u64]=0xFFu8   ECDSA_N_BE[3u64]=0xFFu8
+    ECDSA_N_BE[4u64]=0x00u8   ECDSA_N_BE[5u64]=0x00u8   ECDSA_N_BE[6u64]=0x00u8   ECDSA_N_BE[7u64]=0x00u8
+    ECDSA_N_BE[8u64]=0xFFu8   ECDSA_N_BE[9u64]=0xFFu8   ECDSA_N_BE[10u64]=0xFFu8  ECDSA_N_BE[11u64]=0xFFu8
+    ECDSA_N_BE[12u64]=0xFFu8  ECDSA_N_BE[13u64]=0xFFu8  ECDSA_N_BE[14u64]=0xFFu8  ECDSA_N_BE[15u64]=0xFFu8
+    ECDSA_N_BE[16u64]=0xBCu8  ECDSA_N_BE[17u64]=0xE6u8  ECDSA_N_BE[18u64]=0xFAu8  ECDSA_N_BE[19u64]=0xADu8
+    ECDSA_N_BE[20u64]=0xA7u8  ECDSA_N_BE[21u64]=0x17u8  ECDSA_N_BE[22u64]=0x9Eu8  ECDSA_N_BE[23u64]=0x84u8
+    ECDSA_N_BE[24u64]=0xF3u8  ECDSA_N_BE[25u64]=0xB9u8  ECDSA_N_BE[26u64]=0xCAu8  ECDSA_N_BE[27u64]=0xC2u8
+    ECDSA_N_BE[28u64]=0xFCu8  ECDSA_N_BE[29u64]=0x63u8  ECDSA_N_BE[30u64]=0x25u8  ECDSA_N_BE[31u64]=0x51u8
+    /* n/2 = 7FFFFFFF800000007FFFFFFFFFFFFFFFDE737D56D38BCF4279DCE5617E3192A8 */
+    ECDSA_NHALF_BE[0u64]=0x7Fu8   ECDSA_NHALF_BE[1u64]=0xFFu8   ECDSA_NHALF_BE[2u64]=0xFFu8   ECDSA_NHALF_BE[3u64]=0xFFu8
+    ECDSA_NHALF_BE[4u64]=0x80u8   ECDSA_NHALF_BE[5u64]=0x00u8   ECDSA_NHALF_BE[6u64]=0x00u8   ECDSA_NHALF_BE[7u64]=0x00u8
+    ECDSA_NHALF_BE[8u64]=0x7Fu8   ECDSA_NHALF_BE[9u64]=0xFFu8   ECDSA_NHALF_BE[10u64]=0xFFu8  ECDSA_NHALF_BE[11u64]=0xFFu8
+    ECDSA_NHALF_BE[12u64]=0xFFu8  ECDSA_NHALF_BE[13u64]=0xFFu8  ECDSA_NHALF_BE[14u64]=0xFFu8  ECDSA_NHALF_BE[15u64]=0xFFu8
+    ECDSA_NHALF_BE[16u64]=0xDEu8  ECDSA_NHALF_BE[17u64]=0x73u8  ECDSA_NHALF_BE[18u64]=0x7Du8  ECDSA_NHALF_BE[19u64]=0x56u8
+    ECDSA_NHALF_BE[20u64]=0xD3u8  ECDSA_NHALF_BE[21u64]=0x8Bu8  ECDSA_NHALF_BE[22u64]=0xCFu8  ECDSA_NHALF_BE[23u64]=0x42u8
+    ECDSA_NHALF_BE[24u64]=0x79u8  ECDSA_NHALF_BE[25u64]=0xDCu8  ECDSA_NHALF_BE[26u64]=0xE5u8  ECDSA_NHALF_BE[27u64]=0x61u8
+    ECDSA_NHALF_BE[28u64]=0x7Eu8  ECDSA_NHALF_BE[29u64]=0x31u8  ECDSA_NHALF_BE[30u64]=0x92u8  ECDSA_NHALF_BE[31u64]=0xA8u8
+    ECDSA_N_INIT = 1u8
+    return 0i32
+}
+
+/* 0 if a<b, 1 if a==b, 2 if a>b -- big-endian 32-byte compare (only ==, no signed ordering). */
+fn ec_bytes_cmp(a: u64, b: u64) -> u8 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let av : u8 = pa[i]
+        let bv : u8 = pb[i]
+        if av != bv {
+            if av < bv { return 0u8 }
+            return 2u8
+        }
+        i = i + 1u64
+    }
+    return 1u8
+}
+fn ec_bytes_is_zero(a: u64) -> u8 {
+    let p : *u8 = a as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if p[i] != 0u8 { return 0u8 } ; i = i + 1u64 }
+    return 1u8
+}
+
+/* [E-EC-2] 1u8 iff (r,s) is well-formed: 1<=r<n and 1<=s<n.  This is the
+ * interop-preserving check the default verify enforces (rejects malformed r,s>=n). */
+fn iii_ecdsa_p256_sig_range_ok(sig_bytes: u64) -> u8 @export {
+    ecdsa_n_init()
+    if ec_bytes_is_zero(sig_bytes) == 1u8 { return 0u8 }                          /* r == 0 */
+    if ec_bytes_cmp(sig_bytes, &ECDSA_N_BE as u64) != 0u8 { return 0u8 }          /* r >= n */
+    if ec_bytes_is_zero(sig_bytes + 32u64) == 1u8 { return 0u8 }                  /* s == 0 */
+    if ec_bytes_cmp(sig_bytes + 32u64, &ECDSA_N_BE as u64) != 0u8 { return 0u8 }  /* s >= n */
+    return 1u8
+}
+
+/* [E-EC-2] STRICT, opt-in: 1u8 iff (r,s) is well-formed AND non-malleable (s<=n/2,
+ * BIP-62 low-s).  A security-conscious caller uses this to reject high-s signatures;
+ * the default verify stays interoperable with standard (possibly high-s) signatures. */
+fn iii_ecdsa_p256_sig_inrange(sig_bytes: u64) -> u8 @export {
+    if iii_ecdsa_p256_sig_range_ok(sig_bytes) == 0u8 { return 0u8 }
+    if ec_bytes_cmp(sig_bytes + 32u64, &ECDSA_NHALF_BE as u64) == 2u8 { return 0u8 }  /* s > n/2 */
+    return 1u8
 }
 
 fn iii_ecdsa_p256_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: u64) -> u8 {
@@ -79,6 +156,7 @@ fn iii_ecdsa_p256_verify(qx_bytes: u64, qy_bytes: u64, z_bytes: u64, sig_bytes: 
     fn_set_bytes_x(1u64, sig_bytes + 32u64)       /* s */
     if fn_is_zero_x(0u64) == 1u8 { return 0u8 }
     if fn_is_zero_x(1u64) == 1u8 { return 0u8 }
+    if iii_ecdsa_p256_sig_range_ok(sig_bytes) == 0u8 { return 0u8 }   /* [E-EC-2] range; low-s is opt-in (sig_inrange) */
     fn_set_bytes_x(2u64, z_bytes) fn_reduce_x(2u64)
     fn_to_mont_x(3u64, 1u64)              /* s_m */
     fn_inv_x(4u64, 3u64)                  /* w = s^-1 */
@@ -139,14 +217,19 @@ fn iii_ecdsa_p256_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @exp
     iii_drbg_instantiate(d_bytes, 32u64, z_bytes, 32u64, 0u64, 0u64)
     let mut done : u8 = 0u8
     let mut guard : u64 = 0u64
+    /* retry the nonce until it is nonzero AND the produced (r,s) is non-degenerate
+     * (r!=0 && s!=0) -- [E-EC-3] never emit a signature that verify would reject.  The
+     * degenerate case is astronomically rare, so the common path signs exactly once. */
     while done == 0u8 {
         iii_drbg_generate(&ECDSA_KBUF as u64, 32u64, 0u64, 0u64)
         fn_set_bytes_x(0u64, &ECDSA_KBUF as u64)
         fn_reduce_x(0u64)
-        if fn_is_zero_x(0u64) == 0u8 { done = 1u8 }
+        if fn_is_zero_x(0u64) == 0u8 {
+            fn_get_bytes_x(&ECDSA_KBUF as u64, 0u64)
+            if iii_ecdsa_p256_sign(d_bytes, z_bytes, &ECDSA_KBUF as u64, sig_out) == 0i32 { done = 1u8 }
+        }
         guard = guard + 1u64
         if guard > 64u64 { done = 1u8 }
     }
-    fn_get_bytes_x(&ECDSA_KBUF as u64, 0u64)
-    return iii_ecdsa_p256_sign(d_bytes, z_bytes, &ECDSA_KBUF as u64, sig_out)
+    return 0i32
 }

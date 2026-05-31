@@ -7,6 +7,13 @@
  * compares a fresh instant against the deadline and routes via the
  * on-late action.
  *
+ * APOTHEOSIS S.7 (ADR-S7a): liveness + slot dispatch are DELEGATED to the
+ * one handle organ (memoria/tempaloc.iii) -- the third and last of the
+ * three slot tables (region/instant/deadline) collapsed onto it.  The
+ * former private DEADLINE_LIVE table is gone; a deadline id is a tempaloc
+ * handle tagged TYPE_DEADLINE.  deadline keeps only its DATA arrays
+ * (tick/action), indexed by the local slot tempaloc returns.
+ *
  * Hexad: kind_motion.  Ring: R0.  K: 1.00.
  */
 
@@ -15,6 +22,9 @@ module tempora_deadline
 extern @abi(c-msvc-x64) fn instant_tick(id: u64) -> u64 from "instant.iii"
 extern @abi(c-msvc-x64) fn instant_now_sealed(time_cap: u64) -> u64 from "instant.iii"
 extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+extern @abi(c-msvc-x64) fn tempaloc_alloc(type_tag: u64) -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_slot_of(handle: u64, expected_type: u64) -> u32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_free(handle: u64, expected_type: u64) -> i32 from "tempaloc.iii"
 
 const DEADLINE_INVALID : u64 = 0u64
 
@@ -28,26 +38,14 @@ const DEADLINE_E_LATE     : i32 = -2i32
 
 const DEADLINE_MAX_INSTANCES : u32 = 64u32
 
+/* Must match tempaloc.iii TEMPALOC_TYPE_DEADLINE. */
+const DEADLINE_TYPE : u64 = 3u64
+
 var DEADLINE_TICK    : [u64; 64]   /* expiry tick                          */
 var DEADLINE_ACTION  : [u8;  64]
-var DEADLINE_LIVE    : [u8;  64]
-
-fn deadline_alloc_slot() -> u32 {
-    let mut i : u32 = 0u32
-    while i < DEADLINE_MAX_INSTANCES {
-        if DEADLINE_LIVE[i] == 0u8 { return i }
-        i = i + 1u32
-    }
-    return 0xFFFFFFFFu32
-}
 
 fn deadline_slot_of(id: u64) -> u32 {
-    if id == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = id - 1u64
-    if s >= (DEADLINE_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
-    let si : u32 = s as u32
-    if DEADLINE_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
-    return si
+    return tempaloc_slot_of(id, DEADLINE_TYPE)
 }
 
 /* Create a deadline from an instant id (taken at the deadline tick) +
@@ -55,31 +53,38 @@ fn deadline_slot_of(id: u64) -> u32 {
 fn deadline_at(instant_id: u64, on_late: u8) -> u64 @export {
     let tick : u64 = instant_tick(instant_id)
     if tick == 0u64 { return DEADLINE_INVALID }
-    let s : u32 = deadline_alloc_slot()
+    let id : u64 = tempaloc_alloc(DEADLINE_TYPE)
+    if id == 0u64 { return DEADLINE_INVALID }
+    let s : u32 = tempaloc_slot_of(id, DEADLINE_TYPE)
     if s == 0xFFFFFFFFu32 { return DEADLINE_INVALID }
     DEADLINE_TICK[s]   = tick
     DEADLINE_ACTION[s] = on_late
-    DEADLINE_LIVE[s]   = 1u8
     instant_drop(instant_id)
-    return (s as u64) + 1u64
+    return id
 }
 
-/* Create a deadline `delta_nanos` from now.  Caller must hold a
- * time_cap that's also good enough to read the current instant. */
-fn deadline_in(time_cap: u64, delta_nanos: u64, on_late: u8) -> u64 @export {
+/* Create a deadline `delta_ticks` LOGICAL TICKS from now.  Caller must hold a
+ * time_cap that's also good enough to read the current instant.  APOTHEOSIS S.7
+ * (logical-tick bug fix): instant ticks are a DETERMINISTIC LOGICAL counter
+ * (instant.iii -- no wall clock since the GetTickCount64 nondeterminism leak was
+ * removed), so the delta is a tick count added DIRECTLY.  The old code did
+ * `delta_nanos / 1e6` (a stale GetTickCount64-era ms conversion) and added a
+ * MILLISECOND count to a logical-tick counter -- a unit mismatch that made every
+ * deadline_in deadline meaningless.  delta_ticks = how many subsequent instant
+ * reads the operation may take. */
+fn deadline_in(time_cap: u64, delta_ticks: u64, on_late: u8) -> u64 @export {
     let now_id : u64 = instant_now_sealed(time_cap)
     if now_id == 0u64 { return DEADLINE_INVALID }
     let now_tick : u64 = instant_tick(now_id)
     instant_drop(now_id)
-    /* GetTickCount64 returns milliseconds.  Convert delta_nanos to ms. */
-    let delta_ms : u64 = delta_nanos / 1000000u64
-    let target : u64 = now_tick + delta_ms
-    let s : u32 = deadline_alloc_slot()
+    let target : u64 = now_tick + delta_ticks
+    let id : u64 = tempaloc_alloc(DEADLINE_TYPE)
+    if id == 0u64 { return DEADLINE_INVALID }
+    let s : u32 = tempaloc_slot_of(id, DEADLINE_TYPE)
     if s == 0xFFFFFFFFu32 { return DEADLINE_INVALID }
     DEADLINE_TICK[s]   = target
     DEADLINE_ACTION[s] = on_late
-    DEADLINE_LIVE[s]   = 1u8
-    return (s as u64) + 1u64
+    return id
 }
 
 fn deadline_tick(id: u64) -> u64 @export {
@@ -115,8 +120,8 @@ fn deadline_remaining(id: u64, now_tick: u64) -> u64 @export {
 fn deadline_drop(id: u64) -> i32 @export {
     let s : u32 = deadline_slot_of(id)
     if s == 0xFFFFFFFFu32 { return DEADLINE_E_BADID }
-    DEADLINE_LIVE[s]   = 0u8
     DEADLINE_TICK[s]   = 0u64
     DEADLINE_ACTION[s] = 0u8
+    tempaloc_free(id, DEADLINE_TYPE)
     return DEADLINE_OK
 }

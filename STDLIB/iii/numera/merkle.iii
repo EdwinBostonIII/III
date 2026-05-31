@@ -30,11 +30,22 @@
 module numera_merkle
 
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+/* APOTHEOSIS S.6: hash-parametrized tree -- one builder, two hashes (SHA-256
+ * seal + Keccak-256 commitment), via a SUITE selector (iii-idiomatic, mirroring
+ * cad's suite dispatch -- not a fn-ptr).  keccak256_oneshot takes u64 ptrs. */
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
 
 const MK_OK             : i32 =  0i32
 const MK_E_NULL         : i32 = -1i32
 const MK_E_BADLEN       : i32 = -2i32
 const MK_E_BADIDX       : i32 = -3i32
+
+const MK_SUITE_SHA256   : u32 = 0u32
+const MK_SUITE_KECCAK   : u32 = 1u32
+/* Active hash suite read by _mk_leaf_hash/_mk_node_hash.  Consistent with this
+ * module's existing non-reentrant scratch (MK_LEVEL_A/B, MK_HASH_BUF): set by
+ * the public entry, reset to SHA-256 so the default path is never sticky. */
+var MK_ACTIVE_SUITE : u32 = 0u32
 
 const MK_MAX_LEAVES : u32 = 1024u32
 const MK_MAX_DEPTH  : u32 = 10u32
@@ -62,7 +73,11 @@ fn _mk_leaf_hash(leaf_ptr: u64, leaf_size: u64, out_ptr: u64) -> u32 {
         i = i + 1u64
     }
     let total : u64 = 1u64 + ls_l
-    sha256_oneshot(&MK_HASH_BUF as *u8, total, op_l as *u8)
+    if MK_ACTIVE_SUITE == MK_SUITE_KECCAK {
+        keccak256_oneshot((&MK_HASH_BUF) as u64, total, op_l)
+    } else {
+        sha256_oneshot(&MK_HASH_BUF as *u8, total, op_l as *u8)
+    }
     return 0u32
 }
 
@@ -79,7 +94,11 @@ fn _mk_node_hash(left_ptr: u64, right_ptr: u64, out_ptr: u64) -> u32 {
         MK_HASH_BUF[1u64 + 32u64 + i] = rp[i]
         i = i + 1u64
     }
-    sha256_oneshot(&MK_HASH_BUF as *u8, 65u64, o_l as *u8)
+    if MK_ACTIVE_SUITE == MK_SUITE_KECCAK {
+        keccak256_oneshot((&MK_HASH_BUF) as u64, 65u64, o_l)
+    } else {
+        sha256_oneshot(&MK_HASH_BUF as *u8, 65u64, o_l as *u8)
+    }
     return 0u32
 }
 
@@ -87,7 +106,11 @@ fn _mk_node_hash(left_ptr: u64, right_ptr: u64, out_ptr: u64) -> u32 {
  * each, packed contiguously at `leaves_ptr`.  Writes 32 bytes to out_32.
  * For non-power-of-two leaf counts, the last hash at each level is
  * duplicated (paired with itself) to fill to the next power of two. */
-fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 @export {
+/* APOTHEOSIS S.6: hash-suite-parametrized root.  suite = MK_SUITE_SHA256 (the
+ * seal default) or MK_SUITE_KECCAK (the commitment hash, used by zk Merkle
+ * commitments).  MK_ACTIVE_SUITE is set AFTER the validation early-returns (so a
+ * bad-arg return never leaves it dirty) and reset to SHA-256 before success. */
+fn merkle_compute_root_suite(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, suite: u32, out_32: u64) -> i32 @export {
     let lp_l : u64 = leaves_ptr
     let lc_l : u32 = leaf_count
     let ls_l : u64 = leaf_size
@@ -96,6 +119,8 @@ fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32:
     if op_l == 0u64 { return MK_E_NULL }
     if lc_l == 0u32 { return MK_E_BADLEN }
     if lc_l > MK_MAX_LEAVES { return MK_E_BADLEN }
+    if ls_l > 4127u64 { return MK_E_BADLEN }   /* _mk_leaf_hash writes leaf into MK_HASH_BUF[1..1+ls_l) (4128B) and feeds total=1+ls_l to the hash; ls_l>4127 => OOB read + bytes>=4127 silently skipped => wrong hash [audit E2-MK-1] */
+    MK_ACTIVE_SUITE = suite
 
     /* Hash all leaves into MK_LEVEL_A. */
     let mut k : u32 = 0u32
@@ -146,7 +171,13 @@ fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32:
         }
         j = j + 1u64
     }
+    MK_ACTIVE_SUITE = MK_SUITE_SHA256    /* reset: the SHA-256 default is never sticky for proof/verify */
     return MK_OK
+}
+
+/* SHA-256 Merkle root (the seal default) -- byte-identical to the pre-S.6 API. */
+fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 @export {
+    return merkle_compute_root_suite(leaves_ptr, leaf_count, leaf_size, MK_SUITE_SHA256, out_32)
 }
 
 /* Number of proof steps required for a given (leaf_count, leaf_index).
@@ -184,6 +215,8 @@ fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64
     if lc_l == 0u32 { return MK_E_BADLEN }
     if lc_l > MK_MAX_LEAVES { return MK_E_BADLEN }
     if li_l >= lc_l { return MK_E_BADIDX }
+    if ls_l > 4127u64 { return MK_E_BADLEN }   /* leaf overruns MK_HASH_BUF [audit E2-MK-1] */
+    MK_ACTIVE_SUITE = MK_SUITE_SHA256          /* proof is SHA-256; defensive vs a dirty suite */
 
     /* Hash all leaves into MK_LEVEL_A. */
     let mut k : u32 = 0u32
@@ -261,6 +294,8 @@ fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_
     if pp_l == 0u64 { return 0u8 }
     if rp_l == 0u64 { return 0u8 }
     if ps_l > MK_MAX_DEPTH { return 0u8 }
+    if ls_l > 4127u64 { return 0u8 }   /* leaf overruns MK_HASH_BUF [audit E2-MK-1] */
+    MK_ACTIVE_SUITE = MK_SUITE_SHA256   /* verify is SHA-256; defensive vs a dirty suite */
 
     /* Compute leaf hash into MK_OUT_BUF. */
     _mk_leaf_hash(lp_l, ls_l, &MK_OUT_BUF as u64)
@@ -270,7 +305,11 @@ fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_
     let mut step : u32 = 0u32
     let mut cur_idx : u32 = li_l
     while step < ps_l {
-        let sib_dir : u8 = pb[(step as u64) * 33u64]
+        /* MERKLE-2: the child's side is fixed by the leaf INDEX bit, NOT a prover-supplied
+         * byte -- so cur_idx is load-bearing and a leaf presented at the WRONG index is
+         * rejected (even index -> current is the LEFT child, sibling on the RIGHT). */
+        let mut sib_dir : u8 = 1u8
+        if (cur_idx & 1u32) == 1u32 { sib_dir = 0u8 }   /* odd index -> current is RIGHT child, sibling LEFT */
         /* Sibling hash starts at offset (step*33 + 1). */
         let sib_off : u64 = (step as u64) * 33u64 + 1u64
         if sib_dir == 1u8 {

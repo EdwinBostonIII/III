@@ -165,18 +165,8 @@ fn ma_ready_cycle(z: u32, deps: *u32, dep_n: u32) -> u64 {
     return rc
 }
 
-/* Count ops currently occupying the ROB (issued but not retired). */
-fn ma_in_flight(n: u32) -> u32 {
-    let mut cnt : u32 = 0u32
-    let mut i : u32 = 0u32
-    while i < n {
-        if UARCH_ISSUED[i] == 1u8 {
-            if UARCH_RETIRED[i] == 0u8 { cnt = cnt + 1u32 }
-        }
-        i = i + 1u32
-    }
-    return cnt
-}
+/* [CUT-3/A-MA-1] ma_in_flight deleted: in-order issue/retire make the ROB occupancy exactly
+ * UARCH_NEXT_ISSUE - UARCH_RETIRED_COUNT (O(1)), so the O(n) scan over ISSUED/RETIRED was redundant. */
 
 /* Lowest free port index whose mask covers opc; UARCH_MAX_PORTS if none. */
 fn ma_find_port(opc: u32) -> u32 {
@@ -198,7 +188,7 @@ fn ma_find_port(opc: u32) -> u32 {
 /* Issue stage: from NEXT_ISSUE upward, issue ops in program order while
  * width and ROB capacity permit. Flag-driven (no break, W14). */
 fn ma_stage_issue(n: u32, deps: *u32, dep_n: u32) -> i32 {
-    let mut in_flight : u32 = ma_in_flight(n)
+    let mut in_flight : u32 = UARCH_NEXT_ISSUE - UARCH_RETIRED_COUNT   /* [CUT-3/A-MA-1] O(1) ROB occupancy; RETIRED<=NEXT_ISSUE so no underflow */
     let mut issued_this : u32 = 0u32
     let mut ii : u32 = UARCH_NEXT_ISSUE
     while ii < n {
@@ -539,6 +529,28 @@ fn ma_selftest() -> u64 @export {
         k = k + 1u64
     }
     if mismatch == 1u8 { return 8u64 }
+
+    // KAT 9 [CUT-3/A-MA-1 non-vacuity]: ROB back-pressure -- 3 independent latency-1 ops with
+    // ROB_CAP=2 force op2 to stall until op0/op1 retire -> exactly 3 cycles.  This drives the
+    // in_flight back-pressure branch that the O(1) seed (NEXT_ISSUE - RETIRED_COUNT) must reproduce;
+    // the existing KAT 1-8 never saturate the ROB (cap 224), so this is what makes the cut non-vacuous.
+    ma_init()
+    ma_t_params(4u32, 4u32, 2u32, 4u32)
+    UARCH_T_OPS[0u64] = 0u32
+    UARCH_T_OPS[1u64] = 0u32
+    UARCH_T_OPS[2u64] = 0u32
+    let r9 : i32 = ma_simulate((&UARCH_T_OPS as u64) as *u32, 3u32, (&UARCH_T_DEPS as u64) as *u32, 0u32, (&UARCH_T_OUT as u64) as *u64)
+    if r9 != UARCH_OK { return 9u64 }
+    if UARCH_T_OUT[0u64] != 3u64 { return 9u64 }
+    // sibling arm pins the boundary: same ops, ROB_CAP=4 -> no back-pressure -> 1 cycle.
+    ma_init()
+    ma_t_params(4u32, 4u32, 4u32, 4u32)
+    UARCH_T_OPS[0u64] = 0u32
+    UARCH_T_OPS[1u64] = 0u32
+    UARCH_T_OPS[2u64] = 0u32
+    let r9b : i32 = ma_simulate((&UARCH_T_OPS as u64) as *u32, 3u32, (&UARCH_T_DEPS as u64) as *u32, 0u32, (&UARCH_T_OUT as u64) as *u64)
+    if r9b != UARCH_OK { return 9u64 }
+    if UARCH_T_OUT[0u64] != 1u64 { return 9u64 }
 
     return 99u64
 }

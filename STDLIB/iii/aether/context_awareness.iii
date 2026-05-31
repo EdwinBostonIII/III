@@ -340,6 +340,48 @@ fn ca_add_nn(su: u64, term: u64) -> u64 {
     return su + term
 }
 
+/* SIGNED overflow-checked i64 arithmetic for the OLS products: the window sums can
+ * each be < i64-max yet their PRODUCTS (ni*SUM_TY, num*FP, b_fp*SUM_T_R, ...) wrap
+ * 2^63, corrupting the trend/predict DECISION.  These set CTXA_SAT on overflow so the
+ * caller falls back to the documented degenerate (slope 0 / predict 0) path -- exactly
+ * as for a saturated window.  Bit-63 sign tests only (Trap 3).  For small-score windows
+ * (the KAT regime) nothing overflows, CTXA_SAT stays 0, and results are exact.  [audit context_awareness-1] */
+fn ca_iabs(x: i64) -> i64 {
+    let neg : u64 = ((x as u64) >> 63u64) & 1u64
+    if neg == 1u64 { return 0i64 - x }
+    return x
+}
+fn ca_imul_s(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let au : u64 = a as u64
+    let bu : u64 = b as u64
+    let amin : u64 = 0x8000000000000000u64
+    if au == amin { CTXA_SAT = 1u8 ; return 0i64 }
+    if bu == amin { CTXA_SAT = 1u8 ; return 0i64 }
+    let aa : i64 = ca_iabs(a)
+    let ab : i64 = ca_iabs(b)
+    let lim : i64 = (CTXA_I64_MAX_U as i64) / ab
+    if aa > lim { CTXA_SAT = 1u8 ; return 0i64 }
+    return a * b
+}
+fn ca_iadd_s(a: i64, b: i64) -> i64 {
+    let r : i64 = a + b
+    let sa : u64 = ((a as u64) >> 63u64) & 1u64
+    let sb : u64 = ((b as u64) >> 63u64) & 1u64
+    let sr : u64 = ((r as u64) >> 63u64) & 1u64
+    if sa == sb { if sr != sa { CTXA_SAT = 1u8 } }
+    return r
+}
+fn ca_isub_s(a: i64, b: i64) -> i64 {
+    let r : i64 = a - b
+    let sa : u64 = ((a as u64) >> 63u64) & 1u64
+    let sb : u64 = ((b as u64) >> 63u64) & 1u64
+    let sr : u64 = ((r as u64) >> 63u64) & 1u64
+    if sa != sb { if sr != sa { CTXA_SAT = 1u8 } }
+    return r
+}
+
 /* Walk the window once and fill the module-scope regression sums.  Oldest
  * in-window sample maps to t=0, newest to t=n-1; sample k lives at ring index
  * (WIN_HEAD + WIN_SIZE - n + k) & 63.  All terms are non-negative; the sums use
@@ -389,10 +431,13 @@ fn ca_trend_coefficient(out_b: *i64) -> i32 @export {
     ca_window_sums(n)
     if CTXA_SAT == 1u8 { out_b[0u64] = 0i64 ; return CTXA_OK }
     let ni : i64 = n as i64
-    let num : i64 = ni * CTXA_SUM_TY - CTXA_SUM_T_R * CTXA_SUM_Y
-    let den : i64 = ni * CTXA_SUM_T2_R - CTXA_SUM_T_R * CTXA_SUM_T_R
+    let num : i64 = ca_isub_s(ca_imul_s(ni, CTXA_SUM_TY), ca_imul_s(CTXA_SUM_T_R, CTXA_SUM_Y))
+    let den : i64 = ca_isub_s(ca_imul_s(ni, CTXA_SUM_T2_R), ca_imul_s(CTXA_SUM_T_R, CTXA_SUM_T_R))
+    if CTXA_SAT == 1u8 { out_b[0u64] = 0i64 ; return CTXA_OK }   /* product overflow -> degenerate [audit context_awareness-1] */
     if den == 0i64 { out_b[0u64] = 0i64 ; return CTXA_OK }
-    out_b[0u64] = (num * CTXA_FP_ONE_I) / den
+    let numfp : i64 = ca_imul_s(num, CTXA_FP_ONE_I)
+    if CTXA_SAT == 1u8 { out_b[0u64] = 0i64 ; return CTXA_OK }
+    out_b[0u64] = numfp / den
     return CTXA_OK
 }
 
@@ -410,10 +455,12 @@ fn ca_predict(horizon: u32) -> u64 @export {
     ca_window_sums(n)
     if CTXA_SAT == 1u8 { return 0u64 }
     let ni : i64 = n as i64
-    let a_num : i64 = CTXA_SUM_Y * CTXA_FP_ONE_I - b_fp * CTXA_SUM_T_R
+    let a_num : i64 = ca_isub_s(ca_imul_s(CTXA_SUM_Y, CTXA_FP_ONE_I), ca_imul_s(b_fp, CTXA_SUM_T_R))
+    if CTXA_SAT == 1u8 { return 0u64 }   /* product overflow -> predict 0 [audit context_awareness-1] */
     let a_fp : i64 = a_num / ni
     let t_pred : i64 = (ni - 1i64) + (horizon as i64)
-    let y_fp : i64 = a_fp + b_fp * t_pred
+    let y_fp : i64 = ca_iadd_s(a_fp, ca_imul_s(b_fp, t_pred))
+    if CTXA_SAT == 1u8 { return 0u64 }
     if (((y_fp as u64) >> 63u64) & 1u64) == 1u64 { return 0u64 }
     let y_raw : i64 = y_fp / CTXA_FP_ONE_I
     return y_raw as u64

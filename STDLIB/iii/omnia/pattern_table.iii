@@ -55,6 +55,9 @@ var g_pattern_table       : [u8; 688128]
 var g_pattern_table_used  : u32 = 0u32
 var g_pattern_table_sealed: u8  = 0u8
 var g_global_pattern_set  : [u8; 512]   /* 4096 bits */
+/* W4.3 test affordance: when 1, pattern_register fails (returns 0) without writing -- lets a
+ * falsifier drive resolution_init's failure-propagation path.  Defaults 0; production unaffected. */
+var g_pattern_register_fail_for_test : u8 = 0u8
 
 /* Domain "III_PAT_TABLE" 16 bytes */
 var PT_DOM_TBL : [u8; 16] = [73u8, 73u8, 73u8, 95u8, 80u8, 65u8, 84u8, 95u8, 84u8, 65u8, 66u8, 76u8, 69u8, 0u8, 0u8, 0u8]
@@ -145,7 +148,15 @@ fn pattern_proof_id(p: u64) -> u64 @export {
     return read_u64_le(p + (PF_PROOF_ID as u64))
 }
 
+/* W4.3 falsifier hook: force the next pattern_register calls to fail (test-only). */
+fn pattern_register_set_fail_for_test(on: u8) -> i32 @export {
+    g_pattern_register_fail_for_test = on
+    return 0i32
+}
+
 fn pattern_register(slot: u32, p_template: u64) -> u8 @export {
+    /* W4.3 test affordance (off in production). */
+    if g_pattern_register_fail_for_test == 1u8 { return 0u8 }
     /* HC-1 enforcement: post-seal returns 0 unconditionally */
     if g_pattern_table_sealed == 1u8 { return 0u8 }
     if slot >= PATTERN_REGISTRY_CAP { return 0u8 }

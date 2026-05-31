@@ -1350,3 +1350,45 @@ produces meaningful, kernel-certified enhancements -- or kernel-certified absten
 source, never a rubber stamp. Spec: `DOCS/III-SOVEREIGN-ENHANCEMENT-COORDINATION.md`.
 
 **§8.23 sealed at:** 2026-05-29.
+
+### §8.24 — Evolution baseline: compiler reseal `4e138415` → `196b0c5f` (the `.iii` codegen fixed point moves) (2026-05-31)
+
+BATCH 0 of the production-ready Evolution: re-establish the sealed green baseline so III's
+self-enhancement engine (the Sovereign Ripple Optimizer + `commit_gate` + `ripple_apply`) is unblocked.
+The live `iiis-2` had drifted from the pinned golden because the `.iii` compiler source was enhanced but
+never resealed (the documented "awaiting build_iiis2 reseal" WIP state). The enhancements are functional
+codegen changes, so the drift is **legitimate — proven, not assumed**:
+
+- `cg_r3` `r3_reserve_slot()` — bounds the previously-unchecked `R3_G_LOCAL_COUNT` bumps (match
+  scrutinee, loop counter, struct-field padding) that could push the local count past `R3_MAX_LOCALS`
+  (64), OOB-read `R3_LOCAL_OFF/LEN[>=64]`, and overrun the emitted frame; at the cap it flags
+  `R3_E_INTERNAL` and clamps (clean compile-fail, never memory corruption). Byte-identical codegen for
+  every <64-local function (the entire corpus + the compiler itself).
+- `cg_rm2` `RM2_CHBUF` — a dedicated 1-byte scratch so `cg_emit_ch` can never alias `RM2_NUMBUF[0]`.
+- the `sid` rewrite, the PE emitter (`iii_cg_pe_iiis1`), and the compositions table.
+
+**Convergence — the textbook two-step heal of a codegen bug-fix.** Because the *old* compiler carried
+the `CHBUF` aliasing emission, the `iiis-2` it builds is a TRANSITIONAL stage, not the fixed point:
+`4e138415` (old) → `7aded1aa` (transitional: old compiler emits new source) → `196b0c5f` (stable: the
+new compiler re-emits itself). Verified **`iiis-2 == iiis-3 == iiis-4`** (build_iiis2 then build_iiis3
+each reproduce `196b0c5f`; one extra round confirmed self-reproduction). The **joint compiler/lib fixed
+point** holds: the final compiler rebuilds `libiii_native.a` byte-identically to `13fa921e`.
+
+| Artifact (golden) | Before (§8.23) | After (this reseal) |
+|---|---|---|
+| `iiis-1 == iiis-2 == iiis-3` | `4e138415…0619fa85` | `196b0c5f5159329b2e419aecb561ee57980d62bcc892ea84f260559bcdfaa990` (**MOVED** — `.iii` codegen source enhanced; new fixed point proven `iiis-2≡iiis-3≡iiis-4`) |
+| `STDLIB/build/iii/libiii_native.a` | `9776af67…b684124` | `13fa921e7da475a42ae06a64eaca5a181e26a4033ade7c41d60834e6273f2092` |
+
+**Verified:** build_stdlib **434/0**; FULL corpus **652/0** (one `817_xii_lower_decide` link flake
+re-ran green — an OneDrive/Defender in-place-overwrite lock on the live `.exe` (`ld returned 1`, zero
+undefined refs), defeated by `rm`-before-relink; NOT a defect — it compiles+links+runs=99 standalone);
+bench **7/0** correctness; stage-1 `--check-corpus` **59/0** on both `build_iiis2` and `build_iiis3`.
+Golden re-pinned in the three Ripple executors (`ripple_apply` / `pcc_synthesize` / `ripple_extract`);
+iiis-1 re-frozen to the new fixed point (iiis-0 can no longer re-seed from scratch — pre-existing, per
+`DOCS/III-DISPOSITION-EXECUTION.md`).
+
+**This unblocks the self-enhancement engine:** `ripple_apply`'s GATE2 (compiler byte-UNCHANGED =
+LIBNATIVE) now holds against the live `iiis-2`, so III can certify + apply + gate its own refactorings
+against a true, current golden.
+
+**§8.24 sealed at:** 2026-05-31.

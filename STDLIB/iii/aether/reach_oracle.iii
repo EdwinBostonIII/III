@@ -39,7 +39,12 @@ fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 @export {
     let pb : u64 = pin_bytes
     let pl : u64 = pin_len
     let op : u64 = out_pin
-    cad_oneshot(ROR_SUITE, pb as *u8, pl, op as *u8)
+    let rc : i32 = cad_oneshot(ROR_SUITE, pb as *u8, pl, op as *u8)
+    if rc != ROR_OK {
+        let dp : *u8 = op as *u8
+        let mut z : u64 = 0u64
+        while z < 32u64 { dp[z] = 0u8  z = z + 1u64 }   /* [II-REACH_ORACLE-1/X23] failed pin -> deterministic zero, never stale garbage */
+    }
     return ROR_TIER_PROVISIONAL
 }
 
@@ -63,7 +68,8 @@ fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u
     let pb : u64 = pin_bytes
     let pl : u64 = pin_len
     let cp : u64 = claimed_pin
-    cad_oneshot(ROR_SUITE, pb as *u8, pl, (&ROR_VBUF as u64) as *u8)
+    let rc : i32 = cad_oneshot(ROR_SUITE, pb as *u8, pl, (&ROR_VBUF as u64) as *u8)
+    if rc != ROR_OK { return 0u8 }   /* [II-REACH_ORACLE-2/X23] null/zero input writes nothing -> stale ROR_VBUF would false-match a forged pin; fail closed */
     return cad_eq((&ROR_VBUF as u64) as *u8, cp as *u8)
 }
 

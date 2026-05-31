@@ -1,0 +1,52 @@
+/* 943 -- W4.2 / ENHANCE-17 falsifier: omnia/resolver_memo's collision + eviction guards were
+ * never exercised.  This drives them: two keys that share the low-12-bit initial slot probe to
+ * DISTINCT slots with no false cross-hit; an absent key in the same bucket is rejected (not a
+ * false hit); and filling all 4096 slots then inserting once more FIFO-evicts the lowest-seq
+ * (first) key, which is then absent while the new key is present.  99 = pass. */
+module corpus_943
+
+extern @abi(c-msvc-x64) fn memo_reset() -> i32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_insert(key: u64, p_id: u32, fp: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_lookup(key: u64) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_pattern_id(slot: u32) -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_used() -> u32 from "resolver_memo.iii"
+extern @abi(c-msvc-x64) fn memo_capacity() -> u32 from "resolver_memo.iii"
+
+fn main() -> u64 {
+    memo_reset()
+    if memo_used() != 0u32 { return 1u64 }
+
+    /* COLLISION: k1, k2, k3 all share low-12 bits (= 0) but are distinct keys. */
+    let k1 : u64 = 0x1000u64
+    let k2 : u64 = 0x2000u64
+    let k3 : u64 = 0x3000u64
+    let s1 : u32 = memo_insert(k1, 100u32, 0u64)
+    let s2 : u32 = memo_insert(k2, 200u32, 0u64)
+    if s1 == s2 { return 2u64 }                                  /* probed to distinct slots */
+    let l1 : u32 = memo_lookup(k1)
+    let l2 : u32 = memo_lookup(k2)
+    if l1 == 0xFFFFFFFFu32 { return 3u64 }
+    if l2 == 0xFFFFFFFFu32 { return 4u64 }
+    if memo_pattern_id(l1) != 100u32 { return 5u64 }             /* no false cross-hit */
+    if memo_pattern_id(l2) != 200u32 { return 6u64 }
+    /* FALSIFIER: an ABSENT key in the same bucket is rejected (open-addressing says "no"). */
+    if memo_lookup(k3) != 0xFFFFFFFFu32 { return 7u64 }
+
+    /* EVICTION: fill every slot, then overflow by one -> FIFO-evict the lowest-seq key. */
+    memo_reset()
+    let cap : u32 = memo_capacity()
+    let mut i : u32 = 0u32
+    while i < cap {
+        memo_insert((i as u64) + 1u64, i + 1u32, 0u64)          /* keys 1..cap, seq 1..cap */
+        i = i + 1u32
+    }
+    if memo_used() != cap { return 8u64 }
+    if memo_lookup(1u64) == 0xFFFFFFFFu32 { return 9u64 }        /* first key present pre-eviction */
+    let newk : u64 = 0x7FFFFFFF00u64
+    memo_insert(newk, 9999u32, 0u64)                            /* table full -> evict lowest seq (key 1) */
+    if memo_lookup(1u64) != 0xFFFFFFFFu32 { return 10u64 }       /* FALSIFIER: evicted -> absent */
+    let ln : u32 = memo_lookup(newk)
+    if ln == 0xFFFFFFFFu32 { return 11u64 }                      /* new key present */
+    if memo_pattern_id(ln) != 9999u32 { return 12u64 }
+    return 99u64
+}

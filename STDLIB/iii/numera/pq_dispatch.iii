@@ -37,7 +37,18 @@ fn pq_mldsa_level(suite: u64) -> u64 {                                    /* 44-
     return 5u64
 }
 
+/* [E-PQD-2] every FIPS suite's low-nibble is 1..3 (level/k index); a 0 nibble would
+ * underflow pq_slh_lv (0-1 -> u64 MAX) and index a params table OOB; reject it (and any
+ * out-of-range nibble) at the dispatcher rather than route a degenerate level. */
+fn pq_nibble_ok(suite: u64) -> u8 {
+    let lo : u64 = suite & 0xFu64
+    if lo == 0u64 { return 0u8 }
+    if lo > 3u64 { return 0u8 }
+    return 1u8
+}
+
 fn iii_pq_keygen(suite: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
+    if pq_nibble_ok(suite) == 0u8 { return 0i32 - 1i32 }   /* [E-PQD-2] reject degenerate nibble */
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0100u64 { return iii_mlkem_keygen(pq_mlkem_k(suite), seed, pk, sk) }
     if fam == 0x0110u64 { return iii_mldsa_keygen(pq_mldsa_level(suite), seed, pk, sk) }
@@ -46,6 +57,7 @@ fn iii_pq_keygen(suite: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
 }
 
 fn iii_pq_sign(suite: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    if pq_nibble_ok(suite) == 0u8 { return 0i32 - 1i32 }   /* [E-PQD-2] reject degenerate nibble */
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0110u64 { return iii_mldsa_sign(pq_mldsa_level(suite), sk, msg, msglen, sig, siglen) }
     if fam == 0x0120u64 { return iii_slhdsa_sign(pq_slh_lv(suite), sk, msg, msglen, sig, siglen) }
@@ -53,6 +65,7 @@ fn iii_pq_sign(suite: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64
 }
 
 fn iii_pq_verify(suite: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    if pq_nibble_ok(suite) == 0u8 { return 0i32 - 1i32 }   /* [E-PQD-2] reject degenerate nibble */
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0110u64 { return iii_mldsa_verify(pq_mldsa_level(suite), pk, msg, msglen, sig, siglen) }
     if fam == 0x0120u64 { return iii_slhdsa_verify(pq_slh_lv(suite), pk, msg, msglen, sig, siglen) }
@@ -60,12 +73,14 @@ fn iii_pq_verify(suite: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u
 }
 
 fn iii_pq_encaps(suite: u64, pk: u64, coins: u64, ct: u64, ss: u64) -> i32 @export {
+    if pq_nibble_ok(suite) == 0u8 { return 0i32 - 1i32 }   /* [E-PQD-2] reject degenerate nibble */
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0100u64 { return iii_mlkem_encaps(pq_mlkem_k(suite), pk, coins, ct, ss) }
     return 0i32 - 1i32
 }
 
 fn iii_pq_decaps(suite: u64, sk: u64, ct: u64, ss: u64) -> i32 @export {
+    if pq_nibble_ok(suite) == 0u8 { return 0i32 - 1i32 }   /* [E-PQD-2] reject degenerate nibble */
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0100u64 { return iii_mlkem_decaps(pq_mlkem_k(suite), sk, ct, ss) }
     return 0i32 - 1i32

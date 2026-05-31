@@ -1,0 +1,31 @@
+/* Falsifier for COMBINE-7 / RIPPLE-6 / II-BASE32-1: base32_encode discarded every builder_push_byte
+ * return, so a push into a SEALED builder fails silently and the encode reports B32_OK (success)
+ * despite writing nothing -- a truncated/empty transcode read as complete.  Seal a builder, then
+ * encode a 5-byte input.  BROKEN: returns B32_OK(0).  FIXED: the first push returns BLD_E_SEALED, so
+ * encode returns B32_E_BUILD(-2).
+ * Expected exit: 99 (the encode must report failure on a sealed builder, not silent success). */
+module corpus_710
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn base32_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base32.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let b : u64 = builder_new(a, 64u64)
+    if b == 0u64 { return 1u64 }
+    let src : *u8 = malloc(5u64)
+    src[0] = 1u8  src[1] = 2u8  src[2] = 3u8  src[3] = 4u8  src[4] = 5u8
+    /* sanity: into a FRESH builder, encode succeeds (proves the test is live, not rejecting always) */
+    let ok : i32 = base32_encode(b, src as u64, 5u64)
+    if ok != 0i32 { return 2u64 }
+    /* now seal: any further push MUST fail, so the next encode must report failure */
+    builder_seal(b)
+    let rc : i32 = base32_encode(b, src as u64, 5u64)
+    if rc == 0i32 { return 3u64 }   /* [II-BASE32-1] sealed-builder encode MUST NOT report success */
+    arena_drop(a)
+    return 99u64
+}

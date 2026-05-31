@@ -349,6 +349,7 @@ fn regex_match(root: u32, input: u64, len: u64) -> u8 @export {
     while i < len {
         let c : u32 = p[i] as u32
         node_idx = rx_derivative(node_idx, c)
+        if node_idx == RX_INVALID_IDX { return 0u8 }   /* rx_derivative can overflow the node pool -> SENT; guard before rx_node_kind OOB-reads [audit regex MATH-1] */
         let k : u32 = rx_node_kind(node_idx)
         if k == RX_NULL_SET { return 0u8 }
         i = i + 1u64

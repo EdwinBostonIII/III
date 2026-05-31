@@ -4,12 +4,14 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "kchain.iiikchain.iiikchain.iiimandate_m22.iii\0"
+    .ascii "kchain.iiikchain.iiikchain.iiikchain.iiimandate_m22.iii\0"
 L_str_1:
-    .ascii "kchain.iiikchain.iiimandate_m22.iii\0"
+    .ascii "kchain.iiikchain.iiikchain.iiimandate_m22.iii\0"
 L_str_2:
-    .ascii "kchain.iiimandate_m22.iii\0"
+    .ascii "kchain.iiikchain.iiimandate_m22.iii\0"
 L_str_3:
+    .ascii "kchain.iiimandate_m22.iii\0"
+L_str_4:
     .ascii "mandate_m22.iii\0"
     .section .rodata
 L_MANDATE_PROCESS_BITS:
@@ -59,7 +61,7 @@ L_if_end_1:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq kchain_is_underflow
+    callq kchain_is_live
     addq $32, %rsp
     movzbq %al, %rax
     pushq %rax
@@ -74,7 +76,7 @@ L_if_end_1:
     popq %rax
     testq %rax, %rax
     jz L_if_end_3
-    movabsq $0x1, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -84,6 +86,35 @@ L_if_end_1:
     pushq %rax
     popq %rax
 L_if_end_3:
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq kchain_is_underflow
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -201,7 +232,7 @@ mandate_check_m14_via_match:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -211,7 +242,7 @@ mandate_check_m14_via_match:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -251,7 +282,7 @@ mandate_check_m15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -261,7 +292,36 @@ mandate_check_m15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_9:
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq kchain_is_live
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -292,7 +352,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_13
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -302,7 +362,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_13:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -377,7 +437,7 @@ mandate_audit:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_15
     movl -24(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -391,69 +451,9 @@ mandate_audit:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
-    subq $32, %rsp
-    callq mandate_check_m5
-    addq $32, %rsp
-    movzbq %al, %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_13
-    movl -24(%rbp), %eax
-    pushq %rax
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_13:
-    subq $32, %rsp
-    callq mandate_check_m9
-    addq $32, %rsp
-    movzbq %al, %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_15
-    movl -24(%rbp), %eax
-    pushq %rax
-    movl -48(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
 L_if_end_15:
     subq $32, %rsp
-    callq mandate_check_m10
+    callq mandate_check_m5
     addq $32, %rsp
     movzbq %al, %rax
     pushq %rax
@@ -470,7 +470,7 @@ L_if_end_15:
     jz L_if_end_17
     movl -24(%rbp), %eax
     pushq %rax
-    movl -56(%rbp), %eax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -482,6 +482,66 @@ L_if_end_15:
     pushq %rax
     popq %rax
 L_if_end_17:
+    subq $32, %rsp
+    callq mandate_check_m9
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
+    subq $32, %rsp
+    callq mandate_check_m10
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
     movzbq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -500,7 +560,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_23
     movl -24(%rbp), %eax
     pushq %rax
     movl -64(%rbp), %eax
@@ -514,7 +574,7 @@ L_if_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_23:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -533,7 +593,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_25
     movl -24(%rbp), %eax
     pushq %rax
     movl -72(%rbp), %eax
@@ -547,7 +607,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_25:
     movl -24(%rbp), %eax
     pushq %rax
     subq $8, %rsp

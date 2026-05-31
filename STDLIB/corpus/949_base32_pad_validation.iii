@@ -1,0 +1,51 @@
+/* 949 -- W4.3 / ENHANCE-16 falsifier: verba/base32's decoder now validates the RFC 4648 final
+ * quantum.  Pre-fix, an illegal pad count (2,5,7) left bytes_out at its default 5, so the decoder
+ * "successfully" decoded malformed input (II-BASE32-2).  Now legal pad counts {0,1,6} decode and
+ * an illegal pad count -- or a data char after padding -- is REJECTED.  99 = pass. */
+module corpus_949
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base32.iii"
+
+var SRC_OK  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 84u8, 66u8]   /* "MZXW6YTB" -> "fooba" (pad 0) */
+var SRC_P1  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 84u8, 61u8]   /* "MZXW6YT=" -> 4 bytes (pad 1, legal) */
+var SRC_P6  : [u8; 8] = [77u8, 90u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "MZ======" -> 1 byte (pad 6, legal) */
+var SRC_P2  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 61u8, 61u8]   /* "MZXW6Y==" -> pad 2, ILLEGAL */
+var SRC_P5  : [u8; 8] = [77u8, 90u8, 88u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "MZX=====" -> pad 5, ILLEGAL */
+var SRC_P7  : [u8; 8] = [77u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8, 61u8]   /* "M=======" -> pad 7, ILLEGAL */
+var SRC_DAP : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 61u8, 89u8, 84u8, 66u8]   /* "MZXW=YTB" -> data after pad, ILLEGAL */
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    /* Positive: a full block decodes the five bytes of "fooba". */
+    let bo : u64 = builder_new(a, 64u64)
+    if base32_decode(bo, (&SRC_OK) as u64, 8u64) != 0i32 { return 2u64 }
+    if builder_len(bo) != 5u64 { return 3u64 }
+    let dec : *u8 = builder_seal(bo) as *u8
+    if dec[0u64] != 102u8 { return 4u64 }   /* f */
+    if dec[1u64] != 111u8 { return 5u64 }   /* o */
+    if dec[2u64] != 111u8 { return 6u64 }   /* o */
+    if dec[3u64] != 98u8  { return 7u64 }   /* b */
+    if dec[4u64] != 97u8  { return 8u64 }   /* a */
+
+    /* Legal pads decode to the right byte counts. */
+    let b1 : u64 = builder_new(a, 64u64)
+    if base32_decode(b1, (&SRC_P1) as u64, 8u64) != 0i32 { return 9u64 }
+    if builder_len(b1) != 4u64 { return 10u64 }
+    let b6 : u64 = builder_new(a, 64u64)
+    if base32_decode(b6, (&SRC_P6) as u64, 8u64) != 0i32 { return 11u64 }
+    if builder_len(b6) != 1u64 { return 12u64 }
+
+    /* FALSIFIERS: illegal pad counts and data-after-pad are REJECTED (non-zero rc). */
+    let br : u64 = builder_new(a, 64u64)
+    if base32_decode(br, (&SRC_P2) as u64, 8u64)  == 0i32 { return 13u64 }
+    if base32_decode(br, (&SRC_P5) as u64, 8u64)  == 0i32 { return 14u64 }
+    if base32_decode(br, (&SRC_P7) as u64, 8u64)  == 0i32 { return 15u64 }
+    if base32_decode(br, (&SRC_DAP) as u64, 8u64) == 0i32 { return 16u64 }
+    return 99u64
+}

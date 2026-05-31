@@ -1,0 +1,43 @@
+/* 947 -- W4.3 / ENHANCE-16 falsifier: omnia/dynamic_impact's aggregates are now sign-correct
+ * and complete.  aggregate_perf previously cast each u32 `as u64` (zero-extend), so a negative
+ * basis-point value (II-DYNIMP-2) became ~+4.29e9; aggregate_ux did not exist at all
+ * (II-DYNIMP-1).  This registers a positive and a negative impact and asserts the SIGNED sums:
+ * perf 300 + (-500) = -200, ux 100 + (-50) = 50.  99 = pass. */
+module corpus_947
+
+extern @abi(c-msvc-x64) fn dynamic_impact_register(id: u64, perf_bp: u32, ux_bp: u32) -> i32 from "dynamic_impact.iii"
+extern @abi(c-msvc-x64) fn dynamic_impact_count() -> u32 from "dynamic_impact.iii"
+extern @abi(c-msvc-x64) fn dynamic_impact_perf_bp(id: u64) -> u32 from "dynamic_impact.iii"
+extern @abi(c-msvc-x64) fn dynamic_impact_aggregate_perf() -> u64 from "dynamic_impact.iii"
+extern @abi(c-msvc-x64) fn dynamic_impact_aggregate_ux() -> u64 from "dynamic_impact.iii"
+extern @abi(c-msvc-x64) fn dynamic_impact_aggregate_perf_lo() -> u64 from "dynamic_impact.iii"
+extern @abi(c-msvc-x64) fn dynamic_impact_aggregate_perf_hi() -> u64 from "dynamic_impact.iii"
+
+fn main() -> u64 {
+    /* Hoist the negative encodings into typed locals (inline `0 - x` in an argument or
+     * comparison position trips the iii parser's hexad-literal ambiguity). */
+    let neg500 : u32 = 0u32 - 500u32
+    let neg50  : u32 = 0u32 - 50u32
+    let neg200 : u64 = 0u64 - 200u64
+    let neg200_lo : u64 = neg200 & 0xFFFFFFFFu64
+
+    if dynamic_impact_register(0xA1u64, 300u32, 100u32) != 0i32 { return 1u64 }
+    /* perf = -500, ux = -50 (two's-complement u32). */
+    if dynamic_impact_register(0xB2u64, neg500, neg50) != 0i32 { return 2u64 }
+    if dynamic_impact_count() != 2u32 { return 3u64 }
+    if dynamic_impact_perf_bp(0xB2u64) != neg500 { return 4u64 }
+
+    /* FALSIFIER: the SIGNED perf sum is -200, not a huge positive. */
+    if dynamic_impact_aggregate_perf() != neg200 { return 5u64 }
+    /* II-DYNIMP-1: aggregate_ux now exists and is signed: 100 + (-50) = 50. */
+    if dynamic_impact_aggregate_ux() != 50u64 { return 6u64 }
+    /* lo/hi split is consistent with the signed 64-bit value (high half = all-ones for negative). */
+    if dynamic_impact_aggregate_perf_lo() != neg200_lo { return 7u64 }
+    if dynamic_impact_aggregate_perf_hi() != 0xFFFFFFFFu64 { return 8u64 }
+
+    /* Net can swing back positive: add +1000 -> 300 - 500 + 1000 = 800. */
+    if dynamic_impact_register(0xC3u64, 1000u32, 0u32) != 0i32 { return 9u64 }
+    if dynamic_impact_aggregate_perf() != 800u64 { return 10u64 }
+    if dynamic_impact_aggregate_perf_hi() != 0u64 { return 11u64 }
+    return 99u64
+}

@@ -490,7 +490,7 @@ fn tc_infer(t: u32) -> u32 @export {
         let ia : u32 = tc_infer(a)
         let i : u32 = tc_sort_level(ia)
         if i == TC_NOSORT { return 0u32 }
-        tc_ctx_push(a)
+        if tc_ctx_push(a) != 0u64 { return 0u32 }   /* II-TC-2: fail closed at >TC_CTX_MAX binders (was: ignored -> stack corruption) */
         let ib : u32 = tc_infer(b)
         let j : u32 = tc_sort_level(ib)
         tc_ctx_pop()
@@ -505,7 +505,7 @@ fn tc_infer(t: u32) -> u32 @export {
         let ia : u32 = tc_infer(a)
         let i : u32 = tc_sort_level(ia)
         if i == TC_NOSORT { return 0u32 }
-        tc_ctx_push(a)
+        if tc_ctx_push(a) != 0u64 { return 0u32 }   /* II-TC-2: fail closed at >TC_CTX_MAX binders (was: ignored -> stack corruption) */
         let bt : u32 = tc_infer(body)
         tc_ctx_pop()
         if bt == 0u32 { return 0u32 }
@@ -530,7 +530,7 @@ fn tc_infer(t: u32) -> u32 @export {
         let ia : u32 = tc_infer(a)
         let i : u32 = tc_sort_level(ia)
         if i == TC_NOSORT { return 0u32 }
-        tc_ctx_push(a)
+        if tc_ctx_push(a) != 0u64 { return 0u32 }   /* II-TC-2: fail closed at >TC_CTX_MAX binders (was: ignored -> stack corruption) */
         let ib : u32 = tc_infer(b)
         let j : u32 = tc_sort_level(ib)
         tc_ctx_pop()
@@ -624,7 +624,7 @@ fn tc_infer(t: u32) -> u32 @export {
         if TC_TAG[tr_pw] != TC_PI { return 0u32 }
         let tr_domok : u8 = tc_conv(TC_A[tr_pw], tr_A)
         if tr_domok == 0u8 { return 0u32 }
-        tc_ctx_push(tr_A)
+        if tc_ctx_push(tr_A) != 0u64 { return 0u32 }   /* II-TC-2: fail closed on context overflow */
         let tr_codlv : u32 = tc_sort_level(TC_B[tr_pw])
         tc_ctx_pop()
         if tr_codlv == TC_NOSORT { return 0u32 }
@@ -672,7 +672,7 @@ fn tc_infer(t: u32) -> u32 @export {
         if TC_TAG[nr_pw] != TC_PI { return 0u32 }
         let nr_natd : u8 = tc_conv(TC_A[nr_pw], tc_nat())
         if nr_natd == 0u8 { return 0u32 }
-        tc_ctx_push(tc_nat())
+        if tc_ctx_push(tc_nat()) != 0u64 { return 0u32 }   /* II-TC-2: fail closed on context overflow */
         let nr_cods : u32 = tc_sort_level(TC_B[nr_pw])
         tc_ctx_pop()
         if nr_cods == TC_NOSORT { return 0u32 }
@@ -755,7 +755,7 @@ fn tc_infer(t: u32) -> u32 @export {
         let w_b : u32 = TC_B[t]
         let w_i : u32 = tc_sort_level(tc_infer(w_a))
         if w_i == TC_NOSORT { return 0u32 }
-        tc_ctx_push(w_a)
+        if tc_ctx_push(w_a) != 0u64 { return 0u32 }   /* II-TC-2: fail closed on context overflow */
         let w_j : u32 = tc_sort_level(tc_infer(w_b))
         tc_ctx_pop()
         if w_j == TC_NOSORT { return 0u32 }
@@ -783,7 +783,7 @@ fn tc_infer(t: u32) -> u32 @export {
         let wr_pw : u32 = tc_whnf(wr_pty)
         if TC_TAG[wr_pw] != TC_PI { return 0u32 }
         if tc_conv(TC_A[wr_pw], wr_ww) == 0u8 { return 0u32 }
-        tc_ctx_push(wr_ww)
+        if tc_ctx_push(wr_ww) != 0u64 { return 0u32 }   /* II-TC-2: fail closed on context overflow */
         let wr_cods : u32 = tc_sort_level(TC_B[wr_pw])
         tc_ctx_pop()
         if wr_cods == TC_NOSORT { return 0u32 }
@@ -934,7 +934,7 @@ fn tc_check(t: u32, ty: u32) -> u8 @export {
             let p_dom : u32 = TC_A[w]          /* Pi domain */
             let p_cod : u32 = TC_B[w]          /* Pi codomain (under the binder) */
             if tc_conv(l_dom, p_dom) == 0u8 { return 0u8 }
-            tc_ctx_push(p_dom)
+            if tc_ctx_push(p_dom) != 0u64 { return 0u8 }   /* II-TC-2: fail closed on context overflow */
             let okb : u8 = tc_check(l_body, p_cod)
             tc_ctx_pop()
             return okb
@@ -1830,6 +1830,71 @@ fn p5_kat_cbconv() -> u64 @export {
     return 99u64
 }
 
+/* W2.2 / ENHANCE-21 / SEPARATE-2 -- the PERMANENT, build-gated differential oracle.
+ * cb_conv (first-order SKI combinator reduction) vs tc_conv (the kernel's CCL-backed NbE)
+ * must AGREE on every pair of a fixed, comprehensive corpus spanning the computational
+ * fragment tc_to_cb translates FAITHFULLY: beta, Bool-iota (IF), Nat-iota (ITER/NATREC),
+ * sum-iota (CASE), Id-iota (J), and constructor distinctness -- positive (convertible) AND
+ * negative (non-convertible) arms.  Two independent reduction engines: a soundness bug in
+ * ccl that flips tc_conv must ALSO fool the combinator engine to escape this gate.  Promoted
+ * from the KAT-only cb_agrees path to corpus 938_cb_differential => part of run_corpus GREEN,
+ * so any ccl edit that diverges cb_conv from tc_conv reddens the build (the adversarial
+ * surpass form: a build-time seal gate, not a per-tc_conv runtime tax).
+ * Returns 99 iff every pair agrees; else the 1-based index of the first disagreeing pair.
+ * NOTE: type-level Pi/Sigma conversion is intentionally OUT of scope -- tc_to_cb maps every
+ * type-former to a tag-only atom, so the combinator oracle cannot discriminate their
+ * arguments; that surface is covered by the CCL differential (ccl_conv == tc_conv) below. */
+fn cb_differential_cert() -> u64 @export {
+    tc_reset()
+    let tt : u32 = tc_true()
+    let ff : u32 = tc_false()
+    let z  : u32 = tc_zero()
+    let one : u32 = tc_succ(z)
+    let two : u32 = tc_succ(one)
+    let three : u32 = tc_succ(two)
+
+    /* ---- POSITIVE arms: convertible; both oracles must say YES ---- */
+    let id_b : u32 = tc_lam(tc_bool(), tc_var(0u32))
+    if cb_agrees(tc_app(id_b, tt), tt) != 1u8 { return 1u64 }                 /* beta */
+    if cb_agrees(tc_app(id_b, ff), ff) != 1u8 { return 2u64 }
+    if cb_agrees(tc_app(id_b, tc_app(id_b, tt)), tt) != 1u8 { return 3u64 }   /* nested beta */
+    let id_n : u32 = tc_lam(tc_nat(), tc_var(0u32))
+    if cb_agrees(tc_succ(tc_app(id_n, z)), one) != 1u8 { return 4u64 }        /* beta under SUCC */
+    if cb_agrees(tc_if(tt, tt, ff), tt) != 1u8 { return 5u64 }                /* IF iota (true) */
+    if cb_agrees(tc_if(ff, tt, ff), ff) != 1u8 { return 6u64 }                /* IF iota (false) */
+    if cb_agrees(tc_if(tc_if(tt, ff, tt), tt, ff), ff) != 1u8 { return 7u64 } /* nested IF */
+    if cb_agrees(tc_if(tc_app(id_b, tt), tt, ff), tt) != 1u8 { return 8u64 }  /* beta UNDER iota */
+    if cb_agrees(tc_iter(tt, tc_lam(tc_bool(), ff), one), ff) != 1u8 { return 9u64 }   /* ITER Bool */
+    let succ_lam : u32 = tc_lam(tc_nat(), tc_succ(tc_var(0u32)))
+    if cb_agrees(tc_iter(z, succ_lam, two), two) != 1u8 { return 10u64 }      /* ITER Nat =2 */
+    if cb_agrees(tc_iter(z, succ_lam, three), three) != 1u8 { return 11u64 }  /* ITER Nat =3 */
+    if cb_agrees(tc_iter(z, succ_lam, one), one) != 1u8 { return 12u64 }      /* ITER Nat =1 */
+    let nr_s : u32 = tc_lam(tc_nat(), tc_lam(tc_bool(), ff))
+    let nr : u32 = tc_natrec(tc_lam(tc_nat(), tc_bool()), tt, nr_s, two)
+    if cb_agrees(nr, ff) != 1u8 { return 13u64 }                             /* NATREC Bool */
+    let cmot : u32 = tc_lam(tc_sum(tc_bool(), tc_bool()), tc_bool())
+    let s_l : u32 = tc_ann(tc_inl(tt), tc_sum(tc_bool(), tc_bool()))
+    let c_l : u32 = tc_case(cmot, tc_lam(tc_bool(), tc_var(0u32)), tc_lam(tc_bool(), ff), s_l)
+    if cb_agrees(c_l, tt) != 1u8 { return 14u64 }                            /* CASE inl */
+    let s_r : u32 = tc_ann(tc_inr(tt), tc_sum(tc_bool(), tc_bool()))
+    let c_r : u32 = tc_case(cmot, tc_lam(tc_bool(), ff), tc_lam(tc_bool(), tc_var(0u32)), s_r)
+    if cb_agrees(c_r, tt) != 1u8 { return 15u64 }                            /* CASE inr */
+    let jmot : u32 = tc_lam(tc_bool(), tc_lam(tc_id(tc_bool(), tt, tc_var(0u32)), tc_bool()))
+    if cb_agrees(tc_j(jmot, tt, tc_refl(tt)), tt) != 1u8 { return 16u64 }     /* J refl-iota */
+
+    /* ---- NEGATIVE arms: NON-convertible; both oracles must say NO (so cb_agrees == 1) ---- */
+    if cb_agrees(tt, ff) != 1u8 { return 17u64 }                             /* true vs false */
+    if cb_agrees(z, one) != 1u8 { return 18u64 }                             /* 0 vs 1 */
+    if cb_agrees(one, two) != 1u8 { return 19u64 }                           /* 1 vs 2 */
+    if cb_agrees(tc_if(tt, tt, ff), ff) != 1u8 { return 20u64 }              /* iota result distinct */
+    if cb_agrees(tc_iter(z, succ_lam, one), z) != 1u8 { return 21u64 }       /* iter=1 vs 0 */
+    if cb_agrees(s_l, s_r) != 1u8 { return 22u64 }                           /* inl vs inr */
+    if cb_agrees(tc_lam(tc_bool(), tt), tc_lam(tc_bool(), ff)) != 1u8 { return 23u64 } /* distinct bodies */
+    if cb_agrees(two, z) != 1u8 { return 24u64 }                             /* 2 vs 0 */
+
+    return 99u64
+}
+
 /* ============================================================
  *  Path C brick 16b: TC -> CCL compiler + the beta-eta+iota differential.
  *  ccl_conv(compile x, compile y) == tc_conv(x,y) on the FULL theory incl eta.
@@ -2105,6 +2170,39 @@ fn p5_kat_readback() -> u64 @export {
     /* type with a var-referencing codomain: PI(Bool, Id(Bool, #0, #0)) */
     let r8 : u32 = tc_pi(kb, tc_id(kb, tc_var(0u32), tc_var(0u32)))
     if TC_TAG[ccl_normalize(r8)] != TC_PI { return 8u64 }
+    /* II-CCL-1: a 5-argument NEUTRAL application (#0 applied to five distinct closed
+     * values) is already a normal form; the read-back must preserve ALL five args.
+     * The old ccl_to_tc unrolled only e0..e3, silently dropping the innermost arg for
+     * arity>=5 -> a mis-reified normal form on the kernel's tc_nf path. Round-trip and
+     * confirm conversion-equality: this returns 9 on the buggy reducer, 99 when fixed. */
+    let nv : u32 = tc_var(0u32)
+    let app5 : u32 = tc_app(tc_app(tc_app(tc_app(tc_app(nv, tt), ff), z), tc_tt()), tc_succ(z))
+    if tc_conv(app5, ccl_normalize(app5)) != 1u8 { return 9u64 }
+    return 99u64
+}
+
+/* II-TC-2 falsifier (prove the negative): the typing context stack must FAIL CLOSED
+ * past TC_CTX_MAX (256) binders, not silently mis-push-and-mis-pop. A Pi-chain of
+ * depth > 256 must be REJECTED (tc_infer -> TC_ERR), and the stack must stay intact so
+ * a subsequent in-bounds term still types. (Before the fix, the over-deep push was
+ * ignored while the paired pop still fired -> stack corruption / mis-typing.)
+ * 99 = correct; 1 = shallow chain failed to type; 2 = deep chain was NOT rejected;
+ * 3 = stack corrupted (shallow chain broke after the deep attempt). */
+fn p5_kat_ctxdepth() -> u64 @export {
+    tc_reset()
+    let kb : u32 = tc_bool()
+    /* depth 200 (< TC_CTX_MAX): a well-formed Pi(Bool)…Bool chain infers a sort. */
+    let mut okc : u32 = kb
+    let mut i : u32 = 0u32
+    while i < 200u32 { okc = tc_pi(kb, okc) ; i = i + 1u32 }
+    if tc_infer(okc) == 0u32 { return 1u64 }
+    /* depth 300 (> 256): inference would overflow the context -> must fail closed (TC_ERR). */
+    let mut deep : u32 = kb
+    let mut j : u32 = 0u32
+    while j < 300u32 { deep = tc_pi(kb, deep) ; j = j + 1u32 }
+    if tc_infer(deep) != 0u32 { return 2u64 }
+    /* the stack is balanced after the rejected deep attempt: the shallow chain still types. */
+    if tc_infer(okc) == 0u32 { return 3u64 }
     return 99u64
 }
 
@@ -2139,7 +2237,7 @@ fn tc_var_usage(t: u32, k: u32) -> u32 {
         return tcq_add(uf, tcq_mul(q, ua))
     }
     if tag == TC_LAM {
-        tc_ctx_push(TC_A[t])
+        if tc_ctx_push(TC_A[t]) != 0u64 { return TCQ_OMEGA }   /* II-TC-2: overflow -> conservative OMEGA usage (never under-counts) */
         let r : u32 = tc_var_usage(TC_B[t], k + 1u32)
         tc_ctx_pop()
         return r
@@ -2211,7 +2309,7 @@ fn tc_qtt_ok(t: u32) -> u8 @export {
     if tag == TC_SORT { return 1u8 }    /* A = universe level (payload) */
     if tag == TC_LAM {
         let q : u32 = tcq_decode(TC_MULT[t])
-        tc_ctx_push(TC_A[t])
+        if tc_ctx_push(TC_A[t]) != 0u64 { return 0u8 }   /* II-TC-2: fail closed on context overflow */
         let u : u32 = tc_var_usage(TC_B[t], 0u32)
         let okb : u8 = tc_qtt_ok(TC_B[t])
         tc_ctx_pop()
@@ -2221,14 +2319,14 @@ fn tc_qtt_ok(t: u32) -> u8 @export {
     }
     if tag == TC_PI {
         if tc_qtt_ok(TC_A[t]) == 0u8 { return 0u8 }
-        tc_ctx_push(TC_A[t])
+        if tc_ctx_push(TC_A[t]) != 0u64 { return 0u8 }   /* II-TC-2: fail closed on context overflow */
         let okc : u8 = tc_qtt_ok(TC_B[t])   /* codomain is under the binder */
         tc_ctx_pop()
         return okc
     }
     if tag == TC_SIG {
         if tc_qtt_ok(TC_A[t]) == 0u8 { return 0u8 }
-        tc_ctx_push(TC_A[t])
+        if tc_ctx_push(TC_A[t]) != 0u64 { return 0u8 }   /* II-TC-2: fail closed on context overflow */
         let oks : u8 = tc_qtt_ok(TC_B[t])
         tc_ctx_pop()
         return oks

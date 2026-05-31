@@ -1,0 +1,11 @@
+/* KAT for numera/ntt_bigint -- big-integer multiply via the NTT organ (D-KARA-3, the structural
+ * cure for the silent D-KARA-1 large-operand break).  nb_selftest checks: (1) the 2-prime Garner
+ * CRT round-trips a known value, (2) bigint_mul_ntt agrees with schoolbook bigint_mul across
+ * 1/4/31/100/512-limb and asymmetric (200x37) operands.  The NTT multiply allocates only the
+ * result bigint, so the 64-slot recursion exhaustion that corrupts Karatsuba cannot occur.
+ * Exit 99 = the NTT product is exact at every size. */
+module corpus_724
+
+extern @abi(c-msvc-x64) fn nb_selftest() -> u64 from "ntt_bigint.iii"
+
+fn main() -> u64 { return nb_selftest() }

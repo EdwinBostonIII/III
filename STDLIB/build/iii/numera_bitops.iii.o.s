@@ -1496,6 +1496,33 @@ L_if_end_43:
     pushq %rax
     popq %rax
 L_if_end_45:
+    movabsq $0x8000000000000000, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_47
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_47:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1511,10 +1538,10 @@ L_if_end_45:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -16(%rbp)
+    movq %rax, -24(%rbp)
     movabsq $0x1, %rax
     pushq %rax
-    movl -16(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

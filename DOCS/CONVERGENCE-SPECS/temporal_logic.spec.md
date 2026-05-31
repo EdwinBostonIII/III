@@ -85,10 +85,9 @@ var TL_NODE_B    : [u32; 65536]
 var TL_NODE_USED : u32 = 0u32
 ```
 
-**Fixpoint value table** (the W15 fix — replaces recursion). Bound = `TLOGIC_MAX_SUBF` × `TLOGIC_MAX_SEG` = 1024 × 4096 = 4 194 304 bytes (4 MiB BSS). Indexed `[subformula_local_index * TLOGIC_MAX_SEG + (position - chain_start)]`. `TL_VAL_FILLED` marks which positions have been computed for the active formula so a temporal operator can look up an already-computed sub-result instead of recursing:
+**Fixpoint value table** (the W15 fix — replaces recursion). Bound = `TLOGIC_MAX_SUBF` × `TLOGIC_MAX_SEG` = 1024 × 4096 = 4 194 304 bytes (4 MiB BSS). Indexed `[subformula_local_index * TLOGIC_MAX_SEG + (position - chain_start)]`. Because Pass 2 evaluates node-by-node in arena order (children precede parents) and reads a child's *complete* row, no per-position "computed yet?" flag is needed — the former `TL_VAL_FILLED` marker was write-only with no reader and has been removed (CUT-1; the 4 MiB BSS and its O(subf·L) clear are gone, behaviour byte-identical):
 ```
 var TL_VAL       : [u8; 4194304]   // truth of subformula s at relative position p; bound MAX_SUBF*MAX_SEG
-var TL_VAL_FILLED: [u8; 4194304]   // 1 iff TL_VAL[s,p] has been computed this call
 ```
 Justification of the 4 MiB bound: a constitutional clause formula has ≤ `TLOGIC_MAX_SUBF`=1024 nodes (a clause is human-authored; 1024 connectives is far beyond any real safety property) and a single model-check segment is ≤ `TLOGIC_MAX_SEG`=4096 fragments (one epoch). Segments longer than 4096 are rejected by `tl_eval` with a vacuous **0** and a recorded `TLOGIC_E_FULL` state (M5: refusal, never silent truncation or crash). The preserver chunks longer chains epoch-by-epoch (gospel 22002: it verifies "the segment since the last verification", never the unbounded whole at once for the table path).
 
@@ -157,7 +156,7 @@ Let `start = TL_F_START[slot]`, `end = TL_F_END[slot]`, `nsub = end - start`, se
 - `AND/OR`→ bitwise `&` / `|` of the two child cells
 - `IMPL`  → `if a==0u8 {1u8} else {b}` (one-line else)
   where `child_val = TL_VAL[loc(child), p]`, `loc(x) = x - start`.
-Mark `TL_VAL_FILLED[loc(n),p]=1`.
+(No fill-marker is recorded — Pass 2 reads each child's complete row in arena order; CUT-1.)
 
 **Pass 2 — temporal operators, computed by closed-form scan over the table that Pass 1 (and earlier Pass-2 sub-results) already filled.** Because the child's truth at *every* position is already in `TL_VAL` after Pass 1 (for propositional/atomic children) — and because temporal nodes also have smaller arena indices than their parents (construction guarantees children precede parents) — we run Pass 2 **node-by-node in arena order**, and for each temporal node fill **all** its positions from its child's already-complete row. This is the key: a temporal operator never needs to *call* anything; it *reads* its child's full row `TL_VAL[loc(child), 0..L)`. Order within one node's row matters for the past/future recurrences, so use the standard linear DP recurrences (each O(L), total O(nsub·L) — polynomial, M19-bounded):
 - `NEXT  Xφ`  at p:  `TL_VAL[c, p+1]` if `p+1 < L` else `0`.
@@ -176,7 +175,7 @@ Why this satisfies W15 with **zero** recursion and zero explicit pointer-stack: 
 ### `tl_holds_on_segment(slot, chain_start, chain_end)`
 Fill the table **once** for `[chain_start, chain_end)` (one call into the fixpoint filler), then AND the root's row across all positions: `ok = TL_VAL[loc(root),0]; for p=1..L-1: ok = ok & TL_VAL[loc(root),p]`. This is `G(formula)` over the segment, computed in one table fill — O(nsub·L), versus the gospel's `tl_eval`-per-position which was O(L · nsub·L) = O(nsub·L²). Returns 0 on any refusal (M5).
 
-**Determinism / bit-identity (M2, W5):** no floating point, no clocks, no allocation, no observation of run order. Every cell is a deterministic function of immutable fragment fields and fixed predicate bytecode. The table is fully overwritten (`TL_VAL_FILLED` reset at the top of each fill) so no cross-call state leaks (M13/M20 reflection-boundedness: the checker reasons only about the supplied formula and segment, never about itself). **Witness (M6/M10/M16):** this module *evaluates* properties; it does not publish fragments — the constitution_preserver (Module 19) wraps `tl_eval` results in a Constitutional Compliance Witness. So M6/M10 are satisfied at the preserver boundary; this module's contribution is that its verdict is **recomputable byte-identically** from the recorded formula + segment (M10), which the fixpoint form guarantees.
+**Determinism / bit-identity (M2, W5):** no floating point, no clocks, no allocation, no observation of run order. Every cell is a deterministic function of immutable fragment fields and fixed predicate bytecode. The `TL_VAL` table is fully overwritten every call so no cross-call state leaks (M13/M20 reflection-boundedness: the checker reasons only about the supplied formula and segment, never about itself). **Witness (M6/M10/M16):** this module *evaluates* properties; it does not publish fragments — the constitution_preserver (Module 19) wraps `tl_eval` results in a Constitutional Compliance Witness. So M6/M10 are satisfied at the preserver boundary; this module's contribution is that its verdict is **recomputable byte-identically** from the recorded formula + segment (M10), which the fixpoint form guarantees.
 
 ### Reversibility / cost (M9, M19)
 The module is read-only over the chain: it mutates only its own arenas (formula construction) and the scratch table (evaluation). Construction is reversible via `tl_drop_formula` (LIFO reclaim). Evaluation has no side effect to reverse. Cost is bounded: every public fn is O(`TLOGIC_MAX_SUBF` · `TLOGIC_MAX_SEG`) = O(1024·4096) worst case, a fixed ceiling (M19 cost-lattice-bounded — the table dimensions ARE the cost bound, enforced by the up-front size guards).

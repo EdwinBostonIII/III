@@ -3,6 +3,8 @@
     .att_syntax
     .file 1 "<iii-source>"
     .section .rodata
+L_str_0:
+    .ascii "bound.iii\0"
     .section .rodata
 L_OBST_OK:
     .quad 0x0
@@ -389,9 +391,24 @@ L__obst_slot_of:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
+    movl L_OBST_SLOTS(%rip), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq bnd_index
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -412,55 +429,9 @@ L__obst_slot_of:
     pushq %rax
     popq %rax
 L_if_end_13:
-    movq -16(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    movabsq $0x7f, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movl -32(%rbp), %eax
-    pushq %rax
-    movl L_OBST_SLOTS(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_15
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_15:
     leaq L_OBST_LIVE(%rip), %rax
     pushq %rax
-    movl -32(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -476,7 +447,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_15
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -486,8 +457,8 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
-    movl -32(%rbp), %eax
+L_if_end_15:
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -540,7 +511,7 @@ obs_trace_span_end:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_17
     movslq L_OBST_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -550,7 +521,7 @@ obs_trace_span_end:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_17:
     leaq L_OBST_END_SEQ(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -569,7 +540,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_19
     movslq L_OBST_E_BADSTATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -579,7 +550,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_19:
     leaq L_OBST_END_SEQ(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -653,7 +624,7 @@ obs_trace_span_parent:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -663,7 +634,7 @@ obs_trace_span_parent:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_21:
     leaq L_OBST_PARENT(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -723,7 +694,7 @@ obs_trace_span_trace_id:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_23
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -733,7 +704,7 @@ obs_trace_span_trace_id:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_23:
     leaq L_OBST_TRACE_ID(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -793,7 +764,7 @@ obs_trace_span_start_seq:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_25
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -803,7 +774,7 @@ obs_trace_span_start_seq:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_25:
     leaq L_OBST_START_SEQ(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -863,7 +834,7 @@ obs_trace_span_end_seq:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -873,7 +844,7 @@ obs_trace_span_end_seq:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_27:
     leaq L_OBST_END_SEQ(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -933,7 +904,7 @@ obs_trace_span_duration:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_29
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -943,7 +914,7 @@ obs_trace_span_duration:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_29:
     leaq L_OBST_END_SEQ(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -966,7 +937,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_31
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -976,7 +947,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_31:
     movq -32(%rbp), %rax
     pushq %rax
     leaq L_OBST_START_SEQ(%rip), %rax
@@ -1047,7 +1018,7 @@ obs_trace_span_name_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_33
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1057,7 +1028,7 @@ obs_trace_span_name_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_33:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1070,7 +1041,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_35
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1080,7 +1051,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_35:
     leaq L_OBST_NAME_HASH(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1162,7 +1133,7 @@ obs_trace_clear_all:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_38:
+L_loop_top_36:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_OBST_SLOTS(%rip), %eax
@@ -1175,7 +1146,7 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
+    jz L_loop_end_37
     leaq L_OBST_LIVE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1240,13 +1211,13 @@ L_loop_top_38:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
+    jmp L_loop_top_36
+L_loop_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_40:
+L_loop_top_38:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1000, %rax
@@ -1259,7 +1230,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_39
     leaq L_OBST_NAME_HASH(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1284,8 +1255,8 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_38
+L_loop_end_39:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

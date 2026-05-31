@@ -1,0 +1,8 @@
+/* 961 — W3.14 / ENHANCE-11 falsifier: xoshiro256** jump (2^128) and long_jump
+ * (2^192) split the singleton generator into provably non-overlapping substreams.
+ * Asserts jump advances (non-identity), is deterministic, and that stream0 /
+ * after-jump / after-2-jumps / after-long-jump are pairwise disjoint over a bounded
+ * draw count (the two polynomials yield distinct streams). 99 = pass. */
+module corpus_961
+extern @abi(c-msvc-x64) fn xoshiro_jump_kat() -> u64 from "xoshiro.iii"
+fn main() -> u64 { return xoshiro_jump_kat() }

@@ -1,0 +1,90 @@
+/* 755_ripple_sep_grouping.iii -- W3.1 Step-1 determinism KAT for the O(N) caindex
+ * re-expression of forcefield/ripple_metric rm_sep (was O(N^2) all-pairs).  The
+ * authoritative oracle is rm_unifiable (the per-pair predicate, UNCHANGED): this
+ * test asserts the migrated rm_sep() equals the literal O(N^2) double-loop over
+ * rm_unifiable on the same graph (byte-identical to the old scan, by construction),
+ * across several group sizes, AND that the result is insertion-order independent.
+ *   Arm 10/11/12 : groups {5,3,1,1} + a cap-equal/intent-DIFFERENT pair (excluded);
+ *                  rm_sep == 13 == ground-truth double-loop.
+ *   Arm 20/21    : SAME multiset, interleaved insertion order -> still 13.
+ *   Arm 30/31    : empty graph and single node -> 0 (no pairs).
+ *   Arm 40/41/42 : 10 identical nodes -> C(10,2)=45 (exercises the incremental
+ *                  0+1+...+9 group accumulation), == ground-truth.
+ * Exit 99 = every arm holds. */
+module corpus_755
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_unifiable(i: u32, j: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_sep() -> u32 from "ripple_metric.iii"
+
+/* Add `count` nodes all sharing (cap, iclass) -> one group of size count. */
+fn add_group(cap: u64, iclass: u32, count: u32) -> i32 {
+    let mut k : u32 = 0u32
+    while k < count { rm_add_node(cap, iclass)  k = k + 1u32 }
+    return 0i32
+}
+
+/* Ground-truth O(N^2) all-pairs count over the UNCHANGED rm_unifiable predicate
+ * (this is exactly what the old linear rm_sep computed). */
+fn count_pairs(n: u32) -> u32 {
+    let mut c : u32 = 0u32
+    let mut i : u32 = 0u32
+    while i < n {
+        let mut j : u32 = i + 1u32
+        while j < n {
+            c = c + rm_unifiable(i, j)
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    return c
+}
+
+fn main() -> u64 {
+    /* ---- Graph 1: groups {5,3,1,1} + cap-equal/intent-different pair. ---- */
+    rm_reset()
+    add_group(0x1111u64, 1u32, 5u32)   /* group of 5 -> C(5,2)=10 */
+    add_group(0x2222u64, 2u32, 3u32)   /* group of 3 -> C(3,2)=3  */
+    add_group(0x3333u64, 3u32, 1u32)   /* singleton               */
+    add_group(0x4444u64, 4u32, 1u32)   /* singleton               */
+    rm_add_node(0x5555u64, 5u32)       /* cap 0x5555 iclass 5     */
+    rm_add_node(0x5555u64, 6u32)       /* cap-equal but iclass 6 -> NOT a pair */
+    /* 12 nodes; expected separation = 10 + 3 = 13. */
+    if rm_sep() != 13u32 { return 10u64 }
+    if rm_sep() != count_pairs(12u32) { return 11u64 }   /* == ground-truth scan */
+    if count_pairs(12u32) != 13u32 { return 12u64 }
+
+    /* ---- Graph 2: SAME multiset, interleaved order -> order independence. ---- */
+    rm_reset()
+    rm_add_node(0x5555u64, 5u32)
+    add_group(0x1111u64, 1u32, 1u32)
+    add_group(0x2222u64, 2u32, 1u32)
+    add_group(0x1111u64, 1u32, 1u32)
+    rm_add_node(0x3333u64, 3u32)
+    add_group(0x2222u64, 2u32, 1u32)
+    add_group(0x1111u64, 1u32, 1u32)
+    rm_add_node(0x5555u64, 6u32)
+    add_group(0x1111u64, 1u32, 1u32)
+    rm_add_node(0x4444u64, 4u32)
+    add_group(0x2222u64, 2u32, 1u32)
+    add_group(0x1111u64, 1u32, 1u32)
+    /* 0x1111/1 x5, 0x2222/2 x3, 0x3333/3 x1, 0x4444/4 x1, 0x5555/5 x1, 0x5555/6 x1 */
+    if rm_sep() != 13u32 { return 20u64 }
+    if rm_sep() != count_pairs(12u32) { return 21u64 }
+
+    /* ---- Graph 3: empty + single node -> 0. ---- */
+    rm_reset()
+    if rm_sep() != 0u32 { return 30u64 }
+    rm_add_node(0x9999u64, 9u32)
+    if rm_sep() != 0u32 { return 31u64 }
+
+    /* ---- Graph 4: 10 identical nodes -> C(10,2)=45 (accumulation stress). ---- */
+    rm_reset()
+    add_group(0x7777u64, 7u32, 10u32)
+    if rm_sep() != 45u32 { return 40u64 }
+    if rm_sep() != count_pairs(10u32) { return 41u64 }
+    if count_pairs(10u32) != 45u32 { return 42u64 }
+
+    return 99u64
+}

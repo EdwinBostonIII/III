@@ -1,0 +1,42 @@
+/* 995_mldsa_siglen_guard.iii -- falsifier for iii_mldsa_verify's signature-length guard
+ * (C.1 PQ negative arm, mldsa.iii:1082 `if siglen != sigbytes return -1`). A signature presented
+ * with the WRONG declared length must be REJECTED (-1) before any polynomial unpack -- a verifier
+ * that reads a short/long sig buffer past its bound is an OOB hazard. The good arm uses a GENUINE
+ * signature (keygen->sign), so only the wrong length (sl-1, sl+1) can cause -1, isolating the guard
+ * from ordinary bad-signature rejection (verify returns -1 for both). 198_mldsa_roundtrip only ever
+ * passes the exact siglen, so the length guard had no falsifier. 99 = pass. */
+module corpus_995
+
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+
+const NEG1 : i32 = -1i32
+
+var SEED : [u8; 64]
+var PK   : [u8; 2048]
+var SK   : [u8; 5120]
+var SIG  : [u8; 4096]
+var SLB  : [u8; 16]
+var MSG  : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = ((0x42u64 + i) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { MSG[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    iii_mldsa_keygen(2u64, &SEED as u64, &PK as u64, &SK as u64)
+    let sr : i32 = iii_mldsa_sign(2u64, &SK as u64, &MSG as u64, 32u64, &SIG as u64, &SLB as u64)
+    if sr != 0i32 { return 1u64 }
+    let sl : u64 = (SLB[0u64] as u64) | ((SLB[1u64] as u64) << 8u64) | ((SLB[2u64] as u64) << 16u64) | ((SLB[3u64] as u64) << 24u64)
+
+    /* admit: the genuine signature at its exact length verifies */
+    if iii_mldsa_verify(2u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl) != 0i32 { return 2u64 }
+    /* reject: one byte short -> -1 (length guard; the sig bytes are valid, so only the length fails) */
+    if iii_mldsa_verify(2u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl - 1u64) != NEG1 { return 3u64 }
+    /* reject: one byte long -> -1 */
+    if iii_mldsa_verify(2u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl + 1u64) != NEG1 { return 4u64 }
+
+    return 99u64
+}

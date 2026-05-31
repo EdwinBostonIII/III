@@ -4,20 +4,24 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "field.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "field.iiibigint.iiibigint_div.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_1:
-    .ascii "bigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "bigint.iiibigint_div.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_2:
-    .ascii "crystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "bigint_div.iiibigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_3:
-    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "bigint.iiicrystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_4:
-    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iiicrystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_5:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "crystal.iiimhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_6:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_7:
+    .ascii "mhash.iiimhash.iiimhash.iii\0"
+L_str_8:
+    .ascii "mhash.iiimhash.iii\0"
+L_str_9:
     .ascii "mhash.iii\0"
     .section .rodata
 L_FIELD_CRYSTAL_FAIL_ZERO:
@@ -504,7 +508,35 @@ L_if_end_5:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movq -24(%rbp), %rax
+    pushq %rax
     movq -16(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq bigint_mod
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_7
+    movq -48(%rbp), %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -522,11 +554,24 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movl L_FIELD_CRYSTAL_FAIL_ZERO(%rip), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq bigint_drop
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -586,7 +631,7 @@ fp_inv_unwrap_or_invalid:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -596,7 +641,7 @@ fp_inv_unwrap_or_invalid:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_11:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -615,7 +660,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -625,7 +670,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -665,7 +710,7 @@ fp_inv_failure_crystal_for:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -675,7 +720,7 @@ fp_inv_failure_crystal_for:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -694,7 +739,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -704,7 +749,7 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax

@@ -2,7 +2,10 @@
 
 ## Status
 
-FROZEN.
+FROZEN — **superseded by ADR-RES-009-A** (W5.3 / KEEP-1) for the coefficient-table encoding.
+The two-seal architecture below stands; the frozen coefficient bytes were corrected (six rows
+whose little-endian encoding did not decode to their documented magnitudes) and the seal reissued.
+See `DOCS/ADR/ADR-RES-009-A.md`.
 
 ## Context
 

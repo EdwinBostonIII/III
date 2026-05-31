@@ -165,7 +165,11 @@ fn sl_snapshot(op_id: *u8, ante_snap: u32, root: *u8) -> u32 @export {
     let slot : u32 = SNAPL_USED
     SNAPL_USED = SNAPL_USED + 1u32
     SNAPL_LIVE[slot] = 1u8
-    SNAPL_ANTE[slot] = ante_snap
+    /* Normalize an out-of-range antecedent to the genesis sentinel so the chain
+     * walkers (sl_le / sl_meet) always terminate safely.  [audit snapshot_lattice-2] */
+    let mut ante_norm : u32 = ante_snap
+    if ante_snap >= SNAPL_MAX { ante_norm = SNAPL_SENT }
+    SNAPL_ANTE[slot] = ante_norm
     ident_copy(root, sl_root_ptr(slot))
     /* Build the 72-byte snap_id preimage: ante_id(32) || op_id(32) || time(8 LE). */
     let mut b : u64 = 0u64
@@ -238,6 +242,11 @@ fn sl_le(a: u32, b: u32) -> u8 @export {
  * single-parent chains, i.e. the meet.  Two bounded while loops; no recursion, no
  * break (W14/W15); equality-only sentinel compares (W11). */
 fn sl_meet(a: u32, b: u32) -> u32 @export {
+    /* a,b are caller-supplied slot ids indexing SNAPL_SEEN/SNAPL_ANTE[8192] with no
+     * range check; fail closed (SNAPL_SENT = no common antecedent) for out-of-range
+     * ids instead of OOB-reading/writing the arrays.  [audit snapshot_lattice-1] */
+    if a >= SNAPL_MAX { return SNAPL_SENT }
+    if b >= SNAPL_MAX { return SNAPL_SENT }
     let mut z : u32 = 0u32
     while z < SNAPL_MAX {
         SNAPL_SEEN[z] = 0u8

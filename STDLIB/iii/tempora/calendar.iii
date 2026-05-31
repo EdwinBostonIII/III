@@ -77,7 +77,11 @@ fn cal_civil_from_days(days_unix: u64) -> i32 {
     return CAL_OK
 }
 
-fn cal_unix_to_civil(unix_seconds: u64) -> i32 @export {
+/* Pure decompose: Unix seconds -> (year, month, day, hour, min, sec) stored
+ * in CAL_LAST_* (read via the cal_last_* accessors).  APOTHEOSIS S.7 step 7:
+ * this is the side-effect-free (no I/O, no alloc) civil decomposition the
+ * seal_organ reuses; cal_unix_to_civil is a thin compatibility wrapper. */
+fn cal_decompose_unix(unix_seconds: u64) -> i32 @export {
     let days : u64 = unix_seconds / 86400u64
     let secs_in_day : u64 = unix_seconds - days * 86400u64
     cal_civil_from_days(days)
@@ -89,6 +93,10 @@ fn cal_unix_to_civil(unix_seconds: u64) -> i32 @export {
     CAL_LAST_MIN  = mm as u32
     CAL_LAST_SEC  = ss as u32
     return CAL_OK
+}
+
+fn cal_unix_to_civil(unix_seconds: u64) -> i32 @export {
+    return cal_decompose_unix(unix_seconds)
 }
 
 fn cal_last_year() -> u32 @export { return CAL_LAST_YEAR }

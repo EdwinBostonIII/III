@@ -25,28 +25,23 @@ extern @abi(c-msvc-x64) fn scalar_u64_mul_did_overflow(a: u64, b: u64) -> u8 fro
 extern @abi(c-msvc-x64) fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
 extern @abi(c-msvc-x64) fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 from "scalar.iii"
 extern @abi(c-msvc-x64) fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
+/* COMBINE-11: scalar's single-pass saturating ops (no double op-evaluation). */
+extern @abi(c-msvc-x64) fn scalar_u64_add_sat(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_sub_sat(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u64_mul_sat(a: u64, b: u64) -> u64 from "scalar.iii"
 
 /* --- u64 saturating --- */
 
 fn sat_add_u64(a: u64, b: u64) -> u64 @export {
-    if scalar_u64_add_did_overflow(a, b) == 1u8 {
-        return 0xFFFFFFFFFFFFFFFFu64
-    }
-    return a + b
+    return scalar_u64_add_sat(a, b)   /* COMBINE-11: single-pass (was check-then-recompute) */
 }
 
 fn sat_sub_u64(a: u64, b: u64) -> u64 @export {
-    if scalar_u64_sub_did_underflow(a, b) == 1u8 {
-        return 0u64
-    }
-    return a - b
+    return scalar_u64_sub_sat(a, b)   /* COMBINE-11 */
 }
 
 fn sat_mul_u64(a: u64, b: u64) -> u64 @export {
-    if scalar_u64_mul_did_overflow(a, b) == 1u8 {
-        return 0xFFFFFFFFFFFFFFFFu64
-    }
-    return a * b
+    return scalar_u64_mul_sat(a, b)   /* COMBINE-11 */
 }
 
 fn sat_div_u64(a: u64, b: u64) -> u64 @export {

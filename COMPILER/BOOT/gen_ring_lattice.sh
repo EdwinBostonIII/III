@@ -86,6 +86,8 @@ GEN_BLOCK="$(mktemp)"
     printf 'fn katabasis_ring_constructor(src: u32, dst: u32) -> u32 @export {\n'
     printf '    let a : u32 = src\n'
     printf '    let b : u32 = dst\n'
+    printf '    if a > KRL_RM4 { return KRL_C_NONE }   /* domain guard: an out-of-range/u32-wrapping src cannot alias a legal key */\n'
+    printf '    if b > KRL_RM4 { return KRL_C_NONE }   /* domain guard: ... nor dst (key = a*5+b is bijective only on rings 0..4) */\n'
     printf '    let key : u32 = (a * 5u32) + b\n'
     for ((i=0; i<N; i++)); do
         sc="$(code_of "${SRCS[i]}")"; dc="$(code_of "${DSTS[i]}")"

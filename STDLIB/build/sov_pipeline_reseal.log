@@ -1,0 +1,19 @@
+=== build_stdlib (lib + numera/sov_pipeline = 420 modules) ===
+stdlib_exit=0
+  PASS = 420
+  FAIL = 0
+  TOTAL= 420
+=== build_iiis2 --check-corpus (iiis-2 MUST stay 4e138415) ===
+i2_exit=0
+[iiis-2 build] corpus equivalence: 59 passed, 0 failed
+=== build_iiis3 --check-corpus ===
+i3_exit=0
+[iiis-3 build] corpus equivalence: 59 passed, 0 failed
+=== MHASHES (iiis-2/3 stay 4e138415; lib drifts to NEW) ===
+4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85 *COMPILED/iiis-2.exe
+4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85 *COMPILED/iiis-3.exe
+913a7ffc339e13837d435cbbe97cda604226ab6468e7c930babebf32ec6ae205 */c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+=== run_corpus (expect 916 PASS + 548/0) ===
+corpus_exit=0
+  PASS  916_sov_pipeline : exit=99
+  PASS=548  FAIL=0  SKIP=96  TOTAL=548

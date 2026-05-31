@@ -67,6 +67,26 @@ fn main() -> u64 {
     if out[5] != 98u8 { return 13u64 }
     builder_drop(bid)
 
+    /* Normalize ".." resolution: "/foo/../bar" -> "/bar" [audit H-PATH-1] */
+    let n5 : u64 = make_str(buf, "/foo/../bar", 11u64)
+    let bid5 : u64 = builder_new(a, 64u64)
+    path_normalize(bid5, buf, n5)
+    if builder_len(bid5) != 4u64 { return 14u64 }
+    let out5 : *u8 = builder_seal(bid5) as *u8
+    if out5[0] != 47u8 { return 15u64 }
+    if out5[1] != 98u8 { return 16u64 }
+    if out5[3] != 114u8 { return 17u64 }
+    builder_drop(bid5)
+
+    /* Relative ".." : "a/../b" -> "b" */
+    let n6 : u64 = make_str(buf, "a/../b", 6u64)
+    let bid6 : u64 = builder_new(a, 64u64)
+    path_normalize(bid6, buf, n6)
+    if builder_len(bid6) != 1u64 { return 18u64 }
+    let out6 : *u8 = builder_seal(bid6) as *u8
+    if out6[0] != 98u8 { return 19u64 }
+    builder_drop(bid6)
+
     arena_drop(a)
     free(buf)
     return 99u64

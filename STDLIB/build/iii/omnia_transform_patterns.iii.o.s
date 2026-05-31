@@ -84,6 +84,10 @@ L_TX_NAME_BUF:
     .global L_g_transform_fn_table
 L_g_transform_fn_table:
     .zero 4608
+    .section .data
+    .global L_TX_REG_FAIL
+L_TX_REG_FAIL:
+    .quad 0x0
     .section .iii.ring3,"n"
     .asciz "tp_table_set"
     .text
@@ -1044,6 +1048,28 @@ L__tx_register:
     movzbq %al, %rax
     pushq %rax
     popq %rax
+    movq %rax, -40(%rbp)
+    movzbq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_TX_REG_FAIL(%rip)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
     movq -32(%rbp), %rax
     pushq %rax
     movzbq -24(%rbp), %rax
@@ -1095,6 +1121,10 @@ transform_register_all:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_TX_REG_FAIL(%rip)
     leaq tp_iii_to_asm(%rip), %rax
     pushq %rax
     popq %rax
@@ -1623,6 +1653,32 @@ transform_register_all:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movzbq L_TX_REG_FAIL(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

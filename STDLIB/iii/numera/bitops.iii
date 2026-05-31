@@ -115,6 +115,8 @@ fn bitops_log2_floor64(v: u64) -> u32 @export {
 fn bitops_next_pow2_64(v: u64) -> u64 @export {
     if v == 0u64 { return 0u64 }
     if v == 1u64 { return 1u64 }
+    let topbit : u64 = 0x8000000000000000u64
+    if v > topbit { return 0u64 }   /* no power of two > 2^63 fits u64; `1u64 << 64` is UB (x86: shift mod 64 -> wrong) [audit D-BIT-1] */
     let lg : u32 = bitops_log2_floor64(v - 1u64)
     return 1u64 << ((lg + 1u32) as u64)
 }

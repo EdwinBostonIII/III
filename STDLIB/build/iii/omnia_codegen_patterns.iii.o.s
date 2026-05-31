@@ -44,6 +44,10 @@ L_CG_TEMPLATE_BUF:
     .global L_CG_NAME_BUF
 L_CG_NAME_BUF:
     .zero 256
+    .section .data
+    .global L_CG_REG_FAIL
+L_CG_REG_FAIL:
+    .quad 0x0
     .section .iii.ring3,"n"
     .asciz "_cg_register"
     .text
@@ -271,6 +275,28 @@ L__cg_register:
     movzbq %al, %rax
     pushq %rax
     popq %rax
+    movq %rax, -72(%rbp)
+    movzbq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_1
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_CG_REG_FAIL(%rip)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -301,6 +327,10 @@ codegen_register_all:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_CG_REG_FAIL(%rip)
     subq $8, %rsp
     movabsq $0x30, %rax
     pushq %rax
@@ -1030,6 +1060,32 @@ codegen_register_all:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movzbq L_CG_REG_FAIL(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

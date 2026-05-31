@@ -28,13 +28,28 @@ extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: 
 extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
 extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) -> u64 from "keccak.iii"
 extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+/* W0.7 / COMBINE-1: the Dilithium NTT butterfly now lives in the shared organ
+ * (numera/ntt.iii); mldsa_ntt_work/mldsa_invntt_work delegate to the tabled cores
+ * (min_len=1 -> complete; start_k=255).  MLDSA_ZETAS is u64 so the organ's u64
+ * zeta-table reader can index it directly.  Final ×n^-1 inverse scale stays here. */
+extern @abi(c-msvc-x64) fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 from "ntt.iii"
+/* APOTHEOSIS C.1: the per-q descriptor over the same organ (consumes ntt_ctx). */
+extern @abi(c-msvc-x64) fn ntt_ctx_forward(row: u64, base: u64, zeta_addr: u64) -> i32 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_inverse(row: u64, base: u64, zeta_addr: u64) -> i32 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_mldsa() -> u64 from "ntt_ctx.iii"
+/* W0.5: Montgomery-form zetas for the organ NTT cores (Dilithium pointwise is
+ * zeta-free, so no plain-zeta consumer remains -- MLDSA_ZETAS_MONT[i]=ZETAS[i]*R mod q). */
+extern @abi(c-msvc-x64) fn mont_to_form(a: u64, n: u64) -> u64 from "modular_mont.iii"
 
 const MLDSA_Q  : u64 = 8380417u64
 const MLDSA_QH : u64 = 4190208u64    /* (q-1)/2 */
 const MLDSA_N  : u64 = 256u64
 
-/* zeta^brv(i) mod q, plain domain, computed once. */
-var MLDSA_ZETAS : [u32; 256]
+/* zeta^brv(i) mod q, plain domain, computed once.  u64 so the shared NTT organ's
+ * u64 zeta-table reader can index it directly (W0.7); values < q < 2^23. */
+var MLDSA_ZETAS : [u64; 256]
+var MLDSA_ZETAS_MONT : [u64; 256]   /* Montgomery-form zetas for the NTT (W0.5) */
 var MLDSA_ZINIT : [u32; 1]
 
 /* slot pool: 160 slots of 256 coeffs.  A=k*l (<=56) + ~12 vectors of <=8
@@ -66,9 +81,12 @@ fn mldsa_init_zetas() -> i32 {
             x = x >> 1u64
             bb = bb + 1u64
         }
-        MLDSA_ZETAS[i] = mldsa_powmod(1753u64, br) as u32
+        MLDSA_ZETAS[i] = mldsa_powmod(1753u64, br)
         i = i + 1u64
     }
+    /* W0.5: derive the Montgomery-form zetas (ZETAS*R mod q) for the organ NTT cores. */
+    let mut m : u64 = 0u64
+    while m < 256u64 { MLDSA_ZETAS_MONT[m] = mont_to_form(MLDSA_ZETAS[m], MLDSA_Q)  m = m + 1u64 }
     MLDSA_ZINIT[0] = 1u32
     return 0i32
 }
@@ -87,49 +105,14 @@ fn mldsa_work_out(s: u64) -> i32 {
     return 0i32
 }
 
-/* NTT on WORK (verbatim proven 4.4.1 code, unsigned u64 +q butterflies). */
+/* Complete Dilithium NTT on WORK -- delegates to the shared organ (W0.7/COMBINE-1),
+ * byte-identical to the prior inline transform. */
 fn mldsa_ntt_work() -> i32 {
-    let mut k : u64 = 0u64
-    let mut len : u64 = 128u64
-    while len > 0u64 {
-        let mut start : u64 = 0u64
-        while start < 256u64 {
-            k = k + 1u64
-            let z : u64 = MLDSA_ZETAS[k] as u64
-            let mut j : u64 = start
-            while j < start + len {
-                let t : u64 = (z * (MLDSA_WORK[j + len] as u64)) % MLDSA_Q
-                let a : u64 = MLDSA_WORK[j] as u64
-                MLDSA_WORK[j + len] = ((a + MLDSA_Q - t) % MLDSA_Q) as u32
-                MLDSA_WORK[j]       = ((a + t) % MLDSA_Q) as u32
-                j = j + 1u64
-            }
-            start = j + len
-        }
-        len = len >> 1u64
-    }
-    return 0i32
+    return ntt_ctx_forward(ntt_ctx_mldsa(), (&MLDSA_WORK as u64), (&MLDSA_ZETAS_MONT as u64))
 }
 fn mldsa_invntt_work() -> i32 {
-    let mut k : u64 = 256u64
-    let mut len : u64 = 1u64
-    while len < 256u64 {
-        let mut start : u64 = 0u64
-        while start < 256u64 {
-            k = k - 1u64
-            let z : u64 = (MLDSA_Q - (MLDSA_ZETAS[k] as u64)) % MLDSA_Q
-            let mut j : u64 = start
-            while j < start + len {
-                let t : u64 = MLDSA_WORK[j] as u64
-                let u : u64 = MLDSA_WORK[j + len] as u64
-                MLDSA_WORK[j]       = ((t + u) % MLDSA_Q) as u32
-                MLDSA_WORK[j + len] = ((z * ((t + MLDSA_Q - u) % MLDSA_Q)) % MLDSA_Q) as u32
-                j = j + 1u64
-            }
-            start = j + len
-        }
-        len = len << 1u64
-    }
+    ntt_ctx_inverse(ntt_ctx_mldsa(), (&MLDSA_WORK as u64), (&MLDSA_ZETAS_MONT as u64))
+    /* Dilithium-specific final inverse scale (×256^-1 mod q). */
     let f : u64 = mldsa_powmod(256u64, MLDSA_Q - 2u64)
     let mut i : u64 = 0u64
     while i < 256u64 {
@@ -910,7 +893,12 @@ var MLDSA_RPIN  : [u8; 96]
 var MLDSA_CSEED : [u8; 32]
 var MLDSA_CSIN  : [u8; 1664]
 
-fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+/* APOTHEOSIS C.1 sealed ABI: the signature-length output is an EXPLICIT *u64
+ * the caller owns (was siglen:u64 cast to *u8 below -- a type that lied about
+ * direction).  sig_out is the signature buffer (*u8).  iii_mldsa_sign is kept
+ * as a deprecated thin wrapper for back-compat. */
+fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 @export {
+    let sig : u64 = sig_out as u64
     let k : u64 = mldsa_k(level)
     let l : u64 = mldsa_l(level)
     let eta : u64 = mldsa_eta(level)
@@ -1059,15 +1047,20 @@ fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: 
                     sp[hoff + omega + i] = (idx & 0xFFu64) as u8
                     i = i + 1u64
                 }
-                let slp : *u8 = siglen as *u8
                 let total : u64 = 32u64 + l*pzp + omega + k
-                let mut b : u64 = 0u64
-                while b < 8u64 { slp[b] = ((total >> (8u64 * b)) & 0xFFu64) as u8 ; b = b + 1u64 }
+                sig_len_out[0u64] = total   /* typed *u64 store: lands in the caller-owned u64 */
                 return 0i32
             }
         }
     }
     return 0i32 - 1i32
+}
+
+/* Deprecated back-compat wrapper (pre-C.1 ABI: siglen passed as a u64 then
+ * cast to *u8).  New callers use iii_mldsa_sign_sealed with an explicit *u64
+ * length output.  Retained so corpus 198 + the pq_dispatch router link. */
+fn iii_mldsa_sign(level: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    return iii_mldsa_sign_sealed(level, sk, msg, msglen, sig as *u8, siglen as *u64)
 }
 
 /* ---- verify ---- (slot map: A=0, t1=56, z=64, chat=71, zhat=72, Az=79,

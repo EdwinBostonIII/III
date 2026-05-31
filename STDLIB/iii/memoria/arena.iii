@@ -6,6 +6,21 @@
  * (each arena owns exactly one region).  This is the convenience
  * surface most stdlib modules consume.
  *
+ * APOTHEOSIS S.7 (ADR-S7b): the advisory `clear_fn` registry (the former
+ * arena_safe.iii / region_safe.iii) is RETIRED in favour of a witnessed
+ * reset.  arena_reset_with_witness binds a reset to the arena INCARNATION
+ * the caller captured: the witness is the low 16 bytes of
+ * sha256(base_le8 ‖ capacity_le8), exposed as two u64 words the caller
+ * grabs EARLY (arena_witness_lo/hi) and holds.  Because the witness
+ * commits to the backing VirtualAlloc address and the capacity, a reset
+ * issued after the arena was released and a new arena re-allocated in the
+ * same handle slot (the classic ABA hazard) is REFUSED -- the recomputed
+ * witness no longer matches the held one.  This is honest about what it
+ * buys: it is not an access-control boundary (anyone who can reset can
+ * also read base/capacity and recompute the witness), it is a captured-
+ * incarnation check that turns "remember to clear first" from a comment
+ * into a verifiable precondition.
+ *
  * Hexad: kind_substance.  Ring: R0.  K: 0.99.
  */
 
@@ -18,8 +33,15 @@ extern @abi(c-msvc-x64) fn region_remaining(id: u64) -> u64 from "region.iii"
 extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
 extern @abi(c-msvc-x64) fn region_reset(id: u64) -> i32 from "region.iii"
 extern @abi(c-msvc-x64) fn region_capacity(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn region_base(id: u64) -> u64 from "region.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
 
-const ARENA_INVALID : u64 = 0u64
+const ARENA_OK         : i32 =  0i32
+const ARENA_E_BADID    : i32 = -2i32
+const ARENA_E_WITNESS  : i32 = -7i32   /* held witness != current incarnation */
 
 /* Create an arena backed by a fresh region of `bytes` capacity. */
 fn arena_new(bytes: u64) -> u64 @export {
@@ -34,7 +56,8 @@ fn arena_drop(arena_id: u64) -> i32 @export {
 /* Reset the arena's bump pointer, recycling all space allocated since
  * creation or the previous reset.  All pointers handed out since then
  * are STALE -- caller must clear any external state that references
- * them BEFORE calling.  Used by crypto modules with bounded scratch. */
+ * them BEFORE calling.  Used by crypto modules with bounded scratch.
+ * (See arena_reset_with_witness for the provable variant.) */
 fn arena_reset(arena_id: u64) -> i32 @export {
     return region_reset(arena_id)
 }
@@ -66,6 +89,67 @@ fn arena_capacity(arena_id: u64) -> u64 @export {
     return region_capacity(arena_id)
 }
 
-/* arena_reset_safe and clear_fn registry moved to a separate module
- * (memoria/arena_safe.iii) to avoid disturbing this file's BSS layout
- * which other tests are sensitive to.  See lattice plan Step 0017. */
+fn arena_base(arena_id: u64) -> u64 @export {
+    return region_base(arena_id)
+}
+
+/* --- ADR-S7b provable reset --- */
+
+/* Recompute word `which` (0 = low 8 bytes, 1 = next 8 bytes) of
+ * sha256(base_le8 ‖ capacity_le8) for this arena's CURRENT incarnation.
+ * Returns 0 for an invalid/released arena (base == 0), which no valid
+ * captured witness can match -- so a stale id is refused. */
+fn arena_witness_word(arena_id: u64, which: u32) -> u64 {
+    let base : u64 = region_base(arena_id)
+    if base == 0u64 { return 0u64 }
+    let cap : u64 = region_capacity(arena_id)
+    sha256_init()
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u64 = (i as u64) * 8u64
+        sha256_update_byte(((base >> shift) & 0xFFu64) as u32)
+        i = i + 1u32
+    }
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let shift : u64 = (j as u64) * 8u64
+        sha256_update_byte(((cap >> shift) & 0xFFu64) as u32)
+        j = j + 1u32
+    }
+    sha256_finalize_internal()
+    let off : u32 = which * 8u32
+    let mut w : u64 = 0u64
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        let b : u64 = (sha256_digest_byte(off + k) & 0xFFu32) as u64
+        w = w | (b << ((k as u64) * 8u64))
+        k = k + 1u32
+    }
+    return w
+}
+
+/* Capture the witness for the arena's current incarnation.  The caller
+ * must grab BOTH words EARLY and hold them across the operations whose
+ * scratch the reset will reclaim; only then does the ABA check bite. */
+fn arena_witness_lo(arena_id: u64) -> u64 @export {
+    return arena_witness_word(arena_id, 0u32)
+}
+
+fn arena_witness_hi(arena_id: u64) -> u64 @export {
+    return arena_witness_word(arena_id, 1u32)
+}
+
+/* Provable reset: reset ONLY if the held witness (w_lo, w_hi) matches the
+ * arena's current incarnation.  Refuses (ARENA_E_WITNESS, no reset) on a
+ * mismatch -- including the ABA case where the slot was released and re-
+ * allocated (new base, or a different capacity) since the witness was
+ * captured. */
+fn arena_reset_with_witness(arena_id: u64, w_lo: u64, w_hi: u64) -> i32 @export {
+    let cur_lo : u64 = arena_witness_word(arena_id, 0u32)
+    let cur_hi : u64 = arena_witness_word(arena_id, 1u32)
+    /* base==0 -> both cur words are 0; a real captured witness is the hash
+     * of a nonzero base, so it cannot be (0,0) -> invalid id is refused. */
+    if cur_lo != w_lo { return ARENA_E_WITNESS }
+    if cur_hi != w_hi { return ARENA_E_WITNESS }
+    return region_reset(arena_id)
+}

@@ -486,7 +486,7 @@ L_if_end_19:
     movq %rax, -56(%rbp)
     movl -56(%rbp), %eax
     pushq %rax
-    movl -48(%rbp), %eax
+    movabsq $0x98, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -510,6 +510,32 @@ L_if_end_19:
     pushq %rax
     popq %rax
 L_if_end_21:
+    movl -56(%rbp), %eax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -544,7 +570,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_22:
+L_loop_top_24:
     movq -80(%rbp), %rax
     pushq %rax
     movq -88(%rbp), %rax
@@ -557,7 +583,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_23
+    jz L_loop_end_25
     movq -72(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -587,8 +613,8 @@ L_loop_top_22:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_22
-L_loop_end_23:
+    jmp L_loop_top_24
+L_loop_end_25:
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
@@ -635,7 +661,7 @@ glyph_str_validate:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -645,7 +671,7 @@ glyph_str_validate:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -664,7 +690,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -674,7 +700,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx

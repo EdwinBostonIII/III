@@ -1,0 +1,13 @@
+/* 935 -- II-CCL-2 falsifier: the CCL conversion oracle must FAIL CLOSED on the
+ * INVALID / arena-exhausted sentinel (node 0).  ccl_struct_eq(0, *) and (*, 0)
+ * and (0,0) must all be NOT-equal, so arena exhaustion can never manufacture a
+ * false "convertible" verdict in the kernel (tc_conv = ccl_conv).  The positive
+ * (a real term equals itself) must still hold.  Exit 99 = correct; 1..4 = which broke.
+ * (Before the fix, ccl_struct_eq(0,0) returned 1 via the nullary-tag fallthrough.) */
+module corpus_935_ccl_invalid
+
+extern @abi(c-msvc-x64) fn ccl_invalid_kat() -> u64 from "ccl.iii"
+
+fn main() -> u64 {
+    return ccl_invalid_kat()
+}

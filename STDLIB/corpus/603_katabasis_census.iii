@@ -35,6 +35,13 @@ fn main() -> u64 {
     if katabasis_census_fact_matches(5u64, 0xFB000000u64) != 1u8 { return 14u64 }
     if katabasis_census_fact_matches(5u64, 0xFC000000u64) != 0u8 { return 15u64 }  /* drift */
 
+    /* W5.1 (RIPPLE-11/KEEP-2) falsifier: an OUT-OF-RANGE index can never match -- not even
+     * when the measured value happens to be 0 (which used to collide with the OOB masking
+     * zero -> a spurious MATCH).  The gate must report drift, not in-spec. */
+    if katabasis_census_fact_matches(16u64, 0u64) != 0u8 { return 18u64 }
+    if katabasis_census_fact_matches(16u64, 1u64) != 0u8 { return 19u64 }
+    if katabasis_census_fact_matches(99u64, 0u64) != 0u8 { return 20u64 }
+
     /* the Census Crystal identity: reproducible (content-addressed) + non-zero */
     katabasis_census_hash(&T_HASH_A as u64)
     katabasis_census_hash(&T_HASH_B as u64)

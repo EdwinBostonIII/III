@@ -1,0 +1,7 @@
+/* 964 — W3.4 / RIPPLE-4 falsifier: the capability audit rx_export_in_g is PURE --
+ * call-history-independent, never mutates the audited congruence ring, and rejects a
+ * hallucinated export even at ring capacity (the old intern-probe false-admitted
+ * there). 99 = pass. */
+module corpus_964
+extern @abi(c-msvc-x64) fn rx_audit_purity_kat() -> u64 from "ripple_extract.iii"
+fn main() -> u64 { return rx_audit_purity_kat() }

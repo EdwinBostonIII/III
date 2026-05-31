@@ -20,6 +20,8 @@ L_PROOF_PRIMITIVE_COUNT:
     .quad 0x13
 L_PROOF_OK:
     .quad 0x0
+L_PROOF_REDUCIBLE:
+    .quad 0x1
 L_PROOF_OUT_OF_RANGE:
     .quad 0xffffffff
 L_PROOF_OP_PAIRS:
@@ -1203,7 +1205,101 @@ L_if_end_35:
     pushq %rax
     popq %rax
 L_if_end_37:
+    subq $32, %rsp
+    callq calculus_is_initialised
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movl L_PROOF_OUT_OF_RANGE(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq proof_structural_distinguishability
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
     movl L_PROOF_OK(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq is_operational_pair
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movl L_PROOF_OK(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
+    movl L_PROOF_REDUCIBLE(%rip), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1244,7 +1340,7 @@ proof_run_full_matrix:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_45
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -1254,7 +1350,7 @@ proof_run_full_matrix:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_45:
     movzbq L_PROOF_OP_INIT(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1267,7 +1363,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_47
     subq $32, %rsp
     callq L__proof_init_op_pairs
     addq $32, %rsp
@@ -1277,7 +1373,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_47:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1286,7 +1382,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_42:
+L_loop_top_48:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_PROOF_PRIMITIVE_COUNT(%rip), %eax
@@ -1299,12 +1395,12 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_49
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_44:
+L_loop_top_50:
     movl -24(%rbp), %eax
     pushq %rax
     movl L_PROOF_PRIMITIVE_COUNT(%rip), %eax
@@ -1317,7 +1413,7 @@ L_loop_top_44:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_45
+    jz L_loop_end_51
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1339,7 +1435,7 @@ L_loop_top_44:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_53
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1354,7 +1450,7 @@ L_loop_top_44:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_53:
     movl -16(%rbp), %eax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1367,7 +1463,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_55
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1393,7 +1489,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_57
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1415,7 +1511,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_59
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1430,15 +1526,15 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_55:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1453,8 +1549,8 @@ L_if_end_49:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_44
-L_loop_end_45:
+    jmp L_loop_top_50
+L_loop_end_51:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1469,8 +1565,8 @@ L_loop_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_48
+L_loop_end_49:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1512,7 +1608,7 @@ proof_first_failure:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_61
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1522,7 +1618,7 @@ proof_first_failure:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_61:
     movzbq L_PROOF_OP_INIT(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -1535,7 +1631,7 @@ L_if_end_55:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_63
     subq $32, %rsp
     callq L__proof_init_op_pairs
     addq $32, %rsp
@@ -1545,12 +1641,12 @@ L_if_end_55:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_63:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_58:
+L_loop_top_64:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_PROOF_PRIMITIVE_COUNT(%rip), %eax
@@ -1563,12 +1659,12 @@ L_loop_top_58:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_59
+    jz L_loop_end_65
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_60:
+L_loop_top_66:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_PROOF_PRIMITIVE_COUNT(%rip), %eax
@@ -1581,7 +1677,7 @@ L_loop_top_60:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_61
+    jz L_loop_end_67
     movl -8(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1594,7 +1690,7 @@ L_loop_top_60:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_69
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1620,7 +1716,7 @@ L_loop_top_60:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_65
+    jz L_if_end_71
     movl -16(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1642,7 +1738,7 @@ L_loop_top_60:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_73
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x64, %rax
@@ -1666,15 +1762,15 @@ L_loop_top_60:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_73:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_65:
+L_if_end_71:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_69:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1689,8 +1785,8 @@ L_if_end_63:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_60
-L_loop_end_61:
+    jmp L_loop_top_66
+L_loop_end_67:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1705,8 +1801,8 @@ L_loop_end_61:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_58
-L_loop_end_59:
+    jmp L_loop_top_64
+L_loop_end_65:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1748,7 +1844,7 @@ proof_count_irreducible:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_75
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1758,7 +1854,7 @@ proof_count_irreducible:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_75:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1767,7 +1863,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_70:
+L_loop_top_76:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_PROOF_PRIMITIVE_COUNT(%rip), %eax
@@ -1780,12 +1876,12 @@ L_loop_top_70:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_71
+    jz L_loop_end_77
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_72:
+L_loop_top_78:
     movl -24(%rbp), %eax
     pushq %rax
     movl L_PROOF_PRIMITIVE_COUNT(%rip), %eax
@@ -1798,7 +1894,7 @@ L_loop_top_72:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_73
+    jz L_loop_end_79
     movl -24(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1820,7 +1916,7 @@ L_loop_top_72:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_81
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1835,7 +1931,7 @@ L_loop_top_72:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_81:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1850,8 +1946,8 @@ L_if_end_75:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_72
-L_loop_end_73:
+    jmp L_loop_top_78
+L_loop_end_79:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1866,9 +1962,187 @@ L_loop_end_73:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_70
-L_loop_end_71:
+    jmp L_loop_top_76
+L_loop_end_77:
     movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "proof_drop_op_pair_for_test"
+    .text
+    .global proof_drop_op_pair_for_test
+    .seh_proc proof_drop_op_pair_for_test
+proof_drop_op_pair_for_test:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl L_PROOF_OP_PAIRS(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_83
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_83:
+    movzbq L_PROOF_OP_INIT(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_85
+    subq $32, %rsp
+    callq L__proof_init_op_pairs
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_85:
+    leaq L_PROOF_OP_LEFT(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    leaq L_PROOF_OP_RIGHT(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    leaq L_PROOF_OP_LEFT(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_PROOF_OP_RIGHT(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x64, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    imulq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "proof_restore_op_pairs_for_test"
+    .text
+    .global proof_restore_op_pairs_for_test
+    .seh_proc proof_restore_op_pairs_for_test
+proof_restore_op_pairs_for_test:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_PROOF_OP_INIT(%rip)
+    subq $32, %rsp
+    callq L__proof_init_op_pairs
+    addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

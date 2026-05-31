@@ -8,9 +8,9 @@
  *   - bigint_mod (remainder only)
  *   - bigint_modpow (repeated-square)
  *
- * Algorithm: bit-by-bit long division.  O(bits(a) * limbs(b)) per
- * call.  Phase E with @specialize will switch to Knuth Algorithm D
- * for n > 16 limbs.
+ * Algorithm (W3.9): bigint_div_qr is Knuth Algorithm D -- base-2^32 half-limb
+ * long division, O(limbs(a)*limbs(b)), ~64x faster than the prior bit-serial
+ * loop (retained as bigint_div_qr_bitserial, the differential oracle for 757).
  *
  * Hexad: kind_essence.  Ring: R0.  K: 0.99.
  */
@@ -34,11 +34,53 @@ extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "b
 extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, n: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_u64(arena: u64, a: u64, scalar: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shr_bits(arena: u64, a: u64, bits: u64) -> u64 from "bigint.iii"
+
+/* modulus_ctx accessors (storage lives in bigint.iii; this module is the builder + consumer). */
+extern @abi(c-msvc-x64) fn modctx_new(arena: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_set_dims(id: u64, k: u64, s: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_set_nprime(id: u64, nprime0: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_set_handles(id: u64, n_id: u64, r2_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_k(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_s(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_nprime0(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_free(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_n(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_r2(id: u64) -> u64 from "bigint.iii"
 
 const BIGINT_DIV_INVALID : u64 = 0u64
 
 var BIGINT_DIV_LAST_REM : u64 = 0u64
 var BIGINT_DIV_REM_U64  : u64 = 0u64
+
+/* --- Knuth Algorithm D (W3.9): base-2^32 half-limb long division. All working
+ * digit arrays are MODULE-global (a function-local array with a runtime index
+ * segfaults); all arithmetic is u64 (no i64 -> no signed-shift / i64-literal-
+ * before-brace trap); every / and % runs on array-loaded values, never directly
+ * after a call (no modulo-after-call trap). 528 u32 digits = 264 u64 limbs,
+ * well past any crypto operand (RSA-4096 modpow dividend = 128 limbs). --- */
+var KD_U  : [u32; 528]   /* normalized dividend digits (low..high) + top carry  */
+var KD_V  : [u32; 528]   /* normalized divisor digits; reused for remainder out  */
+var KD_Q  : [u32; 528]   /* quotient digits                                      */
+var KD_N  : u64 = 0u64   /* divisor effective digit count (>= 1)                 */
+var KD_UA : u64 = 0u64   /* dividend effective digit count (m + n)               */
+var KD_S  : u64 = 0u64   /* normalization left-shift (0..31 bits)                */
+
+/* --- Montgomery CIOS scratch (radix 2^32 half-limbs, module-global per the
+ * same rule as KD_*: a function-local array with a runtime index segfaults).
+ * All arithmetic is u64 over u32-valued digits, so every partial fits exactly
+ * (max t[j] + a[j]*b[i] + C = (2^32-1) + (2^32-1)^2 + (2^32-1) = 2^64-1 < 2^64);
+ * no / or % anywhere (only * + - << >> &), so no modulo-after-call trap. 528 u32
+ * digits = 264 u64 limbs, past RSA-4096 (modulus = 64 limbs -> s = 128 digits).
+ * MM_T holds the s+2-digit CIOS accumulator. --- */
+var MM_N : [u32; 528]   /* modulus n as u32 LE digits (low..high)               */
+var MM_A : [u32; 528]   /* operand a (Montgomery domain), zero-extended          */
+var MM_B : [u32; 528]   /* operand b (Montgomery domain), zero-extended          */
+var MM_T : [u32; 530]   /* CIOS accumulator: indices 0..s+1                      */
+var MM_D : [u32; 530]   /* constant-time conditional-subtract difference (T - n) */
+var MM_SQ : [u32; 1060] /* SOS squaring product + reduction work: 2s+2 digits    */
 
 fn bigint_remainder_take() -> u64 @export {
     let r : u64 = BIGINT_DIV_LAST_REM
@@ -122,7 +164,323 @@ fn bigint_div_u64(arena: u64, a: u64, scalar: u64) -> u64 @export {
     return q_id
 }
 
+/* ==================== Knuth Algorithm D (base 2^32) ==================== */
+
+/* Leading-zero count of a NONZERO u32 (0..31).  V[n-1] is the top divisor
+ * digit and is nonzero by construction, so the x==0 case never arises. */
+fn kd_clz32(x: u32) -> u64 {
+    let v : u64 = x as u64
+    let mut n : u64 = 0u64
+    let mut bit : u64 = 31u64
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        let mask : u64 = 1u64 << bit
+        if (v & mask) != 0u64 {
+            going = 0u8
+        } else {
+            n = n + 1u64
+            if bit == 0u64 { going = 0u8 }
+            if bit > 0u64 { bit = bit - 1u64 }
+        }
+    }
+    return n
+}
+
+/* Load a's u64 limbs as base-2^32 digits into KD_U; return the effective digit
+ * count (high zero digits stripped). */
+fn kd_load_u(a: u64) -> u64 {
+    let la : u64 = bigint_len_limbs(a)
+    let mut i : u64 = 0u64
+    while i < la {
+        let limb : u64 = bigint_get_limb(a, i)
+        KD_U[2u64 * i] = (limb & 0xFFFFFFFFu64) as u32
+        KD_U[2u64 * i + 1u64] = (limb >> 32u64) as u32
+        i = i + 1u64
+    }
+    let mut e : u64 = 2u64 * la
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if e == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            if KD_U[e - 1u64] != 0u32 { going = 0u8 }
+            if going == 1u8 { e = e - 1u64 }
+        }
+    }
+    return e
+}
+
+/* Load b's u64 limbs as base-2^32 digits into KD_V; return effective digit count. */
+fn kd_load_v(b: u64) -> u64 {
+    let lb : u64 = bigint_len_limbs(b)
+    let mut i : u64 = 0u64
+    while i < lb {
+        let limb : u64 = bigint_get_limb(b, i)
+        KD_V[2u64 * i] = (limb & 0xFFFFFFFFu64) as u32
+        KD_V[2u64 * i + 1u64] = (limb >> 32u64) as u32
+        i = i + 1u64
+    }
+    let mut e : u64 = 2u64 * lb
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if e == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            if KD_V[e - 1u64] != 0u32 { going = 0u8 }
+            if going == 1u8 { e = e - 1u64 }
+        }
+    }
+    return e
+}
+
+/* D1 normalize: shift U (KD_UA digits) and V (KD_N digits) left by KD_S = clz(V[top])
+ * so the top divisor digit has its high bit set.  V stays KD_N digits; U gains the
+ * carry digit KD_U[KD_UA]. */
+fn kd_normalize() -> i32 {
+    let n : u64 = KD_N
+    let ua : u64 = KD_UA
+    let s : u64 = kd_clz32(KD_V[n - 1u64])
+    KD_S = s
+    if s == 0u64 {
+        KD_U[ua] = 0u32
+        return 0i32
+    }
+    let mut cv : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let cur : u64 = KD_V[i] as u64
+        let sh : u64 = (cur << s) | cv
+        KD_V[i] = (sh & 0xFFFFFFFFu64) as u32
+        cv = sh >> 32u64
+        i = i + 1u64
+    }
+    let mut cu : u64 = 0u64
+    let mut g : u64 = 0u64
+    while g < ua {
+        let cur2 : u64 = KD_U[g] as u64
+        let sh2 : u64 = (cur2 << s) | cu
+        KD_U[g] = (sh2 & 0xFFFFFFFFu64) as u32
+        cu = sh2 >> 32u64
+        g = g + 1u64
+    }
+    KD_U[ua] = cu as u32
+    return 0i32
+}
+
+/* D3: the corrected quotient digit estimate q^ at window position j (n >= 2).
+ * Reads only KD_U/KD_V (no call before the / and the - that forms rhat). */
+fn kd_qhat(j: u64) -> u64 {
+    let n : u64 = KD_N
+    let jpn : u64 = j + n
+    let num : u64 = ((KD_U[jpn] as u64) << 32u64) | (KD_U[jpn - 1u64] as u64)
+    let vtop : u64 = KD_V[n - 1u64] as u64
+    let mut qhat : u64 = num / vtop
+    let mut rhat : u64 = num - qhat * vtop
+    let vnm2 : u64 = KD_V[n - 2u64] as u64
+    let unm2 : u64 = KD_U[jpn - 2u64] as u64
+    let mut again : u8 = 1u8
+    while again == 1u8 {
+        again = 0u8
+        let mut over : u8 = 0u8
+        if qhat >= 0x100000000u64 { over = 1u8 }
+        if over == 0u8 {
+            let lhs : u64 = qhat * vnm2
+            let rhs : u64 = (rhat << 32u64) + unm2
+            if lhs > rhs { over = 1u8 }
+        }
+        if over == 1u8 {
+            qhat = qhat - 1u64
+            rhat = rhat + vtop
+            if rhat < 0x100000000u64 { again = 1u8 }
+        }
+    }
+    return qhat
+}
+
+/* D4: multiply-and-subtract  U[j..j+n] -= qhat * V[0..n-1].  Returns 1 iff the
+ * subtraction borrowed past the top window digit (qhat was one too large). */
+fn kd_mulsub(j: u64, qhat: u64) -> u8 {
+    let n : u64 = KD_N
+    let mut k : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let p : u64 = qhat * (KD_V[i] as u64)
+        let plo : u64 = p & 0xFFFFFFFFu64
+        let phi : u64 = p >> 32u64
+        let sub : u64 = plo + k
+        let d : u64 = KD_U[j + i] as u64
+        if d >= sub {
+            KD_U[j + i] = (d - sub) as u32
+            k = phi
+        } else {
+            let diff : u64 = sub - d
+            let bks : u64 = (diff + 0xFFFFFFFFu64) >> 32u64
+            let addv : u64 = bks << 32u64
+            KD_U[j + i] = ((d + addv) - sub) as u32
+            k = phi + bks
+        }
+        i = i + 1u64
+    }
+    let jpn : u64 = j + n
+    let dt : u64 = KD_U[jpn] as u64
+    if dt >= k {
+        KD_U[jpn] = (dt - k) as u32
+        return 0u8
+    }
+    KD_U[jpn] = ((dt + 0x100000000u64) - k) as u32
+    return 1u8
+}
+
+/* D6: add the divisor back into U[j..j+n] (cancels the over-subtraction when
+ * qhat was decremented).  The final carry-out is discarded by design. */
+fn kd_addback(j: u64) -> i32 {
+    let n : u64 = KD_N
+    let mut carry : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let s : u64 = (KD_U[j + i] as u64) + (KD_V[i] as u64) + carry
+        KD_U[j + i] = (s & 0xFFFFFFFFu64) as u32
+        carry = s >> 32u64
+        i = i + 1u64
+    }
+    let jpn : u64 = j + n
+    let t : u64 = (KD_U[jpn] as u64) + carry
+    KD_U[jpn] = (t & 0xFFFFFFFFu64) as u32
+    return 0i32
+}
+
+/* D2/D7: the main quotient loop, j = m down to 0 (m = KD_UA - KD_N). */
+fn kd_divloop() -> i32 {
+    let m : u64 = KD_UA - KD_N
+    let mut jj : u64 = m + 1u64
+    while jj > 0u64 {
+        jj = jj - 1u64
+        let qhat : u64 = kd_qhat(jj)
+        let neg : u8 = kd_mulsub(jj, qhat)
+        let mut q : u64 = qhat
+        if neg == 1u8 {
+            kd_addback(jj)
+            q = qhat - 1u64
+        }
+        KD_Q[jj] = q as u32
+    }
+    return 0i32
+}
+
+/* Pack dn base-2^32 digits from KD_Q into a fresh normalized bigint. */
+fn kd_build_from_q(arena: u64, dn: u64) -> u64 {
+    let mut nlimbs : u64 = (dn + 1u64) / 2u64
+    if nlimbs == 0u64 { nlimbs = 1u64 }
+    let id : u64 = bigint_new(arena, nlimbs)
+    if id == 0u64 { return BIGINT_DIV_INVALID }
+    let mut k : u64 = 0u64
+    while k < nlimbs {
+        let lo : u64 = KD_Q[2u64 * k] as u64
+        let mut hi : u64 = 0u64
+        if (2u64 * k + 1u64) < dn { hi = KD_Q[2u64 * k + 1u64] as u64 }
+        bigint_set_limb(id, k, lo | (hi << 32u64))
+        k = k + 1u64
+    }
+    bigint_set_len(id, nlimbs)
+    bigint_normalize(id)
+    return id
+}
+
+/* Pack dn base-2^32 digits from KD_V into a fresh normalized bigint. */
+fn kd_build_from_v(arena: u64, dn: u64) -> u64 {
+    let mut nlimbs : u64 = (dn + 1u64) / 2u64
+    if nlimbs == 0u64 { nlimbs = 1u64 }
+    let id : u64 = bigint_new(arena, nlimbs)
+    if id == 0u64 { return BIGINT_DIV_INVALID }
+    let mut k : u64 = 0u64
+    while k < nlimbs {
+        let lo : u64 = KD_V[2u64 * k] as u64
+        let mut hi : u64 = 0u64
+        if (2u64 * k + 1u64) < dn { hi = KD_V[2u64 * k + 1u64] as u64 }
+        bigint_set_limb(id, k, lo | (hi << 32u64))
+        k = k + 1u64
+    }
+    bigint_set_len(id, nlimbs)
+    bigint_normalize(id)
+    return id
+}
+
+/* D8: denormalize the remainder U[0..n-1] >> KD_S into KD_V, then pack it. */
+fn kd_build_remainder(arena: u64) -> u64 {
+    let n : u64 = KD_N
+    let s : u64 = KD_S
+    let mut i : u64 = 0u64
+    while i < n {
+        let lo : u64 = (KD_U[i] as u64) >> s
+        let mut hi : u64 = 0u64
+        if (i + 1u64) < n {
+            let nxt : u64 = KD_U[i + 1u64] as u64
+            hi = (nxt << (32u64 - s)) & 0xFFFFFFFFu64
+        }
+        KD_V[i] = (lo | hi) as u32
+        i = i + 1u64
+    }
+    return kd_build_from_v(arena, n)
+}
+
+/* Single-digit divisor (n == 1): exact schoolbook, no normalization needed
+ * (each partial remainder r < v0 < 2^32, so r*2^32 + digit fits u64). */
+fn kd_div_single(arena: u64) -> u64 {
+    let ua : u64 = KD_UA
+    let v0 : u64 = KD_V[0u64] as u64
+    let mut r : u64 = 0u64
+    let mut jj : u64 = ua
+    while jj > 0u64 {
+        jj = jj - 1u64
+        let acc : u64 = (r << 32u64) | (KD_U[jj] as u64)
+        let qd : u64 = acc / v0
+        KD_Q[jj] = qd as u32
+        r = acc - qd * v0
+    }
+    let r_id : u64 = bigint_from_u64(arena, r)
+    BIGINT_DIV_LAST_REM = r_id
+    return kd_build_from_q(arena, ua)
+}
+
+/* The W3.9 division: quotient (returned) + remainder (BIGINT_DIV_LAST_REM), via
+ * Knuth Algorithm D (base-2^32 half-limb long division, ~64x faster than the
+ * retained bit-serial bigint_div_qr_bitserial).  THIS is the public bigint_div_qr
+ * used by bigint_mod / bigint_modpow and all downstream crypto.  Corpus 757
+ * gates it byte-identical to the bit-serial oracle + the q*b+r==a invariant. */
 fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 @export {
+    if bigint_is_zero(b) == 1u8 { return BIGINT_DIV_INVALID }
+    if bigint_is_zero(a) == 1u8 {
+        BIGINT_DIV_LAST_REM = bigint_from_u64(arena, 0u64)
+        return bigint_from_u64(arena, 0u64)
+    }
+    let cmp_ab : i32 = bigint_cmp(a, b)
+    if cmp_ab == -1i32 {
+        BIGINT_DIV_LAST_REM = bigint_copy(arena, a)
+        return bigint_from_u64(arena, 0u64)
+    }
+    if cmp_ab == 0i32 {
+        BIGINT_DIV_LAST_REM = bigint_from_u64(arena, 0u64)
+        return bigint_from_u64(arena, 1u64)
+    }
+    /* a > b: run Algorithm D over base-2^32 digits. */
+    let ua : u64 = kd_load_u(a)
+    let n  : u64 = kd_load_v(b)
+    KD_UA = ua
+    KD_N = n
+    if n == 1u64 {
+        return kd_div_single(arena)
+    }
+    kd_normalize()
+    kd_divloop()
+    let qdn : u64 = (ua - n) + 1u64
+    let q_id : u64 = kd_build_from_q(arena, qdn)
+    let r_id : u64 = kd_build_remainder(arena)
+    BIGINT_DIV_LAST_REM = r_id
+    return q_id
+}
+
+/* Bit-serial long division -- RETAINED as the in-binary differential oracle for
+ * the Knuth path (corpus 757) and as a one-line revert target.  No longer the
+ * public bigint_div_qr (that is now Knuth Algorithm D, ~64x faster). */
+fn bigint_div_qr_bitserial(arena: u64, a: u64, b: u64) -> u64 @export {
     if bigint_is_zero(b) == 1u8 { return BIGINT_DIV_INVALID }
     if bigint_is_zero(a) == 1u8 {
         BIGINT_DIV_LAST_REM = bigint_from_u64(arena, 0u64)
@@ -141,7 +499,7 @@ fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 @export {
     let mut q_id : u64 = bigint_from_u64(arena, 0u64)
     if q_id == 0u64 { return BIGINT_DIV_INVALID }
     let mut r_id : u64 = bigint_from_u64(arena, 0u64)
-    if r_id == 0u64 { return BIGINT_DIV_INVALID }
+    if r_id == 0u64 { bigint_drop(q_id) ; return BIGINT_DIV_INVALID }   /* q_id was allocated just above; free it before the OOM early-return [audit D-DIV-3] */
     let mut bit : u64 = msb_a
     while bit > 0u64 {
         bit = bit - 1u64
@@ -196,12 +554,536 @@ fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 @export {
     return r
 }
 
+/* === Bigint-width Montgomery (W0.5 Step 2) === lives here, with bigint_mod, so
+ * bigint_modpow can use it with no module cycle.  Oracle KAT: corpus 759.
+ * APOTHEOSIS S.2-S.4 harmony cross-ref: this CIOS reduction organ is "one core,
+ * many consumers" -- the same shape as the shared NTT organ (numera::ntt).  One
+ * audited mont_cios_run / mont_sq_run serves bigint modpow, RSA (rsa_modexp via
+ * the raw-buffer bridge), and all four NIST prime fields (fp256/fn256/fp384/
+ * fn384); ntt's one core serves four NTT-friendly primes + the 2-prime bigint
+ * multiply.  A win in either organ is a win across every consumer at once. */
+
+/* -n^-1 mod 2^64 (low-limb Montgomery constant); n0 ODD.  Newton from x0=n0
+ * (=n0^-1 mod 8), 5 doublings -> > 64-bit precision. */
+fn mont_nprime64(n0: u64) -> u64 @export {
+    let mut x : u64 = n0
+    let mut k : u32 = 0u32
+    while k < 5u32 {
+        let prod : u64 = n0 * x
+        let two_minus : u64 = 2u64 - prod
+        x = x * two_minus
+        k = k + 1u32
+    }
+    return 0u64 - x
+}
+
+/* === modulus_ctx builder (APOTHEOSIS S.1 keystone) ====================
+ * Compute ONCE the Montgomery descriptor for an ODD modulus n, so the modpow
+ * (and every odd-modulus consumer) stops recomputing the 5-doubling Newton
+ * inverse per multiply (the §III.16-class waste: ~6000 redundant Newton runs
+ * inside one RSA-4096 modpow).  Caches:
+ *   k       = u64-limb count of n
+ *   s       = 2*k   (u32-digit count; R = 2^(32*s) = 2^(64*k))
+ *   nprime0 = (-n^-1 mod 2^32) low word  (from mont_nprime64, ONCE)
+ *   free    = (nprime0 == 1)             (derived in modctx_set_nprime)
+ *   n_id    = the caller's modulus handle (NOT copied -- must outlive the ctx;
+ *             true for the modpow scope, where modulus is live throughout)
+ *   r2_id   = R^2 mod n  (ctx-owned; one-shot to-Montgomery via mont_mul(a,r2))
+ * Returns a ctx id (consume via mont_mul_ctx/_sq/_add; release via modctx_drop),
+ * or 0 for a zero/EVEN modulus (Montgomery is defined only for odd n: n0 odd
+ * <=> n0^-1 mod 2^32 exists) or on allocation failure -- the caller MUST treat
+ * 0 as "not Montgomery-friendly, use the schoolbook/division fallback". */
+fn mod_ctx_build(arena: u64, n: u64) -> u64 @export {
+    let k : u64 = bigint_len_limbs(n)
+    if k == 0u64 { return 0u64 }                       /* zero modulus */
+    let n0 : u64 = bigint_get_limb(n, 0u64)
+    let n0_odd : u64 = n0 & 1u64
+    if n0_odd == 0u64 { return 0u64 }                  /* EVEN modulus: organ undefined */
+    let s : u64 = 2u64 * k
+    let np64 : u64 = mont_nprime64(n0)
+    let nprime : u64 = np64 & 0xFFFFFFFFu64
+    /* r2 = R^2 mod n,  R = 2^(64*k)  =>  R^2 = 2^(128*k). */
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    if one == 0u64 { return 0u64 }
+    let shift_bits : u64 = 128u64 * k
+    let shifted : u64 = bigint_shl_bits(arena, one, shift_bits)
+    bigint_drop(one)
+    if shifted == 0u64 { return 0u64 }
+    let r2 : u64 = bigint_mod(arena, shifted, n)
+    bigint_drop(shifted)
+    if r2 == 0u64 { return 0u64 }
+    let ctx : u64 = modctx_new(arena)
+    if ctx == 0u64 { bigint_drop(r2) ; return 0u64 }
+    modctx_set_dims(ctx, k, s)
+    modctx_set_nprime(ctx, nprime)
+    modctx_set_handles(ctx, n, r2)
+    return ctx
+}
+
+/* a*b*R^-1 mod n, R = 2^(64*limbs(n)), n ODD, a,b in [0,n).  Radix-2^32 CIOS
+ * (Coarsely Integrated Operand Scanning, Koc et al.): interleaves the multiply
+ * and the per-digit Montgomery reduction in a single pass over u32 half-limbs,
+ * on FIXED module-global scratch (MM_*) -- ZERO per-step heap allocation (the
+ * prior version allocated 3 bigints per limb-step, ~3k per multiply, which made
+ * Montgomery ~2.5x SLOWER than schoolbook+Knuth; corpus 991 measured this).
+ *
+ * s = 2*limbs(n) u32 digits, so R = 2^(32*s) = 2^(64*limbs(n)) -- byte-identical
+ * to the value mont_to_form/from_form assume.  n' = -n^-1 mod 2^32 is the low 32
+ * bits of -n^-1 mod 2^64 (the inverse is consistent across moduli that divide,
+ * and negation commutes with reduction).  Result < 2n -> one conditional subtract.
+ * Allocates exactly ONE output bigint. */
+/* --- The shared CIOS organ (APOTHEOSIS S.2): ONE multiply-reduce, fed by the
+ * n-based front-end (mont_mul_bigint, recomputes n') AND the ctx-driven
+ * front-end (mont_mul_ctx, n' precomputed -- the modpow hot path).  Both call
+ * mont_cios_run, so there is ONE reduction proof surface (corpus 759). --- */
+
+/* Load k u64 limbs of n,a,b into MM_N/MM_A/MM_B as 2k u32 LE digits. */
+fn mont_load_nab(a: u64, b: u64, n: u64, k: u64) -> i32 {
+    let mut li : u64 = 0u64
+    while li < k {
+        let ln : u64 = bigint_get_limb(n, li)
+        let la : u64 = bigint_get_limb(a, li)
+        let lb : u64 = bigint_get_limb(b, li)
+        let d2 : u64 = 2u64 * li
+        MM_N[d2]          = (ln & 0xFFFFFFFFu64) as u32
+        MM_N[d2 + 1u64]   = ((ln >> 32u64) & 0xFFFFFFFFu64) as u32
+        MM_A[d2]          = (la & 0xFFFFFFFFu64) as u32
+        MM_A[d2 + 1u64]   = ((la >> 32u64) & 0xFFFFFFFFu64) as u32
+        MM_B[d2]          = (lb & 0xFFFFFFFFu64) as u32
+        MM_B[d2 + 1u64]   = ((lb >> 32u64) & 0xFFFFFFFFu64) as u32
+        li = li + 1u64
+    }
+    return 0i32
+}
+
+/* Constant-time conditional subtract (APOTHEOSIS S.2 / Theorem 1, adversarially
+ * verified): given MM_T holding T with 0 <= T < 2n (so the overflow digit
+ * T_s in {0,1}) and MM_N holding the s-digit modulus n, map T to its UNIQUE
+ * representative in [0,n).  Compute D = T - n as an (s+1)-digit ripple-borrow
+ * (n zero-extended at digit s); the final borrow-out beta == 0 IFF T >= n
+ * (proved by the exact carry identity).  A uniform per-digit mask (all-ones iff
+ * beta==0) selects D when T>=n else T.  The full (s+1)-digit borrow AND the
+ * select run regardless of the operand values -- NO data-dependent branch -- so
+ * this is safe on the RSA-sign / ECDSA-scalar SECRET path.  Result in
+ * MM_T[0..s-1]; MM_T[s] cleared.  Precondition T<2n (i.e. operand a < n) holds
+ * at every call site by Theorem 1. */
+fn mont_cond_sub_ct(s: u64) -> i32 {
+    let mut borrow : u64 = 0u64
+    let mut k : u64 = 0u64
+    while k <= s {
+        let tk : u64 = MM_T[k] as u64
+        let mut nk : u64 = 0u64
+        if k < s { nk = MM_N[k] as u64 }
+        let nb : u64 = nk + borrow                       /* <= 2^32 (nk<2^32, borrow in {0,1}) */
+        let diff : u64 = (tk + 0x100000000u64) - nb      /* in [0, 2^33); never underflows u64 */
+        MM_D[k] = (diff & 0xFFFFFFFFu64) as u32
+        borrow = 1u64 - (diff >> 32u64)                  /* 1 iff tk < nb (this digit borrowed) */
+        k = k + 1u64
+    }
+    /* beta = borrow (0 iff T >= n).  mask = all-ones iff we keep D (T >= n). */
+    let keepD : u64 = 1u64 - borrow
+    let mask : u64 = 0u64 - keepD                        /* 0xFFFF..FF iff keepD==1, else 0 */
+    let notmask : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    let mut k2 : u64 = 0u64
+    while k2 < s {
+        let dv : u64 = MM_D[k2] as u64
+        let tv : u64 = MM_T[k2] as u64
+        let sel : u64 = (dv & mask) | (tv & notmask)
+        MM_T[k2] = (sel & 0xFFFFFFFFu64) as u32
+        k2 = k2 + 1u64
+    }
+    MM_T[s] = 0u32
+    return 0i32
+}
+
+/* CIOS multiply-reduce MM_A*MM_B mod MM_N (s = 2*limbs u32 digits; nprime = the
+ * low word of -n^-1 mod 2^32; free = 1 iff nprime == 1) into MM_T, then ONE
+ * constant-time conditional subtract so 0 <= MM_T < n (Theorem 1: acc < 2n).
+ * free_reduction (the NIST primes + the all-0xFF 759 modulus, n[0]=2^32-1) takes
+ * m = t[0] directly -- output-identical to (t[0]*1) mod 2^32, one fewer mul/digit. */
+fn mont_cios_run(s: u64, nprime: u64, free: u64) -> i32 @export {
+    if s + 2u64 > 530u64 { return -1i32 }   /* MM_T capacity guard (belt for the @export entry; front-ends guard too) */
+    let mut z : u64 = 0u64
+    while z <= s + 1u64 { MM_T[z] = 0u32  z = z + 1u64 }
+    let mut i : u64 = 0u64
+    while i < s {
+        /* --- multiply phase: t += a * b[i] --- */
+        let bi : u64 = MM_B[i] as u64
+        let mut c : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < s {
+            let prod : u64 = (MM_A[j] as u64) * bi
+            let sum : u64 = (MM_T[j] as u64) + prod + c
+            MM_T[j] = (sum & 0xFFFFFFFFu64) as u32
+            c = sum >> 32u64
+            j = j + 1u64
+        }
+        let sum_s : u64 = (MM_T[s] as u64) + c
+        MM_T[s] = (sum_s & 0xFFFFFFFFu64) as u32
+        MM_T[s + 1u64] = (sum_s >> 32u64) as u32
+
+        /* --- reduction phase: m = t[0]*n' mod 2^32; t = (t + m*n) >> 32 --- */
+        let mut m : u64 = MM_T[0u64] as u64
+        if free != 1u64 { m = (m * nprime) & 0xFFFFFFFFu64 }
+        let sum0 : u64 = (MM_T[0u64] as u64) + m * (MM_N[0u64] as u64)   /* low 32 == 0 */
+        let mut c2 : u64 = sum0 >> 32u64
+        let mut j2 : u64 = 1u64
+        while j2 < s {
+            let prodj : u64 = m * (MM_N[j2] as u64)
+            let sumj : u64 = (MM_T[j2] as u64) + prodj + c2
+            MM_T[j2 - 1u64] = (sumj & 0xFFFFFFFFu64) as u32
+            c2 = sumj >> 32u64
+            j2 = j2 + 1u64
+        }
+        let sum_se : u64 = (MM_T[s] as u64) + c2
+        MM_T[s - 1u64] = (sum_se & 0xFFFFFFFFu64) as u32
+        MM_T[s] = ((MM_T[s + 1u64] as u64) + (sum_se >> 32u64)) as u32
+        i = i + 1u64
+    }
+
+    /* Result is in MM_T[0..s] (overflow digit MM_T[s] in {0,1} since a<n => T<2n,
+     * Theorem 1).  One constant-time conditional subtract canonicalises to [0,n). */
+    mont_cond_sub_ct(s)
+    return 0i32
+}
+
+/* Pack MM_T[0..s] (s=2k) -> k u64 limbs into one fresh bigint. */
+fn mont_pack_out(arena: u64, k: u64) -> u64 {
+    let out : u64 = bigint_new(arena, k + 1u64)
+    if out == 0u64 { return BIGINT_DIV_INVALID }
+    let mut pi : u64 = 0u64
+    while pi < k {
+        let pd : u64 = 2u64 * pi
+        let lo : u64 = MM_T[pd] as u64
+        let hi : u64 = MM_T[pd + 1u64] as u64
+        bigint_set_limb(out, pi, lo | (hi << 32u64))
+        pi = pi + 1u64
+    }
+    bigint_set_len(out, k)
+    bigint_normalize(out)
+    return out
+}
+
+/* Raw-buffer bridge to the shared CIOS organ (APOTHEOSIS S.2/S.3 H-2 apex):
+ * a consumer holding FIXED u32 digit buffers (RSA RM_ buffers, the NIST field
+ * FP_ and FQ_ buffers) loads them into MM_A/MM_B/MM_N, runs mont_cios_run, then
+ * copies the reduced result out -- the ONE proven CIOS reduction WITHOUT
+ * per-multiply bigint allocation (so an RSA-4096 / ECDSA field multiply stays
+ * allocation-free, honouring H-2).  a_ptr,b_ptr,n_ptr,out_ptr are u64 addresses
+ * of u32 arrays of s digits; the caller honours the s+2 within 530 guard. */
+fn mont_load_raw(a_ptr: u64, b_ptr: u64, n_ptr: u64, s: u64) -> i32 @export {
+    let ap : *u32 = a_ptr as *u32
+    let bp : *u32 = b_ptr as *u32
+    let np : *u32 = n_ptr as *u32
+    let mut i : u64 = 0u64
+    while i < s {
+        MM_A[i] = ap[i]
+        MM_B[i] = bp[i]
+        MM_N[i] = np[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+fn mont_store_raw(out_ptr: u64, s: u64) -> i32 @export {
+    let op : *u32 = out_ptr as *u32
+    let mut i : u64 = 0u64
+    while i < s {
+        op[i] = MM_T[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* n-based front-end: recomputes n' (back-compat / one-off callers + the 759 API). */
+fn mont_mul_bigint(arena: u64, a: u64, b: u64, n: u64) -> u64 @export {
+    let k : u64 = bigint_len_limbs(n)
+    if k == 0u64 { return BIGINT_DIV_INVALID }
+    let s : u64 = 2u64 * k                       /* u32 digit count of n */
+    if s + 2u64 > 530u64 { return BIGINT_DIV_INVALID }   /* MM_T capacity guard */
+    let n0 : u64 = bigint_get_limb(n, 0u64)
+    let np64 : u64 = mont_nprime64(n0)
+    let nprime : u64 = np64 & 0xFFFFFFFFu64
+    let mut free : u64 = 0u64
+    if nprime == 1u64 { free = 1u64 }
+    mont_load_nab(a, b, n, k)
+    mont_cios_run(s, nprime, free)
+    return mont_pack_out(arena, k)
+}
+
+/* ctx-driven front-end: the modpow HOT PATH -- n' is cached in the modulus_ctx,
+ * so NO per-multiply Newton iteration (the §III.16 ~6000x-redundant waste).
+ * ctx MUST be a live mod_ctx_build() result (odd modulus). */
+fn mont_mul_ctx(arena: u64, a: u64, b: u64, ctx: u64) -> u64 @export {
+    let k : u64 = modctx_k(ctx)
+    if k == 0u64 { return BIGINT_DIV_INVALID }
+    let s : u64 = modctx_s(ctx)
+    if s + 2u64 > 530u64 { return BIGINT_DIV_INVALID }
+    let nprime : u64 = modctx_nprime0(ctx)
+    let n : u64 = modctx_n(ctx)
+    let mut free : u64 = 0u64
+    if modctx_free(ctx) == 1u8 { free = 1u64 }
+    mont_load_nab(a, b, n, k)
+    mont_cios_run(s, nprime, free)
+    return mont_pack_out(arena, k)
+}
+
+/* mont_sq_run: the SYMMETRY-squaring guts (APOTHEOSIS S.2 / Theorem 2,
+ * adversarially verified), on MM_A (operand, preloaded, s u32 digits) + MM_N
+ * (modulus) -> MM_T (reduced, [0,n)).  Forms a^2 = diagonal + 2*(off-diagonal):
+ * each cross product a_i*a_j (i<j) computed ONCE then the whole partial doubled,
+ * ~half the partial products of a full multiply (a^2 = sum a_i^2 B^2i + 2
+ * sum_{i<j} a_i a_j B^(i+j), bit-identical to schoolbook; at radix-2^32 each
+ * product fits one u64 with a 2-word carry).  Then a Separated-Operand-Scanning
+ * Montgomery reduction of the 2s-digit product, then the constant-time subtract.
+ * All carry propagations are FIXED-LENGTH (to digit 2s) -> constant time.
+ * SHARED by mont_mul_sq (bigint) and RSA rm_mont_sq.  Requires a < n. */
+fn mont_sq_run(s: u64, nprime: u64, free: u64) -> i32 @export {
+    if 2u64 * s + 2u64 > 1060u64 { return -1i32 }   /* MM_SQ capacity guard */
+    let twos : u64 = 2u64 * s
+    let mut z : u64 = 0u64
+    while z <= twos { MM_SQ[z] = 0u32  z = z + 1u64 }
+
+    /* Off-diagonal: MM_SQ += sum_{i<j} a_i*a_j at digit i+j (each pair once). */
+    let mut i : u64 = 0u64
+    while i < s {
+        let ai : u64 = MM_A[i] as u64
+        let mut carry : u64 = 0u64
+        let mut j : u64 = i + 1u64
+        while j < s {
+            let p : u64 = ai * (MM_A[j] as u64)
+            let pos : u64 = i + j
+            let t : u64 = (MM_SQ[pos] as u64) + (p & 0xFFFFFFFFu64) + carry
+            MM_SQ[pos] = (t & 0xFFFFFFFFu64) as u32
+            carry = (p >> 32u64) + (t >> 32u64)
+            j = j + 1u64
+        }
+        let mut pos2 : u64 = i + s
+        while pos2 <= twos {
+            let t2 : u64 = (MM_SQ[pos2] as u64) + carry
+            MM_SQ[pos2] = (t2 & 0xFFFFFFFFu64) as u32
+            carry = t2 >> 32u64
+            pos2 = pos2 + 1u64
+        }
+        i = i + 1u64
+    }
+
+    /* Double: MM_SQ = 2*MM_SQ. */
+    let mut dcarry : u64 = 0u64
+    let mut dd : u64 = 0u64
+    while dd <= twos {
+        let v : u64 = ((MM_SQ[dd] as u64) << 1u64) | dcarry
+        MM_SQ[dd] = (v & 0xFFFFFFFFu64) as u32
+        dcarry = v >> 32u64
+        dd = dd + 1u64
+    }
+
+    /* Diagonal: MM_SQ += sum_i a_i^2 at digit 2i.  Now MM_SQ = a^2 (2s digits). */
+    let mut g : u64 = 0u64
+    while g < s {
+        let ag : u64 = MM_A[g] as u64
+        let sq : u64 = ag * ag
+        let pos : u64 = 2u64 * g
+        let t0 : u64 = (MM_SQ[pos] as u64) + (sq & 0xFFFFFFFFu64)
+        MM_SQ[pos] = (t0 & 0xFFFFFFFFu64) as u32
+        let mut carry2 : u64 = (sq >> 32u64) + (t0 >> 32u64)
+        let mut pos3 : u64 = pos + 1u64
+        while pos3 <= twos {
+            let t3 : u64 = (MM_SQ[pos3] as u64) + carry2
+            MM_SQ[pos3] = (t3 & 0xFFFFFFFFu64) as u32
+            carry2 = t3 >> 32u64
+            pos3 = pos3 + 1u64
+        }
+        g = g + 1u64
+    }
+
+    /* SOS Montgomery reduction: for i in 0..s-1, m_i = SQ[i]*n' mod 2^32 (free:
+     * m_i = SQ[i]); add m_i*n at offset i, zeroing the low s digits.  Result
+     * T = SQ >> (32*s) = SQ[s..2s] in [0,2n). */
+    let mut ri : u64 = 0u64
+    while ri < s {
+        let mut m : u64 = MM_SQ[ri] as u64
+        if free != 1u64 { m = (m * nprime) & 0xFFFFFFFFu64 }
+        let mut rcarry : u64 = 0u64
+        let mut rj : u64 = 0u64
+        while rj < s {
+            let pos : u64 = ri + rj
+            let t : u64 = (MM_SQ[pos] as u64) + m * (MM_N[rj] as u64) + rcarry
+            MM_SQ[pos] = (t & 0xFFFFFFFFu64) as u32
+            rcarry = t >> 32u64
+            rj = rj + 1u64
+        }
+        let mut pos4 : u64 = ri + s
+        while pos4 <= twos {
+            let t4 : u64 = (MM_SQ[pos4] as u64) + rcarry
+            MM_SQ[pos4] = (t4 & 0xFFFFFFFFu64) as u32
+            rcarry = t4 >> 32u64
+            pos4 = pos4 + 1u64
+        }
+        ri = ri + 1u64
+    }
+
+    /* T = SQ[s..2s] (s+1 digits) -> MM_T; constant-time subtract -> [0,n). */
+    let mut ci : u64 = 0u64
+    while ci <= s {
+        MM_T[ci] = MM_SQ[s + ci]
+        ci = ci + 1u64
+    }
+    mont_cond_sub_ct(s)
+    return 0i32
+}
+
+/* Load a single operand a + modulus n (s u32 digits each) from raw u32 buffers
+ * into MM_A/MM_N for mont_sq_run -- the squaring sibling of mont_load_raw. */
+fn mont_load_one_raw(a_ptr: u64, n_ptr: u64, s: u64) -> i32 @export {
+    let ap : *u32 = a_ptr as *u32
+    let np : *u32 = n_ptr as *u32
+    let mut i : u64 = 0u64
+    while i < s {
+        MM_A[i] = ap[i]
+        MM_N[i] = np[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* a^2 * R^-1 mod n via the modulus_ctx (bigint front-end over mont_sq_run).
+ * Differential-KAT'd byte-identical to mont_mul_ctx(a,a).  Requires a < n. */
+fn mont_mul_sq(arena: u64, a: u64, ctx: u64) -> u64 @export {
+    let k : u64 = modctx_k(ctx)
+    if k == 0u64 { return BIGINT_DIV_INVALID }
+    let s : u64 = modctx_s(ctx)
+    if 2u64 * s + 2u64 > 1060u64 { return BIGINT_DIV_INVALID }   /* MM_SQ capacity */
+    let nprime : u64 = modctx_nprime0(ctx)
+    let n : u64 = modctx_n(ctx)
+    let mut free : u64 = 0u64
+    if modctx_free(ctx) == 1u8 { free = 1u64 }
+    /* Load a -> MM_A (s u32 digits), n -> MM_N. */
+    let mut li : u64 = 0u64
+    while li < k {
+        let la : u64 = bigint_get_limb(a, li)
+        let ln : u64 = bigint_get_limb(n, li)
+        let d2 : u64 = 2u64 * li
+        MM_A[d2]        = (la & 0xFFFFFFFFu64) as u32
+        MM_A[d2 + 1u64] = ((la >> 32u64) & 0xFFFFFFFFu64) as u32
+        MM_N[d2]        = (ln & 0xFFFFFFFFu64) as u32
+        MM_N[d2 + 1u64] = ((ln >> 32u64) & 0xFFFFFFFFu64) as u32
+        li = li + 1u64
+    }
+    mont_sq_run(s, nprime, free)
+    return mont_pack_out(arena, k)
+}
+
+/* (a*b*R^-1 + c) mod n via the modulus_ctx -- fused multiply-add (APOTHEOSIS
+ * S.2 / Theorem 3).  The shared CIOS organ yields REDC(a*b) in [0,n); then c
+ * (< n) is added digit-wise (=> < 2n) and ONE more constant-time subtract
+ * canonicalises to [0,n).  Differential-KAT'd == (mont_mul_ctx(a,b) + c) mod n.
+ * Requires a < n and c < n. */
+fn mont_mul_add(arena: u64, a: u64, b: u64, c: u64, ctx: u64) -> u64 @export {
+    let k : u64 = modctx_k(ctx)
+    if k == 0u64 { return BIGINT_DIV_INVALID }
+    let s : u64 = modctx_s(ctx)
+    if s + 2u64 > 530u64 { return BIGINT_DIV_INVALID }
+    let nprime : u64 = modctx_nprime0(ctx)
+    let n : u64 = modctx_n(ctx)
+    let mut free : u64 = 0u64
+    if modctx_free(ctx) == 1u8 { free = 1u64 }
+    mont_load_nab(a, b, n, k)
+    mont_cios_run(s, nprime, free)            /* MM_T[0..s-1] = a*b*R^-1 mod n in [0,n) */
+    /* MM_T += c  (c has k u64 limbs = s u32 digits; c < n => MM_T + c < 2n). */
+    let mut carry : u64 = 0u64
+    let mut di : u64 = 0u64
+    while di < s {
+        let limbidx : u64 = di >> 1u64
+        let half : u64 = di & 1u64
+        let limb : u64 = bigint_get_limb(c, limbidx)
+        let mut cd : u64 = limb & 0xFFFFFFFFu64
+        if half == 1u64 { cd = (limb >> 32u64) & 0xFFFFFFFFu64 }
+        let t : u64 = (MM_T[di] as u64) + cd + carry
+        MM_T[di] = (t & 0xFFFFFFFFu64) as u32
+        carry = t >> 32u64
+        di = di + 1u64
+    }
+    MM_T[s] = (carry & 0xFFFFFFFFu64) as u32   /* in {0,1} since MM_T < 2n < 2R */
+    mont_cond_sub_ct(s)
+    return mont_pack_out(arena, k)
+}
+
+/* aR mod n (enter Montgomery domain). */
+fn mont_to_form_bigint(arena: u64, a: u64, n: u64) -> u64 @export {
+    let k : u64 = bigint_len_limbs(n)
+    let shifted : u64 = bigint_shl_bits(arena, a, 64u64 * k)
+    let r : u64 = bigint_mod(arena, shifted, n)
+    bigint_drop(shifted)
+    return r
+}
+
+/* x R^-1 mod n (leave Montgomery domain) = mont_mul(x, 1). */
+fn mont_from_form_bigint(arena: u64, x: u64, n: u64) -> u64 @export {
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let r : u64 = mont_mul_bigint(arena, x, one, n)
+    bigint_drop(one)
+    return r
+}
+
+/* Montgomery exponentiation (odd modulus): square-and-multiply staying in the
+ * Montgomery domain -- no per-step division.  Returns base^exp mod n.
+ * APOTHEOSIS S.2.3: builds the modulus_ctx ONCE so n' (the 5-doubling Newton)
+ * is computed a single time instead of per multiply (~6000x redundantly in one
+ * RSA-4096 modpow); to-Montgomery uses the ctx's R^2 (mont_mul_ctx(x,R^2) =
+ * x*R mod n -- one-shot, no shl+division).  All operands stay in [0,n)
+ * throughout, so Theorem 1's CIOS bound (acc < 2n, one conditional subtract)
+ * holds at every multiply. */
+fn bigint_modpow_mont(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 {
+    let ctx : u64 = mod_ctx_build(arena, modulus)
+    if ctx == 0u64 { return BIGINT_DIV_INVALID }   /* modulus even/zero: caller mis-dispatched */
+    let r2 : u64 = modctx_r2(ctx)
+    let base_mod : u64 = bigint_mod(arena, base, modulus)
+    /* to_form(x) = x*R mod n = mont_mul_ctx(x, R^2). */
+    let mut b_cur : u64 = mont_mul_ctx(arena, base_mod, r2, ctx)
+    bigint_drop(base_mod)
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let mut result : u64 = mont_mul_ctx(arena, one, r2, ctx)   /* mont(1) = R mod n */
+    let exp_bits : u64 = bigint_msb_position(exp)
+    let mut bit : u64 = 0u64
+    while bit < exp_bits {
+        let limb_idx : u64 = bit >> 6u64
+        let bit_off  : u64 = bit & 63u64
+        let limb_val : u64 = bigint_get_limb(exp, limb_idx)
+        let e_bit : u64 = (limb_val >> bit_off) & 1u64
+        if e_bit == 1u64 {
+            let nr : u64 = mont_mul_ctx(arena, result, b_cur, ctx)
+            bigint_drop(result)
+            result = nr
+        }
+        /* square step: squaring-symmetry organ (Theorem 2), differential-KAT'd
+         * byte-identical to mont_mul_ctx(b_cur, b_cur). */
+        let nb : u64 = mont_mul_sq(arena, b_cur, ctx)
+        bigint_drop(b_cur)
+        b_cur = nb
+        bit = bit + 1u64
+    }
+    bigint_drop(b_cur)
+    /* from_form(result) = result*R^-1 mod n = mont_mul_ctx(result, 1). */
+    let out : u64 = mont_mul_ctx(arena, result, one, ctx)
+    bigint_drop(result)
+    bigint_drop(one)
+    modctx_drop(ctx)
+    return out
+}
+
 fn bigint_modpow(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 @export {
     if bigint_is_zero(modulus) == 1u8 { return BIGINT_DIV_INVALID }
     let one : u64 = bigint_from_u64(arena, 1u64)
     if bigint_eq(modulus, one) == 1u8 {
         bigint_drop(one)
         return bigint_from_u64(arena, 0u64)
+    }
+    /* Odd modulus -> Montgomery (no per-step division); even -> schoolbook. */
+    let n0 : u64 = bigint_get_limb(modulus, 0u64)
+    if (n0 & 1u64) == 1u64 {
+        bigint_drop(one)
+        return bigint_modpow_mont(arena, base, exp, modulus)
     }
     let mut result : u64 = one
     let mut b_cur : u64 = bigint_mod(arena, base, modulus)

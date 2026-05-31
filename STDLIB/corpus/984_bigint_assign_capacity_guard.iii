@@ -1,0 +1,28 @@
+/* 984_bigint_assign_capacity_guard.iii -- falsifier for bigint_assign's destination-capacity guard.
+ * Assigning a src whose limb count exceeds the dst's capacity must REJECT (-3) rather than overrun
+ * the dst limb array; an ample-capacity dst accepts (0). No dedicated capacity-violation test. 99. */
+module corpus_984
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_shl_bits(arena: u64, a: u64, n: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_assign(dst: u64, src: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* src = 2^64 (spans 3 radix-2^32 limbs) */
+    let one : u64 = bigint_from_u64(a, 1u64)
+    let src : u64 = bigint_shl_bits(a, one, 64u64)
+    /* a 1-limb-capacity dst cannot hold a 3-limb src -> -3 */
+    let dst : u64 = bigint_new(a, 1u64)
+    if bigint_assign(dst, src) != -3i32 { return 1u64 }
+    /* an ample-capacity dst accepts -> 0 */
+    let dst2 : u64 = bigint_new(a, 8u64)
+    if bigint_assign(dst2, src) != 0i32 { return 2u64 }
+    bigint_drop(one) bigint_drop(src) bigint_drop(dst) bigint_drop(dst2)
+    arena_drop(a)
+    return 99u64
+}

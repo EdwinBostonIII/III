@@ -34,6 +34,22 @@ fn main() -> u64 {
     if csv_field_len(t, 1u64, 2u64) != 1u64 { return 7u64 }
     let p12 : *u8 = csv_field_base(t, 1u64, 2u64) as *u8
     if p12[0] != 102u8 { return 8u64 }
+
+    /* Quoted field with "" escape: `"ab""cd"\n` -> 1 field, raw span `ab""cd` (len 6). [audit H-CSV-1] */
+    let qbuf : *u8 = malloc(9u64)
+    qbuf[0] = 34u8; qbuf[1] = 97u8; qbuf[2] = 98u8; qbuf[3] = 34u8
+    qbuf[4] = 34u8; qbuf[5] = 99u8; qbuf[6] = 100u8; qbuf[7] = 34u8
+    qbuf[8] = 10u8
+    let qt : u64 = csv_parse(a, qbuf as u64, 9u64)
+    if qt == 0u64 { return 9u64 }
+    if csv_field_count(qt, 0u64) != 1u64 { return 10u64 }
+    if csv_field_len(qt, 0u64, 0u64) != 6u64 { return 11u64 }
+    let qp : *u8 = csv_field_base(qt, 0u64, 0u64) as *u8
+    if qp[0] != 97u8 { return 12u64 }
+    if qp[2] != 34u8 { return 13u64 }
+    if qp[5] != 100u8 { return 14u64 }
+    free(qbuf)
+
     free(buf)
     arena_drop(a)
     return 99u64

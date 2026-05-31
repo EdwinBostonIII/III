@@ -3147,17 +3147,7 @@ L_loop_top_122:
     movq %rax, -32(%rbp)
     movl -32(%rbp), %eax
     pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_rx_node_kind
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movl -64(%rbp), %eax
-    pushq %rax
-    movl L_RX_NULL_SET(%rip), %eax
+    movl L_RX_INVALID_IDX(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3178,6 +3168,39 @@ L_loop_top_122:
     pushq %rax
     popq %rax
 L_if_end_125:
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_rx_node_kind
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movl -64(%rbp), %eax
+    pushq %rax
+    movl L_RX_NULL_SET(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_127
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_127:
     movq -48(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax

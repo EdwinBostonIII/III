@@ -12,6 +12,8 @@ L_OPT_TAG_SOME:
     .quad 0x1
 L_OPTU64_SLOTS:
     .quad 0x100
+L_OPTION_U64_FULL:
+    .quad 0xffffffffffffffff
     .section .bss
     .global L_OPT_U64_VAL
 L_OPT_U64_VAL:
@@ -1754,6 +1756,32 @@ option_u64_none:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "option_u64_full"
+    .text
+    .global option_u64_full
+    .seh_proc option_u64_full
+option_u64_full:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq L_OPTION_U64_FULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "option_u64_some"
     .text
     .global option_u64_some
@@ -1858,7 +1886,7 @@ L_if_end_45:
     popq %rax
     jmp L_loop_top_42
 L_loop_end_43:
-    movabsq $0x0, %rax
+    movq L_OPTION_U64_FULL(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

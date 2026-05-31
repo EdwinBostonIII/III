@@ -30,6 +30,8 @@
 
 module omnia_obs_trace
 
+extern @abi(c-msvc-x64) fn bnd_index(id: u64, slots: u64) -> u32 from "bound.iii"
+
 const OBST_OK             : i32 =  0i32
 const OBST_E_BADID        : i32 = -1i32
 const OBST_E_NULL         : i32 = -2i32
@@ -82,10 +84,8 @@ fn obs_trace_span_begin(parent_id: u64, trace_id: u64, name_hash_32_ptr: u64) ->
 
 fn _obst_slot_of(span_id: u64) -> u32 {
     let id_l : u64 = span_id
-    if id_l == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = (id_l - 1u64) & 0x7Fu64
-    let s_u32 : u32 = s as u32
-    if s_u32 >= OBST_SLOTS { return 0xFFFFFFFFu32 }
+    let s_u32 : u32 = bnd_index(id_l, OBST_SLOTS as u64)   /* [COMBINE-7/K-OBST-1/X19] route the range-check-before-index through the one bound organ (behaviour-identical) */
+    if s_u32 == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
     if OBST_LIVE[s_u32] == 0u8 { return 0xFFFFFFFFu32 }
     return s_u32
 }

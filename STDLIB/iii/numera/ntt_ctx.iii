@@ -1,0 +1,107 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ntt_ctx.iii
+ *
+ * III STDLIB - numera::ntt_ctx  (APOTHEOSIS C.1)
+ *
+ * Per-modulus NTT descriptor over the ONE S.4 transform organ (numera/ntt.iii),
+ * mirroring the S.1 modulus_ctx pattern: the (q, n, min_len, start_k) tuple
+ * each lattice scheme would otherwise pass inline to ntt_ct_forward_tabled /
+ * ntt_gs_inverse_tabled is named ONCE here, so the magic constants
+ * (8380417 / 3329, 256, the Cooley-Tukey min_len, the Gentleman-Sande
+ * start_k) live in a single descriptor rather than scattered through mldsa /
+ * mlkem.
+ *
+ * DELIBERATE OMISSIONS (corrected vs the doc's `{q, zeta_addr, q_inv_neg, n}`):
+ *   - q_inv_neg is NOT stored.  The organ derives it once per call via
+ *     mont_n_inv_neg (ntt.iii:171,207); duplicating it here would risk drift.
+ *   - the inverse n^-1 post-scale (×256^-1 for ML-DSA, ×3303 for ML-KEM) is
+ *     NOT applied here.  It stays in the CALLER (mldsa.iii:111-118 etc.) where
+ *     it belongs -- the organ's GS-inverse leaves the result unscaled.
+ *   - zeta_addr is NOT stored.  Each scheme owns its Montgomery-form zeta
+ *     table (MLDSA_ZETAS_MONT / KZ_MONT) and passes its address at the call;
+ *     the descriptor is pure read-only constants, no cross-module address.
+ *
+ * ntt.iii needs ZERO change: q is already a runtime parameter to every tabled
+ * entry, so ntt_ctx is a thin descriptor over existing exports.
+ *
+ * SCOPE: the q=998244353 users (zk_stark / entropy_monitor / ntt_bigint) use
+ * the GENERIC ntt_forward_at(base,n,q,omega) convention -- a DIFFERENT call
+ * signature (omega, not a tabled zeta base) -- so they are intentionally OUT
+ * of ntt_ctx's scope and keep their direct generic calls.
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00 (pure descriptor + thin dispatch).
+ */
+
+module numera_ntt_ctx
+
+extern @abi(c-msvc-x64) fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 from "ntt.iii"
+
+const NTTC_ROWS : u64 = 2u64
+
+/* Public row ids. */
+const NTTC_MLKEM : u64 = 0u64
+const NTTC_MLDSA : u64 = 1u64
+
+var NTTC_Q       : [u64; 2]
+var NTTC_N       : [u64; 2]
+var NTTC_MINLEN  : [u64; 2]
+var NTTC_STARTK  : [u64; 2]
+
+var NTTC_INIT : u8 = 0u8
+
+fn ntt_ctx_init() -> i32 @export {
+    if NTTC_INIT == 1u8 { return 0i32 }
+    /* ML-KEM: q=3329, n=256, CT min_len=2, GS start_k=127 (verified mlkem.iii:94,97) */
+    NTTC_Q[0u64]      = 3329u64
+    NTTC_N[0u64]      = 256u64
+    NTTC_MINLEN[0u64] = 2u64
+    NTTC_STARTK[0u64] = 127u64
+    /* ML-DSA: q=8380417, n=256, CT min_len=1, GS start_k=255 (verified mldsa.iii:107,110) */
+    NTTC_Q[1u64]      = 8380417u64
+    NTTC_N[1u64]      = 256u64
+    NTTC_MINLEN[1u64] = 1u64
+    NTTC_STARTK[1u64] = 255u64
+    NTTC_INIT = 1u8
+    return 0i32
+}
+
+fn ntt_ctx_mlkem() -> u64 @export { return NTTC_MLKEM }
+fn ntt_ctx_mldsa() -> u64 @export { return NTTC_MLDSA }
+
+/* Forward NTT through the descriptor: caller supplies the work buffer address
+ * and its own Montgomery-form zeta-table address. */
+fn ntt_ctx_forward(row: u64, base: u64, zeta_addr: u64) -> i32 @export {
+    if row >= NTTC_ROWS { return -1i32 }
+    ntt_ctx_init()
+    return ntt_ct_forward_tabled(base, NTTC_N[row], NTTC_Q[row], zeta_addr, NTTC_MINLEN[row])
+}
+
+/* Inverse NTT through the descriptor.  Caller still applies the n^-1 scale
+ * afterward (the organ leaves the result unscaled). */
+fn ntt_ctx_inverse(row: u64, base: u64, zeta_addr: u64) -> i32 @export {
+    if row >= NTTC_ROWS { return -1i32 }
+    ntt_ctx_init()
+    return ntt_gs_inverse_tabled(base, NTTC_N[row], NTTC_Q[row], zeta_addr, NTTC_MINLEN[row], NTTC_STARTK[row])
+}
+
+/* Descriptor accessors (for KAT verification + sizing). */
+fn ntt_ctx_q(row: u64) -> u64 @export {
+    if row >= NTTC_ROWS { return 0u64 }
+    ntt_ctx_init()
+    return NTTC_Q[row]
+}
+fn ntt_ctx_n(row: u64) -> u64 @export {
+    if row >= NTTC_ROWS { return 0u64 }
+    ntt_ctx_init()
+    return NTTC_N[row]
+}
+fn ntt_ctx_min_len(row: u64) -> u64 @export {
+    if row >= NTTC_ROWS { return 0u64 }
+    ntt_ctx_init()
+    return NTTC_MINLEN[row]
+}
+fn ntt_ctx_start_k(row: u64) -> u64 @export {
+    if row >= NTTC_ROWS { return 0u64 }
+    ntt_ctx_init()
+    return NTTC_STARTK[row]
+}

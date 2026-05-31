@@ -1,21 +1,27 @@
-/* Stress baseline (Step 0021): 1024 alloc + reset cycles must
- * leave arena_used at 0 with no fragmentation. */
+/* Stress baseline (Step 0021, migrated to ADR-S7b): 1024 alloc + witnessed-
+ * reset cycles must leave arena_used at 0 with no fragmentation.  The witness
+ * is captured ONCE and survives every reset (reset leaves base/capacity
+ * unchanged), so all 1024 witnessed resets succeed. */
 module corpus_122
 
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_used(id: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_reset_safe(id: u64, clear_done: u8) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_witness_lo(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_witness_hi(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset_with_witness(id: u64, w_lo: u64, w_hi: u64) -> i32 from "arena.iii"
 
 fn main() -> u64 {
     let a : u64 = arena_new(1u64 << 16u64)
     if a == 0u64 { return 1u64 }
+    let wlo : u64 = arena_witness_lo(a)
+    let whi : u64 = arena_witness_hi(a)
     let mut k : u32 = 0u32
     while k < 1024u32 {
         let p : u64 = arena_alloc8(a, 64u64)
         if p == 0u64 { return 2u64 }
-        if arena_reset_safe(a, 0u8) != 0i32 { return 3u64 }
+        if arena_reset_with_witness(a, wlo, whi) != 0i32 { return 3u64 }
         if arena_used(a) != 0u64 { return 4u64 }
         k = k + 1u32
     }

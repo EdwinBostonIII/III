@@ -767,11 +767,11 @@ L_if_end_31:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "kchain_readmit_count"
+    .asciz "kchain_is_live"
     .text
-    .global kchain_readmit_count
-    .seh_proc kchain_readmit_count
-kchain_readmit_count:
+    .global kchain_is_live
+    .seh_proc kchain_is_live
+kchain_is_live:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -813,6 +813,66 @@ kchain_readmit_count:
     pushq %rax
     popq %rax
 L_if_end_33:
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "kchain_readmit_count"
+    .text
+    .global kchain_readmit_count
+    .seh_proc kchain_readmit_count
+kchain_readmit_count:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_kchain_slot_of
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
     leaq L_KCHAIN_READMITS(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -868,7 +928,7 @@ kchain_readmit:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_37
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -878,7 +938,7 @@ kchain_readmit:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_37:
     leaq L_KCHAIN_CURRENT(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -970,7 +1030,7 @@ kchain_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -980,7 +1040,7 @@ kchain_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     leaq L_KCHAIN_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

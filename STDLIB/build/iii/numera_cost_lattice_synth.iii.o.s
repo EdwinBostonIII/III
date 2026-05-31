@@ -48,8 +48,6 @@ L_CLS_K_BASE:
     .quad 0x8
 L_CLS_K_END:
     .quad 0xd
-L_CLS_DIM_RESERVED:
-    .quad 0xd
 L_CLS_DIM_COUNT:
     .quad 0xe
 L_CLS_DIM_NONE:
@@ -66,8 +64,12 @@ L_CLS_V3_SENTINEL:
     .quad 0xe3
 L_CLS_KIND_OVERRUN:
     .quad 0x11
-L_CLS_DESC_BYTES:
-    .quad 0x18
+L_CLS_DESC_DIM_OFF:
+    .quad 0x0
+L_CLS_DESC_DECL_OFF:
+    .quad 0x8
+L_CLS_DESC_OBS_OFF:
+    .quad 0x10
 L_CLS_OVERRUN_INNER:
     .quad 0x9
 L_CLS_PAYLOAD_BYTES:
@@ -2217,7 +2219,7 @@ L_if_end_97:
 L_if_end_99:
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movq L_CLS_DESC_DIM_OFF(%rip), %rax
     pushq %rax
     movzbq -8(%rbp), %rax
     pushq %rax
@@ -2232,7 +2234,7 @@ L_if_end_99:
 L_loop_top_100:
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
+    movq L_CLS_DESC_DECL_OFF(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2288,7 +2290,7 @@ L_loop_top_102:
     jz L_loop_end_103
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
+    movq L_CLS_DESC_DECL_OFF(%rip), %rax
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
@@ -2325,7 +2327,7 @@ L_loop_top_102:
     movb %dl, (%rax,%rcx,1)
     movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
+    movq L_CLS_DESC_OBS_OFF(%rip), %rax
     pushq %rax
     movq -48(%rbp), %rax
     pushq %rax
@@ -2795,7 +2797,7 @@ L_loop_end_111:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movq L_CLS_DESC_DIM_OFF(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2835,7 +2837,7 @@ L_loop_top_112:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
+    movq L_CLS_DESC_DECL_OFF(%rip), %rax
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax
@@ -2871,7 +2873,7 @@ L_loop_top_112:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x10, %rax
+    movq L_CLS_DESC_OBS_OFF(%rip), %rax
     pushq %rax
     movq -104(%rbp), %rax
     pushq %rax

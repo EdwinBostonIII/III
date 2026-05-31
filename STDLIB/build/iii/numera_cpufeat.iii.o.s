@@ -26,10 +26,54 @@ L_CPUFEAT_BIT_AVX512F:
     .quad 0x7
 L_CPUFEAT_BIT_BMI2:
     .quad 0x8
+L_CPUFEAT_BIT_AVX512DQ:
+    .quad 0x9
+    .section .data
+    .global L_CPUFEAT_FORCE_MASK
+L_CPUFEAT_FORCE_MASK:
+    .quad 0xffffffff
     .section .bss
     .global L_CPUFEAT_OUT
 L_CPUFEAT_OUT:
     .zero 128
+    .section .data
+    .global L_CPUFEAT_SUMMARY_CACHE
+L_CPUFEAT_SUMMARY_CACHE:
+    .quad 0x0
+    .global L_CPUFEAT_CACHED
+L_CPUFEAT_CACHED:
+    .quad 0x0
+    .section .iii.ring3,"n"
+    .asciz "cpufeat_force_mask"
+    .text
+    .global cpufeat_force_mask
+    .seh_proc cpufeat_force_mask
+cpufeat_force_mask:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movl %eax, L_CPUFEAT_FORCE_MASK(%rip)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
     .section .iii.ring3,"n"
     .asciz "cf_ld_u32"
     .text
@@ -416,7 +460,16 @@ cpufeat_summary:
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
-    movabsq $0x0, %rax
+    movabsq $0x11, %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_cf_bit
+    addq $32, %rsp
+    movl %eax, %eax
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
@@ -424,6 +477,14 @@ cpufeat_summary:
     pushq %rax
     popq %rax
     movq %rax, -120(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -128(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -136(%rbp)
     movl -72(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -445,8 +506,8 @@ cpufeat_summary:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq %rax, -128(%rbp)
-    movq -128(%rbp), %rax
+    movq %rax, -144(%rbp)
+    movq -144(%rbp), %rax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax
@@ -455,8 +516,8 @@ cpufeat_summary:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
-    movq -128(%rbp), %rax
+    movq %rax, -152(%rbp)
+    movq -144(%rbp), %rax
     pushq %rax
     movabsq $0xe6, %rax
     pushq %rax
@@ -465,7 +526,7 @@ cpufeat_summary:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -144(%rbp)
+    movq %rax, -160(%rbp)
     movl -96(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -479,7 +540,7 @@ cpufeat_summary:
     popq %rax
     testq %rax, %rax
     jz L_if_end_3
-    movq -136(%rbp), %rax
+    movq -152(%rbp), %rax
     pushq %rax
     movabsq $0x6, %rax
     pushq %rax
@@ -495,7 +556,7 @@ cpufeat_summary:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
-    movq %rax, -112(%rbp)
+    movq %rax, -120(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -517,7 +578,7 @@ L_if_end_3:
     popq %rax
     testq %rax, %rax
     jz L_if_end_7
-    movq -144(%rbp), %rax
+    movq -160(%rbp), %rax
     pushq %rax
     movabsq $0xe6, %rax
     pushq %rax
@@ -533,7 +594,7 @@ L_if_end_3:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
-    movq %rax, -120(%rbp)
+    movq %rax, -128(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -542,23 +603,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
 L_if_end_7:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_1:
     movl -112(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -128(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -136(%rbp)
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -144(%rbp)
-    movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -571,9 +616,63 @@ L_if_end_1:
     popq %rax
     testq %rax, %rax
     jz L_if_end_11
-    movl -136(%rbp), %eax
+    movq -160(%rbp), %rax
     pushq %rax
-    movl -144(%rbp), %eax
+    movabsq $0xe6, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -136(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
+    movl -120(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -144(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -152(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -160(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movl -152(%rbp), %eax
+    pushq %rax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_SSE2(%rip), %eax
     pushq %rax
@@ -587,11 +686,11 @@ L_if_end_1:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_15:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -604,10 +703,10 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
-    movl -136(%rbp), %eax
+    jz L_if_end_17
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_SSE41(%rip), %eax
     pushq %rax
@@ -621,11 +720,11 @@ L_if_end_11:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_17:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -638,10 +737,10 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
-    movl -136(%rbp), %eax
+    jz L_if_end_19
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_AESNI(%rip), %eax
     pushq %rax
@@ -655,12 +754,12 @@ L_if_end_13:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
-    movl -112(%rbp), %eax
+L_if_end_19:
+    movl -120(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -672,10 +771,10 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
-    movl -136(%rbp), %eax
+    jz L_if_end_21
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_AVX2(%rip), %eax
     pushq %rax
@@ -689,11 +788,11 @@ L_if_end_15:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_21:
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -706,10 +805,10 @@ L_if_end_17:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
-    movl -136(%rbp), %eax
+    jz L_if_end_23
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_SHA(%rip), %eax
     pushq %rax
@@ -723,11 +822,11 @@ L_if_end_17:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_23:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -740,10 +839,10 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
-    movl -136(%rbp), %eax
+    jz L_if_end_25
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_RDRAND(%rip), %eax
     pushq %rax
@@ -757,11 +856,11 @@ L_if_end_19:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_25:
     movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -774,10 +873,10 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
-    movl -136(%rbp), %eax
+    jz L_if_end_27
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_RDSEED(%rip), %eax
     pushq %rax
@@ -791,12 +890,12 @@ L_if_end_21:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
-    movl -120(%rbp), %eax
+L_if_end_27:
+    movl -128(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -808,10 +907,10 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
-    movl -136(%rbp), %eax
+    jz L_if_end_29
+    movl -152(%rbp), %eax
     pushq %rax
-    movl -144(%rbp), %eax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_AVX512F(%rip), %eax
     pushq %rax
@@ -825,12 +924,12 @@ L_if_end_23:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
-    movl -128(%rbp), %eax
+L_if_end_29:
+    movl -136(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -842,10 +941,44 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
-    movl -136(%rbp), %eax
+    jz L_if_end_31
+    movl -152(%rbp), %eax
     pushq %rax
+    movl -160(%rbp), %eax
+    pushq %rax
+    movl L_CPUFEAT_BIT_AVX512DQ(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -152(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
     movl -144(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movl -152(%rbp), %eax
+    pushq %rax
+    movl -160(%rbp), %eax
     pushq %rax
     movl L_CPUFEAT_BIT_BMI2(%rip), %eax
     pushq %rax
@@ -859,12 +992,76 @@ L_if_end_25:
     orq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -136(%rbp)
+    movq %rax, -152(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
-    movl -136(%rbp), %eax
+L_if_end_33:
+    movl -152(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cpufeat_summary_cached"
+    .text
+    .global cpufeat_summary_cached
+    .seh_proc cpufeat_summary_cached
+cpufeat_summary_cached:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movzbq L_CPUFEAT_CACHED(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movl L_CPUFEAT_SUMMARY_CACHE(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    subq $32, %rsp
+    callq cpufeat_summary
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movl %eax, L_CPUFEAT_SUMMARY_CACHE(%rip)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_CPUFEAT_CACHED(%rip)
+    movl -8(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -892,9 +1089,15 @@ L_cf_has:
     .seh_endprologue
     movq %rcx, -8(%rbp)
     subq $32, %rsp
-    callq cpufeat_summary
+    callq cpufeat_summary_cached
     addq $32, %rsp
     movl %eax, %eax
+    pushq %rax
+    movl L_CPUFEAT_FORCE_MASK(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
@@ -930,7 +1133,7 @@ L_cf_has:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_37
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -940,7 +1143,7 @@ L_cf_has:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1096,6 +1299,38 @@ cpufeat_has_avx512f:
     .seh_stackalloc 1024
     .seh_endprologue
     movl L_CPUFEAT_BIT_AVX512F(%rip), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_cf_has
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cpufeat_has_avx512dq"
+    .text
+    .global cpufeat_has_avx512dq
+    .seh_proc cpufeat_has_avx512dq
+cpufeat_has_avx512dq:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movl L_CPUFEAT_BIT_AVX512DQ(%rip), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp

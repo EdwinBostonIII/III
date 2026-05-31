@@ -1,0 +1,24 @@
+/* 971 — W3.6 / RIPPLE-8 / D-BI-1 falsifier: cpufeat exposes AVX-512DQ detection
+ * (CPUID.7.0:EBX[17]) distinct from AVX-512F, so bigint's vpmullq path is gated on DQ
+ * (else #UD on F-only hosts). Proves DQ => F (DQ requires F) and that the X17 force-mask
+ * can drive DQ OFF independently of F (enabling the scalar fallback test on any host).
+ * 99 = pass. */
+module corpus_971
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512dq() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_force_mask(m: u32) -> i32 from "cpufeat.iii"
+
+fn main() -> u64 {
+    /* DQ => F : AVX-512DQ cannot exist without AVX-512F (vacuous if DQ absent). */
+    if cpufeat_has_avx512dq() == 1u8 {
+        if cpufeat_has_avx512f() != 1u8 { return 1u64 }
+    }
+    /* record the host's F state, then force DQ (bit 9) OFF without touching F (bit 7). */
+    let f_real : u8 = cpufeat_has_avx512f()
+    cpufeat_force_mask(0xFFFFFDFFu32)                 /* all ones except bit 9 (DQ) */
+    if cpufeat_has_avx512dq() != 0u8 { return 2u64 }  /* DQ forced off */
+    if cpufeat_has_avx512f() != f_real { return 3u64 }/* F unaffected (distinct bit) */
+    cpufeat_force_mask(0xFFFFFFFFu32)                 /* restore */
+    if cpufeat_has_avx512f() != f_real { return 4u64 }
+    return 99u64
+}

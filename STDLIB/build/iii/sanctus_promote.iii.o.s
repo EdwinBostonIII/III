@@ -78,6 +78,31 @@ L__prm_slot_of:
 L_if_end_1:
     movq -16(%rbp), %rax
     pushq %rax
+    movl L_PRM_SLOTS(%rip), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
+    movq -16(%rbp), %rax
+    pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
@@ -111,7 +136,7 @@ L_if_end_1:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_5
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -121,7 +146,7 @@ L_if_end_1:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_5:
     leaq L_PRM_LIVE(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -140,7 +165,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -150,7 +175,7 @@ L_if_end_3:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rax
@@ -199,7 +224,7 @@ promote_register:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -209,7 +234,7 @@ promote_register:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_9:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -222,7 +247,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -232,7 +257,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_11:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -251,7 +276,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -261,7 +286,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movl L_PRM_USED(%rip), %eax
     pushq %rax
     movl L_PRM_SLOTS(%rip), %eax
@@ -274,7 +299,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -284,7 +309,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movl L_PRM_USED(%rip), %eax
     pushq %rax
     popq %rax
@@ -355,7 +380,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_14:
+L_loop_top_16:
     movq -72(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -368,7 +393,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_17
     movq -56(%rbp), %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -398,8 +423,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_16
+L_loop_end_17:
     movl L_PRM_USED(%rip), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -479,7 +504,7 @@ promote_vocabulary_active_count:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_16:
+L_loop_top_18:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_PRM_USED(%rip), %eax
@@ -492,7 +517,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_19
     leaq L_PRM_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -511,7 +536,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     leaq L_PRM_ACTIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -530,7 +555,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -545,11 +570,11 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -564,8 +589,8 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_18
+L_loop_end_19:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -615,7 +640,7 @@ promote_is_active:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -625,7 +650,7 @@ promote_is_active:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     leaq L_PRM_ACTIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -681,7 +706,7 @@ promote_hyp_id:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -691,7 +716,7 @@ promote_hyp_id:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     leaq L_PRM_HYP_ID(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -752,7 +777,7 @@ promote_name_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -762,7 +787,7 @@ promote_name_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -775,7 +800,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -785,7 +810,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     leaq L_PRM_NAME_HASH(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -865,7 +890,7 @@ promote_set_active:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movslq L_PRM_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -875,7 +900,7 @@ promote_set_active:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     movzbq -24(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -888,7 +913,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movslq L_PRM_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -898,7 +923,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     leaq L_PRM_ACTIVE(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -939,7 +964,7 @@ promote_clear_all:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_34:
+L_loop_top_36:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_PRM_SLOTS(%rip), %eax
@@ -952,7 +977,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_37
     leaq L_PRM_LIVE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -997,13 +1022,13 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_36
+L_loop_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_36:
+L_loop_top_38:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x800, %rax
@@ -1016,7 +1041,7 @@ L_loop_top_36:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_37
+    jz L_loop_end_39
     leaq L_PRM_NAME_HASH(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1041,8 +1066,8 @@ L_loop_top_36:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
+    jmp L_loop_top_38
+L_loop_end_39:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

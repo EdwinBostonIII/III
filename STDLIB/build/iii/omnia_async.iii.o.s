@@ -4,9 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "vec.iiivec.iii\0"
+    .ascii "vec.iiivec.iiibound.iii\0"
 L_str_1:
-    .ascii "vec.iii\0"
+    .ascii "vec.iiibound.iii\0"
+L_str_2:
+    .ascii "bound.iii\0"
     .section .rodata
 L_OMNIA_ASYNC_STATE_READY:
     .quad 0x0
@@ -74,9 +76,24 @@ L__async_rt_slot_of:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
+    movl L_OMNIA_ASYNC_RT_MAX(%rip), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq bnd_index
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -97,55 +114,9 @@ L__async_rt_slot_of:
     pushq %rax
     popq %rax
 L_if_end_1:
-    movq -16(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    movabsq $0xf, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movl -32(%rbp), %eax
-    pushq %rax
-    movl L_OMNIA_ASYNC_RT_MAX(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
     leaq L_OMNIA_ASYNC_RT_LIVE(%rip), %rax
     pushq %rax
-    movl -32(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -161,7 +132,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_3
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -171,8 +142,8 @@ L_if_end_3:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
-    movl -32(%rbp), %eax
+L_if_end_3:
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -204,14 +175,70 @@ L__async_task_global_idx:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
+    movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq bnd_index
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
     sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
+    movl -8(%rbp), %eax
+    pushq %rax
+    movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    imulq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0x400, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -227,96 +254,9 @@ L__async_task_global_idx:
     pushq %rax
     popq %rax
 L_if_end_7:
-    movq -24(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    movabsq $0x3f, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movl -40(%rbp), %eax
-    pushq %rax
-    movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_9
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_9:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    imulq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movl -48(%rbp), %eax
-    pushq %rax
-    movabsq $0x400, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_11
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_11:
     leaq L_OMNIA_ASYNC_TASK_LIVE(%rip), %rax
     pushq %rax
-    movl -48(%rbp), %eax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -332,7 +272,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_9
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -342,8 +282,8 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
-    movl -48(%rbp), %eax
+L_if_end_9:
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -391,7 +331,7 @@ async_runtime_new:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -401,7 +341,7 @@ async_runtime_new:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_11:
     movl -32(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -414,7 +354,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -424,7 +364,7 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_13:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -433,7 +373,7 @@ L_if_end_17:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_18:
+L_loop_top_14:
     movl -40(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_RT_MAX(%rip), %eax
@@ -446,7 +386,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_19
+    jz L_loop_end_15
     leaq L_OMNIA_ASYNC_RT_LIVE(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -465,7 +405,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_17
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -478,7 +418,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_19
     movl -40(%rbp), %eax
     pushq %rax
     popq %rax
@@ -486,11 +426,11 @@ L_loop_top_18:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_17:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -505,8 +445,8 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_18
-L_loop_end_19:
+    jmp L_loop_top_14
+L_loop_end_15:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -519,7 +459,7 @@ L_loop_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -529,7 +469,7 @@ L_loop_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_21:
     leaq L_OMNIA_ASYNC_RT_LIVE(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -574,7 +514,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_26:
+L_loop_top_22:
     movl -56(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -587,7 +527,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_27
+    jz L_loop_end_23
     movl -48(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -670,8 +610,8 @@ L_loop_top_26:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_26
-L_loop_end_27:
+    jmp L_loop_top_22
+L_loop_end_23:
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax
@@ -733,7 +673,7 @@ async_runtime_free:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_25
     movslq L_OMNIA_ASYNC_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -743,12 +683,12 @@ async_runtime_free:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_25:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_30:
+L_loop_top_26:
     movl -32(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -761,7 +701,7 @@ L_loop_top_30:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_31
+    jz L_loop_end_27
     movl -24(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -844,8 +784,8 @@ L_loop_top_30:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_30
-L_loop_end_31:
+    jmp L_loop_top_26
+L_loop_end_27:
     leaq L_OMNIA_ASYNC_RT_LIVE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -949,7 +889,7 @@ async_spawn:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_29
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -959,7 +899,7 @@ async_spawn:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_29:
     leaq L_OMNIA_ASYNC_RT_MAX_TASKS(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -978,7 +918,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_34:
+L_loop_top_30:
     movl -72(%rbp), %eax
     pushq %rax
     movl -64(%rbp), %eax
@@ -991,7 +931,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_31
     movl -56(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -1028,7 +968,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_33
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -1041,7 +981,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_35
     movl -72(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1049,11 +989,11 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_33:
     movl -72(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1068,8 +1008,8 @@ L_if_end_37:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_30
+L_loop_end_31:
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -1082,7 +1022,7 @@ L_loop_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_37
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1092,7 +1032,7 @@ L_loop_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_37:
     movl -56(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -1227,8 +1167,119 @@ async_task_state:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_39
     movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
+    movq -32(%rbp), %rax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__async_task_global_idx
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movl -48(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    leaq L_OMNIA_ASYNC_TASK_STATE(%rip), %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "async_task_kind"
+    .text
+    .global async_task_kind
+    .seh_proc async_task_kind
+async_task_kind:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L__async_rt_slot_of
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1264,7 +1315,7 @@ L_if_end_43:
     popq %rax
     testq %rax, %rax
     jz L_if_end_45
-    movabsq $0xffffffff, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1274,13 +1325,13 @@ L_if_end_43:
     pushq %rax
     popq %rax
 L_if_end_45:
-    leaq L_OMNIA_ASYNC_TASK_STATE(%rip), %rax
+    leaq L_OMNIA_ASYNC_TASK_KIND(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
-    movl (%rax,%rcx,4), %eax
+    movq (%rax,%rcx,8), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1294,11 +1345,11 @@ L_if_end_45:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "async_task_kind"
+    .asciz "async_task_ctx"
     .text
-    .global async_task_kind
-    .seh_proc async_task_kind
-async_task_kind:
+    .global async_task_ctx
+    .seh_proc async_task_ctx
+async_task_ctx:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -1385,7 +1436,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
 L_if_end_49:
-    leaq L_OMNIA_ASYNC_TASK_KIND(%rip), %rax
+    leaq L_OMNIA_ASYNC_TASK_CTX(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
@@ -1405,11 +1456,11 @@ L_if_end_49:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "async_task_ctx"
+    .asciz "async_task_result"
     .text
-    .global async_task_ctx
-    .seh_proc async_task_ctx
-async_task_ctx:
+    .global async_task_result
+    .seh_proc async_task_result
+async_task_result:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -1496,117 +1547,6 @@ L_if_end_51:
     pushq %rax
     popq %rax
 L_if_end_53:
-    leaq L_OMNIA_ASYNC_TASK_CTX(%rip), %rax
-    pushq %rax
-    movl -48(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
-    .asciz "async_task_result"
-    .text
-    .global async_task_result
-    .seh_proc async_task_result
-async_task_result:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    movq -8(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L__async_rt_slot_of
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movl -40(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_55
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_55:
-    movq -32(%rbp), %rax
-    pushq %rax
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L__async_task_global_idx
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movl -48(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_57
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_57:
     leaq L_OMNIA_ASYNC_TASK_RESULT(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -1676,7 +1616,7 @@ async_set_state:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_55
     movslq L_OMNIA_ASYNC_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1686,7 +1626,7 @@ async_set_state:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_55:
     movq -40(%rbp), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -1712,7 +1652,7 @@ L_if_end_59:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_57
     movslq L_OMNIA_ASYNC_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1722,7 +1662,7 @@ L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_57:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -1735,7 +1675,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_63
+    jz L_if_end_59
     movslq L_OMNIA_ASYNC_E_BADSTATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -1745,7 +1685,7 @@ L_if_end_61:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_63:
+L_if_end_59:
     leaq L_OMNIA_ASYNC_TASK_STATE(%rip), %rax
     pushq %rax
     movl -64(%rbp), %eax
@@ -1819,7 +1759,7 @@ async_complete:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_65
+    jz L_if_end_61
     movslq L_OMNIA_ASYNC_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1829,7 +1769,7 @@ async_complete:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_65:
+L_if_end_61:
     movq -40(%rbp), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -1855,7 +1795,7 @@ L_if_end_65:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_67
+    jz L_if_end_63
     movslq L_OMNIA_ASYNC_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1865,7 +1805,7 @@ L_if_end_65:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_67:
+L_if_end_63:
     leaq L_OMNIA_ASYNC_TASK_RESULT(%rip), %rax
     pushq %rax
     movl -64(%rbp), %eax
@@ -2035,7 +1975,7 @@ async_yield_now:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_65
     movslq L_OMNIA_ASYNC_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -2045,7 +1985,7 @@ async_yield_now:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_65:
     leaq L_OMNIA_ASYNC_RT_MAX_TASKS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2089,7 +2029,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_71
+    jz L_if_end_67
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2097,7 +2037,7 @@ L_if_end_69:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_71:
+L_if_end_67:
     leaq L_OMNIA_ASYNC_RT_RR_HEAD(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2161,7 +2101,7 @@ async_next_ready:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_69
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2171,7 +2111,7 @@ async_next_ready:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_69:
     leaq L_OMNIA_ASYNC_RT_MAX_TASKS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2200,7 +2140,7 @@ L_if_end_73:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_74:
+L_loop_top_70:
     movl -48(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2213,7 +2153,7 @@ L_loop_top_74:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_75
+    jz L_loop_end_71
     movl -24(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -2250,7 +2190,7 @@ L_loop_top_74:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_73
     leaq L_OMNIA_ASYNC_TASK_STATE(%rip), %rax
     pushq %rax
     movl -64(%rbp), %eax
@@ -2269,7 +2209,7 @@ L_loop_top_74:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_79
+    jz L_if_end_75
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2293,7 +2233,7 @@ L_loop_top_74:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_77
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2301,7 +2241,7 @@ L_loop_top_74:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_77:
     leaq L_OMNIA_ASYNC_RT_RR_HEAD(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2329,11 +2269,11 @@ L_if_end_81:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_79:
+L_if_end_75:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_73:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2357,7 +2297,7 @@ L_if_end_77:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_83
+    jz L_if_end_79
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2365,7 +2305,7 @@ L_if_end_77:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_83:
+L_if_end_79:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2380,8 +2320,8 @@ L_if_end_83:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_74
-L_loop_end_75:
+    jmp L_loop_top_70
+L_loop_end_71:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2440,7 +2380,7 @@ async_await:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_85
+    jz L_if_end_81
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2450,7 +2390,7 @@ async_await:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_85:
+L_if_end_81:
     movq -32(%rbp), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -2476,7 +2416,7 @@ L_if_end_85:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_87
+    jz L_if_end_83
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2486,7 +2426,7 @@ L_if_end_85:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_87:
+L_if_end_83:
     leaq L_OMNIA_ASYNC_TASK_STATE(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -2505,7 +2445,7 @@ L_if_end_87:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_89
+    jz L_if_end_85
     leaq L_OMNIA_ASYNC_TASK_RESULT(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -2521,7 +2461,7 @@ L_if_end_87:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_89:
+L_if_end_85:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2580,7 +2520,7 @@ async_select:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_91
+    jz L_if_end_87
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2590,7 +2530,7 @@ async_select:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_91:
+L_if_end_87:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2613,7 +2553,7 @@ L_if_end_91:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_92:
+L_loop_top_88:
     movl -56(%rbp), %eax
     pushq %rax
     movl -48(%rbp), %eax
@@ -2626,7 +2566,7 @@ L_loop_top_92:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_93
+    jz L_loop_end_89
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2666,7 +2606,7 @@ L_loop_top_92:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_95
+    jz L_if_end_91
     leaq L_OMNIA_ASYNC_TASK_STATE(%rip), %rax
     pushq %rax
     movl -72(%rbp), %eax
@@ -2685,7 +2625,7 @@ L_loop_top_92:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_97
+    jz L_if_end_93
     movq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2695,11 +2635,11 @@ L_loop_top_92:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_97:
+L_if_end_93:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_95:
+L_if_end_91:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2714,8 +2654,8 @@ L_if_end_95:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_92
-L_loop_end_93:
+    jmp L_loop_top_88
+L_loop_end_89:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2769,7 +2709,7 @@ async_alive_count:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_99
+    jz L_if_end_95
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2779,7 +2719,7 @@ async_alive_count:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_99:
+L_if_end_95:
     leaq L_OMNIA_ASYNC_RT_MAX_TASKS(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2798,7 +2738,7 @@ L_if_end_99:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_100:
+L_loop_top_96:
     movl -48(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2811,7 +2751,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_101
+    jz L_loop_end_97
     movl -24(%rbp), %eax
     pushq %rax
     movl L_OMNIA_ASYNC_TASKS_PER_RT(%rip), %eax
@@ -2848,7 +2788,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_99
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2863,7 +2803,7 @@ L_loop_top_100:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_99:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2878,8 +2818,8 @@ L_if_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_100
-L_loop_end_101:
+    jmp L_loop_top_96
+L_loop_end_97:
     movl -40(%rbp), %eax
     pushq %rax
     popq %rax

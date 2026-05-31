@@ -19,7 +19,11 @@ L_add0:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    addq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -48,7 +52,11 @@ L_mul1:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    imulq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -75,7 +83,13 @@ L_mul0:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
     movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    imulq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -102,9 +116,13 @@ L_zadd:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
+    popq %rcx
     popq %rax
+    addq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -131,9 +149,13 @@ L_omul:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
+    popq %rcx
     popq %rax
+    imulq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

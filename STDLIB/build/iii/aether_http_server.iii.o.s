@@ -4,13 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiibuilder.iiibuilder.iiinormalise_ascii.iii\0"
+    .ascii "arena.iiibuilder.iiibuilder.iiinormalise_ascii.iiibound.iii\0"
 L_str_1:
-    .ascii "builder.iiibuilder.iiinormalise_ascii.iii\0"
+    .ascii "builder.iiibuilder.iiinormalise_ascii.iiibound.iii\0"
 L_str_2:
-    .ascii "builder.iiinormalise_ascii.iii\0"
+    .ascii "builder.iiinormalise_ascii.iiibound.iii\0"
 L_str_3:
-    .ascii "normalise_ascii.iii\0"
+    .ascii "normalise_ascii.iiibound.iii\0"
+L_str_4:
+    .ascii "bound.iii\0"
     .section .rodata
 L_HTTPS_OK:
     .quad 0x0
@@ -3797,6 +3799,29 @@ L_if_else_152:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq L_HTTPS_PARSE_RAW_LEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_155
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_155:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3836,7 +3861,7 @@ L_loop_end_135:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_155
+    jz L_if_end_157
     movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rax
@@ -3846,12 +3871,12 @@ L_loop_end_135:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_155:
+L_if_end_157:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_156:
+L_loop_top_158:
     movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3864,7 +3889,7 @@ L_loop_top_156:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_157
+    jz L_loop_end_159
     movq L_HTTPS_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movq L_HTTPS_PARSE_RAW_LEN(%rip), %rax
@@ -3877,7 +3902,7 @@ L_loop_top_156:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_159
+    jz L_if_end_161
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3885,7 +3910,7 @@ L_loop_top_156:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_159:
+L_if_end_161:
     movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3898,7 +3923,7 @@ L_if_end_159:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_161
+    jz L_if_end_163
     subq $32, %rsp
     callq L_https_at_crlf
     addq $32, %rsp
@@ -3914,7 +3939,7 @@ L_if_end_159:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_162
+    jz L_if_else_164
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3922,8 +3947,8 @@ L_if_end_159:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_163
-L_if_else_162:
+    jmp L_if_end_165
+L_if_else_164:
     movq L_HTTPS_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3937,16 +3962,16 @@ L_if_else_162:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_165:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_163:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_161:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_156
-L_loop_end_157:
+    jmp L_loop_top_158
+L_loop_end_159:
     subq $32, %rsp
     callq L_https_at_crlf
     addq $32, %rsp
@@ -3962,7 +3987,7 @@ L_loop_end_157:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_165
+    jz L_if_end_167
     movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rax
@@ -3972,7 +3997,7 @@ L_loop_end_157:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_165:
+L_if_end_167:
     movq L_HTTPS_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -4045,7 +4070,7 @@ L_https_chunked_decode:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_167
+    jz L_if_end_169
     movslq L_HTTPS_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4055,7 +4080,7 @@ L_https_chunked_decode:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_167:
+L_if_end_169:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -4070,7 +4095,7 @@ L_if_end_167:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_168:
+L_loop_top_170:
     movzbq -56(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4083,7 +4108,7 @@ L_loop_top_168:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_169
+    jz L_loop_end_171
     subq $32, %rsp
     callq L_https_read_chunk_size
     addq $32, %rsp
@@ -4102,7 +4127,7 @@ L_loop_top_168:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_171
+    jz L_if_end_173
     movslq L_HTTPS_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -4112,29 +4137,8 @@ L_loop_top_168:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_171:
-    movq -64(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_173
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
 L_if_end_173:
-    movzbq -56(%rbp), %rax
+    movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -4147,25 +4151,52 @@ L_if_end_173:
     popq %rax
     testq %rax, %rax
     jz L_if_end_175
-    movq L_HTTPS_PARSE_CURSOR(%rip), %rax
+    movabsq $0x1, %rax
     pushq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
+    movq %rax, -56(%rbp)
+    movq $0, %rax
     pushq %rax
-    movq L_HTTPS_PARSE_RAW_LEN(%rip), %rax
+    popq %rax
+L_if_end_175:
+    movzbq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    seta %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
     testq %rax, %rax
     jz L_if_end_177
+    movq L_HTTPS_PARSE_RAW_LEN(%rip), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq L_HTTPS_PARSE_CURSOR(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq bnd_cap_ok
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_179
     movslq L_HTTPS_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -4175,7 +4206,7 @@ L_if_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_177:
+L_if_end_179:
     movq L_HTTPS_PARSE_RAW_BASE(%rip), %rax
     pushq %rax
     movq L_HTTPS_PARSE_CURSOR(%rip), %rax
@@ -4192,7 +4223,7 @@ L_if_end_177:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_178:
+L_loop_top_180:
     movq -80(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -4205,7 +4236,7 @@ L_loop_top_178:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_179
+    jz L_loop_end_181
     movq -40(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -4241,8 +4272,8 @@ L_loop_top_178:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_178
-L_loop_end_179:
+    jmp L_loop_top_180
+L_loop_end_181:
     movq -48(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -4278,7 +4309,7 @@ L_loop_end_179:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_181
+    jz L_if_end_183
     movslq L_HTTPS_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -4288,7 +4319,7 @@ L_loop_end_179:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
+L_if_end_183:
     movq L_HTTPS_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -4302,12 +4333,12 @@ L_if_end_181:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_175:
+L_if_end_177:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_168
-L_loop_end_169:
+    jmp L_loop_top_170
+L_loop_end_171:
     leaq L_HTTPS_REQ_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -4392,7 +4423,7 @@ L_https_parse_body:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_183
+    jz L_if_end_185
     movslq L_HTTPS_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4402,7 +4433,7 @@ L_https_parse_body:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_183:
+L_if_end_185:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -4609,7 +4640,7 @@ L_if_end_183:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_185
+    jz L_if_end_187
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -4677,7 +4708,7 @@ L_if_end_183:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_187
+    jz L_if_end_189
     movslq L_HTTPS_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4687,7 +4718,7 @@ L_if_end_183:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_187:
+L_if_end_189:
     movq -80(%rbp), %rax
     pushq %rax
     popq %rax
@@ -4791,7 +4822,7 @@ L_if_end_187:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_189
+    jz L_if_end_191
     movl -16(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -4810,11 +4841,11 @@ L_if_end_187:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_189:
+L_if_end_191:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_185:
+L_if_end_187:
     movabsq $0xe, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -4839,7 +4870,7 @@ L_if_end_185:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_191
+    jz L_if_end_193
     movslq L_HTTPS_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4849,7 +4880,7 @@ L_if_end_185:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_191:
+L_if_end_193:
     movq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -5026,7 +5057,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_193
+    jz L_if_end_195
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -5094,7 +5125,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_195
+    jz L_if_end_197
     movslq L_HTTPS_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -5104,7 +5135,7 @@ L_if_end_191:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_195:
+L_if_end_197:
     movq L_HTTPS_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movq -104(%rbp), %rax
@@ -5123,7 +5154,7 @@ L_if_end_195:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_197
+    jz L_if_end_199
     movslq L_HTTPS_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -5133,7 +5164,7 @@ L_if_end_195:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_197:
+L_if_end_199:
     leaq L_HTTPS_REQ_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5179,7 +5210,7 @@ L_if_end_197:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_193:
+L_if_end_195:
     leaq L_HTTPS_REQ_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5260,46 +5291,7 @@ http_parse_request:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_199
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_199:
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_https_parse_request_line
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movslq L_HTTPS_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_201
-    leaq L_HTTPS_REQ_LIVE(%rip), %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5314,7 +5306,7 @@ L_if_end_201:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_https_parse_headers
+    callq L_https_parse_request_line
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -5351,12 +5343,9 @@ L_if_end_201:
 L_if_end_203:
     movl -32(%rbp), %eax
     pushq %rax
-    movq -8(%rbp), %rax
-    pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq L_https_parse_body
+    callq L_https_parse_headers
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -5391,6 +5380,48 @@ L_if_end_203:
     pushq %rax
     popq %rax
 L_if_end_205:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_https_parse_body
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movslq L_HTTPS_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_207
+    leaq L_HTTPS_REQ_LIVE(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_207:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rax
@@ -5448,7 +5479,7 @@ http_request_method_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_207
+    jz L_if_end_209
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5458,7 +5489,7 @@ http_request_method_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_207:
+L_if_end_209:
     leaq L_HTTPS_REQ_METHOD_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5514,7 +5545,7 @@ http_request_method_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_209
+    jz L_if_end_211
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5524,7 +5555,7 @@ http_request_method_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_209:
+L_if_end_211:
     leaq L_HTTPS_REQ_METHOD_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5580,7 +5611,7 @@ http_request_target_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_211
+    jz L_if_end_213
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5590,7 +5621,7 @@ http_request_target_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_211:
+L_if_end_213:
     leaq L_HTTPS_REQ_TARGET_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5646,7 +5677,7 @@ http_request_target_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_213
+    jz L_if_end_215
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5656,7 +5687,7 @@ http_request_target_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_213:
+L_if_end_215:
     leaq L_HTTPS_REQ_TARGET_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5712,7 +5743,7 @@ http_request_header_count:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_215
+    jz L_if_end_217
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5722,7 +5753,7 @@ http_request_header_count:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_215:
+L_if_end_217:
     leaq L_HTTPS_REQ_HEADERS_COUNT(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5778,7 +5809,7 @@ http_request_body_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_217
+    jz L_if_end_219
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5788,7 +5819,7 @@ http_request_body_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_217:
+L_if_end_219:
     leaq L_HTTPS_REQ_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5844,7 +5875,7 @@ http_request_body_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_219
+    jz L_if_end_221
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5854,7 +5885,7 @@ http_request_body_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_219:
+L_if_end_221:
     leaq L_HTTPS_REQ_BODY_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5910,7 +5941,7 @@ http_request_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_221
+    jz L_if_end_223
     movslq L_HTTPS_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -5920,7 +5951,7 @@ http_request_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_221:
+L_if_end_223:
     leaq L_HTTPS_REQ_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

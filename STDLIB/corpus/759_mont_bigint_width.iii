@@ -1,0 +1,107 @@
+/* 759_mont_bigint_width.iii -- W0.5 Step 2 non-vacuity KAT for the bigint-width
+ * Montgomery core (mont_mul_bigint).  The u32 KAT (146) only covers single-limb
+ * moduli, so it cannot catch a multi-limb carry-propagation bug; this drives
+ * MULTI-LIMB (k = 1..4) ADVERSARIAL moduli/operands (full-u64 limbs, near 2^64)
+ * and asserts the Montgomery round-trip equals the bigint_mod ORACLE:
+ *   to_form(a)=aR, to_form(b)=bR, mont_mul(aR,bR)=abR, from_form(abR)=ab mod n
+ *   MUST equal bigint_mod(a*b, n).
+ * Plus an explicit all-0xFF..FF adversarial modulus (max carry pressure).
+ * Deterministic.  Exit 99 = every trial holds. */
+module corpus_759
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_mul_bigint(arena: u64, a: u64, b: u64, n: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_to_form_bigint(arena: u64, a: u64, n: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_from_form_bigint(arena: u64, x: u64, n: u64) -> u64 from "bigint_div.iii"
+
+var LCG : u64 = 0u64
+fn lcg() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* k random limbs; odd=1 forces limb0|1 (odd modulus). */
+fn build(arena: u64, k: u64, odd: u64) -> u64 {
+    let id : u64 = bigint_new(arena, k)
+    let mut i : u64 = 0u64
+    while i < k {
+        let v : u64 = lcg()
+        if i == 0u64 {
+            if odd == 1u64 { bigint_set_limb(id, 0u64, v | 1u64) }
+            if odd != 1u64 { bigint_set_limb(id, 0u64, v) }
+        }
+        if i != 0u64 { bigint_set_limb(id, i, v) }
+        i = i + 1u64
+    }
+    bigint_set_len(id, k)
+    bigint_normalize(id)
+    return id
+}
+
+/* Montgomery round-trip == bigint_mod oracle for a given odd n, a, b (a,b<n). */
+fn rt_eq(arena: u64, a: u64, b: u64, n: u64) -> u8 {
+    let am : u64 = mont_to_form_bigint(arena, a, n)
+    let bm : u64 = mont_to_form_bigint(arena, b, n)
+    let cm : u64 = mont_mul_bigint(arena, am, bm, n)
+    let got : u64 = mont_from_form_bigint(arena, cm, n)
+    let prod : u64 = bigint_mul(arena, a, b)
+    let ref : u64 = bigint_mod(arena, prod, n)
+    let ok : u8 = bigint_eq(got, ref)
+    bigint_drop(am) ; bigint_drop(bm) ; bigint_drop(cm) ; bigint_drop(got)
+    bigint_drop(prod) ; bigint_drop(ref)
+    return ok
+}
+
+fn check(arena: u64, k: u64) -> u8 {
+    let n : u64 = build(arena, k, 1u64)
+    let a_raw : u64 = build(arena, k, 0u64)
+    let b_raw : u64 = build(arena, k, 0u64)
+    let a : u64 = bigint_mod(arena, a_raw, n)   /* a < n */
+    let b : u64 = bigint_mod(arena, b_raw, n)   /* b < n */
+    let ok : u8 = rt_eq(arena, a, b, n)
+    bigint_drop(n) ; bigint_drop(a_raw) ; bigint_drop(b_raw) ; bigint_drop(a) ; bigint_drop(b)
+    return ok
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 22u64)
+    if arena == 0u64 { return 1u64 }
+    LCG = 0x0123456789ABCDEFu64
+
+    /* 40 random multi-limb trials, k cycling 1..4. */
+    let mut t : u64 = 0u64
+    while t < 40u64 {
+        let k : u64 = 1u64 + (t & 3u64)
+        if check(arena, k) != 1u8 { return 10u64 + t }
+        bigint_drop_arena(arena)
+        arena_reset(arena)
+        t = t + 1u64
+    }
+
+    /* explicit all-0xFF..FF adversarial modulus (k=3, max carry pressure). */
+    let n : u64 = bigint_new(arena, 3u64)
+    bigint_set_limb(n, 0u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(n, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(n, 2u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_len(n, 3u64)
+    bigint_normalize(n)
+    let araw : u64 = build(arena, 3u64, 0u64)
+    let braw : u64 = build(arena, 3u64, 0u64)
+    let a : u64 = bigint_mod(arena, araw, n)
+    let b : u64 = bigint_mod(arena, braw, n)
+    if rt_eq(arena, a, b, n) != 1u8 { return 90u64 }
+
+    arena_drop(arena)
+    return 99u64
+}

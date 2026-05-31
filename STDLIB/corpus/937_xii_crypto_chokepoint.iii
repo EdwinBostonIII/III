@@ -1,0 +1,48 @@
+/* 937 — xii_emit_gen crypto chokepoint falsifier (W1.1 / COMBINE-13 / SEPARATE-5 / I4).
+ *
+ * NON-VACUOUS BY CONSTRUCTION: we first REGISTER a curated override for EVERY crypto
+ * (horizon<24, target) cell.  The chokepoint must still return 0xFFFFFFFF ("no override")
+ * for all of them -- which can ONLY be the `horizon < XEG_CRYPTO_HORIZON_MAX` guard firing,
+ * not "nothing registered".  Remove that guard and these registered overrides resolve ->
+ * the KAT reddens (return 1).  Positive arm: a non-crypto override (id 60) DOES resolve,
+ * proving the guard is specific, not a blanket disable.  99 = both arms hold. */
+module corpus_937
+extern @abi(c-msvc-x64) fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xeg_override_index(horizon_id: u8, target: u8) -> u32 from "xii_emit_gen.iii"
+
+var PAY : [u8; 4]
+
+fn main() -> u64 {
+    PAY[0] = 0xDEu8
+    PAY[1] = 0xADu8
+    PAY[2] = 0xBEu8
+    PAY[3] = 0xEFu8
+
+    /* Register a crypto override for every crypto (horizon<24, target<7) cell (168 < cap 256). */
+    let mut h : u32 = 0u32
+    while h < 24u32 {
+        let mut t : u32 = 0u32
+        while t < 7u32 {
+            xii_emit_gen_override(h as u8, t as u8, &PAY as *u8, 4u16)
+            t = t + 1u32
+        }
+        h = h + 1u32
+    }
+    /* Positive arm: a NON-crypto override (id 60 >= 24) that MUST resolve. */
+    xii_emit_gen_override(60u8, 3u8, &PAY as *u8, 4u16)
+
+    /* Negative arm (the falsifier): every crypto cell is REFUSED despite being registered. */
+    let mut h2 : u32 = 0u32
+    while h2 < 24u32 {
+        let mut t2 : u32 = 0u32
+        while t2 < 7u32 {
+            if xeg_override_index(h2 as u8, t2 as u8) != 0xFFFFFFFFu32 { return 1u64 }
+            t2 = t2 + 1u32
+        }
+        h2 = h2 + 1u32
+    }
+    /* Positive arm: the non-crypto override resolves (guard is specific). */
+    if xeg_override_index(60u8, 3u8) == 0xFFFFFFFFu32 { return 2u64 }
+
+    return 99u64
+}

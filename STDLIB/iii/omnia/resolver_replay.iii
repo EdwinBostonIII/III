@@ -22,8 +22,10 @@
 module omnia_resolver_replay
 
 extern @abi(c-msvc-x64) fn witness_verify_chain() -> u8 from "witness.iii"
-extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
 extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+/* Q7-c per-entry replay gate (sanctus/resolver_replay.iii): every recorded witness mhash
+ * must recompute non-zero.  Composed here so Layer 3 is a REAL check, not the dead one. */
+extern @abi(c-msvc-x64) fn sanctus_resolver_replay_check_chain() -> u8 from "resolver_replay.iii"
 
 var g_resolver_self_call_count : u32 = 0u32
 
@@ -41,9 +43,10 @@ fn resolver_replay_check_chain() -> u8 @export {
     if witness_verify_chain() == 0u8 { return 0u8 }
     /* Layer 2: registry sealed (no late admissions). */
     if pattern_registry_is_sealed() == 0u8 { return 0u8 }
-    /* Layer 3: count is non-negative (always true; defense against
-     * future signedness changes). */
-    let c : u32 = witness_count()
-    if c < 0u32 { return 0u8 }
+    /* Layer 3 (W4.2 / ENHANCE-17): per-entry replay -- every recorded witness mhash must
+     * recompute non-zero.  This REPLACES the prior `if witness_count() < 0u32` guard, which
+     * was DEAD (a u32 is never negative) -- it advertised a check it never performed.  The
+     * real per-entry gate lives once in sanctus/resolver_replay.iii; we compose it. */
+    if sanctus_resolver_replay_check_chain() == 0u8 { return 0u8 }
     return 1u8
 }

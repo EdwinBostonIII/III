@@ -36,6 +36,8 @@ extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifie
 extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+/* W4.4 (RIPPLE-13): the single canonical reflect right -- shared with reflection_governance. */
+extern @abi(c-msvc-x64) fn cap_right_reflect() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn pt_alloc(out_term_id: *u8) -> i32 from "proof_term.iii"
 extern @abi(c-msvc-x64) fn pt_add_inference(args: *u8) -> i32 from "proof_term.iii"
@@ -77,7 +79,8 @@ const RFLC_PT_AXIOM       : u8  = 0x01u8         // == PT_RULE_AXIOM
 const RFLC_PT_OK          : i32 = 0i32           // == PT_OK
 const RFLC_FRAG_MAGIC_HI  : u8  = 0xE3u8
 const RFLC_FRAG_MAGIC_LO  : u8  = 0x09u8
-const RFLC_RIGHT_REFLECT  : u64 = 0x0800u64      // == CAP_RIGHT_ATTEST (Gap G7)
+/* W4.4: cap_right_reflect() removed -- the required right is now the shared cap_right_reflect()
+ * (CAP_RIGHT_AMEND), identical to reflection_governance's gate.  See capability.iii. */
 const RFLC_PILLAR         : u16 = 0x0046u16
 const RFLC_PHASE          : u8  = 0u8
 const RFLC_REVTAG         : u8  = 1u8
@@ -136,6 +139,14 @@ var RFLC_ST_CLAUSEREQ      : [u8; 128]
 
 fn rflc_prop_id_ptr(slot: u64) -> *u8 { return ((&RFLC_PROPOSAL_IDS as u64) + (slot & 0xFFFFFFFFFFFFFFFFu64) * 32u64) as *u8 }
 fn rflc_prop_payload_ptr(slot: u64) -> *u8 { return ((&RFLC_PROPOSAL_PAYLOADS as u64) + slot * 4096u64) as *u8 }
+
+/* W4.4 (F-RFLC-2): the single canonical proposal-payload capacity (max producer write).  A
+ * consumer dequeuing a proposal MUST provide a buffer at least this large; reflection_governance
+ * sizes/validates its dequeue buffer against THIS value, so the producer and consumer can never
+ * silently drift to two different sizes (the F-RFLC-2 overrun). */
+fn rc_proposal_payload_cap() -> u64 @export {
+    return RFLC_PROPOSAL_PAYLOAD_CAP
+}
 fn rflc_forbidden_ptr(i: u64) -> *u8 { return ((&RFLC_FORBIDDEN_IDS as u64) + i * 32u64) as *u8 }
 
 // Derive a forbidden-style id: ident_from_bytes("FORB"||tag||000, 8) into out.
@@ -223,7 +234,7 @@ fn rc_request_begin(target_module: *u8, cap: u64) -> i32 @export {
     if RFLC_INITED == 0u8 { return RFLC_E_NOT_INITED }
     if (target_module as u64) == 0u64 { return RFLC_E_NULL }
     if rc_forbidden_target(target_module) == 1u8 { return RFLC_E_TARGET_FORBIDDEN }
-    if cap_verify_rights(vcap, RFLC_RIGHT_REFLECT) == 0u8 { return RFLC_E_CAP_DENIED }
+    if cap_verify_rights(vcap, cap_right_reflect()) == 0u8 { return RFLC_E_CAP_DENIED }
     ident_copy(target_module, (&RFLC_REQ_TARGET as u64) as *u8)
     RFLC_REQ_CAP = vcap
     RFLC_REQ_PROP_LEN = 0u64
@@ -262,7 +273,7 @@ fn rc_construct_proof(out_term_id: *u8) -> i32 @export {
     if RFLC_REQ_OPEN == 0u8 { return RFLC_E_NO_REQUEST }
     if op == 0u64 { return RFLC_E_NULL }
     if rc_forbidden_target((&RFLC_REQ_TARGET as u64) as *u8) == 1u8 { return RFLC_E_TARGET_FORBIDDEN }
-    if cap_verify_rights(RFLC_REQ_CAP, RFLC_RIGHT_REFLECT) == 0u8 { return RFLC_E_CAP_DENIED }
+    if cap_verify_rights(RFLC_REQ_CAP, cap_right_reflect()) == 0u8 { return RFLC_E_CAP_DENIED }
     let bp : *u8 = (&RFLC_REQ_BUDGET as u64) as *u8
     let mut weight : u64 = 0u64
     let mut b : u64 = 0u64
@@ -306,7 +317,7 @@ fn rc_propose_clause(req: *u8, cap: u64, out_proposal_id: *u8) -> i32 @export {
     if RFLC_INITED == 0u8 { return RFLC_E_NOT_INITED }
     if rp == 0u64 { return RFLC_E_NULL }
     if (out_proposal_id as u64) == 0u64 { return RFLC_E_NULL }
-    if cap_verify_rights(vcap, RFLC_RIGHT_REFLECT) == 0u8 { return RFLC_E_CAP_DENIED }
+    if cap_verify_rights(vcap, cap_right_reflect()) == 0u8 { return RFLC_E_CAP_DENIED }
     let slot : u64 = rflc_free_slot()
     if slot == RFLC_PROPOSAL_SLOTS { return RFLC_E_QUEUE_FULL }
     let hp : *u8 = rp as *u8
@@ -320,7 +331,11 @@ fn rc_propose_clause(req: *u8, cap: u64, out_proposal_id: *u8) -> i32 @export {
     let mut g : u64 = 0u64
     while g < 4u64 { plen = plen | ((hp[8u64 + g] as u64) << (g * 8u64))  g = g + 1u64 }
     let mut total : u64 = tlen + llen + plen
-    if total > RFLC_PROPOSAL_PAYLOAD_CAP { total = RFLC_PROPOSAL_PAYLOAD_CAP }
+    /* The body is written at offset 12 (after the 12-byte header), so 12+total
+     * must fit the 4096-byte slot; clamping to CAP (not CAP-12) let a clause
+     * with tlen+llen+plen>=4085 write up to 12 bytes past the slot (OOB BSS for
+     * slot 1023).  [audit F-RFLC-1] */
+    if total > RFLC_PROPOSAL_PAYLOAD_CAP - 12u64 { total = RFLC_PROPOSAL_PAYLOAD_CAP - 12u64 }
     rflc_build_clause_id(hp, total, slot)
     ident_copy(rflc_prop_id_ptr(slot), out_proposal_id)
     let dp : *u8 = rflc_prop_payload_ptr(slot)
@@ -365,7 +380,7 @@ fn rc_propose_synthesis(spec_id: *u8, cap: u64, out_proposal_id: *u8) -> i32 @ex
     if RFLC_INITED == 0u8 { return RFLC_E_NOT_INITED }
     if (spec_id as u64) == 0u64 { return RFLC_E_NULL }
     if (out_proposal_id as u64) == 0u64 { return RFLC_E_NULL }
-    if cap_verify_rights(vcap, RFLC_RIGHT_REFLECT) == 0u8 { return RFLC_E_CAP_DENIED }
+    if cap_verify_rights(vcap, cap_right_reflect()) == 0u8 { return RFLC_E_CAP_DENIED }
     let slot : u64 = rflc_free_slot()
     if slot == RFLC_PROPOSAL_SLOTS { return RFLC_E_QUEUE_FULL }
     ident_copy(spec_id, rflc_prop_id_ptr(slot))

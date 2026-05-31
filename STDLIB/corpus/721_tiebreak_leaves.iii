@@ -1,0 +1,36 @@
+/* KAT for COMBINE-6 / numera/tiebreak -- the new comparator leaves tb_cmp_u32 + tb_max_by_u64 that
+ * the egraph/ripple_search/resolver tie-breaks will route through.  Proves the total order, the
+ * least-index tie rule, and that the null/empty guards FIRE (negative arms).  Exit 99 = all hold.
+ *
+ * NOTE: tb_cmp_u32 returns a signed i32 (-1/0/1).  Per the iiis i32-signed-ordering trap, ordering
+ * compares on a possibly-negative i32 compile UNSIGNED, so the result MUST be tested with EQUALITY
+ * (== -1i32) not ordering (>= 0).  Consumers routing through tb_cmp_u32 must do the same. */
+module corpus_721
+
+extern @abi(c-msvc-x64) fn tb_cmp_u32(a: u32, b: u32) -> i32 from "tiebreak.iii"
+extern @abi(c-msvc-x64) fn tb_max_by_u64(values: *u64, count: u64, out_index: *u64) -> i32 from "tiebreak.iii"
+
+var TBVALS : [u64; 5]
+var TBOUT  : [u64; 1]
+
+fn main() -> u64 {
+    /* total order via EQUALITY: 3<5 -> -1; 5>3 -> 1; 4==4 -> 0 */
+    let c1 : i32 = tb_cmp_u32(3u32, 5u32)
+    if c1 != -1i32 { return 1u64 }
+    let c2 : i32 = tb_cmp_u32(5u32, 3u32)
+    if c2 != 1i32 { return 2u64 }
+    let c3 : i32 = tb_cmp_u32(4u32, 4u32)
+    if c3 != 0i32 { return 3u64 }
+    /* least-index tie: two 30s at indices 1,2 -> argmax picks the LOWER index 1 */
+    TBVALS[0u64] = 10u64  TBVALS[1u64] = 30u64  TBVALS[2u64] = 30u64  TBVALS[3u64] = 20u64  TBVALS[4u64] = 5u64
+    let r : i32 = tb_max_by_u64(&TBVALS as *u64, 5u64, &TBOUT as *u64)
+    if r != 0i32 { return 4u64 }
+    if TBOUT[0u64] != 1u64 { return 5u64 }
+    /* negative arm: null out_index -> the guard FIRES (returns an error, not OK=0) */
+    let rc_null : i32 = tb_max_by_u64(&TBVALS as *u64, 5u64, 0u64)
+    if rc_null == 0i32 { return 6u64 }
+    /* negative arm: count==0 -> the empty guard FIRES */
+    let rc_empty : i32 = tb_max_by_u64(&TBVALS as *u64, 0u64, &TBOUT as *u64)
+    if rc_empty == 0i32 { return 7u64 }
+    return 99u64
+}

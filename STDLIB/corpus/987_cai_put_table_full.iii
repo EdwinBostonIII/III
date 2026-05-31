@@ -1,0 +1,47 @@
+/* 987_cai_put_table_full.iii -- falsifier for cai_put's table-full failure. When every slot is
+ * occupied, inserting a NEW distinct id must fail (-1) rather than overwrite or loop unbounded; an
+ * EXISTING id still updates in place (0). Corpus 720 inserts 1000 into 2048 slots, so the full-table
+ * reject never fired. Here an 8-slot table is filled, then probed. 99 = pass. */
+module corpus_987
+
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
+
+const SLOTS : u64 = 8u64
+const MASK  : u64 = 7u64
+
+var IDBUF : [u8; 32]
+var KEYS  : [u8; 256]   /* SLOTS * 32 */
+var VALS  : [u32; 8]
+
+fn mkid(n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { IDBUF[i] = 0u8  i = i + 1u64 }
+    IDBUF[0u64] = (n & 0xFFu64) as u8
+    IDBUF[1u64] = ((n >> 8u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let kp : u64 = (&KEYS) as u64
+    let vp : u64 = (&VALS) as u64
+    cai_clear(vp, SLOTS)
+
+    /* fill all 8 slots with distinct ids */
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        mkid(i)
+        if cai_put(kp, vp, MASK, &IDBUF as *u8, i as u32) != 0i32 { return 1u64 }
+        i = i + 1u64
+    }
+    /* a NEW distinct id has no empty slot -> -1 (table full) */
+    mkid(8u64)
+    if cai_put(kp, vp, MASK, &IDBUF as *u8, 8u32) != -1i32 { return 2u64 }
+    /* an EXISTING id still updates in place even when full -> 0 */
+    mkid(3u64)
+    if cai_put(kp, vp, MASK, &IDBUF as *u8, 333u32) != 0i32 { return 3u64 }
+    mkid(3u64)
+    if cai_get(kp, vp, MASK, &IDBUF as *u8) != 333u32 { return 4u64 }
+    return 99u64
+}

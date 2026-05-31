@@ -84,6 +84,9 @@ fn fed_seal_anchor_with_qc(child_tier: u32, child_root_ptr: u64, parent_tier: u3
     if (qc_ptr as u64) == 0u64 { return FED_SEAL_E_NULL }
     let qp : *u8 = qc_ptr
     let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
+    /* n_sigs is read unbounded from the caller QC; `n_sigs * 64` wraps u32 for
+     * n_sigs >= 2^26, yielding a too-small qc_len.  Bound it first.  [audit fed_seal-1] */
+    if n_sigs > 0xFFFFu32 { return FED_SEAL_E_QC }
     let qc_len : u32 = 44u32 + n_sigs * 64u32
     if hs_verify_qc(qp, qc_len) != 1u8 { return FED_SEAL_E_QC }
     return fed_seal_anchor(child_tier, child_root_ptr, parent_tier, parent_root_ptr)

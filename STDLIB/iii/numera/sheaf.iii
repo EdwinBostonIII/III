@@ -239,6 +239,8 @@ fn sh_find_restriction(parent: u32, child: u32) -> u32 @export {
 /* Idempotent with transform-update semantics (a restriction map's identity
  * is its transform id). */
 fn sh_add_restriction(parent: u32, child: u32, transform_id: *u8) -> u32 @export {
+    if parent >= SHEAF_MAX_OPEN { return SHEAF_SENT }   /* open-slot contract: a restriction between out-of-range opens is invalid and would OOB in sh_restrict [audit F-SH-1] */
+    if child >= SHEAF_MAX_OPEN { return SHEAF_SENT }
     let existing : u32 = sh_find_restriction(parent, child)
     if existing != SHEAF_SENT {
         ident_copy(transform_id, sh_res_xform_ptr(existing))
@@ -312,6 +314,7 @@ fn sh_add_intersection(a: u32, b: u32, inter: u32) -> u32 @export {
 fn sh_restrict(section: u32, parent: u32, child: u32, out_id: *u8) -> i32 @export {
     if section >= SHEAF_MAX_SECTION { return SHEAF_E_BAD_SLOT }
     if SH_SEC_LIVE[section] == 0u8 { return SHEAF_E_BAD_SLOT }
+    if child >= SHEAF_MAX_OPEN { return SHEAF_E_BAD_SLOT }   /* sh_open_id_ptr(child) below reads SH_OPEN_ID[child*32..] OOB otherwise [audit F-SH-1] */
     let res : u32 = sh_find_restriction(parent, child)
     if res == SHEAF_SENT { return SHEAF_E_NO_RESTRICT }
     let sec_p : *u8 = sh_sec_id_ptr(section)

@@ -1,0 +1,43 @@
+/* 996_slhdsa_siglen_guard.iii -- falsifier for iii_slhdsa_verify's signature-length guard
+ * (C.1 PQ negative arm, slhdsa.iii:716 `if siglen != slh_sig_bytes(lv) return -1`, FIPS-205). A
+ * signature presented with the WRONG declared length must be REJECTED (-1) before any WOTS+/FORS/
+ * hypertree work -- reading a short/long sig buffer past its bound is an OOB hazard. The good arm
+ * uses a GENUINE signature (keygen->sign), so only the wrong length (sl-1, sl+1) causes -1,
+ * isolating the guard from ordinary bad-sig rejection. slhdsa's length guard is SEPARATE code from
+ * mldsa's (995), so it needs its own proof. 200_slhdsa_roundtrip only passes the exact siglen.
+ * NOTE: SLH-DSA-128S sign is ~15-20s by design (naive treehash). 99 = pass. */
+module corpus_996
+
+extern @abi(c-msvc-x64) fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+
+const NEG1 : i32 = -1i32
+
+var SEED : [u8; 64]
+var PK   : [u8; 128]
+var SK   : [u8; 256]
+var SIG  : [u8; 16384]
+var SLB  : [u8; 16]
+var MSG  : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { SEED[i] = ((0x21u64 + i) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { MSG[i] = ((i * 5u64 + 9u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    iii_slhdsa_keygen(0u64, &SEED as u64, &PK as u64, &SK as u64)
+    let sr : i32 = iii_slhdsa_sign(0u64, &SK as u64, &MSG as u64, 32u64, &SIG as u64, &SLB as u64)
+    if sr != 0i32 { return 1u64 }
+    let sl : u64 = (SLB[0u64] as u64) | ((SLB[1u64] as u64) << 8u64) | ((SLB[2u64] as u64) << 16u64) | ((SLB[3u64] as u64) << 24u64)
+
+    /* admit: the genuine signature at its exact length verifies */
+    if iii_slhdsa_verify(0u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl) != 0i32 { return 2u64 }
+    /* reject: one byte short -> -1 (length guard; the sig bytes are valid, so only the length fails) */
+    if iii_slhdsa_verify(0u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl - 1u64) != NEG1 { return 3u64 }
+    /* reject: one byte long -> -1 */
+    if iii_slhdsa_verify(0u64, &PK as u64, &MSG as u64, 32u64, &SIG as u64, sl + 1u64) != NEG1 { return 4u64 }
+
+    return 99u64
+}

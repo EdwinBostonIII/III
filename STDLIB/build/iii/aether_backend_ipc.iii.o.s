@@ -962,7 +962,7 @@ L_if_end_21:
     movq %rax, -88(%rbp)
     movq -88(%rbp), %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    movq L_IPC_MAXVAL(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -983,6 +983,29 @@ L_if_end_21:
     pushq %rax
     popq %rax
 L_if_end_23:
+    movq -88(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movslq L_IPC_E_TOOBIG(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
     movq -80(%rbp), %rax
     pushq %rax
     movq L_IPC_OFF_VAL(%rip), %rax
@@ -1005,7 +1028,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
-L_loop_top_24:
+L_loop_top_26:
     movq -112(%rbp), %rax
     pushq %rax
     movq -88(%rbp), %rax
@@ -1018,7 +1041,7 @@ L_loop_top_24:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_25
+    jz L_loop_end_27
     movq -104(%rbp), %rax
     pushq %rax
     movq -112(%rbp), %rax
@@ -1048,8 +1071,8 @@ L_loop_top_24:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_24
-L_loop_end_25:
+    jmp L_loop_top_26
+L_loop_end_27:
     movq -56(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1119,7 +1142,7 @@ backend_ipc_put:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movslq L_IPC_SKIP(%rip), %rax
     pushq %rax
     popq %rax
@@ -1129,7 +1152,7 @@ backend_ipc_put:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     subq $32, %rsp
     callq L__ipc_ensure
     addq $32, %rsp
@@ -1148,7 +1171,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movslq L_IPC_E_NOMAP(%rip), %rax
     pushq %rax
     popq %rax
@@ -1158,7 +1181,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     movq -32(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -1179,7 +1202,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movslq L_IPC_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1189,7 +1212,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     movq L_IPC_NEXT(%rip), %rax
     pushq %rax
     popq %rax
@@ -1244,7 +1267,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     movq %rax, -96(%rbp)
-L_loop_top_32:
+L_loop_top_34:
     movq -96(%rbp), %rax
     pushq %rax
     movq L_IPC_ADDR_BYTES(%rip), %rax
@@ -1257,7 +1280,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_33
+    jz L_loop_end_35
     movq -80(%rbp), %rax
     pushq %rax
     movq -96(%rbp), %rax
@@ -1287,8 +1310,8 @@ L_loop_top_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_32
-L_loop_end_33:
+    jmp L_loop_top_34
+L_loop_end_35:
     movq -72(%rbp), %rax
     pushq %rax
     movq L_IPC_OFF_VAL(%rip), %rax
@@ -1311,7 +1334,7 @@ L_loop_end_33:
     pushq %rax
     popq %rax
     movq %rax, -120(%rbp)
-L_loop_top_34:
+L_loop_top_36:
     movq -120(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -1324,7 +1347,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_37
     movq -104(%rbp), %rax
     pushq %rax
     movq -120(%rbp), %rax
@@ -1354,8 +1377,8 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_36
+L_loop_end_37:
     movq -48(%rbp), %rax
     pushq %rax
     movq -72(%rbp), %rax

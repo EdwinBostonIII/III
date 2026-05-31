@@ -6,24 +6,18 @@
     .section .rodata
 L_FX16_FRAC_BITS:
     .quad 0x10
-L_FX16_SCALE:
-    .quad 0x10000
 L_FX16_MASK:
     .quad 0xffffffff
 L_FX16_MAX:
     .quad 0xffffffff
 L_FX24_FRAC_BITS:
     .quad 0x8
-L_FX24_SCALE:
-    .quad 0x100
 L_FX24_MASK:
     .quad 0xffffffff
 L_FX24_MAX:
     .quad 0xffffffff
 L_FX48_FRAC_BITS:
     .quad 0x10
-L_FX48_SCALE:
-    .quad 0x10000
 L_FX48_MAX:
     .quad 0xffffffffffffffff
     .section .iii.ring3,"n"
@@ -42,17 +36,7 @@ fx16_from_int:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movq L_FX16_FRAC_BITS(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    movq L_FX16_MAX(%rip), %rax
+    movabsq $0xffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -73,7 +57,13 @@ fx16_from_int:
     pushq %rax
     popq %rax
 L_if_end_1:
-    movq -16(%rbp), %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq L_FX16_FRAC_BITS(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
     pushq %rax
     movq L_FX16_MASK(%rip), %rax
     pushq %rax
@@ -511,17 +501,7 @@ fx24_from_int:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movq L_FX24_FRAC_BITS(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    movq L_FX24_MAX(%rip), %rax
+    movabsq $0xffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -542,7 +522,13 @@ fx24_from_int:
     pushq %rax
     popq %rax
 L_if_end_13:
-    movq -16(%rbp), %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq L_FX24_FRAC_BITS(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
     pushq %rax
     movq L_FX24_MASK(%rip), %rax
     pushq %rax
@@ -1266,14 +1252,116 @@ fx48_mul:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shrq %cl, %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movq -88(%rbp), %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq -88(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shrq %cl, %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shrq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shrq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
     movq -80(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -104(%rbp)
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x10000, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setne %al
+    setae %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -1289,107 +1377,6 @@ fx48_mul:
     pushq %rax
     popq %rax
 L_if_end_31:
-    movq -64(%rbp), %rax
-    pushq %rax
-    movq -72(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -88(%rbp)
-    movq -88(%rbp), %rax
-    pushq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_33
-    movq L_FX48_MAX(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_33:
-    movq -88(%rbp), %rax
-    pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shrq %cl, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_35
-    movq L_FX48_MAX(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_35:
-    movq -56(%rbp), %rax
-    pushq %rax
-    movq -88(%rbp), %rax
-    pushq %rax
-    movabsq $0x20, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -96(%rbp)
-    movq -96(%rbp), %rax
-    pushq %rax
-    movq -56(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_37
-    movq L_FX48_MAX(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_37:
     movq -96(%rbp), %rax
     pushq %rax
     movq L_FX48_FRAC_BITS(%rip), %rax
@@ -1397,6 +1384,18 @@ L_if_end_37:
     popq %rcx
     popq %rax
     shrq %cl, %rax
+    pushq %rax
+    movq -104(%rbp), %rax
+    pushq %rax
+    movabsq $0x30, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1436,7 +1435,7 @@ fx48_div:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_33
     movq L_FX48_MAX(%rip), %rax
     pushq %rax
     popq %rax
@@ -1446,7 +1445,7 @@ fx48_div:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_33:
     movq -8(%rbp), %rax
     pushq %rax
     movq L_FX48_MAX(%rip), %rax
@@ -1465,7 +1464,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_35
     movq L_FX48_MAX(%rip), %rax
     pushq %rax
     popq %rax
@@ -1475,7 +1474,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_35:
     movq -8(%rbp), %rax
     pushq %rax
     movq L_FX48_FRAC_BITS(%rip), %rax

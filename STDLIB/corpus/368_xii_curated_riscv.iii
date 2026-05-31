@@ -1,16 +1,30 @@
-/* corpus/368_xii_curated_riscv.iii — RISC-V Zkn/Zbc/V curated payloads */
+/* corpus/368_xii_curated_riscv.iii — RISC-V curated payloads (X25 hardened)
+ *
+ * X25 (Vol II): H012 (id 11) is a CRYPTO horizon whose curated riscv inline is a
+ * SCAFFOLD; _find_override now refuses crypto horizons, so emission falls through
+ * to the real structural kernel fragment.  The crypto-horizon body must EQUAL its
+ * primary-op kernel (proof the scaffold was refused); the NON-crypto H051 (id 50)
+ * curated override is still served.
+ */
 
 module corpus_368_xii_curated_riscv
 
 extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
 extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_kernel_emit_fragment(kind: u8, target: u8, out: *u8) -> u32 from "xii_kernel_emit.iii"
 
 var BUF368 : [u8; 256]
+var KREF368 : [u8; 256]
 
 fn main() -> u64 {
     xii_register_all()
 
-    /* H012 sha256_oneshot on target 5 (riscv64_v + Zknh). Prologue is 12 bytes. */
+    /* H012 sha256_oneshot on target 5 (riscv64_v + Zknh) -- CRYPTO: scaffold
+     * override REFUSED (X25); body must be the structural kernel fragment. */
+    let prim11 : u8 = xii_horizon_primary_op(11u32)
+    let kn11 : u32 = xii_kernel_emit_fragment(prim11, 5u8, &KREF368 as *u8)
+    if kn11 < 4u32 { return 20u64 }
     let n12 : u32 = xii_emit_gen_produce(11u32, 5u32, 128u32, &BUF368 as *u8)
     if n12 == 0u32 { return 1u64 }
 
@@ -20,13 +34,14 @@ fn main() -> u64 {
     if BUF368[2] != 0x01u8 { return 4u64 }
     if BUF368[3] != 0xFFu8 { return 5u64 }
 
-    /* After 12-byte prologue, body starts with ld a0, 0(a0) = 03 35 05 00 */
-    if BUF368[12] != 0x03u8 { return 6u64 }
-    if BUF368[13] != 0x35u8 { return 7u64 }
-    if BUF368[14] != 0x05u8 { return 8u64 }
-    if BUF368[15] != 0x00u8 { return 9u64 }
+    /* After the 12-byte prologue, body == structural kernel (NOT the scaffold). */
+    if BUF368[12] != KREF368[0] { return 6u64 }
+    if BUF368[13] != KREF368[1] { return 7u64 }
+    if BUF368[14] != KREF368[2] { return 8u64 }
+    if BUF368[15] != KREF368[3] { return 9u64 }
 
-    /* H051 swap_bytes_u64 on target 5: body should start with rev8 a0, a0 = 13 d5 85 6b */
+    /* H051 swap_bytes_u64 on target 5 -- NON-crypto override still served:
+     * body starts with rev8 a0, a0 = 13 d5 85 6b */
     let n51 : u32 = xii_emit_gen_produce(50u32, 5u32, 64u32, &BUF368 as *u8)
     if n51 == 0u32 { return 10u64 }
     if BUF368[12] != 0x13u8 { return 11u64 }

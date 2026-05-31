@@ -1,0 +1,114 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\keccak_sponge.iii
+ *
+ * III STDLIB - numera::keccak_sponge  (APOTHEOSIS C.1)
+ *
+ * An 8-slot lease/release pool over the ONE S.5 Keccak permutation
+ * (numera/keccak.iii).  Today every Keccak consumer hashes through a single
+ * module-global state buffer (KK256_STATE, MLDSA_SST, KEM_SST, SLH_KST, ...);
+ * any NESTED or interleaved sponge use -- e.g. a seed-expansion SHAKE that is
+ * still squeezing while a Fiat-Shamir challenge hash starts -- would corrupt
+ * that one shared state.  This pool hands out 8 INDEPENDENT 200-byte states:
+ * a caller leases a slot, drives absorb/squeeze on it, and releases it; two
+ * leased slots can never alias, so reuse-races are structurally impossible.
+ *
+ * Each slot is 200 bytes (25 lanes × 8) = exactly one Keccak-f[1600] state.
+ * The backing store is [u64; 200] (8 slots × 25 lanes) so it is naturally
+ * 8-byte aligned -- the permutation reads u64 lanes, so byte alignment matters.
+ *
+ * SCOPE NOTE: the pool fixes the SPONGE-STATE race.  keccak.iii still has
+ * module-global AVX-512 scratch (KK_LANE_A/B, the KK_CHI_INIT table guard)
+ * that keccak_f1600 itself uses; making the permutation core fully reentrant
+ * is a separate concern beyond C.1 and is not claimed here.
+ *
+ * Hexad: kind_substance.  Ring: R3.  K: 1.00 (pure pool over a proven core).
+ */
+
+module numera_keccak_sponge
+
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate: u32, dom: u8) -> u64 from "keccak.iii"
+
+const KSP_SLOTS    : u64 = 8u64
+const KSP_LANES    : u64 = 25u64           /* u64 lanes per Keccak state    */
+const KSP_STATE_BY : u64 = 200u64          /* bytes per state (25 × 8)      */
+const KSP_NONE     : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var KSP_STATE  : [u64; 200]   /* 8 slots × 25 lanes, 8-byte aligned          */
+var KSP_LEASED : [u8;  8]     /* 1 = leased/in-use                           */
+
+/* Lease the lowest free sponge slot.  Returns 0..7, or KSP_NONE if all 8 are
+ * in use.  The slot is zeroed on lease so the caller starts from a clean
+ * sponge. */
+fn ksp_lease() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < KSP_SLOTS {
+        if KSP_LEASED[i] == 0u8 {
+            KSP_LEASED[i] = 1u8
+            let addr : u64 = (&KSP_STATE as u64) + i * KSP_STATE_BY
+            keccak_state_zero(addr)
+            return i
+        }
+        i = i + 1u64
+    }
+    return KSP_NONE
+}
+
+fn ksp_release(slot: u64) -> i32 @export {
+    if slot >= KSP_SLOTS { return -1i32 }
+    if KSP_LEASED[slot] == 0u8 { return -1i32 }   /* double-release caught */
+    /* Wipe on release so a freed slot never leaks prior sponge state. */
+    let addr : u64 = (&KSP_STATE as u64) + slot * KSP_STATE_BY
+    keccak_state_zero(addr)
+    KSP_LEASED[slot] = 0u8
+    return 0i32
+}
+
+/* Absolute address of a leased slot's 200-byte state. */
+fn ksp_state_addr(slot: u64) -> u64 @export {
+    if slot >= KSP_SLOTS { return 0u64 }
+    return (&KSP_STATE as u64) + slot * KSP_STATE_BY
+}
+
+fn ksp_leased(slot: u64) -> u8 @export {
+    if slot >= KSP_SLOTS { return 0u8 }
+    return KSP_LEASED[slot]
+}
+
+fn ksp_count_leased() -> u64 @export {
+    let mut i : u64 = 0u64
+    let mut n : u64 = 0u64
+    while i < KSP_SLOTS {
+        if KSP_LEASED[i] == 1u8 { n = n + 1u64 }
+        i = i + 1u64
+    }
+    return n
+}
+
+/* Convenience: pack rate+domain exactly as the bare keccak API expects. */
+fn ksp_pack_rate_dom(rate: u32, dom: u8) -> u64 @export {
+    return keccak_pack_rate_dom(rate, dom)
+}
+
+/* Zero a leased slot's state (re-init without re-leasing). */
+fn ksp_zero(slot: u64) -> i32 @export {
+    if slot >= KSP_SLOTS { return -1i32 }
+    if KSP_LEASED[slot] == 0u8 { return -1i32 }
+    keccak_state_zero((&KSP_STATE as u64) + slot * KSP_STATE_BY)
+    return 0i32
+}
+
+/* Absorb into a leased slot (rate_dom pre-packed via ksp_pack_rate_dom). */
+fn ksp_absorb(slot: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 @export {
+    if slot >= KSP_SLOTS { return -1i32 }
+    if KSP_LEASED[slot] == 0u8 { return -1i32 }
+    return keccak_absorb((&KSP_STATE as u64) + slot * KSP_STATE_BY, msg_ptr, msg_len, rate_dom)
+}
+
+/* Squeeze from a leased slot. */
+fn ksp_squeeze(slot: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 @export {
+    if slot >= KSP_SLOTS { return -1i32 }
+    if KSP_LEASED[slot] == 0u8 { return -1i32 }
+    return keccak_squeeze((&KSP_STATE as u64) + slot * KSP_STATE_BY, out_ptr, out_len, rate_bytes)
+}

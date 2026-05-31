@@ -644,11 +644,11 @@ L_if_end_7:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "cal_unix_to_civil"
+    .asciz "cal_decompose_unix"
     .text
-    .global cal_unix_to_civil
-    .seh_proc cal_unix_to_civil
-cal_unix_to_civil:
+    .global cal_decompose_unix
+    .seh_proc cal_decompose_unix
+cal_decompose_unix:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -769,6 +769,39 @@ cal_unix_to_civil:
     popq %rax
     movl %eax, L_CAL_LAST_SEC(%rip)
     movslq L_CAL_OK(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "cal_unix_to_civil"
+    .text
+    .global cal_unix_to_civil
+    .seh_proc cal_unix_to_civil
+cal_unix_to_civil:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq cal_decompose_unix
+    addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

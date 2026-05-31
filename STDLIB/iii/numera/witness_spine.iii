@@ -67,6 +67,33 @@ const WSPINE_SENTINEL      : u64 = 0xFFFFFFFFFFFFFFFFu64
  *   (c) live bitmap packed 8-per-u64 ([u64; (N+7)/8]) accessed by byte pointer
  *       (the witness_hook [u64; bytes/8] idiom). 1 live byte per slot, 16->2 MiB.
  * Capacity is unchanged (2Mi slots); only the representation changed. */
+/* APOTHEOSIS S.6 Phase 2 (certify + staged horizon -- ADR-S6, evidence-based).
+ * The design doc proposed replacing this HT with a "radix-256 tree" to make a
+ * "gospel-scale 2-mebi-entry .bss evaporate".  VERIFIED: that premise is already
+ * resolved -- this is a FRUGAL 10 MiB INDEX (WSPINE_HT_IDX 8 MiB + WSPINE_HT_LIVE
+ * 2 MiB), with NO id copies (the 64 MiB id table was removed in a prior pass;
+ * the hook is the single source of truth).  Three further facts make the radix
+ * rewrite UNWARRANTED here, so it is staged as a NAMED HORIZON rather than cut:
+ *   (1) Load factor <= 50% (WH_MAX_FRAGMENTS 1Mi vs 2Mi slots; the file comment
+ *       above documents "2 Mi avoids silent E_FULL at 50 percent"), and the probe
+ *       terminates on the first empty slot -> short expected chains, NO clustering
+ *       pathology to fix.
+ *   (2) Every ws_lookup_id consumer (memo_query, witness_compactor,
+ *       computation_graph, memo_lattice) is integrity/audit/admission verification
+ *       over PUBLIC fragment ids -- none is a secret-dependent path, so the radix's
+ *       "constant-time / no probe clustering" property buys nothing real here.
+ *   (3) A literal dense radix-256 is NOT leaner (256 child slots/node ~ HT size at
+ *       2Mi capacity) and NOT .bss-realizable bounded for 2Mi ids; the only feasible
+ *       "sparse + deterministic" form is a binary Patricia, a lateral memory move
+ *       that diverges from the spec AND reseals the integrity organ for no gain.
+ * STAGED HORIZON: IF a real pathology ever emerges (load factor climbs past ~70%,
+ * or a secret-dependent lookup consumer appears), cut a binary Patricia (NOT dense
+ * radix-256) via capture-golden of this HT's id->idx map + a TOTAL differential KAT
+ * (radix returns the same idx the HT does for every inserted id) + one intentional
+ * reseal -- the exact ADR-S6 phased discipline.  Until then the frugal HT is
+ * certified the correct shape; the integrity organ stays byte-identical (no reseal).
+ * The merkle hash-suite parametrization (step 3) + the witness_hook->cad routing +
+ * seal.iii (Phase 1) ARE done; this completes S.6. */
 var WSPINE_HT_IDX  : [u64; 1048576]    /* 2Mi indices packed 2-per-u64 */
 var WSPINE_HT_LIVE : [u64; 262144]     /* 2Mi live bytes (8-per-u64), byte-addressed */
 

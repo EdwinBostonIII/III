@@ -4,9 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "cad.iiialgebraic_time.iii\0"
+    .ascii "cad.iiialgebraic_time.iiintt.iii\0"
 L_str_1:
-    .ascii "algebraic_time.iii\0"
+    .ascii "algebraic_time.iiintt.iii\0"
+L_str_2:
+    .ascii "ntt.iii\0"
     .section .rodata
 L_ENTROPY_OK:
     .quad 0x0
@@ -54,11 +56,8 @@ L_ENTROPY_BASELINE:
     .global L_ENTROPY_BASE_SET
 L_ENTROPY_BASE_SET:
     .zero 2048
-    .global L_ENTROPY_SCRATCH_A
-L_ENTROPY_SCRATCH_A:
-    .zero 512
-    .global L_ENTROPY_SCRATCH_B
-L_ENTROPY_SCRATCH_B:
+    .global L_ENTROPY_U32
+L_ENTROPY_U32:
     .zero 512
     .global L_ENTROPY_WIT_SPEC
 L_ENTROPY_WIT_SPEC:
@@ -403,108 +402,6 @@ L_loop_end_5:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "entropy_bitrev"
-    .text
-    .global L_entropy_bitrev
-    .seh_proc L_entropy_bitrev
-L_entropy_bitrev:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-L_loop_top_8:
-    movl -32(%rbp), %eax
-    pushq %rax
-    movl L_ENTROPY_LOG2N(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_9
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    movl %eax, %eax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shrq %cl, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
     .asciz "entropy_init"
     .text
     .global entropy_init
@@ -521,7 +418,7 @@ entropy_init:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_10:
+L_loop_top_8:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_MAX_PATHS(%rip), %eax
@@ -534,7 +431,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_9
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -589,8 +486,8 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_8
+L_loop_end_9:
     movq L_ENTROPY_PRIME(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -657,7 +554,7 @@ entropy_register_path:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_12:
+L_loop_top_10:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_MAX_PATHS(%rip), %eax
@@ -670,7 +567,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_11
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -689,7 +586,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_13
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -712,7 +609,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_16:
+L_loop_top_14:
     movq -32(%rbp), %rax
     pushq %rax
     movq L_ENTROPY_ID_LEN(%rip), %rax
@@ -725,7 +622,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_15
     leaq L_ENTROPY_PATH_ID(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -761,8 +658,8 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_14
+L_loop_end_15:
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -812,7 +709,7 @@ L_loop_end_17:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_13:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -827,8 +724,8 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_10
+L_loop_end_11:
     movl L_ENTROPY_INVALID_SLOT(%rip), %eax
     pushq %rax
     popq %rax
@@ -994,7 +891,7 @@ entropy_sample:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_17
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -1004,7 +901,7 @@ entropy_sample:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_17:
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1023,7 +920,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_19
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -1033,7 +930,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_19:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1128,7 +1025,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_21
     leaq L_ENTROPY_BUF_LEN(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1154,7 +1051,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_21:
     movslq L_ENTROPY_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1199,7 +1096,7 @@ entropy_spectrum:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_23
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -1209,7 +1106,7 @@ entropy_spectrum:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_23:
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1228,7 +1125,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_25
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -1238,7 +1135,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_25:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1283,7 +1180,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_28:
+L_loop_top_26:
     movl -56(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_N(%rip), %eax
@@ -1296,7 +1193,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_29
+    jz L_loop_end_27
     movl -56(%rbp), %eax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1309,7 +1206,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_29
     movl -48(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_N(%rip), %eax
@@ -1341,7 +1238,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    leaq L_ENTROPY_SCRATCH_A(%rip), %rax
+    leaq L_ENTROPY_U32(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
@@ -1361,14 +1258,17 @@ L_loop_top_28:
     popq %rax
     movq (%rax,%rcx,8), %rax
     pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
     popq %rdx
     popq %rcx
     popq %rax
-    movq %rdx, (%rax,%rcx,8)
+    movl %edx, (%rax,%rcx,4)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_29:
     movl -56(%rbp), %eax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1381,8 +1281,8 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
-    leaq L_ENTROPY_SCRATCH_A(%rip), %rax
+    jz L_if_end_31
+    leaq L_ENTROPY_U32(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
     pushq %rax
@@ -1391,11 +1291,11 @@ L_if_end_31:
     popq %rdx
     popq %rcx
     popq %rax
-    movq %rdx, (%rax,%rcx,8)
+    movl %edx, (%rax,%rcx,4)
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_31:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1410,123 +1310,39 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_28
-L_loop_end_29:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-L_loop_top_34:
-    movl -64(%rbp), %eax
-    pushq %rax
-    movl L_ENTROPY_N(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_35
-    movl -64(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_entropy_bitrev
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -72(%rbp)
-    leaq L_ENTROPY_SCRATCH_B(%rip), %rax
-    pushq %rax
-    movl -72(%rbp), %eax
-    pushq %rax
-    leaq L_ENTROPY_SCRATCH_A(%rip), %rax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movq %rdx, (%rax,%rcx,8)
-    movl -64(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -64(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -72(%rbp)
-L_loop_top_36:
-    movl -72(%rbp), %eax
-    pushq %rax
-    movl L_ENTROPY_N(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setbe %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_37
-    movl -72(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shrq %cl, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -80(%rbp)
-    movl L_ENTROPY_N(%rip), %eax
-    pushq %rax
-    movl -72(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    xorl %edx, %edx
-    divq %rcx
-    pushq %rax
-    popq %rax
-    pushq %rax
+    jmp L_loop_top_26
+L_loop_end_27:
     movq L_ENTROPY_OMEGA(%rip), %rax
     pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_entropy_powmod
-    addq $32, %rsp
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x3b800001, %rax
+    pushq %rax
+    movl L_ENTROPY_N(%rip), %eax
     pushq %rax
     popq %rax
-    movq %rax, -88(%rbp)
+    pushq %rax
+    leaq L_ENTROPY_U32(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq ntt_forward_at
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
-    movq %rax, -96(%rbp)
-L_loop_top_38:
-    movl -96(%rbp), %eax
+    movq %rax, -64(%rbp)
+L_loop_top_32:
+    movl -64(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_N(%rip), %eax
     pushq %rax
@@ -1538,230 +1354,26 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -104(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -112(%rbp)
-L_loop_top_40:
-    movl -112(%rbp), %eax
-    pushq %rax
-    movl -80(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_41
-    leaq L_ENTROPY_SCRATCH_B(%rip), %rax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movl -112(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movq (%rax,%rcx,8), %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -120(%rbp)
-    leaq L_ENTROPY_SCRATCH_B(%rip), %rax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movl -112(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    movl -80(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movq (%rax,%rcx,8), %rax
-    pushq %rax
-    movq -104(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_entropy_mulmod
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -128(%rbp)
-    leaq L_ENTROPY_SCRATCH_B(%rip), %rax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movl -112(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    movq -128(%rbp), %rax
-    pushq %rax
-    movq -120(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_entropy_addmod
-    addq $32, %rsp
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movq %rdx, (%rax,%rcx,8)
-    leaq L_ENTROPY_SCRATCH_B(%rip), %rax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movl -112(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    movl -80(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    movq -128(%rbp), %rax
-    pushq %rax
-    movq -120(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_entropy_submod
-    addq $32, %rsp
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movq %rdx, (%rax,%rcx,8)
-    movq -88(%rbp), %rax
-    pushq %rax
-    movq -104(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_entropy_mulmod
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -104(%rbp)
-    movl -112(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -112(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
-    movl -96(%rbp), %eax
-    pushq %rax
-    movl -72(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -96(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
-    movl -72(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    shlq %cl, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -72(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -80(%rbp)
-L_loop_top_42:
-    movl -80(%rbp), %eax
-    pushq %rax
-    movl L_ENTROPY_N(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_33
     movq -16(%rbp), %rax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -64(%rbp), %eax
     pushq %rax
-    leaq L_ENTROPY_SCRATCH_B(%rip), %rax
+    leaq L_ENTROPY_U32(%rip), %rax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -64(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
-    movq (%rax,%rcx,8), %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rdx
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
-    movl -80(%rbp), %eax
+    movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1771,12 +1383,12 @@ L_loop_top_42:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -80(%rbp)
+    movq %rax, -64(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_32
+L_loop_end_33:
     movslq L_ENTROPY_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1818,7 +1430,7 @@ entropy_set_baseline:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_35
     movslq L_ENTROPY_E_CAP(%rip), %rax
     pushq %rax
     popq %rax
@@ -1828,7 +1440,7 @@ entropy_set_baseline:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_35:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1845,7 +1457,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_37
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -1855,7 +1467,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_37:
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1874,7 +1486,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_39
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -1884,7 +1496,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_39:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1909,7 +1521,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_50:
+L_loop_top_40:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_N(%rip), %eax
@@ -1922,7 +1534,7 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_51
+    jz L_loop_end_41
     leaq L_ENTROPY_BASELINE(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1961,8 +1573,8 @@ L_loop_top_50:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_50
-L_loop_end_51:
+    jmp L_loop_top_40
+L_loop_end_41:
     leaq L_ENTROPY_BASE_SET(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2033,7 +1645,7 @@ entropy_distance:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_43
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2043,7 +1655,7 @@ entropy_distance:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_43:
     leaq L_ENTROPY_BASE_SET(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2062,7 +1674,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_45
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2072,7 +1684,7 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_45:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2101,7 +1713,7 @@ L_if_end_55:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_56:
+L_loop_top_46:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_ENTROPY_N(%rip), %eax
@@ -2114,7 +1726,7 @@ L_loop_top_56:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_57
+    jz L_loop_end_47
     leaq L_ENTROPY_BASELINE(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -2185,8 +1797,8 @@ L_loop_top_56:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_56
-L_loop_end_57:
+    jmp L_loop_top_46
+L_loop_end_47:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2228,7 +1840,7 @@ L_entropy_witness_core:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_49
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2238,7 +1850,7 @@ L_entropy_witness_core:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_49:
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2257,7 +1869,7 @@ L_if_end_59:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_51
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2267,7 +1879,7 @@ L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_51:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2290,7 +1902,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_62:
+L_loop_top_52:
     movq -40(%rbp), %rax
     pushq %rax
     movq L_ENTROPY_ID_LEN(%rip), %rax
@@ -2303,7 +1915,7 @@ L_loop_top_62:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_63
+    jz L_loop_end_53
     leaq L_ENTROPY_WIT_BUF(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -2339,8 +1951,8 @@ L_loop_top_62:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_62
-L_loop_end_63:
+    jmp L_loop_top_52
+L_loop_end_53:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2349,7 +1961,7 @@ L_loop_end_63:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_64:
+L_loop_top_54:
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -2362,7 +1974,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_65
+    jz L_loop_end_55
     leaq L_ENTROPY_WIT_BUF(%rip), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -2413,8 +2025,8 @@ L_loop_top_64:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_64
-L_loop_end_65:
+    jmp L_loop_top_54
+L_loop_end_55:
     leaq L_ENTROPY_WIT_SPEC(%rip), %rax
     pushq %rax
     popq %rax
@@ -2435,7 +2047,7 @@ L_loop_end_65:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_66:
+L_loop_top_56:
     movq -64(%rbp), %rax
     pushq %rax
     movl L_ENTROPY_N(%rip), %eax
@@ -2450,7 +2062,7 @@ L_loop_top_66:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_67
+    jz L_loop_end_57
     leaq L_ENTROPY_WIT_SPEC(%rip), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -2608,8 +2220,8 @@ L_loop_top_66:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_66
-L_loop_end_67:
+    jmp L_loop_top_56
+L_loop_end_57:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2680,7 +2292,7 @@ entropy_witness:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_69
+    jz L_if_end_59
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2690,7 +2302,7 @@ entropy_witness:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_69:
+L_if_end_59:
     leaq L_ENTROPY_LIVE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2709,7 +2321,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_71
+    jz L_if_end_61
     movslq L_ENTROPY_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2719,7 +2331,7 @@ L_if_end_69:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_71:
+L_if_end_61:
     subq $32, %rsp
     callq at_advance
     addq $32, %rsp
@@ -2782,7 +2394,7 @@ entropy_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_63
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2792,7 +2404,7 @@ entropy_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_63:
     movabsq $0x40, %rax
     pushq %rax
     movq L_ENTROPY_OMEGA(%rip), %rax
@@ -2813,7 +2425,7 @@ L_if_end_73:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_65
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -2823,7 +2435,7 @@ L_if_end_73:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_65:
     movabsq $0x20, %rax
     pushq %rax
     movq L_ENTROPY_OMEGA(%rip), %rax
@@ -2844,7 +2456,7 @@ L_if_end_75:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_67
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -2854,7 +2466,7 @@ L_if_end_75:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_67:
     movabsq $0x3b800000, %rax
     pushq %rax
     movabsq $0x3b800000, %rax
@@ -2875,7 +2487,7 @@ L_if_end_77:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_79
+    jz L_if_end_69
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -2885,7 +2497,7 @@ L_if_end_77:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_79:
+L_if_end_69:
     movabsq $0x3b800000, %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -2906,7 +2518,7 @@ L_if_end_79:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_71
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -2916,12 +2528,12 @@ L_if_end_79:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_71:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_82:
+L_loop_top_72:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -2934,7 +2546,7 @@ L_loop_top_82:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_83
+    jz L_loop_end_73
     leaq L_ENTROPY_KAT_ID(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -2967,8 +2579,8 @@ L_loop_top_82:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_82
-L_loop_end_83:
+    jmp L_loop_top_72
+L_loop_end_73:
     leaq L_ENTROPY_KAT_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -2995,7 +2607,7 @@ L_loop_end_83:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_85
+    jz L_if_end_75
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -3005,7 +2617,7 @@ L_loop_end_83:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_85:
+L_if_end_75:
     movabsq $0x5, %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3043,7 +2655,7 @@ L_if_end_85:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_87
+    jz L_if_end_77
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -3053,12 +2665,12 @@ L_if_end_85:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_87:
+L_if_end_77:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_88:
+L_loop_top_78:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -3071,7 +2683,7 @@ L_loop_top_88:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_89
+    jz L_loop_end_79
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3090,7 +2702,7 @@ L_loop_top_88:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_91
+    jz L_if_end_81
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -3100,7 +2712,7 @@ L_loop_top_88:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_91:
+L_if_end_81:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3115,8 +2727,8 @@ L_if_end_91:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_88
-L_loop_end_89:
+    jmp L_loop_top_78
+L_loop_end_79:
     leaq L_ENTROPY_KAT_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -3143,7 +2755,7 @@ L_loop_end_89:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_93
+    jz L_if_end_83
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -3153,12 +2765,12 @@ L_loop_end_89:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_93:
+L_if_end_83:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_94:
+L_loop_top_84:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -3171,7 +2783,7 @@ L_loop_top_94:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_95
+    jz L_loop_end_85
     movabsq $0x7, %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3198,8 +2810,8 @@ L_loop_top_94:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_94
-L_loop_end_95:
+    jmp L_loop_top_84
+L_loop_end_85:
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     popq %rax
@@ -3225,7 +2837,7 @@ L_loop_end_95:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_97
+    jz L_if_end_87
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -3235,7 +2847,7 @@ L_loop_end_95:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_97:
+L_if_end_87:
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -3254,7 +2866,7 @@ L_if_end_97:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_99
+    jz L_if_end_89
     movabsq $0xb, %rax
     pushq %rax
     popq %rax
@@ -3264,12 +2876,12 @@ L_if_end_97:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_99:
+L_if_end_89:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_100:
+L_loop_top_90:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -3282,7 +2894,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_101
+    jz L_loop_end_91
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -3301,7 +2913,7 @@ L_loop_top_100:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_93
     movabsq $0xc, %rax
     pushq %rax
     popq %rax
@@ -3311,7 +2923,7 @@ L_loop_top_100:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_93:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3326,8 +2938,8 @@ L_if_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_100
-L_loop_end_101:
+    jmp L_loop_top_90
+L_loop_end_91:
     leaq L_ENTROPY_KAT_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -3354,7 +2966,7 @@ L_loop_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_105
+    jz L_if_end_95
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -3364,7 +2976,7 @@ L_loop_end_101:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_105:
+L_if_end_95:
     movabsq $0x0, %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -3414,7 +3026,7 @@ L_if_end_105:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_107
+    jz L_if_end_97
     movabsq $0xe, %rax
     pushq %rax
     popq %rax
@@ -3424,7 +3036,7 @@ L_if_end_105:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_107:
+L_if_end_97:
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3443,7 +3055,7 @@ L_if_end_107:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_109
+    jz L_if_end_99
     movabsq $0xf, %rax
     pushq %rax
     popq %rax
@@ -3453,7 +3065,7 @@ L_if_end_107:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_109:
+L_if_end_99:
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -3472,7 +3084,7 @@ L_if_end_109:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_111
+    jz L_if_end_101
     movabsq $0x10, %rax
     pushq %rax
     popq %rax
@@ -3482,7 +3094,7 @@ L_if_end_109:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_111:
+L_if_end_101:
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     popq %rax
@@ -3508,7 +3120,7 @@ L_if_end_111:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_113
+    jz L_if_end_103
     movabsq $0x11, %rax
     pushq %rax
     popq %rax
@@ -3518,7 +3130,7 @@ L_if_end_111:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_113:
+L_if_end_103:
     movabsq $0x1, %rax
     pushq %rax
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
@@ -3547,7 +3159,7 @@ L_if_end_113:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_115
+    jz L_if_end_105
     movabsq $0x12, %rax
     pushq %rax
     popq %rax
@@ -3557,7 +3169,7 @@ L_if_end_113:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_115:
+L_if_end_105:
     leaq L_ENTROPY_KAT_SPEC(%rip), %rax
     pushq %rax
     popq %rax
@@ -3582,7 +3194,7 @@ L_if_end_115:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_117
+    jz L_if_end_107
     movabsq $0x13, %rax
     pushq %rax
     popq %rax
@@ -3592,12 +3204,12 @@ L_if_end_115:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_117:
+L_if_end_107:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_118:
+L_loop_top_108:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x40, %rax
@@ -3610,7 +3222,7 @@ L_loop_top_118:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_119
+    jz L_loop_end_109
     leaq L_ENTROPY_KAT_SPEC2(%rip), %rax
     pushq %rax
     movl -64(%rbp), %eax
@@ -3641,8 +3253,8 @@ L_loop_top_118:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_118
-L_loop_end_119:
+    jmp L_loop_top_108
+L_loop_end_109:
     leaq L_ENTROPY_KAT_SPEC2(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -3689,7 +3301,7 @@ L_loop_end_119:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_121
+    jz L_if_end_111
     movabsq $0x14, %rax
     pushq %rax
     popq %rax
@@ -3699,7 +3311,7 @@ L_loop_end_119:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_121:
+L_if_end_111:
     leaq L_ENTROPY_KAT_ID(%rip), %rax
     pushq %rax
     popq %rax
@@ -3726,7 +3338,7 @@ L_if_end_121:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_123
+    jz L_if_end_113
     movabsq $0x15, %rax
     pushq %rax
     popq %rax
@@ -3736,7 +3348,7 @@ L_if_end_121:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_123:
+L_if_end_113:
     leaq L_ENTROPY_BASE_SET(%rip), %rax
     pushq %rax
     movl -72(%rbp), %eax
@@ -3775,7 +3387,7 @@ L_if_end_123:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_125
+    jz L_if_end_115
     movabsq $0x16, %rax
     pushq %rax
     popq %rax
@@ -3785,7 +3397,7 @@ L_if_end_123:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_125:
+L_if_end_115:
     leaq L_ENTROPY_BASE_SET(%rip), %rax
     pushq %rax
     movl -72(%rbp), %eax
@@ -3804,7 +3416,7 @@ L_if_end_125:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_127
+    jz L_if_end_117
     movabsq $0x17, %rax
     pushq %rax
     popq %rax
@@ -3814,7 +3426,7 @@ L_if_end_125:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_127:
+L_if_end_117:
     leaq L_ENTROPY_KAT_H1(%rip), %rax
     pushq %rax
     popq %rax
@@ -3857,7 +3469,7 @@ L_if_end_127:
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_128:
+L_loop_top_118:
     movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -3870,7 +3482,7 @@ L_loop_top_128:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_129
+    jz L_loop_end_119
     leaq L_ENTROPY_KAT_H1(%rip), %rax
     pushq %rax
     movl -88(%rbp), %eax
@@ -3895,7 +3507,7 @@ L_loop_top_128:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_131
+    jz L_if_end_121
     movabsq $0x18, %rax
     pushq %rax
     popq %rax
@@ -3905,7 +3517,7 @@ L_loop_top_128:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_131:
+L_if_end_121:
     movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3920,8 +3532,8 @@ L_if_end_131:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_128
-L_loop_end_129:
+    jmp L_loop_top_118
+L_loop_end_119:
     movabsq $0x2a, %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3961,7 +3573,7 @@ L_loop_end_129:
     pushq %rax
     popq %rax
     movq %rax, -104(%rbp)
-L_loop_top_132:
+L_loop_top_122:
     movl -104(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -3974,7 +3586,7 @@ L_loop_top_132:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_133
+    jz L_loop_end_123
     leaq L_ENTROPY_KAT_H1(%rip), %rax
     pushq %rax
     movl -104(%rbp), %eax
@@ -3999,7 +3611,7 @@ L_loop_top_132:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_135
+    jz L_if_end_125
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -4007,7 +3619,7 @@ L_loop_top_132:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_135:
+L_if_end_125:
     movl -104(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -4022,8 +3634,8 @@ L_if_end_135:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_132
-L_loop_end_133:
+    jmp L_loop_top_122
+L_loop_end_123:
     movzbq -96(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4036,7 +3648,7 @@ L_loop_end_133:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_137
+    jz L_if_end_127
     movabsq $0x19, %rax
     pushq %rax
     popq %rax
@@ -4046,7 +3658,7 @@ L_loop_end_133:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_137:
+L_if_end_127:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

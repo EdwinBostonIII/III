@@ -21,12 +21,13 @@ module numera_crc32
 
 const CRC32_POLY_REV : u32 = 0xEDB88320u32
 
-var CRC32_TABLE : [u32; 256]
+var CRC32_TAB8 : [u32; 2048]   /* [D-CRC-1] slice-by-8: 8 tables of 256 (tab[k] at k*256) */
 var CRC32_TABLE_INIT : u8 = 0u8
 var CRC32_STATE : u32 = 0xFFFFFFFFu32
 
 fn crc32_init_table() -> i32 {
     if CRC32_TABLE_INIT == 1u8 { return 0i32 }
+    /* tab[0]: the standard byte-wise reflected CRC-32 table. */
     let mut i : u32 = 0u32
     while i < 256u32 {
         let mut c : u32 = i
@@ -39,8 +40,22 @@ fn crc32_init_table() -> i32 {
             }
             k = k + 1u32
         }
-        CRC32_TABLE[i] = c
+        CRC32_TAB8[i] = c
         i = i + 1u32
+    }
+    /* tab[1..7]: slice-by-8 derived -- tab[n][j] = (tab[n-1][j] >> 8) ^ tab[0][tab[n-1][j] & 0xFF]. */
+    let mut n : u32 = 1u32
+    while n < 8u32 {
+        let base : u32 = n * 256u32
+        let pbase : u32 = (n - 1u32) * 256u32
+        let mut j : u32 = 0u32
+        while j < 256u32 {
+            let prev : u32 = CRC32_TAB8[pbase + j]
+            let lo : u32 = prev & 0xFFu32
+            CRC32_TAB8[base + j] = (prev >> 8u32) ^ CRC32_TAB8[lo]
+            j = j + 1u32
+        }
+        n = n + 1u32
     }
     CRC32_TABLE_INIT = 1u8
     return 0i32
@@ -56,10 +71,38 @@ fn crc32_update(data: *u8, len: u64) -> i32 @export {
     crc32_init_table()
     let mut crc : u32 = CRC32_STATE
     let mut i : u64 = 0u64
+    /* [D-CRC-1] slice-by-8: consume 8 bytes per iteration via the 8 derived tables. */
+    while (i + 8u64) <= len {
+        let d0 : u32 = data[i + 0u64] as u32
+        let d1 : u32 = data[i + 1u64] as u32
+        let d2 : u32 = data[i + 2u64] as u32
+        let d3 : u32 = data[i + 3u64] as u32
+        let w  : u32 = d0 | (d1 << 8u32) | (d2 << 16u32) | (d3 << 24u32)
+        let one : u32 = crc ^ w
+        let i0 : u32 = one & 0xFFu32
+        let i1 : u32 = (one >> 8u32) & 0xFFu32
+        let i2 : u32 = (one >> 16u32) & 0xFFu32
+        let i3 : u32 = (one >> 24u32) & 0xFFu32
+        let b4 : u32 = data[i + 4u64] as u32
+        let b5 : u32 = data[i + 5u64] as u32
+        let b6 : u32 = data[i + 6u64] as u32
+        let b7 : u32 = data[i + 7u64] as u32
+        let mut x : u32 = CRC32_TAB8[1792u32 + i0]   /* tab[7] */
+        x = x ^ CRC32_TAB8[1536u32 + i1]             /* tab[6] */
+        x = x ^ CRC32_TAB8[1280u32 + i2]             /* tab[5] */
+        x = x ^ CRC32_TAB8[1024u32 + i3]             /* tab[4] */
+        x = x ^ CRC32_TAB8[768u32 + b4]              /* tab[3] */
+        x = x ^ CRC32_TAB8[512u32 + b5]              /* tab[2] */
+        x = x ^ CRC32_TAB8[256u32 + b6]              /* tab[1] */
+        x = x ^ CRC32_TAB8[b7]                        /* tab[0] */
+        crc = x
+        i = i + 8u64
+    }
+    /* remainder: byte-by-byte through tab[0]. */
     while i < len {
         let b : u32 = data[i] as u32
         let idx : u32 = (crc ^ b) & 0xFFu32
-        crc = (crc >> 8u32) ^ CRC32_TABLE[idx]
+        crc = (crc >> 8u32) ^ CRC32_TAB8[idx]
         i = i + 1u64
     }
     CRC32_STATE = crc

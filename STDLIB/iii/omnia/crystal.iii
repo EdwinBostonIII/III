@@ -39,6 +39,13 @@ const CRYSTAL_E_FULL  : i32 = -2i32
 
 const CRYSTAL_MAX_INSTANCES : u32 = 256u32
 
+/* Crystal ids live in a HIGH band [CRYSTAL_ID_BASE, +255], disjoint from the bigint
+ * id pool [1, BIGINT_SLOTS=64].  field_crystal returns a bigint_id on success and a
+ * crystal id on failure, told apart via crystal_slot_of; when both pools numbered from
+ * 1 a success bigint_id i aliased live crystal slot i-1.  Resolution is via id - BASE,
+ * so the offset is transparent to all crystal consumers.  [audit FC-COLLIDE-1] */
+const CRYSTAL_ID_BASE : u64 = 0x10000u64
+
 var CRYSTAL_CODE   : [u32; 256]
 var CRYSTAL_SITE   : [u8;  8192]   /* 256 × 32 */
 var CRYSTAL_CAP    : [u64; 256]
@@ -99,8 +106,8 @@ fn crystal_alloc_slot() -> u32 {
 }
 
 fn crystal_slot_of(id: u64) -> u32 {
-    if id == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = id - 1u64
+    if id < CRYSTAL_ID_BASE { return 0xFFFFFFFFu32 }   /* below the crystal band (0=INVALID or a bigint id) [audit FC-COLLIDE-1] */
+    let s : u64 = id - CRYSTAL_ID_BASE
     if s >= (CRYSTAL_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
     let si : u32 = s as u32
     if CRYSTAL_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
@@ -188,7 +195,7 @@ fn crystal_mac_compute(s: u32) -> u32 {
 }
 
 /* Mint a crystal.  site_hash_ptr and msg_hash_ptr each point to 32
- * bytes (caller-owned).  Returns the crystal id (slot+1). */
+ * bytes (caller-owned).  Returns the crystal id (slot + CRYSTAL_ID_BASE). */
 fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 @export {
     crystal_init_key()
     let s : u32 = crystal_alloc_slot()
@@ -208,7 +215,7 @@ fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64
         i = i + 1u32
     }
     crystal_mac_compute(s)
-    return (s as u64) + 1u64
+    return (s as u64) + CRYSTAL_ID_BASE
 }
 
 /* Set the K-fixed value AFTER mint (without invalidating MAC) */

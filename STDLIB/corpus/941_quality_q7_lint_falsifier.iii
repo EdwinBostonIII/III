@@ -1,0 +1,40 @@
+/* 941 -- W4.2 / CUT-15 falsifier: sanctus/quality_q7's check (a) "resolver source contains no
+ * forbidden behaviour" is no longer a bare unconditionally-set flag.  quality_run_resolver_lint
+ * is a REAL lint that scans source bytes for forbidden constructs (floating point, hardware
+ * randomness, wall-clock) and can REJECT.  Proves: a clean source lints clean; a source bearing
+ * a forbidden token ("rdtsc") is rejected and flags the violation the gate consults; a clean
+ * re-lint clears it; a null source is rejected defensively.  99 = pass. */
+module corpus_941
+
+extern @abi(c-msvc-x64) fn quality_run_resolver_lint(src: u64, len: u32) -> u8 from "quality_q7.iii"
+extern @abi(c-msvc-x64) fn quality_resolver_lint_violation() -> u8 from "quality_q7.iii"
+
+/* "pure resolve seal" -- 17 bytes, no forbidden substring. */
+var Q_CLEAN : [u8; 17] = [112u8, 117u8, 114u8, 101u8, 32u8, 114u8, 101u8, 115u8, 111u8, 108u8, 118u8, 101u8, 32u8, 115u8, 101u8, 97u8, 108u8]
+/* "x rdtsc y" -- 9 bytes, contains the forbidden token "rdtsc". */
+var Q_DIRTY : [u8; 9]  = [120u8, 32u8, 114u8, 100u8, 116u8, 115u8, 99u8, 32u8, 121u8]
+
+fn main() -> u64 {
+    let clean : u64 = (&Q_CLEAN) as u64
+    let dirty : u64 = (&Q_DIRTY) as u64
+
+    /* Positive arm: a clean resolver source lints clean. */
+    if quality_run_resolver_lint(clean, 17u32) != 1u8 { return 1u64 }
+    if quality_resolver_lint_violation() != 0u8 { return 2u64 }
+
+    /* FALSIFIER: a forbidden construct is REJECTED (the gate can say no). */
+    if quality_run_resolver_lint(dirty, 9u32) != 0u8 { return 3u64 }
+    if quality_resolver_lint_violation() != 1u8 { return 4u64 }
+
+    /* A clean re-lint clears the violation (no sticky false-red). */
+    if quality_run_resolver_lint(clean, 17u32) != 1u8 { return 5u64 }
+    if quality_resolver_lint_violation() != 0u8 { return 6u64 }
+
+    /* Defensive: a null source is a violation, not a silent pass. */
+    if quality_run_resolver_lint(0u64, 10u32) != 0u8 { return 7u64 }
+    if quality_resolver_lint_violation() != 1u8 { return 8u64 }
+
+    /* Token at the very start is still caught (boundary). */
+    if quality_run_resolver_lint(dirty + 2u64, 5u32) != 0u8 { return 9u64 }   /* exactly "rdtsc" */
+    return 99u64
+}

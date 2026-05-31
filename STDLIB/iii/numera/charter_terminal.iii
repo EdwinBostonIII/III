@@ -81,6 +81,7 @@ const CT_KIND_H12       : u8  = 11u8
 const CT_KIND_H13       : u8  = 12u8
 const CT_KIND_CANARY    : u8  = 13u8     /* a deliberately-false clause (negative arm only) */
 const CT_VERDICT_GREEN  : u64 = 99u64    /* > CT_MAX_CLAUSES, so never a RED index */
+const CT_VERDICT_EMPTY  : u64 = 98u64    /* RED: self-population failed to fill the registry (W4.1) */
 const CT_U32MASK        : u64 = 0xFFFFFFFFu64
 
 /* --- clause registry (W8-bounded; kind-tag dispatch, never a fn pointer) --- */
@@ -170,23 +171,10 @@ fn ct_seal_verdict(n: u32) -> i32 {
     return CT_OK
 }
 
-/* THE TERMINAL GATE.  Fold every registered clause: GREEN (99) iff all hold; else the
- * 1-based index of the first failing clause (RED) -- which, for the thirteen registered in
- * order, IS the failing Harmony Invariant's number.  GREEN seals the verdict (dogfoods the
- * one name -> the one .iii sha256). */
-fn ct_run_charter() -> u64 @export {
-    let n : u32 = CT_CLAUSE_COUNT
-    let mut i : u32 = 0u32
-    while i < n {
-        if ct_clause_eval(i) != 1u8 { return ((i as u64) & CT_U32MASK) + 1u64 }
-        i = i + 1u32
-    }
-    ct_seal_verdict(n)
-    return CT_VERDICT_GREEN
-}
-
 /* Register all thirteen Harmony-Invariant clauses (H1..H13) at slots 0..12.  Returns the
- * count registered, or -1 if any registration failed (registry full / out of order). */
+ * count registered, or -1 if any registration failed (registry full / out of order).
+ * (Kept private: the registry is filled either here, from the self-populating gate, or from
+ * the selftest -- never by an outside caller.) */
 fn ct_register_all() -> i32 {
     ct_init()
     let mut k : u32 = 0u32
@@ -195,6 +183,42 @@ fn ct_register_all() -> i32 {
         k = k + 1u32
     }
     return CT_INVARIANTS as i32
+}
+
+/* Number of clauses currently registered.  Lets a caller WITNESS self-population: after a
+ * fresh production-path ct_run_charter() this must read CT_INVARIANTS (13), never 0 -- the
+ * exact discriminator the pre-W4.1 false-GREEN-over-empty fails (it left this at 0). */
+fn ct_clause_count() -> u32 @export {
+    return CT_CLAUSE_COUNT
+}
+
+/* THE TERMINAL GATE.  Fold every registered clause: GREEN (99) iff all hold; else the
+ * 1-based index of the first failing clause (RED) -- which, for the thirteen registered in
+ * order, IS the failing Harmony Invariant's number.  GREEN seals the verdict (dogfoods the
+ * one name -> the one .iii sha256).
+ *
+ * RIPPLE-14 (W4.1): the gate is SELF-POPULATING on the production path.  Before W4.1 the
+ * registry was filled only by ct_register_all, reachable only from ct_selftest -- so a
+ * stranger calling ct_run_charter() over the fresh (empty) registry got an empty fold ->
+ * ct_seal_verdict(0) -> a sealed false-GREEN.  Now, when the registry is empty, the gate
+ * registers the thirteen clauses ITSELF.  It populates only when EMPTY -- never "always",
+ * which would wipe a deliberately registered extra clause (the selftest's canary at slot 13)
+ * and so defeat the very falsifier that proves the fold can go RED.  Defense in depth: if
+ * population does not yield exactly CT_INVARIANTS clauses, refuse with a RED sentinel rather
+ * than seal a partial/empty verdict -- the gate can say *no*. */
+fn ct_run_charter() -> u64 @export {
+    if CT_CLAUSE_COUNT == 0u32 {
+        ct_register_all()
+        if CT_CLAUSE_COUNT != CT_INVARIANTS { return CT_VERDICT_EMPTY }
+    }
+    let n : u32 = CT_CLAUSE_COUNT
+    let mut i : u32 = 0u32
+    while i < n {
+        if ct_clause_eval(i) != 1u8 { return ((i as u64) & CT_U32MASK) + 1u64 }
+        i = i + 1u32
+    }
+    ct_seal_verdict(n)
+    return CT_VERDICT_GREEN
 }
 
 /* Copy the last sealed terminal verdict into out[0..32). -1 on null. */
@@ -237,6 +261,16 @@ fn ct_selftest() -> u64 @export {
     if cad_eq((&CT_VERDICT as u64) as *u8, (&CT_SAVED as u64) as *u8) != 1u8 { return 19u64 }
     if ct_register(CT_KIND_CANARY) != 13i32 { return 20u64 }
     if ct_run_charter() != 14u64 { return 21u64 }
+    /* RIPPLE-14 falsifier (W4.1): from a FRESH (empty) registry the PUBLIC gate must
+     * SELF-POPULATE -- not seal a false-GREEN over nothing.  Pre-W4.1 ct_run_charter left the
+     * registry empty yet returned GREEN; the discriminator is the post-call clause count.
+     * Drive the empty state, confirm it (22), call the public gate and require a REAL green
+     * (23), then require the count to be the full thirteen afterwards (24) -- which is 0 on
+     * the old code, so this arm FAILS pre-fix and PASSES only once the gate populates itself. */
+    ct_init()
+    if ct_clause_count() != 0u32                 { return 22u64 }
+    if ct_run_charter()  != CT_VERDICT_GREEN     { return 23u64 }
+    if ct_clause_count() != CT_INVARIANTS        { return 24u64 }
     return 99u64
 }
 

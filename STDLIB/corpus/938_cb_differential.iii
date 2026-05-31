@@ -1,0 +1,12 @@
+/* 938 — cb_conv differential oracle, build-gated (W2.2 / ENHANCE-21 / SEPARATE-2).
+ *
+ * The first-order SKI combinator conversion (cb_conv) and the kernel's CCL-backed NbE
+ * conversion (tc_conv) must AGREE on a fixed, comprehensive corpus of conversion pairs
+ * spanning the computational fragment (beta, Bool/Nat/sum/Id iota, constructor
+ * distinctness) -- positive AND negative arms.  99 = every pair agrees; any other code =
+ * the 1-based index of the first pair where the two independent reduction engines diverge,
+ * which would expose a soundness bug in the trusted reducer.  Part of run_corpus GREEN: any
+ * ccl edit that diverges cb_conv from tc_conv reddens the build. */
+module corpus_938
+extern @abi(c-msvc-x64) fn cb_differential_cert() -> u64 from "typecheck.iii"
+fn main() -> u64 { return cb_differential_cert() }

@@ -57,6 +57,7 @@ extern @abi(c-msvc-x64) fn calculus_is_initialised() -> u8 from "calculus_v1.iii
 const PROOF_PRIMITIVE_COUNT : u32 = 19u32
 
 const PROOF_OK              : u32 = 0u32
+const PROOF_REDUCIBLE       : u32 = 1u32          /* W4.2: distinct pair, structurally identical, NOT a documented operational pair -> reducible (the gate can say no) */
 const PROOF_OUT_OF_RANGE    : u32 = 0xFFFFFFFFu32
 
 /* ---------------------------------------------------------------- */
@@ -205,11 +206,19 @@ fn proof_pair(i: u32, j: u32) -> u32 @export {
     if j > PROOF_PRIMITIVE_COUNT { return PROOF_OUT_OF_RANGE }
     /* i == j: trivially irreducible. */
     if i == j { return PROOF_OK }
-    /* i != j: irreducible by distinct primitive_id.
-     * The structural distinguishability is supplementary; either
-     * (a) at least one structural field differs, or (b) the pair
-     * is in PROOF_OP_PAIR_TABLE. Either way, irreducible. */
-    return PROOF_OK
+    /* W4.2 (ENHANCE-17): the verdict now DEPENDS on the real irreducibility witness, not
+     * a bare `return PROOF_OK`.  A distinct ordered pair (i != j) is irreducible iff it is
+     * structurally distinguishable in at least one of {hexad, K-cost, arg_mask, ring_min},
+     * OR it is one of the documented operational-distinction pairs (calculus_v1 sec A.2)
+     * whose distinction is semantic, not structural.  A pair that is structurally identical
+     * AND carries no operational backing is REDUCIBLE -- the gate returns PROOF_REDUCIBLE,
+     * proving it can reject.  (Requires the metadata table; without it the pair is
+     * unjudgeable -> out-of-range rather than a false OK.) */
+    if calculus_is_initialised() != 1u8 { return PROOF_OUT_OF_RANGE }
+    let smask : u32 = proof_structural_distinguishability(i, j)
+    if smask != 0u32 { return PROOF_OK }
+    if is_operational_pair(i, j) == 1u8 { return PROOF_OK }
+    return PROOF_REDUCIBLE
 }
 
 /* ---------------------------------------------------------------- */
@@ -303,4 +312,35 @@ fn proof_count_irreducible() -> u32 @export {
         i = i + 1u32
     }
     return total
+}
+
+/* ---------------------------------------------------------------- */
+/* W4.2 falsifier support (test-only).                                */
+/*                                                                   */
+/* The calculus has NO reducible pair by construction, so a genuine   */
+/* reducible input must be MANUFACTURED to prove proof_pair / the      */
+/* matrix actually reject one.  proof_drop_op_pair_for_test           */
+/* de-whitelists the operational-distinction pair at table slot `idx`  */
+/* (overwriting it with the never-matching (0,0); primitive ids are    */
+/* 1..19, so it can never match a real lookup again).  That pair is    */
+/* structurally identical (smask == 0) AND now has no operational      */
+/* backing -- i.e. reducible.  proof_pair / proof_run_full_matrix /    */
+/* proof_first_failure must then REJECT it.  Returns the dropped pair  */
+/* encoded left*100+right so the test can target it exactly; 0 if idx  */
+/* is out of range.                                                    */
+/* ---------------------------------------------------------------- */
+fn proof_drop_op_pair_for_test(idx: u32) -> u32 @export {
+    if idx >= PROOF_OP_PAIRS { return 0u32 }
+    if PROOF_OP_INIT != 1u8 { _proof_init_op_pairs() }
+    let l : u32 = (PROOF_OP_LEFT[idx]  as u32) & 0xFFu32
+    let r : u32 = (PROOF_OP_RIGHT[idx] as u32) & 0xFFu32
+    PROOF_OP_LEFT[idx]  = 0u8
+    PROOF_OP_RIGHT[idx] = 0u8
+    return l * 100u32 + r
+}
+
+/* Restore the operational-distinction table to its full, correct state. */
+fn proof_restore_op_pairs_for_test() -> i32 @export {
+    PROOF_OP_INIT = 0u8
+    return _proof_init_op_pairs()
 }

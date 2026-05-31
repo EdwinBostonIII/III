@@ -1,0 +1,20 @@
+/* 967 — W3.20 / E-PQD-2 falsifier: the PQ dispatcher rejects a degenerate suite
+ * low-nibble (0) instead of underflowing pq_slh_lv (0-1 -> u64 MAX) and indexing an
+ * SLH params table out of bounds. SLH-family suite 0x0120 (nibble 0) and 0x0124
+ * (nibble 4) must route to E_BAD_SUITE (-1) across keygen/sign/verify. 99 = pass. */
+module corpus_967
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_pq_keygen(suite: u64, seed: u64, pk: u64, sk: u64) -> i32 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn iii_pq_sign(suite: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn iii_pq_verify(suite: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "pq_dispatch.iii"
+
+fn main() -> i32 {
+    let buf : *u8 = malloc(256u64)
+    let b : u64 = buf as u64
+    let bad : i32 = 0i32 - 1i32                       /* E_BAD_SUITE; var avoids the paren-literal-before-brace trap */
+    if iii_pq_keygen(0x0120u64, b, b, b) != bad { return 1i32 }            /* nibble 0 keygen */
+    if iii_pq_sign(0x0120u64, b, b, 4u64, b, 64u64) != bad { return 2i32 } /* nibble 0 sign */
+    if iii_pq_verify(0x0120u64, b, b, 4u64, b, 64u64) != bad { return 3i32 } /* nibble 0 verify */
+    if iii_pq_keygen(0x0124u64, b, b, b) != bad { return 4i32 }            /* nibble 4 (out of range) */
+    return 99i32
+}

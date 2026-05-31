@@ -127,31 +127,59 @@ fn babel_intent_send(intent_ptr: u64, crystal_id: u64, dst_buf: u64, dst_cap: u3
     return off
 }
 
+/* 1u8 iff the patlen bytes at src+off equal pat[0..patlen) (bounds-checked). */
+fn _babel_eq_at(src: u64, srclen: u32, off: u32, pat: u64, patlen: u32) -> u8 {
+    if patlen > srclen { return 0u8 }
+    if off > srclen - patlen { return 0u8 }
+    let mut i : u32 = 0u32
+    while i < patlen {
+        let sp : *u8 = (src + ((off as u64) & 0xFFFFu64) + ((i as u64) & 0xFFFFu64)) as *u8
+        let pp : *u8 = (pat + ((i as u64) & 0xFFFFu64)) as *u8
+        if sp[0u64] != pp[0u64] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+/* Index of the first occurrence of pat in src[start..srclen), or 0xFFFFFFFF if absent. */
+fn _babel_find_from(src: u64, srclen: u32, start: u32, pat: u64, patlen: u32) -> u32 {
+    if patlen == 0u32 { return 0xFFFFFFFFu32 }
+    if patlen > srclen { return 0xFFFFFFFFu32 }
+    let last : u32 = srclen - patlen
+    let mut i : u32 = start
+    while i <= last {
+        if _babel_eq_at(src, srclen, i, pat, patlen) == 1u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+/* W4.2 (ENHANCE-17): REAL Babel-envelope validation.  Pre-fix this "validated" by finding the
+ * 3-byte substring "bab" ANYWHERE -- so any `{...bab...}` blob was accepted.  Now the envelope
+ * must literally BEGIN with the exact 47-byte Babel prefix
+ * `{"babel_version":1,"domain":"iii.intent","id":"`, end with '}', and carry the four field
+ * markers ("goal_kind", "intent_id", "required_guarantees", "expected_hexad") in order -- the
+ * exact structure babel_intent_send emits.  A blob that merely contains "bab" is rejected. */
 fn babel_intent_receive(src: u64, src_len: u32, arena_id: u64) -> u64 @export {
     let _arena : u64 = arena_id
     if src == 0u64 { return 0u64 }
-    if src_len < 32u32 { return 0u64 }
-    /* First byte must be '{' */
+    if src_len < 47u32 { return 0u64 }              /* shorter than the envelope prefix */
+    /* First byte '{', last byte '}'. */
     let bp : *u8 = (src) as *u8
     if bp[0u64] != 123u8 { return 0u64 }
-    /* Last byte must be '}' */
     let last_off : u64 = (src_len as u64) & 0xFFFFFFFFu64
     let lp : *u8 = (src + last_off - 1u64) as *u8
     if lp[0u64] != 125u8 { return 0u64 }
-    /* Look for "babel_version":1 */
-    let mut found_ver : u8 = 0u8
-    let mut i : u32 = 0u32
-    while i + 18u32 < src_len {
-        let p0 : *u8 = (src + ((i as u64) & 0xFFFFu64)) as *u8
-        let p1 : *u8 = (src + ((i as u64) & 0xFFFFu64) + 1u64) as *u8
-        let p2 : *u8 = (src + ((i as u64) & 0xFFFFu64) + 2u64) as *u8
-        if p0[0u64] == 98u8 {
-            if p1[0u64] == 97u8 {
-                if p2[0u64] == 98u8 { found_ver = 1u8 }
-            }
-        }
-        i = i + 1u32
-    }
-    if found_ver == 0u8 { return 0u64 }
+    /* Exact 47-byte prefix match -- the real structural gate. */
+    if _babel_eq_at(src, src_len, 0u32, (&BABEL_PRE) as u64, 47u32) == 0u8 { return 0u64 }
+    /* The four field markers, in order, after the prefix+id. */
+    let p1 : u32 = _babel_find_from(src, src_len, 47u32, (&BABEL_SFX1) as u64, 14u32)
+    if p1 == 0xFFFFFFFFu32 { return 0u64 }
+    let p2 : u32 = _babel_find_from(src, src_len, p1 + 14u32, (&BABEL_SFX2) as u64, 13u32)
+    if p2 == 0xFFFFFFFFu32 { return 0u64 }
+    let p3 : u32 = _babel_find_from(src, src_len, p2 + 13u32, (&BABEL_SFX3) as u64, 23u32)
+    if p3 == 0xFFFFFFFFu32 { return 0u64 }
+    let p4 : u32 = _babel_find_from(src, src_len, p3 + 23u32, (&BABEL_SFX4) as u64, 18u32)
+    if p4 == 0xFFFFFFFFu32 { return 0u64 }
     return src
 }

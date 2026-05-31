@@ -294,7 +294,10 @@ fn bprobe_neg_log2_fp(x: u64) -> u64 {
     let mantissa   : u64 = x - mant_scale
     let frac_fp    : u64 = (mantissa * BPROBE_FP_ONE) / mant_scale
     // linear correction log2(1+frac) ~= frac/ln2, exact integer ops.
-    let frac_correction : u64 = (frac_fp * BPROBE_LOG2_INV_LN2) >> 32u64
+    /* frac_fp in [0,2^32); frac_fp * BPROBE_LOG2_INV_LN2 (~2^32.53) overflows u64 for
+     * frac_fp > ~0.69*2^32, wrapping to a wrong -log2 in the info-gain decision path.
+     * Pre-shift one operand: (frac_fp>>1)*K < 2^63.53 fits, >>31 compensates.  [audit basal_probe-1] */
+    let frac_correction : u64 = ((frac_fp >> 1u64) * BPROBE_LOG2_INV_LN2) >> 31u64
     if frac_correction >= int_part { return 0u64 }
     return int_part - frac_correction
 }
@@ -317,13 +320,22 @@ fn bprobe_entropy_of(weights: *u64, n: u32) -> u64 {
 
 // ---- internal: marginal P(Y=o) = sum_h (W[h]*PRED[probe,h,o]) >> 32 ----
 
+/* Fixed-point multiply (a/2^32)*(b/2^32)*2^32 with the FP_ONE identity folded so the
+ * 2^32*2^32 certainty boundary (collapsed weight * declared likelihood) never forms a
+ * 2^64 product.  Exact for all valid a,b <= BPROBE_FP_ONE.  [audit basal_probe-2] */
+fn bprobe_mul_fp(a: u64, b: u64) -> u64 {
+    if a == BPROBE_FP_ONE { return b }
+    if b == BPROBE_FP_ONE { return a }
+    return (a * b) >> 32u64
+}
+
 fn bprobe_marginal(probe: u32, outcome: u32) -> u64 {
     let mut acc : u64 = 0u64
     let mut h : u32 = 0u32
     let n : u32 = BPROBE_N_HYP
     while h < n {
         let idx : u64 = bprobe_pred_idx(probe, h, outcome)
-        acc = acc + ((BPROBE_W[h] * BPROBE_PRED[idx]) >> 32u64)
+        acc = acc + bprobe_mul_fp(BPROBE_W[h], BPROBE_PRED[idx])
         h = h + 1u32
     }
     return acc
@@ -362,7 +374,7 @@ fn bprobe_posterior(probe: u32, outcome: u32, out: *u64) -> i32 {
     let mut h : u32 = 0u32
     while h < n {
         let idx : u64 = bprobe_pred_idx(probe, h, outcome)
-        let u_h : u64 = (BPROBE_W[h] * BPROBE_PRED[idx]) >> 32u64
+        let u_h : u64 = bprobe_mul_fp(BPROBE_W[h], BPROBE_PRED[idx])
         out[h as u64] = u_h
         total = total + u_h
         h = h + 1u32

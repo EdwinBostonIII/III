@@ -68,6 +68,7 @@ fn glyph_bytes_unpack(in_192: u64, dst_ptr: u64, dst_cap: u32) -> i32 @export {
     if gv3_form_id(i_l) != GV3_FORM_BYTES { return -2i32 }
     if gv3_validate(i_l) != 1u8 { return -3i32 }
     let n : u32 = gv3_payload_len(i_l)
+    if n > 152u32 { return -4i32 }   /* payload_len is read from the (untrusted) glyph header; the source payload region is only 152 bytes [audit gv-bytes] */
     if n > c_l { return -4i32 }
     let sp : *u8 = (i_l + 8u64) as *u8
     let dp : *u8 = d_l as *u8

@@ -1,0 +1,63 @@
+/* Falsifier for COMBINE-7 / II-HTTPCLIENT-1 (and the mirror II-HTTPSERVER-1): the chunked-decode
+ * capacity guard `CURSOR + sz > RAW_LEN` is an unchecked u64 add that WRAPS for an adversarial chunk
+ * size, defeating the bound and driving an out-of-bounds copy.
+ *
+ * Wire input: a well-formed chunked response (status + Transfer-Encoding: chunked + CRLF, identical
+ * to corpus 58's first 47 bytes) whose FIRST chunk size is the hex "FFFFFFFFFFFFFFD0" = 2^64-48.
+ *   - BROKEN code: CURSOR(65) + (2^64-48) wraps to 17 < RAW_LEN(69); the guard PASSES; the copy loop
+ *     `while k < sz` writes 2^64-48 bytes into a 4-byte dst -> OOB write -> process crashes -> the
+ *     harness records a non-99 exit -> FAIL (the prove-the-negative arm).
+ *   - FIXED code (bnd_cap_ok): 65<=69, room=4, sz=2^64-48 > 4 -> reject (HTTP_E_PARSE) -> the parser
+ *     returns safely, no OOB, and this KAT reaches `return 99u64` -> PASS.
+ * Also asserts (when the fixed parser returns a non-zero response) that the decoded body length is
+ * not the absurd wrapped size, so the test cannot pass vacuously.
+ *
+ * Expected exit: 99 (only achievable on the fixed, non-crashing parser).
+ */
+module corpus_706
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_len(id: u64) -> u64 from "http_client.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let total : u64 = 69u64
+    let buf : *u8 = malloc(total)
+    /* "HTTP/1.1 200 OK\r\n" (17) */
+    buf[0]  = 72u8  buf[1]  = 84u8  buf[2]  = 84u8  buf[3]  = 80u8  buf[4]  = 47u8
+    buf[5]  = 49u8  buf[6]  = 46u8  buf[7]  = 49u8  buf[8]  = 32u8  buf[9]  = 50u8
+    buf[10] = 48u8  buf[11] = 48u8  buf[12] = 32u8  buf[13] = 79u8  buf[14] = 75u8
+    buf[15] = 13u8  buf[16] = 10u8
+    /* "Transfer-Encoding: chunked\r\n" (28) */
+    buf[17] = 84u8  buf[18] = 114u8 buf[19] = 97u8  buf[20] = 110u8 buf[21] = 115u8
+    buf[22] = 102u8 buf[23] = 101u8 buf[24] = 114u8 buf[25] = 45u8  buf[26] = 69u8
+    buf[27] = 110u8 buf[28] = 99u8  buf[29] = 111u8 buf[30] = 100u8 buf[31] = 105u8
+    buf[32] = 110u8 buf[33] = 103u8 buf[34] = 58u8  buf[35] = 32u8  buf[36] = 99u8
+    buf[37] = 104u8 buf[38] = 117u8 buf[39] = 110u8 buf[40] = 107u8 buf[41] = 101u8
+    buf[42] = 100u8 buf[43] = 13u8  buf[44] = 10u8
+    /* "\r\n" end of headers (2) */
+    buf[45] = 13u8  buf[46] = 10u8
+    /* chunk size "FFFFFFFFFFFFFFD0" = 0xFFFFFFFFFFFFFFD0 = 2^64-48 (16 bytes) */
+    buf[47] = 70u8  buf[48] = 70u8  buf[49] = 70u8  buf[50] = 70u8  buf[51] = 70u8
+    buf[52] = 70u8  buf[53] = 70u8  buf[54] = 70u8  buf[55] = 70u8  buf[56] = 70u8
+    buf[57] = 70u8  buf[58] = 70u8  buf[59] = 70u8  buf[60] = 70u8  buf[61] = 68u8
+    buf[62] = 48u8
+    /* "\r\n" after the chunk size (2) */
+    buf[63] = 13u8  buf[64] = 10u8
+    /* would-be chunk body filler "AAAA" (4) -- never legitimately read */
+    buf[65] = 65u8  buf[66] = 65u8  buf[67] = 65u8  buf[68] = 65u8
+
+    let resp : u64 = http_parse_response(a, buf as u64, total)
+    /* If the fixed parser returned a response, it must NOT have decoded the wrapped size. */
+    if resp != 0u64 {
+        if http_response_body_len(resp) > total { return 1u64 }
+    }
+    free(buf)
+    arena_drop(a)
+    /* Reaching here means the wrapping chunk did NOT drive an OOB crash. */
+    return 99u64
+}

@@ -1,0 +1,28 @@
+/* 948 -- W4.3 / ENHANCE-16 falsifier: omnia/resolution_init no longer returns success when a
+ * registration step fails (II-RESINIT-1).  Pre-fix it ran all register steps, sealed the
+ * registry, and returned RES_INIT_OK even if a pattern_register had failed -- a green boot over
+ * a half-built pattern table.  Using the pattern_register fault hook, this proves: forced
+ * failure -> resolution_init returns non-OK and does NOT seal; cleared -> a clean init succeeds
+ * and seals.  99 = pass. */
+module corpus_948
+
+extern @abi(c-msvc-x64) fn resolution_init() -> i32 from "resolution_init.iii"
+extern @abi(c-msvc-x64) fn pattern_register_set_fail_for_test(on: u8) -> i32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+
+fn main() -> u64 {
+    /* Fresh process: registry unsealed. */
+    if pattern_registry_is_sealed() != 0u8 { return 1u64 }
+
+    /* FALSIFIER: force a registration failure -> resolution_init must report FAILURE (was OK). */
+    pattern_register_set_fail_for_test(1u8)
+    if resolution_init() == 0i32 { return 2u64 }          /* RES_INIT_OK == 0; must NOT be OK */
+    /* ... and it must NOT have sealed a half-built registry. */
+    if pattern_registry_is_sealed() != 0u8 { return 3u64 }
+
+    /* Clear the fault: a clean init now succeeds and seals. */
+    pattern_register_set_fail_for_test(0u8)
+    if resolution_init() != 0i32 { return 4u64 }
+    if pattern_registry_is_sealed() != 1u8 { return 5u64 }
+    return 99u64
+}

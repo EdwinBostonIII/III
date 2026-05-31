@@ -33,6 +33,7 @@ module forcefield_optinvoke
 
 extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
 
 const OI_NONE  : u64 = 0xFFFFFFFFFFFFFFFFu64
@@ -152,7 +153,33 @@ fn oi_selection_kind(cands: *u8, n: u64) -> u64 @export {
 
 /* the decision seal: a content-address of the whole candidate table, so the
  * choice is reproducible and witnessable. */
+var OI_DOM : [u8; 14]      /* A-OI-2: "optinvoke.seal" domain tag */
+var OI_DOM_INIT : u8 = 0u8
+fn oi_dom_init() -> i32 {
+    if OI_DOM_INIT == 1u8 { return 0i32 }
+    OI_DOM[0u64] = 111u8   OI_DOM[1u64] = 112u8   OI_DOM[2u64] = 116u8
+    OI_DOM[3u64] = 105u8   OI_DOM[4u64] = 110u8   OI_DOM[5u64] = 118u8
+    OI_DOM[6u64] = 111u8   OI_DOM[7u64] = 107u8   OI_DOM[8u64] = 101u8
+    OI_DOM[9u64] = 46u8    OI_DOM[10u64] = 115u8  OI_DOM[11u64] = 101u8
+    OI_DOM[12u64] = 97u8   OI_DOM[13u64] = 108u8
+    OI_DOM_INIT = 1u8
+    return 0i32
+}
+
+/* A-OI-2: domain-separate the optinvoke seal so it cannot alias a bare mhash of the same
+ * bytes in another context (cross-context second-preimage); prefix a fixed domain tag. */
 fn oi_seal(cands: *u8, n: u64, out: *u8) -> u64 @export {
-    oi_hash(cands, 0u64, n * 80u64, out, 0u64)
+    oi_dom_init()
+    mhash_begin()
+    mhash_domain((&OI_DOM as u64), 14u64)
+    /* DETERMINISM (A-OI-2): stream only the 73 MEANINGFUL bytes of each 80-byte record
+     * (output [32..63], field [64..71], validity [72]); the 7 padding bytes [73..79] are not
+     * content, and hashing leftover/uninitialized padding made the seal non-reproducible. */
+    let mut i : u64 = 0u64
+    while i < n {
+        mhash_payload((cands as u64) + i * 80u64, 73u64)
+        i = i + 1u64
+    }
+    mhash_final((out as u64))
     return 0u64
 }

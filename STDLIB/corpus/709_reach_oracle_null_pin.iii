@@ -1,0 +1,26 @@
+/* Falsifier for COMBINE-7 / II-REACH_ORACLE-2: reach_oracle_pin_matches ignores cad_oneshot's
+ * return; on a null/zero pin, cad_oneshot writes nothing, leaving ROR_VBUF holding the PREVIOUS
+ * pin's digest -> a forged null pin "matches" a real claimed pin (a determinism-firewall bypass).
+ * Sequence: pin a real input to out1; verify pin_matches(real, out1)==1 (this loads ROR_VBUF =
+ * cad(real)); then a NULL pin (0,0,out1) MUST be rejected (0).  BROKEN: ROR_VBUF stale = cad(real)
+ * -> cad_eq == 1 (false match).  FIXED: cad_oneshot rc != 0 -> return 0.
+ * Expected exit: 99 (the prove-negative step confirms cad_oneshot errors on the null input, so this
+ * is not vacuous). */
+module corpus_709
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 from "reach_oracle.iii"
+extern @abi(c-msvc-x64) fn reach_oracle_pin_matches(pin_bytes: u64, pin_len: u64, claimed_pin: u64) -> u8 from "reach_oracle.iii"
+
+fn main() -> u64 {
+    let real : *u8 = malloc(8u64)
+    real[0] = 1u8  real[1] = 2u8  real[2] = 3u8  real[3] = 4u8
+    real[4] = 5u8  real[5] = 6u8  real[6] = 7u8  real[7] = 8u8
+    let out1 : *u8 = malloc(32u64)
+    reach_oracle_pin(real as u64, 8u64, out1 as u64)
+    /* positive arm: the real pin matches its own claim, and loads ROR_VBUF = cad(real) */
+    if reach_oracle_pin_matches(real as u64, 8u64, out1 as u64) != 1u8 { return 1u64 }
+    /* falsifier: a NULL pin must NOT match the real claim (stale-buffer false-match on broken code) */
+    if reach_oracle_pin_matches(0u64, 0u64, out1 as u64) != 0u8 { return 2u64 }
+    return 99u64
+}

@@ -4,14 +4,18 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiiarena.iiiarena.iiiarena.iiiarena.iii\0"
+    .ascii "arena.iiiarena.iiiarena.iiiarena.iiiarena.iiiarena.iiiarena.iii\0"
 L_str_1:
-    .ascii "arena.iiiarena.iiiarena.iiiarena.iii\0"
+    .ascii "arena.iiiarena.iiiarena.iiiarena.iiiarena.iiiarena.iii\0"
 L_str_2:
-    .ascii "arena.iiiarena.iiiarena.iii\0"
+    .ascii "arena.iiiarena.iiiarena.iiiarena.iiiarena.iii\0"
 L_str_3:
-    .ascii "arena.iiiarena.iii\0"
+    .ascii "arena.iiiarena.iiiarena.iiiarena.iii\0"
 L_str_4:
+    .ascii "arena.iiiarena.iiiarena.iii\0"
+L_str_5:
+    .ascii "arena.iiiarena.iii\0"
+L_str_6:
     .ascii "arena.iii\0"
     .section .iii.ring3,"n"
     .asciz "main"
@@ -64,12 +68,30 @@ main:
     pushq %rax
     popq %rax
 L_if_end_1:
-    movabsq $0x0, %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq arena_witness_lo
+    addq $32, %rsp
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq arena_witness_hi
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
 L_loop_top_2:
-    movl -16(%rbp), %eax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x400, %rax
     pushq %rax
@@ -93,8 +115,8 @@ L_loop_top_2:
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -117,14 +139,17 @@ L_loop_top_2:
     pushq %rax
     popq %rax
 L_if_end_5:
-    movabsq $0x0, %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
+    popq %r8
     subq $32, %rsp
-    callq arena_reset_safe
+    callq arena_reset_with_witness
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -177,7 +202,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
 L_if_end_9:
-    movl -16(%rbp), %eax
+    movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -187,7 +212,7 @@ L_if_end_9:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -16(%rbp)
+    movq %rax, -32(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax

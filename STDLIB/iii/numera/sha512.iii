@@ -191,10 +191,22 @@ fn _sha512_sched4_avx512() -> u32 {
     return 0u32
 }
 
+/* [E2-512-1] cache the AVX-512 decision once per session instead of issuing a CPUID
+ * ~16x per block (the schedule expansion calls _sha512_sched4 once per 4-word group).
+ * A one-time memo of an invariant CPU feature -- not observational/adaptive. */
+var SHA512_AVX512 : u32 = 0u32     /* 0=unknown, 1=scalar, 2=avx512 */
+fn _sha512_avx512_ok() -> u8 {
+    if SHA512_AVX512 == 0u32 {
+        if cpufeat_has_avx512f() == 1u8 { SHA512_AVX512 = 2u32 } else { SHA512_AVX512 = 1u32 }
+    }
+    if SHA512_AVX512 == 2u32 { return 1u8 }
+    return 0u8
+}
+
 fn _sha512_sched4() -> u32 {
     if SHA512_FORCE == 1u32 { return _sha512_sched4_scalar() }
     if SHA512_FORCE == 2u32 { return _sha512_sched4_avx512() }
-    if cpufeat_has_avx512f() == 1u8 { return _sha512_sched4_avx512() }
+    if _sha512_avx512_ok() == 1u8 { return _sha512_sched4_avx512() }
     return _sha512_sched4_scalar()
 }
 

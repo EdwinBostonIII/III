@@ -7,6 +7,15 @@
  * generic arithmetic mod n).  For u64 multiplication we use
  * 64-bit-safe mul-mod via repeated doubling to avoid overflow.
  *
+ *
+ * APOTHEOSIS S.3 (the generic escape hatch).  This value-typed u32/u64 modular
+ * path is the deliberate FALLBACK for moduli the shared Montgomery organ does
+ * NOT serve: EVEN moduli and small non-Montgomery-friendly n (the organ is
+ * defined only for odd n -- mod_ctx_build returns 0 for even/zero, and
+ * bigint_modpow routes even moduli to schoolbook).  It uses the standard %
+ * operator (u32) and overflow-safe doubling mul-mod (u64); no precomputed
+ * n-prime or R-squared, no CIOS -- nothing here to consolidate onto the organ.
+ * Totality: the organ handles odd moduli, this path covers the rest.
  * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure).
  */
 

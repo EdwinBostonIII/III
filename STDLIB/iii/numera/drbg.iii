@@ -105,6 +105,7 @@ fn drbg_hmac_into(out: u64, msg: u64, msg_len: u64) -> i32 {
 }
 
 fn drbg_update(data: u64, data_len: u64) -> i32 {
+    if data_len > 959u64 { return 0i32 - 1i32 }   /* IN = V||byte||data writes ip[65 .. 65+data_len) into DRBG_IN[1024]; data_len>959 overruns the scratch [audit D-DRBG-1] */
     let ip : *u8 = &DRBG_IN as *u8
     let vp : *u8 = &DRBG_V as *u8
     let dp : *u8 = data as *u8
@@ -130,6 +131,7 @@ fn drbg_update(data: u64, data_len: u64) -> i32 {
 }
 
 fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u64, plen: u64) -> i32 @export {
+    if elen + nlen + plen > 768u64 { return 0i32 - 1i32 }   /* seed = entropy||nonce||perso into DRBG_SEED[768] [audit D-DRBG-1] */
     let kp : *u8 = &DRBG_K as *u8
     let vp : *u8 = &DRBG_V as *u8
     let mut i : u64 = 0u64
@@ -151,6 +153,7 @@ fn iii_drbg_instantiate(entropy: u64, elen: u64, nonce: u64, nlen: u64, perso: u
 }
 
 fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 @export {
+    if elen + alen > 768u64 { return 0i32 - 1i32 }   /* seed = entropy||addl into DRBG_SEED[768] [audit D-DRBG-1] */
     let sp : *u8 = &DRBG_SEED as *u8
     let ep : *u8 = entropy as *u8
     let ap : *u8 = addl as *u8

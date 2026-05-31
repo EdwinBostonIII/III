@@ -606,7 +606,7 @@ L_cc_mint_err:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq -32(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax

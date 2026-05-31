@@ -93,7 +93,14 @@ fn xii_lattice_alloc_cell(payload_ptr: *u8, payload_size: u32, ct_kind: u8, prov
     if XII_LATTICE_INIT_DONE == 0u8 { xii_lattice_reset() }
     if XII_LATTICE_USED >= XL_CELL_CAP { return 0xFFFFFFFFu32 }
     let payload_off : u32 = XII_LATTICE_PAYLOAD_NEXT
-    if (payload_off + payload_size) > XL_PAYLOAD_ARENA_BYTES { return 0xFFFFFFFFu32 }
+    /* SOUNDNESS (X22): the old additive guard `(payload_off + payload_size) > ARENA` WRAPS on u32
+     * overflow -- a caller-supplied payload_size near u32-max makes the sum wrap to a small value,
+     * passing the guard and entering a multi-GB OOB copy below. Use the subtraction form, which
+     * cannot underflow given the invariant payload_off <= ARENA (NEXT starts 0 and only advances
+     * past this guard). The first line re-establishes that invariant defensively (never fires on a
+     * valid arena), so the second's subtraction is provably safe. Byte-identical for valid inputs. */
+    if payload_off > XL_PAYLOAD_ARENA_BYTES { return 0xFFFFFFFFu32 }
+    if payload_size > (XL_PAYLOAD_ARENA_BYTES - payload_off) { return 0xFFFFFFFFu32 }
 
     /* Copy payload. */
     let mut i : u32 = 0u32

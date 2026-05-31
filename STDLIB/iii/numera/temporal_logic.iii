@@ -79,7 +79,6 @@ var TL_NODE_USED : u32 = 0u32
 /* Fixpoint table; dim = MAX_SUBF * MAX_SEG = 4194304 bytes.
  * Frugal (Trap 19): [u64; 524288] = exactly 4194304 bytes BSS each. */
 var TL_VAL        : [u64; 524288]
-var TL_VAL_FILLED : [u64; 524288]
 
 /* Serialized atomic-eval scratch (Trap 7). */
 var TL_SCR_PROD  : [u8; 32]
@@ -108,12 +107,6 @@ fn tl_val_set(s: u64, p: u64, v: u8) -> i32 {
     return 0i32
 }
 
-fn tl_filled_set(s: u64, p: u64, v: u8) -> i32 {
-    let idx : u64 = s * TLOGIC_MAX_SEG + p
-    let bp : *u8 = (&TL_VAL_FILLED as u64 + idx) as *u8
-    bp[0u64] = v
-    return 0i32
-}
 
 /* === Lifecycle === */
 
@@ -242,7 +235,6 @@ fn tl_prop_node(n: u32, start: u32, abs_pos: u64, rel_p: u64) -> i32 {
     if tag == TLOGIC_TAG_ATOM {
         let v : u8 = tl_eval_atom(TL_NODE_A[n], abs_pos)
         tl_val_set(loc, rel_p, v)
-        tl_filled_set(loc, rel_p, 1u8)
         return TLOGIC_OK
     }
     if tag == TLOGIC_TAG_NOT {
@@ -251,21 +243,18 @@ fn tl_prop_node(n: u32, start: u32, abs_pos: u64, rel_p: u64) -> i32 {
         let mut nv : u8 = 1u8
         if cv != 0u8 { nv = 0u8 }
         tl_val_set(loc, rel_p, nv)
-        tl_filled_set(loc, rel_p, 1u8)
         return TLOGIC_OK
     }
     if tag == TLOGIC_TAG_AND {
         let lc : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         let rc : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
         tl_val_set(loc, rel_p, tl_val_get(lc, rel_p) & tl_val_get(rc, rel_p))
-        tl_filled_set(loc, rel_p, 1u8)
         return TLOGIC_OK
     }
     if tag == TLOGIC_TAG_OR {
         let lc2 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         let rc2 : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
         tl_val_set(loc, rel_p, tl_val_get(lc2, rel_p) | tl_val_get(rc2, rel_p))
-        tl_filled_set(loc, rel_p, 1u8)
         return TLOGIC_OK
     }
     if tag == TLOGIC_TAG_IMPL {
@@ -276,7 +265,6 @@ fn tl_prop_node(n: u32, start: u32, abs_pos: u64, rel_p: u64) -> i32 {
         let mut iv : u8 = bv
         if av == 0u8 { iv = 1u8 }
         tl_val_set(loc, rel_p, iv)
-        tl_filled_set(loc, rel_p, 1u8)
         return TLOGIC_OK
     }
     return TLOGIC_OK
@@ -294,7 +282,6 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
             let mut v : u8 = 0u8
             if nxt < ll { v = tl_val_get(cloc, nxt) }
             tl_val_set(loc, p, v)
-            tl_filled_set(loc, p, 1u8)
             p = p + 1u64
         }
         return TLOGIC_OK
@@ -303,12 +290,10 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
         let cloc2 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         let last : u64 = ll - 1u64
         tl_val_set(loc, last, tl_val_get(cloc2, last))
-        tl_filled_set(loc, last, 1u8)
         let mut q : u64 = last
         while q > 0u64 {
             q = q - 1u64
             tl_val_set(loc, q, tl_val_get(cloc2, q) & tl_val_get(loc, q + 1u64))
-            tl_filled_set(loc, q, 1u8)
         }
         return TLOGIC_OK
     }
@@ -316,12 +301,10 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
         let cloc3 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         let last3 : u64 = ll - 1u64
         tl_val_set(loc, last3, tl_val_get(cloc3, last3))
-        tl_filled_set(loc, last3, 1u8)
         let mut q3 : u64 = last3
         while q3 > 0u64 {
             q3 = q3 - 1u64
             tl_val_set(loc, q3, tl_val_get(cloc3, q3) | tl_val_get(loc, q3 + 1u64))
-            tl_filled_set(loc, q3, 1u8)
         }
         return TLOGIC_OK
     }
@@ -330,7 +313,6 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
         let psiloc : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
         let last4 : u64 = ll - 1u64
         tl_val_set(loc, last4, tl_val_get(psiloc, last4))
-        tl_filled_set(loc, last4, 1u8)
         let mut q4 : u64 = last4
         while q4 > 0u64 {
             q4 = q4 - 1u64
@@ -338,18 +320,15 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
             let phiv : u8 = tl_val_get(philoc, q4)
             let uv : u8 = tl_val_get(loc, q4 + 1u64)
             tl_val_set(loc, q4, psiv | (phiv & uv))
-            tl_filled_set(loc, q4, 1u8)
         }
         return TLOGIC_OK
     }
     if tag == TLOGIC_TAG_ONCE {
         let cloc5 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         tl_val_set(loc, 0u64, tl_val_get(cloc5, 0u64))
-        tl_filled_set(loc, 0u64, 1u8)
         let mut p5 : u64 = 1u64
         while p5 < ll {
             tl_val_set(loc, p5, tl_val_get(cloc5, p5) | tl_val_get(loc, p5 - 1u64))
-            tl_filled_set(loc, p5, 1u8)
             p5 = p5 + 1u64
         }
         return TLOGIC_OK
@@ -357,11 +336,9 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
     if tag == TLOGIC_TAG_HIST {
         let cloc6 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         tl_val_set(loc, 0u64, tl_val_get(cloc6, 0u64))
-        tl_filled_set(loc, 0u64, 1u8)
         let mut p6 : u64 = 1u64
         while p6 < ll {
             tl_val_set(loc, p6, tl_val_get(cloc6, p6) & tl_val_get(loc, p6 - 1u64))
-            tl_filled_set(loc, p6, 1u8)
             p6 = p6 + 1u64
         }
         return TLOGIC_OK
@@ -370,14 +347,12 @@ fn tl_temp_node(n: u32, start: u32, ll: u64) -> i32 {
         let philoc7 : u64 = ((TL_NODE_A[n] - start) as u64) & 0xFFFFFFFFu64
         let psiloc7 : u64 = ((TL_NODE_B[n] - start) as u64) & 0xFFFFFFFFu64
         tl_val_set(loc, 0u64, tl_val_get(psiloc7, 0u64))
-        tl_filled_set(loc, 0u64, 1u8)
         let mut p7 : u64 = 1u64
         while p7 < ll {
             let psiv7 : u8 = tl_val_get(psiloc7, p7)
             let phiv7 : u8 = tl_val_get(philoc7, p7)
             let sv7 : u8 = tl_val_get(loc, p7 - 1u64)
             tl_val_set(loc, p7, psiv7 | (phiv7 & sv7))
-            tl_filled_set(loc, p7, 1u8)
             p7 = p7 + 1u64
         }
         return TLOGIC_OK
@@ -405,27 +380,31 @@ fn tl_fill_table(slot: u32, chain_start: u64, chain_end: u64) -> i32 {
         let mut rp : u64 = 0u64
         while rp < ll {
             tl_val_set(rs, rp, 0u8)
-            tl_filled_set(rs, rp, 0u8)
             rp = rp + 1u64
         }
         rs = rs + 1u64
     }
-    let mut pp : u64 = 0u64
-    while pp < ll {
-        let abs_pos : u64 = chain_start + pp
-        let mut ni : u32 = st
-        while ni < en {
-            let tg : u8 = TL_NODE_TAG[ni]
-            if tg < TLOGIC_TAG_NEXT { tl_prop_node(ni, st, abs_pos, pp) }
-            ni = ni + 1u32
+    /* C-TL-1: SINGLE post-order pass in increasing node index.  The builder
+     * guarantees children have lower indices than parents (tl_node_append
+     * appends bottom-up), so when node ni is processed all its children are
+     * already fully filled at every position.  This is correct for ALL
+     * nestings, including a Boolean connective ABOVE a temporal operator
+     * (e.g. NOT(F A0)); the old two-pass form (all propositional, then all
+     * temporal) computed such a NOT in pass 1 against the still-zero
+     * temporal row.  [audit C-TL-1] */
+    let mut ni : u32 = st
+    while ni < en {
+        let tg : u8 = TL_NODE_TAG[ni]
+        if tg < TLOGIC_TAG_NEXT {
+            let mut pp : u64 = 0u64
+            while pp < ll {
+                let abs_pos : u64 = chain_start + pp
+                tl_prop_node(ni, st, abs_pos, pp)
+                pp = pp + 1u64
+            }
         }
-        pp = pp + 1u64
-    }
-    let mut ti : u32 = st
-    while ti < en {
-        let tg2 : u8 = TL_NODE_TAG[ti]
-        if tg2 >= TLOGIC_TAG_NEXT { tl_temp_node(ti, st, ll) }
-        ti = ti + 1u32
+        if tg >= TLOGIC_TAG_NEXT { tl_temp_node(ni, st, ll) }
+        ni = ni + 1u32
     }
     TL_LAST_ERR = TLOGIC_OK
     return TLOGIC_OK
@@ -481,7 +460,6 @@ fn tl_kat_inject(s: u64, ll: u64, tbl: *u8) -> i32 {
     let mut p : u64 = 0u64
     while p < ll {
         tl_val_set(s, p, tbl[p])
-        tl_filled_set(s, p, 1u8)
         p = p + 1u64
     }
     return 0i32
@@ -491,23 +469,23 @@ fn tl_kat_run(slot: u32, ll: u64) -> i32 {
     let st : u32 = TL_F_START[slot]
     let en : u32 = TL_F_END[slot]
     if en < st { return TLOGIC_E_BAD }
-    let mut pp : u64 = 0u64
-    while pp < ll {
-        let mut ni : u32 = st
-        while ni < en {
-            let tg : u8 = TL_NODE_TAG[ni]
-            if tg > TLOGIC_TAG_ATOM {
-                if tg < TLOGIC_TAG_NEXT { tl_prop_node(ni, st, pp, pp) }
+    /* C-TL-1: single post-order pass (mirrors tl_fill_table).  ATOM rows are
+     * injected by the KAT so they are skipped; every other node is filled
+     * only after its lower-indexed children.  [audit C-TL-1] */
+    let mut ni : u32 = st
+    while ni < en {
+        let tg : u8 = TL_NODE_TAG[ni]
+        if tg > TLOGIC_TAG_ATOM {
+            if tg < TLOGIC_TAG_NEXT {
+                let mut pp : u64 = 0u64
+                while pp < ll {
+                    tl_prop_node(ni, st, pp, pp)
+                    pp = pp + 1u64
+                }
             }
-            ni = ni + 1u32
+            if tg >= TLOGIC_TAG_NEXT { tl_temp_node(ni, st, ll) }
         }
-        pp = pp + 1u64
-    }
-    let mut ti : u32 = st
-    while ti < en {
-        let tg2 : u8 = TL_NODE_TAG[ti]
-        if tg2 >= TLOGIC_TAG_NEXT { tl_temp_node(ti, st, ll) }
-        ti = ti + 1u32
+        ni = ni + 1u32
     }
     return TLOGIC_OK
 }
@@ -646,6 +624,33 @@ fn tl_kat_guards() -> u64 {
     return 0u64
 }
 
+/* KAT 8 (C-TL-1 prove-the-negative): NOT(F A0) -- a Boolean connective
+ * ABOVE a temporal operator.  Fixture A0 = [0,0,1,0,0,1,0,0] over [0,8):
+ * F A0 = [1,1,1,1,1,1,0,0], so NOT(F A0) = [0,0,0,0,0,0,1,1].  The old
+ * two-pass eval computed NOT in pass 1 against the still-zero EVENT row and
+ * returned all-1 -- this KAT fails (return != 0) on that code and passes
+ * only under the single post-order pass.  Returns 0 on pass. */
+fn tl_kat_boolover() -> u64 {
+    let a0p : *u8 = &TL_T_A0 as u64 as *u8
+    let fb : u32 = tl_alloc_formula()
+    if fb == TLOGIC_SENT { return 100u64 }
+    let a0nb : u32 = tl_append_atom(fb, 0u32)
+    if a0nb == TLOGIC_SENT { return 101u64 }
+    let fnb : u32 = tl_append_unary_temp(fb, TLOGIC_TAG_EVENT, a0nb)
+    if fnb == TLOGIC_SENT { return 102u64 }
+    let notb : u32 = tl_append_not(fb, fnb)
+    if notb == TLOGIC_SENT { return 103u64 }
+    tl_set_root(fb, notb)
+    tl_kat_inject(0u64, 8u64, a0p)
+    tl_kat_run(fb, 8u64)
+    /* NOT is loc 2 (atom=0, F=1, NOT=2). */
+    if tl_val_get(2u64, 0u64) != 0u8 { return 104u64 }   /* old code: 1 */
+    if tl_val_get(2u64, 5u64) != 0u8 { return 105u64 }
+    if tl_val_get(2u64, 6u64) != 1u8 { return 106u64 }
+    if tl_val_get(2u64, 7u64) != 1u8 { return 107u64 }
+    return 0u64
+}
+
 fn tl_selftest() -> u64 @export {
     tl_init()
     let a0p : *u8 = &TL_T_A0 as u64 as *u8
@@ -662,5 +667,7 @@ fn tl_selftest() -> u64 @export {
     if r3 != 0u64 { return r3 }
     let r4 : u64 = tl_kat_guards()
     if r4 != 0u64 { return r4 }
+    let r5 : u64 = tl_kat_boolover()
+    if r5 != 0u64 { return r5 }
     return 99u64
 }

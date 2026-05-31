@@ -1,0 +1,51 @@
+/* 975_xii_lattice_payload_wrap_guard.iii -- xii_lattice_alloc_cell payload bounds guard (X22).
+ *
+ * The old guard `(payload_off + payload_size) > XL_PAYLOAD_ARENA_BYTES` WRAPS on u32 overflow:
+ * a caller-supplied payload_size near u32-max makes the sum wrap below the arena size, passing
+ * the guard and entering a multi-GB out-of-bounds copy into XII_LATTICE_PAYLOAD[524288].
+ * The fix is the subtraction form `payload_size > (ARENA - payload_off)`, which cannot underflow
+ * (payload_off <= ARENA invariant) and is byte-identical for all valid inputs.
+ *
+ * SAFE prove-the-negative (an OOB falsifier must NOT execute the OOB): arm 2 evaluates the OLD
+ * guard's exact left-hand side (off + size) and shows it WRAPS to 0 (<= arena -> the old guard
+ * would PASS); arm 3 asserts the FIXED guard REJECTS the same size (returns 0xFFFFFFFF, before any
+ * copy). Together non-tautological; the buggy 4 GiB copy is never run. Exit 99 on success.
+ */
+module corpus_975
+
+extern @abi(c-msvc-x64) fn xii_lattice_reset() -> i32 from "xii_lattice.iii"
+extern @abi(c-msvc-x64) fn xii_lattice_alloc_cell(payload_ptr: *u8, payload_size: u32, ct_kind: u8, prov_xform_id: u8, flags: u8, mhash_ptr: *u8) -> u32 from "xii_lattice.iii"
+
+var PAY : [u8; 256]
+var MH  : [u8; 32]
+
+fn main() -> u64 {
+    xii_lattice_reset()
+    let payp : *u8 = (&PAY as u64) as *u8
+    let mhp  : *u8 = (&MH as u64) as *u8
+
+    /* baseline: a real 256-byte payload -> PAYLOAD_NEXT advances to 256, cell 0 created */
+    let i0 : u32 = xii_lattice_alloc_cell(payp, 256u32, 0u8, 0u8, 0u8, mhp)
+    if i0 == 0xFFFFFFFFu32 { return 1u64 }
+
+    /* arm 2 -- demonstrate the wrap on the OLD guard's own expression (safe: just arithmetic).
+     * off=256, size=0xFFFFFF00 -> 256 + 0xFFFFFF00 = 2^32 -> u32-wraps to 0 <= arena -> PASS. */
+    let off : u32 = 256u32
+    let psz : u32 = 0xFFFFFF00u32
+    let wrapped : u32 = off + psz
+    if wrapped != 0u32 { return 2u64 }              /* the additive guard is provably fooled */
+
+    /* arm 3 -- the FIXED subtraction guard must REJECT the wrapping size (no copy executed). */
+    let bad : u32 = xii_lattice_alloc_cell(payp, 0xFFFFFF00u32, 0u8, 0u8, 0u8, mhp)
+    if bad != 0xFFFFFFFFu32 { return 3u64 }
+
+    /* arm 4 -- a huge NON-wrapping overflow still rejects (the ordinary reject path is intact). */
+    let bad2 : u32 = xii_lattice_alloc_cell(payp, 0x7FFFFFFFu32, 0u8, 0u8, 0u8, mhp)
+    if bad2 != 0xFFFFFFFFu32 { return 4u64 }
+
+    /* arm 5 -- valid inputs are unaffected (byte-identical behaviour): a small alloc succeeds. */
+    let i1 : u32 = xii_lattice_alloc_cell(payp, 128u32, 0u8, 0u8, 0u8, mhp)
+    if i1 == 0xFFFFFFFFu32 { return 5u64 }
+
+    return 99u64
+}

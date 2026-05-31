@@ -23,6 +23,9 @@ extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.
 extern @abi(c-msvc-x64) fn ws_init() -> i32 from "witness_spine.iii"
 extern @abi(c-msvc-x64) fn ws_register(frag_idx: u64) -> i32 from "witness_spine.iii"
 extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
 
 /* Error codes (W9: negative i32). */
 const CG_OK                : i32 =  0i32
@@ -98,6 +101,19 @@ var CG_ANCHOR_CLAUSES : [u64; 16384]
 var CG_ANCHOR_LIVE    : [u8;  4096]
 var CG_ANCHOR_COUNT   : u64 = 0u64
 
+/* --- Anchor content-address index (W3.1 / COMBINE-3, omnia/caindex.iii):
+ * O(1) fid->slot lookup replacing the O(N) cg_anchor_slot_find linear scan.
+ * Caller-owned caindex: KEYS = [u8; CG_ANCHOR_SLOTS*32], VALS = [u32;
+ * CG_ANCHOR_SLOTS], MASK = CG_ANCHOR_SLOTS-1, VALS pre-cleared to CAI_EMPTY in
+ * cg_init.  The insert path (LIVE + free-slot scan) is retained unchanged and
+ * cai_put runs alongside it; only the lookup is rerouted (proven math_lib /
+ * theorem_carrier pattern).  The BRANCH table is intentionally NOT indexed: it
+ * has no insert path in this module (append-only side-branch creation is a
+ * later phase), so a caindex there would be permanently empty -- dead state. */
+const CG_ANCHOR_CAI_MASK : u64 = 4095u64
+var CG_ANCHOR_CAI_KEYS : [u8;  131072]   /* CG_ANCHOR_SLOTS(4096) * 32 */
+var CG_ANCHOR_CAI_VALS : [u32; 4096]
+
 /* --- Fragment serialization scratch (4096-byte, frugal [u64;512]). --- */
 var CG_FRAG_L         : [u64; 512]
 var CG_FRAG_R         : [u64; 512]
@@ -163,6 +179,7 @@ fn cg_init() -> i32 @export {
         j = j + 1u64
     }
     CG_ANCHOR_COUNT = 0u64
+    cai_clear(&CG_ANCHOR_CAI_VALS as u64, CG_ANCHOR_SLOTS)
     /* Derive canonical producer id from "numera::computation_graph" (28 bytes).
      * Build the literal byte-by-byte into CG_OPTAG scratch (reused as temp). */
     let tp : *u8 = (&CG_OPTAG as u64) as *u8
@@ -230,24 +247,15 @@ fn cg_branch_slot_find(branch_id: *u8) -> i64 {
  * Returns slot index >= 0 as i64, or -1i64 on miss.
  * ===================================================================== */
 fn cg_anchor_slot_find(fid: *u8) -> i64 {
+    /* Param-spill safety: copy fid to module scratch before the extern (Trap 11),
+     * exactly as the prior linear scan did.  Lookup is now O(1) via the caindex
+     * (full-32-byte verify inside cai_get -> exact, deterministic). */
     ident_copy(fid, (&CG_SC_LFID as u64) as *u8)
-    let mut i : u64 = 0u64
-    let mut found : i64 = -1i64
-    let mut found_flag : u8 = 0u8
-    while i < CG_ANCHOR_SLOTS {
-        if found_flag == 0u8 {
-            if CG_ANCHOR_LIVE[i] == 1u8 {
-                let slot_base : u64 = (&CG_ANCHOR_FIDS as u64) + i * CG_IDENT_BYTES
-                let slot_ptr : *u8 = slot_base as *u8
-                if ident_eq(slot_ptr, (&CG_SC_LFID as u64) as *u8) == 1u8 {
-                    found = i as i64
-                    found_flag = 1u8
-                }
-            }
-        }
-        i = i + 1u64
-    }
-    return found
+    let kp : u64 = &CG_ANCHOR_CAI_KEYS as u64
+    let vp : u64 = &CG_ANCHOR_CAI_VALS as u64
+    let s : u32 = cai_get(kp, vp, CG_ANCHOR_CAI_MASK, (&CG_SC_LFID as u64) as *u8)
+    if s == 0xFFFFFFFFu32 { return -1i64 }
+    return s as i64
 }
 
 /* =====================================================================
@@ -408,6 +416,8 @@ fn cg_walk_segment(seg: *u8) -> i32 @export {
         let bslot : i64 = cg_branch_slot_find(bid_ptr)
         if bslot == -1i64 { return CG_E_BRANCH_ABSENT }
     }
+    /* empty/inverted range -> count 0 without walking (cg_walk_inner assumes FROM<=TO) [audit F-CG-1] */
+    if CG_WALK_FROM > CG_WALK_TO { cg_store_u64_le(seg64, 48u64, 0u64) ; return CG_OK }
     /* Walk the position range, counting visited fragments. */
     cg_walk_inner()
     /* Write count into the aggregate at offset 48 (little-endian u64). */
@@ -546,6 +556,10 @@ fn cg_anchor_declare(fid: *u8, clause_id: *u8) -> i32 @export {
     ident_copy((&CG_SC_CLAUSE as u64) as *u8, clause_dst as *u8)
     CG_ANCHOR_LIVE[fs64] = 1u8
     CG_ANCHOR_COUNT = CG_ANCHOR_COUNT + 1u64
+    /* W3.1: mirror the insert into the content-address index (fid -> slot). */
+    let kp2 : u64 = &CG_ANCHOR_CAI_KEYS as u64
+    let vp2 : u64 = &CG_ANCHOR_CAI_VALS as u64
+    cai_put(kp2, vp2, CG_ANCHOR_CAI_MASK, fid, fs64 as u32)
     return CG_OK
 }
 

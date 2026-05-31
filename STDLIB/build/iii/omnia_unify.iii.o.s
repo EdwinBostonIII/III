@@ -23,7 +23,7 @@ L_UNIFY_MAX_VARS:
 L_UNIFY_MAX_SUBSTS:
     .quad 0x40
 L_UNIFY_MAX_DEPTH:
-    .quad 0x10
+    .quad 0x40
 L_UNIFY_MAX_ARITY:
     .quad 0x20
 L_UNIFY_MAX_ARGS_POOL:

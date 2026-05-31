@@ -1,0 +1,7 @@
+/* 962 — W3.15 / ENHANCE-12 falsifier: bv_ring's column-stack bitwise decider is
+ * EXACT for >6 variables. 7- and 8-variable De Morgan / XOR-associativity identities
+ * are certified; non-identities are rejected with a recoverable satisfying
+ * assignment; >12 variables decline (BWS_ERR) rather than answer wrongly. 99 = pass. */
+module corpus_962
+extern @abi(c-msvc-x64) fn bv_ring_colstack_kat() -> u64 from "bv_ring.iii"
+fn main() -> u64 { return bv_ring_colstack_kat() }

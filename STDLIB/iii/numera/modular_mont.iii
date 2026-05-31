@@ -39,7 +39,7 @@ const MONT_R_SHIFT : u64 = 32u64
  * Newton's iteration: x_{k+1} = x_k * (2 - n * x_k) mod R.
  * Start with x_0 = n (or 1 -- doubles each iteration; 5 iterations
  * suffice for 32-bit precision). */
-fn mont_n_inv_neg(n: u64) -> u64 {
+fn mont_n_inv_neg(n: u64) -> u64 @export {
     let n_l : u64 = n & MONT_R_MASK
     let mut x : u64 = n_l
     let mut k : u32 = 0u32
@@ -55,10 +55,22 @@ fn mont_n_inv_neg(n: u64) -> u64 {
 }
 
 /* REDC(t) = t * R^(-1) mod n.  Precondition: t < n * R, n < 2^32. */
-fn mont_redc(t: u64, n: u64, n_inv_neg: u64) -> u64 {
+fn mont_redc(t: u64, n: u64, n_inv_neg: u64) -> u64 @export {
     let n_l : u64 = n
     let m : u64 = (((t & MONT_R_MASK) * n_inv_neg) & MONT_R_MASK)
-    let v : u64 = (t + m * n_l) >> MONT_R_SHIFT
+    /* v = (t + m*n_l) >> 32, computed CARRYLESS so the (possibly >2^64)
+     * sum never forms: m,n_l < 2^32 => mn = m*n_l < 2^64 (fits exactly);
+     * low = t+mn wraps mod 2^64, carry = [low < t] recovers the lost 2^64
+     * bit, and since (t+m*n) is divisible by R=2^32 the result is
+     * (carry<<32) | (low>>32).  For small odd n (corpus 146) t+mn never
+     * wraps => carry=0 => bit-identical to the old (t+m*n)>>32; for n near
+     * 2^32 this fixes the truncation that the old form silently produced.
+     * [audit D-MONT-1] */
+    let mn : u64 = m * n_l
+    let low : u64 = t + mn
+    let mut carry : u64 = 0u64
+    if low < t { carry = 1u64 }
+    let v : u64 = (low >> MONT_R_SHIFT) | (carry << MONT_R_SHIFT)
     if v >= n_l {
         return v - n_l
     }
@@ -82,6 +94,15 @@ fn mont_from_form(a_R: u64, n: u64) -> u64 @export {
 
 fn mont_mul_u32(a: u64, b: u64, n: u64) -> u64 @export {
     let n_l : u64 = n
+    if (n_l & 1u64) == 0u64 {
+        /* Even modulus: gcd(n, R=2^32) != 1, so no inverse mod R exists and
+         * mont_n_inv_neg returns garbage.  a,b < n < 2^32 => a*b < 2^64
+         * (fits), so exact schoolbook is overflow-free and correct.
+         * [audit D-MONT-2] */
+        let ar : u64 = a % n_l
+        let br : u64 = b % n_l
+        return (ar * br) % n_l
+    }
     let n_inv : u64 = mont_n_inv_neg(n_l)
     /* Convert both operands to Montgomery form, multiply, REDC twice. */
     let a_R : u64 = mont_to_form(a, n_l)
@@ -99,6 +120,24 @@ fn mont_pow_u32(base: u64, exp: u64, n: u64) -> u64 @export {
     if n_l == 0u64 { return 0u64 }
     if n_l == 1u64 { return 0u64 }
     if exp_l == 0u64 { return 1u64 }
+    if (n_l & 1u64) == 0u64 {
+        /* Even modulus: Montgomery REDC invalid (no inverse mod R).  Exact
+         * schoolbook square-and-multiply; cur,result < n < 2^32 => products
+         * < 2^64, so % is overflow-free and correct.  [audit D-MONT-2] */
+        let mut r : u64 = 1u64
+        let mut c : u64 = base_l % n_l
+        let mut ee : u64 = exp_l
+        let mut go : u8 = 1u8
+        while go == 1u8 {
+            if ee == 0u64 { go = 0u8 }
+            if go == 1u8 {
+                if (ee & 1u64) == 1u64 { r = (r * c) % n_l }
+                c = (c * c) % n_l
+                ee = ee >> 1u64
+            }
+        }
+        return r
+    }
     let n_inv : u64 = mont_n_inv_neg(n_l)
     let one_R : u64 = mont_to_form(1u64, n_l)
     let base_R : u64 = mont_to_form(base_l, n_l)

@@ -1520,8 +1520,14 @@ L_if_end_51:
     popq %rax
     jmp L_loop_top_48
 L_loop_end_49:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rdx
     subq $32, %rsp
-    callq L__psf_alloc_slot
+    callq fed_seal_lookup_anchor
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -1529,7 +1535,7 @@ L_loop_end_49:
     movq %rax, -96(%rbp)
     movl -96(%rbp), %eax
     pushq %rax
-    movl L_PSF_NOT_FOUND(%rip), %eax
+    movabsq $0xffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1550,9 +1556,39 @@ L_loop_end_49:
     pushq %rax
     popq %rax
 L_if_end_53:
+    subq $32, %rsp
+    callq L__psf_alloc_slot
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -104(%rbp)
+    movl -104(%rbp), %eax
+    pushq %rax
+    movl L_PSF_NOT_FOUND(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_55
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_55:
     movq -16(%rbp), %rax
     pushq %rax
-    movl -96(%rbp), %eax
+    movl -104(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1564,7 +1600,7 @@ L_if_end_53:
     popq %rax
     leaq L_PSF_TIER(%rip), %rax
     pushq %rax
-    movl -96(%rbp), %eax
+    movl -104(%rbp), %eax
     pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
@@ -1574,7 +1610,7 @@ L_if_end_53:
     movl %edx, (%rax,%rcx,4)
     leaq L_PSF_LOCAL_ID(%rip), %rax
     pushq %rax
-    movl -96(%rbp), %eax
+    movl -104(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -1584,7 +1620,7 @@ L_if_end_53:
     movq %rdx, (%rax,%rcx,8)
     leaq L_PSF_LIVE(%rip), %rax
     pushq %rax
-    movl -96(%rbp), %eax
+    movl -104(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1604,7 +1640,7 @@ L_if_end_53:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_57
     movl L_PSF_USED(%rip), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1619,8 +1655,8 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
-    movl -96(%rbp), %eax
+L_if_end_57:
+    movl -104(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -1669,7 +1705,7 @@ pattern_set_fed_send:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_57
+    jz L_if_end_59
     movslq L_PSF_E_NO_CHANNEL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1679,7 +1715,7 @@ pattern_set_fed_send:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_57:
+L_if_end_59:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1692,7 +1728,7 @@ L_if_end_57:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_59
+    jz L_if_end_61
     movslq L_PSF_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1702,7 +1738,7 @@ L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_59:
+L_if_end_61:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1000, %rax
@@ -1715,7 +1751,7 @@ L_if_end_59:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_61
+    jz L_if_end_63
     movslq L_PSF_E_FULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1725,7 +1761,7 @@ L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_61:
+L_if_end_63:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1758,7 +1794,7 @@ L_if_end_61:
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_62:
+L_loop_top_64:
     movq -56(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -1771,7 +1807,7 @@ L_loop_top_62:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_63
+    jz L_loop_end_65
     movq -40(%rbp), %rax
     pushq %rax
     movq -56(%rbp), %rax
@@ -1801,8 +1837,8 @@ L_loop_top_62:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_62
-L_loop_end_63:
+    jmp L_loop_top_64
+L_loop_end_65:
     leaq L_PSF_FETCH_BUF(%rip), %rax
     pushq %rax
     popq %rax
@@ -1860,7 +1896,7 @@ pattern_set_fed_reset:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_64:
+L_loop_top_66:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_PSF_SLOTS(%rip), %eax
@@ -1873,7 +1909,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_65
+    jz L_loop_end_67
     leaq L_PSF_LIVE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1934,7 +1970,7 @@ L_loop_top_64:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_66:
+L_loop_top_68:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -1947,7 +1983,7 @@ L_loop_top_66:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_67
+    jz L_loop_end_69
     movq -24(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1971,8 +2007,8 @@ L_loop_top_66:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_66
-L_loop_end_67:
+    jmp L_loop_top_68
+L_loop_end_69:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1993,8 +2029,8 @@ L_loop_end_67:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_64
-L_loop_end_65:
+    jmp L_loop_top_66
+L_loop_end_67:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

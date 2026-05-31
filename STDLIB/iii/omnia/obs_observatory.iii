@@ -43,6 +43,14 @@ fn obs_observatory_set_threshold(family: u32, t: u64) -> i32 @export {
     let t_l : u64 = t
     if f_l >= OBSO_FAMILIES { return OBSO_E_BADID }
     OBSO_THRESHOLD[f_l] = t_l
+    /* K-OBSO-1: recompute the firing bit against the moved threshold (same
+     * strict v>t semantics as obs_observatory_update); otherwise a
+     * set_threshold after an update leaves OBSO_FIRING stale and
+     * family_alarm / collapsed_state report the pre-move verdict.
+     * [audit K-OBSO-1] */
+    let mut fire : u8 = 0u8
+    if OBSO_VALUE[f_l] > t_l { fire = 1u8 }
+    OBSO_FIRING[f_l] = fire
     return OBSO_OK
 }
 

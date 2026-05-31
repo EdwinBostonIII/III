@@ -12,12 +12,15 @@
  * UNREFERENCED -> LIBNATIVE. */
 module forcefield_ripple_search
 
+extern @abi(c-msvc-x64) fn tb_max_by_u64(values: *u64, count: u64, out_index: *u64) -> i32 from "tiebreak.iii"
+
 const RS_MAX  : u32 = 4096u32
 const RS_NONE : u32 = 0xFFFFFFFFu32
 
 var RS_V   : [u64; 4096]    /* candidate post-move values 𝒱 */
 var RS_N   : [u32; 1]       /* candidate count */
 var RS_INC : [u64; 1]       /* incumbent value 𝒱(s₀) */
+var RS_OUT : [u64; 1]       /* [COMBINE-6] tb_max_by_u64 out_index receiver */
 
 fn rs_reset() -> u64 @export { RS_N[0u32] = 0u32 ; RS_INC[0u32] = 0u64 ; return 0u64 }
 fn rs_set_incumbent(v: u64) -> u64 @export { RS_INC[0u32] = v ; return 0u64 }
@@ -32,15 +35,13 @@ fn rs_add(v: u64) -> u32 @export {
 /* argmax over the frontier: the candidate of greatest 𝒱; ties -> least index (deterministic). */
 fn rs_argmax() -> u32 @export {
     let n : u32 = RS_N[0u32]
-    if n == 0u32 { return RS_NONE }
-    let mut best : u32 = 0u32
-    let mut bv   : u64 = RS_V[0u32]
-    let mut i    : u32 = 1u32
-    while i < n {
-        if RS_V[i] > bv { bv = RS_V[i] ; best = i }   /* strict > => equal values keep the lower index */
-        i = i + 1u32
-    }
-    return best
+    if n == 0u32 { return RS_NONE }                    /* preserve the exact RS_NONE empty contract */
+    let vptr : *u64 = &RS_V as *u64                    /* [COMBINE-6] route the argmax law through the one authority */
+    let optr : *u64 = &RS_OUT as *u64
+    let cnt  : u64  = n as u64
+    let rc   : i32  = tb_max_by_u64(vptr, cnt, optr)   /* SAME law: strict-> max, least-index tie */
+    if rc != 0i32 { return RS_NONE }                   /* i32 tested by EQUALITY (trap 1); n>0 so never fires */
+    return RS_OUT[0u64] as u32                          /* best < n <= 4096, lossless u64->u32 */
 }
 
 /* the emergent s★: the argmax IF it strictly dominates the incumbent (s★⊳s₀), else NONE -- the

@@ -4,20 +4,27 @@
  *
  * RFC 5869 HKDF using HMAC-SHA256.
  *
- * Public API (singleton state, two-step):
- *   hkdf_sha256_extract(salt:*u8, salt_len:u64, ikm:*u8, ikm_len:u64) -> i32
- *      -- Derives PRK = HMAC-SHA256(salt, IKM).  Stored internally.
- *      -- If salt_len == 0, an all-zero 32-byte salt is used.
- *   hkdf_sha256_expand(info:*u8, info_len:u64, out:*u8, out_len:u64) -> i32
- *      -- Generates out_len bytes of OKM into out.  out_len <= 255 * 32 = 8160.
+ * Public API:
+ *   hkdf_sha256_extract(salt, salt_len, ikm, ikm_len) -> i32
+ *      -- PRK = HMAC-SHA256(salt, IKM).  salt_len==0 => all-zero 32-byte salt.
+ *   hkdf_sha256_expand(info, info_len, out, out_len) -> i32
+ *      -- out_len bytes of OKM into the caller's out.  out_len <= 255*32 = 8160.
+ *   hkdf_sha256_oneshot(salt, salt_len, ikm, ikm_len, info, info_len, out, out_len)
+ *      -- APOTHEOSIS S.5: extract+expand in one call (the TLS-handshake hot-path
+ *         convenience), caller owns `out`.
+ *
+ * APOTHEOSIS S.5 (H-2).  Work buffers are now FIXED .bss module arrays
+ * (HKDF_WORK_*), not arena allocations -- removing hkdf's dependency on arena.iii
+ * entirely.  (The prior arena_new(8192) was a ONE-TIME lazy init, idempotent --
+ * not the per-call allocation the design premised -- but pure module buffers are
+ * leaner still: zero allocation, one fewer module dependency.)  HKDF_ZERO is .bss
+ * so it is zero-initialised with no init loop.
  *
  * Hexad: kind_essence.  Ring: R0.  K: 1.00.
  */
 
 module numera_hkdf
 
-extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn hmac_sha256(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
 extern @abi(c-msvc-x64) fn hmac_sha256_tag(out_32: *u8) -> i32 from "hmac.iii"
 
@@ -28,52 +35,37 @@ const HKDF_E_TOOLONG : i32 = -2i32
 const HKDF_HASH_LEN : u32 = 32u32
 const HKDF_MAX_OUT  : u64 = 8160u64    /* 255 * 32 */
 
-var HKDF_ARENA   : u64 = 0u64
-var HKDF_PRK_BUF : u64 = 0u64    /* 32-byte PRK */
-var HKDF_T_BUF   : u64 = 0u64    /* 32-byte block T(i) */
-var HKDF_MSG_BUF : u64 = 0u64    /* T(i-1) || info || counter */
-var HKDF_ZERO_SALT : u64 = 0u64  /* 32-byte zero salt (constant) */
-
-fn hkdf_alloc() -> i32 {
-    if HKDF_ARENA != 0u64 { return HKDF_OK }
-    HKDF_ARENA = arena_new(8192u64)
-    if HKDF_ARENA == 0u64 { return HKDF_E_INIT }
-    HKDF_PRK_BUF   = arena_alloc1(HKDF_ARENA, 32u64)
-    HKDF_T_BUF     = arena_alloc1(HKDF_ARENA, 32u64)
-    HKDF_MSG_BUF   = arena_alloc1(HKDF_ARENA, 4096u64)
-    HKDF_ZERO_SALT = arena_alloc1(HKDF_ARENA, 32u64)
-    let zp : *u8 = HKDF_ZERO_SALT as *u8
-    let mut i : u32 = 0u32
-    while i < 32u32 {
-        zp[i] = 0u8
-        i = i + 1u32
-    }
-    return HKDF_OK
-}
+/* Fixed module work buffers (S.5: no arena). */
+var HKDF_WORK_PRK  : [u8; 32]      /* PRK */
+var HKDF_WORK_T    : [u8; 32]      /* block T(i) */
+var HKDF_WORK_MSG  : [u8; 4096]    /* T(i-1) || info || counter */
+var HKDF_WORK_ZERO : [u8; 32]      /* all-zero salt (.bss zero-init) */
+var HKDF_PRK_READY : u8 = 0u8
 
 fn hkdf_sha256_extract(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64) -> i32 @export {
-    if hkdf_alloc() != HKDF_OK { return HKDF_E_INIT }
     /* PRK = HMAC-SHA256(salt, IKM) */
     let mut k : *u8 = salt
     let mut k_len : u64 = salt_len
     if k_len == 0u64 {
-        k = HKDF_ZERO_SALT as *u8
+        k = (&HKDF_WORK_ZERO) as u64 as *u8
         k_len = 32u64
     }
     hmac_sha256(k, k_len, ikm, ikm_len)
-    hmac_sha256_tag(HKDF_PRK_BUF as *u8)
+    hmac_sha256_tag((&HKDF_WORK_PRK) as u64 as *u8)
+    HKDF_PRK_READY = 1u8
     return HKDF_OK
 }
 
 fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @export {
-    if HKDF_PRK_BUF == 0u64 { return HKDF_E_INIT }
+    if HKDF_PRK_READY == 0u8 { return HKDF_E_INIT }
     if out_len > HKDF_MAX_OUT { return HKDF_E_TOOLONG }
     /* N = ceil(out_len / 32).  T(0) = empty.
      * For i = 1..N: T(i) = HMAC-SHA256(PRK, T(i-1) || info || [i]) */
     let mut written : u64 = 0u64
     let mut counter : u32 = 1u32
-    let mp : *u8 = HKDF_MSG_BUF as *u8
-    let tp : *u8 = HKDF_T_BUF as *u8
+    let mp : *u8 = (&HKDF_WORK_MSG) as u64 as *u8
+    let tp : *u8 = (&HKDF_WORK_T) as u64 as *u8
+    let pp : *u8 = (&HKDF_WORK_PRK) as u64 as *u8
     let mut prev_len : u64 = 0u64    /* length of T(i-1); 0 for i=1 */
     while written < out_len {
         /* Build msg: T(i-1) || info || [counter] */
@@ -93,8 +85,8 @@ fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @
         mp[mi] = (counter & 0xFFu32) as u8
         mi = mi + 1u64
         /* T(i) = HMAC-SHA256(PRK, msg) */
-        hmac_sha256(HKDF_PRK_BUF as *u8, 32u64, HKDF_MSG_BUF as *u8, mi)
-        hmac_sha256_tag(HKDF_T_BUF as *u8)
+        hmac_sha256(pp, 32u64, mp, mi)
+        hmac_sha256_tag(tp)
         prev_len = 32u64
         /* Copy chunk from T(i) to out */
         let mut chunk : u64 = 32u64
@@ -108,4 +100,13 @@ fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @
         counter = counter + 1u32
     }
     return HKDF_OK
+}
+
+/* APOTHEOSIS S.5: single-call HKDF (extract then expand) on the fixed buffers.
+ * 8 params (Win64 4 regs + 4 stack; the iiis-2 arg-spill path is proven --
+ * corpus 277, and rsa_pss_sign uses 8 args). */
+fn hkdf_sha256_oneshot(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64, info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @export {
+    let e : i32 = hkdf_sha256_extract(salt, salt_len, ikm, ikm_len)
+    if e != HKDF_OK { return e }
+    return hkdf_sha256_expand(info, info_len, out, out_len)
 }

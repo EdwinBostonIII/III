@@ -4,9 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "sandbox_ctor.iiisandbox_ctor.iii\0"
+    .ascii "sandbox_ctor.iiisandbox_ctor.iiibound.iii\0"
 L_str_1:
-    .ascii "sandbox_ctor.iii\0"
+    .ascii "sandbox_ctor.iiibound.iii\0"
+L_str_2:
+    .ascii "bound.iii\0"
     .section .rodata
 L_SBQ_OK:
     .quad 0x0
@@ -37,9 +39,24 @@ L__sbq_slot_of:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
+    movl L_SBQ_SLOTS(%rip), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq bnd_index
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -60,53 +77,7 @@ L__sbq_slot_of:
     pushq %rax
     popq %rax
 L_if_end_1:
-    movq -16(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    movabsq $0x3f, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movl -32(%rbp), %eax
-    pushq %rax
-    movl L_SBQ_SLOTS(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
-    movl -32(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -164,7 +135,7 @@ sandbox_quota_record_alloc:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_3
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -174,7 +145,7 @@ sandbox_quota_record_alloc:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_3:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -196,7 +167,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_5
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -206,7 +177,7 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_5:
     leaq L_SBQ_MEM_USED(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -239,7 +210,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_7
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -249,7 +220,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_7:
     leaq L_SBQ_MEM_USED(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -324,7 +295,7 @@ sandbox_quota_record_cpu:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_9
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -334,7 +305,7 @@ sandbox_quota_record_cpu:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_9:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -356,7 +327,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -366,7 +337,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_11:
     leaq L_SBQ_CPU_USED(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -399,7 +370,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -409,7 +380,7 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_13:
     leaq L_SBQ_CPU_USED(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -479,7 +450,7 @@ sandbox_quota_mem_used:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -489,7 +460,7 @@ sandbox_quota_mem_used:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_15:
     leaq L_SBQ_MEM_USED(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -549,7 +520,7 @@ sandbox_quota_cpu_used:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -559,7 +530,7 @@ sandbox_quota_cpu_used:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_17:
     leaq L_SBQ_CPU_USED(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -619,7 +590,7 @@ sandbox_quota_mem_remaining:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -629,7 +600,7 @@ sandbox_quota_mem_remaining:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_19:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -661,7 +632,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -671,7 +642,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_21:
     movq -32(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -731,7 +702,7 @@ sandbox_quota_cpu_remaining:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_23
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -741,7 +712,7 @@ sandbox_quota_cpu_remaining:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_23:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -773,7 +744,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_25
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -783,7 +754,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_25:
     movq -32(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -820,7 +791,7 @@ sandbox_quota_clear_all:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_28:
+L_loop_top_26:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_SBQ_SLOTS(%rip), %eax
@@ -833,7 +804,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_29
+    jz L_loop_end_27
     leaq L_SBQ_MEM_USED(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -868,8 +839,8 @@ L_loop_top_28:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_28
-L_loop_end_29:
+    jmp L_loop_top_26
+L_loop_end_27:
     movslq L_SBQ_OK(%rip), %rax
     pushq %rax
     popq %rax

@@ -105,25 +105,17 @@ fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
             while going == 1u8 {
                 if pos >= raw_len { going = 0u8 }
                 if going == 1u8 {
-                    let c : u32 = p[pos] as u32
-                    if c == 34u32 {
-                        /* Check for "" escape */
-                        if pos + 1u64 < raw_len {
-                            if p[pos + 1u64] == 34u8 {
-                                pos = pos + 2u64
-                            }
-                            if p[pos] != 34u8 { /* if not escaped, was a closing quote */
-                                going = 0u8
-                            }
-                        }
-                        if going == 1u8 {
-                            if pos >= raw_len { going = 0u8 }
-                        }
-                        if going == 1u8 {
-                            /* still going, must have been escape */
-                        }
+                    if p[pos] == 34u8 {
+                        /* A quote: "" is an escaped quote (consume both, keep going);
+                         * a LONE quote -- including one at the final byte -- is the
+                         * closing quote.  The prior FSM mis-split `"ab""cd"` and never
+                         * closed a quote at end-of-buffer.  [audit H-CSV-1/2] */
+                        let mut esc : u8 = 0u8
+                        if pos + 1u64 < raw_len { if p[pos + 1u64] == 34u8 { esc = 1u8 } }
+                        if esc == 1u8 { pos = pos + 2u64 } else { going = 0u8 }
+                    } else {
+                        pos = pos + 1u64
                     }
-                    if going == 1u8 { pos = pos + 1u64 }
                 }
             }
             field_len = pos - field_start

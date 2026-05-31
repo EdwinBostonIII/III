@@ -63,7 +63,7 @@ L_COEFF_TABLE_BYTES:
     .byte 0x0
     .byte 0x0
     .byte 0x0
-    .byte 0x35
+    .byte 0xe9
     .byte 0xa4
     .byte 0x35
     .byte 0x0
@@ -71,7 +71,7 @@ L_COEFF_TABLE_BYTES:
     .byte 0x0
     .byte 0x0
     .byte 0x0
-    .byte 0x35
+    .byte 0xe9
     .byte 0xa4
     .byte 0x35
     .byte 0x0
@@ -79,7 +79,7 @@ L_COEFF_TABLE_BYTES:
     .byte 0x0
     .byte 0x0
     .byte 0x0
-    .byte 0x35
+    .byte 0xe9
     .byte 0xa4
     .byte 0x35
     .byte 0x0
@@ -87,7 +87,7 @@ L_COEFF_TABLE_BYTES:
     .byte 0x0
     .byte 0x0
     .byte 0x0
-    .byte 0x35
+    .byte 0xe9
     .byte 0xa4
     .byte 0x35
     .byte 0x0
@@ -95,7 +95,7 @@ L_COEFF_TABLE_BYTES:
     .byte 0x0
     .byte 0x0
     .byte 0x0
-    .byte 0x35
+    .byte 0xe9
     .byte 0xa4
     .byte 0x35
     .byte 0x0
@@ -271,8 +271,8 @@ L_COEFF_TABLE_BYTES:
     .byte 0x0
     .byte 0x0
     .byte 0x0
-    .byte 0xff
-    .byte 0x7e
+    .byte 0x27
+    .byte 0xb9
     .byte 0x29
     .byte 0x0
     .byte 0x0
@@ -647,6 +647,216 @@ seal_resolver_is_computed:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "seal_resolver_coeff_u64"
+    .text
+    .global seal_resolver_coeff_u64
+    .seh_proc seal_resolver_coeff_u64
+seal_resolver_coeff_u64:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x21, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_7
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_7:
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    imulq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+L_loop_top_8:
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_9
+    movq -24(%rbp), %rax
+    pushq %rax
+    leaq L_COEFF_TABLE_BYTES(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    imulq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_8
+L_loop_end_9:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "seal_resolver_flip_byte_for_test"
+    .text
+    .global seal_resolver_flip_byte_for_test
+    .seh_proc seal_resolver_flip_byte_for_test
+seal_resolver_flip_byte_for_test:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    movabsq $0x108, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
+    leaq L_COEFF_TABLE_BYTES(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    leaq L_COEFF_TABLE_BYTES(%rip), %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "seal_resolver_verify"
     .text
     .global seal_resolver_verify
@@ -671,7 +881,7 @@ seal_resolver_verify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -681,12 +891,12 @@ seal_resolver_verify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_13:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_8:
+L_loop_top_14:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -699,7 +909,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_9
+    jz L_loop_end_15
     leaq L_SEAL_RESOLVER_SAVED(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -730,8 +940,8 @@ L_loop_top_8:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
+    jmp L_loop_top_14
+L_loop_end_15:
     subq $32, %rsp
     callq seal_resolver_compute
     addq $32, %rsp
@@ -746,7 +956,7 @@ L_loop_end_9:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_10:
+L_loop_top_16:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -759,7 +969,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_17
     leaq L_SEAL_RESOLVER_SAVED(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -784,7 +994,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -792,7 +1002,7 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_19:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -807,8 +1017,8 @@ L_if_end_13:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_16
+L_loop_end_17:
     movzbq -16(%rbp), %rax
     pushq %rax
     popq %rax

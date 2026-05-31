@@ -89,6 +89,16 @@ var MLCUR_STATES        : [u8; 1024]
 var MLCUR_LIVE          : [u8; 1024]
 var MLCUR_COUNT         : u64 = 0u64
 
+/* [W0.3 / COMBINE-3] caller-owned content-address index: ticket -> slot, for O(1) curate_find
+ * (was an O(MLCUR_SLOTS) linear scan).  Sized 2048 (>= 1024 slots, <=50% load for clean probing). */
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
+const MLCUR_CAI_SLOTS : u64 = 2048u64
+const MLCUR_CAI_MASK  : u64 = 2047u64
+var MLCUR_CAI_KEYS : [u8;  65536]   /* 2048 * 32 */
+var MLCUR_CAI_VALS : [u32; 2048]
+
 /* -- Module-scope scratch (Trap 7 fix -- hoisted from gospel's local arrays) -- */
 var MLCUR_SEED    : [u8; 96]
 var MLCUR_TIMEBUF : [u8; 32]
@@ -123,6 +133,7 @@ fn curate_init() -> i32 @export {
         i = i + 1u64
     }
     MLCUR_COUNT = 0u64
+    cai_clear((&MLCUR_CAI_VALS) as u64, MLCUR_CAI_SLOTS)
     MLCUR_INITED = 1u8
     return MLCUR_OK
 }
@@ -133,22 +144,12 @@ fn curate_init() -> i32 @export {
  * W14: sentinel flag suppresses body after match; no break.
  * -------------------------------------------------------------------------- */
 fn curate_find(ticket: *u8) -> i64 {
-    let mut i : u64 = 0u64
-    let mut found : i64 = -1i64
-    let mut sentinel : u8 = 0u8
-    while i < MLCUR_SLOTS {
-        if sentinel == 0u8 {
-            if MLCUR_LIVE[i] == 1u8 {
-                let slot_ptr : *u8 = ((&MLCUR_TICKETS as u64) + i * 32u64) as *u8
-                if ident_eq(slot_ptr, ticket) == 1u8 {
-                    found = i as i64
-                    sentinel = 1u8
-                }
-            }
-        }
-        i = i + 1u64
-    }
-    return found
+    /* [W0.3 / COMBINE-3] O(1) content-address lookup (was an O(MLCUR_SLOTS) linear scan).  The
+     * table is ADD-ONLY (a slot, once live, never frees), so a caindex hit is always a live,
+     * full-id-verified match -> byte-identical to the old (LIVE && ident_eq) scan result. */
+    let s : u32 = cai_get((&MLCUR_CAI_KEYS) as u64, (&MLCUR_CAI_VALS) as u64, MLCUR_CAI_MASK, ticket)
+    if s == 0xFFFFFFFFu32 { return -1i64 }
+    return s as i64
 }
 
 /* --------------------------------------------------------------------------
@@ -217,6 +218,7 @@ fn curate_propose(carrier_id: *u8, operator_capability: *u8, out_ticket: *u8) ->
     MLCUR_STATES[s] = MLCUR_STATE_PENDING
     MLCUR_LIVE[s] = 1u8
     MLCUR_COUNT = MLCUR_COUNT + 1u64
+    cai_put((&MLCUR_CAI_KEYS) as u64, (&MLCUR_CAI_VALS) as u64, MLCUR_CAI_MASK, slot_tk_ptr, s as u32)   /* [W0.3] index ticket -> slot */
     return MLCUR_OK
 }
 

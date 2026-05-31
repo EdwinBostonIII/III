@@ -1,0 +1,345 @@
+/* 991_bench_montgomery_modpow.iii -- CORRECTNESS-gated MEASUREMENT of the
+ * Montgomery modular exponentiation (bigint_modpow, which routes an ODD modulus
+ * to bigint_modpow_mont) vs a reconstructed SCHOOLBOOK square-and-multiply that
+ * reduces with a real division at every step (bigint_mul + bigint_mod -> Knuth).
+ *
+ * Measures the III-CAPABILITY-VERIFICATION "RSA-PSS Montgomery modpow, no
+ * per-step division -> faster" claim, whose magnitude previously lived only in
+ * a source comment (rsa.iii:388) with no measurement.
+ *
+ * MEASURED RESULT (after the raw-limb CIOS rewrite of mont_mul_bigint):
+ *   Montgomery is ~2.5x FASTER than schoolbook+Knuth (ratio ~2.4-2.5 across
+ *   521/1279/2203-bit moduli).  This bench DROVE that optimization: the prior
+ *   mont_mul_bigint did 3 fresh bigint heap allocations per limb-step (~3k per
+ *   multiply), making Montgomery ~2.5x SLOWER than schoolbook+Knuth; this bench
+ *   measured it, and mont_mul_bigint was rewritten as a radix-2^32 CIOS on fixed
+ *   module-global scratch (zero per-step allocation, bigint_div.iii) -- a ~6.5x
+ *   speedup on the Montgomery path that flipped the ratio.  Knuth division is
+ *   itself ~250x over the old bit-serial divider (bench 990), so this 2.5x is
+ *   Montgomery beating the CURRENT best generic modexp, not a weak baseline.
+ *
+ * The bench GATES CORRECTNESS (the two independent modexp impls -- Montgomery
+ * REDC vs schoolbook Knuth-division -- must agree bit-for-bit; a fast wrong
+ * answer is a HARD failure) AND asserts the speedup (Montgomery must be strictly
+ * faster at every size, else an advisory) so it doubles as a perf-regression
+ * guard: a future slow REDC reverts the ratio and trips the advisory.
+ *
+ * Operands: modulus = Mersenne PRIME 2^p-1 (p in {521,1279,2203}) so Z/m is a
+ * field (no zero-divisor collapse, unambiguous residues); base = full-width
+ * random (RSA exponentiates a ciphertext ~ modulus size, so both paths do
+ * full-width work every iteration -- a tiny base would let schoolbook coast
+ * through cheap small-operand squarings and unfairly handicap Montgomery).
+ *
+ * Methodology (identical discipline to 990):
+ *   - bench_now() = lfence;rdtsc;lfence brackets ONE full modexp.
+ *   - scratch arena drop+reset OUTSIDE the timed bracket.
+ *   - MIN over N_ITER runs = uncontended floor.
+ *
+ * Reports to stdout (captured by run_bench_corpus.sh):
+ *   "<mod_bits> <mont_cyc> <school_cyc> <ratio_x100>\n" per size (ratio>100 =
+ *   Montgomery faster).
+ *
+ * Exit map:
+ *    1  arena alloc failed
+ *    3  Montgomery result != schoolbook result (a path is WRONG) -- HARD fail
+ *   30  correct but Montgomery NOT strictly faster at some size (advisory --
+ *       host noise, or a Montgomery perf regression)
+ *   99  correct AND Montgomery strictly faster at every size -- PASS
+ *
+ * NIH: arena/bigint/bigint_div + omnia_bench (rdtsc) + kernel32 (stdout) only. */
+module corpus_991
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bench_now() -> u64 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_cpuid_serialize() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_pause_loop() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn GetStdHandle(n: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
+
+const N_ITER : u64 = 6u64
+
+var OUTBUF : [u8; 96]
+var NWR    : [u8; 8]
+var DIGTMP : [u8; 24]
+var LCG    : u64 = 0u64
+
+fn warmup() -> i32 {
+    bench_cpuid_serialize()
+    bench_pause_loop()
+    bench_pause_loop()
+    bench_pause_loop()
+    return 0i32
+}
+
+fn lcg_next() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* The Mersenne prime 2^p - 1 (p in {521,1279,2203}, all known primes).  A PRIME
+ * modulus makes Z/m a field: every nonzero base is coprime to m, so base^exp mod
+ * m is NEVER 0 and the residue is unambiguous -- eliminating the zero-divisor
+ * collapse a random COMPOSITE modulus suffers (base^e == 0 mod m when m has a
+ * repeated factor), which would break strict bigint_eq for no real reason.  It
+ * is odd (-> the Montgomery path) and full-width.  Crucially, NEITHER bigint_mod
+ * (general Knuth division) NOR Montgomery REDC special-cases the 2^p-1 shape, so
+ * the comparison stays fair -- both do generic full-width modular reduction. */
+fn build_mersenne(arena: u64, p_bits: u64) -> u64 {
+    let nlimbs : u64 = (p_bits + 63u64) >> 6u64
+    let top_bits : u64 = p_bits & 63u64
+    /* top limb mask: all-ones if p_bits is limb-aligned, else low top_bits set. */
+    let mut top_mask : u64 = 0xFFFFFFFFFFFFFFFFu64
+    if top_bits != 0u64 {
+        let one : u64 = 1u64
+        let hi  : u64 = one << top_bits
+        top_mask = hi - 1u64
+    }
+    let id : u64 = bigint_new(arena, nlimbs)
+    let mut i : u64 = 0u64
+    while i < nlimbs {
+        if i != nlimbs - 1u64 { bigint_set_limb(id, i, 0xFFFFFFFFFFFFFFFFu64) }
+        if i == nlimbs - 1u64 { bigint_set_limb(id, i, top_mask) }
+        i = i + 1u64
+    }
+    bigint_set_len(id, nlimbs)
+    bigint_normalize(id)
+    return id
+}
+
+/* A small fixed-width random value (the exponent / base seed). */
+fn build_val(arena: u64, nlimbs: u64) -> u64 {
+    let id : u64 = bigint_new(arena, nlimbs)
+    let mut i : u64 = 0u64
+    while i < nlimbs {
+        bigint_set_limb(id, i, lcg_next())
+        i = i + 1u64
+    }
+    bigint_set_limb(id, nlimbs - 1u64, lcg_next() | 0x8000000000000000u64)
+    bigint_set_len(id, nlimbs)
+    bigint_normalize(id)
+    return id
+}
+
+/* Reconstructed schoolbook square-and-multiply: result accumulates b^exp mod m,
+ * reducing with a real division (bigint_mod -> Knuth) at every step.  This is
+ * exactly the path Montgomery replaced (bigint_div.iii:640-665, the even-modulus
+ * branch), called here directly so an ODD modulus still exercises it for the
+ * comparison.  Pow2 shifts (>>6, &63) avoid the modulo-after-call trap.
+ *
+ * CRITICAL: every transient (prod, old result, b_squared, old b_cur) is dropped
+ * each iteration -- exactly as the shipped path does.  The bigint slot table is
+ * only 64 wide (bigint.iii:44); a ~64-bit exponent runs ~64 iterations, so a
+ * leak of even one slot per iteration exhausts the table mid-call and bigint_new
+ * silently returns a degenerate (zero) slot.  Drop discipline keeps ~3 live. */
+fn schoolbook_modpow(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 {
+    let ar : u64 = arena
+    let mut result : u64 = bigint_from_u64(ar, 1u64)
+    let mut b_cur : u64 = bigint_mod(ar, base, modulus)
+    let exp_bits : u64 = bigint_msb_position(exp)
+    let mut bit : u64 = 0u64
+    while bit < exp_bits {
+        let limb_idx : u64 = bit >> 6u64
+        let bit_off  : u64 = bit & 63u64
+        let limb_val : u64 = bigint_get_limb(exp, limb_idx)
+        let shifted  : u64 = limb_val >> bit_off
+        let e_bit    : u64 = shifted & 1u64
+        if e_bit == 1u64 {
+            let prod : u64 = bigint_mul(ar, result, b_cur)
+            let nr   : u64 = bigint_mod(ar, prod, modulus)
+            bigint_drop(prod)
+            bigint_drop(result)
+            result = nr
+        }
+        let bsq   : u64 = bigint_mul(ar, b_cur, b_cur)
+        let bnext : u64 = bigint_mod(ar, bsq, modulus)
+        bigint_drop(bsq)
+        bigint_drop(b_cur)
+        b_cur = bnext
+        bit = bit + 1u64
+    }
+    bigint_drop(b_cur)
+    return result
+}
+
+/* MIN cycles of one Montgomery modexp over N_ITER runs (reset outside bracket). */
+fn time_mont(arena_s: u64, base: u64, exp: u64, modulus: u64) -> u64 {
+    let ar : u64 = arena_s
+    let bse : u64 = base
+    let exe : u64 = exp
+    let md  : u64 = modulus
+    let mut best : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < N_ITER {
+        bigint_drop_arena(ar)
+        arena_reset(ar)
+        let t0 : u64 = bench_now()
+        let r  : u64 = bigint_modpow(ar, bse, exe, md)
+        let t1 : u64 = bench_now()
+        let d  : u64 = t1 - t0
+        if d < best { best = d }
+        i = i + 1u64
+    }
+    return best
+}
+
+fn time_school(arena_s: u64, base: u64, exp: u64, modulus: u64) -> u64 {
+    let ar : u64 = arena_s
+    let bse : u64 = base
+    let exe : u64 = exp
+    let md  : u64 = modulus
+    let mut best : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < N_ITER {
+        bigint_drop_arena(ar)
+        arena_reset(ar)
+        let t0 : u64 = bench_now()
+        let r  : u64 = schoolbook_modpow(ar, bse, exe, md)
+        let t1 : u64 = bench_now()
+        let d  : u64 = t1 - t0
+        if d < best { best = d }
+        i = i + 1u64
+    }
+    return best
+}
+
+fn put_dec(off: u64, n: u64) -> u64 {
+    if n == 0u64 { OUTBUF[off] = 48u8 return off + 1u64 }
+    let mut v : u64 = n
+    let mut k : u64 = 0u64
+    while v > 0u64 {
+        let qd : u64 = v / 10u64
+        let dd : u64 = v - qd * 10u64
+        DIGTMP[k] = (dd as u8) + 48u8
+        v = qd
+        k = k + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < k {
+        OUTBUF[off + j] = DIGTMP[k - 1u64 - j]
+        j = j + 1u64
+    }
+    return off + k
+}
+
+fn emit(n: u32) -> i32 {
+    let h : u64 = GetStdHandle(0xFFFFFFF5u32)   /* STD_OUTPUT_HANDLE = (DWORD)-11 */
+    WriteFile(h, (&OUTBUF) as *u8, n, (&NWR) as u64, 0u64)
+    return 0i32
+}
+
+fn report(mod_bits: u64, mont_c: u64, school_c: u64, ratio_x100: u64) -> i32 {
+    let mut off : u64 = 0u64
+    off = put_dec(off, mod_bits)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, mont_c)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, school_c)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, ratio_x100)
+    OUTBUF[off] = 10u8 off = off + 1u64
+    emit(off as u32)
+    return 0i32
+}
+
+/* Build operands at mod_limbs (modulus width) with a fixed-width exponent,
+ * gate the two modexp paths bit-equal, time both, report.
+ * Returns 0 = ok+faster; 30 = ok but not faster; 3 = result mismatch.
+ *
+ * modulus = 2^p_bits - 1 (Mersenne PRIME) and base = a FULL-WIDTH random value.
+ * A full-width base is what RSA actually exponentiates (a ciphertext ~ modulus
+ * size), so both paths do full-width work from the first iteration -- unlike a
+ * tiny base, which lets schoolbook coast through cheap small-operand squarings
+ * and unfairly handicaps Montgomery (which goes full-width immediately via the
+ * to-Montgomery-form step).  The prime modulus guarantees nonzero, unambiguous
+ * residues (see build_mersenne).  The exponent is full ~64-bit; the per-step
+ * reduction cost (division vs REDC) -- the measured quantity -- is full-width
+ * every iteration. */
+fn run_size(arena_p: u64, arena_s: u64, p_bits: u64, exp_limbs: u64) -> u64 {
+    let ap  : u64 = arena_p
+    let as2 : u64 = arena_s
+    let nlimbs  : u64 = (p_bits + 63u64) >> 6u64
+    let modulus : u64 = build_mersenne(ap, p_bits)
+    let base    : u64 = build_val(ap, nlimbs)       /* full-width random ciphertext-like base */
+    let exp     : u64 = build_val(ap, exp_limbs)
+
+    /* ---- absolute correctness gate (two independent impls must agree) ---- */
+    let r_mont   : u64 = bigint_modpow(as2, base, exp, modulus)
+    let r_school : u64 = schoolbook_modpow(as2, base, exp, modulus)
+    let mut fault : u64 = 0u64
+    if bigint_eq(r_mont, r_school) != 1u8 { fault = 3u64 }
+    bigint_drop_arena(as2)
+    arena_reset(as2)
+    if fault != 0u64 { return fault }
+
+    /* ---- timed measurement ----
+     * After the raw-limb CIOS rewrite of mont_mul_bigint, Montgomery is ~2.5x
+     * FASTER than schoolbook+Knuth (REDC replaces division and -- crucially --
+     * no longer allocates per limb-step).  Assert it: strictly faster -> 0 (ok),
+     * else 30 (advisory: host noise or a Montgomery perf regression). */
+    warmup()
+    let mont_c   : u64 = time_mont(as2, base, exp, modulus)
+    let school_c : u64 = time_school(as2, base, exp, modulus)
+    let mut ratio : u64 = 0u64
+    if mont_c > 0u64 { ratio = school_c * 100u64 / mont_c }
+    report(p_bits, mont_c, school_c, ratio)
+    if school_c > mont_c { return 0u64 }   /* Montgomery strictly faster */
+    return 30u64                            /* advisory: not faster on this host */
+}
+
+fn main() -> u64 {
+    let arena_p : u64 = arena_new(1u64 << 20u64)   /* persistent: holds operands */
+    let arena_s : u64 = arena_new(1u64 << 27u64)   /* scratch: modexp temporaries (128MB; the
+                                                    * CIOS Montgomery now allocates ONE bigint per
+                                                    * mont_mul -- a few MB per full-width modexp --
+                                                    * but the schoolbook baseline still bump-allocs
+                                                    * heavily, so the headroom stays) */
+    if arena_p == 0u64 { return 1u64 }
+    if arena_s == 0u64 { return 1u64 }
+    LCG = 0xB5297A4D816F0BC1u64
+
+    /* Three Mersenne-prime modulus widths, fixed 1-limb (~64-bit) exponent.
+     * Each run_size GATES that Montgomery and schoolbook agree bit-for-bit and
+     * REPORTS the cycle ratio.  Columns per line:
+     * "<mod_bits> <mont_cyc> <school_cyc> <ratio_x100>". */
+    /* A fault (3) is a HARD failure -> return at once.  The advisory "not faster"
+     * (30) is NOT a fault: keep measuring every size, surface 30 only if SOME
+     * size failed to show the Montgomery speedup. */
+    let mut worst : u64 = 0u64
+    let r1 : u64 = run_size(arena_p, arena_s, 521u64, 1u64)    /* M521  (~512-bit)  */
+    if r1 != 0u64 { if r1 != 30u64 { return r1 } }
+    if r1 == 30u64 { worst = 30u64 }
+    let r2 : u64 = run_size(arena_p, arena_s, 1279u64, 1u64)   /* M1279 (~1024-bit) */
+    if r2 != 0u64 { if r2 != 30u64 { return r2 } }
+    if r2 == 30u64 { worst = 30u64 }
+    let r3 : u64 = run_size(arena_p, arena_s, 2203u64, 1u64)   /* M2203, ~64-bit exp  */
+    if r3 != 0u64 { if r3 != 30u64 { return r3 } }
+    if r3 == 30u64 { worst = 30u64 }
+    /* M1279 with a FULL-WIDTH (~1279-bit) exponent -- the capstone: the ratio is
+     * exponent-length-INDEPENDENT (per-iteration REDC-vs-Knuth cost dominates and
+     * is the same every iteration; the fixed domain-conversion overhead amortizes
+     * to noise).  Measured ~2.47x at full-width vs ~2.50x at ~64-bit -- identical
+     * to two digits.  1279 (not 2203) keeps runtime bounded. */
+    let r4 : u64 = run_size(arena_p, arena_s, 1279u64, 20u64)  /* M1279, full-width exp */
+    if r4 != 0u64 { if r4 != 30u64 { return r4 } }
+    if r4 == 30u64 { worst = 30u64 }
+
+    arena_drop(arena_s)
+    arena_drop(arena_p)
+    if worst == 30u64 { return 30u64 }   /* correct, but not faster on this host */
+    return 99u64                          /* correct AND Montgomery faster everywhere */
+}

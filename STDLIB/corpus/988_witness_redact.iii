@@ -1,0 +1,95 @@
+/* 988_witness_redact.iii -- falsifier for witness_hook M6 provable forgetting (wh_redact).
+ * The capability (consumer: numera/h8_charter) had no prove-the-negative KAT. Publishing a
+ * fragment with a payload, then redacting it, must satisfy ALL four M6 invariants:
+ *   (1) is_redacted flips 0 -> 1;
+ *   (2) the redaction commitment == keccak256(original payload)  -- proves WHAT was forgotten;
+ *   (3) the stored payload is ZEROED                              -- the content is gone;
+ *   (4) the frag_id is UNCHANGED                                  -- a verifiable hole, NOT a
+ *       broken chain (the defining M6 property: forget without breaking provenance).
+ * Negative arm: redacting an out-of-range idx returns WH_E_BAD_IDX (not WH_OK, no OOB write).
+ * 99 = pass. */
+module corpus_988
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_redact(idx: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_is_redacted(idx: u64) -> u8 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_redaction_commit(idx: u64, out: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_frag_id(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+
+const WH_OK        : i32 =  0i32
+const WH_E_BAD_IDX : i32 = -3i32
+
+var PRODUCER    : [u8; 32]
+var OPID        : [u8; 32]
+var INCOM       : [u8; 32]
+var OUTCOM      : [u8; 32]
+var ANTE_DUMMY  : [u8; 32]
+var PAYLOAD     : [u8; 16]
+var PAY_COPY    : [u8; 16]   /* untouched copy of the original payload (for the reference commit) */
+var FRAG_BEFORE : [u8; 32]
+var FRAG_AFTER  : [u8; 32]
+var COMMIT_GOT  : [u8; 32]
+var COMMIT_REF  : [u8; 32]
+var PAY_OUT     : [u8; 16]
+var PAY_LEN     : [u64; 1]
+
+fn fill_id(buf: u64, b: u8) -> i32 {
+    let p : *u8 = buf as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = b  i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    wh_init(1000u64)
+    fill_id(&PRODUCER as u64, 0x11u8)
+    fill_id(&OPID as u64, 0x22u8)
+    fill_id(&INCOM as u64, 0x33u8)
+    fill_id(&OUTCOM as u64, 0x44u8)
+    /* payload bytes 0x41..0x50; keep an independent copy (redaction zeros the SPINE copy only) */
+    let mut i : u64 = 0u64
+    while i < 16u64 {
+        let v : u8 = 0x41u8 + (i as u8)
+        PAYLOAD[i] = v
+        PAY_COPY[i] = v
+        i = i + 1u64
+    }
+
+    let idx : u64 = wh_publish(&PRODUCER as *u8, &OPID as *u8, &INCOM as *u8, &OUTCOM as *u8, 0u8, 0u8, 0u16, &ANTE_DUMMY as *u8, 0u32, &PAYLOAD as *u8, 16u32, &FRAG_BEFORE as *u8)
+    if idx == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }     /* publish must succeed */
+
+    /* pre-state: not redacted */
+    if wh_is_redacted(idx) != 0u8 { return 2u64 }
+
+    /* independent reference commitment = keccak256(original payload), BEFORE redaction */
+    keccak256_oneshot(&PAY_COPY as u64, 16u64, &COMMIT_REF as u64)
+
+    if wh_redact(idx) != WH_OK { return 3u64 }
+
+    /* (1) state flipped 0 -> 1 */
+    if wh_is_redacted(idx) != 1u8 { return 4u64 }
+
+    /* (2) commitment == keccak256(original) */
+    wh_redaction_commit(idx, &COMMIT_GOT as *u8)
+    i = 0u64
+    while i < 32u64 { if COMMIT_GOT[i] != COMMIT_REF[i] { return 5u64 }  i = i + 1u64 }
+
+    /* (3) payload forgotten (every byte zeroed) */
+    wh_get_payload(idx, &PAY_OUT as *u8, 16u64, &PAY_LEN as *u64)
+    if PAY_LEN[0u64] != 16u64 { return 6u64 }
+    i = 0u64
+    while i < 16u64 { if PAY_OUT[i] != 0u8 { return 7u64 }  i = i + 1u64 }
+
+    /* (4) frag_id UNCHANGED -- the chain is intact (a verifiable hole) */
+    wh_get_frag_id(idx, &FRAG_AFTER as *u8)
+    i = 0u64
+    while i < 32u64 { if FRAG_AFTER[i] != FRAG_BEFORE[i] { return 8u64 }  i = i + 1u64 }
+
+    /* negative arm: out-of-range idx must reject (WH_E_BAD_IDX), never WH_OK / OOB */
+    if wh_redact(idx + 1000u64) != WH_E_BAD_IDX { return 9u64 }
+
+    return 99u64
+}

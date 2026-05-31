@@ -1,6 +1,7 @@
 /* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\slhdsa.iii
  *
- * III STDLIB - numera::slhdsa -- SLH-DSA (FIPS 205 / SPHINCS+) signature.
+ * III STDLIB - numera::slhdsa -- SLH-DSA-style (SPHINCS+ family) signature.
+ * [E-SLH-2] NON-STANDARD instantiation -- NOT FIPS-205 wire-interoperable (see below).
  * RITCHIE Stage 4.4.3: native .iii port of CRYPTO-AGILITY/src/slhdsa.c.
  * SHA-256-based parameter sets {128s,192s,256s}; hash truncated to n bytes.
  * Hash-based (no NTT): hypertree of d Merkle trees of WOTS+ public keys,
@@ -8,6 +9,13 @@
  *
  * H_n/PRF/PRF_msg = SHA-256(...)[0..n]; H_msg = SHAKE-256 (incremental over
  * keccak_f1600, arbitrary msg).  ADRS = 32-byte FIPS-205 address.
+ *
+ * [E-SLH-2] FIPS-205 defines TWO DISJOINT families: SLH-DSA-SHA2 (SHA-256/512 + MGF1
+ * for EVERY hash) and SLH-DSA-SHAKE (SHAKE-256 throughout).  This module mixes SHA-256
+ * (H_n/PRF) with SHAKE-256 (H_msg), so it is NEITHER family and is NOT FIPS-205 wire-
+ * interoperable.  It is a self-consistent hash-based scheme (cross-KAT'd against its own
+ * C reference) retained under its true non-standard name; conforming H_msg to MGF1-SHA2
+ * would change every output and is a separate task -- honest labelling over a false claim.
  *
  * Public surface (byte-compatible with the C ref for cross-KAT):
  *   iii_slhdsa_keygen(lv, seed, pk, sk) -> i32
@@ -23,6 +31,19 @@ extern @abi(c-msvc-x64) fn sha256_oneshot(input_ptr: u64, input_len: u64, out_32
 extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
 extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
 extern @abi(c-msvc-x64) fn keccak_f1600(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn shake256_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 from "shake256.iii"
+
+/* APOTHEOSIS C.1 (ADR-C1): hash-family suite for the strict FIPS-205 split.
+ * Default 0 = SHAKE -> the strict FIPS-205 SLH-DSA-SHAKE family (H_n/PRF/
+ * PRF_msg all SHAKE-256; H_msg already SHAKE).  Verified byte-exact against
+ * NIST ACVP SLH-DSA-SHAKE-128s (corpus/_fips205_slhdsa_128s.vectors.json;
+ * Python oracle scripts/fips205_slhdsa_shake_ref.py).  1 = the legacy hybrid
+ * (SHA-256 H_n/PRF), retained ONLY so the non-vacuity proof can show a hybrid
+ * signature is REJECTED by the strict SHAKE verify.  Module-global (zero-init
+ * = SHAKE); the iii_sphincs_variant_* entries flip it to HYBRID and reset. */
+const SLH_SUITE_SHAKE  : u8 = 0u8
+const SLH_SUITE_HYBRID : u8 = 1u8
+var SLH_HASH_SUITE : u8 = 0u8
 
 /* ---- per-level params (lv 0=128s, 1=192s, 2=256s) ---- */
 fn slh_n(lv: u64) -> u64 { if lv == 0u64 { return 16u64 } if lv == 1u64 { return 24u64 } return 32u64 }
@@ -99,7 +120,12 @@ fn slh_H_n(out: u64, n: u64, seed: u64, seedlen: u64, adrs_slot: u64, msg: u64, 
     while i < 32u64 { hb[seedlen + i] = SLH_ADRS[ab + i] ; i = i + 1u64 }
     i = 0u64
     while i < msglen { hb[seedlen + 32u64 + i] = mp[i] ; i = i + 1u64 }
-    sha256_oneshot(&SLH_HBUF as u64, seedlen + 32u64 + msglen, &SLH_H32 as u64)
+    let _tot : u64 = seedlen + 32u64 + msglen
+    if SLH_HASH_SUITE == SLH_SUITE_SHAKE {
+        shake256_oneshot(&SLH_HBUF as u64, _tot, out, n)
+        return 0i32
+    }
+    sha256_oneshot(&SLH_HBUF as u64, _tot, &SLH_H32 as u64)
     let op : *u8 = out as *u8
     i = 0u64
     while i < n { op[i] = SLH_H32[i] ; i = i + 1u64 }
@@ -118,6 +144,10 @@ fn slh_PRF(out: u64, n: u64, pkseed: u64, skseed: u64, adrs_slot: u64) -> i32 {
     while i < 32u64 { hb[n + i] = SLH_ADRS[ab + i] ; i = i + 1u64 }
     i = 0u64
     while i < n { hb[n + 32u64 + i] = sk[i] ; i = i + 1u64 }
+    if SLH_HASH_SUITE == SLH_SUITE_SHAKE {
+        shake256_oneshot(&SLH_HBUF as u64, n + 32u64 + n, out, n)
+        return 0i32
+    }
     sha256_oneshot(&SLH_HBUF as u64, n + 32u64 + n, &SLH_H32 as u64)
     let op : *u8 = out as *u8
     i = 0u64
@@ -137,6 +167,10 @@ fn slh_PRF_msg(out: u64, n: u64, skprf: u64, opt_rand: u64, msg: u64, msglen: u6
     while i < n { hb[n + i] = op2[i] ; i = i + 1u64 }
     i = 0u64
     while i < msglen { hb[2u64*n + i] = mp[i] ; i = i + 1u64 }
+    if SLH_HASH_SUITE == SLH_SUITE_SHAKE {
+        shake256_oneshot(&SLH_HBUF as u64, 2u64*n + msglen, out, n)
+        return 0i32
+    }
     sha256_oneshot(&SLH_HBUF as u64, 2u64*n + msglen, &SLH_H32 as u64)
     let op : *u8 = out as *u8
     i = 0u64
@@ -263,6 +297,7 @@ fn slh_wots_pkgen(pk_out: u64, n: u64, len: u64, skseed: u64, pkseed: u64, in_sl
     }
     adrs_copy(5u64, in_slot)
     adrs_set_type(5u64, 1u64)        /* ADRS_WOTS_PK */
+    adrs_set_keypair(5u64, kp)       /* FIPS-205: WOTS_PK keypair = leaf idx (set_type cleared it) */
     slh_H_n(pk_out, n, pkseed, n, 5u64, &SLH_CHAINS as u64, len * n)
     return 0i32
 }
@@ -288,6 +323,7 @@ fn slh_wots_sign(sig: u64, n: u64, len: u64, len1: u64, len2: u64, msg: u64, sks
 
 fn slh_wots_pk_from_sig(pk_out: u64, n: u64, len: u64, len1: u64, len2: u64, sig: u64, msg: u64, pkseed: u64, in_slot: u64) -> i32 {
     slh_wots_chain_lengths(n, len1, len2, msg)
+    let kp : u64 = adrs_get4(in_slot, 20u64)
     let mut i : u64 = 0u64
     while i < len {
         adrs_copy(4u64, in_slot)
@@ -297,6 +333,7 @@ fn slh_wots_pk_from_sig(pk_out: u64, n: u64, len: u64, len1: u64, len2: u64, sig
     }
     adrs_copy(5u64, in_slot)
     adrs_set_type(5u64, 1u64)
+    adrs_set_keypair(5u64, kp)       /* FIPS-205: WOTS_PK keypair = leaf idx (set_type cleared it) */
     slh_H_n(pk_out, n, pkseed, n, 5u64, &SLH_CHAINS as u64, len * n)
     return 0i32
 }
@@ -314,7 +351,7 @@ fn slh_compute_root(root: u64, n: u64, height: u64, leaf_idx: u64, leaf: u64, au
         adrs_zero(6u64)
         adrs_set_layer(6u64, layer)
         adrs_set_tree(6u64, tree)
-        if is_fors == 1u64 { adrs_set_type(6u64, 3u64) } else { adrs_set_type(6u64, 2u64) }
+        if is_fors == 1u64 { adrs_set_type(6u64, 3u64) adrs_set_keypair(6u64, SLH_FORS_KP) } else { adrs_set_type(6u64, 2u64) }
         adrs_set_tree_height(6u64, h + 1u64)
         adrs_set_tree_index(6u64, leaf_idx >> (h + 1u64))
         if ((leaf_idx >> h) & 1u64) == 1u64 {
@@ -339,6 +376,10 @@ fn slh_compute_root(root: u64, n: u64, height: u64, leaf_idx: u64, leaf: u64, au
 
 /* fors_indices: extract kf indices of `a` bits each from digest */
 var SLH_FIDX : [u64; 64]
+/* APOTHEOSIS C.1: FORS KeyPairAddress = hypertree idx_leaf (FIPS-205).  The
+ * legacy hybrid left FORS keypair=0 (a non-FIPS layout its C ref shared);
+ * set before fors_sign/fors_pk_from_sig, read at every FORS ADRS site. */
+var SLH_FORS_KP : u64 = 0u64
 fn slh_fors_indices(kf: u64, a: u64, digest: u64) -> i32 {
     let d : *u8 = digest as *u8
     let mut bit : u64 = 0u64
@@ -375,6 +416,7 @@ fn slh_fors_subtree(out: u64, n: u64, layer: u64, tree: u64, lo: u64, height: u6
         adrs_set_layer(5u64, layer)
         adrs_set_tree(5u64, tree)
         adrs_set_type(5u64, 6u64)        /* FORS_PRF */
+        adrs_set_keypair(5u64, SLH_FORS_KP)
         adrs_set_tree_height(5u64, 0u64)
         adrs_set_tree_index(5u64, lo + j)
         slh_PRF(&SLH_SKI as u64, n, pkseed, skseed, 5u64)
@@ -382,6 +424,7 @@ fn slh_fors_subtree(out: u64, n: u64, layer: u64, tree: u64, lo: u64, height: u6
         adrs_set_layer(5u64, layer)
         adrs_set_tree(5u64, tree)
         adrs_set_type(5u64, 3u64)        /* FORS_TREE */
+        adrs_set_keypair(5u64, SLH_FORS_KP)
         adrs_set_tree_height(5u64, 0u64)
         adrs_set_tree_index(5u64, lo + j)
         slh_H_n((&SLH_STACK as u64) + top*n, n, pkseed, n, 5u64, &SLH_SKI as u64, n)
@@ -396,6 +439,7 @@ fn slh_fors_subtree(out: u64, n: u64, layer: u64, tree: u64, lo: u64, height: u6
                     adrs_set_layer(6u64, layer)
                     adrs_set_tree(6u64, tree)
                     adrs_set_type(6u64, 3u64)
+                    adrs_set_keypair(6u64, SLH_FORS_KP)
                     adrs_set_tree_height(6u64, SLH_HH[top - 1u64] + 1u64)
                     adrs_set_tree_index(6u64, (lo + j) >> (SLH_HH[top - 1u64] + 1u64))
                     slh_H_n((&SLH_STACK as u64) + (top - 2u64)*n, n, pkseed, n, 6u64, (&SLH_STACK as u64) + (top - 2u64)*n, 2u64*n)
@@ -427,6 +471,7 @@ fn slh_fors_sign_and_root(sig_out: u64, root_out: u64, n: u64, a: u64, kf: u64, 
         adrs_set_layer(7u64, layer)
         adrs_set_tree(7u64, tree)
         adrs_set_type(7u64, 6u64)
+        adrs_set_keypair(7u64, SLH_FORS_KP)
         adrs_set_tree_height(7u64, 0u64)
         adrs_set_tree_index(7u64, leaf_offset + leaf_idx)
         slh_PRF(sk_dst, n, pkseed, skseed, 7u64)
@@ -444,6 +489,7 @@ fn slh_fors_sign_and_root(sig_out: u64, root_out: u64, n: u64, a: u64, kf: u64, 
         adrs_set_layer(7u64, layer)
         adrs_set_tree(7u64, tree)
         adrs_set_type(7u64, 3u64)
+        adrs_set_keypair(7u64, SLH_FORS_KP)
         adrs_set_tree_height(7u64, 0u64)
         adrs_set_tree_index(7u64, leaf_offset + leaf_idx)
         slh_H_n(&SLH_FLEAF as u64, n, pkseed, n, 7u64, sk_dst, n)
@@ -454,6 +500,7 @@ fn slh_fors_sign_and_root(sig_out: u64, root_out: u64, n: u64, a: u64, kf: u64, 
     adrs_set_layer(7u64, layer)
     adrs_set_tree(7u64, tree)
     adrs_set_type(7u64, 4u64)            /* FORS_ROOTS */
+    adrs_set_keypair(7u64, SLH_FORS_KP)
     slh_H_n(root_out, n, pkseed, n, 7u64, &SLH_ROOTS as u64, kf * n)
     return 0i32
 }
@@ -471,6 +518,7 @@ fn slh_fors_pk_from_sig(pk_out: u64, n: u64, a: u64, kf: u64, sig: u64, digest: 
         adrs_set_layer(7u64, layer)
         adrs_set_tree(7u64, tree)
         adrs_set_type(7u64, 3u64)
+        adrs_set_keypair(7u64, SLH_FORS_KP)
         adrs_set_tree_height(7u64, 0u64)
         adrs_set_tree_index(7u64, leaf_offset + leaf_idx)
         slh_H_n(&SLH_FLEAF as u64, n, pkseed, n, 7u64, sk_i, n)
@@ -481,6 +529,7 @@ fn slh_fors_pk_from_sig(pk_out: u64, n: u64, a: u64, kf: u64, sig: u64, digest: 
     adrs_set_layer(7u64, layer)
     adrs_set_tree(7u64, tree)
     adrs_set_type(7u64, 4u64)
+    adrs_set_keypair(7u64, SLH_FORS_KP)
     slh_H_n(pk_out, n, pkseed, n, 7u64, &SLH_ROOTS as u64, kf * n)
     return 0i32
 }
@@ -605,7 +654,12 @@ fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
     return 0i32
 }
 
-fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+/* APOTHEOSIS C.1 sealed ABI (same type-honesty fix as ML-DSA): the signature
+ * length is an EXPLICIT *u64 the caller owns; iii_slhdsa_sign is kept as a
+ * deprecated wrapper.  (Carries into the FIPS-205 strict families cloned from
+ * this module.) */
+fn iii_slhdsa_sign_sealed(lv: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 @export {
+    let sig : u64 = sig_out as u64
     let n : u64 = slh_n(lv)
     let h : u64 = slh_h(lv)
     let d : u64 = slh_d(lv)
@@ -640,6 +694,7 @@ fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u6
     while i < lib { leaf_idx = (leaf_idx << 8u64) | (dg[md_kf + tib + i] as u64) ; i = i + 1u64 }
     leaf_idx = leaf_idx & slh_lowmask(leaf_bits)
     let mut p : u64 = sig + n
+    SLH_FORS_KP = leaf_idx
     slh_fors_sign_and_root(p, &SLH_KFR as u64, n, a, kf, &SLH_KDIG as u64, skseed, pkseed, 0u64, tree_idx)
     p = p + kf * (n + a * n)
     slh_copy(&SLH_KCUR as u64, &SLH_KFR as u64, n)
@@ -654,11 +709,14 @@ fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u6
         cur_tree = cur_tree >> hp
         layer = layer + 1u64
     }
-    let slp : *u8 = siglen as *u8
     let total : u64 = slh_sig_bytes(lv)
-    let mut b : u64 = 0u64
-    while b < 8u64 { slp[b] = ((total >> (8u64 * b)) & 0xFFu64) as u8 ; b = b + 1u64 }
+    sig_len_out[0u64] = total   /* typed *u64 store: lands in the caller-owned u64 */
     return 0i32
+}
+
+/* Deprecated back-compat wrapper (pre-C.1 ABI: siglen as u64 cast to *u8). */
+fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    return iii_slhdsa_sign_sealed(lv, sk, msg, msglen, sig as *u8, siglen as *u64)
 }
 
 fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
@@ -691,6 +749,7 @@ fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: 
     while i < lib { leaf_idx = (leaf_idx << 8u64) | (dg[md_kf + tib + i] as u64) ; i = i + 1u64 }
     leaf_idx = leaf_idx & slh_lowmask(leaf_bits)
     let mut p : u64 = sig + n
+    SLH_FORS_KP = leaf_idx
     slh_fors_pk_from_sig(&SLH_KFR as u64, n, a, kf, p, &SLH_KDIG as u64, pkseed, 0u64, tree_idx)
     p = p + kf * (n + a * n)
     slh_copy(&SLH_KCUR as u64, &SLH_KFR as u64, n)
@@ -712,4 +771,29 @@ fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: 
     while i < n { diff = diff | ((cur[i] as u64) ^ (rt[i] as u64)) ; i = i + 1u64 }
     if diff == 0u64 { return 0i32 }
     return 0i32 - 1i32
+}
+
+/* --- APOTHEOSIS C.1 non-vacuity oracle: the FROZEN legacy hybrid (SHA-256
+ * H_n/PRF + SHAKE H_msg) reachable via these entries.  They flip the hash
+ * suite to HYBRID, run the SAME core, then restore the SHAKE default.  A
+ * signature these produce MUST be REJECTED by the strict SHAKE
+ * iii_slhdsa_verify -- the proof that the FIPS-205 split is real, not a
+ * relabel (round-trip alone is vacuous; the hybrid round-trips too). --- */
+fn iii_sphincs_variant_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
+    SLH_HASH_SUITE = SLH_SUITE_HYBRID
+    let rc : i32 = iii_slhdsa_keygen(lv, seed, pk, sk)
+    SLH_HASH_SUITE = SLH_SUITE_SHAKE
+    return rc
+}
+fn iii_sphincs_variant_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    SLH_HASH_SUITE = SLH_SUITE_HYBRID
+    let rc : i32 = iii_slhdsa_sign(lv, sk, msg, msglen, sig, siglen)
+    SLH_HASH_SUITE = SLH_SUITE_SHAKE
+    return rc
+}
+fn iii_sphincs_variant_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 @export {
+    SLH_HASH_SUITE = SLH_SUITE_HYBRID
+    let rc : i32 = iii_slhdsa_verify(lv, pk, msg, msglen, sig, siglen)
+    SLH_HASH_SUITE = SLH_SUITE_SHAKE
+    return rc
 }

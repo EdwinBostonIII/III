@@ -39,6 +39,8 @@ extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifie
 extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn cons_find(clause_id: *u8) -> u32 from "constitution.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
+/* W4.4 (RIPPLE-13): the single canonical reflect right -- shared with reflection_constrained. */
+extern @abi(c-msvc-x64) fn cap_right_reflect() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn rc_request_begin(target_module: *u8, cap: u64) -> i32 from "reflection_constrained.iii"
 extern @abi(c-msvc-x64) fn rc_request_push_property(chunk: *u8, chunk_len: u32) -> i32 from "reflection_constrained.iii"
@@ -47,6 +49,9 @@ extern @abi(c-msvc-x64) fn rc_construct_proof(out_term_id: *u8) -> i32 from "ref
 extern @abi(c-msvc-x64) fn rc_propose_synthesis(spec_id: *u8, cap: u64, out_proposal_id: *u8) -> i32 from "reflection_constrained.iii"
 extern @abi(c-msvc-x64) fn rc_queue_size() -> u64 from "reflection_constrained.iii"
 extern @abi(c-msvc-x64) fn rc_dequeue(slot: u64, out_kind: *u8, out_payload: *u8, out_len: *u32) -> i32 from "reflection_constrained.iii"
+/* W4.4 (F-RFLC-2): the canonical max proposal-payload size -- the consumer's dequeue buffer
+ * must be at least this large or the dequeue is refused (no producer/consumer overrun). */
+extern @abi(c-msvc-x64) fn rc_proposal_payload_cap() -> u64 from "reflection_constrained.iii"
 
 // --- KAT-harness externs ---
 extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
@@ -71,7 +76,8 @@ const RFLG_E_BAD_SLOT         : i32 = -9i32
 
 const RFLG_FORBIDDEN_SLOTS    : u64 = 16u64
 const RFLG_FORBIDDEN_SEED     : u64 = 7u64
-const RFLG_CAP_REFLECT        : u64 = 0x4000u64        // == CAP_RIGHT_AMEND
+/* W4.4: cap_right_reflect() removed -- the required right is now the shared cap_right_reflect()
+ * (CAP_RIGHT_AMEND), identical to reflection_constrained's dispatcher.  See capability.iii. */
 const RFLG_CONS_SENT          : u32 = 0xFFFFFFFFu32     // == CONS_SENT
 const RFLG_RC_BUDGET_CODE     : i32 = -3i32            // == RFLC_E_BUDGET_EXHAUSTED (-> K_TOO_LOW)
 const RFLG_U64_SENT           : u64 = 0xFFFFFFFFFFFFFFFFu64
@@ -265,7 +271,7 @@ fn rg_invoke(req: *u8) -> i32 @export {
     RFLG_REQ_OUTPTR = rg_load_u64(rb, 88u64)
     if RFLG_REQ_PROPPTR == 0u64 { return RFLG_E_NULL }
     if RFLG_REQ_OUTPTR == 0u64 { return RFLG_E_NULL }
-    if cap_verify_rights(RFLG_REQ_CAP, RFLG_CAP_REFLECT) != 1u8 { return RFLG_E_CAP_DENIED }
+    if cap_verify_rights(RFLG_REQ_CAP, cap_right_reflect()) != 1u8 { return RFLG_E_CAP_DENIED }
     if rg_forbidden_target(RFLG_REQ_TARGET as *u8) == 1u8 { return RFLG_E_TARGET_FORBIDDEN }
     rg_build_clause_ids()
     if cons_find((&RFLG_CLAUSE_ID as u64) as *u8) == RFLG_CONS_SENT { return RFLG_E_CLAUSE_ABSENT }
@@ -288,10 +294,15 @@ fn rg_dequeue_proposal(req: *u8) -> i32 @export {
     let out_cap : u64 = rg_load_u64(rb, 16u64)
     let out_len : u64 = rg_load_u64(rb, 24u64)
     let out_payload : u64 = rg_load_u64(rb, 32u64)
+    let out_payload_cap : u64 = rg_load_u64(rb, 40u64)
     if out_kind == 0u64 { return RFLG_E_NULL }
     if out_len == 0u64 { return RFLG_E_NULL }
     if out_payload == 0u64 { return RFLG_E_NULL }
-    if cap_verify_rights(out_cap, RFLG_CAP_REFLECT) != 1u8 { return RFLG_E_CAP_DENIED }
+    /* W4.4 (F-RFLC-2): the consumer's payload buffer (declared capacity at offset 40) MUST be
+     * at least the producer's max write (rc_proposal_payload_cap); else the dequeue is refused
+     * rather than overrunning a too-small buffer.  Single-sourced -- no 80-vs-4096 drift. */
+    if out_payload_cap < rc_proposal_payload_cap() { return RFLG_E_BAD_SLOT }
+    if cap_verify_rights(out_cap, cap_right_reflect()) != 1u8 { return RFLG_E_CAP_DENIED }
     if slot >= rc_queue_size() { return RFLG_E_BAD_SLOT }
     return rc_dequeue(slot, out_kind as *u8, out_payload as *u8, out_len as *u32)
 }
@@ -403,6 +414,54 @@ fn rg_st_k5(cap_ok: u64) -> u64 {
     return 0u64
 }
 
+// Store an LE u64 into base+off (8 bytes).
+fn rg_st_put_u64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return RFLG_OK
+}
+
+// KAT-6 (W4.4 / RIPPLE-13): single-right consistency.  A cap granting EXACTLY the reflect
+// right passes the gate AND the dispatcher (they now require the identical right); pre-fix the
+// dispatcher required ATTEST, so this very invoke failed at dispatch.  A cap granting a
+// different single right (ATTEST, not the reflect right) is denied -- consistently.
+fn rg_st_k6() -> u64 {
+    let cap_reflect : u64 = cap_attenuate(1u64, cap_right_reflect(), 0u64)
+    if cap_reflect == 0u64 { return 60u64 }
+    rg_st_fill(&RFLG_ST_PROP as u64, 64u64, 0x2Cu8)
+    rg_st_fill(&RFLG_ST_BUD as u64, 32u64, 0u8)
+    let bp : *u8 = (&RFLG_ST_BUD as u64) as *u8
+    bp[0u64] = 100u8
+    rg_st_build_invreq(cap_reflect)
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_OK { return 61u64 }
+    let cap_attest : u64 = cap_attenuate(1u64, 0x0800u64, 0u64)
+    if cap_attest == 0u64 { return 62u64 }
+    rg_st_build_invreq(cap_attest)
+    if rg_invoke((&RFLG_ST_INVREQ as u64) as *u8) != RFLG_E_CAP_DENIED { return 63u64 }
+    return 0u64
+}
+
+// KAT-7 (W4.4 / F-RFLC-2): producer/consumer buffer single-source.  The dequeue req declares
+// the consumer buffer capacity at offset 40; a buffer smaller than the producer's max write
+// (rc_proposal_payload_cap) is REFUSED, a buffer >= it is accepted -- no silent overrun.
+fn rg_st_k7() -> u64 {
+    let dq : u64 = &RFLG_ST_DEQREQ as u64
+    let dp : *u8 = dq as *u8
+    let mut z : u64 = 0u64
+    while z < 88u64 { dp[z] = 0u8  z = z + 1u64 }
+    rg_st_put_u64(dq, 0u64,  0u64)                          // slot 0
+    rg_st_put_u64(dq, 8u64,  &RFLG_ST_DEQKIND as u64)       // out_kind ptr
+    rg_st_put_u64(dq, 16u64, 1u64)                          // out_cap = root (grants reflect)
+    rg_st_put_u64(dq, 24u64, &RFLG_ST_DEQLEN as u64)        // out_len ptr (rc writes the length)
+    rg_st_put_u64(dq, 32u64, &RFLG_ST_DEQPAY as u64)        // out_payload (4096-byte buffer)
+    rg_st_put_u64(dq, 40u64, 80u64)                         // FALSIFIER: buffer too small
+    if rg_dequeue_proposal(dq as *u8) != RFLG_E_BAD_SLOT { return 70u64 }
+    rg_st_put_u64(dq, 40u64, rc_proposal_payload_cap())     // adequate buffer
+    if rg_dequeue_proposal(dq as *u8) != RFLG_OK { return 71u64 }
+    return 0u64
+}
+
 fn rg_selftest() -> u64 @export {
     wh_init(0u64)
     ws_init()
@@ -426,5 +485,9 @@ fn rg_selftest() -> u64 @export {
     if r4 != 0u64 { return r4 }
     let r5 : u64 = rg_st_k5(1u64)
     if r5 != 0u64 { return r5 }
+    let r6 : u64 = rg_st_k6()
+    if r6 != 0u64 { return r6 }
+    let r7 : u64 = rg_st_k7()
+    if r7 != 0u64 { return r7 }
     return 99u64
 }

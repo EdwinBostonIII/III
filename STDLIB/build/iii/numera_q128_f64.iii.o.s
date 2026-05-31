@@ -681,7 +681,7 @@ L_if_end_29:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0xff, %rax
+    movabsq $0x3f, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1038,7 +1038,7 @@ L_if_end_39:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0xff, %rax
+    movabsq $0x3f, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1323,7 +1323,7 @@ L_if_end_63:
     popq %rax
     subq %rcx, %rax
     pushq %rax
-    movabsq $0xff, %rax
+    movabsq $0x3f, %rax
     pushq %rax
     popq %rcx
     popq %rax

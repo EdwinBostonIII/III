@@ -811,6 +811,15 @@ fn r3_emit_mhash_label(node: u32) -> u32 { r3_emit_arr(&R3_PFX_LMHASH as u64, R3
 fn r3_local_lookup(off: u32, len: u32) -> u32 { let src: u64 = iii_ast_source_buf(R3_G_AST); let mut i: u32 = 0u32; while i < R3_G_LOCAL_COUNT { if R3_LOCAL_LEN[i] == len { if iii_emit_memcmp_c(src + (R3_LOCAL_OFF[i] as u64), src + (off as u64), len as u64) == 0i32 { return i } }; i = i + 1u32 }; return 4294967295u32 }
 
 fn r3_local_add(off: u32, len: u32) -> u32 { if R3_G_LOCAL_COUNT >= R3_MAX_LOCALS { R3_G_LAST_ERROR = R3_E_INTERNAL; return R3_E_INTERNAL }; R3_LOCAL_OFF[R3_G_LOCAL_COUNT] = off; R3_LOCAL_LEN[R3_G_LOCAL_COUNT] = len; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32; return R3_OK }
+/* Reserve one anonymous stack-local slot, returning its index.  Bounds the direct
+ * R3_G_LOCAL_COUNT bumps (match scrutinee, loop counter, struct-field padding) that
+ * otherwise pushed the count past R3_MAX_LOCALS with no check -> r3_local_lookup then
+ * OOB-reads R3_LOCAL_OFF/LEN[>=64] and emit_*_slot overruns the frame.  At the cap it
+ * flags R3_E_INTERNAL and clamps (count stays <=64, every emitted slot index in [0,64)),
+ * so the compile fails cleanly instead of corrupting memory.  For <64-local functions
+ * (all corpus + the compiler itself) it reserves the SAME slot as the old direct bump
+ * -> byte-identical codegen.  [audit cg_r3 MATCH-SLOT-1] */
+fn r3_reserve_slot() -> u32 { if R3_G_LOCAL_COUNT >= R3_MAX_LOCALS { R3_G_LAST_ERROR = R3_E_INTERNAL; return R3_MAX_LOCALS - 1u32 }; let s: u32 = R3_G_LOCAL_COUNT; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32; return s }
 
 /* ─────────────── stack-machine helpers ─────────────── */
 fn r3_push_rax() -> u32 { r3_emit_arr(&R3_STR_PUSHRAX as u64, R3_STR_PUSHRAX_LEN); R3_G_STACK_DEPTH = R3_G_STACK_DEPTH + 1u32; if R3_G_STACK_DEPTH > R3_G_MAX_STACK_DEPTH { R3_G_MAX_STACK_DEPTH = R3_G_STACK_DEPTH }; return R3_OK }
@@ -1229,7 +1238,7 @@ fn r3_try_struct_slots(type_node: u32, name_off: u32, name_len: u32, value_expr:
     r3_local_add(name_off, name_len)
     let mut ex: u32 = 1u32
     while ex < ns {
-        R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32
+        r3_reserve_slot()
         ex = ex + 1u32
     }
     if value_expr != 0u32 {
@@ -2552,7 +2561,7 @@ fn r3_emit_expr(node: u32) -> u32 {
         let scrut: u32 = iii_ast_match_expr_scrutinee(R3_G_AST, node); let armc: u32 = iii_ast_match_expr_arm_count(R3_G_AST, node)
         let endid: u32 = R3_G_LABEL_COUNTER; R3_G_LABEL_COUNTER = R3_G_LABEL_COUNTER + 1u32
         r3_emit_expr(scrut); r3_pop_rax()
-        let scrut_slot: u32 = R3_G_LOCAL_COUNT; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32
+        let scrut_slot: u32 = r3_reserve_slot()
         r3_emit_store_rax_slot(scrut_slot)
         let mut i: u32 = 0u32
         while i < armc {
@@ -2613,7 +2622,7 @@ fn r3_emit_stmt(node: u32) -> u32 {
                 r3_local_add(off, len)
                 let mut r3_extra: u32 = 1u32
                 while r3_extra < r3_total_slots {
-                    R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32
+                    r3_reserve_slot()
                     r3_extra = r3_extra + 1u32
                 }
                 if v != 0u32 {
@@ -2732,14 +2741,14 @@ fn r3_emit_stmt(node: u32) -> u32 {
         let mut var_slot: u32 = 0u32
         if ik == R3_K_EXPR_RANGE {
             r3_emit_expr(iii_ast_range_hi(R3_G_AST, iter)); r3_pop_rax()
-            count_slot = R3_G_LOCAL_COUNT; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32
+            count_slot = r3_reserve_slot()
             r3_emit_store_rax_slot(count_slot)
             r3_emit_expr(iii_ast_range_lo(R3_G_AST, iter)); r3_pop_rax()
             r3_local_add(off, len); var_slot = R3_G_LOCAL_COUNT - 1u32
             r3_emit_store_rax_slot(var_slot)
         } else {
             r3_emit_expr(iter); r3_pop_rax()
-            count_slot = R3_G_LOCAL_COUNT; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32
+            count_slot = r3_reserve_slot()
             r3_emit_store_rax_slot(count_slot)
             r3_local_add(off, len); var_slot = R3_G_LOCAL_COUNT - 1u32
             r3_emit_arr(&R3_STR_MOVQ_RAX_C as u64, R3_STR_MOVQ_RAX_C_LEN)
@@ -2857,7 +2866,7 @@ fn r3_emit_stmt(node: u32) -> u32 {
         let scrut: u32 = iii_ast_match_stmt_scrutinee(R3_G_AST, node); let armc: u32 = iii_ast_match_stmt_arm_count(R3_G_AST, node)
         let endid: u32 = R3_G_LABEL_COUNTER; R3_G_LABEL_COUNTER = R3_G_LABEL_COUNTER + 1u32
         r3_emit_expr(scrut); r3_pop_rax()
-        let scrut_slot: u32 = R3_G_LOCAL_COUNT; R3_G_LOCAL_COUNT = R3_G_LOCAL_COUNT + 1u32
+        let scrut_slot: u32 = r3_reserve_slot()
         r3_emit_store_rax_slot(scrut_slot)
         let mut i: u32 = 0u32
         while i < armc {

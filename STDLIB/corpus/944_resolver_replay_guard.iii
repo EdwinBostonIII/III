@@ -1,0 +1,22 @@
+/* 944 -- W4.2 / ENHANCE-17 falsifier: omnia/resolver_replay's check is now load-bearing.
+ * The dead `if witness_count() < 0u32` Layer-3 guard (a u32 is never negative) is replaced by
+ * the real sanctus per-entry replay gate.  This exercises the REAL guards: in a fresh process
+ * the registry is NOT sealed, so the gate REJECTS (says no); after sealing, the (fresh, empty)
+ * witness chain verifies and the gate accepts.  99 = pass. */
+module corpus_944
+
+extern @abi(c-msvc-x64) fn resolver_replay_check_chain() -> u8 from "resolver_replay.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_is_sealed() -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+
+fn main() -> u64 {
+    /* FALSIFIER: a fresh, UNSEALED registry must be rejected (Layer 2 says no). */
+    if pattern_registry_is_sealed() != 0u8 { return 1u64 }
+    if resolver_replay_check_chain() != 0u8 { return 2u64 }
+
+    /* Seal the registry; the fresh witness chain verifies (empty) -> the gate accepts. */
+    pattern_registry_seal_global()
+    if pattern_registry_is_sealed() != 1u8 { return 3u64 }
+    if resolver_replay_check_chain() != 1u8 { return 4u64 }
+    return 99u64
+}

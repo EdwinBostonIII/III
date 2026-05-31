@@ -111,6 +111,7 @@ fn tp_iii_to_asm(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @exp
             }
         }
         /* Line suffix */
+        if off + 2u64 > dst_cap { return 0u64 }   /* body guard permits off==dst_cap; bound the 2 suffix bytes [audit tp_asm-1] */
         tp_asm_emit(dst_buf, off, TP_ASM_LINE_SUFFIX[0])
         tp_asm_emit(dst_buf, off + 1u64, TP_ASM_LINE_SUFFIX[1])
         off = off + 2u64

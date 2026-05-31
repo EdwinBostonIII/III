@@ -1,31 +1,23 @@
-/* Ed25519/X25519 field-multiply bit-identity: scalar bigint == AVX-512 bigint.
+/* X25519 RFC 7748 §5.2 Test 1 vector -- positive correctness anchor on the
+ * dedicated fe25519 field.
  *
- * RITCHIE §3.5 kernels 7+8.  Ed25519 (field mul) and X25519 (Montgomery
- * ladder) in this NIH substrate are both built on field.iii::fp_mul =
- * bigint_mul + bigint_mod -- there is NO dedicated 5x51-bit field.  So
- * their field multiply IS bigint_mul, which the §3.5 kernel-6 work
- * vectorized (AVX-512 vpmullq + vpmuludq).  Adding a separate 51-bit
- * field would duplicate field arithmetic (anti-bloat, Mandate 9) and
- * force a rewrite of working point code -- so kernels 7+8 are delivered
- * via the shared bigint_mul.
- *
- * This test runs the full X25519 Montgomery ladder (255 rounds, each a
- * chain of fp_mul=bigint_mul) twice -- once forcing the scalar bigint
- * multiply (bigint_force_path(1)) and once forcing the AVX-512 multiply
- * (force_path(2)) -- and asserts:
- *   (1) the two 32-byte outputs are byte-identical (the field-mul
- *       bit-identity proof at the curve level), and
- *   (2) the output equals the RFC 7748 5.2 Test 1 vector (correctness
- *       anchor on the AVX-512 path, not-both-wrong).
- *
- * Exit = 88 on full success.
+ * HISTORY (W0.5 x25519->fe25519): this test formerly drove the X25519 ladder
+ * TWICE through bigint_force_path(1) vs (2) to prove the AVX-512 vs scalar
+ * bigint-multiply bit-identity AT THE CURVE LEVEL -- because x25519/ed25519
+ * field-multiply WAS field.iii::fp_mul = bigint_mul.  That premise is now
+ * obsolete: x25519 runs on numera/fe25519's fixed 8-limb GF(2^255-19) field
+ * (no bigint), so bigint_force_path no longer affects it -- the two-path
+ * compare became VACUOUS (both calls take the identical fe25519 path).  The
+ * bigint AVX-512-vs-scalar bit-identity is now tested DIRECTLY and
+ * non-vacuously by 182_bigint_mul_scalar_avx512_bitident.  This test is
+ * repurposed to its still-meaningful half: anchor the x25519/fe25519 ladder to
+ * the RFC 7748 §5.2 Test 1 vector.  Exit = 88 on success.
  */
 module corpus_183
 
 extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
 extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
-extern @abi(c-msvc-x64) fn bigint_force_path(p: u32) -> i32 from "bigint.iii"
 
 fn fill_scalar(s: *u8) -> i32 {
     s[0]  = 0xA5u8; s[1]  = 0x46u8; s[2]  = 0xE3u8; s[3]  = 0x6Bu8
@@ -91,27 +83,12 @@ fn check_rfc(r: *u8) -> u64 {
 fn main() -> u64 {
     let scalar : *u8 = malloc(32u64)
     let u_in   : *u8 = malloc(32u64)
-    let out_s  : *u8 = malloc(32u64)
-    let out_a  : *u8 = malloc(32u64)
+    let out    : *u8 = malloc(32u64)
     fill_scalar(scalar)
     fill_u(u_in)
-
-    bigint_force_path(1u32)        /* scalar bigint multiply */
-    x25519(out_s, scalar, u_in)
-    bigint_force_path(2u32)        /* AVX-512 bigint multiply */
-    x25519(out_a, scalar, u_in)
-    bigint_force_path(0u32)
-
-    /* (1) field-mul bit-identity at the curve level. */
-    let mut i : u64 = 0u64
-    while i < 32u64 {
-        if out_s[i] != out_a[i] { return 1u64 + i }
-        i = i + 1u64
-    }
-    /* (2) RFC 7748 correctness anchor. */
-    let rfc_err : u64 = check_rfc(out_s)
+    x25519(out, scalar, u_in)
+    let rfc_err : u64 = check_rfc(out)
     if rfc_err != 0u64 { return 40u64 + rfc_err }
-
-    free(scalar); free(u_in); free(out_s); free(out_a)
+    free(scalar); free(u_in); free(out)
     return 88u64
 }

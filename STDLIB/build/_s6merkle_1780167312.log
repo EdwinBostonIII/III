@@ -1,0 +1,18 @@
+=== build_stdlib ===
+[build_stdlib] OK   cpuid_helper.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/cpuid_helper.o
+[build_stdlib] OK   resolver_hot.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/resolver_hot.o
+[build_stdlib] aggregated -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+[build_stdlib] mhash:
+4992210e69a8c84ee0ad1ff74de90b9235532f137d74127484e644a751b0b5fe */c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+=== run_corpus ===
+  PASS  167_merkle_basic : exit=99
+  PASS  382_witness_hook : exit=99
+  PASS  607_katabasis_seal : exit=99
+  PASS  760_field_mont_organ : exit=99
+  PASS  761_buffer_bound_falsifier : exit=99
+  PASS  762_merkle_keccak_suite : exit=99
+  PASS=623  FAIL=0  SKIP=99  TOTAL=623
+=== run_bench ===
+  PASS=7  ADVISORY=0  CORRECTNESS-FAIL=0
+   CORRECTNESS-FAIL = functional regression -- hard error)
+=== DONE ===

@@ -1,0 +1,35 @@
+/* 993_ed_decompress_canonical.iii -- falsifier for ed_decompress's non-canonical-point reject
+ * (C.2 classical negative arm, fe25519.iii:362 [E-FE-4]). A compressed Ed25519 point whose y
+ * coordinate (after clearing the sign bit) is >= p = 2^255-19 is NOT a canonical encoding and must
+ * be REJECTED (1i32) before any curve math -- accepting it would admit malleable/duplicate point
+ * encodings. A canonical RFC8032 pubkey is ADMITTED (0i32). 388_fe25519_ed only ever decompresses
+ * the valid pubkey, so the canonicity reject had no falsifier. 99 = pass. */
+module corpus_993
+
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn ed_decompress(comp: u64, pout: u64) -> i32 from "fe25519.iii"
+
+const ADMIT : i32 = 0i32
+const REJ   : i32 = 1i32   /* literal const (avoids the nonzero-literal-before-`{` parse trap) */
+
+var PKE : [u8; 32]   /* RFC8032 test1 pubkey d75a9801..511a (a valid, canonical point) */
+var BAD : [u8; 32]   /* all 0xFF -> y = 2^255-1 >= p after sign-bit clear: non-canonical */
+var PTR : [u64; 32]  /* decompressed-point sink (>= the point's internal size) */
+
+fn main() -> u64 {
+    fe25519_init()
+    PKE[0u64]=0xd7u8 PKE[1u64]=0x5au8 PKE[2u64]=0x98u8 PKE[3u64]=0x01u8 PKE[4u64]=0x82u8 PKE[5u64]=0xb1u8 PKE[6u64]=0x0au8 PKE[7u64]=0xb7u8
+    PKE[8u64]=0xd5u8 PKE[9u64]=0x4bu8 PKE[10u64]=0xfeu8 PKE[11u64]=0xd3u8 PKE[12u64]=0xc9u8 PKE[13u64]=0x64u8 PKE[14u64]=0x07u8 PKE[15u64]=0x3au8
+    PKE[16u64]=0x0eu8 PKE[17u64]=0xe1u8 PKE[18u64]=0x72u8 PKE[19u64]=0xf3u8 PKE[20u64]=0xdau8 PKE[21u64]=0xa6u8 PKE[22u64]=0x23u8 PKE[23u64]=0x25u8
+    PKE[24u64]=0xafu8 PKE[25u64]=0x02u8 PKE[26u64]=0x1au8 PKE[27u64]=0x68u8 PKE[28u64]=0xf7u8 PKE[29u64]=0x07u8 PKE[30u64]=0x51u8 PKE[31u64]=0x1au8
+
+    let mut i : u64 = 0u64
+    while i < 32u64 { BAD[i] = 0xFFu8  i = i + 1u64 }
+
+    /* admit: a canonical pubkey decompresses */
+    if ed_decompress(&PKE as u64, &PTR as u64) != ADMIT { return 1u64 }
+    /* reject: non-canonical y (>= p) -> 1i32 [E-FE-4] */
+    if ed_decompress(&BAD as u64, &PTR as u64) != REJ { return 2u64 }
+
+    return 99u64
+}

@@ -1,0 +1,13 @@
+/* 986_mod_u64_mul_zero_modulus.iii -- falsifier for mod_u64_mul's m==0 guard. A zero modulus must
+ * be rejected (early return 0u64) rather than driving a division/reduction by zero; a real modulus
+ * computes (a*b) mod m. The m==0 guard had no dedicated test. 99 = pass. */
+module corpus_986
+
+extern @abi(c-msvc-x64) fn mod_u64_mul(a: u64, b: u64, m: u64) -> u64 from "modular.iii"
+
+fn main() -> u64 {
+    if mod_u64_mul(5u64, 7u64, 0u64) != 0u64 { return 1u64 }    /* m==0 guarded -> 0 (no div-by-zero) */
+    if mod_u64_mul(5u64, 7u64, 11u64) != 2u64 { return 2u64 }   /* 35 mod 11 = 2 */
+    if mod_u64_mul(0u64, 9u64, 11u64) != 0u64 { return 3u64 }   /* 0 mod 11 = 0 (valid, distinct from the guard) */
+    return 99u64
+}

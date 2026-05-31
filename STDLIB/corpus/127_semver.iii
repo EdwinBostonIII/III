@@ -68,6 +68,33 @@ fn main() -> u64 {
     let bn3 : u64 = make_str(b, "1.0.0", 5u64)
     if semver_compare(a, an3, b, bn3) != -1i32 { return 15u64 }
 
+    /* §11.4 pre-release precedence [audit H-SEMVER-1]: alpha < beta (ASCII-lexical) */
+    let an4 : u64 = make_str(a, "1.0.0-alpha", 11u64)
+    let bn4 : u64 = make_str(b, "1.0.0-beta", 10u64)
+    if semver_compare(a, an4, b, bn4) != -1i32 { return 16u64 }
+    /* symmetry: beta > alpha */
+    if semver_compare(b, bn4, a, an4) != 1i32 { return 17u64 }
+
+    /* numeric identifier < alphanumeric: 1.0.0-1 < 1.0.0-alpha (§11.4 rule 3) */
+    let an5 : u64 = make_str(a, "1.0.0-1", 7u64)
+    let bn5 : u64 = make_str(b, "1.0.0-alpha", 11u64)
+    if semver_compare(a, an5, b, bn5) != -1i32 { return 18u64 }
+
+    /* more fields > fewer when prefix equal: 1.0.0-alpha < 1.0.0-alpha.1 (§11.4 rule 4) */
+    let an6 : u64 = make_str(a, "1.0.0-alpha", 11u64)
+    let bn6 : u64 = make_str(b, "1.0.0-alpha.1", 13u64)
+    if semver_compare(a, an6, b, bn6) != -1i32 { return 19u64 }
+
+    /* numeric identifiers compared numerically: 1.0.0-alpha.1 < 1.0.0-alpha.2 (§11.4 rule 1) */
+    let an7 : u64 = make_str(a, "1.0.0-alpha.1", 13u64)
+    let bn7 : u64 = make_str(b, "1.0.0-alpha.2", 13u64)
+    if semver_compare(a, an7, b, bn7) != -1i32 { return 20u64 }
+
+    /* equal pre-release -> 0 */
+    let an8 : u64 = make_str(a, "1.0.0-alpha.beta", 16u64)
+    let bn8 : u64 = make_str(b, "1.0.0-alpha.beta", 16u64)
+    if semver_compare(a, an8, b, bn8) != 0i32 { return 21u64 }
+
     free(b)
     free(a)
     return 99u64

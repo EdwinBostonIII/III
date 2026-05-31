@@ -1300,6 +1300,600 @@ L_if_end_25:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "xii_subforms_compute_salted"
+    .text
+    .global xii_subforms_compute_salted
+    .seh_proc xii_subforms_compute_salted
+xii_subforms_compute_salted:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_27
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movzbq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq xii_subforms_compute
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_27:
+    leaq L_XSF_SCRATCH(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movzbq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__prefix_bytes
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x40, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
+    leaq L_XSF_SCRATCH(%rip), %rax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    movl -16(%rbp), %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movzbq %al, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+L_loop_top_30:
+    movl -64(%rbp), %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_31
+    leaq L_XSF_SCRATCH(%rip), %rax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -64(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    movl -64(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movl -64(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_30
+L_loop_end_31:
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    leaq L_XSF_HASH_OUT(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movl -72(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq sha256_oneshot
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    leaq L_XSF_HASH_OUT(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -80(%rbp)
+    leaq L_XSF_HASH_OUT(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    leaq L_XSF_HASH_OUT(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    leaq L_XSF_HASH_OUT(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -104(%rbp)
+    movl -80(%rbp), %eax
+    pushq %rax
+    movl -88(%rbp), %eax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movl -96(%rbp), %eax
+    pushq %rax
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    movl -104(%rbp), %eax
+    pushq %rax
+    movabsq $0x18, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -112(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_if_mask
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -120(%rbp)
+    movl -112(%rbp), %eax
+    pushq %rax
+    movl -120(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "xii_subforms_salt_resolve"
+    .text
+    .global xii_subforms_salt_resolve
+    .seh_proc xii_subforms_salt_resolve
+xii_subforms_salt_resolve:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq %r8, -24(%rbp)
+    movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
+    movq 56(%rbp), %rax
+    movq %rax, -48(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+L_loop_top_32:
+    movl -72(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_33
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    movl -72(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    subq $8, %rsp
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    movzbq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq xii_subforms_compute_salted
+    addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -80(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+L_loop_top_38:
+    movl -96(%rbp), %eax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_39
+    movq -40(%rbp), %rax
+    pushq %rax
+    movl -96(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    movl -80(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -88(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    movl -96(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_38
+L_loop_end_39:
+    movl -88(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_else_42
+    movl -56(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_if_end_43
+L_if_else_42:
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_32
+L_loop_end_33:
+    movl -64(%rbp), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "_name_buf_set"
     .text
     .global L__name_buf_set
@@ -1444,7 +2038,7 @@ xii_subforms_act_poly_mult:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_45
     movl L_XSF_POLY_MULT_VAL(%rip), %eax
     pushq %rax
     popq %rax
@@ -1454,7 +2048,7 @@ xii_subforms_act_poly_mult:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_45:
     leaq L_XSF_NAME_POLY_MULT(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1608,7 +2202,7 @@ xii_subforms_seal_witness_form:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_47
     movl L_XSF_WITNESS_FORM_VAL(%rip), %eax
     pushq %rax
     popq %rax
@@ -1618,7 +2212,7 @@ xii_subforms_seal_witness_form:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_47:
     leaq L_XSF_NAME_WITNESS_FORM(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1961,7 +2555,7 @@ xii_subforms_sample_collision_free:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_49
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1971,7 +2565,7 @@ xii_subforms_sample_collision_free:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_49:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax

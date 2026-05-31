@@ -222,6 +222,15 @@ fn _hip_pack_pv_meta(verb_word: u32, frag_count: u32, start_idx: u32, max_cands:
     return v_l | f_l | i_l | m_l
 }
 
+/* Conveyed-payload source for the SEND/PUT/STORE/WRITE/COPY/MOVE/DISPATCH family:
+ * the explicit from-NP source when present, else the PATIENT (direct-object) head.
+ * "send packet to server" has no from-NP, so src_h was 0 and the payload was dropped;
+ * threading the patient recovers it, while "send X from Y to Z" keeps Y.  [audit H-HIP-1] */
+fn _hip_convey_src(src_h: u64, pat_h: u64) -> u64 {
+    if src_h == 0u64 { return pat_h }
+    return src_h
+}
+
 /* Map a verb word_id to a sequence of (intent_constructor) calls,
  * each producing a candidate intent_id.  Returns the new candidate
  * count (or 0xFFFFFFFFu32 on overflow). */
@@ -251,16 +260,16 @@ fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_p
     /* CONVEY group: send / put / store / write / load / get / read /
      * copy / move. Slots: (src_handle, dst_cap, byte_count). */
     if v == VW_SEND {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_PUT {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_STORE {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_WRITE {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_LOAD {
         /* "load X from Y" -> CONVEY(Y, X, qty). source/dest swap. */
@@ -273,10 +282,10 @@ fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_p
         let id : u64 = intent_convey(src_h, pat_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_COPY {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_MOVE {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_OPEN {
         /* "open file" -> FORM(file_form) AND ACT(open_transition). */
@@ -383,7 +392,7 @@ fn _hip_project_verb(packed_meta: u64, frags_buf: u64, tok_buf: u64, out_cands_p
         let id : u64 = intent_act(pat_h, 137u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else if v == VW_DISPATCH {
-        let id : u64 = intent_convey(src_h, dst_h, qty as u64)
+        let id : u64 = intent_convey(_hip_convey_src(src_h, pat_h), dst_h, qty as u64)
         k = _hip_emit_intent(o_l, k, m_l, id)
     } else {
         /* unknown verb -> no candidate */

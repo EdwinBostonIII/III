@@ -1044,6 +1044,35 @@ L_if_end_29:
     popq %rax
     jmp L_loop_top_24
 L_loop_end_25:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
     leaq L_TP_ASM_LINE_SUFFIX(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax

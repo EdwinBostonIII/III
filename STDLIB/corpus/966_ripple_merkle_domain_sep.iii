@@ -1,0 +1,85 @@
+/* 966 — W3.17 / ENHANCE-18 falsifier: the ripple Merkle DAG domain-separates leaves
+ * from interior nodes. A LEAF whose value equals a child address X (32 bytes) must NOT
+ * collide with the ONE-INPUT computed cell over that child (today both hash X -> same
+ * address). After the fix: H_leaf(X) = mhash(LEAF||32||X) != mhash(NODE||1||X) = H_node(X).
+ * Also checks both still resolve (round-trip preserved). 99 = pass. */
+module corpus_966
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, oo: u64, out_cap: u64, vbuf: *u8) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cell_addr: *u8, in_off: *u8, in_cnt: *u8, in_list: *u8, scratch: *u8, newaddr: *u8) -> u64 from "ripple.iii"
+
+const RN_GAP : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn kfill(buf: *u8, off: u64, n: u64, seed: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n { buf[off + k] = ((seed + k) & 0xFFu64) as u8 ; k = k + 1u64 }
+    return 0u64
+}
+fn keqn(a: *u8, ao: u64, b: *u8, bo: u64, n: u64) -> u8 {
+    let mut k : u64 = 0u64
+    let mut eq : u8 = 1u8
+    while k < n { if a[ao + k] != b[bo + k] { eq = 0u8 } ; k = k + 1u64 }
+    return eq
+}
+fn kst_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 { p[off + i] = (x & 0xFFu64) as u8 ; x = x >> 8u64 ; i = i + 1u64 }
+    return 0u64
+}
+fn kcopy(d: *u8, doff: u64, s: *u8, soff: u64, n: u64) -> u64 {
+    let mut k : u64 = 0u64
+    while k < n { d[doff + k] = s[soff + k] ; k = k + 1u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let cap : u64 = 64u64
+    let acap : u64 = 65536u64
+    let meta : *u8 = malloc(32u64)
+    let slots : *u8 = malloc(cap * 64u64)
+    let arena : *u8 = malloc(acap)
+    let vb : *u8 = malloc(64u64)
+    let out : *u8 = malloc(64u64)
+    let vbuf : *u8 = malloc(32u64)
+    let lx_addr : *u8 = malloc(32u64)
+    let cell_kind : *u8 = malloc(2u64)
+    let cell_addr : *u8 = malloc(64u64)
+    let in_off : *u8 = malloc(16u64)
+    let in_cnt : *u8 = malloc(16u64)
+    let in_list : *u8 = malloc(8u64)
+    let scratch : *u8 = malloc(64u64)
+    let newaddr : *u8 = malloc(32u64)
+
+    rn_store_init(meta, slots, cap, acap)
+
+    /* cell 0 = SOURCE leaf: value (16 bytes) -> its address X = cell_addr[0..31] */
+    kfill(vb, 0u64, 16u64, 5u64)
+    rn_publish(meta, slots, arena, vb, 0u64, 16u64, cell_addr, 0u64)
+
+    /* cell 1 = COMPUTED, single input = cell 0 -> address NX = H_node(1 || X) */
+    cell_kind[0] = 0u8
+    cell_kind[1] = 1u8
+    kst_u64(in_off, 0u64, 0u64)
+    kst_u64(in_off, 8u64, 0u64)
+    kst_u64(in_cnt, 0u64, 0u64)
+    kst_u64(in_cnt, 8u64, 1u64)        /* arity 1 */
+    kst_u64(in_list, 0u64, 0u64)       /* cell 1's lone input = cell 0 */
+    rn_ripple(meta, slots, arena, 2u64, cell_kind, cell_addr, in_off, in_cnt, in_list, scratch, newaddr)
+
+    /* publish a LEAF whose VALUE is exactly the child address X (32 bytes) -> LX = H_leaf(X) */
+    kcopy(vb, 0u64, cell_addr, 0u64, 32u64)
+    rn_publish(meta, slots, arena, vb, 0u64, 32u64, lx_addr, 0u64)
+
+    /* FC: the leaf-of-X address must be DISJOINT from the one-input-node-over-X address. */
+    if keqn(lx_addr, 0u64, cell_addr, 32u64, 32u64) == 1u8 { return 1u64 }   /* collide -> FAIL */
+
+    /* both must still resolve (round-trip preserved under domain separation) */
+    if rn_resolve(meta, slots, arena, cell_addr, 32u64, out, 0u64, 64u64, vbuf) == RN_GAP { return 2u64 }  /* the node */
+    if rn_resolve(meta, slots, arena, lx_addr, 0u64, out, 0u64, 64u64, vbuf) != 32u64 { return 3u64 }      /* the leaf */
+    if keqn(out, 0u64, cell_addr, 0u64, 32u64) == 0u8 { return 4u64 }        /* leaf round-trips to X */
+
+    return 99u64
+}

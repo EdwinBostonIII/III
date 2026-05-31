@@ -10,6 +10,7 @@ extern @abi(c-msvc-x64) fn babel_intent_receive(src: u64, src_len: u32, arena_id
 extern @abi(c-msvc-x64) fn intent_new(goal_kind: u8) -> u64 from "intent.iii"
 
 var BIBUF : [u8; 4096]
+var BIBUF2 : [u8; 48]
 
 fn main() -> u64 {
     let cid : u64 = 0xABCDu64
@@ -29,5 +30,20 @@ fn main() -> u64 {
     if babel_intent_send(0u64, cid, buf, 4096u32) != 0u32 { return 6u64 }   /* null intent */
     if babel_intent_receive(buf, 10u32, 0u64) != 0u64 { return 7u64 }       /* too short (<32) */
     if babel_intent_send(intent, cid, buf, 4u32) != 0u32 { return 8u64 }    /* dst too small */
+
+    /* W4.2 / ENHANCE-17 falsifier: a blob that merely CONTAINS the 3-byte "bab" but is NOT a
+     * Babel envelope must be REJECTED (was: accepted by the substring "validation").
+     * Build `{"babZxxxx...}` -- 48 bytes, starts '{', ends '}', has "bab" at [2..4], but
+     * diverges from the babel prefix at byte 5 ('Z' vs 'e' in "babel"). */
+    let mut j : u32 = 0u32
+    while j < 48u32 { BIBUF2[j] = 120u8  j = j + 1u32 }     /* 'x' filler */
+    BIBUF2[0u32]  = 123u8     /* { */
+    BIBUF2[1u32]  = 34u8      /* " */
+    BIBUF2[2u32]  = 98u8      /* b */
+    BIBUF2[3u32]  = 97u8      /* a */
+    BIBUF2[4u32]  = 98u8      /* b */
+    BIBUF2[5u32]  = 90u8      /* Z  -- diverges from babel's 'e' */
+    BIBUF2[47u32] = 125u8     /* } */
+    if babel_intent_receive((&BIBUF2) as u64, 48u32, 0u64) != 0u64 { return 9u64 }
     return 99u64
 }

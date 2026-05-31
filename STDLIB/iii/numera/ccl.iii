@@ -528,6 +528,13 @@ fn ccl_reduce(t: u32) -> u32 @export {
 
 /* structural equality (CCL has no binders -> pure structure). */
 fn ccl_struct_eq(x: u32, y: u32) -> u8 @export {
+    /* II-CCL-2: node 0 is the reserved INVALID / arena-exhausted sentinel (ccl_mk
+     * returns 0 on overflow; ccl_reset starts the bump at 1). It must NEVER compare
+     * equal -- otherwise two exhausted reductions both collapse to node 0 and
+     * ccl_conv would wrongly report "convertible", admitting a FALSE definitional
+     * equality into the kernel (the unsound direction). Fail closed: 0 != anything. */
+    if x == 0u32 { return 0u8 }
+    if y == 0u32 { return 0u8 }
     let tx : u8 = CCL_TAG[x]
     let ty : u8 = CCL_TAG[y]
     if tx != ty { return 0u8 }
@@ -555,6 +562,21 @@ fn ccl_conv(x: u32, y: u32) -> u8 @export {
     let nx : u32 = ccl_reduce(x)
     let ny : u32 = ccl_reduce(y)
     return ccl_struct_eq(nx, ny)
+}
+
+/* II-CCL-2 falsifier (prove the negative): the INVALID/exhausted sentinel (node 0)
+ * must be fail-closed in ccl_struct_eq -- never equal to anything, including itself --
+ * so arena exhaustion can never manufacture a FALSE "convertible" verdict. Also proves
+ * the fix introduces NO false-negative on a real term. 99 = correct; 1..4 = which broke.
+ * (Before the fix, ccl_struct_eq(0,0) returned 1 via the nullary-tag fallthrough.) */
+fn ccl_invalid_kat() -> u64 @export {
+    ccl_reset()
+    if ccl_struct_eq(0u32, 0u32) != 0u8 { return 1u64 }   /* 0 vs 0 -> NOT equal (fail-closed) */
+    let s : u32 = ccl_snd()
+    if ccl_struct_eq(0u32, s) != 0u8 { return 2u64 }       /* 0 vs real -> NOT equal */
+    if ccl_struct_eq(s, 0u32) != 0u8 { return 3u64 }       /* real vs 0 -> NOT equal */
+    if ccl_struct_eq(s, s)    != 1u8 { return 4u64 }       /* real vs itself -> still equal (no regression) */
+    return 99u64
 }
 
 /* ============================================================
@@ -757,13 +779,18 @@ fn ccl_to_tc(c: u32) -> u32 @export {
         if htag == CCL_SFST { return tc_fst(ccl_to_tc(e0)) }
         if htag == CCL_SSND { return tc_snd(ccl_to_tc(e0)) }
         if htag == CCL_TRANSP { return tc_transp(ccl_to_tc(e2), ccl_to_tc(e1), ccl_to_tc(e0)) }
-        /* ordinary application: head a0 a1 ... (a0 = outermost = e_{k-1}, last = e0) */
-        let mut acc : u32 = ccl_to_tc(head)
-        if k >= 4u32 { acc = tc_app(acc, ccl_to_tc(e3)) }
-        if k >= 3u32 { acc = tc_app(acc, ccl_to_tc(e2)) }
-        if k >= 2u32 { acc = tc_app(acc, ccl_to_tc(e1)) }
-        acc = tc_app(acc, ccl_to_tc(e0))
-        return acc
+        /* ordinary application of ARBITRARY arity (II-CCL-1): the old fixed e0..e3
+         * fold silently DROPPED args for k>=5 (and the head for k>8). Decompose the
+         * outermost App o <inner, arg> structurally instead: `inner` is the (k-1)-arg
+         * spine, read back by recursion; the head was already classified non-special
+         * above, so the recursive ccl_to_tc(inner) re-derives the same head harmlessly
+         * and re-applies it. No dependency on the bounded CCL_EARG scratch, so it is
+         * recursion-safe and correct for every arity. (k>=1 here -- the k==0 early-out
+         * above guarantees the outermost node is App o Pair.) */
+        let sp : u32 = CCL_B[c]              /* the outermost <inner, arg> pair */
+        let inner : u32 = CCL_A[sp]
+        let arg : u32 = CCL_B[sp]
+        return tc_app(ccl_to_tc(inner), ccl_to_tc(arg))
     }
     return tc_var(0u32)
 }
@@ -789,6 +816,169 @@ fn ccl_etahi_kat() -> u64 @export {
 }
 
 /* ============================================================
+ *  B18d (de-deferred): the CCL-NATIVE machine critical-pair ENUMERATOR.
+ *
+ *  The rule set as a machine-readable table (rule id -> LHS pattern -> RHS image):
+ *    1 idr   x o Id              -> x
+ *    2 idl   Id o x              -> x
+ *    3 ass   (x o y) o z         -> x o (y o z)
+ *    4 dpair <x,y> o z           -> <x o z, y o z>
+ *    5 dcur  Cur(x) o y          -> Cur(x o <y o Fst, Snd>)     (side-cond: y != Id; idr has priority)
+ *    6 fst   Fst o <x,y>         -> x
+ *    7 snd   Snd o <x,y>         -> y
+ *    8 beta  App o <Cur(x) o y, z> -> x o <y, z>
+ *    9 bare  App o <Cur(x), z>     -> x o <Id, z>
+ *   10 weak  c o y               -> c        (c a constant, tag >= CCL_ATOM)
+ *
+ *  ccl_cp_lhs(rid) builds the LHS with STRUCTURED fillers (Fst/Snd/App + the rule's own
+ *  head); ccl_cp_rhs(rid, t, fault) is the RHS image -- and when fault==rid it returns a
+ *  DELIBERATELY WRONG image (the build-time injection the falsifier 939 exercises).
+ *  ccl_critpair_enum enumerates every rule-rule overlap and checks the two one-step reducts
+ *  JOIN under the real reducer (ccl_reduce).  Unlike the hand list it is GENERATED from the
+ *  table, so it certifies confluence as a THEOREM, not a 16-pair sample, and CATCHES an
+ *  arbitrary injected divergence (any rule with a wrong RHS). */
+
+fn ccl_cp_lhs(rid: u32) -> u32 {
+    if rid == 1u32 { return ccl_comp(ccl_fst(), ccl_id()) }                                   /* idr  x o Id */
+    if rid == 2u32 { return ccl_comp(ccl_id(), ccl_fst()) }                                   /* idl  Id o x */
+    if rid == 3u32 { return ccl_comp(ccl_comp(ccl_fst(), ccl_snd()), ccl_app()) }             /* ass  (x o y) o z */
+    if rid == 4u32 { return ccl_comp(ccl_pair(ccl_fst(), ccl_snd()), ccl_app()) }             /* dpair <x,y> o z */
+    if rid == 5u32 { return ccl_comp(ccl_cur(ccl_fst()), ccl_snd()) }                         /* dcur Cur(x) o y (y=Snd!=Id) */
+    if rid == 6u32 { return ccl_comp(ccl_fst(), ccl_pair(ccl_snd(), ccl_app())) }             /* fst  Fst o <x,y> */
+    if rid == 7u32 { return ccl_comp(ccl_snd(), ccl_pair(ccl_fst(), ccl_app())) }             /* snd  Snd o <x,y> */
+    if rid == 8u32 { return ccl_comp(ccl_app(), ccl_pair(ccl_comp(ccl_cur(ccl_fst()), ccl_snd()), ccl_app())) }  /* beta */
+    if rid == 9u32 { return ccl_comp(ccl_app(), ccl_pair(ccl_cur(ccl_fst()), ccl_snd())) }    /* bare App o <Cur(x), z> */
+    return ccl_comp(ccl_atom(7u32), ccl_fst())                                                /* weak c o y */
+}
+
+fn ccl_cp_rhs(rid: u32, t: u32, fault: u32) -> u32 {
+    let mut wrong : u32 = 0u32
+    if fault == rid { wrong = 1u32 }
+    if rid == 1u32 {                                            /* idr: x o Id -> x */
+        if wrong == 1u32 { return CCL_B[t] }
+        return CCL_A[t]
+    }
+    if rid == 2u32 {                                            /* idl: Id o x -> x */
+        if wrong == 1u32 { return CCL_A[t] }
+        return CCL_B[t]
+    }
+    if rid == 3u32 {                                            /* ass: (x o y) o z -> x o (y o z) */
+        let a3 : u32 = CCL_A[t]
+        let z3 : u32 = CCL_B[t]
+        if wrong == 1u32 { return ccl_comp(CCL_B[a3], ccl_comp(CCL_A[a3], z3)) }
+        return ccl_comp(CCL_A[a3], ccl_comp(CCL_B[a3], z3))
+    }
+    if rid == 4u32 {                                            /* dpair: <x,y> o z -> <x o z, y o z> */
+        let a4 : u32 = CCL_A[t]
+        let z4 : u32 = CCL_B[t]
+        if wrong == 1u32 { return ccl_pair(ccl_comp(CCL_B[a4], z4), ccl_comp(CCL_A[a4], z4)) }
+        return ccl_pair(ccl_comp(CCL_A[a4], z4), ccl_comp(CCL_B[a4], z4))
+    }
+    if rid == 5u32 {                                            /* dcur: Cur(x) o y -> Cur(x o <y o Fst, Snd>) */
+        let a5 : u32 = CCL_A[t]
+        let y5 : u32 = CCL_B[t]
+        let xb5 : u32 = CCL_A[a5]
+        if wrong == 1u32 { return ccl_cur(xb5) }
+        return ccl_cur(ccl_comp(xb5, ccl_pair(ccl_comp(y5, ccl_fst()), ccl_snd())))
+    }
+    if rid == 6u32 {                                            /* fst: Fst o <x,y> -> x */
+        let b6 : u32 = CCL_B[t]
+        if wrong == 1u32 { return CCL_B[b6] }
+        return CCL_A[b6]
+    }
+    if rid == 7u32 {                                            /* snd: Snd o <x,y> -> y */
+        let b7 : u32 = CCL_B[t]
+        if wrong == 1u32 { return CCL_A[b7] }
+        return CCL_B[b7]
+    }
+    if rid == 8u32 {                                            /* beta: App o <Cur(x) o y, z> -> x o <y, z> */
+        let b8 : u32 = CCL_B[t]
+        let p8 : u32 = CCL_A[b8]
+        let z8 : u32 = CCL_B[b8]
+        let xb8 : u32 = CCL_A[CCL_A[p8]]
+        let y8 : u32 = CCL_B[p8]
+        if wrong == 1u32 { return ccl_comp(xb8, ccl_pair(z8, y8)) }
+        return ccl_comp(xb8, ccl_pair(y8, z8))
+    }
+    if rid == 9u32 {                                            /* bare: App o <Cur(x), z> -> x o <Id, z> */
+        let b9 : u32 = CCL_B[t]
+        let p9 : u32 = CCL_A[b9]
+        let z9 : u32 = CCL_B[b9]
+        let xb9 : u32 = CCL_A[p9]
+        if wrong == 1u32 { return ccl_comp(xb9, ccl_pair(z9, ccl_id())) }
+        return ccl_comp(xb9, ccl_pair(ccl_id(), z9))
+    }
+    /* rid == 10: weak: c o y -> c */
+    if wrong == 1u32 { return CCL_B[t] }
+    return CCL_A[t]
+}
+
+fn ccl_cp_join(r1: u32, r2: u32) -> u8 {
+    return ccl_struct_eq(ccl_reduce(r1), ccl_reduce(r2))
+}
+
+fn ccl_critpair_enum(fault: u32) -> u64 @export {
+    /* ---- Class A: ass at root vs rule R at the left child  ((R.lhs) o Z) ---- */
+    let mut r : u32 = 1u32
+    while r <= 10u32 {
+        ccl_reset()
+        let inner : u32 = ccl_cp_lhs(r)
+        let zf : u32 = ccl_fst()
+        let t : u32 = ccl_comp(inner, zf)
+        let r1 : u32 = ccl_cp_rhs(3u32, t, fault)                       /* ass at root */
+        let r2 : u32 = ccl_comp(ccl_cp_rhs(r, inner, fault), zf)        /* R at the child, o Z */
+        if ccl_cp_join(r1, r2) != 1u8 { return (100u32 + r) as u64 }
+        r = r + 1u32
+    }
+    /* ---- Class B: idr at root (b = Id) vs free-b rule R at root.  dcur excluded (y!=Id). ---- */
+    ccl_reset()
+    let tb2 : u32 = ccl_comp(ccl_id(), ccl_id())                        /* idl/idr: Id o Id */
+    if ccl_cp_join(ccl_cp_rhs(1u32, tb2, fault), ccl_cp_rhs(2u32, tb2, fault)) != 1u8 { return 202u64 }
+    ccl_reset()
+    let tb3 : u32 = ccl_comp(ccl_comp(ccl_fst(), ccl_snd()), ccl_id())  /* ass/idr: (x o y) o Id */
+    if ccl_cp_join(ccl_cp_rhs(1u32, tb3, fault), ccl_cp_rhs(3u32, tb3, fault)) != 1u8 { return 203u64 }
+    ccl_reset()
+    let tb4 : u32 = ccl_comp(ccl_pair(ccl_fst(), ccl_snd()), ccl_id())  /* dpair/idr: <x,y> o Id */
+    if ccl_cp_join(ccl_cp_rhs(1u32, tb4, fault), ccl_cp_rhs(4u32, tb4, fault)) != 1u8 { return 204u64 }
+    ccl_reset()
+    let tb10 : u32 = ccl_comp(ccl_atom(7u32), ccl_id())                 /* weak/idr: c o Id */
+    if ccl_cp_join(ccl_cp_rhs(1u32, tb10, fault), ccl_cp_rhs(10u32, tb10, fault)) != 1u8 { return 210u64 }
+
+    /* ---- Specials: higher-order subterm overlaps ---- */
+    /* S1 beta x dcur: App o <Cur(x) o y, z> ; the subterm Cur(x) o y is a dcur redex. */
+    ccl_reset()
+    let s1sub : u32 = ccl_comp(ccl_cur(ccl_fst()), ccl_snd())
+    let s1t : u32 = ccl_comp(ccl_app(), ccl_pair(s1sub, ccl_app()))
+    let s1r1 : u32 = ccl_cp_rhs(8u32, s1t, fault)                                       /* beta at root */
+    let s1r2 : u32 = ccl_comp(ccl_app(), ccl_pair(ccl_cp_rhs(5u32, s1sub, fault), ccl_app()))  /* dcur at subterm */
+    if ccl_cp_join(s1r1, s1r2) != 1u8 { return 301u64 }
+    /* S2 bare x eta: App o <Cur(App o <c o Fst, Snd>), z> ; the Cur body is an eta-redex. */
+    ccl_reset()
+    let s2body : u32 = ccl_comp(ccl_app(), ccl_pair(ccl_comp(ccl_atom(9u32), ccl_fst()), ccl_snd()))
+    let s2t : u32 = ccl_comp(ccl_app(), ccl_pair(ccl_cur(s2body), ccl_app()))
+    let s2r1 : u32 = ccl_cp_rhs(9u32, s2t, fault)                                       /* bare at root */
+    let s2r2 : u32 = ccl_comp(ccl_app(), ccl_pair(ccl_eta_contract(s2body), ccl_app())) /* eta at subterm */
+    if ccl_cp_join(s2r1, s2r2) != 1u8 { return 302u64 }
+    /* S3 dcur x eta: Cur(App o <c o Fst, Snd>) o y ; root dcur vs inner eta. */
+    ccl_reset()
+    let s3body : u32 = ccl_comp(ccl_app(), ccl_pair(ccl_comp(ccl_atom(9u32), ccl_fst()), ccl_snd()))
+    let s3t : u32 = ccl_comp(ccl_cur(s3body), ccl_snd())
+    let s3r1 : u32 = ccl_cp_rhs(5u32, s3t, fault)                                       /* dcur at root */
+    let s3r2 : u32 = ccl_comp(ccl_eta_contract(s3body), ccl_snd())                      /* eta inside Cur, then o y */
+    if ccl_cp_join(s3r1, s3r2) != 1u8 { return 303u64 }
+    /* S4 iota(IF) x substitution: IF(TRUE,F,A) o S  joins  (then=F) o S. */
+    ccl_reset()
+    let s4sp : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_if_c(), ccl_true_c()), ccl_fst()), ccl_app())
+    if ccl_struct_eq(ccl_reduce(ccl_comp(s4sp, ccl_snd())), ccl_reduce(ccl_comp(ccl_fst(), ccl_snd()))) != 1u8 { return 304u64 }
+    /* S5 iota(NATREC) x substitution: NATREC(C,F,S,ZERO) o A  joins  F o A. */
+    ccl_reset()
+    let s5sp : u32 = ccl_app2(ccl_app2(ccl_app2(ccl_app2(ccl_natrec_c(), ccl_atom(8u32)), ccl_fst()), ccl_snd()), ccl_zero_c())
+    if ccl_struct_eq(ccl_reduce(ccl_comp(s5sp, ccl_app())), ccl_reduce(ccl_comp(ccl_fst(), ccl_app()))) != 1u8 { return 305u64 }
+
+    return 99u64
+}
+
+/* ============================================================
  *  B18d: CONFLUENCE CERTIFICATE (the bootstrap falsifier).
  *  Local confluence is decided by checking that EVERY critical pair of the CCL
  *  rule set joins: an overlap term with two distinct redexes is contracted each
@@ -804,8 +994,11 @@ fn ccl_etahi_kat() -> u64 @export {
  *  OWN, with no second oracle to compare against.  Structured fillers
  *  (Fst/Snd/App/Id + fresh atom) keep the joined forms structured, so a wrong
  *  rule yields a DIFFERENT normal form (proven sensitive by the negative test).
- *  99 = every critical pair joins;  N = critical pair N failed to join. */
-fn ccl_conf_cert() -> u64 @export {
+ *  99 = every critical pair joins;  N = critical pair N failed to join.
+ *  RETAINED as a regression CROSS-CHECK: the machine enumerator (ccl_critpair_enum) is now
+ *  the primary, exhaustive theorem; these 16 hand pairs must still join (the generator must
+ *  find AT LEAST these). */
+fn ccl_conf_cert_cp16() -> u64 {
     ccl_reset()
     let f  : u32 = ccl_fst()
     let s  : u32 = ccl_snd()
@@ -894,5 +1087,31 @@ fn ccl_conf_cert() -> u64 @export {
     let n14b : u32 = ccl_reduce(ccl_comp(ap, ccl_pair(ccl_cur(ccl_comp(s, ccl_pair(ccl_comp(f, f), s))), s))) /* dcur form */
     if ccl_struct_eq(n14a, n14b) != 1u8 { return 14u64 }
 
+    /* CP15  ass / dcur :  (Cur(App) o Fst) o Snd   (II-CCL-3: a real overlap the
+     *  original 14 omitted -- the left arg of an outer `ass` is itself a `dcur` redex). */
+    let n15a : u32 = ccl_reduce(ccl_comp(ccl_cur(ap), ccl_comp(f, s)))                                  /* outer ass first -> Cur(App) o (Fst o Snd) */
+    let n15b : u32 = ccl_reduce(ccl_comp(ccl_cur(ccl_comp(ap, ccl_pair(ccl_comp(f, f), s))), s))        /* inner dcur first -> Cur(App o <Fst o Fst,Snd>) o Snd */
+    if ccl_struct_eq(n15a, n15b) != 1u8 { return 15u64 }
+
+    /* CP16  beta / idr-then-bare :  App o <Cur(Snd) o Id, Fst>   (the inner `Cur(x) o Id`
+     *  is both part of a `beta` redex and an `idr` redex; contracting idr turns it into a
+     *  `bare` redex -- both routes must join.  Another overlap absent from the original 14). */
+    let n16a : u32 = ccl_reduce(ccl_comp(s, ccl_pair(id, f)))                                           /* beta first -> Snd o <Id, Fst> -> Fst */
+    let n16b : u32 = ccl_reduce(ccl_comp(ap, ccl_pair(ccl_cur(s), f)))                                  /* idr first -> App o <Cur(Snd), Fst> -> bare -> Fst */
+    if ccl_struct_eq(n16a, n16b) != 1u8 { return 16u64 }
+
+    return 99u64
+}
+
+/* SEPARATE-2 / II-CCL-3 (deferral eliminated): confluence is now a THEOREM, not a sample.
+ * PRIMARY = the machine-enumerated critical-pair set over the rule TABLE (every rule-rule
+ * overlap, generated -- so adding/changing a rule auto-generates its pairs); SECONDARY = the
+ * original CP1..CP16 retained as a regression cross-check.  Both must report all-join.
+ * 99 = confluent; an enumerator code (1xx/2xx/3xx) or 1000+N (a CP16 regression) on failure. */
+fn ccl_conf_cert() -> u64 @export {
+    let enr : u64 = ccl_critpair_enum(0u32)
+    if enr != 99u64 { return enr }
+    let leg : u64 = ccl_conf_cert_cp16()
+    if leg != 99u64 { return 1000u64 + leg }
     return 99u64
 }

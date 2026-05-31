@@ -42,6 +42,12 @@ const CPUFEAT_BIT_RDRAND  : u32 = 5u32
 const CPUFEAT_BIT_RDSEED  : u32 = 6u32
 const CPUFEAT_BIT_AVX512F : u32 = 7u32
 const CPUFEAT_BIT_BMI2    : u32 = 8u32
+const CPUFEAT_BIT_AVX512DQ : u32 = 9u32   /* AVX-512DQ (CPUID.7.0:EBX[17]) [RIPPLE-8 / D-BI-1] */
+
+/* X17 forced-path enabler: an AND-mask over the summary so a KAT can force a feature
+ * OFF and exercise the fallback path on any host (default all-ones = no override). */
+var CPUFEAT_FORCE_MASK : u32 = 0xFFFFFFFFu32
+fn cpufeat_force_mask(m: u32) -> i32 @export { CPUFEAT_FORCE_MASK = m ; return 0i32 }
 
 /* 16-byte CPUID output scratch (module-global; no heap dependency). */
 var CPUFEAT_OUT : [u8; 16]
@@ -76,9 +82,11 @@ fn cpufeat_summary() -> u32 @export {
     let rdseed : u32 = cf_bit(ebx7, 18u32)
     let avx2_bit : u32 = cf_bit(ebx7, 5u32)
     let avx512_bit : u32 = cf_bit(ebx7, 16u32)
+    let avx512dq_bit : u32 = cf_bit(ebx7, 17u32)
 
     let mut avx2 : u32 = 0u32
     let mut avx512 : u32 = 0u32
+    let mut avx512dq : u32 = 0u32
     if osxsave == 1u32 {
         let xcr0 : u64 = iii_xgetbv(0u32)
         let avxlanes : u64 = xcr0 & 6u64
@@ -88,6 +96,9 @@ fn cpufeat_summary() -> u32 @export {
         }
         if avx512_bit == 1u32 {
             if av512lanes == 0xE6u64 { avx512 = 1u32 }
+        }
+        if avx512dq_bit == 1u32 {
+            if av512lanes == 0xE6u64 { avx512dq = 1u32 }   /* DQ requires the same AVX-512 OS-XSAVE lanes */
         }
     }
     let bmi2 : u32 = avx2
@@ -102,12 +113,28 @@ fn cpufeat_summary() -> u32 @export {
     if rdrand == 1u32 { bits = bits | (one << CPUFEAT_BIT_RDRAND) }
     if rdseed == 1u32 { bits = bits | (one << CPUFEAT_BIT_RDSEED) }
     if avx512 == 1u32 { bits = bits | (one << CPUFEAT_BIT_AVX512F) }
+    if avx512dq == 1u32 { bits = bits | (one << CPUFEAT_BIT_AVX512DQ) }
     if bmi2 == 1u32   { bits = bits | (one << CPUFEAT_BIT_BMI2) }
     return bits
 }
 
-fn cf_has(b: u32) -> u8 {
+/* APOTHEOSIS S.5: memoize the summary.  cpufeat_summary() re-runs CPUID(1) +
+ * CPUID(7) + XGETBV on EVERY call; every cpufeat_has_* dispatch went through it,
+ * so a hot crypto dispatch re-serialised CPUID per call.  Compute ONCE, cache the
+ * u32 bitmask.  The FORCE_MASK override stays PER-CALL (applied to the cached raw
+ * summary in cf_has), so the KAT force-path still exercises fallbacks. */
+var CPUFEAT_SUMMARY_CACHE : u32 = 0u32
+var CPUFEAT_CACHED        : u8  = 0u8
+fn cpufeat_summary_cached() -> u32 @export {
+    if CPUFEAT_CACHED == 1u8 { return CPUFEAT_SUMMARY_CACHE }
     let s : u32 = cpufeat_summary()
+    CPUFEAT_SUMMARY_CACHE = s
+    CPUFEAT_CACHED = 1u8
+    return s
+}
+
+fn cf_has(b: u32) -> u8 {
+    let s : u32 = cpufeat_summary_cached() & CPUFEAT_FORCE_MASK
     let v : u32 = s >> b
     let w : u32 = v & 1u32
     if w == 1u32 { return 1u8 }
@@ -119,6 +146,7 @@ fn cpufeat_has_sse41() -> u8 @export   { return cf_has(CPUFEAT_BIT_SSE41) }
 fn cpufeat_has_aesni() -> u8 @export   { return cf_has(CPUFEAT_BIT_AESNI) }
 fn cpufeat_has_avx2() -> u8 @export    { return cf_has(CPUFEAT_BIT_AVX2) }
 fn cpufeat_has_avx512f() -> u8 @export { return cf_has(CPUFEAT_BIT_AVX512F) }
+fn cpufeat_has_avx512dq() -> u8 @export { return cf_has(CPUFEAT_BIT_AVX512DQ) }
 fn cpufeat_has_bmi2() -> u8 @export    { return cf_has(CPUFEAT_BIT_BMI2) }
 fn cpufeat_has_sha() -> u8 @export     { return cf_has(CPUFEAT_BIT_SHA) }
 fn cpufeat_has_rdrand() -> u8 @export  { return cf_has(CPUFEAT_BIT_RDRAND) }

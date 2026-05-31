@@ -54,6 +54,7 @@ var TRIPLE_FN_B        : [u64; 256]
 var TRIPLE_FN_C        : [u64; 256]
 var TRIPLE_USED        : u32 = 0u32
 var TRIPLE_DISAGREE    : u32 = 0u32
+var TRIPLE_RES         : [u64; 3]    /* staged (ra,rb,rc) for the disagreement witness [audit triple_check-1] */
 var TRIPLE_PRODUCER    : [u8; 32]
 var TRIPLE_OPID_DIS_21 : [u8; 32]
 var TRIPLE_OPID_DIS_FAT: [u8; 32]
@@ -251,15 +252,20 @@ fn tc_execute(op_id: *u8, args: *u64, out_result: *u64) -> i32 @export {
     if ra == rb { have_maj = 1u8  majority = ra }
     if ra == rc { have_maj = 1u8  majority = ra }
     if rb == rc { have_maj = 1u8  majority = rb }
+    /* Witness the actual diverging RESULTS, not the input args (tc_publish_disagreement
+     * reads results[0..2] as ra/rb/rc).  [audit triple_check-1] */
+    TRIPLE_RES[0u64] = ra
+    TRIPLE_RES[1u64] = rb
+    TRIPLE_RES[2u64] = rc
     if have_maj == 1u8 {
         out_result[0u64] = majority
         TRIPLE_DISAGREE = TRIPLE_DISAGREE + 1u32
-        tc_publish_disagreement(slot, args, 0u8)
+        tc_publish_disagreement(slot, (&TRIPLE_RES as u64) as *u64, 0u8)
         return TRIPLE_DISAGREE_2_1
     }
     /* Three-way split -> hard fatal; nothing written (M5: refuse, never fabricate). */
     TRIPLE_DISAGREE = TRIPLE_DISAGREE + 1u32
-    tc_publish_disagreement(slot, args, 1u8)
+    tc_publish_disagreement(slot, (&TRIPLE_RES as u64) as *u64, 1u8)
     return TRIPLE_DISAGREE_FATAL
 }
 

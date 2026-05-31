@@ -202,7 +202,7 @@ fn prespec_drop(slot: u32) -> i32 @export {
 fn prespec_register_compositions() -> u32 @export {
     let mut count : u32 = 0u32
 /* === BEGIN AUTO-GENERATED FROM iii_compositions.def === */
-    /* SEQ_IDX 256 entries follow; encoding mirrors
+    /* SEQ_IDX 255 entries follow; encoding mirrors
      * iii_composition_synth_hash() in iii_compositions.h. */
     {
         let h : u64 = _prespec_synth_hash(100u32, 1u8, 0x01u8)
@@ -711,13 +711,7 @@ fn prespec_register_compositions() -> u32 @export {
     {
         let h : u64 = _prespec_synth_hash(215u32, 5u8, 0x10u8)
         let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
-        let f : u64 = (&arena_reset_safe) as u64
-        if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
-    }
-    {
-        let h : u64 = _prespec_synth_hash(216u32, 5u8, 0x10u8)
-        let m : u64 = prespec_pack_meta(5u8, 0x10u8, 950000000u32)
-        let f : u64 = (&region_reset_safe) as u64
+        let f : u64 = (&arena_reset_with_witness) as u64
         if prespec_register(h, m, f, 0u32) == PRESPEC_OK { count = count + 1u32 }
     }
     {
@@ -1834,8 +1828,7 @@ extern @abi(c-msvc-x64) fn span_u8_store(a: u64, b: u64, c: u64, d: u64) -> u64 
 extern @abi(c-msvc-x64) fn span_u8_fill(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
 extern @abi(c-msvc-x64) fn span_u8_copy(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
 extern @abi(c-msvc-x64) fn span_u8_find(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
-extern @abi(c-msvc-x64) fn arena_reset_safe(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
-extern @abi(c-msvc-x64) fn region_reset_safe(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
+extern @abi(c-msvc-x64) fn arena_reset_with_witness(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
 extern @abi(c-msvc-x64) fn cap_env_init(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(a: u64, b: u64, c: u64, d: u64) -> u64 from "_unused.iii"

@@ -165,9 +165,12 @@ fn bv_mul(a: u32, b: u32) -> u32 @export {
 }
 
 fn bv_shl(a: u32, k: u32) -> u32 @export {
-    if k >= 64u32 { return bv_const(0u64) }
+    /* C-BV-1: x86-64 SHL masks the shift count to 6 bits (k & 63), so x<<64 == x<<0 == x,
+     * NOT 0.  Model the TARGET's mask so a certified rewrite is honored by the hardware
+     * (the prior `k>=64 -> 0` was C's UB-as-zero, which the target does not implement). */
+    let km : u32 = k & 63u32
     let one : u64 = 1u64
-    let factor : u64 = one << k
+    let factor : u64 = one << (km as u64)
     let s : u32 = bv_alloc()
     let abase : u64 = (a as u64) * 32u64
     let n : u32 = BV_LEN[(a as u64)]
@@ -290,6 +293,171 @@ fn bw_equal(a: u64, b: u64) -> u8 @export {
     return 0u8
 }
 
+/* ===== column-stack bitwise decider: exact for >6 variables (W3.15/ENHANCE-12) ==
+ * The single-register decider above caps at 6 vars (64 positions cannot realize
+ * 2^k > 64 valuations).  Surpass: stack W = ceil(2^k / 64) u64 words per value so
+ * EVERY one of the 2^k valuations occupies its own bit position across the stack.
+ * Variable i's column over position b (b = word*64 + offset): bit b = bit i of b.
+ *   - i < 6 : within-word periodic -> BW_Mi in every word.
+ *   - i >= 6: constant within a word -> word w is all-ones iff bit (i-6) of w is set.
+ * &|^~ apply word-wise; equality is all-words-equal; a satisfying assignment is the
+ * lowest set bit across the stack (var i = bit i of that position).  No float, no
+ * sampling: a complete decision within the deterministic gate (I1). */
+const BWS_MAX_VARS   : u32 = 12u32          /* up to 2^12 = 4096 valuations */
+const BWS_MAX_WORDS  : u64 = 64u64          /* 4096 / 64 = 64 u64 words per value */
+const BWS_MAX_SLOTS  : u64 = 128u64         /* stacked-value arena depth */
+const BWS_NO_WITNESS : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var BWS_W      : [u64; 8192]   /* BWS_MAX_SLOTS(128) * BWS_MAX_WORDS(64) */
+var BWS_NWORDS : u64 = 1u64    /* live words per value this session = ceil(2^k/64) */
+var BWS_USED   : u64 = 0u64
+var BWS_ERR    : u8  = 0u8
+
+/* Begin a k-variable decision: fix the live word count and reset the arena.
+ * k > BWS_MAX_VARS -> BWS_ERR (decline, never silently wrong). */
+fn bws_init(k: u32) -> i32 @export {
+    BWS_USED = 0u64
+    BWS_ERR  = 0u8
+    if k > BWS_MAX_VARS {
+        BWS_ERR = 1u8
+        BWS_NWORDS = 1u64
+        return 1i32
+    }
+    if k <= 6u32 {
+        BWS_NWORDS = 1u64
+        return 0i32
+    }
+    let sh : u64 = (k - 6u32) as u64
+    BWS_NWORDS = 1u64 << sh
+    return 0i32
+}
+
+fn bws_alloc() -> u64 {
+    if BWS_USED >= BWS_MAX_SLOTS { BWS_ERR = 1u8 ; return 0u64 }
+    let s : u64 = BWS_USED
+    BWS_USED = BWS_USED + 1u64
+    return s
+}
+
+/* The within-word truth-table column for variable i in [0,5]. */
+fn bws_mask6(i: u32) -> u64 {
+    if i == 0u32 { return BW_M0 }
+    if i == 1u32 { return BW_M1 }
+    if i == 2u32 { return BW_M2 }
+    if i == 3u32 { return BW_M3 }
+    if i == 4u32 { return BW_M4 }
+    return BW_M5
+}
+
+/* A fresh value = the truth-table column of variable i over BWS_NWORDS words. */
+fn bws_var(i: u32) -> u64 @export {
+    let s : u64 = bws_alloc()
+    let base : u64 = s * BWS_MAX_WORDS
+    let nw : u64 = BWS_NWORDS
+    if (i as u64) < 6u64 {
+        let col : u64 = bws_mask6(i)
+        let mut w : u64 = 0u64
+        while w < nw { BWS_W[base + w] = col ; w = w + 1u64 }
+    } else {
+        let hb : u64 = (i as u64) - 6u64
+        let mut w : u64 = 0u64
+        while w < nw {
+            if ((w >> hb) & 1u64) == 1u64 { BWS_W[base + w] = BW_ONES } else { BWS_W[base + w] = 0u64 }
+            w = w + 1u64
+        }
+    }
+    return s
+}
+
+/* The boolean constants over all valuations (the only position-uniform constants). */
+fn bws_false() -> u64 @export {
+    let s : u64 = bws_alloc()
+    let base : u64 = s * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS { BWS_W[base + w] = 0u64 ; w = w + 1u64 }
+    return s
+}
+fn bws_true() -> u64 @export {
+    let s : u64 = bws_alloc()
+    let base : u64 = s * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS { BWS_W[base + w] = BW_ONES ; w = w + 1u64 }
+    return s
+}
+
+fn bws_and(a: u64, b: u64) -> u64 @export {
+    let s : u64 = bws_alloc()
+    let ba : u64 = a * BWS_MAX_WORDS
+    let bb : u64 = b * BWS_MAX_WORDS
+    let bs : u64 = s * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS { BWS_W[bs + w] = BWS_W[ba + w] & BWS_W[bb + w] ; w = w + 1u64 }
+    return s
+}
+fn bws_or(a: u64, b: u64) -> u64 @export {
+    let s : u64 = bws_alloc()
+    let ba : u64 = a * BWS_MAX_WORDS
+    let bb : u64 = b * BWS_MAX_WORDS
+    let bs : u64 = s * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS { BWS_W[bs + w] = BWS_W[ba + w] | BWS_W[bb + w] ; w = w + 1u64 }
+    return s
+}
+fn bws_xor(a: u64, b: u64) -> u64 @export {
+    let s : u64 = bws_alloc()
+    let ba : u64 = a * BWS_MAX_WORDS
+    let bb : u64 = b * BWS_MAX_WORDS
+    let bs : u64 = s * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS { BWS_W[bs + w] = BWS_W[ba + w] ^ BWS_W[bb + w] ; w = w + 1u64 }
+    return s
+}
+fn bws_not(a: u64) -> u64 @export {
+    let s : u64 = bws_alloc()
+    let ba : u64 = a * BWS_MAX_WORDS
+    let bs : u64 = s * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS { BWS_W[bs + w] = BWS_W[ba + w] ^ BW_ONES ; w = w + 1u64 }
+    return s
+}
+
+/* 1 iff a and b are equal for ALL 2^k valuations.  Any overflow/decline -> 0. */
+fn bws_equal(a: u64, b: u64) -> u8 @export {
+    if BWS_ERR == 1u8 { return 0u8 }
+    let ba : u64 = a * BWS_MAX_WORDS
+    let bb : u64 = b * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS {
+        if BWS_W[ba + w] != BWS_W[bb + w] { return 0u8 }
+        w = w + 1u64
+    }
+    return 1u8
+}
+
+/* Lowest valuation index b (0..2^k-1) at which value a is TRUE, or BWS_NO_WITNESS
+ * if a is false everywhere.  This recovers a satisfying assignment (var i = bit i). */
+fn bws_witness(a: u64) -> u64 @export {
+    let ba : u64 = a * BWS_MAX_WORDS
+    let mut w : u64 = 0u64
+    while w < BWS_NWORDS {
+        let word : u64 = BWS_W[ba + w]
+        if word != 0u64 {
+            let mut o : u64 = 0u64
+            while o < 64u64 {
+                if ((word >> o) & 1u64) == 1u64 { return w * 64u64 + o }
+                o = o + 1u64
+            }
+        }
+        w = w + 1u64
+    }
+    return BWS_NO_WITNESS
+}
+
+/* Variable i's value (0/1) under the valuation indexed by b. */
+fn bws_assign_bit(b: u64, i: u32) -> u8 @export {
+    return ((b >> (i as u64)) & 1u64) as u8
+}
+
 /* KAT: the u64-sound decider.  POSITIVES are real Z/2^64 ring identities it
  * certifies; NEGATIVES are non-identities it must REJECT (soundness + non-
  * vacuity).  99 = pass; 1..13 ring, 14..18 const-fold, 19..30 bitwise. */
@@ -362,5 +530,110 @@ fn bv_ring_selftest() -> u64 @export {
     if bw_equal(bw_or(bw_var(0u32), bw_const(1u64)), bw_var(0u32)) != 0u8 { return 29u64 }  /* x|1 != x */
     bw_reset()
     if bw_equal(bw_xor(bw_var(0u32), bw_var(1u32)), bw_const(0u64)) != 0u8 { return 30u64 } /* x^y != 0 */
+    return 99u64
+}
+
+/* W3.15 / ENHANCE-12 falsifier: the column-stack decider is EXACT for >6 vars.
+ * Positives are 7- and 8-variable boolean identities it must certify; negatives are
+ * non-identities it must reject WITH a recoverable satisfying assignment; and >12
+ * vars must DECLINE (BWS_ERR), never silently wrong.  99 = pass. */
+fn bv_ring_colstack_kat() -> u64 @export {
+    /* ----- 7 variables (W = 2 words): De Morgan over a 7-way AND ----- */
+    bws_init(7u32)
+    if BWS_NWORDS != 2u64 { return 1u64 }                 /* 2^7/64 = 2 words */
+    let a01 : u64 = bws_and(bws_var(0u32), bws_var(1u32))
+    let a2  : u64 = bws_and(a01, bws_var(2u32))
+    let a3  : u64 = bws_and(a2, bws_var(3u32))
+    let a4  : u64 = bws_and(a3, bws_var(4u32))
+    let a5  : u64 = bws_and(a4, bws_var(5u32))
+    let a6  : u64 = bws_and(a5, bws_var(6u32))
+    let dl7 : u64 = bws_not(a6)
+    let o01 : u64 = bws_or(bws_not(bws_var(0u32)), bws_not(bws_var(1u32)))
+    let o2  : u64 = bws_or(o01, bws_not(bws_var(2u32)))
+    let o3  : u64 = bws_or(o2, bws_not(bws_var(3u32)))
+    let o4  : u64 = bws_or(o3, bws_not(bws_var(4u32)))
+    let o5  : u64 = bws_or(o4, bws_not(bws_var(5u32)))
+    let dr7 : u64 = bws_or(o5, bws_not(bws_var(6u32)))
+    if bws_equal(dl7, dr7) != 1u8 { return 2u64 }         /* ~(AND7) == OR7(~xi): valid */
+    if BWS_ERR != 0u8 { return 3u64 }
+
+    /* ----- 7-var XOR associativity (left-assoc == right-assoc) ----- */
+    bws_init(7u32)
+    let lx5 : u64 = bws_xor(bws_xor(bws_xor(bws_xor(bws_var(0u32), bws_var(1u32)), bws_var(2u32)), bws_var(3u32)), bws_var(4u32))
+    let lx7 : u64 = bws_xor(bws_xor(lx5, bws_var(5u32)), bws_var(6u32))
+    let rx5 : u64 = bws_xor(bws_var(2u32), bws_xor(bws_var(3u32), bws_xor(bws_var(4u32), bws_xor(bws_var(5u32), bws_var(6u32)))))
+    let rx7 : u64 = bws_xor(bws_var(0u32), bws_xor(bws_var(1u32), rx5))
+    if bws_equal(lx7, rx7) != 1u8 { return 4u64 }
+
+    /* ----- 7-var NEGATIVE: (AND of all 7) != x0, with recoverable witness ----- */
+    bws_init(7u32)
+    let b01 : u64 = bws_and(bws_var(0u32), bws_var(1u32))
+    let b2  : u64 = bws_and(b01, bws_var(2u32))
+    let b3  : u64 = bws_and(b2, bws_var(3u32))
+    let b4  : u64 = bws_and(b3, bws_var(4u32))
+    let b5  : u64 = bws_and(b4, bws_var(5u32))
+    let b6  : u64 = bws_and(b5, bws_var(6u32))
+    let v0  : u64 = bws_var(0u32)
+    if bws_equal(b6, v0) != 0u8 { return 5u64 }           /* non-identity: must reject */
+    let wb : u64 = bws_witness(bws_xor(b6, v0))
+    if wb == BWS_NO_WITNESS { return 6u64 }               /* a counterexample MUST exist */
+    let x0b : u8 = bws_assign_bit(wb, 0u32)
+    let mut andall : u8 = 1u8
+    let mut vi : u32 = 0u32
+    while vi < 7u32 {
+        if bws_assign_bit(wb, vi) == 0u8 { andall = 0u8 }
+        vi = vi + 1u32
+    }
+    if andall == x0b { return 7u64 }                      /* witness truly distinguishes */
+
+    /* ----- 8 variables (W = 4 words): De Morgan over an 8-way OR ----- */
+    bws_init(8u32)
+    if BWS_NWORDS != 4u64 { return 8u64 }                 /* 2^8/64 = 4 words */
+    let p01 : u64 = bws_or(bws_var(0u32), bws_var(1u32))
+    let p2  : u64 = bws_or(p01, bws_var(2u32))
+    let p3  : u64 = bws_or(p2, bws_var(3u32))
+    let p4  : u64 = bws_or(p3, bws_var(4u32))
+    let p5  : u64 = bws_or(p4, bws_var(5u32))
+    let p6  : u64 = bws_or(p5, bws_var(6u32))
+    let p7  : u64 = bws_or(p6, bws_var(7u32))
+    let lp8 : u64 = bws_not(p7)
+    let q01 : u64 = bws_and(bws_not(bws_var(0u32)), bws_not(bws_var(1u32)))
+    let q2  : u64 = bws_and(q01, bws_not(bws_var(2u32)))
+    let q3  : u64 = bws_and(q2, bws_not(bws_var(3u32)))
+    let q4  : u64 = bws_and(q3, bws_not(bws_var(4u32)))
+    let q5  : u64 = bws_and(q4, bws_not(bws_var(5u32)))
+    let q6  : u64 = bws_and(q5, bws_not(bws_var(6u32)))
+    let rq8 : u64 = bws_and(q6, bws_not(bws_var(7u32)))
+    if bws_equal(lp8, rq8) != 1u8 { return 9u64 }         /* ~(OR8) == AND8(~xi): valid */
+
+    /* ----- 8-var NEGATIVE: x0 ^ x7 != false, witness distinguishes x0 from x7 ----- */
+    bws_init(8u32)
+    let nx : u64 = bws_xor(bws_var(0u32), bws_var(7u32))
+    if bws_equal(nx, bws_false()) != 0u8 { return 10u64 }
+    let wb2 : u64 = bws_witness(nx)
+    if wb2 == BWS_NO_WITNESS { return 11u64 }
+    if bws_assign_bit(wb2, 0u32) == bws_assign_bit(wb2, 7u32) { return 12u64 }
+
+    /* ----- above the cap: DECLINE (BWS_ERR), never silently wrong ----- */
+    bws_init(13u32)
+    if BWS_ERR != 1u8 { return 13u64 }
+
+    return 99u64
+}
+
+/* W3.21 / C-BV-1 falsifier: bv_shl models the x86-64 SHL count-mask (k & 63), so a
+ * shift >= width wraps the count rather than zeroing the value -- otherwise the ring
+ * decider would certify x<<64 -> 0, a rewrite the hardware does NOT honor. 99 = pass. */
+fn bv_ring_shift_mask_kat() -> u64 @export {
+    bv_reset()
+    if bv_equal(bv_shl(bv_var(0u32), 64u32), bv_var(0u32)) != 1u8 { return 1u64 }                       /* x<<64 == x */
+    bv_reset()
+    if bv_equal(bv_shl(bv_var(0u32), 65u32), bv_shl(bv_var(0u32), 1u32)) != 1u8 { return 2u64 }         /* x<<65 == x<<1 */
+    bv_reset()
+    if bv_equal(bv_shl(bv_var(0u32), 128u32), bv_var(0u32)) != 1u8 { return 3u64 }                      /* x<<128 == x */
+    bv_reset()
+    if bv_equal(bv_shl(bv_var(0u32), 1u32), bv_var(0u32)) != 0u8 { return 4u64 }                        /* x<<1 != x (normal) */
+    bv_reset()
+    if bv_equal(bv_shl(bv_var(0u32), 66u32), bv_shl(bv_var(0u32), 2u32)) != 1u8 { return 5u64 }         /* x<<66 == x<<2 */
     return 99u64
 }

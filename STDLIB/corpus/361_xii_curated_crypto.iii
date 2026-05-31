@@ -1,38 +1,62 @@
-/* corpus/361_xii_curated_crypto.iii — curated crypto payload emission */
+/* corpus/361_xii_curated_crypto.iii — curated override emission (X25 hardened)
+ *
+ * X25 (Vol II): the curated CRYPTO inlines (H001..H024 = ids 0..23) are SCAFFOLD
+ * placeholders -- e.g. ed25519_verify emits `vpcmpeqd ymm,ymm,ymm; and eax,0xF`,
+ * a register compared with itself => an always-valid (fail-open) verify.
+ * _find_override now REFUSES crypto horizons, so emission falls through to the
+ * REAL structural kernel (xii_kernel_emit_fragment) instead of the scaffold.
+ *
+ * This test PROVES the refusal: a crypto horizon's emitted body must EQUAL its
+ * primary-op kernel fragment (the scaffold -- whose body opened 0xC5 -- is gone),
+ * while a NON-crypto override (H051 = id 50) is still served from the curated
+ * table.  No hardcoded scaffold bytes: the kernel reference is computed at run
+ * time, so the test stays correct as kernels evolve.
+ */
 
 module corpus_361_xii_curated_crypto
 
 extern @abi(c-msvc-x64) fn xii_register_all() -> i32 from "xii_register_all.iii"
 extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_primary_op(id: u32) -> u8 from "xii_horizon.iii"
+extern @abi(c-msvc-x64) fn xii_kernel_emit_fragment(kind: u8, target: u8, out: *u8) -> u32 from "xii_kernel_emit.iii"
 
 var BUF361 : [u8; 256]
+var KREF361 : [u8; 256]
 
 fn main() -> u64 {
     xii_register_all()
 
-    /* H012 sha256_oneshot on target 1 (x86_avx2) -- curated override registered.
-     * H012 is at index 11 in the 0-based array. */
+    /* H012 sha256_oneshot (id 11) -- CRYPTO: scaffold override REFUSED (X25);
+     * emission must be the structural kernel fragment for H012's primary op. */
+    let prim11 : u8 = xii_horizon_primary_op(11u32)
+    let kn11 : u32 = xii_kernel_emit_fragment(prim11, 1u8, &KREF361 as *u8)
+    if kn11 < 4u32 { return 20u64 }
     let n11 : u32 = xii_emit_gen_produce(11u32, 1u32, 256u32, &BUF361 as *u8)
     if n11 == 0u32 { return 1u64 }
-
-    /* Bytes should start with prologue (mov [rsp+8], rbx => 48 89 5C 24 08). */
+    /* prologue intact (mov [rsp+8], rbx => 48 89 5C ...). */
     if BUF361[0] != 0x48u8 { return 2u64 }
     if BUF361[1] != 0x89u8 { return 3u64 }
     if BUF361[2] != 0x5Cu8 { return 4u64 }
+    /* body (after the 11-byte prologue) == structural kernel, NOT the scaffold. */
+    if BUF361[11] != KREF361[0] { return 5u64 }
+    if BUF361[12] != KREF361[1] { return 12u64 }
+    if BUF361[13] != KREF361[2] { return 13u64 }
+    if BUF361[14] != KREF361[3] { return 14u64 }
 
-    /* After 11-byte prologue, body starts with the SHA-256 NI curated bytes
-     * (first byte 0xC5 = vmovq prefix). */
-    if BUF361[11] != 0xC5u8 { return 5u64 }
-
-    /* H003 chacha20_block on target 1: curated. H003 = index 2. */
+    /* H003 chacha20_block (id 2) -- CRYPTO: also refused -> structural kernel. */
+    let prim2 : u8 = xii_horizon_primary_op(2u32)
+    let kn2 : u32 = xii_kernel_emit_fragment(prim2, 1u8, &KREF361 as *u8)
+    if kn2 < 4u32 { return 21u64 }
     let n3 : u32 = xii_emit_gen_produce(2u32, 1u32, 256u32, &BUF361 as *u8)
     if n3 == 0u32 { return 6u64 }
-    if BUF361[11] != 0xC5u8 { return 7u64 }
+    if BUF361[11] != KREF361[0] { return 7u64 }
+    if BUF361[12] != KREF361[1] { return 15u64 }
+    if BUF361[13] != KREF361[2] { return 16u64 }
 
-    /* H051 swap_bytes_u64 on target 1 (BSWAP rax = 48 0f c8). H051 = index 50. */
+    /* H051 swap_bytes_u64 (id 50) -- NON-crypto: curated override STILL served
+     * (BSWAP rax = 48 0f c8 at body offset 11). */
     let n50 : u32 = xii_emit_gen_produce(50u32, 1u32, 64u32, &BUF361 as *u8)
     if n50 == 0u32 { return 8u64 }
-    /* Body offset 11..13 should be the BSWAP sequence. */
     if BUF361[11] != 0x48u8 { return 9u64 }
     if BUF361[12] != 0x0Fu8 { return 10u64 }
     if BUF361[13] != 0xC8u8 { return 11u64 }

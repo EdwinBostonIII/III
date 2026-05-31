@@ -21,6 +21,7 @@ module aether_inet
 extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
 
 const INET_OK : i32 = 0i32
+const INET_E_BUILD : i32 = -2i32   /* [COMBINE-7/RIPPLE-6/II-INET-1] a builder push failed -- output incomplete, do NOT report success */
 var INET_LAST_ERROR : u32 = 0u32
 
 fn inet_last_error() -> u32 @export { return INET_LAST_ERROR }
@@ -96,20 +97,20 @@ fn inet_emit_octet(builder_id: u64, octet: u32) -> i32 {
         let h : u32 = v / 100u32
         let t : u32 = (v / 10u32) - (h * 10u32)
         let o : u32 = v - (h * 100u32) - (t * 10u32)
-        builder_push_byte(builder_id, 48u32 + h)
-        builder_push_byte(builder_id, 48u32 + t)
-        builder_push_byte(builder_id, 48u32 + o)
+        if builder_push_byte(builder_id, 48u32 + h) != 0i32 { return INET_E_BUILD }
+        if builder_push_byte(builder_id, 48u32 + t) != 0i32 { return INET_E_BUILD }
+        if builder_push_byte(builder_id, 48u32 + o) != 0i32 { return INET_E_BUILD }
     }
     if v >= 10u32 {
         if v < 100u32 {
             let t : u32 = v / 10u32
             let o : u32 = v - (t * 10u32)
-            builder_push_byte(builder_id, 48u32 + t)
-            builder_push_byte(builder_id, 48u32 + o)
+            if builder_push_byte(builder_id, 48u32 + t) != 0i32 { return INET_E_BUILD }
+            if builder_push_byte(builder_id, 48u32 + o) != 0i32 { return INET_E_BUILD }
         }
     }
     if v < 10u32 {
-        builder_push_byte(builder_id, 48u32 + v)
+        if builder_push_byte(builder_id, 48u32 + v) != 0i32 { return INET_E_BUILD }
     }
     return INET_OK
 }
@@ -119,12 +120,12 @@ fn inet_format_ipv4(builder_id: u64, ip: u32) -> i32 @export {
     let o1 : u32 = (ip >> 16u32) & 0xFFu32
     let o2 : u32 = (ip >>  8u32) & 0xFFu32
     let o3 : u32 = ip & 0xFFu32
-    inet_emit_octet(builder_id, o0)
-    builder_push_byte(builder_id, 46u32)
-    inet_emit_octet(builder_id, o1)
-    builder_push_byte(builder_id, 46u32)
-    inet_emit_octet(builder_id, o2)
-    builder_push_byte(builder_id, 46u32)
-    inet_emit_octet(builder_id, o3)
+    if inet_emit_octet(builder_id, o0) != 0i32 { return INET_E_BUILD }
+    if builder_push_byte(builder_id, 46u32) != 0i32 { return INET_E_BUILD }
+    if inet_emit_octet(builder_id, o1) != 0i32 { return INET_E_BUILD }
+    if builder_push_byte(builder_id, 46u32) != 0i32 { return INET_E_BUILD }
+    if inet_emit_octet(builder_id, o2) != 0i32 { return INET_E_BUILD }
+    if builder_push_byte(builder_id, 46u32) != 0i32 { return INET_E_BUILD }
+    if inet_emit_octet(builder_id, o3) != 0i32 { return INET_E_BUILD }
     return INET_OK
 }

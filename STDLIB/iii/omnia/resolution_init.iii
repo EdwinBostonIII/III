@@ -49,9 +49,12 @@ extern @abi(c-msvc-x64) fn closure_compute_with_resolver() -> i32 from "closure.
 extern @abi(c-msvc-x64) fn closure_is_set() -> u8 from "closure.iii"
 
 const RES_INIT_OK : i32 = 0i32
+const RES_INIT_E_REGISTER : i32 = -1i32   /* W4.3 (II-RESINIT-1): a registration step failed */
 
 var INIT_MODULE_MHASH : [u8; 32]
 var INIT_TEMPLATE_BUF : [u8; 168]
+/* W4.3: set by _meta_register when a pattern_register fails; meta_register_all reports it. */
+var META_REG_FAIL : u8 = 0u8
 var INIT_NAME_BUF : [u8; 32]
 
 const RI_HEXAD_FORM      : u8 = 1u8
@@ -97,7 +100,10 @@ fn _meta_register(slot: u32, hexad: u8, name_b0: u8, name_b1: u8, name_b2: u8, n
     pattern_template_set_dispatch((&INIT_TEMPLATE_BUF) as u64, fp)
     /* Side-channel: store intent_kind in binding_kinds[0] so dispatch can route */
     pattern_template_set_binding_kind((&INIT_TEMPLATE_BUF) as u64, 0u8, slot as u8)
-    pattern_register(slot, (&INIT_TEMPLATE_BUF) as u64)
+    /* W4.3 (II-RESINIT-1): a failed registration is recorded -- it is no longer silently
+     * dropped on the floor as it was before this fix. */
+    let rok : u8 = pattern_register(slot, (&INIT_TEMPLATE_BUF) as u64)
+    if rok != 1u8 { META_REG_FAIL = 1u8  return -1i32 }
     return 0i32
 }
 
@@ -108,6 +114,7 @@ fn meta_register_all() -> i32 @export {
      * The default_or_fail catch-all from FROZEN SPEC III-RES-FROZEN-001 is
      * removed: with 19 irreducible primitives, every intent has a canonical
      * primitive root; resolution failures are explicit (NOMATCH). */
+    META_REG_FAIL = 0u8
     /* p001 PRIMITIVE_FORM    -- HEXAD_FORM */
     _meta_register(0u32,  RI_HEXAD_FORM,      112u8, 48u8, 48u8, 49u8)
     /* p002 PRIMITIVE_BIND    -- HEXAD_SUBSTANCE */
@@ -149,6 +156,8 @@ fn meta_register_all() -> i32 @export {
      * doesn't collide with transform_register_all which writes slots
      * 18..41.  PATTERN_REGISTRY_USED_MAX bumped to 100 to admit. */
     _meta_register(69u32, RI_HEXAD_COMPOSE,   112u8, 48u8, 49u8, 57u8)
+    /* W4.3: if ANY of the nineteen registrations failed, report it. */
+    if META_REG_FAIL == 1u8 { return RES_INIT_E_REGISTER }
     return RES_INIT_OK
 }
 
@@ -160,12 +169,16 @@ fn resolution_init() -> i32 @export {
      * activation_base / hexad / K from the calculus metadata at boot. */
     calculus_init()
     proof_init()
+    /* W4.3 (II-RESINIT-1): each registration step's return is now CHECKED.  Pre-fix,
+     * resolution_init ran all three and sealed the registry even if a registration had
+     * failed, then returned RES_INIT_OK -- a green boot over a half-built pattern table.
+     * Now any failed step aborts BEFORE sealing and returns RES_INIT_E_REGISTER. */
     /* Step 1: 19 primitive meta-patterns (slots 0..18) */
-    meta_register_all()
+    if meta_register_all() != RES_INIT_OK { return RES_INIT_E_REGISTER }
     /* Step 2: 24 transform patterns (slots 18..41) */
-    transform_register_all()
+    if transform_register_all() != RES_INIT_OK { return RES_INIT_E_REGISTER }
     /* Step 3: 27 codegen patterns (slots 42..68) */
-    codegen_register_all()
+    if codegen_register_all() != RES_INIT_OK { return RES_INIT_E_REGISTER }
     /* Step 4: seal the global registry */
     pattern_registry_seal_global()
     /* Step 5: compute resolver seal */

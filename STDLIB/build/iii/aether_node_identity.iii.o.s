@@ -1848,16 +1848,6 @@ L_ni_make_node_seed:
     movq %rax, -40(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movq -48(%rbp), %rax
-    pushq %rax
     movq L_NODEID_MAX_INPUT(%rip), %rax
     pushq %rax
     popq %rcx
@@ -1879,6 +1869,62 @@ L_ni_make_node_seed:
     pushq %rax
     popq %rax
 L_if_end_13:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq L_NODEID_MAX_INPUT(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movslq L_NODEID_E_BAD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movq -40(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -48(%rbp), %rax
+    pushq %rax
+    movq L_NODEID_MAX_INPUT(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movslq L_NODEID_E_BAD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1895,7 +1941,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_14:
+L_loop_top_18:
     movq -72(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1908,7 +1954,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_19
     leaq L_NODEID_CONCAT(%rip), %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -1938,13 +1984,13 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_18
+L_loop_end_19:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_16:
+L_loop_top_20:
     movq -80(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -1957,7 +2003,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_21
     leaq L_NODEID_CONCAT(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -1993,8 +2039,8 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_20
+L_loop_end_21:
     leaq L_NODEID_NODE_SEED(%rip), %rax
     pushq %rax
     popq %rax
@@ -2142,7 +2188,7 @@ L_ni_witness_birth:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_23
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2152,7 +2198,7 @@ L_ni_witness_birth:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_23:
     movslq L_NODEID_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -2200,7 +2246,7 @@ L_ni_derive:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_25
     movq L_NODEID_RIGHT_ATTEST(%rip), %rax
     pushq %rax
     movq L_NODEID_RIGHT_SIGN(%rip), %rax
@@ -2232,7 +2278,7 @@ L_ni_derive:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_27
     movslq L_NODEID_E_DENIED(%rip), %rax
     pushq %rax
     popq %rax
@@ -2242,11 +2288,11 @@ L_ni_derive:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_25:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2269,7 +2315,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_29
     movslq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2279,7 +2325,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_29:
     movq L_NODEID_INFO_ID_LEN(%rip), %rax
     pushq %rax
     leaq L_NODEID_INFO_ID(%rip), %rax
@@ -2314,7 +2360,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_31
     movslq L_NODEID_E_DERIVE(%rip), %rax
     pushq %rax
     popq %rax
@@ -2324,7 +2370,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_31:
     movq L_NODEID_INFO_COMM_LEN(%rip), %rax
     pushq %rax
     leaq L_NODEID_INFO_COMM(%rip), %rax
@@ -2359,7 +2405,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_33
     movslq L_NODEID_E_DERIVE(%rip), %rax
     pushq %rax
     popq %rax
@@ -2369,7 +2415,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_33:
     movq L_NODEID_INFO_WIT_LEN(%rip), %rax
     pushq %rax
     leaq L_NODEID_INFO_WIT(%rip), %rax
@@ -2404,7 +2450,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_35
     movslq L_NODEID_E_DERIVE(%rip), %rax
     pushq %rax
     popq %rax
@@ -2414,7 +2460,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_35:
     leaq L_NODEID_ID_KEYS(%rip), %rax
     pushq %rax
     popq %rax
@@ -2464,7 +2510,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_37
     subq $32, %rsp
     callq L_ni_witness_birth
     addq $32, %rsp
@@ -2474,7 +2520,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_37:
     movslq L_NODEID_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -2516,7 +2562,7 @@ ni_init:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_39
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2526,7 +2572,7 @@ ni_init:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_39:
     movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -2581,7 +2627,7 @@ ni_init_witnessed:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_41
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2591,7 +2637,7 @@ ni_init_witnessed:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_41:
     movabsq $0x1, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -2644,7 +2690,7 @@ L_ni_copy_pub:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_43
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2654,7 +2700,7 @@ L_ni_copy_pub:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_43:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2669,7 +2715,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_45
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2679,7 +2725,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_45:
     movq -8(%rbp), %rax
     pushq %rax
     movq L_NODEID_KEY_BYTES(%rip), %rax
@@ -2696,7 +2742,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_42:
+L_loop_top_46:
     movq -32(%rbp), %rax
     pushq %rax
     movq L_NODEID_KEY_BYTES(%rip), %rax
@@ -2709,7 +2755,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_47
     movq -16(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -2739,8 +2785,8 @@ L_loop_top_42:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_46
+L_loop_end_47:
     movslq L_NODEID_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -2897,7 +2943,7 @@ L_ni_sign_role:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_49
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2907,7 +2953,7 @@ L_ni_sign_role:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_49:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2922,7 +2968,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_51
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -2932,7 +2978,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_51:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2966,7 +3012,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_53
     movslq L_NODEID_E_SIGN(%rip), %rax
     pushq %rax
     popq %rax
@@ -2976,7 +3022,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_53:
     movslq L_NODEID_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -3154,7 +3200,7 @@ ni_node_id:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_55
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -3164,7 +3210,7 @@ ni_node_id:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_55:
     movq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -3179,7 +3225,7 @@ L_if_end_51:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_57
     movslq L_NODEID_E_BAD(%rip), %rax
     pushq %rax
     popq %rax
@@ -3189,7 +3235,7 @@ L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_57:
     movq -8(%rbp), %rax
     pushq %rax
     leaq L_NODEID_NODE_ID(%rip), %rax
@@ -3334,7 +3380,7 @@ L_ni_st_build_args:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_54:
+L_loop_top_58:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -3347,7 +3393,7 @@ L_loop_top_54:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_55
+    jz L_loop_end_59
     leaq L_NODEID_ST_ARGS(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -3392,8 +3438,8 @@ L_loop_top_54:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_54
-L_loop_end_55:
+    jmp L_loop_top_58
+L_loop_end_59:
     leaq L_NODEID_ST_ARGS(%rip), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -3478,7 +3524,7 @@ L_loop_end_55:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_56:
+L_loop_top_60:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -3491,7 +3537,7 @@ L_loop_top_56:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_57
+    jz L_loop_end_61
     leaq L_NODEID_ST_ARGS(%rip), %rax
     pushq %rax
     movabsq $0x10, %rax
@@ -3542,8 +3588,8 @@ L_loop_top_56:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_56
-L_loop_end_57:
+    jmp L_loop_top_60
+L_loop_end_61:
     leaq L_NODEID_ST_ARGS(%rip), %rax
     pushq %rax
     movabsq $0x18, %rax
@@ -3660,128 +3706,6 @@ L_ni_st_differs:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_58:
-    movq -32(%rbp), %rax
-    pushq %rax
-    movq L_NODEID_KEY_BYTES(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_59
-    movl -24(%rbp), %eax
-    pushq %rax
-    movq -8(%rbp), %rax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    movq -16(%rbp), %rax
-    pushq %rax
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    popq %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    xorq %rcx, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    orq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq -32(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_58
-L_loop_end_59:
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_61
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_61:
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
-    .asciz "ni_st_eq32"
-    .text
-    .global L_ni_st_eq32
-    .seh_proc L_ni_st_eq32
-L_ni_st_eq32:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movq %rcx, -8(%rbp)
-    movq %rdx, -16(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -32(%rbp)
 L_loop_top_62:
     movq -32(%rbp), %rax
     pushq %rax
@@ -3858,7 +3782,7 @@ L_loop_end_63:
     popq %rax
     testq %rax, %rax
     jz L_if_end_65
-    movabsq $0x1, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -3868,7 +3792,7 @@ L_loop_end_63:
     pushq %rax
     popq %rax
 L_if_end_65:
-    movabsq $0x0, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -3882,11 +3806,11 @@ L_if_end_65:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "ni_st_eq64"
+    .asciz "ni_st_eq32"
     .text
-    .global L_ni_st_eq64
-    .seh_proc L_ni_st_eq64
-L_ni_st_eq64:
+    .global L_ni_st_eq32
+    .seh_proc L_ni_st_eq32
+L_ni_st_eq32:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -3907,7 +3831,7 @@ L_ni_st_eq64:
 L_loop_top_66:
     movq -32(%rbp), %rax
     pushq %rax
-    movq L_NODEID_SIG_BYTES(%rip), %rax
+    movq L_NODEID_KEY_BYTES(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4004,6 +3928,128 @@ L_if_end_69:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "ni_st_eq64"
+    .text
+    .global L_ni_st_eq64
+    .seh_proc L_ni_st_eq64
+L_ni_st_eq64:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+L_loop_top_70:
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq L_NODEID_SIG_BYTES(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_71
+    movl -24(%rbp), %eax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_70
+L_loop_end_71:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "ni_selftest"
     .text
     .global ni_selftest
@@ -4037,7 +4083,7 @@ ni_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_71
+    jz L_if_end_75
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -4047,7 +4093,7 @@ ni_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_71:
+L_if_end_75:
     leaq L_NODEID_ST_PUB(%rip), %rax
     pushq %rax
     popq %rax
@@ -4070,7 +4116,7 @@ L_if_end_71:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_77
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -4080,7 +4126,7 @@ L_if_end_71:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_77:
     subq $32, %rsp
     callq L_ni_st_build_args
     addq $32, %rsp
@@ -4109,7 +4155,7 @@ L_if_end_73:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_79
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -4119,7 +4165,7 @@ L_if_end_73:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_79:
     subq $32, %rsp
     callq ni_is_inited
     addq $32, %rsp
@@ -4135,7 +4181,7 @@ L_if_end_75:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_81
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -4145,7 +4191,7 @@ L_if_end_75:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_81:
     leaq L_NODEID_ST_CONCAT(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4254,7 +4300,7 @@ L_if_end_77:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_79
+    jz L_if_end_83
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -4264,7 +4310,7 @@ L_if_end_77:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_79:
+L_if_end_83:
     leaq L_NODEID_ST_PUB(%rip), %rax
     pushq %rax
     popq %rax
@@ -4287,7 +4333,7 @@ L_if_end_79:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_85
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -4297,7 +4343,7 @@ L_if_end_79:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_85:
     leaq L_NODEID_ST_IDOUT(%rip), %rax
     pushq %rax
     popq %rax
@@ -4320,7 +4366,7 @@ L_if_end_81:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_83
+    jz L_if_end_87
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -4330,7 +4376,7 @@ L_if_end_81:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_83:
+L_if_end_87:
     leaq L_NODEID_ST_IDREF(%rip), %rax
     pushq %rax
     popq %rax
@@ -4379,7 +4425,7 @@ L_if_end_83:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_85
+    jz L_if_end_89
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -4389,7 +4435,7 @@ L_if_end_83:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_85:
+L_if_end_89:
     leaq L_NODEID_ST_MSG(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4452,7 +4498,7 @@ L_if_end_85:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_87
+    jz L_if_end_91
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -4462,7 +4508,7 @@ L_if_end_85:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_87:
+L_if_end_91:
     leaq L_NODEID_ST_SIG(%rip), %rax
     pushq %rax
     popq %rax
@@ -4502,74 +4548,8 @@ L_if_end_87:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_89
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_89:
-    leaq L_NODEID_ST_PUB2(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq ni_communication_pub
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movslq L_NODEID_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_91
-    movabsq $0xa, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_91:
-    leaq L_NODEID_ST_PUB3(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq ni_witness_pub
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movslq L_NODEID_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_93
-    movabsq $0xa, %rax
+    movabsq $0x9, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4585,20 +4565,13 @@ L_if_end_93:
     pushq %rax
     popq %rax
     pushq %rax
-    leaq L_NODEID_ST_PUB(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq L_ni_st_differs
+    callq ni_communication_pub
     addq $32, %rsp
-    movzbq %al, %rax
+    movslq %eax, %rax
     pushq %rax
-    movabsq $0x1, %rax
+    movslq L_NODEID_OK(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4625,20 +4598,13 @@ L_if_end_95:
     pushq %rax
     popq %rax
     pushq %rax
-    leaq L_NODEID_ST_PUB2(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq L_ni_st_differs
+    callq ni_witness_pub
     addq $32, %rsp
-    movzbq %al, %rax
+    movslq %eax, %rax
     pushq %rax
-    movabsq $0x1, %rax
+    movslq L_NODEID_OK(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4649,7 +4615,7 @@ L_if_end_95:
     popq %rax
     testq %rax, %rax
     jz L_if_end_97
-    movabsq $0xb, %rax
+    movabsq $0xa, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4659,7 +4625,7 @@ L_if_end_95:
     pushq %rax
     popq %rax
 L_if_end_97:
-    leaq L_NODEID_ST_PUB3(%rip), %rax
+    leaq L_NODEID_ST_PUB2(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -4689,7 +4655,7 @@ L_if_end_97:
     popq %rax
     testq %rax, %rax
     jz L_if_end_99
-    movabsq $0xc, %rax
+    movabsq $0xa, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4699,6 +4665,86 @@ L_if_end_97:
     pushq %rax
     popq %rax
 L_if_end_99:
+    leaq L_NODEID_ST_PUB3(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_NODEID_ST_PUB2(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_ni_st_differs
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_101
+    movabsq $0xb, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_101:
+    leaq L_NODEID_ST_PUB3(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    leaq L_NODEID_ST_PUB(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_ni_st_differs
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_103
+    movabsq $0xc, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_103:
     leaq L_NODEID_ST_SIG2(%rip), %rax
     pushq %rax
     popq %rax
@@ -4731,7 +4777,7 @@ L_if_end_99:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_101
+    jz L_if_end_105
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -4741,7 +4787,7 @@ L_if_end_99:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_101:
+L_if_end_105:
     leaq L_NODEID_ST_SIG2(%rip), %rax
     pushq %rax
     popq %rax
@@ -4771,7 +4817,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_107
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -4781,7 +4827,7 @@ L_if_end_101:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_107:
     leaq L_NODEID_ST_SIG2(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4843,7 +4889,7 @@ L_if_end_103:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_105
+    jz L_if_end_109
     movabsq $0xe, %rax
     pushq %rax
     popq %rax
@@ -4853,7 +4899,7 @@ L_if_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_105:
+L_if_end_109:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

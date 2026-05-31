@@ -26,10 +26,24 @@ extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) ->
 extern @abi(c-msvc-x64) fn shake256_oneshot(input_ptr: u64, input_len: u64, out_ptr: u64, out_len: u64) -> u32 from "shake256.iii"
 extern @abi(c-msvc-x64) fn sha3_512_oneshot(input_ptr: u64, input_len: u64, out_64: u64) -> u32 from "sha3_512.iii"
 extern @abi(c-msvc-x64) fn sha3_256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha3_256.iii"
+/* W0.7 / COMBINE-1: the Kyber NTT butterfly now lives in the shared organ
+ * (numera/ntt.iii).  Byte-identical: kem_ntt_work/kem_invntt_work delegate to the
+ * tabled cores (min_len=2 -> incomplete; start_k=127); the final ×3303 inverse
+ * scale stays here (Kyber-specific). */
+extern @abi(c-msvc-x64) fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 from "ntt.iii"
+/* APOTHEOSIS C.1: the per-q descriptor over the same organ (consumes ntt_ctx). */
+extern @abi(c-msvc-x64) fn ntt_ctx_forward(row: u64, base: u64, zeta_addr: u64) -> i32 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_inverse(row: u64, base: u64, zeta_addr: u64) -> i32 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_mlkem() -> u64 from "ntt_ctx.iii"
+/* W0.5: Montgomery-form zetas for the NTT (the organ's cores REDC-reduce); the
+ * plain KZ stays for basemul (unchanged).  KZ_MONT[i] = KZ[i]*R mod q. */
+extern @abi(c-msvc-x64) fn mont_to_form(a: u64, n: u64) -> u64 from "modular_mont.iii"
 
 const KQ : u64 = 3329u64
 
-var KZ    : [u64; 128]    /* plain zetas */
+var KZ    : [u64; 128]    /* plain zetas (basemul) */
+var KZ_MONT : [u64; 128]  /* Montgomery-form zetas (NTT organ cores, W0.5) */
 var KZINIT : [u64; 1]
 var KPOOL : [u32; 16384]  /* 64 slots * 256 */
 var KWORK : [u32; 256]
@@ -58,6 +72,9 @@ fn kem_init_zetas() -> i32 {
     KZ[104]=1063u64 KZ[105]=319u64 KZ[106]=2773u64 KZ[107]=757u64 KZ[108]=2099u64 KZ[109]=561u64 KZ[110]=2466u64 KZ[111]=2594u64
     KZ[112]=2804u64 KZ[113]=1092u64 KZ[114]=403u64 KZ[115]=1026u64 KZ[116]=1143u64 KZ[117]=2150u64 KZ[118]=2775u64 KZ[119]=886u64
     KZ[120]=1722u64 KZ[121]=1212u64 KZ[122]=1874u64 KZ[123]=1029u64 KZ[124]=2110u64 KZ[125]=2935u64 KZ[126]=885u64 KZ[127]=2154u64
+    /* W0.5: derive the Montgomery-form zetas (KZ*R mod q) for the organ NTT cores. */
+    let mut zm : u64 = 0u64
+    while zm < 128u64 { KZ_MONT[zm] = mont_to_form(KZ[zm], KQ)  zm = zm + 1u64 }
     KZINIT[0] = 1u32
     return 0i32
 }
@@ -75,48 +92,14 @@ fn kem_work_out(s: u64) -> i32 {
     return 0i32
 }
 
-/* incomplete 7-layer NTT on KWORK (proven §4.4.2) */
+/* incomplete 7-layer Kyber NTT on KWORK -- delegates to the shared organ
+ * (W0.7/COMBINE-1), byte-identical to the prior inline transform. */
 fn kem_ntt_work() -> i32 {
-    let mut k : u64 = 1u64
-    let mut len : u64 = 128u64
-    while len >= 2u64 {
-        let mut start : u64 = 0u64
-        while start < 256u64 {
-            let z : u64 = KZ[k]
-            k = k + 1u64
-            let mut j : u64 = start
-            while j < start + len {
-                let t : u64 = (z * KWORK[j + len]) % KQ
-                let a : u64 = KWORK[j]
-                KWORK[j + len] = (a + KQ - t) % KQ
-                KWORK[j]       = (a + t) % KQ
-                j = j + 1u64
-            }
-            start = j + len
-        }
-        len = len >> 1u64
-    }
-    return 0i32
+    return ntt_ctx_forward(ntt_ctx_mlkem(), (&KWORK as u64), (&KZ_MONT as u64))
 }
 fn kem_invntt_work() -> i32 {
-    let mut k : u64 = 127u64
-    let mut len : u64 = 2u64
-    while len <= 128u64 {
-        let mut start : u64 = 0u64
-        while start < 256u64 {
-            let z : u64 = KZ[k]
-            k = k - 1u64
-            let mut j : u64 = start
-            while j < start + len {
-                let t : u64 = KWORK[j]
-                KWORK[j] = (t + KWORK[j + len]) % KQ
-                KWORK[j + len] = (z * ((KWORK[j + len] + KQ - t) % KQ)) % KQ
-                j = j + 1u64
-            }
-            start = j + len
-        }
-        len = len << 1u64
-    }
+    ntt_ctx_inverse(ntt_ctx_mlkem(), (&KWORK as u64), (&KZ_MONT as u64))
+    /* Kyber-specific final inverse scale (×3303 = the incomplete-NTT normalizer). */
     let mut j2 : u64 = 0u64
     while j2 < 256u64 { KWORK[j2] = (KWORK[j2] * 3303u64) % KQ ; j2 = j2 + 1u64 }
     return 0i32

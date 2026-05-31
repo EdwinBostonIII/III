@@ -4,10 +4,12 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "mhash.iiimhash.iiimhash.iii\0"
+    .ascii "mhash.iiimhash.iiimhash.iiimhash.iii\0"
 L_str_1:
-    .ascii "mhash.iiimhash.iii\0"
+    .ascii "mhash.iiimhash.iiimhash.iii\0"
 L_str_2:
+    .ascii "mhash.iiimhash.iii\0"
+L_str_3:
     .ascii "mhash.iii\0"
     .section .rodata
 L_OI_NONE:
@@ -16,6 +18,14 @@ L_OI_IMPL:
     .quad 0x0
 L_OI_SUITE:
     .quad 0x1
+    .section .bss
+    .global L_OI_DOM
+L_OI_DOM:
+    .zero 112
+    .section .data
+    .global L_OI_DOM_INIT
+L_OI_DOM_INIT:
+    .quad 0x0
     .section .iii.ring3,"n"
     .asciz "oi_ld_u64"
     .text
@@ -1313,6 +1323,199 @@ L_if_end_43:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "oi_dom_init"
+    .text
+    .global L_oi_dom_init
+    .seh_proc L_oi_dom_init
+L_oi_dom_init:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movzbq L_OI_DOM_INIT(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_45
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_45:
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x6f, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x70, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movabsq $0x74, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movabsq $0x69, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    movabsq $0x6e, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x76, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x6, %rax
+    pushq %rax
+    movabsq $0x6f, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    movabsq $0x6b, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    movabsq $0x65, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0x9, %rax
+    pushq %rax
+    movabsq $0x2e, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0xa, %rax
+    pushq %rax
+    movabsq $0x73, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0xb, %rax
+    pushq %rax
+    movabsq $0x65, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0xc, %rax
+    pushq %rax
+    movabsq $0x61, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    movabsq $0xd, %rax
+    pushq %rax
+    movabsq $0x6c, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_OI_DOM_INIT(%rip)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "oi_seal"
     .text
     .global oi_seal
@@ -1328,12 +1531,57 @@ oi_seal:
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
-    subq $8, %rsp
+    subq $32, %rsp
+    callq L_oi_dom_init
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    subq $32, %rsp
+    callq mhash_begin
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movabsq $0xe, %rax
+    pushq %rax
+    leaq L_OI_DOM(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq mhash_domain
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movabsq $0x0, %rax
     pushq %rax
-    movq -24(%rbp), %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+L_loop_top_46:
+    movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_47
+    movabsq $0x49, %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x50, %rax
     pushq %rax
@@ -1341,19 +1589,42 @@ oi_seal:
     popq %rax
     imulq %rcx, %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    movq -8(%rbp), %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
     pushq %rax
     popq %rcx
     popq %rdx
-    popq %r8
-    popq %r9
     subq $32, %rsp
-    callq L_oi_hash
+    callq mhash_payload
     addq $32, %rsp
-    addq $8, %rsp
-    addq $8, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_46
+L_loop_end_47:
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq mhash_final
+    addq $32, %rsp
+    movslq %eax, %rax
     pushq %rax
     popq %rax
     movabsq $0x0, %rax

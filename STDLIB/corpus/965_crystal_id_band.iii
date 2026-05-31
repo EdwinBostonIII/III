@@ -1,0 +1,36 @@
+/* 965 — W3.3 / RIPPLE-3 falsifier: crystal ids live in a HIGH band disjoint from the
+ * low success-id band under crystal_slot_of (FC-COLLIDE-1), and provenance crystals
+ * carry a ROOT cause (0), never an operand value (D-SP-1 scalar_provenance / D-CC-1
+ * checked_crystal). A success/bigint id (1..64) must NOT resolve as a crystal; a minted
+ * crystal id (>= CRYSTAL_ID_BASE) must. 99 = pass. */
+module corpus_965
+extern @abi(c-msvc-x64) fn crystal_slot_of_pub(id: u64) -> u32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_cause(id: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn sp_u32_add(a: u32, b: u32) -> u64 from "scalar_provenance.iii"
+extern @abi(c-msvc-x64) fn checked_u32_add_with_crystal(a: u32, b: u32) -> u64 from "checked_crystal.iii"
+extern @abi(c-msvc-x64) fn checked_crystal_last_error() -> u64 from "checked_crystal.iii"
+
+fn main() -> u64 {
+    /* D-SP-1: a standalone overflow crystal is a ROOT -> cause 0 (NOT the operand b=1). */
+    let cid : u64 = sp_u32_add(0xFFFFFFFFu32, 1u32)              /* overflows -> mints a crystal */
+    if cid < 0x10000u64 { return 1u64 }                          /* crystal id is in the high band */
+    if crystal_slot_of_pub(cid) == 0xFFFFFFFFu32 { return 2u64 } /* it resolves as a crystal */
+    if crystal_cause(cid) != 0u64 { return 3u64 }               /* D-SP-1: cause is ROOT 0, not 1 */
+
+    /* D-CC-1: a checked-overflow crystal is likewise a ROOT -> cause 0 (not the operand 7). */
+    let bad : u64 = checked_u32_add_with_crystal(0xFFFFFFFFu32, 7u32)
+    if bad != 0u64 { return 4u64 }
+    let ccid : u64 = checked_crystal_last_error()
+    if ccid < 0x10000u64 { return 5u64 }
+    if crystal_cause(ccid) != 0u64 { return 6u64 }              /* D-CC-1: cause is 0, not 7 */
+
+    /* FC-COLLIDE-1: low-band success/bigint ids (1..64) are NEVER mistaken for a crystal --
+     * crystal_slot_of rejects everything below CRYSTAL_ID_BASE; only the high band resolves
+     * to a slot.  So a field_crystal SUCCESS id and a FAILURE crystal id are disjoint. */
+    if crystal_slot_of_pub(1u64)  != 0xFFFFFFFFu32 { return 7u64 }
+    if crystal_slot_of_pub(64u64) != 0xFFFFFFFFu32 { return 8u64 }
+    if crystal_slot_of_pub(0u64)  != 0xFFFFFFFFu32 { return 9u64 }
+    if crystal_slot_of_pub(cid)   == 0xFFFFFFFFu32 { return 10u64 }
+
+    return 99u64
+}

@@ -7,6 +7,9 @@ extern @abi(c-msvc-x64) fn xii_circ_feasible(circ: u32) -> u8 from "xii_circ.iii
 extern @abi(c-msvc-x64) fn xii_circ_p01_target_hw_match(circ: u32) -> u8 from "xii_circ.iii"
 extern @abi(c-msvc-x64) fn xii_circ_p07_avx512_baseline(circ: u32) -> u8 from "xii_circ.iii"
 extern @abi(c-msvc-x64) fn xii_circ_p10_embedded_no_simd(circ: u32) -> u8 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_p06_fusion_budget_k_max(circ: u32) -> u8 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_fusion_budget_magnitude(code: u32) -> u32 from "xii_circ.iii"
+extern @abi(c-msvc-x64) fn xii_circ_p03_k_budget_target_compat(circ: u32) -> u8 from "xii_circ.iii"
 
 fn main() -> u64 {
     /* Feasible: x86_avx512 (0) with AVX512 mask (1), k_bucket 4, cap 0, hexad 5, fusion 3. */
@@ -26,6 +29,31 @@ fn main() -> u64 {
     /* Feasible: embedded_safe (6) without SIMD. */
     let c4 : u32 = xii_circ_encode(6u32, 0u32, 2u32, 5u32, 1u32, 1u32)
     if xii_circ_feasible(c4) != 1u8 { return 6u64 }
+
+    /* ===== B-CIRC-1: P06 fusion_budget_k_max -- PROVE the gate can REJECT (was provably vacuous) ===== */
+    /* fusion code 7 = magnitude 16; k_bucket 0 = k_max 1; 16 > 1 -> INFEASIBLE (the old gate admitted it). */
+    let c5 : u32 = xii_circ_encode(0u32, 1u32, 0u32, 0u32, 5u32, 7u32)
+    if xii_circ_p06_fusion_budget_k_max(c5) != 0u8 { return 7u64 }
+    /* valid: c1 fusion code 3 = magnitude 3; k_bucket 4 = k_max 31; 3 <= 31 -> admit. */
+    if xii_circ_p06_fusion_budget_k_max(c1) != 1u8 { return 8u64 }
+    /* the magnitude decode is the documented LUT, not identity: code 7 -> 16, code 5 -> 6. */
+    if xii_circ_fusion_budget_magnitude(7u32) != 16u32 { return 9u64 }
+    if xii_circ_fusion_budget_magnitude(5u32) != 6u32 { return 10u64 }
+    /* boundary: code 6 = magnitude 8 in k_bucket 2 (k_max 7) -> 8 > 7 -> INFEASIBLE. */
+    let c6 : u32 = xii_circ_encode(0u32, 1u32, 2u32, 0u32, 5u32, 6u32)
+    if xii_circ_p06_fusion_budget_k_max(c6) != 0u8 { return 11u64 }
+
+    /* ===== B-CIRC-2: P01 scalar_ct must REJECT a SIMD bit (the rule was enforced nowhere) ===== */
+    let c7 : u32 = xii_circ_encode(2u32, 1u32, 4u32, 0u32, 5u32, 3u32)   /* scalar_ct + AVX-512 bit */
+    if xii_circ_p01_target_hw_match(c7) != 0u8 { return 12u64 }
+    let c8 : u32 = xii_circ_encode(2u32, 0u32, 4u32, 0u32, 5u32, 3u32)   /* scalar_ct, no SIMD */
+    if xii_circ_p01_target_hw_match(c8) != 1u8 { return 13u64 }
+
+    /* ===== B-CIRC-3: P03 avx512 bucket 7 (k 128..255) is "invalid for safety" -> REJECT ===== */
+    let c9 : u32 = xii_circ_encode(0u32, 1u32, 7u32, 0u32, 5u32, 0u32)   /* avx512, bucket 7 */
+    if xii_circ_p03_k_budget_target_compat(c9) != 0u8 { return 14u64 }
+    let c10 : u32 = xii_circ_encode(0u32, 1u32, 6u32, 0u32, 5u32, 0u32)  /* avx512, bucket 6 (valid) */
+    if xii_circ_p03_k_budget_target_compat(c10) != 1u8 { return 15u64 }
 
     return 0u64
 }

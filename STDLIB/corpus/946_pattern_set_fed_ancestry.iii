@@ -1,0 +1,34 @@
+/* 946 -- W4.2 / ENHANCE-17 falsifier: aether/pattern_set_federation's FETCH no longer omits
+ * its own ancestry check (it now calls fed_seal_lookup_anchor before admitting a peer set).
+ * This drives the SAME ancestry gate the fetch enforces, via pattern_set_fed_verify_ancestry:
+ * an unvouched (tier, mhash) set -- one with no FOUNDERS-ANCHOR-descended fed_seal anchor --
+ * is REJECTED (returns 0), as are bogus handles.  99 = pass. */
+module corpus_946
+
+extern @abi(c-msvc-x64) fn pattern_set_fed_reset() -> i32 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_publish(local_set_id: u64, tier: u32, mhash_ptr: u64) -> u64 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_count() -> u32 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_verify_ancestry(handle: u64) -> u8 from "pattern_set_federation.iii"
+
+var PSF_M : [u8; 32]
+
+fn main() -> u64 {
+    pattern_set_fed_reset()
+    if pattern_set_fed_count() != 0u32 { return 1u64 }
+
+    /* Publish a set with an unvouched (tier, mhash): no fed_seal anchor exists for it. */
+    let mut i : u32 = 0u32
+    while i < 32u32 { PSF_M[i] = (i + 1u32) as u8  i = i + 1u32 }
+    let h : u64 = pattern_set_fed_publish(0u64, 0xCAFEu32, (&PSF_M) as u64)
+    if h == 0u64 { return 2u64 }
+    if pattern_set_fed_count() != 1u32 { return 3u64 }
+
+    /* FALSIFIER: the ancestry gate REJECTS the unvouched set (no anchor) -- the same gate
+     * pattern_set_fed_fetch now enforces before allocating a slot for a peer set. */
+    if pattern_set_fed_verify_ancestry(h) != 0u8 { return 4u64 }
+
+    /* Bogus handles are rejected too. */
+    if pattern_set_fed_verify_ancestry(0u64)    != 0u8 { return 5u64 }
+    if pattern_set_fed_verify_ancestry(9999u64) != 0u8 { return 6u64 }
+    return 99u64
+}

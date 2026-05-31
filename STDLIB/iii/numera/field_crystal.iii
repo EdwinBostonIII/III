@@ -27,6 +27,8 @@ module numera_field_crystal
 
 extern @abi(c-msvc-x64) fn fp_inv_fermat(arena: u64, a: u64, p: u64) -> u64 from "field.iii"
 extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
 
 extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64,
                                          cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
@@ -90,9 +92,17 @@ fn fp_inv_with_crystal(arena: u64, a: u64, p: u64) -> u64 @export {
     mhash_payload(&FC_A_BUF as u64, 8u64)
     mhash_payload(&FC_P_BUF as u64, 8u64)
     mhash_final(&FC_SITE as u64)
-    /* error_code distinguishes failure mode based on whether a is zero. */
+    /* Classify by the RESIDUE a mod p, not raw a -- mirroring fp_inv_fermat's own
+     * failure ordering (INVALID when (a mod p)==0 first, else p<2).  Testing the
+     * residue makes a = p, 2p, ... (a != 0 yet a ≡ 0 mod p) correctly FAIL_ZERO.
+     * bigint_mod yields a valid value-0 id for a zero residue; the INVALID sentinel
+     * 0 only for a degenerate modulus p=0 (-> FAIL_TINY_P).  [audit D-FC-2] */
     let mut code : u32 = FIELD_CRYSTAL_FAIL_TINY_P
-    if bigint_is_zero(a) == 1u8 { code = FIELD_CRYSTAL_FAIL_ZERO }
+    let am : u64 = bigint_mod(arena, a, p)
+    if am != 0u64 {
+        if bigint_is_zero(am) == 1u8 { code = FIELD_CRYSTAL_FAIL_ZERO }
+        bigint_drop(am)
+    }
     return crystal_mint(code, &FC_SITE as u64, 0u64, p)
 }
 

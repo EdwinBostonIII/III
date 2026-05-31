@@ -139,6 +139,7 @@ fn glyph_map_unpack_pairs(in_192: u64, dst_ptr: u64, dst_cap_bytes: u32) -> i32 
     if gv3_validate(i_l) != 1u8 { return -3i32 }
     let plen : u32 = gv3_payload_len(i_l)
     if plen < 12u32 { return -4i32 }
+    if plen > 152u32 { return -4i32 }   /* payload_len from untrusted header; pair region is payload[12..151]=140 bytes [audit gv-map] */
     let pair_bytes : u32 = plen - 12u32
     if pair_bytes > c_l { return -5i32 }
     let sp : *u8 = (i_l + 20u64) as *u8

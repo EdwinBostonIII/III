@@ -18,6 +18,7 @@ extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "build
 
 const B32_OK : i32 = 0i32
 const B32_E_BADCHAR : i32 = -1i32
+const B32_E_BUILD : i32 = -2i32   /* [COMBINE-7/RIPPLE-6/II-BASE32-1] a builder push failed (full/OOM/sealed) -- the transcode is incomplete, do NOT report success */
 
 fn b32_encode_5bit(v: u32) -> u32 {
     let m : u32 = v & 0x1Fu32
@@ -56,14 +57,14 @@ fn base32_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         let g5 : u64 = (v >> 10u64) & 0x1Fu64
         let g6 : u64 = (v >> 5u64)  & 0x1Fu64
         let g7 : u64 = v & 0x1Fu64
-        builder_push_byte(builder_id, b32_encode_5bit(g0 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g1 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g2 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g3 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g4 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g5 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g6 as u32))
-        builder_push_byte(builder_id, b32_encode_5bit(g7 as u32))
+        if builder_push_byte(builder_id, b32_encode_5bit(g0 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g1 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g2 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g3 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g4 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g5 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g6 as u32)) != 0i32 { return B32_E_BUILD }
+        if builder_push_byte(builder_id, b32_encode_5bit(g7 as u32)) != 0i32 { return B32_E_BUILD }
         i = i + 5u64
     }
     let rem : u64 = src_len - i
@@ -95,43 +96,52 @@ fn base32_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         if rem == 2u64 { data_chars = 4u32 }
         if rem == 3u64 { data_chars = 5u32 }
         if rem == 4u64 { data_chars = 7u32 }
-        if data_chars >= 1u32 { builder_push_byte(builder_id, b32_encode_5bit(g0 as u32)) }
-        if data_chars >= 2u32 { builder_push_byte(builder_id, b32_encode_5bit(g1 as u32)) }
-        if data_chars >= 3u32 { builder_push_byte(builder_id, b32_encode_5bit(g2 as u32)) }
-        if data_chars >= 4u32 { builder_push_byte(builder_id, b32_encode_5bit(g3 as u32)) }
-        if data_chars >= 5u32 { builder_push_byte(builder_id, b32_encode_5bit(g4 as u32)) }
-        if data_chars >= 6u32 { builder_push_byte(builder_id, b32_encode_5bit(g5 as u32)) }
-        if data_chars >= 7u32 { builder_push_byte(builder_id, b32_encode_5bit(g6 as u32)) }
+        if data_chars >= 1u32 { if builder_push_byte(builder_id, b32_encode_5bit(g0 as u32)) != 0i32 { return B32_E_BUILD } }
+        if data_chars >= 2u32 { if builder_push_byte(builder_id, b32_encode_5bit(g1 as u32)) != 0i32 { return B32_E_BUILD } }
+        if data_chars >= 3u32 { if builder_push_byte(builder_id, b32_encode_5bit(g2 as u32)) != 0i32 { return B32_E_BUILD } }
+        if data_chars >= 4u32 { if builder_push_byte(builder_id, b32_encode_5bit(g3 as u32)) != 0i32 { return B32_E_BUILD } }
+        if data_chars >= 5u32 { if builder_push_byte(builder_id, b32_encode_5bit(g4 as u32)) != 0i32 { return B32_E_BUILD } }
+        if data_chars >= 6u32 { if builder_push_byte(builder_id, b32_encode_5bit(g5 as u32)) != 0i32 { return B32_E_BUILD } }
+        if data_chars >= 7u32 { if builder_push_byte(builder_id, b32_encode_5bit(g6 as u32)) != 0i32 { return B32_E_BUILD } }
         let mut pad_count : u32 = 8u32 - data_chars
         while pad_count > 0u32 {
-            builder_push_byte(builder_id, 61u32)
+            if builder_push_byte(builder_id, 61u32) != 0i32 { return B32_E_BUILD }
             pad_count = pad_count - 1u32
         }
     }
     return B32_OK
 }
 
+/* RFC 4648 §6 legal final-quantum pad counts -> data bytes a padded block decodes to.
+ * Legal pad ∈ {0,1,3,4,6}; pad ∈ {2,5,7,8} is ILLEGAL (no bit-length produces them).
+ * Returns the byte count, or 0xFFFFFFFF for an illegal pad count. */
+fn _b32_bytes_for_pad(pad: u32) -> u32 {
+    if pad == 0u32 { return 5u32 }
+    if pad == 1u32 { return 4u32 }
+    if pad == 3u32 { return 3u32 }
+    if pad == 4u32 { return 2u32 }
+    if pad == 6u32 { return 1u32 }
+    return 0xFFFFFFFFu32
+}
+
 fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
     let p : *u8 = src_base as *u8
     let mut i : u64 = 0u64
     while i + 8u64 <= src_len {
-        let mut nvalid : u32 = 8u32
-        let mut bytes_out : u32 = 5u32
+        let mut nvalid  : u32 = 8u32
+        let mut saw_pad : u8  = 0u8
         let mut v : u64 = 0u64
         let mut k : u64 = 0u64
         while k < 8u64 {
             let c : u32 = p[i + k] as u32
             if c == 61u32 {
-                nvalid = k as u32
-                let m : u64 = 7u64 - k
-                k = 8u64
-                /* Determine bytes_out from number of pad chars (8-nvalid) */
-                let pad : u32 = 8u32 - nvalid
-                if pad == 1u32 { bytes_out = 4u32 }
-                if pad == 3u32 { bytes_out = 3u32 }
-                if pad == 4u32 { bytes_out = 2u32 }
-                if pad == 6u32 { bytes_out = 1u32 }
+                /* First '=' fixes the data-char count; subsequent '=' just continue. */
+                if saw_pad == 0u8 { nvalid = k as u32  saw_pad = 1u8 }
+                k = k + 1u64
             } else {
+                /* W4.3 (II-BASE32-2): a data char AFTER padding is illegal -- '=' may only
+                 * trail in the final quantum, never be re-followed by data. */
+                if saw_pad == 1u8 { return B32_E_BADCHAR }
                 let d : u32 = b32_decode_5bit(c)
                 if d == 0xFFu32 { return B32_E_BADCHAR }
                 let shift : u64 = (7u64 - k) * 5u64
@@ -139,16 +149,26 @@ fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
                 k = k + 1u64
             }
         }
+        /* W4.3 (II-BASE32-2): validate the pad count is a LEGAL final quantum.  Pre-fix an
+         * illegal count (2,5,7) left bytes_out at its default 5, "successfully" decoding
+         * malformed input; now it is rejected. */
+        let pad : u32 = 8u32 - nvalid
+        let bytes_out : u32 = _b32_bytes_for_pad(pad)
+        if bytes_out == 0xFFFFFFFFu32 { return B32_E_BADCHAR }
+        /* A padded block must be the FINAL block -- padding cannot appear mid-stream. */
+        if saw_pad == 1u8 {
+            if i + 8u64 < src_len { return B32_E_BADCHAR }
+        }
         let o0 : u64 = (v >> 32u64) & 0xFFu64
         let o1 : u64 = (v >> 24u64) & 0xFFu64
         let o2 : u64 = (v >> 16u64) & 0xFFu64
         let o3 : u64 = (v >> 8u64)  & 0xFFu64
         let o4 : u64 = v & 0xFFu64
-        if bytes_out >= 1u32 { builder_push_byte(builder_id, o0 as u32) }
-        if bytes_out >= 2u32 { builder_push_byte(builder_id, o1 as u32) }
-        if bytes_out >= 3u32 { builder_push_byte(builder_id, o2 as u32) }
-        if bytes_out >= 4u32 { builder_push_byte(builder_id, o3 as u32) }
-        if bytes_out >= 5u32 { builder_push_byte(builder_id, o4 as u32) }
+        if bytes_out >= 1u32 { if builder_push_byte(builder_id, o0 as u32) != 0i32 { return B32_E_BUILD } }
+        if bytes_out >= 2u32 { if builder_push_byte(builder_id, o1 as u32) != 0i32 { return B32_E_BUILD } }
+        if bytes_out >= 3u32 { if builder_push_byte(builder_id, o2 as u32) != 0i32 { return B32_E_BUILD } }
+        if bytes_out >= 4u32 { if builder_push_byte(builder_id, o3 as u32) != 0i32 { return B32_E_BUILD } }
+        if bytes_out >= 5u32 { if builder_push_byte(builder_id, o4 as u32) != 0i32 { return B32_E_BUILD } }
         i = i + 8u64
     }
     return B32_OK

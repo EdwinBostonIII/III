@@ -1,0 +1,9 @@
+/* KAT for COMBINE-1 / numera/ntt -- the shared modulus-parameterized NTT organ.
+ * ntt_selftest exercises over GF(998244353): inverse(forward(v))==v (round-trip identity), the NTT
+ * of a unit impulse is all-ones, and the DC term of all-ones is n.  A wrong omega/butterfly/inverse
+ * reddens an arm.  Exit 99 = the transform is correct. */
+module corpus_722
+
+extern @abi(c-msvc-x64) fn ntt_selftest() -> u64 from "ntt.iii"
+
+fn main() -> u64 { return ntt_selftest() }

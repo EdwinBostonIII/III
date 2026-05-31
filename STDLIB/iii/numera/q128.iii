@@ -13,6 +13,23 @@
  *   - from_u64, to_u64_lo, to_u64_hi
  *
  * Hexad: kind_essence.  Ring: R0.  K: 1.00 (pure modular arithmetic).
+ *
+ * APOTHEOSIS S.2.4 (q_generic decision -- ADR).  The design doc proposed
+ * monomorphising q128 to a generic q_generic<bits> over {128,256,512} via
+ * @specialize.  VERIFIED NOT BUILDABLE: III @specialize monomorphises over a
+ * TYPE alphabet (u8..u64, i8..i64, bool -- corpus 393), NOT over const VALUE
+ * parameters such as a bit-width, and III has no u128/u256/u512 type to
+ * specialise over.  Both buildable alternatives lose under the charter's
+ * "apex is LEANER, not bigger" rule (DOCS/III-CAPABILITY-APOTHEOSIS.md sec.1):
+ *   - a variable-width runtime qint PESSIMISES the fast fixed 2-limb 128-bit
+ *     hot path (slower for the only widths used today);
+ *   - a .def -> .iii generator emitting fixed-width q256/q512 manufactures
+ *     modules with ZERO consumers -- exactly the bloat the charter forbids.
+ * DECISION = keep + document: q128 stays the fast fixed two-u64 module.  GROWTH
+ * PATH: add a width (or the generic form) when EITHER a real consumer appears OR
+ * the compiler gains const-generic @specialize -- whichever comes first.  This
+ * is no placeholder and no dead code; the unbuildable spec mechanism is itself
+ * the mistake corrected here (per the standing "fix mistakes" license).
  */
 
 module numera_q128

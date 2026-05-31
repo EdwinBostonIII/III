@@ -44,6 +44,8 @@ const KRL_C_VMMCALL   : u32 = 6u32   /* guest->host within R-1 (a VMEXIT cause; 
 fn katabasis_ring_constructor(src: u32, dst: u32) -> u32 @export {
     let a : u32 = src
     let b : u32 = dst
+    if a > KRL_RM4 { return KRL_C_NONE }   /* domain guard: an out-of-range/u32-wrapping src cannot alias a legal key */
+    if b > KRL_RM4 { return KRL_C_NONE }   /* domain guard: ... nor dst (key = a*5+b is bijective only on rings 0..4) */
     let key : u32 = (a * 5u32) + b
     if key == 1u32  { return KRL_C_IOCTL }   /* R3(0) -> R0(1) */
     if key == 7u32  { return KRL_C_MAGIC_MSR }   /* R0(1) -> RM1(2) */

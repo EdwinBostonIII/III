@@ -1,0 +1,3 @@
+[run_corpus] iiis = /c/Users/Edwin Boston/OneDrive/Desktop/III/COMPILED/iiis-2.exe
+STDLIB/scripts/run_corpus.sh: line 852: syntax error near unexpected token `fi'
+STDLIB/scripts/run_corpus.sh: line 852: `    fi'

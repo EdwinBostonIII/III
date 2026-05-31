@@ -4,34 +4,36 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iiiidentifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiicapability.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_1:
-    .ascii "identifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iiiidentifier.iiiidentifier.iiialgebraic_time.iiicapability.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_2:
-    .ascii "identifier.iiiidentifier.iiialgebraic_time.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iiiidentifier.iiialgebraic_time.iiicapability.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_3:
-    .ascii "identifier.iiialgebraic_time.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "identifier.iiialgebraic_time.iiicapability.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_4:
-    .ascii "algebraic_time.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "algebraic_time.iiicapability.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_5:
-    .ascii "capability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "capability.iiicapability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_6:
-    .ascii "witness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "capability.iiiwitness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_7:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "witness_hook.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_8:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_9:
-    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_10:
-    .ascii "proof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "proof_term.iiiproof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_11:
-    .ascii "proof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "proof_term.iiiproof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_12:
-    .ascii "witness_hook.iiicapability.iiicapability.iii\0"
+    .ascii "proof_term.iiiwitness_hook.iiicapability.iiicapability.iii\0"
 L_str_13:
-    .ascii "capability.iiicapability.iii\0"
+    .ascii "witness_hook.iiicapability.iiicapability.iii\0"
 L_str_14:
+    .ascii "capability.iiicapability.iii\0"
+L_str_15:
     .ascii "capability.iii\0"
     .section .rodata
 L_RFLC_OK:
@@ -86,8 +88,6 @@ L_RFLC_FRAG_MAGIC_HI:
     .quad 0xe3
 L_RFLC_FRAG_MAGIC_LO:
     .quad 0x9
-L_RFLC_RIGHT_REFLECT:
-    .quad 0x800
 L_RFLC_PILLAR:
     .quad 0x46
 L_RFLC_PHASE:
@@ -302,6 +302,32 @@ L_rflc_prop_payload_ptr:
     addq %rcx, %rax
     pushq %rax
     popq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
+    .asciz "rc_proposal_payload_cap"
+    .text
+    .global rc_proposal_payload_cap
+    .seh_proc rc_proposal_payload_cap
+rc_proposal_payload_cap:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq L_RFLC_PROPOSAL_PAYLOAD_CAP(%rip), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -1557,7 +1583,9 @@ L_if_end_25:
     pushq %rax
     popq %rax
 L_if_end_27:
-    movq L_RFLC_RIGHT_REFLECT(%rip), %rax
+    subq $32, %rsp
+    callq cap_right_reflect
+    addq $32, %rsp
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -2106,7 +2134,9 @@ L_if_end_51:
     pushq %rax
     popq %rax
 L_if_end_53:
-    movq L_RFLC_RIGHT_REFLECT(%rip), %rax
+    subq $32, %rsp
+    callq cap_right_reflect
+    addq $32, %rsp
     pushq %rax
     movq L_RFLC_REQ_CAP(%rip), %rax
     pushq %rax
@@ -2756,7 +2786,9 @@ L_if_end_83:
     pushq %rax
     popq %rax
 L_if_end_85:
-    movq L_RFLC_RIGHT_REFLECT(%rip), %rax
+    subq $32, %rsp
+    callq cap_right_reflect
+    addq $32, %rsp
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
@@ -3056,6 +3088,12 @@ L_loop_end_95:
     pushq %rax
     movq L_RFLC_PROPOSAL_PAYLOAD_CAP(%rip), %rax
     pushq %rax
+    movabsq $0xc, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
@@ -3066,6 +3104,12 @@ L_loop_end_95:
     testq %rax, %rax
     jz L_if_end_97
     movq L_RFLC_PROPOSAL_PAYLOAD_CAP(%rip), %rax
+    pushq %rax
+    movabsq $0xc, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -112(%rbp)
@@ -3674,7 +3718,9 @@ L_if_end_113:
     pushq %rax
     popq %rax
 L_if_end_115:
-    movq L_RFLC_RIGHT_REFLECT(%rip), %rax
+    subq $32, %rsp
+    callq cap_right_reflect
+    addq $32, %rsp
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax

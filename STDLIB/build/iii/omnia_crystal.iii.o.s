@@ -22,6 +22,8 @@ L_CRYSTAL_E_FULL:
     .quad 0xfffffffffffffffe
 L_CRYSTAL_MAX_INSTANCES:
     .quad 0x100
+L_CRYSTAL_ID_BASE:
+    .quad 0x10000
     .section .bss
     .global L_CRYSTAL_CODE
 L_CRYSTAL_CODE:
@@ -460,12 +462,12 @@ L_crystal_slot_of:
     movq %rcx, -8(%rbp)
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movq L_CRYSTAL_ID_BASE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    sete %al
+    setb %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -483,7 +485,7 @@ L_crystal_slot_of:
 L_if_end_11:
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
+    movq L_CRYSTAL_ID_BASE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1555,7 +1557,7 @@ L_loop_end_33:
     pushq %rax
     popq %rax
     pushq %rax
-    movabsq $0x1, %rax
+    movq L_CRYSTAL_ID_BASE(%rip), %rax
     pushq %rax
     popq %rcx
     popq %rax

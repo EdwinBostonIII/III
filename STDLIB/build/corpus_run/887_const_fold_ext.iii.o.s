@@ -16,7 +16,13 @@ L_shl_c:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x30, %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -42,7 +48,13 @@ L_shr_c:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x40, %rax
+    movabsq $0x100, %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shrq %cl, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -68,7 +80,13 @@ L_shl_u32c:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x30, %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -94,7 +112,15 @@ L_eq_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -120,7 +146,15 @@ L_eq_f:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x0, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -146,7 +180,15 @@ L_ne_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -172,7 +214,15 @@ L_lt_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -198,7 +248,15 @@ L_lt_f:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x0, %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -224,7 +282,15 @@ L_le_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setbe %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -250,7 +316,15 @@ L_gt_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -276,7 +350,15 @@ L_ge_f:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x0, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -302,7 +384,15 @@ L_slt_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -328,7 +418,15 @@ L_sgt_t:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x1, %rax
+    movabsq $0x7, %rax
+    pushq %rax
+    movabsq $0x5, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

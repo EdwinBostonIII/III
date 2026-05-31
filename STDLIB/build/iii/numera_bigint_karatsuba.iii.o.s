@@ -4,32 +4,36 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_1:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_2:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_3:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_4:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_5:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_6:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_7:
-    .ascii "bigint.iiibigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_8:
-    .ascii "bigint.iiibigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiibigint.iiintt_bigint.iii\0"
 L_str_9:
-    .ascii "bigint.iiibigint.iii\0"
+    .ascii "bigint.iiibigint.iiintt_bigint.iii\0"
 L_str_10:
-    .ascii "bigint.iii\0"
+    .ascii "bigint.iiintt_bigint.iii\0"
+L_str_11:
+    .ascii "ntt_bigint.iii\0"
     .section .rodata
 L_KARA_INVALID:
     .quad 0x0
 L_KARA_THRESHOLD:
     .quad 0x20
+L_KARA_NTT_THRESHOLD:
+    .quad 0x800
     .section .iii.ring3,"n"
     .asciz "kara_slice"
     .text
@@ -630,6 +634,78 @@ L_if_end_17:
 L_if_end_19:
     movq -72(%rbp), %rax
     pushq %rax
+    movq L_KARA_NTT_THRESHOLD(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_21
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq bigint_mul_ntt
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -80(%rbp)
+    movq -80(%rbp), %rax
+    pushq %rax
+    movq L_KARA_INVALID(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_23
+    movq -80(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_23:
+    movq -40(%rbp), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq bigint_mul
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_21:
+    movq -72(%rbp), %rax
+    pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
@@ -665,7 +741,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_25
     movq -80(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -705,7 +781,7 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_25:
     movq -56(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -718,7 +794,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_27
     movq -80(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -752,7 +828,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_27:
     movq -56(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -765,7 +841,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_29
     movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -799,7 +875,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_29:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -820,7 +896,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_31
     movq -80(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -860,7 +936,7 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_31:
     movq -64(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -873,7 +949,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_33
     movq -80(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -907,7 +983,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_33:
     movq -64(%rbp), %rax
     pushq %rax
     movq -80(%rbp), %rax
@@ -920,7 +996,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_35
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -954,7 +1030,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_35:
     movq -104(%rbp), %rax
     pushq %rax
     movq -88(%rbp), %rax

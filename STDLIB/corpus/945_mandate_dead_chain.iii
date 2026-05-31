@@ -1,0 +1,42 @@
+/* 945 -- W4.2 / ENHANCE-17 falsifier: sanctus/mandate's M1 (and M15) no longer report a
+ * dead/unknown k-chain id as SATISFIED.  Pre-fix, kchain_is_underflow reports a dead id as
+ * "not underflowing" (0), which mandate_check_m1 read as satisfied -- a green light over a
+ * chain that does not exist.  Now a dead chain is NOT satisfied (the kchain_id==0 "no chain"
+ * convention stays satisfied).  99 = pass. */
+module corpus_945
+
+extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_drop(id: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_is_live(id: u64) -> u8 from "kchain.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m1(kchain_id: u64) -> u8 from "mandate.iii"
+extern @abi(c-msvc-x64) fn mandate_check_m15(kchain_id: u64) -> u8 from "mandate.iii"
+extern @abi(c-msvc-x64) fn mandate_audit(kchain_id: u64, mhash_matched: u8) -> u32 from "mandate.iii"
+
+fn main() -> u64 {
+    let k : u64 = kchain_new(0u64)
+    if k == 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }        /* KCHAIN_INVALID */
+
+    /* A live, healthy chain: M1 and M15 satisfied. */
+    if kchain_is_live(k) != 1u8 { return 2u64 }
+    if mandate_check_m1(k) != 1u8 { return 3u64 }
+    if mandate_check_m15(k) != 1u8 { return 4u64 }
+
+    /* Drop it -> the id now names a DEAD chain. */
+    kchain_drop(k)
+    if kchain_is_live(k) != 0u8 { return 5u64 }
+
+    /* FALSIFIER: a dead chain is NOT satisfied (was: 1). */
+    if mandate_check_m1(k)  != 0u8 { return 6u64 }
+    if mandate_check_m15(k) != 0u8 { return 7u64 }
+    /* An id that was never created is likewise not satisfied. */
+    if mandate_check_m1(0x7777u64) != 0u8 { return 8u64 }
+
+    /* The full audit drops the M1 bit (bit 0) for the dead chain. */
+    let bits : u32 = mandate_audit(k, 1u8)
+    if (bits & 0x00000001u32) != 0u32 { return 9u64 }
+
+    /* The "no chain to check" convention (id == 0) remains satisfied. */
+    if mandate_check_m1(0u64)  != 1u8 { return 10u64 }
+    if mandate_check_m15(0u64) != 1u8 { return 11u64 }
+    return 99u64
+}

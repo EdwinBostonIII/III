@@ -31,7 +31,7 @@ const NOUS_VAL_CAD_KECCAK : u32 = 1u32
 const NOUS_VAL_RBASE      : u64 = 200u64    /* mirrors nous_policy (params, not behaviour) */
 const NOUS_VAL_BONUS_TRIT : u64 = 1000u64
 const NOUS_VAL_BONUS_FUS  : u64 = 500u64
-const NOUS_VAL_COST_BOUND : u64 = 2401u64   /* 49*49 selection-sort comparisons, bounded */
+const NOUS_VAL_COST_BOUND : u64 = 2401u64   /* [CUT-10] conservative bound; ranker is a linear block-reorder over <=49 rules (was mislabeled 49*49 selection-sort) */
 const NOUS_VAL_OK         : i32 = 0i32
 
 var NOUS_VAL_WBUF   : [u8; 32]

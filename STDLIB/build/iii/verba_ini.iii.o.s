@@ -2273,6 +2273,29 @@ ini_section_base:
     pushq %rax
     popq %rax
 L_if_end_111:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq L_INI_ENTRY_MAX(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_113
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_113:
     leaq L_INI_SECTION_BASE(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -2339,7 +2362,7 @@ ini_section_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_113
+    jz L_if_end_115
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2349,7 +2372,30 @@ ini_section_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_113:
+L_if_end_115:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq L_INI_ENTRY_MAX(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_117
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_117:
     leaq L_INI_SECTION_LEN(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -2416,7 +2462,7 @@ ini_key_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_115
+    jz L_if_end_119
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2426,7 +2472,30 @@ ini_key_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_115:
+L_if_end_119:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq L_INI_ENTRY_MAX(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_121
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_121:
     leaq L_INI_KEY_BASE(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -2493,7 +2562,7 @@ ini_key_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_117
+    jz L_if_end_123
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2503,7 +2572,30 @@ ini_key_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_117:
+L_if_end_123:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq L_INI_ENTRY_MAX(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_125
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_125:
     leaq L_INI_KEY_LEN(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -2570,7 +2662,7 @@ ini_value_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_119
+    jz L_if_end_127
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2580,7 +2672,30 @@ ini_value_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_119:
+L_if_end_127:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq L_INI_ENTRY_MAX(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_129
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_129:
     leaq L_INI_VALUE_BASE(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -2647,7 +2762,7 @@ ini_value_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_121
+    jz L_if_end_131
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2657,7 +2772,30 @@ ini_value_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_121:
+L_if_end_131:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq L_INI_ENTRY_MAX(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_133
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_133:
     leaq L_INI_VALUE_LEN(%rip), %rax
     pushq %rax
     subq $8, %rsp
@@ -2723,7 +2861,7 @@ ini_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_123
+    jz L_if_end_135
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2736,7 +2874,7 @@ ini_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_123:
+L_if_end_135:
     leaq L_INI_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

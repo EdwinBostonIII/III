@@ -97,6 +97,16 @@ fn kchain_is_underflow(id: u64) -> u8 @export {
     return KCHAIN_UNDERFLOW[s]
 }
 
+/* Liveness: 1u8 iff `id` names a currently-live chain slot (created via kchain_new and not
+ * yet kchain_drop'd).  Lets a consumer distinguish "chain healthy" from "chain does not
+ * exist" -- the two collapse in kchain_is_underflow (a dead id is reported NOT underflowing),
+ * which is exactly the mandate M1 vacuity W4.2 closes. */
+fn kchain_is_live(id: u64) -> u8 @export {
+    let s : u32 = kchain_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return 1u8
+}
+
 fn kchain_readmit_count(id: u64) -> u32 @export {
     let s : u32 = kchain_slot_of(id)
     if s == 0xFFFFFFFFu32 { return 0u32 }

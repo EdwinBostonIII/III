@@ -36,10 +36,16 @@ fn option__unwrap_or<T>(o: u64, default: T) -> u64 @specialize(u8, u16, u32, i8,
 /* ─── u64 payloads: side-table (u63 < u64) ──────────────────────────── */
 
 const OPTU64_SLOTS : u32 = 256u32
+/* [COMBINE-7/J-OPT-1/X6] distinct "table full" sentinel, separate from none(0) and from any valid
+ * handle (1..256).  is_some/unwrap_or/drop already reject it via their s >= OPTU64_SLOTS guard, so a
+ * full table is no longer indistinguishable from an empty option. */
+const OPTION_U64_FULL : u64 = 0xFFFFFFFFFFFFFFFFu64
 var OPT_U64_VAL    : [u64; 256]
 var OPT_U64_LIVE   : [u8;  256]
 
 fn option_u64_none() -> u64 @export { return 0u64 }
+
+fn option_u64_full() -> u64 @export { return OPTION_U64_FULL }
 
 fn option_u64_some(v: u64) -> u64 @export {
     let mut i : u32 = 0u32
@@ -51,7 +57,7 @@ fn option_u64_some(v: u64) -> u64 @export {
         }
         i = i + 1u32
     }
-    return 0u64
+    return OPTION_U64_FULL   /* [J-OPT-1] table full: distinct from none(0); is_some rejects it */
 }
 
 fn option_u64_is_some(o: u64) -> u8 @export {

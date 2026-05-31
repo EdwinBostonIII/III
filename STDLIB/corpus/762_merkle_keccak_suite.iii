@@ -1,0 +1,71 @@
+/* 762_merkle_keccak_suite.iii -- APOTHEOSIS S.6 step 3: prove the hash-suite
+ * parametrization of merkle_compute_root_suite.  Builds a 2-leaf Merkle root
+ * with MK_SUITE_KECCAK and asserts it byte-for-byte against an INDEPENDENT
+ * Keccak-256 recompute of the domain-separated tree:
+ *   leaf_h = Keccak256(0x00 || leaf) ;  root = Keccak256(0x01 || leaf_h0 || leaf_h1).
+ * (The SHA-256 default path is byte-identity-gated by 167_merkle_basic.)  This is
+ * the negative-of-dead-code proof: the new Keccak suite is exercised + correct,
+ * not an untested branch.  Exit 99 = match; 10 = mismatch. */
+module corpus_762
+
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_root_suite(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, suite: u32, out_32: u64) -> i32 from "merkle.iii"
+
+var LEAVES  : [u8; 8]      /* 2 leaves * 4 bytes */
+var HASHBUF : [u8; 65]     /* dom || data (max 1 + 64) */
+var LH0     : [u8; 32]
+var LH1     : [u8; 32]
+var NODEIN  : [u8; 64]     /* lh0 || lh1 */
+var GOT     : [u8; 32]
+var REF     : [u8; 32]
+
+/* out = Keccak256(domb || data[0..data_len]) */
+fn kc(domb: u8, data_ptr: u64, data_len: u64, out_ptr: u64) -> i32 {
+    HASHBUF[0u64] = domb
+    let dp : *u8 = data_ptr as *u8
+    let mut i : u64 = 0u64
+    while i < data_len {
+        HASHBUF[1u64 + i] = dp[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot((&HASHBUF) as u64, 1u64 + data_len, out_ptr)
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* leaves = [1,2,3,4],[5,6,7,8] */
+    let lp : *u8 = (&LEAVES) as u64 as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        lp[i] = (i + 1u64) as u8
+        i = i + 1u64
+    }
+    /* GOT = Keccak Merkle root via the organ's suite path. */
+    merkle_compute_root_suite((&LEAVES) as u64, 2u32, 4u64, 1u32, (&GOT) as u64)
+
+    /* REF = independent Keccak recompute. */
+    kc(0u8, (&LEAVES) as u64, 4u64, (&LH0) as u64)
+    kc(0u8, (&LEAVES) as u64 + 4u64, 4u64, (&LH1) as u64)
+    let np : *u8 = (&NODEIN) as u64 as *u8
+    let l0 : *u8 = (&LH0) as u64 as *u8
+    let l1 : *u8 = (&LH1) as u64 as *u8
+    let mut j : u64 = 0u64
+    while j < 32u64 {
+        np[j] = l0[j]
+        np[32u64 + j] = l1[j]
+        j = j + 1u64
+    }
+    kc(1u8, (&NODEIN) as u64, 64u64, (&REF) as u64)
+
+    /* compare GOT == REF */
+    let gp : *u8 = (&GOT) as u64 as *u8
+    let rp : *u8 = (&REF) as u64 as *u8
+    let mut d : u8 = 0u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if gp[k] != rp[k] { d = 1u8 }
+        k = k + 1u64
+    }
+    if d != 0u8 { return 10u64 }
+    return 99u64
+}

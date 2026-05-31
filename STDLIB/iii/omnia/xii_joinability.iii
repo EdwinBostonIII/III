@@ -59,7 +59,6 @@ const XJN_NONJOIN  : u8  = 0u8
 const XJN_NOWIT    : u8  = 2u8
 
 var XJN_TALLY : [u64; 4]   /* [0]=join  [1]=no_witness  [2]=nonjoin  [3]=total */
-var XJN_NJ    : [u64; 4]   /* first NONJOIN: [0]=rid_i [1]=rid_j [2]=kind [3]=pos */
 var XJN_NJ_I  : [u64; 128] /* every NONJOIN: rewriter rule-id (rid_i) */
 var XJN_NJ_J  : [u64; 128] /* every NONJOIN: rewritten rule-id (rid_j) */
 var XJN_NJ_P  : [u64; 128] /* every NONJOIN: position */

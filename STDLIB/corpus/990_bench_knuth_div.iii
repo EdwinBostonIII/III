@@ -1,0 +1,244 @@
+/* 990_bench_knuth_div.iii -- MEASURED speedup benchmark for the Knuth Algorithm D
+ * division (bigint_div_qr) vs the retained bit-serial oracle (bigint_div_qr_bitserial).
+ *
+ * Closes the III-CAPABILITY-VERIFICATION "~64x faster" gap: the prior claim lived
+ * only in a source comment (bigint_div.iii:12,417) with no measurement.  This test
+ * times BOTH dividers on the SAME operand pair on the SAME host in the SAME run and
+ * reports the cycle RATIO -- a clock-invariant quantity (both paths scale with the
+ * TSC frequency, so the ratio is reproducible across machines, unlike an absolute
+ * cycle budget which run_bench_corpus.sh correctly treats as advisory).
+ *
+ * Methodology:
+ *   - bench_now() = lfence;rdtsc;lfence (serializing) brackets ONE division.
+ *   - The scratch arena is reset OUTSIDE the timed bracket, so only the division
+ *     (incl. its own output allocation -- fair, both paths allocate) is measured.
+ *   - MIN over N_ITER runs = the uncontended floor (removes preemption/interrupt
+ *     noise; the true compute cost is the minimum, not the mean).
+ *   - Operands live in a persistent arena that is never reset.
+ *
+ * Correctness is gated ABSOLUTELY first (q,r byte-identical between the two paths,
+ * AND q*b+r==a, AND r<b) -- a fast divider that computes the wrong answer is a HARD
+ * failure, not a fast pass.
+ *
+ * Reports to stdout (advisory, captured by run_bench_corpus.sh):
+ *   "<knuth_min> <serial_min> <ratio_x100>\n"   (cycles, cycles, ratio*100)
+ *
+ * Exit map:
+ *    1  arena alloc failed
+ *    3  q-mismatch knuth vs serial        4  r-mismatch
+ *    5  q*b+r != a (knuth wrong)          6  r >= b (knuth wrong)
+ *   30  serial NOT slower than knuth on this host (advisory -- no speedup measured)
+ *   99  correct AND knuth strictly faster than serial -- full pass
+ *
+ * NIH: arena/bigint/bigint_div + omnia_bench (rdtsc) + kernel32 (stdout) only.
+ * bench_now is non-deterministic by design; this exe is NOT sealed (corpus tests
+ * are standalone, never aggregated into libiii_native.a). */
+module corpus_990
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr_bitserial(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_get() -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bench_now() -> u64 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_warmup() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_cpuid_serialize() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_pause_loop() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn GetStdHandle(n: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
+
+const N_ITER : u64 = 240u64
+
+var OUTBUF : [u8; 96]
+var NWR    : [u8; 8]
+var DIGTMP : [u8; 24]
+var LCG    : u64 = 0u64
+
+fn warmup() -> i32 {
+    bench_cpuid_serialize()
+    bench_pause_loop()
+    bench_pause_loop()
+    bench_pause_loop()
+    return 0i32
+}
+
+fn lcg_next() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* nlimbs random limbs, low limb forced odd -> guaranteed nonzero, top limb forced
+ * nonzero -> full-width (so the divider does real work, not a short-circuit). */
+fn build_rand(arena: u64, nlimbs: u64) -> u64 {
+    let id : u64 = bigint_new(arena, nlimbs)
+    let mut i : u64 = 0u64
+    while i < nlimbs {
+        let v : u64 = lcg_next()
+        if i == 0u64 { bigint_set_limb(id, 0u64, v | 1u64) }
+        if i != 0u64 { bigint_set_limb(id, i, v) }
+        i = i + 1u64
+    }
+    bigint_set_limb(id, nlimbs - 1u64, lcg_next() | 0x8000000000000000u64)
+    bigint_set_len(id, nlimbs)
+    bigint_normalize(id)
+    return id
+}
+
+/* MIN cycles of one knuth division over N_ITER runs (reset outside the bracket). */
+fn time_knuth(arena_s: u64, a: u64, b: u64) -> u64 {
+    let ar : u64 = arena_s
+    let aa : u64 = a
+    let bb : u64 = b
+    let mut best : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < N_ITER {
+        bigint_drop_arena(ar)
+        arena_reset(ar)
+        let t0 : u64 = bench_now()
+        let q : u64 = bigint_div_qr(ar, aa, bb)
+        let t1 : u64 = bench_now()
+        let d : u64 = t1 - t0
+        if d < best { best = d }
+        i = i + 1u64
+    }
+    return best
+}
+
+fn time_serial(arena_s: u64, a: u64, b: u64) -> u64 {
+    let ar : u64 = arena_s
+    let aa : u64 = a
+    let bb : u64 = b
+    let mut best : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < N_ITER {
+        bigint_drop_arena(ar)
+        arena_reset(ar)
+        let t0 : u64 = bench_now()
+        let q : u64 = bigint_div_qr_bitserial(ar, aa, bb)
+        let t1 : u64 = bench_now()
+        let d : u64 = t1 - t0
+        if d < best { best = d }
+        i = i + 1u64
+    }
+    return best
+}
+
+/* Append decimal of n to OUTBUF at offset off; return new offset. */
+fn put_dec(off: u64, n: u64) -> u64 {
+    if n == 0u64 { OUTBUF[off] = 48u8 return off + 1u64 }
+    let mut v : u64 = n
+    let mut k : u64 = 0u64
+    while v > 0u64 {
+        let qd : u64 = v / 10u64
+        let dd : u64 = v - qd * 10u64
+        DIGTMP[k] = (dd as u8) + 48u8
+        v = qd
+        k = k + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < k {
+        OUTBUF[off + j] = DIGTMP[k - 1u64 - j]
+        j = j + 1u64
+    }
+    return off + k
+}
+
+fn emit(n: u32) -> i32 {
+    let h : u64 = GetStdHandle(0xFFFFFFF5u32)   /* STD_OUTPUT_HANDLE = (DWORD)-11 */
+    WriteFile(h, (&OUTBUF) as *u8, n, (&NWR) as u64, 0u64)
+    return 0i32
+}
+
+fn report(la: u64, lb: u64, knuth_c: u64, serial_c: u64, ratio_x100: u64) -> i32 {
+    let mut off : u64 = 0u64
+    off = put_dec(off, la)
+    OUTBUF[off] = 47u8 off = off + 1u64       /* '/' */
+    off = put_dec(off, lb)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, knuth_c)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, serial_c)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, ratio_x100)
+    OUTBUF[off] = 10u8 off = off + 1u64
+    emit(off as u32)
+    return 0i32
+}
+
+/* Build a,b at (la,lb) limbs, gate correctness, time both, report.
+ * Returns 0 = ok+faster; 30 = ok but not faster; 3..6 = correctness fault. */
+fn run_size(arena_p: u64, arena_s: u64, la: u64, lb: u64) -> u64 {
+    let ap : u64 = arena_p
+    let as2 : u64 = arena_s
+    let a : u64 = build_rand(ap, la)
+    let b : u64 = build_rand(ap, lb)
+
+    /* ---- absolute correctness gate (before any timing) ---- */
+    let q_k : u64 = bigint_div_qr(as2, a, b)
+    let r_k : u64 = bigint_remainder_get()
+    let q_s : u64 = bigint_div_qr_bitserial(as2, a, b)
+    let r_s : u64 = bigint_remainder_get()
+    let prod  : u64 = bigint_mul(as2, q_k, b)
+    let recon : u64 = bigint_add(as2, prod, r_k)
+    let mut fault : u64 = 0u64
+    if bigint_eq(recon, a) != 1u8 { fault = 5u64 }
+    if fault == 0u64 { if bigint_cmp(r_k, b) != -1i32 { fault = 6u64 } }
+    if fault == 0u64 { if bigint_eq(q_k, q_s) != 1u8 { fault = 3u64 } }
+    if fault == 0u64 { if bigint_eq(r_k, r_s) != 1u8 { fault = 4u64 } }
+    bigint_drop_arena(as2)
+    arena_reset(as2)
+    if fault != 0u64 { return fault }
+
+    /* ---- timed measurement ---- */
+    warmup()
+    let knuth_c  : u64 = time_knuth(as2, a, b)
+    let serial_c : u64 = time_serial(as2, a, b)
+    let mut ratio : u64 = 0u64
+    if knuth_c > 0u64 { ratio = serial_c * 100u64 / knuth_c }
+    report(la, lb, knuth_c, serial_c, ratio)
+
+    if serial_c > knuth_c { return 0u64 }
+    return 30u64
+}
+
+fn main() -> u64 {
+    let arena_p : u64 = arena_new(1u64 << 22u64)   /* persistent: holds a,b */
+    let arena_s : u64 = arena_new(1u64 << 24u64)   /* scratch: division outputs */
+    if arena_p == 0u64 { return 1u64 }
+    if arena_s == 0u64 { return 1u64 }
+    LCG = 0x243F6A8885A308D3u64
+
+    /* Three regimes -- columns: "<la>/<lb> <knuth_cyc> <serial_cyc> <ratio_x100>".
+     * The ratio grows with operand size (Algorithm D is O(m*n); bit-serial is
+     * O(bits)).  ~64x is the small/mid-operand regime the source comment quotes. */
+    /* A correctness fault (3..6) is a HARD failure -> return immediately.
+     * The advisory "not faster" (30) is NOT a fault: keep measuring every
+     * size, and surface 30 only if SOME size failed to show a speedup. */
+    let mut worst : u64 = 0u64
+    let r1 : u64 = run_size(arena_p, arena_s, 4u64, 2u64)     /*  256 / 128 bit */
+    if r1 != 0u64 { if r1 != 30u64 { return r1 } }
+    if r1 == 30u64 { worst = 30u64 }
+    let r2 : u64 = run_size(arena_p, arena_s, 8u64, 4u64)     /*  512 / 256 bit */
+    if r2 != 0u64 { if r2 != 30u64 { return r2 } }
+    if r2 == 30u64 { worst = 30u64 }
+    let r3 : u64 = run_size(arena_p, arena_s, 16u64, 8u64)    /* 1024 / 512 bit */
+    if r3 != 0u64 { if r3 != 30u64 { return r3 } }
+    if r3 == 30u64 { worst = 30u64 }
+
+    arena_drop(arena_s)
+    arena_drop(arena_p)
+
+    if worst == 30u64 { return 30u64 }
+    return 99u64
+}

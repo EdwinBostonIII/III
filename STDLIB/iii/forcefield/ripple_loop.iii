@@ -29,34 +29,63 @@ extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_ok: u32) -> u32 from "ripple_unify.iii"
 extern @abi(c-msvc-x64) fn cg_decide(rule_sound: u32, module_coherent: u32, determinism_sealed: u32, conservative: u32, kernel_sound: u32) -> u32 from "commit_gate.iii"
+/* W3.1 / COMBINE-3: bucket nodes by their (cap||iclass) group key via the shared
+ * caindex; rm_node_key is ripple_metric's single-source key writer. */
+extern @abi(c-msvc-x64) fn rm_node_key(i: u32, out: *u8) -> i32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
+
+/* rl_run grouping index (caller-owned caindex): maps a node's 32-byte group key
+ * to the index of its first-seen representative.  Sized to the ripple_metric node
+ * headroom (RM_MAXN=4096); VALS cleared to CAI_EMPTY at the top of rl_run. */
+const RL_CAI_SLOTS : u64 = 4096u64
+const RL_CAI_MASK  : u64 = 4095u64
+var RL_CAI_KEYS : [u8;  131072]   /* 4096 * 32 */
+var RL_CAI_VALS : [u32; 4096]
+var RL_KEY      : [u8;  32]       /* per-node key scratch */
 
 /* The closed loop.  Returns the count of certified + admitted merges performed (the size of
  * the converged refactoring plan).  rl_run leaves the congruence closure at its local optimum
- * (cgr_num_classes = the sound dedup'd ring size). */
+ * (cgr_num_classes = the sound dedup'd ring size).
+ *
+ * W3.1 re-expression (O(N) bucket-and-group, results byte-identical to the old O(passes*N^2)
+ * fixpoint): (1) cg_decide(1,1,1,1,kernel_ok) is LOOP-INVARIANT -- it is a pure verdict of its
+ * args, and only kernel_ok varies per run -- so it is hoisted; if it rejects, NO move is
+ * admissible and the loop merges nothing.  (2) The only pairs that can ever merge are
+ * capability+intent-equal ones: ru_certify_unify's intent gate (rm_unifiable) returns 0 with
+ * NO side effect for every cross-group pair, so the old all-pairs scan wasted O(N^2) on pairs
+ * that could never merge.  Bucketing each node by its group key and unioning it with its
+ * group's first-seen representative attempts exactly the merges that can succeed: a group of m
+ * members yields m-1 certified unions (the rest are already same-class), summing to the same
+ * N - (#groups) total and the same final congruence closure -- in ~O(N). */
 fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 @export {
+    /* (1) Hoisted commit_gate verdict -- the §8.2 kernel-aware gate.  If III's prover is down
+     * (kernel_ok=0) the gate rejects every move, so the loop self-edits NOTHING. */
+    if cg_decide(1u32, 1u32, 1u32, 1u32, kernel_ok) != 99u32 { return 0u32 }
+    let kp : u64 = &RL_CAI_KEYS as u64
+    let vp : u64 = &RL_CAI_VALS as u64
+    let bufp : *u8 = (&RL_KEY as u64) as *u8
+    cai_clear(vp, RL_CAI_SLOTS)
     let mut merges : u32 = 0u32
-    let mut dry : u32 = 0u32
-    while dry == 0u32 {
-        let mut pass : u32 = 0u32
-        let mut i : u32 = 0u32
-        while i < n {
-            let mut j : u32 = i + 1u32
-            while j < n {
-                if cgr_find(i) != cgr_find(j) {
-                    /* DECIDE (1): commit_gate admissibility -- the §8.2 kernel-aware gate. */
-                    if cg_decide(1u32, 1u32, 1u32, 1u32, kernel_ok) == 99u32 {
-                        /* DECIDE (2): certified-sound (intent gate + faithfulness-gated merge). */
-                        if ru_certify_unify(i, j, i, j, proof_avail) == 1u32 {
-                            pass = pass + 1u32
-                        }
-                    }
+    let mut i : u32 = 0u32
+    while i < n {
+        rm_node_key(i, bufp)
+        let rep : u32 = cai_get(kp, vp, RL_CAI_MASK, bufp)
+        if rep == 0xFFFFFFFFu32 {
+            /* first member of a new group -> it becomes the representative. */
+            cai_put(kp, vp, RL_CAI_MASK, bufp, i)
+        } else {
+            /* existing group: attempt to merge i with its representative.  Skip if already the
+             * same class (no double count); ru_certify_unify enforces the intent gate +
+             * congruence's faithfulness gate (proof_avail) and performs the certified union. */
+            if cgr_find(i) != cgr_find(rep) {
+                if ru_certify_unify(i, rep, i, rep, proof_avail) == 1u32 {
+                    merges = merges + 1u32
                 }
-                j = j + 1u32
             }
-            i = i + 1u32
         }
-        merges = merges + pass
-        if pass == 0u32 { dry = 1u32 }
+        i = i + 1u32
     }
     return merges
 }

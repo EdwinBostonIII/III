@@ -1,0 +1,62 @@
+/* KAT for COMBINE-3 / omnia/caindex -- the shared content-address index ALGORITHM (caller-owned).
+ * Proves: absent id -> CAI_EMPTY (negative arm); 1000 inserts all round-trip (positive arm, which
+ * forces real bucket collisions in 2048 slots so the linear-probe + full-32-byte-id verify path is
+ * exercised); a non-inserted id does NOT false-match (negative arm); idempotent re-put updates the
+ * payload.  The test OWNS its (keys, vals) arrays.  Deterministic (fixed seed).  Exit 99 = all hold. */
+module corpus_720
+
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
+
+const CAI_SLOTS : u64 = 2048u64
+const CAI_MASK  : u64 = 2047u64
+
+var IDBUF : [u8; 32]
+var KEYS  : [u8; 65536]    /* CAI_SLOTS * 32 */
+var VALS  : [u32; 2048]
+
+/* write n into IDBUF[0..4] (LE), zero the rest -> a distinct 32-byte id per n. */
+fn mkid(n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { IDBUF[i] = 0u8  i = i + 1u64 }
+    IDBUF[0u64] = (n & 0xFFu64) as u8
+    IDBUF[1u64] = ((n >> 8u64)  & 0xFFu64) as u8
+    IDBUF[2u64] = ((n >> 16u64) & 0xFFu64) as u8
+    IDBUF[3u64] = ((n >> 24u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+fn main() -> u64 {
+    let kp : u64 = (&KEYS) as u64
+    let vp : u64 = (&VALS) as u64
+    cai_clear(vp, CAI_SLOTS)
+
+    /* negative arm: an absent id returns CAI_EMPTY */
+    mkid(123u64)
+    if cai_get(kp, vp, CAI_MASK, &IDBUF as *u8) != 0xFFFFFFFFu32 { return 1u64 }
+
+    /* insert 1000 ids, payload = i (forces real bucket collisions) */
+    let mut i : u64 = 0u64
+    while i < 1000u64 {
+        mkid(i)
+        if cai_put(kp, vp, CAI_MASK, &IDBUF as *u8, i as u32) != 0i32 { return 2u64 }
+        i = i + 1u64
+    }
+    /* positive arm: every id round-trips to its exact payload */
+    let mut j : u64 = 0u64
+    while j < 1000u64 {
+        mkid(j)
+        if cai_get(kp, vp, CAI_MASK, &IDBUF as *u8) != (j as u32) { return 4u64 }
+        j = j + 1u64
+    }
+    /* negative arm: a non-inserted id must NOT false-match */
+    mkid(99999u64)
+    if cai_get(kp, vp, CAI_MASK, &IDBUF as *u8) != 0xFFFFFFFFu32 { return 5u64 }
+    /* idempotent re-put: payload updates in place */
+    mkid(5u64)
+    if cai_put(kp, vp, CAI_MASK, &IDBUF as *u8, 7777u32) != 0i32 { return 6u64 }
+    mkid(5u64)
+    if cai_get(kp, vp, CAI_MASK, &IDBUF as *u8) != 7777u32 { return 8u64 }
+    return 99u64
+}

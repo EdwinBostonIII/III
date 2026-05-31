@@ -4411,21 +4411,6 @@ L_if_end_131:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movabsq $0x37, %rax
-    pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
-    movabsq $0x86c8946e5047dea7, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq nl_lex_register_hash
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
     movabsq $0x38, %rax
     pushq %rax
     movabsq $0x2, %rax

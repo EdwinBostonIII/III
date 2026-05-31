@@ -57,7 +57,7 @@ const PROOFC_REQ_BYTES   : u64 = 64u64
 /* Module-scope scratch (Trap 7: no local var arrays). Not reentrant. */
 var PROOFC_LAYER       : [u8; 32768]   /* current Merkle layer, 1024 * 32 */
 var PROOFC_LEAVES      : [u8; 32768]   /* coefficient leaves for poly commit */
-var PROOFC_LIMB        : [u8; 1024]    /* one coeff's LE limbs, 128 * 8 */
+var PROOFC_LIMB        : [u8; 1056]    /* LE64(idx)(8) || one coeff's LE limbs (128*8) -- poly leaf prefix [audit C-PC-3] */
 var PROOFC_CUR         : [u8; 32]      /* verify: running node */
 var PROOFC_NXT         : [u8; 32]      /* verify: next node */
 var PROOFC_HBUF        : [u8; 32]      /* verify_proof: payload hash */
@@ -181,6 +181,57 @@ fn pc_coeff_leaf(arena: u64, bid: u64, out_leaf: *u8) -> i32 @export {
     return PROOFC_OK
 }
 
+/* Store v little-endian into base[+off..+8]. */
+fn pc_store_u64_le(base: u64, off: u64, v: u64) -> i32 {
+    let bp : *u8 = (base + off) as *u8
+    bp[0u64] = (v & 0xFFu64) as u8
+    bp[1u64] = ((v >> 8u64)  & 0xFFu64) as u8
+    bp[2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    bp[3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    bp[4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    bp[5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    bp[6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    bp[7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return PROOFC_OK
+}
+
+/* Position-binding coefficient leaf for the POLYNOMIAL scheme:
+ *   leaf_i = Keccak256(LE64(i) || coeff_i limbs LE).
+ * The index prefix domain-separates leaves so the commutative Merkle fold binds
+ * POSITION (coeff at index 3 and 5 hash differently even when equal).  The
+ * order-agnostic vector commitment keeps the plain pc_coeff_leaf.  [audit C-PC-3] */
+fn pc_poly_leaf(idx: u64, bid: u64, out_leaf: *u8) -> i32 {
+    if (out_leaf as u64) == 0u64 { return PROOFC_E_NULL }
+    let limbs : u64 = bigint_len_limbs(bid)
+    if limbs > PROOFC_MAX_LIMBS { return PROOFC_E_TOO_BIG }
+    let lim_base : u64 = &PROOFC_LIMB as u64
+    let bp : *u8 = lim_base as *u8
+    bp[0u64] = (idx & 0xFFu64) as u8
+    bp[1u64] = ((idx >> 8u64)  & 0xFFu64) as u8
+    bp[2u64] = ((idx >> 16u64) & 0xFFu64) as u8
+    bp[3u64] = ((idx >> 24u64) & 0xFFu64) as u8
+    bp[4u64] = ((idx >> 32u64) & 0xFFu64) as u8
+    bp[5u64] = ((idx >> 40u64) & 0xFFu64) as u8
+    bp[6u64] = ((idx >> 48u64) & 0xFFu64) as u8
+    bp[7u64] = ((idx >> 56u64) & 0xFFu64) as u8
+    let mut k : u64 = 0u64
+    while k < limbs {
+        let lv : u64 = bigint_get_limb(bid, k)
+        let off : u64 = 8u64 + k * 8u64
+        bp[off + 0u64] = (lv & 0xFFu64) as u8
+        bp[off + 1u64] = ((lv >> 8u64)  & 0xFFu64) as u8
+        bp[off + 2u64] = ((lv >> 16u64) & 0xFFu64) as u8
+        bp[off + 3u64] = ((lv >> 24u64) & 0xFFu64) as u8
+        bp[off + 4u64] = ((lv >> 32u64) & 0xFFu64) as u8
+        bp[off + 5u64] = ((lv >> 40u64) & 0xFFu64) as u8
+        bp[off + 6u64] = ((lv >> 48u64) & 0xFFu64) as u8
+        bp[off + 7u64] = ((lv >> 56u64) & 0xFFu64) as u8
+        k = k + 1u64
+    }
+    ident_from_bytes(bp, 8u64 + limbs * 8u64, out_leaf)
+    return PROOFC_OK
+}
+
 /* ===================================================================
  * Vector commitments
  * =================================================================== */
@@ -290,7 +341,7 @@ fn pc_commit_poly(coeffs: u64, n_coeffs: u64, p: u64, out_root: *u8) -> i32 @exp
         if going == 1u8 {
             let bid : u64 = pc_load_u64_le(l_coeffs, i * 8u64)
             let out_p : *u8 = (leaves_base + i * 32u64) as *u8
-            let r : i32 = pc_coeff_leaf(0u64, bid, out_p)
+            let r : i32 = pc_poly_leaf(i, bid, out_p)
             if r != PROOFC_OK { rc = r  going = 0u8 }
             i = i + 1u64
         }
@@ -352,28 +403,29 @@ fn pc_eval_poly(arena: u64, coeffs: u64, n_coeffs: u64, z: u64, p: u64) -> u64 @
  * leaf at index z (the coefficient-vector commitment scheme). W2: a single
  * aggregate carries the 8 logical args. */
 fn pc_open_poly(arena: u64, req: *u8) -> i32 @export {
-    let l_arena : u64 = arena
     if (req as u64) == 0u64 { return PROOFC_E_NULL }
     let rb : u64 = req as u64
     let coeffs : u64 = pc_load_u64_le(rb, 0u64)
     let n_coeffs : u64 = pc_load_u64_le(rb, 8u64)
     let z : u64 = pc_load_u64_le(rb, 16u64)
-    let p : u64 = pc_load_u64_le(rb, 24u64)
     let out_eval : u64 = pc_load_u64_le(rb, 32u64)
     let out_path : u64 = pc_load_u64_le(rb, 40u64)
     let out_path_len : u64 = pc_load_u64_le(rb, 48u64)
     let reserved : u64 = pc_load_u64_le(rb, 56u64)
     if reserved != 0u64 { return PROOFC_E_BAD_LEN }
+    if coeffs == 0u64 { return PROOFC_E_NULL }
     if out_eval == 0u64 { return PROOFC_E_NULL }
     if out_path == 0u64 { return PROOFC_E_NULL }
     if out_path_len == 0u64 { return PROOFC_E_NULL }
     if n_coeffs == 0u64 { return PROOFC_E_BAD_LEN }
     if n_coeffs > PROOFC_MAX_LEAVES { return PROOFC_E_TOO_BIG }
     if z >= n_coeffs { return PROOFC_E_BAD_IDX }
-    let ev_id : u64 = pc_eval_poly(l_arena, coeffs, n_coeffs, z, p)
-    if ev_id == PROOFC_INVALID { return PROOFC_E_OOM }
-    let r1 : i32 = pc_coeff_leaf(l_arena, ev_id, out_eval as *u8)
-    bigint_drop(ev_id)
+    /* Coefficient opening: emit the COMMITTED position-binding leaf H(LE64(z)||coeff_z)
+     * -- the very leaf pc_commit_poly placed in the tree.  (Previously this wrote
+     * H(f(z)), which the tree never contained, so verify rejected every correct
+     * opening -- C-PC-1.)  A coeff-Merkle tree can prove "coeff_z=v", not "f(z)=y". */
+    let bid_z : u64 = pc_load_u64_le(coeffs, z * 8u64)
+    let r1 : i32 = pc_poly_leaf(z, bid_z, out_eval as *u8)
     if r1 != PROOFC_OK { return r1 }
     let r2 : i32 = pc_open_vec_poly(coeffs, n_coeffs, z, out_path, out_path_len)
     return r2
@@ -394,7 +446,7 @@ fn pc_open_vec_poly(coeffs: u64, n_coeffs: u64, idx: u64, out_path: u64, out_pat
         if going == 1u8 {
             let bid : u64 = pc_load_u64_le(l_coeffs, i * 8u64)
             let out_p : *u8 = (leaves_base + i * 32u64) as *u8
-            let r : i32 = pc_coeff_leaf(0u64, bid, out_p)
+            let r : i32 = pc_poly_leaf(i, bid, out_p)
             if r != PROOFC_OK { rc = r  going = 0u8 }
             i = i + 1u64
         }
@@ -574,6 +626,45 @@ fn pc_selftest_arena(arena: u64) -> u64 {
     /* accessor: producer readback == producer */
     pc_cert_producer((&PCST_CERT as u64) as *u8, (&PCST_POUT as u64) as *u8)
     if ident_eq((&PCST_POUT as u64) as *u8, (&PCST_PROD as u64) as *u8) != 1u8 { return 18u64 }
+
+    /* -- KAT 7: polynomial commit + open + verify round-trip + tamper + position
+     *    binding.  [audit C-PC-1/2/3]  f = 2z^2+3z+5 over GF(97); coeffs [5,3,2];
+     *    open COEFFICIENT INDEX 1 (value 3) -- the round-trip C-PC-1 broke. -- */
+    if l_arena != 0u64 {
+        let k0 : u64 = bigint_from_u64(l_arena, 5u64)
+        let k1 : u64 = bigint_from_u64(l_arena, 3u64)
+        let k2 : u64 = bigint_from_u64(l_arena, 2u64)
+        if k0 == 0u64 { return 20u64 }
+        if k1 == 0u64 { return 21u64 }
+        if k2 == 0u64 { return 22u64 }
+        PCST_COEF[0] = k0
+        PCST_COEF[1] = k1
+        PCST_COEF[2] = k2
+        let rc_c : i32 = pc_commit_poly(&PCST_COEF as u64, 3u64, 97u64, (&PCST_ROOT as u64) as *u8)
+        if rc_c != 0i32 { return 23u64 }
+        let rqb : u64 = &PROOFC_REQ_SCRATCH as u64
+        pc_store_u64_le(rqb, 0u64,  &PCST_COEF as u64)
+        pc_store_u64_le(rqb, 8u64,  3u64)
+        pc_store_u64_le(rqb, 16u64, 1u64)
+        pc_store_u64_le(rqb, 24u64, 97u64)
+        pc_store_u64_le(rqb, 32u64, &PCST_A as u64)
+        pc_store_u64_le(rqb, 40u64, &PCST_PATH as u64)
+        pc_store_u64_le(rqb, 48u64, &PCST_PLEN as u64)
+        pc_store_u64_le(rqb, 56u64, 0u64)
+        let rc_o : i32 = pc_open_poly(l_arena, rqb as *u8)
+        if rc_o != 0i32 { return 24u64 }
+        pc_poly_leaf(1u64, k1, (&PCST_B as u64) as *u8)
+        if ident_eq((&PCST_A as u64) as *u8, (&PCST_B as u64) as *u8) != 1u8 { return 25u64 }
+        if pc_verify_poly((&PCST_ROOT as u64) as *u8, (&PCST_A as u64) as *u8, 1u64, 3u64, (&PCST_PATH as u64) as *u8, PCST_PLEN[0]) != 1u8 { return 26u64 }
+        PCST_A[0] = PCST_A[0] ^ 0x01u8
+        if pc_verify_poly((&PCST_ROOT as u64) as *u8, (&PCST_A as u64) as *u8, 1u64, 3u64, (&PCST_PATH as u64) as *u8, PCST_PLEN[0]) == 1u8 { return 27u64 }
+        PCST_A[0] = PCST_A[0] ^ 0x01u8
+        pc_poly_leaf(0u64, k1, (&PCST_C as u64) as *u8)
+        if pc_verify_poly((&PCST_ROOT as u64) as *u8, (&PCST_C as u64) as *u8, 0u64, 3u64, (&PCST_PATH as u64) as *u8, PCST_PLEN[0]) == 1u8 { return 28u64 }
+        bigint_drop(k0)
+        bigint_drop(k1)
+        bigint_drop(k2)
+    }
 
     return 99u64
 }

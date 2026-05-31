@@ -4,45 +4,65 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "msvcrtmsvcrtsemver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "msvcrtmsvcrtsemver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_1:
-    .ascii "msvcrtsemver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "msvcrtsemver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_2:
-    .ascii "semver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "semver.iiisemver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_3:
-    .ascii "semver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "semver.iiisemver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_4:
-    .ascii "semver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "semver.iiisemver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_5:
-    .ascii "semver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "semver.iiisemver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_6:
-    .ascii "semver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "semver.iiisemver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_7:
-    .ascii "semver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "semver.iii1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_8:
-    .ascii "1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.2.31.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_9:
-    .ascii "1.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.2.3-alpha.10.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_10:
-    .ascii "0.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "0.0.001.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_11:
-    .ascii "01.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "01.0.01.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_12:
-    .ascii "1.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.21.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_13:
-    .ascii "1.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.0.0-1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_14:
-    .ascii "1.0.02.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.0.02.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_15:
-    .ascii "2.0.01.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "2.0.01.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_16:
-    .ascii "1.2.31.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.2.31.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_17:
-    .ascii "1.2.31.0.0-alpha1.0.0\0"
+    .ascii "1.2.31.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_18:
-    .ascii "1.0.0-alpha1.0.0\0"
+    .ascii "1.0.0-alpha1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
 L_str_19:
-    .ascii "1.0.0\0"
+    .ascii "1.0.01.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_20:
+    .ascii "1.0.0-alpha1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_21:
+    .ascii "1.0.0-beta1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_22:
+    .ascii "1.0.0-11.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_23:
+    .ascii "1.0.0-alpha1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_24:
+    .ascii "1.0.0-alpha1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_25:
+    .ascii "1.0.0-alpha.11.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_26:
+    .ascii "1.0.0-alpha.11.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_27:
+    .ascii "1.0.0-alpha.21.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_28:
+    .ascii "1.0.0-alpha.beta1.0.0-alpha.beta\0"
+L_str_29:
+    .ascii "1.0.0-alpha.beta\0"
     .section .iii.ring3,"n"
     .asciz "make_str"
     .text
@@ -794,6 +814,396 @@ L_if_end_29:
     pushq %rax
     popq %rax
 L_if_end_31:
+    movabsq $0xb, %rax
+    pushq %rax
+    leaq L_str_20(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -120(%rbp)
+    movabsq $0xa, %rax
+    pushq %rax
+    leaq L_str_21(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -128(%rbp)
+    movq -128(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -120(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq semver_compare
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movabsq $0x10, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    movq -120(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq -128(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq semver_compare
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x11, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
+    movabsq $0x7, %rax
+    pushq %rax
+    leaq L_str_22(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -136(%rbp)
+    movabsq $0xb, %rax
+    pushq %rax
+    leaq L_str_23(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -144(%rbp)
+    movq -144(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -136(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq semver_compare
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_37
+    movabsq $0x12, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_37:
+    movabsq $0xb, %rax
+    pushq %rax
+    leaq L_str_24(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -152(%rbp)
+    movabsq $0xd, %rax
+    pushq %rax
+    leaq L_str_25(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -160(%rbp)
+    movq -160(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq semver_compare
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_39
+    movabsq $0x13, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_39:
+    movabsq $0xd, %rax
+    pushq %rax
+    leaq L_str_26(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -168(%rbp)
+    movabsq $0xd, %rax
+    pushq %rax
+    leaq L_str_27(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -176(%rbp)
+    movq -176(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -168(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq semver_compare
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_41
+    movabsq $0x14, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_41:
+    movabsq $0x10, %rax
+    pushq %rax
+    leaq L_str_28(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -184(%rbp)
+    movabsq $0x10, %rax
+    pushq %rax
+    leaq L_str_29(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq L_make_str
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -192(%rbp)
+    movq -192(%rbp), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -184(%rbp), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq semver_compare
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_43
+    movabsq $0x15, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_43:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx

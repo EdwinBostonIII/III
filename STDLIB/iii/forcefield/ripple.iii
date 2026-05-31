@@ -43,7 +43,15 @@ const RN_NOTFOUND : u64 = 0xFFFFFFFFFFFFFFFFu64
  *   [0] cap (slots, a power of two)   [8] arena_cap
  *   [16] arena_used                   [24] count
  * slot stride = 64 bytes:
- *   [0..31] addr   [32..39] value-offset   [40..47] value-len   [48] occupied */
+ *   [0..31] addr   [32..39] value-offset   [40..47] value-len   [48] occupied   [49] kind */
+
+/* W3.17 / ENHANCE-18: domain bytes separating Merkle leaves from interior nodes (the
+ * leaf-as-node second-preimage).  A leaf hashes under RN_DOM_LEAF + its byte length; an
+ * interior node under RN_DOM_NODE + its arity.  The per-slot kind byte [49] lets
+ * rn_resolve rehash under the right domain.  Reuses the production mhash (no new primitive). */
+const RN_DOM_LEAF : u8 = 0u8
+const RN_DOM_NODE : u8 = 1u8
+var RN_FRAME : [u8; 9]   /* domain(1) + length/arity(8 LE) hash-prefix scratch */
 
 /* --- byte (de)serialization, all *u8 + byte offsets (no pointer-int casts) --- */
 
@@ -97,6 +105,20 @@ fn rn_hash(src: *u8, soff: u64, len: u64, out: *u8, oo: u64) -> u64 {
     return 0u64
 }
 
+/* domain-separated, length/arity-framed hash: addr = mhash(dom || frame(8 LE) || payload).
+ * dom = RN_DOM_LEAF (frame = byte length) or RN_DOM_NODE (frame = arity).  This closes the
+ * leaf-as-node second-preimage: H_leaf(X) and H_node(X) now differ for the same bytes X.
+ * The frame lives in a module-global scratch, so the STORED payload size is unchanged. */
+fn rn_hash_f(dom: u8, frame: u64, src: *u8, soff: u64, len: u64, out: *u8, oo: u64) -> u64 {
+    RN_FRAME[0u64] = dom
+    rn_st_u64((&RN_FRAME as u64) as *u8, 1u64, frame)
+    mhash_begin()
+    mhash_payload((&RN_FRAME as u64), 9u64)
+    mhash_payload((src as u64) + soff, len)
+    mhash_final((out as u64) + oo)
+    return 0u64
+}
+
 /* open-addressing probe (cap is a power of two so slot = hash & (cap-1), never % ) */
 fn rn_find(meta: *u8, slots: *u8, addr: *u8, ao: u64, want: u64) -> u64 {
     let cap : u64 = rn_ld_u64(meta, 0u64)
@@ -117,6 +139,8 @@ fn rn_find(meta: *u8, slots: *u8, addr: *u8, ao: u64, want: u64) -> u64 {
 }
 
 fn rn_store_init(meta: *u8, slots: *u8, cap: u64, arena_cap: u64) -> u64 @export {
+    if cap == 0u64 { return 1u64 }                     /* the probe computes slot = hash & (cap-1); cap MUST be a nonzero power of two [audit A-RP-4] */
+    if (cap & (cap - 1u64)) != 0u64 { return 1u64 }
     rn_st_u64(meta, 0u64, cap)
     rn_st_u64(meta, 8u64, arena_cap)
     rn_st_u64(meta, 16u64, 0u64)
@@ -133,9 +157,10 @@ fn rn_count(meta: *u8) -> u64 @export {
     return rn_ld_u64(meta, 24u64)
 }
 
-/* publish: addr_out := H(value); insert if new (dedup if present). 0 ok / 2 full / 3 oom */
-fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 @export {
-    rn_hash(val, vo, vlen, addr_out, ao)
+/* domain-aware hash + insert (dedup if present).  Records the slot kind byte [49] so
+ * rn_resolve rehashes under the SAME domain.  0 ok / 2 full / 3 oom. */
+fn rn_insert(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, dom: u8, frame: u64, addr_out: *u8, ao: u64) -> u64 {
+    rn_hash_f(dom, frame, val, vo, vlen, addr_out, ao)
     let i : u64 = rn_find(meta, slots, addr_out, ao, 1u64)
     if i == RN_NOTFOUND { return 2u64 }
     let occ : u8 = slots[i * 64u64 + 48u64]
@@ -148,9 +173,15 @@ fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, a
     rn_st_u64(slots, i * 64u64 + 32u64, used)
     rn_st_u64(slots, i * 64u64 + 40u64, vlen)
     slots[i * 64u64 + 48u64] = 1u8
+    slots[i * 64u64 + 49u64] = dom
     rn_st_u64(meta, 16u64, used + vlen)
     rn_st_u64(meta, 24u64, rn_ld_u64(meta, 24u64) + 1u64)
     return 0u64
+}
+
+/* publish a LEAF value: addr_out := H_leaf(value); insert if new (dedup if present). */
+fn rn_publish(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, addr_out: *u8, ao: u64) -> u64 @export {
+    return rn_insert(meta, slots, arena, val, vo, vlen, RN_DOM_LEAF, vlen, addr_out, ao)
 }
 
 /* resolve: returns length, or RN_GAP if absent OR if the stored bytes do not
@@ -160,7 +191,10 @@ fn rn_resolve(meta: *u8, slots: *u8, arena: *u8, addr: *u8, ao: u64, out: *u8, o
     if i == RN_NOTFOUND { return RN_GAP }
     let voff : u64 = rn_ld_u64(slots, i * 64u64 + 32u64)
     let vlen : u64 = rn_ld_u64(slots, i * 64u64 + 40u64)
-    rn_hash(arena, voff, vlen, vbuf, 0u64)
+    let kind : u8 = slots[i * 64u64 + 49u64]
+    let mut frame : u64 = vlen                       /* leaf: byte-length frame */
+    if kind == RN_DOM_NODE { frame = vlen >> 5u64 }  /* node: arity frame (vlen / 32) */
+    rn_hash_f(kind, frame, arena, voff, vlen, vbuf, 0u64)
     if rn_eq32(vbuf, 0u64, addr, ao) == 0u8 { return RN_GAP }
     let mut n : u64 = vlen
     if n > out_cap { n = out_cap }
@@ -185,10 +219,15 @@ fn rn_recompute(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, 
                 let mut j : u64 = 0u64
                 while j < cnt {
                     let child : u64 = rn_ld_u64(in_list, (off + j) * 8u64)
+                    /* SOUNDNESS: child is a DATA-derived index (read from in_list) into
+                     * cell_addr, which is sized [ncells*32]. A malformed in_list with child >=
+                     * ncells would OOB-READ cell_addr[child*32]. ncells is the exact in-scope
+                     * bound -- reject (RN_GAP) before the read rather than trust the input. */
+                    if child >= ncells { return RN_GAP }
                     rn_copy(scratch, j * 32u64, cell_addr, child * 32u64, 32u64)
                     j = j + 1u64
                 }
-                rn_publish(meta, slots, arena, scratch, 0u64, cnt * 32u64, newaddr, 0u64)
+                rn_insert(meta, slots, arena, scratch, 0u64, cnt * 32u64, RN_DOM_NODE, cnt, newaddr, 0u64)
                 if rn_eq32(newaddr, 0u64, cell_addr, c * 32u64) == 0u8 {
                     rn_copy(cell_addr, c * 32u64, newaddr, 0u64, 32u64)
                     anychange = 1u64
@@ -222,7 +261,10 @@ fn rn_merge(dmeta: *u8, dslots: *u8, darena: *u8, smeta: *u8, sslots: *u8, saren
         if sslots[i * 64u64 + 48u64] == 1u8 {
             let voff : u64 = rn_ld_u64(sslots, i * 64u64 + 32u64)
             let vlen : u64 = rn_ld_u64(sslots, i * 64u64 + 40u64)
-            rn_publish(dmeta, dslots, darena, sarena, voff, vlen, tmpaddr, 0u64)
+            let kind : u8 = sslots[i * 64u64 + 49u64]
+            let mut frame : u64 = vlen
+            if kind == RN_DOM_NODE { frame = vlen >> 5u64 }
+            rn_insert(dmeta, dslots, darena, sarena, voff, vlen, kind, frame, tmpaddr, 0u64)
         }
         i = i + 1u64
     }

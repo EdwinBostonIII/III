@@ -100,15 +100,15 @@ fn main() -> u64 {
     if prespec_used() != 0u32 { return 1u64 }
 
     let n : u32 = prespec_register_compositions()
-    /* The current .def has 256 entries (249 baseline + IDSG primitive
-     * intent_abstract + ed25519_sign_c4 §4.1 + 5 PQ pq_*_c4 §4.4.5). This
+    /* The current .def has 255 entries (was 256; region_reset_safe retired
+     * per ADR-S7b §S.7, arena_reset_safe -> arena_reset_with_witness). This
      * count is the structural SSOT cardinality and must equal prespec_used()
      * after the bulk register call. If they diverge, the generator's emitted
      * block is out of sync with the .def — drift. If the .def grows or shrinks
      * intentionally, this constant updates in lock-step (one definition:
      * iii_compositions.def). */
-    if n != 256u32 { return 1u64 }
-    if prespec_used() != 256u32 { return 1u64 }
+    if n != 255u32 { return 1u64 }
+    if prespec_used() != 255u32 { return 1u64 }
 
     /* Capture real function addresses for comparison. These must match
      * exactly what prespec.iii's auto-generated block bound via

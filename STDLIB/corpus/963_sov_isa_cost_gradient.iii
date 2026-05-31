@@ -1,0 +1,8 @@
+/* 963 — W3.8 / ENHANCE-4 / SEPARATE-3 gradient falsifier: sov_isa's cost field is
+ * the REAL 6-D cost_calculus model (not an all-ones stub). MUL's cost vector differs
+ * from ADD's per dimension (latency / throughput-deficit / energy) and MUL is
+ * strictly dearer than ADD/SHL; a flat re-seed collapses the gradient (mul == add),
+ * proving the field is data-driven, not hardcoded. 99 = pass. */
+module corpus_963
+extern @abi(c-msvc-x64) fn sov_isa_cost_gradient_kat() -> u64 from "sov_isa.iii"
+fn main() -> u64 { return sov_isa_cost_gradient_kat() }

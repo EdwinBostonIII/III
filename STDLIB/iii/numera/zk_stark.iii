@@ -16,6 +16,12 @@
 module numera_zk_stark
 
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+/* W0.7 / COMBINE-1: the radix-2 NTT butterfly lives ONCE in numera/ntt.iii.  This
+ * module's GF(998244353) NTT (st_ntt/st_intt) is byte-identical to the organ's
+ * ntt_forward_at/ntt_inverse_at (same DIT bit-reversal + wn=omega^(n/len) butterfly,
+ * same inverse = forward(omega^-1) then *inv(n)); it now delegates to the organ. */
+extern @abi(c-msvc-x64) fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
 
 /* sf working arrays (NTT buffers / LDE / cp / FRI layers). */
 var ZKST     : [u32; 8192]
@@ -88,54 +94,16 @@ fn sf_pow(x: u32, e: u64) -> u32 {
 fn sf_inv(x: u32) -> u32 { return sf_pow(x, 998244351u64) }            /* x^(q-2) */
 fn sf_rou(n: u32) -> u32 { return sf_pow(3u32, 998244352u64 / (n as u64)) }   /* g^((q-1)/n) */
 
-/* in-place bit-reversal permutation of ZKST[base..base+n-1]. */
-fn st_bitrev(base: u64, n: u64) -> i32 {
-    let mut j : u64 = 0u64
-    let mut i : u64 = 1u64
-    while i < n {
-        let mut bit : u64 = n >> 1u64
-        while (j & bit) != 0u64 { j = j ^ bit ; bit = bit >> 1u64 }
-        j = j ^ bit
-        if i < j {
-            let t : u32 = ZKST[base + i]
-            ZKST[base + i] = ZKST[base + j]
-            ZKST[base + j] = t
-        }
-        i = i + 1u64
-    }
-    return 0i32
-}
-/* in-place radix-2 NTT of ZKST[base..base+n-1] with n-th root omega. */
+/* GF(998244353) NTT -- now delegates to the shared organ (W0.7 / COMBINE-1).
+ * `base` is an element index into ZKST; the organ takes the byte address of
+ * ZKST[base] (+ base*4).  Byte-identical to the prior inline butterfly: same DIT
+ * bit-reversal, same wn=omega^(n/len), same field ops (q=998244353).  st_intt =
+ * the organ's inverse (forward over omega^-1, then scale by inv(n) -- Fermat). */
 fn st_ntt(base: u64, n: u64, omega: u32) -> i32 {
-    st_bitrev(base, n)
-    let mut len : u64 = 2u64
-    while len <= n {
-        let wn : u32 = sf_pow(omega, n / len)
-        let half : u64 = len / 2u64
-        let mut i : u64 = 0u64
-        while i < n {
-            let mut w : u32 = 1u32
-            let mut k : u64 = 0u64
-            while k < half {
-                let uu : u32 = ZKST[base + i + k]
-                let vv : u32 = sf_mul(ZKST[base + i + k + half], w)
-                ZKST[base + i + k] = sf_add(uu, vv)
-                ZKST[base + i + k + half] = sf_sub(uu, vv)
-                w = sf_mul(w, wn)
-                k = k + 1u64
-            }
-            i = i + len
-        }
-        len = len << 1u64
-    }
-    return 0i32
+    return ntt_forward_at((&ZKST as u64) + base * 4u64, n, 998244353u32, omega)
 }
 fn st_intt(base: u64, n: u64, omega: u32) -> i32 {
-    st_ntt(base, n, sf_inv(omega))
-    let ninv : u32 = sf_inv(n as u32)
-    let mut i : u64 = 0u64
-    while i < n { ZKST[base + i] = sf_mul(ZKST[base + i], ninv) ; i = i + 1u64 }
-    return 0i32
+    return ntt_inverse_at((&ZKST as u64) + base * 4u64, n, 998244353u32, omega)
 }
 
 /* Layer-1 self-test: sf Fermat/inverse + NTT/INTT round-trip.  99 = pass. */

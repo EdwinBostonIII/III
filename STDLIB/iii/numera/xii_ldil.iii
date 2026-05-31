@@ -485,6 +485,27 @@ fn ldil_op_is_cmp(op: u8) -> u8 {
     return 0u8
 }
 
+/* 1 iff op is a genuine arithmetic/bitwise binary operator.  STORE/CALL/LOAD/PHI
+ * also have n_in>=2 but are NOT binops -- typing their operands as binop operands
+ * OOB-reads LDIL_V_WIDTH[out] when out==LDIL_SENT (STORE) and falsely rejects a
+ * 2-arg CALL.  [audit B-LDIL-1/2] */
+fn ldil_op_is_binop(op: u8) -> u8 {
+    if op == LDIL_OP_ADD  { return 1u8 }
+    if op == LDIL_OP_SUB  { return 1u8 }
+    if op == LDIL_OP_MUL  { return 1u8 }
+    if op == LDIL_OP_DIV  { return 1u8 }
+    if op == LDIL_OP_MOD  { return 1u8 }
+    if op == LDIL_OP_UDIV { return 1u8 }
+    if op == LDIL_OP_UMOD { return 1u8 }
+    if op == LDIL_OP_AND  { return 1u8 }
+    if op == LDIL_OP_OR   { return 1u8 }
+    if op == LDIL_OP_XOR  { return 1u8 }
+    if op == LDIL_OP_SHL  { return 1u8 }
+    if op == LDIL_OP_SHR  { return 1u8 }
+    if op == LDIL_OP_SAR  { return 1u8 }
+    return 0u8
+}
+
 fn ldil_emit_binop(block: u32, op: u8, a: u32, b: u32) -> u32 @export {
     if ldil_block_ok(block) == 0u8 { return LDIL_SENT }
     if ldil_value_ok(a) == 0u8 { return LDIL_SENT }
@@ -744,6 +765,9 @@ fn ldil_tc_check_inputs(insn: u32) -> i32 {
 fn ldil_tc_binop_types(insn: u32) -> i32 {
     let op : u8 = LDIL_I_OP[insn]
     if ldil_op_is_cmp(op) == 1u8 { return LDIL_OK }
+    /* Only genuine binops get operand-width-checked; STORE/CALL/etc. (also n_in==2)
+     * must NOT reach the LDIL_V_WIDTH[out] read below (out==SENT for STORE -> OOB).  [audit B-LDIL-1/2] */
+    if ldil_op_is_binop(op) == 0u8 { return LDIL_OK }
     let base : u64 = ((insn as u64) & 0xFFFFFFFFu64) * 8u64
     let a : u32 = LDIL_I_IN[base + 0u64]
     let b : u32 = LDIL_I_IN[base + 1u64]

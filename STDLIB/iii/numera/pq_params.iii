@@ -1,0 +1,227 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\pq_params.iii
+ *
+ * III STDLIB - numera::pq_params  (APOTHEOSIS C.1, ADR-C1)
+ *
+ * The ONE post-quantum parameter descriptor table.  Nine prebuilt rows --
+ * three ML-KEM, three ML-DSA, three SLH-DSA -- keyed by FIPS suite id, with
+ * O(1) lookup by id.  This RETIRES the nibble-arithmetic parameter decode in
+ * pq_dispatch.iii (pq_mlkem_k / pq_slh_lv:32 / pq_mldsa_level + the bolted-on
+ * pq_nibble_ok guard).  E-PQD-2 (the `(suite & 0xF) - 1u64` underflow that
+ * sent nibble-0 to u64::MAX) does not merely get a guard here -- the
+ * subtraction CEASES TO EXIST: pq_params_for scans the table for an exact
+ * suite-id match and returns a not-found sentinel for anything unrouted, so
+ * there is no arithmetic to underflow.  Unfalsifiable retirement.
+ *
+ * Descriptor fields (struct-of-arrays so each accessor is a direct
+ * module-global index, no offset arithmetic):
+ *   suite    -- FIPS suite id (the lookup key)
+ *   scheme   -- KEM / DSA / SLH
+ *   selector -- the FIRST argument the scheme's keygen/sign/encaps entry
+ *               expects:  ML-KEM -> k {2,3,4};  ML-DSA -> level {2,3,5};
+ *               SLH-DSA -> lv {0,1,2}.  (Verified against the live entry
+ *               signatures: iii_mlkem_keygen(k,..), iii_mldsa_keygen(level,..),
+ *               iii_slhdsa_keygen(lv,..).)
+ *   n,q      -- ring degree / modulus (lattice schemes; 0 for SLH-DSA)
+ *   k,l      -- module dimensions (l=0 for ML-KEM/SLH-DSA)
+ *   eta      -- secret/noise bound (eta1 for ML-KEM)
+ *   du,dv    -- ciphertext compression (ML-KEM only; 0 otherwise)
+ *
+ * The headline math params live here for dispatch-level routing/validation;
+ * each scheme module keeps its OWN detailed parameter tables (tau, omega,
+ * gamma, hypertree h/d/a/w/m, ...) -- this descriptor does NOT duplicate them
+ * (single source of truth, no drift).
+ *
+ * Hexad: kind_essence.  Ring: R3.  K: 1.00 (pure table).
+ */
+
+module numera_pq_params
+
+const PQP_SCHEME_KEM : u64 = 1u64
+const PQP_SCHEME_DSA : u64 = 2u64
+const PQP_SCHEME_SLH : u64 = 3u64
+
+const PQP_ROWS : u64 = 9u64
+const PQP_NONE : u64 = 0xFFFFFFFFFFFFFFFFu64   /* "no such suite" sentinel */
+
+var PQP_SUITE    : [u64; 9]
+var PQP_SCHEME   : [u64; 9]
+var PQP_SELECTOR : [u64; 9]
+var PQP_N        : [u64; 9]
+var PQP_Q        : [u64; 9]
+var PQP_K        : [u64; 9]
+var PQP_L        : [u64; 9]
+var PQP_ETA      : [u64; 9]
+var PQP_DU       : [u64; 9]
+var PQP_DV       : [u64; 9]
+
+var PQP_INIT : u8 = 0u8
+
+/* Fill the descriptor table once (runtime-fill-with-guard, matching the
+ * keccak round-constant idiom; module arrays are runtime-index safe). */
+fn pq_params_init() -> i32 @export {
+    if PQP_INIT == 1u8 { return 0i32 }
+
+    /* --- ML-KEM (FIPS-203): n=256, q=3329, selector=k --- */
+    /* ML-KEM-512  (0x0101): k=2, eta1=3, du=10, dv=4 */
+    PQP_SUITE[0u64]    = 0x0101u64
+    PQP_SCHEME[0u64]   = PQP_SCHEME_KEM
+    PQP_SELECTOR[0u64] = 2u64
+    PQP_N[0u64]        = 256u64
+    PQP_Q[0u64]        = 3329u64
+    PQP_K[0u64]        = 2u64
+    PQP_L[0u64]        = 0u64
+    PQP_ETA[0u64]      = 3u64
+    PQP_DU[0u64]       = 10u64
+    PQP_DV[0u64]       = 4u64
+    /* ML-KEM-768  (0x0102): k=3, eta1=2, du=10, dv=4 */
+    PQP_SUITE[1u64]    = 0x0102u64
+    PQP_SCHEME[1u64]   = PQP_SCHEME_KEM
+    PQP_SELECTOR[1u64] = 3u64
+    PQP_N[1u64]        = 256u64
+    PQP_Q[1u64]        = 3329u64
+    PQP_K[1u64]        = 3u64
+    PQP_L[1u64]        = 0u64
+    PQP_ETA[1u64]      = 2u64
+    PQP_DU[1u64]       = 10u64
+    PQP_DV[1u64]       = 4u64
+    /* ML-KEM-1024 (0x0103): k=4, eta1=2, du=11, dv=5 */
+    PQP_SUITE[2u64]    = 0x0103u64
+    PQP_SCHEME[2u64]   = PQP_SCHEME_KEM
+    PQP_SELECTOR[2u64] = 4u64
+    PQP_N[2u64]        = 256u64
+    PQP_Q[2u64]        = 3329u64
+    PQP_K[2u64]        = 4u64
+    PQP_L[2u64]        = 0u64
+    PQP_ETA[2u64]      = 2u64
+    PQP_DU[2u64]       = 11u64
+    PQP_DV[2u64]       = 5u64
+
+    /* --- ML-DSA (FIPS-204): n=256, q=8380417, selector=level --- */
+    /* ML-DSA-44 (0x0111, level 2): k=4, l=4, eta=2 */
+    PQP_SUITE[3u64]    = 0x0111u64
+    PQP_SCHEME[3u64]   = PQP_SCHEME_DSA
+    PQP_SELECTOR[3u64] = 2u64
+    PQP_N[3u64]        = 256u64
+    PQP_Q[3u64]        = 8380417u64
+    PQP_K[3u64]        = 4u64
+    PQP_L[3u64]        = 4u64
+    PQP_ETA[3u64]      = 2u64
+    PQP_DU[3u64]       = 0u64
+    PQP_DV[3u64]       = 0u64
+    /* ML-DSA-65 (0x0112, level 3): k=6, l=5, eta=4 */
+    PQP_SUITE[4u64]    = 0x0112u64
+    PQP_SCHEME[4u64]   = PQP_SCHEME_DSA
+    PQP_SELECTOR[4u64] = 3u64
+    PQP_N[4u64]        = 256u64
+    PQP_Q[4u64]        = 8380417u64
+    PQP_K[4u64]        = 6u64
+    PQP_L[4u64]        = 5u64
+    PQP_ETA[4u64]      = 4u64
+    PQP_DU[4u64]       = 0u64
+    PQP_DV[4u64]       = 0u64
+    /* ML-DSA-87 (0x0113, level 5): k=8, l=7, eta=2 */
+    PQP_SUITE[5u64]    = 0x0113u64
+    PQP_SCHEME[5u64]   = PQP_SCHEME_DSA
+    PQP_SELECTOR[5u64] = 5u64
+    PQP_N[5u64]        = 256u64
+    PQP_Q[5u64]        = 8380417u64
+    PQP_K[5u64]        = 8u64
+    PQP_L[5u64]        = 7u64
+    PQP_ETA[5u64]      = 2u64
+    PQP_DU[5u64]       = 0u64
+    PQP_DV[5u64]       = 0u64
+
+    /* --- SLH-DSA (FIPS-205): hash-based, no ring; selector=lv, only n applies --- */
+    /* SLH-DSA-128s (0x0121, lv 0): n=16 */
+    PQP_SUITE[6u64]    = 0x0121u64
+    PQP_SCHEME[6u64]   = PQP_SCHEME_SLH
+    PQP_SELECTOR[6u64] = 0u64
+    PQP_N[6u64]        = 16u64
+    PQP_Q[6u64]        = 0u64
+    PQP_K[6u64]        = 0u64
+    PQP_L[6u64]        = 0u64
+    PQP_ETA[6u64]      = 0u64
+    PQP_DU[6u64]       = 0u64
+    PQP_DV[6u64]       = 0u64
+    /* SLH-DSA-192s (0x0122, lv 1): n=24 */
+    PQP_SUITE[7u64]    = 0x0122u64
+    PQP_SCHEME[7u64]   = PQP_SCHEME_SLH
+    PQP_SELECTOR[7u64] = 1u64
+    PQP_N[7u64]        = 24u64
+    PQP_Q[7u64]        = 0u64
+    PQP_K[7u64]        = 0u64
+    PQP_L[7u64]        = 0u64
+    PQP_ETA[7u64]      = 0u64
+    PQP_DU[7u64]       = 0u64
+    PQP_DV[7u64]       = 0u64
+    /* SLH-DSA-256s (0x0123, lv 2): n=32 */
+    PQP_SUITE[8u64]    = 0x0123u64
+    PQP_SCHEME[8u64]   = PQP_SCHEME_SLH
+    PQP_SELECTOR[8u64] = 2u64
+    PQP_N[8u64]        = 32u64
+    PQP_Q[8u64]        = 0u64
+    PQP_K[8u64]        = 0u64
+    PQP_L[8u64]        = 0u64
+    PQP_ETA[8u64]      = 0u64
+    PQP_DU[8u64]       = 0u64
+    PQP_DV[8u64]       = 0u64
+
+    PQP_INIT = 1u8
+    return 0i32
+}
+
+/* O(1) descriptor lookup by FIPS suite id.  Returns the ROW index (0..8), or
+ * PQP_NONE for an unrouted id.  No nibble arithmetic -> no underflow path. */
+fn pq_params_for(suite_id: u64) -> u64 @export {
+    pq_params_init()
+    let mut i : u64 = 0u64
+    while i < PQP_ROWS {
+        if PQP_SUITE[i] == suite_id { return i }
+        i = i + 1u64
+    }
+    return PQP_NONE
+}
+
+fn pq_params_count() -> u64 @export { return PQP_ROWS }
+
+/* Field accessors (row in 0..8).  Out-of-range row -> 0. */
+fn pq_params_scheme(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_SCHEME[row]
+}
+fn pq_params_selector(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_SELECTOR[row]
+}
+fn pq_params_suite(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_SUITE[row]
+}
+fn pq_params_n(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_N[row]
+}
+fn pq_params_q(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_Q[row]
+}
+fn pq_params_k(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_K[row]
+}
+fn pq_params_l(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_L[row]
+}
+fn pq_params_eta(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_ETA[row]
+}
+fn pq_params_du(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_DU[row]
+}
+fn pq_params_dv(row: u64) -> u64 @export {
+    if row >= PQP_ROWS { return 0u64 }
+    return PQP_DV[row]
+}

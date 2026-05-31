@@ -1,0 +1,66 @@
+/* COMPILER/BOOT/forge_keccak_driver.iii -- W5.2 (RIPPLE-11 level D): the missing Keccak-256
+ * manifest closure-root recompute tool, hand-rolled over the in-tree numera/keccak.iii (NIH --
+ * no openssl, no third-party keccak).  Reads the sorted-and-concatenated citizen seals from
+ * "forge_keccak_in.tmp" (relative to cwd), computes Keccak-256 (rate 136, domain 0x01 -- the
+ * pre-NIST Keccak the forge spec names), and writes the 64-char lowercase-hex root to
+ * "forge_keccak_out.tmp".  Driven by COMPILER/BOOT/forge_manifest_keccak.sh.  Exit 0 on success.
+ *
+ * Determinism: pure function of the input bytes; the shell pins LC_ALL=C + sorted seals + no
+ * trailing newline, matching the SHA-256 descent-root convention so the two closure levels share
+ * one input.  Hexad: kind_form.  Ring: R3. */
+module forge_keccak_driver
+
+extern @abi(c-msvc-x64) fn fopen(path: u64, mode: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fread(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fwrite(ptr: u64, size: u64, nmemb: u64, stream: u64) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn fclose(stream: u64) -> i32 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn keccak_state_zero(state_ptr: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn keccak_pack_rate_dom(rate_bytes: u32, dom_sep: u8) -> u64 from "keccak.iii"
+
+var KKD_STATE : [u8; 200]
+var KKD_IN    : [u8; 8192]
+var KKD_DIG   : [u8; 32]
+var KKD_HEX   : [u8; 64]
+
+/* NUL-terminated path/mode strings (msvcrt string fns read past the bytes -- a bare string
+ * literal has no trailing NUL, so these are explicit byte arrays). */
+var KKD_PATH_IN  : [u8; 20] = [102u8, 111u8, 114u8, 103u8, 101u8, 95u8, 107u8, 101u8, 99u8, 99u8, 97u8, 107u8, 95u8, 105u8, 110u8, 46u8, 116u8, 109u8, 112u8, 0u8]   /* "forge_keccak_in.tmp\0" */
+var KKD_PATH_OUT : [u8; 21] = [102u8, 111u8, 114u8, 103u8, 101u8, 95u8, 107u8, 101u8, 99u8, 99u8, 97u8, 107u8, 95u8, 111u8, 117u8, 116u8, 46u8, 116u8, 109u8, 112u8, 0u8]   /* "forge_keccak_out.tmp\0" */
+var KKD_MODE_RB  : [u8; 3]  = [114u8, 98u8, 0u8]   /* "rb\0" */
+var KKD_MODE_WB  : [u8; 3]  = [119u8, 98u8, 0u8]   /* "wb\0" */
+var KKD_HEXCH    : [u8; 16] = [48u8, 49u8, 50u8, 51u8, 52u8, 53u8, 54u8, 55u8, 56u8, 57u8, 97u8, 98u8, 99u8, 100u8, 101u8, 102u8]   /* "0123456789abcdef" */
+
+fn _kkd_hex() -> i32 {
+    let mut i : u32 = 0u32
+    while i < 32u32 {
+        let b  : u32 = (KKD_DIG[i] as u32) & 0xFFu32
+        let hi : u32 = (b >> 4u32) & 0xFu32
+        let lo : u32 = b & 0xFu32
+        KKD_HEX[i * 2u32]        = KKD_HEXCH[hi]
+        KKD_HEX[i * 2u32 + 1u32] = KKD_HEXCH[lo]
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn main() -> u64 {
+    let fin : u64 = fopen((&KKD_PATH_IN) as u64, (&KKD_MODE_RB) as u64)
+    if fin == 0u64 { return 1u64 }
+    let n : u64 = fread((&KKD_IN) as u64, 1u64, 8192u64, fin)
+    fclose(fin)
+
+    keccak_state_zero((&KKD_STATE) as u64)
+    let rd : u64 = keccak_pack_rate_dom(136u32, 0x01u8)
+    keccak_absorb((&KKD_STATE) as u64, (&KKD_IN) as u64, n, rd)
+    keccak_squeeze((&KKD_STATE) as u64, (&KKD_DIG) as u64, 32u64, 136u32)
+    _kkd_hex()
+
+    let fout : u64 = fopen((&KKD_PATH_OUT) as u64, (&KKD_MODE_WB) as u64)
+    if fout == 0u64 { return 2u64 }
+    fwrite((&KKD_HEX) as u64, 1u64, 64u64, fout)
+    fclose(fout)
+    return 0u64
+}

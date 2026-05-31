@@ -9,7 +9,10 @@
  * the gate RED at index 14.  On GREEN the gate cad-seals its own verdict (the stable seal of
  * capability 1; the single light a stranger runs of capability 12).
  * Main-corpus convention: rc 99 = pass; 1..13 = which Harmony Invariant failed;
- * 14..21 = which terminal-gate assertion failed. */
+ * 14..21 = which terminal-gate assertion failed; 22..24 = the RIPPLE-14 (W4.1) fresh-state
+ * self-population falsifier: the public gate over an EMPTY registry must self-populate the
+ * thirteen and return a REAL green (count==13 afterwards), never a sealed false-GREEN over
+ * nothing (the old code left the count at 0 -> arm 24 fails). */
 module corpus_700
 
 extern @abi(c-msvc-x64) fn ct_selftest() -> u64 from "charter_terminal.iii"

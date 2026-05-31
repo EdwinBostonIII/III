@@ -1,0 +1,9 @@
+/* KAT for numera/ntt convolution -- the multiply pipeline the bigint NTT tier (D-KARA-3) and
+ * polynomial-ring crypto are built on.  ntt_conv_selftest convolves two zero-padded cubics over
+ * GF(998244353) and checks the product against the hand-computed coefficients
+ * [5,16,34,60,61,52,32,0].  Exit 99 = forward · pointwise · inverse is correct. */
+module corpus_723
+
+extern @abi(c-msvc-x64) fn ntt_conv_selftest() -> u64 from "ntt.iii"
+
+fn main() -> u64 { return ntt_conv_selftest() }

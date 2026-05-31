@@ -4,11 +4,17 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "instant.iiiinstant.iiiinstant.iii\0"
+    .ascii "instant.iiiinstant.iiiinstant.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
 L_str_1:
-    .ascii "instant.iiiinstant.iii\0"
+    .ascii "instant.iiiinstant.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
 L_str_2:
-    .ascii "instant.iii\0"
+    .ascii "instant.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+L_str_3:
+    .ascii "tempaloc.iiitempaloc.iiitempaloc.iii\0"
+L_str_4:
+    .ascii "tempaloc.iiitempaloc.iii\0"
+L_str_5:
+    .ascii "tempaloc.iii\0"
     .section .rodata
 L_DEADLINE_INVALID:
     .quad 0x0
@@ -26,6 +32,8 @@ L_DEADLINE_E_LATE:
     .quad 0xfffffffffffffffe
 L_DEADLINE_MAX_INSTANCES:
     .quad 0x40
+L_DEADLINE_TYPE:
+    .quad 0x3
     .section .bss
     .global L_DEADLINE_TICK
 L_DEADLINE_TICK:
@@ -33,98 +41,6 @@ L_DEADLINE_TICK:
     .global L_DEADLINE_ACTION
 L_DEADLINE_ACTION:
     .zero 512
-    .global L_DEADLINE_LIVE
-L_DEADLINE_LIVE:
-    .zero 512
-    .section .iii.ring3,"n"
-    .asciz "deadline_alloc_slot"
-    .text
-    .global L_deadline_alloc_slot
-    .seh_proc L_deadline_alloc_slot
-L_deadline_alloc_slot:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-L_loop_top_0:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movl L_DEADLINE_MAX_INSTANCES(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_1
-    leaq L_DEADLINE_LIVE(%rip), %rax
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_0
-L_loop_end_1:
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
     .section .iii.ring3,"n"
     .asciz "deadline_slot_of"
     .text
@@ -139,101 +55,16 @@ L_deadline_slot_of:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movq L_DEADLINE_TYPE(%rip), %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_5
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_5:
-    movq -8(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    movl L_DEADLINE_MAX_INSTANCES(%rip), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_7
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_7:
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
+    addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    leaq L_DEADLINE_LIVE(%rip), %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_9
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_9:
-    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -282,7 +113,7 @@ deadline_at:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_1
     movq L_DEADLINE_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -292,15 +123,53 @@ deadline_at:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_1:
+    movq L_DEADLINE_TYPE(%rip), %rax
+    pushq %rax
+    popq %rcx
     subq $32, %rsp
-    callq L_deadline_alloc_slot
+    callq tempaloc_alloc
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movq L_DEADLINE_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
+    movq L_DEADLINE_TYPE(%rip), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -32(%rbp)
-    movl -32(%rbp), %eax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -312,7 +181,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_5
     movq L_DEADLINE_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -322,10 +191,10 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_5:
     leaq L_DEADLINE_TICK(%rip), %rax
     pushq %rax
-    movl -32(%rbp), %eax
+    movl -40(%rbp), %eax
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
@@ -335,19 +204,9 @@ L_if_end_13:
     movq %rdx, (%rax,%rcx,8)
     leaq L_DEADLINE_ACTION(%rip), %rax
     pushq %rax
-    movl -32(%rbp), %eax
+    movl -40(%rbp), %eax
     pushq %rax
     movzbq -16(%rbp), %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    leaq L_DEADLINE_LIVE(%rip), %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -362,15 +221,7 @@ L_if_end_13:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -420,7 +271,7 @@ deadline_in:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_7
     movq L_DEADLINE_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -430,7 +281,7 @@ deadline_in:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_7:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -449,29 +300,56 @@ L_if_end_15:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq -16(%rbp), %rax
-    pushq %rax
-    movabsq $0xf4240, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    xorl %edx, %edx
-    divq %rcx
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
     movq -40(%rbp), %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
+    movq %rax, -48(%rbp)
+    movq L_DEADLINE_TYPE(%rip), %rax
+    pushq %rax
+    popq %rcx
     subq $32, %rsp
-    callq L_deadline_alloc_slot
+    callq tempaloc_alloc
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -56(%rbp)
+    movq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movq L_DEADLINE_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
+    movq L_DEADLINE_TYPE(%rip), %rax
+    pushq %rax
+    movq -56(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
@@ -489,7 +367,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_11
     movq L_DEADLINE_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -499,12 +377,12 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_11:
     leaq L_DEADLINE_TICK(%rip), %rax
     pushq %rax
     movl -64(%rbp), %eax
     pushq %rax
-    movq -56(%rbp), %rax
+    movq -48(%rbp), %rax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -520,25 +398,7 @@ L_if_end_17:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    leaq L_DEADLINE_LIVE(%rip), %rax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movl -64(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    movq -56(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -587,7 +447,7 @@ deadline_tick:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -597,7 +457,7 @@ deadline_tick:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_13:
     leaq L_DEADLINE_TICK(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -653,7 +513,7 @@ deadline_action:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -663,7 +523,7 @@ deadline_action:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_15:
     leaq L_DEADLINE_ACTION(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -720,7 +580,7 @@ deadline_check:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_17
     movslq L_DEADLINE_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -730,7 +590,7 @@ deadline_check:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_17:
     movq -16(%rbp), %rax
     pushq %rax
     leaq L_DEADLINE_TICK(%rip), %rax
@@ -749,7 +609,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_19
     movslq L_DEADLINE_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -759,7 +619,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_19:
     movslq L_DEADLINE_E_LATE(%rip), %rax
     pushq %rax
     popq %rax
@@ -810,7 +670,7 @@ deadline_remaining:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -820,7 +680,7 @@ deadline_remaining:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_21:
     leaq L_DEADLINE_TICK(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -843,7 +703,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_23
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -853,7 +713,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_23:
     movq -32(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -909,7 +769,7 @@ deadline_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_25
     movslq L_DEADLINE_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -919,17 +779,7 @@ deadline_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
-    leaq L_DEADLINE_LIVE(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
+L_if_end_25:
     leaq L_DEADLINE_TICK(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -950,6 +800,18 @@ L_if_end_31:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
+    movq L_DEADLINE_TYPE(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_free
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movslq L_DEADLINE_OK(%rip), %rax
     pushq %rax
     popq %rax

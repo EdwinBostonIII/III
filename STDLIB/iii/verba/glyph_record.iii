@@ -97,6 +97,7 @@ fn glyph_record_unpack_field_id(in_192: u64, slot: u32) -> u32 @export {
     if gv3_form_id(i_l) != GV3_FORM_RECORD { return 0u32 }
     if gv3_validate(i_l) != 1u8 { return 0u32 }
     let count : u32 = gv3_read_u32_le(i_l + 8u64)
+    if count > GV3_REC_MAX_FIELDS { return 0u32 }   /* count from untrusted header; field table holds at most GV3_REC_MAX_FIELDS [audit gv-rec] */
     if s_l >= count { return 0u32 }
     let off : u64 = 16u64 + (s_l as u64) * 12u64
     return gv3_read_u32_le(i_l + off)
@@ -109,6 +110,7 @@ fn glyph_record_unpack_field_value(in_192: u64, slot: u32) -> u64 @export {
     if gv3_form_id(i_l) != GV3_FORM_RECORD { return 0u64 }
     if gv3_validate(i_l) != 1u8 { return 0u64 }
     let count : u32 = gv3_read_u32_le(i_l + 8u64)
+    if count > GV3_REC_MAX_FIELDS { return 0u64 }   /* count from untrusted header; field table holds at most GV3_REC_MAX_FIELDS [audit gv-rec] */
     if s_l >= count { return 0u64 }
     let off : u64 = 16u64 + (s_l as u64) * 12u64 + 4u64
     return gv3_read_u64_le(i_l + off)

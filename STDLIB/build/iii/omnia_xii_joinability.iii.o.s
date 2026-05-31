@@ -70,9 +70,6 @@ L_XJN_NOWIT:
     .global L_XJN_TALLY
 L_XJN_TALLY:
     .zero 32
-    .global L_XJN_NJ
-L_XJN_NJ:
-    .zero 32
     .global L_XJN_NJ_I
 L_XJN_NJ_I:
     .zero 1024

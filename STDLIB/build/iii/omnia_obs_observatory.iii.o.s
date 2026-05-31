@@ -76,6 +76,47 @@ L_if_end_1:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    leaq L_OBSO_VALUE(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movq (%rax,%rcx,8), %rax
+    pushq %rax
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
+    leaq L_OBSO_FIRING(%rip), %rax
+    pushq %rax
+    movl -24(%rbp), %eax
+    pushq %rax
+    movzbq -40(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
     movslq L_OBSO_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -119,7 +160,7 @@ obs_observatory_threshold:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_5
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -129,7 +170,7 @@ obs_observatory_threshold:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_5:
     leaq L_OBSO_THRESHOLD(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -184,7 +225,7 @@ obs_observatory_update:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movslq L_OBSO_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -194,7 +235,7 @@ obs_observatory_update:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     leaq L_OBSO_VALUE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -227,7 +268,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -235,7 +276,7 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_9:
     leaq L_OBSO_FIRING(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -289,7 +330,7 @@ obs_observatory_value:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -299,7 +340,7 @@ obs_observatory_value:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_11:
     leaq L_OBSO_VALUE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -349,7 +390,7 @@ obs_observatory_family_alarm:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -359,7 +400,7 @@ obs_observatory_family_alarm:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     leaq L_OBSO_FIRING(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -400,7 +441,7 @@ obs_observatory_collapsed_state:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_12:
+L_loop_top_14:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_OBSO_FAMILIES(%rip), %eax
@@ -413,7 +454,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_15
     leaq L_OBSO_FIRING(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -432,7 +473,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x1, %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -456,7 +497,7 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -471,8 +512,8 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_14
+L_loop_end_15:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -503,7 +544,7 @@ obs_observatory_clear:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_16:
+L_loop_top_18:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_OBSO_FAMILIES(%rip), %eax
@@ -516,7 +557,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_19
     leaq L_OBSO_VALUE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -561,8 +602,8 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_18
+L_loop_end_19:
     movslq L_OBSO_OK(%rip), %rax
     pushq %rax
     popq %rax

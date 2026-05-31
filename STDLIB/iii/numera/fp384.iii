@@ -14,6 +14,14 @@ module numera_fp384
 var FQ_P    : [u32; 12]
 var FQ_R2   : [u32; 12]
 var FQ_ONE  : [u32; 12]
+/* APOTHEOSIS S.3: fq_mul delegates to the shared CIOS organ (numera::bigint_div).
+ * s=12 (384-bit), free reduction (p384[0]=2^32-1 => n'[0]=1).  fq_csub_p stays
+ * for fq_add/fq_sub.  Differential gate: 209 ECDSA-P384 end-to-end + the s=12
+ * organ anchor in corpus 758. */
+extern @abi(c-msvc-x64) fn mont_load_raw(a_ptr: u64, b_ptr: u64, n_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_cios_run(s: u64, nprime: u64, free: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_store_raw(out_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+
 var FQ      : [u32; 576]    /* 48 slots * 12 limbs */
 var FQ_T    : [u64; 14]
 var FQ_INIT : [u32; 1]
@@ -127,45 +135,13 @@ fn fq_sub(r: u64, a: u64, b: u64) -> i32 {
     }
     return 0i32
 }
+/* r = a*b mod p384 (Montgomery) -- APOTHEOSIS S.3: shared CIOS organ. s=12,
+ * free reduction (n'[0]=1).  Load-before-store, so r may alias a/b. */
 fn fq_mul(r: u64, a: u64, b: u64) -> i32 {
-    let ab : u64 = a * 12u64
-    let bb : u64 = b * 12u64
-    let pp : *u32 = &FQ_P as *u32
-    let mut k : u64 = 0u64
-    while k < 14u64 { FQ_T[k] = 0u64 ; k = k + 1u64 }
-    let mut i : u64 = 0u64
-    while i < 12u64 {
-        let bi : u64 = FQ[bb + i] as u64
-        let mut c : u64 = 0u64
-        let mut j : u64 = 0u64
-        while j < 12u64 {
-            let uv : u64 = FQ_T[j] + (FQ[ab + j] as u64) * bi + c
-            FQ_T[j] = uv & 0xFFFFFFFFu64
-            c = uv >> 32u64
-            j = j + 1u64
-        }
-        let uv12 : u64 = FQ_T[12] + c
-        FQ_T[12] = uv12 & 0xFFFFFFFFu64
-        FQ_T[13] = uv12 >> 32u64
-        let m : u64 = FQ_T[0]
-        let uv0 : u64 = FQ_T[0] + m * (pp[0] as u64)
-        c = uv0 >> 32u64
-        j = 1u64
-        while j < 12u64 {
-            let uv : u64 = FQ_T[j] + m * (pp[j] as u64) + c
-            FQ_T[j - 1u64] = uv & 0xFFFFFFFFu64
-            c = uv >> 32u64
-            j = j + 1u64
-        }
-        let uvs : u64 = FQ_T[12] + c
-        FQ_T[11] = uvs & 0xFFFFFFFFu64
-        FQ_T[12] = FQ_T[13] + (uvs >> 32u64)
-        i = i + 1u64
-    }
-    let rb : u64 = r * 12u64
-    let mut q : u64 = 0u64
-    while q < 12u64 { FQ[rb + q] = FQ_T[q] as u32 ; q = q + 1u64 }
-    fq_csub_p((&FQ as u64) + rb * 4u64, FQ_T[12])
+    let base : u64 = &FQ as u64
+    mont_load_raw(base + a * 48u64, base + b * 48u64, &FQ_P as u64, 12u64)
+    mont_cios_run(12u64, 1u64, 1u64)
+    mont_store_raw(base + r * 48u64, 12u64)
     return 0i32
 }
 fn fq_sqr(r: u64, a: u64) -> i32 { return fq_mul(r, a, a) }

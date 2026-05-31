@@ -334,6 +334,38 @@ rfc3339_format:
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
+    movabsq $0x270f, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_1
+    movabsq $0x0, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
+    subq $32, %rsp
+    callq cal_last_year
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
     movabsq $0x0, %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -799,7 +831,7 @@ rfc3339_parse:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_1
+    jz L_if_end_3
     movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rax
@@ -809,7 +841,7 @@ rfc3339_parse:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_1:
+L_if_end_3:
     movabsq $0x0, %rax
     pushq %rax
     movq -8(%rbp), %rax

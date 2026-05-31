@@ -1,0 +1,6 @@
+/* 969 — W3.21 / C-BV-1 falsifier: bv_ring's bv_shl models the x86-64 SHL count-mask
+ * (k & 63), so x<<64 == x and x<<65 == x<<1 (not 0). Otherwise the ring decider would
+ * certify x<<64 -> 0, a rewrite the hardware does not honor. 99 = pass. */
+module corpus_969
+extern @abi(c-msvc-x64) fn bv_ring_shift_mask_kat() -> u64 from "bv_ring.iii"
+fn main() -> u64 { return bv_ring_shift_mask_kat() }

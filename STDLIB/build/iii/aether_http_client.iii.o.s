@@ -4,13 +4,15 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iiibuilder.iiibuilder.iiinormalise_ascii.iii\0"
+    .ascii "arena.iiibuilder.iiibuilder.iiinormalise_ascii.iiibound.iii\0"
 L_str_1:
-    .ascii "builder.iiibuilder.iiinormalise_ascii.iii\0"
+    .ascii "builder.iiibuilder.iiinormalise_ascii.iiibound.iii\0"
 L_str_2:
-    .ascii "builder.iiinormalise_ascii.iii\0"
+    .ascii "builder.iiinormalise_ascii.iiibound.iii\0"
 L_str_3:
-    .ascii "normalise_ascii.iii\0"
+    .ascii "normalise_ascii.iiibound.iii\0"
+L_str_4:
+    .ascii "bound.iii\0"
     .section .rodata
 L_HTTP_OK:
     .quad 0x0
@@ -4048,6 +4050,29 @@ L_if_else_162:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movq L_HTTP_PARSE_RAW_LEN(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_165
+    movabsq $0xffffffffffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_165:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -4087,7 +4112,7 @@ L_loop_end_145:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_165
+    jz L_if_end_167
     movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rax
@@ -4097,12 +4122,12 @@ L_loop_end_145:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_165:
+L_if_end_167:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_166:
+L_loop_top_168:
     movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -4115,7 +4140,7 @@ L_loop_top_166:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_167
+    jz L_loop_end_169
     movq L_HTTP_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movq L_HTTP_PARSE_RAW_LEN(%rip), %rax
@@ -4128,7 +4153,7 @@ L_loop_top_166:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_169
+    jz L_if_end_171
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4136,7 +4161,7 @@ L_loop_top_166:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_169:
+L_if_end_171:
     movzbq -32(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -4149,7 +4174,7 @@ L_if_end_169:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_171
+    jz L_if_end_173
     subq $32, %rsp
     callq L_http_at_crlf
     addq $32, %rsp
@@ -4165,7 +4190,7 @@ L_if_end_169:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_172
+    jz L_if_else_174
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4173,8 +4198,8 @@ L_if_end_169:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_173
-L_if_else_172:
+    jmp L_if_end_175
+L_if_else_174:
     movq L_HTTP_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -4188,16 +4213,16 @@ L_if_else_172:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_175:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_171:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_166
-L_loop_end_167:
+    jmp L_loop_top_168
+L_loop_end_169:
     subq $32, %rsp
     callq L_http_at_crlf
     addq $32, %rsp
@@ -4213,7 +4238,7 @@ L_loop_end_167:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_175
+    jz L_if_end_177
     movabsq $0xffffffffffffffff, %rax
     pushq %rax
     popq %rax
@@ -4223,7 +4248,7 @@ L_loop_end_167:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_175:
+L_if_end_177:
     movq L_HTTP_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -4296,7 +4321,7 @@ L_http_chunked_decode:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_177
+    jz L_if_end_179
     movslq L_HTTP_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4306,7 +4331,7 @@ L_http_chunked_decode:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_177:
+L_if_end_179:
     movq -32(%rbp), %rax
     pushq %rax
     popq %rax
@@ -4321,7 +4346,7 @@ L_if_end_177:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_178:
+L_loop_top_180:
     movzbq -56(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4334,7 +4359,7 @@ L_loop_top_178:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_179
+    jz L_loop_end_181
     subq $32, %rsp
     callq L_http_read_chunk_size
     addq $32, %rsp
@@ -4353,7 +4378,7 @@ L_loop_top_178:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_181
+    jz L_if_end_183
     movslq L_HTTP_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -4363,29 +4388,8 @@ L_loop_top_178:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
-    movq -64(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_183
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
 L_if_end_183:
-    movzbq -56(%rbp), %rax
+    movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -4398,25 +4402,52 @@ L_if_end_183:
     popq %rax
     testq %rax, %rax
     jz L_if_end_185
-    movq L_HTTP_PARSE_CURSOR(%rip), %rax
+    movabsq $0x1, %rax
     pushq %rax
-    movq -64(%rbp), %rax
-    pushq %rax
-    popq %rcx
     popq %rax
-    addq %rcx, %rax
+    movq %rax, -56(%rbp)
+    movq $0, %rax
     pushq %rax
-    movq L_HTTP_PARSE_RAW_LEN(%rip), %rax
+    popq %rax
+L_if_end_185:
+    movzbq -56(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    seta %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
     testq %rax, %rax
     jz L_if_end_187
+    movq L_HTTP_PARSE_RAW_LEN(%rip), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq L_HTTP_PARSE_CURSOR(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq bnd_cap_ok
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_189
     movslq L_HTTP_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -4426,7 +4457,7 @@ L_if_end_183:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_187:
+L_if_end_189:
     movq L_HTTP_PARSE_RAW_BASE(%rip), %rax
     pushq %rax
     movq L_HTTP_PARSE_CURSOR(%rip), %rax
@@ -4443,7 +4474,7 @@ L_if_end_187:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_188:
+L_loop_top_190:
     movq -80(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -4456,7 +4487,7 @@ L_loop_top_188:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_189
+    jz L_loop_end_191
     movq -40(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -4492,8 +4523,8 @@ L_loop_top_188:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_188
-L_loop_end_189:
+    jmp L_loop_top_190
+L_loop_end_191:
     movq -48(%rbp), %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -4529,7 +4560,7 @@ L_loop_end_189:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_191
+    jz L_if_end_193
     movslq L_HTTP_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -4539,7 +4570,7 @@ L_loop_end_189:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_191:
+L_if_end_193:
     movq L_HTTP_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -4553,12 +4584,12 @@ L_if_end_191:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_185:
+L_if_end_187:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_178
-L_loop_end_179:
+    jmp L_loop_top_180
+L_loop_end_181:
     leaq L_HTTP_RESP_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -4664,7 +4695,7 @@ L_http_parse_body:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_193
+    jz L_if_end_195
     movslq L_HTTP_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4674,7 +4705,7 @@ L_http_parse_body:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_193:
+L_if_end_195:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -4881,7 +4912,7 @@ L_if_end_193:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_195
+    jz L_if_end_197
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -4949,7 +4980,7 @@ L_if_end_193:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_197
+    jz L_if_end_199
     movslq L_HTTP_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -4959,7 +4990,7 @@ L_if_end_193:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_197:
+L_if_end_199:
     movq -88(%rbp), %rax
     pushq %rax
     popq %rax
@@ -5063,7 +5094,7 @@ L_if_end_197:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_199
+    jz L_if_end_201
     movl -16(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -5082,11 +5113,11 @@ L_if_end_197:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_199:
+L_if_end_201:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_195:
+L_if_end_197:
     movabsq $0xe, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -5111,7 +5142,7 @@ L_if_end_195:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_201
+    jz L_if_end_203
     movslq L_HTTP_E_OOM(%rip), %rax
     pushq %rax
     popq %rax
@@ -5121,7 +5152,7 @@ L_if_end_195:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_201:
+L_if_end_203:
     movq -64(%rbp), %rax
     pushq %rax
     popq %rax
@@ -5298,7 +5329,7 @@ L_if_end_201:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_203
+    jz L_if_end_205
     movq -80(%rbp), %rax
     pushq %rax
     popq %rax
@@ -5396,7 +5427,7 @@ L_if_end_201:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_205
+    jz L_if_end_207
     movslq L_HTTP_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -5406,7 +5437,7 @@ L_if_end_201:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_205:
+L_if_end_207:
     movq L_HTTP_PARSE_CURSOR(%rip), %rax
     pushq %rax
     movq -136(%rbp), %rax
@@ -5425,7 +5456,7 @@ L_if_end_205:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_207
+    jz L_if_end_209
     movslq L_HTTP_E_PARSE(%rip), %rax
     pushq %rax
     popq %rax
@@ -5435,7 +5466,7 @@ L_if_end_205:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_207:
+L_if_end_209:
     leaq L_HTTP_RESP_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5481,7 +5512,7 @@ L_if_end_207:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_203:
+L_if_end_205:
     leaq L_HTTP_RESP_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5578,46 +5609,7 @@ http_parse_response:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_209
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_209:
-    movl -32(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L_http_parse_status_line
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movslq L_HTTP_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_211
-    leaq L_HTTP_RESP_LIVE(%rip), %rax
-    pushq %rax
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5632,7 +5624,7 @@ L_if_end_211:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_http_parse_headers
+    callq L_http_parse_status_line
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -5669,12 +5661,9 @@ L_if_end_211:
 L_if_end_213:
     movl -32(%rbp), %eax
     pushq %rax
-    movq -8(%rbp), %rax
-    pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq L_http_parse_body
+    callq L_http_parse_headers
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -5709,6 +5698,48 @@ L_if_end_213:
     pushq %rax
     popq %rax
 L_if_end_215:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L_http_parse_body
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movslq L_HTTP_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_217
+    leaq L_HTTP_RESP_LIVE(%rip), %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_217:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rax
@@ -5766,7 +5797,7 @@ http_response_status:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_217
+    jz L_if_end_219
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5776,7 +5807,7 @@ http_response_status:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_217:
+L_if_end_219:
     leaq L_HTTP_RESP_STATUS(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5835,7 +5866,7 @@ http_response_status_text_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_219
+    jz L_if_end_221
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5845,7 +5876,7 @@ http_response_status_text_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_219:
+L_if_end_221:
     leaq L_HTTP_RESP_TEXT_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5901,7 +5932,7 @@ http_response_status_text_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_221
+    jz L_if_end_223
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5911,7 +5942,7 @@ http_response_status_text_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_221:
+L_if_end_223:
     leaq L_HTTP_RESP_TEXT_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -5967,7 +5998,7 @@ http_response_header_count:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_223
+    jz L_if_end_225
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -5977,7 +6008,7 @@ http_response_header_count:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_223:
+L_if_end_225:
     leaq L_HTTP_RESP_HEADERS_COUNT(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -6033,7 +6064,7 @@ http_response_body_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_225
+    jz L_if_end_227
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -6043,7 +6074,7 @@ http_response_body_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_225:
+L_if_end_227:
     leaq L_HTTP_RESP_BODY_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -6099,7 +6130,7 @@ http_response_body_len:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_227
+    jz L_if_end_229
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -6109,7 +6140,7 @@ http_response_body_len:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_227:
+L_if_end_229:
     leaq L_HTTP_RESP_BODY_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -6165,7 +6196,7 @@ http_response_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_229
+    jz L_if_end_231
     movslq L_HTTP_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -6175,7 +6206,7 @@ http_response_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_229:
+L_if_end_231:
     leaq L_HTTP_RESP_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

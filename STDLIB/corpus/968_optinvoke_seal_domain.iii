@@ -1,0 +1,39 @@
+/* 968 — W3.5 / A-OI-2 falsifier: oi_seal is domain-separated. The optinvoke seal of a
+ * candidate buffer must DIFFER from a bare (un-domained) mhash of the same bytes -- else
+ * a seal in one context aliases a hash in another (cross-context second-preimage). Also
+ * checks oi_seal stays deterministic. 99 = pass. */
+module corpus_968
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn oi_seal(cands: *u8, n: u64, out: *u8) -> u64 from "optinvoke.iii"
+extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_payload(p: u64, plen: u64) -> i32 from "mhash.iii"
+extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
+
+fn eq32(a: *u8, b: *u8) -> u8 {
+    let mut i : u64 = 0u64
+    let mut e : u8 = 1u8
+    while i < 32u64 { if a[i] != b[i] { e = 0u8 } ; i = i + 1u64 }
+    return e
+}
+
+fn main() -> u64 {
+    let cands : *u8 = malloc(240u64)              /* 3 candidates * 80 bytes */
+    let mut k : u64 = 0u64
+    while k < 240u64 { cands[k] = ((k * 37u64 + 11u64) & 0xFFu64) as u8 ; k = k + 1u64 }
+    let sd  : *u8 = malloc(32u64)
+    let sd2 : *u8 = malloc(32u64)
+    let sr  : *u8 = malloc(32u64)
+
+    oi_seal(cands, 3u64, sd)                       /* domained seal */
+    /* bare mhash of the SAME 240 bytes (no domain) */
+    mhash_begin()
+    mhash_payload(cands as u64, 240u64)
+    mhash_final(sr as u64)
+
+    if eq32(sd, sr) == 1u8 { return 1u64 }         /* A-OI-2: must DIFFER from the bare hash */
+
+    oi_seal(cands, 3u64, sd2)
+    if eq32(sd, sd2) == 0u8 { return 2u64 }        /* deterministic */
+
+    return 99u64
+}

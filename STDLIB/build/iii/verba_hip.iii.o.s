@@ -1226,6 +1226,57 @@ L__hip_pack_pv_meta:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "_hip_convey_src"
+    .text
+    .global L__hip_convey_src
+    .seh_proc L__hip_convey_src
+L__hip_convey_src:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "_hip_project_verb"
     .text
     .global L__hip_project_verb
@@ -1496,60 +1547,6 @@ L__hip_project_verb:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_16
-    movl -136(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movq -168(%rbp), %rax
-    pushq %rax
-    movq -160(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq intent_convey
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -184(%rbp)
-    movq -184(%rbp), %rax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movq -88(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    popq %r9
-    subq $32, %rsp
-    callq L__hip_emit_intent
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -96(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_17
-L_if_else_16:
-    movl -48(%rbp), %eax
-    pushq %rax
-    movl L_VW_PUT(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_else_18
     movl -136(%rbp), %eax
     pushq %rax
@@ -1557,7 +1554,15 @@ L_if_else_16:
     pushq %rax
     movq -168(%rbp), %rax
     pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
     movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1594,7 +1599,7 @@ L_if_else_16:
 L_if_else_18:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_STORE(%rip), %eax
+    movl L_VW_PUT(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1611,7 +1616,15 @@ L_if_else_18:
     pushq %rax
     movq -168(%rbp), %rax
     pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
     movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1648,7 +1661,7 @@ L_if_else_18:
 L_if_else_20:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_WRITE(%rip), %eax
+    movl L_VW_STORE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1665,7 +1678,15 @@ L_if_else_20:
     pushq %rax
     movq -168(%rbp), %rax
     pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
     movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1702,7 +1723,7 @@ L_if_else_20:
 L_if_else_22:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_LOAD(%rip), %eax
+    movl L_VW_WRITE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1717,9 +1738,17 @@ L_if_else_22:
     pushq %rax
     popq %rax
     pushq %rax
+    movq -168(%rbp), %rax
+    pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
     movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1756,7 +1785,7 @@ L_if_else_22:
 L_if_else_24:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_GET(%rip), %eax
+    movl L_VW_LOAD(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1810,7 +1839,7 @@ L_if_else_24:
 L_if_else_26:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_READ(%rip), %eax
+    movl L_VW_GET(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1864,7 +1893,7 @@ L_if_else_26:
 L_if_else_28:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_COPY(%rip), %eax
+    movl L_VW_READ(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1879,7 +1908,7 @@ L_if_else_28:
     pushq %rax
     popq %rax
     pushq %rax
-    movq -168(%rbp), %rax
+    movq -152(%rbp), %rax
     pushq %rax
     movq -160(%rbp), %rax
     pushq %rax
@@ -1918,7 +1947,7 @@ L_if_else_28:
 L_if_else_30:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_MOVE(%rip), %eax
+    movl L_VW_COPY(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1935,7 +1964,15 @@ L_if_else_30:
     pushq %rax
     movq -168(%rbp), %rax
     pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
     movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
     pushq %rax
     popq %rcx
     popq %rdx
@@ -1972,7 +2009,7 @@ L_if_else_30:
 L_if_else_32:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_OPEN(%rip), %eax
+    movl L_VW_MOVE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1983,6 +2020,68 @@ L_if_else_32:
     popq %rax
     testq %rax, %rax
     jz L_if_else_34
+    movl -136(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movq -168(%rbp), %rax
+    pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
+    movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq intent_convey
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -184(%rbp)
+    movq -184(%rbp), %rax
+    pushq %rax
+    movl -64(%rbp), %eax
+    pushq %rax
+    movl -96(%rbp), %eax
+    pushq %rax
+    movq -88(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq L__hip_emit_intent
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_if_end_35
+L_if_else_34:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl L_VW_OPEN(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_else_36
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2023,7 +2122,7 @@ L_if_else_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     movabsq $0xe, %rax
     pushq %rax
     movq -152(%rbp), %rax
@@ -2058,12 +2157,12 @@ L_if_else_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_35
-L_if_else_34:
+    jmp L_if_end_37
+L_if_else_36:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_VW_CLOSE(%rip), %eax
@@ -2076,57 +2175,8 @@ L_if_else_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_38
-    movabsq $0xf, %rax
-    pushq %rax
-    movq -152(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq intent_act
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -184(%rbp)
-    movq -184(%rbp), %rax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movq -88(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    popq %r9
-    subq $32, %rsp
-    callq L__hip_emit_intent
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -96(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_39
-L_if_else_38:
-    movl -48(%rbp), %eax
-    pushq %rax
-    movl L_VW_FREE(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_else_40
-    movabsq $0x29, %rax
+    movabsq $0xf, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -2164,7 +2214,7 @@ L_if_else_38:
 L_if_else_40:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_CREATE(%rip), %eax
+    movl L_VW_FREE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2175,11 +2225,14 @@ L_if_else_40:
     popq %rax
     testq %rax, %rax
     jz L_if_else_42
+    movabsq $0x29, %rax
+    pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
+    popq %rdx
     subq $32, %rsp
-    callq intent_form
+    callq intent_act
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -2210,7 +2263,7 @@ L_if_else_40:
 L_if_else_42:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_ALLOCATE(%rip), %eax
+    movl L_VW_CREATE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2256,7 +2309,7 @@ L_if_else_42:
 L_if_else_44:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_DESTROY(%rip), %eax
+    movl L_VW_ALLOCATE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2267,6 +2320,52 @@ L_if_else_44:
     popq %rax
     testq %rax, %rax
     jz L_if_else_46
+    movq -152(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq intent_form
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -184(%rbp)
+    movq -184(%rbp), %rax
+    pushq %rax
+    movl -64(%rbp), %eax
+    pushq %rax
+    movl -96(%rbp), %eax
+    pushq %rax
+    movq -88(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq L__hip_emit_intent
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_if_end_47
+L_if_else_46:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl L_VW_DESTROY(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_else_48
     movabsq $0x1b, %rax
     pushq %rax
     movq -152(%rbp), %rax
@@ -2301,8 +2400,8 @@ L_if_else_44:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_47
-L_if_else_46:
+    jmp L_if_end_49
+L_if_else_48:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_VW_ENCRYPT(%rip), %eax
@@ -2315,7 +2414,7 @@ L_if_else_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_48
+    jz L_if_else_50
     movl -136(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2364,7 +2463,7 @@ L_if_else_46:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_53
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2396,12 +2495,12 @@ L_if_else_46:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_49
-L_if_else_48:
+    jmp L_if_end_51
+L_if_else_50:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_VW_DECRYPT(%rip), %eax
@@ -2414,7 +2513,7 @@ L_if_else_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_52
+    jz L_if_else_54
     movl -136(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2463,7 +2562,7 @@ L_if_else_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_55
+    jz L_if_end_57
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -2495,61 +2594,15 @@ L_if_else_48:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_55:
+L_if_end_57:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_53
-L_if_else_52:
+    jmp L_if_end_55
+L_if_else_54:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_VW_HASH(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_else_56
-    movq -152(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq intent_form
-    addq $32, %rsp
-    pushq %rax
-    popq %rax
-    movq %rax, -184(%rbp)
-    movq -184(%rbp), %rax
-    pushq %rax
-    movl -64(%rbp), %eax
-    pushq %rax
-    movl -96(%rbp), %eax
-    pushq %rax
-    movq -88(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    popq %r9
-    subq $32, %rsp
-    callq L__hip_emit_intent
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -96(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_if_end_57
-L_if_else_56:
-    movl -48(%rbp), %eax
-    pushq %rax
-    movl L_VW_SIGN(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2595,7 +2648,7 @@ L_if_else_56:
 L_if_else_58:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_VERIFY(%rip), %eax
+    movl L_VW_SIGN(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2641,7 +2694,7 @@ L_if_else_58:
 L_if_else_60:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_PROVE(%rip), %eax
+    movl L_VW_VERIFY(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2687,7 +2740,7 @@ L_if_else_60:
 L_if_else_62:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_QUERY(%rip), %eax
+    movl L_VW_PROVE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2733,7 +2786,7 @@ L_if_else_62:
 L_if_else_64:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_PARSE(%rip), %eax
+    movl L_VW_QUERY(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2779,7 +2832,7 @@ L_if_else_64:
 L_if_else_66:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_CONNECT(%rip), %eax
+    movl L_VW_PARSE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2790,14 +2843,11 @@ L_if_else_66:
     popq %rax
     testq %rax, %rax
     jz L_if_else_68
-    movabsq $0x10, %rax
-    pushq %rax
-    movq -168(%rbp), %rax
+    movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq intent_act
+    callq intent_form
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -2828,7 +2878,7 @@ L_if_else_66:
 L_if_else_68:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_LISTEN(%rip), %eax
+    movl L_VW_CONNECT(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2839,9 +2889,9 @@ L_if_else_68:
     popq %rax
     testq %rax, %rax
     jz L_if_else_70
-    movabsq $0x12, %rax
+    movabsq $0x10, %rax
     pushq %rax
-    movq -152(%rbp), %rax
+    movq -168(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -2877,7 +2927,7 @@ L_if_else_68:
 L_if_else_70:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_SEAL_V(%rip), %eax
+    movl L_VW_LISTEN(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2888,11 +2938,14 @@ L_if_else_70:
     popq %rax
     testq %rax, %rax
     jz L_if_else_72
+    movabsq $0x12, %rax
+    pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
+    popq %rdx
     subq $32, %rsp
-    callq intent_form
+    callq intent_act
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -2923,7 +2976,7 @@ L_if_else_70:
 L_if_else_72:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_COMPOSE(%rip), %eax
+    movl L_VW_SEAL_V(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2969,7 +3022,7 @@ L_if_else_72:
 L_if_else_74:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_LOCK(%rip), %eax
+    movl L_VW_COMPOSE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -2980,14 +3033,11 @@ L_if_else_74:
     popq %rax
     testq %rax, %rax
     jz L_if_else_76
-    movabsq $0x7f, %rax
-    pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq intent_act
+    callq intent_form
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -3018,7 +3068,7 @@ L_if_else_74:
 L_if_else_76:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_UNLOCK(%rip), %eax
+    movl L_VW_LOCK(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3029,7 +3079,7 @@ L_if_else_76:
     popq %rax
     testq %rax, %rax
     jz L_if_else_78
-    movabsq $0x80, %rax
+    movabsq $0x7f, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3067,7 +3117,7 @@ L_if_else_76:
 L_if_else_78:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_FORK(%rip), %eax
+    movl L_VW_UNLOCK(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3078,11 +3128,14 @@ L_if_else_78:
     popq %rax
     testq %rax, %rax
     jz L_if_else_80
+    movabsq $0x80, %rax
+    pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
+    popq %rdx
     subq $32, %rsp
-    callq intent_form
+    callq intent_act
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -3113,7 +3166,7 @@ L_if_else_78:
 L_if_else_80:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_SPAWN(%rip), %eax
+    movl L_VW_FORK(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3159,7 +3212,7 @@ L_if_else_80:
 L_if_else_82:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_WAIT(%rip), %eax
+    movl L_VW_SPAWN(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3170,14 +3223,11 @@ L_if_else_82:
     popq %rax
     testq %rax, %rax
     jz L_if_else_84
-    movabsq $0x83, %rax
-    pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
     popq %rcx
-    popq %rdx
     subq $32, %rsp
-    callq intent_act
+    callq intent_form
     addq $32, %rsp
     pushq %rax
     popq %rax
@@ -3208,7 +3258,7 @@ L_if_else_82:
 L_if_else_84:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_SIGNAL_V(%rip), %eax
+    movl L_VW_WAIT(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3219,7 +3269,7 @@ L_if_else_84:
     popq %rax
     testq %rax, %rax
     jz L_if_else_86
-    movabsq $0x84, %rax
+    movabsq $0x83, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3257,7 +3307,7 @@ L_if_else_84:
 L_if_else_86:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_BLOCK(%rip), %eax
+    movl L_VW_SIGNAL_V(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3268,7 +3318,7 @@ L_if_else_86:
     popq %rax
     testq %rax, %rax
     jz L_if_else_88
-    movabsq $0x85, %rax
+    movabsq $0x84, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3306,7 +3356,7 @@ L_if_else_86:
 L_if_else_88:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_RELEASE(%rip), %eax
+    movl L_VW_BLOCK(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3317,7 +3367,7 @@ L_if_else_88:
     popq %rax
     testq %rax, %rax
     jz L_if_else_90
-    movabsq $0x86, %rax
+    movabsq $0x85, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3355,7 +3405,7 @@ L_if_else_88:
 L_if_else_90:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_CANCEL(%rip), %eax
+    movl L_VW_RELEASE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3366,7 +3416,7 @@ L_if_else_90:
     popq %rax
     testq %rax, %rax
     jz L_if_else_92
-    movabsq $0x87, %rax
+    movabsq $0x86, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3404,7 +3454,7 @@ L_if_else_90:
 L_if_else_92:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_FLUSH(%rip), %eax
+    movl L_VW_CANCEL(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3415,7 +3465,7 @@ L_if_else_92:
     popq %rax
     testq %rax, %rax
     jz L_if_else_94
-    movabsq $0x88, %rax
+    movabsq $0x87, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3453,7 +3503,7 @@ L_if_else_92:
 L_if_else_94:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_SCHEDULE(%rip), %eax
+    movl L_VW_FLUSH(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3464,7 +3514,7 @@ L_if_else_94:
     popq %rax
     testq %rax, %rax
     jz L_if_else_96
-    movabsq $0x89, %rax
+    movabsq $0x88, %rax
     pushq %rax
     movq -152(%rbp), %rax
     pushq %rax
@@ -3502,7 +3552,7 @@ L_if_else_94:
 L_if_else_96:
     movl -48(%rbp), %eax
     pushq %rax
-    movl L_VW_DISPATCH(%rip), %eax
+    movl L_VW_SCHEDULE(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3513,13 +3563,70 @@ L_if_else_96:
     popq %rax
     testq %rax, %rax
     jz L_if_else_98
+    movabsq $0x89, %rax
+    pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq intent_act
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -184(%rbp)
+    movq -184(%rbp), %rax
+    pushq %rax
+    movl -64(%rbp), %eax
+    pushq %rax
+    movl -96(%rbp), %eax
+    pushq %rax
+    movq -88(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    popq %r9
+    subq $32, %rsp
+    callq L__hip_emit_intent
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -96(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_if_end_99
+L_if_else_98:
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl L_VW_DISPATCH(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_else_100
     movl -136(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
     movq -168(%rbp), %rax
     pushq %rax
+    movq -152(%rbp), %rax
+    pushq %rax
     movq -160(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq L__hip_convey_src
+    addq $32, %rsp
     pushq %rax
     popq %rcx
     popq %rdx
@@ -3552,11 +3659,12 @@ L_if_else_96:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_99
-L_if_else_98:
+    jmp L_if_end_101
+L_if_else_100:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_101:
 L_if_end_99:
 L_if_end_97:
 L_if_end_95:
@@ -3578,14 +3686,14 @@ L_if_end_65:
 L_if_end_63:
 L_if_end_61:
 L_if_end_59:
-L_if_end_57:
-L_if_end_53:
+L_if_end_55:
+L_if_end_51:
 L_if_end_49:
 L_if_end_47:
 L_if_end_45:
 L_if_end_43:
 L_if_end_41:
-L_if_end_39:
+L_if_end_37:
 L_if_end_35:
 L_if_end_33:
 L_if_end_31:
@@ -3595,7 +3703,6 @@ L_if_end_25:
 L_if_end_23:
 L_if_end_21:
 L_if_end_19:
-L_if_end_17:
     movl -96(%rbp), %eax
     pushq %rax
     popq %rax
@@ -3635,7 +3742,7 @@ L__hip_classify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_101
+    jz L_if_end_103
     movl L_HIP_CLASS_NO_MATCH(%rip), %eax
     pushq %rax
     popq %rax
@@ -3645,7 +3752,7 @@ L__hip_classify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_101:
+L_if_end_103:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3658,7 +3765,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_105
     movl L_HIP_CLASS_UNIQUE(%rip), %eax
     pushq %rax
     popq %rax
@@ -3668,7 +3775,7 @@ L_if_end_101:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_105:
     movl L_HIP_CLASS_AMBIGUOUS(%rip), %eax
     pushq %rax
     popq %rax
@@ -3727,29 +3834,6 @@ hip_resolve:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_105
-    movslq L_HIP_E_NULL(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_105:
-    movq -56(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_107
     movslq L_HIP_E_NULL(%rip), %rax
     pushq %rax
@@ -3761,7 +3845,7 @@ L_if_end_105:
     pushq %rax
     popq %rax
 L_if_end_107:
-    movq -64(%rbp), %rax
+    movq -56(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -3784,7 +3868,7 @@ L_if_end_107:
     pushq %rax
     popq %rax
 L_if_end_109:
-    movzbq L_HIP_INITED(%rip), %rax
+    movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -3797,6 +3881,29 @@ L_if_end_109:
     popq %rax
     testq %rax, %rax
     jz L_if_end_111
+    movslq L_HIP_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_111:
+    movzbq L_HIP_INITED(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_113
     subq $32, %rsp
     callq nl_lex_init_all
     addq $32, %rsp
@@ -3810,7 +3917,7 @@ L_if_end_109:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_111:
+L_if_end_113:
     leaq L_HIP_PARSE_META(%rip), %rax
     pushq %rax
     popq %rax
@@ -3920,7 +4027,7 @@ L_if_end_111:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_113
+    jz L_if_end_115
     movslq L_HIP_E_TOKENS(%rip), %rax
     pushq %rax
     popq %rax
@@ -3930,7 +4037,7 @@ L_if_end_111:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_113:
+L_if_end_115:
     movq -80(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -3998,7 +4105,7 @@ L_if_end_113:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_115
+    jz L_if_end_117
     movabsq $0x0, %rax
     pushq %rax
     movq -64(%rbp), %rax
@@ -4038,7 +4145,7 @@ L_if_end_113:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_115:
+L_if_end_117:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4055,7 +4162,7 @@ L_if_end_115:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_116
+    jz L_if_else_118
     movl L_HIPN_ROLE_AGENT(%rip), %eax
     pushq %rax
     movl -136(%rbp), %eax
@@ -4153,7 +4260,7 @@ L_if_end_115:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_119
+    jz L_if_end_121
     movl L_HIP_MAX_CANDIDATES(%rip), %eax
     pushq %rax
     popq %rax
@@ -4161,12 +4268,12 @@ L_if_end_115:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_119:
+L_if_end_121:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_117
-L_if_else_116:
+    jmp L_if_end_119
+L_if_else_118:
     movl -136(%rbp), %eax
     pushq %rax
     movq -88(%rbp), %rax
@@ -4195,7 +4302,7 @@ L_if_else_116:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_121
+    jz L_if_end_123
     movl L_HIP_MAX_CANDIDATES(%rip), %eax
     pushq %rax
     movl -152(%rbp), %eax
@@ -4245,7 +4352,7 @@ L_if_else_116:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_123
+    jz L_if_end_125
     movl L_HIP_MAX_CANDIDATES(%rip), %eax
     pushq %rax
     popq %rax
@@ -4253,15 +4360,15 @@ L_if_else_116:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_125:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_123:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_121:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_117:
+L_if_end_119:
     movl -152(%rbp), %eax
     pushq %rax
     movq -64(%rbp), %rax

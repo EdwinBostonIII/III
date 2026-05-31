@@ -136,6 +136,7 @@ var CONS_EV_OPREVTAG  : u8  = 0u8     /* op_revtag                           */
 var CONS_EV_OPPILLAR  : u16 = 0u16    /* op_pillar                           */
 var CONS_EV_ANTE      : u64 = 0u64    /* byte addr of ante_ids               */
 var CONS_EV_NANTE     : u32 = 0u32    /* number of antecedents               */
+var CONS_EV_NCONST    : u32 = 0u32    /* const_count -- bounds cons_const_ptr [audit constitution-1] */
 
 /* === Byte accessors (little-endian) over raw module/arg memory. === */
 
@@ -474,6 +475,15 @@ fn cons_not() -> i32 {
 fn cons_id_eq(is_producer: u8) -> i32 {
     if (CONS_EV_IP + 2u64) <= CONS_EV_LEN {
         let ci : u8 = cons_operand(1u64)
+        let ci64 : u64 = ci as u64
+        let nc64 : u64 = CONS_EV_NCONST as u64
+        if ci64 >= nc64 {
+            /* const index past const_count -> cons_const_ptr would OOB-read the const
+             * table; emit a deterministic no-match and advance.  [audit constitution-1] */
+            cons_push(0u8)
+            CONS_EV_IP = CONS_EV_IP + 2u64
+            return 0i32
+        }
         let cp : *u8 = cons_const_ptr(ci)
         let mut subj : u64 = CONS_EV_OPID
         if is_producer == 1u8 { subj = CONS_EV_OPPROD }
@@ -535,6 +545,14 @@ fn cons_pillar_eq() -> i32 {
 fn cons_has_ante() -> i32 {
     if (CONS_EV_IP + 2u64) <= CONS_EV_LEN {
         let ci : u8 = cons_operand(1u64)
+        let ci64 : u64 = ci as u64
+        let nc64 : u64 = CONS_EV_NCONST as u64
+        if ci64 >= nc64 {
+            /* out-of-range const index -> deterministic no-match (was OOB-read).  [audit constitution-1] */
+            cons_push(0u8)
+            CONS_EV_IP = CONS_EV_IP + 2u64
+            return 0i32
+        }
         let cp : *u8 = cons_const_ptr(ci)
         let abase : u64 = CONS_EV_ANTE
         let n64 : u64 = (CONS_EV_NANTE as u64) & 0xFFFFFFFFu64
@@ -595,6 +613,7 @@ fn cons_eval_predicate(slot: u32, opv: *u8, ante_ids: *u8, n_ante: u32) -> u8 @e
     CONS_EV_LEN      = len
     CONS_EV_BUF      = buf
     CONS_EV_CTAB     = buf + 1u64
+    CONS_EV_NCONST   = cc64 as u32   /* so cons_id_eq/cons_has_ante can reject ci >= const_count [audit constitution-1] */
     CONS_EV_IP       = 1u64 + cc64 * 32u64
     CONS_EV_SP       = 0u32
     CONS_EV_HALTED   = 0u8

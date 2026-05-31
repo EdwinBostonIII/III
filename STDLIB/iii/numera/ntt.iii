@@ -1,0 +1,335 @@
+/* STDLIB/iii/numera/ntt.iii -- the shared Number-Theoretic-Transform organ (COMBINE-1 / lever X1).
+ * The exact-integer sibling of the quantum Fourier transform.  A single MODULUS-PARAMETERIZED
+ * radix-2 decimation-in-time NTT core: the prime q, the n-th root of unity omega, and the length n
+ * are inputs, so ONE audited transform serves every NTT-friendly prime instead of the four
+ * hand-rolled copies the audit found (mlkem q=3329, mldsa q=8380417, zk_stark + entropy_monitor
+ * both q=998244353).  The butterfly is byte-identical to zk_stark's proven st_ntt, generalized over
+ * the modulus.  Large bigint multiply above the schoolbook threshold routes through this (D-KARA-3),
+ * which also resolves the silent large-operand break (D-KARA-1, see RIPPLE-2).
+ *
+ * Field ops are mod-q on u32 values (products of two <q values fit u64 for q up to ~2^31).  q MUST
+ * be a prime with q ≡ 1 (mod n) so a primitive n-th root of unity exists; inverses use Fermat
+ * (x^(q-2)), which is valid exactly because q is prime.
+ *
+ * APOTHEOSIS S.4 (certify-finished -- ADR-S4).  This is the harmony exemplar: ONE
+ * modulus-parameterized core serving four NTT-friendly primes + the 2-prime Garner
+ * bigint-multiply (ntt_bigint).  The S.4 design staged an "ntt_gs_inverse_redc"
+ * horizon -- folding the Montgomery reduction INTO the Gentleman-Sande butterfly
+ * rather than a separate trailing reduction sweep.  VERIFIED ALREADY REALIZED:
+ * ntt_gs_inverse_tabled's butterfly is exactly that -- b' = mont_redc(diff*zeta_mont)
+ * inline, output already in [0,q), with NO trailing O(n) reduction pass; the forward
+ * ntt_ct_forward_tabled likewise fuses mont_redc per butterfly.  The doc's premise
+ * (a trailing sweep to eliminate) did not match the code -- the current organ IS the
+ * optimum.  Gated bit-exact on all four primes by corpus 722 (round-trip), 723
+ * (convolve), 724-725 (bigint route).  Per the doc's own rule (protect a proven
+ * shared organ, do not churn it), this is certified finished, not rewritten.
+ *
+ * Hexad: kind_form.  Ring: R0.  NIH: nothing (pure integer field arithmetic).  No float, no ML.
+ */
+module numera_ntt
+
+/* W0.5: the tabled FIPS cores reduce via Montgomery REDC (R=2^32) instead of a
+ * runtime `% q` division -- the zetas are supplied in Montgomery form (zeta*R mod
+ * q) so mont_redc(coeff * zeta_mont) = coeff*zeta mod q, byte-identical. */
+extern @abi(c-msvc-x64) fn mont_redc(t: u64, n: u64, n_inv_neg: u64) -> u64 from "modular_mont.iii"
+extern @abi(c-msvc-x64) fn mont_n_inv_neg(n: u64) -> u64 from "modular_mont.iii"
+
+const NTT_MAXN : u64 = 8192u64
+
+var NTT_W    : [u32; 8192]    /* the transform work buffer (caller loads, runs, reads) */
+var NTT_SAVE : [u32; 8192]    /* spectrum witness (Â during convolution; round-trip copy in selftest) */
+var NTT_B    : [u32; 8192]    /* second convolution operand (caller stages B here) */
+
+/* (x + y) mod q, branch-reduced (single conditional subtract). */
+fn ntt_add(x: u32, y: u32, q: u32) -> u32 {
+    let s  : u64 = (x as u64) + (y as u64)
+    let qq : u64 = q as u64
+    if s >= qq { return (s - qq) as u32 }
+    return s as u32
+}
+
+/* (x - y) mod q. */
+fn ntt_sub(x: u32, y: u32, q: u32) -> u32 {
+    if x >= y { return x - y }
+    return (((x as u64) + (q as u64)) - (y as u64)) as u32
+}
+
+/* (x * y) mod q.  Products of two values < q < 2^31 fit in u64; the % is not after a call (Trap 4). */
+fn ntt_mul(x: u32, y: u32, q: u32) -> u32 {
+    let p : u64 = (x as u64) * (y as u64)
+    return (p % (q as u64)) as u32
+}
+
+/* x^e mod q (square-and-multiply). */
+fn ntt_pow(x: u32, e: u64, q: u32) -> u32 {
+    let mut r  : u32 = 1u32
+    let mut b  : u32 = x
+    let mut ee : u64 = e
+    while ee > 0u64 {
+        if (ee & 1u64) == 1u64 { r = ntt_mul(r, b, q) }
+        b = ntt_mul(b, b, q)
+        ee = ee >> 1u64
+    }
+    return r
+}
+
+/* x^(-1) mod q via Fermat: x^(q-2).  Valid because q is prime. */
+fn ntt_inv(x: u32, q: u32) -> u32 {
+    let e : u64 = (q as u64) - 2u64
+    return ntt_pow(x, e, q)
+}
+
+/* Load/read the work buffer (public so consumers stage their coefficients here). */
+fn ntt_set(i: u64, v: u32) -> i32 @export { NTT_W[i] = v ; return 0i32 }
+fn ntt_get(i: u64) -> u32 @export { return NTT_W[i] }
+/* Load the second convolution operand B. */
+fn ntt_set_b(i: u64, v: u32) -> i32 @export { NTT_B[i] = v ; return 0i32 }
+
+/* --- Buffer-generic NTT core (operates on a caller-supplied u32 array at byte address
+ * `base`). --- The bigint NTT tier (D-KARA-3) drives a 64K-element buffer through these;
+ * the NTT_W wrappers below feed the module work buffer for crypto-sized transforms.  ONE
+ * core implementation -- the whole point of COMBINE-1. */
+
+/* In-place bit-reversal permutation of base[0..n). */
+fn ntt_bitrev_at(base: u64, n: u64) -> i32 {
+    let w : *u32 = base as *u32
+    let mut j : u64 = 0u64
+    let mut i : u64 = 1u64
+    while i < n {
+        let mut bit : u64 = n >> 1u64
+        while (j & bit) != 0u64 { j = j ^ bit ; bit = bit >> 1u64 }
+        j = j ^ bit
+        if i < j {
+            let t : u32 = w[i]
+            w[i] = w[j]
+            w[j] = t
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Forward NTT over GF(q) on base[0..n); omega a primitive n-th root of unity mod q. */
+fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 @export {
+    let w : *u32 = base as *u32
+    ntt_bitrev_at(base, n)
+    let mut len : u64 = 2u64
+    while len <= n {
+        let wn   : u32 = ntt_pow(omega, n / len, q)
+        let half : u64 = len / 2u64
+        let mut i : u64 = 0u64
+        while i < n {
+            let mut tw : u32 = 1u32
+            let mut k : u64 = 0u64
+            while k < half {
+                let uu : u32 = w[i + k]
+                let vv : u32 = ntt_mul(w[i + k + half], tw, q)
+                w[i + k]        = ntt_add(uu, vv, q)
+                w[i + k + half] = ntt_sub(uu, vv, q)
+                tw = ntt_mul(tw, wn, q)
+                k = k + 1u64
+            }
+            i = i + len
+        }
+        len = len << 1u64
+    }
+    return 0i32
+}
+
+/* Inverse NTT on base[0..n): forward with inv(omega), then scale by inv(n). */
+fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 @export {
+    let w : *u32 = base as *u32
+    let iw : u32 = ntt_inv(omega, q)
+    ntt_forward_at(base, n, q, iw)
+    let ninv : u32 = ntt_inv(n as u32, q)
+    let mut i : u64 = 0u64
+    while i < n {
+        w[i] = ntt_mul(w[i], ninv, q)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* === Tabled FIPS NTT cores (COMBINE-1, W0.7): the Kyber/Dilithium NTT family ===
+ * Unlike the DIT core above (data bit-reversal + on-the-fly omega), the FIPS NTTs
+ * use NO data permutation: the zetas, precomputed in bit-reversed order, are
+ * consumed SEQUENTIALLY from zt[1..].  base = caller u32 coefficient buffer; zt =
+ * caller u64 zeta table (mlkem 128, mldsa 256 entries); q the prime.  Forward and
+ * inverse are byte-identical to mlkem (kem_ntt_work / kem_invntt_work, min_len=2,
+ * INCOMPLETE -> degree-1 pairs) and mldsa (mldsa_ntt_work / mldsa_invntt_work,
+ * min_len=1, COMPLETE).  The final inverse scaling (×3303 for Kyber, ×n^-1 for
+ * Dilithium) genuinely differs and stays in each consumer's wrapper. */
+
+/* Forward Cooley-Tukey, tabled, Montgomery-reduced.  Levels len=n/2 down to
+ * min_len; per block one Montgomery zeta zt[k] (=zeta*R mod q; k=1,2,...);
+ * butterfly t=mont_redc(b*zeta_mont)=b*zeta mod q, then a'=a+t, b'=a-t via
+ * conditional subtract (NO % after the mont_redc call -- modulo-after-call trap;
+ * also faster).  Byte-identical to the prior `(z*b)%q` form. */
+fn ntt_ct_forward_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64) -> i32 @export {
+    let w : *u32 = base as *u32
+    let zt : *u64 = zbase as *u64
+    let qinv : u64 = mont_n_inv_neg(q)
+    let mut k : u64 = 1u64
+    let mut len : u64 = n >> 1u64
+    while len >= min_len {
+        let mut start : u64 = 0u64
+        while start < n {
+            let z : u64 = zt[k]
+            k = k + 1u64
+            let mut j : u64 = start
+            while j < start + len {
+                let b : u64 = w[j + len] as u64
+                let t : u64 = mont_redc(b * z, q, qinv)
+                let a : u64 = w[j] as u64
+                let mut s1 : u64 = a + t
+                if s1 >= q { s1 = s1 - q }
+                let mut s2 : u64 = (a + q) - t
+                if s2 >= q { s2 = s2 - q }
+                w[j]       = s1 as u32
+                w[j + len] = s2 as u32
+                j = j + 1u64
+            }
+            start = j + len
+        }
+        len = len >> 1u64
+    }
+    return 0i32
+}
+
+/* Inverse Gentleman-Sande, tabled.  Levels len=min_len up to n/2; zetas consumed
+ * in reverse (k=start_k,start_k-1,...; start_k = #forward zetas = 127 mlkem / 255
+ * mldsa).  Butterfly a'=a+b, b'=z*(b-a) mod q -- POSITIVE zeta (Dilithium's
+ * negated-zeta * (a-b) form gives the identical residue z*(b-a), proven).  Caller
+ * applies the final n^-1 / Kyber scale afterward. */
+fn ntt_gs_inverse_tabled(base: u64, n: u64, q: u64, zbase: u64, min_len: u64, start_k: u64) -> i32 @export {
+    let w : *u32 = base as *u32
+    let zt : *u64 = zbase as *u64
+    let qinv : u64 = mont_n_inv_neg(q)
+    let mut k : u64 = start_k
+    let mut len : u64 = min_len
+    let half_n : u64 = n >> 1u64
+    while len <= half_n {
+        let mut start : u64 = 0u64
+        while start < n {
+            let z : u64 = zt[k]
+            k = k - 1u64
+            let mut j : u64 = start
+            while j < start + len {
+                let a : u64 = w[j] as u64
+                let b : u64 = w[j + len] as u64
+                /* a' = a + b mod q (conditional subtract). */
+                let mut s : u64 = a + b
+                if s >= q { s = s - q }
+                w[j] = s as u32
+                /* diff = (b - a) mod q, then b' = mont_redc(diff*zeta_mont) = (b-a)*zeta mod q. */
+                let mut diff : u64 = (b + q) - a
+                if diff >= q { diff = diff - q }
+                w[j + len] = mont_redc(diff * z, q, qinv) as u32
+                j = j + 1u64
+            }
+            start = j + len
+        }
+        len = len << 1u64
+    }
+    return 0i32
+}
+
+/* Module-work-buffer (NTT_W) wrappers -- the crypto-sized API; behaviour unchanged. */
+fn ntt_bitrev(n: u64) -> i32 { return ntt_bitrev_at(&NTT_W as u64, n) }
+fn ntt_forward(n: u64, q: u32, omega: u32) -> i32 @export { return ntt_forward_at(&NTT_W as u64, n, q, omega) }
+fn ntt_inverse(n: u64, q: u32, omega: u32) -> i32 @export { return ntt_inverse_at(&NTT_W as u64, n, q, omega) }
+
+/* KAT (99 = pass).  Over GF(998244353), g=3 a primitive root:
+ *  - round-trip: inverse(forward(v)) == v for v=[1..8]            (the defining NTT property)
+ *  - delta:      forward([1,0,..,0]) == [1,1,..,1]                (NTT of a unit impulse is all-ones)
+ *  - linearity sanity: forward of all-ones has DC term == n        (sum at j=0) and 0 elsewhere is NOT
+ *    required, but [0]==n is asserted to pin the omega^0 row.
+ * A wrong omega, butterfly, or inverse-scale reddens at least one arm. */
+fn ntt_selftest() -> u64 @export {
+    let q : u32 = 998244353u32
+    let n : u64 = 8u64
+    let g : u32 = 3u32
+    let omega : u32 = ntt_pow(g, ((q as u64) - 1u64) / n, q)
+    /* round-trip on [1..8] */
+    let mut i : u64 = 0u64
+    while i < n {
+        let v : u32 = (i + 1u64) as u32
+        NTT_W[i] = v
+        NTT_SAVE[i] = v
+        i = i + 1u64
+    }
+    ntt_forward(n, q, omega)
+    ntt_inverse(n, q, omega)
+    let mut j : u64 = 0u64
+    while j < n {
+        if NTT_W[j] != NTT_SAVE[j] { return 1u64 }
+        j = j + 1u64
+    }
+    /* delta -> all ones */
+    NTT_W[0u64] = 1u32
+    let mut z : u64 = 1u64
+    while z < n { NTT_W[z] = 0u32 ; z = z + 1u64 }
+    ntt_forward(n, q, omega)
+    let mut a : u64 = 0u64
+    while a < n {
+        if NTT_W[a] != 1u32 { return 2u64 }
+        a = a + 1u64
+    }
+    /* all-ones -> DC term == n at index 0 */
+    let mut o : u64 = 0u64
+    while o < n { NTT_W[o] = 1u32 ; o = o + 1u64 }
+    ntt_forward(n, q, omega)
+    if NTT_W[0u64] != (n as u32) { return 3u64 }
+    return 99u64
+}
+
+/* Cyclic convolution over GF(q): with A staged in NTT_W[0..n) and B in NTT_B[0..n),
+ * leaves (A ⊛ B) mod q in NTT_W[0..n) -- the multiply that polynomial-ring crypto
+ * (mlkem/mldsa NTT-domain pointwise) and the bigint NTT tier (D-KARA-3) are built on.
+ * For a LINEAR convolution (a polynomial or bigint product), zero-pad both operands to
+ * n >= deg(A)+deg(B)+1 so no term wraps; n must be a power of two with n | (q-1) and
+ * omega a primitive n-th root of unity mod q.  Â and B̂ share the forward; the spectra
+ * are multiplied pointwise, then a single inverse returns the convolution. */
+fn ntt_convolve(n: u64, q: u32, omega: u32) -> i32 @export {
+    ntt_forward(n, q, omega)                                   /* NTT_W <- Â */
+    let mut i : u64 = 0u64
+    while i < n { NTT_SAVE[i] = NTT_W[i] ; i = i + 1u64 }       /* stash Â */
+    let mut c : u64 = 0u64
+    while c < n { NTT_W[c] = NTT_B[c] ; c = c + 1u64 }          /* B into the work buffer */
+    ntt_forward(n, q, omega)                                   /* NTT_W <- B̂ */
+    let mut m : u64 = 0u64
+    while m < n {
+        let prod : u32 = ntt_mul(NTT_SAVE[m], NTT_W[m], q)     /* Â·B̂ pointwise */
+        NTT_W[m] = prod
+        m = m + 1u64
+    }
+    ntt_inverse(n, q, omega)                                   /* NTT_W <- A ⊛ B */
+    return 0i32
+}
+
+/* KAT (99 = pass).  Linear convolution via size-8 cyclic convolution of two zero-padded
+ * cubics over GF(998244353):
+ *   (1 + 2x + 3x² + 4x³) · (5 + 6x + 7x² + 8x³)
+ *     = 5 + 16x + 34x² + 60x³ + 61x⁴ + 52x⁵ + 32x⁶          (degree 6 < 8, no wrap)
+ * This exercises the FULL multiply pipeline (forward · pointwise · inverse); a wrong
+ * butterfly, omega, pointwise step, or inverse-scale reddens one of the eight checks. */
+fn ntt_conv_selftest() -> u64 @export {
+    let q : u32 = 998244353u32
+    let n : u64 = 8u64
+    let g : u32 = 3u32
+    let omega : u32 = ntt_pow(g, ((q as u64) - 1u64) / n, q)
+    let mut i : u64 = 0u64
+    while i < n { NTT_W[i] = 0u32 ; NTT_B[i] = 0u32 ; i = i + 1u64 }
+    NTT_W[0u64] = 1u32 ; NTT_W[1u64] = 2u32 ; NTT_W[2u64] = 3u32 ; NTT_W[3u64] = 4u32
+    NTT_B[0u64] = 5u32 ; NTT_B[1u64] = 6u32 ; NTT_B[2u64] = 7u32 ; NTT_B[3u64] = 8u32
+    ntt_convolve(n, q, omega)
+    if NTT_W[0u64] != 5u32  { return 1u64 }
+    if NTT_W[1u64] != 16u32 { return 2u64 }
+    if NTT_W[2u64] != 34u32 { return 3u64 }
+    if NTT_W[3u64] != 60u32 { return 4u64 }
+    if NTT_W[4u64] != 61u32 { return 5u64 }
+    if NTT_W[5u64] != 52u32 { return 6u64 }
+    if NTT_W[6u64] != 32u32 { return 7u64 }
+    if NTT_W[7u64] != 0u32  { return 8u64 }
+    return 99u64
+}

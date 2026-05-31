@@ -14,6 +14,7 @@
 module omnia_pq
 
 extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bnd_mul_ok(n: u64, elem: u64) -> u8 from "bound.iii"
 
 const PQ_INVALID : u64 = 0u64
 const PQ_OK      : i32 = 0i32
@@ -108,8 +109,14 @@ fn pq_swap(slot: u32, a: u64, b: u64) -> u32 {
     return 0u32
 }
 
+/* [COMBINE-5/A-PQ-1] hole-sift: hold the moving element, shift larger parents down into the hole,
+ * write the held element once at the end -- ~3x fewer load/stores than the full-swap-per-level form;
+ * the final heap is byte-identical to the swap form. */
 fn pq_sift_up(slot: u32, idx: u64) -> u32 {
     let prio_base : u64 = PQ_PRIO_BASE[slot]
+    let pay_base  : u64 = PQ_PAY_BASE[slot]
+    let sp : u64 = pq_load_u64_le(prio_base, idx)   /* held element's priority */
+    let sx : u32 = pq_load_u32_le(pay_base, idx)    /* held element's payload */
     let mut i : u64 = idx
     let mut done : u8 = 0u8
     while done == 0u8 {
@@ -117,20 +124,29 @@ fn pq_sift_up(slot: u32, idx: u64) -> u32 {
         if done == 0u8 {
             let parent : u64 = (i - 1u64) / 2u64
             let pp : u64 = pq_load_u64_le(prio_base, parent)
-            let pi : u64 = pq_load_u64_le(prio_base, i)
-            if pi < pp {
-                pq_swap(slot, i, parent)
+            if sp < pp {
+                pq_store_u64_le(prio_base, i, pp)                 /* move parent down into the hole */
+                let xp : u32 = pq_load_u32_le(pay_base, parent)
+                pq_store_u32_le(pay_base, i, xp)
                 i = parent
             }
-            if pi >= pp { done = 1u8 }
+            if sp >= pp { done = 1u8 }
         }
     }
+    pq_store_u64_le(prio_base, i, sp)                             /* write the held element once */
+    pq_store_u32_le(pay_base, i, sx)
     return 0u32
 }
 
+/* [COMBINE-5/A-PQ-1] hole-sift down: hold the element, shift the smaller child up into the hole,
+ * single write at the end.  Child selection + stop condition are identical to the swap form, so the
+ * final heap is byte-identical. */
 fn pq_sift_down(slot: u32, idx: u64) -> u32 {
     let len : u64 = PQ_LEN[slot]
     let prio_base : u64 = PQ_PRIO_BASE[slot]
+    let pay_base  : u64 = PQ_PAY_BASE[slot]
+    let sp : u64 = pq_load_u64_le(prio_base, idx)   /* held element */
+    let sx : u32 = pq_load_u32_le(pay_base, idx)
     let mut i : u64 = idx
     let mut done : u8 = 0u8
     while done == 0u8 {
@@ -138,22 +154,23 @@ fn pq_sift_down(slot: u32, idx: u64) -> u32 {
         let right : u64 = i * 2u64 + 2u64
         if left >= len { done = 1u8 }
         if done == 0u8 {
-            let mut smallest : u64 = i
-            let pi : u64 = pq_load_u64_le(prio_base, i)
-            let pl : u64 = pq_load_u64_le(prio_base, left)
-            let mut sp : u64 = pi
-            if pl < sp { smallest = left; sp = pl }
+            let mut smallest : u64 = left                        /* same selection: left, then right only if strictly smaller */
+            let mut sm : u64 = pq_load_u64_le(prio_base, left)
             if right < len {
                 let pr : u64 = pq_load_u64_le(prio_base, right)
-                if pr < sp { smallest = right; sp = pr }
+                if pr < sm { smallest = right; sm = pr }
             }
-            if smallest == i { done = 1u8 }
+            if sp <= sm { done = 1u8 }                            /* held element fits here (<= both children) -> stop */
             if done == 0u8 {
-                pq_swap(slot, i, smallest)
+                pq_store_u64_le(prio_base, i, sm)                 /* move smaller child up into the hole */
+                let xs : u32 = pq_load_u32_le(pay_base, smallest)
+                pq_store_u32_le(pay_base, i, xs)
                 i = smallest
             }
         }
     }
+    pq_store_u64_le(prio_base, i, sp)                             /* write the held element once */
+    pq_store_u32_le(pay_base, i, sx)
     return 0u32
 }
 
@@ -170,6 +187,7 @@ fn pq_u64u32_new(arena_id: u64, hard_max: u64) -> u64 @export {
         i = i + 1u32
     }
     if slot == 0xFFFFFFFFu32 { return PQ_INVALID }
+    if bnd_mul_ok(hard_max, 8u64) == 0u8 { return PQ_INVALID }  /* [COMBINE-7/A-PQ-3/X18] hard_max*8 wrap -> tiny alloc -> OOB; reject */
     let prio : u64 = arena_alloc1(arena_id, hard_max * 8u64)
     if prio == 0u64 { return PQ_INVALID }
     let pay : u64 = arena_alloc1(arena_id, hard_max * 4u64)

@@ -3,7 +3,17 @@
  * III STDLIB - sanctus::seal_resolver
  *
  * SEAL_RESOLVER.mhash computation and verify.
- * FROZEN SPEC §1.4.6, §15.1, ADR-RES-009.
+ * FROZEN SPEC §1.4.6, §15.1, ADR-RES-009 (superseded by ADR-RES-009-A).
+ *
+ * W5.3 (KEEP-1) REFREEZE: ADR-RES-009-A corrects six coefficient rows whose frozen LE bytes did
+ * not decode to their documented magnitudes (a transcription drift, not a value change): the five
+ * 900_000_000 rows encoded 0x35A43500 = 899,953,920 (byte[1] 0x35, a copy of byte[3], where 0xE9
+ * belongs), and the 700_000_000 row encoded 0x297EFF00 = 696,188,672 (should be 0x29B92700). The
+ * documented magnitudes are canonical (they are the system K-values used identically in
+ * resolution_init / calculus_v1); the bytes are now recomputed to match. The seal is reissued
+ * (seal_resolver_compute is self-consistent -- no golden pinned the old value); corpus 951 is the
+ * manifest-verify KAT (decoded coeffs == magnitudes, + a byte-flip falsifier proving the seal
+ * binds the table).
  *
  * Covers:
  *   (1) the 33 activation coefficients (encoded as a frozen byte array)
@@ -39,15 +49,15 @@ var COEFF_TABLE_BYTES : [u8; 264] = [
     /* RESOLVER_BASE_FORM_PATTERN = 1_000_000_000 */
     0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_COMPOSE_PATTERN = 900_000_000 */
-    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    0x00u8, 0xE9u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_PASSAGE_PATTERN = 900_000_000 */
-    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    0x00u8, 0xE9u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_ESSENCE_PATTERN = 900_000_000 */
-    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    0x00u8, 0xE9u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_MOTION_PATTERN = 900_000_000 */
-    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    0x00u8, 0xE9u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_SUBSTANCE_PATTERN = 900_000_000 */
-    0x00u8, 0x35u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    0x00u8, 0xE9u8, 0xA4u8, 0x35u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_ORIGIN_PATTERN = 1_000_000_000 */
     0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_BASE_DEFAULT_PATTERN = 500_000_000 */
@@ -91,7 +101,7 @@ var COEFF_TABLE_BYTES : [u8; 264] = [
     /* RESOLVER_P_RING_HIGHER = 1_000_000_000 */
     0x00u8, 0xCAu8, 0x9Au8, 0x3Bu8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_P_EFFECTS_UNDECLARED = 700_000_000 */
-    0x00u8, 0xFFu8, 0x7Eu8, 0x29u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
+    0x00u8, 0x27u8, 0xB9u8, 0x29u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVER_P_ARITY_MISMATCH = 300_000_000 */
     0x00u8, 0xA3u8, 0xE1u8, 0x11u8, 0x00u8, 0x00u8, 0x00u8, 0x00u8,
     /* RESOLVE_MIN_SCORE = 100_000_000 */
@@ -143,6 +153,29 @@ fn seal_resolver_byte(i: u32) -> u8 @export {
 
 fn seal_resolver_is_computed() -> u8 @export {
     return g_seal_resolver_computed
+}
+
+/* W5.3 (KEEP-1): decode coefficient `idx` (0..32) as a u64 from the frozen little-endian byte
+ * table.  Lets the manifest-verify KAT confirm the bytes now match the documented magnitudes
+ * (the canonical K-values) after the ADR-RES-009-A refreeze that corrected the 900M/700M typos. */
+fn seal_resolver_coeff_u64(idx: u32) -> u64 @export {
+    if idx >= 33u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    let off : u64 = (idx as u64) * 8u64
+    let mut v : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        v = v | ((COEFF_TABLE_BYTES[off + i] as u64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return v
+}
+
+/* W5.3 test hook: XOR coefficient-table byte `i` with 0xFF.  Falsifier support -- proves the
+ * seal BINDS the coefficient bytes (a single flipped byte must change the recomputed seal). */
+fn seal_resolver_flip_byte_for_test(i: u32) -> i32 @export {
+    if i >= 264u32 { return -1i32 }
+    COEFF_TABLE_BYTES[i] = COEFF_TABLE_BYTES[i] ^ 0xFFu8
+    return 0i32
 }
 
 var SEAL_RESOLVER_SAVED : [u8; 32]

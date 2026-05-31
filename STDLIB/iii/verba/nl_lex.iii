@@ -470,7 +470,11 @@ fn nl_lex_init_all() -> i32 @export {
     nl_lex_register_hash(0xa5013e9ad5caeda4u64, 2u8, 52u32)  /* channel */
     nl_lex_register_hash(0x10f2dcb841372d0cu64, 2u8, 53u32)  /* socket */
     nl_lex_register_hash(0xc7f597ea639b1b59u64, 2u8, 54u32)  /* connection */
-    nl_lex_register_hash(0x86c8946e5047dea7u64, 2u8, 55u32)  /* capability */
+    /* 'capability' (key 0x86c8946e5047dea7) is re-registered below in the v1.0
+     * governance block as (type 1, word 628); the open-addressing table updates in
+     * place on a key match, so that LATER registration silently clobbered this
+     * (type 2, word 55) noun entry.  Removed to dedupe (628 is the intentional v1.0
+     * sense the lexer already returned).  [audit H-NL-1] */
     nl_lex_register_hash(0xd053586f9c8e048bu64, 2u8, 56u32)  /* intent */
     nl_lex_register_hash(0x0b7a1e4bea695f89u64, 2u8, 57u32)  /* pattern */
     nl_lex_register_hash(0x226447d5a36b55e5u64, 2u8, 58u32)  /* glyph */

@@ -21,6 +21,7 @@
 module omnia_list
 
 extern @abi(c-msvc-x64) fn arena_alloc8(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn bnd_mul_ok(n: u64, elem: u64) -> u8 from "bound.iii"
 
 const LIST_MAX_INSTANCES : u32 = 32u32
 const LIST_INVALID : u64 = 0xFFFFFFFFFFFFFFFFu64
@@ -52,6 +53,7 @@ fn list_slot_of(id: u64) -> u32 {
 
 fn list_new(arena_id: u64, hard_max: u64) -> u64 @export {
     if hard_max == 0u64 { return 0u64 }
+    if bnd_mul_ok(hard_max, 16u64) == 0u8 { return 0u64 }   /* [COMBINE-7/J-LIST-1/X18] route the hard_max*16 wrap guard through the one bound organ (behaviour-identical: rejects hard_max >= 2^60) */
     let mut i : u32 = 0u32
     let mut slot : u32 = 0xFFFFFFFFu32
     while i < LIST_MAX_INSTANCES {

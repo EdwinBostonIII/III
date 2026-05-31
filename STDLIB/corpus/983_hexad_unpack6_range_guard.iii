@@ -1,0 +1,17 @@
+/* 983_hexad_unpack6_range_guard.iii -- falsifier for iii_hexad_unpack6's numeric bounds gate.
+ * h >= HXA_HEXAD_MAX(729=3^6) is out of range and must REJECT (0u8, out left unwritten); h=728
+ * (max valid) admits (1u8). Distinct from corpus 261 (the @hexad_kind annotation mechanism); the
+ * unpack6 range gate had no falsifier. 99 = pass. */
+module corpus_983
+
+extern @abi(c-msvc-x64) fn iii_hexad_unpack6(h: u16, out_addr: u64) -> u8 from "hexad_algebra.iii"
+
+var OUT : [u8; 8]
+
+fn main() -> u64 {
+    let op : u64 = &OUT as u64
+    if iii_hexad_unpack6(728u16, op) != 1u8 { return 1u64 }   /* max valid 3^6-1 admits */
+    if iii_hexad_unpack6(729u16, op) != 0u8 { return 2u64 }   /* == HXA_HEXAD_MAX rejects */
+    if iii_hexad_unpack6(730u16, op) != 0u8 { return 3u64 }   /* above-max rejects */
+    return 99u64
+}

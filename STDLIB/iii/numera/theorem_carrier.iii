@@ -87,10 +87,21 @@ var THMC_TIMESTAMPS        : [u64; 16384]
 var THMC_LIVE              : [u8;  16384]
 var THMC_VERIFIED_FLAG     : [u8;  16384]
 
+/* [W3.1 / COMBINE-3] caller-owned content-address index: carrier_id -> slot, for O(1) tc_find_slot
+ * (was an O(THMC_SLOTS)=16384 linear scan, called per dependency -> O((D+1)*16384)).  Sized 32768
+ * (>= 16384 slots, <=50% load).  The table is ADD-ONLY (LIVE cleared only on tc_init). */
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
+const THMC_CAI_SLOTS : u64 = 32768u64
+const THMC_CAI_MASK  : u64 = 32767u64
+var THMC_CAI_KEYS : [u8;  1048576]   /* 32768 * 32 */
+var THMC_CAI_VALS : [u32; 32768]
+
 /* --- Module-scope scratch (Trap 7 -- no local var arrays) --- */
 var THMC_HASH_OUT           : [u8; 32]
 var THMC_IDBUF              : [u64; 388]      /* 3104 bytes / 8 = 388 words: holds statement(1024) + ptid(32) + deps(2048) */
-var THMC_PAYLOAD            : [u64; 264]      /* 2112 bytes / 8 = 264 words: 64 + 64*32 dep ids */
+var THMC_PAYLOAD            : [u64; 266]      /* 64 hdr + 64*32 dep ids, +2 words headroom [audit C-TC-2] */
 var THMC_PRODUCER           : [u8; 32]
 var THMC_OP_PROPOSED        : [u8; 32]
 var THMC_OP_VERIFIED        : [u8; 32]
@@ -153,19 +164,12 @@ fn tc_load_u64_le(base: u64, off: u64) -> u64 {
 /* Sentinel-scan live slots for carrier_id; return slot as i64, -1i64 if absent.
  * All callers test == / != against -1i64 only (Trap 3). */
 fn tc_find_slot(carrier_id: *u8) -> i64 {
-    let mut found : i64 = -1i64
-    let mut sentinel : u8 = 0u8
-    let mut i : u64 = 0u64
-    while i < THMC_SLOTS {
-        if sentinel == 0u8 {
-            if THMC_LIVE[i] == 1u8 {
-                let idp : *u8 = tc_cid_addr(i) as *u8
-                if ident_eq(idp, carrier_id) == 1u8 { found = i as i64  sentinel = 1u8 }
-            }
-        }
-        i = i + 1u64
-    }
-    return found
+    /* [W3.1 / COMBINE-3] O(1) content-address lookup (was an O(THMC_SLOTS)=16384 scan, called per
+     * dependency).  Add-only table -> a caindex hit is always a live, full-id-verified match,
+     * byte-identical to the old (LIVE && ident_eq) scan's first-match result. */
+    let s : u32 = cai_get((&THMC_CAI_KEYS) as u64, (&THMC_CAI_VALS) as u64, THMC_CAI_MASK, carrier_id)
+    if s == 0xFFFFFFFFu32 { return -1i64 }
+    return s as i64
 }
 
 /* Sentinel-scan for a free slot; return index as i64, -1i64 if full. */
@@ -229,6 +233,7 @@ fn tc_init() -> i32 @export {
         i = i + 1u64
     }
     THMC_COUNT = 0u64
+    cai_clear((&THMC_CAI_VALS) as u64, THMC_CAI_SLOTS)
     /* Stable op-ids for M6/M10: hash of ASCII op name. */
     let prop_name : *u8 = (&THMC_OP_PROPOSED as u64) as *u8
     THMC_OP_PROPOSED[0]  = 0x74u8   THMC_OP_PROPOSED[1]  = 0x63u8
@@ -279,6 +284,7 @@ fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 @export {
     let ptid_ptr      : u64 = tc_load_u64_le(req_base, 16u64)
     let dep_ptr       : u64 = tc_load_u64_le(req_base, 24u64)
     let dep_count     : u64 = tc_load_u64_le(req_base, 32u64)
+    if dep_count > THMC_MAX_DEPS { return THMC_E_FULL }   /* unbounded dep_count overruns THMC_PAYLOAD/dep arrays [audit C-TC-1] */
     /* Null checks. */
     if stmt_ptr == 0u64 { return THMC_E_NULL }
     if ptid_ptr == 0u64 { return THMC_E_NULL }
@@ -336,6 +342,7 @@ fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 @export {
     THMC_LIVE[s] = 1u8
     THMC_VERIFIED_FLAG[s] = 1u8
     THMC_COUNT = THMC_COUNT + 1u64
+    cai_put((&THMC_CAI_KEYS) as u64, (&THMC_CAI_VALS) as u64, THMC_CAI_MASK, tc_cid_addr(s) as *u8, s as u32)   /* [W3.1] index carrier_id -> slot */
     return THMC_OK
 }
 
@@ -664,6 +671,7 @@ fn tc_kat() -> u64 @export {
     while fi < 32u64 { fake_cid[fi] = 0x55u8  fi = fi + 1u64 }
     THMC_STATEMENT_LENS[fake_s] = 3u32
     THMC_LIVE[fake_s] = 1u8
+    cai_put((&THMC_CAI_KEYS) as u64, (&THMC_CAI_VALS) as u64, THMC_CAI_MASK, fake_cid, fake_s as u32)   /* [W3.1] mirror the white-box slot write into the index */
     /* Copy "abc" into statement. */
     let fake_stmt : *u8 = tc_stmt_addr(fake_s) as *u8
     fake_stmt[0u64] = 0x61u8   fake_stmt[1u64] = 0x62u8   fake_stmt[2u64] = 0x63u8

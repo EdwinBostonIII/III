@@ -1,0 +1,34 @@
+/* 989_mlkem_decaps_k_guard.iii -- falsifier for iii_mlkem_decaps's parameter-set guard (C.1 PQ
+ * negative arm). ML-KEM is defined only for k in {2,3,4} (ML-KEM-512/768/1024); a k outside that
+ * range must be REJECTED (-1) before any buffer is touched (the guard fires first, so the buffers
+ * need not be well-formed). A valid k is ADMITTED: decaps is an implicit-reject KEM, so it never
+ * returns an error for k in {2,3,4} -- it always returns 0 (writing a shared secret), even over
+ * zero buffers. 199_mlkem_roundtrip only ever passes k=2, so the k<2 / k>4 rejects had no
+ * falsifier. 99 = pass. */
+module corpus_989
+
+extern @abi(c-msvc-x64) fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -> i32 from "mlkem.iii"
+
+const NEG1 : i32 = -1i32   /* literal initializer (a computed const emits an undefined symbol; a parenthesised expr before `{` misparses) */
+
+var SK : [u8; 4096]   /* >= ML-KEM-1024 sk (3168 bytes); zero-filled BSS */
+var CT : [u8; 2048]   /* >= ML-KEM-1024 ct (1568 bytes) */
+var SS : [u8; 32]
+
+fn main() -> u64 {
+    let skp : u64 = &SK as u64
+    let ctp : u64 = &CT as u64
+    let ssp : u64 = &SS as u64
+
+    /* negative arms: k outside {2,3,4} -> -1, before any buffer use */
+    if iii_mlkem_decaps(0u64, skp, ctp, ssp) != NEG1 { return 1u64 }
+    if iii_mlkem_decaps(1u64, skp, ctp, ssp) != NEG1 { return 2u64 }
+    if iii_mlkem_decaps(5u64, skp, ctp, ssp) != NEG1 { return 3u64 }
+
+    /* positive arms: every valid parameter set is admitted (implicit-reject -> 0) */
+    if iii_mlkem_decaps(2u64, skp, ctp, ssp) != 0i32 { return 4u64 }
+    if iii_mlkem_decaps(3u64, skp, ctp, ssp) != 0i32 { return 5u64 }
+    if iii_mlkem_decaps(4u64, skp, ctp, ssp) != 0i32 { return 6u64 }
+
+    return 99u64
+}

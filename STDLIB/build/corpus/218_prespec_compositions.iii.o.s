@@ -174,7 +174,7 @@ L_if_end_1:
     movq %rax, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x100, %rax
+    movabsq $0xff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -200,7 +200,7 @@ L_if_end_3:
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
+    movabsq $0xff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -655,7 +655,7 @@ L_if_end_27:
     movq %rax, -96(%rbp)
     movl -96(%rbp), %eax
     pushq %rax
-    movabsq $0x100, %rax
+    movabsq $0xff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -681,7 +681,7 @@ L_if_end_29:
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
-    movabsq $0x100, %rax
+    movabsq $0xff, %rax
     pushq %rax
     popq %rcx
     popq %rax

@@ -179,32 +179,84 @@ fn proof_ripple_corpus_equiv(old_pid: u32, new_pid: u32, corpus_witness_ptr: u64
     return cid
 }
 
-/* Verify a corpus-equivalence cert. Recomputes the site_hash from
- * (old_pid, new_pid, corpus_witness_ptr, count) -- which requires
- * the caller to re-invoke both dispatch_fps to reproduce the
- * exit_codes_hash. Returns 1 on full match, 0 on any divergence
- * (including dispatch divergence). */
-fn proof_ripple_corpus_equiv_verify(cert_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64) -> u8 @export {
+/* Verify a corpus-equivalence cert.  W4.2 (ENHANCE-17): no longer a vacuous identity-only
+ * "return 1" -- the verdict now RECOMPUTES the ripple roots and compares.  Given the count
+ * (the one input not recoverable from the cert), it re-resolves both dispatch_fps, re-runs
+ * the whole corpus to reproduce corpus_root + exit_codes_hash, rebuilds the site_hash, and
+ * compares it byte-for-byte against the cert's sealed site.  Returns 1 only on full match;
+ * 0 on ANY divergence -- a tampered witness, a wrong count, a dispatch divergence, a bad
+ * pid, or a forged/mismatched cert.  The gate can say *no*. */
+fn proof_ripple_corpus_equiv_verify(cert_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u8 @export {
     let l_cid : u64 = cert_id
     let l_old : u32 = old_pid
     let l_new : u32 = new_pid
     let l_cwp : u64 = corpus_witness_ptr
+    let l_cnt : u32 = corpus_count
 
+    /* Identity gate (cheap reject). */
     if crystal_verify(l_cid) == 0u8 { return 0u8 }
     if crystal_code(l_cid) != RIPPLE_EQUIV_CORPUS_KIND { return 0u8 }
-
     let cause_expect : u64 = (((l_old as u64) & 0xFFFFFFFFu64) << 32u64) | ((l_new as u64) & 0xFFFFFFFFu64)
     if crystal_cause(l_cid) != cause_expect { return 0u8 }
 
-    /* Recover count from the cert: encoded in the high 32 bits of cause?
-     * No -- cause holds (old, new). We need count separately or stored.
-     * Strategy: decode count by walking until corpus_root + exit_hash
-     * match. To simplify: require caller to pass count. */
-    /* (verify is called as a 4-param function; count must be retrieved
-     *  externally by the caller, or stored with the cert. For v1.0,
-     *  this verify accepts the cert's identity check only -- the
-     *  semantic verification (re-running the corpus) is a separate
-     *  operation the caller composes.) */
+    /* Reject null witness when count > 0 (mirror the mint contract exactly). */
+    if l_cwp == 0u64 {
+        if l_cnt != 0u32 { return 0u8 }
+    }
+
+    /* Re-resolve both dispatch fps from the registry (must match mint). */
+    let p_old : u64 = pattern_table_get(l_old)
+    let p_new : u64 = pattern_table_get(l_new)
+    if p_old == 0u64 { return 0u8 }
+    if p_new == 0u64 { return 0u8 }
+    let fp_old : u64 = pattern_dispatch_fn(p_old)
+    let fp_new : u64 = pattern_dispatch_fn(p_new)
+    if fp_old == 0u64 { return 0u8 }
+    if fp_new == 0u64 { return 0u8 }
+
+    /* Recompute corpus_root = sha256(domain || witness bytes). */
+    mhash_begin()
+    mhash_domain((&PRR_DOM_CORPUS) as u64, 16u64)
+    if l_cnt > 0u32 {
+        mhash_payload(l_cwp, ((l_cnt as u64) & 0xFFFFFFFFu64) * 8u64)
+    }
+    mhash_final((&PROOF_CORPUS_ROOT) as u64)
+
+    /* Recompute exit_codes_hash by re-running the corpus through both fps; any output
+     * divergence is itself a rejection (the patterns are NOT equivalent on this input). */
+    mhash_begin()
+    mhash_domain((&PRR_DOM_CORPUS) as u64, 16u64)
+    let mut i : u32 = 0u32
+    while i < l_cnt {
+        let off : u64 = ((i as u64) & 0xFFFFFFFFu64) * 8u64
+        let in_pp : *u64 = (l_cwp + off) as *u64
+        let input : u64 = in_pp[0u64]
+        let f_a : u64 = fp_old
+        let f_b : u64 = fp_new
+        let out_a : u64 = f_a(input, 0u64, 0u64, 0u64)
+        let out_b : u64 = f_b(input, 0u64, 0u64, 0u64)
+        if out_a != out_b { return 0u8 }
+        _emit_le8(out_a)
+        i = i + 1u32
+    }
+    mhash_final((&PROOF_EXIT_HASH) as u64)
+
+    /* Rebuild the site_hash exactly as mint did. */
+    mhash_begin()
+    mhash_domain((&PRR_DOM_CORPUS) as u64, 16u64)
+    _emit_le8((l_old as u64) & 0xFFFFFFFFu64)
+    _emit_le8((l_new as u64) & 0xFFFFFFFFu64)
+    _emit_le8((l_cnt as u64) & 0xFFFFFFFFu64)
+    mhash_payload((&PROOF_CORPUS_ROOT) as u64, 32u64)
+    mhash_payload((&PROOF_EXIT_HASH) as u64, 32u64)
+    mhash_final((&PROOF_RECOMP_OUT) as u64)
+
+    /* Compare the recomputed site against the cert's sealed site, byte for byte. */
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if (PROOF_RECOMP_OUT[k] as u32) != crystal_site_byte(l_cid, k) { return 0u8 }
+        k = k + 1u32
+    }
     return 1u8
 }
 

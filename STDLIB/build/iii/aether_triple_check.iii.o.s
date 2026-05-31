@@ -54,6 +54,9 @@ L_TRIPLE_USED:
 L_TRIPLE_DISAGREE:
     .quad 0x0
     .section .bss
+    .global L_TRIPLE_RES
+L_TRIPLE_RES:
+    .zero 24
     .global L_TRIPLE_PRODUCER
 L_TRIPLE_PRODUCER:
     .zero 256
@@ -1986,6 +1989,36 @@ L_if_end_43:
     pushq %rax
     popq %rax
 L_if_end_45:
+    leaq L_TRIPLE_RES(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movq -104(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    leaq L_TRIPLE_RES(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movq -112(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
+    leaq L_TRIPLE_RES(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movq -120(%rbp), %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movq %rdx, (%rax,%rcx,8)
     movzbq -128(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -2022,7 +2055,11 @@ L_if_end_45:
     movl %eax, L_TRIPLE_DISAGREE(%rip)
     movabsq $0x0, %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    leaq L_TRIPLE_RES(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
@@ -2058,7 +2095,11 @@ L_if_end_47:
     movl %eax, L_TRIPLE_DISAGREE(%rip)
     movabsq $0x1, %rax
     pushq %rax
-    movq -16(%rbp), %rax
+    leaq L_TRIPLE_RES(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax

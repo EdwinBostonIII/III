@@ -1,0 +1,56 @@
+/* APOTHEOSIS S.7 step 8: seal_organ batches a sealed instant with a civil-time
+ * decomposition under one digest, bounds-checked once at creation.
+ *
+ * Arms:
+ *   civil    -- the cached (y,m,d) of a known Unix timestamp is correct
+ *   positive -- a freshly created seal verifies intact
+ *   readable -- the combined digest is readable (valid handle/index)
+ *   cap-neg  -- a capability lacking time_read yields no seal (instant denied)
+ *   uaf-neg  -- a dropped seal handle fails verify (use-after-free caught)
+ *
+ * 1700000000 unix = 2023-11-14 22:13:20 UTC.
+ */
+module corpus_c765
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn seal_instant(time_cap: u64, unix_seconds: u64) -> u64 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_verify(handle: u64) -> u8 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_year(handle: u64) -> u32 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_month(handle: u64) -> u32 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_day(handle: u64) -> u32 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_digest_byte(handle: u64, i: u32) -> u32 from "seal_organ.iii"
+extern @abi(c-msvc-x64) fn seal_drop(handle: u64) -> i32 from "seal_organ.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let time_cap : u64 = cap_attenuate(env, 0x100u64, 0u64)   /* bit 8 = time_read */
+
+    let s : u64 = seal_instant(time_cap, 1700000000u64)
+    if s == 0u64 { return 1u64 }
+
+    /* civil: cached decomposition is the correct civil date */
+    if seal_year(s)  != 2023u32 { return 2u64 }
+    if seal_month(s) != 11u32   { return 3u64 }
+    if seal_day(s)   != 14u32   { return 4u64 }
+
+    /* positive: verify intact */
+    if seal_verify(s) == 0u8 { return 5u64 }
+
+    /* readable: the digest accessor returns a real byte (< 256) for a valid
+     * handle/index (0x100 is the bad-handle sentinel) */
+    if seal_digest_byte(s, 0u32) >= 0x100u32 { return 6u64 }
+    if seal_digest_byte(s, 31u32) >= 0x100u32 { return 7u64 }
+    /* out-of-range index -> sentinel */
+    if seal_digest_byte(s, 32u32) != 0x100u32 { return 8u64 }
+
+    /* cap-neg: a capability without time_read yields no seal */
+    let bad_cap : u64 = cap_attenuate(env, 0u64, 0u64)
+    if seal_instant(bad_cap, 1700000000u64) != 0u64 { return 9u64 }
+
+    /* uaf-neg: a dropped handle fails verify */
+    seal_drop(s)
+    if seal_verify(s) != 0u8 { return 10u64 }
+
+    return 99u64
+}

@@ -47,6 +47,15 @@ extern @abi(c-msvc-x64) fn eg_rebuild() -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn cl_init() -> i32 from "cost_lattice.iii"
 extern @abi(c-msvc-x64) fn cl_dot_slot(slot: u32, c: *u64, out_dot: *u64) -> i32 from "cost_lattice.iii"
 
+/* the real 6-D cost producer (W3.8 / ENHANCE-4 / SEPARATE-3): cost_calculus emits
+ * the (latency, throughput, regpressure, icache, dcache, energy) vector via the
+ * microarch_model simulator + per-opcode tables -- replacing the all-ones stub. */
+extern @abi(c-msvc-x64) fn cc_init() -> i32 from "cost_calculus.iii"
+extern @abi(c-msvc-x64) fn cc_evaluate(req: *u8, out_cost: *u64) -> i32 from "cost_calculus.iii"
+extern @abi(c-msvc-x64) fn cc_set_energy(opcode: u32, energy: u32) -> i32 from "cost_calculus.iii"
+extern @abi(c-msvc-x64) fn ma_init() -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_set_latency(opcode: u32, cycles: u32) -> i32 from "microarch_model.iii"
+
 /* the ripple network (forcefield/ripple): a content-addressed dependency store with
  * deterministic change-propagation -- the substrate for the CONTINGENT EVOLUTION
  * DRIVER (files self-optimize -> content-address -> propagate changes coherently). */
@@ -118,6 +127,13 @@ var EV_C1SNAP  : [u8; 32]     /* cell1's address snapshot */
 var EV_RESOLVE : [u8; 256]    /* resolve output */
 var EV_VBUF    : [u8; 32]     /* resolve tamper-check scratch */
 
+var SI_CC_SEEDED : u8 = 0u8     /* W3.8 one-time microarch cost-table seed flag */
+var SI_REQ32     : [u8; 32]     /* cc_evaluate request aggregate (ops_ptr,n,deps_ptr,dep_n) */
+var SI_OPS1      : [u32; 1]     /* single-op opcode array for the per-tag cost query */
+var SI_GA        : [u64; 6]     /* gradient KAT: ADD cost-vector capture */
+var SI_GM        : [u64; 6]     /* gradient KAT: MUL cost-vector capture */
+var SI_GS        : [u64; 6]     /* gradient KAT: SHL cost-vector capture */
+
 fn si_symset(tag: u8) -> i32 {
     let mut i : u64 = 0u64
     while i < 32u64 { SI_SYM[i] = 0u8 ; i = i + 1u64 }
@@ -153,25 +169,113 @@ fn si_enc_var(idx: u32) -> u32 {
     return (idx << 1u32) | 1u32
 }
 
-/* THE COST-FIELD: an ISA op's scalar cost = the balanced-order dot of its 6-dim
- * microarch cost vector (latency, throughput, regs, icache, dcache, energy).  A
- * multiply is dearer (3x latency, 2x energy) than a shift/add/leaf.  Requires
- * cl_init() to have seeded the standard orders. */
+const SI_TP_SCALE : u64 = 1000u64    /* cc_evaluate's throughput full-scale */
+
+/* store a little-endian u64 at byte offset off of the request aggregate p. */
+fn si_st_u64(p: *u8, off: u64, v: u64) -> i32 {
+    p[off + 0u64] = (v & 0xFFu64) as u8
+    p[off + 1u64] = ((v >> 8u64) & 0xFFu64) as u8
+    p[off + 2u64] = ((v >> 16u64) & 0xFFu64) as u8
+    p[off + 3u64] = ((v >> 24u64) & 0xFFu64) as u8
+    p[off + 4u64] = ((v >> 32u64) & 0xFFu64) as u8
+    p[off + 5u64] = ((v >> 40u64) & 0xFFu64) as u8
+    p[off + 6u64] = ((v >> 48u64) & 0xFFu64) as u8
+    p[off + 7u64] = ((v >> 56u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* pack a cc_evaluate request aggregate: {ops_ptr, n, deps_ptr, dep_n} (32 bytes LE). */
+fn si_pack_req(req: *u8, ops_ptr: u64, n: u64, deps_ptr: u64, dep_n: u64) -> i32 {
+    si_st_u64(req, 0u64, ops_ptr)
+    si_st_u64(req, 8u64, n)
+    si_st_u64(req, 16u64, deps_ptr)
+    si_st_u64(req, 24u64, dep_n)
+    return 0i32
+}
+
+/* Seed the per-opcode microarch cost table ONCE (idempotent; deterministic -- a
+ * fixed table, NOT observational/counting).  The cost-calculus/microarch opcode IS
+ * the SI_* tag value.  A multiply costs 3x latency + 2x energy; the cheap ops keep
+ * the cc/ma defaults (latency 1, size 4, dcache 0, energy 1). */
+fn sov_isa_cost_seed() -> i32 {
+    cc_init()
+    ma_init()
+    ma_set_latency((SI_MUL as u32), 3u32)
+    cc_set_energy((SI_MUL as u32), 2u32)
+    return 0i32
+}
+
+/* THE COST-FIELD (W3.8 / ENHANCE-4 / SEPARATE-3): an ISA op's scalar cost is the
+ * balanced-order dot of its REAL 6-dim microarch cost vector, now produced by
+ * numera/cost_calculus.cc_evaluate (latency from the microarch_model simulator;
+ * register pressure, icache=size, dcache, energy from cc's per-opcode tables) --
+ * no longer a hand-stubbed all-ones vector.  The throughput dimension is converted
+ * to a DEFICIT (TP_SCALE - throughput): a stalling (high-latency) op must be DEARER,
+ * but cc reports throughput as (1000*n)/cycles which DROPS with latency -- fed raw
+ * into a positive-weight dot it would rank a multiply CHEAPER and invert the
+ * optimizer.  The deficit makes it a true cost.  Requires cl_init() for the orders. */
 fn sov_isa_op_cost(tag: u8) -> u64 @export {
-    SI_CVEC[0u32] = 1u64
-    SI_CVEC[1u32] = 1u64
-    SI_CVEC[2u32] = 1u64
-    SI_CVEC[3u32] = 1u64
-    SI_CVEC[4u32] = 1u64
-    SI_CVEC[5u32] = 1u64
-    if tag == SI_MUL {
-        SI_CVEC[0u32] = 3u64     /* multiply: ~3x the latency */
-        SI_CVEC[5u32] = 2u64     /* ... and more energy */
+    if SI_CC_SEEDED == 0u8 {
+        sov_isa_cost_seed()
+        SI_CC_SEEDED = 1u8
     }
+    SI_OPS1[0u32] = tag as u32
+    let reqp : *u8 = (&SI_REQ32) as u64 as *u8
+    si_pack_req(reqp, (&SI_OPS1) as u64, 1u64, 0u64, 0u64)
     let cvp : *u64 = (&SI_CVEC) as u64 as *u64
+    cc_evaluate(reqp, cvp)
+    let tp : u64 = SI_CVEC[1u32]
+    if tp < SI_TP_SCALE { SI_CVEC[1u32] = SI_TP_SCALE - tp } else { SI_CVEC[1u32] = 0u64 }
     let dtp : *u64 = (&SI_DOT) as u64 as *u64
     cl_dot_slot(CL_BALANCED, cvp, dtp)
     return SI_DOT[0u32]
+}
+
+/* W3.8 helper: snapshot the live SI_CVEC into a 6-u64 buffer (gradient capture). */
+fn si_cap6(dst: u64) -> i32 {
+    let d : *u64 = dst as *u64
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        d[i] = SI_CVEC[i]
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* W3.8 / ENHANCE-4 gradient falsifier: the cost field is REAL (sourced from
+ * cost_calculus), not a flat stub.  Positives: MUL's 6-vec differs from ADD's in
+ * latency / throughput-deficit / energy, and MUL's scalar cost strictly exceeds
+ * ADD's and SHL's (the gradient that drives strength-reduction extraction); the
+ * cheap ops share a cost (shl == add).  Negative: a FLAT re-seed (mul == add)
+ * collapses the gradient so the costs become EQUAL -- proving it is data-driven, not
+ * hardcoded.  99 = pass. */
+fn sov_isa_cost_gradient_kat() -> u64 @export {
+    cl_init()                                       /* seed the cost_lattice orders */
+    let ca : u64 = sov_isa_op_cost(SI_ADD)
+    si_cap6((&SI_GA) as u64)
+    let cm : u64 = sov_isa_op_cost(SI_MUL)
+    si_cap6((&SI_GM) as u64)
+    let cs : u64 = sov_isa_op_cost(SI_SHL)
+    si_cap6((&SI_GS) as u64)
+    if SI_GM[0u32] == SI_GA[0u32] { return 1u64 }   /* latency differs (3 vs 1) */
+    if SI_GM[1u32] == SI_GA[1u32] { return 2u64 }   /* throughput deficit differs */
+    if SI_GM[5u32] == SI_GA[5u32] { return 3u64 }   /* energy differs (2 vs 1) */
+    if SI_GS[0u32] != SI_GA[0u32] { return 4u64 }   /* shl latency == add (cheap) */
+    if SI_GS[5u32] != SI_GA[5u32] { return 5u64 }   /* shl energy == add (cheap) */
+    if cm <= ca { return 6u64 }                     /* MUL strictly dearer than ADD */
+    if cm <= cs { return 7u64 }                     /* MUL strictly dearer than SHL */
+    if ca != cs { return 8u64 }                     /* ADD == SHL (both cheap) */
+    /* NEGATIVE: a flat re-seed (mul == add) collapses the gradient. */
+    ma_set_latency((SI_MUL as u32), 1u32)
+    cc_set_energy((SI_MUL as u32), 1u32)
+    let cm_flat : u64 = sov_isa_op_cost(SI_MUL)
+    let ca2     : u64 = sov_isa_op_cost(SI_ADD)
+    if cm_flat != ca2 { return 9u64 }               /* flat field -> mul == add */
+    /* restore the real gradient. */
+    ma_set_latency((SI_MUL as u32), 3u32)
+    cc_set_energy((SI_MUL as u32), 2u32)
+    if sov_isa_op_cost(SI_MUL) <= sov_isa_op_cost(SI_ADD) { return 10u64 }
+    return 99u64
 }
 
 /* register the two SOUND algebraic rules into the (already eg_init'd) egraph:

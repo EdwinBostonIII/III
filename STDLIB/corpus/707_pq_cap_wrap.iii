@@ -1,0 +1,23 @@
+/* Falsifier for COMBINE-7 / A-PQ-3: pq_u64u32_new's `hard_max * 8` / `hard_max * 4` are unchecked
+ * u64 muls that WRAP for a large hard_max, yielding a tiny arena allocation while PQ_HARD records the
+ * huge capacity -> a later push writes out of bounds.  hard_max = 0x2000000000000001 (2^61 + 1):
+ * *8 wraps to 8, *4 to 4, so BROKEN code allocates 8/4 bytes yet returns a VALID handle with
+ * PQ_HARD = 2^61+1.  FIXED code's bnd_mul_ok(hard_max, 8) rejects it -> returns PQ_INVALID(0).
+ * Expected exit: 99 (only achievable when the capacity wrap is rejected). */
+module corpus_707
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn pq_u64u32_new(arena_id: u64, hard_max: u64) -> u64 from "pq.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    /* sanity: a small valid pq IS created (handle != PQ_INVALID(0)) -- proves the test is live */
+    let okq : u64 = pq_u64u32_new(a, 8u64)
+    if okq == 0u64 { return 1u64 }
+    /* the wrap: hard_max*8 overflows u64 -> MUST be rejected (PQ_INVALID == 0) */
+    let bad : u64 = pq_u64u32_new(a, 0x4000000000000001u64)   /* 2^62+1: BOTH *8 and *4 wrap to tiny allocs */
+    if bad != 0u64 { return 2u64 }
+    arena_drop(a)
+    return 99u64
+}

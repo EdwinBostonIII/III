@@ -1,0 +1,17 @@
+/* 985_hexad_epistemic_floor_escalate.iii -- falsifier for iii_hexad_epistemic_escalates' Q-floor.
+ * buf[1] is confidence in ppm; below HXE_FLOOR_Q (850000 = 0.85) the gate MUST escalate (1u8); at
+ * or above the floor it must NOT (0u8). The boundary-escalation arm had no dedicated falsifier. 99. */
+module corpus_985
+
+extern @abi(c-msvc-x64) fn iii_hexad_epistemic_escalates(buf_addr: u64) -> u8 from "hexad_epistemic.iii"
+
+var BUF : [u32; 4]
+
+fn main() -> u64 {
+    let bp : u64 = &BUF as u64
+    BUF[0u32] = 100u32  BUF[1u32] = 850000u32  BUF[2u32] = 0u32  BUF[3u32] = 0u32
+    if iii_hexad_epistemic_escalates(bp) != 0u8 { return 1u64 }   /* == floor -> no escalation */
+    BUF[1u32] = 849999u32
+    if iii_hexad_epistemic_escalates(bp) != 1u8 { return 2u64 }   /* below floor -> escalates */
+    return 99u64
+}

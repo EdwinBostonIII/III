@@ -379,26 +379,28 @@ fn resolver_score(p: u64, intent: u64, ctx: u64) -> u64 @export {
     return s
 }
 
-/* §2.6: tiebreak */
+/* §2.6: tiebreak -- [COMBINE-6 / W0.4] routed through the ONE tie-break authority
+ * (numera/tiebreak.iii::tb_compare_pair).  resolver's (pattern_id, 32-byte module-mhash) order is
+ * byte-for-byte the same as tb_compare_pair's (value, ident) order: ident_cmp does the identical
+ * unsigned 32-byte lexicographic compare.  So the winner is UNCHANGED; only the comparison law now
+ * lives in one place (the audit's zero-behaviour-change flagship).  Map -1/1/0 -> 1/2/0. */
+extern @abi(c-msvc-x64) fn tb_compare_pair(a_val: u64, a_ident: *u8, b_val: u64, b_ident: *u8) -> i32 from "tiebreak.iii"
+var RES_TB_MHASH_A : [u8; 32]
+var RES_TB_MHASH_B : [u8; 32]
 fn tiebreak(a_id: u32, b_id: u32) -> u8 @export {
     let a : u64 = pattern_table_get(a_id)
     let b : u64 = pattern_table_get(b_id)
     let pa : u64 = pattern_id(a)
     let pb : u64 = pattern_id(b)
-    if pa != pb {
-        if pa < pb { return 1u8 }
-        if pa > pb { return 2u8 }
-    }
     let mut i : u32 = 0u32
     while i < 32u32 {
-        let ba : u8 = pattern_module_mhash_byte(a, i)
-        let bb : u8 = pattern_module_mhash_byte(b, i)
-        if ba != bb {
-            if ba < bb { return 1u8 }
-            if ba > bb { return 2u8 }
-        }
+        RES_TB_MHASH_A[i] = pattern_module_mhash_byte(a, i)
+        RES_TB_MHASH_B[i] = pattern_module_mhash_byte(b, i)
         i = i + 1u32
     }
+    let c : i32 = tb_compare_pair(pa, (&RES_TB_MHASH_A) as u64 as *u8, pb, (&RES_TB_MHASH_B) as u64 as *u8)
+    if c == -1i32 { return 1u8 }
+    if c == 1i32 { return 2u8 }
     return 0u8
 }
 

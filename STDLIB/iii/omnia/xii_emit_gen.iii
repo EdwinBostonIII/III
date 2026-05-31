@@ -242,7 +242,31 @@ fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) ->
     return 0i32
 }
 
+/* SEPARATE-5 / COMBINE-13 / X25 -- the crypto-chokepoint POLICY, named + single-source.
+ * Invariant: no horizon id < XEG_CRYPTO_HORIZON_MAX may resolve to a curated override
+ * body.  The crypto hot-path (H001..H024 == ids 0..23) MUST fall through to the real
+ * kernel fragment (_structural_body), never a scaffold stub.  This constant + the one
+ * guard below ARE the policy (the "when may an override win" decision); the catalog of
+ * bodies is a separate concern (SEPARATE-5 policy/body split).
+ * CUT-14: cosmetic patches to scaffold crypto ("append two NOPs", embedded-return fixups)
+ * are themselves junk -- the only correct moves are remove (W1.2) or regenerate-from-the-
+ * proven numera crypto (W1.3).  Do NOT revive a patched scaffold. */
+const XEG_CRYPTO_HORIZON_MAX : u8 = 24u8
+
 fn _find_override(horizon_id: u8, target: u8) -> u32 {
+    /* X25 (Vol II): NEVER serve a curated override for a CRYPTO horizon
+     * (H001..H024 == ids 0..23 -- the crypto hot-path).  Every curated crypto
+     * inline registered for these ids is a SCAFFOLD placeholder: ed25519_verify
+     * (H002) emits `vpcmpeqd ymm,ymm,ymm; and eax,0xF` -> a register compared
+     * with itself -> ALWAYS-valid (a fail-open verify), the x25519 ladder zeroes
+     * the point, blake2s zeroes its accumulator, etc.  Refusing them here forces
+     * xii_emit_gen_produce to fall through to _structural_body, which emits the
+     * REAL primary-op kernel fragment (xii_kernel_emit_fragment) -- never a
+     * constant-returning crypto stub.  Non-crypto curated overrides (ids >= 50)
+     * are unaffected.  Until real, test-vector-validated inlines are generated
+     * FROM numera/crypt_ed25519 / x25519 / keccak / blake2s, this is the
+     * single-chokepoint guarantee that no scaffold crypto can be emitted. */
+    if horizon_id < XEG_CRYPTO_HORIZON_MAX { return 0xFFFFFFFFu32 }
     let mut i : u32 = 0u32
     while i < XEG_OVERRIDE_USED {
         let off : u32 = i * 4u32
@@ -250,6 +274,14 @@ fn _find_override(horizon_id: u8, target: u8) -> u32 {
         i = i + 1u32
     }
     return 0xFFFFFFFFu32
+}
+
+/* COMBINE-13 / I4 test hook: expose the chokepoint DECISION so the falsifier KAT can prove
+ * the guard REJECTS a registered crypto override (returns 0xFFFFFFFF) while a non-crypto
+ * override still resolves.  Read-only; identical to what xii_emit_gen_produce consults; not
+ * part of the emit path. */
+fn xeg_override_index(horizon_id: u8, target: u8) -> u32 @export {
+    return _find_override(horizon_id, target)
 }
 
 /* Structural body emit: for every (horizon, target) cell that does not
@@ -291,6 +323,13 @@ fn if_min(a: u32, b: u32) -> u32 {
 /* Top-level: produce the full byte slice for (horizon_id, target).    */
 /* Writes prologue + body + epilogue (+ NOP pad up to expected_size).  */
 /* Returns the actual byte count written.                              */
+/*                                                                     */
+/* CUT-16 [WRONG -> keep + cover]: this function is NOT dead.  It has a */
+/* load-bearing build-time caller (the gen_xii_lattice emitter-catalog */
+/* generator), so the audit's removal premise was false.  Coverage is  */
+/* the corrected resolution: corpus 950 asserts the emitted catalog is */
+/* well-formed and that NO crypto horizon (< XEG_CRYPTO_HORIZON_MAX)   */
+/* ever emits a curated override body (the X25/W1.1 chokepoint).        */
 /* ------------------------------------------------------------------ */
 
 fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 @export {

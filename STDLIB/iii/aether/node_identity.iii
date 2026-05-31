@@ -206,6 +206,10 @@ fn ni_make_node_seed(args: *u8) -> i32 {
     let hw_len : u64 = ni_args_u64(args, 8u64)
     let bs_ptr : u64 = ni_args_u64(args, 16u64)
     let bs_len : u64 = ni_args_u64(args, 24u64)
+    /* Bound each length individually before summing: hw_len+bs_len could wrap u64
+     * and pass the total check while a single copy overruns NODEID_CONCAT.  [audit node_identity-1] */
+    if hw_len > NODEID_MAX_INPUT { return NODEID_E_BAD }
+    if bs_len > NODEID_MAX_INPUT { return NODEID_E_BAD }
     let total : u64 = hw_len + bs_len
     if total > NODEID_MAX_INPUT { return NODEID_E_BAD }
     let hw : *u8 = hw_ptr as *u8

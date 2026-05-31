@@ -210,6 +210,17 @@ fn cap_rights(id: u64) -> u64 @export {
     return CAP_RIGHTS[s]
 }
 
+/* W4.4 (RIPPLE-13): the SINGLE canonical capability right required to perform reflection.
+ * numera/reflection_governance (the W32 gate) and numera/reflection_constrained (the
+ * dispatcher) MUST both require this identical right -- pre-fix they declared two independent
+ * rights (governance AMEND 0x4000, constrained ATTEST 0x0800) that agreed only under the
+ * all-granting root cap, so a cap satisfying the gate could fail the dispatcher.  Resolved to
+ * CAP_RIGHT_AMEND: reflection proposes amendments to the self, and the gate is the primary
+ * arbiter.  Defining it ONCE here (the rights authority) eliminates the divergence. */
+fn cap_right_reflect() -> u64 @export {
+    return CAP_RIGHT_AMEND
+}
+
 fn cap_parent(id: u64) -> u64 @export {
     let s : u32 = cap_slot_of(id)
     if s == 0xFFFFFFFFu32 { return 0u64 }

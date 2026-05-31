@@ -47,8 +47,38 @@ var BIGINT_CAP   : [u64; 64]   /* allocated limb count                */
 var BIGINT_ARENA : [u64; 64]   /* backing arena                       */
 var BIGINT_LIVE  : [u8;  64]
 
+/* === modulus_ctx (APOTHEOSIS S.1 keystone) ============================
+ * The one compute-once Montgomery descriptor, shared by the bigint modpow
+ * organ (numera::bigint_div) and -- via the same accessors -- by any odd-
+ * modulus consumer.  STORAGE lives here (a thin slot-table value type
+ * "alongside the 64-slot model", zero dependencies); the BUILDER
+ * (mod_ctx_build) lives in bigint_div.iii, where mont_nprime64 + bigint_mod
+ * already live, so this module stays a leaf (no dependency cycle).
+ *
+ * A ctx caches: k (u64-limb count of n), s = 2*k (u32-digit count),
+ * nprime0 = (-n^-1 mod 2^32) low word (the per-call Newton iteration that
+ * the §III.16 profile flagged as ~6000x-redundant inside one RSA-4096
+ * modpow), the free_reduction flag (nprime0 == 1, the NIST-prime fast
+ * path), the modulus handle n_id, and r2_id = R^2 mod n (one-shot
+ * to-Montgomery).  The bigint path stores n_id directly (caller-owned,
+ * live for the whole modpow -- no copy); r2_id is ctx-owned (dropped by
+ * modctx_drop).  Fields are written by typed setters (<=4 params each,
+ * honouring the module discipline) so the builder fills them in steps. */
+const MODCTX_SLOTS   : u32 = 16u32
+const MODCTX_INVALID  : u64 = 0u64
+
+var MODCTX_ARENA   : [u64; 16]   /* backing arena (for diagnostics/sweep)     */
+var MODCTX_K       : [u64; 16]   /* u64-limb count of n                       */
+var MODCTX_S       : [u64; 16]   /* u32-digit count = 2*k                     */
+var MODCTX_NPRIME0 : [u64; 16]   /* -n^-1 mod 2^32 (low word), cached         */
+var MODCTX_FREE    : [u8;  16]   /* 1 iff nprime0 == 1 (NIST free reduction)  */
+var MODCTX_N       : [u64; 16]   /* bigint handle to modulus n (not owned)    */
+var MODCTX_R2      : [u64; 16]   /* bigint handle to R^2 mod n (ctx-owned)    */
+var MODCTX_LIVE    : [u8;  16]
+
 /* --- §3.5 AVX-512 8-wide partial-product primitive (vpmullq + vpmuludq) --- */
 extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512dq() -> u8 from "cpufeat.iii"
 var BIG_VEC_SRC   : u64 = 0u64      /* byte addr of the current 8-limb group */
 var BIG_VEC_MUL   : u64 = 0u64      /* the multiplier (broadcast) */
 var BIG_VEC_LO    : [u64; 8]        /* per-group prod_lo[0..7] */
@@ -567,7 +597,9 @@ fn _big_mul8_avx512() -> i32 {
 fn _big_mul8() -> i32 {
     if BIG_VEC_FORCE == 1u32 { return _big_mul8_scalar() }
     if BIG_VEC_FORCE == 2u32 { return _big_mul8_avx512() }
-    if cpufeat_has_avx512f() == 1u8 { return _big_mul8_avx512() }
+    if cpufeat_has_avx512f() == 1u8 {
+        if cpufeat_has_avx512dq() == 1u8 { return _big_mul8_avx512() }   /* [D-BI-1] _big_mul8_avx512 uses vpmullq -> needs AVX-512DQ, not just F (else #UD on F-only hosts) */
+    }
     return _big_mul8_scalar()
 }
 
@@ -808,4 +840,133 @@ fn bigint_shr_bits(arena_id: u64, a: u64, bits: u64) -> u64 @export {
     }
     BIGINT_LEN[ds] = 0u64
     return new_id
+}
+
+/* === modulus_ctx accessors (APOTHEOSIS S.1 keystone) ==================
+ * Pure slot-table storage for the compute-once Montgomery descriptor; no
+ * dependencies (the builder mod_ctx_build lives in bigint_div.iii).  All
+ * setters/getters take <=4 params (module discipline).  The free_reduction
+ * flag is DERIVED from nprime0 (single source of truth: nprime0 == 1 iff the
+ * NIST-prime free reduction applies). */
+
+fn modctx_alloc_slot() -> u32 {
+    let mut i : u32 = 0u32
+    while i < MODCTX_SLOTS {
+        if MODCTX_LIVE[i] == 0u8 { return i }
+        i = i + 1u32
+    }
+    return 0xFFFFFFFFu32
+}
+
+fn modctx_slot_of(id: u64) -> u32 {
+    if id == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = id - 1u64
+    if s >= (MODCTX_SLOTS as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if MODCTX_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* Allocate a fresh ctx slot bound to `arena`; fields zeroed, caller fills
+ * them via the typed setters.  Returns id (slot+1) or MODCTX_INVALID. */
+fn modctx_new(arena: u64) -> u64 @export {
+    let s : u32 = modctx_alloc_slot()
+    if s == 0xFFFFFFFFu32 { return MODCTX_INVALID }
+    MODCTX_ARENA[s]   = arena
+    MODCTX_K[s]       = 0u64
+    MODCTX_S[s]       = 0u64
+    MODCTX_NPRIME0[s] = 0u64
+    MODCTX_FREE[s]    = 0u8
+    MODCTX_N[s]       = 0u64
+    MODCTX_R2[s]      = 0u64
+    MODCTX_LIVE[s]    = 1u8
+    return (s as u64) + 1u64
+}
+
+fn modctx_set_dims(id: u64, k: u64, s: u64) -> i32 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return -2i32 }
+    MODCTX_K[si] = k
+    MODCTX_S[si] = s
+    return 0i32
+}
+
+/* nprime0 = -n^-1 mod 2^32 (low word); free_reduction is derived. */
+fn modctx_set_nprime(id: u64, nprime0: u64) -> i32 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return -2i32 }
+    let np : u64 = nprime0 & 0xFFFFFFFFu64
+    MODCTX_NPRIME0[si] = np
+    if np == 1u64 { MODCTX_FREE[si] = 1u8 }
+    if np != 1u64 { MODCTX_FREE[si] = 0u8 }
+    return 0i32
+}
+
+fn modctx_set_handles(id: u64, n_id: u64, r2_id: u64) -> i32 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return -2i32 }
+    MODCTX_N[si]  = n_id
+    MODCTX_R2[si] = r2_id
+    return 0i32
+}
+
+fn modctx_arena(id: u64) -> u64 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    return MODCTX_ARENA[si]
+}
+
+fn modctx_k(id: u64) -> u64 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    return MODCTX_K[si]
+}
+
+fn modctx_s(id: u64) -> u64 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    return MODCTX_S[si]
+}
+
+fn modctx_nprime0(id: u64) -> u64 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    return MODCTX_NPRIME0[si]
+}
+
+fn modctx_free(id: u64) -> u8 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u8 }
+    return MODCTX_FREE[si]
+}
+
+fn modctx_n(id: u64) -> u64 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    return MODCTX_N[si]
+}
+
+fn modctx_r2(id: u64) -> u64 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return 0u64 }
+    return MODCTX_R2[si]
+}
+
+/* Free the ctx slot.  r2_id is ctx-owned -> dropped here (same-module
+ * bigint_drop; a 0 handle is a safe no-op).  n_id is caller-owned -> left
+ * intact. */
+fn modctx_drop(id: u64) -> i32 @export {
+    let si : u32 = modctx_slot_of(id)
+    if si == 0xFFFFFFFFu32 { return -2i32 }
+    let r2 : u64 = MODCTX_R2[si]
+    if r2 != 0u64 { bigint_drop(r2) }
+    MODCTX_LIVE[si]    = 0u8
+    MODCTX_ARENA[si]   = 0u64
+    MODCTX_K[si]       = 0u64
+    MODCTX_S[si]       = 0u64
+    MODCTX_NPRIME0[si] = 0u64
+    MODCTX_FREE[si]    = 0u8
+    MODCTX_N[si]       = 0u64
+    MODCTX_R2[si]      = 0u64
+    return 0i32
 }

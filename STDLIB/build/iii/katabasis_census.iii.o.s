@@ -349,6 +349,33 @@ katabasis_census_fact_matches:
     movq %rax, -32(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
+    subq $8, %rsp
+    subq $32, %rsp
+    callq katabasis_census_fact_count
+    addq $32, %rsp
+    addq $8, %rsp
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
+    movq -24(%rbp), %rax
+    pushq %rax
     popq %rcx
     subq $32, %rsp
     callq katabasis_census_fact
@@ -368,7 +395,7 @@ katabasis_census_fact_matches:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -378,7 +405,7 @@ katabasis_census_fact_matches:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

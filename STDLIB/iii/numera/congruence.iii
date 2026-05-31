@@ -80,6 +80,19 @@ fn cgr_intern(p: *u8, cost: u64) -> u32 @export {
     return n
 }
 
+/* Pure read-only membership (RIPPLE-4 / A-RX-1): 1u8 iff the 32-byte content-address is
+ * ALREADY interned in the ring.  Unlike cgr_intern it does NOT insert -- an audit must never
+ * mutate the audited set.  History-independent; rejects a fresh address even at capacity. */
+fn cgr_contains(p: *u8) -> u8 @export {
+    let n : u32 = CGR_N[0u64]
+    let mut i : u32 = 0u32
+    while i < n {
+        if cgr_addr_eq(i, p) == 1u32 { return 1u8 }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
 /* CERTIFIED merge: join the classes of a and b ONLY when proof_ok==1 (a discharged kernel proof
  * of semantic equality).  proof_ok==0 => REFUSED (returns 0, classes untouched) -- the
  * faithfulness gate.  Returns 1 when merged (or already joined).  Union by rank; the surviving

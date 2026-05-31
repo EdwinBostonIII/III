@@ -108,7 +108,9 @@ fn cc_mint_err(op_kind: u32, err_code: u32, a64: u64, b64: u64) -> u64 {
     mhash_payload(&CC_A_BUF as u64, 8u64)
     mhash_payload(&CC_B_BUF as u64, 8u64)
     mhash_final(&CC_SITE as u64)
-    let cid : u64 = crystal_mint(err_code, &CC_SITE as u64, 0u64, b64)
+    /* cause_seq is a PARENT crystal id; a standalone checked-overflow op is a ROOT -> pass 0,
+     * not the operand b64 (operands a64/b64 stay bound via the site hash above).  [audit D-CC-1] */
+    let cid : u64 = crystal_mint(err_code, &CC_SITE as u64, 0u64, 0u64)
     CC_LAST_ERR = cid
     return 0u64
 }

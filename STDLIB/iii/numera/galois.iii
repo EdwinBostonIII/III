@@ -311,6 +311,12 @@ fn gfp_mul(arena: u64, a: u64, b: u64, p: u64) -> u64 @export {
 /* Fermat inverse over GF(p): a^(p-2) mod p. Precondition (caller-asserted,
  * not tested): p prime, 0 < a < p. exp=p-2; modpow; OOM-guard two/exp. */
 fn gfp_inv(arena: u64, a: u64, p: u64) -> u64 @export {
+    /* a == 0 (invalid slot) or a ≡ 0 has no inverse: a^(p-2) mod p would be a
+     * valid slot holding value 0, indistinguishable from success by the
+     * caller's slot-id==0 fail-net.  Return the INVALID sentinel instead,
+     * matching gf8_inv/gf128_inv's zero guard.  [audit D-GAL-1] */
+    if a == 0u64 { return 0u64 }
+    if bigint_is_zero(a) == 1u8 { return 0u64 }
     let two : u64 = bigint_from_u64(arena, 2u64)
     if two == 0u64 { return 0u64 }
     let exp : u64 = bigint_sub(arena, p, two)
@@ -638,8 +644,7 @@ fn bm_step_nonzero(d: u64, k: u64, bl: u64, m: u64) -> u8 {
     }
     // Length-change predicate (2L <= k), expressed without signed/else (G11).
     let mut do_change : u8 = 0u8
-    if (2u64 * bl) < (k + 1u64) { do_change = 1u8 }
-    if (2u64 * bl) == k { do_change = 1u8 }
+    if (2u64 * bl) < (k + 1u64) { do_change = 1u8 }   /* [CUT-7/D-GAL-2] 2*bl < k+1 <=> 2*bl <= k already subsumes the redundant 2*bl==k branch (deleted) */
     let mut ok : u8 = 1u8
     if do_change == 1u8 { ok = bm_snapshot() }
     if ok == 1u8 { ok = bm_update(factor, m) }

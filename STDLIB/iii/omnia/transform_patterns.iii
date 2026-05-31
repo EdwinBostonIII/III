@@ -114,6 +114,9 @@ fn tp_table_call(idx: u32, src: u64, src_len: u64, dst: u64) -> u64 @export {
     return f(src, src_len, dst, 1048576u64)
 }
 
+/* W4.3: set when a transform-pattern registration fails; transform_register_all reports it. */
+var TX_REG_FAIL : u8 = 0u8
+
 fn _tx_register(slot: u32, src_form: u8, dst_form: u8, fn_ptr: u64) -> i32 {
     pattern_template_zero((&TX_TEMPLATE_BUF) as u64)
     TX_NAME_BUF[0] = 116u8
@@ -129,13 +132,15 @@ fn _tx_register(slot: u32, src_form: u8, dst_form: u8, fn_ptr: u64) -> i32 {
     pattern_template_set_dispatch((&TX_TEMPLATE_BUF) as u64, fn_ptr)
     pattern_template_set_binding_kind((&TX_TEMPLATE_BUF) as u64, 1u8, src_form)
     pattern_template_set_binding_kind((&TX_TEMPLATE_BUF) as u64, 2u8, dst_form)
-    pattern_register(slot, (&TX_TEMPLATE_BUF) as u64)
+    let rok : u8 = pattern_register(slot, (&TX_TEMPLATE_BUF) as u64)
+    if rok != 1u8 { TX_REG_FAIL = 1u8 }
     /* Side table index = slot - 18 (transform base shifted with 18-primitive collapse). */
     tp_table_set(slot - 18u32, src_form, dst_form, fn_ptr)
     return 0i32
 }
 
 fn transform_register_all() -> i32 @export {
+    TX_REG_FAIL = 0u8
     /* Use u64 variable to take address of fn (per III's address-of-fn pattern). */
     let f16 : u64 = tp_iii_to_asm
     let f17 : u64 = tp_iii_to_babel_json
@@ -185,5 +190,6 @@ fn transform_register_all() -> i32 @export {
     _tx_register(39u32, 17u8, 12u8, f37)
     _tx_register(40u32, 7u8, 2u8, f38)
     _tx_register(41u32, 2u8, 7u8, f39)
+    if TX_REG_FAIL == 1u8 { return -1i32 }
     return 0i32
 }

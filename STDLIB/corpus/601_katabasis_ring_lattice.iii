@@ -32,5 +32,13 @@ fn main() -> u64 {
     if katabasis_ring_legal(1u32, 0u32) != 0u8 { return 16u64 }   /* ascend illegal */
     if katabasis_ring_legal(2u32, 4u32) != 0u8 { return 17u64 }   /* enter R-4 illegal */
 
+    /* II-RING_LATTICE-1/2: out-of-domain / u32-wrapping ring ids must NOT alias a legal
+     * key (key = src*5+dst is bijective only on rings 0..4). These FAIL on the pre-guard
+     * code and PASS after the domain guard. */
+    if katabasis_ring_constructor(0u32, 7u32) != 0u32 { return 18u64 }            /* (0,7): key=7 had aliased MAGIC_MSR */
+    if katabasis_ring_constructor(3435973837u32, 0u32) != 0u32 { return 19u64 }   /* 3435973837*5 wraps u32 to key=1 (IOCTL) */
+    if katabasis_ring_constructor(5u32, 0u32) != 0u32 { return 20u64 }            /* src=5 just past the valid domain */
+    if katabasis_ring_legal(0u32, 7u32) != 0u8 { return 21u64 }                   /* legality predicate agrees */
+
     return 99u64
 }

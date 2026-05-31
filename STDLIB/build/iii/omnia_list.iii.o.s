@@ -4,7 +4,9 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "arena.iii\0"
+    .ascii "arena.iiibound.iii\0"
+L_str_1:
+    .ascii "bound.iii\0"
     .section .rodata
 L_LIST_MAX_INSTANCES:
     .quad 0x20
@@ -206,6 +208,38 @@ list_new:
     pushq %rax
     popq %rax
 L_if_end_7:
+    movabsq $0x10, %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq bnd_mul_ok
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -214,7 +248,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_8:
+L_loop_top_10:
     movl -24(%rbp), %eax
     pushq %rax
     movl L_LIST_MAX_INSTANCES(%rip), %eax
@@ -227,7 +261,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_9
+    jz L_loop_end_11
     leaq L_LIST_LIVE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -246,7 +280,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -259,7 +293,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -267,11 +301,11 @@ L_loop_top_8:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -286,8 +320,8 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
+    jmp L_loop_top_10
+L_loop_end_11:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -300,7 +334,7 @@ L_loop_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -310,7 +344,7 @@ L_loop_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x10, %rax
@@ -345,7 +379,7 @@ L_if_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -355,7 +389,7 @@ L_if_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     leaq L_LIST_ARENA(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -732,7 +766,7 @@ L_list_alloc_node:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movq L_LIST_NIL(%rip), %rax
     pushq %rax
     popq %rax
@@ -742,7 +776,7 @@ L_list_alloc_node:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     leaq L_LIST_NODE_USED(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -809,7 +843,7 @@ list_push_front:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movslq L_LIST_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -819,7 +853,7 @@ list_push_front:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -841,7 +875,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     movslq L_LIST_E_FULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -851,7 +885,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     leaq L_LIST_NODE_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -918,7 +952,7 @@ L_if_end_23:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     leaq L_LIST_TAIL(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -932,7 +966,7 @@ L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     leaq L_LIST_LEN(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1005,7 +1039,7 @@ list_push_back:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movslq L_LIST_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1015,7 +1049,7 @@ list_push_back:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -1037,7 +1071,7 @@ L_if_end_27:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movslq L_LIST_E_FULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1047,7 +1081,7 @@ L_if_end_27:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     leaq L_LIST_NODE_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1098,7 +1132,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_30
+    jz L_if_else_32
     leaq L_LIST_HEAD(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1112,8 +1146,8 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_31
-L_if_else_30:
+    jmp L_if_end_33
+L_if_else_32:
     movq -32(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -1132,7 +1166,7 @@ L_if_else_30:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     leaq L_LIST_TAIL(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1214,7 +1248,7 @@ list_pop_front:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movq L_LIST_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1224,7 +1258,7 @@ list_pop_front:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     leaq L_LIST_HEAD(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1247,7 +1281,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_37
     movq L_LIST_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1257,7 +1291,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_37:
     leaq L_LIST_NODE_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1314,7 +1348,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     leaq L_LIST_TAIL(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1328,7 +1362,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     leaq L_LIST_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1400,7 +1434,7 @@ list_front:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_41
     movq L_LIST_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1410,7 +1444,7 @@ list_front:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_41:
     leaq L_LIST_HEAD(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1433,7 +1467,7 @@ L_if_end_39:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_43
     movq L_LIST_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1443,7 +1477,7 @@ L_if_end_39:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_43:
     movq -24(%rbp), %rax
     pushq %rax
     leaq L_LIST_NODE_BASE(%rip), %rax
@@ -1507,7 +1541,7 @@ list_count:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_45
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1517,7 +1551,7 @@ list_count:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_45:
     leaq L_LIST_LEN(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1574,7 +1608,7 @@ list_at:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_47
     movq L_LIST_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1584,7 +1618,7 @@ list_at:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_47:
     movq -16(%rbp), %rax
     pushq %rax
     leaq L_LIST_LEN(%rip), %rax
@@ -1603,7 +1637,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_49
     movq L_LIST_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1613,7 +1647,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_49:
     leaq L_LIST_NODE_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1638,7 +1672,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_48:
+L_loop_top_50:
     movq -48(%rbp), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -1651,7 +1685,7 @@ L_loop_top_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_49
+    jz L_loop_end_51
     movq -40(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1677,8 +1711,8 @@ L_loop_top_48:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_48
-L_loop_end_49:
+    jmp L_loop_top_50
+L_loop_end_51:
     movq -40(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -1736,7 +1770,7 @@ list_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_53
     movslq L_LIST_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1746,7 +1780,7 @@ list_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_53:
     leaq L_LIST_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax

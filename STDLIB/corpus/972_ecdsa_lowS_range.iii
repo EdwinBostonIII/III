@@ -1,0 +1,56 @@
+/* 972 — W3.19 / E-EC-2 falsifier: ECDSA P-256 range + low-s checks. range_ok rejects
+ * r/s == 0 and r/s >= n (malformed), but ACCEPTS an in-range high-s sig (interop). The
+ * strict sig_inrange additionally rejects high-s (s > n/2, BIP-62 non-malleable). 99=pass. */
+module corpus_972
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_sig_range_ok(sig_bytes: u64) -> u8 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_sig_inrange(sig_bytes: u64) -> u8 from "ecdsa_p256.iii"
+
+fn setr(base: u64, start: u64, endx: u64, v: u8) -> i32 {
+    let p : *u8 = base as *u8
+    let mut i : u64 = start
+    while i < endx { p[i] = v ; i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> i32 {
+    let sig : *u8 = malloc(64u64)
+    let b : u64 = sig as u64
+
+    /* valid low-s: r = 1, s = 1 (big-endian -> byte 31 and byte 63) */
+    setr(b, 0u64, 64u64, 0u8)
+    sig[31] = 1u8
+    sig[63] = 1u8
+    if iii_ecdsa_p256_sig_range_ok(b) != 1u8 { return 1i32 }
+    if iii_ecdsa_p256_sig_inrange(b) != 1u8 { return 2i32 }
+
+    /* r == 0 -> reject */
+    sig[31] = 0u8
+    if iii_ecdsa_p256_sig_range_ok(b) != 0u8 { return 3i32 }
+    sig[31] = 1u8
+
+    /* s == 0 -> reject */
+    sig[63] = 0u8
+    if iii_ecdsa_p256_sig_range_ok(b) != 0u8 { return 4i32 }
+    sig[63] = 1u8
+
+    /* s = all 0xFF (> n) -> range reject */
+    setr(b, 32u64, 64u64, 0xFFu8)
+    if iii_ecdsa_p256_sig_range_ok(b) != 0u8 { return 5i32 }
+    setr(b, 32u64, 64u64, 0u8)
+    sig[63] = 1u8
+
+    /* r = all 0xFF (> n) -> range reject */
+    setr(b, 0u64, 32u64, 0xFFu8)
+    if iii_ecdsa_p256_sig_range_ok(b) != 0u8 { return 6i32 }
+    setr(b, 0u64, 32u64, 0u8)
+    sig[31] = 1u8
+
+    /* high-s in range: s = 0x8000...00 (= 2^255): < n (n[0]=0xFF) but > n/2 (n/2[0]=0x7F) */
+    setr(b, 32u64, 64u64, 0u8)
+    sig[32] = 0x80u8
+    if iii_ecdsa_p256_sig_range_ok(b) != 1u8 { return 7i32 }   /* range accepts (s < n) */
+    if iii_ecdsa_p256_sig_inrange(b) != 0u8 { return 8i32 }    /* strict rejects (high-s) */
+
+    return 99i32
+}

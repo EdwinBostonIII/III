@@ -1,0 +1,307 @@
+/* STDLIB/iii/numera/ntt_bigint.iii -- big-integer multiplication via the NTT organ (D-KARA-3).
+ *
+ * The structural cure for D-KARA-1 (RIPPLE-2): recursive Karatsuba (numera/bigint_karatsuba)
+ * allocates ~4-8 live bigint slots PER recursion level, and the slot table holds only
+ * BIGINT_SLOTS = 64.  Above ~2048-8192 limbs the recursion exhausts the table; bigint_new then
+ * returns BIGINT_INVALID (0), which bigint_mul_karatsuba feeds back UNCHECKED -- and since a
+ * zero id has length 0, that half is silently treated as the number zero, producing a wrong
+ * product with no crash and no error.
+ *
+ * The NTT multiply does the whole product in FLAT u32 buffers and allocates exactly ONE bigint
+ * (the result), so the slot table cannot exhaust regardless of operand size -- the bug is gone by
+ * construction, not patched.  It is also asymptotically faster (O(n log n) vs Karatsuba O(n^1.585)).
+ *
+ * Method: pack each 64-bit limb into four base-2^16 digits; the product's digit i is the acyclic
+ * convolution sum_{j} A[j]*B[i-j].  Each summand is < 2^16 * 2^16 = 2^32 and there are < 4*L of
+ * them, so a coefficient is < 2^34 * L.  Two NTT primes (p1*p2 ~ 2^59.7) recover any coefficient
+ * for operands up to ~54 MILLION limbs -- far past any real bigint -- so a THIRD prime would be a
+ * dead, untestable path (its residue is multiplied by k2 = 0 for every realistic size).  Two
+ * primes is therefore both leaner AND fully exercised by the vs-schoolbook KAT (generic
+ * coefficients keep k1 != 0).  CRT is Garner's; the final base-2^16 digits are carry-propagated
+ * back into 64-bit limbs.
+ *
+ * Hexad: kind_form.  Ring: R0.  NIH: nothing beyond the NTT organ + bigint.  No float, no ML.
+ */
+module numera_ntt_bigint
+
+extern @abi(c-msvc-x64) fn ntt_forward_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_inverse_at(base: u64, n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+
+/* APOTHEOSIS S.4 (certify): NB_MAXN is EXACT, not a stale ceiling -- 4 base-2^16
+ * digits per 64-bit limb => need = (na+nb)*4, so 8192-limb operands need exactly
+ * 65536 = NB_MAXN (nfft > NB_MAXN is rejected in nb_mul).  2-prime Garner
+ * (NB_P1*NB_P2 ~ 2^59.7) recovers any coefficient far past this; a 3rd prime is
+ * absent BY DESIGN (its residue * k2 = 0 for every realistic size -- a dead,
+ * untestable path).  k1 != 0 (both primes genuinely exercised) is gated by corpus 724. */
+const NB_MAXN : u64 = 65536u64   /* max NTT length (= 2^16) */
+
+/* Two NTT-friendly primes near 2^30 (both with 2-adicity >= 16, so any nfft up to 2^16 has a
+ * primitive root): p1 = 3*2^23*... wait -- p1-1 = 2^23*119, p2-1 = 2^22*235.  Roots g below. */
+const NB_P1 : u64 = 998244353u64
+const NB_G1 : u64 = 3u64
+const NB_P2 : u64 = 985661441u64
+const NB_G2 : u64 = 3u64
+
+var NB_INITED          : u8  = 0u8
+var NB_INV_P1_MOD_P2   : u64 = 0u64   /* (p1 mod p2)^{-1} mod p2, for Garner CRT */
+
+var NB_DA    : [u32; 65536]   /* base-2^16 digits of operand A */
+var NB_DB    : [u32; 65536]   /* base-2^16 digits of operand B */
+var NB_WORK  : [u32; 65536]   /* per-prime NTT scratch for A */
+var NB_WORKB : [u32; 65536]   /* per-prime NTT scratch for B */
+var NB_R1    : [u32; 65536]   /* convolution mod p1 */
+var NB_R2    : [u32; 65536]   /* convolution mod p2 */
+
+/* (a * b) mod p, a,b < p < 2^30 so the product < 2^60 fits u64; the % is not after a call. */
+fn nb_mulmod(a: u64, b: u64, p: u64) -> u64 {
+    let prod : u64 = a * b
+    return prod % p
+}
+
+/* a^e mod p (square-and-multiply). */
+fn nb_powmod(a: u64, e: u64, p: u64) -> u64 {
+    let mut r    : u64 = 1u64
+    let mut base : u64 = a % p
+    let mut ee   : u64 = e
+    while ee > 0u64 {
+        if (ee & 1u64) == 1u64 { r = nb_mulmod(r, base, p) }
+        base = nb_mulmod(base, base, p)
+        ee = ee >> 1u64
+    }
+    return r
+}
+
+/* Compute the Garner inverse constant once (idempotent). */
+fn nb_init() -> i32 {
+    if NB_INITED == 1u8 { return 0i32 }
+    let p1m2 : u64 = NB_P1 % NB_P2
+    NB_INV_P1_MOD_P2 = nb_powmod(p1m2, NB_P2 - 2u64, NB_P2)   /* Fermat: p2 prime */
+    NB_INITED = 1u8
+    return 0i32
+}
+
+/* 2-prime Garner CRT: given r1 = x mod p1, r2 = x mod p2 with x < p1*p2, recover x exactly.
+ * x = r1 + p1 * ((r2 - r1) * inv(p1,p2) mod p2); r1 + p1*k1 < p1*p2 ~ 2^60 fits u64. */
+fn nb_crt2(r1: u64, r2: u64) -> u64 {
+    let p1   : u64 = NB_P1
+    let p2   : u64 = NB_P2
+    let r1m2 : u64 = r1 % p2
+    let mut t : u64 = r2
+    if t < r1m2 { t = t + p2 }
+    t = t - r1m2
+    let k1 : u64 = nb_mulmod(t, NB_INV_P1_MOD_P2, p2)
+    let x  : u64 = r1 + p1 * k1
+    return x
+}
+
+/* Pack nlimbs 64-bit limbs of `id` into base-2^16 digits at dest_base (4 digits per limb). */
+fn nb_pack(id: u64, dest_base: u64, nlimbs: u64) -> i32 {
+    let d : *u32 = dest_base as *u32
+    let mut i : u64 = 0u64
+    while i < nlimbs {
+        let limb : u64 = bigint_get_limb(id, i)
+        let o : u64 = i * 4u64
+        d[o + 0u64] = (limb & 0xFFFFu64) as u32
+        d[o + 1u64] = ((limb >> 16u64) & 0xFFFFu64) as u32
+        d[o + 2u64] = ((limb >> 32u64) & 0xFFFFu64) as u32
+        d[o + 3u64] = ((limb >> 48u64) & 0xFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Zero buffer[lo..hi). */
+fn nb_zero(base: u64, lo: u64, hi: u64) -> i32 {
+    let d : *u32 = base as *u32
+    let mut i : u64 = lo
+    while i < hi { d[i] = 0u32 ; i = i + 1u64 }
+    return 0i32
+}
+
+/* Copy buffer src[0..n) -> dst[0..n). */
+fn nb_copy(src: u64, dst: u64, n: u64) -> i32 {
+    let s : *u32 = src as *u32
+    let d : *u32 = dst as *u32
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i] ; i = i + 1u64 }
+    return 0i32
+}
+
+/* Acyclic convolution of NB_DA and NB_DB (both length-nfft, zero-padded) modulo p, written to
+ * dest[0..nfft): forward both, pointwise multiply, inverse. */
+fn nb_convolve_mod(p: u64, g: u64, nfft: u64, dest: u64) -> i32 {
+    let e     : u64 = (p - 1u64) / nfft
+    let omega : u32 = nb_powmod(g, e, p) as u32
+    let qb    : u32 = p as u32
+    let wbase : u64 = &NB_WORK as u64
+    let bbase : u64 = &NB_WORKB as u64
+    nb_copy(&NB_DA as u64, wbase, nfft)
+    nb_copy(&NB_DB as u64, bbase, nfft)
+    ntt_forward_at(wbase, nfft, qb, omega)
+    ntt_forward_at(bbase, nfft, qb, omega)
+    let w  : *u32 = wbase as *u32
+    let wb : *u32 = bbase as *u32
+    let mut i : u64 = 0u64
+    while i < nfft {
+        let prod : u64 = (w[i] as u64) * (wb[i] as u64)
+        let red  : u64 = prod % p
+        w[i] = red as u32
+        i = i + 1u64
+    }
+    ntt_inverse_at(wbase, nfft, qb, omega)
+    nb_copy(wbase, dest, nfft)
+    return 0i32
+}
+
+/* The product a*b via NTT.  Allocates exactly one bigint (the result); the transform lives in
+ * flat buffers, so the bigint slot table never exhausts (the D-KARA-1 cure).  Returns
+ * BIGINT_INVALID (0) only if an operand exceeds the buffer capacity. */
+fn bigint_mul_ntt(arena: u64, a: u64, b: u64) -> u64 @export {
+    nb_init()
+    let na : u64 = bigint_len_limbs(a)
+    let nb : u64 = bigint_len_limbs(b)
+    if na == 0u64 { return bigint_from_u64(arena, 0u64) }
+    if nb == 0u64 { return bigint_from_u64(arena, 0u64) }
+    let da   : u64 = na * 4u64
+    let db   : u64 = nb * 4u64
+    let need : u64 = da + db
+    let mut nfft : u64 = 1u64
+    while nfft < need { nfft = nfft << 1u64 }
+    if nfft > NB_MAXN { return 0u64 }
+
+    nb_pack(a, &NB_DA as u64, na)
+    nb_pack(b, &NB_DB as u64, nb)
+    nb_zero(&NB_DA as u64, da, nfft)
+    nb_zero(&NB_DB as u64, db, nfft)
+
+    nb_convolve_mod(NB_P1, NB_G1, nfft, &NB_R1 as u64)
+    nb_convolve_mod(NB_P2, NB_G2, nfft, &NB_R2 as u64)
+
+    let r1p : *u32 = &NB_R1 as u64 as *u32
+    let r2p : *u32 = &NB_R2 as u64 as *u32
+    let result : u64 = bigint_new(arena, na + nb + 1u64)
+    if result == 0u64 { return 0u64 }
+
+    let ndig : u64 = da + db - 1u64
+    let mut carry    : u64 = 0u64
+    let mut limb_idx : u64 = 0u64
+    let mut cur_limb : u64 = 0u64
+    let mut sub      : u64 = 0u64
+
+    /* significant convolution digits */
+    let mut di : u64 = 0u64
+    while di < ndig {
+        let coeff : u64 = nb_crt2(r1p[di] as u64, r2p[di] as u64)
+        let total : u64 = coeff + carry
+        let digit : u64 = total & 0xFFFFu64
+        carry = total >> 16u64
+        cur_limb = cur_limb | (digit << (sub * 16u64))
+        sub = sub + 1u64
+        if sub == 4u64 {
+            bigint_set_limb(result, limb_idx, cur_limb)
+            limb_idx = limb_idx + 1u64
+            cur_limb = 0u64
+            sub = 0u64
+        }
+        di = di + 1u64
+    }
+    /* flush the remaining carry into further base-2^16 digits */
+    while carry > 0u64 {
+        let digit : u64 = carry & 0xFFFFu64
+        carry = carry >> 16u64
+        cur_limb = cur_limb | (digit << (sub * 16u64))
+        sub = sub + 1u64
+        if sub == 4u64 {
+            bigint_set_limb(result, limb_idx, cur_limb)
+            limb_idx = limb_idx + 1u64
+            cur_limb = 0u64
+            sub = 0u64
+        }
+    }
+    /* flush a partial limb */
+    if sub != 0u64 {
+        bigint_set_limb(result, limb_idx, cur_limb)
+        limb_idx = limb_idx + 1u64
+    }
+    bigint_normalize(result)
+    return result
+}
+
+/* ---- KAT (99 = pass) ---- */
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+
+fn nb_fill_pattern(id: u64, n: u64, seed: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        bigint_set_limb(id, i, seed + i * 0x9E3779B97F4A7C15u64)
+        i = i + 1u64
+    }
+    bigint_set_len(id, n)
+    return 0i32
+}
+
+/* Compare bigint_mul_ntt against schoolbook bigint_mul for an n-limb x n-limb product. */
+fn nb_check_size(arena: u64, n: u64, seed_a: u64, seed_b: u64) -> u8 {
+    let x : u64 = bigint_new(arena, n)
+    let y : u64 = bigint_new(arena, n)
+    nb_fill_pattern(x, n, seed_a)
+    nb_fill_pattern(y, n, seed_b)
+    let ref  : u64 = bigint_mul(arena, x, y)
+    let got  : u64 = bigint_mul_ntt(arena, x, y)
+    let ok   : u8  = bigint_eq(ref, got)
+    bigint_drop(x); bigint_drop(y); bigint_drop(ref); bigint_drop(got)
+    return ok
+}
+
+fn nb_selftest() -> u64 @export {
+    nb_init()
+
+    /* (1) Garner CRT round-trips a known value < p1*p2 (k1 != 0 -> both primes exercised). */
+    let xv : u64 = 0x123456789ABCDEu64
+    let r1 : u64 = xv % NB_P1
+    let r2 : u64 = xv % NB_P2
+    if nb_crt2(r1, r2) != xv { return 1u64 }
+
+    let a : u64 = arena_new(1u64 << 24u64)
+    if a == 0u64 { return 2u64 }
+
+    /* (2) small: 1-limb x 1-limb (0xFFFF.. ^2), against schoolbook */
+    let sx : u64 = bigint_from_u64(a, 0xFFFFFFFFFFFFFFFFu64)
+    let sy : u64 = bigint_from_u64(a, 0xFFFFFFFFFFFFFFFFu64)
+    let sp : u64 = bigint_mul(a, sx, sy)
+    let sg : u64 = bigint_mul_ntt(a, sx, sy)
+    if bigint_eq(sp, sg) != 1u8 { return 3u64 }
+    bigint_drop(sx); bigint_drop(sy); bigint_drop(sp); bigint_drop(sg)
+
+    /* (3) increasing sizes, each vs schoolbook */
+    if nb_check_size(a, 4u64,   0x1u64,          0x2u64)          != 1u8 { return 4u64 }
+    if nb_check_size(a, 31u64,  0xDEADBEEFu64,   0xCAFEF00Du64)   != 1u8 { return 5u64 }
+    if nb_check_size(a, 100u64, 0x1234567890ABu64, 0xFEDCBA98u64) != 1u8 { return 6u64 }
+    if nb_check_size(a, 512u64, 0x7u64,          0xBu64)          != 1u8 { return 7u64 }
+
+    /* (4) asymmetric lengths */
+    let bx : u64 = bigint_new(a, 200u64)
+    let by : u64 = bigint_new(a, 37u64)
+    nb_fill_pattern(bx, 200u64, 0x55u64)
+    nb_fill_pattern(by, 37u64,  0xAAu64)
+    let bp : u64 = bigint_mul(a, bx, by)
+    let bg : u64 = bigint_mul_ntt(a, bx, by)
+    if bigint_eq(bp, bg) != 1u8 { return 8u64 }
+    bigint_drop(bx); bigint_drop(by); bigint_drop(bp); bigint_drop(bg)
+
+    arena_drop(a)
+    return 99u64
+}

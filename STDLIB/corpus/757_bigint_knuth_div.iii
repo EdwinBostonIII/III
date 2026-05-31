@@ -1,0 +1,135 @@
+/* 757_bigint_knuth_div.iii -- W3.9 differential + invariant KAT for the Knuth
+ * Algorithm D division (now the public bigint_div_qr).  For every operand pair
+ * it checks BOTH:
+ *   (A) DIFFERENTIAL: knuth bigint_div_qr (q,r) is byte-identical to the retained
+ *       bit-serial bigint_div_qr_bitserial (q,r) -- the gospel's byte-identical
+ *       gate; and
+ *   (B) INVARIANT: q*b + r == a AND r < b -- the division theorem, which proves
+ *       correctness ABSOLUTELY (independent of the oracle).
+ * Coverage: 300 deterministic multi-limb random pairs (a: 1..8 limbs, b: 1..4),
+ * plus crafted edges -- single-u32-digit divisors (the n==1 path), the 2^32
+ * normalization boundary, a==b / a=b+1, and the scaled Hacker's-Delight/Knuth
+ * add-back trigger (forces the D6 correction).  Exit 99 = every pair holds. */
+module corpus_757
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_div_qr_bitserial(arena: u64, a: u64, b: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_remainder_get() -> u64 from "bigint_div.iii"
+
+var LCG : u64 = 0u64
+fn lcg_next() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* nlimbs random limbs, low limb forced odd -> guaranteed nonzero. */
+fn build_rand(arena: u64, nlimbs: u64) -> u64 {
+    let id : u64 = bigint_new(arena, nlimbs)
+    let mut i : u64 = 0u64
+    while i < nlimbs {
+        let v : u64 = lcg_next()
+        if i == 0u64 { bigint_set_limb(id, 0u64, v | 1u64) }
+        if i != 0u64 { bigint_set_limb(id, i, v) }
+        i = i + 1u64
+    }
+    bigint_set_len(id, nlimbs)
+    bigint_normalize(id)
+    return id
+}
+
+fn build_limbs2(arena: u64, l0: u64, l1: u64) -> u64 {
+    let id : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(id, 0u64, l0)
+    bigint_set_limb(id, 1u64, l1)
+    bigint_set_len(id, 2u64)
+    bigint_normalize(id)
+    return id
+}
+
+/* Run both dividers + both invariants on (a,b).  0 = ok; 1..4 = first failing
+ * arm (1 q-mismatch, 2 r-mismatch, 3 q*b+r!=a, 4 r>=b). */
+fn check(arena: u64, a: u64, b: u64) -> u8 {
+    let q_k : u64 = bigint_div_qr(arena, a, b)            /* now Knuth Algorithm D */
+    let r_k : u64 = bigint_remainder_get()
+    let q_b : u64 = bigint_div_qr_bitserial(arena, a, b)  /* retained oracle */
+    let r_b : u64 = bigint_remainder_get()
+    let mut code : u8 = 0u8
+    /* knuth-invariant FIRST (absolute correctness): q*b + r == a AND r < b. */
+    let prod  : u64 = bigint_mul(arena, q_k, b)
+    let recon : u64 = bigint_add(arena, prod, r_k)
+    if bigint_eq(recon, a) != 1u8 { code = 3u8 }
+    if code == 0u8 { if bigint_cmp(r_k, b) != -1i32 { code = 4u8 } }
+    if code == 0u8 { if bigint_eq(q_k, q_b) != 1u8 { code = 1u8 } }
+    if code == 0u8 { if bigint_eq(r_k, r_b) != 1u8 { code = 2u8 } }
+    bigint_drop(q_k) ; bigint_drop(r_k) ; bigint_drop(q_b) ; bigint_drop(r_b)
+    bigint_drop(prod) ; bigint_drop(recon)
+    return code
+}
+
+fn check_drop(arena: u64, a: u64, b: u64) -> u8 {
+    let c : u8 = check(arena, a, b)
+    bigint_drop(a) ; bigint_drop(b)
+    /* Reclaim the arena (bump allocator -- the alloc-heavy bit-serial oracle
+     * would otherwise exhaust it over many iterations); free all bigint slots
+     * referencing it first, then reset the bump pointer. */
+    bigint_drop_arena(arena)
+    arena_reset(arena)
+    return c
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 22u64)
+    if arena == 0u64 { return 1u64 }
+    LCG = 0x243F6A8885A308D3u64
+
+    /* ---- crafted edges ---- */
+    /* single-u32-digit divisors (n==1 path) against a 4-limb dividend */
+    if check_drop(arena, build_rand(arena, 4u64), bigint_from_u64(arena, 3u64))          != 0u8 { return 10u64 }
+    if check_drop(arena, build_rand(arena, 4u64), bigint_from_u64(arena, 7u64))          != 0u8 { return 11u64 }
+    if check_drop(arena, build_rand(arena, 4u64), bigint_from_u64(arena, 0xFFFFFFFFu64)) != 0u8 { return 12u64 }
+    if check_drop(arena, build_rand(arena, 6u64), bigint_from_u64(arena, 1000000007u64)) != 0u8 { return 13u64 }
+    /* 2^32 normalization boundary (n==2, divisor top digit == 1) */
+    if check_drop(arena, build_rand(arena, 4u64), bigint_from_u64(arena, 0x100000000u64)) != 0u8 { return 14u64 }
+    if check_drop(arena, build_rand(arena, 4u64), bigint_from_u64(arena, 0x100000001u64)) != 0u8 { return 15u64 }
+    /* scaled Knuth/Warren add-back trigger: forces the D6 correction.
+     * u = digits[0, 0xFFFFFFFE, 0x80000000]; v = digits[0xFFFFFFFF, 0x80000000]. */
+    if check_drop(arena, build_limbs2(arena, 0xFFFFFFFE00000000u64, 0x0000000080000000u64),
+                         bigint_from_u64(arena, 0x80000000FFFFFFFFu64)) != 0u8 { return 16u64 }
+    /* a == b and a == b+1 (multi-limb) */
+    if check_drop(arena, build_limbs2(arena, 0x123456789ABCDEFu64, 0xFEDCBA98u64),
+                         build_limbs2(arena, 0x123456789ABCDEFu64, 0xFEDCBA98u64)) != 0u8 { return 17u64 }
+    if check_drop(arena, build_limbs2(arena, 0x1000000000000000u64, 0xFEDCBA98u64),
+                         build_limbs2(arena, 0x0FFFFFFFFFFFFFFFu64, 0xFEDCBA98u64)) != 0u8 { return 18u64 }
+    /* power-of-two dividend / 2^64 divisor (clean digit boundaries) */
+    if check_drop(arena, build_limbs2(arena, 0u64, 0x8000000000000000u64),
+                         build_limbs2(arena, 0u64, 1u64)) != 0u8 { return 19u64 }
+
+    /* ---- 300 deterministic random multi-limb pairs ---- */
+    let mut t : u64 = 0u64
+    while t < 300u64 {
+        let la : u64 = 1u64 + (t & 7u64)    /* 1..8 limbs */
+        let lb : u64 = 1u64 + (t & 3u64)    /* 1..4 limbs */
+        let a : u64 = build_rand(arena, la)
+        let b : u64 = build_rand(arena, lb)
+        let c : u8 = check_drop(arena, a, b)
+        if c != 0u8 { return 50u64 + (c as u64) }
+        t = t + 1u64
+    }
+
+    arena_drop(arena)
+    return 99u64
+}

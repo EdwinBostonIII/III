@@ -63,7 +63,6 @@ const CLS_DIM_REFLECT_BUDGET  : u8 = 7u8
 
 const CLS_K_BASE          : u8  = 8u8
 const CLS_K_END           : u8  = 13u8
-const CLS_DIM_RESERVED    : u8  = 13u8
 const CLS_DIM_COUNT       : u8  = 14u8
 const CLS_DIM_NONE        : u8  = 0xFFu8
 const CLS_K_BYTE0         : u64 = 64u64   /* K bytes start AFTER the 8 u64 dims (bytes 0..63); 56 overlapped dim 7's u64 (bytes 56..63) -> cls_le mis-read K8 as dim7 */
@@ -75,7 +74,11 @@ const CLS_WH_FAIL         : u64 = 0xFFFFFFFFFFFFFFFFu64
 const CLS_V3_SENTINEL     : u8  = 0xE3u8
 const CLS_KIND_OVERRUN    : u8  = 0x11u8
 
-const CLS_DESC_BYTES      : u64 = 24u64
+/* CUT-2: the overrun descriptor as a named-offset schema (was hardcoded 0/8/16/24). */
+const CLS_DESC_DIM_OFF    : u64 = 0u64
+const CLS_DESC_DECL_OFF   : u64 = 8u64
+const CLS_DESC_OBS_OFF    : u64 = 16u64
+const CLS_DESC_BYTES      : u64 = CLS_DESC_OBS_OFF + 8u64
 const CLS_OVERRUN_INNER   : u64 = 9u64
 const CLS_PAYLOAD_BYTES   : u64 = 81u64
 
@@ -283,13 +286,13 @@ fn cls_admit(declared: *u8, bound: *u8) -> i32 @export {
 fn cls_overrun_desc_pack(dim: u8, declared: u64, observed: u64, out_desc: *u8) -> i32 @export {
     if (out_desc as u64) == 0u64 { return CLS_E_NULL }
     if dim >= CLS_DIM_COUNT { return CLS_E_DIM }
-    out_desc[0u64] = dim
+    out_desc[CLS_DESC_DIM_OFF] = dim
     let mut z : u64 = 1u64
-    while z < 8u64 { out_desc[z] = 0u8 ; z = z + 1u64 }
+    while z < CLS_DESC_DECL_OFF { out_desc[z] = 0u8 ; z = z + 1u64 }
     let mut k : u64 = 0u64
     while k < 8u64 {
-        out_desc[8u64 + k]  = ((declared >> (k * 8u64)) & 0xFFu64) as u8
-        out_desc[16u64 + k] = ((observed >> (k * 8u64)) & 0xFFu64) as u8
+        out_desc[CLS_DESC_DECL_OFF + k] = ((declared >> (k * 8u64)) & 0xFFu64) as u8
+        out_desc[CLS_DESC_OBS_OFF + k]  = ((observed >> (k * 8u64)) & 0xFFu64) as u8
         k = k + 1u64
     }
     return CLS_OK
@@ -328,13 +331,13 @@ fn cls_emit_overrun(operation_id: *u8, desc: *u8, out_frag_id: *u8) -> i32 @expo
     pay_p[70u64] = 0u8
     pay_p[71u64] = 0u8
     /* inner payload: dim + saturating(observed - declared) LE */
-    pay_p[72u64] = desc[0u64]
+    pay_p[72u64] = desc[CLS_DESC_DIM_OFF]
     let mut dec : u64 = 0u64
     let mut obs : u64 = 0u64
     let mut k : u64 = 0u64
     while k < 8u64 {
-        dec = dec | ((desc[8u64 + k]  as u64) << (k * 8u64))
-        obs = obs | ((desc[16u64 + k] as u64) << (k * 8u64))
+        dec = dec | ((desc[CLS_DESC_DECL_OFF + k] as u64) << (k * 8u64))
+        obs = obs | ((desc[CLS_DESC_OBS_OFF + k] as u64) << (k * 8u64))
         k = k + 1u64
     }
     let mut mag : u64 = obs - dec

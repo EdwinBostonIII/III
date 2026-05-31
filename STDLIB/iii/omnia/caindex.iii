@@ -1,0 +1,99 @@
+/* STDLIB/iii/omnia/caindex.iii -- the shared content-address index ALGORITHM (COMBINE-3 / lever X3).
+ * A deterministic open-addressed hash index keyed by a 32-byte content id, modelled on the proven
+ * COMPILER/BOOT/ast.iii hash-consing DAG.  Replaces the O(N^2) all-pairs and O(N) linear-membership
+ * scans scattered across nine modules (theorem_carrier, math_library_curation, computation_graph,
+ * ripple_metric, ripple_loop, unify, lru, sema, congruence) with O(1) expected lookup.
+ *
+ * CALLER-OWNED (W0.2 redesign): the organ is the ALGORITHM (murmur3 bucket + linear probe + full-id
+ * verify); each consumer owns its own (keys, vals) arrays sized to its need.  This is strictly more
+ * coherent + adaptable than one shared global: there is NO cross-consumer id-collision hazard (two
+ * consumers content-addressing the same bytes can never clobber each other -- their tables are
+ * disjoint), NO shared-capacity coupling, and NO shared init/reset.  keys is [u8; slots*32], vals is
+ * [u32; slots], slots is a power of two, mask = slots - 1, vals pre-cleared to CAI_EMPTY.
+ *
+ * Correctness does NOT depend on the hash: every probe does a full 32-byte id compare (cai_id_eq),
+ * so a bucket collision costs extra probes, never a wrong answer -- exact and deterministic.  The
+ * fast bucket hash is murmur3 (non-crypto; Keccak stays reserved for seals, per COMBINE-2).
+ *
+ * Hexad: kind_essence.  Ring: R0.  NIH: murmur3.iii only.  No float, no ML, no u64 division.
+ */
+module omnia_caindex
+
+extern @abi(c-msvc-x64) fn murmur3_32(data: *u8, len: u64, seed: u32) -> u32 from "murmur3.iii"
+
+const CAI_EMPTY   : u32 = 0xFFFFFFFFu32     /* payload sentinel = empty slot */
+const CAI_SEED    : u32 = 0x9E3779B9u32     /* fixed seed -> deterministic bucketing */
+
+/* 1u8 iff the two 32-byte ids are byte-equal. */
+fn cai_id_eq(a: *u8, b: *u8) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if a[i] != b[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* Deterministic bucket from the 32-byte id (masked into [0, mask]). */
+fn cai_bucket(id: *u8, mask: u64) -> u64 {
+    let h : u32 = murmur3_32(id, 32u64, CAI_SEED)
+    return (h as u64) & mask
+}
+
+/* Clear a caller-owned vals array of `slots` entries to CAI_EMPTY (call once at the consumer's
+ * init, before any cai_put).  `vals` is the address of a [u32; slots] array. */
+fn cai_clear(vals: u64, slots: u64) -> i32 @export {
+    let vp : *u32 = vals as *u32
+    let mut i : u64 = 0u64
+    while i < slots {
+        vp[i] = CAI_EMPTY
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Look up id -> payload in the caller's table, or CAI_EMPTY if absent.  Linear probe with full-id
+ * verify on every probe.  keys = address of [u8; slots*32]; vals = address of [u32; slots];
+ * mask = slots - 1 (slots a power of two). */
+fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 @export {
+    let vp : *u32 = vals as *u32
+    let mut s : u64 = cai_bucket(id, mask)
+    let mut n : u64 = 0u64
+    while n <= mask {
+        if vp[s] == CAI_EMPTY { return CAI_EMPTY }
+        let kp : u64 = keys + s * 32u64
+        if cai_id_eq(kp as *u8, id) == 1u8 { return vp[s] }
+        s = (s + 1u64) & mask
+        n = n + 1u64
+    }
+    return CAI_EMPTY
+}
+
+/* Insert (id, payload) into the caller's table; idempotent (re-inserting an existing id updates its
+ * payload).  Returns 0 ok, -1 if the table is full (distinct from CAI_EMPTY -- no sentinel overload). */
+fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 @export {
+    let vp : *u32 = vals as *u32
+    let mut s : u64 = cai_bucket(id, mask)
+    let mut n : u64 = 0u64
+    while n <= mask {
+        if vp[s] == CAI_EMPTY {
+            let kp : u64 = keys + s * 32u64
+            let dp : *u8 = kp as *u8
+            let mut i : u64 = 0u64
+            while i < 32u64 {
+                dp[i] = id[i]
+                i = i + 1u64
+            }
+            vp[s] = payload
+            return 0i32
+        }
+        let kp2 : u64 = keys + s * 32u64
+        if cai_id_eq(kp2 as *u8, id) == 1u8 {
+            vp[s] = payload
+            return 0i32
+        }
+        s = (s + 1u64) & mask
+        n = n + 1u64
+    }
+    return -1i32
+}

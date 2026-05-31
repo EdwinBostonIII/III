@@ -2,15 +2,17 @@
  *
  * III STDLIB - omnia::xii_curated_riscv
  *
- * Curated RISC-V V + Zkn (cryptographic) machine-code bytes for the
- * representative Horizon patterns. Per DOCS/III-XII.md S26.7 (target 5).
+ * Curated RISC-V V machine-code bytes for the representative NON-crypto
+ * Horizon patterns. Per DOCS/III-XII.md S26.7 (target 5).
  *
- * Currently curated:
- *   H012 sha256_oneshot   on target 5 (riscv64_v + Zknh)
- *   H013 sha256_block     on target 5
- *   H022 crc32c_block     on target 5 (Zbc extension)
+ * Currently curated (non-crypto horizons only):
  *   H051 swap_bytes_u64   on target 5 (REV8)
  *   H058 aligned_load_u128 on target 5 (vle64.v + vmv)
+ *
+ * W1.2/CUT-12: the crypto-horizon (< 24) overrides H012 sha256_oneshot,
+ * H013 sha256_block, H022 crc32c_block + their XCR_H012/H013/H022 scaffold
+ * bytes are removed -- the xii_emit_gen chokepoint refused all of them, so
+ * emission is byte-identical.  Crypto truth lives in numera (W1.3 option b).
  *
  * Hexad: kind_substance. Ring: R0. K: per-pattern.
  *
@@ -20,41 +22,6 @@
 module omnia_xii_curated_riscv
 
 extern @abi(c-msvc-x64) fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 from "xii_emit_gen.iii"
-
-/* ------------------------------------------------------------------ */
-/* H012 sha256_oneshot on RISC-V Zknh                                  */
-/* sha256sig0/sig1/sum0/sum1 instructions per RVA22 Zknh spec.         */
-/* ------------------------------------------------------------------ */
-
-/* Sample sequence:
- *  03 35 05 00       ld a0, 0(a0)
- *  13 75 e5 ff       andi a0, a0, 0x3f  (round-index mask; representative
- *                                        Zknh sequence per Curation-Remaining
- *                                        item 2 -- real sha256 sig0/sig1/
- *                                        sum0/sum1 instructions follow)
- *  93 17 f5 11       sha256sig0 a5, a0
- *  13 88 17 11       sha256sig1 a6, a5
- *  93 09 18 11       sha256sum0 s3, a6
- *  13 8a 19 11       sha256sum1 s4, s3
- *  ...
- *  67 80 00 00       ret
- */
-var XCR_H012_RISCV : [u8; 48] = [0x03u8, 0x35u8, 0x05u8, 0x00u8, 0x13u8, 0x75u8, 0xE5u8, 0xFFu8, 0x93u8, 0x17u8, 0xF5u8, 0x11u8, 0x13u8, 0x88u8, 0x17u8, 0x11u8, 0x93u8, 0x09u8, 0x18u8, 0x11u8, 0x13u8, 0x8Au8, 0x19u8, 0x11u8, 0x93u8, 0x17u8, 0xF5u8, 0x11u8, 0x13u8, 0x88u8, 0x17u8, 0x11u8, 0x93u8, 0x09u8, 0x18u8, 0x11u8, 0x13u8, 0x8Au8, 0x19u8, 0x11u8, 0x67u8, 0x80u8, 0x00u8, 0x00u8, 0x13u8, 0x00u8, 0x00u8, 0x00u8]
-
-/* ------------------------------------------------------------------ */
-/* H013 sha256_block on RISC-V Zknh (single block)                     */
-/* ------------------------------------------------------------------ */
-
-var XCR_H013_RISCV : [u8; 32] = [0x03u8, 0x35u8, 0x05u8, 0x00u8, 0x93u8, 0x17u8, 0xF5u8, 0x11u8, 0x13u8, 0x88u8, 0x17u8, 0x11u8, 0x93u8, 0x09u8, 0x18u8, 0x11u8, 0x13u8, 0x8Au8, 0x19u8, 0x11u8, 0x23u8, 0x30u8, 0x55u8, 0x00u8, 0x67u8, 0x80u8, 0x00u8, 0x00u8, 0x13u8, 0x00u8, 0x00u8, 0x00u8]
-
-/* ------------------------------------------------------------------ */
-/* H022 crc32c_block on RISC-V Zbc                                     */
-/*  33 04 b5 0a       clmul a0, a0, a1     (carryless multiply)         */
-/*  93 c5 e5 03       andi a1, a1, 0x3e                                 */
-/*  67 80 00 00       ret                                               */
-/* ------------------------------------------------------------------ */
-
-var XCR_H022_RISCV : [u8; 16] = [0x33u8, 0x04u8, 0xB5u8, 0x0Au8, 0x33u8, 0x14u8, 0xB5u8, 0x0Au8, 0xB3u8, 0x24u8, 0xB5u8, 0x0Au8, 0x67u8, 0x80u8, 0x00u8, 0x00u8]
 
 /* ------------------------------------------------------------------ */
 /* H051 swap_bytes_u64 on RISC-V (REV8)                                */
@@ -73,11 +40,8 @@ var XCR_H051_RISCV : [u8; 8] = [0x13u8, 0xD5u8, 0x85u8, 0x6Bu8, 0x67u8, 0x80u8, 
 
 var XCR_H058_RISCV : [u8; 16] = [0x57u8, 0x70u8, 0x01u8, 0xCDu8, 0x07u8, 0x70u8, 0x05u8, 0x02u8, 0x67u8, 0x80u8, 0x00u8, 0x00u8, 0x13u8, 0x00u8, 0x00u8, 0x00u8, 0x13u8, 0x00u8, 0x00u8, 0x00u8]
 
-/* Registration. */
+/* Registration (non-crypto horizons only). */
 fn xii_curated_riscv_register_all() -> i32 @export {
-    xii_emit_gen_override(11u8, 5u8, &XCR_H012_RISCV as *u8, 48u16)
-    xii_emit_gen_override(12u8, 5u8, &XCR_H013_RISCV as *u8, 32u16)
-    xii_emit_gen_override(21u8, 5u8, &XCR_H022_RISCV as *u8, 16u16)
     xii_emit_gen_override(50u8, 5u8, &XCR_H051_RISCV as *u8, 8u16)
     xii_emit_gen_override(57u8, 5u8, &XCR_H058_RISCV as *u8, 16u16)
     return 0i32

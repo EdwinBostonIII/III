@@ -45,6 +45,9 @@ fn rfc_emit4(out: *u8, off: u64, v: u32) -> i32 {
 
 fn rfc3339_format(unix_seconds: u64, out_20: *u8) -> i32 @export {
     cal_unix_to_civil(unix_seconds)
+    /* rfc_emit4 writes EXACTLY 4 digits; year > 9999 would silently emit only the
+     * low 4 decimal digits -> a wrong/ambiguous timestamp.  Reject out of range.  [audit rfc3339-1] */
+    if cal_last_year() > 9999u32 { return 0i32 - 1i32 }
     rfc_emit4(out_20, 0u64, cal_last_year())
     out_20[4] = 45u8   /* - */
     rfc_emit2(out_20, 5u64, cal_last_month())

@@ -124,10 +124,24 @@ causes fixed + verified end-to-end:
 
 | Artifact | mhash (was) | mhash (now) |
 |---|---|---|
-| `iiis-1 ≡ iiis-2 ≡ iiis-3` | `840a528e…b3b8` | `4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85` |
-| `libiii_native.a` | `c45f1d3f…a2cd` | `258b357980796b9613e498bd36978db1885d67fefe139c1092360ec0f828f5f8` |
+| `iiis-1 ≡ iiis-2 ≡ iiis-3` | `4e138415…fa85` | `196b0c5f5159329b2e419aecb561ee57980d62bcc892ea84f260559bcdfaa990` |
+| `libiii_native.a` | `9776af67…b684124` | `13fa921e7da475a42ae06a64eaca5a181e26a4033ade7c41d60834e6273f2092` |
 
-Corpus: STDLIB **546/0**, bench **4/0**, stage-1 **57/0** → **ALL CORPORA PASSED**.
+Corpus: STDLIB **652/0**, bench **7/0**, stage-1 **59/0** → **ALL CORPORA PASSED**.
+
+**This reseal (2026-05-31, the Evolution baseline).** The `.iii`-only compiler-source enhancements moved
+the codegen fixed point: `cg_r3` `r3_reserve_slot` (bounds the unchecked `R3_G_LOCAL_COUNT` bumps that
+could overrun the 64-slot frame — clean compile-fail at the cap instead of memory corruption), `cg_rm2`
+`RM2_CHBUF` (a dedicated 1-byte scratch so `cg_emit_ch` can never alias `RM2_NUMBUF[0]`), the `sid`
+rewrite, and the PE emitter. Convergence was the **textbook two-step heal** of a codegen bug-fix:
+`4e138415` (old) → `7aded1aa` (transitional — the *old* compiler emits the *new* source, still carrying
+the old `CHBUF` aliasing emission) → `196b0c5f` (stable — the new compiler re-emits itself; verified
+`iiis-2 == iiis-3 == iiis-4`). The **joint compiler/lib fixed point** holds: the final compiler rebuilds
+`libiii_native.a` byte-identically to `13fa921e`. Golden re-pinned in the three Ripple executors
+(`ripple_apply` / `pcc_synthesize` / `ripple_extract`). **Environmental note:** relinking the live
+`COMPILED/iiis-2.exe` in-place intermittently fails under OneDrive/Defender file-lock (`ld returned 1`,
+no undefined refs) — `rm` the output first so `ld` writes a fresh inode; this is the root cause of the
+sporadic single-test corpus link flakes (they re-run green).
 
 **Bootstrap finding (pre-existing, non-blocking):** `build_iiis1` (from-iiis-0 bootstrap) is broken —
 iiis-0 can no longer compile post-port `parse.iii` (`iii_lex_*_c` undefined). The reseal correctly

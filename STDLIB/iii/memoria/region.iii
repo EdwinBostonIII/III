@@ -2,8 +2,9 @@
  *
  * III STDLIB - memoria::region
  *
- * Capability-gated heap region.  Only this module externs malloc/free
- * from MSVCRT - all other STDLIB modules must allocate via this surface.
+ * Capability-gated heap region.  Only this module externs VirtualAlloc/
+ * VirtualFree from kernel32 - all other STDLIB modules must allocate via
+ * this surface.
  *
  * Phase A scope:
  *   - region_create(bytes): single allocation backing a region
@@ -11,18 +12,28 @@
  *   - region_release(r): release the underlying buffer
  *   - region_used / region_capacity / region_remaining queries
  *
- * Region state lives in module-singleton table (REG_TABLE).  Phase B
- * will introduce typed region handles via @specialize once the compiler
- * supports it; for now regions are referenced by integer id.
+ * APOTHEOSIS S.7 (ADR-S7a): liveness + slot dispatch are DELEGATED to the
+ * one type-discriminated handle organ (memoria/tempaloc.iii).  The former
+ * private REG_LIVE table is gone -- a region id is now a tempaloc handle
+ * tagged TYPE_REGION, so a region id passed where an instant/deadline id is
+ * expected is a CAUGHT error rather than a silent slot collision.  region
+ * keeps only its own DATA arrays (base/capacity/used/sealed), indexed by the
+ * module-local slot tempaloc hands back; tempaloc's REGION sub-range scans
+ * low-to-high exactly as the old REG_LIVE scan did, so allocation order and
+ * the resulting local slot are unchanged.
  *
  * Hexad: kind_substance.  Ring: R0.  K: 0.99 (allocation can fail).
  *
- * NIH posture: malloc/free are MSVCRT externs but represent the only
- * concession to C runtime.  No third-party allocator.  Future phases
- * may replace with hand-rolled VirtualAlloc-backed pages.
+ * NIH posture: VirtualAlloc/VirtualFree are kernel32 externs but represent
+ * the only concession to the OS.  No third-party allocator.
  */
 
 module memoria_region
+
+extern @abi(c-msvc-x64) fn tempaloc_alloc(type_tag: u64) -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_slot_of(handle: u64, expected_type: u64) -> u32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_free(handle: u64, expected_type: u64) -> i32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_count_live(type_tag: u64) -> u32 from "tempaloc.iii"
 
 const REG_INVALID  : u64 = 0u64
 const REG_MAX      : u32 = 64u32        /* up to 64 simultaneous regions */
@@ -33,53 +44,48 @@ const REG_E_BADID  : i32 = -3i32
 const REG_E_NOFIT  : i32 = -4i32
 const REG_E_SEALED : i32 = -5i32
 
-/* --- MSVCRT externs (only here) --- */
+/* Must match tempaloc.iii TEMPALOC_TYPE_REGION (consts are module-local in
+ * iiis-2; this is the local name for the shared tag).  A local const keeps
+ * region_slot_of off a per-lookup function call on the alloc hot path. */
+const REG_TYPE : u64 = 1u64
+
+/* --- kernel32 externs (only here) --- */
 
 extern @abi(c-msvc-x64) fn VirtualAlloc(addr: u64, size: u64, alloc_type: u32, protect: u32) -> *u8 from "kernel32"
 extern @abi(c-msvc-x64) fn VirtualFree(addr: *u8, size: u64, free_type: u32) -> i32 from "kernel32"
 
-/* --- Region table: parallel arrays, one row per region. --- */
+/* --- Region DATA: parallel arrays, one row per local slot.  Liveness now
+ *     lives in tempaloc; these hold only region-specific state. --- */
 
-var REG_BASE       : [u64; 64]   /* base pointer (as u64) for region i */
+var REG_BASE       : [u64; 64]   /* base pointer (as u64) for region slot i */
 var REG_CAPACITY   : [u64; 64]
 var REG_USED       : [u64; 64]
-var REG_LIVE       : [u8; 64]    /* 1 = active, 0 = free slot           */
-var REG_SEALED     : [u8; 64]    /* 1 = no further alloc permitted      */
+var REG_SEALED     : [u8;  64]   /* 1 = no further alloc permitted          */
 
 /* --- Allocation --- */
 
 fn region_create(bytes: u64) -> u64 @export {
-    /* Find a free slot. */
-    let mut i : u32 = 0u32
-    let mut slot : u32 = 0xFFFFFFFFu32
-    while i < REG_MAX {
-        if REG_LIVE[i] == 0u8 {
-            if slot == 0xFFFFFFFFu32 {
-                slot = i
-            }
-        }
-        i = i + 1u32
-    }
+    /* tempaloc finds the lowest free REGION slot and returns a typed handle. */
+    let id : u64 = tempaloc_alloc(REG_TYPE)
+    if id == 0u64 { return REG_INVALID }
+    let slot : u32 = tempaloc_slot_of(id, REG_TYPE)
     if slot == 0xFFFFFFFFu32 { return REG_INVALID }
     let p : *u8 = VirtualAlloc(0u64, bytes, 0x3000u32, 0x04u32)   /* MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE */
-    if p as u64 == 0u64 { return REG_INVALID }
+    if p as u64 == 0u64 {
+        /* VirtualAlloc failed: release the reserved tempaloc slot. */
+        tempaloc_free(id, REG_TYPE)
+        return REG_INVALID
+    }
     REG_BASE[slot]     = p as u64
     REG_CAPACITY[slot] = bytes
     REG_USED[slot]     = 0u64
-    REG_LIVE[slot]     = 1u8
     REG_SEALED[slot]   = 0u8
-    /* Region id = slot + 1 (so 0 = invalid). */
-    return (slot as u64) + 1u64
+    return id
 }
 
 /* Validate a region id and return slot index, or 0xFFFFFFFF if bad. */
 fn region_slot_of(id: u64) -> u32 {
-    if id == 0u64 { return 0xFFFFFFFFu32 }
-    let slot : u64 = id - 1u64
-    if slot >= (REG_MAX as u64) { return 0xFFFFFFFFu32 }
-    let s : u32 = slot as u32
-    if REG_LIVE[s] == 0u8 { return 0xFFFFFFFFu32 }
-    return s
+    return tempaloc_slot_of(id, REG_TYPE)
 }
 
 fn region_capacity(id: u64) -> u64 @export {
@@ -128,7 +134,10 @@ fn region_alloc(id: u64, n: u64, align: u64) -> u64 @export {
     let mut start : u64 = used
     if mis != 0u64 { start = used + (a - mis) }
     let cap  : u64 = REG_CAPACITY[s]
-    if start + n > cap { return 0u64 }
+    /* Overflow-safe: `start + n` can wrap u64 and pass a naive `start + n > cap`,
+     * over-allocating past the region.  [audit region-1] */
+    if start > cap { return 0u64 }
+    if n > cap - start { return 0u64 }
     REG_USED[s] = start + n
     let base : u64 = REG_BASE[s]
     return base + start
@@ -147,6 +156,8 @@ fn region_seal(id: u64) -> i32 @export {
  *
  * Caller's responsibility: clear any external state (slot tables,
  * caches) that holds pointers into this region BEFORE calling reset.
+ * (APOTHEOSIS S.7 / ADR-S7b: a provable variant that VERIFIES the
+ * caller's commitment lives in arena_reset_with_witness.)
  *
  * Used by crypto modules that perform many short-lived bigint allocs
  * (modpow, scalar multiplication) to recycle scratch space. */
@@ -168,21 +179,11 @@ fn region_release(id: u64) -> i32 @export {
     REG_BASE[s]     = 0u64
     REG_CAPACITY[s] = 0u64
     REG_USED[s]     = 0u64
-    REG_LIVE[s]     = 0u8
     REG_SEALED[s]   = 0u8
+    tempaloc_free(id, REG_TYPE)
     return REG_OK
 }
 
 fn region_count_live() -> u32 @export {
-    let mut i : u32 = 0u32
-    let mut n : u32 = 0u32
-    while i < REG_MAX {
-        if REG_LIVE[i] == 1u8 { n = n + 1u32 }
-        i = i + 1u32
-    }
-    return n
+    return tempaloc_count_live(REG_TYPE)
 }
-
-/* region_reset_safe and clear_fn registry moved to a separate module
- * (memoria/region_safe.iii) to avoid disturbing this file's BSS
- * layout which other tests are sensitive to.  See plan Step 0018. */

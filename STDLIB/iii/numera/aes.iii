@@ -46,6 +46,15 @@ const AES128_KEY_BYTES : u32 = 16u32
 
 /* ---- Module-scope tables and state ---- */
 
+/* [E2-AES-1] The S-box is a 256-entry table indexed by secret state bytes -- a
+ * cache-timing channel.  A true constant-time S-box requires bitslicing (a large,
+ * separate undertaking), so the @constant_time / @side_channel_resistant claims were
+ * DROPPED from the block operations: an honest absence beats a false assertion.  The
+ * field-multiply half (aes_xtime) IS now branch-free.
+ * APOTHEOSIS S.5 (named horizon, not hidden): the constant-time fix is a BITSLICED
+ * S-box (process multiple blocks in parallel across bit-lanes, no table indexing) --
+ * staged, gated on a bit-identity KAT to this table path when cut.  Until then the
+ * table channel is a RECORDED known limit (this comment), not a false claim. */
 var AES_SBOX        : [u8; 256]
 var AES_INV_SBOX    : [u8; 256]
 var AES_RCON        : [u8; 16]
@@ -63,10 +72,13 @@ var AES_STATE       : [u8; 16]
 /* ---- GF(2^8) helpers ---- */
 
 fn aes_xtime(b: u32) -> u32 {
-    let high : u32 = b & 0x80u32
     let shifted : u32 = (b << 1u32) & 0xFFu32
-    if high != 0u32 { return shifted ^ 0x1Bu32 }
-    return shifted
+    /* [E2-AES-1] branch-free GF(2^8) reduction: XOR 0x1B iff bit 7 was set, via a mask
+     * (no secret-dependent branch).  mask = 0xFFFFFFFF if high bit set, else 0. */
+    let hb : u32 = (b >> 7u32) & 1u32
+    let mask : u32 = 0u32 - hb
+    let red : u32 = 0x1Bu32 & mask
+    return shifted ^ red
 }
 
 fn aes_gmul(a: u32, b: u32) -> u32 {
@@ -241,7 +253,7 @@ fn aes_expand_key_into(key: *u8, nk_bytes: u32, total_bytes: u32) -> i32 {
     return 0i32
 }
 
-fn aes128_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+fn aes128_set_key(key: *u8) -> i32 @crystal @export {
     aes_init_tables()
     aes_expand_key_into(key, 16u32, 176u32)
     AES_NR = AES128_ROUNDS
@@ -249,7 +261,7 @@ fn aes128_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_ti
     return 0i32
 }
 
-fn aes256_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+fn aes256_set_key(key: *u8) -> i32 @crystal @export {
     aes_init_tables()
     aes_expand_key_into(key, 32u32, 240u32)
     AES_NR = AES256_ROUNDS
@@ -258,7 +270,7 @@ fn aes256_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_ti
 }
 
 /* AES-192: Nk=6 (24-byte key), Nr=12, 13 round keys = 208 bytes. */
-fn aes192_set_key(key: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+fn aes192_set_key(key: *u8) -> i32 @crystal @export {
     aes_init_tables()
     aes_expand_key_into(key, 24u32, 208u32)
     AES_NR = AES192_ROUNDS
@@ -386,16 +398,38 @@ fn aes_mix_columns() -> i32 {
  *   d_3 = 0b*s_0 ^ 0d*s_1 ^ 09*s_2 ^ 0e*s_3
  * Computed via aes_gmul.
  */
+/* {09,0b,0d,0e}*b via xtime chains: x2,x4,x8 then 09=x8^b, 0b=x8^x2^b, 0d=x8^x4^b,
+ * 0e=x8^x4^x2.  Writes [m9,mb,md,me] to a 4-u32 buffer.  [E2-AES-2] ~10x fewer ops/gmul. */
+fn aes_inv_mults(b: u32, out: u64) -> i32 {
+    let p : *u32 = out as *u32
+    let x2 : u32 = aes_xtime(b)
+    let x4 : u32 = aes_xtime(x2)
+    let x8 : u32 = aes_xtime(x4)
+    p[0u64] = x8 ^ b              /* 09 */
+    p[1u64] = (x8 ^ x2) ^ b       /* 0b */
+    p[2u64] = (x8 ^ x4) ^ b       /* 0d */
+    p[3u64] = (x8 ^ x4) ^ x2      /* 0e */
+    return 0i32
+}
+var AES_IM0 : [u32; 4]
+var AES_IM1 : [u32; 4]
+var AES_IM2 : [u32; 4]
+var AES_IM3 : [u32; 4]
 fn aes_inv_mix_one_column(col: u32) -> i32 {
     let off : u32 = col * 4u32
     let s0 : u32 = AES_STATE[off + 0u32] as u32
     let s1 : u32 = AES_STATE[off + 1u32] as u32
     let s2 : u32 = AES_STATE[off + 2u32] as u32
     let s3 : u32 = AES_STATE[off + 3u32] as u32
-    let r0 : u32 = aes_gmul(0x0Eu32, s0) ^ aes_gmul(0x0Bu32, s1) ^ aes_gmul(0x0Du32, s2) ^ aes_gmul(0x09u32, s3)
-    let r1 : u32 = aes_gmul(0x09u32, s0) ^ aes_gmul(0x0Eu32, s1) ^ aes_gmul(0x0Bu32, s2) ^ aes_gmul(0x0Du32, s3)
-    let r2 : u32 = aes_gmul(0x0Du32, s0) ^ aes_gmul(0x09u32, s1) ^ aes_gmul(0x0Eu32, s2) ^ aes_gmul(0x0Bu32, s3)
-    let r3 : u32 = aes_gmul(0x0Bu32, s0) ^ aes_gmul(0x0Du32, s1) ^ aes_gmul(0x09u32, s2) ^ aes_gmul(0x0Eu32, s3)
+    aes_inv_mults(s0, &AES_IM0 as u64)   /* [0]=9 [1]=b [2]=d [3]=e of s0 */
+    aes_inv_mults(s1, &AES_IM1 as u64)
+    aes_inv_mults(s2, &AES_IM2 as u64)
+    aes_inv_mults(s3, &AES_IM3 as u64)
+    /* d0 = 0e*s0 ^ 0b*s1 ^ 0d*s2 ^ 09*s3 (etc.) -- same coefficients as the gmul form. */
+    let r0 : u32 = ((AES_IM0[3u64] ^ AES_IM1[1u64]) ^ (AES_IM2[2u64] ^ AES_IM3[0u64])) & 0xFFu32
+    let r1 : u32 = ((AES_IM0[0u64] ^ AES_IM1[3u64]) ^ (AES_IM2[1u64] ^ AES_IM3[2u64])) & 0xFFu32
+    let r2 : u32 = ((AES_IM0[2u64] ^ AES_IM1[0u64]) ^ (AES_IM2[3u64] ^ AES_IM3[1u64])) & 0xFFu32
+    let r3 : u32 = ((AES_IM0[1u64] ^ AES_IM1[2u64]) ^ (AES_IM2[0u64] ^ AES_IM3[3u64])) & 0xFFu32
     AES_STATE[off + 0u32] = r0 as u8
     AES_STATE[off + 1u32] = r1 as u8
     AES_STATE[off + 2u32] = r2 as u8
@@ -413,7 +447,7 @@ fn aes_inv_mix_columns() -> i32 {
 
 /* ---- Encrypt block ---- */
 
-fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @export {
     if AES_KEY_SET == 0u8 { return -1i32 }
     /* Load input into state. */
     let mut i : u32 = 0u32
@@ -444,7 +478,7 @@ fn aes_encrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @side_channe
 
 /* ---- Decrypt block ---- */
 
-fn aes_decrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @side_channel_resistant @constant_time @export {
+fn aes_decrypt_block(in_block: *u8, out_block: *u8) -> i32 @crystal @export {
     if AES_KEY_SET == 0u8 { return -1i32 }
     let mut i : u32 = 0u32
     while i < 16u32 {

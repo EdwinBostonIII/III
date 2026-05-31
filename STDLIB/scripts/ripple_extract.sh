@@ -19,7 +19,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IIIS="$ROOT/COMPILED/iiis-2.exe"
-GOLDEN_IIIS="4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85"
+GOLDEN_IIIS="196b0c5f5159329b2e419aecb561ee57980d62bcc892ea84f260559bcdfaa990"
 BS="$ROOT/STDLIB/scripts/build_stdlib.sh"
 
 SUBSPHERE="$1"; LEAF="$2"; PAYLOAD="$3"; PASS="$4"; CONG="$5"; DJ="$6"

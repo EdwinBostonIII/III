@@ -76,6 +76,9 @@ L_g_pattern_table_sealed:
 L_g_global_pattern_set:
     .zero 4096
     .section .data
+    .global L_g_pattern_register_fail_for_test
+L_g_pattern_register_fail_for_test:
+    .quad 0x0
     .global L_PT_DOM_TBL
 L_PT_DOM_TBL:
     .byte 0x49
@@ -1011,6 +1014,37 @@ pattern_proof_id:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "pattern_register_set_fail_for_test"
+    .text
+    .global pattern_register_set_fail_for_test
+    .seh_proc pattern_register_set_fail_for_test
+pattern_register_set_fail_for_test:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movzbq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_g_pattern_register_fail_for_test(%rip)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "pattern_register"
     .text
     .global pattern_register
@@ -1025,7 +1059,7 @@ pattern_register:
     .seh_endprologue
     movq %rcx, -8(%rbp)
     movq %rdx, -16(%rbp)
-    movzbq L_g_pattern_table_sealed(%rip), %rax
+    movzbq L_g_pattern_register_fail_for_test(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -1048,14 +1082,14 @@ pattern_register:
     pushq %rax
     popq %rax
 L_if_end_9:
-    movl -8(%rbp), %eax
+    movzbq L_g_pattern_table_sealed(%rip), %rax
     pushq %rax
-    movl L_PATTERN_REGISTRY_CAP(%rip), %eax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setae %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -1073,7 +1107,7 @@ L_if_end_9:
 L_if_end_11:
     movl -8(%rbp), %eax
     pushq %rax
-    movl L_PATTERN_REGISTRY_USED_MAX(%rip), %eax
+    movl L_PATTERN_REGISTRY_CAP(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -1096,6 +1130,29 @@ L_if_end_11:
 L_if_end_13:
     movl -8(%rbp), %eax
     pushq %rax
+    movl L_PATTERN_REGISTRY_USED_MAX(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
+    movl -8(%rbp), %eax
+    pushq %rax
     popq %rcx
     subq $32, %rsp
     callq L_pattern_slot_ptr
@@ -1107,7 +1164,7 @@ L_if_end_13:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_14:
+L_loop_top_16:
     movl -32(%rbp), %eax
     pushq %rax
     movl L_PATTERN_BYTES(%rip), %eax
@@ -1120,7 +1177,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_17
     movq -16(%rbp), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1191,8 +1248,8 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_16
+L_loop_end_17:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -1280,7 +1337,7 @@ L_loop_end_15:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1295,7 +1352,7 @@ L_loop_end_15:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1334,7 +1391,7 @@ pattern_registry_seal_global:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1344,7 +1401,7 @@ pattern_registry_seal_global:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1550,12 +1607,12 @@ pattern_set_new:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_22:
+L_loop_top_24:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x200, %rax
@@ -1568,7 +1625,7 @@ L_loop_top_22:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_23
+    jz L_loop_end_25
     movq -16(%rbp), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1613,12 +1670,12 @@ L_loop_top_22:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_22
-L_loop_end_23:
+    jmp L_loop_top_24
+L_loop_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1659,7 +1716,7 @@ pattern_set_add:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1672,7 +1729,7 @@ pattern_set_add:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -1792,7 +1849,7 @@ pattern_set_has:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1802,7 +1859,7 @@ pattern_set_has:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_29:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -1911,7 +1968,7 @@ pattern_set_verify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_31
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1921,7 +1978,7 @@ pattern_set_verify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_31:
     movzbq L_g_pattern_table_sealed(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1934,7 +1991,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1944,7 +2001,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax

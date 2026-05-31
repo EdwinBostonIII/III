@@ -437,6 +437,29 @@ L_if_end_11:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
+    movl -56(%rbp), %eax
+    pushq %rax
+    movabsq $0xffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movslq L_FED_SEAL_E_QC(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
     movabsq $0x2c, %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -475,7 +498,7 @@ L_if_end_11:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movslq L_FED_SEAL_E_QC(%rip), %rax
     pushq %rax
     popq %rax
@@ -485,7 +508,7 @@ L_if_end_11:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movq -32(%rbp), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -549,7 +572,7 @@ fed_seal_lookup_anchor:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -559,12 +582,12 @@ fed_seal_lookup_anchor:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_16:
+L_loop_top_18:
     movl -40(%rbp), %eax
     pushq %rax
     movl L_FED_SEAL_USED(%rip), %eax
@@ -577,7 +600,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_19
     leaq L_FED_SEAL_LIVE(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -596,7 +619,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     leaq L_FED_SEAL_CHILD_TIER(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -615,7 +638,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     leaq L_FED_SEAL_CHILD_ROOT(%rip), %rax
     pushq %rax
     popq %rax
@@ -657,7 +680,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     movl -40(%rbp), %eax
     pushq %rax
     popq %rax
@@ -667,15 +690,15 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_25:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_23:
     movq $0, %rax
     pushq %rax
     popq %rax
 L_if_end_21:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_19:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -690,8 +713,8 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_18
+L_loop_end_19:
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -750,7 +773,7 @@ fed_seal_anchor:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movslq L_FED_SEAL_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -760,7 +783,7 @@ fed_seal_anchor:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -773,7 +796,7 @@ L_if_end_25:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_29
     movslq L_FED_SEAL_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -783,37 +806,8 @@ L_if_end_25:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
-    movl -40(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq L__fseal_valid_tier
-    addq $32, %rsp
-    movzbq %al, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_29
-    movslq L_FED_SEAL_E_BADTIER(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
 L_if_end_29:
-    movl -56(%rbp), %eax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -844,12 +838,18 @@ L_if_end_29:
 L_if_end_31:
     movl -56(%rbp), %eax
     pushq %rax
-    movl -40(%rbp), %eax
+    popq %rcx
+    subq $32, %rsp
+    callq L__fseal_valid_tier
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setbe %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -865,6 +865,29 @@ L_if_end_31:
     pushq %rax
     popq %rax
 L_if_end_33:
+    movl -56(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setbe %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movslq L_FED_SEAL_E_BADTIER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
     movq -48(%rbp), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -886,7 +909,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_37
     movslq L_FED_SEAL_E_ALREADY(%rip), %rax
     pushq %rax
     popq %rax
@@ -896,7 +919,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_37:
     movl L_FED_SEAL_USED(%rip), %eax
     pushq %rax
     movl L_FED_SEAL_SLOTS(%rip), %eax
@@ -909,7 +932,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_39
     movslq L_FED_SEAL_E_FULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -919,7 +942,7 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_39:
     movl L_FED_SEAL_USED(%rip), %eax
     pushq %rax
     popq %rax
@@ -1022,7 +1045,7 @@ L_if_end_37:
     pushq %rax
     popq %rax
     movq %rax, -128(%rbp)
-L_loop_top_38:
+L_loop_top_40:
     movq -128(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -1035,7 +1058,7 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
+    jz L_loop_end_41
     movq -96(%rbp), %rax
     pushq %rax
     movq -128(%rbp), %rax
@@ -1081,8 +1104,8 @@ L_loop_top_38:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
+    jmp L_loop_top_40
+L_loop_end_41:
     movl L_FED_SEAL_USED(%rip), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1147,7 +1170,7 @@ fed_seal_anchor_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_43
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1157,7 +1180,7 @@ fed_seal_anchor_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_43:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1170,7 +1193,7 @@ L_if_end_41:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_45
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1180,7 +1203,7 @@ L_if_end_41:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_45:
     leaq L_FED_SEAL_LIVE(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1199,7 +1222,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_47
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1209,7 +1232,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_47:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -1222,7 +1245,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_49
     leaq L_FED_SEAL_CHILD_ROOT(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1257,7 +1280,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_49:
     leaq L_FED_SEAL_PARENT_ROOT(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1326,7 +1349,7 @@ fed_seal_compute_chain_root:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_51
     movslq L_FED_SEAL_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -1336,7 +1359,7 @@ fed_seal_compute_chain_root:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_51:
     subq $32, %rsp
     callq mhash_begin
     addq $32, %rsp
@@ -1361,7 +1384,7 @@ L_if_end_49:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_50:
+L_loop_top_52:
     movl -24(%rbp), %eax
     pushq %rax
     movl L_FED_SEAL_USED(%rip), %eax
@@ -1374,7 +1397,7 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_51
+    jz L_loop_end_53
     leaq L_FED_SEAL_LIVE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1393,7 +1416,7 @@ L_loop_top_50:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_53
+    jz L_if_end_55
     leaq L_FED_SEAL_CHILD_TIER(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1509,7 +1532,7 @@ L_loop_top_50:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_53:
+L_if_end_55:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1524,8 +1547,8 @@ L_if_end_53:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_50
-L_loop_end_51:
+    jmp L_loop_top_52
+L_loop_end_53:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1565,7 +1588,7 @@ fed_seal_clear:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_54:
+L_loop_top_56:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_FED_SEAL_SLOTS(%rip), %eax
@@ -1578,7 +1601,7 @@ L_loop_top_54:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_55
+    jz L_loop_end_57
     leaq L_FED_SEAL_LIVE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1623,13 +1646,13 @@ L_loop_top_54:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_54
-L_loop_end_55:
+    jmp L_loop_top_56
+L_loop_end_57:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_56:
+L_loop_top_58:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x2000, %rax
@@ -1642,7 +1665,7 @@ L_loop_top_56:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_57
+    jz L_loop_end_59
     leaq L_FED_SEAL_CHILD_ROOT(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1677,8 +1700,8 @@ L_loop_top_56:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_56
-L_loop_end_57:
+    jmp L_loop_top_58
+L_loop_end_59:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

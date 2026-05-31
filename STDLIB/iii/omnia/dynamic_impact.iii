@@ -87,20 +87,56 @@ fn dynamic_impact_count() -> u32 @export {
     return IMPACT_COUNT
 }
 
-/* Aggregate sum (treating values as signed i32 sign-extended to i64).
- * Returned via two u64 sentinels because iii has no i64 return. */
-var IMPACT_SUM_PERF_LO : u64 = 0u64
-var IMPACT_SUM_PERF_HI : u64 = 0u64
+/* Sign-extend a u32 holding an i32 (signed basis points, two's-complement) to a 64-bit
+ * two's-complement value in a u64.  W4.3 (II-DYNIMP-2): the prior aggregate cast `as u64`,
+ * which ZERO-extends -- a stored -100 (0xFFFFFF9C) became +4294967196, corrupting any sum
+ * with a negative term. */
+fn _di_sext32(v: u32) -> u64 {
+    let lo : u64 = (v as u64) & 0xFFFFFFFFu64
+    if (v & 0x80000000u32) != 0u32 { return lo | 0xFFFFFFFF00000000u64 }
+    return lo
+}
 
-fn dynamic_impact_aggregate_perf_lo() -> u64 @export {
+/* Signed 64-bit sum of all live perf basis points.  Two's-complement add over sign-extended
+ * terms yields the exact signed sum; with <=256 terms each |v| < 2^31 the magnitude < 2^39,
+ * so it never overflows i64.  iii returns the full 64 bits via u64 (the i64 bit pattern). */
+fn dynamic_impact_aggregate_perf() -> u64 @export {
     let mut sum : u64 = 0u64
     let mut i : u32 = 0u32
     while i < IMPACT_MAX {
         if IMPACT_LIVE[i] == 1u8 {
-            sum = sum + (IMPACT_PERF[i] as u64)
+            sum = sum + _di_sext32(IMPACT_PERF[i])
         }
         i = i + 1u32
     }
-    IMPACT_SUM_PERF_LO = sum
     return sum
+}
+
+/* W4.3 (II-DYNIMP-1): aggregate_ux was entirely UNIMPLEMENTED.  Same signed sum over the UX
+ * deltas -- the declared capability, now real. */
+fn dynamic_impact_aggregate_ux() -> u64 @export {
+    let mut sum : u64 = 0u64
+    let mut i : u32 = 0u32
+    while i < IMPACT_MAX {
+        if IMPACT_LIVE[i] == 1u8 {
+            sum = sum + _di_sext32(IMPACT_UX[i])
+        }
+        i = i + 1u32
+    }
+    return sum
+}
+
+/* Low / high 32-bit halves of the signed 64-bit aggregates (the "two u64 sentinels" the
+ * header names).  Kept for the split-readout API; both are now sign-correct. */
+fn dynamic_impact_aggregate_perf_lo() -> u64 @export {
+    return dynamic_impact_aggregate_perf() & 0xFFFFFFFFu64
+}
+fn dynamic_impact_aggregate_perf_hi() -> u64 @export {
+    return (dynamic_impact_aggregate_perf() >> 32u64) & 0xFFFFFFFFu64
+}
+fn dynamic_impact_aggregate_ux_lo() -> u64 @export {
+    return dynamic_impact_aggregate_ux() & 0xFFFFFFFFu64
+}
+fn dynamic_impact_aggregate_ux_hi() -> u64 @export {
+    return (dynamic_impact_aggregate_ux() >> 32u64) & 0xFFFFFFFFu64
 }

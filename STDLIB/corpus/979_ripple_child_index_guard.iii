@@ -1,0 +1,54 @@
+/* 979_ripple_child_index_guard.iii -- soundness falsifier for rn_recompute's child-index OOB read.
+ *
+ * rn_recompute reads `child` from the in_list DATA buffer and copies cell_addr[child*32] WITHOUT a
+ * `child < ncells` check (cell_addr is sized [ncells*32]). A malformed in_list with child >= ncells
+ * OOB-reads cell_addr. The fix rejects (RN_GAP) before the copy; ncells is the exact in-scope bound.
+ *
+ * arm 1: a computed cell whose single child index == ncells (out of range) must be REJECTED (RN_GAP)
+ *        -- the guard fires BEFORE the OOB read (and before rn_insert). arm 2: a single SOURCE cell
+ *        (no child reads) returns a normal pass count, proving the guard is NOT unconditional.
+ *        Valid in-range children are covered by the existing 837_forcefield_ripple. 99 = pass.
+ */
+module corpus_979
+
+extern @abi(c-msvc-x64) fn rn_ripple(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, cell_addr: *u8, in_off: *u8, in_cnt: *u8, in_list: *u8, scratch: *u8, newaddr: *u8) -> u64 from "ripple.iii"
+
+var META  : [u8; 64]
+var SLOTS : [u8; 256]
+var ARENA : [u8; 256]
+var CK    : [u8; 4]
+var CA    : [u8; 128]
+var IOFF  : [u8; 32]
+var ICNT  : [u8; 32]
+var ILIST : [u8; 32]
+var SCR   : [u8; 128]
+var NEW   : [u8; 64]
+
+fn main() -> u64 {
+    let mp  : *u8 = (&META as u64) as *u8
+    let sp  : *u8 = (&SLOTS as u64) as *u8
+    let ap  : *u8 = (&ARENA as u64) as *u8
+    let ckp : *u8 = (&CK as u64) as *u8
+    let cap : *u8 = (&CA as u64) as *u8
+    let iop : *u8 = (&IOFF as u64) as *u8
+    let icp : *u8 = (&ICNT as u64) as *u8
+    let ilp : *u8 = (&ILIST as u64) as *u8
+    let scp : *u8 = (&SCR as u64) as *u8
+    let np  : *u8 = (&NEW as u64) as *u8
+
+    /* arm 1: computed cell 0 with one child whose index = 2 = ncells (out of range) -> REJECT */
+    CK[0u32] = 1u8          /* cell 0 computed */
+    CK[1u32] = 0u8          /* cell 1 source   */
+    ICNT[0u32] = 1u8        /* in_cnt[0] = 1   (low byte; BSS-zero high bytes) */
+    IOFF[0u32] = 0u8        /* in_off[0] = 0   */
+    ILIST[0u32] = 2u8       /* in_list[0] = 2 = ncells -> out of range */
+    let r1 : u64 = rn_ripple(mp, sp, ap, 2u64, ckp, cap, iop, icp, ilp, scp, np)
+    if r1 != 0xFFFFFFFFFFFFFFFFu64 { return 1u64 }   /* RN_GAP = reject */
+
+    /* arm 2: a single SOURCE cell (no child path) returns a normal pass count, not RN_GAP */
+    CK[0u32] = 0u8
+    let r2 : u64 = rn_ripple(mp, sp, ap, 1u64, ckp, cap, iop, icp, ilp, scp, np)
+    if r2 == 0xFFFFFFFFFFFFFFFFu64 { return 2u64 }
+
+    return 99u64
+}

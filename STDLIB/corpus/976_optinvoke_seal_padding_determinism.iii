@@ -1,0 +1,51 @@
+/* 976_optinvoke_seal_padding_determinism.iii -- A-OI-2 / determinism falsifier for oi_seal.
+ *
+ * An optinvoke candidate record is 80 bytes but only [0..72] are meaningful (output [32..63],
+ * a field [64..71], validity [72]); [73..79] are PADDING. oi_seal hashed the full n*80 bytes,
+ * so uninitialized/leftover padding made the seal NON-DETERMINISTIC -- a reproducibility defect
+ * on a sealed dimension commit_gate checks. The fix streams only the 73 meaningful bytes/record.
+ *
+ * Arm 1 (the falsifier): seal a table, POISON every record's [73..79], re-seal -> the seal MUST be
+ * unchanged (padding is not content). Old code: the seals DIFFER (return 1). Fixed code: identical.
+ * Arm 2 (non-over-ignoring): flip a MEANINGFUL byte [0..72] -> the seal MUST change. Together the
+ * seal is proven a function of meaningful content ONLY. 99 = pass.
+ */
+module corpus_976
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn oi_seal(cands: *u8, n: u64, out: *u8) -> u64 from "optinvoke.iii"
+
+fn eq32(a: *u8, b: *u8) -> u8 {
+    let mut i : u64 = 0u64
+    let mut e : u8 = 1u8
+    while i < 32u64 { if a[i] != b[i] { e = 0u8 }  i = i + 1u64 }
+    return e
+}
+
+fn main() -> u64 {
+    let cands : *u8 = malloc(240u64)              /* 3 records * 80 bytes */
+    let mut k : u64 = 0u64
+    while k < 240u64 { cands[k] = ((k * 37u64 + 11u64) & 0xFFu64) as u8  k = k + 1u64 }
+    let sa : *u8 = malloc(32u64)
+    let sb : *u8 = malloc(32u64)
+    let sc : *u8 = malloc(32u64)
+
+    oi_seal(cands, 3u64, sa)
+
+    /* arm 1: poison [73..79] of each record (meaningful [0..72] untouched) */
+    let mut r : u64 = 0u64
+    while r < 3u64 {
+        let mut p : u64 = 73u64
+        while p < 80u64 { cands[r * 80u64 + p] = 0xAAu8  p = p + 1u64 }
+        r = r + 1u64
+    }
+    oi_seal(cands, 3u64, sb)
+    if eq32(sa, sb) == 0u8 { return 1u64 }        /* padding changed the seal -> NON-deterministic (the bug) */
+
+    /* arm 2: a MEANINGFUL byte change must alter the seal (the fix must not ignore content) */
+    cands[5u64] = cands[5u64] ^ 0x01u8            /* flip a byte in record 0's meaningful range */
+    oi_seal(cands, 3u64, sc)
+    if eq32(sa, sc) == 1u8 { return 2u64 }        /* meaningful change left the seal unchanged -> over-ignoring */
+
+    return 99u64
+}

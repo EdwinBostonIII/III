@@ -44,9 +44,22 @@ extern @abi(c-msvc-x64) fn bigint_add(arena_id: u64, a: u64, b: u64) -> u64 from
 extern @abi(c-msvc-x64) fn bigint_sub(arena_id: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_mul(arena_id: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+/* D-KARA-3: above KARA_NTT_THRESHOLD limbs the recursive split would, on deep enough recursion,
+ * exhaust the 64-entry bigint slot table and silently corrupt the product (D-KARA-1).  The NTT
+ * multiply does the whole product in flat buffers (one result allocation), so it cannot exhaust. */
+extern @abi(c-msvc-x64) fn bigint_mul_ntt(arena: u64, a: u64, b: u64) -> u64 from "ntt_bigint.iii"
 
 const KARA_INVALID    : u64 = 0u64
-const KARA_THRESHOLD  : u64 = 32u64       /* fall through to schoolbook below this */
+/* APOTHEOSIS S.2.5 unit clarification: both thresholds are in u64-LIMB units
+ * (radix 2^64).  The shared §S.1 compute layer counts radix-2^32 DIGITS, which
+ * is 2x these (so 32 limbs = 64 digits, 2048 limbs = 4096 digits).  The VALUES
+ * are unchanged -- they are KAT-tuned (corpus 143 Karatsuba, 725 large-route);
+ * retuning them is a behaviour change with no measured gain, deliberately not
+ * done (simple-until-proven-otherwise). */
+const KARA_THRESHOLD  : u64 = 32u64       /* u64-limbs (=64 radix-2^32 digits): below this, schoolbook */
+/* Route to the NTT multiply at/above this u64-limb count: keeps Karatsuba recursion shallow enough
+ * that the 64-slot bigint table never exhausts (the D-KARA-1 danger zone begins around here). */
+const KARA_NTT_THRESHOLD : u64 = 2048u64  /* u64-limbs (=4096 radix-2^32 digits): at/above this, NTT */
 
 /* Build a fresh bigint holding the limbs of `src` from index `lo`
  * (inclusive) to `hi` (exclusive).  Returns 0 on OOM.
@@ -107,6 +120,16 @@ fn bigint_mul_karatsuba(arena: u64, a: u64, b: u64) -> u64 @export {
     if nb > max_n { max_n = nb }
     if max_n == 0u64 { return bigint_from_u64(arena_l, 0u64) }
     if max_n <= KARA_THRESHOLD {
+        return bigint_mul(arena_l, a_l, b_l)
+    }
+    /* D-KARA-3: large operands take the exhaustion-proof NTT path (the recursion below would
+     * otherwise overflow the 64-slot bigint table and silently zero a half -- D-KARA-1).  If the
+     * operand is larger than the NTT buffers (bigint_mul_ntt returns BIGINT_INVALID), fall back to
+     * schoolbook -- O(n^2) but it allocates only the result, so it also cannot exhaust the table.
+     * Never silently return a wrong product. */
+    if max_n >= KARA_NTT_THRESHOLD {
+        let ntt_r : u64 = bigint_mul_ntt(arena_l, a_l, b_l)
+        if ntt_r != KARA_INVALID { return ntt_r }
         return bigint_mul(arena_l, a_l, b_l)
     }
 

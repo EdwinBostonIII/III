@@ -1,8 +1,10 @@
 {
   "tool": "build_iiis1.sh",
-  "ported_tus": "acc,ast,ceiling,cg_r0,cg_r3,cg_rm1,cg_rm2,emit,hexad_check,jit_emit,lex,link,main,parse,proof,sema,sid,witness_alloc",
+  "ported_tus": "acc,ast,ceiling,cg_r0,cg_r3,cg_r3_xii,cg_r3_xii_adapter,cg_rm1,cg_rm2,cg_sha,emit,hexad_check,iii_cg_pe_iiis1,jit_emit,lex,lex_rt,link,main,parse,proof,sema,sema_xii_adapter,sid,witness_alloc,xii_ldil",
   "mode": "release",
   "iiis0_used": "iiis-0.exe",
   "output": "iiis-1.exe",
-  "output_mhash": "a82dc08ef4689c7ea36329d1a20a4ee3786d9b843b7d230e28ed83845862ac0c"
+  "source_files": [""],
+  "output_mhash": "196b0c5f5159329b2e419aecb561ee57980d62bcc892ea84f260559bcdfaa990",
+  "note": "re-frozen seed: byte-identical to the converged fixed point iiis-1==iiis-2==iiis-3 (genuine builds via build_iiis2/build_iiis3, 59/0 stage1-equiv); iiis-0 can no longer re-seed from scratch (post-port parse.iii needs iii_lex_*_c) so the seed is promoted to the new fixed point per DOCS/III-DISPOSITION-EXECUTION.md"
 }

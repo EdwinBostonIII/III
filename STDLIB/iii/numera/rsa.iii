@@ -25,6 +25,13 @@ extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, m: u64) -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
+/* APOTHEOSIS S.2.6: the shared CIOS organ + raw-buffer bridge (deletes RSA's duplicate CIOS reduction). */
+extern @abi(c-msvc-x64) fn mont_load_raw(a_ptr: u64, b_ptr: u64, n_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_store_raw(out_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_cios_run(s: u64, nprime: u64, free: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_load_one_raw(a_ptr: u64, n_ptr: u64, s: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_sq_run(s: u64, nprime: u64, free: u64) -> i32 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_nprime64(n0: u64) -> u64 from "bigint_div.iii"
 extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_to_u64_lo(id: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
@@ -484,6 +491,7 @@ fn rsa_keygen(arena: u64, modBits: u64, seed: u64, slen: u64) -> i32 @export {
      * d = (1 + k*phi) / e (exact). */
     let pe_big : u64 = bigint_mod(arena, phi, e_big)
     let pe : u64 = bigint_to_u64_lo(pe_big)
+    if pe == 0u64 { return 0i32 - 1i32 }   /* phi mod e == 0 -> e | phi -> no inverse; d would collapse to 0 (dead key) [audit rsa-1] */
     let inv_pe : u64 = rsa_u64_modexp(pe, RSA_E_PUB - 2u64, RSA_E_PUB)
     let k : u64 = (RSA_E_PUB - inv_pe) % RSA_E_PUB
     let kphi : u64 = bigint_mul_u64(arena, phi, k)
@@ -588,64 +596,47 @@ fn rm_dbl(buf: u64, nw: u64) -> i32 {
     return 0i32
 }
 
-/* out = a*b*R^-1 mod N (CIOS), nw u32 limbs.  out/a/b are u32 buffers. */
+/* out = a*b*R^-1 mod N (nw u32 limbs; out/a/b/N are u32 buffers).  APOTHEOSIS
+ * S.2.6: delegates to the SHARED CIOS organ (numera::bigint_div mont_cios_run)
+ * through the raw-buffer bridge, deleting RSA's duplicate CIOS reduction -- one
+ * reduction proof surface shared with bigint modpow + the NIST fields.  Stays
+ * allocation-free (H-2: loads fixed buffers, no per-multiply bigint) and
+ * constant-time (mont_cios_run uses the masked mont_cond_sub_ct, like rm_csub).
+ * RM_NP[0] is the cached n', RM_N the modulus; a is reduced (< N) at every call
+ * site (the modpow loop keeps Montgomery values in [0,N)), so Theorem 1 holds. */
 fn rm_mont_mul(out: u64, a: u64, b: u64, nw: u64) -> i32 {
-    let ap : *u32 = a as *u32
-    let bp : *u32 = b as *u32
-    let pp : *u32 = &RM_N as *u32
     let np : u64 = RM_NP[0] as u64
-    let mut k : u64 = 0u64
-    while k < nw + 2u64 { RM_T[k] = 0u64 ; k = k + 1u64 }
-    let mut i : u64 = 0u64
-    while i < nw {
-        let bi : u64 = bp[i] as u64
-        let mut c : u64 = 0u64
-        let mut j : u64 = 0u64
-        while j < nw {
-            let uv : u64 = RM_T[j] + (ap[j] as u64) * bi + c
-            RM_T[j] = uv & 0xFFFFFFFFu64
-            c = uv >> 32u64
-            j = j + 1u64
-        }
-        let uvn : u64 = RM_T[nw] + c
-        RM_T[nw] = uvn & 0xFFFFFFFFu64
-        RM_T[nw + 1u64] = uvn >> 32u64
-        let m : u64 = (RM_T[0] * np) & 0xFFFFFFFFu64
-        let uv0 : u64 = RM_T[0] + m * (pp[0] as u64)
-        c = uv0 >> 32u64
-        j = 1u64
-        while j < nw {
-            let uv : u64 = RM_T[j] + m * (pp[j] as u64) + c
-            RM_T[j - 1u64] = uv & 0xFFFFFFFFu64
-            c = uv >> 32u64
-            j = j + 1u64
-        }
-        let uvs : u64 = RM_T[nw] + c
-        RM_T[nw - 1u64] = uvs & 0xFFFFFFFFu64
-        RM_T[nw] = RM_T[nw + 1u64] + (uvs >> 32u64)
-        i = i + 1u64
-    }
-    let o : *u32 = out as *u32
-    let mut q : u64 = 0u64
-    while q < nw { o[q] = RM_T[q] as u32 ; q = q + 1u64 }
-    rm_csub(out, nw, RM_T[nw])
+    let mut free : u64 = 0u64
+    if np == 1u64 { free = 1u64 }
+    mont_load_raw(a, b, &RM_N as u64, nw)
+    mont_cios_run(nw, np, free)
+    mont_store_raw(out, nw)
+    return 0i32
+}
+
+/* out = a^2 * R^-1 mod N (nw u32 limbs) via the shared squaring-symmetry organ
+ * (mont_sq_run) -- ~half the partial products of rm_mont_mul, allocation-free
+ * and constant-time.  Used for the modpow loop's square step (out de-aliased). */
+fn rm_mont_sq(out: u64, a: u64, nw: u64) -> i32 {
+    let np : u64 = RM_NP[0] as u64
+    let mut free : u64 = 0u64
+    if np == 1u64 { free = 1u64 }
+    mont_load_one_raw(a, &RM_N as u64, nw)
+    mont_sq_run(nw, np, free)
+    mont_store_raw(out, nw)
     return 0i32
 }
 
 /* RSA modular exponentiation base^exp mod n via Montgomery (u32 CIOS). */
 fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
     let nw : u64 = rm_extract(n, &RM_N as u64, 130u64)
-    /* n'[0] = -N[0]^-1 mod 2^32 via Newton */
-    let n0 : u64 = RM_N[0] as u64
-    let mut x : u64 = n0
-    let mut it : u64 = 0u64
-    while it < 6u64 {
-        let prod : u64 = (n0 * x) & 0xFFFFFFFFu64
-        let tm : u64 = (2u64 + 0x100000000u64 - prod) & 0xFFFFFFFFu64
-        x = (x * tm) & 0xFFFFFFFFu64
-        it = it + 1u64
-    }
-    RM_NP[0] = ((0x100000000u64 - x) & 0xFFFFFFFFu64) as u32
+    /* n'[0] = -N[0]^-1 mod 2^32 via the SHARED Newton organ (mont_nprime64).
+     * APOTHEOSIS S.2.6 finish: rsa's 32-bit CIOS needs only n' mod 2^32, and
+     * mont_nprime64(n0)'s low 32 bits are exactly -N0^-1 mod 2^32 (n' mod 2^32
+     * depends only on N mod 2^32), so the duplicated inline 32-bit Newton is
+     * deleted -- ONE Newton proof surface, shared with bigint modpow + fields. */
+    let n0full : u64 = (RM_N[0] as u64) | ((RM_N[1] as u64) << 32u64)
+    RM_NP[0] = (mont_nprime64(n0full) & 0xFFFFFFFFu64) as u32
     /* R2 = 2^(64*nw) mod N : start at R mod N = 2^(32*nw) mod N = 2^(32*nw)-N,
      * then double 32*nw more times.  Build R mod N = (2^(32*nw) - N). */
     let r2 : *u32 = &RM_R2 as *u32
@@ -677,7 +668,7 @@ fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
     let mut bit : u64 = ebits
     while bit > 0u64 {
         bit = bit - 1u64
-        rm_mont_mul(&RM_TMP as u64, &RM_RES as u64, &RM_RES as u64, nw)   /* square (de-aliased) */
+        rm_mont_sq(&RM_TMP as u64, &RM_RES as u64, nw)   /* square via symmetry organ (de-aliased) */
         rm_copy(&RM_RES as u64, &RM_TMP as u64, nw)
         let limb : u64 = bigint_get_limb(exp, bit / 64u64)
         let ebit : u64 = (limb >> (bit % 64u64)) & 1u64

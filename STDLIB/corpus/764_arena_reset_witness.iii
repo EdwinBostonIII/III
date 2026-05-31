@@ -1,0 +1,65 @@
+/* APOTHEOSIS S.7 / ADR-S7b falsifier: a witnessed reset proves the caller
+ * holds the arena's CURRENT incarnation, and refuses an ABA-stale witness.
+ *
+ * Arms:
+ *   positive  -- the held witness matches -> reset succeeds, used -> 0
+ *   stable    -- the witness survives a reset (base/capacity unchanged)
+ *   garbage   -- a wrong witness -> REFUSE (used is NOT reset)
+ *   ABA       -- release the arena, re-allocate a DIFFERENT capacity in the
+ *                reused slot; the OLD witness must be REFUSED (the whole
+ *                point -- a stale reset cannot fire on a new incarnation)
+ *   fresh     -- the new incarnation's own witness -> reset succeeds
+ */
+module corpus_c764
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_used(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_witness_lo(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_witness_hi(id: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset_with_witness(id: u64, w_lo: u64, w_hi: u64) -> i32 from "arena.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(4096u64)
+    if a == 0u64 { return 1u64 }
+    let _p : u64 = arena_alloc8(a, 64u64)
+    if arena_used(a) == 0u64 { return 2u64 }
+
+    /* capture the witness for THIS incarnation (a real witness is the hash of
+     * a nonzero base, so it is not (0,0)) */
+    let wlo : u64 = arena_witness_lo(a)
+    let whi : u64 = arena_witness_hi(a)
+    if wlo == 0u64 { if whi == 0u64 { return 3u64 } }
+
+    /* positive: held witness matches -> reset, used -> 0 */
+    if arena_reset_with_witness(a, wlo, whi) != 0i32 { return 4u64 }
+    if arena_used(a) != 0u64 { return 5u64 }
+
+    /* stable: reset does not change base/capacity, so the witness still works */
+    let _p2 : u64 = arena_alloc8(a, 64u64)
+    if arena_reset_with_witness(a, wlo, whi) != 0i32 { return 6u64 }
+
+    /* garbage: a wrong witness must REFUSE and leave used intact */
+    let _p3 : u64 = arena_alloc8(a, 64u64)
+    if arena_reset_with_witness(a, 0xBADu64, 0xBADu64) != -7i32 { return 7u64 }
+    if arena_used(a) == 0u64 { return 8u64 }
+
+    /* ABA: release, re-allocate a DIFFERENT capacity (likely the same slot),
+     * the OLD witness must be refused */
+    arena_drop(a)
+    let b : u64 = arena_new(8192u64)
+    if b == 0u64 { return 9u64 }
+    let _q : u64 = arena_alloc8(b, 64u64)
+    if arena_reset_with_witness(b, wlo, whi) != -7i32 { return 10u64 }
+    if arena_used(b) == 0u64 { return 11u64 }
+
+    /* fresh: the new incarnation's own witness succeeds */
+    let blo : u64 = arena_witness_lo(b)
+    let bhi : u64 = arena_witness_hi(b)
+    if arena_reset_with_witness(b, blo, bhi) != 0i32 { return 12u64 }
+    if arena_used(b) != 0u64 { return 13u64 }
+
+    arena_drop(b)
+    return 99u64
+}

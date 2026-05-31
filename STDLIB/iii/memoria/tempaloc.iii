@@ -1,0 +1,165 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\tempaloc.iii
+ *
+ * III STDLIB - memoria::tempaloc  (APOTHEOSIS S.7, ADR-S7a)
+ *
+ * The ONE type-discriminated handle organ.  region, instant and deadline
+ * each used to re-implement the identical triad "allocate a free slot,
+ * mark it live, validate (live + in-bounds) on every access" over a
+ * private LIVE table.  tempaloc collapses those three slot tables into a
+ * single global table with one dispatch proof surface AND adds a property
+ * none of them had: a handle carries its TYPE in its upper byte, so a
+ * mis-typed handle (a region id passed where an instant id is expected)
+ * is a CAUGHT error rather than a silent slot-index collision (today
+ * region id 5 and instant id 5 are indistinguishable u64s).
+ *
+ * WHAT A HANDLE IS.  A handle is a u64:  (type_tag << 56) | (g + 1)
+ *   - upper byte      = the TYPE tag (REGION / INSTANT / DEADLINE)
+ *   - lower 56 bits   = (global slot index g) + 1, so the raw part is
+ *                       never 0 and 0u64 stays the universal "invalid".
+ * g+1 <= 384, far below 2^56, so the index never bleeds into the type byte.
+ *
+ * SUB-RANGE LAYOUT.  The 512-entry global table is partitioned into
+ * disjoint per-type ranges so each module's LOCAL slot == (g - base) keeps
+ * that module's data arrays at their HISTORICAL sizes -- region stays 64,
+ * instant stays 256, deadline stays 64 -- which leaves each consumer's own
+ * .bss arrangement undisturbed (the layout-sensitivity those files warn
+ * about lives in their data arrays, which tempaloc does not touch):
+ *     REGION   [0,   64)   cap 64
+ *     INSTANT  [64,  320)  cap 256
+ *     DEADLINE [320, 384)  cap 64
+ * 384 <= 512; 128 spare global slots for future temporal handle types.
+ * Because tempaloc_alloc scans a type's sub-range low-to-high exactly as
+ * the old per-module scans did, allocation ORDER and the resulting local
+ * slot are bit-identical to the legacy scheme -- the only externally
+ * visible change is the type tag now present in the returned id.
+ *
+ * Hexad: kind_substance.  Ring: R0.  K: 1.00 (pure in-table dispatch).
+ */
+
+module memoria_tempaloc
+
+/* --- Type tags (handle upper byte).  0 = none/free. --- */
+const TEMPALOC_TYPE_NONE     : u8 = 0u8
+const TEMPALOC_TYPE_REGION   : u8 = 1u8
+const TEMPALOC_TYPE_INSTANT  : u8 = 2u8
+const TEMPALOC_TYPE_DEADLINE : u8 = 3u8
+const TEMPALOC_TYPE_SEAL     : u8 = 4u8
+
+const TEMPALOC_CAP : u32 = 512u32              /* total global handle slots */
+const TEMPALOC_BAD : u32 = 0xFFFFFFFFu32       /* "no such slot" sentinel   */
+
+/* --- Sub-range bases / caps (see header).  SEAL occupies the formerly-spare
+ *     range [384,448); REGION/INSTANT/DEADLINE bases are unchanged. --- */
+const TEMPALOC_REGION_BASE   : u32 = 0u32
+const TEMPALOC_REGION_CAP    : u32 = 64u32
+const TEMPALOC_INSTANT_BASE  : u32 = 64u32
+const TEMPALOC_INSTANT_CAP   : u32 = 256u32
+const TEMPALOC_DEADLINE_BASE : u32 = 320u32
+const TEMPALOC_DEADLINE_CAP  : u32 = 64u32
+const TEMPALOC_SEAL_BASE     : u32 = 384u32
+const TEMPALOC_SEAL_CAP      : u32 = 64u32
+
+/* --- The one global table (module-scope, runtime-index safe). --- */
+var TEMPALOC_TYPE : [u8;  512]   /* type tag per global slot, 0 = free      */
+var TEMPALOC_LIVE : [u8;  512]   /* 1 = allocated/live                       */
+var TEMPALOC_SLOT : [u32; 512]   /* module-local slot index (= g - base)     */
+
+/* Return the global base index for a type, or TEMPALOC_BAD if unknown.
+ * when-cascade (NOT select(): select eagerly evaluates both arms). */
+fn tempaloc_base_of(t: u8) -> u32 {
+    if t == TEMPALOC_TYPE_REGION   { return TEMPALOC_REGION_BASE }
+    if t == TEMPALOC_TYPE_INSTANT  { return TEMPALOC_INSTANT_BASE }
+    if t == TEMPALOC_TYPE_DEADLINE { return TEMPALOC_DEADLINE_BASE }
+    if t == TEMPALOC_TYPE_SEAL     { return TEMPALOC_SEAL_BASE }
+    return TEMPALOC_BAD
+}
+
+fn tempaloc_cap_of(t: u8) -> u32 {
+    if t == TEMPALOC_TYPE_REGION   { return TEMPALOC_REGION_CAP }
+    if t == TEMPALOC_TYPE_INSTANT  { return TEMPALOC_INSTANT_CAP }
+    if t == TEMPALOC_TYPE_DEADLINE { return TEMPALOC_DEADLINE_CAP }
+    if t == TEMPALOC_TYPE_SEAL     { return TEMPALOC_SEAL_CAP }
+    return 0u32
+}
+
+/* Allocate the lowest free slot of `type_tag`'s sub-range.  Returns a typed
+ * handle, or 0u64 if the type is unknown or its sub-range is exhausted. */
+fn tempaloc_alloc(type_tag: u64) -> u64 @export {
+    let t : u8 = (type_tag & 0xFFu64) as u8
+    let base : u32 = tempaloc_base_of(t)
+    if base == TEMPALOC_BAD { return 0u64 }
+    let cap : u32 = tempaloc_cap_of(t)
+    let mut i : u32 = 0u32
+    let mut g : u32 = TEMPALOC_BAD
+    while i < cap {
+        let idx : u32 = base + i
+        if TEMPALOC_LIVE[idx] == 0u8 {
+            if g == TEMPALOC_BAD { g = idx }
+        }
+        i = i + 1u32
+    }
+    if g == TEMPALOC_BAD { return 0u64 }
+    TEMPALOC_TYPE[g] = t
+    TEMPALOC_LIVE[g] = 1u8
+    TEMPALOC_SLOT[g] = g - base
+    let raw : u64 = (g as u64) + 1u64
+    return ((t as u64) << 56u64) | raw
+}
+
+/* THE dispatch.  One bounds-check + one falsifiable type-check.  Returns the
+ * module-local slot index, or TEMPALOC_BAD if the handle is the wrong type,
+ * out of range, or no longer live (use-after-free is caught here). */
+fn tempaloc_slot_of(handle: u64, expected_type: u64) -> u32 @export {
+    let want  : u8 = (expected_type & 0xFFu64) as u8
+    let htype : u8 = ((handle >> 56u64) & 0xFFu64) as u8
+    if htype != want { return TEMPALOC_BAD }                 /* type-check (from handle) */
+    let raw : u64 = handle & 0x00FFFFFFFFFFFFFFu64
+    if raw == 0u64 { return TEMPALOC_BAD }
+    let g64 : u64 = raw - 1u64
+    if g64 >= (TEMPALOC_CAP as u64) { return TEMPALOC_BAD }   /* bounds-check */
+    let g : u32 = g64 as u32
+    if TEMPALOC_LIVE[g] == 0u8 { return TEMPALOC_BAD }        /* liveness */
+    if TEMPALOC_TYPE[g] != want { return TEMPALOC_BAD }       /* type-check (table consistency: defeats a forged upper byte) */
+    return TEMPALOC_SLOT[g]
+}
+
+/* Release a handle.  Validates type first (so freeing with the wrong type is
+ * itself a caught error and a no-op), then clears the global slot. */
+fn tempaloc_free(handle: u64, expected_type: u64) -> i32 @export {
+    let s : u32 = tempaloc_slot_of(handle, expected_type)
+    if s == TEMPALOC_BAD { return -1i32 }
+    let raw : u64 = handle & 0x00FFFFFFFFFFFFFFu64
+    let g : u32 = (raw - 1u64) as u32
+    TEMPALOC_TYPE[g] = TEMPALOC_TYPE_NONE
+    TEMPALOC_LIVE[g] = 0u8
+    TEMPALOC_SLOT[g] = 0u32
+    return 0i32
+}
+
+/* Count live handles of a given type (replaces each module's private
+ * count-live scan). */
+fn tempaloc_count_live(type_tag: u64) -> u32 @export {
+    let t : u8 = (type_tag & 0xFFu64) as u8
+    let base : u32 = tempaloc_base_of(t)
+    if base == TEMPALOC_BAD { return 0u32 }
+    let cap : u32 = tempaloc_cap_of(t)
+    let mut i : u32 = 0u32
+    let mut n : u32 = 0u32
+    while i < cap {
+        let idx : u32 = base + i
+        if TEMPALOC_LIVE[idx] == 1u8 {
+            if TEMPALOC_TYPE[idx] == t { n = n + 1u32 }
+        }
+        i = i + 1u32
+    }
+    return n
+}
+
+/* Expose the type tags as functions so consumers (region/instant/deadline)
+ * and KATs name them through one surface rather than re-declaring the
+ * literals.  (Constants are module-local in iiis-2; these are the public
+ * contract.) */
+fn tempaloc_type_region()   -> u64 @export { return TEMPALOC_TYPE_REGION   as u64 }
+fn tempaloc_type_instant()  -> u64 @export { return TEMPALOC_TYPE_INSTANT  as u64 }
+fn tempaloc_type_deadline() -> u64 @export { return TEMPALOC_TYPE_DEADLINE as u64 }
+fn tempaloc_type_seal()     -> u64 @export { return TEMPALOC_TYPE_SEAL     as u64 }

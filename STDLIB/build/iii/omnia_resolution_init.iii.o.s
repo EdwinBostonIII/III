@@ -48,6 +48,8 @@ L_str_20:
     .section .rodata
 L_RES_INIT_OK:
     .quad 0x0
+L_RES_INIT_E_REGISTER:
+    .quad 0xffffffffffffffff
     .section .bss
     .global L_INIT_MODULE_MHASH
 L_INIT_MODULE_MHASH:
@@ -55,6 +57,11 @@ L_INIT_MODULE_MHASH:
     .global L_INIT_TEMPLATE_BUF
 L_INIT_TEMPLATE_BUF:
     .zero 1344
+    .section .data
+    .global L_META_REG_FAIL
+L_META_REG_FAIL:
+    .quad 0x0
+    .section .bss
     .global L_INIT_NAME_BUF
 L_INIT_NAME_BUF:
     .zero 256
@@ -387,6 +394,37 @@ L_if_end_5:
     movzbq %al, %rax
     pushq %rax
     popq %rax
+    movq %rax, -64(%rbp)
+    movzbq -64(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_META_REG_FAIL(%rip)
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -413,6 +451,10 @@ meta_register_all:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movb %al, L_META_REG_FAIL(%rip)
     movabsq $0x31, %rax
     pushq %rax
     movabsq $0x30, %rax
@@ -850,6 +892,29 @@ meta_register_all:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movzbq L_META_REG_FAIL(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movslq L_RES_INIT_E_REGISTER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movslq L_RES_INIT_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -891,7 +956,7 @@ resolution_init:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_13
     movslq L_RES_INIT_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -901,7 +966,7 @@ resolution_init:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_13:
     subq $32, %rsp
     callq calculus_init
     addq $32, %rsp
@@ -919,19 +984,79 @@ L_if_end_9:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movslq L_RES_INIT_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_15
+    movslq L_RES_INIT_E_REGISTER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_15:
     subq $32, %rsp
     callq transform_register_all
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movslq L_RES_INIT_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_17
+    movslq L_RES_INIT_E_REGISTER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_17:
     subq $32, %rsp
     callq codegen_register_all
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movslq L_RES_INIT_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movslq L_RES_INIT_E_REGISTER(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
     subq $32, %rsp
     callq pattern_registry_seal_global
     addq $32, %rsp
@@ -964,7 +1089,7 @@ L_if_end_9:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_21
     subq $32, %rsp
     callq closure_compute_with_resolver
     addq $32, %rsp
@@ -974,7 +1099,7 @@ L_if_end_9:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_21:
     movslq L_RES_INIT_OK(%rip), %rax
     pushq %rax
     popq %rax

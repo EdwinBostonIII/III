@@ -1,0 +1,78 @@
+/* 950 -- W4.5 / CUT-16 coverage: omnia/xii_emit_gen_produce is LIVE (the emitter-catalog
+ * generator's build-time caller), NOT dead -- CUT-16's removal premise was WRONG.  This covers
+ * the catalog instead of removing the function: it proves (a) a curated override CHANGES the
+ * produced bytes for a NON-crypto horizon (the override path is live), and (b) for a CRYPTO
+ * horizon (< 24) a registered override is NEVER served -- produce is byte-identical before and
+ * after registration, and xeg_override_index returns the no-override sentinel (the W1.1
+ * chokepoint).  Plus produce well-formedness (size + out-of-range rejection).  99 = pass. */
+module corpus_950
+
+extern @abi(c-msvc-x64) fn xii_emit_gen_produce(horizon_id: u32, target: u32, expected_size: u32, out: *u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xeg_override_index(horizon_id: u8, target: u8) -> u32 from "xii_emit_gen.iii"
+extern @abi(c-msvc-x64) fn xii_horizon_is_productive(id: u32) -> u8 from "xii_horizon.iii"
+
+var XEG_OUT     : [u8; 4096]
+var XEG_SNAP    : [u8; 4096]
+var XEG_CURATED : [u8; 32]
+
+fn xeg_snap(n: u32) -> i32 {
+    let mut i : u32 = 0u32
+    while i < n { XEG_SNAP[i] = XEG_OUT[i]  i = i + 1u32 }
+    return 0i32
+}
+
+/* 1u8 iff XEG_OUT[0..n) == XEG_SNAP[0..n). */
+fn xeg_out_eq_snap(n: u32) -> u8 {
+    let mut i : u32 = 0u32
+    while i < n {
+        if XEG_OUT[i] != XEG_SNAP[i] { return 0u8 }
+        i = i + 1u32
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* Find one productive crypto horizon (< 24) and one productive non-crypto horizon (>= 24). */
+    let mut hc : u32 = 0xFFFFFFFFu32
+    let mut hn : u32 = 0xFFFFFFFFu32
+    let mut h : u32 = 0u32
+    while h < 144u32 {
+        if xii_horizon_is_productive(h) == 1u8 {
+            if h < 24u32 { if hc == 0xFFFFFFFFu32 { hc = h } }
+            if h >= 24u32 { if hn == 0xFFFFFFFFu32 { hn = h } }
+        }
+        h = h + 1u32
+    }
+    if hc == 0xFFFFFFFFu32 { return 1u64 }
+    if hn == 0xFFFFFFFFu32 { return 2u64 }
+
+    let mut f : u32 = 0u32
+    while f < 32u32 { XEG_CURATED[f] = 0xCCu8  f = f + 1u32 }
+    let sz : u32 = 256u32
+    let out : *u8 = (&XEG_OUT) as u64 as *u8
+    let cur : *u8 = (&XEG_CURATED) as u64 as *u8
+
+    /* NON-CRYPTO: a curated override CHANGES the produced bytes (the override path is LIVE). */
+    if xii_emit_gen_produce(hn, 0u32, sz, out) != sz { return 3u64 }
+    xeg_snap(sz)
+    if xii_emit_gen_override(hn as u8, 0u8, cur, 32u16) != 0i32 { return 4u64 }
+    if xeg_override_index(hn as u8, 0u8) == 0xFFFFFFFFu32 { return 5u64 }   /* override visible */
+    if xii_emit_gen_produce(hn, 0u32, sz, out) != sz { return 6u64 }
+    if xeg_out_eq_snap(sz) == 1u8 { return 7u64 }                           /* MUST differ: served */
+
+    /* CRYPTO: a curated override is NEVER served -- produce is byte-identical before/after, and
+     * xeg_override_index reports the no-override sentinel (the X25/W1.1 chokepoint). */
+    if xii_emit_gen_produce(hc, 0u32, sz, out) != sz { return 8u64 }
+    xeg_snap(sz)
+    if xii_emit_gen_override(hc as u8, 0u8, cur, 32u16) != 0i32 { return 9u64 }
+    if xeg_override_index(hc as u8, 0u8) != 0xFFFFFFFFu32 { return 10u64 } /* FALSIFIER: chokepoint */
+    if xii_emit_gen_produce(hc, 0u32, sz, out) != sz { return 11u64 }
+    if xeg_out_eq_snap(sz) != 1u8 { return 12u64 }                         /* MUST match: override dead */
+
+    /* produce well-formedness: out-of-range and too-small are rejected (return 0). */
+    if xii_emit_gen_produce(144u32, 0u32, sz, out) != 0u32 { return 13u64 }
+    if xii_emit_gen_produce(hn, 7u32, sz, out)     != 0u32 { return 14u64 }
+    if xii_emit_gen_produce(hn, 0u32, 1u32, out)   != 0u32 { return 15u64 }
+    return 99u64
+}

@@ -2375,14 +2375,16 @@ topoa_neighbors:
     movq %rdx, -16(%rbp)
     movq %r8, -24(%rbp)
     movq %r9, -32(%rbp)
+    movq 48(%rbp), %rax
+    movq %rax, -40(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
+    movq %rax, -48(%rbp)
     movzbq -16(%rbp), %rax
     pushq %rax
     popq %rax
-    movq %rax, -48(%rbp)
+    movq %rax, -56(%rbp)
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -2433,7 +2435,7 @@ L_if_end_69:
     pushq %rax
     popq %rax
 L_if_end_71:
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     movl L_TOPOA_MAX_REGIONS(%rip), %eax
     pushq %rax
@@ -2458,7 +2460,7 @@ L_if_end_71:
 L_if_end_73:
     leaq L_TOPOA_R_LIVE(%rip), %rax
     pushq %rax
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -2496,13 +2498,13 @@ L_if_end_75:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
-    movq %rax, -56(%rbp)
+    movq %rax, -64(%rbp)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
+    movq %rax, -72(%rbp)
 L_loop_top_76:
-    movl -64(%rbp), %eax
+    movl -72(%rbp), %eax
     pushq %rax
     movl L_TOPOA_MAX_EDGES(%rip), %eax
     pushq %rax
@@ -2515,11 +2517,11 @@ L_loop_top_76:
     popq %rax
     testq %rax, %rax
     jz L_loop_end_77
-    movzbq -48(%rbp), %rax
+    movzbq -56(%rbp), %rax
     pushq %rax
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
-    movl -64(%rbp), %eax
+    movl -72(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -2530,8 +2532,8 @@ L_loop_top_76:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
-    movl -72(%rbp), %eax
+    movq %rax, -80(%rbp)
+    movl -80(%rbp), %eax
     pushq %rax
     movl L_TOPOA_SENT(%rip), %eax
     pushq %rax
@@ -2544,9 +2546,22 @@ L_loop_top_76:
     popq %rax
     testq %rax, %rax
     jz L_if_end_79
+    movl -64(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_81
     movq -24(%rbp), %rax
     pushq %rax
-    movl -56(%rbp), %eax
+    movl -64(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -2556,27 +2571,12 @@ L_loop_top_76:
     popq %rax
     andq %rcx, %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
     popq %rax
     movl %edx, (%rax,%rcx,4)
-    movl -56(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -56(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_79:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2591,13 +2591,32 @@ L_if_end_79:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_81:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_79:
+    movl -72(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
     jmp L_loop_top_76
 L_loop_end_77:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
-    movl -56(%rbp), %eax
+    movl -64(%rbp), %eax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -2660,7 +2679,7 @@ topoa_in_same_domain:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_81
+    jz L_if_end_83
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -2670,7 +2689,7 @@ topoa_in_same_domain:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_81:
+L_if_end_83:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2705,7 +2724,7 @@ L_topoa_collect_regions:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_82:
+L_loop_top_84:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_TOPOA_MAX_REGIONS(%rip), %eax
@@ -2718,7 +2737,7 @@ L_loop_top_82:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_83
+    jz L_loop_end_85
     leaq L_TOPOA_R_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -2745,7 +2764,7 @@ L_loop_top_82:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_85
+    jz L_if_end_87
     leaq L_TOPOA_ORDER(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2778,7 +2797,7 @@ L_loop_top_82:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_85:
+L_if_end_87:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -2793,13 +2812,13 @@ L_if_end_85:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_82
-L_loop_end_83:
+    jmp L_loop_top_84
+L_loop_end_85:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_86:
+L_loop_top_88:
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2812,7 +2831,7 @@ L_loop_top_86:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_87
+    jz L_loop_end_89
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -2821,7 +2840,7 @@ L_loop_top_86:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_88:
+L_loop_top_90:
     movzbq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -2834,7 +2853,7 @@ L_loop_top_88:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_89
+    jz L_loop_end_91
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -2847,7 +2866,7 @@ L_loop_top_88:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_90
+    jz L_if_else_92
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2855,8 +2874,8 @@ L_loop_top_88:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_91
-L_if_else_90:
+    jmp L_if_end_93
+L_if_else_92:
     leaq L_TOPOA_ORDER(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2937,7 +2956,7 @@ L_if_else_90:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_92
+    jz L_if_else_94
     leaq L_TOPOA_ORDER(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -2995,8 +3014,8 @@ L_if_else_90:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_93
-L_if_else_92:
+    jmp L_if_end_95
+L_if_else_94:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3004,16 +3023,16 @@ L_if_else_92:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_95:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_93:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_91:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_88
-L_loop_end_89:
+    jmp L_loop_top_90
+L_loop_end_91:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3028,8 +3047,8 @@ L_loop_end_89:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_86
-L_loop_end_87:
+    jmp L_loop_top_88
+L_loop_end_89:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -3125,40 +3144,7 @@ L_topoa_edge_end_id:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_95
-    movzbq -16(%rbp), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_97
-    movq -40(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_97:
-    movq -32(%rbp), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_95:
     movzbq -16(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -3172,7 +3158,7 @@ L_if_end_95:
     popq %rax
     testq %rax, %rax
     jz L_if_end_99
-    movq -32(%rbp), %rax
+    movq -40(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -3182,6 +3168,39 @@ L_if_end_95:
     pushq %rax
     popq %rax
 L_if_end_99:
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_97:
+    movzbq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_101
+    movq -32(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_101:
     movq -40(%rbp), %rax
     pushq %rax
     popq %rax
@@ -3283,7 +3302,7 @@ L_topoa_edge_lt:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_101
+    jz L_if_end_103
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3293,7 +3312,7 @@ L_topoa_edge_lt:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_101:
+L_if_end_103:
     movslq -56(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3309,7 +3328,7 @@ L_if_end_101:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_103
+    jz L_if_end_105
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3319,7 +3338,7 @@ L_if_end_101:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_103:
+L_if_end_105:
     movabsq $0x1, %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -3369,7 +3388,7 @@ L_if_end_103:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_105
+    jz L_if_end_107
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3379,7 +3398,7 @@ L_if_end_103:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_105:
+L_if_end_107:
     movslq -80(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3395,7 +3414,7 @@ L_if_end_105:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_107
+    jz L_if_end_109
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3405,7 +3424,7 @@ L_if_end_105:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_107:
+L_if_end_109:
     leaq L_TOPOA_E_KIND(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -3438,7 +3457,7 @@ L_if_end_107:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_109
+    jz L_if_end_111
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3448,7 +3467,7 @@ L_if_end_107:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_109:
+L_if_end_111:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3483,7 +3502,7 @@ L_topoa_collect_edges:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_110:
+L_loop_top_112:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_TOPOA_MAX_EDGES(%rip), %eax
@@ -3496,7 +3515,7 @@ L_loop_top_110:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_111
+    jz L_loop_end_113
     leaq L_TOPOA_E_LIVE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3523,7 +3542,7 @@ L_loop_top_110:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_113
+    jz L_if_end_115
     leaq L_TOPOA_E_ORDER(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -3556,7 +3575,7 @@ L_loop_top_110:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_113:
+L_if_end_115:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3571,13 +3590,13 @@ L_if_end_113:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_110
-L_loop_end_111:
+    jmp L_loop_top_112
+L_loop_end_113:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_114:
+L_loop_top_116:
     movl -24(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -3590,7 +3609,7 @@ L_loop_top_114:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_115
+    jz L_loop_end_117
     movl -24(%rbp), %eax
     pushq %rax
     popq %rax
@@ -3599,7 +3618,7 @@ L_loop_top_114:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_116:
+L_loop_top_118:
     movzbq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3612,7 +3631,7 @@ L_loop_top_116:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_117
+    jz L_loop_end_119
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -3625,7 +3644,7 @@ L_loop_top_116:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_118
+    jz L_if_else_120
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3633,8 +3652,8 @@ L_loop_top_116:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_119
-L_if_else_118:
+    jmp L_if_end_121
+L_if_else_120:
     leaq L_TOPOA_E_ORDER(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3699,7 +3718,7 @@ L_if_else_118:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_else_120
+    jz L_if_else_122
     leaq L_TOPOA_E_ORDER(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3757,8 +3776,8 @@ L_if_else_118:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_if_end_121
-L_if_else_120:
+    jmp L_if_end_123
+L_if_else_122:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3766,16 +3785,16 @@ L_if_else_120:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_123:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_121:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_119:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_116
-L_loop_end_117:
+    jmp L_loop_top_118
+L_loop_end_119:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -3790,8 +3809,8 @@ L_loop_end_117:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_114
-L_loop_end_115:
+    jmp L_loop_top_116
+L_loop_end_117:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -3853,7 +3872,7 @@ L_topoa_hash_atlas:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_122:
+L_loop_top_124:
     movl -32(%rbp), %eax
     pushq %rax
     movl -8(%rbp), %eax
@@ -3866,7 +3885,7 @@ L_loop_top_122:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_123
+    jz L_loop_end_125
     leaq L_TOPOA_ORDER(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -3958,13 +3977,13 @@ L_loop_top_122:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_122
-L_loop_end_123:
+    jmp L_loop_top_124
+L_loop_end_125:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_124:
+L_loop_top_126:
     movl -40(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -3977,7 +3996,7 @@ L_loop_top_124:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_125
+    jz L_loop_end_127
     leaq L_TOPOA_E_ORDER(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -4100,8 +4119,8 @@ L_loop_top_124:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_124
-L_loop_end_125:
+    jmp L_loop_top_126
+L_loop_end_127:
     leaq L_TOPOA_OUTC(%rip), %rax
     pushq %rax
     popq %rax
@@ -4151,7 +4170,7 @@ topoa_publish_atlas:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_127
+    jz L_if_end_129
     subq $32, %rsp
     callq topoa_init
     addq $32, %rsp
@@ -4161,7 +4180,7 @@ topoa_publish_atlas:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_127:
+L_if_end_129:
     subq $32, %rsp
     callq L_topoa_hash_atlas
     addq $32, %rsp
@@ -4301,7 +4320,7 @@ L_topoa_t_reg:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_128:
+L_loop_top_130:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -4314,7 +4333,7 @@ L_loop_top_128:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_129
+    jz L_loop_end_131
     movq -16(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -4338,8 +4357,8 @@ L_loop_top_128:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_128
-L_loop_end_129:
+    jmp L_loop_top_130
+L_loop_end_131:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -4457,7 +4476,7 @@ topoa_selftest:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_131
+    jz L_if_end_133
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -4467,7 +4486,7 @@ topoa_selftest:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_131:
+L_if_end_133:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
@@ -4480,43 +4499,8 @@ L_if_end_131:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_133
-    movabsq $0x2, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_133:
-    movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq topoa_add_edge
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    movslq L_TOPOA_OK(%rip), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_135
-    movabsq $0x3, %rax
+    movabsq $0x2, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4528,9 +4512,9 @@ L_if_end_133:
 L_if_end_135:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
-    movabsq $0x2, %rax
-    pushq %rax
     movabsq $0x1, %rax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -4551,7 +4535,7 @@ L_if_end_135:
     popq %rax
     testq %rax, %rax
     jz L_if_end_137
-    movabsq $0x4, %rax
+    movabsq $0x3, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4561,6 +4545,41 @@ L_if_end_135:
     pushq %rax
     popq %rax
 L_if_end_137:
+    movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq topoa_add_edge
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    movslq L_TOPOA_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_139
+    movabsq $0x4, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_139:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -4585,43 +4604,8 @@ L_if_end_137:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_139
-    movabsq $0x5, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_139:
-    movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
-    pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    subq $32, %rsp
-    callq topoa_distance
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    movabsq $0x3, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_141
-    movabsq $0x6, %rax
+    movabsq $0x5, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4633,7 +4617,7 @@ L_if_end_139:
 L_if_end_141:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
-    movabsq $0x2, %rax
+    movabsq $0x3, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -4645,7 +4629,7 @@ L_if_end_141:
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
-    movabsq $0x2, %rax
+    movabsq $0x3, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4656,7 +4640,7 @@ L_if_end_141:
     popq %rax
     testq %rax, %rax
     jz L_if_end_143
-    movabsq $0x7, %rax
+    movabsq $0x6, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4668,9 +4652,9 @@ L_if_end_141:
 L_if_end_143:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
-    movabsq $0x0, %rax
+    movabsq $0x2, %rax
     pushq %rax
-    movabsq $0x3, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rdx
@@ -4680,7 +4664,7 @@ L_if_end_143:
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
-    movabsq $0x3, %rax
+    movabsq $0x2, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -4691,7 +4675,7 @@ L_if_end_143:
     popq %rax
     testq %rax, %rax
     jz L_if_end_145
-    movabsq $0x8, %rax
+    movabsq $0x7, %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -4705,6 +4689,41 @@ L_if_end_145:
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    popq %r8
+    subq $32, %rsp
+    callq topoa_distance
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_147
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_147:
+    movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
@@ -4725,7 +4744,7 @@ L_if_end_145:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_147
+    jz L_if_end_149
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -4735,7 +4754,7 @@ L_if_end_145:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_147:
+L_if_end_149:
     movzbq L_TOPOA_EK_SAME_SOCKET(%rip), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -4760,7 +4779,7 @@ L_if_end_147:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_149
+    jz L_if_end_151
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -4770,7 +4789,7 @@ L_if_end_147:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_149:
+L_if_end_151:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -4795,7 +4814,7 @@ L_if_end_149:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_151
+    jz L_if_end_153
     movabsq $0xb, %rax
     pushq %rax
     popq %rax
@@ -4805,7 +4824,7 @@ L_if_end_149:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_151:
+L_if_end_153:
     movzbq L_TOPOA_EK_SAME_SOCKET(%rip), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -4830,7 +4849,7 @@ L_if_end_151:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_153
+    jz L_if_end_155
     movabsq $0xc, %rax
     pushq %rax
     popq %rax
@@ -4840,7 +4859,7 @@ L_if_end_151:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_153:
+L_if_end_155:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
     movabsq $0x2328, %rax
@@ -4865,7 +4884,7 @@ L_if_end_153:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_155
+    jz L_if_end_157
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -4875,7 +4894,7 @@ L_if_end_153:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_155:
+L_if_end_157:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
     movabsq $0x64, %rax
@@ -4900,7 +4919,7 @@ L_if_end_155:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_157
+    jz L_if_end_159
     movabsq $0xe, %rax
     pushq %rax
     popq %rax
@@ -4910,7 +4929,7 @@ L_if_end_155:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_157:
+L_if_end_159:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
     movabsq $0x2328, %rax
@@ -4935,7 +4954,7 @@ L_if_end_157:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_159
+    jz L_if_end_161
     movabsq $0xf, %rax
     pushq %rax
     popq %rax
@@ -4945,7 +4964,7 @@ L_if_end_157:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_159:
+L_if_end_161:
     movabsq $0x45, %rax
     pushq %rax
     popq %rcx
@@ -4968,7 +4987,7 @@ L_if_end_159:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_161
+    jz L_if_end_163
     movabsq $0x10, %rax
     pushq %rax
     popq %rax
@@ -4978,7 +4997,7 @@ L_if_end_159:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_161:
+L_if_end_163:
     leaq L_TOPOA_T_OUT(%rip), %rax
     pushq %rax
     popq %rax
@@ -4995,6 +5014,9 @@ L_if_end_161:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
+    subq $8, %rsp
+    movabsq $0x1000, %rax
+    pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -5010,6 +5032,8 @@ L_if_end_161:
     subq $32, %rsp
     callq topoa_neighbors
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movslq %eax, %rax
     pushq %rax
     movslq L_TOPOA_OK(%rip), %rax
@@ -5022,7 +5046,7 @@ L_if_end_161:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_163
+    jz L_if_end_165
     movabsq $0x11, %rax
     pushq %rax
     popq %rax
@@ -5032,7 +5056,7 @@ L_if_end_161:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_163:
+L_if_end_165:
     leaq L_TOPOA_T_N(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5051,7 +5075,7 @@ L_if_end_163:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_165
+    jz L_if_end_167
     movabsq $0x12, %rax
     pushq %rax
     popq %rax
@@ -5061,7 +5085,7 @@ L_if_end_163:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_165:
+L_if_end_167:
     leaq L_TOPOA_T_OUT(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5080,7 +5104,7 @@ L_if_end_165:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_167
+    jz L_if_end_169
     movabsq $0x13, %rax
     pushq %rax
     popq %rax
@@ -5090,7 +5114,7 @@ L_if_end_165:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_167:
+L_if_end_169:
     leaq L_TOPOA_T_OUT(%rip), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5109,7 +5133,7 @@ L_if_end_167:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_169
+    jz L_if_end_171
     movabsq $0x14, %rax
     pushq %rax
     popq %rax
@@ -5119,7 +5143,7 @@ L_if_end_167:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_169:
+L_if_end_171:
     movzbq L_TOPOA_EK_SAME_NUMA(%rip), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -5144,7 +5168,7 @@ L_if_end_169:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_171
+    jz L_if_end_173
     movabsq $0x15, %rax
     pushq %rax
     popq %rax
@@ -5154,7 +5178,10 @@ L_if_end_169:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_171:
+L_if_end_173:
+    subq $8, %rsp
+    movabsq $0x1000, %rax
+    pushq %rax
     movq -56(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -5170,6 +5197,8 @@ L_if_end_171:
     subq $32, %rsp
     callq topoa_neighbors
     addq $32, %rsp
+    addq $8, %rsp
+    addq $8, %rsp
     movslq %eax, %rax
     pushq %rax
     movslq L_TOPOA_OK(%rip), %rax
@@ -5182,7 +5211,7 @@ L_if_end_171:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_173
+    jz L_if_end_175
     movabsq $0x16, %rax
     pushq %rax
     popq %rax
@@ -5192,7 +5221,7 @@ L_if_end_171:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_173:
+L_if_end_175:
     leaq L_TOPOA_T_N(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5211,7 +5240,7 @@ L_if_end_173:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_175
+    jz L_if_end_177
     movabsq $0x17, %rax
     pushq %rax
     popq %rax
@@ -5221,7 +5250,7 @@ L_if_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_175:
+L_if_end_177:
     subq $32, %rsp
     callq topoa_init
     addq $32, %rsp
@@ -5260,7 +5289,7 @@ L_if_end_175:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_177
+    jz L_if_end_179
     movabsq $0x18, %rax
     pushq %rax
     popq %rax
@@ -5270,7 +5299,7 @@ L_if_end_175:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_177:
+L_if_end_179:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5289,7 +5318,7 @@ L_if_end_177:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_179
+    jz L_if_end_181
     movabsq $0x19, %rax
     pushq %rax
     popq %rax
@@ -5299,7 +5328,7 @@ L_if_end_177:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_179:
+L_if_end_181:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x2, %rax
@@ -5318,7 +5347,7 @@ L_if_end_179:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_181
+    jz L_if_end_183
     movabsq $0x1a, %rax
     pushq %rax
     popq %rax
@@ -5328,7 +5357,7 @@ L_if_end_179:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
+L_if_end_183:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1f, %rax
@@ -5347,7 +5376,7 @@ L_if_end_181:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_183
+    jz L_if_end_185
     movabsq $0x1b, %rax
     pushq %rax
     popq %rax
@@ -5357,7 +5386,7 @@ L_if_end_181:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_183:
+L_if_end_185:
     subq $32, %rsp
     callq topoa_init
     addq $32, %rsp
@@ -5407,7 +5436,7 @@ L_if_end_183:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_184:
+L_loop_top_186:
     movq -72(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5420,7 +5449,7 @@ L_loop_top_184:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_185
+    jz L_loop_end_187
     leaq L_TOPOA_T_CP(%rip), %rax
     pushq %rax
     movq -72(%rbp), %rax
@@ -5450,8 +5479,8 @@ L_loop_top_184:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_184
-L_loop_end_185:
+    jmp L_loop_top_186
+L_loop_end_187:
     subq $32, %rsp
     callq topoa_init
     addq $32, %rsp
@@ -5505,7 +5534,7 @@ L_loop_end_185:
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_186:
+L_loop_top_188:
     movq -88(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5518,7 +5547,7 @@ L_loop_top_186:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_187
+    jz L_loop_end_189
     leaq L_TOPOA_T_CP(%rip), %rax
     pushq %rax
     movq -88(%rbp), %rax
@@ -5543,7 +5572,7 @@ L_loop_top_186:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_189
+    jz L_if_end_191
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5551,7 +5580,7 @@ L_loop_top_186:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_189:
+L_if_end_191:
     movq -88(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5565,8 +5594,8 @@ L_if_end_189:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_186
-L_loop_end_187:
+    jmp L_loop_top_188
+L_loop_end_189:
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -5579,7 +5608,7 @@ L_loop_end_187:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_191
+    jz L_if_end_193
     movabsq $0x1c, %rax
     pushq %rax
     popq %rax
@@ -5589,7 +5618,7 @@ L_loop_end_187:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_191:
+L_if_end_193:
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5608,7 +5637,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_193
+    jz L_if_end_195
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5627,7 +5656,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_195
+    jz L_if_end_197
     movq -64(%rbp), %rax
     pushq %rax
     movabsq $0x1f, %rax
@@ -5646,7 +5675,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_197
+    jz L_if_end_199
     movabsq $0x1d, %rax
     pushq %rax
     popq %rax
@@ -5656,15 +5685,15 @@ L_if_end_191:
     movq $0, %rax
     pushq %rax
     popq %rax
+L_if_end_199:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
 L_if_end_197:
     movq $0, %rax
     pushq %rax
     popq %rax
 L_if_end_195:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_193:
     subq $32, %rsp
     callq topoa_publish_atlas
     addq $32, %rsp
@@ -5683,7 +5712,7 @@ L_if_end_193:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_199
+    jz L_if_end_201
     movabsq $0x1e, %rax
     pushq %rax
     popq %rax
@@ -5693,7 +5722,7 @@ L_if_end_193:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_199:
+L_if_end_201:
     leaq L_TOPOA_T_FID(%rip), %rax
     pushq %rax
     popq %rax
@@ -5734,7 +5763,7 @@ L_if_end_199:
     pushq %rax
     popq %rax
     movq %rax, -128(%rbp)
-L_loop_top_200:
+L_loop_top_202:
     movq -128(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5747,7 +5776,7 @@ L_loop_top_200:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_201
+    jz L_loop_end_203
     movq -104(%rbp), %rax
     pushq %rax
     movq -128(%rbp), %rax
@@ -5772,7 +5801,7 @@ L_loop_top_200:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_203
+    jz L_if_end_205
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5780,7 +5809,7 @@ L_loop_top_200:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_203:
+L_if_end_205:
     movq -128(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5794,8 +5823,8 @@ L_if_end_203:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_200
-L_loop_end_201:
+    jmp L_loop_top_202
+L_loop_end_203:
     movl -120(%rbp), %eax
     pushq %rax
     movabsq $0x0, %rax
@@ -5808,7 +5837,7 @@ L_loop_end_201:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_205
+    jz L_if_end_207
     movabsq $0x1f, %rax
     pushq %rax
     popq %rax
@@ -5818,7 +5847,7 @@ L_loop_end_201:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_205:
+L_if_end_207:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

@@ -44,12 +44,12 @@ fn main() -> u64 {
     if prespec_used() != 0u32 { return 1u64 }
 
     /* The bulk-registration ships the full COMPILER/BOOT/iii_compositions.def
-     * set (256 entries; +1 ed25519_sign_c4 §4.1, +5 PQ pq_*_c4 §4.4.5). The constant below
+     * set (255 entries; was 256, −1 region_reset_safe retired per ADR-S7b §S.7). The constant below
      * tracks the .def cardinality one-to-one; it updates in lock-step with
      * the .def. */
     let n : u32 = prespec_register_compositions()
-    if n != 256u32 { return 2u64 }
-    if prespec_used() != 256u32 { return 3u64 }
+    if n != 255u32 { return 2u64 }
+    if prespec_used() != 255u32 { return 3u64 }
 
     /* Lookup a representative sample of canonical synthetic hashes
      * (matches the .def block layout: NUMERA hashes at 100..119,
@@ -86,8 +86,8 @@ fn main() -> u64 {
 
     /* Idempotence: re-register; same count (in-place update). */
     let n2 : u32 = prespec_register_compositions()
-    if n2 != 256u32 { return 15u64 }
-    if prespec_used() != 256u32 { return 16u64 }
+    if n2 != 255u32 { return 15u64 }
+    if prespec_used() != 255u32 { return 16u64 }
 
     /* Lookup of unknown synthetic hash returns NOT_FOUND.  SEQ=9999
      * with primitive=1, hexad=0x01 is well outside any .def block. */

@@ -1,0 +1,272 @@
+/* 758_mont_ctx_organ.iii -- APOTHEOSIS S.2 KAT for the modulus_ctx-driven
+ * Montgomery organ (mod_ctx_build / mont_mul_ctx) and the ctx-once modpow.
+ * Companion to 759 (which gates the n-based mont_mul_bigint path).  Asserts:
+ *   (A) mont_mul_ctx round-trip == bigint_mod ORACLE, multi-limb k=1..4
+ *       adversarial moduli, AND (C) post-condition 0 <= got < n.
+ *   (D) free_reduction flag fires for the all-0xFF modulus (n[0]=2^32-1).
+ *   (B) NEGATIVE arm: mod_ctx_build REJECTS even and zero moduli (returns 0)
+ *       -- the organ is defined only for odd n; the caller must fall back.
+ *   (E) bigint_modpow (odd -> ctx Montgomery path) == an INDEPENDENT
+ *       square-and-multiply oracle (bigint_mul + bigint_mod), + result < n.
+ * Deterministic.  Exit 99 = every assertion holds.
+ *   10+t = trial t round-trip/post-condition failed
+ *   40   = free_reduction flag did not fire on all-0xFF modulus
+ *   50   = even modulus NOT rejected ; 51 = zero modulus NOT rejected
+ *   60/61 = modpow(65537) wrong / >= n ; 62/63 = modpow(rand) wrong / >= n
+ *   1    = arena alloc failed */
+module corpus_758
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_r2(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_free(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn modctx_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_msb_position(id: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mod_ctx_build(arena: u64, n: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_mul_ctx(arena: u64, a: u64, b: u64, ctx: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_mul_sq(arena: u64, a: u64, ctx: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn mont_mul_add(arena: u64, a: u64, b: u64, c: u64, ctx: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn bigint_modpow(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 from "bigint_div.iii"
+
+var LCG : u64 = 0u64
+fn lcg() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* k random limbs; odd=1 forces limb0|1 (odd modulus). */
+fn build(arena: u64, k: u64, odd: u64) -> u64 {
+    let id : u64 = bigint_new(arena, k)
+    let mut i : u64 = 0u64
+    while i < k {
+        let v : u64 = lcg()
+        if i == 0u64 {
+            if odd == 1u64 { bigint_set_limb(id, 0u64, v | 1u64) }
+            if odd != 1u64 { bigint_set_limb(id, 0u64, v) }
+        }
+        if i != 0u64 { bigint_set_limb(id, i, v) }
+        i = i + 1u64
+    }
+    bigint_set_len(id, k)
+    bigint_normalize(id)
+    return id
+}
+
+/* mont_mul_ctx round-trip == bigint_mod oracle for odd n, a,b < n; AND got < n. */
+fn rt_ctx(arena: u64, a: u64, b: u64, n: u64) -> u8 {
+    let ctx : u64 = mod_ctx_build(arena, n)
+    if ctx == 0u64 { return 0u8 }                     /* odd n MUST build */
+    let r2 : u64 = modctx_r2(ctx)
+    let am : u64 = mont_mul_ctx(arena, a, r2, ctx)    /* to_form(a) = aR mod n */
+    let bm : u64 = mont_mul_ctx(arena, b, r2, ctx)    /* to_form(b) = bR mod n */
+    let cm : u64 = mont_mul_ctx(arena, am, bm, ctx)   /* abR mod n */
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let got : u64 = mont_mul_ctx(arena, cm, one, ctx) /* from_form -> ab mod n */
+    let prod : u64 = bigint_mul(arena, a, b)
+    let ref : u64 = bigint_mod(arena, prod, n)
+    let eqd : u8 = bigint_eq(got, ref)
+    let cmpn : i32 = bigint_cmp(got, n)               /* -1 iff got < n */
+    let mut ok : u8 = 0u8
+    if eqd == 1u8 {
+        if cmpn == -1i32 { ok = 1u8 }
+    }
+    bigint_drop(am) ; bigint_drop(bm) ; bigint_drop(cm) ; bigint_drop(one)
+    bigint_drop(got) ; bigint_drop(prod) ; bigint_drop(ref)
+    modctx_drop(ctx)
+    return ok
+}
+
+fn check(arena: u64, k: u64) -> u8 {
+    let n : u64 = build(arena, k, 1u64)
+    let a_raw : u64 = build(arena, k, 0u64)
+    let b_raw : u64 = build(arena, k, 0u64)
+    let a : u64 = bigint_mod(arena, a_raw, n)   /* a < n */
+    let b : u64 = bigint_mod(arena, b_raw, n)   /* b < n */
+    let ok : u8 = rt_ctx(arena, a, b, n)
+    bigint_drop(n) ; bigint_drop(a_raw) ; bigint_drop(b_raw) ; bigint_drop(a) ; bigint_drop(b)
+    return ok
+}
+
+/* INDEPENDENT square-and-multiply oracle (bigint_mul + bigint_mod, no Montgomery). */
+fn modpow_naive(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
+    let mut result : u64 = bigint_from_u64(arena, 1u64)
+    let mut b : u64 = bigint_mod(arena, base, n)
+    let ebits : u64 = bigint_msb_position(exp)
+    let mut bit : u64 = 0u64
+    while bit < ebits {
+        let li : u64 = bit >> 6u64
+        let bo : u64 = bit & 63u64
+        let lv : u64 = bigint_get_limb(exp, li)
+        let eb : u64 = (lv >> bo) & 1u64
+        if eb == 1u64 {
+            let p : u64 = bigint_mul(arena, result, b)
+            let nr : u64 = bigint_mod(arena, p, n)
+            bigint_drop(p) ; bigint_drop(result)
+            result = nr
+        }
+        let bb : u64 = bigint_mul(arena, b, b)
+        let nb : u64 = bigint_mod(arena, bb, n)
+        bigint_drop(bb) ; bigint_drop(b)
+        b = nb
+        bit = bit + 1u64
+    }
+    bigint_drop(b)
+    return result
+}
+
+/* Differential arms for an odd modulus n (k limbs), ADVERSARIAL operands:
+ *  - mont_mul_sq(x) == mont_mul_ctx(x,x) AND result < n, for x in {n-1, random}
+ *  - mont_mul_add(a,b,c) == (mont_mul_ctx(a,b) + c) mod n AND result < n
+ * Returns 1 iff every assertion holds. */
+fn sa_for_n(arena: u64, n: u64, k: u64) -> u8 {
+    let ctx : u64 = mod_ctx_build(arena, n)
+    if ctx == 0u64 { return 0u8 }
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let nm1 : u64 = bigint_sub(arena, n, one)          /* n-1: the maximal residue */
+    let braw : u64 = build(arena, k, 0u64)
+    let b : u64 = bigint_mod(arena, braw, n)
+    let craw : u64 = build(arena, k, 0u64)
+    let c : u64 = bigint_mod(arena, craw, n)
+    let mut ok : u8 = 1u8
+    /* squaring symmetry on the maximal residue n-1 */
+    let s1 : u64 = mont_mul_sq(arena, nm1, ctx)
+    let s2 : u64 = mont_mul_ctx(arena, nm1, nm1, ctx)
+    if bigint_eq(s1, s2) != 1u8 { ok = 0u8 }
+    if bigint_cmp(s1, n) != -1i32 { ok = 0u8 }
+    /* squaring symmetry on a random residue */
+    let s3 : u64 = mont_mul_sq(arena, b, ctx)
+    let s4 : u64 = mont_mul_ctx(arena, b, b, ctx)
+    if bigint_eq(s3, s4) != 1u8 { ok = 0u8 }
+    /* fused multiply-add vs (mont_mul_ctx(a,b) + c) mod n */
+    let mab : u64 = mont_mul_ctx(arena, nm1, b, ctx)
+    let tmp : u64 = bigint_add(arena, mab, c)
+    let ref : u64 = bigint_mod(arena, tmp, n)
+    let got : u64 = mont_mul_add(arena, nm1, b, c, ctx)
+    if bigint_eq(got, ref) != 1u8 { ok = 0u8 }
+    if bigint_cmp(got, n) != -1i32 { ok = 0u8 }
+    bigint_drop(one) ; bigint_drop(nm1) ; bigint_drop(braw) ; bigint_drop(b)
+    bigint_drop(craw) ; bigint_drop(c) ; bigint_drop(s1) ; bigint_drop(s2)
+    bigint_drop(s3) ; bigint_drop(s4) ; bigint_drop(mab) ; bigint_drop(tmp)
+    bigint_drop(ref) ; bigint_drop(got)
+    modctx_drop(ctx)
+    return ok
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 22u64)
+    if arena == 0u64 { return 1u64 }
+    LCG = 0x0123456789ABCDEFu64
+
+    /* (A)+(C) 36 random multi-limb trials, k cycling 1..6 (s = 2k up to 12,
+     * covering the P-384 field width as a direct organ anchor). */
+    let mut t : u64 = 0u64
+    let mut k : u64 = 1u64
+    while t < 36u64 {
+        if check(arena, k) != 1u8 { return 10u64 + t }
+        bigint_drop_arena(arena)
+        arena_reset(arena)
+        k = k + 1u64
+        if k > 6u64 { k = 1u64 }
+        t = t + 1u64
+    }
+
+    /* (D) free_reduction: all-0xFF k=2 modulus => n[0]=2^32-1 => nprime0==1. */
+    let nf : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(nf, 0u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(nf, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_len(nf, 2u64)
+    bigint_normalize(nf)
+    let ctxf : u64 = mod_ctx_build(arena, nf)
+    if ctxf == 0u64 { return 40u64 }
+    let ff : u8 = modctx_free(ctxf)
+    modctx_drop(ctxf)
+    bigint_drop(nf)
+    if ff != 1u8 { return 40u64 }
+
+    /* (B) NEGATIVE arm: even and zero moduli MUST be rejected (ctx == 0). */
+    let ne : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(ne, 0u64, 0xFFFFFFFFFFFFFFFEu64)   /* low bit clear => even */
+    bigint_set_limb(ne, 1u64, 0x0123456789ABCDEFu64)
+    bigint_set_len(ne, 2u64)
+    bigint_normalize(ne)
+    let ctxe : u64 = mod_ctx_build(arena, ne)
+    bigint_drop(ne)
+    if ctxe != 0u64 { return 50u64 }                   /* even must reject */
+    let nz : u64 = bigint_from_u64(arena, 0u64)
+    let ctxz : u64 = mod_ctx_build(arena, nz)
+    bigint_drop(nz)
+    if ctxz != 0u64 { return 51u64 }                   /* zero must reject */
+
+    bigint_drop_arena(arena)
+    arena_reset(arena)
+
+    /* (E) bigint_modpow (ctx Montgomery path) == independent oracle, + result < n. */
+    let bx : u64 = build(arena, 3u64, 0u64)            /* base */
+    let nx : u64 = build(arena, 3u64, 1u64)            /* odd modulus */
+    let e1 : u64 = bigint_from_u64(arena, 65537u64)
+    let g1 : u64 = bigint_modpow(arena, bx, e1, nx)
+    let r1 : u64 = modpow_naive(arena, bx, e1, nx)
+    if bigint_eq(g1, r1) != 1u8 { return 60u64 }
+    if bigint_cmp(g1, nx) != -1i32 { return 61u64 }
+    bigint_drop(g1) ; bigint_drop(r1) ; bigint_drop(e1)
+
+    let e2 : u64 = build(arena, 2u64, 1u64)            /* a 2-limb odd exponent */
+    let g2 : u64 = bigint_modpow(arena, bx, e2, nx)
+    let r2v : u64 = modpow_naive(arena, bx, e2, nx)
+    if bigint_eq(g2, r2v) != 1u8 { return 62u64 }
+    if bigint_cmp(g2, nx) != -1i32 { return 63u64 }
+
+    bigint_drop_arena(arena)
+    arena_reset(arena)
+
+    /* (F) squaring-symmetry + fused-add differential arms, 18 random moduli,
+     * k cycling 1..6 (s up to 12 -> P-384 width organ anchor). */
+    let mut sk : u64 = 0u64
+    let mut kk : u64 = 1u64
+    while sk < 18u64 {
+        let nn : u64 = build(arena, kk, 1u64)
+        if sa_for_n(arena, nn, kk) != 1u8 { return 70u64 + sk }
+        bigint_drop(nn)
+        bigint_drop_arena(arena)
+        arena_reset(arena)
+        kk = kk + 1u64
+        if kk > 6u64 { kk = 1u64 }
+        sk = sk + 1u64
+    }
+
+    /* all-0xFF free-reduction moduli (n[0]=2^32-1 => nprime0==1), k=2 and k=3. */
+    let nfa : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(nfa, 0u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(nfa, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_len(nfa, 2u64)
+    bigint_normalize(nfa)
+    if sa_for_n(arena, nfa, 2u64) != 1u8 { return 88u64 }
+    bigint_drop(nfa)
+    bigint_drop_arena(arena)
+    arena_reset(arena)
+    let nfb : u64 = bigint_new(arena, 3u64)
+    bigint_set_limb(nfb, 0u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(nfb, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(nfb, 2u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_len(nfb, 3u64)
+    bigint_normalize(nfb)
+    if sa_for_n(arena, nfb, 3u64) != 1u8 { return 89u64 }
+
+    arena_drop(arena)
+    return 99u64
+}

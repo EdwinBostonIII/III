@@ -1,0 +1,159 @@
+/* APOTHEOSIS C.1 / ADR-C1: FIPS-205 SLH-DSA-SHAKE-128s INTEROP conformance.
+ * The strict SHAKE family (slhdsa.iii default suite) must reproduce the NIST
+ * ACVP deterministic internal signature BYTE-FOR-BYTE, and the strict verify
+ * must REJECT a signature produced by the legacy hybrid (non-vacuity: proves
+ * the FIPS-205 split is real, not a relabel).  Vector: NIST ACVP
+ * SLH-DSA-sigGen-FIPS205, SLH-DSA-SHAKE-128s, internal, msg=0x36, det.
+ * Conformance is checked via sha256(signature) == embedded digest (compact). */
+module corpus_c770
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_sphincs_variant_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha256.iii"
+
+var SK  : [u8; 64]
+var MSG : [u8; 1]
+var EXP : [u8; 32]
+
+fn main() -> u64 {
+    SK[0u64] = 0xA0u8
+    SK[1u64] = 0x8Du8
+    SK[2u64] = 0xD5u8
+    SK[3u64] = 0xFDu8
+    SK[4u64] = 0x6Du8
+    SK[5u64] = 0xB6u8
+    SK[6u64] = 0x40u8
+    SK[7u64] = 0x50u8
+    SK[8u64] = 0xE7u8
+    SK[9u64] = 0xDAu8
+    SK[10u64] = 0xE0u8
+    SK[11u64] = 0xDBu8
+    SK[12u64] = 0x3Bu8
+    SK[13u64] = 0xB3u8
+    SK[14u64] = 0xFAu8
+    SK[15u64] = 0x24u8
+    SK[16u64] = 0x64u8
+    SK[17u64] = 0x19u8
+    SK[18u64] = 0x30u8
+    SK[19u64] = 0xD2u8
+    SK[20u64] = 0x17u8
+    SK[21u64] = 0x9Eu8
+    SK[22u64] = 0xE6u8
+    SK[23u64] = 0x15u8
+    SK[24u64] = 0x5Cu8
+    SK[25u64] = 0x3Eu8
+    SK[26u64] = 0x51u8
+    SK[27u64] = 0xFCu8
+    SK[28u64] = 0x4Fu8
+    SK[29u64] = 0x69u8
+    SK[30u64] = 0x6Cu8
+    SK[31u64] = 0xE0u8
+    SK[32u64] = 0x61u8
+    SK[33u64] = 0x46u8
+    SK[34u64] = 0xE9u8
+    SK[35u64] = 0x2Au8
+    SK[36u64] = 0x0Cu8
+    SK[37u64] = 0xE7u8
+    SK[38u64] = 0xC6u8
+    SK[39u64] = 0xF4u8
+    SK[40u64] = 0x88u8
+    SK[41u64] = 0x76u8
+    SK[42u64] = 0x97u8
+    SK[43u64] = 0x0Au8
+    SK[44u64] = 0x31u8
+    SK[45u64] = 0x3Cu8
+    SK[46u64] = 0x60u8
+    SK[47u64] = 0x00u8
+    SK[48u64] = 0x05u8
+    SK[49u64] = 0xD6u8
+    SK[50u64] = 0x70u8
+    SK[51u64] = 0x2Bu8
+    SK[52u64] = 0x2Cu8
+    SK[53u64] = 0x1Du8
+    SK[54u64] = 0x72u8
+    SK[55u64] = 0x9Eu8
+    SK[56u64] = 0x9Du8
+    SK[57u64] = 0xD5u8
+    SK[58u64] = 0xE7u8
+    SK[59u64] = 0x51u8
+    SK[60u64] = 0x7Du8
+    SK[61u64] = 0x2Eu8
+    SK[62u64] = 0x02u8
+    SK[63u64] = 0xFEu8
+    MSG[0u64] = 0x36u8
+    EXP[0u64] = 0xACu8
+    EXP[1u64] = 0x3Du8
+    EXP[2u64] = 0x5Du8
+    EXP[3u64] = 0x2Bu8
+    EXP[4u64] = 0xE3u8
+    EXP[5u64] = 0xB1u8
+    EXP[6u64] = 0x1Cu8
+    EXP[7u64] = 0xD1u8
+    EXP[8u64] = 0x7Eu8
+    EXP[9u64] = 0xFBu8
+    EXP[10u64] = 0xEEu8
+    EXP[11u64] = 0xFEu8
+    EXP[12u64] = 0xACu8
+    EXP[13u64] = 0x22u8
+    EXP[14u64] = 0x68u8
+    EXP[15u64] = 0x00u8
+    EXP[16u64] = 0xA9u8
+    EXP[17u64] = 0x55u8
+    EXP[18u64] = 0x07u8
+    EXP[19u64] = 0xD7u8
+    EXP[20u64] = 0x7Cu8
+    EXP[21u64] = 0x9Fu8
+    EXP[22u64] = 0x9Du8
+    EXP[23u64] = 0x51u8
+    EXP[24u64] = 0xE6u8
+    EXP[25u64] = 0x8Fu8
+    EXP[26u64] = 0x78u8
+    EXP[27u64] = 0x08u8
+    EXP[28u64] = 0xB5u8
+    EXP[29u64] = 0xEEu8
+    EXP[30u64] = 0x03u8
+    EXP[31u64] = 0x96u8
+
+    let sig : *u8 = malloc(8192u64)
+    let slb : *u8 = malloc(16u64)
+    let h32 : *u8 = malloc(32u64)
+    let sig2: *u8 = malloc(8192u64)
+    let slb2: *u8 = malloc(16u64)
+
+    /* --- strict SHAKE sign (default suite) --- */
+    let sr : i32 = iii_slhdsa_sign(0u64, &SK as u64, &MSG as u64, 1u64, sig as u64, slb as u64)
+    if sr != 0i32 { return 1u64 }
+    let sl : u64 = (slb[0u64] as u64) | ((slb[1u64] as u64) << 8u64) | ((slb[2u64] as u64) << 16u64) | ((slb[3u64] as u64) << 24u64)
+    if sl != 7856u64 { return 2u64 }
+
+    /* CONFORMANCE: sha256(sig) must equal the NIST signature's sha256 */
+    sha256_oneshot(sig as u64, sl, h32 as u64)
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if h32[i] != EXP[i] { return 3u64 }
+        i = i + 1u64
+    }
+
+    /* strict verify accepts (pk = SK[32..64] = PKseed||PKroot) */
+    let pk : u64 = (&SK as u64) + 32u64
+    if iii_slhdsa_verify(0u64, pk, &MSG as u64, 1u64, sig as u64, sl) != 0i32 { return 4u64 }
+
+    /* forgery: 1-bit flip rejected */
+    sig[0u64] = sig[0u64] ^ 0x01u8
+    if iii_slhdsa_verify(0u64, pk, &MSG as u64, 1u64, sig as u64, sl) == 0i32 { return 5u64 }
+    sig[0u64] = sig[0u64] ^ 0x01u8
+
+    /* NON-VACUITY: a hybrid-produced signature is REJECTED by the strict
+     * SHAKE verify (same sk/msg/pk) -> the split is real. */
+    let hr : i32 = iii_sphincs_variant_sign(0u64, &SK as u64, &MSG as u64, 1u64, sig2 as u64, slb2 as u64)
+    if hr != 0i32 { return 6u64 }
+    let sl2 : u64 = (slb2[0u64] as u64) | ((slb2[1u64] as u64) << 8u64) | ((slb2[2u64] as u64) << 16u64) | ((slb2[3u64] as u64) << 24u64)
+    if sl2 != 7856u64 { return 7u64 }
+    if iii_slhdsa_verify(0u64, pk, &MSG as u64, 1u64, sig2 as u64, sl2) == 0i32 { return 8u64 }
+
+    free(sig) free(slb) free(h32) free(sig2) free(slb2)
+    return 99u64
+}

@@ -26,8 +26,18 @@
  *
  * Pure, deterministic, no allocator (module-global BSS arrays; integer ==/!= and counts).
  * Compiler-UNREFERENCED -> LIBNATIVE.  Hexad: kind_sensitivity (self-measurement).
- * Ring: R0.  K: 1.00.  NIH: standalone (no externs). */
+ * Ring: R0.  K: 1.00.  NIH: omnia/caindex.iii (COMBINE-3 shared content-address
+ * index -- used only by rm_sep's O(N) grouping; murmur3 transitively). */
 module forcefield_ripple_metric
+
+/* W3.1 / COMBINE-3: rm_sep groups capability-equal nodes through the shared
+ * caindex (omnia/caindex.iii) -- the X3 "deterministic superposition collapse" --
+ * turning the old O(N^2) all-pairs scan into ~O(N).  The count is identical:
+ * a group of m capability/intent-equal nodes contributes C(m,2) pairs, summed
+ * incrementally (the k-th member of a group adds k-1 pairs). */
+extern @abi(c-msvc-x64) fn cai_clear(vals: u64, slots: u64) -> i32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_get(keys: u64, vals: u64, mask: u64, id: *u8) -> u32 from "caindex.iii"
+extern @abi(c-msvc-x64) fn cai_put(keys: u64, vals: u64, mask: u64, id: *u8, payload: u32) -> i32 from "caindex.iii"
 
 const RM_MAXN : u32 = 4096u32     /* module-graph headroom (III ~420 modules) */
 const RM_MAXE : u32 = 16384u32    /* edge headroom (III ~835 ripples) */
@@ -41,6 +51,15 @@ var RM_ESRC : [u32; 16384]
 var RM_EDST : [u32; 16384]
 var RM_EUSED : [u32; 16384]       /* 1 = load-bearing (symbol referenced); 0 = dead */
 var RM_EINTENT : [u32; 16384]     /* 1 = witnessed-keep even if unused; 0 = plain */
+
+/* rm_sep grouping index (W3.1): maps a node's 32-byte (cap||iclass) key to the
+ * running size of its capability/intent group.  Sized to RM_MAXN so an all-
+ * distinct graph never overflows; VALS cleared to CAI_EMPTY at each rm_sep call. */
+const RM_SEP_SLOTS : u64 = 4096u64
+const RM_SEP_MASK  : u64 = 4095u64
+var RM_SEP_KEYS : [u8;  131072]   /* RM_MAXN(4096) * 32 */
+var RM_SEP_VALS : [u32; 4096]
+var RM_SEP_KEY  : [u8;  32]       /* per-node 32-byte key scratch (cap||iclass||0) */
 
 /* ---- graph construction ---- */
 fn rm_reset() -> u64 @export {
@@ -107,6 +126,42 @@ fn rm_merge_improves(i: u32, j: u32) -> u32 @export {
     return rm_unifiable(i, j)
 }
 
+/* ---- group key (single source for rm_sep + ripple_loop's rl_run) ---- */
+/* Write node i's 32-byte group key = cap(8 LE) || iclass(4 LE) || zero(20) into
+ * bufp.  Two nodes share this key IFF capability-equal AND intent-equal -- i.e.
+ * exactly when rm_unifiable(i,j)==1.  caindex hashes/compares all 32 bytes, so
+ * the 20 trailing zeros are inert padding (deterministic). */
+fn rm_write_key(i: u32, bufp: *u8) -> i32 {
+    let cap : u64 = RM_CAP[i]
+    let icl64 : u64 = RM_ICLASS[i] as u64
+    let mut z : u64 = 0u64
+    while z < 32u64 { bufp[z] = 0u8  z = z + 1u64 }
+    bufp[0u64] = (cap & 0xFFu64) as u8
+    bufp[1u64] = ((cap >> 8u64)  & 0xFFu64) as u8
+    bufp[2u64] = ((cap >> 16u64) & 0xFFu64) as u8
+    bufp[3u64] = ((cap >> 24u64) & 0xFFu64) as u8
+    bufp[4u64] = ((cap >> 32u64) & 0xFFu64) as u8
+    bufp[5u64] = ((cap >> 40u64) & 0xFFu64) as u8
+    bufp[6u64] = ((cap >> 48u64) & 0xFFu64) as u8
+    bufp[7u64] = ((cap >> 56u64) & 0xFFu64) as u8
+    bufp[8u64]  = (icl64 & 0xFFu64) as u8
+    bufp[9u64]  = ((icl64 >> 8u64)  & 0xFFu64) as u8
+    bufp[10u64] = ((icl64 >> 16u64) & 0xFFu64) as u8
+    bufp[11u64] = ((icl64 >> 24u64) & 0xFFu64) as u8
+    return 0i32
+}
+
+/* Exported accessor: write node i's 32-byte group key into out (rl_run buckets on
+ * it).  Out-of-range i -> zeroed key + -1 (memory-safe; RM_CAP is [u64; RM_MAXN]). */
+fn rm_node_key(i: u32, out: *u8) -> i32 @export {
+    if i >= RM_MAXN {
+        let mut z : u64 = 0u64
+        while z < 32u64 { out[z] = 0u8  z = z + 1u64 }
+        return -1i32
+    }
+    return rm_write_key(i, out)
+}
+
 /* ---- aggregate metrics ---- */
 fn rm_noise() -> u32 @export {
     let mut c : u32 = 0u32
@@ -131,15 +186,22 @@ fn rm_good() -> u32 @export {
 /* SEPARATION: count of unifiable node pairs (capability-equal, intent-equal) currently
  * in distinct nodes -- the duplication unification would collapse. */
 fn rm_sep() -> u32 @export {
-    let mut c : u32 = 0u32
     let n : u32 = RM_N[0u32]
+    let kp : u64 = &RM_SEP_KEYS as u64
+    let vp : u64 = &RM_SEP_VALS as u64
+    let bufp : *u8 = (&RM_SEP_KEY as u64) as *u8
+    cai_clear(vp, RM_SEP_SLOTS)
+    let mut c : u32 = 0u32
     let mut i : u32 = 0u32
     while i < n {
-        let mut j : u32 = i + 1u32
-        while j < n {
-            if rm_unifiable(i, j) == 1u32 { c = c + 1u32 }
-            j = j + 1u32
-        }
+        rm_write_key(i, bufp)
+        /* Running group size m: this node forms m new pairs with the m prior
+         * members, then the group grows to m+1 (Sum over groups of C(m,2)). */
+        let prev : u32 = cai_get(kp, vp, RM_SEP_MASK, bufp)
+        let mut m : u32 = 0u32
+        if prev != 0xFFFFFFFFu32 { m = prev }
+        c = c + m
+        cai_put(kp, vp, RM_SEP_MASK, bufp, m + 1u32)
         i = i + 1u32
     }
     return c

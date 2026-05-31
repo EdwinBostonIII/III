@@ -1,0 +1,44 @@
+/* 970 — W3.21 / MERKLE-2 falsifier: the leaf INDEX binds into verification. A valid
+ * leaf+proof for index 1 must verify at index 1 but be REJECTED at a wrong index (0 or 3),
+ * because the sibling direction is now derived from the index bit, not a prover-supplied
+ * byte. (The old code read the prover's direction and accepted any claimed index.) 99=pass. */
+module corpus_970
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn merkle_compute_root(leaves_ptr: u64, leaf_count: u32, leaf_size: u64, out_32: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_compute_proof(leaves_ptr: u64, leaf_size: u64, packed_count_index: u64, proof_out_ptr: u64) -> i32 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_verify_proof(leaf_ptr: u64, packed_meta: u64, proof_ptr: u64, root_32_ptr: u64) -> u8 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_count_index(leaf_count: u32, leaf_index: u32) -> u64 from "merkle.iii"
+extern @abi(c-msvc-x64) fn merkle_pack_verify_meta(leaf_size: u32, leaf_index: u32, proof_steps: u32) -> u64 from "merkle.iii"
+
+fn fill_leaf(p: *u8, base: u8, n: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < n { p[i] = base + (i as u8) ; i = i + 1u64 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let leaves : *u8 = malloc(64u64)
+    fill_leaf(leaves,                          0x10u8, 16u64)
+    fill_leaf((leaves as u64 + 16u64) as *u8,  0x20u8, 16u64)
+    fill_leaf((leaves as u64 + 32u64) as *u8,  0x30u8, 16u64)
+    fill_leaf((leaves as u64 + 48u64) as *u8,  0x40u8, 16u64)
+    let root : *u8 = malloc(32u64)
+    if merkle_compute_root(leaves as u64, 4u32, 16u64, root as u64) != 0i32 { return 1u64 }
+
+    let proof : *u8 = malloc(256u64)
+    let pci1 : u64 = merkle_pack_count_index(4u32, 1u32)
+    merkle_compute_proof(leaves as u64, 16u64, pci1, proof as u64)
+    let leaf1 : u64 = (leaves as u64) + 16u64
+
+    /* honest: leaf 1 at index 1 -> accept */
+    let vm1 : u64 = merkle_pack_verify_meta(16u32, 1u32, 2u32)
+    if merkle_verify_proof(leaf1, vm1, proof as u64, root as u64) != 1u8 { return 2u64 }
+
+    /* MERKLE-2: same leaf+proof claiming a WRONG index -> reject (index is bound) */
+    let vm0 : u64 = merkle_pack_verify_meta(16u32, 0u32, 2u32)
+    if merkle_verify_proof(leaf1, vm0, proof as u64, root as u64) != 0u8 { return 3u64 }
+    let vm3 : u64 = merkle_pack_verify_meta(16u32, 3u32, 2u32)
+    if merkle_verify_proof(leaf1, vm3, proof as u64, root as u64) != 0u8 { return 4u64 }
+
+    return 99u64
+}

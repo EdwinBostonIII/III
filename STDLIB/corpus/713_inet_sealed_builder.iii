@@ -1,0 +1,23 @@
+/* Falsifier for COMBINE-7 / RIPPLE-6 / II-INET-1: inet_format_ipv4 discarded builder_push_byte (and
+ * inet_emit_octet) returns, so a format into a SEALED builder reports INET_OK despite writing nothing.
+ * Fresh builder: inet_format_ipv4(127.0.0.1) succeeds (sanity).  Sealed builder: it MUST report
+ * failure.  BROKEN: returns INET_OK(0).  FIXED: first push -> BLD_E_SEALED -> returns INET_E_BUILD(-2).
+ * Expected exit: 99. */
+module corpus_713
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn inet_format_ipv4(builder_id: u64, ip: u32) -> i32 from "inet.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    let b : u64 = builder_new(a, 64u64)
+    if b == 0u64 { return 1u64 }
+    if inet_format_ipv4(b, 0x7F000001u32) != 0i32 { return 2u64 }   /* sanity: fresh builder, 127.0.0.1 */
+    builder_seal(b)
+    if inet_format_ipv4(b, 0x7F000001u32) == 0i32 { return 3u64 }   /* [II-INET-1] sealed MUST report failure */
+    arena_drop(a)
+    return 99u64
+}

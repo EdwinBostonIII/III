@@ -255,6 +255,7 @@ fn json_parse_number() -> u64 {
                 let lim : i64 = 922337203685477580i64
                 let v_abs : i64 = value
                 if v_abs > lim { overflowed = 1u8 }
+                if v_abs == lim { if d > 7i64 { overflowed = 1u8 } }   /* lim*10 = 2^63-8, so lim*10+d overflows i64 (max 2^63-1) for d>=8 [audit H-JSON-1] */
                 if overflowed == 0u8 {
                     value = (value * 10i64) + d
                 }
@@ -433,7 +434,8 @@ fn json_parse_array() -> u64 {
             JSON_DEPTH = JSON_DEPTH - 1u32
             return JSON_INVALID
         }
-        JSON_ARRAY_SCRATCH[count as u32] = child
+        let aidx : u32 = ((JSON_DEPTH - 1u32) * 256u32) + (count as u32)
+        JSON_ARRAY_SCRATCH[aidx] = child
         count = count + 1u64
         json_skip_ws()
         let nx : u32 = json_peek()
@@ -468,7 +470,8 @@ fn json_parse_array() -> u64 {
     let bp : *u8 = buf as *u8
     let mut i : u64 = 0u64
     while i < count {
-        let v : u64 = JSON_ARRAY_SCRATCH[i as u32]
+        let aidx : u32 = ((JSON_DEPTH - 1u32) * 256u32) + (i as u32)
+        let v : u64 = JSON_ARRAY_SCRATCH[aidx]
         let off : u64 = i * 8u64
         bp[off + 0u64] = (v & 0xFFu64) as u8
         bp[off + 1u64] = ((v >> 8u64)  & 0xFFu64) as u8
@@ -488,8 +491,8 @@ fn json_parse_array() -> u64 {
     return id
 }
 
-var JSON_ARRAY_SCRATCH : [u64; 256]
-var JSON_OBJECT_SCRATCH : [u64; 512]   /* 256 (key, value) pairs */
+var JSON_ARRAY_SCRATCH : [u64; 16384]   /* 64 depths * 256 items: depth-indexed so a nested array doesn't clobber its enclosing array's staging [audit H-JSON-2] */
+var JSON_OBJECT_SCRATCH : [u64; 32768]  /* 64 depths * 256 (key,value) pairs: depth-indexed [audit H-JSON-2] */
 
 fn json_parse_object() -> u64 {
     if json_peek() != 0x7Bu32 { return JSON_INVALID }   /* '{' */
@@ -537,7 +540,8 @@ fn json_parse_object() -> u64 {
             JSON_DEPTH = JSON_DEPTH - 1u32
             return JSON_INVALID
         }
-        let pair_idx : u32 = (count as u32) * 2u32
+        let obase : u32 = (JSON_DEPTH - 1u32) * 512u32
+        let pair_idx : u32 = obase + ((count as u32) * 2u32)
         JSON_OBJECT_SCRATCH[pair_idx] = key_id
         JSON_OBJECT_SCRATCH[pair_idx + 1u32] = value_id
         count = count + 1u64
@@ -567,7 +571,8 @@ fn json_parse_object() -> u64 {
     let bp : *u8 = buf as *u8
     let mut i : u64 = 0u64
     while i < count {
-        let pair_idx : u32 = (i as u32) * 2u32
+        let obase : u32 = (JSON_DEPTH - 1u32) * 512u32
+        let pair_idx : u32 = obase + ((i as u32) * 2u32)
         let kid : u64 = JSON_OBJECT_SCRATCH[pair_idx]
         let vid : u64 = JSON_OBJECT_SCRATCH[pair_idx + 1u32]
         let off : u64 = i * 16u64

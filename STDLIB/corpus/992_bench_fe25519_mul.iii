@@ -1,0 +1,271 @@
+/* 992_bench_fe25519_mul.iii -- CORRECTNESS-gated MEASUREMENT of the fixed 8-limb
+ * Curve25519 field multiply fz_mul (GF(2^255-19), allocation-free, radix 2^32)
+ * vs a generic ARBITRARY-PRECISION field multiply (bigint_mul + bigint_mod p).
+ *
+ * Investigates the III-CAPABILITY-VERIFICATION "X25519 ... ~1000x faster on the
+ * fixed 8-limb fe25519 field, no per-call arena" claim (fe25519.iii:5
+ * "~1000x faster: ~us vs ~ms per mul"), whose magnitude lived only in a source
+ * comment with no measurement.
+ *
+ * HONEST SCOPE OF THE NUMBER (read before quoting it):
+ *   The "~1000x / ~us vs ~ms" referred to the OLD per-call-arena bigint field
+ *   path that fe25519 REPLACED -- that path is deleted, so it cannot be timed
+ *   today.  This bench instead times fz_mul against the CURRENT best generic
+ *   arbitrary-precision field multiply (bigint_mul then bigint_mod p, using the
+ *   Knuth divider).  So the reported ratio is the speedup of the specialized
+ *   fixed-limb field over GENERIC bigint -- a conservative, still-fair baseline
+ *   (the old arena-per-op path was much slower than today's bigint, so the
+ *   historical "~1000x" was against a weaker baseline than this).
+ *
+ * Both compute a*b mod (2^255-19) for the SAME operands; the result is gated
+ * bit-identical (fz_mul -> fz_freeze -> fz_encode, rebuilt as a bigint, MUST
+ * equal bigint_mul(A,B) mod P).  A fast field mul that computes the wrong
+ * residue is a HARD failure.
+ *
+ * Operand bridge: 4 random u64 words W[0..3] per operand define BOTH the 8-limb
+ * fe25519 element (via its 32-byte LE encoding -> fz_decode) AND the bigint
+ * (4 u64 limbs) -- identical 256-bit value in both representations.
+ *
+ * Timing: fz_mul alone (the per-mul cost in a real Ed25519/X25519 chain, where
+ * freezing happens only at the end) vs bigint_mul+bigint_mod (one generic field
+ * multiply).  MIN over N_ITER = uncontended floor.
+ *
+ * Reports to stdout (captured by run_bench_corpus.sh):
+ *   "<fz_cyc> <bigint_cyc> <ratio_x100>\n"
+ *
+ * Exit map:
+ *    1  arena alloc failed / fe25519_init failed
+ *    3  fz_mul result != bigint result (a path is WRONG) -- HARD fail
+ *   99  results agree AND fz_mul strictly faster -- PASS
+ *   30  fz_mul NOT faster on this host (advisory; never expected) -- reported
+ *
+ * NIH: arena/bigint/bigint_div/fe25519 + omnia_bench + kernel32 only. */
+module corpus_992
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop_arena(arena_id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn fe25519_init() -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_decode(src: u64, dst: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_mul(a: u64, b: u64, r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_freeze(r: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn fz_encode(src: u64, dst: u64) -> i32 from "fe25519.iii"
+extern @abi(c-msvc-x64) fn bench_now() -> u64 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_cpuid_serialize() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn bench_pause_loop() -> i32 from "bench_helpers"
+extern @abi(c-msvc-x64) fn GetStdHandle(n: u32) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn WriteFile(h: u64, buf: *u8, n: u32, nwritten: u64, ovl: u64) -> i32 from "kernel32"
+
+const N_ITER : u64 = 2000u64
+
+var OUTBUF : [u8; 64]
+var NWR    : [u8; 8]
+var DIGTMP : [u8; 24]
+var LCG    : u64 = 0u64
+
+var WA : [u64; 4]   var WB : [u64; 4]
+var ABYTES : [u8; 32]   var BBYTES : [u8; 32]   var OUTBYTES : [u8; 32]
+var FA : [u64; 8]   var FB : [u64; 8]   var FR : [u64; 8]
+
+fn warmup() -> i32 {
+    bench_cpuid_serialize()
+    bench_pause_loop()
+    bench_pause_loop()
+    bench_pause_loop()
+    return 0i32
+}
+fn lcg_next() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* Fill a [u64;4] word buffer with random words. */
+fn fill_words(wp: u64) -> i32 {
+    let w : *u64 = wp as *u64
+    let mut i : u64 = 0u64
+    while i < 4u64 { w[i] = lcg_next()  i = i + 1u64 }
+    return 0i32
+}
+/* 4 LE u64 words -> 32 LE bytes (same numeric value). */
+fn words_to_bytes(wp: u64, bp: u64) -> i32 {
+    let w : *u64 = wp as *u64
+    let b : *u8  = bp as *u8
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let v : u64 = w[i]
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            b[i * 8u64 + j] = ((v >> (j * 8u64)) & 0xFFu64) as u8
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 0i32
+}
+/* 4 LE u64 words -> bigint (4 limbs). */
+fn words_to_bigint(arena: u64, wp: u64) -> u64 {
+    let w : *u64 = wp as *u64
+    let id : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(id, 0u64, w[0u64])
+    bigint_set_limb(id, 1u64, w[1u64])
+    bigint_set_limb(id, 2u64, w[2u64])
+    bigint_set_limb(id, 3u64, w[3u64])
+    bigint_set_len(id, 4u64)
+    bigint_normalize(id)
+    return id
+}
+/* 32 LE bytes -> bigint (4 limbs), each limb packed from 8 LE bytes. */
+fn bytes_to_bigint(arena: u64, bp: u64) -> u64 {
+    let b : *u8 = bp as *u8
+    let id : u64 = bigint_new(arena, 4u64)
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let mut v : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let byte : u64 = b[i * 8u64 + j] as u64
+            v = v | (byte << (j * 8u64))
+            j = j + 1u64
+        }
+        bigint_set_limb(id, i, v)
+        i = i + 1u64
+    }
+    bigint_set_len(id, 4u64)
+    bigint_normalize(id)
+    return id
+}
+/* P = 2^255 - 19 as a 4-limb bigint. */
+fn build_p(arena: u64) -> u64 {
+    let id : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(id, 0u64, 0xFFFFFFFFFFFFFFEDu64)
+    bigint_set_limb(id, 1u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(id, 2u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(id, 3u64, 0x7FFFFFFFFFFFFFFFu64)
+    bigint_set_len(id, 4u64)
+    bigint_normalize(id)
+    return id
+}
+
+fn time_fz() -> u64 {
+    let fa : u64 = (&FA) as u64
+    let fb : u64 = (&FB) as u64
+    let fr : u64 = (&FR) as u64
+    let mut best : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < N_ITER {
+        let t0 : u64 = bench_now()
+        fz_mul(fa, fb, fr)
+        let t1 : u64 = bench_now()
+        let d : u64 = t1 - t0
+        if d < best { best = d }
+        i = i + 1u64
+    }
+    return best
+}
+fn time_bigint(arena_s: u64, a: u64, b: u64, p: u64) -> u64 {
+    let ar : u64 = arena_s
+    let aa : u64 = a
+    let bb : u64 = b
+    let pp : u64 = p
+    let mut best : u64 = 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < N_ITER {
+        bigint_drop_arena(ar)
+        arena_reset(ar)
+        let t0 : u64 = bench_now()
+        let prod : u64 = bigint_mul(ar, aa, bb)
+        let r : u64 = bigint_mod(ar, prod, pp)
+        let t1 : u64 = bench_now()
+        let d : u64 = t1 - t0
+        if d < best { best = d }
+        i = i + 1u64
+    }
+    return best
+}
+
+fn put_dec(off: u64, n: u64) -> u64 {
+    if n == 0u64 { OUTBUF[off] = 48u8 return off + 1u64 }
+    let mut v : u64 = n
+    let mut k : u64 = 0u64
+    while v > 0u64 {
+        let qd : u64 = v / 10u64
+        DIGTMP[k] = ((v - qd * 10u64) as u8) + 48u8
+        v = qd
+        k = k + 1u64
+    }
+    let mut j : u64 = 0u64
+    while j < k { OUTBUF[off + j] = DIGTMP[k - 1u64 - j]  j = j + 1u64 }
+    return off + k
+}
+fn emit(n: u32) -> i32 {
+    let h : u64 = GetStdHandle(0xFFFFFFF5u32)
+    WriteFile(h, (&OUTBUF) as *u8, n, (&NWR) as u64, 0u64)
+    return 0i32
+}
+fn report(fz_c: u64, big_c: u64, ratio_x100: u64) -> i32 {
+    let mut off : u64 = 0u64
+    off = put_dec(off, fz_c)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, big_c)
+    OUTBUF[off] = 32u8 off = off + 1u64
+    off = put_dec(off, ratio_x100)
+    OUTBUF[off] = 10u8 off = off + 1u64
+    emit(off as u32)
+    return 0i32
+}
+
+fn main() -> u64 {
+    if fe25519_init() != 0i32 { return 1u64 }
+    let arena_p : u64 = arena_new(1u64 << 16u64)   /* persistent: A, B, P */
+    let arena_s : u64 = arena_new(1u64 << 20u64)   /* scratch: prod, r */
+    if arena_p == 0u64 { return 1u64 }
+    if arena_s == 0u64 { return 1u64 }
+    LCG = 0x2545F4914F6CDD1Du64
+
+    /* one random operand pair, in BOTH representations from the same words. */
+    fill_words((&WA) as u64)
+    fill_words((&WB) as u64)
+    words_to_bytes((&WA) as u64, (&ABYTES) as u64)
+    words_to_bytes((&WB) as u64, (&BBYTES) as u64)
+    fz_decode((&ABYTES) as u64, (&FA) as u64)
+    fz_decode((&BBYTES) as u64, (&FB) as u64)
+    let a : u64 = words_to_bigint(arena_p, (&WA) as u64)
+    let b : u64 = words_to_bigint(arena_p, (&WB) as u64)
+    let p : u64 = build_p(arena_p)
+
+    /* ---- absolute correctness gate ----
+     * fz_mul -> freeze -> encode, rebuilt as a bigint, must equal A*B mod P. */
+    fz_mul((&FA) as u64, (&FB) as u64, (&FR) as u64)
+    fz_freeze((&FR) as u64)
+    fz_encode((&FR) as u64, (&OUTBYTES) as u64)
+    let r_fz  : u64 = bytes_to_bigint(arena_s, (&OUTBYTES) as u64)
+    let prod  : u64 = bigint_mul(arena_s, a, b)
+    let r_big : u64 = bigint_mod(arena_s, prod, p)
+    let mut fault : u64 = 0u64
+    if bigint_eq(r_fz, r_big) != 1u8 { fault = 3u64 }
+    bigint_drop_arena(arena_s)
+    arena_reset(arena_s)
+    if fault != 0u64 { return fault }
+
+    /* ---- timed measurement ---- */
+    warmup()
+    let fz_c  : u64 = time_fz()
+    let big_c : u64 = time_bigint(arena_s, a, b, p)
+    let mut ratio : u64 = 0u64
+    if fz_c > 0u64 { ratio = big_c * 100u64 / fz_c }
+    report(fz_c, big_c, ratio)
+
+    arena_drop(arena_s)
+    arena_drop(arena_p)
+    if big_c > fz_c { return 99u64 }
+    return 30u64
+}

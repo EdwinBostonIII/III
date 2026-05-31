@@ -1,0 +1,64 @@
+/* APOTHEOSIS S.7 / ADR-S7a falsifier: the unified handle organ catches a
+ * mis-typed handle instead of silently colliding slot indices.
+ *
+ * Arms:
+ *   positive  -- a REGION handle, read as REGION, yields its local slot (0)
+ *   negative  -- the SAME handle, read as INSTANT, is CAUGHT (BAD)
+ *   distinct  -- a REGION and an INSTANT handle are different u64 values
+ *                (the type tag separates the otherwise-colliding ids)
+ *   reverse   -- an INSTANT handle read as REGION is CAUGHT (BAD)
+ *   uaf       -- a freed handle is CAUGHT (use-after-free)
+ *   independ  -- freeing the region does NOT disturb the instant handle
+ */
+module corpus_c763
+
+extern @abi(c-msvc-x64) fn tempaloc_alloc(type_tag: u64) -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_slot_of(handle: u64, expected_type: u64) -> u32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_free(handle: u64, expected_type: u64) -> i32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_type_region() -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_type_instant() -> u64 from "tempaloc.iii"
+
+fn main() -> u64 {
+    let T_REGION  : u64 = tempaloc_type_region()
+    let T_INSTANT : u64 = tempaloc_type_instant()
+    let BAD : u32 = 0xFFFFFFFFu32
+
+    /* allocate a REGION handle */
+    let r : u64 = tempaloc_alloc(T_REGION)
+    if r == 0u64 { return 1u64 }
+
+    /* positive arm: correct type -> valid local slot (first region -> 0) */
+    let s_ok : u32 = tempaloc_slot_of(r, T_REGION)
+    if s_ok == BAD { return 2u64 }
+    if s_ok != 0u32 { return 3u64 }
+
+    /* NEGATIVE ARM: region handle read as instant -> caught */
+    if tempaloc_slot_of(r, T_INSTANT) != BAD { return 4u64 }
+
+    /* allocate an INSTANT handle -> a distinct u64 from the region handle */
+    let in0 : u64 = tempaloc_alloc(T_INSTANT)
+    if in0 == 0u64 { return 5u64 }
+    if in0 == r { return 6u64 }
+
+    let si : u32 = tempaloc_slot_of(in0, T_INSTANT)
+    if si == BAD { return 7u64 }
+    if si != 0u32 { return 8u64 }
+
+    /* reverse mis-type: instant handle read as region -> caught */
+    if tempaloc_slot_of(in0, T_REGION) != BAD { return 9u64 }
+
+    /* free the region handle, then it must be rejected (use-after-free) */
+    if tempaloc_free(r, T_REGION) != 0i32 { return 10u64 }
+    if tempaloc_slot_of(r, T_REGION) != BAD { return 11u64 }
+
+    /* freeing the region must NOT disturb the still-live instant handle */
+    if tempaloc_slot_of(in0, T_INSTANT) == BAD { return 12u64 }
+
+    /* freeing with the wrong type must itself be a caught no-op */
+    if tempaloc_free(in0, T_REGION) != -1i32 { return 13u64 }
+    /* ... so the instant handle is still live */
+    if tempaloc_slot_of(in0, T_INSTANT) == BAD { return 14u64 }
+
+    tempaloc_free(in0, T_INSTANT)
+    return 99u64
+}

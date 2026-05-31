@@ -12,8 +12,12 @@
  * HONEST SCOPE: this is the inductive safety-typing FRAGMENT. The full CIC kernel
  * (beta/zeta/delta/iota/eta reduction, the seven-level universe, dependent Pi, the SovVal
  * dependent record whose K-floor/reach are Pi-typed refinements, gaps-as-open-terms, and
- * all-artifacts-proof-carrying) stays anchored by the trusted cic.c and is completed by the
- * H13 in-language numera/kernel.iii port -- NOT claimed here.
+ * all-artifacts-proof-carrying) stays anchored by the trusted cic.c and is realized by the
+ * in-language proof kernel numera/typecheck.iii (the CIC checker, sole arbiter of meaning) +
+ * its CCL beta-eta reducer numera/ccl.iii -- the trusted base sealed as TRUSTED_BASE_ROOT
+ * (COMPILER/BOOT/trusted_base_check.sh, SEPARATE-2/W2.4) -- NOT claimed here.
+ * (COMBINE-12: the former "numera/kernel.iii port" was a phantom subsystem; the real kernel
+ * is typecheck.iii + ccl.iii.)
  *
  * Verdicts (equality-compared only -- the i32 ordering trap forbids < and >):
  *   SAFETY_TYPE0           =  0   well-typed (the type Type0)

@@ -1,0 +1,59 @@
+/* 953 -- W0.5 Step 1 / D-MONT-5 falsifier: the landed Montgomery fixes (MONT-1 carryless high-word
+ * REDC; MONT-2 even-n schoolbook fallback) were UNPROVEN on the negative -- corpus 146 only tests
+ * small odd moduli + n=1.  This drives the adversarial branches the old code got wrong:
+ *   (i) a large ODD modulus near 2^32 with operands near n -> exercises the carryless-REDC carry!=0
+ *       branch (old truncation was ~25% wrong).
+ *   (ii) EVEN moduli -> the schoolbook fallback (standard Montgomery has no inverse mod R=2^32;
+ *        old garbage-inverse path was ~43% wrong).
+ * Each asserts mont_mul_u32/mont_pow_u32 == exact schoolbook reference (overflow-free: operands
+ * < n < 2^32 so products < 2^64).  A broken REDC or a missing even-n guard reddens this.  99 = pass. */
+module corpus_953
+
+extern @abi(c-msvc-x64) fn mont_mul_u32(a: u64, b: u64, n: u64) -> u64 from "modular_mont.iii"
+extern @abi(c-msvc-x64) fn mont_pow_u32(base: u64, exp: u64, n: u64) -> u64 from "modular_mont.iii"
+
+/* exact schoolbook references (no call precedes any `%` -> no modulo-after-call trap). */
+fn _ref_mul(a: u64, b: u64, n: u64) -> u64 {
+    let ar : u64 = a % n
+    let br : u64 = b % n
+    return (ar * br) % n
+}
+fn _ref_pow(base: u64, exp: u64, n: u64) -> u64 {
+    let mut r : u64 = 1u64 % n
+    let mut c : u64 = base % n
+    let mut e : u64 = exp
+    while e > 0u64 {
+        if (e & 1u64) == 1u64 { r = (r * c) % n }
+        c = (c * c) % n
+        e = e >> 1u64
+    }
+    return r
+}
+
+fn main() -> u64 {
+    /* (i) large ODD modulus near 2^32 -- carry-heavy operands sweep the carryless-REDC branch. */
+    let n1 : u64 = 4294967291u64
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let a : u64 = n1 - 1u64 - i
+        let b : u64 = n1 - 1u64 - (i * 3u64)
+        if mont_mul_u32(a, b, n1) != _ref_mul(a, b, n1) { return 1u64 }
+        i = i + 1u64
+    }
+    if mont_pow_u32(3u64, 1000000u64, n1)    != _ref_pow(3u64, 1000000u64, n1)    { return 2u64 }
+    if mont_pow_u32(n1 - 1u64, 65537u64, n1) != _ref_pow(n1 - 1u64, 65537u64, n1) { return 3u64 }
+
+    /* (ii) EVEN moduli -- the schoolbook fallback path. */
+    if mont_mul_u32(7u64, 8u64, 10u64) != _ref_mul(7u64, 8u64, 10u64) { return 4u64 }
+    if mont_mul_u32(9u64, 9u64, 10u64) != _ref_mul(9u64, 9u64, 10u64) { return 5u64 }
+    if mont_pow_u32(3u64, 7u64, 10u64) != _ref_pow(3u64, 7u64, 10u64) { return 6u64 }
+    let mut j : u64 = 0u64
+    while j < 16u64 {
+        let a2 : u64 = 999983u64 - j
+        let b2 : u64 = 888888u64 - (j * 7u64)
+        if mont_mul_u32(a2, b2, 1000000u64) != _ref_mul(a2, b2, 1000000u64) { return 7u64 }
+        j = j + 1u64
+    }
+    if mont_pow_u32(7u64, 13u64, 1000000u64) != _ref_pow(7u64, 13u64, 1000000u64) { return 8u64 }
+    return 99u64
+}

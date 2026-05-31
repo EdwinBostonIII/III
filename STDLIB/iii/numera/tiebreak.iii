@@ -125,6 +125,30 @@ fn tb_select_by_u64_then_ident(values: *u64, idents: *u8, count: u64, out_index:
     return TB_OK
 }
 
+/* [COMBINE-6/X21] u32 comparator: -1 a<b, 0 a==b, 1 a>b.  Centralizes the class-id/cost order that
+ * eg_union (lower-id tie) and eg_extract (strict-improvement) hand-roll, WITHOUT changing which
+ * element wins -- the comparison law lives in one place. */
+fn tb_cmp_u32(a: u32, b: u32) -> i32 @export {
+    if a < b { return -1i32 }
+    if a > b { return 1i32 }
+    return 0i32
+}
+
+/* [COMBINE-6/X21] u64 argmax with least-index tie (strict-improvement scan): rs_argmax's law. */
+fn tb_max_by_u64(values: *u64, count: u64, out_index: *u64) -> i32 @export {
+    if (out_index as u64) == 0u64 { return TB_E_NULL }
+    if count == 0u64 { return TB_E_EMPTY }
+    let mut best : u64 = 0u64
+    let mut bv : u64 = values[0u64]
+    let mut i : u64 = 1u64
+    while i < count {
+        if values[i] > bv { bv = values[i]  best = i }   /* strict > => equal values keep the lower index */
+        i = i + 1u64
+    }
+    out_index[0u64] = best
+    return TB_OK
+}
+
 /* Self-test.  99 = pass; 1..8 = first failed KAT (K1..K8). */
 fn tb_selftest() -> u64 @export {
     /* Zero the ident vectors, then set the discriminating byte-0 of each.

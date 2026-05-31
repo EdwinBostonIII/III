@@ -48,6 +48,19 @@ L_AES192_ROUNDS:
     .quad 0xc
 L_AES192_KEY_BYTES:
     .quad 0x18
+    .section .bss
+    .global L_AES_IM0
+L_AES_IM0:
+    .zero 32
+    .global L_AES_IM1
+L_AES_IM1:
+    .zero 32
+    .global L_AES_IM2
+L_AES_IM2:
+    .zero 32
+    .global L_AES_IM3
+L_AES_IM3:
+    .zero 32
     .section .iii.ring3,"n"
     .asciz "aes_xtime"
     .text
@@ -64,16 +77,6 @@ L_aes_xtime:
     movq %rcx, -8(%rbp)
     movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x80, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movl -8(%rbp), %eax
-    pushq %rax
     movabsq $0x1, %rax
     pushq %rax
     popq %rcx
@@ -88,37 +91,50 @@ L_aes_xtime:
     andq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -24(%rbp)
-    movl -16(%rbp), %eax
+    movq %rax, -16(%rbp)
+    movl -8(%rbp), %eax
     pushq %rax
-    movabsq $0x0, %rax
+    movabsq $0x7, %rax
     pushq %rax
     popq %rcx
     popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
+    shrq %cl, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
-    testq %rax, %rax
-    jz L_if_end_1
+    movq %rax, -24(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
     movabsq $0x1b, %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_1:
-    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -174,7 +190,7 @@ L_aes_gmul:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_2:
+L_loop_top_0:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -187,7 +203,7 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_3
+    jz L_loop_end_1
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -206,7 +222,7 @@ L_loop_top_2:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_3
     movl -24(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
@@ -220,7 +236,7 @@ L_loop_top_2:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_3:
     movl -32(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -255,8 +271,8 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_2
-L_loop_end_3:
+    jmp L_loop_top_0
+L_loop_end_1:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xff, %rax
@@ -302,7 +318,7 @@ L_aes_mulinv:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_5
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -312,7 +328,7 @@ L_aes_mulinv:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_5:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rax
@@ -875,7 +891,7 @@ L_aes_init_tables:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_7
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -885,12 +901,12 @@ L_aes_init_tables:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_7:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_10:
+L_loop_top_8:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x100, %rax
@@ -903,7 +919,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_9
     movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -947,13 +963,13 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_8
+L_loop_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_12:
+L_loop_top_10:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x100, %rax
@@ -966,7 +982,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_11
     leaq L_AES_SBOX(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1007,8 +1023,8 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_10
+L_loop_end_11:
     leaq L_AES_RCON(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -1156,7 +1172,7 @@ L_aes_expand_key_into:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_14:
+L_loop_top_12:
     movl -32(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1169,7 +1185,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_13
     leaq L_AES_RKEYS(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1200,13 +1216,13 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_12
+L_loop_end_13:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_16:
+L_loop_top_14:
     movl -40(%rbp), %eax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1219,7 +1235,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_15
     leaq L_AES_RKEYS(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1324,7 +1340,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_17
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1426,7 +1442,7 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_17:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -1439,7 +1455,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_19
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -1452,7 +1468,7 @@ L_if_end_19:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_21
     leaq L_AES_SBOX(%rip), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -1508,11 +1524,11 @@ L_if_end_19:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_19:
     leaq L_AES_RKEYS(%rip), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1739,8 +1755,8 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_14
+L_loop_end_15:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1951,7 +1967,7 @@ L_aes_add_round_key:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_24:
+L_loop_top_22:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -1964,7 +1980,7 @@ L_loop_top_24:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_25
+    jz L_loop_end_23
     leaq L_AES_STATE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -2023,8 +2039,8 @@ L_loop_top_24:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_24
-L_loop_end_25:
+    jmp L_loop_top_22
+L_loop_end_23:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2055,7 +2071,7 @@ L_aes_sub_bytes:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_26:
+L_loop_top_24:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -2068,7 +2084,7 @@ L_loop_top_26:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_27
+    jz L_loop_end_25
     leaq L_AES_STATE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2112,8 +2128,8 @@ L_loop_top_26:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_26
-L_loop_end_27:
+    jmp L_loop_top_24
+L_loop_end_25:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -2144,7 +2160,7 @@ L_aes_inv_sub_bytes:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_28:
+L_loop_top_26:
     movl -8(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -2157,7 +2173,7 @@ L_loop_top_28:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_29
+    jz L_loop_end_27
     leaq L_AES_STATE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -2201,8 +2217,8 @@ L_loop_top_28:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_28
-L_loop_end_29:
+    jmp L_loop_top_26
+L_loop_end_27:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3081,6 +3097,152 @@ L_aes_mix_columns:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "aes_inv_mults"
+    .text
+    .global L_aes_inv_mults
+    .seh_proc L_aes_inv_mults
+L_aes_inv_mults:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq %rdx, -16(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_aes_xtime
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_aes_xtime
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq L_aes_xtime
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -48(%rbp)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    movl -8(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    movl -48(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movl %edx, (%rax,%rcx,4)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "aes_inv_mix_one_column"
     .text
     .global L_aes_inv_mix_one_column
@@ -3185,259 +3347,267 @@ L_aes_inv_mix_one_column:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
+    leaq L_AES_IM0(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movl -24(%rbp), %eax
     pushq %rax
-    movabsq $0xe, %rax
-    pushq %rax
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_aes_gmul
+    callq L_aes_inv_mults
     addq $32, %rsp
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
-    subq $8, %rsp
+    popq %rax
+    leaq L_AES_IM1(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
-    movabsq $0xb, %rax
-    pushq %rax
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_aes_gmul
+    callq L_aes_inv_mults
     addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
-    popq %rcx
     popq %rax
-    xorq %rcx, %rax
+    leaq L_AES_IM2(%rip), %rax
     pushq %rax
-    subq $8, %rsp
+    popq %rax
+    pushq %rax
     movl -40(%rbp), %eax
     pushq %rax
-    movabsq $0xd, %rax
-    pushq %rax
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_aes_gmul
+    callq L_aes_inv_mults
     addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    movslq %eax, %rax
     pushq %rax
-    popq %rcx
     popq %rax
-    xorq %rcx, %rax
+    leaq L_AES_IM3(%rip), %rax
     pushq %rax
-    subq $8, %rsp
+    popq %rax
+    pushq %rax
     movl -48(%rbp), %eax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_aes_gmul
+    callq L_aes_inv_mults
     addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
+    leaq L_AES_IM0(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM1(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
+    pushq %rax
+    leaq L_AES_IM2(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM3(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    xorq %rcx, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movl -24(%rbp), %eax
+    leaq L_AES_IM0(%rip), %rax
     pushq %rax
-    movabsq $0x9, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    subq $8, %rsp
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0xe, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM1(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
     pushq %rax
-    subq $8, %rsp
-    movl -40(%rbp), %eax
+    leaq L_AES_IM2(%rip), %rax
     pushq %rax
-    movabsq $0xb, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM3(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
     pushq %rax
-    subq $8, %rsp
-    movl -48(%rbp), %eax
-    pushq %rax
-    movabsq $0xd, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
-    pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-    movl -24(%rbp), %eax
+    leaq L_AES_IM0(%rip), %rax
     pushq %rax
-    movabsq $0xd, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    subq $8, %rsp
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0x9, %rax
+    movabsq $0x2, %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM1(%rip), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
     pushq %rax
-    subq $8, %rsp
-    movl -40(%rbp), %eax
+    leaq L_AES_IM2(%rip), %rax
     pushq %rax
-    movabsq $0xe, %rax
+    movabsq $0x3, %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM3(%rip), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
     pushq %rax
-    subq $8, %rsp
-    movl -48(%rbp), %eax
-    pushq %rax
-    movabsq $0xb, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
-    pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-    movl -24(%rbp), %eax
+    leaq L_AES_IM0(%rip), %rax
     pushq %rax
-    movabsq $0xb, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    subq $8, %rsp
-    movl -32(%rbp), %eax
-    pushq %rax
-    movabsq $0xd, %rax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM1(%rip), %rax
+    pushq %rax
+    movabsq $0x2, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
     pushq %rax
-    subq $8, %rsp
-    movl -40(%rbp), %eax
+    leaq L_AES_IM2(%rip), %rax
     pushq %rax
-    movabsq $0x9, %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
+    popq %rax
+    movl (%rax,%rcx,4), %eax
+    pushq %rax
+    leaq L_AES_IM3(%rip), %rax
+    pushq %rax
+    movabsq $0x3, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movl (%rax,%rcx,4), %eax
     pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
     pushq %rax
-    subq $8, %rsp
-    movl -48(%rbp), %eax
-    pushq %rax
-    movabsq $0xe, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    subq $32, %rsp
-    callq L_aes_gmul
-    addq $32, %rsp
-    addq $8, %rsp
-    movl %eax, %eax
-    pushq %rax
     popq %rcx
     popq %rax
     xorq %rcx, %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
@@ -3623,7 +3793,7 @@ aes_encrypt_block:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_29
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3636,12 +3806,12 @@ aes_encrypt_block:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_29:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_32:
+L_loop_top_30:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -3654,7 +3824,7 @@ L_loop_top_32:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_33
+    jz L_loop_end_31
     leaq L_AES_STATE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3685,8 +3855,8 @@ L_loop_top_32:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_32
-L_loop_end_33:
+    jmp L_loop_top_30
+L_loop_end_31:
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
@@ -3700,7 +3870,7 @@ L_loop_end_33:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_34:
+L_loop_top_32:
     movl -32(%rbp), %eax
     pushq %rax
     movl L_AES_NR(%rip), %eax
@@ -3713,7 +3883,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_33
     subq $32, %rsp
     callq L_aes_sub_bytes
     addq $32, %rsp
@@ -3755,8 +3925,8 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_32
+L_loop_end_33:
     subq $32, %rsp
     callq L_aes_sub_bytes
     addq $32, %rsp
@@ -3782,7 +3952,7 @@ L_loop_end_35:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_36:
+L_loop_top_34:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -3795,7 +3965,7 @@ L_loop_top_36:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_37
+    jz L_loop_end_35
     movq -16(%rbp), %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -3826,8 +3996,8 @@ L_loop_top_36:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
+    jmp L_loop_top_34
+L_loop_end_35:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -3868,7 +4038,7 @@ aes_decrypt_block:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_37
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -3881,12 +4051,12 @@ aes_decrypt_block:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_37:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_40:
+L_loop_top_38:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -3899,7 +4069,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_39
     leaq L_AES_STATE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -3930,8 +4100,8 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_38
+L_loop_end_39:
     movl L_AES_NR(%rip), %eax
     pushq %rax
     popq %rcx
@@ -3956,7 +4126,7 @@ L_loop_end_41:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_42:
+L_loop_top_40:
     movzbq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -3969,7 +4139,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_43
+    jz L_loop_end_41
     subq $32, %rsp
     callq L_aes_inv_shift_rows
     addq $32, %rsp
@@ -4009,7 +4179,7 @@ L_loop_top_42:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_43
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4017,7 +4187,7 @@ L_loop_top_42:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_43:
     movzbq -40(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -4030,7 +4200,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_45
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -4045,12 +4215,12 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_42
-L_loop_end_43:
+    jmp L_loop_top_40
+L_loop_end_41:
     subq $32, %rsp
     callq L_aes_inv_shift_rows
     addq $32, %rsp
@@ -4076,7 +4246,7 @@ L_loop_end_43:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_48:
+L_loop_top_46:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -4089,7 +4259,7 @@ L_loop_top_48:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_49
+    jz L_loop_end_47
     movq -16(%rbp), %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -4120,8 +4290,8 @@ L_loop_top_48:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_48
-L_loop_end_49:
+    jmp L_loop_top_46
+L_loop_end_47:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

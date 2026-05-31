@@ -1,0 +1,38 @@
+/* APOTHEOSIS C.1: ntt_ctx per-modulus descriptor over the S.4 NTT organ.
+ * Verifies the two prebuilt rows carry the EXACT constants the live mldsa/
+ * mlkem call sites use (so adopting ntt_ctx in step 5 is byte-equivalent).
+ *   ML-KEM: q=3329,    n=256, CT min_len=2, GS start_k=127
+ *   ML-DSA: q=8380417, n=256, CT min_len=1, GS start_k=255
+ */
+module corpus_c767
+
+extern @abi(c-msvc-x64) fn ntt_ctx_mlkem() -> u64 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_mldsa() -> u64 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_q(row: u64) -> u64 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_n(row: u64) -> u64 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_min_len(row: u64) -> u64 from "ntt_ctx.iii"
+extern @abi(c-msvc-x64) fn ntt_ctx_start_k(row: u64) -> u64 from "ntt_ctx.iii"
+
+fn main() -> u64 {
+    let km : u64 = ntt_ctx_mlkem()
+    let ds : u64 = ntt_ctx_mldsa()
+    if km == ds { return 1u64 }
+
+    /* ML-KEM row */
+    if ntt_ctx_q(km)       != 3329u64 { return 2u64 }
+    if ntt_ctx_n(km)       != 256u64  { return 3u64 }
+    if ntt_ctx_min_len(km) != 2u64    { return 4u64 }
+    if ntt_ctx_start_k(km) != 127u64  { return 5u64 }
+
+    /* ML-DSA row */
+    if ntt_ctx_q(ds)       != 8380417u64 { return 6u64 }
+    if ntt_ctx_n(ds)       != 256u64     { return 7u64 }
+    if ntt_ctx_min_len(ds) != 1u64       { return 8u64 }
+    if ntt_ctx_start_k(ds) != 255u64     { return 9u64 }
+
+    /* out-of-range row -> 0 (negative arm) */
+    if ntt_ctx_q(2u64) != 0u64 { return 10u64 }
+    if ntt_ctx_q(99u64) != 0u64 { return 11u64 }
+
+    return 99u64
+}

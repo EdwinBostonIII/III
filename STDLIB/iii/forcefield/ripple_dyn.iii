@@ -145,6 +145,8 @@ fn dn_find(meta: *u8, slots: *u8, key: *u8, ko: u64, want: u64) -> u64 {
 }
 
 fn dn_init(meta: *u8, slots: *u8, cap: u64) -> u64 @export {
+    if cap == 0u64 { return 1u64 }                     /* probe slot = hash & (cap-1) requires a nonzero power-of-two cap [audit A-RD-PRE-1] */
+    if (cap & (cap - 1u64)) != 0u64 { return 1u64 }
     dn_st_u64(meta, 0u64, cap)
     dn_st_u64(meta, 8u64, 0u64)
     let mut i : u64 = 0u64

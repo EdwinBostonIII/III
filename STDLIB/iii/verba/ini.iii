@@ -258,36 +258,42 @@ fn ini_count(id: u64) -> u64 @export {
 fn ini_section_base(id: u64, i: u64) -> u64 @export {
     let idx : u32 = ini_resolve(id)
     if idx == INI_TABLE_MAX { return 0u64 }
+    if i >= INI_ENTRY_MAX { return 0u64 }   /* ini_index = idx*INI_ENTRY_MAX + i; unbounded i spills into the next table's region [audit H-INI-1] */
     return INI_SECTION_BASE[ini_index(idx, i)]
 }
 
 fn ini_section_len(id: u64, i: u64) -> u64 @export {
     let idx : u32 = ini_resolve(id)
     if idx == INI_TABLE_MAX { return 0u64 }
+    if i >= INI_ENTRY_MAX { return 0u64 }   /* [audit H-INI-1] */
     return INI_SECTION_LEN[ini_index(idx, i)]
 }
 
 fn ini_key_base(id: u64, i: u64) -> u64 @export {
     let idx : u32 = ini_resolve(id)
     if idx == INI_TABLE_MAX { return 0u64 }
+    if i >= INI_ENTRY_MAX { return 0u64 }   /* [audit H-INI-1] */
     return INI_KEY_BASE[ini_index(idx, i)]
 }
 
 fn ini_key_len(id: u64, i: u64) -> u64 @export {
     let idx : u32 = ini_resolve(id)
     if idx == INI_TABLE_MAX { return 0u64 }
+    if i >= INI_ENTRY_MAX { return 0u64 }   /* [audit H-INI-1] */
     return INI_KEY_LEN[ini_index(idx, i)]
 }
 
 fn ini_value_base(id: u64, i: u64) -> u64 @export {
     let idx : u32 = ini_resolve(id)
     if idx == INI_TABLE_MAX { return 0u64 }
+    if i >= INI_ENTRY_MAX { return 0u64 }   /* [audit H-INI-1] */
     return INI_VALUE_BASE[ini_index(idx, i)]
 }
 
 fn ini_value_len(id: u64, i: u64) -> u64 @export {
     let idx : u32 = ini_resolve(id)
     if idx == INI_TABLE_MAX { return 0u64 }
+    if i >= INI_ENTRY_MAX { return 0u64 }   /* [audit H-INI-1] */
     return INI_VALUE_LEN[ini_index(idx, i)]
 }
 

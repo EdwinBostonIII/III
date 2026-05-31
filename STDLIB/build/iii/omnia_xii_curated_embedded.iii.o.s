@@ -6,24 +6,6 @@
 L_str_0:
     .ascii "xii_emit_gen.iii\0"
     .section .data
-    .global L_XCE_H022_CORTEX_M
-L_XCE_H022_CORTEX_M:
-    .byte 0x0
-    .byte 0x68
-    .byte 0x78
-    .byte 0x40
-    .byte 0x0
-    .byte 0xfa
-    .byte 0x87
-    .byte 0xf0
-    .byte 0x0
-    .byte 0x68
-    .byte 0x78
-    .byte 0x40
-    .byte 0x80
-    .byte 0xbd
-    .byte 0x0
-    .byte 0xbf
     .global L_XCE_H051_CORTEX_M
 L_XCE_H051_CORTEX_M:
     .byte 0x80
@@ -57,26 +39,6 @@ xii_curated_embedded_register_all:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x10, %rax
-    pushq %rax
-    leaq L_XCE_H022_CORTEX_M(%rip), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x6, %rax
-    pushq %rax
-    movabsq $0x15, %rax
-    pushq %rax
-    popq %rcx
-    popq %rdx
-    popq %r8
-    popq %r9
-    subq $32, %rsp
-    callq xii_emit_gen_override
-    addq $32, %rsp
-    movslq %eax, %rax
-    pushq %rax
-    popq %rax
     movabsq $0x8, %rax
     pushq %rax
     leaq L_XCE_H051_CORTEX_M(%rip), %rax

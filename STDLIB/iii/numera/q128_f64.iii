@@ -118,7 +118,7 @@ fn q128_to_f64_bits(id: u64) -> u64 @export {
     if hi == 0u64 {
         if lo == 0u64 {
             /* exact zero */
-            let slot : u64 = (id_l - 1u64) & 0xFFu64
+            let slot : u64 = (id_l - 1u64) & 0x3Fu64
             Q128_F64_LAST_DIR[slot] = 0i32
             return F64_POS_ZERO_BITS
         }
@@ -163,7 +163,7 @@ fn q128_to_f64_bits(id: u64) -> u64 @export {
     }
     /* Round to nearest, ties to even. */
     let mut bits : u64 = (exp << 52u64) | mant_full
-    let slot : u64 = (id_l - 1u64) & 0xFFu64
+    let slot : u64 = (id_l - 1u64) & 0x3Fu64
     if round_bit == 1u64 {
         let lsb_of_mant : u64 = mant_full & 1u64
         if sticky != 0u64 {
@@ -193,7 +193,7 @@ fn q128_to_f64_bits(id: u64) -> u64 @export {
 
 fn q128_to_f64_round_dir(id: u64) -> i32 @export {
     if id == 0u64 { return 0i32 }
-    let slot : u64 = (id - 1u64) & 0xFFu64
+    let slot : u64 = (id - 1u64) & 0x3Fu64
     return Q128_F64_LAST_DIR[slot]
 }
 

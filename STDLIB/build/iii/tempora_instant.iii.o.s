@@ -4,15 +4,21 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "capability.iiisha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "capability.iiisha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
 L_str_1:
-    .ascii "sha256.iiisha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iiisha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
 L_str_2:
-    .ascii "sha256.iiisha256.iiisha256.iii\0"
+    .ascii "sha256.iiisha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
 L_str_3:
-    .ascii "sha256.iiisha256.iii\0"
+    .ascii "sha256.iiisha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
 L_str_4:
-    .ascii "sha256.iii\0"
+    .ascii "sha256.iiitempaloc.iiitempaloc.iiitempaloc.iii\0"
+L_str_5:
+    .ascii "tempaloc.iiitempaloc.iiitempaloc.iii\0"
+L_str_6:
+    .ascii "tempaloc.iiitempaloc.iii\0"
+L_str_7:
+    .ascii "tempaloc.iii\0"
     .section .rodata
 L_INSTANT_INVALID:
     .quad 0x0
@@ -20,6 +26,8 @@ L_INSTANT_RIGHT_TIME:
     .quad 0x100
 L_INSTANT_MAX_INSTANCES:
     .quad 0x100
+L_INSTANT_TYPE:
+    .quad 0x2
     .section .bss
     .global L_INSTANT_TICK
 L_INSTANT_TICK:
@@ -33,9 +41,6 @@ L_INSTANT_CAP:
     .global L_INSTANT_SEAL
 L_INSTANT_SEAL:
     .zero 32768
-    .global L_INSTANT_LIVE
-L_INSTANT_LIVE:
-    .zero 2048
     .section .data
     .global L_INSTANT_PROCESS_EPOCH
 L_INSTANT_PROCESS_EPOCH:
@@ -83,95 +88,6 @@ L_instant_logical_next:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
-    .asciz "instant_alloc_slot"
-    .text
-    .global L_instant_alloc_slot
-    .seh_proc L_instant_alloc_slot
-L_instant_alloc_slot:
-    pushq %rbp
-    .seh_pushreg %rbp
-    movq %rsp, %rbp
-    .seh_setframe %rbp, 0
-    subq $1024, %rsp
-    .seh_stackalloc 1024
-    .seh_endprologue
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-L_loop_top_0:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movl L_INSTANT_MAX_INSTANCES(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_1
-    leaq L_INSTANT_LIVE(%rip), %rax
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_3
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_0
-L_loop_end_1:
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    movq $0, %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    .seh_endproc
-    .section .iii.ring3,"n"
     .asciz "instant_slot_of"
     .text
     .global L_instant_slot_of
@@ -185,101 +101,16 @@ L_instant_slot_of:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movq L_INSTANT_TYPE(%rip), %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_5
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_5:
-    movq -8(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    movl L_INSTANT_MAX_INSTANCES(%rip), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_7
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_7:
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
+    addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    leaq L_INSTANT_LIVE(%rip), %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_9
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_9:
-    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -317,7 +148,7 @@ L_instant_init_epoch:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_1
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -327,7 +158,7 @@ L_instant_init_epoch:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_1:
     subq $32, %rsp
     callq L_instant_logical_next
     addq $32, %rsp
@@ -405,7 +236,7 @@ L_instant_seal_compute:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_12:
+L_loop_top_2:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -418,7 +249,7 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_3
     movl -40(%rbp), %eax
     pushq %rax
     popq %rax
@@ -469,13 +300,13 @@ L_loop_top_12:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_2
+L_loop_end_3:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_14:
+L_loop_top_4:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -488,7 +319,7 @@ L_loop_top_14:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_15
+    jz L_loop_end_5
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax
@@ -539,13 +370,13 @@ L_loop_top_14:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_14
-L_loop_end_15:
+    jmp L_loop_top_4
+L_loop_end_5:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_16:
+L_loop_top_6:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -558,7 +389,7 @@ L_loop_top_16:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_17
+    jz L_loop_end_7
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
@@ -609,8 +440,8 @@ L_loop_top_16:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_16
-L_loop_end_17:
+    jmp L_loop_top_6
+L_loop_end_7:
     subq $32, %rsp
     callq sha256_finalize_internal
     addq $32, %rsp
@@ -632,7 +463,7 @@ L_loop_end_17:
     pushq %rax
     popq %rax
     movq %rax, -72(%rbp)
-L_loop_top_18:
+L_loop_top_8:
     movl -72(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -645,7 +476,7 @@ L_loop_top_18:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_19
+    jz L_loop_end_9
     leaq L_INSTANT_SEAL(%rip), %rax
     pushq %rax
     movl -64(%rbp), %eax
@@ -692,8 +523,8 @@ L_loop_top_18:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_18
-L_loop_end_19:
+    jmp L_loop_top_8
+L_loop_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -742,7 +573,7 @@ instant_now_sealed:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_11
     movq L_INSTANT_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -752,21 +583,59 @@ instant_now_sealed:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_11:
     subq $32, %rsp
     callq L_instant_init_epoch
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax
+    movq L_INSTANT_TYPE(%rip), %rax
+    pushq %rax
+    popq %rcx
     subq $32, %rsp
-    callq L_instant_alloc_slot
+    callq tempaloc_alloc
+    addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_13
+    movq L_INSTANT_INVALID(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_13:
+    movq L_INSTANT_TYPE(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
     addq $32, %rsp
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -16(%rbp)
-    movl -16(%rbp), %eax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
     pushq %rax
@@ -778,7 +647,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_15
     movq L_INSTANT_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -788,18 +657,18 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_15:
     subq $32, %rsp
     callq L_instant_logical_next
     addq $32, %rsp
     pushq %rax
     popq %rax
-    movq %rax, -24(%rbp)
+    movq %rax, -32(%rbp)
     leaq L_INSTANT_TICK(%rip), %rax
     pushq %rax
-    movl -16(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
-    movq -24(%rbp), %rax
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rdx
     popq %rcx
@@ -807,7 +676,7 @@ L_if_end_23:
     movq %rdx, (%rax,%rcx,8)
     leaq L_INSTANT_EPOCH(%rip), %rax
     pushq %rax
-    movl -16(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     movq L_INSTANT_PROCESS_EPOCH(%rip), %rax
     pushq %rax
@@ -817,7 +686,7 @@ L_if_end_23:
     movq %rdx, (%rax,%rcx,8)
     leaq L_INSTANT_CAP(%rip), %rax
     pushq %rax
-    movl -16(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
@@ -825,17 +694,7 @@ L_if_end_23:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
-    leaq L_INSTANT_LIVE(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
-    movl -16(%rbp), %eax
+    movl -24(%rbp), %eax
     pushq %rax
     popq %rcx
     subq $32, %rsp
@@ -844,15 +703,7 @@ L_if_end_23:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -901,7 +752,7 @@ instant_tick:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -911,7 +762,7 @@ instant_tick:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_17:
     leaq L_INSTANT_TICK(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -967,7 +818,7 @@ instant_epoch:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -977,7 +828,7 @@ instant_epoch:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_19:
     leaq L_INSTANT_EPOCH(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1034,7 +885,7 @@ instant_seal_byte:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_21
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1044,7 +895,7 @@ instant_seal_byte:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_21:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -1057,7 +908,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_23
     movabsq $0x100, %rax
     pushq %rax
     popq %rax
@@ -1067,7 +918,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_23:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -1144,7 +995,7 @@ instant_verify:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_25
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1154,7 +1005,7 @@ instant_verify:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_25:
     leaq L_INSTANT_TICK(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1195,7 +1046,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     movq %rax, -48(%rbp)
-L_loop_top_34:
+L_loop_top_26:
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -1208,7 +1059,7 @@ L_loop_top_34:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_35
+    jz L_loop_end_27
     movl -48(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1259,13 +1110,13 @@ L_loop_top_34:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_34
-L_loop_end_35:
+    jmp L_loop_top_26
+L_loop_end_27:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_36:
+L_loop_top_28:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -1278,7 +1129,7 @@ L_loop_top_36:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_37
+    jz L_loop_end_29
     movl -56(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1329,13 +1180,13 @@ L_loop_top_36:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_36
-L_loop_end_37:
+    jmp L_loop_top_28
+L_loop_end_29:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_38:
+L_loop_top_30:
     movl -64(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -1348,7 +1199,7 @@ L_loop_top_38:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_39
+    jz L_loop_end_31
     movl -64(%rbp), %eax
     pushq %rax
     popq %rax
@@ -1399,8 +1250,8 @@ L_loop_top_38:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_38
-L_loop_end_39:
+    jmp L_loop_top_30
+L_loop_end_31:
     subq $32, %rsp
     callq sha256_finalize_internal
     addq $32, %rsp
@@ -1422,7 +1273,7 @@ L_loop_end_39:
     pushq %rax
     popq %rax
     movq %rax, -80(%rbp)
-L_loop_top_40:
+L_loop_top_32:
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
@@ -1435,7 +1286,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_41
+    jz L_loop_end_33
     leaq L_INSTANT_SEAL(%rip), %rax
     pushq %rax
     movl -72(%rbp), %eax
@@ -1484,7 +1335,7 @@ L_loop_top_40:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_35
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1494,7 +1345,7 @@ L_loop_top_40:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_35:
     movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -1509,8 +1360,8 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_40
-L_loop_end_41:
+    jmp L_loop_top_32
+L_loop_end_33:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1571,7 +1422,7 @@ instant_diff_ticks:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_37
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1581,7 +1432,7 @@ instant_diff_ticks:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_37:
     movl -32(%rbp), %eax
     pushq %rax
     movabsq $0xffffffff, %rax
@@ -1594,7 +1445,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_39
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1604,7 +1455,7 @@ L_if_end_45:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_39:
     leaq L_INSTANT_TICK(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1637,7 +1488,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_41
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1647,7 +1498,7 @@ L_if_end_47:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_41:
     movq -40(%rbp), %rax
     pushq %rax
     movq -48(%rbp), %rax
@@ -1703,7 +1554,7 @@ instant_drop:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_43
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1716,17 +1567,7 @@ instant_drop:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
-    leaq L_INSTANT_LIVE(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
+L_if_end_43:
     leaq L_INSTANT_TICK(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1757,6 +1598,18 @@ L_if_end_51:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
+    movq L_INSTANT_TYPE(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_free
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rax

@@ -180,6 +180,55 @@ fn if_mask(bits: u32) -> u32 {
     return shifted - 1u32
 }
 
+/* S26.18 salt: a subform value salted with a 1-byte prefix (III-XII.md:4912-4914). salt==0 is the
+ * unsalted value (the normal transition_id); salt k in 1..255 hashes "PREFIX:" || k || name, so a
+ * collision can be resolved deterministically by trying successive salts until the id is unique. */
+fn xii_subforms_compute_salted(prefix_id: u8, salt: u32, name_ptr: *u8, name_len: u32, bits: u32) -> u32 @export {
+    if salt == 0u32 { return xii_subforms_compute(prefix_id, name_ptr, name_len, bits) }
+    let scratch_ptr : *u8 = &XSF_SCRATCH as *u8
+    let p_len : u32 = _prefix_bytes(prefix_id, scratch_ptr)
+    if (p_len + 1u32 + name_len) >= 64u32 { return 0u32 }
+    XSF_SCRATCH[p_len] = (salt & 0xFFu32) as u8
+    let mut i : u32 = 0u32
+    while i < name_len {
+        XSF_SCRATCH[p_len + 1u32 + i] = name_ptr[i as u64]
+        i = i + 1u32
+    }
+    let total_len : u32 = p_len + 1u32 + name_len
+    sha256_oneshot(scratch_ptr, total_len as u64, &XSF_HASH_OUT as *u8)
+    let b0 : u32 = XSF_HASH_OUT[0u32] as u32
+    let b1 : u32 = XSF_HASH_OUT[1u32] as u32
+    let b2 : u32 = XSF_HASH_OUT[2u32] as u32
+    let b3 : u32 = XSF_HASH_OUT[3u32] as u32
+    let raw : u32 = b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+    let mask : u32 = if_mask(bits)
+    return raw & mask
+}
+
+/* S26.18 collision resolution: the smallest salt (0..255) whose salted id is NOT in `used`.
+ * 0 = the unsalted value is already unique; 1..255 = the resolving salt byte; 0xFFFFFFFF = all 256
+ * salts collide (cannot happen for distinct names in a 17-bit space sized to the 91 ACT subforms). */
+fn xii_subforms_salt_resolve(prefix_id: u8, name_ptr: *u8, name_len: u32, bits: u32, used: *u32, used_n: u32) -> u32 @export {
+    let mut salt : u32 = 0u32
+    let mut result : u32 = 0xFFFFFFFFu32
+    let mut done : u32 = 0u32
+    while done == 0u32 {
+        if salt > 255u32 { done = 1u32 }
+        if done == 0u32 {
+            let id : u32 = xii_subforms_compute_salted(prefix_id, salt, name_ptr, name_len, bits)
+            let mut clash : u32 = 0u32
+            let mut k : u32 = 0u32
+            while k < used_n {
+                if used[k as u64] == id { clash = 1u32 }
+                k = k + 1u32
+            }
+            if clash == 0u32 { result = salt  done = 1u32 }
+            else { salt = salt + 1u32 }
+        }
+    }
+    return result
+}
+
 /* Convenience helpers for common Horizon-pattern subforms. */
 
 fn _name_buf_set(name: *u8, b0: u8, b1: u8, b2: u8, b3: u8, b4: u8, b5: u8, b6: u8, b7: u8) -> i32 {

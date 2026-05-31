@@ -1,0 +1,16 @@
+=== [1/3] build_stdlib (ripple_metric + rm_value = 428 modules) ===
+stdlib_exit=0
+[cartographer] GATE: PASS -- no duplicate @export symbols; no un-allowlisted dependency cycles.
+[build_stdlib] OK   forcefield/ripple_metric -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/forcefield_ripple_metric.iii.o
+  PASS = 428
+  FAIL = 0
+  TOTAL= 428
+lib_mhash=4338721698f2297ba6773ba0bd22504850f017689a57e2e0b46e6da0c9aca874
+=== [2/3] compiler UNCHANGED (must be 4e138415) ===
+4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85 *COMPILED/iiis-2.exe
+4e1384157c1f1812fd4b1b24a43aae7e0a7a11812f5658060575742b0619fa85 *COMPILED/iiis-3.exe
+=== [3/3] full corpus (expect 930=99, 562/0) ===
+corpus_exit=0
+  PASS  930_ripple_value : exit=99
+  PASS=562  FAIL=0  SKIP=96  TOTAL=562
+=== DONE ===

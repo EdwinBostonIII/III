@@ -1,0 +1,72 @@
+/* 942 -- W4.2 / ENHANCE-17 falsifier: omnia/proof_ripple_resolution's corpus-equivalence
+ * verify is no longer the vacuous "always returns one, never recomputes the roots."
+ * proof_ripple_corpus_equiv_verify now RECOMPUTES corpus_root + exit_codes_hash + site_hash
+ * and compares byte-for-byte against the sealed cert.  Two test patterns (equivalent identity
+ * dispatch fns) are registered; a cert is minted over a corpus; then the verify is driven with
+ * a correct replay (accept) and with tampered roots -- a flipped witness, a wrong count, a
+ * wrong pid -- each of which must be REJECTED.  99 = pass. */
+module corpus_942
+
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv(old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u64 from "proof_ripple_resolution.iii"
+extern @abi(c-msvc-x64) fn proof_ripple_corpus_equiv_verify(cert_id: u64, old_pid: u32, new_pid: u32, corpus_witness_ptr: u64, corpus_count: u32) -> u8 from "proof_ripple_resolution.iii"
+
+/* 168-byte pattern template scratch (module-scope; runtime-indexed -> not a local array). */
+var RD_TEMPLATE : [u8; 168]
+/* Corpus of u64 inputs. */
+var RD_WIT : [u64; 4] = [11u64, 22u64, 33u64, 44u64]
+
+/* Two equivalent dispatch fns: both map input -> input+1.  Address-taken via (&fn) as u64
+ * (the @export-aware fn-pointer form; bare-identifier take emits the wrong internal label). */
+fn rd_dispatch_a(a: u64, b: u64, c: u64, d: u64) -> u64 { return a + 1u64 }
+fn rd_dispatch_b(a: u64, b: u64, c: u64, d: u64) -> u64 { return a + 1u64 }
+
+fn _rd_put_q(off: u32, v: u64) -> i32 {
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        RD_TEMPLATE[off + i] = ((v >> (((i & 0x7u32) as u64) * 8u64)) & 0xFFu64) as u8
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+fn _rd_register(slot: u32, pid: u64, fp: u64) -> u8 {
+    let mut i : u32 = 0u32
+    while i < 168u32 { RD_TEMPLATE[i] = 0u8  i = i + 1u32 }
+    _rd_put_q(0u32, pid)        /* PF_PATTERN_ID  -- must be nonzero so pattern_table_get returns it */
+    _rd_put_q(96u32, fp)        /* PF_DISPATCH_FN */
+    return pattern_register(slot, (&RD_TEMPLATE) as u64)
+}
+
+fn main() -> u64 {
+    /* Register two equivalent patterns at slots 5 and 6 (fresh, unsealed registry). */
+    if _rd_register(5u32, 0xA5A50005u64, (&rd_dispatch_a) as u64) != 1u8 { return 1u64 }
+    if _rd_register(6u32, 0xA5A50006u64, (&rd_dispatch_b) as u64) != 1u8 { return 2u64 }
+
+    let wit : u64 = (&RD_WIT) as u64
+
+    /* Mint a corpus-equivalence cert over the 4-input corpus (both fps agree). */
+    let cert : u64 = proof_ripple_corpus_equiv(5u32, 6u32, wit, 4u32)
+    if cert == 0u64 { return 3u64 }
+
+    /* Positive: a correct replay verifies. */
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 6u32, wit, 4u32) != 1u8 { return 4u64 }
+
+    /* FALSIFIER A -- tampered witness: flip one input; corpus_root diverges -> reject. */
+    RD_WIT[1u64] = 99u64
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 6u32, wit, 4u32) != 0u8 { return 5u64 }
+    RD_WIT[1u64] = 22u64                                   /* restore */
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 6u32, wit, 4u32) != 1u8 { return 6u64 }
+
+    /* FALSIFIER B -- wrong count: site_hash binds count -> reject. */
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 6u32, wit, 3u32) != 0u8 { return 7u64 }
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 6u32, wit, 5u32) != 0u8 { return 8u64 }
+
+    /* FALSIFIER C -- wrong pid pair: cause mismatch -> reject. */
+    if proof_ripple_corpus_equiv_verify(cert, 5u32, 7u32, wit, 4u32) != 0u8 { return 9u64 }
+    if proof_ripple_corpus_equiv_verify(cert, 6u32, 6u32, wit, 4u32) != 0u8 { return 10u64 }
+
+    /* FALSIFIER D -- a forged/zero cert id is rejected. */
+    if proof_ripple_corpus_equiv_verify(0u64, 5u32, 6u32, wit, 4u32) != 0u8 { return 11u64 }
+    return 99u64
+}

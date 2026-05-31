@@ -1,0 +1,47 @@
+/* 994_ecdsa_p256_zero_rs.iii -- falsifier for iii_ecdsa_p256_verify's signature-range guard
+ * (C.2 classical negative arm, ecdsa_p256.iii sig_range_ok). A signature with r==0 or s==0 is
+ * INVALID per SEC1/FIPS-186 and must be REJECTED (verify -> 0u8) -- a verifier that accepts r=0
+ * or s=0 admits forged/degenerate signatures. A genuine deterministic signature is ADMITTED (1u8).
+ * 913 drives sign/verify + a message-tamper reject, but never zeroes r or s, so the range guard
+ * had no falsifier. Reuses 913's known-good seed/Z roundtrip. 99 = pass. */
+module corpus_994
+
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_keygen_seed(seed: u64, d_out: u64, pub_out: u64) -> i32 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_sign_det(d: u64, z: u64, sig_out: u64) -> i32 from "ecdsa_p256.iii"
+extern @abi(c-msvc-x64) fn iii_ecdsa_p256_verify_x(qx: u64, qy: u64, z: u64, sig: u64) -> u8 from "ecdsa_p256.iii"
+
+var SEED : [u8; 32]
+var D    : [u8; 32]
+var PUB  : [u8; 64]
+var Z    : [u8; 32]
+var SIG  : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SEED[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { Z[i] = ((i + 0x41u64) & 0xFFu64) as u8  i = i + 1u64 }
+
+    iii_ecdsa_p256_keygen_seed(&SEED as u64, &D as u64, &PUB as u64)
+    iii_ecdsa_p256_sign_det(&D as u64, &Z as u64, &SIG as u64)
+
+    let qx : u64 = &PUB as u64
+    let qy : u64 = (&PUB as u64) + 32u64
+
+    /* admit: the genuine deterministic signature verifies */
+    if iii_ecdsa_p256_verify_x(qx, qy, &Z as u64, &SIG as u64) != 1u8 { return 1u64 }
+
+    /* reject r==0: zero the first 32 bytes (r) of an otherwise-valid signature */
+    i = 0u64
+    while i < 32u64 { SIG[i] = 0u8  i = i + 1u64 }
+    if iii_ecdsa_p256_verify_x(qx, qy, &Z as u64, &SIG as u64) != 0u8 { return 2u64 }
+
+    /* restore a valid signature, then reject s==0: zero bytes 32..63 (s) */
+    iii_ecdsa_p256_sign_det(&D as u64, &Z as u64, &SIG as u64)
+    if iii_ecdsa_p256_verify_x(qx, qy, &Z as u64, &SIG as u64) != 1u8 { return 3u64 }   /* re-signed sanity */
+    i = 32u64
+    while i < 64u64 { SIG[i] = 0u8  i = i + 1u64 }
+    if iii_ecdsa_p256_verify_x(qx, qy, &Z as u64, &SIG as u64) != 0u8 { return 4u64 }
+
+    return 99u64
+}

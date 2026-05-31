@@ -54,5 +54,24 @@ fn main() -> u64 {
     if xii_curate_issue(1u8, cr, wi, ca, sa, 100u64, 1u32, sg) == 0i32 { return 14u64 }  /* 13th refused */
     if xii_curate_finalize(7u32) != 0i32 { return 15u64 }                /* now succeeds (count==12) */
     if xii_curate_cert_ptr(12u32) != 0u64 { return 16u64 }               /* out-of-range ptr is 0 */
+
+    /* W4.2 / ENHANCE-17 falsifier: a DUPLICATE ceremony id is refused -- the same id can no
+     * longer finalize twelve times.  (904 above issues the twelve DISTINCT ids; this drives
+     * the duplicate-rejection path the count check alone never exercised.) */
+    xii_curate_reset()
+    if xii_curate_issue(5u8, cr, wi, ca, sa, 100u64, 1u32, sg) != 0i32 { return 17u64 }   /* Ω5 first time */
+    if xii_curate_issue(5u8, cr, wi, ca, sa, 100u64, 1u32, sg) == 0i32 { return 18u64 }   /* Ω5 again REFUSED */
+    if xii_curate_cert_count() != 1u32 { return 19u64 }                                    /* duplicate added nothing */
+    /* Now complete the twelve DISTINCT ceremonies (1, then 2..12 skipping the already-issued 5). */
+    if xii_curate_issue(1u8, cr, wi, ca, sa, 100u64, 1u32, sg) != 0i32 { return 20u64 }
+    let mut d : u32 = 2u32
+    while d <= 12u32 {
+        if d != 5u32 {
+            if xii_curate_issue(d as u8, cr, wi, ca, sa, 100u64, 1u32, sg) != 0i32 { return 21u64 }
+        }
+        d = d + 1u32
+    }
+    if xii_curate_cert_count() != 12u32 { return 22u64 }
+    if xii_curate_finalize(7u32) != 0i32 { return 23u64 }                /* all twelve DISTINCT -> seals */
     return 99u64
 }

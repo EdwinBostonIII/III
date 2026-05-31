@@ -1,0 +1,6 @@
+/* 705 — bound: the boundary-trust organ (COMBINE-7 / W0.1).  99 = all positive AND negative
+ * arms pass: bnd_index range-check (incl. the X19 alias 65->INVALID, not slot 0), bnd_cap_ok
+ * subtraction-form wrap rejection, bnd_mul_ok/bnd_alloc_size overflow rejection. */
+module corpus_705
+extern @abi(c-msvc-x64) fn bnd_selftest() -> u64 from "bound.iii"
+fn main() -> u64 { return bnd_selftest() }

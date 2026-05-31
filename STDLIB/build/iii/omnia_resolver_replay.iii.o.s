@@ -4,11 +4,11 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "witness.iiiwitness.iiipattern_table.iii\0"
+    .ascii "witness.iiipattern_table.iiiresolver_replay.iii\0"
 L_str_1:
-    .ascii "witness.iiipattern_table.iii\0"
+    .ascii "pattern_table.iiiresolver_replay.iii\0"
 L_str_2:
-    .ascii "pattern_table.iii\0"
+    .ascii "resolver_replay.iii\0"
     .section .data
     .global L_g_resolver_self_call_count
 L_g_resolver_self_call_count:
@@ -142,20 +142,16 @@ L_if_end_1:
     popq %rax
 L_if_end_3:
     subq $32, %rsp
-    callq witness_count
+    callq sanctus_resolver_replay_check_chain
     addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movl -8(%rbp), %eax
+    movzbq %al, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setb %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax

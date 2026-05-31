@@ -72,6 +72,73 @@ reach_oracle_pin:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -56(%rbp)
+    movslq -56(%rbp), %rax
+    pushq %rax
+    movslq L_ROR_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_1
+    movq -48(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -64(%rbp)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+L_loop_top_2:
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x20, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_3
+    movq -64(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rdx
+    popq %rcx
+    popq %rax
+    movb %dl, (%rax,%rcx,1)
+    movq -72(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_2
+L_loop_end_3:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
     movl L_ROR_TIER_PROVISIONAL(%rip), %eax
     pushq %rax
     popq %rax
@@ -111,7 +178,7 @@ reach_oracle_admit_canonical:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_1
+    jz L_if_end_5
     movslq L_ROR_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -121,7 +188,7 @@ reach_oracle_admit_canonical:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_1:
+L_if_end_5:
     movslq L_ROR_REFUSED(%rip), %rax
     pushq %rax
     popq %rax
@@ -165,7 +232,7 @@ reach_oracle_is_provisional:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_7
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -175,7 +242,7 @@ reach_oracle_is_provisional:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_7:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -241,6 +308,30 @@ reach_oracle_pin_matches:
     movslq %eax, %rax
     pushq %rax
     popq %rax
+    movq %rax, -56(%rbp)
+    movslq -56(%rbp), %rax
+    pushq %rax
+    movslq L_ROR_OK(%rip), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
     movq -48(%rbp), %rax
     pushq %rax
     popq %rax

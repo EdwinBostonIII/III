@@ -1,0 +1,19 @@
+/* 982_keccak_squeeze_rate_guard.iii -- falsifier for keccak_squeeze's rate-bounds gate. A rate of 0
+ * or > 200 bytes is invalid (it would drive a zero-stride / out-of-bounds sponge copy) and must be
+ * rejected (KK_E_BADRATE = -2) before any sponge read; a valid rate (136 = SHA3-256) returns KK_OK.
+ * Corpus 768 uses only valid rates -- the 0 / >200 rejects had no falsifier. 99 = pass. */
+module corpus_982
+
+extern @abi(c-msvc-x64) fn keccak_squeeze(state_ptr: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak.iii"
+
+var STATE : [u8; 200]
+var OUT   : [u8; 32]
+
+fn main() -> u64 {
+    let sp : u64 = &STATE as u64
+    let op : u64 = &OUT as u64
+    if keccak_squeeze(sp, op, 32u64, 0u32) != -2i32 { return 1u64 }      /* rate 0 -> KK_E_BADRATE */
+    if keccak_squeeze(sp, op, 32u64, 201u32) != -2i32 { return 2u64 }    /* rate > 200 -> KK_E_BADRATE */
+    if keccak_squeeze(sp, op, 32u64, 136u32) != 0i32 { return 3u64 }     /* valid rate -> KK_OK */
+    return 99u64
+}

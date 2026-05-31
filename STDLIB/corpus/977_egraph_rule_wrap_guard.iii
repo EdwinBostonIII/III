@@ -1,0 +1,40 @@
+/* 977_egraph_rule_wrap_guard.iii -- X22 falsifier for eg_register_rule's u32-wrap OOB.
+ *
+ * lhs_n/rhs_n are RAW caller counts (rule[0]/rule[1]); the old guard formed total=lhs_n+rhs_n and
+ * checked USED+total > AREA, both u32 -- a huge pair wrapped the sum below AREA, the guard passed,
+ * the validation loop (while i<total) was skipped, and the copy loops wrote ~2^31 words into
+ * EGRAPH_RULE_BUF[65536] (OOB; the index mask is 0xFFFFFFFF, not a buffer bound).
+ *
+ * arm 1: the wrap itself (0x80000001 + 0x80000000 -> u32 1 -> old guard fooled). arm 2: the FIXED
+ * guard REJECTS the huge-count rule (returns EGRAPH_SENT) WITHOUT running the copy. arm 3: a valid
+ * small rule still registers (the fix does not over-reject). 99 = pass.
+ * NOTE: must NOT be run against the pre-fix lib -- arm 2 would execute the OOB write.
+ */
+module corpus_977
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+
+var RULE : [u32; 8]
+
+fn main() -> u64 {
+    eg_init()
+
+    /* arm 1: the wrap the old additive guard saw */
+    let s : u32 = 0x80000001u32 + 0x80000000u32
+    if s != 1u32 { return 1u64 }
+
+    /* arm 2: a huge-count rule must be REJECTED (EGRAPH_SENT = 0xFFFFFFFF) before any copy */
+    RULE[0u32] = 0x80000001u32          /* lhs_n */
+    RULE[1u32] = 0x80000000u32          /* rhs_n */
+    if eg_register_rule((&RULE as u64) as *u32) != 0xFFFFFFFFu32 { return 2u64 }
+
+    /* arm 3: a valid small rule (lhs_n=1, rhs_n=1, two arity-0 node entries) still registers */
+    RULE[0u32] = 1u32
+    RULE[1u32] = 1u32
+    RULE[2u32] = 2u32                   /* node entry: (e&1)==0, arity (e>>16)&0xFF == 0 */
+    RULE[3u32] = 2u32
+    if eg_register_rule((&RULE as u64) as *u32) == 0xFFFFFFFFu32 { return 3u64 }
+
+    return 99u64
+}

@@ -219,6 +219,22 @@ if [[ -f "$FORGE_CHECK" ]]; then
     fi
 fi
 
+# --- Trusted-base content-address seal (SEPARATE-2 / W2.4) --------------
+# The kernel's ENTIRE trusted computational base = the CCL reducer (numera/ccl.iii) + the
+# TC<->CCL translation (tc_to_ccl).  Its source bytes are content-addressed into one root
+# (DOCS/TRUSTED-BASE-SEAL.md); any edit to the reducer or the translation moves the hash and
+# reddens the build until an explicit reseal -- "the trusted base is small + bounded" as a
+# machine-checked fact (FORGE_CLOSURE-lite; STDLIB).
+TRUSTED_BASE_CHECK="$STDLIB_DIR/../COMPILER/BOOT/trusted_base_check.sh"
+if [[ -f "$TRUSTED_BASE_CHECK" ]]; then
+    echo "[build_stdlib] trusted-base seal: $TRUSTED_BASE_CHECK --check"
+    if ! bash "$TRUSTED_BASE_CHECK" --check; then
+        echo "[build_stdlib] FATAL: trusted-base drift -- numera/ccl.iii or tc_to_ccl changed without a reseal." >&2
+        echo "[build_stdlib]        Re-seal after an intended kernel change: 'bash COMPILER/BOOT/trusted_base_check.sh --print', then update TRUSTED_BASE_ROOT in DOCS/TRUSTED-BASE-SEAL.md." >&2
+        exit 2
+    fi
+fi
+
 # --- Architectural invariant gate (cartographer --gate) ----------------
 # Beyond the per-.def drift gates above, the cartographer (sibling tree)
 # enforces the STRUCTURAL graph invariants: no un-allowlisted dependency
@@ -229,13 +245,44 @@ fi
 # tool lives OUTSIDE the sealed tree, so its (or python's) absence skips the
 # gate rather than breaking the bootstrap; it touches no .iii / no MODULES
 # order / no emitted byte (pre-compile, read-only) -> ZERO seal impact.
-CARTO="$STDLIB_DIR/../../III-CARTOGRAPHER/cartographer.py"
-if [[ -f "$CARTO" ]] && command -v python >/dev/null 2>&1; then
-    echo "[build_stdlib] architectural invariant gate: cartographer --gate"
-    if ! python "$CARTO" --gate; then
-        echo "[build_stdlib] FATAL: architectural invariant violation -- a new dependency cycle or duplicate @export symbol." >&2
-        echo "[build_stdlib]        Fix it, or record an intentional exception in III-CARTOGRAPHER/gate_allow.json." >&2
-        exit 2
+CARTO_DIR="$STDLIB_DIR/../../III-CARTOGRAPHER"
+_carto_done=0
+if [[ -d "$CARTO_DIR" ]]; then
+    pushd "$CARTO_DIR" >/dev/null
+    # NATIVE iii/c gate: carto.c (C) computes the structural facts -> carto_gate.iii (III)
+    # issues the verdict (apotheosis C.13: in-tree NIH).  Auto-build carto.exe if a C
+    # compiler is present and the binary is missing/stale.
+    if [[ -f carto.c ]] && { command -v gcc >/dev/null 2>&1 || command -v cc >/dev/null 2>&1; }; then
+        _CC=$(command -v gcc || command -v cc)
+        if [[ ! -x carto.exe || carto.c -nt carto.exe ]]; then "$_CC" -O2 -o carto.exe carto.c 2>/dev/null || true; fi
+    fi
+    if [[ -x carto.exe ]]; then
+        if ./carto.exe --emit-graph >/dev/null 2>&1 && [[ -x carto_gate.exe ]]; then
+            echo "[build_stdlib] architectural invariant gate: native carto (iii/c) -> carto_gate"
+            ./carto_gate.exe; _rc=$?; _carto_done=1     # the III policy verdict (PASS/FAIL)
+        else
+            echo "[build_stdlib] architectural invariant gate: native carto --gate (C)"
+            ./carto.exe --gate; _rc=$?; _carto_done=1   # the C verdict (fallback when carto_gate.exe absent)
+        fi
+        if [[ $_carto_done -eq 1 && $_rc -ne 0 ]]; then
+            popd >/dev/null
+            echo "[build_stdlib] FATAL: architectural invariant violation -- a new dependency cycle or duplicate @export symbol." >&2
+            echo "[build_stdlib]        Fix it, or record an intentional exception in III-CARTOGRAPHER/gate_allow.json." >&2
+            exit 2
+        fi
+    fi
+    popd >/dev/null
+fi
+# Legacy fallback: the original Python gate, only if the native tool is unavailable.
+if [[ $_carto_done -eq 0 ]]; then
+    CARTO="$CARTO_DIR/cartographer.py"
+    if [[ -f "$CARTO" ]] && command -v python >/dev/null 2>&1; then
+        echo "[build_stdlib] architectural invariant gate: cartographer.py (legacy fallback)"
+        if ! python "$CARTO" --gate; then
+            echo "[build_stdlib] FATAL: architectural invariant violation -- a new dependency cycle or duplicate @export symbol." >&2
+            echo "[build_stdlib]        Fix it, or record an intentional exception in III-CARTOGRAPHER/gate_allow.json." >&2
+            exit 2
+        fi
     fi
 fi
 
@@ -244,6 +291,7 @@ MODULES=(
     "numera/scalar"
     "numera/sha256"
     "numera/hex"
+    "memoria/tempaloc"
     "memoria/region"
     "memoria/span"
     "memoria/arena"
@@ -328,6 +376,7 @@ MODULES=(
     "numera/zk_field"
     "numera/zk_snark"
     "numera/zk_stark"
+    "numera/zk_air"
     "numera/zk_prune"
     "verba/base64"
     "numera/hkdf"
@@ -337,6 +386,8 @@ MODULES=(
     "numera/pbkdf2"
     "verba/uuid"
     "numera/murmur3"
+    "numera/ntt"
+    "numera/ntt_bigint"
     "verba/csv"
     "verba/ini"
     "verba/leb128"
@@ -344,6 +395,7 @@ MODULES=(
     "verba/ulid"
     "tempora/calendar"
     "tempora/rfc3339"
+    "memoria/seal_organ"
     "verba/timing_safe"
     "numera/endian"
     "verba/path"
@@ -363,8 +415,6 @@ MODULES=(
     "omnia/layered_seal"
     "omnia/dynamic_impact"
     "numera/field_crystal"
-    "memoria/arena_safe"
-    "memoria/region_safe"
     "omnia/crystal_edges"
     "numera/bigint_karatsuba"
     "numera/q128_f64"
@@ -404,6 +454,9 @@ MODULES=(
     "numera/sha3_512"
     "numera/shake128"
     "numera/shake256"
+    "numera/pq_params"
+    "numera/ntt_ctx"
+    "numera/keccak_sponge"
     "numera/mldsa"
     "numera/mlkem"
     "numera/slhdsa"
@@ -552,10 +605,9 @@ MODULES=(
     "omnia/xii_emit_gen"
     "omnia/xii_kernel_emit"
     "omnia/xii_curated_payloads"
-    "omnia/xii_curated_crypto"
-    "omnia/xii_curated_crypto_extended"
-    "omnia/xii_curated_crypto_final"
-    "omnia/xii_curated_arm64_crypto"
+    # W1.2/CUT-12: xii_curated_crypto{,_extended,_final} + xii_curated_arm64_crypto deleted --
+    # they registered ONLY crypto-horizon (<24) overrides, all refused by the emit chokepoint
+    # (dead matter, emission byte-identical).  The mixed catalogs below keep their non-crypto rows.
     "omnia/xii_curated_embedded"
     "omnia/xii_curated_riscv"
     "omnia/xii_curated_extended"
@@ -795,6 +847,11 @@ MODULES=(
     "forcefield/ripple_search"
     # Sovereign Enhancement G5: the inductive bridge (sample -> forall via tc_natrec; false universal rejected).
     "numera/induct"
+    # Structural-Audit Wave 0 / W0.1 (COMBINE-7): the boundary-trust organ -- the single source of
+    # the @export door's range/wrap/overflow discipline.  Pure leaf, NO BSS (cannot perturb layout),
+    # libc-free; every boundary @export routes through bnd_index/bnd_cap_ok/bnd_mul_ok/bnd_alloc_size.
+    "omnia/bound"
+    "omnia/caindex"
 )
 
 PASS=0

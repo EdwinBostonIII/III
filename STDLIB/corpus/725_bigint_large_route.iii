@@ -1,0 +1,54 @@
+/* KAT for the D-KARA-3 production route: bigint_mul_karatsuba now sends operands at/above
+ * KARA_NTT_THRESHOLD (2048 limbs) through the exhaustion-proof NTT multiply instead of recursing
+ * into the 64-slot table (which silently corrupted large products -- D-KARA-1).
+ *
+ *  - 1000-limb x 1000-limb stays on the Karatsuba path (< 2048); must equal schoolbook.
+ *  - 3000-limb x 3000-limb routes through the NTT path (>= 2048); must equal schoolbook.
+ *
+ * Comparing against the independent schoolbook bigint_mul (NOT against the NTT path) makes this a
+ * real check, not a tautology.  Exit 99 = both paths agree with schoolbook. */
+module corpus_725
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul_karatsuba(arena: u64, a: u64, b: u64) -> u64 from "bigint_karatsuba.iii"
+
+fn fill_pat(id: u64, n: u64, seed: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n {
+        bigint_set_limb(id, i, seed + i * 0x9E3779B97F4A7C15u64)
+        i = i + 1u64
+    }
+    bigint_set_len(id, n)
+    return 0i32
+}
+
+fn check(arena: u64, n: u64, sa: u64, sb: u64) -> u8 {
+    let x : u64 = bigint_new(arena, n)
+    let y : u64 = bigint_new(arena, n)
+    fill_pat(x, n, sa)
+    fill_pat(y, n, sb)
+    let ref : u64 = bigint_mul(arena, x, y)
+    let got : u64 = bigint_mul_karatsuba(arena, x, y)
+    let ok  : u8  = bigint_eq(ref, got)
+    bigint_drop(x); bigint_drop(y); bigint_drop(ref); bigint_drop(got)
+    return ok
+}
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 26u64)
+    if a == 0u64 { return 1u64 }
+    /* Karatsuba path (< 2048 limbs) */
+    if check(a, 1000u64, 0x1234u64, 0x5678u64) != 1u8 { return 2u64 }
+    /* NTT path (>= 2048 limbs) -- the D-KARA-1 danger zone, now exact */
+    if check(a, 3000u64, 0xABCDu64, 0xEF01u64) != 1u8 { return 3u64 }
+    arena_drop(a)
+    return 99u64
+}

@@ -1,0 +1,231 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\memoria\seal_organ.iii
+ *
+ * III STDLIB - memoria::seal_organ  (APOTHEOSIS S.7 step 8)
+ *
+ * A batched sealed-time witness.  seal_instant pairs a fresh sealed instant
+ * (tempora::instant -- a deterministic logical tick + its own tamper seal)
+ * with a civil-time decomposition of a caller-supplied Unix timestamp
+ * (tempora::calendar::cal_decompose_unix), bounds-checks the civil fields
+ * ONCE at creation, caches them, and binds the whole tuple under a single
+ * combined digest:
+ *
+ *     seal = sha256( instant_seal[16] ‖ unix_le8 ‖ year_le4 ‖ mon ‖ day ‖ hour ‖ min ‖ sec )
+ *
+ * "Batch" = the civil decomposition + bounds-check happen at seal time and
+ * are cached, so seal_verify (and any later civil read) does NOT recompute
+ * cal_decompose_unix.  seal_verify re-checks the instant's own seal, the
+ * cached civil bounds, and the combined digest -- so tampering with any
+ * stored field is caught.
+ *
+ * Handles are tempaloc TYPE_SEAL (the one handle organ, ADR-S7a), so a seal
+ * handle cannot be confused with a region / instant / deadline id.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00 (deterministic).
+ */
+
+module memoria_seal_organ
+
+extern @abi(c-msvc-x64) fn instant_now_sealed(time_cap: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_seal_byte(id: u64, i: u32) -> u32 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_verify(id: u64) -> u8 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+extern @abi(c-msvc-x64) fn cal_decompose_unix(unix_seconds: u64) -> i32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_year() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_month() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_day() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_hour() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_min() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn cal_last_sec() -> u32 from "calendar.iii"
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn tempaloc_alloc(type_tag: u64) -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_slot_of(handle: u64, expected_type: u64) -> u32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_free(handle: u64, expected_type: u64) -> i32 from "tempaloc.iii"
+
+const SEAL_INVALID : u64 = 0u64
+const SEAL_E_BADID : i32 = -1i32
+
+/* Must match tempaloc.iii TEMPALOC_TYPE_SEAL. */
+const SEAL_TYPE : u64 = 4u64
+
+var SEAL_INSTANT : [u64; 64]
+var SEAL_UNIX    : [u64; 64]
+var SEAL_YEAR    : [u32; 64]
+var SEAL_MON     : [u32; 64]
+var SEAL_DAY     : [u32; 64]
+var SEAL_HOUR    : [u32; 64]
+var SEAL_MIN     : [u32; 64]
+var SEAL_SEC     : [u32; 64]
+var SEAL_DIGEST  : [u8;  2048]   /* 64 slots × 32 bytes */
+
+/* Bounds-check the cached civil fields of a slot.  Gregorian ranges; second
+ * allows 60 for a leap second.  Day is checked against the loose [1,31] (the
+ * calendar core already produced a valid (y,m,d) from the Unix days, so this
+ * is the falsifiable guard against a corrupted cached field, not a re-derive). */
+fn seal_civil_ok(slot: u32) -> u8 {
+    let m : u32 = SEAL_MON[slot]
+    let d : u32 = SEAL_DAY[slot]
+    let h : u32 = SEAL_HOUR[slot]
+    let mi : u32 = SEAL_MIN[slot]
+    let s : u32 = SEAL_SEC[slot]
+    if m < 1u32 { return 0u8 }
+    if m > 12u32 { return 0u8 }
+    if d < 1u32 { return 0u8 }
+    if d > 31u32 { return 0u8 }
+    if h > 23u32 { return 0u8 }
+    if mi > 59u32 { return 0u8 }
+    if s > 60u32 { return 0u8 }
+    return 1u8
+}
+
+/* Feed the canonical preimage for `slot` into the sha256 byte stream and
+ * finalize, leaving the digest in sha256 internal state.  Identical in
+ * seal_instant (store) and seal_verify (compare) so the digest is stable. */
+fn seal_feed(slot: u32) -> u32 {
+    let inst : u64 = SEAL_INSTANT[slot]
+    sha256_init()
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        sha256_update_byte(instant_seal_byte(inst, i) & 0xFFu32)
+        i = i + 1u32
+    }
+    let unix : u64 = SEAL_UNIX[slot]
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let shift : u64 = (j as u64) * 8u64
+        sha256_update_byte(((unix >> shift) & 0xFFu64) as u32)
+        j = j + 1u32
+    }
+    let yr : u32 = SEAL_YEAR[slot]
+    let mut k : u32 = 0u32
+    while k < 4u32 {
+        sha256_update_byte((yr >> (k * 8u32)) & 0xFFu32)
+        k = k + 1u32
+    }
+    sha256_update_byte(SEAL_MON[slot]  & 0xFFu32)
+    sha256_update_byte(SEAL_DAY[slot]  & 0xFFu32)
+    sha256_update_byte(SEAL_HOUR[slot] & 0xFFu32)
+    sha256_update_byte(SEAL_MIN[slot]  & 0xFFu32)
+    sha256_update_byte(SEAL_SEC[slot]  & 0xFFu32)
+    sha256_finalize_internal()
+    return 0u32
+}
+
+/* Create a sealed time witness: a fresh sealed instant + the civil
+ * decomposition of `unix_seconds`, bound under one digest.  Returns a
+ * TYPE_SEAL handle, or 0 on capability denial / out-of-range civil /
+ * table exhaustion. */
+fn seal_instant(time_cap: u64, unix_seconds: u64) -> u64 @export {
+    let inst : u64 = instant_now_sealed(time_cap)
+    if inst == 0u64 { return SEAL_INVALID }
+    cal_decompose_unix(unix_seconds)
+    let yr : u32 = cal_last_year()
+    let mo : u32 = cal_last_month()
+    let dy : u32 = cal_last_day()
+    let hr : u32 = cal_last_hour()
+    let mn : u32 = cal_last_min()
+    let sc : u32 = cal_last_sec()
+    let id : u64 = tempaloc_alloc(SEAL_TYPE)
+    if id == 0u64 {
+        instant_drop(inst)
+        return SEAL_INVALID
+    }
+    let slot : u32 = tempaloc_slot_of(id, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 {
+        instant_drop(inst)
+        return SEAL_INVALID
+    }
+    SEAL_INSTANT[slot] = inst
+    SEAL_UNIX[slot]    = unix_seconds
+    SEAL_YEAR[slot]    = yr
+    SEAL_MON[slot]     = mo
+    SEAL_DAY[slot]     = dy
+    SEAL_HOUR[slot]    = hr
+    SEAL_MIN[slot]     = mn
+    SEAL_SEC[slot]     = sc
+    /* Bounds-check ONCE at creation; reject (and unwind) if out of range. */
+    if seal_civil_ok(slot) == 0u8 {
+        instant_drop(inst)
+        tempaloc_free(id, SEAL_TYPE)
+        return SEAL_INVALID
+    }
+    seal_feed(slot)
+    let off : u32 = slot * 32u32
+    let mut p : u32 = 0u32
+    while p < 32u32 {
+        SEAL_DIGEST[off + p] = (sha256_digest_byte(p) & 0xFFu32) as u8
+        p = p + 1u32
+    }
+    return id
+}
+
+/* Verify a sealed time witness: the instant's own seal is intact, the
+ * cached civil fields are still in range, and the combined digest matches
+ * a recomputation.  Returns 1 if all hold, 0 otherwise. */
+fn seal_verify(handle: u64) -> u8 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return 0u8 }
+    let inst : u64 = SEAL_INSTANT[slot]
+    if instant_verify(inst) == 0u8 { return 0u8 }
+    if seal_civil_ok(slot) == 0u8 { return 0u8 }
+    seal_feed(slot)
+    let off : u32 = slot * 32u32
+    let mut p : u32 = 0u32
+    while p < 32u32 {
+        let stored : u8 = SEAL_DIGEST[off + p]
+        let fresh : u32 = sha256_digest_byte(p) & 0xFFu32
+        if (stored as u32) != fresh { return 0u8 }
+        p = p + 1u32
+    }
+    return 1u8
+}
+
+fn seal_digest_byte(handle: u64, i: u32) -> u32 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return 0x100u32 }
+    if i >= 32u32 { return 0x100u32 }
+    let off : u32 = slot * 32u32
+    return SEAL_DIGEST[off + i] as u32
+}
+
+fn seal_year(handle: u64) -> u32 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return 0u32 }
+    return SEAL_YEAR[slot]
+}
+
+fn seal_month(handle: u64) -> u32 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return 0u32 }
+    return SEAL_MON[slot]
+}
+
+fn seal_day(handle: u64) -> u32 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return 0u32 }
+    return SEAL_DAY[slot]
+}
+
+fn seal_instant_id(handle: u64) -> u64 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return 0u64 }
+    return SEAL_INSTANT[slot]
+}
+
+fn seal_drop(handle: u64) -> i32 @export {
+    let slot : u32 = tempaloc_slot_of(handle, SEAL_TYPE)
+    if slot == 0xFFFFFFFFu32 { return SEAL_E_BADID }
+    instant_drop(SEAL_INSTANT[slot])
+    SEAL_INSTANT[slot] = 0u64
+    SEAL_UNIX[slot]    = 0u64
+    SEAL_YEAR[slot]    = 0u32
+    SEAL_MON[slot]     = 0u32
+    SEAL_DAY[slot]     = 0u32
+    SEAL_HOUR[slot]    = 0u32
+    SEAL_MIN[slot]     = 0u32
+    SEAL_SEC[slot]     = 0u32
+    tempaloc_free(handle, SEAL_TYPE)
+    return 0i32
+}

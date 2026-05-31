@@ -1,0 +1,8 @@
+/* 960 — W3.10 / ENHANCE-7 falsifier: the block-oriented keccak256 streaming absorb
+ * (keccak256 init/update/final) is byte-identical to keccak256_oneshot across
+ * adversarial split patterns (partial-block continuation, exact rate boundaries,
+ * single-shot, byte-at-a-time, straddling splits). Reddens on any wrong block
+ * bound or permute cadence. 99 = pass. */
+module corpus_960
+extern @abi(c-msvc-x64) fn keccak256_block_kat() -> u64 from "keccak256.iii"
+fn main() -> u64 { return keccak256_block_kat() }

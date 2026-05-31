@@ -4704,6 +4704,29 @@ L_if_end_137:
     pushq %rax
     popq %rax
 L_if_end_139:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movl L_HS_PEER_COUNT(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_141
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_141:
     movl -16(%rbp), %eax
     pushq %rax
     movabsq $0x2c, %rax
@@ -4729,7 +4752,7 @@ L_if_end_139:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_141
+    jz L_if_end_143
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4739,7 +4762,7 @@ L_if_end_139:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_141:
+L_if_end_143:
     leaq L_HS_SIG_INPUT(%rip), %rax
     pushq %rax
     popq %rax
@@ -4752,7 +4775,7 @@ L_if_end_141:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_142:
+L_loop_top_144:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x28, %rax
@@ -4765,7 +4788,7 @@ L_loop_top_142:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_143
+    jz L_loop_end_145
     movq -32(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -4795,8 +4818,8 @@ L_loop_top_142:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_142
-L_loop_end_143:
+    jmp L_loop_top_144
+L_loop_end_145:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4805,7 +4828,7 @@ L_loop_end_143:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-L_loop_top_144:
+L_loop_top_146:
     movl -56(%rbp), %eax
     pushq %rax
     movl -24(%rbp), %eax
@@ -4818,7 +4841,7 @@ L_loop_top_144:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_145
+    jz L_loop_end_147
     leaq L_HS_PEER_KEYS(%rip), %rax
     pushq %rax
     popq %rax
@@ -4896,7 +4919,7 @@ L_loop_top_144:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_147
+    jz L_if_end_149
     movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -4911,7 +4934,7 @@ L_loop_top_144:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_147:
+L_if_end_149:
     movl -56(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -4926,8 +4949,8 @@ L_if_end_147:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_144
-L_loop_end_145:
+    jmp L_loop_top_146
+L_loop_end_147:
     movl -48(%rbp), %eax
     pushq %rax
     movl L_HS_QUORUM(%rip), %eax
@@ -4940,7 +4963,7 @@ L_loop_end_145:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_149
+    jz L_if_end_151
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -4950,7 +4973,7 @@ L_loop_end_145:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_149:
+L_if_end_151:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -4993,7 +5016,7 @@ hs_dispatch_by_tier:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_151
+    jz L_if_end_153
     movslq L_HS_E_NOT_INITED(%rip), %rax
     pushq %rax
     popq %rax
@@ -5003,33 +5026,8 @@ hs_dispatch_by_tier:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_151:
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_153
-    movslq L_HS_E_NULL(%rip), %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
 L_if_end_153:
-    movq -32(%rbp), %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     pushq %rax
@@ -5054,14 +5052,16 @@ L_if_end_153:
     pushq %rax
     popq %rax
 L_if_end_155:
-    movl -24(%rbp), %eax
+    movq -32(%rbp), %rax
     pushq %rax
-    movabsq $0x1, %rax
+    popq %rax
+    pushq %rax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setb %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -5077,6 +5077,29 @@ L_if_end_155:
     pushq %rax
     popq %rax
 L_if_end_157:
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_159
+    movslq L_HS_E_NULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_159:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5099,7 +5122,7 @@ L_if_end_157:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_159
+    jz L_if_end_161
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5122,7 +5145,7 @@ L_if_end_157:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_159:
+L_if_end_161:
     movzbq -40(%rbp), %rax
     pushq %rax
     movzbq L_HS_TIER_FIELD(%rip), %rax
@@ -5135,7 +5158,7 @@ L_if_end_159:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_161
+    jz L_if_end_163
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5165,7 +5188,7 @@ L_if_end_159:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_161:
+L_if_end_163:
     movzbq -40(%rbp), %rax
     pushq %rax
     movzbq L_HS_TIER_SPECULATIVE(%rip), %rax
@@ -5178,7 +5201,7 @@ L_if_end_161:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_163
+    jz L_if_end_165
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5198,7 +5221,7 @@ L_if_end_161:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_163:
+L_if_end_165:
     movslq L_HS_E_NULL(%rip), %rax
     pushq %rax
     popq %rax
@@ -5229,7 +5252,7 @@ hs_selftest:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_164:
+L_loop_top_166:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -5242,12 +5265,12 @@ L_loop_top_164:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_165
+    jz L_loop_end_167
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_166:
+L_loop_top_168:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5260,7 +5283,7 @@ L_loop_top_166:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_167
+    jz L_loop_end_169
     leaq L_HS_KAT_SEED(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -5317,8 +5340,8 @@ L_loop_top_166:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_166
-L_loop_end_167:
+    jmp L_loop_top_168
+L_loop_end_169:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5332,13 +5355,13 @@ L_loop_end_167:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_164
-L_loop_end_165:
+    jmp L_loop_top_166
+L_loop_end_167:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_168:
+L_loop_top_170:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x4, %rax
@@ -5351,7 +5374,7 @@ L_loop_top_168:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_169
+    jz L_loop_end_171
     leaq L_HS_KAT_PK(%rip), %rax
     pushq %rax
     popq %rax
@@ -5405,7 +5428,7 @@ L_loop_top_168:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_171
+    jz L_if_end_173
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -5415,7 +5438,7 @@ L_loop_top_168:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_171:
+L_if_end_173:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5429,8 +5452,8 @@ L_if_end_171:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_168
-L_loop_end_169:
+    jmp L_loop_top_170
+L_loop_end_171:
     movabsq $0x4, %rax
     pushq %rax
     leaq L_HS_KAT_PK(%rip), %rax
@@ -5454,7 +5477,7 @@ L_loop_end_169:
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-L_loop_top_172:
+L_loop_top_174:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5467,7 +5490,7 @@ L_loop_top_172:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_173
+    jz L_loop_end_175
     leaq L_HS_KAT_KP(%rip), %rax
     pushq %rax
     movq -16(%rbp), %rax
@@ -5531,8 +5554,8 @@ L_loop_top_172:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_172
-L_loop_end_173:
+    jmp L_loop_top_174
+L_loop_end_175:
     leaq L_HS_KAT_KP(%rip), %rax
     pushq %rax
     popq %rax
@@ -5564,7 +5587,7 @@ L_loop_end_173:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_175
+    jz L_if_end_177
     movabsq $0x2, %rax
     pushq %rax
     popq %rax
@@ -5574,12 +5597,12 @@ L_loop_end_173:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_175:
+L_if_end_177:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_176:
+L_loop_top_178:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5592,7 +5615,7 @@ L_loop_top_176:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_177
+    jz L_loop_end_179
     leaq L_HS_KAT_PAY(%rip), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -5625,8 +5648,8 @@ L_loop_top_176:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_176
-L_loop_end_177:
+    jmp L_loop_top_178
+L_loop_end_179:
     leaq L_HS_KAT_BLOCK(%rip), %rax
     pushq %rax
     popq %rax
@@ -5656,7 +5679,7 @@ L_loop_end_177:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_179
+    jz L_if_end_181
     movabsq $0x3, %rax
     pushq %rax
     popq %rax
@@ -5666,7 +5689,7 @@ L_loop_end_177:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_179:
+L_if_end_181:
     movabsq $0x1a8, %rax
     pushq %rax
     leaq L_HS_KAT_BLOCK(%rip), %rax
@@ -5692,7 +5715,7 @@ L_if_end_179:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_181
+    jz L_if_end_183
     movabsq $0x4, %rax
     pushq %rax
     popq %rax
@@ -5702,12 +5725,12 @@ L_if_end_179:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_181:
+L_if_end_183:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_182:
+L_loop_top_184:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5720,7 +5743,7 @@ L_loop_top_182:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_183
+    jz L_loop_end_185
     leaq L_HS_KAT_BMH(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -5778,8 +5801,8 @@ L_loop_top_182:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_182
-L_loop_end_183:
+    jmp L_loop_top_184
+L_loop_end_185:
     leaq L_HS_KAT_SI(%rip), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -5794,7 +5817,7 @@ L_loop_end_183:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_184:
+L_loop_top_186:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x28, %rax
@@ -5807,7 +5830,7 @@ L_loop_top_184:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_185
+    jz L_loop_end_187
     leaq L_HS_KAT_SI(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -5831,13 +5854,13 @@ L_loop_top_184:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_184
-L_loop_end_185:
+    jmp L_loop_top_186
+L_loop_end_187:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_186:
+L_loop_top_188:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x3, %rax
@@ -5850,7 +5873,7 @@ L_loop_top_186:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_187
+    jz L_loop_end_189
     subq $8, %rsp
     leaq L_HS_KAT_SIGS(%rip), %rax
     pushq %rax
@@ -5935,7 +5958,7 @@ L_loop_top_186:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_189
+    jz L_if_end_191
     movabsq $0x5, %rax
     pushq %rax
     popq %rax
@@ -5945,7 +5968,7 @@ L_loop_top_186:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_189:
+L_if_end_191:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
@@ -5959,8 +5982,8 @@ L_if_end_189:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_186
-L_loop_end_187:
+    jmp L_loop_top_188
+L_loop_end_189:
     subq $8, %rsp
     leaq L_HS_KAT_QC(%rip), %rax
     pushq %rax
@@ -6005,7 +6028,7 @@ L_loop_end_187:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_191
+    jz L_if_end_193
     movabsq $0x6, %rax
     pushq %rax
     popq %rax
@@ -6015,7 +6038,7 @@ L_loop_end_187:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_191:
+L_if_end_193:
     movabsq $0xec, %rax
     pushq %rax
     leaq L_HS_KAT_QC(%rip), %rax
@@ -6041,7 +6064,7 @@ L_if_end_191:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_193
+    jz L_if_end_195
     movabsq $0x7, %rax
     pushq %rax
     popq %rax
@@ -6051,7 +6074,7 @@ L_if_end_191:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_193:
+L_if_end_195:
     leaq L_HS_KAT_QC(%rip), %rax
     pushq %rax
     movabsq $0x2c, %rax
@@ -6099,7 +6122,7 @@ L_if_end_193:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_195
+    jz L_if_end_197
     movabsq $0x8, %rax
     pushq %rax
     popq %rax
@@ -6109,12 +6132,12 @@ L_if_end_193:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_195:
+L_if_end_197:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_196:
+L_loop_top_198:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -6127,7 +6150,7 @@ L_loop_top_196:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_197
+    jz L_loop_end_199
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -6157,8 +6180,8 @@ L_loop_top_196:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_196
-L_loop_end_197:
+    jmp L_loop_top_198
+L_loop_end_199:
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -6173,7 +6196,7 @@ L_loop_end_197:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_198:
+L_loop_top_200:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x28, %rax
@@ -6186,7 +6209,7 @@ L_loop_top_198:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_199
+    jz L_loop_end_201
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -6210,8 +6233,8 @@ L_loop_top_198:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_198
-L_loop_end_199:
+    jmp L_loop_top_200
+L_loop_end_201:
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x28, %rax
@@ -6256,7 +6279,7 @@ L_loop_end_199:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_200:
+L_loop_top_202:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x40, %rax
@@ -6269,7 +6292,7 @@ L_loop_top_200:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_201
+    jz L_loop_end_203
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x2c, %rax
@@ -6305,8 +6328,8 @@ L_loop_top_200:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_200
-L_loop_end_201:
+    jmp L_loop_top_202
+L_loop_end_203:
     movabsq $0x6c, %rax
     pushq %rax
     leaq L_HS_KAT_VOTE(%rip), %rax
@@ -6332,7 +6355,7 @@ L_loop_end_201:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_203
+    jz L_if_end_205
     movabsq $0x9, %rax
     pushq %rax
     popq %rax
@@ -6342,7 +6365,7 @@ L_loop_end_201:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_203:
+L_if_end_205:
     movabsq $0x6c, %rax
     pushq %rax
     leaq L_HS_KAT_VOTE(%rip), %rax
@@ -6368,7 +6391,7 @@ L_if_end_203:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_205
+    jz L_if_end_207
     movabsq $0xa, %rax
     pushq %rax
     popq %rax
@@ -6378,7 +6401,7 @@ L_if_end_203:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_205:
+L_if_end_207:
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x28, %rax
@@ -6393,7 +6416,7 @@ L_if_end_205:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_206:
+L_loop_top_208:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x40, %rax
@@ -6406,7 +6429,7 @@ L_loop_top_206:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_207
+    jz L_loop_end_209
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x2c, %rax
@@ -6448,8 +6471,8 @@ L_loop_top_206:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_206
-L_loop_end_207:
+    jmp L_loop_top_208
+L_loop_end_209:
     movabsq $0x6c, %rax
     pushq %rax
     leaq L_HS_KAT_VOTE(%rip), %rax
@@ -6475,7 +6498,7 @@ L_loop_end_207:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_209
+    jz L_if_end_211
     movabsq $0xb, %rax
     pushq %rax
     popq %rax
@@ -6485,7 +6508,7 @@ L_loop_end_207:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_209:
+L_if_end_211:
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x28, %rax
@@ -6500,7 +6523,7 @@ L_if_end_209:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-L_loop_top_210:
+L_loop_top_212:
     movq -40(%rbp), %rax
     pushq %rax
     movabsq $0x40, %rax
@@ -6513,7 +6536,7 @@ L_loop_top_210:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_211
+    jz L_loop_end_213
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x2c, %rax
@@ -6555,8 +6578,8 @@ L_loop_top_210:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_210
-L_loop_end_211:
+    jmp L_loop_top_212
+L_loop_end_213:
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x2c, %rax
@@ -6604,7 +6627,7 @@ L_loop_end_211:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_213
+    jz L_if_end_215
     movabsq $0xc, %rax
     pushq %rax
     popq %rax
@@ -6614,7 +6637,7 @@ L_loop_end_211:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_213:
+L_if_end_215:
     leaq L_HS_KAT_VOTE(%rip), %rax
     pushq %rax
     movabsq $0x2c, %rax
@@ -6662,7 +6685,7 @@ L_if_end_213:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_215
+    jz L_if_end_217
     movabsq $0xd, %rax
     pushq %rax
     popq %rax
@@ -6672,7 +6695,7 @@ L_if_end_213:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_215:
+L_if_end_217:
     movzbq L_HS_PHASE(%rip), %rax
     pushq %rax
     movzbq L_HS_PHASE_PRECOMMIT(%rip), %rax
@@ -6685,7 +6708,7 @@ L_if_end_215:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_217
+    jz L_if_end_219
     movabsq $0xe, %rax
     pushq %rax
     popq %rax
@@ -6695,7 +6718,7 @@ L_if_end_215:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_217:
+L_if_end_219:
     leaq L_HS_KAT_PAY(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6741,7 +6764,7 @@ L_if_end_217:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_219
+    jz L_if_end_221
     movabsq $0xf, %rax
     pushq %rax
     popq %rax
@@ -6751,7 +6774,7 @@ L_if_end_217:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_219:
+L_if_end_221:
     leaq L_HS_KAT_DEC(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6770,7 +6793,7 @@ L_if_end_219:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_221
+    jz L_if_end_223
     movabsq $0x10, %rax
     pushq %rax
     popq %rax
@@ -6780,7 +6803,7 @@ L_if_end_219:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_221:
+L_if_end_223:
     leaq L_HS_KAT_PAY(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6835,7 +6858,7 @@ L_if_end_221:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_223
+    jz L_if_end_225
     movabsq $0x11, %rax
     pushq %rax
     popq %rax
@@ -6845,7 +6868,7 @@ L_if_end_221:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_223:
+L_if_end_225:
     leaq L_HS_KAT_PAY(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6900,7 +6923,7 @@ L_if_end_223:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_225
+    jz L_if_end_227
     movabsq $0x12, %rax
     pushq %rax
     popq %rax
@@ -6910,7 +6933,7 @@ L_if_end_223:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_225:
+L_if_end_227:
     movabsq $0x63, %rax
     pushq %rax
     popq %rax

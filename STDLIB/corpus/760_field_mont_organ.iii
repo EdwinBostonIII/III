@@ -1,0 +1,140 @@
+/* 760_field_mont_organ.iii -- APOTHEOSIS S.3 differential KAT for the NIST
+ * prime-field Montgomery multiplies (fp256 first; fn256/fp384/fn384 arms added
+ * as each is consolidated onto the shared CIOS organ).  ABSOLUTE oracle: for
+ * adversarial canonical a,b < modulus, the field round-trip
+ *     from_mont( fp_mul( to_mont(a), to_mont(b) ) )  ==  bigint(a*b mod modulus)
+ * (to_mont/from_mont themselves drive fp_mul, so this exercises the refactored
+ * multiply 3x per trial).  Run BEFORE the consolidation (golden: must PASS on
+ * the inline-CIOS field) and AFTER (must still PASS via the shared organ) --
+ * the capture-golden discipline with an absolute reference.  Adversarial
+ * vectors: a,b in {p-1, p-2, 1, 2, a high-limb pattern, LCG-random} -- the
+ * near-modulus / max-carry corners 953/759 proved matter.
+ * Exit 99 = all hold.  10+t = fp256 trial t failed. */
+module corpus_760
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_drop(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_from_u64(arena: u64, v: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_eq(a: u64, b: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_sub(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+/* fp256 (P-256 base field) exported slot ops. */
+extern @abi(c-msvc-x64) fn fp256_boot() -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_set_limb(slot: u64, idx: u64, v: u32) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_get_limb(slot: u64, idx: u64) -> u32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_to_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_from_mont_x(r: u64, a: u64) -> i32 from "fp256.iii"
+extern @abi(c-msvc-x64) fn fp_mul_x(r: u64, a: u64, b: u64) -> i32 from "fp256.iii"
+
+var LCG : u64 = 0u64
+fn lcg() -> u64 {
+    LCG = LCG * 6364136223846793005u64 + 1442695040888963407u64
+    return LCG
+}
+
+/* p256 = FFFFFFFF00000001 0000000000000000 00000000FFFFFFFF FFFFFFFFFFFFFFFF (u64 LE). */
+fn make_p256(arena: u64) -> u64 {
+    let p : u64 = bigint_new(arena, 4u64)
+    bigint_set_limb(p, 0u64, 0xFFFFFFFFFFFFFFFFu64)
+    bigint_set_limb(p, 1u64, 0x00000000FFFFFFFFu64)
+    bigint_set_limb(p, 2u64, 0x0000000000000000u64)
+    bigint_set_limb(p, 3u64, 0xFFFFFFFF00000001u64)
+    bigint_set_len(p, 4u64)
+    bigint_normalize(p)
+    return p
+}
+
+/* Load bigint A (< p256, <=4 u64 limbs) into fp256 slot `s` as 8 u32 LE digits. */
+fn load_fp(s: u64, a: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let limb : u64 = bigint_get_limb(a, i)
+        fp_set_limb(s, 2u64 * i, (limb & 0xFFFFFFFFu64) as u32)
+        fp_set_limb(s, 2u64 * i + 1u64, ((limb >> 32u64) & 0xFFFFFFFFu64) as u32)
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* Read fp256 slot `s` (8 u32 digits) into a fresh bigint (4 u64 limbs). */
+fn read_fp(arena: u64, s: u64) -> u64 {
+    let g : u64 = bigint_new(arena, 4u64)
+    let mut i : u64 = 0u64
+    while i < 4u64 {
+        let lo : u64 = fp_get_limb(s, 2u64 * i) as u64
+        let hi : u64 = fp_get_limb(s, 2u64 * i + 1u64) as u64
+        bigint_set_limb(g, i, lo | (hi << 32u64))
+        i = i + 1u64
+    }
+    bigint_set_len(g, 4u64)
+    bigint_normalize(g)
+    return g
+}
+
+/* fp256 round-trip == bigint(a*b mod p) for canonical a,b < p.  Returns 1 if ok. */
+fn fp256_rt(arena: u64, a: u64, b: u64, p: u64) -> u8 {
+    load_fp(0u64, a)
+    load_fp(1u64, b)
+    fp_to_mont_x(2u64, 0u64)        /* am = aR mod p */
+    fp_to_mont_x(3u64, 1u64)        /* bm = bR mod p */
+    fp_mul_x(4u64, 2u64, 3u64)      /* cm = am*bm*R^-1 = abR mod p */
+    fp_from_mont_x(5u64, 4u64)      /* c  = ab mod p */
+    let got : u64 = read_fp(arena, 5u64)
+    let prod : u64 = bigint_mul(arena, a, b)
+    let ref : u64 = bigint_mod(arena, prod, p)
+    let ok : u8 = bigint_eq(got, ref)
+    bigint_drop(got) ; bigint_drop(prod) ; bigint_drop(ref)
+    return ok
+}
+
+/* random bigint < p (k=4 limbs then reduce mod p). */
+fn rand_lt(arena: u64, p: u64) -> u64 {
+    let r : u64 = bigint_new(arena, 4u64)
+    let mut i : u64 = 0u64
+    while i < 4u64 { bigint_set_limb(r, i, lcg()) ; i = i + 1u64 }
+    bigint_set_len(r, 4u64)
+    bigint_normalize(r)
+    let rm : u64 = bigint_mod(arena, r, p)
+    bigint_drop(r)
+    return rm
+}
+
+fn main() -> u64 {
+    let arena : u64 = arena_new(1u64 << 22u64)
+    if arena == 0u64 { return 1u64 }
+    fp256_boot()
+    LCG = 0x0123456789ABCDEFu64
+    let p : u64 = make_p256(arena)
+    let one : u64 = bigint_from_u64(arena, 1u64)
+    let two : u64 = bigint_from_u64(arena, 2u64)
+    let pm1 : u64 = bigint_sub(arena, p, one)         /* p-1, the maximal residue */
+    let pm2 : u64 = bigint_sub(arena, pm1, one)       /* p-2 */
+
+    /* adversarial fixed pairs */
+    if fp256_rt(arena, pm1, pm1, p) != 1u8 { return 10u64 }   /* (p-1)^2 : max carry */
+    if fp256_rt(arena, pm1, one, p) != 1u8 { return 11u64 }
+    if fp256_rt(arena, one, pm1, p) != 1u8 { return 12u64 }
+    if fp256_rt(arena, pm1, two, p) != 1u8 { return 13u64 }
+    if fp256_rt(arena, pm2, pm1, p) != 1u8 { return 14u64 }
+    if fp256_rt(arena, one, one, p) != 1u8 { return 15u64 }
+
+    /* 24 random reduced pairs */
+    let mut t : u64 = 0u64
+    while t < 24u64 {
+        let a : u64 = rand_lt(arena, p)
+        let b : u64 = rand_lt(arena, p)
+        if fp256_rt(arena, a, b, p) != 1u8 { return 20u64 + t }
+        bigint_drop(a) ; bigint_drop(b)
+        t = t + 1u64
+    }
+
+    arena_drop(arena)
+    return 99u64
+}

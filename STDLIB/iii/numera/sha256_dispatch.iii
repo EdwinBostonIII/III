@@ -34,11 +34,12 @@ const SHA_PATH_SOFTWARE : u32 = 0u32
 const SHA_PATH_SHA_NI   : u32 = 1u32
 
 /* Dispatch state is settable by callers via sha256_dispatch_force_path
- * (intended for tests + benchmarking).  Default = software, since the
- * SHA-NI block emitter requires an inline-asm grammar (`metal{}`) that
- * has no STDLIB precedent today.  Future runtime detection can flip
- * the default once asm syntax is in place; the dispatch surface here
- * stays stable across that change. */
+ * (intended for tests + benchmarking).  Default = software: there is one
+ * SHA-256 implementation today (the verified software path).  The metal{}
+ * inline-asm grammar now HAS ample STDLIB precedent (bigint/chacha20/keccak
+ * AVX-512), so the SHA-NI fast path is a real named horizon -- it awaits the
+ * SHA256RNDS2 round-function asm + its bit-identity KAT, not any grammar.  The
+ * dispatch surface stays stable across that change. */
 var SHA_DISPATCH_PATH : u32 = 0u32
 
 fn sha256_dispatch_select() -> u32 {
@@ -64,16 +65,18 @@ fn sha256_dispatch_path() -> u32 @export {
 }
 
 fn sha256_dispatch_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 @export {
-    /* The intended SHA-NI branch would call a sha256_block_shani(...)
-     * sibling; since iii's `metal{}` inline-asm syntax has no STDLIB
-     * precedent in this tree (verified by `grep -r 'metal {' STDLIB/iii/`
-     * returning zero hits), the SHA-NI block emission is materialized
-     * by a follow-up session that lands the inline-asm grammar.  Until
-     * then both branches go through the verified software path -- the
-     * dispatch surface is real, the path-selection is real, and the
-     * software answer is bit-identical to what SHA-NI would produce.
-     * Selection state (SHA_DISPATCH_PATH) tracks which branch was
-     * taken so ripple/proof tooling can attach perf-impact crystals. */
+    /* APOTHEOSIS S.5 (H-4: no stub masquerading as dispatch).  This is HONESTLY
+     * SOFTWARE-ONLY today: there is exactly ONE SHA-256 implementation (the
+     * verified numera/sha256.iii), so the dispatch deterministically routes to
+     * it -- it does NOT pretend to select a fast path that isn't there
+     * (sha256_dispatch_force_path(SHA_NI) returns SHA_PATH_SOFTWARE, telling the
+     * caller plainly that SHA-NI is not active).  NAMED HORIZON: a SHA256RNDS2 /
+     * SHA256MSG1 / SHA256MSG2 metal{} block, gated cpufeat_has_sha() and proven
+     * bit-identical to the software path (the same discipline the AVX-512 blocks
+     * in bigint/chacha20/keccak already follow -- the metal{} grammar this stub
+     * once said was "absent" now has ample STDLIB precedent, so the only
+     * remaining work is the round-function asm + its bit-identity KAT).  The
+     * dispatch surface + selection state stay stable across that future. */
     let p : u32 = sha256_dispatch_select()
     let _selected : u32 = p
     return sha256_oneshot(input, len, out_32)

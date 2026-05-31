@@ -8,6 +8,8 @@ L_str_0:
     .section .rodata
 L_INET_OK:
     .quad 0x0
+L_INET_E_BUILD:
+    .quad 0xfffffffffffffffe
     .section .data
     .global L_INET_LAST_ERROR
 L_INET_LAST_ERROR:
@@ -1001,7 +1003,27 @@ L_inet_emit_octet:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_47
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_47:
     movabsq $0x30, %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1019,7 +1041,27 @@ L_inet_emit_octet:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_49
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_49:
     movabsq $0x30, %rax
     pushq %rax
     movl -48(%rbp), %eax
@@ -1037,7 +1079,27 @@ L_inet_emit_octet:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_51
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_51:
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -1054,7 +1116,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_47
+    jz L_if_end_53
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0x64, %rax
@@ -1067,7 +1129,7 @@ L_if_end_45:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_49
+    jz L_if_end_55
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xa, %rax
@@ -1114,7 +1176,27 @@ L_if_end_45:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_57
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_57:
     movabsq $0x30, %rax
     pushq %rax
     movl -40(%rbp), %eax
@@ -1132,15 +1214,35 @@ L_if_end_45:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_59
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_49:
+L_if_end_59:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_47:
+L_if_end_55:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_53:
     movl -24(%rbp), %eax
     pushq %rax
     movabsq $0xa, %rax
@@ -1153,7 +1255,7 @@ L_if_end_47:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_51
+    jz L_if_end_61
     movabsq $0x30, %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -1171,11 +1273,31 @@ L_if_end_47:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_63
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_51:
+L_if_end_63:
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_61:
     movslq L_INET_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1273,7 +1395,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_65
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_65:
     movabsq $0x2e, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1285,7 +1427,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_67
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_67:
     movl -32(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1297,7 +1459,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_69
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_69:
     movabsq $0x2e, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1309,7 +1491,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_71:
     movl -40(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1321,7 +1523,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_73
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_73:
     movabsq $0x2e, %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1333,7 +1555,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
     movl -48(%rbp), %eax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1345,7 +1587,27 @@ inet_format_ipv4:
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
     popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movslq L_INET_E_BUILD(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
     movslq L_INET_OK(%rip), %rax
     pushq %rax
     popq %rax

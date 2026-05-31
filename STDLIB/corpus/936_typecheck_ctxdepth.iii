@@ -1,0 +1,12 @@
+/* 936 -- II-TC-2 falsifier: the typecheck context stack must FAIL CLOSED past
+ * TC_CTX_MAX (256) binders. A Pi-chain deeper than 256 must be REJECTED (tc_infer
+ * -> TC_ERR) and the stack must stay intact (a subsequent in-bounds term still types).
+ * Before the fix, the over-deep push was ignored while the paired pop still fired,
+ * corrupting the de Bruijn context. Exit 99 = correct; 1..3 = which invariant broke. */
+module corpus_936_typecheck_ctxdepth
+
+extern @abi(c-msvc-x64) fn p5_kat_ctxdepth() -> u64 from "typecheck.iii"
+
+fn main() -> u64 {
+    return p5_kat_ctxdepth()
+}

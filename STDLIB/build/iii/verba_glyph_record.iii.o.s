@@ -726,14 +726,14 @@ L_if_end_21:
     pushq %rax
     popq %rax
     movq %rax, -40(%rbp)
-    movl -32(%rbp), %eax
-    pushq %rax
     movl -40(%rbp), %eax
+    pushq %rax
+    movl L_GV3_REC_MAX_FIELDS(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setae %al
+    seta %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -749,6 +749,29 @@ L_if_end_21:
     pushq %rax
     popq %rax
 L_if_end_23:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_25
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_25:
     movabsq $0x10, %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -827,35 +850,6 @@ glyph_record_unpack_field_value:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_25:
-    movq -24(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    subq $32, %rsp
-    callq gv3_form_id
-    addq $32, %rsp
-    movl %eax, %eax
-    pushq %rax
-    movl L_GV3_FORM_RECORD(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setne %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
@@ -871,11 +865,11 @@ L_if_end_27:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq gv3_validate
+    callq gv3_form_id
     addq $32, %rsp
-    movzbq %al, %rax
+    movl %eax, %eax
     pushq %rax
-    movabsq $0x1, %rax
+    movl L_GV3_FORM_RECORD(%rip), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -898,28 +892,18 @@ L_if_end_27:
 L_if_end_29:
     movq -24(%rbp), %rax
     pushq %rax
-    movabsq $0x8, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq gv3_read_u32_le
+    callq gv3_validate
     addq $32, %rsp
-    movl %eax, %eax
+    movzbq %al, %rax
     pushq %rax
-    popq %rax
-    movq %rax, -40(%rbp)
-    movl -32(%rbp), %eax
-    pushq %rax
-    movl -40(%rbp), %eax
+    movabsq $0x1, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setae %al
+    setne %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
@@ -935,6 +919,68 @@ L_if_end_29:
     pushq %rax
     popq %rax
 L_if_end_31:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x8, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq gv3_read_u32_le
+    addq $32, %rsp
+    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movl -40(%rbp), %eax
+    pushq %rax
+    movl L_GV3_REC_MAX_FIELDS(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_33
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_33:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl -40(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_35
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_35:
     movabsq $0x10, %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1013,7 +1059,7 @@ glyph_record_validate:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_37
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1023,7 +1069,7 @@ glyph_record_validate:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_37:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -1042,7 +1088,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_39
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1052,7 +1098,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_39:
     movq -16(%rbp), %rax
     pushq %rax
     popq %rcx

@@ -57,14 +57,14 @@ var FZ_Y : [u64;8]  var FZ_YY : [u64;8]  var FZ_U : [u64;8]  var FZ_V : [u64;8] 
 var FZ_W : [u64;8]  var FZ_X : [u64;8]  var FZ_XX : [u64;8] var FZ_X2 : [u64;8]
 var FZ_CB : [u8;32]
 
-fn fz_copy(src: u64, dst: u64) -> i32 {
+fn fz_copy(src: u64, dst: u64) -> i32 @export {
     let sp : *u64 = src as *u64
     let dp : *u64 = dst as *u64
     let mut k : u64 = 0u64
     while k < 8u64 { dp[k] = sp[k]  k = k + 1u64 }
     return 0i32
 }
-fn fz_decode(src: u64, dst: u64) -> i32 {
+fn fz_decode(src: u64, dst: u64) -> i32 @export {
     let sp : *u8 = src as *u8
     let dp : *u64 = dst as *u64
     let mut k : u64 = 0u64
@@ -78,7 +78,7 @@ fn fz_decode(src: u64, dst: u64) -> i32 {
     }
     return 0i32
 }
-fn fz_encode(src: u64, dst: u64) -> i32 {
+fn fz_encode(src: u64, dst: u64) -> i32 @export {
     let sp : *u64 = src as *u64
     let dp : *u8 = dst as *u8
     let mut k : u64 = 0u64
@@ -92,7 +92,17 @@ fn fz_encode(src: u64, dst: u64) -> i32 {
     }
     return 0i32
 }
-fn fz_mul(a: u64, b: u64, r: u64) -> i32 {
+/* APOTHEOSIS S.3 SOVEREIGN PATH (ADR-S3b -- invariant, do not "unify").  fz_mul
+ * is the pseudo-Mersenne reduction for p = 2^255-19: schoolbook product, then
+ * fold the high limbs via 2^256 == 38 (mod p) (the *38 carry chain below), then
+ * deferred freeze.  It is DELIBERATELY EXEMPT from the S.3 consolidation that
+ * routes the four NIST CIOS fields (fp256/fn256/fp384/fn384) through the shared
+ * Montgomery organ: for this prime the *38 fold is fundamentally cheaper than
+ * any Montgomery pass (measured ~6.9x, corpus bench 992).  Harmony = "one organ
+ * where the algebra is the same, sovereign specialization where it genuinely
+ * differs."  A future "unify everything" pass MUST NOT absorb this into the
+ * Montgomery organ -- it would be strictly slower.  Protected by 388/973/992. */
+fn fz_mul(a: u64, b: u64, r: u64) -> i32 @export {
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64
     let rp : *u64 = r as *u64
@@ -146,7 +156,7 @@ fn fz_mul(a: u64, b: u64, r: u64) -> i32 {
     return 0i32
 }
 fn fz_sq(a: u64, r: u64) -> i32 { return fz_mul(a, a, r) }
-fn fz_add(a: u64, b: u64, r: u64) -> i32 {
+fn fz_add(a: u64, b: u64, r: u64) -> i32 @export {
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64
     let rp : *u64 = r as *u64
@@ -168,7 +178,7 @@ fn fz_add(a: u64, b: u64, r: u64) -> i32 {
     }
     return 0i32
 }
-fn fz_sub(a: u64, b: u64, r: u64) -> i32 {
+fn fz_sub(a: u64, b: u64, r: u64) -> i32 @export {
     let ap : *u64 = a as *u64
     let bp : *u64 = b as *u64
     let rp : *u64 = r as *u64
@@ -233,7 +243,7 @@ fn fz_subm(r: u64, m: u64) -> i32 {
     }
     return 0i32
 }
-fn fz_freeze(r: u64) -> i32 {
+fn fz_freeze(r: u64) -> i32 @export {
     if fz_ge(r, &FZ_P as u64) == 1u8 { fz_subm(r, &FZ_P as u64) }
     if fz_ge(r, &FZ_P as u64) == 1u8 { fz_subm(r, &FZ_P as u64) }
     return 0i32
@@ -259,7 +269,7 @@ fn fz_pow(a: u64, exp: u64, r: u64) -> i32 {
     fz_copy(&FZ_ACC as u64, r)
     return 0i32
 }
-fn fz_invert(a: u64, r: u64) -> i32 { return fz_pow(a, &FZ_PM2 as u64, r) }
+fn fz_invert(a: u64, r: u64) -> i32 @export { return fz_pow(a, &FZ_PM2 as u64, r) }
 fn fz_eq(a: u64, b: u64) -> u8 {
     fz_copy(a, &FZ_EQ1 as u64)  fz_copy(b, &FZ_EQ2 as u64)
     fz_freeze(&FZ_EQ1 as u64)   fz_freeze(&FZ_EQ2 as u64)
@@ -330,11 +340,26 @@ fn ed_compress(p: u64, out: u64) -> i32 @export {
     op[31u64] = op[31u64] | ((xb << 7u64) as u8)
     return 0i32
 }
+/* [E-FE-4] 1u8 iff the 32-byte little-endian field element is CANONICAL (< p = 2^255-19).
+ * p (LE) = ED FF FF ... FF 7F; only the 19 values in [p, 2^255) are non-canonical. */
+fn fz_is_canonical(b: u64) -> u8 @export {
+    let p : *u8 = b as *u8
+    if p[31u64] != 0x7Fu8 { return 1u8 }     /* high byte < 0x7F (sign bit masked) -> < p */
+    let mut i : u64 = 1u64
+    while i < 31u64 {
+        if p[i] != 0xFFu8 { return 1u8 }     /* a middle byte < 0xFF -> < p */
+        i = i + 1u64
+    }
+    if p[0u64] < 0xEDu8 { return 1u8 }       /* low byte < 0xED -> < p */
+    return 0u8                                /* value in [p, 2^255) -> NON-canonical */
+}
+
 fn ed_decompress(comp: u64, pout: u64) -> i32 @export {
     let cp : *u8 = comp as *u8
     let mut k : u64 = 0u64
     while k < 32u64 { FZ_DCMP[k] = cp[k]  k = k + 1u64 }
     FZ_DCMP[31u64] = FZ_DCMP[31u64] & 0x7Fu8
+    if fz_is_canonical(&FZ_DCMP as u64) == 0u8 { return 1i32 }   /* [E-FE-4] reject non-canonical y >= p */
     fz_decode(&FZ_DCMP as u64, &FZ_Y as u64)
     let xsign : u64 = (cp[31u64] >> 7u64) as u64 & 1u64
     fz_sq(&FZ_Y as u64, &FZ_YY as u64)

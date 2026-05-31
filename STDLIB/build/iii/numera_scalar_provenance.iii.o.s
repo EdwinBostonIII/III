@@ -38,6 +38,8 @@ L_SP_OP_U64_SUB_CODE:
     .quad 0x5105
 L_SP_OP_U64_MUL_CODE:
     .quad 0x5106
+L_SP_E_POOL_FULL:
+    .quad 0xffffffffffffffff
     .section .bss
     .global L_SP_DOMAIN
 L_SP_DOMAIN:
@@ -615,7 +617,7 @@ L_sp_mint:
     movslq %eax, %rax
     pushq %rax
     popq %rax
-    movq -24(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
     movabsq $0x0, %rax
     pushq %rax
@@ -632,6 +634,33 @@ L_sp_mint:
     subq $32, %rsp
     callq crystal_mint
     addq $32, %rsp
+    pushq %rax
+    popq %rax
+    movq %rax, -32(%rbp)
+    movq -32(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_5
+    movq L_SP_E_POOL_FULL(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_5:
+    movq -32(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -680,7 +709,7 @@ sp_u32_add:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_7
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -690,7 +719,7 @@ sp_u32_add:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_7:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -755,7 +784,7 @@ sp_u32_sub:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_9
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -765,7 +794,7 @@ sp_u32_sub:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_9:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -830,7 +859,7 @@ sp_u32_mul:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -840,7 +869,7 @@ sp_u32_mul:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_11:
     movl -16(%rbp), %eax
     pushq %rax
     popq %rax
@@ -905,7 +934,7 @@ sp_u64_add:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -915,7 +944,7 @@ sp_u64_add:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_13:
     movq -16(%rbp), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -976,7 +1005,7 @@ sp_u64_sub:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -986,7 +1015,7 @@ sp_u64_sub:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movq -16(%rbp), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -1047,7 +1076,7 @@ sp_u64_mul:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1057,7 +1086,7 @@ sp_u64_mul:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movq -16(%rbp), %rax
     pushq %rax
     movq -8(%rbp), %rax

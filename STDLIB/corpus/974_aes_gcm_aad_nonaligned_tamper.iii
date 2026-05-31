@@ -1,0 +1,89 @@
+/* 974_aes_gcm_aad_nonaligned_tamper.iii -- AES-128-GCM, NIST SP 800-38D / McGrew-Viega
+ * Test Case 4: a 20-byte (NON-16-aligned) AAD with a 60-byte plaintext. The aligned KATs
+ * (62/63/69) never exercise aes_gcm_aad's partial-block path (:437-440) nor the AAD-length
+ * bit packing (:491-496); this drives both against the known answer.
+ *
+ *   K  = feffe9928665731c6d6a8f9467308308
+ *   IV = cafebabefacedbaddecaf888
+ *   A  = feedfacedeadbeeffeedfacedeadbeefabaddad2                 (20 bytes -- non-aligned)
+ *   P  = d9313225...ba637b39                                       (60 bytes)
+ *   C  = 42831ec2...3d58e091                                       (60 bytes)
+ *   T  = 5bc94fbc3221a5db94fae95ae7121a47
+ *
+ * Arms: (1) seal -> ct==C AND tag==T  (the partial-block AAD path computes the correct tag);
+ *       (2) open with the CORRECT AAD -> 1 (authenticates);
+ *       (3) PROVE-THE-NEGATIVE: flip one AAD byte -> open -> 0 (authentication MUST fail).
+ * Arms (2)+(3) together are non-tautological: the test fails if open ignored the AAD.
+ * Exit 99 on full success; 1..60 = ciphertext byte i; 61..76 = tag byte; 90/91 = open arms.
+ */
+module corpus_974
+
+extern @abi(c-msvc-x64) fn aes_gcm_init(key: *u8, nonce: *u8, nonce_len: u64) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_aad(aad: *u8, aad_len: u64) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_seal(pt: *u8, pt_len: u64, ct_out: *u8, tag_out: *u8) -> i32 from "aes_gcm.iii"
+extern @abi(c-msvc-x64) fn aes_gcm_open(ct: *u8, ct_len: u64, pt_out: *u8, tag_in: *u8) -> u8 from "aes_gcm.iii"
+
+var K  : [u8; 16] = [0xFEu8,0xFFu8,0xE9u8,0x92u8,0x86u8,0x65u8,0x73u8,0x1Cu8,0x6Du8,0x6Au8,0x8Fu8,0x94u8,0x67u8,0x30u8,0x83u8,0x08u8]
+var IV : [u8; 12] = [0xCAu8,0xFEu8,0xBAu8,0xBEu8,0xFAu8,0xCEu8,0xDBu8,0xADu8,0xDEu8,0xCAu8,0xF8u8,0x88u8]
+var A  : [u8; 20] = [0xFEu8,0xEDu8,0xFAu8,0xCEu8,0xDEu8,0xADu8,0xBEu8,0xEFu8,0xFEu8,0xEDu8,0xFAu8,0xCEu8,0xDEu8,0xADu8,0xBEu8,0xEFu8,0xABu8,0xADu8,0xDAu8,0xD2u8]
+var P  : [u8; 60] = [0xD9u8,0x31u8,0x32u8,0x25u8,0xF8u8,0x84u8,0x06u8,0xE5u8,0xA5u8,0x59u8,0x09u8,0xC5u8,0xAFu8,0xF5u8,0x26u8,0x9Au8,
+                     0x86u8,0xA7u8,0xA9u8,0x53u8,0x15u8,0x34u8,0xF7u8,0xDAu8,0x2Eu8,0x4Cu8,0x30u8,0x3Du8,0x8Au8,0x31u8,0x8Au8,0x72u8,
+                     0x1Cu8,0x3Cu8,0x0Cu8,0x95u8,0x95u8,0x68u8,0x09u8,0x53u8,0x2Fu8,0xCFu8,0x0Eu8,0x24u8,0x49u8,0xA6u8,0xB5u8,0x25u8,
+                     0xB1u8,0x6Au8,0xEDu8,0xF5u8,0xAAu8,0x0Du8,0xE6u8,0x57u8,0xBAu8,0x63u8,0x7Bu8,0x39u8]
+var CEXP : [u8; 60] = [0x42u8,0x83u8,0x1Eu8,0xC2u8,0x21u8,0x77u8,0x74u8,0x24u8,0x4Bu8,0x72u8,0x21u8,0xB7u8,0x84u8,0xD0u8,0xD4u8,0x9Cu8,
+                       0xE3u8,0xAAu8,0x21u8,0x2Fu8,0x2Cu8,0x02u8,0xA4u8,0xE0u8,0x35u8,0xC1u8,0x7Eu8,0x23u8,0x29u8,0xACu8,0xA1u8,0x2Eu8,
+                       0x21u8,0xD5u8,0x14u8,0xB2u8,0x54u8,0x66u8,0x93u8,0x1Cu8,0x7Du8,0x8Fu8,0x6Au8,0x5Au8,0xACu8,0x84u8,0xAAu8,0x05u8,
+                       0x1Bu8,0xA3u8,0x0Bu8,0x39u8,0x6Au8,0x0Au8,0xACu8,0x97u8,0x3Du8,0x58u8,0xE0u8,0x91u8]
+var TEXP : [u8; 16] = [0x5Bu8,0xC9u8,0x4Fu8,0xBCu8,0x32u8,0x21u8,0xA5u8,0xDBu8,0x94u8,0xFAu8,0xE9u8,0x5Au8,0xE7u8,0x12u8,0x1Au8,0x47u8]
+
+var CT    : [u8; 60]
+var TAG   : [u8; 16]
+var PTOUT : [u8; 60]
+
+/* first-mismatch index+1 over n bytes, or 0 if equal */
+fn cmp(a: u64, b: u64, n: u64) -> u64 {
+    let mut i : u64 = 0u64
+    while i < n {
+        let pa : *u8 = (a + i) as *u8
+        let pb : *u8 = (b + i) as *u8
+        if pa[0u64] != pb[0u64] { return i + 1u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let kp   : *u8 = (&K as u64) as *u8
+    let ivp  : *u8 = (&IV as u64) as *u8
+    let ap   : *u8 = (&A as u64) as *u8
+    let pp   : *u8 = (&P as u64) as *u8
+    let ctp  : *u8 = (&CT as u64) as *u8
+    let tagp : *u8 = (&TAG as u64) as *u8
+    let ptop : *u8 = (&PTOUT as u64) as *u8
+    let texp : *u8 = (&TEXP as u64) as *u8
+
+    /* (1) seal with the 20-byte non-aligned AAD; ct and tag must match the NIST vector */
+    aes_gcm_init(kp, ivp, 12u64)
+    aes_gcm_aad(ap, 20u64)
+    aes_gcm_seal(pp, 60u64, ctp, tagp)
+    let ce : u64 = cmp(&CT as u64, &CEXP as u64, 60u64)
+    if ce != 0u64 { return ce }                 /* 1..60 ciphertext byte mismatch */
+    let te : u64 = cmp(&TAG as u64, &TEXP as u64, 16u64)
+    if te != 0u64 { return 60u64 + te }         /* 61..76 tag byte mismatch */
+
+    /* (2) prove-the-positive: open with the CORRECT AAD authenticates -> 1 */
+    aes_gcm_init(kp, ivp, 12u64)
+    aes_gcm_aad(ap, 20u64)
+    let ok : u8 = aes_gcm_open(ctp, 60u64, ptop, texp)
+    if ok != 1u8 { return 90u64 }
+
+    /* (3) PROVE-THE-NEGATIVE: a single tampered AAD byte must make open FAIL -> 0 */
+    A[0u32] = A[0u32] ^ 0x01u8
+    aes_gcm_init(kp, ivp, 12u64)
+    aes_gcm_aad(ap, 20u64)
+    let bad : u8 = aes_gcm_open(ctp, 60u64, ptop, texp)
+    A[0u32] = A[0u32] ^ 0x01u8                  /* restore */
+    if bad != 0u8 { return 91u64 }              /* tampered AAD wrongly authenticated */
+
+    return 99u64
+}

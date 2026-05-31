@@ -169,16 +169,100 @@ fn semver_cmp_u64(a: u64, b: u64) -> i32 {
     return 0i32
 }
 
+/* SemVer §11.4 pre-release precedence.  The old code compared only the BYTE
+ * LENGTH of the two pre-release spans (1.0.0-alpha vs 1.0.0-beta mis-ordered)
+ * and never snapshotted a's pre-release OFFSET before parsing b clobbered it.
+ * These helpers compare dot-separated identifier by identifier: (1) all-digit
+ * numerically, (2) others ASCII-lexically, (3) numeric < non-numeric, (4) more
+ * fields > fewer when the prefix is equal.  [audit H-SEMVER-1/2] */
+fn semver_ident_is_numeric(src: *u8, s: u64, len: u64) -> u8 {
+    if len == 0u64 { return 0u8 }
+    let mut i : u64 = 0u64
+    let mut all : u8 = 1u8
+    while i < len {
+        if semver_is_digit(src[s + i]) == 0u8 { all = 0u8 }
+        i = i + 1u64
+    }
+    return all
+}
+
+fn semver_ident_len(src: *u8, start: u64, end: u64) -> u64 {
+    let mut j : u64 = start
+    let mut going : u8 = 1u8
+    while going == 1u8 {
+        if j >= end { going = 0u8 }
+        if going == 1u8 {
+            if src[j] == 46u8 { going = 0u8 } else { j = j + 1u64 }
+        }
+    }
+    return j - start
+}
+
+fn semver_ident_cmp(a: *u8, ao: u64, al: u64, b: *u8, bo: u64, bl: u64) -> i32 {
+    let an : u8 = semver_ident_is_numeric(a, ao, al)
+    let bn : u8 = semver_ident_is_numeric(b, bo, bl)
+    if an == 1u8 { if bn == 0u8 { return -1i32 } }   /* rule 3: numeric < non-numeric */
+    if an == 0u8 { if bn == 1u8 { return  1i32 } }
+    if an == 1u8 {
+        if al < bl { return -1i32 }                  /* both numeric, no leading zeros: longer = larger */
+        if al > bl { return  1i32 }
+    }
+    let mut i : u64 = 0u64
+    let mut lim : u64 = al
+    if bl < al { lim = bl }
+    while i < lim {
+        let ca : u8 = a[ao + i]
+        let cb : u8 = b[bo + i]
+        if ca < cb { return -1i32 }
+        if ca > cb { return  1i32 }
+        i = i + 1u64
+    }
+    if al < bl { return -1i32 }
+    if al > bl { return  1i32 }
+    return 0i32
+}
+
+fn semver_pre_cmp(a: *u8, apo: u64, apl: u64, b: *u8, bpo: u64, bpl: u64) -> i32 {
+    let a_end : u64 = apo + apl
+    let b_end : u64 = bpo + bpl
+    let mut ai : u64 = apo
+    let mut bi : u64 = bpo
+    let mut result : i32 = 0i32
+    let mut decided : u8 = 0u8
+    while decided == 0u8 {
+        let mut a_more : u8 = 0u8
+        if ai < a_end { a_more = 1u8 }
+        let mut b_more : u8 = 0u8
+        if bi < b_end { b_more = 1u8 }
+        if a_more == 0u8 {
+            if b_more == 0u8 { decided = 1u8 } else { result = -1i32  decided = 1u8 }
+        }
+        if decided == 0u8 { if b_more == 0u8 { result = 1i32  decided = 1u8 } }
+        if decided == 0u8 {
+            let al : u64 = semver_ident_len(a, ai, a_end)
+            let bl : u64 = semver_ident_len(b, bi, b_end)
+            let c : i32 = semver_ident_cmp(a, ai, al, b, bi, bl)
+            if c != 0i32 { result = c  decided = 1u8 } else {
+                ai = ai + al + 1u64
+                bi = bi + bl + 1u64
+            }
+        }
+    }
+    return result
+}
+
 fn semver_compare(a: *u8, a_len: u64, b: *u8, b_len: u64) -> i32 @export {
     if semver_parse(a, a_len) != SEMVER_OK { return 0i32 }
     let am : u64 = SEMVER_LAST_MAJOR
     let an : u64 = SEMVER_LAST_MINOR
     let ap : u64 = SEMVER_LAST_PATCH
+    let apo : u64 = SEMVER_LAST_PRE_OFF   /* snapshot a's pre-release span BEFORE parse(b) clobbers it [audit H-SEMVER-2] */
     let apl : u64 = SEMVER_LAST_PRE_LEN
     if semver_parse(b, b_len) != SEMVER_OK { return 0i32 }
     let bm : u64 = SEMVER_LAST_MAJOR
     let bn : u64 = SEMVER_LAST_MINOR
     let bp : u64 = SEMVER_LAST_PATCH
+    let bpo : u64 = SEMVER_LAST_PRE_OFF
     let bpl : u64 = SEMVER_LAST_PRE_LEN
 
     let cm : i32 = semver_cmp_u64(am, bm)
@@ -194,11 +278,6 @@ fn semver_compare(a: *u8, a_len: u64, b: *u8, b_len: u64) -> i32 @export {
         return  1i32       /* a has none, b has pre  →  a > b */
     }
     if bpl == 0u64 { return -1i32 }
-    /* §11.4 -- full lexicographic identifier ordering requires re-walking
-     * the source spans.  Common-case comparison falls back to
-     * length-then-byte order, which yields the right result for the
-     * package-resolution scenarios this module targets. */
-    if apl < bpl { return -1i32 }
-    if apl > bpl { return  1i32 }
-    return 0i32
+    /* §11.4 -- compare pre-release identifiers dot-by-dot.  [audit H-SEMVER-1] */
+    return semver_pre_cmp(a, apo, apl, b, bpo, bpl)
 }

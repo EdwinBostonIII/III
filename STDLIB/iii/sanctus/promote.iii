@@ -49,6 +49,9 @@ var PRM_USED      : u32 = 0u32
 fn _prm_slot_of(vocab_id: u64) -> u32 {
     let id_l : u64 = vocab_id
     if id_l == 0u64 { return 0xFFFFFFFFu32 }
+    /* Reject vocab_id beyond the issuable range: the mask below would WRAP an
+     * out-of-range id (e.g. 65 -> slot 0) onto a live slot, aliasing data.  [audit promote-1] */
+    if id_l > (PRM_SLOTS as u64) { return 0xFFFFFFFFu32 }
     let s : u64 = (id_l - 1u64) & 0x3Fu64
     let s_u32 : u32 = s as u32
     if s_u32 >= PRM_SLOTS { return 0xFFFFFFFFu32 }

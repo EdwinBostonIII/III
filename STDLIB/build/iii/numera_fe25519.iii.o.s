@@ -133,9 +133,9 @@ L_FZ_CB:
     .section .iii.ring3,"n"
     .asciz "fz_copy"
     .text
-    .global L_fz_copy
-    .seh_proc L_fz_copy
-L_fz_copy:
+    .global fz_copy
+    .seh_proc fz_copy
+fz_copy:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -222,9 +222,9 @@ L_loop_end_1:
     .section .iii.ring3,"n"
     .asciz "fz_decode"
     .text
-    .global L_fz_decode
-    .seh_proc L_fz_decode
-L_fz_decode:
+    .global fz_decode
+    .seh_proc fz_decode
+fz_decode:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -431,9 +431,9 @@ L_loop_end_3:
     .section .iii.ring3,"n"
     .asciz "fz_encode"
     .text
-    .global L_fz_encode
-    .seh_proc L_fz_encode
-L_fz_encode:
+    .global fz_encode
+    .seh_proc fz_encode
+fz_encode:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -650,9 +650,9 @@ L_loop_end_5:
     .section .iii.ring3,"n"
     .asciz "fz_mul"
     .text
-    .global L_fz_mul
-    .seh_proc L_fz_mul
-L_fz_mul:
+    .global fz_mul
+    .seh_proc fz_mul
+fz_mul:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -1282,7 +1282,7 @@ L_fz_sq:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -1300,9 +1300,9 @@ L_fz_sq:
     .section .iii.ring3,"n"
     .asciz "fz_add"
     .text
-    .global L_fz_add
-    .seh_proc L_fz_add
-L_fz_add:
+    .global fz_add
+    .seh_proc fz_add
+fz_add:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -1523,9 +1523,9 @@ L_loop_end_27:
     .section .iii.ring3,"n"
     .asciz "fz_sub"
     .text
-    .global L_fz_sub
-    .seh_proc L_fz_sub
-L_fz_sub:
+    .global fz_sub
+    .seh_proc fz_sub
+fz_sub:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -2340,9 +2340,9 @@ L_loop_end_45:
     .section .iii.ring3,"n"
     .asciz "fz_freeze"
     .text
-    .global L_fz_freeze
-    .seh_proc L_fz_freeze
-L_fz_freeze:
+    .global fz_freeze
+    .seh_proc fz_freeze
+fz_freeze:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -2578,7 +2578,7 @@ L_loop_top_54:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2650,7 +2650,7 @@ L_loop_top_54:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2666,7 +2666,7 @@ L_loop_top_54:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2699,7 +2699,7 @@ L_loop_end_55:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2720,9 +2720,9 @@ L_loop_end_55:
     .section .iii.ring3,"n"
     .asciz "fz_invert"
     .text
-    .global L_fz_invert
-    .seh_proc L_fz_invert
-L_fz_invert:
+    .global fz_invert
+    .seh_proc fz_invert
+fz_invert:
     pushq %rbp
     .seh_pushreg %rbp
     movq %rsp, %rbp
@@ -2783,7 +2783,7 @@ L_fz_eq:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2797,7 +2797,7 @@ L_fz_eq:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2808,7 +2808,7 @@ L_fz_eq:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_fz_freeze
+    callq fz_freeze
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -2819,7 +2819,7 @@ L_fz_eq:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_fz_freeze
+    callq fz_freeze
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3035,7 +3035,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_sub
+    callq fz_sub
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3052,7 +3052,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_sub
+    callq fz_sub
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3073,7 +3073,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3090,7 +3090,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_add
+    callq fz_add
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3107,7 +3107,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_add
+    callq fz_add
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3128,7 +3128,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3145,7 +3145,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3166,7 +3166,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3183,7 +3183,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3204,7 +3204,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3225,7 +3225,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_sub
+    callq fz_sub
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3246,7 +3246,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_sub
+    callq fz_sub
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3267,7 +3267,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_add
+    callq fz_add
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3288,7 +3288,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_add
+    callq fz_add
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3307,7 +3307,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3326,7 +3326,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3345,7 +3345,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3364,7 +3364,7 @@ ed_pt_add:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3845,7 +3845,7 @@ ed_compress:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_invert
+    callq fz_invert
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3864,7 +3864,7 @@ ed_compress:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3889,7 +3889,7 @@ ed_compress:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3900,7 +3900,7 @@ ed_compress:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_fz_freeze
+    callq fz_freeze
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3911,7 +3911,7 @@ ed_compress:
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_fz_freeze
+    callq fz_freeze
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3925,7 +3925,7 @@ ed_compress:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_encode
+    callq fz_encode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -3997,6 +3997,159 @@ ed_compress:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "fz_is_canonical"
+    .text
+    .global fz_is_canonical
+    .seh_proc fz_is_canonical
+fz_is_canonical:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq %rcx, -8(%rbp)
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -16(%rbp)
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x1f, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movabsq $0x7f, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_71
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_71:
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+L_loop_top_72:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1f, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_loop_end_73
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -24(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_75
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_75:
+    movq -24(%rbp), %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    addq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+    jmp L_loop_top_72
+L_loop_end_73:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    movzbq (%rax,%rcx,1), %rax
+    pushq %rax
+    movabsq $0xed, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setb %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_77
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_77:
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "ed_decompress"
     .text
     .global ed_decompress
@@ -4021,7 +4174,7 @@ ed_decompress:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_70:
+L_loop_top_78:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -4034,7 +4187,7 @@ L_loop_top_70:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_71
+    jz L_loop_end_79
     leaq L_FZ_DCMP(%rip), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -4064,8 +4217,8 @@ L_loop_top_70:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_70
-L_loop_end_71:
+    jmp L_loop_top_78
+L_loop_end_79:
     leaq L_FZ_DCMP(%rip), %rax
     pushq %rax
     movabsq $0x1f, %rax
@@ -4088,6 +4241,37 @@ L_loop_end_71:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
+    leaq L_FZ_DCMP(%rip), %rax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq fz_is_canonical
+    addq $32, %rsp
+    movzbq %al, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    sete %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_81
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_81:
     leaq L_FZ_Y(%rip), %rax
     pushq %rax
     popq %rax
@@ -4099,7 +4283,7 @@ L_loop_end_71:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4160,7 +4344,7 @@ L_loop_end_71:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_sub
+    callq fz_sub
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4181,7 +4365,7 @@ L_loop_end_71:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4202,7 +4386,7 @@ L_loop_end_71:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_add
+    callq fz_add
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4218,7 +4402,7 @@ L_loop_end_71:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_invert
+    callq fz_invert
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4239,7 +4423,7 @@ L_loop_end_71:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4306,7 +4490,7 @@ L_loop_end_71:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_73
+    jz L_if_end_83
     leaq L_FZ_X2(%rip), %rax
     pushq %rax
     popq %rax
@@ -4323,7 +4507,7 @@ L_loop_end_71:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4339,7 +4523,7 @@ L_loop_end_71:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4347,7 +4531,7 @@ L_loop_end_71:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_73:
+L_if_end_83:
     leaq L_FZ_XX(%rip), %rax
     pushq %rax
     popq %rax
@@ -4389,7 +4573,7 @@ L_if_end_73:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_75
+    jz L_if_end_85
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -4399,14 +4583,14 @@ L_if_end_73:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_75:
+L_if_end_85:
     leaq L_FZ_X(%rip), %rax
     pushq %rax
     popq %rax
     pushq %rax
     popq %rcx
     subq $32, %rsp
-    callq L_fz_freeze
+    callq fz_freeze
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4439,7 +4623,7 @@ L_if_end_75:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_77
+    jz L_if_end_87
     leaq L_FZ_X2(%rip), %rax
     pushq %rax
     popq %rax
@@ -4456,7 +4640,7 @@ L_if_end_75:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_sub
+    callq fz_sub
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4472,7 +4656,7 @@ L_if_end_75:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4480,7 +4664,7 @@ L_if_end_75:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_77:
+L_if_end_87:
     movq -16(%rbp), %rax
     pushq %rax
     leaq L_FZ_X(%rip), %rax
@@ -4490,7 +4674,7 @@ L_if_end_77:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4510,7 +4694,7 @@ L_if_end_77:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_copy
+    callq fz_copy
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4541,7 +4725,7 @@ L_if_end_77:
     pushq %rax
     popq %rax
     movq %rax, -32(%rbp)
-L_loop_top_78:
+L_loop_top_88:
     movq -32(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -4554,7 +4738,7 @@ L_loop_top_78:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_79
+    jz L_loop_end_89
     movq -56(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -4578,8 +4762,8 @@ L_loop_top_78:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_78
-L_loop_end_79:
+    jmp L_loop_top_88
+L_loop_end_89:
     movq -16(%rbp), %rax
     pushq %rax
     movabsq $0xc0, %rax
@@ -4600,7 +4784,7 @@ L_loop_end_79:
     popq %rdx
     popq %r8
     subq $32, %rsp
-    callq L_fz_mul
+    callq fz_mul
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -4655,7 +4839,7 @@ fe25519_init:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_80:
+L_loop_top_90:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x7, %rax
@@ -4668,7 +4852,7 @@ L_loop_top_80:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_81
+    jz L_loop_end_91
     leaq L_FZ_P(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -4702,8 +4886,8 @@ L_loop_top_80:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_80
-L_loop_end_81:
+    jmp L_loop_top_90
+L_loop_end_91:
     leaq L_FZ_P(%rip), %rax
     pushq %rax
     movabsq $0x7, %rax
@@ -4728,7 +4912,7 @@ L_loop_end_81:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_82:
+L_loop_top_92:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -4741,7 +4925,7 @@ L_loop_top_82:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_83
+    jz L_loop_end_93
     leaq L_FZ_TWO(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -4785,8 +4969,8 @@ L_loop_top_82:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_82
-L_loop_end_83:
+    jmp L_loop_top_92
+L_loop_end_93:
     leaq L_FZ_TWO(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -4811,7 +4995,7 @@ L_loop_end_83:
     pushq %rax
     popq %rax
     movq %rax, -8(%rbp)
-L_loop_top_84:
+L_loop_top_94:
     movq -8(%rbp), %rax
     pushq %rax
     movabsq $0x20, %rax
@@ -4824,7 +5008,7 @@ L_loop_top_84:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_85
+    jz L_loop_end_95
     leaq L_FZ_PM2(%rip), %rax
     pushq %rax
     movq -8(%rbp), %rax
@@ -4858,8 +5042,8 @@ L_loop_top_84:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_84
-L_loop_end_85:
+    jmp L_loop_top_94
+L_loop_end_95:
     leaq L_FZ_PM2(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -5231,7 +5415,7 @@ L_loop_end_85:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -5567,7 +5751,7 @@ L_loop_end_85:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -5903,7 +6087,7 @@ L_loop_end_85:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -6239,7 +6423,7 @@ L_loop_end_85:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -6581,7 +6765,7 @@ L_loop_end_85:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax
@@ -6614,7 +6798,7 @@ L_loop_end_85:
     pushq %rax
     popq %rax
     movq %rax, -24(%rbp)
-L_loop_top_86:
+L_loop_top_96:
     movq -24(%rbp), %rax
     pushq %rax
     movabsq $0x8, %rax
@@ -6627,7 +6811,7 @@ L_loop_top_86:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_87
+    jz L_loop_end_97
     movq -16(%rbp), %rax
     pushq %rax
     movq -24(%rbp), %rax
@@ -6651,8 +6835,8 @@ L_loop_top_86:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_86
-L_loop_end_87:
+    jmp L_loop_top_96
+L_loop_end_97:
     leaq L_FZ_CB(%rip), %rax
     pushq %rax
     movabsq $0x0, %rax
@@ -6990,7 +7174,7 @@ L_loop_end_87:
     popq %rcx
     popq %rdx
     subq $32, %rsp
-    callq L_fz_decode
+    callq fz_decode
     addq $32, %rsp
     movslq %eax, %rax
     pushq %rax

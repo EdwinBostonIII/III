@@ -5,58 +5,48 @@
  * RFC 8018 / 2898 PBKDF2 password-based key derivation using HMAC-SHA256.
  * Slow by design (iteration count parameter).
  *
- * Public API (singleton):
- *   pbkdf2_sha256(password:*u8, password_len:u64, salt_iter_packed:u64, dk_out:u64) -> i32
- *      where salt_iter_packed encodes salt+iter via two prior set calls,
- *      and dk_out encodes dst pointer + length.  W2 limits to 4 args.
- *
- * Better split API:
- *   pbkdf2_sha256_set_salt(salt:*u8, salt_len:u64) -> i32
+ * Split API:
+ *   pbkdf2_sha256_set_salt(salt:*u8, salt_len:u64) -> i32   (salt_len <= 256)
  *   pbkdf2_sha256_set_iter(iterations:u32) -> i32
  *   pbkdf2_sha256_derive(password:*u8, password_len:u64, dk:*u8, dk_len:u64) -> i32
+ * Oneshot (APOTHEOSIS S.5):
+ *   pbkdf2_sha256_oneshot(password, password_len, salt, salt_len, iterations, dk, dk_len) -> i32
+ *
+ * APOTHEOSIS S.5 (H-2).  Work buffers are now FIXED .bss module arrays
+ * (PBK_WORK_*), not arena allocations -- pbkdf2 no longer depends on arena.iii.
+ * (The prior arena_new(8192) was a ONE-TIME lazy init, not per-call; pure module
+ * buffers are leaner: zero allocation, one fewer dependency.)
  *
  * Hexad: kind_essence.  Ring: R0.  K: 1.00.
  */
 
 module numera_pbkdf2
 
-extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
-extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn hmac_sha256(key: *u8, key_len: u64, msg: *u8, msg_len: u64) -> i32 from "hmac.iii"
 extern @abi(c-msvc-x64) fn hmac_sha256_tag(out_32: *u8) -> i32 from "hmac.iii"
 
 const PBKDF2_OK : i32 = 0i32
 const PBKDF2_E_INIT : i32 = -1i32
 
-var PBK_ARENA   : u64 = 0u64
-var PBK_SALT    : u64 = 0u64    /* arena copy of salt */
-var PBK_SALT_LEN : u64 = 0u64
-var PBK_ITER    : u32 = 1u32
-var PBK_MSG     : u64 = 0u64    /* salt || INT(i) buffer */
-var PBK_T       : u64 = 0u64    /* T_i intermediate */
-var PBK_U       : u64 = 0u64    /* U_j intermediate */
-
-fn pbk_alloc() -> i32 {
-    if PBK_ARENA != 0u64 { return PBKDF2_OK }
-    PBK_ARENA = arena_new(8192u64)
-    if PBK_ARENA == 0u64 { return PBKDF2_E_INIT }
-    PBK_SALT = arena_alloc1(PBK_ARENA, 256u64)
-    PBK_MSG  = arena_alloc1(PBK_ARENA, 4096u64)
-    PBK_T    = arena_alloc1(PBK_ARENA, 32u64)
-    PBK_U    = arena_alloc1(PBK_ARENA, 32u64)
-    return PBKDF2_OK
-}
+/* Fixed module work buffers (S.5: no arena). */
+var PBK_WORK_SALT : [u8; 256]      /* caller salt copy */
+var PBK_WORK_MSG  : [u8; 4096]     /* salt || INT(i) */
+var PBK_WORK_T    : [u8; 32]       /* T_i */
+var PBK_WORK_U    : [u8; 32]       /* U_j */
+var PBK_SALT_LEN  : u64 = 0u64
+var PBK_ITER      : u32 = 1u32
+var PBK_SALT_SET  : u8  = 0u8
 
 fn pbkdf2_sha256_set_salt(salt: *u8, salt_len: u64) -> i32 @export {
-    if pbk_alloc() != PBKDF2_OK { return PBKDF2_E_INIT }
-    if salt_len > 256u64 { return PBKDF2_E_INIT }
-    let sp : *u8 = PBK_SALT as *u8
+    if salt_len > 256u64 { return PBKDF2_E_INIT }       /* fixed-buffer bound guard */
+    let sp : *u8 = (&PBK_WORK_SALT) as u64 as *u8
     let mut i : u64 = 0u64
     while i < salt_len {
         sp[i] = salt[i]
         i = i + 1u64
     }
     PBK_SALT_LEN = salt_len
+    PBK_SALT_SET = 1u8
     return PBKDF2_OK
 }
 
@@ -66,15 +56,15 @@ fn pbkdf2_sha256_set_iter(iterations: u32) -> i32 @export {
 }
 
 fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) -> i32 @export {
-    if PBK_ARENA == 0u64 { return PBKDF2_E_INIT }
-    /* For each output 32-byte block i (1, 2, ...): T_i = U_1 ^ U_2 ^ ... ^ U_iter
+    if PBK_SALT_SET == 0u8 { return PBKDF2_E_INIT }
+    /* For each 32-byte block i: T_i = U_1 ^ ... ^ U_iter;
      * U_1 = HMAC(password, salt || INT(i)),  U_j = HMAC(password, U_{j-1}). */
     let mut block_idx : u32 = 1u32
     let mut written : u64 = 0u64
-    let mp : *u8 = PBK_MSG as *u8
-    let tp : *u8 = PBK_T as *u8
-    let up : *u8 = PBK_U as *u8
-    let sp : *u8 = PBK_SALT as *u8
+    let mp : *u8 = (&PBK_WORK_MSG) as u64 as *u8
+    let tp : *u8 = (&PBK_WORK_T) as u64 as *u8
+    let up : *u8 = (&PBK_WORK_U) as u64 as *u8
+    let sp : *u8 = (&PBK_WORK_SALT) as u64 as *u8
     while written < dk_len {
         /* Build salt || INT(block_idx) BE */
         let mut k : u64 = 0u64
@@ -87,7 +77,7 @@ fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) 
         mp[PBK_SALT_LEN + 2u64] = ((block_idx >> 8u32)  & 0xFFu32) as u8
         mp[PBK_SALT_LEN + 3u64] = (block_idx & 0xFFu32) as u8
         /* U_1 = HMAC(password, salt||INT) -> tp; copy to up */
-        hmac_sha256(password, password_len, PBK_MSG as *u8, PBK_SALT_LEN + 4u64)
+        hmac_sha256(password, password_len, mp, PBK_SALT_LEN + 4u64)
         hmac_sha256_tag(tp)
         let mut c : u32 = 0u32
         while c < 32u32 {
@@ -97,7 +87,7 @@ fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) 
         /* For j = 2..iter: U_j = HMAC(password, U_{j-1}); T ^= U_j */
         let mut j : u32 = 1u32
         while j < PBK_ITER {
-            hmac_sha256(password, password_len, PBK_U as *u8, 32u64)
+            hmac_sha256(password, password_len, up, 32u64)
             hmac_sha256_tag(up)
             let mut x : u32 = 0u32
             while x < 32u32 {
@@ -120,4 +110,12 @@ fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) 
         block_idx = block_idx + 1u32
     }
     return PBKDF2_OK
+}
+
+/* APOTHEOSIS S.5: single-call PBKDF2 (set salt + iter, then derive).  7 params. */
+fn pbkdf2_sha256_oneshot(password: *u8, password_len: u64, salt: *u8, salt_len: u64, iterations: u32, dk: *u8, dk_len: u64) -> i32 @export {
+    let s : i32 = pbkdf2_sha256_set_salt(salt, salt_len)
+    if s != PBKDF2_OK { return s }
+    pbkdf2_sha256_set_iter(iterations)
+    return pbkdf2_sha256_derive(password, password_len, dk, dk_len)
 }

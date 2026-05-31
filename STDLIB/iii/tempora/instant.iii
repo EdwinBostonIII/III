@@ -17,6 +17,14 @@
  * because we cannot legally pass a pointer to module-scope INSTANT_SEAL under
  * the iiis-2 address-of-global quirk (W3).
  *
+ * APOTHEOSIS S.7 (ADR-S7a): liveness + slot dispatch are DELEGATED to the one
+ * handle organ (memoria/tempaloc.iii).  The former private INSTANT_LIVE table
+ * is gone; an instant id is now a tempaloc handle tagged TYPE_INSTANT, so it
+ * can no longer be confused with a region/deadline id.  instant keeps only its
+ * own DATA arrays (tick/epoch/cap/seal), indexed by the local slot tempaloc
+ * returns -- tempaloc's INSTANT sub-range scans low-to-high exactly as the old
+ * INSTANT_LIVE scan did, so allocation order is unchanged.
+ *
  * Hexad: kind_motion.  Ring: R-1.  K: 1.00 (deterministic logical clock).
  */
 
@@ -27,6 +35,9 @@ extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_finalize_internal() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_digest_byte(i: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn tempaloc_alloc(type_tag: u64) -> u64 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_slot_of(handle: u64, expected_type: u64) -> u32 from "tempaloc.iii"
+extern @abi(c-msvc-x64) fn tempaloc_free(handle: u64, expected_type: u64) -> i32 from "tempaloc.iii"
 
 const INSTANT_INVALID : u64 = 0u64
 
@@ -35,11 +46,13 @@ const INSTANT_RIGHT_TIME : u64 = 0x0100u64
 
 const INSTANT_MAX_INSTANCES : u32 = 256u32
 
+/* Must match tempaloc.iii TEMPALOC_TYPE_INSTANT. */
+const INSTANT_TYPE : u64 = 2u64
+
 var INSTANT_TICK  : [u64; 256]
 var INSTANT_EPOCH : [u64; 256]
 var INSTANT_CAP   : [u64; 256]
 var INSTANT_SEAL  : [u8;  4096]   /* 256 instants × 16 bytes */
-var INSTANT_LIVE  : [u8;  256]
 
 var INSTANT_PROCESS_EPOCH : u64 = 0u64
 var INSTANT_EPOCH_INITED  : u8 = 0u8
@@ -53,22 +66,8 @@ fn instant_logical_next() -> u64 {
     return INSTANT_LOGICAL
 }
 
-fn instant_alloc_slot() -> u32 {
-    let mut i : u32 = 0u32
-    while i < INSTANT_MAX_INSTANCES {
-        if INSTANT_LIVE[i] == 0u8 { return i }
-        i = i + 1u32
-    }
-    return 0xFFFFFFFFu32
-}
-
 fn instant_slot_of(id: u64) -> u32 {
-    if id == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = id - 1u64
-    if s >= (INSTANT_MAX_INSTANCES as u64) { return 0xFFFFFFFFu32 }
-    let si : u32 = s as u32
-    if INSTANT_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
-    return si
+    return tempaloc_slot_of(id, INSTANT_TYPE)
 }
 
 fn instant_init_epoch() -> u32 {
@@ -115,15 +114,16 @@ fn instant_seal_compute(slot: u32) -> u32 {
 fn instant_now_sealed(time_cap: u64) -> u64 @export {
     if cap_verify_rights(time_cap, INSTANT_RIGHT_TIME) == 0u8 { return INSTANT_INVALID }
     instant_init_epoch()
-    let s : u32 = instant_alloc_slot()
+    let id : u64 = tempaloc_alloc(INSTANT_TYPE)
+    if id == 0u64 { return INSTANT_INVALID }
+    let s : u32 = tempaloc_slot_of(id, INSTANT_TYPE)
     if s == 0xFFFFFFFFu32 { return INSTANT_INVALID }
     let tick : u64 = instant_logical_next()
     INSTANT_TICK[s]  = tick
     INSTANT_EPOCH[s] = INSTANT_PROCESS_EPOCH
     INSTANT_CAP[s]   = time_cap
-    INSTANT_LIVE[s]  = 1u8
     instant_seal_compute(s)
-    return (s as u64) + 1u64
+    return id
 }
 
 fn instant_tick(id: u64) -> u64 @export {
@@ -199,9 +199,9 @@ fn instant_diff_ticks(later: u64, earlier: u64) -> u64 @export {
 fn instant_drop(id: u64) -> i32 @export {
     let s : u32 = instant_slot_of(id)
     if s == 0xFFFFFFFFu32 { return -1i32 }
-    INSTANT_LIVE[s]  = 0u8
     INSTANT_TICK[s]  = 0u64
     INSTANT_EPOCH[s] = 0u64
     INSTANT_CAP[s]   = 0u64
+    tempaloc_free(id, INSTANT_TYPE)
     return 0i32
 }

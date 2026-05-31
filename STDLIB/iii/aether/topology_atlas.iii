@@ -272,7 +272,7 @@ fn topoa_distance(a: u32, b: u32, edge_kind: u8) -> u32 @export {
     return result
 }
 
-fn topoa_neighbors(a: u32, edge_kind: u8, out: *u32, out_n: *u32) -> i32 @export {
+fn topoa_neighbors(a: u32, edge_kind: u8, out: *u32, out_n: *u32, out_cap: u32) -> i32 @export {
     let ax : u32 = a
     let ek : u8 = edge_kind
     if (out as u64) == 0u64 { return TOPOA_E_BAD }
@@ -284,8 +284,10 @@ fn topoa_neighbors(a: u32, edge_kind: u8, out: *u32, out_n: *u32) -> i32 @export
     while e < TOPOA_MAX_EDGES {
         let other : u32 = topoa_edge_other(e, ax, ek)
         if other != TOPOA_SENT {
-            out[(n as u64) & TOPOA_U32MASK] = other
-            n = n + 1u32
+            if n < out_cap {   /* never write past the caller's out[] capacity (matching edges can reach TOPOA_MAX_EDGES) [audit topology_atlas out-cap] */
+                out[(n as u64) & TOPOA_U32MASK] = other
+                n = n + 1u32
+            }
         }
         e = e + 1u32
     }
@@ -502,12 +504,12 @@ fn topoa_selftest() -> u64 @export {
     if r4 != 4u32 { return 16u64 }
     let op : *u32 = (&TOPOA_T_OUT as u64) as *u32
     let np : *u32 = (&TOPOA_T_N as u64) as *u32
-    if topoa_neighbors(1u32, TOPOA_EK_SAME_NUMA, op, np) != TOPOA_OK { return 17u64 }
+    if topoa_neighbors(1u32, TOPOA_EK_SAME_NUMA, op, np, 4096u32) != TOPOA_OK { return 17u64 }
     if TOPOA_T_N[0u64] != 2u32 { return 18u64 }
     if TOPOA_T_OUT[0u64] != 0u32 { return 19u64 }
     if TOPOA_T_OUT[1u64] != 2u32 { return 20u64 }
     if topoa_distance(0u32, 4u32, TOPOA_EK_SAME_NUMA) != TOPOA_SENT { return 21u64 }
-    if topoa_neighbors(4u32, TOPOA_EK_SAME_NUMA, op, np) != TOPOA_OK { return 22u64 }
+    if topoa_neighbors(4u32, TOPOA_EK_SAME_NUMA, op, np, 4096u32) != TOPOA_OK { return 22u64 }
     if TOPOA_T_N[0u64] != 0u32 { return 23u64 }
 
     /* ---- Vector 3a: empty-atlas commitment == Keccak256("") ---- */

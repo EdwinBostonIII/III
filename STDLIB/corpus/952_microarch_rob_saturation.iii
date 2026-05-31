@@ -1,0 +1,41 @@
+/* 952 -- W3.25 / CUT-3 falsifier: numera/microarch_model's ROB occupancy is the O(1) counter
+ * (UARCH_NEXT_ISSUE - UARCH_RETIRED_COUNT); the O(n) ma_in_flight scan was deleted.  The existing
+ * 616 KAT never saturates the ROB (ROB_CAP=224, n<=3), so it would pass even for a broken counter
+ * (the gap the plan flags).  This drives REAL ROB back-pressure: 8 independent latency-4 ops on 4
+ * exec ports.  With ROB_CAP=2 (binding, < ports) issue must stall on the in-flight counter, taking
+ * strictly MORE cycles than with ROB_CAP=8 (where the 4 ports bind).  A broken counter that never
+ * reaches ROB_CAP would make the two equal -> rejected.  99 = pass. */
+module corpus_952
+
+extern @abi(c-msvc-x64) fn ma_init() -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_set_params(p: *u32) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_set_latency(opcode: u32, cycles: u32) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_set_port_mask(opcode: u32, mask: u32) -> i32 from "microarch_model.iii"
+extern @abi(c-msvc-x64) fn ma_simulate(ops: *u32, n: u32, deps: *u32, dep_n: u32, out_cycles: *u64) -> i32 from "microarch_model.iii"
+
+var OPS     : [u32; 8] = [0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32]
+var DUMMY   : [u32; 2] = [0u32, 0u32]
+var P_BIG   : [u32; 4] = [8u32, 8u32, 8u32, 4u32]   /* issue=8 retire=8 ROB=8 ports=4 -> ports bind */
+var P_SML   : [u32; 4] = [8u32, 8u32, 2u32, 4u32]   /* ROB=2 (< ports) -> the ROB binds */
+var CYC_BIG : [u64; 1]
+var CYC_SML : [u64; 1]
+
+fn main() -> u64 {
+    ma_init()
+    if ma_set_latency(0u32, 4u32)      != 0i32 { return 1u64 }
+    if ma_set_port_mask(0u32, 0xFu32)  != 0i32 { return 2u64 }   /* opcode 0 -> any of the 4 ports */
+
+    /* Large ROB: the 4 ports bind -> 8 ops issue freely, execute 4-wide. */
+    if ma_set_params((&P_BIG) as u64 as *u32) != 0i32 { return 3u64 }
+    if ma_simulate((&OPS) as u64 as *u32, 8u32, (&DUMMY) as u64 as *u32, 0u32, (&CYC_BIG) as u64 as *u64) != 0i32 { return 4u64 }
+    if CYC_BIG[0u64] == 0u64 { return 5u64 }
+
+    /* Small ROB=2: issue stalls on the in-flight counter -> strictly more cycles. */
+    if ma_set_params((&P_SML) as u64 as *u32) != 0i32 { return 6u64 }
+    if ma_simulate((&OPS) as u64 as *u32, 8u32, (&DUMMY) as u64 as *u32, 0u32, (&CYC_SML) as u64 as *u64) != 0i32 { return 7u64 }
+
+    /* FALSIFIER: ROB back-pressure must raise the cycle count -- proving issue gates on the
+     * (NEXT_ISSUE - RETIRED_COUNT) counter.  A broken/absent counter makes these equal. */
+    if CYC_SML[0u64] <= CYC_BIG[0u64] { return 8u64 }
+    return 99u64
+}

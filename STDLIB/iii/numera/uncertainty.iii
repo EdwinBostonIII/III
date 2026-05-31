@@ -174,6 +174,7 @@ fn unc_apply(op: u32, a: *u8, b: *u8, out: *u8) -> i32 @export {
 /* ----------------------------- provenance (worklist; no recursion, W15) --- */
 fn unc_root_causes(gid: u32, out_ids: *u32, cap: u32) -> u32 @export {
     unc_init()
+    if gid >= UNC_NEXT { return 0u32 }   /* gids live in [0,UNC_NEXT); a larger gid would OOB-read UNC_NA/A0/A1 [audit F-UNC-3] */
     let op : *u32 = out_ids
     let mut sp : u64 = 1u64
     UNC_STACK[0u64] = gid
@@ -197,6 +198,7 @@ fn unc_root_causes(gid: u32, out_ids: *u32, cap: u32) -> u32 @export {
 
 fn unc_well_formed(gid: u32) -> u8 @export {
     unc_init()
+    if gid >= UNC_NEXT { return 0u8 }   /* OOB-read guard on unallocated gid [audit F-UNC-3] */
     let mut sp : u64 = 1u64
     UNC_STACK[0u64] = gid
     while sp > 0u64 {
@@ -220,6 +222,7 @@ fn unc_well_formed(gid: u32) -> u8 @export {
 /* ----------------------------- content address (M1) ----------------------- */
 fn unc_gap_addr(gid: u32, out: *u8) -> i32 @export {
     unc_init()
+    if gid >= UNC_NEXT { return 0i32 - 1i32 }   /* OOB-read guard on unallocated gid [audit F-UNC-3] */
     let gs : u64 = gid as u64
     let bp : *u8 = (&UNC_ADDRBUF as u64) as *u8
     bp[0u64] = UNC_KIND[gs]

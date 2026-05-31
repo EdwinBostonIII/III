@@ -57,7 +57,7 @@ main:
     movq %rax, -16(%rbp)
     movabsq $0x0, %rax
     pushq %rax
-    movabsq $0xdf8475800, %rax
+    movabsq $0x3e8, %rax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -185,7 +185,7 @@ L_if_end_3:
 L_if_end_5:
     movq -40(%rbp), %rax
     pushq %rax
-    movabsq $0x1d4c0, %rax
+    movabsq $0x7d0, %rax
     pushq %rax
     popq %rcx
     popq %rax

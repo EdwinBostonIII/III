@@ -1153,9 +1153,13 @@ fn iii_sid_record_for_decl(s: u64, decl_node: u32) -> u64 @export {
 }
 
 fn iii_sid_se_kind_name(k: u32) -> u64 @export {
+    /* Lazy-init the name tables.  sid_init_kind_name_singletons was defined but
+     * NEVER called, so SID_NONE_NAME / SID_UNKNOWN_NAME stayed all-zero (BSS) and
+     * k==0 / k>17 returned an EMPTY string instead of "none" / "unknown".  Both
+     * inits are idempotent (guarded).  [audit G2-SID-1] */
+    sid_init_method_table()
+    sid_init_kind_name_singletons()
     if k == 0u32 {
-        /* Return pointer to a static "none\0" embedded in SID_METHOD_BUF
-         * slot 0 (which we overload to hold "none"). */
         return &SID_NONE_NAME as u64
     }
     if k >= 1u32 {

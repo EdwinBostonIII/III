@@ -4,8 +4,16 @@
     .file 1 "<iii-source>"
     .section .rodata
 L_str_0:
-    .ascii "kernel32kernel32\0"
+    .ascii "tempaloc.iiitempaloc.iiitempaloc.iiitempaloc.iiikernel32kernel32\0"
 L_str_1:
+    .ascii "tempaloc.iiitempaloc.iiitempaloc.iiikernel32kernel32\0"
+L_str_2:
+    .ascii "tempaloc.iiitempaloc.iiikernel32kernel32\0"
+L_str_3:
+    .ascii "tempaloc.iiikernel32kernel32\0"
+L_str_4:
+    .ascii "kernel32kernel32\0"
+L_str_5:
     .ascii "kernel32\0"
     .section .rodata
 L_REG_INVALID:
@@ -24,6 +32,8 @@ L_REG_E_NOFIT:
     .quad 0xfffffffffffffffc
 L_REG_E_SEALED:
     .quad 0xfffffffffffffffb
+L_REG_TYPE:
+    .quad 0x1
     .section .bss
     .global L_REG_BASE
 L_REG_BASE:
@@ -33,9 +43,6 @@ L_REG_CAPACITY:
     .zero 512
     .global L_REG_USED
 L_REG_USED:
-    .zero 512
-    .global L_REG_LIVE
-L_REG_LIVE:
     .zero 512
     .global L_REG_SEALED
 L_REG_SEALED:
@@ -54,37 +61,54 @@ region_create:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
-    movabsq $0x0, %rax
+    movq L_REG_TYPE(%rip), %rax
+    pushq %rax
+    popq %rcx
+    subq $32, %rsp
+    callq tempaloc_alloc
+    addq $32, %rsp
     pushq %rax
     popq %rax
     movq %rax, -16(%rbp)
-    movabsq $0xffffffff, %rax
+    movq -16(%rbp), %rax
     pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-L_loop_top_0:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movl L_REG_MAX(%rip), %eax
+    movabsq $0x0, %rax
     pushq %rax
     popq %rcx
     popq %rax
     cmpq %rcx, %rax
-    setb %al
+    sete %al
     movzbq %al, %rax
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_1
-    leaq L_REG_LIVE(%rip), %rax
+    jz L_if_end_1
+    movq L_REG_INVALID(%rip), %rax
     pushq %rax
-    movl -16(%rbp), %eax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
+    movq L_REG_TYPE(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
+    addq $32, %rsp
+    movl %eax, %eax
     pushq %rax
-    movabsq $0x0, %rax
+    popq %rax
+    movq %rax, -24(%rbp)
+    movl -24(%rbp), %eax
+    pushq %rax
+    movabsq $0xffffffff, %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -95,60 +119,6 @@ L_loop_top_0:
     popq %rax
     testq %rax, %rax
     jz L_if_end_3
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_5
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_5:
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_3:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_0
-L_loop_end_1:
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_7
     movq L_REG_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -158,7 +128,7 @@ L_loop_end_1:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_3:
     movabsq $0x4, %rax
     pushq %rax
     movabsq $0x3000, %rax
@@ -191,7 +161,19 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_5
+    movq L_REG_TYPE(%rip), %rax
+    pushq %rax
+    movq -16(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_free
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movq L_REG_INVALID(%rip), %rax
     pushq %rax
     popq %rax
@@ -201,7 +183,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_5:
     leaq L_REG_BASE(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -234,16 +216,6 @@ L_if_end_9:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
-    leaq L_REG_LIVE(%rip), %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
     leaq L_REG_SEALED(%rip), %rax
     pushq %rax
     movl -24(%rbp), %eax
@@ -254,15 +226,7 @@ L_if_end_9:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    movq -16(%rbp), %rax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -289,101 +253,16 @@ L_region_slot_of:
     .seh_stackalloc 1024
     .seh_endprologue
     movq %rcx, -8(%rbp)
+    movq L_REG_TYPE(%rip), %rax
+    pushq %rax
     movq -8(%rbp), %rax
     pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_11
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_11:
-    movq -8(%rbp), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    subq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq -16(%rbp), %rax
-    pushq %rax
-    movl L_REG_MAX(%rip), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_13
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_13:
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rax
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_slot_of
+    addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -24(%rbp)
-    leaq L_REG_LIVE(%rip), %rax
-    pushq %rax
-    movl -24(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_15
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_15:
-    movl -24(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp
@@ -432,7 +311,7 @@ region_capacity:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_7
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -442,7 +321,7 @@ region_capacity:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_7:
     leaq L_REG_CAPACITY(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -498,7 +377,7 @@ region_used:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_9
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -508,7 +387,7 @@ region_used:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_9:
     leaq L_REG_USED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -564,7 +443,7 @@ region_remaining:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_11
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -574,7 +453,7 @@ region_remaining:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_11:
     leaq L_REG_CAPACITY(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -607,7 +486,7 @@ L_if_end_21:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_13
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -617,7 +496,7 @@ L_if_end_21:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_13:
     movq -24(%rbp), %rax
     pushq %rax
     movq -32(%rbp), %rax
@@ -673,7 +552,7 @@ region_base:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -683,7 +562,7 @@ region_base:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_15:
     leaq L_REG_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -739,7 +618,7 @@ region_is_sealed:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -749,7 +628,7 @@ region_is_sealed:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_27:
+L_if_end_17:
     leaq L_REG_SEALED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -807,7 +686,7 @@ region_alloc:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_29
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -817,7 +696,7 @@ region_alloc:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_29:
+L_if_end_19:
     leaq L_REG_SEALED(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -836,7 +715,7 @@ L_if_end_29:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -846,7 +725,7 @@ L_if_end_29:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_21:
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -863,7 +742,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_23
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -871,7 +750,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_23:
     leaq L_REG_USED(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -910,7 +789,7 @@ L_if_end_33:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_35
+    jz L_if_end_25
     movq -48(%rbp), %rax
     pushq %rax
     movq -40(%rbp), %rax
@@ -930,7 +809,7 @@ L_if_end_33:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_35:
+L_if_end_25:
     leaq L_REG_CAPACITY(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -943,12 +822,6 @@ L_if_end_35:
     movq %rax, -72(%rbp)
     movq -64(%rbp), %rax
     pushq %rax
-    movq -16(%rbp), %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    pushq %rax
     movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
@@ -959,7 +832,7 @@ L_if_end_35:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_37
+    jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -969,7 +842,36 @@ L_if_end_35:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_37:
+L_if_end_27:
+    movq -16(%rbp), %rax
+    pushq %rax
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_29
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_29:
     leaq L_REG_USED(%rip), %rax
     pushq %rax
     movl -32(%rbp), %eax
@@ -1051,7 +953,7 @@ region_seal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_39
+    jz L_if_end_31
     movslq L_REG_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1061,7 +963,7 @@ region_seal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_39:
+L_if_end_31:
     leaq L_REG_SEALED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1121,7 +1023,7 @@ region_reset:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_41
+    jz L_if_end_33
     movslq L_REG_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1131,7 +1033,7 @@ region_reset:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_41:
+L_if_end_33:
     leaq L_REG_USED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1191,7 +1093,7 @@ region_release:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_43
+    jz L_if_end_35
     movslq L_REG_E_BADID(%rip), %rax
     pushq %rax
     popq %rax
@@ -1201,7 +1103,7 @@ region_release:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_43:
+L_if_end_35:
     leaq L_REG_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1224,7 +1126,7 @@ L_if_end_43:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_45
+    jz L_if_end_37
     movq -24(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1249,7 +1151,7 @@ L_if_end_43:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_45:
+L_if_end_37:
     leaq L_REG_BASE(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1280,16 +1182,6 @@ L_if_end_45:
     popq %rcx
     popq %rax
     movq %rdx, (%rax,%rcx,8)
-    leaq L_REG_LIVE(%rip), %rax
-    pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rdx
-    popq %rcx
-    popq %rax
-    movb %dl, (%rax,%rcx,1)
     leaq L_REG_SEALED(%rip), %rax
     pushq %rax
     movl -16(%rbp), %eax
@@ -1300,6 +1192,18 @@ L_if_end_45:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
+    movq L_REG_TYPE(%rip), %rax
+    pushq %rax
+    movq -8(%rbp), %rax
+    pushq %rax
+    popq %rcx
+    popq %rdx
+    subq $32, %rsp
+    callq tempaloc_free
+    addq $32, %rsp
+    movslq %eax, %rax
+    pushq %rax
+    popq %rax
     movslq L_REG_OK(%rip), %rax
     pushq %rax
     popq %rax
@@ -1326,79 +1230,13 @@ region_count_live:
     subq $1024, %rsp
     .seh_stackalloc 1024
     .seh_endprologue
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movabsq $0x0, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-L_loop_top_46:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movl L_REG_MAX(%rip), %eax
+    movq L_REG_TYPE(%rip), %rax
     pushq %rax
     popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setb %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_loop_end_47
-    leaq L_REG_LIVE(%rip), %rax
-    pushq %rax
-    movl -8(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    movzbq (%rax,%rcx,1), %rax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    sete %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
-    jz L_if_end_49
-    movl -16(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
+    subq $32, %rsp
+    callq tempaloc_count_live
+    addq $32, %rsp
     movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -16(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_49:
-    movl -8(%rbp), %eax
-    pushq %rax
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
-    popq %rax
-    movq %rax, -8(%rbp)
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-    jmp L_loop_top_46
-L_loop_end_47:
-    movl -16(%rbp), %eax
     pushq %rax
     popq %rax
     movq %rbp, %rsp

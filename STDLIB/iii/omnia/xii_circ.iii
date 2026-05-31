@@ -93,11 +93,17 @@ fn xii_circ_fusion_budget(circ: u32) -> u32 @export {
 /* Each returns 1 iff the circumstance satisfies the predicate.        */
 /* ------------------------------------------------------------------ */
 
-/* P01: target requires matching hardware feature. */
+/* P01: target requires matching hardware feature (gospel §26.9 P01 -- the 7 target rules).
+ * B-CIRC-2 fix: the x86_scalar_ct arm ("no SIMD bits set") was enforced NOWHERE, so a
+ * scalar_ct circumstance carrying e.g. an AVX-512 bit was wrongly feasible. The avx2-downgrade
+ * (mask & AVX512 == 0) is enforced by P02; embedded's "no SIMD" by P10; and the gospel's
+ * AVX2_BIT / EMBEDDED_PROFILE_BIT are not part of the curated 4-bit mask model, so they are
+ * NOT invented here (inventing them would break the sealed circumstance cube). */
 fn xii_circ_p01_target_hw_match(circ: u32) -> u8 @export {
     let target : u32 = xii_circ_target(circ)
     let mask : u32 = xii_circ_hw_mask(circ)
     if target == XCR_TGT_X86_AVX512    { if (mask & XCR_FEAT_AVX512) == 0u32 { return 0u8 } }
+    if target == XCR_TGT_X86_SCALAR_CT { if (mask & 0xFu32) != 0u32 { return 0u8 } }
     if target == XCR_TGT_ARM64_NEON    { if (mask & XCR_FEAT_NEON) == 0u32 { return 0u8 } }
     if target == XCR_TGT_ARM64_SVE2    { if (mask & XCR_FEAT_SVE2) == 0u32 { return 0u8 } }
     if target == XCR_TGT_RISCV64_V     { if (mask & XCR_FEAT_RV_V) == 0u32 { return 0u8 } }
@@ -117,10 +123,15 @@ fn xii_circ_p02_target_hw_baseline(circ: u32) -> u8 @export {
     return 1u8
 }
 
-/* P03: K-budget bucket within target's supported range. */
+/* P03: K-budget bucket within target's supported range (gospel §26.9 P03, III-XII.md:3626-3633).
+ * B-CIRC-3 fix: avx512 supports K up to 255 but bucket 7 (k 128..255) is "invalid for safety"
+ * (bucket 0..6 valid) -- that rule was enforced NOWHERE, so an avx512+bucket-7 circumstance was
+ * wrongly feasible. scalar_ct -> 0..5 (K<=127); embedded -> 0..3 (K<=31); avx2/neon/sve2/riscv64_v
+ * support all buckets (K up to 255), so they carry no bucket cap. */
 fn xii_circ_p03_k_budget_target_compat(circ: u32) -> u8 @export {
     let target : u32 = xii_circ_target(circ)
     let bucket : u32 = xii_circ_k_bucket(circ)
+    if target == XCR_TGT_X86_AVX512    { if bucket > 6u32 { return 0u8 } }
     if target == XCR_TGT_X86_SCALAR_CT { if bucket > 5u32 { return 0u8 } }
     if target == XCR_TGT_EMBEDDED_SAFE { if bucket > 3u32 { return 0u8 } }
     return 1u8
@@ -140,12 +151,44 @@ fn xii_circ_p05_hexad_op_compat(circ: u32) -> u8 @export {
     return 1u8
 }
 
-/* P06: fusion_budget <= k_max_for_bucket. */
+/* Decode the D6 fusion-budget CODE (0..7) to its true MAGNITUDE {0,1,2,3,4,6,8,16} (header :17).
+ * The 3-bit field is a CODE indexing the magnitude table -- codes 0..4 are identity; 5->6, 6->8,
+ * 7->16. Exported so the gate's input is an inspectable, KAT-checkable quantity. */
+fn xii_circ_fusion_budget_magnitude(code: u32) -> u32 @export {
+    let c : u32 = code & 0x7u32
+    if c == 5u32 { return 6u32 }
+    if c == 6u32 { return 8u32 }
+    if c == 7u32 { return 16u32 }
+    return c
+}
+
+/* The k_budget_bucket's true upper bound k_max: buckets [0,1][2,3][4,7][8,15][16,31][32,63]
+ * [64,127][128,255] (header :13-14) -> k_max = {1,3,7,15,31,63,127,255}. Explicit cascade (no
+ * variable shift, no local array -- both iiis traps). */
+fn xcr_bucket_kmax(bucket: u32) -> u32 {
+    let b : u32 = bucket & 0x7u32
+    if b == 0u32 { return 1u32 }
+    if b == 1u32 { return 3u32 }
+    if b == 2u32 { return 7u32 }
+    if b == 3u32 { return 15u32 }
+    if b == 4u32 { return 31u32 }
+    if b == 5u32 { return 63u32 }
+    if b == 6u32 { return 127u32 }
+    return 255u32
+}
+
+/* P06: fusion_budget MAGNITUDE <= k_max for the k_budget_bucket (gospel §26.9 P06, III-XII.md:3642).
+ * B-CIRC-1 fix: the old gate compared the 3-bit fusion CODE (<=7) against 8+(bucket<<1) (>=8), so
+ * `fb > kb_max` was at most `7>8` = ALWAYS FALSE -- a provably vacuous gate that could never reject
+ * (a no-vacuous-gate / prove-the-negative violation, audit B-CIRC-1). Now it decodes the true
+ * magnitude and compares against the bucket's true k_max, so e.g. (code 7 = magnitude 16) in bucket
+ * 0 (k_max 1) is correctly INFEASIBLE. */
 fn xii_circ_p06_fusion_budget_k_max(circ: u32) -> u8 @export {
-    let fb : u32 = xii_circ_fusion_budget(circ)
+    let fb_code : u32 = xii_circ_fusion_budget(circ)
     let kb : u32 = xii_circ_k_bucket(circ)
-    let kb_max : u32 = 8u32 + (kb << 1u32) /* coarse heuristic; tight on bucket 0 */
-    if fb > kb_max { return 0u8 }
+    let mag : u32 = xii_circ_fusion_budget_magnitude(fb_code)
+    let kmax : u32 = xcr_bucket_kmax(kb)
+    if mag > kmax { return 0u8 }
     return 1u8
 }
 

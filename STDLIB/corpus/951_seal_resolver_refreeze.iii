@@ -1,0 +1,58 @@
+/* 951 -- W5.3 / KEEP-1 manifest-verify: sanctus/seal_resolver's frozen coefficient table is
+ * refrozen (ADR-RES-009-A) so every row decodes to its documented magnitude.  Pre-fix the five
+ * 900_000_000 rows decoded 899,953,920 and the 700_000_000 row decoded 696,188,672 (transcription
+ * typos).  This asserts (a) the corrected coefficients now equal the documented K-values, and (b)
+ * the seal BINDS the table -- flipping any coefficient byte changes the recomputed seal, and
+ * restoring it returns the original (the seal is not vacuous over the coefficients).  99 = pass. */
+module corpus_951
+
+extern @abi(c-msvc-x64) fn seal_resolver_coeff_u64(idx: u32) -> u64 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_compute() -> i32 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_verify() -> u8 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_is_computed() -> u8 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_byte(i: u32) -> u8 from "seal_resolver.iii"
+extern @abi(c-msvc-x64) fn seal_resolver_flip_byte_for_test(i: u32) -> i32 from "seal_resolver.iii"
+
+var SR_SNAP : [u8; 32]
+
+fn _sr_snapshot() -> i32 {
+    let mut k : u32 = 0u32
+    while k < 32u32 { SR_SNAP[k] = seal_resolver_byte(k)  k = k + 1u32 }
+    return 0i32
+}
+fn _sr_eq_snapshot() -> u8 {
+    let mut k : u32 = 0u32
+    while k < 32u32 {
+        if seal_resolver_byte(k) != SR_SNAP[k] { return 0u8 }
+        k = k + 1u32
+    }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* (a) the corrected coefficients decode to their documented magnitudes. */
+    if seal_resolver_coeff_u64(0u32)  != 1000000000u64 { return 1u64 }   /* META 1.0 (control) */
+    if seal_resolver_coeff_u64(2u32)  != 900000000u64  { return 2u64 }   /* COMPOSE 0.9 (was 899,953,920) */
+    if seal_resolver_coeff_u64(3u32)  != 900000000u64  { return 3u64 }   /* PASSAGE 0.9 */
+    if seal_resolver_coeff_u64(6u32)  != 900000000u64  { return 4u64 }   /* SUBSTANCE 0.9 */
+    if seal_resolver_coeff_u64(28u32) != 700000000u64  { return 5u64 }   /* P_EFFECTS_UNDECLARED 0.7 (was 696,188,672) */
+    if seal_resolver_coeff_u64(8u32)  != 500000000u64  { return 6u64 }   /* DEFAULT 0.5 (control) */
+    if seal_resolver_coeff_u64(31u32) != 0u64          { return 7u64 }   /* AMBIGUITY_EPSILON */
+    if seal_resolver_coeff_u64(32u32) != 8u64          { return 8u64 }   /* MAX_RECURSION_DEPTH */
+
+    /* the seal is reproducible (self-consistent recompute). */
+    seal_resolver_compute()
+    if seal_resolver_is_computed() != 1u8 { return 9u64 }
+    if seal_resolver_verify()      != 1u8 { return 10u64 }
+
+    /* (b) FALSIFIER: the seal binds the coefficient table -- a flipped byte changes it. */
+    _sr_snapshot()
+    seal_resolver_flip_byte_for_test(8u32)        /* flip a DEFAULT-coeff byte */
+    seal_resolver_compute()
+    if _sr_eq_snapshot() == 1u8 { return 11u64 }  /* MUST differ */
+    /* restore: flipping back recovers the original seal exactly. */
+    seal_resolver_flip_byte_for_test(8u32)
+    seal_resolver_compute()
+    if _sr_eq_snapshot() != 1u8 { return 12u64 }
+    return 99u64
+}

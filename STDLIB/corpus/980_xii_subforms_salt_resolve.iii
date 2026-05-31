@@ -1,0 +1,47 @@
+/* 980_xii_subforms_salt_resolve.iii -- B-SUB-1 / S26.18 salt-mechanism falsifier.
+ *
+ * Sealed ACT subform ids are SHA-256("ACT:"+name)[0:17]; the gospel resolves a collision by salting
+ * the name with a 1-byte prefix until unique (III-XII.md:4912-4914) -- a mechanism that was missing.
+ * This proves the mechanism: salt 0 = the unsalted id; salt!=0 changes it; given a CONSTRUCTED
+ * collision (used={id0}) salt_resolve moves past salt 0 to a DISTINCT id; given no collision it
+ * returns the unsalted value (does not over-salt). 99 = pass.
+ */
+module corpus_980
+
+extern @abi(c-msvc-x64) fn xii_subforms_compute(prefix_id: u8, name_ptr: *u8, name_len: u32, bits: u32) -> u32 from "xii_subforms.iii"
+extern @abi(c-msvc-x64) fn xii_subforms_compute_salted(prefix_id: u8, salt: u32, name_ptr: *u8, name_len: u32, bits: u32) -> u32 from "xii_subforms.iii"
+extern @abi(c-msvc-x64) fn xii_subforms_salt_resolve(prefix_id: u8, name_ptr: *u8, name_len: u32, bits: u32, used: *u32, used_n: u32) -> u32 from "xii_subforms.iii"
+
+var NAME : [u8; 8]
+var USED : [u32; 4]
+
+fn main() -> u64 {
+    /* ACT op name "TESTOP" */
+    NAME[0u32] = 84u8  NAME[1u32] = 69u8  NAME[2u32] = 83u8
+    NAME[3u32] = 84u8  NAME[4u32] = 79u8  NAME[5u32] = 80u8
+    let np : *u8 = (&NAME as u64) as *u8
+    let bits : u32 = 17u32      /* XSF_BITS_ACT */
+    let pfx  : u8  = 3u8        /* XSF_PREFIX_ACT */
+
+    let id0 : u32 = xii_subforms_compute(pfx, np, 6u32, bits)
+
+    /* arm 1: salt 0 is the unsalted id (the convention) */
+    if xii_subforms_compute_salted(pfx, 0u32, np, 6u32, bits) != id0 { return 1u64 }
+    /* arm 2: salt 1 changes the id (the salt is effective) */
+    let id1 : u32 = xii_subforms_compute_salted(pfx, 1u32, np, 6u32, bits)
+    if id1 == id0 { return 2u64 }
+
+    /* arm 3 (falsifier): with used={id0} the unsalted value collides; salt_resolve must move past
+     * salt 0 and return a salt whose id is DISTINCT from id0 -- detection + resolution. */
+    USED[0u32] = id0
+    let up : *u32 = (&USED as u64) as *u32
+    let s : u32 = xii_subforms_salt_resolve(pfx, np, 6u32, bits, up, 1u32)
+    if s == 0u32 { return 3u64 }
+    if s == 0xFFFFFFFFu32 { return 4u64 }
+    if xii_subforms_compute_salted(pfx, s, np, 6u32, bits) == id0 { return 5u64 }
+
+    /* arm 4: with an EMPTY used set there is no collision -> salt_resolve returns 0 (no over-salt) */
+    if xii_subforms_salt_resolve(pfx, np, 6u32, bits, up, 0u32) != 0u32 { return 6u64 }
+
+    return 99u64
+}

@@ -22,6 +22,29 @@ var XO_S1 : u64 = 0u64
 var XO_S2 : u64 = 0u64
 var XO_S3 : u64 = 0u64
 
+/* xoshiro256** jump polynomials (Blackman & Vigna 2018): the coefficients of the
+ * state-transition matrix's action over GF(2). Applying xoshiro_jump advances the
+ * generator by EXACTLY 2^128 calls to xoshiro_next_u64; xoshiro_long_jump by 2^192.
+ * Hand-coded per the algorithm spec (like the 7/9/17/45 rotate constants), no dep. */
+const XO_JUMP0  : u64 = 0x180EC6D33CFD0ABAu64
+const XO_JUMP1  : u64 = 0xD5A61266F0C9392Cu64
+const XO_JUMP2  : u64 = 0xA9582618E03FC9AAu64
+const XO_JUMP3  : u64 = 0x39ABDC4529B1661Cu64
+const XO_LJUMP0 : u64 = 0x76E15D3EFEFDCBBFu64
+const XO_LJUMP1 : u64 = 0xC5004E441C522FB3u64
+const XO_LJUMP2 : u64 = 0x77710069854EE241u64
+const XO_LJUMP3 : u64 = 0x39109BB02ACBE635u64
+
+var XO_JA0 : u64 = 0u64    /* jump accumulator words */
+var XO_JA1 : u64 = 0u64
+var XO_JA2 : u64 = 0u64
+var XO_JA3 : u64 = 0u64
+
+var XO_SA : [u64; 64]      /* W3.14 substream-capture scratch (4 streams) */
+var XO_SB : [u64; 64]
+var XO_SC : [u64; 64]
+var XO_SD : [u64; 64]
+
 fn xo_rotl(x: u64, k: u64) -> u64 {
     return (x << k) | (x >> (64u64 - k))
 }
@@ -82,4 +105,143 @@ fn xoshiro_fill(out: *u8, len: u64) -> i32 @k(value=1000000000) @export {
         pos = pos + take
     }
     return 0i32
+}
+
+/* Apply one 64-bit jump-polynomial word: for each set bit, XOR the current state
+ * into the accumulator, then step the generator once (the xoshiro256** jump kernel). */
+fn xo_jump_word(w: u64) -> i32 {
+    let mut b : u64 = 0u64
+    while b < 64u64 {
+        if ((w >> b) & 1u64) == 1u64 {
+            XO_JA0 = XO_JA0 ^ XO_S0
+            XO_JA1 = XO_JA1 ^ XO_S1
+            XO_JA2 = XO_JA2 ^ XO_S2
+            XO_JA3 = XO_JA3 ^ XO_S3
+        }
+        xoshiro_next_u64()
+        b = b + 1u64
+    }
+    return 0i32
+}
+
+/* Advance the singleton state by exactly 2^128 draws (a non-overlapping substream). */
+fn xoshiro_jump() -> i32 @k(value=1000000000) @export {
+    XO_JA0 = 0u64  XO_JA1 = 0u64  XO_JA2 = 0u64  XO_JA3 = 0u64
+    xo_jump_word(XO_JUMP0)
+    xo_jump_word(XO_JUMP1)
+    xo_jump_word(XO_JUMP2)
+    xo_jump_word(XO_JUMP3)
+    XO_S0 = XO_JA0  XO_S1 = XO_JA1  XO_S2 = XO_JA2  XO_S3 = XO_JA3
+    return 0i32
+}
+
+/* Advance the singleton state by exactly 2^192 draws (for 2^64 parallel substreams). */
+fn xoshiro_long_jump() -> i32 @k(value=1000000000) @export {
+    XO_JA0 = 0u64  XO_JA1 = 0u64  XO_JA2 = 0u64  XO_JA3 = 0u64
+    xo_jump_word(XO_LJUMP0)
+    xo_jump_word(XO_LJUMP1)
+    xo_jump_word(XO_LJUMP2)
+    xo_jump_word(XO_LJUMP3)
+    XO_S0 = XO_JA0  XO_S1 = XO_JA1  XO_S2 = XO_JA2  XO_S3 = XO_JA3
+    return 0i32
+}
+
+/* Capture n successive draws into a u64 buffer (base address). */
+fn xo_capture(b: u64, n: u64) -> i32 {
+    let p : *u64 = b as *u64
+    let mut i : u64 = 0u64
+    while i < n {
+        p[i] = xoshiro_next_u64()
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* 1u8 iff no value of buffer p1[0..n) appears in buffer p0[0..n) (substream disjoint). */
+fn xo_disjoint(b0: u64, b1: u64, n: u64) -> u8 {
+    let p0 : *u64 = b0 as *u64
+    let p1 : *u64 = b1 as *u64
+    let mut i : u64 = 0u64
+    while i < n {
+        let vi : u64 = p1[i]
+        let mut j : u64 = 0u64
+        while j < n {
+            if vi == p0[j] { return 0u8 }
+            j = j + 1u64
+        }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* W3.14 / ENHANCE-11 falsifier: jump/long_jump split the generator into
+ * non-overlapping substreams.  Proves (a) jump ADVANCES (non-identity), (b) jump is
+ * DETERMINISTIC, (c) stream0 / stream1=after-jump / stream2=after-2-jumps are
+ * pairwise DISJOINT over a bounded draw count, (d) long_jump's distinct polynomial
+ * yields a distinct, disjoint substream and is deterministic.  "Exactly 2^128/2^192"
+ * is guaranteed by using the canonical published jump polynomials (drawing 2^128
+ * values is infeasible; no observational measurement -- I1).  99 = pass. */
+fn xoshiro_jump_kat() -> u64 @export {
+    let n  : u64 = 64u64
+    let ba : u64 = &XO_SA as u64
+    let bb : u64 = &XO_SB as u64
+    let bc : u64 = &XO_SC as u64
+    let bd : u64 = &XO_SD as u64
+
+    /* stream 0: positions 0..n */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    xo_capture(ba, n)
+
+    /* stream 1: seed -> jump -> capture; record the jumped state */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    xoshiro_jump()
+    let js0 : u64 = XO_S0
+    let js1 : u64 = XO_S1
+    let js2 : u64 = XO_S2
+    let js3 : u64 = XO_S3
+    xo_capture(bb, n)
+
+    /* (a) jump ADVANCES: jumped state must differ from the seed state (not identity) */
+    if js0 == 1u64 { if js1 == 2u64 { if js2 == 3u64 { if js3 == 4u64 { return 1u64 } } } }
+
+    /* (b) jump DETERMINISTIC: re-seed + jump reproduces the identical jumped state */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    xoshiro_jump()
+    if XO_S0 != js0 { return 2u64 }
+    if XO_S1 != js1 { return 3u64 }
+    if XO_S2 != js2 { return 4u64 }
+    if XO_S3 != js3 { return 5u64 }
+
+    /* stream 2: seed -> jump -> jump -> capture */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    xoshiro_jump()
+    xoshiro_jump()
+    xo_capture(bc, n)
+
+    /* (c) the three substreams are pairwise disjoint over n draws */
+    if xo_disjoint(ba, bb, n) == 0u8 { return 6u64 }
+    if xo_disjoint(bb, bc, n) == 0u8 { return 7u64 }
+    if xo_disjoint(ba, bc, n) == 0u8 { return 8u64 }
+
+    /* (d) long_jump: distinct polynomial -> distinct jumped state + disjoint substream */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    xoshiro_long_jump()
+    let ls0 : u64 = XO_S0
+    let ls1 : u64 = XO_S1
+    let ls2 : u64 = XO_S2
+    let ls3 : u64 = XO_S3
+    if ls0 == js0 { if ls1 == js1 { if ls2 == js2 { if ls3 == js3 { return 9u64 } } } }
+    xo_capture(bd, n)
+    if xo_disjoint(ba, bd, n) == 0u8 { return 10u64 }
+    if xo_disjoint(bb, bd, n) == 0u8 { return 11u64 }
+
+    /* long_jump deterministic */
+    xoshiro_seed(1u64, 2u64, 3u64, 4u64)
+    xoshiro_long_jump()
+    if XO_S0 != ls0 { return 12u64 }
+    if XO_S1 != ls1 { return 13u64 }
+    if XO_S2 != ls2 { return 14u64 }
+    if XO_S3 != ls3 { return 15u64 }
+
+    return 99u64
 }

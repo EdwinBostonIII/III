@@ -1,0 +1,66 @@
+/* APOTHEOSIS C.1 sealed-ABI falsifier: iii_mldsa_sign_sealed writes the
+ * signature length through an EXPLICIT *u64 the caller owns (replacing the
+ * pre-C.1 siglen:u64 cast-to-*u8 that lied about direction).
+ *
+ * Arms:
+ *   typed-store -- the length lands in the caller's u64 as the FULL value
+ *                  (ML-DSA-44 signature = 32 + 4*576 + 80 + 4 = 2420 bytes),
+ *                  read back through a *u64 (not a byte reassembly)
+ *   verify      -- the sealed-produced signature verifies (rc 0)
+ *   forgery     -- a 1-bit signature tamper is rejected (rc != 0)
+ *
+ * The deprecated iii_mldsa_sign wrapper path is covered by corpus 198; this
+ * pins the DIRECT sealed entry + the typed length store.
+ */
+module corpus_c769
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_mldsa_keygen(level: u64, seed: u64, pk: u64, sk: u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_sign_sealed(level: u64, sk: u64, msg: u64, msglen: u64, sig_out: *u8, sig_len_out: *u64) -> i32 from "mldsa.iii"
+extern @abi(c-msvc-x64) fn iii_mldsa_verify(level: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "mldsa.iii"
+
+fn main() -> u64 {
+    let seed : *u8 = malloc(64u64)
+    let pk   : *u8 = malloc(2048u64)
+    let sk   : *u8 = malloc(5120u64)
+    let sig  : *u8 = malloc(4096u64)
+    let slb  : *u8 = malloc(16u64)   /* the caller-owned u64 length slot */
+    let msg  : *u8 = malloc(64u64)
+
+    /* poison the length slot so a partial/no write is detectable */
+    let slp : *u64 = slb as *u64
+    slp[0u64] = 0xAAAAAAAAAAAAAAAAu64
+
+    let mut i : u64 = 0u64
+    while i < 32u64 { seed[i] = ((0x42u64 + i) & 0xFFu64) as u8 ; i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { msg[i] = ((i * 7u64 + 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
+
+    iii_mldsa_keygen(2u64, seed as u64, pk as u64, sk as u64)
+
+    /* sealed sign: length output via explicit *u64 */
+    let sr : i32 = iii_mldsa_sign_sealed(2u64, sk as u64, msg as u64, 32u64, sig, slb as *u64)
+    if sr != 0i32 { free(seed) ; free(pk) ; free(sk) ; free(sig) ; free(slb) ; free(msg) ; return 1u64 }
+
+    /* typed-store arm: the FULL u64 == 2420 (ML-DSA-44 sig size) */
+    let sl : u64 = slp[0u64]
+    if sl != 2420u64 { free(seed) ; free(pk) ; free(sk) ; free(sig) ; free(slb) ; free(msg) ; return 2u64 }
+
+    /* verify arm */
+    let v : i32 = iii_mldsa_verify(2u64, pk as u64, msg as u64, 32u64, sig as u64, sl)
+    if v != 0i32 { free(seed) ; free(pk) ; free(sk) ; free(sig) ; free(slb) ; free(msg) ; return 3u64 }
+
+    /* forgery arm */
+    sig[0] = sig[0] ^ 0x01u8
+    let v2 : i32 = iii_mldsa_verify(2u64, pk as u64, msg as u64, 32u64, sig as u64, sl)
+
+    free(seed)
+    free(pk)
+    free(sk)
+    free(sig)
+    free(slb)
+    free(msg)
+    if v2 == 0i32 { return 4u64 }
+    return 99u64
+}

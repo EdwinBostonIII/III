@@ -28,6 +28,7 @@ module sanctus_mandate
 extern @abi(c-msvc-x64) fn kchain_is_underflow(id: u64) -> u8 from "kchain.iii"
 extern @abi(c-msvc-x64) fn kchain_current(id: u64) -> u64 from "kchain.iii"
 extern @abi(c-msvc-x64) fn kchain_floor(id: u64) -> u64 from "kchain.iii"
+extern @abi(c-msvc-x64) fn kchain_is_live(id: u64) -> u8 from "kchain.iii"
 
 /* Precomputed bitmask for the 15 process-time mandates that are
  * always considered satisfied because they were enforced before this
@@ -40,9 +41,14 @@ const MANDATE_PROCESS_BITS : u32 = 0x001F9CEEu32
 const MANDATE_M22_BIT  : u32 = 0x00200000u32
 const MANDATE_ALL_MASK : u32 = 0x003FFFFFu32
 
-/* M1: K-chain integrity. */
+/* M1: K-chain integrity.  W4.2 (ENHANCE-17): a NONZERO chain id must name a LIVE chain to
+ * be satisfied.  Pre-fix, a dead/unknown id passed: kchain_is_underflow reports a dead id as
+ * "not underflowing" (0), which was read as satisfied -- a green light over a chain that does
+ * not exist.  Now a dead chain is NOT satisfied (the `kchain_id == 0` "no chain to check"
+ * convention is preserved as the only trivially-satisfied case). */
 fn mandate_check_m1(kchain_id: u64) -> u8 @export {
     if kchain_id == 0u64 { return 1u8 }
+    if kchain_is_live(kchain_id) == 0u8 { return 0u8 }
     if kchain_is_underflow(kchain_id) == 0u8 { return 1u8 }
     return 0u8
 }
@@ -68,9 +74,11 @@ fn mandate_check_m14_via_match(matched: u8) -> u8 @export {
     return 0u8
 }
 
-/* M15: K-floor. */
+/* M15: K-floor.  W4.2: a dead/unknown nonzero chain is NOT satisfied (made explicit; a dead
+ * chain reads current=0 which is already below floor, but the liveness check states intent). */
 fn mandate_check_m15(kchain_id: u64) -> u8 @export {
     if kchain_id == 0u64 { return 1u8 }
+    if kchain_is_live(kchain_id) == 0u8 { return 0u8 }
     let cur : u64 = kchain_current(kchain_id)
     let flr : u64 = kchain_floor(kchain_id)
     if cur >= flr { return 1u8 }

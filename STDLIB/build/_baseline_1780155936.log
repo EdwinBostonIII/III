@@ -1,0 +1,69 @@
+BASELINE start
+=== build_stdlib ===
+[build_stdlib] OK   forcefield/ripple_extract -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/forcefield_ripple_extract.iii.o
+[build_stdlib] OK   forcefield/pcc_gate -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/forcefield_pcc_gate.iii.o
+[build_stdlib] OK   numera/hdl -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/numera_hdl.iii.o
+[build_stdlib] OK   numera/aeu -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/numera_aeu.iii.o
+[build_stdlib] OK   forcefield/integrity -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/forcefield_integrity.iii.o
+[build_stdlib] OK   forcefield/ripple_search -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/forcefield_ripple_search.iii.o
+[build_stdlib] OK   numera/induct -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/numera_induct.iii.o
+[build_stdlib] OK   omnia/bound -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/omnia_bound.iii.o
+[build_stdlib] OK   omnia/caindex -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/omnia_caindex.iii.o
+
+============================================================
+ STDLIB native module build
+============================================================
+  PASS = 431
+  FAIL = 0
+  TOTAL= 431
+============================================================
+[build_stdlib] OK   resolver_unit.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/resolver_unit.o
+[build_stdlib] OK   resolver_unit_avx512.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/resolver_unit_avx512.o
+[build_stdlib] OK   bench_helpers.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/bench_helpers.o
+[build_stdlib] OK   cpuid_helper.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/cpuid_helper.o
+[build_stdlib] OK   resolver_hot.s -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/resolver_hot.o
+[build_stdlib] aggregated -> /c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+[build_stdlib] mhash:
+24d22adce1d8b12a23e6129b5f1732d0268ffbf2edad30dc40774b8c449e1044 */c/Users/Edwin Boston/OneDrive/Desktop/III/STDLIB/build/iii/libiii_native.a
+=== run_corpus ===
+  PASS  936_typecheck_ctxdepth : exit=99
+  PASS  937_xii_crypto_chokepoint : exit=99
+  PASS  938_cb_differential : exit=99
+  PASS  939_ccl_confluence_falsifier : exit=99
+  PASS  940_irreducibility_falsifier : exit=99
+  PASS  941_quality_q7_lint_falsifier : exit=99
+  PASS  942_proof_ripple_corpus_verify : exit=99
+  PASS  943_resolver_memo_guards : exit=99
+  PASS  944_resolver_replay_guard : exit=99
+  PASS  945_mandate_dead_chain : exit=99
+  PASS  946_pattern_set_fed_ancestry : exit=99
+  PASS  947_dynamic_impact_signed : exit=99
+  PASS  948_resolution_init_fail : exit=99
+  PASS  949_base32_pad_validation : exit=99
+  PASS  950_xii_emit_gen_catalog : exit=99
+  PASS  951_seal_resolver_refreeze : exit=99
+  PASS  952_microarch_rob_saturation : exit=99
+  PASS  953_mont_dmont5_falsifier : exit=99
+  PASS  960_keccak256_block_absorb : exit=99
+  PASS  961_xoshiro_jump : exit=99
+  PASS  962_bv_ring_colstack : exit=99
+  PASS  963_sov_isa_cost_gradient : exit=99
+  PASS  964_ripple_extract_audit_purity : exit=99
+  PASS  965_crystal_id_band : exit=99
+  PASS  966_ripple_merkle_domain_sep : exit=99
+  PASS  967_pq_dispatch_nibble_guard : exit=99
+  PASS  968_optinvoke_seal_domain : exit=99
+  PASS  969_bv_ring_shift_mask : exit=99
+  PASS  970_merkle_index_binding : exit=99
+  PASS  971_cpufeat_avx512dq : exit=99
+  PASS  972_ecdsa_lowS_range : exit=99
+  PASS  973_fe25519_canonical_decode : exit=99
+  SKIP  990_bench_knuth_div : perf benchmark -- owned by run_bench_corpus.sh
+  SKIP  991_bench_montgomery_modpow : perf benchmark -- owned by run_bench_corpus.sh
+  SKIP  992_bench_fe25519_mul : perf benchmark -- owned by run_bench_corpus.sh
+------------------------------------------------------------
+  PASS=619  FAIL=0  SKIP=99  TOTAL=619
+  (SKIP = XII corpus 280..372 [run_xii_corpus.sh] + perf
+   benchmarks 237/242/243/244 [run_bench_corpus.sh])
+============================================================
+=== DONE ===

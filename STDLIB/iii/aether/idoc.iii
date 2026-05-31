@@ -169,9 +169,12 @@ fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_f
     let payload_base : u64 = l_buf + (babel_wire_header_bytes() as u64)
     let mut off : u32 = 0u32
     while off < plen {
+        if ((off as u64) + 5u64) > (plen as u64) { return 0u8 }   /* bounds the header read [audit idoc-2] */
         let fid_b : *u8 = (payload_base + (off as u64)) as *u8
         let fid   : u8  = fid_b[0u64]
         let flen  : u32 = _idoc_read_u32_le(payload_base, (off as u64) + 1u64)
+        let end64 : u64 = (off as u64) + 5u64 + (flen as u64)   /* u64: off+5+flen can wrap u32 */
+        if end64 > (plen as u64) { return 0u8 }
         if (fid & l_cap) != 0u8 {
             /* Match. */
             let data_ptr : u64 = payload_base + (off as u64) + 5u64
@@ -181,7 +184,7 @@ fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_f
             lp_dst[0u64] = flen
             return 1u8
         }
-        off = off + 5u32 + flen
+        off = end64 as u32
     }
     return 0u8
 }
@@ -195,9 +198,12 @@ fn idoc_facet_count(idoc_buf: u64) -> u32 @export {
     let mut count : u32 = 0u32
     let mut off : u32 = 0u32
     while off < plen {
+        if ((off as u64) + 5u64) > (plen as u64) { return count }   /* [audit idoc-3] */
         let flen : u32 = _idoc_read_u32_le(payload_base, (off as u64) + 1u64)
+        let next64 : u64 = (off as u64) + 5u64 + (flen as u64)
+        if next64 > (plen as u64) { return count }
         count = count + 1u32
-        off = off + 5u32 + flen
+        off = next64 as u32
     }
     return count
 }
@@ -213,11 +219,11 @@ fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 @export {
     let mut off : u32 = 0u32
     let payload_base : u64 = l_buf + (babel_wire_header_bytes() as u64)
     while off < plen {
-        if (off + 5u32) > plen { return 0u8 }
+        if ((off as u64) + 5u64) > (plen as u64) { return 0u8 }
         let flen : u32 = _idoc_read_u32_le(payload_base, (off as u64) + 1u64)
-        let next : u32 = off + 5u32 + flen
-        if next > plen { return 0u8 }
-        off = next
+        let next64 : u64 = (off as u64) + 5u64 + (flen as u64)   /* u64: off+5+flen can wrap u32 [audit idoc-1] */
+        if next64 > (plen as u64) { return 0u8 }
+        off = next64 as u32
     }
     return 1u8
 }

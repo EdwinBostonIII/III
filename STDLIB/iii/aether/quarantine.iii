@@ -208,7 +208,8 @@ fn q_capture_undo(slot: u32) -> i32 {
             let l64  : u64 = (len as u64) & 0xFFFFFFFFu64
             if QUAR_UE_USED >= QUAR_MAX_JENT { fail = QUAR_E_FULL }
             if fail == QUAR_OK {
-                if (QUAR_UNDO_USED + len) > QUAR_UNDO_AREA { fail = QUAR_E_FULL }
+                let nu64 : u64 = (QUAR_UNDO_USED as u64) + (len as u64)   /* u64: the u32 sum can wrap [audit quarantine-1] */
+                if nu64 > (QUAR_UNDO_AREA as u64) { fail = QUAR_E_FULL }
             }
             if fail == QUAR_OK { q_capture_one(j, addr, l64) }
         }
@@ -405,7 +406,8 @@ fn q_journal_write(slot: u32, addr: u64, data: *u8, len: u32) -> i32 @export {
     if QUAR_STATE[slot] != QUAR_STATE_OPEN { return QUAR_E_STATE }
     if q_in_region(slot, addr, len) == 0u8 { return QUAR_E_BOUNDS }
     if QUAR_JE_USED >= QUAR_MAX_JENT { return QUAR_E_FULL }
-    if (QUAR_DATA_USED + len) > QUAR_DATA_AREA { return QUAR_E_FULL }
+    let new_used : u64 = (QUAR_DATA_USED as u64) + (len as u64)   /* u64: the u32 sum can wrap [audit quarantine-1] */
+    if new_used > (QUAR_DATA_AREA as u64) { return QUAR_E_FULL }
     let je : u32 = QUAR_JE_USED
     QUAR_JE_ADDR[je]     = addr
     QUAR_JE_LEN[je]      = len

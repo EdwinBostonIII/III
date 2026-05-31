@@ -1400,6 +1400,32 @@ L_if_end_61:
     retq
     .seh_endproc
     .section .iii.ring3,"n"
+    .asciz "cap_right_reflect"
+    .text
+    .global cap_right_reflect
+    .seh_proc cap_right_reflect
+cap_right_reflect:
+    pushq %rbp
+    .seh_pushreg %rbp
+    movq %rsp, %rbp
+    .seh_setframe %rbp, 0
+    subq $1024, %rsp
+    .seh_stackalloc 1024
+    .seh_endprologue
+    movq L_CAP_RIGHT_AMEND(%rip), %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    movq $0, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    .seh_endproc
+    .section .iii.ring3,"n"
     .asciz "cap_parent"
     .text
     .global cap_parent

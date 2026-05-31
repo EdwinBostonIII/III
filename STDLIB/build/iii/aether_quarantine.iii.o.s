@@ -1048,14 +1048,23 @@ L_if_end_27:
     jz L_if_end_29
     movl L_QUAR_UNDO_USED(%rip), %eax
     pushq %rax
+    popq %rax
+    pushq %rax
     movl -56(%rbp), %eax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
-    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movq -72(%rbp), %rax
     pushq %rax
     movl L_QUAR_UNDO_AREA(%rip), %eax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3194,14 +3203,23 @@ L_if_end_69:
 L_if_end_71:
     movl L_QUAR_DATA_USED(%rip), %eax
     pushq %rax
+    popq %rax
+    pushq %rax
     movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rcx
     popq %rax
     addq %rcx, %rax
-    movl %eax, %eax
+    pushq %rax
+    popq %rax
+    movq %rax, -40(%rbp)
+    movq -40(%rbp), %rax
     pushq %rax
     movl L_QUAR_DATA_AREA(%rip), %eax
+    pushq %rax
+    popq %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3225,10 +3243,10 @@ L_if_end_73:
     movl L_QUAR_JE_USED(%rip), %eax
     pushq %rax
     popq %rax
-    movq %rax, -40(%rbp)
+    movq %rax, -48(%rbp)
     leaq L_QUAR_JE_ADDR(%rip), %rax
     pushq %rax
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
@@ -3238,7 +3256,7 @@ L_if_end_73:
     movq %rdx, (%rax,%rcx,8)
     leaq L_QUAR_JE_LEN(%rip), %rax
     pushq %rax
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     movl -32(%rbp), %eax
     pushq %rax
@@ -3248,7 +3266,7 @@ L_if_end_73:
     movl %edx, (%rax,%rcx,4)
     leaq L_QUAR_JE_DATA_OFF(%rip), %rax
     pushq %rax
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     movl L_QUAR_DATA_USED(%rip), %eax
     pushq %rax
@@ -3257,18 +3275,6 @@ L_if_end_73:
     popq %rax
     movl %edx, (%rax,%rcx,4)
     movl L_QUAR_DATA_USED(%rip), %eax
-    pushq %rax
-    popq %rax
-    pushq %rax
-    movabsq $0xffffffff, %rax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    andq %rcx, %rax
-    pushq %rax
-    popq %rax
-    movq %rax, -48(%rbp)
-    movl -32(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -3280,14 +3286,26 @@ L_if_end_73:
     pushq %rax
     popq %rax
     movq %rax, -56(%rbp)
-    movabsq $0x0, %rax
+    movl -32(%rbp), %eax
+    pushq %rax
+    popq %rax
+    pushq %rax
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_74:
-    movq -64(%rbp), %rax
+    movabsq $0x0, %rax
     pushq %rax
-    movq -56(%rbp), %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+L_loop_top_74:
+    movq -72(%rbp), %rax
+    pushq %rax
+    movq -64(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3300,9 +3318,9 @@ L_loop_top_74:
     jz L_loop_end_75
     leaq L_QUAR_DATA(%rip), %rax
     pushq %rax
-    movq -48(%rbp), %rax
+    movq -56(%rbp), %rax
     pushq %rax
-    movq -64(%rbp), %rax
+    movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3310,7 +3328,7 @@ L_loop_top_74:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movq -64(%rbp), %rax
+    movq -72(%rbp), %rax
     pushq %rax
     popq %rcx
     popq %rax
@@ -3320,7 +3338,7 @@ L_loop_top_74:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    movq -64(%rbp), %rax
+    movq -72(%rbp), %rax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -3329,7 +3347,7 @@ L_loop_top_74:
     addq %rcx, %rax
     pushq %rax
     popq %rax
-    movq %rax, -64(%rbp)
+    movq %rax, -72(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
@@ -3346,7 +3364,7 @@ L_loop_end_75:
     pushq %rax
     popq %rax
     movl %eax, L_QUAR_DATA_USED(%rip)
-    movl -40(%rbp), %eax
+    movl -48(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax

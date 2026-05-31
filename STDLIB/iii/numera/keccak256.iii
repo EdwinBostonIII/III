@@ -30,6 +30,8 @@ var KK256_MSG   : [u8; 8]      /* KAT message scratch */
 var KK256_OUT   : [u8; 32]     /* KAT output scratch */
 var KK256_REF   : [u8; 32]     /* KAT reference output */
 var KK256_BIG   : [u8; 300]    /* KAT multi-block scratch */
+var KK256_STREAM : [u8; 512]   /* W3.10 adversarial block-absorb stream */
+var KK256_BREF   : [u8; 32]    /* W3.10 one-shot reference digest */
 
 /* Keccak-256 one-shot: out_ptr[0..31] = Keccak256(msg_ptr[0..msg_len-1]). */
 fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 @export {
@@ -50,13 +52,43 @@ fn keccak256_init() -> i32 @export {
     return 0i32
 }
 fn keccak256_update(input: *u8, len: u64) -> i32 @export {
-    let mut i : u64 = 0u64
-    while i < len {
-        let p : u64 = KK256_POS[0]
-        KK256_SST[p] = KK256_SST[p] ^ input[i]
-        if p == 135u64 { keccak_f1600(&KK256_SST as u64)  KK256_POS[0] = 0u64 } else { KK256_POS[0] = p + 1u64 }
-        i = i + 1u64
+    /* W3.10 / ENHANCE-7 -- block-oriented absorb on the content-address hot path.
+     * Byte-identical to the prior per-byte absorb: the same input bytes XOR into the
+     * same rate-block offsets (0..135) and keccak_f1600 fires on the same 136-byte
+     * cadence; only the per-byte position branch is gone (whole rate blocks at once
+     * plus a partial tail, mirroring keccak.iii keccak_absorb's block routine). */
+    let inp : *u8 = input
+    let ln  : u64 = len
+    let mut off : u64 = 0u64
+    let mut p : u64 = KK256_POS[0]
+    /* (1) finish a rate block already in progress, up to the 136-byte boundary. */
+    if p != 0u64 {
+        while p < 136u64 {
+            if off >= ln { KK256_POS[0] = p  return 0i32 }
+            KK256_SST[p] = KK256_SST[p] ^ inp[off]
+            off = off + 1u64
+            p = p + 1u64
+        }
+        keccak_f1600(&KK256_SST as u64)
     }
+    /* (2) absorb whole 136-byte rate blocks at once (no per-byte position branch). */
+    while (off + 136u64) <= ln {
+        let mut i : u64 = 0u64
+        while i < 136u64 {
+            KK256_SST[i] = KK256_SST[i] ^ inp[off + i]
+            i = i + 1u64
+        }
+        keccak_f1600(&KK256_SST as u64)
+        off = off + 136u64
+    }
+    /* (3) buffer the partial tail; position carries to the next update/final. */
+    let tail : u64 = ln - off
+    let mut j : u64 = 0u64
+    while j < tail {
+        KK256_SST[j] = KK256_SST[j] ^ inp[off + j]
+        j = j + 1u64
+    }
+    KK256_POS[0] = tail
     return 0i32
 }
 fn keccak256_final(out: *u8) -> i32 @export {
@@ -105,5 +137,75 @@ fn keccak256_kat() -> u64 @export {
     keccak256_final((&KK256_OUT as u64) as *u8)
     let mut j : u64 = 0u64
     while j < 32u64 { if KK256_OUT[j] != KK256_REF[j] { return 11u64 }  j = j + 1u64 }
+    return 99u64
+}
+
+/* W3.10 falsifier helper: KK256_OUT[0..31] == KK256_BREF (the one-shot reference). */
+fn k256_blk_eq() -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if KK256_OUT[i] != KK256_BREF[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* W3.10 / ENHANCE-7 byte-identity falsifier: the block-oriented streaming absorb
+ * (keccak256 init/update/final) must equal keccak256_oneshot (keccak.iii's block
+ * routine) on EVERY split pattern of one fixed 400-byte stream -- partial-block
+ * continuation, exact rate boundaries, single-shot, byte-at-a-time, and odd
+ * straddling splits.  A wrong block bound, a dropped/extra permute, or a misplaced
+ * tail makes at least one split diverge.  99 = pass; the failing split index else. */
+fn keccak256_block_kat() -> u64 @export {
+    let n : u64 = 400u64
+    let mut s : u64 = 0u64
+    while s < n {
+        KK256_STREAM[s] = ((s * 131u64 + 17u64) & 0xFFu64) as u8
+        s = s + 1u64
+    }
+    let base : u64 = &KK256_STREAM as u64
+    keccak256_oneshot(base, n, &KK256_BREF as u64)
+
+    /* split A: 1 + 135 + 1 + 263  (partial fill completes a block, then continues) */
+    keccak256_init()
+    keccak256_update(base as *u8, 1u64)
+    keccak256_update((base + 1u64) as *u8, 135u64)
+    keccak256_update((base + 136u64) as *u8, 1u64)
+    keccak256_update((base + 137u64) as *u8, 263u64)
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    if k256_blk_eq() == 0u8 { return 1u64 }
+
+    /* split B: 136 + 136 + 128  (whole rate blocks, block-aligned each call) */
+    keccak256_init()
+    keccak256_update(base as *u8, 136u64)
+    keccak256_update((base + 136u64) as *u8, 136u64)
+    keccak256_update((base + 272u64) as *u8, 128u64)
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    if k256_blk_eq() == 0u8 { return 2u64 }
+
+    /* split C: 400 in a single update */
+    keccak256_init()
+    keccak256_update(base as *u8, n)
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    if k256_blk_eq() == 0u8 { return 3u64 }
+
+    /* split D: byte-at-a-time (the tail path on every call) */
+    keccak256_init()
+    let mut k : u64 = 0u64
+    while k < n {
+        keccak256_update((base + k) as *u8, 1u64)
+        k = k + 1u64
+    }
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    if k256_blk_eq() == 0u8 { return 4u64 }
+
+    /* split E: 135 + 137 + 128  (straddle the 136/272 boundaries oddly) */
+    keccak256_init()
+    keccak256_update(base as *u8, 135u64)
+    keccak256_update((base + 135u64) as *u8, 137u64)
+    keccak256_update((base + 272u64) as *u8, 128u64)
+    keccak256_final((&KK256_OUT as u64) as *u8)
+    if k256_blk_eq() == 0u8 { return 5u64 }
+
     return 99u64
 }

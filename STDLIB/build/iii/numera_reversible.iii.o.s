@@ -132,10 +132,10 @@ L_REV_ID_PROD:
     .zero 256
     .global L_REV_ID_COMMIT
 L_REV_ID_COMMIT:
-    .zero 208
+    .zero 256
     .global L_REV_ID_ROLLBK
 L_REV_ID_ROLLBK:
-    .zero 208
+    .zero 256
     .global L_REV_WIT_INC
 L_REV_WIT_INC:
     .zero 256

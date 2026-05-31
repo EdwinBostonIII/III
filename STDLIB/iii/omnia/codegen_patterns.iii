@@ -42,6 +42,9 @@ var CG_NAME_BUF : [u8; 32]
  * file) so the fn-address operator produces a proper extern symbol. */
 extern @abi(c-msvc-x64) fn cg_dispatch_default(a: u64, b: u64, c: u64, ctx: u64) -> u64 from "codegen_dispatch.iii"
 
+/* W4.3: set when a codegen-pattern registration fails; codegen_register_all reports it. */
+var CG_REG_FAIL : u8 = 0u8
+
 fn _cg_register(slot: u32, parent: u64, ast_kind_low: u8, name_b0: u8, name_b1: u8, name_b2: u8, name_b3: u8) -> i32 {
     pattern_template_zero((&CG_TEMPLATE_BUF) as u64)
     CG_NAME_BUF[0] = name_b0
@@ -60,7 +63,8 @@ fn _cg_register(slot: u32, parent: u64, ast_kind_low: u8, name_b0: u8, name_b1: 
     pattern_template_set_dispatch((&CG_TEMPLATE_BUF) as u64, fp)
     /* Encode AST kind tag in binding_kinds[1] for lookup */
     pattern_template_set_binding_kind((&CG_TEMPLATE_BUF) as u64, 1u8, ast_kind_low)
-    pattern_register(slot, (&CG_TEMPLATE_BUF) as u64)
+    let rok : u8 = pattern_register(slot, (&CG_TEMPLATE_BUF) as u64)
+    if rok != 1u8 { CG_REG_FAIL = 1u8 }
     return 0i32
 }
 
@@ -69,6 +73,7 @@ fn codegen_register_all() -> i32 @export {
      * every codegen pattern. The legacy MP-14/MP-15 split is gone with the
      * 18-primitive collapse (see R2-GENESIS/CORE-CALCULUS-V1.0.iii sec A.2). */
     let mp_compose : u64 = 5u64
+    CG_REG_FAIL = 0u8
 
     /* 7 call-family patterns at slots 42..48 */
     _cg_register(42u32, mp_compose, 0u8, 99u8, 99u8, 49u8, 48u8)   /* cg_call_direct_extern */
@@ -101,5 +106,6 @@ fn codegen_register_all() -> i32 @export {
     _cg_register(67u32, mp_compose, 19u8, 99u8, 97u8, 49u8, 57u8)
     _cg_register(68u32, mp_compose, 20u8, 99u8, 97u8, 50u8, 48u8)
 
+    if CG_REG_FAIL == 1u8 { return -1i32 }
     return 0i32
 }

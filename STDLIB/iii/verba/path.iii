@@ -133,29 +133,53 @@ fn path_join(builder_id: u64, a: *u8, a_len: u64, b: *u8) -> i32 @export {
 
 /* Normalize: collapse multiple separators, resolve '.' and '..' segments,
  * convert '\\' to '/'.  Doesn't follow symlinks. */
+/* Segment-offset stack for path normalization.  Module-scope: a function-local
+ * runtime-indexed array hits the iiis local-array segfault trap. */
+var PATH_SEG_START : [u64; 256]
+var PATH_SEG_LEN   : [u64; 256]
+
+/* 1 iff the segment [seg_start, seg_start+seg_len) is exactly "..". */
+fn path_seg_is_dotdot(src: *u8, seg_start: u64, seg_len: u64) -> u8 {
+    if seg_len != 2u64 { return 0u8 }
+    if src[seg_start] != 46u8 { return 0u8 }
+    if src[seg_start + 1u64] != 46u8 { return 0u8 }
+    return 1u8
+}
+
+/* Action for one segment: 0 = drop, 1 = pop the top, 2 = push.  "." drops; ".."
+ * pops a real parent, but an absolute ".." at the root drops (cannot ascend past
+ * /) and a relative ".." that cannot pop is KEPT so leading "../" survive.  [audit H-PATH-1] */
+fn path_norm_action(src: *u8, is_dot: u8, is_dotdot: u8, is_abs: u8, nseg: u64) -> u32 {
+    if is_dot == 1u8 { return 0u32 }
+    if is_dotdot == 0u8 { return 2u32 }
+    if nseg == 0u64 {
+        if is_abs == 1u8 { return 0u32 }
+        return 2u32
+    }
+    let ti : u64 = nseg - 1u64
+    let tstart : u64 = PATH_SEG_START[ti]
+    let tlen : u64 = PATH_SEG_LEN[ti]
+    if path_seg_is_dotdot(src, tstart, tlen) == 1u8 { return 2u32 }
+    return 1u32
+}
+
 fn path_normalize(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
     /* Pre-scan to determine if absolute (starts with separator) */
     let mut is_abs : u8 = 0u8
     if src_len > 0u64 {
         if path_is_sep(src[0] as u32) == 1u8 { is_abs = 1u8 }
     }
-    if is_abs == 1u8 {
-        builder_push_byte(builder_id, 47u32)
-    }
-    /* Walk segments. */
+    /* Walk segments onto the stack, resolving "."/".." (the old code emitted
+     * directly and so could not pop for "..", leaving "a/../b" unresolved). */
+    let mut nseg : u64 = 0u64
     let mut i : u64 = 0u64
-    let mut first_seg : u8 = 1u8
     while i < src_len {
         /* Skip separators */
         let mut going_sep : u8 = 1u8
         while going_sep == 1u8 {
             if i >= src_len { going_sep = 0u8 }
             if going_sep == 1u8 {
-                if path_is_sep(src[i] as u32) == 1u8 {
-                    i = i + 1u64
-                } else {
-                    going_sep = 0u8
-                }
+                if path_is_sep(src[i] as u32) == 1u8 { i = i + 1u64 } else { going_sep = 0u8 }
             }
         }
         /* Read segment */
@@ -164,28 +188,32 @@ fn path_normalize(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
         while going_seg == 1u8 {
             if i >= src_len { going_seg = 0u8 }
             if going_seg == 1u8 {
-                if path_is_sep(src[i] as u32) == 1u8 {
-                    going_seg = 0u8
-                } else {
-                    i = i + 1u64
-                }
+                if path_is_sep(src[i] as u32) == 1u8 { going_seg = 0u8 } else { i = i + 1u64 }
             }
         }
         let seg_len : u64 = i - seg_start
         if seg_len > 0u64 {
-            /* Skip "." segments */
             let mut is_dot : u8 = 0u8
-            if seg_len == 1u64 {
-                if src[seg_start] == 46u8 { is_dot = 1u8 }
-            }
-            if is_dot == 0u8 {
-                if first_seg == 0u8 {
-                    builder_push_byte(builder_id, 47u32)
+            if seg_len == 1u64 { if src[seg_start] == 46u8 { is_dot = 1u8 } }
+            let is_dd : u8 = path_seg_is_dotdot(src, seg_start, seg_len)
+            let act : u32 = path_norm_action(src, is_dot, is_dd, is_abs, nseg)
+            if act == 1u32 { nseg = nseg - 1u64 }
+            if act == 2u32 {
+                if nseg < 256u64 {
+                    PATH_SEG_START[nseg] = seg_start
+                    PATH_SEG_LEN[nseg] = seg_len
+                    nseg = nseg + 1u64
                 }
-                builder_push_bytes(builder_id, (src as u64) + seg_start, seg_len)
-                first_seg = 0u8
             }
         }
+    }
+    /* Emit: leading '/' if absolute, then segments joined by '/'. */
+    if is_abs == 1u8 { builder_push_byte(builder_id, 47u32) }
+    let mut k : u64 = 0u64
+    while k < nseg {
+        if k > 0u64 { builder_push_byte(builder_id, 47u32) }
+        builder_push_bytes(builder_id, (src as u64) + PATH_SEG_START[k], PATH_SEG_LEN[k])
+        k = k + 1u64
     }
     return PATH_OK
 }

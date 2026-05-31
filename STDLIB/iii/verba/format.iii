@@ -20,6 +20,7 @@ module verba_format
 extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
 
 const FMT_OK : i32 = 0i32
+const FMT_E_BUILD : i32 = -2i32   /* [COMBINE-7/RIPPLE-6/II-FORMAT-1] a builder push failed -- output is incomplete, do NOT report success */
 
 /* Module-scope scratch buffers.  Phase B is single-threaded so a
  * shared scratch is safe across calls to a single builder.  Phase C
@@ -30,7 +31,7 @@ var FMT_DEC_BUF : [u8; 24]   /* enough for u64 decimal (max 20 chars) */
 
 fn format_decimal_u32(builder_id: u64, v: u32) -> i32 @export {
     if v == 0u32 {
-        builder_push_byte(builder_id, 48u32)
+        if builder_push_byte(builder_id, 48u32) != 0i32 { return FMT_E_BUILD }
         return FMT_OK
     }
     let mut tmp : u32 = v
@@ -45,7 +46,7 @@ fn format_decimal_u32(builder_id: u64, v: u32) -> i32 @export {
     while i > 0u32 {
         i = i - 1u32
         let c : u32 = FMT_DEC_BUF[i] as u32
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
     }
     return FMT_OK
 }
@@ -54,7 +55,7 @@ fn format_decimal_u32(builder_id: u64, v: u32) -> i32 @export {
 
 fn format_decimal_u64(builder_id: u64, v: u64) -> i32 @export {
     if v == 0u64 {
-        builder_push_byte(builder_id, 48u32)
+        if builder_push_byte(builder_id, 48u32) != 0i32 { return FMT_E_BUILD }
         return FMT_OK
     }
     let mut tmp : u64 = v
@@ -69,7 +70,7 @@ fn format_decimal_u64(builder_id: u64, v: u64) -> i32 @export {
     while i > 0u32 {
         i = i - 1u32
         let c : u32 = FMT_DEC_BUF[i] as u32
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
     }
     return FMT_OK
 }
@@ -86,7 +87,7 @@ fn format_hex_u32(builder_id: u64, v: u32) -> i32 @export {
         let mut c : u32 = 0u32
         if nib < 10u32 { c = 48u32 + nib }            /* '0'..'9' */
         if nib >= 10u32 { c = 97u32 + (nib - 10u32) } /* 'a'..'f' */
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
     }
     return FMT_OK
 }
@@ -100,7 +101,7 @@ fn format_hex_u32_upper(builder_id: u64, v: u32) -> i32 @export {
         let mut c : u32 = 0u32
         if nib < 10u32 { c = 48u32 + nib }
         if nib >= 10u32 { c = 65u32 + (nib - 10u32) } /* 'A'..'F' */
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
     }
     return FMT_OK
 }
@@ -117,7 +118,7 @@ fn format_hex_u64(builder_id: u64, v: u64) -> i32 @export {
         let n32 : u32 = nib as u32
         if n32 < 10u32 { c = 48u32 + n32 }
         if n32 >= 10u32 { c = 97u32 + (n32 - 10u32) }
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
     }
     return FMT_OK
 }
@@ -125,7 +126,7 @@ fn format_hex_u64(builder_id: u64, v: u64) -> i32 @export {
 /* --- ASCII char emission --- */
 
 fn format_char_ascii(builder_id: u64, c: u32) -> i32 @export {
-    builder_push_byte(builder_id, c & 0xFFu32)
+    if builder_push_byte(builder_id, c & 0xFFu32) != 0i32 { return FMT_E_BUILD }
     return FMT_OK
 }
 
@@ -140,7 +141,7 @@ fn format_literal(builder_id: u64, base: u64, len: u64) -> i32 @export {
     let mut i : u64 = 0u64
     while i < len {
         let c : u32 = p[i] as u32
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
         i = i + 1u64
     }
     return FMT_OK
@@ -166,14 +167,14 @@ fn format_decimal_u32_padded(builder_id: u64, v: u32, width: u32, pad_char: u32)
     if width > n { pad = width - n }
     let mut p : u32 = 0u32
     while p < pad {
-        builder_push_byte(builder_id, pad_char & 0xFFu32)
+        if builder_push_byte(builder_id, pad_char & 0xFFu32) != 0i32 { return FMT_E_BUILD }
         p = p + 1u32
     }
     let mut i : u32 = n
     while i > 0u32 {
         i = i - 1u32
         let c : u32 = FMT_DEC_BUF[i] as u32
-        builder_push_byte(builder_id, c)
+        if builder_push_byte(builder_id, c) != 0i32 { return FMT_E_BUILD }
     }
     return FMT_OK
 }

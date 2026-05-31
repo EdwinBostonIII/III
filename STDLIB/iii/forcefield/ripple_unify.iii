@@ -47,8 +47,7 @@ fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_
     if cgr_find(class_i) == cgr_find(class_j) { return 1u32 }
     /* distinct classes: merge ONLY with a discharged kernel proof (congruence's faithfulness gate) */
     if cgr_union_certified(class_i, class_j, proof_ok) != 1u32 { return 0u32 }
-    if cgr_find(class_i) == cgr_find(class_j) { return 1u32 }
-    return 0u32
+    return 1u32   /* [CUT-4/A-RU-1] certified-union post-condition: cgr_find(i)==cgr_find(j) always holds here; the old re-check + return 0u32 was unreachable */
 }
 
 /* the cost-minimal surviving representative's cost after unification -- the realization all

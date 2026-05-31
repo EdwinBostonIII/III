@@ -40,6 +40,9 @@ L_XII_CURATE_CERTS:
     .global L_XII_CURATE_CERT_COUNT
 L_XII_CURATE_CERT_COUNT:
     .quad 0x0
+    .global L_XII_CURATE_SEEN
+L_XII_CURATE_SEEN:
+    .quad 0x0
     .section .bss
     .global L_XII_CURATE_TRINITY_ADMIT
 L_XII_CURATE_TRINITY_ADMIT:
@@ -149,6 +152,10 @@ L_loop_end_3:
     pushq %rax
     popq %rax
     movl %eax, L_XII_CURATE_CERT_COUNT(%rip)
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_XII_CURATE_SEEN(%rip)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -265,6 +272,70 @@ L_if_end_7:
     pushq %rax
     popq %rax
 L_if_end_9:
+    movabsq $0x1, %rax
+    pushq %rax
+    movzbq -8(%rbp), %rax
+    pushq %rax
+    popq %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0xff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    movabsq $0x1f, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    shlq %cl, %rax
+    pushq %rax
+    popq %rax
+    movq %rax, -72(%rbp)
+    movl L_XII_CURATE_SEEN(%rip), %eax
+    pushq %rax
+    movl -72(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    andq %rcx, %rax
+    pushq %rax
+    movabsq $0x0, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_11
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_11:
     movl L_XII_CURATE_CERT_COUNT(%rip), %eax
     pushq %rax
     movl L_XCU_CERT_BYTES(%rip), %eax
@@ -275,10 +346,10 @@ L_if_end_9:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -72(%rbp)
+    movq %rax, -80(%rbp)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movzbq -8(%rbp), %rax
     pushq %rax
@@ -288,7 +359,7 @@ L_if_end_9:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -305,7 +376,7 @@ L_if_end_9:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x2, %rax
     pushq %rax
@@ -322,7 +393,7 @@ L_if_end_9:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x3, %rax
     pushq %rax
@@ -340,9 +411,9 @@ L_if_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
-    movq %rax, -80(%rbp)
-L_loop_top_10:
-    movl -80(%rbp), %eax
+    movq %rax, -88(%rbp)
+L_loop_top_12:
+    movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x10, %rax
     pushq %rax
@@ -354,10 +425,10 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_13
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4, %rax
     pushq %rax
@@ -366,7 +437,7 @@ L_loop_top_10:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -375,7 +446,7 @@ L_loop_top_10:
     pushq %rax
     movq -16(%rbp), %rax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -389,7 +460,7 @@ L_loop_top_10:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x14, %rax
     pushq %rax
@@ -398,7 +469,7 @@ L_loop_top_10:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -407,7 +478,7 @@ L_loop_top_10:
     pushq %rax
     movq -24(%rbp), %rax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -421,7 +492,7 @@ L_loop_top_10:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x24, %rax
     pushq %rax
@@ -430,7 +501,7 @@ L_loop_top_10:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -439,7 +510,7 @@ L_loop_top_10:
     pushq %rax
     movq -32(%rbp), %rax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -453,7 +524,7 @@ L_loop_top_10:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x34, %rax
     pushq %rax
@@ -462,7 +533,7 @@ L_loop_top_10:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -471,7 +542,7 @@ L_loop_top_10:
     pushq %rax
     movq -40(%rbp), %rax
     pushq %rax
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -483,7 +554,7 @@ L_loop_top_10:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    movl -80(%rbp), %eax
+    movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -493,15 +564,15 @@ L_loop_top_10:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -80(%rbp)
+    movq %rax, -88(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_12
+L_loop_end_13:
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x44, %rax
     pushq %rax
@@ -533,7 +604,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x45, %rax
     pushq %rax
@@ -565,7 +636,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x46, %rax
     pushq %rax
@@ -597,7 +668,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x47, %rax
     pushq %rax
@@ -629,7 +700,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x48, %rax
     pushq %rax
@@ -661,7 +732,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x49, %rax
     pushq %rax
@@ -693,7 +764,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4a, %rax
     pushq %rax
@@ -725,7 +796,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4b, %rax
     pushq %rax
@@ -751,7 +822,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4c, %rax
     pushq %rax
@@ -777,7 +848,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4d, %rax
     pushq %rax
@@ -809,7 +880,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4e, %rax
     pushq %rax
@@ -841,7 +912,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x4f, %rax
     pushq %rax
@@ -873,7 +944,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x50, %rax
     pushq %rax
@@ -890,7 +961,7 @@ L_loop_end_11:
     movb %dl, (%rax,%rcx,1)
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x51, %rax
     pushq %rax
@@ -908,9 +979,9 @@ L_loop_end_11:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
-    movq %rax, -88(%rbp)
-L_loop_top_12:
-    movl -88(%rbp), %eax
+    movq %rax, -96(%rbp)
+L_loop_top_14:
+    movl -96(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
     pushq %rax
@@ -922,10 +993,10 @@ L_loop_top_12:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_13
+    jz L_loop_end_15
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
-    movl -72(%rbp), %eax
+    movl -80(%rbp), %eax
     pushq %rax
     movabsq $0x52, %rax
     pushq %rax
@@ -934,7 +1005,7 @@ L_loop_top_12:
     addq %rcx, %rax
     movl %eax, %eax
     pushq %rax
-    movl -88(%rbp), %eax
+    movl -96(%rbp), %eax
     pushq %rax
     popq %rcx
     popq %rax
@@ -943,7 +1014,7 @@ L_loop_top_12:
     pushq %rax
     movq -64(%rbp), %rax
     pushq %rax
-    movl -88(%rbp), %eax
+    movl -96(%rbp), %eax
     pushq %rax
     popq %rax
     pushq %rax
@@ -955,7 +1026,7 @@ L_loop_top_12:
     popq %rcx
     popq %rax
     movb %dl, (%rax,%rcx,1)
-    movl -88(%rbp), %eax
+    movl -96(%rbp), %eax
     pushq %rax
     movabsq $0x1, %rax
     pushq %rax
@@ -965,12 +1036,12 @@ L_loop_top_12:
     movl %eax, %eax
     pushq %rax
     popq %rax
-    movq %rax, -88(%rbp)
+    movq %rax, -96(%rbp)
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_12
-L_loop_end_13:
+    jmp L_loop_top_14
+L_loop_end_15:
     movl L_XII_CURATE_CERT_COUNT(%rip), %eax
     pushq %rax
     movabsq $0x1, %rax
@@ -982,6 +1053,16 @@ L_loop_end_13:
     pushq %rax
     popq %rax
     movl %eax, L_XII_CURATE_CERT_COUNT(%rip)
+    movl L_XII_CURATE_SEEN(%rip), %eax
+    pushq %rax
+    movl -72(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    orq %rcx, %rax
+    pushq %rax
+    popq %rax
+    movl %eax, L_XII_CURATE_SEEN(%rip)
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1021,7 +1102,7 @@ xii_curate_finalize:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x1, %rax
     pushq %rax
     popq %rax
@@ -1034,7 +1115,33 @@ xii_curate_finalize:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
+    movl L_XII_CURATE_SEEN(%rip), %eax
+    pushq %rax
+    movabsq $0xfff, %rax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_19
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_19:
     leaq L_XII_CURATE_TRINITY_ADMIT(%rip), %rax
     pushq %rax
     popq %rax
@@ -1281,7 +1388,7 @@ xii_curate_cert_ptr:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1291,7 +1398,7 @@ xii_curate_cert_ptr:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_21:
     leaq L_XII_CURATE_CERTS(%rip), %rax
     pushq %rax
     popq %rax

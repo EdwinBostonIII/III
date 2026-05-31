@@ -43,7 +43,7 @@ const TERM_KIND_HEXAD  : u8 = 5u8
 const UNIFY_MAX_TERMS    : u32 = 256u32
 const UNIFY_MAX_VARS     : u32 = 64u32
 const UNIFY_MAX_SUBSTS   : u32 = 64u32
-const UNIFY_MAX_DEPTH    : u32 = 16u32
+const UNIFY_MAX_DEPTH    : u32 = 64u32   /* was 16 -- too shallow; legitimate nested unifications hit the cap.  Worklist arrays (TERMS=256) accommodate it.  [audit unify-1] */
 const UNIFY_MAX_ARITY    : u8  = 32u8
 const UNIFY_MAX_ARGS_POOL: u32 = 1024u32
 

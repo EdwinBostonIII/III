@@ -179,6 +179,50 @@ fn smt_i64_abs(x: i64) -> i64 {
     return x
 }
 
+/* ===================================================================== *
+ *  Overflow-checked i64 arithmetic  [audit C-SMT-1]
+ *  The exact-rational simplex keeps cells reduced but does NOT bound their
+ *  MAGNITUDE; cross-multiplications can wrap 2^63 -> a WRONG sat/unsat. These
+ *  latch SMT_OVF; smt_lia_solve bails to SMT_E_TOO_BIG (sound).  Sign tests use
+ *  bit-63 only (no i64 <); smt_imul compares ABS magnitudes.  Corpus-scale
+ *  inputs never overflow -> SMT_OVF stays 0 -> exact a*b / a+b / a-b. */
+var SMT_OVF : u8 = 0u8
+
+fn smt_imul(a: i64, b: i64) -> i64 {
+    if a == 0i64 { return 0i64 }
+    if b == 0i64 { return 0i64 }
+    let au : u64 = a as u64
+    let bu : u64 = b as u64
+    let amin : u64 = 0x8000000000000000u64
+    if au == amin { SMT_OVF = 1u8  return 0i64 }
+    if bu == amin { SMT_OVF = 1u8  return 0i64 }
+    let aa : i64 = smt_i64_abs(a)
+    let ab : i64 = smt_i64_abs(b)
+    let maxu : u64 = 0x7FFFFFFFFFFFFFFFu64
+    let i64max : i64 = maxu as i64
+    let lim : i64 = i64max / ab
+    if aa > lim { SMT_OVF = 1u8  return 0i64 }
+    return a * b
+}
+
+fn smt_iadd(a: i64, b: i64) -> i64 {
+    let r : i64 = a + b
+    let sa : u64 = ((a as u64) >> 63u64) & 1u64
+    let sb : u64 = ((b as u64) >> 63u64) & 1u64
+    let sr : u64 = ((r as u64) >> 63u64) & 1u64
+    if sa == sb { if sr != sa { SMT_OVF = 1u8 } }
+    return r
+}
+
+fn smt_isub(a: i64, b: i64) -> i64 {
+    let r : i64 = a - b
+    let sa : u64 = ((a as u64) >> 63u64) & 1u64
+    let sb : u64 = ((b as u64) >> 63u64) & 1u64
+    let sr : u64 = ((r as u64) >> 63u64) & 1u64
+    if sa != sb { if sr != sa { SMT_OVF = 1u8 } }
+    return r
+}
+
 /* Sign tag of an i64: SMT_NEG / SMT_ZERO / SMT_POS.  Equality + bit-63
  * only -- never `< 0i64` (Trap 3). */
 fn smt_rat_sign(num: i64) -> u8 {
@@ -257,9 +301,9 @@ fn smt_rat_reduce_scratch() -> i32 {
  * SIGN of (an*bd - bn*ad).  Operands here are products of bounded LIA
  * values; sign is read via smt_rat_sign (no i64 ordering, Trap 3). */
 fn smt_rat_cmp(an: i64, ad: i64, bn: i64, bd: i64) -> i32 {
-    let lhs : i64 = an * bd
-    let rhs : i64 = bn * ad
-    let diff : i64 = lhs - rhs
+    let lhs : i64 = smt_imul(an, bd)
+    let rhs : i64 = smt_imul(bn, ad)
+    let diff : i64 = smt_isub(lhs, rhs)
     let s : u8 = smt_rat_sign(diff)
     if s == SMT_NEG { return -1i32 }
     if s == SMT_POS { return 1i32 }
@@ -366,6 +410,7 @@ fn smt_init() -> i32 @export {
     SMT_BB_NCUT = 0u32
     SMT_SX_NROWS = 0u32
     SMT_SX_NCOLS = 0u32
+    SMT_OVF = 0u8
     let mut i : u32 = 0u32
     while i < SMT_MAX_LIA_VARS {
         let vi : u64 = (i as u64) & SMT_U32MASK
@@ -391,7 +436,12 @@ fn smt_lia_store(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 {
     if (coeffs as u64) == 0u64 { return SMT_E_BAD }
     if (vars as u64) == 0u64 { return SMT_E_BAD }
     if SMT_LIA_NCON >= SMT_MAX_LIA_CON { return SMT_E_TOO_BIG }
-    if SMT_LIA_USED + n > SMT_LIA_PACKED { return SMT_E_TOO_BIG }
+    /* SOUNDNESS (X22): n is a RAW caller u32 (passed through from smt_lia_add_le/eq). The old
+     * `SMT_LIA_USED + n > SMT_LIA_PACKED` u32-WRAPS for huge n, passing the guard and driving the
+     * copy loop to write SMT_LIA_COEFF[(off+i)] for i<n into the 16384-element buffer (OOB).
+     * Subtraction form (USED <= PACKED invariant) cannot wrap; the invariant guard makes it safe. */
+    if SMT_LIA_USED > SMT_LIA_PACKED { return SMT_E_TOO_BIG }
+    if n > (SMT_LIA_PACKED - SMT_LIA_USED) { return SMT_E_TOO_BIG }
     let c : u64 = (SMT_LIA_NCON as u64) & SMT_U32MASK
     let off : u32 = SMT_LIA_USED
     SMT_LIA_OFF[c] = off
@@ -440,7 +490,10 @@ fn smt_lia_add_ge(coeffs: *i64, vars: *u32, n: u32, b: i64) -> i32 @export {
     if (coeffs as u64) == 0u64 { return SMT_E_BAD }
     if (vars as u64) == 0u64 { return SMT_E_BAD }
     if SMT_LIA_NCON >= SMT_MAX_LIA_CON { return SMT_E_TOO_BIG }
-    if SMT_LIA_USED + n > SMT_LIA_PACKED { return SMT_E_TOO_BIG }
+    /* SOUNDNESS (X22): same wrap as smt_lia_store:439, on the independently-coded >= path
+     * (negate-and-store). Subtraction form; n (raw caller u32) cannot wrap the guard. */
+    if SMT_LIA_USED > SMT_LIA_PACKED { return SMT_E_TOO_BIG }
+    if n > (SMT_LIA_PACKED - SMT_LIA_USED) { return SMT_E_TOO_BIG }
     let c : u64 = (SMT_LIA_NCON as u64) & SMT_U32MASK
     let off : u32 = SMT_LIA_USED
     SMT_LIA_OFF[c] = off
@@ -803,13 +856,13 @@ fn smt_sx_fill_con(row: u32, c: u32) -> i32 {
         let ix : u64 = smt_sx_idx(row, col)
         SMT_SX_RN = SMT_SX_NUM[ix]
         SMT_SX_RD = SMT_SX_DEN[ix]
-        let nn : i64 = SMT_SX_RN + coef * SMT_SX_RD
+        let nn : i64 = smt_iadd(SMT_SX_RN, smt_imul(coef, SMT_SX_RD))
         smt_sx_put(row, col, nn, SMT_SX_RD)
         csum = csum + coef
         j = j + 1u32
     }
     /* shifted rhs = bnd + BOX*csum */
-    let rhs_v : i64 = bnd + SMT_LIA_BOX * csum
+    let rhs_v : i64 = smt_iadd(bnd, smt_imul(SMT_LIA_BOX, csum))
     smt_sx_put(row, SMT_SX_RHSCOL, rhs_v, 1i64)
     /* slack column: +1 for a <= row (kind 0); none for an == row (kind 1). */
     let slack_col : u32 = SMT_SX_NSTRUCT + row
@@ -905,8 +958,8 @@ fn smt_sx_reduced_cost(col: u32) -> i32 {
             let bn : i64 = SMT_SX_NUM[ix]
             let bd : i64 = SMT_SX_DEN[ix]
             /* RN = RN + b  (a/ad + bn/bd) */
-            let nn : i64 = an * bd + bn * ad
-            let dd : i64 = ad * bd
+            let nn : i64 = smt_iadd(smt_imul(an, bd), smt_imul(bn, ad))
+            let dd : i64 = smt_imul(ad, bd)
             SMT_SX_RN = nn
             SMT_SX_RD = dd
             smt_rat_reduce_scratch()
@@ -956,8 +1009,8 @@ fn smt_sx_phase1_obj() -> i32 {
             let ad : i64 = SMT_SX_RD
             let bn : i64 = SMT_SX_NUM[ix]
             let bd : i64 = SMT_SX_DEN[ix]
-            let nn : i64 = an * bd + bn * ad
-            let dd : i64 = ad * bd
+            let nn : i64 = smt_iadd(smt_imul(an, bd), smt_imul(bn, ad))
+            let dd : i64 = smt_imul(ad, bd)
             SMT_SX_RN = nn
             SMT_SX_RD = dd
             smt_rat_reduce_scratch()
@@ -1016,8 +1069,8 @@ fn smt_sx_leaving(ecol: u32) -> u32 {
             let bn : i64 = SMT_SX_NUM[ixb]
             let bd : i64 = SMT_SX_DEN[ixb]
             /* ratio = (bn/bd) / (pn/pd) = (bn*pd)/(bd*pn) */
-            let rn : i64 = bn * pd
-            let rd : i64 = bd * pn
+            let rn : i64 = smt_imul(bn, pd)
+            let rd : i64 = smt_imul(bd, pn)
             smt_sx_take_ratio_decision(row, rn, rd)
             if SMT_SX_OK == 1u8 { SMT_SX_BEST_ROW = row  SMT_SX_HAVE = 1u8 }
         }
@@ -1069,8 +1122,8 @@ fn smt_sx_do_pivot(prow: u32, pcol: u32) -> i32 {
         let n : i64 = SMT_SX_NUM[ix]
         let d : i64 = SMT_SX_DEN[ix]
         /* (n/d) * (pd/pn) = (n*pd)/(d*pn) */
-        SMT_SX_NUM[ix] = n * pd
-        SMT_SX_DEN[ix] = d * pn
+        SMT_SX_NUM[ix] = smt_imul(n, pd)
+        SMT_SX_DEN[ix] = smt_imul(d, pn)
         smt_sx_reduce_at(ix)
         c = c + 1u32
     }
@@ -1112,11 +1165,11 @@ fn smt_sx_row_axpy(row: u32, prow: u32, fn_: i64, fd: i64) -> i32 {
         let pn : i64 = SMT_SX_NUM[ixp]
         let pd : i64 = SMT_SX_DEN[ixp]
         /* term = (fn_/fd)*(pn/pd) = (fn_*pn)/(fd*pd) */
-        let tn : i64 = fn_ * pn
-        let td : i64 = fd * pd
+        let tn : i64 = smt_imul(fn_, pn)
+        let td : i64 = smt_imul(fd, pd)
         /* row = rn/rd - tn/td = (rn*td - tn*rd)/(rd*td) */
-        let nn : i64 = rn * td - tn * rd
-        let dd : i64 = rd * td
+        let nn : i64 = smt_isub(smt_imul(rn, td), smt_imul(tn, rd))
+        let dd : i64 = smt_imul(rd, td)
         SMT_SX_NUM[ixr] = nn
         SMT_SX_DEN[ixr] = dd
         smt_sx_reduce_at(ixr)
@@ -1325,6 +1378,7 @@ fn smt_bb_backtrack() -> i32 {
 fn smt_lia_solve() -> i32 {
     SMT_BB_SP = 0u32
     SMT_BB_NCUT = 0u32
+    SMT_OVF = 0u8
     let mut result : i32 = SMT_UNKNOWN
     let mut going : u8 = 1u8
     while going == 1u8 {
@@ -1337,6 +1391,8 @@ fn smt_lia_solve() -> i32 {
                 going = smt_lia_node_step(feas)
                 result = SMT_BB_LAST_RESULT
             }
+            /* any i64 overflow taints this node's verdict -> undecidable, not a wrong sat/unsat [audit C-SMT-1] */
+            if SMT_OVF == 1u8 { going = 0u8  result = SMT_E_TOO_BIG }
         }
     }
     return result

@@ -53,6 +53,52 @@ katabasis_ring_constructor:
     movq %rax, -32(%rbp)
     movl -24(%rbp), %eax
     pushq %rax
+    movl L_KRL_RM4(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_1
+    movl L_KRL_C_NONE(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_1:
+    movl -32(%rbp), %eax
+    pushq %rax
+    movl L_KRL_RM4(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_3
+    movl L_KRL_C_NONE(%rip), %eax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_3:
+    movl -24(%rbp), %eax
+    pushq %rax
     movabsq $0x5, %rax
     pushq %rax
     popq %rcx
@@ -81,7 +127,7 @@ katabasis_ring_constructor:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_1
+    jz L_if_end_5
     movl L_KRL_C_IOCTL(%rip), %eax
     pushq %rax
     popq %rax
@@ -91,7 +137,7 @@ katabasis_ring_constructor:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_1:
+L_if_end_5:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x7, %rax
@@ -104,7 +150,7 @@ L_if_end_1:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_3
+    jz L_if_end_7
     movl L_KRL_C_MAGIC_MSR(%rip), %eax
     pushq %rax
     popq %rax
@@ -114,7 +160,7 @@ L_if_end_1:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_3:
+L_if_end_7:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0xc, %rax
@@ -127,7 +173,7 @@ L_if_end_3:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_5
+    jz L_if_end_9
     movl L_KRL_C_VMRUN(%rip), %eax
     pushq %rax
     popq %rax
@@ -137,7 +183,7 @@ L_if_end_3:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_5:
+L_if_end_9:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0x8, %rax
@@ -150,7 +196,7 @@ L_if_end_5:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_7
+    jz L_if_end_11
     movl L_KRL_C_SKINIT(%rip), %eax
     pushq %rax
     popq %rax
@@ -160,7 +206,7 @@ L_if_end_5:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_7:
+L_if_end_11:
     movl -40(%rbp), %eax
     pushq %rax
     movabsq $0xd, %rax
@@ -173,7 +219,7 @@ L_if_end_7:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_9
+    jz L_if_end_13
     movl L_KRL_C_SMI(%rip), %eax
     pushq %rax
     popq %rax
@@ -183,7 +229,7 @@ L_if_end_7:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_9:
+L_if_end_13:
     movl L_KRL_C_NONE(%rip), %eax
     pushq %rax
     popq %rax
@@ -241,7 +287,7 @@ katabasis_ring_legal:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_11
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -251,7 +297,7 @@ katabasis_ring_legal:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_11:
+L_if_end_15:
     movabsq $0x1, %rax
     pushq %rax
     popq %rax

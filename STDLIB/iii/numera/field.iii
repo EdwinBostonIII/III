@@ -14,6 +14,17 @@
  *   - fp_pow                                  (square-and-multiply)
  *   - fp_inv_fermat                           (assumes p prime)
  *
+ *
+ * APOTHEOSIS S.3 (audit -- the generic escape hatch).  This is the arbitrary-
+ * odd-prime Fp fallback (modulus supplied per call).  A single fp_mul is
+ * bigint_mul + bigint_mod (Knuth division), NOT a Montgomery CIOS, and is
+ * DELIBERATELY not routed to the shared S.2 organ: for ONE multiply, building a
+ * modulus_ctx + to/from-Montgomery costs more than one Knuth reduction
+ * (Montgomery wins only across a modpow's many multiplies).  fp_pow DOES inherit
+ * the shared organ -- it calls bigint_modpow, which dispatches odd moduli to the
+ * ctx-driven Montgomery ladder (numera::bigint_div).  The four fixed-prime NIST
+ * fields (fp256/fn256/fp384/fn384) were the genuine CIOS duplicates and ARE
+ * consolidated onto that organ; this generic path stays generic.
  * Hexad: kind_essence.  Ring: R0.  K: 0.99.
  */
 

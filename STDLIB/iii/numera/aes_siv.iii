@@ -205,6 +205,7 @@ fn siv_ctr(iv: u64, in_buf: u64, out_buf: u64, len: u64) -> i32 {
 }
 
 fn aes_siv_encrypt(key32: u64, ad: u64, ad_len: u64, pt: u64, pt_len: u64, out: u64) -> i32 @export {
+    if pt_len > 65536u64 { return 0i32 - 1i32 }   /* siv_s2v materializes pt into SIV_TBUF[65536]; pt_len>65536 overruns [audit E2-SIV-1] */
     let k1 : u64 = key32
     let k2 : u64 = key32 + 16u64
     /* S2V under K1 */
@@ -226,6 +227,7 @@ fn aes_siv_decrypt(key32: u64, ad: u64, ad_len: u64, in_buf: u64, in_len: u64, p
     let k1 : u64 = key32
     let k2 : u64 = key32 + 16u64
     let pt_len : u64 = in_len - 16u64
+    if pt_len > 65536u64 { return 0u8 }   /* siv_s2v materializes pt_out into SIV_TBUF[65536]; pt_len>65536 overruns [audit E2-SIV-1] */
     /* IV = in[0:16] */
     let inp : *u8 = in_buf as *u8
     let ivp : *u8 = &SIV_IV as *u8

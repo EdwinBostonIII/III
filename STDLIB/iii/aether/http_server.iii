@@ -50,6 +50,7 @@ extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.i
 extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
 extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
 extern @abi(c-msvc-x64) fn str_ascii_eq_ci(a: u64, alen: u64, b: u64, blen: u64) -> u8 from "normalise_ascii.iii"
+extern @abi(c-msvc-x64) fn bnd_cap_ok(off: u64, len: u64, cap: u64) -> u8 from "bound.iii"
 
 /* ----------- Public constants ----------- */
 
@@ -447,6 +448,7 @@ fn https_read_chunk_size() -> u64 {
                 going_hex = 0u8
             } else {
                 acc = acc * 16u64 + (d as u64)
+                if acc > HTTPS_PARSE_RAW_LEN { return 0xFFFFFFFFFFFFFFFFu64 }  /* [COMBINE-7/X22] cap: a chunk can't exceed the message; also prevents acc wrap */
                 got = 1u8
                 HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + 1u64
             }
@@ -481,7 +483,7 @@ fn https_chunked_decode(arena: u64, slot_idx: u32) -> i32 {
         if sz == 0xFFFFFFFFFFFFFFFFu64 { return HTTPS_E_PARSE }
         if sz == 0u64 { done = 1u8 }
         if done == 0u8 {
-            if HTTPS_PARSE_CURSOR + sz > HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+            if bnd_cap_ok(HTTPS_PARSE_CURSOR, sz, HTTPS_PARSE_RAW_LEN) == 0u8 { return HTTPS_E_PARSE }  /* [COMBINE-7/X22] subtraction-form guard: cannot wrap */
             let src : *u8 = (HTTPS_PARSE_RAW_BASE + HTTPS_PARSE_CURSOR) as *u8
             let mut k : u64 = 0u64
             while k < sz {

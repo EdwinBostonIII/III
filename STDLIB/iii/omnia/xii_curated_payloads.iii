@@ -2,27 +2,28 @@
  *
  * III STDLIB - omnia::xii_curated_payloads
  *
- * Curated per-target machine-code bytes for representative Horizon patterns.
- * Per DOCS/III-XII.md S26.7 + S26.18 (Ω9 Target Mapping Ceremony).
+ * Curated per-target machine-code bytes for representative NON-crypto Horizon
+ * patterns. Per DOCS/III-XII.md S26.7 + S26.18 (Ω9 Target Mapping Ceremony).
  *
  * Each registered (horizon_id, target) override is a real, sealed sequence
- * of machine-code bytes hand-curated for the target's ISA. The byte
- * sequences are content-addressed; their SHA-256 is part of the
- * xii_targets.mhash seal.
+ * of machine-code bytes hand-curated for the target's ISA.
  *
  * This file registers the curation overrides at module load via
  * xii_curated_payloads_register_all(). Each pattern's payload is sealed
- * in a module-scope const array.
+ * in a module-scope array.
  *
- * Currently curated:
- *   H011 sha256_oneshot   on target 1 (x86_avx2 + SHA-NI)
- *   H011 sha256_oneshot   on target 3 (arm64_neon + SHA-2 ext)
- *   H012 sha256_block     on target 1
- *   H012 sha256_block     on target 3
- *   H022 crc32c_block     on target 1 (uses CRC32 instruction)
+ * Currently curated (NON-crypto horizons only):
  *   H050 swap_bytes_u64   on target 1 (BSWAP rax)
  *   H050 swap_bytes_u64   on target 3 (REV x0)
  *   H058 aligned_load_u128 on targets 1,3 (vmovdqa / ldr q0)
+ *
+ * W1.2/CUT-12: the crypto-horizon (< 24) overrides H011 sha256_oneshot,
+ * H012 sha256_block, H022 crc32c_block + their XCP_H011_AVX2/ARM64,
+ * XCP_H012_AVX2, XCP_H022_AVX2 scaffold bytes are removed.  The xii_emit_gen
+ * chokepoint (XEG_CRYPTO_HORIZON_MAX) refused every one of them, so they were
+ * unreachable dead matter and emission is byte-identical.  Crypto truth is the
+ * proven numera implementations (W1.3 option b: crypto horizons emit the real
+ * kernel fragment, never a scaffold inline).
  *
  * Hexad: kind_substance. Ring: R0. K: per-pattern.
  *
@@ -32,54 +33,6 @@
 module omnia_xii_curated_payloads
 
 extern @abi(c-msvc-x64) fn xii_emit_gen_override(horizon_id: u8, target: u8, payload: *u8, size: u16) -> i32 from "xii_emit_gen.iii"
-
-/* ------------------------------------------------------------------ */
-/* H011 sha256_oneshot on x86_avx2 + SHA-NI (target 1)                */
-/* ------------------------------------------------------------------ */
-
-/* SHA256RNDS2 + SHA256MSG1 + SHA256MSG2 sequence for one 512-bit block.
- * Real Intel SHA-NI instruction encoding per Intel SDM Vol 2.
- *
- *  c5 fa 7e 47 00       vmovq        xmm0, qword ptr [rdi+0x00]
- *  c5 fa 7e 4f 08       vmovq        xmm1, qword ptr [rdi+0x08]
- *  c4 e2 79 25 d1       vpmovsxbd    xmm2, xmm1
- *  c4 e2 7d 13 d8       vcvtph2ps    ymm3, xmm0
- *  ...
- *  c3                   ret
- *
- * Conservative 64-byte sealed sequence:
- */
-var XCP_H011_AVX2 : [u8; 64] = [0xC5u8, 0xFAu8, 0x7Eu8, 0x47u8, 0x00u8, 0xC5u8, 0xFAu8, 0x7Eu8, 0x4Fu8, 0x08u8, 0xC5u8, 0xFAu8, 0x7Eu8, 0x57u8, 0x10u8, 0xC5u8, 0xFAu8, 0x7Eu8, 0x5Fu8, 0x18u8, 0x0Fu8, 0x38u8, 0xCBu8, 0xC1u8, 0x0Fu8, 0x38u8, 0xCCu8, 0xD2u8, 0x0Fu8, 0x38u8, 0xCDu8, 0xE3u8, 0x0Fu8, 0x38u8, 0xCEu8, 0xC1u8, 0x0Fu8, 0x38u8, 0xCBu8, 0xC1u8, 0x0Fu8, 0x38u8, 0xCCu8, 0xD2u8, 0x0Fu8, 0x38u8, 0xCDu8, 0xE3u8, 0x0Fu8, 0x38u8, 0xCEu8, 0xC1u8, 0xC5u8, 0xF8u8, 0x29u8, 0x07u8, 0xC5u8, 0xF8u8, 0x29u8, 0x4Fu8, 0x10u8, 0xC3u8, 0x90u8, 0x90u8, 0x90u8]
-
-/* ------------------------------------------------------------------ */
-/* H011 sha256_oneshot on arm64_neon + FEAT_SHA2 (target 3)           */
-/* ------------------------------------------------------------------ */
-
-/* SHA-256 round using sha256h/sha256h2 instructions per Arm ARM B6.3.66.
- *
- *   00 00 c0 3d       ldr q0, [x0]
- *   01 00 c0 3d       ldr q1, [x0, #16]
- *   02 00 c0 3d       ldr q2, [x0, #32]
- *   03 00 c0 3d       ldr q3, [x0, #48]
- *   00 40 00 5e       sha256h q0, q1, v2.4s
- *   01 40 04 5e       sha256h2 q1, q0, v4.4s
- *   ...
- *   c0 03 5f d6       ret
- */
-var XCP_H011_ARM64 : [u8; 56] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0x01u8, 0x00u8, 0xC0u8, 0x3Du8, 0x02u8, 0x04u8, 0xC0u8, 0x3Du8, 0x03u8, 0x04u8, 0xC0u8, 0x3Du8, 0x00u8, 0x40u8, 0x00u8, 0x5Eu8, 0x01u8, 0x40u8, 0x04u8, 0x5Eu8, 0x02u8, 0x50u8, 0x00u8, 0x5Eu8, 0x03u8, 0x50u8, 0x04u8, 0x5Eu8, 0x00u8, 0x60u8, 0x00u8, 0x5Eu8, 0x01u8, 0x60u8, 0x04u8, 0x5Eu8, 0x00u8, 0x00u8, 0x80u8, 0x3Du8, 0x01u8, 0x04u8, 0x80u8, 0x3Du8, 0x02u8, 0x08u8, 0x80u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
-
-/* ------------------------------------------------------------------ */
-/* H012 sha256_block on x86_avx2 (single-block SHA-NI variant)        */
-/* ------------------------------------------------------------------ */
-
-var XCP_H012_AVX2 : [u8; 32] = [0xC5u8, 0xFAu8, 0x7Eu8, 0x07u8, 0x0Fu8, 0x38u8, 0xCBu8, 0xC1u8, 0x0Fu8, 0x38u8, 0xCCu8, 0xD2u8, 0x0Fu8, 0x38u8, 0xCDu8, 0xE3u8, 0x0Fu8, 0x38u8, 0xCEu8, 0xC1u8, 0xC5u8, 0xF8u8, 0x29u8, 0x07u8, 0xC3u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8]
-
-/* ------------------------------------------------------------------ */
-/* H022 crc32c_block on x86 + SSE 4.2 (CRC32 instruction)              */
-/* ------------------------------------------------------------------ */
-
-/* f2 48 0f 38 f1 c1    crc32 rax, rcx     (8-byte step) */
-var XCP_H022_AVX2 : [u8; 16] = [0xF2u8, 0x48u8, 0x0Fu8, 0x38u8, 0xF1u8, 0xC1u8, 0xC3u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8, 0x90u8]
 
 /* ------------------------------------------------------------------ */
 /* H050 swap_bytes_u64 — BSWAP rax on x86 / REV x0 on ARM64           */
@@ -102,17 +55,10 @@ var XCP_H058_AVX2 : [u8; 8] = [0xC5u8, 0xF9u8, 0x6Fu8, 0x07u8, 0xC3u8, 0x90u8, 0
 var XCP_H058_ARM64 : [u8; 8] = [0x00u8, 0x00u8, 0xC0u8, 0x3Du8, 0xC0u8, 0x03u8, 0x5Fu8, 0xD6u8]
 
 /* ------------------------------------------------------------------ */
-/* Registration                                                        */
+/* Registration (non-crypto horizons only)                             */
 /* ------------------------------------------------------------------ */
 
 fn xii_curated_payloads_register_all() -> i32 @export {
-    /* sha256_oneshot is H012 (index 11) per S26.8.1 catalog. */
-    xii_emit_gen_override(11u8, 1u8, &XCP_H011_AVX2 as *u8, 64u16)
-    xii_emit_gen_override(11u8, 3u8, &XCP_H011_ARM64 as *u8, 56u16)
-    /* sha256_block is H013 (index 12). */
-    xii_emit_gen_override(12u8, 1u8, &XCP_H012_AVX2 as *u8, 32u16)
-    /* crc32c_block is H022 (index 21). */
-    xii_emit_gen_override(21u8, 1u8, &XCP_H022_AVX2 as *u8, 16u16)
     /* swap_bytes_u64 is H051 (index 50). */
     xii_emit_gen_override(50u8, 1u8, &XCP_H050_AVX2 as *u8, 8u16)
     xii_emit_gen_override(50u8, 3u8, &XCP_H050_ARM64 as *u8, 8u16)

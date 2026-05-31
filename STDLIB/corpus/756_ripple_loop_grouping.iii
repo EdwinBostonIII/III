@@ -1,0 +1,86 @@
+/* 756_ripple_loop_grouping.iii -- W3.1 Step-1 determinism KAT for the O(N) caindex
+ * re-expression of forcefield/ripple_loop rl_run (was O(passes*N^2) all-pairs).
+ * 919_ripple_loop already pins the 6-node positive + kernel-down arms; this test
+ * drives a richer 11-node graph with several group sizes and proves the migrated
+ * loop yields the SAME closed-form result the old fixpoint did:
+ *   merges == N - (#distinct groups), final ring == #distinct groups, the
+ *   intentional variation (cap-equal/intent-different) stays split, every member
+ *   of each accidental-duplicate group collapses to one class, and BOTH gates
+ *   still fail closed (proof_avail=0 -> 0 merges; kernel_ok=0 -> 0 merges).
+ * Groups: A(0xA,1)x4, B(0xB,2)x3, C(0xC,3)x1, D(0xD,4)x1, E(0xE,5)x1, E(0xE,6)x1.
+ *   N=11, #groups=6 -> merges=5, ring=6.  Exit 99 = all arms hold. */
+module corpus_756
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn cgr_num_classes() -> u32 from "congruence.iii"
+extern @abi(c-msvc-x64) fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 from "ripple_loop.iii"
+extern @abi(c-msvc-x64) fn rl_ring_size() -> u32 from "ripple_loop.iii"
+
+var CIBUF : [u8; 352]   /* 11 distinct 32-byte congruence content-addresses */
+
+/* Intern node k as a distinct content-address (byte 0x20+k) -> class k == node k. */
+fn intern_distinct(k: u32) -> i32 {
+    let base : u64 = (&CIBUF as u64) + (k as u64) * 32u64
+    let p : *u8 = base as *u8
+    let b : u8 = (0x20u32 + k) as u8
+    let mut z : u64 = 0u64
+    while z < 32u64 { p[z] = b  z = z + 1u64 }
+    cgr_intern(p, 10u64)
+    return 0i32
+}
+
+/* Add `count` ripple_metric nodes all sharing (cap, iclass) -> one group. */
+fn add_group(cap: u64, iclass: u32, count: u32) -> i32 {
+    let mut k : u32 = 0u32
+    while k < count { rm_add_node(cap, iclass)  k = k + 1u32 }
+    return 0i32
+}
+
+/* 11 metric nodes (6 groups) + 11 distinct interns (class i == node i). */
+fn setup11() -> i32 {
+    rm_reset()
+    cgr_init()
+    add_group(0xAu64, 1u32, 4u32)   /* nodes 0..3  : accidental dup x4 */
+    add_group(0xBu64, 2u32, 3u32)   /* nodes 4..6  : accidental dup x3 */
+    rm_add_node(0xCu64, 3u32)       /* node 7      : unique           */
+    rm_add_node(0xDu64, 4u32)       /* node 8      : unique           */
+    rm_add_node(0xEu64, 5u32)       /* node 9      : cap E, iclass 5  */
+    rm_add_node(0xEu64, 6u32)       /* node 10     : cap E, iclass 6 -> intentional variation */
+    let mut k : u32 = 0u32
+    while k < 11u32 { intern_distinct(k)  k = k + 1u32 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    /* ===== kernel + proof LIVE: collapse the two accidental-dup groups ===== */
+    setup11()
+    if cgr_num_classes() != 11u32 { return 5u64 }      /* 11 distinct interns to start */
+    let m : u32 = rl_run(11u32, 1u32, 1u32)
+    if m != 5u32 { return 10u64 }                       /* (4-1)+(3-1) = 5 unions */
+    if rl_ring_size() != 6u32 { return 11u64 }          /* 6 surviving classes */
+    /* accidental dups fully collapse */
+    if cgr_find(0u32) != cgr_find(3u32) { return 12u64 }   /* group A: 0..3 one class */
+    if cgr_find(4u32) != cgr_find(6u32) { return 13u64 }   /* group B: 4..6 one class */
+    /* distinct groups stay distinct */
+    if cgr_find(0u32) == cgr_find(4u32) { return 14u64 }   /* A != B */
+    if cgr_find(9u32) == cgr_find(10u32) { return 15u64 }  /* intentional variation NOT merged */
+    if cgr_find(7u32) == cgr_find(8u32) { return 16u64 }   /* C != D */
+
+    /* ===== FALSIFIER: proof DOWN (faithfulness gate) -> no distinct-class union ===== */
+    setup11()
+    let m2 : u32 = rl_run(11u32, 0u32, 1u32)
+    if m2 != 0u32 { return 20u64 }                      /* no discharged proof -> refused */
+    if rl_ring_size() != 11u32 { return 21u64 }         /* nothing merged */
+
+    /* ===== FALSIFIER: kernel DOWN (commit_gate §8.2) -> loop self-edits NOTHING ===== */
+    setup11()
+    let m3 : u32 = rl_run(11u32, 1u32, 0u32)
+    if m3 != 0u32 { return 30u64 }
+    if rl_ring_size() != 11u32 { return 31u64 }
+
+    return 99u64
+}

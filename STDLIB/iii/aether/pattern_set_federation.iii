@@ -214,6 +214,14 @@ fn pattern_set_fed_fetch(peer_ch: u64, target_mhash_ptr: u64, expected_tier: u32
         i = i + 1u64
     }
 
+    /* W4.2 (ENHANCE-17): ANCESTRY gate.  A correct hash proves integrity, not provenance --
+     * the fetch previously omitted its OWN ancestry check, so any peer with a well-formed
+     * payload was admitted.  Now the fetched (tier, mhash) MUST trace to a known FOUNDERS-
+     * ANCHOR-descended anchor in the fed_seal chain; an unvouched set is REJECTED before any
+     * slot is allocated (the same gate pattern_set_fed_verify_ancestry enforces post-import). */
+    let anchor_slot : u32 = fed_seal_lookup_anchor(expected_tier, target_mhash_ptr)
+    if anchor_slot == 0xFFFFFFFFu32 { return 0u64 }
+
     /* Hash matches.  Allocate a federation slot and register the (mhash,
      * tier, local_id=0) triple.  local_id is 0 because the payload has
      * not been imported into the local pattern_table yet — that's a

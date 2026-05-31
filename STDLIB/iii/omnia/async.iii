@@ -45,6 +45,7 @@ module omnia_async
 
 extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
 extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn bnd_index(id: u64, slots: u64) -> u32 from "bound.iii"
 
 /* @variant task state -- must remain stable; user code reads these
  * constants when dispatching on async_task_state. */
@@ -78,20 +79,16 @@ var OMNIA_ASYNC_TASK_RESULT    : [u64; 1024]
 
 fn _async_rt_slot_of(rt_id: u64) -> u32 {
     let id_l : u64 = rt_id
-    if id_l == 0u64 { return 0xFFFFFFFFu32 }
-    let s : u64 = (id_l - 1u64) & 0xFu64
-    let s_u32 : u32 = s as u32
-    if s_u32 >= OMNIA_ASYNC_RT_MAX { return 0xFFFFFFFFu32 }
+    let s_u32 : u32 = bnd_index(id_l, OMNIA_ASYNC_RT_MAX as u64)   /* [COMBINE-7/II-ASYNC-1/X19] range-check BEFORE indexing; never mask an out-of-domain id onto a live slot */
+    if s_u32 == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
     if OMNIA_ASYNC_RT_LIVE[s_u32] == 0u8 { return 0xFFFFFFFFu32 }
     return s_u32
 }
 
 fn _async_task_global_idx(rt_slot: u32, task_id: u64) -> u32 {
     let id_l : u64 = task_id
-    if id_l == 0u64 { return 0xFFFFFFFFu32 }
-    let local : u64 = (id_l - 1u64) & 0x3Fu64
-    let local_u32 : u32 = local as u32
-    if local_u32 >= OMNIA_ASYNC_TASKS_PER_RT { return 0xFFFFFFFFu32 }
+    let local_u32 : u32 = bnd_index(id_l, OMNIA_ASYNC_TASKS_PER_RT as u64)   /* [COMBINE-7/II-ASYNC-1/X19] range-check BEFORE indexing */
+    if local_u32 == 0xFFFFFFFFu32 { return 0xFFFFFFFFu32 }
     let g : u32 = rt_slot * OMNIA_ASYNC_TASKS_PER_RT + local_u32
     if g >= 1024u32 { return 0xFFFFFFFFu32 }
     if OMNIA_ASYNC_TASK_LIVE[g] == 0u8 { return 0xFFFFFFFFu32 }

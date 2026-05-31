@@ -143,8 +143,7 @@
 212  3  0x04  950000000  212  span_u8_fill
 213  3  0x04  950000000  213  span_u8_copy
 214  9  0x08  1000000000  214  span_u8_find
-215  5  0x10  950000000  215  arena_reset_safe
-216  5  0x10  950000000  216  region_reset_safe
+215  5  0x10  950000000  215  arena_reset_with_witness
 
 # ═══════════════ AETHER — capability / wire / federation ════════════
 # Block 300..309: capability

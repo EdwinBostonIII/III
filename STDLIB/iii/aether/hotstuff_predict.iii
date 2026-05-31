@@ -47,6 +47,7 @@ fn hsp_predict_quorum(view: u64, out_quorum: *u8, out_size: *u32) -> i32 @export
     if (out_quorum as u64) == 0u64 { return HSP_E_NULL }
     if (out_size as u64) == 0u64 { return HSP_E_NULL }
     let n : u32 = HSP_N
+    if n == 0u32 { return HSP_E_NULL }   /* `% n` below is a div-by-zero when no peers were registered [audit hotstuff_predict-1] */
     let mut qsize : u32 = 2u32 * HSP_F + 1u32 + HSP_K
     if qsize > n { qsize = n }
     let leader : u32 = (view as u32) % n

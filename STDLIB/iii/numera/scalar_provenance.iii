@@ -45,6 +45,11 @@ const SP_OP_U64_ADD_CODE : u32 = 0x5104u32
 const SP_OP_U64_SUB_CODE : u32 = 0x5105u32
 const SP_OP_U64_MUL_CODE : u32 = 0x5106u32
 
+/* Distinct nonzero sentinel: overflow occurred but the crystal pool was full so no
+ * provenance crystal could be minted.  Disjoint from "no overflow" (0) and any valid
+ * crystal id (high band [CRYSTAL_ID_BASE, +255]).  [audit D-SP-2] */
+const SP_E_POOL_FULL : u64 = 0xFFFFFFFFFFFFFFFFu64
+
 var SP_DOMAIN     : [u8; 14]   /* "scalar_provenance" trimmed */
 var SP_DOMAIN_INIT : u8 = 0u8
 var SP_OP_BUF     : [u8; 4]
@@ -102,7 +107,12 @@ fn sp_mint(op_code: u32, a64: u64, b64: u64) -> u64 {
     mhash_payload(&SP_A_BUF as u64, 8u64)
     mhash_payload(&SP_B_BUF as u64, 8u64)
     mhash_final(&SP_SITE as u64)
-    return crystal_mint(op_code, &SP_SITE as u64, 0u64, b64)
+    /* cause_seq is a PARENT crystal id; a standalone overflow op is a ROOT -> pass 0,
+     * not the operand b64 (operands stay bound via the site hash above).  [audit D-SP-1] */
+    let cid : u64 = crystal_mint(op_code, &SP_SITE as u64, 0u64, 0u64)
+    /* pool full (CRYSTAL_INVALID=0) must not read as sp_*'s "no overflow" 0.  [audit D-SP-2] */
+    if cid == 0u64 { return SP_E_POOL_FULL }
+    return cid
 }
 
 fn sp_u32_add(a: u32, b: u32) -> u64 @export {

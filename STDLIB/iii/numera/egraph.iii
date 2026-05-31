@@ -24,6 +24,8 @@ module numera_egraph
 extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_eq(a: *u8, b: *u8) -> u8 from "identifier.iii"
 extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
+extern @abi(c-msvc-x64) fn murmur3_32(data: *u8, len: u64, seed: u32) -> u32 from "murmur3.iii"
+extern @abi(c-msvc-x64) fn tb_cmp_u32(a: u32, b: u32) -> i32 from "tiebreak.iii"
 /* GF(2^8) primitives (poly 0x11B) for Integration A2 Reed-Solomon self-heal. */
 extern @abi(c-msvc-x64) fn gf8_mul(a: u32, b: u32) -> u32 from "galois.iii"
 extern @abi(c-msvc-x64) fn gf8_inv(a: u32) -> u32 from "galois.iii"
@@ -184,20 +186,12 @@ fn eg_hash_key(sym: u32, args: *u32, n: u32) -> u64 {
         off = off + 4u64
         i = i + 1u32
     }
+    /* [COMBINE-2/F-CORE-2] fast non-crypto bucket hash on the hashcons hot path.  Correctness does
+     * NOT depend on the hash: eg_node_matches verifies the full (sym,arity,canon-children) key on every
+     * probe, and node ids are creation-order (not hash-derived), so interning/extraction/seal are all
+     * byte-identical.  Keccak (ident_from_bytes) is reserved for the integrity SEAL (eg_seal_fold). */
     let kp : *u8 = (&EGRAPH_KEYBUF) as u64 as *u8
-    let op : *u8 = (&EGRAPH_HASHOUT) as u64 as *u8
-    ident_from_bytes(kp, off, op)
-    let h0 : u64 = EGRAPH_HASHOUT[0u64] as u64
-    let h1 : u64 = EGRAPH_HASHOUT[1u64] as u64
-    let h2 : u64 = EGRAPH_HASHOUT[2u64] as u64
-    let h3 : u64 = EGRAPH_HASHOUT[3u64] as u64
-    let h4 : u64 = EGRAPH_HASHOUT[4u64] as u64
-    let h5 : u64 = EGRAPH_HASHOUT[5u64] as u64
-    let h6 : u64 = EGRAPH_HASHOUT[6u64] as u64
-    let h7 : u64 = EGRAPH_HASHOUT[7u64] as u64
-    let lo : u64 = h0 | (h1 << 8u64) | (h2 << 16u64) | (h3 << 24u64)
-    let hi : u64 = (h4 << 32u64) | (h5 << 40u64) | (h6 << 48u64) | (h7 << 56u64)
-    let h : u64 = lo | hi
+    let h : u64 = murmur3_32(kp, off, 0x9E3779B9u32) as u64
     return h & EGRAPH_HT_MASK
 }
 
@@ -450,8 +444,8 @@ fn eg_union(a: u32, b: u32) -> u32 @export {
     let mut hi : u32 = ra
     let mut lo : u32 = rb
     if ranks_a == ranks_b {
-        /* tie -> lower id wins (M2 determinism) */
-        if ra < rb { hi = ra ; lo = rb } else { hi = rb ; lo = ra }
+        /* [COMBINE-6] tie -> lower id wins (M2 determinism), via the one comparator law (winner identical) */
+        if tb_cmp_u32(ra, rb) == -1i32 { hi = ra ; lo = rb } else { hi = rb ; lo = ra }
         let hib : u64 = (hi as u64) & EGRAPH_U32MASK
         EGRAPH_CL_RANK[hib] = EGRAPH_CL_RANK[hib] + 1u32
     } else {
@@ -519,9 +513,18 @@ fn eg_register_rule(rule: *u32) -> u32 @export {
     let lhs_n : u32 = rule[0u64]
     let rhs_n : u32 = rule[1u64]
     if lhs_n < 1u32 { return EGRAPH_SENT }
-    let total : u32 = lhs_n + rhs_n
-    if (EGRAPH_RULE_USED + total) > EGRAPH_RULE_AREA { return EGRAPH_SENT }
+    /* SOUNDNESS (X22): lhs_n/rhs_n are RAW caller counts (rule[0]/rule[1]). The old
+     * `total = lhs_n + rhs_n` and `EGRAPH_RULE_USED + total` both u32-WRAP -- a huge pair
+     * (e.g. 0x80000001 + 0x80000000 -> 1) passed the guard, the `while i < total` validation
+     * was skipped, and the copy loops (a<lhs_n / c<rhs_n) wrote ~2^31 words into
+     * EGRAPH_RULE_BUF[65536] -- an OOB write (the index mask EGRAPH_U32MASK is 0xFFFFFFFF, not
+     * a buffer bound). Bound each RAW operand against the remaining capacity BEFORE any sum:
+     * no wrap, no underflow (USED < AREA after the first guard -> rem >= 1; lhs_n <= rem). */
     if EGRAPH_RULE_USED >= EGRAPH_RULE_AREA { return EGRAPH_SENT }
+    let rem : u32 = EGRAPH_RULE_AREA - EGRAPH_RULE_USED
+    if lhs_n > rem { return EGRAPH_SENT }
+    if rhs_n > (rem - lhs_n) { return EGRAPH_SENT }
+    let total : u32 = lhs_n + rhs_n
     /* validate every entry well-formed */
     let mut i : u32 = 0u32
     let mut bad : u8 = 0u8
@@ -993,7 +996,7 @@ fn eg_extract_relax(ni: u32, req: *u32, sym_count: u32) -> u32 {
     let nodep : *u32 = (&EGRAPH_CLASS_NODE) as u64 as *u32
     let mycls : u32 = eg_find(EGRAPH_N_ECLASS[nb])
     let mcb : u64 = (mycls as u64) & EGRAPH_U32MASK
-    if cand >= costp[mcb] { return 0u32 }
+    if tb_cmp_u32(cand, costp[mcb]) != -1i32 { return 0u32 }   /* [COMBINE-6] cand >= cost via the one comparator (strict-improvement only; result identical) */
     costp[mcb] = cand
     nodep[mcb] = ni
     return 1u32

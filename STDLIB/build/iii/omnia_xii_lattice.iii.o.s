@@ -530,13 +530,6 @@ L_if_end_5:
     movq %rax, -56(%rbp)
     movl -56(%rbp), %eax
     pushq %rax
-    movl -16(%rbp), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    addq %rcx, %rax
-    movl %eax, %eax
-    pushq %rax
     movl L_XL_PAYLOAD_ARENA_BYTES(%rip), %eax
     pushq %rax
     popq %rcx
@@ -558,11 +551,41 @@ L_if_end_5:
     pushq %rax
     popq %rax
 L_if_end_7:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl L_XL_PAYLOAD_ARENA_BYTES(%rip), %eax
+    pushq %rax
+    movl -56(%rbp), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    subq %rcx, %rax
+    movl %eax, %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    seta %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_9
+    movabsq $0xffffffff, %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_9:
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
     movq %rax, -64(%rbp)
-L_loop_top_8:
+L_loop_top_10:
     movl -64(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -575,7 +598,7 @@ L_loop_top_8:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_9
+    jz L_loop_end_11
     leaq L_XII_LATTICE_PAYLOAD(%rip), %rax
     pushq %rax
     movl -56(%rbp), %eax
@@ -615,8 +638,8 @@ L_loop_top_8:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_8
-L_loop_end_9:
+    jmp L_loop_top_10
+L_loop_end_11:
     movl -56(%rbp), %eax
     pushq %rax
     movl -16(%rbp), %eax
@@ -647,7 +670,7 @@ L_loop_end_9:
     pushq %rax
     popq %rax
     movq %rax, -88(%rbp)
-L_loop_top_10:
+L_loop_top_12:
     movl -88(%rbp), %eax
     pushq %rax
     movabsq $0x20, %rax
@@ -660,7 +683,7 @@ L_loop_top_10:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_loop_end_11
+    jz L_loop_end_13
     leaq L_XII_LATTICE_STORE(%rip), %rax
     pushq %rax
     movl -80(%rbp), %eax
@@ -700,8 +723,8 @@ L_loop_top_10:
     movq $0, %rax
     pushq %rax
     popq %rax
-    jmp L_loop_top_10
-L_loop_end_11:
+    jmp L_loop_top_12
+L_loop_end_13:
     movl -56(%rbp), %eax
     pushq %rax
     movl -80(%rbp), %eax
@@ -858,7 +881,7 @@ xii_lattice_cell_mhash_ptr:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_13
+    jz L_if_end_15
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -868,7 +891,7 @@ xii_lattice_cell_mhash_ptr:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_13:
+L_if_end_15:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_XL_CELL_BYTES(%rip), %eax
@@ -929,7 +952,7 @@ xii_lattice_cell_payload_offset:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_15
+    jz L_if_end_17
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -939,7 +962,7 @@ xii_lattice_cell_payload_offset:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_15:
+L_if_end_17:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_XL_CELL_BYTES(%rip), %eax
@@ -999,7 +1022,7 @@ xii_lattice_cell_payload_size:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_17
+    jz L_if_end_19
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1009,7 +1032,7 @@ xii_lattice_cell_payload_size:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_17:
+L_if_end_19:
     movl -8(%rbp), %eax
     pushq %rax
     movl L_XL_CELL_BYTES(%rip), %eax
@@ -1069,7 +1092,7 @@ xii_lattice_cell_payload_ptr:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_19
+    jz L_if_end_21
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1079,7 +1102,7 @@ xii_lattice_cell_payload_ptr:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_19:
+L_if_end_21:
     movl -8(%rbp), %eax
     pushq %rax
     popq %rcx
@@ -1139,7 +1162,7 @@ xii_lattice_cell_ct_kind:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_21
+    jz L_if_end_23
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1149,7 +1172,7 @@ xii_lattice_cell_ct_kind:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_21:
+L_if_end_23:
     leaq L_XII_LATTICE_STORE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1209,7 +1232,7 @@ xii_lattice_cell_prov_xform:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_23
+    jz L_if_end_25
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1219,7 +1242,7 @@ xii_lattice_cell_prov_xform:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_23:
+L_if_end_25:
     leaq L_XII_LATTICE_STORE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1279,7 +1302,7 @@ xii_lattice_cell_flags:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_25
+    jz L_if_end_27
     movabsq $0x0, %rax
     pushq %rax
     popq %rax
@@ -1289,7 +1312,7 @@ xii_lattice_cell_flags:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_25:
+L_if_end_27:
     leaq L_XII_LATTICE_STORE(%rip), %rax
     pushq %rax
     movl -8(%rbp), %eax
@@ -1351,32 +1374,6 @@ xii_lattice_lookup_set:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_27
-    movabsq $0x1, %rax
-    pushq %rax
-    popq %rax
-    negq %rax
-    pushq %rax
-    popq %rax
-    movq %rbp, %rsp
-    popq %rbp
-    retq
-    movq $0, %rax
-    pushq %rax
-    popq %rax
-L_if_end_27:
-    movl -16(%rbp), %eax
-    pushq %rax
-    movl L_XL_LOOKUP_PER_HORIZON(%rip), %eax
-    pushq %rax
-    popq %rcx
-    popq %rax
-    cmpq %rcx, %rax
-    setae %al
-    movzbq %al, %rax
-    pushq %rax
-    popq %rax
-    testq %rax, %rax
     jz L_if_end_29
     movabsq $0x1, %rax
     pushq %rax
@@ -1391,6 +1388,32 @@ L_if_end_27:
     pushq %rax
     popq %rax
 L_if_end_29:
+    movl -16(%rbp), %eax
+    pushq %rax
+    movl L_XL_LOOKUP_PER_HORIZON(%rip), %eax
+    pushq %rax
+    popq %rcx
+    popq %rax
+    cmpq %rcx, %rax
+    setae %al
+    movzbq %al, %rax
+    pushq %rax
+    popq %rax
+    testq %rax, %rax
+    jz L_if_end_31
+    movabsq $0x1, %rax
+    pushq %rax
+    popq %rax
+    negq %rax
+    pushq %rax
+    popq %rax
+    movq %rbp, %rsp
+    popq %rbp
+    retq
+    movq $0, %rax
+    pushq %rax
+    popq %rax
+L_if_end_31:
     movzbq -8(%rbp), %rax
     pushq %rax
     popq %rax
@@ -1574,7 +1597,7 @@ xii_lattice_lookup:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_31
+    jz L_if_end_33
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -1584,7 +1607,7 @@ xii_lattice_lookup:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_31:
+L_if_end_33:
     movl -16(%rbp), %eax
     pushq %rax
     movl L_XL_LOOKUP_PER_HORIZON(%rip), %eax
@@ -1597,7 +1620,7 @@ L_if_end_31:
     pushq %rax
     popq %rax
     testq %rax, %rax
-    jz L_if_end_33
+    jz L_if_end_35
     movabsq $0xffffffff, %rax
     pushq %rax
     popq %rax
@@ -1607,7 +1630,7 @@ L_if_end_31:
     movq $0, %rax
     pushq %rax
     popq %rax
-L_if_end_33:
+L_if_end_35:
     movzbq -8(%rbp), %rax
     pushq %rax
     popq %rax

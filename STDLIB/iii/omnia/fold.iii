@@ -14,7 +14,6 @@
 module omnia_fold
 
 extern @abi(c-msvc-x64) fn iter_u8_next(id: u64) -> u32 from "iter.iii"
-extern @abi(c-msvc-x64) fn iter_u8_remaining(id: u64) -> u64 from "iter.iii"
 
 const FOLD_END : u32 = 0x100u32
 

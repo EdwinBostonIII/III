@@ -378,6 +378,9 @@ fn hs_verify_qc(qc: *u8, qc_len: u32) -> u8 @export {
     if qc_len < 44u32 { return 0u8 }
     let n_sigs : u32 = hs_read_u32(qc, 40u64)
     if n_sigs < HS_QUORUM { return 0u8 }
+    /* n_sigs is attacker-controlled; bound it to the peer count so the i*32 index into
+     * HS_PEER_KEYS[2048] stays in-bounds and n_sigs*64 cannot wrap u32.  [audit hotstuff-1] */
+    if n_sigs > HS_PEER_COUNT { return 0u8 }
     if qc_len < 44u32 + n_sigs * 64u32 { return 0u8 }
     let sp : *u8 = (&HS_SIG_INPUT as u64) as *u8
     let mut k : u64 = 0u64

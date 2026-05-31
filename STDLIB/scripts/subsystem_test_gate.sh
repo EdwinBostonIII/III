@@ -85,6 +85,19 @@ if ! bash "$ROOT/COMPILER/BOOT/forge_check.sh" >/dev/null 2>&1; then
     FAILED="$FAILED forge-closure"
 fi
 
+# 3b. W5.2 (RIPPLE-11 level D): the manifest Keccak-256 closure root -- the THIRD level,
+#     recomputed over the SAME sorted citizen seals via the in-tree numera/keccak.iii.  Editing
+#     any forge citizen now reddens ALL THREE levels in one pass (the half-sealed-manifest
+#     hazard is structurally impossible).  Soft dependency: skipped (not failed) if the tool or
+#     the freshly-built lib is unavailable, so a clean checkout still gates the SHA-256 levels.
+if [ -f "$ROOT/COMPILER/BOOT/forge_manifest_keccak.sh" ] && [ -f "$ROOT/STDLIB/build/iii/libiii_native.a" ]; then
+    echo "[gate] forge_manifest_keccak.sh (manifest Keccak-256 closure level D) ..."
+    if ! bash "$ROOT/COMPILER/BOOT/forge_manifest_keccak.sh" >/dev/null 2>&1; then
+        echo "[gate] FAIL: manifest Keccak closure level -- recomputed root not recorded in DOCS/SOVEREIGN-LEDGER.md"
+        FAILED="$FAILED forge-keccak-manifest"
+    fi
+fi
+
 echo "============================================================"
 if [ -n "$FAILED" ]; then
     echo "[gate] GATE FAILED:$FAILED"

@@ -1,0 +1,38 @@
+/* 418_sovereign_witness_align.iii -- Sovereign Witness, second sound safety property: ALIGNMENT.
+ * Completes memory-access safety (bounds + alignment) over a frozen captured trace. Sound + decisive
+ * by a direct power-of-two mod check; the first misaligned access is the counterexample; ABSTAIN on a
+ * non-power-of-two alignment (never a false PROVEN). 99 = pass. */
+module corpus_418
+
+extern @abi(c-msvc-x64) fn sw_prove_aligned(base: u64, stride: u64, count: u64, align: u64, out_ce: u64) -> u32 from "sovereign_witness.iii"
+
+var SW418_CE : [u64; 1]
+
+fn main() -> u64 {
+    let cep : u64 = &SW418_CE as u64
+
+    /* all aligned: base & stride both multiples of 64 -> PROVEN(0). */
+    if sw_prove_aligned(0x1000u64, 64u64, 10u64, 64u64, cep) != 0u32 { return 10u64 }
+
+    /* base misaligned -> access 0 is the counterexample (REFUTED_ALIGN=5, i=0). */
+    if sw_prove_aligned(0x1004u64, 64u64, 10u64, 64u64, cep) != 5u32 { return 11u64 }
+    if SW418_CE[0u64] != 0u64 { return 12u64 }
+
+    /* base aligned to 8 but stride=4 not -> access 1 (base+4) is the first misaligned (i=1). */
+    if sw_prove_aligned(0x1000u64, 4u64, 10u64, 8u64, cep) != 5u32 { return 13u64 }
+    if SW418_CE[0u64] != 1u64 { return 14u64 }
+
+    /* same base/stride but count==1 -> only access 0 (aligned) -> PROVEN (no false REFUTE). */
+    if sw_prove_aligned(0x1000u64, 4u64, 1u64, 8u64, cep) != 0u32 { return 15u64 }
+
+    /* align not a power of two -> ABSTAIN(3), never a false PROVEN. */
+    if sw_prove_aligned(0x1000u64, 64u64, 10u64, 100u64, cep) != 3u32 { return 16u64 }
+
+    /* count==0 -> vacuously PROVEN. */
+    if sw_prove_aligned(0x1003u64, 7u64, 0u64, 8u64, cep) != 0u32 { return 17u64 }
+
+    /* base + stride both aligned to 16 -> PROVEN. */
+    if sw_prove_aligned(0x1000u64, 16u64, 5u64, 16u64, cep) != 0u32 { return 18u64 }
+
+    return 99u64
+}

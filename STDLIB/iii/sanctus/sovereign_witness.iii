@@ -252,3 +252,32 @@ fn sw_replay_seq(h: u64, record_idx: u64, out_state_digest: u64) -> u32 @export 
     cad_final(out_state_digest)
     return SW_PROVEN
 }
+
+/* ================= second sound property: ALIGNMENT SAFETY =================
+ * The sibling of bounds-safety: every access base+i*stride must be aligned to `align` (a power of two),
+ * or some architectures fault / lose atomicity. Decidable + sound by a direct mod check; the first
+ * misaligned access is the counterexample. */
+const SW_REFUTED_ALIGN : u32 = 5u32
+const SW_PROP_ALIGN     : u8  = 2u8
+
+fn sw_is_pow2(x: u64) -> u32 {
+    if x == 0u64 { return 0u32 }
+    if (x & (x - 1u64)) == 0u64 { return 1u32 }
+    return 0u32
+}
+
+/* PROVEN if every access is aligned; REFUTED_ALIGN(+first misaligned i) otherwise; ABSTAIN if align is
+ * not a power of two (cannot reason cheaply -> never a false PROVEN). An aligned base with an aligned
+ * stride keeps every access aligned: (base + i*stride) mod align = (0 + i*0) mod align = 0. */
+fn sw_prove_aligned(base: u64, stride: u64, count: u64, align: u64, out_ce: u64) -> u32 @export {
+    let cep : *u64 = out_ce as *u64
+    cep[0u64] = 0u64
+    if sw_is_pow2(align) == 0u32 { return SW_ABSTAIN }
+    if count == 0u64 { return SW_PROVEN }
+    let mask : u64 = align - 1u64
+    if (base & mask) != 0u64 { cep[0u64] = 0u64 ; return SW_REFUTED_ALIGN }   /* access 0 (= base) misaligned */
+    if (stride & mask) != 0u64 {
+        if count > 1u64 { cep[0u64] = 1u64 ; return SW_REFUTED_ALIGN }        /* access 1 (= base+stride) is the first misaligned */
+    }
+    return SW_PROVEN
+}

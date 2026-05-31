@@ -184,6 +184,7 @@ declare -A EXPECTED=(
     [415_sovereign_witness_artifact]=99
     [416_sovereign_witness_affine]=99
     [417_sovereign_witness_replay]=99
+    [418_sovereign_witness_align]=99
     [133_arena_only]=99
     [134_lru_new_only]=99
     [135_lru_capacity]=99

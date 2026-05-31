@@ -181,6 +181,7 @@ declare -A EXPECTED=(
     [412_babel_wire_len_overflow]=99
     [413_rsa_sign_pool_exhaustion]=99
     [414_builder_oom_latch]=99
+    [415_sovereign_witness_artifact]=99
     [133_arena_only]=99
     [134_lru_new_only]=99
     [135_lru_capacity]=99
@@ -720,6 +721,7 @@ declare -A EXPECTED=(
     [1016_proof_resolve]=99
     [1017_hdl_optimize]=99
     [1018_hdl_compiler]=99
+    [1019_arena_slot_witness]=99
 )
 
 PASS=0

@@ -342,6 +342,7 @@ MODULES=(
     "omnia/crystal"
     "sanctus/mandate"
     "sanctus/closure"
+    "sanctus/legacy_artifact"
     "numera/bigint_div"
     "numera/field"
     "verba/normalise_ascii"
@@ -387,6 +388,8 @@ MODULES=(
     "verba/uuid"
     "numera/murmur3"
     "numera/ntt"
+    "numera/ntt_fri_organ"
+    "numera/zk_stark_seal"
     "numera/ntt_bigint"
     "verba/csv"
     "verba/ini"
@@ -449,6 +452,14 @@ MODULES=(
     "aether/witness_hook"
     "aether/hotstuff"
     "aether/hotstuff_predict"
+    # APOTHEOSIS C.11: the tier-aware certified-monotone pacemaker -- constitutional-constant
+    # timeouts (no-ML), monotone+bounded backoff (liveness), explicit BFT 2f+1 quorum. Safety stays
+    # the mhash vote-block match in hotstuff.iii. Compiler-unreferenced -> LIBNATIVE.
+    "aether/hotstuff_unified"
+    # APOTHEOSIS C.11: the tournament quorum optimizer -- selects the 2f+1 most-available peers by
+    # SEALED fact (no-ML: a data input, never observed-and-adapted), Byzantine-available by
+    # construction. Composes hotstuff_unified. Compiler-unreferenced -> LIBNATIVE.
+    "aether/hotstuff_predict_opt"
     "aether/hotstuff_heal"
     "numera/sha3_256"
     "numera/sha3_512"
@@ -511,6 +522,10 @@ MODULES=(
     "omnia/unify"
     "omnia/pattern_table"
     "omnia/resolver"
+    # APOTHEOSIS C.9: discharge the resolver fast-path shortcut into a proven equivalence theorem --
+    # cold-vs-fast differential (RESOLVER_FORCE_COLD) proves the asm shortcut == the 11-step contract
+    # per input, sealed via cad. The optimization is PROVEN, not deleted. Compiler-unreferenced -> LIBNATIVE.
+    "omnia/proof_resolve"
     "omnia/resolver_replay"
     "omnia/proof_ripple_resolution"
     "omnia/transform"
@@ -671,6 +686,18 @@ MODULES=(
     "numera/groebner"
     "numera/proof_carrying"
     "numera/cost_calculus"
+    # APOTHEOSIS C.8: the 6-D Pareto frontier (antichain of non-dominated cost vectors) -- the
+    # honest multi-dimensional cost selection the e-graph extraction + ripple consult vs a scalar
+    # argmin. Self-contained integer dominance. Compiler-unreferenced -> LIBNATIVE.
+    "numera/pareto_extraction"
+    # APOTHEOSIS C.8: the closed-form cost manifold -- uc_formula_latency = critical-path DP (latency
+    # queryable DURING e-graph saturation, not just at extraction) + the 6-D vector assembly the
+    # pareto frontier + ripple J consult. Compiler-unreferenced -> LIBNATIVE.
+    "numera/unified_cost_manifold"
+    # APOTHEOSIS C.14: the mechanistic provable cycle bound -- derives a fast path's bound from the
+    # C.8 cost manifold (critical path = analytic lower bound); a path slower than bound+margin is a
+    # PROVABLE regression, not advisory. Composes unified_cost_manifold. Compiler-unreferenced -> LIBNATIVE.
+    "numera/cost_lattice_unified"
     "aether/bone_marrow"
     "numera/cost_lattice_synth"
     "aether/basal_probe"
@@ -817,6 +844,10 @@ MODULES=(
     # gate) + congruence (the faithfulness-gated merge) + a kernel proof. Decider only (no file
     # edits). Compiler-unreferenced -> LIBNATIVE.
     "forcefield/ripple_unify"
+    # APOTHEOSIS C.7: the UNIFIED Ripple-move decider -- proof_ripple_decision over MERGE/CUT/EXTRACT
+    # via the three certified deciders + the kernel-first gate (blocks all moves while blind) + the
+    # move crystal. Composes ripple_unify/cut/extract + cad. Compiler-unreferenced -> LIBNATIVE.
+    "forcefield/proof_ripple_unified"
     # Inc 3: the closed loop -- propose -> decide (commit_gate + ripple_unify) -> apply-in-model
     # -> loop until dry. Composes ripple_metric + ripple_unify + congruence + commit_gate.
     # Decider/planner (no file edits). Compiler-unreferenced -> LIBNATIVE.
@@ -836,6 +867,22 @@ MODULES=(
     # TernaryGate/DFlipFlop) with truth-table equivalence as the proof. Composes trit only.
     # Compiler-unreferenced -> LIBNATIVE.
     "numera/hdl"
+    # APOTHEOSIS C.8: the certified gate-identity proof DB -- 10 boolean identities proven bit-exact
+    # over their full 2^n truth tables (hdl_equiv2), so the netlist optimizer's rewrites are
+    # sound by construction; a non-equivalent rewrite is rejected. Compiler-unreferenced -> LIBNATIVE.
+    "numera/hdl_gate_db"
+    # APOTHEOSIS C.8 capstone: the certified netlist optimizer -- CONSUMES hdl_gate_db's identities +
+    # hdl to reduce redundant gates (AND(a,a)/OR(a,a)/NOT NOT) with the output function PROVEN preserved
+    # (truth table before==after) while live gates drop; a wrong rewrite is caught. Compiler-unreferenced -> LIBNATIVE.
+    "numera/hdl_optimize"
+    # APOTHEOSIS C.8 item 4: the combinator->netlist compiler -- lowers a postfix combinator program
+    # to an hdl netlist, then NORMALIZES it via the certified hdl_optimize fixpoint (function PROVEN
+    # preserved while gates drop). Closes the edge hdl_compiler -> hdl_optimize. Compiler-unreferenced -> LIBNATIVE.
+    "numera/hdl_compiler"
+    # APOTHEOSIS C.9 item 3: the container-honesty proof -- HANDLE-TABLE balance on a real container
+    # (list, 32-slot table): balanced new->drop is unbounded, a leak (new w/o drop) fills the table and
+    # the overflow is REFUSED (the documented slot-exhaustion mode caught). Consumes list + arena. -> LIBNATIVE.
+    "omnia/arena_slot_witness"
     # III -> Silicon HW3: the hardware Axiom Enforcement Unit -- III's hexad axioms as a parallel
     # combinational verifier (certified === the conjunction via hdl). Composes hdl + hexad_reach.
     # Compiler-unreferenced -> LIBNATIVE.

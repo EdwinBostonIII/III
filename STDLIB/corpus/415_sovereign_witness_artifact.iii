@@ -1,0 +1,89 @@
+/* 415_sovereign_witness_artifact.iii -- Sovereign Witness SW-0. The legacy_artifact bounded type +
+ * cad seal. Prove-the-negative across the four contract points:
+ *   - DETERMINISM: identical captured bytes -> identical content-address (the "freeze" is a function).
+ *   - TAMPER-EVIDENCE: a single flipped bit -> a different digest (cad domain/avalanche).
+ *   - BOUNDED INGEST: len > cap is REJECTED (0) -- the source is never over-read.
+ *   - OOB-REJECT: la_byte past the declared length / on a bad handle returns 0 (never over-reads).
+ *   - FAIL-CLOSED DIGEST: reading the digest of an UNSEALED artifact is rejected (no false zero digest).
+ * 99 = pass. */
+module corpus_415
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn la_ingest(arena: u64, kind: u32, src: u64, len: u64, cap: u64) -> u64 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_seal(h: u64) -> i32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_digest(h: u64, out32: u64) -> i32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_byte(h: u64, i: u64) -> u8 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_len(h: u64) -> u64 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_kind(h: u64) -> u32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_sealed(h: u64) -> u8 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn la_drop(h: u64) -> i32 from "legacy_artifact.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+var KAT415_A : [u8; 16]
+var KAT415_B : [u8; 16]
+var DIG1 : [u8; 32]
+var DIG2 : [u8; 32]
+var DIG3 : [u8; 32]
+
+fn main() -> u64 {
+    let unsealed_code : i32 = 0i32 - 2i32   /* LA_E_UNSEALED (hoisted out of the pre-brace position) */
+
+    let ar : u64 = arena_new(1u64 << 16u64)
+    if ar == 0u64 { return 10u64 }
+
+    /* A = bytes 0..15; B = A with one bit of byte 0 flipped. */
+    let mut i : u32 = 0u32
+    while i < 16u32 {
+        KAT415_A[i as u64] = (i & 0xFFu32) as u8
+        KAT415_B[i as u64] = (i & 0xFFu32) as u8
+        i = i + 1u32
+    }
+    KAT415_B[0u64] = KAT415_B[0u64] ^ 1u8
+
+    let ap : u64 = &KAT415_A as u64
+    let bp : u64 = &KAT415_B as u64
+
+    /* BOUNDED INGEST: len 16 > cap 8 -> rejected. */
+    if la_ingest(ar, 2u32, ap, 16u64, 8u64) != 0u64 { return 20u64 }
+
+    /* ingest A (kind TRACE=2). */
+    let h1 : u64 = la_ingest(ar, 2u32, ap, 16u64, 64u64)
+    if h1 == 0u64 { return 21u64 }
+    if la_kind(h1) != 2u32 { return 22u64 }
+    if la_len(h1) != 16u64 { return 23u64 }
+    if la_sealed(h1) != 0u8 { return 24u64 }
+
+    /* FAIL-CLOSED DIGEST: unsealed -> rejected. */
+    if la_digest(h1, &DIG1 as u64) != unsealed_code { return 25u64 }
+
+    la_seal(h1)
+    if la_sealed(h1) != 1u8 { return 26u64 }
+    if la_digest(h1, &DIG1 as u64) != 0i32 { return 27u64 }
+
+    /* DETERMINISM: re-ingest identical bytes -> identical digest. */
+    let h2 : u64 = la_ingest(ar, 2u32, ap, 16u64, 64u64)
+    if h2 == 0u64 { return 28u64 }
+    la_seal(h2)
+    la_digest(h2, &DIG2 as u64)
+    if cad_eq(&DIG1 as *u8, &DIG2 as *u8) != 1u8 { return 29u64 }
+
+    /* TAMPER-EVIDENCE: 1-bit flip -> different digest. */
+    let h3 : u64 = la_ingest(ar, 2u32, bp, 16u64, 64u64)
+    if h3 == 0u64 { return 30u64 }
+    la_seal(h3)
+    la_digest(h3, &DIG3 as u64)
+    if cad_eq(&DIG1 as *u8, &DIG3 as *u8) != 0u8 { return 31u64 }
+
+    /* OOB-REJECT accessor. */
+    if la_byte(h1, 5u64) != 5u8 { return 32u64 }
+    if la_byte(h1, 16u64) != 0u8 { return 33u64 }
+    if la_byte(h1, 999u64) != 0u8 { return 34u64 }
+    if la_byte(0u64, 0u64) != 0u8 { return 35u64 }
+
+    la_drop(h1)
+    la_drop(h2)
+    la_drop(h3)
+    arena_drop(ar)
+    return 99u64
+}

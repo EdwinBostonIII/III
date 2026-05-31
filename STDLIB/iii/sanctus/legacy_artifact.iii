@@ -1,0 +1,142 @@
+/* legacy_artifact.iii -- Sovereign Witness SW-0 (DOCS/III-SOVEREIGN-WITNESS-ARCHITECTURE.md).
+ *
+ * The bounded, content-addressed view over a CAPTURED legacy artifact (a memory dump / instruction
+ * trace / packet capture / register snapshot that some external probe produced -- III does NOT capture
+ * live state; it receives the capture). This is the "freeze": once sealed, the artifact is an immutable,
+ * hashed mathematical object (cad/sha256), no longer a running machine. Every accessor BOUNDS its index
+ * (the scan-5/6 OOB-reject discipline) and ingest FAILS CLOSED on over-capacity / OOM (the scan-7
+ * dropped-failure discipline). Composes the REAL organs cad (seal) + arena (bounded memory) only.
+ *
+ * This module owns NO algorithm beyond the bounded byte-store + the cad seal; the analysis/proof
+ * machinery (egraph/smt/proof_term) composes OVER the sealed artifact in later SW increments. */
+module legacy_artifact
+
+extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+
+const LA_OK        : i32 = 0i32
+const LA_E_BADID   : i32 = -1i32
+const LA_E_UNSEALED: i32 = -2i32
+
+const LA_MAX_SLOTS : u32 = 16u32
+const LA_CAD_SUITE : u32 = 0u32      /* CAD_SUITE_SHA256 */
+
+/* artifact kinds (the declared shape of the captured bytes). */
+const LA_KIND_DUMP  : u32 = 1u32
+const LA_KIND_TRACE : u32 = 2u32
+const LA_KIND_PCAP  : u32 = 3u32
+const LA_KIND_REGS  : u32 = 4u32
+
+var LA_LIVE   : [u8;  16]
+var LA_SEALED : [u8;  16]
+var LA_KIND   : [u32; 16]
+var LA_BASE   : [u64; 16]
+var LA_LEN    : [u64; 16]
+var LA_DIGEST : [u8;  512]   /* 16 slots * 32 bytes */
+
+fn la_slot_of(h: u64) -> u32 {
+    if h == 0u64 { return 0xFFFFFFFFu32 }
+    let s : u64 = h - 1u64
+    if s >= (LA_MAX_SLOTS as u64) { return 0xFFFFFFFFu32 }
+    let si : u32 = s as u32
+    if LA_LIVE[si] == 0u8 { return 0xFFFFFFFFu32 }
+    return si
+}
+
+/* INGEST: copy `len` bytes from src into a fresh arena-backed slot, declaring `kind`. FAILS CLOSED
+ * (returns 0) on over-capacity (len > cap -> never over-read the source), a full slot table, a null
+ * source, or arena OOM. Returns an artifact handle (1-based) on success. */
+fn la_ingest(arena: u64, kind: u32, src: u64, len: u64, cap: u64) -> u64 @export {
+    if len > cap { return 0u64 }
+    if src == 0u64 { return 0u64 }
+    let mut i : u32 = 0u32
+    let mut slot : u32 = 0xFFFFFFFFu32
+    while i < LA_MAX_SLOTS {
+        if LA_LIVE[i] == 0u8 {
+            if slot == 0xFFFFFFFFu32 { slot = i }
+        }
+        i = i + 1u32
+    }
+    if slot == 0xFFFFFFFFu32 { return 0u64 }
+    let base : u64 = arena_alloc1(arena, len)
+    if base == 0u64 { return 0u64 }
+    let dst : *u8 = base as *u8
+    let sp  : *u8 = src as *u8
+    let mut j : u64 = 0u64
+    while j < len {
+        dst[j] = sp[j]
+        j = j + 1u64
+    }
+    LA_LIVE[slot]   = 1u8
+    LA_SEALED[slot] = 0u8
+    LA_KIND[slot]   = kind
+    LA_BASE[slot]   = base
+    LA_LEN[slot]    = len
+    return (slot as u64) + 1u64
+}
+
+/* SEAL: content-address the artifact's bytes (sha256 via cad) into its 32-byte digest. After seal the
+ * artifact is the frozen, hashed object. Deterministic: identical bytes -> identical digest. */
+fn la_seal(h: u64) -> i32 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return LA_E_BADID }
+    let dp : u64 = (&LA_DIGEST as u64) + ((s as u64) * 32u64)
+    cad_oneshot(LA_CAD_SUITE, LA_BASE[s] as *u8, LA_LEN[s], dp as *u8)
+    LA_SEALED[s] = 1u8
+    return LA_OK
+}
+
+/* copy the 32-byte digest out. FAILS CLOSED if the artifact was never sealed (no false zero digest). */
+fn la_digest(h: u64, out32: u64) -> i32 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return LA_E_BADID }
+    if LA_SEALED[s] == 0u8 { return LA_E_UNSEALED }
+    let dp  : u64 = (&LA_DIGEST as u64) + ((s as u64) * 32u64)
+    let src : *u8 = dp as *u8
+    let dst : *u8 = out32 as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        dst[i] = src[i]
+        i = i + 1u64
+    }
+    return LA_OK
+}
+
+/* OOB-REJECT accessor: byte i of the artifact, or 0 if i is past the declared length / bad handle.
+ * The lift/analyze stages read ONLY through this -- they can never over-read the captured bytes. */
+fn la_byte(h: u64, i: u64) -> u8 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    if i >= LA_LEN[s] { return 0u8 }
+    let p : *u8 = LA_BASE[s] as *u8
+    return p[i]
+}
+
+fn la_len(h: u64) -> u64 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return 0u64 }
+    return LA_LEN[s]
+}
+
+fn la_kind(h: u64) -> u32 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return 0u32 }
+    return LA_KIND[s]
+}
+
+fn la_sealed(h: u64) -> u8 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return 0u8 }
+    return LA_SEALED[s]
+}
+
+fn la_drop(h: u64) -> i32 @export {
+    let s : u32 = la_slot_of(h)
+    if s == 0xFFFFFFFFu32 { return LA_E_BADID }
+    LA_LIVE[s]   = 0u8
+    LA_SEALED[s] = 0u8
+    LA_KIND[s]   = 0u32
+    LA_BASE[s]   = 0u64
+    LA_LEN[s]    = 0u64
+    return LA_OK
+}

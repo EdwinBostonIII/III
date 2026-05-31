@@ -807,7 +807,9 @@ fn rsa_pss_sign(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64,
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     if emLen == 0u64 { return 0i32 - 1i32 }
     let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
+    if m == 0u64 { return 0i32 - 1i32 }   /* scan-7: bigint pool/arena exhausted -> FAIL CLOSED; never write an all-zero signature and report success */
     let s : u64 = rsa_modexp(arena, m, d, n)
+    if s == 0u64 { return 0i32 - 1i32 }
     let k : u64 = modBits / 8u64
     rsa_i2osp(s, sig_out, k)
     return 0i32
@@ -820,7 +822,9 @@ fn rsa_pss_verify(arena: u64, n: u64, e: u64, modBits: u64, mHash: u64, sig: u64
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = (emBits + 7u64) / 8u64
     let s : u64 = rsa_os2ip(arena, sig, sigLen)
+    if s == 0u64 { return 0u8 }   /* scan-7: pool exhausted -> FAIL CLOSED (reject), never let an all-zero EM accidentally verify */
     let m : u64 = rsa_modexp(arena, s, e, n)
+    if m == 0u64 { return 0u8 }
     rsa_i2osp(m, &RSA_EM as u64, emLen)
     return rsa_pss_verify_em(mHash, emBits, sLen)
 }
@@ -836,9 +840,14 @@ fn iii_rsa_keygen_seed(modBits: u64, seed: u64, slen: u64, pk_out: u64, sk_out: 
     let k : u64 = modBits / 8u64
     let arena : u64 = arena_new(67108864u64)
     if arena == 0u64 { return 0i32 - 1i32 }
-    rsa_keygen(arena, modBits, seed, slen)
+    let kg : i32 = rsa_keygen(arena, modBits, seed, slen)
     let n : u64 = rsa_gen_n()
     let d : u64 = rsa_gen_d()
+    /* scan-7: keygen failure (prime gen / alloc) leaves n or d at the 0 sentinel; FAIL CLOSED rather
+     * than serialize an all-zero key pair and report success. Release the arena on every error path. */
+    if kg != 0i32 { bigint_drop_arena(arena) ; arena_drop(arena) ; return 0i32 - 1i32 }
+    if n == 0u64 { bigint_drop_arena(arena) ; arena_drop(arena) ; return 0i32 - 1i32 }
+    if d == 0u64 { bigint_drop_arena(arena) ; arena_drop(arena) ; return 0i32 - 1i32 }
     rsa_i2osp(n, pk_out, k)
     rsa_i2osp(n, sk_out, k)
     rsa_i2osp(d, sk_out + k, k)

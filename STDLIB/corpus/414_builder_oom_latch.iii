@@ -1,0 +1,58 @@
+/* 414_builder_oom_latch.iii -- scan-7 (dropped failure signal). builder_push_byte returns BLD_E_OOM
+ * when builder_grow's arena_alloc1 fails, but the json emitter (and any producer) pushed without
+ * checking, leaving a TRUNCATED buffer reported as a complete, successful serialization. The fix is a
+ * single-authority sticky latch: builder_grow sets BLD_ERR on the first OOM; builder_error() surfaces
+ * it; producers check it once. Prove-the-negative: drive a small-arena builder past its capacity so a
+ * grow OOMs -> builder_error() == 1 (the unfixed builder has no latch -> no such signal). An ample
+ * builder that never OOMs keeps the latch clear, proving no false trip. 99 = pass. */
+module corpus_414
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena_id: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_error(id: u64) -> u8 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_drop(id: u64) -> i32 from "builder.iii"
+
+fn main() -> u64 {
+    /* (1) SMALL arena: builder_new takes the initial buffer; subsequent grows exhaust the arena
+     * -> builder_grow OOMs mid-push -> the latch trips. */
+    let a1 : u64 = arena_new(256u64)
+    if a1 == 0u64 { return 10u64 }
+    let b1 : u64 = builder_new(a1, 64u64)
+    if b1 == 0u64 { return 11u64 }
+    if builder_error(b1) != 0u8 { return 12u64 }   /* fresh builder: latch clear */
+    let mut i : u32 = 0u32
+    while i < 4096u32 {
+        builder_push_byte(b1, 65u32)
+        i = i + 1u32
+    }
+    if builder_error(b1) != 1u8 { return 13u64 }   /* an OOM occurred -> sticky latch set */
+    builder_drop(b1)
+    arena_drop(a1)
+
+    /* (2) AMPLE arena: every grow succeeds -> latch stays clear (no false trip). */
+    let a2 : u64 = arena_new(1u64 << 20u64)
+    if a2 == 0u64 { return 20u64 }
+    let b2 : u64 = builder_new(a2, 64u64)
+    if b2 == 0u64 { return 21u64 }
+    let mut j : u32 = 0u32
+    while j < 4096u32 {
+        builder_push_byte(b2, 66u32)
+        j = j + 1u32
+    }
+    if builder_error(b2) != 0u8 { return 22u64 }   /* grew cleanly -> latch clear */
+    builder_drop(b2)
+    arena_drop(a2)
+
+    /* (3) latch is per-slot and reset on reuse: a fresh builder after the latched one is clear. */
+    let a3 : u64 = arena_new(1u64 << 16u64)
+    if a3 == 0u64 { return 30u64 }
+    let b3 : u64 = builder_new(a3, 64u64)
+    if b3 == 0u64 { return 31u64 }
+    if builder_error(b3) != 0u8 { return 32u64 }
+    builder_drop(b3)
+    arena_drop(a3)
+
+    return 99u64
+}

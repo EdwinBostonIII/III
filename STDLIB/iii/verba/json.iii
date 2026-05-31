@@ -43,6 +43,7 @@ module verba_json
 extern @abi(c-msvc-x64) fn arena_alloc1(arena_id: u64, n: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "builder.iii"
 extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_error(id: u64) -> u8 from "builder.iii"
 
 /* --- Value kinds --- */
 const JSON_KIND_NULL  : u8 = 1u8
@@ -750,7 +751,10 @@ fn json_object_get(id: u64, key_base: u64, key_len: u64) -> u64 @export {
 /* --- Emitter: serialize a value tree back to a builder --- */
 
 /* Forward declaration: emit is recursive. */
-fn json_emit(builder_id: u64, value_id: u64) -> i32 @export {
+/* dispatch by node kind. The leaf emitters call builder_push_byte without checking each return
+ * (an OOM there leaves a TRUNCATED buffer); the public json_emit wrapper below surfaces that via the
+ * builder's sticky error latch -- one check covers the whole emitter family AND every recursion level. */
+fn json_emit_dispatch(builder_id: u64, value_id: u64) -> i32 {
     let s : u32 = json_slot_of(value_id)
     if s == 0xFFFFFFFFu32 { return JSON_E_BADID }
     let k : u8 = JSON_KIND[s]
@@ -762,6 +766,17 @@ fn json_emit(builder_id: u64, value_id: u64) -> i32 @export {
     if k == JSON_KIND_ARR   { return json_emit_array(builder_id, value_id) }
     if k == JSON_KIND_OBJ   { return json_emit_object(builder_id, value_id) }
     return JSON_E_TYPE
+}
+
+fn json_emit(builder_id: u64, value_id: u64) -> i32 @export {
+    let rc : i32 = json_emit_dispatch(builder_id, value_id)
+    if rc != JSON_OK { return rc }
+    /* scan-7: a leaf emitter dropped a builder OOM and still returned JSON_OK -> surface the
+     * truncation so a partial buffer is never reported as a complete serialization. Sticky +
+     * checked at every recursion level (array/object children call json_emit), so the first OOM
+     * propagates all the way up as JSON_E_OOM. */
+    if builder_error(builder_id) != 0u8 { return JSON_E_OOM }
+    return JSON_OK
 }
 
 fn json_emit_null(builder_id: u64) -> i32 {

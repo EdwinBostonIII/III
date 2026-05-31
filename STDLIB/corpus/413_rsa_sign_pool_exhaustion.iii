@@ -1,0 +1,47 @@
+/* 413_rsa_sign_pool_exhaustion.iii -- scan-7 (dropped failure signal). bigint_new returns the 0
+ * (BIGINT_INVALID) handle when the 64-slot bigint pool is exhausted. rsa_pss_sign used rsa_os2ip's
+ * result UNCHECKED: on exhaustion m=0 -> rsa_modexp(0,..)=0 -> rsa_i2osp writes an ALL-ZERO signature
+ * -> return 0i32 (SUCCESS). A crypto signer silently emitting a zero signature as success is fail-OPEN.
+ * The fix checks the handle and FAILS CLOSED (returns -1). Prove-the-negative: exhaust the pool (64
+ * undropped bigint_new), then sign -> the fixed code returns -1; the unfixed code returns 0. 99 = pass.
+ * (rsa_pss_encode is bigint-free, so the exhausted pool is hit at rsa_os2ip -> exercises the m==0 guard;
+ * n=d=0 dummy: the guard fires before the modexp uses them.) */
+module corpus_413
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena_id: u64, cap_limbs: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn rsa_pss_sign(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64, sig_out: u64) -> i32 from "rsa.iii"
+
+var KAT413_MHASH : [u8; 32]
+var KAT413_SIG   : [u8; 256]
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 24u64)
+    if a == 0u64 { return 10u64 }
+
+    /* dummy 32-byte message hash (content irrelevant: the guard fires before any modular math). */
+    let mut z : u32 = 0u32
+    while z < 32u32 {
+        KAT413_MHASH[z as u64] = (z & 0xFFu32) as u8
+        z = z + 1u32
+    }
+
+    /* EXHAUST the 64-slot global bigint pool -- 64 undropped allocations leave 0 free slots. */
+    let mut i : u32 = 0u32
+    while i < 64u32 {
+        bigint_new(a, 4u64)
+        i = i + 1u32
+    }
+
+    /* sign now hits the exhausted pool at rsa_os2ip -> m=0. FIXED: -1 (fail closed). UNFIXED: writes
+     * an all-zero signature and returns 0 (success). */
+    let mhp : u64 = &KAT413_MHASH as u64
+    let sgp : u64 = &KAT413_SIG as u64
+    let want : i32 = 0i32 - 1i32
+    let rc : i32 = rsa_pss_sign(a, 0u64, 0u64, 2048u64, mhp, 0u64, 0u64, sgp)
+    if rc != want { return 20u64 }
+
+    arena_drop(a)
+    return 99u64
+}

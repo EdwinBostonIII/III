@@ -32,6 +32,7 @@ var BLD_CAP     : [u64; 32]
 var BLD_LEN     : [u64; 32]
 var BLD_LIVE    : [u8;  32]
 var BLD_SEALED  : [u8;  32]
+var BLD_ERR     : [u8;  32]   /* sticky failure latch: set on the FIRST builder_grow OOM, surfaced by builder_error() (scan-7) */
 
 fn builder_new(arena_id: u64, hint: u64) -> u64 @export {
     let mut i : u32 = 0u32
@@ -53,6 +54,7 @@ fn builder_new(arena_id: u64, hint: u64) -> u64 @export {
     BLD_LEN[slot]    = 0u64
     BLD_LIVE[slot]   = 1u8
     BLD_SEALED[slot] = 0u8
+    BLD_ERR[slot]    = 0u8   /* slots are reused -> clear the latch for the new builder */
     return (slot as u64) + 1u64
 }
 
@@ -78,7 +80,7 @@ fn builder_grow(slot: u32, add: u64) -> i32 {
     while new_cap < need { new_cap = new_cap * 2u64 }
     let arena_id : u64 = BLD_ARENA[slot]
     let new_base : u64 = arena_alloc1(arena_id, new_cap)
-    if new_base == 0u64 { return BLD_E_OOM }
+    if new_base == 0u64 { BLD_ERR[slot] = 1u8 ; return BLD_E_OOM }   /* scan-7: latch the OOM so producers can't report truncated output as success */
     /* Copy existing bytes. */
     let old_base : u64 = BLD_BASE[slot]
     if cur_len > 0u64 {
@@ -158,6 +160,15 @@ fn builder_capacity(id: u64) -> u64 @export {
     return BLD_CAP[s]
 }
 
+/* scan-7: sticky failure query. 1 if any builder_grow OOM occurred during this builder's life
+ * (or the id is invalid) -> the accumulated bytes are TRUNCATED and must not be treated as
+ * complete. Every producer (json emitter, ...) checks this once instead of every push. */
+fn builder_error(id: u64) -> u8 @export {
+    let s : u32 = builder_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return 1u8 }
+    return BLD_ERR[s]
+}
+
 /* Seal the builder: marks it immutable.  Returns base pointer; len
  * available via builder_len.  After seal, further pushes return
  * BLD_E_SEALED. */
@@ -177,5 +188,6 @@ fn builder_drop(id: u64) -> i32 @export {
     BLD_CAP[s]    = 0u64
     BLD_LEN[s]    = 0u64
     BLD_ARENA[s]  = 0u64
+    BLD_ERR[s]    = 0u8
     return BLD_OK
 }

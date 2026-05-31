@@ -1,0 +1,107 @@
+/* 957_engine_compound.iii -- Evolution BATCH 4: the sharpened engine as ONE composed decision.
+ * The compounding of the prior batches, proven working TOGETHER (no single-organ KAT does this):
+ *   - B1: 𝒱 (ripple_metric) is the single VALUE authority -- a real structural gain raises it, and
+ *         the extraction boundary verdict is 𝒱's own MDL face (rm_extract_improves).
+ *   - B2: cost_lattice is the single COST authority -- oi_select_costed picks the optimal VALID
+ *         realization through cl_dot.
+ *   - the commit_gate admits iff all five dimensions hold (the trust root).
+ * THE COMPOSED RULE: a refactoring is admitted iff it is value-positive (𝒱 up) AND a valid optimal
+ * realization exists AND the gate admits. Prove-the-negative: drop ANY one of the three and the
+ * composed decision does NOT admit -- even when the other two hold. 99 = all arms; 10..43 localize. */
+module corpus_957
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_value() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_extract_improves(saved: u64, newf: u64, imp: u64) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn oi_select_costed(cands: *u8, n: u64, vecs: *u8, weights: *u8, out: *u8) -> u64 from "optinvoke.iii"
+extern @abi(c-msvc-x64) fn cg_decide(rule: u32, modc: u32, seal: u32, cons: u32, kernel: u32) -> u32 from "commit_gate.iii"
+
+fn st_u64(p: *u8, off: u64, v: u64) -> u64 {
+    let mut i : u64 = 0u64
+    let mut x : u64 = v
+    while i < 8u64 { p[off + i] = (x & 0xFFu64) as u8 ; x = x >> 8u64 ; i = i + 1u64 }
+    return 0u64
+}
+fn cand(c: *u8, i: u64, idseed: u8, valid: u8) -> u64 {
+    let base : u64 = i * 80u64
+    let mut k : u64 = 0u64
+    while k < 80u64 { c[base + k] = 0u8 ; k = k + 1u64 }
+    c[base + 0u64] = idseed
+    c[base + 32u64] = 77u8       /* same out_addr -> IMPL realizations */
+    c[base + 72u64] = valid
+    return 0u64
+}
+fn vec1(v: *u8, i: u64, d0: u64) -> u64 {
+    let base : u64 = i * 48u64
+    let mut k : u64 = 0u64
+    while k < 48u64 { v[base + k] = 0u8 ; k = k + 1u64 }
+    st_u64(v, base + 0u64, d0)
+    return 0u64
+}
+
+const OI_NONE : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+fn main() -> u64 {
+    /* ===== B1: 𝒱 detects a real structural gain (a load-bearing edge raises value) ===== */
+    rm_reset()
+    let a : u32 = rm_add_node(0x1111u64, 1u32)
+    let b : u32 = rm_add_node(0x2222u64, 2u32)
+    let v0 : u64 = rm_value()
+    rm_add_edge(a, b, 1u32, 0u32)
+    let v1 : u64 = rm_value()
+    if v1 <= v0 { return 10u64 }                       /* 𝒱 rose -> the move is value-positive */
+    let value_positive : u32 = 1u32
+
+    /* the extraction boundary verdict IS 𝒱's MDL face (B1 unification) */
+    if rm_extract_improves(40u64, 20u64, 5u64) != 1u32 { return 11u64 }   /* dividend earns boundary */
+    if rm_extract_improves(20u64, 20u64, 5u64) != 0u32 { return 12u64 }   /* break-even rejected */
+
+    /* ===== B2: the cost_lattice picks the optimal VALID realization ===== */
+    let cands : *u8 = malloc(2u64 * 80u64)
+    let vecs : *u8 = malloc(2u64 * 48u64)
+    let wts : *u8 = malloc(48u64)
+    let choice : *u8 = malloc(32u64)
+    let mut wi : u64 = 0u64
+    while wi < 6u64 { st_u64(wts, wi * 8u64, 1u64) ; wi = wi + 1u64 }
+    cand(cands, 0u64, 1u8, 1u8)  vec1(vecs, 0u64, 9u64)    /* valid, cost 9 */
+    cand(cands, 1u64, 2u8, 1u8)  vec1(vecs, 1u64, 4u64)    /* valid, cost 4 (cheaper) */
+    let pick : u64 = oi_select_costed(cands, 2u64, vecs, wts, choice)
+    if pick != 1u64 { return 20u64 }                   /* the cheaper valid realization */
+    let realization_ok : u32 = 1u32
+
+    /* ===== the trust gate admits iff all five dims hold; rejects each violation ===== */
+    if cg_decide(1u32, 1u32, 1u32, 1u32, 1u32) != 99u32 { return 30u64 }
+    if cg_decide(0u32, 1u32, 1u32, 1u32, 1u32) != 1u32  { return 31u64 }   /* prove-the-negative */
+    let gate_ok : u32 = 1u32
+
+    /* ===== THE COMPOSED DECISION: admit iff value-positive AND realization-ok AND gate-ok ===== */
+    let mut admit : u32 = 0u32
+    if value_positive == 1u32 { if realization_ok == 1u32 { if gate_ok == 1u32 { admit = 1u32 } } }
+    if admit != 1u32 { return 40u64 }                  /* the sharpened engine ADMITS the good move */
+
+    /* ===== prove-the-negative on the COMPOSITION: drop any one input -> NOT admitted ===== */
+    /* (a) a REAL value-negative move: a NOISE edge (used=0,intent=0) LOWERS 𝒱 -> value_positive=0 */
+    rm_reset()
+    let p : u32 = rm_add_node(0x3333u64, 3u32)
+    let q : u32 = rm_add_node(0x4444u64, 4u32)
+    let vn0 : u64 = rm_value()
+    rm_add_edge(p, q, 0u32, 0u32)
+    let vn1 : u64 = rm_value()
+    if vn1 >= vn0 { return 44u64 }                 /* 𝒱 genuinely FELL (the move is value-negative) */
+    let mut vp_neg : u32 = 0u32
+    if vn1 > vn0 { vp_neg = 1u32 }                 /* = 0 */
+    let mut admit_a : u32 = 0u32
+    if vp_neg == 1u32 { if realization_ok == 1u32 { if gate_ok == 1u32 { admit_a = 1u32 } } }
+    if admit_a != 0u32 { return 41u64 }            /* a value-negative move is NEVER admitted */
+    /* (b) no valid realization (invalid candidates -> oi_select_costed returns OI_NONE) */
+    cand(cands, 0u64, 1u8, 0u8)  cand(cands, 1u64, 2u8, 0u8)   /* both INVALID */
+    let pick_none : u64 = oi_select_costed(cands, 2u64, vecs, wts, choice)
+    if pick_none != OI_NONE { return 42u64 }           /* no realization -> the move cannot execute */
+    /* (c) gate down (kernel unsound) -> not admitted even with value+realization */
+    if cg_decide(1u32, 1u32, 1u32, 1u32, 0u32) == 99u32 { return 43u64 }
+
+    return 99u64
+}

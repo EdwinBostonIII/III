@@ -688,6 +688,8 @@ declare -A EXPECTED=(
     [995_mldsa_siglen_guard]=99
     [996_slhdsa_siglen_guard]=99
     [997_zk_air_general]=99
+    [998_zk_air_merkle]=99
+    [999_zk_air_stark]=99
 )
 
 PASS=0
@@ -859,11 +861,25 @@ for src in "$CORPUS_DIR"/[0-9][0-9]_*.iii "$CORPUS_DIR"/[0-9][0-9][0-9]_*.iii; d
             ;;
     esac
 
-    gcc "$obj" -Wl,--whole-archive "${SIDE_EFFECT_OBJS[@]}" -Wl,--no-whole-archive "$LIB_ARCHIVE" \
-        -lws2_32 -lkernel32 -o "$exe" >>"$log" 2>&1
-    rc=$?
+    # OneDrive/Defender transient-lock hardening (DOCS/III-DISPOSITION-EXECUTION.md): the
+    # freshly-synced $LIB_ARCHIVE can be momentarily READ-locked -> ld reports spurious
+    # "undefined reference" against a partially-visible archive (the 817 flake); the
+    # OneDrive-watched $exe can be WRITE-locked -> `ld returned 1` with no diagnostic. BOTH
+    # are TRANSIENT. rm the output (fresh inode) + retry lets the lock release. A GENUINE
+    # link error is deterministic -> it still fails every attempt, so this never masks a
+    # real defect (it only removes spurious gate failures that would falsely REVERT a good
+    # ripple_apply edit).
+    rc=1
+    for _la in 1 2 3 4 5; do
+        rm -f "$exe"
+        gcc "$obj" -Wl,--whole-archive "${SIDE_EFFECT_OBJS[@]}" -Wl,--no-whole-archive "$LIB_ARCHIVE" \
+            -lws2_32 -lkernel32 -o "$exe" >>"$log" 2>&1
+        rc=$?
+        [[ $rc -eq 0 && -f "$exe" ]] && break
+        sleep 1
+    done
     if [[ $rc -ne 0 ]]; then
-        RESULTS+=("FAIL  $base : link rc=$rc")
+        RESULTS+=("FAIL  $base : link rc=$rc (after 5 lock-retries)")
         FAIL=$((FAIL+1)); continue
     fi
 

@@ -872,7 +872,18 @@ for mod in "${MODULES[@]}"; do
         FAIL=$((FAIL+1)); FAILED+=("$mod (missing)")
         continue
     fi
-    if "$IIIS" "$src" --compile-only --out "$obj" 2>"$BUILD_DIR/${name}.build.log"; then
+    # OneDrive/Defender transient-lock hardening (DOCS/III-DISPOSITION-EXECUTION.md): the
+    # $obj write can be momentarily blocked by sync/AV. rm (fresh inode) + retry; a genuine
+    # compile error is deterministic and still fails every attempt (the .build.log shows the
+    # real cause), so this never turns a real failure green -- it only stops a transient
+    # lock from spuriously failing GATE1 and REVERTing a good ripple_apply edit.
+    _crc=1
+    for _ca in 1 2 3; do
+        rm -f "$obj"
+        if "$IIIS" "$src" --compile-only --out "$obj" 2>"$BUILD_DIR/${name}.build.log"; then _crc=0; break; fi
+        sleep 1
+    done
+    if [[ $_crc -eq 0 ]]; then
         echo "[build_stdlib] OK   $mod -> $obj"
         PASS=$((PASS+1))
     else
@@ -967,7 +978,6 @@ if [[ $FAIL -eq 0 ]]; then
     # (the cause of run_xii_corpus's 93/93 link failures: a leftover omnia_sid.iii.o
     # colliding with omnia_crystal_deps.iii.o on L_SID_DELTA_DOMAIN etc.). Removing the
     # .a first makes every build contain EXACTLY the current MODULES' objects.
-    rm -f "$BUILD_DIR/libiii_native.a"
     # -D: deterministic mode (zero timestamps/uids/gids in archive headers).
     # The OBJS list outgrew the single-command ARG_MAX -- "ar: Argument list too long"
     # once the module count crossed ~375 (charter + nous additions).  ar's @response-file
@@ -976,8 +986,18 @@ if [[ $FAIL -eq 0 ]]; then
     # space-safe for the "Edwin Boston" path), batched under ARG_MAX: q=quick-append (c
     # creates the archive on the first batch); a final `s` builds the deterministic index
     # once.  Member order = OBJS order, so the archive stays deterministic.
-    printf '%s\0' "${OBJS[@]}" | xargs -0 "$AR" qcD "$BUILD_DIR/libiii_native.a"
-    "$AR" sD "$BUILD_DIR/libiii_native.a"
+    # OneDrive/Defender transient-lock hardening (DOCS/III-DISPOSITION-EXECUTION.md): a .o
+    # input can be momentarily read-locked during sync -> ar yields an incomplete archive
+    # (-> spurious run_corpus "undefined reference" link flakes, the 817 case). Rebuild fresh
+    # until the archive exists with a valid symbol index; deterministic content, so a genuine
+    # bad input still fails every attempt (never masks a real GATE1 failure).
+    for _aa in 1 2 3; do
+        rm -f "$BUILD_DIR/libiii_native.a"
+        printf '%s\0' "${OBJS[@]}" | xargs -0 "$AR" qcD "$BUILD_DIR/libiii_native.a"
+        "$AR" sD "$BUILD_DIR/libiii_native.a"
+        { [[ -s "$BUILD_DIR/libiii_native.a" ]] && "$AR" t "$BUILD_DIR/libiii_native.a" >/dev/null 2>&1; } && break
+        sleep 1
+    done
     echo "[build_stdlib] aggregated -> $BUILD_DIR/libiii_native.a"
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "$BUILD_DIR/libiii_native.a" > "$BUILD_DIR/libiii_native.a.mhash"

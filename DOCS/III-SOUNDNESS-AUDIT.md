@@ -159,13 +159,25 @@ ADMITTED); `dispose` checks its temp-add and refuses cleanly. **Forcing regressi
 - **`affine_audit` (AA-7)**: fail-closed BY EXPLICIT DESIGN — "a false PROVEN is forbidden; default on
   ANY uncertainty to ABSTAIN." The conservative fail-safe, by construction.
 
-## CONVERGENCE
+- **`commit_gate`**: `cg_decide` is a 5-way fail-closed conjunction (ADMIT only if all dimensions = 1);
+  `cg_cert_action` certifies only on φ-admit ∧ strict-value-gain ∧ proof_ok. No internal cap to mask.
+- **`capability` (M8)**: `cap_verify_rights` grants only after slot-valid ∧ not-revoked ∧ no-revoked-
+  ancestor ∧ `(actual & required) == required` — and its internal **parent-chain-walk cap returns DENY**
+  (`steps > CAP_MAX_INSTANCES → 0`), the cap-guard done right.
+- **federation QC (M19)**: `386_fed_qc_gate` — a sub-quorum / tampered signature → `FED_SEAL_E_QC`,
+  nothing anchored (memory-verified).
 
-The 3 soundness holes were the fail-**OPEN** exceptions — verdict gates that, on an internal cap,
-returned the SUCCESS-shaped value. **Every other verdict surface swept (10 positives) is fail-CLOSED** —
-uncertainty / cap / table-full → abstain / refuse / error. The system's general discipline is already
-the correct fail-safe; the audit found + fixed the three exceptions and confirmed the discipline holds
-everywhere else. Remaining (genuinely lower-yield): defensive `BIGINT_INVALID` checks on the bounded,
+## CONVERGENCE (the verdict-surface sweep is EXHAUSTIVE)
+
+Every verdict/gate surface in III has been swept: XII (termination / joinability / critpair-enum /
+admission), the nous search keystone, the e-graph, `reversible`, `cad`, the katabasis gate, the
+`commit_gate` disposer, the proof kernel, the type-judge, `affine_audit`, `capability`, the federation
+QC gate, and `bigint`/NTT. **Result: 3 fail-OPEN holes (all fixed, each forcing-KAT-verified) + 12
+fail-CLOSED positives.** The 3 holes were the only exceptions — verdict gates that, on an internal cap,
+returned the SUCCESS-shaped value. Everywhere else the discipline is already the correct fail-safe
+(uncertainty / cap / table-full → abstain / refuse / deny / error); the `capability` gate clinches it —
+even an *internal* cap (the parent-chain bound) returns DENY. The audit found + fixed the exceptions and
+proved the discipline holds across the whole verdict surface. Remaining (genuinely lower-yield): defensive `BIGINT_INVALID` checks on the bounded,
 vector-green crypto `bigint_new` callers (RSA/ed25519) — production robustness under exhaustion, no
 confirmed soundness impact.
 

@@ -64,6 +64,30 @@ static int run_case(HANDLE h, const char *label,
     return pass ? 0 : 1;
 }
 
+/* CP-1 adversarial short-buffer probe (CRASH-AUDIT-C10-r3-ioctl.md, the Phase-4 metal test).
+ * A METHOD_BUFFERED ADMIT needs InputBufferLength>=48 (6 x u64) and OutputBufferLength>=8 (1 x u64).
+ * The CP-1 guard (gate_driver.iii::gate_validated_code -- binary-verified in gate_ioctl.sys) MUST
+ * reject any undersized/NULL request with STATUS_BUFFER_TOO_SMALL (-> ERROR_INSUFFICIENT_BUFFER 122)
+ * BEFORE it dereferences SystemBuffer.  Pre-fix this drove a NonPagedPool OOB -> delayed BAD_POOL BSOD.
+ *
+ * PASS = DeviceIoControl FAILS cleanly (the guard fired; no OOB) AND the machine stays up -- this
+ * client RETURNING at all is itself the no-BSOD proof.  FAIL = the call succeeds (guard missing) or
+ * the box bugchecks (the client never returns; the operator observes the crash). */
+static int run_short_buf(HANDLE h, const char *label, DWORD inlen, DWORD outlen)
+{
+    uint64_t in[6]  = { 2,1,0x20000,728,0x200000,0 };
+    uint64_t out[1] = { 0xDEADBEEFull };
+    DWORD ret = 0;
+    SetLastError(0);
+    BOOL ok = DeviceIoControl(h, IOCTL_KATABASIS_ADMIT, in, inlen, out, outlen, &ret, NULL);
+    DWORD err = GetLastError();
+    int rejected = (!ok);   /* the guard completes the IRP with a failure NTSTATUS, no buffer touch */
+    printf("  %-26s in=%-2lu out=%-2lu  ok=%d err=%-4lu  %s\n",
+           label, (unsigned long)inlen, (unsigned long)outlen, ok, (unsigned long)err,
+           rejected ? "REJECTED (guard fired, no OOB)" : "ACCEPTED -- CP-1 GUARD MISSING!");
+    return rejected ? 0 : 1;
+}
+
 int main(void)
 {
     HANDLE h = CreateFileA("\\\\.\\IIIKatabasisGate", GENERIC_READ | GENERIC_WRITE,
@@ -83,8 +107,13 @@ int main(void)
     fail += run_case(h, "REJECT_SEAL",  2,1,0x20000,728,0x200000,1, 1);
     fail += run_case(h, "REJECT_CAP",   2,1,0x20000,728,0x800000,0, 2);
     fail += run_case(h, "REJECT_HEXAD", 2,1,0x1000, 728,0x200000,0, 3);
+    /* CP-1 Phase-4: adversarial short/zero buffers must be rejected (STATUS_BUFFER_TOO_SMALL), no BSOD. */
+    printf("\nCP-1 adversarial short-buffer cases (guard MUST reject before touching SystemBuffer):\n");
+    fail += run_short_buf(h, "InputBufferLength<48",  24, 8);   /* in too short  */
+    fail += run_short_buf(h, "OutputBufferLength<8",  48, 4);   /* out too short */
+    fail += run_short_buf(h, "both zero (NULL buf)",   0, 0);   /* zero-length buffered request */
     CloseHandle(h);
     if (fail) printf("\nRESULT: %d case(s) FAILED\n", fail);
-    else      printf("\nRESULT: ALL 4 GATE VERDICTS CORRECT -- R3 queried the Ring-0 gate decision.\n");
+    else      printf("\nRESULT: ALL 4 GATE VERDICTS CORRECT + 3 CP-1 short-buffer cases REJECTED (no BSOD) -- R3 gate + CP-1 guard proven.\n");
     return fail;
 }

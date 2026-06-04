@@ -39,6 +39,10 @@ const HO_OR  : u32 = 6u32
 
 /* the function the netlist computes: pack its output over all 2^n input assignments into a u64. */
 fn hdl_opt_truth_table(out: u32, n: u32) -> u64 @export {
+    /* A u64 truth table holds exactly 2^6 = 64 rows.  For n >= 7 the row count is 128+ and the
+     * per-row `1u64 << r` mask (r up to 127) WRAPS on x86 (shift count & 63), silently corrupting
+     * the function fingerprint.  Reject n > 6: 0u64 is the all-zero (falsey) table, a safe sentinel. */
+    if n > 6u32 { return 0u64 }
     let nn : u64 = n as u64
     let rows : u64 = 1u64 << nn          /* shift operands kept as plain locals (iiis paren-shift quirk) */
     let mut tt : u64 = 0u64

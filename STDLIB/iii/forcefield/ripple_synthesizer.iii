@@ -1,0 +1,190 @@
+/* STDLIB/iii/forcefield/ripple_synthesizer.iii -- the single self-optimization DRIVER (apotheosis §C.7).
+ *
+ * The Ripple Calculus's five subroutines (metric/search/loop/cut/extract) + the unified decider
+ * (proof_ripple_unified) are all built; §C.7's apex is ONE driver over a canonical move-IR so the
+ * self-modifier has a single propose->prove->apply theorem per move.  This module is that driver,
+ * folding §C.7's three remaining pieces:
+ *   - ripple_term  : the move-IR -- a move is (kind, m0..m3), exactly the proof_ripple_decision shape
+ *                    (MERGE=0 / CUT=1 / EXTRACT=2);
+ *   - ripple_synthesizer : the single entry -- propose -> value(J) -> select(rs_strict_best argmax,
+ *                    s*) -> prove(proof_ripple_decision) -> apply-or-abstain;
+ *   - ripple_checkpoint : the SEALED outcome -- on apply, the move CRYSTAL (pru_move_crystal = cad of
+ *                    the move) is the re-checkable record of the pass (the new capability: a sealed
+ *                    self-optimization outcome).
+ *
+ * It COMPOSES the EXISTING certified organs (no new proof): rs_strict_best (the certified s0-in-M
+ * abstention), proof_ripple_decision (the kernel-first five-dimension decider), pru_move_crystal (the
+ * seal).  HONEST LOCALITY (the ceiling): frontier-local argmax over proven moves; certified ABSTENTION
+ * when nothing strictly beats the incumbent (s0 in M) -- never a global-optimum claim.  KERNEL-FIRST:
+ * a down prover (kernel_ok!=1) ABSTAINS on every move (the loop self-edits nothing while blind).
+ *
+ * Hexad: kind_sensitivity (ripple admission).  Ring: R0.  K: 1.00.  NIH: ripple_search + ripple_metric
+ * + proof_ripple_unified + cad only.  Determinism: integer-only; module-scope arrays (Trap 7);
+ * single-line fns; ==/!= compares; byte-by-byte seal copy.  Compiler-UNREFERENCED -> LIBNATIVE. */
+module forcefield_ripple_synthesizer
+
+extern @abi(c-msvc-x64) fn proof_ripple_decision(kind: u32, m0: u32, m1: u32, m2: u32, m3: u32, proof_ok: u32, kernel_ok: u32) -> u32 from "proof_ripple_unified.iii"
+extern @abi(c-msvc-x64) fn pru_move_crystal(kind: u32, m0: u32, m1: u32, m2: u32, m3: u32, out32: u64) -> i32 from "proof_ripple_unified.iii"
+extern @abi(c-msvc-x64) fn rs_reset() -> u64 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_set_incumbent(v: u64) -> u64 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_add(v: u64) -> u32 from "ripple_search.iii"
+extern @abi(c-msvc-x64) fn rs_strict_best() -> u32 from "ripple_search.iii"
+/* KAT-only: a real metric graph (the producer of moves + 𝒱) */
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_edge(src: u32, dst: u32, used: u32, intent: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_is_zero(a: *u8) -> u8 from "cad.iii"
+
+const RSY_OK        : i32 = 0i32
+const RSY_E_NULL    : i32 = -1i32
+const RSY_ADMIT     : u32 = 99u32          /* a strictly-better PROVEN move was applied (move sealed) */
+const RSY_ABSTAIN   : u32 = 98u32          /* s0 in M, OR proof failed, OR kernel down -> no self-edit */
+const RSY_NONE      : u32 = 0xFFFFFFFFu32  /* == rs RS_NONE */
+const RSY_PRU_ADMIT : u32 = 99u32          /* == pru PRU_ADMIT */
+const RSY_CAP       : u32 = 256u32
+const RSY_KIND_MERGE   : u32 = 0u32
+const RSY_KIND_CUT     : u32 = 1u32
+const RSY_KIND_EXTRACT : u32 = 2u32
+
+/* the move-IR table (ripple_term): a candidate move is (kind, m0..m3), indexed in [0,RSY_N). */
+var RSY_KIND : [u32; 256]
+var RSY_M0   : [u32; 256]
+var RSY_M1   : [u32; 256]
+var RSY_M2   : [u32; 256]
+var RSY_M3   : [u32; 256]
+var RSY_N    : [u32; 1]
+/* the chosen move + the sealed checkpoint (ripple_checkpoint) + the last verdict */
+var RSY_CHOSEN  : [u32; 1]
+var RSY_CKPT    : [u8; 32]
+var RSY_VERDICT : [u32; 1]
+/* KAT scratch */
+var RSY_CK1 : [u8; 32]
+var RSY_CK2 : [u8; 32]
+
+fn rsy_seal_null() -> i32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { RSY_CKPT[i] = 0u8  i = i + 1u64 }
+    return RSY_OK
+}
+
+fn rsy_reset() -> i32 @export {
+    rs_reset()
+    RSY_N[0u32] = 0u32
+    RSY_CHOSEN[0u32] = RSY_NONE
+    RSY_VERDICT[0u32] = RSY_ABSTAIN
+    rsy_seal_null()
+    return RSY_OK
+}
+
+fn rsy_set_incumbent(v: u64) -> i32 @export {
+    rs_set_incumbent(v)
+    return RSY_OK
+}
+
+/* Propose a candidate move with its 𝒱 value (the producer supplies 𝒱 = rm_value over the frontier). */
+fn rsy_propose(kind: u32, m0: u32, m1: u32, m2: u32, m3: u32, value: u64) -> u32 @export {
+    let i : u32 = RSY_N[0u32]
+    if i >= RSY_CAP { return RSY_NONE }
+    let s : u64 = (i as u64) & 0xFFFFFFFFu64
+    RSY_KIND[s] = kind
+    RSY_M0[s] = m0
+    RSY_M1[s] = m1
+    RSY_M2[s] = m2
+    RSY_M3[s] = m3
+    rs_add(value)
+    RSY_N[0u32] = i + 1u32
+    return i
+}
+
+/* THE DRIVER.  select(rs_strict_best = the argmax s* IF it strictly beats the incumbent, else the
+ * certified s0-in-M abstention) -> prove(proof_ripple_decision, kernel-first) -> apply (seal the move
+ * crystal) or abstain.  Returns RSY_ADMIT (applied + RSY_CKPT sealed) or RSY_ABSTAIN. */
+fn rsy_run(proof_ok: u32, kernel_ok: u32) -> u32 @export {
+    RSY_CHOSEN[0u32] = RSY_NONE
+    let best : u32 = rs_strict_best()
+    if best == RSY_NONE { rsy_seal_null()  RSY_VERDICT[0u32] = RSY_ABSTAIN  return RSY_ABSTAIN }   /* s0 in M */
+    let s : u64 = (best as u64) & 0xFFFFFFFFu64
+    let v : u32 = proof_ripple_decision(RSY_KIND[s], RSY_M0[s], RSY_M1[s], RSY_M2[s], RSY_M3[s], proof_ok, kernel_ok)
+    if v != RSY_PRU_ADMIT { rsy_seal_null()  RSY_VERDICT[0u32] = RSY_ABSTAIN  return RSY_ABSTAIN }  /* proof failed / kernel down */
+    RSY_CHOSEN[0u32] = best
+    pru_move_crystal(RSY_KIND[s], RSY_M0[s], RSY_M1[s], RSY_M2[s], RSY_M3[s], (&RSY_CKPT as u64))
+    RSY_VERDICT[0u32] = RSY_ADMIT
+    return RSY_ADMIT
+}
+
+fn rsy_chosen() -> u32 @export { return RSY_CHOSEN[0u32] }
+fn rsy_chosen_edge() -> u32 @export {
+    let c : u32 = RSY_CHOSEN[0u32]
+    if c == RSY_NONE { return RSY_NONE }
+    return RSY_M0[(c as u64) & 0xFFFFFFFFu64]
+}
+/* the sealed self-optimization outcome (ripple_checkpoint): the move crystal of the applied move. */
+fn rsy_checkpoint(out32: u64) -> i32 @export {
+    if out32 == 0u64 { return RSY_E_NULL }
+    let p : *u8 = out32 as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = RSY_CKPT[i]  i = i + 1u64 }
+    return RSY_OK
+}
+
+/* KAT: 99 = the driver applies the proven strict-best, seals it, and abstains in every honest case.
+ * Proves, over a REAL metric graph + the REAL certified organs:
+ *   1-3 APPLY: the noise cut (𝒱=100 > incumbent 10, proof_ripple_decision ADMIT) is selected + applied;
+ *       the chosen move is the noise edge; its checkpoint is sealed (non-zero);
+ *   4   ABSTAIN s0-in-M: incumbent above every candidate -> rs_strict_best NONE -> ABSTAIN, no chosen;
+ *   5   ABSTAIN kernel-down: a strict-best exists but kernel_ok=0 -> decider REJECT_KERNEL -> ABSTAIN
+ *       (the loop never self-edits while blind -- the headline negative arm);
+ *   6   DETERMINISM: re-running the apply scenario seals the IDENTICAL checkpoint (reproducible outcome). */
+fn ripple_synthesizer_selftest() -> u64 @export {
+    rm_reset()
+    let n0 : u32 = rm_add_node(100u64, 1u32)
+    let n1 : u32 = rm_add_node(100u64, 1u32)
+    let e_noise : u32 = rm_add_edge(n0, n1, 0u32, 0u32)   /* dead+unwitnessed -> a valid noise cut */
+    let e_load  : u32 = rm_add_edge(n0, n1, 1u32, 0u32)   /* used (load-bearing) -> invalid cut */
+
+    /* (1-3) APPLY */
+    rsy_reset()
+    rsy_set_incumbent(10u64)
+    rsy_propose(RSY_KIND_CUT, e_noise, 0u32, 0u32, 0u32, 100u64)
+    rsy_propose(RSY_KIND_CUT, e_load,  0u32, 0u32, 0u32, 20u64)
+    if rsy_run(0u32, 1u32) != RSY_ADMIT { return 1u64 }
+    if rsy_chosen_edge() != e_noise { return 2u64 }
+    rsy_checkpoint((&RSY_CK1 as u64))
+    if cad_is_zero((&RSY_CK1 as u64) as *u8) != 0u8 { return 3u64 }   /* sealed, non-zero */
+
+    /* (4) ABSTAIN s0 in M (no candidate strictly beats the incumbent) */
+    rsy_reset()
+    rsy_set_incumbent(1000u64)
+    rsy_propose(RSY_KIND_CUT, e_noise, 0u32, 0u32, 0u32, 100u64)
+    if rsy_run(0u32, 1u32) != RSY_ABSTAIN { return 4u64 }
+    if rsy_chosen() != RSY_NONE { return 5u64 }
+
+    /* (5) ABSTAIN kernel-down (strict-best exists, but the prover is blind) */
+    rsy_reset()
+    rsy_set_incumbent(10u64)
+    rsy_propose(RSY_KIND_CUT, e_noise, 0u32, 0u32, 0u32, 100u64)
+    if rsy_run(0u32, 0u32) != RSY_ABSTAIN { return 6u64 }
+
+    /* (6) DETERMINISM: the apply scenario seals the identical checkpoint */
+    rsy_reset()
+    rsy_set_incumbent(10u64)
+    rsy_propose(RSY_KIND_CUT, e_noise, 0u32, 0u32, 0u32, 100u64)
+    rsy_propose(RSY_KIND_CUT, e_load,  0u32, 0u32, 0u32, 20u64)
+    if rsy_run(0u32, 1u32) != RSY_ADMIT { return 7u64 }
+    rsy_checkpoint((&RSY_CK1 as u64))
+    rsy_reset()
+    rsy_set_incumbent(10u64)
+    rsy_propose(RSY_KIND_CUT, e_noise, 0u32, 0u32, 0u32, 100u64)
+    rsy_propose(RSY_KIND_CUT, e_load,  0u32, 0u32, 0u32, 20u64)
+    if rsy_run(0u32, 1u32) != RSY_ADMIT { return 8u64 }
+    rsy_checkpoint((&RSY_CK2 as u64))
+    if cad_eq((&RSY_CK1 as u64) as *u8, (&RSY_CK2 as u64) as *u8) != 1u8 { return 9u64 }
+
+    return 99u64
+}
+
+/* ripple_synthesizer EMBODIES §C.7's apex: the system's self-optimization is ONE driver over ONE
+ * move-IR -- propose, value, select the strict argmax, prove via the unified kernel-first decider,
+ * and either apply with a re-checkable sealed checkpoint or abstain (s0 in M / blind).  The loop that
+ * performs apotheosis on the live tree, with a single theorem per move and a sealed outcome. */

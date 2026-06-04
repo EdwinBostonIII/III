@@ -32,10 +32,12 @@ extern @abi(c-msvc-x64) fn sc_close(channel_id: u64) -> i32 from "sealed_channel
 extern @abi(c-msvc-x64) fn sc_count() -> u32 from "sealed_channel.iii"
 extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
 extern @abi(c-msvc-x64) fn sc_derived_key_byte(channel_id: u64, i: u32) -> u32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_capacity() -> u32 from "sealed_channel.iii"
 
 fn main() -> u64 {
     /* Reset to clean state. */
     sc_reset_all()
+    if sc_capacity() != 64u32 { return 18u64 }   /* gap #29: SC_CAP accessor */
 
     /* x25519 basepoint = 9, then 31 zero bytes (little-endian u-coord). */
     let bp : *u8 = malloc(32u64)

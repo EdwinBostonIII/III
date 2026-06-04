@@ -1,0 +1,50 @@
+/* 726 -- numera::ntt public staging-accessor coverage (gap-backlog #70,#71,#72).
+ *
+ * Closes ntt_set / ntt_get / ntt_set_b (the caller coefficient-staging API + OOB guards).
+ * ntt_set_b's write is otherwise unobservable, so it is verified END-TO-END through a
+ * cyclic convolution: A=[1,2,3,4] (NTT_W via ntt_set) conv B=[5,6,7,8] (NTT_B via ntt_set_b),
+ * zero-padded to n=8, over GF(998244353) -> known product [5,16,34,60,61,52,32,0] read back
+ * via ntt_get.  omega = 3^((q-1)/8) computed via the exported mod_u64_pow.  99 = pass.
+ */
+module corpus_726
+
+extern @abi(c-msvc-x64) fn ntt_set(i: u64, v: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_get(i: u64) -> u32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_set_b(i: u64, v: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn ntt_convolve(n: u64, q: u32, omega: u32) -> i32 from "ntt.iii"
+extern @abi(c-msvc-x64) fn mod_u64_pow(base: u64, exp: u64, m: u64) -> u64 from "modular.iii"
+
+var EXPECT : [u32; 8] = [5u32, 16u32, 34u32, 60u32, 61u32, 52u32, 32u32, 0u32]
+var AVEC   : [u32; 8] = [1u32, 2u32, 3u32, 4u32, 0u32, 0u32, 0u32, 0u32]
+var BVEC   : [u32; 8] = [5u32, 6u32, 7u32, 8u32, 0u32, 0u32, 0u32, 0u32]
+
+fn main() -> u64 {
+    /* OOB guards (#70/#71/#72): out-of-range index refused / sentinel. */
+    if ntt_set(8192u64, 1u32) != -1i32 { return 1u64 }
+    if ntt_set_b(8192u64, 1u32) != -1i32 { return 2u64 }
+    if ntt_get(8192u64) != 0u32 { return 3u64 }
+    if ntt_get(99999u64) != 0u32 { return 4u64 }
+
+    /* set/get round-trip through NTT_W (#70/#71). */
+    if ntt_set(5u64, 42u32) != 0i32 { return 5u64 }
+    if ntt_get(5u64) != 42u32 { return 6u64 }
+    if ntt_set(0u64, 100u32) != 0i32 { return 7u64 }
+    if ntt_get(0u64) != 100u32 { return 8u64 }
+
+    /* Stage A in NTT_W and B in NTT_B, then convolve -- proves ntt_set_b's write (#72). */
+    let q : u32 = 998244353u32
+    let omega : u32 = mod_u64_pow(3u64, 124780544u64, 998244353u64) as u32   /* 3^((q-1)/8) */
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        if ntt_set(i, AVEC[i]) != 0i32 { return 10u64 }
+        if ntt_set_b(i, BVEC[i]) != 0i32 { return 11u64 }
+        i = i + 1u64
+    }
+    if ntt_convolve(8u64, q, omega) != 0i32 { return 12u64 }
+    let mut j : u64 = 0u64
+    while j < 8u64 {
+        if ntt_get(j) != EXPECT[j] { return 20u64 + j }
+        j = j + 1u64
+    }
+    return 99u64
+}

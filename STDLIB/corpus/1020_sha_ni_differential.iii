@@ -1,0 +1,139 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1020_sha_ni_differential.iii
+ *
+ * EXHAUSTIVE differential KAT: the SHA-NI hardware compressor
+ * (numera/sha256_ni.iii) vs the proven software path (numera/sha256.iii).
+ *
+ * This is the ONLY correctness gate for sha256_ni.iii, so it is thorough
+ * and non-vacuous:
+ *
+ *   - For a deterministic byte pattern  byte i = (i*131 + 7) & 0xFF,
+ *     for EVERY length len = 0,1,2,...,135 (covers 0/1/2/3 blocks AND the
+ *     55/56/63/64 padding edges), assert
+ *         sha256_ni_oneshot(buf,len) == sha256_oneshot(buf,len)
+ *     byte-for-byte (all 32 digest bytes).
+ *   - PLUS the FIPS 180-4 vectors:
+ *       "abc" -> ba7816bf 8f01cfea 414140de 5dae2223
+ *                b00361a3 96177a9c b410ff61 f20015ad
+ *       ""    -> e3b0c442 98fc1c14 9afbf4c8 996fb924
+ *                27ae41e4 649b934c a495991b 7852b855
+ *
+ * Return 99 on full success.  A distinct nonzero code (NEVER 99, all <=255)
+ * per failing length / vector so a wrong compressor is caught:
+ *   - differential mismatch at length L  -> 100 + L   (100..235)
+ *   - FIPS "abc"   mismatch              -> 240 + (first-bad-index+1) capped
+ *   - FIPS empty   mismatch              -> 50 + (first-bad-index+1) capped
+ *   - software/HW self-call returned err -> 240..244 sentinel
+ */
+module corpus_1020
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+/* HW path (numera/sha256_ni.iii) */
+extern @abi(c-msvc-x64) fn sha256_ni_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_ni.iii"
+/* SW oracle (numera/sha256.iii) */
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+
+/* Compare 32 bytes; return 0 if equal, else (first-bad-index + 1) in 1..32 */
+fn digest_diff(a: *u8, b: *u8) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if a[i] != b[i] { return i + 1u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* Verify a 32-byte digest against an expected byte read from a table held
+ * in a malloc'd buffer.  Returns 0 if equal, else (first-bad-index+1). */
+fn digest_eq_expected(got: *u8, exp: *u8) -> u64 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if got[i] != exp[i] { return i + 1u64 }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+fn main() -> u64 {
+    /* Input buffer (max 135 bytes); two output buffers. */
+    let buf   : *u8 = malloc(136u64)
+    let out_sw : *u8 = malloc(32u64)
+    let out_hw : *u8 = malloc(32u64)
+    let exp    : *u8 = malloc(32u64)
+
+    /* Fill deterministic pattern: byte i = (i*131 + 7) & 0xFF */
+    let mut p : u64 = 0u64
+    while p < 136u64 {
+        let v : u64 = (p * 131u64 + 7u64) & 0xFFu64
+        buf[p] = v as u8
+        p = p + 1u64
+    }
+
+    /* --- Exhaustive differential over lengths 0..135 --- */
+    let mut len : u64 = 0u64
+    while len <= 135u64 {
+        let rc_sw : u32 = sha256_oneshot(buf, len, out_sw)
+        if rc_sw != 0u32 { free(buf); free(out_sw); free(out_hw); free(exp); return 240u64 }
+        let rc_hw : u32 = sha256_ni_oneshot(buf, len, out_hw)
+        if rc_hw != 0u32 { free(buf); free(out_sw); free(out_hw); free(exp); return 241u64 }
+        let d : u64 = digest_diff(out_hw, out_sw)
+        if d != 0u64 {
+            /* mismatch at this length -> 100 + len (100..235, never 99) */
+            free(buf); free(out_sw); free(out_hw); free(exp)
+            return 100u64 + len
+        }
+        len = len + 1u64
+    }
+
+    /* --- FIPS 180-4 "abc" via the HW path --- */
+    buf[0] = 0x61u8  /* 'a' */
+    buf[1] = 0x62u8  /* 'b' */
+    buf[2] = 0x63u8  /* 'c' */
+    /* expected: ba7816bf 8f01cfea 414140de 5dae2223
+     *           b00361a3 96177a9c b410ff61 f20015ad */
+    exp[0]  = 0xBAu8 ; exp[1]  = 0x78u8 ; exp[2]  = 0x16u8 ; exp[3]  = 0xBFu8
+    exp[4]  = 0x8Fu8 ; exp[5]  = 0x01u8 ; exp[6]  = 0xCFu8 ; exp[7]  = 0xEAu8
+    exp[8]  = 0x41u8 ; exp[9]  = 0x41u8 ; exp[10] = 0x40u8 ; exp[11] = 0xDEu8
+    exp[12] = 0x5Du8 ; exp[13] = 0xAEu8 ; exp[14] = 0x22u8 ; exp[15] = 0x23u8
+    exp[16] = 0xB0u8 ; exp[17] = 0x03u8 ; exp[18] = 0x61u8 ; exp[19] = 0xA3u8
+    exp[20] = 0x96u8 ; exp[21] = 0x17u8 ; exp[22] = 0x7Au8 ; exp[23] = 0x9Cu8
+    exp[24] = 0xB4u8 ; exp[25] = 0x10u8 ; exp[26] = 0xFFu8 ; exp[27] = 0x61u8
+    exp[28] = 0xF2u8 ; exp[29] = 0x00u8 ; exp[30] = 0x15u8 ; exp[31] = 0xADu8
+    let rc_a : u32 = sha256_ni_oneshot(buf, 3u64, out_hw)
+    if rc_a != 0u32 { free(buf); free(out_sw); free(out_hw); free(exp); return 242u64 }
+    let da : u64 = digest_eq_expected(out_hw, exp)
+    if da != 0u64 {
+        /* 240 + idx would collide with 240..244 sentinels; use a code well
+         * outside the differential band and the sentinels: 236..255 here.
+         * da is 1..32 -> map to 236 + min(da,19) so it stays <=255, !=99. */
+        let mut code : u64 = 236u64 + da
+        if code > 255u64 { code = 255u64 }
+        free(buf); free(out_sw); free(out_hw); free(exp)
+        return code
+    }
+
+    /* --- FIPS 180-4 empty "" via the HW path --- */
+    /* expected: e3b0c442 98fc1c14 9afbf4c8 996fb924
+     *           27ae41e4 649b934c a495991b 7852b855 */
+    exp[0]  = 0xE3u8 ; exp[1]  = 0xB0u8 ; exp[2]  = 0xC4u8 ; exp[3]  = 0x42u8
+    exp[4]  = 0x98u8 ; exp[5]  = 0xFCu8 ; exp[6]  = 0x1Cu8 ; exp[7]  = 0x14u8
+    exp[8]  = 0x9Au8 ; exp[9]  = 0xFBu8 ; exp[10] = 0xF4u8 ; exp[11] = 0xC8u8
+    exp[12] = 0x99u8 ; exp[13] = 0x6Fu8 ; exp[14] = 0xB9u8 ; exp[15] = 0x24u8
+    exp[16] = 0x27u8 ; exp[17] = 0xAEu8 ; exp[18] = 0x41u8 ; exp[19] = 0xE4u8
+    exp[20] = 0x64u8 ; exp[21] = 0x9Bu8 ; exp[22] = 0x93u8 ; exp[23] = 0x4Cu8
+    exp[24] = 0xA4u8 ; exp[25] = 0x95u8 ; exp[26] = 0x99u8 ; exp[27] = 0x1Bu8
+    exp[28] = 0x78u8 ; exp[29] = 0x52u8 ; exp[30] = 0xB8u8 ; exp[31] = 0x55u8
+    let rc_e : u32 = sha256_ni_oneshot(buf, 0u64, out_hw)
+    if rc_e != 0u32 { free(buf); free(out_sw); free(out_hw); free(exp); return 243u64 }
+    let de : u64 = digest_eq_expected(out_hw, exp)
+    if de != 0u64 {
+        let mut code2 : u64 = 50u64 + de    /* 51..82, never 99 */
+        if code2 > 98u64 { code2 = 98u64 }
+        free(buf); free(out_sw); free(out_hw); free(exp)
+        return code2
+    }
+
+    free(buf); free(out_sw); free(out_hw); free(exp)
+    return 99u64
+}

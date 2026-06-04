@@ -83,30 +83,16 @@ var ZKST_FS_TLEN    : [u64; 1]     /* FS transcript len (call-clobber-safe) */
 var ZKST_FS_H       : [u64; 1]     /* FS hash result (materialized before modulo) */
 var ZKST_FS_QMOD    : [u64; 1]     /* st_fs_index_compute modulus source (read AFTER the hash call) */
 
-fn sf_add(x: u32, y: u32) -> u32 {
-    let s : u64 = (x as u64) + (y as u64)
-    if s >= 998244353u64 { return (s - 998244353u64) as u32 }
-    return s as u32
-}
-fn sf_sub(x: u32, y: u32) -> u32 {
-    if x >= y { return x - y }
-    return ((x as u64) + 998244353u64 - (y as u64)) as u32
-}
-fn sf_neg(x: u32) -> u32 { if x == 0u32 { return 0u32 } return 998244353u32 - x }
-fn sf_mul(x: u32, y: u32) -> u32 { return (((x as u64) * (y as u64)) % 998244353u64) as u32 }
-fn sf_pow(x: u32, e: u64) -> u32 {
-    let mut r : u64 = 1u64
-    let mut b : u64 = (x as u64) % 998244353u64
-    let mut ee : u64 = e
-    while ee > 0u64 {
-        if (ee & 1u64) == 1u64 { r = (r * b) % 998244353u64 }
-        b = (b * b) % 998244353u64
-        ee = ee >> 1u64
-    }
-    return r as u32
-}
-fn sf_inv(x: u32) -> u32 { return sf_pow(x, 998244351u64) }            /* x^(q-2) */
-fn sf_rou(n: u32) -> u32 { return sf_pow(3u32, 998244352u64 / (n as u64)) }   /* g^((q-1)/n) */
+/* STARK base-field GF(998244353) ops — consolidated into the shared ntt_fri_organ
+ * (were inline + byte-identical to zk_air's copies → the `L_sf_*` global collision
+ * the independence capstone surfaced).  Same residues; now one source. */
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_neg(x: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_pow(x: u32, e: u64) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_inv(x: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
 
 /* GF(998244353) NTT -- now delegates to the shared organ (W0.7 / COMBINE-1).
  * `base` is an element index into ZKST; the organ takes the byte address of

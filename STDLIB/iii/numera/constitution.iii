@@ -647,6 +647,7 @@ fn cons_eval_predicate(slot: u32, opv: *u8, ante_ids: *u8, n_ante: u32) -> u8 @e
 /* KAT scratch (module-scope; Trap 7). */
 var CONS_T_REQ   : [u8; 64]     /* a ratify/supersede request aggregate    */
 var CONS_T_OUT   : [u8; 32]     /* out_clause_id sink                       */
+var CONS_T_IDEXP : [u8; 32]     /* gap #32 cons_id_export sink               */
 var CONS_T_TXT   : [u8; 32]     /* textual literal                          */
 var CONS_T_TXT2  : [u8; 32]     /* second textual literal                   */
 var CONS_T_PRED  : [u8; 512]    /* predicate bytecode under test            */
@@ -732,6 +733,15 @@ fn cons_selftest() -> u64 @export {
     let f1 : u64 = cons_ratify(reqp)
     if f1 != CONS_U64_SENT { return 6u64 }
     if cons_alloc_slot() != 1u32 { return 7u64 } /* still only slot 0 used */
+
+    /* ---- gap #32: cons_id_export OK + content + 3 NOT_FOUND negatives ---- */
+    let idxp : *u8 = &CONS_T_IDEXP as u64 as *u8
+    if cons_id_export(0u32, idxp) != 0i32 { return 70u64 }           /* CONS_OK, live slot 0 */
+    if idxp[0u64]  != 0x4eu8 { return 71u64 }                        /* == clause-0 id Keccak256("abc") */
+    if idxp[31u64] != 0x45u8 { return 72u64 }
+    if cons_id_export(0u32, 0u64 as *u8) != -2i32 { return 73u64 }   /* null out_id -> NOT_FOUND */
+    if cons_id_export(1024u32, idxp) != -2i32 { return 74u64 }       /* slot>=MAX -> NOT_FOUND */
+    if cons_id_export(1023u32, idxp) != -2i32 { return 75u64 }       /* in-range dead slot -> NOT_FOUND */
 
     /* ---- KAT 2: boolean algebra (uses interpreter slot 5). ---- */
     let predp : *u8 = &CONS_T_PRED as u64 as *u8

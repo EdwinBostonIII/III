@@ -69,9 +69,11 @@ fn span_u8_copy(dst: u64, dst_len: u64, src: u64, src_len: u64, n: u64) -> i32 @
 /* Compare first `n` bytes of two spans.  Returns 0 if equal, -1 if
  * a < b, +1 if a > b.  Either span may be shorter than n; treat as
  * inequality at first differing byte / out-of-bounds. */
+/* Returns SPAN_E_NULL (-2) on a null span; otherwise the lexicographic compare
+ * result over min(n, lens): -1 (a<b or a shorter), +1 (a>b or b shorter), 0 equal. */
 fn span_u8_cmp(a: u64, a_len: u64, b: u64, b_len: u64, n: u64) -> i32 @export {
-    if a == 0u64 { return -2i32 }
-    if b == 0u64 { return -2i32 }
+    if a == 0u64 { return SPAN_E_NULL }
+    if b == 0u64 { return SPAN_E_NULL }
     let ap : *u8 = a as *u8
     let bp : *u8 = b as *u8
     let mut i : u64 = 0u64

@@ -9,6 +9,11 @@ extern @abi(c-msvc-x64) fn set_u32_contains(id: u64, k: u32) -> u8 from "set.iii
 extern @abi(c-msvc-x64) fn set_u32_remove(id: u64, k: u32) -> u8 from "set.iii"
 extern @abi(c-msvc-x64) fn set_u32_len(id: u64) -> u64 from "set.iii"
 extern @abi(c-msvc-x64) fn set_u32_drop(id: u64) -> i32 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_capacity(id: u64) -> u64 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_integrity_compute(id: u64, out_32: u64) -> i32 from "set.iii"
+extern @abi(c-msvc-x64) fn set_u32_integrity_byte(id: u64, i: u32) -> u32 from "set.iii"
+
+var SET_IBUF : [u8; 32]
 
 fn main() -> u64 {
     let a : u64 = arena_new(8192u64)
@@ -31,6 +36,11 @@ fn main() -> u64 {
     if set_u32_len(s) != 4u64 { return 8u64 }
     /* remove non-existent */
     if set_u32_remove(s, 999u32) != 0u8 { return 9u64 }
+    /* gap #84: set_u32_capacity + integrity_compute + integrity_byte (thin map delegations) */
+    if set_u32_capacity(s) == 0u64 { return 10u64 }
+    if set_u32_integrity_compute(s, (&SET_IBUF) as u64) != 0i32 { return 11u64 }
+    if set_u32_integrity_byte(s, 0u32) != (SET_IBUF[0] as u32) { return 12u64 }
+    if set_u32_integrity_byte(s, 5u32) != (SET_IBUF[5] as u32) { return 13u64 }
     set_u32_drop(s)
     arena_drop(a)
     return 99u64

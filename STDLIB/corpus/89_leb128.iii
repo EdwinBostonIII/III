@@ -9,6 +9,9 @@ extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
 extern @abi(c-msvc-x64) fn leb128_encode_u64(value: u64, out: *u8) -> u64 from "leb128.iii"
 extern @abi(c-msvc-x64) fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 from "leb128.iii"
 extern @abi(c-msvc-x64) fn leb128_last_value() -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_encode_i64(value: i64, out: *u8) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 from "leb128.iii"
+extern @abi(c-msvc-x64) fn leb128_last_svalue() -> i64 from "leb128.iii"
 
 fn main() -> u64 {
     let buf : *u8 = malloc(10u64)
@@ -34,6 +37,58 @@ fn main() -> u64 {
     if n128 != 2u64 { return 11u64 }
     if buf[0] != 0x80u8 { return 12u64 }
     if buf[1] != 0x01u8 { return 13u64 }
+
+    /* --- SLEB128 (signed) -- known byte sequences (RFC/DWARF canonical) --- */
+    /* 0 -> [0x00] */
+    let s0 : u64 = leb128_encode_i64(0i64, buf)
+    if s0 != 1u64 { return 14u64 }
+    if buf[0] != 0x00u8 { return 15u64 }
+    /* -1 -> [0x7F] */
+    let sm1 : u64 = leb128_encode_i64(0i64 - 1i64, buf)
+    if sm1 != 1u64 { return 16u64 }
+    if buf[0] != 0x7Fu8 { return 17u64 }
+    /* 63 -> [0x3F] (sign bit clear, single byte) */
+    let s63 : u64 = leb128_encode_i64(63i64, buf)
+    if s63 != 1u64 { return 18u64 }
+    if buf[0] != 0x3Fu8 { return 19u64 }
+    /* 64 -> [0xC0 0x00] (bit 0x40 set on a positive => extra 0x00 group) */
+    let s64 : u64 = leb128_encode_i64(64i64, buf)
+    if s64 != 2u64 { return 20u64 }
+    if buf[0] != 0xC0u8 { return 21u64 }
+    if buf[1] != 0x00u8 { return 22u64 }
+    /* -64 -> [0x40] (bit 0x40 set on a negative => single byte) */
+    let sm64 : u64 = leb128_encode_i64(0i64 - 64i64, buf)
+    if sm64 != 1u64 { return 23u64 }
+    if buf[0] != 0x40u8 { return 24u64 }
+
+    /* --- SLEB128 round-trips (encode -> decode -> compare) --- */
+    let v1 : i64 = 624485i64
+    let e1 : u64 = leb128_encode_i64(v1, buf)
+    let c1 : u64 = leb128_decode_i64(buf, e1)
+    if c1 != e1 { return 25u64 }
+    if leb128_last_svalue() != v1 { return 26u64 }
+    let v2 : i64 = 0i64 - 624485i64
+    let e2 : u64 = leb128_encode_i64(v2, buf)
+    let c2 : u64 = leb128_decode_i64(buf, e2)
+    if c2 != e2 { return 27u64 }
+    if leb128_last_svalue() != v2 { return 28u64 }
+    /* i64 max = 2^63 - 1 */
+    let vmax : i64 = 9223372036854775807i64
+    let emax : u64 = leb128_encode_i64(vmax, buf)
+    let cmax : u64 = leb128_decode_i64(buf, emax)
+    if cmax != emax { return 29u64 }
+    if leb128_last_svalue() != vmax { return 30u64 }
+    /* i64 min = -2^63 (10-byte SLEB edge) */
+    let vmin : i64 = 0i64 - 9223372036854775807i64 - 1i64
+    let emin : u64 = leb128_encode_i64(vmin, buf)
+    let cmin : u64 = leb128_decode_i64(buf, emin)
+    if cmin != emin { return 31u64 }
+    if leb128_last_svalue() != vmin { return 32u64 }
+    /* decode of a truncated continuation must fail (0 bytes) */
+    buf[0] = 0x80u8
+    let trunc : u64 = leb128_decode_i64(buf, 1u64)
+    if trunc != 0u64 { return 33u64 }
+
     free(buf)
     return 99u64
 }

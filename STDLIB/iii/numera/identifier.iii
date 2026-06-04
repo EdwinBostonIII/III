@@ -23,6 +23,9 @@ var IDENT_PAIRBUF : [u8; 64]   /* a||b concat scratch for ident_encode_pair */
 var IDENT_MSG     : [u8; 8]    /* KAT scratch */
 var IDENT_OUT     : [u8; 32]
 var IDENT_OUT2    : [u8; 32]
+var IDENT_TA      : [u8; 32]   /* gap #68 seq-vs-pair scratch */
+var IDENT_TB      : [u8; 32]
+var IDENT_TSEQ    : [u8; 64]
 
 fn ident_zero(out: *u8) -> i32 @export {
     if (out as u64) == 0u64 { return IDENT_E_NULL }
@@ -129,5 +132,20 @@ fn ident_selftest() -> u64 @export {
     if IDENT_OUT[8] != 0x00u8 { return 9u64 }
     ident_zero((&IDENT_OUT as u64) as *u8)
     if ident_is_zero((&IDENT_OUT as u64) as *u8) != 1u8 { return 10u64 }
+    /* gap #68: ident_encode_seq -- seq([a,b]) == pair(a,b) == Keccak256(a||b) */
+    let mut z : u64 = 0u64
+    while z < 32u64 { IDENT_TA[z] = 0x11u8 ; IDENT_TB[z] = 0x22u8 ; z = z + 1u64 }
+    z = 0u64
+    while z < 32u64 { IDENT_TSEQ[z] = IDENT_TA[z] ; IDENT_TSEQ[32u64 + z] = IDENT_TB[z] ; z = z + 1u64 }
+    if ident_encode_seq((&IDENT_TSEQ as u64) as *u8, 2u64, (&IDENT_OUT as u64) as *u8) != 0i32 { return 11u64 }
+    if ident_encode_pair((&IDENT_TA as u64) as *u8, (&IDENT_TB as u64) as *u8, (&IDENT_OUT2 as u64) as *u8) != 0i32 { return 12u64 }
+    if ident_eq((&IDENT_OUT as u64) as *u8, (&IDENT_OUT2 as u64) as *u8) != 1u8 { return 13u64 }
+    /* empty seq -> Keccak256("") = c5 d2 ... 70 */
+    if ident_encode_seq((&IDENT_TSEQ as u64) as *u8, 0u64, (&IDENT_OUT as u64) as *u8) != 0i32 { return 14u64 }
+    if IDENT_OUT[0] != 0xc5u8 { return 15u64 }
+    if IDENT_OUT[31] != 0x70u8 { return 16u64 }
+    /* null guards */
+    if ident_encode_seq((&IDENT_TSEQ as u64) as *u8, 1u64, 0u64 as *u8) != IDENT_E_NULL { return 17u64 }
+    if ident_encode_seq(0u64 as *u8, 1u64, (&IDENT_OUT as u64) as *u8) != IDENT_E_NULL { return 18u64 }
     return 99u64
 }

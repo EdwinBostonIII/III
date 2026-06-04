@@ -9,6 +9,7 @@ extern @abi(c-msvc-x64) fn zip_u8_u8_count(a: u64, b: u64) -> u64 from "zip.iii"
 extern @abi(c-msvc-x64) fn zip_u8_u8_next(a: u64, b: u64) -> u64 from "zip.iii"
 extern @abi(c-msvc-x64) fn zip_u8_u8_a(packed: u64) -> u32 from "zip.iii"
 extern @abi(c-msvc-x64) fn zip_u8_u8_b(packed: u64) -> u32 from "zip.iii"
+extern @abi(c-msvc-x64) fn zip_u8_u8_is_end(packed: u64) -> u8 from "zip.iii"
 
 fn main() -> u64 {
     let pa : *u8 = malloc(5u64)
@@ -37,6 +38,12 @@ fn main() -> u64 {
     let r1 : u64 = zip_u8_u8_next(ja, jb)
     if zip_u8_u8_a(r1) != 11u32 { return 4u64 }
     if zip_u8_u8_b(r1) != 21u32 { return 5u64 }
+    /* gap #81: zip_u8_u8_is_end -- 0 mid-iteration, 1 once the shorter iter exhausts */
+    if zip_u8_u8_is_end(r0) != 0u8 { return 6u64 }
+    if zip_u8_u8_is_end(r1) != 0u8 { return 7u64 }
+    let r2 : u64 = zip_u8_u8_next(ja, jb)
+    let rEnd : u64 = zip_u8_u8_next(ja, jb)
+    if zip_u8_u8_is_end(rEnd) != 1u8 { return 8u64 }
     iter_u8_drop(ja)
     iter_u8_drop(jb)
     free(pa)

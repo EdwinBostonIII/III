@@ -290,6 +290,17 @@ fn crystal_mac_byte(id: u64, i: u32) -> u32 @export {
     return CRYSTAL_MAC[off + i] as u32
 }
 
+/* TEST-ONLY @export setter (sibling of crystal_mac_byte): write one stored-MAC byte to drive
+ * crystal_verify's tamper-detection + MAC-restore arms (gap-backlog #73). */
+fn crystal_mac_set(id: u64, i: u32, val: u32) -> i32 @export {
+    let s : u32 = crystal_slot_of(id)
+    if s == 0xFFFFFFFFu32 { return -1i32 }
+    if i >= 16u32 { return -1i32 }
+    let off : u32 = s * 16u32
+    CRYSTAL_MAC[off + i] = (val & 0xFFu32) as u8
+    return 0i32
+}
+
 /* Module-scope save buffer for crystal_verify (W10: no local arrays). */
 var CRYSTAL_VERIFY_SAVED : [u8; 16]
 

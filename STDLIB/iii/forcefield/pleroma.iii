@@ -166,6 +166,12 @@ fn pleroma_cohere(
     if deg == 0u64   { return PLEROMA_ERROR }
     if deg > 256u64  { return PLEROMA_ERROR }
 
+    /* [overflow] obj_count is @export-supplied + unbounded; guard the working-buffer byte sizes BEFORE
+     * pl_malloc so obj_count*deg (L~206) and obj_count*8 (L~208) cannot wrap to a small allocation
+     * (-> later OOB writes into gauge/stack).  deg is in [1,256] here so the division is safe. */
+    if obj_count > (0xFFFFFFFFFFFFFFF7u64 / deg) { return PLEROMA_ERROR }   /* obj_count*deg (+1) */
+    if obj_count > 0x1FFFFFFFFFFFFFFEu64 { return PLEROMA_ERROR }           /* obj_count*8 (+8) */
+
     /* --- validate every transition is a genuine permutation of 0..deg-1, and
      *     every edge endpoint is in range.  A malformed cover is an ERROR, not a
      *     silently-miscomputed REJECT (and it guards every later table index from

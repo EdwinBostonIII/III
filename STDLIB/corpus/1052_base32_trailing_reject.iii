@@ -1,0 +1,43 @@
+/* 1052 -- base32_decode trailing-quantum falsifier (gap-backlog #24).
+ *
+ * RFC 4648 §6: base32 is padded to a multiple of 8 chars.  Pre-fix base32_decode
+ * silently DROPPED a 1-7 char trailing partial quantum, accepting truncated/malformed
+ * input on a public decoder of foreign data (TOTP secrets, magnet links).  Now any
+ * non-multiple-of-8 residue is rejected with B32_E_BADCHAR (-1).  (949 covers the
+ * illegal-pad-count + data-after-pad arms; this covers the trailing-residue arm.)
+ *
+ * Positive control proves the negative arms are not false-positives. 99 = pass.
+ */
+module corpus_1052
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base32.iii"
+
+var SRC_OK  : [u8; 8] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 84u8, 66u8]              /* "MZXW6YTB" -> "fooba" */
+var SRC_9   : [u8; 9] = [77u8, 90u8, 88u8, 87u8, 54u8, 89u8, 84u8, 66u8, 65u8]        /* one full block + 1 trailing char, ILLEGAL */
+var SRC_3   : [u8; 3] = [77u8, 90u8, 88u8]                                            /* 3 trailing chars, no full block, ILLEGAL */
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    /* Positive: a full 8-char block decodes 5 bytes "fooba". */
+    let bo : u64 = builder_new(a, 64u64)
+    if base32_decode(bo, (&SRC_OK) as u64, 8u64) != 0i32 { return 2u64 }
+    if builder_len(bo) != 5u64 { return 3u64 }
+    let dec : *u8 = builder_seal(bo) as *u8
+    if dec[0u64] != 102u8 { return 4u64 }   /* f */
+    if dec[4u64] != 97u8  { return 5u64 }   /* a */
+
+    /* FALSIFIER 1: full block + 1 trailing char rejected with B32_E_BADCHAR (-1). */
+    let br : u64 = builder_new(a, 64u64)
+    if base32_decode(br, (&SRC_9) as u64, 9u64) != -1i32 { return 6u64 }
+
+    /* FALSIFIER 2: a sub-block residue with no full block rejected with B32_E_BADCHAR (-1). */
+    if base32_decode(br, (&SRC_3) as u64, 3u64) != -1i32 { return 7u64 }
+
+    return 99u64
+}

@@ -42,6 +42,8 @@ fn pe_add(c0: u64, c1: u64, c2: u64, c3: u64, c4: u64, c5: u64) -> i64 @export {
 
 /* does candidate a Pareto-dominate candidate b? (a<=b everywhere AND a<b somewhere) */
 fn pe_dominates(a: u64, b: u64) -> u8 @export {
+    if a >= PE_N[0u64] { return 0u8 }    /* a,b must be live candidate indices; else PE_COST[a*PE_DIMS+k] is OOB */
+    if b >= PE_N[0u64] { return 0u8 }
     let ab : u64 = a * PE_DIMS
     let bb : u64 = b * PE_DIMS
     let mut all_le  : u8 = 1u8

@@ -28,6 +28,7 @@ extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 
 const ROR_TIER_CANONICAL   : u32 = 0u32
 const ROR_TIER_PROVISIONAL : u32 = 1u32
+const ROR_TIER_INVALID     : u32 = 0xFFFFFFFFu32   /* pin computation failed -- NOT a valid (tier,pin) pair */
 const ROR_OK       : i32 = 0i32
 const ROR_REFUSED  : i32 = 1i32
 const ROR_SUITE    : u32 = 0u32      /* CAD_SUITE_SHA256 */
@@ -44,6 +45,10 @@ fn reach_oracle_pin(pin_bytes: u64, pin_len: u64, out_pin: u64) -> u32 @export {
         let dp : *u8 = op as *u8
         let mut z : u64 = 0u64
         while z < 32u64 { dp[z] = 0u8  z = z + 1u64 }   /* [II-REACH_ORACLE-1/X23] failed pin -> deterministic zero, never stale garbage */
+        /* The PROVISIONAL contract (header L10-12) REQUIRES a valid content-address pin; a
+         * zeroed failure-marker is not one.  Return INVALID so the caller never mistakes a
+         * failed pin for a provisional value (the firewall already default-denies it). */
+        return ROR_TIER_INVALID
     }
     return ROR_TIER_PROVISIONAL
 }

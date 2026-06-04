@@ -17,7 +17,8 @@
  *
  * Hexad: kind_essence + kind_witness.  Ring: R0.  K: 1.00.
  *
- * NIH: depends on identifier.iii, algebraic_time.iii, math_library.iii (66).
+ * NIH: depends on identifier.iii, algebraic_time.iii, math_library.iii (66),
+ *      caindex.iii (O(1) ticket->slot index; externs cai_clear/cai_get/cai_put).
  *
  * Reconciliations vs. gospel:
  *   - at_now(out) DOES NOT EXIST -> at_current() -> u64, serialized via

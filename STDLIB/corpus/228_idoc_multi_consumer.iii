@@ -33,7 +33,7 @@ extern @abi(c-msvc-x64) fn babel_wire_set_ctx_digest(out_buf: u64, digest_ptr: u
 extern @abi(c-msvc-x64) fn babel_wire_set_facet(out_buf: u64, facet_id: u8) -> i32 from "babel_wire.iii"
 extern @abi(c-msvc-x64) fn babel_wire_header_bytes() -> u32 from "babel_wire.iii"
 
-extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64, out_cap: u32) -> u32 from "idoc.iii"
 extern @abi(c-msvc-x64) fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 from "idoc.iii"
 extern @abi(c-msvc-x64) fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_facet_len_ptr: u64) -> u8 from "idoc.iii"
 extern @abi(c-msvc-x64) fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 from "idoc.iii"
@@ -150,7 +150,7 @@ fn main() -> u64 {
 
     let hb : u32 = babel_wire_header_bytes()
     let payload_addr : u64 = env_u + (hb as u64)
-    let plen : u32 = idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, payload_addr)
+    let plen : u32 = idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, payload_addr, 512u32 - hb)
     /* Expected: 4*5 + 3 + 4 + 4 + 4 = 35 */
     if plen != 35u32 { return 2u64 }
 

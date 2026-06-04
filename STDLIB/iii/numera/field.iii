@@ -58,7 +58,9 @@ fn fp_add(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
 fn fp_sub(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
     /* First compute (a + m - b) mod m to avoid going negative. */
     let am : u64 = bigint_mod(arena, a, m)
+    if am == 0u64 { return FIELD_INVALID }                      /* OOM guard, matching fp_add */
     let bm : u64 = bigint_mod(arena, b, m)
+    if bm == 0u64 { bigint_drop(am) return FIELD_INVALID }
     let cmp : i32 = bigint_cmp(am, bm)
     let mut ge : u8 = 0u8
     if cmp == 0i32 { ge = 1u8 }
@@ -71,6 +73,7 @@ fn fp_sub(arena: u64, a: u64, b: u64, m: u64) -> u64 @export {
     }
     /* am < bm: result = (am + m) - bm */
     let am_plus_m : u64 = bigint_add(arena, am, m)
+    if am_plus_m == 0u64 { bigint_drop(am) bigint_drop(bm) return FIELD_INVALID }   /* OOM guard */
     let diff : u64 = bigint_sub(arena, am_plus_m, bm)
     bigint_drop(am)
     bigint_drop(bm)

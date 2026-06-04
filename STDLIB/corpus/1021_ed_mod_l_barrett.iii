@@ -1,0 +1,186 @@
+/* APOTHEOSIS §C.2 -- differential + falsifier KAT for numera::ed_scalar_modl.
+ *
+ * ed_mod_l is the sovereign allocation-free Barrett reduction modulo the Ed25519
+ * group order L = 2^252 + 27742317777372353535851937790883648493 that replaces
+ * crypt_ed25519's two generic bigint_mod(x, L) calls.  This KAT proves it is
+ * BIT-EXACT to the trusted Knuth oracle bigint_mod over the production input
+ * widths (a 512-bit SHA-512 output; a ~506-bit k*a+r product) and over the
+ * boundary residues -- NOT a round-trip tautology.
+ *
+ * NON-VACUITY / FALSIFIER ARMS (this KAT FAILS on a wrong reduction):
+ *  - differential: ed_mod_l(x) == bigint_mod(x, L) for full 512-bit x, a 92-digit
+ *    x, x = 2^512-1, and the (k*a+r)-shaped x = (L-1)^2+(L-1).  A wrong fold
+ *    (high-limb mishandled) diverges from the oracle -> exit != 99.
+ *  - in-range: ed_mod_l(x) < L always (a result >= L is rejected).
+ *  - reduction-happened (the anti-identity arm): for every x >= L the residue
+ *    MUST differ from x.  A stub `return a` (or a fold that fails to reduce the
+ *    high limbs) passes a naive equality test on small inputs but FAILS here.
+ *  - TOTALITY (the >= 2^512 fallback arm, base 60): a 640-bit input (10 u64 limbs,
+ *    all 0xFF) MUST reduce to the SAME residue as the Knuth oracle.  The OLD
+ *    truncating fast path (drop limbs >= 8) would compute (x mod 2^512) mod L != x
+ *    mod L and FAIL the differential -- this arm is the falsifier for the silent-
+ *    truncation hole the totality fallback closes.
+ *  - edges: L->0, L+1->1, L-1->L-1, 2L->0, 2L+5->5, (L-1)^2+(L-1)->0.
+ *
+ * Vectors precomputed with .NET BigInteger; residues cross-checked against the
+ * bigint_mod oracle at runtime (the oracle is itself the differential gate).
+ *
+ * Exit 99 = full success; 1x/2x/3x/6x localise the failing arm.
+ */
+module corpus_1021
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_cmp(a: u64, b: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_is_zero(id: u64) -> u8 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+extern @abi(c-msvc-x64) fn ed_mod_l(arena: u64, a: u64, lid: u64) -> u64 from "ed_scalar_modl.iii"
+
+/* L = 2^252 + 27742317777372353535851937790883648493 (u64 limbs, LE). */
+var V_L  : [u64; 4]
+/* x = 2^512 - 1 (8 limbs all 0xFFFF...). */
+var V_FF : [u64; 8]
+/* x = 99999...(92 digits) -- a ~305-bit value exercising the high-limb fold. */
+var V_X3 : [u64; 8]
+/* x = (L-1)^2 + (L-1) = (L-1)*L (8 limbs) -- a k*a+r-shaped 506-bit input that is
+ * an exact multiple of L (residue must be 0). */
+var V_KL : [u64; 8]
+/* x = 2^640 - 1 (10 limbs all 0xFFFF...) -- a >= 2^512 input for the totality arm. */
+var V_BIG : [u64; 10]
+/* expected residue of x=2^512-1 mod L (cross-checked vs oracle too). */
+var V_R1 : [u64; 4]
+/* expected residue of x3 mod L. */
+var V_R3 : [u64; 4]
+
+fn mk(arena: u64, src: u64, n: u64) -> u64 {
+    let sp : *u64 = src as *u64
+    let b : u64 = bigint_new(arena, n + 1u64)
+    let mut i : u64 = 0u64
+    while i < n { bigint_set_limb(b, i, sp[i]) ; i = i + 1u64 }
+    bigint_set_len(b, n)
+    bigint_normalize(b)
+    return b
+}
+
+/* small constant bigint (1 limb). */
+fn mk_u64(arena: u64, v: u64) -> u64 {
+    let b : u64 = bigint_new(arena, 2u64)
+    bigint_set_limb(b, 0u64, v)
+    bigint_set_len(b, 1u64)
+    bigint_normalize(b)
+    return b
+}
+
+fn init_vectors() -> i32 {
+    V_L[0u64] = 0x5812631a5cf5d3edu64  V_L[1u64] = 0x14def9dea2f79cd6u64
+    V_L[2u64] = 0x0000000000000000u64  V_L[3u64] = 0x1000000000000000u64
+    let mut i : u64 = 0u64
+    while i < 8u64 { V_FF[i] = 0xFFFFFFFFFFFFFFFFu64 ; i = i + 1u64 }
+    /* 99999...(92 nines): limbs from .NET BigInteger. */
+    V_X3[0u64] = 0xffffffffffffffffu64  V_X3[1u64] = 0x608f63510fffffffu64
+    V_X3[2u64] = 0x0e502fb02174d9b8u64  V_X3[3u64] = 0x7668ee9742f4c93eu64
+    V_X3[4u64] = 0x0003117477e509c4u64  V_X3[5u64] = 0x0000000000000000u64
+    V_X3[6u64] = 0x0000000000000000u64  V_X3[7u64] = 0x0000000000000000u64
+    /* (L-1)^2 + (L-1): limbs from .NET BigInteger. */
+    V_KL[0u64] = 0x8adb936b4e1cb57cu64  V_KL[1u64] = 0x532498977fa10647u64
+    V_KL[2u64] = 0x3dceec73d217f5beu64  V_KL[3u64] = 0x91b399411b7c309au64
+    V_KL[4u64] = 0xcb024c634b9eba7du64  V_KL[5u64] = 0x029bdf3bd45ef39au64
+    V_KL[6u64] = 0x0000000000000000u64  V_KL[7u64] = 0x0100000000000000u64
+    /* 2^640 - 1 : 10 u64 limbs all-ones (>= 2^512, exercises the Knuth fallback). */
+    let mut g : u64 = 0u64
+    while g < 10u64 { V_BIG[g] = 0xFFFFFFFFFFFFFFFFu64 ; g = g + 1u64 }
+    /* expected residues (cross-checked vs oracle at runtime). */
+    V_R1[0u64] = 0xa40611e3449c0f00u64  V_R1[1u64] = 0xd00e1ba768859347u64
+    V_R1[2u64] = 0xceec73d217f5be65u64  V_R1[3u64] = 0x0399411b7c309a3du64
+    V_R3[0u64] = 0xfdef562e8a9dcd44u64  V_R3[1u64] = 0x95e101cf6b5faaa4u64
+    V_R3[2u64] = 0x0e4c2f1c71410988u64  V_R3[3u64] = 0x0668ee9742f4c93eu64
+    return 0i32
+}
+
+/* differential + in-range + anti-identity for one input `x` (>= L expected).
+ * Returns 0 on success, an error code otherwise.  L_id is the bigint L. */
+fn check_ge(arena: u64, x: u64, L_id: u64, base: u64) -> u64 {
+    let got : u64 = ed_mod_l(arena, x, L_id)
+    let oracle : u64 = bigint_mod(arena, x, L_id)
+    /* differential: must equal the Knuth oracle. */
+    if bigint_cmp(got, oracle) != 0i32 { return base + 1u64 }
+    /* in-range: residue < L. */
+    if bigint_cmp(got, L_id) != -1i32 { return base + 2u64 }
+    /* anti-identity: x >= L, so the residue MUST differ from x (a stub `return a`
+     * or an un-reduced fold is caught here). */
+    if bigint_cmp(got, x) == 0i32 { return base + 3u64 }
+    return 0u64
+}
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(67108864u64)
+    init_vectors()
+    let L_id : u64 = mk(ar, &V_L as u64, 4u64)
+
+    /* ---- differential over production widths (x >= L) ---- */
+    let x_ff : u64 = mk(ar, &V_FF as u64, 8u64)            /* 512-bit */
+    let e1 : u64 = check_ge(ar, x_ff, L_id, 10u64)
+    if e1 != 0u64 { return e1 }
+    /* also pin the precomputed residue (a second independent oracle). */
+    let r1 : u64 = mk(ar, &V_R1 as u64, 4u64)
+    if bigint_cmp(ed_mod_l(ar, x_ff, L_id), r1) != 0i32 { return 14u64 }
+
+    let x3 : u64 = mk(ar, &V_X3 as u64, 8u64)              /* ~305-bit */
+    let e3 : u64 = check_ge(ar, x3, L_id, 20u64)
+    if e3 != 0u64 { return e3 }
+    let r3 : u64 = mk(ar, &V_R3 as u64, 4u64)
+    if bigint_cmp(ed_mod_l(ar, x3, L_id), r3) != 0i32 { return 24u64 }
+
+    let x_kl : u64 = mk(ar, &V_KL as u64, 8u64)            /* (L-1)*L, ~506-bit, residue 0 */
+    let e4 : u64 = check_ge(ar, x_kl, L_id, 30u64)
+    if e4 != 0u64 { return e4 }
+    if bigint_is_zero(ed_mod_l(ar, x_kl, L_id)) != 1u8 { return 34u64 }
+
+    /* ---- edge residues ---- */
+    /* L -> 0 */
+    if bigint_is_zero(ed_mod_l(ar, L_id, L_id)) != 1u8 { return 40u64 }
+    /* L+1 -> 1 (build via limbs: L[0]+1, no carry since L[0] is even) */
+    V_L[0u64] = 0x5812631a5cf5d3eeu64
+    let lp1 : u64 = mk(ar, &V_L as u64, 4u64)
+    V_L[0u64] = 0x5812631a5cf5d3edu64
+    let one : u64 = mk_u64(ar, 1u64)
+    if bigint_cmp(ed_mod_l(ar, lp1, L_id), one) != 0i32 { return 41u64 }
+    /* L-1 -> L-1 (the boundary just below L: residue == input, in-range, NOT reduced) */
+    V_L[0u64] = 0x5812631a5cf5d3ecu64
+    let lm1 : u64 = mk(ar, &V_L as u64, 4u64)
+    V_L[0u64] = 0x5812631a5cf5d3edu64
+    let lm1_chk : u64 = ed_mod_l(ar, lm1, L_id)
+    if bigint_cmp(lm1_chk, lm1) != 0i32 { return 42u64 }       /* L-1 < L: residue == input */
+    if bigint_cmp(lm1_chk, L_id) != -1i32 { return 43u64 }     /* still < L */
+    /* 2L -> 0 : double V_L into 5 limbs */
+    V_KL[0u64] = 0xb024c634b9eba7dau64  V_KL[1u64] = 0x29bdf3bd45ef39acu64
+    V_KL[2u64] = 0x0000000000000000u64  V_KL[3u64] = 0x2000000000000000u64
+    V_KL[4u64] = 0x0000000000000000u64
+    let two_l : u64 = mk(ar, &V_KL as u64, 5u64)
+    if bigint_is_zero(ed_mod_l(ar, two_l, L_id)) != 1u8 { return 44u64 }
+    /* 2L+5 -> 5 */
+    V_KL[0u64] = 0xb024c634b9eba7dfu64
+    let two_l5 : u64 = mk(ar, &V_KL as u64, 5u64)
+    V_KL[0u64] = 0xb024c634b9eba7dau64
+    let five : u64 = mk_u64(ar, 5u64)
+    if bigint_cmp(ed_mod_l(ar, two_l5, L_id), five) != 0i32 { return 45u64 }
+
+    /* ---- tiny in-range value: residue == itself, < L (sanity, in-range arm) ---- */
+    let seven : u64 = mk_u64(ar, 7u64)
+    let s_chk : u64 = ed_mod_l(ar, seven, L_id)
+    if bigint_cmp(s_chk, seven) != 0i32 { return 50u64 }
+    if bigint_cmp(s_chk, bigint_mod(ar, seven, L_id)) != 0i32 { return 51u64 }
+
+    /* ---- TOTALITY arm: x = 2^640-1 (>= 2^512) must equal the Knuth oracle ----
+     * the old truncating fast path would drop the high limbs and diverge here. */
+    let x_big : u64 = mk(ar, &V_BIG as u64, 10u64)
+    let e_big : u64 = check_ge(ar, x_big, L_id, 60u64)
+    if e_big != 0u64 { return e_big }
+
+    arena_drop(ar)
+    return 99u64
+}

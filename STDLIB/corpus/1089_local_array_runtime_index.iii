@@ -1,0 +1,59 @@
+/* 1089 -- regression KAT for the function-LOCAL array runtime-index codegen fix (cg_r3 array-frame).
+ *
+ * THE BUG (fixed 2026-06-03, cg_r3.iii + cg_r3.c byte-identically): a `var a : [T;N]` inside a fn body,
+ * indexed by a RUNTIME variable, SEGFAULTED.  The array-decay `leaq -(slot+1)*8(%rbp)` pointed at the
+ * array's TOP slot, so `a[i] = base + i*stride` grew UPWARD past %rbp, smashing the saved rbp + return
+ * address -> crash on the function's RET (or earlier).  THE FIX: reserve the (nslots-1) extra slots
+ * FIRST, add the named local LAST, so the array IDENT resolves to the BOTTOM slot of its reserved
+ * region and a[i] grows UP *through* the region.  Verified: iiis-0 (C seed) AND iiis-2 (.iii) both
+ * compile this to a correct, non-crashing program; 59/0 self-host equivalence holds.
+ *
+ * 99 = every case computes correctly AND the fn returns (no stack smash).  On the UNFIXED compiler this
+ * SEGFAULTS (the falsifier bites).  Covers: u64/u8/u32 element widths (distinct nslots), two arrays in
+ * one frame (slot-accounting non-overlap), and a no-corruption cross-check (the first array survives
+ * writes to the second). */
+module corpus_1089_local_array_runtime_index
+
+fn main() -> u64 {
+    /* (1) u64 array [8] = 8 slots: runtime write then runtime read+sum */
+    var a : [u64; 8]
+    let mut i : u64 = 0u64
+    while i < 8u64 { a[i] = i * 3u64  i = i + 1u64 }
+    let mut s : u64 = 0u64
+    i = 0u64
+    while i < 8u64 { s = s + a[i]  i = i + 1u64 }
+    if s != 84u64 { return 1u64 }                       /* 0+3+6+9+12+15+18+21 = 84 */
+    if a[0u64] != 0u64 { return 2u64 }
+    if a[7u64] != 21u64 { return 3u64 }                 /* the TOP element (was the smash site) */
+
+    /* (2) a SECOND u64 array [4] in the same frame: must not overlap `a` */
+    var b : [u64; 4]
+    i = 0u64
+    while i < 4u64 { b[i] = a[i] * 10u64  i = i + 1u64 }
+    if b[0u64] != 0u64 { return 4u64 }
+    if b[3u64] != 90u64 { return 5u64 }                 /* a[3]=9 -> 90 */
+
+    /* (3) no-corruption: writing `b` must NOT have clobbered `a` (overlap would) */
+    s = 0u64
+    i = 0u64
+    while i < 8u64 { s = s + a[i]  i = i + 1u64 }
+    if s != 84u64 { return 6u64 }
+
+    /* (4) u8 array [16] = 2 slots (sub-word stride): runtime byte write/read */
+    var c : [u8; 16]
+    i = 0u64
+    while i < 16u64 { c[i] = ((i * 7u64) & 255u64) as u8  i = i + 1u64 }
+    if c[0u64] != 0u8 { return 7u64 }
+    if c[5u64] != 35u8 { return 8u64 }                  /* 5*7 = 35 */
+    if c[15u64] != 105u8 { return 9u64 }                /* 15*7 = 105 (the TOP byte) */
+
+    /* (5) u32 array [6] = 3 slots: runtime u32 write/read */
+    var d : [u32; 6]
+    i = 0u64
+    while i < 6u64 { d[i] = (i * 1000u64) as u32  i = i + 1u64 }
+    if d[0u64] != 0u32 { return 10u64 }
+    if d[5u64] != 5000u32 { return 11u64 }
+
+    /* reaching here means: correct values for all widths/arrays AND the fn did not stack-smash. */
+    return 99u64
+}

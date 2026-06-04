@@ -91,7 +91,7 @@ extern @abi(c-msvc-x64) fn hip_class_unique() -> u32 from "hip.iii"
 extern @abi(c-msvc-x64) fn hip_class_ambiguous() -> u32 from "hip.iii"
 extern @abi(c-msvc-x64) fn hip_class_no_match() -> u32 from "hip.iii"
 
-extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64) -> u32 from "idoc.iii"
+extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64, out_cap: u32) -> u32 from "idoc.iii"
 extern @abi(c-msvc-x64) fn idoc_finalize(out_buf: u64, payload_len: u32) -> u32 from "idoc.iii"
 extern @abi(c-msvc-x64) fn idoc_validate(idoc_buf: u64, idoc_len: u32) -> u8 from "idoc.iii"
 extern @abi(c-msvc-x64) fn idoc_resolve_facet(idoc_buf: u64, my_caps: u8, out_facet_data_ptr: u64, out_facet_len_ptr: u64) -> u8 from "idoc.iii"
@@ -359,7 +359,7 @@ fn _idoc_one_roundtrip() -> u32 {
 
     let hb : u32 = babel_wire_header_bytes()
     let payload_addr : u64 = env_u + (hb as u64)
-    let plen : u32 = idoc_pack_payload(fids_u, fdpa_u, flna_u, payload_addr)
+    let plen : u32 = idoc_pack_payload(fids_u, fdpa_u, flna_u, payload_addr, 512u32 - hb)
     let total : u32 = idoc_finalize(env_u, plen)
     let v : u8 = idoc_validate(env_u, total)
     if v == 0u8 { return 0u32 }
@@ -536,7 +536,7 @@ fn main() -> u64 {
 
     let hb : u32 = babel_wire_header_bytes()
     let payload_addr : u64 = (env as u64) + (hb as u64)
-    let warmup_plen : u32 = idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, payload_addr)
+    let warmup_plen : u32 = idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, payload_addr, 512u32 - hb)
     /* Expect 4 * 5 + (8 + 12 + 4 + 16) = 20 + 40 = 60. */
     if warmup_plen != 60u32 { return 18u64 }
 

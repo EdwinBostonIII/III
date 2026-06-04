@@ -3,8 +3,10 @@
  * III STDLIB - numera::pq_params  (APOTHEOSIS C.1, ADR-C1)
  *
  * The ONE post-quantum parameter descriptor table.  Nine prebuilt rows --
- * three ML-KEM, three ML-DSA, three SLH-DSA -- keyed by FIPS suite id, with
- * O(1) lookup by id.  This RETIRES the nibble-arithmetic parameter decode in
+ * three ML-KEM, three ML-DSA, three SLH-DSA -- keyed by FIPS suite id, looked
+ * up by a constant-bounded 9-row (PQP_ROWS) linear scan -- O(PQP_ROWS), i.e.
+ * effectively O(1) since the row count is a fixed compile-time constant (no
+ * nibble arithmetic -> no underflow path).  This RETIRES the nibble-arithmetic parameter decode in
  * pq_dispatch.iii (pq_mlkem_k / pq_slh_lv:32 / pq_mldsa_level + the bolted-on
  * pq_nibble_ok guard).  E-PQD-2 (the `(suite & 0xF) - 1u64` underflow that
  * sent nibble-0 to u64::MAX) does not merely get a guard here -- the

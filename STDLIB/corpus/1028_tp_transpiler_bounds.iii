@@ -1,0 +1,54 @@
+/* 1028 -- omnia tp_* transpiler codec buffer bounds (#18 backlog).
+ *
+ * The six Bucket-A codecs guarded their dst buffer with ADDITION-form total checks
+ * (`overhead + src_len > dst_cap`, or `est = overhead + 4*ceil(src_len/3)`).  For src_len near
+ * u64-max the total/est WRAPS below dst_cap, so the guard passes and the codec writes far past the
+ * buffer (a multi-exabyte OOB).  The fix replaces each with a SUBTRACTION-form bound on the input
+ * (`src_len > dst_cap - overhead`, or `src_len > (dst_cap-overhead)/4*3`), which never wraps.
+ * (L2: tp_table_call now threads the caller's real dst_cap instead of a fabricated 1 MiB --
+ * compile-verified one-line forward; the L1 guards below are the reachable, material fix that
+ * corpus 681 also drives directly.)
+ *
+ * POSITIVE (rc 1-4): emitter codecs with a 4-byte src + 128-byte dst produce output -> the guard
+ *   does NOT false-positive on a valid size.
+ * NEGATIVE/FALSIFIER (rc 11-16): a src_len chosen to wrap each codec's OLD guard below dst_cap MUST
+ *   now be REJECTED (return 0).  The old addition-form code wrapped the total small and wrote OOB
+ *   -> it returns non-zero here and FAILS the KAT; only the subtraction-form fix returns 0.
+ * 99 = pass. */
+module corpus_1028
+
+extern @abi(c-msvc-x64) fn tp_iii_to_md(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_md.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_ast_bin(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_ast_bin.iii"
+extern @abi(c-msvc-x64) fn tp_babel_text_back(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_text_back.iii"
+extern @abi(c-msvc-x64) fn tp_babel_json_cbor(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_json_cbor.iii"
+extern @abi(c-msvc-x64) fn tp_iii_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_iii_to_babel_json.iii"
+extern @abi(c-msvc-x64) fn tp_ast_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_ast_to_babel_json.iii"
+
+var TP_SRC : [u8; 64]
+var TP_DST : [u8; 256]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 4u64 { TP_SRC[i] = (0x41u32 + (i as u32)) as u8  i = i + 1u64 }   /* "ABCD" */
+    let src : u64 = (&TP_SRC) as u64
+    let dst : u64 = (&TP_DST) as u64
+
+    /* L1 POSITIVE: emitter codecs (4-byte src, 128-byte dst) produce output -- no guard false-positive. */
+    if tp_iii_to_md(src, 4u64, dst, 128u64) == 0u64 { return 1u64 }
+    if tp_iii_to_ast_bin(src, 4u64, dst, 128u64) == 0u64 { return 2u64 }
+    if tp_iii_to_babel_json(src, 4u64, dst, 128u64) == 0u64 { return 3u64 }
+    if tp_ast_to_babel_json(src, 4u64, dst, 128u64) == 0u64 { return 4u64 }
+
+    /* L1 NEGATIVE (FALSIFIER): src_len wraps each OLD guard below dst_cap -> MUST be rejected.
+     * md:   12 + (2^64-6)  = 6  < 16   ;  ast_bin: 16 + (2^64-8) = 8 < 32
+     * text: (2^64-2) + 4   = 2 ; 16<2 false ;  cbor: 9 + (2^64-3) = 6 < 16
+     * b64:  est = overhead + 4*((src_len+2)/3) wraps to 87/83 < 128 for src_len = 3*2^62 - 2 */
+    if tp_iii_to_md(src, 0xFFFFFFFFFFFFFFFAu64, dst, 16u64) != 0u64 { return 11u64 }
+    if tp_iii_to_ast_bin(src, 0xFFFFFFFFFFFFFFF8u64, dst, 32u64) != 0u64 { return 12u64 }
+    if tp_babel_text_back(src, 0xFFFFFFFFFFFFFFFEu64, dst, 16u64) != 0u64 { return 13u64 }
+    if tp_babel_json_cbor(src, 0xFFFFFFFFFFFFFFFDu64, dst, 16u64) != 0u64 { return 14u64 }
+    if tp_iii_to_babel_json(src, 0xBFFFFFFFFFFFFFFEu64, dst, 128u64) != 0u64 { return 15u64 }
+    if tp_ast_to_babel_json(src, 0xBFFFFFFFFFFFFFFEu64, dst, 128u64) != 0u64 { return 16u64 }
+
+    return 99u64
+}

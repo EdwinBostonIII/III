@@ -1,0 +1,4 @@
+/* 1041 — zkf_ec_selftest: BLS12-381 elliptic-curve ops. Closes a gating gap (selftest existed, ungated). */
+module corpus_1041
+extern @abi(c-msvc-x64) fn zkf_ec_selftest() -> u64 from "zk_field.iii"
+fn main() -> u64 { return zkf_ec_selftest() }

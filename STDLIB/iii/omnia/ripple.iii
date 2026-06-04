@@ -42,6 +42,7 @@ extern @abi(c-msvc-x64) fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 from
 extern @abi(c-msvc-x64) fn vec_u64_push(id: u64, v: u64) -> i32 from "vec.iii"
 extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
 extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_drop(id: u64) -> i32 from "vec.iii"
 
 extern @abi(c-msvc-x64) fn sid_transitive_closure(arena_id: u64, seeds_vec: u64) -> u64 from "crystal_deps.iii"
 
@@ -53,6 +54,7 @@ extern @abi(c-msvc-x64) fn mhash_final(out: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn witness_init() -> i32 from "witness.iii"
 extern @abi(c-msvc-x64) fn witness_append(mhash_ptr: u64, cap_id: u64, epoch: u64) -> i32 from "witness.iii"
 extern @abi(c-msvc-x64) fn witness_count() -> u32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_remaining() -> u32 from "witness.iii"
 
 extern @abi(c-msvc-x64) fn kchain_new(custom_floor: u64) -> u64 from "kchain.iii"
 extern @abi(c-msvc-x64) fn kchain_compose(id: u64, k_call_fx: u64) -> u8 from "kchain.iii"
@@ -68,6 +70,7 @@ const RIPPLE_E_BADID         : i32 = -1i32
 const RIPPLE_E_OOM           : i32 = -2i32
 const RIPPLE_E_BAD_MODE      : i32 = -3i32
 const RIPPLE_E_K_UNDERFLOW   : i32 = -4i32
+const RIPPLE_E_WITNESS_FULL  : i32 = -5i32    /* strict ripple_execute: insufficient witness headroom */
 
 const RIPPLE_MODE_STRICT     : u32 = 1u32
 const RIPPLE_MODE_FAST       : u32 = 2u32
@@ -135,6 +138,7 @@ fn ripple_init_domains() -> u32 {
 var RIPPLE_SCRATCH_HASH : [u8; 32]
 var RIPPLE_KIND_BUF     : [u8; 4]
 var RIPPLE_TARGET_BUF   : [u8; 8]
+var RIPPLE_LAST_ERR     : i32 = 0i32   /* last typed failure (RIPPLE_OK=0); introspectable via ripple_last_error */
 
 /* Helper: write u32 LE into RIPPLE_KIND_BUF. */
 fn ripple_pack_u32(v: u32) -> u32 {
@@ -189,6 +193,7 @@ fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 @export {
     if seeds == 0u64 { return RIPPLE_INVALID }
     vec_u64_push(seeds, target)
     let closure_v : u64 = sid_transitive_closure(arena_id, seeds)
+    vec_u64_drop(seeds)   /* [handle-leak fix] seeds fully consumed by the closure -> free its VEC64_LIVE slot */
     if closure_v == 0u64 { return RIPPLE_INVALID }
     /* Plan crystal: site_hash = mhash("ripple_plan" || change_id_8) */
     ripple_pack_u64(change_id)
@@ -198,7 +203,7 @@ fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 @export {
     mhash_final(&RIPPLE_SCRATCH_HASH as u64)
     let plan : u64 = crystal_mint(RIPPLE_KIND_PLAN, &RIPPLE_SCRATCH_HASH as u64,
                                    0u64, change_id)
-    if plan == 0u64 { return RIPPLE_INVALID }
+    if plan == 0u64 { vec_u64_drop(closure_v) ; return RIPPLE_INVALID }   /* free closure before bail */
     crystal_edges_init(plan, arena_id)
     /* Add each affected crystal as an edge of the plan. */
     let n : u64 = vec_u64_count(closure_v)
@@ -208,6 +213,7 @@ fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 @export {
         crystal_edges_add(plan, aff)
         i = i + 1u64
     }
+    vec_u64_drop(closure_v)   /* [handle-leak fix] closure fully consumed into plan edges -> free its slot */
     return plan
 }
 
@@ -294,6 +300,15 @@ fn ripple_execute(arena_id: u64, plan_id: u64, mode: u32) -> u64 @export {
     crystal_edges_init(result, arena_id)
     /* For each edge of plan: emit a witness record (strict mode only). */
     let n : u32 = crystal_edges_count(plan_id)
+    /* [witness-full guard] strict mode emits exactly one witness per edge.  Pre-flight the whole
+     * batch: if the witness chain lacks headroom for all n, REFUSE up front (all-or-nothing) rather
+     * than writing a partial record and silently dropping the overflow.  Loud typed failure. */
+    if mode == RIPPLE_MODE_STRICT {
+        if n > witness_remaining() {
+            RIPPLE_LAST_ERR = RIPPLE_E_WITNESS_FULL
+            return RIPPLE_INVALID
+        }
+    }
     let mut i : u32 = 0u32
     while i < n {
         let aff : u64 = crystal_edges_at(plan_id, i)
@@ -311,6 +326,13 @@ fn ripple_execute(arena_id: u64, plan_id: u64, mode: u32) -> u64 @export {
         i = i + 1u32
     }
     return result
+}
+
+/* Last typed error recorded by ripple_execute (RIPPLE_OK=0 if the last call succeeded or the
+ * failure was an early arg-validation return).  Lets a caller distinguish a witness-full refusal
+ * (RIPPLE_E_WITNESS_FULL) from other RIPPLE_INVALID returns. */
+fn ripple_last_error() -> i32 @export {
+    return RIPPLE_LAST_ERR
 }
 
 /* ─── ripple_verify ─────────────────────────────────────────────── */

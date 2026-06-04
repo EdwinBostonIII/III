@@ -288,6 +288,7 @@ fn tc_alloc(req: *u8, out_carrier_id: *u8) -> i32 @export {
     /* Null checks. */
     if stmt_ptr == 0u64 { return THMC_E_NULL }
     if ptid_ptr == 0u64 { return THMC_E_NULL }
+    if dep_count != 0u64 { if dep_ptr == 0u64 { return THMC_E_NULL } }   /* dep_ptr is deref'd (dep_ptr + d*32) in the dep-closure loop when dep_count>0 */
     /* Statement-length cap guard (new -- spec Gap item 6). */
     if statement_len > THMC_STATEMENT_BYTES { return THMC_E_BUF_TOO_SMALL }
     /* Step 1: Verify proof term FIRST (fail-fast, W35/M18). */

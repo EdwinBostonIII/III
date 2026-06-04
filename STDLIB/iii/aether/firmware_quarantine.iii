@@ -162,7 +162,13 @@ fn fquar_register(req: *u8, cap_id: u64) -> u32 @export {
 }
 
 fn fquar_check_write(addr: u64, len: u64) -> u8 @export {
-    if FQUAR_INITED == 0u8 { fquar_init(FQUAR_ENV_CAP) }
+    /* FAIL-CLOSED (M5 anti-bricking): if the lazy bootstrap can't establish the forbidden
+     * sheaf (env cap lacks AMEND, or caps not yet up), a write must NOT be certified safe --
+     * the gate refuses.  Unreachable with the root env cap, but the quarantine's whole purpose
+     * is to refuse on doubt, mirroring bm_verify_seal's "no seal => halt". */
+    if FQUAR_INITED == 0u8 {
+        if fquar_init(FQUAR_ENV_CAP) != FQUAR_OK { return 0u8 }
+    }
     let mut safe : u8 = 1u8
     let mut i : u64 = 0u64
     while i < FQUAR_MAX_REGIONS {
@@ -182,7 +188,12 @@ fn fquar_forbidden_at(addr: u64) -> u8 @export {
 }
 
 fn fquar_region_kind_at(addr: u64) -> u8 @export {
-    if FQUAR_INITED == 0u8 { fquar_init(FQUAR_ENV_CAP) }
+    /* If the sheaf can't bootstrap, the classifier cannot vouch for any region; the
+     * enforcement gate (fquar_check_write) fails closed, so here we honestly report
+     * "unclassified" rather than a stale partial answer.  Unreachable with the root cap. */
+    if FQUAR_INITED == 0u8 {
+        if fquar_init(FQUAR_ENV_CAP) != FQUAR_OK { return FQUAR_KIND_NONE }
+    }
     let mut found : u8 = 0u8
     let mut k : u8 = FQUAR_KIND_NONE
     let mut i : u64 = 0u64

@@ -77,7 +77,8 @@ fn deadline_in(time_cap: u64, delta_ticks: u64, on_late: u8) -> u64 @export {
     if now_id == 0u64 { return DEADLINE_INVALID }
     let now_tick : u64 = instant_tick(now_id)
     instant_drop(now_id)
-    let target : u64 = now_tick + delta_ticks
+    let mut target : u64 = 0xFFFFFFFFFFFFFFFFu64                     /* [overflow] saturate: a never-expiring deadline on wrap */
+    if delta_ticks <= (0xFFFFFFFFFFFFFFFFu64 - now_tick) { target = now_tick + delta_ticks }
     let id : u64 = tempaloc_alloc(DEADLINE_TYPE)
     if id == 0u64 { return DEADLINE_INVALID }
     let s : u32 = tempaloc_slot_of(id, DEADLINE_TYPE)

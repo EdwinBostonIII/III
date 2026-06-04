@@ -145,13 +145,17 @@ fn keccak_rotl64(x: u64, n: u32) -> u64 {
 }
 
 fn _kk_load_lane(state_ptr: u64, idx: u32) -> u64 {
-    let p_l : u64 = state_ptr
-    let i_l : u64 = (idx as u64) & 0xFFu64
-    let p : *u8 = (p_l + i_l * 8u64) as *u8
+    /* Lane idx = the 8 logical bytes [idx*8 .. idx*8+7] of the sponge state. Index the WHOLE logical
+       offset (idx*8 + k) through the element pointer so each backend applies its own stride uniformly:
+       byte-packed cg_r3 -> +(idx*8+k); 8-byte-uniform cg_r0 -> +(idx*8+k)*8 (slot idx*8+k). The old
+       `p = base + idx*8` (raw byte arithmetic) then `p[k]` (element stride) MIXED UNITS -- correct on
+       cg_r3 but on cg_r0 it read slot (idx+k), shifting every lane>0 and corrupting the permutation. */
+    let q : *u8 = state_ptr as *u8
+    let base : u64 = ((idx as u64) & 0xFFu64) * 8u64
     let mut acc : u64 = 0u64
     let mut k : u64 = 0u64
     while k < 8u64 {
-        let bb : u64 = p[k] as u64
+        let bb : u64 = q[base + k] as u64
         acc = acc | (bb << (k * 8u64))
         k = k + 1u64
     }
@@ -159,13 +163,14 @@ fn _kk_load_lane(state_ptr: u64, idx: u32) -> u64 {
 }
 
 fn _kk_store_lane(state_ptr: u64, idx: u32, v: u64) -> u32 {
-    let p_l : u64 = state_ptr
-    let i_l : u64 = (idx as u64) & 0xFFu64
+    /* See _kk_load_lane: index the full logical offset (idx*8 + k) so the store lands in the same slot
+       the load reads on both backends. */
+    let q : *u8 = state_ptr as *u8
+    let base : u64 = ((idx as u64) & 0xFFu64) * 8u64
     let v_l : u64 = v
-    let p : *u8 = (p_l + i_l * 8u64) as *u8
     let mut k : u64 = 0u64
     while k < 8u64 {
-        p[k] = ((v_l >> (k * 8u64)) & 0xFFu64) as u8
+        q[base + k] = ((v_l >> (k * 8u64)) & 0xFFu64) as u8
         k = k + 1u64
     }
     return 0u32
@@ -369,6 +374,7 @@ fn keccak_absorb(state_ptr: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i
     let r_l  : u32 = (rd_l & 0xFFFFFFFFu64) as u32
     let d_l  : u8  = ((rd_l >> 32u64) & 0xFFu64) as u8
     if sp_l == 0u64 { return KK_E_NULL }
+    if ml_l != 0u64 { if mp_l == 0u64 { return KK_E_NULL } }   /* null msg with len>0 -> the absorb loops deref null; protects all callers (sha3/shake/keccak256/slhdsa H_msg) at the root */
     if r_l == 0u32 { return KK_E_BADRATE }
     if r_l > 200u32 { return KK_E_BADRATE }
 

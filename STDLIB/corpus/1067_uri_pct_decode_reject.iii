@@ -1,0 +1,38 @@
+/* 1067 -- verba::uri uri_pct_decode error-path coverage (gap-backlog #89).
+ *
+ * Closes the untested URI_E_BADHEX arms: bad hex nibble (%XY) and truncated escape
+ * (% at/near end).  Positive control (%41 -> 'A', URI_OK) proves the negative arms
+ * are not false-positives. 99 = pass.
+ */
+module corpus_1067
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn uri_pct_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "uri.iii"
+
+var SRC_OK  : [u8; 3] = [37u8, 52u8, 49u8]   /* "%41" -> 'A' */
+var SRC_BAD : [u8; 3] = [37u8, 88u8, 89u8]   /* "%XY" -> bad nibble */
+var SRC_T2  : [u8; 2] = [37u8, 50u8]         /* "%2"  -> truncated */
+var SRC_T1  : [u8; 1] = [37u8]               /* "%"   -> truncated */
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    /* Positive control: "%41" decodes to one byte 'A'. */
+    let bo : u64 = builder_new(a, 64u64)
+    if uri_pct_decode(bo, (&SRC_OK) as u64, 3u64) != 0i32 { return 2u64 }
+    if builder_len(bo) != 1u64 { return 3u64 }
+    let dec : *u8 = builder_seal(bo) as *u8
+    if dec[0u64] != 65u8 { return 4u64 }     /* 'A' */
+
+    /* FALSIFIERS: bad nibble + truncated escapes all return URI_E_BADHEX (-3). */
+    let br : u64 = builder_new(a, 64u64)
+    if uri_pct_decode(br, (&SRC_BAD) as u64, 3u64) != -3i32 { return 5u64 }
+    if uri_pct_decode(br, (&SRC_T2) as u64, 2u64) != -3i32 { return 6u64 }
+    if uri_pct_decode(br, (&SRC_T1) as u64, 1u64) != -3i32 { return 7u64 }
+
+    return 99u64
+}

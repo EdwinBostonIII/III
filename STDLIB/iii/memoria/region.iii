@@ -43,6 +43,7 @@ const REG_E_FULL   : i32 = -2i32        /* table exhausted               */
 const REG_E_BADID  : i32 = -3i32
 const REG_E_NOFIT  : i32 = -4i32
 const REG_E_SEALED : i32 = -5i32
+const REG_E_OSFREE : i32 = -6i32        /* VirtualFree(MEM_RELEASE) reported failure */
 
 /* Must match tempaloc.iii TEMPALOC_TYPE_REGION (consts are module-local in
  * iiis-2; this is the local name for the shared tag).  A local const keeps
@@ -172,15 +173,17 @@ fn region_release(id: u64) -> i32 @export {
     let s : u32 = region_slot_of(id)
     if s == 0xFFFFFFFFu32 { return REG_E_BADID }
     let p_u64 : u64 = REG_BASE[s]
+    let mut fr : i32 = 1i32                /* [unchecked-return] capture VirtualFree BOOL; still complete slot cleanup */
     if p_u64 != 0u64 {
         let p : *u8 = p_u64 as *u8
-        VirtualFree(p, 0u64, 0x8000u32)   /* MEM_RELEASE (size must be 0) */
+        fr = VirtualFree(p, 0u64, 0x8000u32)   /* MEM_RELEASE (size must be 0) */
     }
     REG_BASE[s]     = 0u64
     REG_CAPACITY[s] = 0u64
     REG_USED[s]     = 0u64
     REG_SEALED[s]   = 0u8
     tempaloc_free(id, REG_TYPE)
+    if fr == 0i32 { return REG_E_OSFREE }
     return REG_OK
 }
 

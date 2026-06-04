@@ -76,11 +76,13 @@ fn rl_run(n: u32, proof_avail: u32, kernel_ok: u32) -> u32 @export {
     let mut merges : u32 = 0u32
     let mut i : u32 = 0u32
     while i < n {
-        rm_node_key(i, bufp)
+        let kr : i32 = rm_node_key(i, bufp)
+        if kr != 0i32 { return 0u32 }   /* [err-prop] i>=RM_MAXN zeroes bufp -> would mis-group on a stale key; abort the sweep */
         let rep : u32 = cai_get(kp, vp, RL_CAI_MASK, bufp)
         if rep == 0xFFFFFFFFu32 {
             /* first member of a new group -> it becomes the representative. */
-            cai_put(kp, vp, RL_CAI_MASK, bufp, i)
+            let pr : i32 = cai_put(kp, vp, RL_CAI_MASK, bufp, i)
+            if pr != 0i32 { return 0u32 }   /* [err-prop] a full cai table would silently drop the representative */
         } else {
             /* existing group: attempt to merge i with its representative.  Skip if already the
              * same class (no double count); ru_certify_unify enforces the intent gate +

@@ -20,7 +20,7 @@
  * guarded non-null before the call (resolver.iii idiom).
  *
  * Public API:
- *   tc_init() -> i32
+ *   tck_init() -> i32
  *   tc_register(op_id: *u8, impls: *u64) -> i32          -- impls -> [u64;3] {a,b,c}
  *   tc_execute(op_id: *u8, args: *u64, out_result: *u64) -> i32  -- args -> [u64;4]
  *   tc_disagreement_count() -> u32

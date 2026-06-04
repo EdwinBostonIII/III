@@ -1,0 +1,34 @@
+/* 421 — idoc_pack_payload out_cap guard (#5/#18 backlog).
+ * The packer now takes the out-buffer capacity and rejects BEFORE any write if a facet
+ * would overflow it (was an unbounded write to a NULL-checked-only buffer + a total_off+5+len_p
+ * u32 wrap) and on a null facet-data pointer.  Sentinel 0xFFFFFFFF (distinct from 0 = all skipped). */
+module corpus_421
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn idoc_pack_payload(facet_ids_ptr: u64, facet_data_ptrs_ptr: u64, facet_lens_ptr: u64, out_payload_ptr: u64, out_cap: u32) -> u32 from "idoc.iii"
+
+fn main() -> u64 {
+    let fids : *u8 = malloc(4u64)
+    let fdpa : *u8 = malloc(32u64)   /* 4 x u64 data ptrs */
+    let flna : *u8 = malloc(16u64)   /* 4 x u32 lens */
+    let data : *u8 = malloc(64u64)
+    let out  : *u8 = malloc(256u64)
+
+    fids[0] = 1u8; fids[1] = 0u8; fids[2] = 0u8; fids[3] = 0u8
+    let dpp : *u64 = fdpa as *u64
+    dpp[0] = data as u64; dpp[1] = 0u64; dpp[2] = 0u64; dpp[3] = 0u64
+    let lpp : *u32 = flna as *u32
+    lpp[0] = 40u32; lpp[1] = 0u32; lpp[2] = 0u32; lpp[3] = 0u32   /* one facet, len 40 -> needs 45 bytes */
+
+    /* NEGATIVE: out_cap 30 (< 45) -> sentinel 0xFFFFFFFF, NO OOB write */
+    if idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, out as u64, 30u32) != 0xFFFFFFFFu32 { return 1u64 }
+    /* sufficient cap (45) succeeds and returns the packed length 45 */
+    if idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, out as u64, 45u32) != 45u32 { return 2u64 }
+    /* NEGATIVE: null facet-data pointer with nonzero len -> sentinel */
+    dpp[0] = 0u64
+    if idoc_pack_payload(fids as u64, fdpa as u64, flna as u64, out as u64, 256u32) != 0xFFFFFFFFu32 { return 3u64 }
+
+    free(fids); free(fdpa); free(flna); free(data); free(out)
+    return 99u64
+}

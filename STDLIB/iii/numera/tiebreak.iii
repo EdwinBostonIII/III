@@ -138,6 +138,7 @@ fn tb_cmp_u32(a: u32, b: u32) -> i32 @export {
 fn tb_max_by_u64(values: *u64, count: u64, out_index: *u64) -> i32 @export {
     if (out_index as u64) == 0u64 { return TB_E_NULL }
     if count == 0u64 { return TB_E_EMPTY }
+    if (values as u64) == 0u64 { return TB_E_NULL }   /* sibling tb_select_by_u64_then_ident guards; values[0] else segfaults */
     let mut best : u64 = 0u64
     let mut bv : u64 = values[0u64]
     let mut i : u64 = 1u64

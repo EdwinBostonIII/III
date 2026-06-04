@@ -22,7 +22,9 @@ fn tp_ast_emit(dst: u64, off: u64, b: u8) -> i32 {
 }
 
 fn tp_iii_to_ast_bin(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
-    if 16u64 + src_len > dst_cap { return 0u64 }
+    /* [bounds] subtraction-form: 16+src_len wraps for src_len near u64-max -> tiny <= dst_cap -> OOB. */
+    if dst_cap < 16u64 { return 0u64 }
+    if src_len > dst_cap - 16u64 { return 0u64 }
     /* Magic (8 bytes) */
     let mut i : u32 = 0u32
     while i < 8u32 {

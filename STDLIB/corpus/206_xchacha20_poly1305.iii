@@ -48,7 +48,10 @@ fn main() -> u64 {
     while i < 12u64 { AD[i] = ((i * 3u64) & 0xFFu64) as u8 ; i = i + 1u64 }
     i = 0u64
     while i < 32u64 { PT[i] = ((i * 7u64 + 1u64) & 0xFFu64) as u8 ; i = i + 1u64 }
-    xchacha20_poly1305_seal(&K as u64, &N24 as u64, &AD as u64, 12u64, &PT as u64, 32u64, &CT as u64, &TG as u64)
+    /* (d) seal rc must propagate (==0 on valid inputs): proves the init/aad/seal chain is
+     * wired, not a hardcoded `return 0`.  A broken chain returns a non-zero AEAD error here. */
+    let seal_rc : i32 = xchacha20_poly1305_seal(&K as u64, &N24 as u64, &AD as u64, 12u64, &PT as u64, 32u64, &CT as u64, &TG as u64)
+    if seal_rc != 0i32 { return 7u64 }
     let v : u8 = xchacha20_poly1305_open(&K as u64, &N24 as u64, &AD as u64, 12u64, &CT as u64, 32u64, &PT2 as u64, &TG as u64)
     if v != 1u8 { return 8u64 }
     i = 0u64

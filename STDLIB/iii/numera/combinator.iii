@@ -107,6 +107,7 @@ fn cb_abstract(m: u32) -> u32 {
 /* compile a source lambda-term (VAR/LAM/APP/ATOM/S/K/I) to a variable-free
  * combinator term: every LAM becomes a bracket abstraction. */
 fn cb_compile(m: u32) -> u32 @export {
+    if m >= CB_CAP { return 0u32 }    /* reject an out-of-range node id before CB_TAG[m] (OOB); 0 = reserved-invalid. covers cb_abstract via this entry */
     let tag : u8 = CB_TAG[m]
     if tag == CB_APP {
         let f : u32 = cb_compile(CB_A[m])
@@ -252,6 +253,7 @@ fn cb_step(m: u32) -> u32 {
 
 /* reduce to normal form (fixpoint of cb_step), fuel-bounded. */
 fn cb_reduce(m: u32) -> u32 @export {
+    if m >= CB_CAP { return 0u32 }    /* reject an out-of-range node id before cb_step derefs CB_TAG[m] (OOB) */
     let mut cur : u32 = m
     let mut go : u32 = 1u32
     let mut fuel : u32 = CB_FUEL
@@ -268,6 +270,8 @@ fn cb_reduce(m: u32) -> u32 @export {
 
 /* structural equality (no binders -> pure structure). */
 fn cb_struct_eq(x: u32, y: u32) -> u8 @export {
+    if x >= CB_CAP { return 0u8 }     /* reject out-of-range node ids before CB_TAG[x/y] (OOB); 0 = not-equal */
+    if y >= CB_CAP { return 0u8 }
     let tx : u8 = CB_TAG[x]
     let ty : u8 = CB_TAG[y]
     if tx != ty { return 0u8 }

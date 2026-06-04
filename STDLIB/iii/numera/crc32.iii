@@ -69,6 +69,7 @@ fn crc32_init() -> u32 @export {
 
 fn crc32_update(data: *u8, len: u64) -> i32 @export {
     crc32_init_table()
+    if (data as u64) == 0u64 { return 0i32 }   /* null data -> no-op (stdlib null-guard pattern); avoids data[i] deref segfault. covers crc32_oneshot */
     let mut crc : u32 = CRC32_STATE
     let mut i : u64 = 0u64
     /* [D-CRC-1] slice-by-8: consume 8 bytes per iteration via the 8 derived tables. */

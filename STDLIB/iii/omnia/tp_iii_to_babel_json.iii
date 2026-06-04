@@ -54,9 +54,14 @@ fn tp_bj_b64_triplet(dst: u64, off: u64, b0: u8, b1: u8, b2: u8) -> u32 {
 }
 
 fn tp_iii_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
-    /* Conservative size estimate: prefix(83) + 4*ceil(src_len/3) + suffix(2) */
+    /* Conservative size estimate: prefix(83) + 4*ceil(src_len/3) + suffix(4), overhead = 87.
+     * [bounds] `est` has THREE wrap points (src_len+2, the *4, the +overhead) for src_len near
+     * u64-max.  Subtraction-form bound on the INPUT instead: the largest src_len that fits is
+     * 3*((dst_cap-87)/4); reject anything larger.  All terms derive from dst_cap (a real buffer
+     * size), so nothing wraps. */
+    if dst_cap < 87u64 { return 0u64 }
+    if src_len > (dst_cap - 87u64) / 4u64 * 3u64 { return 0u64 }
     let est : u64 = 83u64 + 4u64 * ((src_len + 2u64) / 3u64) + 4u64
-    if est > dst_cap { return 0u64 }
     let mut off : u64 = 0u64
     /* Prefix (83 bytes used) */
     let mut p : u32 = 0u32

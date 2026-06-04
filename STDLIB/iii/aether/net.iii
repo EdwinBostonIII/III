@@ -57,15 +57,6 @@ const NET_INVALID_SOCKET : u64 = 0xFFFFFFFFFFFFFFFFu64
 var NET_WSADATA   : [u8; 408]
 var NET_INITED    : u8 = 0u8
 
-/* sockaddr_in is 16 bytes:
- *   0: sin_family u16 LE
- *   2: sin_port   u16 BE
- *   4: sin_addr   u32 BE
- *   8: sin_zero   8 bytes
- *
- * We construct it in a module-scope buffer at connect-time. */
-var NET_SOCKADDR : [u8; 16]
-
 fn net_init() -> i32 @export {
     if NET_INITED == 1u8 { return NET_OK }
     /* Winsock REQUIRES WSAStartup before any socket call (the prior
@@ -79,34 +70,6 @@ fn net_init() -> i32 @export {
     return NET_OK
 }
 
-/* Build the IPv4 sockaddr in NET_SOCKADDR for (a.b.c.d : port). */
-fn net_build_sockaddr_ipv4(a: u32, b: u32, c: u32, port: u32) -> u32 {
-    /* family AF_INET = 2 (LE) */
-    NET_SOCKADDR[0] = 2u8
-    NET_SOCKADDR[1] = 0u8
-    /* port (BE) */
-    NET_SOCKADDR[2] = ((port >> 8u32) & 0xFFu32) as u8
-    NET_SOCKADDR[3] = (port & 0xFFu32) as u8
-    /* addr (BE bytes a,b,c,d) -- caller passes a, b, c via 3 args; the
-     * fourth byte d is stored separately to keep this fn ≤4 args. */
-    NET_SOCKADDR[4] = (a & 0xFFu32) as u8
-    NET_SOCKADDR[5] = (b & 0xFFu32) as u8
-    NET_SOCKADDR[6] = (c & 0xFFu32) as u8
-    /* d set by caller via net_set_addr_d */
-    /* zero pad */
-    let mut i : u32 = 8u32
-    while i < 16u32 {
-        NET_SOCKADDR[i] = 0u8
-        i = i + 1u32
-    }
-    return 0u32
-}
-
-fn net_set_addr_d(d: u32) -> u32 @export {
-    NET_SOCKADDR[7] = (d & 0xFFu32) as u8
-    return 0u32
-}
-
 /* Connect.  Caller has already filled the sockaddr via prior helper.
  * Returns a handle id (or 0 on failure).
  *
@@ -117,7 +80,7 @@ fn net_set_addr_d(d: u32) -> u32 @export {
  * built (e.g., via the helpers below or by-hand). */
 fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 @export {
     if cap_verify_rights(net_cap, NET_RIGHT_DIAL) == 0u8 { return 0u64 }
-    if NET_INITED == 0u8 { net_init() }
+    if NET_INITED == 0u8 { if net_init() != NET_OK { return 0u64 } }
     let sock : u64 = socket(NET_AF_INET, NET_SOCK_STREAM, NET_IPPROTO_TCP)
     if sock == NET_INVALID_SOCKET { return 0u64 }
     if sock == 0u64 { return 0u64 }
@@ -127,21 +90,27 @@ fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u
         closesocket(sock)
         return 0u64
     }
-    return handle_alloc(2u8, sock, net_cap)
+    /* handle_alloc fails (returns 0) when the 64-slot handle table is full; without
+     * this the connected socket would LEAK (no fd left to close it). */
+    let hid : u64 = handle_alloc(2u8, sock, net_cap)
+    if hid == 0u64 { closesocket(sock)  return 0u64 }
+    return hid
 }
 
 /* Phase E: bind+listen on (sockaddr_ptr) and return a listening handle.
  * Requires NET_RIGHT_LISTEN on net_cap. */
 fn net_tcp_listen_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 @export {
     if cap_verify_rights(net_cap, NET_RIGHT_LISTEN) == 0u8 { return 0u64 }
-    if NET_INITED == 0u8 { net_init() }
+    if NET_INITED == 0u8 { if net_init() != NET_OK { return 0u64 } }
     let sock : u64 = socket(NET_AF_INET, NET_SOCK_STREAM, NET_IPPROTO_TCP)
     if sock == NET_INVALID_SOCKET { return 0u64 }
     if sock == 0u64 { return 0u64 }
     let len_i : i32 = sockaddr_len as i32
     if bind(sock, sockaddr_ptr, len_i) != 0i32 { closesocket(sock)  return 0u64 }
     if listen(sock, 16i32) != 0i32 { closesocket(sock)  return 0u64 }
-    return handle_alloc(2u8, sock, net_cap)
+    let hid : u64 = handle_alloc(2u8, sock, net_cap)
+    if hid == 0u64 { closesocket(sock)  return 0u64 }
+    return hid
 }
 
 /* Accept one inbound connection on a listening handle.  The accepted
@@ -154,7 +123,9 @@ fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 @export {
     let csock : u64 = accept(lsock, 0u64, 0u64)
     if csock == NET_INVALID_SOCKET { return 0u64 }
     if csock == 0u64 { return 0u64 }
-    return handle_alloc(2u8, csock, dial_cap)
+    let hid : u64 = handle_alloc(2u8, csock, dial_cap)
+    if hid == 0u64 { closesocket(csock)  return 0u64 }
+    return hid
 }
 
 /* mig3 boundary SINK: send transmits `buf` OUTWARD to the OS socket, so it may

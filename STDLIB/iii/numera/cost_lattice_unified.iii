@@ -28,6 +28,7 @@ fn clu_within_bound(measured: u64, margin: u64) -> u8 @export {
     let m : u64 = margin
     if measured < b { return 0u8 }          /* below the sound LOWER bound -> impossible / mis-measure */
     let upper : u64 = b + m
+    if upper < b { return 1u8 }             /* b+m overflowed u64 -> true bound+margin exceeds any u64 measured -> within budget */
     if measured > upper { return 0u8 }      /* exceeds bound+margin -> a PROVABLE regression (FAIL) */
     return 1u8
 }

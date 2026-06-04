@@ -85,6 +85,11 @@ fn rfc3339_parse(src: *u8, src_len: u64) -> u64 @export {
     let hour : u32 = rfc_parse2(src, 11u64)
     let min : u32 = rfc_parse2(src, 14u64)
     let sec : u32 = rfc_parse2(src, 17u64)
+    if hour > 23u32 { return 0xFFFFFFFFFFFFFFFFu64 }     /* [overflow] reject malformed time-of-day */
+    if min > 59u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if sec > 60u32 { return 0xFFFFFFFFFFFFFFFFu64 }      /* allow leap second :60 */
+    let secs : u64 = cal_civil_to_unix(year, month, day)
+    if secs == 0xFFFFFFFFFFFFFFFFu64 { return 0xFFFFFFFFFFFFFFFFu64 }   /* [unchecked-return] propagate invalid-date sentinel */
     let day_secs : u64 = (hour as u64) * 3600u64 + (min as u64) * 60u64 + (sec as u64)
-    return cal_civil_to_unix(year, month, day) + day_secs
+    return secs + day_secs
 }

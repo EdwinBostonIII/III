@@ -38,9 +38,14 @@ fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 @export {
     KK256_MP[0] = msg_ptr
     KK256_ML[0] = msg_len
     KK256_OP[0] = out_ptr
-    keccak_state_zero(&KK256_STATE as u64)
-    keccak_absorb(&KK256_STATE as u64, KK256_MP[0], KK256_ML[0], 0x0000000100000088u64)
-    keccak_squeeze(&KK256_STATE as u64, KK256_OP[0], 32u64, 136u32)
+    /* Propagate every sub-call rc: keccak_absorb returns KK_E_NULL for a null msg with
+     * msg_len>0 -- the old code discarded it and returned 0i32 (success) with a WRONG digest. */
+    let zr : i32 = keccak_state_zero(&KK256_STATE as u64)
+    if zr != 0i32 { return zr }
+    let ar : i32 = keccak_absorb(&KK256_STATE as u64, KK256_MP[0], KK256_ML[0], 0x0000000100000088u64)
+    if ar != 0i32 { return ar }
+    let sr : i32 = keccak_squeeze(&KK256_STATE as u64, KK256_OP[0], 32u64, 136u32)
+    if sr != 0i32 { return sr }
     return 0i32
 }
 
@@ -59,6 +64,7 @@ fn keccak256_update(input: *u8, len: u64) -> i32 @export {
      * plus a partial tail, mirroring keccak.iii keccak_absorb's block routine). */
     let inp : *u8 = input
     let ln  : u64 = len
+    if ln != 0u64 { if (inp as u64) == 0u64 { return -1i32 } }    /* [null-deref] @export: NULL inp with ln>0 reads inp[off] */
     let mut off : u64 = 0u64
     let mut p : u64 = KK256_POS[0]
     /* (1) finish a rate block already in progress, up to the 136-byte boundary. */
@@ -92,6 +98,7 @@ fn keccak256_update(input: *u8, len: u64) -> i32 @export {
     return 0i32
 }
 fn keccak256_final(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return 0i32 - 1i32 }   /* null out -> KK_E_NULL; sibling keccak_squeeze guards (keccak.iii:417). avoids o[i] deref segfault */
     KK256_FOUT[0] = out as u64
     let p : u64 = KK256_POS[0]
     KK256_SST[p] = KK256_SST[p] ^ 0x01u8                /* Keccak domain separator */
@@ -103,10 +110,42 @@ fn keccak256_final(out: *u8) -> i32 @export {
     return 0i32
 }
 
+/* Byte-packed-OUTPUT keccak256 final (4 u64 stores) -- the cross-backend analogue of sha256_emit_bp.
+ * keccak256_final's slotted `o[i]=KK256_SST[i]` writes one digest byte per cg_r0 u64 slot, which a
+ * cg_r3 consumer reading the result byte-packed mis-reads ({d0,0x7,d1,0x7,...}).  Same domain
+ * separator + 10*1 padding + final permutation as keccak256_final, then packs the slotted sponge
+ * bytes into u64s (a u64 store is byte-packed on BOTH backends).  For cross-backend keccak digests. */
+fn keccak256_final_bp(out: *u8) -> i32 @export {
+    if (out as u64) == 0u64 { return 0i32 - 1i32 }
+    let p : u64 = KK256_POS[0u64]
+    KK256_SST[p] = KK256_SST[p] ^ 0x01u8
+    KK256_SST[135u64] = KK256_SST[135u64] ^ 0x80u8
+    keccak_f1600(&KK256_SST as u64)
+    let ob : u64 = out as u64
+    let mut j : u64 = 0u64
+    while j < 4u64 {
+        let b : u64 = j * 8u64
+        let mut w : u64 = (KK256_SST[b] as u64) & 0xFFu64
+        w = w | (((KK256_SST[b + 1u64] as u64) & 0xFFu64) << 8u64)
+        w = w | (((KK256_SST[b + 2u64] as u64) & 0xFFu64) << 16u64)
+        w = w | (((KK256_SST[b + 3u64] as u64) & 0xFFu64) << 24u64)
+        w = w | (((KK256_SST[b + 4u64] as u64) & 0xFFu64) << 32u64)
+        w = w | (((KK256_SST[b + 5u64] as u64) & 0xFFu64) << 40u64)
+        w = w | (((KK256_SST[b + 6u64] as u64) & 0xFFu64) << 48u64)
+        w = w | (((KK256_SST[b + 7u64] as u64) & 0xFFu64) << 56u64)
+        (ob as *u64)[j] = w
+        j = j + 1u64
+    }
+    return 0i32
+}
+
 /* KAT: Keccak256("")  = c5d24601...85a470 ; Keccak256("abc") = 4e03657a...12d6c45 ;
  * streaming "abc" (split) == one-shot ; multi-block streaming (150+50, crosses the
  * 136-byte rate boundary) == one-shot.  99 = pass. */
 fn keccak256_kat() -> u64 @export {
+    /* NEGATIVE (rc propagation): a null msg with msg_len>0 must now return the absorb error,
+     * not 0i32 with a bogus digest (the old keccak256_oneshot discarded every sub-call rc). */
+    if keccak256_oneshot(0u64, 5u64, &KK256_OUT as u64) == 0i32 { return 12u64 }
     keccak256_oneshot(&KK256_MSG as u64, 0u64, &KK256_OUT as u64)
     if KK256_OUT[0] != 0xc5u8 { return 1u64 }
     if KK256_OUT[1] != 0xd2u8 { return 2u64 }

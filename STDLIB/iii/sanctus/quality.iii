@@ -237,7 +237,7 @@ fn quality_check_q4_witness_growth() -> u8 @export {
 
 /* Q5: K-floor preservation. */
 fn quality_check_q5_kfloor() -> u8 @export {
-    if QUALITY_KCHAIN_ID == 0u64 { return 1u8 }
+    if QUALITY_KCHAIN_ID == 0u64 { return 0u8 }   /* [fail-closed] unconfigured K-chain = FAIL, consistent with Q2/Q3/Q4 (was fail-OPEN return 1 -> a bypassable gate on III's most fundamental dimension) */
     if kchain_is_underflow(QUALITY_KCHAIN_ID) == 1u8 { return 0u8 }
     let cur : u64 = kchain_current(QUALITY_KCHAIN_ID)
     let flr : u64 = kchain_floor(QUALITY_KCHAIN_ID)

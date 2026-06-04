@@ -1,0 +1,9 @@
+/* 1054 -- mig5 §G-step5: tie Compromise<HIGH> to mig2 (unrepresentable = doesn't type-check).
+ * h9_mig2_tie.iii proves the reversible.iii assertion "UNREPRESENTABLE = bricking; M3 reach forbids
+ * construction": the Compromise<HIGH> tier's safety-hexad is non-reachable, so mig2's Reach proof is
+ * uninhabited and the SovVal does NOT type-check; representable tiers (REVERSIBLE/LOW/MED) map to a
+ * reachable hexad and DO type-check; the runtime classifier (rev_classify) and the mig2 type gate
+ * agree on the bricking effect; a canary proves the two verdicts genuinely differ.  99 = the tie holds. */
+module corpus_1054
+extern @abi(c-msvc-x64) fn h9_mig2_tie_selftest() -> u64 from "h9_mig2_tie.iii"
+fn main() -> u64 { return h9_mig2_tie_selftest() }

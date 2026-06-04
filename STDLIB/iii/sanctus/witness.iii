@@ -164,6 +164,15 @@ fn witness_count() -> u32 @export {
     return WITNESS_COUNT
 }
 
+/* Free witness slots remaining before the chain is full.  Authoritative headroom query --
+ * lets a caller pre-flight a batch of N appends (all-or-nothing) instead of discovering
+ * WITNESS_E_FULL mid-batch and leaving a partial record.  WITNESS_COUNT never exceeds the
+ * cap (every append guards it), so the subtraction cannot underflow; the guard is belt-and-braces. */
+fn witness_remaining() -> u32 @export {
+    if WITNESS_COUNT >= WITNESS_MAX_ENTRIES { return 0u32 }
+    return WITNESS_MAX_ENTRIES - WITNESS_COUNT
+}
+
 fn witness_root_byte(i: u32) -> u32 @export {
     if i >= 32u32 { return 0x100u32 }
     return WITNESS_ROOT[i] as u32

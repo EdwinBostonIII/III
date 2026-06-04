@@ -23,6 +23,8 @@
 module numera_cad
 
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot_packed(src: *u8, byte_len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot_packed_bp(src: *u8, byte_len: u64, out_32: *u8) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
@@ -31,6 +33,7 @@ extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr
 extern @abi(c-msvc-x64) fn keccak256_init() -> i32 from "keccak256.iii"
 extern @abi(c-msvc-x64) fn keccak256_update(input: *u8, len: u64) -> i32 from "keccak256.iii"
 extern @abi(c-msvc-x64) fn keccak256_final(out: *u8) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn keccak256_final_bp(out: *u8) -> i32 from "keccak256.iii"
 
 const CAD_OK             : i32 = 0i32
 const CAD_E_NULL         : i32 = -1i32
@@ -48,6 +51,7 @@ var CAD_O  : [u8; 32]
 var CAD_O2 : [u8; 32]
 var CAD_REF : [u8; 96]
 var CAD_ZERO : [u8; 1] = [0u8]
+var CAD_PSCRATCH : [u8; 8]   /* slotted 8-byte stage for packed-keccak streaming (cg_r0 byte fix) */
 
 /* Generic oneshot: hash (msg,len) under `suite` into out (32 bytes). */
 fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 @export {
@@ -64,6 +68,99 @@ fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 @export {
     if s == CAD_SUITE_KECCAK256 {
         keccak256_oneshot(m as u64, n, o as u64)
         return CAD_OK
+    }
+    return CAD_E_BAD_SUITE
+}
+
+/* Keccak256 of a BYTE-PACKED buffer: stream 8 bytes at a time through a slotted scratch (the cg_r0
+ * `*u8`-strides-by-8 fix; keccak has no update_byte). */
+fn cad_keccak_packed(src: u64, byte_len: u64, out: *u8) -> i32 {
+    keccak256_init()
+    let nq : u64 = byte_len >> 3u64
+    let mut q : u64 = 0u64
+    while q < nq {
+        let w : u64 = (src as *u64)[q]
+        CAD_PSCRATCH[0u64] = (w & 0xFFu64) as u8
+        CAD_PSCRATCH[1u64] = ((w >> 8u64)  & 0xFFu64) as u8
+        CAD_PSCRATCH[2u64] = ((w >> 16u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[3u64] = ((w >> 24u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[4u64] = ((w >> 32u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[5u64] = ((w >> 40u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[6u64] = ((w >> 48u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[7u64] = ((w >> 56u64) & 0xFFu64) as u8
+        keccak256_update((&CAD_PSCRATCH as u64) as *u8, 8u64)
+        q = q + 1u64
+    }
+    let rem : u64 = byte_len & 7u64
+    if rem > 0u64 {
+        let mut wl : u64 = (src as *u64)[nq]
+        let mut b : u64 = 0u64
+        while b < rem { CAD_PSCRATCH[b] = (wl & 0xFFu64) as u8  wl = wl >> 8u64  b = b + 1u64 }
+        keccak256_update((&CAD_PSCRATCH as u64) as *u8, rem)
+    }
+    return keccak256_final(out)
+}
+
+/* Generic oneshot over BYTE-PACKED input (a running image, a [u64]/[u32] cast to *u8).  Under
+ * cg_r0's 8-byte-uniform model the plain cad_oneshot over-reads byte-packed data 8x (BSOD 0x50);
+ * this reads the source as u64 words and feeds the real bytes, so it is byte-wise-correct on BOTH
+ * backends.  Use this whenever the hashed bytes are NOT a slotted [u8] array. */
+fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 @export {
+    if (msg as u64) == 0u64 { return CAD_E_NULL }
+    if (out as u64) == 0u64 { return CAD_E_NULL }
+    let s : u32 = suite
+    if s == CAD_SUITE_SHA256 {
+        sha256_oneshot_packed(msg, byte_len, out)
+        return CAD_OK
+    }
+    if s == CAD_SUITE_KECCAK256 {
+        return cad_keccak_packed(msg as u64, byte_len, out)
+    }
+    return CAD_E_BAD_SUITE
+}
+
+fn cad_keccak_packed_bp(src: u64, byte_len: u64, out: *u8) -> i32 {
+    keccak256_init()
+    let nq : u64 = byte_len >> 3u64
+    let mut q : u64 = 0u64
+    while q < nq {
+        let w : u64 = (src as *u64)[q]
+        CAD_PSCRATCH[0u64] = (w & 0xFFu64) as u8
+        CAD_PSCRATCH[1u64] = ((w >> 8u64)  & 0xFFu64) as u8
+        CAD_PSCRATCH[2u64] = ((w >> 16u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[3u64] = ((w >> 24u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[4u64] = ((w >> 32u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[5u64] = ((w >> 40u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[6u64] = ((w >> 48u64) & 0xFFu64) as u8
+        CAD_PSCRATCH[7u64] = ((w >> 56u64) & 0xFFu64) as u8
+        keccak256_update((&CAD_PSCRATCH as u64) as *u8, 8u64)
+        q = q + 1u64
+    }
+    let rem : u64 = byte_len & 7u64
+    if rem > 0u64 {
+        let mut wl : u64 = (src as *u64)[nq]
+        let mut b : u64 = 0u64
+        while b < rem { CAD_PSCRATCH[b] = (wl & 0xFFu64) as u8  wl = wl >> 8u64  b = b + 1u64 }
+        keccak256_update((&CAD_PSCRATCH as u64) as *u8, rem)
+    }
+    return keccak256_final_bp(out)
+}
+
+/* Byte-packed-INPUT and byte-packed-OUTPUT cad oneshot -- the CROSS-BACKEND digest path.  Use this
+ * (not cad_oneshot_packed) when a cg_r0 producer's digest is read back byte-packed by a cg_r3 consumer
+ * (the M23 quine-seal: the Ring-0 driver measures its .text, a Ring-3 client re-derives + compares).
+ * cad_oneshot_packed keeps its slotted output for cg_r0-internal cad_eq / cycle-seal consumers, which
+ * read the same slotted layout and stay self-consistent. */
+fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 @export {
+    if (msg as u64) == 0u64 { return CAD_E_NULL }
+    if (out as u64) == 0u64 { return CAD_E_NULL }
+    let s : u32 = suite
+    if s == CAD_SUITE_SHA256 {
+        sha256_oneshot_packed_bp(msg, byte_len, out)
+        return CAD_OK
+    }
+    if s == CAD_SUITE_KECCAK256 {
+        return cad_keccak_packed_bp(msg as u64, byte_len, out)
     }
     return CAD_E_BAD_SUITE
 }
@@ -272,5 +369,17 @@ fn cad_selftest() -> u64 @export {
     while i < 8u64 { CAD_REF[5u64 + i] = CAD_B[i] ; i = i + 1u64 }
     sha256_oneshot((&CAD_REF as u64) as *u8, 13u64, (&CAD_O2 as u64) as *u8)
     if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 13u64 }
+    /* 14. cad_branch_key BYTE-equivalence == keccak256_oneshot(canonical||branch_id) (gap #67) */
+    cad_branch_key((&CAD_A as u64) as *u8, (&CAD_B as u64) as *u8, (&CAD_O as u64) as *u8)
+    i = 0u64
+    while i < 32u64 {
+        CAD_REF[i] = CAD_A[i]
+        CAD_REF[32u64 + i] = CAD_B[i]
+        i = i + 1u64
+    }
+    keccak256_oneshot(&CAD_REF as u64, 64u64, (&CAD_O2 as u64) as *u8)
+    if cad_eq((&CAD_O as u64) as *u8, (&CAD_O2 as u64) as *u8) != 1u8 { return 14u64 }
+    /* 15. cad_branch_key null-arm -> CAD_E_NULL (gap #67) */
+    if cad_branch_key(0u64 as *u8, (&CAD_B as u64) as *u8, (&CAD_O as u64) as *u8) != CAD_E_NULL { return 15u64 }
     return 99u64
 }

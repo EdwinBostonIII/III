@@ -32,7 +32,7 @@
 
 module omnia_unify
 
-extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u32, align: u8) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u64, align: u64) -> u64 from "arena.iii"   /* match arena.iii:66 real sig */
 
 const TERM_KIND_VAR    : u8 = 1u8
 const TERM_KIND_CONST  : u8 = 2u8
@@ -361,7 +361,7 @@ fn unify_export_subst_to_resolver_buf(buf: u64, dst_256b: u64) -> i32 @export {
 }
 
 fn unify_buf_new(arena_id: u64) -> u64 @export {
-    let p : u64 = arena_alloc(arena_id, UNIFY_BUF_SIZE, 16u8)
+    let p : u64 = arena_alloc(arena_id, UNIFY_BUF_SIZE as u64, 16u64)
     if p != 0u64 { unify_init(p) }
     return p
 }

@@ -1,0 +1,213 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\ed_scalar_modl.iii
+ *
+ * III STDLIB - numera::ed_scalar_modl -- sovereign reduction modulo the Ed25519
+ * group order L = 2^252 + 27742317777372353535851937790883648493 (RFC 8032).
+ *
+ * APOTHEOSIS §C.2: replaces crypt_ed25519's two generic `bigint_mod(x, L)` calls
+ * (the per-sign r = SHA512(prefix||M) mod L and S = (k*a + r) mod L; the per-verify
+ * h = SHA512(R||A||M) mod L) with a fixed-buffer, ALLOCATION-FREE Barrett reduction
+ * specialised to L -- mirroring fe25519's sovereign pseudo-Mersenne style for p =
+ * 2^255-19.  bigint_mod is correct (Knuth long division) but allocates a quotient +
+ * normalises + estimates qhat per limb; ed_mod_l replaces all of that with one
+ * precomputed Barrett constant mu = floor(2^512 / L) and two fixed-size multiplies
+ * over module-scope u32-limb buffers (the proven fe25519 radix-2^32 layout, every
+ * partial product a[i]*b[j] < 2^64).  No bigint mul/div/mod in the hot body.
+ *
+ * TOTALITY (no silent precondition): the Barrett fast path is exact for a < 2^512
+ * (16 u32 limbs).  Both live call sites satisfy this -- ed_hash_finalize reduces a
+ * 512-bit SHA-512 output; (k*a + r) has k,a < L < 2^253 so k*a < 2^506, +r < 2^253
+ * (well under 2^512).  For ANY wider input ed_mod_l falls back to the general Knuth
+ * bigint_mod (correct for all widths, never silently truncating) -- so ed_mod_l is a
+ * TRUE drop-in for bigint_mod over every input, with the allocation-free fast path
+ * taken on the only widths the live signer/verifier ever produce.
+ *
+ * For every x < 2^512 the Barrett estimate q = floor(x*mu / 2^512) undershoots
+ * q_true by at most 1 (proven bound; empirically 0..1), so at most 2 conditional
+ * subtractions of L canonicalise r into [0, L); we run THREE as a strict safety belt.
+ *
+ * Drop-in for bigint_mod: ed_mod_l(arena, a, lid) returns a fresh bigint in `arena`
+ * equal to (a mod L).  `lid` (the caller's L handle) is used for the >= 2^512 Knuth
+ * fallback and is otherwise unused (L is the hardcoded Barrett constant here).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  KAT: differential vs bigint_mod +
+ * the >= 2^512 totality arm + RFC-8032 (corpus 1021 + 193-197).
+ */
+module numera_ed_scalar_modl
+
+extern @abi(c-msvc-x64) fn bigint_new(arena: u64, cap: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_limb(id: u64, i: u64, v: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_get_limb(id: u64, i: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_len_limbs(id: u64) -> u64 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint.iii"
+extern @abi(c-msvc-x64) fn bigint_normalize(id: u64) -> i32 from "bigint.iii"
+/* totality fallback for inputs >= 2^512 (never on the live Ed25519 path): the
+ * general Knuth long division -- correct for all widths, no silent truncation. */
+extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+
+/* ---- fixed-buffer state (radix 2^32, little-endian; hoisted to module scope so
+ * no function-local array is indexed by a runtime variable) ----
+ * x  : input, 16 u32 limbs  (<= 512 bits)
+ * L  : modulus, 8 u32 limbs (253 bits; top limb 0x10000000)
+ * MU : floor(2^512 / L), 9 u32 limbs (260 bits)
+ * XM : x*mu product, 25 u32 limbs (<= 772 bits)
+ * Q  : floor(x*mu / 2^512) = XM limbs [16..24], 9 u32 limbs
+ * QL : q*L product, 17 u32 limbs (9+8; edl_mul writes the full na+nb width, so the
+ *      buffer MUST be 17 even though only the low 16 are consumed below)
+ * R  : remainder working buffer, 9 u32 limbs (8 for L-width + 1 guard) */
+var EDL_X  : [u64; 16]
+var EDL_L  : [u64; 8]
+var EDL_MU : [u64; 9]
+var EDL_XM : [u64; 25]
+var EDL_Q  : [u64; 9]
+var EDL_QL : [u64; 17]
+var EDL_R  : [u64; 9]
+var EDL_INIT : u8 = 0u8
+
+/* L = 2^252 + 27742317777372353535851937790883648493, low->high u32 limbs.
+ * mu = floor(2^512 / L), low->high u32 limbs. */
+fn edl_init() -> i32 {
+    if EDL_INIT == 1u8 { return 0i32 }
+    /* L (u64 limbs 0x5812631a5cf5d3ed,0x14def9dea2f79cd6,0,0x1000000000000000) as u32 halves */
+    EDL_L[0u64] = 0x5cf5d3edu64  EDL_L[1u64] = 0x5812631au64
+    EDL_L[2u64] = 0xa2f79cd6u64  EDL_L[3u64] = 0x14def9deu64
+    EDL_L[4u64] = 0x00000000u64  EDL_L[5u64] = 0x00000000u64
+    EDL_L[6u64] = 0x00000000u64  EDL_L[7u64] = 0x10000000u64
+    /* mu (u64 limbs 0xed9ce5a30a2c131b,0x2106215d086329a7,0xffffffffffffffeb,0xffffffffffffffff,0xf) */
+    EDL_MU[0u64] = 0x0a2c131bu64  EDL_MU[1u64] = 0xed9ce5a3u64
+    EDL_MU[2u64] = 0x086329a7u64  EDL_MU[3u64] = 0x2106215du64
+    EDL_MU[4u64] = 0xffffffebu64  EDL_MU[5u64] = 0xffffffffu64
+    EDL_MU[6u64] = 0xffffffffu64  EDL_MU[7u64] = 0xffffffffu64
+    EDL_MU[8u64] = 0x0000000fu64
+    EDL_INIT = 1u8
+    return 0i32
+}
+
+/* schoolbook multiply: out[0..na+nb) = a[0..na) * b[0..nb), radix 2^32.
+ * out is a u32-limb buffer (values < 2^32 per limb); na+nb limbs written. */
+fn edl_mul(out: u64, a: u64, na: u64, b: u64, nb: u64) -> i32 {
+    let op : *u64 = out as *u64
+    let ap : *u64 = a as *u64
+    let bp : *u64 = b as *u64
+    let total : u64 = na + nb
+    let mut z : u64 = 0u64
+    while z < total { op[z] = 0u64  z = z + 1u64 }
+    let mut i : u64 = 0u64
+    while i < na {
+        let mut carry : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < nb {
+            let acc : u64 = op[i + j] + ap[i] * bp[j] + carry
+            op[i + j] = acc & 0xFFFFFFFFu64
+            carry = acc >> 32u64
+            j = j + 1u64
+        }
+        op[i + nb] = op[i + nb] + carry
+        i = i + 1u64
+    }
+    return 0i32
+}
+
+/* ed_mod_l: returns (a mod L) as a fresh bigint in `arena`.  Total over all inputs:
+ * the allocation-free Barrett fast path for a < 2^512, the Knuth bigint_mod fallback
+ * otherwise.  `lid` is the caller's L bigint handle (used only by the fallback). */
+fn ed_mod_l(arena: u64, a: u64, lid: u64) -> u64 @export {
+    edl_init()
+    /* TOTALITY GUARD: the Barrett buffers hold 16 u32 limbs = 512 bits.  An input
+     * with > 8 u64 limbs (>= 2^512) cannot be reduced by the fast path without
+     * dropping high limbs, so route it to the general Knuth organ -- exact for any
+     * width, never a silent truncation.  Never taken on the live Ed25519 path. */
+    if bigint_len_limbs(a) > 8u64 { return bigint_mod(arena, a, lid) }
+    /* load a -> EDL_X as 16 u32 limbs (a is bigint with 64-bit limbs). */
+    let xp : *u64 = (&EDL_X as u64) as *u64
+    let mut k : u64 = 0u64
+    while k < 16u64 { xp[k] = 0u64  k = k + 1u64 }
+    let alen : u64 = bigint_len_limbs(a)
+    let mut i : u64 = 0u64
+    while i < alen {
+        if i < 8u64 {
+            let v : u64 = bigint_get_limb(a, i)
+            xp[2u64 * i] = v & 0xFFFFFFFFu64
+            xp[2u64 * i + 1u64] = (v >> 32u64) & 0xFFFFFFFFu64
+        }
+        i = i + 1u64
+    }
+    /* XM = x * mu  (16 x 9 = up to 25 limbs). */
+    edl_mul(&EDL_XM as u64, &EDL_X as u64, 16u64, &EDL_MU as u64, 9u64)
+    /* Q = floor(XM / 2^512) = XM limbs [16..24] (9 limbs). */
+    let xmp : *u64 = (&EDL_XM as u64) as *u64
+    let qp : *u64 = (&EDL_Q as u64) as *u64
+    k = 0u64
+    while k < 9u64 { qp[k] = xmp[16u64 + k]  k = k + 1u64 }
+    /* QL = q * L  (low 16 limbs suffice: r = x - q*L < 2^512). */
+    edl_mul(&EDL_QL as u64, &EDL_Q as u64, 9u64, &EDL_L as u64, 8u64)
+    /* R16 = x - QL mod 2^512 (16 u32 limbs), reusing EDL_QL as the difference. */
+    let qlp : *u64 = (&EDL_QL as u64) as *u64
+    let mut borrow : u64 = 0u64
+    k = 0u64
+    while k < 16u64 {
+        let sub : u64 = qlp[k] + borrow
+        let xv : u64 = xp[k]
+        if xv >= sub { qlp[k] = xv - sub  borrow = 0u64 }
+        else { qlp[k] = (xv + 0x100000000u64) - sub  borrow = 1u64 }
+        k = k + 1u64
+    }
+    /* the true remainder is < 2L < 2^254, so it lives in the low 8 u32 limbs;
+     * copy them into EDL_R (9 limbs, top guard 0) and canonicalise with up to
+     * THREE conditional subtractions of L (theoretical bound is 2). */
+    let rp : *u64 = (&EDL_R as u64) as *u64
+    k = 0u64
+    while k < 8u64 { rp[k] = qlp[k]  k = k + 1u64 }
+    rp[8u64] = 0u64
+    edl_cond_sub_l()
+    edl_cond_sub_l()
+    edl_cond_sub_l()
+    /* pack EDL_R (8 u32 limbs) -> bigint (4 u64 limbs) in arena. */
+    let result : u64 = bigint_new(arena, 5u64)
+    let mut w : u64 = 0u64
+    while w < 4u64 {
+        let lo : u64 = rp[2u64 * w]
+        let hi : u64 = rp[2u64 * w + 1u64]
+        bigint_set_limb(result, w, lo | (hi << 32u64))
+        w = w + 1u64
+    }
+    bigint_set_len(result, 4u64)
+    bigint_normalize(result)
+    return result
+}
+
+/* if EDL_R >= L (over its 8 low u32 limbs; guard limb 8 must be 0 for in-range),
+ * subtract L.  Compares high->low. */
+fn edl_cond_sub_l() -> i32 {
+    let rp : *u64 = (&EDL_R as u64) as *u64
+    let lp : *u64 = (&EDL_L as u64) as *u64
+    /* ge = (guard limb nonzero) OR (low-8 compare >= L) */
+    let mut ge : u8 = 0u8
+    if rp[8u64] != 0u64 { ge = 1u8 }
+    else {
+        let mut decided : u8 = 0u8
+        let mut k : u64 = 8u64
+        while k > 0u64 {
+            if decided == 0u8 {
+                let idx : u64 = k - 1u64
+                if rp[idx] > lp[idx] { ge = 1u8  decided = 1u8 }
+                else { if rp[idx] < lp[idx] { ge = 0u8  decided = 1u8 } }
+            }
+            k = k - 1u64
+        }
+        if decided == 0u8 { ge = 1u8 }   /* equal -> >= L, subtract to 0 */
+    }
+    if ge == 1u8 {
+        let mut borrow : u64 = 0u64
+        let mut j : u64 = 0u64
+        while j < 8u64 {
+            let sub : u64 = lp[j] + borrow
+            if rp[j] >= sub { rp[j] = rp[j] - sub  borrow = 0u64 }
+            else { rp[j] = (rp[j] + 0x100000000u64) - sub  borrow = 1u64 }
+            j = j + 1u64
+        }
+        /* propagate the final borrow into the guard limb (it was set when ge came
+         * from the guard limb; clearing it folds the 2^256 wrap correctly). */
+        rp[8u64] = rp[8u64] - borrow
+    }
+    return 0i32
+}

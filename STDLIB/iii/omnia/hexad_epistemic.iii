@@ -33,6 +33,9 @@ fn iii_hexad_epistemic_make(buf_addr: u64, h: u16, conf_ppm: u32, qd: u64) -> i3
 
 /* Combine: hexad composes; confidences multiply (ppm); questions add; domains OR. */
 fn iii_hexad_epistemic_combine(a_addr: u64, b_addr: u64, out_addr: u64) -> i32 @export {
+    if a_addr == 0u64 { return 0i32 - 1i32 }
+    if b_addr == 0u64 { return 0i32 - 1i32 }
+    if out_addr == 0u64 { return 0i32 - 1i32 }
     let a : *u32 = a_addr as *u32
     let b : *u32 = b_addr as *u32
     let o : *u32 = out_addr as *u32

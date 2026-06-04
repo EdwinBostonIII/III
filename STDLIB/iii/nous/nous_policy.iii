@@ -136,8 +136,8 @@ fn nous_policy_rank(ctx_term: u32, kind: u32, out: *u64, cap: u32) -> u32 @expor
 }
 
 fn nous_policy_selftest() -> u64 @export {
-    /* advisory score is deterministic + kind-aware */
-    if nous_policy_score(102u32, 26u32) != nous_policy_score(102u32, 26u32) { return 1u64 }
+    /* advisory score is kind-aware (determinism is structural -- nous_policy_score is pure, so a
+     * self-equality check would be tautological; we assert the real DISCRIMINATING property instead). */
     if nous_policy_score(102u32, 26u32) <= nous_policy_score(1u32, 26u32) { return 2u64 }
 
     let buf : *u64 = (&NOUS_POL_OUT as u64) as *u64

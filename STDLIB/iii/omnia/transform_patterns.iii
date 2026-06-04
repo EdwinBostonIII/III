@@ -107,11 +107,13 @@ fn tp_table_get_dst(idx: u32) -> u8 @export {
     return pd[0u64]
 }
 
-fn tp_table_call(idx: u32, src: u64, src_len: u64, dst: u64) -> u64 @export {
+fn tp_table_call(idx: u32, src: u64, src_len: u64, dst: u64, dst_cap: u64) -> u64 @export {
     let f : u64 = tp_table_get_fn(idx)
     if f == 0u64 { return 0u64 }
-    /* Indirect call via u64 fn-pointer (per fold.iii pattern). */
-    return f(src, src_len, dst, 1048576u64)
+    /* [bounds] thread the caller's REAL dst capacity to the codec.  The old fabricated 1 MiB lied
+     * to every codec: a caller passing a smaller real buffer had the codec's own size guard
+     * defeated (it believed it had 1 MiB).  Indirect call via u64 fn-pointer (fold.iii pattern). */
+    return f(src, src_len, dst, dst_cap)
 }
 
 /* W4.3: set when a transform-pattern registration fails; transform_register_all reports it. */

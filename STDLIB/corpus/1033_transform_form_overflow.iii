@@ -1,0 +1,32 @@
+/* 1033_transform_form_overflow.iii -- prove-the-negative for transform_form's integer overflow guards
+ * (the two-stage decimal guard at the value parser + the `>> 60` hex guard), exercised through the real
+ * transform_form_invoke entry point.  src/dst forms default to 0, so transform() takes the identity
+ * fast-path (no resolver) and transform_form_input() returns the parsed value verbatim.
+ *
+ * Same boundary logic proven empirically for intent_form in 1031 (a lone `> MAX/10` guard wraps 2^64 to 0;
+ * the two-stage guard freezes at MAX/10).  Lengths explicit (string literals are not NUL-terminated).
+ * rc 99 = pass; 1..4 = which check failed. */
+module corpus_1033
+
+extern @abi(c-msvc-x64) fn transform_form_invoke(src: u64, len: u64, ctx: u64) -> u64 from "transform_form.iii"
+extern @abi(c-msvc-x64) fn transform_form_input() -> u64 from "transform_form.iii"
+
+fn main() -> u64 {
+    /* DECIMAL max u64 (2^64-1) parses EXACTLY. */
+    transform_form_invoke(("input=18446744073709551615" as *u8) as u64, 26u64, 0u64)
+    if transform_form_input() != 18446744073709551615u64 { return 1u64 }
+
+    /* DECIMAL boundary 2^64 -- two-stage guard freezes at MAX/10, NOT wrapped to 0. */
+    transform_form_invoke(("input=18446744073709551616" as *u8) as u64, 26u64, 0u64)
+    if transform_form_input() != 1844674407370955161u64 { return 2u64 }
+
+    /* HEX 16 nibbles (2^64-1) parses EXACTLY. */
+    transform_form_invoke(("input=0xFFFFFFFFFFFFFFFF" as *u8) as u64, 24u64, 0u64)
+    if transform_form_input() != 18446744073709551615u64 { return 3u64 }
+
+    /* HEX 17th nibble -- rejected by the `>> 60` guard; value frozen at the 16-nibble max. */
+    transform_form_invoke(("input=0xFFFFFFFFFFFFFFFF0" as *u8) as u64, 25u64, 0u64)
+    if transform_form_input() != 18446744073709551615u64 { return 4u64 }
+
+    return 99u64
+}

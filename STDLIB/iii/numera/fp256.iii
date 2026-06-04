@@ -51,7 +51,7 @@ fn fp256_init() -> i32 {
     while i < 8u64 {
         let v : u64 = 0u64 + 0x100000000u64 - (FP_P[i] as u64) - borrow
         FP_ONE[i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
     /* R^2 mod p = (R mod p)^2 * R^-1 ... easier: R2 = 2^512 mod p via 512
@@ -150,7 +150,7 @@ fn fp_sub(r: u64, a: u64, b: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 + (FP[ab + i] as u64) - (FP[bb + i] as u64) - borrow
         FP[rb + i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
     /* if borrow, add p back (constant-time via mask) */

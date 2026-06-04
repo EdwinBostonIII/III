@@ -1,0 +1,94 @@
+/* 1087 -- aether::node_identity M6-witnessed + M8 cap-gated birth (gap-backlog #3).
+ * ni_init_witnessed (and via it ni_witness_birth) were never exercised: neither the
+ * NODEID_E_DENIED deny arm nor the witnessed-birth fragment had a test.  This drives, on a FRESH
+ * module state (NODEID_INITED still 0):
+ *   (1) DENY: a cap missing NODEID_RIGHT_ATTEST -> ni_init_witnessed == NODEID_E_DENIED, and
+ *       crucially ni_is_inited() STAYS 0 and NO witness fragment is published (the gate fires
+ *       BEFORE any derivation/witness side effect);
+ *   (2) GRANT: a cap with ATTEST|SIGN -> NODEID_OK, ni_is_inited()==1, and exactly ONE witness
+ *       fragment is published whose out_commit == node_id and payload == identity pub (recomputed
+ *       from the live accessors -- the M6 birth attestation is real, not a stub).
+ * 99 = pass.  Mirrors corpus 624 (un-gated path) + 988 (witness query pattern).
+ */
+module corpus_1087
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_next_idx() -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_out_commit(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn ni_init_witnessed(args: u64, cap_id: u64) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_is_inited() -> u8 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_node_id(out_id: u64) -> i32 from "node_identity.iii"
+extern @abi(c-msvc-x64) fn ni_identity_pub(out_pub: u64) -> i32 from "node_identity.iii"
+
+const NODEID_OK         : i32 =  0i32
+const NODEID_E_DENIED   : i32 = -2i32
+const NODEID_RIGHT_ATTEST : u64 = 0x0800u64
+const NODEID_RIGHT_SIGN   : u64 = 0x1000u64
+
+var HW   : [u8; 3]
+var BS   : [u8; 3]
+var ARGS : [u8; 32]
+var NID  : [u8; 32]   /* node_id from accessor       */
+var IDP  : [u8; 32]   /* identity pub from accessor   */
+var OUTC : [u8; 32]   /* out_commit from fragment     */
+var PL   : [u8; 64]   /* payload from fragment        */
+var PLLEN: [u64; 1]
+
+fn eq32(a: u64, b: u64) -> u8 {
+    let p : *u8 = a as *u8
+    let q : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if p[i] != q[i] { return 0u8 } i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    wh_init(0u64)
+
+    /* NodeIdInitArgs aggregate: hw_ptr[0..8) hw_len[8..12) pad bs_ptr[16..24) bs_len[24..28) pad */
+    HW[0u64]=0x48u8 HW[1u64]=0x57u8 HW[2u64]=0x30u8   /* "HW0" */
+    BS[0u64]=0x42u8 BS[1u64]=0x53u8 BS[2u64]=0x30u8   /* "BS0" */
+    let hwp : u64 = &HW as u64
+    let bsp : u64 = &BS as u64
+    let mut k : u64 = 0u64
+    while k < 8u64 { ARGS[k] = ((hwp >> (k * 8u64)) & 0xFFu64) as u8  k = k + 1u64 }
+    ARGS[8u64]=0x03u8 ARGS[9u64]=0x00u8 ARGS[10u64]=0x00u8 ARGS[11u64]=0x00u8
+    let mut m : u64 = 0u64
+    while m < 8u64 { ARGS[16u64 + m] = ((bsp >> (m * 8u64)) & 0xFFu64) as u8  m = m + 1u64 }
+    ARGS[24u64]=0x03u8 ARGS[25u64]=0x00u8 ARGS[26u64]=0x00u8 ARGS[27u64]=0x00u8
+
+    let root : u64 = cap_env_init()
+    /* weak cap: SIGN but NOT ATTEST -> verify_rights(ATTEST|SIGN) fails (proves BOTH required) */
+    let weak : u64 = cap_attenuate(root, NODEID_RIGHT_SIGN, 0u64)
+    /* strong cap: ATTEST|SIGN */
+    let strong : u64 = cap_attenuate(root, NODEID_RIGHT_ATTEST | NODEID_RIGHT_SIGN, 0u64)
+    if weak == 0u64 { return 1u64 }
+    if strong == 0u64 { return 2u64 }
+
+    let base : u64 = wh_next_idx()
+
+    /* (1) DENY arm -- fresh state, gate fires before any side effect */
+    if ni_is_inited() != 0u8 { return 3u64 }
+    if ni_init_witnessed(&ARGS as u64, weak) != NODEID_E_DENIED { return 4u64 }
+    if ni_is_inited() != 0u8 { return 5u64 }            /* deny did NOT initialize */
+    if wh_next_idx() != base { return 6u64 }            /* deny published NO fragment */
+
+    /* (2) GRANT arm */
+    if ni_init_witnessed(&ARGS as u64, strong) != NODEID_OK { return 7u64 }
+    if ni_is_inited() != 1u8 { return 8u64 }
+    if wh_next_idx() != base + 1u64 { return 9u64 }     /* exactly one birth fragment */
+
+    /* the fragment at `base`: out_commit == node_id, payload == identity pub */
+    ni_node_id(&NID as u64)
+    ni_identity_pub(&IDP as u64)
+    wh_get_out_commit(base, &OUTC as *u8)
+    if eq32(&OUTC as u64, &NID as u64) != 1u8 { return 10u64 }
+    wh_get_payload(base, &PL as *u8, 64u64, &PLLEN as *u64)
+    if PLLEN[0u64] != 32u64 { return 11u64 }
+    if eq32(&PL as u64, &IDP as u64) != 1u8 { return 12u64 }
+
+    return 99u64
+}

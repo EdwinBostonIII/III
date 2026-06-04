@@ -1,0 +1,21 @@
+/* Diagnostic: does SCALAR-FORCED sha256 (the Ring-0 path the gate driver forces at DriverEntry)
+ * compute the FIPS-180-2 vector?  Reproduces the M23 fail-closed (error 31) in user mode.
+ * Returns 99 if scalar sha256("abc")==FIPS (so the Ring-0 failure is NOT the scalar path);
+ * returns 1 if scalar sha256 != FIPS (REPRODUCED: a latent scalar-crypto bug the base gate's
+ * consistency-only seals never exposed). Also returns 2/3 = baseline (no-force) sanity. */
+module diag_scalar_sha
+
+extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+extern @abi(c-msvc-x64) fn ks_engine_ok() -> u8 from "quine_seal.iii"
+
+fn main() -> u64 {
+    /* baseline: WITHOUT forcing scalar, the normal-dispatch engine must be FIPS-correct */
+    if ks_engine_ok() != 1u8 { return 2u64 }
+    /* the gate driver's DriverEntry sequence: force scalar message-schedule + keccak chi path */
+    sha256_sched_force(1u32)
+    keccak_chi_force_path(1u32)
+    /* now the SAME engine check the kernel runs at DriverEntry */
+    if ks_engine_ok() != 1u8 { return 1u64 }   /* scalar sha256("abc") != FIPS -> the Ring-0 fail-closed cause */
+    return 99u64
+}

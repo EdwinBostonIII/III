@@ -10,7 +10,7 @@ extern @abi(c-msvc-x64) fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u
 extern @abi(c-msvc-x64) fn hs_init(node_id: u32, peers: *u8, n_peers: u32) -> i32 from "hotstuff.iii"
 extern @abi(c-msvc-x64) fn hs_compose_qc(block_mhash: *u8, view: u64, sigs: *u8, n_sigs: u32, out_qc: *u8) -> i32 from "hotstuff.iii"
 extern @abi(c-msvc-x64) fn fed_seal_clear() -> i32 from "fed_seal.iii"
-extern @abi(c-msvc-x64) fn fed_seal_anchor_with_qc(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor_with_qc(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8, qc_len: u32) -> i32 from "fed_seal.iii"
 extern @abi(c-msvc-x64) fn fed_seal_anchor_count() -> u32 from "fed_seal.iii"
 
 var Q_SEED  : [u8; 128]
@@ -59,10 +59,10 @@ fn main() -> u64 {
     Q_BADQC[44u64] = Q_BADQC[44u64] ^ 0x01u8
     fed_seal_clear()
     /* invalid QC -> FED_SEAL_E_QC (-5) */
-    if fed_seal_anchor_with_qc(2u32, (&Q_CR as u64), 4u32, (&Q_PR as u64), (&Q_BADQC as u64) as *u8) != -5i32 { return 4u64 }
+    if fed_seal_anchor_with_qc(2u32, (&Q_CR as u64), 4u32, (&Q_PR as u64), (&Q_BADQC as u64) as *u8, 236u32) != -5i32 { return 4u64 }
     if fed_seal_anchor_count() != 0u32 { return 5u64 }   /* nothing anchored on rejection */
     /* valid QC -> anchored */
-    if fed_seal_anchor_with_qc(2u32, (&Q_CR as u64), 4u32, (&Q_PR as u64), (&Q_QC as u64) as *u8) != 0i32 { return 6u64 }
+    if fed_seal_anchor_with_qc(2u32, (&Q_CR as u64), 4u32, (&Q_PR as u64), (&Q_QC as u64) as *u8, 236u32) != 0i32 { return 6u64 }
     if fed_seal_anchor_count() != 1u32 { return 7u64 }
     return 99u64
 }

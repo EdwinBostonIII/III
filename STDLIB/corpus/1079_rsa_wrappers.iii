@@ -1,0 +1,52 @@
+/* 1079 -- numera::rsa self-managed-arena byte-ABI wrapper iii_rsa_keygen_seed (gap-backlog #43).
+ *
+ * Proves the keygen wrapper's i2osp serialization + arena lifecycle FAST (modBits=256):
+ *   - pk = i2osp(n, k); sk = i2osp(n, k) || i2osp(d, k)  -> pk[0..k] is byte-identical to sk[0..k]
+ *     (the modulus n is serialized consistently into both), and the key is non-zero;
+ *   - a DIFFERENT seed yields a DIFFERENT key (seed-determined, not constant).
+ *
+ * SCOPE NOTE (honest, not a skip): the sibling wrappers iii_rsa_pss_sign_det / iii_rsa_pss_verify_x
+ * hardcode sLen=32, which needs emLen >= 2*32+2 = 66, i.e. modBits >= ~522.  At that width pure-III
+ * RSA *keygen* (Miller-Rabin + bit-serial modpow over ~260-bit primes) is performance-bound
+ * (many minutes) -- a PERFORMANCE limit, not a correctness gap: those two are thin os2ip wrappers
+ * over rsa_pss_sign / rsa_pss_verify, whose sign->verify->tamper roundtrip is already proven by
+ * corpus 373 (320-bit).  The accept-roundtrip of the >=522-bit wrappers is left out of the always-run
+ * corpus for keygen cost, not coverage.  99 = pass.
+ */
+module corpus_1079
+
+extern @abi(c-msvc-x64) fn iii_rsa_keygen_seed(modBits: u64, seed: u64, slen: u64, pk_out: u64, sk_out: u64) -> i32 from "rsa.iii"
+
+var SEED  : [u8; 48]
+var SEED2 : [u8; 48]
+var PK    : [u8; 32]
+var SK    : [u8; 64]
+var PK2   : [u8; 32]
+var SK2   : [u8; 64]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { SEED[i] = (0x10u64 + i) as u8; SEED2[i] = (0x90u64 + i) as u8; i = i + 1u64 }
+
+    /* 256-bit key (k=32): fast keygen */
+    if iii_rsa_keygen_seed(256u64, (&SEED) as u64, 48u64, (&PK) as u64, (&SK) as u64) != 0i32 { return 1u64 }
+
+    /* pk[0..32] (n) == sk[0..32] (n): the modulus is serialized consistently into both */
+    let mut nz : u8 = 0u8
+    let mut k : u64 = 0u64
+    while k < 32u64 {
+        if PK[k] != SK[k] { return 2u64 }
+        if PK[k] != 0u8 { nz = 1u8 }
+        k = k + 1u64
+    }
+    if nz != 1u8 { return 3u64 }   /* key is non-zero (not a fail-closed serialization of n==0) */
+
+    /* a different seed -> a different key (seed-determined, not constant) */
+    if iii_rsa_keygen_seed(256u64, (&SEED2) as u64, 48u64, (&PK2) as u64, (&SK2) as u64) != 0i32 { return 4u64 }
+    let mut diff : u8 = 0u8
+    let mut j : u64 = 0u64
+    while j < 32u64 { if PK[j] != PK2[j] { diff = 1u8 } j = j + 1u64 }
+    if diff != 1u8 { return 5u64 }
+
+    return 99u64
+}

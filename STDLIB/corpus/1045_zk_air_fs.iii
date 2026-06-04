@@ -1,0 +1,4 @@
+/* 1045 — zk_air_fs_selftest: zk-AIR Fiat-Shamir transcript. Closes a gating gap (selftest existed, ungated). */
+module corpus_1045
+extern @abi(c-msvc-x64) fn zk_air_fs_selftest() -> u64 from "zk_air.iii"
+fn main() -> u64 { return zk_air_fs_selftest() }

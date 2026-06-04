@@ -69,6 +69,12 @@ fn xii_lattice_reset() -> i32 @export {
         XII_LATTICE_STORE[i] = 0u8
         i = i + 1u32
     }
+    /* Clear the (horizon_id, circ_slot) -> cell_idx lookup map too: reset() reinitialises
+     * ALL mutable module state, so a reset lattice carries NO stale lookup entries (a stale
+     * entry would index a since-discarded cell -- caught by the consumers' cell_idx bounds
+     * checks, but leaving it set violates the reset contract).  Forward call -- iiis-2 resolves
+     * functions module-wide (the self-hosted parser's own mutual recursion proves this). */
+    xii_lattice_lookup_clear()
     XII_LATTICE_USED = 0u32
     XII_LATTICE_PAYLOAD_NEXT = 0u32
     XII_LATTICE_INIT_DONE = 1u8
@@ -196,6 +202,19 @@ fn xii_lattice_lookup(horizon_id: u8, circ_slot: u32) -> u32 @export {
     let b2 : u32 = XII_LATTICE_LOOKUP[off + 2u32] as u32
     let b3 : u32 = XII_LATTICE_LOOKUP[off + 3u32] as u32
     return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+}
+
+/* Zero the entire (horizon_id, circ_slot) -> cell_idx lookup map (XL_LOOKUP_ENTRIES * 4
+ * bytes).  Called by xii_lattice_reset() so reset reinitialises this state symmetrically
+ * with XII_LATTICE_STORE; also usable standalone to invalidate the map without dropping
+ * the cell payloads. */
+fn xii_lattice_lookup_clear() -> i32 @export {
+    let mut i : u32 = 0u32
+    while i < (XL_LOOKUP_ENTRIES * 4u32) {
+        XII_LATTICE_LOOKUP[i] = 0u8
+        i = i + 1u32
+    }
+    return 0i32
 }
 
 /* Map a 24-bit circumstance to a 4-bit circ_slot (the high 16 bits of D2..D6

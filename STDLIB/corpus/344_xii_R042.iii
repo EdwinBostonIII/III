@@ -1,0 +1,44 @@
+/* corpus/344_xii_R042.iii -- R042 [L?] FORM-spine transposition (gap-backlog #21).
+ * Builds an out-of-order FORM spine  F(0x200, F(0x100, 0x300))  whose outer pair is
+ * out-of-order (sa=0x200 > sb=0x100 across the spine); apply_one must fire R042 and
+ * transpose to  F(0x100, F(0x200, 0x300)).  0 = pass (XII corpus convention). */
+
+module corpus_344_xii_R042
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, sub: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, a: u32, b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_a(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_child_b(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_get_subform(idx: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_one(t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_apply_specific(rule_id: u32, t: u32) -> u32 from "xii_rewrite.iii"
+extern @abi(c-msvc-x64) fn xii_rewrite_last_rule_fired() -> u32 from "xii_rewrite.iii"
+
+fn main() -> u64 {
+    xii_term_arena_reset()
+    /* POSITIVE: out-of-order outer pair (sa=0x200 > sb=0x100) -> R042 transposes. */
+    let f2 : u32 = xii_term_make_basis(0u8, 0x100u32)
+    let z  : u32 = xii_term_make_basis(0u8, 0x300u32)
+    let inner : u32 = xii_term_make_fusion2(18u8, f2, z)
+    let f1 : u32 = xii_term_make_basis(0u8, 0x200u32)
+    let t  : u32 = xii_term_make_fusion2(18u8, f1, inner)
+    let r  : u32 = xii_rewrite_apply_one(t)
+    if xii_rewrite_last_rule_fired() != 42u32 { return 1u64 }
+    if xii_term_get_subform(xii_term_get_child_a(r)) != 0x100u32 { return 2u64 }
+    if xii_term_get_subform(xii_term_get_child_a(xii_term_get_child_b(r))) != 0x200u32 { return 3u64 }
+
+    /* NEGATIVE (gap #22): an already-sorted spine F(0x100, F(0x200,0x300)) must NOT fire R042.
+     * apply_specific(42) tries ONLY R042; on a non-firing guard it sets last_rule_fired=0 and
+     * returns NULL_REF (so inspect the ORIGINAL st, which the non-firing rule left unmutated). */
+    let sf1 : u32 = xii_term_make_basis(0u8, 0x100u32)
+    let sf2 : u32 = xii_term_make_basis(0u8, 0x200u32)
+    let sz  : u32 = xii_term_make_basis(0u8, 0x300u32)
+    let sinner : u32 = xii_term_make_fusion2(18u8, sf2, sz)
+    let st  : u32 = xii_term_make_fusion2(18u8, sf1, sinner)
+    xii_rewrite_apply_specific(42u32, st)
+    if xii_rewrite_last_rule_fired() == 42u32 { return 4u64 }                              /* did NOT fire */
+    if xii_term_get_subform(xii_term_get_child_a(st)) != 0x100u32 { return 5u64 }          /* spine unchanged */
+    if xii_term_get_subform(xii_term_get_child_a(xii_term_get_child_b(st))) != 0x200u32 { return 6u64 }
+    return 0u64
+}

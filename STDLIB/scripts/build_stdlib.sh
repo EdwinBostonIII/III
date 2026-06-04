@@ -290,6 +290,7 @@ fi
 MODULES=(
     "numera/scalar"
     "numera/sha256"
+    "numera/sha256_ni"
     "numera/hex"
     "memoria/tempaloc"
     "memoria/region"
@@ -352,6 +353,7 @@ MODULES=(
     "numera/sha512"
     "aether/http_client"
     "numera/fe25519"
+    "numera/ed_scalar_modl"
     "numera/crypt_ed25519"
     "numera/aes"
     "numera/aes_gcm"
@@ -666,6 +668,9 @@ MODULES=(
     "numera/curry_howard"
     # --- CONVERGENCE Wave 1 batch 2 (appended at end to preserve pre-existing BSS layout) ---
     "numera/category"
+    "omnia/sov_morphism"
+    "omnia/xii_morphism"
+    "numera/h9_mig2_tie"
     "numera/sheaf"
     "aether/manifest"
     "aether/quarantine"
@@ -735,6 +740,7 @@ MODULES=(
     "nous/nous_value"
     "nous/nous_policy"
     "nous/nous_socket"
+    "nous/nous_lattice"
     "nous/nous_search"
     "nous/nous_charter"
     "nous/nous_completion"
@@ -899,6 +905,7 @@ MODULES=(
     "forcefield/integrity"
     # Sovereign Enhancement G3: the real argmax M-search (value-maximal selection + s0-in-M abstention).
     "forcefield/ripple_search"
+    "forcefield/ripple_synthesizer"
     # Sovereign Enhancement G5: the inductive bridge (sample -> forall via tc_natrec; false universal rejected).
     "numera/induct"
     # Structural-Audit Wave 0 / W0.1 (COMBINE-7): the boundary-trust organ -- the single source of
@@ -906,6 +913,8 @@ MODULES=(
     # libc-free; every boundary @export routes through bnd_index/bnd_cap_ok/bnd_mul_ok/bnd_alloc_size.
     "omnia/bound"
     "omnia/caindex"
+    # --- M23: below-OS behavioral quine-seal (capability 11); leaf, tiny BSS, appended last ---
+    "katabasis/quine_seal"
 )
 
 PASS=0

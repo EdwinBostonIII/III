@@ -1,0 +1,29 @@
+/* vec.iii overflow-safe grow primitives (#16 backlog).
+ * Proves vec_safe_cap / vec_safe_bytes on BOTH normal AND the negative
+ * (near-u64-overflow) inputs the old cur_cap*2 / new_cap*esz doublings wrapped on. */
+module corpus_1023
+
+extern @abi(c-msvc-x64) fn vec_safe_cap(cur_cap: u64, need: u64, hard_max: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_safe_bytes(cap: u64, esz: u64) -> u64 from "vec.iii"
+
+fn main() -> u64 {
+    /* --- vec_safe_cap: normal doublings --- */
+    if vec_safe_cap(8u64, 20u64, 1000u64) != 32u64 { return 1u64 }     /* 8->16->32 covers 20 */
+    if vec_safe_cap(8u64, 50u64, 64u64) != 64u64 { return 2u64 }       /* clamps to hard_max 64 */
+    /* --- NEGATIVE: need > hard_max -> overflow sentinel 0 --- */
+    if vec_safe_cap(8u64, 100u64, 64u64) != 0u64 { return 3u64 }
+    /* --- NEGATIVE: a double near 2^63 must SATURATE to hard_max, not wrap to 0 ---
+     * old code: 0x8000000000000000 * 2 == 0 -> infinite loop / tiny cap. */
+    if vec_safe_cap(0x8000000000000000u64, 0xC000000000000000u64, 0xFFFFFFFFFFFFFFFFu64) != 0xFFFFFFFFFFFFFFFFu64 { return 4u64 }
+
+    /* --- vec_safe_bytes: normal --- */
+    if vec_safe_bytes(10u64, 8u64) != 80u64 { return 5u64 }
+    /* --- NEGATIVE: cap*esz overflow -> 0 (old code: 0x2000000000000001 * 8 wrapped to 8) --- */
+    if vec_safe_bytes(0x2000000000000001u64, 8u64) != 0u64 { return 6u64 }
+    /* --- NEGATIVE: esz == 0 -> 0 --- */
+    if vec_safe_bytes(10u64, 0u64) != 0u64 { return 7u64 }
+    /* --- boundary: largest exact-fit product does NOT false-trip --- */
+    if vec_safe_bytes(0x1FFFFFFFFFFFFFFFu64, 8u64) != 0xFFFFFFFFFFFFFFF8u64 { return 8u64 }
+
+    return 99u64
+}

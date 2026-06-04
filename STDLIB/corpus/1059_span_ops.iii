@@ -1,0 +1,38 @@
+/* 1059 -- memoria::span untested-export coverage (gap-backlog #8,#40).
+ *
+ * Closes: span_u8_cmp (lexicographic over min(n,lens) with shorter-span +/-1 and null
+ * sentinel) and span_u8_find (byte search -> offset or len, null-base -> len).  Every arm
+ * has a DISTINCT expected value (no tautology).  span_u8_cmp's i32 result is checked with
+ * == only -- never ordering (the documented iiis i32-ordering-is-unsigned trap). 99 = pass.
+ */
+module corpus_1059
+
+extern @abi(c-msvc-x64) fn span_u8_cmp(a: u64, a_len: u64, b: u64, b_len: u64, n: u64) -> i32 from "span.iii"
+extern @abi(c-msvc-x64) fn span_u8_find(base: u64, len: u64, needle: u32) -> u64 from "span.iii"
+
+var CA : [u8; 4] = [1u8, 2u8, 3u8, 4u8]
+var CB : [u8; 4] = [1u8, 2u8, 3u8, 9u8]                                   /* differs at index 3 */
+var FB : [u8; 8] = [66u8, 66u8, 66u8, 66u8, 66u8, 153u8, 66u8, 66u8]      /* 0x42 x5, 0x99 at idx 5, 0x42 x2 */
+
+fn main() -> u64 {
+    let pa : u64 = (&CA) as u64
+    let pb : u64 = (&CB) as u64
+    let pf : u64 = (&FB) as u64
+
+    /* --- span_u8_cmp (#8) --- */
+    if span_u8_cmp(pa, 4u64, pa, 4u64, 4u64) != 0i32 { return 1u64 }      /* equal prefix */
+    if span_u8_cmp(pa, 4u64, pb, 4u64, 4u64) != -1i32 { return 2u64 }     /* av<bv at i=3 */
+    if span_u8_cmp(pb, 4u64, pa, 4u64, 4u64) != 1i32 { return 3u64 }      /* av>bv at i=3 */
+    if span_u8_cmp(pa, 2u64, pb, 4u64, 4u64) != -1i32 { return 4u64 }     /* a shorter (i>=a_len) */
+    if span_u8_cmp(pa, 4u64, pb, 2u64, 4u64) != 1i32 { return 5u64 }      /* b shorter (i>=b_len) */
+    if span_u8_cmp(0u64, 4u64, pb, 4u64, 4u64) != -2i32 { return 6u64 }   /* null a -> SPAN_E_NULL */
+    if span_u8_cmp(pa, 4u64, 0u64, 4u64, 4u64) != -2i32 { return 7u64 }   /* null b -> SPAN_E_NULL */
+
+    /* --- span_u8_find (#40) --- */
+    if span_u8_find(pf, 8u64, 66u32) != 0u64 { return 10u64 }             /* found at offset 0 */
+    if span_u8_find(pf, 8u64, 153u32) != 5u64 { return 11u64 }            /* found at offset 5 */
+    if span_u8_find(pf, 8u64, 119u32) != 8u64 { return 12u64 }            /* miss -> len */
+    if span_u8_find(0u64, 8u64, 66u32) != 8u64 { return 13u64 }           /* null base -> len */
+
+    return 99u64
+}

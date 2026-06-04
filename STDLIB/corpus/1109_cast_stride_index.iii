@@ -1,0 +1,16 @@
+/* cg_r3 cast-form byte-index stride gate (q3_ptrcast, fixed 2026-06-04).
+ * Reads a byte-packed buffer [1,2,..,8] via the CAST form `(p as *u8)[j]` and sums it.
+ * Correct (stride-1): 1+2+..+8 = 36.  If cg_r3 regressed to the old stride-8 quad default,
+ * (p as *u8)[j] would read ARR[0]=1 then 7 out-of-bounds zero bytes -> sum = 1 != 36 and this
+ * gate reddens.  The prove-the-negative the corpus lacked while the defect was latent. */
+module corpus_caststride
+var ARR : [u8; 8]
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 8u64 { ARR[i] = (i + 1u64) as u8  i = i + 1u64 }
+    let p : u64 = &ARR as u64
+    let mut sum : u64 = 0u64
+    let mut j : u64 = 0u64
+    while j < 8u64 { sum = sum + ((p as *u8)[j] as u64)  j = j + 1u64 }
+    return sum
+}

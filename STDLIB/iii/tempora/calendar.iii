@@ -51,6 +51,11 @@ fn cal_days_from_civil(y_in: u32, m: u32, d: u32) -> u64 {
 }
 
 fn cal_civil_to_unix(year: u32, month: u32, day: u32) -> u64 @export {
+    if year < 1970u32 { return 0xFFFFFFFFFFFFFFFFu64 }   /* [overflow] pre-epoch: days_since_0 < 719468 -> unsigned underflow */
+    if month < 1u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if month > 12u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if day < 1u32 { return 0xFFFFFFFFFFFFFFFFu64 }
+    if day > 31u32 { return 0xFFFFFFFFFFFFFFFFu64 }
     let days : u64 = cal_days_from_civil(year, month, day)
     return days * 86400u64
 }

@@ -1,0 +1,43 @@
+/* 1055 -- numera::modular untested-export coverage (gap-backlog #14,#57,#58,#59).
+ *
+ * Closes: mod_u64_pow, mod_u32_add, mod_u32_sub, mod_u64_sub -- each @export'd with real
+ * branch logic but no prior KAT.  Every arm asserted (guard / direct / wrap-or-borrow),
+ * plus a large-operand Fermat case for the overflow-safe u64 mul-mod path.
+ *
+ * All compares use == / != (equality), never i32/value ordering. 99 = pass.
+ */
+module corpus_1055
+
+extern @abi(c-msvc-x64) fn mod_u64_pow(base: u64, exp: u64, m: u64) -> u64 from "modular.iii"
+extern @abi(c-msvc-x64) fn mod_u32_add(a: u32, b: u32, m: u32) -> u32 from "modular.iii"
+extern @abi(c-msvc-x64) fn mod_u32_sub(a: u32, b: u32, m: u32) -> u32 from "modular.iii"
+extern @abi(c-msvc-x64) fn mod_u64_sub(a: u64, b: u64, m: u64) -> u64 from "modular.iii"
+
+fn main() -> u64 {
+    /* --- mod_u64_pow (#14) --- */
+    if mod_u64_pow(7u64, 13u64, 19u64) != 7u64 { return 1u64 }          /* 7^13 ≡ 7 (mod 19) */
+    if mod_u64_pow(2u64, 10u64, 1000u64) != 24u64 { return 2u64 }       /* 1024 mod 1000 */
+    if mod_u64_pow(5u64, 0u64, 97u64) != 1u64 { return 3u64 }           /* exp 0 -> 1 */
+    if mod_u64_pow(5u64, 7u64, 0u64) != 0u64 { return 4u64 }            /* m==0 guard */
+    if mod_u64_pow(5u64, 7u64, 1u64) != 0u64 { return 5u64 }            /* m==1 guard */
+    /* Large-operand overflow-safe mul-mod: Fermat over Mersenne prime M61 = 2^61-1.
+     * 7^(M61-1) ≡ 1 (mod M61) -- exercises ~61-bit doubling mul-mod without overflow. */
+    if mod_u64_pow(7u64, 2305843009213693950u64, 2305843009213693951u64) != 1u64 { return 6u64 }
+
+    /* --- mod_u32_add (#57) --- */
+    if mod_u32_add(5u32, 7u32, 0u32) != 0u32 { return 10u64 }           /* m==0 guard */
+    if mod_u32_add(5u32, 5u32, 7u32) != 3u32 { return 11u64 }           /* s>=m branch: 10 mod 7 = 3 */
+    if mod_u32_add(0xFFFFFFFEu32, 0xFFFFFFFEu32, 0xFFFFFFFFu32) != 0xFFFFFFFDu32 { return 12u64 }  /* wrap branch */
+
+    /* --- mod_u32_sub (#58) --- */
+    if mod_u32_sub(5u32, 2u32, 7u32) != 3u32 { return 20u64 }           /* am>=bm direct */
+    if mod_u32_sub(2u32, 5u32, 7u32) != 4u32 { return 21u64 }           /* am<bm borrow: (2+7)-5 */
+    if mod_u32_sub(5u32, 7u32, 0u32) != 0u32 { return 22u64 }           /* m==0 guard */
+
+    /* --- mod_u64_sub (#59) --- */
+    if mod_u64_sub(10u64, 2u64, 7u64) != 1u64 { return 30u64 }          /* (10 mod7=3)-(2)=1 */
+    if mod_u64_sub(2u64, 5u64, 7u64) != 4u64 { return 31u64 }           /* underflow-wrap: (2+7)-5 */
+    if mod_u64_sub(5u64, 7u64, 0u64) != 0u64 { return 32u64 }           /* m==0 guard */
+
+    return 99u64
+}

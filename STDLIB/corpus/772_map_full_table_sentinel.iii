@@ -1,0 +1,67 @@
+/* 772 -- omnia/map.iii full-table sentinel collision (#16 backlog).
+ *
+ * map_probe_internal returned MAP_IDX_FULL (all-ones) when the table is 100% OCCUPIED with no
+ * tombstones and the key is absent.  All-ones has bit 63 set = MAP_FOUND_BIT, so the three
+ * read-side consumers misclassified "full + absent" as "found": contains -> false 1u8; get/remove
+ * -> extract idx = r & 0xFFFFFFFF = 0xFFFFFFFF -> map_load_u32_le at base + ~17GB -> OOB segfault,
+ * and remove additionally tombstoned a bogus slot and decremented len.
+ *
+ * Fix: probe returns MAP_FULL_BIT (bit 62, DISJOINT from bit 63).  Every (r & MAP_FOUND_BIT)
+ * consumer now sees bit 63 clear on a full-table probe and returns none/0/none correctly.
+ *
+ * POSITIVE arm: non-full table, absent key -> none/0/none (the early-exit path must not regress).
+ * NEGATIVE arm (FALSIFIER): hard_max=8 (grow blocked), 8 distinct keys, 0 tombstones -> 100% full;
+ *   probing absent key 999 must be none/0/none and must NOT segfault, and len must stay 8.
+ * 99 = pass. */
+module corpus_772
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn map_u32u32_new(arena_id: u64, hard_max: u64) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_put(id: u64, k: u32, v: u32) -> i32 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_get(id: u64, k: u32) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_contains(id: u64, k: u32) -> u8 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_remove(id: u64, k: u32) -> u64 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_len(id: u64) -> u64 from "map.iii"
+
+fn main() -> u64 {
+    let ar : u64 = arena_new(1u64 << 20u64)
+    if ar == 0u64 { return 1u64 }
+
+    /* ── POSITIVE arm: non-full table, absent key ───────────────────── */
+    let mp : u64 = map_u32u32_new(ar, 64u64)
+    if mp == 0u64 { return 2u64 }
+    if map_u32u32_put(mp, 10u32, 100u32) != 0i32 { return 3u64 }
+    if map_u32u32_put(mp, 20u32, 200u32) != 0i32 { return 4u64 }
+    if map_u32u32_put(mp, 30u32, 300u32) != 0i32 { return 5u64 }
+    /* present key resolves; absent key 999 is none/0/none */
+    if map_u32u32_contains(mp, 20u32) != 1u8 { return 6u64 }
+    if map_u32u32_contains(mp, 999u32) != 0u8 { return 7u64 }
+    if map_u32u32_get(mp, 999u32) != 0u64 { return 8u64 }
+    if map_u32u32_remove(mp, 999u32) != 0u64 { return 9u64 }
+
+    /* ── NEGATIVE arm (FALSIFIER): 100%-full table, absent key ──────── */
+    let mf : u64 = map_u32u32_new(ar, 8u64)   /* init_cap clamped to 8 == hard_max -> grow blocked */
+    if mf == 0u64 { return 20u64 }
+    let mut k : u32 = 0u32
+    while k < 8u32 {
+        if map_u32u32_put(mf, k, k + 1000u32) != 0i32 { return 21u64 }
+        k = k + 1u32
+    }
+    if map_u32u32_len(mf) != 8u64 { return 22u64 }   /* 100% OCCUPIED, zero tombstones */
+
+    /* The falsifier: probing an absent key against a full table.  Pre-fix: contains=1 (false),
+     * get/remove segfault on a 17GB OOB read.  Post-fix: none/0/none, no crash. */
+    if map_u32u32_contains(mf, 999u32) != 0u8 { return 40u64 }
+    if map_u32u32_get(mf, 999u32)      != 0u64 { return 41u64 }
+    if map_u32u32_remove(mf, 999u32)   != 0u64 { return 42u64 }
+    if map_u32u32_len(mf) != 8u64 { return 43u64 }   /* remove(absent) must NOT decrement len */
+
+    /* present keys still resolve correctly after the full-table probes. */
+    if map_u32u32_contains(mf, 3u32) != 1u8 { return 44u64 }
+    if map_u32u32_get(mf, 3u32) != (((1003u64) << 1u64) | 1u64) { return 45u64 }
+
+    arena_drop(ar)
+    return 99u64
+}

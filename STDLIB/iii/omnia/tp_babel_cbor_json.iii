@@ -65,7 +65,10 @@ fn tp_babel_cbor_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64
             k = k + 1u32
         }
     }
-    if payload_off + payload_len > src_len { return 0u64 }
+    /* [overflow] payload_off+payload_len can wrap for an attacker-chosen 8-byte CBOR length (info==27);
+     * src_len >= payload_off always holds here (each info arm range-checks src_len), so the subtraction
+     * is underflow-free and the bound is overflow-free. */
+    if payload_len > (src_len - payload_off) { return 0u64 }
     if payload_len > dst_cap { return 0u64 }
     /* Copy payload */
     let mut j : u64 = 0u64

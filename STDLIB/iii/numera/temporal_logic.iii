@@ -421,6 +421,7 @@ fn tl_eval(slot: u32, chain_start: u64, chain_end: u64, position: u64) -> u8 @ex
     let root : u32 = TL_F_ROOT[slot]
     let st : u32 = TL_F_START[slot]
     if root < st { return 0u8 }
+    if root >= TL_F_END[slot] { return 0u8 }    /* root must be a node in [st, TL_F_END); tl_set_root is unvalidated, so loc=root-st could exceed the slot's nodes */
     let loc : u64 = ((root - st) as u64) & 0xFFFFFFFFu64
     return tl_val_get(loc, position - chain_start)
 }
@@ -435,6 +436,7 @@ fn tl_holds_on_segment(slot: u32, chain_start: u64, chain_end: u64) -> u8 @expor
     let root : u32 = TL_F_ROOT[slot]
     let st : u32 = TL_F_START[slot]
     if root < st { return 0u8 }
+    if root >= TL_F_END[slot] { return 0u8 }    /* root must be a node in [st, TL_F_END); tl_set_root is unvalidated, so loc=root-st could exceed the slot's nodes */
     let loc : u64 = ((root - st) as u64) & 0xFFFFFFFFu64
     let mut ok : u8 = tl_val_get(loc, 0u64)
     let mut p : u64 = 1u64

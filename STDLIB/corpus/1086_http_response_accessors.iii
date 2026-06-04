@@ -1,0 +1,120 @@
+/* 1086 -- aether::http_client RESPONSE-parsing accessor surface (gap-backlog #27).
+ * The client-side parse + accessor exports (http_parse_response, http_response_status,
+ * status_text_base/_len, header_count, header_name/value_base/_len, header_find_ci,
+ * body_base/_len, http_response_drop) had no test and no caller.  This parses the canonical
+ * "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nHello" and asserts
+ * every accessor against the raw bytes, find_ci positive (CI) + negative, then http_response_drop
+ * and the post-drop BADID/0 sentinel.  99 = pass.
+ */
+module corpus_1086
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn http_parse_response(arena: u64, raw_base: u64, raw_len: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_status(id: u64) -> u32 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_status_text_base(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_status_text_len(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_count(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_name_base(id: u64, hdr_idx: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_name_len(id: u64, hdr_idx: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_value_base(id: u64, hdr_idx: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_value_len(id: u64, hdr_idx: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_header_find_ci(id: u64, name_base: u64, name_len: u64) -> i64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_base(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_body_len(id: u64) -> u64 from "http_client.iii"
+extern @abi(c-msvc-x64) fn http_response_drop(id: u64) -> i32 from "http_client.iii"
+
+var RAW  : [u8; 69]
+var CTYPE: [u8; 12]   /* "Content-Type"   (mixed case for CI find) */
+var CLEN : [u8; 14]   /* "Content-Length" */
+var ABS  : [u8; 8]    /* "X-Absent"       */
+
+fn put(p: *u8, off: u64, s0: u8) -> u64 { p[off] = s0; return off + 1u64 }
+
+fn bytes_eq(p: u64, q: u64, n: u64) -> u8 {
+    let a : *u8 = p as *u8
+    let b : *u8 = q as *u8
+    let mut i : u64 = 0u64
+    while i < n { if a[i] != b[i] { return 0u8 } i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* "HTTP/1.1 200 OK\r\n" (0..16) */
+    RAW[0u64]=72u8 RAW[1u64]=84u8 RAW[2u64]=84u8 RAW[3u64]=80u8 RAW[4u64]=47u8
+    RAW[5u64]=49u8 RAW[6u64]=46u8 RAW[7u64]=49u8 RAW[8u64]=32u8
+    RAW[9u64]=50u8 RAW[10u64]=48u8 RAW[11u64]=48u8 RAW[12u64]=32u8
+    RAW[13u64]=79u8 RAW[14u64]=75u8 RAW[15u64]=13u8 RAW[16u64]=10u8
+    /* "Content-Type: text/plain\r\n" (17..42) */
+    RAW[17u64]=67u8 RAW[18u64]=111u8 RAW[19u64]=110u8 RAW[20u64]=116u8 RAW[21u64]=101u8
+    RAW[22u64]=110u8 RAW[23u64]=116u8 RAW[24u64]=45u8 RAW[25u64]=84u8 RAW[26u64]=121u8
+    RAW[27u64]=112u8 RAW[28u64]=101u8 RAW[29u64]=58u8 RAW[30u64]=32u8
+    RAW[31u64]=116u8 RAW[32u64]=101u8 RAW[33u64]=120u8 RAW[34u64]=116u8 RAW[35u64]=47u8
+    RAW[36u64]=112u8 RAW[37u64]=108u8 RAW[38u64]=97u8 RAW[39u64]=105u8 RAW[40u64]=110u8
+    RAW[41u64]=13u8 RAW[42u64]=10u8
+    /* "Content-Length: 5\r\n" (43..61) */
+    RAW[43u64]=67u8 RAW[44u64]=111u8 RAW[45u64]=110u8 RAW[46u64]=116u8 RAW[47u64]=101u8
+    RAW[48u64]=110u8 RAW[49u64]=116u8 RAW[50u64]=45u8 RAW[51u64]=76u8 RAW[52u64]=101u8
+    RAW[53u64]=110u8 RAW[54u64]=103u8 RAW[55u64]=116u8 RAW[56u64]=104u8 RAW[57u64]=58u8
+    RAW[58u64]=32u8 RAW[59u64]=53u8 RAW[60u64]=13u8 RAW[61u64]=10u8
+    /* "\r\n" (62..63) + "Hello" (64..68) */
+    RAW[62u64]=13u8 RAW[63u64]=10u8
+    RAW[64u64]=72u8 RAW[65u64]=101u8 RAW[66u64]=108u8 RAW[67u64]=108u8 RAW[68u64]=111u8
+
+    /* mixed-case probe names for CI find */
+    CTYPE[0u64]=99u8 CTYPE[1u64]=111u8 CTYPE[2u64]=110u8 CTYPE[3u64]=116u8 CTYPE[4u64]=101u8
+    CTYPE[5u64]=110u8 CTYPE[6u64]=116u8 CTYPE[7u64]=45u8 CTYPE[8u64]=116u8 CTYPE[9u64]=121u8
+    CTYPE[10u64]=112u8 CTYPE[11u64]=101u8                                              /* "content-type" */
+    CLEN[0u64]=67u8 CLEN[1u64]=111u8 CLEN[2u64]=110u8 CLEN[3u64]=116u8 CLEN[4u64]=101u8
+    CLEN[5u64]=110u8 CLEN[6u64]=116u8 CLEN[7u64]=45u8 CLEN[8u64]=76u8 CLEN[9u64]=101u8
+    CLEN[10u64]=110u8 CLEN[11u64]=103u8 CLEN[12u64]=116u8 CLEN[13u64]=104u8            /* "Content-Length" */
+    ABS[0u64]=88u8 ABS[1u64]=45u8 ABS[2u64]=65u8 ABS[3u64]=98u8 ABS[4u64]=115u8
+    ABS[5u64]=101u8 ABS[6u64]=110u8 ABS[7u64]=116u8                                    /* "X-Absent" */
+
+    let a : u64 = arena_new(1u64 << 16u64)
+    let resp : u64 = http_parse_response(a, &RAW as u64, 69u64)
+    if resp == 0u64 { return 1u64 }
+
+    /* status line */
+    if http_response_status(resp) != 200u32 { return 2u64 }
+    if http_response_status_text_len(resp) != 2u64 { return 3u64 }
+    let stp : *u8 = http_response_status_text_base(resp) as *u8
+    if stp[0u64] != 79u8 { return 4u64 }   /* O */
+    if stp[1u64] != 75u8 { return 5u64 }   /* K */
+
+    /* headers */
+    if http_response_header_count(resp) != 2u64 { return 6u64 }
+    /* header[0] = Content-Type: text/plain */
+    if http_response_header_name_len(resp, 0u64)  != 12u64 { return 7u64 }
+    if http_response_header_value_len(resp, 0u64) != 10u64 { return 8u64 }
+    if bytes_eq(http_response_header_name_base(resp, 0u64),  (&RAW as u64) + 17u64, 12u64) != 1u8 { return 9u64 }
+    if bytes_eq(http_response_header_value_base(resp, 0u64), (&RAW as u64) + 31u64, 10u64) != 1u8 { return 10u64 }
+    /* header[1] = Content-Length: 5 */
+    if http_response_header_name_len(resp, 1u64)  != 14u64 { return 11u64 }
+    if http_response_header_value_len(resp, 1u64) != 1u64  { return 12u64 }
+    /* OOB header index -> 0 sentinel */
+    if http_response_header_name_len(resp, 2u64)  != 0u64  { return 13u64 }
+
+    /* find_ci: CI match (content-type -> idx 0), exact (Content-Length -> idx 1), absent -> -1 */
+    if http_response_header_find_ci(resp, &CTYPE as u64, 12u64) != 0i64  { return 14u64 }
+    if http_response_header_find_ci(resp, &CLEN as u64, 14u64)  != 1i64  { return 15u64 }
+    if http_response_header_find_ci(resp, &ABS as u64, 8u64)    != -1i64 { return 16u64 }
+
+    /* body */
+    if http_response_body_len(resp) != 5u64 { return 17u64 }
+    let bp : *u8 = http_response_body_base(resp) as *u8
+    if bp[0u64] != 72u8 { return 18u64 }   /* H */
+    if bp[4u64] != 111u8 { return 19u64 }  /* o */
+
+    /* drop + post-drop sentinels */
+    if http_response_drop(resp) != 0i32 { return 20u64 }
+    if http_response_status(resp) != 0u32 { return 21u64 }            /* dropped -> 0 */
+    if http_response_header_count(resp) != 0u64 { return 22u64 }
+    if http_response_header_find_ci(resp, &CLEN as u64, 14u64) != -1i64 { return 23u64 }
+    if http_response_drop(resp) != -2i32 { return 24u64 }            /* re-drop bad id -> HTTP_E_BADID */
+
+    arena_drop(a)
+    return 99u64
+}

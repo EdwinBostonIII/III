@@ -40,6 +40,9 @@ extern @abi(c-msvc-x64) fn ident_from_bytes(input: *u8, in_len: u64, out: *u8) -
 extern @abi(c-msvc-x64) fn ident_copy(src: *u8, dst: *u8) -> i32 from "identifier.iii"
 extern @abi(c-msvc-x64) fn cad_compute(producer: *u8, operation: *u8, input_commit: *u8, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_begin(suite: u32) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_payload(payload: u64, payload_len: u64) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_final(out_32: u64) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cap_verify_rights(id: u64, required: u64) -> u8 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
 extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
@@ -1154,66 +1157,45 @@ fn symreg_make_labels() -> i32 {
  * dataset is deterministic).  To keep the commit total we hash sig then
  * fold the dataset in 8192-byte-safe chunks is overkill here; instead we
  * digest the signature and the decoded mirror's canonical bytes. */
+/* [soundness / M10] STREAMING content-address over the FULL request.  The old path staged
+ * `sig || folded-dataset` into the 8192-byte SYMREG_HASH_SCRATCH, but symreg_fold_row's
+ * `(w+9)<=cap` guard SILENTLY DROPPED rows once w >= 8183, so any dataset > ~907 point*vars
+ * (max legal = 256*9*9 = 20736 bytes) bound only a truncated prefix -- the in-commit failed to
+ * commit the exact request (M10/M12 violation).  The keccak streaming sponge is unbounded, so we
+ * digest every row directly.  BYTE-IDENTICAL to the old path for any non-truncated (small)
+ * dataset: the streamed sequence `sig || per-value[sign(1) | mag_le8(8)]` equals the old scratch
+ * contents, and cad_begin(1)+cad_payload*+cad_final == cad_oneshot(1, ...) by sponge associativity
+ * (both are raw Keccak-256, no domain).  No scratch cap; no fold helpers. */
 fn symreg_make_in_commit() -> i32 {
     let sbase : u64 = SYMREG_REQ_SIG
     let slen : u64 = (SYMREG_REQ_SIGLEN as u64) & 0xFFFFFFFFu64
-    let scratch : u64 = &SYMREG_HASH_SCRATCH as u64
-    let sp : *u8 = scratch as *u8
-    let mut w : u64 = 0u64
-    /* copy signature bytes (bounded by SIGLEN, which is < scratch). */
-    let mut i : u64 = 0u64
-    let cap : u64 = 8192u64
-    while i < slen {
-        if w < cap {
-            let src : *u8 = sbase as *u8
-            sp[w] = src[i]
-            w = w + 1u64
-        }
-        i = i + 1u64
-    }
-    /* fold the canonical dataset mirror bytes (sign+mag per value). */
-    w = symreg_fold_dataset(scratch, w, cap)
-    let outc : *u8 = &SYMREG_IN_COMMIT as u64 as *u8
-    cad_oneshot(1u32, scratch as *u8, w, (outc as u64) as *u8)   /* H2: in_commit via cad (byte-identical) */
-    return SYMREG_OK
-}
-
-/* Append the canonical dataset bytes (x then y per row) into the scratch
- * buffer starting at offset w, bounded by cap; return new offset. */
-fn symreg_fold_dataset(scratch: u64, w_in: u64, cap: u64) -> u64 {
-    let sp : *u8 = scratch as *u8
+    /* reuse the first 9 bytes of SYMREG_HASH_SCRATCH as the per-value chunk; the begin..final
+     * sequence is contiguous (nothing else touches the sponge or this buffer in between). */
+    let vbuf : u64 = &SYMREG_HASH_SCRATCH as u64
+    let vp : *u8 = vbuf as *u8
+    cad_begin(1u32)
+    cad_payload(sbase, slen)
     let npts : u32 = SYMREG_N_POINTS
     let nvar : u32 = SYMREG_N_VARS
-    let mut w : u64 = w_in
     let mut row : u32 = 0u32
     while row < npts {
-        w = symreg_fold_row(scratch, w, cap, row, nvar)
+        let rowx : u32 = row * SYMREG_MAX_VARS
+        let mut v : u32 = 0u32
+        while v < nvar {
+            let idx : u64 = ((rowx + v) as u64) & 0xFFFFFFFFu64
+            vp[0u64] = SYMREG_DX_SIGN[idx] & 1u8
+            symreg_store_u64_le(vbuf, 1u64, SYMREG_DX_MAG[idx])
+            cad_payload(vbuf, 9u64)
+            v = v + 1u32
+        }
+        let ridx : u64 = (row as u64) & 0xFFFFFFFFu64
+        vp[0u64] = SYMREG_DY_SIGN[ridx] & 1u8
+        symreg_store_u64_le(vbuf, 1u64, SYMREG_DY_MAG[ridx])
+        cad_payload(vbuf, 9u64)
         row = row + 1u32
     }
-    return w
-}
-
-fn symreg_fold_row(scratch: u64, w_in: u64, cap: u64, row: u32, nvar: u32) -> u64 {
-    let sp : *u8 = scratch as *u8
-    let rowx : u32 = row * SYMREG_MAX_VARS
-    let mut w : u64 = w_in
-    let mut v : u32 = 0u32
-    while v < nvar {
-        let idx : u64 = ((rowx + v) as u64) & 0xFFFFFFFFu64
-        if (w + 9u64) <= cap {
-            sp[w] = SYMREG_DX_SIGN[idx] & 1u8
-            symreg_store_u64_le(scratch, w + 1u64, SYMREG_DX_MAG[idx])
-            w = w + 9u64
-        }
-        v = v + 1u32
-    }
-    let ridx : u64 = (row as u64) & 0xFFFFFFFFu64
-    if (w + 9u64) <= cap {
-        sp[w] = SYMREG_DY_SIGN[ridx] & 1u8
-        symreg_store_u64_le(scratch, w + 1u64, SYMREG_DY_MAG[ridx])
-        w = w + 9u64
-    }
-    return w
+    cad_final((&SYMREG_IN_COMMIT as u64))
+    return SYMREG_OK
 }
 
 /* out-commit = cad_compute(producer, opid, keccak(expr)).  We use the
@@ -1293,6 +1275,7 @@ var SYMREG_T_REQ    : [u8; 64]
 var SYMREG_T_SIG    : [u8; 128]
 var SYMREG_T_DATA   : [u8; 512]
 var SYMREG_T_EXPR   : [u8; 320]
+var SYMREG_T_SAVE   : [u8; 32]    /* saved in-commit for the no-truncation falsifier */
 var SYMREG_T_OUT    : [u8; 320]
 var SYMREG_T_XVEC   : [u8; 80]
 var SYMREG_T_LEN    : u32 = 0u32
@@ -1356,6 +1339,50 @@ fn symreg_t_build_req(n_vars: u32, n_points: u32, tol: u64, max_depth: u32, data
     return SYMREG_OK
 }
 
+/* Falsifier for the in-commit truncation fix.  Drives symreg_make_in_commit (in-module private)
+ * with a dataset whose canonical encoding (110 rows x 8 vars => 8910 bytes) EXCEEDS the old
+ * 8192-byte staging cap.  Commit once, flip one byte of a row WELL BEYOND the cap (row 105's y,
+ * stream value 953 >> the old drop threshold ~910), commit again, and require the two commits to
+ * DIFFER.  The old truncating fold dropped that row, so both commits were identical -> this KAT
+ * FAILS on the broken code and PASSES only when every row is bound (streaming).  Codes 880..889. */
+fn symreg_t_kat_notrunc() -> u64 {
+    SYMREG_REQ_SIGLEN = 0u32
+    SYMREG_N_POINTS = 110u32
+    SYMREG_N_VARS = 8u32
+    let mut row : u32 = 0u32
+    while row < 110u32 {
+        let rowx : u32 = row * SYMREG_MAX_VARS
+        let mut v : u32 = 0u32
+        while v < 8u32 {
+            let idx : u64 = ((rowx + v) as u64) & 0xFFFFFFFFu64
+            SYMREG_DX_SIGN[idx] = 0u8
+            SYMREG_DX_MAG[idx] = ((row * 8u32 + v) as u64) + 1u64
+            v = v + 1u32
+        }
+        let ridx : u64 = (row as u64) & 0xFFFFFFFFu64
+        SYMREG_DY_SIGN[ridx] = 0u8
+        SYMREG_DY_MAG[ridx] = (row as u64) + 1000u64
+        row = row + 1u32
+    }
+    /* commit #1 -> save */
+    symreg_make_in_commit()
+    let mut k : u64 = 0u64
+    while k < 32u64 { SYMREG_T_SAVE[k] = SYMREG_IN_COMMIT[k]  k = k + 1u64 }
+    /* flip one byte of a row beyond the old 8192 cap */
+    SYMREG_DY_MAG[105u64] = SYMREG_DY_MAG[105u64] + 1u64
+    /* commit #2 */
+    symreg_make_in_commit()
+    /* the beyond-cap row MUST now change the commit */
+    let mut differ : u8 = 0u8
+    k = 0u64
+    while k < 32u64 {
+        if SYMREG_IN_COMMIT[k] != SYMREG_T_SAVE[k] { differ = 1u8 }
+        k = k + 1u64
+    }
+    if differ == 0u8 { return 880u64 }
+    return 0u64
+}
+
 fn symreg_selftest() -> u64 @export {
     symreg_init()
     symreg_t_env_init()
@@ -1371,6 +1398,8 @@ fn symreg_selftest() -> u64 @export {
     if r5 != 0u64 { return r5 }
     let r6 : u64 = symreg_t_kat_witness()
     if r6 != 0u64 { return r6 }
+    let r7 : u64 = symreg_t_kat_notrunc()
+    if r7 != 0u64 { return r7 }
     return 99u64
 }
 

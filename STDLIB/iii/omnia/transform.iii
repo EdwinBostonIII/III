@@ -44,7 +44,7 @@ extern @abi(c-msvc-x64) fn pattern_set_add(set: u64, slot: u32) -> i32 from "pat
 extern @abi(c-msvc-x64) fn resolve(set: u64, intent: u64, ctx: u64) -> u64 from "resolver.iii"
 extern @abi(c-msvc-x64) fn crystal_mint(code: u32, site_hash: u64, cap: u64, cause: u64) -> u64 from "crystal.iii"
 extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal_edges.iii"
-extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u32, align: u8) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_alloc(id: u64, n: u64, align: u64) -> u64 from "arena.iii"   /* match arena.iii:66 real sig */
 extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_payload(p: u64, pl: u64) -> i32 from "mhash.iii"
@@ -152,7 +152,7 @@ fn transform(src_form: u32, dst_form: u32, src_handle: u64, ctx: u64) -> u64 @ex
 
 fn transform_buffer(src_bytes: u64, src_len: u64, src_form: u32, dst_form: u32, ctx: u64) -> u64 @export {
     let arena : u64 = call_context_arena_id(ctx)
-    let wrapper : u64 = arena_alloc(arena, 16u32, 8u8)
+    let wrapper : u64 = arena_alloc(arena, 16u64, 8u64)
     if wrapper == 0u64 { return result_err(0xE111u32) }
     let p0 : *u8 = (wrapper) as *u8
     let mut i : u32 = 0u32

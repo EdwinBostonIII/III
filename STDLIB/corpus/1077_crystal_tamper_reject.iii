@@ -1,0 +1,27 @@
+/* 1077 -- omnia::crystal tamper-rejection + MAC-restore arms (gap-backlog #73).
+ * Mint -> verify==1 (baseline). Corrupt one stored MAC byte via the test-only crystal_mac_set
+ * -> verify==0 (the compare/tamper arm). A SECOND verify must ALSO be 0: the restore arm puts
+ * the tampered MAC back, so a broken restore (leaving the recomputed-correct MAC) would falsely
+ * return 1.  Both arms thus proven.  99 = pass.
+ */
+module corpus_1077
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_verify(id: u64) -> u8 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_mac_set(id: u64, i: u32, val: u32) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_mac_byte(id: u64, i: u32) -> u32 from "crystal.iii"
+
+var SITE : [u8; 32]
+
+fn main() -> u64 {
+    let mut k : u64 = 0u64
+    while k < 32u64 { SITE[k] = (0x40u64 + k) as u8; k = k + 1u64 }
+    let id : u64 = crystal_mint(42u32, (&SITE) as u64, 0u64, 1u64)
+    if id == 0u64 { return 1u64 }
+    if crystal_verify(id) != 1u8 { return 2u64 }                       /* baseline valid */
+    let orig : u32 = crystal_mac_byte(id, 3u32)
+    if crystal_mac_set(id, 3u32, (orig ^ 0xFFu32) & 0xFFu32) != 0i32 { return 3u64 }
+    if crystal_verify(id) != 0u8 { return 4u64 }                       /* tamper detected (compare arm) */
+    if crystal_verify(id) != 0u8 { return 5u64 }                       /* restore arm: STILL 0 (not falsely 1) */
+    return 99u64
+}

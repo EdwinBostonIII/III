@@ -319,20 +319,25 @@ fn rva_audit_bv_pair(width: u32, x: u32, z: u32) -> i32 @export {
  * Runs rva_audit_bv_pair; on RVA_OK reads op-id + cap from ctx and
  * calls rva_admit. Returns audit result if audit failed; else admit result.
  * 4 params (W2-OK). */
+/* Decode 8 little-endian bytes at p[off..off+8) into a u64.  Reusable module-local LE8 reader
+ * (W13: 2 locals) -- replaces the repeated 8-shift inline blocks (rva_audit_and_admit cap decode,
+ * rva_selftest KAT-2 counterexample decode), each of which alone pushed those functions well past
+ * the W13 locals budget. */
+fn _rva_le8_to_u64(p: *u8, off: u64) -> u64 {
+    let mut acc : u64 = 0u64
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        acc = acc | (((p[off + i] as u64) & 0xFFu64) << (i * 8u64))
+        i = i + 1u64
+    }
+    return acc
+}
+
 fn rva_audit_and_admit(width: u32, x: u32, z: u32, ctx: *u8) -> i32 @export {
     let ar : i32 = rva_audit_bv_pair(width, x, z)
     if ar != RVA_OK { return ar }
-    /* read cap as LE u64 from ctx[32..40) */
-    let cp : *u8 = ctx
-    let b0 : u64 = (cp[32u64] as u64) & 0xFFu64
-    let b1 : u64 = ((cp[33u64] as u64) & 0xFFu64) << 8u64
-    let b2 : u64 = ((cp[34u64] as u64) & 0xFFu64) << 16u64
-    let b3 : u64 = ((cp[35u64] as u64) & 0xFFu64) << 24u64
-    let b4 : u64 = ((cp[36u64] as u64) & 0xFFu64) << 32u64
-    let b5 : u64 = ((cp[37u64] as u64) & 0xFFu64) << 40u64
-    let b6 : u64 = ((cp[38u64] as u64) & 0xFFu64) << 48u64
-    let b7 : u64 = ((cp[39u64] as u64) & 0xFFu64) << 56u64
-    let cap : u64 = b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+    /* cap = LE u64 from ctx[32..40) */
+    let cap : u64 = _rva_le8_to_u64(ctx, 32u64)
     return rva_admit(ctx, cap)
 }
 
@@ -473,25 +478,10 @@ fn rva_selftest() -> u64 @export {
     /* counterexample must be available and x_val != z_val in the CE */
     let rc2 : i32 = rva_last_counter((&RVA_KAT_CE as u64) as *u8)
     if rc2 != RVA_OK { return 11u64 }
-    /* decode x_val and z_val from LE bytes */
-    let xb0 : u64 = (RVA_KAT_CE[0u64] as u64) & 0xFFu64
-    let xb1 : u64 = ((RVA_KAT_CE[1u64] as u64) & 0xFFu64) << 8u64
-    let xb2 : u64 = ((RVA_KAT_CE[2u64] as u64) & 0xFFu64) << 16u64
-    let xb3 : u64 = ((RVA_KAT_CE[3u64] as u64) & 0xFFu64) << 24u64
-    let xb4 : u64 = ((RVA_KAT_CE[4u64] as u64) & 0xFFu64) << 32u64
-    let xb5 : u64 = ((RVA_KAT_CE[5u64] as u64) & 0xFFu64) << 40u64
-    let xb6 : u64 = ((RVA_KAT_CE[6u64] as u64) & 0xFFu64) << 48u64
-    let xb7 : u64 = ((RVA_KAT_CE[7u64] as u64) & 0xFFu64) << 56u64
-    let xval : u64 = xb0 | xb1 | xb2 | xb3 | xb4 | xb5 | xb6 | xb7
-    let zb0 : u64 = (RVA_KAT_CE[8u64] as u64) & 0xFFu64
-    let zb1 : u64 = ((RVA_KAT_CE[9u64] as u64) & 0xFFu64) << 8u64
-    let zb2 : u64 = ((RVA_KAT_CE[10u64] as u64) & 0xFFu64) << 16u64
-    let zb3 : u64 = ((RVA_KAT_CE[11u64] as u64) & 0xFFu64) << 24u64
-    let zb4 : u64 = ((RVA_KAT_CE[12u64] as u64) & 0xFFu64) << 32u64
-    let zb5 : u64 = ((RVA_KAT_CE[13u64] as u64) & 0xFFu64) << 40u64
-    let zb6 : u64 = ((RVA_KAT_CE[14u64] as u64) & 0xFFu64) << 48u64
-    let zb7 : u64 = ((RVA_KAT_CE[15u64] as u64) & 0xFFu64) << 56u64
-    let zval : u64 = zb0 | zb1 | zb2 | zb3 | zb4 | zb5 | zb6 | zb7
+    /* decode x_val and z_val from the LE counterexample bytes (W13: via the shared LE8 reader) */
+    let ce_p : *u8 = (&RVA_KAT_CE as u64) as *u8
+    let xval : u64 = _rva_le8_to_u64(ce_p, 0u64)
+    let zval : u64 = _rva_le8_to_u64(ce_p, 8u64)
     /* the counterexample must have x_val != z_val */
     if xval == zval { return 12u64 }
     /* op_id_B was never admitted */

@@ -94,7 +94,11 @@ fn parse_set_pending_lit(lit_base: u64, lit_len: u64) -> u32 @export {
 
 fn parse_consume_lit(base: u64, len: u64, pos: u64) -> u64 @export {
     let lit_len : u64 = PARSE_LIT_LEN
-    if pos + lit_len > len { return PARSE_FAIL }
+    /* [bounds] subtraction-form: `pos + lit_len > len` wraps for a caller-supplied pos/lit_len
+     * near u64-max (e.g. 2^63 + 2^63 == 0 <= len), passing the check -> wild OOB read.  pos<=len
+     * then lit_len > len-pos never wraps. */
+    if pos > len { return PARSE_FAIL }
+    if lit_len > len - pos { return PARSE_FAIL }
     let p : *u8 = base as *u8
     let lp : *u8 = PARSE_LIT_BASE as *u8
     let mut i : u64 = 0u64

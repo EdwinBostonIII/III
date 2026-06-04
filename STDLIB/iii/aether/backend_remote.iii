@@ -23,8 +23,8 @@ module aether_backend_remote
 
 extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
 extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
-extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
-extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 from "net.iii"
 extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
 extern @abi(c-msvc-x64) fn hex_encode(src: u64, n: u64, out: u64) -> i32 from "hex.iii"
 

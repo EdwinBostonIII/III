@@ -113,6 +113,14 @@ fn _psf_mhash_eq(slot: u32, other_ptr: u64) -> u8 {
  * a handle (slot+1) or 0 on failure. */
 fn pattern_set_fed_publish(local_set_id: u64, tier: u32, mhash_ptr: u64) -> u64 @export {
     if mhash_ptr == 0u64 { return 0u64 }
+    /* W4.2 (ANCESTRY INVARIANT, complete): the (tier, mhash) pair MUST trace to a known
+     * FOUNDERS-ANCHOR-descended anchor in the fed_seal chain BEFORE a slot is allocated -- the
+     * identical gate pattern_set_fed_fetch enforces inbound and verify_ancestry checks post-hoc.
+     * The outbound publish path previously skipped it, leaving a bootstrap hole where a local
+     * caller could register an unvouched (tier, mhash).  Callers MUST fed_seal_anchor(...) the
+     * mhash first; an unanchored publish is REJECTED with 0 (no slot allocated). */
+    let anchor_slot : u32 = fed_seal_lookup_anchor(tier, mhash_ptr)
+    if anchor_slot == 0xFFFFFFFFu32 { return 0u64 }
     let s : u32 = _psf_alloc_slot()
     if s == PSF_NOT_FOUND { return 0u64 }
     _psf_copy_mhash_in(s, mhash_ptr)

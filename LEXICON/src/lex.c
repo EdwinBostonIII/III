@@ -169,7 +169,7 @@ static int skip_one_ws_or_comment(iii_lex_state_t *st, iii_token_t *out_doc, int
             out_doc->col = scol;
             uint8_t *body = iii_arena_dup(&st->arena, c->src + body_start, c->pos - body_start);
             out_doc->string_payload = body;
-            out_doc->string_len = c->pos - body_start;
+            out_doc->string_len = body ? (c->pos - body_start) : 0;   /* arena OOM: no NULL payload paired with a nonzero len */
             out_doc->interned_id = iii_intern_put(&st->intern,
                                                   c->src + start, c->pos - start);
             *out_emitted = 1;
@@ -226,7 +226,7 @@ static int skip_one_ws_or_comment(iii_lex_state_t *st, iii_token_t *out_doc, int
             uint8_t *body = iii_arena_dup(&st->arena, c->src + body_start,
                                           body_end > body_start ? body_end - body_start : 0);
             out_doc->string_payload = body;
-            out_doc->string_len = body_end > body_start ? body_end - body_start : 0;
+            out_doc->string_len = (body && body_end > body_start) ? (body_end - body_start) : 0;
             out_doc->interned_id = iii_intern_put(&st->intern,
                                                   c->src + start, c->pos - start);
             *out_emitted = 1;
@@ -483,13 +483,13 @@ static int scan_string_lit(iii_lex_state_t *st, iii_token_t *out) {
         if (cp == '"') {
             advance(c, cp, w);
             uint8_t *payload = (uint8_t *)iii_arena_alloc(&st->arena, len + 1, 1);
-            memcpy(payload, buf, len); payload[len] = 0;
+            if (payload) { memcpy(payload, buf, len); payload[len] = 0; }   /* arena OOM: no memcpy/deref of NULL */
             free(buf);
             out->kind = IIIK_STRING_LIT;
             out->text_offset = (uint32_t)start;
             out->text_len = (uint32_t)(c->pos - start);
             out->line = sline; out->col = scol;
-            out->string_payload = payload; out->string_len = len;
+            out->string_payload = payload; out->string_len = payload ? len : 0;
             out->interned_id = iii_intern_put(&st->intern, payload, len);
             return 0;
         }
@@ -599,13 +599,13 @@ static int scan_byte_string_lit(iii_lex_state_t *st, iii_token_t *out) {
         if (b == '"') {
             advance(c, '"', 1);
             uint8_t *payload = (uint8_t *)iii_arena_alloc(&st->arena, len + 1, 1);
-            memcpy(payload, buf, len); payload[len] = 0;
+            if (payload) { memcpy(payload, buf, len); payload[len] = 0; }   /* arena OOM: no memcpy/deref of NULL */
             free(buf);
             out->kind = IIIK_BYTE_STRING_LIT;
             out->text_offset = (uint32_t)start;
             out->text_len = (uint32_t)(c->pos - start);
             out->line = sline; out->col = scol;
-            out->string_payload = payload; out->string_len = len;
+            out->string_payload = payload; out->string_len = payload ? len : 0;
             out->interned_id = iii_intern_put(&st->intern, payload, len);
             return 0;
         }
@@ -706,13 +706,12 @@ static int scan_raw_string_lit(iii_lex_state_t *st, iii_token_t *out) {
     }
     size_t blen = body_end - body_start;
     uint8_t *payload = (uint8_t *)iii_arena_alloc(&st->arena, blen + 1, 1);
-    if (blen) memcpy(payload, c->src + body_start, blen);
-    payload[blen] = 0;
+    if (payload) { if (blen) memcpy(payload, c->src + body_start, blen); payload[blen] = 0; }   /* arena OOM: no deref of NULL */
     out->kind = IIIK_RAW_STRING_LIT;
     out->text_offset = (uint32_t)start;
     out->text_len = (uint32_t)(c->pos - start);
     out->line = sline; out->col = scol;
-    out->string_payload = payload; out->string_len = blen;
+    out->string_payload = payload; out->string_len = payload ? blen : 0;
     out->interned_id = iii_intern_put(&st->intern, payload, blen);
     return 0;
 }
@@ -734,13 +733,13 @@ static int scan_hex_string_lit(iii_lex_state_t *st, iii_token_t *out) {
                 free(buf); return -1;
             }
             uint8_t *payload = (uint8_t *)iii_arena_alloc(&st->arena, len + 1, 1);
-            memcpy(payload, buf, len); payload[len] = 0;
+            if (payload) { memcpy(payload, buf, len); payload[len] = 0; }   /* arena OOM: no memcpy/deref of NULL */
             free(buf);
             out->kind = IIIK_HEX_STRING_LIT;
             out->text_offset = (uint32_t)start;
             out->text_len = (uint32_t)(c->pos - start);
             out->line = sline; out->col = scol;
-            out->string_payload = payload; out->string_len = len;
+            out->string_payload = payload; out->string_len = payload ? len : 0;
             out->interned_id = iii_intern_put(&st->intern, payload, len);
             return 0;
         }

@@ -67,6 +67,8 @@ extern @abi(c-msvc-x64) fn rva_last_counter(out: *u8) -> i32 from "reversibility
 extern @abi(c-msvc-x64) fn smt_init() -> i32 from "smt.iii"
 extern @abi(c-msvc-x64) fn smt_bv_new_var(width: u32) -> u32 from "smt.iii"
 extern @abi(c-msvc-x64) fn smt_bv_add_eq(a: u32, b: u32) -> i32 from "smt.iii"
+/* mig5 §G-5: the Compromise<HIGH> <-> mig2 tie (UNREPRESENTABLE = a non-reachable hexad = no type-check). */
+extern @abi(c-msvc-x64) fn h9_mig2_tie_selftest() -> u64 from "h9_mig2_tie.iii"
 
 const H9_OK              : i32 =  0i32      /* == rev REV_OK == rva RVA_OK (UNSAT -> Reversible) */
 const H9_RVA_E_FAIL      : i32 = -2i32      /* rva: SAT -> Compromise (typed, witnessed) */
@@ -245,6 +247,11 @@ fn h9_selftest() -> u64 @export {
     if h9_run_charter() != H9_VERDICT_GREEN { return 7u64 }
     if h9_register(H9_KIND_CANARY) != 1i32 { return 8u64 }
     if h9_run_charter() != 2u64 { return 9u64 }
+    /* mig5 §G-5 (the deepening this charter folds): Compromise<HIGH> is mig2-UNCONSTRUCTABLE -- its
+     * safety-hexad is non-reachable, so the SovVal's Reach proof is uninhabited (no type-check).  The
+     * runtime trichotomy (above) and the mig2 TYPE gate agree; bricking and irreversible-beyond-tier
+     * are one refusal.  H9 is not green unless this tie holds. */
+    if h9_mig2_tie_selftest() != 99u64 { return 10u64 }
     return 99u64
 }
 

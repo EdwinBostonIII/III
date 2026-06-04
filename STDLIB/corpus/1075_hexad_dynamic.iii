@@ -1,0 +1,34 @@
+/* 1075 -- omnia::hexad_dynamic promote reject-arms + fresh-flags (gap-backlog #74).
+ * Drives ONLY the reachable arms (no bit-clear hook, preserving strict monotonicity):
+ *   -2  out-of-range hexad (h=729 >= HXD_MAX)
+ *   -5  structurally non-admissible (h=0 = all-NEG; pillars 1..4 not all POS)
+ *   promoted()==0 / escalates()==0 on a fresh (unpromoted) buffer.
+ * 99 = pass.
+ */
+module corpus_1075
+
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_create(buf_addr: u64, h: u16, coherence_ppm: u32) -> i32 from "hexad_dynamic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_promote(buf_addr: u64) -> i32 from "hexad_dynamic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_promoted(buf_addr: u64) -> u8 from "hexad_dynamic.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_dynamic_escalates(buf_addr: u64) -> u8 from "hexad_dynamic.iii"
+
+var HXD_BUF : [u8; 16]
+
+fn main() -> u64 {
+    let b : u64 = (&HXD_BUF) as u64
+
+    /* -2: out-of-range hexad */
+    iii_hexad_dynamic_create(b, 729u16, 1000000u32)
+    if iii_hexad_dynamic_promote(b) != -2i32 { return 1u64 }
+
+    /* -5: h=0 (all-NEG) is structurally non-admissible (pillars 1..4 not all POS) */
+    iii_hexad_dynamic_create(b, 0u16, 1000000u32)
+    if iii_hexad_dynamic_promote(b) != -5i32 { return 2u64 }
+
+    /* fresh buffer: not promoted, not escalating */
+    iii_hexad_dynamic_create(b, 100u16, 1000000u32)
+    if iii_hexad_dynamic_promoted(b) != 0u8 { return 3u64 }
+    if iii_hexad_dynamic_escalates(b) != 0u8 { return 4u64 }
+
+    return 99u64
+}

@@ -1,0 +1,121 @@
+/* KATABASIS-DEPLOY/src/quine_attest_client.iii
+ *
+ * M23 capability-11 LIVE ATTEST client (the operator's one step, written in III).  After the gate
+ * driver is loaded (sign_and_deploy_ioctl.ps1), this asks the RUNNING driver -- below the OS -- for
+ * the behavioral quine-seal it measured of its OWN .text at load (IOCTL_ATTEST = 0x222008), then
+ * INDEPENDENTLY recomputes the expected seed by reading the on-disk gate_ioctl.sys, parsing its PE,
+ * and measuring `.text` with the SAME ks_measure (cad/SHA-256) the kernel used.  Match => the running
+ * code IS exactly the sealed on-disk binary; with triple-bit-identity (binary <= source, cap 12) the
+ * full chain is "I am exactly this source and executed behavior" -- attested at Ring 0.
+ *
+ * The anchor is EXTERNAL: the seed is recomputed here from the .sys file by III's cad, NOT taken from
+ * the driver's word -- a tampered driver reporting a forged measurement fails the compare.
+ * Pure III: III's membrane (kernel32) opens the device + reads the file; III parses the PE; III's cad
+ * measures.  Exit 99 = live measurement == independently-recomputed seed; 1..7 = the failing step.
+ *
+ * Build: COMPILED/iiis-2.exe quine_attest_client.iii --compile-only --out qac_client.o
+ *        gcc qac_client.o libiii_native.a -lws2_32 -lkernel32 -o quine_attest_client.exe
+ * Run (after load, from the dir holding gate_ioctl.sys): quine_attest_client.exe
+ */
+module quine_attest_client
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn DeviceIoControl(h: u64, ioctl: u32, inb: u64, insz: u32, outb: u64, outsz: u32, ret: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ks_measure(base: u64, len: u64, out: u64) -> i32 from "quine_seal.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const QC_GENERIC_RW   : u32 = 0xC0000000u32   /* GENERIC_READ|GENERIC_WRITE */
+const QC_GENERIC_READ : u32 = 0x80000000u32
+const QC_SHARE_READ   : u32 = 0x00000001u32
+const QC_OPEN_EXISTING: u32 = 3u32
+const QC_ATTR_NORMAL  : u32 = 0x00000080u32
+const QC_INVALID      : u64 = 0xFFFFFFFFFFFFFFFFu64
+const QC_IOCTL_ATTEST : u32 = 0x222008u32
+
+var QC_DEVPATH : [u8; 24]      /* "\\.\IIIKatabasisGate\0" */
+var QC_SYSPATH : [u8; 32]      /* "gate_ioctl.sys\0" (run from KATABASIS-DEPLOY/build) */
+var QC_FILE    : [u8; 262144]  /* the on-disk .sys */
+var QC_NREAD   : [u8; 8]
+var QC_RETLEN  : [u8; 8]       /* DeviceIoControl lpBytesReturned */
+var QC_LIVE    : [u8; 32]      /* the driver's reported measurement */
+var QC_SEED    : [u8; 32]      /* the independently-recomputed seed */
+var QC_TEXT_OFF  : u64 = 0u64
+var QC_TEXT_SIZE : u64 = 0u64
+
+fn qc_init_paths() -> i32 {
+    /* "\\.\IIIKatabasisGate" = 5C 5C 2E 5C I I I K a t a b a s i s G a t e 00 */
+    QC_DEVPATH[0u64]=0x5Cu8  QC_DEVPATH[1u64]=0x5Cu8  QC_DEVPATH[2u64]=0x2Eu8  QC_DEVPATH[3u64]=0x5Cu8
+    QC_DEVPATH[4u64]=0x49u8  QC_DEVPATH[5u64]=0x49u8  QC_DEVPATH[6u64]=0x49u8  QC_DEVPATH[7u64]=0x4Bu8
+    QC_DEVPATH[8u64]=0x61u8  QC_DEVPATH[9u64]=0x74u8  QC_DEVPATH[10u64]=0x61u8 QC_DEVPATH[11u64]=0x62u8
+    QC_DEVPATH[12u64]=0x61u8 QC_DEVPATH[13u64]=0x73u8 QC_DEVPATH[14u64]=0x69u8 QC_DEVPATH[15u64]=0x73u8
+    QC_DEVPATH[16u64]=0x47u8 QC_DEVPATH[17u64]=0x61u8 QC_DEVPATH[18u64]=0x74u8 QC_DEVPATH[19u64]=0x65u8
+    QC_DEVPATH[20u64]=0x00u8
+    /* "gate_ioctl.sys" */
+    QC_SYSPATH[0u64]=0x67u8  QC_SYSPATH[1u64]=0x61u8  QC_SYSPATH[2u64]=0x74u8  QC_SYSPATH[3u64]=0x65u8
+    QC_SYSPATH[4u64]=0x5Fu8  QC_SYSPATH[5u64]=0x69u8  QC_SYSPATH[6u64]=0x6Fu8  QC_SYSPATH[7u64]=0x63u8
+    QC_SYSPATH[8u64]=0x74u8  QC_SYSPATH[9u64]=0x6Cu8  QC_SYSPATH[10u64]=0x2Eu8 QC_SYSPATH[11u64]=0x73u8
+    QC_SYSPATH[12u64]=0x79u8 QC_SYSPATH[13u64]=0x73u8 QC_SYSPATH[14u64]=0x00u8
+    return 0i32
+}
+
+fn qc_rd_u32(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+}
+fn qc_rd_u16(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    return (p[off + 0u64] as u64) | ((p[off + 1u64] as u64) << 8u64)
+}
+
+/* Parse the PE at `base`, set QC_TEXT_OFF/SIZE for `.text`.  0 = found, -1 = not. */
+fn qc_pe_text(base: u64) -> i32 {
+    let b : u64 = base
+    let e_lfanew : u64 = qc_rd_u32(b, 0x3Cu64)
+    let pe : u64 = b + e_lfanew
+    let numsec  : u64 = qc_rd_u16(pe, 6u64)
+    let optsize : u64 = qc_rd_u16(pe, 20u64)
+    if numsec > 64u64 { return -1i32 }
+    let sectab : u64 = pe + 24u64 + optsize
+    let mut i : u64 = 0u64
+    while i < numsec {
+        let sec : u64 = sectab + (i * 40u64)
+        let p : *u8 = sec as *u8
+        if p[0u64] == 0x2Eu8 { if p[1u64] == 0x74u8 { if p[2u64] == 0x65u8 { if p[3u64] == 0x78u8 { if p[4u64] == 0x74u8 {
+            QC_TEXT_SIZE = qc_rd_u32(sec, 8u64)    /* VirtualSize (off8): reloc-free code, byte-identical live<->file -- NOT SizeOfRawData(off16), whose tail differs live vs disk. Matches the driver's ks_text_size. */
+            QC_TEXT_OFF  = qc_rd_u32(sec, 20u64)
+            return 0i32
+        }}}}}
+        i = i + 1u64
+    }
+    return -1i32
+}
+
+fn main() -> u64 {
+    qc_init_paths()
+    /* 1) ask the RUNNING driver for its below-OS self-measurement (IOCTL_ATTEST) */
+    let h : u64 = CreateFileA((&QC_DEVPATH as u64) as *u8, QC_GENERIC_RW, 0u32, 0u64, QC_OPEN_EXISTING, 0u32, 0u64)
+    if h == QC_INVALID { return 1u64 }   /* gate driver not loaded */
+    let ok : i32 = DeviceIoControl(h, QC_IOCTL_ATTEST, 0u64, 0u32, (&QC_LIVE as u64), 32u32, (&QC_RETLEN as u64), 0u64)
+    CloseHandle(h)
+    if ok == 0i32 { return 2u64 }
+    if qc_rd_u32((&QC_RETLEN as u64), 0u64) != 32u64 { return 3u64 }
+    /* 2) INDEPENDENTLY recompute the seed from the on-disk .sys (anchor is external, not the driver's word) */
+    let fh : u64 = CreateFileA((&QC_SYSPATH as u64) as *u8, QC_GENERIC_READ, QC_SHARE_READ, 0u64, QC_OPEN_EXISTING, QC_ATTR_NORMAL, 0u64)
+    if fh == QC_INVALID { return 4u64 }
+    let rok : i32 = ReadFile(fh, (&QC_FILE as u64) as *u8, 262144u32, (&QC_NREAD as u64), 0u64)
+    CloseHandle(fh)
+    if rok == 0i32 { return 5u64 }
+    if qc_pe_text((&QC_FILE as u64)) != 0i32 { return 6u64 }
+    let off : u64 = QC_TEXT_OFF
+    let sz  : u64 = QC_TEXT_SIZE
+    ks_measure((&QC_FILE as u64) + off, sz, (&QC_SEED as u64))
+    /* 3) the running .text must equal the on-disk .text -- the below-OS quine-seal verifies */
+    if cad_eq((&QC_LIVE as u64) as *u8, (&QC_SEED as u64) as *u8) != 1u8 { return 7u64 }
+    return 99u64
+}

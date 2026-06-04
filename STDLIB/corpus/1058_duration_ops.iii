@@ -1,0 +1,52 @@
+/* 1058 -- tempora::duration untested-export coverage (gap-backlog #7,#34,#35).
+ *
+ * Closes: duration_mul_u32 (overflow-saturating), duration_div_u32 (div-by-zero->DUR_MAX),
+ * duration_from_micros/minutes/hours (saturation at the precomputed LIMIT thresholds),
+ * duration_to_seconds, and eq/lt/min/max.  Corpus 40 covers from_millis/seconds/to_millis/add/sub.
+ * Every saturation arm asserted at LIMIT (exact product) and LIMIT+1 (DUR_MAX). 99 = pass.
+ */
+module corpus_1058
+
+extern @abi(c-msvc-x64) fn duration_mul_u32(a: u64, k: u32) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_div_u32(a: u64, k: u32) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_micros(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_minutes(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_from_hours(n: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_to_seconds(d: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_eq(a: u64, b: u64) -> u8 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_lt(a: u64, b: u64) -> u8 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_min(a: u64, b: u64) -> u64 from "duration.iii"
+extern @abi(c-msvc-x64) fn duration_max(a: u64, b: u64) -> u64 from "duration.iii"
+
+fn main() -> u64 {
+    /* --- duration_mul_u32 (#7) --- */
+    if duration_mul_u32(1000000000u64, 0u32) != 0u64 { return 1u64 }                 /* k==0 -> 0 */
+    if duration_mul_u32(1000000000u64, 1u32) != 1000000000u64 { return 2u64 }        /* k==1 -> a */
+    if duration_mul_u32(1000000000u64, 3u32) != 3000000000u64 { return 3u64 }        /* normal */
+    if duration_mul_u32(0xFFFFFFFFFFFFFFFFu64, 2u32) != 0xFFFFFFFFFFFFFFFFu64 { return 4u64 }   /* saturate (p<a) */
+    if duration_mul_u32(0x8000000000000000u64, 2u32) != 0xFFFFFFFFFFFFFFFFu64 { return 5u64 }   /* saturate (wrap to 0) */
+    if duration_mul_u32(0x7FFFFFFFFFFFFFFFu64, 2u32) != 0xFFFFFFFFFFFFFFFEu64 { return 6u64 }    /* just under overflow */
+
+    /* --- duration_div_u32 (#34) --- */
+    if duration_div_u32(1000000000u64, 0u32) != 0xFFFFFFFFFFFFFFFFu64 { return 10u64 } /* k==0 -> DUR_MAX */
+    if duration_div_u32(1000000000u64, 4u32) != 250000000u64 { return 11u64 }          /* moderate dividend */
+
+    /* --- duration_from_micros/minutes/hours saturation thresholds (#35) --- */
+    if duration_from_micros(18446744073709551u64) != 18446744073709551000u64 { return 20u64 }   /* at LIMIT */
+    if duration_from_micros(18446744073709552u64) != 0xFFFFFFFFFFFFFFFFu64 { return 21u64 }      /* LIMIT+1 -> DUR_MAX */
+    if duration_from_minutes(307445734u64) != 18446744040000000000u64 { return 22u64 }           /* at LIMIT */
+    if duration_from_minutes(307445735u64) != 0xFFFFFFFFFFFFFFFFu64 { return 23u64 }              /* LIMIT+1 -> DUR_MAX */
+    if duration_from_hours(5124095u64) != 18446742000000000000u64 { return 24u64 }               /* at LIMIT */
+    if duration_from_hours(5124096u64) != 0xFFFFFFFFFFFFFFFFu64 { return 25u64 }                  /* LIMIT+1 -> DUR_MAX */
+
+    /* --- duration_to_seconds + comparators (#35) --- */
+    if duration_to_seconds(3000000000u64) != 3u64 { return 30u64 }
+    if duration_eq(5u64, 5u64) != 1u8 { return 31u64 }
+    if duration_eq(5u64, 6u64) != 0u8 { return 32u64 }
+    if duration_lt(5u64, 6u64) != 1u8 { return 33u64 }
+    if duration_lt(6u64, 5u64) != 0u8 { return 34u64 }
+    if duration_min(5u64, 6u64) != 5u64 { return 35u64 }
+    if duration_max(5u64, 6u64) != 6u64 { return 36u64 }
+
+    return 99u64
+}

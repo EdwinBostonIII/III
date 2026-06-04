@@ -21,6 +21,7 @@ extern @abi(c-msvc-x64) fn region_reset(id: u64) -> i32 from "region.iii"
 extern @abi(c-msvc-x64) fn region_release(id: u64) -> i32 from "region.iii"
 extern @abi(c-msvc-x64) fn region_base(id: u64) -> u64 from "region.iii"
 extern @abi(c-msvc-x64) fn region_seal(id: u64) -> i32 from "region.iii"
+extern @abi(c-msvc-x64) fn region_is_sealed(id: u64) -> u8 from "region.iii"
 extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_alloc8(id: u64, n: u64) -> u64 from "arena.iii"
 extern @abi(c-msvc-x64) fn arena_reset(id: u64) -> i32 from "arena.iii"
@@ -32,6 +33,7 @@ fn main() -> u64 {
     if r == 0u64 { return 1u64 }
     let base : u64 = region_base(r)
     if base == 0u64 { return 2u64 }
+    if region_is_sealed(r) != 0u8 { return 24u64 }   /* gap #41: fresh region not sealed */
     /* first alloc: used=0 -> start=0 -> addr=base */
     let p1 : u64 = region_alloc(r, 100u64, 8u64)
     if p1 != base { return 3u64 }
@@ -56,9 +58,13 @@ fn main() -> u64 {
     /* === the bound (clause 2): over-capacity alloc REFUSED, used unchanged === */
     if region_alloc(r, 5000u64, 1u64) != 0u64 { return 12u64 }
     if region_used(r) != 192u64 { return 13u64 }
+    /* gap #42: u64-wrap alloc guard -- start(192)+n must not wrap below cap and over-allocate */
+    if region_alloc(r, 0xFFFFFFFFFFFFFFFFu64, 1u64) != 0u64 { return 25u64 }
+    if region_used(r) != 192u64 { return 26u64 }
 
     /* === a sealed region refuses further alloc === */
     if region_seal(r) != 0i32 { return 14u64 }
+    if region_is_sealed(r) != 1u8 { return 27u64 }   /* gap #41: sealed flag set */
     if region_alloc(r, 1u64, 1u64) != 0u64 { return 15u64 }
     if region_release(r) != 0i32 { return 16u64 }
 

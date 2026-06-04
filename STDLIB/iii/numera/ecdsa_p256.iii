@@ -216,6 +216,7 @@ fn iii_ecdsa_p256_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @exp
     fn256_boot()
     iii_drbg_instantiate(d_bytes, 32u64, z_bytes, 32u64, 0u64, 0u64)
     let mut done : u8 = 0u8
+    let mut ok : u8 = 0u8
     let mut guard : u64 = 0u64
     /* retry the nonce until it is nonzero AND the produced (r,s) is non-degenerate
      * (r!=0 && s!=0) -- [E-EC-3] never emit a signature that verify would reject.  The
@@ -226,10 +227,11 @@ fn iii_ecdsa_p256_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @exp
         fn_reduce_x(0u64)
         if fn_is_zero_x(0u64) == 0u8 {
             fn_get_bytes_x(&ECDSA_KBUF as u64, 0u64)
-            if iii_ecdsa_p256_sign(d_bytes, z_bytes, &ECDSA_KBUF as u64, sig_out) == 0i32 { done = 1u8 }
+            if iii_ecdsa_p256_sign(d_bytes, z_bytes, &ECDSA_KBUF as u64, sig_out) == 0i32 { done = 1u8  ok = 1u8 }
         }
         guard = guard + 1u64
         if guard > 64u64 { done = 1u8 }
     }
+    if ok == 0u8 { return 0i32 - 1i32 }   /* [E-EC-3] exhausted 64 retries without a valid (r,s); never report success with a degenerate sig */
     return 0i32
 }

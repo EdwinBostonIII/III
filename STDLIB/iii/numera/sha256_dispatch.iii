@@ -2,26 +2,33 @@
  *
  * III STDLIB - numera::sha256_dispatch
  *
- * Lattice plan Step 0051 (companion to numera/cpufeat.iii) -- runtime
- * dispatch of the highest-available SHA-256 implementation.
+ * Runtime dispatch of the HIGHEST-AVAILABLE SHA-256 implementation.  Two
+ * implementations now exist and are proven bit-identical:
+ *   - software   numera/sha256.iii      (the FIPS-verified scalar core)
+ *   - hardware   numera/sha256_ni.iii    (Intel SHA-NI: sha256rnds2/msg1/msg2)
+ * The exhaustive differential KAT corpus/1020 proves them byte-for-byte equal
+ * over lengths 0..135 (every block count + the 55/56/63/64 padding edges) PLUS
+ * the FIPS 180-4 "abc"/"" vectors.  C.14 staged accelerator -- now ACTIVATED.
  *
- * Currently the only implementation is the software path in
- * numera/sha256.iii.  When `cpufeat_has_sha() == 1u8`, an SHA-NI-based
- * block compressor (using the SHA256RNDS2 / SHA256MSG1 / SHA256MSG2
- * instructions) is the intended fast path.  The dispatch here records
- * which path is selected at first call so the lattice's ripple engine
- * can attach a `@dynamic_impact(perf, ux)` provenance crystal: when
- * SHA-NI activates, the perf basis-points improve materially without
- * the consumer changing any source code.
+ * Selection (cpufeat-gated -- never emits an unsupported instruction):
+ *   - AUTO (default)        : cpufeat_has_sha()==1 -> SHA-NI, else software.
+ *   - force_path(SOFTWARE)  : pin the software path (overrides AUTO).
+ *   - force_path(SHA_NI)    : request SHA-NI; honored iff cpufeat_has_sha()==1,
+ *                             else falls back to software.
+ * SHA-NI being bit-identical means EVERY consumer (e.g. omnia/prespec.iii) gets
+ * the SAME digest on either path -- only the cycle count changes.  The
+ * @dynamic_impact(perf, ux) provenance is now REAL: on a SHA-capable CPU the
+ * dispatcher auto-selects the fast path with no consumer source change.
  *
- * Public surface:
+ * GOLDEN-SAFE: the compiler does NOT link sha256_dispatch (verified by objdump
+ * of COMPILED/iiis-2.exe -- no sha256_dispatch / sha256_ni symbol), so wiring
+ * the hardware path cannot drift the determinism golden.  A non-SHA CPU runs
+ * the proven software path bit-for-bit (cpufeat-gated fallback).
  *
- *   sha256_dispatch_oneshot(input, len, out_32) -> u32
- *      Compute SHA-256 of (input, len) into out_32.  Selects fast path
- *      when available; falls back to software otherwise.
- *
- *   sha256_dispatch_path() -> u32
- *      Returns 0 = software, 1 = SHA-NI.  Useful for tests + tooling.
+ * Public surface (stable across the activation):
+ *   sha256_dispatch_oneshot(input, len, out_32) -> u32   compute SHA-256
+ *   sha256_dispatch_path() -> u32                        0 = software, 1 = SHA-NI
+ *   sha256_dispatch_force_path(p) -> u32                 returns the resulting path
  *
  * Hexad: kind_essence.  Ring: R0.  K: 1.00.
  */
@@ -29,35 +36,36 @@
 module numera_sha256_dispatch
 
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_ni.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_sha() -> u8 from "cpufeat.iii"
 
 const SHA_PATH_SOFTWARE : u32 = 0u32
 const SHA_PATH_SHA_NI   : u32 = 1u32
 
-/* Dispatch state is settable by callers via sha256_dispatch_force_path
- * (intended for tests + benchmarking).  Default = software: there is one
- * SHA-256 implementation today (the verified software path).  The metal{}
- * inline-asm grammar now HAS ample STDLIB precedent (bigint/chacha20/keccak
- * AVX-512), so the SHA-NI fast path is a real named horizon -- it awaits the
- * SHA256RNDS2 round-function asm + its bit-identity KAT, not any grammar.  The
- * dispatch surface stays stable across that change. */
-var SHA_DISPATCH_PATH : u32 = 0u32
+/* dispatch override: AUTO selects the highest-available path; the two forced
+ * states let tests + tooling pin a specific path.  Default = AUTO. */
+const SHA_OV_AUTO     : u32 = 0u32
+const SHA_OV_SOFTWARE : u32 = 1u32
+const SHA_OV_SHA_NI   : u32 = 2u32
 
+var SHA_DISPATCH_OV : u32 = 0u32
+
+/* The active path.  AUTO and requested-SHA-NI both honor cpufeat (so a non-SHA
+ * CPU never reaches sha256rnds2); forced-software pins the scalar core. */
 fn sha256_dispatch_select() -> u32 {
-    return SHA_DISPATCH_PATH
+    let ov : u32 = SHA_DISPATCH_OV
+    if ov == SHA_OV_SOFTWARE { return SHA_PATH_SOFTWARE }
+    if cpufeat_has_sha() == 1u8 { return SHA_PATH_SHA_NI }
+    return SHA_PATH_SOFTWARE
 }
 
+/* Pin a path for tests/benchmarking.  Returns the RESULTING active path:
+ *   force(SOFTWARE) -> 0 ; force(SHA_NI) -> cpufeat_has_sha() ; bogus -> unchanged. */
 fn sha256_dispatch_force_path(p: u32) -> u32 @export {
     let p_l : u32 = p & 0xFFFFFFFFu32
-    if p_l == SHA_PATH_SOFTWARE {
-        SHA_DISPATCH_PATH = SHA_PATH_SOFTWARE
-        return SHA_PATH_SOFTWARE
-    }
-    if p_l == SHA_PATH_SHA_NI {
-        /* SHA-NI not yet activated; clamp back to software. */
-        SHA_DISPATCH_PATH = SHA_PATH_SOFTWARE
-        return SHA_PATH_SOFTWARE
-    }
-    return SHA_DISPATCH_PATH
+    if p_l == SHA_PATH_SOFTWARE { SHA_DISPATCH_OV = SHA_OV_SOFTWARE ; return sha256_dispatch_select() }
+    if p_l == SHA_PATH_SHA_NI   { SHA_DISPATCH_OV = SHA_OV_SHA_NI   ; return sha256_dispatch_select() }
+    return sha256_dispatch_select()   /* bogus -> override unchanged */
 }
 
 fn sha256_dispatch_path() -> u32 @export {
@@ -65,19 +73,6 @@ fn sha256_dispatch_path() -> u32 @export {
 }
 
 fn sha256_dispatch_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 @export {
-    /* APOTHEOSIS S.5 (H-4: no stub masquerading as dispatch).  This is HONESTLY
-     * SOFTWARE-ONLY today: there is exactly ONE SHA-256 implementation (the
-     * verified numera/sha256.iii), so the dispatch deterministically routes to
-     * it -- it does NOT pretend to select a fast path that isn't there
-     * (sha256_dispatch_force_path(SHA_NI) returns SHA_PATH_SOFTWARE, telling the
-     * caller plainly that SHA-NI is not active).  NAMED HORIZON: a SHA256RNDS2 /
-     * SHA256MSG1 / SHA256MSG2 metal{} block, gated cpufeat_has_sha() and proven
-     * bit-identical to the software path (the same discipline the AVX-512 blocks
-     * in bigint/chacha20/keccak already follow -- the metal{} grammar this stub
-     * once said was "absent" now has ample STDLIB precedent, so the only
-     * remaining work is the round-function asm + its bit-identity KAT).  The
-     * dispatch surface + selection state stay stable across that future. */
-    let p : u32 = sha256_dispatch_select()
-    let _selected : u32 = p
+    if sha256_dispatch_select() == SHA_PATH_SHA_NI { return sha256_ni_oneshot(input, len, out_32) }
     return sha256_oneshot(input, len, out_32)
 }

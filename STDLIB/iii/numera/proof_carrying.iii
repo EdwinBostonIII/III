@@ -524,6 +524,7 @@ var PCST_EXP   : [u8; 32]     /* expected pair-hash */
 var PCST_CERT  : [u8; 96]     /* certificate */
 var PCST_PROD  : [u8; 32]     /* producer id */
 var PCST_POUT  : [u8; 32]     /* producer readback */
+var PCST_ROUT  : [u8; 32]     /* chain-root readback (gap #66) */
 var PCST_MSG   : [u8; 8]      /* payload scratch */
 var PCST_COEF  : [u64; 8]     /* coefficient bigint-id array */
 
@@ -607,6 +608,11 @@ fn pc_selftest_arena(arena: u64) -> u64 {
         if ev10 == 0u64 { return 13u64 }
         if bigint_get_limb(ev10, 0u64) != 41u64 { return 14u64 }
         bigint_drop(ev10)
+        /* gap #65: pc_coeff_leaf -- distinct from pc_poly_leaf (index-prefix separation) + null guard */
+        if pc_coeff_leaf(l_arena, c0, (&PCST_A as u64) as *u8) != 0i32 { return 30u64 }
+        if pc_poly_leaf(0u64, c0, (&PCST_B as u64) as *u8) != 0i32 { return 31u64 }
+        if ident_eq((&PCST_A as u64) as *u8, (&PCST_B as u64) as *u8) == 1u8 { return 32u64 }  /* DIFFER */
+        if pc_coeff_leaf(l_arena, c0, 0u64 as *u8) != -4i32 { return 33u64 }                   /* PROOFC_E_NULL */
         bigint_drop(c0)
         bigint_drop(c1)
         bigint_drop(c2)
@@ -626,6 +632,9 @@ fn pc_selftest_arena(arena: u64) -> u64 {
     /* accessor: producer readback == producer */
     pc_cert_producer((&PCST_CERT as u64) as *u8, (&PCST_POUT as u64) as *u8)
     if ident_eq((&PCST_POUT as u64) as *u8, (&PCST_PROD as u64) as *u8) != 1u8 { return 18u64 }
+    /* gap #66: pc_cert_chain_root reads the chain root at cert+64 */
+    pc_cert_chain_root((&PCST_CERT as u64) as *u8, (&PCST_ROUT as u64) as *u8)
+    if ident_eq((&PCST_ROUT as u64) as *u8, ((&PCST_CERT as u64) + 64u64) as *u8) != 1u8 { return 19u64 }
 
     /* -- KAT 7: polynomial commit + open + verify round-trip + tamper + position
      *    binding.  [audit C-PC-1/2/3]  f = 2z^2+3z+5 over GF(97); coeffs [5,3,2];

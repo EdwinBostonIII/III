@@ -7,8 +7,9 @@
  * Suite ids (CRYPTO-AGILITY/include/iii/crypto_suites.h):
  *   ML-KEM-512/768/1024   = 0x0101 / 0x0102 / 0x0103   (mlkem k = 2/3/4)
  *   ML-DSA-44/65/87        = 0x0111 / 0x0112 / 0x0113   (mldsa level = 2/3/5)
- *   SLH-DSA-128S/192S/256S = 0x0121 / 0x0122 / 0x0123   (slhdsa lv = 0/1/2)
- * Family = (suite & 0xFFF0): 0x0100 KEM, 0x0110 sign-lattice, 0x0120 sign-hash.
+ *   SLH-DSA-SHAKE-128S/192S/256S = 0x0121 / 0x0122 / 0x0123  (slhdsa lv = 0/1/2; SHAKE)
+ *   SLH-DSA-SHA2-128S/192S/256S  = 0x0131 / 0x0132 / 0x0133  (slhdsa lv = 0/1/2; SHA-2, FIPS-205)
+ * Family = (suite & 0xFFF0): 0x0100 KEM, 0x0110 sign-lattice, 0x0120 sign-hash-SHAKE, 0x0130 sign-hash-SHA2.
  *
  * Returns the scheme rc, or -1 (E_BAD_SUITE) for an unroutable suite or a
  * primitive the family doesn't support (e.g. sign on a KEM suite).
@@ -27,6 +28,12 @@ extern @abi(c-msvc-x64) fn iii_mlkem_decaps(k: u64, sk: u64, ct: u64, ss: u64) -
 extern @abi(c-msvc-x64) fn iii_slhdsa_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
 extern @abi(c-msvc-x64) fn iii_slhdsa_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
 extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+/* APOTHEOSIS C.1 step 6: the strict FIPS-205 SLH-DSA-SHA2 family (family bit 0x0130,
+ * ids 0x0131-3), wired so BOTH FIPS-205 SLH-DSA families are reachable through the
+ * uniform surface (the SHAKE family is the 0x0121-3 -> iii_slhdsa_* route above). */
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_sha2_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
 
 fn pq_mlkem_k(suite: u64) -> u64 { return (suite & 0xFu64) + 1u64 }       /* 0x0101->2 .. 0x0103->4 */
 fn pq_slh_lv(suite: u64) -> u64 { return (suite & 0xFu64) - 1u64 }        /* 0x0121->0 .. 0x0123->2 */
@@ -53,6 +60,7 @@ fn iii_pq_keygen(suite: u64, seed: u64, pk: u64, sk: u64) -> i32 @export {
     if fam == 0x0100u64 { return iii_mlkem_keygen(pq_mlkem_k(suite), seed, pk, sk) }
     if fam == 0x0110u64 { return iii_mldsa_keygen(pq_mldsa_level(suite), seed, pk, sk) }
     if fam == 0x0120u64 { return iii_slhdsa_keygen(pq_slh_lv(suite), seed, pk, sk) }
+    if fam == 0x0130u64 { return iii_slhdsa_sha2_keygen(pq_slh_lv(suite), seed, pk, sk) }  /* FIPS-205 SHA-2 family */
     return 0i32 - 1i32
 }
 
@@ -61,6 +69,7 @@ fn iii_pq_sign(suite: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0110u64 { return iii_mldsa_sign(pq_mldsa_level(suite), sk, msg, msglen, sig, siglen) }
     if fam == 0x0120u64 { return iii_slhdsa_sign(pq_slh_lv(suite), sk, msg, msglen, sig, siglen) }
+    if fam == 0x0130u64 { return iii_slhdsa_sha2_sign(pq_slh_lv(suite), sk, msg, msglen, sig, siglen) }  /* FIPS-205 SHA-2 family */
     return 0i32 - 1i32
 }
 
@@ -69,6 +78,7 @@ fn iii_pq_verify(suite: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u
     let fam : u64 = suite & 0xFFF0u64
     if fam == 0x0110u64 { return iii_mldsa_verify(pq_mldsa_level(suite), pk, msg, msglen, sig, siglen) }
     if fam == 0x0120u64 { return iii_slhdsa_verify(pq_slh_lv(suite), pk, msg, msglen, sig, siglen) }
+    if fam == 0x0130u64 { return iii_slhdsa_sha2_verify(pq_slh_lv(suite), pk, msg, msglen, sig, siglen) }  /* FIPS-205 SHA-2 family */
     return 0i32 - 1i32
 }
 

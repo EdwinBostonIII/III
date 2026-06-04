@@ -1,0 +1,9 @@
+/* 1053 -- mig4 x mig7: the one engine feeds the one category.
+ * xii_morphism.iii registers XII-term ops as category morphisms keyed on their XII NORMAL FORM
+ * (cat_add_morphism_xii -> nous_bkey -> xii_canonicalise + cad).  So two computations the one engine
+ * proves equal (AND(POS,NEG) == AND(NEG,POS), min commutative) are the SAME arrow (dedup), and a
+ * behaviorally-distinct op (OR(POS,NEG) = max) is a DISTINCT arrow.  The mig4<->mig7 bridge, made
+ * real and observable.  99 = dedup holds + distinctness holds. */
+module corpus_1053
+extern @abi(c-msvc-x64) fn xii_morphism_selftest() -> u64 from "xii_morphism.iii"
+fn main() -> u64 { return xii_morphism_selftest() }

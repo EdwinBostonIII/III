@@ -116,6 +116,8 @@ fn unc_gap_derived(a0: u32, a1: u32, na: u8, reason: u32) -> u32 @export {
     unc_init()
     if reason == 0u32 { return 0u32 }
     if na == 0u8 { return 0u32 }
+    if a0 >= UNC_NEXT { return 0u32 }                  /* [OOB] a0/a1 are antecedent gap-ids, dereferenced in unc_root_causes -> must already exist */
+    if na >= 2u8 { if a1 >= UNC_NEXT { return 0u32 } }
     if UNC_NEXT >= UNC_MAX { return 0u32 }
     let id : u32 = UNC_NEXT
     let s : u64 = id as u64

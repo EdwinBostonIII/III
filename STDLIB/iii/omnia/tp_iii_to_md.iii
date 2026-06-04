@@ -22,8 +22,12 @@ fn tp_iii_to_md_emit_byte(dst: u64, off: u64, b: u8) -> i32 {
 fn tp_iii_to_md(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
     let header_len : u64 = 7u64
     let footer_len : u64 = 5u64
+    /* [bounds] subtraction-form: header_len+src_len+footer_len wraps for src_len near u64-max
+     * (e.g. 7 + (MAXU64-19) + 5 == -7 mod 2^64 == tiny <= dst_cap -> a ~4e18-byte OOB write). */
+    let fixed_ov : u64 = header_len + footer_len   /* 12, no wrap */
+    if fixed_ov > dst_cap { return 0u64 }
+    if src_len > dst_cap - fixed_ov { return 0u64 }
     let total : u64 = header_len + src_len + footer_len
-    if total > dst_cap { return 0u64 }
     /* Write header */
     let mut i : u32 = 0u32
     while i < 7u32 {

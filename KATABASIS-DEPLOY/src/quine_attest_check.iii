@@ -1,0 +1,138 @@
+/* KATABASIS-DEPLOY/src/quine_attest_check.iii
+ *
+ * M23 capability-11 FALSIFIER (the advisor's proof, entirely in III, no metal):
+ * "different source => different attestation."  Given two pre-built drivers -- g.sys (the genuine
+ * build) and b.sys (built from one-byte-tampered source) -- this tool reads BOTH files, parses each
+ * PE to locate the `.text` section, and measures each `.text` with the SAME ks_measure (cad/SHA-256)
+ * the kernel runs at Ring 0.  It proves:
+ *   (a) the genuine measurement is REPRODUCIBLE (measure g.sys's .text twice -> identical);
+ *   (b) the measurement BINDS TO EXECUTING CODE -- g.sys and b.sys differ in `.text`, so their
+ *       measurements DIFFER.  Folding baked constants (the rejected Fork A) could never show this.
+ * Exit 99 = both hold (the seal binds to the source-derived code); 1..6 = the failing step.
+ *
+ * Pure III: III's compiler builds both .sys (build_gate_ioctl.sh), III's kernel32 membrane reads the
+ * files, III parses the PE, III's cad computes the measurement.  No external hasher / objcopy.
+ * The shell only stages g.sys / b.sys (short fixed names) and runs this III program.
+ */
+module quine_attest_check
+
+extern @abi(c-msvc-x64) fn CreateFileA(name: *u8, access: u32, share: u32, sec: u64, disp: u32, flags: u32, tmpl: u64) -> u64 from "kernel32"
+extern @abi(c-msvc-x64) fn ReadFile(h: u64, buf: *u8, n: u32, nread: u64, ovl: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn CloseHandle(h: u64) -> i32 from "kernel32"
+extern @abi(c-msvc-x64) fn ks_measure(base: u64, len: u64, out: u64) -> i32 from "quine_seal.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const QAC_GENERIC_READ : u32 = 0x80000000u32
+const QAC_SHARE_READ   : u32 = 0x00000001u32
+const QAC_OPEN_EXISTING: u32 = 3u32
+const QAC_ATTR_NORMAL  : u32 = 0x00000080u32
+const QAC_INVALID      : u64 = 0xFFFFFFFFFFFFFFFFu64
+const QAC_CAP          : u64 = 262144u64   /* 256 KiB read cap (the .sys is ~130 KiB) */
+
+var QAC_FILE_GOOD : [u8; 262144]
+var QAC_FILE_BAD  : [u8; 262144]
+var QAC_NREAD     : [u8; 8]        /* ReadFile lpNumberOfBytesRead (DWORD) */
+var QAC_PATH_GOOD : [u8; 8]        /* "g.sys\0" */
+var QAC_PATH_BAD  : [u8; 8]        /* "b.sys\0" */
+var QAC_SEED_G    : [u8; 32]
+var QAC_SEED_G2   : [u8; 32]
+var QAC_SEED_B    : [u8; 32]
+
+/* parsed `.text` fields (module globals -- pe_text sets them; capture into locals before re-parsing) */
+var QAC_TEXT_OFF  : u64 = 0u64    /* PointerToRawData (file offset of .text raw bytes) */
+var QAC_TEXT_SIZE : u64 = 0u64    /* SizeOfRawData (.text raw byte count == what the loader maps) */
+var QAC_TEXT_RVA  : u64 = 0u64    /* VirtualAddress (for cross-checking the baked KS_TEXT_RVA) */
+
+fn qac_init_paths() -> i32 {
+    /* "g.sys" */
+    QAC_PATH_GOOD[0u64] = 0x67u8  QAC_PATH_GOOD[1u64] = 0x2Eu8  QAC_PATH_GOOD[2u64] = 0x73u8
+    QAC_PATH_GOOD[3u64] = 0x79u8  QAC_PATH_GOOD[4u64] = 0x73u8  QAC_PATH_GOOD[5u64] = 0x00u8
+    /* "b.sys" */
+    QAC_PATH_BAD[0u64]  = 0x62u8  QAC_PATH_BAD[1u64]  = 0x2Eu8  QAC_PATH_BAD[2u64]  = 0x73u8
+    QAC_PATH_BAD[3u64]  = 0x79u8  QAC_PATH_BAD[4u64]  = 0x73u8  QAC_PATH_BAD[5u64]  = 0x00u8
+    return 0i32
+}
+
+/* read u32 / u16 little-endian from a byte buffer at offset */
+fn qac_rd_u32(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    let b2 : u64 = p[off + 2u64] as u64
+    let b3 : u64 = p[off + 3u64] as u64
+    return b0 | (b1 << 8u64) | (b2 << 16u64) | (b3 << 24u64)
+}
+fn qac_rd_u16(base: u64, off: u64) -> u64 {
+    let p : *u8 = base as *u8
+    let b0 : u64 = p[off + 0u64] as u64
+    let b1 : u64 = p[off + 1u64] as u64
+    return b0 | (b1 << 8u64)
+}
+
+/* Open `path` (NUL-terminated), read up to QAC_CAP bytes into `buf`.  Returns bytes read, 0 on failure. */
+fn qac_read_file(path: u64, buf: u64) -> u64 {
+    let pp : u64 = path
+    let bp : u64 = buf
+    let h : u64 = CreateFileA(pp as *u8, QAC_GENERIC_READ, QAC_SHARE_READ, 0u64, QAC_OPEN_EXISTING, QAC_ATTR_NORMAL, 0u64)
+    if h == QAC_INVALID { return 0u64 }
+    let ok : i32 = ReadFile(h, bp as *u8, 262144u32, (&QAC_NREAD as u64), 0u64)
+    CloseHandle(h)
+    if ok == 0i32 { return 0u64 }
+    return qac_rd_u32((&QAC_NREAD as u64), 0u64)
+}
+
+/* Parse the PE at `base`, set QAC_TEXT_OFF/SIZE/RVA for the `.text` section.  0 = found, -1 = not. */
+fn qac_pe_text(base: u64) -> i32 {
+    let b : u64 = base
+    let e_lfanew : u64 = qac_rd_u32(b, 0x3Cu64)
+    let pe : u64 = b + e_lfanew
+    let numsec  : u64 = qac_rd_u16(pe, 6u64)
+    let optsize : u64 = qac_rd_u16(pe, 20u64)
+    if numsec > 64u64 { return -1i32 }
+    let sectab : u64 = pe + 24u64 + optsize
+    let mut i : u64 = 0u64
+    while i < numsec {
+        let sec : u64 = sectab + (i * 40u64)
+        let p : *u8 = sec as *u8
+        /* match ".text" = 0x2E 0x74 0x65 0x78 0x74 */
+        if p[0u64] == 0x2Eu8 {
+            if p[1u64] == 0x74u8 {
+                if p[2u64] == 0x65u8 {
+                    if p[3u64] == 0x78u8 {
+                        if p[4u64] == 0x74u8 {
+                            QAC_TEXT_RVA  = qac_rd_u32(sec, 12u64)   /* VirtualAddress  */
+                            QAC_TEXT_SIZE = qac_rd_u32(sec, 8u64)    /* VirtualSize: reloc-free code, matches driver ks_text_size + client */
+                            QAC_TEXT_OFF  = qac_rd_u32(sec, 20u64)   /* PointerToRawData*/
+                            return 0i32
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1u64
+    }
+    return -1i32
+}
+
+fn main() -> u64 {
+    qac_init_paths()
+    /* genuine build */
+    let ng : u64 = qac_read_file((&QAC_PATH_GOOD as u64), (&QAC_FILE_GOOD as u64))
+    if ng == 0u64 { return 1u64 }
+    if qac_pe_text((&QAC_FILE_GOOD as u64)) != 0i32 { return 2u64 }
+    let goff : u64 = QAC_TEXT_OFF
+    let gsz  : u64 = QAC_TEXT_SIZE
+    ks_measure((&QAC_FILE_GOOD as u64) + goff, gsz, (&QAC_SEED_G as u64))
+    ks_measure((&QAC_FILE_GOOD as u64) + goff, gsz, (&QAC_SEED_G2 as u64))
+    if cad_eq((&QAC_SEED_G as u64) as *u8, (&QAC_SEED_G2 as u64) as *u8) != 1u8 { return 3u64 }   /* (a) reproducible */
+    /* tampered build */
+    let nb : u64 = qac_read_file((&QAC_PATH_BAD as u64), (&QAC_FILE_BAD as u64))
+    if nb == 0u64 { return 4u64 }
+    if qac_pe_text((&QAC_FILE_BAD as u64)) != 0i32 { return 5u64 }
+    let boff : u64 = QAC_TEXT_OFF
+    let bsz  : u64 = QAC_TEXT_SIZE
+    ks_measure((&QAC_FILE_BAD as u64) + boff, bsz, (&QAC_SEED_B as u64))
+    /* (b) FALSIFIER: tampered source => different .text => DIFFERENT measurement */
+    if cad_eq((&QAC_SEED_G as u64) as *u8, (&QAC_SEED_B as u64) as *u8) != 0u8 { return 6u64 }
+    return 99u64
+}

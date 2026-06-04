@@ -140,6 +140,7 @@ fn if_parse_value(src: u64, off: u64, len: u64) -> u64 {
                     let bp : *u8 = (src + o) as *u8
                     let d : u32 = if_hex_digit(bp[0u64])
                     if d == 0xFFFFFFFFu32 { return o }
+                    if (IF_PARSED_VAL >> 60u64) != 0u64 { return o }   /* [overflow] next <<4 would drop high bits (17th hex digit) */
                     IF_PARSED_VAL = (IF_PARSED_VAL << 4u64) | (d as u64 & 0xFu64)
                     o = o + 1u64
                 }
@@ -153,7 +154,12 @@ fn if_parse_value(src: u64, off: u64, len: u64) -> u64 {
         let c : u8 = bp[0u64]
         if c < 48u8 { return o }
         if c > 57u8 { return o }
-        IF_PARSED_VAL = IF_PARSED_VAL * 10u64 + ((c - 48u8) as u64 & 0xFFu64)
+        /* [overflow] two-stage guard (matches verba::semver/parse): lone `> MAX/10` misses value==MAX/10 && digit>5. */
+        if IF_PARSED_VAL > 1844674407370955161u64 { return o }
+        let v10 : u64 = IF_PARSED_VAL * 10u64
+        let nv  : u64 = v10 + ((c - 48u8) as u64 & 0xFFu64)
+        if nv < v10 { return o }
+        IF_PARSED_VAL = nv
         o = o + 1u64
     }
     return o
@@ -230,7 +236,12 @@ fn if_apply_field(intent: u64) -> i32 {
                         let d : u8 = IF_KEY_BUF[k]
                         if d < 48u8 { return 0i32 }
                         if d > 57u8 { return 0i32 }
-                        slot = slot * 10u32 + ((d - 48u8) as u32 & 0xFFu32)
+                        /* [overflow] two-stage u32 guard (matches verba::semver/parse two-stage idiom) */
+                        if slot > 429496729u32 { return 0i32 }
+                        let sv10 : u32 = slot * 10u32
+                        let snv  : u32 = sv10 + ((d - 48u8) as u32 & 0xFFu32)
+                        if snv < sv10 { return 0i32 }
+                        slot = snv
                         k = k + 1u32
                     }
                     if slot < 16u32 {

@@ -1,6 +1,23 @@
 /* 384 — V1 Stage 5 predictive quorum: deterministic redundant quorum of size
  * 2f+1+k anchored at leader=view mod n (NO observational learning — closed form
- * of (view,n,f), re-derivable, leader-anchored, rotates with view). */
+ * of (view,n,f), re-derivable, leader-anchored, rotates with view).
+ * Plus the out_cap overflow guard (#4 backlog): a too-small out_quorum buffer
+ * is REJECTED before any write (was an unbounded write to a NULL-checked-only *u8). */
 module corpus_384
 extern @abi(c-msvc-x64) fn hsp_selftest() -> u64 from "hotstuff_predict.iii"
-fn main() -> u64 { return hsp_selftest() }
+extern @abi(c-msvc-x64) fn hsp_predict_quorum(view: u64, out_quorum: *u8, out_size: *u32, out_cap: u32) -> i32 from "hotstuff_predict.iii"
+
+var SMALL_BUF : [u8; 256]
+var SZ : [u32; 1]
+
+fn main() -> u64 {
+    let st : u64 = hsp_selftest()
+    if st != 99u64 { return st }
+    /* hsp_selftest left HSP inited with n=7 -> qsize 6 -> 192 bytes required. */
+    /* NEGATIVE: out_cap 100 (< 192) must return HSP_E_OVERFLOW (-3), NOT write OOB. */
+    if hsp_predict_quorum(3u64, (&SMALL_BUF as u64) as *u8, (&SZ as u64) as *u32, 100u32) != -3i32 { return 50u64 }
+    /* sufficient cap (192) succeeds */
+    if hsp_predict_quorum(3u64, (&SMALL_BUF as u64) as *u8, (&SZ as u64) as *u32, 192u32) != 0i32 { return 51u64 }
+    if SZ[0] != 6u32 { return 52u64 }
+    return 99u64
+}

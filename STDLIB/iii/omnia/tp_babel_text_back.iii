@@ -21,7 +21,10 @@ fn tp_btb_emit(dst: u64, off: u64, b: u8) -> i32 {
 fn tp_babel_text_back(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
     let mut in_off : u64 = 0u64
     let mut out_off : u64 = 0u64
-    if dst_cap < src_len + 4u64 { return 0u64 }
+    /* [bounds] subtraction-form: src_len+4 wraps for src_len near u64-max -> tiny, so `dst_cap < tiny`
+     * is false and the guard passes -> OOB.  src_len > dst_cap-4 never wraps (dst_cap >= 4 checked). */
+    if dst_cap < 4u64 { return 0u64 }
+    if src_len > dst_cap - 4u64 { return 0u64 }
     /* Open brace */
     tp_btb_emit(dst_buf, out_off, 123u8)
     out_off = out_off + 1u64

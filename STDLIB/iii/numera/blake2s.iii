@@ -21,6 +21,7 @@ const B2S_BLOCK_BYTES : u32 = 64u32
 /* Initialization vector (IV) -- same as SHA-256's, RFC 7693 §2.6 */
 var B2S_IV : [u32; 8]
 var B2S_IV_INIT : u8 = 0u8
+var B2S_SESSION : u8 = 0u8   /* [soundness] session-init guard (mirrors sha256 SHA_INIT): update/final before init = uninitialised state */
 
 /* SIGMA: 10 permutations of {0..15} for round message scheduling */
 var B2S_SIGMA : [u32; 160]   /* 10 rounds * 16 entries */
@@ -432,6 +433,12 @@ fn b2s_compress(last: u8) -> i32 {
 }
 
 fn blake2s_init(out_len: u64) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    /* BLAKE2s digest length is 1..32 (RFC 7693 sec 2.5). Clamp out-of-range so an invalid out_len cannot
+     * drive blake2s_final past B2S_H[8] (OOB read) or the caller's out buffer (OOB write). out_len is a
+     * PUBLIC length parameter, so clamping it does not weaken the @constant_time secret-data property. */
+    let mut ol : u32 = out_len as u32
+    if ol == 0u32 { ol = 32u32 }
+    if ol > 32u32 { ol = 32u32 }
     b2s_init_iv()
     let mut i : u32 = 0u32
     while i < 8u32 {
@@ -439,16 +446,18 @@ fn blake2s_init(out_len: u64) -> u32 @dynamic(ripple=auto) @constant_time @expor
         i = i + 1u32
     }
     /* Mix in parameter block: depth=1, fanout=1, key_length=0, digest_length */
-    let param0 : u32 = 0x01010000u32 | (out_len as u32)
+    let param0 : u32 = 0x01010000u32 | ol
     B2S_H[0] = B2S_H[0] ^ param0
     B2S_T[0]    = 0u32
     B2S_T[1]    = 0u32
     B2S_BUFLEN  = 0u32
-    B2S_OUT_LEN = out_len as u32
+    B2S_OUT_LEN = ol
+    B2S_SESSION = 1u8
     return 0u32
 }
 
 fn blake2s_update(input: *u8, len: u64) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    if B2S_SESSION == 0u8 { return 1u32 }   /* [soundness] no update before init (mirrors sha256_update) */
     let mut rem : u64 = len
     let mut off : u64 = 0u64
     while rem > 0u64 {
@@ -475,6 +484,7 @@ fn blake2s_update(input: *u8, len: u64) -> u32 @dynamic(ripple=auto) @constant_t
 }
 
 fn blake2s_final(out: *u8) -> u32 @dynamic(ripple=auto) @constant_time @export {
+    if B2S_SESSION == 0u8 { return 1u32 }   /* [soundness] no final before init (mirrors sha256_final) */
     /* Counter += BUFLEN */
     let new_t0 : u32 = (B2S_T[0] + B2S_BUFLEN)
     if new_t0 < B2S_T[0] { B2S_T[1] = (B2S_T[1] + 1u32) }

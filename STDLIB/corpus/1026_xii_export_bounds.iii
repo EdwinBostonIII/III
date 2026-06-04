@@ -1,0 +1,23 @@
+/* 1026 — xii_emit_gen scratch-buffer bounds (#2 backlog).
+ * xii_emit_gen_cell_mhash -> _sha256_prefix_then_payload guarded the 4096-byte scratch with the
+ * ADDITION form (prefix_len + payload_size), which WRAPS for a caller size near u32-max (4 + 0xFFFFFFFE
+ * == 2 <= 4096), letting a ~4-billion-iteration OOB write run.  The subtraction-form guard now fires. */
+module corpus_1026
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn xii_emit_gen_cell_mhash(horizon_id: u32, target: u32, size: u32, payload_ptr: *u8, out_32: *u8) -> i32 from "xii_emit_gen.iii"
+
+var OUT : [u8; 32]
+
+fn main() -> u64 {
+    let pay : *u8 = malloc(64u64)
+    /* NEGATIVE: size near u32-max -> the old (4+size) wrapped small and PASSED; subtraction guard -> -1, no OOB */
+    if xii_emit_gen_cell_mhash(50u32, 1u32, 0xFFFFFFFEu32, pay, (&OUT as u64) as *u8) != -1i32 { return 1u64 }
+    /* NEGATIVE: size 4093 just over the 4092-byte capacity (4096 - 4 prefix) -> -1 */
+    if xii_emit_gen_cell_mhash(50u32, 1u32, 4093u32, pay, (&OUT as u64) as *u8) != -1i32 { return 2u64 }
+    /* POSITIVE: a small in-bounds size succeeds */
+    if xii_emit_gen_cell_mhash(50u32, 1u32, 32u32, pay, (&OUT as u64) as *u8) != 0i32 { return 3u64 }
+    free(pay)
+    return 99u64
+}

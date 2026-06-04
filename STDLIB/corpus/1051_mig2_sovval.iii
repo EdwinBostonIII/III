@@ -1,0 +1,10 @@
+/* 1051 -- mig2 final integration: the SovVal TYPE itself enforces both facet laws.
+ * SovVal = Sigma(Reach(h), LeK(c)) -- a dependent pair of the reachability proof and the
+ * budget proof.  p5_kat_mig2_cert (numera/typecheck.iii) checks <refl,refl> against it:
+ *   reachable hexad + within-budget cost -> type-checks (both proofs exist);
+ *   bricking hexad -> REJECTED (no Reach proof); over-K cost -> REJECTED (no LeK proof).
+ * So a bricking OR over-K SovVal is UNCONSTRUCTABLE at the type level -- the runtime
+ * SV_STATUS_REFUSED (M5) fully lifted into the type theory (H6). 99 = all three arms. */
+module corpus_1051
+extern @abi(c-msvc-x64) fn p5_kat_mig2_cert() -> u64 from "typecheck.iii"
+fn main() -> u64 { return p5_kat_mig2_cert() }

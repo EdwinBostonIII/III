@@ -167,7 +167,10 @@ fn rn_insert(meta: *u8, slots: *u8, arena: *u8, val: *u8, vo: u64, vlen: u64, do
     if occ == 1u8 { return 0u64 }
     let used : u64 = rn_ld_u64(meta, 16u64)
     let acap : u64 = rn_ld_u64(meta, 8u64)
-    if used + vlen > acap { return 3u64 }
+    /* [bounds] subtraction-form: `used + vlen > acap` wraps for a caller-supplied vlen near u64-max
+     * (via @export rn_publish/rn_merge), passing the check -> rn_copy writes vlen bytes OOB. */
+    if acap < used { return 3u64 }
+    if vlen > acap - used { return 3u64 }
     rn_copy(arena, used, val, vo, vlen)
     rn_copy(slots, i * 64u64, addr_out, ao, 32u64)
     rn_st_u64(slots, i * 64u64 + 32u64, used)
@@ -227,7 +230,8 @@ fn rn_recompute(meta: *u8, slots: *u8, arena: *u8, ncells: u64, cell_kind: *u8, 
                     rn_copy(scratch, j * 32u64, cell_addr, child * 32u64, 32u64)
                     j = j + 1u64
                 }
-                rn_insert(meta, slots, arena, scratch, 0u64, cnt * 32u64, RN_DOM_NODE, cnt, newaddr, 0u64)
+                let rins : u64 = rn_insert(meta, slots, arena, scratch, 0u64, cnt * 32u64, RN_DOM_NODE, cnt, newaddr, 0u64)
+                if rins != 0u64 { return RN_GAP }   /* [silent-trunc] a full arena/table left newaddr UNWRITTEN -> stale read below; fail with the fn's RN_GAP sentinel (cf. L229) */
                 if rn_eq32(newaddr, 0u64, cell_addr, c * 32u64) == 0u8 {
                     rn_copy(cell_addr, c * 32u64, newaddr, 0u64, 32u64)
                     anychange = 1u64
@@ -264,7 +268,10 @@ fn rn_merge(dmeta: *u8, dslots: *u8, darena: *u8, smeta: *u8, sslots: *u8, saren
             let kind : u8 = sslots[i * 64u64 + 49u64]
             let mut frame : u64 = vlen
             if kind == RN_DOM_NODE { frame = vlen >> 5u64 }
-            rn_insert(dmeta, dslots, darena, sarena, voff, vlen, kind, frame, tmpaddr, 0u64)
+            /* [silent-truncation] propagate rn_insert's rc (2=full / 3=oom): a dropped value would
+             * make the union INCOMPLETE while the merge falsely reported success. */
+            let r : u64 = rn_insert(dmeta, dslots, darena, sarena, voff, vlen, kind, frame, tmpaddr, 0u64)
+            if r != 0u64 { return r }
         }
         i = i + 1u64
     }

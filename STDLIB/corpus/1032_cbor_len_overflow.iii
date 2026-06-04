@@ -1,0 +1,45 @@
+/* 1032_cbor_len_overflow.iii -- prove-the-negative for tp_babel_cbor_json's untrusted length bound.
+ * A CBOR byte-string header carries an attacker-chosen payload length (1/2/4/8 bytes).  The decoder
+ * must REJECT any length that runs past the input buffer.  The overflow-free bound
+ * `payload_len > src_len - payload_off` rejects an 8-byte length of 2^64-1 (whose additive form
+ * payload_off+payload_len would WRAP) and a 2-byte length that simply exceeds src_len.
+ * rc 99 = pass; 1..5 = which check failed. */
+module corpus_1032
+
+extern @abi(c-msvc-x64) fn tp_babel_cbor_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 from "tp_babel_cbor_json.iii"
+
+var CB_IN  : [u8; 32]
+var CB_OUT : [u8; 32]
+
+fn main() -> u64 {
+    let pin  : *u8 = (&CB_IN as u64) as *u8
+    let pout : *u8 = (&CB_OUT as u64) as *u8
+
+    /* VALID: major type 2 (byte string) | info 2 = 0x42, then 2 payload bytes "hi". */
+    pin[0u64] = 0x42u8
+    pin[1u64] = 104u8   /* h */
+    pin[2u64] = 105u8   /* i */
+    let n1 : u64 = tp_babel_cbor_json(&CB_IN as u64, 3u64, &CB_OUT as u64, 32u64)
+    if n1 != 2u64 { return 1u64 }
+    if pout[0u64] != 104u8 { return 2u64 }
+    if pout[1u64] != 105u8 { return 3u64 }
+
+    /* NEGATIVE: info 27 (0x5B) => 8-byte big-endian length = 0xFFFFFFFFFFFFFFFF (2^64-1).
+     * payload_off=9, src_len=9: the additive bound 9+(2^64-1) WRAPS to 8 (<9, would pass); the
+     * overflow-free bound 2^64-1 > 9-9=0 REJECTS. Returns 0. */
+    pin[0u64] = 0x5Bu8
+    let mut k : u64 = 1u64
+    while k < 9u64 { pin[k] = 0xFFu8  k = k + 1u64 }
+    let n2 : u64 = tp_babel_cbor_json(&CB_IN as u64, 9u64, &CB_OUT as u64, 32u64)
+    if n2 != 0u64 { return 4u64 }
+
+    /* NEGATIVE: info 25 (0x59) => 2-byte length = 0x00FF (255), src_len only 5.
+     * payload_len 255 > src_len 5 - payload_off 3 = 2 -> REJECT. Returns 0. */
+    pin[0u64] = 0x59u8
+    pin[1u64] = 0x00u8
+    pin[2u64] = 0xFFu8
+    let n3 : u64 = tp_babel_cbor_json(&CB_IN as u64, 5u64, &CB_OUT as u64, 32u64)
+    if n3 != 0u64 { return 5u64 }
+
+    return 99u64
+}

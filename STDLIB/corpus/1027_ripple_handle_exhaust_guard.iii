@@ -1,0 +1,114 @@
+/* 1027 -- omnia/ripple.iii handle-leak + witness-headroom guards (#17 backlog).
+ *
+ * ARM 1 (handle exhaustion): ripple_analyze allocated `seeds` (VEC64_LIVE) and consumed the
+ *   `closure_v` returned by sid_transitive_closure but NEVER dropped either -- 2 of 16 VEC64_LIVE
+ *   slots leaked per call, so the 9th call's vec_u64_new returned 0 and ripple_analyze failed.
+ *   The fix drops seeds + closure_v (and crystal_deps drops its leaked `visited` map) -> the
+ *   function is slot-neutral and 9 consecutive calls all succeed.
+ *
+ * ARM 2 (witness headroom): strict ripple_execute emits one witness per plan edge.  When the
+ *   witness chain filled mid-loop, later witness_appends were silently dropped (a partial,
+ *   unsound result).  The pre-flight guard now REFUSES the whole batch (RIPPLE_INVALID +
+ *   ripple_last_error()==RIPPLE_E_WITNESS_FULL) when n > witness_remaining().  99 = pass. */
+module corpus_1027
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+
+extern @abi(c-msvc-x64) fn crystal_mint(error_code: u32, site_hash_ptr: u64, cap_id: u64, cause_seq: u64) -> u64 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_init(id: u64, arena_id: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_add(parent: u64, child: u64) -> i32 from "crystal.iii"
+extern @abi(c-msvc-x64) fn crystal_edges_count(id: u64) -> u32 from "crystal.iii"
+
+extern @abi(c-msvc-x64) fn ripple_change_new(arena_id: u64, kind: u32, target: u64, old_mhash: u64, new_mhash: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_analyze(arena_id: u64, change_id: u64) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_execute(arena_id: u64, plan_id: u64, mode: u32) -> u64 from "ripple.iii"
+extern @abi(c-msvc-x64) fn ripple_last_error() -> i32 from "ripple.iii"
+
+extern @abi(c-msvc-x64) fn witness_append(mhash_ptr: u64, cap_id: u64, epoch: u64) -> i32 from "witness.iii"
+extern @abi(c-msvc-x64) fn witness_remaining() -> u32 from "witness.iii"
+
+var C1027_DUMMY : [u8; 32]
+
+fn fill32(p: *u8, v: u8) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = v  i = i + 1u64 }
+    return 0u32
+}
+
+fn main() -> u64 {
+    let site  : *u8 = malloc(32u64)
+    let old_h : *u8 = malloc(32u64)
+    let new_h : *u8 = malloc(32u64)
+    fill32(site, 0u8)
+    fill32(old_h, 0xAAu8)
+    fill32(new_h, 0xBBu8)
+
+    let ar : u64 = arena_new(1u64 << 20u64)
+    if ar == 0u64 { return 1u64 }
+
+    /* ── ARM 1: handle exhaustion ───────────────────────────────────── */
+    /* A -> B; ripple a change against A.  Repeat analyze 9 times (> 16/2 leak threshold). */
+    let a : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let b : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    if a == 0u64 { return 2u64 }
+    if b == 0u64 { return 3u64 }
+    crystal_edges_init(a, ar)
+    crystal_edges_add(a, b)
+
+    let change : u64 = ripple_change_new(ar, 1u32, a, old_h as u64, new_h as u64)
+    if change == 0u64 { return 4u64 }
+
+    let mut iter : u32 = 0u32
+    while iter < 9u32 {
+        let plan : u64 = ripple_analyze(ar, change)
+        if plan == 0u64 { return 11u64 }            /* pre-fix: call 9 returns 0 (VEC64_LIVE full) */
+        iter = iter + 1u32
+    }
+
+    /* ── ARM 2: witness-headroom guard ──────────────────────────────── */
+    /* C -> D, C -> E; closure {C,D,E} -> plan has 3 edges -> strict execute needs 3 witnesses. */
+    let c : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let d : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    let e : u64 = crystal_mint(0u32, site as u64, 0u64, 0u64)
+    if c == 0u64 { return 20u64 }
+    if d == 0u64 { return 21u64 }
+    if e == 0u64 { return 22u64 }
+    crystal_edges_init(c, ar)
+    crystal_edges_add(c, d)
+    crystal_edges_add(c, e)
+
+    let change2 : u64 = ripple_change_new(ar, 1u32, c, old_h as u64, new_h as u64)
+    if change2 == 0u64 { return 23u64 }
+    let plan2 : u64 = ripple_analyze(ar, change2)
+    if plan2 == 0u64 { return 24u64 }
+    if crystal_edges_count(plan2) < 3u32 { return 25u64 }
+
+    /* POSITIVE: with full headroom, a strict execute succeeds and the guard does not false-fire. */
+    let okres : u64 = ripple_execute(ar, plan2, 1u32)
+    if okres == 0u64 { return 26u64 }
+
+    /* Fill the witness chain down to exactly 2 free slots. */
+    fill32(C1027_DUMMY as *u8, 0x5Au8)
+    let mut cap : u64 = 0x900000u64
+    while witness_remaining() > 2u32 {
+        witness_append((&C1027_DUMMY) as u64, cap, 0u64)
+        cap = cap + 1u64
+    }
+
+    /* NEGATIVE: plan2 needs 3 witnesses, only 2 free -> the guard REFUSES the whole batch. */
+    let res5 : u64 = ripple_execute(ar, plan2, 1u32)
+    if res5 != 0u64 { return 40u64 }
+    if ripple_last_error() != -5i32 { return 41u64 }
+
+    /* FAST mode never touches the witness chain -> still succeeds even with the chain full. */
+    let fastres : u64 = ripple_execute(ar, plan2, 2u32)
+    if fastres == 0u64 { return 42u64 }
+
+    arena_drop(ar)
+    free(site); free(old_h); free(new_h)
+    return 99u64
+}

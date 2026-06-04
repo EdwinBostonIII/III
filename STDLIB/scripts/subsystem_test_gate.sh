@@ -72,7 +72,12 @@ while IFS= read -r exe; do
         ss_fail=$((ss_fail + 1))
         FAILED="$FAILED $name"
     fi
-done < <(find . -name 'iii_*_test.exe' -type f 2>/dev/null | LC_ALL=C sort)
+done < <(find . -name 'iii_*_test.exe' -type f -not -path '*/.claude/*' 2>/dev/null | LC_ALL=C sort)
+# NOTE: skip .claude worktrees -- they hold STALE orphan copies of every subsystem exe (built at the
+# worktree's past commit); running them validates the gate against dead binaries and 5x-inflates the
+# process-spawn load (30 exes -> 6), which under the post-1GB-witness-corpus commit pressure was the
+# documented source of a transient iii_lex_test teardown segfault (the binary passes 77/77 + 40/40 in
+# isolation). Mirrors the carto-gate .claude skip.
 echo "[gate] subsystem exes: $((ss_total - ss_fail))/$ss_total passed"
 
 # 3. Sovereign Forge closure meta-gate (SOVEREIGN_FORGE.md §2). TRUE function:

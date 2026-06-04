@@ -1,0 +1,71 @@
+/* 1061 -- verba::format untested-export coverage (gap-backlog #91).
+ *
+ * Closes: format_decimal_u64 (>2^32), format_hex_u64, format_hex_u32_upper (A-F table),
+ * format_decimal_u32_padded (pad fill + width<n no-truncation + v==0).  Exact builder
+ * byte output asserted per case.  Equality compares only. 99 = pass.
+ */
+module corpus_1061
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u64(builder_id: u64, v: u64) -> i32 from "format.iii"
+extern @abi(c-msvc-x64) fn format_hex_u64(builder_id: u64, v: u64) -> i32 from "format.iii"
+extern @abi(c-msvc-x64) fn format_hex_u32_upper(builder_id: u64, v: u32) -> i32 from "format.iii"
+extern @abi(c-msvc-x64) fn format_decimal_u32_padded(builder_id: u64, v: u32, width: u32, pad_char: u32) -> i32 from "format.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+
+    /* format_decimal_u64 on a >2^32 value: 10^10 = "10000000000" (11 chars) */
+    let b1 : u64 = builder_new(a, 64u64)
+    if format_decimal_u64(b1, 10000000000u64) != 0i32 { return 2u64 }
+    if builder_len(b1) != 11u64 { return 3u64 }
+    let d1 : *u8 = builder_seal(b1) as *u8
+    if d1[0u64] != 49u8 { return 4u64 }      /* '1' */
+    if d1[1u64] != 48u8 { return 5u64 }      /* '0' */
+    if d1[10u64] != 48u8 { return 6u64 }     /* trailing '0' */
+
+    /* format_hex_u64(0xDEADBEEFCAFEBABE) = "deadbeefcafebabe" (16 chars, lower) */
+    let b2 : u64 = builder_new(a, 64u64)
+    if format_hex_u64(b2, 0xDEADBEEFCAFEBABEu64) != 0i32 { return 7u64 }
+    if builder_len(b2) != 16u64 { return 8u64 }
+    let d2 : *u8 = builder_seal(b2) as *u8
+    if d2[0u64] != 100u8 { return 9u64 }     /* 'd' */
+    if d2[15u64] != 101u8 { return 10u64 }   /* 'e' */
+
+    /* format_hex_u32_upper(0xABCD1234) = "ABCD1234" -- verifies the A-F uppercase table */
+    let b3 : u64 = builder_new(a, 64u64)
+    if format_hex_u32_upper(b3, 0xABCD1234u32) != 0i32 { return 11u64 }
+    if builder_len(b3) != 8u64 { return 12u64 }
+    let d3 : *u8 = builder_seal(b3) as *u8
+    if d3[0u64] != 65u8 { return 13u64 }     /* 'A' */
+    if d3[3u64] != 68u8 { return 14u64 }     /* 'D' */
+    if d3[7u64] != 52u8 { return 15u64 }     /* '4' */
+
+    /* format_decimal_u32_padded: pad fill */
+    let b4 : u64 = builder_new(a, 64u64)
+    if format_decimal_u32_padded(b4, 42u32, 5u32, 48u32) != 0i32 { return 16u64 }
+    if builder_len(b4) != 5u64 { return 17u64 }
+    let d4 : *u8 = builder_seal(b4) as *u8
+    if d4[0u64] != 48u8 { return 18u64 }     /* '0' pad */
+    if d4[3u64] != 52u8 { return 19u64 }     /* '4' */
+    if d4[4u64] != 50u8 { return 20u64 }     /* '2' */
+
+    /* width < digit count: NO truncation ("12345") */
+    let b5 : u64 = builder_new(a, 64u64)
+    if format_decimal_u32_padded(b5, 12345u32, 3u32, 48u32) != 0i32 { return 21u64 }
+    if builder_len(b5) != 5u64 { return 22u64 }
+
+    /* v == 0 with width 4: "0000" */
+    let b6 : u64 = builder_new(a, 64u64)
+    if format_decimal_u32_padded(b6, 0u32, 4u32, 48u32) != 0i32 { return 23u64 }
+    if builder_len(b6) != 4u64 { return 24u64 }
+    let d6 : *u8 = builder_seal(b6) as *u8
+    if d6[0u64] != 48u8 { return 25u64 }
+    if d6[3u64] != 48u8 { return 26u64 }
+
+    return 99u64
+}

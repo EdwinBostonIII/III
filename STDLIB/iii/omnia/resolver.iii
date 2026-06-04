@@ -214,6 +214,15 @@ fn resolver_fast_path_hits_reset() -> i32 @export {
  * then 0 for the shortcut result, and proves the two AGREE -- discharging the documented "the fast
  * path bypasses the 11-step contract" finding into a per-input equivalence theorem (not deleting the
  * optimization, PROVING the invariant it touches still holds -- the doc's central architectural lesson). */
+/* APOTHEOSIS C.12 (silicon twin): the R2-GENESIS Verilog RTL (R2-GENESIS/silicon/resolver_unit.v)
+ * encodes this SAME audited spec-deviation in hardware.  Its memo content-address key is a SHA-256
+ * (cad-spirit) hash while the software memo key here (resolver_memo.iii) is the perf FNV/Knuth hash;
+ * per I-INSTR §7.1 the memo state is UN-witnessed and a hit reproduces the cold winner, so -- exactly
+ * as the RESOLVER_FORCE_COLD equivalence above proves for the asm shortcut -- the witnessed outcome is
+ * invariant to the key hash, and the silicon tournament is proven byte-identical to this resolve()
+ * argmax scan by the equivalence corpus (silicon/test_2xx.sv) + formal harness (resolver_unit_formal.sv).
+ * This comment is inert (no functional change, no hash move); it records that source and silicon agree
+ * on the optimization, not just on the contract. */
 var RESOLVER_FORCE_COLD : [u8; 1]
 fn resolver_set_force_cold(v: u8) -> i32 @export { RESOLVER_FORCE_COLD[0u64] = v  return 0i32 }
 fn resolver_force_cold_state() -> u8 @export { return RESOLVER_FORCE_COLD[0u64] }

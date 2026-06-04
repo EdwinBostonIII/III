@@ -51,9 +51,16 @@ const MAP_STATE_TOMBSTONE : u8 = 2u8
 
 const MAP_MAX_INSTANCES : u32 = 16u32
 
-/* Lookup return packing: bit 63 = found, bits 0..32 = slot index
- * (or MAP_IDX_FULL if no slot available).                          */
+/* Lookup return packing: bit 63 = found, bit 62 = table-full (no slot),
+ * bits 0..61 = slot index.  MAP_FULL_BIT is DISJOINT from MAP_FOUND_BIT:
+ * a full-table-absent probe must NOT trip the (r & MAP_FOUND_BIT) found-check
+ * (the old all-ones MAP_IDX_FULL had bit 63 set -> misclassified as found ->
+ * idx 0xFFFFFFFF -> ~17GB OOB read).  MAP_IDX_FULL is retained ONLY as the
+ * internal "unset" sentinel inside map_probe_internal (first_tomb/result);
+ * it is converted to MAP_FULL_BIT at the return boundary. */
 const MAP_FOUND_BIT : u64 = 0x8000000000000000u64
+const MAP_FULL_BIT  : u64 = 0x4000000000000000u64
+const MAP_IDX_MASK  : u64 = 0x3FFFFFFFFFFFFFFFu64   /* bits 0..61 -- all realistically-allocatable cap */
 const MAP_IDX_FULL  : u64 = 0xFFFFFFFFFFFFFFFFu64
 
 const MAP_FNV_OFFSET : u32 = 0x811C9DC5u32
@@ -143,7 +150,7 @@ fn map_slot_of(id: u64) -> u32 {
 
 fn map_probe_internal(slot_idx: u32, key: u32) -> u64 {
     let cap : u64 = MAP_CAP[slot_idx]
-    if cap == 0u64 { return MAP_IDX_FULL }
+    if cap == 0u64 { return MAP_FULL_BIT }
     let mask : u64 = cap - 1u64
     let salt : u64 = MAP_SALT[slot_idx]
     let states_base : u64 = MAP_STATES_BASE[slot_idx]
@@ -184,6 +191,10 @@ fn map_probe_internal(slot_idx: u32, key: u32) -> u64 {
             }
         }
     }
+    /* Convert the internal "unset" sentinel to the dedicated table-full signal: no EMPTY slot and
+     * no tombstone was found, so the key is absent and there is nowhere to insert.  MAP_FULL_BIT
+     * (bit 62) keeps bit 63 clear, so every (r & MAP_FOUND_BIT) consumer correctly reads "absent". */
+    if result == MAP_IDX_FULL { return MAP_FULL_BIT }
     return result
 }
 
@@ -368,7 +379,7 @@ fn map_u32u32_get(id: u64, key: u32) -> u64 @export {
     if s == 0xFFFFFFFFu32 { return 0u64 }
     let r : u64 = map_probe_internal(s, key)
     if (r & MAP_FOUND_BIT) == 0u64 { return 0u64 }
-    let idx : u64 = r & 0xFFFFFFFFu64
+    let idx : u64 = r & MAP_IDX_MASK
     let v : u32 = map_load_u32_le(MAP_VALUES_BASE[s], idx)
     return ((v as u64) << 1u64) | 1u64
 }
@@ -396,10 +407,10 @@ fn map_u32u32_put(id: u64, key: u32, value: u32) -> i32 @export {
         /* MAP_E_FULL means hard cap reached; we still try a probe. */
     }
     let r : u64 = map_probe_internal(s, key)
-    if r == MAP_IDX_FULL { return MAP_E_FULL }
+    if (r & MAP_FULL_BIT) != 0u64 { return MAP_E_FULL }
     let mut found : u8 = 0u8
     if (r & MAP_FOUND_BIT) != 0u64 { found = 1u8 }
-    let idx : u64 = r & 0xFFFFFFFFu64
+    let idx : u64 = r & MAP_IDX_MASK
     map_store_u32_le(MAP_KEYS_BASE[s], idx, key)
     map_store_u32_le(MAP_VALUES_BASE[s], idx, value)
     map_store_state(MAP_STATES_BASE[s], idx, MAP_STATE_OCCUPIED)
@@ -417,7 +428,7 @@ fn map_u32u32_remove(id: u64, key: u32) -> u64 @export {
     if s == 0xFFFFFFFFu32 { return 0u64 }
     let r : u64 = map_probe_internal(s, key)
     if (r & MAP_FOUND_BIT) == 0u64 { return 0u64 }
-    let idx : u64 = r & 0xFFFFFFFFu64
+    let idx : u64 = r & MAP_IDX_MASK
     let v : u32 = map_load_u32_le(MAP_VALUES_BASE[s], idx)
     map_store_state(MAP_STATES_BASE[s], idx, MAP_STATE_TOMBSTONE)
     MAP_LEN[s] = MAP_LEN[s] - 1u64

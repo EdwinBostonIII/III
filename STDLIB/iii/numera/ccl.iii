@@ -73,6 +73,8 @@ extern @abi(c-msvc-x64) fn tc_snd(p: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_transp(pr: u32, proof: u32, base: u32) -> u32 from "typecheck.iii"
 extern @abi(c-msvc-x64) fn tc_absurd(cc: u32, e: u32) -> u32 from "typecheck.iii"
 
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn cl_le_product(c: *u64, cp: *u64) -> u8 from "cost_lattice.iii"
 const CCL_ID   : u8 = 1u8     /* Id            (nullary morphism)        */
 const CCL_COMP : u8 = 2u8     /* Comp(f,g) = f o g   (binary)            */
 const CCL_PAIR : u8 = 3u8     /* Pair(f,g) = <f,g>   (binary)            */
@@ -100,7 +102,9 @@ const CCL_SFST   : u8 = 22u8   /* Sigma fst:  SFST (SPAIR a b) -> a          */
 const CCL_SSND   : u8 = 23u8   /* Sigma snd:  SSND (SPAIR a b) -> b          */
 const CCL_TRANSP : u8 = 24u8   /* transp pr proof base ; proof=REFL -> base  */
 const CCL_SUP    : u8 = 25u8   /* sup(a,f) : W-type constructor (2 args)      */
-const CCL_WREC   : u8 = 26u8   /* wrec(P,s,w) : W eliminator (3 args, motive)  */
+const CCL_WREC   : u8 = 26u8
+const CCL_REACH  : u8 = 27u8
+const CCL_LEK    : u8 = 28u8   /* mig2: LEK(cost_slot,budget_slot) reduces TRUE/FALSE via cl_le_product over CLEK_REG (M13 budget, full 6-vector) */   /* mig2: REACH(h) A=hexad literal; reduces TRUE/FALSE via iii_hexad_reachable -- the kernel VERIFIES M3 reachability by iota, not a baked/trusted value */   /* wrec(P,s,w) : W eliminator (3 args, motive)  */
 
 const CCL_SENT : u32 = 0xFFFFFFFFu32
 const CCL_CAP  : u32 = 65536u32
@@ -149,6 +153,23 @@ fn ccl_inl_c() -> u32 @export { return ccl_mk(CCL_INL, 0u32, 0u32) }
 fn ccl_inr_c() -> u32 @export { return ccl_mk(CCL_INR, 0u32, 0u32) }
 fn ccl_refl_c() -> u32 @export { return ccl_mk(CCL_REFL, 0u32, 0u32) }
 fn ccl_if_c() -> u32 @export { return ccl_mk(CCL_IF, 0u32, 0u32) }
+fn ccl_reach_c(h: u32) -> u32 @export { return ccl_mk(CCL_REACH, h, 0u32) }
+var CLEK_REG  : [u64; 384]
+var CLEK_NEXT : [u32; 1]
+fn clek_register(c: u64) -> u32 @export {
+    let slot : u32 = CLEK_NEXT[0u64]
+    if slot >= 64u32 { return 0u32 }
+    let cp : *u64 = c as *u64
+    let base : u64 = (slot as u64) * 6u64
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        CLEK_REG[base + k] = cp[k]
+        k = k + 1u64
+    }
+    CLEK_NEXT[0u64] = slot + 1u32
+    return slot
+}
+fn ccl_lek_c(cs: u32, bs: u32) -> u32 @export { return ccl_mk(CCL_LEK, cs, bs) }
 fn ccl_iter_c() -> u32 @export { return ccl_mk(CCL_ITER, 0u32, 0u32) }
 fn ccl_natrec_c() -> u32 @export { return ccl_mk(CCL_NATREC, 0u32, 0u32) }
 fn ccl_case_c() -> u32 @export { return ccl_mk(CCL_CASE, 0u32, 0u32) }
@@ -403,6 +424,20 @@ fn ccl_step(t: u32) -> u32 {
         return dr
     }
     let tag : u8 = CCL_TAG[t]
+    if tag == CCL_REACH {
+        CCL_FIRED[0u64] = 1u32
+        if iii_hexad_reachable(CCL_A[t] as u16) == 1u8 { return ccl_true_c() }
+        return ccl_false_c()
+    }
+    if tag == CCL_LEK {
+        CCL_FIRED[0u64] = 1u32
+        let cs : u64 = (CCL_A[t] as u64) * 6u64
+        let bs : u64 = (CCL_B[t] as u64) * 6u64
+        let cptr : *u64 = ((&CLEK_REG as u64) + cs * 8u64) as *u64
+        let bptr : *u64 = ((&CLEK_REG as u64) + bs * 8u64) as *u64
+        if cl_le_product(cptr, bptr) == 1u8 { return ccl_true_c() }
+        return ccl_false_c()
+    }
     if tag == CCL_CUR {
         let body : u32 = CCL_A[t]
         let dom : u32 = CCL_B[t]
@@ -720,6 +755,10 @@ fn ccl_rb_varidx(c: u32) -> u32 {
 }
 
 fn ccl_to_tc(c: u32) -> u32 @export {
+    /* II-CCL-2: node 0 is the reserved INVALID sentinel (ccl_reduce/ccl_mk return 0 on CCL_CAP overflow).
+     * Treating it as a real node misreads CCL_TAG[0] and, since CCL_A[0]==0, would self-recurse to a stack
+     * overflow. Map it to the same stuck-fallback term the COMP/ATOM arms use (tc_var 0). */
+    if c == 0u32 { return tc_var(0u32) }
     let tag : u8 = CCL_TAG[c]
     let vi : u32 = ccl_rb_varidx(c)
     if vi != CCL_SENT { return tc_var(vi) }

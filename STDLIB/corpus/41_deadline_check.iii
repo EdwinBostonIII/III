@@ -10,6 +10,9 @@ extern @abi(c-msvc-x64) fn deadline_in(time_cap: u64, delta_ticks: u64, on_late:
 extern @abi(c-msvc-x64) fn deadline_check(id: u64, now_tick: u64) -> i32 from "deadline.iii"
 extern @abi(c-msvc-x64) fn deadline_remaining(id: u64, now_tick: u64) -> u64 from "deadline.iii"
 extern @abi(c-msvc-x64) fn deadline_drop(id: u64) -> i32 from "deadline.iii"
+extern @abi(c-msvc-x64) fn deadline_tick(id: u64) -> u64 from "deadline.iii"
+extern @abi(c-msvc-x64) fn deadline_action(id: u64) -> u8 from "deadline.iii"
+extern @abi(c-msvc-x64) fn deadline_at(instant_id: u64, on_late: u8) -> u64 from "deadline.iii"
 
 fn main() -> u64 {
     let env : u64 = cap_env_init()
@@ -24,10 +27,27 @@ fn main() -> u64 {
     instant_drop(now_inst)
     if deadline_check(dl, now_tick) != 0i32 { return 2u64 }
     if deadline_remaining(dl, now_tick) == 0u64 { return 3u64 }
+    /* gap #37: deadline_tick + deadline_action accessors (+ bad-id arms) */
+    if deadline_action(dl) != 0u8 { return 6u64 }                                          /* matches on_late=0 */
+    if deadline_tick(dl) != (now_tick + deadline_remaining(dl, now_tick)) { return 7u64 }   /* tick = now + remaining */
+    if deadline_tick(0u64) != 0u64 { return 8u64 }                                          /* bad-id */
+    if deadline_action(0u64) != 0u8 { return 9u64 }
     /* Synthetic far-future tick triggers late (2000 ticks ahead > the 1000-tick deadline) */
     let far : u64 = now_tick + 2000u64
     if deadline_check(dl, far) != -2i32 { return 4u64 }
     if deadline_remaining(dl, far) != 0u64 { return 5u64 }
+
+    /* gap #36: deadline_at -- instant-consuming constructor (captures tick, then drops the instant) */
+    let inst2 : u64 = instant_now_sealed(time_cap)
+    let inst2_tick : u64 = instant_tick(inst2)
+    let dl2 : u64 = deadline_at(inst2, 1u8)
+    if dl2 == 0u64 { return 10u64 }
+    if deadline_tick(dl2) != inst2_tick { return 11u64 }                   /* captured the instant's tick */
+    if deadline_action(dl2) != 1u8 { return 12u64 }                       /* on_late = 1 */
+    if deadline_check(dl2, inst2_tick - 1u64) != 0i32 { return 13u64 }     /* before -> ok */
+    if deadline_check(dl2, inst2_tick + 1u64) != -2i32 { return 14u64 }    /* after -> E_LATE */
+    if instant_drop(inst2) == 0i32 { return 15u64 }                       /* already consumed -> error */
+    deadline_drop(dl2)
     deadline_drop(dl)
     return 99u64
 }

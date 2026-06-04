@@ -167,6 +167,7 @@ fn iii_drbg_reseed(entropy: u64, elen: u64, addl: u64, alen: u64) -> i32 @export
 }
 
 fn iii_drbg_generate(out: u64, n_bytes: u64, addl: u64, alen: u64) -> i32 @export {
+    if n_bytes > 65536u64 { return 0i32 - 1i32 }   /* NIST SP 800-90A: max 65536 bytes (2^19 bits) per Generate request [audit D-DRBG-2] */
     if alen > 0u64 { drbg_update(addl, alen) }
     let op : *u8 = out as *u8
     let vp : *u8 = &DRBG_V as *u8

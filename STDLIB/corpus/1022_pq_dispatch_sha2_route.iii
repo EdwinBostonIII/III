@@ -1,0 +1,82 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\corpus\1022_pq_dispatch_sha2_route.iii
+ *
+ * APOTHEOSIS C.1 step 6 -- the uniform pq_dispatch surface must route BOTH
+ * FIPS-205 SLH-DSA families.  The SHAKE family (suite 0x0121-3) was already
+ * routed to iii_slhdsa_* ; this KAT proves the dispatcher now also routes the
+ * SHA-2 family (suite 0x0131-3, family bit 0x0130) to iii_slhdsa_sha2_* -- the
+ * built+conformant (corpus 771) SHA-2 family that was previously UNREACHABLE
+ * through the uniform surface.
+ *
+ * ABI note (matches corpus 200): iii_pq_sign's `siglen` arg is an OUT-pointer --
+ * sign writes the produced signature length (u32 LE) there; iii_pq_verify's
+ * `siglen` is the length VALUE read back from it.
+ *
+ * NON-VACUITY / FALSIFIER ARMS (this KAT FAILS on a dispatcher that ignores the
+ * family bit or routes both to one impl):
+ *  - ROUTING (the headline): keygen(0x0131) and keygen(0x0121) from the SAME
+ *    seed MUST produce DIFFERENT public keys -- SHA-2 and SHAKE derive PK.root
+ *    by different hash families, so identical pk would prove the dispatcher
+ *    routed both to the same module (a vacuous wire).  Caught here (-> 3).
+ *  - ROUND-TRIP through the SHA-2 route: sign(0x0131) -> verify(0x0131) accepts.
+ *  - CROSS-FAMILY reject: a signature made via the SHA-2 route (0x0131) must be
+ *    REJECTED by a SHAKE-route verify (0x0121) -- the split is real end-to-end.
+ *  - BAD-SUITE: 0x0130 (nibble 0) and 0x0124 (nibble 4, the WRONG SHA-2 encoding
+ *    in the 0x0120 family) must each be REJECTED (-1) by the nibble guard, so the
+ *    SHA-2 family is reachable ONLY at 0x0131-3.
+ *
+ * Exit 99 = full success; distinct codes localise the failing arm.
+ * NOTE: SLH-DSA-"S" sign is deliberately slow (~15-30s) -- two keygens + one sign.
+ */
+module corpus_1022
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_pq_keygen(suite: u64, seed: u64, pk: u64, sk: u64) -> i32 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn iii_pq_sign(suite: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "pq_dispatch.iii"
+extern @abi(c-msvc-x64) fn iii_pq_verify(suite: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "pq_dispatch.iii"
+
+/* compare the first 32 bytes (the SLH-DSA-128s public key) of two buffers;
+ * 1 = equal, 0 = differ. */
+fn pk_eq(a: *u8, b: *u8) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 { if a[i] != b[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    /* generous buffers (matching corpus 200's slack): keygen writes pk=32/sk=64,
+     * sign writes <= 7856 + the length word; the extra is harmless slack. */
+    let seed : *u8 = malloc(64u64)
+    let pk_a : *u8 = malloc(128u64)   /* SHA-2 (0x0131) */
+    let sk_a : *u8 = malloc(256u64)
+    let pk_b : *u8 = malloc(128u64)   /* SHAKE (0x0121), same seed */
+    let sk_b : *u8 = malloc(256u64)
+    let msg  : *u8 = malloc(64u64)
+    let sig  : *u8 = malloc(16384u64)
+    let slb  : *u8 = malloc(16u64)    /* sign's OUT length buffer */
+
+    let mut i : u64 = 0u64
+    while i < 48u64 { seed[i] = ((i * 73u64 + 11u64) & 0xFFu64) as u8  i = i + 1u64 }
+    msg[0u64] = 0x5Au8
+
+    /* --- keygen via the SHA-2 route (0x0131) and the SHAKE route (0x0121) --- */
+    if iii_pq_keygen(0x0131u64, seed as u64, pk_a as u64, sk_a as u64) != 0i32 { return 1u64 }
+    if iii_pq_keygen(0x0121u64, seed as u64, pk_b as u64, sk_b as u64) != 0i32 { return 2u64 }
+    /* ROUTING non-vacuity: same seed, different family -> different pk. */
+    if pk_eq(pk_a, pk_b) == 1u8 { return 3u64 }   /* identical pk => family bit ignored (vacuous) */
+
+    /* --- round-trip through the SHA-2 route (siglen = OUT-pointer for sign) --- */
+    if iii_pq_sign(0x0131u64, sk_a as u64, msg as u64, 1u64, sig as u64, slb as u64) != 0i32 { return 4u64 }
+    let sl : u64 = (slb[0] as u64) | ((slb[1] as u64) << 8u64) | ((slb[2] as u64) << 16u64) | ((slb[3] as u64) << 24u64)
+    if iii_pq_verify(0x0131u64, pk_a as u64, msg as u64, 1u64, sig as u64, sl) != 0i32 { return 5u64 }
+
+    /* --- cross-family reject: a SHA-2 signature must NOT verify under the SHAKE route --- */
+    if iii_pq_verify(0x0121u64, pk_b as u64, msg as u64, 1u64, sig as u64, sl) == 0i32 { return 6u64 }
+
+    /* --- bad-suite negatives (the SHA-2 family is reachable ONLY at 0x0131-3) --- */
+    if iii_pq_keygen(0x0130u64, seed as u64, pk_a as u64, sk_a as u64) != -1i32 { return 7u64 }  /* nibble 0 */
+    if iii_pq_keygen(0x0124u64, seed as u64, pk_a as u64, sk_a as u64) != -1i32 { return 8u64 }  /* nibble 4 in 0x0120 family */
+
+    free(seed)  free(pk_a)  free(sk_a)  free(pk_b)  free(sk_b)  free(msg)  free(sig)  free(slb)
+    return 99u64
+}

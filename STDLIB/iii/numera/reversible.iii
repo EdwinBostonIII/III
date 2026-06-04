@@ -285,6 +285,7 @@ fn rev_record(slot: u32, tag: u32, a: u64, b: u64) -> i32 @export {
 
 fn rev_record_quad(slot: u32, tag: u32, quad: *u64) -> i32 @export {
     if slot >= REV_MAX_SLOTS { return REV_E_BAD_SLOT }
+    if (quad as u64) == 0u64 { return REV_E_BAD_SLOT }    /* [null-deref] @export quad dereferenced at quad[0..3] below */
     if REV_SLOT_LIVE[slot] == 0u8 { return REV_E_BAD_SLOT }
     if _rev_is_top(slot) == 0u8 { return REV_E_NOT_TOP }
     if tag >= REV_MAX_TAGS { return REV_E_BAD_TAG }

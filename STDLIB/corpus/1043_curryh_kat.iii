@@ -1,0 +1,4 @@
+/* 1043 — curryh_kat: Curry-Howard program<->proof correspondence. Closes a gating gap (selftest existed, ungated). */
+module corpus_1043
+extern @abi(c-msvc-x64) fn curryh_kat() -> u64 from "curry_howard.iii"
+fn main() -> u64 { return curryh_kat() }

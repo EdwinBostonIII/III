@@ -58,7 +58,7 @@ enforces `consumer == generator(def)`. Full 64-char hashes below (M6: the hash i
 | K1 | **SVM layout** | `iii_svm_layout.def` ✓ | `gen_svm_layout.sh` ✓ (`--check` ✓) | `katabasis/svm_layout.iii` — region classifier + per-offset hexad (the §4.7 WriteMetal brick defense) | corpus 390 (svm hexad) + 391 (cycle-term dominance) | `4810b9b4640560ae961d038bd4c0660bdf047bdfba1e65e377c551b6f054884d` | K 1.00 | CONFORMANT |
 | K2 | **Cycle family** | `iii_cycle_family.def` ✓ | `gen_cycle_family.sh` ✓ (`--check` ✓) | `katabasis/cycle_family.iii` — the plan-3.0 nine-family taxonomy the Gate dispatch reads | corpus 392 (cycle_family) + byte-identical `.o` `7e162b69…` | `80795a275c9f4836661e6deedbb98ea53d1b5a14e13f53fa9187205dccb35289` | K 1.00 | CONFORMANT |
 | K3 | **Census** | `iii_census.def` ✓ | `gen_census.sh` ✓ (`--check` ✓, +count-coupling guard) | `katabasis/census.iii` — the 16 verified AD103/Ryzen facts (the Census Crystal expectation) | corpus 603 (census, +OOB-index drift negatives W5.1) | `cca70c89622d61e4a1120fc35ccbbafc1ed888eeb092bcbb24ecb65c1e638cce` | K 1.00 | CONFORMANT |
-| K4 | **BAR layout** | `iii_bar_layout.def` ✓ | `gen_bar_layout.sh` ✓ (`--check` ✓) | `katabasis/bar_layout.iii` — the AD103 GPU BAR address map (F9/CoprocDispatch write typing) | corpus 394 (bar typing) + byte-identical `.o` `c0e7d840…` | `55b70d16082300311a7075f9a43bb08200adc8446c3ee5ea9772e070eb325106` | K 1.00 | CONFORMANT |
+| K4 | **BAR layout** | `iii_bar_layout.def` ✓ | `gen_bar_layout.sh` ✓ (`--check` ✓) | `katabasis/bar_layout.iii` — the AD103 GPU BAR address map (F9/CoprocDispatch write typing) | corpus 394 (bar typing **+ `katabasis_bar_cycle_admissible` action-parameterized arm, gap #33**) + byte-identical `.o` `c0e7d840…` | `27e6f389e62c9b3d373a8eaf35262e16b46d5ee77d0c95b8afc1fb836c90dd26` | K 1.00 | CONFORMANT |
 | K5 | **VMEXIT set** | `iii_vmexit.def` ✓ | `gen_vmexit.sh` ✓ (`--check` ✓) | `katabasis/vmexit.iii` — the minimal deterministic VMEXIT set (the R-1 Floor's exit taxonomy) | corpus 600 (vmexit) + byte-identical `.o` `2ff4ec9b…` | `75c646c14b735f2dcfd4102b965e544622a852bc22d514ad890e966c13c690d2` | K 1.00 | CONFORMANT |
 | K6 | **Ring lattice** | `iii_ring_lattice.def` ✓ | `gen_ring_lattice.sh` ✓ (`--check` ✓) | `katabasis/ring_lattice.iii` — the legal ring-transition lattice (the lawful src->dst crossings); **re-sealed for the II-RING_LATTICE-1/2 domain guard** (out-of-range/u32-wrapping ids can no longer alias a legal key) | corpus 601 (ring_lattice, +alias/wrap negatives) | `77a631b71f1275bc4a1b4033d04395cf00350cf335375f8a21398efd685b86af` | K 1.00 | CONFORMANT |
 
@@ -78,7 +78,7 @@ Anchor signature; mismatch is fatal (analogue of the D8 closure-pin `MOD-RES-001
 uncomputed while the broad citizens rows 1–6 are unsealed (scaffold stage F0; the first broad seal
 lands with the SHA-256 citizen, F1). The six KATABASIS descent citizens (K1–K6) are, however,
 individually content-address-sealed with the full-spec seals K1-K6 AND carry a **computed descent
-sub-closure root** `b21588fb0cf3225ce2eac32e012470e33ead1ebf186af96e4bbb973a8d3dc8c1`
+sub-closure root** `bf18bbf091db56af70472699f4a30869921d7f8824422e54efc084a3340825ab`
 (= `sha256` over the sorted K1-K6 seal-hashes; recomputed and checked by `COMPILER/BOOT/forge_check.sh`),
 and are drift-gated **today** — so the descent's FR-9 mandate ("the
 whole descent is FORGED") holds for all six descent data tables (svm_layout, cycle_family, census, bar_layout, vmexit, ring_lattice): editing any of
@@ -89,9 +89,33 @@ formula above (`Keccak-256( concat( sorted seal-hashes ) )`) is no longer "uncom
 recomputable in toolset": `COMPILER/BOOT/forge_manifest_keccak.sh` recomputes it over the SAME
 sorted K1-K6 seal-hashes that feed the SHA-256 descent root (NIH — hand-rolled over the in-tree
 `numera/keccak.iii` via `forge_keccak_driver.iii`, no third-party Keccak). The descent's Keccak-256
-closure root is **`830164aee47df22a53502fc88b6a05dfa3f113a73270762c3b81e70a5a1180f6`** (Keccak-256
+closure root is **`c5d46fbd52bc6adf99db5b49dc9f3bca8fb8e27f240611afc080651ab4fe1cdc`** (Keccak-256
 over `sort(K1..K6 seals)`; recomputed + checked by `subsystem_test_gate.sh`). Editing any descent
 citizen now reddens **all three** closure levels (per-citizen drift, the SHA-256 descent root, AND
 this Keccak-256 root) in one pass — the half-sealed-manifest hazard is structurally impossible. The
 *broad-citizen* manifest root (Keccak over ALL rows incl. the not-yet-sealed F1+ broad citizens)
 still awaits the first broad seal (F1); the recompute *tool*, however, exists today.
+
+---
+
+## Reseal log
+
+**2026-06-03 — K4 BAR-layout re-seal (KAT-strengthening, verification-backed).** Gap-backlog #33
+strengthened the bar_layout **primary KAT** (corpus `394_katabasis_bar_typing.iii`) with the
+`katabasis_bar_cycle_admissible` action-parameterized arm (POS-action→admissible, NEG-action→refused,
+POS-action-to-host-RAM→refused). Because the K4 full-spec seal recipe is
+`sha256(iii_bar_layout.def ‖ gen_bar_layout.sh ‖ katabasis/bar_layout.iii ‖ primary-KAT)`, the
+**KAT change legitimately moved the K4 seal** — `bar_layout.iii`/`.def`/`gen_bar_layout.sh` are all
+byte-identical to HEAD (`git` clean), and the other five descent seals (svm_layout, cycle_family,
+census, vmexit, ring_lattice) match the ledger **exactly**, localizing the change to K4. Soundness
+verified BEFORE reseal: `gen_bar_layout.sh --check` OK (.def→.iii consistent); corpus 394 = 99 on the
+live lib (the strengthened KAT passes); all three new roots **mechanically derived from tool output**,
+none hand-computed:
+- K4 seal `55b70d16…` → `27e6f389…`  (`forge_check.sh --print`)
+- descent SHA-256 sub-closure root `b21588fb…` → `bf18bbf0…`  (`forge_check.sh --print`)
+- descent Keccak-256 closure root `830164ae…` → `c5d46fbd…`  (`forge_manifest_keccak.sh --print`)
+
+Post-reseal verification: `forge_check.sh` GREEN **and** `forge_manifest_keccak.sh` GREEN (both gates,
+no one-gate-green/other-red split). The not-yet-computed broad-citizen all-rows manifest root (F1+) is
+unaffected. This is a stdlib-gate reseal of a descent data table's KAT binding — the `iiis` compiler
+golden binaries are untouched (no `build_iiisN` reseal).

@@ -106,6 +106,12 @@ fn http_response_with_crystal(arena: u64, raw_base: u64, raw_len: u64) -> u64 @e
     let hidx : i64 = http_response_header_find_ci(resp, &CRYSTAL_HEADER_NAME as u64, 14u64)
     if hidx != -1i64 {
         let slot : u64 = (resp - 1u64) & 0xFFu64
+        /* The 0xFF mask permits 0..255 but the crystal arrays hold only
+         * AETHER_HTTP_RESP_MAX_FOR_CRYSTAL (64) slots; without this guard a resp id
+         * in [65,256] writes OOB into CRYSTAL_ROOT/CRYSTAL_LIVE.  The sibling reader
+         * http_response_crystal_root_byte enforces the SAME bound -- skip the crystal
+         * cache (still return the parsed response) when out of range. */
+        if slot >= (AETHER_HTTP_RESP_MAX_FOR_CRYSTAL as u64) { return resp }
         let slot_u32 : u32 = slot as u32
         let hidx_u64 : u64 = (hidx as u64) & 0xFFFFFFFFu64
         let vbase : u64 = http_response_header_value_base(resp, hidx_u64)

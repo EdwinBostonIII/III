@@ -12,7 +12,7 @@
  * list full, publish failure) returns OBS_SENTINEL and writes NOTHING to the caller's out buffer.
  * (@safety(UNREPLAYABLE) made executable.)
  *
- * Hexad: kind_witness.  Ring: R-1.  K: 1.00.  NIH: witness_hook + keccak256.
+ * Hexad: kind_witness.  Ring: R-1.  K: 1.00.  NIH: witness_hook + cad (the one name, H2).
  * Discipline: module-scope arrays (W8 bounded); u64/u32 + equality only; single writer; no recursion.
  */
 module sanctus_observe
@@ -21,9 +21,14 @@ extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.
 extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
 extern @abi(c-msvc-x64) fn wh_get_out_commit(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
-extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+/* H2 (mig1, "one name"): the observed value's content-address is computed through the ONE
+ * cad primitive, never a raw keccak256.  cad_oneshot(CAD_SUITE_KECCAK256,..) wraps the same
+ * Keccak-256 backend, so OBS_COMMIT is BYTE-IDENTICAL to the prior keccak256_oneshot -- the
+ * witness frag-id and the observe KAT are unchanged; only the address routes via cad now. */
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
 
 const OBS_OK          : i32 = 0i32
+const OBS_SUITE_KECCAK : u32 = 1u32   /* == cad.iii CAD_SUITE_KECCAK256 (the observe address suite) */
 const OBS_MODE_LIVE   : u8  = 0u8
 const OBS_MODE_REPLAY : u8  = 1u8
 const OBS_SENTINEL    : u64 = 0xFFFFFFFFFFFFFFFFu64
@@ -96,7 +101,7 @@ fn obs_observe(source_id: u32, live_ptr: *u8, len: u32, out_ptr: *u8) -> u64 @ex
     if len > OBS_MAX_LEN { return OBS_SENTINEL }
     if OBS_N >= OBS_CAP { return OBS_SENTINEL }
     obs_copy(&OBS_SCRATCH as u64, live_ptr as u64, len)
-    keccak256_oneshot(&OBS_SCRATCH as u64, len as u64, &OBS_COMMIT as u64)
+    cad_oneshot(OBS_SUITE_KECCAK, (&OBS_SCRATCH as u64) as *u8, len as u64, (&OBS_COMMIT as u64) as *u8)
     obs_zero32(&OBS_PROD as u64)
     OBS_PROD[0u64] = (source_id & 0xFFu32) as u8
     OBS_PROD[1u64] = ((source_id >> 8u32) & 0xFFu32) as u8

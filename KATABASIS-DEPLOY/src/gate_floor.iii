@@ -58,6 +58,8 @@ var G_FWRONG  : [u8; 32]    /* I3: a DIFFERENT cycle's seal (for the REJECT_SEAL
 /* --- WDM struct accessors (x64 offsets; cg_r0 is 8-byte-uniform so index = byteoff/8) --- */
 fn wdm_current_stack(irp: u64) -> u64 { return (irp as *u64)[23u64] }              /* IRP.Tail.Overlay.CurrentStackLocation @0xB8 */
 fn wdm_ioctl_code(stk: u64) -> u32 { return ((stk as *u64)[3u64] & 0xFFFFFFFFu64) as u32 } /* IO_STACK.Parameters.DeviceIoControl.IoControlCode @0x18 */
+fn wdm_out_len(stk: u64) -> u64 { return (stk as *u64)[1u64] & 0xFFFFFFFFu64 }     /* Parameters.DeviceIoControl.OutputBufferLength @0x08 */
+fn wdm_in_len(stk: u64) -> u64 { return (stk as *u64)[2u64] & 0xFFFFFFFFu64 }      /* Parameters.DeviceIoControl.InputBufferLength  @0x10 */
 fn wdm_system_buffer(irp: u64) -> u64 { return (irp as *u64)[3u64] }               /* IRP.AssociatedIrp.SystemBuffer @0x18 */
 fn wdm_set_status(irp: u64, status: u64, info: u64) -> i32 {
     (irp as *u64)[6u64] = status                                                   /* IRP.IoStatus.Status @0x30 */
@@ -231,7 +233,7 @@ fn floor_npt_loop(buf: u64) -> u64 {
     if rv == 0u64 { return 0u64 }
     let rp : u64 = iii_kfo_phys_addr(rv)
     iii_kfo_build_vmcb(rv, rp)                                /* default vmmcall;hlt guest + full NPT identity */
-    let cidx : u64 = (rp + 0xA000u64) >> 21u64                /* 2MB NPT index covering the code page */
+    let cidx : u64 = ((rp + 0xA000u64) >> 21u64) & 0x7FFu64   /* [OOB] mask to the 2048-entry NPT (matches fidx @ the NPF handler); rp is a kernel-allocator phys addr */
     (rv as *u64)[2048u64 + cidx] = (rv as *u64)[2048u64 + cidx] & 0xFFFFFFFFFFFFFFFEu64  /* clear present (bit0) */
     let aff  : u64 = iii_kfo_pin_core(1u64)
     let irql : u64 = iii_kfo_raise_dispatch()
@@ -299,14 +301,48 @@ fn floor_vmrun_diag(buf: u64) -> u64 {
     return 1536u64
 }
 
+/* [BSOD/OOB] METHOD_BUFFERED SystemBuffer validator for floor_ioctl.  Returns `code` when buf is
+   non-NULL and the input/output lengths meet that IOCTL's footprint; returns 0 when a KNOWN gate IOCTL
+   is called with a NULL or short buffer (floor_ioctl then rejects with STATUS_BUFFER_TOO_SMALL and never
+   touches the buffer).  Unknown codes (need_out stays 0) pass through unchanged so they fall to no branch
+   -> STATUS_INVALID_DEVICE_REQUEST.  need_out/need_in are held HERE, off floor_ioctl's local budget
+   (which is at cg_r0's per-function ceiling).  out footprints verified against floor_client.c out[] sizes
+   (32/24/40/96/32/32/40/1536/40); the two gate IOCTLs read the 48-byte 6-tuple (need_in=48). */
+fn floor_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
+    let mut need_out : u64 = 0u64
+    let mut need_in  : u64 = 0u64
+    if code == 0x222000u32 { need_out = 32u64 }
+    if code == 0x222004u32 { need_out = 24u64 }
+    if code == 0x222008u32 { need_out = 40u64 }
+    if code == 0x22200Cu32 { need_out = 96u64 }
+    if code == 0x222010u32 { need_out = 32u64 }
+    if code == 0x222014u32 { need_out = 32u64 ; need_in = 48u64 }
+    if code == 0x222018u32 { need_out = 32u64 ; need_in = 48u64 }
+    if code == 0x22201Cu32 { need_out = 40u64 }
+    if code == 0x222020u32 { need_out = 1536u64 }
+    if code == 0x222024u32 { need_out = 40u64 }
+    if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
+    if buf == 0u64 { return 0u32 }
+    if wdm_out_len(stk) < need_out { return 0u32 }
+    if wdm_in_len(stk) < need_in { return 0u32 }
+    return code
+}
+
 /* --- IRP_MJ_DEVICE_CONTROL: the floor's probe + teardown primitive --- */
 fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
     let stk  : u64 = wdm_current_stack(irp)
-    let code : u32 = wdm_ioctl_code(stk)
     let buf  : u64 = wdm_system_buffer(irp)
     let mut status : u64 = 0xC0000010u64   /* STATUS_INVALID_DEVICE_REQUEST */
     let mut info   : u64 = 0u64
-    if code == 0x222000u32 {
+    /* [BSOD/OOB] validate the METHOD_BUFFERED SystemBuffer before ANY branch touches `buf`.  The need
+       table lives in floor_validated_code's OWN local budget -- floor_ioctl already sits at cg_r0's
+       per-function local ceiling (see the I3-ii extraction note), so the validation must add NO
+       function-scope locals here (code2 replaces the old `code`, net 0).  code2==0 => a known gate
+       IOCTL called with a NULL/short buffer: reject (STATUS_BUFFER_TOO_SMALL), buffer untouched.
+       Unknown codes pass through to no branch -> the default STATUS_INVALID_DEVICE_REQUEST. */
+    let code2 : u32 = floor_validated_code(stk, buf, wdm_ioctl_code(stk))
+    if code2 == 0u32 { status = 0xC0000023u64 }
+    if code2 == 0x222000u32 {
         /* IOCTL_FLOOR_PROBE: same read-only SVM read as I0, from the floor driver. VM_CR gated behind
            the SVM CPUID bit (a bit Intel never sets) -> RDMSR cannot #GP. out: [0]=svm [1]=efer [2]=vmcr [3]=ecx. */
         iii_kfo_cpuid(0x80000001u32, 0u32, &G_FCPUID as u64)
@@ -322,7 +358,7 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
         status = 0u64
         info   = 32u64
     }
-    if code == 0x222004u32 {
+    if code2 == 0x222004u32 {
         /* IOCTL_SVM_DISABLE (PD-4 teardown-first): pin core 0, read EFER, clear ONLY bit 12 (SVME),
            write back, read back, unpin. ~0x1000 = 0xFFFFFFFFFFFFEFFF preserves every other EFER bit
            (LME/LMA/NXE/FFXSR/SCE) -> long mode intact. With SVME=0 this is EFER 0x4d01 -> 0x4d01 (no-op). */
@@ -338,7 +374,7 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
         status = 0u64
         info   = 24u64
     }
-    if code == 0x222008u32 {
+    if code2 == 0x222008u32 {
         /* IOCTL_SVM_HOSTMODE (#19b): ENTER + EXIT SVM host mode, NO VMCB, NO VMRUN. Proves the first
            STATE-CHANGING SVM enable + the contiguous region + VM_HSAVE_PA, fully reversed. On a pinned
            core ([S8]): enable (EFER|=0x1000 -> 0x5d01), set VM_HSAVE_PA=region_phys+0x1000 (the HostSave
@@ -368,7 +404,7 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
         status = 0u64
         info   = 40u64
     }
-    if code == 0x22200Cu32 {
+    if code2 == 0x22200Cu32 {
         /* IOCTL_VMCB_BUILD (#19c-i): build the VMCB+NPT+guest code in a fresh region, read back the
            critical fields for verification, free. NO SVM enable, NO VMRUN -- memory-only, cannot wedge.
            Reads via (region as *u64)[byteoff/8]; dword fields come back paired in their 8-byte chunk. */
@@ -393,7 +429,7 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
             info   = 96u64
         }
     }
-    if code == 0x222010u32 {
+    if code2 == 0x222010u32 {
         /* IOCTL_SVM_VMRUN (#19c-ii / I2): THE VMRUN MOMENT. Build the (verified) VMCB, pin core 0, enable
            SVM + VMRUN the one-VMMCALL throwaway guest, read EXITCODE (expect 0x081 = VMEXIT_VMMCALL), read
            post-exit forensics, disable SVM + clear VM_HSAVE_PA, unpin, free. Contained + reversible: the
@@ -420,7 +456,7 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
             info   = 32u64
         }
     }
-    if code == 0x222014u32 {
+    if code2 == 0x222014u32 {
         /* IOCTL_GATE_AT_VMEXIT (I3-i): the Ring-1 VMEXIT TRIGGERS the gate decision. Build the proven VMCB,
            VMRUN the VMMCALL guest (exit 0x81), tear SVM fully down; THEN -- only if the guest VMMCALL'd --
            run the full katabasis gate (cycle_act -> under_cap -> seal -> admit) on R3's 6-tuple request ->
@@ -471,7 +507,7 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
             info   = 32u64
         }
     }
-    if code == 0x222018u32 {
+    if code2 == 0x222018u32 {
         /* IOCTL_GATE_LOOP (I3-ii): the RESUME LOOP. Adjudicate the guest's 1st VMMCALL, write the verdict to
            its RAX, advance RIP, RESUME; the guest carries the verdict (no instruction between the two
            VMMCALLs) to its 2nd VMMCALL, where we read it back (echo). Rehearses the I5 loop with a disposable
@@ -483,21 +519,21 @@ fn floor_ioctl(device_object: u64, irp: u64) -> u64 {
             info   = g4_info
         }
     }
-    if code == 0x22201Cu32 {
+    if code2 == 0x22201Cu32 {
         let g5_info : u64 = floor_npt_loop(buf)    /* I4: NPT page-fault interception */
         if g5_info != 0u64 {
             status = 0u64
             info   = g5_info
         }
     }
-    if code == 0x222020u32 {
+    if code2 == 0x222020u32 {
         let g6_info : u64 = floor_vmrun_diag(buf)  /* [E7]: VMRUN + full VMCB diag-copy to R3 */
         if g6_info != 0u64 {
             status = 0u64
             info   = g6_info
         }
     }
-    if code == 0x222024u32 {
+    if code2 == 0x222024u32 {
         let g7_info : u64 = floor_gate_self(buf)   /* I3-iii: the guest authors its own request */
         if g7_info != 0u64 {
             status = 0u64

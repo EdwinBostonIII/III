@@ -39,7 +39,7 @@ fn fp384_init() -> i32 {
     while i < 12u64 {
         let v : u64 = 0u64 + 0x100000000u64 - (FQ_P[i] as u64) - borrow
         FQ_ONE[i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
     /* R^2 = 2^768 mod p: start at R mod p, double 384x */
@@ -73,12 +73,15 @@ fn fq_csub_p(addr: u64, extra_high: u64) -> i32 {
     while i < 12u64 {
         let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
         FQ_T[i] = v & 0xFFFFFFFFu64
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
-    let mut ge : u64 = 0u64
-    if extra_high != 0u64 { ge = 1u64 }
-    if borrow == 0u64 { ge = 1u64 }
+    /* [D-FP-1] branch-free ge = (extra_high != 0) | (borrow == 0): no secret-dependent
+     * branch on the borrow or the reduced value (the masked select below is constant-time). */
+    let neg_eh : u64 = 0u64 - extra_high
+    let eh_nz  : u64 = (extra_high | neg_eh) >> 63u64    /* 1 iff extra_high != 0 */
+    let b0     : u64 = borrow ^ 1u64                     /* 1 iff borrow == 0 */
+    let ge     : u64 = eh_nz | b0
     let mask : u64 = 0u64 - ge
     let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
     i = 0u64
@@ -120,7 +123,7 @@ fn fq_sub(r: u64, a: u64, b: u64) -> i32 {
     while i < 12u64 {
         let v : u64 = 0x100000000u64 + (FQ[ab + i] as u64) - (FQ[bb + i] as u64) - borrow
         FQ[rb + i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
     let mask : u64 = 0u64 - borrow
@@ -180,14 +183,15 @@ fn fq_inv(r: u64, a: u64) -> i32 {
 /* @export surface */
 fn fp384_boot() -> i32 @export { return fp384_init() }
 fn fq_set_u32(slot: u64, v: u32) -> i32 @export {
+    if slot >= 48u64 { return -1i32 }    /* [OOB] @export slot writes FQ[slot*12 .. +11] */
     let b : u64 = slot * 12u64
     FQ[b] = v
     let mut i : u64 = 1u64
     while i < 12u64 { FQ[b + i] = 0u32 ; i = i + 1u64 }
     return 0i32
 }
-fn fq_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { FQ[slot * 12u64 + idx] = v ; return 0i32 }
-fn fq_get_limb(slot: u64, idx: u64) -> u32 @export { return FQ[slot * 12u64 + idx] }
+fn fq_set_limb(slot: u64, idx: u64, v: u32) -> i32 @export { if slot >= 48u64 { return -1i32 } if idx >= 12u64 { return -1i32 } FQ[slot * 12u64 + idx] = v ; return 0i32 }   /* [OOB] @export idx into FQ[576]=48*12 */
+fn fq_get_limb(slot: u64, idx: u64) -> u32 @export { if slot >= 48u64 { return 0u32 } if idx >= 12u64 { return 0u32 } return FQ[slot * 12u64 + idx] }
 fn fq_add_x(r: u64, a: u64, b: u64) -> i32 @export { return fq_add(r, a, b) }
 fn fq_sub_x(r: u64, a: u64, b: u64) -> i32 @export { return fq_sub(r, a, b) }
 fn fq_mul_x(r: u64, a: u64, b: u64) -> i32 @export { return fq_mul(r, a, b) }

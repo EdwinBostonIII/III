@@ -62,7 +62,7 @@ fn pr_init_domain() -> u32 {
     return 0u32
 }
 
-fn pr_pack_u64(buf_addr: u64, v: u64) -> u32 {
+fn prp_pack_u64(buf_addr: u64, v: u64) -> u32 {
     let p : *u8 = buf_addr as *u8
     let mut i : u64 = 0u64
     while i < 8u64 {
@@ -75,8 +75,8 @@ fn pr_pack_u64(buf_addr: u64, v: u64) -> u32 {
 fn proof_ripple_equivalence(old_id: u64, new_id: u64, corpus_witness_ptr: u64) -> u64 @export {
     if corpus_witness_ptr == 0u64 { return PROOF_RIPPLE_INVALID }
     pr_init_domain()
-    pr_pack_u64(&PR_OLD_BUF as u64, old_id)
-    pr_pack_u64(&PR_NEW_BUF as u64, new_id)
+    prp_pack_u64(&PR_OLD_BUF as u64, old_id)
+    prp_pack_u64(&PR_NEW_BUF as u64, new_id)
     mhash_begin()
     mhash_domain(&PR_DOMAIN as u64, 12u64)
     mhash_payload(&PR_OLD_BUF as u64, 8u64)
@@ -91,8 +91,8 @@ fn proof_ripple_verify(cert_id: u64, old_id: u64, new_id: u64, corpus_witness_pt
     if corpus_witness_ptr == 0u64 { return 0u8 }
     if crystal_verify(cert_id) != 1u8 { return 0u8 }
     pr_init_domain()
-    pr_pack_u64(&PR_OLD_BUF as u64, old_id)
-    pr_pack_u64(&PR_NEW_BUF as u64, new_id)
+    prp_pack_u64(&PR_OLD_BUF as u64, old_id)
+    prp_pack_u64(&PR_NEW_BUF as u64, new_id)
     mhash_begin()
     mhash_domain(&PR_DOMAIN as u64, 12u64)
     mhash_payload(&PR_OLD_BUF as u64, 8u64)

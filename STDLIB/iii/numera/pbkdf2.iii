@@ -76,8 +76,12 @@ fn pbkdf2_sha256_derive(password: *u8, password_len: u64, dk: *u8, dk_len: u64) 
         mp[PBK_SALT_LEN + 1u64] = ((block_idx >> 16u32) & 0xFFu32) as u8
         mp[PBK_SALT_LEN + 2u64] = ((block_idx >> 8u32)  & 0xFFu32) as u8
         mp[PBK_SALT_LEN + 3u64] = (block_idx & 0xFFu32) as u8
-        /* U_1 = HMAC(password, salt||INT) -> tp; copy to up */
-        hmac_sha256(password, password_len, mp, PBK_SALT_LEN + 4u64)
+        /* U_1 = HMAC(password, salt||INT) -> tp; copy to up.
+         * Propagate hmac's rc: hmac_sha256 fails (HMAC_E_INIT) if its internal
+         * buffer alloc fails -- ignoring it would derive a key from uninitialised
+         * HMAC state (silent corruption).  Alloc happens on the first call, so
+         * guarding U_1 covers every later (now-infallible) call. */
+        if hmac_sha256(password, password_len, mp, PBK_SALT_LEN + 4u64) != 0i32 { return PBKDF2_E_INIT }
         hmac_sha256_tag(tp)
         let mut c : u32 = 0u32
         while c < 32u32 {

@@ -52,6 +52,7 @@ const URI_OK         : i32 =  0i32
 const URI_E_PARSE    : i32 = -1i32
 const URI_E_BADID    : i32 = -2i32
 const URI_E_BADHEX   : i32 = -3i32
+const URI_E_BUILDER  : i32 = -4i32   /* a builder_push failed (full/sealed/bad-id) -- never silently truncate */
 
 const URI_MAX : u32 = 32u32
 
@@ -359,13 +360,13 @@ fn uri_pct_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
     while i < src_len {
         let b : u32 = p[i] as u32
         if uri_is_unreserved(b) == 1u8 {
-            builder_push_byte(builder_id, b)
+            if builder_push_byte(builder_id, b) != 0i32 { return URI_E_BUILDER }
         } else {
-            builder_push_byte(builder_id, 37u32)   /* % */
+            if builder_push_byte(builder_id, 37u32) != 0i32 { return URI_E_BUILDER }   /* % */
             let hi : u32 = (b >> 4u32) & 0xFu32
             let lo : u32 = b & 0xFu32
-            builder_push_byte(builder_id, uri_nibble_to_hex_upper(hi))
-            builder_push_byte(builder_id, uri_nibble_to_hex_upper(lo))
+            if builder_push_byte(builder_id, uri_nibble_to_hex_upper(hi)) != 0i32 { return URI_E_BUILDER }
+            if builder_push_byte(builder_id, uri_nibble_to_hex_upper(lo)) != 0i32 { return URI_E_BUILDER }
         }
         i = i + 1u64
     }
@@ -389,10 +390,10 @@ fn uri_pct_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
             if hi == 0xFFu32 { return URI_E_BADHEX }
             if lo == 0xFFu32 { return URI_E_BADHEX }
             let decoded : u32 = (hi << 4u32) | lo
-            builder_push_byte(builder_id, decoded)
+            if builder_push_byte(builder_id, decoded) != 0i32 { return URI_E_BUILDER }
             i = i + 3u64
         } else {
-            builder_push_byte(builder_id, b)
+            if builder_push_byte(builder_id, b) != 0i32 { return URI_E_BUILDER }
             i = i + 1u64
         }
     }

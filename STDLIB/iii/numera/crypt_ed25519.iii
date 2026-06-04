@@ -34,6 +34,10 @@ extern @abi(c-msvc-x64) fn bigint_set_len(id: u64, len: u64) -> i32 from "bigint
 extern @abi(c-msvc-x64) fn bigint_add(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_mul(arena: u64, a: u64, b: u64) -> u64 from "bigint.iii"
 extern @abi(c-msvc-x64) fn bigint_mod(arena: u64, a: u64, m: u64) -> u64 from "bigint_div.iii"
+/* APOTHEOSIS §C.2: sovereign allocation-free Barrett reduction mod L (replaces the
+ * generic bigint_mod at the two scalar-mod-L sites); bit-exact vs bigint_mod (KAT
+ * corpus 1021) + RFC-8032 conformance (corpus 193-197). */
+extern @abi(c-msvc-x64) fn ed_mod_l(arena: u64, a: u64, lid: u64) -> u64 from "ed_scalar_modl.iii"
 extern @abi(c-msvc-x64) fn sha512_init() -> u32 from "sha512.iii"
 extern @abi(c-msvc-x64) fn sha512_update(input: *u8, len: u64) -> u32 from "sha512.iii"
 extern @abi(c-msvc-x64) fn sha512_final(out: *u8) -> u32 from "sha512.iii"
@@ -149,7 +153,7 @@ fn ed_hash_finalize(arena: u64, msg: u64, msg_len: u64) -> u64 {
     sha512_final(buf as *u8)
     /* SHA-512 digest byte 0 = LSByte of the LE integer; read as 64 LE bytes. */
     let h_unmod : u64 = ed_bi_from_le64(arena, buf)
-    let h : u64 = bigint_mod(arena, h_unmod, ED_L_ID)
+    let h : u64 = ed_mod_l(arena, h_unmod, ED_L_ID)   /* sovereign Barrett mod L (was bigint_mod) */
     bigint_drop(h_unmod)
     return h
 }
@@ -234,7 +238,7 @@ fn ed25519_sign(seed: *u8, pk: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 
     let a : u64 = ed_bi_from_le32(arena, &EDB_A as u64)
     let ka : u64 = bigint_mul(arena, k, a)
     let kar : u64 = bigint_add(arena, ka, r)
-    let S : u64 = bigint_mod(arena, kar, ED_L_ID)
+    let S : u64 = ed_mod_l(arena, kar, ED_L_ID)   /* sovereign Barrett mod L (was bigint_mod) */
     ed_bi_to_le32(S, sig_addr + 32u64)
     bigint_drop(r)  bigint_drop(k)  bigint_drop(a)  bigint_drop(ka)  bigint_drop(kar)  bigint_drop(S)
     ed_teardown()
@@ -247,6 +251,17 @@ fn ed25519_sign_c4(keys: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 @expor
     let seed : *u8 = kp as *u8
     let pk : *u8 = (kp + 32u64) as *u8
     return ed25519_sign(seed, pk, msg, msg_len, sig_out)
+}
+
+/* Footgun-free signing: derive pk from the seed, then sign.  ed25519_sign and
+ * ed25519_sign_c4 both read pk as INPUT (A is hashed into the RFC-8032 challenge),
+ * so a caller passing an uninitialized/wrong pk gets a SILENTLY-invalid signature
+ * that only fails at verify.  This is the safe-by-default entry: seed in, sig out. */
+var EDSS_PK : [u8; 32]
+fn ed25519_sign_seed(seed: *u8, msg: *u8, msg_len: u64, sig_out: *u8) -> u8 @export {
+    let pkp : *u8 = (&EDSS_PK as u64) as *u8
+    if ed25519_pubkey(seed, pkp) != 1u8 { return 0u8 }
+    return ed25519_sign(seed, pkp, msg, msg_len, sig_out)
 }
 
 /* ===== Public verify: 1 iff [S]B == R + [h]A (cofactorless) ===== */

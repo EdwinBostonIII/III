@@ -42,6 +42,7 @@ const SC_E_FULL          : i32 = -2i32
 const SC_E_BAD_CHANNEL   : i32 = -3i32
 const SC_E_BAD_TAG       : i32 = -4i32
 const SC_E_NONCE_OVERFLOW: i32 = -5i32
+const SC_E_CRYPTO        : i32 = -6i32   /* AEAD init failed (first-call buffer alloc) -- never seal/open uninitialised */
 
 /* Per-channel state. */
 var SC_DERIVED_KEY  : [u8; 2048]   /* 64 * 32 */
@@ -165,7 +166,7 @@ fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i
     _sc_make_nonce(n)
     let off : u32 = s * 32u32
     let key_p : *u8 = ((&SC_DERIVED_KEY) as u64 + (off as u64)) as *u8
-    aead_chacha20_poly1305_init(key_p, (&SC_NONCE_BUF) as *u8)
+    if aead_chacha20_poly1305_init(key_p, (&SC_NONCE_BUF) as *u8) != SC_OK { return SC_E_CRYPTO }
     /* AAD = 8-byte session_id. Both peers derive identical session_id
      * from the shared secret, so AAD matches across nodes. */
     let sid_off : u32 = s * 8u32
@@ -192,19 +193,22 @@ fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i
 
     let n : u64 = SC_NONCE_RX[s]
     if n == 0xFFFFFFFFFFFFFFFFu64 { return SC_E_NONCE_OVERFLOW }
-    SC_NONCE_RX[s] = n + 1u64
-
+    /* DO NOT advance the receive nonce yet: it must move forward ONLY on an authenticated
+     * packet.  Advancing before the tag check let a single forged/garbage packet bump rx_nonce
+     * and permanently desync the channel from the sender (a trivial 1-packet DoS).  The nonce is
+     * advanced after a successful open() below. */
     _sc_make_nonce(n)
     let off : u32 = s * 32u32
     let key_p : *u8 = ((&SC_DERIVED_KEY) as u64 + (off as u64)) as *u8
-    aead_chacha20_poly1305_init(key_p, (&SC_NONCE_BUF) as *u8)
+    if aead_chacha20_poly1305_init(key_p, (&SC_NONCE_BUF) as *u8) != SC_OK { return SC_E_CRYPTO }
     /* AAD = session_id (matches sc_send). */
     let sid_off : u32 = s * 8u32
     let sid_p : *u8 = ((&SC_SESSION_ID) as u64 + (sid_off as u64)) as *u8
     aead_chacha20_poly1305_aad(sid_p, 8u64)
     let ok : u8 = aead_chacha20_poly1305_open(l_ct as *u8, (l_len as u64) & 0xFFFFFFFFu64,
                                                 l_ct as *u8, l_tag as *u8)
-    if ok != 1u8 { return SC_E_BAD_TAG }
+    if ok != 1u8 { return SC_E_BAD_TAG }   /* forged/garbage -> nonce UNCHANGED, channel stays in sync */
+    SC_NONCE_RX[s] = n + 1u64               /* authenticated -> advance (a replay of nonce n now fails against n+1) */
     return SC_OK
 }
 

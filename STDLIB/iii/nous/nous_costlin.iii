@@ -40,8 +40,13 @@ fn nous_costlin_version() -> u64 @export {
  * -1 = c precedes cp, 1 = c follows cp, 0 = all facets equal (caller breaks the tie
  * with nous_addr_compare on the content-addresses). */
 fn nous_cost_compare(c: *u64, cp: *u64) -> i32 @export {
-    if (c as u64) == 0u64 { return 0i32 }
-    if (cp as u64) == 0u64 { return 0i32 }
+    /* [total-order] NULL sorts strictly before non-NULL (was 0=EQUAL, which broke the antisymmetry/
+     * transitivity this fn promises -> an unstable/incorrect sort if a NULL ever entered). */
+    if (c as u64) == 0u64 {
+        if (cp as u64) == 0u64 { return 0i32 }
+        return -1i32
+    }
+    if (cp as u64) == 0u64 { return 1i32 }
     let mut i : u64 = 0u64
     while i < NOUS_COST_DIM {
         let a : u64 = c[i]
@@ -56,8 +61,11 @@ fn nous_cost_compare(c: *u64, cp: *u64) -> i32 @export {
 /* The final tiebreak: lexicographic over two 32-byte content-addresses.  Used only
  * when nous_cost_compare returns 0, giving a strict total order over (cost, address). */
 fn nous_addr_compare(a: *u8, b: *u8) -> i32 @export {
-    if (a as u64) == 0u64 { return 0i32 }
-    if (b as u64) == 0u64 { return 0i32 }
+    if (a as u64) == 0u64 {
+        if (b as u64) == 0u64 { return 0i32 }
+        return -1i32
+    }
+    if (b as u64) == 0u64 { return 1i32 }   /* [total-order] NULL sorts strictly before non-NULL (was 0=EQUAL) */
     let mut i : u64 = 0u64
     while i < 32u64 {
         let x : u8 = a[i]

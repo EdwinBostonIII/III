@@ -142,3 +142,26 @@ fn iii_hexad_active_neg(h: u16) -> u16 @export {
     while i < 5u64 { HXA_TO[i] = 0i32 - HXA_TA[i]  i = i + 1u64 }
     return iii_hexad_pack6(&HXA_TO as u64)
 }
+
+/* gap-backlog #75: known-answer selftest for add/sub/mul/neg6 over the base-3 pillar packing.
+ * Reference hexads (6 trits base-3 LE): all-NEG=0, all-ZERO=364, all-POS=728, mixed
+ * [P,N,Z,P,N,Z]=308 -> neg [N,P,Z,N,P,Z]=420.  Per-pillar: add=clamp(a+b), sub=clamp(a-b),
+ * mul=a*b (NEG*NEG=POS, ZERO annihilates), neg6=-a.  99 = pass. */
+fn iii_hexad_algebra_selftest() -> u64 @export {
+    if iii_hexad_add(728u16, 728u16) != 728u16 { return 1u64 }    /* 1+1 -> 1 */
+    if iii_hexad_add(728u16, 0u16)   != 364u16 { return 2u64 }    /* 1+(-1) -> 0 */
+    if iii_hexad_add(364u16, 364u16) != 364u16 { return 3u64 }    /* 0+0 -> 0 */
+    if iii_hexad_sub(364u16, 364u16) != 364u16 { return 4u64 }    /* 0-0 -> 0 */
+    if iii_hexad_sub(728u16, 364u16) != 728u16 { return 5u64 }    /* 1-0 -> 1 */
+    if iii_hexad_sub(364u16, 728u16) != 0u16   { return 6u64 }    /* 0-1 -> -1 */
+    if iii_hexad_mul(728u16, 728u16) != 728u16 { return 7u64 }    /* 1*1 -> 1 */
+    if iii_hexad_mul(0u16, 0u16)     != 728u16 { return 8u64 }    /* (-1)*(-1) -> 1 */
+    if iii_hexad_mul(728u16, 364u16) != 364u16 { return 9u64 }    /* 1*0 -> 0 (annihilator) */
+    if iii_hexad_neg6(728u16) != 0u16   { return 10u64 }          /* all-POS -> all-NEG */
+    if iii_hexad_neg6(0u16)   != 728u16 { return 11u64 }          /* all-NEG -> all-POS */
+    if iii_hexad_neg6(364u16) != 364u16 { return 12u64 }          /* all-ZERO unchanged */
+    if iii_hexad_neg6(308u16) != 420u16 { return 13u64 }          /* mixed pillar negation */
+    if iii_hexad_add(729u16, 728u16) != 0u16 { return 14u64 }     /* OOB (>=729) -> 0 */
+    if iii_hexad_neg6(729u16) != 0u16 { return 15u64 }            /* OOB -> 0 */
+    return 99u64
+}

@@ -44,8 +44,11 @@ fn tp_atbj_b64_triplet(dst: u64, off: u64, b0: u8, b1: u8, b2: u8) -> u32 {
 }
 
 fn tp_ast_to_babel_json(src: u64, src_len: u64, dst_buf: u64, dst_cap: u64) -> u64 @export {
+    /* prefix(79) + 4*ceil(src_len/3) + suffix(4), overhead = 83.  [bounds] subtraction-form bound on
+     * the input (the `est` formula wraps three ways for src_len near u64-max); all terms from dst_cap. */
+    if dst_cap < 83u64 { return 0u64 }
+    if src_len > (dst_cap - 83u64) / 4u64 * 3u64 { return 0u64 }
     let est : u64 = 79u64 + 4u64 * ((src_len + 2u64) / 3u64) + 4u64
-    if est > dst_cap { return 0u64 }
     let mut off : u64 = 0u64
     let mut p : u32 = 0u32
     while p < 79u32 {

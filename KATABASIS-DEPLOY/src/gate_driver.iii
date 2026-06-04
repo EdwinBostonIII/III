@@ -35,16 +35,22 @@ extern @abi(c-msvc-x64) fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -
 extern @abi(c-msvc-x64) fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 from "admit.iii"
 extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+/* M23 / capability 11: the below-OS behavioral quine-seal (the gate attests ITSELF). */
+extern @abi(c-msvc-x64) fn ks_engine_ok() -> u8 from "quine_seal.iii"
+extern @abi(c-msvc-x64) fn ks_self_measure(image_base: u64, out: u64) -> i32 from "quine_seal.iii"
 
 /* --- driver state --- */
 var G_DEVOBJ : [u64; 1]    /* the created PDEVICE_OBJECT (for DriverUnload) */
 var G_SEAL   : [u8; 32]
 var G_WRONG  : [u8; 32]
 var G_CPUID  : [u64; 2]    /* I0 scratch: 4 packed u32 from CPUID (shim writes; read as 2 u64) */
+var G_ATTEST : [u64; 4]    /* M23: the below-OS quine-seal measurement of my OWN .text, taken at load */
 
 /* --- WDM struct accessors (x64 offsets; cg_r0 is 8-byte-uniform so index = byteoff/8) --- */
 fn wdm_current_stack(irp: u64) -> u64 { return (irp as *u64)[23u64] }              /* IRP.Tail.Overlay.CurrentStackLocation @0xB8 */
 fn wdm_ioctl_code(stk: u64) -> u32 { return ((stk as *u64)[3u64] & 0xFFFFFFFFu64) as u32 } /* IO_STACK.Parameters.DeviceIoControl.IoControlCode @0x18 */
+fn wdm_out_len(stk: u64) -> u64 { return (stk as *u64)[1u64] & 0xFFFFFFFFu64 }     /* Parameters.DeviceIoControl.OutputBufferLength @0x08 */
+fn wdm_in_len(stk: u64) -> u64 { return (stk as *u64)[2u64] & 0xFFFFFFFFu64 }      /* Parameters.DeviceIoControl.InputBufferLength  @0x10 */
 fn wdm_system_buffer(irp: u64) -> u64 { return (irp as *u64)[3u64] }               /* IRP.AssociatedIrp.SystemBuffer @0x18 */
 fn wdm_set_status(irp: u64, status: u64, info: u64) -> i32 {
     (irp as *u64)[6u64] = status                                                   /* IRP.IoStatus.Status @0x30 */
@@ -64,14 +70,62 @@ fn gate_close(device_object: u64, irp: u64) -> u64 {
     return 0u64
 }
 
+/* [BSOD/OOB] METHOD_BUFFERED SystemBuffer validator for gate_ioctl.  Returns `code` when buf is non-NULL
+   and the lengths meet that IOCTL's footprint; 0 when a KNOWN IOCTL is called with a NULL/short buffer
+   (gate_ioctl rejects with STATUS_BUFFER_TOO_SMALL, buffer untouched).  Unknown codes pass through.
+   ADMIT(0x222000): in 6 x u64 = 48, out 1 x u64 = 8.  PROBE(0x222004): out 4 x u64 = 32, no input.
+   need_out/need_in held HERE, off gate_ioctl's local budget (cg_r0 per-function ceiling). */
+fn gate_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
+    let mut need_out : u64 = 0u64
+    let mut need_in  : u64 = 0u64
+    if code == 0x222000u32 { need_out = 8u64 ; need_in = 48u64 }
+    if code == 0x222004u32 { need_out = 32u64 }
+    if code == 0x222008u32 { need_out = 32u64 }      /* IOCTL_ATTEST: 32-byte measurement out, no input */
+    if need_out == 0u64 { return code }              /* unknown code: pass through, matches no branch */
+    if buf == 0u64 { return 0u32 }
+    if wdm_out_len(stk) < need_out { return 0u32 }
+    if wdm_in_len(stk) < need_in { return 0u32 }
+    return code
+}
+
+/* IOCTL_ATTEST report (factored OUT of gate_ioctl to stay under cg_r0's per-function ceiling, like
+   gate_validated_code): copy the 32-byte below-OS quine-seal measurement (taken at load) to the
+   METHOD_BUFFERED SystemBuffer.  Read-only; the challenger compares it to the independently-built seed. */
+fn gate_attest_report(buf: u64) -> i32 {
+    let b : u64 = buf
+    (b as *u64)[0u64] = G_ATTEST[0u64]
+    (b as *u64)[1u64] = G_ATTEST[1u64]
+    (b as *u64)[2u64] = G_ATTEST[2u64]
+    (b as *u64)[3u64] = G_ATTEST[3u64]
+    return 0i32
+}
+
+/* M23 self-attestation, factored OUT of driver_entry (cg_r0 per-function ceiling).  FAIL-CLOSED on a
+   broken sealer (returns STATUS_UNSUCCESSFUL); else measure my own running .text into G_ATTEST and
+   return 0.  driver_entry refuses residency on a nonzero return. */
+fn gate_self_attest(driver_object: u64) -> u64 {
+    let dobj : u64 = driver_object
+    if ks_engine_ok() != 1u8 { return 0xC0000001u64 }       /* STATUS_UNSUCCESSFUL */
+    let ibase : u64 = (dobj as *u64)[3u64]                  /* DRIVER_OBJECT.DriverStart @0x18 = ASLR load base */
+    ks_self_measure(ibase, &G_ATTEST as u64)
+    return 0u64
+}
+
 /* --- IRP_MJ_DEVICE_CONTROL: the gate decision --- */
 fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
     let stk  : u64 = wdm_current_stack(irp)
-    let code : u32 = wdm_ioctl_code(stk)
     let buf  : u64 = wdm_system_buffer(irp)
     let mut status : u64 = 0xC0000010u64   /* STATUS_INVALID_DEVICE_REQUEST */
     let mut info   : u64 = 0u64
-    if code == 0x222000u32 {
+    /* [BSOD/OOB] validate the METHOD_BUFFERED SystemBuffer in gate_validated_code (its need table lives
+       off gate_ioctl's local budget -- cg_r0 per-function ceiling) BEFORE any branch reads/writes `buf`:
+       a user-mode 0/short-buffer request yields a NULL or undersized SystemBuffer, and the admit branch
+       reads 6 x u64 + writes 1 x u64 -> a trivially user-triggerable kernel NULL-deref / pool OOB (the
+       output write could also leak uninitialised pool).  code2==0 => known IOCTL with a NULL/short
+       buffer (reject untouched); an unknown code passes through to no branch -> INVALID_DEVICE_REQUEST. */
+    let code2 : u32 = gate_validated_code(stk, buf, wdm_ioctl_code(stk))
+    if code2 == 0u32 { status = 0xC0000023u64 }
+    if code2 == 0x222000u32 {
         let family : u32 = (buf as *u64)[0u64] as u32
         let tk     : u32 = (buf as *u64)[1u64] as u32
         let tgt    : u64 = (buf as *u64)[2u64]
@@ -96,7 +150,7 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         status = 0u64
         info   = 8u64
     }
-    if code == 0x222004u32 {
+    if code2 == 0x222004u32 {
         /* IOCTL_SVM_PROBE (Ring-1 I0, READ-ONLY): report SVM capability. No SVM enable, no VMRUN.
            VM_CR (AMD-only) is read ONLY when CPUID(0x80000001).ECX[2]=SVM is set (a bit Intel never
            sets) -> RDMSR cannot #GP. EFER is universal. out: [0]=svm_avail [1]=efer [2]=vm_cr [3]=ecx. */
@@ -110,6 +164,14 @@ fn gate_ioctl(device_object: u64, irp: u64) -> u64 {
         (buf as *u64)[1u64] = efer
         (buf as *u64)[2u64] = vmcr
         (buf as *u64)[3u64] = ecx80
+        status = 0u64
+        info   = 32u64
+    }
+    if code2 == 0x222008u32 {
+        /* IOCTL_ATTEST (capability 11): report the below-OS quine-seal -- the measurement of my OWN
+           running .text, taken at load in driver_entry.  attest-by-report: the anchor is EXTERNAL (the
+           challenger holds cad(.text) built independently), so a tampered self cannot forge a match. */
+        gate_attest_report(buf)
         status = 0u64
         info   = 32u64
     }
@@ -129,6 +191,14 @@ fn gate_unload(driver_object: u64) -> u64 {
 fn driver_entry(driver_object: u64, registry_path: u64) -> u64 {
     sha256_sched_force(1u32)
     keccak_chi_force_path(1u32)
+    /* M23 / capability 11 -- the BELOW-OS behavioral quine-seal.  FAIL-CLOSED: refuse to go resident
+       if the sealed hasher does not compute the FIPS-180-2 vector at Ring 0 (a broken/miscompiled
+       sealer is an incoherent self -- "refuse to ship or run an incoherent self", capability 1, at the
+       metal).  Then measure my OWN running .text (relocation-free => byte-identical on disk and in
+       memory every load AND bound to the executing code) and cache it for IOCTL_ATTEST, so a challenger
+       compares it to the independently-built seed -- "I am exactly this source and executed behavior". */
+    let att : u64 = gate_self_attest(driver_object)
+    if att != 0u64 { return att }                           /* STATUS_UNSUCCESSFUL -> the driver does NOT load (fail-closed) */
     iii_kio_create_device(driver_object, &G_DEVOBJ as u64)
     (driver_object as *u64)[13u64] = &gate_unload as u64   /* DRIVER_OBJECT.DriverUnload @0x68 */
     (driver_object as *u64)[14u64] = &gate_create as u64   /* MajorFunction[IRP_MJ_CREATE=0] @0x70 */

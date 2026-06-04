@@ -1,0 +1,22 @@
+/* omnia::iter null-base construction guard (#13/#14 backlog).
+ * Proves the fail-fast guard FIRES on a null base over a non-empty span,
+ * while preserving the empty-span carve-out and normal iteration. */
+module corpus_1024
+
+extern @abi(c-msvc-x64) fn iter_u8_new(base: u64, len: u64) -> u64 from "iter.iii"
+extern @abi(c-msvc-x64) fn iter_u8_next(id: u64) -> u32 from "iter.iii"
+
+var BUF : [u8; 4] = [65u8, 66u8, 67u8, 68u8]   /* "ABCD" */
+
+fn main() -> u64 {
+    /* NEGATIVE: null base + non-zero len -> ITER_INVALID (0) */
+    if iter_u8_new(0u64, 5u64) != 0u64 { return 1u64 }
+    /* carve-out: null base + zero len is a valid empty iterator (never derefs) */
+    if iter_u8_new(0u64, 0u64) == 0u64 { return 2u64 }
+    /* positive: a real base yields a working iterator */
+    let id : u64 = iter_u8_new((&BUF as u64), 4u64)
+    if id == 0u64 { return 3u64 }
+    if iter_u8_next(id) != 65u32 { return 4u64 }
+    if iter_u8_next(id) != 66u32 { return 5u64 }
+    return 99u64
+}

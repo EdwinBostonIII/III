@@ -1,0 +1,53 @@
+/* 1030 -- forcefield/ripple_metric.iii rm_j separation-underflow floor (#6 backlog, soundness).
+ *
+ * 𝒱 = rm_j() = RM_J_OFFSET(1e6) + good - noise - separation is the total-order value the extraction
+ * decider maximises (rm_cut_improves / rm_merge_improves compare 𝒱-before vs 𝒱-after).  rm_sep() is
+ * QUADRATIC: n fully-unifiable nodes give n(n-1)/2 separations, and with RM_MAXN=4096 that reaches
+ * ~8.4M -- far above the 1e6 offset.  The old `OFFSET + good - noise - sep` then UNDERFLOWED u64 to a
+ * near-2^64 value, so a degenerate all-noise graph read as the MAXIMAL 𝒱 -- a soundness false-accept
+ * (the decider would treat a worthless state as best).  The fix floors at 0: if (noise+sep) > (OFFSET+
+ * good) return 0.
+ *
+ * The crossover is sep = 1e6.  n=1414 -> sep=998991 (< 1e6) -> 𝒱 = 1009 (a real positive value, NOT
+ * floored, NOT wrapped).  n=1415 -> sep=1000405 (> 1e6) -> 𝒱 = 0 (floored; the OLD code would return
+ * ~1.84e19 here).  Edges are never added so good=noise=0 and both 𝒱 values are exact.  99 = pass. */
+module corpus_1030
+
+extern @abi(c-msvc-x64) fn rm_reset() -> u64 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_add_node(cap: u64, iclass: u32) -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_good() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_noise() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_sep() -> u32 from "ripple_metric.iii"
+extern @abi(c-msvc-x64) fn rm_j() -> u64 from "ripple_metric.iii"
+
+/* add `n` nodes that are ALL capability-equal + intent-equal -> one unifiable group of size n. */
+fn add_group(n: u32) -> u32 {
+    let mut i : u32 = 0u32
+    while i < n {
+        rm_add_node(7u64, 3u32)
+        i = i + 1u32
+    }
+    return 0u32
+}
+
+fn main() -> u64 {
+    /* ── ARM A: just BELOW the crossover -> a real positive 𝒱, no floor, no wrap. ── */
+    rm_reset()
+    add_group(1414u32)
+    if rm_good() != 0u32 { return 1u64 }          /* no edges added */
+    if rm_noise() != 0u32 { return 2u64 }
+    if rm_sep() != 998991u32 { return 3u64 }       /* 1414*1413/2 */
+    if rm_j() != 1009u64 { return 4u64 }           /* 1e6 + 0 - 0 - 998991 = 1009 (exact) */
+
+    /* ── ARM B: just ABOVE the crossover -> the underflow floor FIRES -> 𝒱 == 0 (not ~2^64). ── */
+    rm_reset()
+    add_group(1415u32)
+    if rm_sep() != 1000405u32 { return 5u64 }      /* 1415*1414/2 */
+    if rm_j() != 0u64 { return 6u64 }              /* sep(1000405) > OFFSET(1e6) -> floored to 0 */
+
+    /* ── ARM C: empty graph -> 𝒱 == the offset exactly (sanity that the offset path is unchanged). ── */
+    rm_reset()
+    if rm_j() != 1000000u64 { return 7u64 }
+
+    return 99u64
+}

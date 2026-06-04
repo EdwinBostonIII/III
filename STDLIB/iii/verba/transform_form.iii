@@ -115,6 +115,7 @@ fn tf_parse_value(src: u64, off: u64, len: u64) -> u64 {
                     let bp : *u8 = (src + o) as *u8
                     let d : u32 = tf_hex_digit(bp[0u64])
                     if d == 0xFFFFFFFFu32 { return o }
+                    if (TF_PARSED_VAL >> 60u64) != 0u64 { return o }   /* [overflow] next <<4 would drop high bits; stop at the 17th hex digit */
                     TF_PARSED_VAL = (TF_PARSED_VAL << 4u64) | (d as u64 & 0xFu64)
                     o = o + 1u64
                 }
@@ -127,7 +128,13 @@ fn tf_parse_value(src: u64, off: u64, len: u64) -> u64 {
         let c : u8 = bp[0u64]
         if c < 48u8 { return o }
         if c > 57u8 { return o }
-        TF_PARSED_VAL = TF_PARSED_VAL * 10u64 + ((c - 48u8) as u64 & 0xFFu64)
+        /* [overflow] two-stage guard (matches verba::semver/parse): a lone `> MAX/10` misses the exact
+         * boundary value==MAX/10 && digit>5 (decimals 2^64..2^64+3 wrap to 0..3). *10 then +digit, reject on either wrap. */
+        if TF_PARSED_VAL > 1844674407370955161u64 { return o }
+        let v10 : u64 = TF_PARSED_VAL * 10u64
+        let nv  : u64 = v10 + ((c - 48u8) as u64 & 0xFFu64)
+        if nv < v10 { return o }
+        TF_PARSED_VAL = nv
         o = o + 1u64
     }
     return o

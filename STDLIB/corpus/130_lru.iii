@@ -51,6 +51,10 @@ fn main() -> u64 {
     if lru_get(c, 3u32) != 300u64 { return 14u64 }
     if lru_get(c, 4u32) != 400u64 { return 14u64 }
 
+    /* gap #83: evicted-key miss + bad-id both return LRU_INVALID (side-effect-free early return) */
+    if lru_get(c, 1u32) != 0xFFFFFFFFFFFFFFFFu64 { return 18u64 }
+    if lru_get(0u64, 1u32) != 0xFFFFFFFFFFFFFFFFu64 { return 19u64 }
+
     /* Re-insert key 1 (which was evicted earlier).  Cache is full so
      * this triggers another eviction of the current LRU.  Return value
      * is -1 (evict-occurred) or 0 (LRU_OK) — both are success states. */

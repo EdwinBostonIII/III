@@ -38,6 +38,7 @@ void iii_intern_destroy(iii_intern_t *t) {
 }
 
 uint32_t iii_intern_put(iii_intern_t *t, const uint8_t *bytes, size_t len) {
+    if (!bytes) return 0;   /* a NULL payload (arena OOM at the caller) interns as id 0, never deref'd */
     if (t->used * 4 >= t->cap * 3) grow(t);
     uint32_t h = iii_fnv1a32(bytes, len);
     if (h == 0) h = 1;
@@ -58,6 +59,9 @@ uint32_t iii_intern_put(iii_intern_t *t, const uint8_t *bytes, size_t len) {
         t->strings = ns; t->strings_cap = nc;
     }
     uint8_t *copy = iii_arena_dup(t->arena, bytes, len);
+    if (!copy) return 0;   /* arena OOM: fail the intern (id 0) rather than store a NULL bytes
+                            * pointer that a later memcmp would dereference -- the load-exposed
+                            * segfault root cause; mirrors the strings-realloc OOM path above. */
     uint32_t id = (uint32_t)(t->strings_count + 1);
     t->strings[t->strings_count].bytes = copy;
     t->strings[t->strings_count].len = len;

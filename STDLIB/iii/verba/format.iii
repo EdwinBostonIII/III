@@ -21,6 +21,7 @@ extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "build
 
 const FMT_OK : i32 = 0i32
 const FMT_E_BUILD : i32 = -2i32   /* [COMBINE-7/RIPPLE-6/II-FORMAT-1] a builder push failed -- output is incomplete, do NOT report success */
+const FMT_E_NULL  : i32 = -1i32   /* a null base pointer was given with a nonzero length -- nothing to read */
 
 /* Module-scope scratch buffers.  Phase B is single-threaded so a
  * shared scratch is safe across calls to a single builder.  Phase C
@@ -135,7 +136,7 @@ fn format_char_ascii(builder_id: u64, c: u32) -> i32 @export {
 fn format_literal(builder_id: u64, base: u64, len: u64) -> i32 @export {
     if base == 0u64 {
         if len == 0u64 { return FMT_OK }
-        return -1i32
+        return FMT_E_NULL
     }
     let p : *u8 = base as *u8
     let mut i : u64 = 0u64

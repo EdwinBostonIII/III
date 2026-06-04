@@ -22,8 +22,6 @@
 
 module verba_csv
 
-extern @abi(c-msvc-x64) fn arena_alloc1(arena: u64, n: u64) -> u64 from "arena.iii"
-
 const CSV_OK : i32 = 0i32
 const CSV_E_BADID : i32 = -1i32
 const CSV_E_TOOMANY : i32 = -2i32
@@ -73,6 +71,9 @@ fn csv_row_col_index(table_idx: u32, row: u64) -> u64 {
     return (table_idx as u64) * 1024u64 + row
 }
 
+/* arena is accepted for API symmetry with the other verba parsers but is currently UNUSED:
+ * csv_parse stores into fixed module-scope tables (CSV_*), not arena memory.  Reserved for a
+ * future arena-backed table; kept in the signature so call sites do not churn. */
 fn csv_parse(arena: u64, raw_base: u64, raw_len: u64) -> u64 @export {
     let table : u32 = csv_alloc_slot()
     if table >= CSV_TABLE_MAX { return 0u64 }

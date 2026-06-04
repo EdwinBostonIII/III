@@ -171,5 +171,9 @@ fn base32_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         if bytes_out >= 5u32 { if builder_push_byte(builder_id, o4 as u32) != 0i32 { return B32_E_BUILD } }
         i = i + 8u64
     }
+    /* RFC 4648 §6: base32 is padded to a multiple of 8 chars; 1-7 unconsumed trailing chars
+     * are a malformed (truncated) final quantum -- reject, never silently drop (sibling of the
+     * base64 trailing-byte guard). */
+    if (src_len - i) != 0u64 { return B32_E_BADCHAR }
     return B32_OK
 }

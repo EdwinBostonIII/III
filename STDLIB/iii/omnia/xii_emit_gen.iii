@@ -411,7 +411,12 @@ var XEG_PREFIX : [u8; 4]
 var XEG_MHASH_SCRATCH : [u8; 4096]
 
 fn _sha256_prefix_then_payload(prefix: *u8, prefix_len: u32, payload: *u8, payload_size: u32, out_32: *u8) -> i32 {
-    if (prefix_len + payload_size) > 4096u32 { return -1i32 }
+    /* OVERFLOW-SAFE: the old `(prefix_len + payload_size) > 4096` ADDS first -- with a caller
+     * payload_size near u32-max the sum WRAPS small, passes the guard, and the write loop below
+     * runs ~4 billion OOB stores into XEG_MHASH_SCRATCH[4096].  Subtraction form (prefix_len is a
+     * caller param, so bound it first) cannot wrap. */
+    if prefix_len > 4096u32 { return -1i32 }
+    if payload_size > 4096u32 - prefix_len { return -1i32 }
     let mut i : u32 = 0u32
     while i < prefix_len {
         XEG_MHASH_SCRATCH[i] = prefix[i as u64]

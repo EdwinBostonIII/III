@@ -1,0 +1,42 @@
+/* 1056 -- numera::fixed (Q32.32) untested-export coverage (gap-backlog #60,#61,#62,#63).
+ *
+ * Closes: fix_to_u32_round (round-half-up), fix_frac (fractional extractor), fix_eq, fix_lt.
+ * Round-vs-truncate DIVERGENCE on 2.5 proves round is not aliased to truncate; eq/lt assert
+ * both arms.  Equality compares only (no value ordering of results). 99 = pass.
+ */
+module corpus_1056
+
+extern @abi(c-msvc-x64) fn fix_from_u32(v: u32) -> u64 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_to_u32_truncate(q: u64) -> u32 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_to_u32_round(q: u64) -> u32 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_frac(q: u64) -> u32 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_eq(a: u64, b: u64) -> u8 from "fixed.iii"
+extern @abi(c-msvc-x64) fn fix_lt(a: u64, b: u64) -> u8 from "fixed.iii"
+
+fn main() -> u64 {
+    let three : u64 = fix_from_u32(3u32)
+    let four  : u64 = fix_from_u32(4u32)
+
+    /* --- fix_to_u32_round (#60): round-half-up, DIVERGING from truncate at 2.5 --- */
+    let two_half : u64 = fix_from_u32(2u32) | 0x80000000u64        /* 2.5 */
+    if fix_to_u32_round(two_half) != 3u32 { return 1u64 }          /* 2.5 rounds up to 3 */
+    if fix_to_u32_truncate(two_half) != 2u32 { return 2u64 }       /* ...while truncate gives 2 */
+    let below_half : u64 = fix_from_u32(2u32) | 0x7FFFFFFFu64      /* just under 2.5 */
+    if fix_to_u32_round(below_half) != 2u32 { return 3u64 }        /* rounds down to 2 */
+    if fix_to_u32_round(fix_from_u32(5u32)) != 5u32 { return 4u64 } /* exact integer */
+
+    /* --- fix_frac (#61) --- */
+    if fix_frac(three) != 0u32 { return 5u64 }                     /* integers have zero fraction */
+    if fix_frac(0x180000000u64) != 0x80000000u32 { return 6u64 }   /* 1.5 -> 0.5 fractional */
+
+    /* --- fix_eq (#62) --- */
+    if fix_eq(three, three) != 1u8 { return 7u64 }
+    if fix_eq(three, four) != 0u8 { return 8u64 }
+
+    /* --- fix_lt (#63) --- */
+    if fix_lt(three, four) != 1u8 { return 9u64 }
+    if fix_lt(four, three) != 0u8 { return 10u64 }
+    if fix_lt(three, three) != 0u8 { return 11u64 }
+
+    return 99u64
+}

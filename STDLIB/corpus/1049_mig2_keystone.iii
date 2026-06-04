@@ -1,0 +1,10 @@
+/* 1049 -- mig2 keystone: SovVal-as-CIC, the type-level lift (H6).
+ * A non-reachable-hexad (M3 bricking) SovVal must FAIL to type-check -- the runtime
+ * SV_STATUS_REFUSED (M5) is lifted to a TYPE error.  p5_kat_mig2 (numera/typecheck.iii):
+ *   Reach(h) = Id(Bool, REACH(h), true); REACH(h) iota-reduces (in the CCL kernel reducer)
+ *   to TRUE iff iii_hexad_reachable(h).  For a reachable hexad refl:Reach(h) type-checks;
+ *   for a bricking hexad REACH(h)=>FALSE so Id(Bool,FALSE,TRUE) is uninhabited -> REJECTED.
+ * The kernel VERIFIES reachability by iota-reduction (not a trusted/baked value). 99 = both arms. */
+module corpus_1049
+extern @abi(c-msvc-x64) fn p5_kat_mig2() -> u64 from "typecheck.iii"
+fn main() -> u64 { return p5_kat_mig2() }

@@ -1,0 +1,114 @@
+/* 1050 -- sealed_channel forged-packet desync falsifier (gap-backlog #5, sibling of #6).
+ *
+ * Proves sc_recv advances rx_nonce ONLY on an authenticated open():
+ *   (1) a forged/garbage packet at rx_nonce=0 is REJECTED (SC_E_BAD_TAG=-4) and does
+ *       NOT bump rx_nonce, so the channel stays in sync;
+ *   (2) the legitimate nonce-0 packet STILL decrypts afterwards (the desync-fix property
+ *       -- pre-fix the forged packet bumped rx_nonce to 1 and this returned -4: a trivial
+ *       1-packet DoS);
+ *   (3) the next legitimate packet (nonce 1) decrypts -> full sync preserved;
+ *   (4) REPLAY of the nonce-0 ciphertext+tag, now that rx_nonce=2, is rejected.
+ *
+ * All compares use != (equality) -- never i32 ordering (documented iiis unsigned-ordering trap).
+ * 99 = full pass; 1..N = the specific failed assertion.
+ */
+module corpus_1050
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_send(channel_id: u64, plaintext_ptr: u64, len: u32, tag_out_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_recv(channel_id: u64, ciphertext_ptr: u64, len: u32, tag_in_ptr: u64) -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+
+fn _copy(dst: *u8, src: *u8, n: u64) -> i32 {
+    let mut i : u64 = 0u64
+    while i < n { dst[i] = src[i]; i = i + 1u64 }
+    return 0i32
+}
+
+fn _equal(a: *u8, b: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n { if a[i] != b[i] { return 0u8 } i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    sc_reset_all()
+
+    let bp : *u8 = malloc(32u64)
+    bp[0u64] = 9u8
+    let mut z : u64 = 1u64
+    while z < 32u64 { bp[z] = 0u8; z = z + 1u64 }
+
+    let alice_sk : *u8 = malloc(32u64)
+    let bob_sk   : *u8 = malloc(32u64)
+    let mut a : u64 = 0u64
+    while a < 32u64 { alice_sk[a] = ((a + 7u64) & 0xFFu64) as u8; a = a + 1u64 }
+    let mut b : u64 = 0u64
+    while b < 32u64 { bob_sk[b] = ((0x55u64 + b) & 0xFFu64) as u8; b = b + 1u64 }
+
+    let alice_pk : *u8 = malloc(32u64)
+    let bob_pk   : *u8 = malloc(32u64)
+    if x25519(alice_pk, alice_sk, bp) != 0i32 { return 1u64 }
+    if x25519(bob_pk,   bob_sk,    bp) != 0i32 { return 2u64 }
+
+    let alice_ch : u64 = sc_handshake_init(bob_pk as u64, alice_sk as u64)
+    let bob_ch   : u64 = sc_handshake_init(alice_pk as u64, bob_sk as u64)
+    if alice_ch == 0u64 { return 3u64 }
+    if bob_ch == 0u64 { return 4u64 }
+
+    /* Alice seals two messages; snapshot each ciphertext + tag BEFORE bob decrypts
+     * (sc_recv decrypts in place, so pristine ciphertext copies are required). */
+    let pt1 : *u8 = malloc(8u64)
+    let pt2 : *u8 = malloc(8u64)
+    let mut i : u64 = 0u64
+    while i < 8u64 { pt1[i] = (0x41u64 + i) as u8; pt2[i] = (0x61u64 + i) as u8; i = i + 1u64 }
+    let pt1_orig : *u8 = malloc(8u64)
+    let pt2_orig : *u8 = malloc(8u64)
+    _copy(pt1_orig, pt1, 8u64)
+    _copy(pt2_orig, pt2, 8u64)
+
+    let tag1 : *u8 = malloc(16u64)
+    let tag2 : *u8 = malloc(16u64)
+    if sc_send(alice_ch, pt1 as u64, 8u32, tag1 as u64) != 0i32 { return 5u64 }   /* tx nonce 0 */
+    let ct1 : *u8 = malloc(8u64)
+    _copy(ct1, pt1, 8u64)
+    if sc_send(alice_ch, pt2 as u64, 8u32, tag2 as u64) != 0i32 { return 6u64 }   /* tx nonce 1 */
+    let ct2 : *u8 = malloc(8u64)
+    _copy(ct2, pt2, 8u64)
+
+    /* (1) FORGED packet delivered first (bob rx_nonce=0): real ct1 bytes, garbage tag.
+     * Must be REJECTED with SC_E_BAD_TAG (-4) and must NOT advance rx_nonce. */
+    let forged_ct  : *u8 = malloc(8u64)
+    let forged_tag : *u8 = malloc(16u64)
+    _copy(forged_ct, ct1, 8u64)
+    let mut g : u64 = 0u64
+    while g < 16u64 { forged_tag[g] = 0xA5u8; g = g + 1u64 }
+    if sc_recv(bob_ch, forged_ct as u64, 8u32, forged_tag as u64) != -4i32 { return 10u64 }
+
+    /* (2) The legitimate nonce-0 packet must STILL decrypt -- proving rx_nonce stayed 0
+     * after the rejected forgery (desync-fix). Pre-fix this returned -4. */
+    let ct1_valid : *u8 = malloc(8u64)
+    _copy(ct1_valid, ct1, 8u64)
+    if sc_recv(bob_ch, ct1_valid as u64, 8u32, tag1 as u64) != 0i32 { return 11u64 }
+    if _equal(ct1_valid, pt1_orig, 8u64) == 0u8 { return 12u64 }
+
+    /* (3) The next legitimate packet (nonce 1) decrypts -> channel fully in sync. */
+    if sc_recv(bob_ch, ct2 as u64, 8u32, tag2 as u64) != 0i32 { return 13u64 }
+    if _equal(ct2, pt2_orig, 8u64) == 0u8 { return 14u64 }
+
+    /* (4) REPLAY: nonce-0 ciphertext+tag, now that rx_nonce=2, is rejected. */
+    let ct1_replay : *u8 = malloc(8u64)
+    _copy(ct1_replay, ct1, 8u64)
+    if sc_recv(bob_ch, ct1_replay as u64, 8u32, tag1 as u64) != -4i32 { return 15u64 }
+
+    free(bp); free(alice_sk); free(bob_sk); free(alice_pk); free(bob_pk)
+    free(pt1); free(pt2); free(pt1_orig); free(pt2_orig)
+    free(tag1); free(tag2); free(ct1); free(ct2)
+    free(forged_ct); free(forged_tag); free(ct1_valid); free(ct1_replay)
+    return 99u64
+}

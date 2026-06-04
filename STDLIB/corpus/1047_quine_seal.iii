@@ -1,0 +1,15 @@
+/* 1047 -- M23 below-OS behavioral quine-seal (III-APOTHEOSIS capability 11).
+ * Proves, in user mode, the MEASUREMENT logic the metal gate runs below the OS (the on-metal
+ * load is operator/UAC-gated, so the LOGIC is gated here by the SAME compiled module the kernel
+ * links).  ks_selftest: (1) reproducible measurement, (2) BINDS TO CONTENT -- flip one byte and
+ * the measurement DIFFERS (the prove-the-negative that folding baked constants could never show),
+ * (3) the sealed hasher computes the FIPS vector below the OS, (4)+(5) attest-by-report against an
+ * EXTERNAL seed: accept the matching seed, reject a one-byte-different seed.
+ * Exit 99 = all hold; 1..5 = the failing step. */
+module corpus_1047_quine_seal
+
+extern @abi(c-msvc-x64) fn ks_selftest() -> u64 from "quine_seal.iii"
+
+fn main() -> u64 {
+    return ks_selftest()
+}

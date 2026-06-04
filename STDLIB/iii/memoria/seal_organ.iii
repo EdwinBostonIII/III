@@ -173,12 +173,14 @@ fn seal_verify(handle: u64) -> u8 @export {
     seal_feed(slot)
     let off : u32 = slot * 32u32
     let mut p : u32 = 0u32
+    let mut diff : u32 = 0u32                                 /* [const-time] accumulate, no data-dependent early exit */
     while p < 32u32 {
         let stored : u8 = SEAL_DIGEST[off + p]
         let fresh : u32 = sha256_digest_byte(p) & 0xFFu32
-        if (stored as u32) != fresh { return 0u8 }
+        diff = diff | ((stored as u32) ^ fresh)
         p = p + 1u32
     }
+    if diff != 0u32 { return 0u8 }
     return 1u8
 }
 

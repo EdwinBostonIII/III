@@ -80,6 +80,7 @@ fn builder_slot_of(id: u64) -> u32 {
 fn builder_grow(slot: u32, add: u64) -> i32 {
     let cur_cap : u64 = BLD_CAP[slot]
     let cur_len : u64 = BLD_LEN[slot]
+    if add > (0xFFFFFFFFFFFFFFFFu64 - cur_len) { BLD_ERR[slot] = 1u8 ; return BLD_E_OOM }   /* [overflow] cur_len+add wrap -> need wraps small -> guard passes -> undersized realloc -> OOB write (reachable via @export builder_push_bytes n) */
     let need : u64 = cur_len + add
     if need <= cur_cap { return BLD_OK }
     let mut new_cap : u64 = cur_cap * 2u64

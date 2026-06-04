@@ -8,6 +8,7 @@ extern @abi(c-msvc-x64) fn instant_now_sealed(cap: u64) -> u64 from "instant.iii
 extern @abi(c-msvc-x64) fn instant_tick(id: u64) -> u64 from "instant.iii"
 extern @abi(c-msvc-x64) fn instant_seal_byte(id: u64, i: u32) -> u32 from "instant.iii"
 extern @abi(c-msvc-x64) fn instant_verify(id: u64) -> u8 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_epoch(id: u64) -> u64 from "instant.iii"
 extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
 
 fn main() -> u64 {
@@ -26,6 +27,10 @@ fn main() -> u64 {
     let inst2 : u64 = instant_now_sealed(time_cap)
     if inst2 == 0u64 { return 5u64 }
     if instant_verify(inst2) != 1u8 { return 6u64 }
+    /* gap #39: instant_epoch -- non-zero per-process epoch, shared across instants */
+    let e1 : u64 = instant_epoch(inst)
+    if e1 == 0u64 { return 7u64 }
+    if instant_epoch(inst2) != e1 { return 8u64 }
     instant_drop(inst)
     instant_drop(inst2)
     return 99u64

@@ -30,6 +30,7 @@ fn sha3_512_oneshot(input_ptr: u64, input_len: u64, out_64: u64) -> u32 @export 
     let il_l : u64 = input_len
     let on_l : u64 = out_64
     if on_l == 0u64 { return 1u32 }
+    if il_l != 0u64 { if in_l == 0u64 { return 1u32 } }   /* null input with len>0 -> keccak_absorb derefs null; mirror the output guard */
     let sp : u64 = &SHA3_512_STATE as u64
     let rd : u64 = keccak_pack_rate_dom(SHA3_512_RATE, SHA3_512_DOM)
     keccak_state_zero(sp)

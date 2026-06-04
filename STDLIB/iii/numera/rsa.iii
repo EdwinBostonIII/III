@@ -226,11 +226,11 @@ var RSA_SAVE : [u8; 512]
 var RSA_EM2  : [u8; 512]
 var RSA_DBG  : [u64; 8]
 var RSA_SIG  : [u8; 512]
-fn rsa_dbg(i: u64) -> u64 @export { return RSA_DBG[i] }
+fn rsa_dbg(i: u64) -> u64 { return RSA_DBG[i] }
 
 /* test m mod n == m for the EM-value (modpow exp=1).  99=yes (m<n, mod ok);
  * 100+i = first differing byte; tells us if m>=n or the mod is buggy. */
-fn rsa_debug_mod1(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_debug_mod1(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     let em : *u8 = &RSA_EM as *u8
@@ -248,7 +248,7 @@ fn rsa_debug_mod1(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen:
 
 /* signature serialization round-trip: s -> i2osp -> os2ip -> s2 ; cmp(s2,s).
  * 1=equal (serialization OK), 0/2 = i2osp/os2ip bug for the signature value. */
-fn rsa_debug_sigser(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_debug_sigser(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     rsa_pss_encode(mHash, emBits, salt, sLen)
     let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emBits / 8u64 + 1u64)
@@ -264,7 +264,7 @@ fn rsa_debug_sigser(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: 
 
 /* all-bigint round-trip: (m^d)^e vs a fresh os2ip(EM).  cmp+1: 1=equal (modexp
  * round-trip OK -> bug is serialization), 0/2 = modexp/d wrong for EM-value. */
-fn rsa_debug_bigint_rt(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_debug_bigint_rt(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     let mfresh : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)   /* keep m intact for compare */
@@ -282,7 +282,7 @@ fn rsa_debug_bigint_rt(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: 
 
 /* real-path debug: real sign then real verify; returns verify_em's stage
  * (99=verified, 11=bc, 12=topmask, 13=PS, 14=0x01, 15=H mismatch). */
-fn rsa_debug_real(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_debug_real(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     RSA_DBG[7] = 0u64
     rsa_pss_sign(arena, n, d, modBits, mHash, salt, sLen, &RSA_SIG as u64)
     let k : u64 = modBits / 8u64
@@ -296,7 +296,7 @@ fn rsa_debug_real(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, 
 }
 
 /* instrumented full-path debug: returns a stage code (99=ok). */
-fn rsa_debug_path(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_debug_path(arena: u64, n: u64, d: u64, e: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     if emLen == 0u64 { return 1u64 }
@@ -533,6 +533,24 @@ fn rm_copy(dst: u64, src: u64, nw: u64) -> i32 {
     return 0i32
 }
 
+/* Constant-time conditional copy: dst = (cond ? src : dst), per-limb branchless mask
+ * (cond MUST be 0 or 1).  Same mask idiom as rm_csub's conditional subtract.  Used by the
+ * rsa_modexp modpow loop so the secret-exponent multiply is ALWAYS computed and only its
+ * RESULT is selected -- the data-dependent `if ebit==1 { multiply }` branch (a classic
+ * square-and-multiply SPA/timing key-recovery channel) is eliminated. */
+fn rm_cond_copy(dst: u64, src: u64, nw: u64, cond: u64) -> i32 {
+    let d : *u32 = dst as *u32
+    let s : *u32 = src as *u32
+    let mask : u64 = 0u64 - cond
+    let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
+    let mut i : u64 = 0u64
+    while i < nw {
+        d[i] = ((((s[i] as u64) & mask) | ((d[i] as u64) & notm)) & 0xFFFFFFFFu64) as u32
+        i = i + 1u64
+    }
+    return 0i32
+}
+
 /* extract bigint -> u32 LE limbs at RM dst (nw limbs); returns significant nw. */
 fn rm_extract(bi: u64, dst: u64, maxw: u64) -> u64 {
     let d : *u32 = dst as *u32
@@ -672,10 +690,13 @@ fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
         rm_copy(&RM_RES as u64, &RM_TMP as u64, nw)
         let limb : u64 = bigint_get_limb(exp, bit / 64u64)
         let ebit : u64 = (limb >> (bit % 64u64)) & 1u64
-        if ebit == 1u64 {
-            rm_mont_mul(&RM_TMP as u64, &RM_RES as u64, &RM_A as u64, nw)
-            rm_copy(&RM_RES as u64, &RM_TMP as u64, nw)
-        }
+        /* CONSTANT-TIME modpow (was: `if ebit==1 { multiply }` -- a square-and-multiply SPA/timing
+         * channel that recovers EVERY bit of the secret exponent).  ALWAYS compute the multiply
+         * into RM_TMP, then BRANCHLESSLY select it into RM_RES iff ebit==1.  Every iteration now
+         * executes exactly one square + one multiply + one masked select, so the work and the
+         * memory-access pattern are independent of the secret exponent bits. */
+        rm_mont_mul(&RM_TMP as u64, &RM_RES as u64, &RM_A as u64, nw)
+        rm_cond_copy(&RM_RES as u64, &RM_TMP as u64, nw, ebit)
     }
     /* convert out of Montgomery: result = resMont * 1 * R^-1 */
     i = 0u64
@@ -700,7 +721,7 @@ fn rsa_modexp(arena: u64, base: u64, exp: u64, n: u64) -> u64 {
     return result
 }
 
-fn rsa_test_sq(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_test_sq(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
@@ -718,7 +739,7 @@ fn rsa_test_sq(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u6
     return RSA_DBG[0] + RSA_DBG[1] * 8u64
 }
 
-fn rsa_test_smallbase(arena: u64, n: u64, d: u64, e: u64) -> u64 @export {
+fn rsa_test_smallbase(arena: u64, n: u64, d: u64, e: u64) -> u64 {
     let two : u64 = bigint_from_u64(arena, 2u64)
     let r1 : u64 = rsa_modexp(arena, two, d, n)        /* 2^d mod n */
     let r2 : u64 = rsa_modexp(arena, r1, e, n)         /* (2^d)^e mod n -> should be 2 */
@@ -728,7 +749,7 @@ fn rsa_test_smallbase(arena: u64, n: u64, d: u64, e: u64) -> u64 @export {
     return (bigint_cmp(r2, two2) + 1i32) as u64
 }
 
-fn rsa_test_fermat(arena: u64, seed: u64, slen: u64) -> u64 @export {
+fn rsa_test_fermat(arena: u64, seed: u64, slen: u64) -> u64 {
     iii_drbg_instantiate(seed, slen, seed, slen, 0u64, 0u64)
     let p : u64 = rsa_gen_prime(arena, 512u64)         /* 512-bit prime, top-bit-set */
     let one : u64 = bigint_from_u64(arena, 1u64)
@@ -747,7 +768,7 @@ fn rsa_test_fermat(arena: u64, seed: u64, slen: u64) -> u64 @export {
  * exponent (drives ~448 square-and-multiply iterations through rm_*).
  * bigint_modpow is the proven-correct oracle (probe2 / M521 KAT).
  * Returns bigint_cmp(rm,lib)+1: 1 == rm_ matches the oracle (correct). */
-fn rsa_test_rm_vs_lib(arena: u64) -> u64 @export {
+fn rsa_test_rm_vs_lib(arena: u64) -> u64 {
     let n : u64 = bigint_new(arena, 8u64)
     let mut i : u64 = 0u64
     while i < 8u64 { bigint_set_limb(n, i, 0xFEDCBA9876543211u64 + i * 0x1111111111111111u64) ; i = i + 1u64 }
@@ -767,7 +788,7 @@ fn rsa_test_rm_vs_lib(arena: u64) -> u64 @export {
     return (bigint_cmp(r_mont, r_lib) + 1i32) as u64
 }
 
-fn rsa_test_mont_small(arena: u64) -> u64 @export {
+fn rsa_test_mont_small(arena: u64) -> u64 {
     let n : u64 = bigint_from_u64(arena, 1001u64)        /* odd */
     let base : u64 = bigint_from_u64(arena, 2u64)
     let exp : u64 = bigint_from_u64(arena, 10u64)
@@ -776,7 +797,7 @@ fn rsa_test_mont_small(arena: u64) -> u64 @export {
     return bigint_to_u64_lo(r)
 }
 
-fn rsa_test_mulmod(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_test_mulmod(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)
@@ -789,7 +810,7 @@ fn rsa_test_mulmod(arena: u64, n: u64, modBits: u64, mHash: u64, salt: u64, sLen
     return RSA_DBG[0] * 1000000u64 + RSA_DBG[1] * 10000u64 + RSA_DBG[2] * 100u64 + RSA_DBG[3]
 }
 
-fn rsa_test_modexp_len(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 @export {
+fn rsa_test_modexp_len(arena: u64, n: u64, d: u64, modBits: u64, mHash: u64, salt: u64, sLen: u64) -> u64 {
     let emBits : u64 = modBits - 1u64
     let emLen : u64 = rsa_pss_encode(mHash, emBits, salt, sLen)
     let m : u64 = rsa_os2ip(arena, &RSA_EM as u64, emLen)

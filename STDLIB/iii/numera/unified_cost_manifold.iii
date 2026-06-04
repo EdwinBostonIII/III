@@ -105,6 +105,7 @@ fn uc_sum_dcache() -> u64 @export {
  *   [0] critical-path latency  [1] total work (throughput proxy)  [2] max reg pressure
  *   [3] op count (icache)      [4] dcache traffic                 [5] energy */
 fn uc_cost(out6: u64) -> i32 @export {
+    if out6 == 0u64 { return 0i32 - 1i32 }   /* null out6 -> p[0..5] deref segfaults; sibling cost_calculus cc_evaluate guards */
     let p : *u64 = out6 as *u64
     let n : u64 = UCM_N[0u64]
     let mut work : u64 = 0u64  let mut i : u64 = 0u64

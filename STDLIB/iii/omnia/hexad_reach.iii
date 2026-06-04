@@ -82,6 +82,7 @@ fn iii_hexad_reachable(h: u16) -> u8 @export {
 }
 
 fn iii_hexad_bitmap_sha256(out_addr: u64) -> i32 @export {
+    if out_addr == 0u64 { return 0i32 - 1i32 }   /* sha256_oneshot writes 32 bytes to out_addr; null -> segfault */
     iii_hexad_init()
     sha256_oneshot(&HXR_BITMAP as *u8, HXR_BITMAP_LEN, out_addr as *u8)
     return 0i32

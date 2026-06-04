@@ -43,6 +43,11 @@ extern @abi(c-msvc-x64) fn pattern_set_fed_mhash_byte(handle: u64, idx: u32) -> 
 extern @abi(c-msvc-x64) fn pattern_set_fed_tier(handle: u64) -> u32 from "pattern_set_federation.iii"
 extern @abi(c-msvc-x64) fn pattern_set_fed_reset() -> i32 from "pattern_set_federation.iii"
 
+/* W4.2: publish now enforces the ancestry gate -- the domain mhash must be fed_seal-anchored
+ * (FOUNDERS-ANCHOR-descended) before it can be registered.  The publisher pre-anchors. */
+extern @abi(c-msvc-x64) fn fed_seal_clear() -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+
 extern @abi(c-msvc-x64) fn sha256_oneshot(in_ptr: *u8, in_len: u64, out_32: *u8) -> u32 from "sha256.iii"
 
 /* Canonical interface bytes for the "numera" domain.  In production this
@@ -51,9 +56,11 @@ extern @abi(c-msvc-x64) fn sha256_oneshot(in_ptr: *u8, in_len: u64, out_32: *u8)
  * suffices to exercise the federation pipeline. */
 var C247_INTERFACE : [u8; 32]
 var C247_MHASH     : [u8; 32]
+var C247_PARENT    : [u8; 32]   /* parent-tier root the domain mhash descends from */
 
 fn main() -> u64 {
     pattern_set_fed_reset()
+    fed_seal_clear()
     if pattern_set_fed_count() != 0u32 { return 1u64 }
 
     /* Step 1: compute domain mhash. */
@@ -63,6 +70,13 @@ fn main() -> u64 {
         i = i + 1u64
     }
     sha256_oneshot((&C247_INTERFACE) as *u8, 32u64, (&C247_MHASH) as *u8)
+
+    /* Step 1a': pre-anchor the domain mhash (child tier 1 = NUMERA) under a parent tier-2 root,
+     * satisfying the publish-side ancestry gate.  A real deployment anchors against the actual
+     * FOUNDERS chain; here a deterministic parent root suffices. */
+    let mut pj : u64 = 0u64
+    while pj < 32u64 { C247_PARENT[pj] = ((pj * 5u64 + 1u64) & 0xFFu64) as u8  pj = pj + 1u64 }
+    if fed_seal_anchor(1u32, (&C247_MHASH) as u64, 2u32, (&C247_PARENT) as u64) != 0i32 { return 12u64 }
 
     /* Step 1b: publish the domain at tier 1. */
     let h : u64 = pattern_set_fed_publish(0u64, 1u32, (&C247_MHASH) as u64)

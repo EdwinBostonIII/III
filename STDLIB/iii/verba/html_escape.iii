@@ -18,44 +18,47 @@ extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "build
 extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
 
 const HTML_OK : i32 = 0i32
+const HTML_E_NULL  : i32 = -1i32   /* null src with nonzero len -- nothing to read */
+const HTML_E_BUILD : i32 = -2i32   /* a builder_push_byte failed (OOM/sealed/bad-id) -- output incomplete, do NOT report success */
 
 fn html_escape(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
+    if src_len != 0u64 { if (src as u64) == 0u64 { return HTML_E_NULL } }
     let mut i : u64 = 0u64
     while i < src_len {
         let b : u32 = src[i] as u32
         if b == 38u32 {        /* & */
-            builder_push_byte(builder_id, 38u32)   /* & */
-            builder_push_byte(builder_id, 97u32)   /* a */
-            builder_push_byte(builder_id, 109u32)  /* m */
-            builder_push_byte(builder_id, 112u32)  /* p */
-            builder_push_byte(builder_id, 59u32)   /* ; */
+            if builder_push_byte(builder_id, 38u32) != 0i32 { return HTML_E_BUILD }   /* & */
+            if builder_push_byte(builder_id, 97u32) != 0i32 { return HTML_E_BUILD }   /* a */
+            if builder_push_byte(builder_id, 109u32) != 0i32 { return HTML_E_BUILD }  /* m */
+            if builder_push_byte(builder_id, 112u32) != 0i32 { return HTML_E_BUILD }  /* p */
+            if builder_push_byte(builder_id, 59u32) != 0i32 { return HTML_E_BUILD }   /* ; */
         }
         if b == 60u32 {        /* < */
-            builder_push_byte(builder_id, 38u32)
-            builder_push_byte(builder_id, 108u32)  /* l */
-            builder_push_byte(builder_id, 116u32)  /* t */
-            builder_push_byte(builder_id, 59u32)
+            if builder_push_byte(builder_id, 38u32) != 0i32 { return HTML_E_BUILD }
+            if builder_push_byte(builder_id, 108u32) != 0i32 { return HTML_E_BUILD }  /* l */
+            if builder_push_byte(builder_id, 116u32) != 0i32 { return HTML_E_BUILD }  /* t */
+            if builder_push_byte(builder_id, 59u32) != 0i32 { return HTML_E_BUILD }
         }
         if b == 62u32 {        /* > */
-            builder_push_byte(builder_id, 38u32)
-            builder_push_byte(builder_id, 103u32)  /* g */
-            builder_push_byte(builder_id, 116u32)  /* t */
-            builder_push_byte(builder_id, 59u32)
+            if builder_push_byte(builder_id, 38u32) != 0i32 { return HTML_E_BUILD }
+            if builder_push_byte(builder_id, 103u32) != 0i32 { return HTML_E_BUILD }  /* g */
+            if builder_push_byte(builder_id, 116u32) != 0i32 { return HTML_E_BUILD }  /* t */
+            if builder_push_byte(builder_id, 59u32) != 0i32 { return HTML_E_BUILD }
         }
         if b == 34u32 {        /* " */
-            builder_push_byte(builder_id, 38u32)
-            builder_push_byte(builder_id, 113u32)  /* q */
-            builder_push_byte(builder_id, 117u32)  /* u */
-            builder_push_byte(builder_id, 111u32)  /* o */
-            builder_push_byte(builder_id, 116u32)  /* t */
-            builder_push_byte(builder_id, 59u32)
+            if builder_push_byte(builder_id, 38u32) != 0i32 { return HTML_E_BUILD }
+            if builder_push_byte(builder_id, 113u32) != 0i32 { return HTML_E_BUILD }  /* q */
+            if builder_push_byte(builder_id, 117u32) != 0i32 { return HTML_E_BUILD }  /* u */
+            if builder_push_byte(builder_id, 111u32) != 0i32 { return HTML_E_BUILD }  /* o */
+            if builder_push_byte(builder_id, 116u32) != 0i32 { return HTML_E_BUILD }  /* t */
+            if builder_push_byte(builder_id, 59u32) != 0i32 { return HTML_E_BUILD }
         }
         if b == 39u32 {        /* ' */
-            builder_push_byte(builder_id, 38u32)
-            builder_push_byte(builder_id, 35u32)   /* # */
-            builder_push_byte(builder_id, 51u32)   /* 3 */
-            builder_push_byte(builder_id, 57u32)   /* 9 */
-            builder_push_byte(builder_id, 59u32)
+            if builder_push_byte(builder_id, 38u32) != 0i32 { return HTML_E_BUILD }
+            if builder_push_byte(builder_id, 35u32) != 0i32 { return HTML_E_BUILD }   /* # */
+            if builder_push_byte(builder_id, 51u32) != 0i32 { return HTML_E_BUILD }   /* 3 */
+            if builder_push_byte(builder_id, 57u32) != 0i32 { return HTML_E_BUILD }   /* 9 */
+            if builder_push_byte(builder_id, 59u32) != 0i32 { return HTML_E_BUILD }
         }
         let mut handled : u8 = 0u8
         if b == 38u32 { handled = 1u8 }
@@ -64,7 +67,7 @@ fn html_escape(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
         if b == 34u32 { handled = 1u8 }
         if b == 39u32 { handled = 1u8 }
         if handled == 0u8 {
-            builder_push_byte(builder_id, b)
+            if builder_push_byte(builder_id, b) != 0i32 { return HTML_E_BUILD }
         }
         i = i + 1u64
     }
@@ -141,24 +144,41 @@ fn html_try_entity(src: *u8, src_len: u64, i: u64) -> u64 {
             }
         }
     }
+    /* &apos;  -- check src[i+1..i+6] = a,p,o,s,; (HTML5 named entity for ', as the
+     * module doc-comment promises; decodes to the same ' = 0x27 as &#39;). */
+    if i + 6u64 <= src_len {
+        if src[i + 1u64] == 97u8 {
+            if src[i + 2u64] == 112u8 {
+                if src[i + 3u64] == 111u8 {
+                    if src[i + 4u64] == 115u8 {
+                        if src[i + 5u64] == 59u8 {
+                            HTML_LAST_DECODED = 39u32
+                            return 6u64
+                        }
+                    }
+                }
+            }
+        }
+    }
     return 0u64
 }
 
 fn html_unescape(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
+    if src_len != 0u64 { if (src as u64) == 0u64 { return HTML_E_NULL } }
     let mut i : u64 = 0u64
     while i < src_len {
         let b : u32 = src[i] as u32
         if b == 38u32 {
             let consumed : u64 = html_try_entity(src, src_len, i)
             if consumed > 0u64 {
-                builder_push_byte(builder_id, HTML_LAST_DECODED)
+                if builder_push_byte(builder_id, HTML_LAST_DECODED) != 0i32 { return HTML_E_BUILD }
                 i = i + consumed
             } else {
-                builder_push_byte(builder_id, 38u32)
+                if builder_push_byte(builder_id, 38u32) != 0i32 { return HTML_E_BUILD }
                 i = i + 1u64
             }
         } else {
-            builder_push_byte(builder_id, b)
+            if builder_push_byte(builder_id, b) != 0i32 { return HTML_E_BUILD }
             i = i + 1u64
         }
     }

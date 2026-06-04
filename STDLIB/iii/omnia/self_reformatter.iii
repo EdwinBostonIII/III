@@ -144,8 +144,8 @@ fn _sr_build_rationale(pid_a: u32, pid_b: u32) -> u32 {
     SR_RATIONALE[12] = 83u8   /* S */
     SR_RATIONALE[13] = 69u8   /* E */
     SR_RATIONALE[14] = 95u8   /* _ */
-    /* pid_a as decimal in bytes 15..23 (up to 8 digits). */
-    let mut idx : u32 = 23u32
+    /* pid_a as decimal in bytes 15..22 (up to 8 digits); the '_' separator owns byte 23. */
+    let mut idx : u32 = 22u32
     let mut va  : u32 = pid_a
     while va > 0u32 {
         if idx >= 15u32 {

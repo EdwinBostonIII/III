@@ -1,0 +1,33 @@
+/* 1076 -- tempora::instant instant_diff_ticks coverage (gap-backlog #38).
+ * later-earlier tick delta with an underflow guard.  Throwaway mints advance the logical
+ * tick so B is STRICTLY later than A (non-vacuous > 0).  Arms: normal (==tb-ta, >0),
+ * underflow (earlier passed as later -> 0), invalid slot -> 0.  99 = pass.
+ */
+module corpus_1076
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent: u64, mask: u64, exp: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn instant_now_sealed(cap: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_tick(id: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_diff_ticks(later: u64, earlier: u64) -> u64 from "instant.iii"
+extern @abi(c-msvc-x64) fn instant_drop(id: u64) -> i32 from "instant.iii"
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let tc : u64 = cap_attenuate(env, 0x100u64, 0u64)
+    let a : u64 = instant_now_sealed(tc)
+    if a == 0u64 { return 1u64 }
+    let t1 : u64 = instant_now_sealed(tc)  instant_drop(t1)   /* advance logical tick */
+    let t2 : u64 = instant_now_sealed(tc)  instant_drop(t2)
+    let b : u64 = instant_now_sealed(tc)
+    if b == 0u64 { return 2u64 }
+    let ta : u64 = instant_tick(a)
+    let tb : u64 = instant_tick(b)
+    if instant_diff_ticks(b, a) != (tb - ta) { return 3u64 }   /* definitional */
+    if instant_diff_ticks(b, a) == 0u64 { return 4u64 }        /* non-vacuous: B strictly later */
+    if instant_diff_ticks(a, b) != 0u64 { return 5u64 }        /* underflow guard */
+    if instant_diff_ticks(0xdeadu64, a) != 0u64 { return 6u64 } /* invalid slot */
+    instant_drop(a)
+    instant_drop(b)
+    return 99u64
+}

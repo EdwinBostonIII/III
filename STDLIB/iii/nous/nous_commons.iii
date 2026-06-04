@@ -152,6 +152,7 @@ fn nous_deposit(key32: *u8, outcome: u8, n_pairs: u32, budget: u32) -> i32 @expo
 /* Look up by key.  Returns 1 (hit) + outcome/frontier iff the entry's certificate
  * re-verifies; 0 (miss) on absent OR corrupt (re-verification failure). */
 fn nous_lookup(key32: *u8, out_outcome: *u8, out_n: *u32, out_b: *u32) -> u8 @export {
+    if (key32 as u64) == 0u64 { return 0u8 }    /* [null-deref] _cmn_find reads 32 bytes of key32 (output params are already guarded below) */
     let found : u32 = _cmn_find(key32)
     if found == NOUS_CMN_SENT { return 0u8 }
     if _cmn_verify(found) != 1u8 { return 0u8 }
@@ -170,7 +171,9 @@ fn nous_gap_resume(slot: u32, more_budget: u32) -> u8 @export {
     let sb : u64 = (slot as u64) & NOUS_CMN_U32MASK
     if NOUS_CMN_OUTCOME[sb] != NOUS_CMN_GAP { return NOUS_CMN_OUTCOME[sb] }
     let n : u32 = NOUS_CMN_RES_N[sb]
-    let newb : u32 = NOUS_CMN_RES_B[sb] + more_budget
+    let newb64 : u64 = (NOUS_CMN_RES_B[sb] as u64) + (more_budget as u64)
+    if newb64 > 0xFFFFFFFFu64 { return NOUS_CMN_REFUTED }    /* [overflow] caller-supplied more_budget must not wrap the u32 budget to a tiny value */
+    let newb : u32 = newb64 as u32
     let oc : u8 = nous_complete(n, newb, 0u8)
     NOUS_CMN_OUTCOME[sb] = oc
     NOUS_CMN_RES_B[sb] = newb

@@ -1,0 +1,47 @@
+/* 1072 -- omnia::list reject-arm coverage (gap-backlog #20).
+ *
+ * Closes node-pool exhaustion (LIST_E_FULL), empty list_pop_front/list_front (LIST_INVALID),
+ * and bad-id arms (LIST_E_BADID / LIST_INVALID).  FIFO order checked on the first drain.
+ * Equality compares only. 99 = pass.
+ */
+module corpus_1072
+
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn list_new(arena_id: u64, hard_max: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_push_back(id: u64, value: u64) -> i32 from "list.iii"
+extern @abi(c-msvc-x64) fn list_push_front(id: u64, value: u64) -> i32 from "list.iii"
+extern @abi(c-msvc-x64) fn list_pop_front(id: u64) -> u64 from "list.iii"
+extern @abi(c-msvc-x64) fn list_front(id: u64) -> u64 from "list.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+    if a == 0u64 { return 1u64 }
+    let l : u64 = list_new(a, 32u64)
+    if l == 0u64 { return 2u64 }
+
+    /* fill to capacity 32 */
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if list_push_back(l, i) != 0i32 { return 3u64 }
+        i = i + 1u64
+    }
+    /* 33rd -> LIST_E_FULL */
+    if list_push_back(l, 999u64) != -1i32 { return 4u64 }
+
+    /* bad-id arms */
+    if list_push_front(0u64, 5u64) != -3i32 { return 5u64 }                       /* LIST_E_BADID */
+    if list_pop_front(0u64) != 0xFFFFFFFFFFFFFFFFu64 { return 6u64 }               /* LIST_INVALID */
+
+    /* drain: FIFO -> first pop is 0, all 32 pops valid */
+    if list_pop_front(l) != 0u64 { return 7u64 }                                  /* FIFO front */
+    let mut k : u64 = 1u64
+    while k < 32u64 {
+        if list_pop_front(l) == 0xFFFFFFFFFFFFFFFFu64 { return 8u64 }
+        k = k + 1u64
+    }
+    /* now empty: pop_front + front -> LIST_INVALID */
+    if list_pop_front(l) != 0xFFFFFFFFFFFFFFFFu64 { return 9u64 }
+    if list_front(l) != 0xFFFFFFFFFFFFFFFFu64 { return 10u64 }
+
+    return 99u64
+}

@@ -67,7 +67,6 @@ const HIPN_ROLE_INSTRUMENT  : u32 =  6u32
 const HIPN_ROLE_LOCATION    : u32 =  7u32
 const HIPN_ROLE_BENEFICIARY : u32 =  8u32
 const HIPN_ROLE_OF          : u32 =  9u32
-const HIPN_ROLE_TOPIC       : u32 = 10u32
 
 const HIPN_KIND_UNKNOWN       : u32 = 0u32
 const HIPN_KIND_IMPERATIVE    : u32 = 1u32

@@ -23,6 +23,10 @@ var ITER_POS  : [u64; 64]
 var ITER_LIVE : [u8;  64]
 
 fn iter_u8_new(base: u64, len: u64) -> u64 @export {
+    /* null base over a NON-empty span is unusable -- reject at construction (an empty span
+     * over null is fine: it never derefs).  Honest API: don't hand back a "valid" handle whose
+     * next() would silently return END.  (len==0 carve-out preserved.) */
+    if len != 0u64 { if base == 0u64 { return ITER_INVALID } }
     let mut i : u32 = 0u32
     let mut slot : u32 = 0xFFFFFFFFu32
     while i < ITER_MAX {
@@ -83,8 +87,8 @@ fn iter_u8_skip(id: u64, n: u64) -> u64 @export {
     if s == 0xFFFFFFFFu32 { return 0u64 }
     let pos : u64 = ITER_POS[s]
     let len : u64 = ITER_LEN[s]
-    let mut new_pos : u64 = pos + n
-    if new_pos > len { new_pos = len }
+    let mut new_pos : u64 = len                 /* clamp default; pos<=len invariant so len-pos is valid */
+    if n < len - pos { new_pos = pos + n }       /* overflow-safe: only add when pos+n stays <= len (a huge n else wraps past the >len clamp -> underflowing return) */
     ITER_POS[s] = new_pos
     return new_pos - pos
 }
@@ -107,6 +111,7 @@ fn iter_u8_drop(id: u64) -> u8 @export {
  * 0x100-sentinel API above (corpus 11/20). */
 
 fn iter__new<T>(base: u64, len: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32, i64) @export {
+    if len != 0u64 { if base == 0u64 { return ITER_INVALID } }   /* null base over a non-empty span -> reject (see iter_u8_new) */
     let mut i : u32 = 0u32
     let mut slot : u32 = 0xFFFFFFFFu32
     while i < ITER_MAX {
@@ -155,8 +160,8 @@ fn iter__skip<T>(id: u64, n: u64) -> u64 @specialize(u16, u32, u64, i8, i16, i32
     if s == 0xFFFFFFFFu32 { return 0u64 }
     let pos : u64 = ITER_POS[s]
     let len : u64 = ITER_LEN[s]
-    let mut new_pos : u64 = pos + n
-    if new_pos > len { new_pos = len }
+    let mut new_pos : u64 = len                 /* clamp default; pos<=len invariant so len-pos is valid */
+    if n < len - pos { new_pos = pos + n }       /* overflow-safe: only add when pos+n stays <= len (a huge n else wraps past the >len clamp -> underflowing return) */
     ITER_POS[s] = new_pos
     return new_pos - pos
 }

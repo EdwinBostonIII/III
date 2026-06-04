@@ -1,0 +1,31 @@
+/* 1078 -- aether::net capability deny-arms (gap-backlog #4).
+ * A capability WITHOUT net rights (0x02 read-only; no DIAL 0x20 / LISTEN 0x40) must make every
+ * net op refuse BEFORE touching winsock: connect/listen return 0, send/recv return NET_E_DENIED,
+ * accept returns 0.  Mirrors 387/687 but on the deny path. 99 = pass.
+ */
+module corpus_1078
+
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn net_tcp_connect_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
+extern @abi(c-msvc-x64) fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 from "handle.iii"
+
+var SADDR : [u8; 16]
+var BUF   : [u8; 8]
+
+fn main() -> u64 {
+    let env : u64 = cap_env_init()
+    let nocap : u64 = cap_attenuate(env, 0x02u64, 0xFFFFFFFFFFFFFFFFu64)   /* read-only; no net rights */
+    if net_tcp_connect_ipv4(nocap, (&SADDR) as u64, 16u32) != 0u64 { return 1u64 }   /* no DIAL */
+    if net_tcp_listen_ipv4(nocap, (&SADDR) as u64, 16u32) != 0u64 { return 2u64 }    /* no LISTEN */
+    let h : u64 = handle_alloc(1u8, 0u64, nocap)
+    if h == 0u64 { return 3u64 }
+    if net_tcp_send(h, (&BUF) as u64, 8u64) != -2i32 { return 4u64 }                  /* NET_E_DENIED */
+    if net_tcp_recv(h, (&BUF) as u64, 8u64) != -2i32 { return 5u64 }                  /* NET_E_DENIED */
+    if net_tcp_accept(h, nocap) != 0u64 { return 6u64 }                              /* no listen/accept */
+    return 99u64
+}

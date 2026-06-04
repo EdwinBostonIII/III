@@ -17,7 +17,8 @@
  *
  * Public surface:
  *   glyph_vec_form_id()                                                    -> u32 (0x30)
- *   glyph_vec_pack(elem_form_id, elem_count, elem_size, src_ptr, out_192)  -> i32
+ *   glyph_vec_pack_meta(elem_form_id, elem_count, elem_size)               -> u64
+ *   glyph_vec_pack(packed_meta, src_ptr, out_192)                          -> i32
  *   glyph_vec_unpack_count(in_192)                                         -> u32
  *   glyph_vec_unpack_elem_form_id(in_192)                                  -> u32
  *   glyph_vec_unpack_elements(in_192, dst_ptr, dst_cap_bytes)              -> i32

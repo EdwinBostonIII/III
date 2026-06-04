@@ -1,0 +1,44 @@
+/* 1057 -- numera::checked u64 side-table lifecycle (gap-backlog #15,#16).
+ *
+ * Closes: checked_u64_unwrap_or (side-table readback + none/bound guards) and
+ * checked_u64_drop (slot free + recycle).  Drives the full alloc/read/free/realloc
+ * cycle, the none-sentinel + out-of-range default arms, and the overflow->none path.
+ * Equality compares only. 99 = pass.
+ */
+module corpus_1057
+
+extern @abi(c-msvc-x64) fn checked_u64_mul(a: u64, b: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_unwrap_or(handle: u64, default: u64) -> u64 from "checked.iii"
+extern @abi(c-msvc-x64) fn checked_u64_drop(handle: u64) -> u8 from "checked.iii"
+
+fn main() -> u64 {
+    /* Mint a checked value (no overflow): 100*200 = 20000, first free slot -> handle 1. */
+    let h : u64 = checked_u64_mul(100u64, 200u64)
+    if h == 0u64 { return 1u64 }                                   /* not a none */
+    if checked_u64_unwrap_or(h, 0u64) != 20000u64 { return 2u64 }  /* side-table readback */
+
+    /* none-sentinel + out-of-range bound both yield the default. */
+    if checked_u64_unwrap_or(0u64, 7u64) != 7u64 { return 3u64 }   /* handle 0 -> default */
+    if checked_u64_unwrap_or(9999u64, 7u64) != 7u64 { return 4u64 } /* out-of-range -> default */
+
+    /* drop frees the slot and returns 1; post-drop unwrap yields the default (LIVE check). */
+    if checked_u64_drop(h) != 1u8 { return 5u64 }
+    if checked_u64_unwrap_or(h, 7u64) != 7u64 { return 6u64 }      /* freed slot -> default */
+
+    /* drop bad-id arms: null and out-of-range return 0. */
+    if checked_u64_drop(0u64) != 0u8 { return 7u64 }
+    if checked_u64_drop(9999u64) != 0u8 { return 8u64 }
+
+    /* Recycle: the next mint reuses the freed slot (same handle) with a fresh value. */
+    let h2 : u64 = checked_u64_mul(3u64, 4u64)
+    if h2 != h { return 9u64 }                                     /* slot recycled */
+    if checked_u64_unwrap_or(h2, 0u64) != 12u64 { return 10u64 }
+    checked_u64_drop(h2)
+
+    /* overflow -> none (handle 0), unwrap yields default. */
+    let ho : u64 = checked_u64_mul(0xFFFFFFFFFFFFFFFFu64, 2u64)
+    if ho != 0u64 { return 11u64 }
+    if checked_u64_unwrap_or(ho, 7u64) != 7u64 { return 12u64 }
+
+    return 99u64
+}

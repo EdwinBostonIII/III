@@ -122,55 +122,72 @@ fn http_resolve_id(id: u64) -> u32 {
 
 /* ----------- Request building helpers ----------- */
 
+/* The push helpers propagate builder_push_byte's rc (BLD_E_BADID/_SEALED/_OOM,
+ * all != HTTP_OK==0).  Previously they discarded it and hard-returned HTTP_OK, so
+ * a full/sealed/bad builder silently produced a MALFORMED request the caller
+ * believed was well-formed.  The builder is append-only, so a later push can never
+ * succeed after an earlier failure -- propagating the first non-OK rc is exact. */
 fn http_push_crlf(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 13u32)
-    builder_push_byte(builder_id, 10u32)
-    return HTTP_OK
+    let r0 : i32 = builder_push_byte(builder_id, 13u32)
+    if r0 != HTTP_OK { return r0 }
+    return builder_push_byte(builder_id, 10u32)
 }
 
 fn http_push_space(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 32u32)
-    return HTTP_OK
+    return builder_push_byte(builder_id, 32u32)
 }
 
 fn http_push_colon_space(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 58u32)
-    builder_push_byte(builder_id, 32u32)
-    return HTTP_OK
+    let r0 : i32 = builder_push_byte(builder_id, 58u32)
+    if r0 != HTTP_OK { return r0 }
+    return builder_push_byte(builder_id, 32u32)
 }
 
 fn http_push_http11_crlf(builder_id: u64) -> i32 {
-    builder_push_byte(builder_id, 32u32)   /* space */
-    builder_push_byte(builder_id, 72u32)   /* H */
-    builder_push_byte(builder_id, 84u32)   /* T */
-    builder_push_byte(builder_id, 84u32)   /* T */
-    builder_push_byte(builder_id, 80u32)   /* P */
-    builder_push_byte(builder_id, 47u32)   /* / */
-    builder_push_byte(builder_id, 49u32)   /* 1 */
-    builder_push_byte(builder_id, 46u32)   /* . */
-    builder_push_byte(builder_id, 49u32)   /* 1 */
-    builder_push_byte(builder_id, 13u32)   /* \r */
-    builder_push_byte(builder_id, 10u32)   /* \n */
-    return HTTP_OK
+    let mut rc : i32 = builder_push_byte(builder_id, 32u32)   /* space */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 72u32)   /* H */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 84u32)   /* T */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 84u32)   /* T */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 80u32)   /* P */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 47u32)   /* / */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 49u32)   /* 1 */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 46u32)   /* . */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 49u32)   /* 1 */
+    if rc != HTTP_OK { return rc }
+    rc = builder_push_byte(builder_id, 13u32)   /* \r */
+    if rc != HTTP_OK { return rc }
+    return builder_push_byte(builder_id, 10u32)   /* \n */
 }
 
 fn http_method(builder_id: u64, method_base: u64, method_len: u64) -> i32 @export {
-    builder_push_bytes(builder_id, method_base, method_len)
+    let rc : i32 = builder_push_bytes(builder_id, method_base, method_len)
+    if rc != HTTP_OK { return rc }
     return http_push_space(builder_id)
 }
 
 fn http_path(builder_id: u64, path_base: u64, path_len: u64) -> i32 @export {
-    builder_push_bytes(builder_id, path_base, path_len)
+    let rc : i32 = builder_push_bytes(builder_id, path_base, path_len)
+    if rc != HTTP_OK { return rc }
     return http_push_http11_crlf(builder_id)
 }
 
 fn http_header_name(builder_id: u64, name_base: u64, name_len: u64) -> i32 @export {
-    builder_push_bytes(builder_id, name_base, name_len)
+    let rc : i32 = builder_push_bytes(builder_id, name_base, name_len)
+    if rc != HTTP_OK { return rc }
     return http_push_colon_space(builder_id)
 }
 
 fn http_header_value(builder_id: u64, value_base: u64, value_len: u64) -> i32 @export {
-    builder_push_bytes(builder_id, value_base, value_len)
+    let rc : i32 = builder_push_bytes(builder_id, value_base, value_len)
+    if rc != HTTP_OK { return rc }
     return http_push_crlf(builder_id)
 }
 
@@ -446,7 +463,13 @@ fn http_parse_decimal_u64(base: u64, len: u64) -> u64 {
         if b < 48u32 { return 0xFFFFFFFFFFFFFFFFu64 }
         if b > 57u32 { return 0xFFFFFFFFFFFFFFFFu64 }
         let d : u64 = (b - 48u32) as u64
-        acc = acc * 10u64 + d
+        /* [overflow] two-stage guard: lone `> MAX/10` lets the exact boundary (2^64..2^64+3) wrap to 0..3
+         * instead of the sentinel. *10 then +d, reject on either wrap. */
+        if acc > 1844674407370955161u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+        let v10 : u64 = acc * 10u64
+        let nv  : u64 = v10 + d
+        if nv < v10 { return 0xFFFFFFFFFFFFFFFFu64 }
+        acc = nv
         i = i + 1u64
     }
     return acc

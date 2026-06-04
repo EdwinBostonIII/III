@@ -667,6 +667,7 @@ fn bm_verify_seal() -> u8 @export {
 /* Getter for the recorded corpus root. MARROW_E_NOSEAL if none recorded. Pure
  * read. */
 fn bm_seal_root(out_root: *u8) -> i32 @export {
+    if (out_root as u64) == 0u64 { return MARROW_E_BAD }
     if MARROW_SEAL_SET == 0u8 { return MARROW_E_NOSEAL }
     let rp : *u8 = (&MARROW_SEAL_ROOT as u64) as *u8
     ident_copy(rp, out_root)

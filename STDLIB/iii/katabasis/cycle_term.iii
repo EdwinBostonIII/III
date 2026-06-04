@@ -43,7 +43,7 @@ fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad:
     let tk  : u32 = target_kind
     let tgt : u64 = target
     let ah  : u32 = action_hexad
-    let sub : u32 = ((fam << 24u32) | (tk << 16u32)) | (ah & 0xFFFFu32)
+    let sub : u32 = (((fam & 0xFFu32) << 24u32) | ((tk & 0xFFu32) << 16u32)) | (ah & 0xFFFFu32)   /* [overflow] enforce the 8-bit family/target_kind packing invariant (extraction masks the same) -- a caller (e.g. the R3 IOCTL gate) passing tk>0xFF would otherwise collide into the family field */
     let act : u32 = xii_term_make_basis(KCT_KIND_ACT, sub)
     if act == KCT_NULL { return KCT_NULL }
     xii_term_set_aux(act, tgt)

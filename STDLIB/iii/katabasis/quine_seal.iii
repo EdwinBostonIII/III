@@ -1,0 +1,217 @@
+/* STDLIB/iii/katabasis/quine_seal.iii
+ *
+ * M23 -- the below-OS BEHAVIORAL quine-seal (III-APOTHEOSIS capability 11: "Attest its
+ * running self beneath the OS ... 'I am exactly this source and executed behavior' at Ring
+ * -1/-2").  The KATABASIS metal gate decides cycles (proven on metal 2026-05-23); this module
+ * lets the gate ALSO attest ITSELF below the OS.
+ *
+ * The measurement (ADR-M23-1, DOCS/III-M23-QUINE-SEAL-ARCH.md): cad(SHA-256) over the loaded
+ * driver's `.text` section.  Disassembly of gate_ioctl.sys proves `.text` carries ZERO base
+ * relocations (both .reloc blocks target .data only), so the executing `.text` bytes are
+ * byte-identical on disk and in memory on EVERY load (the NT loader fixes up only .idata/.data
+ * under ASLR) -- therefore cad(.text) is simultaneously (i) deterministic across loads and
+ * (ii) causally BOUND to the code the CPU actually runs.  An adversary who edits `.text`
+ * (to neuter the gate) changes this measurement; a fold of baked constants could not detect
+ * that (the rejected Fork A).  The anchor is EXTERNAL: the seed is cad(.text) computed at build
+ * time from the linked .sys, held by the challenger (gate_client / the corpus harness), never
+ * baked into the image it measures.  The "executed behavior" half is completed by
+ * triple-bit-identity (H12/cap-12): this source ⇒ this `.text` ⇒ this attestation.
+ *
+ * cg_r0-safe (Ring-0 closure module): dep = cad.iii only (-> sha256.iii, both in the gate
+ * closure); no witness_hook (no huge BSS); <=4-arg calls; 8-byte-uniform; ==/!= compares;
+ * module-scope scratch (Trap 7); masked idx.  Ring R0.  Hexad: kind_witness.  K 1.00.
+ */
+module katabasis_quine_seal
+
+extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot_packed_bp(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
+
+const KS_SUITE_SHA256 : u32 = 0u32       /* CAD_SUITE_SHA256 -- the one .iii backend */
+const KS_OK           : i32 = 0i32
+
+/* Baked PE LAYOUT of gate_ioctl.sys -- the RANGE of `.text`, never its content (so this is not
+ * the circular self-anchor of Fork A).  RVA is the standard first-section RVA.  LEN is the
+ * `.text` VirtualSize; it is rebaked from objdump after the driver is linked (two-pass: LEN is
+ * a .data constant, so changing it does not change `.text`'s size). */
+const KS_TEXT_RVA : u64 = 0x1000u64
+const KS_TEXT_LEN : u64 = 0x16000u64    /* gate_ioctl.sys .text size = .data_RVA(0x17000) - .text_RVA(0x1000) = full mapped .text, rebaked 2026-06-04 from the pass-1 link (was 0x14e00, stale: it measured only the first 0x14e00 of 0x16000); */
+                                        /* a movabs-immediate const, so its value does not change .text's size -> two-pass converges) */
+
+/* scratch (module scope; serialized R0/R-1 use; Trap 7: no function-local var arrays) */
+var KS_BUF_A : [u8; 64]      /* content-binding probe buffer A */
+var KS_BUF_B : [u8; 64]      /* content-binding probe buffer B (one byte flipped) */
+var KS_D1    : [u8; 32]      /* measurement sink 1 */
+var KS_D2    : [u8; 32]      /* measurement sink 2 */
+var KS_ABC   : [u8; 4]       /* the FIPS engine-check input "abc" */
+var KS_FIPS  : [u8; 32]      /* FIPS-180-2 SHA-256("abc") reference */
+var KS_PABC  : [u64; 1]      /* "abc" as a BYTE-PACKED u64 (0x636261) -- exercises the packed path */
+
+/* Measure [base, base+len): cad(SHA-256) -> out[0..32).  Propagate cad rc (CAD_E_NULL on NULL).
+ * Params spilled to locals first (cg_r0 param-spill guard; same idiom as seal.iii).
+ * PACKED read: the measured range is genuine BYTE-PACKED memory (a running .text image, raw bytes).
+ * Under cg_r0's 8-byte-uniform model the plain cad_oneshot would stride `*u8` by 8 and over-read 8x
+ * off the end of the image (BSOD 0x50 PAGE_FAULT, 2026-06-04 -- the .text measure walked to
+ * base+0x69000); cad_oneshot_packed reads the range as u64 words and feeds the real bytes, so the
+ * measurement is the byte-wise SHA-256 of the range, identical across cg_r0/cg_r3 and to a
+ * challenger computing it externally. */
+fn ks_measure(base: u64, len: u64, out: u64) -> i32 @export {
+    let b : u64 = base
+    let n : u64 = len
+    let o : u64 = out
+    return cad_oneshot_packed(KS_SUITE_SHA256, b as *u8, n, o as *u8)
+}
+
+/* Like ks_measure but BYTE-PACKED OUTPUT -- for a CROSS-BACKEND digest.  ks_measure's output goes
+ * through cad_oneshot_packed -> sha256_final, whose `out[i]=byte` strides by 8 under cg_r0, so a cg_r0
+ * driver's 32-byte G_ATTEST captured only digest[0..3] and a cg_r3 client reading it byte-packed saw
+ * {d0,0x7,d1,0x7,...} -> the M23 mismatch (2026-06-04).  cad_oneshot_packed_bp writes the digest with
+ * u64 stores (byte-packed on both backends).  ks_measure stays slotted for the cg_r0-internal selftest
+ * (ks_selftest's cad_eq reads the same slotted layout). */
+fn ks_measure_bp(base: u64, len: u64, out: u64) -> i32 @export {
+    let b : u64 = base
+    let n : u64 = len
+    let o : u64 = out
+    return cad_oneshot_packed_bp(KS_SUITE_SHA256, b as *u8, n, o as *u8)
+}
+
+/* Read one byte at `addr` from BYTE-PACKED memory (the running PE image / on-disk .sys), via the
+ * proven packed idiom: u64-read the 8-aligned word + constant-shift extract.  NOT `*u8` indexing,
+ * which strides by 8 under cg_r0 and over-reads (the BSOD class).  For parsing a PE header at runtime. */
+fn ks_rd_byte(addr: u64) -> u64 {
+    let a : u64 = addr & 0xFFFFFFFFFFFFFFF8u64
+    let w : u64 = (a as *u64)[0u64]
+    let k : u64 = addr & 7u64
+    if k == 0u64 { return w & 0xFFu64 }
+    if k == 1u64 { return (w >> 8u64)  & 0xFFu64 }
+    if k == 2u64 { return (w >> 16u64) & 0xFFu64 }
+    if k == 3u64 { return (w >> 24u64) & 0xFFu64 }
+    if k == 4u64 { return (w >> 32u64) & 0xFFu64 }
+    if k == 5u64 { return (w >> 40u64) & 0xFFu64 }
+    if k == 6u64 { return (w >> 48u64) & 0xFFu64 }
+    return (w >> 56u64) & 0xFFu64
+}
+fn ks_rd_u16(addr: u64) -> u64 { return ks_rd_byte(addr) | (ks_rd_byte(addr + 1u64) << 8u64) }
+fn ks_rd_u32(addr: u64) -> u64 { return ks_rd_byte(addr) | (ks_rd_byte(addr + 1u64) << 8u64) | (ks_rd_byte(addr + 2u64) << 16u64) | (ks_rd_byte(addr + 3u64) << 24u64) }
+
+/* The driver's OWN `.text` VirtualSize, parsed from its PE header at runtime (image_base =
+ * DriverObject.DriverStart).  WHY VirtualSize and NOT SizeOfRawData: a Ring-3 challenger reads the
+ * same field off the on-disk .sys and hashes [.text, +len].  Measuring VirtualSize hashes EXACTLY the
+ * reloc-free code (no `.text` base relocs / DVRT / IAT-in-.text -- a cg_r0 codegen invariant), which
+ * is byte-identical live<->file by construction.  SizeOfRawData would extend into the section tail
+ * [VirtualSize, SizeOfRawData], whose live bytes (loader copy/zero-fill) need NOT equal the on-disk
+ * padding -- a match only if that padding is zero, which is fragile.  Reading it live also retires the
+ * baked KS_TEXT_LEN that went stale whenever .text grew (0x14e00->0x16000->0x17600...).  Finds the
+ * section whose VirtualAddress == KS_TEXT_RVA; 0 if not found (then ks_self_measure falls back). */
+fn ks_text_size(image_base: u64) -> u64 {
+    let e_lfanew : u64 = ks_rd_u32(image_base + 0x3Cu64)
+    let pe : u64 = image_base + e_lfanew
+    let nsec : u64 = ks_rd_u16(pe + 6u64)
+    let optsize : u64 = ks_rd_u16(pe + 0x14u64)
+    let sectab : u64 = pe + 0x18u64 + optsize
+    let mut i : u64 = 0u64
+    while i < nsec {
+        let sh : u64 = sectab + i * 40u64
+        let va : u64 = ks_rd_u32(sh + 12u64)
+        if va == KS_TEXT_RVA { return ks_rd_u32(sh + 8u64) }
+        i = i + 1u64
+    }
+    return 0u64
+}
+
+/* Measure the RUNNING `.text` of the loaded image rooted at image_base (= DriverObject.DriverStart,
+ * the ASLR'd load base).  out[0..32) = cad(SHA-256, [image_base+KS_TEXT_RVA, +SizeOfRawData)).
+ * Length is read LIVE from the image's own PE (ks_text_size) so it matches a Ring-3 challenger that
+ * reads the same field; falls back to the baked KS_TEXT_LEN only if the PE parse fails.  BYTE-PACKED
+ * output (ks_measure_bp): G_ATTEST is read back by a Ring-3 client, so it must be the universal
+ * byte-packed digest, not cg_r0's slotted one. */
+fn ks_self_measure(image_base: u64, out: u64) -> i32 @export {
+    let ib : u64 = image_base
+    let o  : u64 = out
+    let t  : u64 = ib + KS_TEXT_RVA
+    let mut len : u64 = ks_text_size(ib)
+    if len == 0u64 { len = KS_TEXT_LEN }
+    return ks_measure_bp(t, len, o)
+}
+
+/* Attest [base,len) against an EXTERNALLY supplied 32-byte expected seed (the challenger holds it;
+ * it is NOT baked into the measured image).  1 = the running code matches the sealed seed. */
+fn ks_attest(base: u64, len: u64, expected: u64) -> u8 @export {
+    let b : u64 = base
+    let n : u64 = len
+    let e : u64 = expected
+    ks_measure(b, n, &KS_D1 as u64)
+    return cad_eq((&KS_D1 as u64) as *u8, e as *u8)
+}
+
+/* Load the FIPS-180-2 SHA-256("abc") reference digest into KS_FIPS. */
+fn ks_load_fips() -> i32 {
+    KS_FIPS[0u64]  = 0xBAu8   KS_FIPS[1u64]  = 0x78u8   KS_FIPS[2u64]  = 0x16u8   KS_FIPS[3u64]  = 0xBFu8
+    KS_FIPS[4u64]  = 0x8Fu8   KS_FIPS[5u64]  = 0x01u8   KS_FIPS[6u64]  = 0xCFu8   KS_FIPS[7u64]  = 0xEAu8
+    KS_FIPS[8u64]  = 0x41u8   KS_FIPS[9u64]  = 0x41u8   KS_FIPS[10u64] = 0x40u8   KS_FIPS[11u64] = 0xDEu8
+    KS_FIPS[12u64] = 0x5Du8   KS_FIPS[13u64] = 0xAEu8   KS_FIPS[14u64] = 0x22u8   KS_FIPS[15u64] = 0x23u8
+    KS_FIPS[16u64] = 0xB0u8   KS_FIPS[17u64] = 0x03u8   KS_FIPS[18u64] = 0x61u8   KS_FIPS[19u64] = 0xA3u8
+    KS_FIPS[20u64] = 0x96u8   KS_FIPS[21u64] = 0x17u8   KS_FIPS[22u64] = 0x7Au8   KS_FIPS[23u64] = 0x9Cu8
+    KS_FIPS[24u64] = 0xB4u8   KS_FIPS[25u64] = 0x10u8   KS_FIPS[26u64] = 0xFFu8   KS_FIPS[27u64] = 0x61u8
+    KS_FIPS[28u64] = 0xF2u8   KS_FIPS[29u64] = 0x00u8   KS_FIPS[30u64] = 0x15u8   KS_FIPS[31u64] = 0xADu8
+    return KS_OK
+}
+
+/* The sealed hasher actually computes the FIPS vector BELOW THE OS: cad("abc") == FIPS-180-2.
+ * 1 = the engine the whole attestation rests on is real (not a stub) at Ring 0. */
+fn ks_engine_ok() -> u8 @export {
+    ks_load_fips()
+    KS_ABC[0u64] = 0x61u8   KS_ABC[1u64] = 0x62u8   KS_ABC[2u64] = 0x63u8
+    cad_oneshot(KS_SUITE_SHA256, (&KS_ABC as u64) as *u8, 3u64, (&KS_D1 as u64) as *u8)
+    return cad_eq((&KS_D1 as u64) as *u8, (&KS_FIPS as u64) as *u8)
+}
+
+/* KAT: 99 = all pass; a distinct small code at each failed check (diagnosable).
+ * Proves the MEASUREMENT logic the kernel runs, in user mode (the metal load is operator-gated):
+ *   (1) reproducible: the same bytes measured twice give the SAME 32-byte measurement;
+ *   (2) BINDS TO CONTENT -- the prove-the-negative: flip ONE byte and the measurement DIFFERS
+ *       (a measurement that ignored its input would tie here; folding baked constants could not
+ *       show this -- this is exactly why Fork A was rejected);
+ *   (3) the sealed engine is real below the OS: cad("abc") == the FIPS-180-2 vector;
+ *   (4) ks_attest accepts the matching external seed (KS_D1) and REJECTS a one-byte-different seed
+ *       (KS_D2) -- attest-by-report against an EXTERNAL anchor, both arms. */
+fn ks_selftest() -> u64 @export {
+    let mut i : u64 = 0u64
+    while i < 64u64 { KS_BUF_A[i] = (i & 0xFFu64) as u8  KS_BUF_B[i] = (i & 0xFFu64) as u8  i = i + 1u64 }
+    /* (1) reproducible */
+    ks_measure((&KS_BUF_A as u64), 64u64, (&KS_D1 as u64))
+    ks_measure((&KS_BUF_A as u64), 64u64, (&KS_D2 as u64))
+    if cad_eq((&KS_D1 as u64) as *u8, (&KS_D2 as u64) as *u8) != 1u8 { return 1u64 }
+    /* (2) binds to content: flip one byte of B, re-measure -> DIFFERENT */
+    KS_BUF_B[7u64] = (KS_BUF_B[7u64] ^ 0x01u8)
+    ks_measure((&KS_BUF_B as u64), 64u64, (&KS_D2 as u64))
+    if cad_eq((&KS_D1 as u64) as *u8, (&KS_D2 as u64) as *u8) != 0u8 { return 2u64 }
+    /* (3) engine real below the OS */
+    if ks_engine_ok() != 1u8 { return 3u64 }
+    /* (4) attest-by-report POSITIVE vs an EXTERNAL seed.  The seed MUST live in a buffer DISTINCT
+     * from ks_attest's internal KS_D1 scratch -- passing &KS_D1 would make the compare
+     * cad_eq(KS_D1, KS_D1) tautologically 1 (a vacuous green).  Pre-compute BUF_A's seed into KS_D2,
+     * then attest BUF_A against that external seed -> genuine match. */
+    ks_measure((&KS_BUF_A as u64), 64u64, (&KS_D2 as u64))
+    if ks_attest((&KS_BUF_A as u64), 64u64, (&KS_D2 as u64)) != 1u8 { return 4u64 }
+    /* (5) attest-by-report NEGATIVE: attest BUF_A against BUF_B's DIFFERENT seed (recomputed into
+     * KS_D2) -> reject (0).  Together (4)+(5) prove ks_attest binds the report to the external seed. */
+    ks_measure((&KS_BUF_B as u64), 64u64, (&KS_D2 as u64))
+    if ks_attest((&KS_BUF_A as u64), 64u64, (&KS_D2 as u64)) != 0u8 { return 5u64 }
+    /* (6) the PACKED hash path -- the one ks_self_measure uses on the BYTE-PACKED running .text --
+     * reproduces FIPS on byte-packed input.  This is the check the original KAT lacked: it measured
+     * only a SLOTTED [u8;64] buffer, so cg_r0's *8-stride over-read on byte-packed data stayed
+     * invisible until the metal .text self-measure walked off the image (BSOD 0x50, 2026-06-04).
+     * KS_FIPS is already loaded by check (3)'s ks_engine_ok above. */
+    KS_PABC[0u64] = 0x636261u64   /* 'a','b','c' little-endian-packed into one u64 */
+    cad_oneshot_packed(KS_SUITE_SHA256, (&KS_PABC as u64) as *u8, 3u64, (&KS_D1 as u64) as *u8)
+    if cad_eq((&KS_D1 as u64) as *u8, (&KS_FIPS as u64) as *u8) != 1u8 { return 6u64 }
+    return 99u64
+}
+
+/* quine_seal EMBODIES capability 11 below the OS: it measures the RUNNING `.text` (relocation-free,
+ * so load-invariant AND bound to executing code) with the gate's own sealed hasher, and attests it
+ * against an EXTERNAL seed -- so a tampered self is caught and the anchor is not in the thing it
+ * measures.  With triple-bit-identity (H12) closing source ⇒ binary, this is the full chain
+ * "I am exactly this source and executed behavior," now runnable beneath the operating system. */

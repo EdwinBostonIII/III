@@ -667,6 +667,7 @@ fn gb_reduce_find(basis: *u32, basis_n: u32) -> u32 {
 // Status of the last gb_reduce_step (the slot-returning convention can't
 // also carry the OK/INV/FULL distinction, so it travels here).
 var GROEBNER_RS_STATUS : i32 = 0i32
+var GROEBNER_SPOLY_STATUS : i32 = 0i32   /* gb_spoly failure reason: NOSESS/BAD/INV/FULL, mirrors GROEBNER_RS_STATUS */
 
 // One reduction step against basis element g: returns a FRESH poly equal to
 // work - factor*x^d*g where factor = lc(work) * inv(lc(g)) and d = LT(work)
@@ -755,9 +756,9 @@ fn gb_reduce(target: u32, basis: *u32, basis_n: u32) -> u32 @export {
 // the two leading monomials, each part scaled monic.  Cancels the leading
 // terms.  Fresh result slot (caller owns), or SENT.  Uses GROEBNER_SP_*.
 fn gb_spoly(f: u32, g: u32) -> u32 @export {
-    if GROEBNER_SESS != 1u8 { return GROEBNER_SENT }
-    if gb_is_zero(f) == 1u8 { return GROEBNER_SENT }
-    if gb_is_zero(g) == 1u8 { return GROEBNER_SENT }
+    if GROEBNER_SESS != 1u8 { GROEBNER_SPOLY_STATUS = GROEBNER_E_NOSESS ; return GROEBNER_SENT }
+    if gb_is_zero(f) == 1u8 { GROEBNER_SPOLY_STATUS = GROEBNER_E_BAD ; return GROEBNER_SENT }
+    if gb_is_zero(g) == 1u8 { GROEBNER_SPOLY_STATUS = GROEBNER_E_BAD ; return GROEBNER_SENT }
     let arena : u64 = GROEBNER_ARENA
     let p : u64 = GROEBNER_MOD_P
     let nv : u32 = GROEBNER_NVARS
@@ -788,19 +789,20 @@ fn gb_spoly(f: u32, g: u32) -> u32 @export {
     let fc : u64 = GROEBNER_TERM_COEFF[fst]
     let gc : u64 = GROEBNER_TERM_COEFF[gst]
     let finv : u64 = gfp_inv(arena, fc, p)
-    if finv == 0u64 { return GROEBNER_SENT }
+    if finv == 0u64 { GROEBNER_SPOLY_STATUS = GROEBNER_E_INV ; return GROEBNER_SENT }
     let ginv : u64 = gfp_inv(arena, gc, p)
-    if ginv == 0u64 { bigint_drop(finv) ; return GROEBNER_SENT }
+    if ginv == 0u64 { bigint_drop(finv) ; GROEBNER_SPOLY_STATUS = GROEBNER_E_INV ; return GROEBNER_SENT }
     let part_f : u32 = gb_mul_term(f, finv, df)
     bigint_drop(finv)
-    if part_f == GROEBNER_SENT { bigint_drop(ginv) ; return GROEBNER_SENT }
+    if part_f == GROEBNER_SENT { bigint_drop(ginv) ; GROEBNER_SPOLY_STATUS = GROEBNER_E_FULL ; return GROEBNER_SENT }
     let part_g : u32 = gb_mul_term(g, ginv, dg)
     bigint_drop(ginv)
-    if part_g == GROEBNER_SENT { gb_drop_poly(part_f) ; return GROEBNER_SENT }
+    if part_g == GROEBNER_SENT { gb_drop_poly(part_f) ; GROEBNER_SPOLY_STATUS = GROEBNER_E_FULL ; return GROEBNER_SENT }
     let out : u32 = gb_sub_new(part_f, part_g)
     gb_drop_poly(part_g)
     gb_drop_poly(part_f)
-    if out == GROEBNER_SENT { return GROEBNER_SENT }
+    if out == GROEBNER_SENT { GROEBNER_SPOLY_STATUS = GROEBNER_E_FULL ; return GROEBNER_SENT }
+    GROEBNER_SPOLY_STATUS = GROEBNER_OK
     return out
 }
 
@@ -1038,7 +1040,7 @@ fn gb_buch_step(bptr: *u32, ix: u32, jx: u32) -> i32 {
     let gpoly : u32 = bptr[(jx as u64) & GROEBNER_U32MASK]
     if gb_disjoint_supports(fpoly, gpoly) == 1u8 { return GROEBNER_OK }
     let s : u32 = gb_spoly(fpoly, gpoly)
-    if s == GROEBNER_SENT { return GROEBNER_E_INV }
+    if s == GROEBNER_SENT { return GROEBNER_SPOLY_STATUS }   /* faithful: E_FULL (storage) vs E_INV (field) vs E_BAD/NOSESS, not a blanket E_INV */
     let r : u32 = gb_reduce(s, bptr, bn)
     gb_drop_poly(s)
     if r == GROEBNER_SENT { return GROEBNER_E_FULL }

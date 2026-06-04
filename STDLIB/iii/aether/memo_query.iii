@@ -149,7 +149,10 @@ fn mq_compute_key(producer: *u8, operation: *u8, input_commit: *u8, out_key: *u8
  *   4) Distinguish lattice outcome with == only (Trap3/W11):
  *       rc == MQ_ML_OK -> proceed; rc == MQ_ML_E_STALE -> MQ_E_STALE;
  *       else -> MQ_E_ABSENT.
- *   5) ws_verify_segment(out_chain_id) != 0i32 -> MQ_E_VERIFY_FAIL (W36).
+ *   5) ws_lookup_id(out_chain_id) != 0i32 -> MQ_E_VERIFY_FAIL (W36): the
+ *      content-addressed chain id MUST resolve to a witness-spine entry -- a spine
+ *      hit on a content-hash id IS the anchor/integrity check.  (There is no separate
+ *      ws_verify_segment primitive; ws_lookup_id is the spine's verification API.)
  *   6) k = kp[0u64]; k < MQ_MIN_K -> MQ_E_LOW_CONF (u8 ordering, safe; M17/W50).
  *   7) Emit MEMO_QUERY_VERIFIED witness fragment (M6/M10):
  *       tag[0]=0xE3 tag[1]=0x10; key->bytes[8..40); out_chain_id->bytes[40..72).

@@ -1,0 +1,67 @@
+/* 1062 -- verba::string untested-export coverage (gap-backlog #92).
+ *
+ * Closes: str_find (hit/miss/needle-longer), str_contains, str_byte_cmp, str_rune_count
+ * (multi-byte + invalid->U64_MAX), str_is_valid_utf8, str_hash_fnv1a (known vectors).
+ *
+ * CRITICAL: str_byte_cmp's i32 result is asserted with == / != ONLY, never ordering --
+ * iiis compiles i32 < <= > >= as UNSIGNED, so `-1i32 < 0i32` is FALSE and an ordering
+ * assert would silently pass a broken impl (documented trap). 99 = pass.
+ */
+module corpus_1062
+
+extern @abi(c-msvc-x64) fn str_find(haystack: u64, h_len: u64, needle: u64, n_len: u64) -> u64 from "string.iii"
+extern @abi(c-msvc-x64) fn str_contains(haystack: u64, h_len: u64, needle: u64, n_len: u64) -> u8 from "string.iii"
+extern @abi(c-msvc-x64) fn str_byte_cmp(a: u64, a_len: u64, b: u64, b_len: u64) -> i32 from "string.iii"
+extern @abi(c-msvc-x64) fn str_rune_count(base: u64, len: u64) -> u64 from "string.iii"
+extern @abi(c-msvc-x64) fn str_is_valid_utf8(base: u64, len: u64) -> u8 from "string.iii"
+extern @abi(c-msvc-x64) fn str_hash_fnv1a(base: u64, len: u64) -> u64 from "string.iii"
+
+var H      : [u8; 11] = [104u8,101u8,108u8,108u8,111u8,32u8,119u8,111u8,114u8,108u8,100u8]  /* "hello world" */
+var NW     : [u8; 5]  = [119u8,111u8,114u8,108u8,100u8]                                       /* "world" */
+var NX     : [u8; 3]  = [120u8,121u8,122u8]                                                   /* "xyz" */
+var SA     : [u8; 3]  = [97u8,98u8,99u8]                                                      /* "abc" */
+var SD     : [u8; 3]  = [97u8,98u8,100u8]                                                     /* "abd" */
+var SAB    : [u8; 2]  = [97u8,98u8]                                                           /* "ab" */
+var UTF    : [u8; 2]  = [195u8,169u8]                                                         /* "é" (1 rune) */
+var BAD    : [u8; 2]  = [255u8,65u8]                                                          /* invalid lead */
+var STR_A  : [u8; 1]  = [97u8]                                                                /* "a" */
+var FOOBAR : [u8; 6]  = [102u8,111u8,111u8,98u8,97u8,114u8]                                   /* "foobar" */
+
+fn main() -> u64 {
+    let h : u64 = (&H) as u64
+    let nw : u64 = (&NW) as u64
+    let nx : u64 = (&NX) as u64
+    let sa : u64 = (&SA) as u64
+    let sd : u64 = (&SD) as u64
+    let sab : u64 = (&SAB) as u64
+
+    /* --- str_find --- */
+    if str_find(h, 11u64, nw, 5u64) != 6u64 { return 1u64 }            /* hit at offset 6 */
+    if str_find(h, 11u64, nx, 3u64) != 11u64 { return 2u64 }           /* miss -> h_len */
+    if str_find(nx, 3u64, h, 11u64) != 3u64 { return 3u64 }            /* needle longer -> h_len */
+
+    /* --- str_contains --- */
+    if str_contains(h, 11u64, nw, 5u64) != 1u8 { return 4u64 }
+    if str_contains(h, 11u64, nx, 3u64) != 0u8 { return 5u64 }
+
+    /* --- str_byte_cmp (EQUALITY asserts only) --- */
+    if str_byte_cmp(sa, 3u64, sd, 3u64) != -1i32 { return 6u64 }       /* "abc" < "abd" */
+    if str_byte_cmp(sd, 3u64, sa, 3u64) != 1i32 { return 7u64 }        /* "abd" > "abc" */
+    if str_byte_cmp(sa, 3u64, sa, 3u64) != 0i32 { return 8u64 }        /* equal */
+    if str_byte_cmp(sab, 2u64, sa, 3u64) != -1i32 { return 9u64 }      /* "ab" shorter -> -1 */
+
+    /* --- str_rune_count --- */
+    if str_rune_count(sa, 3u64) != 3u64 { return 10u64 }               /* 3 ASCII runes */
+    if str_rune_count((&UTF) as u64, 2u64) != 1u64 { return 11u64 }    /* one 2-byte rune */
+    if str_rune_count((&BAD) as u64, 2u64) != 0xFFFFFFFFFFFFFFFFu64 { return 12u64 }  /* invalid -> U64_MAX */
+
+    /* --- str_is_valid_utf8 --- */
+    if str_is_valid_utf8(sa, 3u64) != 1u8 { return 13u64 }
+    if str_is_valid_utf8((&BAD) as u64, 2u64) != 0u8 { return 14u64 }
+
+    /* --- str_hash_fnv1a (canonical FNV-1a 64 vectors) --- */
+    if str_hash_fnv1a((&STR_A) as u64, 1u64) != 0xaf63dc4c8601ec8cu64 { return 15u64 }
+    if str_hash_fnv1a((&FOOBAR) as u64, 6u64) != 0x85944171f73967e8u64 { return 16u64 }
+
+    return 99u64
+}

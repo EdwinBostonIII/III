@@ -1,0 +1,82 @@
+/* 1021 -- C.10 CP-1 guard: the IOCTL METHOD_BUFFERED buffer-length validator
+ * (gate_driver.iii :: gate_validated_code) PROVEN to fail-closed on adversarial input.
+ *
+ * The 2026-05-23 metal PASS never exercised a short/NULL buffer (the happy-path client
+ * always sized buffers correctly), so CRASH PROTOCOL demands an explicit adversarial
+ * proof that the guard rejects an under-sized METHOD_BUFFERED request BEFORE any branch
+ * dereferences SystemBuffer -- otherwise a malicious R3 caller drives a pool OOB / NULL
+ * deref (delayed BSOD 0x19 / 0xC2).  This is the userspace LOGIC proof; the cg_r0 BINARY
+ * of the real guard is independently disasm-verified (full-width `test %rax,%rax` null
+ * check + 64-bit length compares -- no 16-bit `test ax,ax` trap).
+ *
+ * vc_* faithfully replicate gate_driver.iii:50-89 (the accessors read stk[1]=OutputBufferLength,
+ * stk[2]=InputBufferLength; the validator's need-table + NULL + length gates).  The guard
+ * NEVER dereferences `buf` (only compares it to 0), so a fake non-null pointer is safe.
+ * 99 = every adversarial reject + every valid admit behaves correctly.
+ */
+module corpus_1092_gate_cp1_guard
+
+/* fake IO_STACK_LOCATION accessors (identical widths/offsets to gate_driver.iii) */
+fn vc_out_len(stk: u64) -> u64 { return (stk as *u64)[1u64] & 0xFFFFFFFFu64 }
+fn vc_in_len(stk: u64) -> u64 { return (stk as *u64)[2u64] & 0xFFFFFFFFu64 }
+
+/* faithful replica of gate_validated_code: returns `code` iff buf non-NULL AND the
+ * lengths meet that IOCTL's footprint; 0 (-> STATUS_BUFFER_TOO_SMALL) for a known IOCTL
+ * with a NULL/short buffer; unknown codes pass through (no branch -> INVALID_DEVICE_REQUEST). */
+fn vc_validated_code(stk: u64, buf: u64, code: u32) -> u32 {
+    let mut need_out : u64 = 0u64
+    let mut need_in  : u64 = 0u64
+    if code == 0x222000u32 { need_out = 8u64 ; need_in = 48u64 }   /* ADMIT: 6xu64 in, 1xu64 out */
+    if code == 0x222004u32 { need_out = 32u64 }                    /* SVM_PROBE: 4xu64 out */
+    if code == 0x222008u32 { need_out = 32u64 }                    /* ATTEST: 32-byte out */
+    if need_out == 0u64 { return code }
+    if buf == 0u64 { return 0u32 }
+    if vc_out_len(stk) < need_out { return 0u32 }
+    if vc_in_len(stk) < need_in { return 0u32 }
+    return code
+}
+
+var STK : [u64; 4]
+
+fn main() -> u64 {
+    let buf : u64 = 0x40000u64   /* a non-null fake SystemBuffer (never dereferenced) */
+
+    /* (1) ADMIT correctly sized (out>=8, in>=48) -> ADMIT */
+    STK[1u64] = 8u64 ; STK[2u64] = 48u64
+    if vc_validated_code((&STK) as u64, buf, 0x222000u32) != 0x222000u32 { return 1u64 }
+
+    /* (2) ADMIT with a NULL SystemBuffer -> REJECT (the core fail-closed) */
+    if vc_validated_code((&STK) as u64, 0u64, 0x222000u32) != 0u32 { return 2u64 }
+
+    /* (3) ADMIT short OUTPUT (out=4 < 8) -> REJECT */
+    STK[1u64] = 4u64 ; STK[2u64] = 48u64
+    if vc_validated_code((&STK) as u64, buf, 0x222000u32) != 0u32 { return 3u64 }
+
+    /* (4) ADMIT short INPUT (in=40 < 48) -> REJECT */
+    STK[1u64] = 8u64 ; STK[2u64] = 40u64
+    if vc_validated_code((&STK) as u64, buf, 0x222000u32) != 0u32 { return 4u64 }
+
+    /* (5) ADMIT exact boundary (out=8, in=48) -> ADMIT (off-by-one guard) */
+    STK[1u64] = 8u64 ; STK[2u64] = 48u64
+    if vc_validated_code((&STK) as u64, buf, 0x222000u32) != 0x222000u32 { return 5u64 }
+
+    /* (6) SVM_PROBE (0x222004) out>=32 -> ADMIT */
+    STK[1u64] = 32u64 ; STK[2u64] = 0u64
+    if vc_validated_code((&STK) as u64, buf, 0x222004u32) != 0x222004u32 { return 6u64 }
+
+    /* (7) SVM_PROBE short out (16 < 32) -> REJECT */
+    STK[1u64] = 16u64 ; STK[2u64] = 0u64
+    if vc_validated_code((&STK) as u64, buf, 0x222004u32) != 0u32 { return 7u64 }
+
+    /* (8) unknown code -> pass through (no branch -> INVALID_DEVICE_REQUEST, buf untouched) */
+    STK[1u64] = 0u64 ; STK[2u64] = 0u64
+    if vc_validated_code((&STK) as u64, buf, 0xDEADBEEFu32) != 0xDEADBEEFu32 { return 8u64 }
+
+    /* (9) NULL-WIDTH ADVERSARIAL: a NON-null pointer whose low 16 bits are zero (0x10000).
+     *     A 16-bit `test ax,ax` null check would WRONGLY reject it; the full-width check
+     *     (disasm-confirmed in the real cg_r0 guard) admits it. */
+    STK[1u64] = 8u64 ; STK[2u64] = 48u64
+    if vc_validated_code((&STK) as u64, 0x10000u64, 0x222000u32) != 0x222000u32 { return 9u64 }
+
+    return 99u64
+}

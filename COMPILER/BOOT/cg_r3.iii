@@ -421,6 +421,12 @@ var R3_CMT_DYN_STUB : [u8; 50] = [32u8,32u8,32u8,32u8,35u8,32u8,73u8,73u8,73u8,9
 const R3_CMT_DYN_STUB_LEN : u64 = 50u64
 var R3_STR_MOVABSQ_DEC : [u8; 13] = [32u8,32u8,32u8,32u8,109u8,111u8,118u8,97u8,98u8,115u8,113u8,32u8,36u8]
 const R3_STR_MOVABSQ_DEC_LEN : u64 = 13u64
+/* strength-reduction (mul-by-2^k -> shift): "    shlq $" then dec(k) then ", %rax\n".  Dual-implemented
+ * byte-identically in cg_r3.c (mul_pow2_k / emit_shlq_imm) so iiis-0 == iiis-2 holds unconditionally. */
+var R3_STR_SHLQ_DOLLAR : [u8; 10] = [32u8,32u8,32u8,32u8,115u8,104u8,108u8,113u8,32u8,36u8]
+const R3_STR_SHLQ_DOLLAR_LEN : u64 = 10u64
+var R3_STR_CM_RAX_NL : [u8; 7] = [44u8,32u8,37u8,114u8,97u8,120u8,10u8]
+const R3_STR_CM_RAX_NL_LEN : u64 = 7u64
 /* R3_STR_COMMA_RCX_NL — already defined at line 303 */
 var R3_STR_MOVL_DOLR : [u8; 10] = [32u8,32u8,32u8,32u8,109u8,111u8,118u8,108u8,32u8,36u8]
 const R3_STR_MOVL_DOLR_LEN : u64 = 10u64
@@ -828,6 +834,20 @@ fn r3_pop_rcx() -> u32 { r3_emit_arr(&R3_STR_POPRCX as u64, R3_STR_POPRCX_LEN); 
 fn r3_pop_rdx() -> u32 { r3_emit_arr(&R3_STR_POPRDX as u64, R3_STR_POPRDX_LEN); if R3_G_STACK_DEPTH > 0u32 { R3_G_STACK_DEPTH = R3_G_STACK_DEPTH - 1u32 }; return R3_OK }
 
 fn r3_emit_movabs_rax(v: u64) -> u32 { r3_emit_arr(&R3_STR_MOVABSQ_OPEN as u64, R3_STR_MOVABSQ_OPEN_LEN); r3_emit_hex(v); r3_emit_arr(&R3_STR_COMMA_RAX_NL as u64, R3_STR_COMMA_RAX_NL_LEN); return R3_OK }
+/* STRENGTH REDUCTION test: if op is MUL (3) and rhs is a constant integer literal equal to 2^k
+ * (k in 1..63), return k; else 0.  Kernel-justified (sov_isa: mul(x,2^k) == shl(x,k)); x*2^k == x<<k
+ * mod 2^64 for signed + unsigned, so the shift is byte-identical in RESULT to the imul. */
+fn r3_mul_pow2_k(op: u32, rhs: u32) -> u32 {
+    if op != 3u32 { return 0u32 }
+    if iii_ast_node_kind(R3_G_AST, rhs) != R3_K_EXPR_INT { return 0u32 }
+    let v: u64 = iii_ast_expr_int_u64(R3_G_AST, rhs)
+    if v < 2u64 { return 0u32 }
+    if (v & (v - 1u64)) != 0u64 { return 0u32 }
+    let mut k: u32 = 0u32
+    let mut t: u64 = v
+    while t > 1u64 { t = t >> 1u64; k = k + 1u32 }
+    return k
+}
 fn r3_emit_load_slot(slot: u32) -> u32 { let _s: u32 = slot; r3_emit_arr(&R3_STR_DASH_OPEN as u64, R3_STR_DASH_OPEN_LEN); r3_emit_dec(((_s+1u32)*8u32) as u64); r3_emit_arr(&R3_STR_BPCMA_RAX as u64, R3_STR_BPCMA_RAX_LEN); return R3_OK }
 
 /* iiis-1 width-aware local load — matches cg_r3.c's type-aware load.
@@ -1899,16 +1919,27 @@ fn r3_index_obj_is_byte(obj_node: u32) -> u32 {
  * Mirrors cg_r3.c's pointer_element_width + element_is_signed_int. */
 fn r3_index_obj_elem_kind(obj_node: u32) -> u32 {
     if obj_node == 0u32 { return 0u32 }
-    let ok: u32 = iii_ast_node_kind(R3_G_AST, obj_node)
+    let mut on : u32 = obj_node
+    let mut onk : u32 = iii_ast_node_kind(R3_G_AST, on)
+    while onk == R3_K_EXPR_PAREN { on = iii_ast_paren_inner(R3_G_AST, on)  onk = iii_ast_node_kind(R3_G_AST, on) }
+    let ok: u32 = onk
     if ok == R3_K_EXPR_STR { return 1u32 }
-    if ok != R3_K_EXPR_IDENT { return 0u32 }
-    let bid: u32 = iii_ast_node_binder_id(R3_G_AST, obj_node)
-    if bid == 0u32 { return 0u32 }
-    let bk: u32 = iii_ast_node_kind(R3_G_AST, bid)
     let mut tnode: u32 = 0u32
-    if bk == R3_K_STMT_LET { tnode = iii_ast_let_type(R3_G_AST, bid) }
-    if bk == R3_K_PARAM { tnode = iii_ast_param_type(R3_G_AST, bid) }
-    if bk == R3_K_VAR_DECL { tnode = iii_ast_var_decl_type(R3_G_AST, bid) }
+    /* CAST base -- (expr as *u8)[i], (X as *u32)[i] -- take the element size from the cast's TARGET
+       type, not the default quad.  Without this a cast-form *u8 subscript strided by 8 (the q3_ptrcast
+       defect, CRASH-AUDIT S4): a byte-packed buffer read 8x off its intended position.  The STR path
+       and the IDENT path (declared type) were already correct; this completes the cast form.  A *u64
+       cast yields elem-kind 0 (quad) below -- unchanged, and correct for u64 (the packed-read idiom). */
+    if ok == R3_K_EXPR_CAST { tnode = iii_ast_cast_target_type(R3_G_AST, on) }
+    if ok == R3_K_EXPR_IDENT {
+        let bid: u32 = iii_ast_node_binder_id(R3_G_AST, on)
+        if bid != 0u32 {
+            let bk: u32 = iii_ast_node_kind(R3_G_AST, bid)
+            if bk == R3_K_STMT_LET { tnode = iii_ast_let_type(R3_G_AST, bid) }
+            if bk == R3_K_PARAM { tnode = iii_ast_param_type(R3_G_AST, bid) }
+            if bk == R3_K_VAR_DECL { tnode = iii_ast_var_decl_type(R3_G_AST, bid) }
+        }
+    }
     if tnode == 0u32 { return 0u32 }
     let tk: u32 = iii_ast_node_kind(R3_G_AST, tnode)
     let mut inner: u32 = 0u32
@@ -2417,6 +2448,16 @@ fn r3_emit_expr(node: u32) -> u32 {
     }
     if k == R3_K_EXPR_BINARY {
         let lhs: u32 = iii_ast_binary_lhs(R3_G_AST, node); let rhs: u32 = iii_ast_binary_rhs(R3_G_AST, node); let op: u32 = iii_ast_binary_op(R3_G_AST, node)
+        let srk: u32 = r3_mul_pow2_k(op, rhs)
+        if srk != 0u32 {
+            /* STRENGTH REDUCTION (the live self-optimizer; dual-implemented byte-identically in cg_r3.c):
+             * mul by a constant 2^k becomes an immediate shift -- emit only the lhs, skip loading the
+             * constant + the imul.  Sound: mul(x,2^k) == shl(x,k).  u32 truncate matches the imul path. */
+            r3_emit_expr(lhs); r3_pop_rax()
+            r3_emit_arr(&R3_STR_SHLQ_DOLLAR as u64, R3_STR_SHLQ_DOLLAR_LEN); r3_emit_dec(srk as u64); r3_emit_arr(&R3_STR_CM_RAX_NL as u64, R3_STR_CM_RAX_NL_LEN)
+            if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) }
+            r3_push_rax(); return R3_OK
+        }
         let signed: u32 = r3_either_is_signed(lhs, rhs)
         r3_emit_expr(lhs); r3_emit_expr(rhs); r3_pop_rcx(); r3_pop_rax()
         if op == 1u32 { r3_emit_arr(&R3_STR_ADDQ as u64, R3_STR_ADDQ_LEN); if r3_expr_is_u32(lhs) == 1u32 { r3_emit_arr(&R3_STR_MOVL_EE as u64, R3_STR_MOVL_EE_LEN) } }

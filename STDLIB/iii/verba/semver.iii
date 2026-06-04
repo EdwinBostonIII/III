@@ -77,7 +77,13 @@ fn semver_parse_uint(src: *u8, src_len: u64, start: u64) -> u64 {
         if going == 1u8 {
             if semver_is_digit(src[i]) == 0u8 { going = 0u8 }
             if going == 1u8 {
-                value = value * 10u64 + ((src[i] - 48u8) as u64)
+                /* [overflow] a numeric field >= 2^64 must be REJECTED, not silently wrapped to a
+                 * wrong version (matches parse.iii::parse_decimal_u32).  max_div_10 = (2^64-1)/10. */
+                if value > 1844674407370955161u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+                let v10 : u64 = value * 10u64
+                let nv : u64 = v10 + ((src[i] - 48u8) as u64)
+                if nv < v10 { return 0xFFFFFFFFFFFFFFFFu64 }
+                value = nv
                 i = i + 1u64
             }
         }

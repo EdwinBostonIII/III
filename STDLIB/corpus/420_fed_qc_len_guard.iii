@@ -1,0 +1,33 @@
+/* 420 — fed_seal_anchor_with_qc / fed_admit_with_qc_proof QC-length guard (#3 backlog).
+ * The QC functions now take the REAL qc_len and guard structure BEFORE indexing qp[40..43]
+ * (was a pre-read OOB) and before computing 44+n_sigs*64 (was a u32 wrap).  This proves all
+ * three guards FIRE on malformed input -- short buffer, wrap-inducing n_sigs, inadequate buffer
+ * -- returning FED_SEAL_E_QC (-5) instead of reading out of bounds. */
+module corpus_420
+
+extern @abi(c-msvc-x64) fn fed_seal_anchor_with_qc(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64, qc_ptr: *u8, qc_len: u32) -> i32 from "fed_seal.iii"
+
+var QC_BUF : [u8; 256]
+var CR : [u8; 32]
+var PR : [u8; 32]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 256u64 { QC_BUF[i] = 0u8  i = i + 1u64 }
+    i = 0u64
+    while i < 32u64 { CR[i] = (i + 1u64) as u8  PR[i] = (i + 100u64) as u8  i = i + 1u64 }
+
+    /* (1) qc_len < 44 -> E_QC, WITHOUT indexing qp[40..43] (the pre-read OOB is eliminated) */
+    if fed_seal_anchor_with_qc(2u32, (&CR as u64), 4u32, (&PR as u64), (&QC_BUF as u64) as *u8, 0u32) != -5i32 { return 1u64 }
+    if fed_seal_anchor_with_qc(2u32, (&CR as u64), 4u32, (&PR as u64), (&QC_BUF as u64) as *u8, 43u32) != -5i32 { return 2u64 }
+
+    /* (2) n_sigs = 0xFFFFFFFF (would wrap n_sigs*64) -> the <=64 ceiling guard fires -> E_QC */
+    QC_BUF[40u64] = 0xFFu8; QC_BUF[41u64] = 0xFFu8; QC_BUF[42u64] = 0xFFu8; QC_BUF[43u64] = 0xFFu8
+    if fed_seal_anchor_with_qc(2u32, (&CR as u64), 4u32, (&PR as u64), (&QC_BUF as u64) as *u8, 44u32) != -5i32 { return 3u64 }
+
+    /* (3) n_sigs = 3 but qc_len 100 < 44+3*64 = 236 -> the buffer-adequacy guard fires -> E_QC */
+    QC_BUF[40u64] = 3u8; QC_BUF[41u64] = 0u8; QC_BUF[42u64] = 0u8; QC_BUF[43u64] = 0u8
+    if fed_seal_anchor_with_qc(2u32, (&CR as u64), 4u32, (&PR as u64), (&QC_BUF as u64) as *u8, 100u32) != -5i32 { return 4u64 }
+
+    return 99u64
+}

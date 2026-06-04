@@ -971,6 +971,7 @@ fn nl_parse_recognize(tokens_ptr: u64, count: u32, out_fragments_ptr: u64, out_m
 
 fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 @export {
     let f_l : u64 = frags_ptr
+    if idx >= NL_MAX_FRAGS { return 0u32 }   /* [bounds] caller-supplied idx; the write side (_np_emit_fragment) bounds i < NL_MAX_FRAGS, so reads past it would OOB the caller's 1024-byte buffer */
     let i_l : u32 = idx
     let p : *u32 = (f_l + ((i_l as u64) * 16u64)) as *u32
     return p[0u64]
@@ -978,6 +979,7 @@ fn nl_parse_frag_role(frags_ptr: u64, idx: u32) -> u32 @export {
 
 fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 @export {
     let f_l : u64 = frags_ptr
+    if idx >= NL_MAX_FRAGS { return 0u32 }   /* [bounds] caller-supplied idx; the write side (_np_emit_fragment) bounds i < NL_MAX_FRAGS, so reads past it would OOB the caller's 1024-byte buffer */
     let i_l : u32 = idx
     let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 4u64) as *u32
     return p[0u64]
@@ -985,6 +987,7 @@ fn nl_parse_frag_head(frags_ptr: u64, idx: u32) -> u32 @export {
 
 fn nl_parse_frag_span_start(frags_ptr: u64, idx: u32) -> u32 @export {
     let f_l : u64 = frags_ptr
+    if idx >= NL_MAX_FRAGS { return 0u32 }   /* [bounds] caller-supplied idx; the write side (_np_emit_fragment) bounds i < NL_MAX_FRAGS, so reads past it would OOB the caller's 1024-byte buffer */
     let i_l : u32 = idx
     let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 8u64) as *u32
     return p[0u64] & 0xFFFFu32
@@ -992,6 +995,7 @@ fn nl_parse_frag_span_start(frags_ptr: u64, idx: u32) -> u32 @export {
 
 fn nl_parse_frag_span_end(frags_ptr: u64, idx: u32) -> u32 @export {
     let f_l : u64 = frags_ptr
+    if idx >= NL_MAX_FRAGS { return 0u32 }   /* [bounds] caller-supplied idx; the write side (_np_emit_fragment) bounds i < NL_MAX_FRAGS, so reads past it would OOB the caller's 1024-byte buffer */
     let i_l : u32 = idx
     let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 8u64) as *u32
     return (p[0u64] >> 16u32) & 0xFFFFu32
@@ -999,6 +1003,7 @@ fn nl_parse_frag_span_end(frags_ptr: u64, idx: u32) -> u32 @export {
 
 fn nl_parse_frag_quantifier(frags_ptr: u64, idx: u32) -> u32 @export {
     let f_l : u64 = frags_ptr
+    if idx >= NL_MAX_FRAGS { return 0u32 }   /* [bounds] caller-supplied idx; the write side (_np_emit_fragment) bounds i < NL_MAX_FRAGS, so reads past it would OOB the caller's 1024-byte buffer */
     let i_l : u32 = idx
     let p : *u32 = (f_l + ((i_l as u64) * 16u64) + 12u64) as *u32
     return p[0u64]

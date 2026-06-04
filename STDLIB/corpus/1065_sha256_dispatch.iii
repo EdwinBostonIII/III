@@ -1,0 +1,51 @@
+/* 1065 -- numera::sha256_dispatch coverage (gap-backlog #50; C.14 SHA-NI ACTIVATED).
+ *
+ * Exercises the now-LIVE highest-available dispatch: AUTO selects SHA-NI on a
+ * SHA-capable CPU, force_path pins software / requests SHA-NI (cpufeat-gated so
+ * it never emits sha256rnds2 on a non-SHA part), and the digest is SHA-256("abc")
+ * on EVERY active path (bit-identical proven exhaustively by corpus/1020).
+ * cpufeat-aware: passes on both SHA and non-SHA CPUs.  99 = pass.
+ */
+module corpus_1065
+
+extern @abi(c-msvc-x64) fn sha256_dispatch_force_path(p: u32) -> u32 from "sha256_dispatch.iii"
+extern @abi(c-msvc-x64) fn sha256_dispatch_path() -> u32 from "sha256_dispatch.iii"
+extern @abi(c-msvc-x64) fn sha256_dispatch_oneshot(input: u64, len: u64, out_32: u64) -> u32 from "sha256_dispatch.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_sha() -> u8 from "cpufeat.iii"
+
+var ABC : [u8; 3]  = [97u8, 98u8, 99u8]
+var OUT : [u8; 32]
+
+fn main() -> u64 {
+    let sha : u32 = cpufeat_has_sha() as u32   /* 1 iff this CPU has the SHA extensions */
+
+    /* AUTO default = highest-available: path == has_sha (1 on a SHA CPU, 0 otherwise) */
+    if sha256_dispatch_path() != sha { return 1u64 }
+
+    /* force software -> path 0 regardless of cpufeat */
+    if sha256_dispatch_force_path(0u32) != 0u32 { return 2u64 }
+    if sha256_dispatch_path() != 0u32 { return 3u64 }
+
+    /* request SHA-NI -> honored iff available (cpufeat-gated; never SIGILL) */
+    if sha256_dispatch_force_path(1u32) != sha { return 4u64 }
+    if sha256_dispatch_path() != sha { return 5u64 }
+
+    /* bogus -> override unchanged (still the requested-NI state from above) */
+    if sha256_dispatch_force_path(0xDEADBEEFu32) != sha { return 6u64 }
+    if sha256_dispatch_path() != sha { return 7u64 }
+
+    /* correctness on the ACTIVE path (SHA-NI on a SHA CPU): SHA-256("abc") */
+    if sha256_dispatch_oneshot((&ABC) as u64, 3u64, (&OUT) as u64) != 0u32 { return 8u64 }
+    if OUT[0u64]  != 0xBAu8 { return 9u64 }
+    if OUT[1u64]  != 0x78u8 { return 10u64 }
+    if OUT[31u64] != 0xADu8 { return 11u64 }
+
+    /* ALSO pin software + verify the SAME digest on the scalar path -- proves the
+     * two dispatch arms agree at the dispatcher level (not only inside 1020). */
+    if sha256_dispatch_force_path(0u32) != 0u32 { return 12u64 }
+    if sha256_dispatch_oneshot((&ABC) as u64, 3u64, (&OUT) as u64) != 0u32 { return 13u64 }
+    if OUT[0u64]  != 0xBAu8 { return 14u64 }
+    if OUT[31u64] != 0xADu8 { return 15u64 }
+
+    return 99u64
+}

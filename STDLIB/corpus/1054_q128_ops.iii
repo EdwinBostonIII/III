@@ -1,0 +1,107 @@
+/* 1054 -- numera::q128 untested-export coverage (gap-backlog #12,#13,#52,#53,#54,#55).
+ *
+ * Closes: q128_mul (32x32 partial-product carry chain), q128_sub (borrow), q128_cmp
+ * (hi-dominates-lo + all three arms), q128_shr (cross-limb + boundary), q128_or, q128_and.
+ * Each result's hi AND lo limbs checked; invalid-slot guards exercised.  Handles dropped
+ * eagerly to respect the 64-slot table.  Equality compares only. 99 = pass.
+ */
+module corpus_1054
+
+extern @abi(c-msvc-x64) fn q128_from_u64(v: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_from_pair(hi: u64, lo: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_drop(id: u64) -> u8 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_lo(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_hi(id: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_cmp(a: u64, b: u64) -> i32 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_sub(a: u64, b: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_mul(a: u64, b: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_shr(a: u64, n: u32) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_or(a: u64, b: u64) -> u64 from "q128.iii"
+extern @abi(c-msvc-x64) fn q128_and(a: u64, b: u64) -> u64 from "q128.iii"
+
+fn main() -> u64 {
+    /* --- q128_mul (#12) --- */
+    let seven : u64 = q128_from_u64(7u64)
+    let one   : u64 = q128_from_u64(1u64)
+    let mid   : u64 = q128_mul(seven, one)                 /* identity */
+    if q128_lo(mid) != 7u64 { return 1u64 }
+    if q128_hi(mid) != 0u64 { return 2u64 }
+    q128_drop(mid)
+    let zero  : u64 = q128_from_u64(0u64)
+    let mz    : u64 = q128_mul(seven, zero)                 /* x*0 */
+    if q128_lo(mz) != 0u64 { return 3u64 }
+    if q128_hi(mz) != 0u64 { return 4u64 }
+    q128_drop(mz); q128_drop(zero); q128_drop(one); q128_drop(seven)
+    let max   : u64 = q128_from_u64(0xFFFFFFFFFFFFFFFFu64)
+    let mm    : u64 = q128_mul(max, max)                    /* MAX*MAX: carry chain */
+    if q128_hi(mm) != 0xFFFFFFFFFFFFFFFEu64 { return 5u64 }
+    if q128_lo(mm) != 0x0000000000000001u64 { return 6u64 }
+    q128_drop(mm); q128_drop(max)
+    if q128_mul(0u64, 1u64) != 0u64 { return 7u64 }         /* invalid-slot guard */
+
+    /* --- q128_sub (#13) --- */
+    let p10 : u64 = q128_from_pair(1u64, 0u64)              /* 2^64 */
+    let u1  : u64 = q128_from_u64(1u64)
+    let s1  : u64 = q128_sub(p10, u1)                       /* borrow into hi: 2^64 - 1 */
+    if q128_hi(s1) != 0u64 { return 10u64 }
+    if q128_lo(s1) != 0xFFFFFFFFFFFFFFFFu64 { return 11u64 }
+    q128_drop(s1); q128_drop(p10)
+    let u13 : u64 = q128_from_u64(13u64)
+    let u7  : u64 = q128_from_u64(7u64)
+    let s2  : u64 = q128_sub(u13, u7)                       /* 13-7 = 6 */
+    if q128_hi(s2) != 0u64 { return 12u64 }
+    if q128_lo(s2) != 6u64 { return 13u64 }
+    q128_drop(s2); q128_drop(u13); q128_drop(u7)
+    let u0  : u64 = q128_from_u64(0u64)
+    let s3  : u64 = q128_sub(u0, u1)                        /* 0-1: full wrap */
+    if q128_hi(s3) != 0xFFFFFFFFFFFFFFFFu64 { return 14u64 }
+    if q128_lo(s3) != 0xFFFFFFFFFFFFFFFFu64 { return 15u64 }
+    q128_drop(s3); q128_drop(u0); q128_drop(u1)
+
+    /* --- q128_cmp (#52) --- */
+    let c7  : u64 = q128_from_u64(7u64)
+    let c13 : u64 = q128_from_u64(13u64)
+    if q128_cmp(c7, c13) != -1i32 { return 20u64 }          /* a<b */
+    if q128_cmp(c13, c7) != 1i32  { return 21u64 }          /* a>b */
+    if q128_cmp(c7, c7)  != 0i32  { return 22u64 }          /* equal */
+    q128_drop(c7); q128_drop(c13)
+    let hi2 : u64 = q128_from_pair(2u64, 0u64)
+    let hi1 : u64 = q128_from_pair(1u64, 0xFFFFFFFFFFFFFFFFu64)
+    if q128_cmp(hi2, hi1) != 1i32 { return 23u64 }          /* hi dominates lo */
+    q128_drop(hi2); q128_drop(hi1)
+    if q128_cmp(0u64, 1u64) != 0i32 { return 24u64 }        /* invalid-slot guard -> 0 */
+
+    /* --- q128_shr (#53) --- */
+    let sa  : u64 = q128_from_pair(0xAAu64, 0xBBu64)
+    let r0  : u64 = q128_shr(sa, 0u32)                      /* shift 0: identity */
+    if q128_hi(r0) != 0xAAu64 { return 30u64 }
+    if q128_lo(r0) != 0xBBu64 { return 31u64 }
+    q128_drop(r0); q128_drop(sa)
+    let t64 : u64 = q128_from_pair(1u64, 0u64)              /* 2^64 */
+    let r1  : u64 = q128_shr(t64, 1u32)                     /* 2^64 >> 1 = 2^63 */
+    if q128_hi(r1) != 0u64 { return 32u64 }
+    if q128_lo(r1) != 0x8000000000000000u64 { return 33u64 }
+    q128_drop(r1)
+    let r2  : u64 = q128_shr(t64, 64u32)                    /* 2^64 >> 64 = 1 */
+    if q128_hi(r2) != 0u64 { return 34u64 }
+    if q128_lo(r2) != 1u64 { return 35u64 }
+    q128_drop(r2)
+    let r3  : u64 = q128_shr(t64, 128u32)                   /* >=128 -> 0 */
+    if q128_hi(r3) != 0u64 { return 36u64 }
+    if q128_lo(r3) != 0u64 { return 37u64 }
+    q128_drop(r3); q128_drop(t64)
+
+    /* --- q128_or (#54) / q128_and (#55) --- */
+    let o7  : u64 = q128_from_u64(7u64)
+    let o13 : u64 = q128_from_u64(13u64)
+    let ro  : u64 = q128_or(o7, o13)                        /* 7|13 = 15 */
+    if q128_hi(ro) != 0u64 { return 40u64 }
+    if q128_lo(ro) != 15u64 { return 41u64 }
+    q128_drop(ro)
+    let ra  : u64 = q128_and(o7, o13)                       /* 7&13 = 5 */
+    if q128_hi(ra) != 0u64 { return 42u64 }
+    if q128_lo(ra) != 5u64 { return 43u64 }
+    q128_drop(ra); q128_drop(o7); q128_drop(o13)
+
+    return 99u64
+}

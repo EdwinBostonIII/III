@@ -48,6 +48,58 @@ fn frm_pow(x: u32, e: u64, q: u32) -> u32 {
 }
 fn frm_inv(x: u32, q: u32) -> u32 { return frm_pow(x, (q as u64) - 2u64, q) }
 
+/* Fixed-prime (q=998244353) STARK base-field ops — the SINGLE source for the STARK
+ * field GF(998244353), consumed by zk_stark.iii + zk_air.iii.  Was duplicated inline
+ * in BOTH (the 6 `L_sf_*` global-symbol collision the independence capstone surfaced);
+ * folded here per ADR-C3 "one field-mul, one organ".  Behavior-identical to the prior
+ * inline copies (frm_* + the canonical ntt_mult_field_elem give the same residues). */
+fn sf_add(x: u32, y: u32) -> u32 @export { return frm_add(x, y, 998244353u32) }
+fn sf_sub(x: u32, y: u32) -> u32 @export { return frm_sub(x, y, 998244353u32) }
+fn sf_neg(x: u32) -> u32 @export { if x == 0u32 { return 0u32 } return 998244353u32 - x }
+fn sf_mul(x: u32, y: u32) -> u32 @export { return ntt_mult_field_elem(x, y, 998244353u32) }
+fn sf_pow(x: u32, e: u64) -> u32 @export { return frm_pow(x, e, 998244353u32) }
+fn sf_inv(x: u32) -> u32 @export { return frm_pow(x, 998244351u64, 998244353u32) }
+fn sf_rou(n: u32) -> u32 @export { return frm_pow(3u32, 998244352u64 / (n as u64), 998244353u32) }
+
+/* Exhaustive non-tautological falsifier for the consolidated STARK base field GF(998244353).
+ * Proves the field axioms AND the load-bearing NTT property — ω_n is a PRIMITIVE n-th root
+ * (order exactly n: ω_n^(n/2) = q-1, not 1) — which is precisely what makes the radix-2 NTT
+ * (and thus the whole zk-STARK + PQ stack over this prime) a correct, invertible transform.
+ * 99 = pass; any other value names the first failing law. */
+fn sf_field_selftest() -> u64 @export {
+    let q : u32 = 998244353u32
+    let mut a : u32 = 7u32
+    let mut count : u32 = 0u32
+    while count < 64u32 {
+        if sf_add(a, sf_neg(a)) != 0u32 { return 1u64 }                         /* additive inverse */
+        let b : u32 = sf_add(a, a)
+        if sf_sub(a, b) != sf_add(a, sf_neg(b)) { return 2u64 }                 /* sub = add(a,-b) */
+        if sf_add(a, b) != sf_add(b, a) { return 3u64 }                         /* add commutes */
+        if sf_mul(a, b) != sf_mul(b, a) { return 4u64 }                         /* mul commutes */
+        if sf_mul(a, sf_inv(a)) != 1u32 { return 5u64 }                         /* Fermat inverse (a!=0) */
+        let c : u32 = sf_add(b, 1u32)
+        if sf_mul(a, sf_add(b, c)) != sf_add(sf_mul(a, b), sf_mul(a, c)) { return 6u64 }  /* distributivity */
+        if sf_pow(a, 0u64) != 1u32 { return 7u64 }                             /* a^0 = 1 */
+        if sf_pow(a, 1u64) != a { return 8u64 }                                /* a^1 = a */
+        if sf_pow(a, 998244352u64) != 1u32 { return 9u64 }                     /* Fermat: a^(q-1) = 1 */
+        /* NEGATIVE: only 1 and q-1 are self-inverse — any other a has a*a != 1 */
+        if a != 1u32 { if a != (q - 1u32) { if sf_mul(a, a) == 1u32 { return 10u64 } } }
+        a = sf_add(sf_mul(a, 3u32), 11u32)                                     /* deterministic walk */
+        if a == 0u32 { a = 7u32 }
+        count = count + 1u32
+    }
+    /* roots of unity, n = 2,4,...,2^20 (the NTT scaffold) */
+    let mut n : u32 = 2u32
+    while n <= 1048576u32 {
+        let w : u32 = sf_rou(n)
+        if sf_pow(w, n as u64) != 1u32 { return 20u64 }                        /* ω_n^n = 1 (an n-th root) */
+        if sf_pow(w, (n / 2u32) as u64) != (q - 1u32) { return 21u64 }         /* PRIMITIVE: ω_n^(n/2) = -1 */
+        if sf_pow(w, (n / 2u32) as u64) == 1u32 { return 22u64 }               /* NEGATIVE: order is exactly n */
+        n = n * 2u32
+    }
+    return 99u64
+}
+
 /* Prover: fold the whole layer.  arr is u32 at arrBase; reads [floff, floff+2*ns), writes
  * [nextOff, nextOff+ns).  inv(omega^j) carried incrementally as inv(omega)^j. */
 fn fri_eval_and_fold(arrBase: u64, floff: u64, ns: u64, omega: u32, alpha: u32, nextOff: u64, q: u32) -> i32 @export {

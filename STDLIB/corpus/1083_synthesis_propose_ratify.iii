@@ -1,0 +1,80 @@
+/* 1083 -- numera::synthesis_spec ss_propose (#64) + ss_ratify capability-gate, BOTH arms (#18).
+ * Self-contained setup (at/wh/cons/ss init), alloc a spec + minimal signature, then:
+ *   #64: ss_propose -> SYNSPEC_OK with a NON-ZERO witness fragment id (positive arm, not ignore);
+ *   #18 NEGATIVE: ss_ratify with NO cp_synth_admit clause ratified -> SYNSPEC_E_CLAUSE_ABSENT (the
+ *        gate, previously never falsified, now bites);
+ *   #18 POSITIVE: cons_ratify a "cp_synth_admit" constitution clause (so cons_find succeeds), then
+ *        ss_ratify -> SYNSPEC_OK (the gate's accept path, previously dead, now driven).  99 = pass.
+ */
+module corpus_1083
+
+extern @abi(c-msvc-x64) fn at_init(initial: u64) -> i32 from "algebraic_time.iii"
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn cons_init() -> i32 from "constitution.iii"
+extern @abi(c-msvc-x64) fn cons_ratify(req: *u8) -> u64 from "constitution.iii"
+extern @abi(c-msvc-x64) fn ss_init() -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_alloc(out_spec_id: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_set_signature(spec_id: *u8, sig: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_propose(spec_id: *u8, out_frag_id: *u8) -> i32 from "synthesis_spec.iii"
+extern @abi(c-msvc-x64) fn ss_ratify(spec_id: *u8, ratifier_capability: *u8, out_frag_id: *u8) -> i32 from "synthesis_spec.iii"
+
+var SPEC_ID : [u8; 32]
+var SIG     : [u8; 72]
+var FRAG    : [u8; 32]
+var FRAG2   : [u8; 32]
+var FRAG3   : [u8; 32]
+var CAP     : [u8; 32]
+var LABEL   : [u8; 14]   /* "cp_synth_admit" */
+var REQ     : [u8; 56]   /* cons_ratify_req aggregate */
+var OUTCID  : [u8; 32]
+var LTLB    : [u8; 8]
+var PREDB   : [u8; 8]
+
+fn put_u64(base: u64, off: u64, v: u64) -> i32 {
+    let p : *u8 = (base + off) as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { p[i] = ((v >> (i * 8u64)) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    at_init(0u64)
+    wh_init(0u64)
+    cons_init()
+    ss_init()
+
+    if ss_alloc((&SPEC_ID as u64) as *u8) != 0i32 { return 1u64 }
+    let mut i : u64 = 0u64
+    while i < 72u64 { SIG[i] = 0u8; i = i + 1u64 }
+    SIG[0u64] = 1u8  SIG[4u64] = 1u8  SIG[8u64] = 1u8  SIG[40u64] = 1u8   /* in_arity/out_arity/in_kinds/out_kinds = 1 */
+    if ss_set_signature((&SPEC_ID as u64) as *u8, (&SIG as u64) as *u8) != 0i32 { return 2u64 }
+
+    /* #64: ss_propose -> OK + non-zero fragment id */
+    if ss_propose((&SPEC_ID as u64) as *u8, (&FRAG as u64) as *u8) != 0i32 { return 3u64 }
+    let mut nz : u8 = 0u8
+    let mut j : u64 = 0u64
+    while j < 32u64 { if FRAG[j] != 0u8 { nz = 1u8 } j = j + 1u64 }
+    if nz != 1u8 { return 4u64 }
+
+    /* #18 negative: no cp_synth_admit clause ratified -> SYNSPEC_E_CLAUSE_ABSENT (-4) */
+    let mut c : u64 = 0u64
+    while c < 32u64 { CAP[c] = (0x20u64 + c) as u8; c = c + 1u64 }
+    if ss_ratify((&SPEC_ID as u64) as *u8, (&CAP as u64) as *u8, (&FRAG2 as u64) as *u8) != -4i32 { return 5u64 }
+
+    /* #18 POSITIVE: ratify the "cp_synth_admit" clause so cons_find succeeds, then ss_ratify -> OK */
+    LABEL[0u64]=0x63u8 LABEL[1u64]=0x70u8 LABEL[2u64]=0x5Fu8 LABEL[3u64]=0x73u8
+    LABEL[4u64]=0x79u8 LABEL[5u64]=0x6Eu8 LABEL[6u64]=0x74u8 LABEL[7u64]=0x68u8
+    LABEL[8u64]=0x5Fu8 LABEL[9u64]=0x61u8 LABEL[10u64]=0x64u8 LABEL[11u64]=0x6Du8
+    LABEL[12u64]=0x69u8 LABEL[13u64]=0x74u8
+    put_u64(&REQ as u64, 0u64,  &OUTCID as u64)    /* out_clause_id_ptr */
+    put_u64(&REQ as u64, 8u64,  &LABEL as u64)     /* textual_ptr       */
+    put_u64(&REQ as u64, 16u64, 14u64)             /* textual_len       */
+    put_u64(&REQ as u64, 24u64, &LTLB as u64)      /* ltl_ptr           */
+    put_u64(&REQ as u64, 32u64, 0u64)              /* ltl_len           */
+    put_u64(&REQ as u64, 40u64, &PREDB as u64)     /* pred_ptr          */
+    put_u64(&REQ as u64, 48u64, 0u64)              /* pred_len          */
+    if cons_ratify((&REQ as u64) as *u8) == 0xFFFFFFFFFFFFFFFFu64 { return 6u64 }   /* clause registered */
+    if ss_ratify((&SPEC_ID as u64) as *u8, (&CAP as u64) as *u8, (&FRAG3 as u64) as *u8) != 0i32 { return 7u64 }
+
+    return 99u64
+}

@@ -40,6 +40,9 @@ const NOUS_TRIT_VAL    : u32 = 24u32     /* a bare TRIT_VAL leaf: no rule fires 
 /* Mode 2 delegates to the real Phase-3 policy.  nous_policy returns a full permutation
  * of the certified set (confluence-safe), so this only changes the order, never the NF. */
 extern @abi(c-msvc-x64) fn nous_policy_rank(ctx_term: u32, kind: u32, out: *u64, cap: u32) -> u32 from "nous_policy.iii"
+/* [NOL §C.15] the proven-safe reorder lattice -- certifies an emitted order only permutes the
+ * confluence-certified set (ADR-N11 executable).  Acyclic: nous_socket -> nous_lattice (no back-edge). */
+extern @abi(c-msvc-x64) fn nol_certify_order(order: *u64, n: u32) -> u8 from "nous_lattice.iii"
 
 var NOUS_ACTIVE     : u8 = 0u8           /* 0 = inert (kill switch / default) */
 var NOUS_ORDER_MODE : u8 = 0u8           /* 0 = cascade (byte-identical); 1 = ascending probe; 2 = policy */
@@ -107,7 +110,7 @@ fn _nous_fill_orders() {
  * occupant: mode 0 = the exact cascade order; mode 1 = ascending.  Returns the count
  * written.  ctx_term/kind are accepted for the real policy (Phase 3) but unused by the
  * inert ranker (the order is term-independent here). */
-fn nous_rank(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 @export {
+fn _nous_rank_raw(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 {
     if NOUS_ORDER_MODE == 2u8 { return nous_policy_rank(ctx_term, kind, out_order, cap) }
     if NOUS_CASCADE[0u64] == 0u64 { _nous_fill_orders() }
     if (out_order as u64) == 0u64 { return 0u32 }
@@ -123,6 +126,32 @@ fn nous_rank(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 @export
         i = i + 1u64
     }
     return n
+}
+
+/* Fall back to the proven cascade order (the abstention target). */
+fn _nous_abstain_to_cascade(out_order: *u64, cap: u32) -> u32 {
+    if NOUS_CASCADE[0u64] == 0u64 { _nous_fill_orders() }
+    let cn : u64 = NOUS_RANK_N as u64
+    let capn : u64 = cap as u64
+    let mut i : u64 = 0u64
+    while i < cn {
+        if i >= capn { return i as u32 }
+        out_order[i] = NOUS_CASCADE[i]
+        i = i + 1u64
+    }
+    return NOUS_RANK_N
+}
+
+/* [NOL §C.15] ADR-N11 made executable: produce the ranked order, then CERTIFY it against the
+ * proven-safe reorder lattice.  If any rule is uncertified (an unproven reorder), ABSTAIN -- fall
+ * back to the proven cascade -- so the proposer never proposes an unproven reorder.  For the
+ * certified cascade/ascending/policy orders certify==1 (no-op), so the P2 differential
+ * (active=0==1==2) stays byte-identical; the guard fires only on a future uncertified rule. */
+fn nous_rank(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 @export {
+    let n : u32 = _nous_rank_raw(ctx_term, kind, out_order, cap)
+    if (out_order as u64) == 0u64 { return n }
+    if nol_certify_order(out_order, n) == 1u8 { return n }
+    return _nous_abstain_to_cascade(out_order, cap)
 }
 
 fn nous_socket_selftest() -> u64 @export {

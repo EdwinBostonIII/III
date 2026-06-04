@@ -1,0 +1,4 @@
+/* 1044 — typecheck_selftest: dependent type-checker (universes/Pi/Sigma). Closes a gating gap (selftest existed, ungated). */
+module corpus_1044
+extern @abi(c-msvc-x64) fn typecheck_selftest() -> u64 from "typecheck.iii"
+fn main() -> u64 { return typecheck_selftest() }

@@ -1,0 +1,11 @@
+/* 1073 -- omnia::hexad_algebra known-answer coverage (gap-backlog #75).
+ * Drives iii_hexad_algebra_selftest: add/sub/mul/neg6 over the base-3 pillar packing
+ * with hand-verified vectors (all-NEG=0, all-ZERO=364, all-POS=728, mixed=308) + OOB
+ * guard.  99 = pass (any other code = the failing arm inside the selftest). */
+module corpus_1073
+
+extern @abi(c-msvc-x64) fn iii_hexad_algebra_selftest() -> u64 from "hexad_algebra.iii"
+
+fn main() -> u64 {
+    return iii_hexad_algebra_selftest()
+}

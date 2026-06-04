@@ -344,6 +344,86 @@ fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 @constant_time @expo
     return sha256_final(out_32)
 }
 
+/* Hash byte_len bytes of a BYTE-PACKED buffer by reading it as u64 words and shift-extracting the
+ * little-endian bytes.  WHY: under cg_r0's 8-byte-uniform model `*u8` indexing strides by 8 (one
+ * slot), so sha256_oneshot over byte-packed data (a running .text image, a [u64] cast to *u8)
+ * over-reads 8x and PAGE-FAULTs (BSOD 0x50, 2026-06-04); `*u64` indexing IS the genuine 8-byte
+ * slot, so reading u64 words and feeding the extracted bytes through sha256_update_byte (which
+ * writes the slotted SHA_BUF) hashes byte-packed input byte-wise-correct under BOTH backends
+ * (cg_r3 reads the identical bytes -> same digest).  Validated vs the NIST 56-byte vector
+ * (0x248d6a61) in cg_r0 and cg_r3 and against a PAGE_NOACCESS guard-page over-read. */
+/* Feed byte_len bytes of a BYTE-PACKED buffer into the running hash (read as u64 words, shift-extract
+ * the LE bytes -- see sha256_oneshot_packed's note above).  Shared by the slotted-output and the
+ * byte-packed-output oneshots so the over-read-safe feed lives in exactly one place. */
+fn sha256_feed_packed(src: *u8, byte_len: u64) -> u32 @export {
+    let base : u64 = src as u64
+    let nq : u64 = byte_len >> 3u64
+    let mut q : u64 = 0u64
+    while q < nq {
+        let w : u64 = (base as *u64)[q]
+        sha256_update_byte((w & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 8u64)  & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 16u64) & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 24u64) & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 32u64) & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 40u64) & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 48u64) & 0xFFu64) as u32)
+        sha256_update_byte(((w >> 56u64) & 0xFFu64) as u32)
+        q = q + 1u64
+    }
+    let rem : u64 = byte_len & 7u64
+    let mut wl : u64 = 0u64
+    if rem > 0u64 { wl = (base as *u64)[nq] }
+    let mut b : u64 = 0u64
+    while b < rem { sha256_update_byte((wl & 0xFFu64) as u32)  wl = wl >> 8u64  b = b + 1u64 }
+    return 0u32
+}
+
+fn sha256_oneshot_packed(src: *u8, byte_len: u64, out_32: *u8) -> u32 @export {
+    sha256_init()
+    sha256_feed_packed(src, byte_len)
+    return sha256_final(out_32)
+}
+
+/* Emit the finalized digest BYTE-PACKED (4 u64 stores), NOT sha256_final's slotted `out[i]=byte`.
+ * WHY: under cg_r0's 8-byte-uniform model `out[i]=byte` strides the OUTPUT by 8 (one digest byte per
+ * u64 slot), so a buffer sized for 32 bytes captures only digest[0..3] and a cg_r3 consumer reading
+ * the result byte-packed sees {d0,0x7,d1,0x7,...} -- the M23 cross-backend quine-seal mismatch
+ * (2026-06-04: verdicts pass because cg_r0-internal cad_eq reads the SAME slotted layout; M23 fails
+ * because the cg_r3 client reads byte-packed).  A u64 store IS byte-packed on BOTH backends, so
+ * reading the slotted SHA_H words and packing their big-endian bytes into u64s is byte-wise-correct
+ * everywhere.  Call AFTER sha256_finalize_internal().  sha256_final stays slotted so the cg_r0-internal
+ * cad_eq / cycle-seal consumers (which read slotted) remain self-consistent and unbroken. */
+fn sha256_emit_bp(out_32: *u8) -> u32 @export {
+    let ob : u64 = out_32 as u64
+    let mut j : u64 = 0u64
+    while j < 4u64 {
+        let h0 : u64 = SHA_H[j * 2u64] as u64
+        let h1 : u64 = SHA_H[j * 2u64 + 1u64] as u64
+        let mut w : u64 = (h0 >> 24u64) & 0xFFu64
+        w = w | (((h0 >> 16u64) & 0xFFu64) << 8u64)
+        w = w | (((h0 >> 8u64)  & 0xFFu64) << 16u64)
+        w = w | ((h0 & 0xFFu64) << 24u64)
+        w = w | (((h1 >> 24u64) & 0xFFu64) << 32u64)
+        w = w | (((h1 >> 16u64) & 0xFFu64) << 40u64)
+        w = w | (((h1 >> 8u64)  & 0xFFu64) << 48u64)
+        w = w | ((h1 & 0xFFu64) << 56u64)
+        (ob as *u64)[j] = w
+        j = j + 1u64
+    }
+    return 0u32
+}
+
+/* Byte-packed-INPUT and byte-packed-OUTPUT sha256 oneshot -- for a CROSS-BACKEND digest (a cg_r0
+ * driver produces it; a cg_r3 client independently re-derives it: the M23 below-OS quine-seal).
+ * sha256_oneshot_packed (slotted output) stays for cg_r0-internal callers. */
+fn sha256_oneshot_packed_bp(src: *u8, byte_len: u64, out_32: *u8) -> u32 @export {
+    sha256_init()
+    sha256_feed_packed(src, byte_len)
+    sha256_finalize_internal()
+    return sha256_emit_bp(out_32)
+}
+
 /* Feed a single byte into the running hash.  Avoids the iiis-2
  * limitation that `&GLOBAL[0] as u64` does not yield a real address;
  * callers without a pointer source for the byte can use this. */

@@ -1082,6 +1082,23 @@ static void emit_pattern_bind(iii_cg_r3_state_t *cg, uint32_t pat_node)
 
 /* ─── Expression codegen (stack machine) ──────────────────────────── */
 
+/* STRENGTH REDUCTION test (dual of cg_r3.iii's r3_mul_pow2_k -- IDENTICAL logic so the emitted
+ * assembly is byte-for-byte the same, keeping iiis-0 == iiis-2): if op is MUL and rhs is a constant
+ * integer literal equal to 2^k (k in 1..63), return k; else 0.  Sound: x*2^k == x<<k (mod 2^64),
+ * signed + unsigned.  Kernel-justified (sov_isa proves mul(x,2)==shl(x,1)). */
+static int mul_pow2_k(iii_cg_r3_state_t *cg, const iii_ast_node_t *n)
+{
+    if (n->u.binary.op != III_BIN_MUL) return 0;
+    const iii_ast_node_t *rhs = iii_ast_get(cg->ast, n->u.binary.rhs);
+    if (!rhs || rhs->kind != III_AST_EXPR_INT) return 0;
+    uint64_t v = rhs->u.int_.value;
+    if (v < 2) return 0;
+    if ((v & (v - 1)) != 0) return 0;
+    int k = 0; uint64_t t = v;
+    while (t > 1) { t >>= 1; k++; }
+    return k;
+}
+
 static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
 {
     if (node == 0) return 0;
@@ -1311,6 +1328,19 @@ static int emit_expr(iii_cg_r3_state_t *cg, uint32_t node)
         case III_AST_EXPR_PAREN:
             return emit_expr(cg, n->u.paren.inner);
         case III_AST_EXPR_BINARY: {
+            int srk = mul_pow2_k(cg, n);
+            if (srk != 0) {
+                /* STRENGTH REDUCTION (the live self-optimizer; dual-implemented byte-identically in
+                 * cg_r3.iii): mul by a constant 2^k becomes an immediate shift -- emit only the lhs,
+                 * skip loading the constant + the imul.  Sound: mul(x,2^k) == shl(x,k). */
+                if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
+                stack_pop_reg(cg, "rax");
+                emit_line(cg, "    shlq $%d, %%rax", srk);
+                if (expr_is_u32(cg, n->u.binary.lhs))
+                    emit_line(cg, "    movl %%eax, %%eax");
+                stack_push_reg(cg, "rax");
+                return 0;
+            }
             if (emit_expr(cg, n->u.binary.lhs) != 0) return -1;
             if (emit_expr(cg, n->u.binary.rhs) != 0) return -1;
             stack_pop_reg(cg, "rcx");   /* rhs */

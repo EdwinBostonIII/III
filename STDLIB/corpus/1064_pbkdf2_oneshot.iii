@@ -1,0 +1,29 @@
+/* 1064 -- numera::pbkdf2 oneshot coverage (gap-backlog #48).
+ *
+ * Closes pbkdf2_sha256_oneshot (set_salt+set_iter+derive composition) against the
+ * RFC 7914 §11 PBKDF2-HMAC-SHA256 vector: P="passwd", S="salt", c=1, dkLen=64.
+ * Asserts the full 64-byte DK byte-for-byte (55 ac 04 ... 97 83). 99 = pass.
+ */
+module corpus_1064
+
+extern @abi(c-msvc-x64) fn pbkdf2_sha256_oneshot(password: u64, password_len: u64, salt: u64, salt_len: u64, iterations: u32, dk: u64, dk_len: u64) -> i32 from "pbkdf2.iii"
+
+var PW   : [u8; 6]  = [112u8,97u8,115u8,115u8,119u8,100u8]    /* "passwd" */
+var SALT : [u8; 4]  = [115u8,97u8,108u8,116u8]                /* "salt" */
+var DK   : [u8; 64]
+var EXP  : [u8; 64] = [
+    85u8,172u8,4u8,110u8,86u8,227u8,8u8,159u8,236u8,22u8,145u8,194u8,37u8,68u8,182u8,5u8,
+    249u8,65u8,133u8,33u8,109u8,222u8,4u8,101u8,230u8,139u8,157u8,87u8,194u8,13u8,172u8,188u8,
+    73u8,202u8,156u8,204u8,241u8,121u8,182u8,69u8,153u8,22u8,100u8,179u8,157u8,119u8,239u8,49u8,
+    124u8,113u8,184u8,69u8,177u8,227u8,11u8,213u8,9u8,17u8,32u8,65u8,211u8,161u8,151u8,131u8]
+
+fn main() -> u64 {
+    let rc : i32 = pbkdf2_sha256_oneshot((&PW) as u64, 6u64, (&SALT) as u64, 4u64, 1u32, (&DK) as u64, 64u64)
+    if rc != 0i32 { return 1u64 }
+    let mut k : u64 = 0u64
+    while k < 64u64 {
+        if DK[k] != EXP[k] { return 10u64 + k }
+        k = k + 1u64
+    }
+    return 99u64
+}

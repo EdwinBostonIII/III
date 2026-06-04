@@ -68,18 +68,25 @@ fn mont_redc(t: u64, n: u64, n_inv_neg: u64) -> u64 @export {
      * [audit D-MONT-1] */
     let mn : u64 = m * n_l
     let low : u64 = t + mn
-    let mut carry : u64 = 0u64
-    if low < t { carry = 1u64 }
+    /* [D-MONT-2] branch-free carry-out of (t+mn): the add-carry identity at bit 63
+     * (carry = 1 iff low < t -- the lost 2^64 bit).  No secret-dependent branch: mont_redc
+     * runs per-NTT-butterfly on secret ML-KEM/ML-DSA coefficients, so the reduction must be
+     * data-oblivious.  Bit-identical value to the old `if low < t { carry = 1 }`. */
+    let notlow : u64 = low ^ 0xFFFFFFFFFFFFFFFFu64
+    let carry : u64 = ((t & mn) | ((t | mn) & notlow)) >> 63u64
     let v : u64 = (low >> MONT_R_SHIFT) | (carry << MONT_R_SHIFT)
-    if v >= n_l {
-        return v - n_l
-    }
-    return v
+    /* [D-MONT-2] branch-free conditional subtract of n: v < 2n (precond t < n*R), so subtract
+     * n iff v >= n.  v-n_l wraps (bit 63 set) iff v < n_l; the mask selects (v-n_l) vs v with
+     * no branch on the secret coefficient.  v < 2^33, n_l < 2^32 => the sign test is exact. */
+    let lt_n : u64 = (v - n_l) >> 63u64           /* 1 iff v < n_l */
+    let ge_mask : u64 = 0u64 - (lt_n ^ 1u64)      /* all-ones iff v >= n_l, else 0 */
+    return v - (n_l & ge_mask)
 }
 
 fn mont_to_form(a: u64, n: u64) -> u64 @export {
     let a_l : u64 = a
     let n_l : u64 = n
+    if n_l == 0u64 { return 0u64 }    /* [div-by-zero] @export n=0 -> `% 0`; matches modular.iii */
     /* aR mod n: avoid overflow by reducing a first then shifting. */
     let a_red : u64 = a_l % n_l
     let shifted : u64 = (a_red << MONT_R_SHIFT) % n_l
@@ -94,6 +101,7 @@ fn mont_from_form(a_R: u64, n: u64) -> u64 @export {
 
 fn mont_mul_u32(a: u64, b: u64, n: u64) -> u64 @export {
     let n_l : u64 = n
+    if n_l == 0u64 { return 0u64 }    /* [div-by-zero] @export n=0 -> the even path does `a % 0`; matches modular.iii */
     if (n_l & 1u64) == 0u64 {
         /* Even modulus: gcd(n, R=2^32) != 1, so no inverse mod R exists and
          * mont_n_inv_neg returns garbage.  a,b < n < 2^32 => a*b < 2^64

@@ -7,17 +7,21 @@
  * Both unsigned (ULEB128) and signed (SLEB128) variants.
  *
  * Public API:
- *   leb128_encode_u64(value:u64, out:*u8) -> u64
- *      Returns number of bytes written (1..10).  out must have >= 10 bytes.
- *   leb128_decode_u64(src:*u8, src_len:u64, value_out:*u64) -> u64
- *      Returns number of bytes consumed.  0 on overflow/invalid.
+ *   leb128_encode_u64(value:u64, out:*u8) -> u64        bytes written (1..10); out must be >= 10 bytes
+ *   leb128_decode_u64(src:*u8, src_len:u64) -> u64       bytes consumed; 0 on overflow/invalid;
+ *                                                        read the decoded value via leb128_last_value()
+ *   leb128_encode_i64(value:i64, out:*u8) -> u64         SLEB128; bytes written (1..10)
+ *   leb128_decode_i64(src:*u8, src_len:u64) -> u64       SLEB128 bytes consumed; 0 on invalid;
+ *                                                        read the decoded value via leb128_last_svalue()
+ *   leb128_last_value() -> u64 ; leb128_last_svalue() -> i64    last decoded value (side-channel; no out-param)
  *
  * Hexad: kind_form.  Ring: R3.  K: 1.00.
  */
 
 module verba_leb128
 
-var LEB_LAST_VALUE : u64 = 0u64
+var LEB_LAST_VALUE  : u64 = 0u64
+var LEB_LAST_SVALUE : i64 = 0i64
 
 fn leb128_encode_u64(value: u64, out: *u8) -> u64 @export {
     let mut v : u64 = value
@@ -62,4 +66,71 @@ fn leb128_decode_u64(src: *u8, src_len: u64) -> u64 @export {
 
 fn leb128_last_value() -> u64 @export {
     return LEB_LAST_VALUE
+}
+
+/* SLEB128 (signed) encode.  Arithmetic-shift-FREE: we shift the two's-complement
+ * BIT PATTERN logically (u64 >>) and re-fill the vacated top 7 bits (57..63) with the
+ * sign, so correctness does NOT depend on whether iii's >> is arithmetic on i64.
+ * Terminates when the remaining bits are all-sign (0 for +, all-ones for -) AND the
+ * emitted group's own sign bit (0x40) agrees -- the canonical SLEB128 stop rule. */
+fn leb128_encode_i64(value: i64, out: *u8) -> u64 @export {
+    let mut neg : u8 = 0u8
+    if value < 0i64 { neg = 1u8 }
+    let mut v : u64 = value as u64
+    let mut i : u64 = 0u64
+    let mut more : u8 = 1u8
+    while more == 1u8 {
+        let byte : u64 = v & 0x7Fu64
+        v = v >> 7u64
+        if neg == 1u8 { v = v | 0xFE00000000000000u64 }   /* fill bits 57..63 with sign=1 (== arithmetic >>7) */
+        let signset : u8 = ((byte >> 6u64) & 1u64) as u8
+        let mut done : u8 = 0u8
+        if neg == 0u8 { if v == 0u64 { if signset == 0u8 { done = 1u8 } } }
+        if neg == 1u8 { if v == 0xFFFFFFFFFFFFFFFFu64 { if signset == 1u8 { done = 1u8 } } }
+        if done == 1u8 {
+            out[i] = byte as u8
+            i = i + 1u64
+            more = 0u8
+        }
+        if more == 1u8 {
+            out[i] = (byte | 0x80u64) as u8
+            i = i + 1u64
+        }
+    }
+    return i
+}
+
+/* SLEB128 (signed) decode.  Accumulates 7-bit groups LSB-first, then sign-extends from
+ * the last group's bit 0x40 if the value did not already fill all 64 bits. */
+fn leb128_decode_i64(src: *u8, src_len: u64) -> u64 @export {
+    let mut value : u64 = 0u64
+    let mut shift : u64 = 0u64
+    let mut i : u64 = 0u64
+    let mut going : u8 = 1u8
+    let mut lastb : u64 = 0u64
+    while going == 1u8 {
+        if i >= src_len { LEB_LAST_SVALUE = 0i64  return 0u64 }
+        let b : u64 = src[i] as u64
+        lastb = b
+        let payload : u64 = b & 0x7Fu64
+        value = value | (payload << shift)
+        i = i + 1u64
+        shift = shift + 7u64
+        if (b & 0x80u64) == 0u64 { going = 0u8 }
+        if going == 1u8 {
+            if shift >= 64u64 { LEB_LAST_SVALUE = 0i64  return 0u64 }
+        }
+    }
+    if shift < 64u64 {
+        if (lastb & 0x40u64) != 0u64 {
+            let ones : u64 = 0xFFFFFFFFFFFFFFFFu64 << shift
+            value = value | ones
+        }
+    }
+    LEB_LAST_SVALUE = value as i64
+    return i
+}
+
+fn leb128_last_svalue() -> i64 @export {
+    return LEB_LAST_SVALUE
 }

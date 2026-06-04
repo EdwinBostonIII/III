@@ -11,9 +11,9 @@
  * Phase F scope (RFC 8259 subset):
  *   value   = null | true | false | number | string | array | object
  *   number  = '-'? digit+         (integer-only; fractional/exp deferred)
- *   string  = '"' chars '"'       (with \\, \", \n, \t, \r, \b, \f, \/)
- *                                 (\uXXXX deferred to Phase G - needs
- *                                  UTF-8 encoder beyond current rune.iii)
+ *   string  = '"' chars '"'       (with \\, \", \n, \t, \r, \b, \f, \/, \uXXXX)
+ *                                 (\uXXXX -> UTF-8, RFC 8259 §7, incl. D800-DFFF
+ *                                  surrogate pairs; lone/bad surrogates rejected)
  *   array   = '[' (value (',' value)*)? ']'
  *   object  = '{' (string ':' value (',' string ':' value)*)? '}'
  *
@@ -291,6 +291,185 @@ fn json_unescape_byte(c: u32) -> u32 {
     return 0x100u32                      /* invalid */
 }
 
+/* --- \uXXXX unicode-escape support (RFC 8259 §7), Phase G --- */
+/* outputs of json_parse_uescape (module-scratch; iiis out-param discipline). */
+var JSON_UESC_CP       : u64 = 0u64    /* decoded Unicode code point */
+var JSON_UESC_CONSUMED : u64 = 0u64    /* input bytes consumed: 6 (\uXXXX) or 12 (surrogate pair) */
+
+/* one hex digit -> 0..15, or 0x100 if not a hex digit. */
+fn json_hexdig(c: u32) -> u32 {
+    let x : u32 = c & 0xFFFFFFFFu32
+    if x >= 48u32 { if x <= 57u32 { let v : u32 = x - 48u32; return v & 0xFFFFFFFFu32 } }   /* 0-9 */
+    if x >= 97u32 { if x <= 102u32 { let v : u32 = x - 87u32; return v & 0xFFFFFFFFu32 } }  /* a-f */
+    if x >= 65u32 { if x <= 70u32 { let v : u32 = x - 55u32; return v & 0xFFFFFFFFu32 } }   /* A-F */
+    return 0x100u32
+}
+
+/* four hex digits at base[pos..pos+4] -> 0..0xFFFF, or 0xFFFFFFFF on a bad digit. */
+fn json_hex4(base: u64, pos: u64) -> u32 {
+    let pp : *u8 = base as *u8
+    let c0 : u32 = pp[pos] as u32
+    let c1 : u32 = pp[pos + 1u64] as u32
+    let c2 : u32 = pp[pos + 2u64] as u32
+    let c3 : u32 = pp[pos + 3u64] as u32
+    let d0 : u32 = json_hexdig(c0)
+    let d1 : u32 = json_hexdig(c1)
+    let d2 : u32 = json_hexdig(c2)
+    let d3 : u32 = json_hexdig(c3)
+    if d0 == 0x100u32 { return 0xFFFFFFFFu32 }
+    if d1 == 0x100u32 { return 0xFFFFFFFFu32 }
+    if d2 == 0x100u32 { return 0xFFFFFFFFu32 }
+    if d3 == 0x100u32 { return 0xFFFFFFFFu32 }
+    let s0 : u32 = d0 << 12u32
+    let s1 : u32 = d1 << 8u32
+    let s2 : u32 = d2 << 4u32
+    let r : u32 = s0 | s1 | s2 | d3
+    return r & 0xFFFFFFFFu32
+}
+
+/* at base[pos]='\' base[pos+1]='u': decode \uXXXX, combining a UTF-16 surrogate
+ * pair (high D800-DBFF then low DC00-DFFF) into one code point.  Writes
+ * JSON_UESC_CP + JSON_UESC_CONSUMED; returns 1 valid, 0 invalid (bad hex,
+ * lone/mis-ordered surrogate, or truncated input). */
+fn json_parse_uescape(base: u64, pos: u64, inlen: u64) -> u32 {
+    let need : u64 = pos + 6u64
+    if need > inlen { return 0u32 }
+    let h : u32 = json_hex4(base, pos + 2u64)
+    if h == 0xFFFFFFFFu32 { return 0u32 }
+    if h >= 0xD800u32 {
+        if h <= 0xDBFFu32 {
+            let need2 : u64 = pos + 12u64
+            if need2 > inlen { return 0u32 }
+            let pp : *u8 = base as *u8
+            let bs : u32 = pp[pos + 6u64] as u32
+            let bu : u32 = pp[pos + 7u64] as u32
+            if bs != 92u32 { return 0u32 }      /* '\' */
+            if bu != 117u32 { return 0u32 }     /* 'u' */
+            let lo : u32 = json_hex4(base, pos + 8u64)
+            if lo == 0xFFFFFFFFu32 { return 0u32 }
+            if lo < 0xDC00u32 { return 0u32 }   /* not a low surrogate */
+            if lo > 0xDFFFu32 { return 0u32 }
+            let hh : u32 = h - 0xD800u32
+            let ll : u32 = lo - 0xDC00u32
+            let hh64 : u64 = hh as u64
+            let hi_part : u64 = hh64 << 10u64
+            let ll64 : u64 = ll as u64
+            let t : u64 = 0x10000u64 + hi_part
+            let cp : u64 = t + ll64
+            JSON_UESC_CP = cp
+            JSON_UESC_CONSUMED = 12u64
+            return 1u32
+        }
+        if h <= 0xDFFFu32 { return 0u32 }       /* lone low surrogate -> invalid */
+    }
+    JSON_UESC_CP = h as u64
+    JSON_UESC_CONSUMED = 6u64
+    return 1u32
+}
+
+/* UTF-8 byte length of a code point (1-4). */
+fn json_utf8_len(cp: u64) -> u64 {
+    if cp < 0x80u64 { return 1u64 }
+    if cp < 0x800u64 { return 2u64 }
+    if cp < 0x10000u64 { return 3u64 }
+    return 4u64
+}
+
+/* encode `cp` as UTF-8 into dp[di..]; returns the number of bytes written (1-4). */
+fn json_utf8_emit(cp: u64, dp: u64, di: u64) -> u64 {
+    let d : *u8 = dp as *u8
+    if cp < 0x80u64 {
+        d[di] = (cp & 0xFFu64) as u8
+        return 1u64
+    }
+    if cp < 0x800u64 {
+        let s6 : u64 = cp >> 6u64
+        let b0 : u64 = 0xC0u64 | s6
+        let m0 : u64 = cp & 0x3Fu64
+        let b1 : u64 = 0x80u64 | m0
+        d[di] = (b0 & 0xFFu64) as u8
+        d[di + 1u64] = (b1 & 0xFFu64) as u8
+        return 2u64
+    }
+    if cp < 0x10000u64 {
+        let s12 : u64 = cp >> 12u64
+        let b0 : u64 = 0xE0u64 | s12
+        let s6 : u64 = cp >> 6u64
+        let m6 : u64 = s6 & 0x3Fu64
+        let b1 : u64 = 0x80u64 | m6
+        let m0 : u64 = cp & 0x3Fu64
+        let b2 : u64 = 0x80u64 | m0
+        d[di] = (b0 & 0xFFu64) as u8
+        d[di + 1u64] = (b1 & 0xFFu64) as u8
+        d[di + 2u64] = (b2 & 0xFFu64) as u8
+        return 3u64
+    }
+    let s18 : u64 = cp >> 18u64
+    let b0 : u64 = 0xF0u64 | s18
+    let s12 : u64 = cp >> 12u64
+    let m12 : u64 = s12 & 0x3Fu64
+    let b1 : u64 = 0x80u64 | m12
+    let s6 : u64 = cp >> 6u64
+    let m6 : u64 = s6 & 0x3Fu64
+    let b2 : u64 = 0x80u64 | m6
+    let m0 : u64 = cp & 0x3Fu64
+    let b3 : u64 = 0x80u64 | m0
+    d[di] = (b0 & 0xFFu64) as u8
+    d[di + 1u64] = (b1 & 0xFFu64) as u8
+    d[di + 2u64] = (b2 & 0xFFu64) as u8
+    d[di + 3u64] = (b3 & 0xFFu64) as u8
+    return 4u64
+}
+
+/* scan-pass: measure ONE escape at base[pos] (pos points at '\').  Writes
+ * JSON_SCAN_BAD (1 = malformed), JSON_SCAN_OUTADD (output bytes), JSON_SCAN_NEXT
+ * (input pos past the escape).  Extracted as a leaf helper so the two-pass loop
+ * body stays shallow (the parser has a statement-nesting limit). */
+var JSON_SCAN_BAD    : u8  = 0u8
+var JSON_SCAN_OUTADD : u64 = 0u64
+var JSON_SCAN_NEXT   : u64 = 0u64
+fn json_scan_escape(base: u64, pos: u64, inlen: u64) -> u32 {
+    JSON_SCAN_BAD = 0u8
+    let pp : *u8 = base as *u8
+    let nxt : u64 = pos + 1u64
+    if nxt >= inlen { JSON_SCAN_BAD = 1u8; return 0u32 }
+    let n : u32 = pp[nxt] as u32
+    if n == 117u32 {
+        let uok : u32 = json_parse_uescape(base, pos, inlen)
+        if uok != 1u32 { JSON_SCAN_BAD = 1u8; return 0u32 }
+        JSON_SCAN_OUTADD = json_utf8_len(JSON_UESC_CP)
+        JSON_SCAN_NEXT = pos + JSON_UESC_CONSUMED
+        return 0u32
+    }
+    let r : u32 = json_unescape_byte(n)
+    if r == 0x100u32 { JSON_SCAN_BAD = 1u8; return 0u32 }
+    JSON_SCAN_OUTADD = 1u64
+    JSON_SCAN_NEXT = pos + 2u64
+    return 0u32
+}
+
+/* copy-pass: decode ONE escape at base[pos] into dp[di] (already scan-validated).
+ * Writes JSON_COPY_DIADD (bytes written) + JSON_COPY_NEXT (input pos past escape). */
+var JSON_COPY_DIADD : u64 = 0u64
+var JSON_COPY_NEXT  : u64 = 0u64
+fn json_copy_escape(base: u64, pos: u64, dp: u64, di: u64) -> u32 {
+    let pp : *u8 = base as *u8
+    let n : u32 = pp[pos + 1u64] as u32
+    if n == 117u32 {
+        json_parse_uescape(base, pos, JSON_INPUT_LEN)
+        let w : u64 = json_utf8_emit(JSON_UESC_CP, dp, di)
+        JSON_COPY_DIADD = w
+        JSON_COPY_NEXT = pos + JSON_UESC_CONSUMED
+        return 0u32
+    }
+    let r : u32 = json_unescape_byte(n)
+    let d : *u8 = dp as *u8
+    d[di] = (r & 0xFFu32) as u8
+    JSON_COPY_DIADD = 1u64
+    JSON_COPY_NEXT = pos + 2u64
+    return 0u32
+}
+
 fn json_parse_string() -> u64 {
     if json_peek() != 0x22u32 { return JSON_INVALID }   /* '"' */
     json_advance()
@@ -309,22 +488,12 @@ fn json_parse_string() -> u64 {
             let c : u32 = p[scan_pos] as u32
             if c == 0x22u32 { closed = 1u8 }       /* '"' end */
             if closed == 0u8 {
-                if c == 92u32 {                    /* '\' escape */
-                    if scan_pos + 1u64 >= JSON_INPUT_LEN { bad = 1u8; closed = 1u8 }
+                if c == 92u32 {                    /* '\' escape (simple or \uXXXX) */
+                    json_scan_escape(JSON_INPUT_BASE, scan_pos, JSON_INPUT_LEN)
+                    if JSON_SCAN_BAD == 1u8 { bad = 1u8; closed = 1u8 }
                     if closed == 0u8 {
-                        let n : u32 = p[scan_pos + 1u64] as u32
-                        if n == 117u32 {           /* \uXXXX deferred */
-                            bad = 1u8
-                            closed = 1u8
-                        }
-                        if closed == 0u8 {
-                            let r : u32 = json_unescape_byte(n)
-                            if r == 0x100u32 { bad = 1u8; closed = 1u8 }
-                            if closed == 0u8 {
-                                scan_pos = scan_pos + 2u64
-                                out_len = out_len + 1u64
-                            }
-                        }
+                        out_len = out_len + JSON_SCAN_OUTADD
+                        scan_pos = JSON_SCAN_NEXT
                     }
                 }
                 if closed == 0u8 {
@@ -346,11 +515,9 @@ fn json_parse_string() -> u64 {
     while src < scan_pos {
         let c : u32 = p[src] as u32
         if c == 92u32 {
-            let n : u32 = p[src + 1u64] as u32
-            let r : u32 = json_unescape_byte(n)
-            dp[di] = (r & 0xFFu32) as u8
-            src = src + 2u64
-            di = di + 1u64
+            json_copy_escape(JSON_INPUT_BASE, src, buf, di)
+            di = di + JSON_COPY_DIADD
+            src = JSON_COPY_NEXT
         }
         if c != 92u32 {
             dp[di] = (c & 0xFFu32) as u8

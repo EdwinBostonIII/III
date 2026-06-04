@@ -793,3 +793,71 @@ run_corpus.sh:943 -- a TRANSIENT mid-edit read caused by the linter reformatting
 ## Determinism note
 Stdlib-only changes (e.g. rsa.iii) do NOT drift the BARE golden (iiis-1/2). §S.6 Phase 2 is the one place a
 **deliberate** golden move is expected — gate it on the radix-vs-HT total differential before resealing.
+
+## ✅ ORCHESTRATION SESSION (2026-06-01) — user authorized a 16-agent fan-out + "manually review every file"
+The user re-engaged with "deploy 14 agents for the 14 capabilities + tail + gates; then MANUALLY review every
+file; don't stop." Reality check (this ledger + a C.2 pilot): the apotheosis is BUILT + full-gate-green (691/0)
++ already 16-agent-gap-audited (0 gaps) + 35-agent-bug-hunted (16 fixes). So a 15-cap re-implement/re-audit is
+the WRONG premise (advisor-confirmed: narrowing scope is the pilot working as designed, not a deviation). Actions:
+- **WIP baseline commit `867849d`** (local, not pushed, NOT a reseal): worktrees check out HEAD, and the whole
+  S.1-S.7+C.1 substrate was UNCOMMITTED — committed so isolated worktrees inherit the substrate they consume.
+- **C.2 pilot (worktree agent) → SOUND.** Certified RSA-already-routes-to-S.2-organ / ECDSA-P384-det-nonce /
+  "dead p256_verify is FALSE" / fz_algebra-modparam-bigint_io decorative-skip. Built the ONE genuine delta:
+  `ed_mod_l` (sovereign Barrett mod L). ADJUDICATED the ledger build-vs-skip contradiction → **KEEP** (doc §C.2
+  step 4 specifies it; user's no-compromise standard overrules the line-93 leaner-skip). INTEGRATED to main with
+  2 fixes I added in manual review: (a) TOTALITY fallback — inputs ≥2^512 route to bigint_mod (kills the silent-
+  truncation hole), (b) KAT renumber 1010→**1021** (1010 collided w/ pareto_frontier; 1020 reserved for SHA-NI)
+  + a ≥2^512 differential arm. GATED: build_stdlib FAIL=0 (lib mhash d5d586…), 1021=99, RFC-8032 193/194/197=99
+  (no-regression on the ed_mod_l-modified sign/verify path). NEW: `numera/ed_scalar_modl.iii`, `corpus/1021`.
+- **The genuine remainder (ledger deferrals = unfinished under "no deferrals") — disposition:**
+  - **SHA-NI** (`numera/sha256_ni.iii` dispatch-off + `1020` exhaustive differential KAT): BUILDING via a
+    golden-safe worktree agent (sha256.iii untouched; 1020 differentials len 0..135 + FIPS vs software; enable-by-
+    default is the reseal-trigger). Not a defer — building the artifact; enable is one explicit reseal step.
+  - **C.12 Verilog** (resolver_unit.v completion + formal harness + equivalence corpus): BUILDING via worktree
+    agent; gating needs iverilog/z3/yosys (env-block, agent reports presence). Built ≠ gatable-here.
+  - **C.10 Ring-0** (r3_ioctl_driver): READ-ONLY CRASH-PROTOCOL Phase-1 audit via agent (the user's own protocol
+    forbids rushing kernel edits); metal deploy = explicit trigger + BSOD-risk test target. Doing the protocol phase.
+  - **2 unwired organs** (`cost_lattice_unified`, `hotstuff_predict_opt`): READ end-to-end myself — BOTH are
+    complete+tested organs whose natural consumers (a per-path uc cost-model in run_bench; a sealed peer-availability-
+    certificate PRODUCER in the consensus) DO NOT EXIST. Forcing a wire = feeding fabricated inputs = synthetic
+    ceremony (violates the doc's own leaner principle + advisor "don't manufacture ceremony"). Disposition =
+    DOCUMENT as substrate-ahead-with-receipt (the consumer-extension is the named future), NOT force-wire.
+  - **proof_term / xii_organ consolidations**: VERIFIED-SKIP class (the "redundant carriers"/"7 redundant lowerings"
+    premises are FALSE on live read — merging would DELETE distinct functionality; leaner-is-WORSE). Not built.
+  - **emit_generic (C.4)**: the ONE genuine leaner cross-tree refactor remaining (4 codegen emit bodies → 1 +
+    ring_config). Doc §C.4 EXPLICITLY scopes it "*Design only; the live compiler/reseal is not edited here*";
+    golden-touching, gated by `build_iiis2 --check-corpus` 59/0. Reserved-to-self, approached LAST under full
+    CRASH PROTOCOL (read-all → refactor → byte-identity gate → revert-on-red); if not safely completable this
+    session, deliver the read-audit + gate-verified plan (real progress, the doc's own design-only horizon).
+- Workflow scripts: `.claude_apotheosis_fanout.mjs` (C.2 pilot), `.claude_apotheosis_frontier.mjs` (C.12+C.10).
+  Single-test gate helper: `STDLIB/scripts/_gate_one.sh`. FINAL step: one full build_stdlib + run_corpus + bench
+  + intentional STDLIB-archive reseal (golden untouched — all edits compiler-unreferenced).
+
+## ⚠️🔓 CP-1 — LATENT KERNEL OOB in the metal-DEPLOYED gate_driver.iii (the session's headline finding)
+The C.10 read-only crash-path audit (`DOCS/CRASH-AUDIT-C10-r3-ioctl.md`) found, and I VERIFIED in source
+(`KATABASIS-DEPLOY/src/gate_driver.iii:68` `gate_ioctl`), that the gate driver **proven on metal 2026-05-23**
+reads `IoControlCode` (+0x18) but **never reads `InputBufferLength` (+0x10) / `OutputBufferLength` (+0x08)** —
+the 0x222000 arm reads `SystemBuffer[0..5]` (48 B) and writes [0] (8 B); the 0x222004 SVM arm writes 32 B —
+all with **no length check**. Under METHOD_BUFFERED a short R3 `DeviceIoControl` (`InputBufferLength<48` or
+`OutputBufferLength<8`/`<32`) → NonPagedPool OOB read/write → pool corruption → delayed BAD_POOL/AV BSOD. The
+2026-05-23 PASS never hit it because `gate_client.exe` always sized buffers exactly — the adversarial short-buffer
+case was never exercised. **OPERATIONAL CAUTION: do not load this driver for untrusted/arbitrary R3 callers until
+CP-1 lands.** FIX (designed, NOT applied — CRASH PROTOCOL forbids a session-tail kernel edit; it OVERRIDES
+keep-going for kernel work): read both lengths from the IO_STACK; if `In<48 || Out<8` (or `<32` for 0x222004) →
+complete `STATUS_BUFFER_TOO_SMALL`, Information=0, return before any SystemBuffer deref; then build + objdump-verify
+the guard is present (BSOD #1 was a *dropped if* in cg_r0 — binary-verify mandatory) + the operator's metal re-test
+with a new short-buffer adversarial case. This is a focused operator-triggered CRASH-PROTOCOL session (audit §3 plan).
+
+## ✅ SESSION CLOSEOUT (2026-06-01) — quick-gateable apotheosis COMPLETE + full-gate-verified
+INTEGRATED to main + reviewed end-to-end: C.2 `ed_scalar_modl.iii`+crypt_ed25519 (ed_mod_l, my totality-fallback +
+1021 fixes); C.14 `sha256_ni.iii`+1020 (SHA-NI dispatch-off, golden-safe, non-vacuity proven); C.1 step6 pq_dispatch
+SHA-2 family wire (0x0130/0x0131-3 → iii_slhdsa_sha2_*) +1022; C.12 resolver_unit.v 7-gaps-closed + formal miter +
+12 testbenches (toolchain-blocked gating; Python-oracle-validated) + I-INSTR §5 + inert resolver.iii doc-comment;
+C.10 the CRASH-AUDIT doc above. FINAL GATE (re-confirmed observed, not inferred — advisor-caught the buffering that
+hid FAIL): build_stdlib FAIL=0 (452 modules, lib 0bd2eb61); run_corpus PASS=694/0 (the one transient fail was MY 1022
+KAT — a `(0i32-1i32){` paren-trap + a siglen-OUT-pointer-vs-value runtime bug, both fixed→99); run_xii_corpus band +
+run_bench 7/7 CORRECTNESS-FAIL=0. STDLIB-archive reseal only; golden UNTOUCHED (no build_iiis2; all edits
+compiler-unreferenced). REMAINING FRONTIER (correctly bounded, NOT started — resist finishing-urge that breaks the
+crown jewel): CP-1 kernel fix (operator CRASH-PROTOCOL session) · C.12 Verilog gating (toolchain host) · emit_generic
+(doc design-only, own gated session) · 2 substrate-ahead organs (cost_lattice_unified, hotstuff_predict_opt — a wire
+would be synthetic). Work is uncommitted atop WIP `867849d` (scopes cleanly to STDLIB/ + R2-GENESIS/ + DOCS/).

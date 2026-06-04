@@ -438,11 +438,11 @@ fn sh_pair_agrees(cover: *u8, u_i: u32, u_j: u32) -> u8 {
     if sec_i == SHEAF_SENT { return 0u8 }
     let sec_j : u32 = sh_find_section(pre_p, u_j)
     if sec_j == SHEAF_SENT { return 0u8 }
-    let nullp : *u8 = 0u64 as *u8
+    /* ri/rj are addresses of the module-scope BSS globals SH_R_I/SH_R_J -- never null;
+     * the old `if ri == nullp` / `if rj == nullp` guards were VACUOUS (dead) and removed.
+     * The real agreement test is the sh_restrict rc + ident_eq below. */
     let ri : *u8 = (&SH_R_I as u64) as *u8
     let rj : *u8 = (&SH_R_J as u64) as *u8
-    if ri == nullp { return 0u8 }
-    if rj == nullp { return 0u8 }
     let rc_i : i32 = sh_restrict(sec_i, u_i, inter, ri)
     if rc_i != SHEAF_OK { return 0u8 }
     let rc_j : i32 = sh_restrict(sec_j, u_j, inter, rj)

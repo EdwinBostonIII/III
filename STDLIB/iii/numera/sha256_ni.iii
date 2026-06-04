@@ -1,0 +1,494 @@
+/* C:\Users\Edwin Boston\OneDrive\Desktop\III\STDLIB\iii\numera\sha256_ni.iii
+ *
+ * III STDLIB - numera::sha256_ni   (APOTHEOSIS C.14 staged accelerator)
+ *
+ * Hardware-accelerated FIPS 180-4 SHA-256 using the Intel SHA Extensions
+ * (SHA-NI): sha256rnds2 / sha256msg1 / sha256msg2, with the SSE4.1
+ * permutes (pshufd / palignr / pblendw / pshufb).  A drop-in differential
+ * sibling of numera/sha256.iii.
+ *
+ * GOLDEN-SAFE DESIGN (non-negotiable):
+ *   - This is a SELF-CONTAINED new module.  It does NOT touch sha256.iii
+ *     (the proven software path) nor sha256_dispatch.iii.  The default
+ *     path + the determinism golden stay provably unchanged.
+ *   - DISPATCH-OFF by default: nothing auto-routes here.  This module
+ *     exists only to be exercised by its differential KAT (corpus 1020)
+ *     and, at a future reseal, an explicit opt-in.
+ *   - Its own module-scope state (NIH/NIBUF/NIBITS/NIK/NIMASK) so nothing
+ *     aliases sha256.iii's SHA_* globals (distinct L_NI* vs L_SHA_* labels).
+ *
+ * FRAMING is byte-for-byte the same as sha256.iii: identical H init
+ * constants, big-endian message-word load (here via the pshufb byteswap
+ * mask), identical padding (0x80, zero to 56 mod 64, then the 64-bit
+ * big-endian bit length), and identical big-endian 32-byte digest output.
+ * ONLY the compression core differs (SHA-NI instead of the scalar round
+ * loop).  The differential KAT proves bit-equivalence over lengths 0..135
+ * plus the FIPS 180-4 "abc" and "" vectors.
+ *
+ * SHA-NI sequence transcribed from the public-domain reference
+ * sha256_process_x86 (Jeffrey Walton; Intel SHA Extensions whitepaper,
+ * Gulley/Gopal/Yap/Feghali/Guilford).  State is permuted to
+ *   STATE0 = ABEF, STATE1 = CDGH
+ * then 16 message groups each do paddd(K) + 2x sha256rnds2, with
+ * sha256msg1/msg2 + palignr building the rounds-16..63 schedule in-register.
+ *
+ * METAL/COMPILER discipline (see CRASH PROTOCOL / .iii metal traps):
+ *   - GAUGE-IN-METAL: module globals are referenced ONLY by their emitted
+ *     RIP-relative label `L_<NAME>(%rip)` (the form the compiler itself
+ *     emits for sha256.iii's AVX-512 sched block, verified by disasm).  No
+ *     bare global name appears inside metal{}.
+ *   - ALIGNMENT: NIK/NIMASK are 4-byte-aligned BSS, so they are NEVER fed
+ *     directly to a legacy-SSE memory operand (paddd/pshufb #GP on a
+ *     misaligned m128).  Always `movdqu` into a register first.
+ *   - Win64 NONVOLATILE XMM: xmm6..xmm9 are callee-saved.  The block
+ *     spills/restores them on the stack with a balanced subq/addq INSIDE
+ *     the block (independent of the III frame).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: zero externs.
+ */
+
+module numera_sha256_ni
+
+
+/* --- FIPS 180-4 K[0..63], natural native-u32 order (NOT byteswapped;
+ * only the MESSAGE is byteswapped, via NIMASK).  Byte-identical to
+ * sha256.iii's SHA_K. --- */
+
+var NIK : [u32; 64]
+
+/* --- pshufb big-endian byteswap mask: reverses each 4-byte group so a
+ * little-endian movdqu load of 16 message bytes yields the four
+ * big-endian message words.  Bytes 0..15 = 03 02 01 00 07 06 05 04 ...
+ * encoded as four u32 = {0x00010203, 0x04050607, 0x08090a0b, 0x0c0d0e0f}
+ * (little-endian store puts byte0=0x03, byte1=0x02, ...). --- */
+
+var NIMASK : [u32; 4]
+
+/* --- Working state --- */
+
+var NIH      : [u32; 8]
+var NIBUF    : [u8; 64]
+var NIBUFLEN : u32 = 0u32
+var NIBITS   : u64 = 0u64
+var NIINIT   : u8  = 0u8
+
+/* --- K table init (ROM constants; identical to sha256.iii SHA_K) --- */
+
+fn ni_init_k() -> u32 {
+    NIK[0]  = 0x428a2f98u32
+    NIK[1]  = 0x71374491u32
+    NIK[2]  = 0xb5c0fbcfu32
+    NIK[3]  = 0xe9b5dba5u32
+    NIK[4]  = 0x3956c25bu32
+    NIK[5]  = 0x59f111f1u32
+    NIK[6]  = 0x923f82a4u32
+    NIK[7]  = 0xab1c5ed5u32
+    NIK[8]  = 0xd807aa98u32
+    NIK[9]  = 0x12835b01u32
+    NIK[10] = 0x243185beu32
+    NIK[11] = 0x550c7dc3u32
+    NIK[12] = 0x72be5d74u32
+    NIK[13] = 0x80deb1feu32
+    NIK[14] = 0x9bdc06a7u32
+    NIK[15] = 0xc19bf174u32
+    NIK[16] = 0xe49b69c1u32
+    NIK[17] = 0xefbe4786u32
+    NIK[18] = 0x0fc19dc6u32
+    NIK[19] = 0x240ca1ccu32
+    NIK[20] = 0x2de92c6fu32
+    NIK[21] = 0x4a7484aau32
+    NIK[22] = 0x5cb0a9dcu32
+    NIK[23] = 0x76f988dau32
+    NIK[24] = 0x983e5152u32
+    NIK[25] = 0xa831c66du32
+    NIK[26] = 0xb00327c8u32
+    NIK[27] = 0xbf597fc7u32
+    NIK[28] = 0xc6e00bf3u32
+    NIK[29] = 0xd5a79147u32
+    NIK[30] = 0x06ca6351u32
+    NIK[31] = 0x14292967u32
+    NIK[32] = 0x27b70a85u32
+    NIK[33] = 0x2e1b2138u32
+    NIK[34] = 0x4d2c6dfcu32
+    NIK[35] = 0x53380d13u32
+    NIK[36] = 0x650a7354u32
+    NIK[37] = 0x766a0abbu32
+    NIK[38] = 0x81c2c92eu32
+    NIK[39] = 0x92722c85u32
+    NIK[40] = 0xa2bfe8a1u32
+    NIK[41] = 0xa81a664bu32
+    NIK[42] = 0xc24b8b70u32
+    NIK[43] = 0xc76c51a3u32
+    NIK[44] = 0xd192e819u32
+    NIK[45] = 0xd6990624u32
+    NIK[46] = 0xf40e3585u32
+    NIK[47] = 0x106aa070u32
+    NIK[48] = 0x19a4c116u32
+    NIK[49] = 0x1e376c08u32
+    NIK[50] = 0x2748774cu32
+    NIK[51] = 0x34b0bcb5u32
+    NIK[52] = 0x391c0cb3u32
+    NIK[53] = 0x4ed8aa4au32
+    NIK[54] = 0x5b9cca4fu32
+    NIK[55] = 0x682e6ff3u32
+    NIK[56] = 0x748f82eeu32
+    NIK[57] = 0x78a5636fu32
+    NIK[58] = 0x84c87814u32
+    NIK[59] = 0x8cc70208u32
+    NIK[60] = 0x90befffau32
+    NIK[61] = 0xa4506cebu32
+    NIK[62] = 0xbef9a3f7u32
+    NIK[63] = 0xc67178f2u32
+    /* big-endian byteswap mask (per-32-bit-group reverse) */
+    NIMASK[0] = 0x00010203u32
+    NIMASK[1] = 0x04050607u32
+    NIMASK[2] = 0x08090a0bu32
+    NIMASK[3] = 0x0c0d0e0fu32
+    return 0u32
+}
+
+/* --- The SHA-NI compression core.  Processes the single 64-byte block in
+ * NIBUF against the running state in NIH, in place.
+ *
+ * Register map (all xmm; gp rax/rcx scratch are Win64 volatile):
+ *   xmm0           K-added message scratch (rnds2 key is the hardwired
+ *                  %xmm0) AND transient byteswap-mask holder
+ *   xmm1..xmm4     MSG0..MSG3 (pre-K big-endian schedule words)
+ *   xmm5           TMP (alignr scratch)
+ *   xmm6 = STATE0  ABEF      (callee-saved -> spilled)
+ *   xmm7 = STATE1  CDGH      (callee-saved -> spilled)
+ *   xmm8 = ABEF_SAVE         (callee-saved -> spilled)
+ *   xmm9 = CDGH_SAVE         (callee-saved -> spilled)
+ *
+ * sha256rnds2 %xmm0, %src, %dest  : dest = rnds2(dest, src), key = xmm0
+ *   (gas requires the literal %xmm0 first operand; verified by disasm)
+ * sha256msg1 %src, %dest          : dest = msg1(dest, src)
+ * sha256msg2 %src, %dest          : dest = msg2(dest, src)
+ * palignr $n, %low, %dest         : dest already holds the HIGH operand
+ * --- */
+
+fn _sha_ni_block() -> u32 {
+    metal {
+    /* spill the four Win64 nonvolatile xmm we use (balanced; restored below) */
+    subq $64, %rsp
+    movdqu %xmm6, 0(%rsp)
+    movdqu %xmm7, 16(%rsp)
+    movdqu %xmm8, 32(%rsp)
+    movdqu %xmm9, 48(%rsp)
+
+    /* --- load state ABCD / EFGH and permute to ABEF / CDGH --- */
+    leaq L_NIH(%rip), %rax
+    movdqu 0(%rax), %xmm6        /* xmm6 = DCBA (mem order [A,B,C,D]) */
+    movdqu 16(%rax), %xmm7       /* xmm7 = HGFE (mem order [E,F,G,H]) */
+    pshufd $0xB1, %xmm6, %xmm6   /* CDAB */
+    pshufd $0x1B, %xmm7, %xmm7   /* EFGH */
+    movdqu %xmm6, %xmm5          /* TMP = CDAB */
+    palignr $8, %xmm7, %xmm5     /* TMP = ABEF  (high=CDAB, low=EFGH, >>8) */
+    pblendw $0xF0, %xmm6, %xmm7  /* STATE1 = CDGH (blend TMP(CDAB) hi into EFGH) */
+    movdqu %xmm5, %xmm6          /* STATE0 = ABEF */
+
+    /* save state for the post-add */
+    movdqu %xmm6, %xmm8          /* ABEF_SAVE */
+    movdqu %xmm7, %xmm9          /* CDGH_SAVE */
+
+    /* load message base + the byteswap mask source */
+    leaq L_NIBUF(%rip), %rax
+    leaq L_NIK(%rip), %rcx
+
+    /* --- Rounds 0-3 --- */
+    movdqu 0(%rax), %xmm1            /* MSG0 raw */
+    movdqu L_NIMASK(%rip), %xmm0     /* mask into reg (movdqu: no align req) */
+    pshufb %xmm0, %xmm1             /* MSG0 = big-endian words */
+    movdqu 0(%rcx), %xmm0            /* K0..3 */
+    paddd %xmm1, %xmm0             /* xmm0 = MSG0 + K0..3 */
+    sha256rnds2 %xmm0, %xmm6, %xmm7  /* STATE1 = rnds2(STATE1, STATE0) */
+    pshufd $0x0E, %xmm0, %xmm0       /* bring high 2 wk-words down */
+    sha256rnds2 %xmm0, %xmm7, %xmm6  /* STATE0 = rnds2(STATE0, STATE1) */
+
+    /* --- Rounds 4-7 --- */
+    movdqu 16(%rax), %xmm2
+    movdqu L_NIMASK(%rip), %xmm0
+    pshufb %xmm0, %xmm2             /* MSG1 */
+    movdqu 16(%rcx), %xmm0
+    paddd %xmm2, %xmm0
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm2, %xmm1         /* MSG0 = msg1(MSG0, MSG1) */
+
+    /* --- Rounds 8-11 --- */
+    movdqu 32(%rax), %xmm3
+    movdqu L_NIMASK(%rip), %xmm0
+    pshufb %xmm0, %xmm3             /* MSG2 */
+    movdqu 32(%rcx), %xmm0
+    paddd %xmm3, %xmm0
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm3, %xmm2         /* MSG1 = msg1(MSG1, MSG2) */
+
+    /* --- Rounds 12-15 --- */
+    movdqu 48(%rax), %xmm4
+    movdqu L_NIMASK(%rip), %xmm0
+    pshufb %xmm0, %xmm4             /* MSG3 */
+    movdqu 48(%rcx), %xmm0
+    paddd %xmm4, %xmm0
+    movdqu %xmm4, %xmm5             /* TMP = MSG3 */
+    palignr $4, %xmm3, %xmm5        /* TMP = msg3:msg2 >> 4 (4 bytes) */
+    paddd %xmm5, %xmm1             /* MSG0 += TMP */
+    sha256msg2 %xmm4, %xmm1         /* MSG0 = msg2(MSG0, MSG3) */
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm4, %xmm3         /* MSG2 = msg1(MSG2, MSG3) */
+
+    /* --- Rounds 16-19 --- (MSG0 holds W16..19 schedule) */
+    movdqu 64(%rcx), %xmm0
+    paddd %xmm1, %xmm0
+    movdqu %xmm1, %xmm5
+    palignr $4, %xmm4, %xmm5        /* TMP = MSG0:MSG3 >> 4 */
+    paddd %xmm5, %xmm2
+    sha256msg2 %xmm1, %xmm2         /* MSG1 = msg2(MSG1, MSG0) */
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm1, %xmm4         /* MSG3 = msg1(MSG3, MSG0) */
+
+    /* --- Rounds 20-23 --- */
+    movdqu 80(%rcx), %xmm0
+    paddd %xmm2, %xmm0
+    movdqu %xmm2, %xmm5
+    palignr $4, %xmm1, %xmm5
+    paddd %xmm5, %xmm3
+    sha256msg2 %xmm2, %xmm3
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm2, %xmm1
+
+    /* --- Rounds 24-27 --- */
+    movdqu 96(%rcx), %xmm0
+    paddd %xmm3, %xmm0
+    movdqu %xmm3, %xmm5
+    palignr $4, %xmm2, %xmm5
+    paddd %xmm5, %xmm4
+    sha256msg2 %xmm3, %xmm4
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm3, %xmm2
+
+    /* --- Rounds 28-31 --- */
+    movdqu 112(%rcx), %xmm0
+    paddd %xmm4, %xmm0
+    movdqu %xmm4, %xmm5
+    palignr $4, %xmm3, %xmm5
+    paddd %xmm5, %xmm1
+    sha256msg2 %xmm4, %xmm1
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm4, %xmm3
+
+    /* --- Rounds 32-35 --- */
+    movdqu 128(%rcx), %xmm0
+    paddd %xmm1, %xmm0
+    movdqu %xmm1, %xmm5
+    palignr $4, %xmm4, %xmm5
+    paddd %xmm5, %xmm2
+    sha256msg2 %xmm1, %xmm2
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm1, %xmm4
+
+    /* --- Rounds 36-39 --- */
+    movdqu 144(%rcx), %xmm0
+    paddd %xmm2, %xmm0
+    movdqu %xmm2, %xmm5
+    palignr $4, %xmm1, %xmm5
+    paddd %xmm5, %xmm3
+    sha256msg2 %xmm2, %xmm3
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm2, %xmm1
+
+    /* --- Rounds 40-43 --- */
+    movdqu 160(%rcx), %xmm0
+    paddd %xmm3, %xmm0
+    movdqu %xmm3, %xmm5
+    palignr $4, %xmm2, %xmm5
+    paddd %xmm5, %xmm4
+    sha256msg2 %xmm3, %xmm4
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm3, %xmm2
+
+    /* --- Rounds 44-47 --- */
+    movdqu 176(%rcx), %xmm0
+    paddd %xmm4, %xmm0
+    movdqu %xmm4, %xmm5
+    palignr $4, %xmm3, %xmm5
+    paddd %xmm5, %xmm1
+    sha256msg2 %xmm4, %xmm1
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm4, %xmm3
+
+    /* --- Rounds 48-51 --- */
+    movdqu 192(%rcx), %xmm0
+    paddd %xmm1, %xmm0
+    movdqu %xmm1, %xmm5
+    palignr $4, %xmm4, %xmm5
+    paddd %xmm5, %xmm2
+    sha256msg2 %xmm1, %xmm2
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+    sha256msg1 %xmm1, %xmm4
+
+    /* --- Rounds 52-55 --- */
+    movdqu 208(%rcx), %xmm0
+    paddd %xmm2, %xmm0
+    movdqu %xmm2, %xmm5
+    palignr $4, %xmm1, %xmm5
+    paddd %xmm5, %xmm3
+    sha256msg2 %xmm2, %xmm3
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+
+    /* --- Rounds 56-59 --- */
+    movdqu 224(%rcx), %xmm0
+    paddd %xmm3, %xmm0
+    movdqu %xmm3, %xmm5
+    palignr $4, %xmm2, %xmm5
+    paddd %xmm5, %xmm4
+    sha256msg2 %xmm3, %xmm4
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+
+    /* --- Rounds 60-63 --- */
+    movdqu 240(%rcx), %xmm0
+    paddd %xmm4, %xmm0
+    sha256rnds2 %xmm0, %xmm6, %xmm7
+    pshufd $0x0E, %xmm0, %xmm0
+    sha256rnds2 %xmm0, %xmm7, %xmm6
+
+    /* --- add saved state back --- */
+    paddd %xmm8, %xmm6          /* STATE0 += ABEF_SAVE */
+    paddd %xmm9, %xmm7          /* STATE1 += CDGH_SAVE */
+
+    /* --- de-permute ABEF/CDGH back to ABCD/EFGH and store --- */
+    pshufd $0x1B, %xmm6, %xmm6   /* FEBA */
+    pshufd $0xB1, %xmm7, %xmm7   /* DCHG */
+    movdqu %xmm6, %xmm5          /* TMP = FEBA */
+    pblendw $0xF0, %xmm7, %xmm5  /* TMP = DCBA (ABCD mem order) */
+    palignr $8, %xmm6, %xmm7     /* STATE1 = HGFE (EFGH mem order) */
+    leaq L_NIH(%rip), %rax
+    movdqu %xmm5, 0(%rax)        /* state[0..3] = A B C D */
+    movdqu %xmm7, 16(%rax)       /* state[4..7] = E F G H */
+
+    /* restore nonvolatile xmm + unwind the spill */
+    movdqu 0(%rsp), %xmm6
+    movdqu 16(%rsp), %xmm7
+    movdqu 32(%rsp), %xmm8
+    movdqu 48(%rsp), %xmm9
+    addq $64, %rsp
+    }
+    return 0u32
+}
+
+/* --- Public streaming API (framing identical to sha256.iii) --- */
+
+fn sha256_ni_init() -> u32 @export {
+    ni_init_k()
+    NIH[0] = 0x6a09e667u32
+    NIH[1] = 0xbb67ae85u32
+    NIH[2] = 0x3c6ef372u32
+    NIH[3] = 0xa54ff53au32
+    NIH[4] = 0x510e527fu32
+    NIH[5] = 0x9b05688cu32
+    NIH[6] = 0x1f83d9abu32
+    NIH[7] = 0x5be0cd19u32
+    NIBITS    = 0u64
+    NIBUFLEN  = 0u32
+    NIINIT    = 1u8
+    return 0u32
+}
+
+fn sha256_ni_update(input: *u8, len: u64) -> u32 @export {
+    if NIINIT == 0u8 { return 1u32 }
+    NIBITS = NIBITS + (len * 8u64)
+    let mut rem : u64 = len
+    let mut off : u64 = 0u64
+    while rem > 0u64 {
+        let mut take : u64 = 64u64 - (NIBUFLEN as u64)
+        if take > rem { take = rem }
+        let mut k : u64 = 0u64
+        while k < take {
+            let idx : u64 = (NIBUFLEN as u64) + k
+            NIBUF[idx] = input[off + k]
+            k = k + 1u64
+        }
+        NIBUFLEN = NIBUFLEN + (take as u32)
+        off = off + take
+        rem = rem - take
+        if NIBUFLEN == 64u32 {
+            _sha_ni_block()
+            NIBUFLEN = 0u32
+        }
+    }
+    return 0u32
+}
+
+fn sha256_ni_final(out_32: *u8) -> u32 @export {
+    if NIINIT == 0u8 { return 1u32 }
+    let bits : u64 = NIBITS
+    NIBUF[NIBUFLEN] = 0x80u8
+    NIBUFLEN = NIBUFLEN + 1u32
+    if NIBUFLEN > 56u32 {
+        while NIBUFLEN < 64u32 {
+            NIBUF[NIBUFLEN] = 0u8
+            NIBUFLEN = NIBUFLEN + 1u32
+        }
+        _sha_ni_block()
+        NIBUFLEN = 0u32
+    }
+    while NIBUFLEN < 56u32 {
+        NIBUF[NIBUFLEN] = 0u8
+        NIBUFLEN = NIBUFLEN + 1u32
+    }
+    let mut i : u32 = 0u32
+    while i < 8u32 {
+        let shift : u32 = 56u32 - i*8u32
+        let byte  : u8 = ((bits >> (shift as u64)) & 0xFFu64) as u8
+        NIBUF[NIBUFLEN] = byte
+        NIBUFLEN = NIBUFLEN + 1u32
+        i = i + 1u32
+    }
+    _sha_ni_block()
+    NIBUFLEN = 0u32
+    let mut j : u32 = 0u32
+    while j < 8u32 {
+        let h_val : u32 = NIH[j]
+        let base : u32 = j * 4u32
+        out_32[base + 0u32] = ((h_val >> 24u32) & 0xFFu32) as u8
+        out_32[base + 1u32] = ((h_val >> 16u32) & 0xFFu32) as u8
+        out_32[base + 2u32] = ((h_val >> 8u32)  & 0xFFu32) as u8
+        out_32[base + 3u32] = (h_val & 0xFFu32) as u8
+        j = j + 1u32
+    }
+    NIINIT = 0u8
+    return 0u32
+}
+
+fn sha256_ni_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 @export {
+    sha256_ni_init()
+    sha256_ni_update(input, len)
+    return sha256_ni_final(out_32)
+}

@@ -21,6 +21,11 @@ extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_aad(aad: u64, aad_len: u64) ->
 extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_seal(pt: u64, pt_len: u64, ct_out: u64, tag_out: u64) -> i32 from "chacha20_poly1305.iii"
 extern @abi(c-msvc-x64) fn aead_chacha20_poly1305_open(ct: u64, ct_len: u64, pt_out: u64, tag_in: u64) -> u8 from "chacha20_poly1305.iii"
 
+const XC_OK      : i32 =  0i32
+const XC_E_SETUP : i32 = -1i32   /* aead init failed (subkey/nonce derive + cipher setup) */
+const XC_E_AAD   : i32 = -2i32   /* aad update failed */
+const XC_E_SEAL  : i32 = -3i32   /* seal failed */
+
 var XC_SUBKEY : [u8; 32]
 var XC_NONCE  : [u8; 12]
 
@@ -34,19 +39,30 @@ fn xc_setup(key: u64, nonce24: u64) -> i32 {
     xn[3] = 0u8
     let mut i : u64 = 0u64
     while i < 8u64 { xn[4u64 + i] = np[16u64 + i] ; i = i + 1u64 }
-    aead_chacha20_poly1305_init(&XC_SUBKEY as u64, &XC_NONCE as u64)
-    return 0i32
+    /* aead init CAN fail (first-call buffer alloc).  Propagate -- never seal/open on an
+     * uninitialised cipher (which would emit unauthenticated output on an AEAD). */
+    let ir : i32 = aead_chacha20_poly1305_init(&XC_SUBKEY as u64, &XC_NONCE as u64)
+    return ir
 }
 
 fn xchacha20_poly1305_seal(key: u64, nonce24: u64, aad: u64, aad_len: u64, pt: u64, pt_len: u64, ct_out: u64, tag_out: u64) -> i32 @export {
-    xc_setup(key, nonce24)
-    if aad_len > 0u64 { aead_chacha20_poly1305_aad(aad, aad_len) }
-    aead_chacha20_poly1305_seal(pt, pt_len, ct_out, tag_out)
-    return 0i32
+    let su : i32 = xc_setup(key, nonce24)
+    if su != XC_OK { return XC_E_SETUP }
+    if aad_len > 0u64 {
+        let ar : i32 = aead_chacha20_poly1305_aad(aad, aad_len)
+        if ar != XC_OK { return XC_E_AAD }
+    }
+    let sr : i32 = aead_chacha20_poly1305_seal(pt, pt_len, ct_out, tag_out)
+    if sr != XC_OK { return XC_E_SEAL }
+    return XC_OK
 }
 
 fn xchacha20_poly1305_open(key: u64, nonce24: u64, aad: u64, aad_len: u64, ct: u64, ct_len: u64, pt_out: u64, tag_in: u64) -> u8 @export {
-    xc_setup(key, nonce24)
-    if aad_len > 0u64 { aead_chacha20_poly1305_aad(aad, aad_len) }
+    let su : i32 = xc_setup(key, nonce24)
+    if su != XC_OK { return 0u8 }   /* setup failed -> reject (cannot authenticate) */
+    if aad_len > 0u64 {
+        let ar : i32 = aead_chacha20_poly1305_aad(aad, aad_len)
+        if ar != XC_OK { return 0u8 }
+    }
     return aead_chacha20_poly1305_open(ct, ct_len, pt_out, tag_in)
 }

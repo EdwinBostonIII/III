@@ -165,7 +165,9 @@ fn dn_count(meta: *u8) -> u64 @export {
  * / 4 registry full.  A forged or stale update never moves the name. */
 fn dn_apply(meta: *u8, slots: *u8, pubkey: *u8, value_addr: *u8, t: u64, sig: *u8) -> u64 @export {
     let kbuf : *u8 = dn_malloc(32u64)
+    if (kbuf as u64) == 0u64 { return 5u64 }                 /* [null-deref] VirtualAlloc fail -> no null write */
     let mbuf : *u8 = dn_malloc(72u64)
+    if (mbuf as u64) == 0u64 { dn_free(kbuf)  return 5u64 }   /* free kbuf on the error path */
     dn_key_addr(pubkey, kbuf)
     dn_build_msg(kbuf, value_addr, t, mbuf)
     let mut res : u64 = 1u64
@@ -231,8 +233,11 @@ fn dn_resolve(meta: *u8, slots: *u8, key: *u8, ko: u64, out: *u8) -> u64 @export
 fn dn_merge(dmeta: *u8, dslots: *u8, smeta: *u8, sslots: *u8) -> u64 @export {
     let scap : u64 = dn_ld_u64(smeta, 0u64)
     let pk : *u8 = dn_malloc(32u64)
+    if (pk as u64) == 0u64 { return 5u64 }                                 /* [null-deref] guard VirtualAlloc fail */
     let va : *u8 = dn_malloc(32u64)
+    if (va as u64) == 0u64 { dn_free(pk)  return 5u64 }
     let sg : *u8 = dn_malloc(64u64)
+    if (sg as u64) == 0u64 { dn_free(pk)  dn_free(va)  return 5u64 }
     let mut i : u64 = 0u64
     while i < scap {
         let base : u64 = i * 192u64

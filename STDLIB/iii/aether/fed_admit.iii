@@ -17,7 +17,7 @@
  *   fed_admit_planetary_gate_status(peer_id_ptr)                    -> u32
  *   fed_admit_eligible(peer_id_ptr)                                 -> u8
  *   fed_admit_to_planetary(slot, peer_id_ptr)                       -> i32
- *   fed_admit_with_pow_proof(node_id, pow_nonce, packed_meta)       -> i32
+ *   fed_admit_with_qc_proof(node_id, pow_nonce, packed_meta, qc_ptr, qc_len) -> i32
  *
  * Hexad: kind_substance.  Ring: R3.  K: 0.95.
  */
@@ -39,6 +39,7 @@ const FED_ADMIT_E_POW          : i32 = -4i32
 const FED_ADMIT_E_TIER_RANGE   : i32 = -5i32
 const FED_ADMIT_E_SCORE        : i32 = -6i32
 const FED_ADMIT_E_QC           : i32 = -7i32   /* 4th gate: HotStuff QC over the admission decision */
+const FED_ADMIT_QC_MAX_SIGS    : u32 = 64u32   /* == hotstuff HS_MAX_PEERS; n_sigs ceiling (anti-wrap, validator bound) */
 
 const FED_ADMIT_MIN_SCORE      : u64 = 16000000u64   /* 16 difficulty bits * 1e6 */
 const FED_ADMIT_PLANETARY_TIER : u32 = 5u32
@@ -135,24 +136,30 @@ fn _fed_admit_pow_bits_for_tier(tier: u32) -> u32 {
     return 0u32
 }
 
-/* fed_admit_with_pow_proof -- hardened admission with caller-supplied PoW.
+/* fed_admit_with_qc_proof -- hardened admission with caller-supplied PoW AND a
+ * HotStuff quorum certificate (the 4th gate, gospel L24432).
  *
  * packed_meta layout:
  *   bits 32..63 : tier id (0 = planetary, 1 = galactic, 2 = sovereign)
  *   bits  0..31 : minimum sybil score required for admission
+ *
+ * Parameters: node_id, pow_nonce, packed_meta (above), qc_ptr (-> a HotStuff QC
+ * whose length is 44 + n_sigs*64, with n_sigs read from qc[40..44]).
  *
  * Behavior:
  *   1. Materialize node_id as a 32-byte peer-id buffer (sealed projection).
  *   2. Resolve PoW difficulty (bits) from tier; reject unknown tiers.
  *   3. Verify pow_nonce via fed_sybil_pow_verify at the tier-required bits.
  *   4. Read sybil score; require score >= threshold (low 32 of packed_meta).
- *   5. On success, dispatch to fed_admit_to_planetary using slot 0.
+ *   5. Verify the HotStuff QC (>= 2f+1 Ed25519 sigs) via hs_verify_qc; checked
+ *      last so a failing sybil/pow/score gate is reported first.
+ *   6. On success, dispatch to fed_admit_to_planetary using slot 0.
  *
  * Returns FED_ADMIT_OK (0) on success, or a negative error code.  No
  * observational state, no thresholds learned from history -- every gate
  * is sealed-input-only.
  */
-fn fed_admit_with_qc_proof(node_id: u64, pow_nonce: u64, packed_meta: u64, qc_ptr: *u8) -> i32 @export {
+fn fed_admit_with_qc_proof(node_id: u64, pow_nonce: u64, packed_meta: u64, qc_ptr: *u8, qc_len: u32) -> i32 @export {
     let n_l : u64 = node_id
     let w_l : u64 = pow_nonce
     let m_l : u64 = packed_meta
@@ -170,9 +177,15 @@ fn fed_admit_with_qc_proof(node_id: u64, pow_nonce: u64, packed_meta: u64, qc_pt
      * HotStuff quorum certificate (>= 2f+1 verified Ed25519 signatures). QC
      * length derived from its n_sigs field (qc[40..44]): 44 + n_sigs*64.
      * Checked last so a failing sybil/pow/score gate is reported first. */
+    /* The caller passes the REAL qc_len (buffer size).  Guard the structure BEFORE indexing
+     * ANY QC byte: (1) min 44 bytes so qp[40..43] is in-bounds (was a pre-read OOB); (2) cap
+     * n_sigs at the validator ceiling (prevents the n_sigs*64 u32 wrap); (3) require the buffer
+     * to actually hold the full sig array.  hs_verify_qc re-checks all three internally. */
+    if qc_len < 44u32 { return FED_ADMIT_E_QC }
     let qp : *u8 = qc_ptr
     let n_sigs : u32 = (qp[40u64] as u32) | ((qp[41u64] as u32) << 8u32) | ((qp[42u64] as u32) << 16u32) | ((qp[43u64] as u32) << 24u32)
-    let qc_len : u32 = 44u32 + n_sigs * 64u32
+    if n_sigs > FED_ADMIT_QC_MAX_SIGS { return FED_ADMIT_E_QC }
+    if qc_len < 44u32 + n_sigs * 64u32 { return FED_ADMIT_E_QC }
     if hs_verify_qc(qp, qc_len) != 1u8 { return FED_ADMIT_E_QC }
     let rc : i32 = fed_admit_to_planetary(0u32, buf_addr)
     if rc != FED_ADMIT_OK { return rc }

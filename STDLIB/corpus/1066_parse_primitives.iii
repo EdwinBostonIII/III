@@ -1,0 +1,41 @@
+/* 1066 -- verba::parse primitives coverage (gap-backlog #90).
+ *
+ * Closes parse_match_byte (hit/miss/pos>=len), parse_take_while_ascii_alpha (run + empty FAIL),
+ * parse_set_pending_lit + parse_consume_lit (success / literal-mismatch FAIL / bounds-overflow
+ * negative arm with pos near u64-max).  Success encodes PARSE_OK_BIT|new_pos; FAIL = 0.
+ * Equality compares only. 99 = pass.
+ */
+module corpus_1066
+
+extern @abi(c-msvc-x64) fn parse_match_byte(base: u64, len: u64, pos: u64, b: u32) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_take_while_ascii_alpha(base: u64, len: u64, pos: u64) -> u64 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_set_pending_lit(lit_base: u64, lit_len: u64) -> u32 from "parse.iii"
+extern @abi(c-msvc-x64) fn parse_consume_lit(base: u64, len: u64, pos: u64) -> u64 from "parse.iii"
+
+var BUF : [u8; 5] = [97u8, 98u8, 99u8, 49u8, 50u8]   /* "abc12" */
+var LIT_ABC : [u8; 3] = [97u8, 98u8, 99u8]            /* "abc" */
+var LIT_XYZ : [u8; 3] = [120u8, 121u8, 122u8]         /* "xyz" */
+
+fn main() -> u64 {
+    let b : u64 = (&BUF) as u64
+
+    /* parse_match_byte */
+    if parse_match_byte(b, 5u64, 0u64, 97u32) != 0x8000000000000001u64 { return 1u64 }   /* 'a' hit -> pos 1 */
+    if parse_match_byte(b, 5u64, 0u64, 120u32) != 0u64 { return 2u64 }                    /* 'x' miss -> FAIL */
+    if parse_match_byte(b, 5u64, 5u64, 97u32) != 0u64 { return 3u64 }                     /* pos>=len -> FAIL */
+
+    /* parse_take_while_ascii_alpha */
+    if parse_take_while_ascii_alpha(b, 5u64, 0u64) != 0x8000000000000003u64 { return 4u64 } /* "abc" -> pos 3 */
+    if parse_take_while_ascii_alpha(b, 5u64, 3u64) != 0u64 { return 5u64 }                   /* '1' no alpha -> FAIL */
+
+    /* parse_set_pending_lit + parse_consume_lit */
+    parse_set_pending_lit((&LIT_ABC) as u64, 3u64)
+    if parse_consume_lit(b, 5u64, 0u64) != 0x8000000000000003u64 { return 6u64 }          /* "abc" matches -> pos 3 */
+    parse_set_pending_lit((&LIT_XYZ) as u64, 3u64)
+    if parse_consume_lit(b, 5u64, 0u64) != 0u64 { return 7u64 }                           /* mismatch -> FAIL */
+    parse_set_pending_lit((&LIT_ABC) as u64, 3u64)
+    if parse_consume_lit(b, 5u64, 4u64) != 0u64 { return 8u64 }                           /* lit_len > len-pos -> FAIL */
+    if parse_consume_lit(b, 5u64, 0x8000000000000000u64) != 0u64 { return 9u64 }          /* pos>len overflow guard */
+
+    return 99u64
+}

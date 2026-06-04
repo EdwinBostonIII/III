@@ -175,44 +175,52 @@ fn call_context_new() -> u64 @export {
     return p
 }
 
-fn call_context_id(p: u64) -> u64 @export { return read_u64_at(p) }
-fn call_context_k_at_entry(p: u64) -> u64 @export { return read_u64_at(p + 48u64) }
-fn call_context_cap_id(p: u64) -> u64 @export { return read_u64_at(p + 56u64) }
-fn call_context_caller_pattern_id(p: u64) -> u64 @export { return read_u64_at(p + 64u64) }
-fn call_context_arena_id(p: u64) -> u64 @export { return read_u64_at(p + 88u64) }
+fn call_context_id(p: u64) -> u64 @export { if p == 0u64 { return 0u64 } return read_u64_at(p) }
+fn call_context_k_at_entry(p: u64) -> u64 @export { if p == 0u64 { return 0u64 } return read_u64_at(p + 48u64) }
+fn call_context_cap_id(p: u64) -> u64 @export { if p == 0u64 { return 0u64 } return read_u64_at(p + 56u64) }
+fn call_context_caller_pattern_id(p: u64) -> u64 @export { if p == 0u64 { return 0u64 } return read_u64_at(p + 64u64) }
+fn call_context_arena_id(p: u64) -> u64 @export { if p == 0u64 { return 0u64 } return read_u64_at(p + 88u64) }
 
 fn call_context_kchain_id(p: u64) -> u8 @export {
+    if p == 0u64 { return 0u8 }
     let pk : *u8 = (p + 40u64) as *u8
     return pk[0u64]
 }
 
 fn call_context_hexad_kind(p: u64) -> u8 @export {
+    if p == 0u64 { return 0u8 }
     let pk : *u8 = (p + 72u64) as *u8
     return pk[0u64]
 }
 
 fn call_context_ring(p: u64) -> u8 @export {
+    if p == 0u64 { return 0u8 }
     let pr : *u8 = (p + 73u64) as *u8
     return pr[0u64]
 }
 
 fn call_context_recursion_depth(p: u64) -> u16 @export {
+    if p == 0u64 { return 0u16 }
     let e : u64 = read_u64_at(p + 80u64)
     return ((e >> 48u64) & 0xFFFFu64) as u16
 }
 
 fn call_context_provenance_root_byte(p: u64, i: u32) -> u8 @export {
     if i >= 32u32 { return 0u8 }
+    if p == 0u64 { return 0u8 }
     let bp : *u8 = (p + 8u64 + ((i as u64) & 0xFFFFFFFFu64)) as *u8
     return bp[0u64]
 }
 
 fn call_context_set_caller_pattern_id(p: u64, pat_id: u64) -> i32 @export {
+    if p == 0u64 { return 0i32 - 1i32 }
     write_u64_at(p + 64u64, pat_id)
     return CC_OK
 }
 
 fn call_context_digest(p: u64, out_32: u64) -> i32 @export {
+    if p == 0u64 { return 0i32 - 1i32 }
+    if out_32 == 0u64 { return 0i32 - 1i32 }
     mhash_begin()
     mhash_domain((&DOM_CCTX_DIG) as u64, 12u64)
     mhash_payload(p, CC_BYTES as u64)

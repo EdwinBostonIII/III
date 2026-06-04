@@ -52,6 +52,7 @@ fn hdl_reset() -> u64 @export { HG_N[0u32] = 0u32 ; return 0u64 }
 
 /* add a primary input reading slot `input_idx`; returns the gate id */
 fn hdl_add_in(input_idx: u32) -> u32 @export {
+    if input_idx >= HG_MAXIN { return 0xFFFFFFFFu32 }   /* HG_IN's A is read as HG_INPUT[input_idx] (size HG_MAXIN) */
     let g : u32 = HG_N[0u32]
     if g >= HG_MAXG { return 0xFFFFFFFFu32 }
     HG_KIND[g] = HG_IN ; HG_A[g] = input_idx ; HG_B[g] = 0u32
@@ -60,17 +61,20 @@ fn hdl_add_in(input_idx: u32) -> u32 @export {
 }
 /* add a gate of `kind` with input gate-ids a, b (b ignored for unary kinds); returns the gate id */
 fn hdl_add(kind: u32, a: u32, b: u32) -> u32 @export {
+    if a >= HG_MAXG { return 0xFFFFFFFFu32 }    /* a,b are gate-ids later read as HG_VAL[a]/HG_DEPTH[a]/HG_LIVE[a]; reject out-of-range refs */
+    if b >= HG_MAXG { return 0xFFFFFFFFu32 }
     let g : u32 = HG_N[0u32]
     if g >= HG_MAXG { return 0xFFFFFFFFu32 }
     HG_KIND[g] = kind ; HG_A[g] = a ; HG_B[g] = b
     HG_N[0u32] = g + 1u32
     return g
 }
-fn hdl_set_input(idx: u32, val: i32) -> u64 @export { HG_INPUT[idx] = val ; return 0u64 }
+fn hdl_set_input(idx: u32, val: i32) -> u64 @export { if idx >= HG_MAXIN { return 0u64 } HG_INPUT[idx] = val ; return 0u64 }
 fn hdl_gate_count() -> u32 @export { return HG_N[0u32] }
 
 /* topological one-pass evaluation -> the value of gate `out` under the current HG_INPUT. */
 fn hdl_eval(out: u32) -> i32 @export {
+    if out >= HG_MAXG { return 0i32 }    /* [OOB] @export out indexes HG_VAL[out] (sibling hdl_set_input bounds its idx) */
     let n : u32 = HG_N[0u32]
     let mut g : u32 = 0u32
     while g < n {
@@ -95,6 +99,7 @@ fn hdl_eval(out: u32) -> i32 @export {
 
 /* BINARY certification: identical truth table over all 2^n input assignments (0/1). */
 fn hdl_equiv2(a: u32, b: u32, n: u32) -> u32 @export {
+    if n >= 32u32 { return 0u32 }    /* 1u32 << n is UB for n>=32; n<32<HG_MAXIN keeps hdl_set_input(i) in-bounds */
     let total : u32 = 1u32 << n
     let mut v : u32 = 0u32
     while v < total {
@@ -143,6 +148,7 @@ fn pc_gate_count() -> u32 @export {
 /* the critical path: the longest gate-chain from inputs to `out` (the gate-delay bounding the
  * clock period). One topological pass: depth = 0 for inputs/consts, else 1 + max(depth of inputs). */
 fn pc_logic_depth(out: u32) -> u32 @export {
+    if out >= HG_MAXG { return 0u32 }    /* [OOB] @export out indexes HG_DEPTH[out] */
     let n : u32 = HG_N[0u32]
     let mut g : u32 = 0u32
     while g < n {
@@ -224,15 +230,15 @@ fn hdl_seq_init() -> u64 @export {
     return 0u64
 }
 /* set gate g's input-A to gate a -- used to close a feedback loop after both gates exist. */
-fn hdl_set_a(g: u32, a: u32) -> u64 @export { HG_A[g] = a ; return 0u64 }
+fn hdl_set_a(g: u32, a: u32) -> u64 @export { if g >= HG_MAXG { return 0u64 } HG_A[g] = a ; return 0u64 }   /* [OOB] @export g write */
 /* APOTHEOSIS C.8: read accessors + set-B so an external certified netlist optimizer can SCAN the
  * graph (detect reducible patterns) + REDIRECT consumers. Additive, behavior-neutral. */
-fn hdl_set_b(g: u32, b: u32) -> u64 @export { HG_B[g] = b ; return 0u64 }
-fn hdl_gate_kind(g: u32) -> u32 @export { return HG_KIND[g] }
-fn hdl_gate_a(g: u32) -> u32 @export { return HG_A[g] }
-fn hdl_gate_b(g: u32) -> u32 @export { return HG_B[g] }
+fn hdl_set_b(g: u32, b: u32) -> u64 @export { if g >= HG_MAXG { return 0u64 } HG_B[g] = b ; return 0u64 }   /* [OOB] @export g write */
+fn hdl_gate_kind(g: u32) -> u32 @export { if g >= HG_MAXG { return 0u32 } return HG_KIND[g] }   /* [OOB] @export g */
+fn hdl_gate_a(g: u32) -> u32 @export { if g >= HG_MAXG { return 0u32 } return HG_A[g] }
+fn hdl_gate_b(g: u32) -> u32 @export { if g >= HG_MAXG { return 0u32 } return HG_B[g] }
 /* read a DFF's current held state. */
-fn hdl_dff_state(g: u32) -> i32 @export { return HG_STATE[g] }
+fn hdl_dff_state(g: u32) -> i32 @export { if g >= HG_MAXG { return 0i32 } return HG_STATE[g] }
 /* one clock cycle: combinational eval (each DFF outputs its HELD state), then latch (each DFF's
  * next state = its input's value). A synchronous-circuit step -- a bounded evaluation, NOT the
  * halting problem (no unbounded fixpoint search). */
@@ -267,6 +273,7 @@ fn pc_gate_delay(kind: u32) -> u32 @export {
 /* the WEIGHTED critical path to `out`: the gate-delay-weighted longest path (the timing bounding the
  * clock period -- finer than pc_logic_depth's uniform 1/gate). DFFs/inputs start fresh (delay 0). */
 fn pc_crit_delay(out: u32) -> u32 @export {
+    if out >= HG_MAXG { return 0u32 }    /* [OOB] @export out indexes HG_DEPTH[out] */
     let n : u32 = HG_N[0u32]
     let mut g : u32 = 0u32
     while g < n {
@@ -328,6 +335,7 @@ fn pc_fanout_cap() -> u32 @export {
  * proven rewrite that routes around redundancy shows up as a strictly lower live count. Reachability
  * propagates DOWN (inputs precede consumers -> process high to low; one pass). */
 fn pc_live_gate_count(out: u32) -> u32 @export {
+    if out >= HG_MAXG { return 0u32 }    /* [OOB] @export out -> HG_LIVE[out] write */
     let n : u32 = HG_N[0u32]
     let mut g : u32 = 0u32
     while g < n { HG_LIVE[g] = 0u32 ; g = g + 1u32 }

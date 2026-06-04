@@ -418,7 +418,13 @@ fn https_parse_decimal_u64(base: u64, len: u64) -> u64 {
         if b < 48u32 { return 0xFFFFFFFFFFFFFFFFu64 }
         if b > 57u32 { return 0xFFFFFFFFFFFFFFFFu64 }
         let d : u64 = (b - 48u32) as u64
-        acc = acc * 10u64 + d
+        /* [overflow] two-stage guard: a lone `> MAX/10` lets the exact boundary (Content-Length 2^64..2^64+3)
+         * wrap to 0..3 instead of the sentinel -> wrong body length / request desync. *10 then +d, reject on either wrap. */
+        if acc > 1844674407370955161u64 { return 0xFFFFFFFFFFFFFFFFu64 }
+        let v10 : u64 = acc * 10u64
+        let nv  : u64 = v10 + d
+        if nv < v10 { return 0xFFFFFFFFFFFFFFFFu64 }
+        acc = nv
         i = i + 1u64
     }
     return acc
@@ -574,7 +580,12 @@ fn https_parse_body(arena: u64, slot_idx: u32) -> i32 {
         let vl : u64 = HTTPS_HDR_VALUE_LEN[vh]
         let n : u64 = https_parse_decimal_u64(vb, vl)
         if n == 0xFFFFFFFFFFFFFFFFu64 { return HTTPS_E_PARSE }
-        if HTTPS_PARSE_CURSOR + n > HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+        /* OVERFLOW-SAFE: `CURSOR + n` wraps for a near-u64-max Content-Length (the
+         * sentinel check above catches only the exact 0xFF..FF), passing the bound and
+         * setting a multi-EB body window.  CURSOR <= RAW_LEN holds (it only advances
+         * past a passed check), so the subtraction form cannot underflow. */
+        if HTTPS_PARSE_CURSOR > HTTPS_PARSE_RAW_LEN { return HTTPS_E_PARSE }
+        if n > HTTPS_PARSE_RAW_LEN - HTTPS_PARSE_CURSOR { return HTTPS_E_PARSE }
         HTTPS_REQ_BODY_BASE[slot_idx] = HTTPS_PARSE_RAW_BASE + HTTPS_PARSE_CURSOR
         HTTPS_REQ_BODY_LEN[slot_idx]  = n
         HTTPS_PARSE_CURSOR = HTTPS_PARSE_CURSOR + n

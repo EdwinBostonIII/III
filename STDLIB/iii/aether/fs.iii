@@ -126,8 +126,9 @@ fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 @export {
 }
 
 /* Delete a file by path. Deletion is a write-class mutation, so it requires
- * the WRITE right on the capability (same right that creates/truncates in
- * fs_open WRITE mode). Path-based (like fs_open), not handle-based — there is
+ * the WRITE right on the capability. (fs_open WRITE mode additionally requires
+ * CREATE to make/truncate the target; deletion needs only WRITE -- it removes an
+ * existing name, it does not create one.) Path-based (like fs_open), not handle-based — there is
  * no open descriptor to delete. Returns FS_OK on success, FS_E_DENIED if the
  * capability lacks WRITE, FS_E_IO if the underlying delete fails (e.g. the
  * file does not exist or is locked). RITCHIE Stage 1.X (Phase D ops, brought
@@ -176,25 +177,34 @@ fn fs_seek(handle_id: u64, off: u64, whence: u32) -> i32 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return FS_E_DENIED }
     let h : u64 = handle_fd(handle_id)
     let d : i64 = off as i64
-    SetFilePointerEx(h, d, 0u64, whence)
+    let ok : i32 = SetFilePointerEx(h, d, 0u64, whence)   /* Win32 BOOL: 0 = failure */
+    if ok == 0i32 { return FS_E_IO }
     return FS_OK
 }
 
 fn fs_tell(handle_id: u64) -> u64 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
     let h : u64 = handle_fd(handle_id)
-    SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_CUR)
+    let ok : i32 = SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_CUR)
+    if ok == 0i32 { return 0xFFFFFFFFFFFFFFFFu64 }   /* query failed -> sentinel, not a stale FS_NEWPOS */
     return fs_newpos()
 }
 
 fn fs_size(handle_id: u64) -> u64 @export {
     if handle_verify(handle_id, FS_RIGHT_READ) == 0u8 { return 0xFFFFFFFFFFFFFFFFu64 }
     let h : u64 = handle_fd(handle_id)
-    SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_CUR)
+    /* save current pos -> seek END (size) -> restore.  Every seek is checked: an
+     * unchecked failure would return a stale FS_NEWPOS as the "size" OR, worst, leave
+     * the file pointer stranded at END (the restore failed) and silently corrupt the
+     * next read/write on this handle.  On any failure: return the sentinel. */
+    let ok1 : i32 = SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_CUR)
+    if ok1 == 0i32 { return 0xFFFFFFFFFFFFFFFFu64 }
     let saved : u64 = fs_newpos()
-    SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_END)
+    let ok2 : i32 = SetFilePointerEx(h, 0i64, (&FS_NEWPOS) as u64, FS_SEEK_END)
+    if ok2 == 0i32 { return 0xFFFFFFFFFFFFFFFFu64 }
     let sz : u64 = fs_newpos()
     let sd : i64 = saved as i64
-    SetFilePointerEx(h, sd, 0u64, FS_SEEK_SET)
+    let ok3 : i32 = SetFilePointerEx(h, sd, 0u64, FS_SEEK_SET)
+    if ok3 == 0i32 { return 0xFFFFFFFFFFFFFFFFu64 }
     return sz
 }

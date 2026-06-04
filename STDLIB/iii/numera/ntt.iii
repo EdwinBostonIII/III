@@ -86,10 +86,10 @@ fn ntt_inv(x: u32, q: u32) -> u32 {
 fn ntt_mult_field_elem(a: u32, b: u32, q: u32) -> u32 @export { return ntt_mul(a, b, q) }
 
 /* Load/read the work buffer (public so consumers stage their coefficients here). */
-fn ntt_set(i: u64, v: u32) -> i32 @export { NTT_W[i] = v ; return 0i32 }
-fn ntt_get(i: u64) -> u32 @export { return NTT_W[i] }
+fn ntt_set(i: u64, v: u32) -> i32 @export { if i >= NTT_MAXN { return -1i32 } NTT_W[i] = v ; return 0i32 }   /* [OOB] @export idx into NTT_W[8192] */
+fn ntt_get(i: u64) -> u32 @export { if i >= NTT_MAXN { return 0u32 } return NTT_W[i] }
 /* Load the second convolution operand B. */
-fn ntt_set_b(i: u64, v: u32) -> i32 @export { NTT_B[i] = v ; return 0i32 }
+fn ntt_set_b(i: u64, v: u32) -> i32 @export { if i >= NTT_MAXN { return -1i32 } NTT_B[i] = v ; return 0i32 }
 
 /* --- Buffer-generic NTT core (operates on a caller-supplied u32 array at byte address
  * `base`). --- The bigint NTT tier (D-KARA-3) drives a 64K-element buffer through these;

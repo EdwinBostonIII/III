@@ -15,8 +15,8 @@ module aether_reach_store
 
 extern @abi(c-msvc-x64) fn fs_open(cap_id: u64, path: u64, mode: u32) -> u64 from "fs.iii"
 extern @abi(c-msvc-x64) fn fs_close(handle_id: u64) -> i32 from "fs.iii"
-extern @abi(c-msvc-x64) fn fs_read(handle_id: u64, buf: u64, n: u64) -> u64 from "fs.iii"
-extern @abi(c-msvc-x64) fn fs_write(handle_id: u64, buf: u64, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_read(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> u64 from "fs.iii"
+extern @abi(c-msvc-x64) fn fs_write(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> u64 from "fs.iii"
 extern @abi(c-msvc-x64) fn fs_seek(handle_id: u64, off: u64, whence: u32) -> i32 from "fs.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 
@@ -109,7 +109,11 @@ fn _rstore_locate(addr: u64, cap: u64) -> u64 {
                     RSTORE_FOUND_LEN = vlen
                     return h
                 }
-                fs_seek(h, vlen, RSTORE_SEEK_CUR)
+                /* fs_seek returns FS_E_IO on a failed skip-seek; an unchecked failure would
+                 * leave the file pointer wrong and parse garbage as the next record.  Stop the
+                 * scan (treat as not-found) rather than read at a corrupt offset. */
+                let sk : i32 = fs_seek(h, vlen, RSTORE_SEEK_CUR)
+                if sk != 0i32 { go = 0u8 }
             }
         }
     }

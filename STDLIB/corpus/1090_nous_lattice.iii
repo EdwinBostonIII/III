@@ -1,0 +1,33 @@
+/* 1090 -- nous_lattice (NOL, apotheosis §C.15): the proven-safe reorder lattice makes ADR-N11
+ * executable.  99 = the lattice classifies + the falsifier fires (nous_lattice_selftest) AND the
+ * LIVE nous orders are NOL-certified (real-data non-vacuity):
+ *   - the cascade order (mode 0) only permutes the confluence-certified set -> certified;
+ *   - the ascending probe (mode 1) likewise -> certified;
+ *   - the falsifier (an order carrying an uncertified rule) is REJECTED (in the selftest).
+ * Proves the no-ML guard ("never propose an unproven reorder") is now runnable, validated on the
+ * actual proposer output -- not a synthetic-only test. */
+module corpus_1090_nous_lattice
+
+extern @abi(c-msvc-x64) fn nous_lattice_selftest() -> u64 from "nous_lattice.iii"
+extern @abi(c-msvc-x64) fn nol_certify_order(order: *u64, n: u32) -> u8 from "nous_lattice.iii"
+extern @abi(c-msvc-x64) fn nous_rank(ctx_term: u32, kind: u32, out_order: *u64, cap: u32) -> u32 from "nous_socket.iii"
+extern @abi(c-msvc-x64) fn nous_set_order_mode(mode: u8) -> i32 from "nous_socket.iii"
+
+var NL_ORD : [u64; 64]
+
+fn main() -> u64 {
+    /* (1) the NOL self-test: block classifier + nf_safe + certify(legal)=1 + falsifier(uncertified)=0 */
+    if nous_lattice_selftest() != 99u64 { return 1u64 }
+    /* (2) REAL-DATA non-vacuity: the LIVE cascade order (mode 0) is NOL-certified */
+    nous_set_order_mode(0u8)
+    let nc : u32 = nous_rank(0u32, 18u32, (&NL_ORD as u64) as *u64, 64u32)
+    if nc == 0u32 { return 2u64 }
+    if nol_certify_order((&NL_ORD as u64) as *u64, nc) != 1u8 { return 3u64 }
+    /* (3) the LIVE ascending probe (mode 1) is NOL-certified */
+    nous_set_order_mode(1u8)
+    let na : u32 = nous_rank(0u32, 18u32, (&NL_ORD as u64) as *u64, 64u32)
+    if na == 0u32 { return 4u64 }
+    if nol_certify_order((&NL_ORD as u64) as *u64, na) != 1u8 { return 5u64 }
+    nous_set_order_mode(0u8)
+    return 99u64
+}

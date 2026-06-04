@@ -102,6 +102,8 @@ fn str_byte_cmp(a: u64, a_len: u64, b: u64, b_len: u64) -> i32 @export {
 fn str_starts_with(a: u64, a_len: u64, prefix: u64, p_len: u64) -> u8 @export {
     if p_len > a_len { return 0u8 }
     if p_len == 0u64 { return 1u8 }
+    if a == 0u64 { return 0u8 }
+    if prefix == 0u64 { return 0u8 }
     let ap : *u8 = a as *u8
     let pp : *u8 = prefix as *u8
     let mut i : u64 = 0u64
@@ -115,6 +117,8 @@ fn str_starts_with(a: u64, a_len: u64, prefix: u64, p_len: u64) -> u8 @export {
 fn str_ends_with(a: u64, a_len: u64, suffix: u64, s_len: u64) -> u8 @export {
     if s_len > a_len { return 0u8 }
     if s_len == 0u64 { return 1u8 }
+    if a == 0u64 { return 0u8 }
+    if suffix == 0u64 { return 0u8 }
     let ap : *u8 = a as *u8
     let sp : *u8 = suffix as *u8
     let off : u64 = a_len - s_len
@@ -131,6 +135,8 @@ fn str_ends_with(a: u64, a_len: u64, suffix: u64, s_len: u64) -> u8 @export {
 fn str_find(haystack: u64, h_len: u64, needle: u64, n_len: u64) -> u64 @export {
     if n_len == 0u64 { return 0u64 }
     if n_len > h_len { return h_len }
+    if haystack == 0u64 { return h_len }
+    if needle == 0u64 { return h_len }
     let hp : *u8 = haystack as *u8
     let np : *u8 = needle as *u8
     let last_start : u64 = h_len - n_len

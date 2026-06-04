@@ -1,0 +1,10 @@
+/* 1034 — sf_field: the consolidated GF(998244353) STARK base-field falsifier.
+ * Field axioms (add/mul commutativity, distributivity, Fermat inverse, additive
+ * inverse, a^(q-1)=1) over 64 deterministic-walk elements + the load-bearing
+ * primitive-root-of-unity property (ω_n^n=1 AND ω_n^(n/2)=q-1≠1 for n=2..2^20)
+ * that makes the radix-2 NTT — and thus the whole zk-STARK + PQ stack over this
+ * prime — a correct invertible transform. Closes the falsifier for the sf_*
+ * consolidation (the L_sf_* dup-symbol collision the independence capstone found). */
+module corpus_1034
+extern @abi(c-msvc-x64) fn sf_field_selftest() -> u64 from "ntt_fri_organ.iii"
+fn main() -> u64 { return sf_field_selftest() }

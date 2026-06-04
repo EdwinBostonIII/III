@@ -1,0 +1,4 @@
+/* 1039 — zkf_g1_selftest: BLS12-381 G1 group law. Closes a gating gap (selftest existed, ungated). */
+module corpus_1039
+extern @abi(c-msvc-x64) fn zkf_g1_selftest() -> u64 from "zk_field.iii"
+fn main() -> u64 { return zkf_g1_selftest() }

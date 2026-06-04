@@ -1,0 +1,100 @@
+/* STDLIB/iii/nous/nous_lattice.iii -- the NOL: the proven-safe reorder lattice (apotheosis §C.15).
+ *
+ * The proposer (nous_socket/nous_policy) chooses the ORDER in which the engine tries rewrite rules.
+ * ADR-N11 is the soundness precondition: "the socket only ever permutes the certified set; no
+ * uncertified rule is moved."  Today that is a *documented* invariant; the NOL makes it
+ * EXECUTABLE -- the no-ML guard turned into runnable code.
+ *
+ * The NF-safe reorder lattice (certified by the Confluence-Core Certificate `xii_conf_cert` +
+ * trit kind-disjointness):
+ *   - block R     = the ACTIVE reorderable rules R005..R044 -- confluence-certified, so ANY
+ *                   permutation reaches the same XII normal form;
+ *   - block INERT = the route-S-retired R001..R004 -- they never fire, so moving them is harmless;
+ *   - block TRIT  = the trit rules 101..105 -- LHS-disjoint from R001..R044 (zero critical pairs).
+ * A rule OUTSIDE these blocks (e.g. a future R045+ added WITHOUT a confluence proof) is
+ * UNCERTIFIED: the lattice REFUSES to certify a reorder that touches it, so an unproven reorder
+ * is never proposed (the proposer abstains -> falls back to the proven cascade).  This is the
+ * negative arm made mechanical: "the proposer abstains on any move not in the NOL."
+ *
+ * NON-vacuity: `nol_certify_order` returns 0 on a constructible bad order (one carrying an
+ * uncertified rule) and 1 on the real cascade/ascending orders (corpus 1090 validates BOTH the
+ * synthetic falsifier AND the live nous orders).  Self-contained (no nous_socket edge) so the
+ * dependency nous_socket -> nous_lattice stays acyclic.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: none (pure integer lattice predicates).
+ * Determinism: integer-only; u64 indices; no div/mod; single-line fns; ==/!= compares.
+ */
+module nous_lattice
+
+const NOL_OK         : i32 = 0i32
+const NOL_R_LO       : u64 = 5u64      /* active reorderable R-rules R005..R044 (confluence-certified) */
+const NOL_R_HI       : u64 = 44u64
+const NOL_INERT_LO   : u64 = 1u64      /* route-S retired R001..R004 (inert, never fire) */
+const NOL_INERT_HI   : u64 = 4u64
+const NOL_TRIT_LO    : u64 = 101u64    /* trit rules 101..105 (LHS-disjoint -> zero critical pairs) */
+const NOL_TRIT_HI    : u64 = 105u64
+const NOL_BLOCK_R      : u8 = 0u8
+const NOL_BLOCK_TRIT   : u8 = 1u8
+const NOL_BLOCK_INERT  : u8 = 2u8
+const NOL_BLOCK_UNCERT : u8 = 255u8    /* not in any certified block -> uncertified (abstain) */
+const NOL_U32MASK    : u64 = 0xFFFFFFFFu64
+
+/* selftest scratch (Trap 7: module-scope, never a function-local runtime-indexed array). */
+var NOL_T : [u64; 64]
+
+/* The rule's lattice block: R (active-reorderable) / TRIT / INERT / UNCERT. */
+fn nol_block(rid: u64) -> u8 @export {
+    if rid >= NOL_R_LO { if rid <= NOL_R_HI { return NOL_BLOCK_R } }
+    if rid >= NOL_TRIT_LO { if rid <= NOL_TRIT_HI { return NOL_BLOCK_TRIT } }
+    if rid >= NOL_INERT_LO { if rid <= NOL_INERT_HI { return NOL_BLOCK_INERT } }
+    return NOL_BLOCK_UNCERT
+}
+
+/* 1 iff reordering this rule provably preserves the XII normal form (it is in a certified block:
+ * active-reorderable, inert, or trit).  0 = UNCERTIFIED -> the proposer must abstain. */
+fn nol_nf_safe(rid: u64) -> u8 @export {
+    if nol_block(rid) == NOL_BLOCK_UNCERT { return 0u8 }
+    return 1u8
+}
+
+/* Certify a proposed firing order: 1 iff EVERY rule in it is NF-safe to reorder (so any permutation
+ * of `order` reaches the same NF as the proven cascade); 0 iff ANY rule is uncertified -- the
+ * caller (nous_socket mode 1/2) must then ABSTAIN and fall back to the cascade.  ADR-N11 executable. */
+fn nol_certify_order(order: *u64, n: u32) -> u8 @export {
+    if (order as u64) == 0u64 { return 0u8 }
+    let nn : u64 = (n as u64) & NOL_U32MASK
+    let mut i : u64 = 0u64
+    while i < nn {
+        if nol_nf_safe(order[i]) == 0u8 { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* KAT: 99 = the lattice classifies correctly AND the no-ML guard fires on the falsifier.
+ * (Corpus 1090 additionally certifies the LIVE nous cascade/ascending orders -- real-data non-vacuity.) */
+fn nous_lattice_selftest() -> u64 @export {
+    /* (1-5) block classifier */
+    if nol_block(NOL_R_LO) != NOL_BLOCK_R { return 1u64 }
+    if nol_block(NOL_R_HI) != NOL_BLOCK_R { return 2u64 }
+    if nol_block(103u64) != NOL_BLOCK_TRIT { return 3u64 }
+    if nol_block(2u64) != NOL_BLOCK_INERT { return 4u64 }
+    if nol_block(50u64) != NOL_BLOCK_UNCERT { return 5u64 }       /* R050: no confluence proof */
+    /* (6-8) nf_safe */
+    if nol_nf_safe(20u64) != 1u8 { return 6u64 }
+    if nol_nf_safe(101u64) != 1u8 { return 7u64 }
+    if nol_nf_safe(50u64) != 0u8 { return 8u64 }                  /* uncertified -> NOT nf-safe */
+    /* (9) certify a LEGAL order (a cascade-shaped order of certified rules) -> accept */
+    NOL_T[0u64] = 38u64  NOL_T[1u64] = 40u64  NOL_T[2u64] = 5u64  NOL_T[3u64] = 44u64  NOL_T[4u64] = 101u64
+    if nol_certify_order((&NOL_T as u64) as *u64, 5u32) != 1u8 { return 9u64 }
+    /* (10) THE FALSIFIER (prove-the-negative): inject an UNCERTIFIED rule (R050) -> certify REJECTS */
+    NOL_T[2u64] = 50u64
+    if nol_certify_order((&NOL_T as u64) as *u64, 5u32) != 0u8 { return 10u64 }
+    /* (11) a single inert rule is still NF-safe (route-S retired, never fires) */
+    if nol_nf_safe(3u64) != 1u8 { return 11u64 }
+    return 99u64
+}
+
+/* nous_lattice EMBODIES §C.15's NOL: the proposer's "creative" freedom is bounded to the
+ * confluence-certified reorderable set, with abstention on any uncertified rule -- the
+ * no-observational-learning guard (never propose an unproven reorder) made executable + falsifiable. */

@@ -118,8 +118,7 @@ fn nous_skey(t: u32, out32: *u8) -> i32 @export {
     if (out32 as u64) == 0u64 { return NBK_E_NULL }
     let r : i32 = _nbk_serialize(t)
     if r != NBK_OK { return r }
-    cad_oneshot(NBK_CAD_KECCAK, (&NBK_SER as u64) as *u8, NBK_SLEN, out32)
-    return NBK_OK
+    return cad_oneshot(NBK_CAD_KECCAK, (&NBK_SER as u64) as *u8, NBK_SLEN, out32)   /* [err-prop] propagate cad rc (matches sibling nous_value; NBK_OK==CAD_OK==0) */
 }
 
 /* BEHAVIORAL key: content-address of the XII NORMAL FORM (canonicalise, then serialize).
@@ -129,8 +128,7 @@ fn nous_bkey(t: u32, out32: *u8) -> i32 @export {
     let nf : u32 = xii_canonicalise(t)
     let r : i32 = _nbk_serialize(nf)
     if r != NBK_OK { return r }
-    cad_oneshot(NBK_CAD_KECCAK, (&NBK_SER as u64) as *u8, NBK_SLEN, out32)
-    return NBK_OK
+    return cad_oneshot(NBK_CAD_KECCAK, (&NBK_SER as u64) as *u8, NBK_SLEN, out32)   /* [err-prop] propagate cad rc (matches sibling nous_value; NBK_OK==CAD_OK==0) */
 }
 
 fn nous_bkey_selftest() -> u64 @export {

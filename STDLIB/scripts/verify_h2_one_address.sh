@@ -29,6 +29,7 @@ declare -A ALLOW=(
   ["numera/cad.iii"]="PRIMITIVE -- cad IS the one content-address (wraps keccak256 oneshot + begin/payload/final) + its own backend-equivalence KAT"
   ["numera/keccak256.iii"]="PRIMITIVE -- the Keccak-256 backend + its KAT vectors"
   ["numera/identifier.iii"]="PRIMITIVE -- the id primitive (ident_from_bytes/pair/list = Keccak256, byte-identical to cad(KECCAK); cad-fold is an M1/M24 follow-on)"
+  ["numera/merkle.iii"]="PRIMITIVE -- the suite-parametrized Merkle hash-tree (SHA-256 seal default + Keccak-256 zk-commitment suite, mirroring cad's dispatch); leaf=hash(0x00||v)/node=hash(0x01||L||R) byte-identical to the seal AND to cad_oneshot(suite); a LOW-LEVEL hashing building block the compiler transitively links (so a cad_oneshot-fold would churn the compiler root-of-trust for ZERO byte/capability gain -- verified: it drifts the golden 450a99f2->efc256ca); same class as identifier.iii/keccak256.iii; cad-fold is an M1/M24 follow-on"
   ["aether/node_identity.iii"]="KDF -- HKDF-Expand + node_seed derivation (keccak as a key-derivation primitive, NOT a content-address) + KAT"
   ["numera/category.iii"]="KAT -- cat selftest independent cad==keccak cross-check (morphism-ids route via cad)"
   ["numera/cost_calculus.iii"]="KAT -- cc_selftest independent Keccak256 recompute (in_commit/out_commit route via cad)"
@@ -40,6 +41,7 @@ declare -A ALLOW=(
   ["numera/synthesis_spec.iii"]="KAT -- ss_selftest independent encode-hash cross-checks (ss_content_address routes via cad)"
   ["aether/witness_hook.iii"]="KAT -- wh_selftest frag-id independent recompute (frag-id/chain-root/redaction route via cad)"
   ["numera/h2_charter.iii"]="FALSIFIER -- the H2 clause itself: it cross-checks cad==keccak256 AND cad==sha256 (the runtime H2 faithfulness falsifier); calling the backends directly IS its purpose"
+  ["numera/h8_charter.iii"]="FALSIFIER -- h8_verify independently recomputes keccak256(original payload) as the REFERENCE to cross-check wh_redaction_commit (which routes via cad); routing this through cad would be CIRCULAR, so the independent raw recompute IS the falsifier's purpose (cf. h2_charter, witness_hook)"
 )
 
 rc=0

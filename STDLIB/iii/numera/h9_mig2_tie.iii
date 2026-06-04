@@ -1,0 +1,109 @@
+/* numera/h9_mig2_tie.iii -- Migration 5 §G-step5: tie Compromise<HIGH> to Migration 2.
+ *
+ * mig5 (H9) classifies every effect as REVERSIBLE | Compromise<LOW|MED> | UNREPRESENTABLE
+ * (Compromise<HIGH> = bricking).  The reversible.iii header asserts "UNREPRESENTABLE = bricking; M3
+ * reach forbids construction" -- this module PROVES that assertion by tying the UNREPRESENTABLE tier
+ * to the mig2 Reach keystone: a Compromise<HIGH> SovVal's safety-hexad is NON-REACHABLE, so its
+ * dependent Reach proof (Id(Bool, REACH(h), true)) is uninhabited -- the SovVal does NOT type-check.
+ * Bricking-is-unsayable (mig2) and irreversible-is-unrepresentable (mig5) are the SAME refusal.
+ *
+ * Principled mapping: a tier is REPRESENTABLE iff its safety-hexad is reachable.  Compromise<HIGH>
+ * (no inverse derivable -- pillar 1 inverse_derivability fails) is exactly the bricking case (a
+ * non-reachable hexad), so the M3 reach gate = the mig2 type gate refuses it.  The representable
+ * tiers (REVERSIBLE / Compromise<LOW|MED> -- typed, witnessed, NOT bricking) map to a reachable
+ * hexad and DO type-check.  The runtime classifier (rev_classify) and the mig2 type gate agree on
+ * the bricking effect (NMI_INSTALL), and a canary proves the two hexads give DIFFERENT mig2 verdicts
+ * (so the refusal is real, not vacuous).
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: reversible + hexad_reach + typecheck (mig2) only.
+ */
+module numera_h9_mig2_tie
+
+extern @abi(c-msvc-x64) fn rev_classify(effect_tag: u32) -> u8 from "reversible.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn tc_reset() -> u64 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_true() -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_refl(a: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_sov_reach(h: u32) -> u32 from "typecheck.iii"
+extern @abi(c-msvc-x64) fn tc_check(t: u32, ty: u32) -> u8 from "typecheck.iii"
+
+/* tier ids (mirror reversible.iii:553-556) */
+const HMT_REVERSIBLE      : u8 = 0u8
+const HMT_COMPROMISE_LOW  : u8 = 1u8
+const HMT_COMPROMISE_MED  : u8 = 2u8
+const HMT_UNREPRESENTABLE : u8 = 3u8
+/* effect tags (mirror reversible.iii:560-562) */
+const HMT_EFF_PAGE_FREE   : u32 = 0x101u32
+const HMT_EFF_CAP_RELEASE : u32 = 0x102u32
+const HMT_EFF_NMI_INSTALL : u32 = 0x103u32
+
+var HMT_RH : u32 = 0u32     /* a reachable hexad (scanned) */
+var HMT_BH : u32 = 0u32     /* a non-reachable / bricking hexad (scanned) */
+
+/* scan for one reachable + one bricking hexad (the mig2-KAT idiom).  0 = ok. */
+fn hmt_scan() -> u32 {
+    let mut rf : u32 = 0u32
+    let mut bf : u32 = 0u32
+    let mut h : u32 = 0u32
+    while h < 729u32 {
+        let r : u8 = iii_hexad_reachable(h as u16)
+        if r == 1u8 { if rf == 0u32 { HMT_RH = h  rf = 1u32 } }
+        if r == 0u8 { if bf == 0u32 { HMT_BH = h  bf = 1u32 } }
+        h = h + 1u32
+    }
+    if rf == 0u32 { return 1u32 }
+    if bf == 0u32 { return 2u32 }
+    return 0u32
+}
+
+/* the tier's safety-hexad: UNREPRESENTABLE -> the bricking (non-reachable) hexad; every representable
+ * tier -> the reachable hexad. */
+fn hmt_tier_hexad(tier: u8) -> u32 {
+    if tier == HMT_UNREPRESENTABLE { return HMT_BH }
+    return HMT_RH
+}
+
+/* does mig2 ADMIT a SovVal whose hexad is h?  1 iff the Reach proof type-checks (h reachable);
+ * 0 iff REJECTED (h bricking -> Id(Bool,FALSE,TRUE) uninhabited).  Fresh arena per call. */
+fn hmt_mig2_admits(h: u32) -> u8 {
+    tc_reset()
+    let proof : u32 = tc_refl(tc_true())
+    return tc_check(proof, tc_sov_reach(h))
+}
+
+/* THE TIE KAT.  99 = Compromise<HIGH> is mig2-unconstructable; representable tiers construct.
+ * Proves, in order:
+ *   1   the hexad scan finds both a reachable and a bricking hexad;
+ *   2   the UNREPRESENTABLE tier maps to a NON-REACHABLE hexad;
+ *   3   KEYSTONE: mig2 REFUSES the Compromise<HIGH> SovVal (Reach uninhabited -> no type-check);
+ *   4-7 the representable tiers (REVERSIBLE/LOW/MED) map to a reachable hexad AND mig2 ADMITS them;
+ *   8-9 the runtime classifier agrees: NMI_INSTALL -> UNREPRESENTABLE, and its tier-hexad is refused;
+ *   10-11 representable effects (PAGE_FREE/CAP_RELEASE) have mig2-constructable tier-hexads;
+ *   12-13 CANARY (non-vacuity): the reachable hexad CONSTRUCTS and the bricking one does NOT --
+ *         the two verdicts genuinely differ, so the refusal discriminates (not a tautology). */
+fn h9_mig2_tie_selftest() -> u64 @export {
+    if hmt_scan() != 0u32 { return 1u64 }
+    let hu : u32 = hmt_tier_hexad(HMT_UNREPRESENTABLE)
+    if iii_hexad_reachable(hu as u16) != 0u8 { return 2u64 }
+    if hmt_mig2_admits(hu) != 0u8 { return 3u64 }
+    let hr : u32 = hmt_tier_hexad(HMT_REVERSIBLE)
+    if iii_hexad_reachable(hr as u16) != 1u8 { return 4u64 }
+    if hmt_mig2_admits(hr) != 1u8 { return 5u64 }
+    if hmt_mig2_admits(hmt_tier_hexad(HMT_COMPROMISE_LOW)) != 1u8 { return 6u64 }
+    if hmt_mig2_admits(hmt_tier_hexad(HMT_COMPROMISE_MED)) != 1u8 { return 7u64 }
+    let tnmi : u8 = rev_classify(HMT_EFF_NMI_INSTALL)
+    if tnmi != HMT_UNREPRESENTABLE { return 8u64 }
+    let hnmi : u32 = hmt_tier_hexad(tnmi)
+    if hmt_mig2_admits(hnmi) != 0u8 { return 9u64 }
+    let tpf : u8 = rev_classify(HMT_EFF_PAGE_FREE)
+    if hmt_mig2_admits(hmt_tier_hexad(tpf)) != 1u8 { return 10u64 }
+    let tcr : u8 = rev_classify(HMT_EFF_CAP_RELEASE)
+    if hmt_mig2_admits(hmt_tier_hexad(tcr)) != 1u8 { return 11u64 }
+    if hmt_mig2_admits(HMT_RH) != 1u8 { return 12u64 }
+    if hmt_mig2_admits(HMT_BH) != 0u8 { return 13u64 }
+    return 99u64
+}
+
+/* h9_mig2_tie EMBODIES the convergence of two refusals: mig5's UNREPRESENTABLE tier (Compromise<HIGH>,
+ * a bricking effect with no derivable inverse) IS mig2's unconstructable SovVal (a non-reachable hexad
+ * whose Reach proof is uninhabited).  Irreversibility-beyond-tier and bricking are one type error. */

@@ -91,9 +91,9 @@ var CLS_OUT_C     : [u8; 32]
 var CLS_CADDR_IN  : [u8; 96]
 
 /* KAT scratch (self-test only) */
-var CLS_KA        : [u8; 64]
-var CLS_KB        : [u8; 64]
-var CLS_KOUT      : [u8; 64]
+var CLS_KA        : [u8; 72]   /* CLS_BYTES (8 u64 dims 0..63 + 6 K bytes 64..69, pad to 72); was [64] -> cls_zero/cls_dimension_set OOB-wrote 64..71 */
+var CLS_KB        : [u8; 72]
+var CLS_KOUT      : [u8; 72]
 var CLS_KDESC     : [u8; 24]
 var CLS_KOPID     : [u8; 32]
 var CLS_KFRAG     : [u8; 32]

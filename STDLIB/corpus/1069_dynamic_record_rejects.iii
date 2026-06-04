@@ -1,0 +1,43 @@
+/* 1069 -- omnia::dynamic_record reject-arm + lifecycle coverage (gap-backlog #79).
+ *
+ * Closes the three reject arms (E_BADID id==0, E_BAD_MODE invalid mode, E_FULL no slot),
+ * dynamic_record_clear (incl. E_BADID + count decrement), dynamic_record_count, lookup-miss.
+ * Equality compares only. 99 = pass.
+ */
+module corpus_1069
+
+extern @abi(c-msvc-x64) fn dynamic_record_register(id: u64, mode: u32) -> i32 from "dynamic_record.iii"
+extern @abi(c-msvc-x64) fn dynamic_record_lookup(id: u64) -> u32 from "dynamic_record.iii"
+extern @abi(c-msvc-x64) fn dynamic_record_clear(id: u64) -> i32 from "dynamic_record.iii"
+extern @abi(c-msvc-x64) fn dynamic_record_count() -> u32 from "dynamic_record.iii"
+
+fn main() -> u64 {
+    if dynamic_record_count() != 0u32 { return 1u64 }
+
+    /* reject arms */
+    if dynamic_record_register(0u64, 1u32) != -2i32 { return 2u64 }       /* id==0 -> E_BADID */
+    if dynamic_record_register(100u64, 99u32) != -3i32 { return 3u64 }    /* bad mode -> E_BAD_MODE */
+
+    /* register + count + lookup hit/miss */
+    if dynamic_record_register(100u64, 1u32) != 0i32 { return 4u64 }      /* OK (AUTO) */
+    if dynamic_record_count() != 1u32 { return 5u64 }
+    if dynamic_record_lookup(100u64) == 0u32 { return 6u64 }              /* registered -> nonzero */
+    if dynamic_record_lookup(999u64) != 0u32 { return 7u64 }              /* absent -> 0 */
+
+    /* clear + count decrement + clear-absent E_BADID + lookup-miss */
+    if dynamic_record_clear(100u64) != 0i32 { return 8u64 }
+    if dynamic_record_count() != 0u32 { return 9u64 }
+    if dynamic_record_clear(100u64) != -2i32 { return 10u64 }             /* now absent -> E_BADID */
+    if dynamic_record_lookup(100u64) != 0u32 { return 11u64 }             /* cleared -> miss */
+
+    /* fill all 256 slots then assert E_FULL */
+    let mut i : u64 = 1u64
+    while i <= 256u64 {
+        if dynamic_record_register(i, 1u32) != 0i32 { return 12u64 }
+        i = i + 1u64
+    }
+    if dynamic_record_count() != 256u32 { return 13u64 }
+    if dynamic_record_register(100000u64, 1u32) != -1i32 { return 14u64 } /* table full -> E_FULL */
+
+    return 99u64
+}

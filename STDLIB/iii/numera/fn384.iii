@@ -209,8 +209,9 @@ fn gn_inv_x(r: u64, a: u64) -> i32 @export { return gn_inv(r, a) }
 fn gn_copy_x(dst: u64, src: u64) -> i32 @export { return gn_copy(dst, src) }
 fn gn_is_zero_x(slot: u64) -> u8 @export { return gn_is_zero(slot) }
 fn gn_eq_x(a: u64, b: u64) -> u8 @export { return gn_eq(a, b) }
-fn gn_get_limb_x(slot: u64, idx: u64) -> u32 @export { return GN[slot * 12u64 + idx] }
+fn gn_get_limb_x(slot: u64, idx: u64) -> u32 @export { if slot >= 48u64 { return 0u32 } if idx >= 12u64 { return 0u32 } return GN[slot * 12u64 + idx] }   /* [OOB] @export idx into GN[576]=48*12 */
 fn gn_set_u32_x(slot: u64, v: u32) -> i32 @export {
+    if slot >= 48u64 { return -1i32 }    /* [OOB] @export slot writes GN[slot*12 .. +11] */
     let b : u64 = slot * 12u64
     GN[b] = v
     let mut i : u64 = 1u64

@@ -1,0 +1,28 @@
+/* 1068 -- verba::pattern pattern_template_set_arity coverage (gap-backlog #94).
+ *
+ * Closes the sole pattern setter with no consumer + its arity>32 range guard.
+ * (1) set_arity(buf,32)=PATTERN_OK, byte@40==32 (positive boundary);
+ * (2) set_arity(buf,33)=PATTERN_E_RANGE, byte@40 UNCHANGED (guard returns before write);
+ * (3) set_arity(buf,0)=PATTERN_OK, byte@40==0.  99 = pass.
+ */
+module corpus_1068
+
+extern @abi(c-msvc-x64) fn pattern_template_set_arity(buf_168: u64, arity: u8) -> i32 from "pattern.iii"
+
+var BUF168 : [u8; 168]
+
+fn main() -> u64 {
+    let b : u64 = (&BUF168) as u64
+    let a40 : *u8 = (b + 40u64) as *u8
+
+    if pattern_template_set_arity(b, 32u8) != 0i32 { return 1u64 }     /* OK at boundary 32 */
+    if a40[0u64] != 32u8 { return 2u64 }                               /* stored at offset 40 */
+
+    if pattern_template_set_arity(b, 33u8) != -1i32 { return 3u64 }    /* >32 -> PATTERN_E_RANGE */
+    if a40[0u64] != 32u8 { return 4u64 }                               /* UNCHANGED (guard before write) */
+
+    if pattern_template_set_arity(b, 0u8) != 0i32 { return 5u64 }      /* OK at 0 */
+    if a40[0u64] != 0u8 { return 6u64 }
+
+    return 99u64
+}

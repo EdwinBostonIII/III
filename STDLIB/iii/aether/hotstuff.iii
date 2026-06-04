@@ -444,6 +444,9 @@ var HS_KAT_QC    : [u8; 256]
 var HS_KAT_VOTE  : [u8; 108]
 var HS_KAT_PAY   : [u8; 32]
 var HS_KAT_DEC   : [u8; 1]
+var HS_KAT_CHEAD : [u8; 32]    /* gap #26: hs_committed_head output */
+var HS_KAT_NV    : [u8; 76]    /* gap #26: NewView msg (new_view||sender||sig) */
+var HS_KAT_NVSIG : [u8; 64]    /* gap #26: NewView timeout signature */
 
 fn hs_selftest() -> u64 @export {
     /* 4 distinct seeds -> 4 real keypairs */
@@ -506,6 +509,34 @@ fn hs_selftest() -> u64 @export {
     HS_KAT_VOTE[44u64] = HS_KAT_VOTE[44u64] ^ 0x01u8        /* repair */
     if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 13u64 }   /* count 3 = quorum */
     if HS_PHASE != HS_PHASE_PRECOMMIT { return 14u64 }      /* phase advanced */
+
+    /* gap #26: drive the remaining two phases to the COMMIT branch.  The bitmap clears on each
+     * quorum (lines above), so re-submitting voters 0/1/2 with the SAME view-1 signatures advances
+     * the pacemaker: ROUND 2 -> COMMIT, ROUND 3 fires the commit branch (sets committed head +
+     * locked view).  Commits do NOT touch HS_VIEW, so the view-1 backoff test below stays valid. */
+    let mut rnd : u64 = 0u64
+    while rnd < 2u64 {
+        HS_KAT_VOTE[40u64] = 0u8                                                     /* voter 0, sig 0 */
+        v = 0u64
+        while v < 64u64 { HS_KAT_VOTE[44u64 + v] = HS_KAT_SIGS[v]  v = v + 1u64 }
+        if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 21u64 }
+        HS_KAT_VOTE[40u64] = 1u8                                                     /* voter 1, sig 1 */
+        v = 0u64
+        while v < 64u64 { HS_KAT_VOTE[44u64 + v] = HS_KAT_SIGS[64u64 + v]  v = v + 1u64 }
+        if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 22u64 }
+        HS_KAT_VOTE[40u64] = 2u8                                                     /* voter 2, sig 2 */
+        v = 0u64
+        while v < 64u64 { HS_KAT_VOTE[44u64 + v] = HS_KAT_SIGS[128u64 + v]  v = v + 1u64 }
+        if hs_handle_vote((&HS_KAT_VOTE as u64) as *u8, 108u32) != 0i32 { return 23u64 }
+        if rnd == 0u64 { if HS_PHASE != HS_PHASE_COMMIT { return 24u64 } }           /* round 2 -> COMMIT */
+        rnd = rnd + 1u64
+    }
+    /* commit branch fired on round 3: committed head == block_mhash, locked view == 1 */
+    if hs_committed_head((&HS_KAT_CHEAD as u64) as *u8) != 0i32 { return 25u64 }
+    b = 0u64
+    while b < 32u64 { if HS_KAT_CHEAD[b] != HS_KAT_BMH[b] { return 26u64 }  b = b + 1u64 }
+    if HS_LOCKED_VIEW != 1u64 { return 27u64 }
+
     /* tier dispatch */
     HS_KAT_PAY[0u64] = HS_TIER_BEDROCK
     if hs_dispatch_by_tier(0u8, (&HS_KAT_PAY as u64) as *u8, 32u32, (&HS_KAT_DEC as u64) as *u8) != 0i32 { return 15u64 }
@@ -523,5 +554,30 @@ fn hs_selftest() -> u64 @export {
      * a cumulative 10000 does.  A fixed-5000 / view-ignoring wiring would fire on the FIRST tick. */
     if hs_tick(5000u32) != 0i32 { return 19u64 }            /* view 1: 5000 < 10000 -> HS_OK, no timeout */
     if hs_tick(5000u32) != HS_E_TIMEOUT { return 20u64 }    /* cumulative 10000 reaches the backoff -> fire */
+
+    /* gap #26: hs_handle_new_view -- f+1 (=2) distinct signed NewView msgs adopt a new view.
+     * Msg = new_view LE [0..8) || sender_id LE [8..12) || ed25519 sig over msg[0..8) [12..76).
+     * One msg is below the f+1 threshold (no adoption); the second distinct sender reaches it and
+     * the pacemaker jumps to new_view at HS_PHASE_PREPARE. */
+    let nv : u64 = 9u64
+    b = 0u64
+    while b < 8u64 { HS_KAT_NV[b] = ((nv >> (b * 8u64)) & 0xFFu64) as u8  b = b + 1u64 }
+    /* sender 0 */
+    HS_KAT_NV[8u64] = 0u8  HS_KAT_NV[9u64] = 0u8  HS_KAT_NV[10u64] = 0u8  HS_KAT_NV[11u64] = 0u8
+    if ed25519_sign((&HS_KAT_SEED as u64) as *u8, (&HS_KAT_PK as u64) as *u8, (&HS_KAT_NV as u64) as *u8, 8u64, (&HS_KAT_NVSIG as u64) as *u8) != 1u8 { return 28u64 }
+    b = 0u64
+    while b < 64u64 { HS_KAT_NV[12u64 + b] = HS_KAT_NVSIG[b]  b = b + 1u64 }
+    if hs_handle_new_view((&HS_KAT_NV as u64) as *u8, 76u32) != 0i32 { return 29u64 }
+    if HS_VIEW == nv { return 30u64 }                        /* one msg < f+1 -> NOT yet adopted */
+    /* sender 1 (distinct) -> f+1 reached */
+    HS_KAT_NV[8u64] = 1u8
+    if ed25519_sign(((&HS_KAT_SEED as u64) + 32u64) as *u8, ((&HS_KAT_PK as u64) + 32u64) as *u8, (&HS_KAT_NV as u64) as *u8, 8u64, (&HS_KAT_NVSIG as u64) as *u8) != 1u8 { return 31u64 }
+    b = 0u64
+    while b < 64u64 { HS_KAT_NV[12u64 + b] = HS_KAT_NVSIG[b]  b = b + 1u64 }
+    if hs_handle_new_view((&HS_KAT_NV as u64) as *u8, 76u32) != 0i32 { return 32u64 }
+    if HS_VIEW != nv { return 33u64 }                        /* f+1 -> view adopted */
+    if HS_PHASE != HS_PHASE_PREPARE { return 34u64 }
+    /* duplicate sender after reset is a fresh count, not a dup error (bitmap cleared on adopt) */
+
     return 99u64
 }

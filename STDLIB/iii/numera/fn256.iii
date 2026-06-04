@@ -56,7 +56,7 @@ fn fn256_init() -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 - (FN_N[i] as u64) - borrow
         FN_ONE[i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
     /* R^2 mod n = 2^512 mod n: start at 2^256 mod n, double 256x */
@@ -90,12 +90,15 @@ fn fn_csub_n(addr: u64, extra_high: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 + (a[i] as u64) - (pp[i] as u64) - borrow
         FN_T[i] = v & 0xFFFFFFFFu64
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
-    let mut ge : u64 = 0u64
-    if extra_high != 0u64 { ge = 1u64 }
-    if borrow == 0u64 { ge = 1u64 }
+    /* [D-FP-1] branch-free ge = (extra_high != 0) | (borrow == 0): no secret-dependent
+     * branch on the borrow or the reduced value (the masked select below is constant-time). */
+    let neg_eh : u64 = 0u64 - extra_high
+    let eh_nz  : u64 = (extra_high | neg_eh) >> 63u64    /* 1 iff extra_high != 0 */
+    let b0     : u64 = borrow ^ 1u64                     /* 1 iff borrow == 0 */
+    let ge     : u64 = eh_nz | b0
     let mask : u64 = 0u64 - ge
     let notm : u64 = mask ^ 0xFFFFFFFFFFFFFFFFu64
     i = 0u64
@@ -137,7 +140,7 @@ fn fn_sub(r: u64, a: u64, b: u64) -> i32 {
     while i < 8u64 {
         let v : u64 = 0x100000000u64 + (FN[ab + i] as u64) - (FN[bb + i] as u64) - borrow
         FN[rb + i] = (v & 0xFFFFFFFFu64) as u32
-        if v < 0x100000000u64 { borrow = 1u64 } else { borrow = 0u64 }
+        borrow = (v >> 32u64) ^ 1u64    /* [D-FP-1] branch-free borrow: 1 iff v < 2^32 (v in [0,2^33)) */
         i = i + 1u64
     }
     let mask : u64 = 0u64 - borrow

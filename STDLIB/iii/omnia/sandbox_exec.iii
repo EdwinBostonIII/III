@@ -77,6 +77,7 @@ fn sandbox_exec_begin(sb_id: u64, kind: u32, ctx: u64) -> i32 @export {
 
 fn sandbox_exec_kind(sb_id: u64) -> u32 @export {
     let id_l : u64 = sb_id
+    if sandbox_state(id_l) == 0xFFFFFFFFu32 { return 0u32 }   /* LIVE check (sibling begin/finish use it): no stale read of a dropped+reused slot */
     let s : u32 = _sbe_slot_of(id_l)
     if s == 0xFFFFFFFFu32 { return 0u32 }
     return SBE_KIND[s]
@@ -84,6 +85,7 @@ fn sandbox_exec_kind(sb_id: u64) -> u32 @export {
 
 fn sandbox_exec_ctx(sb_id: u64) -> u64 @export {
     let id_l : u64 = sb_id
+    if sandbox_state(id_l) == 0xFFFFFFFFu32 { return 0u64 }   /* LIVE check: no stale read of a dropped+reused slot */
     let s : u32 = _sbe_slot_of(id_l)
     if s == 0xFFFFFFFFu32 { return 0u64 }
     return SBE_CTX[s]

@@ -21,8 +21,8 @@ module aether_backend_loopback
 extern @abi(c-msvc-x64) fn net_pack_sockaddr_ipv4(buf_addr: u64, ip_packed: u32, port: u32) -> u32 from "net.iii"
 extern @abi(c-msvc-x64) fn net_tcp_listen_ipv4(net_cap: u64, sockaddr_ptr: u64, sockaddr_len: u32) -> u64 from "net.iii"
 extern @abi(c-msvc-x64) fn net_tcp_accept(listen_handle: u64, dial_cap: u64) -> u64 from "net.iii"
-extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
-extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_recv(handle_id: u64, buf: u64 @sovereign_value @sovereign_out, n: u64) -> i32 from "net.iii"
+extern @abi(c-msvc-x64) fn net_tcp_send(handle_id: u64, buf: u64 @sovereign_value, n: u64) -> i32 from "net.iii"
 extern @abi(c-msvc-x64) fn net_close(handle_id: u64) -> i32 from "net.iii"
 extern @abi(c-msvc-x64) fn reach_store_get(addr: u64, cap: u64, out: u64, max: u64, out_len: u64) -> i32 from "reach_store.iii"
 extern @abi(c-msvc-x64) fn hex_decode(src: u64, src_len: u64, out: u64, out_cap: u64) -> i32 from "hex.iii"
@@ -63,7 +63,12 @@ fn _lb_parse_addr(reqlen: u64) -> u8 {
     if p[2] != 84u8 { return 0u8 }
     if p[3] != 32u8 { return 0u8 }
     if p[4] != 47u8 { return 0u8 }
-    hex_decode((&LB_REQ as u64) + 5u64, LB_HEX_LEN, &LB_ADDR as u64, LB_ADDR_BYTES)
+    /* hex_decode returns HEX_OK(0) / HEX_E_BAD_CHAR(-2) / HEX_E_BAD_LEN(-3).  A malformed
+     * GET (non-hex bytes in the 64-char address) must be REJECTED, not silently accepted with
+     * a partially-filled LB_ADDR -- otherwise serve_once would look up a garbage address.  The
+     * fetcher re-hashes anyway, but the server must not claim a parse it didn't achieve. */
+    let hd : i32 = hex_decode((&LB_REQ as u64) + 5u64, LB_HEX_LEN, &LB_ADDR as u64, LB_ADDR_BYTES)
+    if hd != 0i32 { return 0u8 }
     return 1u8
 }
 

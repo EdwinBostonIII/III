@@ -1,0 +1,22 @@
+/* 1074 -- omnia::hexad_pfs accessor coverage (gap-backlog #85).
+ * Closes iii_hexad_pfs_count (==7) + iii_hexad_pfs_name (op->diagnostic string), checking
+ * the distinguishing leading bytes of "none"/"capsule_update"/"unknown" (op 0/1/7). 99 = pass.
+ */
+module corpus_1074
+
+extern @abi(c-msvc-x64) fn iii_hexad_pfs_count() -> u32 from "hexad_pfs.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_pfs_name(op: u32) -> *u8 from "hexad_pfs.iii"
+
+fn main() -> u64 {
+    if iii_hexad_pfs_count() != 7u32 { return 1u64 }
+    let n1 : *u8 = iii_hexad_pfs_name(1u32)      /* "capsule_update" */
+    if n1[0u64] != 99u8 { return 2u64 }          /* 'c' */
+    if n1[1u64] != 97u8 { return 3u64 }          /* 'a' */
+    let n0 : *u8 = iii_hexad_pfs_name(0u32)      /* "none" */
+    if n0[0u64] != 110u8 { return 4u64 }         /* 'n' */
+    if n0[1u64] != 111u8 { return 5u64 }         /* 'o' */
+    let n7 : *u8 = iii_hexad_pfs_name(7u32)      /* out-of-range -> "unknown" */
+    if n7[0u64] != 117u8 { return 6u64 }         /* 'u' */
+    if n7[1u64] != 110u8 { return 7u64 }         /* 'n' */
+    return 99u64
+}

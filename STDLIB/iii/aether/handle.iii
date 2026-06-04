@@ -57,8 +57,12 @@ fn handle_slot_of(id: u64) -> u32 {
     return si
 }
 
-/* Allocate a handle.  Caller provides kind, OS fd, owning cap, and
- * the rights mask required to use this handle. */
+/* Allocate a handle binding an OS resource (kind, OS fd) to an owning cap_id.
+ * Rights enforcement runs through the OWNING CAP: handle_verify(id, required)
+ * checks `required` against HANDLE_CAP via cap_verify_rights.  HANDLE_RIGHTS is
+ * initialised to 0 and is NOT consulted by handle_verify -- it is a reserved
+ * per-handle slot (settable via handle_set_rights) for future op-level checks,
+ * so setting it does NOT gate anything today; do not rely on it for security. */
 fn handle_alloc(kind: u8, fd: u64, cap_id: u64) -> u64 @export {
     let s : u32 = handle_alloc_slot()
     if s == 0xFFFFFFFFu32 { return HANDLE_INVALID }

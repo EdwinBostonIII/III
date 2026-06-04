@@ -59,6 +59,10 @@ extern @abi(c-msvc-x64) fn ccl_comp(a: u32, b: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_cur(x: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_cur_d(domain: u32, body: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_reduce(t: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_reach_c(h: u32) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn iii_hexad_reachable(h: u16) -> u8 from "hexad_reach.iii"
+extern @abi(c-msvc-x64) fn clek_register(c: u64) -> u32 from "ccl.iii"
+extern @abi(c-msvc-x64) fn ccl_lek_c(cs: u32, bs: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_to_tc(c: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_shift_fstk(p: u32, k: u32) -> u32 from "ccl.iii"
 extern @abi(c-msvc-x64) fn ccl_app2(f: u32, a: u32) -> u32 from "ccl.iii"
@@ -116,7 +120,9 @@ const TC_INR    : u8 = 30u8  /* inr v:   A=value (checked against a SUM)      */
 const TC_CASE   : u8 = 31u8  /* case(C,f,g,s): A=motive,B=leftfn,C=rightfn,D=scrut */
 const TC_W      : u8 = 32u8  /* W(A,B) well-founded trees: A=label type, B=arity family (under the a-binder, like SIG) */
 const TC_SUP    : u8 = 33u8  /* sup(a,f): A=label a, B=children-fn f:B[a]->W  (checkable, not inferable) */
-const TC_WREC   : u8 = 34u8  /* wrec(P,s,w): A=motive P:W->U, B=step, C=scrutinee w */
+const TC_WREC   : u8 = 34u8
+const TC_REACH  : u8 = 35u8
+const TC_LEK    : u8 = 36u8  /* mig2: LEK(cs,bs):Bool -- A,B = cost/budget registry slots; iota-reduces iff cl_le_product */  /* mig2: REACH(h):Bool -- A=hexad literal u16; iota-reduces (via CCL) iff iii_hexad_reachable(h) */  /* wrec(P,s,w): A=motive P:W->U, B=step, C=scrutinee w */
 
 const TC_ERR     : u32 = 0u32           /* the null / error node id (reserved) */
 const TC_CAP     : u32 = 16384u32       /* arena capacity (nodes)              */
@@ -475,8 +481,14 @@ fn tc_sort_level(ty: u32) -> u32 {
 
 /* infer the type of t in the current context; returns a type node, or
  * TC_ERR(0) if t is ill-typed.  Bidirectional with tc_check below. */
+fn tc_reach(h: u32) -> u32 @export { return tc_mk(TC_REACH, h, 0u32) }
+fn tc_lek(cs: u32, bs: u32) -> u32 @export { return tc_mk(TC_LEK, cs, bs) }
+fn tc_sov_lek(cs: u32, bs: u32) -> u32 @export { return tc_mk3(TC_ID, tc_bool(), tc_lek(cs, bs), tc_true()) }
+fn tc_sov_reach(h: u32) -> u32 @export { return tc_mk3(TC_ID, tc_bool(), tc_reach(h), tc_true()) }
 fn tc_infer(t: u32) -> u32 @export {
     let tag : u8 = TC_TAG[t]
+    if tag == TC_REACH { return tc_bool() }
+    if tag == TC_LEK { return tc_bool() }
     if tag == TC_VAR {
         return tc_ctx_lookup(TC_A[t])
     }
@@ -1916,6 +1928,8 @@ fn tc_to_ccl(t: u32) -> u32 {
         }
         return v
     }
+    if tag == TC_REACH { return ccl_reach_c(TC_A[t]) }
+    if tag == TC_LEK { return ccl_lek_c(TC_A[t], TC_B[t]) }
     if tag == TC_LAM { return ccl_cur_d(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_APP { return ccl_app2(tc_to_ccl(TC_A[t]), tc_to_ccl(TC_B[t])) }
     if tag == TC_ANN { return tc_to_ccl(TC_A[t]) }
@@ -2712,6 +2726,111 @@ fn p5_kat_sov() -> u64 @export {
  * runtime data (a pair) costs the SAME weighted as flat -- the discount is
  * type-specific, not a blanket reduction (the falsifier vs a degenerate field).
  * The field is materialized: SOV_COST[n] == sov_cost_q(n) after fill.  99 = pass. */
+fn p5_kat_mig2() -> u64 @export {
+    tc_reset()
+    let mut rh : u32 = 0u32
+    let mut rf : u32 = 0u32
+    let mut bh : u32 = 0u32
+    let mut bf : u32 = 0u32
+    let mut h : u32 = 0u32
+    while h < 729u32 {
+        let r : u8 = iii_hexad_reachable(h as u16)
+        if r == 1u8 {
+            if rf == 0u32 {
+                rh = h
+                rf = 1u32
+            }
+        }
+        if r == 0u8 {
+            if bf == 0u32 {
+                bh = h
+                bf = 1u32
+            }
+        }
+        h = h + 1u32
+    }
+    if rf == 0u32 { return 1u64 }
+    if bf == 0u32 { return 2u64 }
+    let proof : u32 = tc_refl(tc_true())
+    /* POSITIVE: a reachable hexad's Reach proof type-checks (REACH(rh) iota-reduces to TRUE). */
+    if tc_check(proof, tc_sov_reach(rh)) != 1u8 { return 3u64 }
+    /* KEYSTONE NEGATIVE: a bricking hexad's Reach proof is REJECTED (REACH(bh) iota-reduces to
+     * FALSE, so Id(Bool, FALSE, TRUE) is uninhabited -- bricking is now a TYPE error, not runtime). */
+    if tc_check(proof, tc_sov_reach(bh)) != 0u8 { return 4u64 }
+    return 99u64
+}
+var MIG2_BUDGET : [u64; 6]
+var MIG2_LOCOST : [u64; 6]
+var MIG2_HICOST : [u64; 6]
+fn p5_kat_mig2_lek() -> u64 @export {
+    tc_reset()
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        MIG2_BUDGET[k] = 10u64
+        MIG2_LOCOST[k] = 5u64
+        MIG2_HICOST[k] = 5u64
+        k = k + 1u64
+    }
+    MIG2_HICOST[0u64] = 20u64
+    let bs : u32 = clek_register(&MIG2_BUDGET as u64)
+    let ls : u32 = clek_register(&MIG2_LOCOST as u64)
+    let hs : u32 = clek_register(&MIG2_HICOST as u64)
+    let proof : u32 = tc_refl(tc_true())
+    /* POSITIVE: a within-budget cost's LeK proof type-checks. */
+    if tc_check(proof, tc_sov_lek(ls, bs)) != 1u8 { return 1u64 }
+    /* KEYSTONE NEGATIVE: an over-budget cost's LeK proof is REJECTED -- over-K is now a TYPE error. */
+    if tc_check(proof, tc_sov_lek(hs, bs)) != 0u8 { return 2u64 }
+    return 99u64
+}
+var MIG2C_BUDGET : [u64; 6]
+var MIG2C_COST   : [u64; 6]
+var MIG2C_HICOST : [u64; 6]
+/* mig2 final integration: the SovVal TYPE = Sigma(Reach(h), LeK(c)) -- a value inhabits it iff the
+ * hexad is reachable AND the cost is within budget; a bricking OR over-K SovVal is UNCONSTRUCTABLE. */
+fn p5_kat_mig2_cert() -> u64 @export {
+    tc_reset()
+    let mut rh : u32 = 0u32
+    let mut rf : u32 = 0u32
+    let mut bh : u32 = 0u32
+    let mut bf : u32 = 0u32
+    let mut h : u32 = 0u32
+    while h < 729u32 {
+        let r : u8 = iii_hexad_reachable(h as u16)
+        if r == 1u8 {
+            if rf == 0u32 {
+                rh = h
+                rf = 1u32
+            }
+        }
+        if r == 0u8 {
+            if bf == 0u32 {
+                bh = h
+                bf = 1u32
+            }
+        }
+        h = h + 1u32
+    }
+    let mut k : u64 = 0u64
+    while k < 6u64 {
+        MIG2C_BUDGET[k] = 10u64
+        MIG2C_COST[k] = 5u64
+        MIG2C_HICOST[k] = 5u64
+        k = k + 1u64
+    }
+    MIG2C_HICOST[0u64] = 20u64
+    let bs : u32 = clek_register(&MIG2C_BUDGET as u64)
+    let cs : u32 = clek_register(&MIG2C_COST as u64)
+    let hc : u32 = clek_register(&MIG2C_HICOST as u64)
+    let pf : u32 = tc_refl(tc_true())
+    let pair : u32 = tc_mk(TC_PAIR, pf, pf)
+    /* POSITIVE: a reachable + within-budget SovVal type-checks (both proofs exist). */
+    if tc_check(pair, tc_sig(tc_sov_reach(rh), tc_sov_lek(cs, bs))) != 1u8 { return 1u64 }
+    /* NEGATIVE: a bricking SovVal is uninhabited (no Reach proof). */
+    if tc_check(pair, tc_sig(tc_sov_reach(bh), tc_sov_lek(cs, bs))) != 0u8 { return 2u64 }
+    /* NEGATIVE: an over-K SovVal is uninhabited (no LeK proof). */
+    if tc_check(pair, tc_sig(tc_sov_reach(rh), tc_sov_lek(hc, bs))) != 0u8 { return 3u64 }
+    return 99u64
+}
 fn p5_kat_sov_field() -> u64 @export {
     tc_reset()
     let kb : u32 = tc_bool()

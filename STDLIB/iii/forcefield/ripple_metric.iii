@@ -216,7 +216,14 @@ fn rm_j() -> u64 @export {
     let g  : u64 = rm_good() as u64
     let nz : u64 = rm_noise() as u64
     let sp : u64 = rm_sep() as u64
-    return RM_J_OFFSET + g - nz - sp
+    /* [soundness] floor at 0.  For a large graph nz+sp can exceed OFFSET+g; the old
+     * `OFFSET+g-nz-sp` then UNDERFLOWED to a near-u64-max value -> a degenerate (all-noise)
+     * state read as MAXIMAL 𝒱, a false-accept by rm_cut_improves/rm_merge_improves.  g and the
+     * counts are u32-derived so pos/sub themselves never overflow u64. */
+    let pos : u64 = RM_J_OFFSET + g
+    let sub : u64 = nz + sp
+    if sub > pos { return 0u64 }
+    return pos - sub
 }
 
 /* G2 (III-SOVEREIGN-ENHANCEMENT-COORDINATION): the named value 𝒱 the Enhancement Theorem maximizes.

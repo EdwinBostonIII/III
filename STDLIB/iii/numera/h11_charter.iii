@@ -49,6 +49,11 @@ extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii
 extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
 extern @abi(c-msvc-x64) fn cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32 from "category.iii"
 extern @abi(c-msvc-x64) fn cat_morph_eq(f_slot: u32, g_slot: u32) -> u8 from "category.iii"
+/* mig7: the REAL generating Sovereign morphism (sv_op registered, runtime associativity proven), and
+ * the mig4<->mig7 bridge (the XII normal form IS the morphism identity) -- the structural half of H11
+ * ("every transform is lifted to a category morphism") made into a runtime proof. */
+extern @abi(c-msvc-x64) fn sov_morphism_selftest() -> u64 from "sov_morphism.iii"
+extern @abi(c-msvc-x64) fn xii_morphism_selftest() -> u64 from "xii_morphism.iii"
 
 const H11_OK             : i32 =  0i32
 const H11_CAT_SENT       : u32 = 0xFFFFFFFFu32  /* category.iii morphism/object sentinel */
@@ -242,6 +247,13 @@ fn h11_selftest() -> u64 @export {
     if h11_run_charter() != H11_VERDICT_GREEN { return 7u64 }
     if h11_register(H11_KIND_CANARY) != 1i32 { return 8u64 }
     if h11_run_charter() != 2u64 { return 9u64 }
+    /* mig7 (the deepening this charter folds): the synthetic associativity above is the LAW; here the
+     * REAL generating transform sv_op is registered as one arrow and its actual runtime composition is
+     * proven associative (Known byte-identical; SUB a genuine non-associative negative; Gap the open-term
+     * boundary), and the one engine feeds the one category (the XII normal form IS the morphism identity).
+     * H11 is not green unless the real generating morphism + the engine<->category bridge hold. */
+    if sov_morphism_selftest() != 99u64 { return 10u64 }
+    if xii_morphism_selftest() != 99u64 { return 11u64 }
     return 99u64
 }
 

@@ -19,6 +19,7 @@
 module katabasis_seal
 
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
+extern @abi(c-msvc-x64) fn cad_oneshot_packed(suite: u32, msg: *u8, byte_len: u64, out: *u8) -> i32 from "cad.iii"
 extern @abi(c-msvc-x64) fn cad_eq(a: *u8, b: *u8) -> u8 from "cad.iii"
 extern @abi(c-msvc-x64) fn katabasis_cycle_family(cycle_idx: u32) -> u32 from "cycle_term.iii"
 extern @abi(c-msvc-x64) fn katabasis_cycle_target_kind(cycle_idx: u32) -> u32 from "cycle_term.iii"
@@ -45,8 +46,11 @@ fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 @export {
     KCS_BUF[3u64] = ah
     KCS_BUF[4u64] = tgt
     KCS_BUF[5u64] = cap
-    cad_oneshot(0u32, &KCS_BUF as *u8, 48u64, o as *u8)   /* H2: cycle seal via cad (suite 0 = SHA-256; byte-identical) */
-    return 0i32
+    /* PACKED: KCS_BUF is [u64;6] (byte-packed u64), so the 48 hashed bytes are NOT a slotted [u8].
+     * Under cg_r0's 8-byte-uniform model cad_oneshot would stride *u8 by 8 and over-read 8x past the
+     * 48-byte record; cad_oneshot_packed reads the 6 u64 words and feeds the real LE bytes -> the
+     * byte-wise SHA-256 of the 48-byte canonical record, identical in cg_r0 and cg_r3. */
+    return cad_oneshot_packed(0u32, &KCS_BUF as *u8, 48u64, o as *u8)   /* H2: cycle seal via cad (suite 0 = SHA-256); [err-prop] propagate cad rc (CAD_E_NULL on a NULL out) instead of false success */
 }
 
 /* Verify a cycle term against a claimed 32-byte seal: recompute the cycle's

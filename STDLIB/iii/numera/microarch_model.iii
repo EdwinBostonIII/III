@@ -170,6 +170,7 @@ fn ma_ready_cycle(z: u32, deps: *u32, dep_n: u32) -> u64 {
 
 /* Lowest free port index whose mask covers opc; UARCH_MAX_PORTS if none. */
 fn ma_find_port(opc: u32) -> u32 {
+    if opc >= UARCH_MAX_OPCODE { return UARCH_MAX_PORTS }   /* opc indexes UARCH_PORT_MASK/UARCH_LATENCY[UARCH_MAX_OPCODE]; MAX_PORTS makes the caller skip dispatch (and its UARCH_LATENCY[opc] read at L226) */
     let mask : u32 = UARCH_PORT_MASK[opc]
     let mut chosen : u32 = UARCH_MAX_PORTS
     let mut port : u32 = 0u32

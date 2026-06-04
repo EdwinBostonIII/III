@@ -32,6 +32,7 @@ extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "build
 
 const NORM_OK : i32 = 0i32
 const NORM_E_BADUTF8 : i32 = -1i32
+const NORM_E_BUILDER : i32 = -2i32   /* a builder_push failed (full/sealed/bad-id) -- never silently truncate */
 
 /* ---- Hangul constants (UAX 15 §16) ---- */
 const HANGUL_SBASE  : u32 = 0xAC00u32
@@ -220,33 +221,33 @@ fn utf8_decode(src: u64, src_len: u64, pos: u64) -> u32 {
 
 fn utf8_emit(builder_id: u64, cp: u32) -> i32 {
     if cp < 0x80u32 {
-        builder_push_byte(builder_id, cp)
+        if builder_push_byte(builder_id, cp) != 0i32 { return NORM_E_BUILDER }
         return NORM_OK
     }
     if cp < 0x800u32 {
         let b0 : u32 = 0xC0u32 | (cp >> 6u32)
         let b1 : u32 = 0x80u32 | (cp & 0x3Fu32)
-        builder_push_byte(builder_id, b0)
-        builder_push_byte(builder_id, b1)
+        if builder_push_byte(builder_id, b0) != 0i32 { return NORM_E_BUILDER }
+        if builder_push_byte(builder_id, b1) != 0i32 { return NORM_E_BUILDER }
         return NORM_OK
     }
     if cp < 0x10000u32 {
         let b0 : u32 = 0xE0u32 | (cp >> 12u32)
         let b1 : u32 = 0x80u32 | ((cp >> 6u32) & 0x3Fu32)
         let b2 : u32 = 0x80u32 | (cp & 0x3Fu32)
-        builder_push_byte(builder_id, b0)
-        builder_push_byte(builder_id, b1)
-        builder_push_byte(builder_id, b2)
+        if builder_push_byte(builder_id, b0) != 0i32 { return NORM_E_BUILDER }
+        if builder_push_byte(builder_id, b1) != 0i32 { return NORM_E_BUILDER }
+        if builder_push_byte(builder_id, b2) != 0i32 { return NORM_E_BUILDER }
         return NORM_OK
     }
     let b0 : u32 = 0xF0u32 | (cp >> 18u32)
     let b1 : u32 = 0x80u32 | ((cp >> 12u32) & 0x3Fu32)
     let b2 : u32 = 0x80u32 | ((cp >> 6u32) & 0x3Fu32)
     let b3 : u32 = 0x80u32 | (cp & 0x3Fu32)
-    builder_push_byte(builder_id, b0)
-    builder_push_byte(builder_id, b1)
-    builder_push_byte(builder_id, b2)
-    builder_push_byte(builder_id, b3)
+    if builder_push_byte(builder_id, b0) != 0i32 { return NORM_E_BUILDER }
+    if builder_push_byte(builder_id, b1) != 0i32 { return NORM_E_BUILDER }
+    if builder_push_byte(builder_id, b2) != 0i32 { return NORM_E_BUILDER }
+    if builder_push_byte(builder_id, b3) != 0i32 { return NORM_E_BUILDER }
     return NORM_OK
 }
 
@@ -441,7 +442,8 @@ fn norm_compose_buffer() -> i32 {
 fn norm_emit_buffer(builder_id: u64) -> i32 {
     let mut i : u32 = 0u32
     while i < NORM_DECOMP_LEN {
-        utf8_emit(builder_id, NORM_DECOMP_BUF[i])
+        let rc : i32 = utf8_emit(builder_id, NORM_DECOMP_BUF[i])
+        if rc != NORM_OK { return rc }
         i = i + 1u32
     }
     return NORM_OK
@@ -467,7 +469,8 @@ fn normalise_nfd(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         }
         if at_starter == 1u8 {
             norm_canonical_reorder()
-            norm_emit_buffer(builder_id)
+            let er : i32 = norm_emit_buffer(builder_id)
+            if er != NORM_OK { return er }
             NORM_DECOMP_LEN = 0u32
         }
     }
@@ -493,7 +496,8 @@ fn normalise_nfc(builder_id: u64, src_base: u64, src_len: u64) -> i32 @export {
         if at_starter == 1u8 {
             norm_canonical_reorder()
             norm_compose_buffer()
-            norm_emit_buffer(builder_id)
+            let er : i32 = norm_emit_buffer(builder_id)
+            if er != NORM_OK { return er }
             NORM_DECOMP_LEN = 0u32
         }
     }

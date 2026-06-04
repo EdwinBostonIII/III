@@ -61,7 +61,7 @@ fn pr_dom_init() -> i32 {
     PR_DOM[17u64]=47u8 PR_DOM[18u64]=118u8 PR_DOM[19u64]=49u8 PR_DOM[20u64]=0u8     /* /v1 */
     return 0i32
 }
-fn pr_pack_u64(off: u64, v: u64) -> i32 {
+fn prv_pack_u64(off: u64, v: u64) -> i32 {
     let mut k : u64 = 0u64
     while k < 8u64 { PR_BUF[off + k] = ((v >> (k*8u64)) & 0xFFu64) as u8  k = k + 1u64 }
     return 0i32
@@ -73,10 +73,10 @@ fn proof_resolve_seal(set: u64, intent: u64, ctx: u64, out32: u64) -> i32 @expor
     pr_dom_init()
     let mut i : u64 = 0u64
     while i < 21u64 { PR_BUF[i] = PR_DOM[i]  i = i + 1u64 }
-    pr_pack_u64(21u64, set)
-    pr_pack_u64(29u64, intent)
-    pr_pack_u64(37u64, ctx)
-    pr_pack_u64(45u64, result)
+    prv_pack_u64(21u64, set)
+    prv_pack_u64(29u64, intent)
+    prv_pack_u64(37u64, ctx)
+    prv_pack_u64(45u64, result)
     return cad_oneshot(0u32, (&PR_BUF as u64) as *u8, 53u64, out32 as *u8)
 }
 

@@ -50,8 +50,10 @@ fn hkdf_sha256_extract(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64) -> i32 
         k = (&HKDF_WORK_ZERO) as u64 as *u8
         k_len = 32u64
     }
-    hmac_sha256(k, k_len, ikm, ikm_len)
-    hmac_sha256_tag((&HKDF_WORK_PRK) as u64 as *u8)
+    let hr : i32 = hmac_sha256(k, k_len, ikm, ikm_len)
+    if hr != HKDF_OK { return hr }
+    let tr : i32 = hmac_sha256_tag((&HKDF_WORK_PRK) as u64 as *u8)
+    if tr != HKDF_OK { return tr }
     HKDF_PRK_READY = 1u8
     return HKDF_OK
 }
@@ -59,6 +61,7 @@ fn hkdf_sha256_extract(salt: *u8, salt_len: u64, ikm: *u8, ikm_len: u64) -> i32 
 fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @export {
     if HKDF_PRK_READY == 0u8 { return HKDF_E_INIT }
     if out_len > HKDF_MAX_OUT { return HKDF_E_TOOLONG }
+    if info_len > 4063u64 { return HKDF_E_TOOLONG }   /* msg = T(<=32) || info || ctr must fit HKDF_WORK_MSG[4096] (32+info+1<=4096) */
     /* N = ceil(out_len / 32).  T(0) = empty.
      * For i = 1..N: T(i) = HMAC-SHA256(PRK, T(i-1) || info || [i]) */
     let mut written : u64 = 0u64
@@ -85,8 +88,10 @@ fn hkdf_sha256_expand(info: *u8, info_len: u64, out: *u8, out_len: u64) -> i32 @
         mp[mi] = (counter & 0xFFu32) as u8
         mi = mi + 1u64
         /* T(i) = HMAC-SHA256(PRK, msg) */
-        hmac_sha256(pp, 32u64, mp, mi)
-        hmac_sha256_tag(tp)
+        let hr : i32 = hmac_sha256(pp, 32u64, mp, mi)
+        if hr != HKDF_OK { return hr }
+        let tr : i32 = hmac_sha256_tag(tp)
+        if tr != HKDF_OK { return tr }
         prev_len = 32u64
         /* Copy chunk from T(i) to out */
         let mut chunk : u64 = 32u64

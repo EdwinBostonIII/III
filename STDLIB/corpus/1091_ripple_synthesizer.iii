@@ -1,0 +1,9 @@
+/* 1091 -- ripple_synthesizer (apotheosis §C.7): the single self-optimization driver over the move-IR.
+ * 99 = over a REAL metric graph + the REAL certified organs (rs_strict_best, proof_ripple_decision,
+ * pru_move_crystal): the driver APPLIES the proven strict-best move + seals a re-checkable checkpoint;
+ * ABSTAINS when nothing strictly beats the incumbent (s0 in M); ABSTAINS when the prover is blind
+ * (kernel-down -> no self-edit); and re-seals the IDENTICAL checkpoint on a re-run (deterministic
+ * outcome).  propose->prove->apply with one theorem per move + a sealed pass record. */
+module corpus_1091_ripple_synthesizer
+extern @abi(c-msvc-x64) fn ripple_synthesizer_selftest() -> u64 from "ripple_synthesizer.iii"
+fn main() -> u64 { return ripple_synthesizer_selftest() }

@@ -22,7 +22,9 @@ const VEC_E_OOM   : i32 = -1i32
 const VEC_E_FULL  : i32 = -2i32
 const VEC_E_BADID : i32 = -3i32
 const VEC_E_OOB   : i32 = -4i32
+const VEC_E_OVERFLOW : i32 = -5i32   /* a cap-doubling or cap*esz computation would wrap u64 */
 const VEC_MAX     : u32 = 32u32
+const VEC_U64_MAX_VAL : u64 = 0xFFFFFFFFFFFFFFFFu64
 
 var VEC_ARENA : [u64; 32]
 var VEC_BASE  : [u64; 32]
@@ -30,6 +32,43 @@ var VEC_CAP   : [u64; 32]
 var VEC_LEN   : [u64; 32]
 var VEC_HARD  : [u64; 32]    /* user-declared maximum length */
 var VEC_LIVE  : [u8;  32]
+
+/* ── Overflow-safe grow primitives (reusable across EVERY vec variant) ─────────
+ * vec_safe_cap(cur_cap, need, hard_max): the smallest saturating power-of-2
+ *   doubling of cur_cap that covers `need`, clamped to hard_max.  Returns 0
+ *   (the VEC_E_OVERFLOW sentinel) when `need` exceeds hard_max.  The guard
+ *   `nc > hard_max/2` means `nc * 2` only runs while nc <= hard_max/2, so the
+ *   product can NEVER wrap u64 -- the old `cur_cap*2` + `while new_cap<need
+ *   {new_cap*2}` wrapped for cur_cap >= 2^63 (-> infinite loop or a tiny cap
+ *   that falsely satisfied the clamp).  Provably terminating: <=64 doublings
+ *   reach any u64, plus an explicit valve.
+ * vec_safe_bytes(cap, esz): cap*esz, or 0 on u64 overflow (division-form guard)
+ *   -- the old `new_cap*esz` / `new_cap*8` wrapped to a tiny alloc while the
+ *   caller believed it held full capacity (the OOB-write root cause).
+ * Both @export so the corpus KAT drives the negative (overflow) case directly. */
+fn vec_safe_cap(cur_cap: u64, need: u64, hard_max: u64) -> u64 @export {
+    if need > hard_max { return 0u64 }
+    let mut nc : u64 = cur_cap
+    if nc == 0u64 { nc = 1u64 }
+    let mut iter : u32 = 0u32
+    while nc < need {
+        if nc > hard_max / 2u64 {
+            nc = hard_max
+        } else {
+            nc = nc * 2u64
+        }
+        iter = iter + 1u32
+        if iter > 64u32 { return 0u64 }
+    }
+    if nc > hard_max { nc = hard_max }
+    return nc
+}
+
+fn vec_safe_bytes(cap: u64, esz: u64) -> u64 @export {
+    if esz == 0u64 { return 0u64 }
+    if cap > VEC_U64_MAX_VAL / esz { return 0u64 }
+    return cap * esz
+}
 
 fn vec_u8_new(arena_id: u64, hard_max: u64) -> u64 @export {
     let mut i : u32 = 0u32
@@ -66,13 +105,12 @@ fn vec_slot_of(id: u64) -> u32 {
 fn vec_u8_grow(slot: u32, add: u64) -> i32 {
     let cur_cap : u64 = VEC_CAP[slot]
     let cur_len : u64 = VEC_LEN[slot]
+    if add > VEC_U64_MAX_VAL - cur_len { return VEC_E_OVERFLOW }   /* need = cur_len+add must not wrap u64 */
     let need : u64 = cur_len + add
     if need > VEC_HARD[slot] { return VEC_E_FULL }
     if need <= cur_cap { return VEC_OK }
-    let mut new_cap : u64 = cur_cap * 2u64
-    if new_cap < 8u64 { new_cap = 8u64 }
-    while new_cap < need { new_cap = new_cap * 2u64 }
-    if new_cap > VEC_HARD[slot] { new_cap = VEC_HARD[slot] }
+    let new_cap : u64 = vec_safe_cap(cur_cap, need, VEC_HARD[slot])   /* was: cur_cap*2 doubling (wraps >= 2^63) */
+    if new_cap == 0u64 { return VEC_E_OVERFLOW }
     let arena_id : u64 = VEC_ARENA[slot]
     let new_base : u64 = arena_alloc1(arena_id, new_cap)
     if new_base == 0u64 { return VEC_E_OOM }
@@ -221,15 +259,16 @@ fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 @export {
 fn vec_u64_grow(slot: u32, add: u64) -> i32 {
     let cur_cap : u64 = VEC64_CAP[slot]
     let cur_len : u64 = VEC64_LEN[slot]
+    if add > VEC_U64_MAX_VAL - cur_len { return VEC_E_OVERFLOW }
     let need : u64 = cur_len + add
     if need > VEC64_HARD[slot] { return VEC_E_FULL }
     if need <= cur_cap { return VEC_OK }
-    let mut new_cap : u64 = cur_cap * 2u64
-    if new_cap < 8u64 { new_cap = 8u64 }
-    while new_cap < need { new_cap = new_cap * 2u64 }
-    if new_cap > VEC64_HARD[slot] { new_cap = VEC64_HARD[slot] }
+    let new_cap : u64 = vec_safe_cap(cur_cap, need, VEC64_HARD[slot])
+    if new_cap == 0u64 { return VEC_E_OVERFLOW }
+    let alloc_bytes : u64 = vec_safe_bytes(new_cap, 8u64)   /* was: new_cap*8 (wraps to a tiny alloc -> OOB) */
+    if alloc_bytes == 0u64 { return VEC_E_OVERFLOW }
     let arena_id : u64 = VEC64_ARENA[slot]
-    let new_base : u64 = arena_alloc8(arena_id, new_cap * 8u64)
+    let new_base : u64 = arena_alloc8(arena_id, alloc_bytes)
     if new_base == 0u64 { return VEC_E_OOM }
     let old_base : u64 = VEC64_BASE[slot]
     if cur_len > 0u64 {
@@ -366,11 +405,11 @@ fn vec__push<T>(id: u64, value: T) -> i32 @specialize(u16, u32, i8, i16, i32, i6
     let need : u64 = cur_len + 1u64
     if need > VECG_HARD[s] { return VEC_E_FULL }
     if need > cur_cap {
-        let mut new_cap : u64 = cur_cap * 2u64
-        if new_cap < 8u64 { new_cap = 8u64 }
-        while new_cap < need { new_cap = new_cap * 2u64 }
-        if new_cap > VECG_HARD[s] { new_cap = VECG_HARD[s] }
-        let new_base : u64 = arena_alloc1(VECG_ARENA[s], new_cap * esz)
+        let new_cap : u64 = vec_safe_cap(cur_cap, need, VECG_HARD[s])
+        if new_cap == 0u64 { return VEC_E_OVERFLOW }
+        let alloc_bytes : u64 = vec_safe_bytes(new_cap, esz)   /* was: new_cap*esz (wraps -> OOB) */
+        if alloc_bytes == 0u64 { return VEC_E_OVERFLOW }
+        let new_base : u64 = arena_alloc1(VECG_ARENA[s], alloc_bytes)
         if new_base == 0u64 { return VEC_E_OOM }
         let old_base : u64 = VECG_BASE[s]
         if cur_len > 0u64 {

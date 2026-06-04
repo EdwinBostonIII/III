@@ -18,6 +18,9 @@ extern @abi(c-msvc-x64) fn ksp_pack_rate_dom(rate: u32, dom: u8) -> u64 from "ke
 extern @abi(c-msvc-x64) fn ksp_absorb(slot: u64, msg_ptr: u64, msg_len: u64, rate_dom: u64) -> i32 from "keccak_sponge.iii"
 extern @abi(c-msvc-x64) fn ksp_squeeze(slot: u64, out_ptr: u64, out_len: u64, rate_bytes: u32) -> i32 from "keccak_sponge.iii"
 extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn ksp_state_addr(slot: u64) -> u64 from "keccak_sponge.iii"
+extern @abi(c-msvc-x64) fn ksp_leased(slot: u64) -> u8 from "keccak_sponge.iii"
+extern @abi(c-msvc-x64) fn ksp_zero(slot: u64) -> i32 from "keccak_sponge.iii"
 
 var KSPK_MSGA : [u8; 4]
 var KSPK_MSGB : [u8; 4]
@@ -99,6 +102,18 @@ fn main() -> u64 {
     ksp_release(a)
     ksp_release(b)
     if ksp_count_leased() != 0u64 { return 13u64 }
+
+    /* gap #49: ksp_state_addr / ksp_leased / ksp_zero accessors + guard arms */
+    if ksp_state_addr(8u64) != 0u64 { return 14u64 }                /* OOB -> 0 */
+    if ksp_leased(8u64) != 0u8 { return 15u64 }                     /* OOB -> 0 */
+    if ksp_zero(8u64) != -1i32 { return 16u64 }                     /* OOB -> -1 */
+    if ksp_leased(0u64) != 0u8 { return 17u64 }                     /* in-range, unleased -> 0 */
+    if ksp_zero(0u64) != -1i32 { return 18u64 }                     /* unleased -> -1 */
+    if (ksp_state_addr(1u64) - ksp_state_addr(0u64)) != 200u64 { return 19u64 }  /* KSP_STATE_BY stride */
+    let z : u64 = ksp_lease()                                       /* positives on a leased slot */
+    if ksp_leased(z) != 1u8 { return 20u64 }
+    if ksp_zero(z) != 0i32 { return 21u64 }
+    ksp_release(z)
 
     return 99u64
 }

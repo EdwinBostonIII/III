@@ -1,34 +1,53 @@
-/* 946 -- W4.2 / ENHANCE-17 falsifier: aether/pattern_set_federation's FETCH no longer omits
- * its own ancestry check (it now calls fed_seal_lookup_anchor before admitting a peer set).
- * This drives the SAME ancestry gate the fetch enforces, via pattern_set_fed_verify_ancestry:
- * an unvouched (tier, mhash) set -- one with no FOUNDERS-ANCHOR-descended fed_seal anchor --
- * is REJECTED (returns 0), as are bogus handles.  99 = pass. */
+/* 946 -- W4.2 COMPLETE: pattern_set_fed_publish now enforces the FOUNDERS-ANCHOR ancestry gate
+ * (fed_seal_lookup_anchor) identically to pattern_set_fed_fetch.  The registry invariant -- every
+ * live slot traces to an anchored (tier, mhash) -- now holds for BOTH the inbound (fetch) and the
+ * outbound (publish) admission paths; the old publish skipped the gate (a bootstrap hole).
+ *
+ * NEGATIVE arm (the fix FIRES on bad input): an unvouched publish -- no fed_seal anchor exists for
+ *   its (tier, mhash) -- returns 0 and allocates NO slot.
+ * POSITIVE arm (the gate PASSES legitimate input): once fed_seal_anchor establishes the (tier,
+ *   mhash) anchor, the identical publish succeeds, allocates exactly one slot, and verify_ancestry
+ *   confirms.  Bogus handles are rejected.  99 = pass. */
 module corpus_946
 
 extern @abi(c-msvc-x64) fn pattern_set_fed_reset() -> i32 from "pattern_set_federation.iii"
 extern @abi(c-msvc-x64) fn pattern_set_fed_publish(local_set_id: u64, tier: u32, mhash_ptr: u64) -> u64 from "pattern_set_federation.iii"
 extern @abi(c-msvc-x64) fn pattern_set_fed_count() -> u32 from "pattern_set_federation.iii"
 extern @abi(c-msvc-x64) fn pattern_set_fed_verify_ancestry(handle: u64) -> u8 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn fed_seal_clear() -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
 
-var PSF_M : [u8; 32]
+var PSF_M      : [u8; 32]
+var PSF_PARENT : [u8; 32]
 
 fn main() -> u64 {
     pattern_set_fed_reset()
+    fed_seal_clear()
     if pattern_set_fed_count() != 0u32 { return 1u64 }
 
-    /* Publish a set with an unvouched (tier, mhash): no fed_seal anchor exists for it. */
     let mut i : u32 = 0u32
-    while i < 32u32 { PSF_M[i] = (i + 1u32) as u8  i = i + 1u32 }
-    let h : u64 = pattern_set_fed_publish(0u64, 0xCAFEu32, (&PSF_M) as u64)
-    if h == 0u64 { return 2u64 }
-    if pattern_set_fed_count() != 1u32 { return 3u64 }
+    while i < 32u32 {
+        PSF_M[i]      = (i + 1u32) as u8
+        PSF_PARENT[i] = (0x80u32 + i) as u8
+        i = i + 1u32
+    }
 
-    /* FALSIFIER: the ancestry gate REJECTS the unvouched set (no anchor) -- the same gate
-     * pattern_set_fed_fetch now enforces before allocating a slot for a peer set. */
-    if pattern_set_fed_verify_ancestry(h) != 0u8 { return 4u64 }
+    /* NEGATIVE: no anchor exists for (tier=2, PSF_M) -> publish REJECTED, no slot allocated. */
+    let h0 : u64 = pattern_set_fed_publish(0u64, 2u32, (&PSF_M) as u64)
+    if h0 != 0u64 { return 2u64 }
+    if pattern_set_fed_count() != 0u32 { return 3u64 }
 
-    /* Bogus handles are rejected too. */
-    if pattern_set_fed_verify_ancestry(0u64)    != 0u8 { return 5u64 }
-    if pattern_set_fed_verify_ancestry(9999u64) != 0u8 { return 6u64 }
+    /* Establish the anchor: child (tier=2, PSF_M) under parent (tier=3, PSF_PARENT). */
+    if fed_seal_anchor(2u32, (&PSF_M) as u64, 3u32, (&PSF_PARENT) as u64) != 0i32 { return 4u64 }
+
+    /* POSITIVE: the SAME publish now succeeds and allocates exactly one slot. */
+    let h1 : u64 = pattern_set_fed_publish(0u64, 2u32, (&PSF_M) as u64)
+    if h1 == 0u64 { return 5u64 }
+    if pattern_set_fed_count() != 1u32 { return 6u64 }
+    if pattern_set_fed_verify_ancestry(h1) != 1u8 { return 7u64 }
+
+    /* Bogus handles are rejected. */
+    if pattern_set_fed_verify_ancestry(0u64)    != 0u8 { return 8u64 }
+    if pattern_set_fed_verify_ancestry(9999u64) != 0u8 { return 9u64 }
     return 99u64
 }

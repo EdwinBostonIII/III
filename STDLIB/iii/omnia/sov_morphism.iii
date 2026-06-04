@@ -1,0 +1,302 @@
+/* omnia/sov_morphism.iii -- Migration 7 (H11): register the generating Sovereign morphism.
+ *
+ * The Move (sovval.spec.md S"The Move"): every operation crossing a @sovereign boundary is ONE
+ * arrow in the one category whose objects are SovVal-types; `sv_op` is the GENERATING instance --
+ * "every other Sovereign operation is do-what-sv_op-does, for your arrow."  This module realizes
+ * field 6 of the 10-field SovMorphism contract (`morphism_id : cad(src||dst||op), registered via
+ * cat_add_morphism`) for that generating instance, and discharges sv_op's deferred clause
+ * (defer-ledger: `{ morphism_id : "registered but assoc not yet a ratified clause" : mig7 }`).
+ *
+ * THE THEOREM (not the bookkeeping).  cat_check_assoc over the registry is associative BY
+ * CONSTRUCTION (op-word concatenation) -- it proves nothing about sv_op.  The real, falsifiable
+ * theorem is that sv_op's ACTUAL runtime composition is associative:
+ *   L = sv_op(sv_op(a,b),c)  ==  R = sv_op(a,sv_op(b,c))   byte-for-byte (the 112-byte SovVal).
+ * Empirically established (probe, 2026-06-03) and grounded in the facet algebra:
+ *   - payload (unc_apply ADD/MUL on Known)  : integer add/mul, associative;
+ *   - hexad   (iii_hexad_compose6)          : trit AND/OR per pillar = min/max, associative;
+ *   - cost    (cl_join)                     : lattice lub, associative;
+ *   - witness (cad over the facets)         : a deterministic function of them, so it follows.
+ * The GENUINE NEGATIVE arm is a real non-associative operation -- SUB: (a-b)-c != a-(b-c) -- which
+ * MUST make L != R (proving the equality test discriminates; not a synthetic id mismatch).
+ *
+ * THE OPEN-TERM BOUNDARY (honest scope, ties to mig2 "Gap = open term/metavariable").  On a Gap
+ * payload sv_op stays associative on the closed facets (hexad/cost/status) AND preserves the ROOT
+ * CAUSE, but the gap's provenance gid is PATH-DEPENDENT by design (unc_apply mints a fresh derived
+ * gap recording the actual derivation DAG).  So byte-associativity is a closed-term property; the
+ * open-term (Gap) case is associative up-to-provenance, with the root cause invariant -- proven, not
+ * assumed away.
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: sovval + uncertainty + category + cad only.
+ */
+module omnia_sov_morphism
+
+/* the generating morphism + its facets (M5/M4/M3/M13) */
+extern @abi(c-msvc-x64) fn sv_init() -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_make(payload_cell: *u8, hexad: u64, cost: *u64, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_op(op: u32, a: *u8, b: *u8, out: *u8) -> i32 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_hexad(sv: *u8) -> u64 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_status(sv: *u8) -> u64 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_cost_ptr(sv: *u8) -> *u64 from "sovval.iii"
+extern @abi(c-msvc-x64) fn sv_witness_ptr(sv: *u8) -> *u8 from "sovval.iii"
+/* the typed gap (M4) -- for the open-term boundary clause */
+extern @abi(c-msvc-x64) fn unc_set_known(cell: *u8, v: i64) -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_set_gap(cell: *u8, gid: u32) -> i32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_is_gap(cell: *u8) -> u8 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_gap_root(kind: u8, reason: u32) -> u32 from "uncertainty.iii"
+extern @abi(c-msvc-x64) fn unc_root_causes(gid: u32, out_ids: *u32, cap: u32) -> u32 from "uncertainty.iii"
+/* the one category / registry (M12) */
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism(src: u32, dst: u32, op: *u8, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_compose(f_slot: u32, g_slot: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_check_assoc(f_slot: u32, g_slot: u32, h_slot: u32) -> u8 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_src(slot: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_dst(slot: u32) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_id(slot: u32, out_id: *u8) -> i32 from "category.iii"
+
+const SM_OK   : i32 = 0i32
+const SM_ADD  : u32 = 0u32
+const SM_SUB  : u32 = 1u32
+const SM_MUL  : u32 = 2u32
+const SM_SENT : u32 = 0xFFFFFFFFu32
+const SM_U32MASK : u64 = 0xFFFFFFFFu64
+
+/* the one SovVal-type object + a second object (for the non-composable registry negative) */
+var SM_OBJ  : [u8; 32]
+var SM_OBJ2 : [u8; 32]
+var SM_OPK  : [u8; 32]
+var SM_IDSINK : [u8; 32]
+var SM_IDF  : [u8; 32]     /* f's registered id (for the idempotence check) */
+var SM_IDF2 : [u8; 32]
+
+/* SovVal scratch (112-byte cells) */
+var SM_A  : [u8; 112]
+var SM_B  : [u8; 112]
+var SM_C  : [u8; 112]
+var SM_AB : [u8; 112]
+var SM_BC : [u8; 112]
+var SM_L  : [u8; 112]
+var SM_R  : [u8; 112]
+var SM_PC : [u8; 16]
+var SM_C1 : [u64; 6]
+var SM_C2 : [u64; 6]
+var SM_C3 : [u64; 6]
+var SM_RL : [u32; 8]
+var SM_RR : [u32; 8]
+
+/* registered slots (the generating arrows f,g,h = post-compose with operands a,b,c) */
+var SM_SLOT_OBJ : u32 = 0u32
+var SM_SF : u32 = 0u32
+var SM_SG : u32 = 0u32
+var SM_SH : u32 = 0u32
+
+/* ------------------------------- helpers --------------------------------- */
+fn sm_memeq(x: *u8, y: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n {
+        if x[i] != y[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+fn sm_fill32(addr: u64, b: u8) -> i32 {
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = b  i = i + 1u64 }
+    return SM_OK
+}
+fn sm_setcost(c: u64, v: u64) -> i32 {
+    let p : *u64 = c as *u64
+    let mut i : u64 = 0u64
+    while i < 6u64 { p[i] = v  i = i + 1u64 }
+    return SM_OK
+}
+/* a SovVal's payload gap-id = the i64 body at offset 8 (gid widened). */
+fn sm_gap_id(sv: *u8) -> u32 {
+    let p : *u64 = (sv as u64 + 8u64) as *u64
+    return (p[0u64] & SM_U32MASK) as u32
+}
+fn sm_has_root(out: *u32, n: u32, r: u32) -> u8 {
+    let mut i : u64 = 0u64
+    let m : u64 = (n as u64) & SM_U32MASK
+    while i < m {
+        if out[i] == r { return 1u8 }
+        i = i + 1u64
+    }
+    return 0u8
+}
+/* build three Known SovVals a,b,c (payloads 11,13,17; costs 3,5,7; hexad 728 reachable). */
+fn sm_build3_known() -> i32 {
+    sv_init()
+    let pc : *u8 = (&SM_PC as u64) as *u8
+    sm_setcost(&SM_C1 as u64, 3u64)
+    sm_setcost(&SM_C2 as u64, 5u64)
+    sm_setcost(&SM_C3 as u64, 7u64)
+    unc_set_known(pc, 11i64)
+    if sv_make(pc, 728u64, &SM_C1 as *u64, (&SM_A as u64) as *u8) != SM_OK { return 0i32 - 1i32 }
+    unc_set_known(pc, 13i64)
+    if sv_make(pc, 728u64, &SM_C2 as *u64, (&SM_B as u64) as *u8) != SM_OK { return 0i32 - 1i32 }
+    unc_set_known(pc, 17i64)
+    if sv_make(pc, 728u64, &SM_C3 as *u64, (&SM_C as u64) as *u8) != SM_OK { return 0i32 - 1i32 }
+    return SM_OK
+}
+
+/* ------------------------- registration (field 6) ------------------------ */
+/* Register sv_op's generating arrows on the ONE SovVal-type object: f,g,h are the
+ * "post-compose with operand a / b / c" endomorphisms; each arrow's op-word is the
+ * OPERAND's witness (a real SovVal content-address), so the arrow names a real value,
+ * not a synthetic byte.  Distinct operands -> distinct witnesses -> distinct ids -> distinct
+ * slots.  Idempotent (cat_add_morphism dedups by id). */
+fn sm_register() -> i32 {
+    cat_init()
+    sm_fill32(&SM_OBJ as u64, 0x53u8)              /* 'S' = the SovVal type, the category's object */
+    SM_SLOT_OBJ = cat_add_object((&SM_OBJ as u64) as *u8)
+    if SM_SLOT_OBJ == SM_SENT { return 0i32 - 1i32 }
+    if sm_build3_known() != SM_OK { return 0i32 - 2i32 }
+    let sink : *u8 = (&SM_IDSINK as u64) as *u8
+    SM_SF = cat_add_morphism(SM_SLOT_OBJ, SM_SLOT_OBJ, sv_witness_ptr((&SM_A as u64) as *u8), sink)
+    SM_SG = cat_add_morphism(SM_SLOT_OBJ, SM_SLOT_OBJ, sv_witness_ptr((&SM_B as u64) as *u8), sink)
+    SM_SH = cat_add_morphism(SM_SLOT_OBJ, SM_SLOT_OBJ, sv_witness_ptr((&SM_C as u64) as *u8), sink)
+    if SM_SF == SM_SENT { return 0i32 - 3i32 }
+    if SM_SG == SM_SENT { return 0i32 - 4i32 }
+    if SM_SH == SM_SENT { return 0i32 - 5i32 }
+    return SM_OK
+}
+
+/* --------------------- the runtime theorem + arms ------------------------ */
+/* POSITIVE: sv_op is byte-associative on Known payloads.  1 iff L == R (112 bytes). */
+fn sm_runtime_assoc_known() -> u8 {
+    if sm_build3_known() != SM_OK { return 0u8 }
+    let a : *u8 = (&SM_A as u64) as *u8
+    let b : *u8 = (&SM_B as u64) as *u8
+    let c : *u8 = (&SM_C as u64) as *u8
+    let ab : *u8 = (&SM_AB as u64) as *u8
+    let bc : *u8 = (&SM_BC as u64) as *u8
+    let lft : *u8 = (&SM_L as u64) as *u8
+    let rgt : *u8 = (&SM_R as u64) as *u8
+    if sv_op(SM_ADD, a, b, ab) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, ab, c, lft) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, b, c, bc) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, a, bc, rgt) != SM_OK { return 0u8 }
+    return sm_memeq(lft, rgt, 112u64)
+}
+/* GENUINE NEGATIVE: SUB is non-associative -> L != R.  1 iff L differs from R (the assoc test
+ * discriminates a real non-associative operation -- not a vacuous tautology). */
+fn sm_runtime_nonassoc_sub() -> u8 {
+    if sm_build3_known() != SM_OK { return 0u8 }
+    let a : *u8 = (&SM_A as u64) as *u8
+    let b : *u8 = (&SM_B as u64) as *u8
+    let c : *u8 = (&SM_C as u64) as *u8
+    let ab : *u8 = (&SM_AB as u64) as *u8
+    let bc : *u8 = (&SM_BC as u64) as *u8
+    let lft : *u8 = (&SM_L as u64) as *u8
+    let rgt : *u8 = (&SM_R as u64) as *u8
+    if sv_op(SM_SUB, a, b, ab) != SM_OK { return 0u8 }
+    if sv_op(SM_SUB, ab, c, lft) != SM_OK { return 0u8 }
+    if sv_op(SM_SUB, b, c, bc) != SM_OK { return 0u8 }
+    if sv_op(SM_SUB, a, bc, rgt) != SM_OK { return 0u8 }
+    if sm_memeq(lft, rgt, 112u64) == 1u8 { return 0u8 }   /* equal would mean no real negative arm */
+    return 1u8
+}
+/* OPEN-TERM (Gap): hexad/cost/status associative + root cause preserved; payload path-dependent.
+ * 1 iff the closed facets agree, the gap-ness is preserved, the payload DIFFERS (open term), and
+ * BOTH L,R trace to a's root cause. */
+fn sm_runtime_gap_rootcause() -> u8 {
+    sv_init()
+    let pc : *u8 = (&SM_PC as u64) as *u8
+    sm_setcost(&SM_C1 as u64, 3u64)
+    sm_setcost(&SM_C2 as u64, 5u64)
+    sm_setcost(&SM_C3 as u64, 7u64)
+    unc_set_gap(pc, unc_gap_root(1u8, 50u32))
+    let aroot : u32 = sm_gap_id(pc)
+    let a : *u8 = (&SM_A as u64) as *u8
+    let b : *u8 = (&SM_B as u64) as *u8
+    let c : *u8 = (&SM_C as u64) as *u8
+    let ab : *u8 = (&SM_AB as u64) as *u8
+    let bc : *u8 = (&SM_BC as u64) as *u8
+    let lft : *u8 = (&SM_L as u64) as *u8
+    let rgt : *u8 = (&SM_R as u64) as *u8
+    if sv_make(pc, 728u64, &SM_C1 as *u64, a) != SM_OK { return 0u8 }
+    unc_set_known(pc, 13i64)
+    if sv_make(pc, 728u64, &SM_C2 as *u64, b) != SM_OK { return 0u8 }
+    unc_set_known(pc, 17i64)
+    if sv_make(pc, 728u64, &SM_C3 as *u64, c) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, a, b, ab) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, ab, c, lft) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, b, c, bc) != SM_OK { return 0u8 }
+    if sv_op(SM_ADD, a, bc, rgt) != SM_OK { return 0u8 }
+    if unc_is_gap(lft) != 1u8 { return 0u8 }
+    if unc_is_gap(rgt) != 1u8 { return 0u8 }
+    if sv_hexad(lft) != sv_hexad(rgt) { return 0u8 }
+    if sv_status(lft) != sv_status(rgt) { return 0u8 }
+    if sm_memeq(sv_cost_ptr(lft) as *u8, sv_cost_ptr(rgt) as *u8, 48u64) != 1u8 { return 0u8 }
+    if sm_memeq(lft, rgt, 112u64) == 1u8 { return 0u8 }   /* payload IS path-dependent: must differ */
+    let nl : u32 = unc_root_causes(sm_gap_id(lft), (&SM_RL as u64) as *u32, 8u32)
+    let nr : u32 = unc_root_causes(sm_gap_id(rgt), (&SM_RR as u64) as *u32, 8u32)
+    if sm_has_root((&SM_RL as u64) as *u32, nl, aroot) != 1u8 { return 0u8 }
+    if sm_has_root((&SM_RR as u64) as *u32, nr, aroot) != 1u8 { return 0u8 }
+    return 1u8
+}
+/* REGISTRY NEGATIVE (prove-the-negative): a non-composable arrangement -> cat_check_assoc == 0,
+ * and a direct non-composable compose -> the SENT sentinel.  1 iff both rejections fire exactly. */
+fn sm_categorical_negative() -> u8 {
+    sm_fill32(&SM_OBJ2 as u64, 0x54u8)             /* 'T' = a second, distinct object */
+    let t : u32 = cat_add_object((&SM_OBJ2 as u64) as *u8)
+    if t == SM_SENT { return 0u8 }
+    sm_fill32(&SM_OPK as u64, 0x6Bu8)              /* op-word for k : S -> T */
+    let sink : *u8 = (&SM_IDSINK as u64) as *u8
+    let k : u32 = cat_add_morphism(SM_SLOT_OBJ, t, (&SM_OPK as u64) as *u8, sink)
+    if k == SM_SENT { return 0u8 }
+    if cat_check_assoc(SM_SF, k, SM_SG) != 0u8 { return 0u8 }   /* (f:S->S, k:S->T, g:S->S) cannot bracket */
+    if cat_compose(k, SM_SF, sink) != SM_SENT { return 0u8 }    /* dst(k)=T != src(f)=S -> SENT */
+    return 1u8
+}
+/* DETERMINISM: re-registering f (same operand witness) yields the SAME morphism id (dedup).
+ * NB: rebuild the known triple first -- an earlier clause mutates SM_A into a Gap value, so the
+ * operand witness must be restored to Known(11) before re-deriving f's op-word. */
+fn sm_register_idempotent() -> u8 {
+    if sm_build3_known() != SM_OK { return 0u8 }
+    if cat_morphism_id(SM_SF, (&SM_IDF as u64) as *u8) != SM_OK { return 0u8 }
+    let sink : *u8 = (&SM_IDSINK as u64) as *u8
+    let again : u32 = cat_add_morphism(SM_SLOT_OBJ, SM_SLOT_OBJ, sv_witness_ptr((&SM_A as u64) as *u8), sink)
+    if again != SM_SF { return 0u8 }
+    if cat_morphism_id(again, (&SM_IDF2 as u64) as *u8) != SM_OK { return 0u8 }
+    return sm_memeq((&SM_IDF as u64) as *u8, (&SM_IDF2 as u64) as *u8, 32u64)
+}
+
+/* --------------------------- the mig7 falsifier KAT ---------------------- */
+/* 99 = full pass; a distinct code per failed check (diagnosable).  Proves, in order:
+ *   1   registration succeeds (object + 3 arrows);
+ *   2   the 3 arrows are non-sentinel;
+ *   3-4 the 3 arrows are DISTINCT slots (distinct operands -> distinct ids);
+ *   5-6 the generating arrow is an ENDO on the SovVal object (src==dst==SovValObj);
+ *   10  THE THEOREM: sv_op is byte-associative on Known payloads (L == R);
+ *   11  THE GENUINE NEGATIVE: SUB is non-associative (L != R) -- the test discriminates;
+ *   12  the open-term (Gap) boundary: facets associative + root cause preserved;
+ *   13  the categorical mirror: the registered arrows compose associatively (==1);
+ *   14  the registry prove-the-negative: a non-composable arrangement -> ==0 + SENT;
+ *   15  determinism: re-registration yields the identical morphism id. */
+fn sov_morphism_selftest() -> u64 @export {
+    if sm_register() != SM_OK { return 1u64 }
+    if SM_SF == SM_SENT { return 2u64 }
+    if SM_SG == SM_SENT { return 2u64 }
+    if SM_SH == SM_SENT { return 2u64 }
+    if SM_SF == SM_SG { return 3u64 }
+    if SM_SG == SM_SH { return 4u64 }
+    if cat_morphism_src(SM_SF) != SM_SLOT_OBJ { return 5u64 }
+    if cat_morphism_dst(SM_SF) != SM_SLOT_OBJ { return 6u64 }
+    if sm_runtime_assoc_known() != 1u8 { return 10u64 }
+    if sm_runtime_nonassoc_sub() != 1u8 { return 11u64 }
+    if sm_runtime_gap_rootcause() != 1u8 { return 12u64 }
+    if cat_check_assoc(SM_SF, SM_SG, SM_SH) != 1u8 { return 13u64 }
+    if sm_categorical_negative() != 1u8 { return 14u64 }
+    if sm_register_idempotent() != 1u8 { return 15u64 }
+    return 99u64
+}
+
+/* sov_morphism EMBODIES mig7's generating instance: sv_op registered as the one arrow it is
+ * (field 6 of the SovMorphism), with its associativity proven as a FALSIFIABLE theorem about the
+ * actual operation (Known: byte-associative; SUB: a real non-associative negative; Gap: associative
+ * up-to-provenance with the root cause preserved -- the open-term boundary), and the registry's
+ * composition law mirrored + prove-the-negatived.  H11 "one category" holds for the generating
+ * morphism, not merely for a synthetic scene. */

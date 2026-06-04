@@ -1,0 +1,40 @@
+/* 1084 -- numera::slhdsa hybrid variant_keygen full roundtrip (gap-backlog #45).
+ * The legacy HYBRID-suite keygen has zero callers; this drives the full positive-arm trio:
+ * iii_sphincs_variant_keygen -> a hybrid keypair; iii_sphincs_variant_sign -> a signature;
+ * iii_sphincs_variant_verify ACCEPTS it; strict iii_slhdsa_verify REJECTS it (the FIPS-205 split
+ * is real, not a relabel); a 1-byte tamper makes variant_verify REJECT.  Slow (SLH-DSA keygen,
+ * like 770/771).  99 = pass.
+ */
+module corpus_1084
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn iii_sphincs_variant_keygen(lv: u64, seed: u64, pk: u64, sk: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_sphincs_variant_sign(lv: u64, sk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_sphincs_variant_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+extern @abi(c-msvc-x64) fn iii_slhdsa_verify(lv: u64, pk: u64, msg: u64, msglen: u64, sig: u64, siglen: u64) -> i32 from "slhdsa.iii"
+
+var SEED : [u8; 48]
+var MSG  : [u8; 1]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 48u64 { SEED[i] = (0x20u64 + i) as u8; i = i + 1u64 }
+    MSG[0u64] = 0x36u8
+
+    let pk  : *u8 = malloc(64u64)
+    let sk  : *u8 = malloc(64u64)
+    let sig : *u8 = malloc(8192u64)
+    let slb : *u8 = malloc(16u64)
+
+    if iii_sphincs_variant_keygen(0u64, &SEED as u64, pk as u64, sk as u64) != 0i32 { return 1u64 }
+    if iii_sphincs_variant_sign(0u64, sk as u64, &MSG as u64, 1u64, sig as u64, slb as u64) != 0i32 { return 2u64 }
+    let sl : u64 = (slb[0u64] as u64) | ((slb[1u64] as u64) << 8u64) | ((slb[2u64] as u64) << 16u64) | ((slb[3u64] as u64) << 24u64)
+    if iii_sphincs_variant_verify(0u64, pk as u64, &MSG as u64, 1u64, sig as u64, sl) != 0i32 { return 3u64 }  /* variant accepts */
+    if iii_slhdsa_verify(0u64, pk as u64, &MSG as u64, 1u64, sig as u64, sl) == 0i32 { return 4u64 }            /* strict rejects hybrid */
+    sig[0u64] = sig[0u64] ^ 0xFFu8
+    if iii_sphincs_variant_verify(0u64, pk as u64, &MSG as u64, 1u64, sig as u64, sl) == 0i32 { return 5u64 }   /* tamper -> reject */
+
+    free(pk) free(sk) free(sig) free(slb)
+    return 99u64
+}

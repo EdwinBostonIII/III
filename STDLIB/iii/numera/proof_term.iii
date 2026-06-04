@@ -113,6 +113,9 @@ var PT_KAT_CONCL           : [u8; 64]
 var PT_KAT_ID2             : [u8; 32]
 var PT_KAT_BUF2            : [u8; 4096]
 var PT_LEN_SINK            : [u64; 1]          // pt_to_program internal out_len sink
+var PT_KAT_PROG            : [u8; 256]         // gap #17 pt_to_program out buffer
+var PT_KAT_PLEN            : [u64; 1]          // gap #17 out_len
+var PT_KAT_ABSENT          : [u8; 32]          // gap #17 a never-allocated term id
 var PT_KAT_LEN1            : [u64; 1]          // pt_kat serialize length sinks
 var PT_KAT_LEN2            : [u64; 1]
 
@@ -639,7 +642,11 @@ fn pt_to_program(term_id: *u8, out_prog: *u8, out_cap: u64, out_len: *u64) -> i3
     let sr : i32 = pt_serialize(term_id, (&PT_KAT_BUF as u64) as *u8, 4096u64, (&PT_LEN_SINK as u64) as *u64)
     if sr != PT_OK { return sr }
     let sl : u64 = PT_LEN_SINK[0u64]
-    return ch_proof_to_program((&PT_KAT_BUF as u64) as *u8, sl, out_prog, out_cap, out_len)
+    let cr : i32 = ch_proof_to_program((&PT_KAT_BUF as u64) as *u8, sl, out_prog, out_cap, out_len)
+    /* gap #17: ch returns CURRYH_E_BUF_TOO_SMALL(-2); surface pt_to_program's OWN contract code
+     * (PT_E_BUF_TOO_SMALL) so a too-small out_cap reports the documented error, not a leaked foreign one. */
+    if cr == -2i32 { return PT_E_BUF_TOO_SMALL }
+    return cr
 }
 
 // ----------------------------------------------------------------------------
@@ -698,6 +705,14 @@ fn pt_kat() -> u64 @export {
     if pt_kat_add(t1, PT_RULE_MODUS_PONENS, 2u32, 0u32, 1u32, 1u32) != PT_OK { return 4u64 }
     if pt_finalize(t1) != PT_OK { return 5u64 }
     if pt_verify(t1) != PT_OK { return 6u64 }
+
+    // ---- gap #17: pt_to_program -- verified term -> program (+ buf-too-small + absent). ----
+    if pt_to_program((&PT_KAT_ID as u64) as *u8, (&PT_KAT_PROG as u64) as *u8, 256u64, (&PT_KAT_PLEN as u64) as *u64) != PT_OK { return 50u64 }
+    if PT_KAT_PLEN[0u64] == 0u64 { return 51u64 }
+    if PT_KAT_PROG[0u64] != 0x50u8 { return 52u64 }
+    if pt_to_program((&PT_KAT_ID as u64) as *u8, (&PT_KAT_PROG as u64) as *u8, 1u64, (&PT_KAT_PLEN as u64) as *u64) != PT_E_BUF_TOO_SMALL { return 53u64 }
+    PT_KAT_ABSENT[0u64] = 0xABu8                              // a key never allocated -> ABSENT
+    if pt_to_program((&PT_KAT_ABSENT as u64) as *u8, (&PT_KAT_PROG as u64) as *u8, 256u64, (&PT_KAT_PLEN as u64) as *u64) != PT_E_ABSENT { return 54u64 }
 
     // ---- Vector 7 (ordering): not-finalized verify refuses (use fresh term). ----
     if pt_alloc((&PT_KAT_ID2 as u64) as *u8) != PT_OK { return 7u64 }

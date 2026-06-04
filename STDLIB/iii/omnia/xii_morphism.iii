@@ -1,0 +1,101 @@
+/* omnia/xii_morphism.iii -- Migration 7 x Migration 4: the one engine feeds the one category.
+ *
+ * mig4 routes structured computation through the ONE XII engine (xii_canonicalise); mig7 registers
+ * every transform as ONE arrow in the ONE category.  Their junction is `cat_add_morphism_xii`
+ * (category.iii:310): a morphism whose op is an XII TERM is keyed on the content-address of that
+ * term's XII NORMAL FORM (nous_bkey = canonicalise then cad).  Therefore two computations the engine
+ * proves EQUAL (same normal form) are the SAME ARROW, and behaviorally-distinct computations are
+ * distinct arrows -- "key on the XII normal form," the realizable slice of "lift every op to an XII
+ * body" (advisor, 2026-06-03).  This is NON-vacuous because the dedup is OBSERVABLE: a syntactically
+ * different but behaviorally identical op collapses to the same morphism slot; a different op does not.
+ *
+ * The witness: trit-AND is min (commutative), so AND(POS,NEG) and AND(NEG,POS) normalise to the same
+ * leaf VAL(NEG) -> the SAME morphism; trit-OR is max, so OR(POS,NEG) -> VAL(POS) -> a DISTINCT
+ * morphism.  (The behavioral key itself is proven in nous_behavioral_key.iii; here it becomes the
+ * arrow's identity in the category -- the mig4<->mig7 bridge made real.)
+ *
+ * Hexad: kind_essence.  Ring: R0.  K: 1.00.  NIH: xii_term + nous_behavioral_key + category only.
+ */
+module omnia_xii_morphism
+
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_basis(kind: u8, subform: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn xii_term_make_fusion2(kind: u8, child_a: u32, child_b: u32) -> u32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cat_init() -> i32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_object(obj_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_add_morphism_xii(src: u32, dst: u32, op_term: u32, out_id: *u8) -> u32 from "category.iii"
+extern @abi(c-msvc-x64) fn cat_morphism_id(slot: u32, out_id: *u8) -> i32 from "category.iii"
+
+const XM_OK   : i32 = 0i32
+const XM_SENT : u32 = 0xFFFFFFFFu32
+/* xii_term kinds (xii_term.iii:72..77) + trit subform (NEG=0/ZERO=1/POS=2) */
+const XM_VAL  : u8  = 24u8
+const XM_AND  : u8  = 26u8
+const XM_OR   : u8  = 27u8
+const XM_NEG  : u32 = 0u32
+const XM_POS  : u32 = 2u32
+
+var XM_OBJ  : [u8; 32]
+var XM_SINK : [u8; 32]
+var XM_ID1  : [u8; 32]
+var XM_ID2  : [u8; 32]
+var XM_SLOT_OBJ : u32 = 0u32
+var XM_S1 : u32 = 0u32
+var XM_S2 : u32 = 0u32
+var XM_S3 : u32 = 0u32
+
+fn xm_fill32(addr: u64, b: u8) -> i32 {
+    let p : *u8 = addr as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { p[i] = b  i = i + 1u64 }
+    return XM_OK
+}
+fn xm_memeq(x: *u8, y: *u8, n: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < n {
+        if x[i] != y[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* THE BRIDGE GATE.  99 = the XII normal form IS the morphism identity (behavioral dedup), proven:
+ *   1   the category object registers;
+ *   2-3 AND(POS,NEG) and AND(NEG,POS) both register as XII-keyed morphisms (non-sentinel);
+ *   4   they collapse to the SAME slot -- the one engine proved them equal -> ONE arrow (dedup);
+ *   5   and their morphism ids are byte-identical (the content-address agrees);
+ *   6   a behaviorally-DIFFERENT op OR(POS,NEG) registers;
+ *   7   it is a DISTINCT slot -- a different normal form -> a different arrow (prove-the-negative). */
+fn xii_morphism_selftest() -> u64 @export {
+    cat_init()
+    xm_fill32(&XM_OBJ as u64, 0x58u8)                  /* 'X' = the XII-term type object */
+    XM_SLOT_OBJ = cat_add_object((&XM_OBJ as u64) as *u8)
+    if XM_SLOT_OBJ == XM_SENT { return 1u64 }
+    let sink : *u8 = (&XM_SINK as u64) as *u8
+
+    /* T1 = AND(POS,NEG), T2 = AND(NEG,POS): trit-AND = min, commutative -> both NF = VAL(NEG). */
+    xii_term_arena_reset()
+    let t1 : u32 = xii_term_make_fusion2(XM_AND, xii_term_make_basis(XM_VAL, XM_POS), xii_term_make_basis(XM_VAL, XM_NEG))
+    let t2 : u32 = xii_term_make_fusion2(XM_AND, xii_term_make_basis(XM_VAL, XM_NEG), xii_term_make_basis(XM_VAL, XM_POS))
+    XM_S1 = cat_add_morphism_xii(XM_SLOT_OBJ, XM_SLOT_OBJ, t1, sink)
+    XM_S2 = cat_add_morphism_xii(XM_SLOT_OBJ, XM_SLOT_OBJ, t2, sink)
+    if XM_S1 == XM_SENT { return 2u64 }
+    if XM_S2 == XM_SENT { return 3u64 }
+    if XM_S1 != XM_S2 { return 4u64 }                  /* DEDUP: same normal form -> the same arrow */
+    if cat_morphism_id(XM_S1, (&XM_ID1 as u64) as *u8) != XM_OK { return 8u64 }
+    if cat_morphism_id(XM_S2, (&XM_ID2 as u64) as *u8) != XM_OK { return 9u64 }
+    if xm_memeq((&XM_ID1 as u64) as *u8, (&XM_ID2 as u64) as *u8, 32u64) != 1u8 { return 5u64 }
+
+    /* T3 = OR(POS,NEG): trit-OR = max -> NF = VAL(POS), behaviorally distinct. */
+    xii_term_arena_reset()
+    let t3 : u32 = xii_term_make_fusion2(XM_OR, xii_term_make_basis(XM_VAL, XM_POS), xii_term_make_basis(XM_VAL, XM_NEG))
+    XM_S3 = cat_add_morphism_xii(XM_SLOT_OBJ, XM_SLOT_OBJ, t3, sink)
+    if XM_S3 == XM_SENT { return 6u64 }
+    if XM_S3 == XM_S1 { return 7u64 }                  /* DISTINCT: different normal form -> different arrow */
+
+    return 99u64
+}
+
+/* xii_morphism EMBODIES the mig4<->mig7 junction: the XII engine's normal form IS the category
+ * morphism's identity, so the one engine and the one category are the same structure viewed two ways
+ * -- behaviorally-equal computations are one arrow, behaviorally-distinct ones are distinct arrows. */

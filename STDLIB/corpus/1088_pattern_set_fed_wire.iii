@@ -1,0 +1,102 @@
+/* 1088 -- aether::pattern_set_federation sealed-channel wire transfer (gap-backlog #2).
+ * The federation send/fetch paths + pattern_set_fed_local_id had no test.  This establishes a
+ * paired in-process sealed_channel (x25519 -> alice tx / bob rx), anchors (tier, mhash) in the
+ * fed_seal chain, and drives, in lockstep nonce order:
+ *   ARM 1 (positive): send(payload1) -> fetch(mhash1) returns a handle, count++, local_id==0;
+ *   ARM 2 (hash-mismatch): send(payload2) but fetch with mhash1 -> recompute SHA-256 != mhash1 -> 0;
+ *   ARM 3 (no-anchor): send(payload3), fetch with the CORRECT mhash3 (hash passes) but mhash3 is
+ *       NOT anchored -> the ancestry gate rejects -> 0;
+ *   then pattern_set_fed_publish(local_id) registers a LOCAL entry whose pattern_set_fed_local_id
+ *   returns the non-zero local_set_id (vs 0 for the fetched entry).
+ * Each fetch_N pairs with send_N on the same AEAD nonce (sc_recv auth succeeds, advancing rx_nonce,
+ * then the FEDERATION-level hash/ancestry gate decides).  99 = pass.
+ */
+module corpus_1088
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn x25519(out: *u8, scalar: *u8, u_in: *u8) -> i32 from "x25519.iii"
+extern @abi(c-msvc-x64) fn sha256_oneshot(input_ptr: u64, input_len: u64, out_32: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sc_reset_all() -> i32 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn sc_handshake_init(peer_pubkey_ptr: u64, my_secret_ptr: u64) -> u64 from "sealed_channel.iii"
+extern @abi(c-msvc-x64) fn fed_seal_anchor(child_tier: u32, child_root_ptr: u64, parent_tier: u32, parent_root_ptr: u64) -> i32 from "fed_seal.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_reset() -> i32 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_send(peer_ch: u64, payload_ptr: u64, payload_len: u32) -> i32 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_fetch(peer_ch: u64, target_mhash_ptr: u64, expected_tier: u32, payload_len: u32) -> u64 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_local_id(handle: u64) -> u64 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_count() -> u32 from "pattern_set_federation.iii"
+extern @abi(c-msvc-x64) fn pattern_set_fed_publish(local_set_id: u64, tier: u32, mhash_ptr: u64) -> u64 from "pattern_set_federation.iii"
+
+var PAY1   : [u8; 16]
+var PAY2   : [u8; 16]
+var PAY3   : [u8; 16]
+var MH1    : [u8; 32]
+var MH3    : [u8; 32]
+var PARENT : [u8; 32]
+var BASE   : [u8; 32]
+
+fn fill(p: u64, n: u64, seed: u64) -> i32 {
+    let q : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < n { q[i] = ((seed + i) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0i32
+}
+
+fn main() -> u64 {
+    sc_reset_all()
+    pattern_set_fed_reset()
+
+    /* paired sealed channel (mirror corpus 1050) */
+    BASE[0u64] = 9u8
+    let alice_sk : *u8 = malloc(32u64)
+    let bob_sk   : *u8 = malloc(32u64)
+    fill(alice_sk as u64, 32u64, 7u64)
+    fill(bob_sk as u64, 32u64, 0x55u64)
+    let alice_pk : *u8 = malloc(32u64)
+    let bob_pk   : *u8 = malloc(32u64)
+    if x25519(alice_pk, alice_sk, &BASE as *u8) != 0i32 { return 1u64 }
+    if x25519(bob_pk,   bob_sk,   &BASE as *u8) != 0i32 { return 2u64 }
+    let alice_ch : u64 = sc_handshake_init(bob_pk as u64, alice_sk as u64)
+    let bob_ch   : u64 = sc_handshake_init(alice_pk as u64, bob_sk as u64)
+    if alice_ch == 0u64 { return 3u64 }
+    if bob_ch == 0u64 { return 4u64 }
+
+    fill(&PAY1 as u64, 16u64, 0x41u64)
+    fill(&PAY2 as u64, 16u64, 0x51u64)
+    fill(&PAY3 as u64, 16u64, 0x61u64)
+    fill(&PARENT as u64, 32u64, 0xC0u64)
+    sha256_oneshot(&PAY1 as u64, 16u64, &MH1 as u64)
+    sha256_oneshot(&PAY3 as u64, 16u64, &MH3 as u64)
+
+    /* anchor (tier 1, mh1) under a tier-2 parent (mh3 deliberately NOT anchored) */
+    if fed_seal_anchor(1u32, &MH1 as u64, 2u32, &PARENT as u64) != 0i32 { return 5u64 }
+
+    /* ARM 1: positive roundtrip (send nonce 0 / fetch nonce 0) */
+    if pattern_set_fed_send(alice_ch, &PAY1 as u64, 16u32) != 0i32 { return 6u64 }
+    let h1 : u64 = pattern_set_fed_fetch(bob_ch, &MH1 as u64, 1u32, 16u32)
+    if h1 == 0u64 { return 7u64 }
+    if pattern_set_fed_count() != 1u32 { return 8u64 }
+    if pattern_set_fed_local_id(h1) != 0u64 { return 9u64 }     /* fetched entry: local_id 0 */
+
+    /* ARM 2: hash mismatch (send PAY2, fetch with MH1) -> 0, no new slot */
+    if pattern_set_fed_send(alice_ch, &PAY2 as u64, 16u32) != 0i32 { return 10u64 }
+    if pattern_set_fed_fetch(bob_ch, &MH1 as u64, 1u32, 16u32) != 0u64 { return 11u64 }
+    if pattern_set_fed_count() != 1u32 { return 12u64 }
+
+    /* ARM 3: correct hash but unanchored mhash3 -> ancestry gate rejects -> 0 */
+    if pattern_set_fed_send(alice_ch, &PAY3 as u64, 16u32) != 0i32 { return 13u64 }
+    if pattern_set_fed_fetch(bob_ch, &MH3 as u64, 1u32, 16u32) != 0u64 { return 14u64 }
+    if pattern_set_fed_count() != 1u32 { return 15u64 }
+
+    /* local publish: non-zero local_id round-trips (vs 0 for the fetched entry) */
+    let hl : u64 = pattern_set_fed_publish(0x1234u64, 1u32, &MH1 as u64)
+    if hl == 0u64 { return 16u64 }
+    if pattern_set_fed_local_id(hl) != 0x1234u64 { return 17u64 }
+    if pattern_set_fed_count() != 2u32 { return 18u64 }
+
+    /* negative publish: unanchored mhash3 rejected */
+    if pattern_set_fed_publish(0x9999u64, 1u32, &MH3 as u64) != 0u64 { return 19u64 }
+
+    free(alice_sk) free(bob_sk) free(alice_pk) free(bob_pk)
+    return 99u64
+}

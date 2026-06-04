@@ -17,6 +17,7 @@ extern @abi(c-msvc-x64) fn cgr_init() -> i32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_intern(p: *u8, cost: u64) -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn cgr_find(i: u32) -> u32 from "congruence.iii"
 extern @abi(c-msvc-x64) fn ru_certify_unify(node_i: u32, node_j: u32, class_i: u32, class_j: u32, proof_ok: u32) -> u32 from "ripple_unify.iii"
+extern @abi(c-msvc-x64) fn ru_survivor_cost(class_i: u32) -> u64 from "ripple_unify.iii"
 
 var ADDR_A  : [u8; 32]
 var ADDR_A2 : [u8; 32]
@@ -58,6 +59,7 @@ fn main() -> u64 {
     if cgr_find(d0) == cgr_find(d1) { return 11u64 }            /* distinct addr -> separate */
     if ru_certify_unify(n0, n1, d0, d1, 1u32) != 1u32 { return 12u64 }
     if cgr_find(d0) != cgr_find(d1) { return 13u64 }            /* now merged */
+    if ru_survivor_cost(d0) != 7u64 { return 14u64 }           /* gap #31: post-merge cost-minimal survivor min(10,7) */
 
     /* ===== FALSIFIER 1: candidate but NO proof -> REFUSED ===== */
     cgr_init()

@@ -23,6 +23,9 @@
  *   fed_sybil_score(peer_id_ptr)                                         -> u64
  *   fed_sybil_admission_difficulty(peer_id_ptr)                          -> u32
  *   fed_sybil_clear_all()                                                -> i32
+ *   fed_sybil_slot_live(slot)                                            -> u8
+ *   fed_sybil_peer_id_copy(slot, out_32)                                 -> u8
+ *   fed_sybil_slots_max()                                                -> u32
  *
  * Hexad: kind_substance.  Ring: R3.  K: 0.95.
  */

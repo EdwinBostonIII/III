@@ -1,0 +1,84 @@
+/* base64url encode<->decode round-trip + url-mode BADCHAR rejection (#19 backlog).
+ * base64url_encode was exported WITHOUT a decoder; this proves the new
+ * base64url_decode round-trips (incl. the '-'/'_' alphabet + UNPADDED tail) and
+ * REJECTS the standard-alphabet '+' and the padding '=' that url-mode forbids. */
+module corpus_1025
+
+extern @abi(c-msvc-x64) fn malloc(n: u64) -> *u8 from "msvcrt"
+extern @abi(c-msvc-x64) fn free(p: *u8) -> u64 from "msvcrt"
+extern @abi(c-msvc-x64) fn arena_new(bytes: u64) -> u64 from "arena.iii"
+extern @abi(c-msvc-x64) fn arena_drop(id: u64) -> i32 from "arena.iii"
+extern @abi(c-msvc-x64) fn builder_new(arena: u64, hint: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_seal(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn builder_len(id: u64) -> u64 from "builder.iii"
+extern @abi(c-msvc-x64) fn base64url_encode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base64.iii"
+extern @abi(c-msvc-x64) fn base64url_decode(builder_id: u64, src_base: u64, src_len: u64) -> i32 from "base64.iii"
+
+fn main() -> u64 {
+    let a : u64 = arena_new(1u64 << 16u64)
+
+    /* "foobar" (6 bytes) -> 8 url chars -> back to 6 bytes */
+    let src : *u8 = malloc(6u64)
+    src[0] = 102u8; src[1] = 111u8; src[2] = 111u8
+    src[3] = 98u8;  src[4] = 97u8;  src[5] = 114u8
+    let eb : u64 = builder_new(a, 32u64)
+    if base64url_encode(eb, src as u64, 6u64) != 0i32 { return 1u64 }
+    if builder_len(eb) != 8u64 { return 2u64 }
+    let enc : *u8 = builder_seal(eb) as *u8
+    let db : u64 = builder_new(a, 32u64)
+    if base64url_decode(db, enc as u64, 8u64) != 0i32 { return 3u64 }
+    if builder_len(db) != 6u64 { return 4u64 }
+    let dec : *u8 = builder_seal(db) as *u8
+    let mut i : u64 = 0u64
+    while i < 6u64 {
+        if dec[i] != src[i] { return 10u64 + i }
+        i = i + 1u64
+    }
+
+    /* 1-byte UNPADDED tail: "f" -> "Zg" (2 chars, NO '=') -> "f" */
+    let s1 : *u8 = malloc(1u64)
+    s1[0] = 102u8
+    let e1 : u64 = builder_new(a, 16u64)
+    base64url_encode(e1, s1 as u64, 1u64)
+    if builder_len(e1) != 2u64 { return 20u64 }
+    let enc1 : *u8 = builder_seal(e1) as *u8
+    if enc1[0] != 90u8 { return 21u64 }    /* Z */
+    if enc1[1] != 103u8 { return 22u64 }   /* g */
+    let d1 : u64 = builder_new(a, 16u64)
+    if base64url_decode(d1, enc1 as u64, 2u64) != 0i32 { return 23u64 }
+    if builder_len(d1) != 1u64 { return 24u64 }
+    let dec1 : *u8 = builder_seal(d1) as *u8
+    if dec1[0] != 102u8 { return 25u64 }
+
+    /* url alphabet: three 0xFF bytes -> "____" (index 63) -> back to 0xFF x3 */
+    let s2 : *u8 = malloc(3u64)
+    s2[0] = 255u8; s2[1] = 255u8; s2[2] = 255u8
+    let e2 : u64 = builder_new(a, 16u64)
+    base64url_encode(e2, s2 as u64, 3u64)
+    if builder_len(e2) != 4u64 { return 30u64 }
+    let enc2 : *u8 = builder_seal(e2) as *u8
+    if enc2[0] != 95u8 { return 31u64 }    /* _ */
+    if enc2[3] != 95u8 { return 32u64 }    /* _ */
+    let d2 : u64 = builder_new(a, 16u64)
+    base64url_decode(d2, enc2 as u64, 4u64)
+    if builder_len(d2) != 3u64 { return 33u64 }
+    let dec2 : *u8 = builder_seal(d2) as *u8
+    if dec2[0] != 255u8 { return 34u64 }
+    if dec2[2] != 255u8 { return 35u64 }
+
+    /* NEGATIVE: '+' (standard alphabet) is BADCHAR in url-mode */
+    let bad : *u8 = malloc(4u64)
+    bad[0] = 90u8; bad[1] = 109u8; bad[2] = 43u8; bad[3] = 118u8   /* "Zm+v" */
+    let db2 : u64 = builder_new(a, 16u64)
+    if base64url_decode(db2, bad as u64, 4u64) == 0i32 { return 40u64 }
+
+    /* NEGATIVE: '=' (padding) is BADCHAR in url-mode */
+    let bad2 : *u8 = malloc(4u64)
+    bad2[0] = 90u8; bad2[1] = 103u8; bad2[2] = 61u8; bad2[3] = 61u8   /* "Zg==" */
+    let db3 : u64 = builder_new(a, 16u64)
+    if base64url_decode(db3, bad2 as u64, 4u64) == 0i32 { return 41u64 }
+
+    free(src); free(s1); free(s2); free(bad); free(bad2)
+    arena_drop(a)
+    return 99u64
+}

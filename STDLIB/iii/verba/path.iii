@@ -26,6 +26,7 @@ extern @abi(c-msvc-x64) fn builder_push_byte(id: u64, b: u32) -> i32 from "build
 extern @abi(c-msvc-x64) fn builder_push_bytes(id: u64, src: u64, n: u64) -> i32 from "builder.iii"
 
 const PATH_OK : i32 = 0i32
+const PATH_E_BUILDER : i32 = -7i32   /* a builder_push failed (full/sealed/bad-id) -- never silently truncate */
 
 var PATH_LAST_OFFSET : u64 = 0u64
 
@@ -108,14 +109,14 @@ fn path_last_offset() -> u64 @export {
 fn path_join(builder_id: u64, a: *u8, a_len: u64, b: *u8) -> i32 @export {
     /* Push a, then '/' (if a doesn't already end with one and isn't empty),
      * then b until null terminator. */
-    builder_push_bytes(builder_id, a as u64, a_len)
+    if builder_push_bytes(builder_id, a as u64, a_len) != 0i32 { return PATH_E_BUILDER }
     let mut need_sep : u8 = 1u8
     if a_len == 0u64 { need_sep = 0u8 }
     if a_len > 0u64 {
         if path_is_sep(a[a_len - 1u64] as u32) == 1u8 { need_sep = 0u8 }
     }
     if need_sep == 1u8 {
-        builder_push_byte(builder_id, 47u32)
+        if builder_push_byte(builder_id, 47u32) != 0i32 { return PATH_E_BUILDER }
     }
     /* Push b until null */
     let mut i : u64 = 0u64
@@ -124,7 +125,7 @@ fn path_join(builder_id: u64, a: *u8, a_len: u64, b: *u8) -> i32 @export {
         let c : u8 = b[i]
         if c == 0u8 { going = 0u8 }
         if going == 1u8 {
-            builder_push_byte(builder_id, c as u32)
+            if builder_push_byte(builder_id, c as u32) != 0i32 { return PATH_E_BUILDER }
             i = i + 1u64
         }
     }
@@ -208,11 +209,15 @@ fn path_normalize(builder_id: u64, src: *u8, src_len: u64) -> i32 @export {
         }
     }
     /* Emit: leading '/' if absolute, then segments joined by '/'. */
-    if is_abs == 1u8 { builder_push_byte(builder_id, 47u32) }
+    if is_abs == 1u8 {
+        if builder_push_byte(builder_id, 47u32) != 0i32 { return PATH_E_BUILDER }
+    }
     let mut k : u64 = 0u64
     while k < nseg {
-        if k > 0u64 { builder_push_byte(builder_id, 47u32) }
-        builder_push_bytes(builder_id, (src as u64) + PATH_SEG_START[k], PATH_SEG_LEN[k])
+        if k > 0u64 {
+            if builder_push_byte(builder_id, 47u32) != 0i32 { return PATH_E_BUILDER }
+        }
+        if builder_push_bytes(builder_id, (src as u64) + PATH_SEG_START[k], PATH_SEG_LEN[k]) != 0i32 { return PATH_E_BUILDER }
         k = k + 1u64
     }
     return PATH_OK

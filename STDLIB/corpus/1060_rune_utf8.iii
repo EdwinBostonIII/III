@@ -1,0 +1,32 @@
+/* 1060 -- verba::rune untested-export coverage (gap-backlog #93).
+ *
+ * Closes: rune_utf8_len (UTF-8 byte-length at every boundary) and rune_is_valid's
+ * surrogate + over-range REJECT branches (currently unexercised).  Boundary pairs
+ * (0x7F/0x80, 0x7FF/0x800, 0xFFFF/0x10000, 0x10FFFF/0x110000) pin each width edge.
+ * Equality compares only. 99 = pass.
+ */
+module corpus_1060
+
+extern @abi(c-msvc-x64) fn rune_utf8_len(cp: u32) -> u32 from "rune.iii"
+extern @abi(c-msvc-x64) fn rune_is_valid(cp: u32) -> u8 from "rune.iii"
+
+fn main() -> u64 {
+    /* --- rune_utf8_len boundaries (#93) --- */
+    if rune_utf8_len(0x7Fu32) != 1u32 { return 1u64 }
+    if rune_utf8_len(0x80u32) != 2u32 { return 2u64 }
+    if rune_utf8_len(0x7FFu32) != 2u32 { return 3u64 }
+    if rune_utf8_len(0x800u32) != 3u32 { return 4u64 }
+    if rune_utf8_len(0xFFFFu32) != 3u32 { return 5u64 }
+    if rune_utf8_len(0x10000u32) != 4u32 { return 6u64 }
+    if rune_utf8_len(0x10FFFFu32) != 4u32 { return 7u64 }
+    if rune_utf8_len(0x110000u32) != 0u32 { return 8u64 }      /* over max -> 0 */
+
+    /* --- rune_is_valid reject branches (#93) --- */
+    if rune_is_valid(0x41u32) != 1u8 { return 10u64 }          /* 'A' valid */
+    if rune_is_valid(0x10FFFFu32) != 1u8 { return 11u64 }      /* max scalar valid */
+    if rune_is_valid(0xD800u32) != 0u8 { return 12u64 }        /* low surrogate start -> invalid */
+    if rune_is_valid(0xDFFFu32) != 0u8 { return 13u64 }        /* high surrogate end -> invalid */
+    if rune_is_valid(0x110000u32) != 0u8 { return 14u64 }      /* over max -> invalid */
+
+    return 99u64
+}

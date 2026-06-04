@@ -105,6 +105,10 @@ var SMT_CLBUF_LEN   : [u32; 262144]
 var SMT_CLBUF_NCL   : u32 = 0u32
 var SMT_CLBUF_LIT   : [u32; 1048576]
 var SMT_CLBUF_USED  : u32 = 0u32
+/* [soundness] sticky latch: set on ANY clause-buffer add/push/end failure (buffer full or misuse).
+ * A silently-dropped clause weakens the constraint set -> the SAT solver can return false SAT.
+ * smt_solve_cap consumes this latch and refuses to certify SAT when a clause was lost. */
+var SMT_CLBUF_ERR   : u8 = 0u8
 
 /* --- Nelson-Oppen sharing --- */
 var SMT_SHARE_LIA   : [u32; 256]
@@ -316,10 +320,12 @@ fn smt_rat_cmp(an: i64, ad: i64, bn: i64, bd: i64) -> i32 {
 
 /* Copy SMT_SCRATCH_CL[0..n] into the replay buffer as one clause. */
 fn smt_clbuf_add(n: u32) -> i32 {
-    if n == 0u32 { return SMT_E_BAD }
-    if n > 4u32 { return SMT_E_BAD }
-    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { return SMT_E_TOO_BIG }
-    if SMT_CLBUF_USED + n > SMT_CLBUF_MAX_LITS { return SMT_E_TOO_BIG }
+    if n == 0u32 { SMT_CLBUF_ERR = 1u8  return SMT_E_BAD }
+    if n > 4u32 { SMT_CLBUF_ERR = 1u8  return SMT_E_BAD }
+    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { SMT_CLBUF_ERR = 1u8  return SMT_E_TOO_BIG }
+    /* subtractive-form bound (X22): n <= 4 (guarded above) and SMT_CLBUF_USED <= MAX_LITS, so the
+     * difference never underflows; this cannot wrap the way the old additive `USED + n` could. */
+    if n > SMT_CLBUF_MAX_LITS - SMT_CLBUF_USED { SMT_CLBUF_ERR = 1u8  return SMT_E_TOO_BIG }
     let cl : u64 = (SMT_CLBUF_NCL as u64) & SMT_U32MASK
     let off : u32 = SMT_CLBUF_USED
     SMT_CLBUF_OFF[cl] = off
@@ -362,14 +368,14 @@ fn smt_clbuf_add3(l0: u32, l1: u32, l2: u32) -> i32 {
 var SMT_CLBUF_WCNT : u32 = 0u32     /* literals pushed in the open clause */
 
 fn smt_clbuf_begin() -> i32 {
-    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { return SMT_E_TOO_BIG }
+    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { SMT_CLBUF_ERR = 1u8  return SMT_E_TOO_BIG }
     SMT_CLBUF_WCNT = 0u32
     return SMT_OK
 }
 
 fn smt_clbuf_push(lit: u32) -> i32 {
     let off : u32 = SMT_CLBUF_USED + SMT_CLBUF_WCNT
-    if off >= SMT_CLBUF_MAX_LITS { return SMT_E_TOO_BIG }
+    if off >= SMT_CLBUF_MAX_LITS { SMT_CLBUF_ERR = 1u8  return SMT_E_TOO_BIG }
     let di : u64 = (off as u64) & SMT_U32MASK
     SMT_CLBUF_LIT[di] = lit
     SMT_CLBUF_WCNT = SMT_CLBUF_WCNT + 1u32
@@ -377,8 +383,8 @@ fn smt_clbuf_push(lit: u32) -> i32 {
 }
 
 fn smt_clbuf_end() -> i32 {
-    if SMT_CLBUF_WCNT == 0u32 { return SMT_E_BAD }
-    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { return SMT_E_TOO_BIG }
+    if SMT_CLBUF_WCNT == 0u32 { SMT_CLBUF_ERR = 1u8  return SMT_E_BAD }
+    if SMT_CLBUF_NCL >= SMT_CLBUF_MAX_CLS { SMT_CLBUF_ERR = 1u8  return SMT_E_TOO_BIG }
     let cl : u64 = (SMT_CLBUF_NCL as u64) & SMT_U32MASK
     SMT_CLBUF_OFF[cl] = SMT_CLBUF_USED
     SMT_CLBUF_LEN[cl] = SMT_CLBUF_WCNT
@@ -402,6 +408,7 @@ fn smt_init() -> i32 @export {
     SMT_BV_SOLVED = 0u8
     SMT_CLBUF_NCL = 0u32
     SMT_CLBUF_USED = 0u32
+    SMT_CLBUF_ERR = 0u8
     SMT_SHARE_N = 0u32
     SMT_NO_NEW_EQ = 0u8
     SMT_WIT_VALID = 0u8
@@ -858,7 +865,7 @@ fn smt_sx_fill_con(row: u32, c: u32) -> i32 {
         SMT_SX_RD = SMT_SX_DEN[ix]
         let nn : i64 = smt_iadd(SMT_SX_RN, smt_imul(coef, SMT_SX_RD))
         smt_sx_put(row, col, nn, SMT_SX_RD)
-        csum = csum + coef
+        csum = smt_iadd(csum, coef)   /* [soundness] checked accumulation latches SMT_OVF */
         j = j + 1u32
     }
     /* shifted rhs = bnd + BOX*csum */
@@ -889,8 +896,8 @@ fn smt_sx_fill_cut(row: u32, k: u32) -> i32 {
     let col : u32 = v - 1u32
     let slack_col : u32 = SMT_SX_NSTRUCT + row
     smt_sx_put(row, col, 1i64, 1i64)
-    /* single var, coeff 1: box shift adds BOX*1 to the bound */
-    let rhs_v : i64 = bnd + SMT_LIA_BOX
+    /* single var, coeff 1: box shift adds BOX*1 to the bound ([soundness] checked add) */
+    let rhs_v : i64 = smt_iadd(bnd, SMT_LIA_BOX)
     smt_sx_put(row, SMT_SX_RHSCOL, rhs_v, 1i64)
     if kind == 0u8 { smt_sx_put(row, slack_col, 1i64, 1i64) } else { smt_sx_put(row, slack_col, -1i64, 1i64) }
     let bsign : u8 = smt_rat_sign(rhs_v)
@@ -1188,6 +1195,12 @@ fn smt_sx_phase1() -> i32 {
     let mut result : i32 = SMT_UNKNOWN
     while going == 1u8 {
         if it >= maxit { going = 0u8  result = SMT_E_TOO_BIG }
+        /* [soundness/DoS] a pivot whose rational arithmetic overflowed (smt_sx_do_pivot routes
+         * through smt_imul, which latches SMT_OVF) has a corrupted tableau -- the verdict is
+         * undecidable, NOT a wrong sat/unsat.  Bail IMMEDIATELY instead of grinding the degenerate
+         * pivots toward the 4M-iteration cap (an adversarial huge-coefficient instance otherwise
+         * churns for minutes before terminating). */
+        if SMT_OVF == 1u8 { going = 0u8  result = SMT_E_TOO_BIG }
         if going == 1u8 {
             let ecol : u32 = smt_sx_entering()
             if ecol == SMT_NO_PIVOT {
@@ -1268,7 +1281,8 @@ fn smt_lia_true_value(col: u32) -> i32 {
     smt_sx_var_value(col)
     let n : i64 = SMT_SX_RN
     let d : i64 = SMT_SX_RD
-    SMT_SX_RN = n - SMT_LIA_BOX * d
+    /* [soundness] un-shift through the overflow-latching helpers (smt_lia_solve checks SMT_OVF). */
+    SMT_SX_RN = smt_isub(n, smt_imul(SMT_LIA_BOX, d))
     SMT_SX_RD = d
     return SMT_OK
 }
@@ -1288,8 +1302,8 @@ fn smt_lia_first_fractional() -> u32 {
             let n : i64 = SMT_SX_RN
             let d : i64 = SMT_SX_RD
             let fl : i64 = smt_rat_floor(n, d)
-            /* integral iff n == fl*d */
-            if n == fl * d {
+            /* integral iff n == fl*d  ([soundness] checked multiply latches SMT_OVF) */
+            if n == smt_imul(fl, d) {
                 col = col + 1u32
             } else {
                 SMT_BB_VALS[(col as u64) & SMT_U32MASK] = fl
@@ -1635,6 +1649,12 @@ fn smt_solve_after_bv(br: i32) -> u8 {
  * (never reports a false SAT -- M12/M18). */
 fn smt_solve_finish(result: i32, cap: *u8) -> i32 {
     if result != SMT_SAT { return result }
+    /* [soundness] if ANY clause was dropped during construction or bit-blasting (SMT_CLBUF_ERR),
+     * the recorded constraint set is incomplete -- the model checker replays only what was stored,
+     * so it cannot catch a clause that was never added.  A dropped clause can only relax the
+     * problem, so a SAT verdict is unsound; refuse it (UNSAT/other results stay sound).  This runs
+     * AFTER all solving, so it also catches clauses lost inside smt_bv_solve. */
+    if SMT_CLBUF_ERR == 1u8 { return SMT_E_TOO_BIG }
     let ok : u8 = smt_check_model()
     if ok == 0u8 {
         SMT_LIA_SOLVED = 0u8
@@ -1685,10 +1705,16 @@ fn smt_bv_value(vr: u32) -> u64 @export {
 /* Independent model re-check (M12).  Returns 1u8 iff the recorded model
  * satisfies every recorded LIA + BV constraint. */
 fn smt_check_model() -> u8 @export {
+    /* [soundness] reset the overflow latch, run the independent re-check (its arithmetic is now
+     * routed through smt_imul/iadd/isub), then FAIL CLOSED if any check arithmetic overflowed:
+     * a wrapped accumulation must never be allowed to certify SAT.  smt_solve_finish's existing
+     * SAT->E_NOMODEL downgrade fires automatically when this returns 0. */
+    SMT_OVF = 0u8
     let ok_lia : u8 = smt_check_lia()
     if ok_lia == 0u8 { return 0u8 }
     let ok_bv : u8 = smt_check_bv()
     if ok_bv == 0u8 { return 0u8 }
+    if SMT_OVF == 1u8 { return 0u8 }
     return 1u8
 }
 
@@ -1723,7 +1749,11 @@ fn smt_check_lia_one(c: u32) -> u8 {
         let vv : u32 = SMT_LIA_VAR[pi]
         let vi : u64 = ((vv - 1u32) as u64) & SMT_U32MASK
         let val : i64 = SMT_LIA_VAL[vi]
-        sum = sum + coef * val
+        /* [soundness] route the model-check accumulation through the overflow-latching helpers --
+         * raw `sum + coef*val` could wrap and decide SAT on the wrapped value (false SAT), and the
+         * checker cannot catch its own wrap.  smt_imul/smt_iadd set SMT_OVF; smt_check_model
+         * fail-closes on it. */
+        sum = smt_iadd(sum, smt_imul(coef, val))
         j = j + 1u32
     }
     if kind == 1u8 {
@@ -1731,7 +1761,7 @@ fn smt_check_lia_one(c: u32) -> u8 {
         return 0u8
     }
     /* kind 0: sum <= bnd  ->  d = bnd - sum, require sign != NEG */
-    let d : i64 = bnd - sum
+    let d : i64 = smt_isub(bnd, sum)
     let s : u8 = smt_rat_sign(d)
     if s == SMT_NEG { return 0u8 }
     return 1u8
@@ -2079,6 +2109,40 @@ fn smt_kat7() -> u64 {
     return 0u64
 }
 
+/* [soundness] kat8a -- integer overflow in the model checker MUST NOT certify a model.  Exercises
+ * the check-arithmetic latch DIRECTLY (no full solve -- a huge-coefficient instance otherwise just
+ * grinds the simplex, without even reaching the overflow): build one LIA constraint "2^40*v1 <= 0"
+ * and a model v1 = 2^40, so smt_check_lia_one computes sum = 2^40*2^40 = 2^80, which wraps i64.
+ * The fix routes that product through smt_imul, which LATCHES SMT_OVF; the old raw `coef*val`
+ * wrapped silently (SMT_OVF stayed 0) and `d = 0-0 = 0` is non-negative -> the wrapped model would
+ * have been certified (FALSE SAT).  smt_check_model resets the latch, re-checks, and FAILS CLOSED.
+ * Old (raw) code FAILS this KAT at code 1 (SMT_OVF never set); only the fix passes.  A normal small
+ * model is still accepted (value-preserving helpers -- no regression). */
+fn smt_kat8a() -> u64 {
+    smt_init()
+    SMT_LIA_NVAR = 1u32
+    SMT_LIA_NCON = 1u32
+    SMT_LIA_OFF[0u64]   = 0u32
+    SMT_LIA_LEN[0u64]   = 1u32
+    SMT_LIA_KIND[0u64]  = 0u8              /* <= constraint */
+    SMT_LIA_BND[0u64]   = 0i64
+    SMT_LIA_COEFF[0u64] = 1099511627776i64 /* 2^40 */
+    SMT_LIA_VAR[0u64]   = 1u32             /* v1 (1-based) */
+    SMT_LIA_VAL[0u64]   = 1099511627776i64 /* model v1 = 2^40 */
+    SMT_OVF = 0u8
+    let _r : u8 = smt_check_lia_one(0u32)
+    if SMT_OVF != 1u8 { return 1u64 }      /* the 2^40*2^40 multiply MUST latch overflow */
+    if smt_check_model() != 0u8 { return 2u64 }   /* fail-closed under the latch */
+
+    /* regression: a non-overflowing model (2*3 = 6 <= 100) is still accepted */
+    SMT_LIA_COEFF[0u64] = 2i64
+    SMT_LIA_VAL[0u64]   = 3i64
+    SMT_LIA_BND[0u64]   = 100i64
+    SMT_OVF = 0u8
+    if smt_check_model() != 1u8 { return 3u64 }
+    return 0u64
+}
+
 /* Witness reproducibility (M10): run KAT1 twice with a capability; the two
  * 32-byte witnesses must be byte-identical.  With SMT_NULL_CAP, witness is
  * suppressed (smt_witness returns SMT_E_BAD). */
@@ -2159,5 +2223,7 @@ fn smt_selftest() -> u64 @export {
     if r6 != 0u64 { return 600u64 + r6 }
     let r7 : u64 = smt_kat7()
     if r7 != 0u64 { return 700u64 + r7 }
+    let r8a : u64 = smt_kat8a()
+    if r8a != 0u64 { return 800u64 + r8a }
     return 99u64
 }

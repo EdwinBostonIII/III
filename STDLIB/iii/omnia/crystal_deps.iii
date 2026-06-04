@@ -36,6 +36,7 @@ extern @abi(c-msvc-x64) fn vec_u64_new(arena_id: u64, hard_max: u64) -> u64 from
 extern @abi(c-msvc-x64) fn vec_u64_push(id: u64, v: u64) -> i32 from "vec.iii"
 extern @abi(c-msvc-x64) fn vec_u64_at(id: u64, i: u64) -> u64 from "vec.iii"
 extern @abi(c-msvc-x64) fn vec_u64_count(id: u64) -> u64 from "vec.iii"
+extern @abi(c-msvc-x64) fn vec_u64_drop(id: u64) -> i32 from "vec.iii"
 
 extern @abi(c-msvc-x64) fn vec_u8_new(arena_id: u64, hard_max: u64) -> u64 from "vec.iii"
 extern @abi(c-msvc-x64) fn vec_u8_push(id: u64, b: u32) -> i32 from "vec.iii"
@@ -50,6 +51,7 @@ extern @abi(c-msvc-x64) fn queue_u64_drop(id: u64) -> i32 from "queue.iii"
 extern @abi(c-msvc-x64) fn map_u32u32_new(arena_id: u64, hard_max: u64) -> u64 from "map.iii"
 extern @abi(c-msvc-x64) fn map_u32u32_put(id: u64, k: u32, v: u32) -> i32 from "map.iii"
 extern @abi(c-msvc-x64) fn map_u32u32_contains(id: u64, k: u32) -> u8 from "map.iii"
+extern @abi(c-msvc-x64) fn map_u32u32_drop(id: u64) -> i32 from "map.iii"
 
 extern @abi(c-msvc-x64) fn mhash_begin() -> i32 from "mhash.iii"
 extern @abi(c-msvc-x64) fn mhash_domain(d: u64, dl: u64) -> i32 from "mhash.iii"
@@ -178,8 +180,14 @@ fn sid_transitive_closure(arena_id: u64, seeds_vec: u64) -> u64 @export {
         }
     }
 
+    /* [handle-leak fix] q + visited are dead after the BFS; free both slots (visited was
+     * previously leaked -- 1 map_u32u32 slot per call).  On overflow, result is abandoned too. */
     queue_u64_drop(q)
-    if overflow == 1u8 { return SID_INVALID }
+    map_u32u32_drop(visited)
+    if overflow == 1u8 {
+        vec_u64_drop(result)
+        return SID_INVALID
+    }
     return result
 }
 

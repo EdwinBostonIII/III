@@ -9,6 +9,7 @@ module corpus_394_katabasis_bar_typing
 
 extern @abi(c-msvc-x64) fn katabasis_bar_region(phys: u64) -> u32 from "bar_layout.iii"
 extern @abi(c-msvc-x64) fn katabasis_bar_write_admissible(phys: u64) -> u8 from "bar_layout.iii"
+extern @abi(c-msvc-x64) fn katabasis_bar_cycle_admissible(action: u16, phys: u64) -> u8 from "bar_layout.iii"
 
 fn main() -> u64 {
     /* region classification (verified BAR addresses, plan 0.2 / 0.6) */
@@ -30,5 +31,10 @@ fn main() -> u64 {
     if katabasis_bar_write_admissible(0x1000u64)       != 0u8 { return 14u64 }  /* host RAM */
     if katabasis_bar_write_admissible(0xFEE00000u64)   != 0u8 { return 15u64 }  /* LAPIC */
     if katabasis_bar_write_admissible(0xFC000000u64)   != 0u8 { return 16u64 }  /* just past BAR0 */
+
+    /* gap #33: katabasis_bar_cycle_admissible -- the action-parameterized arm */
+    if katabasis_bar_cycle_admissible(728u16, 0xFB000000u64) != 1u8 { return 17u64 }   /* all-POS action -> admissible */
+    if katabasis_bar_cycle_admissible(0u16, 0xFB000000u64)   != 0u8 { return 18u64 }   /* all-NEG action -> refused */
+    if katabasis_bar_cycle_admissible(728u16, 0x1000u64)     != 0u8 { return 19u64 }   /* POS action but host RAM -> refused */
     return 99u64
 }

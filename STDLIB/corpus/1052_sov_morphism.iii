@@ -1,0 +1,14 @@
+/* 1052 -- mig7 (H11 "one category"): register the GENERATING Sovereign morphism (sv_op).
+ * sov_morphism.iii realizes field 6 of the 10-field SovMorphism (`morphism_id`, via cat_add_morphism)
+ * for sv_op -- The Move's generating instance -- and discharges its deferred clause
+ * ({ morphism_id : "registered but assoc not yet a ratified clause" : mig7 }).
+ * The CENTRAL theorem is falsifiable about the ACTUAL operation, not the by-construction registry:
+ *   - Known payloads: sv_op is byte-associative (L = op(op(a,b),c) == R = op(a,op(b,c)));
+ *   - SUB: a GENUINELY non-associative op -> L != R (the assoc test discriminates -- not vacuous);
+ *   - Gap (open term): hexad/cost/status associative + root cause preserved, provenance path-dependent;
+ *   - the registered arrows compose associatively (cat_check_assoc==1) + a non-composable arrangement ->0;
+ *   - re-registration is idempotent (same morphism id).
+ * 99 = all arms hold. */
+module corpus_1052
+extern @abi(c-msvc-x64) fn sov_morphism_selftest() -> u64 from "sov_morphism.iii"
+fn main() -> u64 { return sov_morphism_selftest() }

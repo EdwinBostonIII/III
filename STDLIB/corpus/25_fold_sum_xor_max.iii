@@ -9,6 +9,11 @@ extern @abi(c-msvc-x64) fn fold_u8_u32_sum(id: u64) -> u32 from "fold.iii"
 extern @abi(c-msvc-x64) fn fold_u8_u32_xor(id: u64) -> u32 from "fold.iii"
 extern @abi(c-msvc-x64) fn fold_u8_u32_max(id: u64) -> u32 from "fold.iii"
 extern @abi(c-msvc-x64) fn fold_u8_u32_count(id: u64) -> u64 from "fold.iii"
+extern @abi(c-msvc-x64) fn fold_u8_u32_min(id: u64) -> u32 from "fold.iii"
+extern @abi(c-msvc-x64) fn fold_u8_u32_via_fn(id: u64, init: u32, step: u64) -> u32 from "fold.iii"
+
+/* gap #19: a C-ABI step callback (acc,v)->acc+v, address-taken via (&fn) as u64 */
+fn step_add(acc: u32, v: u32) -> u32 @abi(c-msvc-x64) { return (acc + v) & 0xFFFFFFFFu32 }
 
 fn main() -> u64 {
     let p : *u8 = malloc(5u64)
@@ -38,6 +43,20 @@ fn main() -> u64 {
     iter_u8_drop(it4)
     /* 10^20 = 30, ^30 = 0, ^40 = 40, ^50 = 26 */
     if x != 26u32 { return 4u64 }
+
+    /* gap #19: fold_u8_u32_min (incl. empty->0) + fold_u8_u32_via_fn (fn-ptr callback) */
+    let it5 : u64 = iter_u8_new(p as u64, 5u64)
+    let mn : u32 = fold_u8_u32_min(it5)
+    iter_u8_drop(it5)
+    if mn != 10u32 { return 5u64 }
+    let it6 : u64 = iter_u8_new(p as u64, 0u64)
+    let mn0 : u32 = fold_u8_u32_min(it6)
+    iter_u8_drop(it6)
+    if mn0 != 0u32 { return 6u64 }
+    let it7 : u64 = iter_u8_new(p as u64, 5u64)
+    let vf : u32 = fold_u8_u32_via_fn(it7, 0u32, (&step_add) as u64)
+    iter_u8_drop(it7)
+    if vf != 150u32 { return 7u64 }
 
     free(p)
     return 99u64

@@ -11,7 +11,8 @@
  *
  * Public surface:
  *   glyph_set_form_id()                                                    -> u32 (0x32)
- *   glyph_set_pack(elem_form_id, elem_count, elem_size, src_ptr, out_192)  -> i32
+ *   glyph_set_pack_meta(elem_form_id, elem_count, elem_size)               -> u64
+ *   glyph_set_pack(packed_meta, src_ptr, out_192)                          -> i32
  *   glyph_set_unpack_count(in_192)                                         -> u32
  *   glyph_set_unpack_elem_form_id(in_192)                                  -> u32
  *   glyph_set_unpack_elements(in_192, dst_ptr, dst_cap_bytes)              -> i32
@@ -47,7 +48,12 @@ fn glyph_set_pack_meta(elem_form_id: u32, elem_count: u32, elem_size: u32) -> u6
  * to a multi-arg form -- that would break composition dispatch (the
  * trampoline passes 4 u64s; extra typed params would read garbage).  The
  * iiis-0 5+-arg trap this also dodged is independently fixed (Stage 3.9,
- * corpus 277); the packing now stands on the composition ABI alone. */
+ * corpus 277); the packing now stands on the composition ABI alone.
+ *   packed_meta packs (IDENTICAL to glyph_vec, per the header's encoding claim):
+ *     bits  0..31 = elem_form_id
+ *     bits 32..47 = elem_count   (u16 max)
+ *     bits 48..63 = elem_size    (u16 max)
+ * Use glyph_set_pack_meta to construct safely. */
 fn glyph_set_pack(packed_meta: u64, src_ptr: u64, out_192: u64) -> i32 @export {
     let pm   : u64 = packed_meta
     let ef_l : u32 = (pm & 0xFFFFFFFFu64) as u32

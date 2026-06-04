@@ -1,0 +1,43 @@
+/* 1082 -- omnia::pattern_table field getters + unseal seam (gap-backlog #87).
+ * Build a 168-byte template (PATTERN_ID non-zero, arity=5, binding_kind[0]=7, guarantees_required
+ * =0x11, proof_id=0x42), register it, then read every field back via pattern_table_get + the
+ * getters.  Also drives the seal seam: after pattern_registry_seal_global, register is REFUSED;
+ * after pattern_registry_unseal_for_test, register SUCCEEDS again.  99 = pass.
+ */
+module corpus_1082
+
+extern @abi(c-msvc-x64) fn pattern_register(slot: u32, p_template: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_table_get(idx: u32) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_arity(p: u64) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_binding_kind(p: u64, i: u32) -> u8 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_guarantees_required(p: u64) -> u32 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_proof_id(p: u64) -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_seal_global() -> u64 from "pattern_table.iii"
+extern @abi(c-msvc-x64) fn pattern_registry_unseal_for_test() -> i32 from "pattern_table.iii"
+
+var TPL : [u8; 168]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 168u64 { TPL[i] = 0u8; i = i + 1u64 }
+    TPL[0u64] = 0xCDu8  TPL[1u64] = 0xABu8       /* PATTERN_ID non-zero (so pattern_table_get returns the slot) */
+    TPL[40u64] = 5u8                             /* PF_ARITY */
+    TPL[41u64] = 7u8                             /* PF_BINDING_KINDS[0] */
+    TPL[116u64] = 0x11u8                         /* PF_GUARANTEES_REQUIRED (u32 LE low byte) */
+    TPL[152u64] = 0x42u8                         /* PF_PROOF_ID (u64 LE low byte) */
+
+    if pattern_register(0u32, (&TPL) as u64) != 1u8 { return 1u64 }
+    let p : u64 = pattern_table_get(0u32)
+    if p == 0u64 { return 2u64 }
+    if pattern_arity(p) != 5u8 { return 3u64 }
+    if pattern_binding_kind(p, 0u32) != 7u8 { return 4u64 }
+    if pattern_guarantees_required(p) != 0x11u32 { return 5u64 }
+    if pattern_proof_id(p) != 0x42u64 { return 6u64 }
+
+    pattern_registry_seal_global()
+    if pattern_register(1u32, (&TPL) as u64) != 0u8 { return 7u64 }     /* sealed -> refused */
+    pattern_registry_unseal_for_test()
+    if pattern_register(1u32, (&TPL) as u64) != 1u8 { return 8u64 }     /* unsealed -> succeeds */
+
+    return 99u64
+}

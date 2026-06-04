@@ -65,11 +65,16 @@ fn aeu_netlist_certified() -> u32 @export {
 /* ===== SX4: the SCALABLE multi-axiom AEU -- N lanes, not a fixed 2 ===== */
 
 /* set axiom lane i to bit (1 = the i-th axiom holds for the datum). */
-fn aeu_set_lane(i: u32, bit: u32) -> u64 @export { AEU_LANES[i] = bit ; return 0u64 }
+fn aeu_set_lane(i: u32, bit: u32) -> u64 @export {
+    if i >= 64u32 { return 0u64 }    /* AEU_LANES has 64 slots; drop an out-of-range lane write (OOB) */
+    AEU_LANES[i] = bit
+    return 0u64
+}
 
 /* the N-lane verdict: conjunction over n axiom lanes (ALL evaluated -- parallel). 1 iff all hold;
  * 0 iff ANY lane is violated (caught in the same pass). */
 fn aeu_check_n(n: u32) -> u32 @export {
+    if n > 64u32 { return 0u32 }     /* AEU_LANES has 64 slots; n>64 can't be certified -> conservative 0 */
     let mut acc : u32 = 1u32
     let mut i : u32 = 0u32
     while i < n {

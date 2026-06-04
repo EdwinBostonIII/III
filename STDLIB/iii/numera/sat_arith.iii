@@ -19,16 +19,17 @@
 
 module numera_sat_arith
 
-extern @abi(c-msvc-x64) fn scalar_u64_add_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
-extern @abi(c-msvc-x64) fn scalar_u64_sub_did_underflow(a: u64, b: u64) -> u8 from "scalar.iii"
-extern @abi(c-msvc-x64) fn scalar_u64_mul_did_overflow(a: u64, b: u64) -> u8 from "scalar.iii"
-extern @abi(c-msvc-x64) fn scalar_u32_add_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
-extern @abi(c-msvc-x64) fn scalar_u32_sub_did_underflow(a: u32, b: u32) -> u8 from "scalar.iii"
-extern @abi(c-msvc-x64) fn scalar_u32_mul_did_overflow(a: u32, b: u32) -> u8 from "scalar.iii"
-/* COMBINE-11: scalar's single-pass saturating ops (no double op-evaluation). */
+/* COMBINE-11: scalar's single-pass saturating ops (no double op-evaluation).
+ * BOTH widths delegate here.  The did-overflow / did-underflow predicates that
+ * the u32 paths formerly called are removed: predicate-then-recompute evaluates
+ * the operation twice, which is the exact anti-pattern COMBINE-11 eliminates.
+ * [audit W3.22: u32 sat ops now single-pass, matching the u64 ops.] */
 extern @abi(c-msvc-x64) fn scalar_u64_add_sat(a: u64, b: u64) -> u64 from "scalar.iii"
 extern @abi(c-msvc-x64) fn scalar_u64_sub_sat(a: u64, b: u64) -> u64 from "scalar.iii"
 extern @abi(c-msvc-x64) fn scalar_u64_mul_sat(a: u64, b: u64) -> u64 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_add_sat(a: u32, b: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_sub_sat(a: u32, b: u32) -> u32 from "scalar.iii"
+extern @abi(c-msvc-x64) fn scalar_u32_mul_sat(a: u32, b: u32) -> u32 from "scalar.iii"
 
 /* --- u64 saturating --- */
 
@@ -54,24 +55,15 @@ fn sat_div_u64(a: u64, b: u64) -> u64 @export {
 /* --- u32 saturating --- */
 
 fn sat_add_u32(a: u32, b: u32) -> u32 @export {
-    if scalar_u32_add_did_overflow(a, b) == 1u8 {
-        return 0xFFFFFFFFu32
-    }
-    return (a + b) & 0xFFFFFFFFu32
+    return scalar_u32_add_sat(a, b)   /* COMBINE-11: single-pass (was check-then-recompute) */
 }
 
 fn sat_sub_u32(a: u32, b: u32) -> u32 @export {
-    if scalar_u32_sub_did_underflow(a, b) == 1u8 {
-        return 0u32
-    }
-    return (a - b) & 0xFFFFFFFFu32
+    return scalar_u32_sub_sat(a, b)   /* COMBINE-11 */
 }
 
 fn sat_mul_u32(a: u32, b: u32) -> u32 @export {
-    if scalar_u32_mul_did_overflow(a, b) == 1u8 {
-        return 0xFFFFFFFFu32
-    }
-    return (a * b) & 0xFFFFFFFFu32
+    return scalar_u32_mul_sat(a, b)   /* COMBINE-11 */
 }
 
 fn sat_div_u32(a: u32, b: u32) -> u32 @export {

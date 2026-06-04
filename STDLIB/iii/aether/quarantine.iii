@@ -460,7 +460,16 @@ fn q_commit(cap: u64, slot: u32) -> i32 @export {
     ident_from_bytes((&QUAR_SUMBUF as u64) as *u8, plen64, (&QUAR_OUT_C as u64) as *u8)
     wh_chain_root((&QUAR_IN_C as u64) as *u8)
     let frag : u64 = wh_publish((&QUAR_PRODUCER as u64) as *u8, (&QUAR_OPID_COMMIT as u64) as *u8, (&QUAR_IN_C as u64) as *u8, (&QUAR_OUT_C as u64) as *u8, 0u8, 0u8, QUAR_PILLAR, q_enter_id_ptr(slot), 1u32, (&QUAR_SUMBUF as u64) as *u8, plen, (&QUAR_FID as u64) as *u8)
-    if frag == QUAR_WH_FAIL { return QUAR_E_WITNESS }
+    if frag == QUAR_WH_FAIL {
+        /* M6: a transition that fails to witness REFUSES.  q_apply_forward already mutated
+         * memory and STATE is COMMIT; restore the pre-commit bytes from the undo journal
+         * (captured above) and revert to OPEN so the slot is recoverable (q_abort / retry)
+         * rather than deadlocked at COMMIT with mutated memory and no witness.  Mirrors the
+         * revert q_enter performs on its own witness failure. */
+        q_apply_undo_reverse(slot)
+        QUAR_STATE[slot] = QUAR_STATE_OPEN
+        return QUAR_E_WITNESS
+    }
     QUAR_COMMIT_FRAG[slot] = frag
     ident_copy((&QUAR_FID as u64) as *u8, q_commit_id_ptr(slot))
     QUAR_LIVE[slot] = 0u8

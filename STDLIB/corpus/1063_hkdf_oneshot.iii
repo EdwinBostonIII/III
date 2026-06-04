@@ -1,0 +1,38 @@
+/* 1063 -- numera::hkdf oneshot coverage (gap-backlog #47).
+ *
+ * Closes hkdf_sha256_oneshot (extract+expand composition) against RFC 5869 Test Case 1:
+ *   IKM = 0x0b x22, salt = 00..0c (13), info = f0..f9 (10), L = 42.
+ * Asserts the full 42-byte OKM byte-for-byte (3c b2 5f ... 58 65). 99 = pass.
+ */
+module corpus_1063
+
+extern @abi(c-msvc-x64) fn hkdf_sha256_oneshot(salt: u64, salt_len: u64, ikm: u64, ikm_len: u64, info: u64, info_len: u64, out: u64, out_len: u64) -> i32 from "hkdf.iii"
+
+var IKM  : [u8; 22]
+var SALT : [u8; 13]
+var INFO : [u8; 10]
+var OUT  : [u8; 42]
+var EXP  : [u8; 42] = [
+    60u8,178u8,95u8,37u8,250u8,172u8,213u8,122u8,144u8,67u8,79u8,100u8,208u8,54u8,47u8,42u8,
+    45u8,45u8,10u8,144u8,207u8,26u8,90u8,76u8,93u8,176u8,45u8,86u8,236u8,196u8,197u8,191u8,
+    52u8,0u8,114u8,8u8,213u8,184u8,135u8,24u8,88u8,101u8]
+
+fn main() -> u64 {
+    let mut i : u64 = 0u64
+    while i < 22u64 { IKM[i] = 11u8; i = i + 1u64 }          /* 0x0b */
+    let mut s : u64 = 0u64
+    while s < 13u64 { SALT[s] = s as u8; s = s + 1u64 }       /* 00..0c */
+    let mut f : u64 = 0u64
+    while f < 10u64 { INFO[f] = (240u64 + f) as u8; f = f + 1u64 }  /* f0..f9 */
+
+    let rc : i32 = hkdf_sha256_oneshot((&SALT) as u64, 13u64, (&IKM) as u64, 22u64,
+                                       (&INFO) as u64, 10u64, (&OUT) as u64, 42u64)
+    if rc != 0i32 { return 1u64 }
+
+    let mut k : u64 = 0u64
+    while k < 42u64 {
+        if OUT[k] != EXP[k] { return 10u64 + k }
+        k = k + 1u64
+    }
+    return 99u64
+}

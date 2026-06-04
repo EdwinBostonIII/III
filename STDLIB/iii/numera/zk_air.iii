@@ -77,33 +77,20 @@ var AIR_NT      : [u32; 1]          /* number of terms */
 var AIR_NC      : [u32; 1]          /* number of transition constraints */
 var AIR_ALPHA   : [u32; 8]          /* per-constraint Fiat-Shamir coefficient */
 
-/* ---- GF(998244353) ---- */
-fn sf_add(x: u32, y: u32) -> u32 {
-    let s : u64 = (x as u64) + (y as u64)
-    if s >= 998244353u64 { return (s - 998244353u64) as u32 }
-    return s as u32
-}
-fn sf_sub(x: u32, y: u32) -> u32 {
-    if x >= y { return x - y }
-    return ((x as u64) + 998244353u64 - (y as u64)) as u32
-}
-fn sf_mul(x: u32, y: u32) -> u32 { return (((x as u64) * (y as u64)) % 998244353u64) as u32 }
-fn sf_pow(x: u32, e: u64) -> u32 {
-    let mut r : u64 = 1u64
-    let mut b : u64 = (x as u64) % 998244353u64
-    let mut ee : u64 = e
-    while ee > 0u64 {
-        if (ee & 1u64) == 1u64 { r = (r * b) % 998244353u64 }
-        b = (b * b) % 998244353u64
-        ee = ee >> 1u64
-    }
-    return r as u32
-}
-fn sf_inv(x: u32) -> u32 { return sf_pow(x, 998244351u64) }
-fn sf_rou(n: u32) -> u32 { return sf_pow(3u32, 998244352u64 / (n as u64)) }
+/* ---- GF(998244353): consolidated into the shared ntt_fri_organ ----
+ * Were inline + byte-identical to zk_stark's copies → the `L_sf_*` global-symbol
+ * collision the independence capstone surfaced.  Same residues; now one source. */
+extern @abi(c-msvc-x64) fn sf_add(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_sub(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_mul(x: u32, y: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_pow(x: u32, e: u64) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_inv(x: u32) -> u32 from "ntt_fri_organ.iii"
+extern @abi(c-msvc-x64) fn sf_rou(n: u32) -> u32 from "ntt_fri_organ.iii"
 
 /* ---- AIR construction ---- */
 fn air_reset(w_cols: u32, n_rows: u32) -> i32 @export {
+    if (w_cols as u64) > AIR_WMAX { return 0i32 - 1i32 }    /* [OOB] width/rows bound every AIR_TRACE[AIR_WMAX*AIR_NMAX] index */
+    if (n_rows as u64) > AIR_NMAX { return 0i32 - 1i32 }
     AIR_W[0] = w_cols
     AIR_N[0] = n_rows
     AIR_NT[0] = 0u32
@@ -117,6 +104,8 @@ fn air_set_trace(row: u64, col: u64, v: u32) -> i32 @export {
     let r : u64 = row
     let c : u64 = col
     let w : u64 = AIR_W[0] as u64
+    if r >= AIR_NMAX { return 0i32 - 1i32 }    /* [OOB] @export row/col index AIR_TRACE[AIR_WMAX*AIR_NMAX] */
+    if c >= w { return 0i32 - 1i32 }
     AIR_TRACE[r * w + c] = v
     return 0i32
 }
@@ -124,12 +113,15 @@ fn air_get_trace(row: u64, col: u64) -> u32 @export {
     let r : u64 = row
     let c : u64 = col
     let w : u64 = AIR_W[0] as u64
+    if r >= AIR_NMAX { return 0u32 }
+    if c >= w { return 0u32 }
     return AIR_TRACE[r * w + c]
 }
 /* append a transition term  coeff*var_a*var_b  to constraint k. */
 fn air_add_term(con: u32, coeff: u32, var_a: u32, var_b: u32) -> i32 @export {
     let t : u64 = AIR_NT[0] as u64
     if t >= AIR_TMAX { return 0i32 - 1i32 }
+    if (con as u64) >= AIR_CMAX { return 0i32 - 1i32 }   /* con is later read as AIR_ALPHA[con] (size AIR_CMAX) in air_combine */
     AIR_TT_CON[t]  = con
     AIR_TT_COEF[t] = coeff
     AIR_TT_A[t]    = var_a
@@ -141,6 +133,7 @@ fn air_add_term(con: u32, coeff: u32, var_a: u32, var_b: u32) -> i32 @export {
 /* set the Fiat-Shamir coefficient for constraint k (the verifier derives these;
  * for the selftest they are supplied directly). */
 fn air_set_alpha(con: u64, a: u32) -> i32 @export {
+    if con >= AIR_CMAX { return 0i32 - 1i32 }   /* AIR_ALPHA has AIR_CMAX slots; OOB write else */
     let k : u64 = con
     AIR_ALPHA[k] = a
     return 0i32
@@ -157,9 +150,11 @@ fn air_eval_var(vid: u64, j: u64, w_cols: u64, d_dom: u64) -> u32 {
     if v == 0u64 { return 1u32 }
     if v <= wc {
         let col : u64 = v - 1u64
+        if col >= AIR_WMAX { return 0u32 }
         return AIR_LDE[col * dd + jj]
     }
     let col2 : u64 = v - 1u64 - wc
+    if col2 >= AIR_WMAX { return 0u32 }            /* AIR_LDE is WMAX*DMAX; col must be < WMAX */
     let jn   : u64 = (jj + AIR_B) & (dd - 1u64)
     return AIR_LDE[col2 * dd + jn]
 }
@@ -282,6 +277,7 @@ var AIR_OPEN_CUR  : [u32; 4]
 var AIR_OPEN_NEXT : [u32; 4]
 
 fn air_set_open(col: u64, cur_v: u32, next_v: u32) -> i32 @export {
+    if col >= AIR_WMAX { return 0i32 - 1i32 }   /* AIR_OPEN_CUR/NEXT have AIR_WMAX slots */
     let c : u64 = col
     AIR_OPEN_CUR[c]  = cur_v
     AIR_OPEN_NEXT[c] = next_v
@@ -291,8 +287,14 @@ fn air_eval_var_opened(vid: u64, w_cols: u64) -> u32 {
     let v  : u64 = vid
     let wc : u64 = w_cols
     if v == 0u64 { return 1u32 }
-    if v <= wc { return AIR_OPEN_CUR[v - 1u64] }
-    return AIR_OPEN_NEXT[v - 1u64 - wc]
+    if v <= wc {
+        let i : u64 = v - 1u64
+        if i >= AIR_WMAX { return 0u32 }
+        return AIR_OPEN_CUR[i]
+    }
+    let i2 : u64 = v - 1u64 - wc
+    if i2 >= AIR_WMAX { return 0u32 }              /* AIR_OPEN_NEXT has AIR_WMAX slots */
+    return AIR_OPEN_NEXT[i2]
 }
 fn air_combine_opened(w_cols: u64) -> u32 @export {
     let wc : u64 = w_cols

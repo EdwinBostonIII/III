@@ -168,6 +168,7 @@ fn iii_ecdsa_p384_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @exp
     fn384_boot()
     iii_drbg_instantiate(d_bytes, 48u64, z_bytes, 48u64, 0u64, 0u64)
     let mut done : u8 = 0u8
+    let mut ok : u8 = 0u8
     let mut guard : u64 = 0u64
     /* retry the nonce until it is nonzero AND the produced (r,s) is non-degenerate (r!=0 && s!=0)
      * -- [E-EC-3] never emit a signature that verify would reject.  Now MATCHES the proven P-256
@@ -180,10 +181,11 @@ fn iii_ecdsa_p384_sign_det(d_bytes: u64, z_bytes: u64, sig_out: u64) -> i32 @exp
         gn_reduce_x(0u64)
         if gn_is_zero_x(0u64) == 0u8 {
             gn_get_bytes_x(&EC384_KBUF as u64, 0u64)
-            if iii_ecdsa_p384_sign(d_bytes, z_bytes, &EC384_KBUF as u64, sig_out) == 0i32 { done = 1u8 }
+            if iii_ecdsa_p384_sign(d_bytes, z_bytes, &EC384_KBUF as u64, sig_out) == 0i32 { done = 1u8 ; ok = 1u8 }
         }
         guard = guard + 1u64
         if guard > 64u64 { done = 1u8 }
     }
+    if ok == 0u8 { return -1i32 }   /* [dead-arm] guard-exhausted (64 degenerate nonces) without a valid sig -> error, not false success (matches P-256 sign_det) */
     return 0i32
 }

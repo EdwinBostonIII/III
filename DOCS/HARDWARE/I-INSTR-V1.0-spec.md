@@ -188,17 +188,38 @@ fires (so post-hoc forensics is possible).
 
 ## 5. Witness chain (hardware-direct)
 
-Every committed intent produces a 64-byte witness record:
+Every committed intent produces a **960-bit (120-byte) witness record**
+(APOTHEOSIS §C.12 gap 5). The record is 15 little-endian 64-bit words (word 0
+in `wc_data[63:0]`), faithfully unifying the software `sanctus/witness.iii`
+entry (`mhash || cap || k`) with the `resolver_last_event` reflection struct:
 
 ```
-+----------+----------+---------+----------+----------+----------+----------+----------+
-| seq[0..7]| pat[0..7]| ctx[0..15]         | k_now[0..7]| score[0..3]| flags |...
-+----------+----------+---------+----------+----------+----------+----------+----------+
+ word  field          notes
+  w0   seq            monotonic witness sequence
+  w1   pattern_id     winner id (argmax-tournament winner, zero-extended)
+  w2   intent_id      IR[63:0]
+  w3   ctx_digest[0]  CTXR[63:0]    } first 128 bits of the 256-bit
+  w4   ctx_digest[1]  CTXR[127:64]  } context digest
+  w5   k_now          KChain accumulator after this commit (sealed K-cost)
+  w6   {flags:32, score:32}  winner score in the low 32 bits
+  w7   dispatch_fp    winning pattern's dispatch function pointer
+  w8   memo_key_lo    content-address (cad, SHA-256-trunc-128) low 64
+  w9   memo_key_hi    content-address high 64  (-> the 128-bit cad key)
+  w10  cap_id         capability id (GRANT-fed; sealed-pad 0 in core RTL)
+  w11  ctx_digest[2]  CTXR[191:128] } remaining 128 bits of the
+  w12  ctx_digest[3]  CTXR[255:192] } context digest
+  w13  {…, memo_hit:1, opcode:5}  status word
+  w14  reserved       =0 (sealed-pad)
 ```
+
+(The v1.0-draft 64-byte layout — `seq||pat||ctx128||k||score||flags` — is the
+low-eight-word prefix of this record; the widened 960-bit form adds the full
+256-bit ctx digest, the cad key, and the status word so the silicon record is
+a strict superset of every software witness field.)
 
 The W stage of the pipeline (one cycle, deterministic) appends the record
-and advances `WPR`. There is no buffering — a record is committed before
-its instruction is considered retired.
+and advances `WPR` by 120 bytes. There is no buffering — a record is committed
+before its instruction is considered retired.
 
 ---
 

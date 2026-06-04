@@ -25,7 +25,6 @@ const MEMO_SLOTMASK   : u64 = 31u64
 const MEMO_ADDR_BYTES : u64 = 32u64
 const MEMO_MAXVAL     : u64 = 512u64
 const MEMO_NONE       : u64 = 0xFFFFFFFFFFFFFFFFu64
-const MEMO_U32MASK    : u64 = 0xFFFFFFFFu64
 
 var MEMO_OCC  : [u8; 32]
 var MEMO_ADDR : [u8; 1024]    /* 32 slots * 32 bytes */
@@ -35,13 +34,13 @@ var MEMO_NEXT : u64 = 0u64
 
 /* address of slot's 32-byte address field. */
 fn _memo_addr_ptr(slot: u64) -> u64 {
-    let s : u64 = slot & MEMO_U32MASK
+    let s : u64 = slot & MEMO_SLOTMASK
     return (&MEMO_ADDR as u64) + (s * MEMO_ADDR_BYTES)
 }
 
 /* address of slot's value field. */
 fn _memo_val_ptr(slot: u64) -> u64 {
-    let s : u64 = slot & MEMO_U32MASK
+    let s : u64 = slot & MEMO_SLOTMASK
     return (&MEMO_VAL as u64) + (s * MEMO_MAXVAL)
 }
 

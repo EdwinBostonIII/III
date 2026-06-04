@@ -1039,11 +1039,15 @@ fn bigint_modpow_mont(arena: u64, base: u64, exp: u64, modulus: u64) -> u64 {
     if ctx == 0u64 { return BIGINT_DIV_INVALID }   /* modulus even/zero: caller mis-dispatched */
     let r2 : u64 = modctx_r2(ctx)
     let base_mod : u64 = bigint_mod(arena, base, modulus)
+    if base_mod == 0u64 { return BIGINT_DIV_INVALID }    /* [alloc] 64-slot bigint handle-table exhaustion -> degenerate 0 handle */
     /* to_form(x) = x*R mod n = mont_mul_ctx(x, R^2). */
     let mut b_cur : u64 = mont_mul_ctx(arena, base_mod, r2, ctx)
+    if b_cur == 0u64 { bigint_drop(base_mod) return BIGINT_DIV_INVALID }
     bigint_drop(base_mod)
     let one : u64 = bigint_from_u64(arena, 1u64)
+    if one == 0u64 { return BIGINT_DIV_INVALID }
     let mut result : u64 = mont_mul_ctx(arena, one, r2, ctx)   /* mont(1) = R mod n */
+    if result == 0u64 { return BIGINT_DIV_INVALID }
     let exp_bits : u64 = bigint_msb_position(exp)
     let mut bit : u64 = 0u64
     while bit < exp_bits {

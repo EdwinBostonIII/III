@@ -58,6 +58,7 @@ fn cgr_addr_eq(i: u32, p: *u8) -> u32 {
 
 /* union-find root with path compression */
 fn cgr_find(i: u32) -> u32 @export {
+    if i >= CGR_MAX { return i }    /* [OOB] @export i indexes CGR_PARENT[1024]; OOB -> treat as its own singleton root */
     let mut r : u32 = i
     while CGR_PARENT[r as u64] != r { r = CGR_PARENT[r as u64] }
     let mut c : u32 = i
@@ -99,6 +100,8 @@ fn cgr_contains(p: *u8) -> u8 @export {
  * root carries the cost-minimal realization. */
 fn cgr_union_certified(a: u32, b: u32, proof_ok: u32) -> u32 @export {
     if proof_ok != 1u32 { return 0u32 }
+    if a >= CGR_MAX { return 0u32 }    /* [OOB] @export a/b index CGR_PARENT/COST/RANK[1024] */
+    if b >= CGR_MAX { return 0u32 }
     let ra : u32 = cgr_find(a)
     let rb : u32 = cgr_find(b)
     if ra == rb { return 1u32 }
@@ -119,7 +122,7 @@ fn cgr_union_certified(a: u32, b: u32, proof_ok: u32) -> u32 @export {
 }
 
 /* the cost-minimal representative cost of item's class */
-fn cgr_rep_cost(item: u32) -> u64 @export { return CGR_COST[cgr_find(item) as u64] }
+fn cgr_rep_cost(item: u32) -> u64 @export { if item >= CGR_MAX { return 0u64 } return CGR_COST[cgr_find(item) as u64] }
 
 /* the RING size: number of distinct classes (= unique dedup'd implementation kernels) */
 fn cgr_num_classes() -> u32 @export {

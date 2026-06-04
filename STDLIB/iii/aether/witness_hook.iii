@@ -86,6 +86,9 @@ var WH_ZERO_ID         : [u8; 32]   /* canonical zero id (system producer) */
 var WH_OUT_TMP         : [u8; 32]   /* payload commitment for witness_append_resolution */
 var WH_RES_ID          : [u8; 32]   /* resolution fragment id sink */
 
+/* initial_time is accepted for ABI / call-site compatibility but DELIBERATELY IGNORED: the
+ * witness spine orders fragments by the deterministic monotonic index WH_NEXT_IDX (and epoch
+ * WH_EPOCH_INDEX), never by wall-clock -- seeding from a real clock would break III determinism. */
 fn wh_init(initial_time: u64) -> i32 @export {
     WH_NEXT_IDX = 0u64
     WH_EPOCH_START_IDX = 0u64
@@ -338,7 +341,8 @@ fn wh_epoch_index() -> u64 @export { return WH_EPOCH_INDEX }
 fn wh_append_resolution(cycle_kind: u32, payload: *u8, payload_len: u32) -> i32 @export {
     let ck : u32 = cycle_kind
     let plen : u32 = payload_len
-    cad_oneshot(WH_SUITE_KECCAK, payload, plen as u64, (&WH_OUT_TMP as u64) as *u8)
+    let cr : i32 = cad_oneshot(WH_SUITE_KECCAK, payload, plen as u64, (&WH_OUT_TMP as u64) as *u8)
+    if cr != 0i32 { return WH_E_BAD_PAYLOAD }   /* null/bad payload -> WH_OUT_TMP stale; refuse rather than witness a wrong out_commit */
     let r : u64 = wh_publish((&WH_ZERO_ID as u64) as *u8, (&WH_ZERO_ID as u64) as *u8,
                              (&WH_ZERO_ID as u64) as *u8, (&WH_OUT_TMP as u64) as *u8,
                              0u8, 0u8, (ck & 0xFFFFu32) as u16,

@@ -208,7 +208,7 @@ fn xii_antidrift_check_confluence_empirical(n_samples: u32, seed: u32) -> u32 @e
 
         /* Path B: rebuild the same shape, drive ONE random rule at the
          * root via apply_specific, then canonicalise. If the rule
-         * doesn't match the root the dispatcher returns XCP_NULL_REF,
+         * doesn't match the root the dispatcher returns XRW_NULL_REF,
          * in which case we canonicalise the original term (path B
          * collapses onto path A and trivially agrees). Otherwise path
          * B's prefix is one extra reduction step ahead of path A, and

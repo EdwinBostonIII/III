@@ -133,15 +133,17 @@ fn xii_hj_commut_full_check() -> u32 @export {
     return fails
 }
 
-/* COMPOSE is the HJ-identity for the 6 non-COMPOSE hexads. Verify. */
+/* COMPOSE is the HJ-identity (bottom element): HJ(COMPOSE, x) == x for ALL 7 hexads in
+ * {FORM..ORIGIN}, INCLUDING HJ(COMPOSE, COMPOSE) == COMPOSE (table[40] == 6).  Verify the
+ * full Bottom law the module header (line 54) declares -- with NO per-element exception:
+ * the former `x != COMPOSE` guard left x==COMPOSE (the reflexive case) untested, a 6-of-7
+ * coverage gap, even though the table already satisfies it.  Now all 7 cases are checked. */
 fn xii_hj_compose_identity_check() -> u32 @export {
     let mut fails : u32 = 0u32
     let mut x : u8 = 1u8
     while x <= 7u8 {
-        if x != XHJ_HEXAD_COMPOSE {
-            let r : u8 = xii_hj_join(XHJ_HEXAD_COMPOSE, x)
-            if r != x { fails = fails + 1u32 }
-        }
+        let r : u8 = xii_hj_join(XHJ_HEXAD_COMPOSE, x)
+        if r != x { fails = fails + 1u32 }
         x = x + 1u8
     }
     return fails

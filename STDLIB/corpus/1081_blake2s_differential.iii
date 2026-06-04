@@ -1,0 +1,61 @@
+/* 1081 -- numera::blake2s scalar-vs-AVX bit-identity differential (gap-backlog #10).
+ * Forces each round-function path via b2s_force_path and asserts identical BLAKE2s-256("abc"):
+ *   path 1 (scalar) -- always runs; must equal the RFC 7693 known answer (50 8c 5e ... 82);
+ *   path 2 (avx512) / path 3 (avx2) -- run ONLY when cpufeat reports the ISA, byte-identical
+ *   to the scalar digest.  Resets B2S_FORCE(0).  99 = pass.
+ */
+module corpus_1081
+
+extern @abi(c-msvc-x64) fn blake2s_oneshot(input: *u8, len: u64, out: *u8, out_len: u64) -> u32 from "blake2s.iii"
+extern @abi(c-msvc-x64) fn b2s_force_path(p: u32) -> i32 from "blake2s.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx2() -> u8 from "cpufeat.iii"
+extern @abi(c-msvc-x64) fn cpufeat_has_avx512f() -> u8 from "cpufeat.iii"
+
+var INP      : [u8; 3]
+var D_SCALAR : [u8; 32]
+var D_AVX    : [u8; 32]
+
+fn check_rfc(o: u64) -> u64 {
+    let p : *u8 = o as *u8
+    if p[0u64]  != 0x50u8 { return 1u64 }
+    if p[1u64]  != 0x8Cu8 { return 2u64 }
+    if p[2u64]  != 0x5Eu8 { return 3u64 }
+    if p[3u64]  != 0x8Cu8 { return 4u64 }
+    if p[15u64] != 0x2Fu8 { return 5u64 }
+    if p[16u64] != 0x37u8 { return 6u64 }
+    if p[31u64] != 0x82u8 { return 7u64 }
+    return 0u64
+}
+
+fn eq32(a: u64, b: u64) -> u8 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { if pa[i] != pb[i] { return 0u8 } i = i + 1u64 }
+    return 1u8
+}
+
+fn gen(path: u32, out: u64) -> i32 {
+    b2s_force_path(path)
+    blake2s_oneshot((&INP as u64) as *u8, 3u64, out as *u8, 32u64)
+    return 0i32
+}
+
+fn main() -> u64 {
+    INP[0u64] = 97u8  INP[1u64] = 98u8  INP[2u64] = 99u8   /* "abc" */
+
+    gen(1u32, (&D_SCALAR) as u64)
+    let e : u64 = check_rfc((&D_SCALAR) as u64)
+    if e != 0u64 { return 10u64 + e }
+
+    if cpufeat_has_avx512f() == 1u8 {
+        gen(2u32, (&D_AVX) as u64)
+        if eq32((&D_AVX) as u64, (&D_SCALAR) as u64) != 1u8 { return 30u64 }
+    }
+    if cpufeat_has_avx2() == 1u8 {
+        gen(3u32, (&D_AVX) as u64)
+        if eq32((&D_AVX) as u64, (&D_SCALAR) as u64) != 1u8 { return 31u64 }
+    }
+    b2s_force_path(0u32)
+    return 99u64
+}

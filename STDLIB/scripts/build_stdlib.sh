@@ -451,6 +451,7 @@ MODULES=(
     "numera/charter_terminal"
     "numera/algebraic_time"
     "aether/witness_hook"
+    "sanctus/observe"
     "aether/hotstuff"
     "aether/hotstuff_predict"
     # APOTHEOSIS C.11: the tier-aware certified-monotone pacemaker -- constitutional-constant
@@ -819,6 +820,7 @@ MODULES=(
     "numera/ccl"
     # P6: the sound-evolution commit gate (composes xii_admission + pleroma + cad).
     "forcefield/commit_gate"
+    "forcefield/forked_walk"
     # The Sovereign ISA Descent: the Sovereign Calculus's differential descent over
     # the cost-field, wiring egraph (saturate) + cost_lattice (cost) into a proof-
     # preserving min-cost optimizer.  Externs egraph + cost_lattice (built above).

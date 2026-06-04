@@ -1,0 +1,111 @@
+/* STDLIB/iii/forcefield/forked_walk.iii -- Organ E: the Forked Walk.
+ *
+ * Explore candidate branches speculatively, leave no trace on the ones not taken, and commit the
+ * best branch as a DISPOSER decision on value -- never a race. A driver over two built organs:
+ *   - numera/reversible (rev_begin/rev_record/rev_rollback/rev_commit): each branch is a
+ *     transactional envelope; rev_rollback replays the recorded inverse (WITNESSED) so a loser
+ *     leaves the state byte-for-byte unchanged.
+ *   - forcefield/commit_gate (cg_cert_action/cg_cert_abstain): the winner is committed iff its value
+ *     strictly rises; an abstention must prove the frontier was searched (UNSEARCHED is refused).
+ *
+ * Path-independent: the walk keeps the strictly-greater value, and on a TIE keeps the smaller target
+ * -- both order-free, so the committed winner does not depend on exploration order.
+ *
+ * SCOPE (honest): this is the sound SEQUENTIAL speculate->dispose->commit core. reversible is
+ * single-threaded LIFO (non-reentrant), so true PARALLEL branch exploration is the external
+ * worktree/process layer (scripts/ripple_extract.sh + ripple_apply.sh + git worktrees, with this
+ * gate as the merge disposer) -- staged, not part of this .iii organ.
+ *
+ * Hexad: kind_sensitivity (admission).  Ring: R0.  K: 0.99 (envelope/log exhaustion).
+ * NIH: composes reversible + commit_gate only.  Determinism: u64 ==/</> + module-scope state.
+ */
+module forcefield_forked_walk
+
+extern @abi(c-msvc-x64) fn rev_init() -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_begin(cap: u64) -> u32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_record(slot: u32, tag: u32, a: u64, b: u64) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_rollback(slot: u32) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_commit(slot: u32) -> i32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn cg_cert_action(phi_verdict: u32, v_before: u64, v_after: u64, proof_ok: u32) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn cg_cert_abstain(searched: u32, frontier_best: u64, v_incumbent: u64) -> u32 from "commit_gate.iii"
+
+const FW_OK                   : i32 = 0i32
+const REV_TAG_MEM_RESTORE_U64 : u32 = 2u32
+const REV_SLOT_NONE           : u32 = 0xFFFFFFFFu32
+const CG_ADMIT                : u32 = 99u32
+const CG_CERT                 : u32 = 99u32
+const FW_CAP                  : u64 = 1u64
+const FW_E_SLOT               : u32 = 0xFFFFFFFEu32
+
+var FW_CELL      : [u64; 1]    /* the shared state; value = FW_CELL[0]            */
+var FW_INCUMBENT : u64 = 0u64  /* the value at walk start                        */
+var FW_BEST      : u64 = 0u64  /* best branch value seen                         */
+var FW_BEST_TGT  : u64 = 0u64  /* target achieving FW_BEST (smaller wins a tie)  */
+var FW_HAVE_BEST : u8  = 0u8
+var FW_SEARCHED  : u32 = 0u32
+
+fn fw_cell_value() -> u64 @export { return FW_CELL[0u64] }
+fn fw_best() -> u64 @export { return FW_BEST }
+fn fw_have_best() -> u8 @export { return FW_HAVE_BEST }
+
+fn fw_init(incumbent: u64) -> i32 @export {
+    rev_init()
+    FW_CELL[0u64] = incumbent
+    FW_INCUMBENT = incumbent
+    FW_BEST = 0u64
+    FW_BEST_TGT = 0u64
+    FW_HAVE_BEST = 0u8
+    FW_SEARCHED = 0u32
+    return FW_OK
+}
+
+/* Speculatively explore ONE branch: record the inverse, apply the forward mutation, evaluate,
+ * remember if best (strict >, ties -> smaller target), then ROLL BACK (witnessed) -- no trace. */
+fn fw_explore(target: u64) -> u64 @export {
+    let cur : u64 = FW_CELL[0u64]
+    let s : u32 = rev_begin(FW_CAP)
+    if s == REV_SLOT_NONE { return 0u64 }
+    rev_record(s, REV_TAG_MEM_RESTORE_U64, &FW_CELL as u64, cur)
+    FW_CELL[0u64] = target
+    let v : u64 = FW_CELL[0u64]
+    FW_SEARCHED = 1u32
+    if FW_HAVE_BEST == 0u8 {
+        FW_HAVE_BEST = 1u8
+        FW_BEST = v
+        FW_BEST_TGT = target
+        rev_rollback(s)
+        return v
+    }
+    if v > FW_BEST {
+        FW_BEST = v
+        FW_BEST_TGT = target
+    }
+    if v == FW_BEST {
+        if target < FW_BEST_TGT { FW_BEST_TGT = target }
+    }
+    rev_rollback(s)
+    return v
+}
+
+/* Dispose: commit the best branch IFF it strictly beats the incumbent (a value decision, not a
+ * race); else certify abstention (frontier searched, nothing better). Returns CG_CERT (99) on a
+ * granted certificate, or the located reject code. */
+fn fw_commit() -> u32 @export {
+    if FW_HAVE_BEST == 1u8 {
+        if FW_BEST > FW_INCUMBENT {
+            let cur : u64 = FW_CELL[0u64]
+            let s : u32 = rev_begin(FW_CAP)
+            if s == REV_SLOT_NONE { return FW_E_SLOT }
+            rev_record(s, REV_TAG_MEM_RESTORE_U64, &FW_CELL as u64, cur)
+            FW_CELL[0u64] = FW_BEST_TGT
+            let cert : u32 = cg_cert_action(CG_ADMIT, FW_INCUMBENT, FW_BEST, 1u32)
+            if cert == CG_CERT {
+                rev_commit(s)
+                return CG_CERT
+            }
+            rev_rollback(s)
+            return cert
+        }
+    }
+    return cg_cert_abstain(FW_SEARCHED, FW_BEST, FW_INCUMBENT)
+}

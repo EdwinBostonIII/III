@@ -43,6 +43,8 @@ fi
 echo "[run_corpus] iiis = $IIIS"
 
 declare -A EXPECTED=(
+    [1100_obs_witnessed]=99
+    [1101_forked_walk]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

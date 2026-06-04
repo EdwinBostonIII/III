@@ -1,0 +1,103 @@
+/* 1100_obs_witnessed.iii — falsifier for Organ C (sanctus/observe, the Witnessed Sense).
+ * (Numbered 1100, not 1092: the mid-reseal WIP took 1092 for gate_cp1_guard.)
+ * Proves the boundary is sound:
+ *   (1) LIVE passes the observed value through AND returns a real handle;
+ *   (2) the witness is content-addressed to the value (out_commit == keccak256(value));
+ *   (2b) each witnessed observation advances algebraic time;
+ *   (3) REPLAY re-injects the RECORDED value and IGNORES a decoy live value (no leak);
+ *   (4) replay past the recorded set is REFUSED (the divergence guard);
+ *   (5) an unwitnessable observation (len 0) is REFUSED and writes NOTHING.
+ * Drives DIFFERENT values live vs replay so the re-injection cannot be faked by reading
+ * the world (no-tautological-proof). 99 = pass. */
+module corpus_1100
+
+extern @abi(c-msvc-x64) fn obs_init() -> i32 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_set_mode(m: u8) -> i32 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_count() -> u64 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_observe(source_id: u32, live_ptr: *u8, len: u32, out_ptr: *u8) -> u64 from "observe.iii"
+extern @abi(c-msvc-x64) fn obs_commit_of(k: u64, out: *u8) -> i32 from "observe.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+extern @abi(c-msvc-x64) fn at_current() -> u64 from "algebraic_time.iii"
+
+const OBS_MODE_REPLAY : u8  = 1u8
+const OBS_SENTINEL    : u64 = 0xFFFFFFFFFFFFFFFFu64
+
+var VX   : [u8; 8]
+var VX2  : [u8; 8]
+var VY   : [u8; 8]
+var VOUT : [u8; 8]
+var REF  : [u8; 32]
+var GOT  : [u8; 32]
+
+fn fill8(p: u64, b: u8) -> i32 {
+    let q : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { q[i] = b  i = i + 1u64 }
+    return 0i32
+}
+
+fn eq8(a: u64, b: u64) -> u8 {
+    let pa : *u8 = a as *u8
+    let pb : *u8 = b as *u8
+    let mut i : u64 = 0u64
+    while i < 8u64 { if pa[i] != pb[i] { return 0u8 }  i = i + 1u64 }
+    return 1u8
+}
+
+fn main() -> u64 {
+    obs_init()
+    let mut i : u64 = 0u64
+    while i < 8u64 {
+        VX[i]  = 0x41u8 + (i as u8)
+        VX2[i] = 0x51u8 + (i as u8)
+        VY[i]  = 0x99u8
+        i = i + 1u64
+    }
+
+    /* (1) LIVE observe #1 -> valid handle + passthrough */
+    fill8(&VOUT as u64, 0xEEu8)
+    let h1 : u64 = obs_observe(7u32, &VX as *u8, 8u32, &VOUT as *u8)
+    if h1 == OBS_SENTINEL { return 1u64 }
+    if eq8(&VOUT as u64, &VX as u64) != 1u8 { return 2u64 }
+
+    /* (2) content-address: recorded out_commit == keccak256(VX) */
+    keccak256_oneshot(&VX as u64, 8u64, &REF as u64)
+    obs_commit_of(0u64, &GOT as *u8)
+    i = 0u64
+    while i < 32u64 { if GOT[i] != REF[i] { return 3u64 }  i = i + 1u64 }
+
+    /* (2b) the witnessed observation advanced algebraic time */
+    let t_before : u64 = at_current()
+    fill8(&VOUT as u64, 0xEEu8)
+    let h2 : u64 = obs_observe(7u32, &VX2 as *u8, 8u32, &VOUT as *u8)
+    if h2 == OBS_SENTINEL { return 4u64 }
+    if at_current() == t_before { return 5u64 }
+    if obs_count() != 2u64 { return 6u64 }
+
+    /* (3) REPLAY re-injects the RECORDED value, ignoring the decoy VY */
+    obs_set_mode(OBS_MODE_REPLAY)
+    fill8(&VOUT as u64, 0xEEu8)
+    let r1 : u64 = obs_observe(7u32, &VY as *u8, 8u32, &VOUT as *u8)
+    if r1 == OBS_SENTINEL { return 7u64 }
+    if eq8(&VOUT as u64, &VX as u64) != 1u8 { return 8u64 }
+    if eq8(&VOUT as u64, &VY as u64) == 1u8 { return 9u64 }
+
+    fill8(&VOUT as u64, 0xEEu8)
+    let r2 : u64 = obs_observe(7u32, &VY as *u8, 8u32, &VOUT as *u8)
+    if r2 == OBS_SENTINEL { return 10u64 }
+    if eq8(&VOUT as u64, &VX2 as u64) != 1u8 { return 11u64 }
+
+    /* (4) replay past the record is refused */
+    let r3 : u64 = obs_observe(7u32, &VY as *u8, 8u32, &VOUT as *u8)
+    if r3 != OBS_SENTINEL { return 12u64 }
+
+    /* (5) bricking-class: unwitnessable (len 0) LIVE observation refused, nothing written */
+    obs_init()
+    fill8(&VOUT as u64, 0xEEu8)
+    let bad : u64 = obs_observe(7u32, &VX as *u8, 0u32, &VOUT as *u8)
+    if bad != OBS_SENTINEL { return 13u64 }
+    i = 0u64
+    while i < 8u64 { if VOUT[i] != 0xEEu8 { return 14u64 }  i = i + 1u64 }
+
+    return 99u64
+}

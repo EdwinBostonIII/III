@@ -1,0 +1,117 @@
+/* STDLIB/iii/sanctus/observe.iii — Organ C: the Witnessed Sense.
+ *
+ * Live nondeterminism in, determinism on replay. Every nondeterministic observation (a clock
+ * reading, an RNG draw, a network/sensor byte) is published as a witness FRAGMENT via wh_publish:
+ * the observed value is the fragment payload, its content-address is out_commit, and a reserved
+ * opid tag marks the fragment KIND = NONDET_OBSERVE (the read-dual of the 17 IRPD privileged
+ * writes). The spine IS the replay log: LIVE passes the value through AND records it; REPLAY
+ * re-injects the recorded payload (wh_get_payload) and ignores the live world, so a replay of a
+ * nondeterministic run is bit-identical.
+ *
+ * The new bricking-class: an observation that CANNOT be witnessed (len 0, len > OBS_MAX_LEN,
+ * list full, publish failure) returns OBS_SENTINEL and writes NOTHING to the caller's out buffer.
+ * (@safety(UNREPLAYABLE) made executable.)
+ *
+ * Hexad: kind_witness.  Ring: R-1.  K: 1.00.  NIH: witness_hook + keccak256.
+ * Discipline: module-scope arrays (W8 bounded); u64/u32 + equality only; single writer; no recursion.
+ */
+module sanctus_observe
+
+extern @abi(c-msvc-x64) fn wh_init(initial_time: u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_publish(producer: *u8, opid: *u8, in_commit: *u8, out_commit: *u8, revtag: u8, phase: u8, pillar: u16, antecedents: *u8, n_ante: u32, payload: *u8, payload_len: u32, out_frag_id: *u8) -> u64 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_payload(idx: u64, out_buf: *u8, max_len: u64, out_len: *u64) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn wh_get_out_commit(idx: u64, out_id: *u8) -> i32 from "witness_hook.iii"
+extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
+
+const OBS_OK          : i32 = 0i32
+const OBS_MODE_LIVE   : u8  = 0u8
+const OBS_MODE_REPLAY : u8  = 1u8
+const OBS_SENTINEL    : u64 = 0xFFFFFFFFFFFFFFFFu64
+const OBS_MAX_LEN     : u32 = 4096u32
+const OBS_CAP         : u64 = 65536u64
+
+var OBS_OPID    : [u8; 32]      /* KIND tag: byte0 = 0x0B (NONDET_OBSERVE)  */
+var OBS_PROD    : [u8; 32]      /* producer = source_id (low 4 bytes)        */
+var OBS_INCOM   : [u8; 32]      /* zero in-commit                            */
+var OBS_ANTE    : [u8; 32]      /* zero antecedents (n_ante = 0)             */
+var OBS_COMMIT  : [u8; 32]      /* content-address of the observed value     */
+var OBS_FRAG    : [u8; 32]      /* frag-id sink                              */
+var OBS_SCRATCH : [u8; 4096]    /* the observed value (witnessed + passed through) */
+var OBS_IDX     : [u64; 65536]  /* frag indices of observations, in order    */
+var OBS_OUTLEN  : [u64; 1]      /* wh_get_payload out_len sink               */
+var OBS_N       : u64 = 0u64    /* count recorded (LIVE)                     */
+var OBS_CURSOR  : u64 = 0u64    /* next observation to re-inject (REPLAY)    */
+var OBS_MODE    : u8  = 0u8
+
+fn obs_zero32(p: u64) -> i32 {
+    let b : *u8 = p as *u8
+    let mut i : u64 = 0u64
+    while i < 32u64 { b[i] = 0u8  i = i + 1u64 }
+    return 0i32
+}
+
+fn obs_copy(dst: u64, src: u64, len: u32) -> i32 {
+    let d : *u8 = dst as *u8
+    let s : *u8 = src as *u8
+    let n : u64 = len as u64
+    let mut i : u64 = 0u64
+    while i < n { d[i] = s[i]  i = i + 1u64 }
+    return 0i32
+}
+
+fn obs_init() -> i32 @export {
+    wh_init(0u64)
+    obs_zero32(&OBS_OPID as u64)
+    OBS_OPID[0u64] = 0x0Bu8
+    obs_zero32(&OBS_PROD as u64)
+    obs_zero32(&OBS_INCOM as u64)
+    obs_zero32(&OBS_ANTE as u64)
+    OBS_N = 0u64
+    OBS_CURSOR = 0u64
+    OBS_MODE = OBS_MODE_LIVE
+    return OBS_OK
+}
+
+fn obs_set_mode(m: u8) -> i32 @export {
+    OBS_MODE = m
+    if m == OBS_MODE_REPLAY { OBS_CURSOR = 0u64 }
+    return OBS_OK
+}
+
+fn obs_mode() -> u8 @export { return OBS_MODE }
+fn obs_count() -> u64 @export { return OBS_N }
+
+/* The witnessed sense. Returns the observation handle (frag idx) or OBS_SENTINEL. */
+fn obs_observe(source_id: u32, live_ptr: *u8, len: u32, out_ptr: *u8) -> u64 @export {
+    if OBS_MODE == OBS_MODE_REPLAY {
+        if OBS_CURSOR >= OBS_N { return OBS_SENTINEL }
+        let idx : u64 = OBS_IDX[OBS_CURSOR]
+        let gp : i32 = wh_get_payload(idx, out_ptr, len as u64, &OBS_OUTLEN as *u64)
+        if gp != OBS_OK { return OBS_SENTINEL }
+        if OBS_OUTLEN[0u64] != (len as u64) { return OBS_SENTINEL }
+        OBS_CURSOR = OBS_CURSOR + 1u64
+        return idx
+    }
+    if len == 0u32 { return OBS_SENTINEL }
+    if len > OBS_MAX_LEN { return OBS_SENTINEL }
+    if OBS_N >= OBS_CAP { return OBS_SENTINEL }
+    obs_copy(&OBS_SCRATCH as u64, live_ptr as u64, len)
+    keccak256_oneshot(&OBS_SCRATCH as u64, len as u64, &OBS_COMMIT as u64)
+    obs_zero32(&OBS_PROD as u64)
+    OBS_PROD[0u64] = (source_id & 0xFFu32) as u8
+    OBS_PROD[1u64] = ((source_id >> 8u32) & 0xFFu32) as u8
+    OBS_PROD[2u64] = ((source_id >> 16u32) & 0xFFu32) as u8
+    OBS_PROD[3u64] = ((source_id >> 24u32) & 0xFFu32) as u8
+    let idx : u64 = wh_publish(&OBS_PROD as *u8, &OBS_OPID as *u8, &OBS_INCOM as *u8, &OBS_COMMIT as *u8, 0u8, 0u8, 0u16, &OBS_ANTE as *u8, 0u32, &OBS_SCRATCH as *u8, len, &OBS_FRAG as *u8)
+    if idx == OBS_SENTINEL { return OBS_SENTINEL }
+    OBS_IDX[OBS_N] = idx
+    OBS_N = OBS_N + 1u64
+    obs_copy(out_ptr as u64, &OBS_SCRATCH as u64, len)
+    return idx
+}
+
+/* The recorded content-address (out_commit) of the k-th observation. */
+fn obs_commit_of(k: u64, out: *u8) -> i32 @export {
+    if k >= OBS_N { return -1i32 }
+    return wh_get_out_commit(OBS_IDX[k], out)
+}

@@ -964,6 +964,29 @@ The user challenged the two receipts. Re-evaluated BOTH with evidence:
   archive-reshuffle golden move rides with the operator's `cg_r3` reseal (NO build_iiis2 run). Commit `f57f298`.
   **REMAINING (sized, not skipped):** NI in the kernel packed path = a kernel-SSE-state + metal effort (operator domain).
 
+## ✅ "complete the frontier, no blocks" — adjudicated honestly (2026-06-04)
+On the user's "no blocks" push I re-examined every frontier item for a genuine III-alone path vs a soft caution.
+The one no-line-crossing sliver was REAL and is now DONE; the rest are genuine conflicts with the user's OWN other
+standing rules (not soft blocks), each the operator's to lift or perform:
+- **CP-1 Phase-4 metal test — TURNKEY (commit `3034ee6`).** `gate_client.c` only ever sent exactly-sized buffers, so
+  the short-buffer OOB case CRASH PROTOCOL exists to catch was never exercised (audit §63-64). Added `run_short_buf`:
+  undersized/zero ADMIT requests (In<48 / Out<8 / both-zero) the CP-1 guard must reject with STATUS_BUFFER_TOO_SMALL
+  before any SystemBuffer deref. Compiles clean. The operator now runs one client and observes 4 verdicts + 3 rejected
+  short-buffers (machine up = no-BSOD proof). Phase 1-3 (source fix + objdump-verified guard) were already done; this is
+  the operator-runnable Phase-4 prep, no metal crossed.
+- **Verilog (resolver_unit.v) — genuinely toolchain-blocked.** III's `smt.iii` is BV (256 vars / 16384 bits) — enough
+  for a small combinational block, not a 904-line sequential pipeline. Hand-modelling the RTL into III-SMT would prove
+  my MODEL of the .v == my model of the software (the translation faithfulness is itself unverified → infinite regress)
+  = ILLUSORY verification, refused. Real RTL equivalence needs iverilog/yosys/z3 (absent; installing = the forbidden
+  rigging). q_generic-caliber verified-skip.
+- **emit_generic — PROVEN a compromise (worse code).** Building it violates "no compromise"; not a block, a principled
+  refusal with the body-diff receipt.
+- **self-optimizer live-wiring** — the operator's ACTIVE domain (committing `bd3bad6`; editing cg_r0/lex/keccak/xii_term
+  right now). Touching it = clobbering live WIP.
+- **NI-in-kernel-packed** — Ring-0 kernel-SSE + metal domain.
+The four remaining each need the operator to lift a specific rule (no-rigging / no-compromise / don't-clobber-WIP) or
+perform a physical action (load the Ring-0 driver). Faking past any = a placeholder (forbidden). Truth, not a fake green.
+
 **VERDICT:** III is at production readiness — the idealized 31-module / 7-migration / 13-invariant system is BUILT,
 INTEGRATED, and **verified one body by its own terminal constitutional gate**. Two genuine systemwide gaps were found by
 structural skepticism (H2/observe content-address; H11/tp_* transform registration) and BOTH closed this session — the

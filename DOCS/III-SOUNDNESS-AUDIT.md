@@ -62,7 +62,63 @@ Analysis:
   analysis of `xii_critpair_enum` (does it cover all overlap positions?) + a compound-instantiation
   differential. **Logged as the next deep target, not green-washed and not over-claimed.**
 
-## Targets remaining
+## FINDING #2 — nous SATURATED over-certified on e-graph capacity exhaustion — **FIXED**
+
+The Search Trichotomy keystone (`nous_classify`) is correct *given* `saturated`: a budget-hit → GAP,
+never SATURATED (selftest quadrants 1-4). But the soundness relocates to how `saturated` is computed —
+and there is a hole. `nous_search_egraph`: `sat = (eg_saturate(budget) < budget)`. `eg_saturate` returns
+`step < max_steps` iff a full pass produced **no union** (`changed==0`) — and it checks no overflow flag.
+The code path:
+- `eg_inst`: `eg_add` full → returns `EGRAPH_SENT`, sets `running=0` (node-table `EGRAPH_MAX_NODES`,
+  inst-stack `EGRAPH_INST_STK`, or match-stack `EGRAPH_MFAIL` all bail the same way).
+- `eg_apply_rule`: `if new_cl != EGRAPH_SENT { union; unions++ }` — a full-table instantiation counts
+  **no union**.
+- so when capacity is exhausted, every rule yields `unions==0` → `changed==0` → `eg_saturate` returns a
+  **fixpoint** signal `step < max_steps` → `sat = TRUE` → **SATURATED**.
+
+So a search that overflows the e-graph's internal capacity before a genuine fixpoint is **falsely
+certified SATURATED** — an incomplete (GAP) result hardening as a *trusted, oracle-independent,
+canonical* artifact (the canonical reproducibility key omits budget/weights). The keystone guards the
+*step budget* + rejects wall-clock, but **not internal capacity**: a capacity-hit IS classified
+SATURATED — the keystone's own spirit ("resource exhaustion is never a determined result") violated.
+Same class as FINDING #1 and the bigint-64-slot exhaustion. **Reachable** for any problem with more
+equalities than capacity.
+
+**Fix (verified).** Per the reviewer's design — egraph *exposes the fact*, the nous keystone *decides*:
+`egraph.iii` sets `EGRAPH_SAT_INCOMPLETE` whenever a matched rule's instantiation is blocked by a full
+table (`eg_instantiate → SENT`) or the match-stack overflows (`EGRAPH_MFAIL`) *during* saturation, reset
+at the top of each `eg_saturate`, exposed via `eg_sat_incomplete()`. `nous_search_egraph` then forces
+`sat = 0` (→ GAP) when the flag is set. This extends the keystone from "a budget-hit is never SATURATED"
+to "a **capacity**-hit is never SATURATED" — same fail-safe philosophy as the increment-3 reach-cap.
+
+**Verified by a FORCING KAT (the deliverable — the existing corpus can't reach this path).**
+`1107_egraph_saturate_capacity_gap`: fills the node table (`EGRAPH_MAX_NODES`) with a distinct f-chain
+until `eg_add → SENT`, registers a productive rule `f(?0)→g(?0)` whose RHS nodes are blocked by the full
+table, saturates → asserts outcome **GAP** (=99). **It bites:** linking the same KAT against a no-fix
+`nous_search` flips it to **SATURATED** (exit 10) — proving the test exercises the path and the fix is
+what produces the correct verdict. `eg_sat_incomplete()==1` at the e-graph level; `steps<budget` (the
+old fixpoint-shaped signal) confirmed. build_stdlib 464/0.
+
+## THE UNIFYING ANTI-PATTERN (the audit's central finding)
+
+FINDINGS #1, #2, and the seed increment-3 bug are **one class**:
+
+> **A verifier signals success from a bounded proxy that conflates "succeeded within a limit" with
+> "genuinely complete," and the internal resource bound is invisible to the verdict.**
+
+- increment-3: a reachability cycle-check sound for atomic symbols, blind to the subterm-edge family.
+- FINDING #1 (`xii_termination`): a `max`-based weight whose decrease doesn't survive a heavier sibling
+  — a *narrow-redex* proxy for an *all-contexts* property.
+- FINDING #2 (`nous_search`): `steps < budget` reads as a fixpoint, but a full-table "no-union" pass is
+  capacity exhaustion — an *internal limit* invisible to the *completeness* verdict.
+- Named cousins (already in memory): bigint 64-slot handle table; witness_hook 1M-frag cap.
+
+**The fail-safe rule each fix applies:** when an internal bound is hit, the verdict must be the
+*conservative* one (REJECT / GAP / not-certified), never the success-shaped default. Reframes the audit
+from per-module reading to **hunting this one class**: grep every verifier/gate for a path where a
+cap / table-full / stack-full / step-limit yields a non-error, success-shaped return.
+
+## Targets remaining (hunt the anti-pattern)
 
 - **`xii_critpair_enum` (Step 3) enumeration completeness** — where OPEN ITEM #2 truly lives.
 - **`nous_search` / `nous_classify` (Search Trichotomy keystone).** "A budget-hit is never SATURATED."

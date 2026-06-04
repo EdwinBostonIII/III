@@ -1,0 +1,115 @@
+/* 1107_egraph_saturate_capacity_gap.iii -- FORCING regression for the nous Search Trichotomy soundness
+ * fix (FINDING #2).  The keystone must classify a CAPACITY-blocked saturation as GAP, never SATURATED.
+ *
+ * The existing corpus never fills the e-graph (tiny problems), so it cannot reach this path -- this test
+ * deliberately FORCES it: it fills the node table (EGRAPH_MAX_NODES) with a distinct f-chain until
+ * eg_add returns SENT, then registers a productive rule f(?0)->g(?0) whose RHS nodes g(f_i) are new and
+ * therefore BLOCKED by the full table.  Saturation then reaches a "no-new-union" pass that is NOT a
+ * genuine fixpoint -- the equality set is incomplete.  Pre-fix, eg_saturate returned steps<budget and
+ * nous tagged it SATURATED (a false determined result hardening as canonical).  Post-fix, eg_sat_incomplete()
+ * is set and nous yields GAP.
+ *
+ * THE TEST BITES: with the fix, outcome==GAP (this returns 99); remove the `sat=0` line in
+ * nous_search_egraph and it flips to SATURATED -> this returns 10 -- proving the test exercises the path.
+ * 99 = pass. */
+module corpus_1107
+
+extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_register_rule(rule: *u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sym_slot(tag: u8) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sym_count() -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sat_incomplete() -> u8 from "egraph.iii"
+extern @abi(c-msvc-x64) fn nous_budget_make(steps: u32, cost_cap: u64, kind: u8, out: *u64) -> i32 from "nous_search.iii"
+extern @abi(c-msvc-x64) fn nous_search_egraph(b: *u64, req: *u32, out_term: *u32, out_n: *u32, out_outcome: *u8) -> i32 from "nous_search.iii"
+
+const EG_SENT          : u32 = 0xFFFFFFFFu32
+const NOUS_GAP         : u8  = 1u8
+const NOUS_BUDGET_STEPS : u8 = 0u8
+
+var SYM  : [u8;  32]
+var CH   : [u32;  8]
+var RULE : [u32; 16]
+var BUD  : [u64;  4]
+var REQ  : [u32; 64]
+var OUT  : [u32; 64]
+var OUTN : [u32;  2]
+var OC   : [u8;   4]
+
+fn kset_sym(tag: u8) {
+    let mut i : u64 = 0u64
+    while i < 32u64 { SYM[i] = 0u8  i = i + 1u64 }
+    SYM[0u64] = tag
+}
+
+fn main() -> u64 {
+    eg_init()
+    let symp : *u8  = &SYM as *u8
+    let chp  : *u32 = &CH as *u32
+
+    /* leaf x (tag 12) */
+    kset_sym(12u8)
+    let cx : u32 = eg_add(symp, chp, 0u32)
+    if cx == EG_SENT { return 1u64 }
+
+    /* seed symbol slot g (tag 11) with one g(x) node */
+    kset_sym(11u8)
+    CH[0u64] = cx
+    let cg : u32 = eg_add(symp, chp, 1u32)
+    if cg == EG_SENT { return 2u64 }
+
+    /* FILL the node table with a distinct f-chain (tag 10) until eg_add returns SENT */
+    let mut prev : u32 = cx
+    let mut full : u8 = 0u8
+    let mut guard : u32 = 0u32
+    while full == 0u8 {
+        kset_sym(10u8)
+        CH[0u64] = prev
+        let n : u32 = eg_add(symp, chp, 1u32)
+        if n == EG_SENT { full = 1u8 }
+        if n != EG_SENT { prev = n }
+        guard = guard + 1u32
+        if guard >= 200000u32 { full = 1u8 }
+    }
+    if guard < 1000u32 { return 3u64 }   /* must have genuinely filled a large table */
+
+    /* register rule f(?0) -> g(?0): preorder LHS [f(arity1), ?0]; RHS [g(arity1), ?0] */
+    let s_f : u32 = eg_sym_slot(10u8)
+    let s_g : u32 = eg_sym_slot(11u8)
+    if s_f == EG_SENT { return 4u64 }
+    if s_g == EG_SENT { return 5u64 }
+    let ar1   : u32 = 1u32 << 16u32                    /* arity-1 field (avoid leading-paren hexad trap) */
+    let sf_lo : u32 = s_f << 1u32
+    let sg_lo : u32 = s_g << 1u32
+    let e_f   : u32 = sf_lo | ar1                      /* node f, arity 1 */
+    let e_g   : u32 = sg_lo | ar1                      /* node g, arity 1 */
+    let e_v0  : u32 = 1u32                             /* variable 0: (0<<1)|1 */
+    RULE[0u64] = 2u32
+    RULE[1u64] = 2u32
+    RULE[2u64] = e_f
+    RULE[3u64] = e_v0
+    RULE[4u64] = e_g
+    RULE[5u64] = e_v0
+    let rid : u32 = eg_register_rule(&RULE as *u32)
+    if rid == EG_SENT { return 6u64 }
+
+    /* extraction request: target the leaf x (extractable -> ans=1); costs all 1 */
+    let sc : u32 = eg_sym_count()
+    REQ[0u64] = cx
+    REQ[1u64] = sc
+    let mut s : u64 = 0u64
+    while s < (sc as u64) { REQ[2u64 + s] = 1u32  s = s + 1u64 }
+
+    /* DIRECT (e-graph level): the budget fixpoint is actually a CAPACITY wall */
+    let steps : u32 = eg_saturate(100u32)
+    if steps >= 100u32 { return 7u64 }              /* looked like a within-budget fixpoint... */
+    if eg_sat_incomplete() != 1u8 { return 8u64 }   /* ...but it was capacity exhaustion */
+
+    /* KEYSTONE (the fix): a capacity-blocked saturation -> GAP, never SATURATED */
+    nous_budget_make(100u32, 0u64, NOUS_BUDGET_STEPS, &BUD as *u64)
+    if nous_search_egraph(&BUD as *u64, &REQ as *u32, &OUT as *u32, &OUTN as *u32, &OC as *u8) != 0i32 { return 9u64 }
+    if OC[0u64] != NOUS_GAP { return 10u64 }        /* THE ASSERTION: capacity-hit is GAP (was SATURATED) */
+
+    return 99u64
+}

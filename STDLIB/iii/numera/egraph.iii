@@ -122,6 +122,12 @@ var EGRAPH_M_CAND    : [u32; 8192]     /* committed candidate node id */
 var EGRAPH_M_BSAVE   : [u32; 131072]   /* MATCH_STK * MAX_VARS */
 var EGRAPH_MSP       : u32 = 0u32      /* match stack pointer (shared with helpers) */
 var EGRAPH_MFAIL     : u8  = 0u8       /* match fail-propagation flag */
+var EGRAPH_SAT_INCOMPLETE : u8 = 0u8   /* SOUNDNESS: set when saturation hit an INTERNAL CAPACITY wall
+                                        * (a matched rule could not instantiate its RHS -- node table /
+                                        * inst-stack full -- or the match-stack overflowed).  Then a
+                                        * "no-union" pass is NOT a genuine fixpoint: the equality set is
+                                        * incomplete.  The nous keystone reads this and yields GAP, never
+                                        * SATURATED -- capacity exhaustion is never a determined result. */
 var EGRAPH_MOFF      : u32 = 0u32      /* current rule LHS skeleton offset */
 var EGRAPH_I_POS     : [u32; 8192]
 var EGRAPH_I_ARITY   : [u32; 8192]
@@ -538,6 +544,8 @@ fn eg_register_rule(rule: *u32) -> u32 @export {
             } else {
                 let ar : u32 = (e >> 16u32) & 0xFFu32
                 if ar > EGRAPH_MAX_CHILDREN { bad = 1u8 }
+                let sym : u32 = (e >> 1u32) & 0x7FFFu32
+                if sym >= EGRAPH_MAX_SYMS { bad = 1u8 }    /* slot must be < MAX_SYMS; decode reads EGRAPH_SYM_ID[sym*32] -> OOB if unbounded */
             }
         }
         i = i + 1u32
@@ -907,8 +915,10 @@ fn eg_apply_rule(rid: u32) -> u32 {
         let nb : u64 = (node as u64) & EGRAPH_U32MASK
         if EGRAPH_N_LIVE[nb] == 1u8 {
             let m : u8 = eg_match(rid, node)
+            if EGRAPH_MFAIL == 1u8 { EGRAPH_SAT_INCOMPLETE = 1u8 }   /* match-stack overflow -> incomplete */
             if m == 1u8 {
                 let new_cl : u32 = eg_instantiate(rid)
+                if new_cl == EGRAPH_SENT { EGRAPH_SAT_INCOMPLETE = 1u8 }   /* matched but RHS blocked by capacity */
                 if new_cl != EGRAPH_SENT {
                     let prev_cl : u32 = eg_find(EGRAPH_N_ECLASS[nb])
                     let pc : u32 = eg_find(prev_cl)
@@ -926,6 +936,7 @@ fn eg_apply_rule(rid: u32) -> u32 {
 }
 
 fn eg_saturate(max_steps: u32) -> u32 @export {
+    EGRAPH_SAT_INCOMPLETE = 0u8   /* reset per saturation; set iff a capacity wall blocks productive work */
     let mut step : u32 = 0u32
     let mut going : u8 = 1u8
     while going == 1u8 {
@@ -948,6 +959,12 @@ fn eg_saturate(max_steps: u32) -> u32 @export {
     }
     return step
 }
+
+/* SOUNDNESS EXPOSE: 1 iff the last eg_saturate hit an internal capacity wall (a matched rule could not
+ * complete -- node/stack full).  A "no-union" pass under this condition is NOT a genuine fixpoint; the
+ * caller (the nous trichotomy keystone) must treat the search as GAP, never SATURATED.  Distinguishes
+ * "equality set complete" from "ran out of room" -- the exhaustion-masquerading-as-completion class. */
+fn eg_sat_incomplete() -> u8 @export { return EGRAPH_SAT_INCOMPLETE }
 
 /* Min-cost candidate for node `ni` = costs[sym] + sum(child class min-costs),
  * saturating-clamped just below EGRAPH_INF_COST.  Returns EGRAPH_INF_COST if
@@ -1219,6 +1236,12 @@ fn eg_selftest() -> u64 @export {
     /* ---- KAT 3: rewrite + saturate + extract (mul(x,two) -> shl(x,one)) ---- */
     let r3 : u64 = eg_kat3(0u8)
     if r3 != 0u64 { return 12u64 + r3 }
+    /* gap #69: eg_class_count + eg_node_count exercised + non-zero.  Cross-run determinism is NOT
+     * asserted: empirically the LIVE-class count varies across eg_init+rebuild while the EXTRACTED
+     * output stays bit-identical (KAT 5 below) -- a saturation-bookkeeping nuance, not a result-
+     * determinism bug (flagged in DOCS/III-GAP-BACKLOG.md for a deeper look). */
+    if eg_class_count() == 0u32 { return 52u64 }   /* KAT3 built live e-classes */
+    if eg_node_count() == 0u32 { return 53u64 }
 
     /* ---- KAT 5: determinism / bit-identity replay of KAT 3 ---- */
     let r5 : u64 = eg_kat3(1u8)
@@ -1344,7 +1367,7 @@ fn eg_symbuf_set_kat(tag: u8) -> i32 {
 
 /* KAT helper: intern-or-find the slot for a tag-byte symbol (no allocation
  * beyond what eg_add already did). */
-fn eg_sym_slot(tag: u8) -> u32 {
+fn eg_sym_slot(tag: u8) -> u32 @export {
     let mut i : u64 = 0u64
     while i < EGRAPH_SYMBYTES { EGRAPH_K_SYM[i] = 0u8 ; i = i + 1u64 }
     EGRAPH_K_SYM[0u64] = tag

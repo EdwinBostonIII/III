@@ -68,6 +68,7 @@ const NOUS_KEY_MAXLEN : u64 = 3900u64
 
 extern @abi(c-msvc-x64) fn eg_init() -> i32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_saturate(max_steps: u32) -> u32 from "egraph.iii"
+extern @abi(c-msvc-x64) fn eg_sat_incomplete() -> u8 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_extract(req: *u32, out_term: *u32, out_n: *u32) -> i32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn eg_add(sym_id: *u8, children: *u32, n: u32) -> u32 from "egraph.iii"
 extern @abi(c-msvc-x64) fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 from "cad.iii"
@@ -192,6 +193,12 @@ fn nous_search_egraph(b: *u64, req: *u32, out_term: *u32, out_n: *u32, out_outco
     let steps : u32 = eg_saturate(budget)
     let mut sat : u8 = 0u8
     if steps < budget { sat = 1u8 }
+    /* SOUNDNESS (keystone): a within-budget fixpoint is only GENUINE if no INTERNAL capacity wall
+     * blocked productive work.  If the e-graph ran out of room (node table / inst-stack / match-stack),
+     * the "no-union" pass is not a real fixpoint -- the equality set is incomplete -> NOT saturated ->
+     * GAP, never SATURATED.  This extends the keystone from "a budget-hit is never SATURATED" to "a
+     * CAPACITY-hit is never SATURATED" -- capacity exhaustion is never a determined result. */
+    if eg_sat_incomplete() == 1u8 { sat = 0u8 }
     let rc : i32 = eg_extract(req, out_term, out_n)
     let mut ans : u8 = 0u8
     if rc == NOUS_EG_OK { if out_n[0u64] > 0u32 { ans = 1u8 } }

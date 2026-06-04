@@ -65,7 +65,15 @@ fn fw_explore(target: u64) -> u64 @export {
     let cur : u64 = FW_CELL[0u64]
     let s : u32 = rev_begin(FW_CAP)
     if s == REV_SLOT_NONE { return 0u64 }
-    rev_record(s, REV_TAG_MEM_RESTORE_U64, &FW_CELL as u64, cur)
+    let rr : i32 = rev_record(s, REV_TAG_MEM_RESTORE_U64, &FW_CELL as u64, cur)
+    if rr != 0i32 {
+        /* SOUNDNESS: the inverse could not be logged (e.g. REV_E_OOM_LOG -- rev log full). Without a
+         * recorded undo, rollback could NOT restore byte-for-byte, so REFUSE to explore: do not mutate,
+         * do not claim a best.  An unrollbackable branch is not "searched" -- the same conservative
+         * fail-safe as the increment-3 reach-cap and the nous capacity->GAP rule. */
+        rev_rollback(s)
+        return cur
+    }
     FW_CELL[0u64] = target
     let v : u64 = FW_CELL[0u64]
     FW_SEARCHED = 1u32
@@ -96,7 +104,13 @@ fn fw_commit() -> u32 @export {
             let cur : u64 = FW_CELL[0u64]
             let s : u32 = rev_begin(FW_CAP)
             if s == REV_SLOT_NONE { return FW_E_SLOT }
-            rev_record(s, REV_TAG_MEM_RESTORE_U64, &FW_CELL as u64, cur)
+            let rr : i32 = rev_record(s, REV_TAG_MEM_RESTORE_U64, &FW_CELL as u64, cur)
+            if rr != 0i32 {
+                /* SOUNDNESS: cannot log the inverse -> cannot guarantee the transactional commit;
+                 * refuse rather than mutate without a recoverable envelope. */
+                rev_rollback(s)
+                return FW_E_SLOT
+            }
             FW_CELL[0u64] = FW_BEST_TGT
             let cert : u32 = cg_cert_action(CG_ADMIT, FW_INCUMBENT, FW_BEST, 1u32)
             if cert == CG_CERT {

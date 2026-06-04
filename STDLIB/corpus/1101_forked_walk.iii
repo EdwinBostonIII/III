@@ -18,9 +18,16 @@ extern @abi(c-msvc-x64) fn fw_commit() -> u32 from "forked_walk.iii"
 extern @abi(c-msvc-x64) fn fw_cell_value() -> u64 from "forked_walk.iii"
 extern @abi(c-msvc-x64) fn fw_best() -> u64 from "forked_walk.iii"
 extern @abi(c-msvc-x64) fn cg_cert_abstain(searched: u32, frontier_best: u64, v_incumbent: u64) -> u32 from "commit_gate.iii"
+extern @abi(c-msvc-x64) fn rev_begin(cap: u64) -> u32 from "reversible.iii"
+extern @abi(c-msvc-x64) fn rev_record(slot: u32, tag: u32, a: u64, b: u64) -> i32 from "reversible.iii"
 
 const CG_CERT            : u32 = 99u32
 const CG_CERT_UNSEARCHED : u32 = 14u32
+const FW_CAP                  : u64 = 1u64
+const REV_TAG_MEM_RESTORE_U64 : u32 = 2u32
+const REV_SLOT_NONE           : u32 = 0xFFFFFFFFu32
+
+var FW_DUMMY : [u64; 1]
 
 fn main() -> u64 {
     /* (1) speculative exploration leaves NO trace */
@@ -63,6 +70,28 @@ fn main() -> u64 {
     fw_init(0xDEADBEEFu64)
     fw_explore(0x11111111u64)
     if fw_cell_value() != 0xDEADBEEFu64 { return 13u64 }
+
+    /* (8) FORCING (FINDING #3, the capacity-error-ignored anti-pattern): with the rev undo-log FULL,
+     *     fw_explore must REFUSE -- it cannot log the inverse, so it cannot guarantee rollback.  The
+     *     cell stays byte-for-byte unchanged and the branch is not falsely explored.  Pre-fix,
+     *     fw_explore ignored rev_record's REV_E_OOM_LOG, mutated the cell, then rolled back an EMPTY
+     *     envelope -> the cell kept the speculative value (no-trace silently broken).  BITES: without
+     *     the fix, fw_cell_value() == 777. */
+    fw_init(100u64)
+    let s_fill : u32 = rev_begin(FW_CAP)
+    if s_fill == REV_SLOT_NONE { return 14u64 }
+    let mut filled : u8 = 0u8
+    let mut g : u32 = 0u32
+    while filled == 0u8 {
+        let rc : i32 = rev_record(s_fill, REV_TAG_MEM_RESTORE_U64, &FW_DUMMY as u64, 0u64)
+        if rc != 0i32 { filled = 1u8 }
+        g = g + 1u32
+        if g >= 20000u32 { filled = 1u8 }
+    }
+    if g < 1000u32 { return 15u64 }                  /* the log genuinely filled */
+    let vr : u64 = fw_explore(777u64)
+    if vr != 100u64 { return 16u64 }                 /* refused -> returns the unchanged current value */
+    if fw_cell_value() != 100u64 { return 17u64 }    /* THE GUARANTEE: cell byte-for-byte unchanged */
 
     return 99u64
 }

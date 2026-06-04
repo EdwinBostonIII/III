@@ -99,6 +99,28 @@ table, saturates → asserts outcome **GAP** (=99). **It bites:** linking the sa
 what produces the correct verdict. `eg_sat_incomplete()==1` at the e-graph level; `steps<budget` (the
 old fixpoint-shaped signal) confirmed. build_stdlib 464/0.
 
+## FINDING #3 — organ E (Forked Walk) ignored rev_record's capacity error — **FIXED**
+
+The sweep's caller-audit found a caller-side instance in this session's own organ E. `reversible.iii`
+correctly returns `REV_E_OOM_LOG` when the undo log is full (a *positive* — it signals the limit, never a
+silent drop). But `forked_walk`'s `fw_explore`/`fw_commit` **ignored that return**: on a full log they
+mutated `FW_CELL` without a recorded inverse, then `rev_rollback` replayed an EMPTY envelope → the cell
+kept the speculative value, silently breaking the documented "a loser leaves the state byte-for-byte
+unchanged" guarantee.
+
+**Fix:** check `rev_record`; on any error, `rev_rollback` the empty envelope and REFUSE (return the
+unchanged value / `FW_E_SLOT`) — an unrollbackable branch is not "searched". Same conservative fail-safe
+as the reach-cap and capacity→GAP fixes. **Forcing regression** (KAT `1101` case 8): fill the rev log to
+`REV_MAX_RECORDS`, then `fw_explore` must leave the cell unchanged. BITES: pre-fix the cell keeps 777.
+
+## POSITIVES (the fail-safe done right — gates that correctly guard their cap)
+
+- **`xii_critpair_enum`**: cross-checks the recorded count against an *independent* counter
+  (`cpe_enumerate() == xro_count_overlaps()`) + verifies no table overflow (`n1 > CPE_MAX → fail`).
+- **`reversible`**: `rev_record_quad` returns `REV_E_OOM_LOG` on a full log (an error, not a silent
+  drop) — the hole was the *caller* (FINDING #3), not the gate.
+- **`xii_admission`**: a composition of the (now-hardened) Step-4 joinability + Step-5 termination gates.
+
 ## THE UNIFYING ANTI-PATTERN (the audit's central finding)
 
 FINDINGS #1, #2, and the seed increment-3 bug are **one class**:

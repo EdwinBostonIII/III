@@ -47,6 +47,7 @@ declare -A EXPECTED=(
     [1101_forked_walk]=99
     [1102_conjecture]=99
     [1103_conjecture_complete_all]=99
+    [1104_conjecture_term]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

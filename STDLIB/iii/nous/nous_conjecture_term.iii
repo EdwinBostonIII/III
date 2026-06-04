@@ -1,0 +1,240 @@
+/* STDLIB/iii/nous/nous_conjecture_term.iii -- the Conjecture faculty, increment 3:
+ * critical-pair completion lifted to STRUCTURED TERMS (the genuine term-level "leap beyond
+ * enumeration").
+ *
+ * SCOPE (read first): this is a STANDALONE demonstration of the completion ALGORITHM over a toy
+ * term algebra (depth-1 f over leaf symbols). It does NOT complete III's live XII rule set and does
+ * NOT use the mig4 unifier/critpair pipeline. What it proves is that the propose->dispose->admit
+ * loop is SOUND over structured terms with both ROOT and SUBTERM critical pairs.
+ *
+ * WHY SELF-CONTAINED, NOT THE LIVE XII SET. The live XII rule set is already Knuth-Bendix-complete
+ * (mig4 Step 6 xii_admission ADMITs it: root-confluent AND terminating), so there is nothing to
+ * complete there; and mig4's unifier/critpair machinery is hardwired to that sealed set. So a sound
+ * demonstration of completion OVER TERMS runs on a self-contained term algebra with a constructed
+ * defect -- not by perturbing the sealed live set. (DOCS/III-ORGAN-A-PROPOSER-LEARNING-FINDING.md
+ * records the parallel: III's rewrite system is already complete; proposal creates capability only
+ * over an OPEN space.)
+ *
+ * The lift over increment 1 (ground symbols) is REAL: terms now have STRUCTURE -- a binary
+ * constructor f over leaf symbols (depth 1). This admits SUBTERM critical pairs: a leaf-rule that
+ * rewrites a CHILD of an f-rule's left side creates a divergence (f-rule rhs vs the rewritten-child
+ * form) that root-only completion (increment 1) cannot express. Completion conjectures the rule that
+ * rejoins them, disposer-checked (joinability restored AND no cycle = termination preserved).
+ *
+ * Term encoding (packed u32): a LEAF symbol s in 0..255 is just s (< 0x10000). An f-term f(p,q) over
+ * leaf children p,q is 0x10000 | (p<<8) | q. Term equality is u32 equality. Orientation bigger->
+ * smaller (f outranks leaf) keeps every leaf-rule leaf->leaf and every f-rule f->{leaf,f}, so the
+ * depth-1 invariant is preserved by construction (a leaf is never oriented to an f).
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: self-contained.  Determinism: integer-only;
+ * u32 ==/< (signed-i64 trap only); module-scope arrays; bounded BFS reach (no recursion); single writer.
+ */
+module nous_conjecture_term
+
+const NTM_MAX_RULES : u32 = 64u32
+const NTM_MAX_REACH : u32 = 256u32
+const NTM_MAX_SUCC  : u32 = 64u32
+const NTM_FBIT      : u32 = 0x10000u32   /* terms >= this are f-terms */
+
+const NTM_CONFLUENT : i32 = 0i32
+const NTM_ADMITTED  : i32 = 1i32
+const NTM_REJECTED  : i32 = -1i32
+const NTM_FULL      : i32 = -2i32
+
+var NR_LHS    : [u32; 64]
+var NR_RHS    : [u32; 64]
+var NR_N      : u32 = 0u32
+var NTM_RA    : [u32; 256]   /* reach buffer (BFS frontier+visited) */
+var NTM_RA_N  : u32 = 0u32
+var NTM_RB    : [u32; 256]   /* reach snapshot (for joinability intersect) */
+var NTM_SUCC  : [u32; 64]    /* one-step successors scratch */
+var NTM_SUCC_N: u32 = 0u32
+var NTM_PAIR  : [u32; 2]     /* critical-pair sink */
+var NTM_CAPPED: u8 = 0u8      /* set when a reach truncated at NTM_MAX_REACH -- soundness fail-safe:
+                              * a truncated reach could miss a cycle, so the disposer treats a capped
+                              * reach as "cycle present" and REFUSES (never admits an unverifiable rule). */
+
+/* --- term constructors / accessors --- */
+fn ntm_leaf(s: u32) -> u32 @export { return s & 0xFFu32 }
+fn ntm_f(p: u32, q: u32) -> u32 @export { return NTM_FBIT | ((p & 0xFFu32) << 8u32) | (q & 0xFFu32) }
+fn ntm_is_f(t: u32) -> u8 @export { if t >= NTM_FBIT { return 1u8 }  return 0u8 }
+
+fn nr_reset() -> i32 @export { NR_N = 0u32  return 0i32 }
+fn nr_add(lhs: u32, rhs: u32) -> i32 @export {
+    if NR_N >= NTM_MAX_RULES { return NTM_FULL }
+    NR_LHS[NR_N as u64] = lhs
+    NR_RHS[NR_N as u64] = rhs
+    NR_N = NR_N + 1u32
+    return 0i32
+}
+fn nr_count() -> u32 @export { return NR_N }
+
+fn _ntm_succ_push(v: u32) {
+    if NTM_SUCC_N < NTM_MAX_SUCC { NTM_SUCC[NTM_SUCC_N as u64] = v  NTM_SUCC_N = NTM_SUCC_N + 1u32 }
+}
+
+/* One-step successors of term t under the rule set, into NTM_SUCC. */
+fn ntm_succ(t: u32) -> i32 {
+    NTM_SUCC_N = 0u32
+    let mut i : u32 = 0u32
+    if t < NTM_FBIT {
+        while i < NR_N {
+            if NR_LHS[i as u64] == t { _ntm_succ_push(NR_RHS[i as u64]) }
+            i = i + 1u32
+        }
+        return 0i32
+    }
+    let p : u32 = (t >> 8u32) & 0xFFu32
+    let q : u32 = t & 0xFFu32
+    while i < NR_N {
+        if NR_LHS[i as u64] == t { _ntm_succ_push(NR_RHS[i as u64]) }
+        i = i + 1u32
+    }
+    i = 0u32
+    while i < NR_N {
+        if NR_LHS[i as u64] < NTM_FBIT {
+            if NR_LHS[i as u64] == p { _ntm_succ_push(ntm_f(NR_RHS[i as u64], q)) }
+            if NR_LHS[i as u64] == q { _ntm_succ_push(ntm_f(p, NR_RHS[i as u64])) }
+        }
+        i = i + 1u32
+    }
+    return 0i32
+}
+
+/* Reach-set of `start` (BFS to fixpoint), into NTM_RA (count NTM_RA_N). Bounded by NTM_MAX_REACH. */
+fn ntm_reach(start: u32) -> i32 {
+    NTM_CAPPED = 0u8
+    NTM_RA[0u64] = start
+    NTM_RA_N = 1u32
+    let mut head : u32 = 0u32
+    while head < NTM_RA_N {
+        let cur : u32 = NTM_RA[head as u64]
+        head = head + 1u32
+        ntm_succ(cur)
+        let mut s : u32 = 0u32
+        while s < NTM_SUCC_N {
+            let v : u32 = NTM_SUCC[s as u64]
+            let mut seen : u8 = 0u8
+            let mut k : u32 = 0u32
+            while k < NTM_RA_N { if NTM_RA[k as u64] == v { seen = 1u8 }  k = k + 1u32 }
+            if seen == 0u8 {
+                if NTM_RA_N >= NTM_MAX_REACH { NTM_CAPPED = 1u8 }
+                if NTM_RA_N < NTM_MAX_REACH { NTM_RA[NTM_RA_N as u64] = v  NTM_RA_N = NTM_RA_N + 1u32 }
+            }
+            s = s + 1u32
+        }
+    }
+    return 0i32
+}
+
+/* 1 iff u and v reach a common term. */
+fn ntm_joins(u: u32, v: u32) -> u8 @export {
+    ntm_reach(u)
+    let bn : u32 = NTM_RA_N
+    let mut i : u32 = 0u32
+    while i < bn { NTM_RB[i as u64] = NTM_RA[i as u64]  i = i + 1u32 }
+    ntm_reach(v)
+    let mut a : u32 = 0u32
+    while a < bn {
+        let mut b : u32 = 0u32
+        while b < NTM_RA_N {
+            if NTM_RB[a as u64] == NTM_RA[b as u64] { return 1u8 }
+            b = b + 1u32
+        }
+        a = a + 1u32
+    }
+    return 0u8
+}
+
+/* 1 iff adding l->r would create a cycle (r already reaches l). */
+fn ntm_creates_cycle(l: u32, r: u32) -> u8 {
+    ntm_reach(r)
+    if NTM_CAPPED == 1u8 { return 1u8 }
+    let mut k : u32 = 0u32
+    while k < NTM_RA_N { if NTM_RA[k as u64] == l { return 1u8 }  k = k + 1u32 }
+    return 0u8
+}
+
+/* Find a non-joining critical pair: ROOT (two rules, same LHS, divergent RHS) or SUBTERM (a leaf-rule
+ * rewrites a child of an f-rule's LHS). Writes (u,v) to out; returns 1, or 0 if confluent. */
+fn ntm_find_cp(out: *u32) -> u8 @export {
+    let mut i : u32 = 0u32
+    while i < NR_N {
+        let mut j : u32 = 0u32
+        while j < NR_N {
+            if i != j {
+                if NR_LHS[i as u64] == NR_LHS[j as u64] {
+                    if NR_RHS[i as u64] != NR_RHS[j as u64] {
+                        if ntm_joins(NR_RHS[i as u64], NR_RHS[j as u64]) == 0u8 {
+                            out[0u64] = NR_RHS[i as u64]
+                            out[1u64] = NR_RHS[j as u64]
+                            return 1u8
+                        }
+                    }
+                }
+            }
+            j = j + 1u32
+        }
+        i = i + 1u32
+    }
+    i = 0u32
+    while i < NR_N {
+        if NR_LHS[i as u64] >= NTM_FBIT {
+            let p : u32 = (NR_LHS[i as u64] >> 8u32) & 0xFFu32
+            let q : u32 = NR_LHS[i as u64] & 0xFFu32
+            let mut j : u32 = 0u32
+            while j < NR_N {
+                if NR_LHS[j as u64] < NTM_FBIT {
+                    if NR_LHS[j as u64] == p {
+                        let alt : u32 = ntm_f(NR_RHS[j as u64], q)
+                        if ntm_joins(NR_RHS[i as u64], alt) == 0u8 {
+                            out[0u64] = NR_RHS[i as u64]  out[1u64] = alt  return 1u8
+                        }
+                    }
+                    if NR_LHS[j as u64] == q {
+                        let alt2 : u32 = ntm_f(p, NR_RHS[j as u64])
+                        if ntm_joins(NR_RHS[i as u64], alt2) == 0u8 {
+                            out[0u64] = NR_RHS[i as u64]  out[1u64] = alt2  return 1u8
+                        }
+                    }
+                }
+                j = j + 1u32
+            }
+        }
+        i = i + 1u32
+    }
+    return 0u8
+}
+
+fn ntm_size(t: u32) -> u32 { if t >= NTM_FBIT { return 3u32 }  return 1u32 }
+
+/* The disposer (pure): is l->r an admissible completion for (u,v)?  non-trivial, no cycle
+ * (termination), and restores joinability. Temporarily adds, tests, removes. */
+fn ntm_dispose_candidate(l: u32, r: u32, u: u32, v: u32) -> u8 @export {
+    if l == r { return 0u8 }
+    if ntm_creates_cycle(l, r) == 1u8 { return 0u8 }
+    let saved : u32 = NR_N
+    nr_add(l, r)
+    let j : u8 = ntm_joins(u, v)
+    NR_N = saved
+    return j
+}
+
+/* PROPOSE -> DISPOSE -> ADMIT over structured terms. Orient bigger->smaller (f outranks leaf; ties
+ * by packed value) so termination holds and the depth-1 invariant is preserved. */
+fn ntm_conjecture_complete() -> i32 @export {
+    if ntm_find_cp(&NTM_PAIR as *u32) == 0u8 { return NTM_CONFLUENT }
+    let u : u32 = NTM_PAIR[0u64]
+    let v : u32 = NTM_PAIR[1u64]
+    let mut l : u32 = u
+    let mut r : u32 = v
+    let su : u32 = ntm_size(u)
+    let sv : u32 = ntm_size(v)
+    if sv > su { l = v  r = u }
+    if su == sv { if v > u { l = v  r = u } }
+    if ntm_dispose_candidate(l, r, u, v) == 1u8 {
+        nr_add(l, r)
+        return NTM_ADMITTED
+    }
+    return NTM_REJECTED
+}

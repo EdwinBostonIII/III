@@ -113,6 +113,22 @@ unchanged value / `FW_E_SLOT`) — an unrollbackable branch is not "searched". S
 as the reach-cap and capacity→GAP fixes. **Forcing regression** (KAT `1101` case 8): fill the rev log to
 `REV_MAX_RECORDS`, then `fw_explore` must leave the cell unchanged. BITES: pre-fix the cell keeps 777.
 
+## FINDING #4 — conjecture engines reported a full table as REJECTED, not FULL — **FIXED (verdict honesty, NOT a soundness hole)**
+
+The caller-audit's first hit, in this session's own conjecture engines (`nous_conjecture` ground +
+`nous_conjecture_term`). `*_conjecture_complete` ignored `nr_add`/`nc_add_rule`'s `*_FULL` return, and
+`*_dispose_candidate`'s temporary add silently no-opped on a full table (tested the system WITHOUT the
+candidate). **Honest scope — this is the conservative MIRROR of the anti-pattern, not a soundness hole:**
+a full table can never yield a false ADMITTED (dispose's success implies room for the real add; and a
+non-joining CP stays non-joining without its completing rule, so dispose returns 0 → the old verdict was
+the safe REJECTED). The defect was a MISCLASSIFICATION — capacity reported as REJECTED ("bad conjecture")
+instead of the distinct `*_FULL` ("valid, no room") — plus dispose evaluating the wrong system when full.
+
+**Fix:** `conjecture_complete` returns `*_FULL` on a full table (a capacity verdict, never a false
+ADMITTED); `dispose` checks its temp-add and refuses cleanly. **Forcing regressions:** KAT `1104` case H
+(term) + `1102` case 9 (ground) fill the 64-slot table → `conjecture_complete` must return `*_FULL`
+(bites: pre-fix → REJECTED).
+
 ## POSITIVES (the fail-safe done right — gates that correctly guard their cap)
 
 - **`xii_critpair_enum`**: cross-checks the recorded count against an *independent* counter

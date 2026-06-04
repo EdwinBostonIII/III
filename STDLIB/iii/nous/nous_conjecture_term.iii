@@ -225,7 +225,7 @@ fn ntm_find_cp(out: *u32) -> u8 @export {
 fn ntm_dispose_candidate(l: u32, r: u32, u: u32, v: u32) -> u8 @export {
     if l == r { return 0u8 }
     let saved : u32 = NR_N
-    nr_add(l, r)
+    if nr_add(l, r) != 0i32 { NR_N = saved  return 0u8 }   /* table full -> cannot test the candidate -> cannot dispose */
     let term : u8 = ntm_system_terminating()
     let j : u8 = ntm_joins(u, v)
     NR_N = saved
@@ -242,8 +242,9 @@ fn ntm_conjecture_complete() -> i32 @export {
     let mut l : u32 = u
     let mut r : u32 = v
     if ntm_measure(v) > ntm_measure(u) { l = v  r = u }
+    if NR_N >= NTM_MAX_RULES { return NTM_FULL }   /* no room to admit -- a CAPACITY limit, never a false ADMITTED */
     if ntm_dispose_candidate(l, r, u, v) == 1u8 {
-        nr_add(l, r)
+        if nr_add(l, r) != 0i32 { return NTM_FULL }
         return NTM_ADMITTED
     }
     return NTM_REJECTED

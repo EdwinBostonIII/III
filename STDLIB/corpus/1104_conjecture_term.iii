@@ -26,6 +26,7 @@ extern @abi(c-msvc-x64) fn nr_count() -> u32 from "nous_conjecture_term.iii"
 
 const NTM_ADMITTED : i32 = 1i32
 const NTM_E_DEPTH  : i32 = -4i32
+const NTM_FULL     : i32 = -2i32
 
 var CP : [u32; 2]
 
@@ -83,6 +84,20 @@ fn main() -> u64 {
     nr_reset()
     if nr_add(ntm_leaf(5u32), ntm_f(1u32, 2u32)) != NTM_E_DEPTH { return 19u64 }
     if nr_count() != 0u32 { return 20u64 }                              /* the bad rule was NOT added */
+
+    /* (H) FINDING #4 (verdict honesty): a FULL rule table -> conjecture_complete returns NTM_FULL (a
+     *     CAPACITY verdict), never a false ADMITTED and never a misclassified REJECTED.  Pre-fix it
+     *     ignored nr_add's NTM_FULL return + dispose tested a system without the candidate. */
+    nr_reset()
+    nr_add(ntm_f(0u32, 1u32), ntm_leaf(2u32))   /* the critical pair f(a,b)->c ... */
+    nr_add(ntm_f(0u32, 1u32), ntm_leaf(3u32))   /* ... f(a,b)->d  => non-joining CP (c,d) */
+    let mut kk : u32 = 10u32
+    while nr_count() < 64u32 {                   /* fill the 64-slot table with distinct mu-decreasing leaf rules */
+        nr_add(ntm_leaf(kk), ntm_leaf(0u32))
+        kk = kk + 1u32
+    }
+    if nr_count() != 64u32 { return 21u64 }
+    if ntm_conjecture_complete() != NTM_FULL { return 22u64 }   /* full table -> FULL, not ADMITTED/REJECTED */
 
     return 99u64
 }

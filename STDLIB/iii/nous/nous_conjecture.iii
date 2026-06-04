@@ -128,7 +128,7 @@ fn nc_dispose_candidate(l: u32, r: u32, u: u32, v: u32) -> u8 @export {
     if l == r { return 0u8 }
     if nc_creates_cycle(l, r) == 1u8 { return 0u8 }
     let saved : u32 = NC_N
-    nc_add_rule(l, r)
+    if nc_add_rule(l, r) != 0i32 { NC_N = saved  return 0u8 }   /* arena full -> cannot test the candidate -> cannot dispose */
     let j : u8 = nc_joins(u, v)
     NC_N = saved
     return j
@@ -144,8 +144,9 @@ fn nc_conjecture_complete() -> i32 @export {
     let mut l : u32 = u
     let mut r : u32 = v
     if u > v { l = v  r = u }
+    if NC_N >= NC_MAX_RULES { return NC_FULL }   /* no room to admit -- a CAPACITY limit, never a false ADMITTED */
     if nc_dispose_candidate(l, r, u, v) == 1u8 {
-        nc_add_rule(l, r)
+        if nc_add_rule(l, r) != 0i32 { return NC_FULL }
         return NC_ADMITTED
     }
     return NC_REJECTED

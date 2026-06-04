@@ -19,6 +19,7 @@ extern @abi(c-msvc-x64) fn nc_dispose_candidate(l: u32, r: u32, u: u32, v: u32) 
 extern @abi(c-msvc-x64) fn nc_conjecture_complete() -> i32 from "nous_conjecture.iii"
 
 const NC_ADMITTED : i32 = 1i32
+const NC_FULL     : i32 = -2i32
 
 var CP : [u8; 2]
 
@@ -55,6 +56,18 @@ fn main() -> u64 {
 
     /* (8) POSITIVE -- the good completing rule (b->c, 1->2) IS admitted by the disposer */
     if nc_dispose_candidate(1u32, 2u32, 1u32, 2u32) != 1u8 { return 8u64 }
+
+    /* (9) FINDING #4 (verdict honesty): a FULL rule arena -> nc_conjecture_complete returns NC_FULL (a
+     *     CAPACITY verdict), never a false ADMITTED.  Pre-fix it ignored nc_add_rule's NC_FULL return. */
+    nc_reset()
+    nc_add_rule(0u32, 1u32)              /* CP: a->b ... */
+    nc_add_rule(0u32, 2u32)              /* ... a->c => non-joining CP (b,c) */
+    let mut kk : u32 = 0u32
+    while kk < 62u32 {                    /* fill the 64-slot arena (2 + 62 inert mu-decreasing dups) */
+        nc_add_rule(3u32, 0u32)
+        kk = kk + 1u32
+    }
+    if nc_conjecture_complete() != NC_FULL { return 9u64 }   /* full arena -> FULL, not ADMITTED */
 
     return 99u64
 }

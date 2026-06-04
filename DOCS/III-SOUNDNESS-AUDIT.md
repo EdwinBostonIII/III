@@ -120,6 +120,11 @@ as the reach-cap and capacity→GAP fixes. **Forcing regression** (KAT `1101` ca
 - **`reversible`**: `rev_record_quad` returns `REV_E_OOM_LOG` on a full log (an error, not a silent
   drop) — the hole was the *caller* (FINDING #3), not the gate.
 - **`xii_admission`**: a composition of the (now-hardened) Step-4 joinability + Step-5 termination gates.
+- **`cad`**: `cad_oneshot` is a proper streaming keccak sponge over the full `byte_len` (no input
+  truncation); the fixed `CAD_BUF[96]` is domain separation, and the nous key layer guards
+  `len > NOUS_KEY_MAXLEN`. No collision-via-truncation.
+- **`katabasis_gate_decide`**: a fail-closed conjunction — OK only if all five checks pass; any failure
+  or fallthrough → reject (`KGV_FAIL_CLOSED`). No cap masquerades as OK.
 
 ## THE UNIFYING ANTI-PATTERN (the audit's central finding)
 
@@ -140,11 +145,22 @@ FINDINGS #1, #2, and the seed increment-3 bug are **one class**:
 from per-module reading to **hunting this one class**: grep every verifier/gate for a path where a
 cap / table-full / stack-full / step-limit yields a non-error, success-shaped return.
 
-## Targets remaining (hunt the anti-pattern)
+## Audit state (major-gate sweep complete)
 
-- **`xii_critpair_enum` (Step 3) enumeration completeness** — where OPEN ITEM #2 truly lives.
-- **`nous_search` / `nous_classify` (Search Trichotomy keystone).** "A budget-hit is never SATURATED."
-- **`reversible` (SID round-trip / H9 trichotomy).**
-- **`cad` content-address sealing** (collision/domain-separation).
+The major **verdict / seal gates** have been swept: **3 holes fixed** (`xii_termination`, `nous_search`,
+`forked_walk` — all the unifying anti-pattern, each forcing-KAT-verified with a bite test) + **5
+positives** (`xii_critpair_enum`, `xii_admission`, `reversible`, `cad`, `katabasis_gate_decide` — the
+fail-safe done right). `run_corpus` 781/0, `run_xii_corpus` 92/0, `run_xii_antidrift` 8/8, both forge
+gates green throughout.
+
+## Remaining frontier (lower-yield, systematic)
+
+- **Caller-audit of every cap-returning primitive.** FINDING #3 was a *caller* ignoring a correctly-
+  signalled limit (`rev_record → REV_E_OOM_LOG`). The same shape may recur wherever a caller ignores
+  `eg_add → SENT`, `bigint_new`'s degenerate-slot return (the 64-slot table, see memory), `rev_record`,
+  `eg_register_rule → SENT`, etc. Systematic, broad, per-caller — the natural next sweep.
+- **OPEN ITEM #2 residual:** confirm `xro_count_overlaps` (the enumerator's independent counter) is
+  genuinely uncapped, so the cross-check isn't vacuous.
+- **Un-swept verdict surfaces:** the proof/typecheck kernel; `affine_audit` (AA-7).
 
 *Sister: III-CONJECTURE-FACULTY-AND-CAPABILITY-PROOF.md (the increment-3 fix that seeded this lens).*

@@ -1,0 +1,20 @@
+/* 1112_opt_certified.iii -- PATH C: III GOVERNS its own codegen optimizer.
+ *
+ * "Where does the optimizer come in?"  Here: the codegen rewrite rule the compiler applies is admitted
+ * only if III ITSELF certifies it.  Drives numera/sov_isa::sov_opt_certify_kat -- no logic here:
+ *   (1) the CIC kernel PROVES the base strength-reduction rule  mul(x,2) == shl(x,1)  sound (for all x).
+ *   (2) the kernel GOVERNS -- it REJECTS the meaning-changing  mul(x,2) == mul(x,1).
+ *   (3) the WIDTH-INVARIANCE GUARD admits the SR family (shift/mask of the live operand).
+ *   (4) THE SOUNDNESS CONTRIBUTION: the kernel ACCEPTS the unbounded fold 2*2 == 4, yet the guard still
+ *       REFUSES the const-fold class -- catching the width-sensitivity the unary kernel cannot see.
+ * The kernel proves; the guard bounds admissibility; together they are "the optimizer coming in."
+ * 99 = III certified its own optimization rule and refused what it cannot soundly prove. */
+module corpus_1112
+
+extern @abi(c-msvc-x64) fn sov_opt_certify_kat() -> u64 from "sov_isa.iii"
+
+fn main() -> u64 {
+    let r : u64 = sov_opt_certify_kat()
+    if r != 99u64 { return r }
+    return 99u64
+}

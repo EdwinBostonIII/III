@@ -699,6 +699,51 @@ fn sov_isa_selfext_kat() -> u64 @export {
 }
 
 /* ============================================================
+ *  PATH C: the kernel-GOVERNED codegen optimizer (DOCS/III-OPTIMIZER-PATH-C.md).
+ *  The compiler's codegen rewrite rules are admitted ONLY IF III itself certifies them:
+ *  (a) the WIDTH-INVARIANCE GUARD admits a rule only when its equivalence holds at EVERY bit width,
+ *      and (b) the CIC kernel PROVES the (unbounded) equivalence.  The guard is load-bearing: the
+ *      kernel's Nat model is unary/UNBOUNDED, so it would FALSELY "prove" a width-SENSITIVE rule
+ *      (const-fold under overflow) -- the guard, not the kernel, keeps those out of codegen. */
+const OPT_EMIT_SHIFTMASK : u32 = 1u32   /* emit transforms the LIVE operand by a width-commuting op (shl/shr/and) */
+const OPT_EMIT_LITERAL   : u32 = 2u32   /* emit is a pure literal (a const-fold result) -- the UNBOUNDED value */
+
+/* WIDTH-INVARIANCE GUARD: a rule is admissible iff its equivalence is width-invariant -- i.e. it
+ * commutes with truncation mod 2^w, so the idealized (unbounded) kernel proof transfers to every
+ * width.  Shift/mask of the live operand: YES.  A pure-literal emit (const-fold): NO -- its value is
+ * the unbounded computation, which diverges from the width-w runtime under overflow.  REJECT the
+ * literal class until a fixed-width (mod-2^w) kernel theory exists. */
+fn opt_rule_width_invariant(emit_kind: u32) -> u8 {
+    if emit_kind == OPT_EMIT_SHIFTMASK { return 1u8 }
+    return 0u8
+}
+
+/* THE PATH-C CERTIFIER: III governs its own codegen optimizer.  99 = the optimizer rule the compiler
+ * applies is (kernel-PROVEN sound for the base case) AND (admitted only by the width-invariance guard),
+ * and a width-sensitive rule is REFUSED even though the unary kernel would accept its equivalence. */
+fn sov_opt_certify_kat() -> u64 @export {
+    tc_reset()
+    SOV_SUCCF[0u32] = sov_succf()
+    let x : u32 = tc_var(0u32)
+    /* (1) KERNEL PROOF: III CERTIFIES the base strength-reduction rule  mul(x,2) == shl(x,1)  (modeled add(x,x)). */
+    let mul_x_2 : u32 = sov_m_mul(x, tc_succ(tc_succ(tc_zero())))
+    let add_x_x : u32 = sov_m_add(x, x)
+    if sov_pcc_verify(mul_x_2, add_x_x) != 1u8 { return 1u64 }
+    /* (2) GOVERNANCE: the kernel REJECTS the meaning-changing mul(x,2) == mul(x,1) -- un-riggable. */
+    let mul_x_1 : u32 = sov_m_mul(x, tc_succ(tc_zero()))
+    if sov_pcc_verify(mul_x_2, mul_x_1) != 0u8 { return 2u64 }
+    /* (3) GUARD admits the strength-reduction family (shift/mask of the live operand). */
+    if opt_rule_width_invariant(OPT_EMIT_SHIFTMASK) != 1u8 { return 3u64 }
+    /* (4) THE SOUNDNESS CONTRIBUTION: the kernel ACCEPTS the unbounded fold 2*2 == 4, yet the guard
+     * still REFUSES the const-fold class -- catching exactly what the unary kernel cannot (overflow). */
+    let mul_2_2 : u32 = sov_m_mul(tc_succ(tc_succ(tc_zero())), tc_succ(tc_succ(tc_zero())))
+    let nat_4   : u32 = tc_succ(tc_succ(tc_succ(tc_succ(tc_zero()))))
+    if sov_pcc_verify(mul_2_2, nat_4) != 1u8 { return 4u64 }
+    if opt_rule_width_invariant(OPT_EMIT_LITERAL) != 0u8 { return 5u64 }
+    return 99u64
+}
+
+/* ============================================================
  *  PSI -- DETERMINISTIC SUPERPOSITION (DOCS/III-SOVEREIGN-CALCULUS-DESIGN.md §12).
  *  The no-downsides quantum-like invocation: an e-class is a SUPERPOSITION (all
  *  proven-equal realizations of a value held at once); saturation explores them

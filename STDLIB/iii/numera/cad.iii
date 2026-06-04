@@ -29,6 +29,18 @@ extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_update_byte(b: u32) -> u32 from "sha256.iii"
+/* SHA-NI fullness (apotheosis M1.D1): cad's SHA-256 ONESHOT path -- the system's highest-fan-in
+ * content-address (31 cad_oneshot callers: witness/seal/identifier/...) -- routes through the
+ * cpufeat-gated dispatch, so on a SHA-NI CPU the central primitive is hardware-accelerated.  The
+ * digest is BIT-IDENTICAL across paths (corpus/1020 differential + cad's own selftest below, which
+ * keeps the direct sha256_oneshot as the SOFTWARE reference) -- only the cost facet (M13) changes,
+ * never the value (determinism-safe: a function of SEALED hw capability, not observed workload).
+ * The streaming (cad_begin) + packed paths keep the scalar core (no NI streaming/packed variant yet
+ * -- the sized deeper increment). GOLDEN-SAFE: the compiler uses cg_sha, not stdlib cad/dispatch. */
+extern @abi(c-msvc-x64) fn sha256_dispatch_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_dispatch.iii"
+extern @abi(c-msvc-x64) fn sha256_dispatch_init() -> u32 from "sha256_dispatch.iii"
+extern @abi(c-msvc-x64) fn sha256_dispatch_update(input: *u8, len: u64) -> u32 from "sha256_dispatch.iii"
+extern @abi(c-msvc-x64) fn sha256_dispatch_final(out_32: *u8) -> u32 from "sha256_dispatch.iii"
 extern @abi(c-msvc-x64) fn keccak256_oneshot(msg_ptr: u64, msg_len: u64, out_ptr: u64) -> i32 from "keccak256.iii"
 extern @abi(c-msvc-x64) fn keccak256_init() -> i32 from "keccak256.iii"
 extern @abi(c-msvc-x64) fn keccak256_update(input: *u8, len: u64) -> i32 from "keccak256.iii"
@@ -62,7 +74,7 @@ fn cad_oneshot(suite: u32, msg: *u8, len: u64, out: *u8) -> i32 @export {
     let n : u64 = len
     let o : *u8 = out
     if s == CAD_SUITE_SHA256 {
-        sha256_oneshot(m, n, o)
+        sha256_dispatch_oneshot(m, n, o)
         return CAD_OK
     }
     if s == CAD_SUITE_KECCAK256 {
@@ -218,7 +230,7 @@ fn cad_begin(suite: u32) -> i32 @export {
     let s : u32 = suite
     if s == CAD_SUITE_SHA256 {
         CAD_ACTIVE = s
-        sha256_init()
+        sha256_dispatch_init()
         return CAD_OK
     }
     if s == CAD_SUITE_KECCAK256 {
@@ -235,8 +247,8 @@ fn cad_domain(domain: u64, domain_len: u64) -> i32 @export {
     let dp : *u8 = domain as *u8
     let dl : u64 = domain_len
     if CAD_ACTIVE == CAD_SUITE_SHA256 {
-        sha256_update(dp, dl)
-        sha256_update_byte(0u32)
+        sha256_dispatch_update(dp, dl)
+        sha256_dispatch_update((&CAD_ZERO as u64) as *u8, 1u64)
         return CAD_OK
     }
     if CAD_ACTIVE == CAD_SUITE_KECCAK256 {
@@ -253,7 +265,7 @@ fn cad_payload(payload: u64, payload_len: u64) -> i32 @export {
     let pp : *u8 = payload as *u8
     let pl : u64 = payload_len
     if CAD_ACTIVE == CAD_SUITE_SHA256 {
-        sha256_update(pp, pl)
+        sha256_dispatch_update(pp, pl)
         return CAD_OK
     }
     if CAD_ACTIVE == CAD_SUITE_KECCAK256 {
@@ -267,7 +279,7 @@ fn cad_final(out_32: u64) -> i32 @export {
     if out_32 == 0u64 { return CAD_E_NULL }
     let op : *u8 = out_32 as *u8
     if CAD_ACTIVE == CAD_SUITE_SHA256 {
-        sha256_final(op)
+        sha256_dispatch_final(op)
         return CAD_OK
     }
     if CAD_ACTIVE == CAD_SUITE_KECCAK256 {

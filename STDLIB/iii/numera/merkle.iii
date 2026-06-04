@@ -29,7 +29,11 @@
 
 module numera_merkle
 
-extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+/* SHA-NI fullness (apotheosis M1.D1): the SHA-256 leaf/node hashes route through the cpufeat-gated
+ * dispatch (NI on a SHA-capable CPU), bit-identical to the scalar core (corpus/1020 + the zk/seal
+ * merkle KATs are the differential). Leaf=33B / node=65B are 1-2 blocks -- covered. The Keccak-256
+ * commitment suite keeps keccak256 (no NI). */
+extern @abi(c-msvc-x64) fn sha256_dispatch_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_dispatch.iii"
 /* APOTHEOSIS S.6: hash-parametrized tree -- one builder, two hashes (SHA-256
  * seal + Keccak-256 commitment), via a SUITE selector (iii-idiomatic, mirroring
  * cad's suite dispatch -- not a fn-ptr).  keccak256_oneshot takes u64 ptrs. */
@@ -76,7 +80,7 @@ fn _mk_leaf_hash(leaf_ptr: u64, leaf_size: u64, out_ptr: u64) -> u32 {
     if MK_ACTIVE_SUITE == MK_SUITE_KECCAK {
         keccak256_oneshot((&MK_HASH_BUF) as u64, total, op_l)
     } else {
-        sha256_oneshot(&MK_HASH_BUF as *u8, total, op_l as *u8)
+        sha256_dispatch_oneshot(&MK_HASH_BUF as *u8, total, op_l as *u8)
     }
     return 0u32
 }
@@ -97,7 +101,7 @@ fn _mk_node_hash(left_ptr: u64, right_ptr: u64, out_ptr: u64) -> u32 {
     if MK_ACTIVE_SUITE == MK_SUITE_KECCAK {
         keccak256_oneshot((&MK_HASH_BUF) as u64, 65u64, o_l)
     } else {
-        sha256_oneshot(&MK_HASH_BUF as *u8, 65u64, o_l as *u8)
+        sha256_dispatch_oneshot(&MK_HASH_BUF as *u8, 65u64, o_l as *u8)
     }
     return 0u32
 }

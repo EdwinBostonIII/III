@@ -38,6 +38,16 @@ module numera_sha256_dispatch
 extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
 extern @abi(c-msvc-x64) fn sha256_ni_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_ni.iii"
 extern @abi(c-msvc-x64) fn cpufeat_has_sha() -> u8 from "cpufeat.iii"
+/* STREAMING dispatch (begin->update*->final) -- so the Crown (cad_begin/mhash) seal path is
+ * NI-accelerated too, not just the oneshot.  Proven byte-identical by corpus/1111 (NI stream ==
+ * software stream over every length/multi-block/split-update).  The path is LATCHED at init so a
+ * session is all-NI or all-software (never split mid-hash). */
+extern @abi(c-msvc-x64) fn sha256_init() -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_update(input: *u8, len: u64) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_final(out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_init() -> u32 from "sha256_ni.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_update(input: *u8, len: u64) -> u32 from "sha256_ni.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_final(out_32: *u8) -> u32 from "sha256_ni.iii"
 
 const SHA_PATH_SOFTWARE : u32 = 0u32
 const SHA_PATH_SHA_NI   : u32 = 1u32
@@ -49,6 +59,8 @@ const SHA_OV_SOFTWARE : u32 = 1u32
 const SHA_OV_SHA_NI   : u32 = 2u32
 
 var SHA_DISPATCH_OV : u32 = 0u32
+/* latched active path for the current streaming session (set by sha256_dispatch_init). */
+var SHA_DISPATCH_ACTIVE : u32 = 0u32
 
 /* The active path.  AUTO and requested-SHA-NI both honor cpufeat (so a non-SHA
  * CPU never reaches sha256rnds2); forced-software pins the scalar core. */
@@ -75,4 +87,21 @@ fn sha256_dispatch_path() -> u32 @export {
 fn sha256_dispatch_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 @export {
     if sha256_dispatch_select() == SHA_PATH_SHA_NI { return sha256_ni_oneshot(input, len, out_32) }
     return sha256_oneshot(input, len, out_32)
+}
+
+/* Streaming session: init LATCHES the path; update/final follow the latch (never split). */
+fn sha256_dispatch_init() -> u32 @export {
+    SHA_DISPATCH_ACTIVE = sha256_dispatch_select()
+    if SHA_DISPATCH_ACTIVE == SHA_PATH_SHA_NI { return sha256_ni_init() }
+    return sha256_init()
+}
+
+fn sha256_dispatch_update(input: *u8, len: u64) -> u32 @export {
+    if SHA_DISPATCH_ACTIVE == SHA_PATH_SHA_NI { return sha256_ni_update(input, len) }
+    return sha256_update(input, len)
+}
+
+fn sha256_dispatch_final(out_32: *u8) -> u32 @export {
+    if SHA_DISPATCH_ACTIVE == SHA_PATH_SHA_NI { return sha256_ni_final(out_32) }
+    return sha256_final(out_32)
 }

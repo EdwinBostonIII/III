@@ -1,0 +1,79 @@
+/* 1111 -- SHA-NI STREAMING differential: prove sha256_ni_init/update/final (the hardware streaming
+ * path, previously built but UNGATED) is byte-identical to the software scalar core, BEFORE any
+ * consumer (cad_begin -> the Crown/mhash seal) routes through it.  1020 covers only the NI ONESHOT;
+ * this covers STREAMING -- the determinism-critical path.  For each length L in a battery spanning
+ * the block/padding edges (0/1/55/56/63/64/65/127/128/129/256/1000), assert FOUR digests agree:
+ *   sw_oneshot(L) == ni_oneshot(L) == ni_stream_single(L) == ni_stream_split(L, 13-byte chunks)
+ * The split-update arm exercises NI's partial-block buffering (NIBUF/NIBUFLEN) -- the trickiest part.
+ * A single mismatched byte anywhere -> non-99.  99 = the NI streaming path is proven seal-safe. */
+module corpus_1111
+
+extern @abi(c-msvc-x64) fn sha256_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_oneshot(input: *u8, len: u64, out_32: *u8) -> u32 from "sha256_ni.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_init() -> u32 from "sha256_ni.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_update(input: *u8, len: u64) -> u32 from "sha256_ni.iii"
+extern @abi(c-msvc-x64) fn sha256_ni_final(out_32: *u8) -> u32 from "sha256_ni.iii"
+
+var SND_IN  : [u8; 1024]
+var SND_SW  : [u8; 32]
+var SND_NIO : [u8; 32]
+var SND_NIS : [u8; 32]
+var SND_NIP : [u8; 32]
+var SND_LENS : [u64; 12] = [0u64,1u64,55u64,56u64,63u64,64u64,65u64,127u64,128u64,129u64,256u64,1000u64]
+
+/* deterministic pattern fill */
+fn snd_fill() -> u32 {
+    let mut i : u64 = 0u64
+    while i < 1024u64 { SND_IN[i] = ((i * 7u64 + 13u64) & 0xFFu64) as u8  i = i + 1u64 }
+    return 0u32
+}
+
+/* 1 iff a[0..32) == b[0..32) */
+fn snd_eq32(a: u64, b: u64) -> u8 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        if (a as *u8)[i] != (b as *u8)[i] { return 0u8 }
+        i = i + 1u64
+    }
+    return 1u8
+}
+
+/* NI streaming over `len`, fed in 13-byte chunks (exercises partial-block buffering) */
+fn snd_ni_split(len: u64) -> u32 {
+    sha256_ni_init()
+    let mut off : u64 = 0u64
+    while off < len {
+        let mut take : u64 = 13u64
+        if off + take > len { take = len - off }
+        sha256_ni_update(((&SND_IN as u64) + off) as *u8, take)
+        off = off + take
+    }
+    sha256_ni_final(&SND_NIP as *u8)
+    return 0u32
+}
+
+fn sha_ni_stream_diff() -> u64 @export {
+    snd_fill()
+    let inp : u64 = &SND_IN as u64
+    let mut k : u64 = 0u64
+    while k < 12u64 {
+        let L : u64 = SND_LENS[k]
+        /* software oneshot = the golden reference */
+        sha256_oneshot(inp as *u8, L, &SND_SW as *u8)
+        /* NI oneshot */
+        sha256_ni_oneshot(inp as *u8, L, &SND_NIO as *u8)
+        if snd_eq32(&SND_NIO as u64, &SND_SW as u64) != 1u8 { return 1u64 }
+        /* NI streaming, single update */
+        sha256_ni_init()
+        sha256_ni_update(inp as *u8, L)
+        sha256_ni_final(&SND_NIS as *u8)
+        if snd_eq32(&SND_NIS as u64, &SND_SW as u64) != 1u8 { return 2u64 }
+        /* NI streaming, split into 13-byte updates (partial-block buffering) */
+        snd_ni_split(L)
+        if snd_eq32(&SND_NIP as u64, &SND_SW as u64) != 1u8 { return 3u64 }
+        k = k + 1u64
+    }
+    return 99u64
+}
+
+fn main() -> u64 { return sha_ni_stream_diff() }

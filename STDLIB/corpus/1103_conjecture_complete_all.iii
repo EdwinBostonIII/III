@@ -1,0 +1,47 @@
+/* 1103_conjecture_complete_all.iii -- falsifier for Conjecture increment 2 (nous_conjecture):
+ * the full bounded completion procedure. Proves iterated conjecture turns a non-confluent system
+ * CONFLUENT, soundly:
+ *   (1) a triple divergence a->b,a->c,a->d has a non-joining critical pair (defect present);
+ *   (2) nc_complete_all reaches CONFLUENT within a generous bound;
+ *   (3) no non-joining critical pair remains; (4-6) all three branches now join pairwise;
+ *   (7) NEGATIVE -- a too-small bound does NOT return a false CONFLUENT (it returns DIVERGED),
+ *       proving completion is genuinely iterated, not faked.
+ * 99 = pass. */
+module corpus_1103
+
+extern @abi(c-msvc-x64) fn nc_reset() -> i32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_add_rule(l: u32, r: u32) -> i32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_find_cp(out: *u8) -> u8 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_joins(u: u32, v: u32) -> u8 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_complete_all(max_iters: u32) -> i32 from "nous_conjecture.iii"
+
+const NC_CONFLUENT : i32 = 0i32
+
+var CP : [u8; 2]
+
+fn main() -> u64 {
+    /* (1) triple divergence: a->b, a->c, a->d (0->1, 0->2, 0->3); pairs all non-joining */
+    nc_reset()
+    nc_add_rule(0u32, 1u32)
+    nc_add_rule(0u32, 2u32)
+    nc_add_rule(0u32, 3u32)
+    if nc_find_cp(&CP as *u8) != 1u8 { return 1u64 }
+
+    /* (2) iterate completion to confluence (generous bound) */
+    if nc_complete_all(16u32) != NC_CONFLUENT { return 2u64 }
+    /* (3) fully confluent: no non-joining critical pair remains */
+    if nc_find_cp(&CP as *u8) != 0u8 { return 3u64 }
+    /* (4-6) every branch now joins pairwise */
+    if nc_joins(1u32, 2u32) != 1u8 { return 4u64 }
+    if nc_joins(1u32, 3u32) != 1u8 { return 5u64 }
+    if nc_joins(2u32, 3u32) != 1u8 { return 6u64 }
+
+    /* (7) NEGATIVE: a 1-iteration bound cannot fix three defects -> must NOT report CONFLUENT */
+    nc_reset()
+    nc_add_rule(0u32, 1u32)
+    nc_add_rule(0u32, 2u32)
+    nc_add_rule(0u32, 3u32)
+    if nc_complete_all(1u32) == NC_CONFLUENT { return 7u64 }
+
+    return 99u64
+}

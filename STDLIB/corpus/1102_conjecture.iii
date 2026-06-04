@@ -1,0 +1,60 @@
+/* 1102_conjecture.iii -- falsifier for the Conjecture faculty increment 1 (nous/nous_conjecture):
+ * deterministic ground critical-pair completion. Proves the propose->dispose->admit loop over an
+ * OPEN space is sound:
+ *   (1) a terminating-but-non-confluent system's defect is DETECTED (a non-joining critical pair);
+ *   (2) the pair genuinely doesn't join yet;
+ *   (3) a completing rule is CONJECTURED, DISPOSED, and ADMITTED;
+ *   (4) the pair now joins (confluence restored at it); (5) no non-joining pair remains;
+ *   (6) NEGATIVE -- a cycle-creating conjecture is REJECTED (termination preserved);
+ *   (7) NEGATIVE -- a non-restoring conjecture is REJECTED (joinability required);
+ *   (8) POSITIVE -- the good completing rule is admitted by the disposer.
+ * The conjectured rule is NOT in the input -- the leap beyond enumeration, disposer-checked. 99 = pass. */
+module corpus_1102
+
+extern @abi(c-msvc-x64) fn nc_reset() -> i32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_add_rule(l: u32, r: u32) -> i32 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_find_cp(out: *u8) -> u8 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_joins(u: u32, v: u32) -> u8 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_dispose_candidate(l: u32, r: u32, u: u32, v: u32) -> u8 from "nous_conjecture.iii"
+extern @abi(c-msvc-x64) fn nc_conjecture_complete() -> i32 from "nous_conjecture.iii"
+
+const NC_ADMITTED : i32 = 1i32
+
+var CP : [u8; 2]
+
+fn main() -> u64 {
+    /* (1) a terminating-but-non-confluent system: a->b, a->c  (0->1, 0->2) */
+    nc_reset()
+    nc_add_rule(0u32, 1u32)
+    nc_add_rule(0u32, 2u32)
+
+    /* (2) the confluence defect is DETECTED: critical pair (b,c) does not join */
+    if nc_find_cp(&CP as *u8) != 1u8 { return 1u64 }
+    if nc_joins(1u32, 2u32) != 0u8 { return 2u64 }
+
+    /* (3) CONJECTURE + DISPOSE + ADMIT a completing rule */
+    if nc_conjecture_complete() != NC_ADMITTED { return 3u64 }
+    /* (4) now they join -- confluence restored at the pair */
+    if nc_joins(1u32, 2u32) != 1u8 { return 4u64 }
+    /* (5) and no non-joining critical pair remains */
+    if nc_find_cp(&CP as *u8) != 0u8 { return 5u64 }
+
+    /* (6) NEGATIVE -- termination: a->b->c (0->1,1->2); conjecturing c->a (2->0) would cycle
+     *     0->1->2->0, so the disposer REJECTS it. */
+    nc_reset()
+    nc_add_rule(0u32, 1u32)
+    nc_add_rule(1u32, 2u32)
+    if nc_dispose_candidate(2u32, 0u32, 1u32, 2u32) != 0u8 { return 6u64 }
+
+    /* (7) NEGATIVE -- non-restoring: back to a->b,a->c; an unrelated f->e (5->4) is terminating
+     *     but does NOT make (b,c) join, so the disposer REJECTS it. */
+    nc_reset()
+    nc_add_rule(0u32, 1u32)
+    nc_add_rule(0u32, 2u32)
+    if nc_dispose_candidate(5u32, 4u32, 1u32, 2u32) != 0u8 { return 7u64 }
+
+    /* (8) POSITIVE -- the good completing rule (b->c, 1->2) IS admitted by the disposer */
+    if nc_dispose_candidate(1u32, 2u32, 1u32, 2u32) != 1u8 { return 8u64 }
+
+    return 99u64
+}

@@ -35,16 +35,18 @@ module m
 extern @abi(c-msvc-x64) fn probe() -> u32 from "p.iii"
 fn main() -> u64 { let v : u32 = probe()  return (((v >> 24u32) ^ (v >> 16u32) ^ (v >> 8u32) ^ v) & 0xFFu32) as u64 }
 EOF
-$IIIS --compile-only --out "$W/m.o" "$W/m.iii" 2>/dev/null
+$IIIS --compile-only --out "$W/m.o" "$W/m.iii" 2>/dev/null || { echo "[cg_r0-wgate] FATAL m.iii compile"; exit 2; }
 
 PASS=0; FAIL=0
 dp () {  # name  body
     printf 'module p\n%s\n' "$2" > "$W/p.iii"
-    $IIIS --ring R0 --compile-only --out "$W/p_r0.o" "$W/p.iii" 2>/dev/null
-    gcc "$W/m.o" "$W/harness.o" "$W/p_r0.o" -Wl,--defsym,probe=L_p_probe -lkernel32 -o "$W/r0.exe" 2>/dev/null
+    # Guard EVERY compile/link: a build failure must FAIL the probe, never produce a vacuous PASS.
+    # Without these guards, both exes are absent, both run as 127, 127==127 -> false "PASS".
+    $IIIS --ring R0 --compile-only --out "$W/p_r0.o" "$W/p.iii" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r0 compile)"; FAIL=$((FAIL+1)); return; }
+    gcc "$W/m.o" "$W/harness.o" "$W/p_r0.o" -Wl,--defsym,probe=L_p_probe -lkernel32 -o "$W/r0.exe" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r0 link)"; FAIL=$((FAIL+1)); return; }
     "$W/r0.exe"; local r0=$?
-    $IIIS --compile-only --out "$W/p_def.o" "$W/p.iii" 2>/dev/null
-    gcc "$W/m.o" "$W/p_def.o" -lkernel32 -o "$W/def.exe" 2>/dev/null
+    $IIIS --compile-only --out "$W/p_def.o" "$W/p.iii" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r3 compile)"; FAIL=$((FAIL+1)); return; }
+    gcc "$W/m.o" "$W/p_def.o" -lkernel32 -o "$W/def.exe" 2>/dev/null || { echo "[cg_r0-wgate] FAIL  $1 (cg_r3 link)"; FAIL=$((FAIL+1)); return; }
     "$W/def.exe"; local def=$?
     if [ "$r0" -eq "$def" ]; then echo "[cg_r0-wgate] PASS  $1 (cg_r0==cg_r3 fold=$r0)"; PASS=$((PASS+1))
     else echo "[cg_r0-wgate] FAIL  $1 -> cg_r0=$r0 cg_r3=$def   <== cg_r0 u32-width defect"; FAIL=$((FAIL+1)); fi

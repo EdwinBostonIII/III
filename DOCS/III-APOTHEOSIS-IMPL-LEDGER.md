@@ -947,3 +947,16 @@ structural skepticism (H2/observe content-address; H11/tp_* transform registrati
 "no skips" the user asked for, earned not asserted. The remaining frontier is genuinely operator-gated / toolchain-blocked
 / substrate-ahead, each with an evidence-backed receipt and a named trigger. Truth, not busywork, satisfies "no
 compromise" (advisor).
+
+**⟶ FINAL RESEAL — compiler golden `4e81714d → 78b793eb` (corrects the hash named above; "let the gate decide" caught
+it).** After the observe fix + tp_morphism landed in the stdlib, the FINAL `build_iiis2 --check-corpus` + `build_iiis3`
+produced **iiis-2 == iiis-3 == `78b793ebb9fb9423de347957cb1d77875a70551f78d2cd02f3a7d6442e49ab3f`** (byte-identical TRUE
+FIXPOINT; 59/0 self-host corpus ×2; Ring-−2 OK; cg_r0 crypto 5/0 + width 10/0). The golden moved from the mid-session
+`4e81714d` even though `nm iiis-2.exe` shows **zero** obs_observe/tpm_ symbols — i.e. the touched modules are NOT in the
+compiler's link closure; the drift is pure **archive reshuffling** (adding `tp_morphism.o` + changing `observe.o` changed
+`libiii_native.a`'s member layout → the linker lays out the SAME resolved compiler code differently → functionally
+identical, all gates green). The determinism INVARIANT (same inputs → same output; iiis-2==iiis-3) holds; the golden is
+per-lib-state and legitimately moved. Lesson refines the det-memory: a compiler-UNREFERENCED stdlib *add/byte-change* can
+still move the golden via archive layout (a rename does not) — so reseal is gate-driven, never asserted. Goldens updated
+to 78b793eb: `COMPILER/BOOT/iiis-2.mhash`, `COMPILED/iiis-2.mhash`/`iiis-3.mhash`/`.exe.mhash`. **78b793eb is the
+authoritative final compiler.** (Every `4e81714d` above = the mid-session pre-final-lib state; superseded here.)

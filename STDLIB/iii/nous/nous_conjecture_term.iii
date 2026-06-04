@@ -40,6 +40,7 @@ const NTM_CONFLUENT : i32 = 0i32
 const NTM_ADMITTED  : i32 = 1i32
 const NTM_REJECTED  : i32 = -1i32
 const NTM_FULL      : i32 = -2i32
+const NTM_E_DEPTH   : i32 = -4i32   /* a leaf->f rule would break the depth-1 invariant (rejected) */
 
 var NR_LHS    : [u32; 64]
 var NR_RHS    : [u32; 64]
@@ -59,6 +60,11 @@ fn ntm_is_f(t: u32) -> u8 @export { if t >= NTM_FBIT { return 1u8 }  return 0u8 
 fn nr_reset() -> i32 @export { NR_N = 0u32  return 0i32 }
 fn nr_add(lhs: u32, rhs: u32) -> i32 @export {
     if NR_N >= NTM_MAX_RULES { return NTM_FULL }
+    /* DEPTH-1 GUARD (not mere convention): a leaf LHS with an f-term RHS would, via ntm_succ's
+     * subterm rule ntm_f(rhs, q), build ntm_f(f-term, q) and silently truncate the f-term child to
+     * 8 bits -- corruption. Such a rule is rejected at the door. (f-rule RHS may be leaf or f-term;
+     * leaf-rule RHS must be a leaf.) */
+    if lhs < NTM_FBIT { if rhs >= NTM_FBIT { return NTM_E_DEPTH } }
     NR_LHS[NR_N as u64] = lhs
     NR_RHS[NR_N as u64] = rhs
     NR_N = NR_N + 1u32

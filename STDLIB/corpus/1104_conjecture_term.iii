@@ -21,8 +21,11 @@ extern @abi(c-msvc-x64) fn ntm_joins(u: u32, v: u32) -> u8 from "nous_conjecture
 extern @abi(c-msvc-x64) fn ntm_dispose_candidate(l: u32, r: u32, u: u32, v: u32) -> u8 from "nous_conjecture_term.iii"
 extern @abi(c-msvc-x64) fn ntm_conjecture_complete() -> i32 from "nous_conjecture_term.iii"
 extern @abi(c-msvc-x64) fn ntm_system_terminating() -> u8 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_measure(t: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn nr_count() -> u32 from "nous_conjecture_term.iii"
 
 const NTM_ADMITTED : i32 = 1i32
+const NTM_E_DEPTH  : i32 = -4i32
 
 var CP : [u32; 2]
 
@@ -68,6 +71,18 @@ fn main() -> u64 {
     nr_add(ntm_leaf(4u32), ntm_leaf(0u32))
     if ntm_dispose_candidate(ntm_f(0u32, 1u32), ntm_leaf(2u32), ntm_leaf(2u32), ntm_f(0u32, 1u32)) != 1u8 { return 14u64 }
     if ntm_system_terminating() != 1u8 { return 15u64 }
+
+    /* (F) mechanism isolation for (D): the rejection is BY THE MEASURE, not incidental */
+    nr_reset()
+    nr_add(ntm_f(0u32, 9u32), ntm_f(1u32, 9u32))
+    if ntm_system_terminating() != 0u8 { return 16u64 }                 /* the f-rule is mu-INCREASING */
+    if ntm_measure(ntm_f(0u32, 9u32)) != 267u32 { return 17u64 }        /* mu(f(0,9)) = 1+10+256 */
+    if ntm_measure(ntm_f(1u32, 9u32)) != 268u32 { return 18u64 }        /* mu(f(1,9)) = 2+10+256 > 267 */
+
+    /* (G) DEPTH-1 GUARD: nr_add REJECTS a leaf->f rule (would silently truncate in ntm_succ) */
+    nr_reset()
+    if nr_add(ntm_leaf(5u32), ntm_f(1u32, 2u32)) != NTM_E_DEPTH { return 19u64 }
+    if nr_count() != 0u32 { return 20u64 }                              /* the bad rule was NOT added */
 
     return 99u64
 }

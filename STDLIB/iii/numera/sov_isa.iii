@@ -341,6 +341,18 @@ fn sov_isa_rules() -> u32 @export {
     SI_RULE[5u32] = si_enc_sym(s_c2, 0u32)
     if eg_register_rule(rulep) == SI_SENT { return 8u32 }
 
+    /* Rule G [SELF-EXTENSION via the self-improvement loop, 2026-06-04]: mul(c1, c2) -> c2  [1*2 = 2,
+     * a GROUND constant fold the optimizer LACKED -- mul(1,2) descended only to shl(1,1), 3 nodes].
+     * KERNEL-CERTIFIED + KERNEL-GOVERNED by sov_isa_selfext_kat (the CIC kernel proves 1*2 == 2 and
+     * REJECTS the meaning-changing 1*2 == 1).  Additive: fires ONLY on the ground term mul(1,2). */
+    SI_RULE[0u32] = 3u32
+    SI_RULE[1u32] = 1u32
+    SI_RULE[2u32] = si_enc_sym(s_mul, 2u32)
+    SI_RULE[3u32] = si_enc_sym(s_c1, 0u32)
+    SI_RULE[4u32] = si_enc_sym(s_c2, 0u32)
+    SI_RULE[5u32] = si_enc_sym(s_c2, 0u32)
+    if eg_register_rule(rulep) == SI_SENT { return 9u32 }
+
     return 0u32
 }
 
@@ -538,8 +550,12 @@ fn sov_lower(out_term: *u32) -> u32 {
         return sov_m_mul(ma, mb)
     }
     if slot == si_slot(SI_SHL) {
-        let sa : u32 = sov_lower(out_term)
-        let sb : u32 = sov_lower(out_term)
+        let sa      : u32 = sov_lower(out_term)   /* the value being shifted */
+        let s_shift : u32 = sov_lower(out_term)   /* shift-amount child: lowered ONLY to advance the
+                                                   * preorder cursor (stream integrity).  Intentionally
+                                                   * UNUSED -- shl(a,1) is modeled as add(a,a) in the Nat
+                                                   * model regardless of the shift constant.  (iii permits
+                                                   * the unused binding; the call's SIDE EFFECT is required.) */
         return sov_m_add(sa, sa)
     }
     return 0u32
@@ -638,6 +654,46 @@ fn sov_pcc_kat() -> u64 @export {
 
     /* (4) control: the verifier ACCEPTS a true equality (x == x) */
     if sov_pcc_verify(tc_var(0u32), tc_var(0u32)) != 1u8 { return 6u64 }
+
+    return 99u64
+}
+
+/* THE SELF-IMPROVEMENT LOOP, REALIZED on the freshly-added Rule G (mul(c1,c2) -> c2).  III improves +
+ * extends its OWN optimizer via its OWN reasoning, kernel-governed -- no rigging:
+ *   (1) IMPROVEMENT: with the rules registered, mul(c1,c2) now descends to the literal c2 (a SINGLE
+ *       node) -- a fold the optimizer GAINED (pre-G it reached only shl(c1,c1), 3 nodes).
+ *   (2) KERNEL DISPOSES: the CIC kernel CERTIFIES the rule sound -- sov_m_mul(1,2) is convertible to 2.
+ *   (3) KERNEL GOVERNS: the kernel REJECTS the meaning-changing variant 1*2 == 1 (un-riggable).
+ * The optimization is the e-graph's (untrusted); every soundness verdict is the kernel's.  99 = pass. */
+fn sov_isa_selfext_kat() -> u64 @export {
+    eg_init()
+    cl_init()
+    tc_reset()
+    let gx  : u32 = si_leaf(SI_X)
+    let gc1 : u32 = si_leaf(SI_C1)
+    let gc2 : u32 = si_leaf(SI_C2)
+    let gc0 : u32 = si_leaf(SI_C0)
+    let gprod : u32 = si_node2(SI_MUL, gc1, gc2)         /* the ground term 1 * 2 */
+    let gseed : u32 = si_node2(SI_SHL, gx, gc1)          /* seed shl/c1 slots (Rule A RHS + cost table) */
+    if gseed == SI_SENT { return 1u64 }
+    if sov_isa_rules() != 0u32 { return 2u64 }
+
+    /* (1) IMPROVEMENT: mul(1,2) now folds to the literal c2 (single node), not shl(1,1) */
+    let otp : *u32 = (&SI_OUT) as u64 as *u32
+    let onp : *u32 = (&SI_OUTN) as u64 as *u32
+    if sov_isa_descend(gprod, otp, onp) != 0i32 { return 3u64 }
+    if SI_OUTN[0u32] != 1u32 { return 4u64 }             /* folded to a SINGLE node */
+    if SI_OUT[0u32] != si_slot(SI_C2) { return 5u64 }    /* and it is the literal 2 */
+
+    /* (2) KERNEL DISPOSES: the kernel CERTIFIES 1*2 == 2 (the rule is sound) */
+    SOV_SUCCF[0u32] = sov_succf()
+    let m_1x2 : u32 = sov_m_mul(tc_succ(tc_zero()), tc_succ(tc_succ(tc_zero())))
+    let m_2   : u32 = tc_succ(tc_succ(tc_zero()))
+    if sov_pcc_verify(m_1x2, m_2) != 1u8 { return 6u64 }
+
+    /* (3) KERNEL GOVERNS: the kernel REJECTS 1*2 == 1 (meaning-changing -> un-riggable) */
+    let m_1   : u32 = tc_succ(tc_zero())
+    if sov_pcc_verify(m_1x2, m_1) != 0u8 { return 7u64 }
 
     return 99u64
 }

@@ -51,6 +51,7 @@ declare -A EXPECTED=(
     [1105_conjecture_gen]=99
     [1106_conjecture_lemma]=99
     [1107_egraph_saturate_capacity_gap]=99
+    [1108_sov_self_extend]=99
     [01_scalar_u32_add_wrap]=42
     [02_sha256_kat_abc]=186
     [03_region_create_alloc_release]=99

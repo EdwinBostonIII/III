@@ -1,0 +1,39 @@
+/* 1105_conjecture_gen.iii -- falsifier for Conjecture increment 4 (nous_conjecture_gen):
+ * GENERALIZATION conjecture, soundly checked by exhaustive verification over a bounded domain.
+ *   (1) conjecture forall x: x*x == x (mod 2) over 0..64 -> ADMITTED (a true universal);
+ *   (2) the admitted universal entails specific instances (P(7), P(50)) by instantiation;
+ *   (3,4) two more true universals (consecutive-even, x*x>=x) -> ADMITTED;
+ *   (5) NEGATIVE -- OVERGENERALIZATION: "forall x even" is true on observed {2,4} but false generally;
+ *       the disposer REFUTES it with counterexample x=1 (the leap is caught soundly);
+ *   (6) NEGATIVE -- bounded-false: "forall x<5" -> REFUTED with counterexample x=5.
+ * 99 = pass. */
+module corpus_1105
+
+extern @abi(c-msvc-x64) fn ng_conjecture_universal(kind: u32, n: u32) -> i32 from "nous_conjecture_gen.iii"
+extern @abi(c-msvc-x64) fn ng_implies_instance(kind: u32, c: u32) -> u8 from "nous_conjecture_gen.iii"
+extern @abi(c-msvc-x64) fn ng_counterexample(kind: u32, n: u32) -> u32 from "nous_conjecture_gen.iii"
+
+const NG_ADMITTED : i32 = 1i32
+const NG_REFUTED  : i32 = -1i32
+
+fn main() -> u64 {
+    /* (1) true universal: squaring preserves parity */
+    if ng_conjecture_universal(0u32, 64u32) != NG_ADMITTED { return 1u64 }
+    /* (2) it entails the specific instances the goal cared about */
+    if ng_implies_instance(0u32, 7u32) != 1u8 { return 2u64 }
+    if ng_implies_instance(0u32, 50u32) != 1u8 { return 3u64 }
+    /* (3) product of consecutive integers is even */
+    if ng_conjecture_universal(1u32, 64u32) != NG_ADMITTED { return 4u64 }
+    /* (4) x*x >= x */
+    if ng_conjecture_universal(4u32, 64u32) != NG_ADMITTED { return 5u64 }
+
+    /* (5) NEGATIVE -- overgeneralization "forall x even": true on {2,4}, REFUTED, counterexample x=1 */
+    if ng_conjecture_universal(3u32, 64u32) != NG_REFUTED { return 6u64 }
+    if ng_counterexample(3u32, 64u32) != 1u32 { return 7u64 }
+
+    /* (6) NEGATIVE -- bounded-false "forall x<5": REFUTED, counterexample x=5 */
+    if ng_conjecture_universal(2u32, 64u32) != NG_REFUTED { return 8u64 }
+    if ng_counterexample(2u32, 64u32) != 5u32 { return 9u64 }
+
+    return 99u64
+}

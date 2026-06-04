@@ -1,0 +1,51 @@
+/* 1106_conjecture_lemma.iii -- falsifier for Conjecture increment 5 (nous_conjecture_lemma):
+ * LEMMA / equation discovery by joinability (sound congruence closure), composing the increment-3
+ * term engine. With rules a->c, b->c (0->2, 1->2):
+ *   (1) discover the NON-OBVIOUS lemma a=b (joinable via c, though no rule states a->b);
+ *   (2) refute a non-lemma a=d (d unreachable);
+ *   (3) the CONGRUENCE lemma f(a,d)=f(b,d) (a=b lifts through the constructor);
+ *   (4) refute the structured non-lemma f(a,d) != f(b,e) (d != e);
+ *   (5) systematic discovery over leaves 0..4 finds exactly {a=b, a=c, b=c} = 3 lemmas;
+ *   (6) the discovered set CONTAINS the non-obvious a=b.
+ * 99 = pass. */
+module corpus_1106
+
+extern @abi(c-msvc-x64) fn nr_reset() -> i32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn nr_add(lhs: u32, rhs: u32) -> i32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_leaf(s: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_f(p: u32, q: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ld_is_lemma(u: u32, v: u32) -> u8 from "nous_conjecture_lemma.iii"
+extern @abi(c-msvc-x64) fn ld_discover(n: u32, out: *u32, cap: u32) -> u32 from "nous_conjecture_lemma.iii"
+
+var LEMMAS : [u32; 64]
+
+fn main() -> u64 {
+    /* rewrite system: a->c, b->c (0->2, 1->2) */
+    nr_reset()
+    nr_add(ntm_leaf(0u32), ntm_leaf(2u32))
+    nr_add(ntm_leaf(1u32), ntm_leaf(2u32))
+
+    /* (1) the non-obvious discovered lemma: a=b (joinable via c; no rule says a->b) */
+    if ld_is_lemma(ntm_leaf(0u32), ntm_leaf(1u32)) != 1u8 { return 1u64 }
+    /* (2) refute a non-lemma: a=d (d=3 unreachable) */
+    if ld_is_lemma(ntm_leaf(0u32), ntm_leaf(3u32)) != 0u8 { return 2u64 }
+    /* (3) CONGRUENCE: a=b lifts to f(a,d)=f(b,d) */
+    if ld_is_lemma(ntm_f(0u32, 3u32), ntm_f(1u32, 3u32)) != 1u8 { return 3u64 }
+    /* (4) refute a structured non-lemma: f(a,d) != f(b,e) (d=3 != e=4) */
+    if ld_is_lemma(ntm_f(0u32, 3u32), ntm_f(1u32, 4u32)) != 0u8 { return 4u64 }
+
+    /* (5) systematic discovery over leaves 0..4 -> exactly {a=b,a=c,b=c} = 3 */
+    let nl : u32 = ld_discover(4u32, &LEMMAS as *u32, 32u32)
+    if nl != 3u32 { return 5u64 }
+
+    /* (6) the discovered set contains the non-obvious a=b (0,1) */
+    let mut found : u8 = 0u8
+    let mut i : u32 = 0u32
+    while i < nl {
+        if LEMMAS[(i * 2u32) as u64] == 0u32 { if LEMMAS[(i * 2u32 + 1u32) as u64] == 1u32 { found = 1u8 } }
+        i = i + 1u32
+    }
+    if found != 1u8 { return 6u64 }
+
+    return 99u64
+}

@@ -1,0 +1,79 @@
+/* STDLIB/iii/nous/nous_conjecture_gen.iii -- Conjecture increment 4: GENERALIZATION, soundly checked.
+ *
+ * SCOPE (read first): a STANDALONE, BOUNDED-DOMAIN generalization faculty. It conjectures a UNIVERSAL
+ * (forall x in 0..N: P(x)) -- the impulse to generalize from instances -- and the disposer VERIFIES
+ * it EXHAUSTIVELY over the bounded domain: a decision procedure, never sampling/observation/counting
+ * (so it honors the no-statistical-learning rule). A false generalization is REFUTED with a concrete
+ * COUNTEREXAMPLE. This is "the generalization that opens a [bounded] proof": the LEAP is the proposed
+ * universal; the SOUNDNESS is the exhaustive check -- NOT the partial instances that prompted it.
+ * (Unbounded N-induction, kernel-checked over all of N, is a deeper increment; the predicate here is
+ * COMPUTED real arithmetic, so P(x) at an unobserved x is DECIDED, not guessed.)
+ *
+ * Propose->dispose: ng_conjecture_universal PROPOSES the universal; the exhaustive ng_counterexample
+ * scan DISPOSES (statistic-blind). The proposer never decides; the decision procedure does.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: self-contained.  Determinism: u32 +/==/< only;
+ * &1 for mod-2 (no % after a call); no overflow (x <= N is small); single-line fns; no recursion.
+ */
+module nous_conjecture_gen
+
+const NG_OK       : i32 = 0i32
+const NG_ADMITTED : i32 = 1i32
+const NG_REFUTED  : i32 = -1i32
+
+const NG_PARITY_SQ   : u32 = 0u32   /* x*x == x (mod 2): squaring preserves parity -- TRUE forall x */
+const NG_CONSEC_EVEN : u32 = 1u32   /* x*(x+1) is even -- TRUE forall x */
+const NG_LT5         : u32 = 2u32   /* x < 5 -- FALSE for x>=5 (a bounded-false universal) */
+const NG_EVEN        : u32 = 3u32   /* x is even -- FALSE for odd x (the overgeneralization probe) */
+const NG_SQ_GE       : u32 = 4u32   /* x*x >= x -- TRUE forall x */
+
+/* The COMPUTED predicate (a real decision procedure over x). Unknown kind -> conservatively false,
+ * so an unrecognised universal is REFUTED, never falsely admitted. */
+fn ng_pred(kind: u32, x: u32) -> u8 @export {
+    if kind == NG_PARITY_SQ {
+        let sq : u32 = x * x
+        if (sq & 1u32) == (x & 1u32) { return 1u8 }
+        return 0u8
+    }
+    if kind == NG_CONSEC_EVEN {
+        let pr : u32 = x * (x + 1u32)
+        if (pr & 1u32) == 0u32 { return 1u8 }
+        return 0u8
+    }
+    if kind == NG_LT5 {
+        if x < 5u32 { return 1u8 }
+        return 0u8
+    }
+    if kind == NG_EVEN {
+        if (x & 1u32) == 0u32 { return 1u8 }
+        return 0u8
+    }
+    if kind == NG_SQ_GE {
+        let sq2 : u32 = x * x
+        if sq2 >= x { return 1u8 }
+        return 0u8
+    }
+    return 0u8
+}
+
+/* Smallest x in 0..n with P(x) FALSE; returns n if none (the universal holds over 0..n). */
+fn ng_counterexample(kind: u32, n: u32) -> u32 @export {
+    let mut x : u32 = 0u32
+    while x < n {
+        if ng_pred(kind, x) == 0u8 { return x }
+        x = x + 1u32
+    }
+    return n
+}
+
+/* PROPOSE the universal (forall x in 0..n: P(x)); DISPOSE by exhaustive verification.
+ * ADMITTED iff no counterexample exists in the domain; REFUTED otherwise. */
+fn ng_conjecture_universal(kind: u32, n: u32) -> i32 @export {
+    if ng_counterexample(kind, n) < n { return NG_REFUTED }
+    return NG_ADMITTED
+}
+
+/* An admitted universal entails the specific instance P(c) by instantiation; 1 iff P(c) holds. */
+fn ng_implies_instance(kind: u32, c: u32) -> u8 @export {
+    return ng_pred(kind, c)
+}

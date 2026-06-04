@@ -1,0 +1,46 @@
+/* STDLIB/iii/nous/nous_conjecture_lemma.iii -- Conjecture increment 5: LEMMA / equation discovery.
+ *
+ * COMPOSES the increment-3 term engine (nous_conjecture_term) -- it does NOT reimplement rewriting.
+ * A candidate equation u = v is a VALID LEMMA iff u and v are JOINABLE (reach a common term) under the
+ * current rewrite system -- a sound decision procedure (congruence closure), never observation. The
+ * proposer ENUMERATES candidate equations; the disposer (joinability) decides each. `ld_discover`
+ * surfaces the theory's equalities systematically, including NON-OBVIOUS ones not stated as rules:
+ * from `a->c, b->c` it discovers `a=b`, and -- because joinability is a congruence -- the structured
+ * lemma `f(a,d)=f(b,d)`. The leap is proposing the equation; the soundness is the joinability check.
+ *
+ * Hexad: kind_decision.  Ring: R0.  K: 1.00.  NIH: nous_conjecture_term only.  Determinism: u32 only;
+ * no recursion; single writer (the underlying engine's state is driven via nr_reset/nr_add).
+ */
+module nous_conjecture_lemma
+
+extern @abi(c-msvc-x64) fn ntm_leaf(s: u32) -> u32 from "nous_conjecture_term.iii"
+extern @abi(c-msvc-x64) fn ntm_joins(u: u32, v: u32) -> u8 from "nous_conjecture_term.iii"
+
+const LD_OK : i32 = 0i32
+
+/* A candidate equation u = v is a valid lemma iff u,v are joinable (equal in the theory). */
+fn ld_is_lemma(u: u32, v: u32) -> u8 @export {
+    return ntm_joins(u, v)
+}
+
+/* Discover all valid leaf-equations over symbols 0..n: enumerate pairs u<v<n, collect the joinable
+ * ones as (u,v) into `out` (2 u32 per lemma), return the lemma count (records up to `cap` pairs). */
+fn ld_discover(n: u32, out: *u32, cap: u32) -> u32 @export {
+    let mut cnt : u32 = 0u32
+    let mut u : u32 = 0u32
+    while u < n {
+        let mut v : u32 = u + 1u32
+        while v < n {
+            if ntm_joins(ntm_leaf(u), ntm_leaf(v)) == 1u8 {
+                if cnt < cap {
+                    out[(cnt * 2u32) as u64] = u
+                    out[(cnt * 2u32 + 1u32) as u64] = v
+                }
+                cnt = cnt + 1u32
+            }
+            v = v + 1u32
+        }
+        u = u + 1u32
+    }
+    return cnt
+}

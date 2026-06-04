@@ -744,6 +744,8 @@ MODULES=(
     "nous/nous_behavioral_key"
     "nous/nous_conjecture"
     "nous/nous_conjecture_term"
+    "nous/nous_conjecture_gen"
+    "nous/nous_conjecture_lemma"
     # mig4 Step 1: declarative XII rule LHS pattern table + structural matcher (consumed by
     # the Step-2 unifier for critical-pair enumeration).  Additive; externs xii_term +
     # xii_rewrite (built above).  Placed last so it cannot perturb any module's BSS layout.

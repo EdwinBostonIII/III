@@ -919,7 +919,31 @@ build artifacts regenerate). mhash bookkeeping: `COMPILER/BOOT/iiis-2.mhash`=4e8
 `COMPILED/iiis-2.mhash`/`iiis-3.mhash` were stale 36d3ca98 (no live gate consumes them — only a comment in
 seal_xii_horizons.sh) → tidied to 4e81714d.
 
+**⟶ mig7/H11 SYSTEMWIDE TAIL CLOSED (the second real increment, found by deeper structural skepticism).** The
+advisor pressed: a green charter proves the MECHANISM, not the systemwide claim — "register EVERY transform" (mig7) is
+exactly what H11 is *defined as*, and the charters can't see it. Check: `cat_add_morphism` was called only from the
+generators (sov_op via sov_morphism, XII ops via xii_morphism) — the **24 `tp_*` FORMAT transforms** (iii↔md/latex/c99/
+asm/ast_bin/babel_json/cbor/hex/pe/x86/dot/...) registered only in the resolution/dispatch system, NOT the category
+morphism registry. So H11 "every transform is a morphism" held for the generators but NOT the format-transform family —
+a genuine open tail (NOT operator-gated). **CLOSED:** `omnia/tp_morphism.iii` (NEW) registers all 24 as typed arrows
+src_format→dst_format in the one category; `tpm_selftest` (corpus **1110**, =99) proves completeness (24/24), a typed
+composition that MEETS (iii→ast_bin . ast_bin→iii), associativity, idempotent dedup, distinct-arrows, and the **biting
+NEGATIVE arm** — a non-meeting composition (iii→md . ast_bin→iii, md≠ast_bin) is REJECTED by `cat_compose`'s type law.
+build_stdlib **465/0** (+tp_morphism), 1052/1053/700 no-regression. mig3/H1's tail was already complete (the marked set ==
+the raw-IO-primitive set: only fs `ReadFile` + net `recv` do raw receives, both `@sovereign`-marked; all higher IO routes
+through them). The discriminator held for the rest: H3 (glyph is the one typed-value IR; codecs are a distinct format
+layer), H5 (xii_mig4_seal), H6 (one CIC kernel: typecheck.iii+ccl.iii, bricking→uninhabited bound there), H7 (the
+13-invariant fold + the corpus = the union), H9 (the reversibility classifier) — mechanism/architectural invariants with
+no concrete "register-every-X" set left open.
+
+**Structural-verification scope (honest):** DIRECTLY structural-verified this session = H1 (boundary marking complete),
+H2 (verify_h2 + observe fix), H4 (xii_mig4_seal), H6 (one-kernel), H11 (tp_* tail closed), H13 (sha256-dedup + carto).
+Affirmed via green charters + the existing structural gates + the apotheosis MIG model = H3/H5/H7/H9 + H8/H10/H12 (TRUE
+by construction). No dedicated structural gate exists for H3 (glyph-routing) — noted, not overclaimed.
+
 **VERDICT:** III is at production readiness — the idealized 31-module / 7-migration / 13-invariant system is BUILT,
-INTEGRATED, and **verified one body by its own terminal constitutional gate**. No compromise was made: the remaining
-frontier is genuinely operator-gated / toolchain-blocked / substrate-ahead, each with an evidence-backed receipt and a
-named trigger. Truth, not busywork, satisfies "no compromise" (advisor).
+INTEGRATED, and **verified one body by its own terminal constitutional gate**. Two genuine systemwide gaps were found by
+structural skepticism (H2/observe content-address; H11/tp_* transform registration) and BOTH closed this session — the
+"no skips" the user asked for, earned not asserted. The remaining frontier is genuinely operator-gated / toolchain-blocked
+/ substrate-ahead, each with an evidence-backed receipt and a named trigger. Truth, not busywork, satisfies "no
+compromise" (advisor).

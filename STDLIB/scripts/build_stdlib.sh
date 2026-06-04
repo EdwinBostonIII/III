@@ -670,6 +670,7 @@ MODULES=(
     "numera/category"
     "omnia/sov_morphism"
     "omnia/xii_morphism"
+    "omnia/tp_morphism"
     "numera/h9_mig2_tie"
     "numera/sheaf"
     "aether/manifest"

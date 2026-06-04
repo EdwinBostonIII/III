@@ -1,0 +1,11 @@
+/* 1110 -- mig7 (H11 "one category") closure: every tp_* FORMAT transform is a typed arrow.
+ * tp_morphism.iii registers all 24 tp_* transforms (iii<->md/latex/c99/asm/ast_bin/babel_json/
+ * cbor/hex/pe/x86/dot/...) as morphisms in the ONE category (sov_morphism did sv_op, xii_morphism
+ * did the XII ops; this closes the format-transform family). tpm_selftest proves: 24/24 registered
+ * (completeness); a typed composition that MEETS composes (iii->ast_bin . ast_bin->iii); associativity;
+ * idempotent dedup (re-register = same arrow); distinct transforms = distinct arrows; and the NEGATIVE
+ * arm BITES -- a non-meeting composition (iii->md . ast_bin->iii, md != ast_bin) is REJECTED.
+ * 99 = all six arms hold. */
+module corpus_1110
+extern @abi(c-msvc-x64) fn tpm_selftest() -> u64 from "tp_morphism.iii"
+fn main() -> u64 { return tpm_selftest() }

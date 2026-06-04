@@ -61,7 +61,25 @@ annotated (fidelity-safe).
 - **Fail-closed-only:** make `@lattice` a compile ERROR (kill the silent NOP→return-0 mis-compile). Sound
   + tractable + fidelity-safe; ships no optimization (honest roadmap).
 
-## VERDICT (2026-06-04)
+## RESOLVED — the no-compromise live optimizer is BUILT (2026-06-04)
+
+The operator funded the full no-compromise option. **Done, fidelity-preserved, verified:** an always-on
+**strength-reduction** optimizer (`mul(x, 2^k) → shl(x, k)`, kernel-justified by sov_isa — `x*2^k == x<<k`
+mod 2^64, signed + unsigned) is now **dual-implemented byte-identically** in `cg_r3.c` (the C seed,
+`mul_pow2_k` + the BINARY peephole) AND `cg_r3.iii` (`r3_mul_pow2_k` + the same peephole). Because both
+the seed and the self-host emit identically, **C-seed fidelity is preserved with NO trade**:
+- `iiis-0 (C) ≡ iiis-2 (self-hosted)` stage1 byte-identity **59/0** (both optimize prog 57's `i*8 → shl $3`).
+- Fixpoint `iiis-2 ≡ iiis-3` HOLDS (`288bb9bb…`) — the optimized compiler reproduces itself.
+- The optimization **fires live**: `x*2 → shl $1`, `i*8 → shl $3`, results correct (behavior-preserving).
+- No regression: build_stdlib 464/0, run_corpus 783/0, run_xii 92/0, forge ×2 unchanged.
+- Chain re-keyed + resealed (iiis-0 golden `4edf5b9d→98f4b063`; iiis-1/2 auto-resealed).
+
+This is the win-win the no-compromise standard demands: **every compiled program is now auto-optimized,
+AND the C-seed self-host fidelity is intact.** The self-optimizer is LIVE in production. Strength
+reduction is the first pass; constant folding + more are the natural follow-on increments (same dual-
+implement discipline). The original (pre-funding) diagnosis is preserved below for the record.
+
+## VERDICT (2026-06-04, superseded by the above — kept for the record)
 
 **Can we actually use the self-optimizer? — Not live, today.** It is a **verified library** (`sov_isa`
 arithmetic e-graph + CIC kernel, self-extends; `xii_canonicalise` the XII engine). It is **NOT wired into

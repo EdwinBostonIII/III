@@ -42,7 +42,15 @@ node_count) + 0 DEC_P + **0 INC_L/INC_N/STUCK**. No rule increases the new tier-
 
 ---
 
-## OPEN ITEM #2 — `xii_joinability` ground-instance vs MGU (analyzed; no witness; relocates to Step 3)
+## OPEN ITEM #2 — `xii_joinability` ground-instance vs MGU — **RESOLVED (positive)**
+
+**RESOLVED:** the residual relocated to Step-3 enumeration completeness, and the cross-check there is
+sound. `xro_count_overlaps` (`xii_rule_overlap.iii:91`) is **genuinely uncapped** — a pure double/triple
+loop counting every root pair + subterm triple into a `u64`, no `MAX` guard (≤49 rules → ~9600, far
+under u32). So `cpe_enumerate() == xro_count_overlaps()` is **non-vacuous**: a truncated enumeration
+(true count > `CPE_MAX`) ≠ the true count → the selftest reddens (also via `n1 > CPE_MAX`). Step 3 is a
+confirmed positive; confluence-via-critical-pairs is completeness-guarded. (Original analysis below.)
+
 
 The joinability gate builds each witness by instantiating constrained children via `_xjn_inst` — a
 **specific ground sentinel** (`make_basis(0,1)` for an unconstrained child), not a variable/MGU term.
@@ -141,6 +149,25 @@ ADMITTED); `dispose` checks its temp-add and refuses cleanly. **Forcing regressi
   `len > NOUS_KEY_MAXLEN`. No collision-via-truncation.
 - **`katabasis_gate_decide`**: a fail-closed conjunction — OK only if all five checks pass; any failure
   or fallthrough → reject (`KGV_FAIL_CLOSED`). No cap masquerades as OK.
+- **`bigint` / `ntt_bigint`**: `bigint_new` returns `BIGINT_INVALID` on a full 64-slot table; the
+  heaviest consumer (NTT) checks it AND does per-coefficient work in flat u32 scratch arrays — the
+  recursive-Karatsuba handle-exhaustion was *known* and structurally cured (D-KARA-1).
+- **proof kernel (`pt_verify` / `tc_alloc`)**: fail-closed — a proof verifies only if EVERY step passes;
+  capacity rejected at construction (`PT_E_TOO_MANY_STEPS`), never masked as VALID at verify time.
+- **`safety_type`**: the type-judge maps the 729 over-bound to `BOT_MALFORMED` (not a false `TYPE0`);
+  non-reachable → `BOT_UNREACHABLE`; only in-bound + reachable → `TYPE0`.
+- **`affine_audit` (AA-7)**: fail-closed BY EXPLICIT DESIGN — "a false PROVEN is forbidden; default on
+  ANY uncertainty to ABSTAIN." The conservative fail-safe, by construction.
+
+## CONVERGENCE
+
+The 3 soundness holes were the fail-**OPEN** exceptions — verdict gates that, on an internal cap,
+returned the SUCCESS-shaped value. **Every other verdict surface swept (10 positives) is fail-CLOSED** —
+uncertainty / cap / table-full → abstain / refuse / error. The system's general discipline is already
+the correct fail-safe; the audit found + fixed the three exceptions and confirmed the discipline holds
+everywhere else. Remaining (genuinely lower-yield): defensive `BIGINT_INVALID` checks on the bounded,
+vector-green crypto `bigint_new` callers (RSA/ed25519) — production robustness under exhaustion, no
+confirmed soundness impact.
 
 ## THE UNIFYING ANTI-PATTERN (the audit's central finding)
 

@@ -941,6 +941,29 @@ H2 (verify_h2 + observe fix), H4 (xii_mig4_seal), H6 (one-kernel), H11 (tp_* tai
 Affirmed via green charters + the existing structural gates + the apotheosis MIG model = H3/H5/H7/H9 + H8/H10/H12 (TRUE
 by construction). No dedicated structural gate exists for H3 (glyph-routing) — noted, not overclaimed.
 
+## ✅ FRONTIER RE-ADJUDICATED on the user's "if emit_generic & SHA-NI are worth it, implement in fullness" (2026-06-04)
+The user challenged the two receipts. Re-evaluated BOTH with evidence:
+- **emit_generic — PROVEN not worth it (evidence, not a dodge).** Diffed the shared-name cg_r0/cg_r3 function BODIES:
+  `emit_bytes` 58, `emit_dec` 54, `push_rax` 68, `emit_movabs_rax` 59 DIFFERING lines. cg_r0 (Ring-0, 8-byte-uniform)
+  and cg_r3 (Ring-3, width-aware) are genuinely DISTINCT backends, not redundancy. A parametric merge threads
+  `ring_config` through dozens of fns → a LESS-readable system → a COMPROMISE. "No compromise" forbids shipping worse
+  code to cut line count (q_generic-precedent verified-skip). The honest answer to "if worth it" is: it isn't. NOT built.
+- **SHA-NI — WORTH IT; implemented in FULLNESS (the whole userland cad SHA surface now NI).** It was built + AUTO→NI
+  dispatch-wired + golden-safe, but the hot consumers BYPASSED it (`cad` called `sha256.iii` direct; only `prespec` used
+  the dispatch). Routed the entire userland cad surface through the cpufeat dispatch (apotheosis M1·D1):
+  - ONESHOT — `cad_oneshot` (31 callers) + `merkle` leaf/node → `sha256_dispatch_oneshot`.
+  - STREAMING (the Crown/`mhash`, 16 callers) — `cad_begin/domain/payload/final` → NEW latched `sha256_dispatch_init/
+    update/final` (path latched at init; `update_byte(0)`→`dispatch_update(&CAD_ZERO,1)`, byte-identical).
+  - PACKED (2 callers) — `katabasis/quine_seal` + `seal` are RING-0 KERNEL; NI needs kernel XMM-state + is the
+    CRASH-PROTOCOL metal domain → correctly stays scalar (a principled boundary, not a skip).
+  PROOF: NEW corpus **1111** (NI streaming == software over lengths/multi-block/split-updates — the seal-critical path
+  proven BEFORE the Crown routes through it); `665` kept the direct `sha256_oneshot` as the SOFTWARE reference → a
+  cad-via-NI differential; build_stdlib **465/0**; **FULL corpus 785/0** (every cad seal/witness/charter/zk/merkle KAT
+  now NI-computed and byte-identical to its software golden — the real differential gate, covering the large multi-block
+  inputs 1020 cannot). GOLDEN: stdlib-only (compiler uses `cg_sha`, not stdlib cad/dispatch — nm-confirmed); the
+  archive-reshuffle golden move rides with the operator's `cg_r3` reseal (NO build_iiis2 run). Commit `f57f298`.
+  **REMAINING (sized, not skipped):** NI in the kernel packed path = a kernel-SSE-state + metal effort (operator domain).
+
 **VERDICT:** III is at production readiness — the idealized 31-module / 7-migration / 13-invariant system is BUILT,
 INTEGRATED, and **verified one body by its own terminal constitutional gate**. Two genuine systemwide gaps were found by
 structural skepticism (H2/observe content-address; H11/tp_* transform registration) and BOTH closed this session — the

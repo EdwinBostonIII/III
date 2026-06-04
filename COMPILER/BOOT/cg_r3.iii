@@ -225,9 +225,9 @@ extern @abi(c-msvc-x64) fn cgsha_init(ctx: u64) -> u32 from "cg_sha.iii"
 extern @abi(c-msvc-x64) fn cgsha_update(ctx: u64, addr: u64, n: u64) -> u32 from "cg_sha.iii"
 extern @abi(c-msvc-x64) fn cgsha_snapshot(ctx: u64, out: u64) -> u32 from "cg_sha.iii"
 var R3_SHA : [u64; 14]
-fn iii_cg_r3_sha_init_c() -> u32 { cgsha_init(&R3_SHA as u64); return 0u32 }
-fn iii_cg_r3_sha_update_c(addr: u64, n: u64) -> u32 { cgsha_update(&R3_SHA as u64, addr, n); return 0u32 }
-fn iii_cg_r3_sha_snapshot_c(out32: u64) -> u32 { cgsha_snapshot(&R3_SHA as u64, out32); return 0u32 }
+fn iii_cg_r3_sha_init_c() -> u32 { return cgsha_init(&R3_SHA as u64) }                          /* [unchecked-return] propagate cgsha rc */
+fn iii_cg_r3_sha_update_c(addr: u64, n: u64) -> u32 { return cgsha_update(&R3_SHA as u64, addr, n) }
+fn iii_cg_r3_sha_snapshot_c(out32: u64) -> u32 { return cgsha_snapshot(&R3_SHA as u64, out32) }
 
 /* XII gate externs (Phase XII-eta).  Linked in iiis-2 only (the C-side
  * implementations are guarded by IIIS_XII_ENABLED; without that define
@@ -1744,8 +1744,8 @@ fn iii_cg_r3_error_name(code: u32) -> u64 @export { if code == R3_OK { return &R
 
 fn iii_cg_r3_last_error() -> u32 @export { return R3_G_LAST_ERROR }
 fn iii_cg_r3_error_count() -> u32 @export { return R3_G_ERROR_COUNT }
-fn iii_cg_r3_get_witness(out32: u64) -> u32 @export { iii_emit_memcpy_c(out32, &R3_MHASH_CACHE as u64, 32u64); return R3_OK }
-fn iii_cg_r3_set_expected_witness(in32: u64) -> u32 @export { iii_emit_memcpy_c(&R3_EXPECTED_WITNESS as u64, in32, 32u64); R3_G_HAS_EXPECTED_WITNESS = 1u32; return R3_OK }
+fn iii_cg_r3_get_witness(out32: u64) -> u32 @export { if out32 == 0u64 { return R3_E_NULL_ARG }; iii_emit_memcpy_c(out32, &R3_MHASH_CACHE as u64, 32u64); return R3_OK }   /* [null-deref] C cg_r3.c:3553 `if(!cg||!out32)` */
+fn iii_cg_r3_set_expected_witness(in32: u64) -> u32 @export { if in32 == 0u64 { R3_G_HAS_EXPECTED_WITNESS = 0u32; return R3_OK }; iii_emit_memcpy_c(&R3_EXPECTED_WITNESS as u64, in32, 32u64); R3_G_HAS_EXPECTED_WITNESS = 1u32; return R3_OK }   /* [null-deref] C cg_r3.c:3564 guards memcpy on expected_mh32, else clears has_witness */
 fn r3_addr_eq_lit(addr: u64, len: u64, lit_addr: u64, lit_len: u64) -> u32 { if len != lit_len { return 0u32 }; if iii_emit_memcmp_c(addr, lit_addr, lit_len) == 0i32 { return 1u32 }; return 0u32 }
 fn iii_cg_r3_op_known_c(addr: u64, len: u64) -> i32 @export {
     if addr == 0u64 { return 0i32 }
@@ -2244,6 +2244,8 @@ var R3_K_DQUOTE_NL : [u8; 2] = [34u8, 10u8]
 const R3_K_DQUOTE_NL_LEN : u64 = 2u64
 var R3_K_TEXT_GLOB : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8, 32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8]
 const R3_K_TEXT_GLOB_LEN : u64 = 22u64
+var R3_K_TEXT : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 46u8, 116u8, 101u8, 120u8, 116u8, 10u8]
+const R3_K_TEXT_LEN : u64 = 10u64
 var R3_K_GLOBAL_PFX : [u8; 12] = [32u8, 32u8, 32u8, 32u8, 46u8, 103u8, 108u8, 111u8, 98u8, 97u8, 108u8, 32u8]
 const R3_K_GLOBAL_PFX_LEN : u64 = 12u64
 var R3_K_PUSHRBP : [u8; 15] = [32u8, 32u8, 32u8, 32u8, 112u8, 117u8, 115u8, 104u8, 113u8, 32u8, 37u8, 114u8, 98u8, 112u8, 10u8]
@@ -2619,12 +2621,18 @@ fn r3_emit_stmt(node: u32) -> u32 {
                 let r3_total_bytes: u64 = r3_elem_count * (r3_elem_width as u64)
                 let mut r3_total_slots: u32 = ((r3_total_bytes + 7u64) / 8u64) as u32
                 if r3_total_slots == 0u32 { r3_total_slots = 1u32 }
-                r3_local_add(off, len)
+                /* [array-frame-fix] Reserve the (nslots-1) EXTRA slots FIRST, then add the named
+                 * local LAST, so the array IDENT resolves to the BOTTOM slot of its reserved
+                 * region.  The existing array-decay `leaq -(slot+1)*8(%rbp)` then computes a[0]'s
+                 * address = the region base, so a[i]=base+i*stride grows UP through the reserved
+                 * region instead of UP PAST %rbp (which smashed the saved rbp + return address --
+                 * the local-array runtime-index SEGFAULT).  Mirrored byte-identically in cg_r3.c. */
                 let mut r3_extra: u32 = 1u32
                 while r3_extra < r3_total_slots {
                     r3_reserve_slot()
                     r3_extra = r3_extra + 1u32
                 }
+                r3_local_add(off, len)
                 if v != 0u32 {
                     r3_emit_expr(v)
                     r3_pop_rax()
@@ -3206,8 +3214,14 @@ fn r3_emit_function(node: u32, kind: u32) -> u32 {
         while ni < name_len { let b: u32 = iii_emit_buf_read_u8_c(src, (name_off + ni) as u64); if b == 34u32 { r3_emit_ch(95u32) } else { if b == 92u32 { r3_emit_ch(95u32) } else { r3_emit_ch(b) } }; ni = ni + 1u32 }
     }
     r3_emit_arr(&R3_K_DQUOTE_NL as u64, R3_K_DQUOTE_NL_LEN)
-    /* .text\n    .global <name>\n */
-    r3_emit_arr(&R3_K_TEXT_GLOB as u64, R3_K_TEXT_GLOB_LEN); r3_emit_fn_symbol(name_off, name_len, R3_G_CUR_EXPORT); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
+    /* .text\n always; .global <name>\n ONLY when @export — a non-@export fn becomes a
+     * module-LOCAL symbol (no .global), so private helpers no longer leak into the global
+     * link namespace.  Closes the dup-symbol class at the source + makes the cartographer
+     * dup-export gate complete (every global is now @export). */
+    r3_emit_arr(&R3_K_TEXT as u64, R3_K_TEXT_LEN)
+    let mut r3_glob : u32 = R3_G_CUR_EXPORT
+    if name_len == 4u32 { if iii_emit_memcmp_c(src + (name_off as u64), &R3_SYM_MAIN as u64, 4u64) == 0i32 { r3_glob = 1u32 } }   /* the entry point `main` is always global */
+    if r3_glob == 1u32 { r3_emit_arr(&R3_K_GLOBAL_PFX as u64, R3_K_GLOBAL_PFX_LEN); r3_emit_fn_symbol(name_off, name_len, R3_G_CUR_EXPORT); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN) }
     /*     .seh_proc <name>\n */
     r3_emit_arr(&R3_STR_SEH_PROC as u64, R3_STR_SEH_PROC_LEN); r3_emit_fn_symbol(name_off, name_len, R3_G_CUR_EXPORT); r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)
     /* <name>:\n */
@@ -3478,6 +3492,8 @@ fn _xii_hex_digit(v: u32) -> u32 {
  * iiis-1 stub path, so this never fires there). */
 fn r3_emit_xii_section_bytes(name_ptr: u64, name_len: u64, bytes: u64, bytes_len: u64) -> i32 @export {
     if R3_G_OUT == 0u64 { return -1i32 }
+    if name_len != 0u64 { if name_ptr == 0u64 { return -1i32 } }   /* [null-deref] caller pointers read in the emit loops */
+    if bytes_len != 0u64 { if bytes == 0u64 { return -1i32 } }
     r3_emit_arr(&R3_XII_DOT_SECTION as u64, R3_XII_DOT_SECTION_LEN)
     r3_emit_bytes(name_ptr, name_len)
     r3_emit_arr(&R3_STR_NL as u64, R3_STR_NL_LEN)

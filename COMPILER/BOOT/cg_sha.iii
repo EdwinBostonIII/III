@@ -127,6 +127,8 @@ fn cgsha_init(ctx: u64) -> u32 @export {
 }
 
 fn cgsha_update(ctx: u64, addr: u64, n: u64) -> u32 @export {
+    if ctx == 0u64 { return 1u32 }                       /* [null-deref] @export: ctx is the SHA state, addr the data */
+    if n != 0u64 { if addr == 0u64 { return 1u32 } }
     cgsha_wr64(ctx, 32u64, cgsha_rd64(ctx, 32u64) + n * 8u64)
     let mut rem: u64 = n
     let mut off: u64 = 0u64

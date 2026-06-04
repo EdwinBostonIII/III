@@ -62,7 +62,7 @@ DO_CLEAN=0
 
 # TUs ported from C to .iii.  Each entry maps "name.c" -> compile name.iii
 # via iiis-0 instead of gcc.  Keep this list LC_ALL=C sorted.
-PORTED_TUS=( acc ast ceiling cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha emit hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
+PORTED_TUS=( acc affine_audit ast ceiling cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha emit emit_sanctum hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
 
 usage() {
     cat <<'EOF' >&2
@@ -146,6 +146,7 @@ ALL_C="$( cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' \
             ! -name 'sign_*.c' \
             ! -name 'verify_*.c' \
             ! -name 'iiis1_link_stubs.c' \
+            ! -name 'rm2_driver.c' \
             | sed 's|^\./||' | LC_ALL=C sort -V )"
 
 OBJS=()

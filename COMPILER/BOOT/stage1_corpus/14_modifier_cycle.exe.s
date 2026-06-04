@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "compute"
     .text
-    .global L_compute
     .seh_proc L_compute
 L_compute:
     pushq %rbp

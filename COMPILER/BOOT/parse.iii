@@ -1653,9 +1653,12 @@ fn iiip_parse_arg_list(st: u64) -> u64 {
         let arg: u32 = iiip_parse_arg(st)
         if arg == 0u32 { go = 0u32 }
         if go == 1u32 {
-            iii_ast_open_list_push(ol, arg)
-            if iiip_accept(st, III_TOK_COMMA_P) == 0u32 { go = 0u32 }
-            if go == 1u32 { iiip_skip_newlines(st) }
+            let pr: i32 = iii_ast_open_list_push(ol, arg)
+            if pr == 0i32 { iiip_record_error(st, III_PARSE_E_OOM, iiip_peek(st), "argument list grow failed (out of memory)" as u64, PARSE_TOK_INVALID) ; go = 0u32 }   /* [soundness] OOM drop would compile a wrong-arity call */
+            if go == 1u32 {
+                if iiip_accept(st, III_TOK_COMMA_P) == 0u32 { go = 0u32 }
+                if go == 1u32 { iiip_skip_newlines(st) }
+            }
         }
     }
     return iii_ast_open_list_commit(iii_lex_read_u64_c(st, PS_AST), ol)
@@ -1798,8 +1801,9 @@ fn iiip_parse_pattern(st: u64) -> u32 {
                 let p: u32 = iiip_parse_pattern(st)
                 if p == 0u32 { go = 0u32 }
                 if go == 1u32 {
-                    iii_ast_open_list_push(ol, p)
-                    if iiip_accept(st, III_TOK_COMMA_P) == 0u32 { go = 0u32 }
+                    let pr: i32 = iii_ast_open_list_push(ol, p)
+                    if pr == 0i32 { iiip_record_error(st, III_PARSE_E_OOM, iiip_peek(st), "tuple pattern grow failed (out of memory)" as u64, PARSE_TOK_INVALID) ; go = 0u32 }   /* [soundness] OOM drop would compile a wrong-arity tuple pattern */
+                    if go == 1u32 { if iiip_accept(st, III_TOK_COMMA_P) == 0u32 { go = 0u32 } }
                 }
             }
         } }
@@ -2586,6 +2590,13 @@ fn iiip_attach_type_mods(st: u64, type_node: u32) -> u32 {
 
 fn iiip_parse_block(st: u64) -> u32 {
     if iiip_expect(st, III_TOK_LBRACE_P, &ST_KW as u64) == 0u32 { return 0u32 }
+    /* Push the BLOCK recursion budget (IIIP_PROD_BLOCK=256) for the duration of this block,
+     * so statement nesting inside it is NOT capped at the enclosing context's budget.  The
+     * budget table defines IIIP_PROD_BLOCK=256 expressly for this, but parse_block never pushed
+     * it -- so a function body inherited IIIP_PROD_FN_DECL's budget of 8, falsely rejecting any
+     * function nested deeper than ~8 with "parse recursion limit exceeded".  Popped before the
+     * single return below (bc stack is bounded + self-balancing; bc_pop is a no-op at depth 0). */
+    iiip_bc_push(st, IIIP_PROD_BLOCK, 0u32, 0u32)
     let lb_s: u32 = iii_lex_read_u32_c(&ST_KW as u64, TOK_START)
     let lb_e: u32 = iii_lex_read_u32_c(&ST_KW as u64, TOK_END)
     let lb_l: u32 = iii_lex_read_u32_c(&ST_KW as u64, TOK_LINE)
@@ -2615,6 +2626,7 @@ fn iiip_parse_block(st: u64) -> u32 {
     st_kw_pos(lb_s, lb_e, lb_l, lb_c)
     let n: u32 = iiip_alloc_node(st, PA_AST_EXPR_BLOCK, &NP_A as u64)
     if n != 0u32 { iii_lex_write_u64_c(iii_ast_get_mut(ast, n), 8u64, stmts) }
+    iiip_bc_pop(st)
     return n
 }
 
@@ -3172,6 +3184,9 @@ fn iiip_parse_var_decl(st: u64) -> u32 {
  * ============================================================================ */
 const PA_AST_SEALED_CALL_METHOD_DECL: u32 = 11u32
 const III_TOK_KW_SEALED_CALL_P: u32 = 23u32
+/* The lexer fuses the post-@ modifier name `seal_id` into MOD_SEAL_ID (kind 68, lex.iii:583/126),
+ * exactly as `@abi` -> MOD_ABI. The sealed_call grammar must accept it (mirror of III_TOK_MOD_ABI_P). */
+const III_TOK_MOD_SEAL_ID_P: u32 = 68u32
 
 var DC_TP : [u8; 104]
 
@@ -3311,10 +3326,19 @@ fn iiip_parse_sealed_call_method(st: u64) -> u32 {
     let mut ret: u32 = 0u32
     if iiip_accept(st, III_TOK_ARROW_P) == 1u32 { ret = iiip_parse_type_expr(st) }
     iiip_expect(st, III_TOK_AT_P, 0u64)
-    let lex: u64 = iii_lex_read_u64_c(st, PS_LEX)
-    iiip_expect(st, III_TOK_IDENTIFIER_P, &DC_TP as u64)
-    if iiip_raw_eq(st, &DC_TP as u64, "seal_id" as u64, 7u64) == 0u32 {
-        iiip_record_error(st, 7u32, &DC_TP as u64, "sealed_call declaration requires @seal_id(N) modifier" as u64, III_TOK_IDENTIFIER_P)
+    /* `seal_id` after `@` lexes as the fused MOD_SEAL_ID token, NOT a bare IDENTIFIER (mirror of
+     * iiip_extern_abi accepting MOD_ABI).  Accept either spelling, then consume the modifier name. */
+    let mk: u32 = iiip_peek_kind(st)
+    if mk == III_TOK_MOD_SEAL_ID_P {
+        iiip_advance(st, &ADV_SCRATCH as u64)
+    } else {
+        if iiip_expect(st, III_TOK_IDENTIFIER_P, &DC_TP as u64) == 0u32 {
+            iiip_record_error(st, 7u32, &DC_TP as u64, "sealed_call declaration requires @seal_id(N) modifier" as u64, III_TOK_IDENTIFIER_P)
+        } else {
+            if iiip_raw_eq(st, &DC_TP as u64, "seal_id" as u64, 7u64) == 0u32 {
+                iiip_record_error(st, 7u32, &DC_TP as u64, "sealed_call declaration requires @seal_id(N) modifier" as u64, III_TOK_IDENTIFIER_P)
+            }
+        }
     }
     iiip_expect(st, III_TOK_LPAREN_P, 0u64)
     iiip_expect(st, III_TOK_INT_LITERAL_P, &DC_TP as u64)

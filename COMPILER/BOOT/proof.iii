@@ -963,6 +963,7 @@ fn iii_proof_error_count(p: u64) -> u32 @export {
 }
 
 fn iii_proof_error_at(p: u64, i: u32, out: *u8) -> u32 @export {
+    if (out as u64) == 0u64 { return 0u32 }   /* [null-deref] C proof.c:456 `if(!out) return;` -- guard before the 16-byte zero-fill */
         /* Zero out the 16-byte struct first (sizeof iii_proof_error_t). */
     for k in 0..16 {
         out[k as u64] = 0u8
@@ -1009,6 +1010,7 @@ fn iii_proof_error_name(code: i32) -> u64 @export {
 
 fn iii_proof_cert_for_decl(p: u64, decl_node: u32, out: *u8) -> u8 @export {
     if p == 0u64 { return 0u8 }
+    if (out as u64) == 0u64 { return 0u8 }    /* [null-deref] C proof.c:477 `if(!p || !out) return false;` */
         let mut i: u32 = 0u32
     while i < PF_CERT_COUNT {
         if PF_CERT_NODE[i] == decl_node {

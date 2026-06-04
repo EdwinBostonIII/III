@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "helper"
     .text
-    .global L_helper
     .seh_proc L_helper
 L_helper:
     pushq %rbp

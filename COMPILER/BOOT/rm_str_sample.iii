@@ -1,0 +1,11 @@
+module rm_str_sample
+
+/* Gate coverage for the sanctum string_pool loop (a string payload exercises per-byte escaping +
+ * the rodata pool emit), complementing rm2_sample which covers only the empty-pool prefix. */
+extern @abi(c-sysv-x64) fn iii_cap_revoke(h: u64) -> u64 from "sanctum_rt"
+
+sealed_call do_str(x: u64) @seal_id(1) {
+    iii_cap_revoke(x)
+    let s: *u8 = "hi\n\"x" as *u8
+    return x
+}

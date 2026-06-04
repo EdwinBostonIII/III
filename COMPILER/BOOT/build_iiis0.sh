@@ -223,6 +223,7 @@ do_build() {
                  ! -name 'sign_*.c' \
                  ! -name 'verify_*.c' \
                  ! -name 'iiis1_*.c' \
+                 ! -name 'rm2_driver.c' \
                  | sed 's|^\./||' | LC_ALL=C sort -V )"
 
     # Optional TUs: skip-with-warning if absent; emit deterministic

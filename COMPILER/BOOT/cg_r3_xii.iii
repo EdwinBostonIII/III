@@ -23,6 +23,7 @@ extern @abi(c-msvc-x64) fn r3_ast_to_xii_term(ast: u64, body_node: u64) -> u32 f
 extern @abi(c-msvc-x64) fn emit_section_bytes(section_name: u64, bytes: u64, len: u32) -> i32 from "cg_r3_xii_adapter.iii"
 extern @abi(c-msvc-x64) fn emit_current_text_offset() -> u64 from "cg_r3_xii_adapter.iii"
 extern @abi(c-msvc-x64) fn xii_canonicalise(term: u32) -> u32 from "xii_canonicalise.iii"
+extern @abi(c-msvc-x64) fn xii_canonicalise_gapped() -> u8 from "xii_canonicalise.iii"
 extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> u32 from "xii_term.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_is_productive(horizon_id: u32) -> u8 from "xii_horizon.iii"
 extern @abi(c-msvc-x64) fn xii_horizon_ct_kind(horizon_id: u32) -> u8 from "xii_horizon.iii"
@@ -89,6 +90,7 @@ fn r3_pe_canonicalise(ast: u64, fn_node: u64) -> i32 @export {
     let term : u32 = r3_ast_to_xii_term(a, body)
     if term == XR_NULL_REF { return XII_R3_FAIL }
     xii_canonicalise(term)
+    if xii_canonicalise_gapped() == 1u8 { return XII_R3_FAIL }   /* [soundness] step-cap hit -> partial reduction, not canonical */
     return XII_R3_OK
 }
 
@@ -97,7 +99,9 @@ fn r3_pe_canonicalise(ast: u64, fn_node: u64) -> i32 @export {
  * trap; 144 is not a power of two). */
 fn r3_select_horizon_for_term(ast: u64, fn_node: u64) -> u32 {
     let fnn : u64 = fn_node
-    let hexad : u32 = sema_get_anno_u32(fnn, 0x07i32, 6u32)
+    let mut hexad : u32 = sema_get_anno_u32(fnn, 0x07i32, 6u32)
+    if hexad == 0u32 { hexad = 6u32 }            /* [overflow] 0 is not a valid hexad; (hexad-1) would wrap */
+    if hexad > 6u32 { hexad = 6u32 }             /* clamp to the 1..6 hexad range */
     let k : u32 = sema_get_anno_u32(fnn, 0x05i32, 1u32)
     let base : u32 = (hexad - 1u32) * 18u32 + (k & 0xFu32)
     let mut i : u32 = 0u32

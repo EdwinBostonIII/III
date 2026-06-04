@@ -208,6 +208,13 @@ extern @abi(c-msvc-x64) fn iii_ast_const_decl_value(ast: u64, node: u32) -> u32 
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_off(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_name_len(ast: u64, node: u32) -> u32 from "sema_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_type(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+/* [u32-width fix 2026-06-04] mirror cg_r3's width-aware codegen: a u32 value must stay clean
+   (high 32 = 0) in %rax so a later shr/cmp/div/mod reads the right bits.  These 4 accessors let
+   r0_expr_is_u32 derive a node's width (already in cg_r3; cg_r0 was 8-byte-uniform and omitted them). */
+extern @abi(c-msvc-x64) fn iii_ast_let_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_cast_target_type(ast: u64, node: u32) -> u32 from "sema_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_off(ast: u64, node: u32) -> u32 from "ast_accessors.c"
+extern @abi(c-msvc-x64) fn iii_ast_type_ref_name_len(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_var_decl_init(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_count(ast: u64, node: u32) -> u32 from "ast_accessors.c"
 extern @abi(c-msvc-x64) fn iii_ast_parallel_branch_at(ast: u64, node: u32, i: u32) -> u32 from "ast_accessors.c"
@@ -426,6 +433,17 @@ var R0_STR_DASH_OPEN : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 
 const R0_STR_DASH_OPEN_LEN : u64 = 10u64
 var R0_STR_BPCMA_RAX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
 const R0_STR_BPCMA_RAX_LEN : u64 = 13u64
+/* [u32-width fix] width-aware u32 forms (mirror cg_r3): movl loads into %eax (auto-zeros high 32). */
+var R0_STR_MOVL_DASH : [u8; 10] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 108u8, 32u8, 45u8]   /* "    movl -" */
+const R0_STR_MOVL_DASH_LEN : u64 = 10u64
+var R0_STR_BPCMA_EAX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 101u8, 97u8, 120u8, 10u8]   /* "(%rbp), %eax\n" */
+const R0_STR_BPCMA_EAX_LEN : u64 = 13u64
+var R0_STR_MOVL_EE : [u8; 20] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 108u8, 32u8, 37u8, 101u8, 97u8, 120u8, 44u8, 32u8, 37u8, 101u8, 97u8, 120u8, 10u8]   /* "    movl %eax, %eax\n" (truncate-to-32) */
+const R0_STR_MOVL_EE_LEN : u64 = 20u64
+var R0_TY_U32 : [u8; 3] = [117u8, 51u8, 50u8]   /* "u32" */
+const R0_TY_U32_LEN : u64 = 3u64
+var R0_TY_I32 : [u8; 3] = [105u8, 51u8, 50u8]   /* "i32" */
+const R0_TY_I32_LEN : u64 = 3u64
 var R0_STR_BPCMA_RCX : [u8; 13] = [40u8, 37u8, 114u8, 98u8, 112u8, 41u8, 44u8, 32u8, 37u8, 114u8, 99u8, 120u8, 10u8]
 const R0_STR_BPCMA_RCX_LEN : u64 = 13u64
 var R0_STR_DEREF_RAX : [u8; 22] = [32u8, 32u8, 32u8, 32u8, 109u8, 111u8, 118u8, 113u8, 32u8, 40u8, 37u8, 114u8, 97u8, 120u8, 41u8, 44u8, 32u8, 37u8, 114u8, 97u8, 120u8, 10u8]
@@ -735,6 +753,46 @@ fn r0_emit_pattern_compare(pat: u32, end_label_id: u32) -> u32 { let pk: u32 = i
 
 
 /* ─────────────── emit_expr ─────────────── */
+/* [u32-width fix] is this type-ref node u32/i32 (4-byte)?  (mirror r3_tref_is_u32) */
+fn r0_tref_is_u32(tn: u32) -> u32 {
+    if tn == 0u32 { return 0u32 }
+    if iii_ast_node_kind(R0_G_AST, tn) != R0_K_TYPE_REF { return 0u32 }
+    let len: u32 = iii_ast_type_ref_name_len(R0_G_AST, tn)
+    if len != 3u32 { return 0u32 }
+    let off: u32 = iii_ast_type_ref_name_off(R0_G_AST, tn)
+    let src: u64 = iii_ast_source_buf(R0_G_AST)
+    if iii_emit_memcmp_c(src + (off as u64), &R0_TY_U32 as u64, 3u64) == 0i32 { return 1u32 }
+    /* i32 is NOT u32 (fixed 2026-06-04): u32 IDENT loads zero-extend (movl %eax), which is correct
+       for UNSIGNED 32-bit, but a SIGNED i32 must SIGN-extend.  The earlier u32-width fix wrongly
+       grouped i32 here -> i32 negatives loaded zero-extended (-1 became 0x00000000FFFFFFFF), so
+       `i32val == -1i32` (the inline literal is full-width 0xFFFFFFFFFFFFFFFF) compared UNEQUAL ->
+       the trit Kleene `== -1i32` checks failed -> hexad composition wrong -> REJECT_HEXAD admitted
+       a HOST_SAVE brick write on metal (gate_client case 4 FAIL, 2026-06-04).  i32 now falls through
+       to the full-width movq load (the original 8-byte-uniform path) -- negatives stay sign-correct. */
+    return 0u32
+}
+/* [u32-width fix] does this expression evaluate to a 32-bit value?  Derived the SAME way cg_r3 does
+   (no per-node type annotation exists): a binary's width = its LHS; an ident's = its binder's decl
+   type.  When 1, the emitter truncates the result to 32 bits so high-half carry/shift garbage cannot
+   leak into a subsequent shr/cmp/div/mod (the Ring-0 sha256 defect found 2026-06-04). */
+fn r0_expr_is_u32(node: u32) -> u32 {
+    if node == 0u32 { return 0u32 }
+    let nk: u32 = iii_ast_node_kind(R0_G_AST, node)
+    if nk == R0_K_EXPR_PAREN { return r0_expr_is_u32(iii_ast_paren_inner(R0_G_AST, node)) }
+    if nk == R0_K_EXPR_CAST { return r0_tref_is_u32(iii_ast_cast_target_type(R0_G_AST, node)) }
+    if nk == R0_K_EXPR_BINARY { return r0_expr_is_u32(iii_ast_binary_lhs(R0_G_AST, node)) }
+    if nk == R0_K_EXPR_UNARY { return r0_expr_is_u32(iii_ast_unary_operand(R0_G_AST, node)) }
+    if nk == R0_K_EXPR_IDENT {
+        let bid: u32 = iii_ast_node_binder_id(R0_G_AST, node)
+        if bid == 0u32 { return 0u32 }
+        let bk: u32 = iii_ast_node_kind(R0_G_AST, bid)
+        if bk == R0_K_STMT_LET { return r0_tref_is_u32(iii_ast_let_type(R0_G_AST, bid)) }
+        if bk == R0_K_PARAM { return r0_tref_is_u32(iii_ast_param_type(R0_G_AST, bid)) }
+        if bk == R0_K_VAR_DECL { return r0_tref_is_u32(iii_ast_var_decl_type(R0_G_AST, bid)) }
+        if bk == R0_K_CONST_DECL { return r0_tref_is_u32(iii_ast_const_decl_type(R0_G_AST, bid)) }
+    }
+    return 0u32
+}
 fn r0_emit_expr(node: u32) -> u32 {
     if node == 0u32 { return R0_OK }
     let k: u32 = iii_ast_node_kind(R0_G_AST, node)
@@ -771,7 +829,7 @@ fn r0_emit_expr(node: u32) -> u32 {
         let off: u32 = iii_ast_ident_name_offset(R0_G_AST, node)
         let len: u32 = iii_ast_ident_name_length(R0_G_AST, node)
         let s: i32 = r0_local_lookup(off, len)
-        if s >= 0i32 { r0_emit_arr(&R0_STR_DASH_OPEN as u64, R0_STR_DASH_OPEN_LEN); r0_emit_dec((((s as u32)+1u32)*8u32) as u64); r0_emit_arr(&R0_STR_BPCMA_RAX as u64, R0_STR_BPCMA_RAX_LEN); r0_push_rax(); return R0_OK }
+        if s >= 0i32 { if r0_expr_is_u32(node) == 1u32 { r0_emit_arr(&R0_STR_MOVL_DASH as u64, R0_STR_MOVL_DASH_LEN); r0_emit_dec((((s as u32)+1u32)*8u32) as u64); r0_emit_arr(&R0_STR_BPCMA_EAX as u64, R0_STR_BPCMA_EAX_LEN) } else { r0_emit_arr(&R0_STR_DASH_OPEN as u64, R0_STR_DASH_OPEN_LEN); r0_emit_dec((((s as u32)+1u32)*8u32) as u64); r0_emit_arr(&R0_STR_BPCMA_RAX as u64, R0_STR_BPCMA_RAX_LEN) }; r0_push_rax(); return R0_OK }
         /* Tier-2 Inc-1: module CONST / non-array VAR -> load VALUE (movq), not address.
            Functions, var-arrays, and unbound idents fall through to leaq (address). */
         let bid: u32 = iii_ast_node_binder_id(R0_G_AST, node)
@@ -807,15 +865,15 @@ fn r0_emit_expr(node: u32) -> u32 {
         let rhs: u32 = iii_ast_binary_rhs(R0_G_AST, node)
         let op: u32 = iii_ast_binary_op(R0_G_AST, node)
         let le: u32 = r0_emit_expr(lhs); if le != R0_OK { return le }; let re: u32 = r0_emit_expr(rhs); if re != R0_OK { return re }; r0_pop_rcx(); r0_pop_rax()
-        if op == 1u32 { r0_emit_arr(&R0_STR_ADDQ as u64, R0_STR_ADDQ_LEN) }
-        if op == 2u32 { r0_emit_arr(&R0_STR_SUBQ as u64, R0_STR_SUBQ_LEN) }
-        if op == 3u32 { r0_emit_arr(&R0_STR_IMULQ as u64, R0_STR_IMULQ_LEN) }
+        if op == 1u32 { r0_emit_arr(&R0_STR_ADDQ as u64, R0_STR_ADDQ_LEN); if r0_expr_is_u32(lhs) == 1u32 { r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN) } }
+        if op == 2u32 { r0_emit_arr(&R0_STR_SUBQ as u64, R0_STR_SUBQ_LEN); if r0_expr_is_u32(lhs) == 1u32 { r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN) } }
+        if op == 3u32 { r0_emit_arr(&R0_STR_IMULQ as u64, R0_STR_IMULQ_LEN); if r0_expr_is_u32(lhs) == 1u32 { r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN) } }
         if op == 4u32 { r0_emit_arr(&R0_STR_IDIV as u64, R0_STR_IDIV_LEN) }
         if op == 5u32 { r0_emit_arr(&R0_STR_IDIVMOD as u64, R0_STR_IDIVMOD_LEN) }
         if op == 6u32 { r0_emit_arr(&R0_STR_ANDQ as u64, R0_STR_ANDQ_LEN) }
         if op == 7u32 { r0_emit_arr(&R0_STR_ORQ as u64, R0_STR_ORQ_LEN) }
         if op == 8u32 { r0_emit_arr(&R0_STR_XORQ as u64, R0_STR_XORQ_LEN) }
-        if op == 9u32 { r0_emit_arr(&R0_STR_SHLQ as u64, R0_STR_SHLQ_LEN) }
+        if op == 9u32 { r0_emit_arr(&R0_STR_SHLQ as u64, R0_STR_SHLQ_LEN); if r0_expr_is_u32(lhs) == 1u32 { r0_emit_arr(&R0_STR_MOVL_EE as u64, R0_STR_MOVL_EE_LEN) } }
         if op == 10u32 { r0_emit_arr(&R0_STR_SHRQ as u64, R0_STR_SHRQ_LEN) }
         if op == 11u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETE as u64, R0_STR_SETE_LEN) }
         if op == 12u32 { r0_emit_arr(&R0_STR_CMP_RCX_RAX as u64, R0_STR_CMP_RCX_RAX_LEN); r0_emit_arr(&R0_STR_SETNE as u64, R0_STR_SETNE_LEN) }
@@ -1335,7 +1393,7 @@ fn r0_emit_data_decls() -> u32 {
 fn r0_any_irp_handler() -> u32 { let mut i: u32 = 0u32; while i < R0_MAX_IRP { if R0_IRP_HANDLER_VALID[i] != 0u32 { return 1u32 }; i = i + 1u32 }; return 0u32 }
 
 fn iii_cg_r0_emit_module(cg: u64, out: u64) -> u32 @export {
-    if cg == 0u64 { return R0_E_NULL_ARG }
+    if cg == 0u64 { R0_G_LAST_ERROR = R0_E_NULL_ARG; return R0_E_NULL_ARG }   /* [design] set error-state like the sibling guards */
     if out == 0u64 { R0_G_LAST_ERROR = R0_E_NULL_ARG; return R0_E_NULL_ARG }
     if R0_G_SEALED != 0u32 { R0_G_LAST_ERROR = R0_E_SEALED; return R0_E_SEALED }
     R0_G_OUT = out
@@ -1378,7 +1436,7 @@ fn iii_cg_r0_emit_module(cg: u64, out: u64) -> u32 @export {
     return R0_OK
 }
 
-fn iii_cg_r0_get_witness(cg: u64, out32: u64) -> u32 @export { if cg == 0u64 { return R0_E_NULL_ARG }; if out32 == 0u64 { return R0_E_NULL_ARG }; iii_emit_memcpy_c(out32, &R0_MHASH_CACHE as u64, 32u64); return R0_OK }
+fn iii_cg_r0_get_witness(cg: u64, out32: u64) -> u32 @export { if cg == 0u64 { R0_G_LAST_ERROR = R0_E_NULL_ARG; return R0_E_NULL_ARG }; if out32 == 0u64 { R0_G_LAST_ERROR = R0_E_NULL_ARG; return R0_E_NULL_ARG }; iii_emit_memcpy_c(out32, &R0_MHASH_CACHE as u64, 32u64); return R0_OK }   /* [design] set error-state */
 
 fn iii_cg_r0_last_error(cg: u64) -> u32 @export { if cg == 0u64 { return R0_E_NULL_ARG }; return R0_G_LAST_ERROR }
 

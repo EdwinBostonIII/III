@@ -776,8 +776,8 @@ fn sid_record_call(rec_idx: u32, kind: u32) -> u32 {
             if iii_hexad_packed_admitted(composed) == 0u8 {
                 sid_emit_error(SID_E_HEXAD_COMPOSE_FAIL, sid_rec_decl_node(rec_idx))
             }
-            sid_rec_set_composed(rec_idx, composed)
         }
+        sid_rec_set_composed(rec_idx, composed)   /* [C-fidelity sid.c:300] set composed_hexad UNCONDITIONALLY; the prior code left it stale (=prev) on compose-fail (composed==UNSET) */
     }
     /* Replay bitmap bit cc (0-indexed). */
     let bm : u32 = sid_rec_replay(rec_idx)

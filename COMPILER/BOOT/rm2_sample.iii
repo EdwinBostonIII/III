@@ -1,0 +1,13 @@
+module rm2_sample
+
+/* iii_cap_revoke is the sanctum-runtime capability-revoke primitive. cg_rm2 recognises the call by
+ * name (sets RM2_G_CAP_REVOKE -- a sealed_call entry MUST revoke its cap), but sema still needs it
+ * declared. The sanctum runtime provides the symbol at link time. */
+extern @abi(c-sysv-x64) fn iii_cap_revoke(h: u64) -> u64 from "sanctum_rt"
+
+sealed_call do_thing(x: u64) @seal_id(1) {
+    iii_cap_revoke(x)
+    let a: u64 = x + x
+    let b: u64 = a + x
+    return b
+}

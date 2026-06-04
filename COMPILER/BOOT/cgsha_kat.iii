@@ -1,0 +1,52 @@
+/* cgsha_kat.iii -- the standalone KAT cg_sha.iii's header (line 22) promised but that did not exist.
+ *
+ * Proves the codegen-witness SHA-256 (cg_sha.iii) against the FIPS 180-4 "abc" vector AND proves the
+ * snapshot is NON-DESTRUCTIVE (the witness must keep streaming after a snapshot).  Built + run by
+ * build_cgsha_kat.sh:  iiis-2 compiles cg_sha.iii + this KAT, links them, runs -> exit 99 = pass.
+ *
+ *   SHA-256("abc") = ba7816bf 8f01cfea 414140de 5dae2223 b00361a3 96177a9c b410ff61 f20015ad
+ */
+module cgsha_kat
+
+extern @abi(c-msvc-x64) fn cgsha_init(ctx: u64) -> u32 from "cg_sha.iii"
+extern @abi(c-msvc-x64) fn cgsha_update(ctx: u64, addr: u64, n: u64) -> u32 from "cg_sha.iii"
+extern @abi(c-msvc-x64) fn cgsha_snapshot(ctx: u64, out: u64) -> u32 from "cg_sha.iii"
+
+var CGK_CTX : [u64; 14]        /* 112-byte streaming context */
+var CGK_OUT : [u8; 32]
+var CGK_MSG : [u8; 3] = [97u8, 98u8, 99u8]    /* "abc" */
+var CGK_EXP : [u8; 32] = [0xBAu8,0x78u8,0x16u8,0xBFu8, 0x8Fu8,0x01u8,0xCFu8,0xEAu8,
+                          0x41u8,0x41u8,0x40u8,0xDEu8, 0x5Du8,0xAEu8,0x22u8,0x23u8,
+                          0xB0u8,0x03u8,0x61u8,0xA3u8, 0x96u8,0x17u8,0x7Au8,0x9Cu8,
+                          0xB4u8,0x10u8,0xFFu8,0x61u8, 0xF2u8,0x00u8,0x15u8,0xADu8]
+
+fn cgk_eq32(a: u64, b: u64) -> u32 {
+    let mut i : u64 = 0u64
+    while i < 32u64 {
+        let pa : *u8 = (a + i) as *u8
+        let pb : *u8 = (b + i) as *u8
+        if pa[0] != pb[0] { return 0u32 }
+        i = i + 1u64
+    }
+    return 1u32
+}
+
+fn main() -> u64 {
+    /* ARM 1 -- FIPS "abc" one-shot. */
+    cgsha_init(&CGK_CTX as u64)
+    cgsha_update(&CGK_CTX as u64, &CGK_MSG as u64, 3u64)
+    cgsha_snapshot(&CGK_CTX as u64, &CGK_OUT as u64)
+    if cgk_eq32(&CGK_OUT as u64, &CGK_EXP as u64) != 1u32 { return 1u64 }
+
+    /* ARM 2 -- snapshot NON-DESTRUCTIVE: stream "a", snapshot mid-flight, then stream "bc" and snapshot
+       again.  If the first snapshot corrupted the live ctx the final digest would differ; it must still
+       equal SHA("abc"). */
+    cgsha_init(&CGK_CTX as u64)
+    cgsha_update(&CGK_CTX as u64, &CGK_MSG as u64, 1u64)               /* "a"  */
+    cgsha_snapshot(&CGK_CTX as u64, &CGK_OUT as u64)                   /* mid-stream snapshot */
+    cgsha_update(&CGK_CTX as u64, (&CGK_MSG as u64) + 1u64, 2u64)      /* "bc" */
+    cgsha_snapshot(&CGK_CTX as u64, &CGK_OUT as u64)
+    if cgk_eq32(&CGK_OUT as u64, &CGK_EXP as u64) != 1u32 { return 2u64 }
+
+    return 99u64
+}

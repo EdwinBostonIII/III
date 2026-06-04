@@ -2196,10 +2196,16 @@ static int emit_stmt(iii_cg_r3_state_t *cg, uint32_t node)
                 uint32_t total_bytes = elem_count * (uint32_t)elem_width;
                 uint32_t total_slots = (total_bytes + 7u) / 8u;
                 if (total_slots == 0) total_slots = 1;
-                local_add(cg, n->u.let_.name);
+                /* [array-frame-fix] Reserve the (nslots-1) EXTRA slots FIRST, then add the named
+                 * local LAST, so the array IDENT resolves to the BOTTOM slot of its reserved
+                 * region.  The existing array-decay `leaq -(slot+1)*8(%rbp)` then computes a[0]'s
+                 * address = the region base, so a[i]=base+i*stride grows UP through the reserved
+                 * region instead of UP PAST %rbp (which smashed the saved rbp + return address --
+                 * the local-array runtime-index SEGFAULT).  Mirrored byte-identically in cg_r3.iii. */
                 for (uint32_t extra = 1; extra < total_slots; extra++) {
                     cg->local_count++;
                 }
+                local_add(cg, n->u.let_.name);
                 /* No initializer for array lets is permitted; if one
                  * was supplied (e.g. `let buf : [u8;16] = [0u8; 16]`)
                  * evaluate-and-discard.  Repeat-initializer codegen is
@@ -3019,9 +3025,23 @@ static int emit_function(iii_cg_r3_state_t *cg,
     }
     cg_write_str(cg, "\"\n");
 
-    cg_write_str(cg, "    .text\n    .global ");
-    if (cg->cur_export) emit_raw_symbol(cg, name); else emit_decl_label(cg, name);
-    cg_write_char(cg, '\n');
+    /* .text always; .global <name> ONLY when @export -- a non-@export fn becomes a
+     * module-LOCAL symbol so private helpers no longer leak into the global link
+     * namespace.  Must stay byte-identical to cg_r3.iii (the --check-corpus gate). */
+    cg_write_str(cg, "    .text\n");
+    {
+        /* the entry point `main` is always global (host linker finds it), even
+         * though it is non-@export -- mirrors cg_r3.iii's r3_glob check. */
+        const uint8_t *src_m = iii_ast_source_buf(cg->ast);
+        bool is_main_fn = (src_m && name.length == 4
+                           && src_m[name.offset + 0] == 'm' && src_m[name.offset + 1] == 'a'
+                           && src_m[name.offset + 2] == 'i' && src_m[name.offset + 3] == 'n');
+        if (cg->cur_export || is_main_fn) {
+            cg_write_str(cg, "    .global ");
+            emit_raw_symbol(cg, name);
+            cg_write_char(cg, '\n');
+        }
+    }
 
     /* D4: SEH unwind-info bracket.  Windows x64 unwind spec requires
      * pushreg → stackalloc → setframe → endprologue ordering. */

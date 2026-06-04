@@ -1686,9 +1686,9 @@ fn iii_ast_list_at(ast: u64, list_packed: u64, i: u32) -> u32 @export {
     let cnt: u32 = (list_packed >> 32u64) as u32
     if i >= cnt { return 0u32 }
     let used: u32 = iii_lex_read_u32_c(ast, AST_OFF_LIST_USED)
-    if (off + i) >= used { return 0u32 }
+    if ((off as u64) + (i as u64)) >= (used as u64) { return 0u32 }   /* [overflow] u32 off+i could wrap past the bound; widen to u64 */
     let la: u64 = iii_lex_read_u64_c(ast, AST_OFF_LIST_ARENA)
-    return iii_lex_read_u32_c(la + ((off + i) as u64) * 4u64, 0u64)
+    return iii_lex_read_u32_c(la + ((off as u64) + (i as u64)) * 4u64, 0u64)
 }
 
 /* ============================================================================

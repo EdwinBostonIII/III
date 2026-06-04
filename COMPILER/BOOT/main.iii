@@ -746,9 +746,15 @@ fn iii_mhash_file(path: u64, out: u64) -> u32 {
     msha256_final(out)
     return 0u32
 }
-/* dst <- base (NUL-term) ++ suffix(litlen) ++ NUL. */
-fn iiim_path_suffix(dst: u64, base: u64, suffix: u64, slen: u64) -> u32 {
+/* dst <- base (NUL-term) ++ suffix(litlen) ++ NUL, bounded by dst_cap.
+ * Returns 0 on success, 1 on overflow (writes a clean empty string so a downstream
+ * fopen fails gracefully instead of an OOB write past the fixed dst buffer).
+ * [OOB] base is a CLI-derived path of unbounded length; dst is a fixed 1024/2048-byte array. */
+fn iiim_path_suffix(dst: u64, dst_cap: u64, base: u64, suffix: u64, slen: u64) -> u32 {
+    if dst_cap == 0u64 { return 1u32 }
     let bl: u64 = iiim_strlen(base)
+    if bl > dst_cap - 1u64 { iii_lex_write_u8_at_c(dst, 0u64, 0u32) ; return 1u32 }
+    if slen > (dst_cap - 1u64) - bl { iii_lex_write_u8_at_c(dst, 0u64, 0u32) ; return 1u32 }
     iii_lex_memcpy_c(dst, base, bl)
     iii_lex_memcpy_c(dst + bl, suffix, slen)
     iii_lex_write_u8_at_c(dst, bl + slen, 0u32)
@@ -904,15 +910,16 @@ fn iii_run_pipeline(src_path: u64, out_path: u64) -> u32 {
     iii_link_verify_imports(lnk, ast)
     if iii_link_hard_fail(lnk) == 1u32 { iii_pipeline_cleanup() ; return III_EXIT_LINK_FAIL }
     /* codegen -> .s */
-    iiim_path_suffix(&ASM_PATH as u64, out_path, ".s" as u64, 2u64)
+    iiim_path_suffix(&ASM_PATH as u64, 1024u64, out_path, ".s" as u64, 2u64)
     let asm_out: u64 = iii_lex_fopen_c(&ASM_PATH as u64, FOPEN_W)
     if asm_out == 0u64 {
         mw_lit(iii_lex_stderr_c(), "iiis-0: cannot open .s for write\n" as u64, 33u64)
         iii_pipeline_cleanup() ; return III_EXIT_EMIT_FAIL
     }
     let cg_rc: u32 = iii_cg_dispatch(ring, ast, sema, sid, wa, asm_out)
-    iii_lex_fclose_c(asm_out)
+    let acr: u32 = iii_lex_fclose_c(asm_out)
     if cg_rc != 0u32 { iii_pipeline_cleanup() ; return III_EXIT_CG_FAIL }
+    if acr != 0u32 { iii_pipeline_cleanup() ; return III_EXIT_EMIT_FAIL }   /* [unchecked-return] asm output flush failed -> corrupt .s */
     /* emit. */
     let fmt: u32 = iii_ring_to_fmt(ring)
     let mut emit_rc: u32 = III_EXIT_OK
@@ -931,7 +938,7 @@ fn iii_run_pipeline(src_path: u64, out_path: u64) -> u32 {
             }
         }
         if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 0u32 {
-            iiim_path_suffix(&OBJ_PATH as u64, out_path, ".o" as u64, 2u64)
+            iiim_path_suffix(&OBJ_PATH as u64, 1024u64, out_path, ".o" as u64, 2u64)
             if iii_emit_assemble(&ASM_PATH as u64, &OBJ_PATH as u64) != 0u32 {
                 mw_lit(iii_lex_stderr_c(), "iiis-0: assemble failed\n" as u64, 24u64)
                 emit_rc = III_EXIT_EMIT_FAIL
@@ -1039,7 +1046,8 @@ fn iii_witness_write(wpath: u64, fmt: u32) -> u32 {
     mw_lit(w, ",\"tool\":\"iiis-0\"" as u64, 16u64)
     mw_lit(w, ",\"version\":\"0.1.0\"" as u64, 18u64)
     iii_lex_fputc_c(125u32, w)
-    iii_lex_fclose_c(w)
+    let wcr: u32 = iii_lex_fclose_c(w)
+    if wcr != 0u32 { return III_EXIT_EMIT_FAIL }   /* [unchecked-return] witness JSON flush failed -> corrupt reproducibility witness */
     return III_EXIT_OK
 }
 
@@ -1082,7 +1090,7 @@ fn iiip_sig_handler(sig: u32) -> u32 @export {
     mw_lit(iii_lex_stderr_c(), "iiis-0: caught signal, flushing partial witness\n" as u64, 48u64)
     let op: u64 = iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH)
     if op != 0u64 {
-        iiim_path_suffix(&WP_BUF as u64, op, ".partial.witness.json" as u64, 21u64)
+        iiim_path_suffix(&WP_BUF as u64, 2048u64, op, ".partial.witness.json" as u64, 21u64)
         iii_witness_write(&WP_BUF as u64, FMT_PE_EXE)
     }
     iii_lex_exit_c(III_EXIT_INTERNAL)
@@ -1202,7 +1210,7 @@ fn main(argc: u32, argv: u64) -> u32 @export {
             if stop == 0u32 {
                 let src: u64 = iii_lex_read_u64_c(positionals, (j as u64) * 8u64)
                 iii_lex_write_u64_c(&ORCH as u64, O_SRC_PATH, src)
-                iiim_path_suffix(&DEFAULT_OUT as u64, src, ".o" as u64, 2u64)
+                iiim_path_suffix(&DEFAULT_OUT as u64, 1024u64, src, ".o" as u64, 2u64)
                 let rc: u32 = iii_run_pipeline(src, &DEFAULT_OUT as u64)
                 if rc != III_EXIT_OK { multi_rc = rc ; stop = 1u32 }
             }
@@ -1218,12 +1226,12 @@ fn main(argc: u32, argv: u64) -> u32 @export {
     iii_lex_write_u64_c(&ORCH as u64, O_SRC_PATH, src_path)
     if iii_lex_read_u64_c(&ORCH as u64, O_OUT_PATH) == 0u64 {
         let ring: u32 = iii_lex_read_u32_c(&ORCH as u64, O_RING)
-        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 1u32 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".o" as u64, 2u64) }
+        if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 1u32 { iiim_path_suffix(&DEFAULT_OUT as u64, 1024u64, src_path, ".o" as u64, 2u64) }
         if iii_lex_read_u32_c(&ORCH as u64, O_COMPILE_ONLY) == 0u32 {
-            if ring == RING_CHOICE_R3 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".exe" as u64, 4u64) }
-            if ring == RING_CHOICE_R0 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".sys" as u64, 4u64) }
-            if ring == RING_CHOICE_RM1 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".bin" as u64, 4u64) }
-            if ring == RING_CHOICE_RM2 { iiim_path_suffix(&DEFAULT_OUT as u64, src_path, ".sanctum.o" as u64, 10u64) }
+            if ring == RING_CHOICE_R3 { iiim_path_suffix(&DEFAULT_OUT as u64, 1024u64, src_path, ".exe" as u64, 4u64) }
+            if ring == RING_CHOICE_R0 { iiim_path_suffix(&DEFAULT_OUT as u64, 1024u64, src_path, ".sys" as u64, 4u64) }
+            if ring == RING_CHOICE_RM1 { iiim_path_suffix(&DEFAULT_OUT as u64, 1024u64, src_path, ".bin" as u64, 4u64) }
+            if ring == RING_CHOICE_RM2 { iiim_path_suffix(&DEFAULT_OUT as u64, 1024u64, src_path, ".sanctum.o" as u64, 10u64) }
         }
         iii_lex_write_u64_c(&ORCH as u64, O_OUT_PATH, &DEFAULT_OUT as u64)
     }
@@ -1237,7 +1245,7 @@ fn main(argc: u32, argv: u64) -> u32 @export {
     }
     /* reproducibility check. */
     if iii_lex_read_u32_c(&ORCH as u64, O_REPRO) == 1u32 {
-        iiim_path_suffix(&REPRO_OUT as u64, out_path, ".repro" as u64, 6u64)
+        iiim_path_suffix(&REPRO_OUT as u64, 2048u64, out_path, ".repro" as u64, 6u64)
         let rc2: u32 = iii_run_pipeline(src_path, &REPRO_OUT as u64)
         if rc2 != III_EXIT_OK { return rc2 }
         let mut same: u32 = 1u32
@@ -1256,7 +1264,7 @@ fn main(argc: u32, argv: u64) -> u32 @export {
     /* build-witness sidecar. */
     if iii_lex_read_u32_c(&ORCH as u64, O_EMIT_WITNESS) == 1u32 {
         let fmt: u32 = iii_ring_to_fmt(iii_lex_read_u32_c(&ORCH as u64, O_RING))
-        iiim_path_suffix(&WP_BUF as u64, out_path, ".witness.json" as u64, 13u64)
+        iiim_path_suffix(&WP_BUF as u64, 2048u64, out_path, ".witness.json" as u64, 13u64)
         let wrc: u32 = iii_witness_write(&WP_BUF as u64, fmt)
         if wrc != III_EXIT_OK { return wrc }
     }

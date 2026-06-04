@@ -76,7 +76,6 @@ L_TPL:
     .section .iii.ring3,"n"
     .asciz "read_u64_le"
     .text
-    .global L_read_u64_le
     .seh_proc L_read_u64_le
 L_read_u64_le:
     pushq %rbp

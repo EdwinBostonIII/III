@@ -103,6 +103,7 @@ fn sx_find_modifier(ast: u64, fn_node: u32, anno_kind: i32) -> u32 {
 /* Extract a u32 from an int/hex literal expr (mirror expr_to_u32). */
 fn sx_expr_to_u32(ast: u64, expr_node: u32, default_val: u32) -> u32 {
     if expr_node == 0u32 { return default_val }
+    if ast == 0u64 { return default_val }    /* [null-deref] sibling sx_find_modifier guards ast==0 before iii_ast_node_kind */
     let k : u32 = iii_ast_node_kind(ast, expr_node)
     if k == SX_K_EXPR_INT { return iii_ast_expr_int_u64(ast, expr_node) as u32 }
     if k == SX_K_EXPR_HEX { return iii_ast_hex_value_lo(ast, expr_node) }

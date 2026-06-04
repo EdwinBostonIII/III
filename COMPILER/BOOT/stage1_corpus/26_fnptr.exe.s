@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "double_it"
     .text
-    .global L_double_it
     .seh_proc L_double_it
 L_double_it:
     pushq %rbp

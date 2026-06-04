@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "add"
     .text
-    .global L_add
     .seh_proc L_add
 L_add:
     pushq %rbp

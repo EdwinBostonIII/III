@@ -1,0 +1,12 @@
+module rprobe
+extern @abi(c-msvc-x64) fn sha256_oneshot(msg: *u8, len: u64, out: *u8) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
+var RBUF : [u8; 140]
+var ROUT : [u8; 32]
+fn r0_sha_w0(len: u64) -> u32 @export {
+    sha256_sched_force(1u32)
+    let mut i : u64 = 0u64
+    while i < len { RBUF[i] = ((i * 131u64 + 7u64) & 0xFFu64) as u8  i = i + 1u64 }
+    sha256_oneshot((&RBUF as u64) as *u8, len, (&ROUT as u64) as *u8)
+    return ((ROUT[0u64] as u32) << 24u32) | ((ROUT[1u64] as u32) << 16u32) | ((ROUT[2u64] as u32) << 8u32) | (ROUT[3u64] as u32)
+}

@@ -1,0 +1,14 @@
+module rm_match_sample
+
+/* Gate coverage for the sanctum-family pattern_compare mode branch (LITERAL + WILDCARD patterns).
+ * rm2_sample has no match, so without this the R-1/R-2 differential is blind to pattern_compare. */
+extern @abi(c-sysv-x64) fn iii_cap_revoke(h: u64) -> u64 from "sanctum_rt"
+
+sealed_call do_match(x: u64) @seal_id(1) {
+    iii_cap_revoke(x)
+    return match x {
+        1 => 10,
+        2 => 42,
+        _ => 99,
+    }
+}

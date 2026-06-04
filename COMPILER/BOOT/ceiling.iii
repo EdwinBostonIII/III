@@ -263,6 +263,7 @@ fn iii_ceil_is_sealed() -> u32 @export {
 }
 
 fn iii_ceil_canonical_bytes(out: *u8) -> u32 @export {
+    if (out as u64) == 0u64 { return 0u32 }    /* [null-deref] public ABI: match ceiling.c:150 `if(!out)return` */
     if INITED == 0u8 {
         for i in 0..8192 {
             out[i] = 0u8
@@ -276,6 +277,7 @@ fn iii_ceil_canonical_bytes(out: *u8) -> u32 @export {
 }
 
 fn iii_ceil_bitmap_mhash(out: *u8) -> u32 @export {
+    if (out as u64) == 0u64 { return 0u32 }    /* [null-deref] public ABI: match ceiling.c:157 `if(!out)return` */
     cl_init_k_once()
     cl_sha_init()
     if INITED == 0u8 {

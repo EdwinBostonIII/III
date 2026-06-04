@@ -1201,8 +1201,10 @@ fn iii_link_register_module_ex(l: u64, qualified_name: u64,
     while i < dep_count {
         /* dep_qualified_names is a `const char *const []` — array of u64 ptrs. */
         let p : u64 = l_load_u64_le(dep_qualified_names + ((i * 8u32) as u64))
-        let nlen : u32 = l_strlen_cap(p, LINK_NAME_CAP)
-        l_str_set(l_mod_dep_name_addr(idx as u32, i), LINK_NAME_CAP, p, nlen)
+        if p != 0u64 {                               /* [null-deref] caller-array element; l_strlen_cap derefs it */
+            let nlen : u32 = l_strlen_cap(p, LINK_NAME_CAP)
+            l_str_set(l_mod_dep_name_addr(idx as u32, i), LINK_NAME_CAP, p, nlen)
+        }
         l_mod_set_dep_idx(idx as u32, i, 0i32 - 1i32)
         i = i + 1u32
     }
@@ -1216,8 +1218,10 @@ fn iii_link_register_module_ex(l: u64, qualified_name: u64,
     let mut k : u32 = 0u32
     while k < export_count {
         let sp : u64 = l_load_u64_le(export_symbols + ((k * 8u32) as u64))
-        let slen : u32 = l_strlen_cap(sp, LINK_SYM_CAP)
-        l_str_set(l_mod_export_sym_addr(idx as u32, k), LINK_SYM_CAP, sp, slen)
+        if sp != 0u64 {                              /* [null-deref] caller-array element; l_strlen_cap derefs it */
+            let slen : u32 = l_strlen_cap(sp, LINK_SYM_CAP)
+            l_str_set(l_mod_export_sym_addr(idx as u32, k), LINK_SYM_CAP, sp, slen)
+        }
         let vis : u32 = l_load_u32_le(export_visibility + ((k * 4u32) as u64))
         l_mod_set_export_vis(idx as u32, k, vis)
         let tok : u64 = l_load_u64_le(export_addr_tokens + ((k * 8u32) as u64))
@@ -1315,6 +1319,7 @@ fn iii_link_verify_imports(l: u64, ast: u64) -> i32 @export {
     if iii_ast_node_kind(ast, root_idx) != K_AST_MODULE { return E_INTERNAL }
 
     let src : u64 = iii_ast_source_buf_addr_c(ast)
+    if src == 0u64 { return E_INTERNAL }    /* [null-deref] src+offset is read by l_memcmp/l_find_module_slice below */
     let imp_off : u32 = iii_ast_module_name_offset(ast, root_idx)
     let imp_len : u32 = iii_ast_module_name_length(ast, root_idx)
     let imp_ptr : u64 = src + (imp_off as u64)

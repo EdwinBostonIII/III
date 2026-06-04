@@ -1714,6 +1714,7 @@ fn s_register_struct_layout(decl_node: u32) -> u32 {
     let name_off : u32 = iii_ast_struct_decl_name_off(SEMA_AST, decl_node)
     let name_len : u32 = iii_ast_struct_decl_name_len(SEMA_AST, decl_node)
     let aoff : u32 = s_arena_strdup(name_off, name_len)
+    if aoff == 0xFFFFFFFFu32 { return 0u32 }    /* [OOB] arena OOM -> don't register a 4GB-OOB name offset */
     let s : u32 = s_struct_alloc(decl_node, aoff, name_len)
     if s == 0xFFFFFFFFu32 { return 0u32 }
     let n : u32 = iii_ast_struct_field_count(SEMA_AST, decl_node)
@@ -1726,6 +1727,7 @@ fn s_register_struct_layout(decl_node: u32) -> u32 {
                 let fo : u32 = iii_ast_param_name_off(SEMA_AST, fp)
                 let fl : u32 = iii_ast_param_name_len(SEMA_AST, fp)
                 let fa : u32 = s_arena_strdup(fo, fl)
+                if fa == 0xFFFFFFFFu32 { return 0u32 }    /* [OOB] arena OOM -> stop, don't add a 4GB-OOB field offset */
                 s_struct_add_field(s, fa, fl)
             }
         }

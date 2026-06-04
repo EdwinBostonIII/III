@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "other"
     .text
-    .global L_other
     .seh_proc L_other
 L_other:
     pushq %rbp

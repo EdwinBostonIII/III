@@ -6,7 +6,6 @@
     .section .iii.ring3,"n"
     .asciz "classify"
     .text
-    .global L_classify
     .seh_proc L_classify
 L_classify:
     pushq %rbp

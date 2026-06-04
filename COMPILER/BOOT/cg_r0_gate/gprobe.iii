@@ -1,0 +1,30 @@
+module gprobe
+extern @abi(c-msvc-x64) fn xii_term_arena_reset() -> i32 from "xii_term.iii"
+extern @abi(c-msvc-x64) fn cap_env_init() -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn cap_attenuate(parent_id: u64, rights_mask: u64, expires_at: u64) -> u64 from "capability.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_act(family: u32, target_kind: u32, target: u64, action_hexad: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_under_cap(act_idx: u32, cap_id: u32) -> u32 from "cycle_term.iii"
+extern @abi(c-msvc-x64) fn katabasis_cycle_seal(cycle_idx: u32, out_addr: u64) -> i32 from "seal.iii"
+extern @abi(c-msvc-x64) fn katabasis_gate_admit(cycle_idx: u32, claimed_seal_addr: u64) -> u32 from "admit.iii"
+extern @abi(c-msvc-x64) fn sha256_sched_force(p: u32) -> u32 from "sha256.iii"
+extern @abi(c-msvc-x64) fn keccak_chi_force_path(p: u32) -> i32 from "keccak.iii"
+var GSEAL  : [u8; 32]
+var GWRONG : [u8; 32]
+/* the driver ADMIT-branch smode==1 (REJECT_SEAL) path: build the real cycle, then a DIFFERENT
+   cycle (family=9, tk=2, tgt=0xFB000000, ah=728 -- the boundary values), admit with the wrong seal.
+   Returns verdict+200 so a normal return is distinguishable from a segfault (exit>=128). */
+fn gprobe_run() -> u32 @export {
+    sha256_sched_force(1u32)
+    keccak_chi_force_path(1u32)
+    xii_term_arena_reset()
+    let root : u64 = cap_env_init()
+    let cap  : u64 = cap_attenuate(root, 0xFFFFFFFFFFFFFFFFu64, 0u64)
+    let a : u32 = katabasis_cycle_act(5u32, 1u32, 0x10u64, 720u32)
+    let c : u32 = katabasis_cycle_under_cap(a, cap as u32)
+    katabasis_cycle_seal(c, (&GSEAL as u64))
+    let a2 : u32 = katabasis_cycle_act(9u32, 2u32, 0xFB000000u64, 728u32)
+    let c2 : u32 = katabasis_cycle_under_cap(a2, cap as u32)
+    katabasis_cycle_seal(c2, (&GWRONG as u64))
+    let v : u32 = katabasis_gate_admit(c, (&GWRONG as u64))
+    return v + 200u32
+}

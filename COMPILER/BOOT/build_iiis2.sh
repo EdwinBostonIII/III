@@ -62,7 +62,7 @@ DO_CLEAN=0
 
 # TUs ported from C to .iii.  Each entry maps "name.c" -> compile name.iii
 # via iiis-0 instead of gcc.  Keep this list LC_ALL=C sorted.
-PORTED_TUS=( acc affine_audit ast ceiling cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha emit hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
+PORTED_TUS=( acc affine_audit ast ceiling cg_r0 cg_r3 cg_r3_xii cg_r3_xii_adapter cg_rm1 cg_rm2 cg_sha emit emit_sanctum hexad_check iii_cg_pe_iiis1 jit_emit lex lex_rt link main parse proof sema sema_xii_adapter sid witness_alloc xii_ldil )
 
 usage() {
     cat <<'EOF' >&2
@@ -146,6 +146,7 @@ ALL_C="$( cd "$BOOT_DIR" && find . -maxdepth 1 -type f -name '*.c' \
             ! -name 'sign_*.c' \
             ! -name 'verify_*.c' \
             ! -name 'iiis1_link_stubs.c' \
+            ! -name 'rm2_driver.c' \
             | sed 's|^\./||' | LC_ALL=C sort -V )"
 
 OBJS=()
@@ -254,6 +255,35 @@ if [[ "$DO_CHECK_CORPUS" -eq 1 ]]; then
     if [[ "$FAIL" -gt 0 ]]; then
         log "failed:$FAILED_NAMES"
         die "$III_EXIT_VERIFY" "corpus equivalence FAILED"
+    fi
+
+    # Ring -2 (cg_rm2 sanctum) end-to-end gate. The determinism corpus above does NOT exercise
+    # --ring R-2, so cg_rm2 can silently rot (e.g. its node-kind constants drifting from ast.iii --
+    # the exact bug class found 2026-06-02). This proves it still emits correct, RUNNABLE machine
+    # code: sealed_call do_thing(7) must compute 3*7 == 21. Falsifiable -- break a kind/op constant.
+    if [[ -f "$BOOT_DIR/check_rm2.sh" ]]; then
+        phase check-rm2
+        if ! bash "$BOOT_DIR/check_rm2.sh" "$OUT_BIN"; then
+            die "$III_EXIT_VERIFY" "Ring -2 (cg_rm2) end-to-end check FAILED"
+        fi
+    fi
+
+    # Ring 0 (cg_r0) crypto + u32-width gates.  The 59/0 corpus above is Ring-3 (cg_r3) and check_rm2 is
+    # Ring -2 (cg_rm2); NEITHER exercises cg_r0, the Ring-0 backend used by KATABASIS kernel drivers.  A
+    # u32-width regression in cg_r0 (the 2026-06-04 bug class: 8-byte-uniform codegen leaks a high-half
+    # carry/shift bit into a later shr/cmp/div/mod -> wrong sha256 at Ring-0) is invisible to every other
+    # gate -- it surfaced only on a metal kernel load (M23 quine-seal fail-closed).  These two gates prove
+    # cg_r0 emits correct crypto (sha256("abc")==FIPS) + correct u32 width (cg_r0 == cg_r3 differential).
+    if [[ -f "$BOOT_DIR/cg_r0_crypto_gate.sh" ]]; then
+        phase check-cg-r0
+        if ! IIIS="$OUT_BIN" bash "$BOOT_DIR/cg_r0_crypto_gate.sh"; then
+            die "$III_EXIT_VERIFY" "cg_r0 crypto gate FAILED (Ring-0 backend mis-compiles sha256)"
+        fi
+        if [[ -f "$BOOT_DIR/cg_r0_width_gate.sh" ]]; then
+            if ! IIIS="$OUT_BIN" bash "$BOOT_DIR/cg_r0_width_gate.sh"; then
+                die "$III_EXIT_VERIFY" "cg_r0 width gate FAILED (Ring-0 backend mishandles u32 width)"
+            fi
+        fi
     fi
 fi
 
